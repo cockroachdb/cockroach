@@ -127,6 +127,7 @@ func TestSpillingQueue(t *testing.T) {
 						DiskQueueCfg:       queueCfg,
 						FDSemaphore:        colexecop.NewTestingSemaphore(2),
 						DiskAcc:            testDiskAcc,
+						ConverterMemAcc:    testMemAcc,
 					},
 				)
 			} else {
@@ -138,6 +139,7 @@ func TestSpillingQueue(t *testing.T) {
 						DiskQueueCfg:       queueCfg,
 						FDSemaphore:        colexecop.NewTestingSemaphore(2),
 						DiskAcc:            testDiskAcc,
+						ConverterMemAcc:    testMemAcc,
 					},
 				)
 			}
@@ -227,7 +229,7 @@ func TestSpillingQueue(t *testing.T) {
 				}
 
 				if rewindable {
-					require.NoError(t, q.Rewind())
+					require.NoError(t, q.Rewind(ctx))
 					numAlreadyDequeuedTuples = numDequeuedTuplesBeforeReading
 					dequeuedBatches = dequeuedBatches[:numDequeuedBatchesBeforeReading]
 					dequeuedBatchLengths = dequeuedBatchLengths[:numDequeuedBatchesBeforeReading]
@@ -294,6 +296,7 @@ func TestSpillingQueueDidntSpill(t *testing.T) {
 			DiskQueueCfg:       queueCfg,
 			FDSemaphore:        colexecop.NewTestingSemaphore(2),
 			DiskAcc:            testDiskAcc,
+			ConverterMemAcc:    testMemAcc,
 		},
 	)
 
@@ -360,6 +363,7 @@ func TestSpillingQueueMemoryAccounting(t *testing.T) {
 				DiskQueueCfg:       queueCfg,
 				FDSemaphore:        colexecop.NewTestingSemaphore(2),
 				DiskAcc:            testDiskAcc,
+				ConverterMemAcc:    testMemAcc,
 			}
 			var q *SpillingQueue
 			if rewindable {
@@ -464,6 +468,7 @@ func TestSpillingQueueMovingTailWhenSpilling(t *testing.T) {
 			DiskQueueCfg:       queueCfg,
 			FDSemaphore:        colexecop.NewTestingSemaphore(2),
 			DiskAcc:            testDiskAcc,
+			ConverterMemAcc:    testMemAcc,
 		}
 		q := NewSpillingQueue(newQueueArgs)
 

@@ -39,6 +39,7 @@ func NewCrossJoiner(
 	leftTypes []*types.T,
 	rightTypes []*types.T,
 	diskAcc *mon.BoundAccount,
+	converterMemAcc *mon.BoundAccount,
 ) colexecop.ClosableOperator {
 	c := &crossJoiner{
 		crossJoinerBase: newCrossJoinerBase(
@@ -50,6 +51,7 @@ func NewCrossJoiner(
 			diskQueueCfg,
 			fdSemaphore,
 			diskAcc,
+			converterMemAcc,
 		),
 		TwoInputInitHelper: colexecop.MakeTwoInputInitHelper(left, right),
 		outputTypes:        joinType.MakeOutputTypes(leftTypes, rightTypes),
@@ -303,6 +305,7 @@ func newCrossJoinerBase(
 	cfg colcontainer.DiskQueueCfg,
 	fdSemaphore semaphore.Semaphore,
 	diskAcc *mon.BoundAccount,
+	converterMemAcc *mon.BoundAccount,
 ) *crossJoinerBase {
 	base := &crossJoinerBase{
 		joinType: joinType,
@@ -324,6 +327,7 @@ func newCrossJoinerBase(
 				DiskQueueCfg:       cfg,
 				FDSemaphore:        fdSemaphore,
 				DiskAcc:            diskAcc,
+				ConverterMemAcc:    converterMemAcc,
 			},
 		),
 	}

@@ -36,8 +36,9 @@ func NewLagOperator(
 	bufferMemLimit := int64(float64(args.MemoryLimit) * 0.10)
 	mainMemLimit := args.MemoryLimit - bufferMemLimit
 	buffer := colexecutils.NewSpillingBuffer(
-		args.BufferAllocator, bufferMemLimit, args.QueueCfg,
-		args.FdSemaphore, args.InputTypes, args.DiskAcc, argIdx)
+		args.BufferAllocator, bufferMemLimit, args.QueueCfg, args.FdSemaphore,
+		args.InputTypes, args.DiskAcc, args.ConverterMemAcc, argIdx,
+	)
 	base := lagBase{
 		partitionSeekerBase: partitionSeekerBase{
 			buffer:          buffer,

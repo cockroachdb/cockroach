@@ -4092,7 +4092,11 @@ value if you rely on the HLC for accuracy.`,
 				if err := protoutil.Unmarshal(data, &msg); err != nil {
 					return nil, pgerror.Wrap(err, pgcode.InvalidParameterValue, "invalid protocol message")
 				}
-				return tree.NewDString(msg.Type().String()), nil
+				typ, err := msg.CheckType()
+				if err != nil {
+					return nil, pgerror.Wrap(err, pgcode.InvalidParameterValue, "invalid type in job payload protocol message")
+				}
+				return tree.NewDString(typ.String()), nil
 			}
 
 			return []tree.Overload{

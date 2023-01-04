@@ -683,6 +683,9 @@ func (b *Builder) buildUDF(
 			// The limit expression will maintain the desired ordering, if any,
 			// so the physical props ordering can be cleared. The presentation
 			// must remain.
+			// TODO(mgartner): For SETOF functions, we may need to maintain the
+			// ordering without the LIMIT. Make sure to account for this in
+			// ConvertUDFToSubquery.
 			physProps.Ordering = props.OrderingChoice{}
 
 			// If there are multiple output columns, we must combine them into a

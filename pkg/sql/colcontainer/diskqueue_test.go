@@ -93,9 +93,9 @@ func TestDiskQueue(t *testing.T) {
 						err error
 					)
 					if rewindable {
-						q, err = colcontainer.NewRewindableDiskQueue(ctx, typs, queueCfg, testDiskAcc)
+						q, err = colcontainer.NewRewindableDiskQueue(ctx, typs, queueCfg, testDiskAcc, testMemAcc)
 					} else {
-						q, err = colcontainer.NewDiskQueue(ctx, typs, queueCfg, testDiskAcc)
+						q, err = colcontainer.NewDiskQueue(ctx, typs, queueCfg, testDiskAcc, testMemAcc)
 					}
 					require.NoError(t, err)
 
@@ -154,7 +154,7 @@ func TestDiskQueue(t *testing.T) {
 						}
 
 						if rewindable {
-							require.NoError(t, q.(colcontainer.RewindableQueue).Rewind())
+							require.NoError(t, q.(colcontainer.RewindableQueue).Rewind(ctx))
 						}
 					}
 
@@ -186,7 +186,7 @@ func TestDiskQueueCloseOnErr(t *testing.T) {
 	defer diskAcc.Close(ctx)
 
 	typs := []*types.T{types.Int}
-	q, err := colcontainer.NewDiskQueue(ctx, typs, queueCfg, &diskAcc)
+	q, err := colcontainer.NewDiskQueue(ctx, typs, queueCfg, &diskAcc, testMemAcc)
 	require.NoError(t, err)
 
 	b := coldata.NewMemBatch(typs, coldata.StandardColumnFactory)
@@ -238,7 +238,7 @@ func BenchmarkDiskQueue(b *testing.B) {
 	ctx := context.Background()
 	for i := 0; i < b.N; i++ {
 		op.ResetBatchesToReturn(numBatches)
-		q, err := colcontainer.NewDiskQueue(ctx, typs, queueCfg, testDiskAcc)
+		q, err := colcontainer.NewDiskQueue(ctx, typs, queueCfg, testDiskAcc, testMemAcc)
 		require.NoError(b, err)
 		for {
 			batchToEnqueue := op.Next()

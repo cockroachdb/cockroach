@@ -14,6 +14,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/errors"
 )
@@ -394,4 +396,87 @@ func (c *CustomFuncs) InlineConstVar(f memo.FiltersExpr) memo.FiltersExpr {
 		}
 	}
 	return result
+}
+
+// IsInlinableUDF returns true if the given UDF can be inlined as a subquery,
+// which requires all the following to be true:
+//
+//  1. It must be labeled as non-volatile, i.e., immutable, stable, or
+//     leak-proof.
+//  2. It has a single statement.
+//  3. Its arguments are non-volatile expressions.
+//
+// UDFs with mutations (INSERT, UPDATE, UPSERT, DELETE) cannot be inlined, but
+// we do not need an explicit check for this because immutable UDFs cannot
+// contain mutations.
+//
+// TODO(mgartner): We may be able to loosen (1) and (3). Subqueries are always
+// evaluated just once, so by converting a UDF to a subquery we effectively make
+// it and it's arguments non-volatile. So, if UDFs can be inlined in some other
+// way, or the subquery can be eliminated with normalization rules, we may be
+// able to inline volatile UDFs. We must take care not to inline UDFs with
+// volatile arguments used more than once in the function body.
+func (c *CustomFuncs) IsInlinableUDF(args memo.ScalarListExpr, udfp *memo.UDFPrivate) bool {
+	if udfp.Volatility == volatility.Volatile || len(udfp.Body) > 1 {
+		return false
+	}
+	for i := range args {
+		var p props.Shared
+		memo.BuildSharedProps(args[i], &p, c.f.EvalContext())
+		if p.VolatilitySet.HasVolatile() {
+			return false
+		}
+	}
+	return true
+}
+
+// ConvertUDFToSubquery returns a subquery expression that is equivalent to the
+// given UDF and UDF arguments.
+func (c *CustomFuncs) ConvertUDFToSubquery(
+	args memo.ScalarListExpr, udfp *memo.UDFPrivate,
+) opt.ScalarExpr {
+	// argForParam returns the argument that can be substituted for the given
+	// column, if the column is a parameter of the UDF. It returns ok=false if
+	// the column is not a UDF parameter.
+	argForParam := func(col opt.ColumnID) (e opt.Expr, ok bool) {
+		for i := range udfp.Params {
+			if udfp.Params[i] == col {
+				return args[i], true
+			}
+		}
+		return nil, false
+	}
+
+	// replace substitutes variables that are UDF parameters with the
+	// corresponding argument from the invocation of the UDF.
+	var replace ReplaceFunc
+	replace = func(nd opt.Expr) opt.Expr {
+		if t, ok := nd.(*memo.VariableExpr); ok {
+			if arg, ok := argForParam(t.Col); ok {
+				return arg
+			}
+		}
+		return c.f.Replace(nd, replace)
+	}
+
+	// The presentation and ordering in the physical properties of the UDF
+	// statement must be preserved in the subquery to produce correct results.
+	// The presentation, which always contains a single column, is preserved
+	// with a Project expression. The ordering is preserved in the LIMIT 1
+	// expression that optbuilder wraps around the last statement in a UDF. The
+	// presence of the LIMIT 1 makes a Max1Row expression unnecessary for the
+	// subquery.
+	//
+	// TODO(mgartner): The ordering may need to be preserved in the
+	// SubqueryPrivate for SETOF UDFs.
+	stmt := udfp.Body[0]
+	returnColID := stmt.PhysProps.Presentation[0].ID
+	return c.f.ConstructSubquery(
+		c.f.ConstructProject(
+			replace(stmt.RelExpr).(memo.RelExpr),
+			nil, /* projections */
+			opt.MakeColSet(returnColID),
+		),
+		&memo.SubqueryPrivate{},
+	)
 }

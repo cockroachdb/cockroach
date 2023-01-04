@@ -170,6 +170,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 				// Create an allocator for each output.
 				allocators := make([]*colmem.Allocator, numHashRouterOutputs)
 				diskAccounts := make([]*mon.BoundAccount, numHashRouterOutputs)
+				converterMemAccounts := make([]*mon.BoundAccount, numHashRouterOutputs)
 				for i := range allocators {
 					acc := testMemMonitor.MakeBoundAccount()
 					defer acc.Close(ctxRemote)
@@ -177,6 +178,9 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					diskAcc := testDiskMonitor.MakeBoundAccount()
 					diskAccounts[i] = &diskAcc
 					defer diskAcc.Close(ctxRemote)
+					converterMemAcc := testMemMonitor.MakeBoundAccount()
+					converterMemAccounts[i] = &converterMemAcc
+					defer converterMemAcc.Close(ctx)
 				}
 				createMetadataSourceForID := func(id int) colexecop.MetadataSource {
 					return colexectestutils.CallbackMetadataSource{
@@ -205,6 +209,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					queueCfg,
 					&colexecop.TestingSemaphore{},
 					diskAccounts,
+					converterMemAccounts,
 				)
 				for i := 0; i < numInboxes; i++ {
 					inboxMemAccount := testMemMonitor.MakeBoundAccount()
@@ -234,6 +239,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					outboxCtx context.Context,
 					flowCtxCancel context.CancelFunc,
 					outboxMemAcc *mon.BoundAccount,
+					outboxConverterMemAcc *mon.BoundAccount,
 					outboxInput colexecop.Operator,
 					inbox *colrpc.Inbox,
 					id int,
@@ -241,6 +247,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 				) {
 					outbox, err := colrpc.NewOutbox(
 						colmem.NewAllocator(outboxCtx, outboxMemAcc, testColumnFactory),
+						outboxConverterMemAcc,
 						colexecargs.OpWithMetaInfo{
 							Root:            outboxInput,
 							MetadataSources: outboxMetadataSources,
@@ -285,8 +292,19 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 				for i := 0; i < numInboxes; i++ {
 					outboxMemAccount := testMemMonitor.MakeBoundAccount()
 					defer outboxMemAccount.Close(ctxRemote)
+					outboxConverterMemAcc := testMemMonitor.MakeBoundAccount()
+					defer outboxConverterMemAcc.Close(ctxRemote)
 					if i < numHashRouterOutputs {
-						runOutboxInbox(ctxRemote, cancelRemote, &outboxMemAccount, hashRouterOutputs[i], inboxes[i], streamID, []colexecop.MetadataSource{hashRouterOutputs[i]})
+						runOutboxInbox(
+							ctxRemote,
+							cancelRemote,
+							&outboxMemAccount,
+							&outboxConverterMemAcc,
+							hashRouterOutputs[i],
+							inboxes[i],
+							streamID,
+							[]colexecop.MetadataSource{hashRouterOutputs[i]},
+						)
 					} else {
 						sourceMemAccount := testMemMonitor.MakeBoundAccount()
 						defer sourceMemAccount.Close(ctxRemote)
@@ -297,6 +315,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 							ctxRemote,
 							cancelRemote,
 							&outboxMemAccount,
+							&outboxConverterMemAcc,
 							colexecop.NewRepeatableBatchSource(remoteAllocator, batch, typs),
 							inboxes[i],
 							streamID,
@@ -317,10 +336,13 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					inboxes = append(inboxes, inbox)
 					outboxMemAccount := testMemMonitor.MakeBoundAccount()
 					defer outboxMemAccount.Close(ctxAnotherRemote)
+					outboxConverterMemAcc := testMemMonitor.MakeBoundAccount()
+					defer outboxConverterMemAcc.Close(ctxRemote)
 					runOutboxInbox(
 						ctxAnotherRemote,
 						cancelAnotherRemote,
 						&outboxMemAccount,
+						&outboxConverterMemAcc,
 						synchronizer,
 						inbox,
 						streamID,

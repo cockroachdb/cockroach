@@ -975,8 +975,22 @@ func (sr *StoreRebalancer) chooseRangeToRebalance(
 		// than possibly new, incoming voters that are yet to be initialized.
 		for i := range validTargets {
 			storeDesc, ok := storeDescMap[validTargets[i].StoreID]
+
+			// Target doesn't exist in our store list, this can happen as we
+			// don't always have a consistent view of the storepool as the
+			// allocator. This could be due to it originally being suspect but
+			// later not etc. Skip this target.
+			// TODO(kvoli): We should be sharing a consistent store list or
+			// calling the storepool every time required, rather than caching a
+			// store list locally for use, which is currently refreshed after
+			// each operation. Alternatively, allocator calls may return the
+			// storelist considered.
+			if !ok {
+				continue
+			}
+
 			storeLoad := storeDesc.Capacity.Load()
-			if ok && storeLoad.Dim(rctx.loadDimension) < newLeaseLoad {
+			if storeLoad.Dim(rctx.loadDimension) < newLeaseLoad {
 				newLeaseIdx = i
 				newLeaseLoad = storeLoad.Dim(rctx.loadDimension)
 			}

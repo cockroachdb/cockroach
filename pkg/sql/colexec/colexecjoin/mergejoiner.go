@@ -317,6 +317,7 @@ func NewMergeJoinOp(
 	leftOrdering []execinfrapb.Ordering_Column,
 	rightOrdering []execinfrapb.Ordering_Column,
 	diskAcc *mon.BoundAccount,
+	converterMemAcc *mon.BoundAccount,
 	evalCtx *eval.Context,
 ) colexecop.ResettableOperator {
 	// Merge joiner only supports the case when the physical types in the
@@ -387,7 +388,7 @@ func NewMergeJoinOp(
 	}
 	base := newMergeJoinBase(
 		unlimitedAllocator, memoryLimit, diskQueueCfg, fdSemaphore, joinType, left, right,
-		actualLeftTypes, actualRightTypes, actualLeftOrdering, actualRightOrdering, diskAcc,
+		actualLeftTypes, actualRightTypes, actualLeftOrdering, actualRightOrdering, diskAcc, converterMemAcc,
 	)
 	var mergeJoinerOp colexecop.ResettableOperator
 	switch joinType {
@@ -491,6 +492,7 @@ func newMergeJoinBase(
 	leftOrdering []execinfrapb.Ordering_Column,
 	rightOrdering []execinfrapb.Ordering_Column,
 	diskAcc *mon.BoundAccount,
+	converterMemAcc *mon.BoundAccount,
 ) *mergeJoinBase {
 	lEqCols := make([]uint32, len(leftOrdering))
 	lDirections := make([]execinfrapb.Ordering_Column_Direction, len(leftOrdering))
@@ -525,7 +527,8 @@ func newMergeJoinBase(
 			eqCols:                rEqCols,
 			directions:            rDirections,
 		},
-		diskAcc: diskAcc,
+		diskAcc:         diskAcc,
+		converterMemAcc: converterMemAcc,
 	}
 	base.helper.Init(unlimitedAllocator, memoryLimit)
 	base.left.distincterInput = &colexecop.FeedOperator{}
@@ -566,7 +569,8 @@ type mergeJoinBase struct {
 	proberState   mjProberState
 	builderState  mjBuilderState
 
-	diskAcc *mon.BoundAccount
+	diskAcc         *mon.BoundAccount
+	converterMemAcc *mon.BoundAccount
 }
 
 var _ colexecop.Resetter = &mergeJoinBase{}
@@ -594,7 +598,7 @@ func (o *mergeJoinBase) Init(ctx context.Context) {
 	).ColVecs()
 	o.bufferedGroup.helper = newCrossJoinerBase(
 		o.unlimitedAllocator, o.joinType, o.left.sourceTypes, o.right.sourceTypes,
-		o.memoryLimit, o.diskQueueCfg, o.fdSemaphore, o.diskAcc,
+		o.memoryLimit, o.diskQueueCfg, o.fdSemaphore, o.diskAcc, o.converterMemAcc,
 	)
 	o.bufferedGroup.helper.init(o.Ctx)
 
