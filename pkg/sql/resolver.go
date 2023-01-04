@@ -417,7 +417,7 @@ func (p *planner) getDescriptorsFromTargetListForPrivilegeChange(
 				if err != nil {
 					return nil, err
 				}
-				muts, err := p.Descriptors().GetMutableDescriptorsByID(ctx, p.txn, objectIDs...)
+				muts, err := p.Descriptors().ByID(p.txn).Mutable().Descs(ctx, objectIDs)
 				if err != nil {
 					return nil, err
 				}
@@ -552,7 +552,7 @@ func (p *planner) getDescriptorsFromTargetListForPrivilegeChange(
 		if err != nil {
 			return nil, err
 		}
-		muts, err := p.Descriptors().GetMutableDescriptorsByID(ctx, p.txn, objectIDs...)
+		muts, err := p.Descriptors().ByID(p.txn).Mutable().Descs(ctx, objectIDs)
 		if err != nil {
 			return nil, err
 		}

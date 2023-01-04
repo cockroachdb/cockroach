@@ -120,7 +120,7 @@ func (p *planner) forEachMutableTableInDatabase(
 		}
 		droppedRemoved = append(droppedRemoved, tbID)
 	}
-	descs, err := p.Descriptors().GetMutableDescriptorsByID(ctx, p.Txn(), droppedRemoved...)
+	descs, err := p.Descriptors().ByID(p.Txn()).Mutable().Descs(ctx, droppedRemoved)
 	if err != nil {
 		return err
 	}

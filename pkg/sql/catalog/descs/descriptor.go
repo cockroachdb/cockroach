@@ -29,14 +29,6 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// GetMutableDescriptorsByID returns a mutable implementation of the descriptors
-// with the requested ids. An error is returned if no descriptor exists.
-func (tc *Collection) GetMutableDescriptorsByID(
-	ctx context.Context, txn *kv.Txn, ids ...descpb.ID,
-) ([]catalog.MutableDescriptor, error) {
-	return tc.ByID(txn).Mutable().Descs(ctx, ids)
-}
-
 // GetMutableDescriptorByID delegates to GetMutableDescriptorsByID.
 func (tc *Collection) GetMutableDescriptorByID(
 	ctx context.Context, txn *kv.Txn, id descpb.ID,

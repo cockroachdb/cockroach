@@ -2228,7 +2228,7 @@ func prefetchDescriptors(
 	// and we're going to write them to KV very soon as part of a
 	// single batch).
 	ids := allDescIDs.Ordered()
-	got, err := descsCol.GetMutableDescriptorsByID(ctx, txn, ids...)
+	got, err := descsCol.ByID(txn).Mutable().Descs(ctx, ids)
 	if err != nil {
 		return nstree.Catalog{}, errors.Wrap(err, "prefetch descriptors")
 	}

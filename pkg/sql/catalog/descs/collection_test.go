@@ -558,7 +558,7 @@ func TestCollectionPreservesPostDeserializationChanges(t *testing.T) {
 	require.NoError(t, sql.DescsTxn(ctx, &execCfg, func(
 		ctx context.Context, txn *kv.Txn, col *descs.Collection,
 	) error {
-		descs, err := col.GetMutableDescriptorsByID(ctx, txn, dbID, scID, typID, tabID)
+		descs, err := col.ByID(txn).Mutable().Descs(ctx, []descpb.ID{dbID, scID, typID, tabID})
 		if err != nil {
 			return err
 		}
@@ -593,7 +593,7 @@ func TestCollectionPreservesPostDeserializationChanges(t *testing.T) {
 	require.NoError(t, sql.DescsTxn(ctx, &execCfg, func(
 		ctx context.Context, txn *kv.Txn, col *descs.Collection,
 	) error {
-		muts, err := col.GetMutableDescriptorsByID(ctx, txn, dbID, scID, typID, tabID)
+		muts, err := col.ByID(txn).Mutable().Descs(ctx, []descpb.ID{dbID, scID, typID, tabID})
 		if err != nil {
 			return err
 		}
