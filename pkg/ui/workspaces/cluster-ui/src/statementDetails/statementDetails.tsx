@@ -632,7 +632,7 @@ export class StatementDetails extends React.Component<
               />
             </Col>
           </Row>
-          <Row gutter={24}>
+          <Row gutter={24} className={cx("margin-left-neg")}>
             <Col className="gutter-row" span={12}>
               <SummaryCard id="first-card" className={cx("summary-card")}>
                 {!isTenant && (
