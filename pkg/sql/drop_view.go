@@ -239,7 +239,7 @@ func (p *planner) dropViewImpl(
 	// Remove back-references from the tables/views this view depends on.
 	dependedOn := append([]descpb.ID(nil), viewDesc.DependsOn...)
 	for _, depID := range dependedOn {
-		dependencyDesc, err := p.Descriptors().GetMutableTableVersionByID(ctx, depID, p.txn)
+		dependencyDesc, err := p.Descriptors().ByID(p.txn).Mutable().Table(ctx, depID)
 		if err != nil {
 			return cascadeDroppedViews,
 				errors.Wrapf(err, "error resolving dependency relation ID %d", depID)

@@ -203,7 +203,7 @@ func (p *planner) canDropTable(
 func (p *planner) canRemoveFKBackreference(
 	ctx context.Context, from string, ref catalog.ForeignKeyConstraint, behavior tree.DropBehavior,
 ) error {
-	table, err := p.Descriptors().GetMutableTableVersionByID(ctx, ref.GetOriginTableID(), p.txn)
+	table, err := p.Descriptors().ByID(p.txn).Mutable().Table(ctx, ref.GetOriginTableID())
 	if err != nil {
 		return err
 	}
@@ -459,7 +459,7 @@ func (p *planner) removeFKForBackReference(
 	if tableDesc.ID == ref.GetOriginTableID() {
 		originTableDesc = tableDesc
 	} else {
-		lookup, err := p.Descriptors().GetMutableTableVersionByID(ctx, ref.GetOriginTableID(), p.txn)
+		lookup, err := p.Descriptors().ByID(p.txn).Mutable().Table(ctx, ref.GetOriginTableID())
 		if err != nil {
 			return errors.Wrapf(err, "error resolving origin table ID %d", ref.GetOriginTableID())
 		}
@@ -523,7 +523,7 @@ func (p *planner) removeFKBackReference(
 	if tableDesc.ID == ref.ReferencedTableID {
 		referencedTableDesc = tableDesc
 	} else {
-		lookup, err := p.Descriptors().GetMutableTableVersionByID(ctx, ref.ReferencedTableID, p.txn)
+		lookup, err := p.Descriptors().ByID(p.txn).Mutable().Table(ctx, ref.ReferencedTableID)
 		if err != nil {
 			return errors.Wrapf(err, "error resolving referenced table ID %d", ref.ReferencedTableID)
 		}

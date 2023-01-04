@@ -487,7 +487,7 @@ INSERT INTO foo VALUES (1), (10), (100);
 		require.NoError(t, sql.DescsTxn(ctx, &execCfg, func(
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 		) (err error) {
-			mut, err := descriptors.GetMutableTableByID(ctx, txn, tableID, tree.ObjectLookupFlags{})
+			mut, err := descriptors.ByID(txn).Mutable().Table(ctx, tableID)
 			if err != nil {
 				return err
 			}
@@ -539,7 +539,7 @@ INSERT INTO foo VALUES (1), (10), (100);
 		require.NoError(t, sql.DescsTxn(ctx, &execCfg, func(
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 		) error {
-			table, err := descriptors.GetMutableTableByID(ctx, txn, tableID, tree.ObjectLookupFlags{})
+			table, err := descriptors.ByID(txn).Mutable().Table(ctx, tableID)
 			if err != nil {
 				return err
 			}

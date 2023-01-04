@@ -179,9 +179,7 @@ func (p *planner) dropFunctionImpl(ctx context.Context, fnMutable *funcdesc.Muta
 		// TODO(chengxiong): remove backreference from UDFs that this UDF has
 		// reference to. This is needed when we allow UDFs being referenced by
 		// UDFs.
-		refMutable, err := p.Descriptors().GetMutableTableByID(
-			ctx, p.txn, id, tree.ObjectLookupFlagsWithRequired(),
-		)
+		refMutable, err := p.Descriptors().ByID(p.txn).Mutable().Table(ctx, id)
 		if err != nil {
 			return err
 		}

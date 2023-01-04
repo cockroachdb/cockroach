@@ -755,7 +755,7 @@ func (p *planner) validateTTLScheduledJobInTable(
 
 // RepairTTLScheduledJobForTable is part of the EvalPlanner interface.
 func (p *planner) RepairTTLScheduledJobForTable(ctx context.Context, tableID int64) error {
-	tableDesc, err := p.Descriptors().GetMutableTableByID(ctx, p.txn, descpb.ID(tableID), tree.ObjectLookupFlagsWithRequired())
+	tableDesc, err := p.Descriptors().ByID(p.txn).Mutable().Table(ctx, descpb.ID(tableID))
 	if err != nil {
 		return err
 	}

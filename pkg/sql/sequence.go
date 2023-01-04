@@ -507,7 +507,7 @@ func removeSequenceOwnerIfExists(
 	if !opts.HasOwner() {
 		return nil
 	}
-	tableDesc, err := p.Descriptors().GetMutableTableVersionByID(ctx, opts.SequenceOwner.OwnerTableID, p.txn)
+	tableDesc, err := p.Descriptors().ByID(p.txn).Mutable().Table(ctx, opts.SequenceOwner.OwnerTableID)
 	if err != nil {
 		// Special case error swallowing for #50711 and #50781, which can cause a
 		// column to own sequences that have been dropped/do not exist.
@@ -754,7 +754,7 @@ func (p *planner) dropSequencesOwnedByCol(
 	}
 
 	for _, sequenceID := range colOwnsSequenceIDs {
-		seqDesc, err := p.Descriptors().GetMutableTableVersionByID(ctx, sequenceID, p.txn)
+		seqDesc, err := p.Descriptors().ByID(p.txn).Mutable().Table(ctx, sequenceID)
 		// Special case error swallowing for #50781, which can cause a
 		// column to own sequences that do not exist.
 		if err != nil {
@@ -794,7 +794,7 @@ func (p *planner) removeSequenceDependencies(
 	for i := 0; i < col.NumUsesSequences(); i++ {
 		sequenceID := col.GetUsesSequenceID(i)
 		// Get the sequence descriptor so we can remove the reference from it.
-		seqDesc, err := p.Descriptors().GetMutableTableVersionByID(ctx, sequenceID, p.txn)
+		seqDesc, err := p.Descriptors().ByID(p.txn).Mutable().Table(ctx, sequenceID)
 		if err != nil {
 			return err
 		}

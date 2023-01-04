@@ -472,7 +472,7 @@ func prepareExistingTablesForIngestion(
 	}
 
 	// Note that desc is just used to verify that the version matches.
-	importing, err := descsCol.GetMutableTableVersionByID(ctx, desc.ID, txn)
+	importing, err := descsCol.ByID(txn).Mutable().Table(ctx, desc.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -700,7 +700,7 @@ func bindImportStartTime(
 	if err := sql.DescsTxn(ctx, p.ExecCfg(), func(
 		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
 	) error {
-		mutableDesc, err := descsCol.GetMutableTableVersionByID(ctx, id, txn)
+		mutableDesc, err := descsCol.ByID(txn).Mutable().Table(ctx, id)
 		if err != nil {
 			return err
 		}
@@ -942,7 +942,7 @@ func (r *importResumer) publishTables(
 	) error {
 		b := txn.NewBatch()
 		for _, tbl := range details.Tables {
-			newTableDesc, err := descsCol.GetMutableTableVersionByID(ctx, tbl.Desc.ID, txn)
+			newTableDesc, err := descsCol.ByID(txn).Mutable().Table(ctx, tbl.Desc.ID)
 			if err != nil {
 				return err
 			}
@@ -1449,7 +1449,7 @@ func (r *importResumer) dropTables(
 	var intoTable catalog.TableDescriptor
 	for _, tbl := range details.Tables {
 		if !tbl.IsNew {
-			desc, err := descsCol.GetMutableTableVersionByID(ctx, tbl.Desc.ID, txn)
+			desc, err := descsCol.ByID(txn).Mutable().Table(ctx, tbl.Desc.ID)
 			if err != nil {
 				return err
 			}
@@ -1526,7 +1526,7 @@ func (r *importResumer) dropTables(
 
 	// Bring the IMPORT INTO table back online
 	b := txn.NewBatch()
-	intoDesc, err := descsCol.GetMutableTableVersionByID(ctx, intoTable.GetID(), txn)
+	intoDesc, err := descsCol.ByID(txn).Mutable().Table(ctx, intoTable.GetID())
 	if err != nil {
 		return err
 	}
@@ -1551,7 +1551,7 @@ func (r *importResumer) dropNewTables(
 	tablesToGC := make([]descpb.ID, 0, len(details.Tables))
 	toWrite := make([]*tabledesc.Mutable, 0, len(details.Tables))
 	for _, tbl := range details.Tables {
-		newTableDesc, err := descsCol.GetMutableTableVersionByID(ctx, tbl.Desc.ID, txn)
+		newTableDesc, err := descsCol.ByID(txn).Mutable().Table(ctx, tbl.Desc.ID)
 		if err != nil {
 			return err
 		}

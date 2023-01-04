@@ -717,7 +717,7 @@ func expandIndexName(
 	// Memoize the table name that was found. tn is a reference to the table name
 	// stored in index.Table.
 	*tn = tableName
-	tblMutable, err := p.Descriptors().GetMutableTableVersionByID(ctx, tbl.GetID(), p.Txn())
+	tblMutable, err := p.Descriptors().ByID(p.Txn()).Mutable().Table(ctx, tbl.GetID())
 	if err != nil {
 		return nil, nil, err
 	}
@@ -770,7 +770,7 @@ func (p *planner) getTableAndIndexImpl(
 	// Use the descriptor collection to get a proper handle to the mutable
 	// descriptor for the relevant table and use that mutable object to
 	// get a handle to the corresponding index.
-	mut, err := p.Descriptors().GetMutableTableVersionByID(ctx, tbl.GetID(), p.Txn())
+	mut, err := p.Descriptors().ByID(p.Txn()).Mutable().Table(ctx, tbl.GetID())
 	if err != nil {
 		return catalog.ResolvedObjectPrefix{}, nil, nil, errors.NewAssertionErrorWithWrappedErrf(err,
 			"failed to re-resolve table %d for index %s", tbl.GetID(), tableWithIndex)

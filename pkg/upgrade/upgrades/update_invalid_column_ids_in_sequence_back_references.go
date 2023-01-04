@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -95,7 +94,7 @@ func maybeUpdateInvalidColumnIdsInSequenceBackReferences(
 	ctx context.Context, txn *kv.Txn, idToUpgrade descpb.ID, descriptors *descs.Collection,
 ) (hasUpgraded bool, err error) {
 	// Get the sequence descriptor that we are going to upgrade.
-	seqDesc, err := descriptors.GetMutableTableByID(ctx, txn, idToUpgrade, tree.ObjectLookupFlagsWithRequired())
+	seqDesc, err := descriptors.ByID(txn).Mutable().Table(ctx, idToUpgrade)
 	if err != nil {
 		return false, err
 	}
@@ -108,7 +107,7 @@ func maybeUpdateInvalidColumnIdsInSequenceBackReferences(
 		// `ref.ColumnIDs` if the actual value is not equal to the
 		// expected value.
 		expectedColumnIDsInRef := make([]descpb.ColumnID, 0)
-		tableDesc, err := descriptors.GetMutableTableByID(ctx, txn, ref.ID, tree.ObjectLookupFlagsWithRequired())
+		tableDesc, err := descriptors.ByID(txn).Mutable().Table(ctx, ref.ID)
 		if err != nil {
 			return false, err
 		}

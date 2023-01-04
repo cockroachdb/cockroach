@@ -86,23 +86,3 @@ func (tc *Collection) GetUncommittedMutableTableByID(
 	}
 	return original.(catalog.TableDescriptor), mut.(*tabledesc.Mutable), nil
 }
-
-// GetMutableTableByID returns a mutable table descriptor with
-// properties according to the provided lookup flags. RequireMutable is ignored.
-// Required is ignored, and an error is always returned if no descriptor with
-// the ID exists.
-func (tc *Collection) GetMutableTableByID(
-	ctx context.Context, txn *kv.Txn, tableID descpb.ID, flags tree.ObjectLookupFlags,
-) (*tabledesc.Mutable, error) {
-	return tc.ByID(txn).WithFlags(flags.CommonLookupFlags).Mutable().Table(ctx, tableID)
-}
-
-// GetMutableTableVersionByID is a variant of sqlbase.getTableDescFromID which returns a mutable
-// table descriptor of the table modified in the same transaction.
-// TODO (lucy): Usages should be replaced with GetMutableTableByID, but this
-// needs a careful look at what flags should be passed in at each call site.
-func (tc *Collection) GetMutableTableVersionByID(
-	ctx context.Context, tableID descpb.ID, txn *kv.Txn,
-) (*tabledesc.Mutable, error) {
-	return tc.ByID(txn).Mutable().Table(ctx, tableID)
-}

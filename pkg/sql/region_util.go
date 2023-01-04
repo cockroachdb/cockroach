@@ -1243,7 +1243,7 @@ func (p *planner) ValidateAllMultiRegionZoneConfigsInCurrentDatabase(ctx context
 // zone configurations to match what would have originally been set by the
 // multi-region syntax.
 func (p *planner) ResetMultiRegionZoneConfigsForTable(ctx context.Context, id int64) error {
-	desc, err := p.Descriptors().GetMutableTableVersionByID(ctx, descpb.ID(id), p.txn)
+	desc, err := p.Descriptors().ByID(p.txn).Mutable().Table(ctx, descpb.ID(id))
 	if err != nil {
 		return errors.Wrapf(err, "error resolving referenced table ID %d", id)
 	}

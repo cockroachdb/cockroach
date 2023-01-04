@@ -58,12 +58,7 @@ func fixInvalidObjectsThatLookLikeBadUserfileConstraint(
 				errString := string(tree.MustBeDString(row[4]))
 				if veryLikelyKnownUserfileBreakage(ctx, txn, descriptors, tableID, errString) {
 					log.Infof(ctx, "attempting to fix invalid table descriptor %d assuming it is a userfile-related table", tableID)
-					mutTableDesc, err := descriptors.GetMutableTableByID(ctx, txn, tableID, tree.ObjectLookupFlags{
-						CommonLookupFlags: tree.CommonLookupFlags{
-							IncludeOffline: true,
-							IncludeDropped: true,
-						},
-					})
+					mutTableDesc, err := descriptors.ByID(txn).Mutable().Table(ctx, tableID)
 					if err != nil {
 						return err
 					}

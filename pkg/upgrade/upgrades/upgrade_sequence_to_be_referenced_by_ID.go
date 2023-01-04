@@ -148,7 +148,7 @@ func upgradeSetUpForTableOrView(
 	idToUpgrade descpb.ID,
 ) (*tabledesc.Mutable, resolver.SchemaResolver, func(), error) {
 	// Get the table descriptor that we are going to upgrade.
-	tableDesc, err := descriptors.GetMutableTableByID(ctx, txn, idToUpgrade, tree.ObjectLookupFlagsWithRequired())
+	tableDesc, err := descriptors.ByID(txn).Mutable().Table(ctx, idToUpgrade)
 	if err != nil {
 		return nil, nil, nil, err
 	}

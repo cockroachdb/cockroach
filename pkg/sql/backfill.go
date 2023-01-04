@@ -450,7 +450,7 @@ func (sc *SchemaChanger) dropConstraints(
 
 	// Create update closure for the table and all other tables with backreferences.
 	if err := sc.txn(ctx, func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
-		scTable, err := descsCol.GetMutableTableVersionByID(ctx, sc.descID, txn)
+		scTable, err := descsCol.ByID(txn).Mutable().Table(ctx, sc.descID)
 		if err != nil {
 			return err
 		}
@@ -480,7 +480,7 @@ func (sc *SchemaChanger) dropConstraints(
 					if def.Name != constraint.GetName() {
 						continue
 					}
-					backrefTable, err := descsCol.GetMutableTableVersionByID(ctx, fk.GetReferencedTableID(), txn)
+					backrefTable, err := descsCol.ByID(txn).Mutable().Table(ctx, fk.GetReferencedTableID())
 					if err != nil {
 						return err
 					}
@@ -586,7 +586,7 @@ func (sc *SchemaChanger) addConstraints(
 	if err := sc.txn(ctx, func(
 		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
 	) error {
-		scTable, err := descsCol.GetMutableTableVersionByID(ctx, sc.descID, txn)
+		scTable, err := descsCol.ByID(txn).Mutable().Table(ctx, sc.descID)
 		if err != nil {
 			return err
 		}
@@ -635,7 +635,7 @@ func (sc *SchemaChanger) addConstraints(
 				}
 				if !foundExisting {
 					scTable.OutboundFKs = append(scTable.OutboundFKs, *fk.ForeignKeyDesc())
-					backrefTable, err := descsCol.GetMutableTableVersionByID(ctx, fk.GetReferencedTableID(), txn)
+					backrefTable, err := descsCol.ByID(txn).Mutable().Table(ctx, fk.GetReferencedTableID())
 					if err != nil {
 						return err
 					}
@@ -2208,7 +2208,7 @@ func (sc *SchemaChanger) mergeFromTemporaryIndex(
 		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
 	) error {
 		var err error
-		tbl, err = descsCol.GetMutableTableVersionByID(ctx, sc.descID, txn)
+		tbl, err = descsCol.ByID(txn).Mutable().Table(ctx, sc.descID)
 		return err
 	}); err != nil {
 		return err
@@ -2229,7 +2229,7 @@ func (sc *SchemaChanger) runStateMachineAfterTempIndexMerge(ctx context.Context)
 	return sc.txn(ctx, func(
 		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
 	) error {
-		tbl, err := descsCol.GetMutableTableVersionByID(ctx, sc.descID, txn)
+		tbl, err := descsCol.ByID(txn).Mutable().Table(ctx, sc.descID)
 		if err != nil {
 			return err
 		}
@@ -2534,7 +2534,7 @@ func runSchemaChangesInTxn(
 			if selfReference {
 				referencedTableDesc = tableDesc
 			} else {
-				lookup, err := planner.Descriptors().GetMutableTableVersionByID(ctx, fk.GetReferencedTableID(), planner.Txn())
+				lookup, err := planner.Descriptors().ByID(planner.Txn()).Mutable().Table(ctx, fk.GetReferencedTableID())
 				if err != nil {
 					return errors.Wrapf(err, "error resolving referenced table ID %d", fk.GetReferencedTableID())
 				}

@@ -418,7 +418,7 @@ func TestSyntheticDescriptorResolution(t *testing.T) {
 		require.Equal(t, "bar", desc.PublicColumns()[0].GetName())
 
 		// Attempting to resolve the table mutably is not allowed.
-		_, err = descriptors.GetMutableTableByID(ctx, txn, tableID, tree.ObjectLookupFlags{})
+		_, err = descriptors.ByID(txn).Mutable().Table(ctx, tableID)
 		require.EqualError(t, err, fmt.Sprintf("attempted mutable access of synthetic descriptor %d", tableID))
 
 		return nil
@@ -1157,9 +1157,7 @@ SELECT id
 
 		// Modify the table to have the name "bar", synthetically
 		{
-			tab, err := descriptors.GetMutableTableByID(
-				ctx, txn, tabID, tree.ObjectLookupFlagsWithRequired(),
-			)
+			tab, err := descriptors.ByID(txn).Mutable().Table(ctx, tabID)
 			if err != nil {
 				return err
 			}
@@ -1176,17 +1174,13 @@ SELECT id
 			return err
 		}
 		// Attempt to retrieve the mutable descriptor, validate the error.
-		_, err := descriptors.GetMutableTableByID(
-			ctx, txn, tabID, tree.ObjectLookupFlagsWithRequired(),
-		)
+		_, err := descriptors.ByID(txn).Mutable().Table(ctx, tabID)
 		require.Regexp(t, `attempted mutable access of synthetic descriptor \d+`, err)
 		descriptors.ResetSyntheticDescriptors()
 		// Retrieve the mutable descriptor, find the unmodified "foo".
 		// Then modify the name to "baz" and write it.
 		{
-			tabMut, err := descriptors.GetMutableTableByID(
-				ctx, txn, tabID, tree.ObjectLookupFlagsWithRequired(),
-			)
+			tabMut, err := descriptors.ByID(txn).Mutable().Table(ctx, tabID)
 			require.NoError(t, err)
 			require.Equal(t, "foo", tabMut.GetName())
 			tabMut.Name = "baz"

@@ -1149,7 +1149,7 @@ func createImportingDescriptors(
 								table.ID, table.ParentID)
 						}
 
-						mutTable, err := descsCol.GetMutableTableVersionByID(ctx, table.GetID(), txn)
+						mutTable, err := descsCol.ByID(txn).Mutable().Table(ctx, table.GetID())
 						if err != nil {
 							return err
 						}
@@ -2360,7 +2360,7 @@ func (r *restoreResumer) dropDescriptors(
 	mutableTables := make([]*tabledesc.Mutable, len(details.TableDescs))
 	for i := range details.TableDescs {
 		var err error
-		mutableTables[i], err = descsCol.GetMutableTableVersionByID(ctx, details.TableDescs[i].ID, txn)
+		mutableTables[i], err = descsCol.ByID(txn).Mutable().Table(ctx, details.TableDescs[i].ID)
 		if err != nil {
 			return err
 		}

@@ -116,9 +116,7 @@ func (n *createViewNode) startExec(params runParams) error {
 			return err
 		}
 		for id := range n.planDeps {
-			backRefMutable, err := params.p.Descriptors().GetMutableTableByID(
-				params.ctx, params.p.Txn(), id, tree.ObjectLookupFlagsWithRequired(),
-			)
+			backRefMutable, err := params.p.Descriptors().ByID(params.p.Txn()).Mutable().Table(params.ctx, id)
 			if err != nil {
 				return err
 			}
@@ -160,7 +158,7 @@ func (n *createViewNode) startExec(params runParams) error {
 			if err != nil {
 				return err
 			}
-			desc, err := params.p.Descriptors().GetMutableTableVersionByID(params.ctx, id, params.p.txn)
+			desc, err := params.p.Descriptors().ByID(params.p.txn).Mutable().Table(params.ctx, id)
 			if err != nil {
 				return err
 			}
@@ -619,7 +617,7 @@ func (p *planner) replaceViewDesc(
 		desc, ok := backRefMutables[id]
 		if !ok {
 			var err error
-			desc, err = p.Descriptors().GetMutableTableVersionByID(ctx, id, p.txn)
+			desc, err = p.Descriptors().ByID(p.txn).Mutable().Table(ctx, id)
 			if err != nil {
 				return nil, err
 			}

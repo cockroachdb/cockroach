@@ -294,7 +294,7 @@ func (p *planner) accumulateOwnedSequences(
 ) error {
 	for colID := range desc.GetColumns() {
 		for _, seqID := range desc.GetColumns()[colID].OwnsSequenceIds {
-			ownedSeqDesc, err := p.Descriptors().GetMutableTableVersionByID(ctx, seqID, p.txn)
+			ownedSeqDesc, err := p.Descriptors().ByID(p.txn).Mutable().Table(ctx, seqID)
 			if err != nil {
 				// Special case error swallowing for #50711 and #50781, which can
 				// cause columns to own sequences that have been dropped/do not
