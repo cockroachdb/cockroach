@@ -381,16 +381,24 @@ func TestReplicaStatsDecaySmoothing(t *testing.T) {
 	}
 }
 
-func genTestingReplicaStats(windowedMultipliers []int, n, offset int) *ReplicaStats {
-	now := testingStartTime()
-	awsLocalities := map[roachpb.NodeID]string{
-		1: "region=us-east-1,zone=us-east-1a",
-		2: "region=us-east-1,zone=us-east-1b",
-		3: "region=us-west-1,zone=us-west-1a",
-	}
-	rs := NewReplicaStats(now, func(nodeID roachpb.NodeID) string {
+func genTestingReplicaStatsWithAWSLocalities(
+	windowedMultipliers []int, n, offset int,
+) *ReplicaStats {
+	return genTestingReplicaStats(windowedMultipliers, n, offset, func(nodeID roachpb.NodeID) string {
+		awsLocalities := map[roachpb.NodeID]string{
+			1: "region=us-east-1,zone=us-east-1a",
+			2: "region=us-east-1,zone=us-east-1b",
+			3: "region=us-west-1,zone=us-west-1a",
+		}
 		return awsLocalities[nodeID]
 	})
+}
+
+func genTestingReplicaStats(
+	windowedMultipliers []int, n, offset int, localityOracle LocalityOracle,
+) *ReplicaStats {
+	now := testingStartTime()
+	rs := NewReplicaStats(now, localityOracle)
 
 	now = now.Add(replStatsRotateInterval * time.Duration(offset))
 
@@ -453,9 +461,9 @@ func TestReplicaStatsSplit(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		initial := genTestingReplicaStats(tc.windowsInitial, 10, tc.rotation)
-		expected := genTestingReplicaStats(tc.expectedSplit, 10, tc.rotation)
-		otherHalf := genTestingReplicaStats(nilMultipliers, 0, 0)
+		initial := genTestingReplicaStatsWithAWSLocalities(tc.windowsInitial, 10, tc.rotation)
+		expected := genTestingReplicaStatsWithAWSLocalities(tc.expectedSplit, 10, tc.rotation)
+		otherHalf := genTestingReplicaStatsWithAWSLocalities(nilMultipliers, 0, 0)
 		n := len(initial.records)
 
 		initial.SplitRequestCounts(otherHalf)
@@ -536,9 +544,9 @@ func TestReplicaStatsMerge(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		rsA := genTestingReplicaStats(tc.windowsA, 10, tc.rotateA)
-		rsB := genTestingReplicaStats(tc.windowsB, 10, tc.rotateB)
-		expectedRs := genTestingReplicaStats(tc.windowsExp, 10, tc.rotateA)
+		rsA := genTestingReplicaStatsWithAWSLocalities(tc.windowsA, 10, tc.rotateA)
+		rsB := genTestingReplicaStatsWithAWSLocalities(tc.windowsB, 10, tc.rotateB)
+		expectedRs := genTestingReplicaStatsWithAWSLocalities(tc.windowsExp, 10, tc.rotateA)
 		n := len(expectedRs.records)
 
 		rsA.MergeRequestCounts(rsB)
@@ -548,6 +556,70 @@ func TestReplicaStatsMerge(t *testing.T) {
 			assert.Equal(t, expectedRs.records[idxExpected], rsA.records[idxA], "expected idx: %d, merged idx %d", idxExpected, idxA)
 		}
 	}
+}
+
+// TestReplicaStatsLocalityCountsSplitMergeReset asserts that after a merge or
+// split, where there is a mismatch in locality tracking that the locality
+// tracking on each resulting replica stats is correct.
+func TestReplicaStatsLocalityCountsSplitMergeReset(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	initTestStats := func() (*ReplicaStats, *ReplicaStats) {
+		noLocalityStats := genTestingReplicaStats([]int{1, 1, 1, 1, 1, 1}, 100, 0, nil /* localityOracle */)
+		localityStats := genTestingReplicaStatsWithAWSLocalities([]int{1, 1, 1, 1, 1, 1}, 100, 0)
+		return noLocalityStats, localityStats
+	}
+
+	assertEmptyLocalityTracking := func(t *testing.T, rs *ReplicaStats) {
+		require.Nil(t, rs.getNodeLocality)
+		for i := range rs.records {
+			require.Nil(t, rs.records[i].localityCounts)
+		}
+		require.Equal(t, PerLocalityCounts{}, rs.PerLocalityDecayingRate(testingStartTime()))
+	}
+
+	assertNonEmptyLocalityTracking := func(t *testing.T, rs *ReplicaStats) {
+		require.NotNil(t, rs.getNodeLocality)
+		for i := range rs.records {
+			require.NotNil(t, rs.records[i].localityCounts)
+		}
+		require.NotEqual(t, PerLocalityCounts{}, rs.PerLocalityDecayingRate(testingStartTime()))
+	}
+
+	t.Run("no-locality.merge(locality)", func(t *testing.T) {
+		// Merge the locality stats into the no-locality stats.
+		noLocalityStats, localityStats := initTestStats()
+		noLocalityStats.MergeRequestCounts(localityStats)
+		assertEmptyLocalityTracking(t, noLocalityStats)
+		// We reset the locality replica stats after merging it into the
+		// no-locality, the locality stats should have only empty records.
+		require.Equal(t, PerLocalityCounts{}, localityStats.PerLocalityDecayingRate(testingStartTime()))
+
+	})
+	t.Run("locality.merge(no-locality)", func(t *testing.T) {
+		// Merge the no-locality stats into the locality stats.
+		noLocalityStats, localityStats := initTestStats()
+		localityStats.MergeRequestCounts(noLocalityStats)
+		assertEmptyLocalityTracking(t, noLocalityStats)
+		assertNonEmptyLocalityTracking(t, localityStats)
+	})
+	t.Run("locality.split(no-locality)", func(t *testing.T) {
+		// Split the locality stats request counts between itself and the
+		// no-locality stats.
+		noLocalityStats, localityStats := initTestStats()
+		localityStats.SplitRequestCounts(noLocalityStats)
+		assertEmptyLocalityTracking(t, noLocalityStats)
+		assertNonEmptyLocalityTracking(t, localityStats)
+	})
+	t.Run("no-locality.split(locality)", func(t *testing.T) {
+		// Split the no-locality stats request counts between itself and the
+		// locality stats.
+		noLocalityStats, localityStats := initTestStats()
+		noLocalityStats.SplitRequestCounts(localityStats)
+		assertEmptyLocalityTracking(t, noLocalityStats)
+		assertNonEmptyLocalityTracking(t, localityStats)
+	})
 }
 
 // TestReplicaStatsRecordAggregate asserts that the aggregate stats collected
@@ -563,7 +635,7 @@ func TestReplicaStatsRecordAggregate(t *testing.T) {
 	}
 
 	n := 100
-	rs := genTestingReplicaStats([]int{1, 0, 0, 0, 0, 0}, n, 0)
+	rs := genTestingReplicaStatsWithAWSLocalities([]int{1, 0, 0, 0, 0, 0}, n, 0)
 
 	expectedSum := float64(n*(n+1)) / 2.0
 

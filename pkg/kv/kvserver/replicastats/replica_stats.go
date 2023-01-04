@@ -150,10 +150,9 @@ func (rsr *replicaStatsRecord) mergeReplicaStatsRecords(other *replicaStatsRecor
 	rsr.sum += other.sum
 	rsr.activate()
 
-	// If either of the locality counts are not set, then set both to be nil.
-	if rsr.localityCounts == nil || other.localityCounts == nil {
-		rsr.localityCounts = nil
-		other.localityCounts = nil
+	// When the other record's locality counts or calling record's locality
+	// counts are not set, there is nothing to merge togther.
+	if other.localityCounts == nil || rsr.localityCounts == nil {
 		return
 	}
 
@@ -166,15 +165,25 @@ func (rsr *replicaStatsRecord) split(other *replicaStatsRecord) {
 	rsr.sum = rsr.sum / 2.0
 	other.sum = rsr.sum
 
-	// If either of the locality counts are not set, then set both to be nil.
-	if rsr.localityCounts == nil || other.localityCounts == nil {
-		rsr.localityCounts = nil
-		other.localityCounts = nil
+	// When the calling record's locality counts are not set, there is nothing
+	// to split onto the other record's localityCounts.
+	if rsr.localityCounts == nil {
 		return
 	}
 
+	// Halve the calling record's locality counts, so that even if the other
+	// record won't be updated, the calling record has at least halved.
 	for locality, count := range *rsr.localityCounts {
 		(*rsr.localityCounts)[locality] = count / 2.0
+	}
+
+	// When the other record's locality counts are not set, there is nothing to
+	// split into.
+	if other.localityCounts == nil {
+		return
+	}
+
+	for locality := range *rsr.localityCounts {
 		(*other.localityCounts)[locality] = (*rsr.localityCounts)[locality]
 	}
 }
