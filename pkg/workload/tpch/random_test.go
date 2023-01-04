@@ -25,11 +25,7 @@ func TestRandPartName(t *testing.T) {
 	rng := rand.New(rand.NewSource(uint64(timeutil.Now().UnixNano())))
 	seen := make(map[string]int)
 	runOneRound := func() {
-		namePerm := make([]int, len(randPartNames))
-		for i := range namePerm {
-			namePerm[i] = i
-		}
-		res := randPartName(rng, namePerm, &a)
+		res := randPartName(rng, &a)
 		names := strings.Split(string(res), " ")
 		assert.Equal(t, len(names), nPartNames)
 		seenLocal := make(map[string]int)
