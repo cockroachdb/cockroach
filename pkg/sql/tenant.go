@@ -202,6 +202,33 @@ func CreateTenantRecord(
 	)
 }
 
+func GetAllTenantNames(
+	ctx context.Context, execCfg *ExecutorConfig, txn *kv.Txn,
+) ([]roachpb.TenantName, error) {
+	if !execCfg.Settings.Version.IsActive(ctx, clusterversion.V23_1TenantNames) {
+		return nil, errors.Newf("tenant names not supported until upgrade to %s or higher is completed",
+			clusterversion.V23_1TenantNames.String())
+	}
+	rows, err := execCfg.InternalExecutor.QueryBuffered(
+		ctx, "get-tenant-names", txn,
+		`SELECT name FROM system.tenants`,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	tenants := make([]roachpb.TenantName, 0, len(rows))
+	for _, tenant := range rows {
+		// If the tenants is in the DROP state the then name is nil.
+		if tenant[0] != tree.DNull {
+			tenantName := tree.MustBeDString(tenant[0])
+			tenants = append(tenants, roachpb.TenantName(tenantName))
+		}
+	}
+
+	return tenants, nil
+}
+
 // GetTenantRecordByName retrieves a tenant with the provided name from
 // system.tenants.
 func GetTenantRecordByName(

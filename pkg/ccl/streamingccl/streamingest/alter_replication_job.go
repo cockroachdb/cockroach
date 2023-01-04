@@ -161,7 +161,7 @@ func alterReplicationJobHook(
 			return err
 		}
 		if tenInfo.TenantReplicationJobID == 0 {
-			return errors.Newf("tenant %q does not have an active replication job", tenantName)
+			return errors.Newf("tenant %q is not a replicated tenant", tenantName)
 		}
 		jobRegistry := p.ExecCfg().JobRegistry
 		if alterTenantStmt.Cutover != nil {
