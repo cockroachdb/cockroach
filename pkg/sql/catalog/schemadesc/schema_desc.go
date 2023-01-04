@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -76,9 +77,27 @@ func (desc *immutable) GetRawBytesInStorage() []byte {
 	return desc.rawBytesInStorage
 }
 
-// GetRawBytesInStorage implements the catalog.Descriptor interface.
-func (desc *Mutable) GetRawBytesInStorage() []byte {
-	return desc.rawBytesInStorage
+// ForEachUDTDependentForHydration implements the catalog.Descriptor interface.
+func (desc *immutable) ForEachUDTDependentForHydration(fn func(t *types.T) error) error {
+	for _, f := range desc.Functions {
+		for _, fo := range f.Overloads {
+			for _, typ := range fo.ArgTypes {
+				if !catid.IsOIDUserDefined(typ.Oid()) {
+					continue
+				}
+				if err := fn(typ); err != nil {
+					return iterutil.Map(err)
+				}
+			}
+			if !catid.IsOIDUserDefined(fo.ReturnType.Oid()) {
+				continue
+			}
+			if err := fn(fo.ReturnType); err != nil {
+				return iterutil.Map(err)
+			}
+		}
+	}
+	return nil
 }
 
 // SafeMessage makes Mutable a SafeMessager.
@@ -459,23 +478,6 @@ func (desc *Mutable) RemoveFunction(name string, id descpb.ID) {
 // GetObjectType implements the Object interface.
 func (desc *immutable) GetObjectType() privilege.ObjectType {
 	return privilege.Schema
-}
-
-// ContainsUserDefinedTypes implements the HydratableDescriptor interface.
-func (desc *immutable) ContainsUserDefinedTypes() bool {
-	for _, fn := range desc.Functions {
-		for i := range fn.Overloads {
-			for _, t := range fn.Overloads[i].ArgTypes {
-				if t.UserDefined() {
-					return true
-				}
-			}
-			if fn.Overloads[i].ReturnType.UserDefined() {
-				return true
-			}
-		}
-	}
-	return false
 }
 
 // GetResolvedFuncDefinition implements the SchemaDescriptor interface.

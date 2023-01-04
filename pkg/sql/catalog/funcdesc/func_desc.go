@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
@@ -372,9 +373,20 @@ func (desc *immutable) GetRawBytesInStorage() []byte {
 	return desc.rawBytesInStorage
 }
 
-// GetRawBytesInStorage implements the catalog.Descriptor interface.
-func (desc *Mutable) GetRawBytesInStorage() []byte {
-	return desc.rawBytesInStorage
+// ForEachUDTDependentForHydration implements the catalog.Descriptor interface.
+func (desc *immutable) ForEachUDTDependentForHydration(fn func(t *types.T) error) error {
+	for _, p := range desc.Params {
+		if !catid.IsOIDUserDefined(p.Type.Oid()) {
+			continue
+		}
+		if err := fn(p.Type); err != nil {
+			return iterutil.Map(err)
+		}
+	}
+	if !catid.IsOIDUserDefined(desc.ReturnType.Type.Oid()) {
+		return nil
+	}
+	return iterutil.Map(fn(desc.ReturnType.Type))
 }
 
 // IsUncommittedVersion implements the catalog.LeasableDescriptor interface.
@@ -523,16 +535,6 @@ func (desc *immutable) GetLanguage() catpb.Function_Language {
 	return desc.Lang
 }
 
-// ContainsUserDefinedTypes implements the catalog.HydratableDescriptor interface.
-func (desc *immutable) ContainsUserDefinedTypes() bool {
-	for i := range desc.Params {
-		if desc.Params[i].Type.UserDefined() {
-			return true
-		}
-	}
-	return desc.ReturnType.Type.UserDefined()
-}
-
 func (desc *immutable) ToOverload() (ret *tree.Overload, err error) {
 	ret = &tree.Overload{
 		Oid:        catid.FuncIDToOID(desc.ID),
@@ -677,10 +679,9 @@ func toTreeNodeParamClass(class catpb.Function_Param_Class) tree.FuncParamClass 
 	return 0
 }
 
-// UserDefinedFunctionOIDToID converts a UDF OID into a descriptor ID. OID of a
-// UDF must be greater CockroachPredefinedOIDMax. The function returns an error
-// if the given OID is less than or equal to CockroachPredefinedOIDMax.
-func UserDefinedFunctionOIDToID(oid oid.Oid) (descpb.ID, error) {
+// UserDefinedFunctionOIDToID converts a UDF OID into a descriptor ID.
+// Returns zero if the OID is not for something user-defined.
+func UserDefinedFunctionOIDToID(oid oid.Oid) descpb.ID {
 	return catid.UserDefinedOIDToID(oid)
 }
 

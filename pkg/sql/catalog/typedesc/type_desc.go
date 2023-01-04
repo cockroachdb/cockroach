@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
@@ -129,26 +130,24 @@ func TableIDToImplicitTypeOID(id descpb.ID) oid.Oid {
 }
 
 // UserDefinedTypeOIDToID converts a user defined type OID into a descriptor ID.
-// OID of a user-defined type must be greater than CockroachPredefinedOIDMax.
-// The function returns an error if the given OID is less than or equals to
-// CockroachPredefinedMax. If the OID is for a virtual table, then the ID itself
-// is returned, since the type can then be assumed to be the implict record type
-// for that table.
-func UserDefinedTypeOIDToID(oid oid.Oid) (descpb.ID, error) {
+// Returns zero when the OID is not for a user-defined type. If the OID is for
+// a virtual table, then the ID itself is returned, since the type can then be
+// assumed to be the implict record type for that table.
+func UserDefinedTypeOIDToID(oid oid.Oid) descpb.ID {
 	if descpb.IsVirtualTable(descpb.ID(oid)) {
-		return descpb.ID(oid), nil
+		return descpb.ID(oid)
 	}
 	return catid.UserDefinedOIDToID(oid)
 }
 
 // GetUserDefinedTypeDescID gets the type descriptor ID from a user defined type.
-func GetUserDefinedTypeDescID(t *types.T) (descpb.ID, error) {
+func GetUserDefinedTypeDescID(t *types.T) descpb.ID {
 	return UserDefinedTypeOIDToID(t.Oid())
 }
 
 // GetUserDefinedArrayTypeDescID gets the ID of the array type descriptor from a user
 // defined type.
-func GetUserDefinedArrayTypeDescID(t *types.T) (descpb.ID, error) {
+func GetUserDefinedArrayTypeDescID(t *types.T) descpb.ID {
 	return UserDefinedTypeOIDToID(t.UserDefinedArrayOID())
 }
 
@@ -672,10 +671,7 @@ func (desc *immutable) ValidateForwardReferences(
 
 	// Validate that the forward-referenced types exist.
 	if desc.GetKind() == descpb.TypeDescriptor_ALIAS && desc.GetAlias().UserDefined() {
-		aliasedID, err := UserDefinedTypeOIDToID(desc.GetAlias().Oid())
-		if err != nil {
-			vea.Report(err)
-		}
+		aliasedID := UserDefinedTypeOIDToID(desc.GetAlias().Oid())
 		if typ, err := vdg.GetTypeDescriptor(aliasedID); err != nil {
 			vea.Report(errors.Wrapf(err, "aliased type %d does not exist", aliasedID))
 		} else if typ.Dropped() {
@@ -826,23 +822,13 @@ func (t TypeLookupFunc) GetTypeDescriptor(
 	return t(ctx, id)
 }
 
-// MakeTypesT implements the TypeDescriptor interface.
-func (desc *immutable) MakeTypesT(
-	ctx context.Context, name *tree.TypeName, res catalog.TypeDescriptorResolver,
-) (*types.T, error) {
-	switch t := desc.Kind; t {
+// AsTypesT implements the TypeDescriptor interface.
+func (desc *immutable) AsTypesT() *types.T {
+	switch desc.Kind {
 	case descpb.TypeDescriptor_ENUM, descpb.TypeDescriptor_MULTIREGION_ENUM:
-		typ := types.MakeEnum(catid.TypeIDToOID(desc.GetID()), catid.TypeIDToOID(desc.ArrayTypeID))
-		if err := desc.HydrateTypeInfoWithName(ctx, typ, name, res); err != nil {
-			return nil, err
-		}
-		return typ, nil
+		return types.MakeEnum(catid.TypeIDToOID(desc.GetID()), catid.TypeIDToOID(desc.ArrayTypeID))
 	case descpb.TypeDescriptor_ALIAS:
-		// Hydrate the alias and return it.
-		if err := desc.HydrateTypeInfoWithName(ctx, desc.Alias, name, res); err != nil {
-			return nil, err
-		}
-		return desc.Alias, nil
+		return desc.Alias
 	case descpb.TypeDescriptor_COMPOSITE:
 		contents := make([]*types.T, len(desc.Composite.Elements))
 		labels := make([]string, len(desc.Composite.Elements))
@@ -850,160 +836,14 @@ func (desc *immutable) MakeTypesT(
 			contents[i] = e.ElementType
 			labels[i] = e.ElementLabel
 		}
-		typ := types.MakeCompositeType(catid.TypeIDToOID(desc.GetID()), catid.TypeIDToOID(desc.ArrayTypeID),
-			contents, labels)
-		// Hydrate the composite type and return it.
-		if err := desc.HydrateTypeInfoWithName(ctx, typ, name, res); err != nil {
-			return nil, err
-		}
-		return typ, nil
-	default:
-		return nil, errors.AssertionFailedf("unknown type kind %s", t.String())
+		return types.NewCompositeType(
+			catid.TypeIDToOID(desc.GetID()),
+			catid.TypeIDToOID(desc.ArrayTypeID),
+			contents,
+			labels,
+		)
 	}
-}
-
-// EnsureTypeIsHydrated makes sure that t is a fully-hydrated type.
-func EnsureTypeIsHydrated(
-	ctx context.Context, t *types.T, res catalog.TypeDescriptorResolver,
-) error {
-	if t.Family() == types.TupleFamily {
-		for _, typ := range t.TupleContents() {
-			if err := EnsureTypeIsHydrated(ctx, typ, res); err != nil {
-				return err
-			}
-		}
-	}
-	if !t.UserDefined() {
-		return nil
-	}
-	id, err := GetUserDefinedTypeDescID(t)
-	if err != nil {
-		return err
-	}
-	elemTypName, elemTypDesc, err := res.GetTypeDescriptor(ctx, id)
-	if err != nil {
-		return err
-	}
-	return elemTypDesc.HydrateTypeInfoWithName(ctx, t, &elemTypName, res)
-}
-
-// HydrateTypesInTableDescriptor uses res to install metadata in the types
-// present in a table descriptor. res retrieves the fully qualified name and
-// descriptor for a particular ID.
-func HydrateTypesInTableDescriptor(
-	ctx context.Context, desc *descpb.TableDescriptor, res catalog.TypeDescriptorResolver,
-) error {
-	for i := range desc.Columns {
-		if err := EnsureTypeIsHydrated(ctx, desc.Columns[i].Type, res); err != nil {
-			return err
-		}
-	}
-	for i := range desc.Mutations {
-		mut := &desc.Mutations[i]
-		if col := mut.GetColumn(); col != nil {
-			if err := EnsureTypeIsHydrated(ctx, col.Type, res); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
-}
-
-// HydrateTypesInFunctionDescriptor uses res to install metadata in the types
-// present in a function descriptor.
-func HydrateTypesInFunctionDescriptor(
-	ctx context.Context, desc *descpb.FunctionDescriptor, res catalog.TypeDescriptorResolver,
-) error {
-	for i := range desc.Params {
-		if err := EnsureTypeIsHydrated(ctx, desc.Params[i].Type, res); err != nil {
-			return err
-		}
-	}
-	if err := EnsureTypeIsHydrated(ctx, desc.GetReturnType().Type, res); err != nil {
-		return err
-	}
-	return nil
-}
-
-// HydrateTypesInSchemaDescriptor uses res to install metadata in the types
-// present in a function descriptor.
-func HydrateTypesInSchemaDescriptor(
-	ctx context.Context, desc *descpb.SchemaDescriptor, res catalog.TypeDescriptorResolver,
-) error {
-	for _, f := range desc.Functions {
-		for i := range f.Overloads {
-			for _, t := range f.Overloads[i].ArgTypes {
-				if err := EnsureTypeIsHydrated(ctx, t, res); err != nil {
-					return err
-				}
-			}
-			if err := EnsureTypeIsHydrated(ctx, f.Overloads[i].ReturnType, res); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
-}
-
-// HydrateTypeInfoWithName implements the TypeDescriptor interface.
-func (desc *immutable) HydrateTypeInfoWithName(
-	ctx context.Context, typ *types.T, name *tree.TypeName, res catalog.TypeDescriptorResolver,
-) error {
-	if typ.IsHydrated() && typ.TypeMeta.Version == uint32(desc.GetVersion()) {
-		return nil
-	}
-	var enumData *types.EnumMetadata
-	switch desc.Kind {
-	case descpb.TypeDescriptor_ENUM, descpb.TypeDescriptor_MULTIREGION_ENUM:
-		if typ.Family() != types.EnumFamily {
-			return errors.New("cannot hydrate a non-enum type with an enum type descriptor")
-		}
-		enumData = &types.EnumMetadata{
-			LogicalRepresentations:  desc.logicalReps,
-			PhysicalRepresentations: desc.physicalReps,
-			IsMemberReadOnly:        desc.readOnlyMembers,
-		}
-	case descpb.TypeDescriptor_ALIAS:
-		if typ.UserDefined() {
-			switch typ.Family() {
-			case types.ArrayFamily:
-				// Hydrate the element type.
-				elemType := typ.ArrayContents()
-				if err := EnsureTypeIsHydrated(ctx, elemType, res); err != nil {
-					return err
-				}
-			case types.TupleFamily:
-				if err := EnsureTypeIsHydrated(ctx, typ, res); err != nil {
-					return err
-				}
-			default:
-				return errors.AssertionFailedf("unhandled alias type family %s", typ.Family())
-			}
-		}
-	case descpb.TypeDescriptor_COMPOSITE:
-		for _, e := range desc.Composite.Elements {
-			if err := EnsureTypeIsHydrated(ctx, e.ElementType, res); err != nil {
-				return err
-			}
-		}
-	default:
-		return errors.AssertionFailedf("unknown type descriptor kind %s", desc.Kind)
-	}
-
-	// Only hydrate the type if we did not fail to perform any of the above
-	// steps. If we were to populate these before something that might fail,
-	// the type may end up partially hydrated.
-	typ.TypeMeta = types.UserDefinedTypeMetadata{
-		Name: &types.UserDefinedTypeName{
-			Catalog:        name.Catalog(),
-			ExplicitSchema: name.ExplicitSchema,
-			Schema:         name.Schema(),
-			Name:           name.Object(),
-		},
-		Version:  uint32(desc.Version),
-		EnumData: enumData,
-	}
-	return nil
+	panic(errors.AssertionFailedf("unsupported descriptor kind %s", desc.Kind.String()))
 }
 
 // NumEnumMembers implements the TypeDescriptor interface.
@@ -1118,9 +958,25 @@ func (desc *immutable) GetRawBytesInStorage() []byte {
 	return desc.rawBytesInStorage
 }
 
-// GetRawBytesInStorage implements the catalog.Descriptor interface.
-func (desc *Mutable) GetRawBytesInStorage() []byte {
-	return desc.rawBytesInStorage
+// ForEachUDTDependentForHydration implements the catalog.Descriptor interface.
+func (desc *immutable) ForEachUDTDependentForHydration(fn func(t *types.T) error) error {
+	if desc.Alias != nil && catid.IsOIDUserDefined(desc.Alias.Oid()) {
+		if err := fn(desc.Alias); err != nil {
+			return iterutil.Map(err)
+		}
+	}
+	if desc.Composite == nil {
+		return nil
+	}
+	for _, e := range desc.Composite.Elements {
+		if !catid.IsOIDUserDefined(e.ElementType.Oid()) {
+			continue
+		}
+		if err := fn(e.ElementType); err != nil {
+			return iterutil.Map(err)
+		}
+	}
+	return nil
 }
 
 // GetIDClosure implements the TypeDescriptor interface.
@@ -1167,10 +1023,7 @@ func GetTypeDescriptorClosure(typ *types.T) (map[descpb.ID]struct{}, error) {
 	if !typ.UserDefined() {
 		return map[descpb.ID]struct{}{}, nil
 	}
-	id, err := GetUserDefinedTypeDescID(typ)
-	if err != nil {
-		return nil, err
-	}
+	id := GetUserDefinedTypeDescID(typ)
 	// Collect the type's descriptor ID.
 	ret := map[descpb.ID]struct{}{
 		id: {},
@@ -1198,10 +1051,7 @@ func GetTypeDescriptorClosure(typ *types.T) (map[descpb.ID]struct{}, error) {
 		}
 	default:
 		// Otherwise, take the array type ID.
-		id, err := GetUserDefinedArrayTypeDescID(typ)
-		if err != nil {
-			return nil, err
-		}
+		id := GetUserDefinedArrayTypeDescID(typ)
 		ret[id] = struct{}{}
 	}
 	return ret, nil

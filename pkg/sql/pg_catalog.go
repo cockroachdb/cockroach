@@ -3269,7 +3269,8 @@ https://www.postgresql.org/docs/9.5/catalog-pg-type.html`,
 					db,
 					func(_ catalog.DatabaseDescriptor, sc catalog.SchemaDescriptor, typDesc catalog.TypeDescriptor) error {
 						nspOid := schemaOid(sc.GetID())
-						typ, err := typDesc.MakeTypesT(ctx, tree.NewQualifiedTypeName(db.GetName(), sc.GetName(), typDesc.GetName()), p)
+						tn := tree.NewQualifiedTypeName(db.GetName(), sc.GetName(), typDesc.GetName())
+						typ, err := typedesc.HydratedTFromDesc(ctx, tn, typDesc, p)
 						if err != nil {
 							return err
 						}
@@ -3313,10 +3314,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-type.html`,
 					return false, nil
 				}
 
-				id, err := typedesc.UserDefinedTypeOIDToID(ooid)
-				if err != nil {
-					return false, err
-				}
+				id := typedesc.UserDefinedTypeOIDToID(ooid)
 
 				sc, typDesc, err := getSchemaAndTypeByTypeID(ctx, p, id)
 				if err != nil || typDesc == nil {
@@ -3350,7 +3348,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-type.html`,
 				}
 
 				nspOid = schemaOid(sc.GetID())
-				typ, err = typDesc.MakeTypesT(ctx, tree.NewUnqualifiedTypeName(typDesc.GetName()), p)
+				typ, err = typedesc.HydratedTFromDesc(ctx, tree.NewUnqualifiedTypeName(typDesc.GetName()), typDesc, p)
 				if err != nil {
 					return false, err
 				}

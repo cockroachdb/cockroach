@@ -84,7 +84,7 @@ func (r *Replica) Metrics(
 		livenessMap:           livenessMap,
 		clusterNodes:          clusterNodes,
 		desc:                  r.mu.state.Desc,
-		raftStatus:            r.raftStatusRLocked(),
+		raftStatus:            r.raftSparseStatusRLocked(),
 		leaseStatus:           r.leaseStatusAtRLocked(ctx, now),
 		storeID:               r.store.StoreID(),
 		quiescent:             r.mu.quiescent,
@@ -110,7 +110,7 @@ type calcReplicaMetricsInput struct {
 	livenessMap           livenesspb.IsLiveMap
 	clusterNodes          int
 	desc                  *roachpb.RangeDescriptor
-	raftStatus            *raft.Status
+	raftStatus            *raftSparseStatus
 	leaseStatus           kvserverpb.LeaseStatus
 	storeID               roachpb.StoreID
 	quiescent             bool
@@ -138,7 +138,7 @@ func calcReplicaMetrics(d calcReplicaMetricsInput) ReplicaMetrics {
 
 	// The raft leader computes the number of raft entries that replicas are
 	// behind.
-	leader := isRaftLeader(d.raftStatus)
+	leader := d.raftStatus != nil && d.raftStatus.RaftState == raft.StateLeader
 	var leaderBehindCount, leaderPausedFollowerCount int64
 	if leader {
 		leaderBehindCount = calcBehindCount(d.raftStatus, d.desc, d.livenessMap)
@@ -263,7 +263,7 @@ func calcLiveReplicas(repls []roachpb.ReplicaDescriptor, livenessMap livenesspb.
 // calcBehindCount returns a total count of log entries that follower replicas
 // are behind. This can only be computed on the raft leader.
 func calcBehindCount(
-	raftStatus *raft.Status, desc *roachpb.RangeDescriptor, livenessMap livenesspb.IsLiveMap,
+	raftStatus *raftSparseStatus, desc *roachpb.RangeDescriptor, livenessMap livenesspb.IsLiveMap,
 ) int64 {
 	var behindCount int64
 	for _, rd := range desc.Replicas().Descriptors() {

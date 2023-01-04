@@ -48,15 +48,7 @@ func (i importTypeResolver) ResolveType(
 }
 
 func (i importTypeResolver) ResolveTypeByOID(ctx context.Context, oid oid.Oid) (*types.T, error) {
-	id, err := typedesc.UserDefinedTypeOIDToID(oid)
-	if err != nil {
-		return nil, err
-	}
-	name, desc, err := i.GetTypeDescriptor(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-	return desc.MakeTypesT(ctx, &name, i)
+	return typedesc.ResolveHydratedTByOID(ctx, oid, i)
 }
 
 var _ catalog.TypeDescriptorResolver = &importTypeResolver{}

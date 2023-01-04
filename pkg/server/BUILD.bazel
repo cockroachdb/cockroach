@@ -171,7 +171,7 @@ go_library(
         "//pkg/sql/catalog/descidgen",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/descs",
-        "//pkg/sql/catalog/hydrateddesc",
+        "//pkg/sql/catalog/hydrateddesccache",
         "//pkg/sql/catalog/lease",
         "//pkg/sql/catalog/schematelemetry",
         "//pkg/sql/catalog/systemschema",

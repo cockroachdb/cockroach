@@ -4,6 +4,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "typedesc",
     srcs = [
+        "hydrate.go",
         "safe_format.go",
         "table_implicit_record_type.go",
         "type_desc.go",
@@ -27,6 +28,7 @@ go_library(
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
         "//pkg/util/hlc",
+        "//pkg/util/iterutil",
         "//pkg/util/protoutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",

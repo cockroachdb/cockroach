@@ -25,6 +25,7 @@ go_library(
         "//pkg/sql/sem/volatility",
         "//pkg/sql/types",
         "//pkg/util/hlc",
+        "//pkg/util/iterutil",
         "//pkg/util/protoutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_lib_pq//oid",

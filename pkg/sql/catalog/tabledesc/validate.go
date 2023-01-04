@@ -102,11 +102,7 @@ func (desc *wrapper) GetReferencedDescIDs() (catalog.DescriptorIDSet, error) {
 		if !types.IsOIDUserDefinedType(oid) {
 			continue
 		}
-		id, err := typedesc.UserDefinedTypeOIDToID(oid)
-		if err != nil {
-			return catalog.DescriptorIDSet{}, err
-		}
-		ids.Add(id)
+		ids.Add(typedesc.UserDefinedTypeOIDToID(oid))
 	}
 	// Add view dependencies.
 	for _, id := range desc.GetDependsOn() {

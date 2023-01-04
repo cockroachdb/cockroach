@@ -1707,10 +1707,6 @@ func (r *Replica) hasOutstandingSnapshotInFlightToStore(storeID roachpb.StoreID)
 	return r.getSnapshotLogTruncationConstraints(storeID) > 0
 }
 
-func isRaftLeader(raftStatus *raft.Status) bool {
-	return raftStatus != nil && raftStatus.SoftState.RaftState == raft.StateLeader
-}
-
 // HasRaftLeader returns true if the raft group has a raft leader currently.
 func HasRaftLeader(raftStatus *raft.Status) bool {
 	return raftStatus != nil && raftStatus.SoftState.Lead != 0

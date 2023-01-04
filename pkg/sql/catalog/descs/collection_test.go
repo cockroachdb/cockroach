@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -444,18 +445,18 @@ func TestDistSQLTypeResolver_GetTypeDescriptor_FromTable(t *testing.T) {
 
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 	var name tree.TypeName
-	var typedesc catalog.TypeDescriptor
+	var tdesc catalog.TypeDescriptor
 	err := sql.DescsTxn(ctx, &execCfg, func(
 		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 	) error {
 		tr := descs.NewDistSQLTypeResolver(descriptors, txn)
 		var err error
-		name, typedesc, err = tr.GetTypeDescriptor(ctx, id)
+		name, tdesc, err = tr.GetTypeDescriptor(ctx, id)
 		return err
 	})
 	require.NoError(t, err)
 	require.Equal(t, "t", name.ObjectName.String())
-	typ, err := typedesc.MakeTypesT(ctx, &name, nil)
+	typ, err := typedesc.HydratedTFromDesc(ctx, &name, tdesc, nil /* res */)
 	require.NoError(t, err)
 	require.Equal(t, types.TupleFamily, typ.Family())
 	require.Equal(t, "t", typ.TypeMeta.Name.Name)

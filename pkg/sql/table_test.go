@@ -455,7 +455,7 @@ CREATE TABLE test.tt (x test.t);
 		}
 		return tree.TypeName{}, typeDesc, nil
 	}
-	if err := typedesc.HydrateTypesInTableDescriptor(ctx, desc.TableDesc(), typedesc.TypeLookupFunc(typLookup)); err != nil {
+	if err := typedesc.HydrateTypesInDescriptor(ctx, desc, typedesc.TypeLookupFunc(typLookup)); err != nil {
 		t.Fatal(err)
 	}
 	// Ensure that we can clone this table.
