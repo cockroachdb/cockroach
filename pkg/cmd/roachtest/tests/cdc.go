@@ -504,9 +504,7 @@ func newCDCTester(ctx context.Context, t test.Test, c cluster.Cluster) cdcTester
 		t.L().Printf("failed to set cluster setting: %s", err)
 	}
 
-	if !t.SkipInit() {
-		tester.startGrafana()
-	}
+	tester.startGrafana()
 	return tester
 }
 
@@ -520,15 +518,19 @@ func (ct *cdcTester) startGrafana() {
 
 	ct.promCfg = cfg
 
-	err := ct.cluster.StartGrafana(ct.ctx, ct.t.L(), cfg)
-	if err != nil {
-		ct.t.Errorf("error starting prometheus/grafana: %s", err)
+	if !ct.t.SkipInit() {
+		err := ct.cluster.StartGrafana(ct.ctx, ct.t.L(), cfg)
+		if err != nil {
+			ct.t.Errorf("error starting prometheus/grafana: %s", err)
+		}
+		nodeURLs, err := ct.cluster.ExternalIP(ct.ctx, ct.t.L(), ct.workloadNode)
+		if err != nil {
+			ct.t.Errorf("error getting grafana node external ip: %s", err)
+		}
+		ct.t.Status(fmt.Sprintf("started grafana at http://%s:3000/d/928XNlN4k/basic?from=now-15m&to=now", nodeURLs[0]))
+	} else {
+		ct.t.Status("skipping grafana installation")
 	}
-	nodeURLs, err := ct.cluster.ExternalIP(ct.ctx, ct.t.L(), ct.workloadNode)
-	if err != nil {
-		ct.t.Errorf("error getting grafana node external ip: %s", err)
-	}
-	ct.t.Status(fmt.Sprintf("started grafana at http://%s:3000/d/928XNlN4k/basic?from=now-15m&to=now", nodeURLs[0]))
 }
 
 type latencyTargets struct {
@@ -905,7 +907,7 @@ func registerCDC(r registry.Registry) {
 
 			exportStatsFile := ct.startStatsCollection()
 			feed := ct.newChangefeed(feedArgs{
-				sinkType: kafkaSink,
+				sinkType: cloudStorageSink,
 				targets:  allTpccTargets,
 				opts:     map[string]string{"initial_scan": "'only'"},
 			})
