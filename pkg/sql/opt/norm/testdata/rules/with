@@ -1746,20 +1746,20 @@ project
 # Case with a window function.
 norm expect=TryAddLimitToRecursiveBranch
 WITH RECURSIVE cte (i, j) AS (
-  (SELECT 1, 2)
+  (SELECT 1, 2::numeric)
   UNION ALL
   (SELECT i+1, sum(i) OVER (ORDER BY j) FROM cte WHERE i <= 10)
 )
 SELECT i, j FROM cte;
 ----
 project
- ├── columns: i:10 j:11
+ ├── columns: i:9 j:10
  ├── cardinality: [1 - ]
  ├── immutable
  ├── recursive-c-t-e
  │    ├── columns: i:3 j:4
  │    ├── working table binding: &2
- │    ├── initial columns: "?column?":1 "?column?":9
+ │    ├── initial columns: "?column?":1 numeric:2
  │    ├── recursive columns: "?column?":8 sum:7
  │    ├── cardinality: [1 - ]
  │    ├── immutable
@@ -1769,10 +1769,10 @@ project
  │    │    ├── key: ()
  │    │    └── fd: ()-->(3,4)
  │    ├── values
- │    │    ├── columns: "?column?":1!null "?column?":9!null
+ │    │    ├── columns: "?column?":1!null numeric:2!null
  │    │    ├── cardinality: [1 - 1]
  │    │    ├── key: ()
- │    │    ├── fd: ()-->(1,9)
+ │    │    ├── fd: ()-->(1,2)
  │    │    └── (1, 2)
  │    └── project
  │         ├── columns: "?column?":8!null sum:7
@@ -1805,8 +1805,8 @@ project
  │         └── projections
  │              └── i:5 + 1 [as="?column?":8, outer=(5), immutable]
  └── projections
-      ├── i:3 [as=i:10, outer=(3)]
-      └── j:4 [as=j:11, outer=(4)]
+      ├── i:3 [as=i:9, outer=(3)]
+      └── j:4 [as=j:10, outer=(4)]
 
 # Case with DistinctOn.
 norm expect=TryAddLimitToRecursiveBranch
@@ -1869,7 +1869,7 @@ norm expect=TryAddLimitToRecursiveBranch
 WITH RECURSIVE cte (i, j) AS (
   (SELECT 1, 2)
   UNION ALL
-  (SELECT i+1, sum(j) FROM cte WHERE i <= 10 GROUP BY i)
+  (SELECT i+1, sum(j)::int FROM cte WHERE i <= 10 GROUP BY i)
 )
 SELECT i, j FROM cte;
 ----
@@ -1880,8 +1880,8 @@ project
  ├── recursive-c-t-e
  │    ├── columns: i:3 j:4
  │    ├── working table binding: &2
- │    ├── initial columns: "?column?":1 "?column?":9
- │    ├── recursive columns: "?column?":8 sum:7
+ │    ├── initial columns: "?column?":1 "?column?":2
+ │    ├── recursive columns: "?column?":8 sum:9
  │    ├── cardinality: [1 - ]
  │    ├── immutable
  │    ├── fake-rel
@@ -1890,17 +1890,17 @@ project
  │    │    ├── key: ()
  │    │    └── fd: ()-->(3,4)
  │    ├── values
- │    │    ├── columns: "?column?":1!null "?column?":9!null
+ │    │    ├── columns: "?column?":1!null "?column?":2!null
  │    │    ├── cardinality: [1 - 1]
  │    │    ├── key: ()
- │    │    ├── fd: ()-->(1,9)
+ │    │    ├── fd: ()-->(1,2)
  │    │    └── (1, 2)
  │    └── project
- │         ├── columns: "?column?":8!null sum:7
+ │         ├── columns: "?column?":8!null sum:9
  │         ├── cardinality: [0 - 1]
  │         ├── immutable
  │         ├── key: ()
- │         ├── fd: ()-->(7,8)
+ │         ├── fd: ()-->(8,9)
  │         ├── group-by (streaming)
  │         │    ├── columns: i:5!null sum:7
  │         │    ├── cardinality: [0 - 1]
@@ -1927,7 +1927,8 @@ project
  │         │         └── const-agg [as=i:5, outer=(5)]
  │         │              └── i:5
  │         └── projections
- │              └── i:5 + 1 [as="?column?":8, outer=(5), immutable]
+ │              ├── i:5 + 1 [as="?column?":8, outer=(5), immutable]
+ │              └── sum:7::INT8 [as=sum:9, outer=(7), immutable]
  └── projections
       ├── i:3 [as=i:10, outer=(3)]
       └── j:4 [as=j:11, outer=(4)]
@@ -2476,7 +2477,7 @@ norm expect=TryAddLimitToRecursiveBranch
 WITH RECURSIVE cte (i, j) AS (
   (SELECT 1, 2)
   UNION ALL
-  (SELECT i+1, sum(x) FROM cte INNER JOIN xy ON j = y WHERE i <= 10 GROUP BY i)
+  (SELECT i+1, sum(x)::int FROM cte INNER JOIN xy ON j = y WHERE i <= 10 GROUP BY i)
 )
 SELECT i, j FROM cte;
 ----
@@ -2487,8 +2488,8 @@ project
  ├── recursive-c-t-e
  │    ├── columns: i:3 j:4
  │    ├── working table binding: &2
- │    ├── initial columns: "?column?":1 "?column?":13
- │    ├── recursive columns: "?column?":12 sum:11
+ │    ├── initial columns: "?column?":1 "?column?":2
+ │    ├── recursive columns: "?column?":12 sum:13
  │    ├── cardinality: [1 - ]
  │    ├── immutable
  │    ├── fake-rel
@@ -2497,17 +2498,17 @@ project
  │    │    ├── key: ()
  │    │    └── fd: ()-->(3,4)
  │    ├── values
- │    │    ├── columns: "?column?":1!null "?column?":13!null
+ │    │    ├── columns: "?column?":1!null "?column?":2!null
  │    │    ├── cardinality: [1 - 1]
  │    │    ├── key: ()
- │    │    ├── fd: ()-->(1,13)
+ │    │    ├── fd: ()-->(1,2)
  │    │    └── (1, 2)
  │    └── project
- │         ├── columns: "?column?":12!null sum:11!null
+ │         ├── columns: "?column?":12!null sum:13!null
  │         ├── cardinality: [0 - 1]
  │         ├── immutable
  │         ├── key: ()
- │         ├── fd: ()-->(11,12)
+ │         ├── fd: ()-->(12,13)
  │         ├── group-by (streaming)
  │         │    ├── columns: i:5!null sum:11!null
  │         │    ├── cardinality: [0 - 1]
@@ -2545,7 +2546,8 @@ project
  │         │         └── const-agg [as=i:5, outer=(5)]
  │         │              └── i:5
  │         └── projections
- │              └── i:5 + 1 [as="?column?":12, outer=(5), immutable]
+ │              ├── i:5 + 1 [as="?column?":12, outer=(5), immutable]
+ │              └── sum:11::INT8 [as=sum:13, outer=(11), immutable]
  └── projections
       ├── i:3 [as=i:14, outer=(3)]
       └── j:4 [as=j:15, outer=(4)]
