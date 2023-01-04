@@ -314,6 +314,7 @@ func (h *histogram) adjustCounts(
 			h.buckets[i].DistinctRange = 0
 			h.buckets[i].NumEq *= adjustmentFactorNumEq
 		}
+		h.clampNonNegative()
 		h.removeZeroBuckets()
 		return
 	}
@@ -412,7 +413,23 @@ func (h *histogram) adjustCounts(
 		h.buckets[i].NumEq *= adjustmentFactorRowCount
 	}
 
+	h.clampNonNegative()
 	h.removeZeroBuckets()
+}
+
+// clampNonNegative sets any negative counts to zero.
+func (h *histogram) clampNonNegative() {
+	for i := 0; i < len(h.buckets); i++ {
+		if h.buckets[i].NumEq < 0 {
+			h.buckets[i].NumEq = 0
+		}
+		if h.buckets[i].NumRange < 0 {
+			h.buckets[i].NumRange = 0
+		}
+		if h.buckets[i].DistinctRange < 0 {
+			h.buckets[i].DistinctRange = 0
+		}
+	}
 }
 
 // removeZeroBuckets removes any extra zero buckets if we don't need them
@@ -424,8 +441,8 @@ func (h *histogram) removeZeroBuckets() {
 
 	var j int
 	for i := 0; i < len(h.buckets); i++ {
-		if h.buckets[i].NumEq <= 0 && h.buckets[i].NumRange <= 0 &&
-			(i == len(h.buckets)-1 || h.buckets[i+1].NumRange <= 0) {
+		if h.buckets[i].NumEq == 0 && h.buckets[i].NumRange == 0 && h.buckets[i].DistinctRange == 0 &&
+			(i == len(h.buckets)-1 || h.buckets[i+1].NumRange == 0 && h.buckets[i+1].DistinctRange == 0) {
 			continue
 		}
 		if j != i {
