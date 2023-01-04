@@ -130,6 +130,16 @@ export function addStatementStats(
 ): Required<StatementStatistics> {
   const countA = FixLong(a.count).toInt();
   const countB = FixLong(b.count).toInt();
+
+  let regions: string[] = [];
+  if (a.regions && b.regions) {
+    regions = unique(a.regions.concat(b.regions));
+  } else if (a.regions) {
+    regions = a.regions;
+  } else if (b.regions) {
+    regions = b.regions;
+  }
+
   let planGists: string[] = [];
   if (a.plan_gists && b.plan_gists) {
     planGists = unique(a.plan_gists.concat(b.plan_gists));
@@ -205,6 +215,7 @@ export function addStatementStats(
         ? a.last_exec_timestamp
         : b.last_exec_timestamp,
     nodes: uniqueLong([...a.nodes, ...b.nodes]),
+    regions: regions,
     plan_gists: planGists,
     index_recommendations: indexRec,
     indexes: indexes,

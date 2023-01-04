@@ -96,6 +96,12 @@ func BuildStmtMetadataJSON(statistics *roachpb.CollectedStatementStatistics) (js
 //	        "type": "int",
 //	      },
 //	    },
+//	    "regions": {
+//	      "type": "array",
+//	      "items": {
+//	        "type": "string",
+//	      },
+//	    },
 //	    "statistics": {
 //	      "type": "object",
 //	      "properties": {
@@ -113,6 +119,7 @@ func BuildStmtMetadataJSON(statistics *roachpb.CollectedStatementStatistics) (js
 //	        "firstExecAt":       { "type": "string" },
 //	        "lastExecAt":        { "type": "string" },
 //	        "nodes":             { "type": "node_ids" },
+//	        "regions":           { "type": "regions" },
 //	        "indexes":           { "type": "indexes" },
 //	      },
 //	      "required": [
@@ -128,6 +135,7 @@ func BuildStmtMetadataJSON(statistics *roachpb.CollectedStatementStatistics) (js
 //	        "bytesRead",
 //	        "rowsRead",
 //	        "nodes",
+//	        "regions",
 //	        "indexes
 //	      ]
 //	    },

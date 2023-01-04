@@ -12,9 +12,12 @@ package sql
 
 import (
 	"context"
+	"sort"
 	"strconv"
+	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/contentionpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/idxrecommendations"
@@ -184,6 +187,10 @@ func (ex *connExecutor) recordStatementSummary(
 	if err != nil {
 		log.Warningf(ctx, "failed to convert node ID to int: %s", err)
 	}
+
+	nodeIDs := util.CombineUniqueInt64(getNodesFromPlanner(planner), []int64{nodeID})
+	regions := getRegionsForNodes(ctx, planner, nodeIDs)
+
 	recordedStmtStats := sqlstats.RecordedStmtStats{
 		SessionID:            ex.sessionID,
 		StatementID:          stmt.QueryID,
@@ -199,7 +206,8 @@ func (ex *connExecutor) recordStatementSummary(
 		BytesRead:            stats.bytesRead,
 		RowsRead:             stats.rowsRead,
 		RowsWritten:          stats.rowsWritten,
-		Nodes:                util.CombineUniqueInt64(getNodesFromPlanner(planner), []int64{nodeID}),
+		Nodes:                nodeIDs,
+		Regions:              regions,
 		StatementType:        stmt.AST.StatementType(),
 		Plan:                 planner.instrumentation.PlanForStats(ctx),
 		PlanGist:             planner.instrumentation.planGist.String(),
@@ -311,6 +319,81 @@ func getNodesFromPlanner(planner *planner) []int64 {
 			nodes = append(nodes, int64(i))
 		})
 	}
-
 	return nodes
+}
+
+var regionsPool = sync.Pool{
+	New: func() interface{} {
+		return make(map[string]struct{})
+	},
+}
+
+func getRegionsForNodes(ctx context.Context, planner *planner, nodeIDs []int64) []string {
+	regions := regionsPool.Get().(map[string]struct{})
+	defer func() {
+		for region := range regions {
+			delete(regions, region)
+		}
+		regionsPool.Put(regions)
+	}()
+
+	if planner.DistSQLPlanner().codec.ForSystemTenant() {
+		// TODO(todd): I am not sure this is okay. ListNodesInternal makes
+		//  a KV call to get the current list of nodes, which includes extra
+		//  liveness information we don't need. Do we already have this
+		//  information somewhere?
+		status, err := planner.execCfg.NodesStatusServer.OptionalNodesStatusServer(47900)
+		if err != nil {
+			return nil
+		}
+		resp, err := status.ListNodesInternal(ctx, &serverpb.NodesRequest{})
+		if err != nil {
+			return nil
+		}
+		// Since we expect nodeIDs to be small, at worst say O(num(regions)),
+		// we prefer this quick double for-loop to allocating a transient map
+		// (or intsets.Fast) of them.
+		for _, node := range resp.Nodes {
+			for _, nodeID := range nodeIDs {
+				// TODO(todd): Since roachpb.NodeID and base.SQLInstanceID
+				//  are both aliases for int32, I think we've been sloppy
+				//  using int64 here. I've filed #XXXXX to follow up.
+				if int64(node.Desc.NodeID) == nodeID {
+					if region, ok := node.Desc.Locality.Find("region"); ok {
+						regions[region] = struct{}{}
+					}
+				}
+			}
+		}
+	} else {
+		// Note that, in contrast to the above questionable ListNodesInternal
+		// call, this one should be fine: GetAllInstances is non-blocking,
+		// completely served in-memory.
+		instances, err := planner.DistSQLPlanner().sqlAddressResolver.GetAllInstances(ctx)
+		if err != nil {
+			return nil
+		}
+		// Since we expect nodeIDs to be small, at worst say O(num(regions)),
+		// we prefer this quick double for-loop to allocating a transient map
+		// (or intsets.Fast) of them.
+		for _, instance := range instances {
+			for _, nodeID := range nodeIDs {
+				// TODO(todd): Since roachpb.NodeID and base.SQLInstanceID
+				//  are both aliases for int32, I think we've been sloppy
+				//  using int64 here. I've filed #95088 to follow up.
+				if int64(instance.InstanceID) == nodeID {
+					if region, ok := instance.Locality.Find("region"); ok {
+						regions[region] = struct{}{}
+					}
+				}
+			}
+		}
+	}
+
+	result := make([]string, 0, len(regions))
+	for region := range regions {
+		result = append(result, region)
+	}
+	sort.Strings(result)
+	return result
 }

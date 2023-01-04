@@ -62,6 +62,7 @@
 /pkg/sql/execstats/          @cockroachdb/sql-observability
 /pkg/sql/scheduledlogging/   @cockroachdb/sql-observability
 /pkg/sql/sqlstats/           @cockroachdb/sql-observability
+/pkg/ccl/testccl/sqlstatsccl/ @cockroachdb/sql-observability
 
 /pkg/sql/sem/tree/           @cockroachdb/sql-syntax-prs
 /pkg/sql/parser/             @cockroachdb/sql-syntax-prs
