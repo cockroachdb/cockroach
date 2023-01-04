@@ -74,6 +74,7 @@ COCKROACH_BRANCH="$USER/pebble-${BRANCH}-${NEW_SHA:0:12}"
 
 # Pull in the Pebble module at the desired SHA.
 pushd "$COCKROACH_DIR"
+./dev generate go
 go get "github.com/cockroachdb/pebble@${NEW_SHA}"
 go mod tidy
 popd
