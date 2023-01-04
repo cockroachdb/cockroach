@@ -643,3 +643,4 @@ DECLARE foo CURSOR WITH HOLD FOR SELECT 1
 # ROLLBACK is fine, since it renders the cursor unusable anyway.
 statement ok
 ROLLBACK
+
