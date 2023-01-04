@@ -921,7 +921,8 @@ show_tables_stmt ::=
 	| 'SHOW' 'TABLES' with_comment
 
 show_tenant_stmt ::=
-	'SHOW' 'TENANT' d_expr
+	'SHOW' 'TENANTS'
+	| 'SHOW' 'TENANT' d_expr
 	| 'SHOW' 'TENANT' d_expr 'WITH' 'REPLICATION' 'STATUS'
 
 show_trace_stmt ::=
@@ -1380,6 +1381,7 @@ unreserved_keyword ::=
 	| 'TEMPLATE'
 	| 'TEMPORARY'
 	| 'TENANT'
+	| 'TENANTS'
 	| 'TESTING_RELOCATE'
 	| 'TEXT'
 	| 'TIES'

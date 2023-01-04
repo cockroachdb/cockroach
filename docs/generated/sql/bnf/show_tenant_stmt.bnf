@@ -1,3 +1,4 @@
 show_tenant_stmt ::=
-	'SHOW' 'TENANT' d_expr
+	'SHOW' 'TENANTS'
+	| 'SHOW' 'TENANT' d_expr
 	| 'SHOW' 'TENANT' d_expr 'WITH' 'REPLICATION' 'STATUS'
