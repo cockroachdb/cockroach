@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/local"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -146,7 +145,7 @@ func newSizeTime(ctx context.Context, du *DiskUsageTracker, nodes option.NodeLis
 // that the total bytes written between the time intervals is diskUsage_End - diskUsage_Start.
 func diskDiffThroughput(start sizeTime, end sizeTime) float64 {
 	if start.nodeCount != end.nodeCount {
-		return 0
+		panic("node count cannot change while measuring throughput")
 	}
 	return (float64(end.size-start.size) / end.time.Sub(start.time).Seconds()) / float64(start.nodeCount)
 }
@@ -277,9 +276,6 @@ func createSystemRole(t test.Test, name string, sql *sqlutils.SQLRunner) {
 }
 
 type streamingWorkload interface {
-	// name returns the name of the workload
-	name() string
-
 	// sourceInitCmd returns a command that will populate the src cluster with data before the
 	// replication stream begins
 	sourceInitCmd(pgURL string) string
@@ -293,10 +289,6 @@ type replicateTPCC struct {
 	warehouses int
 }
 
-func (tpcc replicateTPCC) name() string {
-	return fmt.Sprintf("tpcc/warehouses=%d", tpcc.warehouses)
-}
-
 func (tpcc replicateTPCC) sourceInitCmd(pgURL string) string {
 	return fmt.Sprintf(`./workload init tpcc --data-loader import --warehouses %d '%s'`,
 		tpcc.warehouses, pgURL)
@@ -308,7 +300,26 @@ func (tpcc replicateTPCC) sourceRunCmd(pgURL string, duration time.Duration) str
 		tpcc.warehouses, int(duration.Minutes()), pgURL)
 }
 
+type replicateKV struct {
+	readPercent int
+}
+
+func (kv replicateKV) sourceInitCmd(pgURL string) string {
+	return ""
+}
+
+func (kv replicateKV) sourceRunCmd(pgURL string, duration time.Duration) string {
+	// added --tolerate-errors flags to prevent test from flaking due to a transaction retry error
+	return fmt.Sprintf(`./workload run kv --tolerate-errors --init --duration %dm --read-percent %d '%s'`,
+		int(duration.Minutes()),
+		kv.readPercent,
+		pgURL)
+}
+
 type replicationTestSpec struct {
+	// name specifies the name of the roachtest
+	name string
+
 	// srcKVNodes is the number of kv nodes on the source cluster.
 	srcKVNodes int
 
@@ -335,76 +346,9 @@ type replicationTestSpec struct {
 }
 
 func registerClusterToCluster(r registry.Registry) {
-	r.Add(registry.TestSpec{
-		Name:            "c2c/kv0",
-		Owner:           registry.OwnerDisasterRecovery,
-		Cluster:         r.MakeClusterSpec(7),
-		RequiresLicense: true,
-		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			setup, cleanup := setupC2C(ctx, t, c, 3, 3)
-			defer cleanup()
-			var (
-				kvWorkloadDuration = "15m"
-				kvWorkloadReadPerc = 0
-			)
-			m := c.NewMonitor(ctx, c.Range(1, 6))
-			workloadDoneCh := make(chan struct{})
-			m.Go(func(ctx context.Context) error {
-				defer close(workloadDoneCh)
-				cmd := fmt.Sprintf("./workload run kv --tolerate-errors --init --duration %s --read-percent %d '%s'",
-					kvWorkloadDuration,
-					kvWorkloadReadPerc,
-					setup.src.tenant.secureURL())
-				c.Run(ctx, c.Node(setup.src.sqlNode), cmd)
-				return nil
-			})
-
-			t.Status("starting replication stream")
-			streamReplStmt := fmt.Sprintf("CREATE TENANT %q FROM REPLICATION OF %q ON '%s'",
-				setup.dst.name, setup.src.name, setup.src.pgURL)
-			setup.dst.sql.Exec(t, streamReplStmt)
-
-			// Get the ingestion job id.
-			var tenantInfoBytes []byte
-			var tenantInfo descpb.TenantInfo
-			setup.dst.sql.QueryRow(t, "SELECT info FROM system.tenants WHERE name=$1",
-				setup.dst.name).Scan(&tenantInfoBytes)
-			require.NoError(t, protoutil.Unmarshal(tenantInfoBytes, &tenantInfo))
-			ingestionJobID := int(tenantInfo.TenantReplicationJobID)
-
-			// TODO(ssd): The job doesn't record the initial
-			// statement time, so we can't correctly measure the
-			// initial scan time here.
-			lv := makeLatencyVerifier("stream-ingestion", 0, 2*time.Minute, t.L(), getStreamIngestionJobInfo, t.Status, false)
-			defer lv.maybeLogLatencyHist()
-
-			m.Go(func(ctx context.Context) error {
-				return lv.pollLatency(ctx, setup.dst.db, ingestionJobID, time.Second, workloadDoneCh)
-			})
-
-			t.Status("waiting for replication stream to return high watermark")
-			waitForHighWatermark(t, setup.dst.db, ingestionJobID, time.Minute*10)
-
-			// Fail fast if workload or latency poller goroutines fail
-			require.NoError(t, m.WaitE())
-
-			t.Status("waiting for replication stream to cutover")
-			// Cut over the ingestion job and the job will stop eventually.
-			var cutoverTime time.Time
-			setup.dst.sql.QueryRow(t, "SELECT clock_timestamp()").Scan(&cutoverTime)
-			stopReplicationStream(t, setup.dst.sql, ingestionJobID, cutoverTime)
-
-			compareTenantFingerprintsAtTimestamp(
-				t,
-				m,
-				setup,
-				hlc.Timestamp{WallTime: cutoverTime.UnixNano()})
-			lv.assertValid(t)
-		},
-	})
-
 	for _, sp := range []replicationTestSpec{
 		{
+			name:       "c2c/tpcc",
 			srcKVNodes: 4,
 			dstKVNodes: 4,
 			cpus:       8,
@@ -414,7 +358,17 @@ func registerClusterToCluster(r registry.Registry) {
 			// TODO(msbutler): increase default test to 1000 warehouses once fingerprinting
 			// job speeds up.
 			workload:           replicateTPCC{warehouses: 500},
-			timeout:            3 * time.Hour,
+			timeout:            1 * time.Hour,
+			additionalDuration: 10 * time.Minute,
+			cutover:            5 * time.Minute,
+		}, {
+			name:               "c2c/kv0",
+			srcKVNodes:         3,
+			dstKVNodes:         3,
+			cpus:               8,
+			pdSize:             1000,
+			workload:           replicateKV{readPercent: 0},
+			timeout:            1 * time.Hour,
 			additionalDuration: 10 * time.Minute,
 			cutover:            5 * time.Minute,
 		},
@@ -426,7 +380,7 @@ func registerClusterToCluster(r registry.Registry) {
 		}
 
 		r.Add(registry.TestSpec{
-			Name:            "c2c/tpcc",
+			Name:            sp.name,
 			Owner:           registry.OwnerDisasterRecovery,
 			Cluster:         r.MakeClusterSpec(sp.dstKVNodes+sp.srcKVNodes+1, clusterOps...),
 			RequiresLicense: true,
