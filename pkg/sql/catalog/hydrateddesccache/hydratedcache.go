@@ -242,7 +242,7 @@ func (c *Cache) GetHydratedSchemaDescriptor(
 	return hydratedDesc.(catalog.SchemaDescriptor), nil
 }
 
-// GetHydratedDescriptor returns an Immutable copy with the types hydrated. It
+// GetHydratedDescriptor returns a descriptor copy with the types hydrated. It
 // may use a cached copy but all of the relevant type descriptors will be
 // retrieved via the TypeDescriptorResolver. Note that if the given descriptor
 // is modified, nil will be returned. If any of the types used by the descriptor

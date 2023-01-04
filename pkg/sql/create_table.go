@@ -83,8 +83,7 @@ func (n *createTableNode) ReadingOwnWrites() {}
 func (p *planner) getNonTemporarySchemaForCreate(
 	ctx context.Context, db catalog.DatabaseDescriptor, scName string,
 ) (catalog.SchemaDescriptor, error) {
-	flags := tree.SchemaLookupFlags{Required: true, AvoidLeased: true}
-	sc, err := p.Descriptors().GetImmutableSchemaByName(ctx, p.txn, db, scName, flags)
+	sc, err := p.Descriptors().ByName(p.txn).Get().Schema(ctx, db, scName)
 	if err != nil {
 		return nil, err
 	}
@@ -92,7 +91,7 @@ func (p *planner) getNonTemporarySchemaForCreate(
 	case catalog.SchemaPublic:
 		return sc, nil
 	case catalog.SchemaUserDefined:
-		return p.Descriptors().GetMutableSchemaByID(ctx, p.txn, sc.GetID(), flags)
+		return p.Descriptors().MutableByID(p.txn).Schema(ctx, sc.GetID())
 	case catalog.SchemaVirtual:
 		return nil, pgerror.Newf(pgcode.InsufficientPrivilege, "schema cannot be modified: %q", scName)
 	default:
@@ -445,15 +444,7 @@ func (n *createTableNode) startExec(params runParams) error {
 	}
 
 	if desc.LocalityConfig != nil {
-		_, dbDesc, err := params.p.Descriptors().GetImmutableDatabaseByID(
-			params.ctx,
-			params.p.txn,
-			desc.ParentID,
-			tree.DatabaseLookupFlags{
-				Required:    true,
-				AvoidLeased: true,
-			},
-		)
+		dbDesc, err := params.p.Descriptors().ByID(params.p.txn).WithoutNonPublic().Get().Database(params.ctx, desc.ParentID)
 		if err != nil {
 			return errors.Wrap(err, "error resolving database for multi-region")
 		}
@@ -482,11 +473,7 @@ func (n *createTableNode) startExec(params runParams) error {
 			if err != nil {
 				return err
 			}
-			typeDesc, err := params.p.Descriptors().GetMutableTypeVersionByID(
-				params.ctx,
-				params.p.txn,
-				regionEnumID,
-			)
+			typeDesc, err := params.p.Descriptors().MutableByID(params.p.txn).Type(params.ctx, regionEnumID)
 			if err != nil {
 				return errors.Wrap(err, "error resolving multi-region enum")
 			}

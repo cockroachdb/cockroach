@@ -17,59 +17,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
-
-// GetMutableSchemaByName resolves the schema and returns a mutable descriptor
-// usable by the transaction. RequireMutable is ignored.
-//
-// TODO(ajwerner): Change this to take database by name to avoid any weirdness
-// due to the descriptor being passed in having been cached and causing
-// problems.
-func (tc *Collection) GetMutableSchemaByName(
-	ctx context.Context,
-	txn *kv.Txn,
-	db catalog.DatabaseDescriptor,
-	schemaName string,
-	flags tree.SchemaLookupFlags,
-) (*schemadesc.Mutable, error) {
-	return tc.ByName(txn).WithFlags(flags).Mutable().Schema(ctx, db, schemaName)
-}
-
-// GetImmutableSchemaByName returns a catalog.SchemaDescriptor object if the
-// target schema exists under the target database. RequireMutable is ignored.
-//
-// TODO(ajwerner): Change this to take database by name to avoid any weirdness
-// due to the descriptor being passed in having been cached and causing
-// problems.
-func (tc *Collection) GetImmutableSchemaByName(
-	ctx context.Context,
-	txn *kv.Txn,
-	db catalog.DatabaseDescriptor,
-	scName string,
-	flags tree.SchemaLookupFlags,
-) (catalog.SchemaDescriptor, error) {
-	return tc.ByName(txn).WithFlags(flags).Immutable().Schema(ctx, db, scName)
-}
-
-// GetImmutableSchemaByID returns a ResolvedSchema wrapping an immutable
-// descriptor, if applicable. RequireMutable is ignored.
-// Required is ignored, and an error is always returned if no descriptor with
-// the ID exists.
-func (tc *Collection) GetImmutableSchemaByID(
-	ctx context.Context, txn *kv.Txn, schemaID descpb.ID, flags tree.SchemaLookupFlags,
-) (catalog.SchemaDescriptor, error) {
-	return tc.ByID(txn).WithFlags(flags).Immutable().Schema(ctx, schemaID)
-}
-
-// GetMutableSchemaByID returns a mutable schema descriptor with the given
-// schema ID. An error is always returned if the descriptor is not physical.
-func (tc *Collection) GetMutableSchemaByID(
-	ctx context.Context, txn *kv.Txn, schemaID descpb.ID, flags tree.SchemaLookupFlags,
-) (*schemadesc.Mutable, error) {
-	return tc.ByID(txn).WithFlags(flags).Mutable().Schema(ctx, schemaID)
-}
 
 // InsertDescriptorlessPublicSchemaToBatch adds the creation of a new descriptorless public
 // schema to the batch.

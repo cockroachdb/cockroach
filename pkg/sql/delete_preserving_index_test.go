@@ -677,7 +677,7 @@ func TestMergeProcessor(t *testing.T) {
 
 		require.NoError(t, sql.DescsTxn(ctx, &execCfg, func(
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) error {
-			mut, err := descriptors.GetMutableTableByID(ctx, txn, tableDesc.GetID(), tree.ObjectLookupFlags{})
+			mut, err := descriptors.MutableByID(txn).Table(ctx, tableDesc.GetID())
 			if err != nil {
 				return err
 			}
@@ -710,7 +710,7 @@ func TestMergeProcessor(t *testing.T) {
 
 		require.NoError(t, sql.DescsTxn(ctx, &execCfg, func(
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) error {
-			mut, err := descriptors.GetMutableTableByID(ctx, txn, tableDesc.GetID(), tree.ObjectLookupFlags{})
+			mut, err := descriptors.MutableByID(txn).Table(ctx, tableDesc.GetID())
 			if err != nil {
 				return err
 			}

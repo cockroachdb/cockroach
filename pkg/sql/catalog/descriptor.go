@@ -591,13 +591,13 @@ type TableDescriptor interface {
 	// HasColumnBackfillMutation returns whether the table has any queued column
 	// mutations that require a backfill.
 	HasColumnBackfillMutation() bool
-	// MakeFirstMutationPublic creates a Mutable from the
-	// immutable by making the first mutation public.
+	// MakeFirstMutationPublic creates a descriptor by making the first
+	// mutation public.
 	// This is super valuable when trying to run SQL over data associated
 	// with a schema mutation that is still not yet public: Data validation,
 	// error reporting.
 	MakeFirstMutationPublic(...MutationPublicationFilter) (TableDescriptor, error)
-	// MakePublic creates a Mutable from the immutable by making the it public.
+	// MakePublic creates a descriptor by making the state public.
 	MakePublic() TableDescriptor
 	// AllMutations returns all of the table descriptor's mutations.
 	AllMutations() []Mutation

@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -79,7 +78,7 @@ func InjectLegacyTable(
 		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 	) error {
 		id := table.GetID()
-		tab, err := descriptors.GetMutableTableByID(ctx, txn, id, tree.ObjectLookupFlagsWithRequired())
+		tab, err := descriptors.MutableByID(txn).Table(ctx, id)
 		if err != nil {
 			return err
 		}
@@ -143,12 +142,7 @@ func GetTable(
 	err := s.InternalExecutorFactory().(descs.TxnManager).DescsTxn(ctx, s.DB(), func(
 		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 	) (err error) {
-		table, err = descriptors.GetImmutableTableByID(ctx, txn, tableID, tree.ObjectLookupFlags{
-			CommonLookupFlags: tree.CommonLookupFlags{
-				AvoidLeased: true,
-				Required:    true,
-			},
-		})
+		table, err = descriptors.ByID(txn).WithoutNonPublic().Get().Table(ctx, tableID)
 		return err
 	})
 	require.NoError(t, err)

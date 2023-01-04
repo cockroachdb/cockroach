@@ -79,9 +79,7 @@ func TestCollectionWriteDescToBatch(t *testing.T) {
 	require.NoError(t, db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		defer descriptors.ReleaseAll(ctx)
 		tn := tree.MakeTableNameWithSchema("db", "schema", "table")
-		flags := tree.ObjectLookupFlagsWithRequired()
-		flags.RequireMutable = true
-		_, mut, err := descriptors.GetMutableTableByName(ctx, txn, &tn, flags)
+		_, mut, err := descs.PrefixAndMutableTable(ctx, descriptors.MutableByName(txn), &tn)
 		require.NoError(t, err)
 		require.NotNil(t, mut)
 		// We want to create some descriptors and then ensure that writing them to a
@@ -131,12 +129,12 @@ func TestCollectionWriteDescToBatch(t *testing.T) {
 		require.Equal(t, descpb.DescriptorVersion(1), newTable.Version)
 
 		// Ensure that the descriptor has been added to the collection.
-		_, mut2, err := descriptors.GetMutableTableByName(ctx, txn, &tn, flags)
+		_, mut2, err := descs.PrefixAndMutableTable(ctx, descriptors.MutableByName(txn), &tn)
 		require.NoError(t, err)
 		require.Equal(t, mut, mut2)
 
 		t2n := tree.MakeTableNameWithSchema("db", "schema", "table2")
-		_, newTableResolved, err := descriptors.GetMutableTableByName(ctx, txn, &t2n, flags)
+		_, newTableResolved, err := descs.PrefixAndMutableTable(ctx, descriptors.MutableByName(txn), &t2n)
 		require.NoError(t, err)
 		require.Equal(t, newTable, newTableResolved)
 		return txn.Run(ctx, b)
@@ -188,10 +186,7 @@ func TestTxnClearsCollectionOnRetry(t *testing.T) {
 		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 	) error {
 		txn.SetDebugName(txnName)
-
-		flags := tree.ObjectLookupFlagsWithRequired()
-		flags.RequireMutable = true
-		_, mut, err := descriptors.GetMutableTableByName(ctx, txn, &tn, flags)
+		_, mut, err := descs.PrefixAndMutableTable(ctx, descriptors.MutableByName(txn), &tn)
 		require.NoError(t, err)
 		// Verify that the descriptor version is always 1 prior to the write and 2
 		// after the write even after a retry.
@@ -229,30 +224,25 @@ func TestAddUncommittedDescriptorAndMutableResolution(t *testing.T) {
 		require.NoError(t, sql.DescsTxn(ctx, &execCfg, func(
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 		) error {
-			flags := tree.DatabaseLookupFlags{}
-			flags.RequireMutable = true
-			flags.Required = true
-
-			mut, err := descriptors.GetMutableDatabaseByName(ctx, txn, "db", flags)
+			mut, err := descriptors.MutableByName(txn).Database(ctx, "db")
 			require.NoError(t, err)
 
 			dbID := mut.GetID()
-			byID, err := descriptors.GetMutableDescriptorByID(ctx, txn, dbID)
+			byID, err := descriptors.MutableByID(txn).Desc(ctx, dbID)
 			require.NoError(t, err)
 			require.Same(t, mut, byID)
 
 			mut.MaybeIncrementVersion()
 			mut.Name = "new_name"
-			flags.RequireMutable = false
 
 			// Check that changes to the mutable descriptor don't impact the
 			// collection until they're added as uncommitted
-			immByName, err := descriptors.GetImmutableDatabaseByName(ctx, txn, "db", flags)
+			immByName, err := descriptors.ByNameWithLeased(txn).Get().Database(ctx, "db")
 			require.NoError(t, err)
 			require.Equal(t, dbID, immByName.GetID())
 			require.Equal(t, mut.OriginalVersion(), immByName.GetVersion())
 
-			_, immByID, err := descriptors.GetImmutableDatabaseByID(ctx, txn, dbID, flags)
+			immByID, err := descriptors.ByIDWithLeased(txn).WithoutNonPublic().Get().Database(ctx, dbID)
 			require.NoError(t, err)
 			require.Same(t, immByName, immByID)
 
@@ -264,25 +254,25 @@ func TestAddUncommittedDescriptorAndMutableResolution(t *testing.T) {
 			require.NoError(t, err)
 
 			// Should be able to get the database descriptor by the new name.
-			resolved, err := descriptors.GetImmutableDatabaseByName(ctx, txn, "new_name", flags)
+			resolved, err := descriptors.ByNameWithLeased(txn).Get().Database(ctx, "new_name")
 			require.Nil(t, err)
 			require.Equal(t, dbID, resolved.GetID())
 
 			// Try to get the database descriptor by the old name and succeed but get
 			// the old version with the old name because the new version has not yet
 			// been written.
-			immResolvedWithNewNameButHasOldName, err := descriptors.GetImmutableDatabaseByName(ctx, txn, "db", flags)
+			immResolvedWithNewNameButHasOldName, err := descriptors.ByNameWithLeased(txn).Get().Database(ctx, "db")
 			require.NoError(t, err)
 			require.Same(t, immByID, immResolvedWithNewNameButHasOldName)
 
 			require.NoError(t, descriptors.AddUncommittedDescriptor(ctx, mut))
 
-			immByNameAfter, err := descriptors.GetImmutableDatabaseByName(ctx, txn, "new_name", flags)
+			immByNameAfter, err := descriptors.ByNameWithLeased(txn).Get().Database(ctx, "new_name")
 			require.NoError(t, err)
 			require.Equal(t, mut.GetVersion(), immByNameAfter.GetVersion())
 			require.Equal(t, mut.ImmutableCopy().DescriptorProto(), immByNameAfter.DescriptorProto())
 
-			_, immByIDAfter, err := descriptors.GetImmutableDatabaseByID(ctx, txn, dbID, flags)
+			immByIDAfter, err := descriptors.ByIDWithLeased(txn).WithoutNonPublic().Get().Database(ctx, dbID)
 			require.NoError(t, err)
 			require.Same(t, immByNameAfter, immByIDAfter)
 
@@ -293,24 +283,20 @@ func TestAddUncommittedDescriptorAndMutableResolution(t *testing.T) {
 		require.NoError(t, sql.DescsTxn(ctx, &execCfg, func(
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 		) error {
-			flags := tree.SchemaLookupFlags{}
-			flags.RequireMutable = true
-			flags.Required = true
-
-			db, err := descriptors.GetMutableDatabaseByName(ctx, txn, "db", flags)
+			db, err := descriptors.MutableByName(txn).Database(ctx, "db")
 			require.NoError(t, err)
 
-			schema, err := descriptors.GetMutableSchemaByName(ctx, txn, db, "sc", flags)
+			schema, err := descriptors.MutableByName(txn).Schema(ctx, db, "sc")
 			require.NoError(t, err)
 			require.NotNil(t, schema)
 
-			resolved, err := descriptors.GetMutableSchemaByName(ctx, txn, db, "sc", flags)
+			resolved, err := descriptors.MutableByName(txn).Schema(ctx, db, "sc")
 			require.NoError(t, err)
 			require.NotNil(t, schema)
 
 			require.Same(t, schema, resolved)
 
-			byID, err := descriptors.GetMutableDescriptorByID(ctx, txn, schema.GetID())
+			byID, err := descriptors.MutableByID(txn).Desc(ctx, schema.GetID())
 			require.NoError(t, err)
 
 			require.Same(t, schema, byID)
@@ -321,20 +307,17 @@ func TestAddUncommittedDescriptorAndMutableResolution(t *testing.T) {
 		require.NoError(t, sql.DescsTxn(ctx, &execCfg, func(
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 		) error {
-			flags := tree.ObjectLookupFlags{}
-			flags.RequireMutable = true
-			flags.Required = true
 			tn := tree.MakeTableNameWithSchema("db", "sc", "tab")
 
-			_, tab, err := descriptors.GetMutableTableByName(ctx, txn, &tn, flags)
+			_, tab, err := descs.PrefixAndMutableTable(ctx, descriptors.MutableByName(txn), &tn)
 			require.NoError(t, err)
 
-			_, resolved, err := descriptors.GetMutableTableByName(ctx, txn, &tn, flags)
+			_, resolved, err := descs.PrefixAndMutableTable(ctx, descriptors.MutableByName(txn), &tn)
 			require.NoError(t, err)
 
 			require.Same(t, tab, resolved)
 
-			byID, err := descriptors.GetMutableDescriptorByID(ctx, txn, tab.GetID())
+			byID, err := descriptors.MutableByID(txn).Desc(ctx, tab.GetID())
 			require.NoError(t, err)
 
 			require.Same(t, tab, byID)
@@ -345,19 +328,16 @@ func TestAddUncommittedDescriptorAndMutableResolution(t *testing.T) {
 		require.NoError(t, sql.DescsTxn(ctx, &execCfg, func(
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 		) error {
-			flags := tree.ObjectLookupFlags{}
-			flags.RequireMutable = true
-			flags.Required = true
 			tn := tree.MakeQualifiedTypeName("db", "sc", "typ")
-			_, typ, err := descriptors.GetMutableTypeByName(ctx, txn, &tn, flags)
+			_, typ, err := descs.PrefixAndMutableType(ctx, descriptors.MutableByName(txn), &tn)
 			require.NoError(t, err)
 
-			_, resolved, err := descriptors.GetMutableTypeByName(ctx, txn, &tn, flags)
+			_, resolved, err := descs.PrefixAndMutableType(ctx, descriptors.MutableByName(txn), &tn)
 			require.NoError(t, err)
 
 			require.Same(t, typ, resolved)
 
-			byID, err := descriptors.GetMutableTypeVersionByID(ctx, txn, typ.GetID())
+			byID, err := descriptors.MutableByID(txn).Type(ctx, typ.GetID())
 			require.NoError(t, err)
 
 			require.Same(t, typ, byID)
@@ -393,8 +373,8 @@ func TestSyntheticDescriptorResolution(t *testing.T) {
 	) error {
 		// Resolve the descriptor so we can mutate it.
 		tn := tree.MakeTableNameWithSchema("db", tree.PublicSchemaName, "tbl")
-		found, desc, err := descriptors.GetImmutableTableByName(ctx, txn, &tn, tree.ObjectLookupFlags{})
-		require.True(t, found)
+		_, desc, err := descs.PrefixAndTable(ctx, descriptors.ByNameWithLeased(txn).MaybeGet(), &tn)
+		require.NotNil(t, desc)
 		require.NoError(t, err)
 
 		// Modify the column name.
@@ -402,23 +382,23 @@ func TestSyntheticDescriptorResolution(t *testing.T) {
 		descriptors.SetSyntheticDescriptors([]catalog.Descriptor{desc})
 
 		// Resolve the table by name again.
-		found, desc, err = descriptors.GetImmutableTableByName(ctx, txn, &tn, tree.ObjectLookupFlags{})
-		require.True(t, found)
+		_, desc, err = descs.PrefixAndTable(ctx, descriptors.ByNameWithLeased(txn).MaybeGet(), &tn)
+		require.NotNil(t, desc)
 		require.NoError(t, err)
 		require.Equal(t, "bar", desc.PublicColumns()[0].GetName())
 
 		// Attempting to resolve the table mutably is not allowed.
-		_, _, err = descriptors.GetMutableTableByName(ctx, txn, &tn, tree.ObjectLookupFlags{})
+		_, _, err = descs.PrefixAndMutableTable(ctx, descriptors.MutableByName(txn), &tn)
 		require.EqualError(t, err, fmt.Sprintf("attempted mutable access of synthetic descriptor %d", tableID))
 
 		// Resolution by ID.
 
-		desc, err = descriptors.GetImmutableTableByID(ctx, txn, tableID, tree.ObjectLookupFlags{})
+		desc, err = descriptors.ByIDWithLeased(txn).WithoutNonPublic().Get().Table(ctx, tableID)
 		require.NoError(t, err)
 		require.Equal(t, "bar", desc.PublicColumns()[0].GetName())
 
 		// Attempting to resolve the table mutably is not allowed.
-		_, err = descriptors.GetMutableTableByID(ctx, txn, tableID, tree.ObjectLookupFlags{})
+		_, err = descriptors.MutableByID(txn).Table(ctx, tableID)
 		require.EqualError(t, err, fmt.Sprintf("attempted mutable access of synthetic descriptor %d", tableID))
 
 		return nil
@@ -494,13 +474,11 @@ CREATE TABLE test.schema.t(x INT);
 	require.NoError(t, sql.DescsTxn(ctx, &execCfg, func(
 		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
 	) error {
-		dbDesc, err := descsCol.GetImmutableDatabaseByName(
-			ctx, txn, "test", tree.DatabaseLookupFlags{Required: true},
-		)
+		dbDesc, err := descsCol.ByNameWithLeased(txn).Get().Database(ctx, "test")
 		if err != nil {
 			return err
 		}
-		schemaDesc, err := descsCol.GetMutableSchemaByName(ctx, txn, dbDesc, "schema", tree.SchemaLookupFlags{Required: true})
+		schemaDesc, err := descsCol.MutableByName(txn).Schema(ctx, dbDesc, "schema")
 		if err != nil {
 			return err
 		}
@@ -558,7 +536,7 @@ func TestCollectionPreservesPostDeserializationChanges(t *testing.T) {
 	require.NoError(t, sql.DescsTxn(ctx, &execCfg, func(
 		ctx context.Context, txn *kv.Txn, col *descs.Collection,
 	) error {
-		descs, err := col.GetMutableDescriptorsByID(ctx, txn, dbID, scID, typID, tabID)
+		descs, err := col.MutableByID(txn).Descs(ctx, []descpb.ID{dbID, scID, typID, tabID})
 		if err != nil {
 			return err
 		}
@@ -576,10 +554,7 @@ func TestCollectionPreservesPostDeserializationChanges(t *testing.T) {
 	require.NoError(t, sql.DescsTxn(ctx, &execCfg, func(
 		ctx context.Context, txn *kv.Txn, col *descs.Collection,
 	) error {
-		immuts, err := col.GetImmutableDescriptorsByID(ctx, txn, tree.CommonLookupFlags{
-			Required:    true,
-			AvoidLeased: true,
-		}, dbID, scID, typID, tabID)
+		immuts, err := col.ByID(txn).WithoutNonPublic().Get().Descs(ctx, []descpb.ID{dbID, scID, typID, tabID})
 		if err != nil {
 			return err
 		}
@@ -596,7 +571,7 @@ func TestCollectionPreservesPostDeserializationChanges(t *testing.T) {
 	require.NoError(t, sql.DescsTxn(ctx, &execCfg, func(
 		ctx context.Context, txn *kv.Txn, col *descs.Collection,
 	) error {
-		muts, err := col.GetMutableDescriptorsByID(ctx, txn, dbID, scID, typID, tabID)
+		muts, err := col.MutableByID(txn).Descs(ctx, []descpb.ID{dbID, scID, typID, tabID})
 		if err != nil {
 			return err
 		}
@@ -711,9 +686,7 @@ func TestDescriptorCache(t *testing.T) {
 			}
 			// Modify table descriptor.
 			tn := tree.MakeTableNameWithSchema("db", "schema", "table")
-			flags := tree.ObjectLookupFlagsWithRequired()
-			flags.RequireMutable = true
-			_, mut, err := descriptors.GetMutableTableByName(ctx, txn, &tn, flags)
+			_, mut, err := descs.PrefixAndMutableTable(ctx, descriptors.MutableByName(txn), &tn)
 			if err != nil {
 				return err
 			}
@@ -747,9 +720,7 @@ func TestDescriptorCache(t *testing.T) {
 			}
 			require.Len(t, dbDescs, 4)
 			// Modify database descriptor.
-			flags := tree.DatabaseLookupFlags{}
-			flags.RequireMutable = true
-			mut, err := descriptors.GetMutableDatabaseByName(ctx, txn, "db", flags)
+			mut, err := descriptors.MutableByName(txn).Database(ctx, "db")
 			if err != nil {
 				return err
 			}
@@ -776,7 +747,7 @@ func TestDescriptorCache(t *testing.T) {
 		) error {
 			descriptors.SkipValidationOnWrite()
 			// Warm up cache.
-			dbDesc, err := descriptors.GetMutableDatabaseByName(ctx, txn, "db", tree.DatabaseLookupFlags{})
+			dbDesc, err := descriptors.MutableByName(txn).Database(ctx, "db")
 			if err != nil {
 				return err
 			}
@@ -785,7 +756,8 @@ func TestDescriptorCache(t *testing.T) {
 				return err
 			}
 			// Modify schema name.
-			schemaDesc, err := descriptors.GetMutableSchemaByName(ctx, txn, dbDesc, "schema", tree.SchemaLookupFlags{Required: true})
+			var db catalog.DatabaseDescriptor = dbDesc
+			schemaDesc, err := descriptors.MutableByName(txn).Schema(ctx, db, "schema")
 			if err != nil {
 				return err
 			}
@@ -839,7 +811,7 @@ func TestGetAllDescriptorsInDatabase(t *testing.T) {
 	require.NoError(t, tm.DescsTxnWithExecutor(ctx, s0.DB(), sd, func(
 		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection, ie sqlutil.InternalExecutor,
 	) error {
-		dbDesc, err := descriptors.GetImmutableDatabaseByName(ctx, txn, "db", tree.DatabaseLookupFlags{AvoidLeased: true})
+		dbDesc, err := descriptors.ByName(txn).Get().Database(ctx, "db")
 		if err != nil {
 			return err
 		}
@@ -1146,11 +1118,7 @@ SELECT id
 		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection, ie sqlutil.InternalExecutor,
 	) error {
 		checkImmutableDescriptor := func(id descpb.ID, expName string, f func(t *testing.T, desc catalog.Descriptor)) error {
-			flags := tree.ObjectLookupFlagsWithRequired()
-			flags.IncludeDropped = true
-			tabImm, err := descriptors.GetImmutableTableByID(
-				ctx, txn, id, flags,
-			)
+			tabImm, err := descriptors.ByIDWithLeased(txn).WithoutOffline().Get().Table(ctx, id)
 			require.NoError(t, err)
 			require.Equal(t, expName, tabImm.GetName())
 			f(t, tabImm)
@@ -1164,9 +1132,7 @@ SELECT id
 
 		// Modify the table to have the name "bar", synthetically
 		{
-			tab, err := descriptors.GetMutableTableByID(
-				ctx, txn, tabID, tree.ObjectLookupFlagsWithRequired(),
-			)
+			tab, err := descriptors.MutableByID(txn).Table(ctx, tabID)
 			if err != nil {
 				return err
 			}
@@ -1183,17 +1149,13 @@ SELECT id
 			return err
 		}
 		// Attempt to retrieve the mutable descriptor, validate the error.
-		_, err := descriptors.GetMutableTableByID(
-			ctx, txn, tabID, tree.ObjectLookupFlagsWithRequired(),
-		)
+		_, err := descriptors.MutableByID(txn).Table(ctx, tabID)
 		require.Regexp(t, `attempted mutable access of synthetic descriptor \d+`, err)
 		descriptors.ResetSyntheticDescriptors()
 		// Retrieve the mutable descriptor, find the unmodified "foo".
 		// Then modify the name to "baz" and write it.
 		{
-			tabMut, err := descriptors.GetMutableTableByID(
-				ctx, txn, tabID, tree.ObjectLookupFlagsWithRequired(),
-			)
+			tabMut, err := descriptors.MutableByID(txn).Table(ctx, tabID)
 			require.NoError(t, err)
 			require.Equal(t, "foo", tabMut.GetName())
 			tabMut.Name = "baz"
@@ -1226,7 +1188,7 @@ SELECT id
 		newDB := dbdesc.NewInitial(newDBID, "newDB", username.RootUserName())
 		descriptors.AddSyntheticDescriptor(newDB)
 
-		_, curDatabase, err := descriptors.GetImmutableDatabaseByID(ctx, txn, curDatabaseID, tree.DatabaseLookupFlags{})
+		curDatabase, err := descriptors.ByIDWithLeased(txn).WithoutNonPublic().Get().Database(ctx, curDatabaseID)
 		if err != nil {
 			return err
 		}
@@ -1250,7 +1212,7 @@ SELECT id
 		}
 
 		// Rename a schema synthetically, make sure that that propagates.
-		scDesc, err := descriptors.GetMutableSchemaByID(ctx, txn, scID, tree.SchemaLookupFlags{})
+		scDesc, err := descriptors.MutableByID(txn).Schema(ctx, scID)
 		if err != nil {
 			return err
 		}

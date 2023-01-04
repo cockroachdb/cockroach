@@ -191,18 +191,13 @@ func FullyQualifyTables(
 				}
 
 				// Resolve the database.
-				found, dbDesc, err := col.GetImmutableDatabaseByID(ctx, txn, tableDesc.GetParentID(),
-					tree.DatabaseLookupFlags{Required: true})
+				dbDesc, err := col.ByIDWithLeased(txn).WithoutNonPublic().Get().Database(ctx, tableDesc.GetParentID())
 				if err != nil {
 					return err
 				}
-				if !found {
-					return errors.Newf("database of target table %s could not be resolved", tp.String())
-				}
 
 				// Resolve the schema.
-				schemaDesc, err := col.GetImmutableSchemaByID(ctx, txn, tableDesc.GetParentSchemaID(),
-					tree.SchemaLookupFlags{Required: true})
+				schemaDesc, err := col.ByIDWithLeased(txn).WithoutNonPublic().Get().Schema(ctx, tableDesc.GetParentSchemaID())
 				if err != nil {
 					return err
 				}
@@ -227,8 +222,7 @@ func FullyQualifyTables(
 				// database.
 				var schemaID descpb.ID
 				if err := sql.DescsTxn(ctx, p.ExecCfg(), func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
-					flags := tree.DatabaseLookupFlags{Required: true}
-					dbDesc, err := col.GetImmutableDatabaseByName(ctx, txn, p.CurrentDatabase(), flags)
+					dbDesc, err := col.ByNameWithLeased(txn).Get().Database(ctx, p.CurrentDatabase())
 					if err != nil {
 						return err
 					}

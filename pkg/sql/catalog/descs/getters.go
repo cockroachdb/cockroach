@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/errors"
@@ -57,9 +58,6 @@ func (g ByIDGetter) Database(
 	desc, err := g.Desc(ctx, id)
 	if err != nil {
 		if errors.Is(err, catalog.ErrDescriptorNotFound) {
-			if g.flags.isOptional {
-				return nil, nil
-			}
 			return nil, sqlerrors.NewUndefinedDatabaseError(fmt.Sprintf("[%d]", id))
 		}
 		return nil, err
@@ -76,9 +74,6 @@ func (g ByIDGetter) Schema(ctx context.Context, id descpb.ID) (catalog.SchemaDes
 	desc, err := g.Desc(ctx, id)
 	if err != nil {
 		if errors.Is(err, catalog.ErrDescriptorNotFound) {
-			if g.flags.isOptional {
-				return nil, nil
-			}
 			return nil, sqlerrors.NewUndefinedSchemaError(fmt.Sprintf("[%d]", id))
 		}
 		return nil, err
@@ -135,6 +130,10 @@ func (g ByIDGetter) Type(ctx context.Context, id descpb.ID) (catalog.TypeDescrip
 	return nil, pgerror.Newf(
 		pgcode.UndefinedObject, "type with ID %d does not exist", id)
 }
+
+// ErrMutableTableImplicitType indicates that a table implicit type was fetched
+// as a mutable, which is not allowed.
+var ErrMutableTableImplicitType = pgerror.Newf(pgcode.DependentObjectsStillExist, "table implicit type not mutable")
 
 // Function looks up an immutable function descriptor by ID.
 func (g ByIDGetter) Function(
@@ -444,10 +443,6 @@ type getterFlags struct {
 type contextFlags struct {
 	// isOptional specifies that the descriptor is being looked up on
 	// a best-effort basis.
-	//
-	// Presently, for historical reasons, this is overridden to true for
-	// all mutable by-ID lookups, and for all immutable by-ID object lookups.
-	// TODO(postamar): clean this up
 	isOptional bool
 	// isMutable specifies that a mutable descriptor is to be returned.
 	isMutable bool
@@ -472,18 +467,9 @@ type layerFilters struct {
 type descFilters struct {
 	// withoutDropped specifies to raise an error if the looked-up descriptor
 	// is in the DROP state.
-	//
-	// Presently, for historical reasons, this is overridden everywhere except
-	// for immutable by-ID lookups: to true for by-name lookups and to false for
-	// mutable by-ID lookups.
-	// TODO(postamar): clean this up
 	withoutDropped bool
 	// withoutOffline specifies to raise an error if the looked-up descriptor
 	// is in the OFFLINE state.
-	//
-	// Presently, for historical reasons, this is overridden to true for mutable
-	// by-ID lookups.
-	// TODO(postamar): clean this up
 	withoutOffline bool
 	// withoutCommittedAdding specifies if committed descriptors in the
 	// adding state will be ignored.
@@ -493,69 +479,86 @@ type descFilters struct {
 	maybeParentID descpb.ID
 }
 
-func fromCommonFlags(flags tree.CommonLookupFlags) (f getterFlags) {
-	return getterFlags{
-		contextFlags: contextFlags{
-			isOptional: !flags.Required,
-			isMutable:  flags.RequireMutable,
-		},
-		layerFilters: layerFilters{
-			withoutSynthetic: flags.AvoidSynthetic,
-			withoutLeased:    flags.AvoidLeased,
-		},
-		descFilters: descFilters{
-			withoutDropped: !flags.IncludeDropped,
-			withoutOffline: !flags.IncludeOffline,
-			maybeParentID:  flags.ParentID,
-		},
-	}
-}
-
-func fromObjectFlags(flags tree.ObjectLookupFlags) getterFlags {
-	return fromCommonFlags(flags.CommonLookupFlags)
-}
-
-func defaultFlags() getterFlags {
-	return fromCommonFlags(tree.CommonLookupFlags{})
-}
-
 func defaultUnleasedFlags() (f getterFlags) {
 	f.layerFilters.withoutLeased = true
 	return f
 }
 
-// ByID returns a ByIDGetterBuilder.
+// ByID returns a ByIDGetterBuilder set up to look up descriptors by ID
+// in all layers except the leased descriptors layer. To opt in to the
+// leased descriptors, use ByIDWithLeased instead.
 func (tc *Collection) ByID(txn *kv.Txn) ByIDGetterBuilder {
-	return ByIDGetterBuilder(makeGetterBase(txn, tc, defaultFlags()))
+	return ByIDGetterBuilder(makeGetterBase(txn, tc, getterFlags{
+		layerFilters: layerFilters{
+			withoutLeased: true,
+		},
+	}))
+}
+
+// ByIDWithLeased is like ByID but also looks up in the leased descriptors
+// layer. This may save a round-trip to KV at the expense of the descriptor
+// being slightly stale (one version off).
+func (tc *Collection) ByIDWithLeased(txn *kv.Txn) ByIDGetterBuilder {
+	return ByIDGetterBuilder(makeGetterBase(txn, tc, getterFlags{}))
+}
+
+// MutableByID returns a MutableByIDGetter.
+// This convenience method exists because mutable lookups never require
+// any customization.
+func (tc *Collection) MutableByID(txn *kv.Txn) MutableByIDGetter {
+	return MutableByIDGetter(makeGetterBase(txn, tc, getterFlags{
+		contextFlags: contextFlags{
+			isMutable: true,
+		},
+		layerFilters: layerFilters{
+			withoutLeased: true,
+		},
+	}))
 }
 
 // ByIDGetterBuilder is a builder object for ByIDGetter and MutableByIDGetter.
 type ByIDGetterBuilder getterBase
 
-// WithFlags configures the ByIDGetterBuilder with the given flags.
-func (b ByIDGetterBuilder) WithFlags(flags tree.CommonLookupFlags) ByIDGetterBuilder {
-	b.flags = fromCommonFlags(flags)
+// WithoutSynthetic configures the ByIDGetterBuilder to bypass the synthetic
+// layer. This is useful mainly for the declarative schema changer, which is
+// the main client of this layer.
+func (b ByIDGetterBuilder) WithoutSynthetic() ByIDGetterBuilder {
+	b.flags.layerFilters.withoutSynthetic = true
 	return b
 }
 
-// WithObjFlags configures the ByIDGetterBuilder with the given object flags.
-func (b ByIDGetterBuilder) WithObjFlags(flags tree.ObjectLookupFlags) ByIDGetterBuilder {
-	b.flags = fromObjectFlags(flags)
+// WithoutDropped configures the ByIDGetterBuilder to error on descriptors
+// which are in a dropped state.
+func (b ByIDGetterBuilder) WithoutDropped() ByIDGetterBuilder {
+	b.flags.descFilters.withoutDropped = true
 	return b
 }
 
-// Mutable builds a MutableByIDGetter.
-func (b ByIDGetterBuilder) Mutable() MutableByIDGetter {
-	b.flags.isOptional = false
-	b.flags.isMutable = true
-	b.flags.layerFilters.withoutLeased = true
-	b.flags.descFilters.withoutDropped = false
-	b.flags.descFilters.withoutOffline = false
-	return MutableByIDGetter(b)
+// WithoutOffline configures the ByIDGetterBuilder to error on descriptors
+// which are in an offline state.
+func (b ByIDGetterBuilder) WithoutOffline() ByIDGetterBuilder {
+	b.flags.descFilters.withoutOffline = true
+	return b
 }
 
-// Immutable builds a ByIDGetter.
-func (b ByIDGetterBuilder) Immutable() ByIDGetter {
+// WithoutNonPublic configures the ByIDGetterBuilder to error on descriptors
+// which are not in a public state: dropped, offline, etc.
+func (b ByIDGetterBuilder) WithoutNonPublic() ByIDGetterBuilder {
+	b.flags.descFilters.withoutDropped = true
+	b.flags.descFilters.withoutOffline = true
+	return b
+}
+
+// WithoutOtherParent configures the ByIDGetterBuilder to error on descriptors
+// which, if they have a parent ID, have one different than the argument.
+// The argument must be non-zero for this filter to be effective.
+func (b ByIDGetterBuilder) WithoutOtherParent(parentID catid.DescID) ByIDGetterBuilder {
+	b.flags.descFilters.maybeParentID = parentID
+	return b
+}
+
+// Get builds a ByIDGetter.
+func (b ByIDGetterBuilder) Get() ByIDGetter {
 	if b.flags.isMutable {
 		b.flags.layerFilters.withoutLeased = true
 		b.flags.isMutable = false
@@ -563,40 +566,69 @@ func (b ByIDGetterBuilder) Immutable() ByIDGetter {
 	return ByIDGetter(b)
 }
 
-// ByName returns a ByNameGetterBuilder.
+// ByName returns a ByNameGetterBuilder set up to look up
+// descriptors by name in all layers except the leased descriptors layer.
+// To opt in to the leased descriptors, use ByNameWithLeased instead.
 func (tc *Collection) ByName(txn *kv.Txn) ByNameGetterBuilder {
-	return ByNameGetterBuilder(makeGetterBase(txn, tc, defaultFlags()))
+	return ByNameGetterBuilder(makeGetterBase(txn, tc, getterFlags{
+		layerFilters: layerFilters{
+			withoutLeased: true,
+		},
+		descFilters: descFilters{
+			withoutOffline: true,
+			withoutDropped: true,
+		},
+	}))
+}
+
+// ByNameWithLeased is like ByName but also looks up in the
+// leased descriptors layer. This may save a round-trip to KV at the expense
+// of the descriptor being slightly stale (one version off).
+func (tc *Collection) ByNameWithLeased(txn *kv.Txn) ByNameGetterBuilder {
+	return ByNameGetterBuilder(makeGetterBase(txn, tc, getterFlags{
+		descFilters: descFilters{
+			withoutOffline: true,
+			withoutDropped: true,
+		},
+	}))
+}
+
+// MutableByName returns a MutableByNameGetter.
+// This convenience method exists because mutable lookups never require
+// any customization.
+func (tc *Collection) MutableByName(txn *kv.Txn) MutableByNameGetter {
+	return MutableByNameGetter(makeGetterBase(txn, tc, getterFlags{
+		contextFlags: contextFlags{
+			isMutable: true,
+		},
+		layerFilters: layerFilters{
+			withoutLeased: true,
+		},
+		descFilters: descFilters{
+			withoutOffline: true,
+			withoutDropped: true,
+		},
+	}))
 }
 
 // ByNameGetterBuilder is a builder object for ByNameGetter and MutableByNameGetter.
 type ByNameGetterBuilder getterBase
 
-// WithFlags configures the ByIDGetterBuilder with the given flags.
-func (b ByNameGetterBuilder) WithFlags(flags tree.CommonLookupFlags) ByNameGetterBuilder {
-	b.flags = fromCommonFlags(flags)
+// WithOffline configures the ByNameGetterBuilder to allow lookups
+// of offline descriptors.
+func (b ByNameGetterBuilder) WithOffline() ByNameGetterBuilder {
+	b.flags.descFilters.withoutOffline = false
 	return b
 }
 
-// WithObjFlags configures the ByNameGetterBuilder with the given object flags.
-func (b ByNameGetterBuilder) WithObjFlags(flags tree.ObjectLookupFlags) ByNameGetterBuilder {
-	b.flags = fromObjectFlags(flags)
-	return b
+// Get builds a ByNameGetter.
+func (b ByNameGetterBuilder) Get() ByNameGetter {
+	return ByNameGetter(b)
 }
 
-// Mutable builds a MutableByNameGetter.
-func (b ByNameGetterBuilder) Mutable() MutableByNameGetter {
-	b.flags.isMutable = true
-	b.flags.layerFilters.withoutLeased = true
-	b.flags.descFilters.withoutDropped = true
-	return MutableByNameGetter(b)
-}
-
-// Immutable builds a ByNameGetter.
-func (b ByNameGetterBuilder) Immutable() ByNameGetter {
-	if b.flags.isMutable {
-		b.flags.layerFilters.withoutLeased = true
-		b.flags.isMutable = false
-	}
-	b.flags.descFilters.withoutDropped = true
+// MaybeGet builds a ByNameGetter which returns a nil descriptor instead of
+// an error when the descriptor is not found.
+func (b ByNameGetterBuilder) MaybeGet() ByNameGetter {
+	b.flags.contextFlags.isOptional = true
 	return ByNameGetter(b)
 }

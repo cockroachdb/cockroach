@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -104,14 +103,11 @@ INSERT INTO perm_table VALUES (DEFAULT, 1);
 	) error {
 		// Add a hack to not wait for one version on the descriptors.
 		defer descsCol.ReleaseAll(ctx)
-		_, defaultDB, err := descsCol.GetImmutableDatabaseByID(
-			ctx, txn, namesToID["defaultdb"], tree.CommonLookupFlags{AvoidLeased: true},
-		)
+		defaultDB, err := descsCol.ByID(txn).WithoutNonPublic().Get().Database(ctx, namesToID["defaultdb"])
 		if err != nil {
 			return err
 		}
-		flags := tree.CommonLookupFlags{Required: true, AvoidLeased: true}
-		tempSchema, err := descsCol.GetImmutableSchemaByName(ctx, txn, defaultDB, tempSchemaName, flags)
+		tempSchema, err := descsCol.ByName(txn).Get().Schema(ctx, defaultDB, tempSchemaName)
 		if err != nil {
 			return err
 		}

@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -34,11 +33,7 @@ func TestDatabaseAccessors(t *testing.T) {
 	defer s.Stopper().Stop(context.Background())
 
 	if err := TestingDescsTxn(context.Background(), s, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
-		_, _, err := col.GetImmutableDatabaseByID(ctx, txn, keys.SystemDatabaseID, tree.CommonLookupFlags{
-			AvoidLeased:    true,
-			IncludeDropped: true,
-			IncludeOffline: true,
-		})
+		_, err := col.ByID(txn).Get().Database(ctx, keys.SystemDatabaseID)
 		return err
 	}); err != nil {
 		t.Fatal(err)

@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
@@ -180,18 +179,6 @@ func (s *SQLTranslator) Translate(
 	return records, s.GetTxn().CommitTimestamp(), nil
 }
 
-// descLookupFlags is the set of look up flags used when fetching descriptors.
-var descLookupFlags = tree.CommonLookupFlags{
-	// We act on errors being surfaced when the descriptor being looked up is
-	// not found.
-	Required: true,
-	// We can (do) generate span configurations for dropped and offline tables.
-	IncludeDropped: true,
-	IncludeOffline: true,
-	// We want consistent reads.
-	AvoidLeased: true,
-}
-
 // generateSystemSpanConfigRecords is responsible for generating all the SpanConfigs
 // that apply to spanconfig.SystemTargets.
 func (s *SQLTranslator) generateSystemSpanConfigRecords(
@@ -261,7 +248,7 @@ func (s *SQLTranslator) generateSpanConfigurations(
 	}
 
 	// We're dealing with a SQL object.
-	desc, err := descsCol.GetImmutableDescriptorByID(ctx, txn, id, descLookupFlags)
+	desc, err := descsCol.ByID(txn).Get().Desc(ctx, id)
 	if err != nil {
 		if errors.Is(err, catalog.ErrDescriptorNotFound) {
 			return nil, nil // the descriptor has been deleted; nothing to do here
@@ -542,7 +529,7 @@ func (s *SQLTranslator) findDescendantLeafIDs(
 func (s *SQLTranslator) findDescendantLeafIDsForDescriptor(
 	ctx context.Context, id descpb.ID, txn *kv.Txn, descsCol *descs.Collection,
 ) (descpb.IDs, error) {
-	desc, err := descsCol.GetImmutableDescriptorByID(ctx, txn, id, descLookupFlags)
+	desc, err := descsCol.ByID(txn).Get().Desc(ctx, id)
 	if err != nil {
 		if errors.Is(err, catalog.ErrDescriptorNotFound) {
 			return nil, nil // the descriptor has been deleted; nothing to do here

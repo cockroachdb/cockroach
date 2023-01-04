@@ -93,10 +93,9 @@ func deleteTempTables(ctx context.Context, p *planner) error {
 		if err != nil {
 			return err
 		}
-		flags := p.CommonLookupFlagsRequired()
-		flags.Required = false
+		g := p.byNameGetterBuilder().MaybeGet()
 		for _, db := range allDbDescs {
-			sc, err := descCol.GetImmutableSchemaByName(ctx, p.Txn(), db, p.TemporarySchemaName(), flags)
+			sc, err := g.Schema(ctx, db, p.TemporarySchemaName())
 			if err != nil {
 				return err
 			}

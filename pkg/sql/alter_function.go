@@ -133,9 +133,7 @@ func (n *alterFunctionRenameNode) startExec(params runParams) error {
 		return err
 	}
 
-	scDesc, err := params.p.Descriptors().GetMutableSchemaByID(
-		params.ctx, params.p.txn, fnDesc.GetParentSchemaID(), tree.SchemaLookupFlags{Required: true},
-	)
+	scDesc, err := params.p.Descriptors().MutableByID(params.p.txn).Schema(params.ctx, fnDesc.GetParentSchemaID())
 	if err != nil {
 		return err
 	}
@@ -269,17 +267,11 @@ func (n *alterFunctionSetSchemaNode) startExec(params runParams) error {
 	}
 	// Functions cannot be resolved across db, so just use current db name to get
 	// the descriptor.
-	db, err := params.p.Descriptors().GetMutableDatabaseByName(
-		params.ctx, params.p.txn, params.p.CurrentDatabase(), tree.DatabaseLookupFlags{Required: true},
-	)
+	db, err := params.p.Descriptors().MutableByName(params.p.txn).Database(params.ctx, params.p.CurrentDatabase())
 	if err != nil {
 		return err
 	}
-
-	scFlags := tree.SchemaLookupFlags{Required: true, AvoidLeased: true}
-	sc, err := params.p.Descriptors().GetImmutableSchemaByName(
-		params.ctx, params.p.txn, db, string(n.n.NewSchemaName), scFlags,
-	)
+	sc, err := params.p.Descriptors().ByName(params.p.txn).Get().Schema(params.ctx, db, string(n.n.NewSchemaName))
 	if err != nil {
 		return err
 	}
@@ -304,9 +296,7 @@ func (n *alterFunctionSetSchemaNode) startExec(params runParams) error {
 		// No-op if moving to the same schema.
 		return nil
 	}
-	targetSc, err := params.p.Descriptors().GetMutableSchemaByID(
-		params.ctx, params.p.txn, sc.GetID(), params.p.CommonLookupFlagsRequired(),
-	)
+	targetSc, err := params.p.Descriptors().MutableByID(params.p.txn).Schema(params.ctx, sc.GetID())
 	if err != nil {
 		return err
 	}
@@ -326,9 +316,7 @@ func (n *alterFunctionSetSchemaNode) startExec(params runParams) error {
 		)
 	}
 
-	sourceSc, err := params.p.Descriptors().GetMutableSchemaByID(
-		params.ctx, params.p.txn, fnDesc.GetParentSchemaID(), tree.SchemaLookupFlags{Required: true},
-	)
+	sourceSc, err := params.p.Descriptors().MutableByID(params.p.txn).Schema(params.ctx, fnDesc.GetParentSchemaID())
 	if err != nil {
 		return err
 	}
