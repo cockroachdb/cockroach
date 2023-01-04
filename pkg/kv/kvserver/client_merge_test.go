@@ -353,7 +353,7 @@ func mergeWithData(t *testing.T, retries int64) {
 
 	// Verify no intents remains on range descriptor keys.
 	for _, key := range []roachpb.Key{keys.RangeDescriptorKey(lhsDesc.StartKey), keys.RangeDescriptorKey(rhsDesc.StartKey)} {
-		if _, _, err := storage.MVCCGet(
+		if _, _, _, err := storage.MVCCGet(
 			ctx, store.Engine(), key, store.Clock().Now(), storage.MVCCGetOptions{},
 		); err != nil {
 			t.Fatal(err)

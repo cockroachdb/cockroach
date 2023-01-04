@@ -1805,7 +1805,7 @@ func (r *Replica) maybeWatchForMergeLocked(ctx context.Context) (bool, error) {
 	// if one exists, regardless of what timestamp it is written at.
 	desc := r.descRLocked()
 	descKey := keys.RangeDescriptorKey(desc.StartKey)
-	_, intent, err := storage.MVCCGet(ctx, r.Engine(), descKey, hlc.MaxTimestamp,
+	_, intent, _, err := storage.MVCCGet(ctx, r.Engine(), descKey, hlc.MaxTimestamp,
 		storage.MVCCGetOptions{Inconsistent: true})
 	if err != nil {
 		return false, err

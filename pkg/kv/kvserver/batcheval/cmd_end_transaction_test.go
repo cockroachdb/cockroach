@@ -1062,7 +1062,7 @@ func TestPartialRollbackOnEndTransaction(t *testing.T) {
 
 		// The second write has been rolled back; verify that the remaining
 		// value is from the first write.
-		res, i, err := storage.MVCCGet(ctx, batch, k, ts2, storage.MVCCGetOptions{})
+		res, i, _, err := storage.MVCCGet(ctx, batch, k, ts2, storage.MVCCGetOptions{})
 		if err != nil {
 			t.Fatal(err)
 		}

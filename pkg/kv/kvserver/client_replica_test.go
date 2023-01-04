@@ -207,7 +207,7 @@ func TestLeaseholdersRejectClockUpdateWithJump(t *testing.T) {
 	if advance := ts3.GoTime().Sub(ts2.GoTime()); advance != 0 {
 		t.Fatalf("expected clock not to advance, but it advanced by %s", advance)
 	}
-	val, _, err := storage.MVCCGet(context.Background(), store.Engine(), key, ts3,
+	val, _, _, err := storage.MVCCGet(context.Background(), store.Engine(), key, ts3,
 		storage.MVCCGetOptions{})
 	if err != nil {
 		t.Fatal(err)

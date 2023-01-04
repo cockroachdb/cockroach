@@ -177,7 +177,7 @@ func applyReplicaUpdate(
 	// there will be keys not represented by any ranges or vice
 	// versa).
 	key := keys.RangeDescriptorKey(update.StartKey.AsRKey())
-	value, intent, err := storage.MVCCGet(
+	value, intent, _, err := storage.MVCCGet(
 		ctx, readWriter, key, clock.Now(), storage.MVCCGetOptions{Inconsistent: true})
 	if value == nil {
 		return PrepareReplicaReport{}, errors.Errorf(

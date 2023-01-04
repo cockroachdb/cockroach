@@ -181,7 +181,7 @@ func (m mvccGetOp) run(ctx context.Context) string {
 	// TODO(itsbilal): Specify these bools as operands instead of having a
 	// separate operation for inconsistent cases. This increases visibility for
 	// anyone reading the output file.
-	val, intent, err := storage.MVCCGet(ctx, reader, m.key, m.ts, storage.MVCCGetOptions{
+	val, intent, _, err := storage.MVCCGet(ctx, reader, m.key, m.ts, storage.MVCCGetOptions{
 		Inconsistent: m.inconsistent,
 		Tombstones:   true,
 		Txn:          txn,

@@ -95,7 +95,7 @@ var (
 // merge          [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> v=<string> [raw]
 // put            [t=<name>] [ts=<int>[,<int>]] [localTs=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> v=<string> [raw]
 // put_rangekey   ts=<int>[,<int>] [localTs=<int>[,<int>]] k=<key> end=<key>
-// get            [t=<name>] [ts=<int>[,<int>]]                         [resolve [status=<txnstatus>]] k=<key> [inconsistent] [skipLocked] [tombstones] [failOnMoreRecent] [localUncertaintyLimit=<int>[,<int>]] [globalUncertaintyLimit=<int>[,<int>]]
+// get            [t=<name>] [ts=<int>[,<int>]]                         [resolve [status=<txnstatus>]] k=<key> [inconsistent] [skipLocked] [tombstones] [failOnMoreRecent] [localUncertaintyLimit=<int>[,<int>]] [globalUncertaintyLimit=<int>[,<int>]] [maxKeys=<int>] [targetBytes=<int>] [allowEmpty]
 // scan           [t=<name>] [ts=<int>[,<int>]]                         [resolve [status=<txnstatus>]] k=<key> [end=<key>] [inconsistent] [skipLocked] [tombstones] [reverse] [failOnMoreRecent] [localUncertaintyLimit=<int>[,<int>]] [globalUncertaintyLimit=<int>[,<int>]] [max=<max>] [targetbytes=<target>] [wholeRows[=<int>]] [allowEmpty]
 // export         [k=<key>] [end=<key>] [ts=<int>[,<int>]] [kTs=<int>[,<int>]] [startTs=<int>[,<int>]] [maxIntents=<int>] [allRevisions] [targetSize=<int>] [maxSize=<int>] [stopMidKey] [fingerprint]
 //
@@ -1230,9 +1230,18 @@ func cmdGet(e *evalCtx) error {
 		}
 		opts.Uncertainty.GlobalLimit = txn.GlobalUncertaintyLimit
 	}
+	if e.hasArg("maxKeys") {
+		e.scanArg("maxKeys", &opts.MaxKeys)
+	}
+	if e.hasArg("targetBytes") {
+		e.scanArg("targetBytes", &opts.TargetBytes)
+	}
+	if e.hasArg("allowEmpty") {
+		opts.AllowEmpty = true
+	}
 
 	return e.withReader(func(r storage.Reader) error {
-		val, intent, err := storage.MVCCGet(e.ctx, r, key, ts, opts)
+		val, intent, _, err := storage.MVCCGet(e.ctx, r, key, ts, opts)
 		// NB: the error is returned below. This ensures the test can
 		// ascertain no result is populated in the intent when an error
 		// occurs.

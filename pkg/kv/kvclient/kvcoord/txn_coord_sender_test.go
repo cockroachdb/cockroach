@@ -378,7 +378,7 @@ func verifyCleanup(
 				return fmt.Errorf("expected no heartbeat")
 			}
 		}
-		_, intent, err := storage.MVCCGet(ctx, eng, key, hlc.MaxTimestamp, storage.MVCCGetOptions{
+		_, intent, _, err := storage.MVCCGet(ctx, eng, key, hlc.MaxTimestamp, storage.MVCCGetOptions{
 			Inconsistent: true,
 		})
 		require.NoError(t, err)

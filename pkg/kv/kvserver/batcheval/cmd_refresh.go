@@ -54,7 +54,7 @@ func Refresh(
 	// specifying consistent=false. Note that we include tombstones,
 	// which must be considered as updates on refresh.
 	log.VEventf(ctx, 2, "refresh %s @[%s-%s]", args.Span(), refreshFrom, refreshTo)
-	val, intent, err := storage.MVCCGet(ctx, reader, args.Key, refreshTo, storage.MVCCGetOptions{
+	val, intent, _, err := storage.MVCCGet(ctx, reader, args.Key, refreshTo, storage.MVCCGetOptions{
 		Inconsistent: true,
 		Tombstones:   true,
 	})
