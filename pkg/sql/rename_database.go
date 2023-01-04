@@ -235,7 +235,7 @@ func maybeFailOnDependentDescInRename(
 		}
 
 		if err := tbDesc.ForeachDependedOnBy(func(dependedOn *descpb.TableDescriptor_Reference) error {
-			dependentDesc, err := p.Descriptors().GetMutableDescriptorByID(ctx, p.txn, dependedOn.ID)
+			dependentDesc, err := p.Descriptors().ByID(p.txn).Mutable().Desc(ctx, dependedOn.ID)
 			if err != nil {
 				return err
 			}

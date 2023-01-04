@@ -176,7 +176,7 @@ func (d *txnDeps) GetFullyQualifiedName(ctx context.Context, id descpb.ID) (stri
 func (d *txnDeps) MustReadMutableDescriptor(
 	ctx context.Context, id descpb.ID,
 ) (catalog.MutableDescriptor, error) {
-	return d.descsCollection.GetMutableDescriptorByID(ctx, d.txn, id)
+	return d.descsCollection.ByID(d.txn).Mutable().Desc(ctx, id)
 }
 
 // AddSyntheticDescriptor is part of the

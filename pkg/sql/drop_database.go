@@ -323,7 +323,7 @@ func (p *planner) accumulateCascadingViews(
 	ctx context.Context, dependentObjects map[descpb.ID]*tabledesc.Mutable, desc *tabledesc.Mutable,
 ) error {
 	for _, ref := range desc.DependedOnBy {
-		desc, err := p.Descriptors().GetMutableDescriptorByID(ctx, p.txn, ref.ID)
+		desc, err := p.Descriptors().ByID(p.txn).Mutable().Desc(ctx, ref.ID)
 		if err != nil {
 			return err
 		}

@@ -237,7 +237,7 @@ func TestAddUncommittedDescriptorAndMutableResolution(t *testing.T) {
 			require.NoError(t, err)
 
 			dbID := mut.GetID()
-			byID, err := descriptors.GetMutableDescriptorByID(ctx, txn, dbID)
+			byID, err := descriptors.ByID(txn).Mutable().Desc(ctx, dbID)
 			require.NoError(t, err)
 			require.Same(t, mut, byID)
 
@@ -310,7 +310,7 @@ func TestAddUncommittedDescriptorAndMutableResolution(t *testing.T) {
 
 			require.Same(t, schema, resolved)
 
-			byID, err := descriptors.GetMutableDescriptorByID(ctx, txn, schema.GetID())
+			byID, err := descriptors.ByID(txn).Mutable().Desc(ctx, schema.GetID())
 			require.NoError(t, err)
 
 			require.Same(t, schema, byID)
@@ -334,7 +334,7 @@ func TestAddUncommittedDescriptorAndMutableResolution(t *testing.T) {
 
 			require.Same(t, tab, resolved)
 
-			byID, err := descriptors.GetMutableDescriptorByID(ctx, txn, tab.GetID())
+			byID, err := descriptors.ByID(txn).Mutable().Desc(ctx, tab.GetID())
 			require.NoError(t, err)
 
 			require.Same(t, tab, byID)

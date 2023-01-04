@@ -29,13 +29,6 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// GetMutableDescriptorByID delegates to GetMutableDescriptorsByID.
-func (tc *Collection) GetMutableDescriptorByID(
-	ctx context.Context, txn *kv.Txn, id descpb.ID,
-) (catalog.MutableDescriptor, error) {
-	return tc.ByID(txn).Mutable().Desc(ctx, id)
-}
-
 // GetComment fetches comment from uncommitted cache if it exists, otherwise from storage.
 func (tc *Collection) GetComment(key catalogkeys.CommentKey) (string, bool) {
 	if cmt, hasCmt, cached := tc.uncommittedComments.getUncommitted(key); cached {

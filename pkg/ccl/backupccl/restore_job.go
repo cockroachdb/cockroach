@@ -1073,7 +1073,7 @@ func createImportingDescriptors(
 			// Write the updated databases.
 			for dbID, schemas := range existingDBsWithNewSchemas {
 				log.Infof(ctx, "writing %d schema entries to database %d", len(schemas), dbID)
-				desc, err := descsCol.GetMutableDescriptorByID(ctx, txn, dbID)
+				desc, err := descsCol.ByID(txn).Mutable().Desc(ctx, dbID)
 				if err != nil {
 					return err
 				}
@@ -2537,13 +2537,13 @@ func (r *restoreResumer) dropDescriptors(
 			continue
 		}
 
-		mutSchema, err := descsCol.GetMutableDescriptorByID(ctx, txn, schemaDesc.GetID())
+		mutSchema, err := descsCol.ByID(txn).Mutable().Desc(ctx, schemaDesc.GetID())
 		if err != nil {
 			return err
 		}
 		entry, hasEntry := dbsWithDeletedSchemas[schemaDesc.GetParentID()]
 		if !hasEntry {
-			mutParent, err := descsCol.GetMutableDescriptorByID(ctx, txn, schemaDesc.GetParentID())
+			mutParent, err := descsCol.ByID(txn).Mutable().Desc(ctx, schemaDesc.GetParentID())
 			if err != nil {
 				return err
 			}
@@ -2614,7 +2614,7 @@ func (r *restoreResumer) dropDescriptors(
 			continue
 		}
 
-		db, err := descsCol.GetMutableDescriptorByID(ctx, txn, dbDesc.GetID())
+		db, err := descsCol.ByID(txn).Mutable().Desc(ctx, dbDesc.GetID())
 		if err != nil {
 			return err
 		}

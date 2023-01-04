@@ -237,7 +237,7 @@ func dropDependentOnSequence(ctx context.Context, p *planner, seqDesc *tabledesc
 	numDependedOnByTablesToSkip := 0
 	for len(seqDesc.DependedOnBy) > numDependedOnByTablesToSkip {
 		dependent := seqDesc.DependedOnBy[numDependedOnByTablesToSkip]
-		desc, err := p.Descriptors().GetMutableDescriptorByID(ctx, p.txn, dependent.ID)
+		desc, err := p.Descriptors().ByID(p.txn).Mutable().Desc(ctx, dependent.ID)
 		if err != nil {
 			return err
 		}
