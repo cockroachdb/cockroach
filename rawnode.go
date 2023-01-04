@@ -54,7 +54,8 @@ func NewRawNode(config *Config) (*RawNode, error) {
 		raft: r,
 	}
 	rn.asyncStorageWrites = config.AsyncStorageWrites
-	rn.prevSoftSt = r.softState()
+	ss := r.softState()
+	rn.prevSoftSt = &ss
 	rn.prevHardSt = r.hardState()
 	return rn, nil
 }
@@ -144,7 +145,9 @@ func (rn *RawNode) readyWithoutAccept() Ready {
 		Messages:         r.msgs,
 	}
 	if softSt := r.softState(); !softSt.equal(rn.prevSoftSt) {
-		rd.SoftState = softSt
+		// Allocate only when SoftState changes.
+		escapingSoftSt := softSt
+		rd.SoftState = &escapingSoftSt
 	}
 	if hardSt := r.hardState(); !isHardStateEqual(hardSt, rn.prevHardSt) {
 		rd.HardState = hardSt
@@ -445,7 +448,7 @@ func (rn *RawNode) applyUnstableEntries() bool {
 func (rn *RawNode) HasReady() bool {
 	// TODO(nvanbenschoten): order these cases in terms of cost and frequency.
 	r := rn.raft
-	if !r.softState().equal(rn.prevSoftSt) {
+	if softSt := r.softState(); !softSt.equal(rn.prevSoftSt) {
 		return true
 	}
 	if hardSt := r.hardState(); !IsEmptyHardState(hardSt) && !isHardStateEqual(hardSt, rn.prevHardSt) {
