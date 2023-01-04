@@ -10387,7 +10387,7 @@ $$;
 		require.NoError(t, err)
 		require.Equal(t, 110, int(tbDesc.GetID()))
 
-		fnDesc, err := col.GetImmutableFunctionByID(ctx, txn, descpb.ID(udfID), tree.ObjectLookupFlagsWithRequired())
+		fnDesc, err := col.ByID(txn).WithObjFlags(tree.ObjectLookupFlags{}).Immutable().Function(ctx, descpb.ID(udfID))
 		require.NoError(t, err)
 		require.Equal(t, 111, int(fnDesc.GetID()))
 		require.Equal(t, 104, int(fnDesc.GetParentID()))
@@ -10443,7 +10443,7 @@ $$;
 		require.NoError(t, err)
 		require.Equal(t, 118, int(tbDesc.GetID()))
 
-		fnDesc, err := col.GetImmutableFunctionByID(ctx, txn, descpb.ID(udfID), tree.ObjectLookupFlagsWithRequired())
+		fnDesc, err := col.ByID(txn).WithObjFlags(tree.ObjectLookupFlags{}).Immutable().Function(ctx, descpb.ID(udfID))
 		require.NoError(t, err)
 		require.Equal(t, 119, int(fnDesc.GetID()))
 		require.Equal(t, 112, int(fnDesc.GetParentID()))
@@ -10534,7 +10534,7 @@ $$;
 		require.NoError(t, err)
 		require.Equal(t, 110, int(tbDesc.GetID()))
 
-		fnDesc, err := col.GetImmutableFunctionByID(ctx, txn, descpb.ID(udfID), tree.ObjectLookupFlagsWithRequired())
+		fnDesc, err := col.ByID(txn).WithObjFlags(tree.ObjectLookupFlags{}).Immutable().Function(ctx, descpb.ID(udfID))
 		require.NoError(t, err)
 		require.Equal(t, 111, int(fnDesc.GetID()))
 		require.Equal(t, 104, int(fnDesc.GetParentID()))
@@ -10592,7 +10592,7 @@ $$;
 		require.NoError(t, err)
 		require.Equal(t, 129, int(tbDesc.GetID()))
 
-		fnDesc, err := col.GetImmutableFunctionByID(ctx, txn, descpb.ID(udfID), tree.ObjectLookupFlagsWithRequired())
+		fnDesc, err := col.ByID(txn).WithObjFlags(tree.ObjectLookupFlags{}).Immutable().Function(ctx, descpb.ID(udfID))
 		require.NoError(t, err)
 		require.Equal(t, 130, int(fnDesc.GetID()))
 		require.Equal(t, 107, int(fnDesc.GetParentID()))

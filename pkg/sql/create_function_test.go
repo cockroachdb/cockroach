@@ -65,7 +65,7 @@ CREATE SCHEMA test_sc;
 	)
 
 	err := sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
-		funcDesc, err := col.GetImmutableFunctionByID(ctx, txn, 110, tree.ObjectLookupFlagsWithRequired())
+		funcDesc, err := col.ByID(txn).WithObjFlags(tree.ObjectLookupFlags{}).Immutable().Function(ctx, 110)
 		require.NoError(t, err)
 		require.Equal(t, funcDesc.GetName(), "f")
 
@@ -250,7 +250,7 @@ $$;
 	)
 
 	err := sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
-		funcDesc, err := col.GetImmutableFunctionByID(ctx, txn, 112, tree.ObjectLookupFlagsWithRequired())
+		funcDesc, err := col.ByID(txn).WithObjFlags(tree.ObjectLookupFlags{}).Immutable().Function(ctx, 112)
 		require.NoError(t, err)
 		require.Equal(t, funcDesc.GetName(), "f")
 
@@ -293,13 +293,7 @@ $$;
 `)
 
 	err = sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
-		flags := tree.ObjectLookupFlags{
-			CommonLookupFlags: tree.CommonLookupFlags{
-				Required:    true,
-				AvoidLeased: true,
-			},
-		}
-		funcDesc, err := col.GetImmutableFunctionByID(ctx, txn, 112, flags)
+		funcDesc, err := col.ByID(txn).WithFlags(tree.CommonLookupFlags{AvoidLeased: true}).Immutable().Function(ctx, 112)
 		require.NoError(t, err)
 		require.Equal(t, funcDesc.GetName(), "f")
 

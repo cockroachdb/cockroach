@@ -2556,12 +2556,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-proc.html`,
 			func(dbDesc catalog.DatabaseDescriptor) error {
 				return forEachSchema(ctx, p, dbDesc, true /* requiresPrivileges */, func(scDesc catalog.SchemaDescriptor) error {
 					return scDesc.ForEachFunctionOverload(func(overload descpb.SchemaDescriptor_FunctionOverload) error {
-						fnDesc, err := p.Descriptors().GetImmutableFunctionByID(
-							ctx, p.Txn(), overload.ID,
-							tree.ObjectLookupFlags{
-								CommonLookupFlags: tree.CommonLookupFlags{AvoidLeased: true},
-							},
-						)
+						fnDesc, err := p.Descriptors().ByID(p.Txn()).WithFlags(tree.CommonLookupFlags{AvoidLeased: true}).Immutable().Function(ctx, overload.ID)
 						if err != nil {
 							return err
 						}
@@ -2589,12 +2584,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-proc.html`,
 				}
 
 				if overload.IsUDF {
-					fnDesc, err := p.Descriptors().GetImmutableFunctionByID(
-						ctx, p.Txn(), descpb.ID(overload.Oid),
-						tree.ObjectLookupFlags{
-							CommonLookupFlags: tree.CommonLookupFlags{AvoidLeased: true},
-						},
-					)
+					fnDesc, err := p.Descriptors().ByID(p.Txn()).WithFlags(tree.CommonLookupFlags{AvoidLeased: true}).Immutable().Function(ctx, descpb.ID(overload.Oid))
 					if err != nil {
 						return false, err
 					}

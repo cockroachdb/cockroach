@@ -14,18 +14,10 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
-
-// GetImmutableFunctionByID returns a immutable function descriptor.
-func (tc *Collection) GetImmutableFunctionByID(
-	ctx context.Context, txn *kv.Txn, fnID descpb.ID, flags tree.ObjectLookupFlags,
-) (catalog.FunctionDescriptor, error) {
-	return tc.ByID(txn).WithObjFlags(flags).Immutable().Function(ctx, fnID)
-}
 
 // GetMutableFunctionByID returns a mutable function descriptor.
 func (tc *Collection) GetMutableFunctionByID(

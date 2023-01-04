@@ -586,8 +586,7 @@ func (sr *schemaResolver) ResolveFunctionByOID(
 	flags := sr.CommonLookupFlagsRequired()
 	flags.ParentID = sr.typeResolutionDbID
 	descID := funcdesc.UserDefinedFunctionOIDToID(oid)
-	funcDesc, err := sr.descCollection.GetImmutableFunctionByID(ctx, sr.txn, descID,
-		tree.ObjectLookupFlags{CommonLookupFlags: flags})
+	funcDesc, err := sr.descCollection.ByID(sr.txn).WithFlags(flags).Immutable().Function(ctx, descID)
 	if err != nil {
 		return "", nil, err
 	}
