@@ -134,7 +134,7 @@ var _ colexecop.Operator = &Inbox{}
 func NewInbox(
 	allocator *colmem.Allocator, typs []*types.T, streamID execinfrapb.StreamID,
 ) (*Inbox, error) {
-	c, err := colserde.NewArrowBatchConverter(typs, colserde.ArrowToBatchOnly)
+	c, err := colserde.NewArrowBatchConverter(typs, colserde.ArrowToBatchOnly, nil /* acc */)
 	if err != nil {
 		return nil, err
 	}
@@ -488,7 +488,7 @@ func (i *Inbox) DrainMeta() []execinfrapb.ProducerMetadata {
 	// We also no longer need the scratch batch nor the arrow-to-batch
 	// converter.
 	i.scratch.b = nil
-	i.converter.Release()
+	i.converter.Release(i.Ctx)
 	// The allocator tracks the memory usage for a few things (the scratch batch
 	// as well as the metadata), and when this function returns, we no longer
 	// reference any of those, so we can release all of the allocations.

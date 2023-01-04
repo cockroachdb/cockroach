@@ -190,9 +190,6 @@ func (w *tpch) Hooks() workload.Hooks {
 type generateLocals struct {
 	rng *rand.Rand
 
-	// namePerm is a slice of ordinals into randPartNames.
-	namePerm []int
-
 	orderData *orderSharedRandomData
 }
 
@@ -201,13 +198,8 @@ func (w *tpch) Tables() []workload.Table {
 	if w.localsPool == nil {
 		w.localsPool = &sync.Pool{
 			New: func() interface{} {
-				namePerm := make([]int, len(randPartNames))
-				for i := range namePerm {
-					namePerm[i] = i
-				}
 				return &generateLocals{
-					rng:      rand.New(rand.NewSource(uint64(timeutil.Now().UnixNano()))),
-					namePerm: namePerm,
+					rng: rand.New(rand.NewSource(uint64(timeutil.Now().UnixNano()))),
 					orderData: &orderSharedRandomData{
 						partKeys:   make([]int, 0, 7),
 						shipDates:  make([]int64, 0, 7),

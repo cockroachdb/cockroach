@@ -113,7 +113,7 @@ func TestPartitionedDiskQueue(t *testing.T) {
 	queueCfg.FS = countingFS
 
 	t.Run("ReopenReadPartition", func(t *testing.T) {
-		p := colcontainer.NewPartitionedDiskQueue(typs, queueCfg, sem, colcontainer.PartitionerStrategyDefault, testDiskAcc)
+		p := colcontainer.NewPartitionedDiskQueue(typs, queueCfg, sem, colcontainer.PartitionerStrategyDefault, testDiskAcc, testMemAcc)
 
 		countingFS.assertOpenFDs(t, sem, 0, 0)
 		require.NoError(t, p.Enqueue(ctx, 0, batch))
@@ -177,7 +177,7 @@ func TestPartitionedDiskQueueSimulatedExternal(t *testing.T) {
 		// new partition being written to when closedForWrites from maxPartitions
 		// and writing the merged result to a single new partition.
 		sem := colexecop.NewTestingSemaphore(maxPartitions + 1)
-		p := colcontainer.NewPartitionedDiskQueue(typs, queueCfg, sem, colcontainer.PartitionerStrategyCloseOnNewPartition, testDiskAcc)
+		p := colcontainer.NewPartitionedDiskQueue(typs, queueCfg, sem, colcontainer.PartitionerStrategyCloseOnNewPartition, testDiskAcc, testMemAcc)
 
 		// Define sortRepartition to be able to call this helper function
 		// recursively.
@@ -256,7 +256,7 @@ func TestPartitionedDiskQueueSimulatedExternal(t *testing.T) {
 		// number of partitions partitioned to and 2 represents the file descriptors
 		// for the left and right side in the case of a repartition.
 		sem := colexecop.NewTestingSemaphore(maxPartitions + 2)
-		p := colcontainer.NewPartitionedDiskQueue(typs, queueCfg, sem, colcontainer.PartitionerStrategyDefault, testDiskAcc)
+		p := colcontainer.NewPartitionedDiskQueue(typs, queueCfg, sem, colcontainer.PartitionerStrategyDefault, testDiskAcc, testMemAcc)
 
 		// joinRepartition will perform the partitioning that happens during a hash
 		// join. expectedRepartitionReadFDs are the read file descriptors that are

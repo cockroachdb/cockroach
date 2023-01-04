@@ -275,9 +275,11 @@ func TestOutboxInbox(t *testing.T) {
 			)
 			outboxMemAcc := testMemMonitor.MakeBoundAccount()
 			defer outboxMemAcc.Close(outboxCtx)
+			outboxConverterMemAcc := testMemMonitor.MakeBoundAccount()
+			defer outboxConverterMemAcc.Close(ctx)
 			outbox, err := NewOutbox(
 				colmem.NewAllocator(outboxCtx, &outboxMemAcc, coldata.StandardColumnFactory),
-				colexecargs.OpWithMetaInfo{Root: input}, typs, nil, /* getStats */
+				&outboxConverterMemAcc, colexecargs.OpWithMetaInfo{Root: input}, typs, nil, /* getStats */
 			)
 			require.NoError(t, err)
 
@@ -520,7 +522,7 @@ func TestInboxHostCtxCancellation(t *testing.T) {
 	defer outboxMemAcc.Close(outboxHostCtx)
 	outbox, err := NewOutbox(
 		colmem.NewAllocator(outboxHostCtx, &outboxMemAcc, coldata.StandardColumnFactory),
-		colexecargs.OpWithMetaInfo{Root: outboxInput}, typs, nil, /* getStats */
+		testMemAcc, colexecargs.OpWithMetaInfo{Root: outboxInput}, typs, nil, /* getStats */
 	)
 	require.NoError(t, err)
 	var wg sync.WaitGroup
@@ -701,6 +703,7 @@ func TestOutboxInboxMetadataPropagation(t *testing.T) {
 			}
 			outbox, err := NewOutbox(
 				colmem.NewAllocator(ctx, &outboxMemAcc, coldata.StandardColumnFactory),
+				testMemAcc,
 				colexecargs.OpWithMetaInfo{
 					Root: input,
 					MetadataSources: []colexecop.MetadataSource{
@@ -796,7 +799,7 @@ func BenchmarkOutboxInbox(b *testing.B) {
 	defer outboxMemAcc.Close(ctx)
 	outbox, err := NewOutbox(
 		colmem.NewAllocator(ctx, &outboxMemAcc, coldata.StandardColumnFactory),
-		colexecargs.OpWithMetaInfo{Root: input}, typs, nil, /* getStats */
+		testMemAcc, colexecargs.OpWithMetaInfo{Root: input}, typs, nil, /* getStats */
 	)
 	require.NoError(b, err)
 
@@ -861,7 +864,7 @@ func TestOutboxStreamIDPropagation(t *testing.T) {
 	defer outboxMemAcc.Close(ctx)
 	outbox, err := NewOutbox(
 		colmem.NewAllocator(ctx, &outboxMemAcc, coldata.StandardColumnFactory),
-		colexecargs.OpWithMetaInfo{Root: input}, typs, nil, /* getStats */
+		testMemAcc, colexecargs.OpWithMetaInfo{Root: input}, typs, nil, /* getStats */
 	)
 	require.NoError(t, err)
 

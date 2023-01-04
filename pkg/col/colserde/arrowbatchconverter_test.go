@@ -12,6 +12,7 @@ package colserde_test
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"testing"
 
@@ -47,14 +48,15 @@ func TestArrowBatchConverterRandom(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	typs, b := randomBatch(testAllocator)
-	c, err := colserde.NewArrowBatchConverter(typs, colserde.BiDirectional)
+	c, err := colserde.NewArrowBatchConverter(typs, colserde.BiDirectional, testMemAcc)
 	require.NoError(t, err)
+	defer c.Release(context.Background())
 
 	// Make a copy of the original batch because the converter modifies and casts
 	// data without copying for performance reasons.
 	expected := coldatatestutils.CopyBatch(b, typs, testColumnFactory)
 
-	arrowData, err := c.BatchToArrow(b)
+	arrowData, err := c.BatchToArrow(context.Background(), b)
 	require.NoError(t, err)
 	actual := testAllocator.NewMemBatchWithFixedCapacity(typs, b.Length())
 	require.NoError(t, c.ArrowToBatch(arrowData, b.Length(), actual))
@@ -68,7 +70,7 @@ func roundTripBatch(
 	src, dest coldata.Batch, c *colserde.ArrowBatchConverter, r *colserde.RecordBatchSerializer,
 ) error {
 	var buf bytes.Buffer
-	arrowDataIn, err := c.BatchToArrow(src)
+	arrowDataIn, err := c.BatchToArrow(context.Background(), src)
 	if err != nil {
 		return err
 	}
@@ -100,8 +102,9 @@ func TestRecordBatchRoundtripThroughBytes(t *testing.T) {
 			typs, src = randomBatch(testAllocator)
 		}
 		dest := testAllocator.NewMemBatchWithMaxCapacity(typs)
-		c, err := colserde.NewArrowBatchConverter(typs, colserde.BiDirectional)
+		c, err := colserde.NewArrowBatchConverter(typs, colserde.BiDirectional, testMemAcc)
 		require.NoError(t, err)
+		defer c.Release(context.Background())
 		r, err := colserde.NewRecordBatchSerializer(typs)
 		require.NoError(t, err)
 
@@ -215,16 +218,18 @@ func runConversionBenchmarks(
 }
 
 func BenchmarkArrowBatchConverter(b *testing.B) {
+	ctx := context.Background()
 	runConversionBenchmarks(
 		b,
 		"BatchToArrow",
 		func(b *testing.B, batch coldata.Batch, typ *types.T) {
-			c, err := colserde.NewArrowBatchConverter([]*types.T{typ}, colserde.BiDirectional)
+			c, err := colserde.NewArrowBatchConverter([]*types.T{typ}, colserde.BiDirectional, testMemAcc)
 			require.NoError(b, err)
+			defer c.Release(ctx)
 			var data []array.Data
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				data, _ = c.BatchToArrow(batch)
+				data, _ = c.BatchToArrow(ctx, batch)
 				if len(data) != 1 {
 					b.Fatal("expected arrow batch of length 1")
 				}
@@ -235,9 +240,10 @@ func BenchmarkArrowBatchConverter(b *testing.B) {
 		},
 		"ArrowToBatch",
 		func(b *testing.B, batch coldata.Batch, typ *types.T) {
-			c, err := colserde.NewArrowBatchConverter([]*types.T{typ}, colserde.BiDirectional)
+			c, err := colserde.NewArrowBatchConverter([]*types.T{typ}, colserde.BiDirectional, testMemAcc)
 			require.NoError(b, err)
-			data, err := c.BatchToArrow(batch)
+			defer c.Release(ctx)
+			data, err := c.BatchToArrow(ctx, batch)
 			dataCopy := make([]array.Data, len(data))
 			require.NoError(b, err)
 			result := testAllocator.NewMemBatchWithMaxCapacity([]*types.T{typ})

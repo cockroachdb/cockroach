@@ -1160,6 +1160,7 @@ func BenchmarkWindowFunctions(b *testing.B) {
 			QueueCfg:        queueCfg,
 			FdSemaphore:     colexecop.NewTestingSemaphore(fdLimit),
 			DiskAcc:         testDiskAcc,
+			ConverterMemAcc: testMemAcc,
 			Input:           source,
 			InputTypes:      sourceTypes,
 			OutputColIdx:    outputIdx,

@@ -68,8 +68,18 @@ var (
 	_ ProgressDetails = SchemaTelemetryProgress{}
 )
 
-// Type returns the payload's job type.
+// Type returns the payload's job type and panics if the type is invalid.
 func (p *Payload) Type() Type {
+	typ, err := DetailsType(p.Details)
+	if err != nil {
+		panic(err)
+	}
+	return typ
+}
+
+// CheckType returns the payload's job type with an error
+// if the type is invalid.
+func (p *Payload) CheckType() (Type, error) {
 	return DetailsType(p.Details)
 }
 
@@ -103,46 +113,46 @@ var AutomaticJobTypes = [...]Type{
 }
 
 // DetailsType returns the type for a payload detail.
-func DetailsType(d isPayload_Details) Type {
+func DetailsType(d isPayload_Details) (Type, error) {
 	switch d := d.(type) {
 	case *Payload_Backup:
-		return TypeBackup
+		return TypeBackup, nil
 	case *Payload_Restore:
-		return TypeRestore
+		return TypeRestore, nil
 	case *Payload_SchemaChange:
-		return TypeSchemaChange
+		return TypeSchemaChange, nil
 	case *Payload_Import:
-		return TypeImport
+		return TypeImport, nil
 	case *Payload_Changefeed:
-		return TypeChangefeed
+		return TypeChangefeed, nil
 	case *Payload_CreateStats:
 		createStatsName := d.CreateStats.Name
 		if createStatsName == AutoStatsName {
-			return TypeAutoCreateStats
+			return TypeAutoCreateStats, nil
 		}
-		return TypeCreateStats
+		return TypeCreateStats, nil
 	case *Payload_SchemaChangeGC:
-		return TypeSchemaChangeGC
+		return TypeSchemaChangeGC, nil
 	case *Payload_TypeSchemaChange:
-		return TypeTypeSchemaChange
+		return TypeTypeSchemaChange, nil
 	case *Payload_StreamIngestion:
-		return TypeStreamIngestion
+		return TypeStreamIngestion, nil
 	case *Payload_NewSchemaChange:
-		return TypeNewSchemaChange
+		return TypeNewSchemaChange, nil
 	case *Payload_Migration:
-		return TypeMigration
+		return TypeMigration, nil
 	case *Payload_AutoSpanConfigReconciliation:
-		return TypeAutoSpanConfigReconciliation
+		return TypeAutoSpanConfigReconciliation, nil
 	case *Payload_AutoSQLStatsCompaction:
-		return TypeAutoSQLStatsCompaction
+		return TypeAutoSQLStatsCompaction, nil
 	case *Payload_StreamReplication:
-		return TypeStreamReplication
+		return TypeStreamReplication, nil
 	case *Payload_RowLevelTTL:
-		return TypeRowLevelTTL
+		return TypeRowLevelTTL, nil
 	case *Payload_SchemaTelemetry:
-		return TypeAutoSchemaTelemetry
+		return TypeAutoSchemaTelemetry, nil
 	default:
-		panic(errors.AssertionFailedf("Payload.Type called on a payload with an unknown details type: %T", d))
+		return TypeUnspecified, errors.Newf("Payload.Type called on a payload with an unknown details type: %T", d)
 	}
 }
 

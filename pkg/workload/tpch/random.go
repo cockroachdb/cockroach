@@ -125,11 +125,16 @@ const nPartNames = 5
 
 // randPartName concatenates 5 random unique strings from randPartNames, separated
 // by spaces.
-func randPartName(rng *rand.Rand, namePerm []int, a *bufalloc.ByteAllocator) []byte {
-	// do nPartNames iterations of rand.Perm, to get a random 5-subset of the
-	// indexes into randPartNames.
+func randPartName(rng *rand.Rand, a *bufalloc.ByteAllocator) []byte {
+	namePerm := make([]int, len(randPartNames))
+	for i := range namePerm {
+		namePerm[i] = i
+	}
+	// Create a random 5-subset of the indexes into randPartNames using a modified
+	// Fisher–Yates shuffle.
 	for i := 0; i < nPartNames; i++ {
-		j := rng.Intn(len(namePerm))
+		// N.B. Correctness requires that i <= j < len(namePerm)
+		j := rng.Intn(len(namePerm)-i) + i
 		namePerm[i], namePerm[j] = namePerm[j], namePerm[i]
 	}
 	var buf []byte
