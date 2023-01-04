@@ -9,9 +9,6 @@ go_library(
     deps = [
         "//pkg/roachpb",
         "//pkg/settings",
-        "//pkg/util/hlc",
-        "//pkg/util/syncutil",
-        "//pkg/util/timeutil",
     ],
 )
 
@@ -22,10 +19,8 @@ go_test(
     embed = [":replicastats"],
     deps = [
         "//pkg/roachpb",
-        "//pkg/util/hlc",
         "//pkg/util/leaktest",
         "//pkg/util/log",
-        "//pkg/util/timeutil",
         "@com_github_kr_pretty//:pretty",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",

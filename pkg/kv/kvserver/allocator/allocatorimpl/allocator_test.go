@@ -43,7 +43,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/olekukonko/tablewriter"
@@ -103,6 +102,10 @@ var multiDCConfigVoterAndNonVoter = roachpb.SpanConfig{
 // emptySpanConfig returns the empty span configuration.
 func emptySpanConfig() roachpb.SpanConfig {
 	return roachpb.SpanConfig{}
+}
+
+func testingStartTime() time.Time {
+	return time.Date(2022, 12, 16, 11, 0, 0, 0, time.UTC)
 }
 
 var singleStore = []*roachpb.StoreDescriptor{
@@ -5396,27 +5399,26 @@ func TestAllocatorTransferLeaseTargetLoadBased(t *testing.T) {
 	localityFn := func(nodeID roachpb.NodeID) string {
 		return localities[nodeID]
 	}
-	manual := timeutil.NewManualTime(timeutil.Unix(0, 123))
-	clock := hlc.NewClock(manual, time.Nanosecond /* maxOffset */)
+	now := testingStartTime()
 
 	// Set up four different load distributions. Record a bunch of requests to
 	// the unknown node 99 in evenlyBalanced to verify that requests from
 	// unknown localities don't affect the algorithm.
-	evenlyBalanced := replicastats.NewReplicaStats(clock, localityFn)
-	evenlyBalanced.RecordCount(1, 1)
-	evenlyBalanced.RecordCount(1, 2)
-	evenlyBalanced.RecordCount(1, 3)
-	imbalanced1 := replicastats.NewReplicaStats(clock, localityFn)
-	imbalanced2 := replicastats.NewReplicaStats(clock, localityFn)
-	imbalanced3 := replicastats.NewReplicaStats(clock, localityFn)
+	evenlyBalanced := replicastats.NewReplicaStats(now, localityFn)
+	evenlyBalanced.RecordCount(now, 1, 1)
+	evenlyBalanced.RecordCount(now, 1, 2)
+	evenlyBalanced.RecordCount(now, 1, 3)
+	imbalanced1 := replicastats.NewReplicaStats(now, localityFn)
+	imbalanced2 := replicastats.NewReplicaStats(now, localityFn)
+	imbalanced3 := replicastats.NewReplicaStats(now, localityFn)
 	for i := 0; i < 100*int(MinLeaseTransferStatsDuration.Seconds()); i++ {
-		evenlyBalanced.RecordCount(1, 99)
-		imbalanced1.RecordCount(1, 1)
-		imbalanced2.RecordCount(1, 2)
-		imbalanced3.RecordCount(1, 3)
+		evenlyBalanced.RecordCount(now, 1, 99)
+		imbalanced1.RecordCount(now, 1, 1)
+		imbalanced3.RecordCount(now, 1, 3)
+		imbalanced2.RecordCount(now, 1, 2)
 	}
 
-	manual.Advance(MinLeaseTransferStatsDuration)
+	now = now.Add(MinLeaseTransferStatsDuration)
 
 	noLatency := map[string]time.Duration{}
 	highLatency := map[string]time.Duration{
@@ -5502,7 +5504,7 @@ func TestAllocatorTransferLeaseTargetLoadBased(t *testing.T) {
 			a := MakeAllocator(st, true /* deterministic */, func(addr string) (time.Duration, bool) {
 				return c.latency[addr], true
 			}, nil)
-			localitySummary := c.stats.SnapshotRatedSummary()
+			localitySummary := c.stats.SnapshotRatedSummary(now)
 			usage := allocator.RangeUsageInfo{}
 			usage.RequestLocality = &allocator.RangeRequestLocalityInfo{
 				Counts:   localitySummary.LocalityCounts,

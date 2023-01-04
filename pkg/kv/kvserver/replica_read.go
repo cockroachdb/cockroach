@@ -215,8 +215,8 @@ func (r *Replica) executeReadOnlyBatch(
 		log.VErrEventf(ctx, 3, "%v", pErr.String())
 	} else {
 		keysRead, bytesRead := getBatchResponseReadStats(br)
-		r.loadStats.readKeys.RecordCount(keysRead, 0)
-		r.loadStats.readBytes.RecordCount(bytesRead, 0)
+		r.loadStats.RecordReadKeys(keysRead)
+		r.loadStats.RecordReadBytes(bytesRead)
 		log.Event(ctx, "read completed")
 	}
 	return br, nil, nil, pErr

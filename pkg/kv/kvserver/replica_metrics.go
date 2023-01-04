@@ -13,13 +13,13 @@ package kvserver
 import (
 	"context"
 	"math"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/load"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"go.etcd.io/raft/v3"
@@ -278,65 +278,9 @@ func calcBehindCount(
 	return behindCount
 }
 
-// QueriesPerSecond returns the range's average QPS if it is the current
-// leaseholder. If it isn't, this will return 0 because the replica does not
-// know about the reads that the leaseholder is serving.
-//
-// A "Query" is a BatchRequest (regardless of its contents) arriving at the
-// leaseholder with a gateway node set in the header (i.e. excluding requests
-// that weren't sent through a DistSender, which in practice should be
-// practically none). See Replica.getBatchRequestQPS() for how this is
-// accounted for.
-func (r *Replica) QueriesPerSecond() (float64, time.Duration) {
-	return r.loadStats.batchRequests.AverageRatePerSecond()
-}
-
-// RequestsPerSecond returns the range's average requests received per second.
-// A batch request may have one to many requests.
-func (r *Replica) RequestsPerSecond() float64 {
-	rps, _ := r.loadStats.requests.AverageRatePerSecond()
-	return rps
-}
-
-// WritesPerSecond returns the range's average keys written per second. A
-// "Write" is a mutation applied by Raft as measured by
-// engine.RocksDBBatchCount(writeBatch). This corresponds roughly to the number
-// of keys mutated by a write. For example, writing 12 intents would count as 24
-// writes (12 for the metadata, 12 for the versions). A DeleteRange that
-// ultimately only removes one key counts as one (or two if it's transactional).
-func (r *Replica) WritesPerSecond() float64 {
-	wps, _ := r.loadStats.writeKeys.AverageRatePerSecond()
-	return wps
-}
-
-// ReadsPerSecond returns the range's average keys read per second. A "Read" is
-// a key access during evaluation of a batch request. This includes both
-// follower and leaseholder reads.
-func (r *Replica) ReadsPerSecond() float64 {
-	rps, _ := r.loadStats.readKeys.AverageRatePerSecond()
-	return rps
-}
-
-// WriteBytesPerSecond returns the range's average bytes written per second. A "Write" is
-// as described in WritesPerSecond.
-func (r *Replica) WriteBytesPerSecond() float64 {
-	wbps, _ := r.loadStats.writeBytes.AverageRatePerSecond()
-	return wbps
-}
-
-// ReadBytesPerSecond returns the range's average bytes read per second. A "Read" is
-// as described in ReadsPerSecond.
-func (r *Replica) ReadBytesPerSecond() float64 {
-	rbps, _ := r.loadStats.readBytes.AverageRatePerSecond()
-	return rbps
-}
-
-// CPUNanosPerSecond tracks the time this replica spent on-processor averaged
-// per second.
-func (r *Replica) CPUNanosPerSecond() float64 {
-	raftCPUNanos, _ := r.loadStats.raftCPUNanos.AverageRatePerSecond()
-	reqCPUNanos, _ := r.loadStats.reqCPUNanos.AverageRatePerSecond()
-	return raftCPUNanos + reqCPUNanos
+// LoadStats returns the load statistics for the replica.
+func (r *Replica) LoadStats() load.ReplicaLoadStats {
+	return r.loadStats.Stats()
 }
 
 func (r *Replica) needsSplitBySizeRLocked() bool {
