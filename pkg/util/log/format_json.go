@@ -190,7 +190,7 @@ var jsonTags = map[byte]struct {
 	// SQL servers in multi-tenant deployments.
 	'q': {[2]string{"q", "instance_id"},
 		"The SQL instance ID where the event was generated, once known. Only reported for multi-tenant SQL servers.", true},
-	'T': {[2]string{"T", "tenant_id"},
+	'T': {[2]string{TenantIDLogTagKey, TenantIDLogTagKeyJSON},
 		"The SQL tenant ID where the event was generated, once known. Only reported for multi-tenant SQL servers.", true},
 }
 
@@ -199,8 +199,9 @@ const serverIdentifierFields = "NxqT"
 type tagChoice int
 
 const (
-	tagCompact tagChoice = 0
-	tagVerbose tagChoice = 1
+	tagCompact            tagChoice = 0
+	tagVerbose            tagChoice = 1
+	TenantIDLogTagKeyJSON string    = "tenant_id"
 )
 
 var channelNamesLowercase = func() map[Channel]string {
@@ -292,12 +293,12 @@ func formatJSON(entry logEntry, forFluent bool, tags tagChoice) *buffer {
 		buf.WriteString(`":`)
 		buf.WriteString(entry.nodeID)
 	}
-	if entry.tenantID != "" {
-		buf.WriteString(`,"`)
-		buf.WriteString(jtags['T'].tags[tags])
-		buf.WriteString(`":`)
-		buf.WriteString(entry.tenantID)
-	}
+	// The entry's idPayload always returns a tenant ID,
+	// so write the tenant ID tag in any case.
+	buf.WriteString(`,"`)
+	buf.WriteString(jtags['T'].tags[tags])
+	buf.WriteString(`":`)
+	buf.WriteString(entry.TenantID())
 	if entry.sqlInstanceID != "" {
 		buf.WriteString(`,"`)
 		buf.WriteString(jtags['q'].tags[tags])
@@ -485,6 +486,12 @@ func (e *JSONEntry) populate(entry *logpb.Entry, d *entryDecoderJSON) (*redactab
 	entry.File = e.File
 	entry.Line = e.Line
 	entry.Redactable = e.Redactable == 1
+	// Default to the system tenant ID, and override if
+	// we find a tenant ID tag in the decoded entry.
+	entry.TenantID = systemTenantID
+	if e.TenantID != 0 {
+		entry.TenantID = fmt.Sprint(e.TenantID)
+	}
 
 	if e.Header == 0 {
 		entry.Severity = Severity(e.SeverityNumeric)

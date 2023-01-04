@@ -505,6 +505,7 @@ var functions = func() map[tree.FunctionClass]map[oid.Oid][]function {
 			"crdb_internal.force_",
 			"crdb_internal.unsafe_",
 			"crdb_internal.create_join_token",
+			"crdb_internal.job_payload_type",
 			"crdb_internal.reset_multi_region_zone_configs_for_database",
 			"crdb_internal.reset_index_usage_stats",
 			"crdb_internal.start_replication_stream",
