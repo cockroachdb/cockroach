@@ -41,38 +41,42 @@ const (
 	replicationUnknownFormat tenantStatus = "REPLICATION UNKNOWN (%s)"
 )
 
-type showTenantNode struct {
-	name               tree.TypedExpr
+type tenantValues struct {
 	tenantInfo         *descpb.TenantInfo
 	tenantStatus       tenantStatus
-	withReplication    bool
 	replicationInfo    *streampb.StreamIngestionStats
 	protectedTimestamp hlc.Timestamp
-	columns            colinfo.ResultColumns
-	done               bool
 }
 
+type showTenantNode struct {
+	withReplication bool
+	all             bool
+	columns         colinfo.ResultColumns
+	row             int
+	tenantIds       []roachpb.TenantID
+	tenantName      roachpb.TenantName
+	values          *tenantValues
+}
+
+// ShowTenant constructs a showTenantNode.
 func (p *planner) ShowTenant(ctx context.Context, n *tree.ShowTenant) (planNode, error) {
 	if err := p.RequireAdminRole(ctx, "show tenant"); err != nil {
 		return nil, err
 	}
-
 	if err := rejectIfCantCoordinateMultiTenancy(p.execCfg.Codec, "show"); err != nil {
 		return nil, err
 	}
 
-	var dummyHelper tree.IndexedVarHelper
-	strName := paramparse.UnresolvedNameToStrVal(n.Name)
-	typedName, err := p.analyzeExpr(
-		ctx, strName, nil, dummyHelper, types.String,
-		true, "SHOW TENANT ... WITH REPLICATION STATUS")
-	if err != nil {
-		return nil, err
-	}
-
 	node := &showTenantNode{
-		name:            typedName,
 		withReplication: n.WithReplication,
+		all:             n.All,
+	}
+	if !n.All {
+		name, err := p.parseTenantName(ctx, n.Name)
+		if err != nil {
+			return nil, err
+		}
+		node.tenantName = name
 	}
 	if n.WithReplication {
 		node.columns = colinfo.TenantColumnsWithReplication
@@ -83,8 +87,19 @@ func (p *planner) ShowTenant(ctx context.Context, n *tree.ShowTenant) (planNode,
 	return node, nil
 }
 
-func (n *showTenantNode) getTenantName(params runParams) (roachpb.TenantName, error) {
-	dName, err := eval.Expr(params.ctx, params.p.EvalContext(), n.name)
+func (p *planner) parseTenantName(
+	ctx context.Context, exprName tree.Expr,
+) (roachpb.TenantName, error) {
+	var dummyHelper tree.IndexedVarHelper
+	strName := paramparse.UnresolvedNameToStrVal(exprName)
+	var err error
+	typedName, err := p.analyzeExpr(
+		ctx, strName, nil, dummyHelper, types.String,
+		true, "SHOW TENANT ... WITH REPLICATION STATUS")
+	if err != nil {
+		return "", err
+	}
+	dName, err := eval.Expr(ctx, p.EvalContext(), typedName)
 	if err != nil {
 		return "", err
 	}
@@ -95,16 +110,31 @@ func (n *showTenantNode) getTenantName(params runParams) (roachpb.TenantName, er
 	return roachpb.TenantName(*name), nil
 }
 
-func (n *showTenantNode) initReplicationStats(params runParams, job *jobs.Job) error {
+func (n *showTenantNode) startExec(params runParams) error {
+	if n.all {
+		ids, err := GetAllTenantIds(params.ctx, params.p.execCfg, params.p.Txn())
+		if err != nil {
+			return err
+		}
+		n.tenantIds = ids
+	}
+
+	return nil
+}
+
+func getReplicationStats(
+	params runParams, job *jobs.Job,
+) (*streampb.StreamIngestionStats, *hlc.Timestamp, error) {
 	mgr, err := params.p.EvalContext().StreamManagerFactory.GetStreamIngestManager(params.ctx)
 	if err != nil {
-		return err
+		return nil, nil, err
 	}
 	details, ok := job.Details().(jobspb.StreamIngestionDetails)
 	if !ok {
-		return errors.Newf("job with id %d is not a stream ingestion job", job.ID())
+		return nil, nil, errors.Newf("job with id %d is not a stream ingestion job", job.ID())
 	}
 	stats, err := mgr.GetStreamIngestionStats(params.ctx, details, job.Progress())
+	var protectedTimestamp hlc.Timestamp
 	if err != nil {
 		// An error means we don't have stats but we can still present some info,
 		// therefore we don't fail here.
@@ -113,9 +143,8 @@ func (n *showTenantNode) initReplicationStats(params runParams, job *jobs.Job) e
 		log.Infof(params.ctx, "stream ingestion stats unavailable for tenant %q and job %d",
 			details.DestinationTenantName, job.ID())
 	} else {
-		n.replicationInfo = stats
 		if stats.IngestionDetails.ProtectedTimestampRecordID == nil {
-			// We don't have the protected timestamp record but we still want to show
+			// We don't have the protected timestamp record, but we still want to show
 			// the info we do have about tenant replication status, logging an error
 			// and continuing.
 			log.Warningf(params.ctx, "protected timestamp unavailable for tenant %q and job %d",
@@ -124,12 +153,15 @@ func (n *showTenantNode) initReplicationStats(params runParams, job *jobs.Job) e
 			ptp := params.p.execCfg.ProtectedTimestampProvider
 			record, err := ptp.GetRecord(params.ctx, params.p.Txn(), *stats.IngestionDetails.ProtectedTimestampRecordID)
 			if err != nil {
-				return err
+				// Protected timestamp might not be set yet, no need to fail.
+				log.Warningf(params.ctx, "protected timestamp unavailable for tenant %q and job %d: %v",
+					details.DestinationTenantName, job.ID(), err)
+				return stats, nil, nil
 			}
-			n.protectedTimestamp = record.Timestamp
+			protectedTimestamp = record.Timestamp
 		}
 	}
-	return nil
+	return stats, &protectedTimestamp, nil
 }
 
 func getTenantStatus(
@@ -156,63 +188,91 @@ func getTenantStatus(
 	}
 }
 
-func (n *showTenantNode) startExec(params runParams) error {
-	tenantName, err := n.getTenantName(params)
-	if err != nil {
-		return err
-	}
-	tenantRecord, err := GetTenantRecordByName(params.ctx, params.p.execCfg, params.p.Txn(), tenantName)
-	if err != nil {
-		return err
-	}
-	n.tenantInfo = tenantRecord
-	jobId := n.tenantInfo.TenantReplicationJobID
+func (n *showTenantNode) getTenantValues(
+	params runParams, tenantInfo *descpb.TenantInfo,
+) (*tenantValues, error) {
+	var values tenantValues
+	values.tenantInfo = tenantInfo
+	jobId := values.tenantInfo.TenantReplicationJobID
 	if jobId == 0 {
 		// No replication job, this is a non-replicating tenant.
 		if n.withReplication {
-			return errors.Newf("tenant %q does not have an active replication job", tenantName)
+			return nil, errors.Newf("tenant %q does not have an active replication job", tenantInfo.Name)
 		}
-		n.tenantStatus = tenantStatus(n.tenantInfo.State.String())
-		return nil
+		values.tenantStatus = tenantStatus(values.tenantInfo.State.String())
+		return &values, nil
 	}
 
-	switch n.tenantInfo.State {
+	switch values.tenantInfo.State {
 	case descpb.TenantInfo_ADD:
 		// There is a replication job, we need to get the job info and the
 		// replication stats in order to generate the exact tenant status.
 		registry := params.p.execCfg.JobRegistry
 		job, err := registry.LoadJobWithTxn(params.ctx, jobId, params.p.Txn())
 		if err != nil {
-			return err
+			log.Errorf(params.ctx, "cannot load job info for replicated tenant %q and job %d: %v",
+				tenantInfo.Name, jobId, err)
+			values.tenantStatus = tenantStatus(fmt.Sprintf(string(replicationUnknownFormat), err))
+			return &values, nil
 		}
-		if err := n.initReplicationStats(params, job); err != nil {
-			return err
+		stats, protectedTimestamp, err := getReplicationStats(params, job)
+		if err != nil {
+			log.Errorf(params.ctx, "cannot load replication stats for replicated tenant %q and job %d: %v",
+				tenantInfo.Name, jobId, err)
+			values.tenantStatus = tenantStatus(fmt.Sprintf(string(replicationUnknownFormat), err))
+			return &values, nil
+		}
+		values.replicationInfo = stats
+		if protectedTimestamp != nil {
+			values.protectedTimestamp = *protectedTimestamp
 		}
 
-		n.tenantStatus = getTenantStatus(job.Status(), n.replicationInfo)
+		values.tenantStatus = getTenantStatus(job.Status(), values.replicationInfo)
 	case descpb.TenantInfo_ACTIVE, descpb.TenantInfo_DROP:
-		n.tenantStatus = tenantStatus(n.tenantInfo.State.String())
+		values.tenantStatus = tenantStatus(values.tenantInfo.State.String())
 	default:
-		return errors.Newf("unknown tenant status %s", n.tenantInfo.State)
+		return nil, errors.Newf("tenant %q state is unknown: %s", tenantInfo.Name, values.tenantInfo.State.String())
 	}
-
-	return nil
+	return &values, nil
 }
 
-func (n *showTenantNode) Next(_ runParams) (bool, error) {
-	if n.done {
-		return false, nil
+func (n *showTenantNode) Next(params runParams) (bool, error) {
+	var tenantInfo *descpb.TenantInfo
+	if n.all {
+		if n.row >= len(n.tenantIds) {
+			return false, nil
+		}
+		var err error
+		tenantInfo, err = GetTenantRecordByID(params.ctx, params.p.execCfg, params.p.Txn(), n.tenantIds[n.row])
+		if err != nil {
+			return false, err
+		}
+	} else {
+		// We only have one tenant, return true once.
+		if n.row > 0 {
+			return false, nil
+		}
+		var err error
+		tenantInfo, err = GetTenantRecordByName(params.ctx, params.p.execCfg, params.p.Txn(), n.tenantName)
+		if err != nil {
+			return false, err
+		}
 	}
-	n.done = true
+	values, err := n.getTenantValues(params, tenantInfo)
+	if err != nil {
+		return false, err
+	}
+	n.values = values
+	n.row++
 	return true, nil
 }
 
 func (n *showTenantNode) Values() tree.Datums {
-	tenantId := tree.NewDInt(tree.DInt(n.tenantInfo.ID))
-	tenantName := tree.NewDString(string(n.tenantInfo.Name))
-	tenantStatus := tree.NewDString(string(n.tenantStatus))
+	v := n.values
+	tenantId := tree.NewDInt(tree.DInt(v.tenantInfo.ID))
+	tenantName := tree.NewDString(string(v.tenantInfo.Name))
+	tenantStatus := tree.NewDString(string(v.tenantStatus))
 	if !n.withReplication {
-		// This is a simple 'SHOW TENANT name'.
 		return tree.Datums{
 			tenantId,
 			tenantName,
@@ -223,16 +283,16 @@ func (n *showTenantNode) Values() tree.Datums {
 	// This is a 'SHOW TENANT name WITH REPLICATION STATUS' command.
 	sourceTenantName := tree.DNull
 	sourceClusterUri := tree.DNull
-	replicationJobId := tree.NewDInt(tree.DInt(n.tenantInfo.TenantReplicationJobID))
+	replicationJobId := tree.NewDInt(tree.DInt(v.tenantInfo.TenantReplicationJobID))
 	replicatedTimestamp := tree.DNull
 	retainedTimestamp := tree.DNull
 	cutoverTimestamp := tree.DNull
 
-	if n.replicationInfo != nil {
-		sourceTenantName = tree.NewDString(string(n.replicationInfo.IngestionDetails.SourceTenantName))
-		sourceClusterUri = tree.NewDString(n.replicationInfo.IngestionDetails.StreamAddress)
-		if n.replicationInfo.ReplicationLagInfo != nil {
-			minIngested := n.replicationInfo.ReplicationLagInfo.MinIngestedTimestamp
+	if v.replicationInfo != nil {
+		sourceTenantName = tree.NewDString(string(v.replicationInfo.IngestionDetails.SourceTenantName))
+		sourceClusterUri = tree.NewDString(v.replicationInfo.IngestionDetails.StreamAddress)
+		if v.replicationInfo.ReplicationLagInfo != nil {
+			minIngested := v.replicationInfo.ReplicationLagInfo.MinIngestedTimestamp
 			// The latest fully replicated time. Truncating to the nearest microsecond
 			// because if we don't, then MakeDTimestamp rounds to the nearest
 			// microsecond. In that case a user may want to cutover to a rounded-up
@@ -245,9 +305,9 @@ func (n *showTenantNode) Values() tree.Datums {
 		// window (retained to replicated) and not below it. We take a timestamp
 		// that is greater than the protected timestamp by a microsecond or less
 		// (it's not exactly ceil but close enough).
-		retainedCeil := n.protectedTimestamp.GoTime().Truncate(time.Microsecond).Add(time.Microsecond)
+		retainedCeil := v.protectedTimestamp.GoTime().Truncate(time.Microsecond).Add(time.Microsecond)
 		retainedTimestamp, _ = tree.MakeDTimestampTZ(retainedCeil, time.Nanosecond)
-		progress := n.replicationInfo.IngestionProgress
+		progress := v.replicationInfo.IngestionProgress
 		if progress != nil && !progress.CutoverTime.IsEmpty() {
 			cutoverTimestamp = eval.TimestampToDecimalDatum(progress.CutoverTime)
 		}

@@ -76,10 +76,10 @@ id  name   status
 statement error tenant "seven" does not exist
 SHOW TENANT seven
 
-statement error tenant "tenant-one" does not have an active replication job
+query error pq: tenant "tenant-one" does not have an active replication job
 SHOW TENANT "tenant-one" WITH REPLICATION STATUS
 
-statement error tenant "two" does not have an active replication job
+query error pq: tenant "two" does not have an active replication job
 SHOW TENANT two WITH REPLICATION STATUS
 
 # Test creating a tenant with the same name as an existing tenant, but a unique
