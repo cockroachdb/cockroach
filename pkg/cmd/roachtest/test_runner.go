@@ -57,6 +57,9 @@ var (
 
 	// reference error used when cluster creation fails for a test
 	errClusterProvisioningFailed = fmt.Errorf("cluster could not be created")
+
+	prometheusNameSpace      = "roachtest"
+	prometheusScrapeInterval = time.Second * 10
 )
 
 // testRunner runs tests.
@@ -322,6 +325,7 @@ func (r *testRunner) Run(
 
 	// Wait for all the workers to finish.
 	wg.Wait()
+	shutdownStart := timeutil.Now()
 	r.cr.destroyAllClusters(ctx, l)
 
 	if errs.Err() != nil {
@@ -338,6 +342,13 @@ func (r *testRunner) Run(
 
 	if len(r.status.fail) > 0 {
 		return errTestsFailed
+	}
+	// To ensure all prometheus metrics have been scraped, ensure shutdown takes
+	// at least one scrapeInterval, unless the roachtest fails or gets cancelled.
+	ticker := time.NewTicker(prometheusScrapeInterval - timeutil.Since(shutdownStart))
+	select {
+	case <-r.stopper.ShouldQuiesce():
+	case <-ticker.C:
 	}
 	return nil
 }
