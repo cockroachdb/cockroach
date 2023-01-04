@@ -13,6 +13,7 @@ package storage
 import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/pebble"
 )
 
 // verifyingMVCCIterator is an MVCC iterator that wraps a pebbleIterator and
@@ -128,4 +129,9 @@ func (i *verifyingMVCCIterator) Valid() (bool, error) {
 // HasPointAndRange implements MVCCIterator.
 func (i *verifyingMVCCIterator) HasPointAndRange() (bool, bool) {
 	return i.hasPoint, i.hasRange
+}
+
+// UnsafeLazyValue implements MVCCIterator.
+func (i *verifyingMVCCIterator) UnsafeLazyValue() pebble.LazyValue {
+	return pebble.LazyValue{ValueOrHandle: i.value}
 }

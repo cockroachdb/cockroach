@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/pebble"
 	"github.com/stretchr/testify/require"
 )
 
@@ -348,6 +349,7 @@ func (m *metamorphicIterator) RangeKeyChanged() bool {
 }
 
 type metamorphicMVCCIterator struct {
+	// INVARIANT: metamorphicIterator.it implements MVCCIterator.
 	*metamorphicIterator
 }
 
@@ -361,6 +363,10 @@ func (m *metamorphicMVCCIterator) SeekLT(key storage.MVCCKey) {
 func (m *metamorphicMVCCIterator) Prev() {
 	m.it.(storage.MVCCIterator).Prev()
 	m.moveAround()
+}
+
+func (m *metamorphicMVCCIterator) UnsafeLazyValue() pebble.LazyValue {
+	return m.it.(storage.MVCCIterator).UnsafeLazyValue()
 }
 
 func (m *metamorphicMVCCIterator) SeekIntentGE(key roachpb.Key, txnUUID uuid.UUID) {
