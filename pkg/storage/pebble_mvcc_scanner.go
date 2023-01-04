@@ -376,13 +376,15 @@ type pebbleMVCCScanner struct {
 	failOnMoreRecent bool
 	keyBuf           []byte
 	savedBuf         []byte
+	lazyFetcherBuf   pebble.LazyFetcher
+	lazyValueBuf     []byte
 	// cur* variables store the "current" record we're pointing to. Updated in
 	// updateCurrent. Note that the timestamp can be clobbered in the case of
 	// adding an intent from the intent history but is otherwise meaningful.
 	curUnsafeKey   MVCCKey
 	curRawKey      []byte
 	curUnsafeValue MVCCValue
-	curRawValue    []byte
+	curRawValue    pebble.LazyValue
 	curRangeKeys   MVCCRangeKeyStack
 	savedRangeKeys MVCCRangeKeyStack
 	results        pebbleResults
@@ -692,10 +694,16 @@ func (p *pebbleMVCCScanner) getOne(ctx context.Context) (ok, added bool) {
 			return p.addSynthetic(ctx, p.curUnsafeKey.Key, rkv)
 		}
 
-		if extended, valid := p.tryDecodeCurrentValueSimple(); !valid {
+		// We are eagerly fetching and decoding the value, even though it may be
+		// too recent. With some care, this could be optimized to be lazy.
+		v, valid := p.getFromLazyValue()
+		if !valid {
+			return false, false
+		}
+		if extended, valid := p.tryDecodeCurrentValueSimple(v); !valid {
 			return false, false
 		} else if extended {
-			if !p.decodeCurrentValueExtended() {
+			if !p.decodeCurrentValueExtended(v) {
 				return false, false
 			}
 		}
@@ -1246,10 +1254,14 @@ func (p *pebbleMVCCScanner) seekVersion(
 		}
 		if p.curUnsafeKey.Timestamp.LessEq(seekTS) {
 			p.incrementItersBeforeSeek()
-			if extended, valid := p.tryDecodeCurrentValueSimple(); !valid {
+			v, valid := p.getFromLazyValue()
+			if !valid {
+				return false, false
+			}
+			if extended, valid := p.tryDecodeCurrentValueSimple(v); !valid {
 				return false, false
 			} else if extended {
-				if !p.decodeCurrentValueExtended() {
+				if !p.decodeCurrentValueExtended(v) {
 					return false, false
 				}
 			}
@@ -1284,10 +1296,14 @@ func (p *pebbleMVCCScanner) seekVersion(
 			p.setAdvanceKeyAtNewKey(origKey)
 			return true /* ok */, false
 		}
-		if extended, valid := p.tryDecodeCurrentValueSimple(); !valid {
+		v, valid := p.getFromLazyValue()
+		if !valid {
+			return false, false
+		}
+		if extended, valid := p.tryDecodeCurrentValueSimple(v); !valid {
 			return false, false
 		} else if extended {
-			if !p.decodeCurrentValueExtended() {
+			if !p.decodeCurrentValueExtended(v) {
 				return false, false
 			}
 		}
@@ -1447,11 +1463,7 @@ func (p *pebbleMVCCScanner) updateCurrent() bool {
 		p.err = errors.Wrap(err, "unable to decode MVCCKey")
 		return false
 	}
-	p.curRawValue, err = p.parent.UnsafeValue()
-	if err != nil {
-		p.err = err
-		return false
-	}
+	p.curRawValue = p.parent.UnsafeLazyValue()
 
 	// Reset decoded value to avoid bugs.
 	if util.RaceEnabled {
@@ -1461,12 +1473,28 @@ func (p *pebbleMVCCScanner) updateCurrent() bool {
 	return true
 }
 
+func (p *pebbleMVCCScanner) getFromLazyValue() (v []byte, valid bool) {
+	v, callerOwned, err := p.curRawValue.Value(p.lazyValueBuf)
+	if err != nil {
+		p.err = err
+		return nil, false
+	}
+	if callerOwned {
+		p.lazyValueBuf = v[:0]
+	}
+	return v, true
+}
+
 func (p *pebbleMVCCScanner) decodeCurrentMetadata() bool {
-	if len(p.curRawValue) == 0 {
+	val, valid := p.getFromLazyValue()
+	if !valid {
+		return false
+	}
+	if len(val) == 0 {
 		p.err = errors.Errorf("zero-length mvcc metadata")
 		return false
 	}
-	err := protoutil.Unmarshal(p.curRawValue, &p.meta)
+	err := protoutil.Unmarshal(val, &p.meta)
 	if err != nil {
 		p.err = errors.Wrap(err, "unable to decode MVCCMetadata")
 		return false
@@ -1475,15 +1503,15 @@ func (p *pebbleMVCCScanner) decodeCurrentMetadata() bool {
 }
 
 //gcassert:inline
-func (p *pebbleMVCCScanner) tryDecodeCurrentValueSimple() (extended, valid bool) {
+func (p *pebbleMVCCScanner) tryDecodeCurrentValueSimple(v []byte) (extended, valid bool) {
 	var simple bool
-	p.curUnsafeValue, simple, p.err = tryDecodeSimpleMVCCValue(p.curRawValue)
+	p.curUnsafeValue, simple, p.err = tryDecodeSimpleMVCCValue(v)
 	return !simple, p.err == nil
 }
 
 //gcassert:inline
-func (p *pebbleMVCCScanner) decodeCurrentValueExtended() bool {
-	p.curUnsafeValue, p.err = decodeExtendedMVCCValue(p.curRawValue)
+func (p *pebbleMVCCScanner) decodeCurrentValueExtended(v []byte) bool {
+	p.curUnsafeValue, p.err = decodeExtendedMVCCValue(v)
 	return p.err == nil
 }
 
@@ -1607,9 +1635,8 @@ func (p *pebbleMVCCScanner) iterPeekPrev() ([]byte, bool, bool) {
 		// curRawKey, curKey and curValue to point to this saved data. We use a
 		// single buffer for this purpose: savedBuf.
 		p.savedBuf = append(p.savedBuf[:0], p.curRawKey...)
-		p.savedBuf = append(p.savedBuf, p.curRawValue...)
+		p.curRawValue, p.savedBuf = p.curRawValue.Clone(p.savedBuf, &p.lazyFetcherBuf)
 		p.curRawKey = p.savedBuf[:len(p.curRawKey)]
-		p.curRawValue = p.savedBuf[len(p.curRawKey):]
 		// The raw key is always a prefix of the encoded MVCC key. Take advantage of this to
 		// sub-slice the raw key directly, instead of calling SplitMVCCKey.
 		p.curUnsafeKey.Key = p.curRawKey[:len(p.curUnsafeKey.Key)]
@@ -1690,7 +1717,11 @@ func (p *pebbleMVCCScanner) isKeyLockedByConflictingTxn(
 // addCurIntent adds the key-value pair that the scanner is currently
 // pointing to as an intent to the intents set.
 func (p *pebbleMVCCScanner) addCurIntent(ctx context.Context) bool {
-	return p.addRawIntent(ctx, p.curRawKey, p.curRawValue)
+	v, valid := p.getFromLazyValue()
+	if !valid {
+		return false
+	}
+	return p.addRawIntent(ctx, p.curRawKey, v)
 }
 
 // addKeyAndMetaAsIntent adds the key and transaction meta as an intent to
