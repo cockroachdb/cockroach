@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/replicastats"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
@@ -2190,22 +2189,15 @@ func rangeRaftProgress(raftStatus *raft.Status, replicas []roachpb.ReplicaDescri
 // usage information matches. Which is dubious in some cases but often
 // reasonable when we only consider the leaseholder.
 func RangeUsageInfoForRepl(repl *Replica) allocator.RangeUsageInfo {
-	info := allocator.RangeUsageInfo{
-		LogicalBytes: repl.GetMVCCStats().Total(),
+	loadStats := repl.LoadStats()
+	localityInfo := repl.loadStats.RequestLocalityInfo()
+	return allocator.RangeUsageInfo{
+		LogicalBytes:     repl.GetMVCCStats().Total(),
+		QueriesPerSecond: loadStats.QueriesPerSecond,
+		WritesPerSecond:  loadStats.WriteKeysPerSecond,
+		RequestLocality: &allocator.RangeRequestLocalityInfo{
+			Counts:   localityInfo.LocalityCounts,
+			Duration: localityInfo.Duration,
+		},
 	}
-
-	localitySummary := repl.loadStats.batchRequests.SnapshotRatedSummary()
-	info.RequestLocality = &allocator.RangeRequestLocalityInfo{
-		Counts:   localitySummary.LocalityCounts,
-		Duration: localitySummary.Duration,
-	}
-
-	if localitySummary.Duration >= replicastats.MinStatsDuration {
-		info.QueriesPerSecond = localitySummary.QPS
-	}
-
-	if writesPerSecond, dur := repl.loadStats.writeKeys.AverageRatePerSecond(); dur >= replicastats.MinStatsDuration {
-		info.WritesPerSecond = writesPerSecond
-	}
-	return info
 }

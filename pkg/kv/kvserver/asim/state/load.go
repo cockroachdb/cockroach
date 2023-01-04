@@ -15,7 +15,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/workload"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/replicastats"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
 // ReplicaLoad defines the methods a datastructure is required to perform in
@@ -58,7 +57,7 @@ type ReplicaLoadCounter struct {
 func NewReplicaLoadCounter(clock *ManualSimClock) *ReplicaLoadCounter {
 	return &ReplicaLoadCounter{
 		clock: clock,
-		QPS:   replicastats.NewReplicaStats(hlc.NewClock(clock, 0), nil),
+		QPS:   replicastats.NewReplicaStats(clock.Now(), nil),
 	}
 }
 
@@ -68,7 +67,7 @@ func (rl *ReplicaLoadCounter) ApplyLoad(le workload.LoadEvent) {
 	rl.ReadKeys += le.Reads
 	rl.WriteBytes += le.WriteSize
 	rl.WriteKeys += le.Writes
-	rl.QPS.RecordCount(LoadEventQPS(le), 0)
+	rl.QPS.RecordCount(rl.clock.Now(), LoadEventQPS(le), 0)
 }
 
 // Load translates the recorded key accesses and size into range usage
@@ -76,7 +75,7 @@ func (rl *ReplicaLoadCounter) ApplyLoad(le workload.LoadEvent) {
 func (rl *ReplicaLoadCounter) Load() allocator.RangeUsageInfo {
 	qps := 0.0
 	if rl.QPS != nil {
-		qps, _ = rl.QPS.AverageRatePerSecond()
+		qps, _ = rl.QPS.AverageRatePerSecond(rl.clock.Now())
 	}
 
 	return allocator.RangeUsageInfo{
@@ -90,7 +89,7 @@ func (rl *ReplicaLoadCounter) Load() allocator.RangeUsageInfo {
 // counters.
 func (rl *ReplicaLoadCounter) ResetLoad() {
 	if rl.QPS != nil {
-		rl.QPS.ResetRequestCounts()
+		rl.QPS.ResetRequestCounts(rl.clock.Now())
 	}
 }
 
@@ -101,7 +100,8 @@ func (rl *ReplicaLoadCounter) Split() ReplicaLoad {
 	rl.WriteBytes /= 2
 	rl.ReadKeys /= 2
 	rl.ReadBytes /= 2
-	otherQPS := replicastats.NewReplicaStats(hlc.NewClock(rl.clock, 0), nil)
+
+	otherQPS := replicastats.NewReplicaStats(rl.clock.Now(), nil)
 	rl.QPS.SplitRequestCounts(otherQPS)
 
 	return &ReplicaLoadCounter{

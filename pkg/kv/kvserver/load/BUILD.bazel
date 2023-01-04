@@ -1,0 +1,21 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "load",
+    srcs = [
+        "record_replica_load.go",
+        "replica_load.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/load",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/kv/kvserver/replicastats",
+        "//pkg/roachpb",
+        "//pkg/util/hlc",
+        "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
+    ],
+)
+
+get_x_data(name = "get_x_data")
