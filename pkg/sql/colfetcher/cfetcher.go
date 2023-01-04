@@ -324,7 +324,9 @@ func (cf *cFetcher) resetBatch() {
 }
 
 // Init sets up the cFetcher based on the table args. Only columns present in
-// tableArgs.cols will be fetched.
+// tableArgs.spec will be fetched.
+//
+// Note: the allocator must **not** be shared with any other component.
 func (cf *cFetcher) Init(
 	allocator *colmem.Allocator, nextKVer storage.NextKVer, tableArgs *cFetcherTableArgs,
 ) error {

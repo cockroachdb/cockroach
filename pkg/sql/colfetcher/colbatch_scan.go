@@ -184,7 +184,7 @@ var colBatchScanPool = sync.Pool{
 // NewColBatchScan creates a new ColBatchScan operator.
 func NewColBatchScan(
 	ctx context.Context,
-	allocator *colmem.Allocator,
+	fetcherAllocator *colmem.Allocator,
 	kvFetcherMemAcc *mon.BoundAccount,
 	flowCtx *execinfra.FlowCtx,
 	spec *execinfrapb.TableReaderSpec,
@@ -239,7 +239,7 @@ func NewColBatchScan(
 	}
 
 	if err = fetcher.Init(
-		allocator, kvFetcher, tableArgs,
+		fetcherAllocator, kvFetcher, tableArgs,
 	); err != nil {
 		fetcher.Release()
 		return nil, err
@@ -250,7 +250,14 @@ func NewColBatchScan(
 	if !flowCtx.Local {
 		// Make a copy of the spans so that we could get the misplanned ranges
 		// info.
-		allocator.AdjustMemoryUsage(s.Spans.MemUsage())
+		//
+		// Note that we cannot use fetcherAllocator to track this memory usage
+		// (because the cFetcher requires that its allocator is not shared with
+		// any other component), but we can use the memory account of the KV
+		// fetcher.
+		if err = kvFetcherMemAcc.Grow(ctx, s.Spans.MemUsage()); err != nil {
+			return nil, err
+		}
 		s.MakeSpansCopy()
 	}
 

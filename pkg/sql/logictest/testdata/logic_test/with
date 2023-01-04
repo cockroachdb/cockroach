@@ -733,18 +733,22 @@ INSERT INTO graph_node (id, parent) VALUES
   ('C', 'B'),
   ('D', 'C')
 
-query T rowsort
+# The recursive query seed column types must match the output columns types.
+query error pgcode 42804 recursive query \"nodes\" column 1 has type string in non-recursive term but type varchar overall
 WITH RECURSIVE nodes AS (
   SELECT 'A' AS id
   UNION ALL
   SELECT graph_node.id FROM graph_node JOIN nodes ON graph_node.parent = nodes.id
 )
 SELECT * FROM nodes
-----
-A
-B
-C
-D
+
+# The recursive query seed column types must match the output columns types.
+query error pgcode 42804 recursive query \"foo\" column 1 has type int in non-recursive term but type decimal overall
+WITH RECURSIVE foo(i) AS
+    (SELECT i FROM (VALUES(1),(2)) t(i)
+    UNION ALL
+    SELECT (i+1)::numeric(10,0) FROM foo WHERE i < 10)
+SELECT * FROM foo
 
 # Tests with correlated CTEs.
 statement ok
