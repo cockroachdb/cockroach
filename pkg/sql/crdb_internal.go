@@ -394,11 +394,7 @@ CREATE TABLE crdb_internal.super_regions (
 				if err != nil {
 					return err
 				}
-				typeDesc, err := p.Descriptors().GetImmutableTypeByID(ctx, p.txn, typeID,
-					tree.ObjectLookupFlags{CommonLookupFlags: tree.CommonLookupFlags{
-						Required: true,
-					}},
-				)
+				typeDesc, err := p.Descriptors().ByID(p.txn).WithObjFlags(tree.ObjectLookupFlags{}).Immutable().Type(ctx, typeID)
 				if err != nil {
 					return err
 				}

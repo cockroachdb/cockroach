@@ -303,12 +303,7 @@ func resolveUDTsUsedByImportInto(
 		}
 		typeIDs, _, err := table.GetAllReferencedTypeIDs(dbDesc,
 			func(id descpb.ID) (catalog.TypeDescriptor, error) {
-				immutDesc, err := descriptors.GetImmutableTypeByID(ctx, txn, id, tree.ObjectLookupFlags{
-					CommonLookupFlags: tree.CommonLookupFlags{
-						Required:    true,
-						AvoidLeased: true,
-					},
-				})
+				immutDesc, err := descriptors.ByID(txn).WithFlags(tree.CommonLookupFlags{AvoidLeased: true}).Immutable().Type(ctx, id)
 				if err != nil {
 					return nil, err
 				}
@@ -319,12 +314,7 @@ func resolveUDTsUsedByImportInto(
 		}
 
 		for _, typeID := range typeIDs {
-			immutDesc, err := descriptors.GetImmutableTypeByID(ctx, txn, typeID, tree.ObjectLookupFlags{
-				CommonLookupFlags: tree.CommonLookupFlags{
-					Required:    true,
-					AvoidLeased: true,
-				},
-			})
+			immutDesc, err := descriptors.ByID(txn).WithFlags(tree.CommonLookupFlags{AvoidLeased: true}).Immutable().Type(ctx, typeID)
 			if err != nil {
 				return err
 			}

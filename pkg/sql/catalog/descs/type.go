@@ -73,13 +73,3 @@ func (tc *Collection) GetMutableTypeByID(
 ) (*typedesc.Mutable, error) {
 	return tc.ByID(txn).WithObjFlags(flags).Mutable().Type(ctx, typeID)
 }
-
-// GetImmutableTypeByID returns an immutable type descriptor with
-// properties according to the provided lookup flags. RequireMutable is ignored.
-// Required is ignored, and an error is always returned if no descriptor with
-// the ID exists.
-func (tc *Collection) GetImmutableTypeByID(
-	ctx context.Context, txn *kv.Txn, typeID descpb.ID, flags tree.ObjectLookupFlags,
-) (catalog.TypeDescriptor, error) {
-	return tc.ByID(txn).WithObjFlags(flags).Immutable().Type(ctx, typeID)
-}

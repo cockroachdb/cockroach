@@ -3186,7 +3186,7 @@ func addPGTypeRow(
 func getSchemaAndTypeByTypeID(
 	ctx context.Context, p *planner, id descpb.ID,
 ) (catalog.SchemaDescriptor, catalog.TypeDescriptor, error) {
-	typDesc, err := p.Descriptors().GetImmutableTypeByID(ctx, p.txn, id, tree.ObjectLookupFlags{})
+	typDesc, err := p.Descriptors().ByID(p.txn).WithObjFlags(tree.ObjectLookupFlags{}).Immutable().Type(ctx, id)
 	if err != nil {
 		// If the type was not found, it may be a table.
 		if !(errors.Is(err, catalog.ErrDescriptorNotFound) || pgerror.GetPGCode(err) == pgcode.UndefinedObject) {

@@ -455,12 +455,7 @@ func (n *renameTableNode) checkForCrossDbReferences(
 		if allowCrossDatabaseViews.Get(&p.execCfg.Settings.SV) {
 			return nil
 		}
-		dependentObject, err := p.Descriptors().GetImmutableTypeByID(ctx, p.txn, depID,
-			tree.ObjectLookupFlags{
-				CommonLookupFlags: tree.CommonLookupFlags{
-					Required:    true,
-					AvoidLeased: true,
-				}})
+		dependentObject, err := p.Descriptors().ByID(p.txn).WithFlags(tree.CommonLookupFlags{AvoidLeased: true}).Immutable().Type(ctx, depID)
 		if err != nil {
 			return err
 		}

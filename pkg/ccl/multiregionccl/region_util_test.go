@@ -128,8 +128,7 @@ func getEnumMembers(
 		require.NoError(t, err)
 		regionEnumID, err := dbDesc.MultiRegionEnumID()
 		require.NoError(t, err)
-		regionEnumDesc, err := descsCol.GetImmutableTypeByID(ctx, txn, regionEnumID,
-			tree.ObjectLookupFlags{CommonLookupFlags: tree.CommonLookupFlags{Required: true}})
+		regionEnumDesc, err := descsCol.ByID(txn).WithObjFlags(tree.ObjectLookupFlags{}).Immutable().Type(ctx, regionEnumID)
 		require.NoError(t, err)
 		for ord := 0; ord < regionEnumDesc.NumEnumMembers(); ord++ {
 			enumMembers[regionEnumDesc.GetMemberLogicalRepresentation(ord)] = regionEnumDesc.GetMemberPhysicalRepresentation(ord)

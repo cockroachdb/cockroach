@@ -1175,13 +1175,11 @@ func (r *importResumer) checkForUDTModification(
 		ctx context.Context, txn *kv.Txn, col *descs.Collection,
 		savedTypeDesc *descpb.TypeDescriptor,
 	) error {
-		typeDesc, err := col.GetImmutableTypeByID(ctx, txn, savedTypeDesc.GetID(), tree.ObjectLookupFlags{
-			CommonLookupFlags: tree.CommonLookupFlags{
-				AvoidLeased:    true,
-				IncludeDropped: true,
-				IncludeOffline: true,
-			},
-		})
+		typeDesc, err := col.ByID(txn).WithFlags(tree.CommonLookupFlags{
+			AvoidLeased:    true,
+			IncludeDropped: true,
+			IncludeOffline: true,
+		}).Immutable().Type(ctx, savedTypeDesc.GetID())
 		if err != nil {
 			return errors.Wrap(err, "resolving type descriptor when checking version mismatch")
 		}

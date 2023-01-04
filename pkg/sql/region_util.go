@@ -1598,18 +1598,10 @@ func getDBAndRegionEnumDescs(
 	if err != nil {
 		return nil, nil, err
 	}
-	regionEnumDesc, err = descsCol.GetImmutableTypeByID(
-		ctx,
-		txn,
-		regionEnumID,
-		tree.ObjectLookupFlags{
-			CommonLookupFlags: tree.CommonLookupFlags{
-				AvoidLeased:    !useCache,
-				Required:       true,
-				IncludeOffline: includeOffline,
-			},
-		},
-	)
+	regionEnumDesc, err = descsCol.ByID(txn).WithFlags(tree.CommonLookupFlags{
+		AvoidLeased:    !useCache,
+		IncludeOffline: includeOffline,
+	}).Immutable().Type(ctx, regionEnumID)
 	if err != nil {
 		return nil, nil, err
 	}

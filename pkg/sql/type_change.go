@@ -960,8 +960,7 @@ func (t *typeSchemaChanger) canRemoveEnumValue(
 	}
 
 	// Do validation for the array type now.
-	arrayTypeDesc, err := descsCol.GetImmutableTypeByID(
-		ctx, txn, typeDesc.ArrayTypeID, tree.ObjectLookupFlags{})
+	arrayTypeDesc, err := descsCol.ByID(txn).WithObjFlags(tree.ObjectLookupFlags{}).Immutable().Type(ctx, typeDesc.ArrayTypeID)
 	if err != nil {
 		return err
 	}

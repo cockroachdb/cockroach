@@ -362,9 +362,7 @@ func (sr *schemaResolver) GetTypeDescriptor(
 	// Note that the value of required doesn't matter for lookups by ID.
 	flags := sr.CommonLookupFlagsRequired()
 	flags.ParentID = sr.typeResolutionDbID
-	desc, err := tc.GetImmutableTypeByID(ctx, sr.txn, id, tree.ObjectLookupFlags{
-		CommonLookupFlags: flags,
-	})
+	desc, err := tc.ByID(sr.txn).WithFlags(flags).Immutable().Type(ctx, id)
 	if err != nil {
 		return tree.TypeName{}, nil, err
 	}

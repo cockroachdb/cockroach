@@ -1368,7 +1368,7 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 
 		collectReferencedTypeIDs := func() (catalog.DescriptorIDSet, error) {
 			typeLookupFn := func(id descpb.ID) (catalog.TypeDescriptor, error) {
-				desc, err := descsCol.GetImmutableTypeByID(ctx, txn, id, tree.ObjectLookupFlags{})
+				desc, err := descsCol.ByID(txn).WithObjFlags(tree.ObjectLookupFlags{}).Immutable().Type(ctx, id)
 				if err != nil {
 					return nil, err
 				}
