@@ -183,7 +183,7 @@ function formatInsights(recommendations: string[]): string {
   return `${recommendations.length} Insights`;
 }
 
-function formatIndexes(indexes: string[], database: string): ReactNode {
+export function formatIndexes(indexes: string[], database: string): ReactNode {
   if (indexes.length == 0) {
     return <></>;
   }
