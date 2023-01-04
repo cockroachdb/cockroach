@@ -210,7 +210,7 @@ func maybeFailOnDependentDescInRename(
 	if err != nil {
 		return err
 	}
-	descs, err := p.Descriptors().GetImmutableDescriptorsByID(ctx, p.txn, lookupFlags, ids...)
+	descs, err := p.Descriptors().ByID(p.txn).WithFlags(lookupFlags).Immutable().Descs(ctx, ids)
 	if err != nil {
 		return err
 	}

@@ -282,7 +282,7 @@ func (c *DatumRowConverter) getSequenceAnnotation(
 			IncludeOffline: true,
 			IncludeDropped: true,
 		}
-		seqs, err := descsCol.GetImmutableDescriptorsByID(ctx, txn, flags, sequenceIDs.Ordered()...)
+		seqs, err := descsCol.ByID(txn).WithFlags(flags).Immutable().Descs(ctx, sequenceIDs.Ordered())
 		if err != nil {
 			return err
 		}

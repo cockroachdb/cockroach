@@ -576,10 +576,9 @@ func TestCollectionPreservesPostDeserializationChanges(t *testing.T) {
 	require.NoError(t, sql.DescsTxn(ctx, &execCfg, func(
 		ctx context.Context, txn *kv.Txn, col *descs.Collection,
 	) error {
-		immuts, err := col.GetImmutableDescriptorsByID(ctx, txn, tree.CommonLookupFlags{
-			Required:    true,
+		immuts, err := col.ByID(txn).WithFlags(tree.CommonLookupFlags{
 			AvoidLeased: true,
-		}, dbID, scID, typID, tabID)
+		}).Immutable().Descs(ctx, []descpb.ID{dbID, scID, typID, tabID})
 		if err != nil {
 			return err
 		}

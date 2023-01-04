@@ -2965,9 +2965,7 @@ CREATE TABLE crdb_internal.create_function_statements (
 			}
 		}
 
-		fnDescs, err := p.Descriptors().GetImmutableDescriptorsByID(
-			ctx, p.txn, tree.CommonLookupFlags{Required: true, AvoidLeased: true}, fnIDs...,
-		)
+		fnDescs, err := p.Descriptors().ByID(p.txn).WithFlags(tree.CommonLookupFlags{AvoidLeased: true}).Immutable().Descs(ctx, fnIDs)
 		if err != nil {
 			return err
 		}
