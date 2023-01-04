@@ -2497,7 +2497,7 @@ func (s *statusServer) HotRangesV2(
 									dbName = dbDesc.GetName()
 								}
 
-								if schemaDesc, err := col.GetImmutableSchemaByID(ctx, txn, desc.GetParentSchemaID(), commonLookupFlags); err != nil {
+								if schemaDesc, err := col.ByID(txn).WithFlags(commonLookupFlags).Immutable().Schema(ctx, desc.GetParentSchemaID()); err != nil {
 									log.Warningf(ctx, "cannot get schema name for range descriptor: %s: %v", r.Desc, err)
 								} else {
 									schemaName = schemaDesc.GetName()

@@ -82,12 +82,11 @@ func CreateUserDefinedSchemaDescriptor(
 			// and can't be in a dropping state.
 			if schemaID != descpb.InvalidID {
 				// Check if the object already exists in a dropped state
-				sc, err := descriptors.GetImmutableSchemaByID(ctx, txn, schemaID, tree.SchemaLookupFlags{
-					Required:       true,
+				sc, err := descriptors.ByID(txn).WithFlags(tree.SchemaLookupFlags{
 					AvoidLeased:    true,
 					IncludeOffline: true,
 					IncludeDropped: true,
-				})
+				}).Immutable().Schema(ctx, schemaID)
 				if err != nil || sc.SchemaKind() != catalog.SchemaUserDefined {
 					return nil, nil, err
 				}

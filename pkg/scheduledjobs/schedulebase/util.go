@@ -197,8 +197,7 @@ func FullyQualifyTables(
 				}
 
 				// Resolve the schema.
-				schemaDesc, err := col.GetImmutableSchemaByID(ctx, txn, tableDesc.GetParentSchemaID(),
-					tree.SchemaLookupFlags{Required: true})
+				schemaDesc, err := col.ByID(txn).WithFlags(tree.SchemaLookupFlags{}).Immutable().Schema(ctx, tableDesc.GetParentSchemaID())
 				if err != nil {
 					return err
 				}

@@ -650,9 +650,7 @@ func (p *planner) getQualifiedTypeName(
 	}
 
 	schemaID := desc.GetParentSchemaID()
-	scDesc, err := p.Descriptors().GetImmutableSchemaByID(
-		ctx, p.txn, schemaID, tree.SchemaLookupFlags{Required: true},
-	)
+	scDesc, err := p.Descriptors().ByID(p.txn).WithFlags(tree.SchemaLookupFlags{}).Immutable().Schema(ctx, schemaID)
 	if err != nil {
 		return nil, err
 	}

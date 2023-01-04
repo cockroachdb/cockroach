@@ -816,7 +816,7 @@ func getPublicSchemaDescForDatabase(
 		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 	) error {
 		publicSchemaID := db.GetSchemaID(tree.PublicSchema)
-		scDesc, err = descriptors.GetImmutableSchemaByID(ctx, txn, publicSchemaID, tree.SchemaLookupFlags{Required: true})
+		scDesc, err = descriptors.ByID(txn).WithFlags(tree.SchemaLookupFlags{}).Immutable().Schema(ctx, publicSchemaID)
 		return err
 	}); err != nil {
 		return nil, err

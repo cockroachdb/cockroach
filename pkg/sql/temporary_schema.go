@@ -122,7 +122,7 @@ func (p *planner) getOrCreateTemporarySchema(
 		m.SetTemporarySchemaName(tempSchemaName)
 		m.SetTemporarySchemaIDForDatabase(uint32(db.GetID()), uint32(id))
 	})
-	return p.Descriptors().GetImmutableSchemaByID(ctx, p.Txn(), id, p.CommonLookupFlagsRequired())
+	return p.Descriptors().ByID(p.Txn()).WithFlags(p.CommonLookupFlagsRequired()).Immutable().Schema(ctx, id)
 }
 
 // temporarySchemaName returns the session specific temporary schema name given
@@ -317,7 +317,7 @@ func cleanupTempSchemaObjects(
 					if err != nil {
 						return err
 					}
-					sc, err := descsCol.GetImmutableSchemaByID(ctx, txn, dTableDesc.GetParentSchemaID(), flags)
+					sc, err := descsCol.ByID(txn).WithFlags(flags).Immutable().Schema(ctx, dTableDesc.GetParentSchemaID())
 					if err != nil {
 						return err
 					}

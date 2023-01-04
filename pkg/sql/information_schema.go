@@ -1673,7 +1673,7 @@ var informationSchemaRoleRoutineGrantsTable = virtualSchemaTable{
 			}
 
 			err := db.ForEachSchema(func(id descpb.ID, name string) error {
-				sc, err := p.Descriptors().GetImmutableSchemaByID(ctx, p.txn, id, tree.SchemaLookupFlags{Required: true})
+				sc, err := p.Descriptors().ByID(p.txn).WithFlags(tree.SchemaLookupFlags{}).Immutable().Schema(ctx, id)
 				if err != nil {
 					return err
 				}

@@ -745,8 +745,7 @@ func (p *planner) canCreateOnSchema(
 	user username.SQLUsername,
 	checkPublicSchema shouldCheckPublicSchema,
 ) error {
-	scDesc, err := p.Descriptors().GetImmutableSchemaByID(
-		ctx, p.Txn(), schemaID, tree.SchemaLookupFlags{Required: true})
+	scDesc, err := p.Descriptors().ByID(p.Txn()).WithFlags(tree.SchemaLookupFlags{}).Immutable().Schema(ctx, schemaID)
 	if err != nil {
 		return err
 	}
@@ -850,9 +849,7 @@ func (p *planner) HasOwnershipOnSchema(
 		// Only the node user has ownership over the system database.
 		return p.User().IsNodeUser(), nil
 	}
-	scDesc, err := p.Descriptors().GetImmutableSchemaByID(
-		ctx, p.Txn(), schemaID, tree.SchemaLookupFlags{Required: true},
-	)
+	scDesc, err := p.Descriptors().ByID(p.Txn()).WithFlags(tree.SchemaLookupFlags{}).Immutable().Schema(ctx, schemaID)
 	if err != nil {
 		return false, err
 	}

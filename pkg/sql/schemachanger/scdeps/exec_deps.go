@@ -161,9 +161,7 @@ func (d *txnDeps) GetFullyQualifiedName(ctx context.Context, id descpb.ID) (stri
 		if err != nil {
 			return "", err
 		}
-		schemaDesc, err := d.descsCollection.GetImmutableSchemaByID(
-			ctx, d.txn, objectDesc.GetParentSchemaID(), flags,
-		)
+		schemaDesc, err := d.descsCollection.ByID(d.txn).WithFlags(flags).Immutable().Schema(ctx, objectDesc.GetParentSchemaID())
 		if err != nil {
 			return "", err
 		}

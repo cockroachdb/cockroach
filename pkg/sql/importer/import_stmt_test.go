@@ -6418,11 +6418,11 @@ func TestImportPgDumpSchemas(t *testing.T) {
 		for _, schemaID := range schemaIDs {
 			// Expect that the schema descriptor is deleted.
 			if err := sql.TestingDescsTxn(ctx, tc.Server(0), func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
-				_, err := col.GetImmutableSchemaByID(ctx, txn, schemaID, tree.CommonLookupFlags{
+				_, err := col.ByID(txn).WithFlags(tree.CommonLookupFlags{
 					AvoidLeased:    true,
 					IncludeDropped: true,
 					IncludeOffline: true,
-				})
+				}).Immutable().Schema(ctx, schemaID)
 				if pgerror.GetPGCode(err) == pgcode.InvalidSchemaName {
 					return nil
 				}

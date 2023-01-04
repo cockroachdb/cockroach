@@ -53,16 +53,6 @@ func (tc *Collection) GetImmutableSchemaByName(
 	return tc.ByName(txn).WithFlags(flags).Immutable().Schema(ctx, db, scName)
 }
 
-// GetImmutableSchemaByID returns a ResolvedSchema wrapping an immutable
-// descriptor, if applicable. RequireMutable is ignored.
-// Required is ignored, and an error is always returned if no descriptor with
-// the ID exists.
-func (tc *Collection) GetImmutableSchemaByID(
-	ctx context.Context, txn *kv.Txn, schemaID descpb.ID, flags tree.SchemaLookupFlags,
-) (catalog.SchemaDescriptor, error) {
-	return tc.ByID(txn).WithFlags(flags).Immutable().Schema(ctx, schemaID)
-}
-
 // GetMutableSchemaByID returns a mutable schema descriptor with the given
 // schema ID. An error is always returned if the descriptor is not physical.
 func (tc *Collection) GetMutableSchemaByID(

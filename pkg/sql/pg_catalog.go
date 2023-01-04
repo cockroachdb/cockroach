@@ -1076,11 +1076,11 @@ func (r oneAtATimeSchemaResolver) getTableByID(id descpb.ID) (catalog.TableDescr
 }
 
 func (r oneAtATimeSchemaResolver) getSchemaByID(id descpb.ID) (catalog.SchemaDescriptor, error) {
-	return r.p.Descriptors().GetImmutableSchemaByID(r.ctx, r.p.txn, id, tree.SchemaLookupFlags{
+	return r.p.Descriptors().ByID(r.p.txn).WithFlags(tree.SchemaLookupFlags{
 		AvoidLeased:    true,
 		IncludeDropped: true,
 		IncludeOffline: true,
-	})
+	}).Immutable().Schema(r.ctx, id)
 }
 
 // makeAllRelationsVirtualTableWithDescriptorIDIndex creates a virtual table that searches through
@@ -1148,10 +1148,7 @@ func makeAllRelationsVirtualTableWithDescriptorIDIndex(
 					}
 					h := makeOidHasher()
 					scResolver := oneAtATimeSchemaResolver{p: p, ctx: ctx}
-					sc, err := p.Descriptors().GetImmutableSchemaByID(
-						ctx, p.txn, table.GetParentSchemaID(), tree.SchemaLookupFlags{
-							Required: true,
-						})
+					sc, err := p.Descriptors().ByID(p.txn).WithFlags(tree.SchemaLookupFlags{}).Immutable().Schema(ctx, table.GetParentSchemaID())
 					if err != nil {
 						return false, err
 					}
@@ -1611,13 +1608,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-description.html`,
 				if err != nil {
 					return err
 				}
-				schema, err := p.Descriptors().GetImmutableSchemaByID(
-					ctx,
-					p.txn,
-					tableDesc.GetParentSchemaID(),
-					tree.CommonLookupFlags{
-						Required: true,
-					})
+				schema, err := p.Descriptors().ByID(p.txn).WithFlags(tree.CommonLookupFlags{}).Immutable().Schema(ctx, tableDesc.GetParentSchemaID())
 				if err != nil {
 					return err
 				}
@@ -2110,9 +2101,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-namespace.html`,
 					if sc, ok := schemadesc.GetVirtualSchemaByID(descpb.ID(ooid)); ok {
 						return sc, true, nil
 					}
-					if sc, err := p.Descriptors().GetImmutableSchemaByID(
-						ctx, p.Txn(), descpb.ID(ooid), tree.SchemaLookupFlags{Required: true},
-					); err == nil {
+					if sc, err := p.Descriptors().ByID(p.Txn()).WithFlags(tree.SchemaLookupFlags{}).Immutable().Schema(ctx, descpb.ID(ooid)); err == nil {
 						return sc, true, nil
 					} else if !sqlerrors.IsUndefinedSchemaError(err) {
 						return nil, false, err
@@ -2610,9 +2599,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-proc.html`,
 						return false, err
 					}
 
-					scDesc, err := p.Descriptors().GetImmutableSchemaByID(
-						ctx, p.Txn(), descpb.ID(ooid), tree.SchemaLookupFlags{Required: true},
-					)
+					scDesc, err := p.Descriptors().ByID(p.Txn()).WithFlags(tree.SchemaLookupFlags{}).Immutable().Schema(ctx, descpb.ID(ooid))
 					if err != nil {
 						return false, err
 					}
@@ -3218,12 +3205,7 @@ func getSchemaAndTypeByTypeID(
 		return nil, nil, nil
 	}
 
-	sc, err := p.Descriptors().GetImmutableSchemaByID(
-		ctx,
-		p.txn,
-		typDesc.GetParentSchemaID(),
-		tree.SchemaLookupFlags{Required: true},
-	)
+	sc, err := p.Descriptors().ByID(p.txn).WithFlags(tree.SchemaLookupFlags{}).Immutable().Schema(ctx, typDesc.GetParentSchemaID())
 	if err != nil {
 		return nil, nil, err
 	}

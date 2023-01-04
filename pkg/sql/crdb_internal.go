@@ -7097,7 +7097,7 @@ func convertContentionEventsToJSON(
 			return nil, err
 		}
 
-		schemaDesc, err := desc.GetImmutableSchemaByID(ctx, p.txn, tableDesc.GetParentSchemaID(), tree.SchemaLookupFlags{})
+		schemaDesc, err := desc.ByID(p.txn).WithFlags(tree.SchemaLookupFlags{}).Immutable().Schema(ctx, tableDesc.GetParentSchemaID())
 		if err != nil {
 			return nil, err
 		}

@@ -332,11 +332,11 @@ func allocateDescriptorRewrites(
 				} else {
 					// If we found an existing schema, then we need to remap all references
 					// to this schema to the existing one.
-					desc, err := col.GetImmutableSchemaByID(ctx, txn, id, tree.SchemaLookupFlags{
+					desc, err := col.ByID(txn).WithFlags(tree.SchemaLookupFlags{
 						AvoidLeased:    true,
 						IncludeDropped: true,
 						IncludeOffline: true,
-					})
+					}).Immutable().Schema(ctx, id)
 					if err != nil {
 						return err
 					}

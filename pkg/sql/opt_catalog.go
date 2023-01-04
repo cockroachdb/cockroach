@@ -448,9 +448,7 @@ func (oc *optCatalog) fullyQualifiedNameWithTxn(
 	if scID == keys.PublicSchemaID {
 		scName = tree.PublicSchemaName
 	} else {
-		scDesc, err := oc.planner.Descriptors().GetImmutableSchemaByID(
-			ctx, txn, scID, tree.SchemaLookupFlags{AvoidLeased: true},
-		)
+		scDesc, err := oc.planner.Descriptors().ByID(txn).WithFlags(tree.SchemaLookupFlags{AvoidLeased: true}).Immutable().Schema(ctx, scID)
 		if err != nil {
 			return cat.DataSourceName{}, err
 		}

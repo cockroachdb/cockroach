@@ -256,13 +256,11 @@ func (sr *schemaResolver) getQualifiedTableName(
 	// information from the namespace table.
 	var schemaName tree.Name
 	schemaID := desc.GetParentSchemaID()
-	scDesc, err := sr.descCollection.GetImmutableSchemaByID(ctx, sr.txn, schemaID,
-		tree.SchemaLookupFlags{
-			Required:       true,
-			IncludeOffline: true,
-			IncludeDropped: true,
-			AvoidLeased:    true,
-		})
+	scDesc, err := sr.descCollection.ByID(sr.txn).WithFlags(tree.SchemaLookupFlags{
+		IncludeOffline: true,
+		IncludeDropped: true,
+		AvoidLeased:    true,
+	}).Immutable().Schema(ctx, schemaID)
 	switch {
 	case scDesc != nil:
 		schemaName = tree.Name(scDesc.GetName())
@@ -300,7 +298,7 @@ func (sr *schemaResolver) getQualifiedFunctionName(
 	if err != nil {
 		return nil, err
 	}
-	scDesc, err := sr.descCollection.GetImmutableSchemaByID(ctx, sr.txn, fnDesc.GetParentSchemaID(), lookupFlags)
+	scDesc, err := sr.descCollection.ByID(sr.txn).WithFlags(lookupFlags).Immutable().Schema(ctx, fnDesc.GetParentSchemaID())
 	if err != nil {
 		return nil, err
 	}
@@ -378,7 +376,7 @@ func (sr *schemaResolver) GetTypeDescriptor(
 		}
 		dbName = db.GetName()
 	}
-	sc, err := tc.GetImmutableSchemaByID(ctx, sr.txn, desc.GetParentSchemaID(), flags)
+	sc, err := tc.ByID(sr.txn).WithFlags(flags).Immutable().Schema(ctx, desc.GetParentSchemaID())
 	if err != nil {
 		return tree.TypeName{}, nil, err
 	}

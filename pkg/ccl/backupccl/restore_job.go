@@ -2683,13 +2683,11 @@ func setGCTTLForDroppingTable(
 		return err
 	}
 
-	schemaDesc, err := descsCol.GetImmutableSchemaByID(ctx, txn, tableToDrop.GetParentSchemaID(),
-		tree.SchemaLookupFlags{
-			Required:       true,
-			IncludeDropped: true,
-			IncludeOffline: true,
-			AvoidLeased:    true,
-		})
+	schemaDesc, err := descsCol.ByID(txn).WithFlags(tree.SchemaLookupFlags{
+		IncludeDropped: true,
+		IncludeOffline: true,
+		AvoidLeased:    true,
+	}).Immutable().Schema(ctx, tableToDrop.GetParentSchemaID())
 	if err != nil {
 		return err
 	}

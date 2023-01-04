@@ -145,11 +145,11 @@ func getIngestingPrivilegesForTableOrSchema(
 			} else {
 				// If we are restoring into an existing schema, resolve it, and fetch
 				// its default privileges.
-				parentSchema, err := descsCol.GetImmutableSchemaByID(ctx, txn, desc.GetParentSchemaID(), tree.SchemaLookupFlags{
+				parentSchema, err := descsCol.ByID(txn).WithFlags(tree.SchemaLookupFlags{
 					AvoidLeased:    true,
 					IncludeDropped: true,
 					IncludeOffline: true,
-				})
+				}).Immutable().Schema(ctx, desc.GetParentSchemaID())
 				if err != nil {
 					return nil,
 						errors.Wrapf(err, "failed to lookup parent schema %d", errors.Safe(desc.GetParentSchemaID()))

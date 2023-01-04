@@ -1186,7 +1186,7 @@ func getQualifiedTableNameObj(
 	if err != nil {
 		return tree.TableName{}, err
 	}
-	sc, err := col.GetImmutableSchemaByID(ctx, txn, desc.GetParentSchemaID(), flags)
+	sc, err := col.ByID(txn).WithFlags(flags).Immutable().Schema(ctx, desc.GetParentSchemaID())
 	if err != nil {
 		return tree.TableName{}, err
 	}
