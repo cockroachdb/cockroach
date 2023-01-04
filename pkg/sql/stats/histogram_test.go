@@ -730,6 +730,20 @@ func TestAdjustCounts(t *testing.T) {
 				{NumRange: 5, NumEq: 1.67, DistinctRange: 2.25, UpperBound: d(15)},
 			},
 		},
+		{ // Clamp negative counts to zero.
+			h: []cat.HistogramBucket{
+				{NumRange: 0, NumEq: 100, DistinctRange: 0, UpperBound: d(-80)},
+				{NumRange: 100, NumEq: -1, DistinctRange: 8, UpperBound: d(-70)},
+				{NumRange: -1, NumEq: 100, DistinctRange: -1, UpperBound: d(-60)},
+			},
+			rowCount:      298,
+			distinctCount: 9,
+			expected: []cat.HistogramBucket{
+				{NumRange: 0, NumEq: 100, DistinctRange: 0, UpperBound: d(-80)},
+				{NumRange: 100, NumEq: 0, DistinctRange: 8, UpperBound: d(-70)},
+				{NumRange: 0, NumEq: 100, DistinctRange: 0, UpperBound: d(-60)},
+			},
+		},
 	}
 
 	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
