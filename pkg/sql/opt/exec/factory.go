@@ -336,6 +336,74 @@ type ExecutionStats struct {
 	KVRowsRead            optional.Uint
 	KVBatchRequestsIssued optional.Uint
 
+	// Storage engine iterator statistics
+	//
+	// These statistics provide observability into the work performed by
+	// low-level iterators during the execution of a query. Interpreting these
+	// statistics requires some context on the mechanics of MVCC and LSMs.
+	//
+	//
+	// SeekCount and StepCount record the cumulative number of seeks and steps
+	// performed on Pebble iterators while servicing a query. Every scan or
+	// point lookup within a KV range requires reading from two distinct
+	// keyspaces within the storage engine: the MVCC row data keyspace and the
+	// lock table. As an example, a typical point lookup will seek once within
+	// the MVCC row data and once within the lock table, yielding SeekCount=2.
+	//
+	// Cockroach's MVCC layer is implemented (mostly) above Pebble, so the keys
+	// returned by Pebble iterators can be MVCC garbage. An accumulation of MVCC
+	// garbage amplifies the number of top-level Pebble iterator operations
+	// performed, inflating {Seek,Step}Count relative to RowCount.
+	//
+	//
+	// InternalSeekCount and InternalStepCount record the cumulative number of
+	// low-level seeks and steps performed among LSM internal keys while
+	// servicing a query. These internal keys have a many-to-one relationship
+	// with the visible keys returned by the Pebble iterator due to the
+	// mechanics of a LSM. When mutating the LSM, deleted or overwritten keys
+	// are not updated in-place. Instead new 'internal keys' are recorded, and
+	// Pebble iterators are responsible for ignoring obsolete, shadowed internal
+	// keys. Asynchronous background compactions are responsible for eventually
+	// removing obsolete internal keys to reclaim storage space and reduce the
+	// amount of work iterators must perform.
+	//
+	// Internal keys that must be seeked or stepped through can originate from a
+	// few sources:
+	//   - Tombstones: Pebble models deletions as tombstone internal keys. An
+	//     iterator observing a tombstone must skip both the tombstone itself
+	//     and any shadowed keys. In Cockroach, these tombstones may be written
+	//     within the MVCC keyspace due to transaction aborts and MVCC garbage
+	//     collection. These tombstones may be written within the lock table
+	//     during intent resolution.
+	//   - Overwritten keys: Overwriting existing keys adds new internal keys,
+	//     again requiring iterators to skip the obsolete shadowed keys.
+	//     Overwritten keys should be rare since (a) CockroachDB's MVCC layer
+	//     creates new KV versions (across different transactions) (b)
+	//     transactions that write the same key multiple times will cause
+	//     overwrites to the MVCC key and the lock table key, but they should be
+	//     rare.
+	//   - Concurrent writes: While a Pebble iterator is open, new keys may be
+	//     committed to the LSM. The internal Pebble iterator will observe these
+	//     new keys but skip over them to ensure the Pebble iterator provides a
+	//     consistent view of the LSM state.
+	//   - LSM snapshots: Cockroach's KV layer sometimes opens a 'LSM snapshot,'
+	//     which provides a long-lived consistent view of the LSM at a
+	//     particular moment. LSM snapshots prevent compactions from deleting
+	//     obsolete keys if they're required for the LSM snapshot's consistent
+	//     view. Snapshots don't introduce new obsolete internal keys, just
+	//     postpone their reclamation during compactions.
+	//   - MVCC range tombstones: Although the MVCC layer is mostly implemented
+	//     above the Pebble interface, Pebble iterators perform a role in the
+	//     implementation of MVCC range tombstones used for bulk deletions (eg,
+	//     table drops, truncates, import cancellation) in 23.1+. In some cases,
+	//     Pebble iterators will skip over garbage MVCC keys if they're marked
+	//     as garbage by a MVCC range tombstone. Since stepping over these
+	//     skipped keys is performed internally within Pebble, these steps are
+	//     recorded within InternalStepCounts.
+	//
+	// Typically, a large amplification of internal iterator seeks/steps
+	// relative to top-level seeks/steps is unexpected.
+
 	StepCount         optional.Uint
 	InternalStepCount optional.Uint
 	SeekCount         optional.Uint
