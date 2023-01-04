@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -384,7 +385,7 @@ func (n *DropRoleNode) startExec(params runParams) error {
 		}
 
 		if numUsersDeleted == 0 && !n.ifExists {
-			return errors.Errorf("role/user %s does not exist", normalizedUsername)
+			return sqlerrors.NewUndefinedUserError(normalizedUsername)
 		}
 
 		// Drop all role memberships involving the user/role.

@@ -109,13 +109,16 @@ func CreateUserDefinedSchemaDescriptor(
 
 	owner := user
 	if !n.AuthRole.Undefined() {
+		u, err := username.MakeSQLUsernameFromUserInput(n.AuthRole.Name, username.PurposeValidation)
+		if err != nil {
+			return nil, nil, err
+		}
 		exists, err := RoleExists(ctx, ie, txn, authRole)
 		if err != nil {
 			return nil, nil, err
 		}
 		if !exists {
-			return nil, nil, pgerror.Newf(pgcode.UndefinedObject, "role/user %q does not exist",
-				n.AuthRole)
+			return nil, nil, sqlerrors.NewUndefinedUserError(u)
 		}
 		owner = authRole
 	}
