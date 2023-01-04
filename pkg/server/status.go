@@ -2471,9 +2471,7 @@ func (s *statusServer) HotRangesV2(
 						if err = s.sqlServer.distSQLServer.InternalExecutorFactory.DescsTxnWithExecutor(
 							ctx, s.db, nil, func(ctx context.Context, txn *kv.Txn, col *descs.Collection, ie sqlutil.InternalExecutor) error {
 								commonLookupFlags := tree.CommonLookupFlags{AvoidLeased: true}
-								desc, err := col.GetImmutableTableByID(ctx, txn, descpb.ID(tableID), tree.ObjectLookupFlags{
-									CommonLookupFlags: commonLookupFlags,
-								})
+								desc, err := col.ByID(txn).WithFlags(commonLookupFlags).Immutable().Table(ctx, descpb.ID(tableID))
 								if err != nil {
 									return errors.Wrapf(err, "cannot get table descriptor with tableID: %d, %s", tableID, r.Desc)
 								}

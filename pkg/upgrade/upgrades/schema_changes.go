@@ -144,12 +144,9 @@ func readTableDescriptor(
 	if err := d.InternalExecutorFactory.DescsTxn(ctx, d.DB, func(
 		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 	) (err error) {
-		t, err = descriptors.GetImmutableTableByID(ctx, txn, tableID, tree.ObjectLookupFlags{
-			CommonLookupFlags: tree.CommonLookupFlags{
-				AvoidLeased: true,
-				Required:    true,
-			},
-		})
+		t, err = descriptors.ByID(txn).WithObjFlags(tree.ObjectLookupFlags{
+			CommonLookupFlags: tree.CommonLookupFlags{AvoidLeased: true},
+		}).Immutable().Table(ctx, tableID)
 		return err
 	}); err != nil {
 		return nil, err

@@ -218,14 +218,7 @@ func (sr *schemaResolver) CurrentDatabase() string {
 func (sr *schemaResolver) GetQualifiedTableNameByID(
 	ctx context.Context, id int64, requiredType tree.RequiredTableKind,
 ) (*tree.TableName, error) {
-	lookupFlags := tree.ObjectLookupFlags{
-		CommonLookupFlags:    tree.CommonLookupFlags{Required: true},
-		DesiredObjectKind:    tree.TableObject,
-		DesiredTableDescKind: requiredType,
-	}
-
-	table, err := sr.descCollection.GetImmutableTableByID(
-		ctx, sr.txn, descpb.ID(id), lookupFlags)
+	table, err := sr.descCollection.ByID(sr.txn).WithObjFlags(tree.ObjectLookupFlags{}).Immutable().Table(ctx, descpb.ID(id))
 	if err != nil {
 		return nil, err
 	}

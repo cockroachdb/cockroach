@@ -543,19 +543,13 @@ func (sc *SchemaChanger) dropConstraints(
 	if err := sc.txn(ctx, func(
 		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
 	) (err error) {
-		if tableDescs[sc.descID], err = descsCol.GetImmutableTableByID(
-			ctx, txn, sc.descID, tree.ObjectLookupFlags{},
-		); err != nil {
+		if tableDescs[sc.descID], err = descsCol.ByID(txn).WithObjFlags(tree.ObjectLookupFlags{}).Immutable().Table(ctx, sc.descID); err != nil {
 			return err
 		}
 		for id := range fksByBackrefTable {
-			desc, err := descsCol.GetImmutableTableByID(
-				ctx, txn, id, tree.ObjectLookupFlags{
-					CommonLookupFlags: tree.CommonLookupFlags{
-						IncludeDropped: true,
-					},
-				},
-			)
+			desc, err := descsCol.ByID(txn).WithFlags(tree.CommonLookupFlags{
+				IncludeDropped: true,
+			}).Immutable().Table(ctx, id)
 			if err != nil {
 				return err
 			}
@@ -740,9 +734,9 @@ func (sc *SchemaChanger) validateConstraints(
 	if err := sc.fixedTimestampTxn(ctx, readAsOf, func(
 		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 	) error {
-		flags := tree.ObjectLookupFlagsWithRequired()
-		flags.AvoidLeased = true
-		tableDesc, err = descriptors.GetImmutableTableByID(ctx, txn, sc.descID, flags)
+		tableDesc, err = descriptors.ByID(txn).WithObjFlags(tree.ObjectLookupFlags{
+			CommonLookupFlags: tree.CommonLookupFlags{AvoidLeased: true},
+		}).Immutable().Table(ctx, sc.descID)
 		return err
 	}); err != nil {
 		return err
@@ -826,7 +820,7 @@ func (sc *SchemaChanger) validateConstraints(
 func (sc *SchemaChanger) getTableVersion(
 	ctx context.Context, txn *kv.Txn, tc *descs.Collection, version descpb.DescriptorVersion,
 ) (catalog.TableDescriptor, error) {
-	tableDesc, err := tc.GetImmutableTableByID(ctx, txn, sc.descID, tree.ObjectLookupFlags{})
+	tableDesc, err := tc.ByID(txn).WithObjFlags(tree.ObjectLookupFlags{}).Immutable().Table(ctx, sc.descID)
 	if err != nil {
 		return nil, err
 	}
@@ -1379,13 +1373,13 @@ func (sc *SchemaChanger) updateJobRunningStatus(
 ) (tableDesc catalog.TableDescriptor, err error) {
 	err = DescsTxn(ctx, sc.execCfg, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) (err error) {
 		// Read table descriptor without holding a lease.
-		tableDesc, err = col.GetImmutableTableByID(ctx, txn, sc.descID, tree.ObjectLookupFlags{
+		tableDesc, err = col.ByID(txn).WithObjFlags(tree.ObjectLookupFlags{
 			CommonLookupFlags: tree.CommonLookupFlags{
 				AvoidLeased:    true,
 				IncludeDropped: true,
 				IncludeOffline: true,
 			},
-		})
+		}).Immutable().Table(ctx, sc.descID)
 		if err != nil {
 			return err
 		}
@@ -1443,9 +1437,9 @@ func (sc *SchemaChanger) validateIndexes(ctx context.Context) error {
 	if err := sc.fixedTimestampTxn(ctx, readAsOf, func(
 		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 	) (err error) {
-		flags := tree.ObjectLookupFlagsWithRequired()
-		flags.AvoidLeased = true
-		tableDesc, err = descriptors.GetImmutableTableByID(ctx, txn, sc.descID, flags)
+		tableDesc, err = descriptors.ByID(txn).WithObjFlags(tree.ObjectLookupFlags{
+			CommonLookupFlags: tree.CommonLookupFlags{AvoidLeased: true},
+		}).Immutable().Table(ctx, sc.descID)
 		return err
 	}); err != nil {
 		return err
@@ -2641,13 +2635,13 @@ func getTargetTablesAndFk(
 	if fk == nil {
 		return nil, nil, nil, errors.AssertionFailedf("foreign key %s does not exist", fkName)
 	}
-	targetTable, err = descsCol.GetImmutableTableByID(ctx, txn, fk.ReferencedTableID, tree.ObjectLookupFlags{
+	targetTable, err = descsCol.ByID(txn).WithObjFlags(tree.ObjectLookupFlags{
 		CommonLookupFlags: tree.CommonLookupFlags{
 			AvoidLeased:    true,
 			IncludeDropped: true,
 			IncludeOffline: true,
 		},
-	})
+	}).Immutable().Table(ctx, fk.ReferencedTableID)
 	if err != nil {
 		return nil, nil, nil, err
 	}

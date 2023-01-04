@@ -604,9 +604,7 @@ func (p *planner) ResolveTableName(ctx context.Context, tn *tree.TableName) (tre
 func (p *planner) LookupTableByID(
 	ctx context.Context, tableID descpb.ID,
 ) (catalog.TableDescriptor, error) {
-	const required = true // lookups by ID are always "required"
-	table, err := p.Descriptors().GetImmutableTableByID(ctx, p.txn, tableID, p.ObjectLookupFlags(
-		required, false /* requireMutable */))
+	table, err := p.Descriptors().ByID(p.txn).WithFlags(p.CommonLookupFlagsRequired()).Immutable().Table(ctx, tableID)
 	if err != nil {
 		return nil, err
 	}

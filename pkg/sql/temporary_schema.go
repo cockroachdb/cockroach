@@ -308,8 +308,7 @@ func cleanupTempSchemaObjects(
 						return nil
 					}
 					flags := tree.CommonLookupFlags{AvoidLeased: true}
-					dTableDesc, err := descsCol.GetImmutableTableByID(
-						ctx, txn, d.ID, tree.ObjectLookupFlags{CommonLookupFlags: flags})
+					dTableDesc, err := descsCol.ByID(txn).WithFlags(flags).Immutable().Table(ctx, d.ID)
 					if err != nil {
 						return err
 					}

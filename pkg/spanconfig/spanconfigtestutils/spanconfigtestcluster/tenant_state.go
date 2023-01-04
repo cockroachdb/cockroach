@@ -212,11 +212,7 @@ func (s *Tenant) LookupTableDescriptorByID(
 		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
 	) error {
 		var err error
-		desc, err = descsCol.GetImmutableTableByID(ctx, txn, id,
-			tree.ObjectLookupFlags{
-				CommonLookupFlags: descLookupFlags,
-			},
-		)
+		desc, err = descsCol.ByID(txn).WithFlags(descLookupFlags).Immutable().Table(ctx, id)
 		return err
 	}))
 	return desc

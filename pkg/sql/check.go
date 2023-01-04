@@ -414,12 +414,7 @@ func (p *planner) RevalidateUniqueConstraintsInCurrentDB(ctx context.Context) er
 // rows in the table have unique values for every unique constraint defined on
 // the table.
 func (p *planner) RevalidateUniqueConstraintsInTable(ctx context.Context, tableID int) error {
-	tableDesc, err := p.Descriptors().GetImmutableTableByID(
-		ctx,
-		p.Txn(),
-		descpb.ID(tableID),
-		tree.ObjectLookupFlagsWithRequired(),
-	)
+	tableDesc, err := p.Descriptors().ByID(p.Txn()).WithObjFlags(tree.ObjectLookupFlags{}).Immutable().Table(ctx, descpb.ID(tableID))
 	if err != nil {
 		return err
 	}
@@ -436,12 +431,7 @@ func (p *planner) RevalidateUniqueConstraintsInTable(ctx context.Context, tableI
 func (p *planner) RevalidateUniqueConstraint(
 	ctx context.Context, tableID int, constraintName string,
 ) error {
-	tableDesc, err := p.Descriptors().GetImmutableTableByID(
-		ctx,
-		p.Txn(),
-		descpb.ID(tableID),
-		tree.ObjectLookupFlagsWithRequired(),
-	)
+	tableDesc, err := p.Descriptors().ByID(p.Txn()).WithObjFlags(tree.ObjectLookupFlags{}).Immutable().Table(ctx, descpb.ID(tableID))
 	if err != nil {
 		return err
 	}
@@ -495,12 +485,7 @@ func (p *planner) RevalidateUniqueConstraint(
 func (p *planner) IsConstraintActive(
 	ctx context.Context, tableID int, constraintName string,
 ) (bool, error) {
-	tableDesc, err := p.Descriptors().GetImmutableTableByID(
-		ctx,
-		p.Txn(),
-		descpb.ID(tableID),
-		tree.ObjectLookupFlagsWithRequired(),
-	)
+	tableDesc, err := p.Descriptors().ByID(p.Txn()).WithObjFlags(tree.ObjectLookupFlags{}).Immutable().Table(ctx, descpb.ID(tableID))
 	if err != nil {
 		return false, err
 	}

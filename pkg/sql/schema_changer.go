@@ -892,9 +892,9 @@ func (sc *SchemaChanger) handlePermanentSchemaChangeError(
 // initialize the job running status.
 func (sc *SchemaChanger) initJobRunningStatus(ctx context.Context) error {
 	return sc.txn(ctx, func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) error {
-		flags := tree.ObjectLookupFlagsWithRequired()
-		flags.AvoidLeased = true
-		desc, err := descriptors.GetImmutableTableByID(ctx, txn, sc.descID, flags)
+		desc, err := descriptors.ByID(txn).WithObjFlags(tree.ObjectLookupFlags{
+			CommonLookupFlags: tree.CommonLookupFlags{AvoidLeased: true},
+		}).Immutable().Table(ctx, sc.descID)
 		if err != nil {
 			return err
 		}

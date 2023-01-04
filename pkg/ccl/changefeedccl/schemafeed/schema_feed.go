@@ -273,9 +273,7 @@ func (tf *schemaFeed) primeInitialTableDescs(ctx context.Context) error {
 		}
 		// Note that all targets are currently guaranteed to be tables.
 		return tf.targets.EachTableID(func(id descpb.ID) error {
-			flags := tree.ObjectLookupFlagsWithRequired()
-			flags.AvoidLeased = true
-			tableDesc, err := descriptors.GetImmutableTableByID(ctx, txn, id, flags)
+			tableDesc, err := descriptors.ByID(txn).WithFlags(tree.CommonLookupFlags{AvoidLeased: true}).Immutable().Table(ctx, id)
 			if err != nil {
 				return err
 			}

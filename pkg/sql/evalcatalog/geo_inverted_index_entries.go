@@ -74,9 +74,7 @@ func getIndexGeoConfig(
 	tableID catid.DescID,
 	indexID catid.IndexID,
 ) (geoindex.Config, error) {
-	tableDesc, err := dc.GetImmutableTableByID(
-		ctx, txn, tableID, tree.ObjectLookupFlagsWithRequired(),
-	)
+	tableDesc, err := dc.ByID(txn).WithObjFlags(tree.ObjectLookupFlags{}).Immutable().Table(ctx, tableID)
 	if err != nil {
 		return geoindex.Config{}, err
 	}

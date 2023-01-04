@@ -6467,8 +6467,7 @@ CREATE TABLE crdb_internal.index_spans (
 					cflags := p.CommonLookupFlagsRequired()
 					cflags.IncludeOffline = true
 					cflags.IncludeDropped = true
-					flags := tree.ObjectLookupFlags{CommonLookupFlags: cflags}
-					table, err = p.Descriptors().GetImmutableTableByID(ctx, p.txn, descID, flags)
+					table, err = p.Descriptors().ByID(p.txn).WithObjFlags(tree.ObjectLookupFlags{CommonLookupFlags: cflags}).Immutable().Table(ctx, descID)
 				})
 				if err != nil {
 					return false, err
@@ -6523,8 +6522,7 @@ CREATE TABLE crdb_internal.table_spans (
 					cflags := p.CommonLookupFlagsRequired()
 					cflags.IncludeOffline = true
 					cflags.IncludeDropped = true
-					flags := tree.ObjectLookupFlags{CommonLookupFlags: cflags}
-					table, err = p.Descriptors().GetImmutableTableByID(ctx, p.txn, descID, flags)
+					table, err = p.Descriptors().ByID(p.txn).WithObjFlags(tree.ObjectLookupFlags{CommonLookupFlags: cflags}).Immutable().Table(ctx, descID)
 				})
 				if err != nil {
 					return false, err
@@ -7072,13 +7070,9 @@ func convertContentionEventsToJSON(
 			return nil, err
 		}
 
-		flags := tree.ObjectLookupFlags{CommonLookupFlags: tree.CommonLookupFlags{
-			Required: true,
-		}}
-
 		desc := p.Descriptors()
 		var tableDesc catalog.TableDescriptor
-		tableDesc, err = desc.GetImmutableTableByID(ctx, p.txn, descpb.ID(tableID), flags)
+		tableDesc, err = desc.ByID(p.txn).WithObjFlags(tree.ObjectLookupFlags{}).Immutable().Table(ctx, descpb.ID(tableID))
 		if err != nil {
 			return nil, err
 		}

@@ -110,24 +110,24 @@ func TestSchemaChangeGCJob(t *testing.T) {
 			var myTableDesc *tabledesc.Mutable
 			var myOtherTableDesc *tabledesc.Mutable
 			if err := sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
-				myImm, err := col.GetImmutableTableByID(ctx, txn, myTableID, tree.ObjectLookupFlags{
+				myImm, err := col.ByID(txn).WithObjFlags(tree.ObjectLookupFlags{
 					CommonLookupFlags: tree.CommonLookupFlags{
 						AvoidLeased:    true,
 						IncludeDropped: true,
 						IncludeOffline: true,
 					},
-				})
+				}).Immutable().Table(ctx, myTableID)
 				if err != nil {
 					return err
 				}
 				myTableDesc = tabledesc.NewBuilder(myImm.TableDesc()).BuildExistingMutableTable()
-				myOtherImm, err := col.GetImmutableTableByID(ctx, txn, myOtherTableID, tree.ObjectLookupFlags{
+				myOtherImm, err := col.ByID(txn).WithObjFlags(tree.ObjectLookupFlags{
 					CommonLookupFlags: tree.CommonLookupFlags{
 						AvoidLeased:    true,
 						IncludeDropped: true,
 						IncludeOffline: true,
 					},
-				})
+				}).Immutable().Table(ctx, myOtherTableID)
 				if err != nil {
 					return err
 				}
@@ -251,13 +251,13 @@ func TestSchemaChangeGCJob(t *testing.T) {
 			}
 
 			if err := sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
-				myImm, err := col.GetImmutableTableByID(ctx, txn, myTableID, tree.ObjectLookupFlags{
+				myImm, err := col.ByID(txn).WithObjFlags(tree.ObjectLookupFlags{
 					CommonLookupFlags: tree.CommonLookupFlags{
 						AvoidLeased:    true,
 						IncludeDropped: true,
 						IncludeOffline: true,
 					},
-				})
+				}).Immutable().Table(ctx, myTableID)
 				if err != nil {
 					return err
 				}
@@ -267,13 +267,13 @@ func TestSchemaChangeGCJob(t *testing.T) {
 					return nil
 				}
 				myTableDesc = tabledesc.NewBuilder(myImm.TableDesc()).BuildExistingMutableTable()
-				myOtherImm, err := col.GetImmutableTableByID(ctx, txn, myOtherTableID, tree.ObjectLookupFlags{
+				myOtherImm, err := col.ByID(txn).WithObjFlags(tree.ObjectLookupFlags{
 					CommonLookupFlags: tree.CommonLookupFlags{
 						AvoidLeased:    true,
 						IncludeDropped: true,
 						IncludeOffline: true,
 					},
-				})
+				}).Immutable().Table(ctx, myOtherTableID)
 				if err != nil {
 					return err
 				}

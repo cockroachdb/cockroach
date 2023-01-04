@@ -413,7 +413,7 @@ func TestSyntheticDescriptorResolution(t *testing.T) {
 
 		// Resolution by ID.
 
-		desc, err = descriptors.GetImmutableTableByID(ctx, txn, tableID, tree.ObjectLookupFlags{})
+		desc, err = descriptors.ByID(txn).WithObjFlags(tree.ObjectLookupFlags{}).Immutable().Table(ctx, tableID)
 		require.NoError(t, err)
 		require.Equal(t, "bar", desc.PublicColumns()[0].GetName())
 
@@ -1145,11 +1145,7 @@ SELECT id
 		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection, ie sqlutil.InternalExecutor,
 	) error {
 		checkImmutableDescriptor := func(id descpb.ID, expName string, f func(t *testing.T, desc catalog.Descriptor)) error {
-			flags := tree.ObjectLookupFlagsWithRequired()
-			flags.IncludeDropped = true
-			tabImm, err := descriptors.GetImmutableTableByID(
-				ctx, txn, id, flags,
-			)
+			tabImm, err := descriptors.ByID(txn).WithObjFlags(tree.ObjectLookupFlags{CommonLookupFlags: tree.CommonLookupFlags{IncludeDropped: true}}).Immutable().Table(ctx, id)
 			require.NoError(t, err)
 			require.Equal(t, expName, tabImm.GetName())
 			f(t, tabImm)

@@ -1600,11 +1600,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-description.html`,
 				objID = tree.NewDOid(oid.Oid(tree.MustBeDInt(objID)))
 				classOid = tree.NewDOid(catconstants.PgCatalogClassTableID)
 			case catalogkeys.ConstraintCommentType:
-				tableDesc, err := p.Descriptors().GetImmutableTableByID(
-					ctx,
-					p.txn,
-					descpb.ID(tree.MustBeDInt(objID)),
-					tree.ObjectLookupFlagsWithRequiredTableKind(tree.ResolveRequireTableDesc))
+				tableDesc, err := p.Descriptors().ByID(p.txn).WithObjFlags(tree.ObjectLookupFlags{}).Immutable().Table(ctx, descpb.ID(tree.MustBeDInt(objID)))
 				if err != nil {
 					return err
 				}
@@ -3294,7 +3290,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-type.html`,
 				// It's an entry for the implicit record type created on behalf of each
 				// table. We have special logic for this case.
 				if typDesc.GetKind() == descpb.TypeDescriptor_TABLE_IMPLICIT_RECORD_TYPE {
-					table, err := p.Descriptors().GetImmutableTableByID(ctx, p.txn, id, tree.ObjectLookupFlags{})
+					table, err := p.Descriptors().ByID(p.txn).WithObjFlags(tree.ObjectLookupFlags{}).Immutable().Table(ctx, id)
 					if err != nil {
 						if errors.Is(err, catalog.ErrDescriptorNotFound) ||
 							pgerror.GetPGCode(err) == pgcode.UndefinedObject ||
@@ -3528,9 +3524,7 @@ https://www.postgresql.org/docs/13/catalog-pg-statistic-ext.html`,
 			h.writeUInt64(uint64(statisticsID))
 			statisticsOID := h.getOid()
 
-			tbl, err := p.Descriptors().GetImmutableTableByID(
-				ctx, p.Txn(), descpb.ID(tableID), tree.ObjectLookupFlagsWithRequired(),
-			)
+			tbl, err := p.Descriptors().ByID(p.Txn()).WithObjFlags(tree.ObjectLookupFlags{}).Immutable().Table(ctx, descpb.ID(tableID))
 			if err != nil {
 				return err
 			}

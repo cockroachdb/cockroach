@@ -325,13 +325,12 @@ func (d *txnDeps) MaybeSplitIndexSpans(
 func (d *txnDeps) GetResumeSpans(
 	ctx context.Context, tableID descpb.ID, indexID descpb.IndexID,
 ) ([]roachpb.Span, error) {
-	table, err := d.descsCollection.GetImmutableTableByID(ctx, d.txn, tableID, tree.ObjectLookupFlags{
+	table, err := d.descsCollection.ByID(d.txn).WithObjFlags(tree.ObjectLookupFlags{
 		CommonLookupFlags: tree.CommonLookupFlags{
-			Required:       true,
 			AvoidLeased:    true,
 			AvoidSynthetic: true,
 		},
-	})
+	}).Immutable().Table(ctx, tableID)
 	if err != nil {
 		return nil, err
 	}

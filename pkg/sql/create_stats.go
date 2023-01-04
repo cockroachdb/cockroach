@@ -207,7 +207,7 @@ func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, erro
 		flags := tree.ObjectLookupFlags{CommonLookupFlags: tree.CommonLookupFlags{
 			AvoidLeased: n.p.skipDescriptorCache,
 		}}
-		tableDesc, err = n.p.Descriptors().GetImmutableTableByID(ctx, n.p.txn, descpb.ID(t.TableID), flags)
+		tableDesc, err = n.p.Descriptors().ByID(n.p.txn).WithObjFlags(flags).Immutable().Table(ctx, descpb.ID(t.TableID))
 		if err != nil {
 			return nil, err
 		}

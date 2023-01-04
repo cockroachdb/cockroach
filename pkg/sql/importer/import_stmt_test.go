@@ -2061,13 +2061,13 @@ func TestFailedImportGC(t *testing.T) {
 	tableID := descpb.ID(dbID + 2)
 	var td catalog.TableDescriptor
 	if err := sql.TestingDescsTxn(ctx, tc.Server(0), func(ctx context.Context, txn *kv.Txn, col *descs.Collection) (err error) {
-		td, err = col.GetImmutableTableByID(ctx, txn, tableID, tree.ObjectLookupFlags{
+		td, err = col.ByID(txn).WithObjFlags(tree.ObjectLookupFlags{
 			CommonLookupFlags: tree.CommonLookupFlags{
 				AvoidLeased:    true,
 				IncludeDropped: true,
 				IncludeOffline: true,
 			},
-		})
+		}).Immutable().Table(ctx, tableID)
 		return err
 	}); err != nil {
 		t.Fatal(err)
@@ -6438,13 +6438,13 @@ func TestImportPgDumpSchemas(t *testing.T) {
 		for _, tableID := range tableIDs {
 			// Expect that the table descriptor is deleted.
 			if err := sql.TestingDescsTxn(ctx, tc.Server(0), func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
-				_, err := col.GetImmutableTableByID(ctx, txn, tableID, tree.ObjectLookupFlags{
+				_, err := col.ByID(txn).WithObjFlags(tree.ObjectLookupFlags{
 					CommonLookupFlags: tree.CommonLookupFlags{
 						AvoidLeased:    true,
 						IncludeDropped: true,
 						IncludeOffline: true,
 					},
-				})
+				}).Immutable().Table(ctx, tableID)
 				if !testutils.IsError(err, "descriptor not found") {
 					return err
 				}

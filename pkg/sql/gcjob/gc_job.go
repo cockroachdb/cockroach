@@ -142,7 +142,7 @@ func deleteTableData(
 					IncludeOffline: true,
 				},
 			}
-			table, err = col.GetImmutableTableByID(ctx, txn, droppedTable.ID, flags)
+			table, err = col.ByID(txn).WithObjFlags(flags).Immutable().Table(ctx, droppedTable.ID)
 			return err
 		}); err != nil {
 			if errors.Is(err, catalog.ErrDescriptorNotFound) {

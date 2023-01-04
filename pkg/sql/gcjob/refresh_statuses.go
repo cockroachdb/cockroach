@@ -112,7 +112,7 @@ func updateStatusForGCElements(
 				IncludeOffline: true,
 			},
 		}
-		table, err := col.GetImmutableTableByID(ctx, txn, tableID, flags)
+		table, err := col.ByID(txn).WithObjFlags(flags).Immutable().Table(ctx, tableID)
 		if err != nil {
 			return err
 		}

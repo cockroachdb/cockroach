@@ -93,12 +93,12 @@ func veryLikelyKnownUserfileBreakage(
 		return false
 	}
 
-	tableDesc, err := descriptors.GetImmutableTableByID(ctx, txn, id, tree.ObjectLookupFlags{
+	tableDesc, err := descriptors.ByID(txn).WithObjFlags(tree.ObjectLookupFlags{
 		CommonLookupFlags: tree.CommonLookupFlags{
 			IncludeOffline: true,
 			IncludeDropped: true,
 		},
-	})
+	}).Immutable().Table(ctx, id)
 	if err != nil {
 		return false
 	}
@@ -140,17 +140,12 @@ func mutationsLookLikeuserfilePayloadCorruption(
 	mutation := tableDesc.AllMutations()[0]
 	if mutation.Adding() && mutation.DeleteOnly() {
 		if fkConstraint := mutation.AsForeignKey(); fkConstraint != nil {
-			targetTableDesc, err := descriptors.GetImmutableTableByID(
-				ctx,
-				txn,
-				fkConstraint.GetReferencedTableID(),
-				tree.ObjectLookupFlags{
-					CommonLookupFlags: tree.CommonLookupFlags{
-						IncludeOffline: true,
-						IncludeDropped: true,
-					},
+			targetTableDesc, err := descriptors.ByID(txn).WithObjFlags(tree.ObjectLookupFlags{
+				CommonLookupFlags: tree.CommonLookupFlags{
+					IncludeOffline: true,
+					IncludeDropped: true,
 				},
-			)
+			}).Immutable().Table(ctx, fkConstraint.GetReferencedTableID())
 			if err != nil {
 				return false
 			}

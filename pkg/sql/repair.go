@@ -718,14 +718,9 @@ func (p *planner) ForceDeleteTableData(ctx context.Context, descID int64) error 
 
 	// Validate no descriptor exists for this table
 	id := descpb.ID(descID)
-	desc, err := p.Descriptors().GetImmutableTableByID(ctx, p.txn, id,
-		tree.ObjectLookupFlags{
-			CommonLookupFlags: tree.CommonLookupFlags{
-				Required:    true,
-				AvoidLeased: true,
-			},
-			DesiredTableDescKind: tree.ResolveRequireTableDesc,
-		})
+	desc, err := p.Descriptors().ByID(p.txn).WithObjFlags(tree.ObjectLookupFlags{
+		CommonLookupFlags: tree.CommonLookupFlags{AvoidLeased: true},
+	}).Immutable().Table(ctx, id)
 	if err != nil && pgerror.GetPGCode(err) != pgcode.UndefinedTable {
 		return err
 	}

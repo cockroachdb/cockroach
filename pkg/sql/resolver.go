@@ -236,9 +236,7 @@ func (p *planner) ResolveDescriptorForPrivilegeSpecifier(
 				ctx, p.txn, tn, tree.ObjectLookupFlags{},
 			)
 		} else {
-			table, err = p.Descriptors().GetImmutableTableByID(
-				ctx, p.txn, descpb.ID(*specifier.TableOID), tree.ObjectLookupFlags{},
-			)
+			table, err = p.Descriptors().ByID(p.txn).WithObjFlags(tree.ObjectLookupFlags{}).Immutable().Table(ctx, descpb.ID(*specifier.TableOID))
 			// When a TableOID is specified and the relation is not found, we return NULL.
 			if err != nil && sqlerrors.IsUndefinedRelationError(err) {
 				// nolint:returnerrcheck

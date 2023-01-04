@@ -324,13 +324,11 @@ func (n *renameTableNode) checkForCrossDbReferences(
 			tableID = fk.GetOriginTableID()
 		}
 
-		referencedTable, err := p.Descriptors().GetImmutableTableByID(ctx, p.txn, tableID,
-			tree.ObjectLookupFlags{
-				CommonLookupFlags: tree.CommonLookupFlags{
-					Required:    true,
-					AvoidLeased: true,
-				},
-			})
+		referencedTable, err := p.Descriptors().ByID(p.txn).WithObjFlags(tree.ObjectLookupFlags{
+			CommonLookupFlags: tree.CommonLookupFlags{
+				AvoidLeased: true,
+			},
+		}).Immutable().Table(ctx, tableID)
 		if err != nil {
 			return err
 		}
@@ -354,12 +352,9 @@ func (n *renameTableNode) checkForCrossDbReferences(
 	type crossDBDepType int
 	const owner, reference crossDBDepType = 0, 1
 	checkDepForCrossDbRef := func(depID descpb.ID, depType crossDBDepType) error {
-		dependentObject, err := p.Descriptors().GetImmutableTableByID(ctx, p.txn, depID,
-			tree.ObjectLookupFlags{
-				CommonLookupFlags: tree.CommonLookupFlags{
-					Required:    true,
-					AvoidLeased: true,
-				}})
+		dependentObject, err := p.Descriptors().ByID(p.txn).WithObjFlags(tree.ObjectLookupFlags{
+			CommonLookupFlags: tree.CommonLookupFlags{AvoidLeased: true},
+		}).Immutable().Table(ctx, depID)
 		if err != nil {
 			return err
 		}

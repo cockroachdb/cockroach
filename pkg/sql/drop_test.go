@@ -876,13 +876,13 @@ func TestDropTableWhileUpgradingFormat(t *testing.T) {
 	// Simulate a migration upgrading the table descriptor's format version after
 	// the table has been dropped but before the truncation has occurred.
 	if err := sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) (err error) {
-		tbl, err := col.GetImmutableTableByID(ctx, txn, tableDesc.ID, tree.ObjectLookupFlags{
+		tbl, err := col.ByID(txn).WithObjFlags(tree.ObjectLookupFlags{
 			CommonLookupFlags: tree.CommonLookupFlags{
 				AvoidLeased:    true,
 				IncludeDropped: true,
 				IncludeOffline: true,
 			},
-		})
+		}).Immutable().Table(ctx, tableDesc.ID)
 		if err != nil {
 			return err
 		}
@@ -1226,13 +1226,13 @@ func TestDropIndexOnHashShardedIndexWithStoredShardColumn(t *testing.T) {
 	tdb.QueryRow(t, query).Scan(&tableID)
 	require.NoError(t, sql.TestingDescsTxn(ctx, s,
 		func(ctx context.Context, txn *kv.Txn, col *descs.Collection) (err error) {
-			tableDesc, err = col.GetImmutableTableByID(ctx, txn, tableID, tree.ObjectLookupFlags{
+			tableDesc, err = col.ByID(txn).WithObjFlags(tree.ObjectLookupFlags{
 				CommonLookupFlags: tree.CommonLookupFlags{
 					AvoidLeased:    true,
 					IncludeDropped: true,
 					IncludeOffline: true,
 				},
-			})
+			}).Immutable().Table(ctx, tableID)
 			return err
 		}))
 	shardIdx, err := tableDesc.FindIndexWithName("idx")
@@ -1250,13 +1250,13 @@ func TestDropIndexOnHashShardedIndexWithStoredShardColumn(t *testing.T) {
 	// Assert that the index is dropped but the shard column remains after dropping the index.
 	require.NoError(t, sql.TestingDescsTxn(ctx, s,
 		func(ctx context.Context, txn *kv.Txn, col *descs.Collection) (err error) {
-			tableDesc, err = col.GetImmutableTableByID(ctx, txn, tableID, tree.ObjectLookupFlags{
+			tableDesc, err = col.ByID(txn).WithObjFlags(tree.ObjectLookupFlags{
 				CommonLookupFlags: tree.CommonLookupFlags{
 					AvoidLeased:    true,
 					IncludeDropped: true,
 					IncludeOffline: true,
 				},
-			})
+			}).Immutable().Table(ctx, tableID)
 			return err
 		}))
 	_, err = tableDesc.FindIndexWithName("idx")

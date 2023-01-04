@@ -762,12 +762,9 @@ func (t *typeSchemaChanger) canRemoveEnumValue(
 	descsCol *descs.Collection,
 ) error {
 	for _, ID := range typeDesc.ReferencingDescriptorIDs {
-		desc, err := descsCol.GetImmutableTableByID(ctx, txn, ID, tree.ObjectLookupFlags{
-			CommonLookupFlags: tree.CommonLookupFlags{
-				AvoidLeased: true,
-				Required:    true,
-			},
-		})
+		desc, err := descsCol.ByID(txn).WithObjFlags(tree.ObjectLookupFlags{
+			CommonLookupFlags: tree.CommonLookupFlags{AvoidLeased: true},
+		}).Immutable().Table(ctx, ID)
 		if err != nil {
 			return errors.Wrapf(err,
 				"could not validate enum value removal for %q", member.LogicalRepresentation)
@@ -1094,7 +1091,7 @@ func (t *typeSchemaChanger) canRemoveEnumValueFromArrayUsages(
 	const validationErr = "could not validate removal of enum value %q"
 	for i := 0; i < arrayTypeDesc.NumReferencingDescriptors(); i++ {
 		id := arrayTypeDesc.GetReferencingDescriptorID(i)
-		desc, err := descsCol.GetImmutableTableByID(ctx, txn, id, tree.ObjectLookupFlags{})
+		desc, err := descsCol.ByID(txn).WithObjFlags(tree.ObjectLookupFlags{}).Immutable().Table(ctx, id)
 		if err != nil {
 			return errors.Wrapf(err, validationErr, member.LogicalRepresentation)
 		}

@@ -201,13 +201,13 @@ func GetResumeSpans(
 	mutationID descpb.MutationID,
 	filter backfill.MutationFilter,
 ) ([]roachpb.Span, *jobs.Job, int, error) {
-	tableDesc, err := col.GetImmutableTableByID(ctx, txn, tableID, tree.ObjectLookupFlags{
+	tableDesc, err := col.ByID(txn).WithObjFlags(tree.ObjectLookupFlags{
 		CommonLookupFlags: tree.CommonLookupFlags{
 			AvoidLeased:    true,
 			IncludeDropped: true,
 			IncludeOffline: true,
 		},
-	})
+	}).Immutable().Table(ctx, tableID)
 	if err != nil {
 		return nil, nil, 0, err
 	}

@@ -106,13 +106,3 @@ func (tc *Collection) GetMutableTableVersionByID(
 ) (*tabledesc.Mutable, error) {
 	return tc.ByID(txn).Mutable().Table(ctx, tableID)
 }
-
-// GetImmutableTableByID returns an immutable table descriptor with
-// properties according to the provided lookup flags. RequireMutable is ignored.
-// Required is ignored, and an error is always returned if no descriptor with
-// the ID exists.
-func (tc *Collection) GetImmutableTableByID(
-	ctx context.Context, txn *kv.Txn, tableID descpb.ID, flags tree.ObjectLookupFlags,
-) (catalog.TableDescriptor, error) {
-	return tc.ByID(txn).WithObjFlags(flags).Immutable().Table(ctx, tableID)
-}

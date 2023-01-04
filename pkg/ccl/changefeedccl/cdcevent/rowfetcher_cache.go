@@ -106,7 +106,7 @@ func refreshUDT(
 		if err != nil {
 			return err
 		}
-		tableDesc, err = collection.GetImmutableTableByID(ctx, txn, tableID, tree.ObjectLookupFlags{})
+		tableDesc, err = collection.ByID(txn).WithObjFlags(tree.ObjectLookupFlags{}).Immutable().Table(ctx, tableID)
 		return err
 	}); err != nil {
 		// Manager can return all kinds of errors during chaos, but based on
