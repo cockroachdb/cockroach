@@ -803,6 +803,18 @@ func TestEvalAddSSTable(t *testing.T) {
 			sst:        kvs{rangeKV("a", "b", 8, ""), pointKV("a", 7, "a8"), rangeKV("c", "d", 8, "")},
 			expect:     kvs{rangeKV("a", "b", 8, ""), pointKV("a", 7, "a8"), pointKV("a", 6, "d"), rangeKV("c", "d", 8, "")},
 		},
+		"DisallowConflicts allows sst and engine range keys with no points": {
+			noConflict: true,
+			data:       kvs{rangeKV("a", "b", 6, ""), rangeKV("e", "f", 6, "")},
+			sst:        kvs{rangeKV("a", "b", 8, ""), rangeKV("c", "d", 8, "")},
+			expect:     kvs{rangeKV("a", "b", 8, ""), rangeKV("a", "b", 6, ""), rangeKV("c", "d", 8, ""), rangeKV("e", "f", 6, "")},
+		},
+		"DisallowConflicts returns engine intents below sst range keys as write intent errors": {
+			noConflict: true,
+			data:       kvs{pointKV("b", intentTS, "intent")},
+			sst:        kvs{rangeKV("a", "c", intentTS+8, "")},
+			expectErr:  &roachpb.WriteIntentError{},
+		},
 		"DisallowConflicts disallows sst range keys below engine point key": {
 			noConflict: true,
 			data:       kvs{pointKV("a", 6, "d")},
