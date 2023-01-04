@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -1519,6 +1520,47 @@ func TestSQLStatsLatencyInfo(t *testing.T) {
 			require.GreaterOrEqual(t, p99, p90)
 			require.GreaterOrEqual(t, p90, p50)
 			require.LessOrEqual(t, p99, max)
+		})
+	}
+}
+
+func TestSQLStatsRegions(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testCases := []struct {
+		name     string
+		locality roachpb.Locality
+		expected string
+	}{{
+		name:     "locality not set",
+		locality: roachpb.Locality{},
+		expected: `[]`,
+	}, {
+		name:     "locality set",
+		locality: roachpb.Locality{Tiers: []roachpb.Tier{{Key: "region", Value: "us-east1"}}},
+		expected: `["us-east1"]`,
+	}}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+			params, _ := tests.CreateTestServerParams()
+			params.Locality = tc.locality
+			s, conn, _ := serverutils.StartServer(t, params)
+			defer s.Stopper().Stop(ctx)
+
+			db := sqlutils.MakeSQLRunner(conn)
+			db.Exec(t, "SET application_name = $1", t.Name())
+			db.Exec(t, "SELECT 1")
+
+			row := db.QueryRow(t, `
+				SELECT statistics->'statistics'->>'regions'
+				  FROM crdb_internal.statement_statistics
+				 WHERE app_name = $1`, t.Name())
+			var actual string
+			row.Scan(&actual)
+			require.Equal(t, tc.expected, actual)
 		})
 	}
 }
