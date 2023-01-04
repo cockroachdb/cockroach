@@ -253,6 +253,7 @@ go_library(
         "@com_github_pmezard_go_difflib//difflib",
         "@com_github_prometheus_client_golang//api",
         "@com_github_prometheus_client_golang//api/prometheus/v1:prometheus",
+        "@com_github_prometheus_client_golang//prometheus",
         "@com_github_prometheus_common//model",
         "@com_github_shopify_sarama//:sarama",
         "@com_github_stretchr_testify//assert",
