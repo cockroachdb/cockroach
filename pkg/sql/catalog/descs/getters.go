@@ -57,9 +57,6 @@ func (g ByIDGetter) Database(
 	desc, err := g.Desc(ctx, id)
 	if err != nil {
 		if errors.Is(err, catalog.ErrDescriptorNotFound) {
-			if g.flags.isOptional {
-				return nil, nil
-			}
 			return nil, sqlerrors.NewUndefinedDatabaseError(fmt.Sprintf("[%d]", id))
 		}
 		return nil, err
@@ -76,9 +73,6 @@ func (g ByIDGetter) Schema(ctx context.Context, id descpb.ID) (catalog.SchemaDes
 	desc, err := g.Desc(ctx, id)
 	if err != nil {
 		if errors.Is(err, catalog.ErrDescriptorNotFound) {
-			if g.flags.isOptional {
-				return nil, nil
-			}
 			return nil, sqlerrors.NewUndefinedSchemaError(fmt.Sprintf("[%d]", id))
 		}
 		return nil, err

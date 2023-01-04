@@ -198,6 +198,12 @@ func (p *planner) ResolveDescriptorForPrivilegeSpecifier(
 		_, database, err := p.Descriptors().GetImmutableDatabaseByID(
 			ctx, p.txn, descpb.ID(*specifier.DatabaseOID), tree.DatabaseLookupFlags{},
 		)
+		// When a DatabaseOID is specified and the database is not found,
+		// we return NULL.
+		if err != nil && sqlerrors.IsUndefinedDatabaseError(err) {
+			// nolint:returnerrcheck
+			return nil, nil
+		}
 		return database, err
 	} else if specifier.SchemaName != nil {
 		database, err := p.Descriptors().GetImmutableDatabaseByName(
