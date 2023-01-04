@@ -365,9 +365,12 @@ func (h *histogram) adjustCounts(
 				if countable {
 					maxDistRange -= h.buckets[i].DistinctRange
 
-					// Set the increment proportional to the remaining number of
-					// distinct values in the bucket.
+					// Set the increment proportional to the remaining number of distinct
+					// values in the bucket.
 					inc = remDistinctCount * (maxDistRange / maxDistinctCountRange)
+					if inc < 0 {
+						inc = 0
+					}
 				}
 
 				h.buckets[i].NumRange += inc
@@ -573,11 +576,13 @@ func (h *histogram) addOuterBuckets(
 		maxDistRange, countable := maxDistinctRange(compareCtx, lowerBound, upperBound)
 
 		inc := avgRemPerBucket
-		if countable && colType.Family() == types.EnumFamily {
-			// Set the increment proportional to the remaining number of
-			// distinct values in the bucket. This only really matters for
-			// enums.
+		if countable {
+			// Set the increment proportional to the remaining number of distinct
+			// values in the bucket.
 			inc = remDistinctCount * (maxDistRange / maxDistinctCountExtraBuckets)
+			if inc < 0 {
+				inc = 0
+			}
 		}
 
 		h.buckets[i].NumRange += inc
