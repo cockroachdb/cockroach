@@ -15,7 +15,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -52,24 +51,4 @@ func (tc *Collection) GetImmutableTypeByName(
 	}
 	typ, err := g.Type(ctx, p.Database, p.Schema, name.Object())
 	return typ != nil, typ, err
-}
-
-// GetMutableTypeVersionByID is the equivalent of GetMutableTableDescriptorByID
-// but for accessing types.
-// TODO (lucy): Usages should be replaced with GetMutableTypeByID, but this
-// needs a careful look at what flags should be passed in at each call site.
-func (tc *Collection) GetMutableTypeVersionByID(
-	ctx context.Context, txn *kv.Txn, typeID descpb.ID,
-) (*typedesc.Mutable, error) {
-	return tc.ByID(txn).Mutable().Type(ctx, typeID)
-}
-
-// GetMutableTypeByID returns a mutable type descriptor with
-// properties according to the provided lookup flags. RequireMutable is ignored.
-// Required is ignored, and an error is always returned if no descriptor with
-// the ID exists.
-func (tc *Collection) GetMutableTypeByID(
-	ctx context.Context, txn *kv.Txn, typeID descpb.ID, flags tree.ObjectLookupFlags,
-) (*typedesc.Mutable, error) {
-	return tc.ByID(txn).WithFlags(flags.CommonLookupFlags).Mutable().Type(ctx, typeID)
 }

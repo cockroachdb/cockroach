@@ -474,11 +474,7 @@ func (n *createTableNode) startExec(params runParams) error {
 			if err != nil {
 				return err
 			}
-			typeDesc, err := params.p.Descriptors().GetMutableTypeVersionByID(
-				params.ctx,
-				params.p.txn,
-				regionEnumID,
-			)
+			typeDesc, err := params.p.Descriptors().ByID(params.p.txn).Mutable().Type(params.ctx, regionEnumID)
 			if err != nil {
 				return errors.Wrap(err, "error resolving multi-region enum")
 			}

@@ -2470,9 +2470,7 @@ func (p *planner) OptimizeSystemDatabase(ctx context.Context) error {
 	if err != nil {
 		return errors.Wrap(err, "system database is not multi-region")
 	}
-	enumTypeDesc, err := p.Descriptors().GetMutableTypeByID(ctx, p.txn, regionEnumID, tree.ObjectLookupFlags{
-		CommonLookupFlags: tree.CommonLookupFlags{AvoidLeased: true},
-	})
+	enumTypeDesc, err := p.Descriptors().ByID(p.txn).Mutable().Type(ctx, regionEnumID)
 	if err != nil {
 		return err
 	}

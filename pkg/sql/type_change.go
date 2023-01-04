@@ -302,7 +302,7 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 			ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
 			f func(finalizer *databaseRegionChangeFinalizer) error,
 		) error {
-			typeDesc, err := descsCol.GetMutableTypeVersionByID(ctx, txn, t.typeID)
+			typeDesc, err := descsCol.ByID(txn).Mutable().Type(ctx, t.typeID)
 			if err != nil {
 				return err
 			}
@@ -345,7 +345,7 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 		// use and fail. This is done in a separate txn to the one that mutates the
 		// descriptor, as this validation can take arbitrarily long.
 		validateDrops := func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
-			typeDesc, err := descsCol.GetMutableTypeVersionByID(ctx, txn, t.typeID)
+			typeDesc, err := descsCol.ByID(txn).Mutable().Type(ctx, t.typeID)
 			if err != nil {
 				return err
 			}
@@ -402,7 +402,7 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 		// have performed any necessary pre-drop work, we can actually go about
 		// modifying the type descriptor.
 		run := func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
-			typeDesc, err := descsCol.GetMutableTypeVersionByID(ctx, txn, t.typeID)
+			typeDesc, err := descsCol.ByID(txn).Mutable().Type(ctx, t.typeID)
 			if err != nil {
 				return err
 			}
@@ -448,7 +448,7 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 			// The version of the array type needs to get bumped as well so that
 			// changes to the underlying type are picked up. Simply reading the
 			// mutable descriptor and writing it back should do the trick.
-			arrayTypeDesc, err := descsCol.GetMutableTypeVersionByID(ctx, txn, typeDesc.ArrayTypeID)
+			arrayTypeDesc, err := descsCol.ByID(txn).Mutable().Type(ctx, typeDesc.ArrayTypeID)
 			if err != nil {
 				return err
 			}
@@ -546,7 +546,7 @@ func (t *typeSchemaChanger) cleanupEnumValues(ctx context.Context) error {
 	var regionChangeFinalizer *databaseRegionChangeFinalizer
 	// Cleanup:
 	cleanup := func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
-		typeDesc, err := descsCol.GetMutableTypeVersionByID(ctx, txn, t.typeID)
+		typeDesc, err := descsCol.ByID(txn).Mutable().Type(ctx, t.typeID)
 		if err != nil {
 			return err
 		}

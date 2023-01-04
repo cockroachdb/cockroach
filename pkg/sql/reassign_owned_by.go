@@ -299,8 +299,7 @@ func (n *reassignOwnedByNode) reassignTypeOwner(
 	if mutableTypDesc.Dropped() {
 		return nil
 	}
-	arrayDesc, err := params.p.Descriptors().GetMutableTypeVersionByID(
-		params.ctx, params.p.txn, typDesc.GetArrayTypeID())
+	arrayDesc, err := params.p.Descriptors().ByID(params.p.txn).Mutable().Type(params.ctx, typDesc.GetArrayTypeID())
 	if err != nil {
 		return err
 	}

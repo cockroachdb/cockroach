@@ -357,7 +357,7 @@ func TestAddUncommittedDescriptorAndMutableResolution(t *testing.T) {
 
 			require.Same(t, typ, resolved)
 
-			byID, err := descriptors.GetMutableTypeVersionByID(ctx, txn, typ.GetID())
+			byID, err := descriptors.ByID(txn).Mutable().Type(ctx, typ.GetID())
 			require.NoError(t, err)
 
 			require.Same(t, typ, byID)

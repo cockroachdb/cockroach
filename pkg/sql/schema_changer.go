@@ -970,14 +970,7 @@ func (sc *SchemaChanger) dropViewDeps(
 			return err
 		}
 		for id := range typeClosure {
-			typeDesc, err := descsCol.GetMutableTypeByID(ctx,
-				txn,
-				id,
-				tree.ObjectLookupFlags{
-					CommonLookupFlags: tree.CommonLookupFlags{
-						AvoidLeased: true,
-					},
-				})
+			typeDesc, err := descsCol.ByID(txn).Mutable().Type(ctx, id)
 			if err != nil {
 				log.Warningf(ctx, "error resolving type dependency %d", id)
 				continue
@@ -1689,7 +1682,7 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 
 			// Update the set of back references.
 			for id, isAddition := range update {
-				typ, err := descsCol.GetMutableTypeVersionByID(ctx, txn, id)
+				typ, err := descsCol.ByID(txn).Mutable().Type(ctx, id)
 				if err != nil {
 					return err
 				}

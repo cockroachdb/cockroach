@@ -662,7 +662,7 @@ func setNewLocalityConfig(
 		if err != nil {
 			return nil, err
 		}
-		return descsCol.GetMutableTypeVersionByID(ctx, txn, regionEnumID)
+		return descsCol.ByID(txn).Mutable().Type(ctx, regionEnumID)
 	}
 	// If there was a dependency before on the multi-region enum before the
 	// new locality is set, we must unlink the dependency.

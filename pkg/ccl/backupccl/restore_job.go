@@ -1115,7 +1115,7 @@ func createImportingDescriptors(
 						continue
 					}
 					// Otherwise, add a backreference to this table.
-					typDesc, err := descsCol.GetMutableTypeVersionByID(ctx, txn, id)
+					typDesc, err := descsCol.ByID(txn).Mutable().Type(ctx, id)
 					if err != nil {
 						return err
 					}
@@ -2439,12 +2439,7 @@ func (r *restoreResumer) dropDescriptors(
 		// TypeDescriptors don't have a GC job process, so we can just write them
 		// as dropped here.
 		typDesc := details.TypeDescs[i]
-		mutType, err := descsCol.GetMutableTypeByID(ctx, txn, typDesc.ID, tree.ObjectLookupFlags{
-			CommonLookupFlags: tree.CommonLookupFlags{
-				AvoidLeased:    true,
-				IncludeOffline: true,
-			},
-		})
+		mutType, err := descsCol.ByID(txn).Mutable().Type(ctx, typDesc.ID)
 		if err != nil {
 			return err
 		}
@@ -2727,7 +2722,7 @@ func (r *restoreResumer) removeExistingTypeBackReferences(
 				return restored, nil
 			}
 			// Finally, look it up using the transaction.
-			typ, err := descsCol.GetMutableTypeVersionByID(ctx, txn, id)
+			typ, err := descsCol.ByID(txn).Mutable().Type(ctx, id)
 			if err != nil {
 				return nil, err
 			}
