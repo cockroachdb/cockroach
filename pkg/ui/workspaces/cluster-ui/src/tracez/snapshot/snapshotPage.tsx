@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React, { useCallback, useEffect } from "react";
+import React, { useCallback, useEffect, useMemo } from "react";
 import { RouteComponentProps } from "react-router-dom";
 import {
   ListTracingSnapshotsResponse,
@@ -38,7 +38,7 @@ import { Breadcrumbs } from "src/breadcrumbs";
 // In order to provide that feature with respectable performance and an easy
 // GUI, we toggle between one of several components here based on the URL
 // params. To manage that navigation, we need to know the route prefix.
-export const ROUTE_PREFIX = "/debug/tracez_v2/";
+export const ROUTE_PREFIX = "/debug/tracez/";
 
 export interface SnapshotPageStateProps {
   sort: SortSetting;
@@ -306,16 +306,40 @@ export const SnapshotPage: React.FC<SnapshotPageProps> = props => {
     refreshRawTrace,
   };
 
-  const breadcrumbItems = [
-    {
-      link: `/debug/tracez_v2/node/${nodeID}/snapshot/${snapshotID}`,
-      name: `Node ${nodeID}, Snapshot ${snapshotID}`,
-    },
-    {
-      link: `/debug/tracez_v2/node/${nodeID}/snapshot/${snapshotID}/span/${spanID}`,
-      name: `${span?.operation}`,
-    },
-  ];
+  const spanOperation = span?.operation;
+
+  const breadcrumbItems = useMemo(
+    () => [
+      {
+        link: join(ROUTE_PREFIX, `/node/${nodeID}/snapshot/${snapshotID}`),
+        name: `Node ${nodeID}, Snapshot ${snapshotID}`,
+      },
+      {
+        link: join(
+          ROUTE_PREFIX,
+          `/node/${nodeID}/snapshot/${snapshotID}/span/${spanID}`,
+        ),
+        name: `${spanOperation}`,
+      },
+    ],
+    [nodeID, snapshotID, spanID, spanOperation],
+  );
+
+  const breadcrumbItemsRaw = useMemo(
+    () => [
+      ...breadcrumbItems,
+      {
+        link: join(
+          ROUTE_PREFIX,
+          `/node/${nodeID}/snapshot/${snapshotID}/span/${spanID}/raw`,
+        ),
+        name: `raw trace`,
+      },
+    ],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [nodeID, snapshotID, spanID, spanOperation],
+  );
+
   return !spanID ? (
     <SnapshotComponent {...snapProps} />
   ) : !isRaw ? (
@@ -325,15 +349,7 @@ export const SnapshotPage: React.FC<SnapshotPageProps> = props => {
     </>
   ) : (
     <>
-      <Breadcrumbs
-        items={[
-          ...breadcrumbItems,
-          {
-            link: `/debug/tracez_v2/node/${nodeID}/snapshot/${snapshotID}/span/${spanID}/raw`,
-            name: `raw trace`,
-          },
-        ]}
-      />
+      <Breadcrumbs items={breadcrumbItemsRaw} />
       <RawTraceComponent {...rawTraceProps} />
     </>
   );
