@@ -191,13 +191,13 @@ func FullyQualifyTables(
 				}
 
 				// Resolve the database.
-				dbDesc, err := col.ByID(txn).WithFlags(tree.DatabaseLookupFlags{}).Immutable().Database(ctx, tableDesc.GetParentID())
+				dbDesc, err := col.ByID(txn).WithoutNonPublic().Immutable().Database(ctx, tableDesc.GetParentID())
 				if err != nil {
 					return err
 				}
 
 				// Resolve the schema.
-				schemaDesc, err := col.ByID(txn).WithFlags(tree.SchemaLookupFlags{}).Immutable().Schema(ctx, tableDesc.GetParentSchemaID())
+				schemaDesc, err := col.ByID(txn).WithoutNonPublic().Immutable().Schema(ctx, tableDesc.GetParentSchemaID())
 				if err != nil {
 					return err
 				}

@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -131,7 +132,12 @@ func (n *renameDatabaseNode) startExec(params runParams) error {
 		if err != nil {
 			return err
 		}
-		if err := maybeFailOnDependentDescInRename(ctx, p, dbDesc, sc, lookupFlags, catalog.Database); err != nil {
+		if err := maybeFailOnDependentDescInRename(ctx, p, dbDesc, sc, func(b descs.ByIDGetterBuilder) descs.ByIDGetterBuilder {
+			if p.skipDescriptorCache {
+				b = b.WithoutLeased()
+			}
+			return b.WithoutNonPublic()
+		}, catalog.Database); err != nil {
 			return err
 		}
 	}
@@ -203,14 +209,15 @@ func maybeFailOnDependentDescInRename(
 	p *planner,
 	db catalog.DatabaseDescriptor,
 	sc catalog.SchemaDescriptor,
-	lookupFlags tree.CommonLookupFlags,
+	lookupFilters func(builder descs.ByIDGetterBuilder) descs.ByIDGetterBuilder,
 	renameDescType catalog.DescriptorType,
 ) error {
 	_, ids, err := p.GetObjectNamesAndIDs(ctx, db, sc)
 	if err != nil {
 		return err
 	}
-	descs, err := p.Descriptors().ByID(p.txn).WithFlags(lookupFlags).Immutable().Descs(ctx, ids)
+	b := lookupFilters(p.Descriptors().ByID(p.txn))
+	descs, err := b.Immutable().Descs(ctx, ids)
 	if err != nil {
 		return err
 	}

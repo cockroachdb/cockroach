@@ -394,7 +394,7 @@ CREATE TABLE crdb_internal.super_regions (
 				if err != nil {
 					return err
 				}
-				typeDesc, err := p.Descriptors().ByID(p.txn).WithObjFlags(tree.ObjectLookupFlags{}).Immutable().Type(ctx, typeID)
+				typeDesc, err := p.Descriptors().ByID(p.txn).WithoutNonPublic().Immutable().Type(ctx, typeID)
 				if err != nil {
 					return err
 				}
@@ -499,9 +499,7 @@ CREATE TABLE crdb_internal.tables (
 			// INDEX(parent_id) WHERE drop_time IS NULL
 			populate: func(ctx context.Context, unwrappedConstraint tree.Datum, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) (matched bool, err error) {
 				dbID := descpb.ID(tree.MustBeDInt(unwrappedConstraint))
-				flags := p.CommonLookupFlagsRequired()
-				flags.IncludeOffline = true
-				db, err := p.Descriptors().ByID(p.Txn()).WithFlags(flags).Immutable().Database(ctx, dbID)
+				db, err := p.byIDGetterBuilder().WithoutDropped().Immutable().Database(ctx, dbID)
 				if err != nil {
 					return false, err
 				}
@@ -2960,7 +2958,7 @@ CREATE TABLE crdb_internal.create_function_statements (
 			}
 		}
 
-		fnDescs, err := p.Descriptors().ByID(p.txn).WithFlags(tree.CommonLookupFlags{AvoidLeased: true}).Immutable().Descs(ctx, fnIDs)
+		fnDescs, err := p.Descriptors().ByID(p.txn).WithoutNonPublic().WithoutLeased().Immutable().Descs(ctx, fnIDs)
 		if err != nil {
 			return err
 		}
@@ -4034,7 +4032,7 @@ CREATE TABLE crdb_internal.zones (
 
 			var table catalog.TableDescriptor
 			if zs.Database != "" {
-				database, err := p.Descriptors().ByID(p.txn).WithFlags(tree.DatabaseLookupFlags{AvoidLeased: true}).Immutable().Database(ctx, descpb.ID(id))
+				database, err := p.Descriptors().ByID(p.txn).WithoutNonPublic().WithoutLeased().Immutable().Database(ctx, descpb.ID(id))
 				if err != nil {
 					return err
 				}
@@ -6464,10 +6462,7 @@ CREATE TABLE crdb_internal.index_spans (
 				// forEachTableDescAll() below. So we can't use p.LookupByID()
 				// which only considers online tables.
 				p.runWithOptions(resolveFlags{skipCache: true}, func() {
-					cflags := p.CommonLookupFlagsRequired()
-					cflags.IncludeOffline = true
-					cflags.IncludeDropped = true
-					table, err = p.Descriptors().ByID(p.txn).WithObjFlags(tree.ObjectLookupFlags{CommonLookupFlags: cflags}).Immutable().Table(ctx, descID)
+					table, err = p.byIDGetterBuilder().Immutable().Table(ctx, descID)
 				})
 				if err != nil {
 					return false, err
@@ -6519,10 +6514,7 @@ CREATE TABLE crdb_internal.table_spans (
 				// forEachTableDescAll() below. So we can't use p.LookupByID()
 				// which only considers online tables.
 				p.runWithOptions(resolveFlags{skipCache: true}, func() {
-					cflags := p.CommonLookupFlagsRequired()
-					cflags.IncludeOffline = true
-					cflags.IncludeDropped = true
-					table, err = p.Descriptors().ByID(p.txn).WithObjFlags(tree.ObjectLookupFlags{CommonLookupFlags: cflags}).Immutable().Table(ctx, descID)
+					table, err = p.byIDGetterBuilder().Immutable().Table(ctx, descID)
 				})
 				if err != nil {
 					return false, err
@@ -7072,7 +7064,7 @@ func convertContentionEventsToJSON(
 
 		desc := p.Descriptors()
 		var tableDesc catalog.TableDescriptor
-		tableDesc, err = desc.ByID(p.txn).WithObjFlags(tree.ObjectLookupFlags{}).Immutable().Table(ctx, descpb.ID(tableID))
+		tableDesc, err = desc.ByID(p.txn).WithoutNonPublic().Immutable().Table(ctx, descpb.ID(tableID))
 		if err != nil {
 			return nil, err
 		}
@@ -7082,12 +7074,12 @@ func convertContentionEventsToJSON(
 			return nil, err
 		}
 
-		dbDesc, err := desc.ByID(p.txn).WithFlags(tree.DatabaseLookupFlags{}).Immutable().Database(ctx, tableDesc.GetParentID())
+		dbDesc, err := desc.ByID(p.txn).WithoutNonPublic().Immutable().Database(ctx, tableDesc.GetParentID())
 		if err != nil {
 			return nil, err
 		}
 
-		schemaDesc, err := desc.ByID(p.txn).WithFlags(tree.SchemaLookupFlags{}).Immutable().Schema(ctx, tableDesc.GetParentSchemaID())
+		schemaDesc, err := desc.ByID(p.txn).WithoutNonPublic().Immutable().Schema(ctx, tableDesc.GetParentSchemaID())
 		if err != nil {
 			return nil, err
 		}

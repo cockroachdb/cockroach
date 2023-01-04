@@ -118,6 +118,14 @@ func (sr *schemaResolver) CommonLookupFlagsRequired() tree.CommonLookupFlags {
 	}
 }
 
+func (sr *schemaResolver) byIDGetterBuilder() descs.ByIDGetterBuilder {
+	b := sr.descCollection.ByID(sr.txn)
+	if sr.skipDescriptorCache {
+		return b.WithoutLeased()
+	}
+	return b
+}
+
 // LookupObject implements the tree.ObjectNameExistingResolver interface.
 func (sr *schemaResolver) LookupObject(
 	ctx context.Context, flags tree.ObjectLookupFlags, dbName, scName, obName string,
@@ -218,7 +226,7 @@ func (sr *schemaResolver) CurrentDatabase() string {
 func (sr *schemaResolver) GetQualifiedTableNameByID(
 	ctx context.Context, id int64, requiredType tree.RequiredTableKind,
 ) (*tree.TableName, error) {
-	table, err := sr.descCollection.ByID(sr.txn).WithObjFlags(tree.ObjectLookupFlags{}).Immutable().Table(ctx, descpb.ID(id))
+	table, err := sr.descCollection.ByID(sr.txn).WithoutNonPublic().Immutable().Table(ctx, descpb.ID(id))
 	if err != nil {
 		return nil, err
 	}
@@ -231,11 +239,7 @@ func (sr *schemaResolver) GetQualifiedTableNameByID(
 func (sr *schemaResolver) getQualifiedTableName(
 	ctx context.Context, desc catalog.TableDescriptor,
 ) (*tree.TableName, error) {
-	dbDesc, err := sr.descCollection.ByID(sr.txn).WithFlags(tree.DatabaseLookupFlags{
-		IncludeOffline: true,
-		IncludeDropped: true,
-		AvoidLeased:    true,
-	}).Immutable().Database(ctx, desc.GetParentID())
+	dbDesc, err := sr.descCollection.ByID(sr.txn).WithoutLeased().Immutable().Database(ctx, desc.GetParentID())
 	if err != nil {
 		return nil, err
 	}
@@ -249,11 +253,7 @@ func (sr *schemaResolver) getQualifiedTableName(
 	// information from the namespace table.
 	var schemaName tree.Name
 	schemaID := desc.GetParentSchemaID()
-	scDesc, err := sr.descCollection.ByID(sr.txn).WithFlags(tree.SchemaLookupFlags{
-		IncludeOffline: true,
-		IncludeDropped: true,
-		AvoidLeased:    true,
-	}).Immutable().Schema(ctx, schemaID)
+	scDesc, err := sr.descCollection.ByID(sr.txn).WithoutLeased().Immutable().Schema(ctx, schemaID)
 	switch {
 	case scDesc != nil:
 		schemaName = tree.Name(scDesc.GetName())
@@ -282,16 +282,11 @@ func (sr *schemaResolver) getQualifiedTableName(
 func (sr *schemaResolver) getQualifiedFunctionName(
 	ctx context.Context, fnDesc catalog.FunctionDescriptor,
 ) (*tree.FunctionName, error) {
-	lookupFlags := tree.CommonLookupFlags{
-		IncludeOffline: true,
-		IncludeDropped: true,
-		AvoidLeased:    true,
-	}
-	dbDesc, err := sr.descCollection.ByID(sr.txn).WithFlags(lookupFlags).Immutable().Database(ctx, fnDesc.GetParentID())
+	dbDesc, err := sr.descCollection.ByID(sr.txn).WithoutLeased().Immutable().Database(ctx, fnDesc.GetParentID())
 	if err != nil {
 		return nil, err
 	}
-	scDesc, err := sr.descCollection.ByID(sr.txn).WithFlags(lookupFlags).Immutable().Schema(ctx, fnDesc.GetParentSchemaID())
+	scDesc, err := sr.descCollection.ByID(sr.txn).WithoutLeased().Immutable().Schema(ctx, fnDesc.GetParentSchemaID())
 	if err != nil {
 		return nil, err
 	}
@@ -351,23 +346,20 @@ func (sr *schemaResolver) ResolveTypeByOID(ctx context.Context, oid oid.Oid) (*t
 func (sr *schemaResolver) GetTypeDescriptor(
 	ctx context.Context, id descpb.ID,
 ) (tree.TypeName, catalog.TypeDescriptor, error) {
-	tc := sr.descCollection
-	// Note that the value of required doesn't matter for lookups by ID.
-	flags := sr.CommonLookupFlagsRequired()
-	flags.ParentID = sr.typeResolutionDbID
-	desc, err := tc.ByID(sr.txn).WithFlags(flags).Immutable().Type(ctx, id)
+	g := sr.byIDGetterBuilder().WithoutNonPublic().WithoutOtherParent(sr.typeResolutionDbID).Immutable()
+	desc, err := g.Type(ctx, id)
 	if err != nil {
 		return tree.TypeName{}, nil, err
 	}
 	dbName := sr.CurrentDatabase()
 	if !descpb.IsVirtualTable(desc.GetID()) {
-		db, err := tc.ByID(sr.txn).WithFlags(flags).Immutable().Database(ctx, desc.GetParentID())
+		db, err := g.Database(ctx, desc.GetParentID())
 		if err != nil {
 			return tree.TypeName{}, nil, err
 		}
 		dbName = db.GetName()
 	}
-	sc, err := tc.ByID(sr.txn).WithFlags(flags).Immutable().Schema(ctx, desc.GetParentSchemaID())
+	sc, err := g.Schema(ctx, desc.GetParentSchemaID())
 	if err != nil {
 		return tree.TypeName{}, nil, err
 	}
@@ -574,10 +566,9 @@ func (sr *schemaResolver) ResolveFunctionByOID(
 		}
 	}
 
-	flags := sr.CommonLookupFlagsRequired()
-	flags.ParentID = sr.typeResolutionDbID
+	g := sr.byIDGetterBuilder().WithoutNonPublic().WithoutOtherParent(sr.typeResolutionDbID).Immutable()
 	descID := funcdesc.UserDefinedFunctionOIDToID(oid)
-	funcDesc, err := sr.descCollection.ByID(sr.txn).WithFlags(flags).Immutable().Function(ctx, descID)
+	funcDesc, err := g.Function(ctx, descID)
 	if err != nil {
 		return "", nil, err
 	}

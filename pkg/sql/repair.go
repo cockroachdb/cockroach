@@ -35,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
@@ -418,11 +417,8 @@ func (p *planner) UnsafeUpsertNamespaceEntry(
 	if val.Value != nil {
 		existingID = descpb.ID(val.ValueInt())
 	}
-	flags := p.CommonLookupFlagsRequired()
-	flags.IncludeDropped = true
-	flags.IncludeOffline = true
 	validateDescriptor := func() error {
-		desc, err := p.Descriptors().ByID(p.Txn()).WithFlags(flags).Immutable().Desc(ctx, descID)
+		desc, err := p.byIDGetterBuilder().Immutable().Desc(ctx, descID)
 		if err != nil && descID != keys.PublicSchemaID {
 			return errors.Wrapf(err, "failed to retrieve descriptor %d", descID)
 		}
@@ -456,7 +452,7 @@ func (p *planner) UnsafeUpsertNamespaceEntry(
 		if parentID == descpb.InvalidID {
 			return nil
 		}
-		parent, err := p.Descriptors().ByID(p.Txn()).WithFlags(flags).Immutable().Desc(ctx, parentID)
+		parent, err := p.byIDGetterBuilder().Immutable().Desc(ctx, parentID)
 		if err != nil {
 			return errors.Wrapf(err, "failed to look up parent %d", parentID)
 		}
@@ -470,7 +466,7 @@ func (p *planner) UnsafeUpsertNamespaceEntry(
 		if parentSchemaID == descpb.InvalidID || parentSchemaID == keys.PublicSchemaID {
 			return nil
 		}
-		schema, err := p.Descriptors().ByID(p.Txn()).WithFlags(flags).Immutable().Desc(ctx, parentSchemaID)
+		schema, err := p.byIDGetterBuilder().Immutable().Desc(ctx, parentSchemaID)
 		if err != nil {
 			return err
 		}
@@ -718,9 +714,7 @@ func (p *planner) ForceDeleteTableData(ctx context.Context, descID int64) error 
 
 	// Validate no descriptor exists for this table
 	id := descpb.ID(descID)
-	desc, err := p.Descriptors().ByID(p.txn).WithObjFlags(tree.ObjectLookupFlags{
-		CommonLookupFlags: tree.CommonLookupFlags{AvoidLeased: true},
-	}).Immutable().Table(ctx, id)
+	desc, err := p.Descriptors().ByID(p.txn).WithoutNonPublic().WithoutLeased().Immutable().Table(ctx, id)
 	if err != nil && pgerror.GetPGCode(err) != pgcode.UndefinedTable {
 		return err
 	}

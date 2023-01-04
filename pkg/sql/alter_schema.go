@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/decodeusername"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -123,9 +124,10 @@ func (n *alterSchemaNode) startExec(params runParams) error {
 			return sqlerrors.NewSchemaAlreadyExistsError(newName)
 		}
 
-		lookupFlags := tree.CommonLookupFlags{Required: true, AvoidLeased: true}
 		if err := maybeFailOnDependentDescInRename(
-			params.ctx, params.p, n.db, n.desc, lookupFlags, catalog.Schema,
+			params.ctx, params.p, n.db, n.desc, func(b descs.ByIDGetterBuilder) descs.ByIDGetterBuilder {
+				return b.WithoutNonPublic().WithoutLeased()
+			}, catalog.Schema,
 		); err != nil {
 			return err
 		}

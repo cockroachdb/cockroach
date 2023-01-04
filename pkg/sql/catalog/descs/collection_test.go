@@ -252,7 +252,7 @@ func TestAddUncommittedDescriptorAndMutableResolution(t *testing.T) {
 			require.Equal(t, dbID, immByName.GetID())
 			require.Equal(t, mut.OriginalVersion(), immByName.GetVersion())
 
-			immByID, err := descriptors.ByID(txn).WithFlags(flags).Immutable().Database(ctx, dbID)
+			immByID, err := descriptors.ByID(txn).WithoutNonPublic().Immutable().Database(ctx, dbID)
 			require.NoError(t, err)
 			require.Same(t, immByName, immByID)
 
@@ -282,7 +282,7 @@ func TestAddUncommittedDescriptorAndMutableResolution(t *testing.T) {
 			require.Equal(t, mut.GetVersion(), immByNameAfter.GetVersion())
 			require.Equal(t, mut.ImmutableCopy().DescriptorProto(), immByNameAfter.DescriptorProto())
 
-			immByIDAfter, err := descriptors.ByID(txn).WithFlags(flags).Immutable().Database(ctx, dbID)
+			immByIDAfter, err := descriptors.ByID(txn).WithoutNonPublic().Immutable().Database(ctx, dbID)
 			require.NoError(t, err)
 			require.Same(t, immByNameAfter, immByIDAfter)
 
@@ -413,7 +413,7 @@ func TestSyntheticDescriptorResolution(t *testing.T) {
 
 		// Resolution by ID.
 
-		desc, err = descriptors.ByID(txn).WithObjFlags(tree.ObjectLookupFlags{}).Immutable().Table(ctx, tableID)
+		desc, err = descriptors.ByID(txn).WithoutNonPublic().Immutable().Table(ctx, tableID)
 		require.NoError(t, err)
 		require.Equal(t, "bar", desc.PublicColumns()[0].GetName())
 
@@ -576,9 +576,7 @@ func TestCollectionPreservesPostDeserializationChanges(t *testing.T) {
 	require.NoError(t, sql.DescsTxn(ctx, &execCfg, func(
 		ctx context.Context, txn *kv.Txn, col *descs.Collection,
 	) error {
-		immuts, err := col.ByID(txn).WithFlags(tree.CommonLookupFlags{
-			AvoidLeased: true,
-		}).Immutable().Descs(ctx, []descpb.ID{dbID, scID, typID, tabID})
+		immuts, err := col.ByID(txn).WithoutNonPublic().WithoutLeased().Immutable().Descs(ctx, []descpb.ID{dbID, scID, typID, tabID})
 		if err != nil {
 			return err
 		}
@@ -1145,7 +1143,7 @@ SELECT id
 		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection, ie sqlutil.InternalExecutor,
 	) error {
 		checkImmutableDescriptor := func(id descpb.ID, expName string, f func(t *testing.T, desc catalog.Descriptor)) error {
-			tabImm, err := descriptors.ByID(txn).WithObjFlags(tree.ObjectLookupFlags{CommonLookupFlags: tree.CommonLookupFlags{IncludeDropped: true}}).Immutable().Table(ctx, id)
+			tabImm, err := descriptors.ByID(txn).WithoutOffline().Immutable().Table(ctx, id)
 			require.NoError(t, err)
 			require.Equal(t, expName, tabImm.GetName())
 			f(t, tabImm)
@@ -1221,7 +1219,7 @@ SELECT id
 		newDB := dbdesc.NewInitial(newDBID, "newDB", username.RootUserName())
 		descriptors.AddSyntheticDescriptor(newDB)
 
-		curDatabase, err := descriptors.ByID(txn).WithFlags(tree.DatabaseLookupFlags{}).Immutable().Database(ctx, curDatabaseID)
+		curDatabase, err := descriptors.ByID(txn).WithoutNonPublic().Immutable().Database(ctx, curDatabaseID)
 		if err != nil {
 			return err
 		}

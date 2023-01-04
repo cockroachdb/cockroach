@@ -111,12 +111,8 @@ func (n *createViewNode) startExec(params runParams) error {
 		for id := range n.planDeps {
 			ids.Add(id)
 		}
-		flags := tree.CommonLookupFlags{
-			AvoidLeased:    true,
-			AvoidSynthetic: true,
-		}
 		// Lookup the dependent tables in bulk to minimize round-trips to KV.
-		if _, err := params.p.Descriptors().ByID(params.p.Txn()).WithFlags(flags).Immutable().Descs(params.ctx, ids.Ordered()); err != nil {
+		if _, err := params.p.Descriptors().ByID(params.p.Txn()).WithoutNonPublic().WithoutSynthetic().WithoutLeased().Immutable().Descs(params.ctx, ids.Ordered()); err != nil {
 			return err
 		}
 		for id := range n.planDeps {

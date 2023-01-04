@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/errors"
@@ -532,9 +533,48 @@ func (b ByIDGetterBuilder) WithFlags(flags tree.CommonLookupFlags) ByIDGetterBui
 	return b
 }
 
-// WithObjFlags configures the ByIDGetterBuilder with the given object flags.
-func (b ByIDGetterBuilder) WithObjFlags(flags tree.ObjectLookupFlags) ByIDGetterBuilder {
-	b.flags = fromObjectFlags(flags)
+// WithoutSynthetic configures the ByIDGetterBuilder to bypass the synthetic
+// layer. This is useful mainly for the declarative schema changer, which is
+// the main client of this layer.
+func (b ByIDGetterBuilder) WithoutSynthetic() ByIDGetterBuilder {
+	b.flags.layerFilters.withoutSynthetic = true
+	return b
+}
+
+// WithoutLeased configures the ByIDGetterBuilder to bypass the leasing layer.
+// The leasing layer may contain descriptors which are slightly stale.
+func (b ByIDGetterBuilder) WithoutLeased() ByIDGetterBuilder {
+	b.flags.layerFilters.withoutLeased = true
+	return b
+}
+
+// WithoutDropped configures the ByIDGetterBuilder to error on descriptors
+// which are in a dropped state.
+func (b ByIDGetterBuilder) WithoutDropped() ByIDGetterBuilder {
+	b.flags.descFilters.withoutDropped = true
+	return b
+}
+
+// WithoutOffline configures the ByIDGetterBuilder to error on descriptors
+// which are in an offline state.
+func (b ByIDGetterBuilder) WithoutOffline() ByIDGetterBuilder {
+	b.flags.descFilters.withoutOffline = true
+	return b
+}
+
+// WithoutNonPublic configures the ByIDGetterBuilder to error on descriptors
+// which are not in a public state: dropped, offline, etc.
+func (b ByIDGetterBuilder) WithoutNonPublic() ByIDGetterBuilder {
+	b.flags.descFilters.withoutDropped = true
+	b.flags.descFilters.withoutOffline = true
+	return b
+}
+
+// WithoutOtherParent configures the ByIDGetterBuilder to error on descriptors
+// which, if they have a parent ID, have one different than the argument.
+// The argument must be non-zero for this filter to be effective.
+func (b ByIDGetterBuilder) WithoutOtherParent(parentID catid.DescID) ByIDGetterBuilder {
+	b.flags.descFilters.maybeParentID = parentID
 	return b
 }
 

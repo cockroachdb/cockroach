@@ -195,7 +195,7 @@ func (p *planner) ResolveDescriptorForPrivilegeSpecifier(
 			ctx, p.txn, *specifier.DatabaseName, tree.DatabaseLookupFlags{Required: true},
 		)
 	} else if specifier.DatabaseOID != nil {
-		database, err := p.Descriptors().ByID(p.txn).WithFlags(tree.DatabaseLookupFlags{}).Immutable().Database(ctx, descpb.ID(*specifier.DatabaseOID))
+		database, err := p.Descriptors().ByID(p.txn).WithoutNonPublic().Immutable().Database(ctx, descpb.ID(*specifier.DatabaseOID))
 		// When a DatabaseOID is specified and the database is not found,
 		// we return NULL.
 		if err != nil && sqlerrors.IsUndefinedDatabaseError(err) {
@@ -236,7 +236,7 @@ func (p *planner) ResolveDescriptorForPrivilegeSpecifier(
 				ctx, p.txn, tn, tree.ObjectLookupFlags{},
 			)
 		} else {
-			table, err = p.Descriptors().ByID(p.txn).WithObjFlags(tree.ObjectLookupFlags{}).Immutable().Table(ctx, descpb.ID(*specifier.TableOID))
+			table, err = p.Descriptors().ByID(p.txn).WithoutNonPublic().Immutable().Table(ctx, descpb.ID(*specifier.TableOID))
 			// When a TableOID is specified and the relation is not found, we return NULL.
 			if err != nil && sqlerrors.IsUndefinedRelationError(err) {
 				// nolint:returnerrcheck
@@ -263,7 +263,7 @@ func (p *planner) ResolveDescriptorForPrivilegeSpecifier(
 		return table, nil
 	} else if specifier.FunctionOID != nil {
 		fnID := funcdesc.UserDefinedFunctionOIDToID(*specifier.FunctionOID)
-		return p.Descriptors().ByID(p.txn).WithObjFlags(tree.ObjectLookupFlags{}).Immutable().Function(ctx, fnID)
+		return p.Descriptors().ByID(p.txn).WithoutNonPublic().Immutable().Function(ctx, fnID)
 	}
 	return nil, errors.AssertionFailedf("invalid HasPrivilegeSpecifier")
 }
@@ -594,11 +594,7 @@ func (p *planner) getFullyQualifiedTableNamesFromIDs(
 	ctx context.Context, ids []descpb.ID,
 ) (fullyQualifiedNames []string, _ error) {
 	for _, id := range ids {
-		desc, err := p.Descriptors().ByID(p.txn).WithFlags(tree.CommonLookupFlags{
-			AvoidLeased:    true,
-			IncludeDropped: true,
-			IncludeOffline: true,
-		}).Immutable().Desc(ctx, id)
+		desc, err := p.Descriptors().ByID(p.txn).WithoutLeased().Immutable().Desc(ctx, id)
 		if err != nil {
 			return nil, err
 		}
@@ -625,7 +621,7 @@ func (p *planner) getFullyQualifiedTableNamesFromIDs(
 func (p *planner) getQualifiedSchemaName(
 	ctx context.Context, desc catalog.SchemaDescriptor,
 ) (*tree.ObjectNamePrefix, error) {
-	dbDesc, err := p.Descriptors().ByID(p.txn).WithFlags(tree.DatabaseLookupFlags{AvoidLeased: true}).Immutable().Database(ctx, desc.GetParentID())
+	dbDesc, err := p.Descriptors().ByID(p.txn).WithoutNonPublic().WithoutLeased().Immutable().Database(ctx, desc.GetParentID())
 	if err != nil {
 		return nil, err
 	}
@@ -642,13 +638,13 @@ func (p *planner) getQualifiedSchemaName(
 func (p *planner) getQualifiedTypeName(
 	ctx context.Context, desc catalog.TypeDescriptor,
 ) (*tree.TypeName, error) {
-	dbDesc, err := p.Descriptors().ByID(p.txn).WithFlags(tree.DatabaseLookupFlags{AvoidLeased: true}).Immutable().Database(ctx, desc.GetParentID())
+	dbDesc, err := p.Descriptors().ByID(p.txn).WithoutNonPublic().WithoutLeased().Immutable().Database(ctx, desc.GetParentID())
 	if err != nil {
 		return nil, err
 	}
 
 	schemaID := desc.GetParentSchemaID()
-	scDesc, err := p.Descriptors().ByID(p.txn).WithFlags(tree.SchemaLookupFlags{}).Immutable().Schema(ctx, schemaID)
+	scDesc, err := p.Descriptors().ByID(p.txn).WithoutNonPublic().Immutable().Schema(ctx, schemaID)
 	if err != nil {
 		return nil, err
 	}

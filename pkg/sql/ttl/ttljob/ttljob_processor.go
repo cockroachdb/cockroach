@@ -69,7 +69,7 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 	var pkTypes []*types.T
 	var labelMetrics bool
 	if err := serverCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		desc, err := descsCol.ByID(txn).WithObjFlags(tree.ObjectLookupFlags{}).Immutable().Table(ctx, details.TableID)
+		desc, err := descsCol.ByID(txn).WithoutNonPublic().Immutable().Table(ctx, details.TableID)
 		if err != nil {
 			return err
 		}
@@ -297,7 +297,7 @@ func (t *ttlProcessor) runTTLOnSpan(
 			if err := serverCfg.DB.TxnWithSteppingEnabled(ctx, sessiondatapb.TTLLow, func(ctx context.Context, txn *kv.Txn) error {
 				// If we detected a schema change here, the DELETE will not succeed
 				// (the SELECT still will because of the AOST). Early exit here.
-				desc, err := flowCtx.Descriptors.ByID(txn).WithObjFlags(tree.ObjectLookupFlags{}).Immutable().Table(ctx, details.TableID)
+				desc, err := flowCtx.Descriptors.ByID(txn).WithoutNonPublic().Immutable().Table(ctx, details.TableID)
 				if err != nil {
 					return err
 				}

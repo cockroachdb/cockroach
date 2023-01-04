@@ -122,7 +122,8 @@ func (p *planner) getOrCreateTemporarySchema(
 		m.SetTemporarySchemaName(tempSchemaName)
 		m.SetTemporarySchemaIDForDatabase(uint32(db.GetID()), uint32(id))
 	})
-	return p.Descriptors().ByID(p.Txn()).WithFlags(p.CommonLookupFlagsRequired()).Immutable().Schema(ctx, id)
+	g := p.byIDGetterBuilder().WithoutNonPublic().Immutable()
+	return g.Schema(ctx, id)
 }
 
 // temporarySchemaName returns the session specific temporary schema name given
@@ -307,16 +308,15 @@ func cleanupTempSchemaObjects(
 					if _, ok := tblDescsByID[d.ID]; ok {
 						return nil
 					}
-					flags := tree.CommonLookupFlags{AvoidLeased: true}
-					dTableDesc, err := descsCol.ByID(txn).WithFlags(flags).Immutable().Table(ctx, d.ID)
+					dTableDesc, err := descsCol.ByID(txn).WithoutNonPublic().WithoutLeased().Immutable().Table(ctx, d.ID)
 					if err != nil {
 						return err
 					}
-					db, err := descsCol.ByID(txn).WithFlags(flags).Immutable().Database(ctx, dTableDesc.GetParentID())
+					db, err := descsCol.ByID(txn).WithoutNonPublic().WithoutLeased().Immutable().Database(ctx, dTableDesc.GetParentID())
 					if err != nil {
 						return err
 					}
-					sc, err := descsCol.ByID(txn).WithFlags(flags).Immutable().Schema(ctx, dTableDesc.GetParentSchemaID())
+					sc, err := descsCol.ByID(txn).WithoutNonPublic().WithoutLeased().Immutable().Schema(ctx, dTableDesc.GetParentSchemaID())
 					if err != nil {
 						return err
 					}

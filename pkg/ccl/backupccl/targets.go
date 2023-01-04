@@ -595,11 +595,7 @@ func checkMultiRegionCompatible(
 		// For REGION BY TABLE IN <region> tables, allow the restore if the
 		// database has the region.
 		regionEnumID := database.GetRegionConfig().RegionEnumID
-		regionEnum, err := col.ByID(txn).WithFlags(tree.CommonLookupFlags{
-			AvoidLeased:    true,
-			IncludeDropped: true,
-			IncludeOffline: true,
-		}).Immutable().Type(ctx, regionEnumID)
+		regionEnum, err := col.ByID(txn).WithoutLeased().Immutable().Type(ctx, regionEnumID)
 		if err != nil {
 			return err
 		}

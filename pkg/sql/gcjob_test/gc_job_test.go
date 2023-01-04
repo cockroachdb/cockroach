@@ -40,7 +40,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob"
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob/gcjobnotifier"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -110,24 +109,12 @@ func TestSchemaChangeGCJob(t *testing.T) {
 			var myTableDesc *tabledesc.Mutable
 			var myOtherTableDesc *tabledesc.Mutable
 			if err := sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
-				myImm, err := col.ByID(txn).WithObjFlags(tree.ObjectLookupFlags{
-					CommonLookupFlags: tree.CommonLookupFlags{
-						AvoidLeased:    true,
-						IncludeDropped: true,
-						IncludeOffline: true,
-					},
-				}).Immutable().Table(ctx, myTableID)
+				myImm, err := col.ByID(txn).WithoutLeased().Immutable().Table(ctx, myTableID)
 				if err != nil {
 					return err
 				}
 				myTableDesc = tabledesc.NewBuilder(myImm.TableDesc()).BuildExistingMutableTable()
-				myOtherImm, err := col.ByID(txn).WithObjFlags(tree.ObjectLookupFlags{
-					CommonLookupFlags: tree.CommonLookupFlags{
-						AvoidLeased:    true,
-						IncludeDropped: true,
-						IncludeOffline: true,
-					},
-				}).Immutable().Table(ctx, myOtherTableID)
+				myOtherImm, err := col.ByID(txn).WithoutLeased().Immutable().Table(ctx, myOtherTableID)
 				if err != nil {
 					return err
 				}
@@ -251,13 +238,7 @@ func TestSchemaChangeGCJob(t *testing.T) {
 			}
 
 			if err := sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
-				myImm, err := col.ByID(txn).WithObjFlags(tree.ObjectLookupFlags{
-					CommonLookupFlags: tree.CommonLookupFlags{
-						AvoidLeased:    true,
-						IncludeDropped: true,
-						IncludeOffline: true,
-					},
-				}).Immutable().Table(ctx, myTableID)
+				myImm, err := col.ByID(txn).WithoutLeased().Immutable().Table(ctx, myTableID)
 				if err != nil {
 					return err
 				}
@@ -267,13 +248,7 @@ func TestSchemaChangeGCJob(t *testing.T) {
 					return nil
 				}
 				myTableDesc = tabledesc.NewBuilder(myImm.TableDesc()).BuildExistingMutableTable()
-				myOtherImm, err := col.ByID(txn).WithObjFlags(tree.ObjectLookupFlags{
-					CommonLookupFlags: tree.CommonLookupFlags{
-						AvoidLeased:    true,
-						IncludeDropped: true,
-						IncludeOffline: true,
-					},
-				}).Immutable().Table(ctx, myOtherTableID)
+				myOtherImm, err := col.ByID(txn).WithoutLeased().Immutable().Table(ctx, myOtherTableID)
 				if err != nil {
 					return err
 				}

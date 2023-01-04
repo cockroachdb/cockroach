@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/backfiller"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
@@ -160,7 +159,7 @@ func (d *jobExecutionDeps) WithTxnInJob(ctx context.Context, fn scrun.JobTxnFunc
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 		) error {
 			for _, id := range tableStatsToRefresh {
-				tbl, err := descriptors.ByID(txn).WithObjFlags(tree.ObjectLookupFlags{}).Immutable().Table(ctx, id)
+				tbl, err := descriptors.ByID(txn).WithoutNonPublic().Immutable().Table(ctx, id)
 				if err != nil {
 					return err
 				}

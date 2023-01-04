@@ -56,7 +56,7 @@ func (p *planner) GetSerialSequenceNameFromColumn(
 			//       as well as backward compatibility) so we're using this heuristic for now.
 			// TODO(#52487): fix this up.
 			if col.NumUsesSequences() == 1 {
-				seq, err := p.Descriptors().ByID(p.txn).WithObjFlags(tree.ObjectLookupFlags{}).Immutable().Table(ctx, col.GetUsesSequenceID(0))
+				seq, err := p.Descriptors().ByID(p.txn).WithoutNonPublic().Immutable().Table(ctx, col.GetUsesSequenceID(0))
 				if err != nil {
 					return nil, err
 				}
@@ -73,7 +73,7 @@ func (p *planner) IncrementSequenceByID(ctx context.Context, seqID int64) (int64
 	if p.EvalContext().TxnReadOnly {
 		return 0, readOnlyError("nextval()")
 	}
-	descriptor, err := p.Descriptors().ByID(p.txn).WithObjFlags(tree.ObjectLookupFlags{}).Immutable().Table(ctx, descpb.ID(seqID))
+	descriptor, err := p.Descriptors().ByID(p.txn).WithoutNonPublic().Immutable().Table(ctx, descpb.ID(seqID))
 	if err != nil {
 		return 0, err
 	}
@@ -245,7 +245,7 @@ func boundsExceededError(descriptor catalog.TableDescriptor) error {
 func (p *planner) GetLatestValueInSessionForSequenceByID(
 	ctx context.Context, seqID int64,
 ) (int64, error) {
-	descriptor, err := p.Descriptors().ByID(p.txn).WithObjFlags(tree.ObjectLookupFlags{}).Immutable().Table(ctx, descpb.ID(seqID))
+	descriptor, err := p.Descriptors().ByID(p.txn).WithoutNonPublic().Immutable().Table(ctx, descpb.ID(seqID))
 	if err != nil {
 		return 0, err
 	}
@@ -283,7 +283,7 @@ func (p *planner) SetSequenceValueByID(
 		return readOnlyError("setval()")
 	}
 
-	descriptor, err := p.Descriptors().ByID(p.txn).WithObjFlags(tree.ObjectLookupFlags{}).Immutable().Table(ctx, descpb.ID(seqID))
+	descriptor, err := p.Descriptors().ByID(p.txn).WithoutNonPublic().Immutable().Table(ctx, descpb.ID(seqID))
 	if err != nil {
 		return err
 	}

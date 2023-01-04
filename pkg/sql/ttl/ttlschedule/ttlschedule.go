@@ -71,7 +71,7 @@ func (s rowLevelTTLExecutor) OnDrop(
 	}
 
 	if !canDrop {
-		tbl, err := descsCol.ByID(txn).WithObjFlags(tree.ObjectLookupFlags{}).Immutable().Table(ctx, args.TableID)
+		tbl, err := descsCol.ByID(txn).WithoutNonPublic().Immutable().Table(ctx, args.TableID)
 		if err != nil {
 			return 0, err
 		}
@@ -101,7 +101,7 @@ func canDropTTLSchedule(
 	schedule *jobs.ScheduledJob,
 	args catpb.ScheduledRowLevelTTLArgs,
 ) (bool, error) {
-	desc, err := descsCol.ByID(txn).WithObjFlags(tree.ObjectLookupFlags{}).Immutable().Table(ctx, args.TableID)
+	desc, err := descsCol.ByID(txn).WithoutNonPublic().Immutable().Table(ctx, args.TableID)
 	if err != nil {
 		// If the descriptor does not exist we can drop this schedule.
 		if sqlerrors.IsUndefinedRelationError(err) {
@@ -208,7 +208,7 @@ func (s rowLevelTTLExecutor) GetCreateScheduleStatement(
 	if err := pbtypes.UnmarshalAny(sj.ExecutionArgs().Args, args); err != nil {
 		return "", err
 	}
-	tbl, err := descsCol.ByID(txn).WithObjFlags(tree.ObjectLookupFlags{}).Immutable().Table(ctx, args.TableID)
+	tbl, err := descsCol.ByID(txn).WithoutNonPublic().Immutable().Table(ctx, args.TableID)
 	if err != nil {
 		return "", err
 	}
@@ -254,7 +254,7 @@ func createRowLevelTTLJob(
 	jobRegistry *jobs.Registry,
 	ttlArgs catpb.ScheduledRowLevelTTLArgs,
 ) (jobspb.JobID, error) {
-	tableDesc, err := descsCol.ByID(txn).WithObjFlags(tree.ObjectLookupFlags{}).Immutable().Table(ctx, ttlArgs.TableID)
+	tableDesc, err := descsCol.ByID(txn).WithoutNonPublic().Immutable().Table(ctx, ttlArgs.TableID)
 	if err != nil {
 		return 0, err
 	}

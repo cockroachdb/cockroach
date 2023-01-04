@@ -70,7 +70,7 @@ func (p *planner) AlterTableLocality(
 	}
 
 	// Ensure that the database is multi-region enabled.
-	dbDesc, err := p.Descriptors().ByID(p.txn).WithFlags(tree.DatabaseLookupFlags{AvoidLeased: true}).Immutable().Database(ctx, tableDesc.GetParentID())
+	dbDesc, err := p.Descriptors().ByID(p.txn).WithoutNonPublic().WithoutLeased().Immutable().Database(ctx, tableDesc.GetParentID())
 	if err != nil {
 		return nil, err
 	}
@@ -114,7 +114,7 @@ func (n *alterTableSetLocalityNode) alterTableLocalityGlobalToRegionalByTable(
 		)
 	}
 
-	dbDesc, err := params.p.Descriptors().ByID(params.p.txn).WithFlags(tree.DatabaseLookupFlags{AvoidLeased: true}).Immutable().Database(params.ctx, n.tableDesc.ParentID)
+	dbDesc, err := params.p.Descriptors().ByID(params.p.txn).WithoutNonPublic().WithoutLeased().Immutable().Database(params.ctx, n.tableDesc.ParentID)
 	if err != nil {
 		return err
 	}
@@ -176,7 +176,7 @@ func (n *alterTableSetLocalityNode) alterTableLocalityRegionalByTableToRegionalB
 		)
 	}
 
-	dbDesc, err := params.p.Descriptors().ByID(params.p.txn).WithFlags(tree.DatabaseLookupFlags{AvoidLeased: true}).Immutable().Database(params.ctx, n.tableDesc.ParentID)
+	dbDesc, err := params.p.Descriptors().ByID(params.p.txn).WithoutNonPublic().WithoutLeased().Immutable().Database(params.ctx, n.tableDesc.ParentID)
 	if err != nil {
 		return err
 	}
@@ -653,7 +653,7 @@ func setNewLocalityConfig(
 	descsCol *descs.Collection,
 ) error {
 	getMultiRegionTypeDesc := func() (*typedesc.Mutable, error) {
-		dbDesc, err := descsCol.ByID(txn).WithFlags(tree.DatabaseLookupFlags{AvoidLeased: true}).Immutable().Database(ctx, desc.GetParentID())
+		dbDesc, err := descsCol.ByID(txn).WithoutNonPublic().WithoutLeased().Immutable().Database(ctx, desc.GetParentID())
 		if err != nil {
 			return nil, err
 		}

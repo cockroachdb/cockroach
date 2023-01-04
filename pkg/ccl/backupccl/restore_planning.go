@@ -332,11 +332,7 @@ func allocateDescriptorRewrites(
 				} else {
 					// If we found an existing schema, then we need to remap all references
 					// to this schema to the existing one.
-					desc, err := col.ByID(txn).WithFlags(tree.SchemaLookupFlags{
-						AvoidLeased:    true,
-						IncludeDropped: true,
-						IncludeOffline: true,
-					}).Immutable().Schema(ctx, id)
+					desc, err := col.ByID(txn).WithoutLeased().Immutable().Schema(ctx, id)
 					if err != nil {
 						return err
 					}
@@ -385,11 +381,7 @@ func allocateDescriptorRewrites(
 				}
 
 				// Check privileges.
-				parentDB, err := col.ByID(txn).WithFlags(tree.DatabaseLookupFlags{
-					AvoidLeased:    true,
-					IncludeDropped: true,
-					IncludeOffline: true,
-				}).Immutable().Database(ctx, parentID)
+				parentDB, err := col.ByID(txn).WithoutLeased().Immutable().Database(ctx, parentID)
 				if err != nil {
 					return errors.Wrapf(err,
 						"failed to lookup parent DB %d", errors.Safe(parentID))
@@ -454,11 +446,7 @@ func allocateDescriptorRewrites(
 						targetDB, typ.Name)
 				}
 				// Check privileges on the parent DB.
-				parentDB, err := col.ByID(txn).WithFlags(tree.DatabaseLookupFlags{
-					AvoidLeased:    true,
-					IncludeDropped: true,
-					IncludeOffline: true,
-				}).Immutable().Database(ctx, parentID)
+				parentDB, err := col.ByID(txn).WithoutLeased().Immutable().Database(ctx, parentID)
 				if err != nil {
 					return errors.Wrapf(err,
 						"failed to lookup parent DB %d", errors.Safe(parentID))
@@ -706,11 +694,7 @@ func getDatabaseIDAndDesc(
 		return dbID, nil, errors.Errorf("a database named %q needs to exist", targetDB)
 	}
 	// Check privileges on the parent DB.
-	dbDesc, err = col.ByID(txn).WithFlags(tree.DatabaseLookupFlags{
-		AvoidLeased:    true,
-		IncludeDropped: true,
-		IncludeOffline: true,
-	}).Immutable().Database(ctx, dbID)
+	dbDesc, err = col.ByID(txn).WithoutLeased().Immutable().Database(ctx, dbID)
 	if err != nil {
 		return 0, nil, errors.Wrapf(err,
 			"failed to lookup parent DB %d", errors.Safe(dbID))

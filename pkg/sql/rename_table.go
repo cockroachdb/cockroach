@@ -252,7 +252,7 @@ func (n *renameTableNode) Close(context.Context)        {}
 func (p *planner) dependentError(
 	ctx context.Context, typeName string, objName string, parentID descpb.ID, id descpb.ID, op string,
 ) error {
-	desc, err := p.Descriptors().ByID(p.txn).WithFlags(tree.CommonLookupFlags{}).Immutable().Desc(ctx, id)
+	desc, err := p.Descriptors().ByID(p.txn).WithoutNonPublic().Immutable().Desc(ctx, id)
 	if err != nil {
 		return err
 	}
@@ -324,11 +324,7 @@ func (n *renameTableNode) checkForCrossDbReferences(
 			tableID = fk.GetOriginTableID()
 		}
 
-		referencedTable, err := p.Descriptors().ByID(p.txn).WithObjFlags(tree.ObjectLookupFlags{
-			CommonLookupFlags: tree.CommonLookupFlags{
-				AvoidLeased: true,
-			},
-		}).Immutable().Table(ctx, tableID)
+		referencedTable, err := p.Descriptors().ByID(p.txn).WithoutNonPublic().WithoutLeased().Immutable().Table(ctx, tableID)
 		if err != nil {
 			return err
 		}
@@ -352,9 +348,7 @@ func (n *renameTableNode) checkForCrossDbReferences(
 	type crossDBDepType int
 	const owner, reference crossDBDepType = 0, 1
 	checkDepForCrossDbRef := func(depID descpb.ID, depType crossDBDepType) error {
-		dependentObject, err := p.Descriptors().ByID(p.txn).WithObjFlags(tree.ObjectLookupFlags{
-			CommonLookupFlags: tree.CommonLookupFlags{AvoidLeased: true},
-		}).Immutable().Table(ctx, depID)
+		dependentObject, err := p.Descriptors().ByID(p.txn).WithoutNonPublic().WithoutLeased().Immutable().Table(ctx, depID)
 		if err != nil {
 			return err
 		}
@@ -450,7 +444,7 @@ func (n *renameTableNode) checkForCrossDbReferences(
 		if allowCrossDatabaseViews.Get(&p.execCfg.Settings.SV) {
 			return nil
 		}
-		dependentObject, err := p.Descriptors().ByID(p.txn).WithFlags(tree.CommonLookupFlags{AvoidLeased: true}).Immutable().Type(ctx, depID)
+		dependentObject, err := p.Descriptors().ByID(p.txn).WithoutNonPublic().WithoutLeased().Immutable().Type(ctx, depID)
 		if err != nil {
 			return err
 		}

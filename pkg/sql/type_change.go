@@ -197,14 +197,9 @@ func (t *typeSchemaChanger) getTypeDescFromStore(
 ) (catalog.TypeDescriptor, error) {
 	var typeDesc catalog.TypeDescriptor
 	if err := DescsTxn(ctx, t.execCfg, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
-		flags := tree.CommonLookupFlags{
-			AvoidLeased:    true,
-			IncludeDropped: true,
-			IncludeOffline: true,
-		}
 		// Avoid GetImmutableTypeByID, downstream logic relies on
 		// catalog.ErrDescriptorNotFound.
-		desc, err := col.ByID(txn).WithFlags(flags).Immutable().Desc(ctx, t.typeID)
+		desc, err := col.ByID(txn).WithoutLeased().Immutable().Desc(ctx, t.typeID)
 		if err != nil {
 			return err
 		}
@@ -762,9 +757,7 @@ func (t *typeSchemaChanger) canRemoveEnumValue(
 	descsCol *descs.Collection,
 ) error {
 	for _, ID := range typeDesc.ReferencingDescriptorIDs {
-		desc, err := descsCol.ByID(txn).WithObjFlags(tree.ObjectLookupFlags{
-			CommonLookupFlags: tree.CommonLookupFlags{AvoidLeased: true},
-		}).Immutable().Table(ctx, ID)
+		desc, err := descsCol.ByID(txn).WithoutNonPublic().WithoutLeased().Immutable().Table(ctx, ID)
 		if err != nil {
 			return errors.Wrapf(err,
 				"could not validate enum value removal for %q", member.LogicalRepresentation)
@@ -919,7 +912,7 @@ func (t *typeSchemaChanger) canRemoveEnumValue(
 			// be unset by default) when executing the query constructed above. This is
 			// because the enum value may be used in a view expression, which is
 			// name resolved in the context of the type's database.
-			dbDesc, err := descsCol.ByID(txn).WithFlags(tree.DatabaseLookupFlags{AvoidLeased: true}).Immutable().Database(ctx, typeDesc.ParentID)
+			dbDesc, err := descsCol.ByID(txn).WithoutNonPublic().WithoutLeased().Immutable().Database(ctx, typeDesc.ParentID)
 			const validationErr = "could not validate removal of enum value %q"
 			if err != nil {
 				return errors.Wrapf(err, validationErr, member.LogicalRepresentation)
@@ -957,7 +950,7 @@ func (t *typeSchemaChanger) canRemoveEnumValue(
 	}
 
 	// Do validation for the array type now.
-	arrayTypeDesc, err := descsCol.ByID(txn).WithObjFlags(tree.ObjectLookupFlags{}).Immutable().Type(ctx, typeDesc.ArrayTypeID)
+	arrayTypeDesc, err := descsCol.ByID(txn).WithoutNonPublic().Immutable().Type(ctx, typeDesc.ArrayTypeID)
 	if err != nil {
 		return err
 	}
@@ -1091,7 +1084,7 @@ func (t *typeSchemaChanger) canRemoveEnumValueFromArrayUsages(
 	const validationErr = "could not validate removal of enum value %q"
 	for i := 0; i < arrayTypeDesc.NumReferencingDescriptors(); i++ {
 		id := arrayTypeDesc.GetReferencingDescriptorID(i)
-		desc, err := descsCol.ByID(txn).WithObjFlags(tree.ObjectLookupFlags{}).Immutable().Table(ctx, id)
+		desc, err := descsCol.ByID(txn).WithoutNonPublic().Immutable().Table(ctx, id)
 		if err != nil {
 			return errors.Wrapf(err, validationErr, member.LogicalRepresentation)
 		}
@@ -1140,7 +1133,7 @@ func (t *typeSchemaChanger) canRemoveEnumValueFromArrayUsages(
 		}
 		query.WriteString(fmt.Sprintf(") WHERE unnest = %s", sqlPhysRep))
 
-		dbDesc, err := descsCol.ByID(txn).WithFlags(tree.DatabaseLookupFlags{AvoidLeased: true}).Immutable().Database(ctx, arrayTypeDesc.GetParentID())
+		dbDesc, err := descsCol.ByID(txn).WithoutNonPublic().WithoutLeased().Immutable().Database(ctx, arrayTypeDesc.GetParentID())
 		if err != nil {
 			return errors.Wrapf(err, validationErr, member.LogicalRepresentation)
 		}
@@ -1160,7 +1153,7 @@ func (t *typeSchemaChanger) canRemoveEnumValueFromArrayUsages(
 		}
 		if len(rows) > 0 {
 			// Use an FQN in the error message.
-			parentSchema, err := descsCol.ByID(txn).WithFlags(tree.SchemaLookupFlags{}).Immutable().Schema(ctx, desc.GetParentSchemaID())
+			parentSchema, err := descsCol.ByID(txn).WithoutNonPublic().Immutable().Schema(ctx, desc.GetParentSchemaID())
 			if err != nil {
 				return err
 			}

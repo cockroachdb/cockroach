@@ -132,24 +132,13 @@ var _ scexec.Catalog = (*txnDeps)(nil)
 func (d *txnDeps) MustReadImmutableDescriptors(
 	ctx context.Context, ids ...descpb.ID,
 ) ([]catalog.Descriptor, error) {
-	flags := tree.CommonLookupFlags{
-		AvoidLeased:    true,
-		IncludeOffline: true,
-		IncludeDropped: true,
-		AvoidSynthetic: true,
-	}
-	return d.descsCollection.ByID(d.txn).WithFlags(flags).Immutable().Descs(ctx, ids)
+	return d.descsCollection.ByID(d.txn).WithoutSynthetic().WithoutLeased().Immutable().Descs(ctx, ids)
 }
 
 // GetFullyQualifiedName implements the scmutationexec.CatalogReader interface
 func (d *txnDeps) GetFullyQualifiedName(ctx context.Context, id descpb.ID) (string, error) {
-	flags := tree.CommonLookupFlags{
-		IncludeOffline: true,
-		IncludeDropped: true,
-		AvoidLeased:    true,
-		AvoidSynthetic: true,
-	}
-	objectDesc, err := d.descsCollection.ByID(d.txn).WithFlags(flags).Immutable().Desc(ctx, id)
+	g := d.descsCollection.ByID(d.txn).WithoutSynthetic().WithoutLeased().Immutable()
+	objectDesc, err := g.Desc(ctx, id)
 	if err != nil {
 		return "", err
 	}
@@ -157,11 +146,11 @@ func (d *txnDeps) GetFullyQualifiedName(ctx context.Context, id descpb.ID) (stri
 	// we can fetch the fully qualified names.
 	if objectDesc.DescriptorType() != catalog.Database &&
 		objectDesc.DescriptorType() != catalog.Schema {
-		databaseDesc, err := d.descsCollection.ByID(d.txn).WithFlags(flags).Immutable().Database(ctx, objectDesc.GetParentID())
+		databaseDesc, err := g.Database(ctx, objectDesc.GetParentID())
 		if err != nil {
 			return "", err
 		}
-		schemaDesc, err := d.descsCollection.ByID(d.txn).WithFlags(flags).Immutable().Schema(ctx, objectDesc.GetParentSchemaID())
+		schemaDesc, err := g.Schema(ctx, objectDesc.GetParentSchemaID())
 		if err != nil {
 			return "", err
 		}
@@ -174,7 +163,7 @@ func (d *txnDeps) GetFullyQualifiedName(ctx context.Context, id descpb.ID) (stri
 	} else if objectDesc.DescriptorType() == catalog.Database {
 		return objectDesc.GetName(), nil
 	} else if objectDesc.DescriptorType() == catalog.Schema {
-		databaseDesc, err := d.descsCollection.ByID(d.txn).WithFlags(flags).Immutable().Database(ctx, objectDesc.GetParentID())
+		databaseDesc, err := g.Database(ctx, objectDesc.GetParentID())
 		if err != nil {
 			return "", err
 		}
@@ -325,12 +314,7 @@ func (d *txnDeps) MaybeSplitIndexSpans(
 func (d *txnDeps) GetResumeSpans(
 	ctx context.Context, tableID descpb.ID, indexID descpb.IndexID,
 ) ([]roachpb.Span, error) {
-	table, err := d.descsCollection.ByID(d.txn).WithObjFlags(tree.ObjectLookupFlags{
-		CommonLookupFlags: tree.CommonLookupFlags{
-			AvoidLeased:    true,
-			AvoidSynthetic: true,
-		},
-	}).Immutable().Table(ctx, tableID)
+	table, err := d.descsCollection.ByID(d.txn).WithoutNonPublic().WithoutLeased().WithoutSynthetic().Immutable().Table(ctx, tableID)
 	if err != nil {
 		return nil, err
 	}

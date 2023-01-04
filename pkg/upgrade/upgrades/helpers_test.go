@@ -143,9 +143,7 @@ func GetTable(
 	err := s.InternalExecutorFactory().(descs.TxnManager).DescsTxn(ctx, s.DB(), func(
 		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 	) (err error) {
-		table, err = descriptors.ByID(txn).WithObjFlags(tree.ObjectLookupFlags{
-			CommonLookupFlags: tree.CommonLookupFlags{AvoidLeased: true},
-		}).Immutable().Table(ctx, tableID)
+		table, err = descriptors.ByID(txn).WithoutNonPublic().WithoutLeased().Immutable().Table(ctx, tableID)
 		return err
 	})
 	require.NoError(t, err)

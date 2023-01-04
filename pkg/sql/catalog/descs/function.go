@@ -23,5 +23,5 @@ import (
 func (tc *Collection) GetMutableFunctionByID(
 	ctx context.Context, txn *kv.Txn, fnID descpb.ID, flags tree.ObjectLookupFlags,
 ) (*funcdesc.Mutable, error) {
-	return tc.ByID(txn).WithObjFlags(flags).Mutable().Function(ctx, fnID)
+	return tc.ByID(txn).WithFlags(flags.CommonLookupFlags).Mutable().Function(ctx, fnID)
 }

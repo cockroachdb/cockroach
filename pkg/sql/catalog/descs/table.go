@@ -94,7 +94,7 @@ func (tc *Collection) GetUncommittedMutableTableByID(
 func (tc *Collection) GetMutableTableByID(
 	ctx context.Context, txn *kv.Txn, tableID descpb.ID, flags tree.ObjectLookupFlags,
 ) (*tabledesc.Mutable, error) {
-	return tc.ByID(txn).WithObjFlags(flags).Mutable().Table(ctx, tableID)
+	return tc.ByID(txn).WithFlags(flags.CommonLookupFlags).Mutable().Table(ctx, tableID)
 }
 
 // GetMutableTableVersionByID is a variant of sqlbase.getTableDescFromID which returns a mutable

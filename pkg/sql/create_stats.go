@@ -204,10 +204,7 @@ func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, erro
 		fqTableName = n.p.ResolvedName(t).FQString()
 
 	case *tree.TableRef:
-		flags := tree.ObjectLookupFlags{CommonLookupFlags: tree.CommonLookupFlags{
-			AvoidLeased: n.p.skipDescriptorCache,
-		}}
-		tableDesc, err = n.p.Descriptors().ByID(n.p.txn).WithObjFlags(flags).Immutable().Table(ctx, descpb.ID(t.TableID))
+		tableDesc, err = n.p.byIDGetterBuilder().WithoutNonPublic().Immutable().Table(ctx, descpb.ID(t.TableID))
 		if err != nil {
 			return nil, err
 		}

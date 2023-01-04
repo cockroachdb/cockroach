@@ -33,7 +33,7 @@ func (ec *Builtins) EncodeTableIndexKey(
 	performCast func(context.Context, tree.Datum, *types.T) (tree.Datum, error),
 ) ([]byte, error) {
 	// Get the referenced table and index.
-	tableDesc, err := ec.dc.ByID(ec.txn).WithObjFlags(tree.ObjectLookupFlags{}).Immutable().Table(ctx, tableID)
+	tableDesc, err := ec.dc.ByID(ec.txn).WithoutNonPublic().Immutable().Table(ctx, tableID)
 	if err != nil {
 		return nil, err
 	}

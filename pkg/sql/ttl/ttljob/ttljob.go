@@ -113,7 +113,7 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 	var relationName string
 	var entirePKSpan roachpb.Span
 	if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		desc, err := descsCol.ByID(txn).WithObjFlags(tree.ObjectLookupFlags{}).Immutable().Table(ctx, details.TableID)
+		desc, err := descsCol.ByID(txn).WithoutNonPublic().Immutable().Table(ctx, details.TableID)
 		if err != nil {
 			return err
 		}

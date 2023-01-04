@@ -71,5 +71,5 @@ func (tc *Collection) GetMutableTypeVersionByID(
 func (tc *Collection) GetMutableTypeByID(
 	ctx context.Context, txn *kv.Txn, typeID descpb.ID, flags tree.ObjectLookupFlags,
 ) (*typedesc.Mutable, error) {
-	return tc.ByID(txn).WithObjFlags(flags).Mutable().Type(ctx, typeID)
+	return tc.ByID(txn).WithFlags(flags.CommonLookupFlags).Mutable().Type(ctx, typeID)
 }

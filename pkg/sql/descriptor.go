@@ -70,12 +70,7 @@ func (p *planner) createDatabase(
 	if dbID, err := p.Descriptors().LookupDatabaseID(ctx, p.txn, dbName); err == nil && dbID != descpb.InvalidID {
 		if database.IfNotExists {
 			// Check if the database is in a dropping state
-			flags := tree.DatabaseLookupFlags{
-				AvoidLeased:    true,
-				IncludeDropped: true,
-				IncludeOffline: true,
-			}
-			desc, err := p.Descriptors().ByID(p.txn).WithFlags(flags).Immutable().Database(ctx, dbID)
+			desc, err := p.Descriptors().ByID(p.txn).WithoutLeased().Immutable().Database(ctx, dbID)
 			if err != nil {
 				return nil, false, err
 			}
@@ -368,7 +363,7 @@ func (p *planner) maybeInitializeMultiRegionMetadata(
 
 // GetImmutableTableInterfaceByID is part of the EvalPlanner interface.
 func (p *planner) GetImmutableTableInterfaceByID(ctx context.Context, id int) (interface{}, error) {
-	desc, err := p.Descriptors().ByID(p.txn).WithObjFlags(tree.ObjectLookupFlags{}).Immutable().Table(ctx, descpb.ID(id))
+	desc, err := p.Descriptors().ByID(p.txn).WithoutNonPublic().Immutable().Table(ctx, descpb.ID(id))
 	if err != nil {
 		return nil, err
 	}

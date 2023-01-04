@@ -583,12 +583,7 @@ func (sc *SchemaChanger) getTargetDescriptor(ctx context.Context) (catalog.Descr
 	if err := sc.txn(ctx, func(
 		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 	) (err error) {
-		flags := tree.CommonLookupFlags{
-			AvoidLeased:    true,
-			IncludeOffline: true,
-			IncludeDropped: true,
-		}
-		desc, err = descriptors.ByID(txn).WithFlags(flags).Immutable().Desc(ctx, sc.descID)
+		desc, err = descriptors.ByID(txn).WithoutLeased().Immutable().Desc(ctx, sc.descID)
 		return err
 	}); err != nil {
 		return nil, err
@@ -892,9 +887,7 @@ func (sc *SchemaChanger) handlePermanentSchemaChangeError(
 // initialize the job running status.
 func (sc *SchemaChanger) initJobRunningStatus(ctx context.Context) error {
 	return sc.txn(ctx, func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) error {
-		desc, err := descriptors.ByID(txn).WithObjFlags(tree.ObjectLookupFlags{
-			CommonLookupFlags: tree.CommonLookupFlags{AvoidLeased: true},
-		}).Immutable().Table(ctx, sc.descID)
+		desc, err := descriptors.ByID(txn).WithoutNonPublic().WithoutLeased().Immutable().Table(ctx, sc.descID)
 		if err != nil {
 			return err
 		}
@@ -1109,7 +1102,7 @@ func (sc *SchemaChanger) RunStateMachineBeforeBackfill(ctx context.Context) erro
 		if err != nil {
 			return err
 		}
-		dbDesc, err := descsCol.ByID(txn).WithFlags(tree.DatabaseLookupFlags{AvoidLeased: true}).Immutable().Database(ctx, tbl.GetParentID())
+		dbDesc, err := descsCol.ByID(txn).WithoutNonPublic().WithoutLeased().Immutable().Database(ctx, tbl.GetParentID())
 		if err != nil {
 			return err
 		}
@@ -1361,14 +1354,14 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 			return err
 		}
 
-		dbDesc, err := descsCol.ByID(txn).WithFlags(tree.DatabaseLookupFlags{AvoidLeased: true}).Immutable().Database(ctx, scTable.GetParentID())
+		dbDesc, err := descsCol.ByID(txn).WithoutNonPublic().WithoutLeased().Immutable().Database(ctx, scTable.GetParentID())
 		if err != nil {
 			return err
 		}
 
 		collectReferencedTypeIDs := func() (catalog.DescriptorIDSet, error) {
 			typeLookupFn := func(id descpb.ID) (catalog.TypeDescriptor, error) {
-				desc, err := descsCol.ByID(txn).WithObjFlags(tree.ObjectLookupFlags{}).Immutable().Type(ctx, id)
+				desc, err := descsCol.ByID(txn).WithoutNonPublic().Immutable().Type(ctx, id)
 				if err != nil {
 					return nil, err
 				}

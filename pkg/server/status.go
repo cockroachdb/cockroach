@@ -62,7 +62,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insights"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
@@ -2470,8 +2469,7 @@ func (s *statusServer) HotRangesV2(
 					} else {
 						if err = s.sqlServer.distSQLServer.InternalExecutorFactory.DescsTxnWithExecutor(
 							ctx, s.db, nil, func(ctx context.Context, txn *kv.Txn, col *descs.Collection, ie sqlutil.InternalExecutor) error {
-								commonLookupFlags := tree.CommonLookupFlags{AvoidLeased: true}
-								desc, err := col.ByID(txn).WithFlags(commonLookupFlags).Immutable().Table(ctx, descpb.ID(tableID))
+								desc, err := col.ByID(txn).WithoutNonPublic().WithoutLeased().Immutable().Table(ctx, descpb.ID(tableID))
 								if err != nil {
 									return errors.Wrapf(err, "cannot get table descriptor with tableID: %d, %s", tableID, r.Desc)
 								}
@@ -2489,13 +2487,13 @@ func (s *statusServer) HotRangesV2(
 									}
 								}
 
-								if dbDesc, err := col.ByID(txn).WithFlags(commonLookupFlags).Immutable().Database(ctx, desc.GetParentID()); err != nil {
+								if dbDesc, err := col.ByID(txn).WithoutNonPublic().WithoutLeased().Immutable().Database(ctx, desc.GetParentID()); err != nil {
 									log.Warningf(ctx, "cannot get database by descriptor ID: %s: %v", r.Desc, err)
 								} else {
 									dbName = dbDesc.GetName()
 								}
 
-								if schemaDesc, err := col.ByID(txn).WithFlags(commonLookupFlags).Immutable().Schema(ctx, desc.GetParentSchemaID()); err != nil {
+								if schemaDesc, err := col.ByID(txn).WithoutNonPublic().WithoutLeased().Immutable().Schema(ctx, desc.GetParentSchemaID()); err != nil {
 									log.Warningf(ctx, "cannot get schema name for range descriptor: %s: %v", r.Desc, err)
 								} else {
 									schemaName = schemaDesc.GetName()

@@ -62,7 +62,7 @@ CREATE SCHEMA test_sc;
 	)
 
 	err := sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
-		funcDesc, err := col.ByID(txn).WithObjFlags(tree.ObjectLookupFlags{}).Immutable().Function(ctx, 109)
+		funcDesc, err := col.ByID(txn).WithoutNonPublic().Immutable().Function(ctx, 109)
 		require.NoError(t, err)
 		require.Equal(t, funcDesc.GetName(), "f")
 
@@ -145,7 +145,7 @@ SELECT nextval(105:::REGCLASS);`,
 	// DROP the function and make sure dependencies are cleared.
 	tDB.Exec(t, "DROP FUNCTION f")
 	err = sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
-		_, err := col.ByID(txn).WithObjFlags(tree.ObjectLookupFlags{}).Immutable().Function(ctx, 109)
+		_, err := col.ByID(txn).WithoutNonPublic().Immutable().Function(ctx, 109)
 		require.Error(t, err)
 		require.Regexp(t, "descriptor is being dropped", err.Error())
 
@@ -374,7 +374,7 @@ $$;
 			tDB.Exec(t, "SET use_declarative_schema_changer = off;")
 
 			err := sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
-				fnDesc, err := col.ByID(txn).WithObjFlags(tree.ObjectLookupFlags{}).Immutable().Function(ctx, 113)
+				fnDesc, err := col.ByID(txn).WithoutNonPublic().Immutable().Function(ctx, 113)
 				require.NoError(t, err)
 				require.Equal(t, "f", fnDesc.GetName())
 				require.True(t, fnDesc.Public())
@@ -385,7 +385,7 @@ $$;
 			tDB.Exec(t, tc.stmt)
 
 			err = sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
-				_, err := col.ByID(txn).WithObjFlags(tree.ObjectLookupFlags{}).Immutable().Function(ctx, 113)
+				_, err := col.ByID(txn).WithoutNonPublic().Immutable().Function(ctx, 113)
 				require.Error(t, err)
 				require.Regexp(t, "descriptor is being dropped", err.Error())
 				return nil
@@ -407,7 +407,7 @@ $$;
 			tDB.Exec(t, "SET use_declarative_schema_changer = on;")
 
 			err := sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
-				fnDesc, err := col.ByID(txn).WithObjFlags(tree.ObjectLookupFlags{}).Immutable().Function(ctx, 113)
+				fnDesc, err := col.ByID(txn).WithoutNonPublic().Immutable().Function(ctx, 113)
 				require.NoError(t, err)
 				require.Equal(t, "f", fnDesc.GetName())
 				require.True(t, fnDesc.Public())
@@ -418,7 +418,7 @@ $$;
 			tDB.Exec(t, tc.stmt)
 
 			err = sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
-				_, err := col.ByID(txn).WithObjFlags(tree.ObjectLookupFlags{}).Immutable().Function(ctx, 113)
+				_, err := col.ByID(txn).WithoutNonPublic().Immutable().Function(ctx, 113)
 				require.Error(t, err)
 				require.Regexp(t, "descriptor is being dropped", err.Error())
 				return nil

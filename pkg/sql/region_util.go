@@ -1278,7 +1278,7 @@ func (p *planner) ResetMultiRegionZoneConfigsForTable(ctx context.Context, id in
 // database's zone configuration to match what would have originally been set by
 // the multi-region syntax.
 func (p *planner) ResetMultiRegionZoneConfigsForDatabase(ctx context.Context, id int64) error {
-	dbDesc, err := p.Descriptors().ByID(p.txn).WithFlags(tree.DatabaseLookupFlags{AvoidLeased: true}).Immutable().Database(ctx, descpb.ID(id))
+	dbDesc, err := p.Descriptors().ByID(p.txn).WithoutNonPublic().WithoutLeased().Immutable().Database(ctx, descpb.ID(id))
 	if err != nil {
 		return err
 	}
@@ -1584,10 +1584,14 @@ func getDBAndRegionEnumDescs(
 	useCache bool,
 	includeOffline bool,
 ) (dbDesc catalog.DatabaseDescriptor, regionEnumDesc catalog.TypeDescriptor, _ error) {
-	dbDesc, err := descsCol.ByID(txn).WithFlags(tree.DatabaseLookupFlags{
-		AvoidLeased:    !useCache,
-		IncludeOffline: includeOffline,
-	}).Immutable().Database(ctx, dbID)
+	b := descsCol.ByID(txn).WithoutDropped()
+	if !includeOffline {
+		b = b.WithoutOffline()
+	}
+	if !useCache {
+		b = b.WithoutLeased()
+	}
+	dbDesc, err := b.Immutable().Database(ctx, dbID)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -1598,10 +1602,7 @@ func getDBAndRegionEnumDescs(
 	if err != nil {
 		return nil, nil, err
 	}
-	regionEnumDesc, err = descsCol.ByID(txn).WithFlags(tree.CommonLookupFlags{
-		AvoidLeased:    !useCache,
-		IncludeOffline: includeOffline,
-	}).Immutable().Type(ctx, regionEnumID)
+	regionEnumDesc, err = b.Immutable().Type(ctx, regionEnumID)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -2461,8 +2462,7 @@ func (p *planner) OptimizeSystemDatabase(ctx context.Context) error {
 
 	// Retrieve the system database descriptor and ensure it supports
 	// multi-region
-	options := tree.CommonLookupFlags{AvoidLeased: true}
-	systemDB, err := p.Descriptors().ByID(p.txn).WithFlags(options).Immutable().Database(ctx, keys.SystemDatabaseID)
+	systemDB, err := p.Descriptors().ByID(p.txn).WithoutNonPublic().WithoutLeased().Immutable().Database(ctx, keys.SystemDatabaseID)
 	if err != nil {
 		return err
 	}
@@ -2471,7 +2471,7 @@ func (p *planner) OptimizeSystemDatabase(ctx context.Context) error {
 		return errors.Wrap(err, "system database is not multi-region")
 	}
 	enumTypeDesc, err := p.Descriptors().GetMutableTypeByID(ctx, p.txn, regionEnumID, tree.ObjectLookupFlags{
-		CommonLookupFlags: options,
+		CommonLookupFlags: tree.CommonLookupFlags{AvoidLeased: true},
 	})
 	if err != nil {
 		return err
