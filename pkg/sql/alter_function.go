@@ -133,7 +133,7 @@ func (n *alterFunctionRenameNode) startExec(params runParams) error {
 		return err
 	}
 
-	scDesc, err := params.p.Descriptors().ByID(params.p.txn).Mutable().Schema(params.ctx, fnDesc.GetParentSchemaID())
+	scDesc, err := params.p.Descriptors().MutableByID(params.p.txn).Schema(params.ctx, fnDesc.GetParentSchemaID())
 	if err != nil {
 		return err
 	}
@@ -302,7 +302,7 @@ func (n *alterFunctionSetSchemaNode) startExec(params runParams) error {
 		// No-op if moving to the same schema.
 		return nil
 	}
-	targetSc, err := params.p.Descriptors().ByID(params.p.txn).Mutable().Schema(params.ctx, sc.GetID())
+	targetSc, err := params.p.Descriptors().MutableByID(params.p.txn).Schema(params.ctx, sc.GetID())
 	if err != nil {
 		return err
 	}
@@ -322,7 +322,7 @@ func (n *alterFunctionSetSchemaNode) startExec(params runParams) error {
 		)
 	}
 
-	sourceSc, err := params.p.Descriptors().ByID(params.p.txn).Mutable().Schema(params.ctx, fnDesc.GetParentSchemaID())
+	sourceSc, err := params.p.Descriptors().MutableByID(params.p.txn).Schema(params.ctx, fnDesc.GetParentSchemaID())
 	if err != nil {
 		return err
 	}

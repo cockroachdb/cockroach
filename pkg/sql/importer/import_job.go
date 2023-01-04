@@ -134,7 +134,7 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 				}
 
 				// The public schema is expected to always be present in the database for 22.2+.
-				dbDesc, err := descsCol.ByID(txn).WithoutNonPublic().Immutable().Database(ctx, details.ParentID)
+				dbDesc, err := descsCol.ByIDWithLeased(txn).WithoutNonPublic().Get().Database(ctx, details.ParentID)
 				if err != nil {
 					return err
 				}
@@ -149,7 +149,7 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 
 				// Telemetry for multi-region.
 				for _, table := range preparedDetails.Tables {
-					dbDesc, err := descsCol.ByID(txn).WithoutNonPublic().Immutable().Database(ctx, table.Desc.GetParentID())
+					dbDesc, err := descsCol.ByIDWithLeased(txn).WithoutNonPublic().Get().Database(ctx, table.Desc.GetParentID())
 					if err != nil {
 						return err
 					}
@@ -472,7 +472,7 @@ func prepareExistingTablesForIngestion(
 	}
 
 	// Note that desc is just used to verify that the version matches.
-	importing, err := descsCol.ByID(txn).Mutable().Table(ctx, desc.ID)
+	importing, err := descsCol.MutableByID(txn).Table(ctx, desc.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -624,7 +624,7 @@ func (r *importResumer) prepareSchemasForIngestion(
 	schemaMetadata.schemaPreparedDetails.Schemas = make([]jobspb.ImportDetails_Schema,
 		len(details.Schemas))
 
-	desc, err := descsCol.ByID(txn).Mutable().Desc(ctx, details.ParentID)
+	desc, err := descsCol.MutableByID(txn).Desc(ctx, details.ParentID)
 	if err != nil {
 		return nil, err
 	}
@@ -700,7 +700,7 @@ func bindImportStartTime(
 	if err := sql.DescsTxn(ctx, p.ExecCfg(), func(
 		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
 	) error {
-		mutableDesc, err := descsCol.ByID(txn).Mutable().Table(ctx, id)
+		mutableDesc, err := descsCol.MutableByID(txn).Table(ctx, id)
 		if err != nil {
 			return err
 		}
@@ -752,7 +752,7 @@ func (r *importResumer) parseBundleSchemaIfNeeded(ctx context.Context, phs inter
 			if err := sql.DescsTxn(ctx, p.ExecCfg(), func(
 				ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 			) (err error) {
-				dbDesc, err = descriptors.ByID(txn).WithoutNonPublic().WithoutLeased().Immutable().Database(ctx, parentID)
+				dbDesc, err = descriptors.ByID(txn).WithoutNonPublic().Get().Database(ctx, parentID)
 				if err != nil {
 					return err
 				}
@@ -816,7 +816,7 @@ func getPublicSchemaDescForDatabase(
 		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 	) error {
 		publicSchemaID := db.GetSchemaID(tree.PublicSchema)
-		scDesc, err = descriptors.ByID(txn).WithoutNonPublic().Immutable().Schema(ctx, publicSchemaID)
+		scDesc, err = descriptors.ByIDWithLeased(txn).WithoutNonPublic().Get().Schema(ctx, publicSchemaID)
 		return err
 	}); err != nil {
 		return nil, err
@@ -942,7 +942,7 @@ func (r *importResumer) publishTables(
 	) error {
 		b := txn.NewBatch()
 		for _, tbl := range details.Tables {
-			newTableDesc, err := descsCol.ByID(txn).Mutable().Table(ctx, tbl.Desc.ID)
+			newTableDesc, err := descsCol.MutableByID(txn).Table(ctx, tbl.Desc.ID)
 			if err != nil {
 				return err
 			}
@@ -1063,7 +1063,7 @@ func (r *importResumer) publishSchemas(ctx context.Context, execCfg *sql.Executo
 	) error {
 		b := txn.NewBatch()
 		for _, schema := range details.Schemas {
-			newDesc, err := descsCol.ByID(txn).Mutable().Desc(ctx, schema.Desc.GetID())
+			newDesc, err := descsCol.MutableByID(txn).Desc(ctx, schema.Desc.GetID())
 			if err != nil {
 				return err
 			}
@@ -1175,7 +1175,7 @@ func (r *importResumer) checkForUDTModification(
 		ctx context.Context, txn *kv.Txn, col *descs.Collection,
 		savedTypeDesc *descpb.TypeDescriptor,
 	) error {
-		typeDesc, err := col.ByID(txn).WithoutLeased().Immutable().Type(ctx, savedTypeDesc.GetID())
+		typeDesc, err := col.ByID(txn).Get().Type(ctx, savedTypeDesc.GetID())
 		if err != nil {
 			return errors.Wrap(err, "resolving type descriptor when checking version mismatch")
 		}
@@ -1449,7 +1449,7 @@ func (r *importResumer) dropTables(
 	var intoTable catalog.TableDescriptor
 	for _, tbl := range details.Tables {
 		if !tbl.IsNew {
-			desc, err := descsCol.ByID(txn).Mutable().Table(ctx, tbl.Desc.ID)
+			desc, err := descsCol.MutableByID(txn).Table(ctx, tbl.Desc.ID)
 			if err != nil {
 				return err
 			}
@@ -1526,7 +1526,7 @@ func (r *importResumer) dropTables(
 
 	// Bring the IMPORT INTO table back online
 	b := txn.NewBatch()
-	intoDesc, err := descsCol.ByID(txn).Mutable().Table(ctx, intoTable.GetID())
+	intoDesc, err := descsCol.MutableByID(txn).Table(ctx, intoTable.GetID())
 	if err != nil {
 		return err
 	}
@@ -1551,7 +1551,7 @@ func (r *importResumer) dropNewTables(
 	tablesToGC := make([]descpb.ID, 0, len(details.Tables))
 	toWrite := make([]*tabledesc.Mutable, 0, len(details.Tables))
 	for _, tbl := range details.Tables {
-		newTableDesc, err := descsCol.ByID(txn).Mutable().Table(ctx, tbl.Desc.ID)
+		newTableDesc, err := descsCol.MutableByID(txn).Table(ctx, tbl.Desc.ID)
 		if err != nil {
 			return err
 		}
@@ -1620,7 +1620,7 @@ func (r *importResumer) dropSchemas(
 	}
 
 	// Resolve the database descriptor.
-	desc, err := descsCol.ByID(txn).Mutable().Desc(ctx, details.ParentID)
+	desc, err := descsCol.MutableByID(txn).Desc(ctx, details.ParentID)
 	if err != nil {
 		return nil, err
 	}
@@ -1633,7 +1633,7 @@ func (r *importResumer) dropSchemas(
 
 	droppedSchemaIDs := make([]descpb.ID, 0)
 	for _, schema := range details.Schemas {
-		desc, err := descsCol.ByID(txn).Mutable().Desc(ctx, schema.Desc.ID)
+		desc, err := descsCol.MutableByID(txn).Desc(ctx, schema.Desc.ID)
 		if err != nil {
 			return nil, err
 		}

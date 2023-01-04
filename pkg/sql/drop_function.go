@@ -134,7 +134,7 @@ func (p *planner) matchUDF(
 func (p *planner) checkPrivilegesForDropFunction(
 	ctx context.Context, fnID descpb.ID,
 ) (*funcdesc.Mutable, error) {
-	mutable, err := p.Descriptors().ByID(p.Txn()).Mutable().Function(ctx, fnID)
+	mutable, err := p.Descriptors().MutableByID(p.Txn()).Function(ctx, fnID)
 	if err != nil {
 		return nil, err
 	}
@@ -179,7 +179,7 @@ func (p *planner) dropFunctionImpl(ctx context.Context, fnMutable *funcdesc.Muta
 		// TODO(chengxiong): remove backreference from UDFs that this UDF has
 		// reference to. This is needed when we allow UDFs being referenced by
 		// UDFs.
-		refMutable, err := p.Descriptors().ByID(p.txn).Mutable().Table(ctx, id)
+		refMutable, err := p.Descriptors().MutableByID(p.txn).Table(ctx, id)
 		if err != nil {
 			return err
 		}
@@ -209,7 +209,7 @@ func (p *planner) dropFunctionImpl(ctx context.Context, fnMutable *funcdesc.Muta
 	}
 
 	// Remove function signature from schema.
-	scDesc, err := p.Descriptors().ByID(p.Txn()).Mutable().Schema(ctx, fnMutable.ParentSchemaID)
+	scDesc, err := p.Descriptors().MutableByID(p.Txn()).Schema(ctx, fnMutable.ParentSchemaID)
 	if err != nil {
 		return err
 	}

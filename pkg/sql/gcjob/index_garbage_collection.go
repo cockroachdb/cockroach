@@ -121,7 +121,7 @@ func gcIndexes(
 		removeIndexZoneConfigs := func(
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 		) error {
-			freshParentTableDesc, err := descriptors.ByID(txn).Mutable().Table(ctx, parentID)
+			freshParentTableDesc, err := descriptors.MutableByID(txn).Table(ctx, parentID)
 			if err != nil {
 				return err
 			}
@@ -202,7 +202,7 @@ func deleteIndexZoneConfigsAfterGC(
 		removeIndexZoneConfigs := func(
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 		) error {
-			freshParentTableDesc, err := descriptors.ByID(txn).Mutable().Table(ctx, parentID)
+			freshParentTableDesc, err := descriptors.MutableByID(txn).Table(ctx, parentID)
 			if err != nil {
 				return err
 			}

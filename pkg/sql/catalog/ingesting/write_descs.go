@@ -213,7 +213,7 @@ func WriteDescriptors(
 			if mut, ok := fn.(*funcdesc.Mutable); ok {
 				mut.Privileges = updatedPrivileges
 			} else {
-				log.Fatalf(ctx, "wrong type for function %d, %T, expected funcdesc.Mutable", fn.GetID(), fn)
+				log.Fatalf(ctx, "wrong type for function %d, %T, expected Mutable", fn.GetID(), fn)
 			}
 		}
 		if err := descsCol.WriteDescToBatch(
@@ -239,7 +239,7 @@ func WriteDescriptors(
 func processTableForMultiRegion(
 	ctx context.Context, txn *kv.Txn, descsCol *descs.Collection, table catalog.TableDescriptor,
 ) error {
-	dbDesc, err := descsCol.ByID(txn).WithoutDropped().WithoutLeased().Immutable().Database(ctx, table.GetParentID())
+	dbDesc, err := descsCol.ByID(txn).WithoutDropped().Get().Database(ctx, table.GetParentID())
 	if err != nil {
 		return err
 	}

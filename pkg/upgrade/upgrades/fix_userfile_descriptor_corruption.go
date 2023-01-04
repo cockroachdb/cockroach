@@ -58,7 +58,7 @@ func fixInvalidObjectsThatLookLikeBadUserfileConstraint(
 				errString := string(tree.MustBeDString(row[4]))
 				if veryLikelyKnownUserfileBreakage(ctx, txn, descriptors, tableID, errString) {
 					log.Infof(ctx, "attempting to fix invalid table descriptor %d assuming it is a userfile-related table", tableID)
-					mutTableDesc, err := descriptors.ByID(txn).Mutable().Table(ctx, tableID)
+					mutTableDesc, err := descriptors.MutableByID(txn).Table(ctx, tableID)
 					if err != nil {
 						return err
 					}
@@ -88,7 +88,7 @@ func veryLikelyKnownUserfileBreakage(
 		return false
 	}
 
-	tableDesc, err := descriptors.ByID(txn).Immutable().Table(ctx, id)
+	tableDesc, err := descriptors.ByIDWithLeased(txn).Get().Table(ctx, id)
 	if err != nil {
 		return false
 	}
@@ -130,7 +130,7 @@ func mutationsLookLikeuserfilePayloadCorruption(
 	mutation := tableDesc.AllMutations()[0]
 	if mutation.Adding() && mutation.DeleteOnly() {
 		if fkConstraint := mutation.AsForeignKey(); fkConstraint != nil {
-			targetTableDesc, err := descriptors.ByID(txn).Immutable().Table(ctx, fkConstraint.GetReferencedTableID())
+			targetTableDesc, err := descriptors.ByIDWithLeased(txn).Get().Table(ctx, fkConstraint.GetReferencedTableID())
 			if err != nil {
 				return false
 			}

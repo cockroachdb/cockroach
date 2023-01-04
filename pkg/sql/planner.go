@@ -604,7 +604,7 @@ func (p *planner) ResolveTableName(ctx context.Context, tn *tree.TableName) (tre
 func (p *planner) LookupTableByID(
 	ctx context.Context, tableID descpb.ID,
 ) (catalog.TableDescriptor, error) {
-	table, err := p.byIDGetterBuilder().WithoutNonPublic().Immutable().Table(ctx, tableID)
+	table, err := p.byIDGetterBuilder().WithoutNonPublic().Get().Table(ctx, tableID)
 	if err != nil {
 		return nil, err
 	}

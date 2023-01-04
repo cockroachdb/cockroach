@@ -79,7 +79,7 @@ func (mu metadataUpdater) DeleteDatabaseRoleSettings(ctx context.Context, dbID d
 		return nil
 	}
 	// Bump the table version for the role settings table when we modify it.
-	desc, err := mu.descriptors.ByID(mu.txn).Mutable().Table(ctx, keys.DatabaseRoleSettingsTableID)
+	desc, err := mu.descriptors.MutableByID(mu.txn).Table(ctx, keys.DatabaseRoleSettingsTableID)
 	if err != nil {
 		return err
 	}

@@ -70,7 +70,7 @@ func (p *planner) AlterTableLocality(
 	}
 
 	// Ensure that the database is multi-region enabled.
-	dbDesc, err := p.Descriptors().ByID(p.txn).WithoutNonPublic().WithoutLeased().Immutable().Database(ctx, tableDesc.GetParentID())
+	dbDesc, err := p.Descriptors().ByID(p.txn).WithoutNonPublic().Get().Database(ctx, tableDesc.GetParentID())
 	if err != nil {
 		return nil, err
 	}
@@ -114,7 +114,7 @@ func (n *alterTableSetLocalityNode) alterTableLocalityGlobalToRegionalByTable(
 		)
 	}
 
-	dbDesc, err := params.p.Descriptors().ByID(params.p.txn).WithoutNonPublic().WithoutLeased().Immutable().Database(params.ctx, n.tableDesc.ParentID)
+	dbDesc, err := params.p.Descriptors().ByID(params.p.txn).WithoutNonPublic().Get().Database(params.ctx, n.tableDesc.ParentID)
 	if err != nil {
 		return err
 	}
@@ -176,7 +176,7 @@ func (n *alterTableSetLocalityNode) alterTableLocalityRegionalByTableToRegionalB
 		)
 	}
 
-	dbDesc, err := params.p.Descriptors().ByID(params.p.txn).WithoutNonPublic().WithoutLeased().Immutable().Database(params.ctx, n.tableDesc.ParentID)
+	dbDesc, err := params.p.Descriptors().ByID(params.p.txn).WithoutNonPublic().Get().Database(params.ctx, n.tableDesc.ParentID)
 	if err != nil {
 		return err
 	}
@@ -653,7 +653,7 @@ func setNewLocalityConfig(
 	descsCol *descs.Collection,
 ) error {
 	getMultiRegionTypeDesc := func() (*typedesc.Mutable, error) {
-		dbDesc, err := descsCol.ByID(txn).WithoutNonPublic().WithoutLeased().Immutable().Database(ctx, desc.GetParentID())
+		dbDesc, err := descsCol.ByID(txn).WithoutNonPublic().Get().Database(ctx, desc.GetParentID())
 		if err != nil {
 			return nil, err
 		}
@@ -662,7 +662,7 @@ func setNewLocalityConfig(
 		if err != nil {
 			return nil, err
 		}
-		return descsCol.ByID(txn).Mutable().Type(ctx, regionEnumID)
+		return descsCol.MutableByID(txn).Type(ctx, regionEnumID)
 	}
 	// If there was a dependency before on the multi-region enum before the
 	// new locality is set, we must unlink the dependency.

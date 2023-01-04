@@ -56,7 +56,7 @@ func (p *planner) GetSerialSequenceNameFromColumn(
 			//       as well as backward compatibility) so we're using this heuristic for now.
 			// TODO(#52487): fix this up.
 			if col.NumUsesSequences() == 1 {
-				seq, err := p.Descriptors().ByID(p.txn).WithoutNonPublic().Immutable().Table(ctx, col.GetUsesSequenceID(0))
+				seq, err := p.Descriptors().ByIDWithLeased(p.txn).WithoutNonPublic().Get().Table(ctx, col.GetUsesSequenceID(0))
 				if err != nil {
 					return nil, err
 				}
@@ -73,7 +73,7 @@ func (p *planner) IncrementSequenceByID(ctx context.Context, seqID int64) (int64
 	if p.EvalContext().TxnReadOnly {
 		return 0, readOnlyError("nextval()")
 	}
-	descriptor, err := p.Descriptors().ByID(p.txn).WithoutNonPublic().Immutable().Table(ctx, descpb.ID(seqID))
+	descriptor, err := p.Descriptors().ByIDWithLeased(p.txn).WithoutNonPublic().Get().Table(ctx, descpb.ID(seqID))
 	if err != nil {
 		return 0, err
 	}
@@ -245,7 +245,7 @@ func boundsExceededError(descriptor catalog.TableDescriptor) error {
 func (p *planner) GetLatestValueInSessionForSequenceByID(
 	ctx context.Context, seqID int64,
 ) (int64, error) {
-	descriptor, err := p.Descriptors().ByID(p.txn).WithoutNonPublic().Immutable().Table(ctx, descpb.ID(seqID))
+	descriptor, err := p.Descriptors().ByIDWithLeased(p.txn).WithoutNonPublic().Get().Table(ctx, descpb.ID(seqID))
 	if err != nil {
 		return 0, err
 	}
@@ -283,7 +283,7 @@ func (p *planner) SetSequenceValueByID(
 		return readOnlyError("setval()")
 	}
 
-	descriptor, err := p.Descriptors().ByID(p.txn).WithoutNonPublic().Immutable().Table(ctx, descpb.ID(seqID))
+	descriptor, err := p.Descriptors().ByIDWithLeased(p.txn).WithoutNonPublic().Get().Table(ctx, descpb.ID(seqID))
 	if err != nil {
 		return err
 	}
@@ -507,7 +507,7 @@ func removeSequenceOwnerIfExists(
 	if !opts.HasOwner() {
 		return nil
 	}
-	tableDesc, err := p.Descriptors().ByID(p.txn).Mutable().Table(ctx, opts.SequenceOwner.OwnerTableID)
+	tableDesc, err := p.Descriptors().MutableByID(p.txn).Table(ctx, opts.SequenceOwner.OwnerTableID)
 	if err != nil {
 		// Special case error swallowing for #50711 and #50781, which can cause a
 		// column to own sequences that have been dropped/do not exist.
@@ -754,7 +754,7 @@ func (p *planner) dropSequencesOwnedByCol(
 	}
 
 	for _, sequenceID := range colOwnsSequenceIDs {
-		seqDesc, err := p.Descriptors().ByID(p.txn).Mutable().Table(ctx, sequenceID)
+		seqDesc, err := p.Descriptors().MutableByID(p.txn).Table(ctx, sequenceID)
 		// Special case error swallowing for #50781, which can cause a
 		// column to own sequences that do not exist.
 		if err != nil {
@@ -794,7 +794,7 @@ func (p *planner) removeSequenceDependencies(
 	for i := 0; i < col.NumUsesSequences(); i++ {
 		sequenceID := col.GetUsesSequenceID(i)
 		// Get the sequence descriptor so we can remove the reference from it.
-		seqDesc, err := p.Descriptors().ByID(p.txn).Mutable().Table(ctx, sequenceID)
+		seqDesc, err := p.Descriptors().MutableByID(p.txn).Table(ctx, sequenceID)
 		if err != nil {
 			return err
 		}

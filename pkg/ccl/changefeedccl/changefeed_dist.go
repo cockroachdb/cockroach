@@ -148,7 +148,7 @@ func fetchTableDescriptors(
 		// and lie within the primary index span. Deduplication is important
 		// here as requesting the same span twice will deadlock.
 		return targets.EachTableID(func(id catid.DescID) error {
-			tableDesc, err := descriptors.ByID(txn).WithoutNonPublic().WithoutLeased().Immutable().Table(ctx, id)
+			tableDesc, err := descriptors.ByID(txn).WithoutNonPublic().Get().Table(ctx, id)
 			if err != nil {
 				return err
 			}

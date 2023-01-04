@@ -204,7 +204,7 @@ func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, erro
 		fqTableName = n.p.ResolvedName(t).FQString()
 
 	case *tree.TableRef:
-		tableDesc, err = n.p.byIDGetterBuilder().WithoutNonPublic().Immutable().Table(ctx, descpb.ID(t.TableID))
+		tableDesc, err = n.p.byIDGetterBuilder().WithoutNonPublic().Get().Table(ctx, descpb.ID(t.TableID))
 		if err != nil {
 			return nil, err
 		}

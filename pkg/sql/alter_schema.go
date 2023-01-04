@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/decodeusername"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -74,7 +73,7 @@ func (p *planner) AlterSchema(ctx context.Context, n *tree.AlterSchema) (planNod
 	case catalog.SchemaPublic, catalog.SchemaVirtual, catalog.SchemaTemporary:
 		return nil, pgerror.Newf(pgcode.InvalidSchemaName, "cannot modify schema %q", n.Schema.String())
 	case catalog.SchemaUserDefined:
-		desc, err := p.Descriptors().ByID(p.txn).Mutable().Schema(ctx, schema.GetID())
+		desc, err := p.Descriptors().MutableByID(p.txn).Schema(ctx, schema.GetID())
 		if err != nil {
 			return nil, err
 		}
@@ -124,9 +123,7 @@ func (n *alterSchemaNode) startExec(params runParams) error {
 		}
 
 		if err := maybeFailOnDependentDescInRename(
-			params.ctx, params.p, n.db, n.desc, func(b descs.ByIDGetterBuilder) descs.ByIDGetterBuilder {
-				return b.WithoutNonPublic().WithoutLeased()
-			}, catalog.Schema,
+			params.ctx, params.p, n.db, n.desc, false /* withLeased */, catalog.Schema,
 		); err != nil {
 			return err
 		}
@@ -174,7 +171,7 @@ func (p *planner) alterSchemaOwner(
 	}
 
 	// The user must also have CREATE privilege on the schema's database.
-	parentDBDesc, err := p.Descriptors().ByID(p.txn).Mutable().Desc(ctx, scDesc.GetParentID())
+	parentDBDesc, err := p.Descriptors().MutableByID(p.txn).Desc(ctx, scDesc.GetParentID())
 	if err != nil {
 		return err
 	}

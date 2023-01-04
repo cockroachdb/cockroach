@@ -197,7 +197,7 @@ func (p *planner) waitForDescriptorSchemaChanges(
 			if err := txn.SetFixedTimestamp(ctx, now); err != nil {
 				return err
 			}
-			desc, err := descriptors.ByID(txn).WithoutNonPublic().WithoutLeased().Immutable().Desc(ctx, descID)
+			desc, err := descriptors.ByID(txn).WithoutNonPublic().Get().Desc(ctx, descID)
 			if err != nil {
 				return err
 			}

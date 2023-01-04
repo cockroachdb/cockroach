@@ -439,7 +439,7 @@ func createConstraintCheckOperations(
 		if ck := constraint.AsCheck(); ck != nil {
 			op = newSQLCheckConstraintCheckOperation(tableName, tableDesc, ck, asOf)
 		} else if fk := constraint.AsForeignKey(); fk != nil {
-			referencedTable, err := p.Descriptors().ByID(p.Txn()).WithoutNonPublic().Immutable().Table(ctx, fk.GetReferencedTableID())
+			referencedTable, err := p.Descriptors().ByIDWithLeased(p.Txn()).WithoutNonPublic().Get().Table(ctx, fk.GetReferencedTableID())
 			if err != nil {
 				return nil, err
 			}

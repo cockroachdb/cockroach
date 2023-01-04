@@ -272,7 +272,7 @@ func (tf *schemaFeed) primeInitialTableDescs(ctx context.Context) error {
 		}
 		// Note that all targets are currently guaranteed to be tables.
 		return tf.targets.EachTableID(func(id descpb.ID) error {
-			tableDesc, err := descriptors.ByID(txn).WithoutNonPublic().WithoutLeased().Immutable().Table(ctx, id)
+			tableDesc, err := descriptors.ByID(txn).WithoutNonPublic().Get().Table(ctx, id)
 			if err != nil {
 				return err
 			}

@@ -159,7 +159,7 @@ func (d *jobExecutionDeps) WithTxnInJob(ctx context.Context, fn scrun.JobTxnFunc
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 		) error {
 			for _, id := range tableStatsToRefresh {
-				tbl, err := descriptors.ByID(txn).WithoutNonPublic().Immutable().Table(ctx, id)
+				tbl, err := descriptors.ByIDWithLeased(txn).WithoutNonPublic().Get().Table(ctx, id)
 				if err != nil {
 					return err
 				}

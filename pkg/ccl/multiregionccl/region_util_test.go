@@ -123,11 +123,11 @@ func getEnumMembers(
 	t.Helper()
 	enumMembers := make(map[string][]byte)
 	err := sql.TestingDescsTxn(ctx, ts, func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
-		dbDesc, err := descsCol.ByID(txn).WithoutNonPublic().Immutable().Database(ctx, dbID)
+		dbDesc, err := descsCol.ByIDWithLeased(txn).WithoutNonPublic().Get().Database(ctx, dbID)
 		require.NoError(t, err)
 		regionEnumID, err := dbDesc.MultiRegionEnumID()
 		require.NoError(t, err)
-		regionEnumDesc, err := descsCol.ByID(txn).WithoutNonPublic().Immutable().Type(ctx, regionEnumID)
+		regionEnumDesc, err := descsCol.ByIDWithLeased(txn).WithoutNonPublic().Get().Type(ctx, regionEnumID)
 		require.NoError(t, err)
 		for ord := 0; ord < regionEnumDesc.NumEnumMembers(); ord++ {
 			enumMembers[regionEnumDesc.GetMemberLogicalRepresentation(ord)] = regionEnumDesc.GetMemberPhysicalRepresentation(ord)

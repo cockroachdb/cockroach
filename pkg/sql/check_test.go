@@ -56,7 +56,7 @@ func TestValidateTTLScheduledJobs(t *testing.T) {
 				require.NoError(t, sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) (err error) {
 					// We need the collection to read the descriptor from storage for
 					// the subsequent write to succeed.
-					tableDesc, err = col.ByID(txn).Mutable().Table(ctx, tableDesc.GetID())
+					tableDesc, err = col.MutableByID(txn).Table(ctx, tableDesc.GetID())
 					tableDesc.RowLevelTTL.ScheduleID = 0
 					tableDesc.Version++
 					if err != nil {

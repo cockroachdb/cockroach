@@ -92,7 +92,7 @@ func (p *planner) getNonTemporarySchemaForCreate(
 	case catalog.SchemaPublic:
 		return sc, nil
 	case catalog.SchemaUserDefined:
-		return p.Descriptors().ByID(p.txn).Mutable().Schema(ctx, sc.GetID())
+		return p.Descriptors().MutableByID(p.txn).Schema(ctx, sc.GetID())
 	case catalog.SchemaVirtual:
 		return nil, pgerror.Newf(pgcode.InsufficientPrivilege, "schema cannot be modified: %q", scName)
 	default:
@@ -445,7 +445,7 @@ func (n *createTableNode) startExec(params runParams) error {
 	}
 
 	if desc.LocalityConfig != nil {
-		dbDesc, err := params.p.Descriptors().ByID(params.p.txn).WithoutNonPublic().WithoutLeased().Immutable().Database(params.ctx, desc.ParentID)
+		dbDesc, err := params.p.Descriptors().ByID(params.p.txn).WithoutNonPublic().Get().Database(params.ctx, desc.ParentID)
 		if err != nil {
 			return errors.Wrap(err, "error resolving database for multi-region")
 		}
@@ -474,7 +474,7 @@ func (n *createTableNode) startExec(params runParams) error {
 			if err != nil {
 				return err
 			}
-			typeDesc, err := params.p.Descriptors().ByID(params.p.txn).Mutable().Type(params.ctx, regionEnumID)
+			typeDesc, err := params.p.Descriptors().MutableByID(params.p.txn).Type(params.ctx, regionEnumID)
 			if err != nil {
 				return errors.Wrap(err, "error resolving multi-region enum")
 			}

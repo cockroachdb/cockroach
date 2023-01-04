@@ -86,7 +86,7 @@ func init() {
 		ctx context.Context, t *testing.T, s serverutils.TestServerInterface, id descpb.ID,
 	) {
 		require.NoError(t, sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
-			t, err := col.ByID(txn).Mutable().Table(ctx, id)
+			t, err := col.MutableByID(txn).Table(ctx, id)
 			if err != nil {
 				return err
 			}
@@ -2437,7 +2437,7 @@ func TestLeaseWithOfflineTables(t *testing.T) {
 			flags := tree.ObjectLookupFlagsWithRequiredTableKind(tree.ResolveRequireTableDesc)
 			flags.CommonLookupFlags.IncludeOffline = true
 			flags.CommonLookupFlags.IncludeDropped = true
-			desc, err := descsCol.ByID(txn).Mutable().Table(ctx, testTableID())
+			desc, err := descsCol.MutableByID(txn).Table(ctx, testTableID())
 			require.NoError(t, err)
 			require.Equal(t, desc.State, expected)
 			desc.State = next

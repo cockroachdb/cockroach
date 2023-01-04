@@ -519,32 +519,37 @@ func defaultUnleasedFlags() (f getterFlags) {
 	return f
 }
 
-// ByID returns a ByIDGetterBuilder.
+// ByID returns a ByIDGetterBuilder set up to look up descriptors by ID
+// in all layers except the leased descriptors layer. To opt in to the
+// leased descriptors, use ByIDWithLeased instead.
 func (tc *Collection) ByID(txn *kv.Txn) ByIDGetterBuilder {
-	return ByIDGetterBuilder(makeGetterBase(txn, tc, defaultFlags()))
+	b := tc.ByIDWithLeased(txn)
+	b.flags.layerFilters.withoutLeased = true
+	return b
+}
+
+// ByIDWithLeased is like ByID but also looks up in the leased descriptors
+// layer. This may save a round-trip to KV at the expense of the descriptor
+// being slightly stale (one version off).
+func (tc *Collection) ByIDWithLeased(txn *kv.Txn) ByIDGetterBuilder {
+	return ByIDGetterBuilder(makeGetterBase(txn, tc, getterFlags{}))
+}
+
+// MutableByID returns a MutableByIDGetter.
+// This convenience method exists because mutable lookups never require
+// any customization.
+func (tc *Collection) MutableByID(txn *kv.Txn) MutableByIDGetter {
+	return tc.ByID(txn).mutable()
 }
 
 // ByIDGetterBuilder is a builder object for ByIDGetter and MutableByIDGetter.
 type ByIDGetterBuilder getterBase
-
-// WithFlags configures the ByIDGetterBuilder with the given flags.
-func (b ByIDGetterBuilder) WithFlags(flags tree.CommonLookupFlags) ByIDGetterBuilder {
-	b.flags = fromCommonFlags(flags)
-	return b
-}
 
 // WithoutSynthetic configures the ByIDGetterBuilder to bypass the synthetic
 // layer. This is useful mainly for the declarative schema changer, which is
 // the main client of this layer.
 func (b ByIDGetterBuilder) WithoutSynthetic() ByIDGetterBuilder {
 	b.flags.layerFilters.withoutSynthetic = true
-	return b
-}
-
-// WithoutLeased configures the ByIDGetterBuilder to bypass the leasing layer.
-// The leasing layer may contain descriptors which are slightly stale.
-func (b ByIDGetterBuilder) WithoutLeased() ByIDGetterBuilder {
-	b.flags.layerFilters.withoutLeased = true
 	return b
 }
 
@@ -578,8 +583,8 @@ func (b ByIDGetterBuilder) WithoutOtherParent(parentID catid.DescID) ByIDGetterB
 	return b
 }
 
-// Mutable builds a MutableByIDGetter.
-func (b ByIDGetterBuilder) Mutable() MutableByIDGetter {
+// mutable builds a MutableByIDGetter.
+func (b ByIDGetterBuilder) mutable() MutableByIDGetter {
 	b.flags.isOptional = false
 	b.flags.isMutable = true
 	b.flags.layerFilters.withoutLeased = true
@@ -588,8 +593,8 @@ func (b ByIDGetterBuilder) Mutable() MutableByIDGetter {
 	return MutableByIDGetter(b)
 }
 
-// Immutable builds a ByIDGetter.
-func (b ByIDGetterBuilder) Immutable() ByIDGetter {
+// Get builds a ByIDGetter.
+func (b ByIDGetterBuilder) Get() ByIDGetter {
 	if b.flags.isMutable {
 		b.flags.layerFilters.withoutLeased = true
 		b.flags.isMutable = false

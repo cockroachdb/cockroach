@@ -26,7 +26,7 @@ import (
 func GetObjectName(
 	ctx context.Context, txn *kv.Txn, tc *Collection, obj catalog.Descriptor,
 ) (tree.ObjectName, error) {
-	g := tc.ByID(txn).Immutable()
+	g := tc.ByIDWithLeased(txn).Get()
 	sc, err := g.Schema(ctx, obj.GetParentSchemaID())
 	if err != nil {
 		return nil, err

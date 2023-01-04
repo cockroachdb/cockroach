@@ -354,7 +354,7 @@ func (r *Refresher) getTableDescriptor(
 	if err := r.cache.internalExecutorFactory.DescsTxn(ctx, r.cache.ClientDB, func(
 		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 	) (err error) {
-		if desc, err = descriptors.ByID(txn).WithoutNonPublic().Immutable().Table(ctx, tableID); err != nil {
+		if desc, err = descriptors.ByIDWithLeased(txn).WithoutNonPublic().Get().Table(ctx, tableID); err != nil {
 			err = errors.Wrapf(err,
 				"failed to get table descriptor for automatic stats on table id: %d", tableID)
 		}

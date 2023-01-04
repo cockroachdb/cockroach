@@ -1673,12 +1673,12 @@ var informationSchemaRoleRoutineGrantsTable = virtualSchemaTable{
 			}
 
 			err := db.ForEachSchema(func(id descpb.ID, name string) error {
-				sc, err := p.Descriptors().ByID(p.txn).WithoutNonPublic().Immutable().Schema(ctx, id)
+				sc, err := p.Descriptors().ByIDWithLeased(p.txn).WithoutNonPublic().Get().Schema(ctx, id)
 				if err != nil {
 					return err
 				}
 				return sc.ForEachFunctionOverload(func(overload descpb.SchemaDescriptor_FunctionOverload) error {
-					fn, err := p.Descriptors().ByID(p.txn).Mutable().Function(ctx, overload.ID)
+					fn, err := p.Descriptors().MutableByID(p.txn).Function(ctx, overload.ID)
 					if err != nil {
 						return err
 					}

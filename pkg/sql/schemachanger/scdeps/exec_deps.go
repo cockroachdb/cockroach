@@ -132,12 +132,12 @@ var _ scexec.Catalog = (*txnDeps)(nil)
 func (d *txnDeps) MustReadImmutableDescriptors(
 	ctx context.Context, ids ...descpb.ID,
 ) ([]catalog.Descriptor, error) {
-	return d.descsCollection.ByID(d.txn).WithoutSynthetic().WithoutLeased().Immutable().Descs(ctx, ids)
+	return d.descsCollection.ByID(d.txn).WithoutSynthetic().Get().Descs(ctx, ids)
 }
 
 // GetFullyQualifiedName implements the scmutationexec.CatalogReader interface
 func (d *txnDeps) GetFullyQualifiedName(ctx context.Context, id descpb.ID) (string, error) {
-	g := d.descsCollection.ByID(d.txn).WithoutSynthetic().WithoutLeased().Immutable()
+	g := d.descsCollection.ByID(d.txn).WithoutSynthetic().Get()
 	objectDesc, err := g.Desc(ctx, id)
 	if err != nil {
 		return "", err
@@ -176,7 +176,7 @@ func (d *txnDeps) GetFullyQualifiedName(ctx context.Context, id descpb.ID) (stri
 func (d *txnDeps) MustReadMutableDescriptor(
 	ctx context.Context, id descpb.ID,
 ) (catalog.MutableDescriptor, error) {
-	return d.descsCollection.ByID(d.txn).Mutable().Desc(ctx, id)
+	return d.descsCollection.MutableByID(d.txn).Desc(ctx, id)
 }
 
 // AddSyntheticDescriptor is part of the
@@ -314,7 +314,7 @@ func (d *txnDeps) MaybeSplitIndexSpans(
 func (d *txnDeps) GetResumeSpans(
 	ctx context.Context, tableID descpb.ID, indexID descpb.IndexID,
 ) ([]roachpb.Span, error) {
-	table, err := d.descsCollection.ByID(d.txn).WithoutNonPublic().WithoutLeased().WithoutSynthetic().Immutable().Table(ctx, tableID)
+	table, err := d.descsCollection.ByID(d.txn).WithoutNonPublic().WithoutSynthetic().Get().Table(ctx, tableID)
 	if err != nil {
 		return nil, err
 	}

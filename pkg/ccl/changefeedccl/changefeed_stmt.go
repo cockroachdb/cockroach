@@ -1177,11 +1177,11 @@ func getQualifiedTableNameObj(
 	ctx context.Context, execCfg *sql.ExecutorConfig, txn *kv.Txn, desc catalog.TableDescriptor,
 ) (tree.TableName, error) {
 	col := execCfg.CollectionFactory.NewCollection(ctx)
-	db, err := col.ByID(txn).WithoutLeased().Immutable().Database(ctx, desc.GetParentID())
+	db, err := col.ByID(txn).Get().Database(ctx, desc.GetParentID())
 	if err != nil {
 		return tree.TableName{}, err
 	}
-	sc, err := col.ByID(txn).WithoutLeased().Immutable().Schema(ctx, desc.GetParentSchemaID())
+	sc, err := col.ByID(txn).Get().Schema(ctx, desc.GetParentSchemaID())
 	if err != nil {
 		return tree.TableName{}, err
 	}

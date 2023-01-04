@@ -745,7 +745,7 @@ func (p *planner) canCreateOnSchema(
 	user username.SQLUsername,
 	checkPublicSchema shouldCheckPublicSchema,
 ) error {
-	scDesc, err := p.Descriptors().ByID(p.Txn()).WithoutNonPublic().Immutable().Schema(ctx, schemaID)
+	scDesc, err := p.Descriptors().ByIDWithLeased(p.Txn()).WithoutNonPublic().Get().Schema(ctx, schemaID)
 	if err != nil {
 		return err
 	}
@@ -757,7 +757,7 @@ func (p *planner) canCreateOnSchema(
 			// The caller wishes to skip this check.
 			return nil
 		}
-		dbDesc, err := p.Descriptors().ByID(p.Txn()).WithoutNonPublic().Immutable().Database(ctx, dbID)
+		dbDesc, err := p.Descriptors().ByIDWithLeased(p.Txn()).WithoutNonPublic().Get().Database(ctx, dbID)
 		if err != nil {
 			return err
 		}
@@ -849,7 +849,7 @@ func (p *planner) HasOwnershipOnSchema(
 		// Only the node user has ownership over the system database.
 		return p.User().IsNodeUser(), nil
 	}
-	scDesc, err := p.Descriptors().ByID(p.Txn()).WithoutNonPublic().Immutable().Schema(ctx, schemaID)
+	scDesc, err := p.Descriptors().ByIDWithLeased(p.Txn()).WithoutNonPublic().Get().Schema(ctx, schemaID)
 	if err != nil {
 		return false, err
 	}

@@ -1493,7 +1493,7 @@ func (p *planner) updateFKBackReferenceName(
 	if tableDesc.ID == ref.ReferencedTableID {
 		referencedTableDesc = tableDesc
 	} else {
-		lookup, err := p.Descriptors().ByID(p.txn).Mutable().Table(ctx, ref.ReferencedTableID)
+		lookup, err := p.Descriptors().MutableByID(p.txn).Table(ctx, ref.ReferencedTableID)
 		if err != nil {
 			return errors.Wrapf(err, "error resolving referenced table ID %d", ref.ReferencedTableID)
 		}

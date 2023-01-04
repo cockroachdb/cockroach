@@ -33,7 +33,7 @@ func TestDatabaseAccessors(t *testing.T) {
 	defer s.Stopper().Stop(context.Background())
 
 	if err := TestingDescsTxn(context.Background(), s, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
-		_, err := col.ByID(txn).WithoutLeased().Immutable().Database(ctx, keys.SystemDatabaseID)
+		_, err := col.ByID(txn).Get().Database(ctx, keys.SystemDatabaseID)
 		return err
 	}); err != nil {
 		t.Fatal(err)

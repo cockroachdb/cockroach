@@ -106,7 +106,7 @@ func refreshUDT(
 		if err != nil {
 			return err
 		}
-		tableDesc, err = collection.ByID(txn).WithoutNonPublic().Immutable().Table(ctx, tableID)
+		tableDesc, err = collection.ByIDWithLeased(txn).WithoutNonPublic().Get().Table(ctx, tableID)
 		return err
 	}); err != nil {
 		// Manager can return all kinds of errors during chaos, but based on
@@ -189,7 +189,7 @@ func (c *rowFetcherCache) RowFetcherForColumnFamily(
 		// version and the desired version to use the cache. It is safe to use
 		// UserDefinedTypeColsHaveSameVersion if we have a hit because we are
 		// guaranteed that the tables have the same version. Additionally, these
-		// fetchers are always initialized with a single tabledesc.Immutable.
+		// fetchers are always initialized with a single tabledesc.Get.
 		if safe, err := catalog.UserDefinedTypeColsInFamilyHaveSameVersion(tableDesc, f.tableDesc, family); err != nil {
 			return nil, nil, err
 		} else if safe {

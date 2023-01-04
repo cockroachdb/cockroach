@@ -65,7 +65,7 @@ CREATE SCHEMA test_sc;
 	)
 
 	err := sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
-		funcDesc, err := col.ByID(txn).WithoutNonPublic().Immutable().Function(ctx, 110)
+		funcDesc, err := col.ByIDWithLeased(txn).WithoutNonPublic().Get().Function(ctx, 110)
 		require.NoError(t, err)
 		require.Equal(t, funcDesc.GetName(), "f")
 
@@ -250,7 +250,7 @@ $$;
 	)
 
 	err := sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
-		funcDesc, err := col.ByID(txn).WithoutNonPublic().Immutable().Function(ctx, 112)
+		funcDesc, err := col.ByIDWithLeased(txn).WithoutNonPublic().Get().Function(ctx, 112)
 		require.NoError(t, err)
 		require.Equal(t, funcDesc.GetName(), "f")
 
@@ -293,7 +293,7 @@ $$;
 `)
 
 	err = sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
-		funcDesc, err := col.ByID(txn).WithoutNonPublic().WithoutLeased().Immutable().Function(ctx, 112)
+		funcDesc, err := col.ByID(txn).WithoutNonPublic().Get().Function(ctx, 112)
 		require.NoError(t, err)
 		require.Equal(t, funcDesc.GetName(), "f")
 

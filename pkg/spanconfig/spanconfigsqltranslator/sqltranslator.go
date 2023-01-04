@@ -248,7 +248,7 @@ func (s *SQLTranslator) generateSpanConfigurations(
 	}
 
 	// We're dealing with a SQL object.
-	desc, err := descsCol.ByID(txn).WithoutLeased().Immutable().Desc(ctx, id)
+	desc, err := descsCol.ByID(txn).Get().Desc(ctx, id)
 	if err != nil {
 		if errors.Is(err, catalog.ErrDescriptorNotFound) {
 			return nil, nil // the descriptor has been deleted; nothing to do here
@@ -529,7 +529,7 @@ func (s *SQLTranslator) findDescendantLeafIDs(
 func (s *SQLTranslator) findDescendantLeafIDsForDescriptor(
 	ctx context.Context, id descpb.ID, txn *kv.Txn, descsCol *descs.Collection,
 ) (descpb.IDs, error) {
-	desc, err := descsCol.ByID(txn).WithoutLeased().Immutable().Desc(ctx, id)
+	desc, err := descsCol.ByID(txn).Get().Desc(ctx, id)
 	if err != nil {
 		if errors.Is(err, catalog.ErrDescriptorNotFound) {
 			return nil, nil // the descriptor has been deleted; nothing to do here

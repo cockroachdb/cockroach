@@ -132,12 +132,7 @@ func (n *renameDatabaseNode) startExec(params runParams) error {
 		if err != nil {
 			return err
 		}
-		if err := maybeFailOnDependentDescInRename(ctx, p, dbDesc, sc, func(b descs.ByIDGetterBuilder) descs.ByIDGetterBuilder {
-			if p.skipDescriptorCache {
-				b = b.WithoutLeased()
-			}
-			return b.WithoutNonPublic()
-		}, catalog.Database); err != nil {
+		if err := maybeFailOnDependentDescInRename(ctx, p, dbDesc, sc, !p.skipDescriptorCache, catalog.Database); err != nil {
 			return err
 		}
 	}
@@ -209,15 +204,20 @@ func maybeFailOnDependentDescInRename(
 	p *planner,
 	db catalog.DatabaseDescriptor,
 	sc catalog.SchemaDescriptor,
-	lookupFilters func(builder descs.ByIDGetterBuilder) descs.ByIDGetterBuilder,
+	withLeased bool,
 	renameDescType catalog.DescriptorType,
 ) error {
 	_, ids, err := p.GetObjectNamesAndIDs(ctx, db, sc)
 	if err != nil {
 		return err
 	}
-	b := lookupFilters(p.Descriptors().ByID(p.txn))
-	descs, err := b.Immutable().Descs(ctx, ids)
+	var b descs.ByIDGetterBuilder
+	if withLeased {
+		b = p.Descriptors().ByIDWithLeased(p.txn)
+	} else {
+		b = p.Descriptors().ByID(p.txn)
+	}
+	descs, err := b.WithoutNonPublic().Get().Descs(ctx, ids)
 	if err != nil {
 		return err
 	}
@@ -235,7 +235,7 @@ func maybeFailOnDependentDescInRename(
 		}
 
 		if err := tbDesc.ForeachDependedOnBy(func(dependedOn *descpb.TableDescriptor_Reference) error {
-			dependentDesc, err := p.Descriptors().ByID(p.txn).Mutable().Desc(ctx, dependedOn.ID)
+			dependentDesc, err := p.Descriptors().MutableByID(p.txn).Desc(ctx, dependedOn.ID)
 			if err != nil {
 				return err
 			}

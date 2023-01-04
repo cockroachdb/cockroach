@@ -94,7 +94,7 @@ func maybeUpdateInvalidColumnIdsInSequenceBackReferences(
 	ctx context.Context, txn *kv.Txn, idToUpgrade descpb.ID, descriptors *descs.Collection,
 ) (hasUpgraded bool, err error) {
 	// Get the sequence descriptor that we are going to upgrade.
-	seqDesc, err := descriptors.ByID(txn).Mutable().Table(ctx, idToUpgrade)
+	seqDesc, err := descriptors.MutableByID(txn).Table(ctx, idToUpgrade)
 	if err != nil {
 		return false, err
 	}
@@ -107,7 +107,7 @@ func maybeUpdateInvalidColumnIdsInSequenceBackReferences(
 		// `ref.ColumnIDs` if the actual value is not equal to the
 		// expected value.
 		expectedColumnIDsInRef := make([]descpb.ColumnID, 0)
-		tableDesc, err := descriptors.ByID(txn).Mutable().Table(ctx, ref.ID)
+		tableDesc, err := descriptors.MutableByID(txn).Table(ctx, ref.ID)
 		if err != nil {
 			return false, err
 		}

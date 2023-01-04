@@ -201,7 +201,7 @@ func (n *reassignOwnedByNode) startExec(params runParams) error {
 func (n *reassignOwnedByNode) reassignDatabaseOwner(
 	dbDesc catalog.DatabaseDescriptor, params runParams,
 ) error {
-	mutableDbDesc, err := params.p.Descriptors().ByID(params.p.txn).Mutable().Desc(params.ctx, dbDesc.GetID())
+	mutableDbDesc, err := params.p.Descriptors().MutableByID(params.p.txn).Desc(params.ctx, dbDesc.GetID())
 	if err != nil {
 		return err
 	}
@@ -230,7 +230,7 @@ func (n *reassignOwnedByNode) reassignDatabaseOwner(
 func (n *reassignOwnedByNode) reassignSchemaOwner(
 	schemaDesc catalog.SchemaDescriptor, dbDesc *dbdesc.Mutable, params runParams,
 ) error {
-	mutableSchemaDesc, err := params.p.Descriptors().ByID(params.p.txn).Mutable().Desc(params.ctx, schemaDesc.GetID())
+	mutableSchemaDesc, err := params.p.Descriptors().MutableByID(params.p.txn).Desc(params.ctx, schemaDesc.GetID())
 	if err != nil {
 		return err
 	}
@@ -259,7 +259,7 @@ func (n *reassignOwnedByNode) reassignSchemaOwner(
 func (n *reassignOwnedByNode) reassignTableOwner(
 	tbDesc catalog.TableDescriptor, params runParams,
 ) error {
-	mutableTbDesc, err := params.p.Descriptors().ByID(params.p.txn).Mutable().Desc(params.ctx, tbDesc.GetID())
+	mutableTbDesc, err := params.p.Descriptors().MutableByID(params.p.txn).Desc(params.ctx, tbDesc.GetID())
 	if err != nil {
 		return err
 	}
@@ -292,14 +292,14 @@ func (n *reassignOwnedByNode) reassignTableOwner(
 func (n *reassignOwnedByNode) reassignTypeOwner(
 	typDesc catalog.TypeDescriptor, params runParams,
 ) error {
-	mutableTypDesc, err := params.p.Descriptors().ByID(params.p.txn).Mutable().Desc(params.ctx, typDesc.GetID())
+	mutableTypDesc, err := params.p.Descriptors().MutableByID(params.p.txn).Desc(params.ctx, typDesc.GetID())
 	if err != nil {
 		return err
 	}
 	if mutableTypDesc.Dropped() {
 		return nil
 	}
-	arrayDesc, err := params.p.Descriptors().ByID(params.p.txn).Mutable().Type(params.ctx, typDesc.GetArrayTypeID())
+	arrayDesc, err := params.p.Descriptors().MutableByID(params.p.txn).Type(params.ctx, typDesc.GetArrayTypeID())
 	if err != nil {
 		return err
 	}
@@ -340,7 +340,7 @@ func (n *reassignOwnedByNode) reassignTypeOwner(
 func (n *reassignOwnedByNode) reassignFunctionOwner(
 	fnDesc catalog.FunctionDescriptor, params runParams,
 ) error {
-	mutableDesc, err := params.p.Descriptors().ByID(params.p.txn).Mutable().Function(params.ctx, fnDesc.GetID())
+	mutableDesc, err := params.p.Descriptors().MutableByID(params.p.txn).Function(params.ctx, fnDesc.GetID())
 	if err != nil {
 		return err
 	}

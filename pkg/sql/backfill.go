@@ -450,7 +450,7 @@ func (sc *SchemaChanger) dropConstraints(
 
 	// Create update closure for the table and all other tables with backreferences.
 	if err := sc.txn(ctx, func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
-		scTable, err := descsCol.ByID(txn).Mutable().Table(ctx, sc.descID)
+		scTable, err := descsCol.MutableByID(txn).Table(ctx, sc.descID)
 		if err != nil {
 			return err
 		}
@@ -480,7 +480,7 @@ func (sc *SchemaChanger) dropConstraints(
 					if def.Name != constraint.GetName() {
 						continue
 					}
-					backrefTable, err := descsCol.ByID(txn).Mutable().Table(ctx, fk.GetReferencedTableID())
+					backrefTable, err := descsCol.MutableByID(txn).Table(ctx, fk.GetReferencedTableID())
 					if err != nil {
 						return err
 					}
@@ -543,11 +543,11 @@ func (sc *SchemaChanger) dropConstraints(
 	if err := sc.txn(ctx, func(
 		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
 	) (err error) {
-		if tableDescs[sc.descID], err = descsCol.ByID(txn).WithoutNonPublic().Immutable().Table(ctx, sc.descID); err != nil {
+		if tableDescs[sc.descID], err = descsCol.ByIDWithLeased(txn).WithoutNonPublic().Get().Table(ctx, sc.descID); err != nil {
 			return err
 		}
 		for id := range fksByBackrefTable {
-			desc, err := descsCol.ByID(txn).WithoutOffline().Immutable().Table(ctx, id)
+			desc, err := descsCol.ByIDWithLeased(txn).WithoutOffline().Get().Table(ctx, id)
 			if err != nil {
 				return err
 			}
@@ -586,7 +586,7 @@ func (sc *SchemaChanger) addConstraints(
 	if err := sc.txn(ctx, func(
 		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
 	) error {
-		scTable, err := descsCol.ByID(txn).Mutable().Table(ctx, sc.descID)
+		scTable, err := descsCol.MutableByID(txn).Table(ctx, sc.descID)
 		if err != nil {
 			return err
 		}
@@ -635,7 +635,7 @@ func (sc *SchemaChanger) addConstraints(
 				}
 				if !foundExisting {
 					scTable.OutboundFKs = append(scTable.OutboundFKs, *fk.ForeignKeyDesc())
-					backrefTable, err := descsCol.ByID(txn).Mutable().Table(ctx, fk.GetReferencedTableID())
+					backrefTable, err := descsCol.MutableByID(txn).Table(ctx, fk.GetReferencedTableID())
 					if err != nil {
 						return err
 					}
@@ -732,7 +732,7 @@ func (sc *SchemaChanger) validateConstraints(
 	if err := sc.fixedTimestampTxn(ctx, readAsOf, func(
 		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 	) error {
-		tableDesc, err = descriptors.ByID(txn).WithoutNonPublic().WithoutLeased().Immutable().Table(ctx, sc.descID)
+		tableDesc, err = descriptors.ByID(txn).WithoutNonPublic().Get().Table(ctx, sc.descID)
 		return err
 	}); err != nil {
 		return err
@@ -816,7 +816,7 @@ func (sc *SchemaChanger) validateConstraints(
 func (sc *SchemaChanger) getTableVersion(
 	ctx context.Context, txn *kv.Txn, tc *descs.Collection, version descpb.DescriptorVersion,
 ) (catalog.TableDescriptor, error) {
-	tableDesc, err := tc.ByID(txn).WithoutNonPublic().Immutable().Table(ctx, sc.descID)
+	tableDesc, err := tc.ByIDWithLeased(txn).WithoutNonPublic().Get().Table(ctx, sc.descID)
 	if err != nil {
 		return nil, err
 	}
@@ -1369,7 +1369,7 @@ func (sc *SchemaChanger) updateJobRunningStatus(
 ) (tableDesc catalog.TableDescriptor, err error) {
 	err = DescsTxn(ctx, sc.execCfg, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) (err error) {
 		// Read table descriptor without holding a lease.
-		tableDesc, err = col.ByID(txn).WithoutLeased().Immutable().Table(ctx, sc.descID)
+		tableDesc, err = col.ByID(txn).Get().Table(ctx, sc.descID)
 		if err != nil {
 			return err
 		}
@@ -1427,7 +1427,7 @@ func (sc *SchemaChanger) validateIndexes(ctx context.Context) error {
 	if err := sc.fixedTimestampTxn(ctx, readAsOf, func(
 		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 	) (err error) {
-		tableDesc, err = descriptors.ByID(txn).WithoutNonPublic().WithoutLeased().Immutable().Table(ctx, sc.descID)
+		tableDesc, err = descriptors.ByID(txn).WithoutNonPublic().Get().Table(ctx, sc.descID)
 		return err
 	}); err != nil {
 		return err
@@ -2208,7 +2208,7 @@ func (sc *SchemaChanger) mergeFromTemporaryIndex(
 		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
 	) error {
 		var err error
-		tbl, err = descsCol.ByID(txn).Mutable().Table(ctx, sc.descID)
+		tbl, err = descsCol.MutableByID(txn).Table(ctx, sc.descID)
 		return err
 	}); err != nil {
 		return err
@@ -2229,7 +2229,7 @@ func (sc *SchemaChanger) runStateMachineAfterTempIndexMerge(ctx context.Context)
 	return sc.txn(ctx, func(
 		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
 	) error {
-		tbl, err := descsCol.ByID(txn).Mutable().Table(ctx, sc.descID)
+		tbl, err := descsCol.MutableByID(txn).Table(ctx, sc.descID)
 		if err != nil {
 			return err
 		}
@@ -2534,7 +2534,7 @@ func runSchemaChangesInTxn(
 			if selfReference {
 				referencedTableDesc = tableDesc
 			} else {
-				lookup, err := planner.Descriptors().ByID(planner.Txn()).Mutable().Table(ctx, fk.GetReferencedTableID())
+				lookup, err := planner.Descriptors().MutableByID(planner.Txn()).Table(ctx, fk.GetReferencedTableID())
 				if err != nil {
 					return errors.Wrapf(err, "error resolving referenced table ID %d", fk.GetReferencedTableID())
 				}
@@ -2623,7 +2623,7 @@ func getTargetTablesAndFk(
 	if fk == nil {
 		return nil, nil, nil, errors.AssertionFailedf("foreign key %s does not exist", fkName)
 	}
-	targetTable, err = descsCol.ByID(txn).WithoutLeased().Immutable().Table(ctx, fk.ReferencedTableID)
+	targetTable, err = descsCol.ByID(txn).Get().Table(ctx, fk.ReferencedTableID)
 	if err != nil {
 		return nil, nil, nil, err
 	}

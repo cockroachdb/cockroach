@@ -10387,7 +10387,7 @@ $$;
 		require.NoError(t, err)
 		require.Equal(t, 110, int(tbDesc.GetID()))
 
-		fnDesc, err := col.ByID(txn).WithoutNonPublic().Immutable().Function(ctx, descpb.ID(udfID))
+		fnDesc, err := col.ByIDWithLeased(txn).WithoutNonPublic().Get().Function(ctx, descpb.ID(udfID))
 		require.NoError(t, err)
 		require.Equal(t, 111, int(fnDesc.GetID()))
 		require.Equal(t, 104, int(fnDesc.GetParentID()))
@@ -10443,7 +10443,7 @@ $$;
 		require.NoError(t, err)
 		require.Equal(t, 118, int(tbDesc.GetID()))
 
-		fnDesc, err := col.ByID(txn).WithoutNonPublic().Immutable().Function(ctx, descpb.ID(udfID))
+		fnDesc, err := col.ByIDWithLeased(txn).WithoutNonPublic().Get().Function(ctx, descpb.ID(udfID))
 		require.NoError(t, err)
 		require.Equal(t, 119, int(fnDesc.GetID()))
 		require.Equal(t, 112, int(fnDesc.GetParentID()))
@@ -10534,7 +10534,7 @@ $$;
 		require.NoError(t, err)
 		require.Equal(t, 110, int(tbDesc.GetID()))
 
-		fnDesc, err := col.ByID(txn).WithoutNonPublic().Immutable().Function(ctx, descpb.ID(udfID))
+		fnDesc, err := col.ByIDWithLeased(txn).WithoutNonPublic().Get().Function(ctx, descpb.ID(udfID))
 		require.NoError(t, err)
 		require.Equal(t, 111, int(fnDesc.GetID()))
 		require.Equal(t, 104, int(fnDesc.GetParentID()))
@@ -10592,7 +10592,7 @@ $$;
 		require.NoError(t, err)
 		require.Equal(t, 129, int(tbDesc.GetID()))
 
-		fnDesc, err := col.ByID(txn)..WithPublic().Immutable().Function(ctx, descpb.ID(udfID))
+		fnDesc, err := col.ByIDWithLeased(txn).WithoutNonPublic().Get().Function(ctx, descpb.ID(udfID))
 		require.NoError(t, err)
 		require.Equal(t, 130, int(fnDesc.GetID()))
 		require.Equal(t, 107, int(fnDesc.GetParentID()))

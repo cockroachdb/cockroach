@@ -89,7 +89,7 @@ func (t *truncateNode) startExec(params runParams) error {
 			if _, ok := toTruncate[tableID]; ok {
 				return nil
 			}
-			other, err := p.Descriptors().ByID(p.txn).Mutable().Table(ctx, tableID)
+			other, err := p.Descriptors().MutableByID(p.txn).Table(ctx, tableID)
 			if err != nil {
 				return err
 			}
@@ -163,7 +163,7 @@ var PreservedSplitCountMultiple = settings.RegisterIntSetting(
 func (p *planner) truncateTable(ctx context.Context, id descpb.ID, jobDesc string) error {
 	// Read the table descriptor because it might have changed
 	// while another table in the truncation list was truncated.
-	tableDesc, err := p.Descriptors().ByID(p.txn).Mutable().Table(ctx, id)
+	tableDesc, err := p.Descriptors().MutableByID(p.txn).Table(ctx, id)
 	if err != nil {
 		return err
 	}

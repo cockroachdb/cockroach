@@ -72,7 +72,7 @@ func (d *dropCascadeState) collectObjectsInSchema(
 	// objectNamesToDelete. Instead, we need to go through each schema descriptor
 	// to collect function descriptors by function ids.
 	err = schema.ForEachFunctionOverload(func(overload descpb.SchemaDescriptor_FunctionOverload) error {
-		fnDesc, err := p.Descriptors().ByID(p.txn).Mutable().Function(ctx, overload.ID)
+		fnDesc, err := p.Descriptors().MutableByID(p.txn).Function(ctx, overload.ID)
 		if err != nil {
 			return err
 		}

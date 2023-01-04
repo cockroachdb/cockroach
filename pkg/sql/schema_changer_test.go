@@ -1503,7 +1503,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 		timeoutCtx, cancel := context.WithTimeout(ctx, base.DefaultDescriptorLeaseDuration/2)
 		defer cancel()
 		if err := sql.TestingDescsTxn(timeoutCtx, s, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
-			tbl, err := col.ByID(txn).Mutable().Table(ctx, tableDesc.GetID())
+			tbl, err := col.MutableByID(txn).Table(ctx, tableDesc.GetID())
 			if err != nil {
 				return err
 			}

@@ -212,7 +212,7 @@ func (s *Tenant) LookupTableDescriptorByID(
 		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
 	) error {
 		var err error
-		desc, err = descsCol.ByID(txn).WithoutLeased().Immutable().Table(ctx, id)
+		desc, err = descsCol.ByID(txn).Get().Table(ctx, id)
 		return err
 	}))
 	return desc

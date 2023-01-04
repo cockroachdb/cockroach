@@ -418,7 +418,7 @@ func (p *planner) UnsafeUpsertNamespaceEntry(
 		existingID = descpb.ID(val.ValueInt())
 	}
 	validateDescriptor := func() error {
-		desc, err := p.byIDGetterBuilder().Immutable().Desc(ctx, descID)
+		desc, err := p.byIDGetterBuilder().Get().Desc(ctx, descID)
 		if err != nil && descID != keys.PublicSchemaID {
 			return errors.Wrapf(err, "failed to retrieve descriptor %d", descID)
 		}
@@ -452,7 +452,7 @@ func (p *planner) UnsafeUpsertNamespaceEntry(
 		if parentID == descpb.InvalidID {
 			return nil
 		}
-		parent, err := p.byIDGetterBuilder().Immutable().Desc(ctx, parentID)
+		parent, err := p.byIDGetterBuilder().Get().Desc(ctx, parentID)
 		if err != nil {
 			return errors.Wrapf(err, "failed to look up parent %d", parentID)
 		}
@@ -466,7 +466,7 @@ func (p *planner) UnsafeUpsertNamespaceEntry(
 		if parentSchemaID == descpb.InvalidID || parentSchemaID == keys.PublicSchemaID {
 			return nil
 		}
-		schema, err := p.byIDGetterBuilder().Immutable().Desc(ctx, parentSchemaID)
+		schema, err := p.byIDGetterBuilder().Get().Desc(ctx, parentSchemaID)
 		if err != nil {
 			return err
 		}
@@ -662,7 +662,7 @@ func (p *planner) UnsafeDeleteDescriptor(ctx context.Context, descID int64, forc
 func unsafeReadDescriptor(
 	ctx context.Context, p *planner, id descpb.ID, force bool,
 ) (mut catalog.MutableDescriptor, notice error, err error) {
-	mut, err = p.Descriptors().ByID(p.txn).Mutable().Desc(ctx, id)
+	mut, err = p.Descriptors().MutableByID(p.txn).Desc(ctx, id)
 	if mut != nil {
 		return mut, nil, nil
 	}
@@ -714,7 +714,7 @@ func (p *planner) ForceDeleteTableData(ctx context.Context, descID int64) error 
 
 	// Validate no descriptor exists for this table
 	id := descpb.ID(descID)
-	desc, err := p.Descriptors().ByID(p.txn).WithoutNonPublic().WithoutLeased().Immutable().Table(ctx, id)
+	desc, err := p.Descriptors().ByID(p.txn).WithoutNonPublic().Get().Table(ctx, id)
 	if err != nil && pgerror.GetPGCode(err) != pgcode.UndefinedTable {
 		return err
 	}

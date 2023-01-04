@@ -195,7 +195,7 @@ func (p *planner) ResolveDescriptorForPrivilegeSpecifier(
 			ctx, p.txn, *specifier.DatabaseName, tree.DatabaseLookupFlags{Required: true},
 		)
 	} else if specifier.DatabaseOID != nil {
-		database, err := p.Descriptors().ByID(p.txn).WithoutNonPublic().Immutable().Database(ctx, descpb.ID(*specifier.DatabaseOID))
+		database, err := p.Descriptors().ByIDWithLeased(p.txn).WithoutNonPublic().Get().Database(ctx, descpb.ID(*specifier.DatabaseOID))
 		// When a DatabaseOID is specified and the database is not found,
 		// we return NULL.
 		if err != nil && sqlerrors.IsUndefinedDatabaseError(err) {
@@ -236,7 +236,7 @@ func (p *planner) ResolveDescriptorForPrivilegeSpecifier(
 				ctx, p.txn, tn, tree.ObjectLookupFlags{},
 			)
 		} else {
-			table, err = p.Descriptors().ByID(p.txn).WithoutNonPublic().Immutable().Table(ctx, descpb.ID(*specifier.TableOID))
+			table, err = p.Descriptors().ByIDWithLeased(p.txn).WithoutNonPublic().Get().Table(ctx, descpb.ID(*specifier.TableOID))
 			// When a TableOID is specified and the relation is not found, we return NULL.
 			if err != nil && sqlerrors.IsUndefinedRelationError(err) {
 				// nolint:returnerrcheck
@@ -263,7 +263,7 @@ func (p *planner) ResolveDescriptorForPrivilegeSpecifier(
 		return table, nil
 	} else if specifier.FunctionOID != nil {
 		fnID := funcdesc.UserDefinedFunctionOIDToID(*specifier.FunctionOID)
-		return p.Descriptors().ByID(p.txn).WithoutNonPublic().Immutable().Function(ctx, fnID)
+		return p.Descriptors().ByIDWithLeased(p.txn).WithoutNonPublic().Get().Function(ctx, fnID)
 	}
 	return nil, errors.AssertionFailedf("invalid HasPrivilegeSpecifier")
 }
@@ -375,7 +375,7 @@ func (p *planner) getDescriptorsFromTargetListForPrivilegeChange(
 				continue
 			}
 			fnResolved.Add(fnID)
-			fnDesc, err := p.Descriptors().ByID(p.txn).Mutable().Function(ctx, fnID)
+			fnDesc, err := p.Descriptors().MutableByID(p.txn).Function(ctx, fnID)
 			if err != nil {
 				return nil, err
 			}
@@ -413,7 +413,7 @@ func (p *planner) getDescriptorsFromTargetListForPrivilegeChange(
 				if err != nil {
 					return nil, err
 				}
-				muts, err := p.Descriptors().ByID(p.txn).Mutable().Descs(ctx, objectIDs)
+				muts, err := p.Descriptors().MutableByID(p.txn).Descs(ctx, objectIDs)
 				if err != nil {
 					return nil, err
 				}
@@ -468,7 +468,7 @@ func (p *planner) getDescriptorsFromTargetListForPrivilegeChange(
 					return nil, err
 				}
 				err = sc.ForEachFunctionOverload(func(overload descpb.SchemaDescriptor_FunctionOverload) error {
-					fn, err := p.Descriptors().ByID(p.txn).Mutable().Function(ctx, overload.ID)
+					fn, err := p.Descriptors().MutableByID(p.txn).Function(ctx, overload.ID)
 					if err != nil {
 						return err
 					}
@@ -521,7 +521,7 @@ func (p *planner) getDescriptorsFromTargetListForPrivilegeChange(
 			}
 			switch resSchema.SchemaKind() {
 			case catalog.SchemaUserDefined:
-				mutSchema, err := p.Descriptors().ByID(p.txn).Mutable().Schema(ctx, resSchema.GetID())
+				mutSchema, err := p.Descriptors().MutableByID(p.txn).Schema(ctx, resSchema.GetID())
 				if err != nil {
 					return nil, err
 				}
@@ -550,7 +550,7 @@ func (p *planner) getDescriptorsFromTargetListForPrivilegeChange(
 		if err != nil {
 			return nil, err
 		}
-		muts, err := p.Descriptors().ByID(p.txn).Mutable().Descs(ctx, objectIDs)
+		muts, err := p.Descriptors().MutableByID(p.txn).Descs(ctx, objectIDs)
 		if err != nil {
 			return nil, err
 		}
@@ -592,7 +592,7 @@ func (p *planner) getFullyQualifiedTableNamesFromIDs(
 	ctx context.Context, ids []descpb.ID,
 ) (fullyQualifiedNames []string, _ error) {
 	for _, id := range ids {
-		desc, err := p.Descriptors().ByID(p.txn).WithoutLeased().Immutable().Desc(ctx, id)
+		desc, err := p.Descriptors().ByID(p.txn).Get().Desc(ctx, id)
 		if err != nil {
 			return nil, err
 		}
@@ -619,7 +619,7 @@ func (p *planner) getFullyQualifiedTableNamesFromIDs(
 func (p *planner) getQualifiedSchemaName(
 	ctx context.Context, desc catalog.SchemaDescriptor,
 ) (*tree.ObjectNamePrefix, error) {
-	dbDesc, err := p.Descriptors().ByID(p.txn).WithoutNonPublic().WithoutLeased().Immutable().Database(ctx, desc.GetParentID())
+	dbDesc, err := p.Descriptors().ByID(p.txn).WithoutNonPublic().Get().Database(ctx, desc.GetParentID())
 	if err != nil {
 		return nil, err
 	}
@@ -636,13 +636,13 @@ func (p *planner) getQualifiedSchemaName(
 func (p *planner) getQualifiedTypeName(
 	ctx context.Context, desc catalog.TypeDescriptor,
 ) (*tree.TypeName, error) {
-	dbDesc, err := p.Descriptors().ByID(p.txn).WithoutNonPublic().WithoutLeased().Immutable().Database(ctx, desc.GetParentID())
+	dbDesc, err := p.Descriptors().ByID(p.txn).WithoutNonPublic().Get().Database(ctx, desc.GetParentID())
 	if err != nil {
 		return nil, err
 	}
 
 	schemaID := desc.GetParentSchemaID()
-	scDesc, err := p.Descriptors().ByID(p.txn).WithoutNonPublic().Immutable().Schema(ctx, schemaID)
+	scDesc, err := p.Descriptors().ByIDWithLeased(p.txn).WithoutNonPublic().Get().Schema(ctx, schemaID)
 	if err != nil {
 		return nil, err
 	}
@@ -717,7 +717,7 @@ func expandIndexName(
 	// Memoize the table name that was found. tn is a reference to the table name
 	// stored in index.Table.
 	*tn = tableName
-	tblMutable, err := p.Descriptors().ByID(p.Txn()).Mutable().Table(ctx, tbl.GetID())
+	tblMutable, err := p.Descriptors().MutableByID(p.Txn()).Table(ctx, tbl.GetID())
 	if err != nil {
 		return nil, nil, err
 	}
@@ -770,7 +770,7 @@ func (p *planner) getTableAndIndexImpl(
 	// Use the descriptor collection to get a proper handle to the mutable
 	// descriptor for the relevant table and use that mutable object to
 	// get a handle to the corresponding index.
-	mut, err := p.Descriptors().ByID(p.Txn()).Mutable().Table(ctx, tbl.GetID())
+	mut, err := p.Descriptors().MutableByID(p.Txn()).Table(ctx, tbl.GetID())
 	if err != nil {
 		return catalog.ResolvedObjectPrefix{}, nil, nil, errors.NewAssertionErrorWithWrappedErrf(err,
 			"failed to re-resolve table %d for index %s", tbl.GetID(), tableWithIndex)

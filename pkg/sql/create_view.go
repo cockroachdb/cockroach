@@ -112,11 +112,11 @@ func (n *createViewNode) startExec(params runParams) error {
 			ids.Add(id)
 		}
 		// Lookup the dependent tables in bulk to minimize round-trips to KV.
-		if _, err := params.p.Descriptors().ByID(params.p.Txn()).WithoutNonPublic().WithoutSynthetic().WithoutLeased().Immutable().Descs(params.ctx, ids.Ordered()); err != nil {
+		if _, err := params.p.Descriptors().ByID(params.p.Txn()).WithoutNonPublic().WithoutSynthetic().Get().Descs(params.ctx, ids.Ordered()); err != nil {
 			return err
 		}
 		for id := range n.planDeps {
-			backRefMutable, err := params.p.Descriptors().ByID(params.p.Txn()).Mutable().Table(params.ctx, id)
+			backRefMutable, err := params.p.Descriptors().MutableByID(params.p.Txn()).Table(params.ctx, id)
 			if err != nil {
 				return err
 			}
@@ -158,7 +158,7 @@ func (n *createViewNode) startExec(params runParams) error {
 			if err != nil {
 				return err
 			}
-			desc, err := params.p.Descriptors().ByID(params.p.txn).Mutable().Table(params.ctx, id)
+			desc, err := params.p.Descriptors().MutableByID(params.p.txn).Table(params.ctx, id)
 			if err != nil {
 				return err
 			}
@@ -617,7 +617,7 @@ func (p *planner) replaceViewDesc(
 		desc, ok := backRefMutables[id]
 		if !ok {
 			var err error
-			desc, err = p.Descriptors().ByID(p.txn).Mutable().Table(ctx, id)
+			desc, err = p.Descriptors().MutableByID(p.txn).Table(ctx, id)
 			if err != nil {
 				return nil, err
 			}

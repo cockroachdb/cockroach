@@ -1073,7 +1073,7 @@ func createImportingDescriptors(
 			// Write the updated databases.
 			for dbID, schemas := range existingDBsWithNewSchemas {
 				log.Infof(ctx, "writing %d schema entries to database %d", len(schemas), dbID)
-				desc, err := descsCol.ByID(txn).Mutable().Desc(ctx, dbID)
+				desc, err := descsCol.MutableByID(txn).Desc(ctx, dbID)
 				if err != nil {
 					return err
 				}
@@ -1093,7 +1093,7 @@ func createImportingDescriptors(
 			// to the new tables being restored.
 			for _, table := range mutableTables {
 				// Collect all types used by this table.
-				dbDesc, err := descsCol.ByID(txn).WithoutDropped().WithoutLeased().Immutable().Database(ctx, table.GetParentID())
+				dbDesc, err := descsCol.ByID(txn).WithoutDropped().Get().Database(ctx, table.GetParentID())
 				if err != nil {
 					return err
 				}
@@ -1115,7 +1115,7 @@ func createImportingDescriptors(
 						continue
 					}
 					// Otherwise, add a backreference to this table.
-					typDesc, err := descsCol.ByID(txn).Mutable().Type(ctx, id)
+					typDesc, err := descsCol.MutableByID(txn).Type(ctx, id)
 					if err != nil {
 						return err
 					}
@@ -1139,7 +1139,7 @@ func createImportingDescriptors(
 			if details.DescriptorCoverage != tree.AllDescriptors {
 				for _, table := range tableDescs {
 					if lc := table.GetLocalityConfig(); lc != nil {
-						desc, err := descsCol.ByID(txn).WithoutDropped().WithoutLeased().Immutable().Database(ctx, table.ParentID)
+						desc, err := descsCol.ByID(txn).WithoutDropped().Get().Database(ctx, table.ParentID)
 						if err != nil {
 							return err
 						}
@@ -1149,7 +1149,7 @@ func createImportingDescriptors(
 								table.ID, table.ParentID)
 						}
 
-						mutTable, err := descsCol.ByID(txn).Mutable().Table(ctx, table.GetID())
+						mutTable, err := descsCol.MutableByID(txn).Table(ctx, table.GetID())
 						if err != nil {
 							return err
 						}
@@ -2228,7 +2228,7 @@ func prefetchDescriptors(
 	// and we're going to write them to KV very soon as part of a
 	// single batch).
 	ids := allDescIDs.Ordered()
-	got, err := descsCol.ByID(txn).Mutable().Descs(ctx, ids)
+	got, err := descsCol.MutableByID(txn).Descs(ctx, ids)
 	if err != nil {
 		return nstree.Catalog{}, errors.Wrap(err, "prefetch descriptors")
 	}
@@ -2360,7 +2360,7 @@ func (r *restoreResumer) dropDescriptors(
 	mutableTables := make([]*tabledesc.Mutable, len(details.TableDescs))
 	for i := range details.TableDescs {
 		var err error
-		mutableTables[i], err = descsCol.ByID(txn).Mutable().Table(ctx, details.TableDescs[i].ID)
+		mutableTables[i], err = descsCol.MutableByID(txn).Table(ctx, details.TableDescs[i].ID)
 		if err != nil {
 			return err
 		}
@@ -2439,7 +2439,7 @@ func (r *restoreResumer) dropDescriptors(
 		// TypeDescriptors don't have a GC job process, so we can just write them
 		// as dropped here.
 		typDesc := details.TypeDescs[i]
-		mutType, err := descsCol.ByID(txn).Mutable().Type(ctx, typDesc.ID)
+		mutType, err := descsCol.MutableByID(txn).Type(ctx, typDesc.ID)
 		if err != nil {
 			return err
 		}
@@ -2455,7 +2455,7 @@ func (r *restoreResumer) dropDescriptors(
 
 	for i := range details.FunctionDescs {
 		fnDesc := details.FunctionDescs[i]
-		mutFn, err := descsCol.ByID(txn).Mutable().Function(ctx, fnDesc.ID)
+		mutFn, err := descsCol.MutableByID(txn).Function(ctx, fnDesc.ID)
 		if err != nil {
 			return err
 		}
@@ -2527,13 +2527,13 @@ func (r *restoreResumer) dropDescriptors(
 			continue
 		}
 
-		mutSchema, err := descsCol.ByID(txn).Mutable().Desc(ctx, schemaDesc.GetID())
+		mutSchema, err := descsCol.MutableByID(txn).Desc(ctx, schemaDesc.GetID())
 		if err != nil {
 			return err
 		}
 		entry, hasEntry := dbsWithDeletedSchemas[schemaDesc.GetParentID()]
 		if !hasEntry {
-			mutParent, err := descsCol.ByID(txn).Mutable().Desc(ctx, schemaDesc.GetParentID())
+			mutParent, err := descsCol.MutableByID(txn).Desc(ctx, schemaDesc.GetParentID())
 			if err != nil {
 				return err
 			}
@@ -2604,7 +2604,7 @@ func (r *restoreResumer) dropDescriptors(
 			continue
 		}
 
-		db, err := descsCol.ByID(txn).Mutable().Desc(ctx, dbDesc.GetID())
+		db, err := descsCol.MutableByID(txn).Desc(ctx, dbDesc.GetID())
 		if err != nil {
 			return err
 		}
@@ -2658,12 +2658,12 @@ func setGCTTLForDroppingTable(
 	log.VInfof(ctx, 2, "lowering TTL for table %q (%d)", tableToDrop.GetName(), tableToDrop.GetID())
 	// We get a mutable descriptor here because we are going to construct a
 	// synthetic descriptor collection in which they are online.
-	dbDesc, err := descsCol.ByID(txn).WithoutLeased().Immutable().Database(ctx, tableToDrop.GetParentID())
+	dbDesc, err := descsCol.ByID(txn).Get().Database(ctx, tableToDrop.GetParentID())
 	if err != nil {
 		return err
 	}
 
-	schemaDesc, err := descsCol.ByID(txn).WithoutLeased().Immutable().Schema(ctx, tableToDrop.GetParentSchemaID())
+	schemaDesc, err := descsCol.ByID(txn).Get().Schema(ctx, tableToDrop.GetParentSchemaID())
 	if err != nil {
 		return err
 	}
@@ -2722,7 +2722,7 @@ func (r *restoreResumer) removeExistingTypeBackReferences(
 				return restored, nil
 			}
 			// Finally, look it up using the transaction.
-			typ, err := descsCol.ByID(txn).Mutable().Type(ctx, id)
+			typ, err := descsCol.MutableByID(txn).Type(ctx, id)
 			if err != nil {
 				return nil, err
 			}
@@ -2730,7 +2730,7 @@ func (r *restoreResumer) removeExistingTypeBackReferences(
 			return typ, nil
 		}
 
-		dbDesc, err := descsCol.ByID(txn).WithoutDropped().WithoutLeased().Immutable().Database(ctx, tbl.GetParentID())
+		dbDesc, err := descsCol.ByID(txn).WithoutDropped().Get().Database(ctx, tbl.GetParentID())
 		if err != nil {
 			return err
 		}
