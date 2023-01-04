@@ -10,11 +10,15 @@
 
 package registry
 
-import "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
+import (
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
+	"github.com/prometheus/client_golang/prometheus/promauto"
+)
 
 // Registry is the interface again which tests are registered with the roachtest
 // test runner.
 type Registry interface {
 	MakeClusterSpec(nodeCount int, opts ...spec.Option) spec.ClusterSpec
 	Add(TestSpec)
+	PromFactory() promauto.Factory
 }
