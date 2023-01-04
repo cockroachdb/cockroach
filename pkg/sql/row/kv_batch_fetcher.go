@@ -798,7 +798,7 @@ func (h *kvBatchFetcherHelper) NextBatch(ctx context.Context) (KVBatchFetcherRes
 	if !resp.MoreKVs || err != nil {
 		return resp, err
 	}
-	nBytes := len(resp.BatchResponse)
+	nBytes := len(resp.BatchResponse) + len(resp.ColBatch)
 	for i := range resp.KVs {
 		nBytes += len(resp.KVs[i].Key)
 		nBytes += len(resp.KVs[i].Value.RawBytes)
