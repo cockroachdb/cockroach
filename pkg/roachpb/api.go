@@ -1822,14 +1822,18 @@ func humanizePointCount(n uint64) redact.SafeString {
 func (s *ScanStats) SafeFormat(w redact.SafePrinter, _ rune) {
 	w.Printf("scan stats: stepped %d times (%d internal); seeked %d times (%d internal); "+
 		"block-bytes: (total %s, cached %s); "+
-		"points: (count %s, key-bytes %s, value-bytes %s, tombstoned: %s)",
+		"points: (count %s, key-bytes %s, value-bytes %s, tombstoned: %s) "+
+		"ranges: (count %s), (contained-points %s, skipped-points %s)",
 		s.NumInterfaceSteps, s.NumInternalSteps, s.NumInterfaceSeeks, s.NumInternalSeeks,
 		humanizeutil.IBytes(int64(s.BlockBytes)),
 		humanizeutil.IBytes(int64(s.BlockBytesInCache)),
 		humanizePointCount(s.PointCount),
 		humanizeutil.IBytes(int64(s.KeyBytes)),
 		humanizeutil.IBytes(int64(s.ValueBytes)),
-		humanizePointCount(s.PointsCoveredByRangeTombstones))
+		humanizePointCount(s.PointsCoveredByRangeTombstones),
+		humanizePointCount(s.RangeKeyCount),
+		humanizePointCount(s.RangeKeyContainedPoints),
+		humanizePointCount(s.RangeKeySkippedPoints))
 }
 
 // String implements fmt.Stringer.
