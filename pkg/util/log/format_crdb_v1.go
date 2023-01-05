@@ -314,14 +314,23 @@ func formatLogEntryInternalV1(
 	// the static size of tmp. But we do have an upper bound.
 	buf.Grow(len(entry.Tags) + 14 + len(entry.Message))
 
+	// We must always tag with tenant ID.
+	buf.Write(cp[ttycolor.Blue])
+	buf.WriteByte('[')
+	buf.WriteString(TenantIDLogTagKey)
+	if entry.TenantID != "" {
+		buf.WriteString(entry.TenantID)
+	} else {
+		// If no tenant ID was set, default to the system tenant ID
+		buf.WriteString(systemTenantID)
+	}
 	// Display the tags if set.
 	if len(entry.Tags) != 0 {
-		buf.Write(cp[ttycolor.Blue])
-		buf.WriteByte('[')
+		buf.WriteByte(',')
 		buf.WriteString(entry.Tags)
-		buf.WriteString("] ")
-		buf.Write(cp[ttycolor.Reset])
 	}
+	buf.WriteString("] ")
+	buf.Write(cp[ttycolor.Reset])
 
 	// Display the counter if set and enabled.
 	if showCounter && entry.Counter > 0 {
@@ -417,9 +426,19 @@ func (d *entryDecoderV1) Decode(entry *logpb.Entry) error {
 
 		// Process the context tags.
 		redactable := len(m[6]) != 0
+		// Look for a tenant ID tag. Default to system otherwise.g
+		entry.TenantID = systemTenantID
 		if len(m[7]) != 0 {
+			fullTags := string(m[7])
+			if strings.HasPrefix(fullTags, TenantIDLogTagKey) {
+				entry.TenantID = strings.Split(fullTags, ",")[0][1:]
+			}
+		}
+		// Process the remaining tags.
+		tagsWithoutTenantID := v2TenantIdTagSelect.ReplaceAllString(string(m[7]), "")
+		if len(tagsWithoutTenantID) != 0 {
 			r := redactablePackage{
-				msg:        m[7],
+				msg:        []byte(tagsWithoutTenantID),
 				redactable: redactable,
 			}
 			r = d.sensitiveEditor(r)
@@ -449,11 +468,6 @@ func (d *entryDecoderV1) Decode(entry *logpb.Entry) error {
 		r = d.sensitiveEditor(r)
 		entry.Message = string(r.msg)
 		entry.Redactable = r.redactable
-		// crdb_v1 does not support tagging of log entries with
-		// tenant IDs. However, to help the decoded entry play
-		// nicely with utilities that use it, we always default
-		// the entry's tenantID with the system tenant ID.
-		entry.TenantID = systemTenantID
 
 		if strings.HasPrefix(entry.Message, structuredEntryPrefix+"{") /* crdb-v1 prefix */ {
 			// Note: we do not recognize the v2 marker here (" ={") because
