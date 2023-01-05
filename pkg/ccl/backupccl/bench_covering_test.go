@@ -14,6 +14,8 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/stretchr/testify/require"
@@ -27,6 +29,7 @@ func BenchmarkCoverageChecks(b *testing.B) {
 	r, _ := randutil.NewTestRand()
 
 	for _, numBackups := range []int{1, 7, 24, 24 * 4} {
+		numBackups := numBackups
 		b.Run(fmt.Sprintf("numBackups=%d", numBackups), func(b *testing.B) {
 			for _, numSpans := range []int{10, 20, 100} {
 				b.Run(fmt.Sprintf("numSpans=%d", numSpans), func(b *testing.B) {
@@ -61,6 +64,7 @@ func BenchmarkRestoreEntryCover(b *testing.B) {
 	ctx := context.Background()
 	r, _ := randutil.NewTestRand()
 	for _, numBackups := range []int{1, 2, 24, 24 * 4} {
+		numBackups := numBackups
 		b.Run(fmt.Sprintf("numBackups=%d", numBackups), func(b *testing.B) {
 			for _, baseFiles := range []int{0, 100, 10000} {
 				b.Run(fmt.Sprintf("numFiles=%d", baseFiles), func(b *testing.B) {
@@ -82,10 +86,22 @@ func BenchmarkRestoreEntryCover(b *testing.B) {
 											layerToBackupManifestFileIterFactory, err := getBackupManifestFileIters(ctx, &execCfg,
 												backups, nil, nil)
 											require.NoError(b, err)
-											cov, err := makeSimpleImportSpans(backups[numBackups-1].Spans, backups,
-												layerToBackupManifestFileIterFactory, nil, introducedSpanFrontier,
-												nil, 0)
-											require.NoError(b, err)
+
+											spanCh := make(chan execinfrapb.RestoreSpanEntry, 1000)
+
+											g := ctxgroup.WithContext(ctx)
+											g.GoCtx(func(ctx context.Context) error {
+												defer close(spanCh)
+												return generateAndSendImportSpans(ctx, backups[numBackups-1].Spans, backups,
+													layerToBackupManifestFileIterFactory, nil, introducedSpanFrontier, nil, 0, spanCh, false)
+											})
+
+											var cov []execinfrapb.RestoreSpanEntry
+											for entry := range spanCh {
+												cov = append(cov, entry)
+											}
+
+											require.NoError(b, g.Wait())
 											b.ReportMetric(float64(len(cov)), "coverSize")
 										}
 									})
