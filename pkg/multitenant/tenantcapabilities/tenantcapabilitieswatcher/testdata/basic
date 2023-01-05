@@ -1,0 +1,126 @@
+# Test basic tenant capability watcher functionality.
+
+start
+----
+ok
+
+updates
+----
+
+update-state
+upsert {ten=10}:{CanAdminSplit=true}
+upsert {ten=11}:{CanAdminSplit=false}
+----
+ok
+
+updates
+----
+Incremental Update
+updated {ten=10}:{CanAdminSplit=true}
+updated {ten=11}:{CanAdminSplit=false}
+
+flush-state
+----
+{ten=10}:{CanAdminSplit=true}
+{ten=11}:{CanAdminSplit=false}
+
+# Perform incremental updates.
+update-state
+upsert {ten=11}:{CanAdminSplit=true}
+----
+ok
+
+updates
+----
+Incremental Update
+updated {ten=11}:{CanAdminSplit=true}
+
+get-capabilities
+{ten=11}
+----
+{CanAdminSplit=true}
+
+update-state
+delete {ten=10}
+----
+ok
+
+updates
+----
+Incremental Update
+deleted {ten=10}
+
+get-capabilities
+{ten=10}
+----
+not-found
+
+# No-op update.
+update-state
+delete {ten=15}
+----
+ok
+
+updates
+----
+
+# Check that the internal state after a few incremental updates corresponds to
+# what we'd expect.
+flush-state
+----
+{ten=11}:{CanAdminSplit=true}
+
+update-state
+upsert {ten=15}:{CanAdminSplit=true}
+----
+ok
+
+updates
+----
+Incremental Update
+updated {ten=15}:{CanAdminSplit=true}
+
+# Ensure only the last update is applied, even when there are multiple updates
+# to a single key.
+update-state
+upsert {ten=11}:{CanAdminSplit=false}
+upsert {ten=11}:{CanAdminSplit=true}
+delete {ten=11}
+----
+ok
+
+updates
+----
+Incremental Update
+deleted {ten=11}
+
+get-capabilities
+{ten=11}
+----
+not-found
+
+flush-state
+----
+{ten=15}:{CanAdminSplit=true}
+
+# Same thing, but this time instead of deleting the key, leave it behind.
+update-state
+delete {ten=15}
+upsert {ten=15}:{CanAdminSplit=true}
+upsert {ten=15}:{CanAdminSplit=false}
+----
+ok
+
+updates
+----
+Incremental Update
+updated {ten=15}:{CanAdminSplit=false}
+
+flush-state
+----
+{ten=15}:{CanAdminSplit=false}
+
+get-capabilities
+{ten=15}
+----
+{CanAdminSplit=false}
