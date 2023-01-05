@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
@@ -610,8 +611,7 @@ func (p *planner) validateRoles(
 	}
 	for i, grantee := range roles {
 		if _, ok := users[grantee]; !ok {
-			sqlName := tree.Name(roles[i].Normalized())
-			return errors.Errorf("user or role %s does not exist", &sqlName)
+			return sqlerrors.NewUndefinedUserError(roles[i])
 		}
 	}
 

@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/errors"
 )
@@ -59,7 +60,7 @@ func (p *planner) ReassignOwnedBy(ctx context.Context, n *tree.ReassignOwnedBy) 
 			return nil, err
 		}
 		if !roleExists {
-			return nil, pgerror.Newf(pgcode.UndefinedObject, "role/user %q does not exist", oldRole)
+			return nil, sqlerrors.NewUndefinedUserError(oldRole)
 		}
 	}
 	newRole, err := decodeusername.FromRoleSpec(
@@ -70,7 +71,7 @@ func (p *planner) ReassignOwnedBy(ctx context.Context, n *tree.ReassignOwnedBy) 
 	}
 	roleExists, err := RoleExists(ctx, p.ExecCfg().InternalExecutor, p.Txn(), newRole)
 	if !roleExists {
-		return nil, pgerror.Newf(pgcode.UndefinedObject, "role/user %q does not exist", newRole)
+		return nil, sqlerrors.NewUndefinedUserError(newRole)
 	}
 	if err != nil {
 		return nil, err

@@ -1,14 +1,14 @@
 # Should error when a role that does not exist is provided.
-statement error pq: user or role who does not exist
+statement error pq: role/user "who" does not exist
 ALTER DEFAULT PRIVILEGES FOR ROLE who GRANT SELECT ON TABLES to testuser
 
-statement error pq: user or role who does not exist
+statement error pq: role/user "who" does not exist
 ALTER DEFAULT PRIVILEGES GRANT SELECT ON TABLES to who
 
-statement error pq: user or role who does not exist
+statement error pq: role/user "who" does not exist
 ALTER DEFAULT PRIVILEGES FOR ROLE testuser GRANT SELECT ON TABLES to who
 
-statement error pq: user or role who does not exist
+statement error pq: role/user "who" does not exist
 ALTER DEFAULT PRIVILEGES FOR ROLE testuser GRANT SELECT ON TABLES to testuser, who
 
 # Should not be able to use invalid privileges.
@@ -357,7 +357,7 @@ d              public       t12         root      ALL             true
 d              public       t12         testuser  ALL             true
 
 # Cannot specify PUBLIC as the target role.
-statement error pq: user or role public does not exist
+statement error pq: role/user "public" does not exist
 ALTER DEFAULT PRIVILEGES FOR ROLE public REVOKE SELECT ON TABLES FROM testuser2, testuser3
 
 # Can specify PUBLIC as a grantee.
