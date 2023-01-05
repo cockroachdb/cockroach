@@ -300,7 +300,7 @@ func (s *Store) tryGetOrCreateReplica(
 			return err
 		}
 
-		return repl.loadUninit(uninitializedDesc)
+		return repl.loadUninit(ctx, uninitializedDesc)
 	}(); err != nil {
 		// Mark the replica as destroyed and remove it from the replicas maps to
 		// ensure nobody tries to use it.

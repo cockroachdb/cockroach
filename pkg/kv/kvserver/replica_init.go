@@ -235,10 +235,16 @@ func (r *Replica) loadRaftMuLockedReplicaMuLocked(desc *roachpb.RangeDescriptor)
 	return nil
 }
 
-func (r *Replica) loadUninit(*roachpb.RangeDescriptor) error {
+func (r *Replica) loadUninit(ctx context.Context, desc *roachpb.RangeDescriptor) error {
 	// r.setDescLockedRaftMuLocked(ctx, desc):
 	// r.rangeStr.store(r.replicaID, desc) <- done in newUnloadedReplica
 	// r.concMgr.OnRangeDescUpdated(desc) <- not needed?
+
+	// FIXME: r.mu.state.TruncatedState should not be nil.
+	var err error
+	if r.mu.state, err = r.mu.stateLoader.Load(ctx, r.Engine(), desc); err != nil {
+		return err
+	}
 
 	// FIXME: are any of these needed?
 	// r.raftMu.sideloaded, err = logstore.NewDiskSideloadStorage(
