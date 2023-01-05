@@ -282,7 +282,7 @@ func (s *Store) tryGetOrCreateReplica(
 			return err
 		}
 
-		return repl.loadRaftMuLockedReplicaMuLocked(repl.descRLocked())
+		return repl.loadUninit(ctx, repl.descRLocked())
 	}(); err != nil {
 		// Mark the replica as destroyed and remove it from the replicas maps to
 		// ensure nobody tries to use it.
