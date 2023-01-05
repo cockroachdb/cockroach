@@ -419,6 +419,11 @@ func (fw *SSTWriter) ShouldWriteLocalTimestamps(context.Context) bool {
 	return false
 }
 
+// BufferedSize implements the Writer interface.
+func (fw *SSTWriter) BufferedSize() int {
+	return 0
+}
+
 // MemFile is a file-like struct that buffers all data written to it in memory.
 // Implements the writeCloseSyncer interface and is intended for use with
 // SSTWriter.
