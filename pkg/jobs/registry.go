@@ -29,6 +29,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/server/tracedumper"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -514,30 +516,30 @@ func (r *Registry) CreateJobWithTxn(
 		return nil, err
 	}
 
-	cols := [7]string{"id", "status", "payload", "progress", "claim_session_id", "claim_instance_id", "job_type"}
-	numCols := len(cols)
-	vals := [7]interface{}{jobID, StatusRunning, payloadBytes, progressBytes, s.ID().UnsafeBytes(), r.ID(), jobType.String()}
-	placeholders := func() string {
-		var p strings.Builder
-		for i := 0; i < numCols; i++ {
-			if i > 0 {
-				p.WriteByte(',')
-			}
-			p.WriteByte('$')
-			p.WriteString(strconv.Itoa(i + 1))
-		}
-		return p.String()
-	}
-	// TODO(jayant): remove this version gate in 24.1
-	// To run the upgrade below, migration and schema change jobs will need
-	// to be created using the old schema of the jobs table.
-	if !r.settings.Version.IsActive(ctx, clusterversion.V23_1AddTypeColumnToJobsTable) {
-		numCols -= 1
-	}
-	insertStmt := fmt.Sprintf(`INSERT INTO system.jobs (%s) VALUES (%s)`, strings.Join(cols[:numCols], ","), placeholders())
-	if _, err = j.registry.ex.Exec(ctx, "job-row-insert", txn, insertStmt, vals[:numCols]...,
+	const insertStmt = `INSERT
+		INTO system.jobs (id, status, payload, progress, claim_session_id, claim_instance_id)
+		VALUES ($1, $2, $3, $4, $5, $6)`
+	if _, err := j.registry.ex.Exec(
+		ctx, "job-row-insert", txn, insertStmt,
+		jobID, StatusRunning, payloadBytes, progressBytes, s.ID().UnsafeBytes(), r.ID(),
 	); err != nil {
 		return nil, err
+	}
+	if r.settings.Version.IsActive(ctx, clusterversion.V23_1AddTypeColumnToJobsTable) {
+		const updateStmt = `UPDATE system.jobs SET job_type = $2 WHERE job_id = $1`
+		if _, err := j.registry.ex.Exec(
+			ctx, "job-row-update", txn, updateStmt, jobID, jobType.String(),
+		); err != nil {
+			if pgerror.GetPGCode(err) != pgcode.UndefinedColumn {
+				// It's legitimately possible for this UPDATE to fail in tenant clusters
+				// whose system schema was bootstrapped using values from V22.2. In that
+				// schema, the job_type column doesn't exist. Yet, the version gate may
+				// still be passed at startup because the active version isn't properly
+				// set yet at that point.
+				// TODO(postamar): remove this once the jobs_type column is baked in.
+				return nil, err
+			}
+		}
 	}
 	return j, nil
 }

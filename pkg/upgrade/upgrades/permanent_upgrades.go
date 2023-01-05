@@ -21,6 +21,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
@@ -52,11 +54,27 @@ func addRootUser(
 
 	// Upsert the role membership into the table. We intentionally override any existing entry.
 	const upsertMembership = `
-          UPSERT INTO system.role_members ("role", "member", "isAdmin", role_id, member_id) VALUES ($1, $2, true, $3, $4)
+          UPSERT INTO system.role_members ("role", "member", "isAdmin") VALUES ($1, $2, true)
           `
 	_, err = deps.InternalExecutor.Exec(
-		ctx, "addRootToAdminRole", nil /* txn */, upsertMembership, username.AdminRole, username.RootUser, username.AdminRoleID, username.RootUserID)
+		ctx, "addRootToAdminRole", nil /* txn */, upsertMembership, username.AdminRole, username.RootUser)
 	if err != nil {
+		return err
+	}
+
+	const updateMembership = `
+					UPDATE system.role_members SET role_id = $3, member_id = $4 WHERE role = $1 AND member = $2 AND (role_id IS NULL OR member_id IS NULL)
+	        `
+	_, err = deps.InternalExecutor.Exec(
+		ctx, "addRootToAdminRole", nil /* txn */, updateMembership, username.AdminRole, username.RootUser, username.AdminRoleID, username.RootUserID)
+	if err != nil {
+		if pgerror.GetPGCode(err) == pgcode.UndefinedColumn {
+			// It's legitimately possible for this UPDATE to fail in tenant clusters
+			// whose system schema was bootstrapped using values from V22.2. In that
+			// schema, the user_id column doesn't exist yet and version gates are
+			// useless at this juncture. Swallow this error.
+			return nil
+		}
 		return err
 	}
 
