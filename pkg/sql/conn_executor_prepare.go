@@ -417,11 +417,14 @@ func (ex *connExecutor) execBind(
 				} else {
 					typ, ok := types.OidToType[t]
 					if !ok {
+						// These special cases for json, json[] is here so we can
+						// support decoding parameters with oid=json/json[] without
+						// adding full support for these type.
+						// TODO(sql-exp): Remove this if we support JSON.
 						if t == oid.T_json {
-							// This special case is here so we can support decoding parameters
-							// with oid=json without adding full support for the JSON type.
-							// TODO(sql-exp): Remove this if we support JSON.
 							typ = types.Json
+						} else if t == oid.T__json {
+							typ = types.JSONArray
 						} else {
 							var err error
 							typ, err = ex.planner.ResolveTypeByOID(ctx, t)

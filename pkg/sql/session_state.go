@@ -175,11 +175,17 @@ func (p *planner) DeserializeSessionState(
 					placeholderTypes[i] = nil
 					continue
 				}
+				// These special cases for json, json[] is here so we can
+				// support decoding parameters with oid=json/json[] without
+				// adding full support for these type.
+				// TODO(sql-exp): Remove this if we support JSON.
 				if t == oid.T_json {
-					// This special case is here so we can support decoding parameters
-					// with oid=json without adding full support for the JSON type.
 					// TODO(sql-exp): Remove this if we support JSON.
 					placeholderTypes[i] = types.Json
+					continue
+				}
+				if t == oid.T__json {
+					placeholderTypes[i] = types.JSONArray
 					continue
 				}
 				v, ok := types.OidToType[t]

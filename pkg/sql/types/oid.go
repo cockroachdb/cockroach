@@ -79,6 +79,7 @@ var OidToType = map[oid.Oid]*T{
 	// existing tables.
 	// oid.T_json:      Json,
 	oid.T_jsonb:        Jsonb,
+	oid.T__jsonb:       JSONBArray,
 	oid.T_name:         Name,
 	oid.T_numeric:      Decimal,
 	oid.T_oid:          Oid,
