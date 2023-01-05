@@ -20,6 +20,7 @@ import "roachpb/errors.proto";
 import "roachpb/metadata.proto";
 import "roachpb/span_config.proto";
 import "settings/encoding.proto";
+import "sql/catalog/fetchpb/index_fetch.proto";
 import "storage/enginepb/mvcc.proto";
 import "storage/enginepb/mvcc3.proto";
 import "util/hlc/timestamp.proto";
@@ -557,6 +558,9 @@ enum ScanFormat {
   // The batch_response format: a byte slice of alternating keys and values,
   // each prefixed by their length as a varint.
   BATCH_RESPONSE = 1;
+  // The serialized (in Apache Arrow format) representation of coldata.Batch'es
+  // that contain only necessary (according to the IndexFetchSpec) columns.
+  COL_BATCH_RESPONSE = 2;
 }
 
 
@@ -607,6 +611,13 @@ message ScanResponse {
   // complete - there are no key/value pairs that are split across more than one
   // entry. There are num_keys total pairs across all entries, as defined by the
   // ResponseHeader. If set, rows will not be set and vice versa.
+  // TODO(feedback wanted): should we introduce a separate col_batch_responses
+  // field for COL_BATCH_RESPONSE scan format?
+  // Pros of reusing the same field:
+  // - smaller overhead
+  // - less cases to handle in the SQL land.
+  // Pros of a separate field:
+  // - avoiding possible confusion about what format is used in the response.
   repeated bytes batch_responses = 4;
 }
 
@@ -2537,8 +2548,6 @@ message Header {
   // The given value specifies the maximum number of keys in a row (i.e. the
   // number of column families). If any larger rows are found at the end of the
   // result, an error is returned.
-  //
-  // Added in 22.1, callers must check the ScanWholeRows version gate first.
   int32 whole_rows_of_size = 26;
   // If true, allow returning an empty result when the first result exceeds a
   // limit (e.g. TargetBytes). Only supported by Get, Scan, and ReverseScan.
@@ -2612,6 +2621,10 @@ message Header {
   BoundedStalenessHeader bounded_staleness = 22;
 
   util.tracing.tracingpb.TraceInfo trace_info = 25;
+
+  // index_fetch_spec, if set, is used for ScanRequests and ReverseScanRequests
+  // with COL_BATCH_RESPONSE ScanFormat.
+  sql.sqlbase.IndexFetchSpec index_fetch_spec = 29;
 
   reserved 7, 10, 12, 14, 20;
 }

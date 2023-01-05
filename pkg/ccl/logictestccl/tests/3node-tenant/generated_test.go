@@ -87,6 +87,9 @@ func runExecBuildLogicTest(t *testing.T, file string) {
 	skip.UnderDeadlock(t, "times out and/or hangs")
 	serverArgs := logictest.TestServerArgs{
 		DisableWorkmemRandomization: true,
+		// Disable the direct scans in order to keep the output of EXPLAIN (VEC)
+		// deterministic.
+		DisableDirectColumnarScans: true,
 	}
 	logictest.RunLogicTest(t, serverArgs, configIdx, filepath.Join(execBuildLogicTestDir, file))
 }

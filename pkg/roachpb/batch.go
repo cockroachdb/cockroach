@@ -500,6 +500,9 @@ func (ba *BatchRequest) RefreshSpanIterate(br *BatchResponse, fn func(Span)) err
 			resp = br.Responses[i].GetInner()
 		}
 		if ba.WaitPolicy == lock.WaitPolicy_SkipLocked && CanSkipLocked(req) {
+			if ba.IndexFetchSpec != nil {
+				return errors.AssertionFailedf("unexpectedly IndexFetchSpec is set with SKIP LOCKED wait policy")
+			}
 			// If the request is using a SkipLocked wait policy, it behaves as if run
 			// at a lower isolation level for any keys that it skips over. For this
 			// reason, the request only adds point reads for the individual keys

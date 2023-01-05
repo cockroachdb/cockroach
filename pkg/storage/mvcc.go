@@ -3628,20 +3628,33 @@ func mvccScanToBytes(
 	}
 
 	res.KVData = results.finish()
-	res.NumKeys, res.NumBytes, _ = results.sizeInfo(0 /* lenKey */, 0 /* lenValue */)
+	if err = finalizeScanResult(ctx, mvccScanner, &res, opts.errOnIntents()); err != nil {
+		return MVCCScanResult{}, err
+	}
+	return res, nil
+}
+
+// finalizeScanResult updates the MVCCScanResult in-place after the scan was
+// completed successfully. It also performs some additional auxiliary tasks
+// (like recording iterators stats).
+func finalizeScanResult(
+	ctx context.Context, mvccScanner *pebbleMVCCScanner, res *MVCCScanResult, errOnIntents bool,
+) error {
+	res.NumKeys, res.NumBytes, _ = mvccScanner.results.sizeInfo(0 /* lenKey */, 0 /* lenValue */)
 
 	// If we have a trace, emit the scan stats that we produced.
 	recordIteratorStats(ctx, mvccScanner.parent)
 
+	var err error
 	res.Intents, err = buildScanIntents(mvccScanner.intentsRepr())
 	if err != nil {
-		return MVCCScanResult{}, err
+		return err
 	}
 
-	if opts.errOnIntents() && len(res.Intents) > 0 {
-		return MVCCScanResult{}, &roachpb.WriteIntentError{Intents: res.Intents}
+	if errOnIntents && len(res.Intents) > 0 {
+		return &roachpb.WriteIntentError{Intents: res.Intents}
 	}
-	return res, nil
+	return nil
 }
 
 // mvccScanToKvs converts the raw key/value pairs returned by MVCCIterator.MVCCScan

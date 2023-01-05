@@ -367,6 +367,9 @@ const (
 	// based on (statistics->>'indexes') with inverted index on table system.statement_statistics.
 	V23_1_AlterSystemStatementStatisticsAddIndexesUsage
 
+	// V23_1_KVDirectColumnarScans introduces the support of the "direct"
+	// columnar scans in the KV layer.
+	V23_1_KVDirectColumnarScans
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -636,6 +639,10 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     V23_1_AlterSystemStatementStatisticsAddIndexesUsage,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 22},
+	},
+	{
+		Key:     V23_1_KVDirectColumnarScans,
+		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 24},
 	},
 
 	// *************************************************

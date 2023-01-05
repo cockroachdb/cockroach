@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -105,6 +106,34 @@ func newTxnKVFetcher(
 	return newTxnKVFetcherInternal(fetcherArgs)
 }
 
+// NewDirectKVBatchFetcher creates a new KVBatchFetcher that uses the
+// COL_BATCH_RESPONSE scan format for Scans (or ReverseScans, if reverse is
+// true).
+//
+// If acc is non-nil, this fetcher will track its fetches and must be Closed.
+// The fetcher only grows and shrinks the account according to its own use, so
+// the memory account can be shared by the caller with other components (as long
+// as there is no concurrency).
+func NewDirectKVBatchFetcher(
+	txn *kv.Txn,
+	bsHeader *roachpb.BoundedStalenessHeader,
+	spec *fetchpb.IndexFetchSpec,
+	reverse bool,
+	lockStrength descpb.ScanLockingStrength,
+	lockWaitPolicy descpb.ScanLockingWaitPolicy,
+	lockTimeout time.Duration,
+	acc *mon.BoundAccount,
+	forceProductionKVBatchSize bool,
+) KVBatchFetcher {
+	f := newTxnKVFetcher(
+		txn, bsHeader, reverse, lockStrength, lockWaitPolicy,
+		lockTimeout, acc, forceProductionKVBatchSize,
+	)
+	f.scanFormat = roachpb.COL_BATCH_RESPONSE
+	f.indexFetchSpec = spec
+	return f
+}
+
 // NewKVFetcher creates a new KVFetcher.
 //
 // If acc is non-nil, this fetcher will track its fetches and must be Closed.
@@ -156,7 +185,7 @@ func NewStreamingKVFetcher(
 		streamerBudgetLimit,
 		streamerBudgetAcc,
 		&batchRequestsIssued,
-		getKeyLockingStrength(lockStrength),
+		GetKeyLockingStrength(lockStrength),
 	)
 	mode := kvstreamer.OutOfOrder
 	if maintainOrdering {
