@@ -3,7 +3,10 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "bootstrap",
-    srcs = ["metadata.go"],
+    srcs = [
+        "metadata.go",
+        "previous_release.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap",
     visibility = ["//visibility:public"],
     deps = [
