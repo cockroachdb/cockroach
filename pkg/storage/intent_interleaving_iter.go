@@ -962,6 +962,13 @@ func (i *intentInterleavingIter) UnsafeValue() ([]byte, error) {
 	return i.iter.UnsafeValue()
 }
 
+func (i *intentInterleavingIter) UnsafeLazyValue() pebble.LazyValue {
+	if i.isCurAtIntentIter() {
+		return i.intentIter.UnsafeLazyValue()
+	}
+	return i.iter.UnsafeLazyValue()
+}
+
 func (i *intentInterleavingIter) MVCCValueLenAndIsTombstone() (int, bool, error) {
 	if i.isCurAtIntentIter() {
 		return 0, false, errors.Errorf("not at MVCC value")

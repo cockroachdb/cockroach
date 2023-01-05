@@ -229,6 +229,11 @@ func (i *MVCCIterator) IsPrefix() bool {
 	return i.i.IsPrefix()
 }
 
+// UnsafeLazyValue is part of the storage.MVCCIterator interface.
+func (i *MVCCIterator) UnsafeLazyValue() pebble.LazyValue {
+	return i.i.UnsafeLazyValue()
+}
+
 // EngineIterator wraps a storage.EngineIterator and ensures that it can
 // only be used to access spans in a SpanSet.
 type EngineIterator struct {
