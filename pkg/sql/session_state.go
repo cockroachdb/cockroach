@@ -182,6 +182,10 @@ func (p *planner) DeserializeSessionState(
 					placeholderTypes[i] = types.Json
 					continue
 				}
+				if t == oid.T__json {
+					placeholderTypes[i] = types.JSONArray
+					continue
+				}
 				v, ok := types.OidToType[t]
 				if !ok {
 					err := pgwirebase.NewProtocolViolationErrorf("unknown oid type: %v", t)

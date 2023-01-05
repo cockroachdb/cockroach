@@ -1371,6 +1371,8 @@ func (t *T) WithoutTypeModifiers() *T {
 			// with oid=json without adding full support for the JSON type.
 			// TODO(sql-exp): Remove this if we support JSON.
 			return Jsonb
+		} else if t.Oid() == oid.T__json {
+			return JSONArray
 		}
 		panic(errors.AssertionFailedf("unexpected OID: %d", t.Oid()))
 	}

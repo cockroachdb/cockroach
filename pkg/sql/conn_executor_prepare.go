@@ -422,6 +422,8 @@ func (ex *connExecutor) execBind(
 							// with oid=json without adding full support for the JSON type.
 							// TODO(sql-exp): Remove this if we support JSON.
 							typ = types.Json
+						} else if t == oid.T__json {
+							typ = types.JSONArray
 						} else {
 							var err error
 							typ, err = ex.planner.ResolveTypeByOID(ctx, t)
