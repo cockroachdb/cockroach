@@ -47,13 +47,13 @@ func SuffixFromPlatform(platform Platform) string {
 	case PlatformLinux:
 		return ".linux-2.6.32-gnu-amd64"
 	case PlatformLinuxArm:
-		return ".linux-3.7.10-gnu-aarch64"
+		return ".linux-3.7.10-gnu-arm64"
 	case PlatformMacOS:
 		// TODO(#release): The architecture is at least 10.10 until v20.2 and 10.15 for
 		// v21.1 and after. Check whether this can be changed.
 		return ".darwin-10.9-amd64"
 	case PlatformMacOSArm:
-		return ".darwin-11.0-aarch64.unsigned"
+		return ".darwin-11.0-arm64.unsigned"
 	case PlatformWindows:
 		return ".windows-6.2-amd64.exe"
 	default:
