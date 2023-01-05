@@ -62,6 +62,11 @@ start_key                 end_key       replicas  lease_holder
 <before:/Table/109/1/20>  …/1/0         {3}       3
 …/1/20                    <after:/Max>  {3}       3
 
+# Always enable the direct columnar scans to make the output below
+# deterministic.
+statement ok
+SET direct_columnar_scans_enabled = true
+
 # Ensure that the join readers are planned on the remote nodes.
 query T
 EXPLAIN (VEC)
@@ -71,19 +76,22 @@ SELECT t1.x from t1 INNER LOOKUP JOIN t2 ON t1.x=t2.x WHERE t2.y='hello'
 ├ Node 1
 │ └ *colexec.ParallelUnorderedSynchronizer
 │   ├ *rowexec.joinReader
-│   │ └ *colfetcher.ColBatchScan
+│   │ └ *colfetcher.ColBatchDirectScan
 │   ├ *colrpc.Inbox
 │   └ *colrpc.Inbox
 ├ Node 2
 │ └ *colrpc.Outbox
 │   └ *rowexec.joinReader
-│     └ *colfetcher.ColBatchScan
+│     └ *colfetcher.ColBatchDirectScan
 └ Node 3
   └ *colrpc.Outbox
     └ *rowexec.joinReader
-      └ *colfetcher.ColBatchScan
+      └ *colfetcher.ColBatchDirectScan
 
 query I
 SELECT t1.x from t1 INNER LOOKUP JOIN t2 ON t1.x=t2.x WHERE t2.y='hello'
 ----
 0
+
+statement ok
+RESET direct_columnar_scans_enabled

@@ -96,6 +96,11 @@ SELECT 1::INT2, s COLLATE en FROM t66306;
 ----
 1  foo
 
+# Always enable the direct columnar scans to make the output below
+# deterministic.
+statement ok
+SET direct_columnar_scans_enabled = true
+
 # Sanity check that the wrapped processor is planned for the query above. If it
 # no longer is, we should adjust the query here and above.
 query T
@@ -108,4 +113,7 @@ EXPLAIN (VEC) SELECT 1::INT2, s COLLATE en FROM t66306;
   └ *colrpc.Outbox
     └ *colexecbase.castIntInt2Op
       └ *rowexec.noopProcessor
-        └ *colfetcher.ColBatchScan
+        └ *colfetcher.ColBatchDirectScan
+
+statement ok
+RESET direct_columnar_scans_enabled

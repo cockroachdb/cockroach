@@ -125,6 +125,8 @@ func acquireUnreplicatedLocksOnKeys(
 			res.Local.AcquiredLocks[i] = roachpb.MakeLockAcquisition(txn, copyKey(row.Key), lock.Unreplicated)
 		}
 		return nil
+	case roachpb.COL_BATCH_RESPONSE:
+		return errors.AssertionFailedf("unexpectedly acquiring unreplicated locks with COL_BATCH_RESPONSE scan format")
 	default:
 		panic("unexpected scanFormat")
 	}

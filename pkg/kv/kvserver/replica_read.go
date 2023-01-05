@@ -531,6 +531,9 @@ func (r *Replica) collectSpansRead(
 		resp := br.Responses[i].GetInner()
 
 		if ba.WaitPolicy == lock.WaitPolicy_SkipLocked && roachpb.CanSkipLocked(req) {
+			if ba.IndexFetchSpec != nil {
+				return nil, nil, errors.AssertionFailedf("unexpectedly IndexFetchSpec is set with SKIP LOCKED wait policy")
+			}
 			// If the request is using a SkipLocked wait policy, it behaves as if run
 			// at a lower isolation level for any keys that it skips over. If the read
 			// request did not return a key, it does not need to check for conflicts
