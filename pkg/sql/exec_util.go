@@ -3348,6 +3348,10 @@ func (m *sessionDataMutator) SetOptimizerUseImprovedDisjunctionStats(val bool) {
 	m.data.OptimizerUseImprovedDisjunctionStats = val
 }
 
+func (m *sessionDataMutator) SetOptimizerUseLimitOrderingForStreamingGroupBy(val bool) {
+	m.data.OptimizerUseLimitOrderingForStreamingGroupBy = val
+}
+
 // Utility functions related to scrubbing sensitive information on SQL Stats.
 
 // quantizeCounts ensures that the Count field in the

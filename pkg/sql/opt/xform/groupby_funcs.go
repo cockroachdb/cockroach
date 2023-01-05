@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/ordering"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
 )
 
@@ -170,6 +171,133 @@ func (c *CustomFuncs) MakeProjectFromPassthroughAggs(
 		Projections: projections,
 		Passthrough: passthrough,
 	}, grp)
+}
+
+// GroupingColsClosureOverlappingOrdering determines if the specified `ordering`
+// columns overlaps with the closure of the grouping columns in `private` as
+// determined by the functional dependencies of the `input` relation to the
+// grouped aggregation. If found, this expanded set of `groupingCols` is
+// returned, plus the overlapping ordering columns `newOrdering`, along with
+// `ok`=true.
+func (c *CustomFuncs) GroupingColsClosureOverlappingOrdering(
+	input memo.RelExpr, private *memo.GroupingPrivate, ordering props.OrderingChoice,
+) (groupingCols opt.ColSet, newOrdering props.OrderingChoice, ok bool) {
+	if ordering.Any() {
+		// If the limit specifies no ordering, there is no ordering hint for us to
+		// use.
+		return opt.ColSet{}, props.OrderingChoice{}, false
+	}
+	groupingCols = private.GroupingCols
+	// If the result requires a specific ordering, use that as the ordering of the
+	// aggregation if possible.
+	// Find all columns determined by the grouping columns.
+	groupingColumnsClosure := input.Relational().FuncDeps.ComputeClosure(groupingCols)
+	// It is safe to add ordering columns present in the grouping column closure
+	// as grouping columns because the original grouping columns determine all
+	// other column values in the closure (within a group there is only one
+	// combined set of values for the other columns). Doing so allows the required
+	// ordering to be provided by the streaming group by and possibly remove the
+	// requirement for a TopK operator.
+	orderingColsInClosure := groupingColumnsClosure.Intersection(ordering.ColSet())
+	if orderingColsInClosure.Empty() {
+		// If we have no columns to add to the grouping, this rewrite has no effect.
+		return opt.ColSet{}, props.OrderingChoice{}, false
+	}
+	groupingCols = groupingCols.Union(orderingColsInClosure)
+	newOrdering, fullPrefix, found := getPrefixFromOrdering(ordering.ToOrdering(), private.Ordering, input,
+		func(id opt.ColumnID) bool { return groupingCols.Contains(id) })
+	if !found || !fullPrefix {
+		return opt.ColSet{}, props.OrderingChoice{}, false
+	}
+	return groupingCols, newOrdering, true
+}
+
+// GenerateStreamingGroupByLimitOrderingHint generates a LimitExpr with an input
+// which is a GroupBy or DistinctOn expression with an expanded set of
+// `groupingCols` which is an overlap of the closure of the original grouping
+// columns closure and the ordering in the `limitExpr` as determined by
+// `GroupingColsClosureOverlappingOrdering`, which also produces the
+// `newOrdering`. Argument `private` is expected to be a canonical group-by.
+func (c *CustomFuncs) GenerateStreamingGroupByLimitOrderingHint(
+	grp memo.RelExpr,
+	limitExpr *memo.LimitExpr,
+	aggregation memo.RelExpr,
+	input memo.RelExpr,
+	aggs memo.AggregationsExpr,
+	private *memo.GroupingPrivate,
+	groupingCols opt.ColSet,
+	newOrdering props.OrderingChoice,
+) {
+	if !c.e.evalCtx.SessionData().OptimizerUseLimitOrderingForStreamingGroupBy {
+		// This transformation rule is explicitly disabled.
+		return
+	}
+	newPrivate := *private
+	newPrivate.Ordering = newOrdering
+	newPrivate.GroupingCols = groupingCols
+
+	// Remove constant column aggregate expressions if they've been added to
+	// the grouping columns. The column should appear in one place or the other,
+	// but not both.
+	newAggs := make(memo.AggregationsExpr, 0, len(aggs))
+	for _, agg := range aggs {
+		if !groupingCols.Contains(agg.Col) {
+			newAggs = append(newAggs, agg)
+			continue
+		}
+		constAggExpr, ok := agg.Agg.(*memo.ConstAggExpr)
+		if !ok {
+			newAggs = append(newAggs, agg)
+			continue
+		}
+		variableExpr, ok := constAggExpr.Input.(*memo.VariableExpr)
+		if !ok {
+			newAggs = append(newAggs, agg)
+			continue
+		}
+		if variableExpr.Col != agg.Col {
+			// Column IDs expected to match to safely remove this aggregation.
+			return
+		}
+	}
+	// Output columns are the union of grouping columns with columns from the
+	// aggregate projection list. Verify this is built correctly.
+	outputCols := groupingCols.Copy()
+	for i := range newAggs {
+		outputCols.Add(newAggs[i].Col)
+	}
+	if !aggregation.Relational().OutputCols.Equals(outputCols) {
+		// If the output columns in the new aggregation don't match those in the
+		// original aggregation, give up on this optimization.
+		return
+	}
+
+	var newAggregation memo.RelExpr
+	constructAggregation := func() {
+		newAggregation =
+			c.e.f.DynamicConstruct(
+				aggregation.Op(),
+				input,
+				&newAggs,
+				&newPrivate,
+			).(memo.RelExpr)
+	}
+	var disabledRules util.FastIntSet
+	// The ReduceGroupingCols rule must be disabled to prevent the ordering
+	// columns from being removed from the grouping columns during operation
+	// construction. This rule already reduced the grouping columns on the initial
+	// construction. We are just adding back in any ordering columns which overlap
+	// with grouping columns in order to generate a better plan.
+	disabledRules.Add(int(opt.ReduceGroupingCols))
+
+	c.e.f.DisableOptimizationRulesTemporarily(disabledRules, constructAggregation)
+	newLimitExpr :=
+		&memo.LimitExpr{
+			Input:    newAggregation,
+			Limit:    limitExpr.Limit,
+			Ordering: limitExpr.Ordering,
+		}
+	grp.Memo().AddLimitToGroup(newLimitExpr, grp)
 }
 
 // GenerateStreamingGroupBy generates variants of a GroupBy, DistinctOn,

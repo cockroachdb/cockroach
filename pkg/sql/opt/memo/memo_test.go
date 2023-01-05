@@ -298,6 +298,12 @@ func TestMemoIsStale(t *testing.T) {
 	evalCtx.SessionData().VariableInequalityLookupJoinEnabled = false
 	notStale()
 
+	// Stale use limit ordering for streaming group by.
+	evalCtx.SessionData().OptimizerUseLimitOrderingForStreamingGroupBy = true
+	stale()
+	evalCtx.SessionData().OptimizerUseLimitOrderingForStreamingGroupBy = false
+	notStale()
+
 	// Stale testing_optimizer_random_seed.
 	evalCtx.SessionData().TestingOptimizerRandomSeed = 100
 	stale()
