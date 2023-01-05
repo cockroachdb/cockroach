@@ -41,9 +41,8 @@ message PingRequest {
   optional string ping = 1 [(gogoproto.nullable) = false];
   // The last offset the client measured with the server.
   optional RemoteOffset offset = 2 [(gogoproto.nullable) = false];
-  // The address of the client.
-  // TODO(baptist): Remove this field in v23.2. It is no longer read.
-  optional string deprecated_origin_addr = 3 [(gogoproto.nullable) = false];
+  // The advertised address of the client.
+  optional string origin_addr = 3 [(gogoproto.nullable) = false];
   // Cluster ID to prevent connections between nodes in different clusters.
   optional bytes origin_cluster_id = 5 [
     (gogoproto.customname) = "ClusterID",
@@ -60,6 +59,30 @@ message PingRequest {
     (gogoproto.nullable) = false,
     (gogoproto.customname) = "OriginNodeID",
     (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+
+  // The mapping of locality addresses for this node. These are used by the
+  // receivier of the node to initiate a dialback connection. This same
+  // information is also sent over gossip, but the first ping is sent prior to
+  // gossip being available, so it is included here also.
+  repeated cockroach.roachpb.LocalityAddress locality_address = 9 [(gogoproto.nullable) = false];
+
+
+  // What type of dialback is requested.
+  enum DialbackType {
+    // The recipient should always send a PingResponse without checking if there
+    // is a reverse connection.
+    NONE = 0;
+    // If there is already an established reverse connection, respond
+    // immediately, otherwise create a reverse connection and wait until this
+    // connection is successfully established before responding.
+    BLOCKING = 1;
+    // If there is already an established reverse connection, respond
+    // immediately, otherwise if there is no reverse connection, attempt to
+    // create one asynchronously.  If that fails to connect, then respond with
+    // failure to the next PingRequest on this connection.
+    NON_BLOCKING = 2;
+  }
+  optional DialbackType needs_dialback = 10 [(gogoproto.nullable) = false];
 
   reserved 4;
 }

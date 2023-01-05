@@ -36,6 +36,7 @@ go_library(
         "//pkg/security/username",
         "//pkg/settings",
         "//pkg/settings/cluster",
+        "//pkg/util",
         "//pkg/util/buildutil",
         "//pkg/util/contextutil",
         "//pkg/util/envutil",

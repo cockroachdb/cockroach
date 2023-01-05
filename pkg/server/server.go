@@ -312,24 +312,27 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 			// still be tried as caller node is valid, but not the destination.
 			return checkPingFor(ctx, req.TargetNodeID, codes.FailedPrecondition)
 		},
-		OnIncomingPing: func(ctx context.Context, req *rpc.PingRequest) error {
-			// Decommission state is only tracked for the system tenant.
-			if tenantID, isTenant := roachpb.ClientTenantFromContext(ctx); isTenant &&
-				!roachpb.IsSystemTenantID(tenantID.ToUint64()) {
-				return nil
-			}
-			// Incoming ping will reject requests with codes.PermissionDenied to
-			// signal remote node that it is not considered valid anymore and
-			// operations should fail immediately.
-			return checkPingFor(ctx, req.OriginNodeID, codes.PermissionDenied)
-		},
 		TenantRPCAuthorizer: authorizer,
+		NeedsDialback:       true,
 	}
 	if knobs := cfg.TestingKnobs.Server; knobs != nil {
 		serverKnobs := knobs.(*TestingKnobs)
 		rpcCtxOpts.Knobs = serverKnobs.ContextTestingKnobs
 	}
 	rpcContext := rpc.NewContext(ctx, rpcCtxOpts)
+
+	rpcContext.OnIncomingPing = func(ctx context.Context, req *rpc.PingRequest) error {
+		// Decommission state is only tracked for the system tenant.
+		if tenantID, isTenant := roachpb.ClientTenantFromContext(ctx); isTenant &&
+			!roachpb.IsSystemTenantID(tenantID.ToUint64()) {
+			return nil
+		}
+		rpcContext.VerifyDialback(ctx, req, cfg.Locality)
+		// Incoming ping will reject requests with codes.PermissionDenied to
+		// signal remote node that it is not considered valid anymore and
+		// operations should fail immediately.
+		return checkPingFor(ctx, req.OriginNodeID, codes.PermissionDenied)
+	}
 
 	rpcContext.HeartbeatCB = func() {
 		if err := rpcContext.RemoteClocks.VerifyClockOffset(ctx); err != nil {
