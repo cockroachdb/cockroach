@@ -75,10 +75,11 @@ type KVBatchFetcherResponse struct {
 	// KVs, if set, is a slice of roachpb.KeyValue, the deserialized kv pairs
 	// that were fetched.
 	KVs []roachpb.KeyValue
-	// BatchResponse, if set, is a packed byte slice containing the keys and
-	// values. An empty BatchResponse indicates that nothing was fetched for the
-	// corresponding ScanRequest, and the caller is expected to skip over the
-	// response.
+	// BatchResponse, if set, is either a packed byte slice containing the keys
+	// and values (for BATCH_RESPONSE scan format) or serialized representation
+	// of a coldata.Batch (for COL_BATCH_RESPONSE scan format). An empty
+	// BatchResponse indicates that nothing was fetched for the corresponding
+	// ScanRequest, and the caller is expected to skip over the response.
 	BatchResponse []byte
 	// spanID is the ID associated with the span that generated this response.
 	spanID int
@@ -646,37 +647,14 @@ func (rf *Fetcher) startScan(ctx context.Context) error {
 	return err
 }
 
-// setNextKV sets the next KV to process to the input KV. needsCopy, if true,
-// causes the input kv to be deep copied. needsCopy should be set to true if
-// the input KV is pointing to the last KV of a batch, so that the batch can
-// be garbage collected before fetching the next one.
-// gcassert:inline
-func (rf *Fetcher) setNextKV(kv roachpb.KeyValue, needsCopy bool) {
-	if !needsCopy {
-		rf.kv = kv
-		return
-	}
-
-	// If we've made it to the very last key in the batch, copy out the key
-	// so that the GC can reclaim the large backing slice before we call
-	// NextKV() again.
-	kvCopy := roachpb.KeyValue{}
-	kvCopy.Key = make(roachpb.Key, len(kv.Key))
-	copy(kvCopy.Key, kv.Key)
-	kvCopy.Value.RawBytes = make([]byte, len(kv.Value.RawBytes))
-	copy(kvCopy.Value.RawBytes, kv.Value.RawBytes)
-	kvCopy.Value.Timestamp = kv.Value.Timestamp
-	rf.kv = kvCopy
-}
-
 // nextKey retrieves the next key/value and sets kv/kvEnd. Returns whether the
 // key indicates a new row (as opposed to another family for the current row).
 func (rf *Fetcher) nextKey(ctx context.Context) (newRow bool, spanID int, _ error) {
-	ok, kv, spanID, needsCopy, err := rf.kvFetcher.nextKV(ctx, rf.mvccDecodeStrategy)
+	ok, kv, spanID, err := rf.kvFetcher.nextKV(ctx, rf.mvccDecodeStrategy)
 	if err != nil {
 		return false, 0, ConvertFetchError(&rf.table.spec, err)
 	}
-	rf.setNextKV(kv, needsCopy)
+	rf.kv = kv
 
 	if !ok {
 		// No more keys in the scan.

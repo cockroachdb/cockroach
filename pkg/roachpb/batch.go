@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -500,6 +501,9 @@ func (ba *BatchRequest) RefreshSpanIterate(br *BatchResponse, fn func(Span)) err
 			resp = br.Responses[i].GetInner()
 		}
 		if ba.WaitPolicy == lock.WaitPolicy_SkipLocked && CanSkipLocked(req) {
+			if ba.IndexFetchSpec != nil {
+				return errors.AssertionFailedf("unexpectedly IndexFetchSpec is set with SKIP LOCKED wait policy")
+			}
 			// If the request is using a SkipLocked wait policy, it behaves as if run
 			// at a lower isolation level for any keys that it skips over. For this
 			// reason, the request only adds point reads for the individual keys
@@ -553,6 +557,8 @@ func ActualSpan(req Request, resp Response) (Span, bool) {
 // ResponseKeyIterate calls the passed function with the keys returned
 // in the provided request's response. If no keys are being returned,
 // the function will not be called.
+// NOTE: it is assumed that req (if it is a Scan or a ReverseScan) didn't use
+// COL_BATCH_RESPONSE scan format.
 func ResponseKeyIterate(req Request, resp Response, fn func(Key)) error {
 	if resp == nil {
 		return nil
@@ -582,6 +588,15 @@ func ResponseKeyIterate(req Request, resp Response, fn func(Key)) error {
 		}); err != nil {
 			return err
 		}
+		if buildutil.CrdbTestBuild {
+			// COL_BATCH_RESPONSE scan format is not supported.
+			if req.(*ScanRequest).ScanFormat == COL_BATCH_RESPONSE {
+				return errors.AssertionFailedf(
+					"unexpectedly called ResponseKeyIterate on a " +
+						"ScanRequest with COL_BATCH_RESPONSE scan format",
+				)
+			}
+		}
 	case *ReverseScanResponse:
 		// If ScanFormat == KEY_VALUES.
 		for _, kv := range v.Rows {
@@ -594,6 +609,15 @@ func ResponseKeyIterate(req Request, resp Response, fn func(Key)) error {
 			return nil
 		}); err != nil {
 			return err
+		}
+		if buildutil.CrdbTestBuild {
+			// COL_BATCH_RESPONSE scan format is not supported.
+			if req.(*ReverseScanRequest).ScanFormat == COL_BATCH_RESPONSE {
+				return errors.AssertionFailedf(
+					"unexpectedly called ResponseKeyIterate on a " +
+						"ReverseScanRequest with COL_BATCH_RESPONSE scan format",
+				)
+			}
 		}
 	default:
 		return errors.Errorf("cannot iterate over response keys of %s request", req.Method())
