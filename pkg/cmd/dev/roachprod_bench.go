@@ -1,4 +1,4 @@
-// Copyright 2018 The Cockroach Authors.
+// Copyright 2022 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -25,7 +25,6 @@ import (
 
 	"github.com/alessio/shellescape"
 	bazelutil "github.com/cockroachdb/cockroach/pkg/build/util"
-	"github.com/cockroachdb/errors"
 	"github.com/klauspost/pgzip"
 	"github.com/spf13/cobra"
 )
@@ -381,14 +380,14 @@ func compressFile(filePath string) (err error) {
 		return
 	}
 	defer func() {
-		err = errors.CombineErrors(inputFile.Close(), err)
+		err = combineErrors(inputFile.Close(), err)
 	}()
 	compressedFile, err := os.Create(filePath + ".gz")
 	if err != nil {
 		return
 	}
 	defer func() {
-		err = errors.CombineErrors(compressedFile.Close(), err)
+		err = combineErrors(compressedFile.Close(), err)
 	}()
 	writer := pgzip.NewWriter(compressedFile)
 	_, err = io.Copy(writer, inputFile)
@@ -404,4 +403,15 @@ func min(a, b int) int {
 		return a
 	}
 	return b
+}
+
+func combineErrors(err error, otherErr error) error {
+	if err == nil {
+		return otherErr
+	}
+	if otherErr != nil {
+		// nolint:errwrap dev package prohibits import of cockroach errors due to its size.
+		return fmt.Errorf("multiple errors occurred: %s; %s", err.Error(), otherErr.Error())
+	}
+	return err
 }
