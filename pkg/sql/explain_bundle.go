@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/colfetcher"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
@@ -28,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/memzipper"
@@ -628,6 +630,7 @@ func (c *stmtEnvCollector) PrintSessionSettings(w io.Writer, sv *settings.Values
 		{sessionSetting: "default_transaction_quality_of_service"},
 		{sessionSetting: "default_transaction_read_only"},
 		{sessionSetting: "default_transaction_use_follower_reads"},
+		{sessionSetting: "direct_columnar_scans_enabled", clusterSetting: colfetcher.DirectScansEnabled, convFunc: boolToOnOff},
 		{sessionSetting: "disallow_full_table_scans", clusterSetting: disallowFullTableScans, convFunc: boolToOnOff},
 		{sessionSetting: "distsql", clusterSetting: DistSQLClusterExecMode, convFunc: distsqlConv},
 		{sessionSetting: "enable_implicit_select_for_update", clusterSetting: implicitSelectForUpdateClusterMode, convFunc: boolToOnOff},
@@ -674,6 +677,14 @@ func (c *stmtEnvCollector) PrintSessionSettings(w io.Writer, sv *settings.Values
 			}
 		} else {
 			def = s.clusterSetting.EncodedDefault()
+			if buildutil.CrdbTestBuild {
+				// In test builds we might randomize some setting defaults, so
+				// we need to override them to make the tests deterministic.
+				switch s.sessionSetting {
+				case "direct_columnar_scans_enabled":
+					def = "false"
+				}
+			}
 		}
 		if s.convFunc != nil {
 			// If necessary, convert the encoded cluster setting to a session setting

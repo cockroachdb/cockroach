@@ -15,9 +15,11 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
@@ -39,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execreleasable"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
@@ -843,14 +846,81 @@ func NewColOperator(
 				ctx, flowCtx, "cfetcher" /* opName */, spec.ProcessorID, 2, /* numAccounts */
 			)
 			estimatedRowCount := spec.EstimatedRowCount
-			scanOp, err := colfetcher.NewColBatchScan(
-				ctx, colmem.NewAllocator(ctx, accounts[0], factory), accounts[1],
-				flowCtx, core.TableReader, post, estimatedRowCount, args.TypeResolver,
-			)
-			if err != nil {
-				return r, err
+			var scanOp colfetcher.ScanOperator
+			var resultTypes []*types.T
+			if flowCtx.EvalCtx.SessionData().DirectColumnarScansEnabled {
+				canUseDirectScan := flowCtx.EvalCtx.Settings.Version.IsActive(ctx, clusterversion.V23_1_KVDirectColumnarScans)
+				fetchSpec := core.TableReader.FetchSpec
+				// Handling user-defined types requires type hydration which we
+				// cannot easily do on the KV server side, so for the time being
+				// we disable the direct scans with such types. However, we
+				// allow for enums to be processed by treating them as bytes
+				// values.
+				// TODO(yuzefovich): consider supporting non-enum UDTs (#92954).
+				var foundNonEnumUDT bool
+				for _, c := range fetchSpec.KeyAndSuffixColumns {
+					if c.Type.UserDefined() && c.Type.Family() != types.EnumFamily {
+						foundNonEnumUDT = true
+					}
+				}
+				for _, c := range fetchSpec.FetchedColumns {
+					if c.Type.UserDefined() && c.Type.Family() != types.EnumFamily {
+						foundNonEnumUDT = true
+					}
+				}
+				canUseDirectScan = canUseDirectScan && !foundNonEnumUDT
+				// At the moment, the ColBatchDirectScan cannot handle Gets
+				// (it's not clear whether it is worth to handle them
+				// via the same path as for Scans and ReverseScans (which could
+				// have too large of an overhead) or by teaching the operator to
+				// also decode a single KV (similar to what regular ColBatchScan
+				// does)).
+				// TODO(yuzefovich, 23.1): explore supporting Gets somehow.
+				var foundGet bool
+				for i := range core.TableReader.Spans {
+					if len(core.TableReader.Spans[i].EndKey) == 0 {
+						foundGet = true
+						break
+					}
+				}
+				canUseDirectScan = canUseDirectScan && !foundGet
+				// We currently also don't use the direct scans if TraceKV is
+				// enabled (due to not being able to tell the KV server about
+				// it). One idea would be to include this boolean into the
+				// fetchpb.IndexFetchSpec.
+				// TODO(yuzefovich, 23.1): support TraceKV option.
+				canUseDirectScan = canUseDirectScan && !flowCtx.TraceKV
+				// The current implementation of non-default locking strength as
+				// well as of SKIP LOCKED wait policy require being able to
+				// access the full key-value pairs after the corresponding
+				// request is evaluated. This is not possible, in general case,
+				// when using the direct scans since only needed columns are
+				// included into the response.
+				// TODO(yuzefovich): support non-default locking strength and
+				// SKIP LOCKED wait policy somehow (#92950).
+				canUseDirectScan = canUseDirectScan &&
+					row.GetKeyLockingStrength(core.TableReader.LockingStrength) == lock.None &&
+					core.TableReader.LockingWaitPolicy != descpb.ScanLockingWaitPolicy_SKIP_LOCKED
+				if canUseDirectScan {
+					scanOp, resultTypes, err = colfetcher.NewColBatchDirectScan(
+						ctx, colmem.NewAllocator(ctx, accounts[0], factory), accounts[1],
+						flowCtx, core.TableReader, post, args.TypeResolver,
+					)
+					if err != nil {
+						return r, err
+					}
+				}
 			}
-			result.finishScanPlanning(scanOp, scanOp.ResultTypes)
+			if scanOp == nil {
+				scanOp, resultTypes, err = colfetcher.NewColBatchScan(
+					ctx, colmem.NewAllocator(ctx, accounts[0], factory), accounts[1],
+					flowCtx, core.TableReader, post, estimatedRowCount, args.TypeResolver,
+				)
+				if err != nil {
+					return r, err
+				}
+			}
+			result.finishScanPlanning(scanOp, resultTypes)
 
 		case core.JoinReader != nil:
 			if err := checkNumIn(inputs, 1); err != nil {
