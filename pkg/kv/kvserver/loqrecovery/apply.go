@@ -264,7 +264,7 @@ func applyReplicaUpdate(
 			Txn:    intent.Txn,
 			Status: roachpb.ABORTED,
 		}
-		if _, err := storage.MVCCResolveWriteIntent(ctx, readWriter, &ms, update); err != nil {
+		if _, _, _, err := storage.MVCCResolveWriteIntent(ctx, readWriter, &ms, update, storage.MVCCResolveWriteIntentOptions{}); err != nil {
 			return PrepareReplicaReport{}, err
 		}
 		report.AbortedTransaction = true
