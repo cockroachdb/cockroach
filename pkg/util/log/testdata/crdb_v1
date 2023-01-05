@@ -6,20 +6,20 @@ entries
 {"counter": 2, "message": ""}
 {"counter": 3, "message": "info"}
 ----
-I000101 00:00:12.300000 456 somefile.go:136  2 
-I000101 00:00:12.300000 456 somefile.go:136  3 info
+I000101 00:00:12.300000 456 somefile.go:136  [T1] 2 
+I000101 00:00:12.300000 456 somefile.go:136  [T1] 3 info
 # after parse:
 logpb.Entry{Severity:1, Time:946684812300000000, Goroutine:456, File:"somefile.go", Line:136, Message:"‹›", Tags:"", Counter:0x2, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1"}
 logpb.Entry{Severity:1, Time:946684812300000000, Goroutine:456, File:"somefile.go", Line:136, Message:"‹info›", Tags:"", Counter:0x3, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1"}
 
 entries
-{"counter": 2, "message": "hello ‹world›"}
+{"counter": 2, "message": "hello ‹world›", "tags": "sometags"}
 {"counter": 3, "message": "hello ‹world›", "redactable": true}
 ----
-I000101 00:00:12.300000 456 somefile.go:136  2 hello ‹world›
-I000101 00:00:12.300000 456 somefile.go:136 ⋮ 3 hello ‹world›
+I000101 00:00:12.300000 456 somefile.go:136  [T1,sometags] 2 hello ‹world›
+I000101 00:00:12.300000 456 somefile.go:136 ⋮ [T1] 3 hello ‹world›
 # after parse:
-logpb.Entry{Severity:1, Time:946684812300000000, Goroutine:456, File:"somefile.go", Line:136, Message:"‹hello ?world?›", Tags:"", Counter:0x2, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1"}
+logpb.Entry{Severity:1, Time:946684812300000000, Goroutine:456, File:"somefile.go", Line:136, Message:"‹hello ?world?›", Tags:"‹sometags›", Counter:0x2, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1"}
 logpb.Entry{Severity:1, Time:946684812300000000, Goroutine:456, File:"somefile.go", Line:136, Message:"hello ‹world›", Tags:"", Counter:0x3, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1"}
 
 
@@ -27,9 +27,9 @@ entries
 {"counter": 2, "message": "multi-\nline"}
 {"counter": 3, "message": "multi-\nline", "redactable": true}
 ----
-I000101 00:00:12.300000 456 somefile.go:136  2 multi-
+I000101 00:00:12.300000 456 somefile.go:136  [T1] 2 multi-
 line
-I000101 00:00:12.300000 456 somefile.go:136 ⋮ 3 multi-
+I000101 00:00:12.300000 456 somefile.go:136 ⋮ [T1] 3 multi-
 line
 # after parse:
 logpb.Entry{Severity:1, Time:946684812300000000, Goroutine:456, File:"somefile.go", Line:136, Message:"‹multi-›\n‹line›", Tags:"", Counter:0x2, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1"}
@@ -37,17 +37,17 @@ logpb.Entry{Severity:1, Time:946684812300000000, Goroutine:456, File:"somefile.g
 
 
 entries
-{"counter": 2, "severity": 2, "message": "warning"}
-{"counter": 3, "severity": 3, "message": "error"}
-{"counter": 4, "severity": 4, "message": "fatal"}
+{"counter": 2, "severity": 2, "message": "warning", "tenant_id": "1234", "tags": "nsql?,othertag=somevalue"}
+{"counter": 3, "severity": 3, "message": "error", "tenant_id": "1234", "tags": "nsql?,othertag=somevalue"}
+{"counter": 4, "severity": 4, "message": "fatal", "tenant_id": "1234", "tags": "nsql?,othertag=somevalue"}
 ----
-W000101 00:00:12.300000 456 somefile.go:136  2 warning
-E000101 00:00:12.300000 456 somefile.go:136  3 error
-F000101 00:00:12.300000 456 somefile.go:136  4 fatal
+W000101 00:00:12.300000 456 somefile.go:136  [T1234,nsql?,othertag=somevalue] 2 warning
+E000101 00:00:12.300000 456 somefile.go:136  [T1234,nsql?,othertag=somevalue] 3 error
+F000101 00:00:12.300000 456 somefile.go:136  [T1234,nsql?,othertag=somevalue] 4 fatal
 # after parse:
-logpb.Entry{Severity:2, Time:946684812300000000, Goroutine:456, File:"somefile.go", Line:136, Message:"‹warning›", Tags:"", Counter:0x2, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1"}
-logpb.Entry{Severity:3, Time:946684812300000000, Goroutine:456, File:"somefile.go", Line:136, Message:"‹error›", Tags:"", Counter:0x3, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1"}
-logpb.Entry{Severity:4, Time:946684812300000000, Goroutine:456, File:"somefile.go", Line:136, Message:"‹fatal›", Tags:"", Counter:0x4, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1"}
+logpb.Entry{Severity:2, Time:946684812300000000, Goroutine:456, File:"somefile.go", Line:136, Message:"‹warning›", Tags:"‹nsql?,othertag=somevalue›", Counter:0x2, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1234"}
+logpb.Entry{Severity:3, Time:946684812300000000, Goroutine:456, File:"somefile.go", Line:136, Message:"‹error›", Tags:"‹nsql?,othertag=somevalue›", Counter:0x3, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1234"}
+logpb.Entry{Severity:4, Time:946684812300000000, Goroutine:456, File:"somefile.go", Line:136, Message:"‹fatal›", Tags:"‹nsql?,othertag=somevalue›", Counter:0x4, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1234"}
 
 subtest regression_56873
 
@@ -55,8 +55,8 @@ entries
 {"counter": 2, "tags": "sometags", "message": "foo"}
 {"counter": 3, "tags": "", "message": "foo"}
 ----
-I000101 00:00:12.300000 456 somefile.go:136  [sometags] 2 foo
-I000101 00:00:12.300000 456 somefile.go:136  3 foo
+I000101 00:00:12.300000 456 somefile.go:136  [T1,sometags] 2 foo
+I000101 00:00:12.300000 456 somefile.go:136  [T1] 3 foo
 # after parse:
 logpb.Entry{Severity:1, Time:946684812300000000, Goroutine:456, File:"somefile.go", Line:136, Message:"‹foo›", Tags:"‹sometags›", Counter:0x2, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1"}
 logpb.Entry{Severity:1, Time:946684812300000000, Goroutine:456, File:"somefile.go", Line:136, Message:"‹foo›", Tags:"", Counter:0x3, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1"}
@@ -68,7 +68,7 @@ subtest different_channel
 entries
 {"counter": 2, "channel": 2, "message": "foo"}
 ----
-I000101 00:00:12.300000 456 2@somefile.go:136  2 foo
+I000101 00:00:12.300000 456 2@somefile.go:136  [T1] 2 foo
 # after parse:
 logpb.Entry{Severity:1, Time:946684812300000000, Goroutine:456, File:"somefile.go", Line:136, Message:"‹foo›", Tags:"", Counter:0x2, Redactable:true, Channel:2, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1"}
 
@@ -79,7 +79,7 @@ subtest ipv6_in_tags
 entries
 {"counter": 2, "tags": "client=[1::]:2", "message": "foo"}
 ----
-I000101 00:00:12.300000 456 somefile.go:136  [client=[1::]:2] 2 foo
+I000101 00:00:12.300000 456 somefile.go:136  [T1,client=[1::]:2] 2 foo
 # after parse:
 logpb.Entry{Severity:1, Time:946684812300000000, Goroutine:456, File:"somefile.go", Line:136, Message:"‹foo›", Tags:"‹client=[1::]:2›", Counter:0x2, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1"}
 
@@ -91,8 +91,8 @@ entries
 {"counter": 2, "message": "Structured entry: {\"hello\":123}", "redactable": true}
 {"counter": 2, "message": "Structured entry: {\"hello\":123}\nstack trace:\nfoo", "redactable": true}
 ----
-I000101 00:00:12.300000 456 somefile.go:136 ⋮ 2 Structured entry: {"hello":123}
-I000101 00:00:12.300000 456 somefile.go:136 ⋮ 2 Structured entry: {"hello":123}
+I000101 00:00:12.300000 456 somefile.go:136 ⋮ [T1] 2 Structured entry: {"hello":123}
+I000101 00:00:12.300000 456 somefile.go:136 ⋮ [T1] 2 Structured entry: {"hello":123}
 stack trace:
 foo
 # after parse:
@@ -106,8 +106,8 @@ entries
 {"counter": 2, "message": " ={\"hello\":123}", "redactable": true}
 {"counter": 2, "message": " ={\"hello\":123}\nstack trace:\nfoo", "redactable": true}
 ----
-I000101 00:00:12.300000 456 somefile.go:136 ⋮ 2  ={"hello":123}
-I000101 00:00:12.300000 456 somefile.go:136 ⋮ 2  ={"hello":123}
+I000101 00:00:12.300000 456 somefile.go:136 ⋮ [T1] 2  ={"hello":123}
+I000101 00:00:12.300000 456 somefile.go:136 ⋮ [T1] 2  ={"hello":123}
 stack trace:
 foo
 # after parse:
