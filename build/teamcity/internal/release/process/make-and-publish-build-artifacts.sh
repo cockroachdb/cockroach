@@ -59,7 +59,7 @@ export google_credentials="$gcs_credentials"
 source "build/teamcity-support.sh"  # For log_into_gcloud
 log_into_gcloud
 export GOOGLE_APPLICATION_CREDENTIALS="$PWD/.google-credentials.json"
-$BAZEL_BIN/pkg/cmd/publish-provisional-artifacts/publish-provisional-artifacts_/publish-provisional-artifacts -provisional -release --gcs-bucket="$gcs_bucket"
+$BAZEL_BIN/pkg/cmd/publish-provisional-artifacts/publish-provisional-artifacts_/publish-provisional-artifacts -provisional -release --gcs-bucket="$gcs_bucket" --output-directory=artifacts
 EOF
 tc_end_block "Compile and publish artifacts"
 
@@ -70,37 +70,21 @@ docker_login_with_google
 gcr_tag="${gcr_repository}:${build_name}"
 declare -a docker_manifest_amends
 
-for platform_name in "${platform_names[@]}"; do
-  tarball_arch="$(tarball_arch_from_platform_name "$platform_name")"
-  docker_arch="$(docker_arch_from_platform_name "$platform_name")"
-  linux_platform=linux
-  if [[ $tarball_arch == "aarch64" ]]; then
-    linux_platform=linux-3.7.10-gnu
-  fi
-  # TODO: update publish-provisional-artifacts with option to leave one or more cockroach binaries in the local filesystem
-  # NB: tar usually stops reading as soon as it sees an empty block but that makes
-  # curl unhappy, so passing `--ignore-zeros` will cause it to read to the end.
-  cp --recursive "build/deploy" "build/deploy-${docker_arch}"
-  curl \
-    --fail \
-    --silent \
-    --show-error \
-    --output /dev/stdout \
-    --url "${download_prefix}/cockroach-${build_name}.${linux_platform}-${tarball_arch}.tgz" \
-    | tar \
-    --directory="build/deploy-${docker_arch}" \
+for platform_name in amd64 arm64; do
+    tar \
+    --directory="build/deploy-${platform_name}" \
     --extract \
-    --file=/dev/stdin \
+    --file="artifacts/cockroach-${build_name}.linux-${platform_name}.tgz" \
     --ungzip \
     --ignore-zeros \
     --strip-components=1
-  cp --recursive licenses "build/deploy-${docker_arch}"
+  cp --recursive licenses "build/deploy-${platform_name}"
   # Move the libs where Dockerfile expects them to be
-  mv build/deploy-${docker_arch}/lib/* build/deploy-${docker_arch}/
-  rmdir build/deploy-${docker_arch}/lib
+  mv build/deploy-${platform_name}/lib/* build/deploy-${platform_name}/
+  rmdir build/deploy-${platform_name}/lib
 
-  build_docker_tag="${gcr_repository}:${docker_arch}-${build_name}"
-  docker build --no-cache --pull --platform "linux/${docker_arch}" --tag="${build_docker_tag}" "build/deploy-${docker_arch}"
+  build_docker_tag="${gcr_repository}:${platform_name}-${build_name}"
+  docker build --no-cache --pull --platform "linux/${platform_name}" --tag="${build_docker_tag}" "build/deploy-${platform_name}"
   docker push "$build_docker_tag"
   docker_manifest_amends+=("--amend" "${build_docker_tag}")
 done
