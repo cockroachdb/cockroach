@@ -15,6 +15,7 @@ import (
 	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/contentionpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/idxrecommendations"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -185,7 +186,7 @@ func (ex *connExecutor) recordStatementSummary(
 	}
 	recordedStmtStats := sqlstats.RecordedStmtStats{
 		SessionID:            ex.sessionID,
-		StatementID:          planner.stmt.QueryID,
+		StatementID:          stmt.QueryID,
 		AutoRetryCount:       automaticRetryCount,
 		AutoRetryReason:      ex.state.mu.autoRetryReason,
 		RowsAffected:         rowsAffected,
@@ -226,6 +227,15 @@ func (ex *connExecutor) recordStatementSummary(
 	// Record statement execution statistics if span is recorded and no error was
 	// encountered while collecting query-level statistics.
 	if queryLevelStatsOk {
+		for _, ev := range queryLevelStats.ContentionEvents {
+			contentionEvent := contentionpb.ExtendedContentionEvent{
+				BlockingEvent: ev,
+				WaitingTxnID:  planner.txn.ID(),
+			}
+
+			ex.server.cfg.ContentionRegistry.AddContentionEvent(contentionEvent)
+		}
+
 		err = ex.statsCollector.RecordStatementExecStats(recordedStmtStatsKey, *queryLevelStats)
 		if err != nil {
 			if log.V(2 /* level */) {

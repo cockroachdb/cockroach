@@ -151,7 +151,6 @@ func (im *IndexBackfillerMergePlanner) plan(
 			nil, /* txn - the flow does not run wholly in a txn */
 			im.execCfg.Clock,
 			evalCtx.Tracing,
-			im.execCfg.ContentionRegistry,
 		)
 		defer recv.Release()
 		evalCtxCopy := evalCtx
