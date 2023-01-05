@@ -80,8 +80,8 @@ var (
 // txn_status     t=<name> status=<txnstatus>
 // txn_ignore_seqs t=<name> seqs=[<int>-<int>[,<int>-<int>...]]
 //
-// resolve_intent t=<name> k=<key> [status=<txnstatus>] [clockWhilePending=<int>[,<int>]]
-// resolve_intent_range t=<name> k=<key> end=<key> [status=<txnstatus>]
+// resolve_intent t=<name> k=<key> [status=<txnstatus>] [clockWhilePending=<int>[,<int>]] [targetBytes=<int>]
+// resolve_intent_range t=<name> k=<key> end=<key> [status=<txnstatus>] [maxKeys=<int>] [targetBytes=<int>]
 // check_intent   k=<key> [none]
 // add_lock       t=<name> k=<key>
 //
@@ -876,8 +876,12 @@ func cmdResolveIntent(e *evalCtx) error {
 	key := e.getKey()
 	status := e.getTxnStatus()
 	clockWhilePending := hlc.ClockTimestamp(e.getTsWithName("clockWhilePending"))
+	var targetBytes int64
+	if e.hasArg("targetBytes") {
+		e.scanArg("targetBytes", &targetBytes)
+	}
 	return e.withWriter("resolve_intent", func(rw storage.ReadWriter) error {
-		return e.resolveIntent(rw, key, txn, status, clockWhilePending)
+		return e.resolveIntent(rw, key, txn, status, clockWhilePending, targetBytes)
 	})
 }
 
@@ -889,8 +893,18 @@ func cmdResolveIntentRange(e *evalCtx) error {
 	intent := roachpb.MakeLockUpdate(txn, roachpb.Span{Key: start, EndKey: end})
 	intent.Status = status
 
+	var maxKeys int64
+	if e.hasArg("maxKeys") {
+		e.scanArg("maxKeys", &maxKeys)
+	}
+	var targetBytes int64
+	if e.hasArg("targetBytes") {
+		e.scanArg("targetBytes", &targetBytes)
+	}
+
 	return e.withWriter("resolve_intent_range", func(rw storage.ReadWriter) error {
-		_, _, _, _, err := storage.MVCCResolveWriteIntentRange(e.ctx, rw, e.ms, intent, storage.MVCCResolveWriteIntentRangeOptions{})
+		_, _, _, _, err := storage.MVCCResolveWriteIntentRange(e.ctx, rw, e.ms, intent,
+			storage.MVCCResolveWriteIntentRangeOptions{MaxKeys: maxKeys, TargetBytes: targetBytes})
 		return err
 	})
 }
@@ -901,11 +915,13 @@ func (e *evalCtx) resolveIntent(
 	txn *roachpb.Transaction,
 	resolveStatus roachpb.TransactionStatus,
 	clockWhilePending hlc.ClockTimestamp,
+	targetBytes int64,
 ) error {
 	intent := roachpb.MakeLockUpdate(txn, roachpb.Span{Key: key})
 	intent.Status = resolveStatus
 	intent.ClockWhilePending = roachpb.ObservedTimestamp{Timestamp: clockWhilePending}
-	_, _, _, err := storage.MVCCResolveWriteIntent(e.ctx, rw, e.ms, intent, storage.MVCCResolveWriteIntentOptions{})
+	_, _, _, err := storage.MVCCResolveWriteIntent(e.ctx, rw, e.ms, intent,
+		storage.MVCCResolveWriteIntentOptions{TargetBytes: targetBytes})
 	return err
 }
 
@@ -1056,7 +1072,7 @@ func cmdCPut(e *evalCtx) error {
 			return err
 		}
 		if resolve {
-			return e.resolveIntent(rw, key, txn, resolveStatus, hlc.ClockTimestamp{})
+			return e.resolveIntent(rw, key, txn, resolveStatus, hlc.ClockTimestamp{}, 0)
 		}
 		return nil
 	})
@@ -1077,7 +1093,7 @@ func cmdInitPut(e *evalCtx) error {
 			return err
 		}
 		if resolve {
-			return e.resolveIntent(rw, key, txn, resolveStatus, hlc.ClockTimestamp{})
+			return e.resolveIntent(rw, key, txn, resolveStatus, hlc.ClockTimestamp{}, 0)
 		}
 		return nil
 	})
@@ -1100,7 +1116,7 @@ func cmdDelete(e *evalCtx) error {
 			return err
 		}
 		if resolve {
-			return e.resolveIntent(rw, key, txn, resolveStatus, hlc.ClockTimestamp{})
+			return e.resolveIntent(rw, key, txn, resolveStatus, hlc.ClockTimestamp{}, 0)
 		}
 		return nil
 	})
@@ -1133,7 +1149,7 @@ func cmdDeleteRange(e *evalCtx) error {
 		}
 
 		if resolve {
-			return e.resolveIntent(rw, key, txn, resolveStatus, hlc.ClockTimestamp{})
+			return e.resolveIntent(rw, key, txn, resolveStatus, hlc.ClockTimestamp{}, 0)
 		}
 		return nil
 	})
@@ -1270,7 +1286,7 @@ func cmdIncrement(e *evalCtx) error {
 		}
 		e.results.buf.Printf("inc: current value = %d\n", curVal)
 		if resolve {
-			return e.resolveIntent(rw, key, txn, resolveStatus, hlc.ClockTimestamp{})
+			return e.resolveIntent(rw, key, txn, resolveStatus, hlc.ClockTimestamp{}, 0)
 		}
 		return nil
 	})
@@ -1304,7 +1320,7 @@ func cmdPut(e *evalCtx) error {
 			return err
 		}
 		if resolve {
-			return e.resolveIntent(rw, key, txn, resolveStatus, hlc.ClockTimestamp{})
+			return e.resolveIntent(rw, key, txn, resolveStatus, hlc.ClockTimestamp{}, 0)
 		}
 		return nil
 	})

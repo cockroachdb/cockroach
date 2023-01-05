@@ -52,13 +52,14 @@ func ResolveIntentRange(
 		// The observation was from the wrong node. Ignore.
 		update.ClockWhilePending = roachpb.ObservedTimestamp{}
 	}
-	numKeys, _, resumeSpan, _, err := storage.MVCCResolveWriteIntentRange(ctx, readWriter, ms, update,
-		storage.MVCCResolveWriteIntentRangeOptions{MaxKeys: h.MaxSpanRequestKeys})
+	numKeys, numBytes, resumeSpan, resumeReason, err := storage.MVCCResolveWriteIntentRange(ctx, readWriter, ms, update,
+		storage.MVCCResolveWriteIntentRangeOptions{MaxKeys: h.MaxSpanRequestKeys, TargetBytes: h.TargetBytes})
 	if err != nil {
 		return result.Result{}, err
 	}
 	reply := resp.(*roachpb.ResolveIntentRangeResponse)
 	reply.NumKeys = numKeys
+	reply.NumBytes = numBytes
 	if resumeSpan != nil {
 		update.EndKey = resumeSpan.Key
 		reply.ResumeSpan = resumeSpan
@@ -66,7 +67,7 @@ func ResolveIntentRange(
 		// resolved, not the number of keys scanned. We could return
 		// RESUME_INTENT_LIMIT here, but since the given limit is a key limit we
 		// return RESUME_KEY_LIMIT for symmetry.
-		reply.ResumeReason = roachpb.RESUME_KEY_LIMIT
+		reply.ResumeReason = resumeReason
 	}
 
 	var res result.Result
