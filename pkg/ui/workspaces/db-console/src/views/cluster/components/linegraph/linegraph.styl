@@ -26,6 +26,7 @@ $viz-sides = 62px
   height 100%
   .uplot
     display flex
+    flex-direction column
     > .u-legend
       display none
       position absolute
@@ -45,15 +46,13 @@ $viz-sides = 62px
     // stick the legend to the char's bottom.
     // Chart height is hardcoded to 300px (pkg/ui/src/views/cluster/util/graphs.ts)
     > .u-legend.u-legend--place-bottom
-      top 300px!important
-      left 0!important
+      position relative
+      top 0!important // Necessary because uPlot adds top/left on hover to make legend appear near mouse pointer
+      left 0!important // Necessary because uPlot adds top/left on hover to make legend appear near mouse pointer
       width auto
       margin-left -1px
       margin-right -1px
-      border-top none
-      border-radius 0px 0px 5px 5px
       padding-left 50px
-
       // the first line in the legend represents Y-axis and it occupies an entire line
       // to stand out from the rest of x-axis values
       > tr:first-child

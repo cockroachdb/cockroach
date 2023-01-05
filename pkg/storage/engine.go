@@ -299,6 +299,14 @@ type MVCCIterator interface {
 	// IsPrefix returns true if the MVCCIterator is a prefix iterator, i.e.
 	// created with IterOptions.Prefix enabled.
 	IsPrefix() bool
+	// UnsafeLazyValue is only for use inside the storage package. It exposes
+	// the LazyValue at the current iterator position, and hence delays fetching
+	// the actual value. It is exposed for reverse scans that need to search for
+	// the most recent relevant version, and can't know whether the current
+	// value is that version, and need to step back to make that determination.
+	//
+	// REQUIRES: Valid() returns true.
+	UnsafeLazyValue() pebble.LazyValue
 }
 
 // EngineIterator is an iterator over key-value pairs where the key is
