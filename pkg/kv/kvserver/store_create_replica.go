@@ -106,6 +106,7 @@ func (s *Store) tryGetOrCreateReplica(
 	creatingReplica *roachpb.ReplicaDescriptor,
 ) (_ *Replica, created bool, _ error) {
 	repl, ok := s.mu.replicasByRangeID.Load(rangeID)
+	// Uncommon case: replica is not found. Try to create an unitialized replica.
 	if !ok {
 		ur, err := s.tryCreateUninitializedReplica(ctx, rangeID, replicaID)
 		if err != nil {
@@ -113,7 +114,6 @@ func (s *Store) tryGetOrCreateReplica(
 		}
 		return ur, true, nil
 	}
-
 	// The common case: there is an existing (initialized) replica.
 
 	repl.raftMu.Lock() // not unlocked on success
@@ -170,9 +170,9 @@ func (s *Store) tryGetOrCreateReplica(
 func (s *Store) tryCreateUninitializedReplica(
 	ctx context.Context, rangeID roachpb.RangeID, replicaID roachpb.ReplicaID,
 ) (*Replica, error) {
-	// No replica currently exists, so we'll try to create one. Before creating
-	// the replica, see if there is a tombstone which would indicate that this
-	// is a stale message.
+	// Before creating the replica, see if the range tombstone indicates that this
+	// replica ID has been removed.
+	//
 	// NB: we check this before creating a new Replica and adding it to the
 	// Store's Range map even though we must check it again after to avoid race
 	// conditions. This double-checked locking is an optimization to avoid this
@@ -217,7 +217,7 @@ func (s *Store) tryCreateUninitializedReplica(
 	s.mu.uninitReplicas[repl.RangeID] = repl
 	s.mu.Unlock() // NB: unlocking out of order
 
-	// Initialize the Replica with the replicaID.
+	// Store the initial state of the uninitialized replica.
 	if err := func() error {
 		// Check for a tombstone again now that we've inserted into the Range
 		// map. This double-checked locking ensures that we avoid a race where a
