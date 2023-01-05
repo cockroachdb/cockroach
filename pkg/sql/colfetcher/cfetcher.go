@@ -176,6 +176,15 @@ type cFetcherArgs struct {
 	// single set of spans. This allows the cFetcher to close itself eagerly,
 	// once it finishes the first fetch.
 	singleUse bool
+	// allowNullsInNonNullableOnLastRowInBatch, if true, avoids emitting an
+	// error due to setting a NULL value in a non-nullable column in the
+	// stateFinalizeRow state.
+	//
+	// This behavior is needed when the cFetcher is used by the cFetcherWrapper,
+	// and one of the limits of the BatchRequest (either MaxSpanRequestKeys or
+	// TargetSize) was reached forcing the cFetcher to discard the last partial
+	// row.
+	allowNullsInNonNullableOnLastRowInBatch bool
 }
 
 // noOutputColumn is a sentinel value to denote that a system column is not
@@ -256,6 +265,8 @@ type cFetcher struct {
 		// keys are compared against this prefix to determine whether they're part
 		// of a new row or not.
 		lastRowPrefix roachpb.Key
+		// firstKeyInRow, if set, is the first key in the current row.
+		firstKeyInRow roachpb.Key
 		// prettyValueBuf is a temp buffer used to create strings for tracing.
 		prettyValueBuf *bytes.Buffer
 
@@ -272,6 +283,11 @@ type cFetcher struct {
 		timestampCol []apd.Decimal
 		// tableoidCol is the same as timestampCol but for the tableoid system column.
 		tableoidCol coldata.DatumVec
+
+		// mustRemoveLastRow, if set, indicates that a NULL value was set in a
+		// non-nullable column due to the expectation that the last row will be
+		// trimmed by the cFetcherWrapper.
+		mustRemoveLastRow bool
 	}
 
 	// scratch is a scratch space used when decoding bytes-like and decimal
@@ -467,8 +483,38 @@ func (cf *cFetcher) Init(
 		cf.fetcher = kvFetcher
 	}
 	cf.accountingHelper.Init(allocator, cf.memoryLimit, cf.table.typs)
+	cf.machine.state[0] = stateResetBatch
+	cf.machine.state[1] = stateInitFetch
 
 	return nil
+}
+
+func cFetcherFirstBatchLimit(limitHint rowinfra.RowLimit, maxKeysPerRow uint32) rowinfra.KeyLimit {
+	// If we have a limit hint, we limit the first batch size. Subsequent
+	// batches get larger to avoid making things too slow (e.g. in case we have
+	// a very restrictive filter and actually have to retrieve a lot of rows).
+	firstBatchLimit := rowinfra.KeyLimit(limitHint)
+	if firstBatchLimit != 0 {
+		// The limitHint is a row limit, but each row could be made up of more
+		// than one key. We take the maximum possible keys per row out of all
+		// the table rows we could potentially scan over.
+		//
+		// Note that unlike for the row.Fetcher, we don't need an extra key to
+		// form the last row in the cFetcher because we are eagerly finalizing
+		// each row once we know that all KVs comprising that row have been
+		// fetched. Consider several cases:
+		// - the table has only one column family - then we can finalize each
+		//   row right after the first KV is decoded;
+		// - the table has multiple column families:
+		//   - KVs for all column families are present for all rows - then for
+		//     each row, when its last KV is fetched, the row can be finalized
+		//     (and firstBatchLimit asks exactly for the correct number of KVs);
+		//   - KVs for some column families are omitted for some rows - then we
+		//     will actually fetch more KVs than necessary, but we'll decode
+		//     limitHint number of rows.
+		firstBatchLimit = rowinfra.KeyLimit(int(limitHint) * int(maxKeysPerRow))
+	}
+	return firstBatchLimit
 }
 
 // StartScan initializes and starts the key-value scan. Can only be used
@@ -492,31 +538,7 @@ func (cf *cFetcher) StartScan(
 		return errors.AssertionFailedf("batchBytesLimit set without limitBatches")
 	}
 
-	// If we have a limit hint, we limit the first batch size. Subsequent
-	// batches get larger to avoid making things too slow (e.g. in case we have
-	// a very restrictive filter and actually have to retrieve a lot of rows).
-	firstBatchLimit := rowinfra.KeyLimit(limitHint)
-	if firstBatchLimit != 0 {
-		// The limitHint is a row limit, but each row could be made up of more
-		// than one key. We take the maximum possible keys per row out of all
-		// the table rows we could potentially scan over.
-		//
-		// Note that unlike for the row.Fetcher, we don't need an extra key to
-		// form the last row in the cFetcher because we are eagerly finalizing
-		// each row once we know that all KVs comprising that row have been
-		// fetched. Consider several cases:
-		// - the table has only one column family - then we can finalize each
-		//   row right after the first KV is decoded;
-		// - the table has multiple column families:
-		//   - KVs for all column families are present for all rows - then for
-		//     each row, when its last KV is fetched, the row can be finalized
-		//     (and firstBatchLimit asks exactly for the correct number of KVs);
-		//   - KVs for some column families are omitted for some rows - then we
-		//     will actually fetch more KVs than necessary, but we'll decode
-		//     limitHint number of rows.
-		firstBatchLimit = rowinfra.KeyLimit(int(limitHint) * int(cf.table.spec.MaxKeysPerRow))
-	}
-
+	firstBatchLimit := cFetcherFirstBatchLimit(limitHint, cf.table.spec.MaxKeysPerRow)
 	cf.machine.lastRowPrefix = nil
 	cf.machine.limitHint = int(limitHint)
 	cf.machine.state[0] = stateResetBatch
@@ -620,6 +642,12 @@ func (cf *cFetcher) setNextKV(kv roachpb.KeyValue, needsCopy bool) {
 	cf.machine.nextKV = kvCopy
 }
 
+// keyFromNewRow returns true if the given key doesn't belong to the current
+// row. This is only used in case of multiple column families.
+func (cf *cFetcher) keyFromNewRow(key roachpb.Key) bool {
+	return !bytes.HasPrefix(key[cf.table.spec.KeyPrefixLength:], cf.machine.lastRowPrefix[cf.table.spec.KeyPrefixLength:])
+}
+
 // NextBatch processes keys until we complete one batch of rows (subject to the
 // limit hint and the memory limit while being max coldata.BatchSize() in
 // length), which are returned in columnar format as a coldata.Batch. The batch
@@ -636,9 +664,10 @@ func (cf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 		case stateInvalid:
 			return nil, errors.New("invalid fetcher state")
 		case stateInitFetch:
+			cf.machine.firstKeyInRow = nil
 			moreKVs, kv, needsCopy, err := cf.nextKVer.NextKV(ctx, cf.mvccDecodeStrategy)
 			if err != nil {
-				return nil, cf.convertFetchError(ctx, err)
+				return nil, convertFetchError(&cf.table.spec, err)
 			}
 			if !moreKVs {
 				cf.machine.state[0] = stateEmitLastBatch
@@ -675,6 +704,7 @@ func (cf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 		case stateDecodeFirstKVOfRow:
 			// Reset MVCC metadata for the table, since this is the first KV of a row.
 			cf.table.rowLastModified = hlc.Timestamp{}
+			cf.machine.firstKeyInRow = cf.machine.nextKV.Key
 
 			// foundNull is set when decoding a new index key for a row finds a NULL value
 			// in the index key. This is used when decoding unique secondary indexes in order
@@ -788,7 +818,7 @@ func (cf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 		case stateFetchNextKVWithUnfinishedRow:
 			moreKVs, kv, needsCopy, err := cf.nextKVer.NextKV(ctx, cf.mvccDecodeStrategy)
 			if err != nil {
-				return nil, cf.convertFetchError(ctx, err)
+				return nil, convertFetchError(&cf.table.spec, err)
 			}
 			if !moreKVs {
 				// No more data. Finalize the row and exit.
@@ -805,7 +835,7 @@ func (cf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 
 			// TODO(yuzefovich): optimize this prefix check by skipping logical
 			// longest common span prefix.
-			if !bytes.HasPrefix(kv.Key[cf.table.spec.KeyPrefixLength:], cf.machine.lastRowPrefix[cf.table.spec.KeyPrefixLength:]) {
+			if cf.keyFromNewRow(kv.Key) {
 				// The kv we just found is from a different row.
 				cf.machine.state[0] = stateFinalizeRow
 				cf.machine.state[1] = stateDecodeFirstKVOfRow
@@ -1221,16 +1251,24 @@ func (cf *cFetcher) fillNulls() error {
 			continue
 		}
 		if table.spec.FetchedColumns[i].IsNonNullable {
-			var indexColValues strings.Builder
-			cf.writeDecodedCols(&indexColValues, table.indexColOrdinals, ',')
-			var indexColNames []string
-			for i := range table.spec.KeyFullColumns() {
-				indexColNames = append(indexColNames, table.spec.KeyAndSuffixColumns[i].Name)
+			// We allow a NULL value in a non-nullable column when the cFetcher
+			// is used by the cFetcherWrapper and we're finalizing the last row
+			// in the last batch. This incomplete row will be removed by the
+			// cFetcherWrapper.
+			allowNull := cf.allowNullsInNonNullableOnLastRowInBatch && cf.machine.state[1] == stateEmitLastBatch
+			if !allowNull {
+				var indexColValues strings.Builder
+				cf.writeDecodedCols(&indexColValues, table.indexColOrdinals, ',')
+				var indexColNames []string
+				for i := range table.spec.KeyFullColumns() {
+					indexColNames = append(indexColNames, table.spec.KeyAndSuffixColumns[i].Name)
+				}
+				return scrub.WrapError(scrub.UnexpectedNullValueError, errors.Errorf(
+					"non-nullable column \"%s:%s\" with no value! Index scanned was %q with the index key columns (%s) and the values (%s)",
+					table.spec.TableName, table.spec.FetchedColumns[i].Name, table.spec.IndexName,
+					strings.Join(indexColNames, ","), indexColValues.String()))
 			}
-			return scrub.WrapError(scrub.UnexpectedNullValueError, errors.Errorf(
-				"non-nullable column \"%s:%s\" with no value! Index scanned was %q with the index key columns (%s) and the values (%s)",
-				table.spec.TableName, table.spec.FetchedColumns[i].Name, table.spec.IndexName,
-				strings.Join(indexColNames, ","), indexColValues.String()))
+			cf.machine.mustRemoveLastRow = true
 		}
 		cf.machine.colvecs.Nulls[i].SetNull(cf.machine.rowIdx)
 	}
@@ -1277,8 +1315,8 @@ func (cf *cFetcher) getCurrentColumnFamilyID() (descpb.FamilyID, error) {
 // storage error that will propagate through the exec subsystem unchanged. The
 // error may also undergo a mapping to make it more user friendly for SQL
 // consumers.
-func (cf *cFetcher) convertFetchError(ctx context.Context, err error) error {
-	err = row.ConvertFetchError(&cf.table.spec, err)
+func convertFetchError(indexFetchSpec *fetchpb.IndexFetchSpec, err error) error {
+	err = row.ConvertFetchError(indexFetchSpec, err)
 	err = colexecerror.NewStorageError(err)
 	return err
 }

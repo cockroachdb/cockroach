@@ -497,7 +497,7 @@ func NewColIndexJoin(
 		return nil, errors.AssertionFailedf("non-empty ON expressions are not supported for index joins")
 	}
 
-	tableArgs, err := populateTableArgs(ctx, &spec.FetchSpec, typeResolver)
+	tableArgs, err := populateTableArgs(ctx, &spec.FetchSpec, typeResolver, false /* allowUnhydratedEnums */)
 	if err != nil {
 		return nil, err
 	}
@@ -561,6 +561,7 @@ func NewColIndexJoin(
 		0, /* estimatedRowCount */
 		flowCtx.TraceKV,
 		false, /* singleUse */
+		false, /* allowNullsInNonNullableOnLastRowInBatch */
 	}
 	if err = fetcher.Init(
 		fetcherAllocator, kvFetcher, tableArgs,

@@ -75,10 +75,11 @@ type KVBatchFetcherResponse struct {
 	// KVs, if set, is a slice of roachpb.KeyValue, the deserialized kv pairs
 	// that were fetched.
 	KVs []roachpb.KeyValue
-	// BatchResponse, if set, is a packed byte slice containing the keys and
-	// values. An empty BatchResponse indicates that nothing was fetched for the
-	// corresponding ScanRequest, and the caller is expected to skip over the
-	// response.
+	// BatchResponse, if set, is either a packed byte slice containing the keys
+	// and values (for BATCH_RESPONSE scan format) or serialized representation
+	// of a coldata.Batch (for COL_BATCH_RESPONSE scan format). An empty
+	// BatchResponse indicates that nothing was fetched for the corresponding
+	// ScanRequest, and the caller is expected to skip over the response.
 	BatchResponse []byte
 	// spanID is the ID associated with the span that generated this response.
 	spanID int

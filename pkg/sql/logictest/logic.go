@@ -1689,6 +1689,14 @@ func (t *logicTest) newCluster(
 			}
 			t.outf("setting distsql_workmem='%dB';", randomWorkmem)
 		}
+
+		if serverArgs.DisableDirectColumnarScans {
+			if _, err := conn.Exec(
+				"SET CLUSTER SETTING sql.distsql.direct_columnar_scans.enabled = false",
+			); err != nil {
+				t.Fatal(err)
+			}
+		}
 	}
 
 	if cfg.OverrideDistSQLMode != "" {
@@ -4059,6 +4067,8 @@ type TestServerArgs struct {
 	// If positive, it provides a lower bound for the default-batch-bytes-limit
 	// metamorphic constant.
 	BatchBytesLimitLowerBound int64
+	// If set, sql.distsql.direct_columnar_scans.enabled is set to false.
+	DisableDirectColumnarScans bool
 }
 
 // RunLogicTests runs logic tests for all files matching the given glob.
