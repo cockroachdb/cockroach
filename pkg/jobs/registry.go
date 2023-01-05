@@ -514,32 +514,48 @@ func (r *Registry) CreateJobWithTxn(
 		return nil, err
 	}
 
-	cols := [7]string{"id", "status", "payload", "progress", "claim_session_id", "claim_instance_id", "job_type"}
-	numCols := len(cols)
-	vals := [7]interface{}{jobID, StatusRunning, payloadBytes, progressBytes, s.ID().UnsafeBytes(), r.ID(), jobType.String()}
-	placeholders := func() string {
-		var p strings.Builder
-		for i := 0; i < numCols; i++ {
-			if i > 0 {
-				p.WriteByte(',')
-			}
-			p.WriteByte('$')
-			p.WriteString(strconv.Itoa(i + 1))
-		}
-		return p.String()
-	}
-	// TODO(jayant): remove this version gate in 24.1
-	// To run the upgrade below, migration and schema change jobs will need
-	// to be created using the old schema of the jobs table.
-	if !r.settings.Version.IsActive(ctx, clusterversion.V23_1AddTypeColumnToJobsTable) {
-		numCols -= 1
-	}
-	insertStmt := fmt.Sprintf(`INSERT INTO system.jobs (%s) VALUES (%s)`, strings.Join(cols[:numCols], ","), placeholders())
-	if _, err = j.registry.ex.Exec(ctx, "job-row-insert", txn, insertStmt, vals[:numCols]...,
-	); err != nil {
+	if hasJobType, err := r.hasJobTypeColumn(ctx, txn); err != nil {
 		return nil, err
+	} else if hasJobType {
+		const insertStmtWithJobType = `INSERT
+		INTO system.jobs (id, status, payload, progress, claim_session_id, claim_instance_id, job_type)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)`
+		if _, err := j.registry.ex.Exec(
+			ctx, "job-row-insert", txn, insertStmtWithJobType,
+			jobID, StatusRunning, payloadBytes, progressBytes, s.ID().UnsafeBytes(), r.ID(), jobType.String(),
+		); err != nil {
+			return nil, err
+		}
+	} else {
+		const insertStmtWithoutJobType = `INSERT
+		INTO system.jobs (id, status, payload, progress, claim_session_id, claim_instance_id)
+		VALUES ($1, $2, $3, $4, $5, $6)`
+		if _, err := j.registry.ex.Exec(
+			ctx, "job-row-insert", txn, insertStmtWithoutJobType,
+			jobID, StatusRunning, payloadBytes, progressBytes, s.ID().UnsafeBytes(), r.ID(),
+		); err != nil {
+			return nil, err
+		}
 	}
 	return j, nil
+}
+
+// hasJobTypeColumn is a helper function which returns true iff the system.jobs
+// table has the job_type column. Relying on the version gate is not sufficient.
+func (r *Registry) hasJobTypeColumn(ctx context.Context, txn *kv.Txn) (bool, error) {
+	if !r.settings.Version.IsActive(ctx, clusterversion.V23_1AddTypeColumnToJobsTable) {
+		return false, nil
+	}
+	row, err := r.ex.QueryRowEx(
+		ctx, "job-columns-get", txn, sessiondata.NodeUserSessionDataOverride, `
+			SELECT * FROM system.pg_catalog.pg_attribute
+			         WHERE attrelid = 'system.public.jobs'::REGCLASS
+			         AND attname = 'job_type'`,
+	)
+	if err != nil {
+		return false, err
+	}
+	return row != nil, nil
 }
 
 // CreateAdoptableJobWithTxn creates a job which will be adopted for execution
