@@ -70,8 +70,13 @@ const (
 	// BackupPartitionDescriptor protos.
 	backupPartitionDescriptorPrefix = "BACKUP_PART"
 
-	deprecatedPrivilegesPreamble = "The existing privileges are being deprecated " +
-		"in favour of a fine-grained privilege model explained here <link>. In a future release, to run"
+	deprecatedPrivilegesBackupPreamble = "The existing privileges are being deprecated " +
+		"in favour of a fine-grained privilege model explained here " +
+		"https://www.cockroachlabs.com/docs/stable/backup.html#required-privileges. In a future release, to run"
+
+	deprecatedPrivilegesRestorePreamble = "The existing privileges are being deprecated " +
+		"in favour of a fine-grained privilege model explained here " +
+		"https://www.cockroachlabs.com/docs/stable/restore.html#required-privileges. In a future release, to run"
 )
 
 type tableAndIndex struct {
@@ -341,7 +346,7 @@ func backupPrivilegesDeprecationNotice(
 
 		notice = fmt.Sprintf("%s BACKUP DATABASE, user %s will exclusively require the "+
 			"BACKUP privilege on database %s.",
-			deprecatedPrivilegesPreamble, p.User().Normalized(), strings.Join(dbsRequireBackupPrivilege, ", "))
+			deprecatedPrivilegesBackupPreamble, p.User().Normalized(), strings.Join(dbsRequireBackupPrivilege, ", "))
 	} else if backupStmt.Targets.Tables.TablePatterns != nil {
 		// If a user is running `BACKUP TABLE` buffer all the tables that will require the `BACKUP` privilege.
 		tablesRequireBackupPrivilege := make([]string, 0)
@@ -354,7 +359,7 @@ func backupPrivilegesDeprecationNotice(
 
 		notice = fmt.Sprintf("%s BACKUP TABLE, user %s will exclusively require the "+
 			"BACKUP privilege on tables: %s.",
-			deprecatedPrivilegesPreamble,
+			deprecatedPrivilegesBackupPreamble,
 			p.User().Normalized(),
 			strings.Join(tablesRequireBackupPrivilege, ", "))
 	}
