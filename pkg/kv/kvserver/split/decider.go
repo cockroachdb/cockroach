@@ -15,6 +15,7 @@ package split
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -62,6 +63,27 @@ type RandSource interface {
 	// Intn returns, as an int, a non-negative pseudo-random number in the
 	// half-open interval [0,n).
 	Intn(n int) int
+}
+
+// globalRandSource implements the RandSource interface.
+type globalRandSource struct{}
+
+// Float64 returns, as a float64, a pseudo-random number in the half-open
+// interval [0.0,1.0) from the RandSource.
+func (g globalRandSource) Float64() float64 {
+	return rand.Float64()
+}
+
+// Intn returns, as an int, a non-negative pseudo-random number in the
+// half-open interval [0,n).
+func (g globalRandSource) Intn(n int) int {
+	return rand.Intn(n)
+}
+
+// GlobalRandSource returns an implementation of the RandSource interface that
+// redirects calls to the global rand.
+func GlobalRandSource() RandSource {
+	return globalRandSource{}
 }
 
 var enableUnweightedLBSplitFinder = settings.RegisterBoolSetting(
