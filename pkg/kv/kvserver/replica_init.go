@@ -52,6 +52,14 @@ func newReplica(
 	defer repl.raftMu.Unlock()
 	repl.mu.Lock()
 	defer repl.mu.Unlock()
+
+	// TODO(pavelkalinnikov): this path is taken only in tests. Remove it and
+	// assert desc.IsInitialized().
+	if !desc.IsInitialized() {
+		repl.assertStateRaftMuLockedReplicaMuRLocked(ctx, store.Engine())
+		return repl, nil
+	}
+
 	if err := repl.loadRaftMuLockedReplicaMuLocked(desc); err != nil {
 		return nil, err
 	}
@@ -72,7 +80,7 @@ func newUnloadedReplica(
 	if replicaID == 0 {
 		log.Fatalf(ctx, "cannot construct a replica for range %d with a 0 replica ID", rangeID)
 	}
-	uninitializedDesc := &roachpb.RangeDescriptor{RangeID: rangeID}
+	uninitState := stateloader.UninitializedReplicaState(rangeID)
 	r := &Replica{
 		AmbientContext: store.cfg.AmbientCtx,
 		RangeID:        rangeID,
@@ -82,7 +90,7 @@ func newUnloadedReplica(
 		abortSpan:      abortspan.New(rangeID),
 		concMgr: concurrency.NewManager(concurrency.Config{
 			NodeDesc:          store.nodeDesc,
-			RangeDesc:         uninitializedDesc,
+			RangeDesc:         uninitState.Desc,
 			Settings:          store.ClusterSettings(),
 			DB:                store.DB(),
 			Clock:             store.Clock(),
@@ -119,13 +127,9 @@ func newUnloadedReplica(
 		r.loadStats = load.NewReplicaLoad(store.Clock(), store.cfg.StorePool.GetNodeLocalityString)
 	}
 
-	// Init replica descriptor and rangeStr with the uninitialized descriptor
-	// containing only the range ID.
-	// NB: A Replica should never be in the store's replicas map with a nil
-	// descriptor, hence. Assign it unconditionally here. The descriptor will be
-	// updated when the replica gets initialized.
-	r.mu.state.Desc = uninitializedDesc
-	r.rangeStr.store(replicaID, uninitializedDesc)
+	// NB: the state will be loaded when the replica gets initialized.
+	r.mu.state = uninitState
+	r.rangeStr.store(replicaID, uninitState.Desc)
 	// Add replica log tag - the value is rangeStr.String().
 	r.AmbientContext.AddLogTag("r", &r.rangeStr)
 	r.raftCtx = logtags.AddTag(r.AnnotateCtx(context.Background()), "raft", nil /* value */)
@@ -173,28 +177,26 @@ func (r *Replica) setStartKeyLocked(startKey roachpb.RKey) {
 	r.startKey = startKey
 }
 
-// loadRaftMuLockedReplicaMuLocked will load the state of the replica from disk.
-// If desc is initialized, the Replica will be initialized when this method
-// returns. An initialized Replica may not be reloaded. If this method is called
-// with an uninitialized desc it may be called again later with an initialized
-// desc.
+// loadRaftMuLockedReplicaMuLocked loads the state of the initialized replica
+// from storage. After this method returns, Replica is initialized, and can not
+// be loaded again.
 //
-// This method is called in three places:
+// This method is called in two places:
 //
 //  1. newReplica - used when the store is initializing and during testing
-//  2. tryGetOrCreateReplica - see newUnloadedReplica
-//  3. splitPostApply - this call initializes a previously uninitialized Replica.
+//  2. splitPostApply - this call initializes a previously uninitialized Replica.
 func (r *Replica) loadRaftMuLockedReplicaMuLocked(desc *roachpb.RangeDescriptor) error {
 	ctx := r.AnnotateCtx(context.TODO())
-	if r.mu.state.Desc != nil && r.IsInitialized() {
+	if !desc.IsInitialized() {
+		log.Fatalf(ctx, "r%d: cannot load an uninitialized replica", desc.RangeID)
+	}
+	if r.IsInitialized() {
 		log.Fatalf(ctx, "r%d: cannot reinitialize an initialized replica", desc.RangeID)
 	} else if r.replicaID == 0 {
 		// NB: This is just a defensive check as r.mu.replicaID should never be 0.
 		log.Fatalf(ctx, "r%d: cannot initialize replica without a replicaID", desc.RangeID)
 	}
-	if desc.IsInitialized() {
-		r.setStartKeyLocked(desc.StartKey)
-	}
+	r.setStartKeyLocked(desc.StartKey)
 
 	// Clear the internal raft group in case we're being reset. Since we're
 	// reloading the raft state below, it isn't safe to use the existing raft
@@ -216,7 +218,7 @@ func (r *Replica) loadRaftMuLockedReplicaMuLocked(desc *roachpb.RangeDescriptor)
 	replicaID := r.replicaID
 	if replicaDesc, found := r.mu.state.Desc.GetReplicaDescriptor(r.StoreID()); found {
 		replicaID = replicaDesc.ReplicaID
-	} else if desc.IsInitialized() {
+	} else {
 		log.Fatalf(ctx, "r%d: cannot initialize replica which is not in descriptor %v", desc.RangeID, desc)
 	}
 	if r.replicaID != replicaID {

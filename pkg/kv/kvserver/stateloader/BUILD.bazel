@@ -25,7 +25,10 @@ go_library(
 go_test(
     name = "stateloader_test",
     size = "small",
-    srcs = ["initial_test.go"],
+    srcs = [
+        "initial_test.go",
+        "stateloader_test.go",
+    ],
     args = ["-test.timeout=55s"],
     embed = [":stateloader"],
     deps = [
@@ -34,6 +37,7 @@ go_test(
         "//pkg/testutils",
         "//pkg/util/leaktest",
         "//pkg/util/stop",
+        "@com_github_stretchr_testify//require",
         "@io_etcd_go_raft_v3//raftpb",
     ],
 )
