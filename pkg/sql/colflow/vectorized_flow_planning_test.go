@@ -40,10 +40,14 @@ func TestVectorizedPlanning(t *testing.T) {
 			// true; if it isn't, we skip this test.
 			return
 		}
+		// Disable the direct columnar scans to make the output below
+		// deterministic.
+		_, err := conn.ExecContext(ctx, `SET direct_columnar_scans_enabled = false`)
+		require.NoError(t, err)
 		// Check that there is no columnarizer-materializer pair on top of the
 		// root of the execution tree if the root is a wrapped row-execution
 		// processor.
-		_, err := conn.ExecContext(ctx, `CREATE TABLE t (id INT PRIMARY KEY)`)
+		_, err = conn.ExecContext(ctx, `CREATE TABLE t (id INT PRIMARY KEY)`)
 		require.NoError(t, err)
 		rows, err := conn.QueryContext(ctx, `EXPLAIN (VEC, VERBOSE) SELECT * FROM t AS t1 INNER LOOKUP JOIN t AS t2 ON t1.id = t2.id`)
 		require.NoError(t, err)

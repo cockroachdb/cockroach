@@ -2526,7 +2526,7 @@ SELECT
 FROM
   pg_catalog.pg_settings
 WHERE
-  name NOT IN ('optimizer', 'crdb_version', 'session_id', 'distsql_workmem', 'copy_fast_path_enabled')
+  name NOT IN ('optimizer', 'crdb_version', 'session_id', 'distsql_workmem', 'copy_fast_path_enabled', 'direct_columnar_scans_enabled')
 ----
 name                                                  setting             category  short_desc  extra_desc  vartype
 allow_ordinal_column_references                       off                 NULL      NULL        NULL        string
@@ -2670,7 +2670,7 @@ SELECT
 FROM
   pg_catalog.pg_settings
 WHERE
-  name NOT IN ('optimizer', 'crdb_version', 'session_id', 'distsql_workmem', 'copy_fast_path_enabled')
+  name NOT IN ('optimizer', 'crdb_version', 'session_id', 'distsql_workmem', 'copy_fast_path_enabled', 'direct_columnar_scans_enabled')
 ----
 name                                                  setting             unit  context  enumvals  boot_val            reset_val
 allow_ordinal_column_references                       off                 NULL  user     NULL      off                 off
@@ -2837,6 +2837,7 @@ default_transaction_read_only                         NULL    NULL     NULL     
 default_transaction_use_follower_reads                NULL    NULL     NULL     NULL        NULL
 default_with_oids                                     NULL    NULL     NULL     NULL        NULL
 descriptor_validation                                 NULL    NULL     NULL     NULL        NULL
+direct_columnar_scans_enabled                         NULL    NULL     NULL     NULL        NULL
 disable_hoist_projection_in_join_limitation           NULL    NULL     NULL     NULL        NULL
 disable_partially_distributed_plans                   NULL    NULL     NULL     NULL        NULL
 disable_plan_gists                                    NULL    NULL     NULL     NULL        NULL
