@@ -50,17 +50,40 @@ func addRootUser(
 		return err
 	}
 
-	// Upsert the role membership into the table. We intentionally override any existing entry.
-	const upsertMembership = `
-          UPSERT INTO system.role_members ("role", "member", "isAdmin", role_id, member_id) VALUES ($1, $2, true, $3, $4)
+	// Upsert the role membership into the table.
+	// We intentionally override any existing entry.
+	return deps.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		// We query the pg_attribute to determine whether the role_id and member_id
+		// columns are present because we can't rely on version gates here.
+		row, err := deps.InternalExecutor.QueryRow(
+			ctx, "roleMembersColumnsGet", txn, `
+			SELECT * FROM system.pg_catalog.pg_attribute
+			         WHERE attrelid = 'system.public.role_members'::REGCLASS
+			         AND attname IN ('role_id', 'member_id')
+			         LIMIT 1`,
+		)
+		if err != nil {
+			return err
+		}
+		if row == nil {
+			const upsertMembershipWithoutRoleIDAndMemberIDColsStmt = `
+          UPSERT INTO system.role_members ("role", "member", "isAdmin") VALUES ($1, $2, true)
           `
-	_, err = deps.InternalExecutor.Exec(
-		ctx, "addRootToAdminRole", nil /* txn */, upsertMembership, username.AdminRole, username.RootUser, username.AdminRoleID, username.RootUserID)
-	if err != nil {
+			_, err = deps.InternalExecutor.Exec(
+				ctx, "addRootToAdminRole", txn, upsertMembershipWithoutRoleIDAndMemberIDColsStmt,
+				username.AdminRole, username.RootUser,
+			)
+		} else {
+			const upsertMembershipWithRoleIDAndMemberIDColsStmt = `
+          UPSERT INTO system.role_members ("role", "member", "isAdmin", role_id, member_id) VALUES ($1, $2, true, $3, $4)
+	        `
+			_, err = deps.InternalExecutor.Exec(
+				ctx, "addRootToAdminRole", txn, upsertMembershipWithRoleIDAndMemberIDColsStmt,
+				username.AdminRole, username.RootUser, username.AdminRoleID, username.RootUserID,
+			)
+		}
 		return err
-	}
-
-	return nil
+	})
 }
 
 func optInToDiagnosticsStatReporting(
