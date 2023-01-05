@@ -71,6 +71,8 @@ type kvEventToRowConsumer struct {
 	topicDescriptorCache map[TopicIdentifier]TopicDescriptor
 	topicNamer           *TopicNamer
 
+	metrics *sliMetrics
+
 	// This pacer is used to incorporate event consumption to elastic CPU
 	// control. This helps ensure that event encoding/decoding does not throttle
 	// foreground SQL traffic.
@@ -92,6 +94,7 @@ func newEventConsumer(
 	cursor hlc.Timestamp,
 	sink EventSink,
 	metrics *Metrics,
+	sliMetrics *sliMetrics,
 	knobs TestingKnobs,
 ) (eventConsumer, EventSink, error) {
 	encodingOpts, err := feed.Opts.GetEncodingOptions()
@@ -139,7 +142,7 @@ func newEventConsumer(
 
 		execCfg := cfg.ExecutorConfig.(*sql.ExecutorConfig)
 		return newKVEventToRowConsumer(ctx, execCfg, frontier, cursor, s,
-			encoder, feed, spec, knobs, topicNamer, pacer)
+			encoder, feed, spec, knobs, topicNamer, sliMetrics, pacer)
 	}
 
 	numWorkers := changefeedbase.EventConsumerWorkers.Get(&cfg.Settings.SV)
@@ -215,6 +218,7 @@ func newKVEventToRowConsumer(
 	spec execinfrapb.ChangeAggregatorSpec,
 	knobs TestingKnobs,
 	topicNamer *TopicNamer,
+	metrics *sliMetrics,
 	pacer *admission.Pacer,
 ) (_ *kvEventToRowConsumer, err error) {
 	includeVirtual := details.Opts.IncludeVirtual()
@@ -249,6 +253,7 @@ func newKVEventToRowConsumer(
 		topicNamer:           topicNamer,
 		evaluator:            evaluator,
 		encodingFormat:       encodingOpts.Format,
+		metrics:              metrics,
 		pacer:                pacer,
 	}, nil
 }
@@ -344,7 +349,7 @@ func (c *kvEventToRowConsumer) ConsumeEvent(ctx context.Context, ev kvevent.Even
 
 		if !projection.IsInitialized() {
 			// Filter did not match.
-			// TODO(yevgeniy): Add metrics.
+			c.metrics.FilteredMessages.Inc(1)
 			a := ev.DetachAlloc()
 			a.Release(ctx)
 			return nil
