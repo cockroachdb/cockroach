@@ -82,6 +82,7 @@ func TestTenantUpgrade(t *testing.T) {
 			cleanupPGUrl()
 		}
 	}
+	expectedInitialTenantVersion, _, _ := v0v1v2()
 	mkTenant := func(t *testing.T, id uint64) (tenantDB *gosql.DB, cleanup func()) {
 		settings := cluster.MakeTestingClusterSettingsWithVersions(
 			clusterversion.TestingBinaryVersion,
@@ -90,7 +91,7 @@ func TestTenantUpgrade(t *testing.T) {
 		)
 		// Initialize the version to the minimum it could be.
 		require.NoError(t, clusterversion.Initialize(ctx,
-			clusterversion.TestingBinaryMinSupportedVersion, &settings.SV))
+			expectedInitialTenantVersion, &settings.SV))
 		tenantArgs := base.TestTenantArgs{
 			TenantID:     roachpb.MakeTenantID(id),
 			TestingKnobs: base.TestingKnobs{},
@@ -109,7 +110,7 @@ func TestTenantUpgrade(t *testing.T) {
 
 		// Ensure that the tenant works.
 		initialTenantRunner.CheckQueryResults(t, "SHOW CLUSTER SETTING version",
-			[][]string{{clusterversion.TestingBinaryMinSupportedVersion.String()}})
+			[][]string{{expectedInitialTenantVersion.String()}})
 		initialTenantRunner.Exec(t, "CREATE TABLE t (i INT PRIMARY KEY)")
 		initialTenantRunner.Exec(t, "INSERT INTO t VALUES (1), (2)")
 
@@ -172,11 +173,9 @@ func TestTenantUpgrade(t *testing.T) {
 
 }
 
-// Returns two versions v0, v1, v2 which correspond to adjacent releases. v0 will
-// equal the TestingBinaryMinSupportedVersion to avoid rot in tests using this
-// (as we retire old versions).
+// Returns two versions v0, v1, v2 which correspond to adjacent releases.
 func v0v1v2() (roachpb.Version, roachpb.Version, roachpb.Version) {
-	v0 := clusterversion.TestingBinaryMinSupportedVersion
+	v0 := clusterversion.ByKey(clusterversion.V22_1)
 	v1 := clusterversion.TestingBinaryVersion
 	v2 := clusterversion.TestingBinaryVersion
 	if v1.Internal > 2 {
