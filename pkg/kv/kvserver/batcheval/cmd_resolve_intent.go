@@ -93,7 +93,8 @@ func ResolveIntent(
 		// The observation was from the wrong node. Ignore.
 		update.ClockWhilePending = roachpb.ObservedTimestamp{}
 	}
-	ok, err := storage.MVCCResolveWriteIntent(ctx, readWriter, ms, update)
+	ok, _, _, err := storage.MVCCResolveWriteIntent(ctx, readWriter, ms, update,
+		storage.MVCCResolveWriteIntentOptions{})
 	if err != nil {
 		return result.Result{}, err
 	}

@@ -353,11 +353,11 @@ func (d mvccBenchData) Build(ctx context.Context, b *testing.B, eng Engine) erro
 		key := keySlice[idx]
 		txnMeta := txn.TxnMeta
 		txnMeta.WriteTimestamp = hlc.Timestamp{WallTime: int64(counts[idx]) * 5}
-		if _, err := MVCCResolveWriteIntent(ctx, batch, nil /* ms */, roachpb.LockUpdate{
+		if _, _, _, err := MVCCResolveWriteIntent(ctx, batch, nil /* ms */, roachpb.LockUpdate{
 			Span:   roachpb.Span{Key: key},
 			Status: roachpb.COMMITTED,
 			Txn:    txnMeta,
-		}); err != nil {
+		}, MVCCResolveWriteIntentOptions{}); err != nil {
 			b.Fatal(err)
 		}
 	}
