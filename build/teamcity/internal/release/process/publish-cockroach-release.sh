@@ -58,7 +58,6 @@ else
   fi
 fi
 
-download_prefix="https://storage.googleapis.com/$gcs_bucket"
 tc_end_block "Variable Setup"
 
 
@@ -87,7 +86,7 @@ export google_credentials="$gcs_credentials"
 source "build/teamcity-support.sh"  # For log_into_gcloud
 log_into_gcloud
 export GOOGLE_APPLICATION_CREDENTIALS="$PWD/.google-credentials.json"
-$BAZEL_BIN/pkg/cmd/publish-provisional-artifacts/publish-provisional-artifacts_/publish-provisional-artifacts -provisional -release --gcs-bucket="$gcs_bucket"
+$BAZEL_BIN/pkg/cmd/publish-provisional-artifacts/publish-provisional-artifacts_/publish-provisional-artifacts -provisional -release --gcs-bucket="$gcs_bucket" --output-directory=artifacts
 EOF
 tc_end_block "Make and publish release artifacts"
 
@@ -107,20 +106,11 @@ for platform_name in "${platform_names[@]}"; do
   if [[ $tarball_arch == "aarch64" ]]; then
     linux_platform=linux-3.7.10-gnu
   fi
-  # TODO: update publish-provisional-artifacts with option to leave one or more cockroach binaries in the local filesystem
-  # NB: tar usually stops reading as soon as it sees an empty block but that makes
-  # curl unhappy, so passing `--ignore-zeros` will cause it to read to the end.
   cp --recursive "build/deploy" "build/deploy-${docker_arch}"
-  curl \
-    --fail \
-    --silent \
-    --show-error \
-    --output /dev/stdout \
-    --url "${download_prefix}/cockroach-${build_name}.${linux_platform}-${tarball_arch}.tgz" \
-    | tar \
+  tar \
     --directory="build/deploy-${docker_arch}" \
     --extract \
-    --file=/dev/stdin \
+    --file="artifacts/cockroach-${build_name}.${linux_platform}-${tarball_arch}.tgz" \
     --ungzip \
     --ignore-zeros \
     --strip-components=1
