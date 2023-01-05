@@ -27,16 +27,6 @@ import (
 func (p *planner) EvalRoutineExpr(
 	ctx context.Context, expr *tree.RoutineExpr, input tree.Datums,
 ) (result tree.Datum, err error) {
-	// If the routine should not be called on null input, then directly return
-	// NULL if any of the datums in the input are NULL.
-	if !expr.CalledOnNullInput {
-		for i := range input {
-			if input[i] == tree.DNull {
-				return tree.DNull, nil
-			}
-		}
-	}
-
 	retTypes := []*types.T{expr.ResolvedType()}
 
 	// The result of the routine is the result of the last statement. The result
