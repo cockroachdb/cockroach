@@ -39,6 +39,7 @@ const defaultSLIScope = "default"
 // indicators, combined with a limited number of per-changefeed indicators.
 type AggMetrics struct {
 	EmittedMessages           *aggmetric.AggCounter
+	FilteredMessages          *aggmetric.AggCounter
 	MessageSize               *aggmetric.AggHistogram
 	EmittedBytes              *aggmetric.AggCounter
 	FlushedBytes              *aggmetric.AggCounter
@@ -92,6 +93,7 @@ func (a *AggMetrics) MetricStruct() {}
 // sliMetrics holds all SLI related metrics aggregated into AggMetrics.
 type sliMetrics struct {
 	EmittedMessages           *aggmetric.Counter
+	FilteredMessages          *aggmetric.Counter
 	MessageSize               *aggmetric.Histogram
 	EmittedBytes              *aggmetric.Counter
 	FlushedBytes              *aggmetric.Counter
@@ -380,6 +382,14 @@ func newAggregateMetrics(histogramWindow time.Duration) *AggMetrics {
 		Measurement: "Messages",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaChangefeedFilteredMessages := metric.Metadata{
+		Name: "changefeed.filtered_messages",
+		Help: "Messages filtered out by all feeds. " +
+			"This count does not include the number of messages that may be filtered " +
+			"due to the range constraints.",
+		Measurement: "Messages",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaChangefeedEmittedBytes := metric.Metadata{
 		Name:        "changefeed.emitted_bytes",
 		Help:        "Bytes emitted by all feeds",
@@ -477,6 +487,7 @@ func newAggregateMetrics(histogramWindow time.Duration) *AggMetrics {
 	a := &AggMetrics{
 		ErrorRetries:     b.Counter(metaChangefeedErrorRetries),
 		EmittedMessages:  b.Counter(metaChangefeedEmittedMessages),
+		FilteredMessages: b.Counter(metaChangefeedFilteredMessages),
 		MessageSize:      b.Histogram(metaMessageSize, histogramWindow, metric.DataSize16MBBuckets),
 		EmittedBytes:     b.Counter(metaChangefeedEmittedBytes),
 		FlushedBytes:     b.Counter(metaChangefeedFlushedBytes),
@@ -531,6 +542,7 @@ func (a *AggMetrics) getOrCreateScope(scope string) (*sliMetrics, error) {
 
 	sm := &sliMetrics{
 		EmittedMessages:           a.EmittedMessages.AddChild(scope),
+		FilteredMessages:          a.FilteredMessages.AddChild(scope),
 		MessageSize:               a.MessageSize.AddChild(scope),
 		EmittedBytes:              a.EmittedBytes.AddChild(scope),
 		FlushedBytes:              a.FlushedBytes.AddChild(scope),
