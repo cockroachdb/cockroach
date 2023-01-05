@@ -193,7 +193,7 @@ func TestPingInterceptors(t *testing.T) {
 			}
 			return nil
 		},
-		OnIncomingPing: func(ctx context.Context, req *PingRequest) error {
+		OnIncomingPing: func(ctx context.Context, req *PingRequest, resp *PingResponse) error {
 			if req.OriginNodeID == blockedOriginNodeID {
 				return errBoomRecv
 			}
@@ -2467,7 +2467,7 @@ func BenchmarkGRPCDial(b *testing.B) {
 
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
-			_, err := rpcCtx.GRPCDialNode(remoteAddr, serverNodeID, DefaultClass).Connect(context.Background())
+			_, err := rpcCtx.grpcDialRaw(ctx, remoteAddr, DefaultClass)
 			if err != nil {
 				b.Fatal(err)
 			}
