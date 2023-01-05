@@ -1858,7 +1858,7 @@ CREATE TABLE c.t (id INT PRIMARY KEY)
 statement ok
 SET DATABASE = "b"
 
-statement error pq: user or role vanilli does not exist
+statement error pgcode 42704 role/user "vanilli" does not exist
 GRANT ALL ON * TO Vanilli
 
 statement ok

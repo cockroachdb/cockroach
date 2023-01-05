@@ -21,9 +21,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/oidext"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
@@ -383,7 +382,7 @@ SELECT database_name,
 			return nil, err
 		}
 		if !userExists {
-			return nil, pgerror.Newf(pgcode.UndefinedObject, "role/user %q does not exist", user)
+			return nil, sqlerrors.NewUndefinedUserError(user)
 		}
 	}
 

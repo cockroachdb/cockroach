@@ -115,8 +115,7 @@ func CreateUserDefinedSchemaDescriptor(
 			return nil, nil, err
 		}
 		if !exists {
-			return nil, nil, pgerror.Newf(pgcode.UndefinedObject, "role/user %q does not exist",
-				n.AuthRole)
+			return nil, nil, sqlerrors.NewUndefinedUserError(authRole)
 		}
 		owner = authRole
 	}
