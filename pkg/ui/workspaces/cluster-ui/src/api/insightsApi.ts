@@ -319,27 +319,49 @@ export type TransactionContentionEventDetailsResponse =
 // txnContentionDetailsQuery selects information about a specific transaction contention event.
 const txnContentionDetailsQuery = (id: string) => `
 SELECT
-  collection_ts,
-  blocking_txn_id,
-  encode( blocking_txn_fingerprint_id, 'hex' ) AS blocking_txn_fingerprint_id,
-  waiting_txn_id,
-  encode( waiting_txn_fingerprint_id, 'hex' ) AS waiting_txn_fingerprint_id,
-  contention_duration,
-  crdb_internal.pretty_key(contending_key, 0) AS key,
-  database_name,
-  schema_name,
-  table_name,
-  index_name,
-  threshold
+  DISTINCT collection_ts,
+           blocking_txn_id,
+           encode(
+             blocking_txn_fingerprint_id, 'hex'
+             ) AS blocking_txn_fingerprint_id,
+           waiting_txn_id,
+           encode(
+             waiting_txn_fingerprint_id, 'hex'
+             ) AS waiting_txn_fingerprint_id,
+           contention_duration,
+           crdb_internal.pretty_key(contending_key, 0) AS key,
+           database_name,
+           schema_name,
+           table_name,
+           index_name,
+           threshold
 FROM
   (
-    SELECT "sql.insights.latency_threshold"::INTERVAL AS threshold
-    FROM [SHOW CLUSTER SETTING sql.insights.latency_threshold]
+    SELECT
+      "sql.insights.latency_threshold" :: INTERVAL AS threshold
+    FROM
+      [SHOW CLUSTER SETTING sql.insights.latency_threshold]
   ),
   crdb_internal.transaction_contention_events AS tce
-  LEFT OUTER JOIN crdb_internal.ranges AS ranges
-    ON tce.contending_key BETWEEN ranges.start_key AND ranges.end_key
-  WHERE waiting_txn_id = '${id}'
+    JOIN [SELECT database_name,
+                 schema_name,
+                 name AS table_name,
+                 table_id
+          FROM
+            "".crdb_internal.tables] AS tables ON tce.contending_key BETWEEN crdb_internal.table_span(tables.table_id) [1]
+    AND crdb_internal.table_span(tables.table_id) [2]
+    LEFT OUTER JOIN [SELECT index_name,
+                            descriptor_id,
+                            index_id
+                     FROM
+                       "".crdb_internal.table_indexes] AS indexes ON tce.contending_key BETWEEN crdb_internal.index_span(
+    indexes.descriptor_id, indexes.index_id
+    ) [1]
+    AND crdb_internal.index_span(
+      indexes.descriptor_id, indexes.index_id
+      ) [2]
+WHERE
+  waiting_txn_id = '${id}'
 `;
 
 type TxnContentionDetailsResponseColumns = {
@@ -391,7 +413,7 @@ function transactionContentionDetailsResultsToEventState(
       indexName:
         value.index_name && value.index_name !== ""
           ? value.index_name
-          : "primary index",
+          : "index not found",
     };
   });
 
