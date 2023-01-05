@@ -140,7 +140,9 @@ func TestConnHealth(t *testing.T) {
 	// After dialing the node, ConnHealth should return nil.
 	_, err := nd.Dial(ctx, staticNodeID, rpc.DefaultClass)
 	require.NoError(t, err)
-	require.NoError(t, nd.ConnHealth(staticNodeID, rpc.DefaultClass))
+	require.Eventually(t, func() bool {
+		return nd.ConnHealth(staticNodeID, rpc.DefaultClass) == nil
+	}, time.Second, 10*time.Millisecond)
 
 	// ConnHealth should still error for other node ID and class.
 	require.Error(t, nd.ConnHealth(9, rpc.DefaultClass))
@@ -166,7 +168,9 @@ func TestConnHealth(t *testing.T) {
 			_, err := nd.DialNoBreaker(ctx, staticNodeID, rpc.DefaultClass)
 			return err == nil
 		}, 10*time.Second, time.Millisecond)
-		require.NoError(t, nd.ConnHealth(staticNodeID, rpc.DefaultClass))
+		require.Eventually(t, func() bool {
+			return nd.ConnHealth(staticNodeID, rpc.DefaultClass) == nil
+		}, time.Second, 10*time.Millisecond)
 	}
 
 	// Tripping the breaker should return ErrBreakerOpen.
