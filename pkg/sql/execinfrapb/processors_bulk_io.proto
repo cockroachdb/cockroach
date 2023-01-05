@@ -391,3 +391,33 @@ message IndexBackfillMergerSpec {
 
   // NEXT ID: 9.
 }
+
+message GenerativeSplitAndScatterSpec {
+  repeated TableRekey table_rekeys = 1 [(gogoproto.nullable) = false];
+  repeated TenantRekey tenant_rekeys = 2 [(gogoproto.nullable) = false];
+  optional bool validate_only = 3 [(gogoproto.nullable) = false];
+
+  // URIs is the URIs of the backup manifests.
+  repeated string uris = 4 [(gogoproto.customname) = "URIs"];
+  optional jobs.jobspb.BackupEncryptionOptions encryption = 5;
+
+  // EndTime is the time of the restore.
+  optional util.hlc.Timestamp endTime = 9 [(gogoproto.nullable) = false];
+  // Spans is the required spans in the restore.
+  repeated roachpb.Span spans = 10 [(gogoproto.nullable) = false];
+  repeated jobs.jobspb.RestoreDetails.BackupLocalityInfo backup_locality_info = 11 [(gogoproto.nullable) = false];
+  // HighWater is the high watermark of the previous run of restore.
+  optional bytes high_water = 12 [(gogoproto.nullable) = false];
+  // User who initiated the restore.
+  optional string user_proto = 13 [(gogoproto.nullable) = false, (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/security/username.SQLUsernameProto"];
+  // ChunkSize is the number of import spans per chunk.
+  optional int64 chunk_size = 14[(gogoproto.nullable) = false];
+  // TargetSize is the target size for each import span.
+  optional int64 target_size = 15[(gogoproto.nullable) = false];
+  // NumEntries is the total number of import spans in this restore.
+  optional int64 num_entries = 16[(gogoproto.nullable) = false];
+  // NumNodes is the number of nodes available for dist restore.
+  optional int64 num_nodes = 17[(gogoproto.nullable) = false];
+  optional int64 job_id = 18 [(gogoproto.nullable) = false, (gogoproto.customname) = "JobID"];
+  optional bool use_simple_import_spans = 19 [(gogoproto.nullable) = false];
+}

@@ -86,3 +86,7 @@ func (m *ChangeAggregatorSpec) User() username.SQLUsername {
 func (m *ChangeFrontierSpec) User() username.SQLUsername {
 	return m.UserProto.Decode()
 }
+
+func (m *GenerativeSplitAndScatterSpec) User() username.SQLUsername {
+	return m.UserProto.Decode()
+}
