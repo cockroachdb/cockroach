@@ -307,7 +307,7 @@ export type TransactionContentionEventDetails = Omit<
 
 // txnContentionDetailsQuery selects information about a specific transaction contention event.
 const txnContentionDetailsQuery = (id: string) => `
-SELECT
+SELECT DISTINCT
   collection_ts,
   blocking_txn_id,
   encode( blocking_txn_fingerprint_id, 'hex' ) AS blocking_txn_fingerprint_id,
@@ -326,8 +326,19 @@ FROM
     FROM [SHOW CLUSTER SETTING sql.insights.latency_threshold]
   ),
   crdb_internal.transaction_contention_events AS tce
-  LEFT OUTER JOIN crdb_internal.ranges AS ranges
-    ON tce.contending_key BETWEEN ranges.start_key AND ranges.end_key
+JOIN crdb_internal.cluster_contention_events as cce ON tce.contending_key = cce.key
+JOIN [SELECT database_name,
+             schema_name,
+             name AS table_name,
+             table_id
+      FROM
+        crdb_internal.tables] AS tables ON cce.table_id = tables.table_id
+LEFT JOIN [SELECT descriptor_id,
+                  index_name,
+                  index_id
+           FROM
+             "".crdb_internal.table_indexes] AS indexes ON cce.table_id = indexes.descriptor_id
+    AND cce.index_id = indexes.index_id
   WHERE waiting_txn_id = '${id}'
 `;
 
