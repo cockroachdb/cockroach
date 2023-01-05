@@ -190,7 +190,7 @@ var jsonTags = map[byte]struct {
 	// SQL servers in multi-tenant deployments.
 	'q': {[2]string{"q", "instance_id"},
 		"The SQL instance ID where the event was generated, once known. Only reported for multi-tenant SQL servers.", true},
-	'T': {[2]string{TenantIDLogTagKey, TenantIDLogTagKeyJSON},
+	'T': {[2]string{tenantIDLogTagStringPrefix, TenantIDLogTagKeyJSON},
 		"The SQL tenant ID where the event was generated, once known. Only reported for multi-tenant SQL servers.", true},
 }
 
