@@ -17,6 +17,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/pprof"
+	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
@@ -129,11 +130,26 @@ func NewServer(
 	mux.HandleFunc("/debug/vmodule", vsrv.vmoduleHandleDebug)
 
 	// Set up the log spy, a tool that allows inspecting filtered logs at high
-	// verbosity.
+	// verbosity. We require the tenant ID from the ambientCtx to set the logSpy
+	// tenant filter.
 	spy := logSpy{
 		vsrv:         vsrv,
 		setIntercept: log.InterceptWith,
 	}
+	serverTenantID := ambientContext.ServerIDs.ServerIdentityString(log.IdentifyTenantID)
+	if serverTenantID == "" {
+		panic("programmer error: cannot instantiate a debug.Server with no tenantID in the ambientCtx")
+	}
+	parsed, err := strconv.ParseUint(serverTenantID, 10, 64)
+	if err != nil {
+		panic("programmer error: failed parsing ambientCtx tenantID during debug.Server initialization")
+	}
+	tID, err := roachpb.MakeTenantID(parsed)
+	if err != nil {
+		panic("programmer error: failed to construct a tenantID during debug.Server initialization")
+	}
+	spy.tenantID = tID
+
 	mux.HandleFunc("/debug/logspy", spy.handleDebugLogSpy)
 
 	ps := pprofui.NewServer(pprofui.NewMemStorage(pprofui.ProfileConcurrency, pprofui.ProfileExpiry), profiler)
