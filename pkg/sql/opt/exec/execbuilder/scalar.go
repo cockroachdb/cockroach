@@ -659,7 +659,6 @@ func (b *Builder) buildSubquery(
 			1, /* numStmts */
 			subquery.Typ,
 			false, /* enableStepping */
-			true,  /* calledOnNullInput */
 		), nil
 	}
 
@@ -708,7 +707,6 @@ func (b *Builder) buildSubquery(
 			1, /* numStmts */
 			subquery.Typ,
 			false, /* enableStepping */
-			true,  /* calledOnNullInput */
 		), nil
 	}
 
@@ -786,7 +784,6 @@ func (b *Builder) buildUDF(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Typ
 		len(udf.Body),
 		udf.Typ,
 		enableStepping,
-		udf.CalledOnNullInput,
 	), nil
 }
 
