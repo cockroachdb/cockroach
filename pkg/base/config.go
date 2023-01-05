@@ -380,6 +380,10 @@ type Config struct {
 	// The flag exists mostly for the benefit of tests, and for
 	// `cockroach start-single-node`.
 	AutoInitializeCluster bool
+
+	// LocalityAddresses contains private IP addresses that can only be accessed
+	// in the corresponding locality.
+	LocalityAddresses []roachpb.LocalityAddress
 }
 
 // HistogramWindowInterval is used to determine the approximate length of time
