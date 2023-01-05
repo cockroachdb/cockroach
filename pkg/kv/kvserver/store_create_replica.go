@@ -205,6 +205,7 @@ func (s *Store) tryGetOrCreateReplica(
 	// was present in the map. While it was the case that the destroy status had
 	// been set, not every code path which inspects the descriptor checks the
 	// destroy status.
+	// TODO(pavelkalinnikov): this must have been done in newUnloadedReplica.
 	repl.mu.state.Desc = uninitializedDesc
 
 	// Add the range to range map, but not replicasByKey since the range's start
@@ -299,7 +300,7 @@ func (s *Store) tryGetOrCreateReplica(
 			return err
 		}
 
-		return repl.loadRaftMuLockedReplicaMuLocked(uninitializedDesc)
+		return repl.loadUninit(uninitializedDesc)
 	}(); err != nil {
 		// Mark the replica as destroyed and remove it from the replicas maps to
 		// ensure nobody tries to use it.
