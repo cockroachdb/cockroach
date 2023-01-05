@@ -1006,12 +1006,12 @@ func TestMVCCIncrementalIterator(t *testing.T) {
 
 		intent1 := roachpb.MakeLockUpdate(&txn1, roachpb.Span{Key: testKey1})
 		intent1.Status = roachpb.COMMITTED
-		if _, err := MVCCResolveWriteIntent(ctx, e, nil, intent1); err != nil {
+		if _, _, _, err := MVCCResolveWriteIntent(ctx, e, nil, intent1, MVCCResolveWriteIntentOptions{}); err != nil {
 			t.Fatal(err)
 		}
 		intent2 := roachpb.MakeLockUpdate(&txn2, roachpb.Span{Key: testKey2})
 		intent2.Status = roachpb.ABORTED
-		if _, err := MVCCResolveWriteIntent(ctx, e, nil, intent2); err != nil {
+		if _, _, _, err := MVCCResolveWriteIntent(ctx, e, nil, intent2, MVCCResolveWriteIntentOptions{}); err != nil {
 			t.Fatal(err)
 		}
 		t.Run("intents-resolved", assertEqualKVs(e, localMax, keyMax, tsMin, tsMax, latest, kvs(kv1_4_4, kv2_2_2)))
@@ -1073,12 +1073,12 @@ func TestMVCCIncrementalIterator(t *testing.T) {
 
 		intent1 := roachpb.MakeLockUpdate(&txn1, roachpb.Span{Key: testKey1})
 		intent1.Status = roachpb.COMMITTED
-		if _, err := MVCCResolveWriteIntent(ctx, e, nil, intent1); err != nil {
+		if _, _, _, err := MVCCResolveWriteIntent(ctx, e, nil, intent1, MVCCResolveWriteIntentOptions{}); err != nil {
 			t.Fatal(err)
 		}
 		intent2 := roachpb.MakeLockUpdate(&txn2, roachpb.Span{Key: testKey2})
 		intent2.Status = roachpb.ABORTED
-		if _, err := MVCCResolveWriteIntent(ctx, e, nil, intent2); err != nil {
+		if _, _, _, err := MVCCResolveWriteIntent(ctx, e, nil, intent2, MVCCResolveWriteIntentOptions{}); err != nil {
 			t.Fatal(err)
 		}
 		t.Run("intents-resolved", assertEqualKVs(e, localMax, keyMax, tsMin, tsMax, all, kvs(kv1_4_4, kv1Deleted3, kv1_2_2, kv1_1_1, kv2_2_2)))
@@ -1261,9 +1261,9 @@ func TestMVCCIncrementalIteratorIntentDeletion(t *testing.T) {
 	require.NoError(t, MVCCPut(ctx, db, nil, kC, txnC1.ReadTimestamp, hlc.ClockTimestamp{}, vC1, txnC1))
 	require.NoError(t, db.Flush())
 	require.NoError(t, db.Compact())
-	_, err := MVCCResolveWriteIntent(ctx, db, nil, intent(txnA1))
+	_, _, _, err := MVCCResolveWriteIntent(ctx, db, nil, intent(txnA1), MVCCResolveWriteIntentOptions{})
 	require.NoError(t, err)
-	_, err = MVCCResolveWriteIntent(ctx, db, nil, intent(txnB1))
+	_, _, _, err = MVCCResolveWriteIntent(ctx, db, nil, intent(txnB1), MVCCResolveWriteIntentOptions{})
 	require.NoError(t, err)
 	require.NoError(t, MVCCPut(ctx, db, nil, kA, ts2, hlc.ClockTimestamp{}, vA2, nil))
 	require.NoError(t, MVCCPut(ctx, db, nil, kA, txnA3.WriteTimestamp, hlc.ClockTimestamp{}, vA3, txnA3))
