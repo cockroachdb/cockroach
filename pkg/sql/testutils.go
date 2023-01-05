@@ -144,7 +144,6 @@ func (dsp *DistSQLPlanner) Exec(
 		p.txn,
 		execCfg.Clock,
 		p.ExtendedEvalContext().Tracing,
-		execCfg.ContentionRegistry,
 	)
 	defer recv.Release()
 
@@ -174,7 +173,6 @@ func (dsp *DistSQLPlanner) ExecLocalAll(
 		p.txn,
 		execCfg.Clock,
 		p.ExtendedEvalContext().Tracing,
-		execCfg.ContentionRegistry,
 	)
 	defer recv.Release()
 
