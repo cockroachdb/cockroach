@@ -283,7 +283,7 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 	ca.sink = &errorWrapperSink{wrapped: ca.sink}
 	ca.eventConsumer, ca.sink, err = newEventConsumer(
 		ctx, ca.flowCtx.Cfg, ca.spec, feed, ca.frontier.SpanFrontier(), kvFeedHighWater,
-		ca.sink, ca.metrics, ca.knobs)
+		ca.sink, ca.metrics, ca.sliMetrics, ca.knobs)
 
 	if err != nil {
 		// Early abort in the case that there is an error setting up the consumption.
