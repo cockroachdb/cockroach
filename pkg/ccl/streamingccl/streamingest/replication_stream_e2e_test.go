@@ -907,18 +907,17 @@ func TestTenantStreamingShowTenant(t *testing.T) {
 	replicationDetails := details.Details().(jobspb.StreamIngestionDetails)
 
 	var (
-		id                   int
-		dest                 string
-		status               string
-		source               string
-		sourceUri            string
-		jobId                int
-		maxReplTime          time.Time
-		protectedTime        time.Time
-		replicationStartTime time.Time
+		id            int
+		dest          string
+		status        string
+		source        string
+		sourceUri     string
+		jobId         int
+		maxReplTime   time.Time
+		protectedTime time.Time
 	)
 	row := c.DestSysSQL.QueryRow(t, fmt.Sprintf("SHOW TENANT %s WITH REPLICATION STATUS", args.DestTenantName))
-	row.Scan(&id, &dest, &status, &source, &sourceUri, &jobId, &maxReplTime, &protectedTime, &replicationStartTime)
+	row.Scan(&id, &dest, &status, &source, &sourceUri, &jobId, &maxReplTime, &protectedTime)
 	require.Equal(t, 2, id)
 	require.Equal(t, "destination", dest)
 	require.Equal(t, "REPLICATING", status)
@@ -929,6 +928,4 @@ func TestTenantStreamingShowTenant(t *testing.T) {
 	require.Less(t, protectedTime, timeutil.Now())
 	require.GreaterOrEqual(t, maxReplTime, highWatermark.GoTime())
 	require.GreaterOrEqual(t, protectedTime, replicationDetails.ReplicationStartTime.GoTime())
-	require.Equal(t, replicationStartTime.UnixMicro(),
-		timeutil.Unix(0, replicationDetails.ReplicationStartTime.WallTime).UnixMicro())
 }
