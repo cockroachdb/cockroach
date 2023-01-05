@@ -27,7 +27,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -52,6 +54,14 @@ func newReplica(
 	defer repl.raftMu.Unlock()
 	repl.mu.Lock()
 	defer repl.mu.Unlock()
+
+	if !desc.IsInitialized() {
+		if err := repl.loadUninit(ctx, desc); err != nil {
+			return nil, err
+		}
+		return repl, nil
+	}
+
 	if err := repl.loadRaftMuLockedReplicaMuLocked(desc); err != nil {
 		return nil, err
 	}
@@ -174,28 +184,27 @@ func (r *Replica) setStartKeyLocked(startKey roachpb.RKey) {
 	r.startKey = startKey
 }
 
-// loadRaftMuLockedReplicaMuLocked will load the state of the replica from disk.
-// If desc is initialized, the Replica will be initialized when this method
-// returns. An initialized Replica may not be reloaded. If this method is called
-// with an uninitialized desc it may be called again later with an initialized
-// desc.
+// loadRaftMuLockedReplicaMuLocked loads the state of the initialized replica
+// from storage. The passed-in desc must be initialized. After this method
+// returns, Replica is initialized. An initialized Replica may not be reloaded.
 //
-// This method is called in three places:
+// This method is called in two places:
 //
 //  1. newReplica - used when the store is initializing and during testing
-//  2. tryGetOrCreateReplica - see newUnloadedReplica
-//  3. splitPostApply - this call initializes a previously uninitialized Replica.
+//  2. splitPostApply - this call initializes a previously uninitialized Replica.
 func (r *Replica) loadRaftMuLockedReplicaMuLocked(desc *roachpb.RangeDescriptor) error {
 	ctx := r.AnnotateCtx(context.TODO())
+	if !desc.IsInitialized() {
+		log.Fatalf(ctx, "r%d: cannot load an uninitialized replica", desc.RangeID)
+	}
+
 	if r.mu.state.Desc != nil && r.IsInitialized() {
 		log.Fatalf(ctx, "r%d: cannot reinitialize an initialized replica", desc.RangeID)
 	} else if r.replicaID == 0 {
 		// NB: This is just a defensive check as r.mu.replicaID should never be 0.
 		log.Fatalf(ctx, "r%d: cannot initialize replica without a replicaID", desc.RangeID)
 	}
-	if desc.IsInitialized() {
-		r.setStartKeyLocked(desc.StartKey)
-	}
+	r.setStartKeyLocked(desc.StartKey)
 
 	// Clear the internal raft group in case we're being reset. Since we're
 	// reloading the raft state below, it isn't safe to use the existing raft
@@ -217,7 +226,7 @@ func (r *Replica) loadRaftMuLockedReplicaMuLocked(desc *roachpb.RangeDescriptor)
 	replicaID := r.replicaID
 	if replicaDesc, found := r.mu.state.Desc.GetReplicaDescriptor(r.StoreID()); found {
 		replicaID = replicaDesc.ReplicaID
-	} else if desc.IsInitialized() {
+	} else {
 		log.Fatalf(ctx, "r%d: cannot initialize replica which is not in descriptor %v", desc.RangeID, desc)
 	}
 	if r.replicaID != replicaID {
@@ -239,6 +248,33 @@ func (r *Replica) loadRaftMuLockedReplicaMuLocked(desc *roachpb.RangeDescriptor)
 		r.mu.minLeaseProposedTS = r.Clock().NowAsClockTimestamp()
 	}
 
+	r.assertStateRaftMuLockedReplicaMuRLocked(ctx, r.store.Engine())
+
+	return nil
+}
+
+func (r *Replica) loadUninit(ctx context.Context, desc *roachpb.RangeDescriptor) error {
+	// r.setDescLockedRaftMuLocked(ctx, desc):
+	// r.rangeStr.store(r.replicaID, desc) <- done in newUnloadedReplica
+	// r.concMgr.OnRangeDescUpdated(desc) <- not needed?
+
+	// FIXME: Was r.mu.stateLoader.Load(ctx, r.Engine(), desc), should it still
+	// be, or at least initialize all other fields?
+	//
+	// Leaving any of the following fields nil leads to panics in some tests. The
+	// safest would be to initialize ReplicaState to a reasonable default (same as
+	// stateLoader.Load on an empty storage would return). In contrast, revisiting
+	// all usages of these fields and checking nils seems too much work.
+	r.mu.state.Desc = desc
+	r.mu.state.Lease = &roachpb.Lease{}
+	r.mu.state.TruncatedState = &roachpb.RaftTruncatedState{}
+	r.mu.state.GCThreshold = &hlc.Timestamp{}
+	r.mu.state.Stats = &enginepb.MVCCStats{}
+	// FIXME: satisfies the assert below.
+	r.mu.state.GCHint = &roachpb.GCHint{}
+	// r.mu.state.Version?
+
+	// FIXME: is this needed?
 	r.assertStateRaftMuLockedReplicaMuRLocked(ctx, r.store.Engine())
 
 	return nil
