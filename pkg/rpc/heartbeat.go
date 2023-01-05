@@ -52,7 +52,7 @@ type HeartbeatService struct {
 	clusterName                    string
 	disableClusterNameVerification bool
 
-	onHandlePing func(context.Context, *PingRequest) error // see ContextOptions.OnIncomingPing
+	onHandlePing func(context.Context, *PingRequest, *PingResponse) error // see ContextOptions.OnIncomingPing
 
 	// TestingAllowNamedRPCToAnonymousServer, when defined (in tests),
 	// disables errors in case a heartbeat requests a specific node ID but
@@ -115,13 +115,13 @@ func checkVersion(
 // server's current clock value, allowing the requester to measure its clock.
 // The requester should also estimate its offset from this server along
 // with the requester's address.
-func (hs *HeartbeatService) Ping(ctx context.Context, args *PingRequest) (*PingResponse, error) {
+func (hs *HeartbeatService) Ping(ctx context.Context, request *PingRequest) (*PingResponse, error) {
 	if log.ExpensiveLogEnabled(ctx, 2) {
-		log.Dev.Infof(ctx, "received heartbeat: %+v vs local cluster %+v node %+v", args, hs.clusterID, hs.nodeID)
+		log.Dev.Infof(ctx, "received heartbeat: %+v vs local cluster %+v node %+v", request, hs.clusterID, hs.nodeID)
 	}
 	// Check that cluster IDs match.
 	clusterID := hs.clusterID.Get()
-	if args.ClusterID != nil && *args.ClusterID != uuid.Nil && clusterID != uuid.Nil {
+	if request.ClusterID != nil && *request.ClusterID != uuid.Nil && clusterID != uuid.Nil {
 		// There is a cluster ID on both sides. Use that to verify the connection.
 		//
 		// Note: we could be checking the cluster name here too, however
@@ -129,9 +129,9 @@ func (hs *HeartbeatService) Ping(ctx context.Context, args *PingRequest) (*PingR
 		// initiating the connection), so that the user of a newly started
 		// node gets a chance to see a cluster name mismatch as an error message
 		// on their side.
-		if *args.ClusterID != clusterID {
+		if *request.ClusterID != clusterID {
 			return nil, errors.Errorf(
-				"client cluster ID %q doesn't match server cluster ID %q", args.ClusterID, clusterID)
+				"client cluster ID %q doesn't match server cluster ID %q", request.ClusterID, clusterID)
 		}
 	}
 	// Check that node IDs match.
@@ -139,7 +139,7 @@ func (hs *HeartbeatService) Ping(ctx context.Context, args *PingRequest) (*PingR
 	if hs.nodeID != nil {
 		nodeID = hs.nodeID.Get()
 	}
-	if args.TargetNodeID != 0 && (!hs.testingAllowNamedRPCToAnonymousServer || nodeID != 0) && args.TargetNodeID != nodeID {
+	if request.TargetNodeID != 0 && (!hs.testingAllowNamedRPCToAnonymousServer || nodeID != 0) && request.TargetNodeID != nodeID {
 		// If nodeID != 0, the situation is clear (we are checking that
 		// the other side is talking to the right node).
 		//
@@ -149,29 +149,31 @@ func (hs *HeartbeatService) Ping(ctx context.Context, args *PingRequest) (*PingR
 		// however we can still serve connections that don't need a node
 		// ID, e.g. during initial gossip.
 		return nil, errors.Errorf(
-			"client requested node ID %d doesn't match server node ID %d", args.TargetNodeID, nodeID)
+			"client requested node ID %d doesn't match server node ID %d", request.TargetNodeID, nodeID)
 	}
 
 	// Check version compatibility.
-	if err := checkVersion(ctx, hs.version, args.ServerVersion); err != nil {
+	if err := checkVersion(ctx, hs.version, request.ServerVersion); err != nil {
 		return nil, errors.Wrap(err, "version compatibility check failed on ping request")
 	}
 
-	if fn := hs.onHandlePing; fn != nil {
-		if err := fn(ctx, args); err != nil {
-			return nil, err
-		}
-	}
-
-	serverOffset := args.Offset
+	serverOffset := request.Offset
 	// The server offset should be the opposite of the client offset.
 	serverOffset.Offset = -serverOffset.Offset
-	hs.remoteClockMonitor.UpdateOffset(ctx, args.OriginNodeID, serverOffset, 0 /* roundTripLatency */)
-	return &PingResponse{
-		Pong:                           args.Ping,
+	hs.remoteClockMonitor.UpdateOffset(ctx, request.OriginNodeID, serverOffset, 0 /* roundTripLatency */)
+	response := PingResponse{
+		Pong:                           request.Ping,
 		ServerTime:                     hs.clock.Now().UnixNano(),
 		ServerVersion:                  hs.version.BinaryVersion(),
 		ClusterName:                    hs.clusterName,
 		DisableClusterNameVerification: hs.disableClusterNameVerification,
-	}, nil
+	}
+
+	if fn := hs.onHandlePing; fn != nil {
+		if err := fn(ctx, request, &response); err != nil {
+			return nil, err
+		}
+	}
+
+	return &response, nil
 }
