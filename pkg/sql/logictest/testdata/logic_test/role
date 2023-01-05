@@ -74,7 +74,7 @@ admin     ·        {}
 root      ·        {admin}
 testuser  ·        {}
 
-statement error pq: role/user myrole does not exist
+statement error pq: role/user "myrole" does not exist
 DROP ROLE myrole
 
 statement ok
@@ -92,7 +92,7 @@ CREATE ROLE rolec
 statement ok
 CREATE ROLE roled
 
-statement error pq: role/user rolee does not exist
+statement error pq: role/user "rolee" does not exist
 DROP ROLE rolea, roleb, rolec, roled, rolee
 
 statement ok
@@ -140,10 +140,10 @@ role_name
 admin
 root
 
-statement error pq: role/user unknownuser does not exist
+statement error pq: role/user "unknownuser" does not exist
 GRANT testrole TO unknownuser
 
-statement error pq: role/user unknownrole does not exist
+statement error pq: role/user "unknownrole" does not exist
 GRANT unknownrole TO testuser
 
 # Test role "grant" and WITH ADMIN option.
@@ -502,10 +502,10 @@ REVOKE admin FROM root
 statement error pq: role/user root cannot be removed from role admin or lose the ADMIN OPTION
 REVOKE ADMIN OPTION FOR admin FROM root
 
-statement error pq: role/user unknownuser does not exist
+statement error pq: role/user "unknownuser" does not exist
 REVOKE ADMIN OPTION FOR admin FROM unknownuser
 
-statement error pq: role/user unknownrole does not exist
+statement error pq: role/user "unknownrole" does not exist
 REVOKE ADMIN OPTION FOR unknownrole FROM root
 
 statement error pgcode 42939 CURRENT_USER cannot be used as a role name here
@@ -843,16 +843,16 @@ DROP USER public
 statement error role name "public" is reserved
 DROP ROLE public
 
-statement error role/user public does not exist
+statement error role/user "public" does not exist
 GRANT public TO testuser
 
-statement error role/user public does not exist
+statement error role/user "public" does not exist
 GRANT admin TO public
 
-statement error role/user public does not exist
+statement error role/user "public" does not exist
 REVOKE public FROM testuser
 
-statement error role/user public does not exist
+statement error role/user "public" does not exist
 REVOKE admin FROM public
 
 # Test "WITH CREATEROLE" option
@@ -1018,7 +1018,7 @@ ALTER USER testuser3 WITH PASSWORD 'ilov3beefjerky'
 
 user root
 
-statement error pq: role/user rolek does not exist
+statement error pq: role/user "rolek" does not exist
 ALTER ROLE rolek CREATEROLE
 
 statement ok

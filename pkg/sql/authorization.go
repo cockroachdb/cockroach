@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -789,7 +790,7 @@ func (p *planner) checkCanAlterToNewOwner(
 		return err
 	}
 	if !roleExists {
-		return pgerror.Newf(pgcode.UndefinedObject, "role/user %q does not exist", newOwner)
+		return sqlerrors.NewUndefinedUserError(newOwner)
 	}
 
 	// If the user is a superuser, skip privilege checks.

@@ -58,6 +58,7 @@ go_library(
         "//pkg/sql/sem/catconstants",
         "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
+        "//pkg/sql/sqlerrors",
         "//pkg/sql/sqltelemetry",
         "//pkg/sql/syntheticprivilege",
         "//pkg/util/errorutil/unimplemented",
