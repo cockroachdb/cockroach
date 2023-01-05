@@ -11,6 +11,7 @@ package backupccl
 import (
 	"bytes"
 	"context"
+	"math"
 	"sort"
 	"time"
 
@@ -60,7 +61,6 @@ func distRestore(
 	ctx context.Context,
 	execCtx sql.JobExecContext,
 	jobID int64,
-	chunks [][]execinfrapb.RestoreSpanEntry,
 	pkIDs map[uint64]bool,
 	encryption *jobspb.BackupEncryptionOptions,
 	kmsEnv cloud.KMSEnv,
@@ -68,6 +68,13 @@ func distRestore(
 	tenantRekeys []execinfrapb.TenantRekey,
 	restoreTime hlc.Timestamp,
 	validateOnly bool,
+	uris []string,
+	requiredSpans []roachpb.Span,
+	backupLocalityInfo []jobspb.RestoreDetails_BackupLocalityInfo,
+	lowWaterMark roachpb.Key,
+	targetSize int64,
+	numNodes int,
+	numImportSpans int,
 	progCh chan *execinfrapb.RemoteProducerMetadata_BulkProcessorProgress,
 ) error {
 	defer close(progCh)
@@ -107,12 +114,6 @@ func distRestore(
 
 		p := planCtx.NewPhysicalPlan()
 
-		splitAndScatterSpecs, err := makeSplitAndScatterSpecs(sqlInstanceIDs, chunks, tableRekeys,
-			tenantRekeys, validateOnly)
-		if err != nil {
-			return nil, nil, err
-		}
-
 		restoreDataSpec := execinfrapb.RestoreDataSpec{
 			JobID:        jobID,
 			RestoreTime:  restoreTime,
@@ -121,12 +122,6 @@ func distRestore(
 			TenantRekeys: tenantRekeys,
 			PKIDs:        pkIDs,
 			ValidateOnly: validateOnly,
-		}
-
-		if len(splitAndScatterSpecs) == 0 {
-			// We should return an error here as there are no nodes that are compatible,
-			// but we should have at least found ourselves.
-			return nil, nil, errors.AssertionFailedf("no compatible nodes")
 		}
 
 		// Plan SplitAndScatter in a round-robin fashion.
@@ -162,33 +157,54 @@ func distRestore(
 			return bytes.Compare(rangeRouterSpec.Spans[i].Start, rangeRouterSpec.Spans[j].Start) == -1
 		})
 
-		for _, n := range sqlInstanceIDs {
-			spec := splitAndScatterSpecs[n]
-			if spec == nil {
-				// We may have fewer chunks than we have nodes for very small imports. In
-				// this case we only want to plan splitAndScatter nodes on a subset of
-				// nodes. Note that we still want to plan a RestoreData processor on every
-				// node since each entry could be scattered anywhere.
-				continue
-			}
-			proc := physicalplan.Processor{
-				SQLInstanceID: n,
-				Spec: execinfrapb.ProcessorSpec{
-					Core: execinfrapb.ProcessorCoreUnion{SplitAndScatter: splitAndScatterSpecs[n]},
-					Post: execinfrapb.PostProcessSpec{},
-					Output: []execinfrapb.OutputRouterSpec{
-						{
-							Type:            execinfrapb.OutputRouterSpec_BY_RANGE,
-							RangeRouterSpec: rangeRouterSpec,
-						},
-					},
-					StageID:     splitAndScatterStageID,
-					ResultTypes: splitAndScatterOutputTypes,
-				},
-			}
-			pIdx := p.AddProcessor(proc)
-			splitAndScatterProcs[n] = pIdx
+		// TODO(pbardea): This not super principled. I just wanted something that
+		// wasn't a constant and grew slower than linear with the length of
+		// importSpans. It seems to be working well for BenchmarkRestore2TB but
+		// worth revisiting.
+		// It tries to take the cluster size into account so that larger clusters
+		// distribute more chunks amongst them so that after scattering there isn't
+		// a large varience in the distribution of entries.
+		chunkSize := int(math.Sqrt(float64(numImportSpans))) / numNodes
+		if chunkSize == 0 {
+			chunkSize = 1
 		}
+
+		id := execCtx.ExecCfg().NodeInfo.NodeID.SQLInstanceID()
+
+		spec := &execinfrapb.GenerativeSplitAndScatterSpec{
+			TableRekeys:        tableRekeys,
+			TenantRekeys:       tenantRekeys,
+			ValidateOnly:       validateOnly,
+			URIs:               uris,
+			Encryption:         encryption,
+			EndTime:            restoreTime,
+			Spans:              requiredSpans,
+			BackupLocalityInfo: backupLocalityInfo,
+			HighWater:          lowWaterMark,
+			UserProto:          execCtx.User().EncodeProto(),
+			TargetSize:         targetSize,
+			ChunkSize:          int64(chunkSize),
+			NumEntries:         int64(numImportSpans),
+			NumNodes:           int64(numNodes),
+		}
+
+		proc := physicalplan.Processor{
+			SQLInstanceID: id,
+			Spec: execinfrapb.ProcessorSpec{
+				Core: execinfrapb.ProcessorCoreUnion{GenerativeSplitAndScatter: spec},
+				Post: execinfrapb.PostProcessSpec{},
+				Output: []execinfrapb.OutputRouterSpec{
+					{
+						Type:            execinfrapb.OutputRouterSpec_BY_RANGE,
+						RangeRouterSpec: rangeRouterSpec,
+					},
+				},
+				StageID:     splitAndScatterStageID,
+				ResultTypes: splitAndScatterOutputTypes,
+			},
+		}
+		pIdx := p.AddProcessor(proc)
+		splitAndScatterProcs[id] = pIdx
 
 		// Plan RestoreData.
 		restoreDataStageID := p.NewStageOnNodes(sqlInstanceIDs)

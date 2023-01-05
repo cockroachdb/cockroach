@@ -14,6 +14,8 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/stretchr/testify/require"
@@ -53,7 +55,7 @@ func BenchmarkCoverageChecks(b *testing.B) {
 	}
 }
 
-func BenchmarkRestoreEntryCover(b *testing.B) {
+func BenchmarkRestoreEntryCoverStreaming(b *testing.B) {
 	tc, _, _, cleanupFn := backupRestoreTestSetup(b, singleNode, 1, InitManualReplication)
 	defer cleanupFn()
 	execCfg := tc.Server(0).ExecutorConfig().(sql.ExecutorConfig)
@@ -81,10 +83,22 @@ func BenchmarkRestoreEntryCover(b *testing.B) {
 										layerToBackupManifestFileIterFactory, err := getBackupManifestFileIters(ctx, &execCfg,
 											backups, nil, nil)
 										require.NoError(b, err)
-										cov, err := makeSimpleImportSpans(backups[numBackups-1].Spans, backups,
-											layerToBackupManifestFileIterFactory, nil, introducedSpanFrontier,
-											nil, 0)
-										require.NoError(b, err)
+
+										spanCh := make(chan execinfrapb.RestoreSpanEntry, 1000)
+
+										g := ctxgroup.WithContext(ctx)
+										g.GoCtx(func(ctx context.Context) error {
+											defer close(spanCh)
+											return makeStreamingImportSpans(ctx, backups[numBackups-1].Spans, backups,
+												layerToBackupManifestFileIterFactory, nil, introducedSpanFrontier, nil, 0, spanCh)
+										})
+
+										var cov []execinfrapb.RestoreSpanEntry
+										for entry := range spanCh {
+											cov = append(cov, entry)
+										}
+
+										require.NoError(b, g.Wait())
 										b.ReportMetric(float64(len(cov)), "coverSize")
 									}
 								})

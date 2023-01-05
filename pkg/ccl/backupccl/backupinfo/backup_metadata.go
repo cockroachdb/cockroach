@@ -262,6 +262,14 @@ func writeDescsToMetadata(
 	return nil
 }
 
+func FileCmp(left backuppb.BackupManifest_File, right backuppb.BackupManifest_File) int {
+	if cmp := left.Span.Key.Compare(right.Span.Key); cmp != 0 {
+		return cmp
+	}
+
+	return strings.Compare(left.Path, right.Path)
+}
+
 func writeFilesSST(
 	ctx context.Context,
 	m *backuppb.BackupManifest,
@@ -280,8 +288,7 @@ func writeFilesSST(
 
 	// Sort and write all of the files into a single file info SST.
 	sort.Slice(m.Files, func(i, j int) bool {
-		cmp := m.Files[i].Span.Key.Compare(m.Files[j].Span.Key)
-		return cmp < 0 || (cmp == 0 && strings.Compare(m.Files[i].Path, m.Files[j].Path) < 0)
+		return FileCmp(m.Files[i], m.Files[j]) < 0
 	})
 
 	for i := range m.Files {
@@ -1015,10 +1022,11 @@ func (si *SpanIterator) Next(span *roachpb.Span) bool {
 	return false
 }
 
-// FileIterator is a simple iterator to iterate over stats.TableStatisticProtos.
+// FileIterator is a simple iterator to iterate over backuppb.BackupManifest_File.
 type FileIterator struct {
 	mergedIterator storage.SimpleMVCCIterator
 	err            error
+	file           *backuppb.BackupManifest_File
 }
 
 // NewFileIter creates a new FileIterator for the backup metadata.
@@ -1076,40 +1084,51 @@ func (fi *FileIterator) Close() {
 	fi.mergedIterator.Close()
 }
 
-// Err returns the iterator's error.
-func (fi *FileIterator) Err() error {
-	return fi.err
+// Valid indicates whether or not the iterator is pointing to a valid value.
+func (fi *FileIterator) Valid() (bool, error) {
+	if fi.err != nil {
+		return false, fi.err
+	}
+
+	if ok, err := fi.mergedIterator.Valid(); !ok {
+		fi.err = err
+		return ok, err
+	}
+
+	if fi.file == nil {
+		v, err := fi.mergedIterator.UnsafeValue()
+		if err != nil {
+			fi.err = err
+			return false, fi.err
+		}
+
+		file := &backuppb.BackupManifest_File{}
+		err = protoutil.Unmarshal(v, file)
+		if err != nil {
+			fi.err = err
+			return false, fi.err
+		}
+		fi.file = file
+	}
+	return true, nil
 }
 
-// Next retrieves the next file in the iterator.
-//
-// Next returns true if next element was successfully unmarshalled into file,
-// and false if there are no more elements or if an error was encountered. When
-// Next returns false, the user should call the Err method to verify the
-// existence of an error.
-func (fi *FileIterator) Next(file *backuppb.BackupManifest_File) bool {
-	if fi.err != nil {
-		return false
-	}
+// Value returns the current value of the iterator, if valid.
+func (fi *FileIterator) Value() *backuppb.BackupManifest_File {
+	return fi.file
+}
 
-	valid, err := fi.mergedIterator.Valid()
-	if err != nil || !valid {
-		fi.err = err
-		return false
-	}
-	v, err := fi.mergedIterator.UnsafeValue()
-	if err != nil {
-		fi.err = err
-		return false
-	}
-	err = protoutil.Unmarshal(v, file)
-	if err != nil {
-		fi.err = err
-		return false
-	}
-
+// Next advances the iterator the the next value.
+func (fi *FileIterator) Next() {
 	fi.mergedIterator.Next()
-	return true
+	fi.file = nil
+}
+
+// Reset resets the iterator to the first value.
+func (fi *FileIterator) Reset() {
+	fi.mergedIterator.SeekGE(storage.MVCCKey{})
+	fi.err = nil
+	fi.file = nil
 }
 
 // DescIterator is a simple iterator to iterate over descpb.Descriptors.
