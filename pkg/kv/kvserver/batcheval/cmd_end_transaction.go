@@ -554,7 +554,8 @@ func resolveLocalLocks(
 				//
 				// Note that the underlying pebbleIterator will still be reused
 				// since readWriter is a pebbleBatch in the typical case.
-				ok, err := storage.MVCCResolveWriteIntent(ctx, readWriter, ms, update)
+				ok, _, _, err := storage.MVCCResolveWriteIntent(ctx, readWriter, ms, update,
+					storage.MVCCResolveWriteIntentOptions{})
 				if err != nil {
 					return err
 				}
@@ -579,15 +580,15 @@ func resolveLocalLocks(
 			externalLocks = append(externalLocks, outSpans...)
 			if inSpan != nil {
 				update.Span = *inSpan
-				num, resumeSpan, err := storage.MVCCResolveWriteIntentRange(
-					ctx, readWriter, ms, update, resolveAllowance)
+				numKeys, _, resumeSpan, _, err := storage.MVCCResolveWriteIntentRange(ctx, readWriter, ms, update,
+					storage.MVCCResolveWriteIntentRangeOptions{MaxKeys: resolveAllowance})
 				if err != nil {
 					return err
 				}
 				if evalCtx.EvalKnobs().NumKeysEvaluatedForRangeIntentResolution != nil {
-					atomic.AddInt64(evalCtx.EvalKnobs().NumKeysEvaluatedForRangeIntentResolution, num)
+					atomic.AddInt64(evalCtx.EvalKnobs().NumKeysEvaluatedForRangeIntentResolution, numKeys)
 				}
-				resolveAllowance -= num
+				resolveAllowance -= numKeys
 				if resumeSpan != nil {
 					if resolveAllowance != 0 {
 						log.Fatalf(ctx, "expected resolve allowance to be exactly 0 resolving %s; got %d", update.Span, resolveAllowance)
