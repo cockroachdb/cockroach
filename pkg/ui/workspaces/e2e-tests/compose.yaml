@@ -31,7 +31,6 @@ services:
     volumes:
       - ./:/e2e
       - ./artifacts:/artifacts
-      - ../../yarn-vendor:/yarn-vendor
 
 networks:
   db:

@@ -365,12 +365,8 @@ $(CLUSTER_UI_JS): $(shell find pkg/ui/workspaces/cluster-ui/src -type f | sed 's
 	$(NODE_RUN) -C pkg/ui/workspaces/cluster-ui yarn build
 
 .SECONDARY: pkg/ui/yarn.installed
-pkg/ui/yarn.installed: pkg/ui/package.json pkg/ui/yarn.lock | bin/.submodules-initialized
-	@# Do not install optional dependencies as far as they are required for UI development only
-	@# and should not be installed for production builds.
-	@# Also some linux distributions (that are used as development env) don't support some of
-	@# optional dependencies (i.e. cypress) so it is important to make these deps optional.
-	$(NODE_RUN) -C pkg/ui yarn install --ignore-optional --offline
+pkg/ui/yarn.installed: pkg/ui/package.json pkg/ui/yarn.lock
+	$(NODE_RUN) -C pkg/ui yarn install --pure-lockfile
 	touch $@
 
 vendor/modules.txt: go.mod go.sum | fake-protobufs
@@ -1455,10 +1451,6 @@ pkg/ui/assets.%.installed: pkg/ui/workspaces/db-console/webpack.config.js $(CLUS
 	$(NODE_RUN) -C pkg/ui/workspaces/db-console $(WEBPACK) --config webpack.config.js --env.dist=$*
 	touch $@
 
-pkg/ui/yarn.opt.installed:
-	$(NODE_RUN) -C pkg/ui yarn install --check-files --offline
-	touch $@
-
 .PHONY: ui-watch-secure
 ui-watch-secure: override WEBPACK_DEV_SERVER_FLAGS += --https
 ui-watch-secure: export TARGET ?= https://localhost:8080/
@@ -1466,7 +1458,7 @@ ui-watch-secure: export TARGET ?= https://localhost:8080/
 .PHONY: ui-watch
 ui-watch: export TARGET ?= http://localhost:8080
 ui-watch ui-watch-secure: PORT := 3000
-ui-watch ui-watch-secure: $(UI_PROTOS_OSS) $(UI_PROTOS_CCL) pkg/ui/yarn.opt.installed
+ui-watch ui-watch-secure: $(UI_PROTOS_OSS) $(UI_PROTOS_CCL) pkg/ui/yarn.installed
   # TODO (koorosh): running two webpack dev servers doesn't provide best performance and polling changes.
   # it has to be considered to use something like `parallel-webpack` lib.
   #

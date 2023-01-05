@@ -60,7 +60,6 @@ func LintEverythingIsOwned(
 	skip := map[string]struct{}{
 		filepath.Join("ccl", "ccl_init.go"): {},
 		filepath.Join("node_modules"):       {},
-		filepath.Join("yarn-vendor"):        {},
 		"Makefile":                          {},
 		"BUILD.bazel":                       {},
 		".gitignore":                        {},

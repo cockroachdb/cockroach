@@ -3,7 +3,6 @@
 workspace(
     name = "com_github_cockroachdb_cockroach",
     managed_directories = {
-        "@yarn_vendor": ["pkg/ui/yarn-vendor"],
         "@npm_eslint_plugin_crdb": ["pkg/ui/workspaces/eslint-plugin-crdb/node_modules"],
         "@npm_protos": ["pkg/ui/workspaces/db-console/src/js/node_modules"],
         "@npm_cluster_ui": ["pkg/ui/workspaces/cluster_ui/node_modules"],
@@ -246,12 +245,11 @@ yarn_repositories(
     yarn_version = "1.22.11",
 )
 
-load("//build/bazelutil:seed_yarn_cache.bzl", "seed_yarn_cache")
-
-seed_yarn_cache(name = "yarn_cache")
-
 yarn_install(
     name = "npm_mirror_npm",
+    args = [
+        "--pure-lockfile",
+    ],
     package_json = "//pkg/cmd/mirror/npm:package.json",
     yarn_lock = "//pkg/cmd/mirror/npm:yarn.lock",
     symlink_node_modules = True,
@@ -266,12 +264,8 @@ yarn_install(
 yarn_install(
     name = "npm_eslint_plugin_crdb",
     args = [
-        "--offline",
+        "--pure-lockfile",
         "--ignore-optional",
-    ],
-    data = [
-        "//pkg/ui:.yarnrc",
-        "@yarn_cache//:.seed",
     ],
     package_json = "//pkg/ui/workspaces/eslint-plugin-crdb:package.json",
     strict_visibility = False,
@@ -282,11 +276,7 @@ yarn_install(
 yarn_install(
     name = "npm_e2e_tests",
     args = [
-        "--offline",
-    ],
-    data = [
-        "//pkg/ui:.yarnrc",
-        "@yarn_cache//:.seed",
+        "--pure-lockfile",
     ],
     environment = {
         # Don't automatically install the native Cypress binary, since not all
@@ -308,12 +298,8 @@ yarn_install(
 yarn_install(
     name = "npm_protos",
     args = [
-        "--offline",
+        "--pure-lockfile",
         "--ignore-optional",
-    ],
-    data = [
-        "//pkg/ui:.yarnrc",
-        "@yarn_cache//:.seed",
     ],
     package_json = "//pkg/ui/workspaces/db-console/src/js:package.json",
     package_path = "/",
@@ -324,12 +310,8 @@ yarn_install(
 yarn_install(
     name = "npm_db_console",
     args = [
-        "--offline",
+        "--pure-lockfile",
         "--ignore-optional",
-    ],
-    data = [
-        "//pkg/ui:.yarnrc",
-        "@yarn_cache//:.seed",
     ],
     package_json = "//pkg/ui/workspaces/db-console:package.json",
     strict_visibility = False,
@@ -340,13 +322,8 @@ yarn_install(
 yarn_install(
     name = "npm_cluster_ui",
     args = [
-        "--verbose",
-        "--offline",
+        "--pure-lockfile",
         "--ignore-optional",
-    ],
-    data = [
-        "//pkg/ui:.yarnrc",
-        "@yarn_cache//:.seed",
     ],
     package_json = "//pkg/ui/workspaces/cluster-ui:package.json",
     strict_visibility = False,
