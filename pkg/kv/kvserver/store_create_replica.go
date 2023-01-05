@@ -139,6 +139,7 @@ func (s *Store) tryGetOrCreateReplica(
 		}
 
 		repl.mu.RUnlock()
+		// TODO(here): storage.
 		if err := s.removeReplicaRaftMuLocked(ctx, repl, replicaID, RemoveOptions{
 			DestroyData: true,
 		}); err != nil {
@@ -175,6 +176,7 @@ func (s *Store) tryCreateUninitializedReplica(
 	// Store's Range map even though we must check it again after to avoid race
 	// conditions. This double-checked locking is an optimization to avoid this
 	// work when we know the Replica should not be created ahead of time.
+	// TODO(here): storage (tombstone - state).
 	tombstone := kvstorage.NewRangeTombstoneChecker(rangeID, s.Engine())
 	if _, err := tombstone.Check(ctx, replicaID); err != nil {
 		return nil, err
@@ -218,6 +220,7 @@ func (s *Store) tryCreateUninitializedReplica(
 		// tombstone check and the Range map linearization point. By checking
 		// again now, we make sure to synchronize with any goroutine that wrote
 		// a tombstone and then removed an old replica from the Range map.
+		// TODO(here): storage (tombstone - state).
 		if _, err := tombstone.Check(ctx, replicaID); err != nil {
 			return err
 		}
@@ -225,6 +228,7 @@ func (s *Store) tryCreateUninitializedReplica(
 		// An uninitialized replica should have an empty HardState.Commit at
 		// all times. Failure to maintain this invariant indicates corruption.
 		// And yet, we have observed this in the wild. See #40213.
+		// TODO(here): storage (log).
 		if hs, err := repl.mu.stateLoader.LoadHardState(ctx, s.Engine()); err != nil {
 			return err
 		} else if hs.Commit != 0 {
@@ -280,6 +284,7 @@ func (s *Store) tryCreateUninitializedReplica(
 		//   power-cycled, losing the snapshot) the fire-and-forget way in which
 		//   raft votes are requested (in the same raft cycle) makes it extremely
 		//   unlikely that the restarted node would then receive it.
+		// TODO(here): storage (log).
 		if err := repl.mu.stateLoader.SetRaftReplicaID(ctx, s.Engine(), replicaID); err != nil {
 			return err
 		}
