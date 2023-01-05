@@ -334,7 +334,7 @@ func setupKeysWithIntent(
 					// is not one that should be resolved.
 					continue
 				}
-				found, err := MVCCResolveWriteIntent(context.Background(), batch, nil, lu)
+				found, _, _, err := MVCCResolveWriteIntent(context.Background(), batch, nil, lu, MVCCResolveWriteIntentOptions{})
 				require.Equal(b, true, found)
 				require.NoError(b, err)
 			}
@@ -553,7 +553,7 @@ func BenchmarkIntentResolution(b *testing.B) {
 							b.StartTimer()
 						}
 						lockUpdate.Key = keys[i%numIntentKeys]
-						found, err := MVCCResolveWriteIntent(context.Background(), batch, nil, lockUpdate)
+						found, _, _, err := MVCCResolveWriteIntent(context.Background(), batch, nil, lockUpdate, MVCCResolveWriteIntentOptions{})
 						if !found || err != nil {
 							b.Fatalf("intent not found or err %s", err)
 						}
@@ -613,8 +613,9 @@ func BenchmarkIntentRangeResolution(b *testing.B) {
 										rangeNum := i % numRanges
 										lockUpdate.Key = keys[rangeNum*numKeysPerRange]
 										lockUpdate.EndKey = keys[(rangeNum+1)*numKeysPerRange]
-										resolved, span, err := MVCCResolveWriteIntentRange(
-											context.Background(), batch, nil, lockUpdate, 1000 /* max */)
+										resolved, _, span, _, err := MVCCResolveWriteIntentRange(
+											context.Background(), batch, nil, lockUpdate,
+											MVCCResolveWriteIntentRangeOptions{MaxKeys: 1000})
 										if err != nil {
 											b.Fatal(err)
 										}

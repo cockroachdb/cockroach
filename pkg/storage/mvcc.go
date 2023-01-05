@@ -922,6 +922,21 @@ func (opts *MVCCGetOptions) errOnIntents() bool {
 	return !opts.Inconsistent && !opts.SkipLocked
 }
 
+// MVCCResolveWriteIntentOptions bundles options for the MVCCResolveWriteIntent
+// function.
+type MVCCResolveWriteIntentOptions struct {
+	// See the documentation for MVCCResolveWriteIntent for information on these
+	// parameters.
+}
+
+// MVCCResolveWriteIntentRangeOptions bundles options for the
+// MVCCResolveWriteIntentRange function.
+type MVCCResolveWriteIntentRangeOptions struct {
+	// See the documentation for MVCCResolveWriteIntentRange for information on
+	// these parameters.
+	MaxKeys int64
+}
+
 // newMVCCIterator sets up a suitable iterator for high-level MVCC operations
 // operating at the given timestamp. If timestamp is empty or if
 // `noInterleavedIntents` is set, the iterator is considered to be used for
@@ -3973,7 +3988,9 @@ func MVCCIterate(
 // MVCCResolveWriteIntent either commits, aborts (rolls back), or moves forward
 // in time an extant write intent for a given txn according to commit parameter.
 // ResolveWriteIntent will skip write intents of other txns. It returns
-// whether or not an intent was found to resolve.
+// whether or not an intent was found to resolve. Note that the numBytes and
+// resumeSpan return values are currently unused and serve as a placeholder in
+// refactoring, but will be used in the future.
 //
 // Transaction epochs deserve a bit of explanation. The epoch for a
 // transaction is incremented on transaction retries. A transaction
@@ -3990,14 +4007,17 @@ func MVCCIterate(
 // committed in the event the transaction succeeds (all those with
 // epoch matching the commit epoch), and which intents get aborted,
 // even if the transaction succeeds.
-func MVCCResolveWriteIntent(
-	ctx context.Context, rw ReadWriter, ms *enginepb.MVCCStats, intent roachpb.LockUpdate,
-) (bool, error) {
+func MVCCResolveWriteIntent(ctx context.Context,
+	rw ReadWriter,
+	ms *enginepb.MVCCStats,
+	intent roachpb.LockUpdate,
+	opts MVCCResolveWriteIntentOptions,
+) (ok bool, numBytes int64, resumeSpan *roachpb.Span, err error) {
 	if len(intent.Key) == 0 {
-		return false, emptyKeyError()
+		return false, 0, nil, emptyKeyError()
 	}
 	if len(intent.EndKey) > 0 {
-		return false, errors.Errorf("can't resolve range intent as point intent")
+		return false, 0, nil, errors.Errorf("can't resolve range intent as point intent")
 	}
 
 	iterAndBuf := GetBufUsingIter(rw.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
@@ -4005,10 +4025,10 @@ func MVCCResolveWriteIntent(
 		Prefix:   true,
 	}))
 	iterAndBuf.iter.SeekIntentGE(intent.Key, intent.Txn.ID)
-	ok, err := mvccResolveWriteIntent(ctx, rw, iterAndBuf.iter, ms, intent, iterAndBuf.buf)
+	ok, err = mvccResolveWriteIntent(ctx, rw, iterAndBuf.iter, ms, intent, iterAndBuf.buf)
 	// Using defer would be more convenient, but it is measurably slower.
 	iterAndBuf.Cleanup()
-	return ok, err
+	return ok, 0, nil, err
 }
 
 // iterForKeyVersions provides a subset of the functionality of MVCCIterator.
@@ -4771,13 +4791,24 @@ func (b IterAndBuf) Cleanup() {
 // ResolveWriteIntentRange will skip write intents of other txns. A max of zero
 // means unbounded. A max of -1 means resolve nothing and returns the entire
 // intent span as the resume span. Returns the number of intents resolved and a
-// resume span if the max keys limit was exceeded.
+// resume span if the max keys limit was exceeded. Note that the numBytes and
+// resumeReason return values are currently unused and serve as a placeholder
+// in refactoring, but will be used in the future.
 func MVCCResolveWriteIntentRange(
-	ctx context.Context, rw ReadWriter, ms *enginepb.MVCCStats, intent roachpb.LockUpdate, max int64,
-) (int64, *roachpb.Span, error) {
-	if max < 0 {
+	ctx context.Context,
+	rw ReadWriter,
+	ms *enginepb.MVCCStats,
+	intent roachpb.LockUpdate,
+	opts MVCCResolveWriteIntentRangeOptions,
+) (
+	numKeys, numBytes int64,
+	resumeSpan *roachpb.Span,
+	resumeReason roachpb.ResumeReason,
+	err error,
+) {
+	if opts.MaxKeys < 0 {
 		resumeSpan := intent.Span // don't inline or `intent` would escape to heap
-		return 0, &resumeSpan, nil
+		return 0, 0, &resumeSpan, roachpb.RESUME_UNKNOWN, nil
 	}
 	ltStart, _ := keys.LockTableSingleKey(intent.Key, nil)
 	ltEnd, _ := keys.LockTableSingleKey(intent.EndKey, nil)
@@ -4814,25 +4845,24 @@ func MVCCResolveWriteIntentRange(
 	intent.EndKey = nil
 
 	var lastResolvedKey roachpb.Key
-	num := int64(0)
 	for {
 		if valid, err := sepIter.Valid(); err != nil {
-			return 0, nil, err
+			return 0, 0, nil, roachpb.RESUME_UNKNOWN, err
 		} else if !valid {
 			// No more intents in the given range.
 			break
 		}
-		if max > 0 && num == max {
+		if opts.MaxKeys > 0 && numKeys == opts.MaxKeys {
 			// We could also compute a tighter nextKey here if we wanted to.
-			return num, &roachpb.Span{Key: lastResolvedKey.Next(), EndKey: intentEndKey}, nil
+			return numKeys, 0, &roachpb.Span{Key: lastResolvedKey.Next(), EndKey: intentEndKey}, roachpb.RESUME_UNKNOWN, nil
 		}
 		// Parse the MVCCMetadata to see if it is a relevant intent.
 		meta := &putBuf.meta
 		if err := sepIter.ValueProto(meta); err != nil {
-			return 0, nil, err
+			return 0, 0, nil, roachpb.RESUME_UNKNOWN, err
 		}
 		if meta.Txn == nil {
-			return 0, nil, errors.Errorf("intent with no txn")
+			return 0, 0, nil, roachpb.RESUME_UNKNOWN, errors.Errorf("intent with no txn")
 		}
 		if intent.Txn.ID != meta.Txn.ID {
 			// Intent for a different txn, so ignore.
@@ -4852,11 +4882,11 @@ func MVCCResolveWriteIntentRange(
 		if err != nil {
 			log.Warningf(ctx, "failed to resolve intent for key %q: %+v", lastResolvedKey, err)
 		} else if ok {
-			num++
+			numKeys++
 		}
 		sepIter.nextEngineKey()
 	}
-	return num, nil, nil
+	return numKeys, 0, nil, roachpb.RESUME_UNKNOWN, nil
 }
 
 // MVCCGarbageCollect creates an iterator on the ReadWriter. In parallel
