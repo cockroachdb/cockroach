@@ -4769,7 +4769,8 @@ WHERE
       'experimental_distsql_planning',
       'use_declarative_schema_changer',
       'distsql_workmem',
-      'copy_fast_path_enabled'
+      'copy_fast_path_enabled',
+      'direct_columnar_scans_enabled'
     );
 ----
 variable                                              value

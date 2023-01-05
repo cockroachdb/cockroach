@@ -69,11 +69,18 @@ type results interface {
 	put(_ context.Context, key []byte, value []byte, memAccount *mon.BoundAccount, maxNewSize int) error
 	// continuesFirstRow returns true if the given key belongs to the same SQL
 	// row as the first KV pair in the result (or if the result is empty). If
-	// either key is not a valid SQL row key, returns false.
+	// the given key is not a valid SQL row key, returns false.
+	//
+	// This method is called _before_ calling put() with the same key (i.e. this
+	// key hasn't been seen by the results yet). Only called when wholeRows
+	// option is enabled.
 	continuesFirstRow(key roachpb.Key) bool
 	// maybeTrimPartialLastRow removes the last KV pairs from the result that
 	// are part of the same SQL row as the given key, returning the earliest key
 	// removed.
+	//
+	// This method is called _before_ calling put() with the same key (i.e. this
+	// key hasn't been seen by the results yet).
 	maybeTrimPartialLastRow(key roachpb.Key) (roachpb.Key, error)
 	// lastRowHasFinalColumnFamily returns true if the last key in the result is
 	// the maximum column family ID of the row. If so, we know that the row is
@@ -81,9 +88,9 @@ type results interface {
 	// the row may be omitted, in which case the caller has to scan to the next
 	// key to find out whether the row is complete.
 	//
-	// lastRowHasFinalColumnFamily is only called after having called put() with
-	// no error at least once, meaning that at least one key is in the results.
-	// Also, this is only called when wholeRows option is enabled.
+	// This method is called _after_ having called put() with no error at least
+	// once, meaning that at least one key is in the results. Only called when
+	// wholeRows option is enabled.
 	lastRowHasFinalColumnFamily(reverse bool) bool
 }
 
@@ -540,6 +547,24 @@ func (p *pebbleMVCCScanner) get(ctx context.Context) {
 	}
 }
 
+// seekToStartOfScan positions the scanner at the initial key.
+func (p *pebbleMVCCScanner) seekToStartOfScan() (ok bool) {
+	if p.reverse {
+		if !p.iterSeekReverse(MVCCKey{Key: p.end}) {
+			p.maybeFailOnMoreRecent() // may have seen a conflicting range key
+			return false
+		}
+		p.machine.fn = advanceKeyReverse
+	} else {
+		if !p.iterSeek(MVCCKey{Key: p.start}) {
+			p.maybeFailOnMoreRecent() // may have seen a conflicting range key
+			return false
+		}
+		p.machine.fn = advanceKeyForward
+	}
+	return true
+}
+
 // advance advances the iterator according to the current state of the state
 // machine.
 func (p *pebbleMVCCScanner) advance() bool {
@@ -577,27 +602,22 @@ func (p *pebbleMVCCScanner) scan(
 	if p.wholeRows && !p.results.(*pebbleResults).lastOffsetsEnabled {
 		return nil, 0, 0, errors.AssertionFailedf("cannot use wholeRows without trackLastOffsets")
 	}
-
-	if p.reverse {
-		if !p.iterSeekReverse(MVCCKey{Key: p.end}) {
-			p.maybeFailOnMoreRecent() // may have seen a conflicting range key
-			return nil, 0, 0, p.err
-		}
-		p.machine.fn = advanceKeyReverse
-	} else {
-		if !p.iterSeek(MVCCKey{Key: p.start}) {
-			p.maybeFailOnMoreRecent() // may have seen a conflicting range key
-			return nil, 0, 0, p.err
-		}
-		p.machine.fn = advanceKeyForward
+	if !p.seekToStartOfScan() {
+		return nil, 0, 0, p.err
 	}
-
 	for ok := true; ok; {
 		ok, _ = p.getOne(ctx)
 		if ok {
 			ok = p.advance()
 		}
 	}
+	return p.afterScan()
+}
+
+// afterScan checks whether some limit was exceeded during the scan, and if so,
+// it returns a resume span, resume reason, and for targetBytes the size of the
+// next result.
+func (p *pebbleMVCCScanner) afterScan() (*roachpb.Span, roachpb.ResumeReason, int64, error) {
 	p.maybeFailOnMoreRecent()
 
 	if p.err != nil {
@@ -709,7 +729,8 @@ func (p *pebbleMVCCScanner) uncertaintyError(ts hlc.Timestamp) (ok bool) {
 	return false
 }
 
-// Get one tuple into the result set.
+// Get one tuple into the result set. This method will make at most one
+// 'results.put' call regardless of whether 'put' returns an error or not.
 // - ok indicates whether the iteration should continue.
 // - added indicates whether a tuple was included into the result set.
 // (ok=true, added=false) indicates that the current key was skipped for some
@@ -1128,6 +1149,14 @@ func (p *pebbleMVCCScanner) advanceKeyAtNewKeyReverse() bool {
 	return p.prevKey(p.machine.origKey)
 }
 
+// IncludeStartKeyIntoErr wraps with the given error to include the provided
+// start key of the scan as an additional detail.
+// TODO(feedback wanted): should we just remove this detail about the start key
+// completely? FWIW it's incorrect for reverse scans.
+func IncludeStartKeyIntoErr(startKey roachpb.Key, err error) error {
+	return errors.Wrapf(err, "scan with start key %s", startKey)
+}
+
 // Adds the specified key and value to the result set, excluding tombstones
 // unless p.tombstones is true.
 //   - ok indicates whether the iteration should continue. This can be false
@@ -1201,7 +1230,7 @@ func (p *pebbleMVCCScanner) add(
 	//
 	// For B we will never set maxNewSize.
 	// For A, we may set maxNewSize, but we already know that
-	//   p.targetBytes >= p.results.bytes + lenToAdd
+	//   p.targetBytes >= numBytes + numBytesInc
 	// so maxNewSize will be sufficient.
 	var maxNewSize int
 	if p.targetBytes > 0 && p.targetBytes > numBytes && !mustPutKey {
@@ -1210,7 +1239,7 @@ func (p *pebbleMVCCScanner) add(
 		maxNewSize = int(p.targetBytes - numBytes)
 	}
 	if err := p.results.put(ctx, rawKey, rawValue, p.memAccount, maxNewSize); err != nil {
-		p.err = errors.Wrapf(err, "scan with start key %s", p.start)
+		p.err = IncludeStartKeyIntoErr(p.start, err)
 		return false, false
 	}
 	numKeys++
@@ -1770,7 +1799,7 @@ func (p *pebbleMVCCScanner) addRawIntent(ctx context.Context, key, value []byte)
 	// chunks to amortize allocations. The memMonitor is under-counting here
 	// by only accounting for the key and value bytes.
 	if p.err = p.memAccount.Grow(ctx, int64(len(key)+len(value))); p.err != nil {
-		p.err = errors.Wrapf(p.err, "scan with start key %s", p.start)
+		p.err = IncludeStartKeyIntoErr(p.start, p.err)
 		return false
 	}
 	p.err = p.intents.Set(key, value, nil)
