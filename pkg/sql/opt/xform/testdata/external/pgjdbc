@@ -37,19 +37,19 @@ project
  ├── columns: type_cat:71 type_schem:35!null type_name:3!null class_name:71 data_type:72 remarks:122 base_type:123
  ├── fd: ()-->(71)
  ├── ensure-distinct-on
- │    ├── columns: t.typname:3!null t.typtype:8 nspname:35!null case:70 description:79 rownum:124!null
+ │    ├── columns: t.oid:2!null t.typname:3!null t.typtype:8 nspname:35!null case:70 description:79 rownum:124!null
  │    ├── grouping columns: rownum:124!null
  │    ├── error: "more than one row returned by a subquery used as an expression"
  │    ├── key: (124)
- │    ├── fd: (124)-->(3,8,35,70,79)
+ │    ├── fd: (124)-->(2,3,8,35,70,79)
  │    ├── left-join (hash)
- │    │    ├── columns: t.typname:3!null t.typtype:8 t.typbasetype:26 nspname:35!null pg_catalog.pg_type.oid:39 case:70 description:79 rownum:124!null
- │    │    ├── fd: (124)-->(3,8,26,35,79)
+ │    │    ├── columns: t.oid:2!null t.typname:3!null t.typtype:8 t.typbasetype:26 nspname:35!null pg_catalog.pg_type.oid:39 case:70 description:79 rownum:124!null
+ │    │    ├── fd: (124)-->(2,3,8,26,35,79)
  │    │    ├── distinct-on
- │    │    │    ├── columns: t.typname:3!null t.typtype:8 t.typbasetype:26 nspname:35!null description:79 rownum:124!null
+ │    │    │    ├── columns: t.oid:2!null t.typname:3!null t.typtype:8 t.typbasetype:26 nspname:35!null description:79 rownum:124!null
  │    │    │    ├── grouping columns: rownum:124!null
  │    │    │    ├── key: (124)
- │    │    │    ├── fd: (124)-->(3,8,26,35,79)
+ │    │    │    ├── fd: (124)-->(2,3,8,26,35,79)
  │    │    │    ├── left-join (hash)
  │    │    │    │    ├── columns: t.oid:2!null t.typname:3!null t.typnamespace:4!null t.typtype:8 t.typbasetype:26 n.oid:34!null nspname:35!null objoid:76 classoid:77 objsubid:78 description:79 c.oid:81 relname:82 relnamespace:83 n.oid:118 nspname:119 rownum:124!null
  │    │    │    │    ├── fd: (4)==(34), (34)==(4), (124)-->(2-4,8,26,34,35), (77)==(81), (81)==(77), (83)==(118), (118)==(83)
@@ -98,6 +98,8 @@ project
  │    │    │    │    └── filters
  │    │    │    │         └── objoid:76 = t.oid:2 [outer=(2,76), constraints=(/2: (/NULL - ]; /76: (/NULL - ]), fd=(2)==(76), (76)==(2)]
  │    │    │    └── aggregations
+ │    │    │         ├── const-agg [as=t.oid:2, outer=(2)]
+ │    │    │         │    └── t.oid:2
  │    │    │         ├── const-agg [as=t.typname:3, outer=(3)]
  │    │    │         │    └── t.typname:3
  │    │    │         ├── const-agg [as=t.typtype:8, outer=(8)]
@@ -117,6 +119,8 @@ project
  │    │    └── filters
  │    │         └── pg_catalog.pg_type.oid:39 = t.typbasetype:26 [outer=(26,39), constraints=(/26: (/NULL - ]; /39: (/NULL - ]), fd=(26)==(39), (39)==(26)]
  │    └── aggregations
+ │         ├── const-agg [as=t.oid:2, outer=(2)]
+ │         │    └── t.oid:2
  │         ├── const-agg [as=t.typname:3, outer=(3)]
  │         │    └── t.typname:3
  │         ├── const-agg [as=t.typtype:8, outer=(8)]
@@ -130,7 +134,7 @@ project
  └── projections
       ├── NULL [as=type_cat:71]
       ├── CASE WHEN t.typtype:8 = 'c' THEN 'STRUCT' ELSE 'DISTINCT' END [as=data_type:72, outer=(8)]
-      ├── description:79 [as=remarks:122, outer=(79)]
+      ├── CASE WHEN t.oid:2 IS NULL THEN CAST(NULL AS STRING) ELSE description:79 END [as=remarks:122, outer=(2,79)]
       └── CASE WHEN t.typtype:8 = 'd' THEN case:70 ELSE CAST(NULL AS STRING) END [as=base_type:123, outer=(8,70)]
 
 

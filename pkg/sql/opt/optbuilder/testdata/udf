@@ -1029,3 +1029,140 @@ project
                      └── projections
                           └── assignment-cast: CHAR [as=column3:3]
                                └── variable: s:2
+
+
+# --------------------------------------------------
+# UDFs that are STRICT/RETURNS NULL ON NULL INPUT.
+# --------------------------------------------------
+
+exec-ddl
+CREATE FUNCTION strict_fn(i INT, t TEXT, b BOOl) RETURNS INT STRICT LANGUAGE SQL AS 'SELECT i'
+----
+
+build format=show-scalars
+SELECT strict_fn(1, 'foo', false)
+----
+project
+ ├── columns: strict_fn:5
+ ├── values
+ │    └── tuple
+ └── projections
+      └── case [as=strict_fn:5]
+           ├── true
+           ├── when
+           │    ├── or
+           │    │    ├── is
+           │    │    │    ├── false
+           │    │    │    └── null
+           │    │    └── or
+           │    │         ├── is
+           │    │         │    ├── const: 'foo'
+           │    │         │    └── null
+           │    │         └── is
+           │    │              ├── const: 1
+           │    │              └── null
+           │    └── null
+           └── udf: strict_fn
+                ├── params: i:1 t:2 b:3
+                ├── args
+                │    ├── const: 1
+                │    ├── const: 'foo'
+                │    └── false
+                └── body
+                     └── limit
+                          ├── columns: i:4
+                          ├── project
+                          │    ├── columns: i:4
+                          │    ├── values
+                          │    │    └── tuple
+                          │    └── projections
+                          │         └── variable: i:1 [as=i:4]
+                          └── const: 1
+
+build format=show-scalars
+SELECT strict_fn(a, b::TEXT, false) FROM abc WHERE strict_fn(a+1+2, b::TEXT, false) = 10
+----
+project
+ ├── columns: strict_fn:14
+ ├── select
+ │    ├── columns: a:1!null abc.b:2 c:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+ │    ├── scan abc
+ │    │    └── columns: a:1!null abc.b:2 c:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+ │    └── filters
+ │         └── eq
+ │              ├── case
+ │              │    ├── true
+ │              │    ├── when
+ │              │    │    ├── or
+ │              │    │    │    ├── is
+ │              │    │    │    │    ├── false
+ │              │    │    │    │    └── null
+ │              │    │    │    └── or
+ │              │    │    │         ├── is
+ │              │    │    │         │    ├── cast: STRING
+ │              │    │    │         │    │    └── variable: abc.b:2
+ │              │    │    │         │    └── null
+ │              │    │    │         └── is
+ │              │    │    │              ├── plus
+ │              │    │    │              │    ├── plus
+ │              │    │    │              │    │    ├── variable: a:1
+ │              │    │    │              │    │    └── const: 1
+ │              │    │    │              │    └── const: 2
+ │              │    │    │              └── null
+ │              │    │    └── null
+ │              │    └── udf: strict_fn
+ │              │         ├── params: i:6 t:7 b:8
+ │              │         ├── args
+ │              │         │    ├── plus
+ │              │         │    │    ├── plus
+ │              │         │    │    │    ├── variable: a:1
+ │              │         │    │    │    └── const: 1
+ │              │         │    │    └── const: 2
+ │              │         │    ├── cast: STRING
+ │              │         │    │    └── variable: abc.b:2
+ │              │         │    └── false
+ │              │         └── body
+ │              │              └── limit
+ │              │                   ├── columns: i:9
+ │              │                   ├── project
+ │              │                   │    ├── columns: i:9
+ │              │                   │    ├── values
+ │              │                   │    │    └── tuple
+ │              │                   │    └── projections
+ │              │                   │         └── variable: i:6 [as=i:9]
+ │              │                   └── const: 1
+ │              └── const: 10
+ └── projections
+      └── case [as=strict_fn:14]
+           ├── true
+           ├── when
+           │    ├── or
+           │    │    ├── is
+           │    │    │    ├── false
+           │    │    │    └── null
+           │    │    └── or
+           │    │         ├── is
+           │    │         │    ├── cast: STRING
+           │    │         │    │    └── variable: abc.b:2
+           │    │         │    └── null
+           │    │         └── is
+           │    │              ├── variable: a:1
+           │    │              └── null
+           │    └── null
+           └── udf: strict_fn
+                ├── params: i:10 t:11 b:12
+                ├── args
+                │    ├── variable: a:1
+                │    ├── cast: STRING
+                │    │    └── variable: abc.b:2
+                │    └── false
+                └── body
+                     └── limit
+                          ├── columns: i:13
+                          ├── project
+                          │    ├── columns: i:13
+                          │    ├── values
+                          │    │    └── tuple
+                          │    └── projections
+                          │         └── variable: i:10 [as=i:13]
+                          └── const: 1
