@@ -39,6 +39,7 @@ go_test(
         "bench_test.go",
         "create_alter_role_bench_test.go",
         "drop_bench_test.go",
+        "generate_objects_bench_test.go",
         "grant_revoke_bench_test.go",
         "grant_revoke_role_bench_test.go",
         "orm_queries_bench_test.go",
