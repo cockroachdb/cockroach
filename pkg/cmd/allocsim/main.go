@@ -243,7 +243,7 @@ func (a *allocSim) rangeInfo() allocStats {
 	for i := 0; i < len(a.Nodes); i++ {
 		go func(i int) {
 			defer wg.Done()
-			status := a.Nodes[i].StatusClient()
+			status := a.Nodes[i].StatusClient(context.Background())
 			if status == nil {
 				// Cluster is shutting down.
 				return
