@@ -156,7 +156,17 @@ func (s *Store) tryGetOrCreateReplica(
 		}
 		return repl, false, nil
 	}
+	repl, err := s.tryCreateUninitializedReplica(ctx, rangeID, replicaID)
+	if err != nil {
+		return nil, false, err
+	}
+	return repl, true, nil
+}
 
+// tryCreateUninitializedReplica tries to create an unitialized replica.
+func (s *Store) tryCreateUninitializedReplica(
+	ctx context.Context, rangeID roachpb.RangeID, replicaID roachpb.ReplicaID,
+) (*Replica, error) {
 	// No replica currently exists, so we'll try to create one. Before creating
 	// the replica, see if there is a tombstone which would indicate that this
 	// is a stale message.
@@ -169,9 +179,9 @@ func (s *Store) tryGetOrCreateReplica(
 	if ok, err := storage.MVCCGetProto(
 		ctx, s.Engine(), tombstoneKey, hlc.Timestamp{}, &tombstone, storage.MVCCGetOptions{},
 	); err != nil {
-		return nil, false, err
+		return nil, err
 	} else if ok && replicaID != 0 && replicaID < tombstone.NextReplicaID {
-		return nil, false, &roachpb.RaftGroupDeletedError{}
+		return nil, &roachpb.RaftGroupDeletedError{}
 	}
 
 	// Create a new replica and lock it for raft processing.
@@ -199,7 +209,7 @@ func (s *Store) tryGetOrCreateReplica(
 		s.mu.Unlock()
 		repl.readOnlyCmdMu.Unlock()
 		repl.raftMu.Unlock()
-		return nil, false, errRetry
+		return nil, errRetry
 	}
 	s.mu.uninitReplicas[repl.RangeID] = repl
 	s.mu.Unlock() // NB: unlocking out of order
@@ -293,11 +303,11 @@ func (s *Store) tryGetOrCreateReplica(
 		s.mu.Unlock()
 		repl.readOnlyCmdMu.Unlock()
 		repl.raftMu.Unlock()
-		return nil, false, err
+		return nil, err
 	}
 	repl.mu.Unlock()
 	repl.readOnlyCmdMu.Unlock()
-	return repl, true, nil
+	return repl, nil
 }
 
 // fromReplicaIsTooOldRLocked returns true if the creatingReplica is deemed to
