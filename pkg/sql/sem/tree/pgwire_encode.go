@@ -151,6 +151,10 @@ func (d *DArray) pgwireFormat(ctx *FmtCtx) {
 			floatTyp := d.ResolvedType().ArrayContents()
 			b := PgwireFormatFloat(nil /*buf*/, fl, ctx.dataConversionConfig, floatTyp)
 			ctx.WriteString(string(b))
+		case *DJSON:
+			flags := ctx.flags | fmtRawStrings
+			s := AsStringWithFlags(v, flags, FmtDataConversionConfig(ctx.dataConversionConfig))
+			pgwireFormatStringInArray(ctx, s)
 		default:
 			s := AsStringWithFlags(v, ctx.flags, FmtDataConversionConfig(ctx.dataConversionConfig))
 			pgwireFormatStringInArray(ctx, s)
