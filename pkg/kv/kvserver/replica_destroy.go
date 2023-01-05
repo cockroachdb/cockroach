@@ -100,6 +100,7 @@ func (r *Replica) preDestroyRaftMuLocked(
 	// NB: Legacy tombstones (which are in the replicated key space) are wiped
 	// in clearRangeData, but that's OK since we're writing a new one in the same
 	// batch (and in particular, sequenced *after* the wipe).
+	// TODO(here): legacy tombstones? in state engine too?
 	return r.setTombstoneKey(ctx, writer, nextReplicaID)
 }
 
@@ -148,13 +149,14 @@ func (r *Replica) destroyRaftMuLocked(ctx context.Context, nextReplicaID roachpb
 	batch := r.Engine().NewUnindexedBatch(true /* writeOnly */)
 	defer batch.Close()
 	clearRangeIDLocalOnly := !r.IsInitialized()
+	// TODO(here): clearRange + tombstone.
 	if err := r.preDestroyRaftMuLocked(
 		ctx,
 		r.Engine(),
 		batch,
 		nextReplicaID,
-		clearRangeIDLocalOnly,
-		false, /* mustUseClearRange */
+		clearRangeIDLocalOnly, // TODO(here): switch between log/log+state.
+		false,                 /* mustUseClearRange */
 	); err != nil {
 		return err
 	}
@@ -165,11 +167,12 @@ func (r *Replica) destroyRaftMuLocked(ctx context.Context, nextReplicaID roachpb
 	// a synchronous batch first and then delete the data alternatively, but
 	// then need to handle the case in which there is both the tombstone and
 	// leftover replica data.
-	if err := batch.Commit(true); err != nil {
+	if err := batch.Commit(true); err != nil { // TODO(here): storage.
 		return err
 	}
 	commitTime := timeutil.Now()
 
+	// TODO(here): rm sideloaded files.
 	if err := r.postDestroyRaftMuLocked(ctx, ms); err != nil {
 		return err
 	}

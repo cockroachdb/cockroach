@@ -174,8 +174,9 @@ func (s *Store) removeInitializedReplicaRaftMuLocked(
 	// while not holding Store.mu. This is safe because we're holding
 	// Replica.raftMu and the replica is present in Store.mu.replicasByKey
 	// (preventing any concurrent access to the replica's key range).
-	rep.disconnectReplicationRaftMuLocked(ctx)
+	rep.disconnectReplicationRaftMuLocked(ctx) // TODO(here): storage (log).
 	if opts.DestroyData {
+		// TODO(here): storage.
 		if err := rep.destroyRaftMuLocked(ctx, nextReplicaID); err != nil {
 			return nil, err
 		}
@@ -266,7 +267,9 @@ func (s *Store) removeUninitializedReplicaRaftMuLocked(
 
 	// Proceed with the removal.
 
+	// TODO(here): storage (log).
 	rep.disconnectReplicationRaftMuLocked(ctx)
+	// TODO(here): storage.
 	if err := rep.destroyRaftMuLocked(ctx, nextReplicaID); err != nil {
 		log.Fatalf(ctx, "failed to remove uninitialized replica %v: %v", rep, err)
 	}
