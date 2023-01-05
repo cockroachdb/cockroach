@@ -189,11 +189,7 @@ func (f *Factory) DisableOptimizations() {
 // DisableOptimizationRules disables a specific set of transformation rules.
 func (f *Factory) DisableOptimizationRules(disabledRules intsets.Fast) {
 	f.NotifyOnMatchedRule(func(rule opt.RuleName) bool {
-		if disabledRules.Contains(int(rule)) {
-			return false
-		} else {
-			return true
-		}
+		return !disabledRules.Contains(int(rule))
 	})
 }
 
