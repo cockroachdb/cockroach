@@ -21,6 +21,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
@@ -56,6 +58,18 @@ func addRootUser(
           `
 	_, err = deps.InternalExecutor.Exec(
 		ctx, "addRootToAdminRole", nil /* txn */, upsertMembership, username.AdminRole, username.RootUser, username.AdminRoleID, username.RootUserID)
+	if pgerror.GetPGCode(err) == pgcode.UndefinedColumn {
+		// It's legitimately possible for this UPSERT to fail in tenant clusters
+		// whose system schema was bootstrapped using values from V22.2. In that
+		// schema, the role_id and member_id columns don't exist yet and version
+		// gates are useless at this juncture.
+		// TODO(postamar): remove this once those columns are baked in
+		const upsertMembershipV222 = `
+          UPSERT INTO system.role_members ("role", "member", "isAdmin") VALUES ($1, $2, true)
+          `
+		_, err = deps.InternalExecutor.Exec(
+			ctx, "addRootToAdminRole", nil /* txn */, upsertMembershipV222, username.AdminRole, username.RootUser)
+	}
 	if err != nil {
 		return err
 	}
