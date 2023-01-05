@@ -55,8 +55,8 @@ func (d *delegator) delegateShowFunctions(n *tree.ShowFunctions) (tree.Statement
 	const getFunctionsQuery = `
 SELECT n.nspname as schema_name,
   p.proname as function_name,
-  pg_catalog.pg_get_function_result(p.oid) as result_data_type,
-  pg_catalog.pg_get_function_identity_arguments(p.oid) as argument_data_types,
+  p.prorettype::REGTYPE::TEXT as result_data_type,
+	trim('{}' FROM replace(array_agg(unnest(proargtypes)::REGTYPE::TEXT)::TEXT, ',', ', ')) as argument_data_types,
   CASE p.prokind
 	  WHEN 'a' THEN 'agg'
 	  WHEN 'w' THEN 'window'
@@ -72,6 +72,7 @@ FROM %[1]s.pg_catalog.pg_proc p
 LEFT JOIN %[1]s.pg_catalog.pg_namespace n ON n.oid = p.pronamespace
 WHERE true
 %[2]s
+GROUP BY 1, 2, 3, 5, 6
 ORDER BY 1, 2, 4;
 `
 	query := fmt.Sprintf(
