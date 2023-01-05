@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -110,18 +111,17 @@ func (p *planner) GrantRoleNode(ctx context.Context, n *tree.GrantRole) (*GrantR
 			for name := range roleoption.ByName {
 				if maybeOption == name {
 					return nil, errors.WithHintf(
-						pgerror.Newf(pgcode.UndefinedObject,
-							"role/user %s does not exist", r),
+						sqlerrors.NewUndefinedUserError(r),
 						"%s is a role option, try using ALTER ROLE to change a role's options.", maybeOption)
 				}
 			}
-			return nil, pgerror.Newf(pgcode.UndefinedObject, "role/user %s does not exist", r)
+			return nil, sqlerrors.NewUndefinedUserError(r)
 		}
 	}
 
 	for _, m := range inputMembers {
 		if _, ok := roles[m]; !ok {
-			return nil, pgerror.Newf(pgcode.UndefinedObject, "role/user %s does not exist", m)
+			return nil, sqlerrors.NewUndefinedUserError(m)
 		}
 	}
 

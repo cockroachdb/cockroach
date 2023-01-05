@@ -84,7 +84,7 @@ statement ok
 PREPARE chpw AS ALTER USER foo WITH PASSWORD $1;
   EXECUTE chpw('bar')
 
-statement error user blix does not exist
+statement error user "blix" does not exist
 PREPARE chpw2 AS ALTER USER blix WITH PASSWORD $1;
   EXECUTE chpw2('baz')
 
