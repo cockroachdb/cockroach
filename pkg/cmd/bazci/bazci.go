@@ -497,6 +497,8 @@ func processTestXmls(testXmls []string) error {
 		if len(postErrors) != 0 {
 			return errors.Newf("%s", strings.Join(postErrors, "\n"))
 		}
+	} else {
+		fmt.Printf("branch %s does not appear to be a release branch; skipping reporting issues to GitHub\n", branch)
 	}
 	return nil
 }
