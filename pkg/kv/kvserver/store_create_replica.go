@@ -105,62 +105,65 @@ func (s *Store) tryGetOrCreateReplica(
 	replicaID roachpb.ReplicaID,
 	creatingReplica *roachpb.ReplicaDescriptor,
 ) (_ *Replica, created bool, _ error) {
-	// The common case: look up an existing (initialized) replica.
-	if repl, ok := s.mu.replicasByRangeID.Load(rangeID); ok {
-		repl.raftMu.Lock() // not unlocked on success
-		repl.mu.RLock()
-
-		// The current replica is removed, go back around.
-		if repl.mu.destroyStatus.Removed() {
-			repl.mu.RUnlock()
-			repl.raftMu.Unlock()
-			return nil, false, errRetry
+	repl, ok := s.mu.replicasByRangeID.Load(rangeID)
+	if !ok {
+		ur, err := s.tryCreateUninitializedReplica(ctx, rangeID, replicaID)
+		if err != nil {
+			return nil, false, err
 		}
+		return ur, true, nil
+	}
 
-		// Drop messages from replicas we know to be too old.
-		if fromReplicaIsTooOldRLocked(repl, creatingReplica) {
-			repl.mu.RUnlock()
-			repl.raftMu.Unlock()
-			return nil, false, roachpb.NewReplicaTooOldError(creatingReplica.ReplicaID)
-		}
+	// The common case: there is an existing (initialized) replica.
 
-		// The current replica needs to be removed, remove it and go back around.
-		if toTooOld := repl.replicaID < replicaID; toTooOld {
-			if shouldLog := log.V(1); shouldLog {
-				log.Infof(ctx, "found message for replica ID %d which is newer than %v",
-					replicaID, repl)
-			}
+	repl.raftMu.Lock() // not unlocked on success
+	repl.mu.RLock()
 
-			repl.mu.RUnlock()
-			if err := s.removeReplicaRaftMuLocked(ctx, repl, replicaID, RemoveOptions{
-				DestroyData: true,
-			}); err != nil {
-				log.Fatalf(ctx, "failed to remove replica: %v", err)
-			}
-			repl.raftMu.Unlock()
-			return nil, false, errRetry
-		}
-		defer repl.mu.RUnlock()
+	// The current replica is removed, go back around.
+	if repl.mu.destroyStatus.Removed() {
+		repl.mu.RUnlock()
+		repl.raftMu.Unlock()
+		return nil, false, errRetry
+	}
 
-		if repl.replicaID > replicaID {
-			// The sender is behind and is sending to an old replica.
-			// We could silently drop this message but this way we'll inform the
-			// sender that they may no longer exist.
-			repl.raftMu.Unlock()
-			return nil, false, &roachpb.RaftGroupDeletedError{}
-		}
-		if repl.replicaID != replicaID {
-			// This case should have been caught by handleToReplicaTooOld.
-			log.Fatalf(ctx, "intended replica id %d unexpectedly does not match the current replica %v",
+	// Drop messages from replicas we know to be too old.
+	if fromReplicaIsTooOldRLocked(repl, creatingReplica) {
+		repl.mu.RUnlock()
+		repl.raftMu.Unlock()
+		return nil, false, roachpb.NewReplicaTooOldError(creatingReplica.ReplicaID)
+	}
+
+	// The current replica needs to be removed, remove it and go back around.
+	if toTooOld := repl.replicaID < replicaID; toTooOld {
+		if shouldLog := log.V(1); shouldLog {
+			log.Infof(ctx, "found message for replica ID %d which is newer than %v",
 				replicaID, repl)
 		}
-		return repl, false, nil
+
+		repl.mu.RUnlock()
+		if err := s.removeReplicaRaftMuLocked(ctx, repl, replicaID, RemoveOptions{
+			DestroyData: true,
+		}); err != nil {
+			log.Fatalf(ctx, "failed to remove replica: %v", err)
+		}
+		repl.raftMu.Unlock()
+		return nil, false, errRetry
 	}
-	repl, err := s.tryCreateUninitializedReplica(ctx, rangeID, replicaID)
-	if err != nil {
-		return nil, false, err
+	defer repl.mu.RUnlock()
+
+	if repl.replicaID > replicaID {
+		// The sender is behind and is sending to an old replica.
+		// We could silently drop this message but this way we'll inform the
+		// sender that they may no longer exist.
+		repl.raftMu.Unlock()
+		return nil, false, &roachpb.RaftGroupDeletedError{}
 	}
-	return repl, true, nil
+	if repl.replicaID != replicaID {
+		// This case should have been caught by handleToReplicaTooOld.
+		log.Fatalf(ctx, "intended replica id %d unexpectedly does not match the current replica %v",
+			replicaID, repl)
+	}
+	return repl, false, nil
 }
 
 // tryCreateUninitializedReplica tries to create an unitialized replica.
