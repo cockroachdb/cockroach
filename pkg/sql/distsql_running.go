@@ -30,8 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow"
-	"github.com/cockroachdb/cockroach/pkg/sql/contention"
-	"github.com/cockroachdb/cockroach/pkg/sql/contentionpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -912,8 +910,6 @@ type DistSQLReceiver struct {
 	// contendedQueryMetric is a Counter that is incremented at most once if the
 	// query produces at least one contention event.
 	contendedQueryMetric *metric.Counter
-	// contentionRegistry is a Registry that contention events are added to.
-	contentionRegistry *contention.Registry
 
 	testingKnobs struct {
 		// pushCallback, if set, will be called every time DistSQLReceiver.Push
@@ -1129,7 +1125,6 @@ func MakeDistSQLReceiver(
 	txn *kv.Txn,
 	clockUpdater clockUpdater,
 	tracing *SessionTracing,
-	contentionRegistry *contention.Registry,
 ) *DistSQLReceiver {
 	consumeCtx, cleanup := tracing.TraceExecConsume(ctx)
 	r := receiverSyncPool.Get().(*DistSQLReceiver)
@@ -1142,15 +1137,14 @@ func MakeDistSQLReceiver(
 		}
 	}
 	*r = DistSQLReceiver{
-		ctx:                consumeCtx,
-		cleanup:            cleanup,
-		rangeCache:         rangeCache,
-		txn:                txn,
-		clockUpdater:       clockUpdater,
-		stats:              &topLevelQueryStats{},
-		stmtType:           stmtType,
-		tracing:            tracing,
-		contentionRegistry: contentionRegistry,
+		ctx:          consumeCtx,
+		cleanup:      cleanup,
+		rangeCache:   rangeCache,
+		txn:          txn,
+		clockUpdater: clockUpdater,
+		stats:        &topLevelQueryStats{},
+		stmtType:     stmtType,
+		tracing:      tracing,
 	}
 	r.resultWriterMu.row = resultWriter
 	r.resultWriterMu.batch = batchWriter
@@ -1169,15 +1163,14 @@ func (r *DistSQLReceiver) Release() {
 func (r *DistSQLReceiver) clone() *DistSQLReceiver {
 	ret := receiverSyncPool.Get().(*DistSQLReceiver)
 	*ret = DistSQLReceiver{
-		ctx:                r.ctx,
-		cleanup:            func() {},
-		rangeCache:         r.rangeCache,
-		txn:                r.txn,
-		clockUpdater:       r.clockUpdater,
-		stats:              r.stats,
-		stmtType:           tree.Rows,
-		tracing:            r.tracing,
-		contentionRegistry: r.contentionRegistry,
+		ctx:          r.ctx,
+		cleanup:      func() {},
+		rangeCache:   r.rangeCache,
+		txn:          r.txn,
+		clockUpdater: r.clockUpdater,
+		stats:        r.stats,
+		stmtType:     tree.Rows,
+		tracing:      r.tracing,
 	}
 	return ret
 }
@@ -1297,22 +1290,12 @@ func (r *DistSQLReceiver) pushMeta(meta *execinfrapb.ProducerMetadata) execinfra
 				if !pbtypes.Is(any, &ev) {
 					return
 				}
-				if err := pbtypes.UnmarshalAny(any, &ev); err != nil {
-					return
-				}
 				if r.contendedQueryMetric != nil {
 					// Increment the contended query metric at most once
 					// if the query sees at least one contention event.
 					r.contendedQueryMetric.Inc(1)
 					r.contendedQueryMetric = nil
 				}
-				contentionEvent := contentionpb.ExtendedContentionEvent{
-					BlockingEvent: ev,
-				}
-				if r.txn != nil {
-					contentionEvent.WaitingTxnID = r.txn.ID()
-				}
-				r.contentionRegistry.AddContentionEvent(contentionEvent)
 			})
 		}
 	}

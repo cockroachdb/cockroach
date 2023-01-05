@@ -424,7 +424,6 @@ func TestCdcExpressionExecution(t *testing.T) {
 					nil,
 					nil, /* clockUpdater */
 					planner.extendedEvalCtx.Tracing,
-					planner.execCfg.ContentionRegistry,
 				)
 				defer r.Release()
 

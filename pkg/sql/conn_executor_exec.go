@@ -1621,7 +1621,6 @@ func (ex *connExecutor) execWithDistSQLEngine(
 		planner.txn,
 		ex.server.cfg.Clock,
 		&ex.sessionTracing,
-		ex.server.cfg.ContentionRegistry,
 	)
 	recv.progressAtomic = progressAtomic
 	if ex.server.cfg.TestingKnobs.DistSQLReceiverPushCallbackFactory != nil {

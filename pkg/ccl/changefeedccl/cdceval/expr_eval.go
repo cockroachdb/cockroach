@@ -282,7 +282,6 @@ func (e *Evaluator) executePlan(
 		nil,
 		nil, /* clockUpdater */
 		&sql.SessionTracing{},
-		e.execCfg.ContentionRegistry,
 	)
 
 	// Start execution.
