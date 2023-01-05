@@ -55,6 +55,12 @@ type HeartbeatService struct {
 
 	onHandlePing func(context.Context, *PingRequest) error // see ContextOptions.OnIncomingPing
 
+	// This is a blocking call that verifies the underlying TCP connection is
+	// established. If there is already a healthy connection set up, it will
+	// simply return immediately, however if not, it attempts to establish a
+	// "dummy" connection which is never used to send messages on.
+	verifyDialback func(context.Context, roachpb.NodeID) error
+
 	// TestingAllowNamedRPCToAnonymousServer, when defined (in tests),
 	// disables errors in case a heartbeat requests a specific node ID but
 	// the remote node doesn't have a node ID yet. This testing knob is
@@ -159,6 +165,15 @@ func (hs *HeartbeatService) Ping(ctx context.Context, args *PingRequest) (*PingR
 	if fn := hs.onHandlePing; fn != nil {
 		if err := fn(ctx, args); err != nil {
 			return nil, err
+		}
+	}
+
+	// Verify we are not in an async partition.
+	// verifyDialback is nil in tests so don't check. If the node is connecting to
+	// itself, we skip this check (it will be direct).
+	if hs.verifyDialback != nil {
+		if err := hs.verifyDialback(ctx, args.OriginNodeID); err != nil {
+			return nil, errors.Wrapf(err, "Unable to dial back to n%d", args.OriginNodeID)
 		}
 	}
 

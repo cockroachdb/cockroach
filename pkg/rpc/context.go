@@ -298,9 +298,9 @@ type Connection struct {
 	// err is nil initially; eventually set to the dial or heartbeat error that
 	// tore down the connection.
 	err atomic.Value
-	// initialHeartbeatDone is closed in `runHeartbeat` once grpcConn is
-	// populated. This means that access to that field must read this channel
-	// first.
+	// initialHeartbeatDone is closed in `runHeartbeat` once grpcConn is populated
+	// and a heartbeat is successfully returned. This means that access to that
+	// field must read this channel first.
 	initialHeartbeatDone chan struct{}    // closed after first heartbeat
 	grpcConn             *grpc.ClientConn // present when initialHeartbeatDone is closed; must read that channel first
 }
@@ -345,10 +345,10 @@ func (c *Connection) Health() error {
 		err, _ := c.err.Load().(error)
 		return err
 	default:
-		// TODO(tbg): would be better if this returned ErrNoConnection, as this
-		// is what's happening here. There might be a connection attempt going
-		// on, but not one that has proven conclusively that the peer is even
-		// reachable.
+		// There might be a connection attempt going on, but not one that has proven
+		// conclusively that the peer is reachable and able to connect back to us.
+		// Ideally we could return ErrNoConnection, but it is hard to separate out
+		// these cases.
 		return ErrNotHeartbeated
 	}
 }
@@ -368,6 +368,9 @@ type Context struct {
 	heartbeatInterval time.Duration
 	heartbeatTimeout  time.Duration
 	HeartbeatCB       func()
+	// There is a tangle here as we can't resolve this before we are able to
+	// connect to some nodes. So this starts out nil and is later set.
+	PingResolver func(ctx context.Context, nodeID roachpb.NodeID) string
 
 	rpcCompression bool
 
@@ -1416,6 +1419,7 @@ func (rpcCtx *Context) ConnHealth(
 	if conn, ok := rpcCtx.m.Get(connKey{target, nodeID, class}); ok {
 		return conn.Health()
 	}
+
 	return ErrNoConnection
 }
 
@@ -2188,7 +2192,7 @@ func (rpcCtx *Context) runHeartbeat(
 	// This simple model should work well in practice and it avoids serious
 	// problems that could arise from keeping unhealthy connections in the pool.
 	connFailedCh := make(chan connectivity.State, 1)
-	for i := 0; ; i++ {
+	for first := true; ; first = false {
 		select {
 		case <-ctx.Done():
 			return nil // server shutting down
@@ -2231,6 +2235,7 @@ func (rpcCtx *Context) runHeartbeat(
 			}
 
 			if err != nil {
+				log.Errorf(ctx, "Heartbeat error detected %v", err)
 				return err
 			}
 
@@ -2291,11 +2296,11 @@ func (rpcCtx *Context) runHeartbeat(
 			return err
 		}
 
-		if i == 0 {
+		if first {
 			// First heartbeat succeeded.
 			rpcCtx.metrics.HeartbeatsNominal.Inc(1)
-			log.Health.Infof(ctx, "connection is now ready")
 			close(conn.initialHeartbeatDone)
+			log.Health.Infof(ctx, "connection is now ready")
 			// The connection should be `Ready` now since we just used it for a
 			// heartbeat RPC. Any additional state transition indicates that we need
 			// to remove it, and we want to do so reactively. Unfortunately, gRPC
@@ -2322,6 +2327,51 @@ func (rpcCtx *Context) runHeartbeat(
 	}
 }
 
+func (rpcCtx *Context) VerifyDialback(ctx context.Context, nodeID roachpb.NodeID) error {
+	log.Errorf(ctx, "Verifying health of connection to n%d", nodeID)
+	if nodeID == 0 {
+		//FIXME: at startup, the nodeID might not be set. Unfortunately
+		//skipping this check is bad since sending a response here means we have
+		//validated the reverse connection. However not sending this prevents
+		//startup. Need to consider this case more. If the reverse connection later
+		//fails we will break this connections, so it may be OK.
+		return nil
+	}
+	if rpcCtx.PingResolver == nil {
+		// This should happen at most once during startup.
+		log.Error(ctx, "Ping Resolver not set")
+		return nil
+	}
+	target := rpcCtx.PingResolver(ctx, nodeID)
+	if target == "" {
+		// This should happen at most once during startup.
+		log.Error(ctx, "Target can't be resolved")
+		return nil
+	}
+
+	err := rpcCtx.ConnHealth(target, nodeID, DefaultClass)
+
+	if err != nil {
+		log.Errorf(ctx, "Failed to verify health directly, trying backwards conn to %s, n%d, %v", target, nodeID, err)
+		dialCtx := rpcCtx.makeDialCtx(target, nodeID, DefaultClass)
+		// NB: We only get here for remote nodes, so assume tcpTransport.
+		// FIXME: We don't have a context here.
+		dialOpts, err := rpcCtx.grpcDialOptionsInternal(context.TODO(), target, DefaultClass, tcpTransport)
+		if err != nil {
+			return err
+		}
+
+		// We want this connection to block on connection so we verify it
+		// succeeds.
+		dialOpts = append(dialOpts, grpc.WithBlock())
+		conn, err := grpc.DialContext(dialCtx, target, dialOpts...)
+		log.Errorf(ctx, "Outcome of attempt to n%d was %v", nodeID, err)
+		_ = conn.Close() // nolint:grpcconnclose
+		return err
+	}
+	return nil
+}
+
 // NewHeartbeatService returns a HeartbeatService initialized from the Context.
 func (rpcCtx *Context) NewHeartbeatService() *HeartbeatService {
 	return &HeartbeatService{
@@ -2334,5 +2384,6 @@ func (rpcCtx *Context) NewHeartbeatService() *HeartbeatService {
 		settings:                              rpcCtx.Settings,
 		onHandlePing:                          rpcCtx.OnIncomingPing,
 		testingAllowNamedRPCToAnonymousServer: rpcCtx.TestingAllowNamedRPCToAnonymousServer,
+		verifyDialback:                        rpcCtx.VerifyDialback,
 	}
 }

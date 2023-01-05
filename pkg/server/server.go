@@ -339,6 +339,18 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	nodeDialer := nodedialer.NewWithOpt(rpcContext, gossip.AddressResolver(g),
 		nodedialer.DialerOpt{TestingKnobs: dialerKnobs})
 
+	// This is somewhat tangled due to the need to use gossip to resolve the
+	// address. If we are not able to resolve, we simply skip this verification.
+	rpcContext.PingResolver = func(ctx context.Context, nodeID roachpb.NodeID) string {
+		// FIXME: Handle error
+		addr, err := g.GetNodeIDAddress(nodeID)
+		if err != nil {
+			log.Errorf(ctx, "unable to determine node id: %v", err)
+			return ""
+		}
+		return addr.String()
+	}
+
 	runtimeSampler := status.NewRuntimeStatSampler(ctx, clock)
 	registry.AddMetricStruct(runtimeSampler)
 
