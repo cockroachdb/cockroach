@@ -396,6 +396,10 @@ const (
 	// system.sql_instances table.
 	V23_1AlterSystemSQLInstancesAddSQLAddr
 
+	// V23_1_KVDirectColumnarScans introduces the support of the "direct"
+	// columnar scans in the KV layer.
+	V23_1_KVDirectColumnarScans
+
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -677,6 +681,10 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     V23_1AlterSystemSQLInstancesAddSQLAddr,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 28},
+	},
+	{
+		Key:     V23_1_KVDirectColumnarScans,
+		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 30},
 	},
 
 	// *************************************************
