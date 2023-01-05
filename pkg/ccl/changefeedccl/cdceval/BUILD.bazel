@@ -5,6 +5,7 @@ go_library(
     name = "cdceval",
     srcs = [
         "cdc_prev.go",
+        "compat.go",
         "doc.go",
         "expr_eval.go",
         "func_resolver.go",
@@ -52,6 +53,7 @@ go_library(
 go_test(
     name = "cdceval_test",
     srcs = [
+        "compat_test.go",
         "expr_eval_test.go",
         "func_resolver_test.go",
         "functions_test.go",

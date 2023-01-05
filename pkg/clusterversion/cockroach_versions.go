@@ -396,6 +396,11 @@ const (
 	// system.sql_instances table.
 	V23_1AlterSystemSQLInstancesAddSQLAddr
 
+	// V23_1_ChangefeedExpressionProductionReady marks changefeed expressions (transformation)
+	// as production ready.  This gate functions as a signal to attempt to upgrade
+	// chagnefeeds created prior to this version.
+	V23_1_ChangefeedExpressionProductionReady
+
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -677,6 +682,10 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     V23_1AlterSystemSQLInstancesAddSQLAddr,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 28},
+	},
+	{
+		Key:     V23_1_ChangefeedExpressionProductionReady,
+		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 30},
 	},
 
 	// *************************************************
