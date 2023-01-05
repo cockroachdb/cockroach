@@ -13,6 +13,7 @@ package sqlerrors
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -275,6 +276,11 @@ func NewUniqueConstraintReferencedByForeignKeyError(
 		"%q is referenced by foreign key from table %q",
 		uniqueConstraintOrIndexToDrop, tableName,
 	)
+}
+
+// NewUndefinedUserError returns an undefined user error.
+func NewUndefinedUserError(user username.SQLUsername) error {
+	return pgerror.Newf(pgcode.UndefinedObject, "role/user %q does not exist", user)
 }
 
 // NewRangeUnavailableError creates an unavailable range error.
