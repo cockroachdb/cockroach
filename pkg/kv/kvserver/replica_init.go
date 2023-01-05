@@ -258,7 +258,11 @@ func (r *Replica) loadUninit(ctx context.Context, desc *roachpb.RangeDescriptor)
 	// FIXME: are any of these needed?
 	// r.raftMu.sideloaded, err = logstore.NewDiskSideloadStorage(
 	// r.assertStateRaftMuLockedReplicaMuRLocked(ctx, r.store.Engine())
-	// r.sideTransportClosedTimestamp.init(r.store.cfg.ClosedTimestampReceiver, desc.RangeID)
+
+	// If removed, TestEnsureLocalReadsOnGlobalTables in pkg/ccl/multiregionccl
+	// and a few other tests are broken. Why?
+	r.sideTransportClosedTimestamp.init(r.store.cfg.ClosedTimestampReceiver, desc.RangeID)
+
 	return nil
 }
 
