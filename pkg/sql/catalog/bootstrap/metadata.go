@@ -13,8 +13,11 @@
 package bootstrap
 
 import (
+	"bytes"
 	"context"
+	"encoding/hex"
 	"sort"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -249,6 +252,79 @@ func (ms MetadataSchema) GetInitialValues() ([]roachpb.KeyValue, []roachpb.RKey)
 	})
 
 	return ret, splits
+}
+
+// InitialValuesToString returns a string representation of the return values
+// of MetadataSchema.GetInitialValues. The tenant prefix is stripped.
+func InitialValuesToString(ms MetadataSchema) string {
+	kvs, splits := ms.GetInitialValues()
+	// Collect the records.
+	type record struct {
+		k, v []byte
+	}
+	records := make([]record, 0, len(kvs)+len(splits))
+	for _, kv := range kvs {
+		records = append(records, record{k: kv.Key, v: kv.Value.TagAndDataBytes()})
+	}
+	for _, s := range splits {
+		records = append(records, record{k: s})
+	}
+	// Strip the tenant prefix if there is one.
+	p := []byte(ms.codec.TenantPrefix())
+	for i, r := range records {
+		if !bytes.Equal(p, r.k[:len(p)]) {
+			panic("unexpected prefix")
+		}
+		records[i].k = r.k[len(p):]
+	}
+	// Sort the records by key.
+	sort.Slice(records, func(i, j int) bool {
+		return string(records[i].k) < string(records[j].k)
+	})
+	// Build the string representation.
+	var sb strings.Builder
+	for _, r := range records {
+		sb.WriteString(hex.EncodeToString(r.k))
+		sb.WriteRune(':')
+		sb.WriteString(hex.EncodeToString(r.v))
+		sb.WriteRune('\n')
+	}
+	return sb.String()
+}
+
+// InitialValuesFromString is the reciprocal to InitialValuesToString and
+// appends the tenant prefix from the given codec.
+func InitialValuesFromString(
+	codec keys.SQLCodec, str string,
+) (kvs []roachpb.KeyValue, splits []roachpb.RKey, _ error) {
+	p := codec.TenantPrefix()
+	for i, line := range strings.Split(strings.TrimSpace(str), "\n") {
+		var sk, sv string
+		{
+			parts := strings.SplitN(strings.TrimSpace(line), ":", 2)
+			sk = strings.TrimSpace(parts[0])
+			if len(parts) > 0 {
+				sv = strings.TrimSpace(parts[1])
+			}
+		}
+		k, err := hex.DecodeString(sk)
+		if err != nil {
+			return nil, nil, errors.Errorf("failed to decode hex key %s on line %d", sk, i+1)
+		}
+		v, err := hex.DecodeString(sv)
+		if err != nil {
+			return nil, nil, errors.Errorf("failed to decode hex value %s on line %d", sv, i+1)
+		}
+		k = append(p[:len(p):len(p)], k...)
+		if len(v) == 0 {
+			splits = append(splits, k)
+		} else {
+			kv := roachpb.KeyValue{Key: k}
+			kv.Value.SetTagAndData(v)
+			kvs = append(kvs, kv)
+		}
+	}
+	return kvs, splits, nil
 }
 
 // DescriptorIDs returns the descriptor IDs present in the metadata schema in
