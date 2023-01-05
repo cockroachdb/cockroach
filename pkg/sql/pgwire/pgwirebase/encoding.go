@@ -503,6 +503,34 @@ func DecodeDatum(
 				return nil, err
 			}
 			return tree.ParseDJSON(string(b))
+		case oid.T__json, oid.T__jsonb:
+			var arr pgtype.JSONBArray
+			if err := arr.DecodeText(nil, b); err != nil {
+				return nil, tree.MakeParseError(string(b), typ, err)
+			}
+			if arr.Status != pgtype.Present {
+				return tree.DNull, nil
+			}
+			if err := validateArrayDimensions(len(arr.Dimensions), len(arr.Elements)); err != nil {
+				return nil, err
+			}
+			out := tree.NewDArray(types.Jsonb)
+			var d tree.Datum
+			var err error
+			for _, v := range arr.Elements {
+				if v.Status != pgtype.Present {
+					d = tree.DNull
+				} else {
+					d, err = tree.ParseDJSON(string(v.Bytes))
+					if err != nil {
+						return nil, err
+					}
+				}
+				if err := out.Append(d); err != nil {
+					return nil, err
+				}
+			}
+			return out, nil
 		case oid.T_tsquery:
 			ret, err := tsearch.ParseTSQuery(string(b))
 			if err != nil {
