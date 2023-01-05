@@ -4,7 +4,7 @@
 root="$(dirname $(dirname $(cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )))"
 source "$root/build/teamcity-common-support.sh"
 
-declare -a platform_names=( "amd64::amd64" "aarch64::arm64" )
+declare -a platform_names=( "amd64::amd64" "arm64::arm64" )
 declare -a tarball_archs=( "${platform_names[@]%%::*}" ) 
 declare -a docker_archs=( "${platform_names[@]##*::}" )
 

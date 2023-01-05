@@ -104,9 +104,6 @@ for platform_name in "${platform_names[@]}"; do
   tarball_arch="$(tarball_arch_from_platform_name "$platform_name")"
   docker_arch="$(docker_arch_from_platform_name "$platform_name")"
   linux_platform=linux
-  if [[ $tarball_arch == "aarch64" ]]; then
-    linux_platform=linux-3.7.10-gnu
-  fi
   # TODO: update publish-provisional-artifacts with option to leave one or more cockroach binaries in the local filesystem
   # NB: tar usually stops reading as soon as it sees an empty block but that makes
   # curl unhappy, so passing `--ignore-zeros` will cause it to read to the end.
