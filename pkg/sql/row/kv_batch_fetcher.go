@@ -21,10 +21,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
@@ -135,6 +137,12 @@ type txnKVFetcher struct {
 	// doesn't result in too much data), and wants to preserve concurrency for
 	// this scans inside of DistSender.
 	batchBytesLimit rowinfra.BytesLimit
+
+	// scanFormat indicates the scan format that should be used for Scans and
+	// ReverseScans. With COL_BATCH_RESPONSE scan format, indexFetchSpec must be
+	// set.
+	scanFormat     roachpb.ScanFormat
+	indexFetchSpec *fetchpb.IndexFetchSpec
 
 	reverse bool
 	// lockStrength represents the locking mode to use when fetching KVs.
@@ -261,9 +269,11 @@ type newTxnKVFetcherArgs struct {
 // is non-nil.
 func newTxnKVFetcherInternal(args newTxnKVFetcherArgs) *txnKVFetcher {
 	f := &txnKVFetcher{
-		sendFn:                     args.sendFn,
+		sendFn: args.sendFn,
+		// Default to BATCH_RESPONSE. The caller will override if needed.
+		scanFormat:                 roachpb.BATCH_RESPONSE,
 		reverse:                    args.reverse,
-		lockStrength:               getKeyLockingStrength(args.lockStrength),
+		lockStrength:               GetKeyLockingStrength(args.lockStrength),
 		lockWaitPolicy:             getWaitPolicy(args.lockWaitPolicy),
 		lockTimeout:                args.lockTimeout,
 		acc:                        args.acc,
@@ -404,8 +414,21 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 	ba.Header.LockTimeout = f.lockTimeout
 	ba.Header.TargetBytes = int64(f.batchBytesLimit)
 	ba.Header.MaxSpanRequestKeys = int64(f.getBatchKeyLimit())
+	if buildutil.CrdbTestBuild {
+		if f.scanFormat == roachpb.COL_BATCH_RESPONSE && f.indexFetchSpec == nil {
+			return errors.AssertionFailedf("IndexFetchSpec not provided with COL_BATCH_RESPONSE scan format")
+		}
+	}
+	if f.indexFetchSpec != nil {
+		ba.IndexFetchSpec = f.indexFetchSpec
+		// SQL operators assume that rows are always complete in
+		// coldata.Batch'es, so we must use the WholeRowsOfSize option in order
+		// to tell the KV layer to never split SQL rows across the
+		// BatchResponses.
+		ba.Header.WholeRowsOfSize = int32(f.indexFetchSpec.MaxKeysPerRow)
+	}
 	ba.AdmissionHeader = f.requestAdmissionHeader
-	ba.Requests = spansToRequests(f.spans.Spans, f.reverse, f.lockStrength, f.reqsScratch)
+	ba.Requests = spansToRequests(f.spans.Spans, f.scanFormat, f.reverse, f.lockStrength, f.reqsScratch)
 
 	if log.ExpensiveLogEnabled(ctx, 2) {
 		log.VEventf(ctx, 2, "Scan %s", f.spans)
@@ -664,12 +687,16 @@ const requestUnionOverhead = int64(unsafe.Sizeof(roachpb.RequestUnion{}))
 // spansToRequests converts the provided spans to the corresponding requests. If
 // a span doesn't have the EndKey set, then a Get request is used for it;
 // otherwise, a Scan (or ReverseScan if reverse is true) request is used with
-// BATCH_RESPONSE format.
+// the provided scan format.
 //
 // The provided reqsScratch is reused if it has enough capacity for all spans,
 // if not, a new slice is allocated.
 func spansToRequests(
-	spans roachpb.Spans, reverse bool, keyLocking lock.Strength, reqsScratch []roachpb.RequestUnion,
+	spans roachpb.Spans,
+	scanFormat roachpb.ScanFormat,
+	reverse bool,
+	keyLocking lock.Strength,
+	reqsScratch []roachpb.RequestUnion,
 ) []roachpb.RequestUnion {
 	var reqs []roachpb.RequestUnion
 	if cap(reqsScratch) >= len(spans) {
@@ -710,7 +737,7 @@ func spansToRequests(
 			}
 			curScan := i - curGet
 			scans[curScan].req.SetSpan(spans[i])
-			scans[curScan].req.ScanFormat = roachpb.BATCH_RESPONSE
+			scans[curScan].req.ScanFormat = scanFormat
 			scans[curScan].req.KeyLocking = keyLocking
 			scans[curScan].union.ReverseScan = &scans[curScan].req
 			reqs[i].Value = &scans[curScan].union
@@ -733,7 +760,7 @@ func spansToRequests(
 			}
 			curScan := i - curGet
 			scans[curScan].req.SetSpan(spans[i])
-			scans[curScan].req.ScanFormat = roachpb.BATCH_RESPONSE
+			scans[curScan].req.ScanFormat = scanFormat
 			scans[curScan].req.KeyLocking = keyLocking
 			scans[curScan].union.Scan = &scans[curScan].req
 			reqs[i].Value = &scans[curScan].union
