@@ -37,6 +37,7 @@ go_library(
         "//pkg/sql/sem/tree",
         "//pkg/sql/stats",
         "//pkg/storage",
+        "//pkg/util",
         "//pkg/util/ctxgroup",
         "//pkg/util/encoding",
         "//pkg/util/hlc",

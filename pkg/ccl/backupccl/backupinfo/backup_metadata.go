@@ -54,7 +54,7 @@ const (
 )
 
 var iterOpts = storage.IterOptions{
-	KeyTypes:   storage.IterKeyTypePointsAndRanges,
+	KeyTypes:   storage.IterKeyTypePointsOnly,
 	LowerBound: keys.LocalMax,
 	UpperBound: keys.MaxKey,
 }
@@ -262,6 +262,14 @@ func writeDescsToMetadata(
 	return nil
 }
 
+func FileCmp(left backuppb.BackupManifest_File, right backuppb.BackupManifest_File) int {
+	if cmp := left.Span.Key.Compare(right.Span.Key); cmp != 0 {
+		return cmp
+	}
+
+	return strings.Compare(left.Path, right.Path)
+}
+
 func writeFilesSST(
 	ctx context.Context,
 	m *backuppb.BackupManifest,
@@ -280,8 +288,7 @@ func writeFilesSST(
 
 	// Sort and write all of the files into a single file info SST.
 	sort.Slice(m.Files, func(i, j int) bool {
-		cmp := m.Files[i].Span.Key.Compare(m.Files[j].Span.Key)
-		return cmp < 0 || (cmp == 0 && strings.Compare(m.Files[i].Path, m.Files[j].Path) < 0)
+		return FileCmp(m.Files[i], m.Files[j]) < 0
 	})
 
 	for i := range m.Files {
@@ -987,25 +994,25 @@ func (si *SpanIterator) Next(span *roachpb.Span) bool {
 	return false
 }
 
-// FileIterator is a simple iterator to iterate over stats.TableStatisticProtos.
+// FileIterator is a simple iterator to iterate over backuppb.BackupManifest_File.
 type FileIterator struct {
-	mergedIterator   storage.SimpleMVCCIterator
-	backingIterators []storage.SimpleMVCCIterator
-	err              error
+	mergedIterator storage.SimpleMVCCIterator
+	err            error
+	file           *backuppb.BackupManifest_File
 }
 
-// FileIter creates a new FileIterator for the backup metadata.
-func (b *BackupMetadata) FileIter(ctx context.Context) FileIterator {
+// NewFileIter creates a new FileIterator for the backup metadata.
+func (b *BackupMetadata) NewFileIter(ctx context.Context) (*FileIterator, error) {
 	fileInfoIter := makeBytesIter(ctx, b.store, b.filename, []byte(sstFilesPrefix), b.enc,
 		false, b.kmsEnv)
 	defer fileInfoIter.close()
 
-	var iters []storage.SimpleMVCCIterator
+	var storeFiles []storageccl.StoreFile
 	var encOpts *roachpb.FileEncryptionOptions
 	if b.enc != nil {
 		key, err := backupencryption.GetEncryptionKey(ctx, b.enc, b.kmsEnv)
 		if err != nil {
-			return FileIterator{err: err}
+			return nil, err
 		}
 		encOpts = &roachpb.FileEncryptionOptions{Key: key}
 	}
@@ -1016,21 +1023,20 @@ func (b *BackupMetadata) FileIter(ctx context.Context) FileIterator {
 		if err != nil {
 			break
 		}
-		iter, err := storageccl.ExternalSSTReader(ctx, []storageccl.StoreFile{{Store: b.store,
-			FilePath: path}}, encOpts, iterOpts)
-		if err != nil {
-			return FileIterator{err: err}
-		}
-		iters = append(iters, iter)
+		storeFiles = append(storeFiles, storageccl.StoreFile{Store: b.store,
+			FilePath: path})
 	}
 
 	if fileInfoIter.err() != nil {
-		return FileIterator{err: fileInfoIter.err()}
+		return nil, fileInfoIter.err()
 	}
 
-	mergedIter := storage.MakeMultiIterator(iters)
-	mergedIter.SeekGE(storage.MVCCKey{})
-	return FileIterator{mergedIterator: mergedIter, backingIterators: iters}
+	iter, err := storageccl.ExternalSSTReader(ctx, storeFiles, encOpts, iterOpts)
+	if err != nil {
+		return nil, err
+	}
+	iter.SeekGE(storage.MVCCKey{})
+	return &FileIterator{mergedIterator: iter}, nil
 }
 
 // NewFileSSTIter creates a new FileIterator to iterate over the storeFile.
@@ -1048,42 +1054,49 @@ func NewFileSSTIter(
 
 // Close closes the iterator.
 func (fi *FileIterator) Close() {
-	for _, it := range fi.backingIterators {
-		it.Close()
-	}
-	fi.mergedIterator = nil
-	fi.backingIterators = fi.backingIterators[:0]
+	fi.mergedIterator.Close()
 }
 
-// Err returns the iterator's error.
-func (fi *FileIterator) Err() error {
-	return fi.err
-}
-
-// Next retrieves the next file in the iterator.
-//
-// Next returns true if next element was successfully unmarshalled into file,
-// and false if there are no more elements or if an error was encountered. When
-// Next returns false, the user should call the Err method to verify the
-// existence of an error.
-func (fi *FileIterator) Next(file *backuppb.BackupManifest_File) bool {
+// Valid indicates whether or not the iterator is pointing to a valid value.
+func (fi *FileIterator) Valid() (bool, error) {
 	if fi.err != nil {
-		return false
+		return false, fi.err
 	}
 
-	valid, err := fi.mergedIterator.Valid()
-	if err != nil || !valid {
+	if ok, err := fi.mergedIterator.Valid(); !ok {
 		fi.err = err
-		return false
-	}
-	err = protoutil.Unmarshal(fi.mergedIterator.UnsafeValue(), file)
-	if err != nil {
-		fi.err = err
-		return false
+		return ok, err
 	}
 
+	if fi.file == nil {
+		v := fi.mergedIterator.UnsafeValue()
+		file := &backuppb.BackupManifest_File{}
+		err := protoutil.Unmarshal(v, file)
+		if err != nil {
+			fi.err = err
+			return false, fi.err
+		}
+		fi.file = file
+	}
+	return true, nil
+}
+
+// Value returns the current value of the iterator, if valid.
+func (fi *FileIterator) Value() *backuppb.BackupManifest_File {
+	return fi.file
+}
+
+// Next advances the iterator the the next value.
+func (fi *FileIterator) Next() {
 	fi.mergedIterator.Next()
-	return true
+	fi.file = nil
+}
+
+// Reset resets the iterator to the first value.
+func (fi *FileIterator) Reset() {
+	fi.mergedIterator.SeekGE(storage.MVCCKey{})
+	fi.err = nil
+	fi.file = nil
 }
 
 // DescIterator is a simple iterator to iterate over descpb.Descriptors.

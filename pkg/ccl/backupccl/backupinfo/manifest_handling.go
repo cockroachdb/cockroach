@@ -15,6 +15,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"path"
 	"sort"
 	"strconv"
@@ -92,6 +93,16 @@ var WriteMetadataSST = settings.RegisterBoolSetting(
 	"kv.bulkio.write_metadata_sst.enabled",
 	"write experimental new format BACKUP metadata file",
 	false,
+)
+
+// WriteMetadataWithFilesSST controls if we write a `BACKUP_METADATA` file
+// along with an SST containing the list of `BackupManifest_Files`. This new format
+// of metadata is
+var WriteMetadataWithFilesSST = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	"backup.write_metadata_with_files_sst.enabled",
+	"write BACKUP metadata along with a supporting SST file",
+	util.ConstantWithMetamorphicTestBool("backup.write_metadata_with_files_sst.enabled", false),
 )
 
 // IsGZipped detects whether the given bytes represent GZipped data. This check
