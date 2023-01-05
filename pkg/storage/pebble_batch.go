@@ -420,6 +420,11 @@ func (p *pebbleBatch) ClearMVCCRangeKey(rangeKey MVCCRangeKey) error {
 		rangeKey.StartKey, rangeKey.EndKey, EncodeMVCCTimestampSuffix(rangeKey.Timestamp))
 }
 
+// BufferedSize implements the Engine interface.
+func (p *pebbleBatch) BufferedSize() int {
+	return p.Len()
+}
+
 // PutMVCCRangeKey implements the Batch interface.
 func (p *pebbleBatch) PutMVCCRangeKey(rangeKey MVCCRangeKey, value MVCCValue) error {
 	// NB: all MVCC APIs currently assume all range keys are range tombstones.

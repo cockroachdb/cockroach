@@ -2517,11 +2517,22 @@ message Header {
   // complications discussed in "Unordered requests". For now, that's a good
   // enough reason to disallow such batches.
   int64 max_span_request_keys = 8;
+  // TargetBytes will have different behaviour depending on the request type.
+  //
+  // Forward and Reverse Scans:
   // If set to a non-zero value, sets a target (in bytes) for how large the
-  // response may grow. This is only supported for (forward and reverse) scans
-  // and limits the number of rows scanned (and returned). The target will only
-  // be overshot when the first result is larger than the target, unless
+  // response may grow. For forward and reverse scans, TargetBytes limits the
+  // number of rows scanned (and returned). The target will only be overshot
+  // when the first result is larger than the target, unless
   // target_bytes_allow_empty is set. A suitable resume span will be returned.
+  //
+  // Resolve Intent, Resolve Intent Range, and End Txn:
+  // If set to a non-zero value, sets a target (in bytes) for how large the
+  // write batch from intent resolution may grow. For resolve intent, resolve
+  // intent range, and end txn: TargetBytes limits the number of intents
+  // resolved. We will resolve intents until the number of bytes added to the
+  // write batch by intent resolution exceeds the TargetBytes limit. A suitable
+  // resume span will be returned.
   //
   // The semantics around overlapping requests, unordered requests, and
   // supported requests from max_span_request_keys apply to the target_bytes
