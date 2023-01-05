@@ -130,7 +130,7 @@ func registerRubyPG(r registry.Registry) {
 			c,
 			node,
 			"installing gems",
-			`cd /mnt/data1/ruby-pg/ && bundle install`,
+			`cd /mnt/data1/ruby-pg/ && sudo bundle install`,
 		); err != nil {
 			t.Fatal(err)
 		}
