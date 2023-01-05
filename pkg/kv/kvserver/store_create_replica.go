@@ -206,6 +206,7 @@ func (s *Store) tryGetOrCreateReplica(
 	// been set, not every code path which inspects the descriptor checks the
 	// destroy status.
 	repl.mu.state.Desc = uninitializedDesc
+	repl.rangeStr.store(replicaID, uninitializedDesc)
 
 	// Add the range to range map, but not replicasByKey since the range's start
 	// key is unknown. The range will be added to replicasByKey later when a
@@ -299,7 +300,7 @@ func (s *Store) tryGetOrCreateReplica(
 			return err
 		}
 
-		return repl.loadRaftMuLockedReplicaMuLocked(uninitializedDesc)
+		return repl.loadUninit(uninitializedDesc)
 	}(); err != nil {
 		// Mark the replica as destroyed and remove it from the replicas maps to
 		// ensure nobody tries to use it.
