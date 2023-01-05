@@ -1,0 +1,27 @@
+# Ensure the system tenant can issue any request, regardless of capabilities.
+
+has-capability-for-batch
+{ten=system}
+split
+scan
+cput
+----
+true
+
+has-capability-for-batch
+{ten=system}
+scan
+cput
+----
+true
+
+has-capability-for-batch
+{ten=system}
+split
+----
+true
+
+update-state
+upsert {ten=system}:{CanAdminSplit=true}
+----
+error: cannot update capabilities for the system tenant
