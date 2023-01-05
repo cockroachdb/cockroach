@@ -9836,3 +9836,57 @@ project
       │    └── fd: ()-->(1,2)
       └── filters
            └── (c:1 IS NULL) OR (rowid:2 IS NULL) [outer=(1,2)]
+
+# Regression test for #85356
+exec-ddl
+CREATE TABLE t85356 (c0 DECIMAL(15,3));
+----
+
+# Inlining of DECIMAL 3/2 as INT column rowid is not allowed.
+opt expect-not=InlineConstVar
+SELECT * FROM t85356
+WHERE (CASE WHEN t85356.rowid < t85356.rowid THEN t85356.rowid ELSE 1 END) IN (t85356.rowid) AND NOT t85356.rowid!=3/2;
+----
+project
+ ├── columns: c0:1
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── select
+      ├── columns: c0:1 rowid:2!null
+      ├── cardinality: [0 - 1]
+      ├── key: ()
+      ├── fd: ()-->(1,2)
+      ├── scan t85356
+      │    ├── columns: c0:1 rowid:2!null
+      │    ├── key: (2)
+      │    └── fd: (2)-->(1)
+      └── filters
+           ├── rowid:2 = CASE WHEN (rowid:2 IS NOT DISTINCT FROM CAST(NULL AS INT8)) AND CAST(NULL AS BOOL) THEN rowid:2 ELSE 1 END [outer=(2), constraints=(/2: (/NULL - ])]
+           └── rowid:2 = 1.5000000000000000000 [outer=(2), constraints=(/2: (/NULL - ]), fd=()-->(2)]
+
+# Inlining of INT2 constant 2 as INT column rowid is allowed.
+opt expect=InlineConstVar
+SELECT * FROM t85356
+WHERE (CASE WHEN t85356.rowid < t85356.rowid THEN t85356.rowid ELSE 1 END) IN (t85356.rowid) AND NOT t85356.rowid!=2::INT2;
+----
+values
+ ├── columns: c0:1!null
+ ├── cardinality: [0 - 0]
+ ├── key: ()
+ └── fd: ()-->(1)
+
+# Inlining of INTEGER 2 as DECIMAL column c0 is not allowed.
+opt expect-not=InlineConstVar
+SELECT * FROM t85356
+WHERE (CASE WHEN t85356.c0 < t85356.c0 THEN t85356.c0 ELSE 1.1 END) IN (t85356.c0) AND NOT t85356.c0!=2;
+----
+select
+ ├── columns: c0:1!null
+ ├── immutable
+ ├── fd: ()-->(1)
+ ├── scan t85356
+ │    └── columns: c0:1
+ └── filters
+      ├── c0:1 = CASE WHEN (c0:1 IS NOT DISTINCT FROM CAST(NULL AS DECIMAL(15,3))) AND CAST(NULL AS BOOL) THEN c0:1 ELSE 1.100 END [outer=(1), immutable, constraints=(/1: (/NULL - ])]
+      └── c0:1 = 2 [outer=(1), immutable, constraints=(/1: [/2 - /2]; tight), fd=()-->(1)]
