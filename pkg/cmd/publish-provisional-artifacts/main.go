@@ -32,11 +32,14 @@ var provisionalReleasePrefixRE = regexp.MustCompile(`^provisional_[0-9]{12}_`)
 
 func main() {
 	var gcsBucket string
+	var outputDirectory string
 	var doProvisional bool
 	var isRelease bool
 	var doBless bool
 	flag.BoolVar(&isRelease, "release", false, "build in release mode instead of bleeding-edge mode")
 	flag.StringVar(&gcsBucket, "gcs-bucket", "", "GCS bucket")
+	flag.StringVar(&outputDirectory, "output-directory", "",
+		"Save local copies of uploaded release archives in this directory")
 	flag.BoolVar(&doProvisional, "provisional", false, "publish provisional binaries")
 	flag.BoolVar(&doBless, "bless", false, "bless provisional binaries")
 
@@ -79,22 +82,24 @@ func main() {
 	}
 
 	run(providers, runFlags{
-		doProvisional: doProvisional,
-		doBless:       doBless,
-		isRelease:     isRelease,
-		branch:        branch,
-		pkgDir:        pkg,
-		sha:           string(bytes.TrimSpace(shaOut)),
+		doProvisional:   doProvisional,
+		doBless:         doBless,
+		isRelease:       isRelease,
+		branch:          branch,
+		pkgDir:          pkg,
+		sha:             string(bytes.TrimSpace(shaOut)),
+		outputDirectory: outputDirectory,
 	}, release.ExecFn{})
 }
 
 type runFlags struct {
-	doProvisional bool
-	doBless       bool
-	isRelease     bool
-	branch        string
-	sha           string
-	pkgDir        string
+	doProvisional   bool
+	doBless         bool
+	isRelease       bool
+	branch          string
+	sha             string
+	pkgDir          string
+	outputDirectory string
 }
 
 func run(providers []release.ObjectPutGetter, flags runFlags, execFn release.ExecFn) {
@@ -191,16 +196,18 @@ func run(providers []release.ObjectPutGetter, flags runFlags, execFn release.Exe
 						log.Fatalf("cannot create sql release archive %s", err)
 					}
 					release.PutRelease(provider, release.PutReleaseOptions{
-						NoCache:       false,
-						Platform:      o.Platform,
-						VersionStr:    o.VersionStr,
-						ArchivePrefix: "cockroach",
+						NoCache:         false,
+						Platform:        o.Platform,
+						VersionStr:      o.VersionStr,
+						ArchivePrefix:   "cockroach",
+						OutputDirectory: flags.outputDirectory,
 					}, crdbBody)
 					release.PutRelease(provider, release.PutReleaseOptions{
-						NoCache:       false,
-						Platform:      o.Platform,
-						VersionStr:    o.VersionStr,
-						ArchivePrefix: "cockroach-sql",
+						NoCache:         false,
+						Platform:        o.Platform,
+						VersionStr:      o.VersionStr,
+						ArchivePrefix:   "cockroach-sql",
+						OutputDirectory: flags.outputDirectory,
 					}, sqlBody)
 				}
 			}
