@@ -174,18 +174,20 @@ func (r *Replica) setStartKeyLocked(startKey roachpb.RKey) {
 	r.startKey = startKey
 }
 
-// loadRaftMuLockedReplicaMuLocked will load the state of the replica from disk.
-// If desc is initialized, the Replica will be initialized when this method
-// returns. An initialized Replica may not be reloaded. If this method is called
-// with an uninitialized desc it may be called again later with an initialized
-// desc.
+// loadRaftMuLockedReplicaMuLocked loads the state of the initialized replica
+// from storage. The passed-in desc must be initialized. After this method
+// returns, Replica is initialized. An initialized Replica may not be reloaded.
 //
-// This method is called in three places:
+// This method is called in two places:
 //
 //  1. newReplica - used when the store is initializing and during testing
-//  2. tryGetOrCreateReplica - see newUnloadedReplica
-//  3. splitPostApply - this call initializes a previously uninitialized Replica.
+//  2. splitPostApply - this call initializes a previously uninitialized Replica.
 func (r *Replica) loadRaftMuLockedReplicaMuLocked(desc *roachpb.RangeDescriptor) error {
+	if !desc.IsInitialized() {
+		// TODO(pavelkalinnikov): Fatalf.
+		return nil
+	}
+
 	ctx := r.AnnotateCtx(context.TODO())
 	if r.mu.state.Desc != nil && r.IsInitialized() {
 		log.Fatalf(ctx, "r%d: cannot reinitialize an initialized replica", desc.RangeID)
@@ -193,9 +195,7 @@ func (r *Replica) loadRaftMuLockedReplicaMuLocked(desc *roachpb.RangeDescriptor)
 		// NB: This is just a defensive check as r.mu.replicaID should never be 0.
 		log.Fatalf(ctx, "r%d: cannot initialize replica without a replicaID", desc.RangeID)
 	}
-	if desc.IsInitialized() {
-		r.setStartKeyLocked(desc.StartKey)
-	}
+	r.setStartKeyLocked(desc.StartKey)
 
 	// Clear the internal raft group in case we're being reset. Since we're
 	// reloading the raft state below, it isn't safe to use the existing raft
@@ -217,7 +217,7 @@ func (r *Replica) loadRaftMuLockedReplicaMuLocked(desc *roachpb.RangeDescriptor)
 	replicaID := r.replicaID
 	if replicaDesc, found := r.mu.state.Desc.GetReplicaDescriptor(r.StoreID()); found {
 		replicaID = replicaDesc.ReplicaID
-	} else if desc.IsInitialized() {
+	} else {
 		log.Fatalf(ctx, "r%d: cannot initialize replica which is not in descriptor %v", desc.RangeID, desc)
 	}
 	if r.replicaID != replicaID {
@@ -241,6 +241,18 @@ func (r *Replica) loadRaftMuLockedReplicaMuLocked(desc *roachpb.RangeDescriptor)
 
 	r.assertStateRaftMuLockedReplicaMuRLocked(ctx, r.store.Engine())
 
+	return nil
+}
+
+func (r *Replica) loadUninit(*roachpb.RangeDescriptor) error {
+	// r.setDescLockedRaftMuLocked(ctx, desc):
+	// r.rangeStr.store(r.replicaID, desc) <- done in newUnloadedReplica
+	// r.concMgr.OnRangeDescUpdated(desc) <- not needed?
+
+	// FIXME: are any of these needed?
+	// r.raftMu.sideloaded, err = logstore.NewDiskSideloadStorage(
+	// r.assertStateRaftMuLockedReplicaMuRLocked(ctx, r.store.Engine())
+	// r.sideTransportClosedTimestamp.init(r.store.cfg.ClosedTimestampReceiver, desc.RangeID)
 	return nil
 }
 
