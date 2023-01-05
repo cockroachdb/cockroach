@@ -325,6 +325,7 @@ func (e logEntry) convertToLegacy() (res logpb.Entry) {
 		Counter:    e.counter,
 		Redactable: e.payload.redactable,
 		Message:    e.payload.message,
+		TenantID:   e.TenantID(),
 	}
 
 	if e.payload.tags != nil {
