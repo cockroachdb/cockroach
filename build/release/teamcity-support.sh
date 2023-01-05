@@ -4,18 +4,6 @@
 root="$(dirname $(dirname $(cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )))"
 source "$root/build/teamcity-common-support.sh"
 
-declare -a platform_names=( "amd64::amd64" "aarch64::arm64" )
-declare -a tarball_archs=( "${platform_names[@]%%::*}" ) 
-declare -a docker_archs=( "${platform_names[@]##*::}" )
-
-function tarball_arch_from_platform_name() {
-  echo "${1%%::*}"
-}
-
-function docker_arch_from_platform_name() {
-  echo "${1##*::}"
-}
-
 remove_files_on_exit() {
   rm -rf ~/.docker
   common_support_remove_files_on_exit
