@@ -4209,7 +4209,7 @@ value if you rely on the HLC for accuracy.`,
 	),
 	"crdb_internal.merge_statement_stats": makeBuiltin(arrayProps(),
 		tree.Overload{
-			Types:      tree.ParamTypes{{Name: "input", Typ: types.JSONArray}},
+			Types:      tree.ParamTypes{{Name: "input", Typ: types.JSONBArray}},
 			ReturnType: tree.FixedReturnType(types.Jsonb),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				arr := tree.MustBeDArray(args[0])
@@ -4240,7 +4240,7 @@ value if you rely on the HLC for accuracy.`,
 	),
 	"crdb_internal.merge_transaction_stats": makeBuiltin(arrayProps(),
 		tree.Overload{
-			Types:      tree.ParamTypes{{Name: "input", Typ: types.JSONArray}},
+			Types:      tree.ParamTypes{{Name: "input", Typ: types.JSONBArray}},
 			ReturnType: tree.FixedReturnType(types.Jsonb),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				arr := tree.MustBeDArray(args[0])
@@ -4274,7 +4274,7 @@ value if you rely on the HLC for accuracy.`,
 	),
 	"crdb_internal.merge_stats_metadata": makeBuiltin(arrayProps(),
 		tree.Overload{
-			Types:      tree.ParamTypes{{Name: "input", Typ: types.JSONArray}},
+			Types:      tree.ParamTypes{{Name: "input", Typ: types.JSONBArray}},
 			ReturnType: tree.FixedReturnType(types.Jsonb),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				arr := tree.MustBeDArray(args[0])
