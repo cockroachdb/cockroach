@@ -126,6 +126,7 @@ var oidToArrayOid = map[oid.Oid]oid.Oid{
 	oid.T_int8:         oid.T__int8,
 	oid.T_interval:     oid.T__interval,
 	oid.T_jsonb:        oid.T__jsonb,
+	oid.T_json:         oid.T__json,
 	oid.T_name:         oid.T__name,
 	oid.T_numeric:      oid.T__numeric,
 	oid.T_oid:          oid.T__oid,
@@ -193,7 +194,16 @@ var ArrayOids = map[oid.Oid]struct{}{}
 func init() {
 	for o, ao := range oidToArrayOid {
 		ArrayOids[ao] = struct{}{}
-		OidToType[ao] = MakeArray(OidToType[o])
+		var t *T
+		// This special case is here so we can support decoding parameters
+		// with oid=json without adding full support for the JSON[] type.
+		// TODO(sql-exp): Remove this if we support JSON[].
+		if o == oid.T_json {
+			t = Json
+		} else {
+			t = OidToType[o]
+		}
+		OidToType[ao] = MakeArray(t)
 	}
 }
 

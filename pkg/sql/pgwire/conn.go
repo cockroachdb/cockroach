@@ -969,11 +969,16 @@ func (c *conn) handleParse(
 				sqlTypeHints[i] = nil
 				continue
 			}
+			// This special case for json, json[] is here so we can support decoding
+			// parameters with oid=json/json[] without adding full support for these
+			// type.
+			// TODO(sql-exp): Remove this if we support JSON.
 			if t == oid.T_json {
-				// This special case is here so we can support decoding parameters
-				// with oid=json without adding full support for the JSON type.
-				// TODO(sql-exp): Remove this if we support JSON.
 				sqlTypeHints[i] = types.Json
+				continue
+			}
+			if t == oid.T__json {
+				sqlTypeHints[i] = types.JSONArrayForDecodingOnly
 				continue
 			}
 			v, ok := types.OidToType[t]
