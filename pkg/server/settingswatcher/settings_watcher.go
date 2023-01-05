@@ -137,8 +137,7 @@ func (s *SettingsWatcher) Start(ctx context.Context) error {
 	s.mu.values = make(map[string]settingsValue)
 
 	if s.overridesMonitor != nil {
-		s.mu.overrides = make(map[string]settings.EncodedValue)
-		// Initialize the overrides. We want to do this before processing the
+		s.mu.overrides = make(map[string]settings.EncodedValue) // Initialize the overrides. We want to do this before processing the
 		// settings table, otherwise we could see temporary transitions to the value
 		// in the table.
 		s.updateOverrides(ctx)

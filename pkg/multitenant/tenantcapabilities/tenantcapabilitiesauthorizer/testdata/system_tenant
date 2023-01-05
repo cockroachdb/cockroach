@@ -1,0 +1,38 @@
+# Ensure the system tenant can issue any request, regardless of capabilities.
+
+has-capability-for-batch
+{ten=system}
+split
+scan
+cput
+----
+true
+
+has-capability-for-batch
+{ten=system}
+scan
+cput
+----
+true
+
+has-capability-for-batch
+{ten=system}
+split
+----
+true
+
+update-state
+upsert {ten=system}:{CanAdminSplit=false}
+----
+ok
+
+# tenant capabilities should not apply to the system tenant.
+# TODO(arul): this is likely to change, but is contingent on a migration to seed
+# things properly. For now, we test this case explicitly to ensure nothing
+# breaks.
+
+has-capability-for-batch
+{ten=system}
+split
+----
+true
