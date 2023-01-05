@@ -1,0 +1,101 @@
+# This test ensures the Watcher continues to serve some capability state
+# even in the face of errors. It also ensures that the Watcher is able to
+# transparently restart and update the global tenant capability state when
+# that happens.
+
+start
+----
+ok
+
+updates
+----
+
+update-state
+upsert {ten=10}:{CanAdminSplit=true}
+upsert {ten=11}:{CanAdminSplit=false}
+upsert {ten=12}:{CanAdminSplit=false}
+----
+ok
+
+updates
+----
+Incremental Update
+updated {ten=10}:{CanAdminSplit=true}
+updated {ten=11}:{CanAdminSplit=false}
+updated {ten=12}:{CanAdminSplit=false}
+
+inject-error
+----
+big-yikes
+
+# Update some more state. However, because of the injected error, we shouldn't
+# observe any updates.
+
+update-state
+upsert {ten=12}:{CanAdminSplit=true}
+delete {ten=10}
+upsert {ten=50}:{CanAdminSplit=false}
+----
+ok
+
+updates
+----
+
+# However, we should still be able to query the tenant capabilities that the
+# Watcher was serving before the error happened.
+
+flush-state
+----
+{ten=10}:{CanAdminSplit=true}
+{ten=11}:{CanAdminSplit=false}
+{ten=12}:{CanAdminSplit=false}
+
+get-capabilities
+{ten=50}
+----
+not-found
+
+get-capabilities
+{ten=12}
+----
+{CanAdminSplit=false}
+
+get-capabilities
+{ten=10}
+----
+{CanAdminSplit=true}
+
+# Let the Watcher attempt to restart.
+restart-after-injected-error
+----
+ok
+
+# We expect the Watcher to kickoff a full table scan (complete update) once the
+# it is able to restart.
+updates
+----
+Complete Update
+updated {ten=11}:{CanAdminSplit=false}
+updated {ten=12}:{CanAdminSplit=true}
+updated {ten=50}:{CanAdminSplit=false}
+
+flush-state
+----
+{ten=11}:{CanAdminSplit=false}
+{ten=12}:{CanAdminSplit=true}
+{ten=50}:{CanAdminSplit=false}
+
+get-capabilities
+{ten=50}
+----
+{CanAdminSplit=false}
+
+get-capabilities
+{ten=12}
+----
+{CanAdminSplit=true}
+
+get-capabilities
+{ten=10}
+----
+not-found

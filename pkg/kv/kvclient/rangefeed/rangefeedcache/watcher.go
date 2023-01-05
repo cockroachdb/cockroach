@@ -93,6 +93,13 @@ const (
 	IncrementalUpdate UpdateType = false
 )
 
+func (u UpdateType) String() string {
+	if u == CompleteUpdate {
+		return "Complete Update"
+	}
+	return "Incremental Update"
+}
+
 // TranslateEventFunc is used by the client to translate a low-level event
 // into an event for buffering. If nil is returned, the event is skipped.
 type TranslateEventFunc func(
