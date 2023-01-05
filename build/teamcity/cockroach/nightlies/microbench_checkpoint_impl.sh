@@ -27,4 +27,4 @@ BAZEL_BIN=$(bazel info bazel-bin --config=$CROSSLINUX_CONFIG --config=ci)
 #  --gce-zones="europe-west2-c" \
 #  --os-volume-size=128
 
-./dev roachprod-bench-wrapper
+./dev roachprod-bench-wrapper ./pkg/util/... --cluster herko-bench --bench-args='-iterations 1 -publishdir=gs://gceworker-herko/output' -- -test.short -test.benchtime=1ns
