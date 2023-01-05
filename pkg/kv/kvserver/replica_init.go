@@ -52,6 +52,14 @@ func newReplica(
 	defer repl.raftMu.Unlock()
 	repl.mu.Lock()
 	defer repl.mu.Unlock()
+
+	if !desc.IsInitialized() {
+		if err := repl.loadUninit(ctx, desc); err != nil {
+			return nil, err
+		}
+		return repl, nil
+	}
+
 	if err := repl.loadRaftMuLockedReplicaMuLocked(desc); err != nil {
 		return nil, err
 	}
@@ -183,12 +191,11 @@ func (r *Replica) setStartKeyLocked(startKey roachpb.RKey) {
 //  1. newReplica - used when the store is initializing and during testing
 //  2. splitPostApply - this call initializes a previously uninitialized Replica.
 func (r *Replica) loadRaftMuLockedReplicaMuLocked(desc *roachpb.RangeDescriptor) error {
+	ctx := r.AnnotateCtx(context.TODO())
 	if !desc.IsInitialized() {
-		// TODO(pavelkalinnikov): Fatalf.
-		return nil
+		log.Fatalf(ctx, "r%d: cannot load an uninitialized replica", desc.RangeID)
 	}
 
-	ctx := r.AnnotateCtx(context.TODO())
 	if r.mu.state.Desc != nil && r.IsInitialized() {
 		log.Fatalf(ctx, "r%d: cannot reinitialize an initialized replica", desc.RangeID)
 	} else if r.replicaID == 0 {
@@ -254,11 +261,15 @@ func (r *Replica) loadUninit(ctx context.Context, desc *roachpb.RangeDescriptor)
 	if r.mu.state, err = r.mu.stateLoader.Load(ctx, r.Engine(), desc); err != nil {
 		return err
 	}
+	// FIXME: If removed, TestStoreRemovePlaceholderOnRaftIgnored fails.
+	r.mu.lastIndex, err = r.mu.stateLoader.LoadLastIndex(ctx, r.Engine())
+	if err != nil {
+		return err
+	}
 
-	// FIXME: are any of these needed?
-	// r.raftMu.sideloaded, err = logstore.NewDiskSideloadStorage(
+	// FIXME: is this needed?
 	// r.assertStateRaftMuLockedReplicaMuRLocked(ctx, r.store.Engine())
-	// r.sideTransportClosedTimestamp.init(r.store.cfg.ClosedTimestampReceiver, desc.RangeID)
+
 	return nil
 }
 
