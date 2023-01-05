@@ -618,6 +618,7 @@ func setDemoContextDefaults() {
 	demoCtx.HTTPPort, _ = strconv.Atoi(base.DefaultHTTPPort)
 	demoCtx.WorkloadMaxQPS = 25
 	demoCtx.Multitenant = true
+	demoCtx.InProcessTenant = true
 	demoCtx.DefaultEnableRangefeeds = true
 
 	demoCtx.pidFile = ""

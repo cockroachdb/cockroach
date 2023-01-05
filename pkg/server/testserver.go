@@ -797,7 +797,7 @@ func (ts *TestServer) StartTenant(
 			}
 		} else if params.TenantName != "" {
 			_, err := ts.InternalExecutor().(*sql.InternalExecutor).Exec(ctx, "rename-test-tenant", nil,
-				`SELECT crdb_internal.rename_tenant($1, $2)`, params.TenantID, params.TenantName)
+				`SELECT crdb_internal.rename_tenant($1, $2)`, params.TenantID.ToUint64(), params.TenantName)
 			if err != nil {
 				return nil, err
 			}
@@ -927,39 +927,62 @@ func (ts *TestServer) StartTenant(
 		baseCfg.HTTPAddr = newAddr
 		baseCfg.HTTPAdvertiseAddr = newAddr
 	}
-	sw, err := NewTenantServer(
-		ctx,
-		stopper,
-		baseCfg,
-		sqlCfg,
-	)
+
+	if !params.InProcessTenant {
+		sw, err := NewTenantServer(
+			ctx,
+			stopper,
+			baseCfg,
+			sqlCfg,
+		)
+		if err != nil {
+			return nil, err
+		}
+		go func() {
+			// If the server requests a shutdown, do that simply by stopping the
+			// tenant's stopper.
+			select {
+			case <-sw.ShutdownRequested():
+				stopper.Stop(sw.AnnotateCtx(context.Background()))
+			case <-stopper.ShouldQuiesce():
+			}
+		}()
+
+		if err := sw.Start(ctx); err != nil {
+			return nil, err
+		}
+
+		hts := &httpTestServer{}
+		hts.t.authentication = sw.authentication
+		hts.t.sqlServer = sw.sqlServer
+
+		return &TestTenant{
+			SQLServer:      sw.sqlServer,
+			Cfg:            &baseCfg,
+			httpTestServer: hts,
+			drain:          sw.drainServer,
+		}, err
+	}
+
+	ts.serverController.tenantBaseCfg = &baseCfg
+	onDemandServer, err := ts.serverController.getOrCreateServer(ctx, params.TenantName)
 	if err != nil {
 		return nil, err
 	}
-	go func() {
-		// If the server requests a shutdown, do that simply by stopping the
-		// tenant's stopper.
-		select {
-		case <-sw.ShutdownRequested():
-			stopper.Stop(sw.AnnotateCtx(context.Background()))
-		case <-stopper.ShouldQuiesce():
-		}
-	}()
-
-	if err := sw.Start(ctx); err != nil {
-		return nil, err
-	}
+	sw := onDemandServer.(*tenantServerWrapper)
 
 	hts := &httpTestServer{}
-	hts.t.authentication = sw.authentication
-	hts.t.sqlServer = sw.sqlServer
+	hts.t.authentication = sw.server.authentication
+	hts.t.sqlServer = sw.server.sqlServer
+	hts.t.tenantName = params.TenantName
 
 	return &TestTenant{
-		SQLServer:      sw.sqlServer,
-		Cfg:            &baseCfg,
+		SQLServer:      sw.server.sqlServer,
+		Cfg:            sw.server.sqlServer.cfg,
 		httpTestServer: hts,
-		drain:          sw.drainServer,
+		drain:          sw.server.drainServer,
 	}, err
+
 }
 
 // ExpectedInitialRangeCount returns the expected number of ranges that should

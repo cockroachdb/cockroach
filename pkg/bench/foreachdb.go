@@ -23,6 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -67,7 +68,7 @@ func benchmarkTenantCockroach(b *testing.B, f BenchmarkFn) {
 	require.NoError(b, err)
 
 	// Get a SQL connection to the test tenant.
-	sqlAddr := s.(*server.TestServer).TestingGetSQLAddrForTenant(ctx, tenantName)
+	sqlAddr := s.(*server.TestServer).TestingGetSQLAddrForTenant(ctx, roachpb.TenantName(tenantName))
 	tenantDB := serverutils.OpenDBConn(b, sqlAddr, "bench", false, s.Stopper())
 
 	// The benchmarks sometime hit the default span limit, so we increase it.

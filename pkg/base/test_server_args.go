@@ -330,4 +330,8 @@ type TestTenantArgs struct {
 	// CockroachDB upgrades and periodically reports diagnostics to
 	// Cockroach Labs. Should remain disabled during unit testing.
 	StartDiagnosticsReporting bool
+
+	// InProcessTenant is used to initialize tenants through the
+	// kv server's `serverController` in the same process.
+	InProcessTenant bool
 }
