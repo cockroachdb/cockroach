@@ -265,6 +265,8 @@ type cFetcher struct {
 		// keys are compared against this prefix to determine whether they're part
 		// of a new row or not.
 		lastRowPrefix roachpb.Key
+		// firstKeyInRow, if set, is the first key in the current row.
+		firstKeyInRow roachpb.Key
 		// prettyValueBuf is a temp buffer used to create strings for tracing.
 		prettyValueBuf *bytes.Buffer
 
@@ -479,8 +481,38 @@ func (cf *cFetcher) Init(
 	if cf.cFetcherArgs.collectStats {
 		cf.cpuStopWatch = timeutil.NewCPUStopWatch()
 	}
+	cf.machine.state[0] = stateResetBatch
+	cf.machine.state[1] = stateInitFetch
 
 	return nil
+}
+
+func cFetcherFirstBatchLimit(limitHint rowinfra.RowLimit, maxKeysPerRow uint32) rowinfra.KeyLimit {
+	// If we have a limit hint, we limit the first batch size. Subsequent
+	// batches get larger to avoid making things too slow (e.g. in case we have
+	// a very restrictive filter and actually have to retrieve a lot of rows).
+	firstBatchLimit := rowinfra.KeyLimit(limitHint)
+	if firstBatchLimit != 0 {
+		// The limitHint is a row limit, but each row could be made up of more
+		// than one key. We take the maximum possible keys per row out of all
+		// the table rows we could potentially scan over.
+		//
+		// Note that unlike for the row.Fetcher, we don't need an extra key to
+		// form the last row in the cFetcher because we are eagerly finalizing
+		// each row once we know that all KVs comprising that row have been
+		// fetched. Consider several cases:
+		// - the table has only one column family - then we can finalize each
+		//   row right after the first KV is decoded;
+		// - the table has multiple column families:
+		//   - KVs for all column families are present for all rows - then for
+		//     each row, when its last KV is fetched, the row can be finalized
+		//     (and firstBatchLimit asks exactly for the correct number of KVs);
+		//   - KVs for some column families are omitted for some rows - then we
+		//     will actually fetch more KVs than necessary, but we'll decode
+		//     limitHint number of rows.
+		firstBatchLimit = rowinfra.KeyLimit(int(limitHint) * int(maxKeysPerRow))
+	}
+	return firstBatchLimit
 }
 
 // StartScan initializes and starts the key-value scan. Can only be used
@@ -504,31 +536,7 @@ func (cf *cFetcher) StartScan(
 		return errors.AssertionFailedf("batchBytesLimit set without limitBatches")
 	}
 
-	// If we have a limit hint, we limit the first batch size. Subsequent
-	// batches get larger to avoid making things too slow (e.g. in case we have
-	// a very restrictive filter and actually have to retrieve a lot of rows).
-	firstBatchLimit := rowinfra.KeyLimit(limitHint)
-	if firstBatchLimit != 0 {
-		// The limitHint is a row limit, but each row could be made up of more
-		// than one key. We take the maximum possible keys per row out of all
-		// the table rows we could potentially scan over.
-		//
-		// Note that unlike for the row.Fetcher, we don't need an extra key to
-		// form the last row in the cFetcher because we are eagerly finalizing
-		// each row once we know that all KVs comprising that row have been
-		// fetched. Consider several cases:
-		// - the table has only one column family - then we can finalize each
-		//   row right after the first KV is decoded;
-		// - the table has multiple column families:
-		//   - KVs for all column families are present for all rows - then for
-		//     each row, when its last KV is fetched, the row can be finalized
-		//     (and firstBatchLimit asks exactly for the correct number of KVs);
-		//   - KVs for some column families are omitted for some rows - then we
-		//     will actually fetch more KVs than necessary, but we'll decode
-		//     limitHint number of rows.
-		firstBatchLimit = rowinfra.KeyLimit(int(limitHint) * int(cf.table.spec.MaxKeysPerRow))
-	}
-
+	firstBatchLimit := cFetcherFirstBatchLimit(limitHint, cf.table.spec.MaxKeysPerRow)
 	cf.machine.lastRowPrefix = nil
 	cf.machine.limitHint = int(limitHint)
 	cf.machine.state[0] = stateResetBatch
@@ -609,27 +617,20 @@ func (cf *cFetcher) setEstimatedRowCount(estimatedRowCount uint64) {
 	cf.estimatedRowCount = estimatedRowCount
 }
 
-// setNextKV sets the next KV to process to the input KV. needsCopy, if true,
-// causes the input kv to be deep copied. needsCopy should be set to true if
-// the input KV is pointing to the last KV of a batch, so that the batch can
-// be garbage collected before fetching the next one.
+// copyKV deep copies the input kv into cf.machine.nextKV.
 // gcassert:inline
-func (cf *cFetcher) setNextKV(kv roachpb.KeyValue, needsCopy bool) {
-	if !needsCopy {
-		cf.machine.nextKV = kv
-		return
-	}
+func (cf *cFetcher) copyKV(kv roachpb.KeyValue) {
+	cf.machine.nextKV.Key = make(roachpb.Key, len(kv.Key))
+	copy(cf.machine.nextKV.Key, kv.Key)
+	cf.machine.nextKV.Value.RawBytes = make([]byte, len(kv.Value.RawBytes))
+	copy(cf.machine.nextKV.Value.RawBytes, kv.Value.RawBytes)
+	cf.machine.nextKV.Value.Timestamp = kv.Value.Timestamp
+}
 
-	// If we've made it to the very last key in the batch, copy out the key
-	// so that the GC can reclaim the large backing slice before we call
-	// NextKV() again.
-	kvCopy := roachpb.KeyValue{}
-	kvCopy.Key = make(roachpb.Key, len(kv.Key))
-	copy(kvCopy.Key, kv.Key)
-	kvCopy.Value.RawBytes = make([]byte, len(kv.Value.RawBytes))
-	copy(kvCopy.Value.RawBytes, kv.Value.RawBytes)
-	kvCopy.Value.Timestamp = kv.Value.Timestamp
-	cf.machine.nextKV = kvCopy
+// keyFromNewRow returns true if the given key doesn't belong to the current
+// row. This is only used in case of multiple column families.
+func (cf *cFetcher) keyFromNewRow(key roachpb.Key) bool {
+	return !bytes.HasPrefix(key[cf.table.spec.KeyPrefixLength:], cf.machine.lastRowPrefix[cf.table.spec.KeyPrefixLength:])
 }
 
 // NextBatch processes keys until we complete one batch of rows (subject to the
@@ -648,11 +649,12 @@ func (cf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 		case stateInvalid:
 			return nil, errors.New("invalid fetcher state")
 		case stateInitFetch:
+			cf.machine.firstKeyInRow = nil
 			cf.cpuStopWatch.Start()
-			moreKVs, kv, needsCopy, err := cf.nextKVer.NextKV(ctx, cf.mvccDecodeStrategy)
+			moreKVs, stable, kv, err := cf.nextKVer.NextKV(ctx, cf.mvccDecodeStrategy)
 			cf.cpuStopWatch.Stop()
 			if err != nil {
-				return nil, cf.convertFetchError(ctx, err)
+				return nil, convertFetchError(&cf.table.spec, err)
 			}
 			if !moreKVs {
 				cf.machine.state[0] = stateEmitLastBatch
@@ -680,7 +682,22 @@ func (cf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 				}
 			*/
 
-			cf.setNextKV(kv, needsCopy)
+			if !stable && cf.table.spec.MaxKeysPerRow > 1 {
+				// If the kv is not stable and the table has multiple column
+				// families, then we must perform a deep copy. This is due to
+				// the fact that we keep a shallow reference to the first KV of
+				// each row (in cf.machine.lastRowPrefix and
+				// cf.machine.firstKeyInRow).
+				//
+				// However, even if the kv is not stable, but there is only one
+				// column family, then we will have finalized the row (meaning
+				// we'll have deep copied necessary part of the kv into the
+				// batch) by the time NextKV is called again, so we avoid the
+				// copy in those cases.
+				cf.copyKV(kv)
+			} else {
+				cf.machine.nextKV = kv
+			}
 			cf.machine.state[0] = stateDecodeFirstKVOfRow
 
 		case stateResetBatch:
@@ -689,6 +706,7 @@ func (cf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 		case stateDecodeFirstKVOfRow:
 			// Reset MVCC metadata for the table, since this is the first KV of a row.
 			cf.table.rowLastModified = hlc.Timestamp{}
+			cf.machine.firstKeyInRow = cf.machine.nextKV.Key
 
 			// foundNull is set when decoding a new index key for a row finds a NULL value
 			// in the index key. This is used when decoding unique secondary indexes in order
@@ -801,10 +819,16 @@ func (cf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 
 		case stateFetchNextKVWithUnfinishedRow:
 			cf.cpuStopWatch.Start()
-			moreKVs, kv, needsCopy, err := cf.nextKVer.NextKV(ctx, cf.mvccDecodeStrategy)
+			moreKVs, _, kv, err := cf.nextKVer.NextKV(ctx, cf.mvccDecodeStrategy)
 			cf.cpuStopWatch.Stop()
 			if err != nil {
-				return nil, cf.convertFetchError(ctx, err)
+				return nil, convertFetchError(&cf.table.spec, err)
+			}
+			if cf.machine.state[0] == stateEmitLastBatch {
+				// The last partial row was removed by maybeTrimPartialLastRow.
+				// We don't increment rowIdx, so the last row will be simply
+				// ignored by the caller.
+				continue
 			}
 			if !moreKVs {
 				// No more data. Finalize the row and exit.
@@ -812,16 +836,17 @@ func (cf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 				cf.machine.state[1] = stateEmitLastBatch
 				continue
 			}
-			// TODO(jordan): if nextKV returns newSpan = true, set the new span
-			// prefix and indicate that it needs decoding.
-			cf.setNextKV(kv, needsCopy)
+			// No need to copy this kv even if it is unstable since we only use
+			// it before issuing the following NextKV() call (which could
+			// invalidate it).
+			cf.machine.nextKV = kv
 			if debugState {
 				log.Infof(ctx, "decoding next key %s", cf.machine.nextKV.Key)
 			}
 
 			// TODO(yuzefovich): optimize this prefix check by skipping logical
 			// longest common span prefix.
-			if !bytes.HasPrefix(kv.Key[cf.table.spec.KeyPrefixLength:], cf.machine.lastRowPrefix[cf.table.spec.KeyPrefixLength:]) {
+			if cf.keyFromNewRow(kv.Key) {
 				// The kv we just found is from a different row.
 				cf.machine.state[0] = stateFinalizeRow
 				cf.machine.state[1] = stateDecodeFirstKVOfRow
@@ -1289,12 +1314,47 @@ func (cf *cFetcher) getCurrentColumnFamilyID() (descpb.FamilyID, error) {
 	return descpb.FamilyID(id), nil
 }
 
+// maybeTrimPartialLastRow removes the last KV pairs from the batch that are
+// part of the same SQL row as the given key, returning the earliest key
+// removed.
+//
+// After this method is called, storage.NextKVer.NextKV will return
+// moreKVs=false (in other words, no more KVs will be added to the cFetcher).
+func (cf *cFetcher) maybeTrimPartialLastRow(nextKey roachpb.Key) (roachpb.Key, error) {
+	if cf.machine.state[0] == stateInitFetch {
+		// The previous row was finalized, and this key is the first KV in the
+		// new row, so we don't need to remove the last row from the batch and
+		// will simply need to resume the scan from the given key.
+		//
+		// The cFetcher will transition to the stateEmitLastBatch state on its
+		// own when moreKVs=false will be returned.
+		return nextKey, nil
+	}
+	// We have at least one KV decoded into the current row. Check whether the
+	// next key is part of the same row.
+	if cf.keyFromNewRow(nextKey) {
+		// The given key is the first KV of the next row, so we don't need to
+		// remove anything and will resume from this key.
+		//
+		// The cFetcher will transition to the stateFinalizeRow state on its own
+		// when moreKVs=false will be returned.
+		return nextKey, nil
+	}
+	// The given key is part of the current last row, so we need to remove that
+	// row and will resume the fetch from the first key in that row.
+	//
+	// We want for the cFetcher to go straight to emitting the batch without
+	// finalizing the last row.
+	cf.machine.state[0] = stateEmitLastBatch
+	return cf.machine.firstKeyInRow, nil
+}
+
 // convertFetchError converts an error generated during a key-value fetch to a
 // storage error that will propagate through the exec subsystem unchanged. The
 // error may also undergo a mapping to make it more user friendly for SQL
 // consumers.
-func (cf *cFetcher) convertFetchError(ctx context.Context, err error) error {
-	err = row.ConvertFetchError(&cf.table.spec, err)
+func convertFetchError(indexFetchSpec *fetchpb.IndexFetchSpec, err error) error {
+	err = row.ConvertFetchError(indexFetchSpec, err)
 	err = colexecerror.NewStorageError(err)
 	return err
 }
