@@ -106,6 +106,9 @@ type Context struct {
 	// DefaultEnableRangefeeds is true if rangefeeds should start
 	// out enabled.
 	DefaultEnableRangefeeds bool
+
+	// InProcessTenant is true if we want to emulate an in-process tenant.
+	InProcessTenant bool
 }
 
 // IsInteractive returns true if the demo cluster configuration

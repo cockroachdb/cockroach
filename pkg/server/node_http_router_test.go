@@ -193,6 +193,7 @@ func TestRouteToNode(t *testing.T) {
 
 		resp, err := client.Get(s.AdminURL() + fmt.Sprintf("/_status/vars?%s=%s", RemoteNodeID, "2"))
 		require.NoError(t, err)
+		defer resp.Body.Close()
 		// We expect some error here. It's difficult to know what
 		// will happen because in different stress scenarios, the
 		// node may still have an address available, in which
