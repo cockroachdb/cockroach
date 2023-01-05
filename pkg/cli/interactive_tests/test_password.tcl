@@ -49,7 +49,7 @@ eexpect "Enter password: "
 send "123\r"
 eexpect "Enter it again: "
 send "123\r"
-eexpect "ERROR: role/user a;b does not exist"
+eexpect "ERROR: role/user \"a;b\" does not exist"
 eexpect root@
 
 send "\\password myuser\r"

@@ -27,10 +27,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
-	"github.com/cockroachdb/errors"
 )
 
 // alterRoleNode represents an ALTER ROLE ... [WITH] OPTION... statement.
@@ -200,7 +200,7 @@ func (n *alterRoleNode) startExec(params runParams) error {
 		if n.ifExists {
 			return nil
 		}
-		return pgerror.Newf(pgcode.UndefinedObject, "role/user %s does not exist", n.roleName)
+		return sqlerrors.NewUndefinedUserError(n.roleName)
 	}
 
 	isAdmin, err := params.p.UserHasAdminRole(params.ctx, n.roleName)
@@ -561,7 +561,7 @@ func (n *alterRoleSetNode) getRoleName(
 		if n.ifExists {
 			return false, username.SQLUsername{}, nil
 		}
-		return false, username.SQLUsername{}, errors.Newf("role/user %s does not exist", n.roleName)
+		return false, username.SQLUsername{}, sqlerrors.NewUndefinedUserError(n.roleName)
 	}
 	isAdmin, err := params.p.UserHasAdminRole(params.ctx, n.roleName)
 	if err != nil {
