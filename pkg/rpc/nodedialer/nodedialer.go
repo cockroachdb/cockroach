@@ -251,6 +251,11 @@ func (n *Dialer) ConnHealth(nodeID roachpb.NodeID, class rpc.ConnectionClass) er
 // down), and should be avoided in latency-sensitive code paths. Preferably,
 // this should be replaced by some other mechanism to maintain RPC connections.
 // See also: https://github.com/cockroachdb/cockroach/issues/70111
+// TODO(baptist): This method is poorly named and confusing. It is used as a
+// "hint" to use a connection if it already exists, but simultaneously kick off
+// a connection attempt in the background if it doesn't and always return
+// immediately. It is only used today by DistSQL and it should probably be
+// removed and moved into that code.
 func (n *Dialer) ConnHealthTryDial(nodeID roachpb.NodeID, class rpc.ConnectionClass) error {
 	err := n.ConnHealth(nodeID, class)
 	if err == nil || !n.getBreaker(nodeID, class).Ready() {
@@ -260,6 +265,8 @@ func (n *Dialer) ConnHealthTryDial(nodeID roachpb.NodeID, class rpc.ConnectionCl
 	if err != nil {
 		return err
 	}
+	// NB: This will always return `ErrNotHeartbeated` since the heartbeat will
+	// not be done by the time `Health` is called since GRPCDialNode is async.
 	return n.rpcContext.GRPCDialNode(addr.String(), nodeID, class).Health()
 }
 
