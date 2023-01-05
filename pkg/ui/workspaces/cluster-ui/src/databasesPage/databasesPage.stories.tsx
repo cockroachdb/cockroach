@@ -17,6 +17,7 @@ import { randomName } from "src/storybook/fixtures";
 import { DatabasesPage, DatabasesPageProps } from "./databasesPage";
 
 import * as H from "history";
+import { defaultFilters } from "src/queryFilter";
 const history = H.createHashHistory();
 
 const withLoadingIndicator: DatabasesPageProps = {
@@ -29,6 +30,9 @@ const withLoadingIndicator: DatabasesPageProps = {
     ascending: false,
     columnTitle: "name",
   },
+  search: "",
+  filters: defaultFilters,
+  nodeRegions: {},
   onSortingChange: () => {},
   refreshDatabases: () => {},
   refreshSettings: () => {},
@@ -54,6 +58,9 @@ const withoutData: DatabasesPageProps = {
     ascending: false,
     columnTitle: "name",
   },
+  search: "",
+  filters: defaultFilters,
+  nodeRegions: {},
   onSortingChange: () => {},
   refreshDatabases: () => {},
   refreshSettings: () => {},
@@ -78,6 +85,13 @@ const withData: DatabasesPageProps = {
   sortSetting: {
     ascending: false,
     columnTitle: "name",
+  },
+  search: "",
+  filters: defaultFilters,
+  nodeRegions: {
+    "1": "gcp-us-east1",
+    "6": "gcp-us-west1",
+    "8": "gcp-europe-west1",
   },
   databases: Array(42).map(() => {
     return {

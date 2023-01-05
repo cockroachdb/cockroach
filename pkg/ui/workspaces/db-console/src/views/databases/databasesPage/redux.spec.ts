@@ -17,6 +17,7 @@ import {
   DatabasesPageData,
   DatabasesPageDataDatabase,
   DatabasesPageDataMissingTable,
+  defaultFilters,
 } from "@cockroachlabs/cluster-ui";
 
 import { AdminUIState, createAdminUIStore } from "src/redux/state";
@@ -41,6 +42,10 @@ class TestDriver {
 
   async refreshDatabaseDetails(database: string) {
     return this.actions.refreshDatabaseDetails(database);
+  }
+
+  async refreshNodes() {
+    return this.actions.refreshNodes();
   }
 
   async refreshTableStats(database: string, table: string) {
@@ -106,6 +111,10 @@ describe("Databases Page", function () {
       loaded: false,
       lastError: undefined,
       databases: [],
+      search: null,
+      filters: defaultFilters,
+      nodeRegions: {},
+      isTenant: false,
       sortSetting: { ascending: true, columnTitle: "name" },
       automaticStatsCollectionEnabled: true,
       showNodeRegionsColumn: false,
@@ -133,6 +142,7 @@ describe("Databases Page", function () {
           loaded: false,
           lastError: undefined,
           name: "system",
+          nodes: [],
           sizeInBytes: 0,
           tableCount: 0,
           rangeCount: 0,
@@ -145,6 +155,7 @@ describe("Databases Page", function () {
           loaded: false,
           lastError: undefined,
           name: "test",
+          nodes: [],
           sizeInBytes: 0,
           tableCount: 0,
           rangeCount: 0,
@@ -153,18 +164,52 @@ describe("Databases Page", function () {
           numIndexRecommendations: 0,
         },
       ],
+      search: null,
+      filters: defaultFilters,
+      nodeRegions: {},
+      isTenant: false,
       sortSetting: { ascending: true, columnTitle: "name" },
       showNodeRegionsColumn: false,
       automaticStatsCollectionEnabled: true,
     });
   });
 
-  it("fills in database details", async function () {
+  it("fills in database details and node/region info", async function () {
+    const regions = [
+      "gcp-us-east1",
+      "gcp-us-east1",
+      "gcp-europe-west1",
+      "gcp-us-east1",
+      "gcp-europe-west2",
+      "gcp-europe-west1",
+    ];
+
+    const nodes = Array.from(Array(regions.length).keys()).map(node_id => {
+      return {
+        desc: {
+          node_id: node_id + 1, // 1-index offset.
+          locality: {
+            tiers: [
+              {
+                key: "region",
+                value: regions[node_id],
+              },
+            ],
+          },
+        },
+      };
+    });
+
+    fakeApi.stubNodesUI({
+      nodes: nodes,
+    });
+
     fakeApi.stubDatabases(["system", "test"]);
 
     fakeApi.stubDatabaseDetails("system", {
       table_names: ["foo", "bar"],
       stats: {
+        node_ids: [1, 2, 4],
         missing_tables: [],
         range_count: new Long(3),
         approximate_disk_bytes: new Long(7168),
@@ -174,12 +219,14 @@ describe("Databases Page", function () {
     fakeApi.stubDatabaseDetails("test", {
       table_names: ["widgets"],
       stats: {
+        node_ids: [3, 5, 6],
         missing_tables: [],
         range_count: new Long(42),
         approximate_disk_bytes: new Long(1234),
       },
     });
 
+    await driver.refreshNodes();
     await driver.refreshDatabases();
     await driver.refreshDatabaseDetails("system");
     await driver.refreshDatabaseDetails("test");
@@ -189,10 +236,11 @@ describe("Databases Page", function () {
       loaded: true,
       lastError: null,
       name: "system",
+      nodes: [1, 2, 4],
       sizeInBytes: 7168,
       tableCount: 2,
       rangeCount: 3,
-      nodesByRegionString: "",
+      nodesByRegionString: "gcp-us-east1(n1,n2,n4)",
       missingTables: [],
       numIndexRecommendations: 0,
     });
@@ -202,10 +250,11 @@ describe("Databases Page", function () {
       loaded: true,
       lastError: null,
       name: "test",
+      nodes: [3, 5, 6],
       sizeInBytes: 1234,
       tableCount: 1,
       rangeCount: 42,
-      nodesByRegionString: "",
+      nodesByRegionString: "gcp-europe-west1(n3,n6), gcp-europe-west2(n5)",
       missingTables: [],
       numIndexRecommendations: 0,
     });
@@ -233,6 +282,7 @@ describe("Databases Page", function () {
           loaded: true,
           lastError: null,
           name: "system",
+          nodes: [],
           sizeInBytes: 7168,
           tableCount: 2,
           rangeCount: 3,
@@ -268,6 +318,7 @@ describe("Databases Page", function () {
           loaded: true,
           lastError: null,
           name: "system",
+          nodes: [],
           sizeInBytes: 8192,
           tableCount: 2,
           rangeCount: 8,
@@ -294,6 +345,7 @@ describe("Databases Page", function () {
           loaded: true,
           lastError: null,
           name: "system",
+          nodes: [],
           sizeInBytes: 0,
           tableCount: 2,
           rangeCount: 0,
@@ -332,6 +384,7 @@ describe("Databases Page", function () {
           loaded: true,
           lastError: null,
           name: "system",
+          nodes: [],
           sizeInBytes: 7168,
           tableCount: 2,
           rangeCount: 3,
@@ -347,6 +400,7 @@ describe("Databases Page", function () {
           loaded: true,
           lastError: null,
           name: "system",
+          nodes: [],
           sizeInBytes: 8192,
           tableCount: 2,
           rangeCount: 8,
