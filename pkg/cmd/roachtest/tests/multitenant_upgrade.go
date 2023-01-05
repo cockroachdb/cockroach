@@ -164,6 +164,7 @@ func runMultiTenantUpgrade(ctx context.Context, t test.Test, c cluster.Cluster, 
 	t.Status("verifying that the tenant 13 server works and is at the earlier version")
 
 	verifySQL(t, tenant13.pgURL,
+		mkStmt(`CREATE USER my_user`),
 		mkStmt(`CREATE TABLE foo (id INT PRIMARY KEY, v STRING)`),
 		mkStmt(`INSERT INTO foo VALUES($1, $2)`, 1, "bar"),
 		mkStmt(`SELECT * FROM foo LIMIT 1`).
