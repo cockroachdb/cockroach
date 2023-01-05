@@ -163,7 +163,7 @@ func (p *planner) UnsafeUpsertDescriptor(
 			return pgerror.Newf(pgcode.InvalidObjectDefinition,
 				"descriptor ID %d must be less than the descriptor ID sequence value %d", id, maxDescID)
 		}
-		if err := p.ExecCfg().DescIDGenerator.IncrementDescID(ctx, int64(id-maxDescID+1)); err != nil {
+		if _, err := p.ExecCfg().DescIDGenerator.IncrementDescID(ctx, int64(id-maxDescID+1)); err != nil {
 			return err
 		}
 	}
