@@ -246,6 +246,15 @@ func (r *Replica) loadUninit(ctx context.Context, desc *roachpb.RangeDescriptor)
 		return err
 	}
 
+	// FIXME: sideloaded must not be nil?
+	r.raftMu.sideloaded = logstore.NewDiskSideloadStorage(
+		r.store.cfg.Settings,
+		desc.RangeID,
+		r.Engine().GetAuxiliaryDir(),
+		r.store.limiters.BulkIOWriteRate,
+		r.store.engine,
+	)
+
 	// FIXME: are any of these needed?
 	// r.raftMu.sideloaded, err = logstore.NewDiskSideloadStorage(
 	// r.assertStateRaftMuLockedReplicaMuRLocked(ctx, r.store.Engine())
