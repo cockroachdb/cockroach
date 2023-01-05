@@ -422,10 +422,6 @@ type KVConfig struct {
 	// DefaultSystemZoneConfigOverride server testing knob.
 	DefaultSystemZoneConfig zonepb.ZoneConfig
 
-	// LocalityAddresses contains private IP addresses the can only be accessed
-	// in the corresponding locality.
-	LocalityAddresses []roachpb.LocalityAddress
-
 	// EventLogEnabled is a switch which enables recording into cockroach's SQL
 	// event log tables. These tables record transactional events about changes
 	// to cluster metadata, such as DDL statements and range rebalancing
