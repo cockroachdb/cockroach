@@ -1782,7 +1782,7 @@ func ScanConflictingIntentsForDroppingLatchesEarly(
 			// either of these conditions is true, a corresponding scan over the MVCC
 			// key space will need access to the key's intent history in order to read
 			// the correct provisional value. So we set `needIntentHistory` to true.
-			if seq <= meta.Txn.Sequence || ts.LessEq(meta.Timestamp.ToTimestamp()) {
+			if seq <= meta.Txn.Sequence || ts.Less(meta.Timestamp.ToTimestamp()) {
 				needIntentHistory = true
 			}
 			continue
