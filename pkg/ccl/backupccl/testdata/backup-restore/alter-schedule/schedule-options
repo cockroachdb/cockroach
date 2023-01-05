@@ -78,4 +78,3 @@ exec-sql user=testuser expect-error-regex=(only users with the admin role are al
 alter backup schedule $fullID set schedule option updates_cluster_last_backup_time_metric = '1';
 ----
 regex matches error
-
