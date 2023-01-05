@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-bench/cluster"
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
 )
@@ -79,7 +80,7 @@ func prepareCluster(buildHash, remoteDir string) (int, error) {
 
 func initRoachprod() error {
 	_ = roachprod.InitProviders()
-	_, err := roachprod.Sync(l)
+	_, err := roachprod.Sync(l, vm.ListOptions{})
 	return err
 }
 
