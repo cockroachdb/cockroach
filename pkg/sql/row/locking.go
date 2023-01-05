@@ -16,9 +16,9 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// getKeyLockingStrength returns the configured per-key locking strength to use
+// GetKeyLockingStrength returns the configured per-key locking strength to use
 // for key-value scans.
-func getKeyLockingStrength(lockStrength descpb.ScanLockingStrength) lock.Strength {
+func GetKeyLockingStrength(lockStrength descpb.ScanLockingStrength) lock.Strength {
 	switch lockStrength {
 	case descpb.ScanLockingStrength_FOR_NONE:
 		return lock.None
