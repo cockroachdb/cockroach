@@ -2510,6 +2510,51 @@ CREATE FUNCTION err(i imp) RETURNS INT LANGUAGE SQL AS $$
 $$
 
 
+subtest strict
+
+statement ok
+CREATE FUNCTION strict_fn(i INT, t TEXT, b BOOL) RETURNS INT STRICT LANGUAGE SQL AS $$
+  SELECT 1
+$$
+
+query I
+SELECT strict_fn(1, 'foo', true)
+----
+1
+
+query III
+SELECT strict_fn(NULL, 'foo', true), strict_fn(1, NULL, true), strict_fn(1, 'foo', NULL)
+----
+NULL  NULL  NULL
+
+query III
+SELECT strict_fn(NULL, NULL, true), strict_fn(1, NULL, NULL), strict_fn(NULL, 'foo', NULL)
+----
+NULL  NULL  NULL
+
+query I
+SELECT strict_fn(NULL, NULL, NULL)
+----
+NULL
+
+statement ok
+CREATE FUNCTION strict_fn_imp(t TEXT, i imp) RETURNS INT RETURNS NULL ON NULL INPUT LANGUAGE SQL AS $$
+  SELECT 1
+$$
+
+# A tuple with all NULL elements is not concerned "NULL INPUT" for a UDF, even
+# though IS NULL returns true for it.
+query IB
+SELECT strict_fn_imp('foo', (NULL,NULL,NULL)), (NULL,NULL,NULL)::imp IS NULL
+----
+1  true
+
+query I
+SELECT strict_fn_imp('foo', NULL)
+----
+NULL
+
+
 subtest return_type_assignment_casts
 
 # Do not allow functions with return type mismatches that cannot be cast in an
@@ -2781,7 +2826,20 @@ SELECT oid, proname, pronamespace, proowner, prolang, proleakproof, proisstrict,
 FROM pg_catalog.pg_proc WHERE proname IN ('f_93314', 'f_93314_alias', 'f_93314_comp', 'f_93314_comp_t')
 ORDER BY oid;
 ----
-100257  f_93314         105  1546506610  14  false  false  false  v  0  100256  ·  {}  NULL  SELECT i, e FROM test.public.t_93314 ORDER BY i LIMIT 1;
-100259  f_93314_alias   105  1546506610  14  false  false  false  v  0  100258  ·  {}  NULL  SELECT i, e FROM test.public.t_93314_alias ORDER BY i LIMIT 1;
-100263  f_93314_comp    105  1546506610  14  false  false  false  v  0  100260  ·  {}  NULL  SELECT (1, 2);
-100264  f_93314_comp_t  105  1546506610  14  false  false  false  v  0  100262  ·  {}  NULL  SELECT a, c FROM test.public.t_93314_comp LIMIT 1;
+100259  f_93314         105  1546506610  14  false  false  false  v  0  100258  ·  {}  NULL  SELECT i, e FROM test.public.t_93314 ORDER BY i LIMIT 1;
+100261  f_93314_alias   105  1546506610  14  false  false  false  v  0  100260  ·  {}  NULL  SELECT i, e FROM test.public.t_93314_alias ORDER BY i LIMIT 1;
+100265  f_93314_comp    105  1546506610  14  false  false  false  v  0  100262  ·  {}  NULL  SELECT (1, 2);
+100266  f_93314_comp_t  105  1546506610  14  false  false  false  v  0  100264  ·  {}  NULL  SELECT a, c FROM test.public.t_93314_comp LIMIT 1;
+
+# Regression test for #95240. Strict UDFs that are inlined should result in NULL
+# when presented with NULL arguments.
+statement ok
+CREATE FUNCTION f95240(i INT) RETURNS INT STRICT LANGUAGE SQL AS 'SELECT 33';
+CREATE TABLE t95240 (a INT);
+INSERT INTO t95240 VALUES (1), (NULL)
+
+query I
+SELECT f95240(a) FROM t95240
+----
+33
+NULL

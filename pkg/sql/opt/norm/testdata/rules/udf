@@ -22,3 +22,20 @@ values
                      ├── fd: ()-->(1)
                      └── tuple
                           └── const: 1
+
+exec-ddl
+CREATE FUNCTION strict_fn(i INT, t TEXT, b BOOl) RETURNS INT STRICT LANGUAGE SQL AS 'SELECT i'
+----
+
+# Strict UDFs should be folded to NULL in the presence of a constant NULL
+# argument.
+norm format=show-scalars
+SELECT strict_fn(1, 'foo', NULL)
+----
+values
+ ├── columns: strict_fn:1
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── tuple
+      └── null
