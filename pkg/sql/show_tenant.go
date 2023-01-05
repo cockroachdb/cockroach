@@ -207,11 +207,20 @@ func (n *showTenantNode) Values() tree.Datums {
 		sourceClusterUri = tree.NewDString(n.replicationInfo.IngestionDetails.StreamAddress)
 		if n.replicationInfo.ReplicationLagInfo != nil {
 			minIngested := n.replicationInfo.ReplicationLagInfo.MinIngestedTimestamp.WallTime
-			// The latest fully replicated time.
-			replicatedTimestamp, _ = tree.MakeDTimestamp(timeutil.Unix(0, minIngested), time.Nanosecond)
+			// The latest fully replicated time. Truncating to the nearest microsecond
+			// because if we don't, then MakeDTimestamp rounds to the nearest
+			// microsecond. In that case a user may want to cutover to a rounded-up
+			// time, which is a time that we may never replicate to. Instead, we show
+			// a time that we know we replicated to.
+			replicatedTimestamp, _ = tree.MakeDTimestamp(timeutil.Unix(0, minIngested).Truncate(time.Microsecond), time.Nanosecond)
 		}
-		// The protected timestamp on the destination cluster.
-		retainedTimestamp, _ = tree.MakeDTimestamp(timeutil.Unix(0, n.protectedTimestamp.WallTime), time.Nanosecond)
+		// The protected timestamp on the destination cluster. Same as with the
+		// replicatedTimestamp, we want to show a retained time that is within the
+		// window (retained to replicated) and not below it. We take a timestamp
+		// that is greater than the protected timestamp by a microsecond or less
+		// (it's not exactly ceil but close enough).
+		retainedCeil := timeutil.Unix(0, n.protectedTimestamp.WallTime).Truncate(time.Microsecond).Add(time.Microsecond)
+		retainedTimestamp, _ = tree.MakeDTimestamp(retainedCeil, time.Nanosecond)
 	}
 
 	return tree.Datums{
