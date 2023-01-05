@@ -545,21 +545,11 @@ func (sc StoreCapacity) Load() load.Load {
 // AddressForLocality returns the network address that nodes in the specified
 // locality should use when connecting to the node described by the descriptor.
 func (n *NodeDescriptor) AddressForLocality(loc Locality) *util.UnresolvedAddr {
-	// If the provided locality has any tiers that are an exact exact match (key
+	// If the provided locality has any tiers that are an exact match (key
 	// and value) with a tier in the node descriptor's custom LocalityAddress
 	// list, return the corresponding address. Otherwise, return the default
 	// address.
-	//
-	// O(n^2), but we expect very few locality tiers in practice.
-	for i := range n.LocalityAddress {
-		nLoc := &n.LocalityAddress[i]
-		for _, loc := range loc.Tiers {
-			if loc == nLoc.LocalityTier {
-				return &nLoc.Address
-			}
-		}
-	}
-	return &n.Address
+	return loc.LookupLocality(n.LocalityAddress, &n.Address)
 }
 
 // CheckedSQLAddress returns the value of SQLAddress if set. If not, either
@@ -635,6 +625,23 @@ func (l Locality) Equals(r Locality) bool {
 		}
 	}
 	return true
+}
+
+// LookupLocality is given a set of LocalityAddresses and finds the one that
+// exactly matches my Locality. O(n^2), but we expect very few locality tiers in
+// practice.
+func (l Locality) LookupLocality(
+	address []LocalityAddress, base *util.UnresolvedAddr,
+) *util.UnresolvedAddr {
+	for i := range address {
+		nLoc := &address[i]
+		for _, loc := range l.Tiers {
+			if loc == nLoc.LocalityTier {
+				return &nLoc.Address
+			}
+		}
+	}
+	return base
 }
 
 // MaxDiversityScore is the largest possible diversity score, indicating that

@@ -2467,7 +2467,7 @@ func BenchmarkGRPCDial(b *testing.B) {
 
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
-			_, err := rpcCtx.GRPCDialNode(remoteAddr, serverNodeID, DefaultClass).Connect(context.Background())
+			_, err := rpcCtx.grpcDialRaw(ctx, remoteAddr, DefaultClass)
 			if err != nil {
 				b.Fatal(err)
 			}

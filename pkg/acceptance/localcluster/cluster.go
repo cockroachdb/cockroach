@@ -482,7 +482,7 @@ func (n *Node) Alive() bool {
 }
 
 // StatusClient returns a StatusClient set up to talk to this node.
-func (n *Node) StatusClient() serverpb.StatusClient {
+func (n *Node) StatusClient(ctx context.Context) serverpb.StatusClient {
 	n.Lock()
 	existingClient := n.statusClient
 	n.Unlock()
@@ -491,7 +491,7 @@ func (n *Node) StatusClient() serverpb.StatusClient {
 		return existingClient
 	}
 
-	conn, err := n.rpcCtx.GRPCDialRaw(n.RPCAddr())
+	conn, err := n.rpcCtx.GRPCUnvalidatedDial(n.RPCAddr()).Connect(ctx)
 	if err != nil {
 		log.Fatalf(context.Background(), "failed to initialize status client: %s", err)
 	}

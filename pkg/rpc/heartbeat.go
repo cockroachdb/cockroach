@@ -54,6 +54,12 @@ type HeartbeatService struct {
 
 	onHandlePing func(context.Context, *PingRequest) error // see ContextOptions.OnIncomingPing
 
+	// This is a blocking call that verifies the underlying TCP connection is
+	// established. If there is already a healthy connection set up, it will
+	// simply return immediately, however if not, it attempts to establish a
+	// "dummy" connection which is never used to send messages on.
+	verifyDialback func(context.Context, *PingRequest) error
+
 	// TestingAllowNamedRPCToAnonymousServer, when defined (in tests),
 	// disables errors in case a heartbeat requests a specific node ID but
 	// the remote node doesn't have a node ID yet. This testing knob is
@@ -158,6 +164,12 @@ func (hs *HeartbeatService) Ping(ctx context.Context, args *PingRequest) (*PingR
 	}
 
 	if fn := hs.onHandlePing; fn != nil {
+		if err := fn(ctx, args); err != nil {
+			return nil, err
+		}
+	}
+
+	if fn := hs.verifyDialback; fn != nil {
 		if err := fn(ctx, args); err != nil {
 			return nil, err
 		}
