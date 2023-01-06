@@ -3254,7 +3254,7 @@ func (s *Store) AllocatorCheckRange(
 		return action, roachpb.ReplicationTarget{}, sp.FinishAndGetConfiguredRecording(), err
 	}
 
-	liveVoters, liveNonVoters, isReplacement, nothingToDo, err :=
+	filteredVoters, filteredNonVoters, replacing, nothingToDo, err :=
 		allocatorimpl.FilterReplicasForAction(storePool, desc, action)
 
 	if nothingToDo || err != nil {
@@ -3262,7 +3262,7 @@ func (s *Store) AllocatorCheckRange(
 	}
 
 	target, _, err := s.allocator.AllocateTarget(ctx, storePool, conf,
-		liveVoters, liveNonVoters, action.ReplicaStatus(), action.TargetReplicaType(),
+		filteredVoters, filteredNonVoters, replacing, action.ReplicaStatus(), action.TargetReplicaType(),
 	)
 	if err == nil {
 		log.Eventf(ctx, "found valid allocation of %s target %v", action.TargetReplicaType(), target)
@@ -3274,11 +3274,11 @@ func (s *Store) AllocatorCheckRange(
 			storePool,
 			conf,
 			desc.Replicas().VoterDescriptors(),
-			liveNonVoters,
+			filteredVoters,
 			action.ReplicaStatus(),
 			action.TargetReplicaType(),
 			target,
-			isReplacement,
+			replacing != nil,
 		)
 
 		if fragileQuorumErr != nil {

@@ -975,6 +975,15 @@ func rankedCandidateListForAllocation(
 		}
 		constraintsOK, necessary := constraintsCheck(s)
 		if !constraintsOK {
+			if necessary {
+				log.KvDistribution.VEventf(
+					ctx,
+					3,
+					"cannot allocate necessary %s on s%d",
+					targetType,
+					s.StoreID,
+				)
+			}
 			continue
 		}
 
@@ -1789,15 +1798,43 @@ func nonVoterConstraintsCheckerForRebalance(
 	}
 }
 
+// voterConstraintsCheckerForReplace returns a constraintsCheckFn
+// that determines whether a given store is a valid and/or necessary replacement
+// candidate for the given store of an existing voting replica.
+func voterConstraintsCheckerForReplace(
+	overallConstraints, voterConstraints constraint.AnalyzedConstraints,
+	existingStore roachpb.StoreDescriptor,
+) constraintsCheckFn {
+	return func(s roachpb.StoreDescriptor) (valid, necessary bool) {
+		overallConstraintsOK, necessaryOverall := replaceConstraintsCheck(s, existingStore, overallConstraints)
+		voterConstraintsOK, necessaryForVoters := replaceConstraintsCheck(s, existingStore, voterConstraints)
+
+		return overallConstraintsOK && voterConstraintsOK, necessaryOverall || necessaryForVoters
+	}
+}
+
+// nonVoterConstraintsCheckerForReplace returns a constraintsCheckFn
+// that determines whether a given store is a valid and/or necessary replacement
+// candidate for the given store of an existing non-voting replica.
+func nonVoterConstraintsCheckerForReplace(
+	overallConstraints constraint.AnalyzedConstraints,
+	existingStore roachpb.StoreDescriptor,
+) constraintsCheckFn {
+	return func(s roachpb.StoreDescriptor) (valid, necessary bool) {
+		return replaceConstraintsCheck(s, existingStore, overallConstraints)
+	}
+}
+
 // allocateConstraintsCheck checks the potential allocation target store
 // against all the constraints. If it matches a constraint at all, it's valid.
 // If it matches a constraint that is not already fully satisfied by existing
 // replicas, then it's necessary.
 //
-// NB: This assumes that the sum of all constraints.NumReplicas is equal to
-// configured number of replicas for the range, or that there's just one set of
-// constraints with NumReplicas set to 0. This is meant to be enforced in the
-// config package.
+// NB: Formerly there was an assumption that the sum of all
+// constraints.NumReplicas was equal to the configured number of replicas for
+// the range, or that there was just one set of constraints with NumReplicas
+// set to 0, however this is not enforced by the config package and this
+// no longer holds, as we may have unconstrained replicas.
 func allocateConstraintsCheck(
 	store roachpb.StoreDescriptor, analyzed constraint.AnalyzedConstraints,
 ) (valid bool, necessary bool) {
@@ -1826,6 +1863,57 @@ func allocateConstraintsCheck(
 	}
 
 	return valid, false
+}
+
+// replaceConstraintsCheck checks the potential allocation target store
+// for a replacement operation against all the constraints, including checking
+// that the candidate store matches a constraint satisfied by the existing
+// store. If it matches a constraint, it's valid. If it matches a constraint
+// that is not already overly satisfied by existing replicas (other than the
+// replacement), then it's necessary. If there are any necessary constraints
+// that are not satisfied by the candidate when the existing store did satisfy
+// that constraint, then the candidate is considered invalid entirely.
+func replaceConstraintsCheck(store, existingStore roachpb.StoreDescriptor,
+	analyzed constraint.AnalyzedConstraints,
+) (valid bool, necessary bool) {
+	// All stores are valid when there are no constraints.
+	if len(analyzed.Constraints) == 0 {
+		return true, false
+	}
+
+	for i, constraints := range analyzed.Constraints {
+		matchingStores := analyzed.SatisfiedBy[i]
+		satisfiedByExistingStore := containsStore(matchingStores, existingStore.StoreID)
+		satisfiedByCandidateStore := constraint.ConjunctionsCheck(
+			store, constraints.Constraints,
+		)
+		if satisfiedByCandidateStore {
+			valid = true
+		}
+
+		// If the constraint is not already satisfied, it's necessary.
+		// Additionally, if the constraint is only just satisfied by the existing
+		// store being replaced, since that store is going away, the constraint is
+		// also marked as necessary.
+		if len(matchingStores) < int(constraints.NumReplicas) ||
+			(len(matchingStores) == int(constraints.NumReplicas) &&
+				satisfiedByExistingStore) {
+			necessary = true
+		}
+
+		// Check if existing store matches a constraint that isn't overly satisfied.
+		// If so, then only replacing it with a satisfying store is valid to ensure
+		// that the constraint stays fully satisfied.
+		if necessary && satisfiedByExistingStore && !satisfiedByCandidateStore {
+			return false, necessary
+		}
+	}
+
+	if analyzed.UnconstrainedReplicas {
+		valid = true
+	}
+
+	return valid, necessary
 }
 
 // removeConstraintsCheck checks the existing store against the analyzed
@@ -1867,6 +1955,19 @@ func removeConstraintsCheck(
 // against the analyzed constraints, determining whether it's valid whether it
 // will be necessary if fromStoreID (an existing replica) is removed from the
 // range.
+//
+// NB: Formerly there was an assumption that the sum of all
+// constraints.NumReplicas was equal to the configured number of replicas for
+// the range, or that there was just one set of constraints with NumReplicas
+// set to 0, however this is not enforced by the config package and this
+// no longer holds, as we may have unconstrained replicas.
+//
+// Note that rebalance, while seemingly similar to replacement, is distinct
+// because leaving the replica on the existing store is a valid option.
+// Hence, when leaving the existing store (and using it to satisfy a particular
+// constraint) is not a possibility such as in the case of a decommissioning or
+// dead node, the specialized replacement check is required.
+// See replaceConstraintsCheck(..).
 func rebalanceFromConstraintsCheck(
 	store, fromStoreID roachpb.StoreDescriptor, analyzed constraint.AnalyzedConstraints,
 ) (valid bool, necessary bool) {
@@ -1879,11 +1980,6 @@ func rebalanceFromConstraintsCheck(
 	// all, it's valid. If it matches a constraint that is not already fully
 	// satisfied by existing replicas or that is only fully satisfied because of
 	// fromStoreID, then it's necessary.
-	//
-	// NB: This assumes that the sum of all constraints.NumReplicas is equal to
-	// configured number of replicas for the range, or that there's just one set
-	// of constraints with NumReplicas set to 0. This is meant to be enforced in
-	// the config package.
 	for i, constraints := range analyzed.Constraints {
 		if constraintsOK := constraint.ConjunctionsCheck(
 			store, constraints.Constraints,
