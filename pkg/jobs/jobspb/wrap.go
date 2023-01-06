@@ -23,6 +23,12 @@ import (
 	"github.com/gogo/protobuf/jsonpb"
 )
 
+type ChangefeedTargetSpecifications []ChangefeedTargetSpecification
+
+func (cts ChangefeedTargetSpecifications) Len() int           { return len(cts) }
+func (cts ChangefeedTargetSpecifications) Less(i, j int) bool { return cts[i].TableID < cts[j].TableID }
+func (cts ChangefeedTargetSpecifications) Swap(i, j int)      { cts[i], cts[j] = cts[j], cts[i] }
+
 // JobID is the ID of a job.
 type JobID = catpb.JobID
 

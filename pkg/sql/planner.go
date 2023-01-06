@@ -515,6 +515,7 @@ func (p *planner) EvalContext() *eval.Context {
 	return &p.extendedEvalCtx.Context
 }
 
+// Descriptors implements the PlanHookState interface.
 func (p *planner) Descriptors() *descs.Collection {
 	return p.extendedEvalCtx.Descs
 }

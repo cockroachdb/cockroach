@@ -22,6 +22,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedvalidators"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -45,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/asof"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -390,8 +393,18 @@ func createChangefeedJobRecord(
 		statementTime = initialHighWater
 	}
 
+	checkPrivs := true
 	if !changefeedStmt.alterChangefeedAsOf.IsEmpty() {
 		statementTime = changefeedStmt.alterChangefeedAsOf
+		// When altering a changefeed, we generate target descriptors below
+		// based on a timestamp in the past. For example, this may be the
+		// last highwater timestamp of a paused changefeed.
+		// This is a problem because any privilege checks done on these
+		// descriptors will be out of date.
+		// To solve this problem, we validate the descriptors
+		// in the alterChangefeedPlanHook at the statement time.
+		// Thus, we can skip the check here.
+		checkPrivs = false
 	}
 
 	endTime := hlc.Timestamp{}
@@ -429,7 +442,8 @@ func createChangefeedJobRecord(
 	}
 
 	targets, tables, err := getTargetsAndTables(ctx, p, targetDescs, changefeedStmt.Targets,
-		changefeedStmt.originalSpecs, opts.ShouldUseFullStatementTimeName())
+		changefeedStmt.originalSpecs, opts.ShouldUseFullStatementTimeName(), sinkURI)
+
 	if err != nil {
 		return nil, err
 	}
@@ -442,6 +456,8 @@ func createChangefeedJobRecord(
 		TargetSpecifications: targets,
 	}
 	specs := AllTargets(details)
+	hasSelectPrivOnAllTables := true
+	hasChangefeedPrivOnAllTables := true
 	for _, desc := range targetDescs {
 		if table, isTable := desc.(catalog.TableDescriptor); isTable {
 			if err := changefeedvalidators.ValidateTable(specs, table, tolerances); err != nil {
@@ -450,6 +466,18 @@ func createChangefeedJobRecord(
 			for _, warning := range changefeedvalidators.WarningsForTable(table, tolerances) {
 				p.BufferClientNotice(ctx, pgnotice.Newf("%s", warning))
 			}
+
+			if err := p.CheckPrivilege(ctx, desc, privilege.SELECT); sql.IsInsufficientPrivilegeError(err) {
+				hasSelectPrivOnAllTables = false
+			}
+			if err := p.CheckPrivilege(ctx, desc, privilege.CHANGEFEED); sql.IsInsufficientPrivilegeError(err) {
+				hasChangefeedPrivOnAllTables = false
+			}
+		}
+	}
+	if checkPrivs {
+		if err := verifyUserCanCreateChangefeed(ctx, p, sinkURI, hasSelectPrivOnAllTables, hasChangefeedPrivOnAllTables); err != nil {
+			return nil, err
 		}
 	}
 
@@ -704,22 +732,11 @@ func getTargetsAndTables(
 	rawTargets tree.ChangefeedTargets,
 	originalSpecs map[tree.ChangefeedTarget]jobspb.ChangefeedTargetSpecification,
 	fullTableName bool,
+	sinkURI string,
 ) ([]jobspb.ChangefeedTargetSpecification, jobspb.ChangefeedTargets, error) {
 	tables := make(jobspb.ChangefeedTargets, len(targetDescs))
 	targets := make([]jobspb.ChangefeedTargetSpecification, len(rawTargets))
 	seen := make(map[jobspb.ChangefeedTargetSpecification]tree.ChangefeedTarget)
-
-	hasControlChangefeed, err := p.HasRoleOption(ctx, roleoption.CONTROLCHANGEFEED)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	var requiredPrivilegePerTable privilege.Kind
-	if hasControlChangefeed {
-		requiredPrivilegePerTable = privilege.SELECT
-	} else {
-		requiredPrivilegePerTable = privilege.CHANGEFEED
-	}
 
 	for i, ct := range rawTargets {
 		desc, ok := targetDescs[ct.TableName]
@@ -729,10 +746,6 @@ func getTargetsAndTables(
 		td, ok := desc.(catalog.TableDescriptor)
 		if !ok {
 			return nil, nil, errors.Errorf(`CHANGEFEED cannot target %s`, tree.AsString(&ct))
-		}
-
-		if err := p.CheckPrivilege(ctx, desc, requiredPrivilegePerTable); err != nil {
-			return nil, nil, errors.WithHint(err, `Users with CONTROLCHANGEFEED need SELECT, other users need CHANGEFEED.`)
 		}
 
 		if spec, ok := originalSpecs[ct]; ok {
@@ -782,7 +795,102 @@ func getTargetsAndTables(
 		}
 		seen[targets[i]] = ct
 	}
+
 	return targets, tables, nil
+}
+
+// verifyUserCanCreateChangefeed performs changefeed creation privilege checks, returning a
+// pgcode.InsufficientPrivilege error if the check fails.
+//
+// TODO(#94757): remove CONTROLCHANGEFEED entirely
+// Admins can create any kind of changefeed. For non-admins:
+//   - The first check which is performed is checking if a user has CONTROLCHANGEFEED. If so,
+//     we enforce that they require privilege.SELECT on all target tables. Such as user
+//     can use any sink.
+//   - To create a core changefeed, a user requires privilege.SELECT on all targeted tables.
+//   - To create an enterprise changefeed, the user requires privilege.CHANGEFEED on all tables.
+//     If changefeedbase.EnforceExternalConnectionsForChangefeedPriv is enabled, then the changefeed
+//     must be used with an external connection and the user requires privilege.USAGE on it.
+func verifyUserCanCreateChangefeed(
+	ctx context.Context,
+	p sql.PlanHookState,
+	sinkURI string,
+	hasSelectPrivOnAllTables bool,
+	hasChangefeedPrivOnAllTables bool,
+) error {
+	isAdmin, err := p.HasAdminRole(ctx)
+	if err != nil {
+		return err
+	}
+	if isAdmin {
+		return nil
+	}
+
+	hasControlChangefeed, err := p.HasRoleOption(ctx, roleoption.CONTROLCHANGEFEED)
+	if err != nil {
+		return err
+	}
+	if hasControlChangefeed {
+		if !hasSelectPrivOnAllTables {
+			return pgerror.Newf(pgcode.InsufficientPrivilege,
+				"user %s with %s role option requires the %s privilege on all target tables to be able to run an enterprise changefeed",
+				p.User(), roleoption.CONTROLCHANGEFEED, privilege.SELECT)
+		}
+		p.BufferClientNotice(ctx, pgnotice.Newf("You are creating a changefeed as a user with the %s role option. %s",
+			roleoption.CONTROLCHANGEFEED, roleoption.ControlChangefeedDeprecationNoticeMsg))
+		return nil
+	}
+
+	if sinkURI == "" {
+		if !hasSelectPrivOnAllTables {
+			return pgerror.Newf(pgcode.InsufficientPrivilege,
+				`user %s requires the %s privilege on all target tables to be able to run a core changefeed`,
+				p.User(), privilege.SELECT)
+		}
+		return nil
+	}
+
+	if !hasChangefeedPrivOnAllTables {
+		return pgerror.Newf(pgcode.InsufficientPrivilege,
+			`user %s requires the %s privilege on all target tables to be able to run an enterprise changefeed`,
+			p.User(), privilege.CHANGEFEED)
+	}
+
+	// Version gate for external connections.
+	enforceExternalConnections := changefeedbase.EnforceExternalConnectionsForChangefeedPriv.Get(&p.ExecCfg().Settings.SV)
+	if enforceExternalConnections && !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.V22_2SystemExternalConnectionsTable) {
+		return errors.WithHintf(pgerror.Newf(pgcode.FeatureNotSupported,
+			"version %v must be finalized to create an External Connection",
+			clusterversion.ByKey(clusterversion.V22_2SystemExternalConnectionsTable)),
+			`the %s privilege on all tables is only sufficient for external connection sinks`, privilege.CHANGEFEED)
+	}
+
+	if enforceExternalConnections {
+		url, err := url.Parse(sinkURI)
+		if err != nil {
+			return errors.Newf("failed to parse url %s", sinkURI)
+		}
+		if url.Scheme == changefeedbase.SinkSchemeExternalConnection {
+			ec, err := externalconn.LoadExternalConnection(ctx, url.Host, p.ExecCfg().InternalExecutor, p.Txn())
+			if err != nil {
+				return errors.Wrap(err, "failed to load external connection object")
+			}
+			ecPriv := &syntheticprivilege.ExternalConnectionPrivilege{
+				ConnectionName: ec.ConnectionName(),
+			}
+			if err := p.CheckPrivilege(ctx, ecPriv, privilege.USAGE); err != nil {
+				return err
+			}
+		} else {
+			return pgerror.Newf(
+				pgcode.InsufficientPrivilege,
+				`the %s privilege on all tables can only be used with external connection sinks. see cluster setting %s`,
+				privilege.CHANGEFEED, changefeedbase.EnforceExternalConnectionsForChangefeedPriv.Key(),
+			)
+		}
+	}
+
+	return nil
 }
 
 func validateSink(

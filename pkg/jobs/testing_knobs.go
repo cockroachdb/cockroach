@@ -82,6 +82,10 @@ type TestingKnobs struct {
 	// BeforeWaitForJobsQuery is called once per invocation of the
 	// poll-show-jobs query in WaitForJobs.
 	BeforeWaitForJobsQuery func()
+
+	// OrderChangefeedDescriptorsInPrivilegeCheck is used to create deterministic error messages
+	// when a user does not have privileges on target tables when attempting to access changefeed jobs.
+	OrderChangefeedDescriptorsInPrivilegeCheck bool
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

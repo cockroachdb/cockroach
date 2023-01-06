@@ -68,6 +68,13 @@ const (
 	NOVIEWCLUSTERSETTING
 )
 
+// ControlChangefeedDeprecationNoticeMsg is a user friendly notice which should be shown when CONTROLCHANGEFEED is used
+//
+// TODO(#94757): remove CONTROLCHANGEFEED entirely
+const ControlChangefeedDeprecationNoticeMsg = "The role option CONTROLCHANGEFEED will be removed in a future release, please" +
+	" switch to using the CHANGEFEED privilege for target tables instead:" +
+	" https://www.cockroachlabs.com/docs/stable/create-changefeed.html#required-privileges"
+
 // toSQLStmts is a map of Kind -> SQL statement string for applying the
 // option to the role.
 var toSQLStmts = map[Option]string{

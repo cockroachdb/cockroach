@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -100,6 +101,22 @@ func alterChangefeedPlanHook(
 			return err
 		}
 
+		userIsAdmin, err := p.HasAdminRole(ctx)
+		if err != nil {
+			return err
+		}
+
+		jobPayload := job.Payload()
+
+		// Having control job is not enough to allow them to modify the changefeed.
+		canAccess, userErr, err := sql.JobTypeSpecificPrivilegeCheck(ctx, p, jobID, &jobPayload, userIsAdmin, false, false)
+		if err != nil {
+			return err
+		}
+		if !canAccess {
+			return userErr
+		}
+
 		prevDetails, ok := job.Details().(jobspb.ChangefeedDetails)
 		if !ok {
 			return errors.Errorf(`job %d is not changefeed job`, jobID)
@@ -123,11 +140,12 @@ func alterChangefeedPlanHook(
 			return err
 		}
 
-		newTargets, newProgress, newStatementTime, originalSpecs, err := generateNewTargets(
+		newTargets, newProgress, newStatementTime, originalSpecs, err := generateAndValidateNewTargets(
 			ctx, exprEval, p,
 			alterChangefeedStmt.Cmds,
 			newOptions.AsMap(), // TODO: Remove .AsMap()
 			prevDetails, job.Progress(),
+			newSinkURI,
 		)
 		if err != nil {
 			return err
@@ -320,7 +338,7 @@ func generateNewOpts(
 	return changefeedbase.MakeStatementOptions(newOptions), sinkURI, nil
 }
 
-func generateNewTargets(
+func generateAndValidateNewTargets(
 	ctx context.Context,
 	exprEval exprutil.Evaluator,
 	p sql.PlanHookState,
@@ -328,6 +346,7 @@ func generateNewTargets(
 	opts map[string]string,
 	prevDetails jobspb.ChangefeedDetails,
 	prevProgress jobspb.Progress,
+	sinkURI string,
 ) (
 	tree.ChangefeedTargets,
 	*jobspb.Progress,
@@ -488,8 +507,11 @@ func generateNewTargets(
 				existingTargetDescs = append(existingTargetDescs, targetDesc)
 			}
 			existingTargetSpans := fetchSpansForDescs(p, existingTargetDescs)
+			hasSelectPrivOnAllTables := true
+			hasChangefeedPrivOnAllTables := true
 			var newTargetDescs []catalog.Descriptor
 			for _, target := range v.Targets {
+
 				desc, found, err := getTargetDesc(ctx, p, descResolver, target.TableName)
 				if err != nil {
 					return nil, nil, hlc.Timestamp{}, nil, err
@@ -501,10 +523,20 @@ func generateNewTargets(
 						tree.ErrString(&target),
 					)
 				}
+
+				if err := p.CheckPrivilege(ctx, desc, privilege.SELECT); sql.IsInsufficientPrivilegeError(err) {
+					hasSelectPrivOnAllTables = false
+				}
+				if err := p.CheckPrivilege(ctx, desc, privilege.CHANGEFEED); sql.IsInsufficientPrivilegeError(err) {
+					hasChangefeedPrivOnAllTables = false
+				}
 				k := targetKey{TableID: desc.GetID(), FamilyName: target.FamilyName}
 				newTargets[k] = target
 				newTableDescs[desc.GetID()] = desc
 				newTargetDescs = append(newTargetDescs, desc)
+			}
+			if err := verifyUserCanCreateChangefeed(ctx, p, sinkURI, hasSelectPrivOnAllTables, hasChangefeedPrivOnAllTables); err != nil {
+				return nil, nil, hlc.Timestamp{}, nil, err
 			}
 
 			addedTargetSpans := fetchSpansForDescs(p, newTargetDescs)
