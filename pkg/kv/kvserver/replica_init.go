@@ -27,7 +27,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -247,12 +249,16 @@ func (r *Replica) loadUninit(ctx context.Context, desc *roachpb.RangeDescriptor)
 	// r.rangeStr.store(r.replicaID, desc) <- done in newUnloadedReplica
 	// r.concMgr.OnRangeDescUpdated(desc) <- not needed?
 
-	// FIXME: r.mu.state.TruncatedState should not be nil.
-	var err error
-	if r.mu.state, err = r.mu.stateLoader.Load(ctx, r.Engine(), desc); err != nil {
-		return err
-	}
+	// FIXME: Was r.mu.stateLoader.Load(ctx, r.Engine(), desc), should it still
+	// be, or at least initialize all other fields?
+	r.mu.state.Desc = desc
+	r.mu.state.Lease = &roachpb.Lease{}
+	r.mu.state.TruncatedState = &roachpb.RaftTruncatedState{}
+	r.mu.state.GCThreshold = &hlc.Timestamp{}
+	r.mu.state.Stats = &enginepb.MVCCStats{}
+
 	// FIXME: If removed, TestStoreRemovePlaceholderOnRaftIgnored fails.
+	var err error
 	r.mu.lastIndex, err = r.mu.stateLoader.LoadLastIndex(ctx, r.Engine())
 	if err != nil {
 		return err
