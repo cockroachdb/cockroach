@@ -183,6 +183,10 @@ type BaseConfig struct {
 	// TestingKnobs is used for internal test controls only.
 	TestingKnobs base.TestingKnobs
 
+	// SecondaryTenantKnobs contains the testing knobs to use
+	// for tenant servers started by the serverController.
+	SecondaryTenantKnobs base.TestingKnobs
+
 	// TestingInsecureWebAccess enables uses of the HTTP and UI
 	// endpoints without a valid authentication token. This should be
 	// used only in tests what want a secure cluster with RPC
