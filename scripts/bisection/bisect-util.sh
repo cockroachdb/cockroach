@@ -1,14 +1,22 @@
-export GCE_PROJECT=andrei-jepsen
+#bisect helpers
+#expects TEST_NAME, BRANCH, FROM_DATE, TO_DATE
 
-log() { local msg=$1; local file=$2
-  echo "$(date -u +"%Y-%m-%dT%H:%M:%SZ")   $msg" >> "$file"
+
+log() { local msg=$1
+  echo "$(date -u +"%Y-%m-%dT%H:%M:%SZ")   $msg" >> "$INFO_LOG"
 }
 
-get_conf_val() { local key=$1; local fileName=$2
-  if [ ! -f "$fileName" ]; then
+create_conf_if_not_exists() {
+   if [ ! -f "$CONF_NAME" ]; then
+     echo "{}" > "$CONF_NAME"
+   fi
+}
+
+get_conf_val() { local key=$1
+  if [ ! -f "$CONF_NAME" ]; then
     echo ""
   else
-    val=$(jq -r "$key" "$fileName")
+    val=$(jq -r "$key" "$CONF_NAME")
     if [ "$val" == "null" ]; then
       echo ""
     else
@@ -18,16 +26,33 @@ get_conf_val() { local key=$1; local fileName=$2
 }
 
 #create or update file
-set_conf_val() { local key=$1; local val=$2; local fileName=$3
-   if [ ! -f "$fileName" ]; then
-     echo "{}" > "$fileName"
-   fi
-   updated=$(jq " . += {\"$key\": \"$val\"}" "$fileName")
-
-   echo "$updated" > "$fileName"
+set_conf_val() { local key=$1; local val=$2
+  create_conf_if_not_exists
+  updated=$(jq ". += {\"$key\": \"$val\"}" "$CONF_NAME")
+  echo "$updated" > "$CONF_NAME"
 }
 
-clean_test_name() {
+
+set_hash_result() { local hash=$1; local val=$2
+  create_conf_if_not_exists
+  updated=$(jq ".hashResults += {\"$hash\": \"$val\"}" "$CONF_NAME")
+  echo "$updated" > "$CONF_NAME"
+}
+
+get_hash_result() { local hash=$1
+  if [ ! -f "$CONF_NAME" ]; then
+    echo ""
+  else
+    val=$(jq -r ".hashResults.\"$hash\"" "$CONF_NAME")
+    if [ "$val" == "null" ]; then
+      echo ""
+    else
+      echo "$val"
+    fi
+  fi
+}
+
+clean_name_for_dir() {
   echo "${1//[^[:alnum:]]/-}"
 }
 
@@ -105,11 +130,12 @@ build_sha() { local sha=$1; local duration_override_mins=$2
     cp "bin/roachtest" "${rt}"
   fi
 
+  chmod +x "$cr" "$wl" "$rt"
   git reset --hard
 }
 
-
-prompt_user() { local hash=$1; local ops=$2; local conf=$3; local logname=$4
+# if ops == -1, this is a trapped ^C and we don't yet have a result
+prompt_user() { local hash=$1; local ops=$2;
 
   echo -ne '\a'
   if [[ ops -gt 0 ]]; then
@@ -123,27 +149,28 @@ prompt_user() { local hash=$1; local ops=$2; local conf=$3; local logname=$4
     case $ch in
     "Good")
       if [[ ops -gt 0 ]]; then
-        log "[$hash] Average ops/s: [$ops]. User marked as good. Threshold updated." "$logname"
-        set_conf_val "goodThreshold" "$ops" "$conf"
+        log "[$hash] Average ops/s: [$ops]. User marked as good. Threshold updated."
+        set_conf_val "goodThreshold" "$ops"
       else
-        log "[$hash] Interrupted. User marked as good. Bisection will restart with updated bounds" "$logname"
+        set_hash_result "$hash" "USER_GOOD"
+        log "[$hash] Interrupted. User marked as good. Bisection will restart with updated bounds"
       fi
-      set_conf_val "goodHash" "$hash" "$conf"
       return 0;;
     "Bad")
       if [[ ops -gt 0 ]]; then
-        log "[$hash] Average ops/s: [$ops]. User marked as bad. Threshold updated." "$logname"
-        set_conf_val "badThreshold" "$ops" "$conf"
+        log "[$hash] Average ops/s: [$ops]. User marked as bad. Threshold updated."
+        set_conf_val "badThreshold" "$ops"
       else
-        log "[$hash] Interrupted. User marked as bad. Bisection will restart with updated bounds" "$logname"
+        set_hash_result "$hash" "USER_BAD"
+        log "[$hash] Interrupted. User marked as bad. Bisection will restart with updated bounds"
       fi
-      set_conf_val "badHash" "$hash" "$conf"
       return 1;;
     "Skip")
       if [[ ops -gt 0 ]]; then
-        log "[$hash] Average ops/s: [$ops]. User skipped." "$logname"
+        log "[$hash] Average ops/s: [$ops]. User skipped."
       else
-        log "[$hash] Interrupted. User skipped" "$logname"
+        set_hash_result "$hash" "USER_SKIP"
+        log "[$hash] Interrupted. User skipped"
       fi
       return 125;;
     "Quit")
@@ -153,3 +180,9 @@ prompt_user() { local hash=$1; local ops=$2; local conf=$3; local logname=$4
     esac
   done
 }
+
+export BISECT_DIR="$(clean_name_for_dir "$TEST_NAME")/$(clean_name_for_dir "$BRANCH")/$FROM_DATE,$TO_DATE"
+export BISECT_LOG="$BISECT_DIR/bisect.log"
+export INFO_LOG="$BISECT_DIR/info.log"
+export CONF_NAME="$BISECT_DIR/config.json"
+export GCE_PROJECT=andrei-jepsen
