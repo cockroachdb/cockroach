@@ -54,7 +54,9 @@ type tenantHeaderDecorator struct {
 }
 
 func (t tenantHeaderDecorator) RoundTrip(req *http.Request) (*http.Response, error) {
-	req.Header.Add(TenantSelectHeader, string(t.tenantName))
+	if t.tenantName != "" {
+		req.Header.Add(TenantSelectHeader, string(t.tenantName))
+	}
 	return t.RoundTripper.RoundTrip(req)
 }
 
@@ -62,7 +64,13 @@ var _ http.RoundTripper = &tenantHeaderDecorator{}
 
 // AdminURL implements TestServerInterface.
 func (ts *httpTestServer) AdminURL() string {
-	return ts.t.sqlServer.execCfg.RPCContext.Config.AdminURL().String()
+	u := ts.t.sqlServer.execCfg.RPCContext.Config.AdminURL()
+	if ts.t.tenantName != "" {
+		q := u.Query()
+		q.Add(TenantNameParamInQueryURL, string(ts.t.tenantName))
+		u.RawQuery = q.Encode()
+	}
+	return u.String()
 }
 
 // GetUnauthenticatedHTTPClient implements TestServerInterface.

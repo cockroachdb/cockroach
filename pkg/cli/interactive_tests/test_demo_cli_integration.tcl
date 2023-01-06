@@ -89,10 +89,10 @@ eexpect ":/# "
 # Check that the cookies work.
 set pyfile [file join [file dirname $argv0] test_auth_cookie.py]
 
-send "$python $pyfile cookie_system.txt 'http://localhost:8081/_admin/v1/users'\r"
+send "$python $pyfile cookie_system.txt 'http://localhost:8080/_admin/v1/users?tenant_name=system'\r"
 eexpect "username"
 eexpect "demo"
-send "$python $pyfile cookie_app.txt 'http://localhost:8080/_admin/v1/users'\r"
+send "$python $pyfile cookie_app.txt 'http://localhost:8080/_admin/v1/users?tenant_name=demo-tenant'\r"
 eexpect "username"
 eexpect "demo"
 end_test
@@ -111,10 +111,10 @@ eexpect "defaultdb>"
 
 set spawn_id $shell_spawn_id
 
-send "$python $pyfile cookie_system.txt 'http://localhost:8081/_admin/v1/users'\r"
+send "$python $pyfile cookie_system.txt 'http://localhost:8080/_admin/v1/users?tenant_name=system'\r"
 eexpect "username"
 eexpect "demo"
-send "$python $pyfile cookie_app.txt 'http://localhost:8080/_admin/v1/users'\r"
+send "$python $pyfile cookie_app.txt 'http://localhost:8080/_admin/v1/users?tenant_name=demo-tenant'\r"
 eexpect "username"
 eexpect "demo"
 end_test
