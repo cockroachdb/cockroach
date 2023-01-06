@@ -1343,16 +1343,14 @@ More information about the geo-partitioned replicas topology can be found at:
 		Description: `
 If set, cockroach demo will start separate in-memory KV and SQL servers in multi-tenancy mode.
 The SQL shell will be connected to the first tenant, and can be switched between tenants
-and the system tenant using the \connect command. By default the tenant will be initialized
-in-process. Use --simulate-separate-tenant-process to emulate a separate tenant process.
-`,
+and the system tenant using the \connect command.`,
 	}
 
-	DemoInProcessTenant = FlagInfo{
-		Name: "in-process-tenant",
+	DemoDisableServerController = FlagInfo{
+		Name: "disable-server-controller",
 		Description: `
-If set, and --multitenant is set to true, the tenant process will be started
-in-process.`,
+If set, the server controller will not be used to start secondary
+tenant servers.`,
 	}
 
 	DemoNoLicense = FlagInfo{

@@ -215,6 +215,9 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 		cfg.SQLAdvertiseAddr = util.IsolatedTestAddr.String()
 		cfg.HTTPAddr = util.IsolatedTestAddr.String()
 	}
+	if params.SecondaryTenantPortOffset != 0 {
+		cfg.SecondaryTenantPortOffset = params.SecondaryTenantPortOffset
+	}
 	if params.Addr != "" {
 		cfg.Addr = params.Addr
 		cfg.AdvertiseAddr = params.Addr
@@ -828,6 +831,26 @@ func (ts *TestServer) StartTenant(
 		}
 	}
 
+	if params.UseServerController {
+		onDemandServer, err := ts.serverController.getOrCreateServer(ctx, params.TenantName)
+		if err != nil {
+			return nil, err
+		}
+		sw := onDemandServer.(*tenantServerWrapper)
+
+		hts := &httpTestServer{}
+		hts.t.authentication = sw.server.authentication
+		hts.t.sqlServer = sw.server.sqlServer
+		hts.t.tenantName = params.TenantName
+
+		return &TestTenant{
+			SQLServer:      sw.server.sqlServer,
+			Cfg:            sw.server.sqlServer.cfg,
+			httpTestServer: hts,
+			drain:          sw.server.drainServer,
+		}, err
+	}
+
 	st := params.Settings
 	if st == nil {
 		st = cluster.MakeTestingClusterSettings()
@@ -928,61 +951,39 @@ func (ts *TestServer) StartTenant(
 		baseCfg.HTTPAdvertiseAddr = newAddr
 	}
 
-	if !params.InProcessTenant {
-		sw, err := NewTenantServer(
-			ctx,
-			stopper,
-			baseCfg,
-			sqlCfg,
-		)
-		if err != nil {
-			return nil, err
-		}
-		go func() {
-			// If the server requests a shutdown, do that simply by stopping the
-			// tenant's stopper.
-			select {
-			case <-sw.ShutdownRequested():
-				stopper.Stop(sw.AnnotateCtx(context.Background()))
-			case <-stopper.ShouldQuiesce():
-			}
-		}()
-
-		if err := sw.Start(ctx); err != nil {
-			return nil, err
-		}
-
-		hts := &httpTestServer{}
-		hts.t.authentication = sw.authentication
-		hts.t.sqlServer = sw.sqlServer
-
-		return &TestTenant{
-			SQLServer:      sw.sqlServer,
-			Cfg:            &baseCfg,
-			httpTestServer: hts,
-			drain:          sw.drainServer,
-		}, err
-	}
-
-	ts.serverController.tenantBaseCfg = &baseCfg
-	onDemandServer, err := ts.serverController.getOrCreateServer(ctx, params.TenantName)
+	sw, err := NewTenantServer(
+		ctx,
+		stopper,
+		baseCfg,
+		sqlCfg,
+	)
 	if err != nil {
 		return nil, err
 	}
-	sw := onDemandServer.(*tenantServerWrapper)
+	go func() {
+		// If the server requests a shutdown, do that simply by stopping the
+		// tenant's stopper.
+		select {
+		case <-sw.ShutdownRequested():
+			stopper.Stop(sw.AnnotateCtx(context.Background()))
+		case <-stopper.ShouldQuiesce():
+		}
+	}()
+
+	if err := sw.Start(ctx); err != nil {
+		return nil, err
+	}
 
 	hts := &httpTestServer{}
-	hts.t.authentication = sw.server.authentication
-	hts.t.sqlServer = sw.server.sqlServer
-	hts.t.tenantName = params.TenantName
+	hts.t.authentication = sw.authentication
+	hts.t.sqlServer = sw.sqlServer
 
 	return &TestTenant{
-		SQLServer:      sw.server.sqlServer,
-		Cfg:            sw.server.sqlServer.cfg,
+		SQLServer:      sw.sqlServer,
+		Cfg:            &baseCfg,
 		httpTestServer: hts,
-		drain:          sw.server.drainServer,
+		drain:          sw.drainServer,
 	}, err
-
 }
 
 // ExpectedInitialRangeCount returns the expected number of ranges that should

@@ -93,7 +93,6 @@ type newServerFn func(
 	tenantName roachpb.TenantName,
 	index int,
 	deregister func(),
-	opts *BaseConfig,
 ) (onDemandServer, error)
 
 // serverController manages a fleet of multiple servers side-by-side.
@@ -106,10 +105,6 @@ type serverController struct {
 
 	// stopper is the parent stopper.
 	stopper *stop.Stopper
-
-	// tenantBaseCfg allows overriding of the baseCfg for all new tenants.
-	// Used for testing.
-	tenantBaseCfg *BaseConfig
 
 	mu struct {
 		syncutil.Mutex
@@ -169,7 +164,7 @@ func (c *serverController) getOrCreateServer(
 	// Server does not exist yet: instantiate and start it.
 	c.mu.nextServerIdx++
 	idx := c.mu.nextServerIdx
-	s, err := c.newServerFn(ctx, tenantName, idx, deregisterFn, c.tenantBaseCfg)
+	s, err := c.newServerFn(ctx, tenantName, idx, deregisterFn)
 	if err != nil {
 		return nil, err
 	}
@@ -207,6 +202,9 @@ func (c *serverController) getServers() (res []onDemandServer) {
 // TenantSelectHeader is the HTTP header used to select a particular tenant.
 const TenantSelectHeader = `X-Cockroach-Tenant`
 
+// TenantNameParamInQueryURL is the HTTP query URL parameter used to select a particular tenant.
+const TenantNameParamInQueryURL = "tenant_name"
+
 // TenantSelectCookieName is the name of the HTTP cookie used to select a particular tenant,
 // if the custom header is not specified.
 const TenantSelectCookieName = `tenant`
@@ -239,8 +237,7 @@ func (c *serverController) httpMux(w http.ResponseWriter, r *http.Request) {
 
 func getTenantNameFromHTTPRequest(r *http.Request) (roachpb.TenantName, bool) {
 	// Highest priority is manual override on the URL query parameters.
-	const tenantNameParamInQueryURL = "tenant_name"
-	if tenantName := r.URL.Query().Get(tenantNameParamInQueryURL); tenantName != "" {
+	if tenantName := r.URL.Query().Get(TenantNameParamInQueryURL); tenantName != "" {
 		return roachpb.TenantName(tenantName), true
 	}
 
@@ -470,11 +467,7 @@ var ErrInvalidTenant error = errInvalidTenantMarker{}
 // is not active), the returned error will contain the
 // ErrInvalidTenant mark, which can be checked with errors.Is.
 func (s *Server) newServerForTenant(
-	ctx context.Context,
-	tenantName roachpb.TenantName,
-	index int,
-	deregister func(),
-	baseCfg *BaseConfig,
+	ctx context.Context, tenantName roachpb.TenantName, index int, deregister func(),
 ) (onDemandServer, error) {
 	// Look up the ID of the requested tenant.
 	//
@@ -502,7 +495,7 @@ func (s *Server) newServerForTenant(
 	}
 
 	// Start the tenant server.
-	tenantStopper, tenantServer, err := s.startInMemoryTenantServerInternal(ctx, tenantID, index, baseCfg)
+	tenantStopper, tenantServer, err := s.startInMemoryTenantServerInternal(ctx, tenantID, index)
 	if err != nil {
 		// Abandon any work done so far.
 		tenantStopper.Stop(ctx)
@@ -570,7 +563,7 @@ func (t *systemServerWrapper) testingGetSQLAddr() string {
 // simultaneously running server. This can be used to allocate
 // distinct but predictable network listeners.
 func (s *Server) startInMemoryTenantServerInternal(
-	ctx context.Context, tenantID roachpb.TenantID, index int, baseCfgOverride *BaseConfig,
+	ctx context.Context, tenantID roachpb.TenantID, index int,
 ) (stopper *stop.Stopper, tenantServer *SQLServerWrapper, err error) {
 	stopper = stop.NewStopper()
 
@@ -581,9 +574,6 @@ func (s *Server) startInMemoryTenantServerInternal(
 	baseCfg, sqlCfg, err := makeInMemoryTenantServerConfig(ctx, tenantID, index, parentCfg, stopper)
 	if err != nil {
 		return stopper, nil, err
-	}
-	if baseCfgOverride != nil {
-		baseCfg = *baseCfgOverride
 	}
 
 	// Create a child stopper for this tenant's server.
@@ -694,6 +684,7 @@ func makeInMemoryTenantServerConfig(
 	baseCfg.Locality = kvServerCfg.BaseConfig.Locality
 	baseCfg.SpanConfigsDisabled = kvServerCfg.BaseConfig.SpanConfigsDisabled
 	baseCfg.EnableDemoLoginEndpoint = kvServerCfg.BaseConfig.EnableDemoLoginEndpoint
+	baseCfg.TestingKnobs = kvServerCfg.BaseConfig.SecondaryTenantKnobs
 
 	// TODO(knz): use a single network interface for all tenant servers.
 	// See: https://github.com/cockroachdb/cockroach/issues/84585
@@ -709,6 +700,18 @@ func makeInMemoryTenantServerConfig(
 		return baseCfg, sqlCfg, err
 	}
 
+	// This will change when we can use a single SQL listener.
+	const splitSQL = false
+	if splitSQL {
+		baseCfg.SplitListenSQL = true
+	} else {
+		baseCfg.SplitListenSQL = false
+		baseCfg.Addr, baseCfg.SQLAddr = baseCfg.SQLAddr, baseCfg.Addr
+		baseCfg.AdvertiseAddr, baseCfg.SQLAdvertiseAddr = baseCfg.SQLAdvertiseAddr, baseCfg.AdvertiseAddr
+		baseCfg.SQLAddr = ""
+		baseCfg.SQLAdvertiseAddr = ""
+	}
+
 	// The parent server will route HTTP requests to us.
 	baseCfg.DisableHTTPListener = true
 	// Nevertheless, we like to know our own HTTP address.
@@ -718,8 +721,6 @@ func makeInMemoryTenantServerConfig(
 	// Define the unix socket intelligently.
 	// See: https://github.com/cockroachdb/cockroach/issues/84585
 	baseCfg.SocketFile = ""
-
-	baseCfg.SplitListenSQL = false
 
 	// TODO(knz): Make the TLS config separate per tenant.
 	// See https://cockroachlabs.atlassian.net/browse/CRDB-14539.
