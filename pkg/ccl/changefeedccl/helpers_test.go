@@ -630,7 +630,9 @@ func feed(
 	return feed
 }
 
-func asUser(t testing.TB, f cdctest.TestFeedFactory, user string, fn func()) {
+func asUser(
+	t testing.TB, f cdctest.TestFeedFactory, user string, fn func(runner *sqlutils.SQLRunner),
+) {
 	t.Helper()
 	require.NoError(t, f.AsUser(user, fn))
 }
@@ -1044,4 +1046,46 @@ func TestingSetIncludeParquetMetadata() func() {
 	return func() {
 		includeParquetTestMetadata = false
 	}
+}
+
+// ChangefeedJobPermissionsTestSetup creates entities and users with various permissions
+// for tests which test access control for changefeed jobs.
+//
+// This helper creates the following:
+//
+//	UDT type_a
+//	TABLE table_a (with column type_a)
+//	TABLE table_b (with column type_a)
+//	USER adminUser (with admin privs)
+//	USER feedCreator (with CHANGEFEED priv on table_a and table_b)
+//	USER jobController (with the CONTROLJOB role option)
+//	USER userWithAllGrants (with CHANGEFEED on table_a and table b)
+//	USER userWithSomeGrants (with CHANGEFEED on table_a only)
+//	USER regularUser (with no privs)
+func ChangefeedJobPermissionsTestSetup(t *testing.T, s TestServer) {
+	rootDB := sqlutils.MakeSQLRunner(s.DB)
+
+	rootDB.Exec(t, `CREATE TYPE type_a as enum ('a')`)
+	rootDB.Exec(t, `CREATE TABLE table_a (id int, type type_a)`)
+	rootDB.Exec(t, `CREATE TABLE table_b (id int, type type_a)`)
+	rootDB.Exec(t, `INSERT INTO table_a(id) values (0)`)
+	rootDB.Exec(t, `INSERT INTO table_b(id) values (0)`)
+
+	rootDB.Exec(t, `CREATE USER adminUser`)
+	rootDB.Exec(t, `GRANT ADMIN TO adminUser`)
+
+	rootDB.Exec(t, `CREATE USER feedCreator`)
+	rootDB.Exec(t, `GRANT CHANGEFEED ON table_a TO feedCreator`)
+	rootDB.Exec(t, `GRANT CHANGEFEED ON table_b TO feedCreator`)
+
+	rootDB.Exec(t, `CREATE USER jobController with CONTROLJOB`)
+
+	rootDB.Exec(t, `CREATE USER userWithAllGrants`)
+	rootDB.Exec(t, `GRANT CHANGEFEED ON table_a TO userWithAllGrants`)
+	rootDB.Exec(t, `GRANT CHANGEFEED ON table_b TO userWithAllGrants`)
+
+	rootDB.Exec(t, `CREATE USER userWithSomeGrants`)
+	rootDB.Exec(t, `GRANT CHANGEFEED ON table_a TO userWithSomeGrants`)
+
+	rootDB.Exec(t, `CREATE USER regularUser`)
 }
