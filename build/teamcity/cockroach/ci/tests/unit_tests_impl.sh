@@ -2,6 +2,10 @@
 
 set -xeuo pipefail
 
+dir="$(dirname $(dirname $(dirname $(dirname $(dirname "${0}")))))"
+
+source "$dir/teamcity-support.sh"  # for 'tc_release_branch'
+
 bazel build //pkg/cmd/bazci --config=ci
 
 EXTRA_PARAMS=""
