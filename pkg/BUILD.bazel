@@ -215,6 +215,7 @@ ALL_TESTS = [
     "//pkg/spanconfig/spanconfigtestutils:spanconfigtestutils_test",
     "//pkg/spanconfig:spanconfig_test",
     "//pkg/sql/backfill:backfill_test",
+    "//pkg/sql/catalog/bootstrap:bootstrap_test",
     "//pkg/sql/catalog/catalogkeys:catalogkeys_test",
     "//pkg/sql/catalog/catformat:catformat_test",
     "//pkg/sql/catalog/catpb:catpb_test",
