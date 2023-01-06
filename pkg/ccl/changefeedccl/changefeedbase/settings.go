@@ -270,3 +270,14 @@ var EventConsumerElasticCPUControlEnabled = settings.RegisterBoolSetting(
 	"determines whether changefeed event processing integrates with elastic CPU control",
 	true,
 )
+
+// RequireExternalConnectionSink is used to restrict non-admins with the CHANGEFEED privilege
+// to create changefeeds to external connections only.
+var RequireExternalConnectionSink = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	"changefeed.permissions.require_external_connection_sink",
+	"if enabled, this settings restricts users with the CHANGEFEED privilege"+
+		" to create changefeeds with external connection sinks only."+
+		" see https://www.cockroachlabs.com/docs/stable/create-external-connection.html",
+	false,
+)
