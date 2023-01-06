@@ -218,7 +218,7 @@ func (c *serverController) httpMux(w http.ResponseWriter, r *http.Request) {
 	// if the client didnt specify tenant name call these for login/logout.
 	if !nameProvided {
 		switch r.URL.Path {
-		case loginPath:
+		case loginPath, DemoLoginPath:
 			c.attemptLoginToAllTenants().ServeHTTP(w, r)
 			return
 		case logoutPath:
