@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -167,6 +168,13 @@ func (smf *DummyStreamManagerFactory) GetStreamIngestManager(
 // errors.
 type DummyEvalPlanner struct {
 	Monitor *mon.BytesMonitor
+}
+
+// LookupTableByID is part of the Planner interface.
+func (ep *DummyEvalPlanner) LookupTableByID(
+	ctx context.Context, tableID descpb.ID,
+) (catalog.TableDescriptor, error) {
+	return nil, nil
 }
 
 // ResolveOIDFromString is part of the Planner interface.

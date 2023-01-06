@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -997,6 +998,19 @@ func performIntToOidCast(
 			return nil, err
 		}
 		return tree.NewDOidWithTypeAndName(o, t, name), nil
+
+	case oid.T_regclass:
+		if v == 0 {
+			return tree.WrapAsZeroOid(t), nil
+		}
+		desc, err := res.LookupTableByID(ctx, descpb.ID(o))
+		if err != nil {
+			if pgerror.GetPGCode(err) == pgcode.UndefinedTable {
+				return tree.NewDOidWithType(o, t), nil
+			}
+			return nil, err
+		}
+		return tree.NewDOidWithTypeAndName(o, t, desc.GetName()), nil
 
 	default:
 		if v == 0 {
