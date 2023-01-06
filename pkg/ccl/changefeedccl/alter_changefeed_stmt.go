@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedvalidators"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	jobsprivilege "github.com/cockroachdb/cockroach/pkg/jobs/privilege"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -100,6 +101,12 @@ func alterChangefeedPlanHook(
 			return err
 		}
 
+		jobPayload := job.Payload()
+
+		if err := jobsprivilege.Authorize(ctx, p, jobID, &jobPayload, jobsprivilege.NoFlag); err != nil {
+			return err
+		}
+
 		prevDetails, ok := job.Details().(jobspb.ChangefeedDetails)
 		if !ok {
 			return errors.Errorf(`job %d is not changefeed job`, jobID)
@@ -123,11 +130,12 @@ func alterChangefeedPlanHook(
 			return err
 		}
 
-		newTargets, newProgress, newStatementTime, originalSpecs, err := generateNewTargets(
+		newTargets, newProgress, newStatementTime, originalSpecs, err := generateAndValidateNewTargets(
 			ctx, exprEval, p,
 			alterChangefeedStmt.Cmds,
 			newOptions.AsMap(), // TODO: Remove .AsMap()
 			prevDetails, job.Progress(),
+			newSinkURI,
 		)
 		if err != nil {
 			return err
@@ -320,7 +328,7 @@ func generateNewOpts(
 	return changefeedbase.MakeStatementOptions(newOptions), sinkURI, nil
 }
 
-func generateNewTargets(
+func generateAndValidateNewTargets(
 	ctx context.Context,
 	exprEval exprutil.Evaluator,
 	p sql.PlanHookState,
@@ -328,6 +336,7 @@ func generateNewTargets(
 	opts map[string]string,
 	prevDetails jobspb.ChangefeedDetails,
 	prevProgress jobspb.Progress,
+	sinkURI string,
 ) (
 	tree.ChangefeedTargets,
 	*jobspb.Progress,
@@ -490,6 +499,7 @@ func generateNewTargets(
 			existingTargetSpans := fetchSpansForDescs(p, existingTargetDescs)
 			var newTargetDescs []catalog.Descriptor
 			for _, target := range v.Targets {
+
 				desc, found, err := getTargetDesc(ctx, p, descResolver, target.TableName)
 				if err != nil {
 					return nil, nil, hlc.Timestamp{}, nil, err
@@ -501,6 +511,7 @@ func generateNewTargets(
 						tree.ErrString(&target),
 					)
 				}
+
 				k := targetKey{TableID: desc.GetID(), FamilyName: target.FamilyName}
 				newTargets[k] = target
 				newTableDescs[desc.GetID()] = desc
@@ -546,6 +557,7 @@ func generateNewTargets(
 						tree.ErrString(&target),
 					)
 				}
+				newTableDescs[desc.GetID()] = desc
 				delete(newTargets, k)
 			}
 			telemetry.CountBucketed(telemetryPath+`.dropped_targets`, int64(len(v.Targets)))
@@ -578,6 +590,20 @@ func generateNewTargets(
 
 	for _, target := range newTargets {
 		newTargetList = append(newTargetList, target)
+	}
+
+	hasSelectPrivOnAllTables := true
+	hasChangefeedPrivOnAllTables := true
+	for _, desc := range newTableDescs {
+		hasSelect, hasChangefeed, err := checkPrivilegesForDescriptor(ctx, p, desc)
+		if err != nil {
+			return nil, nil, hlc.Timestamp{}, nil, err
+		}
+		hasSelectPrivOnAllTables = hasSelectPrivOnAllTables && hasSelect
+		hasChangefeedPrivOnAllTables = hasChangefeedPrivOnAllTables && hasChangefeed
+	}
+	if err := verifyUserCanCreateChangefeed(ctx, p, sinkURI, hasSelectPrivOnAllTables, hasChangefeedPrivOnAllTables); err != nil {
+		return nil, nil, hlc.Timestamp{}, nil, err
 	}
 
 	if err := validateNewTargets(ctx, p, newTargetList, newJobProgress, newJobStatementTime); err != nil {
