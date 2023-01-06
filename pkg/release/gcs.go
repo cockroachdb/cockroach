@@ -39,7 +39,7 @@ func NewGCS(bucket string) (*GCSProvider, error) {
 	return provider, nil
 }
 
-// GetObject implements object retrieval for S3
+// GetObject implements object retrieval for GCS
 func (p *GCSProvider) GetObject(input *GetObjectInput) (*GetObjectOutput, error) {
 	obj := p.client.Bucket(p.bucket).Object(*input.Key)
 	ctx := context.Background()
@@ -57,7 +57,7 @@ func (p *GCSProvider) Bucket() string {
 	return p.bucket
 }
 
-// PutObject implements object upload for S3
+// PutObject implements object upload for GCS
 func (p *GCSProvider) PutObject(input *PutObjectInput) error {
 	obj := p.client.Bucket(p.bucket).Object(*input.Key)
 	ctx := context.Background()
