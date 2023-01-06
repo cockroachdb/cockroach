@@ -65,13 +65,13 @@ func NewDiskSideloadStorage(
 	baseDir string,
 	limiter *rate.Limiter,
 	eng storage.Engine,
-) (*DiskSideloadStorage, error) {
+) *DiskSideloadStorage {
 	return &DiskSideloadStorage{
 		dir:     sideloadedPath(baseDir, rangeID),
 		eng:     eng,
 		st:      st,
 		limiter: limiter,
-	}, nil
+	}
 }
 
 func (ss *DiskSideloadStorage) createDir() error {
