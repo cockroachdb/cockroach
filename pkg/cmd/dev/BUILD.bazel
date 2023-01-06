@@ -33,7 +33,6 @@ go_library(
         "//pkg/cmd/dev/io/os",
         "//pkg/util/buildutil",
         "@com_github_alessio_shellescape//:shellescape",
-        "@com_github_cockroachdb_errors//:errors",
         "@com_github_google_shlex//:shlex",
         "@com_github_klauspost_pgzip//:pgzip",
         "@com_github_spf13_cobra//:cobra",
