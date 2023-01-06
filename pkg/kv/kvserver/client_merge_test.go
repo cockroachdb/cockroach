@@ -16,6 +16,8 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"os"
+	"path/filepath"
 	"reflect"
 	"regexp"
 	"strings"
@@ -3882,21 +3884,29 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 		}
 		expectedSSTs = append(expectedSSTs, sstFile.Data())
 
-		var mismatchedSstsIdx []int
 		// Iterate over all the tested SSTs and check that they're byte-by-byte equal.
+		var dumpDir string
 		for i := range sstNamesSubset {
 			actualSST, err := fs.ReadFile(receivingEng, sstNamesSubset[i])
 			if err != nil {
 				return err
 			}
-			if !bytes.Equal(actualSST, expectedSSTs[i]) {
+			if !bytes.Equal(expectedSSTs[i], actualSST) { // intentionally not printing
 				t.Logf("%d=%s", i, sstNamesSubset[i])
-				mismatchedSstsIdx = append(mismatchedSstsIdx, i)
+				if dumpDir == "" {
+					var err error
+					dumpDir, err = os.MkdirTemp("", "ssts")
+					require.NoError(t, err)
+				}
+				expPath := filepath.Join(dumpDir, fmt.Sprintf("%d_exp.sst", i))
+				actPath := filepath.Join(dumpDir, fmt.Sprintf("%d_act.sst", i))
+				require.NoError(t, os.WriteFile(expPath, expectedSSTs[i], 0644))
+				require.NoError(t, os.WriteFile(actPath, actualSST, 0644))
+				// `cockroach debug pebble sstable scan` is helpful with this.
+				t.Errorf("ssts not byte-wise identical: %s and %s", expPath, actPath)
 			}
 		}
-		if len(mismatchedSstsIdx) != 0 {
-			return errors.Errorf("SST indices %v don't match", mismatchedSstsIdx)
-		}
+		// Don't return errors here because that crashes the process.
 		return nil
 	}
 	ctx := context.Background()
