@@ -93,7 +93,7 @@ func runSQLAlchemy(ctx context.Context, t test.Test, c cluster.Cluster) {
 	}
 
 	if err := repeatRunE(
-		ctx, t, c, node, "create virtualenv", `virtualenv venv`,
+		ctx, t, c, node, "create virtualenv", `virtualenv --clear venv`,
 	); err != nil {
 		t.Fatal(err)
 	}
