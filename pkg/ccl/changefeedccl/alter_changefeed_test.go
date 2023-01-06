@@ -10,19 +10,25 @@ package changefeedccl
 
 import (
 	"context"
+	gosql "database/sql"
 	"fmt"
+	"net/url"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
@@ -39,6 +45,155 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
+
+// TestAlterChangefeedAddTargetPrivileges tests permissions for
+// users creating new changefeeds while altering them.
+func TestAlterChangefeedAddTargetPrivileges(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DisableDefaultTestTenant: true,
+		Knobs: base.TestingKnobs{
+			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+			DistSQL: &execinfra.TestingKnobs{
+				Changefeed: &TestingKnobs{
+					WrapSink: func(s Sink, _ jobspb.JobID) Sink {
+						if _, ok := s.(*externalConnectionKafkaSink); ok {
+							return s
+						}
+						return &externalConnectionKafkaSink{sink: s}
+					},
+				},
+			},
+		},
+	})
+	ctx := context.Background()
+	s := srv.(*server.TestServer)
+	defer s.Stopper().Stop(ctx)
+
+	rootDB := sqlutils.MakeSQLRunner(db)
+	rootDB.Exec(t, `CREATE TYPE type_a as enum ('a')`)
+	rootDB.Exec(t, `CREATE TABLE table_a (id int, type type_a)`)
+	rootDB.Exec(t, `CREATE TABLE table_b (id int, type type_a)`)
+	rootDB.Exec(t, `CREATE TABLE table_c (id int, type type_a)`)
+	rootDB.Exec(t, `CREATE USER feedCreator`)
+	rootDB.Exec(t, `GRANT SELECT ON table_a TO feedCreator`)
+	rootDB.Exec(t, `GRANT CHANGEFEED ON table_a TO feedCreator`)
+	rootDB.Exec(t, `CREATE EXTERNAL CONNECTION "first" AS 'kafka://nope'`)
+	rootDB.Exec(t, `GRANT USAGE ON EXTERNAL CONNECTION first TO feedCreator`)
+	rootDB.Exec(t, `INSERT INTO table_a(id) values (0)`)
+
+	rootDB.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
+	enableEnterprise := utilccl.TestingDisableEnterprise()
+	enableEnterprise()
+
+	withUser := func(t *testing.T, user string, fn func(*sqlutils.SQLRunner)) {
+		password := `password`
+		rootDB.Exec(t, fmt.Sprintf(`ALTER USER %s WITH PASSWORD '%s'`, user, password))
+
+		pgURL := url.URL{
+			Scheme: "postgres",
+			User:   url.UserPassword(user, password),
+			Host:   s.SQLAddr(),
+		}
+		db2, err := gosql.Open("postgres", pgURL.String())
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer db2.Close()
+		userDB := sqlutils.MakeSQLRunner(db2)
+
+		fn(userDB)
+	}
+
+	t.Run("using-changefeed-grant", func(t *testing.T) {
+		rootDB.Exec(t, `CREATE EXTERNAL CONNECTION "second" AS 'kafka://nope'`)
+		rootDB.Exec(t, `CREATE USER user1`)
+		rootDB.Exec(t, `GRANT CHANGEFEED ON table_a TO user1`)
+
+		var jobID int
+		withUser(t, "feedCreator", func(userDB *sqlutils.SQLRunner) {
+			row := userDB.QueryRow(t, "CREATE CHANGEFEED for table_a INTO 'external://first'")
+			row.Scan(&jobID)
+			userDB.Exec(t, `PAUSE JOB $1`, jobID)
+			waitForJobStatus(userDB, t, catpb.JobID(jobID), `paused`)
+		})
+
+		// user1 is missing the CHANGEFEED privilege on table_b and table_c.
+		withUser(t, "user1", func(userDB *sqlutils.SQLRunner) {
+			userDB.ExpectErr(t,
+				"user user1 requires the CHANGEFEED privilege on all target tables to be able to run an enterprise changefeed",
+				fmt.Sprintf("ALTER CHANGEFEED %d ADD table_b, table_c set sink='external://second'", jobID),
+			)
+		})
+		rootDB.Exec(t, `GRANT CHANGEFEED ON table_b TO user1`)
+		withUser(t, "user1", func(userDB *sqlutils.SQLRunner) {
+			userDB.ExpectErr(t,
+				"user user1 requires the CHANGEFEED privilege on all target tables to be able to run an enterprise changefeed",
+				fmt.Sprintf("ALTER CHANGEFEED %d ADD table_b, table_c set sink='external://second'", jobID),
+			)
+		})
+		rootDB.Exec(t, `GRANT CHANGEFEED ON table_c TO user1`)
+		withUser(t, "user1", func(userDB *sqlutils.SQLRunner) {
+			userDB.Exec(t,
+				fmt.Sprintf("ALTER CHANGEFEED %d ADD table_b, table_c set sink='external://second'", jobID),
+			)
+		})
+
+		// With require_external_connection_sink enabled, the user requires USAGE on the external connection.
+		rootDB.Exec(t, "SET CLUSTER SETTING changefeed.permissions.require_external_connection_sink = true")
+		withUser(t, "user1", func(userDB *sqlutils.SQLRunner) {
+			userDB.ExpectErr(t,
+				"user user1 does not have USAGE privilege on external_connection second",
+				fmt.Sprintf("ALTER CHANGEFEED %d ADD table_b, table_c set sink='external://second'", jobID),
+			)
+		})
+		rootDB.Exec(t, `GRANT USAGE ON EXTERNAL CONNECTION second TO user1`)
+		withUser(t, "user1", func(userDB *sqlutils.SQLRunner) {
+			userDB.Exec(t,
+				fmt.Sprintf("ALTER CHANGEFEED %d ADD table_b, table_c set sink='external://second'", jobID),
+			)
+		})
+		rootDB.Exec(t, "SET CLUSTER SETTING changefeed.permissions.require_external_connection_sink = false")
+	})
+
+	// TODO(#94757): remove CONTROLCHANGEFEED entirely
+	t.Run("using-controlchangefeed-roleoption", func(t *testing.T) {
+		rootDB.Exec(t, `CREATE USER user2 WITH CONTROLCHANGEFEED`)
+		rootDB.Exec(t, `GRANT CHANGEFEED ON table_a TO user2`)
+		rootDB.Exec(t, `GRANT SELECT ON table_a TO user2`)
+
+		var jobID int
+		withUser(t, "feedCreator", func(userDB *sqlutils.SQLRunner) {
+			row := userDB.QueryRow(t, "CREATE CHANGEFEED for table_a INTO 'kafka://foo'")
+			row.Scan(&jobID)
+			userDB.Exec(t, `PAUSE JOB $1`, jobID)
+			waitForJobStatus(userDB, t, catpb.JobID(jobID), `paused`)
+		})
+
+		// user2 is missing the SELECT privilege on table_b and table_c.
+		withUser(t, "user2", func(userDB *sqlutils.SQLRunner) {
+			userDB.ExpectErr(t,
+				"pq: user user2 with CONTROLCHANGEFEED role option requires the SELECT privilege on all target tables to be able to run an enterprise changefeed",
+				fmt.Sprintf("ALTER CHANGEFEED %d ADD table_b, table_c set sink='kafka://bar'", jobID),
+			)
+		})
+		rootDB.Exec(t, `GRANT SELECT ON table_b TO user2`)
+		withUser(t, "user2", func(userDB *sqlutils.SQLRunner) {
+			userDB.ExpectErr(t,
+				"pq: user user2 with CONTROLCHANGEFEED role option requires the SELECT privilege on all target tables to be able to run an enterprise changefeed",
+				fmt.Sprintf("ALTER CHANGEFEED %d ADD table_b, table_c set sink='kafka://bar'", jobID),
+			)
+		})
+		rootDB.Exec(t, `GRANT SELECT ON table_c TO user2`)
+		withUser(t, "user2", func(userDB *sqlutils.SQLRunner) {
+			userDB.Exec(t,
+				fmt.Sprintf("ALTER CHANGEFEED %d ADD table_b, table_c set sink='kafka://bar'", jobID),
+			)
+		})
+	})
+}
 
 func TestAlterChangefeedAddTarget(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -1417,5 +1572,74 @@ func TestAlterChangefeedWithOldCursorFromCreateChangefeed(t *testing.T) {
 		})
 	}
 
+	cdcTest(t, testFn, feedTestEnterpriseSinks)
+}
+
+// TestChangefeedJobControl tests if a user can modify and existing changefeed
+// based on their privileges.
+func TestAlterChangefeedAccessControl(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		ChangefeedJobPermissionsTestSetup(t, s)
+		rootDB := sqlutils.MakeSQLRunner(s.DB)
+
+		createFeed := func(stmt string) (cdctest.EnterpriseTestFeed, func()) {
+			successfulFeed := feed(t, f, stmt)
+			closeCf := func() {
+				closeFeed(t, successfulFeed)
+			}
+			_, err := successfulFeed.Next()
+			require.NoError(t, err)
+			return successfulFeed.(cdctest.EnterpriseTestFeed), closeCf
+		}
+
+		// Create a changefeed and pause it.
+		var currentFeed cdctest.EnterpriseTestFeed
+		var closeCf func()
+		asUser(t, f, `feedCreator`, func(_ *sqlutils.SQLRunner) {
+			currentFeed, closeCf = createFeed(`CREATE CHANGEFEED FOR table_a, table_b`)
+		})
+		rootDB.Exec(t, "PAUSE job $1", currentFeed.JobID())
+		waitForJobStatus(rootDB, t, currentFeed.JobID(), `paused`)
+
+		// Verify who can modify the existing changefeed.
+		asUser(t, f, `userWithAllGrants`, func(userDB *sqlutils.SQLRunner) {
+			userDB.Exec(t, fmt.Sprintf(`ALTER CHANGEFEED %d DROP table_b`, currentFeed.JobID()))
+		})
+		asUser(t, f, `adminUser`, func(userDB *sqlutils.SQLRunner) {
+			userDB.Exec(t, fmt.Sprintf(`ALTER CHANGEFEED %d ADD table_b`, currentFeed.JobID()))
+		})
+		asUser(t, f, `jobController`, func(userDB *sqlutils.SQLRunner) {
+			userDB.ExpectErr(t, "pq: user jobcontroller does not have CHANGEFEED privilege on relation (table_a|table_b)", fmt.Sprintf(`ALTER CHANGEFEED %d DROP table_b`, currentFeed.JobID()))
+		})
+		asUser(t, f, `userWithSomeGrants`, func(userDB *sqlutils.SQLRunner) {
+			userDB.ExpectErr(t, "pq: user userwithsomegrants does not have CHANGEFEED privilege on relation table_b", fmt.Sprintf(`ALTER CHANGEFEED %d ADD table_b`, currentFeed.JobID()))
+		})
+		asUser(t, f, `regularUser`, func(userDB *sqlutils.SQLRunner) {
+			userDB.ExpectErr(t, "pq: user regularuser does not have CHANGEFEED privilege on relation (table_a|table_b)", fmt.Sprintf(`ALTER CHANGEFEED %d ADD table_b`, currentFeed.JobID()))
+		})
+		closeCf()
+
+		// No one can modify changefeeds created by admins, except for admins.
+		// In this case, the root user creates the changefeed.
+		currentFeed, closeCf = createFeed(`CREATE CHANGEFEED FOR table_a, table_b`)
+		asUser(t, f, `adminUser`, func(userDB *sqlutils.SQLRunner) {
+			userDB.Exec(t, "PAUSE job $1", currentFeed.JobID())
+			require.NoError(t, currentFeed.WaitForStatus(func(s jobs.Status) bool {
+				return s == jobs.StatusPaused
+			}))
+		})
+		asUser(t, f, `userWithAllGrants`, func(userDB *sqlutils.SQLRunner) {
+			userDB.ExpectErr(t, "pq: only admins can control jobs owned by other admins", fmt.Sprintf(`ALTER CHANGEFEED %d ADD table_b`, currentFeed.JobID()))
+		})
+		asUser(t, f, `jobController`, func(userDB *sqlutils.SQLRunner) {
+			userDB.ExpectErr(t, "pq: only admins can control jobs owned by other admins", fmt.Sprintf(`ALTER CHANGEFEED %d ADD table_b`, currentFeed.JobID()))
+		})
+		closeCf()
+	}
+
+	// Only enterprise sinks create jobs.
 	cdcTest(t, testFn, feedTestEnterpriseSinks)
 }
