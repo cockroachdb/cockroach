@@ -292,7 +292,11 @@ var _ cat.Catalog = (*cdcOptCatalog)(nil)
 func (c *cdcOptCatalog) ResolveDataSource(
 	ctx context.Context, flags cat.Flags, name *cat.DataSourceName,
 ) (cat.DataSource, cat.DataSourceName, error) {
-	lflags := tree.ObjectLookupFlagsWithRequiredTableKind(tree.ResolveRequireTableDesc)
+	lflags := tree.ObjectLookupFlags{
+		Required:             true,
+		DesiredObjectKind:    tree.TableObject,
+		DesiredTableDescKind: tree.ResolveRequireTableDesc,
+	}
 	_, desc, err := resolver.ResolveExistingTableObject(ctx, c.planner, name, lflags)
 	if err != nil {
 		return nil, cat.DataSourceName{}, err

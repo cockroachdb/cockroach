@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
@@ -42,14 +41,9 @@ func streamIngestionJobDescription(
 	return tree.AsStringWithFQNames(streamIngestion, ann), nil
 }
 
-var resultColumns = colinfo.ResultColumns{
-	{Name: "ingestion_job_id", Typ: types.Int},
-	{Name: "producer_job_id", Typ: types.Int},
-}
-
 func ingestionTypeCheck(
 	ctx context.Context, stmt tree.Statement, p sql.PlanHookState,
-) (matched bool, header colinfo.ResultColumns, _ error) {
+) (matched bool, _ colinfo.ResultColumns, _ error) {
 	ingestionStmt, ok := stmt.(*tree.CreateTenantFromReplication)
 	if !ok {
 		return false, nil, nil
@@ -61,7 +55,7 @@ func ingestionTypeCheck(
 		return false, nil, err
 	}
 
-	return true, resultColumns, nil
+	return true, nil, nil
 }
 
 func ingestionPlanHook(
@@ -107,7 +101,7 @@ func ingestionPlanHook(
 		retentionTTLSeconds = ret
 	}
 
-	fn := func(ctx context.Context, _ []sql.PlanNode, resultsCh chan<- tree.Datums) error {
+	fn := func(ctx context.Context, _ []sql.PlanNode, _ chan<- tree.Datums) error {
 		ctx, span := tracing.ChildSpan(ctx, stmt.StatementTag())
 		defer span.Finish()
 
@@ -209,18 +203,15 @@ func ingestionPlanHook(
 			Details:     streamIngestionDetails,
 		}
 
-		sj, err := p.ExecCfg().JobRegistry.CreateAdoptableJobWithTxn(ctx, jr,
-			jobID, p.Txn())
+		_, err = p.ExecCfg().JobRegistry.CreateAdoptableJobWithTxn(ctx, jr, jobID, p.Txn())
 		if err != nil {
 			return err
 		}
 
-		resultsCh <- tree.Datums{tree.NewDInt(tree.DInt(sj.ID())),
-			tree.NewDInt(tree.DInt(replicationProducerSpec.StreamID))}
 		return nil
 	}
 
-	return fn, resultColumns, nil, false, nil
+	return fn, nil, nil, false, nil
 }
 
 func init() {

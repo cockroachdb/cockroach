@@ -101,19 +101,11 @@ func GetHydratedTableDescriptor(
 	}()
 
 	execCfg := execCfgI.(sql.ExecutorConfig)
-	var found bool
 	require.NoError(t, sql.DescsTxn(context.Background(), &execCfg,
 		func(ctx context.Context, txn *kv.Txn, col *descs.Collection) (err error) {
-			found, td, err = col.GetImmutableTableByName(ctx, txn,
-				tree.NewTableNameWithSchema(dbName, scName, tableName),
-				tree.ObjectLookupFlags{
-					CommonLookupFlags: tree.CommonLookupFlags{
-						Required:    true,
-						AvoidLeased: true,
-					},
-				})
+			_, td, err = descs.PrefixAndTable(ctx, col.ByName(txn).Get(), tree.NewTableNameWithSchema(dbName, scName, tableName))
 			return err
 		}))
-	require.True(t, found)
+	require.NotNil(t, td)
 	return td
 }

@@ -17,6 +17,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/errors"
@@ -26,7 +28,7 @@ import (
 func GetObjectName(
 	ctx context.Context, txn *kv.Txn, tc *Collection, obj catalog.Descriptor,
 ) (tree.ObjectName, error) {
-	g := tc.ByID(txn).Immutable()
+	g := tc.ByIDWithLeased(txn).Get()
 	sc, err := g.Schema(ctx, obj.GetParentSchemaID())
 	if err != nil {
 		return nil, err
@@ -83,6 +85,10 @@ func CheckObjectNameCollision(
 func getObjectPrefix(
 	ctx context.Context, g ByNameGetter, dbName, scName string,
 ) (prefix catalog.ResolvedObjectPrefix, err error) {
+	if g.flags.isMutable {
+		g.flags.isMutable = false
+		g.flags.layerFilters.withoutLeased = true
+	}
 	// If we're reading the object descriptor from the store,
 	// we should read its parents from the store too to ensure
 	// that subsequent name resolution finds the latest name
@@ -95,6 +101,54 @@ func getObjectPrefix(
 	}
 	prefix.Schema, err = g.Schema(ctx, prefix.Database, scName)
 	return prefix, err
+}
+
+// PrefixAndType looks up an immutable type descriptor by its full name.
+func PrefixAndType(
+	ctx context.Context, g ByNameGetter, name tree.ObjectName,
+) (catalog.ResolvedObjectPrefix, catalog.TypeDescriptor, error) {
+	p, err := getObjectPrefix(ctx, g, name.Catalog(), name.Schema())
+	if err != nil || p.Schema == nil {
+		return p, nil, err
+	}
+	typ, err := g.Type(ctx, p.Database, p.Schema, name.Object())
+	return p, typ, err
+}
+
+// PrefixAndMutableType looks up a mutable type descriptor by its full name.
+func PrefixAndMutableType(
+	ctx context.Context, g MutableByNameGetter, name tree.ObjectName,
+) (catalog.ResolvedObjectPrefix, *typedesc.Mutable, error) {
+	p, err := getObjectPrefix(ctx, ByNameGetter(g), name.Catalog(), name.Schema())
+	if err != nil || p.Schema == nil {
+		return p, nil, err
+	}
+	typ, err := g.Type(ctx, p.Database, p.Schema, name.Object())
+	return p, typ, err
+}
+
+// PrefixAndTable looks up an immutable table descriptor by its full name.
+func PrefixAndTable(
+	ctx context.Context, g ByNameGetter, name tree.ObjectName,
+) (catalog.ResolvedObjectPrefix, catalog.TableDescriptor, error) {
+	p, err := getObjectPrefix(ctx, g, name.Catalog(), name.Schema())
+	if err != nil || p.Schema == nil {
+		return p, nil, err
+	}
+	tbl, err := g.Table(ctx, p.Database, p.Schema, name.Object())
+	return p, tbl, err
+}
+
+// PrefixAndMutableTable looks up a mutable table descriptor by its full name.
+func PrefixAndMutableTable(
+	ctx context.Context, g MutableByNameGetter, name tree.ObjectName,
+) (catalog.ResolvedObjectPrefix, *tabledesc.Mutable, error) {
+	p, err := getObjectPrefix(ctx, ByNameGetter(g), name.Catalog(), name.Schema())
+	if err != nil || p.Schema == nil {
+		return p, nil, err
+	}
+	tbl, err := g.Table(ctx, p.Database, p.Schema, name.Object())
+	return p, tbl, err
 }
 
 // AsZoneConfigHydrationHelper returns the collection as a

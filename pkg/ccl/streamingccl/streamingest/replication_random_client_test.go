@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvtenantccl" // To start tenants.
+	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/replicationtestutils"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -242,8 +243,9 @@ func TestStreamIngestionJobWithRandomClient(t *testing.T) {
 	_, err = conn.Exec(`SET enable_experimental_stream_replication = true`)
 	require.NoError(t, err)
 
-	var ingestionJobID, producerJobID int
-	require.NoError(t, conn.QueryRow(query).Scan(&ingestionJobID, &producerJobID))
+	_, err = conn.Exec(query)
+	require.NoError(t, err)
+	_, ingestionJobID := replicationtestutils.GetStreamJobIds(t, ctx, sqlDB, "30")
 
 	// Start the ingestion stream and wait for at least one AddSSTable to ensure the job is running.
 	allowResponse <- struct{}{}

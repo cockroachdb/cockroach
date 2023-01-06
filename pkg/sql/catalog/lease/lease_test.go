@@ -86,9 +86,7 @@ func init() {
 		ctx context.Context, t *testing.T, s serverutils.TestServerInterface, id descpb.ID,
 	) {
 		require.NoError(t, sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
-			t, err := col.GetMutableTableByID(
-				ctx, txn, id, tree.ObjectLookupFlagsWithRequired(),
-			)
+			t, err := col.MutableByID(txn).Table(ctx, id)
 			if err != nil {
 				return err
 			}
@@ -2436,10 +2434,7 @@ func TestLeaseWithOfflineTables(t *testing.T) {
 		require.NoError(t, sql.DescsTxn(ctx, &execCfg, func(
 			ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
 		) error {
-			flags := tree.ObjectLookupFlagsWithRequiredTableKind(tree.ResolveRequireTableDesc)
-			flags.CommonLookupFlags.IncludeOffline = true
-			flags.CommonLookupFlags.IncludeDropped = true
-			desc, err := descsCol.GetMutableTableByID(ctx, txn, testTableID(), flags)
+			desc, err := descsCol.MutableByID(txn).Table(ctx, testTableID())
 			require.NoError(t, err)
 			require.Equal(t, desc.State, expected)
 			desc.State = next
@@ -2809,13 +2804,16 @@ CREATE TABLE d1.t2 (name int);
 
 	// Force the table descriptor into a offline state
 	cfg := s.ExecutorConfig().(sql.ExecutorConfig)
+	var tableID descpb.ID
 	require.NoError(t, sql.DescsTxn(ctx, &cfg, func(
 		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 	) error {
-		_, tableDesc, err := descriptors.GetMutableTableByName(ctx, txn, tree.NewTableNameWithSchema("d1", "public", "t1"), tree.ObjectLookupFlagsWithRequired())
+		tn := tree.NewTableNameWithSchema("d1", "public", "t1")
+		_, tableDesc, err := descs.PrefixAndMutableTable(ctx, descriptors.MutableByName(txn), tn)
 		if err != nil {
 			return err
 		}
+		tableID = tableDesc.GetID()
 		tableDesc.SetOffline("For unit test")
 		err = descriptors.WriteDesc(ctx, false, tableDesc, txn)
 		if err != nil {
@@ -2835,14 +2833,7 @@ CREATE TABLE d1.t2 (name int);
 			mu.Unlock()
 
 			// Online the descriptor by making it public
-			_, tableDesc, err := descriptors.GetMutableTableByName(ctx, txn,
-				tree.NewTableNameWithSchema("d1", "public", "t1"),
-				tree.ObjectLookupFlags{CommonLookupFlags: tree.CommonLookupFlags{
-					Required:       true,
-					RequireMutable: true,
-					IncludeOffline: true,
-					AvoidLeased:    true,
-				}})
+			tableDesc, err := descriptors.MutableByID(txn).Table(ctx, tableID)
 			if err != nil {
 				return err
 			}

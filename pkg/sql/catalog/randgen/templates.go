@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
@@ -87,9 +86,7 @@ outer:
 	sort.Slice(sobjIDs, func(i, j int) bool { return sobjIDs[i] < sobjIDs[j] })
 
 	// Look up the descriptors from the IDs.
-	descs, err := g.ext.coll.GetImmutableDescriptorsByID(ctx, g.ext.txn,
-		tree.CommonLookupFlags{Required: true},
-		sobjIDs...)
+	descs, err := g.ext.coll.ByID(g.ext.txn).WithoutNonPublic().Get().Descs(ctx, sobjIDs)
 	if err != nil {
 		panic(genError{errors.Wrap(err, "retrieving template descriptors")})
 	}

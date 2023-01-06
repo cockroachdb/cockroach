@@ -6,7 +6,7 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-package streamclient
+package streamclient_test
 
 import (
 	"context"
@@ -21,6 +21,7 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvtenantccl" // Ensure we can start tenant.
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/replicationtestutils"
+	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -42,7 +43,7 @@ import (
 )
 
 type subscriptionFeedSource struct {
-	sub Subscription
+	sub streamclient.Subscription
 }
 
 var _ replicationtestutils.FeedSource = (*subscriptionFeedSource)(nil)
@@ -117,7 +118,7 @@ INSERT INTO d.t2 VALUES (2);
 	}
 
 	maybeInlineURL := maybeGenerateInlineURL(&h.PGUrl)
-	client, err := newPartitionedStreamClient(ctx, maybeInlineURL)
+	client, err := streamclient.NewPartitionedStreamClient(ctx, maybeInlineURL)
 	defer func() {
 		require.NoError(t, client.Close(ctx))
 	}()
@@ -197,7 +198,7 @@ INSERT INTO d.t2 VALUES (2);
 	url, err := streamingccl.StreamAddress(top.Partitions[0].SrcAddr).URL()
 	require.NoError(t, err)
 	// Create a new stream client with the given partition address.
-	subClient, err := newPartitionedStreamClient(ctx, url)
+	subClient, err := streamclient.NewPartitionedStreamClient(ctx, url)
 	defer func() {
 		require.NoError(t, subClient.Close(ctx))
 	}()

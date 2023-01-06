@@ -29,37 +29,6 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// GetMutableDescriptorsByID returns a mutable implementation of the descriptors
-// with the requested ids. An error is returned if no descriptor exists.
-func (tc *Collection) GetMutableDescriptorsByID(
-	ctx context.Context, txn *kv.Txn, ids ...descpb.ID,
-) ([]catalog.MutableDescriptor, error) {
-	return tc.ByID(txn).Mutable().Descs(ctx, ids)
-}
-
-// GetMutableDescriptorByID delegates to GetMutableDescriptorsByID.
-func (tc *Collection) GetMutableDescriptorByID(
-	ctx context.Context, txn *kv.Txn, id descpb.ID,
-) (catalog.MutableDescriptor, error) {
-	return tc.ByID(txn).Mutable().Desc(ctx, id)
-}
-
-// GetImmutableDescriptorsByID returns an immutable implementation of the
-// descriptors with the requested ids. An error is returned if no descriptor
-// exists, regardless of whether the Required flag is set or not.
-func (tc *Collection) GetImmutableDescriptorsByID(
-	ctx context.Context, txn *kv.Txn, flags tree.CommonLookupFlags, ids ...descpb.ID,
-) ([]catalog.Descriptor, error) {
-	return tc.ByID(txn).WithFlags(flags).Immutable().Descs(ctx, ids)
-}
-
-// GetImmutableDescriptorByID delegates to GetImmutableDescriptorsByID.
-func (tc *Collection) GetImmutableDescriptorByID(
-	ctx context.Context, txn *kv.Txn, id descpb.ID, flags tree.CommonLookupFlags,
-) (catalog.Descriptor, error) {
-	return tc.ByID(txn).WithFlags(flags).Immutable().Desc(ctx, id)
-}
-
 // GetComment fetches comment from uncommitted cache if it exists, otherwise from storage.
 func (tc *Collection) GetComment(key catalogkeys.CommentKey) (string, bool) {
 	if cmt, hasCmt, cached := tc.uncommittedComments.getUncommitted(key); cached {

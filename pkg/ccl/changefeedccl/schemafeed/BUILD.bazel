@@ -28,7 +28,6 @@ go_library(
         "//pkg/sql/catalog/typedesc",
         "//pkg/sql/execinfra",
         "//pkg/sql/schemachanger/scpb",
-        "//pkg/sql/sem/tree",
         "//pkg/storage",
         "//pkg/util/contextutil",
         "//pkg/util/encoding",

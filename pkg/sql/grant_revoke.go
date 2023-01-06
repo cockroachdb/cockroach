@@ -587,7 +587,7 @@ func (p *planner) getTablePatternsComposition(
 	}
 	// Note that part of the reason the code is structured this way is that
 	// resolving mutable descriptors for virtual table IDs results in an error.
-	muts, err := p.Descriptors().GetMutableDescriptorsByID(ctx, p.txn, nonVirtualIDs...)
+	muts, err := p.Descriptors().MutableByID(p.txn).Descs(ctx, nonVirtualIDs)
 	if err != nil {
 		return unknownComposition, err
 	}

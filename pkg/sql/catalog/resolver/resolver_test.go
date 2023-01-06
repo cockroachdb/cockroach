@@ -677,12 +677,8 @@ CREATE INDEX baz_idx ON baz (s);
 `)
 
 	err := sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
-		found, tbl, err := col.GetMutableTableByName(
-			ctx, txn,
-			tree.NewTableNameWithSchema("defaultdb", "public", "baz"),
-			tree.ObjectLookupFlagsWithRequiredTableKind(tree.ResolveRequireTableDesc),
-		)
-		require.True(t, found)
+		tn := tree.NewTableNameWithSchema("defaultdb", "public", "baz")
+		_, tbl, err := descs.PrefixAndMutableTable(ctx, col.MutableByName(txn), tn)
 		require.NoError(t, err)
 		tbl.SetOffline("testing-index-resolving")
 		err = col.WriteDesc(ctx, false, tbl, txn)
