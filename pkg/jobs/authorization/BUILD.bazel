@@ -1,0 +1,77 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "privilege",
+    srcs = ["privilege.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/jobs/privilege",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/jobs/jobspb",
+        "//pkg/security/username",
+        "//pkg/sql/catalog",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
+        "//pkg/sql/privilege",
+        "//pkg/sql/roleoption",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "privilege_test",
+    srcs = ["privilege_test.go"],
+    args = ["-test.timeout=295s"],
+    deps = [
+        ":privilege",
+        "//pkg/jobs/jobspb",
+        "//pkg/security/username",
+        "//pkg/sql/catalog",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
+        "//pkg/sql/privilege",
+        "//pkg/sql/roleoption",
+        "//pkg/util/randutil",
+        "@com_github_stretchr_testify//assert",
+    ],
+)
+
+go_library(
+    name = "authorization",
+    srcs = ["authorization.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/jobs/authorization",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/jobs/jobspb",
+        "//pkg/security/username",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
+        "//pkg/sql/privilege",
+        "//pkg/sql/roleoption",
+    ],
+)
+
+go_test(
+    name = "authorization_test",
+    srcs = ["authorization_test.go"],
+    args = ["-test.timeout=295s"],
+    deps = [
+        ":authorization",
+        "//pkg/ccl/changefeedccl",
+        "//pkg/jobs/jobspb",
+        "//pkg/security/username",
+        "//pkg/sql/catalog",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
+        "//pkg/sql/privilege",
+        "//pkg/sql/roleoption",
+        "//pkg/util/randutil",
+        "@com_github_stretchr_testify//assert",
+    ],
+)
+
+get_x_data(name = "get_x_data")
