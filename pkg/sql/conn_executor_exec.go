@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/multitenantcpu"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -313,9 +312,6 @@ func (ex *connExecutor) execStmtInOpenState(
 	ctx, cancelQuery = contextutil.WithCancel(ctx)
 	ex.addActiveQuery(parserStmt, pinfo, queryID, cancelQuery)
 
-	// Check if query is internal.
-	isInternal := ex.executorType == executorTypeInternal || ex.planner.isInternalPlanner
-
 	// Make sure that we always unregister the query. It also deals with
 	// overwriting res.Error to a more user-friendly message in case of query
 	// cancellation.
@@ -335,40 +331,26 @@ func (ex *connExecutor) execStmtInOpenState(
 			}
 		}
 
-		// Disconnect the query from the ActiveQueries structure.
-		// This will prevent concurrent access to the queryMeta
-		// from this point onwards.
-		qm := ex.removeActiveQuery(queryID, ast)
-
-		// As a starting point, indicate that the query has completed.
-		// This will be refined below.
-		qm.phase = serverpb.ActiveQuery_COMPLETED
-
-		if hasResultErr := res != nil && res.Err() != nil; hasResultErr {
-			// The query has failed execution. We'll distinguish further cases below.
-			qm.phase = serverpb.ActiveQuery_FAILED
-
-			// Detect context cancelation and overwrite whatever error might have been
-			// set on the result before. The idea is that once the query's context is
-			// canceled, all sorts of actors can detect the cancelation and set all
-			// sorts of errors on the result. Rather than trying to impose discipline
-			// in that jungle, we just overwrite them all here with an error that's
-			// nicer to look at for the client.
-			if ctx.Err() != nil {
-				// Even in the cases where the error is a retryable error, we want to
-				// intercept the event and payload returned here to ensure that the query
-				// is not retried.
-				retEv = eventNonRetriableErr{
-					IsCommit: fsm.FromBool(isCommit(ast)),
-				}
-				res.SetError(cancelchecker.QueryCanceledError)
-				retPayload = eventNonRetriableErrPayload{err: cancelchecker.QueryCanceledError}
-				qm.phase = serverpb.ActiveQuery_CANCELED
+		// Detect context cancelation and overwrite whatever error might have been
+		// set on the result before. The idea is that once the query's context is
+		// canceled, all sorts of actors can detect the cancelation and set all
+		// sorts of errors on the result. Rather than trying to impose discipline
+		// in that jungle, we just overwrite them all here with an error that's
+		// nicer to look at for the client.
+		if res != nil && ctx.Err() != nil && res.Err() != nil {
+			// Even in the cases where the error is a retryable error, we want to
+			// intercept the event and payload returned here to ensure that the query
+			// is not retried.
+			retEv = eventNonRetriableErr{
+				IsCommit: fsm.FromBool(isCommit(ast)),
 			}
+			res.SetError(cancelchecker.QueryCanceledError)
+			retPayload = eventNonRetriableErrPayload{err: cancelchecker.QueryCanceledError}
 		}
-		cancelQuery()
 
-		if !isInternal {
+		ex.removeActiveQuery(queryID, ast)
+		cancelQuery()
+		if ex.executorType != executorTypeInternal {
 			ex.metrics.EngineMetrics.SQLActiveStatements.Dec(1)
 		}
 
@@ -390,28 +372,16 @@ func (ex *connExecutor) execStmtInOpenState(
 			}
 			res.SetError(sqlerrors.QueryTimeoutError)
 			retPayload = eventNonRetriableErrPayload{err: sqlerrors.QueryTimeoutError}
-			qm.phase = serverpb.ActiveQuery_TIMED_OUT
 		} else if txnTimedOut {
 			retEv = eventNonRetriableErr{
 				IsCommit: fsm.FromBool(isCommit(ast)),
 			}
 			res.SetError(sqlerrors.TxnTimeoutError)
 			retPayload = eventNonRetriableErrPayload{err: sqlerrors.TxnTimeoutError}
-			qm.phase = serverpb.ActiveQuery_TIMED_OUT
-		}
-
-		if !isInternal && !qm.hidden {
-			sd := ex.sessionDataStack.Base()
-
-			remoteStr := "<admin>"
-			if sd.RemoteAddr != nil {
-				remoteStr = sd.RemoteAddr.String()
-			}
-			ex.server.addToRecentStatementsCache(ex.Ctx(), ex.sessionID, ex.applicationName, sd.SessionUser().Normalized(), remoteStr, queryID, qm, timeutil.Now())
 		}
 	}(ctx, res)
 
-	if !isInternal {
+	if ex.executorType != executorTypeInternal {
 		ex.metrics.EngineMetrics.SQLActiveStatements.Inc(1)
 	}
 
@@ -1234,7 +1204,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 			return nil, errors.AssertionFailedf("query %d not in registry", stmt.QueryID)
 		}
 		queryMeta.planGist = planner.instrumentation.planGist.String()
-		queryMeta.phase = serverpb.ActiveQuery_EXECUTING
+		queryMeta.phase = executing
 		queryMeta.database = planner.CurrentDatabase()
 		// TODO(yuzefovich): introduce ternary PlanDistribution into queryMeta.
 		queryMeta.isDistributed = distributePlan.WillDistribute()
@@ -1462,8 +1432,7 @@ func (ex *connExecutor) handleTxnRowsGuardrails(
 		SessionID: ex.sessionID.String(),
 		NumRows:   numRows,
 	}
-	isInternal := ex.executorType == executorTypeInternal || ex.planner.isInternalPlanner
-	if shouldErr && isInternal {
+	if shouldErr && ex.executorType == executorTypeInternal {
 		// Internal work should never err and always log if violating either
 		// limit.
 		shouldLog = true
@@ -1478,7 +1447,7 @@ func (ex *connExecutor) handleTxnRowsGuardrails(
 	if shouldLog {
 		commonSQLEventDetails := ex.planner.getCommonSQLEventDetails(defaultRedactionOptions)
 		var event logpb.EventPayload
-		if isInternal {
+		if ex.executorType == executorTypeInternal {
 			if isRead {
 				event = &eventpb.TxnRowsReadLimitInternal{
 					CommonSQLEventDetails:     commonSQLEventDetails,
@@ -2232,7 +2201,7 @@ func (ex *connExecutor) addActiveQuery(
 		start:         ex.phaseTimes.GetSessionPhaseTime(sessionphase.SessionQueryReceived),
 		stmt:          stmt,
 		placeholders:  placeholders,
-		phase:         serverpb.ActiveQuery_PREPARING,
+		phase:         preparing,
 		isDistributed: false,
 		isFullScan:    false,
 		cancelQuery:   cancelQuery,
@@ -2243,16 +2212,15 @@ func (ex *connExecutor) addActiveQuery(
 	ex.mu.ActiveQueries[queryID] = qm
 }
 
-func (ex *connExecutor) removeActiveQuery(queryID clusterunique.ID, ast tree.Statement) *queryMeta {
+func (ex *connExecutor) removeActiveQuery(queryID clusterunique.ID, ast tree.Statement) {
 	ex.mu.Lock()
 	defer ex.mu.Unlock()
-	qm, ok := ex.mu.ActiveQueries[queryID]
+	_, ok := ex.mu.ActiveQueries[queryID]
 	if !ok {
 		panic(errors.AssertionFailedf("query %d missing from ActiveQueries", queryID))
 	}
 	delete(ex.mu.ActiveQueries, queryID)
 	ex.mu.LastActiveQuery = ast
-	return qm
 }
 
 // handleAutoCommit commits the KV transaction if it hasn't been committed

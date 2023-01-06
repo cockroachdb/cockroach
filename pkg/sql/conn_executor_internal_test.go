@@ -31,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
-	"github.com/cockroachdb/cockroach/pkg/sql/recent"
 	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -295,9 +294,8 @@ func startConnExecutor(
 		SystemConfig: config.NewConstantSystemConfigProvider(
 			config.NewSystemConfig(zonepb.DefaultZoneConfigRef()),
 		),
-		SessionRegistry:       NewSessionRegistry(),
-		ClosedSessionCache:    NewClosedSessionCache(st, pool, time.Now),
-		RecentStatementsCache: recent.NewStatementsCache(st, pool, time.Now),
+		SessionRegistry:    NewSessionRegistry(),
+		ClosedSessionCache: NewClosedSessionCache(st, pool, time.Now),
 		NodeInfo: NodeInfo{
 			NodeID:           nodeID,
 			LogicalClusterID: func() uuid.UUID { return uuid.UUID{} },
