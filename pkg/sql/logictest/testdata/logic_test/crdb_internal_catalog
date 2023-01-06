@@ -526,10 +526,10 @@ SELECT * FROM "".crdb_internal.kv_catalog_namespace
 query IT
 SELECT * FROM "".crdb_internal.kv_catalog_zones
 ----
-0    {"gc": {"ttlSeconds": 90000}, "nullVoterConstraintsIsEmpty": true, "numReplicas": 3, "rangeMaxBytes": "536870912", "rangeMinBytes": "134217728"}
-1    {"gc": {"ttlSeconds": 90000}, "nullVoterConstraintsIsEmpty": true, "numReplicas": 5, "rangeMaxBytes": "536870912", "rangeMinBytes": "134217728"}
+0    {"gc": {"ttlSeconds": 14400}, "nullVoterConstraintsIsEmpty": true, "numReplicas": 3, "rangeMaxBytes": "536870912", "rangeMinBytes": "134217728"}
+1    {"gc": {"ttlSeconds": 14400}, "nullVoterConstraintsIsEmpty": true, "numReplicas": 5, "rangeMaxBytes": "536870912", "rangeMinBytes": "134217728"}
 16   {"gc": {"ttlSeconds": 3600}, "nullVoterConstraintsIsEmpty": true, "numReplicas": 5, "rangeMaxBytes": "536870912", "rangeMinBytes": "134217728"}
-17   {"gc": {"ttlSeconds": 90000}, "nullVoterConstraintsIsEmpty": true, "numReplicas": 5, "rangeMaxBytes": "536870912", "rangeMinBytes": "134217728"}
+17   {"gc": {"ttlSeconds": 14400}, "nullVoterConstraintsIsEmpty": true, "numReplicas": 5, "rangeMaxBytes": "536870912", "rangeMinBytes": "134217728"}
 22   {"gc": {"ttlSeconds": 600}, "nullVoterConstraintsIsEmpty": true, "numReplicas": 5, "rangeMaxBytes": "536870912", "rangeMinBytes": "134217728"}
 25   {"gc": {"ttlSeconds": 600}}
 27   {"gc": {"ttlSeconds": 600}}
