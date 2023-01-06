@@ -7990,6 +7990,24 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 			t.Fatal(pErr)
 		}
 
+		g, _, pErr := r.concMgr.SequenceReq(ctx, nil /* guard */, concurrency.Request{
+			Txn:             ba.Txn,
+			Timestamp:       ba.Timestamp,
+			NonTxnPriority:  ba.UserPriority,
+			ReadConsistency: ba.ReadConsistency,
+			WaitPolicy:      ba.WaitPolicy,
+			LockTimeout:     ba.LockTimeout,
+			Requests:        ba.Requests,
+			LatchSpans:      spanset.New(),
+			LockSpans:       spanset.New(),
+		}, concurrency.PessimisticEval)
+		require.NoError(t, pErr.GoError())
+
+		cmd.ec = endCmds{
+			repl: r,
+			g:    g,
+		}
+
 		dropProposals.Lock()
 		dropProposals.m[cmd] = struct{}{} // silently drop proposals
 		dropProposals.Unlock()
@@ -8112,6 +8130,24 @@ func TestReplicaRefreshMultiple(t *testing.T) {
 	}
 	// Save this channel; it may get reset to nil before we read from it.
 	proposalDoneCh := proposal.doneCh
+
+	g, _, pErr := repl.concMgr.SequenceReq(ctx, nil /* guard */, concurrency.Request{
+		Txn:             ba.Txn,
+		Timestamp:       ba.Timestamp,
+		NonTxnPriority:  ba.UserPriority,
+		ReadConsistency: ba.ReadConsistency,
+		WaitPolicy:      ba.WaitPolicy,
+		LockTimeout:     ba.LockTimeout,
+		Requests:        ba.Requests,
+		LatchSpans:      spanset.New(),
+		LockSpans:       spanset.New(),
+	}, concurrency.PessimisticEval)
+	require.NoError(t, pErr.GoError())
+
+	proposal.ec = endCmds{
+		repl: repl,
+		g:    g,
+	}
 
 	repl.mu.Lock()
 	ai := repl.mu.state.LeaseAppliedIndex
