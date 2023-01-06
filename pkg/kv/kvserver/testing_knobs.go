@@ -412,6 +412,8 @@ type StoreTestingKnobs struct {
 	// TODO(irfansharif): Get rid of this knob, maybe by first moving
 	// DisableSpanConfigs into a testing knob instead of a server arg.
 	UseSystemConfigSpanForQueues bool
+	// ConfReaderInterceptor intercepts calls to get a span config reader.
+	ConfReaderInterceptor func() spanconfig.StoreReader
 	// IgnoreStrictGCEnforcement is used by tests to op out of strict GC
 	// enforcement.
 	IgnoreStrictGCEnforcement bool
