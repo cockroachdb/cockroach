@@ -107,8 +107,9 @@ type Context struct {
 	// out enabled.
 	DefaultEnableRangefeeds bool
 
-	// InProcessTenant is true if we want to emulate an in-process tenant.
-	InProcessTenant bool
+	// DisableServerController is true if we want to avoid the server
+	// controller to instantiate tenant secondary servers.
+	DisableServerController bool
 }
 
 // IsInteractive returns true if the demo cluster configuration

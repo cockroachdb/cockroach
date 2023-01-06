@@ -59,6 +59,15 @@ type TestServerArgs struct {
 	// DisableTLSForHTTP if set, disables TLS for the HTTP interface.
 	DisableTLSForHTTP bool
 
+	// SecondaryTenantPortOffset if non-zero forces the network addresses
+	// generated for servers started by the serverController to be offset
+	// from the base addressed by the specified amount.
+	SecondaryTenantPortOffset int
+
+	// SecondaryTenantKnobs contains the testing knobs to use
+	// for tenant servers started by the serverController.
+	SecondaryTenantKnobs TestingKnobs
+
 	// JoinAddr is the address of a node we are joining.
 	//
 	// If left empty and the TestServer is being added to a nonempty cluster, this
@@ -331,7 +340,7 @@ type TestTenantArgs struct {
 	// Cockroach Labs. Should remain disabled during unit testing.
 	StartDiagnosticsReporting bool
 
-	// InProcessTenant is used to initialize tenants through the
-	// kv server's `serverController` in the same process.
-	InProcessTenant bool
+	// UseServerController tells testserver.StartTenant() to use
+	// its serverController to start the secondary tenant.
+	UseServerController bool
 }

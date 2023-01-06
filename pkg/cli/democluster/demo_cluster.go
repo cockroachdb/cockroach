@@ -218,7 +218,9 @@ func NewDemoCluster(
 		// tenant.
 		// Note: this logic can be removed once we use a single
 		// listener for HTTP and SQL.
-		c.httpFirstPort += c.demoCtx.NumNodes
+		if c.demoCtx.DisableServerController {
+			c.httpFirstPort += c.demoCtx.NumNodes
+		}
 		c.sqlFirstPort += c.demoCtx.NumNodes
 		c.rpcFirstPort += c.demoCtx.NumNodes
 	}
@@ -419,23 +421,16 @@ func (c *transientCluster) Start(ctx context.Context) (err error) {
 				latencyMap := c.servers[i].Cfg.TestingKnobs.Server.(*server.TestingKnobs).
 					ContextTestingKnobs.InjectedLatencyOracle
 				c.infoLog(ctx, "starting tenant node %d", i)
-				tenantStopper := stop.NewStopper()
-				ts, err := c.servers[i].StartTenant(ctx, base.TestTenantArgs{
+
+				args := base.TestTenantArgs{
 					// We set the tenant ID to i+2, since tenant 0 is not a tenant, and
 					// tenant 1 is the system tenant. We also subtract 2 for the "starting"
 					// SQL/HTTP ports so the first tenant ends up with the desired default
 					// ports.
-					DisableCreateTenant:     !createTenant,
-					TenantName:              roachpb.TenantName(fmt.Sprintf("demo-tenant-%d", secondaryTenantID)),
-					TenantID:                roachpb.MustMakeTenantID(secondaryTenantID),
-					Stopper:                 tenantStopper,
-					ForceInsecure:           c.demoCtx.Insecure,
-					SSLCertsDir:             c.demoDir,
-					DisableTLSForHTTP:       true,
-					EnableDemoLoginEndpoint: true,
-					StartingRPCAndSQLPort:   c.demoCtx.SQLPort - secondaryTenantID + i,
-					StartingHTTPPort:        c.demoCtx.HTTPPort - secondaryTenantID + i,
-					Locality:                c.demoCtx.Localities[i],
+					DisableCreateTenant: !createTenant,
+					TenantName:          roachpb.TenantName("demo-tenant"),
+					TenantID:            roachpb.MustMakeTenantID(secondaryTenantID),
+					UseServerController: !c.demoCtx.DisableServerController,
 					TestingKnobs: base.TestingKnobs{
 						Server: &server.TestingKnobs{
 							ContextTestingKnobs: rpc.ContextTestingKnobs{
@@ -444,15 +439,33 @@ func (c *transientCluster) Start(ctx context.Context) (err error) {
 							},
 						},
 					},
-					InProcessTenant: c.demoCtx.InProcessTenant,
-				})
-				c.stopper.AddCloser(stop.CloserFn(func() {
-					stopCtx := context.Background()
-					if ts != nil {
-						stopCtx = ts.AnnotateCtx(stopCtx)
-					}
-					tenantStopper.Stop(stopCtx)
-				}))
+				}
+
+				var tenantStopper *stop.Stopper
+				if c.demoCtx.DisableServerController {
+					tenantStopper = stop.NewStopper()
+					args.Stopper = tenantStopper
+					args.ForceInsecure = c.demoCtx.Insecure
+					args.SSLCertsDir = c.demoDir
+					args.DisableTLSForHTTP = true
+					args.EnableDemoLoginEndpoint = true
+					args.StartingRPCAndSQLPort = c.demoCtx.SQLPort - secondaryTenantID + i
+					args.StartingHTTPPort = c.demoCtx.HTTPPort - secondaryTenantID + i
+					args.Locality = c.demoCtx.Localities[i]
+				}
+
+				ts, err := c.servers[i].StartTenant(ctx, args)
+				if c.demoCtx.DisableServerController {
+					// If we use the server controller, it is already taking
+					// care of shutdown.
+					c.stopper.AddCloser(stop.CloserFn(func() {
+						stopCtx := context.Background()
+						if ts != nil {
+							stopCtx = ts.AnnotateCtx(stopCtx)
+						}
+						tenantStopper.Stop(stopCtx)
+					}))
+				}
 				if err != nil {
 					return err
 				}
@@ -525,6 +538,18 @@ func (c *transientCluster) Start(ctx context.Context) (err error) {
 	}(phaseCtx); err != nil {
 		return err
 	}
+
+	// Step 10: restore web sessions.
+	phaseCtx = logtags.AddTag(ctx, "phase", 10)
+	if err := func(ctx context.Context) error {
+		if err := c.restoreWebSessions(ctx); err != nil {
+			c.warnLog(ctx, "unable to restore web sessions: %v", err)
+		}
+		return nil
+	}(phaseCtx); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -589,9 +614,13 @@ func (c *transientCluster) createAndAddNode(
 		// The latency map will be populated after all servers have
 		// started listening on RPC, and before they proceed with their
 		// startup routine.
-		serverKnobs.ContextTestingKnobs = rpc.ContextTestingKnobs{
+		rpcKnobs := rpc.ContextTestingKnobs{
 			InjectedLatencyOracle:  regionlatency.MakeAddrMap(),
 			InjectedLatencyEnabled: c.latencyEnabled.Get,
+		}
+		serverKnobs.ContextTestingKnobs = rpcKnobs
+		args.SecondaryTenantKnobs.Server = &server.TestingKnobs{
+			ContextTestingKnobs: rpcKnobs,
 		}
 	}
 
@@ -794,6 +823,7 @@ func (demoCtx *Context) testServerArgsForTransientCluster(
 		// Demo clusters by default will create their own tenants, so we
 		// don't need to create them here.
 		DisableDefaultTestTenant: true,
+
 		Knobs: base.TestingKnobs{
 			Server: &server.TestingKnobs{
 				StickyEngineRegistry: stickyEngineRegistry,
@@ -827,6 +857,15 @@ func (demoCtx *Context) testServerArgsForTransientCluster(
 		args.Addr = fmt.Sprintf("127.0.0.1:%d", rpcPort)
 		args.SQLAddr = fmt.Sprintf("127.0.0.1:%d", sqlPort)
 		args.HTTPAddr = fmt.Sprintf("127.0.0.1:%d", httpPort)
+
+		if !demoCtx.DisableServerController {
+			// The code in NewDemoCluster put the KV ports higher
+			// so we need to subtract the number of nodes to get
+			// back to the "good" ports.
+			// We reduce NumNodes by 1 because the server controller
+			// uses 1-based indexing for servers.
+			args.SecondaryTenantPortOffset = -(demoCtx.NumNodes + 1)
+		}
 	}
 
 	if demoCtx.Localities != nil {
@@ -852,6 +891,9 @@ func TestingForceRandomizeDemoPorts() func() {
 }
 
 func (c *transientCluster) Close(ctx context.Context) {
+	if err := c.saveWebSessions(ctx); err != nil {
+		c.warnLog(ctx, "unable to save web sessions: %v", err)
+	}
 	if c.stopper != nil {
 		if r := recover(); r != nil {
 			// A panic here means some of the async tasks may still be
@@ -1778,6 +1820,11 @@ func (c *transientCluster) ListDemoNodes(w, ew io.Writer, justOne, verbose bool)
 			// Connection parameters for the system tenant follow.
 
 			uiURL := s.Cfg.AdminURL()
+			if q := uiURL.Query(); c.demoCtx.Multitenant && !c.demoCtx.DisableServerController && !q.Has(server.TenantNameParamInQueryURL) {
+				q.Add(server.TenantNameParamInQueryURL, catconstants.SystemTenantName)
+				uiURL.RawQuery = q.Encode()
+			}
+
 			sqlURL, err := c.getNetworkURLForServer(context.Background(), i,
 				false /* includeAppName */, false /* forSecondaryTenant */)
 			if err != nil {
@@ -1809,12 +1856,11 @@ func (c *transientCluster) printURLs(
 		// Print node ID and web UI URL. Embed the autologin feature inside the URL.
 		// We avoid printing those when insecure, as the autologin path is not available
 		// in that case.
-		pwauth := url.Values{
-			"username": []string{c.adminUser.Normalized()},
-			"password": []string{c.adminPassword},
-		}
+		q := uiURL.Query()
+		q.Add("username", c.adminUser.Normalized())
+		q.Add("password", c.adminPassword)
 		uiURL.Path = server.DemoLoginPath
-		uiURL.RawQuery = pwauth.Encode()
+		uiURL.RawQuery = q.Encode()
 	}
 	fmt.Fprintln(w, "   (webui)   ", uiURL)
 
