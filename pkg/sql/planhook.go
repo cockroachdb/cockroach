@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 
+	jobsprivilege "github.com/cockroachdb/cockroach/pkg/jobs/privilege"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -125,6 +126,8 @@ type PlanHookState interface {
 	Txn() *kv.Txn
 	CreateTenant(ctx context.Context, name roachpb.TenantName) (roachpb.TenantID, error)
 }
+
+var _ jobsprivilege.AuthorizationAccessor = PlanHookState(nil)
 
 // AddPlanHook adds a hook used to short-circuit creating a planNode from a
 // tree.Statement. If the func returned by the hook is non-nil, it is used to
