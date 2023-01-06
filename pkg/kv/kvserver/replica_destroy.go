@@ -76,8 +76,7 @@ func (r *Replica) preDestroyRaftMuLocked(
 	reader storage.Reader,
 	writer storage.Writer,
 	nextReplicaID roachpb.ReplicaID,
-	clearRangeIDLocalOnly bool,
-	mustUseClearRange bool,
+	opts clearRangeDataOptions,
 ) error {
 	r.mu.RLock()
 	desc := r.descRLocked()
@@ -89,8 +88,7 @@ func (r *Replica) preDestroyRaftMuLocked(
 	if !removed {
 		log.Fatalf(ctx, "replica not marked as destroyed before call to preDestroyRaftMuLocked: %v", r)
 	}
-
-	err := clearRangeData(desc, reader, writer, clearRangeIDLocalOnly, mustUseClearRange)
+	err := clearRangeData(desc.RangeID, reader, writer, opts)
 	if err != nil {
 		return err
 	}
@@ -147,14 +145,25 @@ func (r *Replica) destroyRaftMuLocked(ctx context.Context, nextReplicaID roachpb
 	ms := r.GetMVCCStats()
 	batch := r.Engine().NewUnindexedBatch(true /* writeOnly */)
 	defer batch.Close()
-	clearRangeIDLocalOnly := !r.IsInitialized()
+	desc := r.Desc()
+	inited := desc.IsInitialized()
+
+	opts := clearRangeDataOptions{
+		ClearReplicatedBySpan: desc.RSpan(), // zero if !inited
+		// TODO(tbg): if it's uninitialized, we might as well clear
+		// the replicated state because there isn't any. This seems
+		// like it would be simpler, but needs a code audit to ensure
+		// callers don't call this in in-between states where the above
+		// assumption doesn't hold.
+		ClearReplicatedByRangeID:   inited,
+		ClearUnreplicatedByRangeID: true,
+	}
 	if err := r.preDestroyRaftMuLocked(
 		ctx,
 		r.Engine(),
 		batch,
 		nextReplicaID,
-		clearRangeIDLocalOnly,
-		false, /* mustUseClearRange */
+		opts,
 	); err != nil {
 		return err
 	}

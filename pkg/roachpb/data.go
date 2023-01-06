@@ -2357,6 +2357,24 @@ type RSpan struct {
 	Key, EndKey RKey
 }
 
+// KeySpan returns the Span with the StartKey forwarded to LocalMax, if necessary.
+//
+// See: https://github.com/cockroachdb/cockroach/issues/95055
+func (rs RSpan) KeySpan() RSpan {
+	start := rs.Key
+	if start.Equal(RKeyMin) {
+		// The first range in the keyspace is declared to start at KeyMin (the
+		// lowest possible key). That is a lie, however, since the local key space
+		// ([LocalMin,LocalMax)) doesn't belong to this range; it doesn't belong to
+		// any range in particular.
+		start = RKey(LocalMax)
+	}
+	return RSpan{
+		Key:    start,
+		EndKey: rs.EndKey,
+	}
+}
+
 // Equal compares for equality.
 func (rs RSpan) Equal(o RSpan) bool {
 	return rs.Key.Equal(o.Key) && rs.EndKey.Equal(o.EndKey)
