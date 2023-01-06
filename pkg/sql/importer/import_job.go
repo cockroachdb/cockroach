@@ -1394,6 +1394,7 @@ func (r *importResumer) OnFailOrCancel(ctx context.Context, execCtx interface{},
 		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
 	) error {
 		if err := r.dropTables(ctx, txn, descsCol, cfg); err != nil {
+			log.Errorf(ctx, "drop tables failed: %s", err.Error())
 			return err
 		}
 
