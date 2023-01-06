@@ -222,16 +222,13 @@ func (r *Replica) loadRaftMuLockedReplicaMuLocked(desc *roachpb.RangeDescriptor)
 		r.mu.minLeaseProposedTS = r.Clock().NowAsClockTimestamp()
 	}
 
-	ssBase := r.Engine().GetAuxiliaryDir()
-	if r.raftMu.sideloaded, err = logstore.NewDiskSideloadStorage(
+	r.raftMu.sideloaded = logstore.NewDiskSideloadStorage(
 		r.store.cfg.Settings,
 		desc.RangeID,
-		ssBase,
+		r.Engine().GetAuxiliaryDir(),
 		r.store.limiters.BulkIOWriteRate,
 		r.store.engine,
-	); err != nil {
-		return errors.Wrap(err, "while initializing sideloaded storage")
-	}
+	)
 	r.assertStateRaftMuLockedReplicaMuRLocked(ctx, r.store.Engine())
 
 	r.sideTransportClosedTimestamp.init(r.store.cfg.ClosedTimestampReceiver, desc.RangeID)

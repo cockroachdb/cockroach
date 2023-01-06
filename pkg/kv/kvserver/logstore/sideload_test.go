@@ -83,19 +83,16 @@ func TestSideloadingSideloadedStorage(t *testing.T) {
 	})
 }
 
-func newTestingSideloadStorage(t *testing.T, eng storage.Engine) *DiskSideloadStorage {
-	st := cluster.MakeTestingClusterSettings()
-	ss, err := NewDiskSideloadStorage(
-		st, 1, filepath.Join(eng.GetAuxiliaryDir(), "fake", "testing", "dir"),
-		rate.NewLimiter(rate.Inf, math.MaxInt64), eng,
-	)
-	require.NoError(t, err)
-	return ss
+func newTestingSideloadStorage(eng storage.Engine) *DiskSideloadStorage {
+	return NewDiskSideloadStorage(
+		cluster.MakeTestingClusterSettings(), 1,
+		filepath.Join(eng.GetAuxiliaryDir(), "fake", "testing", "dir"),
+		rate.NewLimiter(rate.Inf, math.MaxInt64), eng)
 }
 
 func testSideloadingSideloadedStorage(t *testing.T, eng storage.Engine) {
 	ctx := context.Background()
-	ss := newTestingSideloadStorage(t, eng)
+	ss := newTestingSideloadStorage(eng)
 
 	assertCreated := func(isCreated bool) {
 		t.Helper()
@@ -427,7 +424,7 @@ func TestRaftSSTableSideloadingInline(t *testing.T) {
 
 		eng := storage.NewDefaultInMemForTesting()
 		defer eng.Close()
-		ss := newTestingSideloadStorage(t, eng)
+		ss := newTestingSideloadStorage(eng)
 		ec := raftentry.NewCache(1024) // large enough
 		if test.setup != nil {
 			test.setup(ec, ss)
@@ -532,7 +529,7 @@ func TestRaftSSTableSideloadingSideload(t *testing.T) {
 			ctx := context.Background()
 			eng := storage.NewDefaultInMemForTesting()
 			defer eng.Close()
-			sideloaded := newTestingSideloadStorage(t, eng)
+			sideloaded := newTestingSideloadStorage(eng)
 			postEnts, numSideloaded, size, nonSideloadedSize, err := MaybeSideloadEntries(ctx, test.preEnts, sideloaded)
 			if err != nil {
 				t.Fatal(err)
