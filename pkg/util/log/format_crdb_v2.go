@@ -709,7 +709,7 @@ func (f entryDecoderV2Fragment) getTags(editor redactEditor) string {
 	case "":
 		fallthrough
 	case "-":
-		return "-"
+		return ""
 	default:
 		r := editor(redactablePackage{
 			msg:        []byte(tagsStr),
