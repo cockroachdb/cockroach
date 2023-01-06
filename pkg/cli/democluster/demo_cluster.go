@@ -218,7 +218,7 @@ func NewDemoCluster(
 		// tenant.
 		// Note: this logic can be removed once we use a single
 		// listener for HTTP and SQL.
-		if !c.demoCtx.InProcessTenant {
+		if c.demoCtx.DisableServerController {
 			c.httpFirstPort += c.demoCtx.NumNodes
 		}
 		c.sqlFirstPort += c.demoCtx.NumNodes
@@ -430,7 +430,7 @@ func (c *transientCluster) Start(ctx context.Context) (err error) {
 					DisableCreateTenant: !createTenant,
 					TenantName:          roachpb.TenantName("demo-tenant"),
 					TenantID:            roachpb.MustMakeTenantID(secondaryTenantID),
-					InProcessTenant:     c.demoCtx.InProcessTenant,
+					UseServerController: !c.demoCtx.DisableServerController,
 					TestingKnobs: base.TestingKnobs{
 						Server: &server.TestingKnobs{
 							ContextTestingKnobs: rpc.ContextTestingKnobs{
@@ -442,7 +442,7 @@ func (c *transientCluster) Start(ctx context.Context) (err error) {
 				}
 
 				var tenantStopper *stop.Stopper
-				if !c.demoCtx.InProcessTenant {
+				if c.demoCtx.DisableServerController {
 					tenantStopper = stop.NewStopper()
 					args.Stopper = tenantStopper
 					args.ForceInsecure = c.demoCtx.Insecure
@@ -455,9 +455,9 @@ func (c *transientCluster) Start(ctx context.Context) (err error) {
 				}
 
 				ts, err := c.servers[i].StartTenant(ctx, args)
-				if !c.demoCtx.InProcessTenant {
-					// InProcessTenant means that the server controller is
-					// already taking care of shutdown.
+				if c.demoCtx.DisableServerController {
+					// If we use the server controller, it is already taking
+					// care of shutdown.
 					c.stopper.AddCloser(stop.CloserFn(func() {
 						stopCtx := context.Background()
 						if ts != nil {
@@ -858,7 +858,7 @@ func (demoCtx *Context) testServerArgsForTransientCluster(
 		args.SQLAddr = fmt.Sprintf("127.0.0.1:%d", sqlPort)
 		args.HTTPAddr = fmt.Sprintf("127.0.0.1:%d", httpPort)
 
-		if demoCtx.InProcessTenant {
+		if !demoCtx.DisableServerController {
 			// The code in NewDemoCluster put the KV ports higher
 			// so we need to subtract the number of nodes to get
 			// back to the "good" ports.
@@ -1820,7 +1820,7 @@ func (c *transientCluster) ListDemoNodes(w, ew io.Writer, justOne, verbose bool)
 			// Connection parameters for the system tenant follow.
 
 			uiURL := s.Cfg.AdminURL()
-			if q := uiURL.Query(); c.demoCtx.Multitenant && c.demoCtx.InProcessTenant && !q.Has(server.TenantNameParamInQueryURL) {
+			if q := uiURL.Query(); c.demoCtx.Multitenant && !c.demoCtx.DisableServerController && !q.Has(server.TenantNameParamInQueryURL) {
 				q.Add(server.TenantNameParamInQueryURL, catconstants.SystemTenantName)
 				uiURL.RawQuery = q.Encode()
 			}

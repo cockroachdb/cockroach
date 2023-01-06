@@ -795,11 +795,11 @@ func init() {
 		cliflagcfg.BoolFlag(f, &demoCtx.DefaultEnableRangefeeds, cliflags.DemoEnableRangefeeds)
 
 		cliflagcfg.BoolFlag(f, &demoCtx.Multitenant, cliflags.DemoMultitenant)
-		cliflagcfg.BoolFlag(f, &demoCtx.InProcessTenant, cliflags.DemoInProcessTenant)
+		cliflagcfg.BoolFlag(f, &demoCtx.DisableServerController, cliflags.DemoDisableServerController)
 		// TODO(knz): Currently the multitenant UX for 'demo' is not
 		// satisfying for end-users. Let's not advertise it too much.
 		_ = f.MarkHidden(cliflags.DemoMultitenant.Name)
-		_ = f.MarkHidden(cliflags.DemoInProcessTenant.Name)
+		_ = f.MarkHidden(cliflags.DemoDisableServerController.Name)
 
 		cliflagcfg.BoolFlag(f, &demoCtx.SimulateLatency, cliflags.Global)
 		// We also support overriding the GEOS library path for 'demo'.
