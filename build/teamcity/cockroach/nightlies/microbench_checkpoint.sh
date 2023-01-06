@@ -33,4 +33,7 @@ echo "build --config=crosslinux" >> ~/.bazelrc
   --gce-zones="europe-west2-c" \
   --os-volume-size=128
 
-./dev roachprod-bench-wrapper ./pkg/util/... --cluster teamcity-microbench --bench-args='-iterations 1 -publishdir=gs://gceworker-herko/output' -- -test.short -test.benchtime=1ns
+./dev roachprod-bench-wrapper ./pkg/util --cluster teamcity-microbench --bench-args='-iterations 1 -publishdir=gs://cockroach-microbench/output' -- -test.short -test.benchtime=1ns
+
+TODO delete bin tar gz artifacts (save space)
+TODO change output bucket to something in teamcity word / emphemeral auth? - make paramaterizable
