@@ -34,7 +34,7 @@ func registerMultiTenantUpgrade(r registry.Registry) {
 		Owner:             registry.OwnerMultiTenant,
 		NonReleaseBlocker: false,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			if runtime.GOARCH == "arm64" {
+			if c.IsLocal() && runtime.GOARCH == "arm64" {
 				t.Skip("Skip under ARM64. See https://github.com/cockroachdb/cockroach/issues/89268")
 			}
 			runMultiTenantUpgrade(ctx, t, c, *t.BuildVersion())
