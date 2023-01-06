@@ -26,11 +26,11 @@ echo "build --config=crosslinux" >> ~/.bazelrc
 ./dev doctor
 ./dev build roachprod
 
-./bin/roachprod create microbench-cluster -n 2 \
+./bin/roachprod create teamcity-microbench -n 2 \
   --lifetime "24h" \
   --clouds gce \
   --gce-machine-type "n2d-highmem-2" \
   --gce-zones="europe-west2-c" \
   --os-volume-size=128
 
-./dev roachprod-bench-wrapper ./pkg/util/... --cluster microbench-cluster --bench-args='-iterations 1 -publishdir=gs://gceworker-herko/output' -- -test.short -test.benchtime=1ns
+./dev roachprod-bench-wrapper ./pkg/util/... --cluster teamcity-microbench --bench-args='-iterations 1 -publishdir=gs://gceworker-herko/output' -- -test.short -test.benchtime=1ns
