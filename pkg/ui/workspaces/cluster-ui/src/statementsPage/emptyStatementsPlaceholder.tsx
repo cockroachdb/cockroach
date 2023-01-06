@@ -11,11 +11,10 @@
 import React from "react";
 import { EmptyTable, EmptyTableProps } from "src/empty";
 import { Anchor } from "src/anchor";
-import { statementsTable } from "src/util";
+import { statementsTable, tabAttr, viewAttr } from "src/util";
 import magnifyingGlassImg from "../assets/emptyState/magnifying-glass.svg";
 import emptyTableResultsImg from "../assets/emptyState/empty-table-results.svg";
 import { StatementViewType } from "./statementPageTypes";
-import { tabAttr, viewAttr } from "src/util";
 import { Link } from "react-router-dom";
 import { commonStyles } from "src/common";
 
@@ -46,6 +45,13 @@ function getMessage(type: StatementViewType): EmptyTableProps {
             View Statement Fingerprints to see historical statement statistics.
           </Link>
         ),
+      };
+    case StatementViewType.USING_INDEX:
+      return {
+        title:
+          "No SQL statements using this index in the selected time interval",
+        icon: emptyTableResultsImg,
+        footer,
       };
     case StatementViewType.FINGERPRINTS:
     default:

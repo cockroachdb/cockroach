@@ -4746,6 +4746,8 @@ Response object returned by TableIndexStatsResponse.
 | index_type | [string](#cockroach.server.serverpb.TableIndexStatsResponse-string) |  | index_type is the type of the index i.e. primary, secondary. | [reserved](#support-status) |
 | create_statement | [string](#cockroach.server.serverpb.TableIndexStatsResponse-string) |  | create_statement is the SQL statement that would re-create the current index if executed. | [reserved](#support-status) |
 | created_at | [google.protobuf.Timestamp](#cockroach.server.serverpb.TableIndexStatsResponse-google.protobuf.Timestamp) |  | CreatedAt is an approximate timestamp at which the index was created. Note that it may not always be populated. | [reserved](#support-status) |
+| index_id | [string](#cockroach.server.serverpb.TableIndexStatsResponse-string) |  | index_id is the ID of the index. | [reserved](#support-status) |
+| table_id | [string](#cockroach.server.serverpb.TableIndexStatsResponse-string) |  | table_id is the ID of the table which the index belongs to. | [reserved](#support-status) |
 
 
 

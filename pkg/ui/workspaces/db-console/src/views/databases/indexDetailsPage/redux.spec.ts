@@ -134,6 +134,8 @@ describe("Index Details Page", function () {
         databaseName: "DATABASE",
         tableName: "TABLE",
         indexName: "INDEX",
+        isTenant: false,
+        nodeRegions: {},
         details: {
           loading: false,
           loaded: false,
@@ -142,6 +144,8 @@ describe("Index Details Page", function () {
           lastRead: moment(),
           lastReset: moment(),
           indexRecommendations: [],
+          tableID: "1",
+          indexID: "1",
         },
         breadcrumbItems: null,
       },
@@ -182,9 +186,13 @@ describe("Index Details Page", function () {
       databaseName: "DATABASE",
       tableName: "TABLE",
       indexName: "INDEX",
+      isTenant: false,
+      nodeRegions: {},
       details: {
         loading: false,
         loaded: true,
+        tableID: "1",
+        indexID: "1",
         createStatement:
           "CREATE INDEX jobs_created_by_type_created_by_id_idx ON system.public.jobs USING btree (created_by_type ASC, created_by_id ASC) STORING (status)",
         totalReads: 2,

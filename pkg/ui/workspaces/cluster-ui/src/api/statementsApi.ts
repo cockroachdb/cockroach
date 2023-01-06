@@ -10,8 +10,15 @@
 
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { fetchData } from "src/api";
-import { propsToQueryString } from "src/util";
-
+import {
+  FixFingerprintHexValue,
+  HexStringToInt64String,
+  NumericStat,
+  propsToQueryString,
+  stringToTimestamp,
+} from "src/util";
+import Long from "long";
+import { AggregateStatistics } from "../statementsTable";
 const STATEMENTS_PATH = "/_status/statements";
 const STATEMENT_DETAILS_PATH = "/_status/stmtdetails";
 
@@ -64,3 +71,112 @@ export const getStatementDetails = (
     "30M",
   );
 };
+
+export type StatementMetadata = {
+  db: string;
+  distsql: boolean;
+  failed: boolean;
+  fullScan: boolean;
+  implicitTxn: boolean;
+  query: string;
+  querySummary: string;
+  stmtTyp: string;
+  vec: boolean;
+};
+
+type Statistics = {
+  bytesRead: NumericStat;
+  cnt: Long;
+  firstAttemptCnt: Long;
+  idleLat: NumericStat;
+  indexes: string[];
+  lastExecAt: string;
+  maxRetries: Long;
+  nodes: Long[];
+  numRows: NumericStat;
+  ovhLat: NumericStat;
+  parseLat: NumericStat;
+  planGists: string[];
+  planLat: NumericStat;
+  rowsRead: NumericStat;
+  rowsWritten: NumericStat;
+  runLat: NumericStat;
+  svcLat: NumericStat;
+};
+
+type ExecStats = {
+  contentionTime: NumericStat;
+  cnt: Long;
+  maxDiskUsage: NumericStat;
+  maxMemUsage: NumericStat;
+  networkBytes: NumericStat;
+  networkMsgs: NumericStat;
+};
+
+type StatementStatistics = {
+  execution_statistics: ExecStats;
+  index_recommendations: string[];
+  statistics: Statistics;
+};
+
+export type StatementRawFormat = {
+  aggregated_ts: number;
+  fingerprint_id: string;
+  transaction_fingerprint_id: string;
+  plan_hash: string;
+  app_name: string;
+  node_id: number;
+  agg_interval: number;
+  metadata: StatementMetadata;
+  statistics: StatementStatistics;
+  index_recommendations: string[];
+  indexes_usage: string[];
+};
+
+export function convertStatementRawFormatToAggregatedStatistics(
+  s: StatementRawFormat,
+): AggregateStatistics {
+  return {
+    aggregationInterval: s.agg_interval,
+    applicationName: s.app_name,
+    database: s.metadata.db,
+    fullScan: s.metadata.fullScan,
+    implicitTxn: s.metadata.implicitTxn,
+    label: s.metadata.querySummary,
+    summary: s.metadata.querySummary,
+    aggregatedTs: s.aggregated_ts,
+    aggregatedFingerprintID: HexStringToInt64String(s.fingerprint_id),
+    aggregatedFingerprintHexID: FixFingerprintHexValue(s.fingerprint_id),
+    stats: {
+      exec_stats: {
+        contention_time: s.statistics.execution_statistics.contentionTime,
+        count: s.statistics.execution_statistics.cnt,
+        max_disk_usage: s.statistics.execution_statistics.maxDiskUsage,
+        max_mem_usage: s.statistics.execution_statistics.maxMemUsage,
+        network_bytes: s.statistics.execution_statistics.networkBytes,
+        network_messages: s.statistics.execution_statistics.networkMsgs,
+      },
+      bytes_read: s.statistics.statistics.bytesRead,
+      count: s.statistics.statistics.cnt,
+      first_attempt_count: s.statistics.statistics.firstAttemptCnt,
+      idle_lat: s.statistics.statistics.idleLat,
+      index_recommendations: s.statistics.index_recommendations,
+      indexes: s.statistics.statistics.indexes,
+      last_exec_timestamp: stringToTimestamp(
+        s.statistics.statistics.lastExecAt,
+      ),
+      max_retries: s.statistics.statistics.maxRetries,
+      nodes: s.statistics.statistics.nodes,
+      num_rows: s.statistics.statistics.numRows,
+      overhead_lat: s.statistics.statistics.ovhLat,
+      parse_lat: s.statistics.statistics.parseLat,
+      plan_gists: s.statistics.statistics.planGists,
+      plan_lat: s.statistics.statistics.planLat,
+      rows_read: s.statistics.statistics.rowsRead,
+      rows_written: s.statistics.statistics.rowsWritten,
+      run_lat: s.statistics.statistics.runLat,
+      service_lat: s.statistics.statistics.svcLat,
+      sql_type: s.metadata.stmtTyp,
+    },
+  };
+}
