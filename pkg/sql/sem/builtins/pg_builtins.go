@@ -1144,6 +1144,36 @@ WHERE c.type=$1::int AND c.object_id=$2::int AND c.sub_id=$3::int LIMIT 1
 		},
 	),
 
+	"regclass": makeBuiltin(defProps(),
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "text", Typ: types.String}},
+			ReturnType: tree.FixedReturnType(types.RegClass),
+			IsUDF:      true,
+			Body: `WITH a(t) AS (SELECT array_agg(unnest) FROM
+                           (SELECT unnest FROM unnest(crdb_internal.split_ident($1)) WITH ORDINALITY ORDER BY ORDINALITY DESC)),
+                  schemas(t, name, ord) AS (
+						          SELECT * FROM a, unnest(CASE WHEN cardinality(t) = 1
+                                              THEN current_schemas(true)
+																		          ELSE ARRAY[quote_ident(t[2])]
+                                              END) WITH ORDINALITY)
+             SELECT COALESCE((
+						     SELECT c.oid from pg_class c
+						     JOIN pg_namespace n on relnamespace=n.oid 
+                 JOIN schemas ON schemas.name = n.nspname
+                 WHERE relname = quote_ident(t[1])
+                 ORDER BY schemas.ord
+                 LIMIT 1
+                 ),
+					       (SELECT c.oid FROM pg_class c WHERE IFERROR(oid=$1::oid, NULL)),
+                 IFERROR($1::int::regclass, NULL),
+                 CASE WHEN crdb_internal.force_error('42P01', 'relation "' || 
+                      array_to_string(crdb_internal.split_ident($1), '.') || '" does not exist') = 0
+                      THEN NULL ELSE NULL END)`,
+			Info:       "Converts a string table name into a regclass.",
+			Volatility: volatility.Stable,
+		},
+	),
+
 	"shobj_description": makeBuiltin(defProps(),
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "object_oid", Typ: types.Oid}, {Name: "catalog_name", Typ: types.String}},
