@@ -128,7 +128,7 @@ var sameDCStores = []*roachpb.StoreDescriptor{
 		Attrs:   roachpb.Attributes{Attrs: []string{"ssd"}},
 		Node: roachpb.NodeDescriptor{
 			NodeID: 1,
-			Attrs:  roachpb.Attributes{Attrs: []string{"a"}},
+			Attrs:  roachpb.Attributes{Attrs: []string{"a", "n1"}},
 		},
 		Capacity: roachpb.StoreCapacity{
 			Capacity:     200,
@@ -141,7 +141,7 @@ var sameDCStores = []*roachpb.StoreDescriptor{
 		Attrs:   roachpb.Attributes{Attrs: []string{"ssd"}},
 		Node: roachpb.NodeDescriptor{
 			NodeID: 2,
-			Attrs:  roachpb.Attributes{Attrs: []string{"a"}},
+			Attrs:  roachpb.Attributes{Attrs: []string{"a", "n2"}},
 		},
 		Capacity: roachpb.StoreCapacity{
 			Capacity:     200,
@@ -154,7 +154,7 @@ var sameDCStores = []*roachpb.StoreDescriptor{
 		Attrs:   roachpb.Attributes{Attrs: []string{"hdd"}},
 		Node: roachpb.NodeDescriptor{
 			NodeID: 3,
-			Attrs:  roachpb.Attributes{Attrs: []string{"a"}},
+			Attrs:  roachpb.Attributes{Attrs: []string{"a", "n3"}},
 		},
 		Capacity: roachpb.StoreCapacity{
 			Capacity:     200,
@@ -167,7 +167,7 @@ var sameDCStores = []*roachpb.StoreDescriptor{
 		Attrs:   roachpb.Attributes{Attrs: []string{"hdd"}},
 		Node: roachpb.NodeDescriptor{
 			NodeID: 4,
-			Attrs:  roachpb.Attributes{Attrs: []string{"a"}},
+			Attrs:  roachpb.Attributes{Attrs: []string{"a", "n4"}},
 		},
 		Capacity: roachpb.StoreCapacity{
 			Capacity:     200,
@@ -180,7 +180,7 @@ var sameDCStores = []*roachpb.StoreDescriptor{
 		Attrs:   roachpb.Attributes{Attrs: []string{"mem"}},
 		Node: roachpb.NodeDescriptor{
 			NodeID: 5,
-			Attrs:  roachpb.Attributes{Attrs: []string{"a"}},
+			Attrs:  roachpb.Attributes{Attrs: []string{"a", "n5"}},
 		},
 		Capacity: roachpb.StoreCapacity{
 			Capacity:     200,
@@ -562,7 +562,7 @@ func TestAllocatorSimpleRetrieval(t *testing.T) {
 		ctx,
 		sp,
 		simpleSpanConfig,
-		nil /* existingVoters */, nil, /* existingNonVoters */
+		nil /* existingVoters */, nil /* existingNonVoters */, nil, /* replacing */
 		Dead,
 	)
 	if err != nil {
@@ -584,7 +584,7 @@ func TestAllocatorNoAvailableDisks(t *testing.T) {
 		ctx,
 		sp,
 		simpleSpanConfig,
-		nil /* existingVoters */, nil, /* existingNonVoters */
+		nil /* existingVoters */, nil /* existingNonVoters */, nil, /* replacing */
 		Dead,
 	)
 	if !roachpb.Empty(result) {
@@ -703,6 +703,7 @@ func TestAllocatorReadAmpCheck(t *testing.T) {
 				test.conf,
 				nil,
 				nil,
+				nil,
 				Alive,
 			)
 			require.NoError(t, err)
@@ -716,6 +717,7 @@ func TestAllocatorReadAmpCheck(t *testing.T) {
 				ctx,
 				sp,
 				test.conf,
+				nil,
 				nil,
 				nil,
 				// Dead and Decommissioning should behave the same here, use either.
@@ -747,7 +749,7 @@ func TestAllocatorTwoDatacenters(t *testing.T) {
 		ctx,
 		sp,
 		multiDCConfigSSD,
-		nil /* existingVoters */, nil, /* existingNonVoters */
+		nil /* existingVoters */, nil /* existingNonVoters */, nil, /* replacing */
 		Dead,
 	)
 	if err != nil {
@@ -760,7 +762,7 @@ func TestAllocatorTwoDatacenters(t *testing.T) {
 		[]roachpb.ReplicaDescriptor{{
 			NodeID:  result1.NodeID,
 			StoreID: result1.StoreID,
-		}}, nil, /* existingNonVoters */
+		}}, nil /* existingNonVoters */, nil, /* replacing */
 		Dead,
 	)
 	if err != nil {
@@ -785,7 +787,7 @@ func TestAllocatorTwoDatacenters(t *testing.T) {
 				NodeID:  result2.NodeID,
 				StoreID: result2.StoreID,
 			},
-		}, nil, /* existingNonVoters */
+		}, nil /* existingNonVoters */, nil, /* replacing */
 		Dead,
 	)
 	if err == nil {
@@ -821,6 +823,7 @@ func TestAllocatorExistingReplica(t *testing.T) {
 				StoreID: 2,
 			},
 		}, nil, /* existingNonVoters */
+		nil, /* replacing */
 		Dead,
 	)
 	if err != nil {
@@ -886,6 +889,11 @@ func TestAllocatorReplaceDecommissioningReplica(t *testing.T) {
 				ReplicaID: 2,
 			},
 		}, nil, /* existingNonVoters */
+		&roachpb.ReplicaDescriptor{
+			NodeID:    3,
+			StoreID:   3,
+			ReplicaID: 3,
+		},
 		Decommissioning,
 	)
 	if err != nil {
@@ -894,6 +902,70 @@ func TestAllocatorReplaceDecommissioningReplica(t *testing.T) {
 	if !(result.StoreID == 4) {
 		t.Errorf("expected result to have store ID 4: %+v", result)
 	}
+}
+
+func TestAllocatorReplaceFailsOnConstrainedDecommissioningReplica(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	stopper, g, sp, a, _ := CreateTestAllocator(ctx, 1, false /* deterministic */)
+	defer stopper.Stop(ctx)
+	gossiputil.NewStoreGossiper(g).GossipStores(sameDCStores, t)
+
+	// Override liveness of n3 to decommissioning so the only available target is s4.
+	oSp := storepool.NewOverrideStorePool(sp, func(nid roachpb.NodeID, now time.Time, timeUntilStoreDead time.Duration) livenesspb.NodeLivenessStatus {
+		if nid == roachpb.NodeID(3) {
+			return livenesspb.NodeLivenessStatus_DECOMMISSIONING
+		}
+
+		return sp.NodeLivenessFn(nid, now, timeUntilStoreDead)
+	})
+
+	_, _, err := a.AllocateVoter(
+		ctx,
+		oSp,
+		roachpb.SpanConfig{
+			NumReplicas: 3,
+			Constraints: []roachpb.ConstraintsConjunction{
+				{
+					Constraints: []roachpb.Constraint{
+						{Value: "mem", Type: roachpb.Constraint_PROHIBITED},
+					},
+				},
+				{
+					NumReplicas: 1,
+					Constraints: []roachpb.Constraint{
+						{Value: "n3", Type: roachpb.Constraint_REQUIRED},
+					},
+				},
+			},
+		},
+		[]roachpb.ReplicaDescriptor{
+			{
+				NodeID:    1,
+				StoreID:   1,
+				ReplicaID: 1,
+			},
+			{
+				NodeID:    2,
+				StoreID:   2,
+				ReplicaID: 2,
+			},
+		}, nil, /* existingNonVoters */
+		&roachpb.ReplicaDescriptor{
+			NodeID:    3,
+			StoreID:   3,
+			ReplicaID: 3,
+		},
+		Decommissioning,
+	)
+	require.Errorf(t, err, "Unable to perform allocation: "+
+		"0 of 4 live stores are able to take a new replica for the range "+
+		"(2 already have a voter, 0 already have a non-voter); "+
+		"replicas must match constraints [{-mem} {+n3:1}]; "+
+		"voting replicas must match voter_constraints []",
+	)
 }
 
 func TestAllocatorMultipleStoresPerNode(t *testing.T) {
@@ -989,7 +1061,7 @@ func TestAllocatorMultipleStoresPerNode(t *testing.T) {
 	for _, tc := range testCases {
 		{
 			result, _, err := a.AllocateVoter(
-				ctx, sp, emptySpanConfig(), tc.existing, nil,
+				ctx, sp, emptySpanConfig(), tc.existing, nil, nil,
 				Dead,
 			)
 			if e, a := tc.expectTargetAllocate, !roachpb.Empty(result); e != a {
@@ -3075,7 +3147,7 @@ func TestAllocatorConstraintsAndVoterConstraints(t *testing.T) {
 			// Allocate the voting replica first, before the non-voter. This is the
 			// order in which we'd expect the allocator to repair a given range. See
 			// TestAllocatorComputeAction.
-			voterTarget, _, err := a.AllocateVoter(ctx, sp, test.conf, test.existingVoters, test.existingNonVoters, Dead)
+			voterTarget, _, err := a.AllocateVoter(ctx, sp, test.conf, test.existingVoters, test.existingNonVoters, nil, Dead)
 			if test.shouldVoterAllocFail {
 				require.Errorf(t, err, "expected voter allocation to fail; got %v as a valid target instead", voterTarget)
 			} else {
@@ -3084,7 +3156,7 @@ func TestAllocatorConstraintsAndVoterConstraints(t *testing.T) {
 				test.existingVoters = append(test.existingVoters, replicas(voterTarget.StoreID)...)
 			}
 
-			nonVoterTarget, _, err := a.AllocateNonVoter(ctx, sp, test.conf, test.existingVoters, test.existingNonVoters, Dead)
+			nonVoterTarget, _, err := a.AllocateNonVoter(ctx, sp, test.conf, test.existingVoters, test.existingNonVoters, nil /* replacing */, Dead)
 			if test.shouldNonVoterAllocFail {
 				require.Errorf(t, err, "expected non-voter allocation to fail; got %v as a valid target instead", nonVoterTarget)
 			} else {
@@ -3158,7 +3230,7 @@ func TestAllocatorAllocateTargetLocality(t *testing.T) {
 				StoreID: storeID,
 			}
 		}
-		targetStore, details, err := a.AllocateVoter(ctx, sp, emptySpanConfig(), existingRepls, nil, Dead)
+		targetStore, details, err := a.AllocateVoter(ctx, sp, emptySpanConfig(), existingRepls, nil, nil, Dead)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -3625,7 +3697,7 @@ func TestAllocatorNonVoterAllocationExcludesVoterNodes(t *testing.T) {
 			sg := gossiputil.NewStoreGossiper(g)
 			sg.GossipStores(test.stores, t)
 
-			result, _, err := a.AllocateNonVoter(ctx, sp, test.conf, test.existingVoters, test.existingNonVoters, Dead)
+			result, _, err := a.AllocateNonVoter(ctx, sp, test.conf, test.existingVoters, test.existingNonVoters, nil /* replacing */, Dead)
 			if test.shouldFail {
 				require.Error(t, err)
 				require.Regexp(t, test.expError, err)
@@ -8878,7 +8950,7 @@ func TestNonVoterPrioritizationInVoterAdditions(t *testing.T) {
 	}
 
 	for i, tc := range testCases {
-		result, _, _ := a.AllocateVoter(ctx, sp, tc.spanConfig, tc.existingVoters, tc.existingNonVoters, Alive)
+		result, _, _ := a.AllocateVoter(ctx, sp, tc.spanConfig, tc.existingVoters, tc.existingNonVoters, nil, Alive)
 		assert.Equal(t, tc.expectedTargetAllocate, result, "Unexpected replication target returned by allocate voter in test %d", i)
 	}
 }

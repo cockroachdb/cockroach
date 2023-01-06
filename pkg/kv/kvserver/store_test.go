@@ -3486,9 +3486,9 @@ func TestAllocatorCheckRange(t *testing.T) {
 		existingReplicas   []roachpb.ReplicaDescriptor
 		spanConfig         *roachpb.SpanConfig
 		livenessOverrides  map[roachpb.NodeID]livenesspb.NodeLivenessStatus
-		baselineExpNoop    bool
 		expectedAction     allocatorimpl.AllocatorAction
 		expectValidTarget  bool
+		expectedTarget     roachpb.ReplicationTarget
 		expectedLogMessage string
 		expectErr          bool
 		expectAllocatorErr bool
@@ -3583,7 +3583,6 @@ func TestAllocatorCheckRange(t *testing.T) {
 			livenessOverrides: map[roachpb.NodeID]livenesspb.NodeLivenessStatus{
 				3: livenesspb.NodeLivenessStatus_DECOMMISSIONING,
 			},
-			baselineExpNoop:   true,
 			expectedAction:    allocatorimpl.AllocatorRemoveDecommissioningVoter,
 			expectErr:         false,
 			expectValidTarget: false,
@@ -3614,12 +3613,119 @@ func TestAllocatorCheckRange(t *testing.T) {
 					},
 				},
 			},
-			baselineExpNoop: true,
-			expectedAction:  allocatorimpl.AllocatorReplaceDecommissioningVoter,
-			// We should get an error attempting to break constraints, but this is
-			// currently a bug.
-			// TODO(sarkesian): Change below to true once #94809 is fixed.
-			expectErr: false,
+			expectedAction:     allocatorimpl.AllocatorReplaceDecommissioningVoter,
+			expectAllocatorErr: true,
+			expectedErrStr:     "replicas must match constraints",
+			expectedLogMessage: "cannot allocate necessary voter on s3",
+		},
+		{
+			name:   "decommissioning without satisfying multiple partial constraints",
+			stores: fourSingleStoreRacks,
+			existingReplicas: []roachpb.ReplicaDescriptor{
+				{NodeID: 1, StoreID: 1, ReplicaID: 1},
+				{NodeID: 2, StoreID: 2, ReplicaID: 2},
+				{NodeID: 4, StoreID: 4, ReplicaID: 3},
+			},
+			livenessOverrides: map[roachpb.NodeID]livenesspb.NodeLivenessStatus{
+				4: livenesspb.NodeLivenessStatus_DECOMMISSIONING,
+			},
+			spanConfig: &roachpb.SpanConfig{
+				NumReplicas: 3,
+				Constraints: []roachpb.ConstraintsConjunction{
+					{
+						NumReplicas: 1,
+						Constraints: []roachpb.Constraint{
+							{
+								Type:  roachpb.Constraint_REQUIRED,
+								Value: "black",
+							},
+						},
+					},
+					{
+						NumReplicas: 1,
+						Constraints: []roachpb.Constraint{
+							{
+								Type:  roachpb.Constraint_REQUIRED,
+								Key:   "rack",
+								Value: "4",
+							},
+						},
+					},
+				},
+			},
+			expectedAction:     allocatorimpl.AllocatorReplaceDecommissioningVoter,
+			expectAllocatorErr: true,
+			expectedErrStr:     "replicas must match constraints",
+			expectedLogMessage: "cannot allocate necessary voter on s3",
+		},
+		{
+			name:   "decommissioning during upreplication with partial constraints",
+			stores: fourSingleStoreRacks,
+			existingReplicas: []roachpb.ReplicaDescriptor{
+				{NodeID: 1, StoreID: 1, ReplicaID: 1},
+			},
+			livenessOverrides: map[roachpb.NodeID]livenesspb.NodeLivenessStatus{
+				4: livenesspb.NodeLivenessStatus_DECOMMISSIONING,
+			},
+			spanConfig: &roachpb.SpanConfig{
+				NumReplicas: 3,
+				Constraints: []roachpb.ConstraintsConjunction{
+					{
+						NumReplicas: 1,
+						Constraints: []roachpb.Constraint{
+							{
+								Type:  roachpb.Constraint_REQUIRED,
+								Key:   "rack",
+								Value: "4",
+							},
+						},
+					},
+				},
+			},
+			expectedAction:    allocatorimpl.AllocatorAddVoter,
+			expectValidTarget: true,
+		},
+		{
+			name:   "decommissioning with replacement satisfying locality",
+			stores: multiRegionStores,
+			existingReplicas: []roachpb.ReplicaDescriptor{
+				{NodeID: 1, StoreID: 1, ReplicaID: 1},
+				{NodeID: 4, StoreID: 4, ReplicaID: 2},
+				{NodeID: 7, StoreID: 7, ReplicaID: 3},
+			},
+			livenessOverrides: map[roachpb.NodeID]livenesspb.NodeLivenessStatus{
+				1: livenesspb.NodeLivenessStatus_DECOMMISSIONING,
+				3: livenesspb.NodeLivenessStatus_DEAD,
+			},
+			spanConfig: &roachpb.SpanConfig{
+				NumReplicas: 3,
+				Constraints: []roachpb.ConstraintsConjunction{
+					{
+						NumReplicas: 1,
+						Constraints: []roachpb.Constraint{
+							{
+								Type:  roachpb.Constraint_REQUIRED,
+								Key:   "region",
+								Value: "a",
+							},
+						},
+					},
+					{
+						NumReplicas: 1,
+						Constraints: []roachpb.Constraint{
+							{
+								Type:  roachpb.Constraint_REQUIRED,
+								Key:   "region",
+								Value: "b",
+							},
+						},
+					},
+				},
+			},
+			expectedAction:    allocatorimpl.AllocatorReplaceDecommissioningVoter,
+			expectValidTarget: true,
+			expectedTarget:    roachpb.ReplicationTarget{NodeID: 2, StoreID: 2},
+			expectErr:         false,
 		},
 		{
 			name:   "decommissioning without satisfying fully constrained locality",
@@ -3667,7 +3773,6 @@ func TestAllocatorCheckRange(t *testing.T) {
 					},
 				},
 			},
-			baselineExpNoop:    true,
 			expectedAction:     allocatorimpl.AllocatorReplaceDecommissioningVoter,
 			expectAllocatorErr: true,
 			expectedErrStr:     "replicas must match constraints",
@@ -3730,19 +3835,6 @@ func TestAllocatorCheckRange(t *testing.T) {
 				storePoolOverride = storepool.NewOverrideStorePool(sp, livenessOverride, nodeCountOverride)
 			}
 
-			// Check if our baseline action without overrides is a noop; i.e., the
-			// range is fully replicated as configured and needs no actions.
-			if tc.baselineExpNoop {
-				action, _, _, err := s.AllocatorCheckRange(ctx, desc,
-					false /* collectTraces */, nil, /* overrideStorePool */
-				)
-				require.NoError(t, err, "expected baseline check without error")
-				require.Containsf(t, []allocatorimpl.AllocatorAction{
-					allocatorimpl.AllocatorNoop,
-					allocatorimpl.AllocatorConsiderRebalance,
-				}, action, "expected baseline noop, got %s", action)
-			}
-
 			// Execute actual allocator range repair check.
 			action, target, recording, err := s.AllocatorCheckRange(ctx, desc,
 				true /* collectTraces */, storePoolOverride,
@@ -3771,12 +3863,18 @@ func TestAllocatorCheckRange(t *testing.T) {
 			)
 
 			if tc.expectValidTarget {
-				require.NotEqualf(t, roachpb.ReplicationTarget{}, target, "expected valid target")
+				require.Falsef(t, roachpb.Empty(target), "expected valid target")
+			}
+
+			if !roachpb.Empty(tc.expectedTarget) {
+				require.Equalf(t, tc.expectedTarget, target, "expected target %s, got %s",
+					tc.expectedTarget, target,
+				)
 			}
 
 			if tc.expectedLogMessage != "" {
 				_, ok := recording.FindLogMessage(tc.expectedLogMessage)
-				require.Truef(t, ok, "expected to find trace \"%s\"", tc.expectedLogMessage)
+				require.Truef(t, ok, "expected to find \"%s\" in trace:\n%s", tc.expectedLogMessage, recording)
 			}
 		})
 	}

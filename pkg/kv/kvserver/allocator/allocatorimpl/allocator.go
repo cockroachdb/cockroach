@@ -820,18 +820,17 @@ func getRemoveIdx(
 // voter and non-voter replicas needed to allocate a target for the given action.
 // NB: This is a convenience method for callers of allocator.AllocateTarget(..).
 func FilterReplicasForAction(
-	storePool storepool.AllocatorStorePool, desc *roachpb.RangeDescriptor, action AllocatorAction,
-) (
-	filteredVoters, filteredNonVoters []roachpb.ReplicaDescriptor,
-	isReplacement, nothingToDo bool,
-	err error,
-) {
+	storePool storepool.AllocatorStorePool,
+	desc *roachpb.RangeDescriptor,
+	action AllocatorAction,
+) (filteredVoters, filteredNonVoters []roachpb.ReplicaDescriptor, replacing *roachpb.ReplicaDescriptor, nothingToDo bool, err error) {
 	voterReplicas, nonVoterReplicas,
 		liveVoterReplicas, deadVoterReplicas,
 		liveNonVoterReplicas, deadNonVoterReplicas := LiveAndDeadVoterAndNonVoterReplicas(storePool, desc)
 
 	removeIdx := -1
-	_, filteredVoters, filteredNonVoters, removeIdx, nothingToDo, err = DetermineReplicaToReplaceAndFilter(
+	var existing []roachpb.ReplicaDescriptor
+	existing, filteredVoters, filteredNonVoters, removeIdx, nothingToDo, err = DetermineReplicaToReplaceAndFilter(
 		storePool,
 		action,
 		voterReplicas, nonVoterReplicas,
@@ -839,7 +838,11 @@ func FilterReplicasForAction(
 		liveNonVoterReplicas, deadNonVoterReplicas,
 	)
 
-	return filteredVoters, filteredNonVoters, removeIdx >= 0, nothingToDo, err
+	if removeIdx >= 0 {
+		replacing = &existing[removeIdx]
+	}
+
+	return filteredVoters, filteredNonVoters, replacing, nothingToDo, err
 }
 
 // ComputeAction determines the exact operation needed to repair the
@@ -1181,6 +1184,7 @@ func (a *Allocator) AllocateTarget(
 	storePool storepool.AllocatorStorePool,
 	conf roachpb.SpanConfig,
 	existingVoters, existingNonVoters []roachpb.ReplicaDescriptor,
+	replacing *roachpb.ReplicaDescriptor,
 	replicaStatus ReplicaStatus,
 	targetType TargetReplicaType,
 ) (roachpb.ReplicationTarget, string, error) {
@@ -1205,6 +1209,7 @@ func (a *Allocator) AllocateTarget(
 		conf,
 		existingVoters,
 		existingNonVoters,
+		replacing,
 		a.ScorerOptions(ctx),
 		selector,
 		// When allocating a *new* replica, we explicitly disregard nodes with any
@@ -1274,7 +1279,7 @@ func (a *Allocator) CheckAvoidsFragileQuorum(
 			roachpb.ReplicaDescriptor{NodeID: newTarget.NodeID, StoreID: newTarget.StoreID},
 		)
 
-		_, _, err := a.AllocateVoter(ctx, storePool, conf, oldPlusNewReplicas, remainingLiveNonVoters, replicaStatus)
+		_, _, err := a.AllocateVoter(ctx, storePool, conf, oldPlusNewReplicas, remainingLiveNonVoters, nil /* replacing */, replicaStatus)
 		return err
 	}
 
@@ -1289,9 +1294,10 @@ func (a *Allocator) AllocateVoter(
 	storePool storepool.AllocatorStorePool,
 	conf roachpb.SpanConfig,
 	existingVoters, existingNonVoters []roachpb.ReplicaDescriptor,
+	replacing *roachpb.ReplicaDescriptor,
 	replicaStatus ReplicaStatus,
 ) (roachpb.ReplicationTarget, string, error) {
-	return a.AllocateTarget(ctx, storePool, conf, existingVoters, existingNonVoters, replicaStatus, VoterTarget)
+	return a.AllocateTarget(ctx, storePool, conf, existingVoters, existingNonVoters, replacing, replicaStatus, VoterTarget)
 }
 
 // AllocateNonVoter returns a suitable store for a new allocation of a
@@ -1302,9 +1308,10 @@ func (a *Allocator) AllocateNonVoter(
 	storePool storepool.AllocatorStorePool,
 	conf roachpb.SpanConfig,
 	existingVoters, existingNonVoters []roachpb.ReplicaDescriptor,
+	replacing *roachpb.ReplicaDescriptor,
 	replicaStatus ReplicaStatus,
 ) (roachpb.ReplicationTarget, string, error) {
-	return a.AllocateTarget(ctx, storePool, conf, existingVoters, existingNonVoters, replicaStatus, NonVoterTarget)
+	return a.AllocateTarget(ctx, storePool, conf, existingVoters, existingNonVoters, replacing, replicaStatus, NonVoterTarget)
 }
 
 // AllocateTargetFromList returns a suitable store for a new allocation of a
@@ -1316,13 +1323,14 @@ func (a *Allocator) AllocateTargetFromList(
 	candidateStores storepool.StoreList,
 	conf roachpb.SpanConfig,
 	existingVoters, existingNonVoters []roachpb.ReplicaDescriptor,
+	replacing *roachpb.ReplicaDescriptor,
 	options ScorerOptions,
 	selector CandidateSelector,
 	allowMultipleReplsPerNode bool,
 	targetType TargetReplicaType,
 ) (roachpb.ReplicationTarget, string) {
 	return a.allocateTargetFromList(ctx, storePool, candidateStores, conf, existingVoters,
-		existingNonVoters, options, selector, allowMultipleReplsPerNode, targetType)
+		existingNonVoters, replacing, options, selector, allowMultipleReplsPerNode, targetType)
 }
 
 func (a *Allocator) allocateTargetFromList(
@@ -1331,12 +1339,16 @@ func (a *Allocator) allocateTargetFromList(
 	candidateStores storepool.StoreList,
 	conf roachpb.SpanConfig,
 	existingVoters, existingNonVoters []roachpb.ReplicaDescriptor,
+	replacing *roachpb.ReplicaDescriptor,
 	options ScorerOptions,
 	selector CandidateSelector,
 	allowMultipleReplsPerNode bool,
 	targetType TargetReplicaType,
 ) (roachpb.ReplicationTarget, string) {
 	existingReplicas := append(existingVoters, existingNonVoters...)
+	if replacing != nil {
+		existingReplicas = append(existingReplicas, *replacing)
+	}
 	analyzedOverallConstraints := constraint.AnalyzeConstraints(
 		storePool,
 		existingReplicas,
@@ -1350,15 +1362,40 @@ func (a *Allocator) allocateTargetFromList(
 		conf.VoterConstraints,
 	)
 
+	var replacingStore roachpb.StoreDescriptor
+	var replacingStoreOK bool
+	if replacing != nil {
+		replacingStore, replacingStoreOK = storePool.GetStoreDescriptor(replacing.StoreID)
+	}
+
 	var constraintsChecker constraintsCheckFn
 	switch t := targetType; t {
 	case VoterTarget:
-		constraintsChecker = voterConstraintsCheckerForAllocation(
-			analyzedOverallConstraints,
-			analyzedVoterConstraints,
-		)
+		// If we are replacing an existing replica, make sure we check the
+		// constraints to ensure we are not going from a state in which a
+		// constraint is satisfied to one in which we are not. In this case, we
+		// consider no candidates to be valid, as no sorting of replicas would lead
+		// to a satisfying candidate being selected.
+		if replacing != nil && replacingStoreOK {
+			constraintsChecker = voterConstraintsCheckerForReplace(
+				analyzedOverallConstraints,
+				analyzedVoterConstraints,
+				replacingStore,
+			)
+		} else {
+			constraintsChecker = voterConstraintsCheckerForAllocation(
+				analyzedOverallConstraints,
+				analyzedVoterConstraints,
+			)
+		}
 	case NonVoterTarget:
-		constraintsChecker = nonVoterConstraintsCheckerForAllocation(analyzedOverallConstraints)
+		if replacing != nil && replacingStoreOK {
+			constraintsChecker = nonVoterConstraintsCheckerForReplace(
+				analyzedOverallConstraints, replacingStore,
+			)
+		} else {
+			constraintsChecker = nonVoterConstraintsCheckerForAllocation(analyzedOverallConstraints)
+		}
 	default:
 		log.KvDistribution.Fatalf(ctx, "unsupported targetReplicaType: %v", t)
 	}

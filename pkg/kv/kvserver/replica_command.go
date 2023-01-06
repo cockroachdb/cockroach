@@ -3605,6 +3605,7 @@ func RelocateOne(
 			conf,
 			existingVoters,
 			existingNonVoters,
+			nil, /* replacing */
 			allocator.ScorerOptions(ctx),
 			allocator.NewBestCandidateSelector(),
 			// NB: Allow the allocator to return target stores that might be on the
