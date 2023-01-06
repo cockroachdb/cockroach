@@ -577,6 +577,32 @@ func TestForecastColumnStatistics(t *testing.T) {
 				hist: testHistogram{{20, 0, 0, 50}, {20, 0, 0, 301}},
 			},
 		},
+		// Histogram, rounded counts.
+		{
+			observed: []*testStat{
+				{
+					at: 2, row: 13, dist: 7, null: 3, size: 1,
+					hist: testHistogram{{5, 0, 0, 100}, {0, 5, 5, 200}},
+				},
+				{
+					at: 4, row: 26, dist: 12, null: 6, size: 4,
+					hist: testHistogram{{10, 0, 0, 200}, {0, 10, 10, 300}},
+				},
+				{
+					at: 6, row: 39, dist: 17, null: 9, size: 7,
+					hist: testHistogram{{15, 0, 0, 300}, {0, 15, 15, 400}},
+				},
+				{
+					at: 8, row: 52, dist: 22, null: 12, size: 10,
+					hist: testHistogram{{20, 0, 0, 400}, {0, 20, 20, 500}},
+				},
+			},
+			at: 9,
+			forecast: &testStat{
+				at: 9, row: 59, dist: 25, null: 14, size: 12,
+				hist: testHistogram{{22, 0, 0, 450}, {0, 23, 23, 550}},
+			},
+		},
 	}
 	ctx := context.Background()
 	for i, tc := range testCases {
