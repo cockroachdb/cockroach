@@ -1144,6 +1144,25 @@ WHERE c.type=$1::int AND c.object_id=$2::int AND c.sub_id=$3::int LIMIT 1
 		},
 	),
 
+	"regclass": makeBuiltin(defProps(),
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "text", Typ: types.String}},
+			ReturnType: tree.FixedReturnType(types.RegClass),
+			IsUDF:      true,
+			Body: `SELECT COALESCE((
+						     SELECT c.oid from pg_class c
+						     JOIN pg_namespace n on relnamespace=n.oid 
+                 WHERE relname = $1 
+                 AND nspname in (SELECT unnest(current_schemas(true)))
+                 LIMIT 1
+                 ),
+                 CASE WHEN crdb_internal.force_error('42P01', 'relation "' || $1 || '" does not exist') = 0
+                      THEN NULL ELSE NULL END)`,
+			Info:       "Converts a string table name into a regclass.",
+			Volatility: volatility.Stable,
+		},
+	),
+
 	"shobj_description": makeBuiltin(defProps(),
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "object_oid", Typ: types.Oid}, {Name: "catalog_name", Typ: types.String}},

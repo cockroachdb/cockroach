@@ -281,6 +281,23 @@ func (b *Builder) buildScalar(
 	case *tree.CastExpr:
 		texpr := t.Expr.(tree.TypedExpr)
 		arg := b.buildScalar(texpr, inScope, nil, nil, colRefs)
+		if t.ResolvedType().Identical(types.RegClass) && texpr.ResolvedType().Equivalent(types.String) {
+			fnRef := tree.MakeUnresolvedName("pg_catalog", "regclass")
+			funcExpr := &tree.FuncExpr{
+				Exprs: tree.Exprs{t.Expr},
+				Func: tree.ResolvableFunctionReference{
+					FunctionReference: &fnRef,
+				},
+			}
+			if _, err := funcExpr.TypeCheck(b.ctx, b.semaCtx, t.ResolvedType()); err == nil {
+				return b.buildFunction(funcExpr, inScope, outScope, outCol, colRefs)
+			}
+		}
+		// Perhaps we could include a map of casts to builtins here, and when we see
+		// a cast that is implemented by a builtin, we simply replace the cast expr
+		// with the builtin.
+		// return b.buildUDF ....
+		// or b.buildFunction ...
 		out = b.factory.ConstructCast(arg, t.ResolvedType())
 
 	case *tree.CoalesceExpr:
