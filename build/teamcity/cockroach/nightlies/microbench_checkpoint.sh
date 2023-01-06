@@ -13,7 +13,7 @@ source "$dir/teamcity-bazel-support.sh"  # For run_bazel
 google_credentials="$GOOGLE_EPHEMERAL_CREDENTIALS"
 log_into_gcloud
 export GOOGLE_APPLICATION_CREDENTIALS="$PWD/.google-credentials.json"
-
+export ROACHPROD_USER=teamcity
 
 echo "build --config nolintonbuild" >> ~/.bazelrc
 echo "build --config=crosslinux" >> ~/.bazelrc
