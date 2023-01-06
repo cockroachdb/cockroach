@@ -1786,7 +1786,15 @@ func (c *transientCluster) ListDemoNodes(w, ew io.Writer, justOne, verbose bool)
 			fmt.Fprintf(w, "node %d:\n", nodeID)
 		}
 		if c.demoCtx.Multitenant {
+			if !c.demoCtx.DisableServerController {
+				// When using the server controller, we have a single web UI
+				// URL for both tenants. The demologin link does an
+				// auto-login for both.
+				uiURL := c.addDemoLoginToURL(s.Cfg.AdminURL(), false /* includeTenantName */)
+				fmt.Fprintln(w, "   (webui)   ", uiURL)
+			}
 			if verbose {
+				fmt.Fprintln(w)
 				fmt.Fprintln(w, "  Application tenant:")
 			}
 
@@ -1801,6 +1809,10 @@ func (c *transientCluster) ListDemoNodes(w, ew io.Writer, justOne, verbose bool)
 				if err != nil {
 					fmt.Fprintln(ew, errors.Wrap(err, "retrieving network URL for tenant server"))
 				} else {
+					// Only include a separate HTTP URL if there's no server
+					// controller.
+					includeHTTP := !c.demoCtx.Multitenant || c.demoCtx.DisableServerController
+
 					// The unix socket is currently not defined for secondary
 					// tenant servers.
 					//
@@ -1808,7 +1820,7 @@ func (c *transientCluster) ListDemoNodes(w, ew io.Writer, justOne, verbose bool)
 					// listener for all tenants; after which this code can be
 					// simplified.
 					tenantSocket := unixSocketDetails{}
-					c.printURLs(w, ew, tenantSqlURL, tenantUiURL, tenantSocket, rpcAddr, verbose)
+					c.printURLs(w, ew, tenantSqlURL, tenantUiURL, tenantSocket, rpcAddr, verbose, includeHTTP)
 				}
 			}
 			fmt.Fprintln(w)
@@ -1818,7 +1830,6 @@ func (c *transientCluster) ListDemoNodes(w, ew io.Writer, justOne, verbose bool)
 		}
 		if !c.demoCtx.Multitenant || verbose {
 			// Connection parameters for the system tenant follow.
-
 			uiURL := s.Cfg.AdminURL()
 			if q := uiURL.Query(); c.demoCtx.Multitenant && !c.demoCtx.DisableServerController && !q.Has(server.TenantNameParamInQueryURL) {
 				q.Add(server.TenantNameParamInQueryURL, catconstants.SystemTenantName)
@@ -1830,7 +1841,10 @@ func (c *transientCluster) ListDemoNodes(w, ew io.Writer, justOne, verbose bool)
 			if err != nil {
 				fmt.Fprintln(ew, errors.Wrap(err, "retrieving network URL"))
 			} else {
-				c.printURLs(w, ew, sqlURL, uiURL, c.sockForServer(i), s.ServingRPCAddr(), verbose)
+				// Only include a separate HTTP URL if there's no server
+				// controller.
+				includeHTTP := !c.demoCtx.Multitenant || c.demoCtx.DisableServerController
+				c.printURLs(w, ew, sqlURL, uiURL, c.sockForServer(i), s.ServingRPCAddr(), verbose, includeHTTP)
 			}
 			fmt.Fprintln(w)
 		}
@@ -1850,19 +1864,12 @@ func (c *transientCluster) printURLs(
 	uiURL *url.URL,
 	socket unixSocketDetails,
 	rpcAddr string,
-	verbose bool,
+	verbose, includeHTTP bool,
 ) {
-	if !c.demoCtx.Insecure {
-		// Print node ID and web UI URL. Embed the autologin feature inside the URL.
-		// We avoid printing those when insecure, as the autologin path is not available
-		// in that case.
-		q := uiURL.Query()
-		q.Add("username", c.adminUser.Normalized())
-		q.Add("password", c.adminPassword)
-		uiURL.Path = server.DemoLoginPath
-		uiURL.RawQuery = q.Encode()
+	if includeHTTP {
+		uiURL = c.addDemoLoginToURL(uiURL, true /* includeTenantName */)
+		fmt.Fprintln(w, "   (webui)   ", uiURL)
 	}
-	fmt.Fprintln(w, "   (webui)   ", uiURL)
 
 	_, _, port := sqlURL.GetNetworking()
 	portArg := ""
@@ -1883,6 +1890,27 @@ func (c *transientCluster) printURLs(
 		}
 		fmt.Fprintln(w, "   (rpc)     ", rpcAddr)
 	}
+}
+
+// addDemoLoginToURL generates an "autologin" URL from the
+// server-generated URL.
+func (c *transientCluster) addDemoLoginToURL(uiURL *url.URL, includeTenantName bool) *url.URL {
+	q := uiURL.Query()
+	if !c.demoCtx.Insecure {
+		// Print web UI URL. Embed the autologin feature inside the URL.
+		// We avoid printing those when insecure, as the autologin path is not available
+		// in that case.
+		q.Add("username", c.adminUser.Normalized())
+		q.Add("password", c.adminPassword)
+		uiURL.Path = server.DemoLoginPath
+	}
+
+	if !includeTenantName {
+		q.Del(server.TenantNameParamInQueryURL)
+	}
+
+	uiURL.RawQuery = q.Encode()
+	return uiURL
 }
 
 // genDemoPassword generates a password that prevents accidental
