@@ -259,6 +259,7 @@ func deleteAllSpanData(
 			})
 			log.VEventf(ctx, 2, "delete range %s - %s", lastKey, endKey)
 			if err := db.Run(ctx, &b); err != nil {
+				log.Errorf(ctx, "delete range %s - %s failed: %s", span.Key, span.EndKey, err.Error())
 				return errors.Wrapf(err, "delete range %s - %s", lastKey, endKey)
 			}
 			n = 0
