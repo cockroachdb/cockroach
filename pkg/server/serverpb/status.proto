@@ -892,10 +892,6 @@ message ActiveQuery {
   enum Phase {
     PREPARING = 0;
     EXECUTING = 1;
-    CANCELED  = 2;
-    TIMED_OUT = 3;
-    COMPLETED = 4;
-    FAILED    = 5;
   }
   // phase stores the current phase of execution for this query.
   Phase phase = 5;
@@ -927,19 +923,6 @@ message ActiveQuery {
 
   // The database the statement was executed on.
   string database = 14;
-
-  // The ID for the session that the statement was executed on
-  // (uint128 represented as raw bytes).
-  bytes session_id = 15 [(gogoproto.customname) = "SessionID"];
-
-  // The application name for the session that the statement was executed on.
-  string app_name = 16;
-
-  // The user name for the session that the statement was executed on.
-  string username = 17;
-
-  // The client address for the session that the statement was executed on.
-  string client_address = 18;
 }
 
 // Request object for ListSessions and ListLocalSessions.
@@ -1263,7 +1246,7 @@ message ProblemRangesResponse {
     ];
     repeated int64 circuit_breaker_error_range_ids = 10 [
       (gogoproto.customname) = "CircuitBreakerErrorRangeIDs",
-      (gogoproto.casttype) =
+      (gogoproto.casttype) = 
           "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"
     ];
     repeated int64 paused_replica_ids = 11 [
