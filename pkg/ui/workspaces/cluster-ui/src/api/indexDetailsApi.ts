@@ -9,7 +9,18 @@
 // licenses/APL.txt.
 
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
-import { fetchData } from "src/api";
+import {
+  convertStatementRawFormatToAggregatedStatistics,
+  executeInternalSql,
+  fetchData,
+  SqlExecutionRequest,
+  sqlResultsAreEmpty,
+  StatementRawFormat,
+} from "src/api";
+import moment from "moment";
+import { TimeScale, toDateRange } from "../timeScaleDropdown";
+import { AggregateStatistics } from "../statementsTable";
+import { INTERNAL_APP_NAME_PREFIX } from "../recentExecutions/recentStatementUtils";
 
 export type TableIndexStatsRequest =
   cockroach.server.serverpb.TableIndexStatsRequest;
@@ -50,3 +61,70 @@ export const resetIndexStats = (
     "30M",
   );
 };
+
+export type StatementsUsingIndexRequest = {
+  table: string;
+  index: string;
+  database: string;
+  start?: moment.Moment;
+  end?: moment.Moment;
+};
+
+export function StatementsListRequestFromDetails(
+  table: string,
+  index: string,
+  database: string,
+  ts: TimeScale,
+): StatementsUsingIndexRequest {
+  if (ts === null) return { table, index, database };
+  const [start, end] = toDateRange(ts);
+  return { table, index, database, start, end };
+}
+
+export function getStatementsUsingIndex({
+  table,
+  index,
+  database,
+  start,
+  end,
+}: StatementsUsingIndexRequest): Promise<AggregateStatistics[]> {
+  const args: any = [`"${table}@${index}"`];
+  let placeholder = 2;
+  let whereClause = "";
+  if (start) {
+    args.push(start);
+    whereClause = `${whereClause} AND aggregated_ts >= $${placeholder}`;
+    placeholder++;
+  }
+  if (end) {
+    args.push(end);
+    whereClause = `${whereClause} AND aggregated_ts <= $${placeholder}`;
+    placeholder++;
+  }
+
+  const selectStatements = {
+    sql: `SELECT * FROM system.statement_statistics 
+            WHERE $1::jsonb <@ indexes_usage
+                AND app_name NOT LIKE '${INTERNAL_APP_NAME_PREFIX}%' 
+                ${whereClause};`,
+    arguments: args,
+  };
+
+  const req: SqlExecutionRequest = {
+    execute: true,
+    statements: [selectStatements],
+    database: database,
+  };
+
+  return executeInternalSql<StatementRawFormat>(req).then(res => {
+    if (res.error || sqlResultsAreEmpty(res)) {
+      return [];
+    }
+
+    const statements: AggregateStatistics[] = [];
+    res.execution.txn_results[0].rows.forEach(s => {
+      statements.push(convertStatementRawFormatToAggregatedStatistics(s));
+    });
+    return statements;
+  });
+}

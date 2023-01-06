@@ -1802,7 +1802,10 @@ message TableIndexStatsResponse {
     // CreatedAt is an approximate timestamp at which the index was created.
     // Note that it may not always be populated.
     google.protobuf.Timestamp created_at = 5 [(gogoproto.stdtime) = true];
-
+    // index_id is the ID of the index.
+    string index_id = 6 [(gogoproto.customname) = "IndexID"];
+    // table_id is the ID of the table which the index belongs to.
+    string table_id = 7 [(gogoproto.customname) = "TableID"];
   }
 
   repeated ExtendedCollectedIndexUsageStatistics statistics = 1;

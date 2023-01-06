@@ -10,7 +10,11 @@
 
 import React from "react";
 import classNames from "classnames/bind";
-import { SortSetting } from "src/sortedtable";
+import {
+  ISortedTablePagination,
+  SortedTable,
+  SortSetting,
+} from "src/sortedtable";
 
 import styles from "./indexDetailsPage.module.scss";
 import { baseHeadingClasses } from "src/transactionsPage/transactionsPageClasses";
@@ -26,9 +30,31 @@ import { SummaryCard } from "../summaryCard";
 import moment, { Moment } from "moment";
 import { Heading } from "@cockroachlabs/ui-components";
 import { Anchor } from "../anchor";
-import { Count, DATE_FORMAT_24_UTC, performanceTuningRecipes } from "../util";
+import {
+  calculateTotalWorkload,
+  Count,
+  DATE_FORMAT_24_UTC,
+  performanceTuningRecipes,
+} from "../util";
+import {
+  getStatementsUsingIndex,
+  StatementsListRequestFromDetails,
+  StatementsUsingIndexRequest,
+} from "../api/indexDetailsApi";
+import {
+  AggregateStatistics,
+  makeStatementsColumns,
+  populateRegionNodeForStatements,
+} from "../statementsTable";
+import { UIConfigState } from "../store";
+import statementsStyles from "../statementsPage/statementsPage.module.scss";
+import { Pagination } from "../pagination";
+import { TableStatistics } from "../tableStatistics";
+import { EmptyStatementsPlaceholder } from "../statementsPage/emptyStatementsPlaceholder";
+import { StatementViewType } from "../statementsPage/statementPageTypes";
 
 const cx = classNames.bind(styles);
+const stmtCx = classNames.bind(statementsStyles);
 
 // We break out separate interfaces for some of the nested objects in our data
 // so that we can make (typed) test assertions on narrower slices of the data.
@@ -45,6 +71,8 @@ const cx = classNames.bind(styles);
 //     details: { // IndexDetails;
 //       loading: boolean;
 //       loaded: boolean;
+//       tableID: string;
+//       indexID: string;
 //       createStatement: string;
 //       totalReads: number;
 //       lastRead: Moment;
@@ -58,11 +86,16 @@ export interface IndexDetailsPageData {
   indexName: string;
   details: IndexDetails;
   breadcrumbItems: BreadcrumbItem[];
+  isTenant: UIConfigState["isTenant"];
+  hasViewActivityRedactedRole?: UIConfigState["hasViewActivityRedactedRole"];
+  nodeRegions: { [nodeId: string]: string };
 }
 
 interface IndexDetails {
   loading: boolean;
   loaded: boolean;
+  tableID: string;
+  indexID: string;
   createStatement: string;
   totalReads: number;
   lastRead: Moment;
@@ -87,7 +120,9 @@ export type IndexDetailsPageProps = IndexDetailsPageData &
   IndexDetailPageActions;
 
 interface IndexDetailsPageState {
-  sortSetting: SortSetting;
+  statements: AggregateStatistics[];
+  stmtSortSetting: SortSetting;
+  stmtPagination: ISortedTablePagination;
 }
 
 export class IndexDetailsPage extends React.Component<
@@ -98,9 +133,15 @@ export class IndexDetailsPage extends React.Component<
     super(props);
 
     this.state = {
-      sortSetting: {
+      stmtSortSetting: {
         ascending: true,
+        columnTitle: "statementTime",
       },
+      stmtPagination: {
+        pageSize: 10,
+        current: 1,
+      },
+      statements: [],
     };
   }
 
@@ -112,6 +153,17 @@ export class IndexDetailsPage extends React.Component<
     this.refresh();
   }
 
+  onChangeSortSetting = (ss: SortSetting): void => {
+    this.setState({
+      stmtSortSetting: ss,
+    });
+  };
+
+  onChangePage = (current: number): void => {
+    const { stmtPagination } = this.state;
+    this.setState({ stmtPagination: { ...stmtPagination, current } });
+  };
+
   private refresh() {
     if (this.props.refreshNodes != null) {
       this.props.refreshNodes();
@@ -122,6 +174,17 @@ export class IndexDetailsPage extends React.Component<
         this.props.tableName,
       );
     }
+
+    const req: StatementsUsingIndexRequest = StatementsListRequestFromDetails(
+      this.props.details.tableID,
+      this.props.details.indexID,
+      this.props.databaseName,
+      null,
+    );
+    getStatementsUsingIndex(req).then(res => {
+      populateRegionNodeForStatements(res, this.props.nodeRegions);
+      this.setState({ statements: res });
+    });
   }
 
   private getTimestampString(timestamp: Moment): string {
@@ -210,6 +273,10 @@ export class IndexDetailsPage extends React.Component<
   }
 
   render(): React.ReactElement {
+    const { statements, stmtSortSetting, stmtPagination } = this.state;
+    const { isTenant, hasViewActivityRedactedRole } = this.props;
+    const isEmptySearchResults = statements?.length > 0;
+
     return (
       <div className={cx("page-container")}>
         <div className="root table-area">
@@ -312,7 +379,7 @@ export class IndexDetailsPage extends React.Component<
             <Row gutter={18} className={cx("row-spaced")}>
               <Col className="gutter-row" span={18}>
                 <SummaryCard className={cx("summary-card--row")}>
-                  <Heading type="h5">Index recommendations</Heading>
+                  <Heading type="h5">Index Recommendations</Heading>
                   <table>
                     <tbody>
                       {this.renderIndexRecommendations(
@@ -320,6 +387,47 @@ export class IndexDetailsPage extends React.Component<
                       )}
                     </tbody>
                   </table>
+                </SummaryCard>
+              </Col>
+            </Row>
+            <Row gutter={24} className={cx("row-spaced", "bottom-space")}>
+              <Col className="gutter-row" span={24}>
+                <SummaryCard className={cx("summary-card--row")}>
+                  <Heading type="h5">Index Usage</Heading>
+                  <TableStatistics
+                    pagination={stmtPagination}
+                    totalCount={statements.length}
+                    arrayItemName={"statement fingerprints using this index"}
+                    activeFilters={0}
+                  />
+                  <SortedTable
+                    data={statements}
+                    columns={makeStatementsColumns(
+                      statements,
+                      [],
+                      calculateTotalWorkload(statements),
+                      "statement",
+                      isTenant,
+                      hasViewActivityRedactedRole,
+                    ).filter(c => !(isTenant && c.hideIfTenant))}
+                    className={stmtCx("statements-table")}
+                    tableWrapperClassName={cx("table-scroll")}
+                    sortSetting={stmtSortSetting}
+                    onChangeSortSetting={this.onChangeSortSetting}
+                    pagination={stmtPagination}
+                    renderNoResult={
+                      <EmptyStatementsPlaceholder
+                        isEmptySearchResults={isEmptySearchResults}
+                        statementView={StatementViewType.USING_INDEX}
+                      />
+                    }
+                  />
+                  <Pagination
+                    pageSize={stmtPagination.pageSize}
+                    current={stmtPagination.current}
+                    total={statements.length}
+                    onChange={this.onChangePage}
+                  />
                 </SummaryCard>
               </Col>
             </Row>

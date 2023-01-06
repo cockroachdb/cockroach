@@ -353,8 +353,8 @@ export const statisticsTableTitles: StatisticTableTitleType = {
               </Anchor>
             </p>
             <p>
-              {` represents one or more SQL statements by replacing the literal values (e.g., numbers and strings) with 
-              underscores (_). To view additional details of a SQL statement fingerprint, click the fingerprint to 
+              {` represents one or more SQL statements by replacing the literal values (e.g., numbers and strings) with
+              underscores (_). To view additional details of a SQL statement fingerprint, click the fingerprint to
               open the Statement Details page.`}
             </p>
           </>
@@ -372,8 +372,8 @@ export const statisticsTableTitles: StatisticTableTitleType = {
         content={
           <>
             <p>
-              {`A transaction fingerprint represents one or more SQL transactions by replacing the literal values (e.g., numbers and strings) with 
-              underscores (_). To view additional details of a SQL transaction fingerprint, click the fingerprint to 
+              {`A transaction fingerprint represents one or more SQL transactions by replacing the literal values (e.g., numbers and strings) with
+              underscores (_). To view additional details of a SQL transaction fingerprint, click the fingerprint to
               open the Transaction Details page.`}
             </p>
           </>
@@ -656,7 +656,7 @@ export const statisticsTableTitles: StatisticTableTitleType = {
         content={
           <>
             <p>
-              {`Maximum memory used by a ${contentModifier} with this fingerprint${fingerprintModifier} at any time 
+              {`Maximum memory used by a ${contentModifier} with this fingerprint${fingerprintModifier} at any time
               during its execution within the specified time interval. `}
             </p>
             <p>
