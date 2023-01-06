@@ -831,7 +831,7 @@ func (ts *TestServer) StartTenant(
 		}
 	}
 
-	if params.InProcessTenant {
+	if params.UseServerController {
 		onDemandServer, err := ts.serverController.getOrCreateServer(ctx, params.TenantName)
 		if err != nil {
 			return nil, err
