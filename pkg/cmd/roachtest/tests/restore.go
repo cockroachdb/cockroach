@@ -666,33 +666,45 @@ func registerRestore(r registry.Registry) {
 
 	for _, sp := range []restoreSpecs{
 		{
-			name:     "restore/nodes=4",
+			name:     "restore/tpce/400GB",
 			hardware: makeHardwareSpecs(hardwareSpecs{}),
 			backup:   makeBackupSpecs(backupSpecs{}),
-			timeout:  2 * time.Hour,
+			timeout:  1 * time.Hour,
 		},
 		{
-			name: "restore/gce",
+			name: "restore/tpce/400GB/gce",
 			// Note that the default specs in makeHardwareSpecs() spin up restore tests in aws,
 			// by default.
 			hardware: makeHardwareSpecs(hardwareSpecs{cloud: spec.GCE}),
 			backup:   makeBackupSpecs(backupSpecs{}),
-			timeout:  2 * time.Hour,
+			timeout:  1 * time.Hour,
 		},
-		// TODO(msbutler): add the following tests once roachperf is hooked up and old tests are
+		{
+			name:     "restore/tpce/8TB/nodes=10",
+			hardware: makeHardwareSpecs(hardwareSpecs{nodes: 10, volumeSize: 2000}),
+			backup: makeBackupSpecs(backupSpecs{
+				version:  "v22.2.1",
+				aost:     "'2023-01-05 20:45:00'",
+				workload: tpceRestore{customers: 500000}}),
+			timeout: 5 * time.Hour,
+		},
+		// TODO(msbutler): add the following tests once roachperf/grafana is hooked up and old tests are
 		// removed:
-		// - restore/nodes=4
-		// - restore/nodes=10
-		// - restore/cpu=16
-		// - restore/gce/8TB
-		// - restore/45TB
-		// - restore/encryption
+		// - restore/tpce400GB/nodes=10
+		// - restore/tpce400GB/nodes=30
+		// - restore/tpce400GB/cpu=16
+		// - restore/tpce45TB/nodes=15/cpu=16/volSize=5000GB
+		// - restore/tpce400GB/encryption
 	} {
 		sp := sp
 		clusterOpts := make([]spec.Option, 0)
 		clusterOpts = append(clusterOpts, spec.CPU(sp.hardware.cpus))
 		if sp.hardware.volumeSize != 0 {
 			clusterOpts = append(clusterOpts, spec.VolumeSize(sp.hardware.volumeSize))
+		}
+		if sp.name != sp.computeName(false) && !sp.overrideTestName {
+			panic(fmt.Sprintf("restore test name %s does not comply with standard test name %s, "+
+				"nor is overrideTestName set to true", sp.name, sp.computeName(false)))
 		}
 		r.Add(registry.TestSpec{
 			Name:    sp.name,
@@ -703,6 +715,8 @@ func registerRestore(r registry.Registry) {
 			// disable metamorphic encryption.
 			EncryptionSupport: registry.EncryptionAlwaysDisabled,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+
+				t.L().Printf("Full test specs: %s", sp.computeName(true))
 
 				if c.Spec().Cloud != sp.hardware.cloud {
 					t.Skip("test configured to run on %s", sp.hardware.cloud)
@@ -725,7 +739,9 @@ func registerRestore(r registry.Registry) {
 					defer hc.Done()
 					t.Status(`running restore`)
 					tick()
-					sp.run(ctx, c)
+					if err := sp.run(ctx, c); err != nil {
+						return err
+					}
 					tick()
 
 					// Upload the perf artifacts to any one of the nodes so that the test
@@ -745,6 +761,13 @@ func registerRestore(r registry.Registry) {
 	}
 }
 
+var defaultHardware = hardwareSpecs{
+	cloud:      spec.AWS,
+	cpus:       8,
+	nodes:      4,
+	volumeSize: 1000,
+}
+
 type hardwareSpecs struct {
 	// cloud is the cloud provider the test will run on.
 	cloud string
@@ -760,16 +783,28 @@ type hardwareSpecs struct {
 	volumeSize int
 }
 
+// String prints the hardware specs. If full==false, only non default specs are printed.
+func (hw hardwareSpecs) String(full bool) string {
+	var builder strings.Builder
+	if full || hw.cloud != defaultHardware.cloud {
+		builder.WriteString("/" + hw.cloud)
+	}
+	if full || hw.nodes != defaultHardware.nodes {
+		builder.WriteString(fmt.Sprintf("/nodes=%d", hw.nodes))
+	}
+	if full || hw.cpus != defaultHardware.cpus {
+		builder.WriteString(fmt.Sprintf("/cpus=%d", hw.cpus))
+	}
+	if full {
+		builder.WriteString(fmt.Sprintf("/volSize=%dGB", hw.volumeSize))
+	}
+	return builder.String()
+}
+
 // makeHardwareSpecs instantiates hardware specs for a restore roachtest.
 // Unless the caller provides any explicit specs, the default specs are used.
 func makeHardwareSpecs(override hardwareSpecs) hardwareSpecs {
-	specs := hardwareSpecs{
-		cloud:      spec.AWS,
-		cpus:       8,
-		nodes:      4,
-		volumeSize: 1000,
-	}
-
+	specs := defaultHardware
 	if override.cloud != "" {
 		specs.cloud = override.cloud
 	}
@@ -783,6 +818,18 @@ func makeHardwareSpecs(override hardwareSpecs) hardwareSpecs {
 		specs.volumeSize = override.volumeSize
 	}
 	return specs
+}
+
+var defaultBackupSpecs = backupSpecs{
+	// TODO(msbutler): write a script that automatically finds the latest versioned fixture for
+	// the given spec and a reasonable aost.
+	version:          "v22.2.0",
+	backupProperties: "inc-count=48",
+	fullBackupDir:    "LATEST",
+
+	// restoring as of from the 24th incremental backup in the chain
+	aost:     "'2022-12-21 05:15:00'",
+	workload: tpceRestore{customers: 25000},
 }
 
 type backupSpecs struct {
@@ -801,20 +848,23 @@ type backupSpecs struct {
 	workload backupWorkload
 }
 
+// String returns a stringified version of the backup specs. If full is false,
+// default backupProperties are omitted. Note that the backup version, backup
+// directory, and AOST are never included.
+func (bs backupSpecs) String(full bool) string {
+	var builder strings.Builder
+	builder.WriteString("/" + bs.workload.String())
+
+	if full || bs.backupProperties != defaultBackupSpecs.backupProperties {
+		builder.WriteString("/" + bs.backupProperties)
+	}
+	return builder.String()
+}
+
 // makeBackupSpecs initializes the default backup specs. The caller can override
 // any of the default backup specs by passing any non-nil params.
 func makeBackupSpecs(override backupSpecs) backupSpecs {
-	// restoring as of from the 24th incremental backup in the chain
-	specs := backupSpecs{
-		// TODO(msbutler): write a script that automatically finds the latest versioned fixture for
-		// the given spec and a reasonable aost.
-		version:          "v22.2.0",
-		backupProperties: "inc-count=48",
-		fullBackupDir:    "LATEST",
-		aost:             "'2022-12-21 05:15:00'",
-		workload:         tpceRestore{customers: 25000},
-	}
-
+	specs := defaultBackupSpecs
 	if override.version != "" {
 		specs.version = override.version
 	}
@@ -839,6 +889,7 @@ func makeBackupSpecs(override backupSpecs) backupSpecs {
 
 type backupWorkload interface {
 	fixtureDir() string
+	String() string
 }
 
 type tpceRestore struct {
@@ -849,11 +900,30 @@ func (tpce tpceRestore) fixtureDir() string {
 	return fmt.Sprintf(`tpc-e/customers=%d`, tpce.customers)
 }
 
+func (tpce tpceRestore) String() string {
+	var builder strings.Builder
+	builder.WriteString("tpce/")
+	switch tpce.customers {
+	case 25000:
+		builder.WriteString("400GB")
+	case 500000:
+		builder.WriteString("8TB")
+	default:
+		panic("tpce customer count not recognized")
+	}
+	return builder.String()
+}
+
 type restoreSpecs struct {
-	name     string
-	hardware hardwareSpecs
-	backup   backupSpecs
-	timeout  time.Duration
+	name             string
+	hardware         hardwareSpecs
+	backup           backupSpecs
+	timeout          time.Duration
+	overrideTestName bool
+}
+
+func (sp restoreSpecs) computeName(full bool) string {
+	return "restore" + sp.backup.String(full) + sp.hardware.String(full)
 }
 
 func (sp restoreSpecs) storagePrefix() string {
@@ -873,8 +943,11 @@ func (sp restoreSpecs) restoreCmd() string {
 		sp.backup.fullBackupDir, sp.backupDir(), sp.backup.aost)
 }
 
-func (sp restoreSpecs) run(ctx context.Context, c cluster.Cluster) {
-	c.Run(ctx, c.Node(1), sp.restoreCmd())
+func (sp restoreSpecs) run(ctx context.Context, c cluster.Cluster) error {
+	if err := c.RunE(ctx, c.Node(1), sp.restoreCmd()); err != nil {
+		return errors.Wrapf(err, "full test specs: %s", sp.computeName(true))
+	}
+	return nil
 }
 
 // verifyMetrics loops, retrieving the timeseries metrics specified in m every
