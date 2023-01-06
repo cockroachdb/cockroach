@@ -1239,6 +1239,13 @@ func (s *statusServer) LogFile(
 	if err != nil {
 		return nil, serverError(ctx, err)
 	}
+	// Unless we're the system tenant, clients should only be able
+	// to view logs that pertain to their own tenant. Set the filter
+	// accordingly.
+	tenantIDFilter := ""
+	if s.rpcCtx.TenantID != roachpb.SystemTenantID {
+		tenantIDFilter = s.rpcCtx.TenantID.String()
+	}
 	for {
 		var entry logpb.Entry
 		if err := decoder.Decode(&entry); err != nil {
@@ -1246,6 +1253,9 @@ func (s *statusServer) LogFile(
 				break
 			}
 			return nil, serverError(ctx, err)
+		}
+		if tenantIDFilter != "" && entry.TenantID != tenantIDFilter {
+			continue
 		}
 		resp.Entries = append(resp.Entries, entry)
 	}
@@ -1354,7 +1364,22 @@ func (s *statusServer) Logs(
 		return nil, serverError(ctx, err)
 	}
 
-	return &serverpb.LogEntriesResponse{Entries: entries}, nil
+	out := &serverpb.LogEntriesResponse{}
+	// Unless we're the system tenant, clients should only be able
+	// to view logs that pertain to their own tenant. Set the filter
+	// accordingly.
+	tenantIDFilter := ""
+	if s.rpcCtx.TenantID != roachpb.SystemTenantID {
+		tenantIDFilter = s.rpcCtx.TenantID.String()
+	}
+	for _, e := range entries {
+		if tenantIDFilter != "" && e.TenantID != tenantIDFilter {
+			continue
+		}
+		out.Entries = append(out.Entries, e)
+	}
+
+	return out, nil
 }
 
 // Stacks returns goroutine or thread stack traces.
