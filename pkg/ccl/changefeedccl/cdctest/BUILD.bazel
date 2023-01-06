@@ -26,6 +26,7 @@ go_library(
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/descs",
         "//pkg/sql/sem/tree",
+        "//pkg/testutils/sqlutils",
         "//pkg/util",
         "//pkg/util/fsm",
         "//pkg/util/hlc",

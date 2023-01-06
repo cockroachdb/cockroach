@@ -98,17 +98,6 @@ CANCEL SESSION 'aaa'::NAME
 query error odd length hex string
 CANCEL QUERY 'aaa'::NAME
 
-user testuser
-
-query error pq: user testuser does not have CONTROLJOB privilege
-CANCEL JOB 1
-
-query error pq: user testuser does not have CONTROLJOB privilege
-PAUSE JOB 1
-
-query error pq: user testuser does not have CONTROLJOB privilege
-RESUME JOB 1
-
 user root
 
 query T rowsort

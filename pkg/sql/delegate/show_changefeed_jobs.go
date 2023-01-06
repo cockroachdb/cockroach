@@ -13,7 +13,6 @@ package delegate
 import (
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 )
@@ -33,7 +32,8 @@ WITH payload AS (
       payload, false, true
     )->'changefeed' AS changefeed_details 
   FROM 
-    system.jobs
+    crdb_internal.system_jobs
+  WHERE job_type = 'CHANGEFEED'
 ) 
 SELECT 
   job_id, 
@@ -70,20 +70,18 @@ FROM
 	)
 
 	var whereClause, orderbyClause string
-	typePredicate := fmt.Sprintf("job_type = '%s'", jobspb.TypeChangefeed)
-
 	if n.Jobs == nil {
 		// The query intends to present:
 		// - first all the running jobs sorted in order of start time,
 		// - then all completed jobs sorted in order of completion time.
-		whereClause = fmt.Sprintf(
-			`WHERE %s AND (finished IS NULL OR finished > now() - '12h':::interval)`, typePredicate)
+		whereClause =
+			`WHERE (finished IS NULL OR finished > now() - '12h':::interval)`
 		// The "ORDER BY" clause below exploits the fact that all
 		// running jobs have finished = NULL.
 		orderbyClause = `ORDER BY COALESCE(finished, now()) DESC, started DESC`
 	} else {
 		// Limit the jobs displayed to the select statement in n.Jobs.
-		whereClause = fmt.Sprintf(`WHERE %s AND job_id in (%s)`, typePredicate, n.Jobs.String())
+		whereClause = fmt.Sprintf(`WHERE job_id in (%s)`, n.Jobs.String())
 	}
 
 	sqlStmt := fmt.Sprintf("%s %s %s", selectClause, whereClause, orderbyClause)

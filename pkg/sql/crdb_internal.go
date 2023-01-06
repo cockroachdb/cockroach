@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobsauth"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -945,16 +946,6 @@ func populateSystemJobsTableRows(
 
 	matched := false
 
-	user := p.User()
-	userIsAdmin, err := p.UserHasAdminRole(ctx, user)
-	if err != nil {
-		return matched, err
-	}
-	userHasControlJobRoleOption, err := p.HasRoleOption(ctx, roleoption.CONTROLJOB)
-	if err != nil {
-		return matched, err
-	}
-
 	// Note: we query system.jobs as root, so we must be careful about which rows we return.
 	it, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryIteratorEx(ctx,
 		"system-jobs-scan",
@@ -988,25 +979,22 @@ func populateSystemJobsTableRows(
 		}
 
 		currentRow := it.Cur()
+		jobID, err := strconv.Atoi(currentRow[jobIdIdx].String())
+		if err != nil {
+			return matched, err
+		}
 		payloadBytes := currentRow[jobPayloadIdx]
 		payload, err := jobs.UnmarshalPayload(payloadBytes)
 		if err != nil {
 			return matched, wrapPayloadUnMarshalError(err, currentRow[jobIdIdx])
 		}
-		jobOwnerUser := payload.UsernameProto.Decode()
-		jobOwnerIsAdmin, err := p.UserHasAdminRole(ctx, jobOwnerUser)
-		if err != nil {
-			return matched, err
-		}
 
-		// The user can access the row if the meet one of the conditions:
-		//  1. The user is an admin.
-		//  2. The job is owned by the user.
-		//  3. The user has CONTROLJOB privilege and the job is not owned by
-		//     an admin.
-		if canAccess := userIsAdmin || (!jobOwnerIsAdmin &&
-			userHasControlJobRoleOption) || user == jobOwnerUser; !canAccess {
-			continue
+		if err := jobsauth.Authorize(ctx, p, jobspb.JobID(jobID), payload, jobsauth.ViewAccess); err != nil {
+			// Filter out jobs which the user is not allowed to see.
+			if IsInsufficientPrivilegeError(err) {
+				continue
+			}
+			return matched, err
 		}
 
 		if err := addRow(currentRow...); err != nil {

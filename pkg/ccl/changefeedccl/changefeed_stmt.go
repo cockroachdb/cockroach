@@ -41,8 +41,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
-	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
-	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/asof"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -391,8 +389,18 @@ func createChangefeedJobRecord(
 		statementTime = initialHighWater
 	}
 
+	checkPrivs := true
 	if !changefeedStmt.alterChangefeedAsOf.IsEmpty() {
 		statementTime = changefeedStmt.alterChangefeedAsOf
+		// When altering a changefeed, we generate target descriptors below
+		// based on a timestamp in the past. For example, this may be the
+		// last highwater timestamp of a paused changefeed.
+		// This is a problem because any privilege checks done on these
+		// descriptors will be out of date.
+		// To solve this problem, we validate the descriptors
+		// in the alterChangefeedPlanHook at the statement time.
+		// Thus, we can skip the check here.
+		checkPrivs = false
 	}
 
 	endTime := hlc.Timestamp{}
@@ -430,7 +438,8 @@ func createChangefeedJobRecord(
 	}
 
 	targets, tables, err := getTargetsAndTables(ctx, p, targetDescs, changefeedStmt.Targets,
-		changefeedStmt.originalSpecs, opts.ShouldUseFullStatementTimeName())
+		changefeedStmt.originalSpecs, opts.ShouldUseFullStatementTimeName(), sinkURI)
+
 	if err != nil {
 		return nil, err
 	}
@@ -448,6 +457,8 @@ func createChangefeedJobRecord(
 	sessiondata.MarshalNonLocal(p.SessionData(), &details.SessionData)
 
 	specs := AllTargets(details)
+	hasSelectPrivOnAllTables := true
+	hasChangefeedPrivOnAllTables := true
 	for _, desc := range targetDescs {
 		if table, isTable := desc.(catalog.TableDescriptor); isTable {
 			if err := changefeedvalidators.ValidateTable(specs, table, tolerances); err != nil {
@@ -456,6 +467,18 @@ func createChangefeedJobRecord(
 			for _, warning := range changefeedvalidators.WarningsForTable(table, tolerances) {
 				p.BufferClientNotice(ctx, pgnotice.Newf("%s", warning))
 			}
+
+			hasSelect, hasChangefeed, err := checkPrivilegesForDescriptor(ctx, p, desc)
+			if err != nil {
+				return nil, err
+			}
+			hasSelectPrivOnAllTables = hasSelectPrivOnAllTables && hasSelect
+			hasChangefeedPrivOnAllTables = hasChangefeedPrivOnAllTables && hasChangefeed
+		}
+	}
+	if checkPrivs {
+		if err := authorizeUserToCreateChangefeed(ctx, p, sinkURI, hasSelectPrivOnAllTables, hasChangefeedPrivOnAllTables); err != nil {
+			return nil, err
 		}
 	}
 
@@ -710,22 +733,11 @@ func getTargetsAndTables(
 	rawTargets tree.ChangefeedTargets,
 	originalSpecs map[tree.ChangefeedTarget]jobspb.ChangefeedTargetSpecification,
 	fullTableName bool,
+	sinkURI string,
 ) ([]jobspb.ChangefeedTargetSpecification, jobspb.ChangefeedTargets, error) {
 	tables := make(jobspb.ChangefeedTargets, len(targetDescs))
 	targets := make([]jobspb.ChangefeedTargetSpecification, len(rawTargets))
 	seen := make(map[jobspb.ChangefeedTargetSpecification]tree.ChangefeedTarget)
-
-	hasControlChangefeed, err := p.HasRoleOption(ctx, roleoption.CONTROLCHANGEFEED)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	var requiredPrivilegePerTable privilege.Kind
-	if hasControlChangefeed {
-		requiredPrivilegePerTable = privilege.SELECT
-	} else {
-		requiredPrivilegePerTable = privilege.CHANGEFEED
-	}
 
 	for i, ct := range rawTargets {
 		desc, ok := targetDescs[ct.TableName]
@@ -735,10 +747,6 @@ func getTargetsAndTables(
 		td, ok := desc.(catalog.TableDescriptor)
 		if !ok {
 			return nil, nil, errors.Errorf(`CHANGEFEED cannot target %s`, tree.AsString(&ct))
-		}
-
-		if err := p.CheckPrivilege(ctx, desc, requiredPrivilegePerTable); err != nil {
-			return nil, nil, errors.WithHint(err, `Users with CONTROLCHANGEFEED need SELECT, other users need CHANGEFEED.`)
 		}
 
 		if spec, ok := originalSpecs[ct]; ok {
@@ -788,6 +796,7 @@ func getTargetsAndTables(
 		}
 		seen[targets[i]] = ct
 	}
+
 	return targets, tables, nil
 }
 
