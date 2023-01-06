@@ -14,12 +14,15 @@ import (
 	"context"
 	"sort"
 
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
@@ -194,6 +197,9 @@ func startDescriptor() descpb.TableDescriptor {
 	return descpb.TableDescriptor{
 		Version: 1,
 		State:   descpb.DescriptorState_PUBLIC,
+		Privileges: catpb.NewCustomSuperuserPrivilegeDescriptor(
+			privilege.List{privilege.ALL}, username.RootUserName(),
+		),
 		Columns: []descpb.ColumnDescriptor{
 			{ID: 1, Name: "rowid", Type: types.Int, DefaultExpr: &uniqueRowIDString, Nullable: false, Hidden: true},
 		},
