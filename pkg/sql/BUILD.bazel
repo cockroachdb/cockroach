@@ -290,6 +290,7 @@ go_library(
         "//pkg/gossip",
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
+        "//pkg/jobs/privilege",
         "//pkg/keys",
         "//pkg/kv",
         "//pkg/kv/kvclient/kvcoord",
