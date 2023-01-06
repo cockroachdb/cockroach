@@ -49,6 +49,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -3405,6 +3406,28 @@ func TestSnapshotRateLimit(t *testing.T) {
 	}
 }
 
+type mockSpanConfigReader struct {
+	real      spanconfig.StoreReader
+	overrides map[string]roachpb.SpanConfig
+}
+
+func (m *mockSpanConfigReader) NeedsSplit(ctx context.Context, start, end roachpb.RKey) bool {
+	panic("unimplemented")
+}
+
+func (m *mockSpanConfigReader) ComputeSplitKey(ctx context.Context, start, end roachpb.RKey) roachpb.RKey {
+	panic("unimplemented")
+}
+
+func (m *mockSpanConfigReader) GetSpanConfigForKey(ctx context.Context, key roachpb.RKey) (roachpb.SpanConfig, error) {
+	if conf, ok := m.overrides[string(key)]; ok {
+		return conf, nil
+	}
+	return m.GetSpanConfigForKey(ctx, key)
+}
+
+var _ spanconfig.StoreReader = &mockSpanConfigReader{}
+
 // TestAllocatorCheckRangeUnconfigured tests evaluating the allocation decisions
 // for a range with a single replica using the default system configuration and
 // no other available allocation targets.
@@ -3461,7 +3484,7 @@ func TestAllocatorCheckRange(t *testing.T) {
 		name               string
 		stores             []*roachpb.StoreDescriptor
 		existingReplicas   []roachpb.ReplicaDescriptor
-		zoneConfig         *zonepb.ZoneConfig
+		spanConfig         *roachpb.SpanConfig
 		livenessOverrides  map[roachpb.NodeID]livenesspb.NodeLivenessStatus
 		baselineExpNoop    bool
 		expectedAction     allocatorimpl.AllocatorAction
@@ -3554,7 +3577,9 @@ func TestAllocatorCheckRange(t *testing.T) {
 				{NodeID: 4, StoreID: 4, ReplicaID: 4},
 				{NodeID: 5, StoreID: 5, ReplicaID: 5},
 			},
-			zoneConfig: zonepb.DefaultSystemZoneConfigRef(),
+			spanConfig: &roachpb.SpanConfig{
+				NumReplicas: 5,
+			},
 			livenessOverrides: map[roachpb.NodeID]livenesspb.NodeLivenessStatus{
 				3: livenesspb.NodeLivenessStatus_DECOMMISSIONING,
 			},
@@ -3562,6 +3587,90 @@ func TestAllocatorCheckRange(t *testing.T) {
 			expectedAction:    allocatorimpl.AllocatorRemoveDecommissioningVoter,
 			expectErr:         false,
 			expectValidTarget: false,
+		},
+		{
+			name:   "decommissioning without satisfying partially constrained locality",
+			stores: fourSingleStoreRacks,
+			existingReplicas: []roachpb.ReplicaDescriptor{
+				{NodeID: 1, StoreID: 1, ReplicaID: 1},
+				{NodeID: 2, StoreID: 2, ReplicaID: 2},
+				{NodeID: 4, StoreID: 4, ReplicaID: 3},
+			},
+			livenessOverrides: map[roachpb.NodeID]livenesspb.NodeLivenessStatus{
+				4: livenesspb.NodeLivenessStatus_DECOMMISSIONING,
+			},
+			spanConfig: &roachpb.SpanConfig{
+				NumReplicas: 3,
+				Constraints: []roachpb.ConstraintsConjunction{
+					{
+						NumReplicas: 1,
+						Constraints: []roachpb.Constraint{
+							{
+								Type:  roachpb.Constraint_REQUIRED,
+								Key:   "rack",
+								Value: "4",
+							},
+						},
+					},
+				},
+			},
+			baselineExpNoop: true,
+			expectedAction:  allocatorimpl.AllocatorReplaceDecommissioningVoter,
+			// We should get an error attempting to break constraints, but this is
+			// currently a bug.
+			// TODO(sarkesian): Change below to true once #94809 is fixed.
+			expectErr: false,
+		},
+		{
+			name:   "decommissioning without satisfying fully constrained locality",
+			stores: fourSingleStoreRacks,
+			existingReplicas: []roachpb.ReplicaDescriptor{
+				{NodeID: 1, StoreID: 1, ReplicaID: 1},
+				{NodeID: 2, StoreID: 2, ReplicaID: 2},
+				{NodeID: 4, StoreID: 4, ReplicaID: 3},
+			},
+			livenessOverrides: map[roachpb.NodeID]livenesspb.NodeLivenessStatus{
+				4: livenesspb.NodeLivenessStatus_DECOMMISSIONING,
+			},
+			spanConfig: &roachpb.SpanConfig{
+				NumReplicas: 3,
+				Constraints: []roachpb.ConstraintsConjunction{
+					{
+						NumReplicas: 1,
+						Constraints: []roachpb.Constraint{
+							{
+								Type:  roachpb.Constraint_REQUIRED,
+								Key:   "rack",
+								Value: "1",
+							},
+						},
+					},
+					{
+						NumReplicas: 1,
+						Constraints: []roachpb.Constraint{
+							{
+								Type:  roachpb.Constraint_REQUIRED,
+								Key:   "rack",
+								Value: "2",
+							},
+						},
+					},
+					{
+						NumReplicas: 1,
+						Constraints: []roachpb.Constraint{
+							{
+								Type:  roachpb.Constraint_REQUIRED,
+								Key:   "rack",
+								Value: "4",
+							},
+						},
+					},
+				},
+			},
+			baselineExpNoop:    true,
+			expectedAction:     allocatorimpl.AllocatorReplaceDecommissioningVoter,
+			expectAllocatorErr: true,
+			expectedErrStr:     "replicas must match constraints",
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -3583,11 +3692,17 @@ func TestAllocatorCheckRange(t *testing.T) {
 			cfg := TestStoreConfig(clock)
 			cfg.Gossip = g
 			cfg.StorePool = sp
-			if tc.zoneConfig != nil {
-				// TODO(sarkesian): This override is not great. It would be much
-				// preferable to provide a SpanConfig if possible. See comment in
-				// createTestStoreWithoutStart.
-				cfg.SystemConfigProvider.GetSystemConfig().DefaultZoneConfig = tc.zoneConfig
+			if tc.spanConfig != nil {
+				mockSr := &mockSpanConfigReader{
+					real: cfg.SystemConfigProvider.GetSystemConfig(),
+					overrides: map[string]roachpb.SpanConfig{
+						"a": *tc.spanConfig,
+					},
+				}
+
+				cfg.TestingKnobs.ConfReaderInterceptor = func() spanconfig.StoreReader {
+					return mockSr
+				}
 			}
 
 			s := createTestStoreWithoutStart(ctx, t, stopper, testStoreOpts{createSystemRanges: true}, &cfg)
@@ -3626,7 +3741,6 @@ func TestAllocatorCheckRange(t *testing.T) {
 					allocatorimpl.AllocatorNoop,
 					allocatorimpl.AllocatorConsiderRebalance,
 				}, action, "expected baseline noop, got %s", action)
-				//require.Equalf(t, allocatorimpl.AllocatorNoop, action, "expected baseline noop, got %s", action)
 			}
 
 			// Execute actual allocator range repair check.
