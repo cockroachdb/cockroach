@@ -157,7 +157,7 @@ func TestingDefaultSpanConfig() SpanConfig {
 		RangeMinBytes: 128 << 20, // 128 MB
 		RangeMaxBytes: 512 << 20, // 512 MB
 		GCPolicy: GCPolicy{
-			TTLSeconds: 25 * 60 * 60,
+			TTLSeconds: 4 * 60 * 60, // 4 hrs
 		},
 		NumReplicas: 3,
 	}

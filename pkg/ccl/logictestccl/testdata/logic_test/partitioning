@@ -1000,31 +1000,31 @@ query TTTTTTTTT
 SHOW PARTITIONS FROM DATABASE d_show_partitions
 ----
 d_show_partitions  t  p1  NULL  x  t@t_pkey  (1)  NULL  range_min_bytes = 134217728,
-range_max_bytes = 536870912,
-gc.ttlseconds = 90000,
-num_replicas = 3,
-constraints = '[]',
-lease_preferences = '[]'
+                                                        range_max_bytes = 536870912,
+                                                        gc.ttlseconds = 14400,
+                                                        num_replicas = 3,
+                                                        constraints = '[]',
+                                                        lease_preferences = '[]'
 
 query TTTTTTTTT
 SHOW PARTITIONS FROM TABLE d_show_partitions.t
 ----
 d_show_partitions  t  p1  NULL  x  t@t_pkey  (1)  NULL  range_min_bytes = 134217728,
-range_max_bytes = 536870912,
-gc.ttlseconds = 90000,
-num_replicas = 3,
-constraints = '[]',
-lease_preferences = '[]'
+                                                        range_max_bytes = 536870912,
+                                                        gc.ttlseconds = 14400,
+                                                        num_replicas = 3,
+                                                        constraints = '[]',
+                                                        lease_preferences = '[]'
 
 query TTTTTTTTT
 SHOW PARTITIONS FROM INDEX d_show_partitions.t@t_pkey
 ----
 d_show_partitions  t  p1  NULL  x  t@t_pkey  (1)  NULL  range_min_bytes = 134217728,
-range_max_bytes = 536870912,
-gc.ttlseconds = 90000,
-num_replicas = 3,
-constraints = '[]',
-lease_preferences = '[]'
+                                                        range_max_bytes = 536870912,
+                                                        gc.ttlseconds = 14400,
+                                                        num_replicas = 3,
+                                                        constraints = '[]',
+                                                        lease_preferences = '[]'
 
 statement ok
 CREATE DATABASE "show partitions"
@@ -1036,31 +1036,31 @@ query TTTTTTTTT
 SHOW PARTITIONS FROM DATABASE "show partitions"
 ----
 show partitions  t  p1  NULL  x  t@t_pkey  (1)  NULL  range_min_bytes = 134217728,
-range_max_bytes = 536870912,
-gc.ttlseconds = 90000,
-num_replicas = 3,
-constraints = '[]',
-lease_preferences = '[]'
+                                                      range_max_bytes = 536870912,
+                                                      gc.ttlseconds = 14400,
+                                                      num_replicas = 3,
+                                                      constraints = '[]',
+                                                      lease_preferences = '[]'
 
 query TTTTTTTTT
 SHOW PARTITIONS FROM TABLE "show partitions".t
 ----
 show partitions  t  p1  NULL  x  t@t_pkey  (1)  NULL  range_min_bytes = 134217728,
-range_max_bytes = 536870912,
-gc.ttlseconds = 90000,
-num_replicas = 3,
-constraints = '[]',
-lease_preferences = '[]'
+                                                      range_max_bytes = 536870912,
+                                                      gc.ttlseconds = 14400,
+                                                      num_replicas = 3,
+                                                      constraints = '[]',
+                                                      lease_preferences = '[]'
 
 query TTTTTTTTT
 SHOW PARTITIONS FROM INDEX "show partitions".t@t_pkey
 ----
 show partitions  t  p1  NULL  x  t@t_pkey  (1)  NULL  range_min_bytes = 134217728,
-range_max_bytes = 536870912,
-gc.ttlseconds = 90000,
-num_replicas = 3,
-constraints = '[]',
-lease_preferences = '[]'
+                                                      range_max_bytes = 536870912,
+                                                      gc.ttlseconds = 14400,
+                                                      num_replicas = 3,
+                                                      constraints = '[]',
+                                                      lease_preferences = '[]'
 
 statement ok
 CREATE DATABASE """"
@@ -1072,31 +1072,31 @@ query TTTTTTTTT
 SHOW PARTITIONS FROM DATABASE """"
 ----
 "  t  p1  NULL  x  t@t_pkey  (1)  NULL  range_min_bytes = 134217728,
-range_max_bytes = 536870912,
-gc.ttlseconds = 90000,
-num_replicas = 3,
-constraints = '[]',
-lease_preferences = '[]'
+                                        range_max_bytes = 536870912,
+                                        gc.ttlseconds = 14400,
+                                        num_replicas = 3,
+                                        constraints = '[]',
+                                        lease_preferences = '[]'
 
 query TTTTTTTTT
 SHOW PARTITIONS FROM TABLE """".t
 ----
 "  t  p1  NULL  x  t@t_pkey  (1)  NULL  range_min_bytes = 134217728,
-range_max_bytes = 536870912,
-gc.ttlseconds = 90000,
-num_replicas = 3,
-constraints = '[]',
-lease_preferences = '[]'
+                                        range_max_bytes = 536870912,
+                                        gc.ttlseconds = 14400,
+                                        num_replicas = 3,
+                                        constraints = '[]',
+                                        lease_preferences = '[]'
 
 query TTTTTTTTT
 SHOW PARTITIONS FROM INDEX """".t@t_pkey
 ----
 "  t  p1  NULL  x  t@t_pkey  (1)  NULL  range_min_bytes = 134217728,
-range_max_bytes = 536870912,
-gc.ttlseconds = 90000,
-num_replicas = 3,
-constraints = '[]',
-lease_preferences = '[]'
+                                        range_max_bytes = 536870912,
+                                        gc.ttlseconds = 14400,
+                                        num_replicas = 3,
+                                        constraints = '[]',
+                                        lease_preferences = '[]'
 
 query T
 SELECT feature_name FROM crdb_internal.feature_usage WHERE feature_name='sql.show.partitions' AND usage_count > 0
@@ -1114,11 +1114,11 @@ query TTTTTTTTT
 SHOW PARTITIONS FROM TABLE t_inherit
 ----
 test  t_inherit  p1  NULL  x  t_inherit@t_inherit_pkey  (1)  NULL  range_min_bytes = 134217728,
-range_max_bytes = 536870912,
-gc.ttlseconds = 90000,
-num_replicas = 3,
-constraints = '[]',
-lease_preferences = '[]'
+                                                                   range_max_bytes = 536870912,
+                                                                   gc.ttlseconds = 14400,
+                                                                   num_replicas = 3,
+                                                                   constraints = '[]',
+                                                                   lease_preferences = '[]'
 
 statement ok
 ALTER PARTITION p1 of TABLE t_inherit CONFIGURE ZONE USING num_replicas=5
@@ -1127,11 +1127,11 @@ query TTTTTTTTT
 SHOW PARTITIONS FROM TABLE t_inherit
 ----
 test  t_inherit  p1  NULL  x  t_inherit@t_inherit_pkey  (1)  num_replicas = 5  range_min_bytes = 134217728,
-range_max_bytes = 536870912,
-gc.ttlseconds = 90000,
-num_replicas = 5,
-constraints = '[]',
-lease_preferences = '[]'
+                                                                               range_max_bytes = 536870912,
+                                                                               gc.ttlseconds = 14400,
+                                                                               num_replicas = 5,
+                                                                               constraints = '[]',
+                                                                               lease_preferences = '[]'
 
 statement ok
 CREATE TABLE t_inherit_range (x INT PRIMARY KEY)
@@ -1143,11 +1143,11 @@ query TTTTTTTTT
 SHOW PARTITIONS FROM TABLE t_inherit_range
 ----
 test  t_inherit_range  p1  NULL  x  t_inherit_range@t_inherit_range_pkey  (1) TO (2)  NULL  range_min_bytes = 134217728,
-range_max_bytes = 536870912,
-gc.ttlseconds = 90000,
-num_replicas = 3,
-constraints = '[]',
-lease_preferences = '[]'
+                                                                                            range_max_bytes = 536870912,
+                                                                                            gc.ttlseconds = 14400,
+                                                                                            num_replicas = 3,
+                                                                                            constraints = '[]',
+                                                                                            lease_preferences = '[]'
 
 statement ok
 ALTER PARTITION p1 of TABLE t_inherit_range CONFIGURE ZONE USING num_replicas=5
@@ -1156,11 +1156,11 @@ query TTTTTTTTT
 SHOW PARTITIONS FROM TABLE t_inherit_range
 ----
 test  t_inherit_range  p1  NULL  x  t_inherit_range@t_inherit_range_pkey  (1) TO (2)  num_replicas = 5  range_min_bytes = 134217728,
-range_max_bytes = 536870912,
-gc.ttlseconds = 90000,
-num_replicas = 5,
-constraints = '[]',
-lease_preferences = '[]'
+                                                                                                        range_max_bytes = 536870912,
+                                                                                                        gc.ttlseconds = 14400,
+                                                                                                        num_replicas = 5,
+                                                                                                        constraints = '[]',
+                                                                                                        lease_preferences = '[]'
 
 statement ok
 CREATE TABLE partition_by_nothing (
