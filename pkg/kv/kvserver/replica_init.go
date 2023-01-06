@@ -226,7 +226,6 @@ func (r *Replica) loadRaftMuLockedReplicaMuLocked(desc *roachpb.RangeDescriptor)
 	if r.raftMu.sideloaded, err = logstore.NewDiskSideloadStorage(
 		r.store.cfg.Settings,
 		desc.RangeID,
-		replicaID,
 		ssBase,
 		r.store.limiters.BulkIOWriteRate,
 		r.store.engine,

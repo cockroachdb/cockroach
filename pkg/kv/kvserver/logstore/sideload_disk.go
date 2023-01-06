@@ -42,17 +42,6 @@ type DiskSideloadStorage struct {
 	eng        storage.Engine
 }
 
-func deprecatedSideloadedPath(
-	baseDir string, rangeID roachpb.RangeID, replicaID roachpb.ReplicaID,
-) string {
-	return filepath.Join(
-		baseDir,
-		"sideloading",
-		fmt.Sprintf("%d", rangeID%1000), // sharding
-		fmt.Sprintf("%d.%d", rangeID, replicaID),
-	)
-}
-
 func sideloadedPath(baseDir string, rangeID roachpb.RangeID) string {
 	// Use one level of sharding to avoid too many items per directory. For
 	// example, ext3 and older ext4 support only 32k and 64k subdirectories
@@ -68,64 +57,21 @@ func sideloadedPath(baseDir string, rangeID roachpb.RangeID) string {
 	)
 }
 
-func exists(eng storage.Engine, path string) (bool, error) {
-	_, err := eng.Stat(path)
-	if err == nil {
-		return true, nil
-	}
-	if oserror.IsNotExist(err) {
-		return false, nil
-	}
-	return false, err
-}
-
 // NewDiskSideloadStorage creates a SideloadStorage for a given replica, stored
 // in the specified engine.
 func NewDiskSideloadStorage(
 	st *cluster.Settings,
 	rangeID roachpb.RangeID,
-	replicaID roachpb.ReplicaID,
 	baseDir string,
 	limiter *rate.Limiter,
 	eng storage.Engine,
 ) (*DiskSideloadStorage, error) {
-	path := deprecatedSideloadedPath(baseDir, rangeID, replicaID)
-	newPath := sideloadedPath(baseDir, rangeID)
-	// NB: this call to exists() is in the hot path when the server starts
-	// as it will be called once for each replica. However, during steady
-	// state (i.e. when the version variable hasn't *just* flipped), we're
-	// expecting `path` to not exist (since it refers to the legacy path at
-	// the moment). A stat call for a directory that doesn't exist isn't
-	// very expensive (on the order of 1000s of ns). For example, on a 2017
-	// MacBook Pro, this case averages ~3245ns and on a gceworker it's
-	// ~1200ns. At 50k replicas, that's on the order of a tenth of a second;
-	// not enough to matter.
-	//
-	// On the other hand, successful (i.e. directory found) calls take ~23k
-	// ns on my laptop, but only around 2.2k ns on the gceworker. Still,
-	// even on the laptop, 50k replicas would only add 1.2s which is also
-	// acceptable given that it'll happen only once.
-	exists, err := exists(eng, path)
-	if err != nil {
-		return nil, errors.Wrap(err, "checking pre-migration sideloaded directory")
-	}
-	if exists {
-		if err := eng.MkdirAll(filepath.Dir(newPath)); err != nil {
-			return nil, errors.Wrap(err, "creating migrated sideloaded directory")
-		}
-		if err := eng.Rename(path, newPath); err != nil {
-			return nil, errors.Wrap(err, "while migrating sideloaded directory")
-		}
-	}
-	path = newPath
-
-	ss := &DiskSideloadStorage{
-		dir:     path,
+	return &DiskSideloadStorage{
+		dir:     sideloadedPath(baseDir, rangeID),
 		eng:     eng,
 		st:      st,
 		limiter: limiter,
-	}
-	return ss, nil
+	}, nil
 }
 
 func (ss *DiskSideloadStorage) createDir() error {

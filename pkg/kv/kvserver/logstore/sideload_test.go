@@ -86,7 +86,7 @@ func TestSideloadingSideloadedStorage(t *testing.T) {
 func newTestingSideloadStorage(t *testing.T, eng storage.Engine) *DiskSideloadStorage {
 	st := cluster.MakeTestingClusterSettings()
 	ss, err := NewDiskSideloadStorage(
-		st, 1, 2, filepath.Join(eng.GetAuxiliaryDir(), "fake", "testing", "dir"),
+		st, 1, filepath.Join(eng.GetAuxiliaryDir(), "fake", "testing", "dir"),
 		rate.NewLimiter(rate.Inf, math.MaxInt64), eng,
 	)
 	require.NoError(t, err)
