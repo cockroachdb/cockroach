@@ -215,12 +215,6 @@ const TenantSelectCookieName = `tenant`
 func (c *serverController) httpMux(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	tenantName, nameProvided := getTenantNameFromHTTPRequest(r)
-	s, err := c.getOrCreateServer(ctx, tenantName)
-	if err != nil {
-		log.Warningf(ctx, "unable to start server for tenant %q: %v", tenantName, err)
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
 	// if the client didnt specify tenant name call these for login/logout.
 	if !nameProvided {
 		switch r.URL.Path {
@@ -231,6 +225,12 @@ func (c *serverController) httpMux(w http.ResponseWriter, r *http.Request) {
 			c.attemptLogoutFromAllTenants().ServeHTTP(w, r)
 			return
 		}
+	}
+	s, err := c.getOrCreateServer(ctx, tenantName)
+	if err != nil {
+		log.Warningf(ctx, "unable to start server for tenant %q: %v", tenantName, err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
 	}
 	s.getHTTPHandlerFn()(w, r)
 }
