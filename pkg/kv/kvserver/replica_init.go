@@ -124,6 +124,16 @@ func newUnloadedReplica(
 		r.loadStats = load.NewReplicaLoad(store.Clock(), store.cfg.StorePool.GetNodeLocalityString)
 	}
 
+	if r.raftMu.sideloaded, err = logstore.NewDiskSideloadStorage(
+		r.store.cfg.Settings,
+		desc.RangeID,
+		r.Engine().GetAuxiliaryDir(),
+		r.store.limiters.BulkIOWriteRate,
+		r.store.engine,
+	); err != nil {
+		return errors.Wrap(err, "while initializing sideloaded storage")
+	}
+
 	// Init rangeStr with the range ID.
 	r.rangeStr.store(replicaID, &roachpb.RangeDescriptor{RangeID: desc.RangeID})
 	// Add replica log tag - the value is rangeStr.String().
