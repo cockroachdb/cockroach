@@ -3,17 +3,17 @@ subtest single_line_no_tenant_tag
 log
 I210116 21:49:17.073282 14 server/node.go:464 ⋮ [-] 23  started with engine type ‹2›
 ----
-logpb.Entry{Severity:1, Time:1610833757073282000, Goroutine:14, File:"server/node.go", Line:464, Message:"started with engine type ‹2›", Tags:"-", Counter:0x17, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1"}
+logpb.Entry{Severity:1, Time:1610833757073282000, Goroutine:14, File:"server/node.go", Line:464, Message:"started with engine type ‹2›", Tags:"", Counter:0x17, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1"}
 
 log
 I210116 21:49:17.073282 14 server/node.go:464 ⋮ [T1] 23  started with engine type ‹2›
 ----
-logpb.Entry{Severity:1, Time:1610833757073282000, Goroutine:14, File:"server/node.go", Line:464, Message:"started with engine type ‹2›", Tags:"-", Counter:0x17, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1"}
+logpb.Entry{Severity:1, Time:1610833757073282000, Goroutine:14, File:"server/node.go", Line:464, Message:"started with engine type ‹2›", Tags:"", Counter:0x17, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1"}
 
 log
 I210116 21:49:17.073282 14 server/node.go:464 ⋮ [T12345] 23  started with engine type ‹2›
 ----
-logpb.Entry{Severity:1, Time:1610833757073282000, Goroutine:14, File:"server/node.go", Line:464, Message:"started with engine type ‹2›", Tags:"-", Counter:0x17, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"12345"}
+logpb.Entry{Severity:1, Time:1610833757073282000, Goroutine:14, File:"server/node.go", Line:464, Message:"started with engine type ‹2›", Tags:"", Counter:0x17, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"12345"}
 
 subtest end
 
@@ -22,12 +22,12 @@ subtest single_line_unstructured_entry
 log
 I210116 21:49:17.073282 14 server/node.go:464 ⋮ [T1] 23  started with engine type ‹2›
 ----
-logpb.Entry{Severity:1, Time:1610833757073282000, Goroutine:14, File:"server/node.go", Line:464, Message:"started with engine type ‹2›", Tags:"-", Counter:0x17, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1"}
+logpb.Entry{Severity:1, Time:1610833757073282000, Goroutine:14, File:"server/node.go", Line:464, Message:"started with engine type ‹2›", Tags:"", Counter:0x17, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1"}
 
 log
 I210116 21:49:17.073282 14 (gostd) server/node.go:464 ⋮ [T1] 23  started with engine type ‹2›
 ----
-logpb.Entry{Severity:1, Time:1610833757073282000, Goroutine:14, File:"server/node.go", Line:464, Message:"started with engine type ‹2›", Tags:"-", Counter:0x17, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1"}
+logpb.Entry{Severity:1, Time:1610833757073282000, Goroutine:14, File:"server/node.go", Line:464, Message:"started with engine type ‹2›", Tags:"", Counter:0x17, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1"}
 
 subtest end
 
@@ -37,14 +37,14 @@ log
 I210116 21:49:17.083093 14 1@cli/start.go:690 ⋮ [T1] 40  node startup completed:
 I210116 21:49:17.083093 14 1@cli/start.go:690 ⋮ [T1] 40 +CockroachDB node starting at 2021-01-16 21:49 (took 0.0s)
 ----
-logpb.Entry{Severity:1, Time:1610833757083093000, Goroutine:14, File:"cli/start.go", Line:690, Message:"node startup completed:\nCockroachDB node starting at 2021-01-16 21:49 (took 0.0s)", Tags:"-", Counter:0x28, Redactable:true, Channel:1, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1"}
+logpb.Entry{Severity:1, Time:1610833757083093000, Goroutine:14, File:"cli/start.go", Line:690, Message:"node startup completed:\nCockroachDB node starting at 2021-01-16 21:49 (took 0.0s)", Tags:"", Counter:0x28, Redactable:true, Channel:1, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1"}
 
 log
 I210116 21:49:17.083093 14 1@cli/start.go:690 ⋮ [T1] 40  node startup completed:
 I210116 21:49:17.083093 14 1@cli/start.go:690 ⋮ [T1] 40 +CockroachDB node starting at 2021-01-16 21:49 (took 0.0s)
 I210116 21:49:17.083093 14 1@cli/start.go:690 ⋮ [T1] 40 +build:               CCL v21.1.1 @ 2021/5/24 11:00:26 (go1.15.5) (go1.12.6)
 ----
-logpb.Entry{Severity:1, Time:1610833757083093000, Goroutine:14, File:"cli/start.go", Line:690, Message:"node startup completed:\nCockroachDB node starting at 2021-01-16 21:49 (took 0.0s)\nbuild:               CCL v21.1.1 @ 2021/5/24 11:00:26 (go1.15.5) (go1.12.6)", Tags:"-", Counter:0x28, Redactable:true, Channel:1, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1"}
+logpb.Entry{Severity:1, Time:1610833757083093000, Goroutine:14, File:"cli/start.go", Line:690, Message:"node startup completed:\nCockroachDB node starting at 2021-01-16 21:49 (took 0.0s)\nbuild:               CCL v21.1.1 @ 2021/5/24 11:00:26 (go1.15.5) (go1.12.6)", Tags:"", Counter:0x28, Redactable:true, Channel:1, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1"}
 
 subtest end
 
@@ -53,7 +53,7 @@ subtest structured_entry
 log
 I210116 21:49:17.080713 14 1@util/log/event_log.go:32 ⋮ [T1] 32 ={"Timestamp":1610833757080706620,"EventType":"node_restart"}
 ----
-logpb.Entry{Severity:1, Time:1610833757080713000, Goroutine:14, File:"util/log/event_log.go", Line:32, Message:"{\"Timestamp\":1610833757080706620,\"EventType\":\"node_restart\"}", Tags:"-", Counter:0x20, Redactable:true, Channel:1, StructuredEnd:0x3c, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1"}
+logpb.Entry{Severity:1, Time:1610833757080713000, Goroutine:14, File:"util/log/event_log.go", Line:32, Message:"{\"Timestamp\":1610833757080706620,\"EventType\":\"node_restart\"}", Tags:"", Counter:0x20, Redactable:true, Channel:1, StructuredEnd:0x3c, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1"}
 
 subtest end
 
@@ -63,14 +63,14 @@ log
 I210116 21:49:17.073282 14 server/node.go:464 ⋮ [T1] 23  aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 I210116 21:49:17.073282 14 server/node.go:464 ⋮ [T1] 23 |aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 ----
-logpb.Entry{Severity:1, Time:1610833757073282000, Goroutine:14, File:"server/node.go", Line:464, Message:"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", Tags:"-", Counter:0x17, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1"}
+logpb.Entry{Severity:1, Time:1610833757073282000, Goroutine:14, File:"server/node.go", Line:464, Message:"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", Tags:"", Counter:0x17, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1"}
 
 log
 I210116 21:49:17.073282 14 server/node.go:464 ⋮ [T1] 23  aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 I210116 21:49:17.073282 14 server/node.go:464 ⋮ [T1] 23 |aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 I210116 21:49:17.073282 14 server/node.go:464 ⋮ [T1] 23 |aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 ----
-logpb.Entry{Severity:1, Time:1610833757073282000, Goroutine:14, File:"server/node.go", Line:464, Message:"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", Tags:"-", Counter:0x17, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1"}
+logpb.Entry{Severity:1, Time:1610833757073282000, Goroutine:14, File:"server/node.go", Line:464, Message:"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", Tags:"", Counter:0x17, Redactable:true, Channel:0, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1"}
 
 log
 I210116 21:49:17.083093 14 1@cli/start.go:690 ⋮ [T1] 40  node startup
@@ -78,13 +78,13 @@ I210116 21:49:17.083093 14 1@cli/start.go:690 ⋮ [T1] 40 | completed:
 I210116 21:49:17.083093 14 1@cli/start.go:690 ⋮ [T1] 40 +CockroachDB node starting at
 I210116 21:49:17.083093 14 1@cli/start.go:690 ⋮ [T1] 40 | 2021-01-16 21:49 (took 0.0s)
 ----
-logpb.Entry{Severity:1, Time:1610833757083093000, Goroutine:14, File:"cli/start.go", Line:690, Message:"node startup completed:\nCockroachDB node starting at 2021-01-16 21:49 (took 0.0s)", Tags:"-", Counter:0x28, Redactable:true, Channel:1, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1"}
+logpb.Entry{Severity:1, Time:1610833757083093000, Goroutine:14, File:"cli/start.go", Line:690, Message:"node startup completed:\nCockroachDB node starting at 2021-01-16 21:49 (took 0.0s)", Tags:"", Counter:0x28, Redactable:true, Channel:1, StructuredEnd:0x0, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1"}
 
 log
 I210116 21:49:17.080713 14 1@util/log/event_log.go:32 ⋮ [T1] 32 ={"Timestamp":1610833757080706620,"EventTy
 I210116 21:49:17.080713 14 1@util/log/event_log.go:32 ⋮ [T1] 32 |pe":"node_restart"}
 ----
-logpb.Entry{Severity:1, Time:1610833757080713000, Goroutine:14, File:"util/log/event_log.go", Line:32, Message:"{\"Timestamp\":1610833757080706620,\"EventType\":\"node_restart\"}", Tags:"-", Counter:0x20, Redactable:true, Channel:1, StructuredEnd:0x3c, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1"}
+logpb.Entry{Severity:1, Time:1610833757080713000, Goroutine:14, File:"util/log/event_log.go", Line:32, Message:"{\"Timestamp\":1610833757080706620,\"EventType\":\"node_restart\"}", Tags:"", Counter:0x20, Redactable:true, Channel:1, StructuredEnd:0x3c, StructuredStart:0x0, StackTraceStart:0x0, TenantID:"1"}
 
 subtest end
 
@@ -107,7 +107,7 @@ log
 I210116 21:49:17.080713 14 1@util/log/event_log.go:32 ⋮ [T1] 32 ={"Timestamp":1610833757080706620,"EventType":"node_restart"}
 I210116 21:49:17.080713 14 1@util/log/event_log.go:32 ⋮ [T1] 32 !this is a fake stack
 ----
-logpb.Entry{Severity:1, Time:1610833757080713000, Goroutine:14, File:"util/log/event_log.go", Line:32, Message:"{\"Timestamp\":1610833757080706620,\"EventType\":\"node_restart\"}\nstack trace:\nthis is a fake stack", Tags:"-", Counter:0x20, Redactable:true, Channel:1, StructuredEnd:0x3c, StructuredStart:0x0, StackTraceStart:0x3d, TenantID:"1"}
+logpb.Entry{Severity:1, Time:1610833757080713000, Goroutine:14, File:"util/log/event_log.go", Line:32, Message:"{\"Timestamp\":1610833757080706620,\"EventType\":\"node_restart\"}\nstack trace:\nthis is a fake stack", Tags:"", Counter:0x20, Redactable:true, Channel:1, StructuredEnd:0x3c, StructuredStart:0x0, StackTraceStart:0x3d, TenantID:"1"}
 
 log
 I060102 15:04:05.654321 11 util/log/format_crdb_v2_test.go:123 ⋮ [T1,noval,s‹1›,long=‹2›] 23  maybe ‹multi›
