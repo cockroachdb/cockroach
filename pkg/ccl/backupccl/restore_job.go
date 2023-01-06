@@ -524,13 +524,16 @@ func (r *restoreResumer) ForceRealSpan() bool {
 	return true
 }
 
-// remapRelevantStatistics changes the table ID references in the stats
-// from those they had in the backed up database to what they should be
-// in the restored database.
-// It also selects only the statistics which belong to one of the tables
-// being restored. If the descriptorRewrites can re-write the table ID, then that
-// table is being restored.
-func remapRelevantStatistics(
+// remapAndFilterRelevantStatistics changes the table ID references in
+// the stats from those they had in the backed up database to what
+// they should be in the restored database.
+//
+// It also selects only the statistics which belong to one of the
+// tables being restored. If the descriptorRewrites can re-write the
+// table ID, then that table is being restored.
+//
+// Any statistics forecasts are ignored.
+func remapAndFilterRelevantStatistics(
 	ctx context.Context,
 	tableStatistics []*stats.TableStatisticProto,
 	descriptorRewrites jobspb.DescRewriteMap,
@@ -540,11 +543,13 @@ func remapRelevantStatistics(
 
 	tableHasStatsInBackup := make(map[descpb.ID]struct{})
 	for _, stat := range tableStatistics {
-		tableHasStatsInBackup[stat.TableID] = struct{}{}
-		if tableRewrite, ok := descriptorRewrites[stat.TableID]; ok {
-			// Statistics imported only when table re-write is present.
-			stat.TableID = tableRewrite.ID
-			relevantTableStatistics = append(relevantTableStatistics, stat)
+		if statShouldBeIncludedInBackupRestore(stat) {
+			tableHasStatsInBackup[stat.TableID] = struct{}{}
+			if tableRewrite, ok := descriptorRewrites[stat.TableID]; ok {
+				// Statistics imported only when table re-write is present.
+				stat.TableID = tableRewrite.ID
+				relevantTableStatistics = append(relevantTableStatistics, stat)
+			}
 		}
 	}
 
@@ -1555,7 +1560,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 	backupStats, err := backupinfo.GetStatisticsFromBackup(ctx, defaultStore, details.Encryption,
 		&kmsEnv, latestBackupManifest)
 	if err == nil {
-		remappedStats = remapRelevantStatistics(ctx, backupStats, details.DescriptorRewrites,
+		remappedStats = remapAndFilterRelevantStatistics(ctx, backupStats, details.DescriptorRewrites,
 			details.TableDescs)
 	} else {
 		// We don't want to fail the restore if we are unable to resolve statistics
