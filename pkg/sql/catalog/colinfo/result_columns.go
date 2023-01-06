@@ -289,10 +289,10 @@ var TenantColumnsWithReplication = ResultColumns{
 	{Name: "source_cluster_uri", Typ: types.String},
 	{Name: "replication_job_id", Typ: types.Int},
 	// The latest fully replicated time.
-	{Name: "replicated_time", Typ: types.Timestamp},
+	{Name: "replicated_time", Typ: types.TimestampTZ},
 	// The protected timestamp on the destination cluster, meaning we cannot
 	// cutover to before this time.
-	{Name: "retained_time", Typ: types.Timestamp},
+	{Name: "retained_time", Typ: types.TimestampTZ},
 }
 
 // RangesNoLeases is the schema for crdb_internal.ranges_no_leases.

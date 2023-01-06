@@ -123,19 +123,7 @@ func TestExecutorDescriptorMutationOps(t *testing.T) {
 			return cpy.ImmutableCopy().(catalog.TableDescriptor)
 		}
 	}
-	mutFlags := tree.ObjectLookupFlags{
-		CommonLookupFlags: tree.CommonLookupFlags{
-			Required:       true,
-			RequireMutable: true,
-			AvoidLeased:    true,
-		},
-	}
-	immFlags := tree.ObjectLookupFlags{
-		CommonLookupFlags: tree.CommonLookupFlags{
-			Required:    true,
-			AvoidLeased: true,
-		},
-	}
+
 	run := func(t *testing.T, c testCase) {
 		ctx := context.Background()
 		ti := setupTestInfra(t)
@@ -152,9 +140,7 @@ CREATE TABLE db.t (
 		require.NoError(t, ti.txn(ctx, func(
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 		) (err error) {
-			if _, table, err = descriptors.GetMutableTableByName(
-				ctx, txn, &tn, mutFlags,
-			); err != nil {
+			if _, table, err = descs.PrefixAndMutableTable(ctx, descriptors.MutableByName(txn), &tn); err != nil {
 				return err
 			}
 			return nil
@@ -164,11 +150,11 @@ CREATE TABLE db.t (
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 		) error {
 			exDeps := ti.newExecDeps(txn, descriptors)
-			_, orig, err := descriptors.GetImmutableTableByName(ctx, txn, &tn, immFlags)
+			_, orig, err := descs.PrefixAndTable(ctx, descriptors.ByName(txn).Get(), &tn)
 			require.NoError(t, err)
 			require.Equal(t, c.orig().TableDesc(), orig.TableDesc())
 			require.NoError(t, scexec.ExecuteStage(ctx, exDeps, c.ops()))
-			_, after, err := descriptors.GetImmutableTableByName(ctx, txn, &tn, immFlags)
+			_, after, err := descs.PrefixAndTable(ctx, descriptors.ByName(txn).Get(), &tn)
 			require.NoError(t, err)
 			require.Equal(t, c.exp().TableDesc(), after.TableDesc())
 			return nil
@@ -267,7 +253,7 @@ func TestSchemaChanger(t *testing.T) {
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 		) (err error) {
 			tn := tree.MakeTableNameWithSchema("db", tree.PublicSchemaName, "foo")
-			_, fooTable, err := descriptors.GetImmutableTableByName(ctx, txn, &tn, tree.ObjectLookupFlagsWithRequired())
+			_, fooTable, err := descs.PrefixAndTable(ctx, descriptors.ByNameWithLeased(txn).Get(), &tn)
 			require.NoError(t, err)
 
 			stmts := []scpb.Statement{

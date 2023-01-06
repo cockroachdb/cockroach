@@ -34,7 +34,7 @@ type DistSQLTypeResolver struct {
 // NewDistSQLTypeResolver creates a new DistSQLTypeResolver.
 func NewDistSQLTypeResolver(descs *Collection, txn *kv.Txn) DistSQLTypeResolver {
 	return DistSQLTypeResolver{
-		g: descs.ByID(txn).Immutable(),
+		g: descs.ByIDWithLeased(txn).Get(),
 	}
 }
 

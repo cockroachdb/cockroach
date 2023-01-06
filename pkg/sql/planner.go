@@ -591,7 +591,10 @@ func (p *planner) GetTypeFromValidSQLSyntax(sql string) (*types.T, error) {
 
 // ResolveTableName implements the eval.DatabaseCatalog interface.
 func (p *planner) ResolveTableName(ctx context.Context, tn *tree.TableName) (tree.ID, error) {
-	flags := tree.ObjectLookupFlagsWithRequiredTableKind(tree.ResolveAnyTableKind)
+	flags := tree.ObjectLookupFlags{
+		Required:          true,
+		DesiredObjectKind: tree.TableObject,
+	}
 	_, desc, err := resolver.ResolveExistingTableObject(ctx, p, tn, flags)
 	if err != nil {
 		return 0, err
@@ -604,9 +607,7 @@ func (p *planner) ResolveTableName(ctx context.Context, tn *tree.TableName) (tre
 func (p *planner) LookupTableByID(
 	ctx context.Context, tableID descpb.ID,
 ) (catalog.TableDescriptor, error) {
-	const required = true // lookups by ID are always "required"
-	table, err := p.Descriptors().GetImmutableTableByID(ctx, p.txn, tableID, p.ObjectLookupFlags(
-		required, false /* requireMutable */))
+	table, err := p.byIDGetterBuilder().WithoutNonPublic().Get().Table(ctx, tableID)
 	if err != nil {
 		return nil, err
 	}

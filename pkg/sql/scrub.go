@@ -152,8 +152,7 @@ func (n *scrubNode) Close(ctx context.Context) {
 func (n *scrubNode) startScrubDatabase(ctx context.Context, p *planner, name *tree.Name) error {
 	// Check that the database exists.
 	database := string(*name)
-	db, err := p.Descriptors().GetImmutableDatabaseByName(ctx, p.txn,
-		database, tree.DatabaseLookupFlags{Required: true})
+	db, err := p.Descriptors().ByNameWithLeased(p.txn).Get().Database(ctx, database)
 	if err != nil {
 		return err
 	}
@@ -165,9 +164,7 @@ func (n *scrubNode) startScrubDatabase(ctx context.Context, p *planner, name *tr
 
 	var tbNames tree.TableNames
 	for _, schema := range schemas {
-		sc, err := p.Descriptors().GetImmutableSchemaByName(
-			ctx, p.txn, db, schema, p.CommonLookupFlagsRequired(),
-		)
+		sc, err := p.byNameGetterBuilder().Get().Schema(ctx, db, schema)
 		if err != nil {
 			return err
 		}
@@ -180,9 +177,9 @@ func (n *scrubNode) startScrubDatabase(ctx context.Context, p *planner, name *tr
 
 	for i := range tbNames {
 		tableName := &tbNames[i]
-		_, objDesc, err := p.GetObjectByName(
-			ctx, tableName.Catalog(), tableName.Schema(), tableName.Table(),
-			p.ObjectLookupFlags(true /*required*/, false /*requireMutable*/),
+		flags := tree.ObjectLookupFlags{DesiredObjectKind: tree.TableObject}
+		_, _, objDesc, err := p.LookupObject(
+			ctx, flags, tableName.Catalog(), tableName.Schema(), tableName.Table(),
 		)
 		// Skip over descriptors that are not tables (like types).
 		// Note: We are asking for table objects above, so It's valid to only
@@ -439,9 +436,7 @@ func createConstraintCheckOperations(
 		if ck := constraint.AsCheck(); ck != nil {
 			op = newSQLCheckConstraintCheckOperation(tableName, tableDesc, ck, asOf)
 		} else if fk := constraint.AsForeignKey(); fk != nil {
-			referencedTable, err := p.Descriptors().GetImmutableTableByID(
-				ctx, p.Txn(), fk.GetReferencedTableID(), tree.ObjectLookupFlagsWithRequired(),
-			)
+			referencedTable, err := p.Descriptors().ByIDWithLeased(p.Txn()).WithoutNonPublic().Get().Table(ctx, fk.GetReferencedTableID())
 			if err != nil {
 				return nil, err
 			}

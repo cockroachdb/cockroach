@@ -394,11 +394,7 @@ CREATE TABLE crdb_internal.super_regions (
 				if err != nil {
 					return err
 				}
-				typeDesc, err := p.Descriptors().GetImmutableTypeByID(ctx, p.txn, typeID,
-					tree.ObjectLookupFlags{CommonLookupFlags: tree.CommonLookupFlags{
-						Required: true,
-					}},
-				)
+				typeDesc, err := p.Descriptors().ByIDWithLeased(p.txn).WithoutNonPublic().Get().Type(ctx, typeID)
 				if err != nil {
 					return err
 				}
@@ -503,11 +499,8 @@ CREATE TABLE crdb_internal.tables (
 			// INDEX(parent_id) WHERE drop_time IS NULL
 			populate: func(ctx context.Context, unwrappedConstraint tree.Datum, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) (matched bool, err error) {
 				dbID := descpb.ID(tree.MustBeDInt(unwrappedConstraint))
-				flags := p.CommonLookupFlagsRequired()
-				flags.Required = false
-				flags.IncludeOffline = true
-				ok, db, err := p.Descriptors().GetImmutableDatabaseByID(ctx, p.Txn(), dbID, flags)
-				if !ok || err != nil {
+				db, err := p.byIDGetterBuilder().WithoutDropped().Get().Database(ctx, dbID)
+				if err != nil {
 					return false, err
 				}
 				return crdbInternalTablesDatabaseLookupFunc(ctx, p, db, addRow)
@@ -517,10 +510,7 @@ CREATE TABLE crdb_internal.tables (
 			// INDEX(database_name) WHERE drop_time IS NULL
 			populate: func(ctx context.Context, unwrappedConstraint tree.Datum, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) (matched bool, err error) {
 				dbName := string(tree.MustBeDString(unwrappedConstraint))
-				flags := p.CommonLookupFlagsRequired()
-				flags.Required = false
-				flags.IncludeOffline = true
-				db, err := p.Descriptors().GetImmutableDatabaseByName(ctx, p.Txn(), dbName, flags)
+				db, err := p.byNameGetterBuilder().WithOffline().MaybeGet().Database(ctx, dbName)
 				if db == nil || err != nil {
 					return false, err
 				}
@@ -2965,9 +2955,7 @@ CREATE TABLE crdb_internal.create_function_statements (
 			}
 		}
 
-		fnDescs, err := p.Descriptors().GetImmutableDescriptorsByID(
-			ctx, p.txn, tree.CommonLookupFlags{Required: true, AvoidLeased: true}, fnIDs...,
-		)
+		fnDescs, err := p.Descriptors().ByID(p.txn).WithoutNonPublic().Get().Descs(ctx, fnIDs)
 		if err != nil {
 			return err
 		}
@@ -4041,10 +4029,7 @@ CREATE TABLE crdb_internal.zones (
 
 			var table catalog.TableDescriptor
 			if zs.Database != "" {
-				_, database, err := p.Descriptors().GetImmutableDatabaseByID(ctx, p.txn, descpb.ID(id), tree.DatabaseLookupFlags{
-					Required:    true,
-					AvoidLeased: true,
-				})
+				database, err := p.Descriptors().ByID(p.txn).WithoutNonPublic().Get().Database(ctx, descpb.ID(id))
 				if err != nil {
 					return err
 				}
@@ -5446,10 +5431,7 @@ CREATE TABLE crdb_internal.cluster_database_privileges (
 				return false, nil
 			}
 
-			flags := tree.CommonLookupFlags{
-				AvoidLeased: true,
-			}
-			dbDesc, err := p.Descriptors().GetImmutableDatabaseByName(ctx, p.Txn(), dbName, flags)
+			dbDesc, err := p.Descriptors().ByName(p.Txn()).MaybeGet().Database(ctx, dbName)
 			if err != nil || dbDesc == nil {
 				return false, err
 			}
@@ -6474,11 +6456,7 @@ CREATE TABLE crdb_internal.index_spans (
 				// forEachTableDescAll() below. So we can't use p.LookupByID()
 				// which only considers online tables.
 				p.runWithOptions(resolveFlags{skipCache: true}, func() {
-					cflags := p.CommonLookupFlagsRequired()
-					cflags.IncludeOffline = true
-					cflags.IncludeDropped = true
-					flags := tree.ObjectLookupFlags{CommonLookupFlags: cflags}
-					table, err = p.Descriptors().GetImmutableTableByID(ctx, p.txn, descID, flags)
+					table, err = p.byIDGetterBuilder().Get().Table(ctx, descID)
 				})
 				if err != nil {
 					return false, err
@@ -6530,11 +6508,7 @@ CREATE TABLE crdb_internal.table_spans (
 				// forEachTableDescAll() below. So we can't use p.LookupByID()
 				// which only considers online tables.
 				p.runWithOptions(resolveFlags{skipCache: true}, func() {
-					cflags := p.CommonLookupFlagsRequired()
-					cflags.IncludeOffline = true
-					cflags.IncludeDropped = true
-					flags := tree.ObjectLookupFlags{CommonLookupFlags: cflags}
-					table, err = p.Descriptors().GetImmutableTableByID(ctx, p.txn, descID, flags)
+					table, err = p.byIDGetterBuilder().Get().Table(ctx, descID)
 				})
 				if err != nil {
 					return false, err
@@ -7082,13 +7056,9 @@ func convertContentionEventsToJSON(
 			return nil, err
 		}
 
-		flags := tree.ObjectLookupFlags{CommonLookupFlags: tree.CommonLookupFlags{
-			Required: true,
-		}}
-
 		desc := p.Descriptors()
 		var tableDesc catalog.TableDescriptor
-		tableDesc, err = desc.GetImmutableTableByID(ctx, p.txn, descpb.ID(tableID), flags)
+		tableDesc, err = desc.ByIDWithLeased(p.txn).WithoutNonPublic().Get().Table(ctx, descpb.ID(tableID))
 		if err != nil {
 			return nil, err
 		}
@@ -7098,12 +7068,12 @@ func convertContentionEventsToJSON(
 			return nil, err
 		}
 
-		ok, dbDesc, err := desc.GetImmutableDatabaseByID(ctx, p.txn, tableDesc.GetParentID(), tree.DatabaseLookupFlags{})
-		if err != nil || !ok {
+		dbDesc, err := desc.ByIDWithLeased(p.txn).WithoutNonPublic().Get().Database(ctx, tableDesc.GetParentID())
+		if err != nil {
 			return nil, err
 		}
 
-		schemaDesc, err := desc.GetImmutableSchemaByID(ctx, p.txn, tableDesc.GetParentSchemaID(), tree.SchemaLookupFlags{})
+		schemaDesc, err := desc.ByIDWithLeased(p.txn).WithoutNonPublic().Get().Schema(ctx, tableDesc.GetParentSchemaID())
 		if err != nil {
 			return nil, err
 		}

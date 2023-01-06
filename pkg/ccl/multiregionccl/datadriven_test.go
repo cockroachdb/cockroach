@@ -797,9 +797,7 @@ func lookupTable(ec *sql.ExecutorConfig, database, table string) (catalog.TableD
 		context.Background(),
 		ec,
 		func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
-			_, desc, err := col.GetImmutableTableByName(ctx, txn, tbName, tree.ObjectLookupFlags{
-				DesiredObjectKind: tree.TableObject,
-			})
+			_, desc, err := descs.PrefixAndTable(ctx, col.ByNameWithLeased(txn).MaybeGet(), tbName)
 			if err != nil {
 				return err
 			}

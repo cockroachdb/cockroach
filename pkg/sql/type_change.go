@@ -197,14 +197,9 @@ func (t *typeSchemaChanger) getTypeDescFromStore(
 ) (catalog.TypeDescriptor, error) {
 	var typeDesc catalog.TypeDescriptor
 	if err := DescsTxn(ctx, t.execCfg, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
-		flags := tree.ObjectLookupFlags{CommonLookupFlags: tree.CommonLookupFlags{
-			AvoidLeased:    true,
-			IncludeDropped: true,
-			IncludeOffline: true,
-		}}
 		// Avoid GetImmutableTypeByID, downstream logic relies on
 		// catalog.ErrDescriptorNotFound.
-		desc, err := col.GetImmutableDescriptorByID(ctx, txn, t.typeID, flags.CommonLookupFlags)
+		desc, err := col.ByID(txn).Get().Desc(ctx, t.typeID)
 		if err != nil {
 			return err
 		}
@@ -307,7 +302,7 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 			ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
 			f func(finalizer *databaseRegionChangeFinalizer) error,
 		) error {
-			typeDesc, err := descsCol.GetMutableTypeVersionByID(ctx, txn, t.typeID)
+			typeDesc, err := descsCol.MutableByID(txn).Type(ctx, t.typeID)
 			if err != nil {
 				return err
 			}
@@ -350,7 +345,7 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 		// use and fail. This is done in a separate txn to the one that mutates the
 		// descriptor, as this validation can take arbitrarily long.
 		validateDrops := func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
-			typeDesc, err := descsCol.GetMutableTypeVersionByID(ctx, txn, t.typeID)
+			typeDesc, err := descsCol.MutableByID(txn).Type(ctx, t.typeID)
 			if err != nil {
 				return err
 			}
@@ -407,7 +402,7 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 		// have performed any necessary pre-drop work, we can actually go about
 		// modifying the type descriptor.
 		run := func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
-			typeDesc, err := descsCol.GetMutableTypeVersionByID(ctx, txn, t.typeID)
+			typeDesc, err := descsCol.MutableByID(txn).Type(ctx, t.typeID)
 			if err != nil {
 				return err
 			}
@@ -453,7 +448,7 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 			// The version of the array type needs to get bumped as well so that
 			// changes to the underlying type are picked up. Simply reading the
 			// mutable descriptor and writing it back should do the trick.
-			arrayTypeDesc, err := descsCol.GetMutableTypeVersionByID(ctx, txn, typeDesc.ArrayTypeID)
+			arrayTypeDesc, err := descsCol.MutableByID(txn).Type(ctx, typeDesc.ArrayTypeID)
 			if err != nil {
 				return err
 			}
@@ -551,7 +546,7 @@ func (t *typeSchemaChanger) cleanupEnumValues(ctx context.Context) error {
 	var regionChangeFinalizer *databaseRegionChangeFinalizer
 	// Cleanup:
 	cleanup := func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
-		typeDesc, err := descsCol.GetMutableTypeVersionByID(ctx, txn, t.typeID)
+		typeDesc, err := descsCol.MutableByID(txn).Type(ctx, t.typeID)
 		if err != nil {
 			return err
 		}
@@ -762,12 +757,7 @@ func (t *typeSchemaChanger) canRemoveEnumValue(
 	descsCol *descs.Collection,
 ) error {
 	for _, ID := range typeDesc.ReferencingDescriptorIDs {
-		desc, err := descsCol.GetImmutableTableByID(ctx, txn, ID, tree.ObjectLookupFlags{
-			CommonLookupFlags: tree.CommonLookupFlags{
-				AvoidLeased: true,
-				Required:    true,
-			},
-		})
+		desc, err := descsCol.ByID(txn).WithoutNonPublic().Get().Table(ctx, ID)
 		if err != nil {
 			return errors.Wrapf(err,
 				"could not validate enum value removal for %q", member.LogicalRepresentation)
@@ -922,11 +912,7 @@ func (t *typeSchemaChanger) canRemoveEnumValue(
 			// be unset by default) when executing the query constructed above. This is
 			// because the enum value may be used in a view expression, which is
 			// name resolved in the context of the type's database.
-			_, dbDesc, err := descsCol.GetImmutableDatabaseByID(
-				ctx, txn, typeDesc.ParentID, tree.DatabaseLookupFlags{
-					Required:    true,
-					AvoidLeased: true,
-				})
+			dbDesc, err := descsCol.ByID(txn).WithoutNonPublic().Get().Database(ctx, typeDesc.ParentID)
 			const validationErr = "could not validate removal of enum value %q"
 			if err != nil {
 				return errors.Wrapf(err, validationErr, member.LogicalRepresentation)
@@ -964,8 +950,7 @@ func (t *typeSchemaChanger) canRemoveEnumValue(
 	}
 
 	// Do validation for the array type now.
-	arrayTypeDesc, err := descsCol.GetImmutableTypeByID(
-		ctx, txn, typeDesc.ArrayTypeID, tree.ObjectLookupFlags{})
+	arrayTypeDesc, err := descsCol.ByIDWithLeased(txn).WithoutNonPublic().Get().Type(ctx, typeDesc.ArrayTypeID)
 	if err != nil {
 		return err
 	}
@@ -1099,7 +1084,7 @@ func (t *typeSchemaChanger) canRemoveEnumValueFromArrayUsages(
 	const validationErr = "could not validate removal of enum value %q"
 	for i := 0; i < arrayTypeDesc.NumReferencingDescriptors(); i++ {
 		id := arrayTypeDesc.GetReferencingDescriptorID(i)
-		desc, err := descsCol.GetImmutableTableByID(ctx, txn, id, tree.ObjectLookupFlags{})
+		desc, err := descsCol.ByIDWithLeased(txn).WithoutNonPublic().Get().Table(ctx, id)
 		if err != nil {
 			return errors.Wrapf(err, validationErr, member.LogicalRepresentation)
 		}
@@ -1148,11 +1133,7 @@ func (t *typeSchemaChanger) canRemoveEnumValueFromArrayUsages(
 		}
 		query.WriteString(fmt.Sprintf(") WHERE unnest = %s", sqlPhysRep))
 
-		_, dbDesc, err := descsCol.GetImmutableDatabaseByID(
-			ctx, txn, arrayTypeDesc.GetParentID(), tree.DatabaseLookupFlags{
-				Required:    true,
-				AvoidLeased: true,
-			})
+		dbDesc, err := descsCol.ByID(txn).WithoutNonPublic().Get().Database(ctx, arrayTypeDesc.GetParentID())
 		if err != nil {
 			return errors.Wrapf(err, validationErr, member.LogicalRepresentation)
 		}
@@ -1172,8 +1153,7 @@ func (t *typeSchemaChanger) canRemoveEnumValueFromArrayUsages(
 		}
 		if len(rows) > 0 {
 			// Use an FQN in the error message.
-			parentSchema, err := descsCol.GetImmutableSchemaByID(
-				ctx, txn, desc.GetParentSchemaID(), tree.SchemaLookupFlags{Required: true})
+			parentSchema, err := descsCol.ByIDWithLeased(txn).WithoutNonPublic().Get().Schema(ctx, desc.GetParentSchemaID())
 			if err != nil {
 				return err
 			}

@@ -448,7 +448,7 @@ func (sc *SchemaChanger) maybeMakeAddTablePublic(
 	log.Info(ctx, "making table public")
 
 	return sc.txn(ctx, func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
-		mut, err := descsCol.GetMutableTableVersionByID(ctx, table.GetID(), txn)
+		mut, err := descsCol.MutableByID(txn).Table(ctx, table.GetID())
 		if err != nil {
 			return err
 		}
@@ -489,7 +489,7 @@ func (sc *SchemaChanger) ignoreRevertedDropIndex(
 		return nil
 	}
 	return sc.txn(ctx, func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
-		mut, err := descsCol.GetMutableTableVersionByID(ctx, table.GetID(), txn)
+		mut, err := descsCol.MutableByID(txn).Table(ctx, table.GetID())
 		if err != nil {
 			return err
 		}
@@ -583,13 +583,7 @@ func (sc *SchemaChanger) getTargetDescriptor(ctx context.Context) (catalog.Descr
 	if err := sc.txn(ctx, func(
 		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 	) (err error) {
-		flags := tree.CommonLookupFlags{
-			AvoidLeased:    true,
-			Required:       true,
-			IncludeOffline: true,
-			IncludeDropped: true,
-		}
-		desc, err = descriptors.GetImmutableDescriptorByID(ctx, txn, sc.descID, flags)
+		desc, err = descriptors.ByID(txn).Get().Desc(ctx, sc.descID)
 		return err
 	}); err != nil {
 		return nil, err
@@ -893,9 +887,7 @@ func (sc *SchemaChanger) handlePermanentSchemaChangeError(
 // initialize the job running status.
 func (sc *SchemaChanger) initJobRunningStatus(ctx context.Context) error {
 	return sc.txn(ctx, func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) error {
-		flags := tree.ObjectLookupFlagsWithRequired()
-		flags.AvoidLeased = true
-		desc, err := descriptors.GetImmutableTableByID(ctx, txn, sc.descID, flags)
+		desc, err := descriptors.ByID(txn).WithoutNonPublic().Get().Table(ctx, sc.descID)
 		if err != nil {
 			return err
 		}
@@ -938,7 +930,7 @@ func (sc *SchemaChanger) dropViewDeps(
 	// Remove back-references from the tables/views this view depends on.
 	dependedOn := append([]descpb.ID(nil), viewDesc.DependsOn...)
 	for _, depID := range dependedOn {
-		dependencyDesc, err := descsCol.GetMutableTableVersionByID(ctx, depID, txn)
+		dependencyDesc, err := descsCol.MutableByID(txn).Table(ctx, depID)
 		if err != nil {
 			log.Warningf(ctx, "error resolving dependency relation ID %d", depID)
 			continue
@@ -958,7 +950,7 @@ func (sc *SchemaChanger) dropViewDeps(
 	// If anything depends on this table clean up references from that object as well.
 	DependedOnBy := append([]descpb.TableDescriptor_Reference(nil), viewDesc.DependedOnBy...)
 	for _, depRef := range DependedOnBy {
-		dependencyDesc, err := descsCol.GetMutableTableVersionByID(ctx, depRef.ID, txn)
+		dependencyDesc, err := descsCol.MutableByID(txn).Table(ctx, depRef.ID)
 		if err != nil {
 			log.Warningf(ctx, "error resolving dependency relation ID %d", depRef.ID)
 			continue
@@ -978,14 +970,7 @@ func (sc *SchemaChanger) dropViewDeps(
 			return err
 		}
 		for id := range typeClosure {
-			typeDesc, err := descsCol.GetMutableTypeByID(ctx,
-				txn,
-				id,
-				tree.ObjectLookupFlags{
-					CommonLookupFlags: tree.CommonLookupFlags{
-						AvoidLeased: true,
-					},
-				})
+			typeDesc, err := descsCol.MutableByID(txn).Type(ctx, id)
 			if err != nil {
 				log.Warningf(ctx, "error resolving type dependency %d", id)
 				continue
@@ -998,7 +983,7 @@ func (sc *SchemaChanger) dropViewDeps(
 		}
 		for i := 0; i < col.NumUsesSequences(); i++ {
 			id := col.GetUsesSequenceID(i)
-			seqDesc, err := descsCol.GetMutableTableVersionByID(ctx, id, txn)
+			seqDesc, err := descsCol.MutableByID(txn).Table(ctx, id)
 			if err != nil {
 				log.Warningf(ctx, "error resolving sequence dependency %d", id)
 				continue
@@ -1045,7 +1030,7 @@ func (sc *SchemaChanger) rollbackSchemaChange(ctx context.Context, err error) er
 	// clean up the descriptor.
 	gcJobID := sc.jobRegistry.MakeJobID()
 	if err := sc.txn(ctx, func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
-		scTable, err := descsCol.GetMutableTableVersionByID(ctx, sc.descID, txn)
+		scTable, err := descsCol.MutableByID(txn).Table(ctx, sc.descID)
 		if err != nil {
 			return err
 		}
@@ -1106,19 +1091,11 @@ func (sc *SchemaChanger) RunStateMachineBeforeBackfill(ctx context.Context) erro
 	if err := sc.txn(ctx, func(
 		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
 	) error {
-		tbl, err := descsCol.GetMutableTableVersionByID(ctx, sc.descID, txn)
+		tbl, err := descsCol.MutableByID(txn).Table(ctx, sc.descID)
 		if err != nil {
 			return err
 		}
-		_, dbDesc, err := descsCol.GetImmutableDatabaseByID(
-			ctx,
-			txn,
-			tbl.GetParentID(),
-			tree.DatabaseLookupFlags{
-				Required:    true,
-				AvoidLeased: true,
-			},
-		)
+		dbDesc, err := descsCol.ByID(txn).WithoutNonPublic().Get().Database(ctx, tbl.GetParentID())
 		if err != nil {
 			return err
 		}
@@ -1220,7 +1197,7 @@ func (sc *SchemaChanger) stepStateMachineAfterIndexBackfill(ctx context.Context)
 	if err := sc.txn(ctx, func(
 		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
 	) error {
-		tbl, err := descsCol.GetMutableTableVersionByID(ctx, sc.descID, txn)
+		tbl, err := descsCol.MutableByID(txn).Table(ctx, sc.descID)
 		if err != nil {
 			return err
 		}
@@ -1365,27 +1342,19 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 		depMutationJobs = depMutationJobs[:0]
 		otherJobIDs = otherJobIDs[:0]
 		var err error
-		scTable, err := descsCol.GetMutableTableVersionByID(ctx, sc.descID, txn)
+		scTable, err := descsCol.MutableByID(txn).Table(ctx, sc.descID)
 		if err != nil {
 			return err
 		}
 
-		_, dbDesc, err := descsCol.GetImmutableDatabaseByID(
-			ctx,
-			txn,
-			scTable.GetParentID(),
-			tree.DatabaseLookupFlags{
-				Required:    true,
-				AvoidLeased: true,
-			},
-		)
+		dbDesc, err := descsCol.ByID(txn).WithoutNonPublic().Get().Database(ctx, scTable.GetParentID())
 		if err != nil {
 			return err
 		}
 
 		collectReferencedTypeIDs := func() (catalog.DescriptorIDSet, error) {
 			typeLookupFn := func(id descpb.ID) (catalog.TypeDescriptor, error) {
-				desc, err := descsCol.GetImmutableTypeByID(ctx, txn, id, tree.ObjectLookupFlags{})
+				desc, err := descsCol.ByIDWithLeased(txn).WithoutNonPublic().Get().Type(ctx, id)
 				if err != nil {
 					return nil, err
 				}
@@ -1441,7 +1410,7 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 			if fk := m.AsForeignKey(); fk != nil && fk.Adding() &&
 				fk.GetConstraintValidity() == descpb.ConstraintValidity_Unvalidated {
 				// Add backreference on the referenced table (which could be the same table)
-				backrefTable, err := descsCol.GetMutableTableVersionByID(ctx, fk.GetReferencedTableID(), txn)
+				backrefTable, err := descsCol.MutableByID(txn).Table(ctx, fk.GetReferencedTableID())
 				if err != nil {
 					return err
 				}
@@ -1713,7 +1682,7 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 
 			// Update the set of back references.
 			for id, isAddition := range update {
-				typ, err := descsCol.GetMutableTypeVersionByID(ctx, txn, id)
+				typ, err := descsCol.MutableByID(txn).Type(ctx, id)
 				if err != nil {
 					return err
 				}
@@ -1754,7 +1723,7 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 
 			// Update the set of back references.
 			for id, colIDSet := range update {
-				tbl, err := descsCol.GetMutableTableVersionByID(ctx, id, txn)
+				tbl, err := descsCol.MutableByID(txn).Table(ctx, id)
 				if err != nil {
 					return err
 				}
@@ -1946,7 +1915,7 @@ func (sc *SchemaChanger) maybeReverseMutations(ctx context.Context, causingError
 	alreadyReversed := false
 	const kvTrace = true // TODO(ajwerner): figure this out
 	err := sc.txn(ctx, func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
-		scTable, err := descsCol.GetMutableTableVersionByID(ctx, sc.descID, txn)
+		scTable, err := descsCol.MutableByID(txn).Table(ctx, sc.descID)
 		if err != nil {
 			return err
 		}
@@ -2019,7 +1988,7 @@ func (sc *SchemaChanger) maybeReverseMutations(ctx context.Context, causingError
 				}
 				// Get the foreign key backreferences to remove.
 				if fk := constraint.AsForeignKey(); fk != nil {
-					backrefTable, err := descsCol.GetMutableTableVersionByID(ctx, fk.GetReferencedTableID(), txn)
+					backrefTable, err := descsCol.MutableByID(txn).Table(ctx, fk.GetReferencedTableID())
 					if err != nil {
 						return err
 					}
@@ -3093,15 +3062,7 @@ func (sc *SchemaChanger) preSplitHashShardedIndexRanges(ctx context.Context) err
 		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
 	) error {
 		hour := hlc.Timestamp{WallTime: timeutil.Now().Add(time.Hour).UnixNano()}
-		tableDesc, err := descsCol.GetMutableTableByID(
-			ctx, txn, sc.descID,
-			tree.ObjectLookupFlags{
-				CommonLookupFlags: tree.CommonLookupFlags{
-					IncludeOffline: true,
-					IncludeDropped: true,
-				},
-			},
-		)
+		tableDesc, err := descsCol.MutableByID(txn).Table(ctx, sc.descID)
 		if err != nil {
 			return err
 		}

@@ -10448,34 +10448,30 @@ $$;
 	udfID, err := strconv.Atoi(rows[0][0])
 	require.NoError(t, err)
 	err = sql.TestingDescsTxn(ctx, srcServer, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
-		dbDesc, err := col.GetImmutableDatabaseByName(ctx, txn, "db1", tree.DatabaseLookupFlags{Required: true})
+		dbDesc, err := col.ByNameWithLeased(txn).Get().Database(ctx, "db1")
 		require.NoError(t, err)
 		require.Equal(t, 104, int(dbDesc.GetID()))
 
-		scDesc, err := col.GetImmutableSchemaByName(ctx, txn, dbDesc, "sc1", tree.SchemaLookupFlags{Required: true})
+		scDesc, err := col.ByNameWithLeased(txn).Get().Schema(ctx, dbDesc, "sc1")
 		require.NoError(t, err)
 		require.Equal(t, 106, int(scDesc.GetID()))
 
 		tbName := tree.MakeTableNameWithSchema("db1", "sc1", "tbl1")
-		_, tbDesc, err := col.GetImmutableTableByName(
-			ctx, txn, &tbName, tree.ObjectLookupFlagsWithRequired(),
-		)
+		_, tbDesc, err := descs.PrefixAndTable(ctx, col.ByNameWithLeased(txn).Get(), &tbName)
 		require.NoError(t, err)
 		require.Equal(t, 107, int(tbDesc.GetID()))
 
 		typName := tree.MakeQualifiedTypeName("db1", "sc1", "enum1")
-		_, typDesc, err := col.GetImmutableTypeByName(ctx, txn, &typName, tree.ObjectLookupFlagsWithRequired())
+		_, typDesc, err := descs.PrefixAndType(ctx, col.ByNameWithLeased(txn).Get(), &typName)
 		require.NoError(t, err)
 		require.Equal(t, 108, int(typDesc.GetID()))
 
 		tbName = tree.MakeTableNameWithSchema("db1", "sc1", "sq1")
-		_, tbDesc, err = col.GetImmutableTableByName(
-			ctx, txn, &tbName, tree.ObjectLookupFlagsWithRequired(),
-		)
+		_, tbDesc, err = descs.PrefixAndTable(ctx, col.ByNameWithLeased(txn).Get(), &tbName)
 		require.NoError(t, err)
 		require.Equal(t, 110, int(tbDesc.GetID()))
 
-		fnDesc, err := col.GetImmutableFunctionByID(ctx, txn, descpb.ID(udfID), tree.ObjectLookupFlagsWithRequired())
+		fnDesc, err := col.ByIDWithLeased(txn).WithoutNonPublic().Get().Function(ctx, descpb.ID(udfID))
 		require.NoError(t, err)
 		require.Equal(t, 111, int(fnDesc.GetID()))
 		require.Equal(t, 104, int(fnDesc.GetParentID()))
@@ -10504,34 +10500,30 @@ $$;
 	udfID, err = strconv.Atoi(rows[0][0])
 	require.NoError(t, err)
 	err = sql.TestingDescsTxn(ctx, srcServer, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
-		dbDesc, err := col.GetImmutableDatabaseByName(ctx, txn, "db1_new", tree.DatabaseLookupFlags{Required: true})
+		dbDesc, err := col.ByNameWithLeased(txn).Get().Database(ctx, "db1_new")
 		require.NoError(t, err)
 		require.Equal(t, 112, int(dbDesc.GetID()))
 
-		scDesc, err := col.GetImmutableSchemaByName(ctx, txn, dbDesc, "sc1", tree.SchemaLookupFlags{Required: true})
+		scDesc, err := col.ByNameWithLeased(txn).Get().Schema(ctx, dbDesc, "sc1")
 		require.NoError(t, err)
 		require.Equal(t, 114, int(scDesc.GetID()))
 
 		tbName := tree.MakeTableNameWithSchema("db1_new", "sc1", "tbl1")
-		_, tbDesc, err := col.GetImmutableTableByName(
-			ctx, txn, &tbName, tree.ObjectLookupFlagsWithRequired(),
-		)
+		_, tbDesc, err := descs.PrefixAndTable(ctx, col.ByNameWithLeased(txn).Get(), &tbName)
 		require.NoError(t, err)
 		require.Equal(t, 115, int(tbDesc.GetID()))
 
 		typName := tree.MakeQualifiedTypeName("db1_new", "sc1", "enum1")
-		_, typDesc, err := col.GetImmutableTypeByName(ctx, txn, &typName, tree.ObjectLookupFlagsWithRequired())
+		_, typDesc, err := descs.PrefixAndType(ctx, col.ByNameWithLeased(txn).Get(), &typName)
 		require.NoError(t, err)
 		require.Equal(t, 116, int(typDesc.GetID()))
 
 		tbName = tree.MakeTableNameWithSchema("db1_new", "sc1", "sq1")
-		_, tbDesc, err = col.GetImmutableTableByName(
-			ctx, txn, &tbName, tree.ObjectLookupFlagsWithRequired(),
-		)
+		_, tbDesc, err = descs.PrefixAndTable(ctx, col.ByNameWithLeased(txn).Get(), &tbName)
 		require.NoError(t, err)
 		require.Equal(t, 118, int(tbDesc.GetID()))
 
-		fnDesc, err := col.GetImmutableFunctionByID(ctx, txn, descpb.ID(udfID), tree.ObjectLookupFlagsWithRequired())
+		fnDesc, err := col.ByIDWithLeased(txn).WithoutNonPublic().Get().Function(ctx, descpb.ID(udfID))
 		require.NoError(t, err)
 		require.Equal(t, 119, int(fnDesc.GetID()))
 		require.Equal(t, 112, int(fnDesc.GetParentID()))
@@ -10595,34 +10587,30 @@ $$;
 	udfID, err := strconv.Atoi(rows[0][0])
 	require.NoError(t, err)
 	err = sql.TestingDescsTxn(ctx, srcServer, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
-		dbDesc, err := col.GetImmutableDatabaseByName(ctx, txn, "db1", tree.DatabaseLookupFlags{Required: true})
+		dbDesc, err := col.ByNameWithLeased(txn).Get().Database(ctx, "db1")
 		require.NoError(t, err)
 		require.Equal(t, 104, int(dbDesc.GetID()))
 
-		scDesc, err := col.GetImmutableSchemaByName(ctx, txn, dbDesc, "sc1", tree.SchemaLookupFlags{Required: true})
+		scDesc, err := col.ByNameWithLeased(txn).Get().Schema(ctx, dbDesc, "sc1")
 		require.NoError(t, err)
 		require.Equal(t, 106, int(scDesc.GetID()))
 
 		tbName := tree.MakeTableNameWithSchema("db1", "sc1", "tbl1")
-		_, tbDesc, err := col.GetImmutableTableByName(
-			ctx, txn, &tbName, tree.ObjectLookupFlagsWithRequired(),
-		)
+		_, tbDesc, err := descs.PrefixAndTable(ctx, col.ByNameWithLeased(txn).Get(), &tbName)
 		require.NoError(t, err)
 		require.Equal(t, 107, int(tbDesc.GetID()))
 
 		typName := tree.MakeQualifiedTypeName("db1", "sc1", "enum1")
-		_, typDesc, err := col.GetImmutableTypeByName(ctx, txn, &typName, tree.ObjectLookupFlagsWithRequired())
+		_, typDesc, err := descs.PrefixAndType(ctx, col.ByNameWithLeased(txn).Get(), &typName)
 		require.NoError(t, err)
 		require.Equal(t, 108, int(typDesc.GetID()))
 
 		tbName = tree.MakeTableNameWithSchema("db1", "sc1", "sq1")
-		_, tbDesc, err = col.GetImmutableTableByName(
-			ctx, txn, &tbName, tree.ObjectLookupFlagsWithRequired(),
-		)
+		_, tbDesc, err = descs.PrefixAndTable(ctx, col.ByNameWithLeased(txn).Get(), &tbName)
 		require.NoError(t, err)
 		require.Equal(t, 110, int(tbDesc.GetID()))
 
-		fnDesc, err := col.GetImmutableFunctionByID(ctx, txn, descpb.ID(udfID), tree.ObjectLookupFlagsWithRequired())
+		fnDesc, err := col.ByIDWithLeased(txn).WithoutNonPublic().Get().Function(ctx, descpb.ID(udfID))
 		require.NoError(t, err)
 		require.Equal(t, 111, int(fnDesc.GetID()))
 		require.Equal(t, 104, int(fnDesc.GetParentID()))
@@ -10653,34 +10641,30 @@ $$;
 	udfID, err = strconv.Atoi(rows[0][0])
 	require.NoError(t, err)
 	err = sql.TestingDescsTxn(ctx, tgtServer, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
-		dbDesc, err := col.GetImmutableDatabaseByName(ctx, txn, "db1", tree.DatabaseLookupFlags{Required: true})
+		dbDesc, err := col.ByNameWithLeased(txn).Get().Database(ctx, "db1")
 		require.NoError(t, err)
 		require.Equal(t, 107, int(dbDesc.GetID()))
 
-		scDesc, err := col.GetImmutableSchemaByName(ctx, txn, dbDesc, "sc1", tree.SchemaLookupFlags{Required: true})
+		scDesc, err := col.ByNameWithLeased(txn).Get().Schema(ctx, dbDesc, "sc1")
 		require.NoError(t, err)
 		require.Equal(t, 125, int(scDesc.GetID()))
 
 		tbName := tree.MakeTableNameWithSchema("db1", "sc1", "tbl1")
-		_, tbDesc, err := col.GetImmutableTableByName(
-			ctx, txn, &tbName, tree.ObjectLookupFlagsWithRequired(),
-		)
+		_, tbDesc, err := descs.PrefixAndTable(ctx, col.ByNameWithLeased(txn).Get(), &tbName)
 		require.NoError(t, err)
 		require.Equal(t, 126, int(tbDesc.GetID()))
 
 		typName := tree.MakeQualifiedTypeName("db1", "sc1", "enum1")
-		_, typDesc, err := col.GetImmutableTypeByName(ctx, txn, &typName, tree.ObjectLookupFlagsWithRequired())
+		_, typDesc, err := descs.PrefixAndType(ctx, col.ByNameWithLeased(txn).Get(), &typName)
 		require.NoError(t, err)
 		require.Equal(t, 127, int(typDesc.GetID()))
 
 		tbName = tree.MakeTableNameWithSchema("db1", "sc1", "sq1")
-		_, tbDesc, err = col.GetImmutableTableByName(
-			ctx, txn, &tbName, tree.ObjectLookupFlagsWithRequired(),
-		)
+		_, tbDesc, err = descs.PrefixAndTable(ctx, col.ByNameWithLeased(txn).Get(), &tbName)
 		require.NoError(t, err)
 		require.Equal(t, 129, int(tbDesc.GetID()))
 
-		fnDesc, err := col.GetImmutableFunctionByID(ctx, txn, descpb.ID(udfID), tree.ObjectLookupFlagsWithRequired())
+		fnDesc, err := col.ByIDWithLeased(txn).WithoutNonPublic().Get().Function(ctx, descpb.ID(udfID))
 		require.NoError(t, err)
 		require.Equal(t, 130, int(fnDesc.GetID()))
 		require.Equal(t, 107, int(fnDesc.GetParentID()))

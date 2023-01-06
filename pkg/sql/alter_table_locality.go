@@ -70,15 +70,7 @@ func (p *planner) AlterTableLocality(
 	}
 
 	// Ensure that the database is multi-region enabled.
-	_, dbDesc, err := p.Descriptors().GetImmutableDatabaseByID(
-		ctx,
-		p.txn,
-		tableDesc.GetParentID(),
-		tree.DatabaseLookupFlags{
-			AvoidLeased: true,
-			Required:    true,
-		},
-	)
+	dbDesc, err := p.Descriptors().ByID(p.txn).WithoutNonPublic().Get().Database(ctx, tableDesc.GetParentID())
 	if err != nil {
 		return nil, err
 	}
@@ -122,12 +114,7 @@ func (n *alterTableSetLocalityNode) alterTableLocalityGlobalToRegionalByTable(
 		)
 	}
 
-	_, dbDesc, err := params.p.Descriptors().GetImmutableDatabaseByID(
-		params.ctx, params.p.txn, n.tableDesc.ParentID,
-		tree.DatabaseLookupFlags{
-			Required:    true,
-			AvoidLeased: true,
-		})
+	dbDesc, err := params.p.Descriptors().ByID(params.p.txn).WithoutNonPublic().Get().Database(params.ctx, n.tableDesc.ParentID)
 	if err != nil {
 		return err
 	}
@@ -189,12 +176,7 @@ func (n *alterTableSetLocalityNode) alterTableLocalityRegionalByTableToRegionalB
 		)
 	}
 
-	_, dbDesc, err := params.p.Descriptors().GetImmutableDatabaseByID(
-		params.ctx, params.p.txn, n.tableDesc.ParentID,
-		tree.DatabaseLookupFlags{
-			Required:    true,
-			AvoidLeased: true,
-		})
+	dbDesc, err := params.p.Descriptors().ByID(params.p.txn).WithoutNonPublic().Get().Database(params.ctx, n.tableDesc.ParentID)
 	if err != nil {
 		return err
 	}
@@ -671,11 +653,7 @@ func setNewLocalityConfig(
 	descsCol *descs.Collection,
 ) error {
 	getMultiRegionTypeDesc := func() (*typedesc.Mutable, error) {
-		_, dbDesc, err := descsCol.GetImmutableDatabaseByID(
-			ctx, txn, desc.GetParentID(), tree.DatabaseLookupFlags{
-				Required:    true,
-				AvoidLeased: true,
-			})
+		dbDesc, err := descsCol.ByID(txn).WithoutNonPublic().Get().Database(ctx, desc.GetParentID())
 		if err != nil {
 			return nil, err
 		}
@@ -684,7 +662,7 @@ func setNewLocalityConfig(
 		if err != nil {
 			return nil, err
 		}
-		return descsCol.GetMutableTypeVersionByID(ctx, txn, regionEnumID)
+		return descsCol.MutableByID(txn).Type(ctx, regionEnumID)
 	}
 	// If there was a dependency before on the multi-region enum before the
 	// new locality is set, we must unlink the dependency.

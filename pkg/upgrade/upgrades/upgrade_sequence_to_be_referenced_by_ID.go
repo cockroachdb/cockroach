@@ -148,14 +148,13 @@ func upgradeSetUpForTableOrView(
 	idToUpgrade descpb.ID,
 ) (*tabledesc.Mutable, resolver.SchemaResolver, func(), error) {
 	// Get the table descriptor that we are going to upgrade.
-	tableDesc, err := descriptors.GetMutableTableByID(ctx, txn, idToUpgrade, tree.ObjectLookupFlagsWithRequired())
+	tableDesc, err := descriptors.MutableByID(txn).Table(ctx, idToUpgrade)
 	if err != nil {
 		return nil, nil, nil, err
 	}
 
 	// Get the database of the table to pass to the planner constructor.
-	_, dbDesc, err := descriptors.GetImmutableDatabaseByID(
-		ctx, txn, tableDesc.GetParentID(), tree.DatabaseLookupFlags{Required: true})
+	dbDesc, err := descriptors.ByIDWithLeased(txn).WithoutNonPublic().Get().Database(ctx, tableDesc.GetParentID())
 	if err != nil {
 		return nil, nil, nil, err
 	}

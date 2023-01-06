@@ -92,9 +92,7 @@ func (b *Builtins) DescriptorWithPostDeserializationChanges(
 func (b *Builtins) PGRelationIsUpdatable(
 	ctx context.Context, oidArg *tree.DOid,
 ) (*tree.DInt, error) {
-	tableDesc, err := b.dc.GetImmutableTableByID(
-		ctx, b.txn, descpb.ID(oidArg.Oid), tree.ObjectLookupFlagsWithRequired(),
-	)
+	tableDesc, err := b.dc.ByIDWithLeased(b.txn).WithoutNonPublic().Get().Table(ctx, descpb.ID(oidArg.Oid))
 	if err != nil {
 		// For postgres compatibility, it is expected that rather returning
 		// an error this return nonUpdatableEvents (Zero) because there could
@@ -124,7 +122,7 @@ func (b *Builtins) PGColumnIsUpdatable(
 		return tree.DBoolFalse, nil
 	}
 	attNum := descpb.PGAttributeNum(attNumArg)
-	tableDesc, err := b.dc.GetImmutableTableByID(ctx, b.txn, descpb.ID(oidArg.Oid), tree.ObjectLookupFlagsWithRequired())
+	tableDesc, err := b.dc.ByIDWithLeased(b.txn).WithoutNonPublic().Get().Table(ctx, descpb.ID(oidArg.Oid))
 	if err != nil {
 		if sqlerrors.IsUndefinedRelationError(err) {
 			// For postgres compatibility, it is expected that rather returning

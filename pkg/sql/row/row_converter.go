@@ -277,12 +277,7 @@ func (c *DatumRowConverter) getSequenceAnnotation(
 		if err := txn.SetFixedTimestamp(ctx, hlc.Timestamp{WallTime: evalCtx.TxnTimestamp.UnixNano()}); err != nil {
 			return err
 		}
-		flags := tree.CommonLookupFlags{
-			AvoidLeased:    true,
-			IncludeOffline: true,
-			IncludeDropped: true,
-		}
-		seqs, err := descsCol.GetImmutableDescriptorsByID(ctx, txn, flags, sequenceIDs.Ordered()...)
+		seqs, err := descsCol.ByID(txn).Get().Descs(ctx, sequenceIDs.Ordered())
 		if err != nil {
 			return err
 		}

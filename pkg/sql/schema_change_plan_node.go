@@ -197,11 +197,7 @@ func (p *planner) waitForDescriptorSchemaChanges(
 			if err := txn.SetFixedTimestamp(ctx, now); err != nil {
 				return err
 			}
-			desc, err := descriptors.GetImmutableDescriptorByID(ctx, txn, descID,
-				tree.CommonLookupFlags{
-					Required:    true,
-					AvoidLeased: true,
-				})
+			desc, err := descriptors.ByID(txn).WithoutNonPublic().Get().Desc(ctx, descID)
 			if err != nil {
 				return err
 			}

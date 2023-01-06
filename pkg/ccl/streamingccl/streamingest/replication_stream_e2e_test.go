@@ -55,7 +55,7 @@ func TestTenantStreamingProducerJobTimedOut(t *testing.T) {
 	c, cleanup := replicationtestutils.CreateTenantStreamingClusters(ctx, t, args)
 	defer cleanup()
 
-	producerJobID, ingestionJobID := c.StartStreamReplication()
+	producerJobID, ingestionJobID := c.StartStreamReplication(ctx)
 
 	jobutils.WaitForJobToRun(c.T, c.SrcSysSQL, jobspb.JobID(producerJobID))
 	jobutils.WaitForJobToRun(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
@@ -116,7 +116,7 @@ func TestTenantStreamingPauseResumeIngestion(t *testing.T) {
 	c, cleanup := replicationtestutils.CreateTenantStreamingClusters(ctx, t, args)
 	defer cleanup()
 
-	producerJobID, ingestionJobID := c.StartStreamReplication()
+	producerJobID, ingestionJobID := c.StartStreamReplication(ctx)
 
 	jobutils.WaitForJobToRun(c.T, c.SrcSysSQL, jobspb.JobID(producerJobID))
 	jobutils.WaitForJobToRun(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
@@ -190,7 +190,7 @@ func TestTenantStreamingPauseOnPermanentJobError(t *testing.T) {
 	ingestErrCh <- errors.Newf("ingestion error from test")
 	close(ingestErrCh)
 
-	producerJobID, ingestionJobID := c.StartStreamReplication()
+	producerJobID, ingestionJobID := c.StartStreamReplication(ctx)
 	jobutils.WaitForJobToRun(c.T, c.SrcSysSQL, jobspb.JobID(producerJobID))
 	jobutils.WaitForJobToPause(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
 
@@ -241,7 +241,7 @@ func TestTenantStreamingCheckpoint(t *testing.T) {
 	c, cleanup := replicationtestutils.CreateTenantStreamingClusters(ctx, t, args)
 	defer cleanup()
 
-	producerJobID, ingestionJobID := c.StartStreamReplication()
+	producerJobID, ingestionJobID := c.StartStreamReplication(ctx)
 
 	// Helper to read job progress
 	jobRegistry := c.DestSysServer.JobRegistry().(*jobs.Registry)
@@ -337,7 +337,7 @@ func TestTenantStreamingCancelIngestion(t *testing.T) {
 	testCancelIngestion := func(t *testing.T, cancelAfterPaused bool) {
 		c, cleanup := replicationtestutils.CreateTenantStreamingClusters(ctx, t, args)
 		defer cleanup()
-		producerJobID, ingestionJobID := c.StartStreamReplication()
+		producerJobID, ingestionJobID := c.StartStreamReplication(ctx)
 
 		jobutils.WaitForJobToRun(c.T, c.SrcSysSQL, jobspb.JobID(producerJobID))
 		jobutils.WaitForJobToRun(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
@@ -413,7 +413,7 @@ func TestTenantStreamingDropTenantCancelsStream(t *testing.T) {
 	testCancelIngestion := func(t *testing.T, cancelAfterPaused bool) {
 		c, cleanup := replicationtestutils.CreateTenantStreamingClusters(ctx, t, args)
 		defer cleanup()
-		producerJobID, ingestionJobID := c.StartStreamReplication()
+		producerJobID, ingestionJobID := c.StartStreamReplication(ctx)
 
 		c.DestSysSQL.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'")
 		c.DestSysSQL.Exec(t, "SET CLUSTER SETTING kv.protectedts.reconciliation.interval = '1ms';")
@@ -480,7 +480,7 @@ func TestTenantStreamingUnavailableStreamAddress(t *testing.T) {
 	replicationtestutils.CreateScatteredTable(t, c, 3)
 	srcScatteredData := c.SrcTenantSQL.QueryStr(c.T, "SELECT * FROM d.scattered ORDER BY key")
 
-	producerJobID, ingestionJobID := c.StartStreamReplication()
+	producerJobID, ingestionJobID := c.StartStreamReplication(ctx)
 	jobutils.WaitForJobToRun(c.T, c.SrcSysSQL, jobspb.JobID(producerJobID))
 	jobutils.WaitForJobToRun(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
 
@@ -532,8 +532,11 @@ func TestTenantStreamingUnavailableStreamAddress(t *testing.T) {
 	var cutoverTime time.Time
 	alternateSrcSysSQL.QueryRow(t, "SELECT clock_timestamp()").Scan(&cutoverTime)
 
-	c.DestSysSQL.Exec(c.T, `ALTER TENANT $1 COMPLETE REPLICATION TO SYSTEM TIME $2::string`,
-		c.Args.DestTenantName, cutoverTime)
+	var cutoverStr string
+	c.DestSysSQL.QueryRow(c.T, `ALTER TENANT $1 COMPLETE REPLICATION TO SYSTEM TIME $2::string`,
+		c.Args.DestTenantName, cutoverTime).Scan(&cutoverStr)
+	cutoverOutput := replicationtestutils.DecimalTimeToHLC(t, cutoverStr)
+	require.Equal(c.T, cutoverTime, cutoverOutput.GoTime())
 	jobutils.WaitForJobToSucceed(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
 
 	// The destroyed address should have been removed from the topology
@@ -561,7 +564,7 @@ func TestTenantStreamingCutoverOnSourceFailure(t *testing.T) {
 	c, cleanup := replicationtestutils.CreateTenantStreamingClusters(ctx, t, args)
 	defer cleanup()
 
-	producerJobID, ingestionJobID := c.StartStreamReplication()
+	producerJobID, ingestionJobID := c.StartStreamReplication(ctx)
 
 	jobutils.WaitForJobToRun(c.T, c.SrcSysSQL, jobspb.JobID(producerJobID))
 	jobutils.WaitForJobToRun(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
@@ -580,8 +583,11 @@ func TestTenantStreamingCutoverOnSourceFailure(t *testing.T) {
 	// Destroy the source cluster
 	c.SrcCleanup()
 
-	c.DestSysSQL.Exec(c.T, `ALTER TENANT $1 COMPLETE REPLICATION TO SYSTEM TIME $2::string`,
-		c.Args.DestTenantName, cutoverTime.AsOfSystemTime())
+	var cutoverStr string
+	c.DestSysSQL.QueryRow(c.T, `ALTER TENANT $1 COMPLETE REPLICATION TO SYSTEM TIME $2::string`,
+		c.Args.DestTenantName, cutoverTime.AsOfSystemTime()).Scan(&cutoverStr)
+	cutoverOutput := replicationtestutils.DecimalTimeToHLC(t, cutoverStr)
+	require.Equal(c.T, cutoverTime, cutoverOutput)
 
 	// Resume ingestion.
 	c.DestSysSQL.Exec(t, fmt.Sprintf("RESUME JOB %d", ingestionJobID))
@@ -602,7 +608,7 @@ func TestTenantStreamingDeleteRange(t *testing.T) {
 	c, cleanup := replicationtestutils.CreateTenantStreamingClusters(ctx, t, replicationtestutils.DefaultTenantStreamingClustersArgs)
 	defer cleanup()
 
-	producerJobID, ingestionJobID := c.StartStreamReplication()
+	producerJobID, ingestionJobID := c.StartStreamReplication(ctx)
 	jobutils.WaitForJobToRun(c.T, c.SrcSysSQL, jobspb.JobID(producerJobID))
 	jobutils.WaitForJobToRun(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
 
@@ -686,7 +692,7 @@ func TestTenantStreamingMultipleNodes(t *testing.T) {
 
 	replicationtestutils.CreateScatteredTable(t, c, 3)
 
-	producerJobID, ingestionJobID := c.StartStreamReplication()
+	producerJobID, ingestionJobID := c.StartStreamReplication(ctx)
 	jobutils.WaitForJobToRun(c.T, c.SrcSysSQL, jobspb.JobID(producerJobID))
 	jobutils.WaitForJobToRun(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
 
@@ -805,7 +811,7 @@ func TestTenantReplicationProtectedTimestampManagement(t *testing.T) {
 		c.DestSysSQL.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'")
 		c.DestSysSQL.Exec(t, "SET CLUSTER SETTING kv.protectedts.reconciliation.interval = '1ms';")
 
-		producerJobID, replicationJobID := c.StartStreamReplication()
+		producerJobID, replicationJobID := c.StartStreamReplication(ctx)
 
 		jobutils.WaitForJobToRun(c.T, c.SrcSysSQL, jobspb.JobID(producerJobID))
 		jobutils.WaitForJobToRun(c.T, c.DestSysSQL, jobspb.JobID(replicationJobID))
@@ -895,7 +901,7 @@ func TestTenantStreamingShowTenant(t *testing.T) {
 
 	c, cleanup := replicationtestutils.CreateTenantStreamingClusters(ctx, t, args)
 	defer cleanup()
-	producerJobID, ingestionJobID := c.StartStreamReplication()
+	producerJobID, ingestionJobID := c.StartStreamReplication(ctx)
 
 	jobutils.WaitForJobToRun(c.T, c.SrcSysSQL, jobspb.JobID(producerJobID))
 	jobutils.WaitForJobToRun(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))

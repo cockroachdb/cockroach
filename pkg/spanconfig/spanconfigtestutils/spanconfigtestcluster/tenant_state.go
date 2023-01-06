@@ -150,20 +150,16 @@ func (s *Tenant) WithMutableDatabaseDescriptor(
 	require.NoError(s.t, sql.DescsTxn(ctx, &execCfg, func(
 		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
 	) error {
-		desc, err := descsCol.GetMutableDatabaseByName(
-			ctx,
-			txn,
-			dbName,
-			tree.DatabaseLookupFlags{
-				Required:       true,
-				IncludeOffline: true,
-			},
-		)
+		imm, err := descsCol.ByName(txn).WithOffline().Get().Database(ctx, dbName)
 		if err != nil {
 			return err
 		}
-		f(desc)
-		return descsCol.WriteDesc(ctx, false, desc, txn)
+		mut, err := descsCol.MutableByID(txn).Database(ctx, imm.GetID())
+		if err != nil {
+			return err
+		}
+		f(mut)
+		return descsCol.WriteDesc(ctx, false, mut, txn)
 	}))
 }
 
@@ -177,30 +173,19 @@ func (s *Tenant) WithMutableTableDescriptor(
 	require.NoError(s.t, sql.DescsTxn(ctx, &execCfg, func(
 		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
 	) error {
-		_, desc, err := descsCol.GetMutableTableByName(
-			ctx,
-			txn,
-			tree.NewTableNameWithSchema(tree.Name(dbName), "public", tree.Name(tbName)),
-			tree.ObjectLookupFlags{
-				CommonLookupFlags: tree.CommonLookupFlags{
-					Required:       true,
-					IncludeOffline: true,
-				},
-			},
-		)
+		g := descsCol.ByName(txn).WithOffline().Get()
+		tn := tree.NewTableNameWithSchema(tree.Name(dbName), "public", tree.Name(tbName))
+		_, imm, err := descs.PrefixAndTable(ctx, g, tn)
 		if err != nil {
 			return err
 		}
-		f(desc)
-		return descsCol.WriteDesc(ctx, false, desc, txn)
+		mut, err := descsCol.MutableByID(txn).Table(ctx, imm.GetID())
+		if err != nil {
+			return err
+		}
+		f(mut)
+		return descsCol.WriteDesc(ctx, false /* kvTrace */, mut, txn)
 	}))
-}
-
-// descLookupFlags is the set of look up flags used when fetching descriptors.
-var descLookupFlags = tree.CommonLookupFlags{
-	IncludeDropped: true,
-	IncludeOffline: true,
-	AvoidLeased:    true, // we want consistent reads
 }
 
 // LookupTableDescriptorByID returns the table identified by the given ID.
@@ -212,11 +197,7 @@ func (s *Tenant) LookupTableDescriptorByID(
 		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
 	) error {
 		var err error
-		desc, err = descsCol.GetImmutableTableByID(ctx, txn, id,
-			tree.ObjectLookupFlags{
-				CommonLookupFlags: descLookupFlags,
-			},
-		)
+		desc, err = descsCol.ByID(txn).Get().Table(ctx, id)
 		return err
 	}))
 	return desc
@@ -231,12 +212,9 @@ func (s *Tenant) LookupTableByName(
 		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
 	) error {
 		var err error
-		_, desc, err = descsCol.GetImmutableTableByName(ctx, txn,
-			tree.NewTableNameWithSchema(tree.Name(dbName), "public", tree.Name(tbName)),
-			tree.ObjectLookupFlags{
-				CommonLookupFlags: descLookupFlags,
-			},
-		)
+		g := descsCol.ByName(txn).WithOffline().MaybeGet()
+		tn := tree.NewTableNameWithSchema(tree.Name(dbName), "public", tree.Name(tbName))
+		_, desc, err = descs.PrefixAndTable(ctx, g, tn)
 		return err
 	}))
 	return desc
@@ -251,13 +229,7 @@ func (s *Tenant) LookupDatabaseByName(
 	require.NoError(s.t, sql.DescsTxn(ctx, &execCfg,
 		func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
 			var err error
-			desc, err = descsCol.GetImmutableDatabaseByName(ctx, txn, dbName,
-				tree.DatabaseLookupFlags{
-					Required:       true,
-					IncludeOffline: true,
-					AvoidLeased:    true,
-				},
-			)
+			desc, err = descsCol.ByName(txn).WithOffline().Get().Database(ctx, dbName)
 			return err
 		}))
 	return desc

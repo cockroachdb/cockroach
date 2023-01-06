@@ -98,8 +98,7 @@ func (p *planner) getOrCreateTemporarySchema(
 	ctx context.Context, db catalog.DatabaseDescriptor,
 ) (catalog.SchemaDescriptor, error) {
 	tempSchemaName := p.TemporarySchemaName()
-	flags := tree.CommonLookupFlags{AvoidLeased: true}
-	sc, err := p.Descriptors().GetImmutableSchemaByName(ctx, p.txn, db, tempSchemaName, flags)
+	sc, err := p.Descriptors().ByName(p.txn).MaybeGet().Schema(ctx, db, tempSchemaName)
 	if sc != nil || err != nil {
 		return sc, err
 	}
@@ -122,7 +121,7 @@ func (p *planner) getOrCreateTemporarySchema(
 		m.SetTemporarySchemaName(tempSchemaName)
 		m.SetTemporarySchemaIDForDatabase(uint32(db.GetID()), uint32(id))
 	})
-	return p.Descriptors().GetImmutableSchemaByID(ctx, p.Txn(), id, p.CommonLookupFlagsRequired())
+	return p.byIDGetterBuilder().WithoutNonPublic().Get().Schema(ctx, id)
 }
 
 // temporarySchemaName returns the session specific temporary schema name given
@@ -175,8 +174,7 @@ func cleanupSessionTempObjects(
 				return err
 			}
 			for _, dbDesc := range allDbDescs {
-				flags := tree.CommonLookupFlags{AvoidLeased: true}
-				tempSchema, err := descsCol.GetImmutableSchemaByName(ctx, txn, dbDesc, tempSchemaName, flags)
+				tempSchema, err := descsCol.ByName(txn).MaybeGet().Schema(ctx, dbDesc, tempSchemaName)
 				if err != nil {
 					return err
 				}
@@ -307,17 +305,15 @@ func cleanupTempSchemaObjects(
 					if _, ok := tblDescsByID[d.ID]; ok {
 						return nil
 					}
-					flags := tree.CommonLookupFlags{AvoidLeased: true}
-					dTableDesc, err := descsCol.GetImmutableTableByID(
-						ctx, txn, d.ID, tree.ObjectLookupFlags{CommonLookupFlags: flags})
+					dTableDesc, err := descsCol.ByID(txn).WithoutNonPublic().Get().Table(ctx, d.ID)
 					if err != nil {
 						return err
 					}
-					_, db, err := descsCol.GetImmutableDatabaseByID(ctx, txn, dTableDesc.GetParentID(), flags)
+					db, err := descsCol.ByID(txn).WithoutNonPublic().Get().Database(ctx, dTableDesc.GetParentID())
 					if err != nil {
 						return err
 					}
-					sc, err := descsCol.GetImmutableSchemaByID(ctx, txn, dTableDesc.GetParentSchemaID(), flags)
+					sc, err := descsCol.ByID(txn).WithoutNonPublic().Get().Schema(ctx, dTableDesc.GetParentSchemaID())
 					if err != nil {
 						return err
 					}

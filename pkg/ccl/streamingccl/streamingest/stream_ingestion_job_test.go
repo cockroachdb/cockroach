@@ -118,14 +118,14 @@ SET enable_experimental_stream_replication = true;
 	pgURL, cleanupSink := sqlutils.PGUrl(t, source.ServingSQLAddr(), t.Name(), url.User(username.RootUser))
 	defer cleanupSink()
 
-	var ingestionJobID, streamProducerJobID int64
 	var startTime string
 	sourceSQL.QueryRow(t, "SELECT cluster_logical_timestamp()").Scan(&startTime)
 
-	destSQL.QueryRow(t,
+	destSQL.Exec(t,
 		`CREATE TENANT "destination-tenant" FROM REPLICATION OF "source-tenant" ON $1 `,
 		pgURL.String(),
-	).Scan(&ingestionJobID, &streamProducerJobID)
+	)
+	streamProducerJobID, ingestionJobID := replicationtestutils.GetStreamJobIds(t, ctx, destSQL, "destination-tenant")
 
 	sourceSQL.Exec(t, `
 CREATE DATABASE d;
@@ -136,12 +136,16 @@ INSERT INTO d.t2 VALUES (2);
 `)
 
 	replicationtestutils.WaitUntilStartTimeReached(t, destSQL, jobspb.JobID(ingestionJobID))
+	var cutoverStr string
 	cutoverTime := timeutil.Now().Round(time.Microsecond)
-	destSQL.Exec(t, `ALTER TENANT "destination-tenant" COMPLETE REPLICATION TO SYSTEM TIME $1::string`, hlc.Timestamp{WallTime: cutoverTime.UnixNano()}.AsOfSystemTime())
+	destSQL.QueryRow(t, `ALTER TENANT "destination-tenant" COMPLETE REPLICATION TO SYSTEM TIME $1::string`,
+		hlc.Timestamp{WallTime: cutoverTime.UnixNano()}.AsOfSystemTime()).Scan(&cutoverStr)
+	cutoverOutput := replicationtestutils.DecimalTimeToHLC(t, cutoverStr)
+	require.Equal(t, cutoverTime, cutoverOutput.GoTime())
 	jobutils.WaitForJobToSucceed(t, destSQL, jobspb.JobID(ingestionJobID))
 	jobutils.WaitForJobToSucceed(t, sourceDBRunner, jobspb.JobID(streamProducerJobID))
 
-	stats := replicationutils.TestingGetStreamIngestionStatsFromReplicationJob(t, ctx, destSQL, int(ingestionJobID))
+	stats := replicationutils.TestingGetStreamIngestionStatsFromReplicationJob(t, ctx, destSQL, ingestionJobID)
 	require.Equal(t, cutoverTime, stats.IngestionProgress.CutoverTime.GoTime())
 	require.Equal(t, streampb.StreamReplicationStatus_STREAM_INACTIVE, stats.ProducerStatus.StreamStatus)
 
@@ -309,7 +313,7 @@ func TestReplicationJobResumptionStartTime(t *testing.T) {
 	defer close(planned)
 	defer close(canContinue)
 
-	producerJobID, replicationJobID := c.StartStreamReplication()
+	producerJobID, replicationJobID := c.StartStreamReplication(ctx)
 	jobutils.WaitForJobToRun(c.T, c.SrcSysSQL, jobspb.JobID(producerJobID))
 	jobutils.WaitForJobToRun(c.T, c.DestSysSQL, jobspb.JobID(replicationJobID))
 

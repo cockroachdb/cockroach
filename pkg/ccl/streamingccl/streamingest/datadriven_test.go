@@ -95,7 +95,7 @@ func TestDataDriven(t *testing.T) {
 				})
 
 			case "start-replication-stream":
-				ds.producerJobID, ds.replicationJobID = ds.replicationClusters.StartStreamReplication()
+				ds.producerJobID, ds.replicationJobID = ds.replicationClusters.StartStreamReplication(ctx)
 
 			case "wait-until-high-watermark":
 				var highWaterMark string

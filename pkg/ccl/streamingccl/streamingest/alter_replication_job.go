@@ -36,8 +36,8 @@ import (
 
 const alterReplicationJobOp = "ALTER TENANT REPLICATION"
 
-var alterReplicationJobHeader = colinfo.ResultColumns{
-	{Name: "replication_job_id", Typ: types.Int},
+var alterReplicationCutoverHeader = colinfo.ResultColumns{
+	{Name: "cutover_time", Typ: types.Decimal},
 }
 
 // ResolvedTenantReplicationOptions represents options from an
@@ -96,9 +96,10 @@ func alterReplicationJobTypeCheck(
 				return false, nil, err
 			}
 		}
+		return true, alterReplicationCutoverHeader, nil
 	}
 
-	return true, alterReplicationJobHeader, nil
+	return true, nil, nil
 }
 
 func alterReplicationJobHook(
@@ -168,6 +169,7 @@ func alterReplicationJobHook(
 				p.ExecCfg().ProtectedTimestampProvider, alterTenantStmt, tenInfo, cutoverTime); err != nil {
 				return err
 			}
+			resultsCh <- tree.Datums{eval.TimestampToDecimalDatum(cutoverTime)}
 		} else if !alterTenantStmt.Options.IsDefault() {
 			if err := alterTenantOptions(ctx, p.Txn(), jobRegistry, options, tenInfo); err != nil {
 				return err
@@ -187,10 +189,12 @@ func alterReplicationJobHook(
 				return errors.New("unsupported job command in ALTER TENANT REPLICATION")
 			}
 		}
-		resultsCh <- tree.Datums{tree.NewDInt(tree.DInt(tenInfo.TenantReplicationJobID))}
 		return nil
 	}
-	return fn, alterReplicationJobHeader, nil, false, nil
+	if alterTenantStmt.Cutover != nil {
+		return fn, alterReplicationCutoverHeader, nil, false, nil
+	}
+	return fn, nil, nil, false, nil
 }
 
 func alterTenantJobCutover(

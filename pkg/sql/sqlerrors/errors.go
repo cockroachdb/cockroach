@@ -139,19 +139,6 @@ func NewInvalidWildcardError(name string) error {
 		"%q does not match any valid database or schema", name)
 }
 
-// NewUndefinedObjectError returns the correct undefined object error based on
-// the kind of object that was requested.
-func NewUndefinedObjectError(name tree.NodeFormatter, kind tree.DesiredObjectKind) error {
-	switch kind {
-	case tree.TableObject:
-		return NewUndefinedRelationError(name)
-	case tree.TypeObject:
-		return NewUndefinedTypeError(name)
-	default:
-		return errors.AssertionFailedf("unknown object kind %d", kind)
-	}
-}
-
 // NewUndefinedTypeError creates an error that represents a missing type.
 func NewUndefinedTypeError(name tree.NodeFormatter) error {
 	return pgerror.Newf(pgcode.UndefinedObject, "type %q does not exist", tree.ErrString(name))

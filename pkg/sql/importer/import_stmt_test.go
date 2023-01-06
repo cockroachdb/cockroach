@@ -2061,13 +2061,7 @@ func TestFailedImportGC(t *testing.T) {
 	tableID := descpb.ID(dbID + 2)
 	var td catalog.TableDescriptor
 	if err := sql.TestingDescsTxn(ctx, tc.Server(0), func(ctx context.Context, txn *kv.Txn, col *descs.Collection) (err error) {
-		td, err = col.GetImmutableTableByID(ctx, txn, tableID, tree.ObjectLookupFlags{
-			CommonLookupFlags: tree.CommonLookupFlags{
-				AvoidLeased:    true,
-				IncludeDropped: true,
-				IncludeOffline: true,
-			},
-		})
+		td, err = col.ByID(txn).Get().Table(ctx, tableID)
 		return err
 	}); err != nil {
 		t.Fatal(err)
@@ -6418,11 +6412,7 @@ func TestImportPgDumpSchemas(t *testing.T) {
 		for _, schemaID := range schemaIDs {
 			// Expect that the schema descriptor is deleted.
 			if err := sql.TestingDescsTxn(ctx, tc.Server(0), func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
-				_, err := col.GetImmutableSchemaByID(ctx, txn, schemaID, tree.CommonLookupFlags{
-					AvoidLeased:    true,
-					IncludeDropped: true,
-					IncludeOffline: true,
-				})
+				_, err := col.ByID(txn).Get().Schema(ctx, schemaID)
 				if pgerror.GetPGCode(err) == pgcode.InvalidSchemaName {
 					return nil
 				}
@@ -6438,13 +6428,7 @@ func TestImportPgDumpSchemas(t *testing.T) {
 		for _, tableID := range tableIDs {
 			// Expect that the table descriptor is deleted.
 			if err := sql.TestingDescsTxn(ctx, tc.Server(0), func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
-				_, err := col.GetImmutableTableByID(ctx, txn, tableID, tree.ObjectLookupFlags{
-					CommonLookupFlags: tree.CommonLookupFlags{
-						AvoidLeased:    true,
-						IncludeDropped: true,
-						IncludeOffline: true,
-					},
-				})
+				_, err := col.ByID(txn).Get().Table(ctx, tableID)
 				if !testutils.IsError(err, "descriptor not found") {
 					return err
 				}

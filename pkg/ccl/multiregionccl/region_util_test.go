@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -124,13 +123,11 @@ func getEnumMembers(
 	t.Helper()
 	enumMembers := make(map[string][]byte)
 	err := sql.TestingDescsTxn(ctx, ts, func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
-		_, dbDesc, err := descsCol.GetImmutableDatabaseByID(ctx, txn, dbID,
-			tree.DatabaseLookupFlags{Required: true})
+		dbDesc, err := descsCol.ByIDWithLeased(txn).WithoutNonPublic().Get().Database(ctx, dbID)
 		require.NoError(t, err)
 		regionEnumID, err := dbDesc.MultiRegionEnumID()
 		require.NoError(t, err)
-		regionEnumDesc, err := descsCol.GetImmutableTypeByID(ctx, txn, regionEnumID,
-			tree.ObjectLookupFlags{CommonLookupFlags: tree.CommonLookupFlags{Required: true}})
+		regionEnumDesc, err := descsCol.ByIDWithLeased(txn).WithoutNonPublic().Get().Type(ctx, regionEnumID)
 		require.NoError(t, err)
 		for ord := 0; ord < regionEnumDesc.NumEnumMembers(); ord++ {
 			enumMembers[regionEnumDesc.GetMemberLogicalRepresentation(ord)] = regionEnumDesc.GetMemberPhysicalRepresentation(ord)

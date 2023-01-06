@@ -117,7 +117,7 @@ func formatSafeMessage(typeName string, desc catalog.SchemaDescriptor) string {
 //
 // Note: Today this isn't actually ever mutated but rather exists for a future
 // where we anticipate having a mutable copy of Schema descriptors. There's a
-// large amount of space to question this `Mutable|ImmutableCopy` version of each
+// large amount of space to question this version of each
 // descriptor type. Maybe it makes no sense but we're running with it for the
 // moment. This is an intermediate state on the road to descriptors being
 // handled outside of the catalog entirely as interfaces.

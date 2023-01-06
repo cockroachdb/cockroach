@@ -126,21 +126,11 @@ func (a *Cache) GetAuthInfo(
 	err = f.DescsTxn(ctx, db, func(
 		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 	) error {
-		_, usersTableDesc, err = descriptors.GetImmutableTableByName(
-			ctx,
-			txn,
-			UsersTableName,
-			tree.ObjectLookupFlagsWithRequired(),
-		)
+		_, usersTableDesc, err = descs.PrefixAndTable(ctx, descriptors.ByNameWithLeased(txn).Get(), UsersTableName)
 		if err != nil {
 			return err
 		}
-		_, roleOptionsTableDesc, err = descriptors.GetImmutableTableByName(
-			ctx,
-			txn,
-			RoleOptionsTableName,
-			tree.ObjectLookupFlagsWithRequired(),
-		)
+		_, roleOptionsTableDesc, err = descs.PrefixAndTable(ctx, descriptors.ByNameWithLeased(txn).Get(), RoleOptionsTableName)
 		return err
 	})
 	if err != nil {
@@ -291,18 +281,13 @@ func (a *Cache) GetDefaultSettings(
 	err = f.DescsTxn(ctx, db, func(
 		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 	) error {
-		_, dbRoleSettingsTableDesc, err = descriptors.GetImmutableTableByName(
-			ctx,
-			txn,
-			DatabaseRoleSettingsTableName,
-			tree.ObjectLookupFlagsWithRequired(),
-		)
+		_, dbRoleSettingsTableDesc, err = descs.PrefixAndTable(ctx, descriptors.ByNameWithLeased(txn).Get(), DatabaseRoleSettingsTableName)
 		if err != nil {
 			return err
 		}
 		databaseID = descpb.ID(0)
 		if databaseName != "" {
-			dbDesc, err := descriptors.GetImmutableDatabaseByName(ctx, txn, databaseName, tree.DatabaseLookupFlags{})
+			dbDesc, err := descriptors.ByNameWithLeased(txn).MaybeGet().Database(ctx, databaseName)
 			if err != nil {
 				return err
 			}
