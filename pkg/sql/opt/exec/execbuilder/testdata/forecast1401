@@ -18444,7 +18444,7 @@ distribution: local
 vectorized: true
 ·
 • scan
-  estimated row count: 179,489,802 (2.7% of the table; stats collected <hidden> ago; using stats forecast)
+  estimated row count: 179,489,803 (2.7% of the table; stats collected <hidden> ago; using stats forecast)
   table: t1401@t1401_c_idx
   spans: [/'2022-01-25 21:17:27.216095+00:00' - ]
 

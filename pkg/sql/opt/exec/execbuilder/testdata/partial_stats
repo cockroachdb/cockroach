@@ -282,10 +282,10 @@ EXPLAIN (OPT, VERBOSE) SELECT * FROM g WHERE b >= 10
 scan g
  ├── columns: b:1
  ├── constraint: /1: [/10 - ]
- ├── stats: [rows=8, distinct(1)=6.5, null(1)=0]
- │   histogram(1)=  0 0.5  0 1.5  0 1.5  0 0.5  0  1   0  1   0 0.5  0 1.5
- │                <--- 10 --- 11 --- 12 --- 13 --- 14 --- 15 --- 16 --- 17
- ├── cost: 22.1
+ ├── stats: [rows=7, distinct(1)=6, null(1)=0]
+ │   histogram(1)=  0  2   0  1   0  1   0  1   0  1   0  1
+ │                <--- 11 --- 12 --- 13 --- 14 --- 15 --- 17
+ ├── cost: 21.09
  ├── key: (1)
  └── distribution: test
 
