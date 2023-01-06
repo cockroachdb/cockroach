@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -60,6 +61,10 @@ type DatabaseCatalog interface {
 	// sets it on the returned TableName.
 	// It returns the ID of the resolved table, and an error if the table doesn't exist.
 	ResolveTableName(ctx context.Context, tn *tree.TableName) (tree.ID, error)
+
+	// LookupTableByID looks up a table, by the given descriptor ID. Based on the
+	// CommonLookupFlags, it could use or skip the Collection cache.
+	LookupTableByID(ctx context.Context, tableID descpb.ID) (catalog.TableDescriptor, error)
 
 	// SchemaExists looks up the schema with the given name and determines
 	// whether it exists.
