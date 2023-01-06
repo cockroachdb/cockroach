@@ -13,6 +13,7 @@ package stats
 import (
 	"context"
 	"fmt"
+	"math"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -717,6 +718,11 @@ func (tabStat *TableStatistic) setHistogramBuckets(hist histogram) {
 			NumEq:      float64(tabStat.NullCount),
 			UpperBound: tree.DNull,
 		}}, tabStat.Histogram...)
+	}
+	// Round NumEq and NumRange, as if this had come from HistogramData.
+	for i := 0; i < len(tabStat.Histogram); i++ {
+		tabStat.Histogram[i].NumEq = math.Round(tabStat.Histogram[i].NumEq)
+		tabStat.Histogram[i].NumRange = math.Round(tabStat.Histogram[i].NumRange)
 	}
 }
 
