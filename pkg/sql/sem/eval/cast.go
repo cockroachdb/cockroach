@@ -978,6 +978,9 @@ func performIntToOidCast(
 		} else if types.IsOIDUserDefinedType(o) {
 			typ, err := res.ResolveTypeByOID(ctx, o)
 			if err != nil {
+				if pgerror.GetPGCode(err) == pgcode.UndefinedObject {
+					return tree.NewDOidWithType(o, t), nil
+				}
 				return nil, err
 			}
 			name = typ.PGName()
