@@ -10,8 +10,8 @@ source "$dir/teamcity-bazel-support.sh"  # For run_bazel
 #BAZEL_SUPPORT_EXTRA_DOCKER_ARGS="-e LITERAL_ARTIFACTS_DIR=$root/artifacts -e BUILD_TAG -e BUILD_VCS_NUMBER -e CLOUD -e GOOGLE_CREDENTIALS -e COCKROACH_DEV_LICENSE -e COUNT -e GITHUB_API_TOKEN -e GITHUB_ORG -e GITHUB_REPO -e GOOGLE_EPHEMERAL_CREDENTIALS -e SLACK_TOKEN -e TC_BUILDTYPE_ID -e TC_BUILD_BRANCH -e TC_BUILD_ID -e TC_SERVER_URL" \
 #			       run_bazel build/teamcity/cockroach/nightlies/microbench_checkpoint_impl.sh
 
-if [[ "$GOOGLE_CREDENTIALS" ]]; then
-  echo "$GOOGLE_CREDENTIALS" > creds.json
+if [[ "$GOOGLE_EPHEMERAL_CREDENTIALS" ]]; then
+  echo "$GOOGLE_EPHEMERAL_CREDENTIALS" > creds.json
   gcloud auth activate-service-account --key-file=creds.json
   export ROACHPROD_USER=teamcity
 else
