@@ -176,7 +176,17 @@ func (r *RangeDescriptor) Equal(other *RangeDescriptor) bool {
 	if r.NextReplicaID != other.NextReplicaID {
 		return false
 	}
-	if !r.StickyBit.Equal(other.StickyBit) {
+	// Consider StickyBit == nil equal to StickyBit == hlc.Timestamp{}. Needed for
+	// forwards-compatibility with 22.2, see:
+	// https://github.com/cockroachdb/cockroach/issues/94834
+	var rStickyBit, otherStickyBit hlc.Timestamp
+	if r.StickyBit != nil {
+		rStickyBit = *r.StickyBit
+	}
+	if other.StickyBit != nil {
+		otherStickyBit = *other.StickyBit
+	}
+	if !rStickyBit.Equal(otherStickyBit) {
 		return false
 	}
 	return true
@@ -455,6 +465,55 @@ func (r ReplicaDescriptor) GetType() ReplicaType {
 		return VOTER_FULL
 	}
 	return *r.Type
+}
+
+// Equal compares two descriptors for equality. This was copied over from the
+// gogoproto generated version in order to handle Type == nil equally to
+// Type == 0. This is necessary because of a mixed-version bug, where 22.2 nodes
+// will always send Type == 0 in e.g. AdminChangeReplicas, but the 22.1 nodes
+// compare this against the range descriptor from KV for equality. See:
+// https://github.com/cockroachdb/cockroach/issues/94834
+func (this *ReplicaDescriptor) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	that1, ok := that.(*ReplicaDescriptor)
+	if !ok {
+		that2, ok := that.(ReplicaDescriptor)
+		if ok {
+			that1 = &that2
+		} else {
+			return false
+		}
+	}
+	if that1 == nil {
+		return this == nil
+	} else if this == nil {
+		return false
+	}
+	if this.NodeID != that1.NodeID {
+		return false
+	}
+	if this.StoreID != that1.StoreID {
+		return false
+	}
+	if this.ReplicaID != that1.ReplicaID {
+		return false
+	}
+	// Consider Type == nil equal to Type == 0. Needed for forwards-compatibility
+	// with 22.2, see: https://github.com/cockroachdb/cockroach/issues/94834
+	var thisType, thatType ReplicaType
+	if this.Type != nil {
+		thisType = *this.Type
+	}
+	if that1.Type != nil {
+		thatType = *that1.Type
+	}
+	if thisType != thatType {
+		return false
+	}
+	return true
 }
 
 // SafeValue implements the redact.SafeValue interface.
