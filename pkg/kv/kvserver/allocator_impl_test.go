@@ -102,6 +102,101 @@ var threeStores = []*roachpb.StoreDescriptor{
 	},
 }
 
+var fourSingleStoreRacks = []*roachpb.StoreDescriptor{
+	{
+		StoreID: 1,
+		Node: roachpb.NodeDescriptor{
+			NodeID: 1,
+			Locality: roachpb.Locality{
+				Tiers: []roachpb.Tier{
+					{
+						Key:   "region",
+						Value: "local",
+					},
+					{
+						Key:   "rack",
+						Value: "1",
+					},
+				},
+			},
+		},
+		Capacity: roachpb.StoreCapacity{
+			Capacity:     200,
+			Available:    100,
+			LogicalBytes: 100,
+		},
+	},
+	{
+		StoreID: 2,
+		Node: roachpb.NodeDescriptor{
+			NodeID: 2,
+			Locality: roachpb.Locality{
+				Tiers: []roachpb.Tier{
+					{
+						Key:   "region",
+						Value: "local",
+					},
+					{
+						Key:   "rack",
+						Value: "2",
+					},
+				},
+			},
+		},
+		Capacity: roachpb.StoreCapacity{
+			Capacity:     200,
+			Available:    100,
+			LogicalBytes: 100,
+		},
+	},
+	{
+		StoreID: 3,
+		Node: roachpb.NodeDescriptor{
+			NodeID: 3,
+			Locality: roachpb.Locality{
+				Tiers: []roachpb.Tier{
+					{
+						Key:   "region",
+						Value: "local",
+					},
+					{
+						Key:   "rack",
+						Value: "3",
+					},
+				},
+			},
+		},
+		Capacity: roachpb.StoreCapacity{
+			Capacity:     200,
+			Available:    100,
+			LogicalBytes: 100,
+		},
+	},
+	{
+		StoreID: 4,
+		Node: roachpb.NodeDescriptor{
+			NodeID: 4,
+			Locality: roachpb.Locality{
+				Tiers: []roachpb.Tier{
+					{
+						Key:   "region",
+						Value: "local",
+					},
+					{
+						Key:   "rack",
+						Value: "4",
+					},
+				},
+			},
+		},
+		Capacity: roachpb.StoreCapacity{
+			Capacity:     200,
+			Available:    100,
+			LogicalBytes: 100,
+		},
+	},
+}
+
 // TestAllocatorRebalanceTarget could help us to verify whether we'll rebalance
 // to a target that we'll immediately remove.
 func TestAllocatorRebalanceTarget(t *testing.T) {
