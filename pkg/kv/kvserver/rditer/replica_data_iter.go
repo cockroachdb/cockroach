@@ -57,38 +57,35 @@ type ReplicaMVCCDataIterator struct {
 // MakeAllKeySpans returns all key spans for the given Range, in
 // sorted order.
 func MakeAllKeySpans(d *roachpb.RangeDescriptor) []roachpb.Span {
-	return makeRangeKeySpans(d, false /* replicatedOnly */)
+	return Select(d.RangeID, SelectionOptions{
+		StateMachineSelectionOptions: StateMachineSelectionOptions{
+			ReplicatedBySpan: roachpb.RSpan{
+				Key:    d.StartKey,
+				EndKey: d.EndKey,
+			},
+			ReplicatedByRangeID: true,
+		},
+		UnreplicatedByRangeID: true,
+	}).Spans()
 }
 
 // MakeReplicatedKeySpans returns all key spans that are fully Raft
-// replicated for the given Range.
-//
-// NOTE: The logic for receiving snapshot relies on this function returning the
-// spans in the following sorted order:
+// replicated for the given Range, in lexicographically sorted order:
 //
 // 1. Replicated range-id local key span.
-// 2. Range-local key span.
+// 2. "Local" key span (range descriptor, etc)
 // 3. Lock-table key spans.
 // 4. User key span.
 func MakeReplicatedKeySpans(d *roachpb.RangeDescriptor) []roachpb.Span {
-	return makeRangeKeySpans(d, true /* replicatedOnly */)
-}
-
-func makeRangeKeySpans(d *roachpb.RangeDescriptor, replicatedOnly bool) []roachpb.Span {
-	rangeIDLocal := MakeRangeIDLocalKeySpan(d.RangeID, replicatedOnly)
-	rangeLocal := makeRangeLocalKeySpan(d)
-	rangeLockTable := makeRangeLockTableKeySpans(d)
-	user := MakeUserKeySpan(d)
-	ranges := make([]roachpb.Span, 5)
-	ranges[0] = rangeIDLocal
-	ranges[1] = rangeLocal
-	if len(rangeLockTable) != 2 {
-		panic("unexpected number of lock table key spans")
-	}
-	ranges[2] = rangeLockTable[0]
-	ranges[3] = rangeLockTable[1]
-	ranges[4] = user
-	return ranges
+	return Select(d.RangeID, SelectionOptions{
+		StateMachineSelectionOptions: StateMachineSelectionOptions{
+			ReplicatedBySpan: roachpb.RSpan{
+				Key:    d.StartKey,
+				EndKey: d.EndKey,
+			},
+			ReplicatedByRangeID: true,
+		},
+	}).Spans()
 }
 
 // MakeReplicatedKeySpansExceptLockTable returns all key spans that are fully Raft
@@ -99,7 +96,7 @@ func makeRangeKeySpans(d *roachpb.RangeDescriptor, replicatedOnly bool) []roachp
 // 3. User key span.
 func MakeReplicatedKeySpansExceptLockTable(d *roachpb.RangeDescriptor) []roachpb.Span {
 	return []roachpb.Span{
-		MakeRangeIDLocalKeySpan(d.RangeID, true /* replicatedOnly */),
+		makeRangeIDReplicatedSpan(d.RangeID),
 		makeRangeLocalKeySpan(d),
 		MakeUserKeySpan(d),
 	}
@@ -112,46 +109,24 @@ func MakeReplicatedKeySpansExceptLockTable(d *roachpb.RangeDescriptor) []roachpb
 // 2. Range-local key span.
 func MakeReplicatedKeySpansExcludingUserAndLockTable(d *roachpb.RangeDescriptor) []roachpb.Span {
 	return []roachpb.Span{
-		MakeRangeIDLocalKeySpan(d.RangeID, true /* replicatedOnly */),
+		makeRangeIDReplicatedSpan(d.RangeID),
 		makeRangeLocalKeySpan(d),
 	}
 }
 
-// MakeReplicatedKeySpansExceptRangeID returns all key spans that are fully Raft
-// replicated for the given Range, except for the replicated range-id local key span.
-// These are returned in the following sorted order:
-// 1. Range-local key span.
-// 2. Lock-table key spans.
-// 3. User key span.
-func MakeReplicatedKeySpansExceptRangeID(d *roachpb.RangeDescriptor) []roachpb.Span {
-	rangeLocal := makeRangeLocalKeySpan(d)
-	rangeLockTable := makeRangeLockTableKeySpans(d)
-	user := MakeUserKeySpan(d)
-	ranges := make([]roachpb.Span, 4)
-	ranges[0] = rangeLocal
-	if len(rangeLockTable) != 2 {
-		panic("unexpected number of lock table key spans")
+func makeRangeIDReplicatedSpan(rangeID roachpb.RangeID) roachpb.Span {
+	prefix := keys.MakeRangeIDReplicatedPrefix(rangeID)
+	return roachpb.Span{
+		Key:    prefix,
+		EndKey: prefix.PrefixEnd(),
 	}
-	ranges[1] = rangeLockTable[0]
-	ranges[2] = rangeLockTable[1]
-	ranges[3] = user
-	return ranges
 }
 
-// MakeRangeIDLocalKeySpan returns the range-id local key span. If
-// replicatedOnly is true, then it returns only the replicated keys, otherwise,
-// it only returns both the replicated and unreplicated keys.
-func MakeRangeIDLocalKeySpan(rangeID roachpb.RangeID, replicatedOnly bool) roachpb.Span {
-	var prefixFn func(roachpb.RangeID) roachpb.Key
-	if replicatedOnly {
-		prefixFn = keys.MakeRangeIDReplicatedPrefix
-	} else {
-		prefixFn = keys.MakeRangeIDPrefix
-	}
-	sysRangeIDKey := prefixFn(rangeID)
+func makeRangeIDUnreplicatedSpan(rangeID roachpb.RangeID) roachpb.Span {
+	prefix := keys.MakeRangeIDUnreplicatedPrefix(rangeID)
 	return roachpb.Span{
-		Key:    sysRangeIDKey,
-		EndKey: sysRangeIDKey.PrefixEnd(),
+		Key:    prefix,
+		EndKey: prefix.PrefixEnd(),
 	}
 }
 
@@ -166,7 +141,9 @@ func makeRangeLocalKeySpan(d *roachpb.RangeDescriptor) roachpb.Span {
 	}
 }
 
-// makeRangeLockTableKeySpans returns the 2 lock table key spans.
+// makeRangeLockTableKeySpans returns the 2 lock table key spans. The first one
+// will contain all local (i.e. range descriptor, etc) key locks for the span,
+// the second non-local key locks.
 func makeRangeLockTableKeySpans(d *roachpb.RangeDescriptor) [2]roachpb.Span {
 	// Handle doubly-local lock table keys since range descriptor key
 	// is a range local key that can have a replicated lock acquired on it.

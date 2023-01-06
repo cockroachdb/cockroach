@@ -5,6 +5,7 @@ go_library(
     name = "rditer",
     srcs = [
         "replica_data_iter.go",
+        "select.go",
         "stats.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer",

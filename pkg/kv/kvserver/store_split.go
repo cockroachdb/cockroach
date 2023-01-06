@@ -69,26 +69,6 @@ func splitPreApply(
 		// the RHS, i.e. we clear the user data the RHS would have inherited from the
 		// LHS due to the split and additionally clear all of the range ID local state
 		// that the split trigger writes into the RHS.
-		//
-		// We know we've never processed a snapshot for the right range because the
-		// LHS prevents any incoming snapshots until the split has executed (i.e. now).
-		// It is important to preserve the HardState because we might however have
-		// already voted at a higher term. In general this shouldn't happen because
-		// we add learners and then promote them only after we snapshot but we're
-		// going to be extra careful in case future versions of cockroach somehow
-		// promote replicas without ensuring that a snapshot has been received.
-		//
-		// Rather than specifically deleting around the data we want to preserve
-		// we read the HardState to preserve it, clear everything and write back
-		// the HardState and tombstone. Note that we only do this if rightRepl
-		// exists; if it doesn't, there's no Raft state to massage (when rightRepl
-		// was removed, a tombstone was written instead).
-		//
-		// TODO(tbg): it would be cleaner to teach clearRangeData to only remove
-		// the replicated state if rightRepl != nil, as opposed to writing back
-		// internal raft state. As is, it's going to break with any new piece of
-		// local state that we add, and it introduces locking between two Replicas
-		// that don't ever need to interact.
 		var hs raftpb.HardState
 		if rightRepl != nil {
 			rightRepl.raftMu.Lock()
@@ -105,9 +85,24 @@ func splitPreApply(
 				log.Fatalf(ctx, "failed to load hard state for removed rhs: %v", err)
 			}
 		}
-		const rangeIDLocalOnly = false
-		const mustUseClearRange = false
-		if err := clearRangeData(&split.RightDesc, readWriter, readWriter, rangeIDLocalOnly, mustUseClearRange); err != nil {
+		if err := clearRangeData(split.RightDesc.RangeID, readWriter, readWriter, clearRangeDataOptions{
+			// We know there isn't anything in these two replicated spans below in the
+			// right-hand side (before the current batch), so setting these options
+			// will in effect only mask the writes to the RHS replicated state we have
+			// staged in this batch, which is what we're after.
+			ClearReplicatedBySpan:    split.RightDesc.RSpan(),
+			ClearReplicatedByRangeID: true,
+			// See the HardState write-back dance above and below.
+			//
+			// TODO(tbg): we don't actually want to touch the raft state of the right
+			// hand side replica since it's absent or a more recent replica than the
+			// split. Now that we have a boolean targeting the unreplicated
+			// RangeID-based keyspace, we can set this to false and remove the
+			// HardState+ReplicaID write-back. See:
+			//
+			// https://github.com/cockroachdb/cockroach/issues/94933
+			ClearUnreplicatedByRangeID: true,
+		}); err != nil {
 			log.Fatalf(ctx, "failed to clear range data for removed rhs: %v", err)
 		}
 		if rightRepl != nil {

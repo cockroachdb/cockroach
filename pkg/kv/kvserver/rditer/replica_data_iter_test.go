@@ -63,26 +63,32 @@ func createRangeData(
 	localTS := hlc.ClockTimestamp{}
 
 	allKeys := []interface{}{
+		// StateMachine (i.e. replicated) keys that are keyed by RangeID.
 		storage.MVCCKey{Key: keys.AbortSpanKey(desc.RangeID, testTxnID), Timestamp: ts0},
 		storage.MVCCKey{Key: keys.AbortSpanKey(desc.RangeID, testTxnID2), Timestamp: ts0},
 		storage.MVCCKey{Key: keys.RangeGCThresholdKey(desc.RangeID), Timestamp: ts0},
 		storage.MVCCKey{Key: keys.RangeAppliedStateKey(desc.RangeID), Timestamp: ts0},
 		storage.MVCCKey{Key: keys.RangeLeaseKey(desc.RangeID), Timestamp: ts0},
+		storage.MVCCRangeKey{ // emitted last because we emit all point keys before range keys
+			StartKey:  append(replicatedPrefix.Clone(), []byte(":a")...),
+			EndKey:    append(replicatedPrefix.Clone(), []byte(":x")...),
+			Timestamp: ts,
+		},
+
+		// Non-StateMachine (i.e. unreplicated) keys that are keyed by RangeID.
 		storage.MVCCKey{Key: keys.RangeTombstoneKey(desc.RangeID), Timestamp: ts0},
 		storage.MVCCKey{Key: keys.RaftHardStateKey(desc.RangeID), Timestamp: ts0},
 		storage.MVCCKey{Key: keys.RaftLogKey(desc.RangeID, 1), Timestamp: ts0},
 		storage.MVCCKey{Key: keys.RaftLogKey(desc.RangeID, 2), Timestamp: ts0},
 		storage.MVCCKey{Key: keys.RangeLastReplicaGCTimestampKey(desc.RangeID), Timestamp: ts0},
-		storage.MVCCRangeKey{
-			StartKey:  append(replicatedPrefix.Clone(), []byte(":a")...),
-			EndKey:    append(replicatedPrefix.Clone(), []byte(":x")...),
-			Timestamp: ts,
-		},
-		storage.MVCCRangeKey{
+		storage.MVCCRangeKey{ // emitted last because we emit all point keys before range keys
 			StartKey:  append(unreplicatedPrefix.Clone(), []byte(":a")...),
 			EndKey:    append(unreplicatedPrefix.Clone(), []byte(":x")...),
 			Timestamp: ts,
 		},
+
+		// Replicated system keys: range descriptor, txns, user keys.
+		// TODO(tbg): this is missing lock keys.
 		storage.MVCCKey{Key: keys.RangeDescriptorKey(desc.StartKey), Timestamp: ts},
 		storage.MVCCKey{Key: keys.TransactionKey(roachpb.Key(desc.StartKey), uuid.MakeV4()), Timestamp: ts0},
 		storage.MVCCKey{Key: keys.TransactionKey(roachpb.Key(desc.StartKey.Next()), uuid.MakeV4()), Timestamp: ts0},
@@ -95,7 +101,7 @@ func createRangeData(
 		// avoid falling into the system-local space.
 		storage.MVCCKey{Key: append(desc.StartKey.AsRawKey().Clone(), '\x02'), Timestamp: ts},
 		storage.MVCCKey{Key: roachpb.Key(desc.EndKey).Prevish(100), Timestamp: ts},
-		storage.MVCCRangeKey{
+		storage.MVCCRangeKey{ // emitted last because we emit all point keys before range keys
 			StartKey:  desc.StartKey.AsRawKey().Clone(),
 			EndKey:    desc.EndKey.AsRawKey().Clone(),
 			Timestamp: ts,
@@ -255,6 +261,8 @@ func verifyIterateReplicaKeySpans(
 				default:
 					t.Fatalf("unexpected key type %v", keyType)
 				}
+
+				t.Logf("%s: %s", span, actualKeys[len(actualKeys)-1])
 			}
 			return err
 		}))
@@ -436,7 +444,6 @@ func TestReplicaKeyRanges(t *testing.T) {
 	checkOrdering(t, MakeAllKeySpans(&desc))
 	checkOrdering(t, MakeReplicatedKeySpans(&desc))
 	checkOrdering(t, MakeReplicatedKeySpansExceptLockTable(&desc))
-	checkOrdering(t, MakeReplicatedKeySpansExceptRangeID(&desc))
 }
 
 func BenchmarkReplicaEngineDataIterator(b *testing.B) {

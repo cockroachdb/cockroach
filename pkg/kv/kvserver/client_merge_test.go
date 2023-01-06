@@ -3838,21 +3838,40 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 		expectedSSTs = expectedSSTs[len(expectedSSTs)-1:]
 
 		// Construct SSTs for the range-id local keys of the subsumed replicas.
-		// with RangeIDs 3 and 4.
+		// with RangeIDs 3 and 4. Note that this also targets the unreplicated
+		// rangeID-based keys because we're effectively replicaGC'ing these
+		// replicas (while absorbing their user keys into the LHS).
 		for _, k := range []roachpb.Key{keyB, keyC} {
 			rangeID := rangeIds[string(k)]
 			sstFile := &storage.MemFile{}
 			sst := storage.MakeIngestionSSTWriter(ctx, st, sstFile)
 			defer sst.Close()
-			s := rditer.MakeRangeIDLocalKeySpan(rangeID, false /* replicatedOnly */)
-			// The snapshot code will use ClearRangeWithHeuristic with a threshold of
-			// 1 to clear the range, but this will truncate the range tombstone to the
-			// first key. In this case, the first key is RangeGCThresholdKey, which
-			// doesn't yet exist in the engine, so we write the Pebble range tombstone
-			// manually.
-			if err := sst.ClearRawRange(keys.RangeGCThresholdKey(rangeID), s.EndKey, true, false); err != nil {
-				return err
+			{
+				// The snapshot code will use ClearRangeWithHeuristic with a threshold of
+				// 1 to clear the range, but this will truncate the range tombstone to the
+				// first key. In this case, the first key is RangeGCThresholdKey, which
+				// doesn't yet exist in the engine, so we write the Pebble range tombstone
+				// manually.
+				sl := rditer.Select(rangeID, rditer.SelectionOptions{
+					StateMachineSelectionOptions: rditer.StateMachineSelectionOptions{
+						ReplicatedByRangeID: true,
+					},
+				}).Spans()
+				require.Len(t, sl, 1)
+				s := sl[0]
+				require.NoError(t, sst.ClearRawRange(keys.RangeGCThresholdKey(rangeID), s.EndKey, true, false))
 			}
+			{
+				// Ditto for the unreplicated version, where the first key happens to be
+				// the HardState.
+				sl := rditer.Select(rangeID, rditer.SelectionOptions{
+					UnreplicatedByRangeID: true,
+				}).Spans()
+				require.Len(t, sl, 1)
+				s := sl[0]
+				require.NoError(t, sst.ClearRawRange(keys.RaftHardStateKey(rangeID), s.EndKey, true, false))
+			}
+
 			tombstoneKey := keys.RangeTombstoneKey(rangeID)
 			tombstoneValue := &roachpb.RangeTombstone{NextReplicaID: math.MaxInt32}
 			if err := storage.MVCCBlindPutProto(
@@ -3875,8 +3894,9 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 			StartKey: roachpb.RKey(keyD),
 			EndKey:   roachpb.RKey(keyEnd),
 		}
-		s := rditer.MakeUserKeySpan(&desc)
-		if err := storage.ClearRangeWithHeuristic(receivingEng, &sst, s.Key, s.EndKey, 64, 8); err != nil {
+		if err := storage.ClearRangeWithHeuristic(
+			receivingEng, &sst, desc.StartKey.AsRawKey(), desc.EndKey.AsRawKey(), 64, 8,
+		); err != nil {
 			return err
 		}
 		if err = sst.Finish(); err != nil {
