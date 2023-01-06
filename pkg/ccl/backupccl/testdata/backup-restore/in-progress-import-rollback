@@ -33,11 +33,6 @@ SET CLUSTER SETTING jobs.debug.pausepoints = 'import.after_ingest';
 ----
 
 exec-sql
-SET CLUSTER SETTING kv.bulkio.write_metadata_sst.enabled = false;
-----
-
-
-exec-sql
 SET CLUSTER SETTING storage.mvcc.range_tombstones.enabled = false;
 ----
 
@@ -245,10 +240,6 @@ SET CLUSTER SETTING jobs.debug.pausepoints = 'import.after_ingest';
 
 exec-sql
 SET CLUSTER SETTING storage.mvcc.range_tombstones.enabled = true;
-----
-
-exec-sql
-SET CLUSTER SETTING kv.bulkio.write_metadata_sst.enabled = false;
 ----
 
 # Pause the import job, in order to back up the importing data.

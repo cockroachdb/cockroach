@@ -609,12 +609,6 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 	_, sqlDB, tempDir, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
 	defer cleanupFn()
 
-	// This test flakes due to
-	// https://github.com/cockroachdb/cockroach/issues/86806. Instead of skipping
-	// the test all together, setting the cluster setting to false which triggers
-	// the failure.
-	sqlDB.Exec(t, "SET CLUSTER SETTING kv.bulkio.write_metadata_sst.enabled=false")
-
 	// Setup the system systemTablesToVerify to ensure that they are copied to the new cluster.
 	// Populate system.users.
 	for i := 0; i < 1000; i++ {
@@ -1078,7 +1072,7 @@ func TestRestoreWithRecreatedDefaultDB(t *testing.T) {
 
 	sqlDB.Exec(t, `
 DROP DATABASE defaultdb;
-CREATE DATABASE defaultdb; 
+CREATE DATABASE defaultdb;
 `)
 	sqlDB.Exec(t, `BACKUP TO $1`, localFoo)
 

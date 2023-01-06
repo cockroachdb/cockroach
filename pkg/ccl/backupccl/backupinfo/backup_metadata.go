@@ -472,12 +472,12 @@ func writeStatsToMetadata(
 		return stats[i].TableID < stats[j].TableID || (stats[i].TableID == stats[j].TableID && stats[i].StatisticID < stats[j].StatisticID)
 	})
 
-	for _, i := range stats {
-		b, err := protoutil.Marshal(i)
+	for _, s := range stats {
+		b, err := protoutil.Marshal(s)
 		if err != nil {
 			return err
 		}
-		if err := sst.PutUnversioned(encodeStatSSTKey(i.TableID, i.StatisticID), b); err != nil {
+		if err := sst.PutUnversioned(encodeStatSSTKey(s.TableID, s.StatisticID), b); err != nil {
 			return err
 		}
 	}
