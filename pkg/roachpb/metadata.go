@@ -176,7 +176,18 @@ func (r *RangeDescriptor) Equal(other *RangeDescriptor) bool {
 	if r.NextReplicaID != other.NextReplicaID {
 		return false
 	}
-	if !r.StickyBit.Equal(other.StickyBit) {
+	// Consider StickyBit: nil equal to StickyBit: &hlc.Timestamp{}. In
+	// particular, this is needed for forwards-compatibility with 22.2 prior to
+	// 22.2.3, see:
+	// https://github.com/cockroachdb/cockroach/issues/94834
+	var rStickyBit, otherStickyBit hlc.Timestamp
+	if r.StickyBit != nil {
+		rStickyBit = *r.StickyBit
+	}
+	if other.StickyBit != nil {
+		otherStickyBit = *other.StickyBit
+	}
+	if !rStickyBit.Equal(otherStickyBit) {
 		return false
 	}
 	return true
@@ -455,6 +466,55 @@ func (r ReplicaDescriptor) GetType() ReplicaType {
 		return VOTER_FULL
 	}
 	return *r.Type
+}
+
+// Equal compares two descriptors for equality. Copied from the gogoproto
+// generated version in order to consider Type: nil equal to Type: VOTER_FULL,
+// similarly to GetType(). In particular, this is necessary for
+// forwards-compatibility with 22.2 prior to 22.2.3, see:
+// https://github.com/cockroachdb/cockroach/issues/94834
+func (r *ReplicaDescriptor) Equal(other interface{}) bool {
+	if other == nil {
+		return r == nil
+	}
+
+	other1, ok := other.(*ReplicaDescriptor)
+	if !ok {
+		other2, ok := other.(ReplicaDescriptor)
+		if ok {
+			other1 = &other2
+		} else {
+			return false
+		}
+	}
+	if other1 == nil {
+		return r == nil
+	} else if r == nil {
+		return false
+	}
+	if r.NodeID != other1.NodeID {
+		return false
+	}
+	if r.StoreID != other1.StoreID {
+		return false
+	}
+	if r.ReplicaID != other1.ReplicaID {
+		return false
+	}
+	// NB: Consider Type: nil equal to Type: 0. In particular, this is needed for
+	// forwards-compatibility with 22.2 prior to 22.2.3, see:
+	// https://github.com/cockroachdb/cockroach/issues/94834
+	var rType, otherType ReplicaType
+	if r.Type != nil {
+		rType = *r.Type
+	}
+	if other1.Type != nil {
+		otherType = *other1.Type
+	}
+	if rType != otherType {
+		return false
+	}
+	return true
 }
 
 // SafeValue implements the redact.SafeValue interface.

@@ -17,6 +17,8 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -87,6 +89,62 @@ func TestRangeDescriptorMissingReplica(t *testing.T) {
 	}
 	if (r != ReplicaDescriptor{}) {
 		t.Fatalf("unexpectedly got nontrivial return: %s", r)
+	}
+}
+
+func TestRangeDescriptorEqual(t *testing.T) {
+	r, _ := randutil.NewTestRand()
+	popA := *NewPopulatedRangeDescriptor(r, false)
+	popB := *NewPopulatedRangeDescriptor(r, false)
+
+	testcases := map[string]struct {
+		a, b RangeDescriptor
+		eq   bool
+	}{
+		"empty":             {RangeDescriptor{}, RangeDescriptor{}, true},
+		"populated equal":   {popA, popA, true},
+		"populated unequal": {popA, popB, false},
+		// NB: Consider nil and empty timestamp equal, similarly to GetStickyBit().
+		// In particular, for 22.2 compatibility prior to 22.2.3.
+		"sticky bit nil/zero": {
+			RangeDescriptor{StickyBit: nil},
+			RangeDescriptor{StickyBit: &hlc.Timestamp{}},
+			true,
+		},
+		"sticky bit nil/min": {
+			RangeDescriptor{StickyBit: nil},
+			RangeDescriptor{StickyBit: &hlc.MinTimestamp},
+			false,
+		},
+		"sticky bit min/max": {
+			RangeDescriptor{StickyBit: &hlc.MinTimestamp},
+			RangeDescriptor{StickyBit: &hlc.MaxTimestamp},
+			false,
+		},
+		// NB: Consider nil and VOTER_FULL equal, similarly to GetType().
+		// In particular, for 22.2 compatibility prior to 22.2.3.
+		"replica type nil/VOTER_FULL": {
+			RangeDescriptor{InternalReplicas: []ReplicaDescriptor{{Type: nil}}},
+			RangeDescriptor{InternalReplicas: []ReplicaDescriptor{{Type: VOTER_FULL.Enum()}}},
+			true,
+		},
+		"replica type nil/LEARNER": {
+			RangeDescriptor{InternalReplicas: []ReplicaDescriptor{{Type: nil}}},
+			RangeDescriptor{InternalReplicas: []ReplicaDescriptor{{Type: LEARNER.Enum()}}},
+			false,
+		},
+		"replica type VOTER_FULL/LEARNER": {
+			RangeDescriptor{InternalReplicas: []ReplicaDescriptor{{Type: VOTER_FULL.Enum()}}},
+			RangeDescriptor{InternalReplicas: []ReplicaDescriptor{{Type: LEARNER.Enum()}}},
+			false,
+		},
+	}
+	for name, tc := range testcases {
+		tc := tc
+		t.Run(name, func(t *testing.T) {
+			require.Equal(t, tc.eq, tc.a.Equal(&tc.b))
+			require.Equal(t, tc.eq, tc.b.Equal(&tc.a))
+		})
 	}
 }
 
