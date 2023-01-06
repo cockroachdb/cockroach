@@ -26,6 +26,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/startupmigrations/leasemanager"
@@ -394,7 +396,7 @@ func (r runner) execAsRootWithRetry(
 	// arbitrarily long time.
 	var err error
 	for retry := retry.Start(retry.Options{MaxRetries: 5}); retry.Next(); {
-		err := r.execAsRoot(ctx, opName, stmt, qargs...)
+		err = r.execAsRoot(ctx, opName, stmt, qargs...)
 		if err == nil {
 			break
 		}
@@ -782,7 +784,18 @@ func addRootUser(ctx context.Context, r runner) error {
 	const upsertRootStmt = `
 	        UPSERT INTO system.users (username, "hashedPassword", "isRole", "user_id") VALUES ($1, '', false,  1)
 	        `
-	return r.execAsRootWithRetry(ctx, "addRootUser", upsertRootStmt, username.RootUser)
+	err := r.execAsRootWithRetry(ctx, "addRootUser", upsertRootStmt, username.RootUser)
+	if pgerror.GetPGCode(err) == pgcode.UndefinedColumn {
+		// It's legitimately possible for this UPSERT to fail in tenant clusters
+		// whose system schema was bootstrapped using values from V22.2. In that
+		// schema, the user_id column doesn't exist yet and version gates are
+		// useless at this juncture.
+		const upsertRootStmtV221 = `
+	        UPSERT INTO system.users (username, "hashedPassword", "isRole") VALUES ($1, '', false)
+	        `
+		return r.execAsRootWithRetry(ctx, "addRootUser", upsertRootStmtV221, username.RootUser)
+	}
+	return err
 }
 
 func addAdminRole(ctx context.Context, r runner) error {
@@ -790,7 +803,18 @@ func addAdminRole(ctx context.Context, r runner) error {
 	const upsertAdminStmt = `
           UPSERT INTO system.users (username, "hashedPassword", "isRole", "user_id") VALUES ($1, '', true,  2)
           `
-	return r.execAsRootWithRetry(ctx, "addAdminRole", upsertAdminStmt, username.AdminRole)
+	err := r.execAsRootWithRetry(ctx, "addAdminRole", upsertAdminStmt, username.AdminRole)
+	if pgerror.GetPGCode(err) == pgcode.UndefinedColumn {
+		// It's legitimately possible for this UPSERT to fail in tenant clusters
+		// whose system schema was bootstrapped using values from V22.2. In that
+		// schema, the user_id column doesn't exist yet and version gates are
+		// useless at this juncture.
+		const upsertAdminStmtV221 = `
+	        UPSERT INTO system.users (username, "hashedPassword", "isRole") VALUES ($1, '', false)
+	        `
+		return r.execAsRootWithRetry(ctx, "addAdminRole", upsertAdminStmtV221, username.AdminRole)
+	}
+	return err
 }
 
 func addRootToAdminRole(ctx context.Context, r runner) error {
