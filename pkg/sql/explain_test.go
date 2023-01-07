@@ -332,7 +332,7 @@ func TestExplainMVCCSteps(t *testing.T) {
 	skip.UnderMetamorphic(t,
 		"this test expects a precise number of scan requests, which is not upheld "+
 			"in the metamorphic configuration that edits the kv batch size.")
-
+	skip.WithIssue(t, 94881)
 	ctx := context.Background()
 	srv, godb, _ := serverutils.StartServer(t, base.TestServerArgs{Insecure: true})
 	defer srv.Stopper().Stop(ctx)
