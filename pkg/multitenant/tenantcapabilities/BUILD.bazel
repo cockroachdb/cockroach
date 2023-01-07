@@ -1,1 +1,15 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
 load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+
+go_library(
+    name = "tenantcapabilities",
+    srcs = ["capabilities.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/multitenant/tenantcapabilities/tenantcapabilitiespb",
+        "//pkg/roachpb",
+    ],
+)
+
+get_x_data(name = "get_x_data")
