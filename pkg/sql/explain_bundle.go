@@ -126,15 +126,17 @@ func buildStatementBundle(
 	ctx context.Context,
 	db *kv.DB,
 	ie *InternalExecutor,
+	stmtRawSQL string,
 	plan *planTop,
 	planString string,
 	trace tracingpb.Recording,
 	placeholders *tree.PlaceholderInfo,
+	queryErr, payloadErr, commErr error,
 ) diagnosticsBundle {
 	if plan == nil {
 		return diagnosticsBundle{collectionErr: errors.AssertionFailedf("execution terminated early")}
 	}
-	b := makeStmtBundleBuilder(db, ie, plan, trace, placeholders)
+	b := makeStmtBundleBuilder(db, ie, stmtRawSQL, plan, trace, placeholders)
 
 	b.addStatement()
 	b.addOptPlans()
@@ -143,6 +145,7 @@ func buildStatementBundle(
 	b.addExplainVec()
 	b.addTrace()
 	b.addEnv(ctx)
+	b.addErrors(queryErr, payloadErr, commErr)
 
 	buf, err := b.finalize()
 	if err != nil {
@@ -187,6 +190,7 @@ type stmtBundleBuilder struct {
 	db *kv.DB
 	ie *InternalExecutor
 
+	stmt         string
 	plan         *planTop
 	trace        tracingpb.Recording
 	placeholders *tree.PlaceholderInfo
@@ -197,34 +201,43 @@ type stmtBundleBuilder struct {
 func makeStmtBundleBuilder(
 	db *kv.DB,
 	ie *InternalExecutor,
+	stmt string,
 	plan *planTop,
 	trace tracingpb.Recording,
 	placeholders *tree.PlaceholderInfo,
 ) stmtBundleBuilder {
-	b := stmtBundleBuilder{db: db, ie: ie, plan: plan, trace: trace, placeholders: placeholders}
+	b := stmtBundleBuilder{
+		db: db, ie: ie, stmt: stmt, plan: plan, trace: trace, placeholders: placeholders,
+	}
+	b.buildPrettyStatement()
 	b.z.Init()
 	return b
 }
 
-// addStatement adds the pretty-printed statement as file statement.txt.
-func (b *stmtBundleBuilder) addStatement() {
-	cfg := tree.DefaultPrettyCfg()
-	cfg.UseTabs = false
-	cfg.LineWidth = 100
-	cfg.TabWidth = 2
-	cfg.Simplify = true
-	cfg.Align = tree.PrettyNoAlign
-	cfg.JSONFmt = true
-	var output string
-	// If we hit an early error, stmt or stmt.AST might not be initialized yet.
-	switch {
-	case b.plan.stmt == nil:
-		output = "-- No Statement."
-	case b.plan.stmt.AST == nil:
-		output = "-- No AST."
-	default:
-		output = cfg.Pretty(b.plan.stmt.AST)
+// buildPrettyStatement saves the pretty-printed statement (without any
+// placeholder arguments).
+func (b *stmtBundleBuilder) buildPrettyStatement() {
+	// If we hit an early error, stmt or stmt.AST might not be initialized yet. In
+	// this case use the original statement SQL already in the stmtBundleBuilder.
+	if b.plan.stmt != nil && b.plan.stmt.AST != nil {
+		cfg := tree.DefaultPrettyCfg()
+		cfg.UseTabs = false
+		cfg.LineWidth = 100
+		cfg.TabWidth = 2
+		cfg.Simplify = true
+		cfg.Align = tree.PrettyNoAlign
+		cfg.JSONFmt = true
+		b.stmt = cfg.Pretty(b.plan.stmt.AST)
 	}
+	if b.stmt == "" {
+		b.stmt = "-- no statement"
+	}
+}
+
+// addStatement adds the pretty-printed statement in b.stmt as file
+// statement.txt.
+func (b *stmtBundleBuilder) addStatement() {
+	output := b.stmt
 
 	if b.placeholders != nil && len(b.placeholders.Values) != 0 {
 		var buf bytes.Buffer
@@ -324,25 +337,16 @@ func (b *stmtBundleBuilder) addTrace() {
 		b.z.AddFile("trace.json", traceJSONStr)
 	}
 
-	cfg := tree.DefaultPrettyCfg()
-	cfg.UseTabs = false
-	cfg.LineWidth = 100
-	cfg.TabWidth = 2
-	cfg.Simplify = true
-	cfg.Align = tree.PrettyNoAlign
-	cfg.JSONFmt = true
-	stmt := cfg.Pretty(b.plan.stmt.AST)
-
 	// The JSON is not very human-readable, so we include another format too.
-	b.z.AddFile("trace.txt", fmt.Sprintf("%s\n\n\n\n%s", stmt, b.trace.String()))
+	b.z.AddFile("trace.txt", fmt.Sprintf("%s\n\n\n\n%s", b.stmt, b.trace.String()))
 
 	// Note that we're going to include the non-anonymized statement in the trace.
 	// But then again, nothing in the trace is anonymized.
 	comment := fmt.Sprintf(`This is a trace for SQL statement: %s
 This trace can be imported into Jaeger for visualization. From the Jaeger Search screen, select the JSON File.
 Jaeger can be started using docker with: docker run -d --name jaeger -p 16686:16686 jaegertracing/all-in-one:1.17
-The UI can then be accessed at http://localhost:16686/search`, stmt)
-	jaegerJSON, err := b.trace.ToJaegerJSON(stmt, comment, "")
+The UI can then be accessed at http://localhost:16686/search`, b.stmt)
+	jaegerJSON, err := b.trace.ToJaegerJSON(b.stmt, comment, "")
 	if err != nil {
 		b.z.AddFile("trace-jaeger.txt", err.Error())
 	} else {
@@ -438,6 +442,17 @@ func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
 		}
 		b.z.AddFile(fmt.Sprintf("stats-%s.sql", tables[i].String()), buf.String())
 	}
+}
+
+func (b *stmtBundleBuilder) addErrors(queryErr, payloadErr, commErr error) {
+	if queryErr == nil && payloadErr == nil && commErr == nil {
+		return
+	}
+	output := fmt.Sprintf(
+		"query error:\n%v\n\npayload error:\n%v\n\ncomm error:\n%v\n",
+		queryErr, payloadErr, commErr,
+	)
+	b.z.AddFile("errors.txt", output)
 }
 
 // finalize generates the zipped bundle and returns it as a buffer.
