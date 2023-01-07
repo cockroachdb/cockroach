@@ -99,28 +99,22 @@ docker_login
 declare -a gcr_amends
 declare -a dockerhub_amends
 
-for platform_name in "${platform_names[@]}"; do
-  tarball_arch="$(tarball_arch_from_platform_name "$platform_name")"
-  docker_arch="$(docker_arch_from_platform_name "$platform_name")"
-  linux_platform=linux
-  if [[ $tarball_arch == "aarch64" ]]; then
-    linux_platform=linux-3.7.10-gnu
-  fi
-  cp --recursive "build/deploy" "build/deploy-${docker_arch}"
+for platform_name in amd64 arm64; do
+  cp --recursive "build/deploy" "build/deploy-${platform_name}"
   tar \
-    --directory="build/deploy-${docker_arch}" \
+    --directory="build/deploy-${platform_name}" \
     --extract \
-    --file="artifacts/cockroach-${build_name}.${linux_platform}-${tarball_arch}.tgz" \
+    --file="artifacts/cockroach-${build_name}.linux-${platform_name}.tgz" \
     --ungzip \
     --ignore-zeros \
     --strip-components=1
-  cp --recursive licenses "build/deploy-${docker_arch}"
+  cp --recursive licenses "build/deploy-${platform_name}"
   # Move the libs where Dockerfile expects them to be
-  mv build/deploy-${docker_arch}/lib/* build/deploy-${docker_arch}/
-  rmdir build/deploy-${docker_arch}/lib
+  mv build/deploy-${platform_name}/lib/* build/deploy-${platform_name}/
+  rmdir build/deploy-${platform_name}/lib
 
-  dockerhub_arch_tag="${dockerhub_repository}:${docker_arch}-${build_name}"
-  gcr_arch_tag="${gcr_repository}:${docker_arch}-${build_name}"
+  dockerhub_arch_tag="${dockerhub_repository}:${platform_name}-${build_name}"
+  gcr_arch_tag="${gcr_repository}:${platform_name}-${build_name}"
   dockerhub_amends+=("--amend" "$dockerhub_arch_tag")
   gcr_amends+=("--amend" "$gcr_arch_tag")
 
@@ -129,10 +123,10 @@ for platform_name in "${platform_names[@]}"; do
     --label version="$version" \
     --no-cache \
     --pull \
-    --platform="linux/${docker_arch}" \
+    --platform="linux/${platform_name}" \
     --tag="${dockerhub_arch_tag}" \
     --tag="${gcr_arch_tag}" \
-    "build/deploy-${docker_arch}"
+    "build/deploy-${platform_name}"
   docker push "$gcr_arch_tag"
   docker push "$dockerhub_arch_tag"
 done
@@ -224,11 +218,10 @@ fi
 error=0
 
 for img in "${images[@]}"; do
-  for platform_name in "${platform_names[@]}"; do
-    docker_arch="$(docker_arch_from_platform_name "$platform_name")"
+  for platform_name in amd64 arm64; do
     docker rmi "$img" || true
-    docker pull --platform="linux/${docker_arch}" "$img"
-    output=$(docker run --platform="linux/${docker_arch}" "$img" version)
+    docker pull --platform="linux/${platform_name}" "$img"
+    output=$(docker run --platform="linux/${platform_name}" "$img" version)
     build_type=$(grep "^Build Type:" <<< "$output" | cut -d: -f2 | sed 's/ //g')
     sha=$(grep "^Build Commit ID:" <<< "$output" | cut -d: -f2 | sed 's/ //g')
     build_tag=$(grep "^Build Tag:" <<< "$output" | cut -d: -f2 | sed 's/ //g')
@@ -247,7 +240,7 @@ for img in "${images[@]}"; do
       error=1
     fi
   
-    build_tag_output=$(docker run --platform="linux/${docker_arch}" "$img" version --build-tag)
+    build_tag_output=$(docker run --platform="linux/${platform_name}" "$img" version --build-tag)
     if [ "$build_tag_output" != "$build_name" ]; then
       echo "ERROR: Build tag from 'cockroach version --build-tag' mismatch, expected '$build_name', got '$build_tag_output'"
       error=1
