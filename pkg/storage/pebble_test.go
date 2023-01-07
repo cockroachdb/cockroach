@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -1222,5 +1223,87 @@ func TestFSOpenFd(t *testing.T) {
 	require.True(t, ok)
 	if fd := fder.Fd(); fd == 0 {
 		t.Fatalf("Fd() returned %d", fd)
+	}
+}
+
+func TestShortAttributeExtractor(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	var txnUUID [uuid.Size]byte
+	lockKey, _ := LockTableKey{
+		Key: roachpb.Key("a"), Strength: lock.Exclusive, TxnUUID: txnUUID[:]}.ToEngineKey(nil)
+	v := MVCCValue{}
+	tombstoneVal, err := EncodeMVCCValue(v)
+	require.NoError(t, err)
+	var sv roachpb.Value
+	sv.SetString("foo")
+	v = MVCCValue{Value: sv}
+	strVal, err := EncodeMVCCValue(v)
+	require.NoError(t, err)
+	valHeader := enginepb.MVCCValueHeader{LocalTimestamp: hlc.ClockTimestamp{WallTime: 5}}
+	v = MVCCValue{MVCCValueHeader: valHeader}
+	tombstoneWithHeaderVal, err := EncodeMVCCValue(v)
+	require.NoError(t, err)
+	v = MVCCValue{MVCCValueHeader: valHeader, Value: sv}
+	strWithHeaderVal, err := EncodeMVCCValue(v)
+	require.NoError(t, err)
+	mvccKey := EncodeMVCCKey(MVCCKey{Key: roachpb.Key("a"), Timestamp: hlc.Timestamp{WallTime: 20}})
+	testCases := []struct {
+		name   string
+		key    []byte
+		value  []byte
+		attr   pebble.ShortAttribute
+		errStr string
+	}{
+		{
+			name:  "no-version",
+			key:   EncodeMVCCKey(MVCCKey{Key: roachpb.Key("a")}),
+			value: []byte(nil),
+		},
+		{
+			name:  "lock-key",
+			key:   lockKey.Encode(),
+			value: []byte(nil),
+		},
+		{
+			name:  "tombstone-val",
+			key:   mvccKey,
+			value: tombstoneVal,
+			attr:  1,
+		},
+		{
+			name:  "str-val",
+			key:   mvccKey,
+			value: strVal,
+		},
+		{
+			name:  "tombstone-with-header-val",
+			key:   mvccKey,
+			value: tombstoneWithHeaderVal,
+			attr:  1,
+		},
+		{
+			name:  "str-with-header-val",
+			key:   mvccKey,
+			value: strWithHeaderVal,
+		},
+		{
+			name:   "invalid-val",
+			key:    mvccKey,
+			value:  []byte("v"),
+			errStr: "invalid encoded mvcc value",
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			prefixLen := EngineComparer.Split(tc.key)
+			attr, err := shortAttributeExtractorForValues(tc.key, prefixLen, tc.value)
+			if len(tc.errStr) != 0 {
+				require.ErrorContains(t, err, tc.errStr)
+			} else {
+				require.NoError(t, err)
+				require.Equal(t, tc.attr, attr)
+			}
+		})
 	}
 }

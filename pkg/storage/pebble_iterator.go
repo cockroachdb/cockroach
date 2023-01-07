@@ -523,14 +523,23 @@ func (p *pebbleIterator) UnsafeLazyValue() pebble.LazyValue {
 // MVCCValueLenAndIsTombstone implements the MVCCIterator interface.
 func (p *pebbleIterator) MVCCValueLenAndIsTombstone() (int, bool, error) {
 	lv := p.iter.LazyValue()
-	// TODO(sumeer): fix this to use LazyValue.TryGetShortAttribute when
-	// https://github.com/cockroachdb/pebble/pull/2142 is merged.
-	val := lv.InPlaceValue()
-	isTombstone, err := EncodedMVCCValueIsTombstone(val)
-	if err != nil {
-		return 0, false, err
+	attr, ok := lv.TryGetShortAttribute()
+	var isTombstone bool
+	var valLen int
+	if ok {
+		isTombstone = attr != 0
+		valLen = lv.Len()
+	} else {
+		// Must be an in-place value, since it did not have a short attribute.
+		val := lv.InPlaceValue()
+		var err error
+		isTombstone, err = EncodedMVCCValueIsTombstone(val)
+		if err != nil {
+			return 0, false, err
+		}
+		valLen = len(val)
 	}
-	return len(val), isTombstone, nil
+	return valLen, isTombstone, nil
 }
 
 // ValueLen implements the MVCCIterator interface.
