@@ -246,7 +246,7 @@ type archiveKeys struct {
 func makeArchiveKeys(platform Platform, versionStr string, archivePrefix string) archiveKeys {
 	suffix := SuffixFromPlatform(platform)
 	targetSuffix, hasExe := TrimDotExe(suffix)
-	if platform == PlatformLinux {
+	if platform == PlatformLinux || platform == PlatformLinuxArm {
 		targetSuffix = strings.Replace(targetSuffix, "gnu-", "", -1)
 		targetSuffix = osVersionRe.ReplaceAllLiteralString(targetSuffix, "")
 	}
