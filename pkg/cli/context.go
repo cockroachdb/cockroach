@@ -530,6 +530,8 @@ func setDrainContextDefaults() {
 var nodeCtx struct {
 	nodeDecommissionWait   nodeDecommissionWaitType
 	nodeDecommissionSelf   bool
+	nodeDecommissionChecks nodeDecommissionCheckMode
+	nodeDecommissionDryRun bool
 	statusShowRanges       bool
 	statusShowStats        bool
 	statusShowDecommission bool
@@ -542,6 +544,8 @@ var nodeCtx struct {
 func setNodeContextDefaults() {
 	nodeCtx.nodeDecommissionWait = nodeDecommissionWaitAll
 	nodeCtx.nodeDecommissionSelf = false
+	nodeCtx.nodeDecommissionChecks = nodeDecommissionChecksEnabled
+	nodeCtx.nodeDecommissionDryRun = false
 	nodeCtx.statusShowRanges = false
 	nodeCtx.statusShowStats = false
 	nodeCtx.statusShowAll = false

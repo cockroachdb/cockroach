@@ -39,6 +39,21 @@ func (ts *TableStatsResponse) Add(ots *TableStatsResponse) {
 	}
 }
 
+func (r DecommissionPreCheckResponse_NodeReadiness) String() string {
+	switch r {
+	case DecommissionPreCheckResponse_UNKNOWN:
+		return "unknown"
+	case DecommissionPreCheckResponse_READY:
+		return "ready"
+	case DecommissionPreCheckResponse_ALREADY_DECOMMISSIONED:
+		return "already decommissioned"
+	case DecommissionPreCheckResponse_ALLOCATION_ERRORS:
+		return "allocation errors"
+	default:
+		panic("unknown decommission node readiness")
+	}
+}
+
 type TenantAdminServer interface {
 	Liveness(context.Context, *LivenessRequest) (*LivenessResponse, error)
 }

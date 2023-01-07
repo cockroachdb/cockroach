@@ -503,6 +503,8 @@ message DecommissionPreCheckRequest {
 // associated error messages and traces, for each node.
 message DecommissionPreCheckResponse {
   enum NodeReadiness {
+    option (gogoproto.goproto_enum_stringer) = false;
+
     UNKNOWN = 0;
     READY = 1;
     ALREADY_DECOMMISSIONED = 2;
