@@ -267,6 +267,47 @@ func (s *nodeDecommissionWaitType) Set(value string) error {
 	return nil
 }
 
+type nodeDecommissionCheckMode int
+
+const (
+	nodeDecommissionChecksSkip nodeDecommissionCheckMode = iota
+	nodeDecommissionChecksEnabled
+	nodeDecommissionChecksStrict
+)
+
+// Type implements the pflag.Value interface.
+func (s *nodeDecommissionCheckMode) Type() string { return "string" }
+
+// String implements the pflag.Value interface.
+func (s *nodeDecommissionCheckMode) String() string {
+	switch *s {
+	case nodeDecommissionChecksSkip:
+		return "skip"
+	case nodeDecommissionChecksEnabled:
+		return "enabled"
+	case nodeDecommissionChecksStrict:
+		return "strict"
+	default:
+		panic("unexpected node decommission check mode (possible values: enabled, strict, skip)")
+	}
+}
+
+// Set implements the pflag.Value interface.
+func (s *nodeDecommissionCheckMode) Set(value string) error {
+	switch value {
+	case "skip":
+		*s = nodeDecommissionChecksSkip
+	case "enabled":
+		*s = nodeDecommissionChecksEnabled
+	case "strict":
+		*s = nodeDecommissionChecksStrict
+	default:
+		return fmt.Errorf("invalid node decommission parameter: %s "+
+			"(possible values: enabled, strict, skip)", value)
+	}
+	return nil
+}
+
 // bytesOrPercentageValue is a flag that accepts an integer value, an integer
 // plus a unit (e.g. 32GB or 32GiB) or a percentage (e.g. 32%). In all these
 // cases, it transforms the string flag input into an int64 value.

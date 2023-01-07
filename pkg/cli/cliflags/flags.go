@@ -1214,6 +1214,26 @@ in the history of the cluster.`,
 as target of the decommissioning or recommissioning command.`,
 	}
 
+	NodeDecommissionChecks = FlagInfo{
+		Name: "checks",
+		Description: `
+Specifies how to evaluate readiness checks prior to node decommission.
+Takes any of the following values:
+<PRE>
+
+  - enabled  evaluate readiness prior to starting node decommission.
+  - strict   use strict readiness evaluation mode prior to node decommission.
+  - skip     skip readiness checks and immediately request node decommission.
+             Use when rerunning node decommission.
+</PRE>`,
+	}
+
+	NodeDecommissionDryRun = FlagInfo{
+		Name: "dry-run",
+		Description: `Only evaluate decommission readiness and check decommission
+status, without actually decommissioning the node.`,
+	}
+
 	NodeDrainSelf = FlagInfo{
 		Name: "self",
 		Description: `Use the node ID of the node connected to via --host

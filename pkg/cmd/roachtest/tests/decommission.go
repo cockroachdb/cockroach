@@ -401,7 +401,7 @@ func runDecommissionRandomized(ctx context.Context, t test.Test, c cluster.Clust
 
 		exp := [][]string{
 			decommissionHeader,
-			{strconv.Itoa(targetNode), "true", `\d+`, "true", "decommissioning", "false"},
+			{strconv.Itoa(targetNode), "true", `\d+`, "true", "decommissioning", "false", "ready|allocation errors", `\d+`},
 		}
 		if err := cli.MatchCSV(o, exp); err != nil {
 			t.Fatal(err)
@@ -480,7 +480,7 @@ func runDecommissionRandomized(ctx context.Context, t test.Test, c cluster.Clust
 
 				exp := [][]string{decommissionHeader}
 				for i := 1; i <= c.Spec().NodeCount; i++ {
-					rowRegex := []string{strconv.Itoa(i), "true", `\d+`, "true", "decommissioning", "false"}
+					rowRegex := []string{strconv.Itoa(i), "true", `\d+`, "true", "decommissioning", "false", "ready|allocation errors", `\d+`}
 					exp = append(exp, rowRegex)
 				}
 				if err := cli.MatchCSV(o, exp); err != nil {
@@ -601,8 +601,8 @@ func runDecommissionRandomized(ctx context.Context, t test.Test, c cluster.Clust
 
 			exp := [][]string{
 				decommissionHeader,
-				{strconv.Itoa(targetNodeA), "true|false", "0", "true", "decommissioned", "false"},
-				{strconv.Itoa(targetNodeB), "true|false", "0", "true", "decommissioned", "false"},
+				{strconv.Itoa(targetNodeA), "true|false", "0", "true", "decommissioned", "false", "ready|allocation errors", `\d+`},
+				{strconv.Itoa(targetNodeB), "true|false", "0", "true", "decommissioned", "false", "ready|allocation errors", `\d+`},
 				decommissionFooter,
 			}
 			return cli.MatchCSV(cli.RemoveMatchingLines(o, warningFilter), exp)
@@ -688,8 +688,8 @@ func runDecommissionRandomized(ctx context.Context, t test.Test, c cluster.Clust
 				decommissionHeader,
 				// NB: the "false" is liveness. We waited above for these nodes to
 				// vanish from `node ls`, so definitely not live at this point.
-				{strconv.Itoa(targetNodeA), "false", "0", "true", "decommissioned", "false"},
-				{strconv.Itoa(targetNodeB), "false", "0", "true", "decommissioned", "false"},
+				{strconv.Itoa(targetNodeA), "false", "0", "true", "decommissioned", "false", "already decommissioned", "0"},
+				{strconv.Itoa(targetNodeB), "false", "0", "true", "decommissioned", "false", "already decommissioned", "0"},
 				decommissionFooter,
 			}
 			if err := cli.MatchCSV(cli.RemoveMatchingLines(o, warningFilter), exp); err != nil {
@@ -780,7 +780,7 @@ func runDecommissionRandomized(ctx context.Context, t test.Test, c cluster.Clust
 
 		exp := [][]string{
 			decommissionHeader,
-			{strconv.Itoa(targetNode), "true|false", "0", "true", "decommissioned", "false"},
+			{strconv.Itoa(targetNode), "true|false", "0", "true", "decommissioned", "false", "already decommissioned", "0"},
 			decommissionFooter,
 		}
 		if err := cli.MatchCSV(cli.RemoveMatchingLines(o, warningFilter), exp); err != nil {
@@ -993,13 +993,13 @@ func runDecommissionDrains(ctx context.Context, t test.Test, c cluster.Cluster) 
 		// The expected output of decommission while the node is about to be drained/is draining.
 		expReplicasTransferred = [][]string{
 			decommissionHeader,
-			{strconv.Itoa(decommNodeID), "true|false", "0", "true", "decommissioning", "false"},
+			{strconv.Itoa(decommNodeID), "true|false", "0", "true", "decommissioning", "false", "ready", "0"},
 			decommissionFooter,
 		}
 		// The expected output of decommission once the node is finally marked as "decommissioned."
 		expDecommissioned = [][]string{
 			decommissionHeader,
-			{strconv.Itoa(decommNodeID), "true|false", "0", "true", "decommissioned", "false"},
+			{strconv.Itoa(decommNodeID), "true|false", "0", "true", "decommissioned", "false", "ready", "0"},
 			decommissionFooter,
 		}
 	)
@@ -1112,7 +1112,7 @@ func runDecommissionSlow(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 // Header from the output of `cockroach node decommission`.
 var decommissionHeader = []string{
-	"id", "is_live", "replicas", "is_decommissioning", "membership", "is_draining",
+	"id", "is_live", "replicas", "is_decommissioning", "membership", "is_draining", "readiness", "blocking_ranges",
 }
 
 // Footer from the output of `cockroach node decommission`, after successful

@@ -693,6 +693,10 @@ func init() {
 	// Decommission command.
 	cliflagcfg.VarFlag(decommissionNodeCmd.Flags(), &nodeCtx.nodeDecommissionWait, cliflags.Wait)
 
+	// Decommission pre-check flags.
+	cliflagcfg.VarFlag(decommissionNodeCmd.Flags(), &nodeCtx.nodeDecommissionChecks, cliflags.NodeDecommissionChecks)
+	cliflagcfg.BoolFlag(decommissionNodeCmd.Flags(), &nodeCtx.nodeDecommissionDryRun, cliflags.NodeDecommissionDryRun)
+
 	// Decommission and recommission share --self.
 	for _, cmd := range []*cobra.Command{decommissionNodeCmd, recommissionNodeCmd} {
 		f := cmd.Flags()
