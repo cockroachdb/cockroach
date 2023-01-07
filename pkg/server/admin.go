@@ -2709,8 +2709,8 @@ func (s *systemAdminServer) DecommissionPreCheck(
 		}
 	}
 
-	// Evaluate readiness for each node to check based on how many ranges have
-	// replicas on the node that did not pass checks.
+	// Evaluate readiness by validating that there are no ranges with replicas on
+	// the given node(s) that did not pass checks.
 	for _, nID := range nodesToCheck {
 		numReplicas := len(results.replicasByNode[nID])
 		var readiness serverpb.DecommissionPreCheckResponse_NodeReadiness
