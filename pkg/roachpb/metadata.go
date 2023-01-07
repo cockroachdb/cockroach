@@ -182,6 +182,115 @@ func (r *RangeDescriptor) Equal(other *RangeDescriptor) bool {
 	return true
 }
 
+// Size returns the encoded size of the message.
+func (r *RangeDescriptor) Size() (n int) {
+	if r == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	n += 1 + sovMetadata(uint64(r.RangeID))
+	if r.StartKey != nil {
+		l = len(r.StartKey)
+		n += 1 + l + sovMetadata(uint64(l))
+	}
+	if r.EndKey != nil {
+		l = len(r.EndKey)
+		n += 1 + l + sovMetadata(uint64(l))
+	}
+	if len(r.InternalReplicas) > 0 {
+		for _, e := range r.InternalReplicas {
+			l = e.Size()
+			n += 1 + l + sovMetadata(uint64(l))
+		}
+	}
+	n += 1 + sovMetadata(uint64(r.NextReplicaID))
+	n += 1 + sovMetadata(uint64(r.Generation))
+	// NB: Omit StickyBit field for the zero value, for backwards compatibility
+	// with 22.1 nodes. See: https://github.com/cockroachdb/cockroach/issues/94834
+	if !r.StickyBit.IsEmpty() {
+		l = r.StickyBit.Size()
+		n += 1 + l + sovMetadata(uint64(l))
+	}
+	return n
+}
+
+// Marshal encodes the message to a byte slice.
+func (r *RangeDescriptor) Marshal() (dAtA []byte, err error) {
+	size := r.Size()
+	dAtA = make([]byte, size)
+	n, err := r.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+// MarshalTo encodes the message to the given byte slice.
+func (r *RangeDescriptor) MarshalTo(dAtA []byte) (int, error) {
+	size := r.Size()
+	return r.MarshalToSizedBuffer(dAtA[:size])
+}
+
+// MarshalToSizedBuffer encodes the message to the given byte slice, which must
+// have the correct size as given by Size().
+func (r *RangeDescriptor) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	// NB: Omit StickyBit field for the zero value, for backwards compatibility
+	// with 22.1 nodes. See: https://github.com/cockroachdb/cockroach/issues/94834
+	if !r.StickyBit.IsEmpty() {
+		size, err := r.StickyBit.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintMetadata(dAtA, i, uint64(size))
+		i--
+		dAtA[i] = 0x3a
+	}
+	i = encodeVarintMetadata(dAtA, i, uint64(r.Generation))
+	i--
+	dAtA[i] = 0x30
+	i = encodeVarintMetadata(dAtA, i, uint64(r.NextReplicaID))
+	i--
+	dAtA[i] = 0x28
+	if len(r.InternalReplicas) > 0 {
+		for iNdEx := len(r.InternalReplicas) - 1; iNdEx >= 0; iNdEx-- {
+			{
+				size, err := r.InternalReplicas[iNdEx].MarshalToSizedBuffer(dAtA[:i])
+				if err != nil {
+					return 0, err
+				}
+				i -= size
+				i = encodeVarintMetadata(dAtA, i, uint64(size))
+			}
+			i--
+			dAtA[i] = 0x22
+		}
+	}
+	if r.EndKey != nil {
+		i -= len(r.EndKey)
+		copy(dAtA[i:], r.EndKey)
+		i = encodeVarintMetadata(dAtA, i, uint64(len(r.EndKey)))
+		i--
+		dAtA[i] = 0x1a
+	}
+	if r.StartKey != nil {
+		i -= len(r.StartKey)
+		copy(dAtA[i:], r.StartKey)
+		i = encodeVarintMetadata(dAtA, i, uint64(len(r.StartKey)))
+		i--
+		dAtA[i] = 0x12
+	}
+	i = encodeVarintMetadata(dAtA, i, uint64(r.RangeID))
+	i--
+	dAtA[i] = 0x8
+	return len(dAtA) - i, nil
+}
+
 // GetRangeID returns the RangeDescriptor's ID.
 // The method implements the batcheval.ImmutableRangeState interface.
 func (r *RangeDescriptor) GetRangeID() RangeID {
@@ -429,6 +538,69 @@ func (r ReplicaDescriptor) Validate() error {
 		return errors.Errorf("ReplicaID must not be zero")
 	}
 	return nil
+}
+
+// Size returns the encoded size of the message.
+func (r *ReplicaDescriptor) Size() (n int) {
+	if r == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	n += 1 + sovMetadata(uint64(r.NodeID))
+	n += 1 + sovMetadata(uint64(r.StoreID))
+	n += 1 + sovMetadata(uint64(r.ReplicaID))
+	// NB: Omit Type field for the VOTER_FULL zero value, for backwards
+	// compatibility with 22.1 nodes. See:
+	// https://github.com/cockroachdb/cockroach/issues/94834
+	if r.Type != VOTER_FULL {
+		n += 1 + sovMetadata(uint64(r.Type))
+	}
+	return n
+}
+
+// Marshal encodes the message to a byte slice.
+func (r *ReplicaDescriptor) Marshal() (dAtA []byte, err error) {
+	size := r.Size()
+	dAtA = make([]byte, size)
+	n, err := r.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+// MarshalTo encodes the message to the given byte slice.
+func (r *ReplicaDescriptor) MarshalTo(dAtA []byte) (int, error) {
+	size := r.Size()
+	return r.MarshalToSizedBuffer(dAtA[:size])
+}
+
+// MarshalToSizedBuffer encodes the message to the given byte slice, which must
+// have the correct size as given by Size().
+func (r *ReplicaDescriptor) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	// NB: Omit Type field for the VOTER_FULL zero value, for backwards
+	// compatibility with 22.1 nodes. See:
+	// https://github.com/cockroachdb/cockroach/issues/94834
+	if r.Type != VOTER_FULL {
+		i = encodeVarintMetadata(dAtA, i, uint64(r.Type))
+		i--
+		dAtA[i] = 0x20
+	}
+	i = encodeVarintMetadata(dAtA, i, uint64(r.ReplicaID))
+	i--
+	dAtA[i] = 0x18
+	i = encodeVarintMetadata(dAtA, i, uint64(r.StoreID))
+	i--
+	dAtA[i] = 0x10
+	i = encodeVarintMetadata(dAtA, i, uint64(r.NodeID))
+	i--
+	dAtA[i] = 0x8
+	return len(dAtA) - i, nil
 }
 
 // SafeValue implements the redact.SafeValue interface.
