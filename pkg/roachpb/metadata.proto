@@ -130,6 +130,11 @@ message ReplicaDescriptor {
   option (gogoproto.goproto_stringer) = false;
   option (gogoproto.equal) = true;
   option (gogoproto.populate) = true;
+  // NB: ReplicaDescriptor uses a custom marshaler for backwards compatibility
+  // with 22.1 nodes, encoding VOTER_FULL as unset/nil. See:
+  // https://github.com/cockroachdb/cockroach/issues/94834
+  option (gogoproto.marshaler) = false;
+  option (gogoproto.sizer) = false;
 
   optional int32 node_id = 1 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "NodeID", (gogoproto.casttype) = "NodeID",
@@ -176,6 +181,12 @@ message RangeDescriptor {
   // populates deprecated_generation_comparable.
   option (gogoproto.equal) = false;
   option (gogoproto.populate) = true;
+   // NB: RangeDescriptor uses a custom marshaler for backwards compatibility
+  // with 22.1 nodes, encoding StickyBit as unset/nil. See:
+  // https://github.com/cockroachdb/cockroach/issues/94834
+  option (gogoproto.marshaler) = false;
+  option (gogoproto.sizer) = false;
+
 
   optional int64 range_id = 1 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "RangeID", (gogoproto.casttype) = "RangeID"];
