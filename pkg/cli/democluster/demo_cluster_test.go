@@ -260,6 +260,7 @@ func TestTransientClusterMultitenant(t *testing.T) {
 	// This test is too slow to complete under the race detector, sometimes.
 	skip.UnderRace(t)
 	skip.UnderStress(t)
+	skip.WithIssue(t, 94862)
 
 	demoCtx := newDemoCtx()
 	// Set up an empty 3-node cluster with tenants on each node.
