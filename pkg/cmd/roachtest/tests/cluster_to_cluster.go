@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/local"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -66,8 +67,119 @@ type clusterInfo struct {
 }
 
 type c2cSetup struct {
-	src clusterInfo
-	dst clusterInfo
+	src     clusterInfo
+	dst     clusterInfo
+	metrics c2cMetrics
+}
+
+// DiskUsageTracker can grab the disk usage of the provided cluster.
+//
+// TODO(msbutler): move DiskUsageTracker, exportedMetric,
+// SizeTime and helper methods to an external package that all
+// roachtests can use.
+type DiskUsageTracker struct {
+	c cluster.Cluster
+	l *logger.Logger
+}
+
+// GetDiskUsage sums the disk usage for the given nodes in megabytes.
+func (du *DiskUsageTracker) GetDiskUsage(ctx context.Context, nodes option.NodeListOption) int {
+	var usage int
+	for _, n := range nodes {
+		cur, err := getDiskUsageInBytes(ctx, du.c, du.l, n)
+		if err != nil {
+			du.l.Printf("Unable to get disk usage for node %d", n)
+			return 0
+		}
+		usage += cur
+	}
+	return usage / 1e6
+}
+
+func NewDiskUsageTracker(
+	c cluster.Cluster, parentLogger *logger.Logger,
+) (*DiskUsageTracker, error) {
+	diskLogger, err := parentLogger.ChildLogger("disk-usage", logger.QuietStdout)
+	if err != nil {
+		return nil, err
+	}
+	return &DiskUsageTracker{c: c, l: diskLogger}, nil
+}
+
+// exportedMetric describes a measurement created in the roachtest process that will export to
+// roachperf or a prom/grafana instance.
+//
+// TODO(msbutler): currently, the exported metrics are merely printed at end of
+// the roachtest. Refactor these methods to play nice with a roachtest prom endpoint,
+// once it exists.
+type exportedMetric struct {
+	metric float64
+	unit   string
+}
+
+// newMetric creates a new exportedMetric
+func newMetric(metric float64, unit string) exportedMetric {
+	return exportedMetric{metric, unit}
+}
+
+func (em exportedMetric) String() string {
+	return fmt.Sprintf("%.2f %s", em.metric, em.unit)
+}
+
+// sizeTime captures the disk size of the nodes at some moment in time
+type sizeTime struct {
+	// size is the megabytes of the objects
+	size      int
+	time      time.Time
+	nodeCount int
+}
+
+func newSizeTime(ctx context.Context, du *DiskUsageTracker, nodes option.NodeListOption) sizeTime {
+	return sizeTime{
+		size:      du.GetDiskUsage(ctx, nodes),
+		time:      timeutil.Now(),
+		nodeCount: len(nodes),
+	}
+}
+
+// diskDiffThroughput estimates throughput between two time intervals as mb/s/node by assuming
+// that the total bytes written between the time intervals is diskUsage_End - diskUsage_Start.
+func diskDiffThroughput(start sizeTime, end sizeTime) float64 {
+	if start.nodeCount != end.nodeCount {
+		panic("node count cannot change while measuring throughput")
+	}
+	return (float64(end.size-start.size) / end.time.Sub(start.time).Seconds()) / float64(start.nodeCount)
+}
+
+type c2cMetrics struct {
+	start sizeTime
+
+	initialScanEnd sizeTime
+
+	cutoverStart sizeTime
+
+	cutoverEnd sizeTime
+}
+
+func (m c2cMetrics) export() map[string]exportedMetric {
+	metrics := map[string]exportedMetric{}
+
+	populate := func(start sizeTime, end sizeTime, label string) {
+		metrics[label+"Duration"] = newMetric(end.time.Sub(start.time).Minutes(), "Minutes")
+
+		// Describes the cluster size difference between two timestamps.
+		metrics[label+"Size"] = newMetric(float64(end.size-start.size), "MB")
+		metrics[label+"Throughput"] = newMetric(diskDiffThroughput(start, end), "MB/S/Node")
+
+	}
+	if m.initialScanEnd.nodeCount != 0 {
+		populate(m.start, m.initialScanEnd, "InitialScan")
+	}
+
+	if m.cutoverEnd.nodeCount != 0 {
+		populate(m.cutoverStart, m.cutoverEnd, "Cutover")
+	}
+	return metrics
 }
 
 func setupC2C(
@@ -149,8 +261,9 @@ func setupC2C(
 	createSystemRole(t, srcTenantInfo.name, srcTenantInfo.sql)
 	createSystemRole(t, destTenantInfo.name, destTenantInfo.sql)
 	return &c2cSetup{
-		src: srcTenantInfo,
-		dst: destTenantInfo}, cleanup
+		src:     srcTenantInfo,
+		dst:     destTenantInfo,
+		metrics: c2cMetrics{}}, cleanup
 }
 
 // createSystemRole creates a role that can be used to log into the cluster's db console
@@ -164,9 +277,6 @@ func createSystemRole(t test.Test, name string, sql *sqlutils.SQLRunner) {
 }
 
 type streamingWorkload interface {
-	// name returns the name of the workload
-	name() string
-
 	// sourceInitCmd returns a command that will populate the src cluster with data before the
 	// replication stream begins
 	sourceInitCmd(pgURL string) string
@@ -180,10 +290,6 @@ type replicateTPCC struct {
 	warehouses int
 }
 
-func (tpcc replicateTPCC) name() string {
-	return fmt.Sprintf("tpcc/warehouses=%d", tpcc.warehouses)
-}
-
 func (tpcc replicateTPCC) sourceInitCmd(pgURL string) string {
 	return fmt.Sprintf(`./workload init tpcc --data-loader import --warehouses %d '%s'`,
 		tpcc.warehouses, pgURL)
@@ -195,7 +301,26 @@ func (tpcc replicateTPCC) sourceRunCmd(pgURL string, duration time.Duration) str
 		tpcc.warehouses, int(duration.Minutes()), pgURL)
 }
 
+type replicateKV struct {
+	readPercent int
+}
+
+func (kv replicateKV) sourceInitCmd(pgURL string) string {
+	return ""
+}
+
+func (kv replicateKV) sourceRunCmd(pgURL string, duration time.Duration) string {
+	// added --tolerate-errors flags to prevent test from flaking due to a transaction retry error
+	return fmt.Sprintf(`./workload run kv --tolerate-errors --init --duration %dm --read-percent %d '%s'`,
+		int(duration.Minutes()),
+		kv.readPercent,
+		pgURL)
+}
+
 type replicationTestSpec struct {
+	// name specifies the name of the roachtest
+	name string
+
 	// srcKVNodes is the number of kv nodes on the source cluster.
 	srcKVNodes int
 
@@ -222,76 +347,9 @@ type replicationTestSpec struct {
 }
 
 func registerClusterToCluster(r registry.Registry) {
-	r.Add(registry.TestSpec{
-		Name:            "c2c/kv0",
-		Owner:           registry.OwnerDisasterRecovery,
-		Cluster:         r.MakeClusterSpec(7),
-		RequiresLicense: true,
-		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			setup, cleanup := setupC2C(ctx, t, c, 3, 3)
-			defer cleanup()
-			var (
-				kvWorkloadDuration = "15m"
-				kvWorkloadReadPerc = 0
-			)
-			m := c.NewMonitor(ctx, c.Range(1, 6))
-			workloadDoneCh := make(chan struct{})
-			m.Go(func(ctx context.Context) error {
-				defer close(workloadDoneCh)
-				cmd := fmt.Sprintf("./workload run kv --tolerate-errors --init --duration %s --read-percent %d '%s'",
-					kvWorkloadDuration,
-					kvWorkloadReadPerc,
-					setup.src.tenant.secureURL())
-				c.Run(ctx, c.Node(setup.src.sqlNode), cmd)
-				return nil
-			})
-
-			t.Status("starting replication stream")
-			streamReplStmt := fmt.Sprintf("CREATE TENANT %q FROM REPLICATION OF %q ON '%s'",
-				setup.dst.name, setup.src.name, setup.src.pgURL)
-			setup.dst.sql.Exec(t, streamReplStmt)
-
-			// Get the ingestion job id.
-			var tenantInfoBytes []byte
-			var tenantInfo descpb.TenantInfo
-			setup.dst.sql.QueryRow(t, "SELECT info FROM system.tenants WHERE name=$1",
-				setup.dst.name).Scan(&tenantInfoBytes)
-			require.NoError(t, protoutil.Unmarshal(tenantInfoBytes, &tenantInfo))
-			ingestionJobID := int(tenantInfo.TenantReplicationJobID)
-
-			// TODO(ssd): The job doesn't record the initial
-			// statement time, so we can't correctly measure the
-			// initial scan time here.
-			lv := makeLatencyVerifier("stream-ingestion", 0, 2*time.Minute, t.L(), getStreamIngestionJobInfo, t.Status, false)
-			defer lv.maybeLogLatencyHist()
-
-			m.Go(func(ctx context.Context) error {
-				return lv.pollLatency(ctx, setup.dst.db, ingestionJobID, time.Second, workloadDoneCh)
-			})
-
-			t.Status("waiting for replication stream to return high watermark")
-			waitForHighWatermark(t, setup.dst.db, ingestionJobID, time.Minute*10)
-
-			// Fail fast if workload or latency poller goroutines fail
-			require.NoError(t, m.WaitE())
-
-			t.Status("waiting for replication stream to cutover")
-			// Cut over the ingestion job and the job will stop eventually.
-			var cutoverTime time.Time
-			setup.dst.sql.QueryRow(t, "SELECT clock_timestamp()").Scan(&cutoverTime)
-			stopReplicationStream(t, setup.dst.sql, ingestionJobID, cutoverTime)
-
-			compareTenantFingerprintsAtTimestamp(
-				t,
-				m,
-				setup,
-				hlc.Timestamp{WallTime: cutoverTime.UnixNano()})
-			lv.assertValid(t)
-		},
-	})
-
 	for _, sp := range []replicationTestSpec{
 		{
+			name:       "c2c/tpcc",
 			srcKVNodes: 4,
 			dstKVNodes: 4,
 			cpus:       8,
@@ -301,7 +359,17 @@ func registerClusterToCluster(r registry.Registry) {
 			// TODO(msbutler): increase default test to 1000 warehouses once fingerprinting
 			// job speeds up.
 			workload:           replicateTPCC{warehouses: 500},
-			timeout:            3 * time.Hour,
+			timeout:            1 * time.Hour,
+			additionalDuration: 10 * time.Minute,
+			cutover:            5 * time.Minute,
+		}, {
+			name:               "c2c/kv0",
+			srcKVNodes:         3,
+			dstKVNodes:         3,
+			cpus:               8,
+			pdSize:             1000,
+			workload:           replicateKV{readPercent: 0},
+			timeout:            1 * time.Hour,
 			additionalDuration: 10 * time.Minute,
 			cutover:            5 * time.Minute,
 		},
@@ -313,7 +381,7 @@ func registerClusterToCluster(r registry.Registry) {
 		}
 
 		r.Add(registry.TestSpec{
-			Name:            "c2c/tpcc",
+			Name:            sp.name,
 			Owner:           registry.OwnerDisasterRecovery,
 			Cluster:         r.MakeClusterSpec(sp.dstKVNodes+sp.srcKVNodes+1, clusterOps...),
 			RequiresLicense: true,
@@ -322,21 +390,24 @@ func registerClusterToCluster(r registry.Registry) {
 				setup, cleanup := setupC2C(ctx, t, c, sp.srcKVNodes, sp.dstKVNodes)
 				defer cleanup()
 				m := c.NewMonitor(ctx, setup.src.kvNodes.Merge(setup.dst.kvNodes))
-
-				t.Status("populating source cluster before replication")
-				initStartTime := timeutil.Now()
+				du, err := NewDiskUsageTracker(c, t.L())
+				require.NoError(t, err)
+				var initDuration time.Duration
 				if initCmd := sp.workload.sourceInitCmd(setup.src.tenant.secureURL()); initCmd != "" {
+					t.Status("populating source cluster before replication")
+					setup.metrics.start = newSizeTime(ctx, du, setup.src.kvNodes)
 					c.Run(ctx, c.Node(setup.src.sqlNode), initCmd)
+					setup.metrics.initialScanEnd = newSizeTime(ctx, du, setup.src.kvNodes)
+
+					initDuration = setup.metrics.initialScanEnd.time.Sub(setup.metrics.start.time)
+					t.L().Printf("src cluster workload initialization took %d minutes", int(initDuration.Minutes()))
 				}
-				initEndTime := timeutil.Now()
-				initDuration := initEndTime.Sub(initStartTime)
-				t.L().Printf("src cluster workload initialization took %d minutes", int(initDuration.Minutes()))
 
 				t.Status("starting replication stream")
 				streamReplStmt := fmt.Sprintf("CREATE TENANT %q FROM REPLICATION OF %q ON '%s'",
 					setup.dst.name, setup.src.name, setup.src.pgURL)
-				var ingestionJobID, streamProducerJobID int
-				setup.dst.sql.QueryRow(t, streamReplStmt).Scan(&ingestionJobID, &streamProducerJobID)
+				setup.dst.sql.Exec(t, streamReplStmt)
+				ingestionJobID := getIngestionJobID(t, setup.dst.sql, setup.dst.name)
 
 				// The replication stream is expected to spend some time conducting an
 				// initial scan, ideally on the same order as the `initDuration`, the
@@ -368,15 +439,15 @@ func registerClusterToCluster(r registry.Registry) {
 				})
 
 				t.Status("waiting for replication stream to finish ingesting initial scan")
-				// TODO(msbutler): measure initial ingestion perf.
 				waitForHighWatermark(t, setup.dst.db, ingestionJobID, sp.timeout/2)
 
 				t.Status("waiting for src cluster workload to complete")
 				m.Wait()
 
 				t.Status("waiting for replication stream to cutover")
-				// TODO(msbutler): measure cutover perf.
+				setup.metrics.cutoverStart = newSizeTime(ctx, du, setup.dst.kvNodes)
 				stopReplicationStream(t, setup.dst.sql, ingestionJobID, cutoverTime)
+				setup.metrics.cutoverEnd = newSizeTime(ctx, du, setup.dst.kvNodes)
 
 				t.Status("comparing fingerprints")
 				// Currently, it takes about 15 minutes to generate a fingerprint for
@@ -392,9 +463,23 @@ func registerClusterToCluster(r registry.Registry) {
 					setup,
 					hlc.Timestamp{WallTime: cutoverTime.UnixNano()})
 				lv.assertValid(t)
+
+				// TODO(msbutler): export metrics to roachperf or prom/grafana
+				exportedMetrics := setup.metrics.export()
+				for key, metric := range exportedMetrics {
+					t.L().Printf("%s: %s", key, metric.String())
+				}
 			},
 		})
-	} //
+	}
+}
+func getIngestionJobID(t test.Test, dstSQL *sqlutils.SQLRunner, dstTenantName string) int {
+	var tenantInfoBytes []byte
+	var tenantInfo descpb.TenantInfo
+	dstSQL.QueryRow(t, "SELECT info FROM system.tenants WHERE name=$1",
+		dstTenantName).Scan(&tenantInfoBytes)
+	require.NoError(t, protoutil.Unmarshal(tenantInfoBytes, &tenantInfo))
+	return int(tenantInfo.TenantReplicationJobID)
 }
 
 func chooseCutover(
