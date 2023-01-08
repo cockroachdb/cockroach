@@ -128,8 +128,12 @@ func TestStartArgChecking(t *testing.T) {
 	for i, c := range testCases {
 		// Reset the context and insecure flag for every test case.
 		err := f.Parse(c.args)
-		if !testutils.IsError(err, c.expected) {
-			t.Errorf("%d: expected %q, but found %v", i, c.expected, err)
+		var err2 error
+		if err == nil {
+			err2 = extraStoreFlagInit(startCmd)
+		}
+		if !testutils.IsError(err, c.expected) && !testutils.IsError(err2, c.expected) {
+			t.Errorf("%d: expected %q, but found %v / %v", i, c.expected, err, err2)
 		}
 	}
 }

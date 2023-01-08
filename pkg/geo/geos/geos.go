@@ -15,6 +15,7 @@
 package geos
 
 import (
+	"fmt"
 	"os"
 	"path"
 	"path/filepath"
@@ -124,10 +125,6 @@ func findLibraryDirectories(flagLibraryDirectoryValue string, crdbBinaryLoc stri
 	// Try path by trying to find all parenting paths and appending
 	// `lib/libgeos_c.<ext>` to the current working directory, as well
 	// as the directory in which the cockroach binary is initialized.
-	cwd, err := os.Getwd()
-	if err != nil {
-		panic(err)
-	}
 	locs := []string{}
 	if flagLibraryDirectoryValue != "" {
 		locs = append(locs, flagLibraryDirectoryValue)
@@ -149,12 +146,18 @@ func findLibraryDirectories(flagLibraryDirectoryValue string, crdbBinaryLoc stri
 		}
 	}
 	locs = append(
-		append(
-			locs,
-			findLibraryDirectoriesInParentingDirectories(crdbBinaryLoc)...,
-		),
-		findLibraryDirectoriesInParentingDirectories(cwd)...,
+		locs,
+		findLibraryDirectoriesInParentingDirectories(crdbBinaryLoc)...,
 	)
+	cwd, err := os.Getwd()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "warning: cannot retrieve cwd: %v", err)
+	} else {
+		locs = append(
+			locs,
+			findLibraryDirectoriesInParentingDirectories(cwd)...,
+		)
+	}
 	return locs
 }
 
