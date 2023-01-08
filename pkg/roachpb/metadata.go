@@ -11,7 +11,6 @@
 package roachpb
 
 import (
-	"bytes"
 	"fmt"
 	"sort"
 	"strconv"
@@ -143,44 +142,6 @@ func NewRangeDescriptor(rangeID RangeID, start, end RKey, replicas ReplicaSet) *
 	}
 	desc.SetReplicas(MakeReplicaSet(repls))
 	return desc
-}
-
-// Equal compares two descriptors for equality. This was copied over from the
-// gogoproto generated version in order to ignore deprecated fields.
-func (r *RangeDescriptor) Equal(other *RangeDescriptor) bool {
-	if other == nil {
-		return r == nil
-	}
-	if r == nil {
-		return false
-	}
-	if r.RangeID != other.RangeID {
-		return false
-	}
-	if r.Generation != other.Generation {
-		return false
-	}
-	if !bytes.Equal(r.StartKey, other.StartKey) {
-		return false
-	}
-	if !bytes.Equal(r.EndKey, other.EndKey) {
-		return false
-	}
-	if len(r.InternalReplicas) != len(other.InternalReplicas) {
-		return false
-	}
-	for i := range r.InternalReplicas {
-		if !r.InternalReplicas[i].Equal(&other.InternalReplicas[i]) {
-			return false
-		}
-	}
-	if r.NextReplicaID != other.NextReplicaID {
-		return false
-	}
-	if !r.StickyBit.Equal(other.StickyBit) {
-		return false
-	}
-	return true
 }
 
 // GetRangeID returns the RangeDescriptor's ID.
