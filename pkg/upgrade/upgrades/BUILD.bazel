@@ -6,6 +6,7 @@ go_library(
     srcs = [
         "alter_jobs_add_job_type.go",
         "alter_sql_instances_locality.go",
+        "alter_sql_instances_sql_addr.go",
         "alter_statement_statistics_index_recommendations.go",
         "alter_table_statistics_partial_predicate_and_id.go",
         "create_index_usage_statement_statistics.go",
@@ -80,6 +81,7 @@ go_test(
     srcs = [
         "alter_jobs_add_job_type_test.go",
         "alter_sql_instances_locality_test.go",
+        "alter_sql_instances_sql_addr_test.go",
         "alter_statement_statistics_index_recommendations_test.go",
         "alter_table_statistics_partial_predicate_and_id_test.go",
         "builtins_test.go",
