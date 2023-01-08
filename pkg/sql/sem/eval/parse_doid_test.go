@@ -31,7 +31,7 @@ func TestSplitIdentifierList(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.in, func(t *testing.T) {
-			out, err := splitIdentifierList(tc.in)
+			out, err := SplitIdentifierList(tc.in)
 			require.NoError(t, err)
 			require.Equal(t, tc.expected, out)
 		})
@@ -48,7 +48,7 @@ func TestSplitIdentifierList(t *testing.T) {
 
 	for _, tc := range errorTestCases {
 		t.Run(tc.in, func(t *testing.T) {
-			_, err := splitIdentifierList(tc.in)
+			_, err := SplitIdentifierList(tc.in)
 			require.EqualError(t, err, tc.expectedError)
 		})
 	}

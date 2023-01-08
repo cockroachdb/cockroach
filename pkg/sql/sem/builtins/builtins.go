@@ -7746,6 +7746,27 @@ expires until the statement bundle is collected`,
 			Volatility: volatility.Immutable,
 		},
 	),
+	"crdb_internal.split_ident": makeBuiltin(defProps(),
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "input", Typ: types.String}},
+			ReturnType: tree.FixedReturnType(types.StringArray),
+			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				list, err := eval.SplitIdentifierList(string(tree.MustBeDString(args[0])))
+				if err != nil {
+					return nil, err
+				}
+				ret := tree.NewDArray(types.String)
+				for _, ident := range list {
+					if err := ret.Append(tree.NewDString(ident)); err != nil {
+						return nil, err
+					}
+				}
+				return ret, nil
+			},
+			Info:       "Splits an input identifier into its constituent parts",
+			Volatility: volatility.Immutable,
+		},
+	),
 }
 
 var lengthImpls = func(incBitOverload bool) builtinDefinition {

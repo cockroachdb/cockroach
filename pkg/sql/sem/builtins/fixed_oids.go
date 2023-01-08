@@ -2044,6 +2044,7 @@ var builtinOidsArray = []string{
 	2066: `crdb_internal.generate_test_objects(parameters: jsonb) -> jsonb`,
 	2067: `crdb_internal.gen_rand_ident(name_pattern: string, count: int) -> string`,
 	2068: `crdb_internal.gen_rand_ident(name_pattern: string, count: int, parameters: jsonb) -> string`,
+	2069: `crdb_internal.split_ident(input: string) -> string[]`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid

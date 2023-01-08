@@ -56,7 +56,7 @@ func ParseDOid(ctx context.Context, evalCtx *Context, s string, t *types.T) (*tr
 	case oid.T_regproc:
 		// To be compatible with postgres, we always treat the trimmed input string
 		// as a function name.
-		substrs, err := splitIdentifierList(strings.TrimSpace(s))
+		substrs, err := SplitIdentifierList(strings.TrimSpace(s))
 		if err != nil {
 			return nil, err
 		}
@@ -252,7 +252,7 @@ func indexNameToOID(ctx context.Context, evalCtx *Context, tn tree.TableName) (o
 
 // castStringToRegClassTableName normalizes a TableName from a string.
 func castStringToRegClassTableName(s string) (tree.TableName, error) {
-	components, err := splitIdentifierList(s)
+	components, err := SplitIdentifierList(s)
 	if err != nil {
 		return tree.TableName{}, err
 	}
@@ -279,10 +279,10 @@ func castStringToRegClassTableName(s string) (tree.TableName, error) {
 	return u.ToTableName(), nil
 }
 
-// splitIdentifierList splits identifiers to individual components, lower
+// SplitIdentifierList splits identifiers to individual components, lower
 // casing non-quoted identifiers and escaping quoted identifiers as appropriate.
 // It is based on PostgreSQL's SplitIdentifier.
-func splitIdentifierList(in string) ([]string, error) {
+func SplitIdentifierList(in string) ([]string, error) {
 	var pos int
 	var ret []string
 	const separator = '.'
