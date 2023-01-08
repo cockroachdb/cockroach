@@ -255,7 +255,7 @@ SELECT relname from pg_class where oid='quotedCase'::regclass
 query T
 SELECT relname from pg_class where oid='"quotedCase"'::regclass
 ----
-quotedCase
+"quotedCase"
 
 query error pgcode 42704 type 'typquotedcase' does not exist
 SELECT typname from pg_type where oid='typQuotedCase'::regtype

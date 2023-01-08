@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -686,20 +687,22 @@ https://www.postgresql.org/docs/9.5/catalog-pg-class.html`,
 		}
 		implicitTypOID := typedesc.TableIDToImplicitTypeOID(table.GetID())
 		namespaceOid := schemaOid(sc.GetID())
+		var buf bytes.Buffer
+		lexbase.EncodeRestrictedSQLIdent(&buf, table.GetName(), lexbase.EncNoFlags)
 		if err := addRow(
-			tableOid(table.GetID()),        // oid
-			tree.NewDName(table.GetName()), // relname
-			namespaceOid,                   // relnamespace
-			tree.NewDOid(implicitTypOID),   // reltype (PG creates a composite type in pg_type for each table)
-			oidZero,                        // reloftype (used for type tables, which is unsupported)
-			ownerOid,                       // relowner
-			relAm,                          // relam
-			oidZero,                        // relfilenode
-			oidZero,                        // reltablespace
-			tree.DNull,                     // relpages
-			tree.DNull,                     // reltuples
-			zeroVal,                        // relallvisible
-			oidZero,                        // reltoastrelid
+			tableOid(table.GetID()),      // oid
+			tree.NewDName(buf.String()),  // relname
+			namespaceOid,                 // relnamespace
+			tree.NewDOid(implicitTypOID), // reltype (PG creates a composite type in pg_type for each table)
+			oidZero,                      // reloftype (used for type tables, which is unsupported)
+			ownerOid,                     // relowner
+			relAm,                        // relam
+			oidZero,                      // relfilenode
+			oidZero,                      // reltablespace
+			tree.DNull,                   // relpages
+			tree.DNull,                   // reltuples
+			zeroVal,                      // relallvisible
+			oidZero,                      // reltoastrelid
 			tree.MakeDBool(tree.DBool(table.IsPhysicalTable())), // relhasindex
 			tree.DBoolFalse, // relisshared
 			relPersistence,  // relpersistence
