@@ -31,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -620,7 +619,8 @@ func makeCookieWithValue(value string, forHTTPSOnly bool) *http.Cookie {
 func (am *authenticationMux) getSession(
 	w http.ResponseWriter, req *http.Request,
 ) (string, *serverpb.SessionCookie, error) {
-	cookie, err := findAndDecodeSessionCookie(req.Context(), req.Cookies())
+	st := am.server.sqlServer.cfg.Settings
+	cookie, err := findAndDecodeSessionCookie(req.Context(), st, req.Cookies())
 	if err != nil {
 		return "", nil, err
 	}
@@ -713,7 +713,7 @@ func createAggregatedSessionCookieValue(sessionCookieValue []sessionCookieValue)
 // If neither cookie types are found or there is an error in decoding or processing,
 // the function will return an error.
 func findAndDecodeSessionCookie(
-	ctx context.Context, cookies []*http.Cookie,
+	ctx context.Context, st *cluster.Settings, cookies []*http.Cookie,
 ) (*serverpb.SessionCookie, error) {
 	// Validate the returned cookie.
 	found := false
@@ -732,7 +732,7 @@ func findAndDecodeSessionCookie(
 		found = true
 		// This case is if the multitenant session cookie is set.
 		if sessionCookie.Name == MultitenantSessionCookieName {
-			mtSessionVal, err := findSessionCookieValue(cookies)
+			mtSessionVal, err := findSessionCookieValue(st, cookies)
 			if err != nil {
 				return cookie, apiInternalError(ctx, err)
 			}
@@ -764,13 +764,11 @@ func findAndDecodeSessionCookie(
 // string to indicate this.
 // e.g. tenant cookie value is "system" and multitenant-session cookie
 // value is "abcd1234,system,efgh5678,app" the output will be "abcd1234".
-func findSessionCookieValue(cookies []*http.Cookie) (string, error) {
+func findSessionCookieValue(st *cluster.Settings, cookies []*http.Cookie) (string, error) {
 	if mtSessionStr := findMultitenantSessionCookieValue(cookies); mtSessionStr != "" {
 		tenantName := findTenantCookieValue(cookies)
-		// TODO(santamaura): Change this once the tenant name is configurable,
-		// see: https://github.com/cockroachdb/cockroach/issues/91741.
 		if tenantName == "" {
-			tenantName = catconstants.SystemTenantName
+			tenantName = defaultTenantSelect.Get(&st.SV)
 		}
 		sessionSlice := strings.Split(mtSessionStr, ",")
 		var encodedSession string
@@ -787,17 +785,16 @@ func findSessionCookieValue(cookies []*http.Cookie) (string, error) {
 	return "", nil
 }
 
-// findTenantCookieValue iterates through all request cookies
-// in order to find the value of the tenant cookie. If
-// the tenant cookie is not found, it assumes the default
-// to be the system tenant.
+// findTenantCookieValue iterates through all request cookies in order
+// to find the value of the tenant cookie. If the tenant cookie is not
+// found, it returns the empty string.
 func findTenantCookieValue(cookies []*http.Cookie) string {
 	for _, c := range cookies {
 		if c.Name == TenantSelectCookieName {
 			return c.Value
 		}
 	}
-	return catconstants.SystemTenantName
+	return ""
 }
 
 // findMultitenantSessionCookieValue iterates through all request

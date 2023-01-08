@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/clientsecopts"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -106,6 +107,9 @@ type serverController struct {
 	// stopper is the parent stopper.
 	stopper *stop.Stopper
 
+	// st refers to the applicable cluster settings.
+	st *cluster.Settings
+
 	mu struct {
 		syncutil.Mutex
 
@@ -124,10 +128,12 @@ type serverController struct {
 func newServerController(
 	ctx context.Context,
 	parentStopper *stop.Stopper,
+	st *cluster.Settings,
 	newServerFn newServerFn,
 	systemServer onDemandServer,
 ) *serverController {
 	c := &serverController{
+		st:          st,
 		stopper:     parentStopper,
 		newServerFn: newServerFn,
 	}
@@ -209,12 +215,24 @@ const TenantNameParamInQueryURL = "tenant_name"
 // if the custom header is not specified.
 const TenantSelectCookieName = `tenant`
 
+// DefaultTenantSelectSettingName is the name of the setting that
+// configures the default tenant to use when a client does not specify
+// a specific tenant.
+var DefaultTenantSelectSettingName = "server.connector.default_tenant"
+
+var defaultTenantSelect = settings.RegisterStringSetting(
+	settings.SystemOnly,
+	DefaultTenantSelectSettingName,
+	"name of the tenant to use to serve requests when clients don't specify a tenant",
+	catconstants.SystemTenantName,
+).WithPublic()
+
 // httpMux redirects incoming HTTP requests to the server selected by
 // the special HTTP request header.
 // If no tenant is specified, the default tenant is used.
 func (c *serverController) httpMux(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	tenantName, nameProvided := getTenantNameFromHTTPRequest(r)
+	tenantName, nameProvided := getTenantNameFromHTTPRequest(c.st, r)
 	s, err := c.getOrCreateServer(ctx, tenantName)
 	if err != nil {
 		log.Warningf(ctx, "unable to start server for tenant %q: %v", tenantName, err)
@@ -235,7 +253,9 @@ func (c *serverController) httpMux(w http.ResponseWriter, r *http.Request) {
 	s.getHTTPHandlerFn()(w, r)
 }
 
-func getTenantNameFromHTTPRequest(r *http.Request) (roachpb.TenantName, bool) {
+func getTenantNameFromHTTPRequest(
+	st *cluster.Settings, r *http.Request,
+) (roachpb.TenantName, bool) {
 	// Highest priority is manual override on the URL query parameters.
 	if tenantName := r.URL.Query().Get(TenantNameParamInQueryURL); tenantName != "" {
 		return roachpb.TenantName(tenantName), true
@@ -251,11 +271,8 @@ func getTenantNameFromHTTPRequest(r *http.Request) (roachpb.TenantName, bool) {
 		return roachpb.TenantName(c.Value), true
 	}
 
-	// No luck so far.
-	//
-	// TODO(knz): Make the default tenant route for HTTP configurable.
-	// See: https://github.com/cockroachdb/cockroach/issues/91741
-	return catconstants.SystemTenantName, false
+	// No luck so far. Use the configured default.
+	return roachpb.TenantName(defaultTenantSelect.Get(&st.SV)), false
 }
 
 func (c *serverController) getCurrentTenantNames() []roachpb.TenantName {
@@ -336,11 +353,10 @@ func (c *serverController) attemptLoginToAllTenants() http.Handler {
 			}
 			http.SetCookie(w, &cookie)
 			// The tenant cookie needs to be set at some point in order for
-			// the dropdown to have a current selection on first load. Subject to change
-			// once this issue is resolved: https://github.com/cockroachdb/cockroach/issues/91741.
+			// the dropdown to have a current selection on first load.
 			cookie = http.Cookie{
 				Name:     TenantSelectCookieName,
-				Value:    catconstants.SystemTenantName,
+				Value:    defaultTenantSelect.Get(&c.st.SV),
 				Path:     "/",
 				HttpOnly: false,
 			}
