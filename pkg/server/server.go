@@ -995,7 +995,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	sStatus.baseStatusServer.sqlServer = sqlServer
 
 	// Create a server controller.
-	sc := newServerController(ctx, stopper,
+	sc := newServerController(ctx, stopper, st,
 		lateBoundServer.newServerForTenant, &systemServerWrapper{server: lateBoundServer})
 
 	// Create the debug API server.

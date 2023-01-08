@@ -112,6 +112,9 @@ const demoOrg = "Cockroach Demo"
 // demoUsername is the name of the predefined non-root user.
 const demoUsername = "demo"
 
+// demoTenantName is the name of the demo tenant.
+const demoTenantName = "demo-tenant"
+
 // LoggerFn is the type of a logger function to use by the
 // demo cluster to report special events.
 type LoggerFn = func(context.Context, string, ...interface{})
@@ -404,7 +407,7 @@ func (c *transientCluster) Start(ctx context.Context) (err error) {
 					// SQL/HTTP ports so the first tenant ends up with the desired default
 					// ports.
 					DisableCreateTenant: !createTenant,
-					TenantName:          roachpb.TenantName("demo-tenant"),
+					TenantName:          demoTenantName,
 					TenantID:            roachpb.MustMakeTenantID(secondaryTenantID),
 					UseServerController: !c.demoCtx.DisableServerController,
 					TestingKnobs: base.TestingKnobs{
@@ -447,25 +450,6 @@ func (c *transientCluster) Start(ctx context.Context) (err error) {
 				}
 				c.tenantServers[i] = ts
 				c.infoLog(ctx, "started tenant server %d: %s", i, ts.SQLAddr())
-
-				// Propagate the tenant server tags to the initialization
-				// context, so that the initialization messages below are
-				// properly annotated in traces.
-				ctx = ts.AnnotateCtx(ctx)
-
-				if i == 0 && !c.demoCtx.Insecure {
-					// Set up the demo username and password on each tenant.
-					ie := ts.DistSQLServer().(*distsql.ServerImpl).ServerConfig.Executor
-					_, err = ie.Exec(ctx, "tenant-password", nil,
-						fmt.Sprintf("CREATE USER %s WITH PASSWORD '%s'", demoUsername, demoPassword))
-					if err != nil {
-						return err
-					}
-					_, err = ie.Exec(ctx, "tenant-grant", nil, fmt.Sprintf("GRANT admin TO %s", demoUsername))
-					if err != nil {
-						return err
-					}
-				}
 			}
 		}
 		return nil
@@ -481,10 +465,10 @@ func (c *transientCluster) Start(ctx context.Context) (err error) {
 		// admin user.
 		c.infoLog(ctx, "running initial SQL for demo cluster")
 		// Propagate the server log tags to the operations below, to include node ID etc.
-		server := c.firstServer.Server
-		ctx = server.AnnotateCtx(ctx)
+		srv := c.firstServer.Server
+		ctx = srv.AnnotateCtx(ctx)
 
-		if err := server.RunInitialSQL(ctx, c.demoCtx.NumNodes < 3, demoUsername, demoPassword); err != nil {
+		if err := srv.RunInitialSQL(ctx, c.demoCtx.NumNodes < 3, demoUsername, demoPassword); err != nil {
 			return err
 		}
 		if c.demoCtx.Insecure {
@@ -493,6 +477,32 @@ func (c *transientCluster) Start(ctx context.Context) (err error) {
 		} else {
 			c.adminUser = username.MakeSQLUsernameFromPreNormalizedString(demoUsername)
 			c.adminPassword = demoPassword
+		}
+
+		if c.demoCtx.Multitenant && !c.demoCtx.Insecure {
+			// Also create the user/password for the secondary tenant.
+			ts := c.tenantServers[0]
+			tctx := ts.AnnotateCtx(ctx)
+			ieTenant := ts.DistSQLServer().(*distsql.ServerImpl).ServerConfig.Executor
+			_, err = ieTenant.Exec(tctx, "tenant-password", nil,
+				fmt.Sprintf("CREATE USER %s WITH PASSWORD '%s'", demoUsername, demoPassword))
+			if err != nil {
+				return err
+			}
+			_, err = ieTenant.Exec(tctx, "tenant-grant", nil, fmt.Sprintf("GRANT admin TO %s", demoUsername))
+			if err != nil {
+				return err
+			}
+		}
+
+		// Select the default tenant.
+		ie := c.firstServer.DistSQLServer().(*distsql.ServerImpl).ServerConfig.Executor
+		// Choose the tenant to use when no tenant is specified on a
+		// connection or web URL.
+		if _, err := ie.Exec(ctx, "default-tenant", nil,
+			`SET CLUSTER SETTING `+server.DefaultTenantSelectSettingName+` = $1`,
+			demoTenantName); err != nil {
+			return err
 		}
 
 		// Prepare the URL for use by the SQL shell.

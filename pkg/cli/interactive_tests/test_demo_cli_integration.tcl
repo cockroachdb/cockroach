@@ -92,7 +92,8 @@ set pyfile [file join [file dirname $argv0] test_auth_cookie.py]
 send "$python $pyfile cookie_system.txt 'http://localhost:8080/_admin/v1/users?tenant_name=system'\r"
 eexpect "username"
 eexpect "demo"
-send "$python $pyfile cookie_app.txt 'http://localhost:8080/_admin/v1/users?tenant_name=demo-tenant'\r"
+# No tenant name specified -> use default tenant.
+send "$python $pyfile cookie_app.txt 'http://localhost:8080/_admin/v1/users'\r"
 eexpect "username"
 eexpect "demo"
 end_test
@@ -114,7 +115,8 @@ set spawn_id $shell_spawn_id
 send "$python $pyfile cookie_system.txt 'http://localhost:8080/_admin/v1/users?tenant_name=system'\r"
 eexpect "username"
 eexpect "demo"
-send "$python $pyfile cookie_app.txt 'http://localhost:8080/_admin/v1/users?tenant_name=demo-tenant'\r"
+# No tenant name specified -> use default tenant.
+send "$python $pyfile cookie_app.txt 'http://localhost:8080/_admin/v1/users'\r"
 eexpect "username"
 eexpect "demo"
 end_test
