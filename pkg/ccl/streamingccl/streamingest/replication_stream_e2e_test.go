@@ -466,6 +466,7 @@ func TestTenantStreamingUnavailableStreamAddress(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.WithIssue(t, 94738, "flaky test")
 	skip.UnderRace(t, "takes too long with multiple nodes")
 
 	ctx := context.Background()

@@ -32,7 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
-func TestAlterSystemSqlInstancesTable(t *testing.T) {
+func TestAlterSystemSqlInstancesTableAddSqlAddr(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -42,7 +42,7 @@ func TestAlterSystemSqlInstancesTable(t *testing.T) {
 				Server: &server.TestingKnobs{
 					DisableAutomaticVersionUpgrade: make(chan struct{}),
 					BinaryVersionOverride: clusterversion.ByKey(
-						clusterversion.V22_2AlterSystemSQLInstancesAddLocality - 1),
+						clusterversion.V23_1AlterSystemSQLInstancesAddSQLAddr - 1),
 				},
 			},
 		},
@@ -59,13 +59,13 @@ func TestAlterSystemSqlInstancesTable(t *testing.T) {
 
 	var (
 		validationSchemas = []upgrades.Schema{
-			{Name: "locality", ValidationFn: upgrades.HasColumn},
+			{Name: "sql_addr", ValidationFn: upgrades.HasColumn},
 		}
 	)
 
 	// Inject the old copy of the descriptor.
 	sqlInstancesTable := systemschema.SQLInstancesTable()
-	upgrades.InjectLegacyTable(ctx, t, s, sqlInstancesTable, getDeprecatedSqlInstancesDescriptor)
+	upgrades.InjectLegacyTable(ctx, t, s, sqlInstancesTable, getDeprecatedSqlInstancesDescriptorWithoutSqlAddr)
 	// Validate that the table sql_instances has the old schema.
 	upgrades.ValidateSchemaExists(
 		ctx,
@@ -82,7 +82,7 @@ func TestAlterSystemSqlInstancesTable(t *testing.T) {
 	upgrades.Upgrade(
 		t,
 		sqlDB,
-		clusterversion.V22_2AlterSystemSQLInstancesAddLocality,
+		clusterversion.V23_1AlterSystemSQLInstancesAddSQLAddr,
 		nil,   /* done */
 		false, /* expectError */
 	)
@@ -103,7 +103,7 @@ func TestAlterSystemSqlInstancesTable(t *testing.T) {
 // getDeprecatedSqlInstancesDescriptor returns the system.sql_instances
 // table descriptor that was being used before adding a new column in the
 // current version.
-func getDeprecatedSqlInstancesDescriptor() *descpb.TableDescriptor {
+func getDeprecatedSqlInstancesDescriptorWithoutSqlAddr() *descpb.TableDescriptor {
 	return &descpb.TableDescriptor{
 		Name:                    string(catconstants.SQLInstancesTableName),
 		ID:                      keys.SQLInstancesTableID,
@@ -114,14 +114,15 @@ func getDeprecatedSqlInstancesDescriptor() *descpb.TableDescriptor {
 			{Name: "id", ID: 1, Type: types.Int, Nullable: false},
 			{Name: "addr", ID: 2, Type: types.String, Nullable: true},
 			{Name: "session_id", ID: 3, Type: types.Bytes, Nullable: true},
+			{Name: "locality", ID: 4, Type: types.Bytes, Nullable: true},
 		},
-		NextColumnID: 4,
+		NextColumnID: 5,
 		Families: []descpb.ColumnFamilyDescriptor{
 			{
 				Name:            "primary",
 				ID:              0,
-				ColumnNames:     []string{"id", "addr", "session_id"},
-				ColumnIDs:       []descpb.ColumnID{1, 2, 3},
+				ColumnNames:     []string{"id", "addr", "session_id", "locality"},
+				ColumnIDs:       []descpb.ColumnID{1, 2, 3, 4},
 				DefaultColumnID: 0,
 			},
 		},

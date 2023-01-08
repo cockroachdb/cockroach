@@ -247,6 +247,12 @@ var upgrades = []upgradebase.Upgrade{
 		upgrade.NoPrecondition,
 		createIndexOnIndexUsageOnSystemStatementStatistics,
 	),
+	upgrade.NewTenantUpgrade(
+		"add column sql_addr to table system.sql_instances",
+		toCV(clusterversion.V23_1AlterSystemSQLInstancesAddSQLAddr),
+		upgrade.NoPrecondition,
+		alterSystemSQLInstancesAddSqlAddr,
+	),
 }
 
 func init() {
