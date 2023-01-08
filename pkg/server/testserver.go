@@ -929,6 +929,7 @@ func (ts *TestServer) StartTenant(
 		baseCfg.SSLCertsDir = params.SSLCertsDir
 	}
 	if params.StartingRPCAndSQLPort > 0 {
+		log.Infof(ctx, "computing tenant server sql/rpc addr from %d", params.StartingRPCAndSQLPort)
 		baseCfg.SplitListenSQL = false
 		addr, _, err := addrutil.SplitHostPort(baseCfg.Addr, strconv.Itoa(params.StartingRPCAndSQLPort))
 		if err != nil {
@@ -941,6 +942,7 @@ func (ts *TestServer) StartTenant(
 		baseCfg.SQLAdvertiseAddr = newAddr
 	}
 	if params.StartingHTTPPort > 0 {
+		log.Infof(ctx, "computing tenant server http addr from %d", params.StartingHTTPPort)
 		addr, _, err := addrutil.SplitHostPort(baseCfg.HTTPAddr, strconv.Itoa(params.StartingHTTPPort))
 		if err != nil {
 			return nil, err
@@ -950,6 +952,11 @@ func (ts *TestServer) StartTenant(
 		baseCfg.HTTPAdvertiseAddr = newAddr
 	}
 
+	log.Infof(ctx, "tenant server configuration (no controller): rpc %v/%v sql %v/%v http %v/%v",
+		baseCfg.Addr, baseCfg.AdvertiseAddr,
+		baseCfg.SQLAddr, baseCfg.SQLAdvertiseAddr,
+		baseCfg.HTTPAddr, baseCfg.HTTPAdvertiseAddr,
+	)
 	sw, err := NewTenantServer(
 		ctx,
 		stopper,
