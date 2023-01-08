@@ -87,6 +87,7 @@ go_library(
         "loss_of_quorum_recovery.go",
         "many_splits.go",
         "mixed_version_cdc.go",
+        "mixed_version_change_replicas.go",
         "mixed_version_decl_schemachange_compat.go",
         "mixed_version_decommission.go",
         "mixed_version_job_compatibility_in_declarative_schema_changer.go",
