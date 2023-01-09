@@ -91,7 +91,7 @@ func runMultiTenantDistSQL(
 	instance1.start(ctx, t, c, "./cockroach")
 
 	// Open things up so we can configure range sizes below.
-	_, err = storConn.Exec(`ALTER TENANT $1 SET CLUSTER SETTING sql.zone_configs.allow_for_secondary_tenant.enabled = true`, tenantID)
+	_, err = storConn.Exec(`ALTER TENANT [$1] SET CLUSTER SETTING sql.zone_configs.allow_for_secondary_tenant.enabled = true`, tenantID)
 	require.NoError(t, err)
 
 	// Create numInstances sql pods and spread them evenly across the machines.

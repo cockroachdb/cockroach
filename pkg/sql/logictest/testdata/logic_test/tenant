@@ -82,13 +82,43 @@ id  name        status
 3   two         ACTIVE
 4   three       ACTIVE
 
+statement error tenant name cannot be empty
+ALTER TENANT [4] RENAME TO ""
+
+statement error tenant name cannot be NULL
+ALTER TENANT [4] RENAME TO NULL
+
+statement error invalid tenant name
+ALTER TENANT [4] RENAME TO "a.b"
+
+statement ok
+ALTER TENANT [4] RENAME TO blux
+
+statement ok
+ALTER TENANT blux RENAME TO 'blix'
+
+query ITT colnames
+SELECT * FROM [SHOW TENANTS] WHERE id = 4
+----
+id  name        status
+4   blix        ACTIVE
+
+statement ok
+ALTER TENANT blix RENAME TO three
+
+query ITT colnames
+SELECT * FROM [SHOW TENANTS] WHERE id = 4
+----
+id  name        status
+4   three       ACTIVE
+
 statement error tenant "seven" does not exist
 SHOW TENANT seven
 
-query error pq: tenant "tenant-one" does not have an active replication job
+statement error pq: tenant "tenant-one" does not have an active replication job
 SHOW TENANT "tenant-one" WITH REPLICATION STATUS
 
-query error pq: tenant "two" does not have an active replication job
+statement error pq: tenant "two" does not have an active replication job
 SHOW TENANT two WITH REPLICATION STATUS
 
 # Test creating a tenant with the same name as an existing tenant, but a unique
@@ -108,12 +138,12 @@ set default_transaction_read_only = off;
 user testuser
 
 statement error only users with the admin role are allowed to create tenant
-CREATE TENANT "not-allowed"
+CREATE TENANT four
 
 subtest drop_tenant
 user root
 
-statement error destroying tenant: tenant "dne" does not exist
+statement error tenant "dne" does not exist
 DROP TENANT dne
 
 statement ok
@@ -153,20 +183,37 @@ statement ok
 set default_transaction_read_only = on;
 
 statement error cannot execute DROP TENANT in a read-only transaction
-DROP TENANT four;
+DROP TENANT three
 
 statement ok
 set default_transaction_read_only = off;
 
 user testuser
 
-statement error only users with the admin role are allowed to destroy tenant
-DROP TENANT "not-allowed"
+statement error only users with the admin role are allowed to drop tenant
+DROP TENANT three
 
 statement error only users with the admin role are allowed to show tenant
 SHOW TENANTS
 
 user root
+
+subtest read_only
+
+statement ok
+SET default_transaction_read_only = true
+
+statement error cannot execute.*in a read-only transaction
+DROP TENANT three
+
+statement error cannot execute.*in a read-only transaction
+ALTER TENANT three RENAME TO blah
+
+statement error cannot execute.*in a read-only transaction
+CREATE TENANT "read-only"
+
+statement ok
+SET default_transaction_read_only = false
 
 subtest reclaim_name
 
