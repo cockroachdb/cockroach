@@ -78,7 +78,8 @@ func runSqliteLogicTest(t *testing.T, file string) {
 		DisableSmallEngineBlocks:                     true,
 		// Some sqlite tests with very low bytes limit value are too slow, so
 		// ensure 3 KiB lower bound.
-		BatchBytesLimitLowerBound: 3 << 10, // 3 KiB
+		BatchBytesLimitLowerBound:     3 << 10, // 3 KiB
+		DisableOptimizerPerturbations: true,
 	}
 	logictest.RunLogicTest(t, serverArgs, configIdx, filepath.Join(sqliteLogicTestDir, file))
 }

@@ -1678,6 +1678,19 @@ func (t *logicTest) newCluster(
 			}
 			t.outf("setting distsql_workmem='%dB';", randomWorkmem)
 		}
+
+		if serverArgs.DisableOptimizerPerturbations {
+			if _, err := conn.Exec(
+				"SET CLUSTER SETTING sql.testing.optimizer_cost_perturbation = 0",
+			); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := conn.Exec(
+				"SET CLUSTER SETTING sql.testing.optimizer_disable_rule_probability = 0",
+			); err != nil {
+				t.Fatal(err)
+			}
+		}
 	}
 
 	if cfg.OverrideDistSQLMode != "" {
@@ -4030,6 +4043,10 @@ type TestServerArgs struct {
 	// If positive, it provides a lower bound for the default-batch-bytes-limit
 	// metamorphic constant.
 	BatchBytesLimitLowerBound int64
+	// If set, then testing_optimizer_cost_perturbation and
+	// testing_optimizer_disable_rule_probability session variables are
+	// overridden to 0.
+	DisableOptimizerPerturbations bool
 }
 
 // RunLogicTests runs logic tests for all files matching the given glob.
