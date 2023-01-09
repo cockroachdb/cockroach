@@ -37,11 +37,6 @@ type SelectionOptions struct {
 // A Selection is a collection of Select describing a part of a Replica.
 // Which fields are populated depends on the SelectionOptions passed to
 // Select.
-//
-// TODO(during review): write a comprehensive test for this. There was some method
-// in the tests for this package that attempts to create an interesting data set,
-// but we should "somehow" make sure this data set is always complete, i.e. contains
-// all possible kinds of keys even as new ones are being added.
 type Selection struct {
 	// The following slices may share backing memory.
 	statemachine []roachpb.Span

@@ -1,0 +1,9 @@
+echo
+----
+Spans():
+- /Local/RangeID/123/{r""-s""}
+- /Local/RangeID/123/{u""-v""}
+StateMachineSpans():
+- /Local/RangeID/123/{r""-s""}
+NonStateMachineSpans():
+- /Local/RangeID/123/{u""-v""}
