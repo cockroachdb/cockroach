@@ -132,11 +132,12 @@ func buildStatementBundle(
 	trace tracingpb.Recording,
 	placeholders *tree.PlaceholderInfo,
 	queryErr, payloadErr, commErr error,
+	sv *settings.Values,
 ) diagnosticsBundle {
 	if plan == nil {
 		return diagnosticsBundle{collectionErr: errors.AssertionFailedf("execution terminated early")}
 	}
-	b := makeStmtBundleBuilder(db, ie, stmtRawSQL, plan, trace, placeholders)
+	b := makeStmtBundleBuilder(db, ie, stmtRawSQL, plan, trace, placeholders, sv)
 
 	b.addStatement()
 	b.addOptPlans(ctx)
@@ -194,6 +195,7 @@ type stmtBundleBuilder struct {
 	plan         *planTop
 	trace        tracingpb.Recording
 	placeholders *tree.PlaceholderInfo
+	sv           *settings.Values
 
 	z memzipper.Zipper
 }
@@ -205,9 +207,10 @@ func makeStmtBundleBuilder(
 	plan *planTop,
 	trace tracingpb.Recording,
 	placeholders *tree.PlaceholderInfo,
+	sv *settings.Values,
 ) stmtBundleBuilder {
 	b := stmtBundleBuilder{
-		db: db, ie: ie, stmt: stmt, plan: plan, trace: trace, placeholders: placeholders,
+		db: db, ie: ie, stmt: stmt, plan: plan, trace: trace, placeholders: placeholders, sv: sv,
 	}
 	b.buildPrettyStatement()
 	b.z.Init()
@@ -364,7 +367,7 @@ func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
 	fmt.Fprintf(&buf, "\n")
 
 	// Show the values of session variables that can impact planning decisions.
-	if err := c.PrintSessionSettings(&buf); err != nil {
+	if err := c.PrintSessionSettings(&buf, b.sv); err != nil {
 		fmt.Fprintf(&buf, "-- error getting session settings: %v\n", err)
 	}
 
@@ -565,7 +568,7 @@ func (c *stmtEnvCollector) PrintVersion(w io.Writer) error {
 
 // PrintSessionSettings appends information about session settings that can
 // impact planning decisions.
-func (c *stmtEnvCollector) PrintSessionSettings(w io.Writer) error {
+func (c *stmtEnvCollector) PrintSessionSettings(w io.Writer, sv *settings.Values) error {
 	// Cluster setting encoded default value to session setting value conversion
 	// functions.
 	boolToOnOff := func(boolStr string) string {
@@ -666,7 +669,7 @@ func (c *stmtEnvCollector) PrintSessionSettings(w io.Writer) error {
 		if s.clusterSetting == nil {
 			if ok, v, _ := getSessionVar(s.sessionSetting, true); ok {
 				if v.GlobalDefault != nil {
-					def = v.GlobalDefault(nil /* *settings.Values */)
+					def = v.GlobalDefault(sv)
 				}
 			}
 		} else {
