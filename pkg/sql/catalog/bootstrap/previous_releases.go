@@ -16,11 +16,26 @@ import (
 	"encoding/hex"
 	"sort"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/errors"
 )
+
+var initialValuesFnByKey = map[clusterversion.Key]initialValuesFn{
+	clusterversion.V22_2: InitialValuesForTenantV222,
+}
+
+type initialValuesFn = func(
+	codec keys.SQLCodec,
+	defaultZoneConfig *zonepb.ZoneConfig,
+	defaultSystemZoneConfig *zonepb.ZoneConfig,
+) (kvs []roachpb.KeyValue, splits []roachpb.RKey, _ error)
+
+func GetInitialValuesFn(key clusterversion.Key) initialValuesFn {
+	return initialValuesFnByKey[key]
+}
 
 // InitialValuesForTenantV222 returns the initial values as produced by the
 // binary for the 22.2 release, for a non-system tenant. The only difference
