@@ -62,6 +62,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -1510,7 +1511,14 @@ func doRestorePlan(
 	// version into a cluster that is on the same version or the next major
 	// version.
 	minimumRestorableVersion := p.ExecCfg().Settings.Version.BinaryMinSupportedVersion()
-	if !build.IsRelease() {
+	if !envutil.EnvOrDefaultBool("COCKROACH_ENFORCE_MIN_RESTOREABLE_VERSION", true) {
+		// Set the minimumRestoreableVersion to a version that will be less than any
+		// backup version rendering the check a no-op.
+		//
+		// TODO(adityamaru): Delete this block once all the restore roachtest
+		// fixtures have been updated to be 22.2.0+.
+		minimumRestorableVersion = roachpb.Version{Major: 1}
+	} else if !build.IsRelease() {
 		minimumRestorableVersion, err = minimumRestorableVersion.VersionWithoutDevOffset()
 		if err != nil {
 			return err

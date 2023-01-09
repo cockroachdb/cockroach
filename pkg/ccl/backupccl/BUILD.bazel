@@ -126,6 +126,7 @@ go_library(
         "//pkg/util/bulk",
         "//pkg/util/contextutil",
         "//pkg/util/ctxgroup",
+        "//pkg/util/envutil",
         "//pkg/util/hlc",
         "//pkg/util/interval",
         "//pkg/util/json",
