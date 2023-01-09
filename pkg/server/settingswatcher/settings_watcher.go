@@ -17,12 +17,14 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed/rangefeedbuffer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed/rangefeedcache"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -40,7 +42,6 @@ type SettingsWatcher struct {
 	settings *cluster.Settings
 	f        *rangefeed.Factory
 	stopper  *stop.Stopper
-	dec      RowDecoder
 	storage  Storage
 
 	overridesMonitor OverridesMonitor
@@ -48,6 +49,7 @@ type SettingsWatcher struct {
 	mu struct {
 		syncutil.Mutex
 
+		dec       RowDecoder
 		updater   settings.Updater
 		values    map[string]settingsValue
 		overrides map[string]settings.EncodedValue
@@ -76,15 +78,16 @@ func New(
 	stopper *stop.Stopper,
 	storage Storage, // optional
 ) *SettingsWatcher {
-	return &SettingsWatcher{
+	sw := &SettingsWatcher{
 		clock:    clock,
 		codec:    codec,
 		settings: settingsToUpdate,
 		f:        f,
 		stopper:  stopper,
-		dec:      MakeRowDecoder(codec),
 		storage:  storage,
 	}
+	sw.mu.dec = MakeRowDecoder(codec)
+	return sw
 }
 
 // NewWithOverrides constructs a new SettingsWatcher which allows external
@@ -233,10 +236,12 @@ func (s *SettingsWatcher) Start(ctx context.Context) error {
 func (s *SettingsWatcher) handleKV(
 	ctx context.Context, kv *roachpb.RangeFeedValue,
 ) rangefeedbuffer.Event {
-	name, val, tombstone, err := s.dec.DecodeRow(roachpb.KeyValue{
+	s.mu.Lock()
+	name, val, tombstone, err := s.mu.dec.DecodeRow(roachpb.KeyValue{
 		Key:   kv.Key,
 		Value: kv.Value,
 	})
+	s.mu.Unlock()
 	if err != nil {
 		log.Warningf(ctx, "failed to decode settings row %v: %v", kv.Key, err)
 		return nil
@@ -439,4 +444,32 @@ func (s *SettingsWatcher) GetStorageClusterVersion() clusterversion.ClusterVersi
 		return clusterversion.ClusterVersion{Version: storageClusterVersion}
 	}
 	return s.mu.storageClusterVersion
+}
+
+// GetTenantClusterVersion reads the value of the "version" setting from the settings
+// table in the tenant keyspace and returns it.
+func (s *SettingsWatcher) GetTenantClusterVersion(
+	ctx context.Context, db *kv.DB,
+) clusterversion.ClusterVersion {
+	indexPrefix := s.codec.IndexPrefix(keys.SettingsTableID, uint32(1))
+	key := encoding.EncodeUvarintAscending(encoding.EncodeStringAscending(indexPrefix, "version"), uint64(0))
+	log.Infof(ctx, "getting tenant cluster version using key: '%v'", roachpb.Key(key))
+	row, err := db.Get(context.Background(), key)
+	if err != nil {
+		log.Fatalf(ctx, "failed to get tenant cluster version row: %v", err)
+	}
+	if row.Value == nil {
+		log.Fatal(ctx, "got nil value for tenant cluster version row")
+	}
+	s.mu.Lock()
+	_, val, _, err := s.mu.dec.DecodeRow(roachpb.KeyValue{Key: row.Key, Value: *row.Value})
+	s.mu.Unlock()
+	if err != nil {
+		log.Fatalf(ctx, "failed to decode tenant cluster version row: %v", err)
+	}
+	var version clusterversion.ClusterVersion
+	if err := protoutil.Unmarshal([]byte(val.Value), &version); err != nil {
+		log.Fatalf(ctx, "failed to unmarshal tenant cluster version row: %v", err)
+	}
+	return version
 }
