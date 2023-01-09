@@ -513,6 +513,9 @@ func (b *replicaAppBatch) stageTrivialReplicatedEvalResult(
 	b.state.RaftAppliedIndex = cmd.Index()
 	b.state.RaftAppliedIndexTerm = cmd.Term
 
+	// NB: since the command is "trivial" we know the LeaseIndex field is set to
+	// something meaningful if it's nonzero (e.g. cmd is not a lease request). For
+	// a rejected command, cmd.LeaseIndex was zeroed out earlier.
 	if leaseAppliedIndex := cmd.LeaseIndex; leaseAppliedIndex != 0 {
 		b.state.LeaseAppliedIndex = leaseAppliedIndex
 	}
@@ -765,6 +768,9 @@ func (mb *ephemeralReplicaAppBatch) Stage(
 	)
 	fr = replicaApplyTestingFilters(ctx, mb.r, cmd, fr)
 	cmd.ForcedErrResult = fr
+	if !cmd.Rejected() && cmd.LeaseIndex > mb.state.LeaseAppliedIndex {
+		mb.state.LeaseAppliedIndex = cmd.LeaseIndex
+	}
 
 	return cmd, nil
 }
