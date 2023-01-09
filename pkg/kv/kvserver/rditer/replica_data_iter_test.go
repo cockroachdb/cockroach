@@ -48,8 +48,6 @@ func uuidFromString(input string) uuid.UUID {
 // an ordered mix of MVCCKey and MVCCRangeKey with:
 // - the encoded keys of all created data.
 // - the subset of the encoded keys that are replicated keys.
-//
-// TODO(sumeer): add lock table and corrsponding MVCC keys.
 func createRangeData(
 	t *testing.T, eng storage.Engine, desc roachpb.RangeDescriptor,
 ) ([]storage.MVCCKey, []storage.MVCCRangeKey) {
@@ -98,21 +96,19 @@ func createRangeData(
 		Timestamp: ts,
 	})
 
+	ltskLocal, _ := keys.LockTableSingleKey(keys.RangeDescriptorKey(desc.StartKey), nil /* buf */)
+	ltskUser, _ := keys.LockTableSingleKey(desc.StartKey.AsRawKey(), nil /* buf */)
+
 	ps = append(ps,
-		// Replicated system keys: range descriptor, txns, user keys.
-		// TODO(tbg): this is missing lock keys.
-		storage.MVCCKey{Key: keys.RangeDescriptorKey(desc.StartKey), Timestamp: ts},
+		// Replicated system keys: range descriptor, txns, locks, user keys.
+		storage.MVCCKey{Key: keys.RangeDescriptorKey(desc.StartKey), Timestamp: ts}, // [1]
 		storage.MVCCKey{Key: keys.TransactionKey(roachpb.Key(desc.StartKey), testTxnID), Timestamp: ts0},
 		storage.MVCCKey{Key: keys.TransactionKey(roachpb.Key(desc.StartKey.Next()), testTxnID2), Timestamp: ts0},
-		storage.MVCCKey{Key: keys.TransactionKey(roachpb.Key(desc.EndKey).Prevish(100), testTxnID3), Timestamp: ts0},
-		// TODO(bdarnell): KeyMin.Next() results in a key in the reserved system-local space.
-		// Once we have resolved https://github.com/cockroachdb/cockroach/issues/437,
-		// replace this with something that reliably generates the first valid key in the range.
-		//{r.Desc().StartKey.Next(), ts},
-		// The following line is similar to StartKey.Next() but adds more to the key to
-		// avoid falling into the system-local space.
-		storage.MVCCKey{Key: append(desc.StartKey.AsRawKey().Clone(), '\x02'), Timestamp: ts},
-		storage.MVCCKey{Key: roachpb.Key(desc.EndKey).Prevish(100), Timestamp: ts},
+		storage.MVCCKey{Key: keys.TransactionKey(roachpb.Key(desc.EndKey).Prevish(5), testTxnID3), Timestamp: ts0},
+		storage.MVCCKey{Key: ltskLocal, Timestamp: ts0},               // mark [1] as intent
+		storage.MVCCKey{Key: ltskUser, Timestamp: ts0},                // mark [2] as intent
+		storage.MVCCKey{Key: desc.StartKey.AsRawKey(), Timestamp: ts}, // [2]
+		storage.MVCCKey{Key: roachpb.Key(desc.EndKey).Prevish(5), Timestamp: ts},
 	)
 	rs = append(rs, storage.MVCCRangeKey{ // emitted last because we emit all point keys before range keys
 		StartKey:  desc.StartKey.AsRawKey().Clone(),
