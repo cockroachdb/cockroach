@@ -1483,6 +1483,18 @@ func (s *SQLServer) preStart(
 
 	log.Infof(ctx, "done ensuring all necessary startup migrations have run")
 
+	// Prevent the server from starting if its binary version is too low
+	// for the current tenant cluster version.
+	// This check needs to run after the "version" setting is set in the
+	// "system.settings" table of this tenant. This includes both system
+	// and secondary tenants.
+	tenantActiveVersion := s.settingsWatcher.GetTenantClusterVersion(ctx, s.execCfg.DB).Version
+	if s.execCfg.Settings.Version.BinaryVersion().Less(tenantActiveVersion) {
+		return errors.Newf("preventing SQL server from starting because its binary version "+
+			"is too low for the tenant active version: server binary version = %v, tenant active version = %v",
+			s.execCfg.Settings.Version.BinaryVersion(), tenantActiveVersion)
+	}
+
 	// Delete all orphaned table leases created by a prior instance of this
 	// node. This also uses SQL.
 	s.leaseMgr.DeleteOrphanedLeases(ctx, orphanedLeasesTimeThresholdNanos)
