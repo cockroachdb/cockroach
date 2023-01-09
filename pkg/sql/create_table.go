@@ -1440,10 +1440,10 @@ func NewTableDesc(
 			oid := catid.TypeIDToOID(regionConfig.RegionEnumID())
 			n.Defs = append(
 				n.Defs,
-				regionalByRowDefaultColDef(
+				RegionalByRowDefaultColDef(
 					oid,
-					regionalByRowGatewayRegionDefaultExpr(oid),
-					maybeRegionalByRowOnUpdateExpr(evalCtx, oid),
+					RegionalByRowGatewayRegionDefaultExpr(oid),
+					MaybeRegionalByRowOnUpdateExpr(evalCtx, oid),
 				),
 			)
 			cdd = append(cdd, nil)
@@ -1451,7 +1451,7 @@ func NewTableDesc(
 
 		// Construct the partitioning for the PARTITION ALL BY.
 		desc.PartitionAllBy = true
-		partitionAllBy = partitionByForRegionalByRow(
+		partitionAllBy = PartitionByForRegionalByRow(
 			*regionConfig,
 			regionalByRowCol,
 		)
@@ -2738,7 +2738,7 @@ func regionalByRowRegionDefaultExpr(oid oid.Oid, region tree.Name) tree.Expr {
 	}
 }
 
-func regionalByRowGatewayRegionDefaultExpr(oid oid.Oid) tree.Expr {
+func RegionalByRowGatewayRegionDefaultExpr(oid oid.Oid) tree.Expr {
 	return &tree.CastExpr{
 		Expr: &tree.FuncExpr{
 			Func: tree.WrapFunction(builtinconstants.DefaultToDatabasePrimaryRegionBuiltinName),
@@ -2753,9 +2753,9 @@ func regionalByRowGatewayRegionDefaultExpr(oid oid.Oid) tree.Expr {
 	}
 }
 
-// maybeRegionalByRowOnUpdateExpr returns a gateway region default statement if
+// MaybeRegionalByRowOnUpdateExpr returns a gateway region default statement if
 // the auto rehoming session setting is enabled, nil otherwise.
-func maybeRegionalByRowOnUpdateExpr(evalCtx *eval.Context, enumOid oid.Oid) tree.Expr {
+func MaybeRegionalByRowOnUpdateExpr(evalCtx *eval.Context, enumOid oid.Oid) tree.Expr {
 	if evalCtx.SessionData().AutoRehomingEnabled {
 		return &tree.CastExpr{
 			Expr: &tree.FuncExpr{
@@ -2768,7 +2768,7 @@ func maybeRegionalByRowOnUpdateExpr(evalCtx *eval.Context, enumOid oid.Oid) tree
 	return nil
 }
 
-func regionalByRowDefaultColDef(
+func RegionalByRowDefaultColDef(
 	oid oid.Oid, defaultExpr tree.Expr, onUpdateExpr tree.Expr,
 ) *tree.ColumnTableDef {
 	c := &tree.ColumnTableDef{

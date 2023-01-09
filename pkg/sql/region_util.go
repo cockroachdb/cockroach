@@ -1176,9 +1176,9 @@ func (p *planner) maybeInitializeMultiRegionDatabase(
 	return nil
 }
 
-// partitionByForRegionalByRow constructs the tree.PartitionBy clause for
+// PartitionByForRegionalByRow constructs the tree.PartitionBy clause for
 // REGIONAL BY ROW tables.
-func partitionByForRegionalByRow(
+func PartitionByForRegionalByRow(
 	regionConfig multiregion.RegionConfig, col tree.Name,
 ) *tree.PartitionBy {
 	listPartition := make([]tree.ListPartition, len(regionConfig.Regions()))
@@ -2535,7 +2535,7 @@ func (p *planner) OptimizeSystemDatabase(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		partitionAllBy := partitionByForRegionalByRow(
+		partitionAllBy := PartitionByForRegionalByRow(
 			regionConfig,
 			"crdb_region",
 		)

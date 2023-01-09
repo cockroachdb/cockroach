@@ -19,14 +19,19 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
@@ -74,7 +79,66 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 		return tc.createVirtualTable(stmt)
 	}
 
+	isRbr := false
+	if stmt.Locality != nil {
+		isRbr = stmt.Locality.LocalityLevel == tree.LocalityLevelRow
+	}
 	tab := &Table{TabID: tc.nextStableID(), TabName: stmt.Table, Catalog: tc}
+
+	if isRbr && stmt.PartitionByTable == nil {
+		// Build the table as LOCALITY REGIONAL BY ROW.
+		tab.multiRegion = true
+		regionNames := make(catpb.RegionNames, 3)
+		regionNames[0] = "east"
+		regionNames[1] = "central"
+		regionNames[2] = "west"
+		regionConfig := multiregion.RegionConfig{}
+		regionConfig = regionConfig.WithPrimaryRegion(regionNames[0])
+		regionConfig = regionConfig.WithRegions(regionNames)
+
+		// For now just support the default `crdb_region` default column name.
+		stmt.PartitionByTable =
+			&tree.PartitionByTable{
+				All: true,
+				PartitionBy: sql.PartitionByForRegionalByRow(
+					regionConfig,
+					tree.RegionalByRowRegionDefaultColName,
+				),
+			}
+		stmt.PartitionByTable.All = true
+		// We're not in a multiregion database with an enum type to specify regions,
+		// so use type STRING instead.
+		oid := types.String.Oid()
+
+		evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+		crdbRegionDef :=
+			sql.RegionalByRowDefaultColDef(
+				oid,
+				sql.RegionalByRowGatewayRegionDefaultExpr(oid),
+				sql.MaybeRegionalByRowOnUpdateExpr(&evalCtx, oid),
+			)
+		crdbRegionDef.Type = types.String
+		stmt.Defs = append(stmt.Defs, crdbRegionDef)
+		tab.implicitRBRIndexElem =
+			&tree.IndexElem{
+				Column: tree.RegionalByRowRegionDefaultColName,
+			}
+
+		// Build the CHECK constraint for the implicit partitioning.
+		result := make([]tree.Datum, 3)
+		for i := 0; i < len(result); i++ {
+			regionName := tree.DString(regionNames[i])
+			result[i] = &regionName
+		}
+		checkExpr := &tree.ComparisonExpr{
+			Operator: treecmp.MakeComparisonOperator(treecmp.In),
+			Left:     &tree.ColumnItem{ColumnName: tree.RegionalByRowRegionDefaultColName},
+			Right:    tree.NewDTuple(types.String, result...),
+		}
+		checkConstraintDef := &tree.CheckConstraintTableDef{Expr: checkExpr}
+		stmt.Defs = append(stmt.Defs, checkConstraintDef)
+
+	}
 
 	// Find the PK columns.
 	pkCols := make(map[tree.Name]struct{})
@@ -82,14 +146,37 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 		switch def := def.(type) {
 		case *tree.ColumnTableDef:
 			if def.PrimaryKey.IsPrimaryKey {
+				if tab.IsRegionalByRow() {
+					// Include the `crdb_region` column in the pkCols.
+					pkCols[tab.implicitRBRIndexElem.Column] = struct{}{}
+				}
 				pkCols[def.Name] = struct{}{}
 			}
 
 		case *tree.UniqueConstraintTableDef:
+			if tab.IsRegionalByRow() {
+				columns := def.Columns
+				// Include the `crdb_region` column in the pkCols and prefix the
+				// index key columns with it.
+				if def.PrimaryKey {
+					pkCols[tab.implicitRBRIndexElem.Column] = struct{}{}
+				}
+				def.Columns = make(tree.IndexElemList, 0, len(columns)+1)
+				def.Columns = append(def.Columns, *tab.implicitRBRIndexElem)
+				def.Columns = append(def.Columns, columns...)
+			}
 			if def.PrimaryKey {
 				for i := range def.Columns {
 					pkCols[def.Columns[i].Column] = struct{}{}
 				}
+			}
+		case *tree.IndexTableDef:
+			if tab.IsRegionalByRow() {
+				columns := def.Columns
+				// Prefix the index key columns with the `crdb_region` column.
+				def.Columns = make(tree.IndexElemList, 0, len(columns)+1)
+				def.Columns = append(def.Columns, *tab.implicitRBRIndexElem)
+				def.Columns = append(def.Columns, columns...)
 			}
 		}
 	}
@@ -184,6 +271,55 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 	// Cache the partitioning statement for the primary index.
 	if stmt.PartitionByTable != nil {
 		tab.partitionBy = stmt.PartitionByTable.PartitionBy
+	}
+
+	if tab.IsRegionalByRow() {
+		// Build the unique without index constraints required for REGIONAL BY ROW
+		// tables.
+		if !hasPrimaryIndex {
+			column := tree.IndexElem{Column: "rowid"}
+			columns := make(tree.IndexElemList, 1)
+			columns[0] = column
+			indexTableDef :=
+				tree.IndexTableDef{Columns: columns}
+			uniqueWithoutIndex := &tree.UniqueConstraintTableDef{
+				IndexTableDef: indexTableDef, WithoutIndex: true,
+			}
+			stmt.Defs = append(stmt.Defs, uniqueWithoutIndex)
+		}
+		for _, def := range stmt.Defs {
+			switch def := def.(type) {
+			case *tree.ColumnTableDef:
+				if def.PrimaryKey.IsPrimaryKey {
+					column := tree.IndexElem{
+						Column: def.Name,
+					}
+					columns := make(tree.IndexElemList, 1)
+					columns[0] = column
+					indexTableDef :=
+						tree.IndexTableDef{Columns: columns}
+					uniqueWithoutIndex := &tree.UniqueConstraintTableDef{
+						indexTableDef,
+						false,
+						true,
+						false,
+					}
+					stmt.Defs = append(stmt.Defs, uniqueWithoutIndex)
+				}
+
+			case *tree.UniqueConstraintTableDef:
+				if !def.IfNotExists && !def.WithoutIndex {
+					indexTableDef :=
+						tree.IndexTableDef{
+							Name: def.Name, Columns: def.Columns[1:], Predicate: def.Predicate,
+						}
+					uniqueWithoutIndex := &tree.UniqueConstraintTableDef{
+						IndexTableDef: indexTableDef, WithoutIndex: true,
+					}
+					stmt.Defs = append(stmt.Defs, uniqueWithoutIndex)
+				}
+			}
+		}
 	}
 
 	// Add the primary index.
@@ -480,8 +616,15 @@ func (tc *Catalog) resolveFK(tab *Table, d *tree.ForeignKeyConstraintTableDef) {
 	// 1. Verify that the target table has a unique index or unique constraint.
 	var targetIndex *Index
 	var targetUniqueConstraint *UniqueConstraint
+	targetCols := toCols
+	if targetTable.IsRegionalByRow() {
+		targetCols = make([]int, 0, len(toCols)+1)
+		targetCols =
+			append(targetCols, targetTable.FindOrdinal(string(targetTable.implicitRBRIndexElem.Column)))
+		targetCols = append(targetCols, toCols...)
+	}
 	for _, idx := range targetTable.Indexes {
-		if indexMatches(idx, toCols, true /* strict */) {
+		if indexMatches(idx, targetCols, true /* strict */) {
 			targetIndex = idx
 			break
 		}
@@ -489,7 +632,7 @@ func (tc *Catalog) resolveFK(tab *Table, d *tree.ForeignKeyConstraintTableDef) {
 	if targetIndex == nil {
 		for i := range targetTable.uniqueConstraints {
 			uc := &targetTable.uniqueConstraints[i]
-			if uniqueConstraintMatches(uc, toCols) {
+			if uniqueConstraintMatches(uc, targetCols) {
 				targetUniqueConstraint = uc
 				break
 			}
@@ -728,6 +871,9 @@ func (tt *Table) addIndexWithVersion(
 	// updated to be non-nullable and non-virtual.
 	// Add the geoConfig if applicable.
 	idx.ExplicitColCount = len(def.Columns)
+	if tt.IsRegionalByRow() {
+		idx.ExplicitColCount--
+	}
 	notNullIndex := true
 	for i, colDef := range def.Columns {
 		isLastIndexCol := i == len(def.Columns)-1
@@ -794,10 +940,28 @@ func (tt *Table) addIndexWithVersion(
 			}
 			for i := range partitionBy.List {
 				p := &partitionBy.List[i]
-				idx.partitions[i] = Partition{
-					name:   string(p.Name),
-					zone:   cat.EmptyZone(),
-					datums: make([]tree.Datums, 0, len(p.Exprs)),
+				if !tt.IsRegionalByRow() {
+					idx.partitions[i] = Partition{
+						name:   string(p.Name),
+						zone:   cat.EmptyZone(),
+						datums: make([]tree.Datums, 0, len(p.Exprs)),
+					}
+				} else {
+					// Place a region voter constraint on this partition that its region
+					// must match the partition name.
+					zone := &zonepb.ZoneConfig{}
+					voterConstraints := make([]zonepb.ConstraintsConjunction, 1)
+					constraints := make([]zonepb.Constraint, 1)
+					constraints[0].Type = zonepb.Constraint_REQUIRED
+					constraints[0].Key = "region"
+					constraints[0].Value = string(p.Name)
+					voterConstraints[0].Constraints = constraints
+					zone.VoterConstraints = voterConstraints
+					idx.partitions[i] = Partition{
+						name:   string(p.Name),
+						zone:   cat.AsZone(zone),
+						datums: make([]tree.Datums, 0, len(p.Exprs)),
+					}
 				}
 
 				// Get the partition values.
@@ -1138,9 +1302,16 @@ func (ti *Index) addColumnByOrdinal(
 }
 
 func (tt *Table) addPrimaryColumnIndex(colName string) {
-	def := tree.IndexTableDef{
-		Columns: tree.IndexElemList{{Column: tree.Name(colName), Direction: tree.Ascending}},
+	numColumns := 1
+	if tt.IsRegionalByRow() {
+		numColumns++
 	}
+	columns := make(tree.IndexElemList, 0, numColumns)
+	if tt.IsRegionalByRow() {
+		columns = append(columns, *tt.implicitRBRIndexElem)
+	}
+	columns = append(columns, tree.IndexElem{Column: tree.Name(colName), Direction: tree.Ascending})
+	def := tree.IndexTableDef{Columns: columns}
 	tt.addIndex(&def, primaryIndex)
 }
 

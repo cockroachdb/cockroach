@@ -270,7 +270,7 @@ func (r *databaseRegionChangeFinalizer) repartitionRegionalByRowTables(
 		if err != nil {
 			return nil, nil, err
 		}
-		partitionAllBy := partitionByForRegionalByRow(regionConfig, colName)
+		partitionAllBy := PartitionByForRegionalByRow(regionConfig, colName)
 
 		// oldPartitionings saves the old partitionings for each
 		// index that is repartitioned. This is later used to remove zone

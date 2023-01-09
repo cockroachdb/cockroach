@@ -296,7 +296,7 @@ func (p *planner) AlterPrimaryKey(
 			if err != nil {
 				return err
 			}
-			partitionAllBy = partitionByForRegionalByRow(
+			partitionAllBy = PartitionByForRegionalByRow(
 				regionConfig,
 				colName,
 			)
