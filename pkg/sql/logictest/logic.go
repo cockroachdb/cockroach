@@ -1822,9 +1822,6 @@ func (t *logicTest) setup(
 		if !bazel.BuiltWithBazel() {
 			skip.IgnoreLint(t.t(), "cockroach-go/testserver can only be uzed in bazel builds")
 		}
-		if runtime.GOARCH == "arm64" {
-			skip.IgnoreLint(t.t(), "Skip under ARM64. See https://github.com/cockroachdb/cockroach/issues/94658")
-		}
 		if cfg.NumNodes != 3 {
 			t.Fatal("cockroach-go testserver tests must use 3 nodes")
 		}
