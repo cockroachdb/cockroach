@@ -1686,6 +1686,19 @@ func (t *logicTest) newCluster(
 				t.Fatal(err)
 			}
 		}
+
+		if serverArgs.DisableOptimizerPerturbations {
+			if _, err := conn.Exec(
+				"SET CLUSTER SETTING sql.testing.optimizer_cost_perturbation = 0",
+			); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := conn.Exec(
+				"SET CLUSTER SETTING sql.testing.optimizer_disable_rule_probability = 0",
+			); err != nil {
+				t.Fatal(err)
+			}
+		}
 	}
 
 	if cfg.OverrideDistSQLMode != "" {
@@ -4031,6 +4044,10 @@ type TestServerArgs struct {
 	BatchBytesLimitLowerBound int64
 	// If set, sql.distsql.direct_columnar_scans.enabled is set to false.
 	DisableDirectColumnarScans bool
+	// If set, then testing_optimizer_cost_perturbation and
+	// testing_optimizer_disable_rule_probability session variables are
+	// overridden to 0.
+	DisableOptimizerPerturbations bool
 }
 
 // RunLogicTests runs logic tests for all files matching the given glob.

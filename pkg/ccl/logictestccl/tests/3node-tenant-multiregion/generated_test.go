@@ -75,7 +75,8 @@ func runExecBuildLogicTest(t *testing.T, file string) {
 		DisableWorkmemRandomization: true,
 		// Disable the direct scans in order to keep the output of EXPLAIN (VEC)
 		// deterministic.
-		DisableDirectColumnarScans: true,
+		DisableDirectColumnarScans:    true,
+		DisableOptimizerPerturbations: true,
 	}
 	logictest.RunLogicTest(t, serverArgs, configIdx, filepath.Join(execBuildLogicTestDir, file))
 }

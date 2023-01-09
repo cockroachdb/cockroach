@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/delegate"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -2257,7 +2258,7 @@ var varGen = map[string]sessionVar{
 			), nil
 		},
 		GlobalDefault: func(sv *settings.Values) string {
-			return formatFloatAsPostgresSetting(0)
+			return formatFloatAsPostgresSetting(xform.TestingOptimizerCostPerturbation.Get(sv))
 		},
 	},
 
@@ -2284,7 +2285,7 @@ var varGen = map[string]sessionVar{
 			), nil
 		},
 		GlobalDefault: func(sv *settings.Values) string {
-			return formatFloatAsPostgresSetting(0)
+			return formatFloatAsPostgresSetting(xform.TestingOptimizerDisableRuleProbability.Get(sv))
 		},
 	},
 

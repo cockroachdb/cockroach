@@ -154,6 +154,26 @@ func ConstantWithMetamorphicTestChoice(
 	return defaultValue
 }
 
+// ConstantWithMetamorphicTestFloatRange is like
+// ConstantWithMetamorphicTestRange which operates with floats.
+//
+// The given name is used for logging.
+func ConstantWithMetamorphicTestFloatRange(name string, defaultValue, min, max float64) float64 {
+	if metamorphicBuild {
+		rng.Lock()
+		defer rng.Unlock()
+		if rng.r.Float64() < metamorphicValueProbability {
+			ret := min
+			if max > min {
+				ret = rng.r.Float64()*(max-min) + min
+			}
+			logMetamorphicValue(name, ret)
+			return ret
+		}
+	}
+	return defaultValue
+}
+
 func logMetamorphicValue(name string, value interface{}) {
 	fmt.Fprintf(os.Stderr, "initialized metamorphic constant %q with value %v\n", name, value)
 }

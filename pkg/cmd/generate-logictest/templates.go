@@ -76,7 +76,8 @@ func runExecBuildLogicTest(t *testing.T, file string) {
 		ForceProductionValues:       true,{{end}}
 		// Disable the direct scans in order to keep the output of EXPLAIN (VEC)
 		// deterministic.
-		DisableDirectColumnarScans: true,
+		DisableDirectColumnarScans:    true,
+		DisableOptimizerPerturbations: true,
 	}
 	logictest.RunLogicTest(t, serverArgs, configIdx, filepath.Join(execBuildLogicTestDir, file))
 }
@@ -99,7 +100,8 @@ func runSqliteLogicTest(t *testing.T, file string) {
 		DisableUseMVCCRangeTombstonesForPointDeletes: true,
 		// Some sqlite tests with very low bytes limit value are too slow, so
 		// ensure 3 KiB lower bound.
-		BatchBytesLimitLowerBound: 3 << 10, // 3 KiB
+		BatchBytesLimitLowerBound:     3 << 10, // 3 KiB
+		DisableOptimizerPerturbations: true,
 	}
 	logictest.RunLogicTest(t, serverArgs, configIdx, filepath.Join(sqliteLogicTestDir, file))
 }
