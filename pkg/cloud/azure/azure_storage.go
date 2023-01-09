@@ -11,6 +11,7 @@
 package azure
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -53,6 +54,13 @@ const (
 
 	deprecatedScheme                   = "azure"
 	deprecatedExternalConnectionScheme = "azure-storage"
+)
+
+var usePutBlob = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	"cloudstorage.azure.buffer_and_put_uploads.enabled",
+	"construct files in memory before uploading via PutBlob (may cause crashes due to memory usage)",
+	false,
 )
 
 func parseAzureURL(
@@ -153,6 +161,10 @@ func (s *azureStorage) Settings() *cluster.Settings {
 }
 
 func (s *azureStorage) Writer(ctx context.Context, basename string) (io.WriteCloser, error) {
+	if usePutBlob.Get(&s.settings.SV) {
+		return s.putUploader(ctx, basename)
+	}
+
 	ctx, sp := tracing.ChildSpan(ctx, "azure.Writer")
 	sp.SetTag("path", attribute.StringValue(path.Join(s.prefix, basename)))
 	blob := s.getBlob(basename)
@@ -166,6 +178,40 @@ func (s *azureStorage) Writer(ctx context.Context, basename string) (io.WriteClo
 		)
 		return err
 	}), nil
+}
+
+type putBlobUploader struct {
+	ctx  context.Context
+	blob azblob.BlockBlobURL
+	b    *bytes.Buffer
+	sp   *tracing.Span
+}
+
+func (u *putBlobUploader) Write(p []byte) (int, error) {
+	return u.b.Write(p)
+}
+
+func (u *putBlobUploader) Close() error {
+	if u.b != nil {
+		defer u.sp.Finish()
+		r := bytes.NewReader(u.b.Bytes())
+		_, err := u.blob.Upload(u.ctx, r, azblob.BlobHTTPHeaders{}, azblob.Metadata{}, azblob.BlobAccessConditions{},
+			azblob.DefaultAccessTier, nil /* blobTagsMap */, azblob.ClientProvidedKeyOptions{})
+		u.b = nil
+		return err
+	}
+	return nil
+}
+
+func (s *azureStorage) putUploader(ctx context.Context, basename string) (io.WriteCloser, error) {
+	ctx, sp := tracing.ChildSpan(ctx, "azure.Writer")
+	sp.SetTag("putBlobUploader", attribute.BoolValue(true))
+	return &putBlobUploader{
+		b:    bytes.NewBuffer(make([]byte, 0, 4<<20)),
+		ctx:  ctx,
+		sp:   sp,
+		blob: s.getBlob(basename),
+	}, nil
 }
 
 // ReadFile is shorthand for ReadFileAt with offset 0.
