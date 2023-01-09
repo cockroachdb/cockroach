@@ -1178,25 +1178,6 @@ func (p *planner) maybeInitializeMultiRegionDatabase(
 	return nil
 }
 
-// partitionByForRegionalByRow constructs the tree.PartitionBy clause for
-// REGIONAL BY ROW tables.
-func partitionByForRegionalByRow(
-	regionConfig multiregion.RegionConfig, col tree.Name,
-) *tree.PartitionBy {
-	listPartition := make([]tree.ListPartition, len(regionConfig.Regions()))
-	for i, region := range regionConfig.Regions() {
-		listPartition[i] = tree.ListPartition{
-			Name:  tree.UnrestrictedName(region),
-			Exprs: tree.Exprs{tree.NewStrVal(string(region))},
-		}
-	}
-
-	return &tree.PartitionBy{
-		Fields: tree.NameList{col},
-		List:   listPartition,
-	}
-}
-
 // ValidateAllMultiRegionZoneConfigsInCurrentDatabase is part of the eval.DatabaseCatalog interface.
 func (p *planner) ValidateAllMultiRegionZoneConfigsInCurrentDatabase(ctx context.Context) error {
 	dbDesc, err := p.Descriptors().ByNameWithLeased(p.txn).Get().Database(ctx, p.CurrentDatabase())
@@ -2503,7 +2484,7 @@ func (p *planner) OptimizeSystemDatabase(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		partitionAllBy := partitionByForRegionalByRow(
+		partitionAllBy := multiregion.PartitionByForRegionalByRow(
 			regionConfig,
 			"crdb_region",
 		)
