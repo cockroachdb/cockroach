@@ -51,6 +51,7 @@
 /pkg/sql/delegate/*job*.go   @cockroachdb/jobs-prs
 
 /pkg/sql/execstats/          @cockroachdb/sql-observability
+/pkg/sql/sqlstats/           @cockroachdb/sql-observability
 
 /pkg/sql/sem/tree/           @cockroachdb/sql-syntax-prs
 /pkg/sql/parser/             @cockroachdb/sql-syntax-prs
