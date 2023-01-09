@@ -42,6 +42,10 @@ import (
 	"github.com/cockroachdb/redact"
 )
 
+const (
+	tenantCreationMinSupportedVersionKey = clusterversion.V22_2
+)
+
 // CreateTenant implements the tree.TenantOperator interface.
 func (p *planner) CreateTenant(
 	ctx context.Context, parameters string,
@@ -133,13 +137,11 @@ func (p *planner) createTenantInternal(
 	codec := keys.MakeSQLCodec(roachpb.MustMakeTenantID(tenantID))
 	var kvs []roachpb.KeyValue
 	var splits []roachpb.RKey
-	const minVersion = clusterversion.V22_2
-	curVersion := clusterversion.V23_1
-	if p.EvalContext().Settings.Version.IsActive(ctx, curVersion) {
+	if p.EvalContext().Settings.Version.IsActive(ctx, clusterversion.BinaryVersionKey) {
 		// The cluster is running the latest version.
 		// Use this version to create the tenant and bootstrap it using the host
 		// cluster's bootstrapping logic.
-		tenantVersion.Version = clusterversion.ByKey(curVersion)
+		tenantVersion.Version = clusterversion.ByKey(clusterversion.BinaryVersionKey)
 		schema := bootstrap.MakeMetadataSchema(
 			codec,
 			initialTenantZoneConfig, /* defaultZoneConfig */
@@ -151,8 +153,8 @@ func (p *planner) createTenantInternal(
 		// Use the previous major version to create the tenant and bootstrap it
 		// just like the previous major version binary would, using hardcoded
 		// initial values.
-		tenantVersion.Version = clusterversion.ByKey(minVersion)
-		kvs, splits, err = bootstrap.InitialValuesForTenantV222(
+		tenantVersion.Version = clusterversion.ByKey(tenantCreationMinSupportedVersionKey)
+		kvs, splits, err = bootstrap.GetInitialValuesFn(tenantCreationMinSupportedVersionKey)(
 			codec,
 			initialTenantZoneConfig, /* defaultZoneConfig */
 			initialTenantZoneConfig, /* defaultSystemZoneConfig */
