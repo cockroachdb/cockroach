@@ -26,7 +26,6 @@ import (
 // RowDecoder decodes rows from the settings table.
 type RowDecoder struct {
 	codec   keys.SQLCodec
-	alloc   tree.DatumAlloc
 	columns []catalog.Column
 	decoder valueside.Decoder
 }
@@ -45,9 +44,12 @@ func MakeRowDecoder(codec keys.SQLCodec) RowDecoder {
 // present, the setting key will be returned but the value will be zero and the
 // tombstone bool will be set.
 func (d *RowDecoder) DecodeRow(
-	kv roachpb.KeyValue,
+	kv roachpb.KeyValue, alloc *tree.DatumAlloc,
 ) (setting string, val settings.EncodedValue, tombstone bool, _ error) {
 	// First we need to decode the setting name field from the index key.
+	if alloc == nil {
+		alloc = &tree.DatumAlloc{}
+	}
 	{
 		types := []*types.T{d.columns[0].GetType()}
 		nameRow := make([]rowenc.EncDatum, 1)
@@ -55,7 +57,7 @@ func (d *RowDecoder) DecodeRow(
 		if err != nil {
 			return "", settings.EncodedValue{}, false, errors.Wrap(err, "failed to decode key")
 		}
-		if err := nameRow[0].EnsureDecoded(types[0], &d.alloc); err != nil {
+		if err := nameRow[0].EnsureDecoded(types[0], alloc); err != nil {
 			return "", settings.EncodedValue{}, false, err
 		}
 		setting = string(tree.MustBeDString(nameRow[0].Datum))
@@ -70,7 +72,7 @@ func (d *RowDecoder) DecodeRow(
 		return "", settings.EncodedValue{}, false, err
 	}
 
-	datums, err := d.decoder.Decode(&d.alloc, bytes)
+	datums, err := d.decoder.Decode(alloc, bytes)
 	if err != nil {
 		return "", settings.EncodedValue{}, false, err
 	}
