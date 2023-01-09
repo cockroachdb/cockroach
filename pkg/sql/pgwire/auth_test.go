@@ -198,7 +198,14 @@ func hbaRunTest(t *testing.T, insecure bool) {
 					CommonSinkConfig: logconfig.CommonSinkConfig{Auditable: &bt},
 				},
 				Channels: logconfig.SelectChannels(channel.SESSIONS),
-			}}
+			},
+			"dev": {
+				FileDefaults: logconfig.FileDefaults{
+					CommonSinkConfig: logconfig.CommonSinkConfig{Auditable: &bt},
+				},
+				Channels: logconfig.SelectChannels(channel.DEV),
+			},
+		}
 		dir := sc.GetDirectory()
 		if err := cfg.Validate(&dir); err != nil {
 			t.Fatal(err)
@@ -217,9 +224,10 @@ func hbaRunTest(t *testing.T, insecure bool) {
 		// We can't use the cluster settings to do this, because
 		// cluster settings propagate asynchronously.
 		testServer := s.(*server.TestServer)
-		pgServer := s.(*server.TestServer).PGServer().(*pgwire.Server)
+		pgServer := testServer.PGServer().(*pgwire.Server)
 		pgServer.TestingEnableConnLogging()
 		pgServer.TestingEnableAuthLogging()
+		testServer.PGPreServer().TestingAcceptSystemIdentityOption(true)
 
 		httpClient, err := s.GetAdminHTTPClient()
 		if err != nil {
