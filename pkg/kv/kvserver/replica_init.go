@@ -91,6 +91,8 @@ func newUnloadedReplica(
 			TxnWaitKnobs:      store.TestingKnobs().TxnWaitKnobs,
 		}),
 	}
+	r.sideTransportClosedTimestamp.init(store.cfg.ClosedTimestampReceiver, desc.RangeID)
+
 	r.mu.pendingLeaseRequest = makePendingLeaseRequest(r)
 	r.mu.stateLoader = stateloader.Make(desc.RangeID)
 	r.mu.quiescent = true
@@ -228,8 +230,6 @@ func (r *Replica) loadRaftMuLockedReplicaMuLocked(desc *roachpb.RangeDescriptor)
 		r.store.engine,
 	)
 	r.assertStateRaftMuLockedReplicaMuRLocked(ctx, r.store.Engine())
-
-	r.sideTransportClosedTimestamp.init(r.store.cfg.ClosedTimestampReceiver, desc.RangeID)
 
 	return nil
 }
