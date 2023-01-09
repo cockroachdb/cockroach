@@ -124,7 +124,15 @@ func newUnloadedReplica(
 	// Add replica pointer value. NB: this was historically useful for debugging
 	// replica GC issues, but is a distraction at the moment.
 	// r.AmbientContext.AddLogTag("@", fmt.Sprintf("%x", unsafe.Pointer(r)))
+
 	r.raftMu.stateLoader = stateloader.Make(desc.RangeID)
+	r.raftMu.sideloaded = logstore.NewDiskSideloadStorage(
+		store.cfg.Settings,
+		desc.RangeID,
+		store.engine.GetAuxiliaryDir(),
+		store.limiters.BulkIOWriteRate,
+		store.engine,
+	)
 
 	r.splitQueueThrottle = util.Every(splitQueueThrottleDuration)
 	r.mergeQueueThrottle = util.Every(mergeQueueThrottleDuration)
@@ -222,13 +230,6 @@ func (r *Replica) loadRaftMuLockedReplicaMuLocked(desc *roachpb.RangeDescriptor)
 		r.mu.minLeaseProposedTS = r.Clock().NowAsClockTimestamp()
 	}
 
-	r.raftMu.sideloaded = logstore.NewDiskSideloadStorage(
-		r.store.cfg.Settings,
-		desc.RangeID,
-		r.Engine().GetAuxiliaryDir(),
-		r.store.limiters.BulkIOWriteRate,
-		r.store.engine,
-	)
 	r.assertStateRaftMuLockedReplicaMuRLocked(ctx, r.store.Engine())
 
 	return nil
