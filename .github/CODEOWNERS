@@ -331,7 +331,6 @@
 /pkg/cmd/gossipsim/          @cockroachdb/kv-prs
 /pkg/cmd/import-tools/       @cockroachdb/dev-inf
 /pkg/cmd/internal/issues/    @cockroachdb/test-eng
-/pkg/cmd/lint-epic-issue-refs/ @cockroachdb/dev-inf
 /pkg/cmd/mirror/             @cockroachdb/dev-inf
 /pkg/cmd/prereqs/            @cockroachdb/dev-inf
 /pkg/cmd/protoc-gen-gogoroach/ @cockroachdb/dev-inf
