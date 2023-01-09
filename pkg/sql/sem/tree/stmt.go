@@ -461,6 +461,15 @@ func (*AlterTenantReplication) StatementTag() string { return "ALTER TENANT REPL
 func (*AlterTenantReplication) cclOnlyStatement() {}
 
 // StatementReturnType implements the Statement interface.
+func (*AlterTenantRename) StatementReturnType() StatementReturnType { return Rows }
+
+// StatementType implements the Statement interface.
+func (*AlterTenantRename) StatementType() StatementType { return TypeDML }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*AlterTenantRename) StatementTag() string { return "ALTER TENANT RENAME" }
+
+// StatementReturnType implements the Statement interface.
 func (*AlterType) StatementReturnType() StatementReturnType { return DDL }
 
 // StatementType implements the Statement interface.
@@ -2103,6 +2112,7 @@ func (n *AlterTableSetNotNull) String() string                { return AsString(
 func (n *AlterTableOwner) String() string                     { return AsString(n) }
 func (n *AlterTableSetSchema) String() string                 { return AsString(n) }
 func (n *AlterTenantSetClusterSetting) String() string        { return AsString(n) }
+func (n *AlterTenantRename) String() string                   { return AsString(n) }
 func (n *AlterTenantReplication) String() string              { return AsString(n) }
 func (n *AlterType) String() string                           { return AsString(n) }
 func (n *AlterRole) String() string                           { return AsString(n) }
@@ -2253,8 +2263,9 @@ func (n *ShowDefaultPrivileges) String() string               { return AsString(
 func (n *ShowCompletions) String() string                     { return AsString(n) }
 func (n *ShowCommitTimestamp) String() string                 { return AsString(n) }
 func (n *Split) String() string                               { return AsString(n) }
-func (n *Unsplit) String() string                             { return AsString(n) }
 func (n *Truncate) String() string                            { return AsString(n) }
+func (n *TenantSpec) String() string                          { return AsString(n) }
 func (n *UnionClause) String() string                         { return AsString(n) }
+func (n *Unsplit) String() string                             { return AsString(n) }
 func (n *Update) String() string                              { return AsString(n) }
 func (n *ValuesClause) String() string                        { return AsString(n) }

@@ -76,10 +76,10 @@ id  name   status
 statement error tenant "seven" does not exist
 SHOW TENANT seven
 
-statement error tenant "tenant-one" does not have an active replication job
+statement error tenant 'tenant-one' does not have an active replication job
 SHOW TENANT "tenant-one" WITH REPLICATION STATUS
 
-statement error tenant "two" does not have an active replication job
+statement error tenant 'two' does not have an active replication job
 SHOW TENANT two WITH REPLICATION STATUS
 
 # Test creating a tenant with the same name as an existing tenant, but a unique
@@ -99,12 +99,12 @@ set default_transaction_read_only = off;
 user testuser
 
 statement error only users with the admin role are allowed to create tenant
-CREATE TENANT "not-allowed"
+CREATE TENANT four
 
 subtest drop_tenant
 user root
 
-statement error destroying tenant: tenant "dne" does not exist
+statement error tenant "dne" does not exist
 DROP TENANT dne
 
 statement ok
@@ -144,7 +144,7 @@ statement ok
 set default_transaction_read_only = on;
 
 statement error cannot execute DROP TENANT in a read-only transaction
-DROP TENANT four;
+DROP TENANT three
 
 statement ok
 set default_transaction_read_only = off;
@@ -152,7 +152,7 @@ set default_transaction_read_only = off;
 user testuser
 
 statement error only users with the admin role are allowed to destroy tenant
-DROP TENANT "not-allowed"
+DROP TENANT three
 
 user root
 

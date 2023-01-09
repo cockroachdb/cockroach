@@ -18,13 +18,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -39,7 +35,7 @@ const (
 )
 
 type showTenantNode struct {
-	name               tree.TypedExpr
+	tenantSpec         *tenantSpec
 	tenantInfo         *descpb.TenantInfo
 	tenantStatus       tenantStatus
 	withReplication    bool
@@ -58,17 +54,13 @@ func (p *planner) ShowTenant(ctx context.Context, n *tree.ShowTenant) (planNode,
 		return nil, err
 	}
 
-	var dummyHelper tree.IndexedVarHelper
-	strName := paramparse.UnresolvedNameToStrVal(n.Name)
-	typedName, err := p.analyzeExpr(
-		ctx, strName, nil, dummyHelper, types.String,
-		true, "SHOW TENANT ... WITH REPLICATION STATUS")
+	tspec, err := p.planTenantSpec(ctx, n.TenantSpec, "SHOW TENANT ... WITH REPLICATION STATUS")
 	if err != nil {
 		return nil, err
 	}
 
 	node := &showTenantNode{
-		name:            typedName,
+		tenantSpec:      tspec,
 		withReplication: n.WithReplication,
 	}
 	if n.WithReplication {
@@ -80,24 +72,8 @@ func (p *planner) ShowTenant(ctx context.Context, n *tree.ShowTenant) (planNode,
 	return node, nil
 }
 
-func (n *showTenantNode) getTenantName(params runParams) (roachpb.TenantName, error) {
-	dName, err := eval.Expr(params.ctx, params.p.EvalContext(), n.name)
-	if err != nil {
-		return "", err
-	}
-	name, ok := dName.(*tree.DString)
-	if !ok || name == nil {
-		return "", errors.Newf("expected a string, got %T", dName)
-	}
-	return roachpb.TenantName(*name), nil
-}
-
 func (n *showTenantNode) startExec(params runParams) error {
-	tenantName, err := n.getTenantName(params)
-	if err != nil {
-		return err
-	}
-	tenantRecord, err := GetTenantRecordByName(params.ctx, params.p.execCfg, params.p.Txn(), tenantName)
+	tenantRecord, err := n.tenantSpec.getTenantInfo(params.ctx, params.p)
 	if err != nil {
 		return err
 	}
@@ -134,7 +110,7 @@ func (n *showTenantNode) startExec(params runParams) error {
 
 	if n.withReplication {
 		if jobId == 0 {
-			return errors.Newf("tenant %q does not have an active replication job", tenantName)
+			return errors.Newf("tenant %v does not have an active replication job", n.tenantSpec)
 		}
 		mgr, err := params.p.EvalContext().StreamManagerFactory.GetStreamIngestManager(params.ctx)
 		if err != nil {
@@ -150,16 +126,16 @@ func (n *showTenantNode) startExec(params runParams) error {
 			// therefore we don't fail here.
 			// TODO(lidor): we need a better signal from GetStreamIngestionStats(), instead of
 			// ignoring all errors.
-			log.Infof(params.ctx, "stream ingestion stats unavailable for tenant %q and job %d",
-				tenantName, jobId)
+			log.Infof(params.ctx, "stream ingestion stats unavailable for tenant %v and job %d",
+				n.tenantSpec, jobId)
 		} else {
 			n.replicationInfo = stats
 			if stats.IngestionDetails.ProtectedTimestampRecordID == nil {
 				// We don't have the protected timestamp record but we still want to show
 				// the info we do have about tenant replication status, logging an error
 				// and continuing.
-				log.Warningf(params.ctx, "protected timestamp unavailable for tenant %q and job %d",
-					tenantName, jobId)
+				log.Warningf(params.ctx, "protected timestamp unavailable for tenant %v and job %d",
+					n.tenantSpec, jobId)
 			} else {
 				ptp := params.p.execCfg.ProtectedTimestampProvider
 				record, err := ptp.GetRecord(params.ctx, params.p.Txn(), *stats.IngestionDetails.ProtectedTimestampRecordID)

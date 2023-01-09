@@ -1,10 +1,10 @@
 # LogicTest: 3node-tenant-default-configs
 
 statement error only the system tenant can create other tenants
-CREATE TENANT nope
+CREATE TENANT [10]
 
 statement error only the system tenant can show other tenants
-SHOW TENANT nope
+SHOW TENANT [10]
 
 statement error only the system tenant can destroy other tenants
-DROP TENANT nope
+DROP TENANT [10]
