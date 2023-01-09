@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 const noPlan = "no plan"
@@ -222,6 +223,10 @@ func makeStmtBundleBuilder(
 // buildPrettyStatement saves the pretty-printed statement (without any
 // placeholder arguments).
 func (b *stmtBundleBuilder) buildPrettyStatement() {
+	if b.flags.RedactValues && b.stmt != "" {
+		b.stmt = string(redact.RedactedMarker())
+	}
+
 	// If we hit an early error, stmt or stmt.AST might not be initialized yet. In
 	// this case use the original statement SQL already in the stmtBundleBuilder.
 	if b.plan.stmt != nil && b.plan.stmt.AST != nil {
@@ -232,7 +237,11 @@ func (b *stmtBundleBuilder) buildPrettyStatement() {
 		cfg.Simplify = true
 		cfg.Align = tree.PrettyNoAlign
 		cfg.JSONFmt = true
+		cfg.ValueRedaction = b.flags.RedactValues
 		b.stmt = cfg.Pretty(b.plan.stmt.AST)
+		if b.flags.RedactValues {
+			b.stmt = string(redact.RedactableString(b.stmt).Redact())
+		}
 	}
 	if b.stmt == "" {
 		b.stmt = "-- no statement"
@@ -242,10 +251,6 @@ func (b *stmtBundleBuilder) buildPrettyStatement() {
 // addStatement adds the pretty-printed statement in b.stmt as file
 // statement.txt.
 func (b *stmtBundleBuilder) addStatement() {
-	if b.flags.RedactValues {
-		return
-	}
-
 	output := b.stmt
 
 	if b.placeholders != nil && len(b.placeholders.Values) != 0 {
@@ -253,7 +258,11 @@ func (b *stmtBundleBuilder) addStatement() {
 		buf.WriteString(output)
 		buf.WriteString("\n\n-- Arguments:\n")
 		for i, v := range b.placeholders.Values {
-			fmt.Fprintf(&buf, "--  %s: %v\n", tree.PlaceholderIdx(i), v)
+			if b.flags.RedactValues {
+				fmt.Fprintf(&buf, "--  %s: %s\n", tree.PlaceholderIdx(i), redact.RedactedMarker())
+			} else {
+				fmt.Fprintf(&buf, "--  %s: %v\n", tree.PlaceholderIdx(i), v)
+			}
 		}
 		output = buf.String()
 	}
