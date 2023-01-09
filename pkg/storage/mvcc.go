@@ -4086,6 +4086,53 @@ func MVCCIterate(
 	return intents, nil
 }
 
+// MVCCPagination invokes f() until it returns done (i.e. we have iterated
+// through all elements) or an error, or until the number of keys hits the
+// maxKeys limit or the number of bytes hits the targetBytes limit.
+func MVCCPagination(
+	ctx context.Context,
+	maxKeys, targetBytes int64,
+	f func(maxKeys, targetBytes int64) (numKeys, numBytes int64, resumeSpan *roachpb.Span, err error),
+) (numKeys, numBytes int64, resumeReason roachpb.ResumeReason, err error) {
+	for {
+		if maxKeys < 0 {
+			return numKeys, numBytes, roachpb.RESUME_KEY_LIMIT, nil
+		}
+		if targetBytes < 0 {
+			return numKeys, numBytes, roachpb.RESUME_BYTE_LIMIT, nil
+		}
+		addedKeys, addedBytes, resumeSpan, err := f(maxKeys, targetBytes)
+		if err != nil {
+			err = iterutil.Map(err)
+			return numKeys, numBytes, 0, err
+		}
+		numKeys += addedKeys
+		numBytes += addedBytes
+		if maxKeys > 0 {
+			if addedKeys > maxKeys {
+				log.Fatalf(ctx, "added %d keys, which exceeds the max key limit %d", addedKeys, maxKeys)
+			} else if addedKeys < maxKeys {
+				maxKeys -= addedKeys
+			} else {
+				maxKeys = -1
+			}
+		}
+		if targetBytes > 0 {
+			if addedBytes < targetBytes {
+				targetBytes -= addedBytes
+			} else {
+				targetBytes = -1
+			}
+		}
+		if resumeSpan != nil {
+			if maxKeys >= 0 && targetBytes >= 0 {
+				log.Fatalf(ctx, "non-nil resume span returned, but both key limit = %d and byte limit = %d have not been hit",
+					maxKeys, targetBytes)
+			}
+		}
+	}
+}
+
 // MVCCResolveWriteIntent either commits, aborts (rolls back), or moves forward
 // in time an extant write intent for a given txn according to commit
 // parameter. ResolveWriteIntent will skip write intents of other txns.

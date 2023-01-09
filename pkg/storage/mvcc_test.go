@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -2670,6 +2671,101 @@ func TestMVCCResolveNewerIntent(t *testing.T) {
 	}
 	if !bytes.Equal(value1.RawBytes, valueRes.Value.RawBytes) {
 		t.Fatalf("expected value1 bytes; got %q", valueRes.Value.RawBytes)
+	}
+}
+
+// TestMVCCPagination tests that MVCCPagination respects the MaxKeys and
+// TargetBytes limits, and returns the correct numKeys, numBytes, and
+// resumeReason.
+func TestMVCCPagination(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testCases := []struct {
+		maxKeys              int64
+		targetBytes          int64
+		numKeysPerIter       int64
+		numBytesPerIter      int64
+		numIters             int
+		expectedNumKeys      int64
+		expectedNumBytes     int64
+		expectedResumeReason roachpb.ResumeReason
+	}{
+		// MaxKeys and TargetBytes limits not reached, so do all 10 iterations.
+		{
+			maxKeys:              31,
+			targetBytes:          51,
+			numKeysPerIter:       3,
+			numBytesPerIter:      5,
+			numIters:             10,
+			expectedNumKeys:      30,
+			expectedNumBytes:     50,
+			expectedResumeReason: 0,
+		},
+		// MaxKeys limit reached after 7 iterations.
+		{
+			maxKeys:              21,
+			targetBytes:          51,
+			numKeysPerIter:       3,
+			numBytesPerIter:      5,
+			numIters:             10,
+			expectedNumKeys:      21,
+			expectedNumBytes:     35,
+			expectedResumeReason: roachpb.RESUME_KEY_LIMIT,
+		},
+		// MaxKeys limit reached after 10 iterations. Despite the fact we
+		// finished iterating, we still return a resume reason because we check
+		// the MaxKeys and TargetBytes limits before we check if we stop
+		// iteration.
+		{
+			maxKeys:              30,
+			targetBytes:          50,
+			numKeysPerIter:       3,
+			numBytesPerIter:      5,
+			numIters:             10,
+			expectedNumKeys:      30,
+			expectedNumBytes:     50,
+			expectedResumeReason: roachpb.RESUME_KEY_LIMIT,
+		},
+		// TargetBytes limit reached after 7 iterations.
+		{
+			maxKeys:              31,
+			targetBytes:          34,
+			numKeysPerIter:       3,
+			numBytesPerIter:      5,
+			numIters:             10,
+			expectedNumKeys:      21,
+			expectedNumBytes:     35,
+			expectedResumeReason: roachpb.RESUME_BYTE_LIMIT,
+		},
+		// TargetBytes limit reached after 7 iterations, but with TargetBytes
+		// limit exactly the number of bytes.
+		{
+			maxKeys:              31,
+			targetBytes:          35,
+			numKeysPerIter:       3,
+			numBytesPerIter:      5,
+			numIters:             10,
+			expectedNumKeys:      21,
+			expectedNumBytes:     35,
+			expectedResumeReason: roachpb.RESUME_BYTE_LIMIT,
+		},
+	}
+
+	for _, tc := range testCases {
+		var iter int
+		numKeys, numBytes, resumeReason, err := MVCCPagination(context.Background(), tc.maxKeys, tc.targetBytes,
+			func(maxKeys, targetBytes int64) (numKeys int64, numBytes int64, resumeSpan *roachpb.Span, err error) {
+				if iter == tc.numIters {
+					return 0, 0, nil, iterutil.StopIteration()
+				}
+				iter++
+				return tc.numKeysPerIter, tc.numBytesPerIter, nil, nil
+			})
+		require.NoError(t, err)
+		require.Equal(t, tc.expectedNumKeys, numKeys)
+		require.Equal(t, tc.expectedNumBytes, numBytes)
+		require.Equal(t, tc.expectedResumeReason, resumeReason)
 	}
 }
 
