@@ -340,7 +340,11 @@ func (c *conn) serveImpl(
 	logAuthn := !inTestWithoutSQL && c.authLogEnabled()
 
 	// We'll build an authPipe to communicate with the authentication process.
-	authPipe := newAuthPipe(c, logAuthn, authOpt, c.sessionArgs.User)
+	systemIdentity := c.sessionArgs.SystemIdentity
+	if systemIdentity.Undefined() {
+		systemIdentity = c.sessionArgs.User
+	}
+	authPipe := newAuthPipe(c, logAuthn, authOpt, systemIdentity)
 	var authenticator authenticatorIO = authPipe
 
 	// procCh is the channel on which we'll receive the termination signal from
