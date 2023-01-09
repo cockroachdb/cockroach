@@ -13,7 +13,6 @@ package tree
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
@@ -34,10 +33,10 @@ type RoutinePlan interface{}
 // avoid import cycles.
 type RoutineExecFactory interface{}
 
-// RoutineExpr represents an execution of multiple statements. For example, it
-// is used to represent execution of statements in the body of a user-defined
-// function. It is only created by execbuilder - it is never constructed during
-// parsing.
+// RoutineExpr represents sequential execution of multiple statements. For
+// example, it is used to represent execution of statements in the body of a
+// user-defined function. It is only created by execbuilder - it is never
+// constructed during parsing.
 type RoutineExpr struct {
 	// Name is a string name that describes the RoutineExpr, e.g., the name of
 	// the UDF that the RoutineExpr is built from.
@@ -55,13 +54,13 @@ type RoutineExpr struct {
 	// Typ is the type of the routine's result.
 	Typ *types.T
 
-	// Volatility affects the visibility of mutations made by the statement
-	// invoking the routine. A volatile routine will see these mutations. Also,
-	// statements within a volatile function's body will see changes made by
-	// previous statements in the routine. In contrast, a stable, immutable,
-	// or leakproof function will see a snapshot of the data as of the start of
-	// the statement calling the function.
-	Volatility volatility.V
+	// EnableStepping configures step-wise execution for the statements in the
+	// routine. When true, statements within the routine will see mutations made
+	// by the statement invoking the routine. They will also see changes made by
+	// previous statements in the routine. When false, statements within the
+	// routine will see a snapshot of the data as of the start of the statement
+	// invoking the routine.
+	EnableStepping bool
 
 	// CalledOnNullInput is true if the function should be called when any of
 	// its inputs are NULL. If false, the function will not be evaluated in the
@@ -76,7 +75,7 @@ func NewTypedRoutineExpr(
 	planFn RoutinePlanFn,
 	numStmts int,
 	typ *types.T,
-	v volatility.V,
+	enableStepping bool,
 	calledOnNullInput bool,
 ) *RoutineExpr {
 	return &RoutineExpr{
@@ -84,7 +83,7 @@ func NewTypedRoutineExpr(
 		PlanFn:            planFn,
 		NumStmts:          numStmts,
 		Typ:               typ,
-		Volatility:        v,
+		EnableStepping:    enableStepping,
 		CalledOnNullInput: calledOnNullInput,
 		Name:              name,
 	}
