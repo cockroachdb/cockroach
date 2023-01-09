@@ -44,18 +44,27 @@ var (
 		Measurement: "Range Rebalances",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaStoreRebalancerImbalancedOverfullOptionsExhausted = metric.Metadata{
+		Name: "rebalancing.state.imbalanced_overfull_options_exhausted",
+		Help: "Number of occurences where this store was imbalanced by being overfull " +
+			"compared to other stores in the cluster after exhausting available rebalance options",
+		Measurement: "Exhuasted Options",
+		Unit:        metric.Unit_COUNT,
+	}
 )
 
 // StoreRebalancerMetrics is the set of metrics for the store-level rebalancer.
 type StoreRebalancerMetrics struct {
-	LeaseTransferCount  *metric.Counter
-	RangeRebalanceCount *metric.Counter
+	LeaseTransferCount                      *metric.Counter
+	RangeRebalanceCount                     *metric.Counter
+	ImbalancedStateOverfullOptionsExhausted *metric.Counter
 }
 
 func makeStoreRebalancerMetrics() StoreRebalancerMetrics {
 	return StoreRebalancerMetrics{
-		LeaseTransferCount:  metric.NewCounter(metaStoreRebalancerLeaseTransferCount),
-		RangeRebalanceCount: metric.NewCounter(metaStoreRebalancerRangeRebalanceCount),
+		LeaseTransferCount:                      metric.NewCounter(metaStoreRebalancerLeaseTransferCount),
+		RangeRebalanceCount:                     metric.NewCounter(metaStoreRebalancerRangeRebalanceCount),
+		ImbalancedStateOverfullOptionsExhausted: metric.NewCounter(metaStoreRebalancerImbalancedOverfullOptionsExhausted),
 	}
 }
 
@@ -558,6 +567,7 @@ func (sr *StoreRebalancer) TransferToRebalanceRanges(
 		log.KvDistribution.Infof(ctx,
 			"ran out of leases worth transferring and load %s is still above desired threshold %s",
 			rctx.LocalDesc.Capacity.Load(), rctx.maxThresholds)
+		sr.metrics.ImbalancedStateOverfullOptionsExhausted.Inc(1)
 		return false
 	}
 
@@ -579,6 +589,7 @@ func (sr *StoreRebalancer) LogRangeRebalanceOutcome(ctx context.Context, rctx *R
 		log.KvDistribution.Infof(ctx,
 			"ran out of replicas worth transferring and load %s is still above desired threshold %s; will check again soon",
 			rctx.LocalDesc.Capacity.Load(), rctx.maxThresholds)
+		sr.metrics.ImbalancedStateOverfullOptionsExhausted.Inc(1)
 	}
 
 	// We successfully rebalanced below or equal to the max threshold,
