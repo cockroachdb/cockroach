@@ -128,7 +128,7 @@ func (h *Handle) AllowSecondaryTenantToSetZoneConfigurations(t *testing.T, tenID
 	sqlDB := sqlutils.MakeSQLRunner(h.tc.ServerConn(0))
 	sqlDB.Exec(
 		t,
-		"ALTER TENANT $1 SET CLUSTER SETTING sql.zone_configs.allow_for_secondary_tenant.enabled = true",
+		"ALTER TENANT [$1] SET CLUSTER SETTING sql.zone_configs.allow_for_secondary_tenant.enabled = true",
 		tenID.ToUint64(),
 	)
 }

@@ -461,6 +461,15 @@ func (*AlterTenantReplication) StatementTag() string { return "ALTER TENANT REPL
 func (*AlterTenantReplication) cclOnlyStatement() {}
 
 // StatementReturnType implements the Statement interface.
+func (*AlterTenantRename) StatementReturnType() StatementReturnType { return Ack }
+
+// StatementType implements the Statement interface.
+func (*AlterTenantRename) StatementType() StatementType { return TypeDCL }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*AlterTenantRename) StatementTag() string { return "ALTER TENANT RENAME" }
+
+// StatementReturnType implements the Statement interface.
 func (*AlterType) StatementReturnType() StatementReturnType { return DDL }
 
 // StatementType implements the Statement interface.
@@ -768,10 +777,10 @@ func (*CreateExternalConnection) StatementType() StatementType { return TypeDDL 
 func (*CreateExternalConnection) StatementTag() string { return "CREATE EXTERNAL CONNECTION" }
 
 // StatementReturnType implements the Statement interface.
-func (*CreateTenant) StatementReturnType() StatementReturnType { return DDL }
+func (*CreateTenant) StatementReturnType() StatementReturnType { return Ack }
 
 // StatementType implements the Statement interface.
-func (*CreateTenant) StatementType() StatementType { return TypeDDL }
+func (*CreateTenant) StatementType() StatementType { return TypeDCL }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*CreateTenant) StatementTag() string { return "CREATE TENANT" }
@@ -1008,10 +1017,10 @@ func (*DropSchema) StatementType() StatementType { return TypeDDL }
 func (*DropSchema) StatementTag() string { return "DROP SCHEMA" }
 
 // StatementReturnType implements the Statement interface.
-func (*DropTenant) StatementReturnType() StatementReturnType { return DDL }
+func (*DropTenant) StatementReturnType() StatementReturnType { return Ack }
 
 // StatementType implements the Statement interface.
-func (*DropTenant) StatementType() StatementType { return TypeDDL }
+func (*DropTenant) StatementType() StatementType { return TypeDCL }
 
 // StatementTag implements the Statement interface.
 func (*DropTenant) StatementTag() string { return "DROP TENANT" }
@@ -2103,6 +2112,7 @@ func (n *AlterTableSetNotNull) String() string                { return AsString(
 func (n *AlterTableOwner) String() string                     { return AsString(n) }
 func (n *AlterTableSetSchema) String() string                 { return AsString(n) }
 func (n *AlterTenantSetClusterSetting) String() string        { return AsString(n) }
+func (n *AlterTenantRename) String() string                   { return AsString(n) }
 func (n *AlterTenantReplication) String() string              { return AsString(n) }
 func (n *AlterType) String() string                           { return AsString(n) }
 func (n *AlterRole) String() string                           { return AsString(n) }
@@ -2253,8 +2263,9 @@ func (n *ShowDefaultPrivileges) String() string               { return AsString(
 func (n *ShowCompletions) String() string                     { return AsString(n) }
 func (n *ShowCommitTimestamp) String() string                 { return AsString(n) }
 func (n *Split) String() string                               { return AsString(n) }
-func (n *Unsplit) String() string                             { return AsString(n) }
 func (n *Truncate) String() string                            { return AsString(n) }
+func (n *TenantSpec) String() string                          { return AsString(n) }
 func (n *UnionClause) String() string                         { return AsString(n) }
+func (n *Unsplit) String() string                             { return AsString(n) }
 func (n *Update) String() string                              { return AsString(n) }
 func (n *ValuesClause) String() string                        { return AsString(n) }

@@ -49,6 +49,8 @@ func ingestionTypeCheck(
 		return false, nil, nil
 	}
 	if err := exprutil.TypeCheck(ctx, "INGESTION", p.SemaCtx(),
+		exprutil.TenantSpec{TenantSpec: ingestionStmt.TenantSpec},
+		exprutil.TenantSpec{TenantSpec: ingestionStmt.ReplicationSourceTenantName},
 		exprutil.Strings{
 			ingestionStmt.ReplicationSourceAddress,
 			ingestionStmt.Options.Retention}); err != nil {
@@ -92,6 +94,16 @@ func ingestionPlanHook(
 		return nil, nil, nil, false, err
 	}
 
+	_, _, sourceTenant, err := exprEval.TenantSpec(ctx, ingestionStmt.ReplicationSourceTenantName)
+	if err != nil {
+		return nil, nil, nil, false, err
+	}
+
+	_, dstTenantID, dstTenantName, err := exprEval.TenantSpec(ctx, ingestionStmt.TenantSpec)
+	if err != nil {
+		return nil, nil, nil, false, err
+	}
+
 	options, err := evalTenantReplicationOptions(ctx, ingestionStmt.Options, exprEval)
 	if err != nil {
 		return nil, nil, nil, false, err
@@ -128,28 +140,23 @@ func ingestionPlanHook(
 		}
 
 		streamAddress = streamingccl.StreamAddress(streamURL.String())
-		sourceTenant := ingestionStmt.ReplicationSourceTenantName
-		destinationTenant := ingestionStmt.Name
 
 		// TODO(adityamaru): Add privileges checks. Probably the same as RESTORE.
 		if roachpb.IsSystemTenantName(roachpb.TenantName(sourceTenant)) ||
-			roachpb.IsSystemTenantName(roachpb.TenantName(destinationTenant)) {
-			return errors.Newf("neither the source tenant %q nor the destination tenant %q can be the system tenant",
-				sourceTenant, destinationTenant)
+			roachpb.IsSystemTenantName(roachpb.TenantName(dstTenantName)) ||
+			roachpb.IsSystemTenantID(dstTenantID) {
+			return errors.Newf("neither the source tenant %q nor the destination tenant %q (%d) can be the system tenant",
+				sourceTenant, dstTenantName, dstTenantID)
 		}
 
 		// Create a new tenant for the replication stream
-		if _, err := sql.GetTenantRecordByName(ctx, p.ExecCfg(), p.Txn(), roachpb.TenantName(destinationTenant)); err == nil {
-			return errors.Newf("tenant with name %q already exists", destinationTenant)
-		}
-
 		jobID := p.ExecCfg().JobRegistry.MakeJobID()
 		tenantInfo := &descpb.TenantInfoWithUsage{
 			TenantInfo: descpb.TenantInfo{
-				// We leave the ID field unset so that the tenant is assigned the next
-				// available tenant ID.
+				// dstTenantID may be zero which will cause auto-allocation.
+				ID:                     dstTenantID,
 				State:                  descpb.TenantInfo_ADD,
-				Name:                   roachpb.TenantName(destinationTenant),
+				Name:                   roachpb.TenantName(dstTenantName),
 				TenantReplicationJobID: jobID,
 			},
 		}
@@ -186,7 +193,7 @@ func ingestionPlanHook(
 			Span:                  roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()},
 			DestinationTenantID:   destinationTenantID,
 			SourceTenantName:      roachpb.TenantName(sourceTenant),
-			DestinationTenantName: roachpb.TenantName(destinationTenant),
+			DestinationTenantName: roachpb.TenantName(dstTenantName),
 			ReplicationTTLSeconds: retentionTTLSeconds,
 			ReplicationStartTime:  replicationProducerSpec.ReplicationStartTime,
 		}

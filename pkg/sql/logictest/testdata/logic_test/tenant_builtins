@@ -39,14 +39,12 @@ ORDER BY id
 id  active  name                  crdb_internal.pb_to_json
 1   true    system                {"capabilities": {"canAdminSplit": false}, "droppedName": "", "id": "1", "name": "system", "state": "ACTIVE", "tenantReplicationJobId": "0"}
 2   true    tenant-number-eleven  {"capabilities": {"canAdminSplit": false}, "droppedName": "", "id": "2", "name": "tenant-number-eleven", "state": "ACTIVE", "tenantReplicationJobId": "0"}
-5   true    NULL                  {"capabilities": {"canAdminSplit": false}, "droppedName": "", "id": "5", "name": "", "state": "ACTIVE", "tenantReplicationJobId": "0"}
+5   true    tenant-5              {"capabilities": {"canAdminSplit": false}, "droppedName": "", "id": "5", "name": "tenant-5", "state": "ACTIVE", "tenantReplicationJobId": "0"}
 10  true    tenant-number-ten     {"capabilities": {"canAdminSplit": false}, "droppedName": "", "id": "10", "name": "tenant-number-ten", "state": "ACTIVE", "tenantReplicationJobId": "0"}
 
 # Check we can add a name where none existed before.
-query I
-SELECT crdb_internal.rename_tenant(5, 'my-tenant')
-----
-5
+statement ok
+ALTER TENANT [5] RENAME TO "my-tenant"
 
 query IBT colnames
 SELECT id, active, name FROM system.tenants ORDER BY id
@@ -59,29 +57,27 @@ id  active  name
 
 
 # Check we can change the name when there was one before.
-query I
-SELECT crdb_internal.rename_tenant(5, 'my-new-tenant-name')
-----
-5
+statement ok
+ALTER TENANT [5] RENAME TO "my-new-tenant-name"
 
-query error invalid tenant name
-SELECT crdb_internal.rename_tenant(5, 'AAA')
+statement error invalid tenant name
+ALTER TENANT [5] RENAME TO 'AAA'
 
-query error invalid tenant name
-SELECT crdb_internal.rename_tenant(5, '-a-')
+statement error invalid tenant name
+ALTER TENANT [5] RENAME TO '-a-'
 
-query error invalid tenant name
-SELECT crdb_internal.rename_tenant(5, '11111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111')
+statement error invalid tenant name
+ALTER TENANT [5] RENAME TO '11111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111'
 
-query error invalid tenant name
-SELECT crdb_internal.rename_tenant(5, 'invalid_name')
+statement error invalid tenant name
+ALTER TENANT [5] RENAME TO 'invalid_name'
 
-query error invalid tenant name
-SELECT crdb_internal.rename_tenant(5, 'invalid.name')
+statement error invalid tenant name
+ALTER TENANT [5] RENAME TO 'invalid.name'
 
 # Check for duplicate names.
-query error name "tenant-number-ten" is already taken
-SELECT crdb_internal.rename_tenant(5, 'tenant-number-ten')
+statement error name "tenant-number-ten" is already taken
+ALTER TENANT [5] RENAME TO 'tenant-number-ten'
 
 query error tenant with name "tenant-number-eleven" already exists
 SELECT crdb_internal.create_tenant('tenant-number-eleven')
@@ -102,10 +98,8 @@ SELECT crdb_internal.gc_tenant(5)
 
 # Note this just marks the tenant as dropped but does not call GC.
 
-query I
-SELECT crdb_internal.destroy_tenant(5)
-----
-5
+statement ok
+DROP TENANT [5]
 
 query IBTT colnames
 SELECT id, active, name, crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info, true)
@@ -121,13 +115,13 @@ id  active  name                  crdb_internal.pb_to_json
 
 # Try to recreate an existing tenant.
 # GC job for tenant 5 has not run yet.
-query error pgcode 42710 tenant "5" already exists
+query error pgcode 42710 a tenant with ID 5 or with name "tenant-5" already exists
 SELECT crdb_internal.create_tenant(5)
 
-query error pgcode 42710 tenant "10" already exists
+query error pgcode 42710 a tenant with ID 10 or with name "tenant-10" already exists
 SELECT crdb_internal.create_tenant(10)
 
-query error pgcode 42710 tenant "11" with name "tenant-number-ten" already exists
+query error pgcode 42710 a tenant with ID 11 or with name "tenant-number-ten" already exists
 SELECT crdb_internal.create_tenant(11, 'tenant-number-ten')
 
 # Try to manipulate system.tenants directly as the root user.
@@ -149,11 +143,11 @@ DELETE FROM system.tenants WHERE id = 10
 query error pgcode 22023 cannot create tenant "1", ID assigned to system tenant
 SELECT crdb_internal.create_tenant(1)
 
-query error pgcode 22023 cannot rename tenant "1", ID assigned to system tenant
-SELECT crdb_internal.rename_tenant(1, 'hello')
+statement error pgcode 22023 cannot rename tenant "1", ID assigned to system tenant
+ALTER TENANT [1] RENAME TO hello
 
-query error pgcode 22023 cannot destroy tenant "1", ID assigned to system tenant
-SELECT crdb_internal.destroy_tenant(1)
+statement error pgcode 22023 cannot destroy tenant "1", ID assigned to system tenant
+DROP TENANT [1]
 
 # Verify that tenants are able to set in-memory cluster settings in logic tests.
 
@@ -214,8 +208,8 @@ SELECT status FROM [
 ----
 succeeded
 
-query error pgcode 42704 tenant "5" does not exist
-SELECT crdb_internal.destroy_tenant(5)
+statement error pgcode 42704 tenant "5" does not exist
+DROP TENANT [5]
 
 query IBT colnames
 SELECT id, active, crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info, true)
@@ -238,8 +232,8 @@ SELECT crdb_internal.create_tenant(314)
 statement error only users with the admin role are allowed to create tenant
 SELECT crdb_internal.create_tenant('not-allowed')
 
-statement error only users with the admin role are allowed to destroy tenant
-SELECT crdb_internal.destroy_tenant(314)
+statement error only users with the admin role are allowed to drop tenant
+DROP TENANT [1]
 
 statement error only users with the admin role are allowed to gc tenant
 SELECT crdb_internal.gc_tenant(314)

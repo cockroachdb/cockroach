@@ -41,7 +41,6 @@ go_library(
         "//pkg/sql/execinfra",
         "//pkg/sql/execinfrapb",
         "//pkg/sql/exprutil",
-        "//pkg/sql/paramparse",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/physicalplan",

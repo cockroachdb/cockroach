@@ -7,12 +7,29 @@ ALTER TENANT _ SET CLUSTER SETTING a = DEFAULT -- literals removed
 ALTER TENANT 123 SET CLUSTER SETTING a = DEFAULT -- identifiers removed
 
 parse
+ALTER TENANT abc RESET CLUSTER SETTING a
+----
+ALTER TENANT abc SET CLUSTER SETTING a = DEFAULT -- normalized!
+ALTER TENANT (abc) SET CLUSTER SETTING a = (DEFAULT) -- fully parenthesized
+ALTER TENANT abc SET CLUSTER SETTING a = DEFAULT -- literals removed
+ALTER TENANT _ SET CLUSTER SETTING a = DEFAULT -- identifiers removed
+
+parse
 ALTER TENANT (1+1) SET CLUSTER SETTING a = 3
 ----
 ALTER TENANT (1 + 1) SET CLUSTER SETTING a = 3 -- normalized!
 ALTER TENANT ((((1) + (1)))) SET CLUSTER SETTING a = (3) -- fully parenthesized
 ALTER TENANT (_ + _) SET CLUSTER SETTING a = _ -- literals removed
 ALTER TENANT (1 + 1) SET CLUSTER SETTING a = 3 -- identifiers removed
+
+parse
+ALTER TENANT abc SET CLUSTER SETTING a = 3
+----
+ALTER TENANT abc SET CLUSTER SETTING a = 3
+ALTER TENANT (abc) SET CLUSTER SETTING a = (3) -- fully parenthesized
+ALTER TENANT abc SET CLUSTER SETTING a = _ -- literals removed
+ALTER TENANT _ SET CLUSTER SETTING a = 3 -- identifiers removed
+
 
 parse
 ALTER TENANT $1 SET CLUSTER SETTING a = 3
@@ -165,3 +182,11 @@ ALTER TENANT 'foo' SET REPLICATION RETENTION = '-2h'
 ALTER TENANT ('foo') SET REPLICATION RETENTION = ('-2h') -- fully parenthesized
 ALTER TENANT '_' SET REPLICATION RETENTION = '_' -- literals removed
 ALTER TENANT 'foo' SET REPLICATION RETENTION = '-2h' -- identifiers removed
+
+parse
+ALTER TENANT 'foo' RENAME TO bar
+----
+ALTER TENANT 'foo' RENAME TO bar
+ALTER TENANT ('foo') RENAME TO (bar) -- fully parenthesized
+ALTER TENANT '_' RENAME TO bar -- literals removed
+ALTER TENANT 'foo' RENAME TO _ -- identifiers removed

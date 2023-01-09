@@ -16,8 +16,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -528,49 +526,20 @@ var _ eval.TenantOperator = &DummyTenantOperator{}
 var errEvalTenant = pgerror.New(pgcode.ScalarOperationCannotRunWithoutFullSessionContext,
 	"cannot evaluate tenant operation in this context")
 
-// CreateTenantWithID is part of the tree.TenantOperator interface.
-func (c *DummyTenantOperator) CreateTenantWithID(
-	_ context.Context, _ uint64, _ roachpb.TenantName,
-) error {
-	return errors.WithStack(errEvalTenant)
+// CreateTenant is part of the tree.TenantOperator interface.
+func (c *DummyTenantOperator) CreateTenant(_ context.Context, _ string) (roachpb.TenantID, error) {
+	return roachpb.TenantID{}, errors.WithStack(errEvalTenant)
 }
 
-// CreateTenant is part of the tree.TenantOperator interface.
-func (c *DummyTenantOperator) CreateTenant(
-	_ context.Context, _ roachpb.TenantName,
+// LookupTenantID is part of the tree.TenantOperator interface.
+func (c *DummyTenantOperator) LookupTenantID(
+	ctx context.Context, tenantName roachpb.TenantName,
 ) (roachpb.TenantID, error) {
 	return roachpb.TenantID{}, errors.WithStack(errEvalTenant)
 }
 
-// RenameTenant is part of the tree.TenantOperator interface.
-func (c *DummyTenantOperator) RenameTenant(
-	_ context.Context, _ uint64, _ roachpb.TenantName,
-) error {
-	return errors.WithStack(errEvalTenant)
-}
-
-// GetTenantInfo is part of the tree.TenantOperator interface.
-func (c *DummyTenantOperator) GetTenantInfo(
-	ctx context.Context, tenantName roachpb.TenantName,
-) (*descpb.TenantInfo, error) {
-	return nil, errors.WithStack(errEvalTenant)
-}
-
-func (p *DummyTenantOperator) GetTenantReplicationInfo(
-	ctx context.Context, replicationJobId jobspb.JobID,
-) (*streampb.StreamIngestionStats, error) {
-	return nil, errors.WithStack(errEvalTenant)
-}
-
-// DestroyTenant is part of the tree.TenantOperator interface.
-func (c *DummyTenantOperator) DestroyTenant(
-	ctx context.Context, tenantName roachpb.TenantName, synchronous bool,
-) error {
-	return errors.WithStack(errEvalTenant)
-}
-
-// DestroyTenantByID is part of the tree.TenantOperator interface.
-func (c *DummyTenantOperator) DestroyTenantByID(
+// DropTenantByID is part of the tree.TenantOperator interface.
+func (c *DummyTenantOperator) DropTenantByID(
 	ctx context.Context, tenantID uint64, synchronous bool,
 ) error {
 	return errors.WithStack(errEvalTenant)
