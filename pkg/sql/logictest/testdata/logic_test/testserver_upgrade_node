@@ -1,5 +1,7 @@
 # LogicTest: cockroach-go-testserver-22.2-master
 
+skip 94956
+
 query I
 SELECT 1
 ----
