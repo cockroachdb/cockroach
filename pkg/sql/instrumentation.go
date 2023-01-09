@@ -398,7 +398,7 @@ func (ih *instrumentationHelper) Finish(
 			}
 			bundle = buildStatementBundle(
 				ih.origCtx, cfg.DB, ie.(*InternalExecutor), stmtRawSQL, &p.curPlan, ob.BuildString(), trace,
-				placeholders, res.Err(), payloadErr, retErr,
+				placeholders, res.Err(), payloadErr, retErr, &p.extendedEvalCtx.Settings.SV,
 			)
 			bundle.insert(
 				ctx, ih.fingerprint, ast, cfg.StmtDiagnosticsRecorder, ih.diagRequestID, ih.diagRequest,
