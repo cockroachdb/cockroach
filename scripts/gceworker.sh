@@ -150,6 +150,11 @@ case "${cmd}" in
     shift
     gcloud compute scp --recurse "${from}" "$@"
     ;;
+    put)
+    to="${NAME}:go/src/github.com/cockroachdb/cockroach/${1}"
+    shift
+    gcloud compute scp --recurse "$@" "${to}"
+    ;;
     ip)
     gcloud compute instances describe --format="value(networkInterfaces[0].accessConfigs[0].natIP)" "${NAME}"
     ;;
