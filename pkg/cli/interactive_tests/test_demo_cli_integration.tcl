@@ -50,7 +50,7 @@ eexpect eof
 end_test
 
 start_test "Check that a SQL shell can connect to the system tenant without special arguments as demo"
-spawn $argv sql --no-line-editor -u demo -p 26258
+spawn $argv sql --no-line-editor -u demo -d cluster:system
 eexpect "Welcome"
 eexpect demo@
 eexpect "defaultdb>"
@@ -61,8 +61,8 @@ send "\\q\r"
 eexpect eof
 end_test
 
-start_test "Check that a SQL shell can connect to the app tenant without special arguments as root"
-spawn $argv sql --no-line-editor -u root -p 26258
+start_test "Check that a SQL shell can connect to the system tenant without special arguments as root"
+spawn $argv sql --no-line-editor -u root -d cluster:system
 eexpect "Welcome"
 eexpect root@
 eexpect "defaultdb>"
@@ -80,7 +80,9 @@ eexpect ":/# "
 
 start_test "Check that an auth cookie can be extracted for a demo session"
 # From the system tenant.
-send "$argv auth-session login root --certs-dir=\$HOME/.cockroach-demo -p 26258 --only-cookie >cookie_system.txt\r"
+set ssldir $env(HOME)/.cockroach-demo
+set sqlurl "postgresql://root@127.0.0.1:26257/?options=-ccluster%3Dsystem&sslmode=require&sslrootcert=$ssldir/ca.crt&sslcert=$ssldir/client.root.crt&sslkey=$ssldir/client.root.key"
+send "$argv auth-session login root --url \"$sqlurl\" --only-cookie >cookie_system.txt\r"
 eexpect ":/# "
 # From the app tenant.
 send "$argv auth-session login root --certs-dir=\$HOME/.cockroach-demo --only-cookie >cookie_app.txt\r"
@@ -92,7 +94,8 @@ set pyfile [file join [file dirname $argv0] test_auth_cookie.py]
 send "$python $pyfile cookie_system.txt 'http://localhost:8080/_admin/v1/users?tenant_name=system'\r"
 eexpect "username"
 eexpect "demo"
-send "$python $pyfile cookie_app.txt 'http://localhost:8080/_admin/v1/users?tenant_name=demo-tenant'\r"
+# No tenant name specified -> use default tenant.
+send "$python $pyfile cookie_app.txt 'http://localhost:8080/_admin/v1/users'\r"
 eexpect "username"
 eexpect "demo"
 end_test
@@ -114,7 +117,8 @@ set spawn_id $shell_spawn_id
 send "$python $pyfile cookie_system.txt 'http://localhost:8080/_admin/v1/users?tenant_name=system'\r"
 eexpect "username"
 eexpect "demo"
-send "$python $pyfile cookie_app.txt 'http://localhost:8080/_admin/v1/users?tenant_name=demo-tenant'\r"
+# No tenant name specified -> use default tenant.
+send "$python $pyfile cookie_app.txt 'http://localhost:8080/_admin/v1/users'\r"
 eexpect "username"
 eexpect "demo"
 end_test

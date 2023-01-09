@@ -51,8 +51,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgconn"
-	"github.com/jackc/pgproto3/v2"
-	"github.com/jackc/pgx/v4"
+	pgproto3 "github.com/jackc/pgproto3/v2"
+	pgx "github.com/jackc/pgx/v4"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 )
@@ -541,7 +541,7 @@ func waitForClientConn(ln net.Listener) (*conn, error) {
 		return nil, err
 	}
 
-	metrics := makeServerMetrics(sql.MemoryMetrics{} /* sqlMemMetrics */, metric.TestSampleInterval)
+	metrics := makeTenantSpecificMetrics(sql.MemoryMetrics{} /* sqlMemMetrics */, metric.TestSampleInterval)
 	pgwireConn := newConn(conn, sql.SessionArgs{ConnResultsBufferSize: 16 << 10}, &metrics, timeutil.Now(), nil)
 	return pgwireConn, nil
 }
@@ -575,9 +575,12 @@ func getSessionArgs(
 			return nil, sql.SessionArgs{}, errors.Errorf("unexpected protocol version: %d", version)
 		}
 
-		args, err := parseClientProvidedSessionParameters(
-			context.Background(), nil, &buf, conn.RemoteAddr(), trustRemoteAddr,
-		)
+		ctx := context.Background()
+		cp, err := parseClientProvidedSessionParameters(ctx, &buf, conn.RemoteAddr(), trustRemoteAddr, false /* acceptTenantName */)
+		if err != nil {
+			return conn, sql.SessionArgs{}, err
+		}
+		args, err := finalizeClientParameters(ctx, cp, nil)
 		return conn, args, err
 	}
 }
@@ -1079,7 +1082,7 @@ func TestMaliciousInputs(t *testing.T) {
 			}(tc)
 
 			sqlMetrics := sql.MakeMemMetrics("test" /* endpoint */, time.Second /* histogramWindow */)
-			metrics := makeServerMetrics(sqlMetrics, time.Second /* histogramWindow */)
+			metrics := makeTenantSpecificMetrics(sqlMetrics, time.Second /* histogramWindow */)
 
 			conn := newConn(
 				r,
@@ -2002,7 +2005,7 @@ func TestConnCloseReleasesReservedMem(t *testing.T) {
 	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
 
-	before := s.PGServer().(*Server).connMonitor.AllocBytes()
+	before := s.PGServer().(*Server).tenantSpecificConnMonitor.AllocBytes()
 
 	pgURL, cleanupFunc := sqlutils.PGUrl(
 		t, s.ServingSQLAddr(), "testConnClose" /* prefix */, url.User(username.RootUser),
@@ -2021,6 +2024,6 @@ func TestConnCloseReleasesReservedMem(t *testing.T) {
 	require.Regexp(t, "pq: option .* is invalid", err.Error())
 
 	// Check that no accounted-for memory is leaked, after the connection attempt fails.
-	after := s.PGServer().(*Server).connMonitor.AllocBytes()
+	after := s.PGServer().(*Server).tenantSpecificConnMonitor.AllocBytes()
 	require.Equal(t, before, after)
 }

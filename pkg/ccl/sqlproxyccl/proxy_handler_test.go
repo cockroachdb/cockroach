@@ -239,8 +239,8 @@ func TestProxyAgainstSecureCRDB(t *testing.T) {
 		DisableDefaultTestTenant: true,
 	},
 	)
+	sql.(*server.TestServer).PGPreServer().TestingSetTrustClientProvidedRemoteAddr(true)
 	pgs := sql.(*server.TestServer).PGServer().(*pgwire.Server)
-	pgs.TestingSetTrustClientProvidedRemoteAddr(true)
 	pgs.TestingEnableAuthLogging()
 	defer sql.Stopper().Stop(ctx)
 
@@ -402,8 +402,8 @@ func TestProxyTLSClose(t *testing.T) {
 			DisableDefaultTestTenant: true,
 		},
 	)
+	sql.(*server.TestServer).PGPreServer().TestingSetTrustClientProvidedRemoteAddr(true)
 	pgs := sql.(*server.TestServer).PGServer().(*pgwire.Server)
-	pgs.TestingSetTrustClientProvidedRemoteAddr(true)
 	pgs.TestingEnableAuthLogging()
 	defer sql.Stopper().Stop(ctx)
 
@@ -458,8 +458,8 @@ func TestProxyModifyRequestParams(t *testing.T) {
 			DisableDefaultTestTenant: true,
 		},
 	)
+	sql.(*server.TestServer).PGPreServer().TestingSetTrustClientProvidedRemoteAddr(true)
 	pgs := sql.(*server.TestServer).PGServer().(*pgwire.Server)
-	pgs.TestingSetTrustClientProvidedRemoteAddr(true)
 	pgs.TestingEnableAuthLogging()
 	defer sql.Stopper().Stop(ctx)
 
@@ -523,8 +523,8 @@ func TestInsecureProxy(t *testing.T) {
 			Insecure:                 false,
 		},
 	)
+	sql.(*server.TestServer).PGPreServer().TestingSetTrustClientProvidedRemoteAddr(true)
 	pgs := sql.(*server.TestServer).PGServer().(*pgwire.Server)
-	pgs.TestingSetTrustClientProvidedRemoteAddr(true)
 	pgs.TestingEnableAuthLogging()
 	defer sql.Stopper().Stop(ctx)
 
@@ -677,7 +677,7 @@ func TestDenylistUpdate(t *testing.T) {
 			DisableDefaultTestTenant: true,
 		},
 	)
-	sql.(*server.TestServer).PGServer().(*pgwire.Server).TestingSetTrustClientProvidedRemoteAddr(true)
+	sql.(*server.TestServer).PGPreServer().TestingSetTrustClientProvidedRemoteAddr(true)
 	defer sql.Stopper().Stop(ctx)
 
 	// Create some user with password authn.
@@ -758,7 +758,7 @@ func TestDirectoryConnect(t *testing.T) {
 			DisableDefaultTestTenant: true,
 		},
 	)
-	srv.(*server.TestServer).PGServer().(*pgwire.Server).TestingSetTrustClientProvidedRemoteAddr(true)
+	srv.(*server.TestServer).PGPreServer().TestingSetTrustClientProvidedRemoteAddr(true)
 	defer srv.Stopper().Stop(ctx)
 
 	// Create tenant 28.
@@ -1391,7 +1391,7 @@ func TestConnectionMigration(t *testing.T) {
 
 	// Start first SQL pod.
 	tenant1, tenantDB1 := serverutils.StartTenant(t, s, tests.CreateTestTenantParams(tenantID))
-	tenant1.PGServer().(*pgwire.Server).TestingSetTrustClientProvidedRemoteAddr(true)
+	tenant1.(*server.TestTenant).PGPreServer().TestingSetTrustClientProvidedRemoteAddr(true)
 	defer tenant1.Stopper().Stop(ctx)
 	defer tenantDB1.Close()
 
@@ -1399,7 +1399,7 @@ func TestConnectionMigration(t *testing.T) {
 	params2 := tests.CreateTestTenantParams(tenantID)
 	params2.DisableCreateTenant = true
 	tenant2, tenantDB2 := serverutils.StartTenant(t, s, params2)
-	tenant2.PGServer().(*pgwire.Server).TestingSetTrustClientProvidedRemoteAddr(true)
+	tenant2.(*server.TestTenant).PGPreServer().TestingSetTrustClientProvidedRemoteAddr(true)
 	defer tenant2.Stopper().Stop(ctx)
 	defer tenantDB2.Close()
 
@@ -2291,7 +2291,7 @@ func newDirectoryServer(
 		require.NoError(t, err)
 		sqlAddr, err := net.ResolveTCPAddr("tcp", ten.SQLAddr())
 		require.NoError(t, err)
-		ten.PGServer().(*pgwire.Server).TestingSetTrustClientProvidedRemoteAddr(true)
+		ten.(*server.TestTenant).PGPreServer().TestingSetTrustClientProvidedRemoteAddr(true)
 		return &tenantdirsvr.Process{SQL: sqlAddr, Stopper: tenantStopper}, nil
 	}
 
@@ -2354,7 +2354,7 @@ func startTestTenantPods(
 		}
 		params.TestingKnobs = knobs
 		tenant, tenantDB := serverutils.StartTenant(t, ts, params)
-		tenant.PGServer().(*pgwire.Server).TestingSetTrustClientProvidedRemoteAddr(true)
+		tenant.(*server.TestTenant).PGPreServer().TestingSetTrustClientProvidedRemoteAddr(true)
 
 		// Create a test user. We only need to do it once.
 		if i == 0 {

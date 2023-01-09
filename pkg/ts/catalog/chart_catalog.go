@@ -2563,6 +2563,43 @@ var charts = []sectionDescription{
 		},
 	},
 	{
+		Organization: [][]string{{SQLLayer, "SQL, Prior to tenant selection"}},
+		Charts: []chartDescription{
+			{
+				Title: "New Connections",
+				Metrics: []string{
+					"sql.pre_serve.new_conns",
+				},
+			},
+			{
+				Title: "Connection Failures",
+				Metrics: []string{
+					"sql.pre_serve.conn.failures",
+				},
+				AxisLabel: "Failures",
+			},
+			{
+				Title: "Byte I/O",
+				Metrics: []string{
+					"sql.pre_serve.bytesin",
+					"sql.pre_serve.bytesout",
+				},
+			},
+			{
+				Title: "Memory usage, Current",
+				Metrics: []string{
+					"sql.pre_serve.mem.cur",
+				},
+			},
+			{
+				Title: "Memory usage, Max",
+				Metrics: []string{
+					"sql.pre_serve.mem.max",
+				},
+			},
+		},
+	},
+	{
 		Organization: [][]string{{SQLLayer, "SQL"}},
 		Charts: []chartDescription{
 			{

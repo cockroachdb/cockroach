@@ -86,6 +86,11 @@ func (c *transientCluster) doPersistence(
 		sqlAddr := c.tenantServers[0].SQLAddr()
 		host, port, _ := addr.SplitHostPort(sqlAddr, "")
 		u.WithNet(pgurl.NetTCP(host, port))
+		// When the server controller is not used, the tenant selection is
+		// done via the TCP port number and the options parameter is
+		// ignored. If the server controller is used, the options will
+		// select the tenant.
+		_ = u.SetOption("options", "-ccluster="+demoTenantName)
 		if err := apply("sessions.app.txt", u); err != nil {
 			return errors.Wrapf(err, "%s for application tenant", word)
 		}
@@ -95,6 +100,8 @@ func (c *transientCluster) doPersistence(
 		sqlAddr := c.servers[0].ServingSQLAddr()
 		host, port, _ := addr.SplitHostPort(sqlAddr, "")
 		u.WithNet(pgurl.NetTCP(host, port))
+		// See the comment above about options.
+		_ = u.SetOption("options", "-ccluster="+catconstants.SystemTenantName)
 		return errors.Wrapf(
 			apply("sessions.system.txt", u),
 			"%s for for system tenant", word)

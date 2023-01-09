@@ -12,37 +12,26 @@ package pgwire
 
 import (
 	"context"
-	"crypto/tls"
-	"encoding/base64"
-	"fmt"
 	"io"
 	"net"
-	"net/url"
-	"strconv"
-	"strings"
 	"sync/atomic"
 	"time"
-	"unicode"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/hba"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/identmap"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirecancel"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
-	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
@@ -119,25 +108,25 @@ const (
 var (
 	MetaConns = metric.Metadata{
 		Name:        "sql.conns",
-		Help:        "Number of active sql connections",
+		Help:        "Number of active SQL connections",
 		Measurement: "Connections",
 		Unit:        metric.Unit_COUNT,
 	}
 	MetaNewConns = metric.Metadata{
 		Name:        "sql.new_conns",
-		Help:        "Counter of the number of sql connections created",
+		Help:        "Counter of the number of SQL connections created",
 		Measurement: "Connections",
 		Unit:        metric.Unit_COUNT,
 	}
 	MetaBytesIn = metric.Metadata{
 		Name:        "sql.bytesin",
-		Help:        "Number of sql bytes received",
+		Help:        "Number of SQL bytes received",
 		Measurement: "SQL Bytes",
 		Unit:        metric.Unit_BYTES,
 	}
 	MetaBytesOut = metric.Metadata{
 		Name:        "sql.bytesout",
-		Help:        "Number of sql bytes sent",
+		Help:        "Number of SQL bytes sent",
 		Measurement: "SQL Bytes",
 		Unit:        metric.Unit_BYTES,
 	}
@@ -149,7 +138,7 @@ var (
 	}
 	MetaConnFailures = metric.Metadata{
 		Name:        "sql.conn.failures",
-		Help:        "Number of sql conection failures",
+		Help:        "Number of SQL connection failures",
 		Measurement: "Connections",
 		Unit:        metric.Unit_COUNT,
 	}
@@ -211,14 +200,15 @@ var (
 // cancellation function has been called and the cancellation has taken place.
 type cancelChanMap map[chan struct{}]context.CancelFunc
 
-// Server implements the server side of the PostgreSQL wire protocol.
+// Server implements the server side of the PostgreSQL wire protocol for one
+// specific tenant (i.e. its configuration is specific to one tenant).
 type Server struct {
 	AmbientCtx log.AmbientContext
 	cfg        *base.Config
 	SQLServer  *sql.Server
 	execCfg    *sql.ExecutorConfig
 
-	metrics ServerMetrics
+	tenantMetrics tenantSpecificMetrics
 
 	mu struct {
 		syncutil.Mutex
@@ -244,37 +234,24 @@ type Server struct {
 		identityMap *identmap.Conf
 	}
 
+	// sqlMemoryPool is the parent memory pool for all SQL memory allocations
+	// for this tenant, including SQL query execution, etc.
 	sqlMemoryPool *mon.BytesMonitor
-	connMonitor   *mon.BytesMonitor
+
+	// tenantSpecificConnMonitor is the pool where the memory usage for the
+	// initial connection overhead is accounted for.
+	tenantSpecificConnMonitor *mon.BytesMonitor
 
 	// testing{Conn,Auth}LogEnabled is used in unit tests in this
 	// package to force-enable conn/auth logging without dancing around
 	// the asynchronicity of cluster settings.
 	testingConnLogEnabled int32
 	testingAuthLogEnabled int32
-
-	// trustClientProvidedRemoteAddr indicates whether the server should honor
-	// a `crdb:remote_addr` status parameter provided by the client during
-	// session authentication. This status parameter can be set by SQL proxies
-	// to feed the "real" client address, where otherwise the CockroachDB SQL
-	// server would only see the address of the proxy.
-	//
-	// This setting is security-sensitive and should not be enabled
-	// without a SQL proxy that carefully scrubs any client-provided
-	// `crdb:remote_addr` field. In particular, this setting should never
-	// be set when there is no SQL proxy at all. Otherwise, a malicious
-	// client could use this field to pretend being from another address
-	// than its own and defeat the HBA rules.
-	//
-	// TODO(knz,ben): It would be good to have something more specific
-	// than a boolean, i.e. to accept the provided address only from
-	// certain peer IPs, or with certain certificates. (could it be a
-	// special hba.conf directive?)
-	trustClientProvidedRemoteAddr syncutil.AtomicBool
 }
 
-// ServerMetrics is the set of metrics for the pgwire server.
-type ServerMetrics struct {
+// tenantSpecificMetrics is the set of metrics for a pgwire server
+// bound to a specific tenant.
+type tenantSpecificMetrics struct {
 	BytesInCount                *metric.Counter
 	BytesOutCount               *metric.Counter
 	Conns                       *metric.Gauge
@@ -288,10 +265,10 @@ type ServerMetrics struct {
 	SQLMemMetrics               sql.MemoryMetrics
 }
 
-func makeServerMetrics(
+func makeTenantSpecificMetrics(
 	sqlMemMetrics sql.MemoryMetrics, histogramWindow time.Duration,
-) ServerMetrics {
-	return ServerMetrics{
+) tenantSpecificMetrics {
+	return tenantSpecificMetrics{
 		BytesInCount:  metric.NewCounter(MetaBytesIn),
 		BytesOutCount: metric.NewCounter(MetaBytesOut),
 		Conns:         metric.NewGauge(MetaConns),
@@ -330,11 +307,13 @@ func MakeServer(
 	histogramWindow time.Duration,
 	executorConfig *sql.ExecutorConfig,
 ) *Server {
+	ctx := ambientCtx.AnnotateCtx(context.Background())
 	server := &Server{
 		AmbientCtx: ambientCtx,
 		cfg:        cfg,
 		execCfg:    executorConfig,
-		metrics:    makeServerMetrics(sqlMemMetrics, histogramWindow),
+
+		tenantMetrics: makeTenantSpecificMetrics(sqlMemMetrics, histogramWindow),
 	}
 	server.sqlMemoryPool = mon.NewMonitor("sql",
 		mon.MemoryResource,
@@ -347,30 +326,25 @@ func MakeServer(
 		nil, /* curCount */
 		nil, /* maxHist */
 		0, noteworthySQLMemoryUsageBytes, st)
-	server.sqlMemoryPool.StartNoReserved(context.Background(), parentMemoryMonitor)
+	server.sqlMemoryPool.StartNoReserved(ctx, parentMemoryMonitor)
 	server.SQLServer = sql.NewServer(executorConfig, server.sqlMemoryPool)
 
-	// TODO(knz,ben): Use a cluster setting for this.
-	server.trustClientProvidedRemoteAddr.Set(trustClientProvidedRemoteAddrOverride)
-
-	server.connMonitor = mon.NewMonitor("conn",
+	server.tenantSpecificConnMonitor = mon.NewMonitor("conn",
 		mon.MemoryResource,
-		server.metrics.ConnMemMetrics.CurBytesCount,
-		server.metrics.ConnMemMetrics.MaxBytesHist,
+		server.tenantMetrics.ConnMemMetrics.CurBytesCount,
+		server.tenantMetrics.ConnMemMetrics.MaxBytesHist,
 		int64(connReservationBatchSize)*baseSQLMemoryBudget, noteworthyConnMemoryUsageBytes, st)
-	server.connMonitor.StartNoReserved(context.Background(), server.sqlMemoryPool)
+	server.tenantSpecificConnMonitor.StartNoReserved(ctx, server.sqlMemoryPool)
 
 	server.mu.Lock()
 	server.mu.connCancelMap = make(cancelChanMap)
 	server.mu.Unlock()
 
 	connAuthConf.SetOnChange(&st.SV, func(ctx context.Context) {
-		loadLocalHBAConfigUponRemoteSettingChange(
-			ambientCtx.AnnotateCtx(context.Background()), server, st)
+		loadLocalHBAConfigUponRemoteSettingChange(ctx, server, st)
 	})
 	ConnIdentityMapConf.SetOnChange(&st.SV, func(ctx context.Context) {
-		loadLocalIdentityMapUponRemoteSettingChange(
-			ambientCtx.AnnotateCtx(context.Background()), server, st)
+		loadLocalIdentityMapUponRemoteSettingChange(ctx, server, st)
 	})
 
 	return server
@@ -378,21 +352,7 @@ func MakeServer(
 
 // BytesOut returns the total number of bytes transmitted from this server.
 func (s *Server) BytesOut() uint64 {
-	return uint64(s.metrics.BytesOutCount.Count())
-}
-
-// AnnotateCtxForIncomingConn annotates the provided context with a
-// tag that reports the peer's address. In the common case, the
-// context is annotated with a "client" tag. When the server is
-// configured to recognize client-specified remote addresses, it is
-// annotated with a "peer" tag and the "client" tag is added later
-// when the session is set up.
-func (s *Server) AnnotateCtxForIncomingConn(ctx context.Context, conn net.Conn) context.Context {
-	tag := "client"
-	if s.trustClientProvidedRemoteAddr.Get() {
-		tag = "peer"
-	}
-	return logtags.AddTag(ctx, tag, conn.RemoteAddr().String())
+	return uint64(s.tenantMetrics.BytesOutCount.Count())
 }
 
 // Match returns true if rd appears to be a Postgres connection.
@@ -423,9 +383,9 @@ func (s *Server) IsDraining() bool {
 }
 
 // Metrics returns the set of metrics structs.
-func (s *Server) Metrics() (res []interface{}) {
+func (s *Server) Metrics() []interface{} {
 	return []interface{}{
-		&s.metrics,
+		&s.tenantMetrics,
 		&s.SQLServer.Metrics.StartedStatementCounters,
 		&s.SQLServer.Metrics.ExecutedStatementCounters,
 		&s.SQLServer.Metrics.EngineMetrics,
@@ -722,10 +682,16 @@ func (s *Server) TestingEnableAuthLogging() {
 // compatible with postgres.
 //
 // An error is returned if the initial handshake of the connection fails.
-func (s *Server) ServeConn(ctx context.Context, conn net.Conn, socketType SocketType) (err error) {
+func (s *Server) ServeConn(
+	ctx context.Context, conn net.Conn, preServeStatus PreServeStatus,
+) (err error) {
+	if preServeStatus.State != PreServeReady {
+		return errors.AssertionFailedf("programming error: cannot call ServeConn with state %v (did you mean HandleCancel?)", preServeStatus.State)
+	}
+
 	defer func() {
 		if err != nil {
-			s.metrics.ConnFailures.Inc(1)
+			s.tenantMetrics.ConnFailures.Inc(1)
 		}
 	}()
 
@@ -764,97 +730,25 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn, socketType Socket
 		}
 	}()
 
-	// In any case, first check the command in the start-up message.
-	//
-	// We're assuming that a client is not willing/able to receive error
-	// packets before we drain that message.
-	version, buf, err := s.readVersion(conn)
-	if err != nil {
-		return err
-	}
-
-	switch version {
-	case versionCancel:
-		// The cancel message is rather peculiar: it is sent without
-		// authentication, always over an unencrypted channel.
-		s.handleCancel(ctx, conn, &buf)
-		return nil
-
-	case versionGSSENC:
-		// This is a request for an unsupported feature: GSS encryption.
-		// https://github.com/cockroachdb/cockroach/issues/52184
-		//
-		// Ensure the right SQLSTATE is sent to the SQL client.
-		err := pgerror.New(pgcode.ProtocolViolation, "GSS encryption is not yet supported")
-		// Annotate a telemetry key. These objects
-		// are treated specially by sendErr: they increase a
-		// telemetry counter to indicate an attempt was made
-		// to use this feature.
-		err = errors.WithTelemetry(err, "#52184")
-		return s.sendErr(ctx, conn, err)
-	}
-
+	st := s.execCfg.Settings
 	// If the server is shutting down, terminate the connection early.
 	if rejectNewConnections {
 		log.Ops.Info(ctx, "rejecting new connection while server is draining")
-		return s.sendErr(ctx, conn, newAdminShutdownErr(ErrDrainingNewConn))
+		return s.sendErr(ctx, st, conn, newAdminShutdownErr(ErrDrainingNewConn))
 	}
 
-	// Compute the initial connType.
-	connType, err := socketType.asConnType()
+	sArgs, err := finalizeClientParameters(ctx, preServeStatus.clientParameters,
+		&st.SV)
 	if err != nil {
-		return err
+		preServeStatus.Reserved.Close(ctx)
+		return s.sendErr(ctx, st, conn, err)
 	}
 
-	// If the client requests SSL, upgrade the connection to use TLS.
-	var clientErr error
-	conn, connType, version, clientErr, err = s.maybeUpgradeToSecureConn(ctx, conn, connType, version, &buf)
+	// Transfer the memory account into this tenant.
+	tenantReserved, err := s.tenantSpecificConnMonitor.TransferAccount(ctx, &preServeStatus.Reserved)
 	if err != nil {
-		return err
-	}
-	if clientErr != nil {
-		return s.sendErr(ctx, conn, clientErr)
-	}
-	sp := tracing.SpanFromContext(ctx)
-	sp.SetTag("conn_type", attribute.StringValue(connType.String()))
-
-	// What does the client want to do?
-	switch version {
-	case version30:
-		// Normal SQL connection. Proceed normally below.
-
-	case versionCancel:
-		// The PostgreSQL protocol definition says that cancel payloads
-		// must be sent *prior to upgrading the connection to use TLS*.
-		// Yet, we've found clients in the wild that send the cancel
-		// after the TLS handshake, for example at
-		// https://github.com/cockroachlabs/support/issues/600.
-		s.handleCancel(ctx, conn, &buf)
-		return nil
-
-	default:
-		// We don't know this protocol.
-		err := pgerror.Newf(pgcode.ProtocolViolation, "unknown protocol version %d", version)
-		err = errors.WithTelemetry(err, fmt.Sprintf("protocol-version-%d", version))
-		return s.sendErr(ctx, conn, err)
-	}
-
-	// Reserve some memory for this connection using the server's monitor. This
-	// reduces pressure on the shared pool because the server monitor allocates in
-	// chunks from the shared pool and these chunks should be larger than
-	// baseSQLMemoryBudget.
-	reserved := s.connMonitor.MakeBoundAccount()
-	if err := reserved.Grow(ctx, baseSQLMemoryBudget); err != nil {
-		return errors.Wrapf(err, "unable to pre-allocate %d bytes for this connection",
-			baseSQLMemoryBudget)
-	}
-
-	// Load the client-provided session parameters.
-	var sArgs sql.SessionArgs
-	if sArgs, err = parseClientProvidedSessionParameters(ctx, &s.execCfg.Settings.SV, &buf,
-		conn.RemoteAddr(), s.trustClientProvidedRemoteAddr.Get()); err != nil {
-		reserved.Close(ctx)
-		return s.sendErr(ctx, conn, err)
+		preServeStatus.Reserved.Close(ctx)
+		return s.sendErr(ctx, st, conn, err)
 	}
 
 	// Populate the client address field in the context tags and the
@@ -862,7 +756,9 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn, socketType Socket
 	// Only now do we know the remote client address for sure (it may have
 	// been overridden by a status parameter).
 	connDetails.RemoteAddress = sArgs.RemoteAddr.String()
+	sp := tracing.SpanFromContext(ctx)
 	ctx = logtags.AddTag(ctx, "client", log.SafeOperational(connDetails.RemoteAddress))
+	sp.SetTag("conn_type", attribute.StringValue(preServeStatus.ConnType.String()))
 	sp.SetTag("client", attribute.StringValue(connDetails.RemoteAddress))
 
 	// If a test is hooking in some authentication option, load it.
@@ -877,10 +773,10 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn, socketType Socket
 	// This includes authentication.
 	s.serveConn(
 		ctx, conn, sArgs,
-		&reserved,
+		&tenantReserved,
 		connStart,
 		authOptions{
-			connType:        connType,
+			connType:        preServeStatus.ConnType,
 			connDetails:     connDetails,
 			insecure:        s.cfg.Insecure,
 			ie:              s.execCfg.InternalExecutor,
@@ -892,30 +788,39 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn, socketType Socket
 	return nil
 }
 
-// handleCancel handles a pgwire query cancellation request. Note that the
+// readCancelKeyAndCloseConn retrieves the "backend data" key that identifies
+// a cancellable query, then closes the connection.
+func readCancelKeyAndCloseConn(
+	ctx context.Context, conn net.Conn, buf *pgwirebase.ReadBuffer,
+) (ok bool, cancelKey pgwirecancel.BackendKeyData) {
+	telemetry.Inc(sqltelemetry.CancelRequestCounter)
+	backendKeyDataBits, err := buf.GetUint64()
+	// The connection that issued the cancel is not a SQL session -- it's an
+	// entirely new connection that's created just to send the cancel. We close
+	// the connection as soon as possible after reading the data, since there
+	// is nothing to send back to the client.
+	_ = conn.Close()
+	// The client is also unwilling to read an error payload, so we just log it locally.
+	if err != nil {
+		log.Sessions.Warningf(ctx, "%v", errors.Wrap(err, "reading cancel key from client"))
+		return false, 0
+	}
+	return true, pgwirecancel.BackendKeyData(backendKeyDataBits)
+}
+
+// HandleCancel handles a pgwire query cancellation request. Note that the
 // request is unauthenticated. To mitigate the security risk (i.e., a
 // malicious actor spamming this endpoint with random data to try to cancel
 // a query), the logic is rate-limited by a semaphore. Refer to the comments
-// in the pgwirecancel package for more information.
+// around the following:
 //
-// This function does not return an error, so the caller (and possible
-// attacker) will not know if the cancellation attempt succeeded. Errors are
-// logged so that an operator can be aware of any possibly malicious requests.
-func (s *Server) handleCancel(ctx context.Context, conn net.Conn, buf *pgwirebase.ReadBuffer) {
-	telemetry.Inc(sqltelemetry.CancelRequestCounter)
-	s.metrics.PGWireCancelTotalCount.Inc(1)
+// - (*server/statusServer).cancelSemaphore
+// - (*server/statusServer).CancelRequestByKey
+// - (*server/serverController).sqlMux
+func (s *Server) HandleCancel(ctx context.Context, cancelKey pgwirecancel.BackendKeyData) error {
+	s.tenantMetrics.PGWireCancelTotalCount.Inc(1)
 
 	resp, err := func() (*serverpb.CancelQueryByKeyResponse, error) {
-		backendKeyDataBits, err := buf.GetUint64()
-		// The connection that issued the cancel is not a SQL session -- it's an
-		// entirely new connection that's created just to send the cancel. We close
-		// the connection as soon as possible after reading the data, since there
-		// is nothing to send back to the client.
-		_ = conn.Close()
-		if err != nil {
-			return nil, err
-		}
-		cancelKey := pgwirecancel.BackendKeyData(backendKeyDataBits)
 		// The request is forwarded to the appropriate node.
 		req := &serverpb.CancelQueryByKeyRequest{
 			SQLInstanceID:  cancelKey.GetSQLInstanceID(),
@@ -923,397 +828,32 @@ func (s *Server) handleCancel(ctx context.Context, conn net.Conn, buf *pgwirebas
 		}
 		resp, err := s.execCfg.SQLStatusServer.CancelQueryByKey(ctx, req)
 		if resp != nil && len(resp.Error) > 0 {
-			err = errors.CombineErrors(err, errors.Newf("error from CancelQueryByKeyResponse: %s", resp.Error))
+			err = errors.Newf("error from CancelQueryByKeyResponse: %s", resp.Error)
 		}
 		return resp, err
 	}()
 
 	if resp != nil && resp.Canceled {
-		s.metrics.PGWireCancelSuccessfulCount.Inc(1)
+		s.tenantMetrics.PGWireCancelSuccessfulCount.Inc(1)
 	} else if err != nil {
 		if respStatus := status.Convert(err); respStatus.Code() == codes.ResourceExhausted {
-			s.metrics.PGWireCancelIgnoredCount.Inc(1)
+			s.tenantMetrics.PGWireCancelIgnoredCount.Inc(1)
 		}
-		log.Sessions.Warningf(ctx, "unexpected while handling pgwire cancellation request: %v", err)
 	}
+	return err
 }
 
-// parseClientProvidedSessionParameters reads the incoming k/v pairs
-// in the startup message into a sql.SessionArgs struct.
-func parseClientProvidedSessionParameters(
-	ctx context.Context,
-	sv *settings.Values,
-	buf *pgwirebase.ReadBuffer,
-	origRemoteAddr net.Addr,
-	trustClientProvidedRemoteAddr bool,
+// finalizeClientParameters "fills in" the session arguments with
+// any tenant-specific defaults.
+func finalizeClientParameters(
+	ctx context.Context, cp tenantIndependentClientParameters, tenantSV *settings.Values,
 ) (sql.SessionArgs, error) {
-	args := sql.SessionArgs{
-		SessionDefaults:             make(map[string]string),
-		CustomOptionSessionDefaults: make(map[string]string),
-		RemoteAddr:                  origRemoteAddr,
-	}
-	foundBufferSize := false
-
-	for {
-		// Read a key-value pair from the client.
-		key, err := buf.GetString()
-		if err != nil {
-			return sql.SessionArgs{}, pgerror.Wrap(
-				err, pgcode.ProtocolViolation,
-				"error reading option key",
-			)
-		}
-		if len(key) == 0 {
-			// End of parameter list.
-			break
-		}
-		value, err := buf.GetString()
-		if err != nil {
-			return sql.SessionArgs{}, pgerror.Wrapf(
-				err, pgcode.ProtocolViolation,
-				"error reading option value for key %q", key,
-			)
-		}
-
-		// Case-fold for the key for easier comparison.
-		key = strings.ToLower(key)
-
-		// Load the parameter.
-		switch key {
-		case "user":
-			// In CockroachDB SQL, unlike in PostgreSQL, usernames are
-			// case-insensitive. Therefore we need to normalize the username
-			// here, so that further lookups for authentication have the correct
-			// identifier.
-			args.User, _ = username.MakeSQLUsernameFromUserInput(value, username.PurposeValidation)
-			// IsSuperuser will get updated later when we load the user's session
-			// initialization information.
-			args.IsSuperuser = args.User.IsRootUser()
-
-		case "crdb:session_revival_token_base64":
-			token, err := base64.StdEncoding.DecodeString(value)
-			if err != nil {
-				return sql.SessionArgs{}, pgerror.Wrapf(
-					err, pgcode.ProtocolViolation,
-					"%s", key,
-				)
-			}
-			args.SessionRevivalToken = token
-
-		case "results_buffer_size":
-			if args.ConnResultsBufferSize, err = humanizeutil.ParseBytes(value); err != nil {
-				return sql.SessionArgs{}, errors.WithSecondaryError(
-					pgerror.Newf(pgcode.ProtocolViolation,
-						"error parsing results_buffer_size option value '%s' as bytes", value), err)
-			}
-			if args.ConnResultsBufferSize < 0 {
-				return sql.SessionArgs{}, pgerror.Newf(pgcode.ProtocolViolation,
-					"results_buffer_size option value '%s' cannot be negative", value)
-			}
-			foundBufferSize = true
-
-		case "crdb:remote_addr":
-			if !trustClientProvidedRemoteAddr {
-				return sql.SessionArgs{}, pgerror.Newf(pgcode.ProtocolViolation,
-					"server not configured to accept remote address override (requested: %q)", value)
-			}
-
-			hostS, portS, err := net.SplitHostPort(value)
-			if err != nil {
-				return sql.SessionArgs{}, pgerror.Wrap(
-					err, pgcode.ProtocolViolation,
-					"invalid address format",
-				)
-			}
-			port, err := strconv.Atoi(portS)
-			if err != nil {
-				return sql.SessionArgs{}, pgerror.Wrap(
-					err, pgcode.ProtocolViolation,
-					"remote port is not numeric",
-				)
-			}
-			ip := net.ParseIP(hostS)
-			if ip == nil {
-				return sql.SessionArgs{}, pgerror.New(pgcode.ProtocolViolation,
-					"remote address is not numeric")
-			}
-			args.RemoteAddr = &net.TCPAddr{IP: ip, Port: port}
-
-		case "options":
-			opts, err := parseOptions(value)
-			if err != nil {
-				return sql.SessionArgs{}, err
-			}
-			for _, opt := range opts {
-				// crdb:jwt_auth_enabled must be passed as an option in order for us to support non-CRDB
-				// clients. jwt_auth_enabled is not a session variable. We extract it separately here.
-				if strings.ToLower(opt.key) == "crdb:jwt_auth_enabled" {
-					b, err := strconv.ParseBool(opt.value)
-					if err != nil {
-						return sql.SessionArgs{}, pgerror.Wrapf(err, pgcode.InvalidParameterValue, "crdb:jwt_auth_enabled")
-					}
-					args.JWTAuthEnabled = b
-					continue
-				}
-				err = loadParameter(ctx, opt.key, opt.value, &args)
-				if err != nil {
-					return sql.SessionArgs{}, pgerror.Wrapf(err, pgerror.GetPGCode(err), "options")
-				}
-			}
-		default:
-			err = loadParameter(ctx, key, value, &args)
-			if err != nil {
-				return sql.SessionArgs{}, err
-			}
-		}
+	// Inject the result buffer size if not defined by client.
+	if !cp.foundBufferSize && tenantSV != nil {
+		cp.ConnResultsBufferSize = connResultsBufferSize.Get(tenantSV)
 	}
 
-	if !foundBufferSize && sv != nil {
-		// The client did not provide buffer_size; use the cluster setting as default.
-		args.ConnResultsBufferSize = connResultsBufferSize.Get(sv)
-	}
-
-	// TODO(richardjcai): When connecting to the database, we'll want to
-	// check for CONNECT privilege on the database. #59875.
-	if _, ok := args.SessionDefaults["database"]; !ok {
-		// CockroachDB-specific behavior: if no database is specified,
-		// default to "defaultdb". In PostgreSQL this would be "postgres".
-		args.SessionDefaults["database"] = catalogkeys.DefaultDatabaseName
-	}
-
-	// The client might override the application name,
-	// which would prevent it from being counted in telemetry.
-	// We've decided that this noise in the data is acceptable.
-	if appName, ok := args.SessionDefaults["application_name"]; ok {
-		if appName == catconstants.ReportableAppNamePrefix+catconstants.InternalSQLAppName {
-			telemetry.Inc(sqltelemetry.CockroachShellCounter)
-		}
-	}
-
-	return args, nil
-}
-
-func loadParameter(ctx context.Context, key, value string, args *sql.SessionArgs) error {
-	key = strings.ToLower(key)
-	exists, configurable := sql.IsSessionVariableConfigurable(key)
-
-	switch {
-	case exists && configurable:
-		args.SessionDefaults[key] = value
-	case sql.IsCustomOptionSessionVariable(key):
-		args.CustomOptionSessionDefaults[key] = value
-	case !exists:
-		if _, ok := sql.UnsupportedVars[key]; ok {
-			counter := sqltelemetry.UnimplementedClientStatusParameterCounter(key)
-			telemetry.Inc(counter)
-		}
-		log.Warningf(ctx, "unknown configuration parameter: %q", key)
-
-	case !configurable:
-		return pgerror.Newf(pgcode.CantChangeRuntimeParam,
-			"parameter %q cannot be changed", key)
-	}
-	return nil
-}
-
-// option represents an option argument passed in the connection URL.
-type option struct {
-	key   string
-	value string
-}
-
-// parseOptions parses the given string into the options. The options must be
-// separated by space and have one of the following patterns:
-// '-c key=value', '-ckey=value', '--key=value'
-func parseOptions(optionsString string) ([]option, error) {
-	var res []option
-	optionsRaw, err := url.QueryUnescape(optionsString)
-	if err != nil {
-		return nil, pgerror.Newf(pgcode.ProtocolViolation, "failed to unescape options %q", optionsString)
-	}
-
-	lastWasDashC := false
-	opts := splitOptions(optionsRaw)
-
-	for i := 0; i < len(opts); i++ {
-		prefix := ""
-		if len(opts[i]) > 1 {
-			prefix = opts[i][:2]
-		}
-
-		switch {
-		case opts[i] == "-c":
-			lastWasDashC = true
-			continue
-		case lastWasDashC:
-			lastWasDashC = false
-			// if the last option was '-c' parse current option with no regard to
-			// the prefix
-			prefix = ""
-		case prefix == "--" || prefix == "-c":
-			lastWasDashC = false
-		default:
-			return nil, pgerror.Newf(pgcode.ProtocolViolation,
-				"option %q is invalid, must have prefix '-c' or '--'", opts[i])
-		}
-
-		opt, err := splitOption(opts[i], prefix)
-		if err != nil {
-			return nil, err
-		}
-		res = append(res, opt)
-	}
-	return res, nil
-}
-
-// splitOptions slices the given string into substrings separated by space
-// unless the space is escaped using backslashes '\\'. It also skips multiple
-// subsequent spaces.
-func splitOptions(options string) []string {
-	var res []string
-	var sb strings.Builder
-	i := 0
-	for i < len(options) {
-		sb.Reset()
-		// skip leading space
-		for i < len(options) && unicode.IsSpace(rune(options[i])) {
-			i++
-		}
-		if i == len(options) {
-			break
-		}
-
-		lastWasEscape := false
-
-		for i < len(options) {
-			if unicode.IsSpace(rune(options[i])) && !lastWasEscape {
-				break
-			}
-			if !lastWasEscape && options[i] == '\\' {
-				lastWasEscape = true
-			} else {
-				lastWasEscape = false
-				sb.WriteByte(options[i])
-			}
-			i++
-		}
-
-		res = append(res, sb.String())
-	}
-
-	return res
-}
-
-// splitOption splits the given opt argument into substrings separated by '='.
-// It returns an error if the given option does not comply with the pattern
-// "key=value" and the number of elements in the result is not two.
-// splitOption removes the prefix from the key and replaces '-' with '_' so
-// "--option-name=value" becomes [option_name, value].
-func splitOption(opt, prefix string) (option, error) {
-	kv := strings.Split(opt, "=")
-
-	if len(kv) != 2 {
-		return option{}, pgerror.Newf(pgcode.ProtocolViolation,
-			"option %q is invalid, check '='", opt)
-	}
-
-	kv[0] = strings.TrimPrefix(kv[0], prefix)
-
-	return option{key: strings.ReplaceAll(kv[0], "-", "_"), value: kv[1]}, nil
-}
-
-// Note: Usage of an env var here makes it possible to unconditionally
-// enable this feature when cluster settings do not work reliably,
-// e.g. in multi-tenant setups in v20.2. This override mechanism can
-// be removed after all of CC is moved to use v21.1 or a version which
-// supports cluster settings.
-var trustClientProvidedRemoteAddrOverride = envutil.EnvOrDefaultBool("COCKROACH_TRUST_CLIENT_PROVIDED_SQL_REMOTE_ADDR", false)
-
-// TestingSetTrustClientProvidedRemoteAddr is used in tests.
-func (s *Server) TestingSetTrustClientProvidedRemoteAddr(b bool) func() {
-	prev := s.trustClientProvidedRemoteAddr.Get()
-	s.trustClientProvidedRemoteAddr.Set(b)
-	return func() { s.trustClientProvidedRemoteAddr.Set(prev) }
-}
-
-// maybeUpgradeToSecureConn upgrades the connection to TLS/SSL if
-// requested by the client, and available in the server configuration.
-func (s *Server) maybeUpgradeToSecureConn(
-	ctx context.Context,
-	conn net.Conn,
-	connType hba.ConnType,
-	version uint32,
-	buf *pgwirebase.ReadBuffer,
-) (newConn net.Conn, newConnType hba.ConnType, newVersion uint32, clientErr, serverErr error) {
-	// By default, this is a no-op.
-	newConn = conn
-	newConnType = connType
-	newVersion = version
-	var n int // byte counts
-
-	if version != versionSSL {
-		// The client did not require a SSL connection.
-
-		// Insecure mode: nothing to say, nothing to do.
-		// TODO(knz): Remove this condition - see
-		// https://github.com/cockroachdb/cockroach/issues/53404
-		if s.cfg.Insecure {
-			return
-		}
-
-		// Secure mode: disallow if TCP and the user did not opt into
-		// non-TLS SQL conns.
-		if !s.cfg.AcceptSQLWithoutTLS && connType != hba.ConnLocal {
-			clientErr = pgerror.New(pgcode.ProtocolViolation, ErrSSLRequired)
-		}
-		return
-	}
-
-	if connType == hba.ConnLocal {
-		// No existing PostgreSQL driver ever tries to activate TLS over
-		// a unix socket. But in case someone, sometime, somewhere, makes
-		// that mistake, let them know that we don't want it.
-		clientErr = pgerror.New(pgcode.ProtocolViolation,
-			"cannot use SSL/TLS over local connections")
-		return
-	}
-
-	// Protocol sanity check.
-	if len(buf.Msg) > 0 {
-		serverErr = errors.Errorf("unexpected data after SSLRequest: %q", buf.Msg)
-		return
-	}
-
-	// The client has requested SSL. We're going to try and upgrade the
-	// connection to use TLS/SSL.
-
-	// Do we have a TLS configuration?
-	tlsConfig, serverErr := s.execCfg.RPCContext.GetServerTLSConfig()
-	if serverErr != nil {
-		return
-	}
-
-	if tlsConfig == nil {
-		// We don't have a TLS configuration available, so we can't honor
-		// the client's request.
-		n, serverErr = conn.Write(sslUnsupported)
-		if serverErr != nil {
-			return
-		}
-	} else {
-		// We have a TLS configuration. Upgrade the connection.
-		n, serverErr = conn.Write(sslSupported)
-		if serverErr != nil {
-			return
-		}
-		newConn = tls.Server(conn, tlsConfig)
-		newConnType = hba.ConnHostSSL
-	}
-	s.metrics.BytesOutCount.Inc(int64(n))
-
-	// Finally, re-read the version/command from the client.
-	newVersion, *buf, serverErr = s.readVersion(newConn)
-	return
+	return cp.SessionArgs, nil
 }
 
 // registerConn registers the incoming connection to the map of active connections,
@@ -1350,46 +890,29 @@ func (s *Server) registerConn(
 	// since DrainClient() waits for that number to drop to zero,
 	// so we don't want it to oscillate unnecessarily.
 	if !rejectNewConnections {
-		s.metrics.NewConns.Inc(1)
-		s.metrics.Conns.Inc(1)
+		s.tenantMetrics.NewConns.Inc(1)
+		s.tenantMetrics.Conns.Inc(1)
 		prevOnCloseFn := onCloseFn
-		onCloseFn = func() { prevOnCloseFn(); s.metrics.Conns.Dec(1) }
+		onCloseFn = func() { prevOnCloseFn(); s.tenantMetrics.Conns.Dec(1) }
 	}
-	return
-}
-
-// readVersion reads the start-up message, then returns the version
-// code (first uint32 in message) and the buffer containing the rest
-// of the payload.
-func (s *Server) readVersion(
-	conn io.Reader,
-) (version uint32, buf pgwirebase.ReadBuffer, err error) {
-	var n int
-	buf = pgwirebase.MakeReadBuffer(
-		pgwirebase.ReadBufferOptionWithClusterSettings(&s.execCfg.Settings.SV),
-	)
-	n, err = buf.ReadUntypedMsg(conn)
-	if err != nil {
-		return
-	}
-	version, err = buf.GetUint32()
-	if err != nil {
-		return
-	}
-	s.metrics.BytesInCount.Inc(int64(n))
 	return
 }
 
 // sendErr sends errors to the client during the connection startup
 // sequence. Later error sends during/after authentication are handled
 // in conn.go.
-func (s *Server) sendErr(ctx context.Context, conn net.Conn, err error) error {
-	msgBuilder := newWriteBuffer(s.metrics.BytesOutCount)
+func (s *Server) sendErr(
+	ctx context.Context, st *cluster.Settings, conn net.Conn, err error,
+) error {
+	w := errWriter{
+		sv:         &st.SV,
+		msgBuilder: newWriteBuffer(s.tenantMetrics.BytesOutCount),
+	}
 	// We could, but do not, report server-side network errors while
 	// trying to send the client error. This is because clients that
 	// receive error payload are highly correlated with clients
 	// disconnecting abruptly.
-	_ /* err */ = writeErr(ctx, &s.execCfg.Settings.SV, err, msgBuilder, conn)
+	_ /* err */ = w.writeErr(ctx, err, conn)
 	_ = conn.Close()
 	return err
 }

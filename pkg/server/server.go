@@ -13,6 +13,7 @@ package server
 import (
 	"context"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -156,6 +157,13 @@ type Server struct {
 	protectedtsProvider protectedts.Provider
 
 	spanConfigSubscriber spanconfig.KVSubscriber
+
+	// pgL is the SQL listener.
+	pgL net.Listener
+
+	// pgPreServer handles SQL connections prior to routing them to a
+	// specific tenant.
+	pgPreServer *pgwire.PreServeConnHandler
 
 	// TODO(knz): pull this down under the serverController.
 	sqlServer *SQLServer
@@ -864,6 +872,21 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	settingsWriter := newSettingsCacheWriter(engines[0], stopper)
 	stopTrigger := newStopTrigger()
 
+	// Initialize the pgwire pre-server, which initializes connections,
+	// sets up TLS and reads client status parameters.
+	pgPreServer := pgwire.MakePreServeConnHandler(
+		cfg.AmbientCtx,
+		cfg.Config,
+		cfg.Settings,
+		rpcContext.GetServerTLSConfig,
+		cfg.HistogramWindowInterval(),
+		sqlMonitorAndMetrics.rootSQLMemoryMonitor,
+		true, /* acceptTenantName */
+	)
+	for _, m := range pgPreServer.Metrics() {
+		registry.AddMetricStruct(m)
+	}
+
 	// Instantiate the SQL server proper.
 	sqlServer, err := newSQLServer(ctx, sqlServerArgs{
 		sqlServerOptionalKVArgs: sqlServerOptionalKVArgs{
@@ -973,7 +996,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	sStatus.baseStatusServer.sqlServer = sqlServer
 
 	// Create a server controller.
-	sc := newServerController(ctx, stopper,
+	sc := newServerController(ctx, stopper, st,
 		lateBoundServer.newServerForTenant, &systemServerWrapper{server: lateBoundServer})
 
 	// Create the debug API server.
@@ -1035,6 +1058,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		replicationReporter:    replicationReporter,
 		protectedtsProvider:    protectedtsProvider,
 		spanConfigSubscriber:   spanConfig.subscriber,
+		pgPreServer:            &pgPreServer,
 		sqlServer:              sqlServer,
 		serverController:       sc,
 		externalStorageBuilder: externalStorageBuilder,
@@ -1276,10 +1300,11 @@ func (s *Server) PreStart(ctx context.Context) error {
 	// and dispatches the server worker for the RPC.
 	// The SQL listener is returned, to start the SQL server later
 	// below when the server has initialized.
-	pgL, rpcLoopbackDialFn, startRPCServer, err := startListenRPCAndSQL(ctx, workersCtx, s.cfg.BaseConfig, s.stopper, s.grpc)
+	pgL, rpcLoopbackDialFn, startRPCServer, err := startListenRPCAndSQL(ctx, workersCtx, s.cfg.BaseConfig, s.stopper, s.grpc, true /* enableSQLListener */)
 	if err != nil {
 		return err
 	}
+	s.pgL = pgL
 
 	// Tell the RPC context how to connect in-memory.
 	s.rpcContext.SetLoopbackDialer(rpcLoopbackDialFn)
@@ -1742,7 +1767,6 @@ func (s *Server) PreStart(ctx context.Context) error {
 		workersCtx,
 		s.stopper,
 		s.cfg.TestingKnobs,
-		pgL,
 		orphanedLeasesTimeThresholdNanos,
 	); err != nil {
 		return err
@@ -1823,14 +1847,18 @@ func (s *Server) PreStart(ctx context.Context) error {
 func (s *Server) AcceptClients(ctx context.Context) error {
 	workersCtx := s.AnnotateCtx(context.Background())
 
-	if err := s.sqlServer.startServeSQL(
+	if err := startServeSQL(
 		workersCtx,
 		s.stopper,
-		s.sqlServer.pgL,
+		s.pgPreServer,
+		s.serverController.sqlMux,
+		s.pgL,
 		&s.cfg.SocketFile,
 	); err != nil {
 		return err
 	}
+
+	s.sqlServer.isReady.Set(true)
 
 	log.Event(ctx, "server ready")
 	return nil

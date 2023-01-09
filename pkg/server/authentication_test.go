@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/debug"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -525,7 +526,7 @@ func TestAuthenticationAPIUserLogin(t *testing.T) {
 	if len(cookies) == 0 {
 		t.Fatalf("good login got no cookies: %v", response)
 	}
-	sessionCookie, err := findAndDecodeSessionCookie(context.Background(), cookies)
+	sessionCookie, err := findAndDecodeSessionCookie(context.Background(), ts.Cfg.Settings, cookies)
 	if err != nil {
 		t.Fatalf("failed to decode session cookie: %s", err)
 	}
@@ -926,7 +927,8 @@ func TestFindSessionCookieValue(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(fmt.Sprintf("find-session-cookie/%s", test.name), func(t *testing.T) {
-			res, err := findSessionCookieValue(test.cookieArg)
+			st := cluster.MakeClusterSettings()
+			res, err := findSessionCookieValue(st, test.cookieArg)
 			require.Equal(t, test.resExpected, res)
 			require.Equal(t, test.errorExpected, err != nil)
 		})
