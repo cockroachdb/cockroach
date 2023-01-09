@@ -398,7 +398,13 @@ func (ex *connExecutor) execStmtInOpenState(
 		switch e.Mode {
 		case tree.ExplainDebug:
 			telemetry.Inc(sqltelemetry.ExplainAnalyzeDebugUseCounter)
-			ih.SetOutputMode(explainAnalyzeDebugOutput, explain.Flags{})
+			flags := explain.MakeFlags(&e.ExplainOptions)
+			flags.Verbose = true
+			flags.ShowTypes = true
+			if ex.server.cfg.TestingKnobs.DeterministicExplain {
+				flags.Redact = explain.RedactAll
+			}
+			ih.SetOutputMode(explainAnalyzeDebugOutput, flags)
 
 		case tree.ExplainPlan:
 			telemetry.Inc(sqltelemetry.ExplainAnalyzeUseCounter)

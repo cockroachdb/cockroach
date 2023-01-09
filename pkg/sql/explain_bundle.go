@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -124,6 +125,7 @@ type diagnosticsBundle struct {
 // system.statement_diagnostics.
 func buildStatementBundle(
 	ctx context.Context,
+	explainFlags explain.Flags,
 	db *kv.DB,
 	ie *InternalExecutor,
 	stmtRawSQL string,
@@ -136,7 +138,7 @@ func buildStatementBundle(
 	if plan == nil {
 		return diagnosticsBundle{collectionErr: errors.AssertionFailedf("execution terminated early")}
 	}
-	b := makeStmtBundleBuilder(db, ie, stmtRawSQL, plan, trace, placeholders)
+	b := makeStmtBundleBuilder(explainFlags, db, ie, stmtRawSQL, plan, trace, placeholders)
 
 	b.addStatement()
 	b.addOptPlans(ctx)
@@ -187,6 +189,8 @@ func (bundle *diagnosticsBundle) insert(
 
 // stmtBundleBuilder is a helper for building a statement bundle.
 type stmtBundleBuilder struct {
+	flags explain.Flags
+
 	db *kv.DB
 	ie *InternalExecutor
 
@@ -199,6 +203,7 @@ type stmtBundleBuilder struct {
 }
 
 func makeStmtBundleBuilder(
+	flags explain.Flags,
 	db *kv.DB,
 	ie *InternalExecutor,
 	stmt string,
@@ -207,7 +212,7 @@ func makeStmtBundleBuilder(
 	placeholders *tree.PlaceholderInfo,
 ) stmtBundleBuilder {
 	b := stmtBundleBuilder{
-		db: db, ie: ie, stmt: stmt, plan: plan, trace: trace, placeholders: placeholders,
+		flags: flags, db: db, ie: ie, stmt: stmt, plan: plan, trace: trace, placeholders: placeholders,
 	}
 	b.buildPrettyStatement()
 	b.z.Init()
@@ -237,6 +242,10 @@ func (b *stmtBundleBuilder) buildPrettyStatement() {
 // addStatement adds the pretty-printed statement in b.stmt as file
 // statement.txt.
 func (b *stmtBundleBuilder) addStatement() {
+	if b.flags.RedactValues {
+		return
+	}
+
 	output := b.stmt
 
 	if b.placeholders != nil && len(b.placeholders.Values) != 0 {
@@ -255,6 +264,10 @@ func (b *stmtBundleBuilder) addStatement() {
 // addOptPlans adds the EXPLAIN (OPT) variants as files opt.txt, opt-v.txt,
 // opt-vv.txt.
 func (b *stmtBundleBuilder) addOptPlans(ctx context.Context) {
+	if b.flags.RedactValues {
+		return
+	}
+
 	if b.plan.mem == nil || b.plan.mem.RootExpr() == nil {
 		// No optimizer plans; an error must have occurred during planning.
 		b.z.AddFile("opt.txt", noPlan)
@@ -278,6 +291,10 @@ func (b *stmtBundleBuilder) addOptPlans(ctx context.Context) {
 
 // addExecPlan adds the EXPLAIN (VERBOSE) plan as file plan.txt.
 func (b *stmtBundleBuilder) addExecPlan(plan string) {
+	if b.flags.RedactValues {
+		return
+	}
+
 	if plan == "" {
 		plan = "no plan"
 	}
@@ -285,6 +302,10 @@ func (b *stmtBundleBuilder) addExecPlan(plan string) {
 }
 
 func (b *stmtBundleBuilder) addDistSQLDiagrams() {
+	if b.flags.RedactValues {
+		return
+	}
+
 	for i, d := range b.plan.distSQLFlowInfos {
 		d.diagram.AddSpans(b.trace)
 		_, url, err := d.diagram.ToURL()
@@ -330,6 +351,10 @@ func (b *stmtBundleBuilder) addExplainVec() {
 // trace (the default and the jaeger formats), the third one is a human-readable
 // representation.
 func (b *stmtBundleBuilder) addTrace() {
+	if b.flags.RedactValues {
+		return
+	}
+
 	traceJSONStr, err := tracing.TraceToJSON(b.trace)
 	if err != nil {
 		b.z.AddFile("trace.json", err.Error())
@@ -375,6 +400,11 @@ func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
 	}
 
 	b.z.AddFile("env.sql", buf.String())
+
+	if b.flags.RedactValues {
+		b.z.AddFile("schema.sql", "-- schema redacted\n")
+		return
+	}
 
 	mem := b.plan.mem
 	if mem == nil {
@@ -445,6 +475,10 @@ func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
 }
 
 func (b *stmtBundleBuilder) addErrors(queryErr, payloadErr, commErr error) {
+	if b.flags.RedactValues {
+		return
+	}
+
 	if queryErr == nil && payloadErr == nil && commErr == nil {
 		return
 	}
