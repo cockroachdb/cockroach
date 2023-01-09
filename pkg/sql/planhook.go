@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -123,7 +124,8 @@ type PlanHookState interface {
 	SpanConfigReconciler() spanconfig.Reconciler
 	BufferClientNotice(ctx context.Context, notice pgnotice.Notice)
 	Txn() *kv.Txn
-	CreateTenant(ctx context.Context, name roachpb.TenantName) (roachpb.TenantID, error)
+	CreateTenant(ctx context.Context, id uint64, name roachpb.TenantName) (roachpb.TenantID, error)
+	LookupTenantInfo(ctx context.Context, tenantSpec *tree.TenantSpec, op string) (*descpb.TenantInfo, error)
 }
 
 // AddPlanHook adds a hook used to short-circuit creating a planNode from a

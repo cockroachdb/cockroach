@@ -107,9 +107,16 @@ func (d *delegator) delegateShowTenantClusterSettingList(
 	// Note: we do the validation in SQL (via CASE...END) because the
 	// TenantID expression may be complex (incl subqueries, etc) and we
 	// cannot evaluate it in the go code.
+	var tenantSpec string
+	if stmt.TenantSpec.IsName {
+		tenantSpec = `SELECT id AS tenant_id
+FROM system.tenant WHERE tenant_name = (` + stmt.TenantSpec.Expr.String() + `)`
+	} else {
+		tenantSpec = `SELECT (` + stmt.TenantSpec.Expr.String() + `):::INT AS tenant_id`
+	}
 	return parse(`
 WITH
-  tenant_id AS (SELECT (` + stmt.TenantID.String() + `):::INT AS tenant_id),
+  tenant_id AS (` + tenantSpec + `),
   isvalid AS (
     SELECT
       CASE

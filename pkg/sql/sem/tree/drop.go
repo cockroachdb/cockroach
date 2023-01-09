@@ -237,8 +237,8 @@ func (node *DropExternalConnection) Format(ctx *FmtCtx) {
 
 // DropTenant represents a DROP TENANT command.
 type DropTenant struct {
-	Name     Name
-	IfExists bool
+	TenantSpec *TenantSpec
+	IfExists   bool
 }
 
 var _ Statement = &DropTenant{}
@@ -249,5 +249,5 @@ func (node *DropTenant) Format(ctx *FmtCtx) {
 	if node.IfExists {
 		ctx.WriteString("IF EXISTS ")
 	}
-	ctx.FormatNode(&node.Name)
+	ctx.FormatNode(node.TenantSpec)
 }
