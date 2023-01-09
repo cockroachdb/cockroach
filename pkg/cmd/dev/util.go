@@ -78,6 +78,14 @@ func mustGetFlagInt(cmd *cobra.Command, name string) int {
 	return val
 }
 
+func mustGetConstrainedFlagInt(cmd *cobra.Command, name string, validate func(int) error) int {
+	val := mustGetFlagInt(cmd, name)
+	if err := validate(val); err != nil {
+		log.Fatalf("invalid argument: %v", err)
+	}
+	return val
+}
+
 func mustGetFlagDuration(cmd *cobra.Command, name string) time.Duration {
 	val, err := cmd.Flags().GetDuration(name)
 	if err != nil {
