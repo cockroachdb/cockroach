@@ -144,7 +144,7 @@ func initializeCachedSettings(
 ) error {
 	dec := settingswatcher.MakeRowDecoder(codec)
 	for _, kv := range kvs {
-		settings, val, _, err := dec.DecodeRow(kv)
+		settings, val, _, err := dec.DecodeRow(kv, nil)
 		if err != nil {
 			return errors.Wrap(err, `while decoding settings data
 -this likely indicates the settings table structure or encoding has been altered;
