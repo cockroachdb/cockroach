@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/settingswatcher"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -143,8 +144,9 @@ func initializeCachedSettings(
 	ctx context.Context, codec keys.SQLCodec, updater settings.Updater, kvs []roachpb.KeyValue,
 ) error {
 	dec := settingswatcher.MakeRowDecoder(codec)
+	var alloc *tree.DatumAlloc
 	for _, kv := range kvs {
-		settings, val, _, err := dec.DecodeRow(kv)
+		settings, val, _, err := dec.DecodeRow(kv, alloc)
 		if err != nil {
 			return errors.Wrap(err, `while decoding settings data
 -this likely indicates the settings table structure or encoding has been altered;
