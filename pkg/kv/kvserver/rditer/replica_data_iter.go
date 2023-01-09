@@ -54,9 +54,9 @@ type ReplicaMVCCDataIterator struct {
 	err error
 }
 
-// MakeAllKeySpans returns all key spans for the given Range, in
+// makeAllKeySpans returns all key spans for the given Range, in
 // sorted order.
-func MakeAllKeySpans(d *roachpb.RangeDescriptor) []roachpb.Span {
+func makeAllKeySpans(d *roachpb.RangeDescriptor) []roachpb.Span {
 	return Select(d.RangeID, SelectionOptions{
 		StateMachineSelectionOptions: StateMachineSelectionOptions{
 			ReplicatedBySpan: roachpb.RSpan{
@@ -88,26 +88,26 @@ func MakeReplicatedKeySpans(d *roachpb.RangeDescriptor) []roachpb.Span {
 	}).Spans()
 }
 
-// MakeReplicatedKeySpansExceptLockTable returns all key spans that are fully Raft
+// makeReplicatedKeySpansExceptLockTable returns all key spans that are fully Raft
 // replicated for the given Range, except for the lock table spans. These are
 // returned in the following sorted order:
 // 1. Replicated range-id local key span.
 // 2. Range-local key span.
 // 3. User key span.
-func MakeReplicatedKeySpansExceptLockTable(d *roachpb.RangeDescriptor) []roachpb.Span {
+func makeReplicatedKeySpansExceptLockTable(d *roachpb.RangeDescriptor) []roachpb.Span {
 	return []roachpb.Span{
 		makeRangeIDReplicatedSpan(d.RangeID),
 		makeRangeLocalKeySpan(d),
-		MakeUserKeySpan(d),
+		makeUserKeySpan(d),
 	}
 }
 
-// MakeReplicatedKeySpansExcludingUserAndLockTable returns all key spans that are fully Raft
+// makeReplicatedKeySpansExcludingUserAndLockTable returns all key spans that are fully Raft
 // replicated for the given Range, except for the lock table spans and user key span.
 // These are returned in the following sorted order:
 // 1. Replicated range-id local key span.
 // 2. Range-local key span.
-func MakeReplicatedKeySpansExcludingUserAndLockTable(d *roachpb.RangeDescriptor) []roachpb.Span {
+func makeReplicatedKeySpansExcludingUserAndLockTable(d *roachpb.RangeDescriptor) []roachpb.Span {
 	return []roachpb.Span{
 		makeRangeIDReplicatedSpan(d.RangeID),
 		makeRangeLocalKeySpan(d),
@@ -171,8 +171,8 @@ func makeRangeLockTableKeySpans(d *roachpb.RangeDescriptor) [2]roachpb.Span {
 	}
 }
 
-// MakeUserKeySpan returns the user key span.
-func MakeUserKeySpan(d *roachpb.RangeDescriptor) roachpb.Span {
+// makeUserKeySpan returns the user key span.
+func makeUserKeySpan(d *roachpb.RangeDescriptor) roachpb.Span {
 	userKeys := d.KeySpan()
 	return roachpb.Span{
 		Key:    userKeys.Key.AsRawKey(),
@@ -201,9 +201,9 @@ func NewReplicaMVCCDataIterator(
 	if !reader.ConsistentIterators() {
 		panic("ReplicaMVCCDataIterator needs a Reader that provides ConsistentIterators")
 	}
-	spans := MakeReplicatedKeySpansExceptLockTable(d)
+	spans := makeReplicatedKeySpansExceptLockTable(d)
 	if opts.ExcludeUserKeySpan {
-		spans = MakeReplicatedKeySpansExcludingUserAndLockTable(d)
+		spans = makeReplicatedKeySpansExcludingUserAndLockTable(d)
 	}
 	ri := &ReplicaMVCCDataIterator{
 		ReplicaDataIteratorOptions: opts,
@@ -354,7 +354,7 @@ func (ri *ReplicaMVCCDataIterator) HasPointAndRange() (bool, bool) {
 
 // IterateReplicaKeySpans iterates over each of a range's key spans, and calls
 // the given visitor with an iterator over its data. Specifically, it iterates
-// over the spans returned by either MakeAllKeySpans or MakeReplicatedKeySpans,
+// over the spans returned by either makeAllKeySpans or MakeReplicatedKeySpans,
 // and for each one provides first a point key iterator and then a range key
 // iterator. This is the expected order for Raft snapshots.
 //
@@ -378,7 +378,7 @@ func IterateReplicaKeySpans(
 	if replicatedOnly {
 		spans = MakeReplicatedKeySpans(desc)
 	} else {
-		spans = MakeAllKeySpans(desc)
+		spans = makeAllKeySpans(desc)
 	}
 	keyTypes := []storage.IterKeyType{storage.IterKeyTypePointsOnly, storage.IterKeyTypeRangesOnly}
 	for _, span := range spans {
@@ -426,9 +426,9 @@ func IterateMVCCReplicaKeySpans(
 	if !reader.ConsistentIterators() {
 		panic("reader must provide consistent iterators")
 	}
-	spans := MakeReplicatedKeySpansExceptLockTable(desc)
+	spans := makeReplicatedKeySpansExceptLockTable(desc)
 	if options.ExcludeUserKeySpan {
-		spans = MakeReplicatedKeySpansExcludingUserAndLockTable(desc)
+		spans = makeReplicatedKeySpansExcludingUserAndLockTable(desc)
 	}
 	if options.Reverse {
 		spanMax := len(spans) - 1

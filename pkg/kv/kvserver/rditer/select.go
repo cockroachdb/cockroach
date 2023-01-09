@@ -95,7 +95,7 @@ func Select(rangeID roachpb.RangeID, opts SelectionOptions) Selection {
 			s.statemachine = append(s.all, sps[:]...)
 		}
 		{
-			sp := MakeUserKeySpan(d)
+			sp := makeUserKeySpan(d)
 			s.all = append(s.all, sp)
 			s.statemachine = append(s.statemachine, sp)
 		}

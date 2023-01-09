@@ -405,7 +405,7 @@ func TestReplicaDataIteratorGlobalRangeKey(t *testing.T) {
 				if replicatedOnly {
 					expectedSpans = MakeReplicatedKeySpans(&desc)
 				} else {
-					expectedSpans = MakeAllKeySpans(&desc)
+					expectedSpans = makeAllKeySpans(&desc)
 				}
 
 				var actualSpans []roachpb.Span
@@ -441,9 +441,9 @@ func TestReplicaKeyRanges(t *testing.T) {
 		StartKey: roachpb.RKeyMin,
 		EndKey:   roachpb.RKeyMax,
 	}
-	checkOrdering(t, MakeAllKeySpans(&desc))
+	checkOrdering(t, makeAllKeySpans(&desc))
 	checkOrdering(t, MakeReplicatedKeySpans(&desc))
-	checkOrdering(t, MakeReplicatedKeySpansExceptLockTable(&desc))
+	checkOrdering(t, makeReplicatedKeySpansExceptLockTable(&desc))
 }
 
 func BenchmarkReplicaEngineDataIterator(b *testing.B) {
@@ -495,7 +495,7 @@ func benchReplicaEngineDataIterator(b *testing.B, numRanges, numKeysPerRange, va
 
 	for _, desc := range descs {
 		var keyBuf roachpb.Key
-		keySpans := MakeAllKeySpans(&desc)
+		keySpans := makeAllKeySpans(&desc)
 		for i := 0; i < numKeysPerRange; i++ {
 			keyBuf = append(keyBuf[:0], keySpans[i%len(keySpans)].Key...)
 			keyBuf = append(keyBuf, 0, 0, 0, 0)
@@ -611,7 +611,7 @@ func TestIterateMVCCReplicaKeySpans(t *testing.T) {
 			testutils.RunTrueAndFalse(t, "reverse", func(t *testing.T, reverse bool) {
 				// Each iteration would go through all spans because we usa a single
 				// range key covering all spans of all ranges.
-				expectedSpans := MakeReplicatedKeySpansExceptLockTable(&d.desc)
+				expectedSpans := makeReplicatedKeySpansExceptLockTable(&d.desc)
 				if reverse {
 					for i, j := 0, len(expectedSpans)-1; i < j; i, j = i+1, j-1 {
 						expectedSpans[i], expectedSpans[j] = expectedSpans[j], expectedSpans[i]
