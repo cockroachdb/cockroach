@@ -49,6 +49,7 @@ func parseClientProvidedSessionParameters(
 	origRemoteAddr net.Addr,
 	trustClientProvidedRemoteAddr bool,
 	acceptTenantName bool,
+	acceptSystemIdentityOption bool,
 ) (args tenantIndependentClientParameters, err error) {
 	args.SessionArgs = sql.SessionArgs{
 		SessionDefaults:             make(map[string]string),
@@ -158,6 +159,15 @@ func parseClientProvidedSessionParameters(
 					}
 					args.JWTAuthEnabled = b
 					continue
+
+				case "system_identity":
+					if !acceptSystemIdentityOption {
+						return args, pgerror.Newf(pgcode.InvalidParameterValue,
+							"cannot specify system identity via options")
+					}
+					args.SystemIdentity, _ = username.MakeSQLUsernameFromUserInput(opt.value, username.PurposeValidation)
+					continue
+
 				case "cluster":
 					if !acceptTenantName {
 						return args, pgerror.Newf(pgcode.InvalidParameterValue,
@@ -366,4 +376,11 @@ func (s *PreServeConnHandler) TestingSetTrustClientProvidedRemoteAddr(b bool) fu
 	prev := s.trustClientProvidedRemoteAddr.Get()
 	s.trustClientProvidedRemoteAddr.Set(b)
 	return func() { s.trustClientProvidedRemoteAddr.Set(prev) }
+}
+
+// TestingAcceptSystemIdentityOption is used in tests.
+func (s *PreServeConnHandler) TestingAcceptSystemIdentityOption(b bool) func() {
+	prev := s.acceptSystemIdentityOption.Get()
+	s.acceptSystemIdentityOption.Set(b)
+	return func() { s.acceptSystemIdentityOption.Set(prev) }
 }

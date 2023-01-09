@@ -112,6 +112,10 @@ type PreServeConnHandler struct {
 	// special hba.conf directive?)
 	trustClientProvidedRemoteAddr syncutil.AtomicBool
 
+	// acceptSystemIdentityOption determines whether the system_identity
+	// option will be read from the client. This is used in tests.
+	acceptSystemIdentityOption syncutil.AtomicBool
+
 	// acceptTenantName determines whether this pre-serve handler will
 	// interpret a tenant name specification in the connection
 	// parameters.
@@ -375,7 +379,7 @@ func (s *PreServeConnHandler) PreServe(
 
 	// Load the client-provided session parameters.
 	st.clientParameters, err = parseClientProvidedSessionParameters(
-		ctx, &buf, conn.RemoteAddr(), s.trustClientProvidedRemoteAddr.Get(), s.acceptTenantName)
+		ctx, &buf, conn.RemoteAddr(), s.trustClientProvidedRemoteAddr.Get(), s.acceptTenantName, s.acceptSystemIdentityOption.Get())
 	if err != nil {
 		st.Reserved.Close(ctx)
 		return conn, st, s.sendErr(ctx, conn, err)
