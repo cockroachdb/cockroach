@@ -129,7 +129,7 @@ enum ReplicaType {
 // non-nullable if #38302 is guaranteed to be on all nodes (I.E. 20.1).
 message ReplicaDescriptor {
   option (gogoproto.goproto_stringer) = false;
-  option (gogoproto.equal) = true;
+  option (gogoproto.equal) = false;
   option (gogoproto.populate) = true;
 
   optional int32 node_id = 1 [(gogoproto.nullable) = false,
