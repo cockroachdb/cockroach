@@ -565,6 +565,24 @@ func (mm *BytesMonitor) MakeBoundAccount() BoundAccount {
 	return BoundAccount{mon: mm}
 }
 
+// TransferAccount creates a new account with the budget
+// allocated in the given origAccount.
+// The new account is owned by this monitor.
+//
+// If the operation succeeds, origAccount is released.
+// If an error occurs, origAccount remains open and the caller
+// remains responsible for closing / shrinking it.
+func (mm *BytesMonitor) TransferAccount(
+	ctx context.Context, origAccount *BoundAccount,
+) (newAccount BoundAccount, err error) {
+	b := mm.MakeBoundAccount()
+	if err = b.Grow(ctx, origAccount.used); err != nil {
+		return newAccount, err
+	}
+	origAccount.Close(ctx)
+	return b, nil
+}
+
 // Init initializes a BoundAccount, connecting it to the given monitor. It is
 // similar to MakeBoundAccount, but allows the caller to save a BoundAccount
 // allocation.

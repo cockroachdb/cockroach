@@ -71,7 +71,7 @@ func TestTestServerArgsForTransientCluster(t *testing.T) {
 				PartOfCluster:             true,
 				JoinAddr:                  "127.0.0.1",
 				DisableTLSForHTTP:         true,
-				Addr:                      "127.0.0.1:7890",
+				Addr:                      "127.0.0.1:1334",
 				SQLAddr:                   "127.0.0.1:1234",
 				HTTPAddr:                  "127.0.0.1:4567",
 				SecondaryTenantPortOffset: -2,
@@ -95,7 +95,7 @@ func TestTestServerArgsForTransientCluster(t *testing.T) {
 				DisableDefaultTestTenant:  true,
 				PartOfCluster:             true,
 				JoinAddr:                  "127.0.0.1",
-				Addr:                      "127.0.0.1:7892",
+				Addr:                      "127.0.0.1:1336",
 				SQLAddr:                   "127.0.0.1:1236",
 				HTTPAddr:                  "127.0.0.1:4569",
 				SecondaryTenantPortOffset: -2,
@@ -118,8 +118,9 @@ func TestTestServerArgsForTransientCluster(t *testing.T) {
 			demoCtx := newDemoCtx()
 			demoCtx.SQLPoolMemorySize = tc.sqlPoolMemorySize
 			demoCtx.CacheSize = tc.cacheSize
-
-			actual := demoCtx.testServerArgsForTransientCluster(unixSocketDetails{}, tc.serverIdx, tc.joinAddr, "", 1234, 7890, 4567, stickyEnginesRegistry)
+			demoCtx.SQLPort = 1234
+			demoCtx.HTTPPort = 4567
+			actual := demoCtx.testServerArgsForTransientCluster(unixSocketDetails{}, tc.serverIdx, tc.joinAddr, "", stickyEnginesRegistry)
 			stopper := actual.Stopper
 			defer stopper.Stop(context.Background())
 
@@ -259,8 +260,8 @@ func TestTransientClusterMultitenant(t *testing.T) {
 
 	// This test is too slow to complete under the race detector, sometimes.
 	skip.UnderRace(t)
-	skip.UnderStress(t)
-	skip.WithIssue(t, 94862)
+
+	defer TestingForceRandomizeDemoPorts()()
 
 	demoCtx := newDemoCtx()
 	// Set up an empty 3-node cluster with tenants on each node.

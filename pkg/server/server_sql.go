@@ -176,9 +176,6 @@ type SQLServer struct {
 
 	isMeta1Leaseholder func(context.Context, hlc.ClockTimestamp) (bool, error)
 
-	// pgL is the shared RPC/SQL listener, opened when RPC was initialized.
-	pgL net.Listener
-
 	// isReady is the health status of the node. When true, the node is healthy;
 	// load balancers and connection management tools treat the node as "ready".
 	// When false, the node is unhealthy or "not ready", with load balancers and
@@ -1035,6 +1032,9 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	// Set up internal memory metrics for use by internal SQL executors.
 	// Don't add them to the registry now because it will be added as part of pgServer metrics.
 	sqlMemMetrics := sql.MakeMemMetrics("sql", cfg.HistogramWindowInterval())
+
+	// Initialize the pgwire server which handles connections
+	// established via the pgPreServer.
 	pgServer := pgwire.MakeServer(
 		cfg.AmbientCtx,
 		cfg.Config,
@@ -1320,7 +1320,6 @@ func (s *SQLServer) preStart(
 	ctx context.Context,
 	stopper *stop.Stopper,
 	knobs base.TestingKnobs,
-	pgL net.Listener,
 	orphanedLeasesTimeThresholdNanos int64,
 ) error {
 	// If necessary, start the tenant proxy first, to ensure all other
@@ -1388,7 +1387,6 @@ func (s *SQLServer) preStart(
 		s.sqlInstanceReader.Start(ctx, instance)
 	}
 
-	s.pgL = pgL
 	s.execCfg.GCJobNotifier.Start(ctx)
 	s.temporaryObjectCleaner.Start(ctx, stopper)
 	s.distSQLServer.Start()
@@ -1541,33 +1539,44 @@ func (s *SQLServer) AnnotateCtx(ctx context.Context) context.Context {
 
 // startServeSQL starts accepting incoming SQL connections over TCP.
 // It also starts listening on the Unix socket, if that was configured.
-func (s *SQLServer) startServeSQL(
-	ctx context.Context, stopper *stop.Stopper, pgL net.Listener, socketFileCfg *string,
+func startServeSQL(
+	ctx context.Context,
+	stopper *stop.Stopper,
+	pgPreServer *pgwire.PreServeConnHandler,
+	serveConn func(ctx context.Context, conn net.Conn, preServeStatus pgwire.PreServeStatus) error,
+	pgL net.Listener,
+	socketFileCfg *string,
 ) error {
 	log.Ops.Info(ctx, "serving sql connections")
 	// Start servicing SQL connections.
-	pgCtx := s.pgServer.AmbientCtx.AnnotateCtx(context.Background())
+
 	tcpKeepAlive := makeTCPKeepAliveManager()
 
 	// The connManager is responsible for tearing down the net.Conn
 	// objects when the stopper tells us to shut down.
 	connManager := netutil.MakeTCPServer(ctx, stopper)
 
-	_ = stopper.RunAsyncTaskEx(pgCtx,
+	_ = stopper.RunAsyncTaskEx(ctx,
 		stop.TaskOpts{TaskName: "pgwire-listener", SpanOpt: stop.SterileRootSpan},
 		func(ctx context.Context) {
 			err := connManager.ServeWith(ctx, pgL, func(ctx context.Context, conn net.Conn) {
-				connCtx := s.pgServer.AnnotateCtxForIncomingConn(ctx, conn)
+				connCtx := pgPreServer.AnnotateCtxForIncomingConn(ctx, conn)
 				tcpKeepAlive.configure(connCtx, conn)
 
-				if err := s.pgServer.ServeConn(connCtx, conn, pgwire.SocketTCP); err != nil {
+				conn, status, err := pgPreServer.PreServe(connCtx, conn, pgwire.SocketTCP)
+				if err != nil {
+					log.Ops.Errorf(connCtx, "serving SQL client conn: %v", err)
+					return
+				}
+
+				if err := serveConn(connCtx, conn, status); err != nil {
 					log.Ops.Errorf(connCtx, "serving SQL client conn: %v", err)
 				}
 			})
 			netutil.FatalIfUnexpected(err)
 		})
 
-	socketFile, socketLock, err := prepareUnixSocket(pgCtx, pgL, socketFileCfg)
+	socketFile, socketLock, err := prepareUnixSocket(ctx, pgL, socketFileCfg)
 	if err != nil {
 		return err
 	}
@@ -1605,13 +1614,20 @@ func (s *SQLServer) startServeSQL(
 			return err
 		}
 
-		if err := stopper.RunAsyncTaskEx(pgCtx,
+		if err := stopper.RunAsyncTaskEx(ctx,
 			stop.TaskOpts{TaskName: "unix-listener", SpanOpt: stop.SterileRootSpan},
 			func(ctx context.Context) {
 				err := connManager.ServeWith(ctx, unixLn, func(ctx context.Context, conn net.Conn) {
-					connCtx := s.pgServer.AnnotateCtxForIncomingConn(ctx, conn)
-					if err := s.pgServer.ServeConn(connCtx, conn, pgwire.SocketUnix); err != nil {
-						log.Ops.Errorf(connCtx, "%v", err)
+					connCtx := pgPreServer.AnnotateCtxForIncomingConn(ctx, conn)
+
+					conn, status, err := pgPreServer.PreServe(connCtx, conn, pgwire.SocketUnix)
+					if err != nil {
+						log.Ops.Errorf(connCtx, "serving SQL client conn: %v", err)
+						return
+					}
+
+					if err := serveConn(connCtx, conn, status); err != nil {
+						log.Ops.Errorf(connCtx, "serving SQL client conn: %v", err)
 					}
 				})
 				netutil.FatalIfUnexpected(err)
@@ -1619,8 +1635,6 @@ func (s *SQLServer) startServeSQL(
 			return err
 		}
 	}
-
-	s.isReady.Set(true)
 
 	return nil
 }

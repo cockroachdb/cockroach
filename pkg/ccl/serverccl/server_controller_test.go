@@ -61,8 +61,8 @@ func TestServerControllerHTTP(t *testing.T) {
 	require.NoError(t, err)
 
 	// Get a SQL connection to the test tenant.
-	sqlAddr := s.(*server.TestServer).TestingGetSQLAddrForTenant(ctx, "hello")
-	db2 := serverutils.OpenDBConn(t, sqlAddr, "defaultdb", false, s.Stopper())
+	sqlAddr := s.ServingSQLAddr()
+	db2 := serverutils.OpenDBConn(t, sqlAddr, "cluster:hello/defaultdb", false, s.Stopper())
 
 	// Instantiate the HTTP test username and privileges into the test tenant.
 	_, err = db2.Exec(fmt.Sprintf(`CREATE USER %s`, lexbase.EscapeSQLIdent(username)))

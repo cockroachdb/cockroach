@@ -311,7 +311,8 @@ func (a *authenticationV2Mux) getSession(
 	cookie := &serverpb.SessionCookie{}
 	var err error
 	if rawSession == apiV2UseCookieBasedAuth {
-		cookie, err = findAndDecodeSessionCookie(req.Context(), req.Cookies())
+		st := a.s.sqlServer.cfg.Settings
+		cookie, err = findAndDecodeSessionCookie(req.Context(), st, req.Cookies())
 	} else {
 		decoded, err := base64.StdEncoding.DecodeString(rawSession)
 		if err != nil {

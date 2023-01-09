@@ -15,10 +15,10 @@ send "\\demo ls\r"
 eexpect "Application tenant"
 eexpect "127.0.0.1:26257/defaultdb"
 eexpect "rpc"
-eexpect "127.0.0.1:26257"
+eexpect "127.0.0.1:26357"
 
 eexpect "System tenant"
-eexpect "127.0.0.1:26260/defaultdb"
+eexpect "127.0.0.1:26257/defaultdb"
 eexpect "rpc"
 eexpect "127.0.0.1:26360"
 

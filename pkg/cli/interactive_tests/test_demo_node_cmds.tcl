@@ -22,10 +22,13 @@ eexpect "defaultdb>"
 # Cannot operate on a node which does not exist.
 send "\\demo shutdown 8\r"
 eexpect "node 8 does not exist"
+eexpect "defaultdb>"
 send "\\demo restart 8\r"
 eexpect "node 8 does not exist"
+eexpect "defaultdb>"
 send "\\demo decommission 8\r"
 eexpect "node 8 does not exist"
+eexpect "defaultdb>"
 send "\\demo recommission 8\r"
 eexpect "node 8 does not exist"
 eexpect "defaultdb>"
@@ -119,7 +122,9 @@ eexpect "defaultdb>"
 
 # Shut down the newly created node.
 send "\\demo shutdown 6\r"
+set timeout 120
 eexpect "node 6 has been shutdown"
+set timeout 30
 eexpect "defaultdb>"
 
 # By now the node should have stabilized in gossip which allows us to query the more detailed information there.
@@ -134,6 +139,6 @@ eexpect "defaultdb>"
 # eexpect "6 |   true   |      false      | active"
 # eexpect "defaultdb>"
 
-send_eof
+send "\\q\r"
 eexpect eof
 end_test
