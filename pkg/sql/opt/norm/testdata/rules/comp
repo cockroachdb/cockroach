@@ -162,6 +162,18 @@ values
  ├── fd: ()-->(2)
  └── (true,)
 
+# Regression test for #94264. This rule should not apply when the argument to a
+# Plus or a Minus is NULL.
+norm expect-not=(NormalizeCmpPlusConst)
+SELECT (9223372036854775807+436256318)+2 < (CASE WHEN false THEN -1 END)
+----
+values
+ ├── columns: "?column?":1
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── (NULL,)
+
 # --------------------------------------------------
 # NormalizeCmpMinusConst
 # --------------------------------------------------
@@ -218,6 +230,19 @@ values
  ├── key: ()
  ├── fd: ()-->(2)
  └── (true,)
+
+# Regression test for #94264. This rule should not apply when the argument to a
+# Plus or a Minus is NULL.
+norm expect-not=(NormalizeCmpMinusConst)
+SELECT (9223372036854775807+436256318)-2 < (CASE WHEN false THEN -1 END)
+----
+values
+ ├── columns: "?column?":1
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── (NULL,)
+
 
 # --------------------------------------------------
 # NormalizeCmpConstMinus
@@ -280,6 +305,18 @@ select
  │    └── fd: (1)-->(2-6)
  └── filters
       └── ('2022-01-01' - s:4::TIME) >= '2022-01-01 01:00:00' [outer=(4), stable]
+
+# Regression test for #94264. This rule should not apply when the argument to a
+# Plus or a Minus is NULL.
+norm expect-not=(NormalizeCmpConstMinus)
+SELECT 2-(9223372036854775807+436256318) < (CASE WHEN false THEN -1 END)
+----
+values
+ ├── columns: "?column?":1
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── (NULL,)
 
 # --------------------------------------------------
 # NormalizeTupleEquality

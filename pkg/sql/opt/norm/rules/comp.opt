@@ -39,8 +39,8 @@
 #       normalize.go either. We can add once we've proved it's OK to do so.
 [NormalizeCmpPlusConst, Normalize]
 (Eq | Ge | Gt | Le | Lt
-    (Plus $leftLeft:^(ConstValue) $leftRight:(ConstValue))
-    $right:(ConstValue) &
+    (Plus $leftLeft:^(ConstValue) $leftRight:(Const))
+    $right:(Const) &
         (ArithmeticErrorsOnOverflow
             (TypeOf $right)
             (TypeOf $leftRight)
@@ -69,8 +69,8 @@
 # See NormalizeCmpPlusConst for more details.
 [NormalizeCmpMinusConst, Normalize]
 (Eq | Ge | Gt | Le | Lt
-    (Minus $leftLeft:^(ConstValue) $leftRight:(ConstValue))
-    $right:(ConstValue) &
+    (Minus $leftLeft:^(ConstValue) $leftRight:(Const))
+    $right:(Const) &
         (ArithmeticErrorsOnOverflow
             (TypeOf $right)
             (TypeOf $leftRight)
@@ -99,8 +99,8 @@
 # See NormalizeCmpPlusConst for more details.
 [NormalizeCmpConstMinus, Normalize]
 (Eq | Ge | Gt | Le | Lt
-    (Minus $leftLeft:(ConstValue) $leftRight:^(ConstValue))
-    $right:(ConstValue) &
+    (Minus $leftLeft:(Const) $leftRight:^(ConstValue))
+    $right:(Const) &
         (ArithmeticErrorsOnOverflow
             (TypeOf $leftLeft)
             (TypeOf $right)
