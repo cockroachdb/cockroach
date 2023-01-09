@@ -927,6 +927,12 @@ type Store struct {
 		replicaPlaceholders map[roachpb.RangeID]*ReplicaPlaceholder
 	}
 
+	// The set of replica being created by getOrCreateReplica.
+	creatingReplicas struct {
+		syncutil.Mutex
+		m map[roachpb.RangeID]struct{}
+	}
+
 	// The unquiesced subset of replicas.
 	unquiescedReplicas struct {
 		syncutil.Mutex
@@ -1292,6 +1298,10 @@ func NewStore(
 	s.mu.replicasByKey = newStoreReplicaBTree()
 	s.mu.uninitReplicas = map[roachpb.RangeID]*Replica{}
 	s.mu.Unlock()
+
+	s.creatingReplicas.Lock()
+	s.creatingReplicas.m = map[roachpb.RangeID]struct{}{}
+	s.creatingReplicas.Unlock()
 
 	s.unquiescedReplicas.Lock()
 	s.unquiescedReplicas.m = map[roachpb.RangeID]struct{}{}

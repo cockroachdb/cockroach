@@ -93,6 +93,67 @@ func (s *Store) getOrCreateReplica(
 	}
 }
 
+func (s *Store) tryGetReplica(
+	ctx context.Context,
+	rangeID roachpb.RangeID,
+	replicaID roachpb.ReplicaID,
+	creatingReplica *roachpb.ReplicaDescriptor,
+) (*Replica, error) {
+	repl, found := s.mu.replicasByRangeID.Load(rangeID)
+	if !found {
+		return nil, nil
+	}
+
+	repl.raftMu.Lock() // not unlocked on success
+	repl.mu.RLock()
+
+	// The current replica is removed, go back around.
+	if repl.mu.destroyStatus.Removed() {
+		repl.mu.RUnlock()
+		repl.raftMu.Unlock()
+		return nil, errRetry
+	}
+
+	// Drop messages from replicas we know to be too old.
+	if fromReplicaIsTooOldRLocked(repl, creatingReplica) {
+		repl.mu.RUnlock()
+		repl.raftMu.Unlock()
+		return nil, roachpb.NewReplicaTooOldError(creatingReplica.ReplicaID)
+	}
+
+	// The current replica needs to be removed, remove it and go back around.
+	if toTooOld := repl.replicaID < replicaID; toTooOld {
+		if shouldLog := log.V(1); shouldLog {
+			log.Infof(ctx, "found message for replica ID %d which is newer than %v",
+				replicaID, repl)
+		}
+
+		repl.mu.RUnlock()
+		if err := s.removeReplicaRaftMuLocked(ctx, repl, replicaID, RemoveOptions{
+			DestroyData: true,
+		}); err != nil {
+			log.Fatalf(ctx, "failed to remove replica: %v", err)
+		}
+		repl.raftMu.Unlock()
+		return nil, errRetry
+	}
+	defer repl.mu.RUnlock()
+
+	if repl.replicaID > replicaID {
+		// The sender is behind and is sending to an old replica.
+		// We could silently drop this message but this way we'll inform the
+		// sender that they may no longer exist.
+		repl.raftMu.Unlock()
+		return nil, &roachpb.RaftGroupDeletedError{}
+	}
+	if repl.replicaID != replicaID {
+		// This case should have been caught by handleToReplicaTooOld.
+		log.Fatalf(ctx, "intended replica id %d unexpectedly does not match the current replica %v",
+			replicaID, repl)
+	}
+	return repl, nil
+}
+
 // tryGetOrCreateReplica performs a single attempt at trying to lookup or
 // create a replica. It will fail with errRetry if it finds a Replica that has
 // been destroyed (and is no longer in Store.mu.replicas) or if during creation
@@ -106,64 +167,40 @@ func (s *Store) tryGetOrCreateReplica(
 	creatingReplica *roachpb.ReplicaDescriptor,
 ) (_ *Replica, created bool, _ error) {
 	// The common case: look up an existing (initialized) replica.
-	if repl, ok := s.mu.replicasByRangeID.Load(rangeID); ok {
-		repl.raftMu.Lock() // not unlocked on success
-		repl.mu.RLock()
-
-		// The current replica is removed, go back around.
-		if repl.mu.destroyStatus.Removed() {
-			repl.mu.RUnlock()
-			repl.raftMu.Unlock()
-			return nil, false, errRetry
-		}
-
-		// Drop messages from replicas we know to be too old.
-		if fromReplicaIsTooOldRLocked(repl, creatingReplica) {
-			repl.mu.RUnlock()
-			repl.raftMu.Unlock()
-			return nil, false, roachpb.NewReplicaTooOldError(creatingReplica.ReplicaID)
-		}
-
-		// The current replica needs to be removed, remove it and go back around.
-		if toTooOld := repl.replicaID < replicaID; toTooOld {
-			if shouldLog := log.V(1); shouldLog {
-				log.Infof(ctx, "found message for replica ID %d which is newer than %v",
-					replicaID, repl)
-			}
-
-			repl.mu.RUnlock()
-			if err := s.removeReplicaRaftMuLocked(ctx, repl, replicaID, RemoveOptions{
-				DestroyData: true,
-			}); err != nil {
-				log.Fatalf(ctx, "failed to remove replica: %v", err)
-			}
-			repl.raftMu.Unlock()
-			return nil, false, errRetry
-		}
-		defer repl.mu.RUnlock()
-
-		if repl.replicaID > replicaID {
-			// The sender is behind and is sending to an old replica.
-			// We could silently drop this message but this way we'll inform the
-			// sender that they may no longer exist.
-			repl.raftMu.Unlock()
-			return nil, false, &roachpb.RaftGroupDeletedError{}
-		}
-		if repl.replicaID != replicaID {
-			// This case should have been caught by handleToReplicaTooOld.
-			log.Fatalf(ctx, "intended replica id %d unexpectedly does not match the current replica %v",
-				replicaID, repl)
-		}
+	if repl, err := s.tryGetReplica(ctx, rangeID, replicaID, creatingReplica); err != nil {
+		return nil, false, err
+	} else if repl != nil {
 		return repl, false, nil
 	}
 
-	// No replica currently exists, so we'll try to create one. Before creating
-	// the replica, see if there is a tombstone which would indicate that this
-	// is a stale message.
-	// NB: we check this before creating a new Replica and adding it to the
-	// Store's Range map even though we must check it again after to avoid race
-	// conditions. This double-checked locking is an optimization to avoid this
-	// work when we know the Replica should not be created ahead of time.
+	// No replica currently exists, so we'll try to create one. Multiple
+	// goroutines may be racing at this point, so grab a "lock" over this rangeID
+	// in s.creatingReplicas map for one goroutine, and retry others.
+	s.creatingReplicas.Lock()
+	defer s.creatingReplicas.Unlock()
+	if _, ok := s.creatingReplicas.m[rangeID]; ok {
+		return nil, false, errRetry
+	}
+	s.creatingReplicas.m[rangeID] = struct{}{}
+	defer delete(s.creatingReplicas.m, rangeID)
+	// Now we are the only goroutine trying to create a replica for this rangeID.
+
+	// Repeat the quick path in case someone has overtaken us while we were
+	// grabbing the "lock".
+	if repl, err := s.tryGetReplica(ctx, rangeID, replicaID, creatingReplica); err != nil {
+		return nil, false, err
+	} else if repl != nil {
+		return repl, false, nil
+	}
+	// Now we have the guarantee that s.mu.replicasByRangeID does not contain
+	// rangeID, and only us can insert this rangeID. This also implies that the
+	// RangeTombstone in storage for this rangeID is "locked".
+	//
+	// FIXME: revisit callers of addReplicaToRangeMapLocked, we might need to lock
+	// s.creatingReplicas in a few other places.
+
+	// Before creating the replica, see if there is a tombstone which would
+	// indicate that this is a stale message.
 	tombstoneKey := keys.RangeTombstoneKey(rangeID)
 	var tombstone roachpb.RangeTombstone
 	if ok, err := storage.MVCCGetProto(
@@ -174,52 +211,19 @@ func (s *Store) tryGetOrCreateReplica(
 		return nil, false, &roachpb.RaftGroupDeletedError{}
 	}
 
-	// Create a new replica and lock it for raft processing.
+	// Create a new uninitialized replica and lock it for raft processing.
 	repl := newUnloadedReplica(ctx, rangeID, s, replicaID)
 	repl.raftMu.Lock() // not unlocked
-
 	// Take out read-only lock. Not strictly necessary here, but follows the
 	// normal lock protocol for destroyStatus.Set().
 	repl.readOnlyCmdMu.Lock()
-	// Install the replica in the store's replica map. The replica is in an
-	// inconsistent state, but nobody will be accessing it while we hold its
-	// locks.
-	s.mu.Lock()
 	// Grab the internal Replica state lock to ensure nobody mucks with our
 	// replica even outside of raft processing. Have to do this after grabbing
 	// Store.mu to maintain lock ordering invariant.
 	repl.mu.Lock()
 
-	// Add the range to range map, but not replicasByKey since the range's start
-	// key is unknown. The range will be added to replicasByKey later when a
-	// snapshot is applied. After unlocking Store.mu above, another goroutine
-	// might have snuck in and created the replica, so we retry on error.
-	if err := s.addReplicaToRangeMapLocked(repl); err != nil {
-		repl.mu.Unlock()
-		s.mu.Unlock()
-		repl.readOnlyCmdMu.Unlock()
-		repl.raftMu.Unlock()
-		return nil, false, errRetry
-	}
-	s.mu.uninitReplicas[repl.RangeID] = repl
-	s.mu.Unlock() // NB: unlocking out of order
-
 	// Initialize the Replica with the replicaID.
 	if err := func() error {
-		// Check for a tombstone again now that we've inserted into the Range
-		// map. This double-checked locking ensures that we avoid a race where a
-		// replica is created and destroyed between the initial unsynchronized
-		// tombstone check and the Range map linearization point. By checking
-		// again now, we make sure to synchronize with any goroutine that wrote
-		// a tombstone and then removed an old replica from the Range map.
-		if ok, err := storage.MVCCGetProto(
-			ctx, s.Engine(), tombstoneKey, hlc.Timestamp{}, &tombstone, storage.MVCCGetOptions{},
-		); err != nil {
-			return err
-		} else if ok && replicaID < tombstone.NextReplicaID {
-			return &roachpb.RaftGroupDeletedError{}
-		}
-
 		// An uninitialized replica should have an empty HardState.Commit at
 		// all times. Failure to maintain this invariant indicates corruption.
 		// And yet, we have observed this in the wild. See #40213.
@@ -288,15 +292,28 @@ func (s *Store) tryGetOrCreateReplica(
 		// ensure nobody tries to use it.
 		repl.mu.destroyStatus.Set(errors.Wrapf(err, "%s: failed to initialize", repl), destroyReasonRemoved)
 		repl.mu.Unlock()
-		s.mu.Lock()
-		s.unlinkReplicaByRangeIDLocked(ctx, rangeID)
-		s.mu.Unlock()
 		repl.readOnlyCmdMu.Unlock()
 		repl.raftMu.Unlock()
 		return nil, false, err
 	}
+
 	repl.mu.Unlock()
 	repl.readOnlyCmdMu.Unlock()
+	// NB: only repl.raftMu is now locked.
+
+	// Install the replica in the store's replica map.
+	s.mu.Lock()
+	// Add the range to range map, but not replicasByKey since the range's start
+	// key is unknown. The range will be added to replicasByKey later when a
+	// snapshot is applied.
+	if err := s.addReplicaToRangeMapLocked(repl); err != nil {
+		s.mu.Unlock()
+		repl.raftMu.Unlock()
+		return nil, false, err
+	}
+	s.mu.uninitReplicas[repl.RangeID] = repl
+	s.mu.Unlock()
+
 	return repl, true, nil
 }
 
