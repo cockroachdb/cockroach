@@ -1459,6 +1459,16 @@ func (s *SQLServer) preStart(
 	if err := s.settingsWatcher.Start(ctx); err != nil {
 		return errors.Wrap(err, "initializing settings")
 	}
+
+	// Prevent the server from starting if its binary version is too low
+	// for the current tenant cluster version.
+	tenantActiveVersion := s.settingsWatcher.GetTenantClusterVersion().ActiveVersion(ctx).Version
+	if s.execCfg.Settings.Version.BinaryVersion().Less(tenantActiveVersion) {
+		return errors.Newf("preventing SQL server from starting because its binary version "+
+			"is too low for the tenant active version: server binary version = %v, tenant active version = %v",
+			s.execCfg.Settings.Version.BinaryVersion(), tenantActiveVersion)
+	}
+
 	if err := s.systemConfigWatcher.Start(ctx, s.stopper); err != nil {
 		return errors.Wrap(err, "initializing settings")
 	}

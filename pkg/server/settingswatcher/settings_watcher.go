@@ -440,3 +440,7 @@ func (s *SettingsWatcher) GetStorageClusterVersion() clusterversion.ClusterVersi
 	}
 	return s.mu.storageClusterVersion
 }
+
+func (s *SettingsWatcher) GetTenantClusterVersion() clusterversion.Handle {
+	return s.settings.Version
+}
