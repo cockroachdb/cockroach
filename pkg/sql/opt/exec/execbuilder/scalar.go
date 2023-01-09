@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -740,13 +741,17 @@ func (b *Builder) buildUDF(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Typ
 		}
 		return plan, nil
 	}
+	// Enable stepping for volatile functions so that statements within the UDF
+	// see mutations made by the invoking statement and by previous executed
+	// statements.
+	enableStepping := udf.Volatility == volatility.Volatile
 	return tree.NewTypedRoutineExpr(
 		udf.Name,
 		args,
 		planFn,
 		len(udf.Body),
 		udf.Typ,
-		udf.Volatility,
+		enableStepping,
 		udf.CalledOnNullInput,
 	), nil
 }

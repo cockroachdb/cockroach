@@ -16,7 +16,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
@@ -51,7 +50,7 @@ func (p *planner) EvalRoutineExpr(
 	// Configure stepping for volatile routines so that mutations made by the
 	// invoking statement are visible to the routine.
 	txn := p.Txn()
-	if expr.Volatility == volatility.Volatile {
+	if expr.EnableStepping {
 		prevSteppingMode := txn.ConfigureStepping(ctx, kv.SteppingEnabled)
 		prevSeqNum := txn.GetLeafTxnInputState(ctx).ReadSeqNum
 		defer func() {
@@ -90,7 +89,7 @@ func (p *planner) EvalRoutineExpr(
 
 			// Place a sequence point before each statement in the routine for
 			// volatile functions.
-			if expr.Volatility == volatility.Volatile {
+			if expr.EnableStepping {
 				if err := txn.Step(ctx); err != nil {
 					return err
 				}
