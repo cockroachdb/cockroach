@@ -881,6 +881,25 @@ func walkReturningClause(v Visitor, clause ReturningClause) (ReturningClause, bo
 	}
 }
 
+// copyNode makes a copy of this clause without recursing in any child clause.
+func (ts *TenantSpec) copyNode() *TenantSpec {
+	tsCopy := *ts
+	return &tsCopy
+}
+
+func walkTenantSpec(v Visitor, ts *TenantSpec) (*TenantSpec, bool) {
+	if ts.Expr == nil {
+		return ts, false
+	}
+	e, changed := WalkExpr(v, ts.Expr)
+	if changed {
+		ret := ts.copyNode()
+		ret.Expr = e
+		return ret, true
+	}
+	return ts, false
+}
+
 // copyNode makes a copy of this Statement without recursing in any child Statements.
 func (n *ShowTenantClusterSetting) copyNode() *ShowTenantClusterSetting {
 	stmtCopy := *n
@@ -895,14 +914,12 @@ func (n *ShowTenantClusterSetting) walkStmt(v Visitor) Statement {
 		ret = n.copyNode()
 		ret.ShowClusterSetting = sc.(*ShowClusterSetting)
 	}
-	if n.TenantID != nil {
-		e, changed := WalkExpr(v, n.TenantID)
-		if changed {
-			if ret == n {
-				ret = n.copyNode()
-			}
-			ret.TenantID = e
+	ts, changed := walkTenantSpec(v, n.TenantSpec)
+	if changed {
+		if ret == n {
+			ret = n.copyNode()
 		}
+		ret.TenantSpec = ts
 	}
 	return ret
 }
@@ -921,14 +938,12 @@ func (n *ShowTenantClusterSettingList) walkStmt(v Visitor) Statement {
 		ret = n.copyNode()
 		ret.ShowClusterSettingList = sc.(*ShowClusterSettingList)
 	}
-	if n.TenantID != nil {
-		e, changed := WalkExpr(v, n.TenantID)
-		if changed {
-			if ret == n {
-				ret = n.copyNode()
-			}
-			ret.TenantID = e
+	ts, changed := walkTenantSpec(v, n.TenantSpec)
+	if changed {
+		if ret == n {
+			ret = n.copyNode()
 		}
+		ret.TenantSpec = ts
 	}
 	return ret
 }
@@ -949,14 +964,145 @@ func (n *AlterTenantSetClusterSetting) walkStmt(v Visitor) Statement {
 			ret.Value = e
 		}
 	}
-	if n.TenantID != nil {
-		e, changed := WalkExpr(v, n.TenantID)
+	ts, changed := walkTenantSpec(v, n.TenantSpec)
+	if changed {
+		if ret == n {
+			ret = n.copyNode()
+		}
+		ret.TenantSpec = ts
+	}
+	return ret
+}
+
+// copyNode makes a copy of this Statement without recursing in any child Statements.
+func (n *AlterTenantReplication) copyNode() *AlterTenantReplication {
+	stmtCopy := *n
+	if stmtCopy.Cutover != nil {
+		cutoverCopy := *stmtCopy.Cutover
+		stmtCopy.Cutover = &cutoverCopy
+	}
+	return &stmtCopy
+}
+
+// walkStmt is part of the walkableStmt interface.
+func (n *AlterTenantReplication) walkStmt(v Visitor) Statement {
+	ret := n
+	ts, changed := walkTenantSpec(v, n.TenantSpec)
+	if changed {
+		if ret == n {
+			ret = n.copyNode()
+		}
+		ret.TenantSpec = ts
+	}
+	if n.Cutover != nil {
+		e, changed := WalkExpr(v, n.Cutover.Timestamp)
 		if changed {
 			if ret == n {
 				ret = n.copyNode()
 			}
-			ret.TenantID = e
+			ret.Cutover.Timestamp = e
 		}
+	}
+	if n.Options.Retention != nil {
+		e, changed := WalkExpr(v, n.Options.Retention)
+		if changed {
+			if ret == n {
+				ret = n.copyNode()
+			}
+			ret.Options.Retention = e
+		}
+	}
+	return ret
+}
+
+// copyNode makes a copy of this Statement without recursing in any child Statements.
+func (n *CreateTenantFromReplication) copyNode() *CreateTenantFromReplication {
+	stmtCopy := *n
+	return &stmtCopy
+}
+
+// walkStmt is part of the walkableStmt interface.
+func (n *CreateTenantFromReplication) walkStmt(v Visitor) Statement {
+	ret := n
+	e, changed := WalkExpr(v, n.ReplicationSourceTenantName.Expr)
+	if changed {
+		if ret == n {
+			ret = n.copyNode()
+		}
+		ret.ReplicationSourceTenantName = &TenantSpec{IsName: true, Expr: e}
+	}
+	e, changed = WalkExpr(v, n.ReplicationSourceAddress)
+	if changed {
+		if ret == n {
+			ret = n.copyNode()
+		}
+		ret.ReplicationSourceAddress = e
+	}
+	if n.Options.Retention != nil {
+		e, changed := WalkExpr(v, n.Options.Retention)
+		if changed {
+			if ret == n {
+				ret = n.copyNode()
+			}
+			ret.Options.Retention = e
+		}
+	}
+	return ret
+}
+
+// copyNode makes a copy of this Statement without recursing in any child Statements.
+func (n *ShowTenant) copyNode() *ShowTenant {
+	stmtCopy := *n
+	return &stmtCopy
+}
+
+// walkStmt is part of the walkableStmt interface.
+func (n *ShowTenant) walkStmt(v Visitor) Statement {
+	ret := n
+	ts, changed := walkTenantSpec(v, n.TenantSpec)
+	if changed {
+		if ret == n {
+			ret = n.copyNode()
+		}
+		ret.TenantSpec = ts
+	}
+	return ret
+}
+
+// copyNode makes a copy of this Statement without recursing in any child Statements.
+func (n *AlterTenantRename) copyNode() *AlterTenantRename {
+	stmtCopy := *n
+	return &stmtCopy
+}
+
+// walkStmt is part of the walkableStmt interface.
+func (n *AlterTenantRename) walkStmt(v Visitor) Statement {
+	ret := n
+	ts, changed := walkTenantSpec(v, n.TenantSpec)
+	if changed {
+		if ret == n {
+			ret = n.copyNode()
+		}
+		ret.TenantSpec = ts
+	}
+	return ret
+}
+
+// copyNode makes a copy of this Statement without recursing in any child Statements.
+func (n *DropTenant) copyNode() *DropTenant {
+	stmtCopy := *n
+	return &stmtCopy
+}
+
+// walkStmt is part of the walkableStmt interface.
+func (n *DropTenant) walkStmt(v Visitor) Statement {
+	ret := n
+	ts, changed := walkTenantSpec(v, n.TenantSpec)
+	if changed {
+		if ret == n {
+			ret = n.copyNode()
+		}
+		ret.TenantSpec = ts
 	}
 	return ret
 }
@@ -1666,27 +1812,33 @@ func (stmt *BeginTransaction) walkStmt(v Visitor) Statement {
 	return ret
 }
 
+var _ walkableStmt = &AlterTenantRename{}
+var _ walkableStmt = &AlterTenantReplication{}
 var _ walkableStmt = &AlterTenantSetClusterSetting{}
-var _ walkableStmt = &CreateTable{}
 var _ walkableStmt = &Backup{}
-var _ walkableStmt = &Delete{}
-var _ walkableStmt = &Explain{}
-var _ walkableStmt = &Insert{}
-var _ walkableStmt = &Import{}
-var _ walkableStmt = &ParenSelect{}
-var _ walkableStmt = &Restore{}
-var _ walkableStmt = &Select{}
-var _ walkableStmt = &SelectClause{}
-var _ walkableStmt = &SetClusterSetting{}
-var _ walkableStmt = &SetVar{}
-var _ walkableStmt = &Update{}
-var _ walkableStmt = &ValuesClause{}
+var _ walkableStmt = &BeginTransaction{}
 var _ walkableStmt = &CancelQueries{}
 var _ walkableStmt = &CancelSessions{}
 var _ walkableStmt = &ControlJobs{}
 var _ walkableStmt = &ControlSchedules{}
-var _ walkableStmt = &BeginTransaction{}
+var _ walkableStmt = &CreateTable{}
+var _ walkableStmt = &CreateTenantFromReplication{}
+var _ walkableStmt = &Delete{}
+var _ walkableStmt = &DropTenant{}
+var _ walkableStmt = &Explain{}
+var _ walkableStmt = &Import{}
+var _ walkableStmt = &Insert{}
+var _ walkableStmt = &ParenSelect{}
+var _ walkableStmt = &Restore{}
+var _ walkableStmt = &SelectClause{}
+var _ walkableStmt = &Select{}
+var _ walkableStmt = &SetClusterSetting{}
+var _ walkableStmt = &SetVar{}
+var _ walkableStmt = &ShowTenantClusterSetting{}
+var _ walkableStmt = &ShowTenant{}
 var _ walkableStmt = &UnionClause{}
+var _ walkableStmt = &Update{}
+var _ walkableStmt = &ValuesClause{}
 
 // walkStmt walks the entire parsed stmt calling WalkExpr on each
 // expression, and replacing each expression with the one returned

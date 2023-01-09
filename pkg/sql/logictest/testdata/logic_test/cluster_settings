@@ -213,15 +213,15 @@ subtest tenant-cluster-settings
 # there.
 skipif config 3node-tenant-default-configs
 statement error admission.kv.enabled is a system-only setting and must be set in the admin tenant using SET CLUSTER SETTING
-ALTER TENANT 10 SET CLUSTER SETTING admission.kv.enabled=true
+ALTER TENANT [10] SET CLUSTER SETTING admission.kv.enabled=true
 
 onlyif config 3node-tenant-default-configs
 statement error ALTER TENANT can only be called by system operators
-ALTER TENANT 10 SET CLUSTER SETTING server.mem_profile.total_dump_size_limit='10M'
+ALTER TENANT [10] SET CLUSTER SETTING server.mem_profile.total_dump_size_limit='10M'
 
 skipif config 3node-tenant-default-configs
 statement error cannot use this statement to access cluster settings in system tenant
-ALTER TENANT 1 SET CLUSTER SETTING server.mem_profile.total_dump_size_limit='10M'
+ALTER TENANT [1] SET CLUSTER SETTING server.mem_profile.total_dump_size_limit='10M'
 
 skipif config 3node-tenant-default-configs
 statement ok
@@ -229,7 +229,7 @@ SELECT crdb_internal.create_tenant(10)
 
 skipif config 3node-tenant-default-configs
 statement ok
-ALTER TENANT 10 SET CLUSTER SETTING server.mem_profile.total_dump_size_limit='10M'
+ALTER TENANT [10] SET CLUSTER SETTING server.mem_profile.total_dump_size_limit='10M'
 
 skipif config 3node-tenant-default-configs
 statement ok
@@ -237,7 +237,7 @@ ALTER TENANT ALL SET CLUSTER SETTING server.mem_profile.total_dump_size_limit='1
 
 skipif config 3node-tenant-default-configs
 statement ok
-ALTER TENANT 10 RESET CLUSTER SETTING server.mem_profile.total_dump_size_limit
+ALTER TENANT [10] RESET CLUSTER SETTING server.mem_profile.total_dump_size_limit
 
 skipif config 3node-tenant-default-configs
 statement ok
