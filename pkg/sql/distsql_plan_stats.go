@@ -517,7 +517,6 @@ func (dsp *DistSQLPlanner) planAndRunCreateStats(
 		txn,
 		evalCtx.ExecCfg.Clock,
 		evalCtx.Tracing,
-		evalCtx.ExecCfg.ContentionRegistry,
 	)
 	defer recv.Release()
 
