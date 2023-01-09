@@ -130,88 +130,6 @@ func createRangeData(
 	return ps, rs
 }
 
-func verifyRDReplicatedOnlyMVCCIter(
-	t *testing.T, desc *roachpb.RangeDescriptor, eng storage.Engine,
-) {
-	t.Helper()
-	get := func(t *testing.T, useSpanSet, reverse bool) ([]storage.MVCCKey, []storage.MVCCRangeKey) {
-		readWriter := eng.NewReadOnly(storage.StandardDurability)
-		defer readWriter.Close()
-		if useSpanSet {
-			var spans spanset.SpanSet
-			spans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{
-				Key:    keys.MakeRangeIDPrefix(desc.RangeID),
-				EndKey: keys.MakeRangeIDPrefix(desc.RangeID).PrefixEnd(),
-			})
-			spans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{
-				Key:    keys.MakeRangeKeyPrefix(desc.StartKey),
-				EndKey: keys.MakeRangeKeyPrefix(desc.EndKey),
-			})
-			spans.AddMVCC(spanset.SpanReadOnly, roachpb.Span{
-				Key:    desc.StartKey.AsRawKey(),
-				EndKey: desc.EndKey.AsRawKey(),
-			}, hlc.Timestamp{WallTime: 42})
-			readWriter = spanset.NewReadWriterAt(readWriter, &spans, hlc.Timestamp{WallTime: 42})
-		}
-		var rangeStart roachpb.Key
-		actualKeys := []storage.MVCCKey{}
-		actualRanges := []storage.MVCCRangeKey{}
-		err := IterateMVCCReplicaKeySpans(desc, readWriter, IterateOptions{
-			CombineRangesAndPoints: false,
-			Reverse:                reverse,
-		}, func(iter storage.MVCCIterator, span roachpb.Span, keyType storage.IterKeyType) error {
-			for {
-				ok, err := iter.Valid()
-				require.NoError(t, err)
-				if !ok {
-					break
-				}
-				p, r := iter.HasPointAndRange()
-				if p {
-					if !reverse {
-						actualKeys = append(actualKeys, iter.Key())
-					} else {
-						actualKeys = append([]storage.MVCCKey{iter.Key()}, actualKeys...)
-					}
-				}
-				if r {
-					rangeKeys := iter.RangeKeys().Clone()
-					if !rangeKeys.Bounds.Key.Equal(rangeStart) {
-						rangeStart = rangeKeys.Bounds.Key
-						if !reverse {
-							for _, v := range rangeKeys.Versions {
-								actualRanges = append(actualRanges, rangeKeys.AsRangeKey(v))
-							}
-						} else {
-							for i := rangeKeys.Len() - 1; i >= 0; i-- {
-								actualRanges = append([]storage.MVCCRangeKey{
-									rangeKeys.AsRangeKey(rangeKeys.Versions[i]),
-								}, actualRanges...)
-							}
-						}
-					}
-				}
-				if reverse {
-					iter.Prev()
-				} else {
-					iter.Next()
-				}
-			}
-			return nil
-		})
-		require.NoError(t, err, "visitor failed")
-		return actualKeys, actualRanges
-	}
-	goldenActualKeys, goldenActualRanges := get(t, false /* useSpanSet */, false /* reverse */)
-	testutils.RunTrueAndFalse(t, "reverse", func(t *testing.T, reverse bool) {
-		testutils.RunTrueAndFalse(t, "spanset", func(t *testing.T, useSpanSet bool) {
-			actualKeys, actualRanges := get(t, useSpanSet, reverse)
-			require.Equal(t, goldenActualKeys, actualKeys)
-			require.Equal(t, goldenActualRanges, actualRanges)
-		})
-	})
-}
-
 // verifyIterateReplicaKeySpans verifies that IterateReplicaKeySpans returns the
 // expected keys in the expected order. The expected keys can be either MVCCKey
 // or MVCCRangeKey.
@@ -377,8 +295,82 @@ func TestIterateMVCCReplicaKeySpansSpansSet(t *testing.T) {
 	// Needs some thinking on how could we use this if ranges become
 	// fragmented.
 	//
-	// TODO(during review): inline this method. This is the only caller.
-	verifyRDReplicatedOnlyMVCCIter(t, &desc, eng)
+	get := func(t *testing.T, useSpanSet, reverse bool) ([]storage.MVCCKey, []storage.MVCCRangeKey) {
+		readWriter := eng.NewReadOnly(storage.StandardDurability)
+		defer readWriter.Close()
+		if useSpanSet {
+			var spans spanset.SpanSet
+			spans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{
+				Key:    keys.MakeRangeIDPrefix(desc.RangeID),
+				EndKey: keys.MakeRangeIDPrefix(desc.RangeID).PrefixEnd(),
+			})
+			spans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{
+				Key:    keys.MakeRangeKeyPrefix(desc.StartKey),
+				EndKey: keys.MakeRangeKeyPrefix(desc.EndKey),
+			})
+			spans.AddMVCC(spanset.SpanReadOnly, roachpb.Span{
+				Key:    desc.StartKey.AsRawKey(),
+				EndKey: desc.EndKey.AsRawKey(),
+			}, hlc.Timestamp{WallTime: 42})
+			readWriter = spanset.NewReadWriterAt(readWriter, &spans, hlc.Timestamp{WallTime: 42})
+		}
+		var rangeStart roachpb.Key
+		var actualKeys []storage.MVCCKey
+		var actualRanges []storage.MVCCRangeKey
+		err := IterateMVCCReplicaKeySpans(&desc, readWriter, IterateOptions{
+			CombineRangesAndPoints: false,
+			Reverse:                reverse,
+		}, func(iter storage.MVCCIterator, span roachpb.Span, keyType storage.IterKeyType) error {
+			for {
+				ok, err := iter.Valid()
+				require.NoError(t, err)
+				if !ok {
+					break
+				}
+				p, r := iter.HasPointAndRange()
+				if p {
+					if !reverse {
+						actualKeys = append(actualKeys, iter.Key())
+					} else {
+						actualKeys = append([]storage.MVCCKey{iter.Key()}, actualKeys...)
+					}
+				}
+				if r {
+					rangeKeys := iter.RangeKeys().Clone()
+					if !rangeKeys.Bounds.Key.Equal(rangeStart) {
+						rangeStart = rangeKeys.Bounds.Key
+						if !reverse {
+							for _, v := range rangeKeys.Versions {
+								actualRanges = append(actualRanges, rangeKeys.AsRangeKey(v))
+							}
+						} else {
+							for i := rangeKeys.Len() - 1; i >= 0; i-- {
+								actualRanges = append([]storage.MVCCRangeKey{
+									rangeKeys.AsRangeKey(rangeKeys.Versions[i]),
+								}, actualRanges...)
+							}
+						}
+					}
+				}
+				if reverse {
+					iter.Prev()
+				} else {
+					iter.Next()
+				}
+			}
+			return nil
+		})
+		require.NoError(t, err, "visitor failed")
+		return actualKeys, actualRanges
+	}
+	goldenActualKeys, goldenActualRanges := get(t, false /* useSpanSet */, false /* reverse */)
+	testutils.RunTrueAndFalse(t, "reverse", func(t *testing.T, reverse bool) {
+		testutils.RunTrueAndFalse(t, "spanset", func(t *testing.T, useSpanSet bool) {
+			actualKeys, actualRanges := get(t, useSpanSet, reverse)
+			require.Equal(t, goldenActualKeys, actualKeys)
+			require.Equal(t, goldenActualRanges, actualRanges)
+		})
+	})
 }
 
 func checkOrdering(t *testing.T, spans []roachpb.Span) {
