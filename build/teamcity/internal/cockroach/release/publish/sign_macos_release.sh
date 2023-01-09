@@ -2,6 +2,9 @@
 
 set -xeuo pipefail
 
+dir="$(dirname $(dirname $(dirname $(dirname $(dirname $(dirname "${0}"))))))"
+source "$dir/teamcity-support.sh"  # For log_into_gcloud
+
 KEYCHAIN_NAME=signing
 KEYCHAIN_PROFILE=notarization
 curr_dir=$(pwd)
@@ -14,31 +17,23 @@ trap remove_files_on_exit EXIT
 
 # By default, set dry-run variables
 google_credentials="$GCS_CREDENTIALS_DEV"
-gcs_bucket="cockroach-release-artifacts-dryrun"
+gcs_staged_bucket="cockroach-release-artifacts-staged-dryrun"
+version=$(grep -v "^#" "$dir/../pkg/build/version.txt" | head -n1)
 
 # override dev defaults with production values
 if [[ -z "${DRY_RUN}" ]] ; then
   echo "Setting production variable values"
   google_credentials="$GCS_CREDENTIALS_PROD"
-  gcs_bucket="cockroach-release-artifacts-prod"
+  gcs_staged_bucket="cockroach-release-artifacts-staged-prod"
 fi
 
-echo "$google_credentials" > "$curr_dir/.google-credentials.json"
-export GOOGLE_APPLICATION_CREDENTIALS="$curr_dir/.google-credentials.json"
+# Install gcloud/gsutil
+GOOGLE_SDK_DIR=$(mktemp -d)
+curl https://sdk.cloud.google.com > "$GOOGLE_SDK_DIR/install.sh"
+bash "$GOOGLE_SDK_DIR/install.sh" --disable-prompts --install-dir="$GOOGLE_SDK_DIR"
+export PATH="$GOOGLE_SDK_DIR/google-cloud-sdk/bin":$PATH
 
-# install bazelisk
-mkdir -p bazelisk-bin
-curl -fsSL https://github.com/bazelbuild/bazelisk/releases/download/v1.13.2/bazelisk-darwin-arm64 > bazelisk-bin/bazel
-shasum --algorithm 256 --check - <<EOF
-c84fb9ae7409b19aee847af4767639ab86fc3ce110f961107ff278879b019e38  bazelisk-bin/bazel
-EOF
-chmod 755 bazelisk-bin/bazel
-export PATH=$PWD/bazelisk-bin:$PATH
-
-# compile the tool
-bazel build --config=crossmacosarm //pkg/cmd/cloudupload
-BAZEL_BIN=$(bazel info --config=crossmacosarm bazel-bin)
-
+log_into_gcloud
 security unlock-keychain -p "${KEYCHAIN_PASSWORD}" "${KEYCHAIN_NAME}"
 
 mkdir -p artifacts
@@ -47,14 +42,14 @@ cd artifacts
 for product in cockroach cockroach-sql; do
   # TODO: add Intel binaries too.
   for platform in darwin-11.0-arm64; do
-    base=${product}-${VERSION}.${platform}
-    unsigned_base=${product}-${VERSION}.${platform}.unsigned
+    base=${product}-${version}.${platform}
+    unsigned_base=${product}-${version}.${platform}.unsigned
     unsigned_file=${unsigned_base}.tgz
     target=${base}.tgz
-    download_prefix="https://storage.googleapis.com/$gcs_bucket"
 
-    curl -o "$unsigned_file" "$download_prefix/$unsigned_file"
-    curl -o "$unsigned_file.sha256sum" "$download_prefix/$unsigned_file.sha256sum"
+    gsutil cp "gs://$gcs_staged_bucket/$unsigned_file" "$unsigned_file"
+    gsutil cp "gs://$gcs_staged_bucket/$unsigned_file.sha256sum" "$unsigned_file.sha256sum"
+
     shasum --algorithm 256 --check "$unsigned_file.sha256sum"
 
     tar -xf "$unsigned_file"
@@ -73,10 +68,8 @@ for product in cockroach cockroach-sql; do
     rm -rf "$base" "$unsigned_file" "$unsigned_file.sha256sum" crl.zip
 
     shasum --algorithm 256 "$target" > "$target.sha256sum"
-    "$BAZEL_BIN/pkg/cmd/cloudupload/cloudupload_/cloudupload" \
-      "$target" "gs://$gcs_bucket/$target"
-    "$BAZEL_BIN/pkg/cmd/cloudupload/cloudupload_/cloudupload" \
-      "$target.sha256sum" "gs://$gcs_bucket/$target.sha256sum"
+    gsutil cp "$target" "gs://$gcs_staged_bucket/$target"
+    gsutil cp "$target.sha256sum" "gs://$gcs_staged_bucket/$target.sha256sum"
 
   done
 done
