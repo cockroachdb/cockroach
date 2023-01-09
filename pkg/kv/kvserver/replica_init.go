@@ -47,7 +47,7 @@ const (
 func newReplica(
 	ctx context.Context, desc *roachpb.RangeDescriptor, store *Store, replicaID roachpb.ReplicaID,
 ) (*Replica, error) {
-	repl := newUnloadedReplica(ctx, desc, store, replicaID)
+	repl := newUnloadedReplica(ctx, desc.RangeID, store, replicaID)
 	repl.raftMu.Lock()
 	defer repl.raftMu.Unlock()
 	repl.mu.Lock()
@@ -58,28 +58,31 @@ func newReplica(
 	return repl, nil
 }
 
-// newUnloadedReplica partially constructs a replica. The primary reason this
-// function exists separately from Replica.loadRaftMuLockedReplicaMuLocked() is
-// to avoid attempting to fully constructing a Replica prior to proving that it
-// can exist during the delicate synchronization dance that occurs in
+// newUnloadedReplica partially constructs a Replica. The returned replica is
+// assumed to be uninitialized, until Replica.loadRaftMuLockedReplicaMuLocked()
+// is called with the correct descriptor. The primary reason this function
+// exists separately from Replica.loadRaftMuLockedReplicaMuLocked() is to avoid
+// attempting to fully construct a Replica and load it from storage prior to
+// proving that it can exist during the delicate synchronization dance in
 // Store.tryGetOrCreateReplica(). A Replica returned from this function must not
-// be used in any way until it's load() method has been called.
+// be used in any way until the load method has been called.
 func newUnloadedReplica(
-	ctx context.Context, desc *roachpb.RangeDescriptor, store *Store, replicaID roachpb.ReplicaID,
+	ctx context.Context, rangeID roachpb.RangeID, store *Store, replicaID roachpb.ReplicaID,
 ) *Replica {
 	if replicaID == 0 {
-		log.Fatalf(ctx, "cannot construct a replica for range %d with a 0 replica ID", desc.RangeID)
+		log.Fatalf(ctx, "cannot construct a replica for range %d with a 0 replica ID", rangeID)
 	}
+	uninitializedDesc := &roachpb.RangeDescriptor{RangeID: rangeID}
 	r := &Replica{
 		AmbientContext: store.cfg.AmbientCtx,
-		RangeID:        desc.RangeID,
+		RangeID:        rangeID,
 		replicaID:      replicaID,
 		creationTime:   timeutil.Now(),
 		store:          store,
-		abortSpan:      abortspan.New(desc.RangeID),
+		abortSpan:      abortspan.New(rangeID),
 		concMgr: concurrency.NewManager(concurrency.Config{
 			NodeDesc:          store.nodeDesc,
-			RangeDesc:         desc,
+			RangeDesc:         uninitializedDesc,
 			Settings:          store.ClusterSettings(),
 			DB:                store.DB(),
 			Clock:             store.Clock(),
@@ -91,10 +94,10 @@ func newUnloadedReplica(
 			TxnWaitKnobs:      store.TestingKnobs().TxnWaitKnobs,
 		}),
 	}
-	r.sideTransportClosedTimestamp.init(store.cfg.ClosedTimestampReceiver, desc.RangeID)
+	r.sideTransportClosedTimestamp.init(store.cfg.ClosedTimestampReceiver, rangeID)
 
 	r.mu.pendingLeaseRequest = makePendingLeaseRequest(r)
-	r.mu.stateLoader = stateloader.Make(desc.RangeID)
+	r.mu.stateLoader = stateloader.Make(rangeID)
 	r.mu.quiescent = true
 	r.mu.conf = store.cfg.DefaultSpanConfig
 	split.Init(&r.loadBasedSplitter, store.cfg.Settings, split.GlobalRandSource(), func() float64 {
@@ -116,8 +119,13 @@ func newUnloadedReplica(
 		r.loadStats = load.NewReplicaLoad(store.Clock(), store.cfg.StorePool.GetNodeLocalityString)
 	}
 
-	// Init rangeStr with the range ID.
-	r.rangeStr.store(replicaID, &roachpb.RangeDescriptor{RangeID: desc.RangeID})
+	// Init replica descriptor and rangeStr with the uninitialized descriptor
+	// containing only the range ID.
+	// NB: A Replica should never be in the store's replicas map with a nil
+	// descriptor, hence. Assign it unconditionally here. The descriptor will be
+	// updated when the replica gets initialized.
+	r.mu.state.Desc = uninitializedDesc
+	r.rangeStr.store(replicaID, uninitializedDesc)
 	// Add replica log tag - the value is rangeStr.String().
 	r.AmbientContext.AddLogTag("r", &r.rangeStr)
 	r.raftCtx = logtags.AddTag(r.AnnotateCtx(context.Background()), "raft", nil /* value */)
@@ -125,10 +133,10 @@ func newUnloadedReplica(
 	// replica GC issues, but is a distraction at the moment.
 	// r.AmbientContext.AddLogTag("@", fmt.Sprintf("%x", unsafe.Pointer(r)))
 
-	r.raftMu.stateLoader = stateloader.Make(desc.RangeID)
+	r.raftMu.stateLoader = stateloader.Make(rangeID)
 	r.raftMu.sideloaded = logstore.NewDiskSideloadStorage(
 		store.cfg.Settings,
-		desc.RangeID,
+		rangeID,
 		store.engine.GetAuxiliaryDir(),
 		store.limiters.BulkIOWriteRate,
 		store.engine,

@@ -222,14 +222,7 @@ func (s *Store) tryGetOrCreateReplica(
 	}
 
 	// Create a new uninitialized replica and lock it for raft processing.
-	// TODO(pavelkalinnikov): consolidate an uninitialized Replica creation into a
-	// single function, now that it is sequential.
-	uninitializedDesc := &roachpb.RangeDescriptor{
-		RangeID: rangeID,
-		// NB: other fields are unknown; need to populate them from
-		// snapshot.
-	}
-	repl := newUnloadedReplica(ctx, uninitializedDesc, s, replicaID)
+	repl := newUnloadedReplica(ctx, rangeID, s, replicaID)
 	repl.raftMu.Lock() // not unlocked
 	// Take out read-only lock. Not strictly necessary here, but follows the
 	// normal lock protocol for destroyStatus.Set().
@@ -237,19 +230,6 @@ func (s *Store) tryGetOrCreateReplica(
 	// Grab the internal Replica state lock to ensure nobody mucks with our
 	// replica even outside of raft processing.
 	repl.mu.Lock()
-
-	// NB: A Replica should never be in the store's replicas map with a nil
-	// descriptor. Assign it directly here. In the case that the Replica should
-	// exist (which we confirm with another check of the Tombstone below), we'll
-	// re-initialize the replica with the same uninitializedDesc.
-	//
-	// During short window between here and call to s.unlinkReplicaByRangeIDLocked()
-	// in the failure branch below, the Replica used to have a nil descriptor and
-	// was present in the map. While it was the case that the destroy status had
-	// been set, not every code path which inspects the descriptor checks the
-	// destroy status.
-	repl.mu.state.Desc = uninitializedDesc
-
 	// Initialize the Replica with the replicaID.
 	if err := func() error {
 		// An uninitialized replica should have an empty HardState.Commit at
@@ -314,7 +294,7 @@ func (s *Store) tryGetOrCreateReplica(
 			return err
 		}
 
-		return repl.loadRaftMuLockedReplicaMuLocked(uninitializedDesc)
+		return repl.loadRaftMuLockedReplicaMuLocked(repl.descRLocked())
 	}(); err != nil {
 		// Mark the replica as destroyed and remove it from the replicas maps to
 		// ensure nobody tries to use it.
