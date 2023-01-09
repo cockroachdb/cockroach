@@ -674,6 +674,17 @@ var charts = []sectionDescription{
 		},
 		Charts: []chartDescription{
 			{
+				Title:   "Rebalancing Exhausted Options",
+				Metrics: []string{"rebalancing.state.imbalanced_overfull_options_exhausted"},
+			},
+		},
+	},
+	{
+		Organization: [][]string{
+			{DistributionLayer, "Rebalancing"},
+		},
+		Charts: []chartDescription{
+			{
 				Title:   "QPS",
 				Metrics: []string{"rebalancing.queriespersecond"},
 			},
