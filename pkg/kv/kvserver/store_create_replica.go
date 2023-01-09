@@ -175,12 +175,7 @@ func (s *Store) tryGetOrCreateReplica(
 	}
 
 	// Create a new replica and lock it for raft processing.
-	uninitializedDesc := &roachpb.RangeDescriptor{
-		RangeID: rangeID,
-		// NB: other fields are unknown; need to populate them from
-		// snapshot.
-	}
-	repl := newUnloadedReplica(ctx, uninitializedDesc, s, replicaID)
+	repl := newUnloadedReplica(ctx, rangeID, s, replicaID)
 	repl.raftMu.Lock() // not unlocked
 
 	// Take out read-only lock. Not strictly necessary here, but follows the
@@ -194,18 +189,6 @@ func (s *Store) tryGetOrCreateReplica(
 	// replica even outside of raft processing. Have to do this after grabbing
 	// Store.mu to maintain lock ordering invariant.
 	repl.mu.Lock()
-
-	// NB: A Replica should never be in the store's replicas map with a nil
-	// descriptor. Assign it directly here. In the case that the Replica should
-	// exist (which we confirm with another check of the Tombstone below), we'll
-	// re-initialize the replica with the same uninitializedDesc.
-	//
-	// During short window between here and call to s.unlinkReplicaByRangeIDLocked()
-	// in the failure branch below, the Replica used to have a nil descriptor and
-	// was present in the map. While it was the case that the destroy status had
-	// been set, not every code path which inspects the descriptor checks the
-	// destroy status.
-	repl.mu.state.Desc = uninitializedDesc
 
 	// Add the range to range map, but not replicasByKey since the range's start
 	// key is unknown. The range will be added to replicasByKey later when a
@@ -299,7 +282,7 @@ func (s *Store) tryGetOrCreateReplica(
 			return err
 		}
 
-		return repl.loadRaftMuLockedReplicaMuLocked(uninitializedDesc)
+		return repl.loadRaftMuLockedReplicaMuLocked(repl.descRLocked())
 	}(); err != nil {
 		// Mark the replica as destroyed and remove it from the replicas maps to
 		// ensure nobody tries to use it.
