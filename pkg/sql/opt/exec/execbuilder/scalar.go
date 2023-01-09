@@ -611,8 +611,57 @@ func (b *Builder) buildSubquery(
 	}
 
 	// We cannot execute correlated subqueries.
+	// TODO(mgartner): We can execute correlated subqueries by making them
+	// routines, like we do below.
 	if !input.Relational().OuterCols.Empty() {
 		return nil, b.decorrelationError()
+	}
+
+	if b.planLazySubqueries {
+		// Build lazily-evaluated subqueries as routines.
+		//
+		// Note: We reuse the optimizer and memo from the original expression
+		// because we don't need to optimize the subquery input any further.
+		// It's already been fully optimized because it is uncorrelated and has
+		// no outer columns.
+		//
+		// TODO(mgartner): Uncorrelated subqueries only need to be evaluated
+		// once. We should cache their result to avoid all this overhead for
+		// every invocation.
+		inputRowCount := int64(input.Relational().Statistics().RowCountIfAvailable())
+		planFn := func(
+			ctx context.Context, ref tree.RoutineExecFactory, stmtIdx int, args tree.Datums,
+		) (tree.RoutinePlan, error) {
+			ef := ref.(exec.Factory)
+			eb := New(ctx, ef, b.optimizer, b.mem, b.catalog, input, b.evalCtx, false /* allowAutoCommit */, b.IsANSIDML)
+			eb.disableTelemetry = true
+			eb.planLazySubqueries = true
+			plan, err := eb.buildRelational(input)
+			if err != nil {
+				return nil, err
+			}
+			if len(eb.subqueries) > 0 {
+				return nil, expectedLazyRoutineError("subquery")
+			}
+			if len(eb.cascades) > 0 {
+				return nil, expectedLazyRoutineError("cascade")
+			}
+			if len(eb.checks) > 0 {
+				return nil, expectedLazyRoutineError("check")
+			}
+			return b.factory.ConstructPlan(
+				plan.root, nil /* subqueries */, nil /* cascades */, nil /* checks */, inputRowCount,
+			)
+		}
+		return tree.NewTypedRoutineExpr(
+			"subquery",
+			nil, /* args */
+			planFn,
+			1, /* numStmts */
+			subquery.Typ,
+			false, /* enableStepping */
+			true,  /* calledOnNullInput */
+		), nil
 	}
 
 	// Build the execution plan for the subquery. Note that the subquery could
@@ -622,6 +671,7 @@ func (b *Builder) buildSubquery(
 		return nil, err
 	}
 
+	// Build a subquery that is eagerly evaluated before the main query.
 	return b.addSubquery(
 		exec.SubqueryOneRow, subquery.Typ, plan.root, subquery.OriginalExpr,
 		int64(input.Relational().Statistics().RowCountIfAvailable()),
@@ -727,6 +777,7 @@ func (b *Builder) buildUDF(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Typ
 		ef := ref.(exec.Factory)
 		eb := New(ctx, ef, &o, f.Memo(), b.catalog, newRightSide, b.evalCtx, false /* allowAutoCommit */, b.IsANSIDML)
 		eb.disableTelemetry = true
+		eb.planLazySubqueries = true
 		plan, err := eb.Build()
 		if err != nil {
 			if errors.IsAssertionFailure(err) {
@@ -754,4 +805,8 @@ func (b *Builder) buildUDF(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Typ
 		enableStepping,
 		udf.CalledOnNullInput,
 	), nil
+}
+
+func expectedLazyRoutineError(typ string) error {
+	return errors.AssertionFailedf("expected %s to be lazily planned as routines", typ)
 }
