@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/blobs/blobspb"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -1519,6 +1520,25 @@ func (s *SQLServer) preStart(
 	}
 
 	log.Infof(ctx, "done ensuring all necessary startup migrations have run")
+
+	// Prevent the server from starting if its binary version is too low
+	// for the current tenant cluster version.
+	// This check needs to run after the "version" setting is set in the
+	// "system.settings" table of this tenant. This includes both system
+	// and secondary tenants.
+	var tenantActiveVersion clusterversion.ClusterVersion
+	if err := s.execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
+		tenantActiveVersion, err = s.settingsWatcher.GetClusterVersionFromStorage(ctx, txn.Get)
+		return err
+	}); err != nil {
+		return err
+	}
+	if s.execCfg.Settings.Version.BinaryVersion().Less(tenantActiveVersion.Version) {
+		return errors.WithHintf(errors.Newf("preventing SQL server from starting because its binary version "+
+			"is too low for the tenant active version: server binary version = %v, tenant active version = %v",
+			s.execCfg.Settings.Version.BinaryVersion(), tenantActiveVersion.Version),
+			"use a tenant binary whose version is at least %v", tenantActiveVersion.Version)
+	}
 
 	// Delete all orphaned table leases created by a prior instance of this
 	// node. This also uses SQL.
