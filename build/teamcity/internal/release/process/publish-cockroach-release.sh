@@ -3,6 +3,7 @@
 set -euxo pipefail
 
 dir="$(dirname $(dirname $(dirname $(dirname $(dirname "${0}")))))"
+source "$dir/teamcity-support.sh"  # For log_into_gcloud
 source "$dir/release/teamcity-support.sh"
 source "$dir/teamcity-bazel-support.sh"  # for run_bazel
 
@@ -25,6 +26,7 @@ release_branch=$(echo ${build_name} | grep -E -o '^v[0-9]+\.[0-9]+')
 
 if [[ -z "${DRY_RUN}" ]] ; then
   gcs_bucket="cockroach-release-artifacts-prod"
+  gcs_staged_bucket="cockroach-release-artifacts-staged-prod"
   google_credentials="$GOOGLE_COCKROACH_CLOUD_IMAGES_COCKROACHDB_CREDENTIALS"
   # export the variable to avoid shell escaping
   export gcs_credentials="$GCS_CREDENTIALS_PROD"
@@ -39,6 +41,7 @@ if [[ -z "${DRY_RUN}" ]] ; then
   git_repo_for_tag="cockroachdb/cockroach"
 else
   gcs_bucket="cockroach-release-artifacts-dryrun"
+  gcs_staged_bucket="cockroach-release-artifacts-staged-dryrun"
   google_credentials="$GOOGLE_COCKROACH_RELEASE_CREDENTIALS"
   # export the variable to avoid shell escaping
   export gcs_credentials="$GCS_CREDENTIALS_DEV"
@@ -76,65 +79,26 @@ git tag "${build_name}"
 tc_end_block "Tag the release"
 
 
-tc_start_block "Make and publish release artifacts"
-# Using publish-provisional-artifacts here is funky. We're directly publishing
-# the official binaries, not provisional ones. Legacy naming. To clean up...
-BAZEL_SUPPORT_EXTRA_DOCKER_ARGS="-e TC_BUILDTYPE_ID -e TC_BUILD_BRANCH=$build_name -e gcs_credentials -e gcs_bucket=$gcs_bucket" run_bazel << 'EOF'
-bazel build --config ci //pkg/cmd/publish-provisional-artifacts
-BAZEL_BIN=$(bazel info bazel-bin --config ci)
-export google_credentials="$gcs_credentials"
-source "build/teamcity-support.sh"  # For log_into_gcloud
-log_into_gcloud
-export GOOGLE_APPLICATION_CREDENTIALS="$PWD/.google-credentials.json"
-$BAZEL_BIN/pkg/cmd/publish-provisional-artifacts/publish-provisional-artifacts_/publish-provisional-artifacts -provisional -release --gcs-bucket="$gcs_bucket" --output-directory=artifacts
-EOF
-tc_end_block "Make and publish release artifacts"
-
-
 tc_start_block "Make and push multiarch docker images"
 configure_docker_creds
 docker_login_with_google
 docker_login
 
-declare -a gcr_amends
 declare -a dockerhub_amends
-
-for platform_name in amd64 arm64; do
-  cp --recursive "build/deploy" "build/deploy-${platform_name}"
-  tar \
-    --directory="build/deploy-${platform_name}" \
-    --extract \
-    --file="artifacts/cockroach-${build_name}.linux-${platform_name}.tgz" \
-    --ungzip \
-    --ignore-zeros \
-    --strip-components=1
-  cp --recursive licenses "build/deploy-${platform_name}"
-  # Move the libs where Dockerfile expects them to be
-  mv build/deploy-${platform_name}/lib/* build/deploy-${platform_name}/
-  rmdir build/deploy-${platform_name}/lib
-
-  dockerhub_arch_tag="${dockerhub_repository}:${platform_name}-${build_name}"
-  gcr_arch_tag="${gcr_repository}:${platform_name}-${build_name}"
-  dockerhub_amends+=("--amend" "$dockerhub_arch_tag")
-  gcr_amends+=("--amend" "$gcr_arch_tag")
-
-  # Tag the arch specific images with only one tag per repository. The manifests will reference the tags.
-  docker build \
-    --label version="$version" \
-    --no-cache \
-    --pull \
-    --platform="linux/${platform_name}" \
-    --tag="${dockerhub_arch_tag}" \
-    --tag="${gcr_arch_tag}" \
-    "build/deploy-${platform_name}"
-  docker push "$gcr_arch_tag"
-  docker push "$dockerhub_arch_tag"
-done
 
 gcr_tag="${gcr_repository}:${build_name}"
 dockerhub_tag="${dockerhub_repository}:${build_name}"
-docker manifest create "${gcr_tag}" "${gcr_amends[@]}"
-docker manifest push "${gcr_tag}"
+
+for platform_name in amd64 arm64; do
+  dockerhub_arch_tag="${dockerhub_repository}:${platform_name}-${build_name}"
+  gcr_arch_tag="${gcr_repository}:${platform_name}-${build_name}"
+  docker pull "$gcr_arch_tag"
+  # TODO: refresh the docker image deps
+  docker tag "$gcr_arch_tag" "$dockerhub_arch_tag"
+  docker push "$dockerhub_arch_tag"
+  dockerhub_amends+=("--amend" "$dockerhub_arch_tag")
+done
+
 docker manifest create "${dockerhub_tag}" "${dockerhub_amends[@]}"
 docker manifest push "${dockerhub_tag}"
 
@@ -149,18 +113,22 @@ git_wrapped push "ssh://git@github.com/${git_repo_for_tag}.git" "$build_name"
 tc_end_block "Push release tag to GitHub"
 
 
-tc_start_block "Publish binaries and archive as latest-RELEASE_BRANCH"
-# example: v20.1-latest
-if [[ -z "$PRE_RELEASE" ]]; then
-  #TODO: implement me!
-  echo "Pushing latest-RELEASE_BRANCH binaries and archive is not implemented."
-else
-  echo "Pushing latest-RELEASE_BRANCH binaries and archive is not implemented."
-fi
-tc_end_block "Publish binaries and archive as latest-RELEASE_BRANCH"
-
-
 tc_start_block "Publish binaries and archive as latest"
+# TODO: move this logic ot publish-provisional-artifacts?
+export google_credentials="$gcs_credentials"
+log_into_gcloud
+for product in cockroach cockroach-sql; do
+  for platform in linux-amd64 linux-arm64 darwin-10.9-amd64 darwin-11.0-arm64.unsigned windows-6.2-amd64; do
+      archive_suffix=tgz
+      if [[ $platform == *"windows"* ]]; then 
+          archive_suffix=zip
+      fi
+      archive="$product-$build_name.$platform.$archive_suffix"
+      gsutil cp "gs://$gcs_staged_bucket/$archive" "gs://$gcs_bucket/$archive"
+      gsutil cp "gs://$gcs_staged_bucket/$archive.sha256sum" "gs://$gcs_bucket/$archive.sha256sum"
+  done
+done
+
 # Only push the "latest" for our most recent release branch.
 # https://github.com/cockroachdb/cockroach/issues/41067
 if [[ -n "${PUBLISH_LATEST}" && -z "${PRE_RELEASE}" ]]; then
@@ -206,7 +174,6 @@ tc_start_block "Verify docker images"
 
 images=(
   "${dockerhub_tag}"
-  "${gcr_tag}"
 )
 if [[ -z "$PRE_RELEASE" ]]; then
   images+=("${dockerhub_repository}:latest-${release_branch}")
