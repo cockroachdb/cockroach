@@ -2615,9 +2615,27 @@ SELECT a, sub_max_odd() FROM sub_all WHERE a = sub_max_odd()
 ----
 5  5
 
-# TODO(mgartner): Allow queries with subqueries outside and inside a UDF.
-statement error pgcode 0A000 unimplemented: apply joins with subqueries in the "inner" and "outer" contexts are not supported
+# Subqueries inside and outside a UDF are supported.
+query I rowsort
 SELECT a FROM sub_all WHERE sub_max_odd() = (SELECT max(a) FROM sub_odd)
+----
+1
+2
+3
+4
+5
+6
+
+# UDF with subquery where ordering must be preserved.
+statement ok
+CREATE FUNCTION sub_max_odd_with_order_by() RETURNS INT LANGUAGE SQL AS $$
+  SELECT a FROM sub_all WHERE a = (SELECT a FROM sub_odd ORDER BY a DESC LIMIT 1)
+$$
+
+query I
+SELECT sub_max_odd_with_order_by()
+----
+5
 
 # UDF with a subquery correlated with an input parameter.
 statement ok
@@ -2763,7 +2781,7 @@ SELECT oid, proname, pronamespace, proowner, prolang, proleakproof, proisstrict,
 FROM pg_catalog.pg_proc WHERE proname IN ('f_93314', 'f_93314_alias', 'f_93314_comp', 'f_93314_comp_t')
 ORDER BY oid;
 ----
-100256  f_93314         105  1546506610  14  false  false  false  v  0  100255  ·  {}  NULL  SELECT i, e FROM test.public.t_93314 ORDER BY i LIMIT 1;
-100258  f_93314_alias   105  1546506610  14  false  false  false  v  0  100257  ·  {}  NULL  SELECT i, e FROM test.public.t_93314_alias ORDER BY i LIMIT 1;
-100262  f_93314_comp    105  1546506610  14  false  false  false  v  0  100259  ·  {}  NULL  SELECT (1, 2);
-100263  f_93314_comp_t  105  1546506610  14  false  false  false  v  0  100261  ·  {}  NULL  SELECT a, c FROM test.public.t_93314_comp LIMIT 1;
+100257  f_93314         105  1546506610  14  false  false  false  v  0  100256  ·  {}  NULL  SELECT i, e FROM test.public.t_93314 ORDER BY i LIMIT 1;
+100259  f_93314_alias   105  1546506610  14  false  false  false  v  0  100258  ·  {}  NULL  SELECT i, e FROM test.public.t_93314_alias ORDER BY i LIMIT 1;
+100263  f_93314_comp    105  1546506610  14  false  false  false  v  0  100260  ·  {}  NULL  SELECT (1, 2);
+100264  f_93314_comp_t  105  1546506610  14  false  false  false  v  0  100262  ·  {}  NULL  SELECT a, c FROM test.public.t_93314_comp LIMIT 1;
