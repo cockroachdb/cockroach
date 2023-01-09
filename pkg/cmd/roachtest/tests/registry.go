@@ -27,6 +27,7 @@ func RegisterTests(r registry.Registry) {
 	registerCDC(r)
 	registerCDCMixedVersions(r)
 	registerCancel(r)
+	registerChangeReplicasMixedVersion(r)
 	registerClearRange(r)
 	registerClockJumpTests(r)
 	registerClockMonotonicTests(r)
