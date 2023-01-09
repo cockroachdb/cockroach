@@ -6,11 +6,12 @@ go_library(
     srcs = [
         "kv_writer.go",
         "metadata.go",
-        "previous_release.go",
+        "previous_releases.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/clusterversion",
         "//pkg/config/zonepb",
         "//pkg/keys",
         "//pkg/kv",

@@ -10,7 +10,10 @@
 
 package eval
 
-import "github.com/cockroachdb/cockroach/pkg/base"
+import (
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+)
 
 // TestingKnobs contains test knobs.
 type TestingKnobs struct {
@@ -39,6 +42,10 @@ type TestingKnobs struct {
 	ForceProductionValues bool
 
 	CallbackGenerators map[string]*CallbackValueGenerator
+
+	// We use clusterversion.Key rather than a roachpb.Version because it will be used
+	// to get initial values to use during bootstrap.
+	TenantLogicalVersionKeyOverride clusterversion.Key
 }
 
 var _ base.ModuleTestingKnobs = &TestingKnobs{}
