@@ -251,21 +251,22 @@ func (r *Replica) loadUninit(ctx context.Context, desc *roachpb.RangeDescriptor)
 
 	// FIXME: Was r.mu.stateLoader.Load(ctx, r.Engine(), desc), should it still
 	// be, or at least initialize all other fields?
+	//
+	// Leaving any of the following fields nil leads to panics in some tests. The
+	// safest would be to initialize ReplicaState to a reasonable default (same as
+	// stateLoader.Load on an empty storage would return). In contrast, revisiting
+	// all usages of these fields and checking nils seems too much work.
 	r.mu.state.Desc = desc
 	r.mu.state.Lease = &roachpb.Lease{}
 	r.mu.state.TruncatedState = &roachpb.RaftTruncatedState{}
 	r.mu.state.GCThreshold = &hlc.Timestamp{}
 	r.mu.state.Stats = &enginepb.MVCCStats{}
-
-	// FIXME: If removed, TestStoreRemovePlaceholderOnRaftIgnored fails.
-	var err error
-	r.mu.lastIndex, err = r.mu.stateLoader.LoadLastIndex(ctx, r.Engine())
-	if err != nil {
-		return err
-	}
+	// FIXME: satisfies the assert below.
+	r.mu.state.GCHint = &roachpb.GCHint{}
+	// r.mu.state.Version?
 
 	// FIXME: is this needed?
-	// r.assertStateRaftMuLockedReplicaMuRLocked(ctx, r.store.Engine())
+	r.assertStateRaftMuLockedReplicaMuRLocked(ctx, r.store.Engine())
 
 	// If removed, TestEnsureLocalReadsOnGlobalTables in pkg/ccl/multiregionccl
 	// and a few other tests are broken. Why?
