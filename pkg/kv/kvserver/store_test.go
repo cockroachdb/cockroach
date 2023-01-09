@@ -2889,37 +2889,18 @@ func TestStoreRemovePlaceholderOnRaftIgnored(t *testing.T) {
 	tc.Start(ctx, t, stopper)
 	s := tc.store
 
-	// Clobber the existing range and recreated it with an uninitialized
-	// descriptor so we can test nonoverlapping placeholders.
+	// Remove the existing replica so we can insert a placeholder.
 	repl1, err := s.GetReplica(1)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := s.RemoveReplica(ctx, repl1, repl1.Desc().NextReplicaID, RemoveOptions{
+	desc := repl1.Desc()
+	require.NoError(t, err)
+	require.NoError(t, s.RemoveReplica(ctx, repl1, desc.NextReplicaID, RemoveOptions{
 		DestroyData: true,
-	}); err != nil {
-		t.Fatal(err)
-	}
+	}))
 
-	uninitDesc := roachpb.RangeDescriptor{RangeID: repl1.Desc().RangeID}
-	if err := stateloader.WriteInitialRangeState(
-		ctx, s.Engine(), uninitDesc, 2, roachpb.Version{},
-	); err != nil {
-		t.Fatal(err)
-	}
-	uninitRepl1, err := newReplica(ctx, &uninitDesc, s, 2)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := s.addReplicaToRangeMapLocked(uninitRepl1); err != nil {
-		t.Fatal(err)
-	}
-
-	// Wrap the snapshot in a minimal header. The request will be dropped
-	// because the Raft log index and term are less than the hard state written
-	// above.
+	// Wrap the snapshot in a minimal header. The request will be dropped because
+	// replica 2 is not in the ConfState.
 	req := &kvserverpb.SnapshotRequest_Header{
-		State: kvserverpb.ReplicaState{Desc: repl1.Desc()},
+		State: kvserverpb.ReplicaState{Desc: desc},
 		RaftMessageRequest: kvserverpb.RaftMessageRequest{
 			RangeID: 1,
 			ToReplica: roachpb.ReplicaDescriptor{
@@ -2945,7 +2926,7 @@ func TestStoreRemovePlaceholderOnRaftIgnored(t *testing.T) {
 		},
 	}
 
-	placeholder := &ReplicaPlaceholder{rangeDesc: *repl1.Desc()}
+	placeholder := &ReplicaPlaceholder{rangeDesc: *desc}
 
 	{
 		s.mu.Lock()
@@ -2954,15 +2935,13 @@ func TestStoreRemovePlaceholderOnRaftIgnored(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	if err := s.processRaftSnapshotRequest(ctx, req,
+	require.NoError(t, s.processRaftSnapshotRequest(ctx, req,
 		IncomingSnapshot{
 			SnapUUID:    uuid.MakeV4(),
-			Desc:        repl1.Desc(),
+			Desc:        desc,
 			placeholder: placeholder,
 		},
-	); err != nil {
-		t.Fatal(err)
-	}
+	).GoError())
 
 	testutils.SucceedsSoon(t, func() error {
 		s.mu.Lock()
