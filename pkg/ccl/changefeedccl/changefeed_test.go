@@ -7658,6 +7658,31 @@ func TestPartitionSpans(t *testing.T) {
 	}
 }
 
+func TestChangefeedMetricsScopeNotice(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	s, stopServer := makeServer(t)
+	defer stopServer()
+	sqlDB := sqlutils.MakeSQLRunner(s.DB)
+	sqlDB.Exec(t, "CREATE table foo (i int)")
+	sqlDB.Exec(t, `SET CLUSTER SETTING server.child_metrics.enabled = false`)
+
+	sqlCreate := fmt.Sprintf("CREATE CHANGEFEED FOR d.foo INTO 'null://' WITH metrics_label='scope'")
+	expectNotice(t, s.Server, sqlCreate, `server.child_metrics.enabled is set to false, metrics will only be published to the 'scope' label when it is set to true`)
+
+	var jobID string
+	sqlDB.QueryRow(t, `SELECT job_id FROM [SHOW JOBS] where job_type='CHANGEFEED'`).Scan(&jobID)
+	sqlDB.Exec(t, "PAUSE JOB $1", jobID)
+	sqlDB.CheckQueryResultsRetry(
+		t,
+		fmt.Sprintf(`SELECT count(*) FROM [SHOW JOBS] WHERE job_type='CHANGEFEED' AND status='%s'`, jobs.StatusPaused),
+		[][]string{{"1"}},
+	)
+
+	sqlAlter := fmt.Sprintf("ALTER CHANGEFEED %s SET metrics_label='other'", jobID)
+	expectNotice(t, s.Server, sqlAlter, `server.child_metrics.enabled is set to false, metrics will only be published to the 'other' label when it is set to true`)
+}
+
 // TestPubsubValidationErrors tests error messages during pubsub sink URI validations.
 func TestPubsubValidationErrors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
