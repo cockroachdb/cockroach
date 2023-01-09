@@ -2892,14 +2892,10 @@ func TestStoreRemovePlaceholderOnRaftIgnored(t *testing.T) {
 	// Remove the existing replica so we can insert a placeholder.
 	repl1, err := s.GetReplica(1)
 	desc := repl1.Desc()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := s.RemoveReplica(ctx, repl1, desc.NextReplicaID, RemoveOptions{
+	require.NoError(t, err)
+	require.NoError(t, s.RemoveReplica(ctx, repl1, desc.NextReplicaID, RemoveOptions{
 		DestroyData: true,
-	}); err != nil {
-		t.Fatal(err)
-	}
+	}))
 
 	// Wrap the snapshot in a minimal header. The request will be dropped because
 	// replica 2 is not in the ConfState.
@@ -2939,15 +2935,13 @@ func TestStoreRemovePlaceholderOnRaftIgnored(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	if err := s.processRaftSnapshotRequest(ctx, req,
+	require.NoError(t, s.processRaftSnapshotRequest(ctx, req,
 		IncomingSnapshot{
 			SnapUUID:    uuid.MakeV4(),
 			Desc:        desc,
 			placeholder: placeholder,
 		},
-	); err != nil {
-		t.Fatal(err)
-	}
+	).GoError())
 
 	testutils.SucceedsSoon(t, func() error {
 		s.mu.Lock()
