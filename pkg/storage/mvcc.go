@@ -4086,9 +4086,10 @@ func MVCCIterate(
 	return intents, nil
 }
 
-// MVCCPagination invokes f() until it returns done (i.e. we have iterated
-// through all elements) or an error, or until the number of keys hits the
-// maxKeys limit or the number of bytes hits the targetBytes limit.
+// MVCCPagination invokes f() until it returns an error (note that the
+// iterutil.StopIteration() error means we have iterated through all elements),
+// or until the number of keys hits the maxKeys limit or the number of bytes
+// hits the targetBytes limit.
 func MVCCPagination(
 	ctx context.Context,
 	maxKeys, targetBytes int64,
