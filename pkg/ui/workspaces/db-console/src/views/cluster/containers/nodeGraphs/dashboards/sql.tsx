@@ -38,6 +38,7 @@ export default function (props: GraphDashboardProps) {
             title={nodeDisplayName(nodeDisplayNameByID, node)}
             sources={[node]}
             downsampleMax
+            includeTenants={true}
           />
         ))}
       </Axis>
