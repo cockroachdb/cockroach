@@ -918,6 +918,12 @@ var (
 		Measurement: "SQL Statements",
 		Unit:        metric.Unit_COUNT,
 	}
+	MetaCopyNonAtomicStarted = metric.Metadata{
+		Name:        "sql.copy.nonatomic.started.count",
+		Help:        "Number of non-atomic COPY SQL statements started",
+		Measurement: "SQL Statements",
+		Unit:        metric.Unit_COUNT,
+	}
 	MetaMiscStarted = metric.Metadata{
 		Name:        "sql.misc.started.count",
 		Help:        "Number of other SQL statements started",
@@ -1019,6 +1025,12 @@ var (
 	MetaCopyExecuted = metric.Metadata{
 		Name:        "sql.copy.count",
 		Help:        "Number of COPY SQL statements successfully executed",
+		Measurement: "SQL Statements",
+		Unit:        metric.Unit_COUNT,
+	}
+	MetaCopyNonAtomicExecuted = metric.Metadata{
+		Name:        "sql.copy.nonatomic.count",
+		Help:        "Number of non-atomic COPY SQL statements successfully executed",
 		Measurement: "SQL Statements",
 		Unit:        metric.Unit_COUNT,
 	}
