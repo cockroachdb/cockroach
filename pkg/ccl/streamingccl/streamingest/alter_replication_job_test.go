@@ -66,9 +66,9 @@ func TestAlterTenantPauseResume(t *testing.T) {
 
 	t.Run("pause-resume-tenant-with-no-replication", func(t *testing.T) {
 		c.DestSysSQL.Exec(t, `CREATE TENANT noreplication`)
-		c.DestSysSQL.ExpectErr(t, "tenant \"noreplication\" does not have an active replication job",
+		c.DestSysSQL.ExpectErr(t, "tenant \"noreplication\" \\(3\\) does not have an active replication job",
 			`ALTER TENANT $1 PAUSE REPLICATION`, "noreplication")
-		c.DestSysSQL.ExpectErr(t, "tenant \"noreplication\" does not have an active replication job",
+		c.DestSysSQL.ExpectErr(t, "tenant \"noreplication\" \\(3\\) does not have an active replication job",
 			`ALTER TENANT $1 RESUME REPLICATION`, "noreplication")
 	})
 

@@ -13,33 +13,36 @@ package sql
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
 type dropTenantNode struct {
-	name     roachpb.TenantName
-	ifExists bool
+	tenantSpec *tenantSpec
+	ifExists   bool
 }
 
-func (p *planner) DropTenant(_ context.Context, n *tree.DropTenant) (planNode, error) {
+func (p *planner) DropTenant(ctx context.Context, n *tree.DropTenant) (planNode, error) {
+	tspec, err := p.planTenantSpec(ctx, n.TenantSpec, "DROP TENANT")
+	if err != nil {
+		return nil, err
+	}
 	return &dropTenantNode{
-		name:     roachpb.TenantName(n.Name),
-		ifExists: n.IfExists,
+		tenantSpec: tspec,
+		ifExists:   n.IfExists,
 	}, nil
 }
 
 func (n *dropTenantNode) startExec(params runParams) error {
-	err := params.p.DestroyTenant(params.ctx, n.name, false /* synchronous */)
+	tenInfo, err := n.tenantSpec.getTenantInfo(params.ctx, params.p)
 	if err != nil {
 		if pgerror.GetPGCode(err) == pgcode.UndefinedObject && n.ifExists {
 			return nil
 		}
 		return err
 	}
-	return nil
+	return params.p.DestroyTenantByID(params.ctx, tenInfo.ID, false /* synchronous */)
 }
 
 func (n *dropTenantNode) Next(_ runParams) (bool, error) { return false, nil }

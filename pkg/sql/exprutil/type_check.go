@@ -14,6 +14,7 @@ package exprutil
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
@@ -47,6 +48,10 @@ type (
 	Ints []tree.Expr
 	// Bools contains Exprs which should all type check to bool.
 	Bools []tree.Expr
+	// TenantSpec refers to a tree.TenantSpec.
+	TenantSpec struct {
+		*tree.TenantSpec
+	}
 
 	// KVOptions contains key-value pairs which should type check to
 	// string and should conform to the validation policy described
@@ -63,6 +68,7 @@ var (
 	_ ToTypeCheck = (Ints)(nil)
 	_ ToTypeCheck = (Bools)(nil)
 	_ ToTypeCheck = (*KVOptions)(nil)
+	_ ToTypeCheck = TenantSpec{}
 )
 
 // MakeStringArraysFromOptList makes a StringArrays by casting the members of in.
@@ -102,6 +108,23 @@ func (b Bools) typeCheck(ctx context.Context, op string, semaCtx *tree.SemaConte
 		ctx, op, semaCtx, types.Bool, len(b),
 		func(i int) tree.Expr { return b[i] },
 	)
+}
+
+func (ts TenantSpec) typeCheck(ctx context.Context, op string, semaCtx *tree.SemaContext) error {
+	if ts.All {
+		return nil
+	}
+	if ts.IsName {
+		// If the expression is a simple identifier, handle
+		// that specially: we promote that identifier to a SQL string.
+		// This is alike what is done for CREATE USER.
+		expr := paramparse.UnresolvedNameToStrVal(ts.Expr)
+		s := Strings{expr}
+		return s.typeCheck(ctx, op, semaCtx)
+	} else {
+		s := Ints{ts.Expr}
+		return s.typeCheck(ctx, op, semaCtx)
+	}
 }
 
 func (k KVOptions) typeCheck(ctx context.Context, op string, semaCtx *tree.SemaContext) error {

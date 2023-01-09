@@ -862,14 +862,14 @@ func (node *ShowTableStats) Format(ctx *FmtCtx) {
 
 // ShowTenant represents a SHOW TENANT statement.
 type ShowTenant struct {
-	Name            Expr
+	TenantSpec      *TenantSpec
 	WithReplication bool
 }
 
 // Format implements the NodeFormatter interface.
 func (node *ShowTenant) Format(ctx *FmtCtx) {
 	ctx.WriteString("SHOW TENANT ")
-	ctx.FormatNode(node.Name)
+	ctx.FormatNode(node.TenantSpec)
 
 	if node.WithReplication {
 		ctx.WriteString(" WITH REPLICATION STATUS")
