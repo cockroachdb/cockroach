@@ -14,6 +14,7 @@ import (
 	"context"
 	"math/rand"
 
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/distribution"
@@ -21,7 +22,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/ordering"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
@@ -118,6 +122,52 @@ type Optimizer struct {
 // that these memo cycles cause, the optimizer throws an internal error when
 // this limit is reached.
 const maxGroupPasses = 100_000
+
+// TestingOptimizerCostPerturbation is the cluster setting that corresponds to
+// testing_optimizer_cost_perturbation session variable.
+var TestingOptimizerCostPerturbation = settings.RegisterFloatSetting(
+	settings.TenantWritable,
+	"sql.testing.optimizer_cost_perturbation",
+	"set to non-zero when the optimizer's coster should randomly perturb "+
+		"costs to produce a non-optimal query plan. This should only be used in "+
+		"test scenarios and is very much a non-production setting.",
+	testingOptimizerCostPerturbationDefault,
+	settings.NonNegativeFloat,
+)
+
+var testingOptimizerCostPerturbationDefault = util.ConstantWithMetamorphicTestFloatRange(
+	"testing-optimizer-cost-perturbation",
+	0,  /* defaultValue */
+	0,  /* min */
+	10, /* max */
+)
+
+// TestingOptimizerDisableRuleProbability is the cluster setting that
+// corresponds to testing_optimizer_disable_rule_probability session variable.
+var TestingOptimizerDisableRuleProbability = settings.RegisterFloatSetting(
+	settings.TenantWritable,
+	"sql.testing.optimizer_disable_rule_probability",
+	"set to non-zero when the optimizer should randomly disable every non-essential "+
+		"transformation rule with the given probability. This should only be used "+
+		"in test scenarios and is very much a non-production setting.",
+	testingOptimizerDisableRuleProbabilityDefault,
+	func(f float64) error {
+		if f < 0 || f > 1 {
+			return pgerror.Newf(
+				pgcode.InvalidParameterValue,
+				"testing_optimizer_disable_rule_probability must be in the range [0.0,1.0]",
+			)
+		}
+		return nil
+	},
+)
+
+var testingOptimizerDisableRuleProbabilityDefault = util.ConstantWithMetamorphicTestFloatRange(
+	"testing-optimizer-disable-rule-probability",
+	0, /* defaultValue */
+	0, /* min */
+	1, /* max */
+)
 
 // Init initializes the Optimizer with a new, blank memo structure inside. This
 // must be called before the optimizer can be used (or reused).

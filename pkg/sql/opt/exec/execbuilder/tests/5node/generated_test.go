@@ -58,8 +58,9 @@ func runExecBuildLogicTest(t *testing.T, file string) {
 	defer sql.TestingOverrideExplainEnvVersion("CockroachDB execbuilder test version")()
 	skip.UnderDeadlock(t, "times out and/or hangs")
 	serverArgs := logictest.TestServerArgs{
-		DisableWorkmemRandomization: true,
-		ForceProductionValues:       true,
+		DisableWorkmemRandomization:   true,
+		ForceProductionValues:         true,
+		DisableOptimizerPerturbations: true,
 	}
 	logictest.RunLogicTest(t, serverArgs, configIdx, filepath.Join(execBuildLogicTestDir, file))
 }
