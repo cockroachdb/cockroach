@@ -295,6 +295,7 @@ func (b *Builder) buildStmt(
 	if b.insideFuncDef {
 		switch stmt := stmt.(type) {
 		case *tree.Select:
+		case tree.SelectStatement:
 		default:
 			panic(unimplemented.Newf("user-defined functions", "%s usage inside a function definition", stmt.StatementTag()))
 		}

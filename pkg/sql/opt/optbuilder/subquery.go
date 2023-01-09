@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
 )
 
@@ -203,9 +202,6 @@ func (s *subquery) Eval(_ context.Context, _ tree.ExprEvaluator) (tree.Datum, er
 // It stores the resulting relational expression in s.node, and also updates
 // s.cols and s.ordering with the output columns and ordering of the subquery.
 func (s *subquery) buildSubquery(desiredTypes []*types.T) {
-	if s.scope.builder.insideFuncDef {
-		panic(unimplemented.New("user-defined functions", "subquery usage inside a function definition"))
-	}
 	if s.scope.replaceSRFs {
 		// We need to save and restore the previous value of the replaceSRFs field in
 		// case we are recursively called within a subquery context.
