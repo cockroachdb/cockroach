@@ -39,7 +39,7 @@ ORDER BY id
 id  active  name                  crdb_internal.pb_to_json
 1   true    system                {"capabilities": {"canAdminSplit": false}, "droppedName": "", "id": "1", "name": "system", "state": "ACTIVE", "tenantReplicationJobId": "0"}
 2   true    tenant-number-eleven  {"capabilities": {"canAdminSplit": false}, "droppedName": "", "id": "2", "name": "tenant-number-eleven", "state": "ACTIVE", "tenantReplicationJobId": "0"}
-5   true    NULL                  {"capabilities": {"canAdminSplit": false}, "droppedName": "", "id": "5", "name": "", "state": "ACTIVE", "tenantReplicationJobId": "0"}
+5   true    anonymous-tenant-5    {"capabilities": {"canAdminSplit": false}, "droppedName": "", "id": "5", "name": "anonymous-tenant-5", "state": "ACTIVE", "tenantReplicationJobId": "0"}
 10  true    tenant-number-ten     {"capabilities": {"canAdminSplit": false}, "droppedName": "", "id": "10", "name": "tenant-number-ten", "state": "ACTIVE", "tenantReplicationJobId": "0"}
 
 # Check we can add a name where none existed before.
@@ -121,10 +121,10 @@ id  active  name                  crdb_internal.pb_to_json
 
 # Try to recreate an existing tenant.
 # GC job for tenant 5 has not run yet.
-query error pgcode 42710 tenant "5" already exists
+query error pgcode 42710 tenant "5" with name "anonymous-tenant-5" already exists
 SELECT crdb_internal.create_tenant(5)
 
-query error pgcode 42710 tenant "10" already exists
+query error pgcode 42710 tenant "10" with name "anonymous-tenant-10" already exists
 SELECT crdb_internal.create_tenant(10)
 
 query error pgcode 42710 tenant "11" with name "tenant-number-ten" already exists

@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package exprutil
+package exprutil_test
 
 import (
 	"context"
@@ -16,6 +16,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/exprutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
@@ -29,7 +30,7 @@ func TestEvalAsString(t *testing.T) {
 	ctx := context.Background()
 	sc := tree.MakeSemaContext()
 	s := cluster.MakeTestingClusterSettings()
-	exprEval := MakeEvaluator(
+	exprEval := exprutil.MakeEvaluator(
 		"test", &sc, eval.NewTestingEvalContext(s),
 	)
 	testData := []struct {

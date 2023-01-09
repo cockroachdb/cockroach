@@ -213,15 +213,15 @@ subtest tenant-cluster-settings
 # there.
 skipif config 3node-tenant-default-configs
 statement error admission.kv.enabled is a system-only setting and must be set in the admin tenant using SET CLUSTER SETTING
-ALTER TENANT 10 SET CLUSTER SETTING admission.kv.enabled=true
+ALTER TENANT [10] SET CLUSTER SETTING admission.kv.enabled=true
 
 onlyif config 3node-tenant-default-configs
 statement error ALTER TENANT can only be called by system operators
-ALTER TENANT 10 SET CLUSTER SETTING server.mem_profile.total_dump_size_limit='10M'
+ALTER TENANT [10] SET CLUSTER SETTING server.mem_profile.total_dump_size_limit='10M'
 
 skipif config 3node-tenant-default-configs
 statement error cannot use this statement to access cluster settings in system tenant
-ALTER TENANT 1 SET CLUSTER SETTING server.mem_profile.total_dump_size_limit='10M'
+ALTER TENANT [1] SET CLUSTER SETTING server.mem_profile.total_dump_size_limit='10M'
 
 skipif config 3node-tenant-default-configs
 statement ok
@@ -229,7 +229,11 @@ SELECT crdb_internal.create_tenant(10)
 
 skipif config 3node-tenant-default-configs
 statement ok
-ALTER TENANT 10 SET CLUSTER SETTING server.mem_profile.total_dump_size_limit='10M'
+ALTER TENANT "anonymous-tenant-10" SET CLUSTER SETTING server.mem_profile.total_dump_size_limit='5M'
+
+skipif config 3node-tenant-default-configs
+statement ok
+ALTER TENANT [10] SET CLUSTER SETTING server.mem_profile.total_dump_size_limit='10M'
 
 skipif config 3node-tenant-default-configs
 statement ok
@@ -237,7 +241,11 @@ ALTER TENANT ALL SET CLUSTER SETTING server.mem_profile.total_dump_size_limit='1
 
 skipif config 3node-tenant-default-configs
 statement ok
-ALTER TENANT 10 RESET CLUSTER SETTING server.mem_profile.total_dump_size_limit
+ALTER TENANT [10] RESET CLUSTER SETTING server.mem_profile.total_dump_size_limit
+
+skipif config 3node-tenant-default-configs
+statement ok
+ALTER TENANT "anonymous-tenant-10" RESET CLUSTER SETTING server.mem_profile.total_dump_size_limit
 
 skipif config 3node-tenant-default-configs
 statement ok
@@ -245,53 +253,76 @@ ALTER TENANT ALL RESET CLUSTER SETTING server.mem_profile.total_dump_size_limit
 
 onlyif config 3node-tenant-default-configs
 statement error SHOW CLUSTER SETTING FOR TENANT can only be called by system operators
-SHOW CLUSTER SETTING server.mem_profile.total_dump_size_limit FOR TENANT 10
+SHOW CLUSTER SETTING server.mem_profile.total_dump_size_limit FOR TENANT [10]
 
 skipif config 3node-tenant-default-configs
-query error tenant ID must be non-zero
-SHOW CLUSTER SETTING server.mem_profile.total_dump_size_limit FOR TENANT 0
+query error invalid tenant ID 0
+SHOW CLUSTER SETTING server.mem_profile.total_dump_size_limit FOR TENANT [0]
 
 
 skipif config 3node-tenant-default-configs
 query error use SHOW CLUSTER SETTING to display a setting for the system tenant
-SHOW CLUSTER SETTING server.mem_profile.total_dump_size_limit FOR TENANT 1
+SHOW CLUSTER SETTING server.mem_profile.total_dump_size_limit FOR TENANT [1]
 
 skipif config 3node-tenant-default-configs
-query error no tenant found with ID 1111
-SHOW CLUSTER SETTING server.mem_profile.total_dump_size_limit FOR TENANT 1111
+query error tenant "1111" does not exist
+SHOW CLUSTER SETTING server.mem_profile.total_dump_size_limit FOR TENANT [1111]
 
 skipif config 3node-tenant-default-configs
 query T
-SHOW CLUSTER SETTING server.mem_profile.total_dump_size_limit FOR TENANT 10
+SHOW CLUSTER SETTING server.mem_profile.total_dump_size_limit FOR TENANT [10]
+----
+NULL
+
+skipif config 3node-tenant-default-configs
+query T
+SHOW CLUSTER SETTING server.mem_profile.total_dump_size_limit FOR TENANT "anonymous-tenant-10"
 ----
 NULL
 
 onlyif config 3snode-tenant-default-config
 query error SHOW CLUSTER SETTINGS FOR TENANT can only be called by system operators
-SHOW CLUSTER SETTINGS FOR TENANT 10
+SHOW CLUSTER SETTINGS FOR TENANT [10]
 
 skipif config 3node-tenant-default-configs
-query error tenant ID must be non-zero
-SHOW CLUSTER SETTINGS FOR TENANT 0
+query error invalid tenant ID 0
+SHOW CLUSTER SETTINGS FOR TENANT [0]
 
 skipif config 3node-tenant-default-configs
 query error use SHOW CLUSTER SETTINGS to display settings for the system tenant
-SHOW CLUSTER SETTINGS FOR TENANT 1
+SHOW CLUSTER SETTINGS FOR TENANT [1]
 
 skipif config 3node-tenant-default-configs
-query error no tenant found with ID 1111
-SHOW CLUSTER SETTINGS FOR TENANT 1111
+query error tenant "1111" does not exist
+SHOW CLUSTER SETTINGS FOR TENANT [1111]
 
 # The IN clause should contain one public and one hidden cluster setting.
 skipif config 3node-tenant-default-configs
 query TTT
-SELECT variable, type, origin FROM [SHOW CLUSTER SETTINGS FOR TENANT 10] WHERE variable IN ('jobs.scheduler.enabled', 'jobs.retention_time') ORDER BY 1
+SELECT variable, type, origin FROM [SHOW CLUSTER SETTINGS FOR TENANT [10]]
+WHERE variable IN ('jobs.scheduler.enabled', 'jobs.retention_time') ORDER BY 1
+----
+jobs.retention_time  d  no-override
+
+skipif config 3node-tenant-default-configs
+query TTT
+SELECT variable, type, origin FROM [SHOW CLUSTER SETTINGS FOR TENANT "anonymous-tenant-10"]
+WHERE variable IN ('jobs.scheduler.enabled', 'jobs.retention_time') ORDER BY 1
 ----
 jobs.retention_time  d  no-override
 
 skipif config 3node-tenant-default-configs
 query TTBT
-SELECT variable, type, public, origin FROM [SHOW ALL CLUSTER SETTINGS FOR TENANT 10] WHERE variable IN ('jobs.scheduler.enabled', 'jobs.retention_time') ORDER BY 1
+SELECT variable, type, public, origin FROM [SHOW ALL CLUSTER SETTINGS FOR TENANT [10]]
+WHERE variable IN ('jobs.scheduler.enabled', 'jobs.retention_time') ORDER BY 1
+----
+jobs.retention_time     d  true   no-override
+jobs.scheduler.enabled  b  false  no-override
+
+skipif config 3node-tenant-default-configs
+query TTBT
+SELECT variable, type, public, origin FROM [SHOW ALL CLUSTER SETTINGS FOR TENANT "anonymous-tenant-10"]
+WHERE variable IN ('jobs.scheduler.enabled', 'jobs.retention_time') ORDER BY 1
 ----
 jobs.retention_time     d  true   no-override
 jobs.scheduler.enabled  b  false  no-override

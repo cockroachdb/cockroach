@@ -847,14 +847,14 @@ func (ts *TestServer) StartTenant(
 		}
 		// Check that the name passed in via params matches the name persisted in
 		// the system.tenants table.
-		if row[0] != tree.DNull {
+		if row[0] != tree.DNull && params.TenantName != "" {
 			actualName := (*string)(row[0].(*tree.DString))
 			if *actualName != string(params.TenantName) {
-				return nil, errors.Newf("name mismatch; tenant %d has name %s, but params specifies name %s",
+				return nil, errors.Newf("name mismatch; tenant %d has name %q, but params specifies name %q",
 					params.TenantID.ToUint64(), *actualName, params.TenantName)
 			}
 		} else if params.TenantName != "" {
-			return nil, errors.Newf("name mismatch; tenant %d has no name, but params specifies name %s",
+			return nil, errors.Newf("name mismatch; tenant %d has no name, but params specifies name %q",
 				params.TenantID.ToUint64(), params.TenantName)
 		}
 	}
