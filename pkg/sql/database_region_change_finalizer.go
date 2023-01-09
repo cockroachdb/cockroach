@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -248,7 +249,7 @@ func (r *databaseRegionChangeFinalizer) repartitionRegionalByRowTables(
 		if err != nil {
 			return nil, nil, err
 		}
-		partitionAllBy := partitionByForRegionalByRow(regionConfig, colName)
+		partitionAllBy := multiregion.PartitionByForRegionalByRow(regionConfig, colName)
 
 		// oldPartitionings saves the old partitionings for each
 		// index that is repartitioned. This is later used to remove zone

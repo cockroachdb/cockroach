@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catsessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -296,7 +297,7 @@ func (p *planner) AlterPrimaryKey(
 			if err != nil {
 				return err
 			}
-			partitionAllBy = partitionByForRegionalByRow(
+			partitionAllBy = multiregion.PartitionByForRegionalByRow(
 				regionConfig,
 				colName,
 			)
