@@ -765,6 +765,9 @@ func (mb *ephemeralReplicaAppBatch) Stage(
 	)
 	fr = replicaApplyTestingFilters(ctx, mb.r, cmd, fr)
 	cmd.ForcedErrResult = fr
+	if !cmd.Rejected() && cmd.LeaseIndex > mb.state.LeaseAppliedIndex {
+		mb.state.LeaseAppliedIndex = cmd.LeaseIndex
+	}
 
 	return cmd, nil
 }
