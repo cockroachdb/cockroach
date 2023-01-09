@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 const noPlan = "no plan"
@@ -206,25 +207,31 @@ func makeStmtBundleBuilder(
 	flags explain.Flags,
 	db *kv.DB,
 	ie *InternalExecutor,
-	stmt string,
+	stmtRawSQL string,
 	plan *planTop,
 	trace tracingpb.Recording,
 	placeholders *tree.PlaceholderInfo,
 ) stmtBundleBuilder {
 	b := stmtBundleBuilder{
-		flags: flags, db: db, ie: ie, stmt: stmt, plan: plan, trace: trace, placeholders: placeholders,
+		flags: flags, db: db, ie: ie, plan: plan, trace: trace, placeholders: placeholders,
 	}
-	b.buildPrettyStatement()
+	b.buildPrettyStatement(stmtRawSQL)
 	b.z.Init()
 	return b
 }
 
 // buildPrettyStatement saves the pretty-printed statement (without any
 // placeholder arguments).
-func (b *stmtBundleBuilder) buildPrettyStatement() {
+func (b *stmtBundleBuilder) buildPrettyStatement(stmtRawSQL string) {
 	// If we hit an early error, stmt or stmt.AST might not be initialized yet. In
-	// this case use the original statement SQL already in the stmtBundleBuilder.
-	if b.plan.stmt != nil && b.plan.stmt.AST != nil {
+	// this case use the original raw SQL.
+	if b.plan.stmt == nil || b.plan.stmt.AST == nil {
+		b.stmt = stmtRawSQL
+		// If we're collecting a redacted bundle, redact the raw SQL completely.
+		if b.flags.RedactValues && b.stmt != "" {
+			b.stmt = string(redact.RedactedMarker())
+		}
+	} else {
 		cfg := tree.DefaultPrettyCfg()
 		cfg.UseTabs = false
 		cfg.LineWidth = 100
@@ -232,7 +239,14 @@ func (b *stmtBundleBuilder) buildPrettyStatement() {
 		cfg.Simplify = true
 		cfg.Align = tree.PrettyNoAlign
 		cfg.JSONFmt = true
+		cfg.ValueRedaction = b.flags.RedactValues
 		b.stmt = cfg.Pretty(b.plan.stmt.AST)
+
+		// If we had ValueRedaction set, Pretty surrounded all constants with
+		// redaction markers. We must call Redact to fully redact them.
+		if b.flags.RedactValues {
+			b.stmt = string(redact.RedactableString(b.stmt).Redact())
+		}
 	}
 	if b.stmt == "" {
 		b.stmt = "-- no statement"
@@ -242,10 +256,6 @@ func (b *stmtBundleBuilder) buildPrettyStatement() {
 // addStatement adds the pretty-printed statement in b.stmt as file
 // statement.txt.
 func (b *stmtBundleBuilder) addStatement() {
-	if b.flags.RedactValues {
-		return
-	}
-
 	output := b.stmt
 
 	if b.placeholders != nil && len(b.placeholders.Values) != 0 {
@@ -253,7 +263,11 @@ func (b *stmtBundleBuilder) addStatement() {
 		buf.WriteString(output)
 		buf.WriteString("\n\n-- Arguments:\n")
 		for i, v := range b.placeholders.Values {
-			fmt.Fprintf(&buf, "--  %s: %v\n", tree.PlaceholderIdx(i), v)
+			if b.flags.RedactValues {
+				fmt.Fprintf(&buf, "--  %s: %s\n", tree.PlaceholderIdx(i), redact.RedactedMarker())
+			} else {
+				fmt.Fprintf(&buf, "--  %s: %v\n", tree.PlaceholderIdx(i), v)
+			}
 		}
 		output = buf.String()
 	}
