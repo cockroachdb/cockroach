@@ -251,7 +251,8 @@ type Replica struct {
 		// Note that there are two StateLoaders, in raftMu and mu,
 		// depending on which lock is being held.
 		stateLoader stateloader.StateLoader
-		// on-disk storage for sideloaded SSTables. nil when there's no ReplicaID.
+		// on-disk storage for sideloaded SSTables. Always non-nil.
+		// TODO(pavelkalinnikov): remove sideloaded == nil checks.
 		sideloaded logstore.SideloadStorage
 		// stateMachine is used to apply committed raft entries.
 		stateMachine replicaStateMachine
