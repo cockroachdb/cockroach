@@ -282,6 +282,27 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 			"distsql.html vec.txt vec-v.txt",
 		)
 	})
+
+	t.Run("redact", func(t *testing.T) {
+		r.Exec(t, "CREATE TABLE pterosaur (cardholder STRING PRIMARY KEY, cardno INT, INDEX (cardno));")
+		r.Exec(t, "INSERT INTO pterosaur VALUES ('pterodactyl', 5555555555554444);")
+		r.Exec(t, "CREATE STATISTICS jurassic FROM pterosaur;")
+		rows := r.QueryStr(t,
+			"EXPLAIN ANALYZE (DEBUG, REDACT) SELECT max(cardno) FROM pterosaur WHERE cardholder = 'pterodactyl'",
+		)
+		verboten := []string{"pterodactyl", "5555555555554444", fmt.Sprintf("%x", 5555555555554444)}
+		checkBundle(
+			t, fmt.Sprint(rows), "", func(name, contents string) error {
+				lowerContents := strings.ToLower(contents)
+				for _, pii := range verboten {
+					if strings.Contains(lowerContents, pii) {
+						return errors.Newf("file %s contained %q:\n%s\n", name, pii, contents)
+					}
+				}
+				return nil
+			}, "env.sql schema.sql vec.txt vec-v.txt",
+		)
+	})
 }
 
 // checkBundle searches text strings for a bundle URL and then verifies that the
