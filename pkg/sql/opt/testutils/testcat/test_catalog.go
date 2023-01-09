@@ -695,6 +695,8 @@ type Table struct {
 	partitionBy *tree.PartitionBy
 
 	multiRegion bool
+
+	implicitRBRIndexElem *tree.IndexElem
 }
 
 var _ cat.Table = &Table{}
@@ -854,7 +856,7 @@ func (tt *Table) Zone() cat.Zone {
 
 // IsPartitionAllBy is part of the cat.Table interface.
 func (tt *Table) IsPartitionAllBy() bool {
-	return false
+	return tt.implicitRBRIndexElem != nil
 }
 
 // HomeRegion is part of the cat.Table interface.
@@ -869,7 +871,7 @@ func (tt *Table) IsGlobalTable() bool {
 
 // IsRegionalByRow is part of the cat.Table interface.
 func (tt *Table) IsRegionalByRow() bool {
-	return false
+	return tt.implicitRBRIndexElem != nil
 }
 
 // IsMultiregion is part of the cat.Table interface.
@@ -879,7 +881,10 @@ func (tt *Table) IsMultiregion() bool {
 
 // HomeRegionColName is part of the cat.Table interface.
 func (tt *Table) HomeRegionColName() (colName string, ok bool) {
-	return "", false
+	if !tt.IsRegionalByRow() {
+		return "", false
+	}
+	return string(tree.RegionalByRowRegionDefaultColName), true
 }
 
 // GetDatabaseID is part of the cat.Table interface.
@@ -1008,6 +1013,10 @@ type Index struct {
 
 	// version is the index descriptor version of the index.
 	version descpb.IndexDescriptorVersion
+
+	// numImplicitPartitioningColumns is the number of implicit partitioning
+	// columns defined in this index.
+	numImplicitPartitioningColumns int
 }
 
 // ID is part of the cat.Index interface.
@@ -1105,12 +1114,12 @@ func (ti *Index) Predicate() (string, bool) {
 
 // ImplicitColumnCount is part of the cat.Index interface.
 func (ti *Index) ImplicitColumnCount() int {
-	return 0
+	return ti.numImplicitPartitioningColumns
 }
 
 // ImplicitPartitioningColumnCount is part of the cat.Index interface.
 func (ti *Index) ImplicitPartitioningColumnCount() int {
-	return 0
+	return ti.numImplicitPartitioningColumns
 }
 
 // GeoConfig is part of the cat.Index interface.
