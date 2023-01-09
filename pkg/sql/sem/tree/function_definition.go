@@ -291,7 +291,7 @@ func (fd *ResolvedFunctionDefinition) MatchOverload(
 
 	findMatches := func(schema string) {
 		for i := range fd.Overloads {
-			if matched(fd.Overloads[i], schema) {
+			if checkIfMatchedOverloadAt(paramTypes, fd.Overloads[i], schema) {
 				found = true
 				ret = append(ret, fd.Overloads[i])
 			}
@@ -317,6 +317,44 @@ func (fd *ResolvedFunctionDefinition) MatchOverload(
 		return QualifiedOverload{}, errors.Errorf("function name %q is not unique", fd.Name)
 	}
 	return ret[0], nil
+}
+
+func checkIfMatchedOverloadAt(
+	paramTypes []*types.T, ql QualifiedOverload, schema string,
+) bool {
+
+	matchedParam := func(
+		paramTypes []*types.T, ql QualifiedOverload, ord int,
+	) bool {
+		for _, qlp := range ql.params().Types() {
+			if qlp.Width() != paramTypes[ord].Width() {
+				return false
+			}
+		}
+		return true
+	}
+
+	for k, pty := range paramTypes {
+		switch pty.Family() {
+		// should check all the types that's supported by udf
+		case types.IntFamily:
+		case types.FloatFamily:
+		case types.DateFamily:
+		case types.TimestampFamily:
+		case types.IntervalFamily:
+		case types.BytesFamily:
+		case types.TimestampTZFamily:
+		case types.CollatedStringFamily:
+		case types.INetFamily:
+			if !matchedParam(paramTypes, ql, k) {
+				return false
+			}
+			return true
+		default:
+			return true
+		}
+	}
+	return true
 }
 
 func combineOverloads(a, b []QualifiedOverload) []QualifiedOverload {
