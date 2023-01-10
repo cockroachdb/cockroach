@@ -361,17 +361,17 @@ func fromReplicaIsTooOldRLocked(toReplica *Replica, fromReplica *roachpb.Replica
 	return !found && fromReplica.ReplicaID < desc.NextReplicaID
 }
 
-// addReplicaInternalLocked adds the replica to the replicas map and the
-// replicasByKey btree. Returns an error if a replica with
-// the same Range ID or an overlapping replica or placeholder exists in
-// this store. addReplicaInternalLocked requires that the store lock is held.
+// addReplicaInternalLocked adds the replica to the replicasByKey btree. The
+// replica must already be in replicasByRangeID. Requires that Store.mu is held.
+//
+// Returns an error if a different replica with the same range ID, or an
+// overlapping replica or placeholder exists in this Store.
 func (s *Store) addReplicaInternalLocked(repl *Replica) error {
 	if !repl.IsInitialized() {
 		return errors.Errorf("attempted to add uninitialized replica %s", repl)
 	}
-
-	if err := s.addReplicaToRangeMapLocked(repl); err != nil {
-		return err
+	if got := s.GetReplicaIfExists(repl.RangeID); got != repl { // NB: got can be nil too
+		return errors.Errorf("replica %s not in replicasByRangeID; got %s", repl, got)
 	}
 
 	if it := s.getOverlappingKeyRangeLocked(repl.Desc()); it.item != nil {
@@ -403,8 +403,8 @@ func (s *Store) addPlaceholderLocked(placeholder *ReplicaPlaceholder) error {
 // addReplicaToRangeMapLocked adds the replica to the replicas map.
 func (s *Store) addReplicaToRangeMapLocked(repl *Replica) error {
 	// It's ok for the replica to exist in the replicas map as long as it is the
-	// same replica object. This occurs during splits where the right-hand side
-	// is added to the replicas map before it is initialized.
+	// same replica object. This does not happen, to the best of our knowledge.
+	// TODO(pavelkalinnikov): consider asserting that existing == nil.
 	if existing, loaded := s.mu.replicasByRangeID.LoadOrStore(
 		repl.RangeID, repl); loaded && existing != repl {
 		return errors.Errorf("%s: replica already exists", repl)
