@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -46,6 +47,9 @@ type TestTenantInterface interface {
 
 	// RPCAddr returns the tenant's RPC address.
 	RPCAddr() string
+
+	// DB returns a handle to the cluster's KV interface.
+	DB() *kv.DB
 
 	// PGServer returns the tenant's *pgwire.Server as an interface{}.
 	PGServer() interface{}

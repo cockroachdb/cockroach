@@ -18,14 +18,17 @@ import (
 	io "io"
 	"regexp"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	_ "github.com/cockroachdb/cockroach/pkg/ccl" // for tenant functionality
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/tenantrate"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -165,36 +168,49 @@ func TestTenantRateLimiter(t *testing.T) {
 			},
 		},
 	})
-
 	ctx := context.Background()
+	tenantID := serverutils.TestTenantID()
+	ts, err := s.StartTenant(ctx, base.TestTenantArgs{
+		TenantID: tenantID,
+		TestingKnobs: base.TestingKnobs{
+			SpanConfig: &spanconfig.TestingKnobs{
+				// Disable the span reconciler because it performs tenant KV requests
+				// that interfere with our operation counts below.
+				ManagerDisableJobCreation: true,
+			},
+		},
+	})
+	require.NoError(t, err)
+
 	defer s.Stopper().Stop(ctx)
 
 	// Set a small rate limit so the test doesn't take a long time.
 	runner := sqlutils.MakeSQLRunner(sqlDB)
 	runner.Exec(t, `SET CLUSTER SETTING kv.tenant_rate_limiter.rate_limit = 200`)
 
-	tenantID := serverutils.TestTenantID()
 	codec := keys.MakeSQLCodec(tenantID)
 
 	tenantPrefix := codec.TenantPrefix()
-	_, _, err := s.SplitRange(tenantPrefix)
+	_, _, err = s.SplitRange(tenantPrefix)
 	require.NoError(t, err)
 	tablePrefix := codec.TablePrefix(42)
 	tablePrefix = tablePrefix[:len(tablePrefix):len(tablePrefix)] // appends realloc
 	mkKey := func() roachpb.Key {
 		return encoding.EncodeUUIDValue(tablePrefix, 1, uuid.MakeV4())
 	}
+
+	timeSource.Advance(time.Second)
 	// Ensure that the qps rate limit does not affect the system tenant even for
 	// the tenant range.
-	tenantCtx := roachpb.NewContextForTenant(ctx, tenantID)
 	cfg := tenantrate.ConfigFromSettings(&s.ClusterSettings().SV)
 
 	// We don't know the exact size of the write, but we can set lower and upper
 	// bounds.
 	writeCostLower := cfg.WriteBatchUnits + cfg.WriteRequestUnits
 	writeCostUpper := cfg.WriteBatchUnits + cfg.WriteRequestUnits + float64(32)*cfg.WriteUnitsPerByte
+	tolerance := 10.0 // leave space for a couple of other background requests
 	// burstWrites is a number of writes that don't exceed the burst limit.
-	burstWrites := int(cfg.Burst / writeCostUpper)
+	burstWrites := int((cfg.Burst - tolerance) / writeCostUpper)
 	// tooManyWrites is a number of writes which definitely exceed the burst
 	// limit.
 	tooManyWrites := int(cfg.Burst/writeCostLower) + 2
@@ -204,10 +220,11 @@ func TestTenantRateLimiter(t *testing.T) {
 	for i := 0; i < tooManyWrites; i++ {
 		require.NoError(t, db.Put(ctx, mkKey(), 0))
 	}
+	timeSource.Advance(time.Second)
 	// Now ensure that in the same instant the write QPS limit does affect the
 	// tenant. First issue requests that can happen without blocking.
 	for i := 0; i < burstWrites; i++ {
-		require.NoError(t, db.Put(tenantCtx, mkKey(), 0))
+		require.NoError(t, ts.DB().Put(ctx, mkKey(), 0))
 	}
 	// Attempt to issue another request, make sure that it gets blocked by
 	// observing a timer.
@@ -215,7 +232,7 @@ func TestTenantRateLimiter(t *testing.T) {
 	go func() {
 		// Issue enough requests so that one has to block.
 		for i := burstWrites; i < tooManyWrites; i++ {
-			if err := db.Put(tenantCtx, mkKey(), 0); err != nil {
+			if err := ts.DB().Put(ctx, mkKey(), 0); err != nil {
 				errCh <- err
 				return
 			}
@@ -244,10 +261,6 @@ func TestTenantRateLimiter(t *testing.T) {
 		require.NoError(t, resp.Body.Close())
 		return string(read)
 	}
-	makeMetricStr := func(expCount int64) string {
-		tenantMetricStr := fmt.Sprintf(`kv_tenant_rate_limit_write_requests_admitted{store="1",tenant_id="%d"}`, tenantID.ToUint64())
-		return fmt.Sprintf("%s %d", tenantMetricStr, expCount)
-	}
 
 	// Allow the blocked request to proceed.
 	timeSource.Advance(time.Second)
@@ -258,6 +271,19 @@ func TestTenantRateLimiter(t *testing.T) {
 	// TODO(radu): this is fragile because a background write could sneak in and
 	// the count wouldn't match exactly.
 	m := getMetrics()
-	exp := makeMetricStr(int64(tooManyWrites))
-	require.Contains(t, m, exp, "could not find %s in metrics: \n%s\n", exp, m)
+	lines := strings.Split(m, "\n")
+	tenantMetricStr := fmt.Sprintf(`kv_tenant_rate_limit_write_requests_admitted{store="1",tenant_id="%d"}`, tenantID.ToUint64())
+	re := regexp.MustCompile(tenantMetricStr + ` (\d*)`)
+	for _, line := range lines {
+		match := re.FindStringSubmatch(line)
+		if match != nil {
+			admittedMetricVal, err := strconv.Atoi(match[1])
+			require.NoError(t, err)
+			require.GreaterOrEqual(t, admittedMetricVal, tooManyWrites)
+			// Allow a tolerance for other requests performed while starting the
+			// tenant server.
+			require.Less(t, admittedMetricVal, tooManyWrites+300)
+			break
+		}
+	}
 }
