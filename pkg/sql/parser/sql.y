@@ -870,7 +870,7 @@ func (u *sqlSymUnion) cteMaterializeClause() tree.CTEMaterializeClause {
 %token <str> BUCKET_COUNT
 %token <str> BOOLEAN BOTH BOX2D BUNDLE BY
 
-%token <str> CACHE CALLED CANCEL CANCELQUERY CASCADE CASE CAST CBRT CHANGEFEED CHAR
+%token <str> CACHE CALLED CANCEL CANCELQUERY CAPABILITIES CAPABILITY CASCADE CASE CAST CBRT CHANGEFEED CHAR
 %token <str> CHARACTER CHARACTERISTICS CHECK CLOSE
 %token <str> CLUSTER COALESCE COLLATE COLLATION COLUMN COLUMNS COMMENT COMMENTS COMMIT
 %token <str> COMMITTED COMPACT COMPLETE COMPLETIONS CONCAT CONCURRENTLY CONFIGURATION CONFIGURATIONS CONFIGURE
@@ -1048,6 +1048,7 @@ func (u *sqlSymUnion) cteMaterializeClause() tree.CTEMaterializeClause {
 
 // Other ALTER TENANT statements.
 %type <tree.Statement> alter_tenant_replication_stmt
+%type <tree.Statement> alter_tenant_capability_stmt
 %type <tree.Statement> alter_tenant_rename_stmt
 
 // ALTER PARTITION
@@ -5570,7 +5571,7 @@ backup_kms:
 // %Help: SHOW TENANT - display tenant information
 // %Category: Experimental
 // %Text:
-// SHOW { TENANT { <tenant_spec> | ALL } | TENANTS ] [WITH REPLICATION STATUS]
+// SHOW { TENANT { <tenant_spec> | ALL } | TENANTS ] [WITH {REPLICATION STATUS|CAPABILITY}]
 show_tenant_stmt:
   SHOW TENANTS
   {
@@ -5614,6 +5615,13 @@ show_tenant_stmt:
      WithReplication: true,
    }
   }
+| SHOW TENANT tenant_spec WITH CAPABILITIES
+	{
+	 $$.val = &tree.ShowTenant{
+		 TenantSpec: $3.tenantSpec(),
+		 WithCapabilities: true,
+	 }
+	}
 | SHOW TENANT error // SHOW HELP: SHOW TENANT
 
 // %Help: PREPARE - prepare a statement for later execution
@@ -6174,10 +6182,11 @@ set_csetting_stmt:
 
 // %Help: ALTER TENANT - alter tenant configuration
 // %Category: Group
-// %SeeAlso: ALTER TENANT REPLICATION, ALTER TENANT CLUSTER SETTING, ALTER TENANT RENAME
+// %SeeAlso: ALTER TENANT REPLICATION, ALTER TENANT CLUSTER SETTING, ALTER TENANT CAPABILITY, ALTER TENANT RENAME
 alter_tenant_stmt:
   alter_tenant_replication_stmt // EXTEND WITH HELP: ALTER TENANT REPLICATION
 | alter_tenant_csetting_stmt    // EXTEND WITH HELP: ALTER TENANT CLUSTER SETTING
+| alter_tenant_capability_stmt  // EXTEND WITH HELP: ALTER TENANT
 | alter_tenant_rename_stmt      // EXTEND WITH HELP: ALTER TENANT RENAME
 | ALTER TENANT error            // SHOW HELP: ALTER TENANT
 
@@ -6290,6 +6299,30 @@ set_or_reset_csetting_stmt:
 to_or_eq:
   '='
 | TO
+
+// %Help: ALTER TENANT CAPABILITY - alter tenant capability
+// %Category: Group
+// %Text:
+// ALTER TENANT <tenant_id> SET CAPABILITY <var> { TO | = } <value>
+// ALTER TENANT <tenant_id> RESET CAPABILITY <var>
+alter_tenant_capability_stmt:
+  ALTER TENANT tenant_spec SET CAPABILITY var_name to_or_eq var_value
+  {
+    /* SKIP DOC */
+    $$.val = &tree.AlterTenantCapability{
+      TenantSpec: $3.tenantSpec(),
+      CapabilityName: strings.Join($6.strs(), "."),
+      CapabilityValue: $8.expr(),
+    }
+  }
+| ALTER TENANT tenant_spec RESET CAPABILITY var_name
+  {
+    /* SKIP DOC */
+    $$.val = &tree.AlterTenantCapability{
+      TenantSpec: $3.tenantSpec(),
+			CapabilityName: strings.Join($6.strs(), "."),
+    }
+  }
 
 set_exprs_internal:
   /* SET ROW serves to accelerate parser.parseExprs().
@@ -15747,6 +15780,8 @@ unreserved_keyword:
 | CALLED
 | CANCEL
 | CANCELQUERY
+| CAPABILITIES
+| CAPABILITY
 | CASCADE
 | CHANGEFEED
 | CLOSE

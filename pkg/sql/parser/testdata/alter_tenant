@@ -190,3 +190,51 @@ ALTER TENANT 'foo' RENAME TO bar
 ALTER TENANT ('foo') RENAME TO (bar) -- fully parenthesized
 ALTER TENANT '_' RENAME TO bar -- literals removed
 ALTER TENANT 'foo' RENAME TO _ -- identifiers removed
+
+parse
+ALTER TENANT 123 SET CAPABILITY a = 3
+----
+ALTER TENANT 123 SET CAPABILITY a = 3
+ALTER TENANT (123) SET CAPABILITY a = (3) -- fully parenthesized
+ALTER TENANT _ SET CAPABILITY a = _ -- literals removed
+ALTER TENANT 123 SET CAPABILITY a = 3 -- identifiers removed
+
+parse
+ALTER TENANT (1+1) SET CAPABILITY a = 3
+----
+ALTER TENANT (1 + 1) SET CAPABILITY a = 3 -- normalized!
+ALTER TENANT ((((1) + (1)))) SET CAPABILITY a = (3) -- fully parenthesized
+ALTER TENANT (_ + _) SET CAPABILITY a = _ -- literals removed
+ALTER TENANT (1 + 1) SET CAPABILITY a = 3 -- identifiers removed
+
+parse
+ALTER TENANT $1 SET CAPABILITY a = 3
+----
+ALTER TENANT $1 SET CAPABILITY a = 3
+ALTER TENANT ($1) SET CAPABILITY a = (3) -- fully parenthesized
+ALTER TENANT $1 SET CAPABILITY a = _ -- literals removed
+ALTER TENANT $1 SET CAPABILITY a = 3 -- identifiers removed
+
+parse
+ALTER TENANT 123 RESET CAPABILITY a
+----
+ALTER TENANT 123 RESET CAPABILITY a
+ALTER TENANT (123) RESET CAPABILITY a -- fully parenthesized
+ALTER TENANT _ RESET CAPABILITY a -- literals removed
+ALTER TENANT 123 RESET CAPABILITY a -- identifiers removed
+
+parse
+ALTER TENANT (1+1) RESET CAPABILITY a
+----
+ALTER TENANT (1 + 1) RESET CAPABILITY a -- normalized!
+ALTER TENANT ((((1) + (1)))) RESET CAPABILITY a -- fully parenthesized
+ALTER TENANT (_ + _) RESET CAPABILITY a -- literals removed
+ALTER TENANT (1 + 1) RESET CAPABILITY a -- identifiers removed
+
+parse
+ALTER TENANT $1 RESET CAPABILITY a
+----
+ALTER TENANT $1 RESET CAPABILITY a
+ALTER TENANT ($1) RESET CAPABILITY a -- fully parenthesized
+ALTER TENANT $1 RESET CAPABILITY a -- literals removed
+ALTER TENANT $1 RESET CAPABILITY a -- identifiers removed

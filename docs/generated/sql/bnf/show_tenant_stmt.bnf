@@ -5,3 +5,4 @@ show_tenant_stmt ::=
 	| 'SHOW' 'TENANT_ALL' 'ALL' 'WITH' 'REPLICATION' 'STATUS'
 	| 'SHOW' 'TENANT' tenant_spec
 	| 'SHOW' 'TENANT' tenant_spec 'WITH' 'REPLICATION' 'STATUS'
+	| 'SHOW' 'TENANT' tenant_spec 'WITH' 'CAPABILITIES'
