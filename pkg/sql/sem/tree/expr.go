@@ -885,7 +885,7 @@ func (node *Array) Format(ctx *FmtCtx) {
 	// UNKNOWN[], since that's not a valid annotation.
 	if ctx.HasFlags(FmtParsable) && node.typ != nil {
 		if node.typ.ArrayContents().Family() != types.UnknownFamily {
-			ctx.WriteString(":::")
+			ctx.WriteString("::")
 			ctx.FormatTypeReference(node.typ)
 		}
 	}
