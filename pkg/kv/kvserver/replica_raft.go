@@ -692,12 +692,13 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			"handleRaftReadyRaftMuLocked cannot be called with a cancellable context")
 	}
 
+	// NB: we need to reference the named return parameter here. If `stats` were
+	// just a local, we'd be modifying the local but not the return value in the
+	// defer below.
 	stats = handleRaftReadyStats{
 		tBegin: timeutil.Now(),
 	}
 	defer func() {
-		// NB: we need to reference the named return parameter here. If `stats` were
-		// just a local, we'd be modifying the local but not the return value.
 		stats.tEnd = timeutil.Now()
 	}()
 
