@@ -697,6 +697,8 @@ type Table struct {
 	multiRegion bool
 
 	implicitRBRIndexElem *tree.IndexElem
+
+	homeRegion string
 }
 
 var _ cat.Table = &Table{}
@@ -861,7 +863,10 @@ func (tt *Table) IsPartitionAllBy() bool {
 
 // HomeRegion is part of the cat.Table interface.
 func (tt *Table) HomeRegion() (region string, ok bool) {
-	return "", false
+	if tt.homeRegion == "" {
+		return "", false
+	}
+	return tt.homeRegion, true
 }
 
 // IsGlobalTable is part of the cat.Table interface.

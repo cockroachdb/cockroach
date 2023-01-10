@@ -80,10 +80,18 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 	}
 
 	isRbr := false
+	isRbt := false
 	if stmt.Locality != nil {
 		isRbr = stmt.Locality.LocalityLevel == tree.LocalityLevelRow
+		isRbt = stmt.Locality.LocalityLevel == tree.LocalityLevelTable
+		fmt.Println(isRbt)
 	}
 	tab := &Table{TabID: tc.nextStableID(), TabName: stmt.Table, Catalog: tc}
+
+	if isRbt && stmt.Locality.TableRegion != "" {
+		tab.multiRegion = true
+		tab.homeRegion = string(stmt.Locality.TableRegion)
+	}
 
 	if isRbr && stmt.PartitionByTable == nil {
 		// Build the table as LOCALITY REGIONAL BY ROW.
