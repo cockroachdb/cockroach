@@ -76,13 +76,7 @@ func (desc *wrapper) GetReferencedDescIDs() (catalog.DescriptorIDSet, error) {
 	}
 	// Collect user defined type Oids and sequence references in columns.
 	for _, col := range desc.DeletableColumns() {
-		children, err := typedesc.GetTypeDescriptorClosure(col.GetType())
-		if err != nil {
-			return catalog.DescriptorIDSet{}, err
-		}
-		for id := range children {
-			ids.Add(id)
-		}
+		typedesc.GetTypeDescriptorClosure(col.GetType()).ForEach(ids.Add)
 		for i := 0; i < col.NumUsesSequences(); i++ {
 			ids.Add(col.GetUsesSequenceID(i))
 		}

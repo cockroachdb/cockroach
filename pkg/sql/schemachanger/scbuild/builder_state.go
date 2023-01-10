@@ -382,15 +382,7 @@ func (b *builderState) ResolveTypeRef(ref tree.ResolvableTypeReference) scpb.Typ
 }
 
 func newTypeT(t *types.T) scpb.TypeT {
-	m, err := typedesc.GetTypeDescriptorClosure(t)
-	if err != nil {
-		panic(err)
-	}
-	var ids catalog.DescriptorIDSet
-	for id := range m {
-		ids.Add(id)
-	}
-	return scpb.TypeT{Type: t, ClosedTypeIDs: ids.Ordered()}
+	return scpb.TypeT{Type: t, ClosedTypeIDs: typedesc.GetTypeDescriptorClosure(t).Ordered()}
 }
 
 // WrapExpression implements the scbuildstmt.TableHelpers interface.
@@ -439,13 +431,7 @@ func (b *builderState) WrapExpression(tableID catid.DescID, expr tree.Expr) *scp
 			if err != nil {
 				panic(err)
 			}
-			ids, err := typ.GetIDClosure()
-			if err != nil {
-				panic(err)
-			}
-			for id = range ids {
-				typeIDs.Add(id)
-			}
+			typ.GetIDClosure().ForEach(typeIDs.Add)
 		}
 	}
 	// Collect sequence IDs.
