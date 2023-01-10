@@ -1,2 +1,0 @@
-name: COCKROACH_BINCHECK
-desc: Linux images used to verify pre-built CockroachDB binaries.
