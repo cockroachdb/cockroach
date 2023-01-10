@@ -1704,9 +1704,7 @@ func dropColumnImpl(
 		if check.Dropped() {
 			continue
 		}
-		if used, err := tableDesc.CheckConstraintUsesColumn(check.CheckDesc(), colToDrop.GetID()); err != nil {
-			return nil, err
-		} else if !used {
+		if !check.CollectReferencedColumnIDs().Contains(colToDrop.GetID()) {
 			continue
 		}
 		if err := tableDesc.DropConstraint(check, nil /* removeFKBackRef */); err != nil {

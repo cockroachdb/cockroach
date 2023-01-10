@@ -61,11 +61,7 @@ func verifyTableDescriptorState(
 	shardColID := getShardColumnID(t, tableDesc, shardedIndexName)
 	foundCheckConstraint := false
 	for _, check := range tableDesc.CheckConstraints() {
-		usesShard, err := tableDesc.CheckConstraintUsesColumn(check.CheckDesc(), shardColID)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if usesShard && check.IsHashShardingConstraint() {
+		if check.CollectReferencedColumnIDs().Contains(shardColID) && check.IsHashShardingConstraint() {
 			foundCheckConstraint = true
 			break
 		}
