@@ -332,7 +332,6 @@ func TestExplainMVCCSteps(t *testing.T) {
 	skip.UnderMetamorphic(t,
 		"this test expects a precise number of scan requests, which is not upheld "+
 			"in the metamorphic configuration that edits the kv batch size.")
-	skip.WithIssue(t, 94881)
 	ctx := context.Background()
 	srv, godb, _ := serverutils.StartServer(t, base.TestServerArgs{Insecure: true})
 	defer srv.Stopper().Stop(ctx)
@@ -353,7 +352,7 @@ func TestExplainMVCCSteps(t *testing.T) {
 	// Update all rows.
 	r.Exec(t, "UPDATE ab SET b=b+1 WHERE true")
 
-	expectedSteps, expectedSeeks = 2000, 1
+	expectedSteps, expectedSeeks = 1000, 1
 	foundSteps, foundSeeks = getMVCCStats(t, r, scanQuery)
 
 	assert.Equal(t, expectedSteps, foundSteps)
