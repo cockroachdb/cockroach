@@ -12,6 +12,7 @@ package loqrecovery
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"time"
 
@@ -52,10 +53,12 @@ type visitNodesFn func(ctx context.Context, retryOpts retry.Options,
 ) error
 
 type Server struct {
-	nodeIDContainer      *base.NodeIDContainer
-	stores               *kvserver.Stores
-	visitNodes           visitNodesFn
-	planStore            PlanStore
+	nodeIDContainer *base.NodeIDContainer
+	stores          *kvserver.Stores
+	visitNodes      visitNodesFn
+	planStore       PlanStore
+	decommissionFn  func(context.Context, roachpb.NodeID) error
+
 	metadataQueryTimeout time.Duration
 	forwardReplicaFilter func(*serverpb.RecoveryCollectLocalReplicaInfoResponse) error
 }
@@ -68,6 +71,7 @@ func NewServer(
 	loc roachpb.Locality,
 	rpcCtx *rpc.Context,
 	knobs base.ModuleTestingKnobs,
+	decommission func(context.Context, roachpb.NodeID) error,
 ) *Server {
 	// Server side timeouts are necessary in recovery collector since we do best
 	// effort operations where cluster info collection as an operation succeeds
@@ -85,6 +89,7 @@ func NewServer(
 		stores:               stores,
 		visitNodes:           makeVisitAvailableNodes(g, loc, rpcCtx),
 		planStore:            planStore,
+		decommissionFn:       decommission,
 		metadataQueryTimeout: metadataQueryTimeout,
 		forwardReplicaFilter: forwardReplicaFilter,
 	}
@@ -209,6 +214,136 @@ func (s Server) ServeClusterReplicas(
 			nodes++
 			return nil
 		})
+}
+
+func (s Server) StagePlan(
+	ctx context.Context, req *serverpb.RecoveryStagePlanRequest,
+) (*serverpb.RecoveryStagePlanResponse, error) {
+	if !req.ForcePlan && req.Plan == nil {
+		return nil, errors.New("stage plan request can't be used with empty plan without force flag")
+	}
+	localNodeID := s.nodeIDContainer.Get()
+	// Create a plan copy with all empty fields to shortcut all plan nil checks
+	// below to avoid unnecessary nil checks.
+	var plan loqrecoverypb.ReplicaUpdatePlan
+	if req.Plan != nil {
+		plan = *req.Plan
+	}
+	if req.AllNodes {
+		// Scan cluster for conflicting recovery plans and for stray nodes that are
+		// planned for forced decommission, but rejoined cluster.
+		foundNodes := make(map[roachpb.NodeID]struct{})
+		err := s.visitNodes(
+			ctx,
+			replicaInfoStreamRetryOptions,
+			func(nodeID roachpb.NodeID, client serverpb.AdminClient) error {
+				res, err := client.RecoveryNodeStatus(ctx, &serverpb.RecoveryNodeStatusRequest{})
+				if err != nil {
+					return errors.Mark(err, errMarkRetry)
+				}
+				// If operation fails here, we don't want to find all remaining
+				// violating nodes because cli must ensure that cluster is safe for
+				// staging.
+				if !req.ForcePlan && res.Status.PendingPlanID != nil && !res.Status.PendingPlanID.Equal(plan.PlanID) {
+					return errors.Newf("plan %s is already staged on node n%d", res.Status.PendingPlanID, nodeID)
+				}
+				foundNodes[nodeID] = struct{}{}
+				return nil
+			})
+		if err != nil {
+			return nil, err
+		}
+
+		// Check that no nodes that must be decommissioned are present.
+		for _, dID := range plan.DecommissionedNodeIDs {
+			if _, ok := foundNodes[dID]; ok {
+				return nil, errors.Newf("node n%d was planned for decommission, but is present in cluster", dID)
+			}
+		}
+
+		// Check out that all nodes that should save plan are present.
+		for _, u := range plan.Updates {
+			if _, ok := foundNodes[u.NodeID()]; !ok {
+				return nil, errors.Newf("node n%d has planned changed but is unreachable in the cluster", u.NodeID())
+			}
+		}
+
+		// Distribute plan - this should not use fan out to available, but use
+		// list from previous step.
+		var nodeErrors []string
+		err = s.visitNodes(
+			ctx,
+			replicaInfoStreamRetryOptions,
+			func(nodeID roachpb.NodeID, client serverpb.AdminClient) error {
+				delete(foundNodes, nodeID)
+				res, err := client.RecoveryStagePlan(ctx, &serverpb.RecoveryStagePlanRequest{
+					Plan:      req.Plan,
+					AllNodes:  false,
+					ForcePlan: req.ForcePlan,
+				})
+				if err != nil {
+					nodeErrors = append(nodeErrors,
+						errors.Wrapf(err, "failed staging the plan on node n%d", nodeID).Error())
+					return nil
+				}
+				nodeErrors = append(nodeErrors, res.Errors...)
+				return nil
+			})
+		if err != nil {
+			nodeErrors = append(nodeErrors,
+				errors.Wrapf(err, "failed to perform fan-out to cluster nodes from n%d",
+					localNodeID).Error())
+		}
+		if len(foundNodes) > 0 {
+			// We didn't talk to some of originally found nodes. Need to report
+			// disappeared nodes as we don't know what is happening with the cluster.
+			for n := range foundNodes {
+				nodeErrors = append(nodeErrors, fmt.Sprintf("node n%d disappeared while performing plan staging operation", n))
+			}
+		}
+		return &serverpb.RecoveryStagePlanResponse{Errors: nodeErrors}, nil
+	}
+
+	log.Infof(ctx, "attempting to stage loss of quorum recovery plan")
+
+	responseFromError := func(err error) (*serverpb.RecoveryStagePlanResponse, error) {
+		return &serverpb.RecoveryStagePlanResponse{
+			Errors: []string{
+				errors.Wrapf(err, "failed to stage plan on node n%d", localNodeID).Error(),
+			},
+		}, nil
+	}
+
+	existingPlan, err := s.planStore.HasPlan()
+	if err != nil {
+		return responseFromError(err)
+	}
+	if !existingPlan.Empty() && !existingPlan.SamePlan(plan.PlanID) && !req.ForcePlan {
+		return responseFromError(errors.Newf("conflicting plan %s is already staged", existingPlan.PlanID))
+	}
+
+	for _, node := range plan.DecommissionedNodeIDs {
+		if err := s.decommissionFn(ctx, node); err != nil {
+			return responseFromError(err)
+		}
+	}
+
+	if req.ForcePlan {
+		if err := s.planStore.RemovePlans(); err != nil {
+			return responseFromError(err)
+		}
+	}
+
+	for _, r := range plan.Updates {
+		if r.NodeID() == localNodeID {
+			if err := s.planStore.SavePlan(plan); err != nil {
+				return responseFromError(err)
+			}
+			break
+		}
+	}
+
+	return &serverpb.RecoveryStagePlanResponse{}, nil
 }
 
 func (s Server) NodeStatus(

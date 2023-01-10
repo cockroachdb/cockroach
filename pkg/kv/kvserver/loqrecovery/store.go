@@ -100,7 +100,7 @@ func (s PlanStore) SavePlan(plan loqrecoverypb.ReplicaUpdatePlan) error {
 		return nil
 	}
 	if !existing.Empty() {
-		return errors.Newf("can not set recovery plan %s, plan %s is already staged", plan.PlanID,
+		return errors.Newf("can not save recovery plan %s, plan %s is already staged", plan.PlanID,
 			existing.PlanID)
 	}
 
