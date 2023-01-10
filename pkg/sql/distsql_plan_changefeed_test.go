@@ -12,6 +12,7 @@ package sql
 
 import (
 	"context"
+	"fmt"
 	"math/rand"
 	"testing"
 
@@ -57,8 +58,23 @@ func TestChangefeedLogicalPlan(t *testing.T) {
 	s, db, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
 
+	defer tree.TestingEnableFamilyIndexHint()()
+
 	sqlDB := sqlutils.MakeSQLRunner(db)
-	sqlDB.Exec(t, `CREATE TABLE foo (a INT, b int, c STRING, CONSTRAINT "pk" PRIMARY KEY (a, b), UNIQUE (c))`)
+	sqlDB.Exec(t, `
+CREATE TABLE foo (
+  a INT,
+  b int,
+  c STRING,
+  double_c STRING AS (concat(c, c)) VIRTUAL,  -- Virtual columns ignored for now, but adding to make sure.
+  extra STRING NOT NULL,
+  CONSTRAINT "pk" PRIMARY KEY (a, b),
+  UNIQUE (c),
+  UNIQUE (extra),
+  FAMILY main (a,b,c),
+  FAMILY extra (extra)
+)`)
+
 	sqlDB.Exec(t, `CREATE TABLE bar (a INT)`)
 	fooDesc := desctestutils.TestingGetTableDescriptor(
 		kvDB, keys.SystemSQLCodec, "defaultdb", "public", "foo")
@@ -82,12 +98,30 @@ func TestChangefeedLogicalPlan(t *testing.T) {
 	rc := func(n string, typ *types.T) colinfo.ResultColumn {
 		return colinfo.ResultColumn{Name: n, Typ: typ}
 	}
-	allColumns := colinfo.ResultColumns{
+	mainColumns := colinfo.ResultColumns{
 		rc("a", types.Int), rc("b", types.Int), rc("c", types.String),
 	}
+	// mainColumns as tuple.
+	mainColumnsTuple := colinfo.ResultColumns{
+		rc("foo", types.MakeLabeledTuple(
+			[]*types.T{types.Int, types.Int, types.String},
+			[]string{"a", "b", "c"}),
+		)}
+
+	extraColumns := colinfo.ResultColumns{
+		rc("a", types.Int), rc("b", types.Int), rc("extra", types.String),
+	}
+
+	// extraColumnsAs tuple.
+	extraColumnsTuple := colinfo.ResultColumns{
+		rc("foo", types.MakeLabeledTuple(
+			[]*types.T{types.Int, types.Int, types.String},
+			[]string{"a", "b", "extra"}),
+		)}
+
 	checkPresentation := func(t *testing.T, expected, found colinfo.ResultColumns) {
 		t.Helper()
-		require.Equal(t, len(expected), len(found))
+		require.Equal(t, len(expected), len(found), "e=%v f=%v", expected, found)
 		for i := 0; i < len(found); i++ {
 			require.Equal(t, expected[i].Name, found[i].Name, "e=%v f=%v", expected[i], found[i])
 			require.True(t, expected[i].Typ.Equal(found[i].Typ), "e=%v f=%v", expected[i], found[i])
@@ -103,7 +137,13 @@ func TestChangefeedLogicalPlan(t *testing.T) {
 		{
 			stmt:        "SELECT * FROM foo WHERE 5 > 1",
 			expectSpans: roachpb.Spans{primarySpan},
-			present:     allColumns,
+			present:     mainColumns,
+		},
+		{
+			// Star scoped to column family.
+			stmt:        "SELECT * FROM foo@{FAMILY=[1]} WHERE 5 > 1",
+			expectSpans: roachpb.Spans{primarySpan},
+			present:     extraColumns,
 		},
 		{
 			stmt:      "SELECT * FROM foo WHERE 0 != 0",
@@ -112,6 +152,27 @@ func TestChangefeedLogicalPlan(t *testing.T) {
 		{
 			stmt:      "SELECT * FROM foo WHERE a IS NULL",
 			expectErr: "does not match any rows",
+		},
+		{
+			stmt:      "SELECT * FROM foo@{FAMILY=[1]} WHERE extra IS NULL",
+			expectErr: "does not match any rows",
+		},
+		{
+			// Cannot reference extra column when targeting main column family.
+			stmt:      "SELECT * FROM foo WHERE extra IS NULL",
+			expectErr: `column "extra" does not exist`,
+		},
+		{
+			// Can access system columns.
+			stmt:        "SELECT *, tableoid FROM foo",
+			expectSpans: roachpb.Spans{primarySpan},
+			present:     append(mainColumns, rc("tableoid", colinfo.TableOIDColumnDesc.Type)),
+		},
+		{
+			// Can access system columns in extra family.
+			stmt:        "SELECT *, crdb_internal_mvcc_timestamp AS mvcc FROM foo@{FAMILY=[1]}",
+			expectSpans: roachpb.Spans{primarySpan},
+			present:     append(extraColumns, rc("mvcc", colinfo.MVCCTimestampColumnDesc.Type)),
 		},
 		{
 			stmt:      "SELECT * FROM foo, bar WHERE foo.a = bar.a",
@@ -127,12 +188,12 @@ func TestChangefeedLogicalPlan(t *testing.T) {
 		},
 		{
 			stmt:      "SELECT * FROM foo WHERE 5 > 1 UNION SELECT * FROM foo WHERE a < 1",
-			expectErr: "unexpected multiple primary index scan operations",
+			expectErr: "unexpected expression type",
 		},
 		{
 			stmt:        "SELECT * FROM foo WHERE a >=3 or a < 3",
 			expectSpans: roachpb.Spans{primarySpan},
-			present:     allColumns,
+			present:     mainColumns,
 		},
 		{
 			stmt:      "SELECT * FROM foo WHERE 5",
@@ -145,7 +206,7 @@ func TestChangefeedLogicalPlan(t *testing.T) {
 		{
 			stmt:        "SELECT * FROM foo WHERE true",
 			expectSpans: roachpb.Spans{primarySpan},
-			present:     allColumns,
+			present:     mainColumns,
 		},
 		{
 			stmt:      "SELECT * FROM foo WHERE false",
@@ -154,32 +215,32 @@ func TestChangefeedLogicalPlan(t *testing.T) {
 		{
 			stmt:        "SELECT * FROM foo WHERE a > 100",
 			expectSpans: roachpb.Spans{{Key: mkPkKey(t, fooID, 101), EndKey: pkEnd}},
-			present:     allColumns,
+			present:     mainColumns,
 		},
 		{
 			stmt:        "SELECT * FROM foo WHERE a < 100",
 			expectSpans: roachpb.Spans{{Key: pkStart, EndKey: mkPkKey(t, fooID, 100)}},
-			present:     allColumns,
+			present:     mainColumns,
 		},
 		{
 			stmt:        "SELECT * FROM foo WHERE a > 10 AND a > 5",
 			expectSpans: roachpb.Spans{{Key: mkPkKey(t, fooID, 11), EndKey: pkEnd}},
-			present:     allColumns,
+			present:     mainColumns,
 		},
 		{
 			stmt:        "SELECT * FROM foo WHERE a > 10 OR a > 5",
 			expectSpans: roachpb.Spans{{Key: mkPkKey(t, fooID, 6), EndKey: pkEnd}},
-			present:     allColumns,
+			present:     mainColumns,
 		},
 		{
 			stmt:        "SELECT * FROM foo WHERE a > 100 AND a <= 101",
 			expectSpans: roachpb.Spans{{Key: mkPkKey(t, fooID, 101), EndKey: mkPkKey(t, fooID, 102)}},
-			present:     allColumns,
+			present:     mainColumns,
 		},
 		{
 			stmt:        "SELECT * FROM foo WHERE a > 100 and a < 200",
 			expectSpans: roachpb.Spans{{Key: mkPkKey(t, fooID, 101), EndKey: mkPkKey(t, fooID, 200)}},
-			present:     allColumns,
+			present:     mainColumns,
 		},
 		{
 			stmt: "SELECT * FROM foo WHERE a > 100 or a <= 99",
@@ -187,25 +248,25 @@ func TestChangefeedLogicalPlan(t *testing.T) {
 				{Key: pkStart, EndKey: mkPkKey(t, fooID, 100)},
 				{Key: mkPkKey(t, fooID, 101), EndKey: pkEnd},
 			},
-			present: allColumns,
+			present: mainColumns,
 		},
 		{
 			stmt:        "SELECT * FROM foo WHERE a > 100 AND b > 11",
 			expectSpans: roachpb.Spans{{Key: mkPkKey(t, fooID, 101, 12), EndKey: pkEnd}},
-			present:     allColumns,
+			present:     mainColumns,
 		},
 		{
 			// Same as above, but with table alias -- we expect remaining expression to
 			// preserve the alias.
 			stmt:        "SELECT * FROM foo AS buz WHERE buz.a > 100 AND b > 11",
 			expectSpans: roachpb.Spans{{Key: mkPkKey(t, fooID, 101, 12), EndKey: pkEnd}},
-			present:     allColumns,
+			present:     mainColumns,
 		},
 		{
 			// Same as above, but w/ silly tautology, which should be removed.
 			stmt:        "SELECT * FROM defaultdb.public.foo WHERE (a > 3 OR a <= 3) AND a > 100 AND b > 11",
 			expectSpans: roachpb.Spans{{Key: mkPkKey(t, fooID, 101, 12), EndKey: pkEnd}},
-			present:     allColumns,
+			present:     mainColumns,
 		},
 		{
 			stmt: "SELECT * FROM foo WHERE a < 42 OR (a > 100 AND b > 11)",
@@ -213,7 +274,7 @@ func TestChangefeedLogicalPlan(t *testing.T) {
 				{Key: pkStart, EndKey: mkPkKey(t, fooID, 42)},
 				{Key: mkPkKey(t, fooID, 101, 12), EndKey: pkEnd},
 			},
-			present: allColumns,
+			present: mainColumns,
 		},
 		{
 			// Same as above, but now with tuples.
@@ -224,18 +285,18 @@ func TestChangefeedLogicalPlan(t *testing.T) {
 				// /Table/104/1/100/12 (i.e. a="100" and b="12" (because 100/12 lexicographically follows 100).
 				{Key: mkPkKey(t, fooID, 100, 12), EndKey: pkEnd},
 			},
-			present: allColumns,
+			present: mainColumns,
 		},
 		{
 			stmt:        "SELECT * FROM foo WHERE (a, b) > (2, 5)",
 			expectSpans: roachpb.Spans{{Key: mkPkKey(t, fooID, 2, 6), EndKey: pkEnd}},
-			present:     allColumns,
+			present:     mainColumns,
 		},
 		{
 			// Test that aliased table names work.
 			stmt:        "SELECT * FROM foo as buz WHERE (buz.a, buz.b) > (2, 5)",
 			expectSpans: roachpb.Spans{{Key: mkPkKey(t, fooID, 2, 6), EndKey: pkEnd}},
-			present:     allColumns,
+			present:     mainColumns,
 		},
 		{
 			// This test also uses qualified names for some fields.
@@ -245,14 +306,14 @@ func TestChangefeedLogicalPlan(t *testing.T) {
 				{Key: mkPkKey(t, fooID, 10), EndKey: mkPkKey(t, fooID, 10, 25)},
 				{Key: mkPkKey(t, fooID, 20), EndKey: mkPkKey(t, fooID, 20, 25)},
 			},
-			present: allColumns,
+			present: mainColumns,
 		},
 		{
 			// Currently, only primary index supported; so even when doing lookup
 			// on a non-primary index, we expect primary index to be scanned.
 			stmt:        "SELECT * FROM foo WHERE c = 'unique'",
 			expectSpans: roachpb.Spans{primarySpan},
-			present:     allColumns,
+			present:     mainColumns,
 		},
 		{
 			// Point lookup.
@@ -267,6 +328,38 @@ func TestChangefeedLogicalPlan(t *testing.T) {
 			stmt:        `SELECT * FROM (SELECT a, c FROM foo) AS foo`,
 			expectSpans: roachpb.Spans{primarySpan},
 			present:     colinfo.ResultColumns{rc("a", types.Int), rc("c", types.String)},
+		},
+		{
+			// Expression targets column C with unique index.
+			// However, we currently do not support any indexes other than primary.
+			// Verify that's the case.
+			stmt:        `SELECT a, c FROM foo WHERE c IN ('a', 'b', 'c')`,
+			expectSpans: roachpb.Spans{primarySpan},
+			present:     colinfo.ResultColumns{rc("a", types.Int), rc("c", types.String)},
+		},
+		{
+			// foo as a table-typed tuple; main column family.
+			stmt:        `SELECT foo FROM foo`,
+			expectSpans: roachpb.Spans{primarySpan},
+			present:     mainColumnsTuple,
+		},
+		{
+			// foo as a table-typed tuple; extra column family.
+			stmt:        `SELECT foo FROM foo@{FAMILY=[1]}`,
+			expectSpans: roachpb.Spans{primarySpan},
+			present:     extraColumnsTuple,
+		},
+		{
+			// foo as a table typed tuple (extra column family), but using table reference.
+			stmt:        fmt.Sprintf(`SELECT foo FROM [%d AS foo]@{FAMILY=[1]}`, fooDesc.GetID()),
+			expectSpans: roachpb.Spans{primarySpan},
+			present:     extraColumnsTuple,
+		},
+		{
+			// System columns
+			stmt:        `SELECT crdb_internal_mvcc_timestamp AS mvcc FROM foo`,
+			expectSpans: roachpb.Spans{primarySpan},
+			present:     colinfo.ResultColumns{rc("mvcc", colinfo.MVCCTimestampColumnType)},
 		},
 	} {
 		t.Run(tc.stmt, func(t *testing.T) {
@@ -337,7 +430,15 @@ func TestCdcExpressionExecution(t *testing.T) {
 	defer s.Stopper().Stop(context.Background())
 
 	sqlDB := sqlutils.MakeSQLRunner(db)
-	sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b INT, c STRING)`)
+	sqlDB.Exec(t, `CREATE TABLE foo (
+a INT PRIMARY KEY, b INT, c STRING, extra STRING,
+FAMILY main(a,b,c),
+-- We will target primary family in the foo table.
+-- The semantics around * expansion should be adopted to
+-- only reference columns in the main family.
+FAMILY extra (extra)
+)`)
+
 	fooDesc := desctestutils.TestingGetTableDescriptor(
 		kvDB, keys.SystemSQLCodec, "defaultdb", "public", "foo")
 

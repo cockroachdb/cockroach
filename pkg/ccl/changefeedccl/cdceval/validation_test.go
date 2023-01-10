@@ -135,28 +135,28 @@ func TestNormalizeAndValidate(t *testing.T) {
 			name:         "can target one column family",
 			desc:         bazDesc,
 			stmt:         "SELECT a, b FROM baz",
-			expectStmt:   fmt.Sprintf("SELECT baz.a, baz.b FROM (SELECT a, b FROM [%d AS t]) AS baz", bazDesc.GetID()),
+			expectStmt:   fmt.Sprintf("SELECT baz.a, baz.b FROM [%d AS baz]", bazDesc.GetID()),
 			splitColFams: false,
 		},
 		{
 			name:         "SELECT a, b FROM bop",
 			desc:         bopDesc,
 			stmt:         "SELECT a, b FROM bop",
-			expectStmt:   fmt.Sprintf("SELECT bop.a, bop.b FROM (SELECT a, b FROM [%d AS t]) AS bop", bopDesc.GetID()),
+			expectStmt:   fmt.Sprintf("SELECT bop.a, bop.b FROM [%d AS bop]", bopDesc.GetID()),
 			splitColFams: false,
 		},
 		{
 			name:         "SELECT a, c FROM baz",
 			desc:         bazDesc,
 			stmt:         "SELECT a, c FROM baz",
-			expectStmt:   fmt.Sprintf("SELECT baz.a, baz.c FROM (SELECT a, c FROM [%d AS t]) AS baz", bazDesc.GetID()),
+			expectStmt:   fmt.Sprintf("SELECT baz.a, baz.c FROM [%d AS baz]", bazDesc.GetID()),
 			splitColFams: false,
 		},
 		{
 			name:         "SELECT b, b+1 AS c FROM baz",
 			desc:         bazDesc,
 			stmt:         "SELECT b, b+1 AS c FROM baz",
-			expectStmt:   fmt.Sprintf("SELECT baz.b, baz.b + 1 AS c FROM (SELECT a, b FROM [%d AS t]) AS baz", bazDesc.GetID()),
+			expectStmt:   fmt.Sprintf("SELECT baz.b, baz.b + 1 AS c FROM [%d AS baz]", bazDesc.GetID()),
 			splitColFams: false,
 		},
 		{
@@ -170,14 +170,14 @@ func TestNormalizeAndValidate(t *testing.T) {
 			name:         "SELECT B FROM baz",
 			desc:         bazDesc,
 			stmt:         "SELECT B FROM baz",
-			expectStmt:   fmt.Sprintf("SELECT baz.b FROM (SELECT a, b FROM [%d AS t]) AS baz", bazDesc.GetID()),
+			expectStmt:   fmt.Sprintf("SELECT baz.b FROM [%d AS baz]", bazDesc.GetID()),
 			splitColFams: false,
 		},
 		{
 			name:         "SELECT baz.b FROM baz",
 			desc:         bazDesc,
 			stmt:         "SELECT baz.b FROM baz",
-			expectStmt:   fmt.Sprintf("SELECT baz.b FROM (SELECT a, b FROM [%d AS t]) AS baz", bazDesc.GetID()),
+			expectStmt:   fmt.Sprintf("SELECT baz.b FROM [%d AS baz]", bazDesc.GetID()),
 			splitColFams: false,
 		},
 		{
@@ -185,7 +185,7 @@ func TestNormalizeAndValidate(t *testing.T) {
 			desc: bazDesc,
 			stmt: "SELECT baz.b, row_to_json(cdc_prev.*) FROM baz",
 			expectStmt: fmt.Sprintf("SELECT baz.b, row_to_json(cdc_prev.*) FROM "+
-				"(SELECT a, b FROM [%d AS t]) AS baz, "+
+				"[%d AS baz], "+
 				"(SELECT (crdb_internal.cdc_prev_row()).*) AS cdc_prev",
 				bazDesc.GetID()),
 			// Currently, accessing cdc_prev.* is treated in such a way as to require
@@ -212,7 +212,7 @@ func TestNormalizeAndValidate(t *testing.T) {
 			name:         "SELECT b::string = 'c' FROM baz",
 			desc:         bazDesc,
 			stmt:         "SELECT b::string = 'c' FROM baz",
-			expectStmt:   fmt.Sprintf("SELECT baz.b::STRING = 'c' FROM (SELECT a, b FROM [%d AS t]) AS baz", bazDesc.GetID()),
+			expectStmt:   fmt.Sprintf("SELECT baz.b::STRING = 'c' FROM [%d AS baz]", bazDesc.GetID()),
 			splitColFams: false,
 		},
 		{
@@ -226,7 +226,7 @@ func TestNormalizeAndValidate(t *testing.T) {
 			name:         "no explicit column references",
 			desc:         bazDesc,
 			stmt:         "SELECT pi() FROM baz",
-			expectStmt:   fmt.Sprintf("SELECT pi() FROM (SELECT a, b FROM [%d AS t]) AS baz", bazDesc.GetID()),
+			expectStmt:   fmt.Sprintf("SELECT pi() FROM [%d AS baz]", bazDesc.GetID()),
 			splitColFams: false,
 		},
 		{
