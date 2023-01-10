@@ -67,9 +67,16 @@ import {
   StatisticTableColumnKeys,
 } from "../statsTableUtil/statsTableUtil";
 import { TableStatistics } from "../tableStatistics";
+import { EmptySessionsTablePlaceholder } from "./emptySessionsTablePlaceholder";
 
 const statementsPageCx = classNames.bind(statementsPageStyles);
 const sessionsPageCx = classNames.bind(sessionPageStyles);
+
+enum SessionStatus {
+  Active = "Active",
+  Closed = "Closed",
+  Idle = "Idle",
+}
 
 export interface OwnProps {
   sessions: SessionInfo[];
@@ -122,12 +129,13 @@ function getSessionUsernameFilterOptions(sessions: SessionInfo[]): string[] {
   return Array.from(uniqueUsernames).sort();
 }
 
-function getSessionStatusFilterOptions(sessions: SessionInfo[]): string[] {
-  const uniqueStatuses = new Set(
-    sessions.map(s => getStatusString(s.session.status)),
-  );
+function getSessionStatusFilterOptions(): string[] {
+  const sessionStatuses: string[] = [];
+  for (const sessionStatus in SessionStatus) {
+    sessionStatuses.push(sessionStatus.toString());
+  }
 
-  return Array.from(uniqueStatuses).sort();
+  return sessionStatuses;
 }
 
 export class SessionsPage extends React.Component<
@@ -360,7 +368,7 @@ export class SessionsPage extends React.Component<
 
     const appNames = getSessionAppFilterOptions(sessionsData);
     const usernames = getSessionUsernameFilterOptions(sessionsData);
-    const sessionStatuses = getSessionStatusFilterOptions(sessionsData);
+    const sessionStatuses = getSessionStatusFilterOptions();
     const columns = makeSessionsColumns(
       "session",
       this.terminateSessionRef,
@@ -427,14 +435,9 @@ export class SessionsPage extends React.Component<
             data={sessionsToDisplay}
             columns={displayColumns}
             renderNoResult={
-              <EmptyTable
-                title="No sessions are currently running"
-                icon={emptyTableResultsIcon}
-                message="Sessions show you which statements and transactions are running for the active session."
-                footer={
-                  <Anchor href={sessionsTable} target="_blank">
-                    Learn more about sessions
-                  </Anchor>
+              <EmptySessionsTablePlaceholder
+                isEmptySearchResults={
+                  activeFilters > 0 && sessionsToDisplay.length === 0
                 }
               />
             }

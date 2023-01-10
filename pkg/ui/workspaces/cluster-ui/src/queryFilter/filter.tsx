@@ -251,6 +251,7 @@ export const inactiveFiltersState: Required<Omit<Filters, "timeUnit">> = {
   sqlType: "",
   database: "",
   regions: "",
+  sessionStatus: "",
   nodes: "",
 };
 
