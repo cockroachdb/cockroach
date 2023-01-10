@@ -9,16 +9,23 @@
 package backupccl
 
 import (
+	"context"
 	"sort"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupencryption"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupinfo"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
+	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
+	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	spanUtils "github.com/cockroachdb/cockroach/pkg/util/span"
+	"github.com/cockroachdb/errors"
 )
 
 type intervalSpan roachpb.Span
@@ -53,6 +60,99 @@ var targetRestoreSpanSize = settings.RegisterByteSizeSetting(
 	384<<20,
 )
 
+// backupManifestFileIterator exposes methods that can be used to iterate over
+// the `BackupManifest_Files` field of a manifest.
+type backupManifestFileIterator interface {
+	next() (backuppb.BackupManifest_File, bool)
+	err() error
+	close()
+}
+
+// inMemoryFileIterator iterates over the `BackupManifest_Files` field stored
+// in-memory in the manifest.
+type inMemoryFileIterator struct {
+	manifest *backuppb.BackupManifest
+	curIdx   int
+}
+
+func (i *inMemoryFileIterator) next() (backuppb.BackupManifest_File, bool) {
+	if i.curIdx >= len(i.manifest.Files) {
+		return backuppb.BackupManifest_File{}, false
+	}
+	f := i.manifest.Files[i.curIdx]
+	i.curIdx++
+	return f, true
+}
+
+func (i *inMemoryFileIterator) err() error {
+	return nil
+}
+
+func (i *inMemoryFileIterator) close() {}
+
+var _ backupManifestFileIterator = &inMemoryFileIterator{}
+
+// makeBackupManifestFileIterator returns a backupManifestFileIterator that can
+// be used to iterate over the `BackupManifest_Files` of the manifest.
+func makeBackupManifestFileIterator(
+	ctx context.Context,
+	storeFactory cloud.ExternalStorageFactory,
+	m backuppb.BackupManifest,
+	encryption *jobspb.BackupEncryptionOptions,
+	kmsEnv cloud.KMSEnv,
+) (backupManifestFileIterator, error) {
+	if m.HasExternalFilesList {
+		es, err := storeFactory(ctx, m.Dir)
+		if err != nil {
+			return nil, err
+		}
+		storeFile := storageccl.StoreFile{
+			Store:    es,
+			FilePath: backupinfo.BackupMetadataFilesListPath,
+		}
+		var encOpts *roachpb.FileEncryptionOptions
+		if encryption != nil {
+			key, err := backupencryption.GetEncryptionKey(ctx, encryption, kmsEnv)
+			if err != nil {
+				return nil, err
+			}
+			encOpts = &roachpb.FileEncryptionOptions{Key: key}
+		}
+		it, err := backupinfo.NewFileSSTIter(ctx, storeFile, encOpts)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to create new FileSST iterator")
+		}
+		return &sstFileIterator{fi: it}, nil
+	}
+
+	return &inMemoryFileIterator{
+		manifest: &m,
+		curIdx:   0,
+	}, nil
+}
+
+// sstFileIterator uses an underlying `backupinfo.FileIterator` to read the
+// `BackupManifest_Files` from the SST file.
+type sstFileIterator struct {
+	fi *backupinfo.FileIterator
+}
+
+func (s *sstFileIterator) next() (backuppb.BackupManifest_File, bool) {
+	var file backuppb.BackupManifest_File
+	hasNext := s.fi.Next(&file)
+	return file, hasNext
+}
+
+func (s *sstFileIterator) err() error {
+	return s.fi.Err()
+}
+
+func (s *sstFileIterator) close() {
+	s.fi.Close()
+}
+
+var _ backupManifestFileIterator = &sstFileIterator{}
+
 // makeSimpleImportSpans partitions the spans of requiredSpans into a covering
 // of RestoreSpanEntry's which each have all overlapping files from the passed
 // backups assigned to them. The spans of requiredSpans are trimmed/removed
@@ -85,13 +185,14 @@ var targetRestoreSpanSize = settings.RegisterByteSizeSetting(
 func makeSimpleImportSpans(
 	requiredSpans roachpb.Spans,
 	backups []backuppb.BackupManifest,
+	layerToBackupManifestFileIterFactory layerToBackupManifestFileIterFactory,
 	backupLocalityMap map[int]storeByLocalityKV,
 	introducedSpanFrontier *spanUtils.Frontier,
 	lowWaterMark roachpb.Key,
 	targetSize int64,
-) []execinfrapb.RestoreSpanEntry {
+) ([]execinfrapb.RestoreSpanEntry, error) {
 	if len(backups) < 1 {
-		return nil
+		return nil, nil
 	}
 
 	for i := range backups {
@@ -134,14 +235,23 @@ func makeSimpleImportSpans(
 				//    This logic seeks to avoid this form of data corruption.
 				continue
 			}
+
+			// If the manifest for this backup layer is a `BACKUP_METADATA` then
+			// we reach out to ExternalStorage to read the accompanying SST that
+			// contains the BackupManifest_Files.
+			iterFactory := layerToBackupManifestFileIterFactory[layer]
+			it, err := iterFactory()
+			if err != nil {
+				return nil, err
+			}
+			defer it.close()
+
 			covPos := spanCoverStart
 
 			// lastCovSpanSize is the size of files added to the right-most span of
 			// the cover so far.
 			var lastCovSpanSize int64
-
-			// TODO(dt): binary search to the first file in required span?
-			for _, f := range backups[layer].Files {
+			for f, hasNext := it.next(); hasNext; f, hasNext = it.next() {
 				if sp := span.Intersect(f.Span); sp.Valid() {
 					fileSpec := execinfrapb.RestoreFileSpec{Path: f.Path, Dir: backups[layer].Dir}
 					if dir, ok := backupLocalityMap[layer][f.LocalityKV]; ok {
@@ -206,10 +316,13 @@ func makeSimpleImportSpans(
 					break
 				}
 			}
+			if err := it.err(); err != nil {
+				return nil, err
+			}
 		}
 	}
 
-	return cover
+	return cover, nil
 }
 
 // createIntroducedSpanFrontier creates a span frontier that tracks the end time
@@ -242,4 +355,30 @@ func makeEntry(start, end roachpb.Key, f execinfrapb.RestoreFileSpec) execinfrap
 		Span:  roachpb.Span{Key: start, EndKey: end},
 		Files: []execinfrapb.RestoreFileSpec{f},
 	}
+}
+
+type layerToBackupManifestFileIterFactory map[int]func() (backupManifestFileIterator, error)
+
+// getBackupManifestFileIters constructs a mapping from the idx of the backup
+// layer to a factory method to construct a backupManifestFileIterator. This
+// iterator can be used to iterate over the `BackupManifest_Files` in a
+// `BackupManifest`. It is the callers responsibility to close the returned
+// iterators.
+func getBackupManifestFileIters(
+	ctx context.Context,
+	execCfg *sql.ExecutorConfig,
+	backupManifests []backuppb.BackupManifest,
+	encryption *jobspb.BackupEncryptionOptions,
+	kmsEnv cloud.KMSEnv,
+) (map[int]func() (backupManifestFileIterator, error), error) {
+	layerToFileIterFactory := make(map[int]func() (backupManifestFileIterator, error))
+	for layer := range backupManifests {
+		layer := layer
+		layerToFileIterFactory[layer] = func() (backupManifestFileIterator, error) {
+			manifest := backupManifests[layer]
+			return makeBackupManifestFileIterator(ctx, execCfg.DistSQLSrv.ExternalStorage, manifest, encryption, kmsEnv)
+		}
+	}
+
+	return layerToFileIterFactory, nil
 }
