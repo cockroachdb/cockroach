@@ -2023,6 +2023,7 @@ func TestLint(t *testing.T) {
 			"../../storage",
 			"../../storage/enginepb",
 			"../../util",
+			"../../util/admission",
 			"../../util/hlc",
 			"../../util/intsets",
 		}
