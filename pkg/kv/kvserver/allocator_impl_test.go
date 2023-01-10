@@ -60,6 +60,48 @@ var singleStore = []*roachpb.StoreDescriptor{
 	},
 }
 
+var threeStores = []*roachpb.StoreDescriptor{
+	{
+		StoreID: 1,
+		Attrs:   roachpb.Attributes{Attrs: []string{"ssd"}},
+		Node: roachpb.NodeDescriptor{
+			NodeID: 1,
+			Attrs:  roachpb.Attributes{Attrs: []string{"a"}},
+		},
+		Capacity: roachpb.StoreCapacity{
+			Capacity:     200,
+			Available:    100,
+			LogicalBytes: 100,
+		},
+	},
+	{
+		StoreID: 2,
+		Attrs:   roachpb.Attributes{Attrs: []string{"ssd"}},
+		Node: roachpb.NodeDescriptor{
+			NodeID: 2,
+			Attrs:  roachpb.Attributes{Attrs: []string{"a"}},
+		},
+		Capacity: roachpb.StoreCapacity{
+			Capacity:     200,
+			Available:    100,
+			LogicalBytes: 100,
+		},
+	},
+	{
+		StoreID: 3,
+		Attrs:   roachpb.Attributes{Attrs: []string{"ssd"}},
+		Node: roachpb.NodeDescriptor{
+			NodeID: 3,
+			Attrs:  roachpb.Attributes{Attrs: []string{"a"}},
+		},
+		Capacity: roachpb.StoreCapacity{
+			Capacity:     200,
+			Available:    100,
+			LogicalBytes: 100,
+		},
+	},
+}
+
 // TestAllocatorRebalanceTarget could help us to verify whether we'll rebalance
 // to a target that we'll immediately remove.
 func TestAllocatorRebalanceTarget(t *testing.T) {
