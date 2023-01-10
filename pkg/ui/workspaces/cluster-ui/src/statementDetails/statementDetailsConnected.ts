@@ -48,16 +48,15 @@ import { getMatchParamByName, statementAttr } from "../util";
 // For tenant cases, we don't show information about node, regions and
 // diagnostics.
 const mapStateToProps = (state: AppState, props: RouteComponentProps) => {
-  const { statementDetails, isLoading, lastError } = selectStatementDetails(
-    state,
-    props,
-  );
+  const { statementDetails, isLoading, lastError, lastUpdated } =
+    selectStatementDetails(state, props);
   const statementFingerprint = statementDetails?.statement.metadata.query;
   return {
     statementFingerprintID: getMatchParamByName(props.match, statementAttr),
     statementDetails,
     isLoading: isLoading,
     statementsError: lastError,
+    lastUpdated: lastUpdated,
     timeScale: selectTimeScale(state),
     nodeRegions: nodeRegionsByIDSelector(state),
     diagnosticsReports:

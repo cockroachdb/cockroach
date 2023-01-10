@@ -17,6 +17,8 @@ import { StatementDetailsResponse } from "../api";
 
 const history = createMemoryHistory({ initialEntries: ["/statements"] });
 
+const lastUpdated = moment("Nov 28 2022 01:30:00 GMT");
+
 const statementDetailsNoData: StatementDetailsResponse = {
   statement: {
     metadata: {
@@ -806,6 +808,7 @@ export const getStatementDetailsPropsFixture = (
     },
   },
   isLoading: false,
+  lastUpdated: lastUpdated,
   timeScale: {
     windowSize: moment.duration(5, "day"),
     sampleSize: moment.duration(5, "minutes"),
