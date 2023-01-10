@@ -309,11 +309,7 @@ func NewStoreSpec(value string) (StoreSpec, error) {
 
 		switch field {
 		case pathField:
-			var err error
-			ss.Path, err = GetAbsoluteStorePath(pathField, value)
-			if err != nil {
-				return StoreSpec{}, err
-			}
+			ss.Path = value
 		case "size":
 			var err error
 			var minBytesAllowed int64 = MinimumStoreSize

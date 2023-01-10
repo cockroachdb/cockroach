@@ -1312,6 +1312,22 @@ func extraStoreFlagInit(cmd *cobra.Command) error {
 	if fs.Changed(cliflags.Store.Name) {
 		serverCfg.Stores = storeSpecs
 	}
+	// Convert all the store paths to absolute paths. We want this to
+	// ensure canonical directories across invocations; and also to
+	// benefit from the check in GetAbsoluteStorePath() that the user
+	// didn't mistakenly assume a heading '~' would get translated by
+	// CockroachDB. (The shell should be responsible for that.)
+	for i, ss := range serverCfg.Stores.Specs {
+		if ss.InMemory {
+			continue
+		}
+		absPath, err := base.GetAbsoluteStorePath("path", ss.Path)
+		if err != nil {
+			return err
+		}
+		ss.Path = absPath
+		serverCfg.Stores.Specs[i] = ss
+	}
 	return nil
 }
 
