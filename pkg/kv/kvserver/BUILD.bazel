@@ -330,6 +330,7 @@ go_test(
     tags = ["cpu:2"],
     deps = [
         "//pkg/base",
+        "//pkg/ccl",
         "//pkg/cli/exit",
         "//pkg/clusterversion",
         "//pkg/config",

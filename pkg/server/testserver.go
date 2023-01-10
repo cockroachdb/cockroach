@@ -658,6 +658,11 @@ func (t *TestTenant) RPCAddr() string {
 	return t.Cfg.Addr
 }
 
+// DB is part of the TestTenantInterface.
+func (t *TestTenant) DB() *kv.DB {
+	return t.execCfg.DB
+}
+
 // PGServer is part of TestTenantInterface.
 func (t *TestTenant) PGServer() interface{} {
 	return t.pgServer
