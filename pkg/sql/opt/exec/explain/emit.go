@@ -76,7 +76,14 @@ func Emit(plan *Plan, ob *OutputBuilder, spanFormatFn SpanFormatFn) error {
 		// This field contains the original subquery (which could have been modified
 		// by optimizer transformations).
 		if s.ExprNode != nil {
-			ob.Attr("original sql", tree.AsStringWithFlags(s.ExprNode, tree.FmtSimple))
+			flags := tree.FmtSimple
+			if e.ob.flags.HideValues {
+				flags |= tree.FmtHideConstants
+			}
+			if e.ob.flags.RedactValues {
+				flags |= tree.FmtMarkRedactionNode | tree.FmtOmitNameRedaction
+			}
+			ob.Attr("original sql", tree.AsStringWithFlags(s.ExprNode, flags))
 		}
 		var mode string
 		switch s.Mode {
@@ -1006,7 +1013,8 @@ func (e *emitter) spansStr(table cat.Table, index cat.Index, scanParams exec.Sca
 	}
 
 	// In verbose mode show the physical spans, unless the table is virtual.
-	if e.ob.flags.Verbose && !table.IsVirtualTable() {
+	if e.ob.flags.Verbose && !e.ob.flags.HideValues && !e.ob.flags.RedactValues &&
+		!table.IsVirtualTable() {
 		return e.spanFormatFn(table, index, scanParams)
 	}
 
@@ -1017,8 +1025,8 @@ func (e *emitter) spansStr(table cat.Table, index cat.Index, scanParams exec.Sca
 		return fmt.Sprintf("%d span%s", n, util.Pluralize(int64(n)))
 	}
 
-	// If we must hide values, only show the count.
-	if e.ob.flags.HideValues {
+	// If we must hide or redact values, only show the count.
+	if e.ob.flags.HideValues || e.ob.flags.RedactValues {
 		n := scanParams.IndexConstraint.Spans.Count()
 		return fmt.Sprintf("%d span%s", n, util.Pluralize(int64(n)))
 	}

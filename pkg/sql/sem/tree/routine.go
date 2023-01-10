@@ -123,12 +123,7 @@ func (node *RoutineExpr) ResolvedType() *types.T {
 // Format is part of the Expr interface.
 func (node *RoutineExpr) Format(ctx *FmtCtx) {
 	ctx.Printf("%s(", node.Name)
-	for i := range node.Args {
-		if i > 0 {
-			ctx.WriteString(", ")
-		}
-		node.Args[i].Format(ctx)
-	}
+	ctx.FormatNode(&node.Args)
 	ctx.WriteByte(')')
 }
 

@@ -338,7 +338,7 @@ children:
   - key: id
     value: '@S1'
   - key: original sql
-    value: (SELECT name FROM t.actors WHERE name = 'Foo')
+    value: (SELECT name FROM t.actors WHERE name = '_')
   - key: exec mode
     value: one row
   children:
