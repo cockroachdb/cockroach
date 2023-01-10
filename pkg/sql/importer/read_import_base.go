@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding/csv"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
@@ -57,6 +58,7 @@ func runImport(
 	kvCh := make(chan row.KVBatch, 10)
 
 	// Install type metadata in all of the import tables.
+	spec = protoutil.Clone(spec).(*execinfrapb.ReadImportDataSpec)
 	importResolver := newImportTypeResolver(spec.Types)
 	for _, table := range spec.Tables {
 		cpy := tabledesc.NewBuilder(table.Desc).BuildCreatedMutableTable()
