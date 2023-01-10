@@ -75,17 +75,17 @@ func readProvisionalVal(
 	ctx context.Context, reader storage.Reader, usePrefixIter bool, intent *roachpb.Intent,
 ) (roachpb.KeyValue, error) {
 	if usePrefixIter {
-		val, _, err := storage.MVCCGetAsTxn(
+		valRes, err := storage.MVCCGetAsTxn(
 			ctx, reader, intent.Key, intent.Txn.WriteTimestamp, intent.Txn,
 		)
 		if err != nil {
 			return roachpb.KeyValue{}, err
 		}
-		if val == nil {
+		if valRes.Value == nil {
 			// Intent is a deletion.
 			return roachpb.KeyValue{}, nil
 		}
-		return roachpb.KeyValue{Key: intent.Key, Value: *val}, nil
+		return roachpb.KeyValue{Key: intent.Key, Value: *valRes.Value}, nil
 	}
 	res, err := storage.MVCCScanAsTxn(
 		ctx, reader, intent.Key, intent.Key.Next(), intent.Txn.WriteTimestamp, intent.Txn,

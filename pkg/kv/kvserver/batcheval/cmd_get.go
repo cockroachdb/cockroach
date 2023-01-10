@@ -49,10 +49,7 @@ func Get(
 		return result.Result{}, nil
 	}
 
-	var val *roachpb.Value
-	var intent *roachpb.Intent
-	var err error
-	val, intent, err = storage.MVCCGet(ctx, reader, args.Key, h.Timestamp, storage.MVCCGetOptions{
+	getRes, err := storage.MVCCGet(ctx, reader, args.Key, h.Timestamp, storage.MVCCGetOptions{
 		Inconsistent:          h.ReadConsistency != roachpb.CONSISTENT,
 		SkipLocked:            h.WaitPolicy == lock.WaitPolicy_SkipLocked,
 		Txn:                   h.Txn,
@@ -65,10 +62,10 @@ func Get(
 	if err != nil {
 		return result.Result{}, err
 	}
-	if val != nil {
+	if getRes.Value != nil {
 		// NB: This calculation is different from Scan, since Scan responses include
 		// the key/value pair while Get only includes the value.
-		numBytes := int64(len(val.RawBytes))
+		numBytes := int64(len(getRes.Value.RawBytes))
 		if h.TargetBytes > 0 && h.AllowEmpty && numBytes > h.TargetBytes {
 			reply.ResumeSpan = &roachpb.Span{Key: args.Key}
 			reply.ResumeReason = roachpb.RESUME_BYTE_LIMIT
@@ -79,11 +76,11 @@ func Get(
 		reply.NumBytes = numBytes
 	}
 	var intents []roachpb.Intent
-	if intent != nil {
-		intents = append(intents, *intent)
+	if getRes.Intent != nil {
+		intents = append(intents, *getRes.Intent)
 	}
 
-	reply.Value = val
+	reply.Value = getRes.Value
 	if h.ReadConsistency == roachpb.READ_UNCOMMITTED {
 		var intentVals []roachpb.KeyValue
 		// NOTE: MVCCGet uses a Prefix iterator, so we want to use one in
@@ -103,7 +100,7 @@ func Get(
 	}
 
 	var res result.Result
-	if args.KeyLocking != lock.None && h.Txn != nil && val != nil {
+	if args.KeyLocking != lock.None && h.Txn != nil && getRes.Value != nil {
 		acq := roachpb.MakeLockAcquisition(h.Txn, args.Key, lock.Unreplicated)
 		res.Local.AcquiredLocks = []roachpb.LockAcquisition{acq}
 	}

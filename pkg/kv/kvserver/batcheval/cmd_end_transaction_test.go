@@ -1062,17 +1062,17 @@ func TestPartialRollbackOnEndTransaction(t *testing.T) {
 
 		// The second write has been rolled back; verify that the remaining
 		// value is from the first write.
-		res, i, err := storage.MVCCGet(ctx, batch, k, ts2, storage.MVCCGetOptions{})
+		res, err := storage.MVCCGet(ctx, batch, k, ts2, storage.MVCCGetOptions{})
 		if err != nil {
 			t.Fatal(err)
 		}
-		if i != nil {
-			t.Errorf("found intent, expected none: %+v", i)
+		if res.Intent != nil {
+			t.Errorf("found intent, expected none: %+v", res.Intent)
 		}
-		if res == nil {
+		if res.Value == nil {
 			t.Errorf("no value found, expected one")
 		} else {
-			s, err := res.GetBytes()
+			s, err := res.Value.GetBytes()
 			if err != nil {
 				t.Fatal(err)
 			}

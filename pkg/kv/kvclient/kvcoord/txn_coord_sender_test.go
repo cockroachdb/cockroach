@@ -378,12 +378,12 @@ func verifyCleanup(
 				return fmt.Errorf("expected no heartbeat")
 			}
 		}
-		_, intent, err := storage.MVCCGet(ctx, eng, key, hlc.MaxTimestamp, storage.MVCCGetOptions{
+		intentRes, err := storage.MVCCGet(ctx, eng, key, hlc.MaxTimestamp, storage.MVCCGetOptions{
 			Inconsistent: true,
 		})
 		require.NoError(t, err)
-		if intent != nil {
-			return fmt.Errorf("found unexpected write intent: %s", intent)
+		if intentRes.Intent != nil {
+			return fmt.Errorf("found unexpected write intent: %s", intentRes.Intent)
 		}
 		return nil
 	})
