@@ -56,9 +56,10 @@ CREATE TABLE foo (
   e status DEFAULT 'inactive',
   f STRING,
   g STRING,
+  h STRING NOT VISIBLE,
   flag BOOL,
   PRIMARY KEY (b, a),
-  FAMILY main (a, b, e),
+  FAMILY main (a, b, e, h),
   FAMILY only_c (c),
   FAMILY f_g_fam(f, g, flag)
 )`)
@@ -315,7 +316,12 @@ CREATE TABLE foo (
 				"INSERT INTO foo (a, b, c) VALUES (42, 'prev_select', 'c value old')",
 				"UPSERT INTO foo (a, b, c) VALUES (42, 'prev_select', 'c value updated')",
 			},
-			stmt: "SELECT a, b, c, (CASE WHEN cdc_prev.c IS NULL THEN 'not there' ELSE cdc_prev.c END) AS old_c FROM foo",
+			stmt: `SELECT
+               a, b, c,
+               (CASE WHEN cdc_prev.c IS NULL THEN 'not there' ELSE cdc_prev.c END) AS old_c
+             FROM foo
+             WHERE cdc_prev.crdb_internal_mvcc_timestamp IS NULL OR
+                   cdc_prev.crdb_internal_mvcc_timestamp < crdb_internal_mvcc_timestamp`,
 			expectMainFamily: []decodeExpectation{
 				{
 					expectUnwatchedErr: true,
@@ -365,23 +371,31 @@ CREATE TABLE foo (
 				},
 			},
 		},
-		// TODO(yevgeniy): enable this test.
-		// This requires adding support to "fetch" those magic system columns from
-		// row fetcher, or replace them with a function call.
-		//{
-		//	testName:   "main/magic_column",
-		//	familyName: "main",
-		//	actions: []string{
-		//		"INSERT INTO foo (a, b) VALUES (1,  'hello')",
-		//	},
-		//	stmt: "SELECT a,  crdb_internal_mvcc_timestamp FROM foo",
-		//	expectMainFamily: []decodeExpectation{
-		//		{
-		//			keyValues: []string{"hello", "1"},
-		//			allValues: map[string]string{"a": "1", "crdb_internal_mvcc_timestamp": "xxx"},
-		//		},
-		//	},
-		//},
+		{
+			testName:   "main/system_and_hidden_columns",
+			familyName: "main",
+			actions: []string{
+				"INSERT INTO foo (a, b, h) VALUES (1,  'hello', 'invisible')",
+			},
+			stmt: "SELECT a, tableoid, h FROM foo WHERE crdb_internal_mvcc_timestamp = cdc_mvcc_timestamp()",
+			expectMainFamily: []decodeExpectation{
+				{
+					keyValues: []string{"hello", "1"},
+					allValues: map[string]string{
+						"a": "1", "tableoid": strconv.Itoa(int(desc.GetID())), "h": "invisible",
+					},
+				},
+			},
+		},
+		{
+			testName:   "main/system_and_hidden_columns_error",
+			familyName: "only_c",
+			actions: []string{
+				"INSERT INTO foo (a, b, h) VALUES (1,  'hello', 'invisible')",
+			},
+			stmt:      "SELECT a, tableoid, h FROM foo WHERE crdb_internal_mvcc_timestamp = cdc_mvcc_timestamp()",
+			expectErr: `column "foo.h" does not exist`,
+		},
 		// {
 		//  // TODO(yevgeniy): Test currently disable since session data is not serialized.
 		//  // Issue #90421
@@ -543,7 +557,7 @@ CREATE TABLE foo (
 					expect, tc.expectFGFamily = popExpectation(t, tc.expectFGFamily)
 				}
 
-				updatedRow, err := decodeRowErr(decoder, &v, false)
+				updatedRow, err := decodeRowErr(decoder, &v, cdcevent.CurrentRow)
 				if expect.expectUnwatchedErr {
 					require.ErrorIs(t, err, cdcevent.ErrUnwatchedFamily)
 					continue
@@ -551,7 +565,7 @@ CREATE TABLE foo (
 
 				require.NoError(t, err)
 				require.True(t, updatedRow.IsInitialized())
-				prevRow := decodeRow(t, decoder, &v, true)
+				prevRow := decodeRow(t, decoder, &v, cdcevent.PrevRow)
 				require.NoError(t, err)
 
 				require.Equal(t, expect.keyValues, slurpKeys(t, updatedRow),
@@ -571,6 +585,16 @@ CREATE TABLE foo (
 
 				require.Equal(t, expect.keyValues, slurpKeys(t, projection))
 				require.Equal(t, expect.allValues, slurpValues(t, projection))
+
+				// Repeat the same eval, pretending that versions changed.
+				// Event descriptor versions are cached, so updated and prev row share
+				// same descriptor; we have to jump through some hoops to update
+				// just one.
+				descriptorCopy := *updatedRow.EventDescriptor
+				descriptorCopy.Version++
+				updatedRow.EventDescriptor = &descriptorCopy
+				_, err = e.Eval(ctx, updatedRow, prevRow)
+				require.NoError(t, err)
 			}
 		})
 	}
@@ -629,22 +653,22 @@ func TestUnsupportedCDCFunctions(t *testing.T) {
 }
 
 func decodeRowErr(
-	decoder cdcevent.Decoder, v *roachpb.RangeFeedValue, prev bool,
+	decoder cdcevent.Decoder, v *roachpb.RangeFeedValue, rt cdcevent.RowType,
 ) (cdcevent.Row, error) {
 	keyVal := roachpb.KeyValue{Key: v.Key}
-	if prev {
+	if rt == cdcevent.PrevRow {
 		keyVal.Value = v.PrevValue
 	} else {
 		keyVal.Value = v.Value
 	}
 	const keyOnly = false
-	return decoder.DecodeKV(context.Background(), keyVal, v.Timestamp(), keyOnly)
+	return decoder.DecodeKV(context.Background(), keyVal, rt, v.Timestamp(), keyOnly)
 }
 
 func decodeRow(
-	t *testing.T, decoder cdcevent.Decoder, v *roachpb.RangeFeedValue, prev bool,
+	t *testing.T, decoder cdcevent.Decoder, v *roachpb.RangeFeedValue, rt cdcevent.RowType,
 ) cdcevent.Row {
-	r, err := decodeRowErr(decoder, v, prev)
+	r, err := decodeRowErr(decoder, v, rt)
 	require.NoError(t, err)
 	return r
 }
