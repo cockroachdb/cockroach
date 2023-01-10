@@ -1950,38 +1950,6 @@ func (t *T) Equivalent(other *T) bool {
 	}
 
 	switch t.Family() {
-	case IntFamily:
-		if t.Width() != other.Width() {
-			return false
-		}
-	case FloatFamily:
-		if t.Width() != other.Width() {
-			return false
-		}
-	case DateFamily:
-		if t.Width() != other.Width() {
-			return false
-		}
-	case TimestampFamily:
-		if t.Width() != other.Width() {
-			return false
-		}
-	case IntervalFamily:
-		if t.Width() != other.Width() {
-			return false
-		}
-	case BytesFamily:
-		if t.Width() != other.Width() {
-			return false
-		}
-	case TimestampTZFamily:
-		if t.Width() != other.Width() {
-			return false
-		}
-	case INetFamily:
-		if t.Width() != other.Width() {
-			return false
-		}
 	case CollatedStringFamily:
 		// CockroachDB differs from Postgres by comparing collation names
 		// case-insensitively and equating hyphens/underscores.
@@ -2027,6 +1995,51 @@ func (t *T) Equivalent(other *T) bool {
 		}
 	}
 
+	return true
+}
+
+func (t *T) EquivalentExact(other *T) bool {
+	if t.Family() == AnyFamily || other.Family() == AnyFamily {
+		return true
+	}
+	if t.Family() != other.Family() {
+		return false
+	}
+
+	switch t.Family() {
+	case IntFamily:
+		if t.Width() != other.Width() {
+			return false
+		}
+	case FloatFamily:
+		if t.Width() != other.Width() {
+			return false
+		}
+	case DateFamily:
+		if t.Width() != other.Width() {
+			return false
+		}
+	case TimestampFamily:
+		if t.Width() != other.Width() {
+			return false
+		}
+	case IntervalFamily:
+		if t.Width() != other.Width() {
+			return false
+		}
+	case BytesFamily:
+		if t.Width() != other.Width() {
+			return false
+		}
+	case TimestampTZFamily:
+		if t.Width() != other.Width() {
+			return false
+		}
+	case INetFamily:
+		if t.Width() != other.Width() {
+			return false
+		}
+	}
 	return true
 }
 

@@ -281,10 +281,12 @@ func GetParamsAndReturnType(impl overloadImpl) (TypeList, ReturnTyper) {
 type TypeList interface {
 	// Match checks if all types in the TypeList match the corresponding elements in types.
 	Match(types []*types.T) bool
+	MatchExact(types []*types.T) bool
 	// MatchAt checks if the parameter type at index i of the TypeList matches type typ.
 	// In all implementations, types.Null will match with each parameter type, allowing
 	// NULL values to be used as arguments.
 	MatchAt(typ *types.T, i int) bool
+	MatchExactAt(typ *types.T, i int) bool
 	// MatchLen checks that the TypeList can support l parameters.
 	MatchLen(l int) bool
 	// GetAt returns the type at the given index in the TypeList, or nil if the TypeList
@@ -335,6 +337,25 @@ func (p ParamTypes) MatchAt(typ *types.T, i int) bool {
 		typ = types.AnyTuple
 	}
 	return i < len(p) && (typ.Family() == types.UnknownFamily || p[i].Typ.Equivalent(typ))
+}
+
+func (p ParamTypes) MatchExact(types []*types.T) bool {
+	if len(types) != len(p) {
+		return false
+	}
+	for i := range types {
+		if !p.MatchExactAt(types[i], i) {
+			return false
+		}
+	}
+	return true
+}
+
+func (p ParamTypes) MatchExactAt(typ *types.T, i int) bool {
+	if typ.Family() == types.TupleFamily {
+		typ = types.AnyTuple
+	}
+	return i < len(p) && (typ.Family() == types.UnknownFamily || p[i].Typ.EquivalentExact(typ))
 }
 
 // MatchLen is part of the TypeList interface.
@@ -396,6 +417,14 @@ func (HomogeneousType) MatchAt(typ *types.T, i int) bool {
 	return true
 }
 
+func (HomogeneousType) MatchExact(types []*types.T) bool {
+	return true
+}
+
+func (HomogeneousType) MatchExactAt(typ *types.T, i int) bool {
+	return true
+}
+
 // MatchLen is part of the TypeList interface.
 func (HomogeneousType) MatchLen(l int) bool {
 	return true
@@ -444,6 +473,14 @@ func (v VariadicType) MatchAt(typ *types.T, i int) bool {
 		return typ.Family() == types.UnknownFamily || v.FixedTypes[i].Equivalent(typ)
 	}
 	return typ.Family() == types.UnknownFamily || v.VarType.Equivalent(typ)
+}
+
+func (VariadicType) MatchExact(types []*types.T) bool {
+	return true
+}
+
+func (VariadicType) MatchExactAt(typ *types.T, i int) bool {
+	return true
 }
 
 // MatchLen is part of the TypeList interface.
