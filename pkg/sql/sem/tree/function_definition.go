@@ -11,7 +11,6 @@
 package tree
 
 import (
-	"log"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -319,50 +318,6 @@ func (fd *ResolvedFunctionDefinition) MatchOverload(
 		return QualifiedOverload{}, errors.Errorf("function name %q is not unique", fd.Name)
 	}
 	return ret[0], nil
-}
-
-func checkIfMatchedOverloadAt(
-	paramTypes []*types.T, ql QualifiedOverload, schema string,
-) bool {
-
-	matchedParam := func(
-		paramTypes []*types.T, ql QualifiedOverload, ord int,
-	) bool {
-		if schema == ql.Schema && (paramTypes == nil || ql.params().Match(paramTypes)) {
-			for _, qlp := range ql.params().Types() {
-				log.Printf("\n qlp : %v, pty : %v \n", qlp.Width(), paramTypes[ord].Width())
-				if qlp.Width() == paramTypes[ord].Width() {
-					continue
-				} else {
-					return false
-				}
-			}
-			return true
-		}
-		return false
-	}
-
-	for k, pty := range paramTypes {
-		switch pty.Family() {
-		// should check all the types that's supported by udf
-		case types.IntFamily:
-		case types.FloatFamily:
-		case types.DateFamily:
-		case types.TimestampFamily:
-		case types.IntervalFamily:
-		case types.BytesFamily:
-		case types.TimestampTZFamily:
-		case types.CollatedStringFamily:
-		case types.INetFamily:
-			if matchedParam(paramTypes, ql, k) {
-				return true
-			}
-			return false
-		default:
-			return true
-		}
-	}
-	return false
 }
 
 func combineOverloads(a, b []QualifiedOverload) []QualifiedOverload {
