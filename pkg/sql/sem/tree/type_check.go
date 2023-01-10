@@ -2053,16 +2053,22 @@ func typeCheckSubqueryWithIn(left, right *types.T) error {
 func typeCheckComparisonOp(
 	ctx context.Context, semaCtx *SemaContext, op treecmp.ComparisonOperator, left, right Expr,
 ) (_ TypedExpr, _ TypedExpr, _ *CmpOp, alwaysNull bool, _ error) {
+	// Parentheses are semantically unimportant and can be removed/replaced
+	// with its nested expression in our plan. This makes type checking cleaner.
+	left = StripParens(left)
+	right = StripParens(right)
+
 	foldedOp, foldedLeft, foldedRight, switched, _ := FoldComparisonExpr(op, left, right)
 	ops := CmpOps[foldedOp.Symbol]
 
 	_, leftIsTuple := foldedLeft.(*Tuple)
-	rightTuple, rightIsTuple := foldedRight.(*Tuple)
-
+	_, rightIsTuple := foldedRight.(*Tuple)
 	_, rightIsSubquery := foldedRight.(SubqueryExpr)
+
 	handleTupleTypeMismatch := false
 	switch {
 	case foldedOp.Symbol == treecmp.In && rightIsTuple:
+		rightTuple := foldedRight.(*Tuple)
 		sameTypeExprs := make([]Expr, len(rightTuple.Exprs)+1)
 		sameTypeExprs[0] = foldedLeft
 		copy(sameTypeExprs[1:], rightTuple.Exprs)
