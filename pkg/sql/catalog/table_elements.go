@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/semenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -1018,4 +1019,30 @@ func GetConstraintType(c Constraint) catconstants.ConstraintType {
 	} else {
 		panic(errors.AssertionFailedf("unknown constraint type %T", c))
 	}
+}
+
+// FindTargetIndexNameByID returns the name of an index based on an ID, taking
+// into account any ongoing declarative schema changes. Declarative schema
+// changes do not propagate the index name into the mutations until changes are
+// fully validated and swap operations are complete (to avoid having two
+// constraints with the same name).
+func FindTargetIndexNameByID(desc TableDescriptor, indexID descpb.IndexID) (string, error) {
+	// Check if there are any ongoing schema changes and prefer the name from
+	// them.
+	if scState := desc.GetDeclarativeSchemaChangerState(); scState != nil {
+		for _, target := range scState.Targets {
+			if target.IndexName != nil &&
+				target.TargetStatus == scpb.Status_PUBLIC &&
+				target.IndexName.TableID == desc.GetID() &&
+				target.IndexName.IndexID == indexID {
+				return target.IndexName.Name, nil
+			}
+		}
+	}
+	// Otherwise, try fetching the name from the index descriptor.
+	index, err := desc.FindIndexWithID(indexID)
+	if err != nil {
+		return "", err
+	}
+	return index.GetName(), err
 }
