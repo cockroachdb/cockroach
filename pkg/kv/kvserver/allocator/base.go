@@ -42,6 +42,13 @@ const (
 	defaultLoadBasedRebalancingInterval = time.Minute
 )
 
+// AllocationError is a simple interface used to indicate a replica processing
+// error originating from the allocator.
+type AllocationError interface {
+	error
+	AllocationErrorMarker() // dummy method for unique interface
+}
+
 // MaxCapacityCheck returns true if the store has room for a new replica.
 func MaxCapacityCheck(store roachpb.StoreDescriptor) bool {
 	return store.Capacity.FractionUsed() < MaxFractionUsedThreshold

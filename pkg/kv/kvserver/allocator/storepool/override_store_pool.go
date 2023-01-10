@@ -12,8 +12,10 @@ package storepool
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -41,6 +43,24 @@ type OverrideStorePool struct {
 
 var _ AllocatorStorePool = &OverrideStorePool{}
 
+// OverrideNodeLivenessFunc constructs a NodeLivenessFunc based on a set of
+// predefined overrides. If any nodeID does not have an override, the liveness
+// status is looked up using the passed-in real node liveness function.
+func OverrideNodeLivenessFunc(
+	overrides map[roachpb.NodeID]livenesspb.NodeLivenessStatus, realNodeLivenessFunc NodeLivenessFunc,
+) NodeLivenessFunc {
+	return func(nid roachpb.NodeID, now time.Time, timeUntilStoreDead time.Duration) livenesspb.NodeLivenessStatus {
+		if override, ok := overrides[nid]; ok {
+			return override
+		}
+
+		return realNodeLivenessFunc(nid, now, timeUntilStoreDead)
+	}
+}
+
+// NewOverrideStorePool constructs an OverrideStorePool that can use its own
+// view of node liveness while falling through to an underlying store pool for
+// the state of peer stores.
 func NewOverrideStorePool(storePool *StorePool, nl NodeLivenessFunc) *OverrideStorePool {
 	return &OverrideStorePool{
 		sp:                     storePool,
