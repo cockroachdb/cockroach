@@ -948,6 +948,32 @@ func (n *ShowTenantClusterSettingList) walkStmt(v Visitor) Statement {
 	return ret
 }
 
+func (n *AlterTenantCapability) walkStmt(v Visitor) Statement {
+	ret := n
+	copyNodeOnce := func() {
+		if ret == n {
+			stmtCopy := *n
+			ret = &stmtCopy
+		}
+	}
+	for i, capability := range n.Capabilities {
+		value := capability.Value
+		if value != nil {
+			e, changed := WalkExpr(v, value)
+			if changed {
+				copyNodeOnce()
+				ret.Capabilities[i].Value = e
+			}
+		}
+	}
+	ts, changed := walkTenantSpec(v, n.TenantSpec)
+	if changed {
+		copyNodeOnce()
+		ret.TenantSpec = ts
+	}
+	return ret
+}
+
 // copyNode makes a copy of this Statement without recursing in any child Statements.
 func (n *AlterTenantSetClusterSetting) copyNode() *AlterTenantSetClusterSetting {
 	stmtCopy := *n
@@ -1823,6 +1849,7 @@ func (stmt *BeginTransaction) walkStmt(v Visitor) Statement {
 
 var _ walkableStmt = &AlterTenantRename{}
 var _ walkableStmt = &AlterTenantReplication{}
+var _ walkableStmt = &AlterTenantCapability{}
 var _ walkableStmt = &AlterTenantSetClusterSetting{}
 var _ walkableStmt = &Backup{}
 var _ walkableStmt = &BeginTransaction{}
