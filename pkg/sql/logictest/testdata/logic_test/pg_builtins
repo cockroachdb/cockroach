@@ -79,19 +79,25 @@ NULL
 statement ok
 CREATE TABLE is_visible(a int primary key);
 CREATE TYPE visible_type AS ENUM('a');
+CREATE FUNCTION visible_func() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
 CREATE SCHEMA other;
 CREATE TABLE other.not_visible(a int primary key);
 CREATE TYPE other.not_visible_type AS ENUM('b');
+CREATE FUNCTION other.not_visible_func() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
 CREATE DATABASE db2;
 SET DATABASE = db2;
 CREATE TABLE table_in_db2(a int primary key);
 CREATE TYPE type_in_db2 AS ENUM('c');
+CREATE FUNCTION func_in_db2() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
 
 let $table_in_db2_id
 SELECT c.oid FROM pg_class c WHERE c.relname = 'table_in_db2';
 
 let $type_in_db2_id
 SELECT t.oid FROM pg_type t WHERE t.typname = 'type_in_db2';
+
+let $func_in_db2_id
+SELECT p.oid FROM pg_proc p WHERE p.proname = 'func_in_db2';
 
 statement ok
 SET DATABASE = test;
@@ -148,6 +154,31 @@ SELECT pg_type_is_visible(NULL)
 ----
 NULL
 
+query TB rowsort
+SELECT p.proname, pg_function_is_visible(p.oid)
+FROM pg_proc p
+WHERE p.proname IN ('array_length', 'visible_func', 'not_visible_func')
+----
+array_length      true
+visible_func      true
+not_visible_func  false
+
+# Looking up a function in a different database should return NULL.
+query B
+SELECT pg_function_is_visible($func_in_db2_id)
+----
+NULL
+
+# Looking up a non-existent OID should return NULL.
+query B
+SELECT pg_function_is_visible(1010101010)
+----
+NULL
+
+query B
+SELECT pg_function_is_visible(NULL)
+----
+NULL
 
 query TT
 SELECT pg_get_partkeydef(1), pg_get_partkeydef(NULL)
@@ -172,11 +203,11 @@ WHERE c.relname IN ('is_updatable', 'is_updatable_view', 'pg_class')
 ORDER BY c.oid, a.attnum
 ----
 relname            attname              oid         attnum  pg_relation_is_updatable  pg_column_is_updatable
-is_updatable       a                    120         1       28                        true
-is_updatable       b                    120         2       28                        true
-is_updatable       c                    120         3       28                        false
-is_updatable_view  a                    121         1       0                         false
-is_updatable_view  b                    121         2       0                         false
+is_updatable       a                    123         1       28                        true
+is_updatable       b                    123         2       28                        true
+is_updatable       c                    123         3       28                        false
+is_updatable_view  a                    124         1       0                         false
+is_updatable_view  b                    124         2       0                         false
 pg_class           oid                  4294967123  1       0                         false
 pg_class           relname              4294967123  2       0                         false
 pg_class           relnamespace         4294967123  3       0                         false

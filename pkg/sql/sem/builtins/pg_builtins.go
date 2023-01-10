@@ -1185,16 +1185,19 @@ SELECT description
 			Types:      tree.ArgTypes{{"oid", types.Oid}},
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				oid := tree.MustBeDOid(args[0])
+				dOid := tree.MustBeDOid(args[0])
 				t, err := ctx.Planner.QueryRowEx(
 					ctx.Ctx(), "pg_function_is_visible",
 					sessiondata.NoSessionDataOverride,
-					"SELECT * from pg_proc WHERE oid=$1 LIMIT 1", oid.Oid)
+					`SELECT n.nspname = ANY current_schemas(true) FROM pg_proc p
+           INNER JOIN pg_namespace n ON p.pronamespace = n.oid WHERE p.oid=$1 LIMIT 1`,
+					dOid,
+				)
 				if err != nil {
 					return nil, err
 				}
 				if t != nil {
-					return tree.DBoolTrue, nil
+					return tree.MakeDBool(tree.MustBeDBool(t[0])), nil
 				}
 				return tree.DNull, nil
 			},
