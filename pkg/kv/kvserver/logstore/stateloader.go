@@ -39,6 +39,8 @@ import (
 // TODO(pavelkalinnikov): understand the split between logstore and raftlog
 // packages, reshuffle or merge them, including this StateLoader.
 type StateLoader struct {
+	// TODO(tbg): this shouldn't be embedded here, because now we have all of the
+	// StateMachine keygen methods exported on StateLoader.
 	keys.RangeIDPrefixBuf
 }
 
