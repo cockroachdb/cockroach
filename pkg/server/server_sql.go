@@ -100,6 +100,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilegecache"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
+	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradebase"
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradecluster"
@@ -368,6 +369,9 @@ type sqlServerArgs struct {
 	// rangeDescIteratorFactory is used to construct iterators over range
 	// descriptors.
 	rangeDescIteratorFactory rangedesc.IteratorFactory
+
+	// tenantTimeSeriesServer is used to make TSDB queries by the DB Console.
+	tenantTimeSeriesServer *ts.TenantServer
 }
 
 type monitorAndMetrics struct {

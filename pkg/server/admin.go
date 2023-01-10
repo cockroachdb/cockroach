@@ -2199,6 +2199,15 @@ func getLivenessResponse(
 	}, nil
 }
 
+func (s *adminServer) Liveness(
+	ctx context.Context, req *serverpb.LivenessRequest,
+) (*serverpb.LivenessResponse, error) {
+	ctx = propagateGatewayMetadata(ctx)
+	ctx = s.AnnotateCtx(ctx)
+
+	return s.sqlServer.tenantConnect.Liveness(ctx, req)
+}
+
 // Liveness returns the liveness state of all nodes on the cluster
 // based on a KV transaction. To reach all nodes in the cluster, consider
 // using (statusServer).NodesWithLiveness instead.

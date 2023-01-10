@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
@@ -98,6 +99,8 @@ type Connector struct {
 type client struct {
 	roachpb.InternalClient
 	serverpb.StatusClient
+	serverpb.AdminClient
+	tspb.TimeSeriesClient
 }
 
 // Connector is capable of providing information on each of the KV nodes in the
@@ -123,6 +126,13 @@ var _ config.SystemConfigProvider = (*Connector)(nil)
 // tenant within the cluster. This is necessary for things such as
 // debug zip and range reports.
 var _ serverpb.TenantStatusServer = (*Connector)(nil)
+
+// Connector is capable of finding debug information about the cluster
+// the tenant belongs to. This is necessary for proper functioning of
+// the DB Console in cases where the tenant has privileges allowing it
+// to access system-level information.
+var _ serverpb.TenantAdminServer = (*Connector)(nil)
+var _ tspb.TenantTimeSeriesServer = (*Connector)(nil)
 
 // Connector is capable of accessing span configurations for secondary tenants.
 var _ spanconfig.KVAccessor = (*Connector)(nil)
@@ -451,6 +461,17 @@ func (c *Connector) RangeLookup(
 	return nil, nil, ctx.Err()
 }
 
+// NodesUI implements the serverpb.TenantStatusServer interface
+func (c *Connector) NodesUI(
+	ctx context.Context, req *serverpb.NodesRequest,
+) (resp *serverpb.NodesResponseExternal, retErr error) {
+	retErr = c.withClient(ctx, func(ctx context.Context, client *client) (err error) {
+		resp, err = client.NodesUI(ctx, req)
+		return
+	})
+	return
+}
+
 // Regions implements the serverpb.TenantStatusServer interface
 func (c *Connector) Regions(
 	ctx context.Context, req *serverpb.RegionsRequest,
@@ -724,8 +745,10 @@ func (c *Connector) dialAddrs(ctx context.Context) (*client, error) {
 				continue
 			}
 			return &client{
-				InternalClient: roachpb.NewInternalClient(conn),
-				StatusClient:   serverpb.NewStatusClient(conn),
+				InternalClient:   roachpb.NewInternalClient(conn),
+				StatusClient:     serverpb.NewStatusClient(conn),
+				AdminClient:      serverpb.NewAdminClient(conn),
+				TimeSeriesClient: tspb.NewTimeSeriesClient(conn),
 			}, nil
 		}
 	}
@@ -754,4 +777,26 @@ func (c *Connector) tryForgetClient(ctx context.Context, client roachpb.Internal
 	if c.mu.client == client {
 		c.mu.client = nil
 	}
+}
+
+// Liveness implements the serverpb.TenantAdminServer interface
+func (c *Connector) Liveness(
+	ctx context.Context, req *serverpb.LivenessRequest,
+) (resp *serverpb.LivenessResponse, retErr error) {
+	retErr = c.withClient(ctx, func(ctx context.Context, client *client) (err error) {
+		resp, err = client.Liveness(ctx, req)
+		return
+	})
+	return
+}
+
+// Query implements the serverpb.TenantTimeSeriesServer interface
+func (c *Connector) Query(
+	ctx context.Context, req *tspb.TimeSeriesQueryRequest,
+) (resp *tspb.TimeSeriesQueryResponse, retErr error) {
+	retErr = c.withClient(ctx, func(ctx context.Context, client *client) (err error) {
+		resp, err = client.Query(ctx, req)
+		return
+	})
+	return
 }

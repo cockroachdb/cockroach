@@ -11,6 +11,7 @@
 package tspb
 
 import (
+	context "context"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -105,4 +106,8 @@ func VerifySlabAndSampleDuration(slabDuration, sampleDuration int64) error {
 	}
 
 	return nil
+}
+
+type TenantTimeSeriesServer interface {
+	Query(context.Context, *TimeSeriesQueryRequest) (*TimeSeriesQueryResponse, error)
 }

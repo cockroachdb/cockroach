@@ -80,6 +80,9 @@ type NodesStatusServer interface {
 type TenantStatusServer interface {
 	TenantRanges(context.Context, *TenantRangesRequest) (*TenantRangesResponse, error)
 	Regions(context.Context, *RegionsRequest) (*RegionsResponse, error)
+
+	// NodesUI is used by DB Console.
+	NodesUI(context.Context, *NodesRequest) (*NodesResponseExternal, error)
 }
 
 // OptionalNodesStatusServer returns the wrapped NodesStatusServer, if it is

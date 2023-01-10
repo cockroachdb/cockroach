@@ -23,6 +23,7 @@ go_library(
         "//pkg/server/serverpb",
         "//pkg/settings",
         "//pkg/spanconfig",
+        "//pkg/ts/tspb",
         "//pkg/util/contextutil",
         "//pkg/util/errorutil",
         "//pkg/util/grpcutil",
