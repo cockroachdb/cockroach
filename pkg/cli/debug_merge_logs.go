@@ -40,7 +40,12 @@ type logStream interface {
 // writeLogStream pops messages off of s and writes them to out prepending
 // prefix per message and filtering messages which match filter.
 func writeLogStream(
-	s logStream, out io.Writer, filter *regexp.Regexp, keepRedactable bool, cp ttycolor.Profile,
+	s logStream,
+	out io.Writer,
+	filter *regexp.Regexp,
+	keepRedactable bool,
+	cp ttycolor.Profile,
+	tenantIDsFilter []string,
 ) error {
 	const chanSize = 1 << 16        // 64k
 	const maxWriteBufSize = 1 << 18 // 256kB
@@ -48,6 +53,10 @@ func writeLogStream(
 	type entryInfo struct {
 		logpb.Entry
 		*fileInfo
+	}
+	tenantIDFilterSet := make(map[string]struct{}, len(tenantIDsFilter))
+	for _, tID := range tenantIDsFilter {
+		tenantIDFilterSet[tID] = struct{}{}
 	}
 	render := func(ei entryInfo, w io.Writer) (err error) {
 		// TODO(postamar): add support for other output formats
@@ -95,6 +104,11 @@ func writeLogStream(
 				if !open {
 					entryChan = nil
 					break
+				}
+				if len(tenantIDsFilter) != 0 {
+					if _, ok := tenantIDFilterSet[ei.TenantID]; !ok {
+						break
+					}
 				}
 				startLen := pending.Len()
 				if err := render(ei, pending); err != nil {
