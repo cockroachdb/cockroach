@@ -25,21 +25,21 @@ import (
 
 const (
 	debugBase         = "debug"
-	eventsName        = debugBase + "/events"
-	livenessName      = debugBase + "/liveness"
-	nodesPrefix       = debugBase + "/nodes"
-	rangelogName      = debugBase + "/rangelog"
-	reportsPrefix     = debugBase + "/reports"
-	schemaPrefix      = debugBase + "/schema"
-	settingsName      = debugBase + "/settings"
+	eventsName        = "/events"
+	livenessName      = "/liveness"
+	nodesPrefix       = "/nodes"
+	rangelogName      = "/rangelog"
+	reportsPrefix     = "/reports"
+	schemaPrefix      = "/schema"
+	settingsName      = "/settings"
 	problemRangesName = reportsPrefix + "/problemranges"
-	tenantRangesName  = debugBase + "/tenant_ranges"
+	tenantRangesName  = "/tenant_ranges"
 )
 
 // makeClusterWideZipRequests defines the zipRequests that are to be
 // performed just once for the entire cluster.
 func makeClusterWideZipRequests(
-	admin serverpb.AdminClient, status serverpb.StatusClient,
+	admin serverpb.AdminClient, status serverpb.StatusClient, prefix string,
 ) []zipRequest {
 	return []zipRequest{
 		// NB: we intentionally omit liveness since it's already pulled manually (we
@@ -48,25 +48,25 @@ func makeClusterWideZipRequests(
 			fn: func(ctx context.Context) (interface{}, error) {
 				return admin.Events(ctx, &serverpb.EventsRequest{})
 			},
-			pathName: eventsName,
+			pathName: prefix + eventsName,
 		},
 		{
 			fn: func(ctx context.Context) (interface{}, error) {
 				return admin.RangeLog(ctx, &serverpb.RangeLogRequest{})
 			},
-			pathName: rangelogName,
+			pathName: prefix + rangelogName,
 		},
 		{
 			fn: func(ctx context.Context) (interface{}, error) {
 				return admin.Settings(ctx, &serverpb.SettingsRequest{})
 			},
-			pathName: settingsName,
+			pathName: prefix + settingsName,
 		},
 		{
 			fn: func(ctx context.Context) (interface{}, error) {
 				return status.ProblemRanges(ctx, &serverpb.ProblemRangesRequest{})
 			},
-			pathName: problemRangesName,
+			pathName: prefix + problemRangesName,
 		},
 	}
 }
@@ -85,7 +85,7 @@ type nodesInfo struct {
 func (zc *debugZipContext) collectClusterData(
 	ctx context.Context, firstNodeDetails *serverpb.DetailsResponse,
 ) (ni nodesInfo, livenessByNodeID nodeLivenesses, err error) {
-	clusterWideZipRequests := makeClusterWideZipRequests(zc.admin, zc.status)
+	clusterWideZipRequests := makeClusterWideZipRequests(zc.admin, zc.status, zc.prefix)
 
 	for _, r := range clusterWideZipRequests {
 		if err := zc.runZipRequest(ctx, zc.clusterPrinter, r); err != nil {
@@ -99,7 +99,7 @@ func (zc *debugZipContext) collectClusterData(
 			if err != nil {
 				return err
 			}
-			if err := zc.dumpTableDataForZip(zc.clusterPrinter, zc.firstNodeSQLConn, debugBase, table, query); err != nil {
+			if err := zc.dumpTableDataForZip(zc.clusterPrinter, zc.firstNodeSQLConn, zc.prefix, table, query); err != nil {
 				return errors.Wrapf(err, "fetching %s", table)
 			}
 		}
@@ -119,11 +119,11 @@ func (zc *debugZipContext) collectClusterData(
 			return err
 		})
 		if ni.nodesStatusResponse != nil {
-			if cErr := zc.z.createJSONOrError(s, debugBase+"/nodes.json", ni.nodesStatusResponse, err); cErr != nil {
+			if cErr := zc.z.createJSONOrError(s, zc.prefix+"/nodes.json", ni.nodesStatusResponse, err); cErr != nil {
 				return nodesInfo{}, nil, cErr
 			}
 		} else {
-			if cErr := zc.z.createJSONOrError(s, debugBase+"/nodes.json", ni.nodesListResponse, err); cErr != nil {
+			if cErr := zc.z.createJSONOrError(s, zc.prefix+"/nodes.json", ni.nodesListResponse, err); cErr != nil {
 				return nodesInfo{}, nil, cErr
 			}
 		}
@@ -149,7 +149,7 @@ func (zc *debugZipContext) collectClusterData(
 			lresponse, err = zc.admin.Liveness(ctx, &serverpb.LivenessRequest{})
 			return err
 		})
-		if cErr := zc.z.createJSONOrError(s, livenessName+".json", nodes, err); cErr != nil {
+		if cErr := zc.z.createJSONOrError(s, zc.prefix+livenessName+".json", nodes, err); cErr != nil {
 			return nodesInfo{}, nil, cErr
 		}
 		livenessByNodeID = map[roachpb.NodeID]livenesspb.NodeLivenessStatus{}
@@ -166,7 +166,7 @@ func (zc *debugZipContext) collectClusterData(
 			tenantRanges, err = zc.status.TenantRanges(ctx, &serverpb.TenantRangesRequest{})
 			return err
 		}); requestErr != nil {
-			if err := zc.z.createError(s, tenantRangesName, requestErr); err != nil {
+			if err := zc.z.createError(s, zc.prefix+tenantRangesName, requestErr); err != nil {
 				return nodesInfo{}, nil, errors.Wrap(err, "fetching tenant ranges")
 			}
 		} else {
@@ -178,7 +178,7 @@ func (zc *debugZipContext) collectClusterData(
 					return rangeList.Ranges[i].RangeID > rangeList.Ranges[j].RangeID
 				})
 				sLocality := zc.clusterPrinter.start("writing tenant ranges for locality: %s", locality)
-				prefix := fmt.Sprintf("%s/%s", tenantRangesName, locality)
+				prefix := fmt.Sprintf("%s/%s/%s", zc.prefix, tenantRangesName, locality)
 				for _, r := range rangeList.Ranges {
 					sRange := zc.clusterPrinter.start("writing tenant range %d", r.RangeID)
 					name := fmt.Sprintf("%s/%d", prefix, r.RangeID)
@@ -200,6 +200,7 @@ func (zc *debugZipContext) collectClusterData(
 // For regular storage servers, the more detailed NodesResponse is
 // returned along with the nodesListResponse.
 func (zc *debugZipContext) nodesInfo(ctx context.Context) (ni nodesInfo, _ error) {
+	// TODO(aaditya): if in UA mode, also call
 	nodesResponse, err := zc.status.Nodes(ctx, &serverpb.NodesRequest{})
 	nodesList := &serverpb.NodesListResponse{}
 	if code := status.Code(errors.Cause(err)); code == codes.Unimplemented {

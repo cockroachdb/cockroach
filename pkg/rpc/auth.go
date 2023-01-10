@@ -157,6 +157,7 @@ func (a kvAuth) authenticate(ctx context.Context) (roachpb.TenantID, error) {
 	// read and write all data, merely good hygiene. For example, there is
 	// no reason to permit the root user to send raw Raft RPCs.
 	certUserScope, err := security.GetCertificateUserScope(&tlsInfo.State)
+	log.Errorf(ctx, "CertUserScope: %v", certUserScope)
 	if err != nil {
 		return roachpb.TenantID{}, err
 	}

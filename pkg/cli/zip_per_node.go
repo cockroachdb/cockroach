@@ -133,7 +133,7 @@ func (zc *debugZipContext) collectCPUProfiles(
 			continue // skipped node
 		}
 		nodeID := nodeList[i].NodeID
-		prefix := fmt.Sprintf("%s/%s", nodesPrefix, fmt.Sprintf("%d", nodeID))
+		prefix := fmt.Sprintf("%s/%s/%s", zc.prefix, nodesPrefix, fmt.Sprintf("%d", nodeID))
 		s := zc.clusterPrinter.start("profile for node %d", nodeID)
 		if err := zc.z.createRawOrError(s, prefix+"/cpu.pprof", pd.data, pd.err); err != nil {
 			return err
@@ -168,7 +168,7 @@ func (zc *debugZipContext) collectPerNodeData(
 	}
 	nodePrinter := zipCtx.newZipReporter("node %d", nodeID)
 	id := fmt.Sprintf("%d", nodeID)
-	prefix := fmt.Sprintf("%s/%s", nodesPrefix, id)
+	prefix := fmt.Sprintf("%s/%s/%s", zc.prefix, nodesPrefix, id)
 
 	if !zipCtx.nodes.isIncluded(nodeID) {
 		if err := zc.z.createRaw(nodePrinter.start("skipping node"), prefix+".skipped",

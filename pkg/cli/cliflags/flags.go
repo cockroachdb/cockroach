@@ -1575,6 +1575,12 @@ Can be set to 1 to ensure only one node is polled for data at a time.
 `,
 	}
 
+	ZipAppTenantPorts = FlagInfo{
+		Name: "app-tenant-ports",
+		// TODO(aaditya): create write a description
+		Description: ``,
+	}
+
 	StmtDiagDeleteAll = FlagInfo{
 		Name:        "all",
 		Description: `Delete all bundles.`,
