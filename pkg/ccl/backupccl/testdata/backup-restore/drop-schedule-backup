@@ -27,4 +27,3 @@ DROP SCHEDULES WITH x AS (SHOW SCHEDULES) SELECT id FROM x WHERE label='hello' A
 query-sql
 SELECT * FROM [SHOW SCHEDULES] WHERE label='hello';
 ----
-
