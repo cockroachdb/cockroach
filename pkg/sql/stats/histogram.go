@@ -136,7 +136,9 @@ func EquiDepthHistogram(
 		// numLess is the number of samples less than upper (in this bucket).
 		numLess := 0
 		for ; numLess < numSamplesInBucket-1; numLess++ {
-			if c := samples[i+numLess].Compare(compareCtx, upper); c == 0 {
+			if c, err := samples[i+numLess].CompareError(compareCtx, upper); err != nil {
+				return HistogramData{}, nil, err
+			} else if c == 0 {
 				break
 			} else if c > 0 {
 				return HistogramData{}, nil, errors.AssertionFailedf("%+v", "samples not sorted")
@@ -144,7 +146,9 @@ func EquiDepthHistogram(
 		}
 		// Advance the boundary of the bucket to cover all samples equal to upper.
 		for ; i+numSamplesInBucket < numSamples; numSamplesInBucket++ {
-			if samples[i+numSamplesInBucket].Compare(compareCtx, upper) != 0 {
+			if c, err := samples[i+numSamplesInBucket].CompareError(compareCtx, upper); err != nil {
+				return HistogramData{}, nil, err
+			} else if c != 0 {
 				break
 			}
 		}

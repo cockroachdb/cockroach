@@ -1878,6 +1878,13 @@ func TestLogic_tuple(
 	runLogicTest(t, "tuple")
 }
 
+func TestLogic_tuple_local(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "tuple_local")
+}
+
 func TestLogic_txn(
 	t *testing.T,
 ) {
