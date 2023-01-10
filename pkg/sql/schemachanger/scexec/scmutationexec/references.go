@@ -197,13 +197,7 @@ func (m *visitor) UpdateTypeBackReferencesInTypes(
 		if err != nil {
 			return err
 		}
-		ids, err := typ.GetIDClosure()
-		if err != nil {
-			return err
-		}
-		for id := range ids {
-			forwardRefs.Add(id)
-		}
+		forwardRefs = typ.GetIDClosure()
 	}
 	return updateBackReferencesInTypes(ctx, m, op.TypeIDs, op.BackReferencedTypeID, forwardRefs)
 }

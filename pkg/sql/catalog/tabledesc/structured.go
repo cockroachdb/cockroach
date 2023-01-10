@@ -326,11 +326,7 @@ func (desc *wrapper) GetAllReferencedTypeIDs(
 	if err != nil {
 		return nil, nil, err
 	}
-	referencedInColumns = make(descpb.IDs, 0, len(ids))
-	for id := range ids {
-		referencedInColumns = append(referencedInColumns, id)
-	}
-	sort.Sort(referencedInColumns)
+	referencedInColumns = ids.Ordered()
 
 	// REGIONAL BY TABLE tables may have a dependency with the multi-region enum.
 	exists := desc.GetMultiRegionEnumDependencyIfExists()
@@ -339,24 +335,16 @@ func (desc *wrapper) GetAllReferencedTypeIDs(
 		if err != nil {
 			return nil, nil, err
 		}
-		ids[regionEnumID] = struct{}{}
+		ids.Add(regionEnumID)
 	}
 
 	// Add any other type dependencies that are not
 	// used in a column (specifically for views).
 	for _, id := range desc.DependsOnTypes {
-		ids[id] = struct{}{}
+		ids.Add(id)
 	}
 
-	// Construct the output.
-	result := make(descpb.IDs, 0, len(ids))
-	for id := range ids {
-		result = append(result, id)
-	}
-
-	// Sort the output so that the order is deterministic.
-	sort.Sort(result)
-	return result, referencedInColumns, nil
+	return ids.Ordered(), referencedInColumns, nil
 }
 
 // getAllReferencedTypesInTableColumns returns a map of all user defined
@@ -371,7 +359,7 @@ func (desc *wrapper) GetAllReferencedTypeIDs(
 // GetAllReferencedTypesByID accounts for this dependency.
 func (desc *wrapper) getAllReferencedTypesInTableColumns(
 	getType func(descpb.ID) (catalog.TypeDescriptor, error),
-) (map[descpb.ID]struct{}, error) {
+) (ret catalog.DescriptorIDSet, _ error) {
 	// All serialized expressions within a table descriptor are serialized
 	// with type annotations as ID's, so this visitor will collect them all.
 	visitor := &tree.TypeCollectorVisitor{
@@ -388,52 +376,34 @@ func (desc *wrapper) getAllReferencedTypesInTableColumns(
 	}
 
 	if err := ForEachExprStringInTableDesc(desc, addOIDsInExpr); err != nil {
-		return nil, err
+		return ret, err
 	}
 
 	// For each of the collected type IDs in the table descriptor expressions,
 	// collect the closure of IDs referenced.
-	ids := make(map[descpb.ID]struct{})
 	for id := range visitor.OIDs {
 		uid := typedesc.UserDefinedTypeOIDToID(id)
 		typDesc, err := getType(uid)
 		if err != nil {
-			return nil, err
+			return ret, err
 		}
-		children, err := typDesc.GetIDClosure()
-		if err != nil {
-			return nil, err
-		}
-		for child := range children {
-			ids[child] = struct{}{}
-		}
+		typDesc.GetIDClosure().ForEach(ret.Add)
 	}
 
 	// Now add all of the column types in the table.
-	addIDsInColumn := func(c *descpb.ColumnDescriptor) error {
-		children, err := typedesc.GetTypeDescriptorClosure(c.Type)
-		if err != nil {
-			return err
-		}
-		for id := range children {
-			ids[id] = struct{}{}
-		}
-		return nil
+	addIDsInColumn := func(c *descpb.ColumnDescriptor) {
+		typedesc.GetTypeDescriptorClosure(c.Type).ForEach(ret.Add)
 	}
 	for i := range desc.Columns {
-		if err := addIDsInColumn(&desc.Columns[i]); err != nil {
-			return nil, err
-		}
+		addIDsInColumn(&desc.Columns[i])
 	}
 	for _, mut := range desc.Mutations {
 		if c := mut.GetColumn(); c != nil {
-			if err := addIDsInColumn(c); err != nil {
-				return nil, err
-			}
+			addIDsInColumn(c)
 		}
 	}
 
-	return ids, nil
+	return ret, nil
 }
 
 func (desc *Mutable) initIDs() {
