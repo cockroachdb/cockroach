@@ -1,0 +1,2 @@
+grant_tenant_capability ::=
+	var_name to_or_eq var_value

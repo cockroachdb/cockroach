@@ -1,0 +1,2 @@
+revoke_tenant_capability_list ::=
+	revoke_tenant_capability ( ( ',' revoke_tenant_capability ) )*

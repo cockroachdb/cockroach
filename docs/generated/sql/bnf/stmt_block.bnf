@@ -917,12 +917,9 @@ show_tables_stmt ::=
 	| 'SHOW' 'TABLES' with_comment
 
 show_tenant_stmt ::=
-	'SHOW' 'TENANTS'
-	| 'SHOW' 'TENANT_ALL' 'ALL'
-	| 'SHOW' 'TENANTS' 'WITH' 'REPLICATION' 'STATUS'
-	| 'SHOW' 'TENANT_ALL' 'ALL' 'WITH' 'REPLICATION' 'STATUS'
-	| 'SHOW' 'TENANT' tenant_spec
-	| 'SHOW' 'TENANT' tenant_spec 'WITH' 'REPLICATION' 'STATUS'
+	'SHOW' 'TENANTS' opt_show_tenant_options
+	| 'SHOW' 'TENANT_ALL' 'ALL' opt_show_tenant_options
+	| 'SHOW' 'TENANT' tenant_spec opt_show_tenant_options
 
 show_trace_stmt ::=
 	'SHOW' opt_compact 'TRACE' 'FOR' 'SESSION'
@@ -1031,6 +1028,8 @@ unreserved_keyword ::=
 	| 'CALLED'
 	| 'CANCEL'
 	| 'CANCELQUERY'
+	| 'CAPABILITIES'
+	| 'CAPABILITY'
 	| 'CASCADE'
 	| 'CHANGEFEED'
 	| 'CLOSE'
@@ -1936,6 +1935,9 @@ statements_or_queries ::=
 opt_show_ranges_options ::=
 	'WITH' show_ranges_options
 
+opt_show_tenant_options ::=
+	'WITH' show_tenant_options
+
 opt_compact ::=
 	'COMPACT'
 	| 
@@ -2634,6 +2636,12 @@ targets_roles ::=
 
 show_ranges_options ::=
 	( 'TABLES' | 'INDEXES' | 'DETAILS' | 'KEYS' | 'EXPLAIN' ) ( ( ',' 'TABLES' | ',' 'INDEXES' | ',' 'DETAILS' | ',' 'EXPLAIN' | ',' 'KEYS' ) )*
+
+show_tenant_options ::=
+	'REPLICATION' 'STATUS'
+	| 'CAPABILITIES'
+	| show_ranges_options ',' 'REPLICATION' 'STATUS'
+	| show_ranges_options ',' 'CAPABILITIES'
 
 partition ::=
 	'PARTITION' partition_name
