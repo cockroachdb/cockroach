@@ -22,6 +22,7 @@ import "kv/kvserver/loqrecovery/loqrecoverypb/recovery.proto";
 import "kv/kvserver/kvserverpb/range_log.proto";
 import "roachpb/api.proto";
 import "roachpb/metadata.proto";
+import "roachpb/data.proto";
 import "ts/catalog/chart_catalog.proto";
 import "util/metric/metric.proto";
 import "gogoproto/gogo.proto";
@@ -1210,6 +1211,23 @@ service Admin {
   // decommissioned.
   rpc RecoveryVerify(RecoveryVerifyRequest) returns (RecoveryVerifyResponse) {}
 
+  // ListTenants returns a list of active tenants in the cluster.
+  rpc ListTenants(ListTenantsRequest) returns (ListTenantsResponse) {
+    option (google.api.http) = {
+      get: "/_admin/v1/tenants"
+    };
+  }
+}
+
+message ListTenantsRequest{}
+
+message ListTenantsResponse {
+  repeated Tenant tenants = 1;
+}
+
+message Tenant {
+  roachpb.TenantID tenant_id = 1;
+  string tenant_name = 2;
 }
 
 message ListTracingSnapshotsRequest {}

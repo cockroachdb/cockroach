@@ -3042,3 +3042,31 @@ func TestDatabaseAndTableIndexRecommendations(t *testing.T) {
 	}
 	require.Equal(t, false, tableDetails.HasIndexRecommendations)
 }
+
+func TestListTenants(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DisableDefaultTestTenant: true,
+	})
+	defer s.Stopper().Stop(context.Background())
+
+	db := sqlutils.MakeSQLRunner(sqlDB)
+	db.Exec(t, "CREATE TENANT test;")
+
+	const path = "tenants"
+	var response serverpb.ListTenantsResponse
+
+	if err := getAdminJSONProto(s, path, &response); err != nil {
+		t.Fatalf("unexpected error: %v\n", err)
+	}
+
+	require.True(t, func() bool {
+		for _, tenant := range response.Tenants {
+			if tenant.TenantName == "test" {
+				return true
+			}
+		}
+		return false
+	}(), "test tenant not found")
+}

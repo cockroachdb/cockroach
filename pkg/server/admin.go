@@ -4093,3 +4093,37 @@ func (s *adminServer) RecoveryVerify(
 ) (*serverpb.RecoveryVerifyResponse, error) {
 	return nil, errors.AssertionFailedf("To be implemented by #93043")
 }
+
+// ListTenants returns a list of active tenants in the cluster. It includes
+// the TenantID and name from the system.tenants table.
+func (s *systemAdminServer) ListTenants(
+	ctx context.Context, _ *serverpb.ListTenantsRequest,
+) (*serverpb.ListTenantsResponse, error) {
+	ie := s.internalExecutor
+	rowIter, err := ie.QueryIterator(ctx, "list-tenants", nil, /* txn */
+		`SELECT id, name FROM system.tenants WHERE active = true`)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rowIter.Close() }()
+
+	var tenantList []*serverpb.Tenant
+
+	var hasNext bool
+	for hasNext, err = rowIter.Next(ctx); hasNext && err == nil; hasNext, err = rowIter.Next(ctx) {
+		row := rowIter.Cur()
+		tenantID := roachpb.MustMakeTenantID(uint64(tree.MustBeDInt(row[0])))
+		tenantName, ok := tree.AsDString(row[1])
+		if !ok {
+			tenantName = ""
+		}
+		tenantList = append(tenantList, &serverpb.Tenant{
+			TenantId:   &tenantID,
+			TenantName: string(tenantName),
+		})
+	}
+
+	return &serverpb.ListTenantsResponse{
+		Tenants: tenantList,
+	}, nil
+}
