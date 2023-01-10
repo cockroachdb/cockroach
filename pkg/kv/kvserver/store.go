@@ -3155,7 +3155,7 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 		averageReadsPerSecond += loadStats.ReadKeysPerSecond
 		averageReadBytesPerSecond += loadStats.ReadBytesPerSecond
 		averageWriteBytesPerSecond += loadStats.WriteBytesPerSecond
-		averageCPUNanosPerSecond += loadStats.CPUNanosPerSecond
+		averageCPUNanosPerSecond += loadStats.RaftCPUNanosPerSecond + loadStats.RequestCPUNanosPerSecond
 
 		locks += metrics.LockTableMetrics.Locks
 		totalLockHoldDurationNanos += metrics.LockTableMetrics.TotalLockHoldDurationNanos
