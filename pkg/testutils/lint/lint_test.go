@@ -2054,6 +2054,7 @@ func TestLint(t *testing.T) {
 			"../../sql/row",
 			"../../kv/kvclient/rangecache",
 			"../../storage",
+			"../../util/admission",
 		); err != nil {
 			t.Fatal(err)
 		}
