@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/errors"
 )
@@ -257,6 +258,13 @@ func constructVirtualScan(
 	// Check for explicit use of the dummy column.
 	if params.NeededCols.Contains(0) {
 		return nil, errors.Errorf("use of %s column not allowed.", table.Column(0).ColName())
+	}
+	if params.NeededCols.Contains(0) {
+		if sd := p.SessionData(); !buildutil.CrdbTestBuild ||
+			(sd.TestingOptimizerDisableRuleProbability == 0 && sd.TestingOptimizerCostPerturbation == 0) {
+			return nil, errors.Errorf("use of %s column not allowed.", table.Column(0).ColName())
+		}
+		params.NeededCols.Remove(0)
 	}
 	if params.Locking.IsLocking() {
 		// We shouldn't have allowed SELECT FOR UPDATE for a virtual table.
