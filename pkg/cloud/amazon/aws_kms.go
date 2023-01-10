@@ -13,6 +13,7 @@ package amazon
 import (
 	"context"
 	"net/url"
+	"reflect"
 	"strings"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -22,7 +23,10 @@ import (
 	"github.com/aws/aws-sdk-go/service/kms"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -43,27 +47,44 @@ func init() {
 }
 
 type kmsURIParams struct {
-	accessKey        string
-	secret           string
-	tempToken        string
-	endpoint         string
-	region           string
-	auth             string
-	roleARN          string
-	delegateRoleARNs []string
+	customerMasterKeyID string
+	accessKey           string
+	secret              string
+	tempToken           string
+	endpoint            string
+	region              string
+	auth                string
+	roleARN             string
+	delegateRoleARNs    []string
+	verbose             bool
+}
+
+var reuseKMSSession = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	"cloudstorage.aws.reuse_kms_session.enabled",
+	"persist the last opened AWS KMS session and reuse it when opening a new session with the same arguments",
+	util.ConstantWithMetamorphicTestBool("aws-reuse-kms", true),
+)
+
+var kmsClientCache struct {
+	syncutil.Mutex
+	key kmsURIParams
+	kms *awsKMS
 }
 
 func resolveKMSURIParams(kmsURI cloud.ConsumeURL) (kmsURIParams, error) {
 	assumeRole, delegateRoles := cloud.ParseRoleString(kmsURI.ConsumeParam(AssumeRoleParam))
 	params := kmsURIParams{
-		accessKey:        kmsURI.ConsumeParam(AWSAccessKeyParam),
-		secret:           kmsURI.ConsumeParam(AWSSecretParam),
-		tempToken:        kmsURI.ConsumeParam(AWSTempTokenParam),
-		endpoint:         kmsURI.ConsumeParam(AWSEndpointParam),
-		region:           kmsURI.ConsumeParam(KMSRegionParam),
-		auth:             kmsURI.ConsumeParam(cloud.AuthParam),
-		roleARN:          assumeRole,
-		delegateRoleARNs: delegateRoles,
+		customerMasterKeyID: strings.TrimPrefix(kmsURI.Path, "/"),
+		accessKey:           kmsURI.ConsumeParam(AWSAccessKeyParam),
+		secret:              kmsURI.ConsumeParam(AWSSecretParam),
+		tempToken:           kmsURI.ConsumeParam(AWSTempTokenParam),
+		endpoint:            kmsURI.ConsumeParam(AWSEndpointParam),
+		region:              kmsURI.ConsumeParam(KMSRegionParam),
+		auth:                kmsURI.ConsumeParam(cloud.AuthParam),
+		roleARN:             assumeRole,
+		delegateRoleARNs:    delegateRoles,
+		verbose:             log.V(2),
 	}
 
 	// Validate that all the passed in parameters are supported.
@@ -100,13 +121,14 @@ func MakeAWSKMS(ctx context.Context, uri string, env cloud.KMSEnv) (cloud.KMS, e
 	if err != nil {
 		return nil, err
 	}
+
 	region := kmsURIParams.region
 	awsConfig := &aws.Config{
 		Credentials: credentials.NewStaticCredentials(kmsURIParams.accessKey,
 			kmsURIParams.secret, kmsURIParams.tempToken),
 	}
 	awsConfig.Logger = newLogAdapter(ctx)
-	if log.V(2) {
+	if kmsURIParams.verbose {
 		awsConfig.LogLevel = awsVerboseLogging
 	}
 
@@ -199,10 +221,28 @@ func MakeAWSKMS(ctx context.Context, uri string, env cloud.KMSEnv) (cloud.KMS, e
 		return nil, errors.New("could not find the aws kms region")
 	}
 	sess.Config.Region = aws.String(region)
-	return &awsKMS{
+
+	reuse := reuseKMSSession.Get(&env.ClusterSettings().SV)
+	if reuse {
+		kmsClientCache.Lock()
+		defer kmsClientCache.Unlock()
+
+		if reflect.DeepEqual(kmsClientCache.key, kmsURIParams) {
+			return kmsClientCache.kms, nil
+		}
+	}
+
+	kms := &awsKMS{
 		kms:                 kms.New(sess),
-		customerMasterKeyID: strings.TrimPrefix(kmsURI.Path, "/"),
-	}, nil
+		customerMasterKeyID: kmsURIParams.customerMasterKeyID,
+	}
+
+	if reuse {
+		// We already have the cache lock from reading the cached client.
+		kmsClientCache.key = kmsURIParams
+		kmsClientCache.kms = kms
+	}
+	return kms, nil
 }
 
 // MasterKeyID implements the KMS interface.
