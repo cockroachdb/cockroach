@@ -1167,19 +1167,6 @@ func (desc *wrapper) FindFamilyByID(id descpb.FamilyID) (*descpb.ColumnFamilyDes
 	return nil, fmt.Errorf("family-id \"%d\" does not exist", id)
 }
 
-// NamesForColumnIDs implements the TableDescriptor interface.
-func (desc *wrapper) NamesForColumnIDs(ids descpb.ColumnIDs) ([]string, error) {
-	names := make([]string, len(ids))
-	for i, id := range ids {
-		col, err := desc.FindColumnWithID(id)
-		if err != nil {
-			return nil, err
-		}
-		names[i] = col.GetName()
-	}
-	return names, nil
-}
-
 // DropConstraint drops a constraint, either by removing it from the table
 // descriptor or by queuing a mutation for a schema change.
 func (desc *Mutable) DropConstraint(
