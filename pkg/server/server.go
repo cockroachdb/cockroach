@@ -1034,6 +1034,9 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		cfg.Locality,
 		rpcContext,
 		cfg.TestingKnobs.LOQRecovery,
+		func(ctx context.Context, id roachpb.NodeID) error {
+			return nodeTombStorage.SetDecommissioned(ctx, id, timeutil.Now())
+		},
 	)
 
 	*lateBoundServer = Server{
