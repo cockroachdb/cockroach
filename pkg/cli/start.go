@@ -188,20 +188,6 @@ func initTraceDir(ctx context.Context, dir string) {
 	}
 }
 
-func initExternalIODir(ctx context.Context, firstStore base.StoreSpec) (string, error) {
-	externalIODir := startCtx.externalIODir
-	if externalIODir == "" && !firstStore.InMemory {
-		externalIODir = filepath.Join(firstStore.Path, "extern")
-	}
-	if externalIODir == "" || externalIODir == "disabled" {
-		return "", nil
-	}
-	if !filepath.IsAbs(externalIODir) {
-		return "", errors.Errorf("%s path must be absolute", cliflags.ExternalIODir.Name)
-	}
-	return externalIODir, nil
-}
-
 func initTempStorageConfig(
 	ctx context.Context, st *cluster.Settings, stopper *stop.Stopper, stores base.StoreSpecList,
 ) (base.TempStorageConfig, error) {
@@ -553,9 +539,7 @@ func runStartInternal(
 	st := serverCfg.BaseConfig.Settings
 
 	// Derive temporary/auxiliary directory specifications.
-	if st.ExternalIODir, err = initExternalIODir(ctx, serverCfg.Stores.Specs[0]); err != nil {
-		return err
-	}
+	st.ExternalIODir = startCtx.externalIODir
 
 	if serverCfg.SQLConfig.TempStorageConfig, err = initTempStorageConfig(
 		ctx, st, stopper, serverCfg.Stores,

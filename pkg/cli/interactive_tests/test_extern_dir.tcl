@@ -9,16 +9,9 @@ spawn /bin/bash
 send "PS1=':''/# '\r"
 eexpect ":/# "
 
-start_test "Check that non-absolute external-io-dir rejected"
-
-send "$argv start-single-node --insecure --store=$storedir --external-io-dir=blah\r"
-eexpect "external-io-dir path must be absolute"
-
-end_test
-
 start_test "Check disabling external IO explicitly"
 
-send "$argv start-single-node --insecure --store=$storedir --external-io-dir=disabled\r"
+send "$argv start-single-node --insecure --store=$storedir --external-io-dir=''\r"
 eexpect "external I/O path:   <disabled>"
 interrupt
 eexpect "shutdown completed"
@@ -37,9 +30,9 @@ end_test
 start_test "Check implicit external I/O dir under store dir"
 
 send "$argv start-single-node --insecure --store=$storedir\r"
-eexpect "external I/O path:   $env(HOME)/$storedir/extern"
+eexpect "external I/O path:"
+eexpect "$storedir/extern"
 interrupt
 eexpect "shutdown completed"
 
 end_test
-
