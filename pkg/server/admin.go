@@ -3259,7 +3259,14 @@ func (s *systemAdminServer) RecoveryCollectLocalReplicaInfo(
 func (s *systemAdminServer) RecoveryStagePlan(
 	ctx context.Context, request *serverpb.RecoveryStagePlanRequest,
 ) (*serverpb.RecoveryStagePlanResponse, error) {
-	return nil, errors.AssertionFailedf("To be implemented by #93044")
+	ctx = s.server.AnnotateCtx(ctx)
+	_, err := s.requireAdminUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	log.Ops.Info(ctx, "staging recovery plan")
+	return s.server.recoveryServer.StagePlan(ctx, request)
 }
 
 func (s *systemAdminServer) RecoveryNodeStatus(
