@@ -792,7 +792,10 @@ func (n *partitionPeerGrouper) InSameGroup(i, j int) (bool, error) {
 			n.err = err
 			return false, n.err
 		}
-		if c := da.Compare(n.evalCtx, db); c != 0 {
+		if c, err := da.CompareError(n.evalCtx, db); err != nil {
+			n.err = err
+			return false, n.err
+		} else if c != 0 {
 			if o.Direction != execinfrapb.Ordering_Column_ASC {
 				return false, nil
 			}

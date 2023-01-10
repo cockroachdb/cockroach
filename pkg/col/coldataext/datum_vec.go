@@ -55,7 +55,15 @@ func newDatumVec(t *types.T, n int, evalCtx *eval.Context) coldata.DatumVec {
 // Note that the method is named differently from "Compare" so that we do not
 // overload tree.Datum.Compare method.
 func CompareDatum(d, dVec, other interface{}) int {
-	return d.(tree.Datum).Compare(dVec.(*datumVec).evalCtx, convertToDatum(other))
+	// Note that it's not strictly necessary to use CompareError here instead of
+	// just Compare since pkg/sql/sem/eval is in the allow-list of paths that
+	// colexecerror catches panics from. Still, it seems nicer to be explicit
+	// about this.
+	res, err := d.(tree.Datum).CompareError(dVec.(*datumVec).evalCtx, convertToDatum(other))
+	if err != nil {
+		colexecerror.InternalError(err)
+	}
+	return res
 }
 
 // Hash returns the hash of the datum as a byte slice.
