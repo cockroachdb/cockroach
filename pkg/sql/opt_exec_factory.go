@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treewindow"
 	"github.com/cockroachdb/cockroach/pkg/sql/span"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/errors"
@@ -768,7 +769,11 @@ func (ef *execFactory) constructVirtualTableLookupJoin(
 	}
 	// Check for explicit use of the dummy column.
 	if lookupCols.Contains(0) {
-		return nil, errors.Errorf("use of %s column not allowed.", table.Column(0).ColName())
+		if sd := ef.planner.SessionData(); !buildutil.CrdbTestBuild ||
+			(sd.TestingOptimizerDisableRuleProbability == 0 && sd.TestingOptimizerCostPerturbation == 0) {
+			return nil, errors.Errorf("use of %s column not allowed.", table.Column(0).ColName())
+		}
+		lookupCols.Remove(0)
 	}
 	idx := index.(*optVirtualIndex).idx
 	tableDesc := table.(*optVirtualTable).desc
