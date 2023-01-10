@@ -178,7 +178,7 @@ func nonMatchingRowQuery(
 	targetTbl catalog.TableDescriptor,
 	limitResults bool,
 ) (sql string, originColNames []string, _ error) {
-	originColNames, err := srcTbl.NamesForColumnIDs(fk.OriginColumnIDs)
+	originColNames, err := catalog.ColumnNamesForIDs(srcTbl, fk.OriginColumnIDs)
 	if err != nil {
 		return "", nil, err
 	}
@@ -208,7 +208,7 @@ func nonMatchingRowQuery(
 		qualifiedSrcCols[i] = fmt.Sprintf("s.%s", srcCols[i])
 	}
 
-	referencedColNames, err := targetTbl.NamesForColumnIDs(fk.ReferencedColumnIDs)
+	referencedColNames, err := catalog.ColumnNamesForIDs(targetTbl, fk.ReferencedColumnIDs)
 	if err != nil {
 		return "", nil, err
 	}
@@ -262,7 +262,7 @@ func validateForeignKey(
 ) error {
 	nCols := len(fk.OriginColumnIDs)
 
-	referencedColumnNames, err := targetTable.NamesForColumnIDs(fk.ReferencedColumnIDs)
+	referencedColumnNames, err := catalog.ColumnNamesForIDs(targetTable, fk.ReferencedColumnIDs)
 	if err != nil {
 		return err
 	}
@@ -345,7 +345,7 @@ func validateForeignKey(
 func duplicateRowQuery(
 	srcTbl catalog.TableDescriptor, columnIDs []descpb.ColumnID, pred string, limitResults bool,
 ) (sql string, colNames []string, _ error) {
-	colNames, err := srcTbl.NamesForColumnIDs(columnIDs)
+	colNames, err := catalog.ColumnNamesForIDs(srcTbl, columnIDs)
 	if err != nil {
 		return "", nil, err
 	}

@@ -984,7 +984,7 @@ func populateTableConstraints(
 				db.GetID(), sc.GetID(), table.GetID(), uwoi,
 			)
 			f.WriteString("UNIQUE WITHOUT INDEX (")
-			colNames, err := table.NamesForColumnIDs(uwoi.UniqueWithoutIndexDesc().ColumnIDs)
+			colNames, err := catalog.ColumnNamesForIDs(table, uwoi.UniqueWithoutIndexDesc().ColumnIDs)
 			if err != nil {
 				return err
 			}
