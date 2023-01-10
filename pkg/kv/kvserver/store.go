@@ -1893,7 +1893,12 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		// constraint (*Replica).raftMu < (*Store).mu. See the comment on
 		// (Store).mu.
 		s.mu.Lock()
-		err = s.addReplicaInternalLocked(rep)
+		// TODO(pavelkalinnikov): hide these in Store's replica create functions.
+		// TODO(pavelkalinnikov): addReplicaToRangeMapLocked needs a locked repl.mu.
+		err = s.addReplicaToRangeMapLocked(rep)
+		if err == nil {
+			err = s.addReplicaInternalLocked(rep)
+		}
 		s.mu.Unlock()
 		if err != nil {
 			return err
