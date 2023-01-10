@@ -1,26 +1,26 @@
-I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [-]   query: SELECT count(*) FROM "multi col range partitioning - MAXVALUE MAXVALUE" WHERE a >= 4 AND (a, b) < (5, 6)
-E190412 10:06:00.645112 195432 storage/queue.go:866  [n1,replicate,s1,r161/2:/Table/84/{1/5/7-2}]   no removable replicas from range that needs a removal: [2*:27, 3:0]
-E190412 10:06:00.681552 195558 storage/queue.go:866  [n1,replicate,s1,r158/3:/Table/84/1/3{-/4}]   no removable replicas from range that needs a removal: [2:0, 3*:34]
-E190412 10:06:00.780922 195831 storage/queue.go:866  [n3,replicate,s3,r49/1:/Table/84/1/{3/4-4}]   no removable replicas from range that needs a removal: [1*:16, 2:0]
-E190412 10:06:00.818605 195938 storage/queue.go:866  [n1,replicate,s1,r159/2:/Table/84/1/{4-5/6}]   no removable replicas from range that needs a removal: [2*:27, 3:0]
-E190412 10:06:01.015534 196474 storage/queue.go:866  [n2,replicate,s2,r161/3:/Table/84/{1/5/7-2}]   no removable replicas from range that needs a removal: [2:0, 3*:29]
-I190412 10:06:01.029478 183717 ccl/partitionccl/partition_test.go:204  [-]   query: SELECT count(*) FROM "multi col range partitioning - MAXVALUE MAXVALUE" WHERE (a, b) < (3, 4)
-I190412 10:06:01.029478 183717 ccl/partitionccl/partition_test.go:204  [-]  !panic: runtime error: invalid memory address or nil pointer dereference [recovered]
-I190412 10:06:01.029478 183717 ccl/partitionccl/partition_test.go:204  [-]  !	panic: runtime error: invalid memory address or nil pointer dereference
-I190412 10:06:01.029478 183717 ccl/partitionccl/partition_test.go:204  [-]  ![signal SIGSEGV: segmentation violation code=0x1 addr=0x10 pc=0x20efbad]
-I190412 10:06:01.029478 183717 ccl/partitionccl/partition_test.go:204  [-]  !
-I190412 10:06:01.029478 183717 ccl/partitionccl/partition_test.go:204  [-]  !goroutine 76680 [running]:
-I190412 10:06:01.029478 183717 ccl/partitionccl/partition_test.go:204  [-]  !github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).Recover(0xc000c467e0, 0x379a020, 0xc0029cb650)
-I190412 10:06:01.029478 183717 ccl/partitionccl/partition_test.go:204  [-]  !	/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:185 +0x11f
-I190412 10:06:01.029478 183717 ccl/partitionccl/partition_test.go:204  [-]  !panic(0x2ccb620, 0x527ac20)
-I190412 10:06:01.029478 183717 ccl/partitionccl/partition_test.go:204  [-]  !	/usr/local/go/src/runtime/panic.go:513 +0x1b9
-I190412 10:06:01.029478 183717 ccl/partitionccl/partition_test.go:204  [-]  !github.com/cockroachdb/cockroach/pkg/storage.(*replicaItem).setProcessing(...)
-I190412 10:06:01.029478 183717 ccl/partitionccl/partition_test.go:204  [-]  !	/go/src/github.com/cockroachdb/cockroach/pkg/storage/queue.go:80
-I190412 10:06:01.029478 183717 ccl/partitionccl/partition_test.go:204  [-]  !github.com/cockroachdb/cockroach/pkg/storage.(*baseQueue).addToPurgatoryLocked.func2.1(0xc000473340, 0x379a020, 0xc0029cb650, 0xc000c467e0)
-I190412 10:06:01.029478 183717 ccl/partitionccl/partition_test.go:204  [-]  !	/go/src/github.com/cockroachdb/cockroach/pkg/storage/queue.go:928 +0x1dd
-I190412 10:06:01.029478 183717 ccl/partitionccl/partition_test.go:204  [-]  !github.com/cockroachdb/cockroach/pkg/storage.(*baseQueue).addToPurgatoryLocked.func2(0x379a020, 0xc0029cb650)
-I190412 10:06:01.029478 183717 ccl/partitionccl/partition_test.go:204  [-]  !	/go/src/github.com/cockroachdb/cockroach/pkg/storage/queue.go:949 +0x462
-I190412 10:06:01.029478 183717 ccl/partitionccl/partition_test.go:204  [-]  !github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker.func1(0xc001480a10, 0xc000c467e0, 0xc0002f37c0)
-I190412 10:06:01.029478 183717 ccl/partitionccl/partition_test.go:204  [-]  !	/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:200 +0xe1
-I190412 10:06:01.029478 183717 ccl/partitionccl/partition_test.go:204  [-]  !created by github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker
-I190412 10:06:01.029478 183717 ccl/partitionccl/partition_test.go:204  [-]  !	/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:193 +0xa8
+I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [T1]   query: SELECT count(*) FROM "multi col range partitioning - MAXVALUE MAXVALUE" WHERE a >= 4 AND (a, b) < (5, 6)
+E190412 10:06:00.645112 195432 storage/queue.go:866  [T1,n1,replicate,s1,r161/2:/Table/84/{1/5/7-2}]   no removable replicas from range that needs a removal: [2*:27, 3:0]
+E190412 10:06:00.681552 195558 storage/queue.go:866  [T1,n1,replicate,s1,r158/3:/Table/84/1/3{-/4}]   no removable replicas from range that needs a removal: [2:0, 3*:34]
+E190412 10:06:00.780922 195831 storage/queue.go:866  [T1,n3,replicate,s3,r49/1:/Table/84/1/{3/4-4}]   no removable replicas from range that needs a removal: [1*:16, 2:0]
+E190412 10:06:00.818605 195938 storage/queue.go:866  [T1,n1,replicate,s1,r159/2:/Table/84/1/{4-5/6}]   no removable replicas from range that needs a removal: [2*:27, 3:0]
+E190412 10:06:01.015534 196474 storage/queue.go:866  [T1,n2,replicate,s2,r161/3:/Table/84/{1/5/7-2}]   no removable replicas from range that needs a removal: [2:0, 3*:29]
+I190412 10:06:01.029478 183717 ccl/partitionccl/partition_test.go:204  [T1]   query: SELECT count(*) FROM "multi col range partitioning - MAXVALUE MAXVALUE" WHERE (a, b) < (3, 4)
+I190412 10:06:01.029478 183717 ccl/partitionccl/partition_test.go:204  [T1]  !panic: runtime error: invalid memory address or nil pointer dereference [recovered]
+I190412 10:06:01.029478 183717 ccl/partitionccl/partition_test.go:204  [T1]  !	panic: runtime error: invalid memory address or nil pointer dereference
+I190412 10:06:01.029478 183717 ccl/partitionccl/partition_test.go:204  [T1]  ![signal SIGSEGV: segmentation violation code=0x1 addr=0x10 pc=0x20efbad]
+I190412 10:06:01.029478 183717 ccl/partitionccl/partition_test.go:204  [T1]  !
+I190412 10:06:01.029478 183717 ccl/partitionccl/partition_test.go:204  [T1]  !goroutine 76680 [running]:
+I190412 10:06:01.029478 183717 ccl/partitionccl/partition_test.go:204  [T1]  !github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).Recover(0xc000c467e0, 0x379a020, 0xc0029cb650)
+I190412 10:06:01.029478 183717 ccl/partitionccl/partition_test.go:204  [T1]  !	/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:185 +0x11f
+I190412 10:06:01.029478 183717 ccl/partitionccl/partition_test.go:204  [T1]  !panic(0x2ccb620, 0x527ac20)
+I190412 10:06:01.029478 183717 ccl/partitionccl/partition_test.go:204  [T1]  !	/usr/local/go/src/runtime/panic.go:513 +0x1b9
+I190412 10:06:01.029478 183717 ccl/partitionccl/partition_test.go:204  [T1]  !github.com/cockroachdb/cockroach/pkg/storage.(*replicaItem).setProcessing(...)
+I190412 10:06:01.029478 183717 ccl/partitionccl/partition_test.go:204  [T1]  !	/go/src/github.com/cockroachdb/cockroach/pkg/storage/queue.go:80
+I190412 10:06:01.029478 183717 ccl/partitionccl/partition_test.go:204  [T1]  !github.com/cockroachdb/cockroach/pkg/storage.(*baseQueue).addToPurgatoryLocked.func2.1(0xc000473340, 0x379a020, 0xc0029cb650, 0xc000c467e0)
+I190412 10:06:01.029478 183717 ccl/partitionccl/partition_test.go:204  [T1]  !	/go/src/github.com/cockroachdb/cockroach/pkg/storage/queue.go:928 +0x1dd
+I190412 10:06:01.029478 183717 ccl/partitionccl/partition_test.go:204  [T1]  !github.com/cockroachdb/cockroach/pkg/storage.(*baseQueue).addToPurgatoryLocked.func2(0x379a020, 0xc0029cb650)
+I190412 10:06:01.029478 183717 ccl/partitionccl/partition_test.go:204  [T1]  !	/go/src/github.com/cockroachdb/cockroach/pkg/storage/queue.go:949 +0x462
+I190412 10:06:01.029478 183717 ccl/partitionccl/partition_test.go:204  [T1]  !github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker.func1(0xc001480a10, 0xc000c467e0, 0xc0002f37c0)
+I190412 10:06:01.029478 183717 ccl/partitionccl/partition_test.go:204  [T1]  !	/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:200 +0xe1
+I190412 10:06:01.029478 183717 ccl/partitionccl/partition_test.go:204  [T1]  !created by github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunWorker
+I190412 10:06:01.029478 183717 ccl/partitionccl/partition_test.go:204  [T1]  !	/go/src/github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:193 +0xa8
