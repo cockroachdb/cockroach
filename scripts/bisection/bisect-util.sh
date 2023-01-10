@@ -1,7 +1,6 @@
 #bisect helpers
 #expects TEST_NAME, BRANCH, FROM_DATE, TO_DATE
 
-
 log() { local msg=$1
   echo "$(date -u +"%Y-%m-%dT%H:%M:%SZ")   $msg" >> "$INFO_LOG"
 }
@@ -17,7 +16,7 @@ get_conf_val() { local key=$1
     echo ""
   else
     val=$(jq -r "$key" "$CONF_NAME")
-    if [ "$val" == "null" ]; then
+    if [[ "$val" == "null" ]]; then
       echo ""
     else
       echo "$val"
@@ -32,7 +31,7 @@ set_conf_val() { local key=$1; local val=$2
   echo "$updated" > "$CONF_NAME"
 }
 
-
+#TODO: flock
 set_hash_result() { local hash=$1; local val=$2
   create_conf_if_not_exists
   updated=$(jq ".hashResults += {\"$hash\": \"$val\"}" "$CONF_NAME")
@@ -40,16 +39,7 @@ set_hash_result() { local hash=$1; local val=$2
 }
 
 get_hash_result() { local hash=$1
-  if [ ! -f "$CONF_NAME" ]; then
-    echo ""
-  else
-    val=$(jq -r ".hashResults.\"$hash\"" "$CONF_NAME")
-    if [ "$val" == "null" ]; then
-      echo ""
-    else
-      echo "$val"
-    fi
-  fi
+  get_conf_val ".hashResults.$hash"
 }
 
 clean_name_for_dir() {
@@ -60,19 +50,27 @@ current_hash() {
   git rev-parse --short HEAD
 }
 
-calc_avg_ops() {
-  JQ_Q='group_by(.Elapsed) | map( { elapsed: (.[0].Elapsed / 1000000000) | rint, read: map(if(.Name=="read") then (.Hist.Counts | add) else 0 end) | add, write: map(if(.Name=="write") then (.Hist.Counts | add) else 0 end) | add } ) | ((([.[].read] | add) + ([.[].write] | add)) / ([.[].elapsed] | add) | rint)'
-  jq -sc "$JQ_Q" $@
+calc_avg_ops() { local hash=$1; local test=$2
+  jq_expression=$'group_by(.Elapsed) |
+      map(
+        {
+          elapsed: (.[0].Elapsed / 1000000000) | rint,
+          count: map(.Hist.Counts | add) | add
+        }
+      ) |
+      ( (([.[].count] | add)) / ([.[].elapsed] | add) | rint )'
+
+  jq -sc "$jq_expression" "artifacts/$hash*/$test/run_*/*.perf/stats.json"
 }
 
-stress_sha() { local sha=$1; local test=$2; local count=$3
-  abase="artifacts/${sha}-dirty"
+test_hash() { local hash=$1; local test=$2; local count=$3
+  abase="artifacts/${hash}-dirty"
   if [ -d "$abase/$test" ]; then
-    echo "[$sha] Using stats from existing run"
+    echo "[$hash] Using stats from existing run"
     return
   fi
 
-  echo "[$sha] Running..."
+  echo "[$hash] Running..."
 
   args=(
     "run" "^${test}\$"
@@ -87,19 +85,19 @@ stress_sha() { local sha=$1; local test=$2; local count=$3
   "${abase}/roachtest" "${args[@]}"
 }
 
-build_sha() { local sha=$1; local duration_override_mins=$2
+build_hash() { local hash=$1; local duration_override_mins=$2
   git reset --hard
-  git checkout "$sha"
+  git checkout "$hash"
 
-  fullsha=$(git rev-parse "$sha")
+  fullsha=$(git rev-parse "$hash")
 
   sed -i "s/opts\.duration = 30 \* time\.Minute/opts.duration = $duration_override_mins * time.Minute/"  pkg/cmd/roachtest/tests/kv.go || exit 2
   sed -i "s/ifLocal(c, \"10s\", \"30m\")/ifLocal(c, \"10s\", \"${duration_override_mins}m\")/"  pkg/cmd/roachtest/tests/ycsb.go || exit 2
 
 #  git apply ./scripts/bisection/roachtest.patch || echo "unable to patch roachtest - cluster will not be reused next time"
 
-  # mark dirty since we've applied changes
-  abase="artifacts/${sha}-dirty"
+  # always mark dirty since we've applied timeout changes
+  abase="artifacts/${hash}-dirty"
   mkdir -p "${abase}"
 
   # Locations of the binaries.
@@ -134,7 +132,7 @@ build_sha() { local sha=$1; local duration_override_mins=$2
   git reset --hard
 }
 
-# if ops == -1, this is a trapped ^C and we don't yet have a result
+# if ops == -1, this is a trapped ^C from which we want to collect user input
 prompt_user() { local hash=$1; local ops=$2;
 
   echo -ne '\a'

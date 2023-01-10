@@ -22,23 +22,18 @@ case $opsPerSec in
   USER_SKIP)
     exit 128
     ;;
+  "")
+    build_hash "$CURRENT_HASH" "$duration_mins" &> "$BISECT_DIR/$CURRENT_HASH-build.log"
+    test_hash "$CURRENT_HASH" "$test" "$count" &> "$BISECT_DIR/$CURRENT_HASH-run.log"
+
+    opsPerSec=$(calc_avg_ops "$CURRENT_HASH" "$test")
+    set_hash_result "$CURRENT_HASH" "$opsPerSec"
+    ;;
   *)
     ;;
 esac
 
 #./pkg/cmd/roachtest/roachstress.sh -b -c 2 "^$test\$" -- --parallelism 1 -c "$cluster" --debug-reuse
-
-#if opsPerSec was not previously saved, we calculate it by building and running
-if [[ -z "$opsPerSec" ]]; then
-  build_sha "$CURRENT_HASH" "$duration_mins" &> "$BISECT_DIR/$CURRENT_HASH-build.log"
-  stress_sha "$CURRENT_HASH" "$test" "$count" &> "$BISECT_DIR/$CURRENT_HASH-run.log"
-
-  git reset --hard
-
-  #looks under the artifacts directory for the current runs stats to calculate the average/second
-  opsPerSec=$(calc_avg_ops "artifacts/$CURRENT_HASH*/$test/run_*/*.perf/stats.json")
-  set_hash_result "$CURRENT_HASH" "$opsPerSec"
-fi
 
 goodThreshold=$(get_conf_val ".goodThreshold")
 badThreshold=$(get_conf_val ".badThreshold")

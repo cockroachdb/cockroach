@@ -58,19 +58,20 @@ else
   # running in parallel is fine, but building saturates CPU so we do that sequentially
   if [ -z "$goodVal" ]; then
    echo "[$good] No good threshold found. Will build/run this hash to collect an initial good value."
-   build_sha "$good" "$duration_mins" &> "$BISECT_DIR/$good-build.log"
-   stress_sha "$good" "$test" $count &> "$BISECT_DIR/$good-run.log" &
+   build_hash "$good" "$duration_mins" &> "$BISECT_DIR/$good-build.log"
+   test_hash "$good" "$test" $count &> "$BISECT_DIR/$good-run.log" &
   fi
 
   badVal="$(get_hash_result "$bad")"
   if [ -z "$badVal" ]; then
    echo "[$bad] No bad threshold specified. Will build/run this hash to collect an initial bad value."
-   build_sha "$bad" "$duration_mins" &> "$BISECT_DIR/$bad-build.log"
-   stress_sha "$bad" "$test" $count &> "$BISECT_DIR/$bad-run.log" &
+   build_hash "$bad" "$duration_mins" &> "$BISECT_DIR/$bad-build.log"
+   test_hash "$bad" "$test" $count &> "$BISECT_DIR/$bad-run.log" &
   fi
 
   wait
 
+  # testing this variable again here as a way to determine whether we ran the test above
   if [ -z "$goodVal" ]; then
     goodVal="$(calc_avg_ops "artifacts/$good*/$test/run_*/*.perf/stats.json")"
     set_hash_result "$good" "$goodVal"
