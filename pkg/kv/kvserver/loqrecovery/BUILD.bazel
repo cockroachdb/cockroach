@@ -69,6 +69,7 @@ go_test(
         "//pkg/kv/kvserver/raftlog",
         "//pkg/kv/kvserver/stateloader",
         "//pkg/roachpb",
+        "//pkg/rpc",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
