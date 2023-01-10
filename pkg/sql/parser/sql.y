@@ -410,6 +410,15 @@ func (u *sqlSymUnion) storageParamKeys() []tree.Name {
     }
     return nil
 }
+func (u *sqlSymUnion) tenantCapability() tree.TenantCapability {
+    return u.val.(tree.TenantCapability)
+}
+func (u *sqlSymUnion) tenantCapabilities() []tree.TenantCapability {
+    if capabilities, ok := u.val.([]tree.TenantCapability); ok {
+        return capabilities
+    }
+    return nil
+}
 func (u *sqlSymUnion) persistence() tree.Persistence {
   return u.val.(tree.Persistence)
 }
@@ -843,6 +852,9 @@ func (u *sqlSymUnion) tenantSpec() *tree.TenantSpec {
 func (u *sqlSymUnion) cteMaterializeClause() tree.CTEMaterializeClause {
     return u.val.(tree.CTEMaterializeClause)
 }
+func (u *sqlSymUnion) showTenantOpts() tree.ShowTenantOptions {
+    return u.val.(tree.ShowTenantOptions)
+}
 %}
 
 // NB: the %token definitions must come before the %type definitions in this
@@ -870,7 +882,7 @@ func (u *sqlSymUnion) cteMaterializeClause() tree.CTEMaterializeClause {
 %token <str> BUCKET_COUNT
 %token <str> BOOLEAN BOTH BOX2D BUNDLE BY
 
-%token <str> CACHE CALLED CANCEL CANCELQUERY CASCADE CASE CAST CBRT CHANGEFEED CHAR
+%token <str> CACHE CALLED CANCEL CANCELQUERY CAPABILITIES CAPABILITY CASCADE CASE CAST CBRT CHANGEFEED CHAR
 %token <str> CHARACTER CHARACTERISTICS CHECK CLOSE
 %token <str> CLUSTER COALESCE COLLATE COLLATION COLUMN COLUMNS COMMENT COMMENTS COMMIT
 %token <str> COMMITTED COMPACT COMPLETE COMPLETIONS CONCAT CONCURRENTLY CONFIGURATION CONFIGURATIONS CONFIGURE
@@ -1042,9 +1054,16 @@ func (u *sqlSymUnion) cteMaterializeClause() tree.CTEMaterializeClause {
 %type <tree.Statement> alter_table_locality_stmt
 %type <tree.Statement> alter_table_owner_stmt
 
-// ALTER TENANT CLUSTER SETTINGS
+// ALTER TENANT
 %type <tree.Statement> alter_tenant_stmt
+
+// ALTER TENANT CLUSTER SETTINGS
 %type <tree.Statement> alter_tenant_csetting_stmt
+%type <tree.Statement> grant_tenant_capability grant_tenant_capability_list
+%type <tree.Statement> revoke_tenant_capability revoke_tenant_capability_list
+
+// ALTER TENANT CAPABILITY
+%type <tree.Statement> alter_tenant_capability_stmt
 
 // Other ALTER TENANT statements.
 %type <tree.Statement> alter_tenant_replication_stmt
@@ -1242,7 +1261,7 @@ func (u *sqlSymUnion) cteMaterializeClause() tree.CTEMaterializeClause {
 %type <tree.Statement> show_syntax_stmt
 %type <tree.Statement> show_last_query_stats_stmt
 %type <tree.Statement> show_tables_stmt
-%type <tree.Statement> show_tenant_stmt
+%type <tree.Statement> show_tenant_stmt opt_show_tenant_options show_tenant_options
 %type <tree.Statement> show_trace_stmt
 %type <tree.Statement> show_transaction_stmt
 %type <tree.Statement> show_transactions_stmt
@@ -5570,51 +5589,59 @@ backup_kms:
 // %Help: SHOW TENANT - display tenant information
 // %Category: Experimental
 // %Text:
-// SHOW { TENANT { <tenant_spec> | ALL } | TENANTS ] [WITH REPLICATION STATUS]
+// SHOW { TENANT { <tenant_spec> | ALL } | TENANTS } [ WITH { REPLICATION STATUS|CAPABILITY } ]
 show_tenant_stmt:
-  SHOW TENANTS
+  SHOW TENANTS opt_show_tenant_options
   {
    $$.val = &tree.ShowTenant{
      TenantSpec: &tree.TenantSpec{All: true},
-     WithReplication: false,
+     ShowTenantOptions: $3.showTenantOpts(),
    }
   }
-| SHOW TENANT_ALL ALL
+| SHOW TENANT_ALL ALL opt_show_tenant_options
   {
    $$.val = &tree.ShowTenant{
      TenantSpec: &tree.TenantSpec{All: true},
-     WithReplication: false,
+     ShowTenantOptions: $4.showTenantOpts(),
    }
   }
-| SHOW TENANTS WITH REPLICATION STATUS
-  {
-   $$.val = &tree.ShowTenant{
-     TenantSpec: &tree.TenantSpec{All: true},
-     WithReplication: true,
-   }
-  }
-| SHOW TENANT_ALL ALL WITH REPLICATION STATUS
-  {
-   $$.val = &tree.ShowTenant{
-     TenantSpec: &tree.TenantSpec{All: true},
-     WithReplication: true,
-   }
-  }
-| SHOW TENANT tenant_spec
+| SHOW TENANT tenant_spec opt_show_tenant_options
   {
    $$.val = &tree.ShowTenant{
      TenantSpec: $3.tenantSpec(),
-     WithReplication: false,
-   }
-  }
-| SHOW TENANT tenant_spec WITH REPLICATION STATUS
-  {
-   $$.val = &tree.ShowTenant{
-     TenantSpec: $3.tenantSpec(),
-     WithReplication: true,
+     ShowTenantOptions: $4.showTenantOpts(),
+
    }
   }
 | SHOW TENANT error // SHOW HELP: SHOW TENANT
+
+opt_show_tenant_options:
+  /* EMPTY */
+  { $$.val = tree.ShowTenantOptions{} }
+| WITH show_tenant_options
+  { $$.val = $2.showTenantOpts() }
+
+show_tenant_options:
+  REPLICATION STATUS
+  {
+    $$.val = tree.ShowTenantOptions{WithReplication: true}
+  }
+| CAPABILITIES
+  {
+    $$.val = tree.ShowTenantOptions{WithCapabilities: true}
+  }
+| show_tenant_options ',' REPLICATION STATUS
+  {
+    o := $1.showTenantOpts()
+    o.WithReplication = true
+    $$.val = o
+  }
+| show_tenant_options ',' CAPABILITIES
+  {
+    o := $1.showTenantOpts()
+    o.WithCapabilities = true
+    $$.val = o
+  }
 
 // %Help: PREPARE - prepare a statement for later execution
 // %Category: Misc
@@ -6174,10 +6201,11 @@ set_csetting_stmt:
 
 // %Help: ALTER TENANT - alter tenant configuration
 // %Category: Group
-// %SeeAlso: ALTER TENANT REPLICATION, ALTER TENANT CLUSTER SETTING, ALTER TENANT RENAME
+// %SeeAlso: ALTER TENANT REPLICATION, ALTER TENANT CLUSTER SETTING, ALTER TENANT CAPABILITY, ALTER TENANT RENAME
 alter_tenant_stmt:
   alter_tenant_replication_stmt // EXTEND WITH HELP: ALTER TENANT REPLICATION
 | alter_tenant_csetting_stmt    // EXTEND WITH HELP: ALTER TENANT CLUSTER SETTING
+| alter_tenant_capability_stmt  // EXTEND WITH HELP: ALTER TENANT
 | alter_tenant_rename_stmt      // EXTEND WITH HELP: ALTER TENANT RENAME
 | ALTER TENANT error            // SHOW HELP: ALTER TENANT
 
@@ -6290,6 +6318,67 @@ set_or_reset_csetting_stmt:
 to_or_eq:
   '='
 | TO
+
+// %Help: ALTER TENANT CAPABILITY - alter tenant capability
+// %Category: Group
+// %Text:
+// ALTER TENANT <tenant_id> GRANT CAPABILITY <var> { TO | = } <value>
+// ALTER TENANT <tenant_id> REVOKE CAPABILITY <var>
+alter_tenant_capability_stmt:
+  ALTER TENANT tenant_spec GRANT CAPABILITY grant_tenant_capability_list
+  {
+    /* SKIP DOC */
+    $$.val = &tree.AlterTenantCapability{
+      TenantSpec: $3.tenantSpec(),
+      Capabilities: $6.tenantCapabilities(),
+    }
+  }
+| ALTER TENANT tenant_spec REVOKE CAPABILITY revoke_tenant_capability_list
+  {
+    /* SKIP DOC */
+    $$.val = &tree.AlterTenantCapability{
+      TenantSpec: $3.tenantSpec(),
+      Capabilities: $6.tenantCapabilities(),
+      IsReset: true,
+    }
+  }
+
+grant_tenant_capability:
+  var_name to_or_eq var_value
+  {
+    $$.val = tree.TenantCapability{
+      Name: strings.Join($1.strs(), "."),
+      Value: $3.expr(),
+    }
+  }
+
+grant_tenant_capability_list:
+  grant_tenant_capability
+  {
+    $$.val = []tree.TenantCapability{$1.tenantCapability()}
+  }
+|  grant_tenant_capability_list ',' grant_tenant_capability
+  {
+    $$.val = append($1.tenantCapabilities(), $3.tenantCapability())
+  }
+
+revoke_tenant_capability:
+  var_name
+  {
+    $$.val = tree.TenantCapability{
+      Name: strings.Join($1.strs(), "."),
+    }
+  }
+
+revoke_tenant_capability_list:
+  revoke_tenant_capability
+  {
+    $$.val = []tree.TenantCapability{$1.tenantCapability()}
+  }
+|  revoke_tenant_capability_list ',' revoke_tenant_capability
+  {
+    $$.val = append($1.tenantCapabilities(), $3.tenantCapability())
+  }
 
 set_exprs_internal:
   /* SET ROW serves to accelerate parser.parseExprs().
@@ -15747,6 +15836,8 @@ unreserved_keyword:
 | CALLED
 | CANCEL
 | CANCELQUERY
+| CAPABILITIES
+| CAPABILITY
 | CASCADE
 | CHANGEFEED
 | CLOSE
