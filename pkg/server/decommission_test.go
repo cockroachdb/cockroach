@@ -193,6 +193,80 @@ func TestDecommissionPreCheckEvaluation(t *testing.T) {
 	require.Lenf(t, result.rangesNotReady, 0, "unexpected number of unready ranges")
 }
 
+// TestDecommissionPreCheckOddToEven tests evaluation of decommission readiness
+// when moving from 5 nodes to 3, in which case ranges with RF of 5 should have
+// an effective RF of 3.
+func TestDecommissionPreCheckOddToEven(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Set up test cluster.
+	ctx := context.Background()
+	tc := serverutils.StartNewTestCluster(t, 5, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	firstSvr := tc.Server(0).(*TestServer)
+	db := tc.ServerConn(0)
+	runQueries := func(queries ...string) {
+		for _, q := range queries {
+			if _, err := db.Exec(q); err != nil {
+				t.Fatalf("error executing '%s': %s", q, err)
+			}
+		}
+	}
+
+	// Create database and tables.
+	ac := firstSvr.AmbientCtx()
+	ctx, span := ac.AnnotateCtxWithSpan(context.Background(), "test")
+	defer span.Finish()
+	setupQueries := []string{
+		"CREATE DATABASE test",
+		"CREATE TABLE test.tblA (val STRING)",
+		"CREATE TABLE test.tblB (val STRING)",
+		"INSERT INTO test.tblA VALUES ('testvalA')",
+		"INSERT INTO test.tblB VALUES ('testvalB')",
+	}
+	runQueries(setupQueries...)
+	alterQueries := []string{
+		"ALTER TABLE test.tblA CONFIGURE ZONE USING num_replicas = 5, " +
+			"range_max_bytes = 500000, range_min_bytes = 100",
+	}
+	runQueries(alterQueries...)
+	tblAID, err := firstSvr.admin.queryTableID(ctx, username.RootUserName(), "test", "tblA")
+	require.NoError(t, err)
+	startKeyTblA := keys.TODOSQLCodec.TablePrefix(uint32(tblAID))
+
+	// Split off range for tblA.
+	_, rDescA, err := firstSvr.SplitRange(startKeyTblA)
+	require.NoError(t, err)
+
+	// Ensure all nodes have the correct span configs for tblA and tblB.
+	waitForSpanConfig(t, tc, rDescA.StartKey, 500000)
+
+	// Transfer tblA to all nodes.
+	tc.AddVotersOrFatal(t, startKeyTblA, tc.Target(1), tc.Target(2), tc.Target(3), tc.Target(4))
+	tc.TransferRangeLeaseOrFatal(t, rDescA, tc.Target(1))
+
+	// Validate range distribution.
+	rDescA = tc.LookupRangeOrFatal(t, startKeyTblA)
+	require.Lenf(t, rDescA.Replicas().VoterAndNonVoterDescriptors(), 5, "expected 5 replicas, have %v", rDescA)
+
+	require.True(t, hasReplicaOnServers(tc, &rDescA, 0, 1, 2, 3, 4))
+
+	// Evaluate n5 decommission check.
+	decommissioningNodeIDs := []roachpb.NodeID{tc.Server(4).NodeID()}
+	result, err := firstSvr.DecommissionPreCheck(ctx, decommissioningNodeIDs,
+		true /* strictReadiness */, true /* collectTraces */, 10000, /* maxErrors */
+	)
+	require.NoError(t, err)
+	require.Equal(t, 1, result.rangesChecked, "unexpected number of ranges checked")
+	require.Equalf(t, 1, result.actionCounts[allocatorimpl.AllocatorRemoveDecommissioningVoter.String()],
+		"unexpected allocator actions, got %v", result.actionCounts)
+	require.Lenf(t, result.rangesNotReady, 0, "unexpected number of unready ranges")
+}
+
 // decommissionTsArgs returns a base.TestServerArgs for creating a test cluster
 // with per-store attributes using a single, in-memory store for each node.
 func decommissionTsArgs(region string, attrs ...string) base.TestServerArgs {
