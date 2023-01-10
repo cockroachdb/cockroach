@@ -75,8 +75,12 @@ type ReplicaLoadStats struct {
 	// ReadBytesPerSecond is the replica's average bytes read per second. A "Read" is as
 	// described in ReadsPerSecond.
 	ReadBytesPerSecond float64
-	// CPUNanosPerSecond is the range's time spent on-processor averaged per second.
-	CPUNanosPerSecond float64
+	// RaftCPUNanos is the replica's time spent on-processor for raft averaged
+	// per second.
+	RaftCPUNanosPerSecond float64
+	// RequestCPUNanos is the replica's time spent on-processor for requests
+	// averaged per second.
+	RequestCPUNanosPerSecond float64
 }
 
 // ReplicaLoad tracks a sliding window of throughput on a replica.
@@ -188,13 +192,14 @@ func (rl *ReplicaLoad) Stats() ReplicaLoadStats {
 	defer rl.mu.Unlock()
 
 	return ReplicaLoadStats{
-		QueriesPerSecond:    rl.getLocked(Queries),
-		RequestsPerSecond:   rl.getLocked(Requests),
-		WriteKeysPerSecond:  rl.getLocked(WriteKeys),
-		ReadKeysPerSecond:   rl.getLocked(ReadKeys),
-		WriteBytesPerSecond: rl.getLocked(WriteBytes),
-		ReadBytesPerSecond:  rl.getLocked(ReadBytes),
-		CPUNanosPerSecond:   rl.getLocked(RaftCPUNanos) + rl.getLocked(ReqCPUNanos),
+		QueriesPerSecond:         rl.getLocked(Queries),
+		RequestsPerSecond:        rl.getLocked(Requests),
+		WriteKeysPerSecond:       rl.getLocked(WriteKeys),
+		ReadKeysPerSecond:        rl.getLocked(ReadKeys),
+		WriteBytesPerSecond:      rl.getLocked(WriteBytes),
+		ReadBytesPerSecond:       rl.getLocked(ReadBytes),
+		RequestCPUNanosPerSecond: rl.getLocked(ReqCPUNanos),
+		RaftCPUNanosPerSecond:    rl.getLocked(RaftCPUNanos),
 	}
 }
 
