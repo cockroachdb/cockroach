@@ -217,7 +217,7 @@ func (s *Store) tryGetOrCreateReplica(
 		ctx, s.Engine(), tombstoneKey, hlc.Timestamp{}, &tombstone, storage.MVCCGetOptions{},
 	); err != nil {
 		return nil, false, err
-	} else if ok && replicaID != 0 && replicaID < tombstone.NextReplicaID {
+	} else if ok && replicaID < tombstone.NextReplicaID {
 		return nil, false, &roachpb.RaftGroupDeletedError{}
 	}
 
