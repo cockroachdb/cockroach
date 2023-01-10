@@ -2242,20 +2242,21 @@ oid         typname  typnamespace  typowner    typlen  typbyval  typtype
 
 ## pg_catalog.pg_proc
 
-query TOOOTTO colnames
-SELECT proname, pronamespace, proowner, prolang, procost, prorows, provariadic
-FROM pg_catalog.pg_proc
+query TOTOOTTO colnames
+SELECT proname, pronamespace, nspname, proowner, prolang, procost, prorows, provariadic
+FROM pg_catalog.pg_proc p
+JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
 WHERE proname='substring'
 ----
-proname    pronamespace  proowner  prolang  procost  prorows  provariadic
-substring  4294967129    NULL      0        NULL     NULL     0
-substring  4294967129    NULL      0        NULL     NULL     0
-substring  4294967129    NULL      0        NULL     NULL     0
-substring  4294967129    NULL      0        NULL     NULL     0
-substring  4294967129    NULL      0        NULL     NULL     0
-substring  4294967129    NULL      0        NULL     NULL     0
-substring  4294967129    NULL      0        NULL     NULL     0
-substring  4294967129    NULL      0        NULL     NULL     0
+proname    pronamespace  nspname     proowner  prolang  procost  prorows  provariadic
+substring  4294967129    pg_catalog  NULL      0        NULL     NULL     0
+substring  4294967129    pg_catalog  NULL      0        NULL     NULL     0
+substring  4294967129    pg_catalog  NULL      0        NULL     NULL     0
+substring  4294967129    pg_catalog  NULL      0        NULL     NULL     0
+substring  4294967129    pg_catalog  NULL      0        NULL     NULL     0
+substring  4294967129    pg_catalog  NULL      0        NULL     NULL     0
+substring  4294967129    pg_catalog  NULL      0        NULL     NULL     0
+substring  4294967129    pg_catalog  NULL      0        NULL     NULL     0
 
 query TTBBBB colnames
 SELECT proname, protransform, proisagg, proiswindow, prosecdef, proleakproof
@@ -2316,6 +2317,17 @@ substring  NULL         substring  NULL    NULL       NULL
 substring  NULL         substring  NULL    NULL       NULL
 substring  NULL         substring  NULL    NULL       NULL
 substring  NULL         substring  NULL    NULL       NULL
+
+query TTOTOT colnames
+SELECT proname, prosrc, pronamespace, nspname, prorettype, proargtypes
+FROM pg_catalog.pg_proc p
+JOIN pg_catalog.pg_namespace n ON p.pronamespace = n.oid
+WHERE proname='pb_to_json'
+----
+proname     prosrc      pronamespace  nspname        prorettype  proargtypes
+pb_to_json  pb_to_json  4294967295    crdb_internal  3802        25 17
+pb_to_json  pb_to_json  4294967295    crdb_internal  3802        25 17 16
+pb_to_json  pb_to_json  4294967295    crdb_internal  3802        25 17 16 16
 
 query TOIOTTB colnames
 SELECT proname, provariadic, pronargs, prorettype, proargtypes, proargmodes, proisstrict
