@@ -748,12 +748,6 @@ type TableDescriptor interface {
 	// enabled or disabled for this table. If ok is true, then the enabled value
 	// is valid, otherwise this has not been set at the table level.
 	ForecastStatsEnabled() (enabled bool, ok bool)
-	// GetIndexNameByID returns the name of an index based on an ID, taking into
-	// account any ongoing declarative schema changes. Declarative schema changes
-	// do not propagate the index name into the mutations until changes are fully
-	// validated and swap operations are complete (to avoid having two constraints
-	// with the same name).
-	GetIndexNameByID(indexID descpb.IndexID) (name string, err error)
 	// IsRefreshViewRequired indicates if a REFRESH VIEW operation needs to be called
 	// on a materialized view.
 	IsRefreshViewRequired() bool
