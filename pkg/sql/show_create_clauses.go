@@ -449,11 +449,11 @@ func showForeignKeyConstraint(
 			return err
 		}
 		fkTableName.ExplicitSchema = !searchPath.Contains(fkTableName.SchemaName.String(), false /* includeImplicit */)
-		refNames, err = fkTable.NamesForColumnIDs(fk.ReferencedColumnIDs)
+		refNames, err = catalog.ColumnNamesForIDs(fkTable, fk.ReferencedColumnIDs)
 		if err != nil {
 			return err
 		}
-		originNames, err = originTable.NamesForColumnIDs(fk.OriginColumnIDs)
+		originNames, err = catalog.ColumnNamesForIDs(originTable, fk.OriginColumnIDs)
 		if err != nil {
 			return err
 		}
@@ -725,7 +725,7 @@ func showConstraintClause(
 			f.WriteString(" ")
 		}
 		f.WriteString("UNIQUE WITHOUT INDEX (")
-		colNames, err := desc.NamesForColumnIDs(c.CollectKeyColumnIDs().Ordered())
+		colNames, err := catalog.ColumnNamesForIDs(desc, c.CollectKeyColumnIDs().Ordered())
 		if err != nil {
 			return err
 		}
