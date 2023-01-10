@@ -1239,3 +1239,12 @@ SELECT * FROM (
 NULL
 
 subtest end
+
+# Regression test for incorrect handling of tree.ParenExprs during type-checking
+# (#94092).
+statement ok
+CREATE TABLE t94092 (c INT);
+INSERT INTO t94092 VALUES (1);
+
+query error expected tuple \(\) to have a length of 2
+SELECT (c, 1) != (()) FROM t94092;
