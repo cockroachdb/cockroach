@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // OutputBuilder is used to build the output of an explain tree.
@@ -148,6 +149,9 @@ func (ob *OutputBuilder) Expr(key string, expr tree.TypedExpr, varColumns colinf
 	if ob.flags.HideValues {
 		flags |= tree.FmtHideConstants
 	}
+	if ob.flags.RedactValues {
+		flags |= tree.FmtMarkRedactionNode | tree.FmtOmitNameRedaction
+	}
 	f := tree.NewFmtCtx(
 		flags,
 		tree.FmtIndexedVarFormat(func(ctx *tree.FmtCtx, idx int) {
@@ -210,7 +214,11 @@ func (ob *OutputBuilder) BuildStringRows() []string {
 		}
 		// Add any fields for the node.
 		for entry = popField(); entry != nil; entry = popField() {
-			child.AddLine(entry.fieldStr())
+			field := entry.fieldStr()
+			if ob.flags.RedactValues {
+				field = string(redact.RedactableString(field).Redact())
+			}
+			child.AddLine(field)
 		}
 	}
 	result = append(result, tp.FormattedRows()...)

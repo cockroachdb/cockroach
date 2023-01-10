@@ -65,7 +65,7 @@ func (node *CreateChangefeed) formatWithPredicates(ctx *FmtCtx) {
 		ctx.FormatNode(&node.Options)
 	}
 	ctx.WriteString(" AS ")
-	node.Select.Format(ctx)
+	ctx.FormatNode(node.Select)
 }
 
 // ChangefeedTarget represents a database object to be watched by a changefeed.
