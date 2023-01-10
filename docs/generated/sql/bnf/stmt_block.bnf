@@ -923,6 +923,7 @@ show_tables_stmt ::=
 show_tenant_stmt ::=
 	'SHOW' 'TENANT' d_expr
 	| 'SHOW' 'TENANT' d_expr 'WITH' 'REPLICATION' 'STATUS'
+	| 'SHOW' 'TENANT' d_expr 'WITH' 'CAPABILITY'
 
 show_trace_stmt ::=
 	'SHOW' opt_compact 'TRACE' 'FOR' 'SESSION'
@@ -1031,6 +1032,7 @@ unreserved_keyword ::=
 	| 'CALLED'
 	| 'CANCEL'
 	| 'CANCELQUERY'
+	| 'CAPABILITY'
 	| 'CASCADE'
 	| 'CHANGEFEED'
 	| 'CLOSE'

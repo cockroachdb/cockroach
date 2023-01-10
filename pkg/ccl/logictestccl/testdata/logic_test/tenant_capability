@@ -1,0 +1,37 @@
+# LogicTest: local
+
+statement ok
+SELECT crdb_internal.create_tenant(5, 'five')
+
+statement error parsing capability value for not_a_capability: unrecognized capability
+ALTER TENANT 5 SET CAPABILITY not_a_capability=true
+
+statement error parsing capability value for not_a_capability: unrecognized capability
+ALTER TENANT 5 RESET CAPABILITY not_a_capability
+
+statement error error parsing capability value for can_admin_split: must be bool
+ALTER TENANT 5 SET CAPABILITY can_admin_split=1
+
+query ITTTT colnames
+SHOW TENANT 'five' WITH CAPABILITY
+----
+id  name  status  capability_name  capability_value
+5   five  ACTIVE  can_admin_split  false
+
+statement ok
+ALTER TENANT 5 SET CAPABILITY can_admin_split=true
+
+query ITTTT colnames
+SHOW TENANT 'five' WITH CAPABILITY
+----
+id  name  status  capability_name  capability_value
+5   five  ACTIVE  can_admin_split  true
+
+statement ok
+ALTER TENANT 5 RESET CAPABILITY can_admin_split
+
+query ITTTT colnames
+SHOW TENANT 'five' WITH CAPABILITY
+----
+id  name  status  capability_name  capability_value
+5   five  ACTIVE  can_admin_split  false

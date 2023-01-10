@@ -864,6 +864,7 @@ func (node *ShowTableStats) Format(ctx *FmtCtx) {
 type ShowTenant struct {
 	Name            Expr
 	WithReplication bool
+	WithCapability  bool
 }
 
 // Format implements the NodeFormatter interface.
@@ -873,6 +874,10 @@ func (node *ShowTenant) Format(ctx *FmtCtx) {
 
 	if node.WithReplication {
 		ctx.WriteString(" WITH REPLICATION STATUS")
+	}
+
+	if node.WithCapability {
+		ctx.WriteString(" WITH CAPABILITY")
 	}
 }
 

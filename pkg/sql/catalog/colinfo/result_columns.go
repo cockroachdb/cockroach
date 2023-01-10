@@ -281,10 +281,7 @@ var TenantColumns = ResultColumns{
 	{Name: "status", Typ: types.String},
 }
 
-var TenantColumnsWithReplication = ResultColumns{
-	{Name: "id", Typ: types.Int},
-	{Name: "name", Typ: types.String},
-	{Name: "status", Typ: types.String},
+var TenantColumnsWithReplication = append(TenantColumns, ResultColumns{
 	{Name: "source_tenant_name", Typ: types.String},
 	{Name: "source_cluster_uri", Typ: types.String},
 	{Name: "replication_job_id", Typ: types.Int},
@@ -293,7 +290,12 @@ var TenantColumnsWithReplication = ResultColumns{
 	// The protected timestamp on the destination cluster, meaning we cannot
 	// cutover to before this time.
 	{Name: "retained_time", Typ: types.TimestampTZ},
-}
+}...)
+
+var TenantColumnsWithCapability = append(TenantColumns, ResultColumns{
+	{Name: "capability_name", Typ: types.String},
+	{Name: "capability_value", Typ: types.String},
+}...)
 
 // RangesNoLeases is the schema for crdb_internal.ranges_no_leases.
 var RangesNoLeases = ResultColumns{

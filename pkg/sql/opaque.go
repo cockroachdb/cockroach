@@ -128,6 +128,8 @@ func planOpaque(ctx context.Context, p *planner, stmt tree.Statement) (planNode,
 		return p.AlterTableOwner(ctx, n)
 	case *tree.AlterTableSetSchema:
 		return p.AlterTableSetSchema(ctx, n)
+	case *tree.AlterTenantCapability:
+		return p.AlterTenantCapability(ctx, n)
 	case *tree.AlterTenantSetClusterSetting:
 		return p.AlterTenantSetClusterSetting(ctx, n)
 	case *tree.AlterType:
@@ -310,6 +312,7 @@ func init() {
 		&tree.AlterTableLocality{},
 		&tree.AlterTableOwner{},
 		&tree.AlterTableSetSchema{},
+		&tree.AlterTenantCapability{},
 		&tree.AlterTenantSetClusterSetting{},
 		&tree.AlterType{},
 		&tree.AlterSequence{},

@@ -861,7 +861,7 @@ func (u *sqlSymUnion) showRangesOpts() *tree.ShowRangesOptions {
 %token <str> BUCKET_COUNT
 %token <str> BOOLEAN BOTH BOX2D BUNDLE BY
 
-%token <str> CACHE CALLED CANCEL CANCELQUERY CASCADE CASE CAST CBRT CHANGEFEED CHAR
+%token <str> CACHE CALLED CANCEL CANCELQUERY CAPABILITY CASCADE CASE CAST CBRT CHANGEFEED CHAR
 %token <str> CHARACTER CHARACTERISTICS CHECK CLOSE
 %token <str> CLUSTER COALESCE COLLATE COLLATION COLUMN COLUMNS COMMENT COMMENTS COMMIT
 %token <str> COMMITTED COMPACT COMPLETE COMPLETIONS CONCAT CONCURRENTLY CONFIGURATION CONFIGURATIONS CONFIGURE
@@ -1037,6 +1037,7 @@ func (u *sqlSymUnion) showRangesOpts() *tree.ShowRangesOptions {
 %type <tree.Statement> alter_tenant_stmt
 %type <tree.Statement> alter_tenant_csetting_stmt
 %type <tree.Statement> alter_tenant_replication_stmt
+%type <tree.Statement> alter_tenant_capability_stmt
 
 // ALTER PARTITION
 %type <tree.Statement> alter_zone_partition_stmt
@@ -5537,7 +5538,7 @@ backup_kms:
 
 // %Help: SHOW TENANT - display tenant information
 // %Category: Misc
-// %Text: SHOW TENANT <tenant_name> [WITH REPLICATION STATUS]
+// %Text: SHOW TENANT <tenant_name> [WITH {REPLICATION STATUS|CAPABILITY}]
 show_tenant_stmt:
   SHOW TENANT d_expr
   {
@@ -5553,6 +5554,13 @@ show_tenant_stmt:
      WithReplication: true,
    }
   }
+| SHOW TENANT d_expr WITH CAPABILITY
+	{
+	 $$.val = &tree.ShowTenant{
+		 Name: $3.expr(),
+		 WithCapability: true,
+	 }
+	}
 | SHOW TENANT error // SHOW HELP: SHOW TENANT
 
 // %Help: PREPARE - prepare a statement for later execution
@@ -6113,10 +6121,11 @@ set_csetting_stmt:
 
 // %Help: ALTER TENANT - alter tenant configuration
 // %Category: Group
-// %SeeAlso: ALTER TENANT REPLICATION, ALTER TENANT CLUSTER SETTING
+// %SeeAlso: ALTER TENANT REPLICATION, ALTER TENANT CLUSTER SETTING, ALTER TENANT CAPABILITY
 alter_tenant_stmt:
   alter_tenant_replication_stmt // EXTEND WITH HELP: ALTER TENANT REPLICATION
 | alter_tenant_csetting_stmt    // EXTEND WITH HELP: ALTER TENANT CLUSTER SETTING
+| alter_tenant_capability_stmt  // EXTEND WITH HELP: ALTER TENANT
 | ALTER TENANT error            // SHOW HELP: ALTER TENANT
 
 // %Help: ALTER TENANT REPLICATION - alter tenant replication stream
@@ -6208,6 +6217,30 @@ set_or_reset_csetting_stmt:
 to_or_eq:
   '='
 | TO
+
+// %Help: ALTER TENANT CAPABILITY - alter tenant capability
+// %Category: Group
+// %Text:
+// ALTER TENANT <tenant_id> SET CAPABILITY <var> { TO | = } <value>
+// ALTER TENANT <tenant_id> RESET CAPABILITY <var>
+alter_tenant_capability_stmt:
+  ALTER TENANT d_expr SET CAPABILITY var_name to_or_eq var_value
+  {
+    /* SKIP DOC */
+    $$.val = &tree.AlterTenantCapability{
+      TenantID: $3.expr(),
+      CapabilityName: strings.Join($6.strs(), "."),
+      CapabilityValue: $8.expr(),
+    }
+  }
+| ALTER TENANT d_expr RESET CAPABILITY var_name
+  {
+    /* SKIP DOC */
+    $$.val = &tree.AlterTenantCapability{
+      TenantID: $3.expr(),
+			CapabilityName: strings.Join($6.strs(), "."),
+    }
+  }
 
 set_exprs_internal:
   /* SET ROW serves to accelerate parser.parseExprs().
@@ -15660,6 +15693,7 @@ unreserved_keyword:
 | CALLED
 | CANCEL
 | CANCELQUERY
+| CAPABILITY
 | CASCADE
 | CHANGEFEED
 | CLOSE

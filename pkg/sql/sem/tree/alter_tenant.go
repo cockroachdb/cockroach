@@ -47,3 +47,32 @@ func (n *AlterTenantReplication) Format(ctx *FmtCtx) {
 		ctx.WriteString(" REPLICATION")
 	}
 }
+
+// AlterTenantCapability represents an ALTER TENANT CAPABILITY statement.
+type AlterTenantCapability struct {
+	TenantID        Expr
+	CapabilityName  string
+	CapabilityValue Expr
+}
+
+var _ Statement = &AlterTenantCapability{}
+
+func (n *AlterTenantCapability) IsReset() bool {
+	return n.CapabilityValue == nil
+}
+
+// Format implements the NodeFormatter interface.
+func (n *AlterTenantCapability) Format(ctx *FmtCtx) {
+	ctx.WriteString("ALTER TENANT ")
+	ctx.FormatNode(n.TenantID)
+	ctx.WriteByte(' ')
+	if n.IsReset() {
+		ctx.WriteString("RESET CAPABILITY ")
+		ctx.WriteString(n.CapabilityName)
+	} else {
+		ctx.WriteString("SET CAPABILITY ")
+		ctx.WriteString(n.CapabilityName)
+		ctx.WriteString(" = ")
+		ctx.FormatNode(n.CapabilityValue)
+	}
+}

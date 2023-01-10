@@ -240,6 +240,7 @@ go_library(
         "telemetry_logging.go",
         "temporary_schema.go",
         "tenant.go",
+        "tenant_capability.go",
         "tenant_settings.go",
         "testutils.go",
         "topk.go",

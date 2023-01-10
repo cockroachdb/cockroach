@@ -269,11 +269,11 @@ func UpdateTenantRecord(
 	}
 
 	if num, err := execCfg.InternalExecutor.ExecEx(
-		ctx, "activate-tenant", txn, sessiondata.NodeUserSessionDataOverride,
+		ctx, "update-tenant", txn, sessiondata.NodeUserSessionDataOverride,
 		`UPDATE system.tenants SET active = $2, info = $3 WHERE id = $1`,
 		tenID, active, infoBytes,
 	); err != nil {
-		return errors.Wrap(err, "activating tenant")
+		return errors.Wrap(err, "updating tenant")
 	} else if num != 1 {
 		log.Fatalf(ctx, "unexpected number of rows affected: %d", num)
 	}
