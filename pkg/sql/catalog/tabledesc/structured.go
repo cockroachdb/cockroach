@@ -13,7 +13,6 @@ package tabledesc
 import (
 	"context"
 	"fmt"
-	"sort"
 	"strconv"
 	"strings"
 
@@ -2113,16 +2112,6 @@ func (desc *wrapper) IndexSpan(codec keys.SQLCodec, indexID descpb.IndexID) roac
 func (desc *wrapper) TableSpan(codec keys.SQLCodec) roachpb.Span {
 	prefix := codec.TablePrefix(uint32(desc.ID))
 	return roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()}
-}
-
-// CheckConstraintUsesColumn implements the TableDescriptor interface.
-func (desc *wrapper) CheckConstraintUsesColumn(
-	cc *descpb.TableDescriptor_CheckConstraint, colID descpb.ColumnID,
-) (bool, error) {
-	i := sort.Search(len(cc.ColumnIDs), func(i int) bool {
-		return cc.ColumnIDs[i] >= colID
-	})
-	return i < len(cc.ColumnIDs) && cc.ColumnIDs[i] == colID, nil
 }
 
 // GetFamilyOfColumn returns the ColumnFamilyDescriptor for the

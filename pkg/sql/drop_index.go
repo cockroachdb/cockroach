@@ -247,9 +247,7 @@ func (n *dropIndexNode) dropShardColumnAndConstraint(
 ) error {
 	validChecks := tableDesc.Checks[:0]
 	for _, check := range tableDesc.CheckConstraints() {
-		if used, err := tableDesc.CheckConstraintUsesColumn(check.CheckDesc(), shardCol.GetID()); err != nil {
-			return err
-		} else if used {
+		if check.CollectReferencedColumnIDs().Contains(shardCol.GetID()) {
 			if check.GetConstraintValidity() == descpb.ConstraintValidity_Validating {
 				return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 					"referencing constraint %q in the middle of being added, try again later", check.GetName())

@@ -563,9 +563,6 @@ type TableDescriptor interface {
 	// GetNextConstraintID returns the next unused constraint ID for this table.
 	// Constraint IDs are unique per table, but not unique globally.
 	GetNextConstraintID() descpb.ConstraintID
-	// CheckConstraintUsesColumn returns whether the check constraint uses the
-	// specified column.
-	CheckConstraintUsesColumn(cc *descpb.TableDescriptor_CheckConstraint, colID descpb.ColumnID) (bool, error)
 	// IsShardColumn returns true if col corresponds to a non-dropped hash sharded
 	// index. This method assumes that col is currently a member of desc.
 	IsShardColumn(col Column) bool

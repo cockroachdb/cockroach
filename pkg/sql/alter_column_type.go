@@ -203,12 +203,8 @@ func alterColumnTypeGeneral(
 
 	// Disallow ALTER COLUMN TYPE general for columns that have a check
 	// constraint.
-	for i := range tableDesc.Checks {
-		uses, err := tableDesc.CheckConstraintUsesColumn(tableDesc.Checks[i], col.GetID())
-		if err != nil {
-			return err
-		}
-		if uses {
+	for _, ck := range tableDesc.EnforcedCheckConstraints() {
+		if ck.CollectReferencedColumnIDs().Contains(col.GetID()) {
 			return colWithConstraintNotSupportedErr
 		}
 	}
