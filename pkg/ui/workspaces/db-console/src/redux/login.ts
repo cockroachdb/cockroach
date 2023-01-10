@@ -20,10 +20,7 @@ import { cockroach } from "src/js/protos";
 import { getDataFromServer } from "src/util/dataFromServer";
 
 import UserLoginRequest = cockroach.server.serverpb.UserLoginRequest;
-import {
-  selectTenantsFromMultitenantSessionCookie,
-  setCookie,
-} from "./cookies";
+import { maybeClearTenantCookie } from "./cookies";
 
 const dataFromServer = getDataFromServer();
 
@@ -217,12 +214,7 @@ export function doLogout(): ThunkAction<
 > {
   return dispatch => {
     dispatch(logoutBeginAction);
-    const tenants = selectTenantsFromMultitenantSessionCookie();
-    // If in multi-tenant environment, we need to clear the tenant cookie so that
-    // we can do a multi-tenant logout.
-    if (tenants.length > 1) {
-      setCookie("tenant", "");
-    }
+    maybeClearTenantCookie();
     // Make request to log out, reloading the page whether it succeeds or not.
     // If there was a successful log out but the network dropped the response somehow,
     // you'll get the login page on reload. If The logout actually didn't work, you'll

@@ -26,6 +26,7 @@ import { getLoginPage } from "src/redux/login";
 import { APIRequestFn } from "src/util/api";
 
 import { PayloadAction, WithRequest } from "src/interfaces/action";
+import { maybeClearTenantCookie } from "./cookies";
 
 export interface WithPaginationRequest {
   page_size: number;
@@ -278,6 +279,7 @@ export class CachedDataReducer<
             // codes.  However, at the moment that's all that the underlying
             // timeoutFetch offers.  Major changes to this plumbing are warranted.
             if (error.message === "Unauthorized") {
+              maybeClearTenantCookie();
               // TODO(couchand): This is an unpleasant dependency snuck in here...
               const { location } = createHashHistory();
               if (location && !location.pathname.startsWith("/login")) {
