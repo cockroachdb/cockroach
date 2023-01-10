@@ -1046,3 +1046,24 @@ func FindTargetIndexNameByID(desc TableDescriptor, indexID descpb.IndexID) (stri
 	}
 	return index.GetName(), err
 }
+
+// ColumnNamesForIDs returns the names for the given column IDs, or an error
+// if one or more column ids was missing. Note - this allocates! It's not for
+// hot path code.
+func ColumnNamesForIDs(tbl TableDescriptor, ids descpb.ColumnIDs) ([]string, error) {
+	names := make([]string, len(ids))
+	columns := tbl.AllColumns()
+	for i, id := range ids {
+		for _, c := range columns {
+			if c.GetID() == id {
+				names[i] = c.GetName()
+				break
+			}
+		}
+		if names[i] == "" {
+			return nil, errors.AssertionFailedf("no column with ID %d found in table %q (%q)",
+				id, tbl.GetName(), tbl.GetID())
+		}
+	}
+	return names, nil
+}

@@ -553,10 +553,6 @@ type TableDescriptor interface {
 	// If no column is found then an error is also returned.
 	FindColumnWithName(name tree.Name) (Column, error)
 
-	// NamesForColumnIDs returns the names for the given column ids, or an error
-	// if one or more column ids was missing. Note - this allocates! It's not for
-	// hot path code.
-	NamesForColumnIDs(ids descpb.ColumnIDs) ([]string, error)
 	// GetNextColumnID returns the next unused column ID for this table. Column
 	// IDs are unique per table, but not unique globally.
 	GetNextColumnID() descpb.ColumnID
