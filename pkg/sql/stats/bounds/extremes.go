@@ -92,7 +92,9 @@ func GetUsingExtremesBounds(
 	// but if none exist, return error
 	for i := range histogram {
 		hist := &histogram[i]
-		if hist.UpperBound.Compare(evalCtx, tree.DNull) != 0 {
+		if cmp, err := hist.UpperBound.CompareError(evalCtx, tree.DNull); err != nil {
+			return lowerBound, nil, err
+		} else if cmp != 0 {
 			lowerBound = hist.UpperBound
 			break
 		}
