@@ -3438,7 +3438,9 @@ func TestAllocatorCheckRange(t *testing.T) {
 		name               string
 		stores             []*roachpb.StoreDescriptor
 		existingReplicas   []roachpb.ReplicaDescriptor
+		zoneConfig         *zonepb.ZoneConfig
 		livenessOverrides  map[roachpb.NodeID]livenesspb.NodeLivenessStatus
+		baselineExpNoop    bool
 		expectedAction     allocatorimpl.AllocatorAction
 		expectValidTarget  bool
 		expectedLogMessage string
@@ -3519,6 +3521,25 @@ func TestAllocatorCheckRange(t *testing.T) {
 			expectAllocatorErr: true,
 			expectedErrStr:     "likely not enough nodes in cluster",
 		},
+		{
+			name:   "five to four nodes at RF five",
+			stores: noLocalityStores,
+			existingReplicas: []roachpb.ReplicaDescriptor{
+				{NodeID: 1, StoreID: 1, ReplicaID: 1},
+				{NodeID: 2, StoreID: 2, ReplicaID: 2},
+				{NodeID: 3, StoreID: 3, ReplicaID: 3},
+				{NodeID: 4, StoreID: 4, ReplicaID: 4},
+				{NodeID: 5, StoreID: 5, ReplicaID: 5},
+			},
+			zoneConfig: zonepb.DefaultSystemZoneConfigRef(),
+			livenessOverrides: map[roachpb.NodeID]livenesspb.NodeLivenessStatus{
+				3: livenesspb.NodeLivenessStatus_DECOMMISSIONING,
+			},
+			baselineExpNoop:   true,
+			expectedAction:    allocatorimpl.AllocatorRemoveDecommissioningVoter,
+			expectErr:         false,
+			expectValidTarget: false,
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			// Setup store pool based on store descriptors and configure test store.
@@ -3539,6 +3560,12 @@ func TestAllocatorCheckRange(t *testing.T) {
 			cfg := TestStoreConfig(clock)
 			cfg.Gossip = g
 			cfg.StorePool = sp
+			if tc.zoneConfig != nil {
+				// TODO(sarkesian): This override is not great. It would be much
+				// preferable to provide a SpanConfig if possible. See comment in
+				// createTestStoreWithoutStart.
+				cfg.SystemConfigProvider.GetSystemConfig().DefaultZoneConfig = tc.zoneConfig
+			}
 
 			s := createTestStoreWithoutStart(ctx, t, stopper, testStoreOpts{createSystemRanges: true}, &cfg)
 
@@ -3552,7 +3579,31 @@ func TestAllocatorCheckRange(t *testing.T) {
 			var storePoolOverride storepool.AllocatorStorePool
 			if len(tc.livenessOverrides) > 0 {
 				livenessOverride := storepool.OverrideNodeLivenessFunc(tc.livenessOverrides, sp.NodeLivenessFn)
-				storePoolOverride = storepool.NewOverrideStorePool(sp, livenessOverride)
+				nodeCountOverride := func() int {
+					numDecomOverrides := 0
+					for _, livenessStatus := range tc.livenessOverrides {
+						if livenessStatus == livenesspb.NodeLivenessStatus_DECOMMISSIONING ||
+							livenessStatus == livenesspb.NodeLivenessStatus_DECOMMISSIONED {
+							numDecomOverrides++
+						}
+					}
+					return numNodes - numDecomOverrides
+				}
+				storePoolOverride = storepool.NewOverrideStorePool(sp, livenessOverride, nodeCountOverride)
+			}
+
+			// Check if our baseline action without overrides is a noop; i.e., the
+			// range is fully replicated as configured and needs no actions.
+			if tc.baselineExpNoop {
+				action, _, _, err := s.AllocatorCheckRange(ctx, desc,
+					false /* collectTraces */, nil, /* overrideStorePool */
+				)
+				require.NoError(t, err, "expected baseline check without error")
+				require.Containsf(t, []allocatorimpl.AllocatorAction{
+					allocatorimpl.AllocatorNoop,
+					allocatorimpl.AllocatorConsiderRebalance,
+				}, action, "expected baseline noop, got %s", action)
+				//require.Equalf(t, allocatorimpl.AllocatorNoop, action, "expected baseline noop, got %s", action)
 			}
 
 			// Execute actual allocator range repair check.
