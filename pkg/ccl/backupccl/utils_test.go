@@ -483,7 +483,7 @@ func setAndWaitForTenantReadOnlyClusterSetting(
 	systemTenantRunner.Exec(
 		t,
 		fmt.Sprintf(
-			"ALTER TENANT $1 SET CLUSTER	SETTING %s = '%s'",
+			"ALTER TENANT [$1] SET CLUSTER SETTING %s = '%s'",
 			setting,
 			val,
 		),

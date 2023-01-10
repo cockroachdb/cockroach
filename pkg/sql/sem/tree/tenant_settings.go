@@ -24,7 +24,9 @@ func (n *AlterTenantSetClusterSetting) Format(ctx *FmtCtx) {
 	if n.TenantAll {
 		ctx.WriteString("ALL")
 	} else {
+		ctx.WriteByte('[')
 		ctx.FormatNode(n.TenantID)
+		ctx.WriteByte(']')
 	}
 	ctx.WriteByte(' ')
 	ctx.FormatNode(&n.SetClusterSetting)
@@ -40,7 +42,9 @@ type ShowTenantClusterSetting struct {
 func (node *ShowTenantClusterSetting) Format(ctx *FmtCtx) {
 	ctx.FormatNode(node.ShowClusterSetting)
 	ctx.WriteString(" FOR TENANT ")
+	ctx.WriteByte('[')
 	ctx.FormatNode(node.TenantID)
+	ctx.WriteByte(']')
 }
 
 // ShowTenantClusterSettingList represents a SHOW CLUSTER SETTINGS FOR TENANT statement.
@@ -53,5 +57,7 @@ type ShowTenantClusterSettingList struct {
 func (node *ShowTenantClusterSettingList) Format(ctx *FmtCtx) {
 	ctx.FormatNode(node.ShowClusterSettingList)
 	ctx.WriteString(" FOR TENANT ")
+	ctx.WriteByte('[')
 	ctx.FormatNode(node.TenantID)
+	ctx.WriteByte(']')
 }

@@ -1,26 +1,34 @@
 parse
 ALTER TENANT 123 RESET CLUSTER SETTING a
 ----
-ALTER TENANT 123 SET CLUSTER SETTING a = DEFAULT -- normalized!
-ALTER TENANT (123) SET CLUSTER SETTING a = (DEFAULT) -- fully parenthesized
-ALTER TENANT _ SET CLUSTER SETTING a = DEFAULT -- literals removed
-ALTER TENANT 123 SET CLUSTER SETTING a = DEFAULT -- identifiers removed
+ALTER TENANT [123] SET CLUSTER SETTING a = DEFAULT -- normalized!
+ALTER TENANT [(123)] SET CLUSTER SETTING a = (DEFAULT) -- fully parenthesized
+ALTER TENANT [_] SET CLUSTER SETTING a = DEFAULT -- literals removed
+ALTER TENANT [123] SET CLUSTER SETTING a = DEFAULT -- identifiers removed
+
+parse
+ALTER TENANT [123] RESET CLUSTER SETTING a
+----
+ALTER TENANT [123] SET CLUSTER SETTING a = DEFAULT -- normalized!
+ALTER TENANT [(123)] SET CLUSTER SETTING a = (DEFAULT) -- fully parenthesized
+ALTER TENANT [_] SET CLUSTER SETTING a = DEFAULT -- literals removed
+ALTER TENANT [123] SET CLUSTER SETTING a = DEFAULT -- identifiers removed
 
 parse
 ALTER TENANT (1+1) SET CLUSTER SETTING a = 3
 ----
-ALTER TENANT (1 + 1) SET CLUSTER SETTING a = 3 -- normalized!
-ALTER TENANT ((((1) + (1)))) SET CLUSTER SETTING a = (3) -- fully parenthesized
-ALTER TENANT (_ + _) SET CLUSTER SETTING a = _ -- literals removed
-ALTER TENANT (1 + 1) SET CLUSTER SETTING a = 3 -- identifiers removed
+ALTER TENANT [(1 + 1)] SET CLUSTER SETTING a = 3 -- normalized!
+ALTER TENANT [((((1) + (1))))] SET CLUSTER SETTING a = (3) -- fully parenthesized
+ALTER TENANT [(_ + _)] SET CLUSTER SETTING a = _ -- literals removed
+ALTER TENANT [(1 + 1)] SET CLUSTER SETTING a = 3 -- identifiers removed
 
 parse
 ALTER TENANT $1 SET CLUSTER SETTING a = 3
 ----
-ALTER TENANT $1 SET CLUSTER SETTING a = 3
-ALTER TENANT ($1) SET CLUSTER SETTING a = (3) -- fully parenthesized
-ALTER TENANT $1 SET CLUSTER SETTING a = _ -- literals removed
-ALTER TENANT $1 SET CLUSTER SETTING a = 3 -- identifiers removed
+ALTER TENANT [$1] SET CLUSTER SETTING a = 3 -- normalized!
+ALTER TENANT [($1)] SET CLUSTER SETTING a = (3) -- fully parenthesized
+ALTER TENANT [$1] SET CLUSTER SETTING a = _ -- literals removed
+ALTER TENANT [$1] SET CLUSTER SETTING a = 3 -- identifiers removed
 
 parse
 ALTER TENANT ALL SET CLUSTER SETTING a = 3
@@ -33,26 +41,26 @@ ALTER TENANT ALL SET CLUSTER SETTING a = 3 -- identifiers removed
 parse
 ALTER TENANT 123 RESET CLUSTER SETTING a
 ----
-ALTER TENANT 123 SET CLUSTER SETTING a = DEFAULT -- normalized!
-ALTER TENANT (123) SET CLUSTER SETTING a = (DEFAULT) -- fully parenthesized
-ALTER TENANT _ SET CLUSTER SETTING a = DEFAULT -- literals removed
-ALTER TENANT 123 SET CLUSTER SETTING a = DEFAULT -- identifiers removed
+ALTER TENANT [123] SET CLUSTER SETTING a = DEFAULT -- normalized!
+ALTER TENANT [(123)] SET CLUSTER SETTING a = (DEFAULT) -- fully parenthesized
+ALTER TENANT [_] SET CLUSTER SETTING a = DEFAULT -- literals removed
+ALTER TENANT [123] SET CLUSTER SETTING a = DEFAULT -- identifiers removed
 
 parse
 ALTER TENANT (1+1) RESET CLUSTER SETTING a
 ----
-ALTER TENANT (1 + 1) SET CLUSTER SETTING a = DEFAULT -- normalized!
-ALTER TENANT ((((1) + (1)))) SET CLUSTER SETTING a = (DEFAULT) -- fully parenthesized
-ALTER TENANT (_ + _) SET CLUSTER SETTING a = DEFAULT -- literals removed
-ALTER TENANT (1 + 1) SET CLUSTER SETTING a = DEFAULT -- identifiers removed
+ALTER TENANT [(1 + 1)] SET CLUSTER SETTING a = DEFAULT -- normalized!
+ALTER TENANT [((((1) + (1))))] SET CLUSTER SETTING a = (DEFAULT) -- fully parenthesized
+ALTER TENANT [(_ + _)] SET CLUSTER SETTING a = DEFAULT -- literals removed
+ALTER TENANT [(1 + 1)] SET CLUSTER SETTING a = DEFAULT -- identifiers removed
 
 parse
 ALTER TENANT $1 RESET CLUSTER SETTING a
 ----
-ALTER TENANT $1 SET CLUSTER SETTING a = DEFAULT -- normalized!
-ALTER TENANT ($1) SET CLUSTER SETTING a = (DEFAULT) -- fully parenthesized
-ALTER TENANT $1 SET CLUSTER SETTING a = DEFAULT -- literals removed
-ALTER TENANT $1 SET CLUSTER SETTING a = DEFAULT -- identifiers removed
+ALTER TENANT [$1] SET CLUSTER SETTING a = DEFAULT -- normalized!
+ALTER TENANT [($1)] SET CLUSTER SETTING a = (DEFAULT) -- fully parenthesized
+ALTER TENANT [$1] SET CLUSTER SETTING a = DEFAULT -- literals removed
+ALTER TENANT [$1] SET CLUSTER SETTING a = DEFAULT -- identifiers removed
 
 parse
 ALTER TENANT ALL RESET CLUSTER SETTING a

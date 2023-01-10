@@ -1023,6 +1023,7 @@ func (u *sqlSymUnion) functionObjs() tree.FuncObjs {
 
 // ALTER TENANT CLUSTER SETTINGS
 %type <tree.Statement> alter_tenant_csetting_stmt
+%type <tree.Expr> tenant_spec
 
 // ALTER PARTITION
 %type <tree.Statement> alter_zone_partition_stmt
@@ -5929,7 +5930,7 @@ set_csetting_stmt:
 // ALTER TENANT { <tenant_id> | ALL } RESET CLUSTER SETTING <var>
 // %SeeAlso: SET CLUSTER SETTING
 alter_tenant_csetting_stmt:
-  ALTER TENANT d_expr set_or_reset_csetting_stmt
+  ALTER TENANT tenant_spec set_or_reset_csetting_stmt
   {
     csettingStmt := $4.stmt().(*tree.SetClusterSetting)
     $$.val = &tree.AlterTenantSetClusterSetting{
@@ -5947,6 +5948,13 @@ alter_tenant_csetting_stmt:
   }
 | ALTER TENANT error // SHOW HELP: ALTER TENANT
 | ALTER TENANT_ALL ALL error // SHOW HELP: ALTER TENANT
+
+// tenant_spec becomes more intelligent in v23.1.
+tenant_spec:
+  d_expr
+  { $$.val = $1.expr() }
+| '[' d_expr ']'
+  { $$.val = $2.expr() }
 
 set_or_reset_csetting_stmt:
   reset_csetting_stmt
@@ -6758,7 +6766,7 @@ show_csettings_stmt:
 show_local_or_tenant_csettings_stmt:
   show_csettings_stmt
   { $$.val = $1.stmt() }
-| show_csettings_stmt FOR TENANT d_expr
+| show_csettings_stmt FOR TENANT tenant_spec
   {
     switch t := $1.stmt().(type) {
     case *tree.ShowClusterSetting:

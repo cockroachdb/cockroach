@@ -509,7 +509,7 @@ alter_role_stmt ::=
 	| 'ALTER' 'USER_ALL' 'ALL' opt_in_database set_or_reset_clause
 
 alter_tenant_csetting_stmt ::=
-	'ALTER' 'TENANT' d_expr set_or_reset_csetting_stmt
+	'ALTER' 'TENANT' tenant_spec set_or_reset_csetting_stmt
 	| 'ALTER' 'TENANT_ALL' 'ALL' set_or_reset_csetting_stmt
 
 opt_backup_targets ::=
@@ -797,7 +797,7 @@ show_create_external_connections_stmt ::=
 
 show_local_or_tenant_csettings_stmt ::=
 	show_csettings_stmt
-	| show_csettings_stmt 'FOR' 'TENANT' d_expr
+	| show_csettings_stmt 'FOR' 'TENANT' tenant_spec
 
 show_databases_stmt ::=
 	'SHOW' 'DATABASES' with_comment
@@ -1632,30 +1632,9 @@ set_or_reset_clause ::=
 	| 'RESET_ALL' 'ALL'
 	| 'RESET' session_var
 
-d_expr ::=
-	'ICONST'
-	| 'FCONST'
-	| 'SCONST'
-	| 'BCONST'
-	| 'BITCONST'
-	| typed_literal
-	| interval_value
-	| 'TRUE'
-	| 'FALSE'
-	| 'NULL'
-	| column_path_with_star
-	| '@' iconst64
-	| 'PLACEHOLDER'
-	| '(' a_expr ')' '.' '*'
-	| '(' a_expr ')' '.' unrestricted_name
-	| '(' a_expr ')' '.' '@' 'ICONST'
-	| '(' a_expr ')'
-	| func_expr
-	| select_with_parens
-	| labeled_row
-	| 'ARRAY' select_with_parens
-	| 'ARRAY' row
-	| 'ARRAY' array_expr
+tenant_spec ::=
+	d_expr
+	| '[' d_expr ']'
 
 set_or_reset_csetting_stmt ::=
 	reset_csetting_stmt
@@ -2226,35 +2205,30 @@ alter_backup_schedule_cmds ::=
 role_options ::=
 	( role_option ) ( ( role_option ) )*
 
-typed_literal ::=
-	func_name_no_crdb_extra 'SCONST'
-	| const_typename 'SCONST'
-
-interval_value ::=
-	'INTERVAL' 'SCONST' opt_interval_qualifier
-	| 'INTERVAL' '(' iconst32 ')' 'SCONST'
-
-column_path_with_star ::=
-	column_path
-	| db_object_name_component '.' unrestricted_name '.' unrestricted_name '.' '*'
-	| db_object_name_component '.' unrestricted_name '.' '*'
-	| db_object_name_component '.' '*'
-
-func_expr ::=
-	func_application within_group_clause filter_clause over_clause
-	| func_expr_common_subexpr
-
-labeled_row ::=
-	row
-	| '(' row 'AS' name_list ')'
-
-row ::=
-	'ROW' '(' opt_expr_list ')'
-	| expr_tuple_unambiguous
-
-array_expr ::=
-	'[' opt_expr_list ']'
-	| '[' array_expr_list ']'
+d_expr ::=
+	'ICONST'
+	| 'FCONST'
+	| 'SCONST'
+	| 'BCONST'
+	| 'BITCONST'
+	| typed_literal
+	| interval_value
+	| 'TRUE'
+	| 'FALSE'
+	| 'NULL'
+	| column_path_with_star
+	| '@' iconst64
+	| 'PLACEHOLDER'
+	| '(' a_expr ')' '.' '*'
+	| '(' a_expr ')' '.' unrestricted_name
+	| '(' a_expr ')' '.' '@' 'ICONST'
+	| '(' a_expr ')'
+	| func_expr
+	| select_with_parens
+	| labeled_row
+	| 'ARRAY' select_with_parens
+	| 'ARRAY' row
+	| 'ARRAY' array_expr
 
 backup_options ::=
 	'ENCRYPTION_PASSPHRASE' '=' string_or_placeholder
@@ -2274,6 +2248,10 @@ c_expr ::=
 
 qual_op ::=
 	'OPERATOR' '(' operator_op ')'
+
+row ::=
+	'ROW' '(' opt_expr_list ')'
+	| expr_tuple_unambiguous
 
 cast_target ::=
 	typename
@@ -2853,79 +2831,31 @@ role_option ::=
 	| password_clause
 	| valid_until_clause
 
-func_name_no_crdb_extra ::=
-	type_function_name_no_crdb_extra
-	| prefixed_column_path
+typed_literal ::=
+	func_name_no_crdb_extra 'SCONST'
+	| const_typename 'SCONST'
 
-const_typename ::=
-	numeric
-	| bit_without_length
-	| character_without_length
-	| const_datetime
-	| const_geo
+interval_value ::=
+	'INTERVAL' 'SCONST' opt_interval_qualifier
+	| 'INTERVAL' '(' iconst32 ')' 'SCONST'
 
-opt_interval_qualifier ::=
-	interval_qualifier
-	| 
+column_path_with_star ::=
+	column_path
+	| db_object_name_component '.' unrestricted_name '.' unrestricted_name '.' '*'
+	| db_object_name_component '.' unrestricted_name '.' '*'
+	| db_object_name_component '.' '*'
 
-iconst32 ::=
-	'ICONST'
+func_expr ::=
+	func_application within_group_clause filter_clause over_clause
+	| func_expr_common_subexpr
 
-func_application ::=
-	func_name '(' ')'
-	| func_name '(' expr_list opt_sort_clause ')'
-	| func_name '(' 'ALL' expr_list opt_sort_clause ')'
-	| func_name '(' 'DISTINCT' expr_list ')'
-	| func_name '(' '*' ')'
+labeled_row ::=
+	row
+	| '(' row 'AS' name_list ')'
 
-within_group_clause ::=
-	'WITHIN' 'GROUP' '(' single_sort_clause ')'
-	| 
-
-filter_clause ::=
-	'FILTER' '(' 'WHERE' a_expr ')'
-	| 
-
-over_clause ::=
-	'OVER' window_specification
-	| 'OVER' window_name
-	| 
-
-func_expr_common_subexpr ::=
-	'COLLATION' 'FOR' '(' a_expr ')'
-	| 'CURRENT_DATE'
-	| 'CURRENT_SCHEMA'
-	| 'CURRENT_CATALOG'
-	| 'CURRENT_TIMESTAMP'
-	| 'CURRENT_TIME'
-	| 'LOCALTIMESTAMP'
-	| 'LOCALTIME'
-	| 'CURRENT_USER'
-	| 'CURRENT_ROLE'
-	| 'SESSION_USER'
-	| 'USER'
-	| 'CAST' '(' a_expr 'AS' cast_target ')'
-	| 'ANNOTATE_TYPE' '(' a_expr ',' typename ')'
-	| 'IF' '(' a_expr ',' a_expr ',' a_expr ')'
-	| 'IFERROR' '(' a_expr ',' a_expr ',' a_expr ')'
-	| 'IFERROR' '(' a_expr ',' a_expr ')'
-	| 'ISERROR' '(' a_expr ')'
-	| 'ISERROR' '(' a_expr ',' a_expr ')'
-	| 'NULLIF' '(' a_expr ',' a_expr ')'
-	| 'IFNULL' '(' a_expr ',' a_expr ')'
-	| 'COALESCE' '(' expr_list ')'
-	| special_function
-
-opt_expr_list ::=
-	expr_list
-	| 
-
-expr_tuple_unambiguous ::=
-	'(' ')'
-	| '(' tuple1_unambiguous_values ')'
-
-array_expr_list ::=
-	( array_expr ) ( ( ',' array_expr ) )*
+array_expr ::=
+	'[' opt_expr_list ']'
+	| '[' array_expr_list ']'
 
 array_subscripts ::=
 	( array_subscript ) ( ( array_subscript ) )*
@@ -2935,6 +2865,14 @@ case_expr ::=
 
 operator_op ::=
 	all_op
+
+opt_expr_list ::=
+	expr_list
+	| 
+
+expr_tuple_unambiguous ::=
+	'(' ')'
+	| '(' tuple1_unambiguous_values ')'
 
 expr_tuple1_ambiguous ::=
 	'(' ')'
@@ -3183,9 +3121,19 @@ func_args_list ::=
 general_type_name ::=
 	type_function_name_no_crdb_extra
 
+iconst32 ::=
+	'ICONST'
+
 complex_type_name ::=
 	general_type_name '.' unrestricted_name
 	| general_type_name '.' unrestricted_name '.' unrestricted_name
+
+const_typename ::=
+	numeric
+	| bit_without_length
+	| character_without_length
+	| const_datetime
+	| const_geo
 
 bit_with_length ::=
 	'BIT' opt_varying '(' iconst32 ')'
@@ -3277,109 +3225,61 @@ valid_until_clause ::=
 	'VALID' 'UNTIL' string_or_placeholder
 	| 'VALID' 'UNTIL' 'NULL'
 
-type_function_name_no_crdb_extra ::=
-	'identifier'
-	| unreserved_keyword
-	| type_func_name_no_crdb_extra_keyword
-
-numeric ::=
-	'INT'
-	| 'INTEGER'
-	| 'SMALLINT'
-	| 'BIGINT'
-	| 'REAL'
-	| 'FLOAT' opt_float
-	| 'DOUBLE' 'PRECISION'
-	| 'DECIMAL' opt_numeric_modifiers
-	| 'DEC' opt_numeric_modifiers
-	| 'NUMERIC' opt_numeric_modifiers
-	| 'BOOLEAN'
-
-bit_without_length ::=
-	'BIT'
-	| 'BIT' 'VARYING'
-	| 'VARBIT'
-
-character_without_length ::=
-	character_base
-
-const_datetime ::=
-	'DATE'
-	| 'TIME' opt_timezone
-	| 'TIME' '(' iconst32 ')' opt_timezone
-	| 'TIMETZ'
-	| 'TIMETZ' '(' iconst32 ')'
-	| 'TIMESTAMP' opt_timezone
-	| 'TIMESTAMP' '(' iconst32 ')' opt_timezone
-	| 'TIMESTAMPTZ'
-	| 'TIMESTAMPTZ' '(' iconst32 ')'
-
-const_geo ::=
-	'GEOGRAPHY'
-	| 'GEOMETRY'
-	| 'BOX2D'
-	| 'GEOMETRY' '(' geo_shape_type ')'
-	| 'GEOGRAPHY' '(' geo_shape_type ')'
-	| 'GEOMETRY' '(' geo_shape_type ',' signed_iconst ')'
-	| 'GEOGRAPHY' '(' geo_shape_type ',' signed_iconst ')'
-
-interval_qualifier ::=
-	'YEAR'
-	| 'MONTH'
-	| 'DAY'
-	| 'HOUR'
-	| 'MINUTE'
-	| interval_second
-	| 'YEAR' 'TO' 'MONTH'
-	| 'DAY' 'TO' 'HOUR'
-	| 'DAY' 'TO' 'MINUTE'
-	| 'DAY' 'TO' interval_second
-	| 'HOUR' 'TO' 'MINUTE'
-	| 'HOUR' 'TO' interval_second
-	| 'MINUTE' 'TO' interval_second
-
-func_name ::=
-	type_function_name
+func_name_no_crdb_extra ::=
+	type_function_name_no_crdb_extra
 	| prefixed_column_path
 
-single_sort_clause ::=
-	'ORDER' 'BY' sortby
-	| 'ORDER' 'BY' sortby ',' sortby_list
+opt_interval_qualifier ::=
+	interval_qualifier
+	| 
 
-window_specification ::=
-	'(' opt_existing_window_name opt_partition_clause opt_sort_clause opt_frame_clause ')'
+func_application ::=
+	func_name '(' ')'
+	| func_name '(' expr_list opt_sort_clause ')'
+	| func_name '(' 'ALL' expr_list opt_sort_clause ')'
+	| func_name '(' 'DISTINCT' expr_list ')'
+	| func_name '(' '*' ')'
 
-window_name ::=
-	name
+within_group_clause ::=
+	'WITHIN' 'GROUP' '(' single_sort_clause ')'
+	| 
 
-special_function ::=
-	'CURRENT_DATE' '(' ')'
-	| 'CURRENT_SCHEMA' '(' ')'
-	| 'CURRENT_TIMESTAMP' '(' ')'
-	| 'CURRENT_TIMESTAMP' '(' a_expr ')'
-	| 'CURRENT_TIME' '(' ')'
-	| 'CURRENT_TIME' '(' a_expr ')'
-	| 'LOCALTIMESTAMP' '(' ')'
-	| 'LOCALTIMESTAMP' '(' a_expr ')'
-	| 'LOCALTIME' '(' ')'
-	| 'LOCALTIME' '(' a_expr ')'
-	| 'CURRENT_USER' '(' ')'
-	| 'SESSION_USER' '(' ')'
-	| 'EXTRACT' '(' extract_list ')'
-	| 'EXTRACT_DURATION' '(' extract_list ')'
-	| 'OVERLAY' '(' overlay_list ')'
-	| 'POSITION' '(' position_list ')'
-	| 'SUBSTRING' '(' substr_list ')'
-	| 'TRIM' '(' 'BOTH' trim_list ')'
-	| 'TRIM' '(' 'LEADING' trim_list ')'
-	| 'TRIM' '(' 'TRAILING' trim_list ')'
-	| 'TRIM' '(' trim_list ')'
-	| 'GREATEST' '(' expr_list ')'
-	| 'LEAST' '(' expr_list ')'
+filter_clause ::=
+	'FILTER' '(' 'WHERE' a_expr ')'
+	| 
 
-tuple1_unambiguous_values ::=
-	a_expr ','
-	| a_expr ',' expr_list
+over_clause ::=
+	'OVER' window_specification
+	| 'OVER' window_name
+	| 
+
+func_expr_common_subexpr ::=
+	'COLLATION' 'FOR' '(' a_expr ')'
+	| 'CURRENT_DATE'
+	| 'CURRENT_SCHEMA'
+	| 'CURRENT_CATALOG'
+	| 'CURRENT_TIMESTAMP'
+	| 'CURRENT_TIME'
+	| 'LOCALTIMESTAMP'
+	| 'LOCALTIME'
+	| 'CURRENT_USER'
+	| 'CURRENT_ROLE'
+	| 'SESSION_USER'
+	| 'USER'
+	| 'CAST' '(' a_expr 'AS' cast_target ')'
+	| 'ANNOTATE_TYPE' '(' a_expr ',' typename ')'
+	| 'IF' '(' a_expr ',' a_expr ',' a_expr ')'
+	| 'IFERROR' '(' a_expr ',' a_expr ',' a_expr ')'
+	| 'IFERROR' '(' a_expr ',' a_expr ')'
+	| 'ISERROR' '(' a_expr ')'
+	| 'ISERROR' '(' a_expr ',' a_expr ')'
+	| 'NULLIF' '(' a_expr ',' a_expr ')'
+	| 'IFNULL' '(' a_expr ',' a_expr ')'
+	| 'COALESCE' '(' expr_list ')'
+	| special_function
+
+array_expr_list ::=
+	( array_expr ) ( ( ',' array_expr ) )*
 
 array_subscript ::=
 	'[' a_expr ']'
@@ -3395,6 +3295,10 @@ when_clause_list ::=
 case_default ::=
 	'ELSE' a_expr
 	| 
+
+tuple1_unambiguous_values ::=
+	a_expr ','
+	| a_expr ',' expr_list
 
 tuple1_ambiguous_values ::=
 	a_expr
@@ -3549,6 +3453,52 @@ func_arg ::=
 	| func_arg_class func_arg_type
 	| func_arg_type
 
+type_function_name_no_crdb_extra ::=
+	'identifier'
+	| unreserved_keyword
+	| type_func_name_no_crdb_extra_keyword
+
+numeric ::=
+	'INT'
+	| 'INTEGER'
+	| 'SMALLINT'
+	| 'BIGINT'
+	| 'REAL'
+	| 'FLOAT' opt_float
+	| 'DOUBLE' 'PRECISION'
+	| 'DECIMAL' opt_numeric_modifiers
+	| 'DEC' opt_numeric_modifiers
+	| 'NUMERIC' opt_numeric_modifiers
+	| 'BOOLEAN'
+
+bit_without_length ::=
+	'BIT'
+	| 'BIT' 'VARYING'
+	| 'VARBIT'
+
+character_without_length ::=
+	character_base
+
+const_datetime ::=
+	'DATE'
+	| 'TIME' opt_timezone
+	| 'TIME' '(' iconst32 ')' opt_timezone
+	| 'TIMETZ'
+	| 'TIMETZ' '(' iconst32 ')'
+	| 'TIMESTAMP' opt_timezone
+	| 'TIMESTAMP' '(' iconst32 ')' opt_timezone
+	| 'TIMESTAMPTZ'
+	| 'TIMESTAMPTZ' '(' iconst32 ')'
+
+const_geo ::=
+	'GEOGRAPHY'
+	| 'GEOMETRY'
+	| 'BOX2D'
+	| 'GEOMETRY' '(' geo_shape_type ')'
+	| 'GEOGRAPHY' '(' geo_shape_type ')'
+	| 'GEOMETRY' '(' geo_shape_type ',' signed_iconst ')'
+	| 'GEOGRAPHY' '(' geo_shape_type ',' signed_iconst ')'
+
 opt_varying ::=
 	'VARYING'
 	| 
@@ -3558,6 +3508,21 @@ character_base ::=
 	| char_aliases 'VARYING'
 	| 'VARCHAR'
 	| 'STRING'
+
+interval_qualifier ::=
+	'YEAR'
+	| 'MONTH'
+	| 'DAY'
+	| 'HOUR'
+	| 'MINUTE'
+	| interval_second
+	| 'YEAR' 'TO' 'MONTH'
+	| 'DAY' 'TO' 'HOUR'
+	| 'DAY' 'TO' 'MINUTE'
+	| 'DAY' 'TO' interval_second
+	| 'HOUR' 'TO' 'MINUTE'
+	| 'HOUR' 'TO' interval_second
+	| 'MINUTE' 'TO' interval_second
 
 opt_column ::=
 	'COLUMN'
@@ -3614,101 +3579,44 @@ storage_parameter_key_list ::=
 partition_by_index ::=
 	partition_by
 
-opt_float ::=
-	'(' 'ICONST' ')'
-	| 
+func_name ::=
+	type_function_name
+	| prefixed_column_path
 
-opt_numeric_modifiers ::=
-	'(' iconst32 ')'
-	| '(' iconst32 ',' iconst32 ')'
-	| 
+single_sort_clause ::=
+	'ORDER' 'BY' sortby
+	| 'ORDER' 'BY' sortby ',' sortby_list
 
-opt_timezone ::=
-	'WITH' 'TIME' 'ZONE'
-	| 'WITHOUT' 'TIME' 'ZONE'
-	| 
+window_specification ::=
+	'(' opt_existing_window_name opt_partition_clause opt_sort_clause opt_frame_clause ')'
 
-geo_shape_type ::=
-	'POINT'
-	| 'POINTM'
-	| 'POINTZ'
-	| 'POINTZM'
-	| 'LINESTRING'
-	| 'LINESTRINGM'
-	| 'LINESTRINGZ'
-	| 'LINESTRINGZM'
-	| 'POLYGON'
-	| 'POLYGONM'
-	| 'POLYGONZ'
-	| 'POLYGONZM'
-	| 'MULTIPOINT'
-	| 'MULTIPOINTM'
-	| 'MULTIPOINTZ'
-	| 'MULTIPOINTZM'
-	| 'MULTILINESTRING'
-	| 'MULTILINESTRINGM'
-	| 'MULTILINESTRINGZ'
-	| 'MULTILINESTRINGZM'
-	| 'MULTIPOLYGON'
-	| 'MULTIPOLYGONM'
-	| 'MULTIPOLYGONZ'
-	| 'MULTIPOLYGONZM'
-	| 'GEOMETRYCOLLECTION'
-	| 'GEOMETRYCOLLECTIONM'
-	| 'GEOMETRYCOLLECTIONZ'
-	| 'GEOMETRYCOLLECTIONZM'
-	| 'GEOMETRY'
-	| 'GEOMETRYM'
-	| 'GEOMETRYZ'
-	| 'GEOMETRYZM'
-
-interval_second ::=
-	'SECOND'
-	| 'SECOND' '(' iconst32 ')'
-
-type_function_name ::=
-	'identifier'
-	| unreserved_keyword
-	| type_func_name_keyword
-
-opt_existing_window_name ::=
+window_name ::=
 	name
-	| 
 
-opt_partition_clause ::=
-	'PARTITION' 'BY' expr_list
-	| 
-
-opt_frame_clause ::=
-	'RANGE' frame_extent opt_frame_exclusion
-	| 'ROWS' frame_extent opt_frame_exclusion
-	| 'GROUPS' frame_extent opt_frame_exclusion
-	| 
-
-extract_list ::=
-	extract_arg 'FROM' a_expr
-	| expr_list
-
-overlay_list ::=
-	a_expr overlay_placing substr_from substr_for
-	| a_expr overlay_placing substr_from
-	| expr_list
-
-position_list ::=
-	b_expr 'IN' b_expr
-	| 
-
-substr_list ::=
-	a_expr substr_from substr_for
-	| a_expr substr_for substr_from
-	| a_expr substr_from
-	| a_expr substr_for
-	| opt_expr_list
-
-trim_list ::=
-	a_expr 'FROM' expr_list
-	| 'FROM' expr_list
-	| expr_list
+special_function ::=
+	'CURRENT_DATE' '(' ')'
+	| 'CURRENT_SCHEMA' '(' ')'
+	| 'CURRENT_TIMESTAMP' '(' ')'
+	| 'CURRENT_TIMESTAMP' '(' a_expr ')'
+	| 'CURRENT_TIME' '(' ')'
+	| 'CURRENT_TIME' '(' a_expr ')'
+	| 'LOCALTIMESTAMP' '(' ')'
+	| 'LOCALTIMESTAMP' '(' a_expr ')'
+	| 'LOCALTIME' '(' ')'
+	| 'LOCALTIME' '(' a_expr ')'
+	| 'CURRENT_USER' '(' ')'
+	| 'SESSION_USER' '(' ')'
+	| 'EXTRACT' '(' extract_list ')'
+	| 'EXTRACT_DURATION' '(' extract_list ')'
+	| 'OVERLAY' '(' overlay_list ')'
+	| 'POSITION' '(' position_list ')'
+	| 'SUBSTRING' '(' substr_list ')'
+	| 'TRIM' '(' 'BOTH' trim_list ')'
+	| 'TRIM' '(' 'LEADING' trim_list ')'
+	| 'TRIM' '(' 'TRAILING' trim_list ')'
+	| 'TRIM' '(' trim_list ')'
+	| 'GREATEST' '(' expr_list ')'
+	| 'LEAST' '(' expr_list ')'
 
 opt_slice_bound ::=
 	a_expr
@@ -3777,9 +3685,61 @@ func_arg_class ::=
 param_name ::=
 	type_function_name
 
+opt_float ::=
+	'(' 'ICONST' ')'
+	| 
+
+opt_numeric_modifiers ::=
+	'(' iconst32 ')'
+	| '(' iconst32 ',' iconst32 ')'
+	| 
+
+opt_timezone ::=
+	'WITH' 'TIME' 'ZONE'
+	| 'WITHOUT' 'TIME' 'ZONE'
+	| 
+
+geo_shape_type ::=
+	'POINT'
+	| 'POINTM'
+	| 'POINTZ'
+	| 'POINTZM'
+	| 'LINESTRING'
+	| 'LINESTRINGM'
+	| 'LINESTRINGZ'
+	| 'LINESTRINGZM'
+	| 'POLYGON'
+	| 'POLYGONM'
+	| 'POLYGONZ'
+	| 'POLYGONZM'
+	| 'MULTIPOINT'
+	| 'MULTIPOINTM'
+	| 'MULTIPOINTZ'
+	| 'MULTIPOINTZM'
+	| 'MULTILINESTRING'
+	| 'MULTILINESTRINGM'
+	| 'MULTILINESTRINGZ'
+	| 'MULTILINESTRINGZM'
+	| 'MULTIPOLYGON'
+	| 'MULTIPOLYGONM'
+	| 'MULTIPOLYGONZ'
+	| 'MULTIPOLYGONZM'
+	| 'GEOMETRYCOLLECTION'
+	| 'GEOMETRYCOLLECTIONM'
+	| 'GEOMETRYCOLLECTIONZ'
+	| 'GEOMETRYCOLLECTIONZM'
+	| 'GEOMETRY'
+	| 'GEOMETRYM'
+	| 'GEOMETRYZ'
+	| 'GEOMETRYZM'
+
 char_aliases ::=
 	'CHAR'
 	| 'CHARACTER'
+
+interval_second ::=
+	'SECOND'
+	| 'SECOND' '(' iconst32 ')'
 
 col_qual_list ::=
 	(  ) ( ( col_qualification ) )*
@@ -3796,35 +3756,49 @@ reference_actions ::=
 	| reference_on_delete reference_on_update
 	| 
 
-frame_extent ::=
-	frame_bound
-	| 'BETWEEN' frame_bound 'AND' frame_bound
+type_function_name ::=
+	'identifier'
+	| unreserved_keyword
+	| type_func_name_keyword
 
-opt_frame_exclusion ::=
-	'EXCLUDE' 'CURRENT' 'ROW'
-	| 'EXCLUDE' 'GROUP'
-	| 'EXCLUDE' 'TIES'
-	| 'EXCLUDE' 'NO' 'OTHERS'
+opt_existing_window_name ::=
+	name
 	| 
 
-extract_arg ::=
-	'identifier'
-	| 'YEAR'
-	| 'MONTH'
-	| 'DAY'
-	| 'HOUR'
-	| 'MINUTE'
-	| 'SECOND'
-	| 'SCONST'
+opt_partition_clause ::=
+	'PARTITION' 'BY' expr_list
+	| 
 
-overlay_placing ::=
-	'PLACING' a_expr
+opt_frame_clause ::=
+	'RANGE' frame_extent opt_frame_exclusion
+	| 'ROWS' frame_extent opt_frame_exclusion
+	| 'GROUPS' frame_extent opt_frame_exclusion
+	| 
 
-substr_from ::=
-	'FROM' a_expr
+extract_list ::=
+	extract_arg 'FROM' a_expr
+	| expr_list
 
-substr_for ::=
-	'FOR' a_expr
+overlay_list ::=
+	a_expr overlay_placing substr_from substr_for
+	| a_expr overlay_placing substr_from
+	| expr_list
+
+position_list ::=
+	b_expr 'IN' b_expr
+	| 
+
+substr_list ::=
+	a_expr substr_from substr_for
+	| a_expr substr_for substr_from
+	| a_expr substr_from
+	| a_expr substr_for
+	| opt_expr_list
+
+trim_list ::=
+	a_expr 'FROM' expr_list
+	| 'FROM' expr_list
+	| expr_list
 
 list_partition ::=
 	partition 'VALUES' 'IN' '(' expr_list ')' opt_partition_by
@@ -3863,12 +3837,35 @@ reference_on_update ::=
 reference_on_delete ::=
 	'ON' 'DELETE' reference_action
 
-frame_bound ::=
-	'UNBOUNDED' 'PRECEDING'
-	| 'UNBOUNDED' 'FOLLOWING'
-	| 'CURRENT' 'ROW'
-	| a_expr 'PRECEDING'
-	| a_expr 'FOLLOWING'
+frame_extent ::=
+	frame_bound
+	| 'BETWEEN' frame_bound 'AND' frame_bound
+
+opt_frame_exclusion ::=
+	'EXCLUDE' 'CURRENT' 'ROW'
+	| 'EXCLUDE' 'GROUP'
+	| 'EXCLUDE' 'TIES'
+	| 'EXCLUDE' 'NO' 'OTHERS'
+	| 
+
+extract_arg ::=
+	'identifier'
+	| 'YEAR'
+	| 'MONTH'
+	| 'DAY'
+	| 'HOUR'
+	| 'MINUTE'
+	| 'SECOND'
+	| 'SCONST'
+
+overlay_placing ::=
+	'PLACING' a_expr
+
+substr_from ::=
+	'FROM' a_expr
+
+substr_for ::=
+	'FOR' a_expr
 
 opt_partition_by ::=
 	partition_by
@@ -3905,6 +3902,13 @@ reference_action ::=
 	| 'CASCADE'
 	| 'SET' 'NULL'
 	| 'SET' 'DEFAULT'
+
+frame_bound ::=
+	'UNBOUNDED' 'PRECEDING'
+	| 'UNBOUNDED' 'FOLLOWING'
+	| 'CURRENT' 'ROW'
+	| a_expr 'PRECEDING'
+	| a_expr 'FOLLOWING'
 
 opt_name_parens ::=
 	'(' name ')'
