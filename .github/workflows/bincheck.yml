@@ -13,7 +13,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v3
-    - run: sudo apt-get update && sudo apt-get install -y qemu-system-x86
     - run: cd build/release/bincheck && ./test-linux ${{ github.ref_name }} ${{ github.sha }}
 
   darwin:
