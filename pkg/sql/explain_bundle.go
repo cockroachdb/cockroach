@@ -308,10 +308,6 @@ func (b *stmtBundleBuilder) addOptPlans(ctx context.Context) {
 
 // addExecPlan adds the EXPLAIN (VERBOSE) plan as file plan.txt.
 func (b *stmtBundleBuilder) addExecPlan(plan string) {
-	if b.flags.RedactValues {
-		return
-	}
-
 	if plan == "" {
 		plan = "no plan"
 	}

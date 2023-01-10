@@ -1000,6 +1000,12 @@ func (e *emitter) spansStr(table cat.Table, index cat.Index, scanParams exec.Sca
 		return "1+ spans"
 	}
 
+	// If we must hide or redact values, only show the count.
+	if e.ob.flags.HideValues || e.ob.flags.RedactValues {
+		n := scanParams.IndexConstraint.Spans.Count()
+		return fmt.Sprintf("%d span%s", n, util.Pluralize(int64(n)))
+	}
+
 	// In verbose mode show the physical spans, unless the table is virtual.
 	if e.ob.flags.Verbose && !table.IsVirtualTable() {
 		return e.spanFormatFn(table, index, scanParams)
@@ -1009,12 +1015,6 @@ func (e *emitter) spansStr(table cat.Table, index cat.Index, scanParams exec.Sca
 	// values are generally not user-readable.
 	if scanParams.InvertedConstraint != nil {
 		n := len(scanParams.InvertedConstraint)
-		return fmt.Sprintf("%d span%s", n, util.Pluralize(int64(n)))
-	}
-
-	// If we must hide values, only show the count.
-	if e.ob.flags.HideValues {
-		n := scanParams.IndexConstraint.Spans.Count()
 		return fmt.Sprintf("%d span%s", n, util.Pluralize(int64(n)))
 	}
 

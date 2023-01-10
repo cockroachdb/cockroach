@@ -264,10 +264,14 @@ func MakeExplain(options []string, stmt Statement) (Statement, error) {
 	}
 
 	if opts.Flags[ExplainFlagRedact] {
-		// TODO(michae2): Support redaction of other EXPLAIN variants.
-		if !analyze || opts.Mode != ExplainDebug {
-			return nil, unimplemented.New(
-				"EXPLAIN (REDACT)", "the REDACT flag can only be used with EXPLAIN ANALYZE (DEBUG)",
+		// TODO(michae2): Support redaction of other EXPLAIN modes.
+		switch opts.Mode {
+		case ExplainPlan:
+		case ExplainVec:
+		case ExplainDebug:
+		default:
+			return nil, unimplemented.Newf(
+				"EXPLAIN (REDACT)", "the REDACT flag cannot be used with %s", opts.Mode,
 			)
 		}
 	}
