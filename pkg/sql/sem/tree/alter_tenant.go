@@ -10,6 +10,8 @@
 
 package tree
 
+import "github.com/cockroachdb/errors"
+
 // ReplicationCutoverTime represent the user-specified cutover time
 type ReplicationCutoverTime struct {
 	Timestamp Expr
@@ -45,6 +47,57 @@ func (n *AlterTenantReplication) Format(ctx *FmtCtx) {
 	} else if n.Command == PauseJob || n.Command == ResumeJob {
 		ctx.WriteString(JobCommandToStatement[n.Command])
 		ctx.WriteString(" REPLICATION")
+	}
+}
+
+// TenantCapability is a key-value parameter representing a tenant capability.
+type TenantCapability struct {
+	Name  string
+	Value Expr
+}
+
+func (c *TenantCapability) GetBoolValue(isRevoke bool) (bool, error) {
+	if c.Value == nil {
+		return false, nil
+	}
+	if isRevoke {
+		return false, errors.New("revoke must not specify value")
+	}
+	dBool, ok := AsDBool(c.Value)
+	if !ok {
+		return false, errors.New("value must be bool")
+	}
+	return bool(dBool), nil
+}
+
+// AlterTenantCapability represents an ALTER TENANT CAPABILITY statement.
+type AlterTenantCapability struct {
+	TenantSpec   *TenantSpec
+	Capabilities []TenantCapability
+	IsRevoke     bool
+}
+
+var _ Statement = &AlterTenantCapability{}
+
+// Format implements the NodeFormatter interface.
+func (n *AlterTenantCapability) Format(ctx *FmtCtx) {
+	ctx.WriteString("ALTER TENANT ")
+	ctx.FormatNode(n.TenantSpec)
+	if n.IsRevoke {
+		ctx.WriteString(" REVOKE CAPABILITY ")
+	} else {
+		ctx.WriteString(" GRANT CAPABILITY ")
+	}
+	for i, capability := range n.Capabilities {
+		if i > 0 {
+			ctx.WriteString(", ")
+		}
+		ctx.WriteString(capability.Name)
+		value := capability.Value
+		if value != nil {
+			ctx.WriteString(" = ")
+			ctx.FormatNode(value)
+		}
 	}
 }
 

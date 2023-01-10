@@ -296,6 +296,13 @@ var TenantColumnsWithReplication = ResultColumns{
 	{Name: "cutover_time", Typ: types.Decimal},
 }
 
+// TenantColumnsWithCapabilities is appended to TenantColumns for
+// SHOW TENANT ... WITH CAPABILITIES queries.
+var TenantColumnsWithCapabilities = ResultColumns{
+	{Name: "capability_name", Typ: types.String},
+	{Name: "capability_value", Typ: types.String},
+}
+
 // RangesNoLeases is the schema for crdb_internal.ranges_no_leases.
 var RangesNoLeases = ResultColumns{
 	{Name: "range_id", Typ: types.Int},

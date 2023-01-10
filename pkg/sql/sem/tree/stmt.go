@@ -441,6 +441,15 @@ func (*AlterSchema) StatementTag() string { return "ALTER SCHEMA" }
 func (*AlterSchema) hiddenFromShowQueries() {}
 
 // StatementReturnType implements the Statement interface.
+func (*AlterTenantCapability) StatementReturnType() StatementReturnType { return Rows }
+
+// StatementType implements the Statement interface.
+func (*AlterTenantCapability) StatementType() StatementType { return TypeDML }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*AlterTenantCapability) StatementTag() string { return "ALTER TENANT CAPABILITY" }
+
+// StatementReturnType implements the Statement interface.
 func (*AlterTenantSetClusterSetting) StatementReturnType() StatementReturnType { return Ack }
 
 // StatementType implements the Statement interface.
@@ -2111,6 +2120,7 @@ func (n *AlterTableSetVisible) String() string                { return AsString(
 func (n *AlterTableSetNotNull) String() string                { return AsString(n) }
 func (n *AlterTableOwner) String() string                     { return AsString(n) }
 func (n *AlterTableSetSchema) String() string                 { return AsString(n) }
+func (n *AlterTenantCapability) String() string               { return AsString(n) }
 func (n *AlterTenantSetClusterSetting) String() string        { return AsString(n) }
 func (n *AlterTenantRename) String() string                   { return AsString(n) }
 func (n *AlterTenantReplication) String() string              { return AsString(n) }

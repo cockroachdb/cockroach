@@ -1,0 +1,2 @@
+tenant_capability_list ::=
+	tenant_capability ( ( ',' tenant_capability ) )*
