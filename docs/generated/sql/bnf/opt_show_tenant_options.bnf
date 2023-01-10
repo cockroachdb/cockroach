@@ -1,0 +1,2 @@
+opt_show_tenant_options ::=
+	'WITH' show_tenant_options
