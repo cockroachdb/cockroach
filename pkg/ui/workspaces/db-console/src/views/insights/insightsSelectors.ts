@@ -19,7 +19,7 @@ import {
   SchemaInsightEventFilters,
   SortSetting,
   selectStatementInsightsCombiner,
-  selectExecutionID,
+  selectID,
   selectStatementInsightDetailsCombiner,
   selectTxnInsightsCombiner,
 } from "@cockroachlabs/cluster-ui";
@@ -47,7 +47,7 @@ export const selectTransactionInsights = createSelector(
 export const selectTransactionInsightDetails = createSelector(
   [
     (state: AdminUIState) => state.cachedData.transactionInsightDetails,
-    selectExecutionID,
+    selectID,
   ],
   (insight, insightId): api.TransactionInsightEventDetailsResponse => {
     if (!insight) {
@@ -59,7 +59,7 @@ export const selectTransactionInsightDetails = createSelector(
 
 export const selectTransactionInsightDetailsError = createSelector(
   (state: AdminUIState) => state.cachedData.transactionInsightDetails,
-  selectExecutionID,
+  selectID,
   (insight, insightId): Error | null => {
     if (!insight) {
       return null;
@@ -75,7 +75,7 @@ export const selectStatementInsights = createSelector(
 
 export const selectStatementInsightDetails = createSelector(
   selectStatementInsights,
-  selectExecutionID,
+  selectID,
   selectStatementInsightDetailsCombiner,
 );
 

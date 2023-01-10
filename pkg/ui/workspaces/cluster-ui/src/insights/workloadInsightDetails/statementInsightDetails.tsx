@@ -18,7 +18,7 @@ import "antd/lib/row/style";
 import { Button } from "src/button";
 import { Loading } from "src/loading";
 import { SqlBox, SqlBoxSize } from "src/sql";
-import { getMatchParamByName, executionIdAttr } from "src/util";
+import { getMatchParamByName, idAttr } from "src/util";
 import { StatementInsightEvent } from "../types";
 import { InsightsError } from "../insightsErrorComponent";
 import classNames from "classnames/bind";
@@ -98,7 +98,7 @@ export const StatementInsightDetails: React.FC<
     }
   };
 
-  const executionID = getMatchParamByName(match, executionIdAttr);
+  const executionID = getMatchParamByName(match, idAttr);
 
   useEffect(() => {
     if (insightEventDetails == null) {

@@ -10,11 +10,11 @@
 
 import { createSelector } from "reselect";
 import { AppState } from "src/store/reducers";
-import { selectExecutionID } from "src/selectors/common";
+import { selectID } from "src/selectors/common";
 
 const selectTransactionInsightDetailsState = createSelector(
   (state: AppState) => state.adminUI.transactionInsightDetails.cachedData,
-  selectExecutionID,
+  selectID,
   (cachedTxnInsightDetails, execId) => {
     return cachedTxnInsightDetails.get(execId);
   },

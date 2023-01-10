@@ -16,7 +16,7 @@ import {
   selectStatementInsightsCombiner,
   selectStatementInsightDetailsCombiner,
 } from "src/selectors/insightsCommon.selectors";
-import { selectExecutionID } from "src/selectors/common";
+import { selectID } from "src/selectors/common";
 export const selectStatementInsights = createSelector(
   (state: AppState) => state.adminUI.statementInsights?.data,
   selectStatementInsightsCombiner,
@@ -27,7 +27,7 @@ export const selectStatementInsightsError = (state: AppState) =>
 
 export const selectStatementInsightDetails = createSelector(
   selectStatementInsights,
-  selectExecutionID,
+  selectID,
   selectStatementInsightDetailsCombiner,
 );
 
