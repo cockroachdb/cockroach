@@ -300,7 +300,7 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 					}
 				}
 				return nil
-			}, "env.sql schema.sql statement.sql vec.txt vec-v.txt",
+			}, "env.sql plan.txt schema.sql statement.sql vec-v.txt vec.txt",
 		)
 	})
 }
