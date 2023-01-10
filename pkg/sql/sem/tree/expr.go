@@ -1595,6 +1595,13 @@ func (node *AnnotateTypeExpr) Format(ctx *FmtCtx) {
 	switch node.SyntaxMode {
 	case AnnotateShort:
 		exprFmtWithParen(ctx, node.Expr)
+		// The Array format function handles adding type annotations for this case.
+		// We short circuit here to prevent double type annotation.
+		if arrayExpr, ok := node.Expr.(*Array); ok {
+			if ctx.HasFlags(FmtParsable) && arrayExpr.typ != nil {
+				return
+			}
+		}
 		ctx.WriteString(":::")
 		ctx.FormatTypeReference(node.Type)
 
