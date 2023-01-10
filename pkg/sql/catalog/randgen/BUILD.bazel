@@ -42,6 +42,7 @@ go_library(
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
         "//pkg/sql/types",
+        "//pkg/util/mon",
         "//pkg/util/randident",
         "@com_github_cockroachdb_errors//:errors",
     ],

@@ -58,6 +58,7 @@ func (p *planner) GenerateTestObjects(ctx context.Context, parameters string) (s
 		p.CurrentSearchPath(),
 		p.ExtendedEvalContext().Tracing.KVTracingEnabled(),
 		p.EvalContext().DescIDGenerator,
+		p.Mon(),
 		rng,
 	)
 
