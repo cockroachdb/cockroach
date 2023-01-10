@@ -671,27 +671,6 @@ func (desc *wrapper) AllMutations() []catalog.Mutation {
 	return desc.getExistingOrNewMutationCache().all
 }
 
-func (desc *wrapper) GetIndexNameByID(indexID descpb.IndexID) (string, error) {
-	// Check if there are any ongoing schema changes and prefer the name from
-	// them.
-	if scState := desc.GetDeclarativeSchemaChangerState(); scState != nil {
-		for _, target := range scState.Targets {
-			if target.IndexName != nil &&
-				target.TargetStatus == scpb.Status_PUBLIC &&
-				target.IndexName.TableID == desc.GetID() &&
-				target.IndexName.IndexID == indexID {
-				return target.IndexName.Name, nil
-			}
-		}
-	}
-	// Otherwise, try fetching the name from the index descriptor.
-	index, err := desc.FindIndexWithID(indexID)
-	if err != nil {
-		return "", err
-	}
-	return index.GetName(), err
-}
-
 // IsRefreshViewRequired implements the TableDescriptor interface.
 func (desc *wrapper) IsRefreshViewRequired() bool {
 	return desc.IsMaterializedView && desc.RefreshViewRequired

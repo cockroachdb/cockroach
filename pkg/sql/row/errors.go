@@ -112,7 +112,7 @@ func NewUniquenessConstraintViolationError(
 			"duplicate key value got decoding error")
 	}
 	// Resolve the table index descriptor name.
-	indexName, err := tableDesc.GetIndexNameByID(index.GetID())
+	indexName, err := catalog.FindTargetIndexNameByID(tableDesc, index.GetID())
 	if err != nil {
 		log.Warningf(ctx,
 			"unable to find index by ID for NewUniquenessConstraintViolationError: %d",
