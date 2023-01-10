@@ -3550,7 +3550,8 @@ func TestAllocatorCheckRange(t *testing.T) {
 			var storePoolOverride storepool.AllocatorStorePool
 			if len(tc.livenessOverrides) > 0 {
 				livenessOverride := storepool.OverrideNodeLivenessFunc(tc.livenessOverrides, sp.NodeLivenessFn)
-				storePoolOverride = storepool.NewOverrideStorePool(sp, livenessOverride)
+				nodeCountOverride := storepool.OverrideNodeCountFunc(tc.livenessOverrides, cfg.NodeLiveness)
+				storePoolOverride = storepool.NewOverrideStorePool(sp, livenessOverride, nodeCountOverride)
 			}
 
 			// Execute actual allocator range repair check.
