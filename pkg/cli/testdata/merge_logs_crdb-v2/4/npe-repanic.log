@@ -1,69 +1,69 @@
-I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [-]   i was created via the following code:
-I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [-]  !func main() {
-I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [-]  !	defer cleanup()
-I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [-]  !	defer cleanup()
-I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [-]  !	defer cleanup()
-I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [-]  !	defer cleanup()
-I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [-]  !	defer cleanup()
-I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [-]  !	defer cleanup()
-I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [-]  !	defer cleanup()
-I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [-]  !	func() { func() { func() { func() { func() {
-I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [-]  !		func() { func() { panic("boom")
-I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [-]  !	}()}()}()}()}()}()}()
-I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [-]  !}
-I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [-]  !
-I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [-]  !and here we go:
-I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [-]  !
-I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [-]  !	panic: boom [recovered]
-I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [-]  !	panic: boom [recovered]
-I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [-]  !	panic: boom [recovered]
-I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [-]  !	panic: boom [recovered]
-I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [-]  !	panic: boom [recovered]
-I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [-]  !	panic: boom [recovered]
-I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [-]  !	panic: boom
-I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [-]  !
-I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [-]  !goroutine 1 [running]:
-I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [-]  !main.cleanup()
-I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [-]  !	/tmp/sandbox881972553/main.go:20 +0x60
-I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [-]  !panic(0x122540, 0x16aa50)
-I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [-]  !	/usr/local/go/src/runtime/panic.go:522 +0x240
-I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [-]  !main.cleanup()
-I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [-]  !	/tmp/sandbox881972553/main.go:20 +0x60
-I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [-]  !panic(0x122540, 0x16aa50)
-I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [-]  !	/usr/local/go/src/runtime/panic.go:522 +0x240
-I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [-]  !main.cleanup()
-I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [-]  !	/tmp/sandbox881972553/main.go:20 +0x60
-I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [-]  !panic(0x122540, 0x16aa50)
-I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [-]  !	/usr/local/go/src/runtime/panic.go:522 +0x240
-I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [-]  !main.cleanup()
-I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [-]  !	/tmp/sandbox881972553/main.go:20 +0x60
-I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [-]  !panic(0x122540, 0x16aa50)
-I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [-]  !	/usr/local/go/src/runtime/panic.go:522 +0x240
-I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [-]  !main.cleanup()
-I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [-]  !	/tmp/sandbox881972553/main.go:20 +0x60
-I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [-]  !panic(0x122540, 0x16aa50)
-I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [-]  !	/usr/local/go/src/runtime/panic.go:522 +0x240
-I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [-]  !main.cleanup()
-I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [-]  !	/tmp/sandbox881972553/main.go:20 +0x60
-I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [-]  !panic(0x122540, 0x16aa50)
-I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [-]  !	/usr/local/go/src/runtime/panic.go:522 +0x240
-I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [-]  !main.cleanup()
-I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [-]  !	/tmp/sandbox881972553/main.go:20 +0x60
-I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [-]  !panic(0x122540, 0x16aa50)
-I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [-]  !	/usr/local/go/src/runtime/panic.go:522 +0x240
-I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [-]  !main.main.func1.1.1.1.1.1.1(...)
-I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [-]  !	/tmp/sandbox881972553/main.go:42
-I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [-]  !main.main.func1.1.1.1.1.1()
-I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [-]  !	/tmp/sandbox881972553/main.go:43 +0x40
-I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [-]  !main.main.func1.1.1.1.1()
-I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [-]  !	/tmp/sandbox881972553/main.go:44 +0x20
-I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [-]  !main.main.func1.1.1.1()
-I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [-]  !	/tmp/sandbox881972553/main.go:45 +0x20
-I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [-]  !main.main.func1.1.1()
-I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [-]  !	/tmp/sandbox881972553/main.go:46 +0x20
-I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [-]  !main.main.func1.1()
-I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [-]  !	/tmp/sandbox881972553/main.go:47 +0x20
-I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [-]  !main.main.func1()
-I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [-]  !	/tmp/sandbox881972553/main.go:48 +0x20
-I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [-]  !main.main()
-I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [-]  !	/tmp/sandbox881972553/main.go:49 +0x200
+I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [T1]   i was created via the following code:
+I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [T1]  !func main() {
+I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [T1]  !	defer cleanup()
+I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [T1]  !	defer cleanup()
+I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [T1]  !	defer cleanup()
+I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [T1]  !	defer cleanup()
+I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [T1]  !	defer cleanup()
+I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [T1]  !	defer cleanup()
+I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [T1]  !	defer cleanup()
+I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [T1]  !	func() { func() { func() { func() { func() {
+I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [T1]  !		func() { func() { panic("boom")
+I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [T1]  !	}()}()}()}()}()}()}()
+I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [T1]  !}
+I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [T1]  !
+I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [T1]  !and here we go:
+I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [T1]  !
+I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [T1]  !	panic: boom [recovered]
+I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [T1]  !	panic: boom [recovered]
+I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [T1]  !	panic: boom [recovered]
+I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [T1]  !	panic: boom [recovered]
+I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [T1]  !	panic: boom [recovered]
+I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [T1]  !	panic: boom [recovered]
+I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [T1]  !	panic: boom
+I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [T1]  !
+I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [T1]  !goroutine 1 [running]:
+I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [T1]  !main.cleanup()
+I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [T1]  !	/tmp/sandbox881972553/main.go:20 +0x60
+I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [T1]  !panic(0x122540, 0x16aa50)
+I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [T1]  !	/usr/local/go/src/runtime/panic.go:522 +0x240
+I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [T1]  !main.cleanup()
+I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [T1]  !	/tmp/sandbox881972553/main.go:20 +0x60
+I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [T1]  !panic(0x122540, 0x16aa50)
+I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [T1]  !	/usr/local/go/src/runtime/panic.go:522 +0x240
+I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [T1]  !main.cleanup()
+I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [T1]  !	/tmp/sandbox881972553/main.go:20 +0x60
+I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [T1]  !panic(0x122540, 0x16aa50)
+I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [T1]  !	/usr/local/go/src/runtime/panic.go:522 +0x240
+I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [T1]  !main.cleanup()
+I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [T1]  !	/tmp/sandbox881972553/main.go:20 +0x60
+I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [T1]  !panic(0x122540, 0x16aa50)
+I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [T1]  !	/usr/local/go/src/runtime/panic.go:522 +0x240
+I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [T1]  !main.cleanup()
+I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [T1]  !	/tmp/sandbox881972553/main.go:20 +0x60
+I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [T1]  !panic(0x122540, 0x16aa50)
+I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [T1]  !	/usr/local/go/src/runtime/panic.go:522 +0x240
+I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [T1]  !main.cleanup()
+I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [T1]  !	/tmp/sandbox881972553/main.go:20 +0x60
+I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [T1]  !panic(0x122540, 0x16aa50)
+I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [T1]  !	/usr/local/go/src/runtime/panic.go:522 +0x240
+I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [T1]  !main.cleanup()
+I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [T1]  !	/tmp/sandbox881972553/main.go:20 +0x60
+I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [T1]  !panic(0x122540, 0x16aa50)
+I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [T1]  !	/usr/local/go/src/runtime/panic.go:522 +0x240
+I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [T1]  !main.main.func1.1.1.1.1.1.1(...)
+I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [T1]  !	/tmp/sandbox881972553/main.go:42
+I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [T1]  !main.main.func1.1.1.1.1.1()
+I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [T1]  !	/tmp/sandbox881972553/main.go:43 +0x40
+I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [T1]  !main.main.func1.1.1.1.1()
+I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [T1]  !	/tmp/sandbox881972553/main.go:44 +0x20
+I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [T1]  !main.main.func1.1.1.1()
+I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [T1]  !	/tmp/sandbox881972553/main.go:45 +0x20
+I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [T1]  !main.main.func1.1.1()
+I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [T1]  !	/tmp/sandbox881972553/main.go:46 +0x20
+I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [T1]  !main.main.func1.1()
+I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [T1]  !	/tmp/sandbox881972553/main.go:47 +0x20
+I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [T1]  !main.main.func1()
+I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [T1]  !	/tmp/sandbox881972553/main.go:48 +0x20
+I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [T1]  !main.main()
+I190412 10:06:00.490104 183717 ccl/partitionccl/partition_test.go:204  [T1]  !	/tmp/sandbox881972553/main.go:49 +0x200
