@@ -214,16 +214,20 @@ func initTempStorageConfig(
 	// While we look, we also clean up any abandoned temporary directories. We
 	// don't know which store spec was used previously—and it may change if
 	// encryption gets enabled after the fact—so we check each store.
-	var specIdx = 0
+	specIdxDisk := -1
+	specIdxEncrypted := -1
 	for i, spec := range stores.Specs {
-		if spec.IsEncrypted() {
+		if spec.InMemory {
+			continue
+		}
+		if spec.IsEncrypted() && specIdxEncrypted == -1 {
 			// TODO(jackson): One store's EncryptionOptions may say to encrypt
 			// with a real key, while another store's say to use key=plain.
 			// This provides no guarantee that we'll use the encrypted one's.
-			specIdx = i
+			specIdxEncrypted = i
 		}
-		if spec.InMemory {
-			continue
+		if specIdxDisk == -1 {
+			specIdxDisk = i
 		}
 		recordPath := filepath.Join(spec.Path, server.TempDirsRecordFilename)
 		if err := fs.CleanupTempDirs(recordPath); err != nil {
@@ -232,6 +236,15 @@ func initTempStorageConfig(
 		}
 	}
 
+	// Use first store by default. This might be an in-memory store.
+	specIdx := 0
+	if specIdxEncrypted >= 0 {
+		// Prefer an encrypted store.
+		specIdx = specIdxEncrypted
+	} else if specIdxDisk >= 0 {
+		// Prefer a non-encrypted on-disk store.
+		specIdx = specIdxDisk
+	}
 	useStore := stores.Specs[specIdx]
 
 	var recordPath string
