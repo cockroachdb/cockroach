@@ -93,19 +93,16 @@ func (s *Store) getOrCreateReplica(
 	}
 }
 
-// tryGetOrCreateReplica performs a single attempt at trying to lookup or
-// create a replica. It will fail with errRetry if it finds a Replica that has
-// been destroyed (and is no longer in Store.mu.replicas) or if during creation
-// another goroutine gets there first. In either case, a subsequent call to
-// tryGetOrCreateReplica will likely succeed, hence the loop in
-// getOrCreateReplica.
-func (s *Store) tryGetOrCreateReplica(
+// tryGetReplica returns the Replica with the given range/replica ID if it
+// exists in the Store's memory, or nil if it does not exist or has been
+// removed. Returns errRetry error if the replica is in a transitional state and
+// its retrieval needs to be retried. Other errors are permanent.
+func (s *Store) tryGetReplica(
 	ctx context.Context,
 	rangeID roachpb.RangeID,
 	replicaID roachpb.ReplicaID,
 	creatingReplica *roachpb.ReplicaDescriptor,
-) (_ *Replica, created bool, _ error) {
-	// The common case: look up an existing (initialized) replica.
+) (*Replica, error) {
 	if repl, ok := s.mu.replicasByRangeID.Load(rangeID); ok {
 		repl.raftMu.Lock() // not unlocked on success
 		repl.mu.RLock()
@@ -114,14 +111,14 @@ func (s *Store) tryGetOrCreateReplica(
 		if repl.mu.destroyStatus.Removed() {
 			repl.mu.RUnlock()
 			repl.raftMu.Unlock()
-			return nil, false, errRetry
+			return nil, errRetry
 		}
 
 		// Drop messages from replicas we know to be too old.
 		if fromReplicaIsTooOldRLocked(repl, creatingReplica) {
 			repl.mu.RUnlock()
 			repl.raftMu.Unlock()
-			return nil, false, roachpb.NewReplicaTooOldError(creatingReplica.ReplicaID)
+			return nil, roachpb.NewReplicaTooOldError(creatingReplica.ReplicaID)
 		}
 
 		// The current replica needs to be removed, remove it and go back around.
@@ -138,7 +135,7 @@ func (s *Store) tryGetOrCreateReplica(
 				log.Fatalf(ctx, "failed to remove replica: %v", err)
 			}
 			repl.raftMu.Unlock()
-			return nil, false, errRetry
+			return nil, errRetry
 		}
 		defer repl.mu.RUnlock()
 
@@ -147,13 +144,34 @@ func (s *Store) tryGetOrCreateReplica(
 			// We could silently drop this message but this way we'll inform the
 			// sender that they may no longer exist.
 			repl.raftMu.Unlock()
-			return nil, false, &roachpb.RaftGroupDeletedError{}
+			return nil, &roachpb.RaftGroupDeletedError{}
 		}
 		if repl.replicaID != replicaID {
 			// This case should have been caught by handleToReplicaTooOld.
 			log.Fatalf(ctx, "intended replica id %d unexpectedly does not match the current replica %v",
 				replicaID, repl)
 		}
+		return repl, nil
+	}
+	return nil, nil
+}
+
+// tryGetOrCreateReplica performs a single attempt at trying to lookup or
+// create a replica. It will fail with errRetry if it finds a Replica that has
+// been destroyed (and is no longer in Store.mu.replicas) or if during creation
+// another goroutine gets there first. In either case, a subsequent call to
+// tryGetOrCreateReplica will likely succeed, hence the loop in
+// getOrCreateReplica.
+func (s *Store) tryGetOrCreateReplica(
+	ctx context.Context,
+	rangeID roachpb.RangeID,
+	replicaID roachpb.ReplicaID,
+	creatingReplica *roachpb.ReplicaDescriptor,
+) (_ *Replica, created bool, _ error) {
+	// The common case: look up an existing replica.
+	if repl, err := s.tryGetReplica(ctx, rangeID, replicaID, creatingReplica); err != nil {
+		return nil, false, err
+	} else if repl != nil {
 		return repl, false, nil
 	}
 
