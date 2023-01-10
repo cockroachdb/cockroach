@@ -11,6 +11,7 @@
 package tree
 
 import (
+	"log"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -278,6 +279,7 @@ func (fd *ResolvedFunctionDefinition) MatchOverload(
 	matched := func(ol QualifiedOverload, schema string) bool {
 		return schema == ol.Schema && (paramTypes == nil || ol.params().Match(paramTypes))
 	}
+
 	typeNames := func() string {
 		ns := make([]string, len(paramTypes))
 		for i, t := range paramTypes {
@@ -291,7 +293,7 @@ func (fd *ResolvedFunctionDefinition) MatchOverload(
 
 	findMatches := func(schema string) {
 		for i := range fd.Overloads {
-			if checkIfMatchedOverloadAt(paramTypes, fd.Overloads[i], schema) {
+			if matched(fd.Overloads[i], schema) {
 				found = true
 				ret = append(ret, fd.Overloads[i])
 			}
@@ -326,12 +328,18 @@ func checkIfMatchedOverloadAt(
 	matchedParam := func(
 		paramTypes []*types.T, ql QualifiedOverload, ord int,
 	) bool {
-		for _, qlp := range ql.params().Types() {
-			if qlp.Width() != paramTypes[ord].Width() {
-				return false
+		if schema == ql.Schema && (paramTypes == nil || ql.params().Match(paramTypes)) {
+			for _, qlp := range ql.params().Types() {
+				log.Printf("\n qlp : %v, pty : %v \n", qlp.Width(), paramTypes[ord].Width())
+				if qlp.Width() == paramTypes[ord].Width() {
+					continue
+				} else {
+					return false
+				}
 			}
+			return true
 		}
-		return true
+		return false
 	}
 
 	for k, pty := range paramTypes {
@@ -346,15 +354,15 @@ func checkIfMatchedOverloadAt(
 		case types.TimestampTZFamily:
 		case types.CollatedStringFamily:
 		case types.INetFamily:
-			if !matchedParam(paramTypes, ql, k) {
-				return false
+			if matchedParam(paramTypes, ql, k) {
+				return true
 			}
-			return true
+			return false
 		default:
 			return true
 		}
 	}
-	return true
+	return false
 }
 
 func combineOverloads(a, b []QualifiedOverload) []QualifiedOverload {
