@@ -177,9 +177,9 @@ func applyReplicaUpdate(
 	// there will be keys not represented by any ranges or vice
 	// versa).
 	key := keys.RangeDescriptorKey(update.StartKey.AsRKey())
-	value, intent, err := storage.MVCCGet(
+	res, err := storage.MVCCGet(
 		ctx, readWriter, key, clock.Now(), storage.MVCCGetOptions{Inconsistent: true})
-	if value == nil {
+	if res.Value == nil {
 		return PrepareReplicaReport{}, errors.Errorf(
 			"failed to find a range descriptor for range %v", key)
 	}
@@ -187,7 +187,7 @@ func applyReplicaUpdate(
 		return PrepareReplicaReport{}, err
 	}
 	var localDesc roachpb.RangeDescriptor
-	if err := value.GetProto(&localDesc); err != nil {
+	if err := res.Value.GetProto(&localDesc); err != nil {
 		return PrepareReplicaReport{}, err
 	}
 	// Sanity check that this is indeed the right range.
@@ -213,7 +213,7 @@ func applyReplicaUpdate(
 	// we won't be able to do MVCCPut later during recovery for the new
 	// descriptor. It should have no effect on the recovery process itself as
 	// transaction would be rolled back anyways.
-	if intent != nil {
+	if res.Intent != nil {
 		// We rely on the property that transactions involving the range
 		// descriptor always start on the range-local descriptor's key. When there
 		// is an intent, this means that it is likely that the transaction did not
@@ -251,24 +251,24 @@ func applyReplicaUpdate(
 		// plan is trivially achievable, due to any of the above problems. But
 		// in the common case, we do expect one to exist.
 		report.AbortedTransaction = true
-		report.AbortedTransactionID = intent.Txn.ID
+		report.AbortedTransactionID = res.Intent.Txn.ID
 
 		// A crude form of the intent resolution process: abort the
 		// transaction by deleting its record.
-		txnKey := keys.TransactionKey(intent.Txn.Key, intent.Txn.ID)
+		txnKey := keys.TransactionKey(res.Intent.Txn.Key, res.Intent.Txn.ID)
 		if _, err := storage.MVCCDelete(ctx, readWriter, &ms, txnKey, hlc.Timestamp{}, hlc.ClockTimestamp{}, nil); err != nil {
 			return PrepareReplicaReport{}, err
 		}
 		update := roachpb.LockUpdate{
-			Span:   roachpb.Span{Key: intent.Key},
-			Txn:    intent.Txn,
+			Span:   roachpb.Span{Key: res.Intent.Key},
+			Txn:    res.Intent.Txn,
 			Status: roachpb.ABORTED,
 		}
 		if _, err := storage.MVCCResolveWriteIntent(ctx, readWriter, &ms, update); err != nil {
 			return PrepareReplicaReport{}, err
 		}
 		report.AbortedTransaction = true
-		report.AbortedTransactionID = intent.Txn.ID
+		report.AbortedTransactionID = res.Intent.Txn.ID
 	}
 	newDesc := localDesc
 	replicas := []roachpb.ReplicaDescriptor{

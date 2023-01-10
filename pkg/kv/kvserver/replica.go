@@ -1805,18 +1805,18 @@ func (r *Replica) maybeWatchForMergeLocked(ctx context.Context) (bool, error) {
 	// if one exists, regardless of what timestamp it is written at.
 	desc := r.descRLocked()
 	descKey := keys.RangeDescriptorKey(desc.StartKey)
-	_, intent, err := storage.MVCCGet(ctx, r.Engine(), descKey, hlc.MaxTimestamp,
+	intentRes, err := storage.MVCCGet(ctx, r.Engine(), descKey, hlc.MaxTimestamp,
 		storage.MVCCGetOptions{Inconsistent: true})
 	if err != nil {
 		return false, err
-	} else if intent == nil {
+	} else if intentRes.Intent == nil {
 		return false, nil
 	}
-	val, _, err := storage.MVCCGetAsTxn(
-		ctx, r.Engine(), descKey, intent.Txn.WriteTimestamp, intent.Txn)
+	valRes, err := storage.MVCCGetAsTxn(
+		ctx, r.Engine(), descKey, intentRes.Intent.Txn.WriteTimestamp, intentRes.Intent.Txn)
 	if err != nil {
 		return false, err
-	} else if val != nil {
+	} else if valRes.Value != nil {
 		return false, nil
 	}
 
@@ -1833,7 +1833,7 @@ func (r *Replica) maybeWatchForMergeLocked(ctx context.Context) (bool, error) {
 		return true, nil
 	}
 	r.mu.mergeComplete = mergeCompleteCh
-	r.mu.mergeTxnID = intent.Txn.ID
+	r.mu.mergeTxnID = intentRes.Intent.Txn.ID
 	// The RHS of a merge is not permitted to quiesce while a mergeComplete
 	// channel is installed. (If the RHS is quiescent when the merge commits, any
 	// orphaned followers would fail to queue themselves for GC.) Unquiesce the
@@ -1854,11 +1854,11 @@ func (r *Replica) maybeWatchForMergeLocked(ctx context.Context) (bool, error) {
 			b := &kv.Batch{}
 			b.Header.Timestamp = r.Clock().Now()
 			b.AddRawRequest(&roachpb.PushTxnRequest{
-				RequestHeader: roachpb.RequestHeader{Key: intent.Txn.Key},
+				RequestHeader: roachpb.RequestHeader{Key: intentRes.Intent.Txn.Key},
 				PusherTxn: roachpb.Transaction{
 					TxnMeta: enginepb.TxnMeta{Priority: enginepb.MinTxnPriority},
 				},
-				PusheeTxn: intent.Txn,
+				PusheeTxn: intentRes.Intent.Txn,
 				PushType:  roachpb.PUSH_ABORT,
 			})
 			if err := r.store.DB().Run(ctx, b); err != nil {
@@ -1882,7 +1882,7 @@ func (r *Replica) maybeWatchForMergeLocked(ctx context.Context) (bool, error) {
 		switch pushTxnRes.PusheeTxn.Status {
 		case roachpb.PENDING, roachpb.STAGING:
 			log.Fatalf(ctx, "PushTxn returned while merge transaction %s was still %s",
-				intent.Txn.ID.Short(), pushTxnRes.PusheeTxn.Status)
+				intentRes.Intent.Txn.ID.Short(), pushTxnRes.PusheeTxn.Status)
 		case roachpb.COMMITTED:
 			// If PushTxn claims that the transaction committed, then the transaction
 			// definitely committed.
