@@ -1473,16 +1473,16 @@ func (tc *TestCluster) ReadIntFromStores(key roachpb.Key) []int64 {
 	results := make([]int64, len(tc.Servers))
 	for i, server := range tc.Servers {
 		err := server.Stores().VisitStores(func(s *kvserver.Store) error {
-			val, _, err := storage.MVCCGet(context.Background(), s.Engine(), key,
+			res, err := storage.MVCCGet(context.Background(), s.Engine(), key,
 				server.Clock().Now(), storage.MVCCGetOptions{})
 			if err != nil {
 				log.VEventf(context.Background(), 1, "store %d: error reading from key %s: %s", s.StoreID(), key, err)
-			} else if val == nil {
+			} else if res.Value == nil {
 				log.VEventf(context.Background(), 1, "store %d: missing key %s", s.StoreID(), key)
 			} else {
-				results[i], err = val.GetInt()
+				results[i], err = res.Value.GetInt()
 				if err != nil {
-					log.Errorf(context.Background(), "store %d: error decoding %s from key %s: %+v", s.StoreID(), val, key, err)
+					log.Errorf(context.Background(), "store %d: error decoding %s from key %s: %+v", s.StoreID(), res.Value, key, err)
 				}
 			}
 			return nil

@@ -1232,15 +1232,15 @@ func cmdGet(e *evalCtx) error {
 	}
 
 	return e.withReader(func(r storage.Reader) error {
-		val, intent, err := storage.MVCCGet(e.ctx, r, key, ts, opts)
+		res, err := storage.MVCCGet(e.ctx, r, key, ts, opts)
 		// NB: the error is returned below. This ensures the test can
 		// ascertain no result is populated in the intent when an error
 		// occurs.
-		if intent != nil {
-			e.results.buf.Printf("get: %v -> intent {%s}\n", key, intent.Txn)
+		if res.Intent != nil {
+			e.results.buf.Printf("get: %v -> intent {%s}\n", key, res.Intent.Txn)
 		}
-		if val != nil {
-			e.results.buf.Printf("get: %v -> %v @%v\n", key, val.PrettyPrint(), val.Timestamp)
+		if res.Value != nil {
+			e.results.buf.Printf("get: %v -> %v @%v\n", key, res.Value.PrettyPrint(), res.Value.Timestamp)
 		} else {
 			e.results.buf.Printf("get: %v -> <no data>\n", key)
 		}

@@ -59,16 +59,16 @@ func (s *nodeTombstoneStorage) IsDecommissioned(
 	// No cache hit.
 	k := s.key(nodeID)
 	for _, eng := range s.engs {
-		v, _, err := storage.MVCCGet(ctx, eng, k, hlc.Timestamp{}, storage.MVCCGetOptions{})
+		res, err := storage.MVCCGet(ctx, eng, k, hlc.Timestamp{}, storage.MVCCGetOptions{})
 		if err != nil {
 			return time.Time{}, err
 		}
-		if v == nil {
+		if res.Value == nil {
 			// Not found.
 			continue
 		}
 		var tsp hlc.Timestamp
-		if err := v.GetProto(&tsp); err != nil {
+		if err := res.Value.GetProto(&tsp); err != nil {
 			return time.Time{}, err
 		}
 		// Found, offer to cache and return.

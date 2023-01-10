@@ -845,11 +845,11 @@ func runMVCCGet(ctx context.Context, b *testing.B, opts mvccBenchData, useBatch 
 		key := roachpb.Key(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(keyIdx)))
 		walltime := int64(5 * (rand.Int31n(int32(opts.numVersions)) + 1))
 		ts := hlc.Timestamp{WallTime: walltime}
-		if v, _, err := MVCCGet(ctx, r, key, ts, MVCCGetOptions{}); err != nil {
+		if res, err := MVCCGet(ctx, r, key, ts, MVCCGetOptions{}); err != nil {
 			b.Fatalf("failed get: %+v", err)
-		} else if v == nil {
+		} else if res.Value == nil {
 			b.Fatalf("failed get (key not found): %d@%d", keyIdx, walltime)
-		} else if valueBytes, err := v.GetBytes(); err != nil {
+		} else if valueBytes, err := res.Value.GetBytes(); err != nil {
 			b.Fatal(err)
 		} else if len(valueBytes) != opts.valueBytes {
 			b.Fatalf("unexpected value size: %d", len(valueBytes))
@@ -1144,7 +1144,7 @@ func runMVCCGetMergedValue(
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, _, err := MVCCGet(ctx, eng, keys[rand.Intn(numKeys)], timestamp, MVCCGetOptions{})
+		_, err := MVCCGet(ctx, eng, keys[rand.Intn(numKeys)], timestamp, MVCCGetOptions{})
 		if err != nil {
 			b.Fatal(err)
 		}

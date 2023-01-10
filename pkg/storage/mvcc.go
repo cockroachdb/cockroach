@@ -804,14 +804,14 @@ func MVCCGetProto(
 	opts MVCCGetOptions,
 ) (bool, error) {
 	// TODO(tschottdorf): Consider returning skipped intents to the caller.
-	value, _, mvccGetErr := MVCCGet(ctx, reader, key, timestamp, opts)
-	found := value != nil
+	res, mvccGetErr := MVCCGet(ctx, reader, key, timestamp, opts)
+	found := res.Value != nil
 	// If we found a result, parse it regardless of the error returned by MVCCGet.
 	if found && msg != nil {
 		// If the unmarshal failed, return its result. Otherwise, pass
 		// through the underlying error (which may be a WriteIntentError
 		// to be handled specially alongside the returned value).
-		if err := value.GetProto(msg); err != nil {
+		if err := res.Value.GetProto(msg); err != nil {
 			return found, err
 		}
 	}
@@ -902,6 +902,18 @@ type MVCCGetOptions struct {
 	DontInterleaveIntents bool
 }
 
+// MVCCGetResult bundles return values for the MVCCGet family of functions.
+type MVCCGetResult struct {
+	// The most recent value for the specified key whose timestamp is less than
+	// or equal to the supplied timestamp. If no such value exists, nil is
+	// returned instead.
+	Value *roachpb.Value
+	// In inconsistent mode, the intent if an intent is encountered. In
+	// consistent mode, an intent will generate a WriteIntentError with the
+	// intent embedded within and the intent parameter will be nil.
+	Intent *roachpb.Intent
+}
+
 func (opts *MVCCGetOptions) validate() error {
 	if opts.Inconsistent && opts.Txn != nil {
 		return errors.Errorf("cannot allow inconsistent reads within a transaction")
@@ -952,9 +964,11 @@ func newMVCCIterator(
 	return reader.NewMVCCIterator(iterKind, opts)
 }
 
-// MVCCGet returns the most recent value for the specified key whose timestamp
-// is less than or equal to the supplied timestamp. If no such value exists, nil
-// is returned instead.
+// MVCCGet returns a MVCCGetResult.
+//
+// The first field of MVCCGetResult contains the most recent value for the
+// specified key whose timestamp is less than or equal to the supplied
+// timestamp. If no such value exists, nil is returned instead.
 //
 // In tombstones mode, if the most recent value is a deletion tombstone, the
 // result will be a non-nil roachpb.Value whose RawBytes field is nil.
@@ -967,9 +981,9 @@ func newMVCCIterator(
 // above existing point keys.
 //
 // In inconsistent mode, if an intent is encountered, it will be placed in the
-// dedicated return parameter. By contrast, in consistent mode, an intent will
-// generate a WriteIntentError with the intent embedded within, and the intent
-// result parameter will be nil.
+// intent field. By contrast, in consistent mode, an intent will generate a
+// WriteIntentError with the intent embedded within, and the intent result
+// parameter will be nil.
 //
 // Note that transactional gets must be consistent. Put another way, only
 // non-transactional gets may be inconsistent.
@@ -991,16 +1005,16 @@ func newMVCCIterator(
 // the read timestamp.
 func MVCCGet(
 	ctx context.Context, reader Reader, key roachpb.Key, timestamp hlc.Timestamp, opts MVCCGetOptions,
-) (*roachpb.Value, *roachpb.Intent, error) {
-	value, intent, _, err := MVCCGetWithValueHeader(ctx, reader, key, timestamp, opts)
-	return value, intent, err
+) (MVCCGetResult, error) {
+	res, _, err := MVCCGetWithValueHeader(ctx, reader, key, timestamp, opts)
+	return res, err
 }
 
 // MVCCGetWithValueHeader is like MVCCGet, but in addition returns the
 // MVCCValueHeader for the value.
 func MVCCGetWithValueHeader(
 	ctx context.Context, reader Reader, key roachpb.Key, timestamp hlc.Timestamp, opts MVCCGetOptions,
-) (*roachpb.Value, *roachpb.Intent, enginepb.MVCCValueHeader, error) {
+) (MVCCGetResult, enginepb.MVCCValueHeader, error) {
 	iter := newMVCCIterator(
 		reader, timestamp, false /* rangeKeyMasking */, opts.DontInterleaveIntents, IterOptions{
 			KeyTypes: IterKeyTypePointsAndRanges,
@@ -1009,7 +1023,10 @@ func MVCCGetWithValueHeader(
 	)
 	defer iter.Close()
 	value, intent, vh, err := mvccGetWithValueHeader(ctx, iter, key, timestamp, opts)
-	return value.ToPointer(), intent, vh, err
+	return MVCCGetResult{
+		Value:  value.ToPointer(),
+		Intent: intent,
+	}, vh, err
 }
 
 // gcassert:inline
@@ -1119,7 +1136,7 @@ func MVCCGetAsTxn(
 	key roachpb.Key,
 	timestamp hlc.Timestamp,
 	txnMeta enginepb.TxnMeta,
-) (*roachpb.Value, *roachpb.Intent, error) {
+) (MVCCGetResult, error) {
 	return MVCCGet(ctx, reader, key, timestamp, MVCCGetOptions{
 		Txn: &roachpb.Transaction{
 			TxnMeta:                txnMeta,
