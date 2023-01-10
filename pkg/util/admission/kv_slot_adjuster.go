@@ -58,8 +58,12 @@ type kvSlotAdjuster struct {
 	// A 0 value indicates that there is no override.
 	runnableAlphaOverride float64
 
-	totalSlotsMetric         *metric.Gauge
-	totalModerateSlotsMetric *metric.Gauge
+	totalSlotsMetric                 *metric.Gauge
+	totalModerateSlotsMetric         *metric.Gauge
+	cpuLoadShortPeriodDurationMetric *metric.Counter
+	cpuLoadLongPeriodDurationMetric  *metric.Counter
+	slotAdjusterIncrementsMetric     *metric.Counter
+	slotAdjusterDecrementsMetric     *metric.Counter
 }
 
 var _ cpuOverloadIndicator = &kvSlotAdjuster{}
@@ -68,6 +72,12 @@ var _ CPULoadListener = &kvSlotAdjuster{}
 func (kvsa *kvSlotAdjuster) CPULoad(runnable int, procs int, samplePeriod time.Duration) {
 	threshold := int(KVSlotAdjusterOverloadThreshold.Get(&kvsa.settings.SV))
 
+	periodDurationMicros := samplePeriod.Microseconds()
+	if samplePeriod > time.Millisecond {
+		kvsa.cpuLoadLongPeriodDurationMetric.Inc(periodDurationMicros)
+	} else {
+		kvsa.cpuLoadShortPeriodDurationMetric.Inc(periodDurationMicros)
+	}
 	// 0.009 gives weight to at least a few hundred samples at a 1ms sampling rate.
 	alpha := 0.009 * float64(samplePeriod/time.Millisecond)
 	if alpha > 0.5 {
@@ -83,7 +93,7 @@ func (kvsa *kvSlotAdjuster) CPULoad(runnable int, procs int, samplePeriod time.D
 	// Simple heuristic, which worked ok in experiments. More sophisticated ones
 	// could be devised.
 	usedSlots := kvsa.granter.usedSlots + kvsa.granter.usedSoftSlots
-	tryDecreaseSlots := func(total int) int {
+	tryDecreaseSlots := func(total int, adjustMetric bool) int {
 		// Overload.
 		// If using some slots, and the used slots is less than the total slots,
 		// and total slots hasn't bottomed out at the min, decrease the total
@@ -98,10 +108,13 @@ func (kvsa *kvSlotAdjuster) CPULoad(runnable int, procs int, samplePeriod time.D
 		// signal or other ways to prevent a fast drop.
 		if usedSlots > 0 && total > kvsa.minCPUSlots && usedSlots <= total {
 			total--
+			if adjustMetric {
+				kvsa.slotAdjusterDecrementsMetric.Inc(1)
+			}
 		}
 		return total
 	}
-	tryIncreaseSlots := func(total int) int {
+	tryIncreaseSlots := func(total int, adjustMetric bool) int {
 		// Underload.
 		// Used all its slots and can increase further, so additive increase. We
 		// also handle the case where the used slots are a bit less than total
@@ -114,21 +127,29 @@ func (kvsa *kvSlotAdjuster) CPULoad(runnable int, procs int, samplePeriod time.D
 			// decrease by 1000 slots every second (because the CPULoad ticks are at
 			// 1ms intervals, and we do additive decrease).
 			total++
+			if adjustMetric {
+				kvsa.slotAdjusterIncrementsMetric.Inc(1)
+			}
 		}
 		return total
 	}
 
 	if runnable >= threshold*procs {
 		// Very overloaded.
-		kvsa.granter.totalHighLoadSlots = tryDecreaseSlots(kvsa.granter.totalHighLoadSlots)
-		kvsa.granter.totalModerateLoadSlots = tryDecreaseSlots(kvsa.granter.totalModerateLoadSlots)
+		kvsa.granter.setTotalHighLoadSlotsLocked(
+			tryDecreaseSlots(kvsa.granter.totalHighLoadSlots, true))
+		kvsa.granter.totalModerateLoadSlots = tryDecreaseSlots(
+			kvsa.granter.totalModerateLoadSlots, false)
 	} else if float64(runnable) <= float64((threshold*procs)/4) {
 		// Very underloaded.
-		kvsa.granter.totalHighLoadSlots = tryIncreaseSlots(kvsa.granter.totalHighLoadSlots)
-		kvsa.granter.totalModerateLoadSlots = tryIncreaseSlots(kvsa.granter.totalModerateLoadSlots)
+		kvsa.granter.setTotalHighLoadSlotsLocked(
+			tryIncreaseSlots(kvsa.granter.totalHighLoadSlots, true))
+		kvsa.granter.totalModerateLoadSlots = tryIncreaseSlots(
+			kvsa.granter.totalModerateLoadSlots, false)
 	} else if float64(runnable) <= float64((threshold*procs)/2) {
 		// Moderately underloaded -- can afford to increase regular slots.
-		kvsa.granter.totalHighLoadSlots = tryIncreaseSlots(kvsa.granter.totalHighLoadSlots)
+		kvsa.granter.setTotalHighLoadSlotsLocked(
+			tryIncreaseSlots(kvsa.granter.totalHighLoadSlots, true))
 	} else if runnable >= 3*threshold*procs/4 {
 		// Moderately overloaded -- should decrease moderate load slots.
 		//
@@ -144,7 +165,8 @@ func (kvsa *kvSlotAdjuster) CPULoad(runnable int, procs int, samplePeriod time.D
 		// Where this will help is when what is pushing us over moderate load is
 		// optional background work, so by decreasing totalModerateLoadSlots we will
 		// contain the load due to that work.
-		kvsa.granter.totalModerateLoadSlots = tryDecreaseSlots(kvsa.granter.totalModerateLoadSlots)
+		kvsa.granter.totalModerateLoadSlots = tryDecreaseSlots(
+			kvsa.granter.totalModerateLoadSlots, false)
 	}
 	// Consider the following cases, when we started this method with
 	// totalHighLoadSlots==totalModerateLoadSlots.

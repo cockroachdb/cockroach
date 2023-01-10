@@ -2024,6 +2024,7 @@ func TestLint(t *testing.T) {
 			"../../storage/enginepb",
 			"../../storage/pebbleiter",
 			"../../util",
+			"../../util/admission",
 			"../../util/hlc",
 			"../../util/intsets",
 		}
