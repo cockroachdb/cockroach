@@ -242,11 +242,8 @@ func (p *planner) removeBackRefsFromAllTypesInTable(
 }
 
 func (p *planner) addBackRefsFromAllTypesInType(ctx context.Context, desc *typedesc.Mutable) error {
-	typeIDs, err := desc.GetIDClosure()
-	if err != nil {
-		return err
-	}
-	for id := range typeIDs {
+	typeIDs := desc.GetIDClosure()
+	for _, id := range typeIDs.Ordered() {
 		if id == desc.ID {
 			// Don't add a self back reference.
 			continue
@@ -262,18 +259,9 @@ func (p *planner) addBackRefsFromAllTypesInType(ctx context.Context, desc *typed
 func (p *planner) removeBackRefsFromAllTypesInType(
 	ctx context.Context, desc *typedesc.Mutable,
 ) error {
-	typeIDMap, err := desc.GetIDClosure()
-	if err != nil {
-		return err
-	}
-	typeIDs := catalog.DescriptorIDSet{}
-	for id := range typeIDMap {
-		if id == desc.ID {
-			// Don't add a self back reference.
-			continue
-		}
-		typeIDs.Add(id)
-	}
+	typeIDs := desc.GetIDClosure()
+	// Don't add a self back reference.
+	typeIDs.Remove(desc.ID)
 	jobDesc := fmt.Sprintf("updating type back references %v for type %d", typeIDs, desc.ID)
 	return p.removeTypeBackReferences(ctx, typeIDs.Ordered(), desc.ID, jobDesc)
 }

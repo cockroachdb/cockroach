@@ -233,8 +233,9 @@ func (v TableImplicitRecordType) AsTypesT() *types.T {
 func (v TableImplicitRecordType) HasPendingSchemaChanges() bool { return false }
 
 // GetIDClosure implements the TypeDescriptor interface.
-func (v TableImplicitRecordType) GetIDClosure() (map[descpb.ID]struct{}, error) {
-	return nil, errors.AssertionFailedf("IDClosure unsupported for implicit table record types")
+func (v TableImplicitRecordType) GetIDClosure() catalog.DescriptorIDSet {
+	v.panicNotSupported("GetIDClosure")
+	return catalog.DescriptorIDSet{}
 }
 
 // IsCompatibleWith implements the TypeDescriptorInterface.

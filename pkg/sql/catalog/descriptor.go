@@ -779,7 +779,7 @@ type TypeDescriptor interface {
 	HasPendingSchemaChanges() bool
 	// GetIDClosure returns all type descriptor IDs that are referenced by this
 	// type descriptor.
-	GetIDClosure() (map[descpb.ID]struct{}, error)
+	GetIDClosure() DescriptorIDSet
 	// IsCompatibleWith returns whether the type "desc" is compatible with "other".
 	// As of now "compatibility" entails that disk encoded data of "desc" can be
 	// interpreted and used by "other".
