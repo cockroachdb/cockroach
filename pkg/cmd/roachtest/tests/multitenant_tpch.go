@@ -40,7 +40,7 @@ func runMultiTenantTPCH(ctx context.Context, t test.Test, c cluster.Cluster) {
 	// one at a time (using the given url as a parameter to the 'workload run'
 	// command). The runtimes are accumulated in the perf helper.
 	runTPCH := func(conn *gosql.DB, url string, setupIdx int) {
-		t.Status("restoring TPCH dataset for Scale Factor 1 in %s", setupNames[setupIdx])
+		t.Status("restoring TPCH dataset for Scale Factor 1 in ", setupNames[setupIdx])
 		if err := loadTPCHDataset(
 			ctx, t, c, conn, 1 /* sf */, c.NewMonitor(ctx), c.All(), false, /* disableMergeQueue */
 		); err != nil {
