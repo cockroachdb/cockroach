@@ -427,7 +427,7 @@ func newFamilyTableDescriptor(
 ) (catalog.TableDescriptor, error) {
 	// Build the set of columns in the family, along with the primary
 	// key columns.
-	fam, err := original.FindFamilyByID(familyID)
+	fam, err := catalog.MustFindFamilyByID(original, familyID)
 	if err != nil {
 		return nil, err
 	}

@@ -930,7 +930,7 @@ func UserDefinedTypeColsHaveSameVersion(desc TableDescriptor, otherDesc TableDes
 func UserDefinedTypeColsInFamilyHaveSameVersion(
 	desc TableDescriptor, otherDesc TableDescriptor, familyID descpb.FamilyID,
 ) (bool, error) {
-	family, err := desc.FindFamilyByID(familyID)
+	family, err := MustFindFamilyByID(desc, familyID)
 	if err != nil {
 		return false, err
 	}
@@ -1135,3 +1135,28 @@ func MustFindConstraintWithName(tbl TableDescriptor, name string) (Constraint, e
 
 // silence the linter
 var _ = MustFindConstraintWithName
+
+// FindFamilyByID traverses the family descriptors on the table descriptor
+// and returns the first column family with the desired ID, or nil if none was
+// found.
+func FindFamilyByID(tbl TableDescriptor, id descpb.FamilyID) (ret *descpb.ColumnFamilyDescriptor) {
+	_ = tbl.ForeachFamily(func(family *descpb.ColumnFamilyDescriptor) error {
+		if family.ID == id {
+			ret = family
+			return iterutil.StopIteration()
+		}
+		return nil
+	})
+	return ret
+}
+
+// MustFindFamilyByID is like FindFamilyByID but returns an error if no column
+// family was found.
+func MustFindFamilyByID(
+	tbl TableDescriptor, id descpb.FamilyID,
+) (*descpb.ColumnFamilyDescriptor, error) {
+	if f := FindFamilyByID(tbl, id); f != nil {
+		return f, nil
+	}
+	return nil, fmt.Errorf("family-id \"%d\" does not exist", id)
+}
