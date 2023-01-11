@@ -98,7 +98,13 @@ func splitPreApply(
 			// hand side replica since it's absent or a more recent replica than the
 			// split. Now that we have a boolean targeting the unreplicated
 			// RangeID-based keyspace, we can set this to false and remove the
-			// HardState+ReplicaID write-back. See:
+			// HardState+ReplicaID write-back. (The WriteBatch does not contain
+			// any writes to the unreplicated RangeID keyspace for the RHS, see
+			// splitTriggerHelper[^1]).
+			//
+			// [^1]: https://github.com/cockroachdb/cockroach/blob/f263a765d750e41f2701da0a923a6e92d09159fa/pkg/kv/kvserver/batcheval/cmd_end_transaction.go#L1109-L1149
+			//
+			// See also:
 			//
 			// https://github.com/cockroachdb/cockroach/issues/94933
 			ClearUnreplicatedByRangeID: true,
