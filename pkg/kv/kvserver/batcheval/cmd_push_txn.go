@@ -15,6 +15,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
@@ -298,10 +299,21 @@ func PushTxn(
 	case roachpb.PUSH_ABORT:
 		// If aborting the transaction, set the new status.
 		reply.PusheeTxn.Status = roachpb.ABORTED
-		// If the transaction record was already present, forward the timestamp
-		// to accommodate AbortSpan GC. See method comment for details.
+		// Forward the timestamp to accommodate AbortSpan GC. See method comment for
+		// details.
+		reply.PusheeTxn.WriteTimestamp.Forward(reply.PusheeTxn.LastActive())
+		// If the transaction record was already present, persist the updates to it.
+		// If not, then we don't want to create it. This could allow for finalized
+		// transactions to be revived. Instead, we obey the invariant that only the
+		// transaction's own coordinator can issue requests that create its
+		// transaction record. To ensure that a timestamp push or an abort is
+		// respected for transactions without transaction records, we rely on markers
+		// in the timestamp cache.
 		if ok {
-			reply.PusheeTxn.WriteTimestamp.Forward(reply.PusheeTxn.LastActive())
+			txnRecord := reply.PusheeTxn.AsRecord()
+			if err := storage.MVCCPutProto(ctx, readWriter, cArgs.Stats, key, hlc.Timestamp{}, hlc.ClockTimestamp{}, nil, &txnRecord); err != nil {
+				return result.Result{}, err
+			}
 		}
 	case roachpb.PUSH_TIMESTAMP:
 		if existTxn.Status != roachpb.PENDING {
@@ -309,27 +321,23 @@ func PushTxn(
 				"PUSH_TIMESTAMP succeeded against non-PENDING txn: %v", existTxn)
 		}
 		// Otherwise, update timestamp to be one greater than the request's
-		// timestamp. This new timestamp will be use to update the read timestamp
-		// cache. If the transaction record was not already present then we rely on
-		// the timestamp cache to prevent the record from ever being written with a
-		// timestamp beneath this timestamp.
+		// timestamp. This new timestamp will be used to update the read timestamp
+		// cache. We rely on the timestamp cache to prevent the record from ever
+		// being committed with a timestamp beneath this timestamp.
 		reply.PusheeTxn.WriteTimestamp.Forward(args.PushTo)
+		// If the transaction record was already present, continue to update the
+		// transaction record until all nodes are running v23.1. v22.2 nodes won't
+		// know to check the timestamp cache again on commit to learn about any
+		// successful timestamp pushes.
+		// TODO(nvanbenschoten): remove this logic in v23.2.
+		if ok && !cArgs.EvalCtx.ClusterSettings().Version.IsActive(ctx, clusterversion.V23_1) {
+			txnRecord := reply.PusheeTxn.AsRecord()
+			if err := storage.MVCCPutProto(ctx, readWriter, cArgs.Stats, key, hlc.Timestamp{}, hlc.ClockTimestamp{}, nil, &txnRecord); err != nil {
+				return result.Result{}, err
+			}
+		}
 	default:
 		return result.Result{}, errors.AssertionFailedf("unexpected push type: %v", pushType)
-	}
-
-	// If the transaction record was already present, persist the updates to it.
-	// If not, then we don't want to create it. This could allow for finalized
-	// transactions to be revived. Instead, we obey the invariant that only the
-	// transaction's own coordinator can issue requests that create its
-	// transaction record. To ensure that a timestamp push or an abort is
-	// respected for transactions without transaction records, we rely on markers
-	// in the timestamp cache.
-	if ok {
-		txnRecord := reply.PusheeTxn.AsRecord()
-		if err := storage.MVCCPutProto(ctx, readWriter, cArgs.Stats, key, hlc.Timestamp{}, hlc.ClockTimestamp{}, nil, &txnRecord); err != nil {
-			return result.Result{}, err
-		}
 	}
 
 	result := result.Result{}
