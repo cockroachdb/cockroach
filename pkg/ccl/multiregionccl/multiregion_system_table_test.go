@@ -287,7 +287,6 @@ func TestTenantStartupWithMultiRegionEnum(t *testing.T) {
 	ten2, tSQL2 := serverutils.StartTenant(t, tc.Server(2), base.TestTenantArgs{
 		Settings: cs,
 		TenantID: tenID,
-		Existing: true,
 		Locality: roachpb.Locality{
 			Tiers: []roachpb.Tier{
 				{Key: "region", Value: "us-east3"},
