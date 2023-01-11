@@ -342,7 +342,7 @@ func (s *Store) SplitRange(
 		// assumption that distribution across all tracked load stats is
 		// identical.
 		leftRepl.loadStats.Split(rightRepl.loadStats)
-		if err := s.addReplicaInternalLocked(rightRepl); err != nil {
+		if err := s.addToReplicasByKeyLocked(rightRepl); err != nil {
 			return errors.Wrapf(err, "unable to add replica %v", rightRepl)
 		}
 
