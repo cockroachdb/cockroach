@@ -999,13 +999,7 @@ func (n *Node) writeNodeStatus(ctx context.Context, alertTTL time.Duration, must
 		}
 
 		if result := n.recorder.CheckHealth(ctx, *nodeStatus); len(result.Alerts) != 0 {
-			var numNodes int
-			if err := n.storeCfg.Gossip.IterateInfos(gossip.KeyNodeDescPrefix, func(k string, info gossip.Info) error {
-				numNodes++
-				return nil
-			}); err != nil {
-				log.Warningf(ctx, "%v", err)
-			}
+			numNodes := n.storeCfg.Gossip.CountInfos(gossip.KeyNodeDescPrefix)
 			if numNodes > 1 {
 				// Avoid this warning on single-node clusters, which require special UX.
 				log.Warningf(ctx, "health alerts detected: %+v", result)

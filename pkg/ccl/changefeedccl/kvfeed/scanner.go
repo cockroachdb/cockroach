@@ -305,12 +305,7 @@ func clusterNodeCount(gw gossip.OptionalGossip) int {
 		// can't count nodes in tenants
 		return 1
 	}
-	var nodes int
-	_ = g.IterateInfos(gossip.KeyNodeDescPrefix, func(_ string, _ gossip.Info) error {
-		nodes++
-		return nil
-	})
-	return nodes
+	return g.CountInfos(gossip.KeyNodeDescPrefix)
 }
 
 // maxConcurrentScanRequests returns the number of concurrent scan requests.

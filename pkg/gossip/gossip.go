@@ -1061,15 +1061,37 @@ func (g *Gossip) GetInfoStatus() InfoStatus {
 	return is
 }
 
-// IterateInfos visits all infos matching the given prefix.
-func (g *Gossip) IterateInfos(prefix string, visit func(k string, info Info) error) error {
+// CountInfos counts matching infos atomically under the lock. It is preferred
+// to using visitor for cases where actual info is irrelevant as it avoids
+// unnecessary cloning and holding a lock.
+func (g *Gossip) CountInfos(prefix string) int {
 	g.mu.RLock()
 	defer g.mu.RUnlock()
-	for k, v := range g.mu.is.Infos {
+	var count int
+	for k := range g.mu.is.Infos {
 		if strings.HasPrefix(k, prefix+separator) {
-			if err := visit(k, *(protoutil.Clone(v).(*Info))); err != nil {
-				return err
+			count++
+		}
+	}
+	return count
+}
+
+// IterateInfos visits all infos matching the given prefix. Function clones
+// matching records under lock, releases lock and then visits infos.
+func (g *Gossip) IterateInfos(prefix string, visit func(k string, info Info) error) error {
+	matching := make(map[string]Info)
+	func() {
+		g.mu.RLock()
+		defer g.mu.RUnlock()
+		for k, v := range g.mu.is.Infos {
+			if strings.HasPrefix(k, prefix+separator) {
+				matching[k] = *(protoutil.Clone(v).(*Info))
 			}
+		}
+	}()
+	for k, v := range matching {
+		if err := visit(k, v); err != nil {
+			return err
 		}
 	}
 	return nil
