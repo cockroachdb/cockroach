@@ -1070,13 +1070,14 @@ func (desc *wrapper) validateColumnFamilies(columnsByID map[descpb.ColumnID]cata
 		}
 
 		for i, colID := range family.ColumnIDs {
+			colName := family.ColumnNames[i]
 			col, ok := columnsByID[colID]
 			if !ok {
-				return errors.Newf("family %q contains unknown column \"%d\"", family.Name, colID)
+				return errors.Newf("family %q contains column reference %q with unknown ID %d", family.Name, colName, colID)
 			}
-			if col.GetName() != family.ColumnNames[i] {
+			if col.GetName() != colName {
 				return errors.Newf("family %q column %d should have name %q, but found name %q",
-					family.Name, colID, col.GetName(), family.ColumnNames[i])
+					family.Name, colID, col.GetName(), colName)
 			}
 			if col.IsVirtual() {
 				return errors.Newf("virtual computed column %q cannot be part of a family", col.GetName())
