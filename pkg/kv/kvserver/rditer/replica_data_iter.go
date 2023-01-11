@@ -131,36 +131,6 @@ func makeRangeLocalKeySpan(sp roachpb.RSpan) roachpb.Span {
 	}
 }
 
-// makeRangeLockTableKeySpans returns the 2 lock table key spans. The first one
-// will contain all local (i.e. range descriptor, etc) key locks for the span,
-// the second non-local key locks.
-func makeRangeLockTableKeySpans(sp roachpb.RSpan) [2]roachpb.Span {
-	// Handle doubly-local lock table keys since range descriptor key
-	// is a range local key that can have a replicated lock acquired on it.
-	startRangeLocal, _ := keys.LockTableSingleKey(keys.MakeRangeKeyPrefix(sp.Key), nil)
-	endRangeLocal, _ := keys.LockTableSingleKey(keys.MakeRangeKeyPrefix(sp.EndKey), nil)
-	// The first range in the global keyspace can start earlier than LocalMax,
-	// at RKeyMin, but the actual data starts at LocalMax. We need to make this
-	// adjustment here to prevent [startRangeLocal, endRangeLocal) and
-	// [startGlobal, endGlobal) from overlapping.
-	globalStartKey := sp.Key.AsRawKey()
-	if sp.Key.Equal(roachpb.RKeyMin) {
-		globalStartKey = keys.LocalMax
-	}
-	startGlobal, _ := keys.LockTableSingleKey(globalStartKey, nil)
-	endGlobal, _ := keys.LockTableSingleKey(roachpb.Key(sp.EndKey), nil)
-	return [2]roachpb.Span{
-		{
-			Key:    startRangeLocal,
-			EndKey: endRangeLocal,
-		},
-		{
-			Key:    startGlobal,
-			EndKey: endGlobal,
-		},
-	}
-}
-
 // NewReplicaMVCCDataIterator creates a ReplicaMVCCDataIterator for the given
 // replica. It iterates over the replicated key spans excluding the lock
 // table key span. Separated locks are made to appear as interleaved. The

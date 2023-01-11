@@ -10,7 +10,10 @@
 
 package rditer
 
-import "github.com/cockroachdb/cockroach/pkg/roachpb"
+import (
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+)
 
 // SelectOpts configures which spans for a Replica to return from Select.
 // A Replica comprises replicated (i.e. belonging to the state machine) spans
@@ -46,11 +49,27 @@ func Select(rangeID roachpb.RangeID, opts SelectOpts) []roachpb.Span {
 		sl = append(sl, makeRangeIDUnreplicatedSpan(rangeID))
 	}
 
-	if in := opts.ReplicatedBySpan; !in.Equal(roachpb.RSpan{}) {
+	if !opts.ReplicatedBySpan.Equal(roachpb.RSpan{}) {
+		// Make sure we call KeySpan here, as r1 really only starts at LocalMax. See
+		// comment on KeySpan for details.
+		in := opts.ReplicatedBySpan.KeySpan()
 		sl = append(sl, makeRangeLocalKeySpan(in))
+
+		// Lock table.
 		{
-			ls := makeRangeLockTableKeySpans(in.KeySpan())
-			sl = append(sl, ls[:]...)
+			// Handle doubly-local lock table keys since range descriptor key
+			// is a range local key that can have a replicated lock acquired on it.
+			startRangeLocal, _ := keys.LockTableSingleKey(keys.MakeRangeKeyPrefix(in.Key), nil)
+			endRangeLocal, _ := keys.LockTableSingleKey(keys.MakeRangeKeyPrefix(in.EndKey), nil)
+			startGlobal, _ := keys.LockTableSingleKey(in.Key.AsRawKey(), nil)
+			endGlobal, _ := keys.LockTableSingleKey(in.EndKey.AsRawKey(), nil)
+			sl = append(sl, roachpb.Span{
+				Key:    startRangeLocal,
+				EndKey: endRangeLocal,
+			}, roachpb.Span{
+				Key:    startGlobal,
+				EndKey: endGlobal,
+			})
 		}
 		sl = append(sl, in.KeySpan().AsRawSpanWithNoLocals())
 	}

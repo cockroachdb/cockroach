@@ -1,26 +1,26 @@
 echo
 ----
 Select({/Min-c}):
-  /Local/Range{/Min-"c"}
-  /Local/Lock/Intent/Local/Range{/Min-"c"}
+  /Local/Range{/Meta1/""-"c"}
+  /Local/Lock/Intent/Local/Range{/Meta1/""-"c"}
   /Local/Lock/Intent{/Meta1/""-"c"}
   {/Meta1/-c}
 Select(RangeID-unreplicated, {/Min-c}):
   /Local/RangeID/123/{u""-v""}
-  /Local/Range{/Min-"c"}
-  /Local/Lock/Intent/Local/Range{/Min-"c"}
+  /Local/Range{/Meta1/""-"c"}
+  /Local/Lock/Intent/Local/Range{/Meta1/""-"c"}
   /Local/Lock/Intent{/Meta1/""-"c"}
   {/Meta1/-c}
 Select(RangeID-replicated, {/Min-c}):
   /Local/RangeID/123/{r""-s""}
-  /Local/Range{/Min-"c"}
-  /Local/Lock/Intent/Local/Range{/Min-"c"}
+  /Local/Range{/Meta1/""-"c"}
+  /Local/Lock/Intent/Local/Range{/Meta1/""-"c"}
   /Local/Lock/Intent{/Meta1/""-"c"}
   {/Meta1/-c}
 Select(RangeID-replicated, RangeID-unreplicated, {/Min-c}):
   /Local/RangeID/123/{r""-s""}
   /Local/RangeID/123/{u""-v""}
-  /Local/Range{/Min-"c"}
-  /Local/Lock/Intent/Local/Range{/Min-"c"}
+  /Local/Range{/Meta1/""-"c"}
+  /Local/Lock/Intent/Local/Range{/Meta1/""-"c"}
   /Local/Lock/Intent{/Meta1/""-"c"}
   {/Meta1/-c}
