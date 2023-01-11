@@ -1743,6 +1743,13 @@ func TestTenantLogic_span_builtins(
 	runLogicTest(t, "span_builtins")
 }
 
+func TestTenantLogic_sql_keys(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "sql_keys")
+}
+
 func TestTenantLogic_sqllite(
 	t *testing.T,
 ) {

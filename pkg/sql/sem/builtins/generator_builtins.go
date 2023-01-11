@@ -2230,6 +2230,7 @@ type rangeKeyIterator struct {
 	// by the constructor of the rangeKeyIterator.
 	rangeID roachpb.RangeID
 	spanKeyIterator
+	planner eval.Planner
 }
 
 var _ eval.ValueGenerator = &rangeKeyIterator{}
@@ -2246,12 +2247,14 @@ func makeRangeKeyIterator(
 	if !isAdmin {
 		return nil, pgerror.Newf(pgcode.InsufficientPrivilege, "user needs the admin role to view range data")
 	}
+	planner := evalCtx.Planner
 	rangeID := roachpb.RangeID(tree.MustBeDInt(args[0]))
 	return &rangeKeyIterator{
 		spanKeyIterator: spanKeyIterator{
-			acc: evalCtx.Planner.Mon().MakeBoundAccount(),
+			acc: planner.Mon().MakeBoundAccount(),
 		},
 		rangeID: rangeID,
+		planner: planner,
 	}, nil
 }
 
@@ -2261,17 +2264,13 @@ func (rk *rangeKeyIterator) ResolvedType() *types.T {
 }
 
 // Start implements the tree.ValueGenerator interface.
-func (rk *rangeKeyIterator) Start(ctx context.Context, txn *kv.Txn) error {
+func (rk *rangeKeyIterator) Start(ctx context.Context, txn *kv.Txn) (err error) {
 	// Scan the range meta K/V's to find the target range. We do this in a
 	// chunk-wise fashion to avoid loading all ranges into memory.
-	rangeDesc, err := kvclient.GetRangeWithID(ctx, txn, rk.rangeID)
+	rk.spanKeyIterator.span, err = rk.planner.GetTenantRangeSpanByID(ctx, rk.rangeID)
 	if err != nil {
 		return err
 	}
-	if rangeDesc == nil {
-		return errors.Newf("range with ID %d not found", rk.rangeID)
-	}
-	rk.spanKeyIterator.span = roachpb.Span{Key: rangeDesc.StartKey.AsRawKey(), EndKey: rangeDesc.EndKey.AsRawKey()}
 	return rk.spanKeyIterator.Start(ctx, txn)
 }
 
