@@ -55,7 +55,7 @@ extra STRING,
 FAMILY main (a, status, alt),
 FAMILY extra (extra)
 )`,
-		`CREATE TABLE bar (a INT PRIMARY KEY, b string)`,
+		`CREATE TABLE rowid (a INT)`, // This table has hidden rowid primary key column.
 	)
 
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
@@ -64,7 +64,6 @@ FAMILY extra (extra)
 	statusT := fooDesc.AllColumns()[1].GetType()
 	altStatusT := fooDesc.AllColumns()[2].GetType()
 	primarySpan := fooDesc.PrimaryIndexSpan(codec)
-
 	pkEnd := primarySpan.EndKey
 	fooID := fooDesc.GetID()
 
@@ -80,13 +79,31 @@ FAMILY extra (extra)
 		}, schemaTS, false, false)
 	require.NoError(t, err)
 
+	rowidDesc := cdctest.GetHydratedTableDescriptor(t, s.ExecutorConfig(), "rowid")
+	rowidEventDesc, err := newEventDescriptorForTarget(
+		rowidDesc, jobspb.ChangefeedTargetSpecification{}, schemaTS, false, false)
+	require.NoError(t, err)
+
 	rc := func(n string, typ *types.T) colinfo.ResultColumn {
 		return colinfo.ResultColumn{Name: n, Typ: typ}
 	}
 	mainColumns := colinfo.ResultColumns{
 		rc("a", types.Int), rc("status", statusT), rc("alt", altStatusT),
 	}
+	// mainColumns as tuple.
+	mainColumnsTuple := colinfo.ResultColumns{
+		rc("foo", types.MakeLabeledTuple(
+			[]*types.T{types.Int, statusT, altStatusT},
+			[]string{"a", "status", "alt"}),
+		)}
+
 	extraColumns := colinfo.ResultColumns{rc("a", types.Int), rc("extra", types.String)}
+	// extraColumns as tuple.
+	extraColumnsTuple := colinfo.ResultColumns{
+		rc("foo", types.MakeLabeledTuple(
+			[]*types.T{types.Int, types.String},
+			[]string{"a", "extra"}),
+		)}
 
 	checkPresentation := func(t *testing.T, expected, found colinfo.ResultColumns) {
 		t.Helper()
@@ -120,6 +137,13 @@ FAMILY extra (extra)
 			presentation: mainColumns,
 		},
 		{
+			name:         "full table - main tuple",
+			desc:         fooDesc,
+			stmt:         "SELECT foo FROM foo",
+			planSpans:    roachpb.Spans{primarySpan},
+			presentation: mainColumnsTuple,
+		},
+		{
 			name:         "full table - double star",
 			desc:         fooDesc,
 			stmt:         "SELECT *, * FROM foo",
@@ -127,12 +151,20 @@ FAMILY extra (extra)
 			presentation: append(mainColumns, mainColumns...),
 		},
 		{
-			name:         "full table  extra family",
+			name:         "full table extra family",
 			desc:         fooDesc,
 			targetFamily: "extra",
 			stmt:         "SELECT * FROM foo",
 			planSpans:    roachpb.Spans{primarySpan},
 			presentation: extraColumns,
+		},
+		{
+			name:         "full table extra family tuple",
+			desc:         fooDesc,
+			targetFamily: "extra",
+			stmt:         "SELECT foo FROM foo",
+			planSpans:    roachpb.Spans{primarySpan},
+			presentation: extraColumnsTuple,
 		},
 		{
 			name:         "expression scoped to column family",
@@ -157,11 +189,17 @@ FAMILY extra (extra)
 			presentation: append(mainColumns, rc("cdc_prev", cdcPrevType(eventDesc))),
 		},
 		{
-			name:         "full table with cdc_prev expanded",
-			desc:         fooDesc,
-			stmt:         "SELECT *, cdc_prev.* FROM foo",
-			planSpans:    roachpb.Spans{primarySpan},
-			presentation: append(mainColumns, mainColumns...),
+			name:      "full table with cdc_prev expanded",
+			desc:      fooDesc,
+			stmt:      "SELECT *, cdc_prev.* FROM foo",
+			planSpans: roachpb.Spans{primarySpan},
+			presentation: append(mainColumns, append(
+				// It would be nice to hide "system" columns from cdc_prev -- just like they are
+				// hidden from the table, unless explicitly accessed.
+				// Alas, this is a bit difficult, since cdc_prev is not a table, but a function.
+				mainColumns,
+				rc(colinfo.MVCCTimestampColumnName, colinfo.MVCCTimestampColumnType),
+			)...),
 		},
 		{
 			name:         "full table with cdc_prev json",
@@ -185,11 +223,43 @@ FAMILY extra (extra)
 			presentation: mainColumns,
 		},
 		{
-			name:         "can cast to standard type",
+			name:         "cast to standard type",
 			desc:         fooDesc,
 			stmt:         "SELECT 'cast'::string AS a, 'type_annotation':::string AS b FROM foo AS bar",
 			planSpans:    roachpb.Spans{primarySpan},
 			presentation: colinfo.ResultColumns{rc("a", types.String), rc("b", types.String)},
+		},
+		{
+			name:         "cast to table-typed tuple main",
+			desc:         fooDesc,
+			stmt:         "SELECT foo FROM foo",
+			planSpans:    roachpb.Spans{primarySpan},
+			presentation: mainColumnsTuple,
+		},
+		{
+			name:         "cast to table-typed tuple extra",
+			desc:         fooDesc,
+			stmt:         "SELECT foo FROM foo",
+			targetFamily: "extra",
+			planSpans:    roachpb.Spans{primarySpan},
+			presentation: extraColumnsTuple,
+		},
+		{
+			name:         "hidden columns hidden",
+			desc:         rowidDesc,
+			stmt:         "SELECT * FROM rowid",
+			planSpans:    roachpb.Spans{rowidDesc.PrimaryIndexSpan(codec)},
+			presentation: colinfo.ResultColumns{rc("a", types.Int)},
+		},
+		{
+			name:      "hidden columns hidden with cdc_prev",
+			desc:      rowidDesc,
+			stmt:      "SELECT *, cdc_prev FROM rowid",
+			planSpans: roachpb.Spans{rowidDesc.PrimaryIndexSpan(codec)},
+			presentation: colinfo.ResultColumns{
+				rc("a", types.Int),
+				rc("cdc_prev", cdcPrevType(rowidEventDesc)),
+			},
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -269,7 +339,7 @@ func normalizeAndPlan(
 		func(ctx context.Context, execCtx sql.JobExecContext) error {
 			defer configSemaForCDC(execCtx.SemaCtx(), d)()
 
-			plan, err = sql.PlanCDCExpression(ctx, execCtx, norm.SelectStatement())
+			plan, err = sql.PlanCDCExpression(ctx, execCtx, norm.SelectStatementForFamily())
 			return err
 		},
 	); err != nil {

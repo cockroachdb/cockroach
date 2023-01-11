@@ -575,7 +575,7 @@ func allocateDescriptorRewrites(
 			dbNames = append(dbNames, dbName)
 		}
 		p.BufferClientNotice(ctx, pgnotice.Newf("%s RESTORE TABLE, user %s will exclusively require the RESTORE privilege on databases %s",
-			deprecatedPrivilegesPreamble, p.User(), strings.Join(dbNames, ", ")))
+			deprecatedPrivilegesRestorePreamble, p.User(), strings.Join(dbNames, ", ")))
 	}
 
 	// Allocate new IDs for each database and table.
@@ -1194,7 +1194,7 @@ func checkRestorePrivilegesOnDatabase(
 
 	if err := p.CheckPrivilege(ctx, parentDB, privilege.CREATE); err != nil {
 		notice := fmt.Sprintf("%s RESTORE TABLE, user %s will exclusively require the "+
-			"RESTORE privilege on database %s.", deprecatedPrivilegesPreamble, p.User().Normalized(), parentDB.GetName())
+			"RESTORE privilege on database %s.", deprecatedPrivilegesRestorePreamble, p.User().Normalized(), parentDB.GetName())
 		p.BufferClientNotice(ctx, pgnotice.Newf("%s", notice))
 		return false, errors.WithHint(err, notice)
 	}
@@ -1265,7 +1265,7 @@ func checkPrivilegesForRestore(
 	// Database restores require the CREATEDB privileges.
 	if len(restoreStmt.Targets.Databases) > 0 {
 		notice := fmt.Sprintf("%s RESTORE DATABASE, user %s will exclusively require the "+
-			"RESTORE system privilege.", deprecatedPrivilegesPreamble, p.User().Normalized())
+			"RESTORE system privilege.", deprecatedPrivilegesRestorePreamble, p.User().Normalized())
 		p.BufferClientNotice(ctx, pgnotice.Newf("%s", notice))
 
 		hasCreateDB, err := p.HasRoleOption(ctx, roleoption.CREATEDB)

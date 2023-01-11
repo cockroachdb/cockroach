@@ -29,10 +29,8 @@ import {
 } from "./transactionsPage.selectors";
 import { selectIsTenant } from "../store/uiConfig";
 import { nodeRegionsByIDSelector } from "../store/nodes";
-import {
-  selectTimeScale,
-  selectStatementsLastUpdated,
-} from "src/statementsPage/statementsPage.selectors";
+import { selectStatementsLastUpdated } from "src/statementsPage/statementsPage.selectors";
+import { selectTimeScale } from "../store/utils/selectors";
 import { StatementsRequest } from "src/api/statementsApi";
 import { actions as localStorageActions } from "../store/localStorage";
 import { Filters } from "../queryFilter";

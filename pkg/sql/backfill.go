@@ -1075,7 +1075,6 @@ func (sc *SchemaChanger) distIndexBackfill(
 		nil, /* txn - the flow does not run wholly in a txn */
 		sc.clock,
 		evalCtx.Tracing,
-		sc.execCfg.ContentionRegistry,
 	)
 	defer recv.Release()
 
@@ -1320,7 +1319,6 @@ func (sc *SchemaChanger) distColumnBackfill(
 				nil, /* txn - the flow does not run wholly in a txn */
 				sc.clock,
 				evalCtx.Tracing,
-				sc.execCfg.ContentionRegistry,
 			)
 			defer recv.Release()
 

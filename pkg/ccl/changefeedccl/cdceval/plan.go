@@ -51,7 +51,7 @@ func NormalizeExpression(
 			defer configSemaForCDC(execCtx.SemaCtx(), norm.desc)()
 			// Plan execution; this steps triggers optimizer, which
 			// performs various validation steps.
-			_, err := sql.PlanCDCExpression(ctx, execCtx, norm.SelectStatement())
+			_, err := sql.PlanCDCExpression(ctx, execCtx, norm.SelectStatementForFamily())
 			if err == nil {
 				return nil
 			}
@@ -91,8 +91,8 @@ func SpansForExpression(
 	if err := withPlanner(ctx, execCfg, user, schemaTS, sd,
 		func(ctx context.Context, execCtx sql.JobExecContext) error {
 			defer configSemaForCDC(execCtx.SemaCtx(), d)()
-
-			plan, err = sql.PlanCDCExpression(ctx, execCtx, &tree.Select{Select: sc})
+			norm := &NormalizedSelectClause{SelectClause: sc, desc: d}
+			plan, err = sql.PlanCDCExpression(ctx, execCtx, norm.SelectStatementForFamily())
 			if err == nil {
 				return nil
 			}

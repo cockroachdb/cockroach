@@ -9,22 +9,23 @@
 // licenses/APL.txt.
 
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
-import { DOMAIN_NAME, noopReducer } from "../../utils";
-import moment, { Moment } from "moment";
+import { DOMAIN_NAME } from "../../utils";
 import { TxnInsightEvent } from "src/insights";
+import { ExecutionInsightsRequest } from "../../../api";
+import { UpdateTimeScalePayload } from "../../sqlStats";
 
 export type ExecutionInsightsState = {
   data: TxnInsightEvent[];
-  lastUpdated: Moment;
   lastError: Error;
   valid: boolean;
+  inFlight: boolean;
 };
 
 const initialState: ExecutionInsightsState = {
   data: null,
-  lastUpdated: null,
   lastError: null,
-  valid: true,
+  valid: false,
+  inFlight: false,
 };
 
 const statementInsightsSlice = createSlice({
@@ -35,18 +36,24 @@ const statementInsightsSlice = createSlice({
       state.data = action.payload;
       state.valid = true;
       state.lastError = null;
-      state.lastUpdated = moment.utc();
+      state.inFlight = false;
     },
     failed: (state, action: PayloadAction<Error>) => {
       state.valid = false;
       state.lastError = action.payload;
+      state.inFlight = false;
     },
     invalidated: state => {
       state.valid = false;
     },
-    // Define actions that don't change state.
-    refresh: noopReducer,
-    request: noopReducer,
+    refresh: (_, _action: PayloadAction<ExecutionInsightsRequest>) => {},
+    request: (_, _action: PayloadAction<ExecutionInsightsRequest>) => {},
+    updateTimeScale: (
+      state,
+      _action: PayloadAction<UpdateTimeScalePayload>,
+    ) => {
+      state.inFlight = true;
+    },
   },
 });
 

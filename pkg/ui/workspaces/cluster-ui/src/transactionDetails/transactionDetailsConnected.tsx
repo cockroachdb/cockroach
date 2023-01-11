@@ -31,7 +31,7 @@ import {
   selectHasViewActivityRedactedRole,
 } from "../store/uiConfig";
 import { nodeRegionsByIDSelector } from "../store/nodes";
-import { selectTimeScale } from "src/statementsPage/statementsPage.selectors";
+import { selectTimeScale } from "../store/utils/selectors";
 import { StatementsRequest } from "src/api/statementsApi";
 import { txnFingerprintIdAttr, getMatchParamByName } from "../util";
 import { TimeScale } from "../timeScaleDropdown";
@@ -60,6 +60,7 @@ export const selectTransaction = createSelector(
     return {
       isLoading: false,
       transaction: transaction,
+      lastUpdated: transactionState.lastUpdated,
     };
   },
 );
@@ -68,7 +69,10 @@ const mapStateToProps = (
   state: AppState,
   props: TransactionDetailsProps,
 ): TransactionDetailsStateProps => {
-  const { isLoading, transaction } = selectTransaction(state, props);
+  const { isLoading, transaction, lastUpdated } = selectTransaction(
+    state,
+    props,
+  );
   return {
     timeScale: selectTimeScale(state),
     error: selectTransactionsLastError(state),
@@ -81,6 +85,7 @@ const mapStateToProps = (
       txnFingerprintIdAttr,
     ),
     isLoading: isLoading,
+    lastUpdated: lastUpdated,
     hasViewActivityRedactedRole: selectHasViewActivityRedactedRole(state),
   };
 };

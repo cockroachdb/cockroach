@@ -28,9 +28,11 @@ import { TransactionInsightDetailsOverviewTab } from "./transactionInsightDetail
 import { TransactionInsightsDetailsStmtsTab } from "./transactionInsightDetailsStmtsTab";
 
 import "antd/lib/tabs/style";
+import { executionInsightsRequestFromTimeScale } from "../utils";
 export interface TransactionInsightDetailsStateProps {
   insightDetails: TxnInsightDetails;
   insightError: Error | null;
+  timeScale?: TimeScale;
 }
 
 export interface TransactionInsightDetailsDispatchProps {
@@ -58,18 +60,22 @@ export const TransactionInsightDetails: React.FC<
   history,
   insightDetails,
   insightError,
+  timeScale,
   match,
 }) => {
   const executionID = getMatchParamByName(match, idAttr);
   const noInsights = !insightDetails;
   useEffect(() => {
+    const execReq = executionInsightsRequestFromTimeScale(timeScale);
     if (noInsights) {
       // Only refresh if we have no data (e.g. refresh the page)
       refreshTransactionInsightDetails({
         id: executionID,
+        start: execReq.start,
+        end: execReq.end,
       });
     }
-  }, [executionID, refreshTransactionInsightDetails, noInsights]);
+  }, [executionID, refreshTransactionInsightDetails, noInsights, timeScale]);
 
   const prevPage = (): void => history.goBack();
 
@@ -95,7 +101,7 @@ export const TransactionInsightDetails: React.FC<
       </div>
       <section>
         <Loading
-          loading={insightDetails == null}
+          loading={!insightDetails || insightDetails === null}
           page={"Transaction Insight details"}
           error={insightError}
           renderError={() => InsightsError()}

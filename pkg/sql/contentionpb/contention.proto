@@ -13,7 +13,6 @@ package cockroach.sql.contentionpb;
 option go_package = "contentionpb";
 
 import "roachpb/api.proto";
-
 import "gogoproto/gogo.proto";
 import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";
@@ -167,8 +166,8 @@ message ExtendedContentionEvent {
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.TransactionFingerprintID"
   ];
 
-   google.protobuf.Timestamp collection_ts = 5 [
-     (gogoproto.nullable) = false,
-     (gogoproto.stdtime) = true
-   ];
+  google.protobuf.Timestamp collection_ts = 5 [
+    (gogoproto.nullable) = false,
+    (gogoproto.stdtime) = true
+  ];
 }

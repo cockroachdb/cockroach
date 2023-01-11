@@ -816,7 +816,7 @@ func (s *systemStatusServer) Allocator(
 						return true // continue.
 					}
 					var allocatorSpans tracingpb.Recording
-					allocatorSpans, err = store.AllocatorDryRun(ctx, rep)
+					allocatorSpans, err = store.ReplicateQueueDryRun(ctx, rep)
 					if err != nil {
 						return false // break and bubble up the error.
 					}
@@ -841,7 +841,7 @@ func (s *systemStatusServer) Allocator(
 			if !rep.OwnsValidLease(ctx, store.Clock().NowAsClockTimestamp()) {
 				continue
 			}
-			allocatorSpans, err := store.AllocatorDryRun(ctx, rep)
+			allocatorSpans, err := store.ReplicateQueueDryRun(ctx, rep)
 			if err != nil {
 				return err
 			}
