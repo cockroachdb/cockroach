@@ -1,0 +1,10 @@
+echo
+----
+Select(nothing):
+Select(RangeID-unreplicated):
+  /Local/RangeID/123/{u""-v""}
+Select(RangeID-replicated):
+  /Local/RangeID/123/{r""-s""}
+Select(RangeID-replicated, RangeID-unreplicated):
+  /Local/RangeID/123/{r""-s""}
+  /Local/RangeID/123/{u""-v""}
