@@ -12290,9 +12290,9 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 				return sendWrappedWithErr(roachpb.Header{}, &pt)
 			},
 			expTxn: func(txn *roachpb.Transaction, pushTs hlc.Timestamp) roachpb.TransactionRecord {
-				record := txn.AsRecord()
+				record := txnWithStatus(roachpb.ABORTED)(txn, pushTs)
 				record.Epoch = txn.Epoch + 1
-				record.WriteTimestamp.Forward(pushTs)
+				record.WriteTimestamp = record.WriteTimestamp.Add(0, 1)
 				record.Priority = pusher.Priority - 1
 				return record
 			},
