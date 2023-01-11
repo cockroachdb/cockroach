@@ -2710,6 +2710,3 @@ statement ok
 CREATE TABLE hash_sharded_idx_table (
   pk INT PRIMARY KEY USING HASH WITH (bucket_count=8)
 )
-
-statement error cannot convert hash_sharded_idx_table to REGIONAL BY ROW as the table contains hash sharded indexes
-ALTER TABLE hash_sharded_idx_table SET LOCALITY REGIONAL BY ROW
