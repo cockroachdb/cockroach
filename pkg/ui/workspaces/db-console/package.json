@@ -20,7 +20,7 @@
     "@cockroachlabs/design-tokens": "0.4.5",
     "@cockroachlabs/eslint-plugin-crdb": "link:../eslint-plugin-crdb",
     "@cockroachlabs/icons": "0.5.2",
-    "@cockroachlabs/ui-components": "0.2.20",
+    "@cockroachlabs/ui-components": "0.4.2",
     "analytics-node": "^3.5.0",
     "antd": "^3.25.2",
     "babel-polyfill": "^6.26.0",
