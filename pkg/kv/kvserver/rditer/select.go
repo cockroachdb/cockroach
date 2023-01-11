@@ -31,9 +31,8 @@ type SelectOpts struct {
 }
 
 // A Selection is a collection of Spans describing all or a part of a Replica's
-// keyspace.
-// Which fields are populated depends on the SelectOpts passed to
-// Select.
+// keyspace, depending on the supplied SelectOpts. The resulting Spans are ordered
+// in strictly ascending lexicographical (`bytes.Compare`) order.
 type Selection struct {
 	// The following slices may share backing memory.
 	statemachine []roachpb.Span
