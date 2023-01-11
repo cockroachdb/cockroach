@@ -227,6 +227,12 @@ SELECT typname from pg_type where oid='typ'::regtype
 ----
 typ
 
+## Make sure that regtype classes don't error on missing OID.
+query O
+SELECT 293874923::regtype
+----
+293874923
+
 ## Regression for #16767 - ensure regclass casts use normalized table names
 
 statement ok

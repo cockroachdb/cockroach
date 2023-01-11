@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -977,6 +978,9 @@ func performIntToOidCast(
 		} else if types.IsOIDUserDefinedType(o) {
 			typ, err := res.ResolveTypeByOID(ctx, o)
 			if err != nil {
+				if pgerror.GetPGCode(err) == pgcode.UndefinedObject {
+					return tree.NewDOidWithType(o, t), nil
+				}
 				return nil, err
 			}
 			name = typ.PGName()
@@ -998,20 +1002,42 @@ func performIntToOidCast(
 		}
 		return tree.NewDOidWithTypeAndName(o, t, name), nil
 
+	case oid.T_regclass:
+		if v == 0 {
+			return tree.WrapAsZeroOid(t), nil
+		}
+		desc, err := res.LookupTableByID(ctx, descpb.ID(o))
+		if err != nil {
+			if pgerror.GetPGCode(err) == pgcode.UndefinedTable {
+				// If we couldn't find a match for the input id, unfortunately we need
+				// to scan the full pg_class table, since it contains indexes - and we
+				// don't reserve OIDs for indexes today, we simply construct them via
+				// a hash function.
+				return defaultPerformIntFromCast(ctx, res, t, o)
+			}
+			return nil, err
+		}
+		return tree.NewDOidWithTypeAndName(o, t, desc.GetName()), nil
+
 	default:
 		if v == 0 {
 			return tree.WrapAsZeroOid(t), nil
 		}
-
-		dOid, errSafeToIgnore, err := res.ResolveOIDFromOID(ctx, t, tree.NewDOid(o))
-		if err != nil {
-			if !errSafeToIgnore {
-				return nil, err
-			}
-			dOid = tree.NewDOidWithType(o, t)
-		}
-		return dOid, nil
+		return defaultPerformIntFromCast(ctx, res, t, o)
 	}
+}
+
+func defaultPerformIntFromCast(
+	ctx context.Context, res Planner, t *types.T, o oid.Oid,
+) (tree.Datum, error) {
+	dOid, errSafeToIgnore, err := res.ResolveOIDFromOID(ctx, t, tree.NewDOid(o))
+	if err != nil {
+		if !errSafeToIgnore {
+			return nil, err
+		}
+		dOid = tree.NewDOidWithType(o, t)
+	}
+	return dOid, nil
 }
 
 func roundDecimalToInt(d *apd.Decimal) (int64, error) {
