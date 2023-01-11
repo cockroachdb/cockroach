@@ -11,4 +11,5 @@
 export enum StatementViewType {
   ACTIVE = "active",
   FINGERPRINTS = "fingerprints",
+  USING_INDEX = "using_index",
 }

@@ -20,12 +20,16 @@ const withData: IndexDetailsPageProps = {
   databaseName: randomName(),
   tableName: randomName(),
   indexName: randomName(),
+  isTenant: false,
+  nodeRegions: {},
   details: {
     loading: false,
     loaded: true,
     createStatement: `
       CREATE UNIQUE INDEX "primary" ON system.public.database_role_settings USING btree (database_id ASC, role_name ASC)
     `,
+    tableID: "1",
+    indexID: "1",
     totalReads: 0,
     lastRead: moment("2021-10-21T22:00:00Z"),
     lastReset: moment("2021-12-02T07:12:00Z"),
