@@ -58,10 +58,7 @@ type ReplicaMVCCDataIterator struct {
 // sorted order.
 func makeAllKeySpans(d *roachpb.RangeDescriptor) []roachpb.Span {
 	return Select(d.RangeID, SelectOpts{
-		ReplicatedBySpan: roachpb.RSpan{
-			Key:    d.StartKey,
-			EndKey: d.EndKey,
-		},
+		ReplicatedBySpan:      d.RSpan(),
 		ReplicatedByRangeID:   true,
 		UnreplicatedByRangeID: true,
 	})
@@ -76,10 +73,7 @@ func makeAllKeySpans(d *roachpb.RangeDescriptor) []roachpb.Span {
 // 4. User key span.
 func MakeReplicatedKeySpans(d *roachpb.RangeDescriptor) []roachpb.Span {
 	return Select(d.RangeID, SelectOpts{
-		ReplicatedBySpan: roachpb.RSpan{
-			Key:    d.StartKey,
-			EndKey: d.EndKey,
-		},
+		ReplicatedBySpan:    d.RSpan(),
 		ReplicatedByRangeID: true,
 	})
 }
