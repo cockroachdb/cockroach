@@ -409,15 +409,6 @@ func (s *Store) addToReplicasByRangeIDLocked(repl *Replica) error {
 		repl.RangeID, repl); loaded && existing != repl {
 		return errors.Errorf("%s: replica already exists", repl)
 	}
-	// Check whether the replica is unquiesced but not in the map. This
-	// can happen during splits and merges, where the uninitialized (but
-	// also unquiesced) replica is removed from the unquiesced replica
-	// map in advance of this method being called.
-	if !repl.mu.quiescent {
-		s.unquiescedReplicas.Lock()
-		s.unquiescedReplicas.m[repl.RangeID] = struct{}{}
-		s.unquiescedReplicas.Unlock()
-	}
 	return nil
 }
 
