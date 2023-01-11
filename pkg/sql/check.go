@@ -533,7 +533,7 @@ func (p *planner) IsConstraintActive(
 	if err != nil {
 		return false, err
 	}
-	constraint, _ := tableDesc.FindConstraintWithName(constraintName)
+	constraint := catalog.FindConstraintByName(tableDesc, constraintName)
 	return constraint != nil && constraint.IsEnforced(), nil
 }
 

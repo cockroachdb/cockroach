@@ -419,7 +419,7 @@ func createConstraintCheckOperations(
 	// constraintNames.
 	if constraintNames != nil {
 		for _, constraintName := range constraintNames {
-			c, _ := tableDesc.FindConstraintWithName(string(constraintName))
+			c := catalog.FindConstraintByName(tableDesc, string(constraintName))
 			if c == nil {
 				return nil, pgerror.Newf(pgcode.UndefinedObject,
 					"constraint %q of relation %q does not exist", constraintName, tableDesc.GetName())

@@ -328,8 +328,7 @@ func (desc *immutable) validateInboundTableRef(
 	}
 
 	for _, cstID := range by.ConstraintIDs {
-		_, err := backRefTbl.FindConstraintWithID(cstID)
-		if err != nil {
+		if catalog.FindConstraintByID(backRefTbl, cstID) == nil {
 			return errors.AssertionFailedf("depended-on-by relation %q (%d) does not have a constraint with ID %d",
 				backRefTbl.GetName(), by.ID, cstID)
 		}

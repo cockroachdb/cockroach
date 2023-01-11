@@ -756,12 +756,11 @@ func ResolveUniqueWithoutIndexConstraint(
 		constraintName = tabledesc.GenerateUniqueName(
 			fmt.Sprintf("unique_%s", strings.Join(colNames, "_")),
 			func(p string) bool {
-				c, _ := tbl.FindConstraintWithName(p)
-				return c != nil
+				return catalog.FindConstraintByName(tbl, p) != nil
 			},
 		)
 	} else {
-		if c, _ := tbl.FindConstraintWithName(constraintName); c != nil {
+		if c := catalog.FindConstraintByName(tbl, constraintName); c != nil {
 			return pgerror.Newf(pgcode.DuplicateObject, "duplicate constraint name: %q", constraintName)
 		}
 	}
@@ -963,12 +962,11 @@ func ResolveFK(
 		constraintName = tabledesc.GenerateUniqueName(
 			tabledesc.ForeignKeyConstraintName(tbl.GetName(), d.FromCols.ToStrings()),
 			func(p string) bool {
-				c, _ := tbl.FindConstraintWithName(p)
-				return c != nil
+				return catalog.FindConstraintByName(tbl, p) != nil
 			},
 		)
 	} else {
-		if c, _ := tbl.FindConstraintWithName(constraintName); c != nil {
+		if c := catalog.FindConstraintByName(tbl, constraintName); c != nil {
 			return pgerror.Newf(pgcode.DuplicateObject, "duplicate constraint name: %q", constraintName)
 		}
 	}
@@ -1041,7 +1039,7 @@ func ResolveFK(
 		tbl.AddForeignKeyMutation(&ref, descpb.DescriptorMutation_ADD)
 	}
 
-	c, err := tbl.FindConstraintWithID(ref.ConstraintID)
+	c, err := catalog.MustFindConstraintByID(tbl, ref.ConstraintID)
 	if err != nil {
 		return errors.HandleAsAssertionFailure(err)
 	}

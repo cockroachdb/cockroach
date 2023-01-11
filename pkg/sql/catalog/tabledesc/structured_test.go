@@ -661,13 +661,13 @@ func TestUnvalidateConstraints(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	before, _ := desc.FindConstraintWithName("fk")
+	before := catalog.FindConstraintByName(desc, "fk")
 	if before == nil || !before.IsConstraintValidated() {
 		t.Fatalf("expected to find a validated constraint fk before, found %v", before)
 	}
 	desc.InvalidateFKConstraints()
 
-	after, _ := desc.FindConstraintWithName("fk")
+	after := catalog.FindConstraintByName(desc, "fk")
 	if after == nil || before.IsConstraintValidated() {
 		t.Fatalf("expected to find an unvalidated constraint fk before, found %v", after)
 	}
