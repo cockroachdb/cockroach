@@ -599,13 +599,9 @@ func (c *transientCluster) createAndAddNode(
 		// The latency map will be populated after all servers have
 		// started listening on RPC, and before they proceed with their
 		// startup routine.
-		rpcKnobs := rpc.ContextTestingKnobs{
+		serverKnobs.ContextTestingKnobs = rpc.ContextTestingKnobs{
 			InjectedLatencyOracle:  regionlatency.MakeAddrMap(),
 			InjectedLatencyEnabled: c.latencyEnabled.Get,
-		}
-		serverKnobs.ContextTestingKnobs = rpcKnobs
-		args.SecondaryTenantKnobs.Server = &server.TestingKnobs{
-			ContextTestingKnobs: rpcKnobs,
 		}
 	}
 
