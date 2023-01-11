@@ -304,6 +304,7 @@ func (f *fullReconciler) fetchExistingSpanConfigs(
 	ctx context.Context,
 ) (*spanconfigstore.Store, error) {
 	var targets []spanconfig.Target
+	var fallback roachpb.SpanConfig
 	if f.codec.ForSystemTenant() {
 		// The system tenant governs all system keys (meta, liveness, timeseries
 		// ranges, etc.) and system tenant tables.
@@ -337,6 +338,8 @@ func (f *fullReconciler) fetchExistingSpanConfigs(
 			sp := targets[1].GetSpan()
 			targets[1] = spanconfig.MakeTargetFromSpan(roachpb.Span{Key: sp.Key, EndKey: keys.ScratchRangeMax})
 		}
+
+		fallback.RangefeedEnabled = true
 	} else {
 		// Secondary tenants govern everything prefixed by their tenant ID.
 		tenPrefix := keys.MakeTenantPrefix(f.tenID)
@@ -349,7 +352,7 @@ func (f *fullReconciler) fetchExistingSpanConfigs(
 		targets = append(targets,
 			spanconfig.MakeTargetFromSystemTarget(spanconfig.MakeAllTenantKeyspaceTargetsSet(f.tenID)))
 	}
-	store := spanconfigstore.New(roachpb.SpanConfig{}, f.settings, f.knobs)
+	store := spanconfigstore.New(fallback, f.settings, f.knobs)
 	{
 		// Fully populate the store with KVAccessor contents.
 		records, err := f.kvAccessor.GetSpanConfigRecords(ctx, targets)

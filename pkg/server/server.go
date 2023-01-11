@@ -680,8 +680,13 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 			))
 		},
 	)
+
+	// Ensure range feeds are enabled by default for system ranges.
+	defaultSpanConfig := cfg.DefaultZoneConfig.AsSpanConfig()
+	defaultSpanConfig.RangefeedEnabled = true
+
 	storeCfg := kvserver.StoreConfig{
-		DefaultSpanConfig:        cfg.DefaultZoneConfig.AsSpanConfig(),
+		DefaultSpanConfig:        defaultSpanConfig,
 		Settings:                 st,
 		AmbientCtx:               cfg.AmbientCtx,
 		RaftConfig:               cfg.RaftConfig,
