@@ -1134,6 +1134,7 @@ unreserved_keyword ::=
 	| 'INSERT'
 	| 'INTO_DB'
 	| 'INVERTED'
+	| 'INVISIBLE'
 	| 'ISOLATION'
 	| 'INVOKER'
 	| 'JOB'
@@ -2375,6 +2376,7 @@ opt_with_storage_parameter_list ::=
 
 opt_index_visible ::=
 	'NOT' 'VISIBLE'
+	| 'INVISIBLE'
 	| 'VISIBLE'
 	| 
 
@@ -2758,6 +2760,7 @@ alter_index_cmds ::=
 
 alter_index_visible ::=
 	'NOT' 'VISIBLE'
+	| 'INVISIBLE'
 	| 'VISIBLE'
 
 sequence_option_list ::=

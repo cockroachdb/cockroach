@@ -1519,3 +1519,27 @@ DROP TABLE child
 
 statement ok
 DROP TABLE parent
+
+# Allow creating a not visible index with the alias INVISIBLE.
+statement ok
+CREATE TABLE t (p INT PRIMARY KEY, k INT, v STRING, INDEX p_idx (p) INVISIBLE)
+
+statement ok
+CREATE INDEX k_idx on t(k) INVISIBLE
+
+statement ok
+CREATE INDEX v_idx on t(k);
+ALTER INDEX v_idx INVISIBLE
+
+query TTBITTBBB colnames
+SELECT * FROM [SHOW INDEX FROM t]
+----
+table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit  visible
+t           t_pkey      false       1             p            ASC        false    false     true
+t           t_pkey      false       2             k            N/A        true     false     true
+t           t_pkey      false       3             v            N/A        true     false     true
+t           p_idx       true        1             p            ASC        false    false     false
+t           k_idx       true        1             k            ASC        false    false     false
+t           k_idx       true        2             p            ASC        false    true      false
+t           v_idx       true        1             k            ASC        false    false     false
+t           v_idx       true        2             p            ASC        false    true      false

@@ -946,7 +946,7 @@ func (u *sqlSymUnion) functionObjs() tree.FuncObjs {
 %token <str> UPDATE UPSERT UNSET UNTIL USE USER USERS USING UUID
 
 %token <str> VALID VALIDATE VALUE VALUES VARBIT VARCHAR VARIADIC VERIFY_BACKUP_TABLE_DATA VIEW VARYING VIEWACTIVITY VIEWACTIVITYREDACTED VIEWDEBUG
-%token <str> VIEWCLUSTERMETADATA VIEWCLUSTERSETTING VIRTUAL VISIBLE VOLATILE VOTERS
+%token <str> VIEWCLUSTERMETADATA VIEWCLUSTERSETTING VIRTUAL VISIBLE INVISIBLE VOLATILE VOTERS
 
 %token <str> WHEN WHERE WINDOW WITH WITHIN WITHOUT WORK WRITE
 
@@ -2139,7 +2139,7 @@ alter_range_stmt:
 //   ALTER INDEX ... UNSPLIT ALL
 //   ALTER INDEX ... SCATTER [ FROM ( <exprs...> ) TO ( <exprs...> ) ]
 //   ALTER INDEX ... RELOCATE [ LEASE | VOTERS | NONVOTERS ] <selectclause>
-//   ALTER INDEX ... [VISIBLE | NOT VISIBLE]
+//   ALTER INDEX ... [VISIBLE | NOT VISIBLE | INVISIBLE]
 //
 // Zone configurations:
 //   DISCARD
@@ -2301,6 +2301,10 @@ alter_index_visible_stmt:
 
 alter_index_visible:
   NOT VISIBLE
+  {
+    $$.val = true
+  }
+| INVISIBLE
   {
     $$.val = true
   }
@@ -9792,6 +9796,10 @@ opt_index_visible:
   {
     $$.val = true
   }
+| INVISIBLE
+  {
+    $$.val = true
+  }
 | VISIBLE
   {
     $$.val = false
@@ -15332,6 +15340,7 @@ unreserved_keyword:
 | INSERT
 | INTO_DB
 | INVERTED
+| INVISIBLE
 | ISOLATION
 | INVOKER
 | JOB

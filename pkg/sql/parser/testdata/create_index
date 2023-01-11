@@ -398,6 +398,14 @@ CREATE INDEX a ON b.c (d) NOT VISIBLE -- literals removed
 CREATE INDEX _ ON _._ (_) NOT VISIBLE -- identifiers removed
 
 parse
+CREATE INDEX a ON b (c) INVISIBLE
+----
+CREATE INDEX a ON b (c) NOT VISIBLE -- normalized!
+CREATE INDEX a ON b (c) NOT VISIBLE -- fully parenthesized
+CREATE INDEX a ON b (c) NOT VISIBLE -- literals removed
+CREATE INDEX _ ON _ (_) NOT VISIBLE -- identifiers removed
+
+parse
 CREATE INDEX ON a ((ARRAY[a, b])) STORING (c, d) NOT VISIBLE
 ----
 CREATE INDEX ON a ((ARRAY[a, b])) STORING (c, d) NOT VISIBLE
