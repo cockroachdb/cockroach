@@ -49,7 +49,7 @@ func Select(rangeID roachpb.RangeID, opts SelectOpts) []roachpb.Span {
 	if in := opts.ReplicatedBySpan; !in.Equal(roachpb.RSpan{}) {
 		sl = append(sl, makeRangeLocalKeySpan(in))
 		{
-			ls := makeRangeLockTableKeySpans(in)
+			ls := makeRangeLockTableKeySpans(in.KeySpan())
 			sl = append(sl, ls[:]...)
 		}
 		sl = append(sl, in.KeySpan().AsRawSpanWithNoLocals())
