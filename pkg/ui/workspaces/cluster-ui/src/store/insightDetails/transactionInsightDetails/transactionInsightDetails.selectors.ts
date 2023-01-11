@@ -16,16 +16,16 @@ const selectTransactionInsightDetailsState = createSelector(
   (state: AppState) => state.adminUI.transactionInsightDetails.cachedData,
   selectID,
   (cachedTxnInsightDetails, execId) => {
-    return cachedTxnInsightDetails.get(execId);
+    return cachedTxnInsightDetails[execId];
   },
 );
 
 export const selectTransactionInsightDetails = createSelector(
   selectTransactionInsightDetailsState,
-  state => state.data,
+  state => state?.data,
 );
 
 export const selectTransactionInsightDetailsError = createSelector(
   selectTransactionInsightDetailsState,
-  state => state.lastError,
+  state => state?.lastError,
 );
