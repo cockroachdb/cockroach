@@ -1894,8 +1894,8 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		// (Store).mu.
 		s.mu.Lock()
 		// TODO(pavelkalinnikov): hide these in Store's replica create functions.
-		// TODO(pavelkalinnikov): addReplicaToRangeMapLocked needs a locked repl.mu.
-		err = s.addReplicaToRangeMapLocked(rep)
+		// TODO(pavelkalinnikov): addToReplicasByRangeIDLocked needs a locked repl.mu.
+		err = s.addToReplicasByRangeIDLocked(rep)
 		if err == nil {
 			err = s.addToReplicasByKeyLocked(rep)
 		}
