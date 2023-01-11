@@ -485,6 +485,23 @@ func TestCopyTrace(t *testing.T) {
 				}
 				require.NoError(t, txn.Rollback())
 			})
+
+			t.Run("error during insert phase of copy", func(t *testing.T) {
+				db := serverutils.OpenDBConn(
+					t, s.ServingSQLAddr(), params.UseDatabase, params.Insecure, s.Stopper())
+				txn, err := db.Begin()
+				require.NoError(t, err)
+				{
+					stmt, err := txn.Prepare(pq.CopyIn("t", "i"))
+					require.NoError(t, err)
+					_, err = stmt.Exec("2")
+					require.NoError(t, err)
+					err = stmt.Close()
+					require.Error(t, err)
+					require.ErrorContains(t, err, `duplicate key value violates unique constraint "t_pkey"`)
+				}
+				require.NoError(t, txn.Rollback())
+			})
 		})
 	}
 }
