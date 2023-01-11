@@ -60,7 +60,7 @@ func MakeDeleter(
 	} else {
 		maybeAddCol := func(colID descpb.ColumnID) error {
 			if _, ok := fetchColIDtoRowIndex.Get(colID); !ok {
-				col, err := tableDesc.FindColumnWithID(colID)
+				col, err := catalog.MustFindColumnByID(tableDesc, colID)
 				if err != nil {
 					return err
 				}

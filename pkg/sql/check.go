@@ -108,7 +108,7 @@ func matchFullUnacceptableKeyQuery(
 
 	returnedCols := srcCols
 	for i := 0; i < nCols; i++ {
-		col, err := srcTbl.FindColumnWithID(fk.OriginColumnIDs[i])
+		col, err := catalog.MustFindColumnByID(srcTbl, fk.OriginColumnIDs[i])
 		if err != nil {
 			return "", nil, err
 		}
@@ -127,7 +127,7 @@ func matchFullUnacceptableKeyQuery(
 			}
 		}
 		if !alreadyPresent {
-			col, err := tabledesc.FindPublicColumnWithID(srcTbl, id)
+			col, err := catalog.MustFindPublicColumnByID(srcTbl, id)
 			if err != nil {
 				return "", nil, err
 			}
@@ -200,7 +200,7 @@ func nonMatchingRowQuery(
 			}
 		}
 		if !found {
-			column, err := tabledesc.FindPublicColumnWithID(srcTbl, pkColID)
+			column, err := catalog.MustFindPublicColumnByID(srcTbl, pkColID)
 			if err != nil {
 				return "", nil, err
 			}

@@ -1080,7 +1080,7 @@ func EncodePrimaryIndex(
 			// We want to include this column if its value is non-null or
 			// we were requested to include all of the columns.
 			if datum != tree.DNull || includeEmpty {
-				col, err := tableDesc.FindColumnWithID(family.DefaultColumnID)
+				col, err := catalog.MustFindColumnByID(tableDesc, family.DefaultColumnID)
 				if err != nil {
 					return err
 				}

@@ -802,7 +802,7 @@ func (t *typeSchemaChanger) canRemoveEnumValue(
 			}
 			keyColumns := make([]catalog.Column, 0, idx.NumKeyColumns())
 			for i := 0; i < idx.NumKeyColumns(); i++ {
-				col, err := desc.FindColumnWithID(idx.GetKeyColumnID(i))
+				col, err := catalog.MustFindColumnByID(desc, idx.GetKeyColumnID(i))
 				if err != nil {
 					return errors.WithAssertionFailure(err)
 				}

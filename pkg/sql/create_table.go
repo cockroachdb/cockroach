@@ -919,7 +919,7 @@ func ResolveFK(
 		}
 	}
 
-	referencedCols, err := tabledesc.FindPublicColumnsWithNames(target, referencedColNames)
+	referencedCols, err := catalog.MustFindPublicColumnsByNameList(target, referencedColNames)
 	if err != nil {
 		return err
 	}
@@ -1044,7 +1044,7 @@ func ResolveFK(
 		return errors.HandleAsAssertionFailure(err)
 	}
 	// Ensure that there is a unique constraint on the referenced side to use.
-	_, err = tabledesc.FindFKReferencedUniqueConstraint(target, c.(catalog.ForeignKeyConstraint))
+	_, err = catalog.FindFKReferencedUniqueConstraint(target, c.(catalog.ForeignKeyConstraint))
 	return err
 }
 
@@ -1076,7 +1076,9 @@ func CreatePartitioning(
 		ctx,
 		st,
 		evalCtx,
-		tableDesc.FindColumnWithName,
+		func(name tree.Name) (catalog.Column, error) {
+			return catalog.MustFindColumnByTreeName(tableDesc, name)
+		},
 		int(indexDesc.Partitioning.NumImplicitColumns),
 		indexDesc.KeyColumnNames,
 		partBy,
@@ -1726,7 +1728,7 @@ func NewTableDesc(
 				if err != nil {
 					return nil, err
 				}
-				col, err := desc.FindColumnWithName(d.Name)
+				col, err := catalog.MustFindColumnByTreeName(&desc, d.Name)
 				if err != nil {
 					return nil, err
 				}
@@ -1787,7 +1789,7 @@ func NewTableDesc(
 				return nil, err
 			}
 			if d.Inverted {
-				column, err := desc.FindColumnWithName(tree.Name(idx.InvertedColumnName()))
+				column, err := catalog.MustFindColumnByName(&desc, idx.InvertedColumnName())
 				if err != nil {
 					return nil, err
 				}
@@ -2600,7 +2602,7 @@ func replaceLikeTableOpts(n *tree.CreateTable, params runParams) (tree.TableDefs
 						Column:    tree.Name(name),
 						Direction: tree.Ascending,
 					}
-					col, err := td.FindColumnWithID(idx.GetKeyColumnID(j))
+					col, err := catalog.MustFindColumnByID(td, idx.GetKeyColumnID(j))
 					if err != nil {
 						return nil, err
 					}
@@ -2731,7 +2733,7 @@ func setSequenceOwner(
 		return errors.Errorf("%s is not a sequence", seqDesc.Name)
 	}
 
-	col, err := table.FindColumnWithName(colName)
+	col, err := catalog.MustFindColumnByTreeName(table, colName)
 	if err != nil {
 		return err
 	}
@@ -2814,7 +2816,7 @@ func isImplicitlyCreatedBySystem(td *tabledesc.Mutable, c *descpb.ColumnDescript
 	if td.IsPrimaryIndexDefaultRowID() && c.ID == td.GetPrimaryIndex().GetKeyColumnID(0) {
 		return true, nil
 	}
-	col, err := td.FindColumnWithID(c.ID)
+	col, err := catalog.MustFindColumnByID(td, c.ID)
 	if err != nil {
 		return false, err
 	}

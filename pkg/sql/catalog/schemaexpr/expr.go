@@ -140,7 +140,7 @@ func DequalifyAndValidateExpr(
 		return colinfo.ResultColumnsFromColumns(desc.GetID(), desc.NonDropColumns())
 	}
 	columnLookupByNameFn := func(columnName tree.Name) (exists bool, accessible bool, id catid.ColumnID, typ *types.T) {
-		col, err := desc.FindColumnWithName(columnName)
+		col, err := catalog.MustFindColumnByTreeName(desc, columnName)
 		if err != nil || col.Dropped() {
 			return false, false, 0, nil
 		}
@@ -173,7 +173,7 @@ func ExtractColumnIDs(
 			return true, expr, nil
 		}
 
-		col, err := desc.FindColumnWithName(c.ColumnName)
+		col, err := catalog.MustFindColumnByTreeName(desc, c.ColumnName)
 		if err != nil {
 			return false, nil, err
 		}
@@ -210,8 +210,7 @@ func HasValidColumnReferences(desc catalog.TableDescriptor, rootExpr tree.Expr) 
 			return true, expr, nil
 		}
 
-		_, err = desc.FindColumnWithName(c.ColumnName)
-		if err != nil {
+		if catalog.FindColumnByTreeName(desc, c.ColumnName) == nil {
 			return false, expr, returnFalsePseudoError
 		}
 

@@ -247,7 +247,7 @@ func DecodeRowInfo(
 	}
 	cols := make([]catalog.Column, len(colIDs))
 	for i, colID := range colIDs {
-		col, err := tableDesc.FindColumnWithID(colID)
+		col, err := catalog.MustFindColumnByID(tableDesc, colID)
 		if err != nil {
 			return nil, nil, nil, err
 		}

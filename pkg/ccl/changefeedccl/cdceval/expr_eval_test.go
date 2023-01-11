@@ -730,7 +730,7 @@ func randEncDatumPrimaryFamily(
 	family, err := catalog.MustFindFamilyByID(desc, 0 /* id */)
 	require.NoError(t, err)
 	for _, colID := range family.ColumnIDs {
-		col, err := desc.FindColumnWithID(colID)
+		col, err := catalog.MustFindColumnByID(desc, colID)
 		require.NoError(t, err)
 		row = append(row, rowenc.EncDatum{Datum: randgen.RandDatum(rng, col.GetType(), col.IsNullable())})
 	}

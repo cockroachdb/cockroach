@@ -1569,7 +1569,7 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 						// If we are adding a new REGIONAL BY ROW column, after backfilling, the
 						// default expression should be switched to utilize to gateway_region.
 						if colID := lcSwap.NewRegionalByRowColumnID; colID != nil {
-							col, err := scTable.FindColumnWithID(*colID)
+							col, err := catalog.MustFindColumnByID(scTable, *colID)
 							if err != nil {
 								return err
 							}
