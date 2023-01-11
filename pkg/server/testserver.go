@@ -49,6 +49,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/ts"
@@ -60,6 +61,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	addrutil "github.com/cockroachdb/cockroach/pkg/util/netutil/addr"
+	"github.com/cockroachdb/cockroach/pkg/util/rangedesc"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -790,6 +792,31 @@ func (t *TestTenant) Codec() keys.SQLCodec {
 // Tracer is part of the TestTenantInterface.
 func (t *TestTenant) Tracer() *tracing.Tracer {
 	return t.SQLServer.ambientCtx.Tracer
+}
+
+// WaitForTenantEndKeySplit is part of the TestTenantInterface.
+func (t *TestTenant) WaitForTenantEndKeySplit(ctx context.Context) error {
+	// Wait until the tenant end key split happens.
+	return testutils.SucceedsWithinError(func() error {
+		factory := t.RangeDescIteratorFactory().(rangedesc.IteratorFactory)
+
+		iterator, err := factory.NewIterator(ctx, t.Codec().TenantSpan())
+		if err != nil {
+			return err
+		}
+		if !iterator.Valid() {
+			return errors.New("range iterator has no ranges")
+		}
+
+		for iterator.Valid() {
+			rangeDesc := iterator.CurRangeDescriptor()
+			if rangeDesc.EndKey.Compare(roachpb.RKeyMax) == 0 {
+				return errors.Newf("range ID %d end key not split", rangeDesc.RangeID)
+			}
+			iterator.Next()
+		}
+		return nil
+	}, 10*time.Second)
 }
 
 // StartSharedProcessTenant is part of TestServerInterface.
@@ -1575,6 +1602,12 @@ func (ts *TestServer) TracerI() interface{} {
 // Tracer is like TracerI(), but returns the actual type.
 func (ts *TestServer) Tracer() *tracing.Tracer {
 	return ts.node.storeCfg.AmbientCtx.Tracer
+}
+
+// WaitForTenantEndKeySplit is part of the TestTenantInterface.
+func (ts *TestServer) WaitForTenantEndKeySplit(context.Context) error {
+	// Does not apply to system tenant.
+	return nil
 }
 
 // ForceTableGC is part of TestServerInterface.
