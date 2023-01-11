@@ -900,6 +900,20 @@ type MVCCGetOptions struct {
 	// or not. It is usually set by read-only requests that have resolved their
 	// conflicts before they begin their MVCC scan.
 	DontInterleaveIntents bool
+	// MaxKeys is the maximum number of kv pairs returned from this operation.
+	// The non-negative value represents an unbounded Get. The value -1 returns
+	// no keys in the result and a ResumeSpan equal to the request span is
+	// returned.
+	MaxKeys int64
+	// TargetBytes is a byte threshold to limit the amount of data pulled into
+	// memory during a Get operation. The zero value indicates no limit. The
+	// value -1 returns no keys in the result. A positive value represents an
+	// unbounded Get unless AllowEmpty is set. If an empty result is returned,
+	// then a ResumeSpan equal to the request span is returned.
+	TargetBytes int64
+	// AllowEmpty will return an empty result if the request key exceeds the
+	// TargetBytes limit.
+	AllowEmpty bool
 }
 
 // MVCCGetResult bundles return values for the MVCCGet family of functions.
@@ -912,6 +926,13 @@ type MVCCGetResult struct {
 	// consistent mode, an intent will generate a WriteIntentError with the
 	// intent embedded within and the intent parameter will be nil.
 	Intent *roachpb.Intent
+	// See the documentation for roachpb.ResponseHeader for information on
+	// these parameters.
+	ResumeSpan      *roachpb.Span
+	ResumeReason    roachpb.ResumeReason
+	ResumeNextBytes int64
+	NumKeys         int64
+	NumBytes        int64
 }
 
 func (opts *MVCCGetOptions) validate() error {
@@ -1015,6 +1036,20 @@ func MVCCGet(
 func MVCCGetWithValueHeader(
 	ctx context.Context, reader Reader, key roachpb.Key, timestamp hlc.Timestamp, opts MVCCGetOptions,
 ) (MVCCGetResult, enginepb.MVCCValueHeader, error) {
+	var result MVCCGetResult
+	if opts.MaxKeys < 0 || opts.TargetBytes < 0 {
+		// Receipt of a GetRequest with negative MaxKeys or TargetBytes indicates
+		// that the request was part of a batch that has already exhausted its
+		// limit, which means that we should *not* serve the request and return a
+		// ResumeSpan for this GetRequest.
+		result.ResumeSpan = &roachpb.Span{Key: key}
+		if opts.MaxKeys < 0 {
+			result.ResumeReason = roachpb.RESUME_KEY_LIMIT
+		} else if opts.TargetBytes < 0 {
+			result.ResumeReason = roachpb.RESUME_BYTE_LIMIT
+		}
+		return result, enginepb.MVCCValueHeader{}, nil
+	}
 	iter := newMVCCIterator(
 		reader, timestamp, false /* rangeKeyMasking */, opts.DontInterleaveIntents, IterOptions{
 			KeyTypes: IterKeyTypePointsAndRanges,
@@ -1023,10 +1058,23 @@ func MVCCGetWithValueHeader(
 	)
 	defer iter.Close()
 	value, intent, vh, err := mvccGetWithValueHeader(ctx, iter, key, timestamp, opts)
-	return MVCCGetResult{
-		Value:  value.ToPointer(),
-		Intent: intent,
-	}, vh, err
+	val := value.ToPointer()
+	if err == nil && val != nil {
+		// NB: This calculation is different from Scan, since Scan responses include
+		// the key/value pair while Get only includes the value.
+		numBytes := int64(len(val.RawBytes))
+		if opts.TargetBytes > 0 && opts.AllowEmpty && numBytes > opts.TargetBytes {
+			result.ResumeSpan = &roachpb.Span{Key: key}
+			result.ResumeReason = roachpb.RESUME_BYTE_LIMIT
+			result.ResumeNextBytes = numBytes
+			return result, enginepb.MVCCValueHeader{}, nil
+		}
+		result.NumKeys = 1
+		result.NumBytes = numBytes
+	}
+	result.Value = val
+	result.Intent = intent
+	return result, vh, err
 }
 
 // gcassert:inline

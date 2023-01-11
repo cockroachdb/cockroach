@@ -32,23 +32,6 @@ func Get(
 	h := cArgs.Header
 	reply := resp.(*roachpb.GetResponse)
 
-	if h.MaxSpanRequestKeys < 0 || h.TargetBytes < 0 {
-		// Receipt of a GetRequest with negative MaxSpanRequestKeys or TargetBytes
-		// indicates that the request was part of a batch that has already exhausted
-		// its limit, which means that we should *not* serve the request and return
-		// a ResumeSpan for this GetRequest.
-		//
-		// This mirrors the logic in MVCCScan, though the logic in MVCCScan is
-		// slightly lower in the stack.
-		reply.ResumeSpan = &roachpb.Span{Key: args.Key}
-		if h.MaxSpanRequestKeys < 0 {
-			reply.ResumeReason = roachpb.RESUME_KEY_LIMIT
-		} else if h.TargetBytes < 0 {
-			reply.ResumeReason = roachpb.RESUME_BYTE_LIMIT
-		}
-		return result.Result{}, nil
-	}
-
 	getRes, err := storage.MVCCGet(ctx, reader, args.Key, h.Timestamp, storage.MVCCGetOptions{
 		Inconsistent:          h.ReadConsistency != roachpb.CONSISTENT,
 		SkipLocked:            h.WaitPolicy == lock.WaitPolicy_SkipLocked,
@@ -58,22 +41,20 @@ func Get(
 		MemoryAccount:         cArgs.EvalCtx.GetResponseMemoryAccount(),
 		LockTable:             cArgs.Concurrency,
 		DontInterleaveIntents: cArgs.DontInterleaveIntents,
+		MaxKeys:               cArgs.Header.MaxSpanRequestKeys,
+		TargetBytes:           cArgs.Header.TargetBytes,
+		AllowEmpty:            cArgs.Header.AllowEmpty,
 	})
 	if err != nil {
 		return result.Result{}, err
 	}
-	if getRes.Value != nil {
-		// NB: This calculation is different from Scan, since Scan responses include
-		// the key/value pair while Get only includes the value.
-		numBytes := int64(len(getRes.Value.RawBytes))
-		if h.TargetBytes > 0 && h.AllowEmpty && numBytes > h.TargetBytes {
-			reply.ResumeSpan = &roachpb.Span{Key: args.Key}
-			reply.ResumeReason = roachpb.RESUME_BYTE_LIMIT
-			reply.ResumeNextBytes = numBytes
-			return result.Result{}, nil
-		}
-		reply.NumKeys = 1
-		reply.NumBytes = numBytes
+	reply.ResumeSpan = getRes.ResumeSpan
+	reply.ResumeReason = getRes.ResumeReason
+	reply.ResumeNextBytes = getRes.ResumeNextBytes
+	reply.NumKeys = getRes.NumKeys
+	reply.NumBytes = getRes.NumBytes
+	if reply.ResumeSpan != nil {
+		return result.Result{}, nil
 	}
 	var intents []roachpb.Intent
 	if getRes.Intent != nil {

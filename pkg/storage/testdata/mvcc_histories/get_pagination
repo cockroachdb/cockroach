@@ -1,0 +1,52 @@
+# Test MaxKeys and TargetBytes for get.
+
+# Put some test data.
+run ok
+put k=a v=a ts=1
+put k=b v=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb ts=1
+----
+>> at end:
+data: "a"/1.000000000,0 -> /BYTES/a
+data: "b"/1.000000000,0 -> /BYTES/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+
+# Return none since maxKeys < 0.
+run ok
+get k=a ts=2 maxKeys=-1
+----
+get: "a" -> <no data>
+
+# Return value since maxKeys >= 0.
+run ok
+get k=a ts=2 maxKeys=1
+----
+get: "a" -> /BYTES/a @1.000000000,0
+
+# Return none since targetBytes < 0.
+run ok
+get k=a ts=2 targetBytes=-1
+----
+get: "a" -> <no data>
+
+# Return none since targetBytes is insufficient and allowEmpty is true.
+run ok
+get k=b ts=2 targetBytes=1 allowEmpty
+----
+get: "b" -> <no data>
+
+# Return value since targetBytes is sufficient and allowEmpty is true.
+run ok
+get k=a ts=2 targetBytes=100 allowEmpty
+----
+get: "a" -> /BYTES/a @1.000000000,0
+
+# Return value since targetBytes is insufficient and allowEmpty is false.
+run ok
+get k=b ts=2 targetBytes=1
+----
+get: "b" -> /BYTES/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb @1.000000000,0
+
+# Return value since targetBytes is sufficient and allowEmpty is false.
+run ok
+get k=a ts=2 targetBytes=100
+----
+get: "a" -> /BYTES/a @1.000000000,0
