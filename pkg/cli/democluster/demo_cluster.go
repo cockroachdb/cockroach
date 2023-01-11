@@ -410,14 +410,6 @@ func (c *transientCluster) Start(ctx context.Context) (err error) {
 					TenantName:          demoTenantName,
 					TenantID:            roachpb.MustMakeTenantID(secondaryTenantID),
 					UseServerController: !c.demoCtx.DisableServerController,
-					TestingKnobs: base.TestingKnobs{
-						Server: &server.TestingKnobs{
-							ContextTestingKnobs: rpc.ContextTestingKnobs{
-								InjectedLatencyOracle:  latencyMap,
-								InjectedLatencyEnabled: c.latencyEnabled.Get,
-							},
-						},
-					},
 				}
 
 				var tenantStopper *stop.Stopper
@@ -431,6 +423,14 @@ func (c *transientCluster) Start(ctx context.Context) (err error) {
 					args.StartingRPCAndSQLPort = c.demoCtx.sqlPort(i, true) - secondaryTenantID
 					args.StartingHTTPPort = c.demoCtx.httpPort(i, true) - secondaryTenantID
 					args.Locality = c.demoCtx.Localities[i]
+					args.TestingKnobs = base.TestingKnobs{
+						Server: &server.TestingKnobs{
+							ContextTestingKnobs: rpc.ContextTestingKnobs{
+								InjectedLatencyOracle:  latencyMap,
+								InjectedLatencyEnabled: c.latencyEnabled.Get,
+							},
+						},
+					}
 				}
 
 				ts, err := c.servers[i].StartTenant(ctx, args)
