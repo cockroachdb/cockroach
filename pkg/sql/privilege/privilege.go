@@ -132,20 +132,13 @@ var (
 )
 
 // Mask returns the bitmask for a given privilege.
-func (k Kind) Mask() uint32 {
+func (k Kind) Mask() uint64 {
 	return 1 << k
 }
 
 // IsSetIn returns true if this privilege kind is set in the supplied bitfield.
-func (k Kind) IsSetIn(bits uint32) bool {
+func (k Kind) IsSetIn(bits uint64) bool {
 	return bits&k.Mask() != 0
-}
-
-// ByValue is just an array of privilege kinds sorted by value.
-var ByValue = [...]Kind{
-	ALL, CREATE, DROP, SELECT, INSERT, DELETE, UPDATE, USAGE, ZONECONFIG, CONNECT, RULE,
-	MODIFYCLUSTERSETTING, EXTERNALCONNECTION, VIEWACTIVITY, VIEWACTIVITYREDACTED, VIEWCLUSTERSETTING,
-	CANCELQUERY, NOSQLLOGIN, EXECUTE, VIEWCLUSTERMETADATA, VIEWDEBUG, BACKUP,
 }
 
 // ByName is a map of string -> kind value.
@@ -237,8 +230,8 @@ func (pl List) SortedNames() []string {
 
 // ToBitField returns the bitfield representation of
 // a list of privileges.
-func (pl List) ToBitField() uint32 {
-	var ret uint32
+func (pl List) ToBitField() uint64 {
+	var ret uint64
 	for _, p := range pl {
 		ret |= p.Mask()
 	}
@@ -257,7 +250,7 @@ func (pl List) Contains(k Kind) bool {
 
 // ListFromBitField takes a bitfield of privileges and a ObjectType
 // returns a List. It is ordered in increasing value of privilege.Kind.
-func ListFromBitField(m uint32, objectType ObjectType) List {
+func ListFromBitField(m uint64, objectType ObjectType) List {
 	ret := List{}
 
 	privileges := GetValidPrivilegesForObject(objectType)
@@ -272,9 +265,7 @@ func ListFromBitField(m uint32, objectType ObjectType) List {
 
 // PrivilegesFromBitFields takes a bitfield of privilege kinds, a bitfield of grant options, and an ObjectType
 // returns a List. It is ordered in increasing value of privilege.Kind.
-func PrivilegesFromBitFields(
-	kindBits uint32, grantOptionBits uint32, objectType ObjectType,
-) []Privilege {
+func PrivilegesFromBitFields(kindBits, grantOptionBits uint64, objectType ObjectType) []Privilege {
 	var ret []Privilege
 
 	kinds := GetValidPrivilegesForObject(objectType)

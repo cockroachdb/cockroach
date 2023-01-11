@@ -34,7 +34,7 @@ upsert descriptor #104
   +  version: "2"
 upsert descriptor #105
   ...
-         withGrantOption: 2
+         withGrantOption: "2"
        version: 2
   -  version: "1"
   +  referencingDescriptorIds:
@@ -42,7 +42,7 @@ upsert descriptor #105
   +  version: "2"
 upsert descriptor #106
   ...
-         withGrantOption: 2
+         withGrantOption: "2"
        version: 2
   -  version: "1"
   +  referencingDescriptorIds:
