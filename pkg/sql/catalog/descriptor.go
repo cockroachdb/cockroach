@@ -656,13 +656,6 @@ type TableDescriptor interface {
 	// in the same order.
 	EnforcedUniqueConstraintsWithoutIndex() []UniqueWithoutIndexConstraint
 
-	// FindConstraintWithID traverses the slice returned by AllConstraints and
-	// returns the first catalog.Constraint that matches the desired ID, or an
-	// error if none was found.
-	FindConstraintWithID(id descpb.ConstraintID) (Constraint, error)
-	// FindConstraintWithName is like FindConstraintWithID but for names.
-	FindConstraintWithName(name string) (Constraint, error)
-
 	// CheckConstraintColumns returns the slice of columns referenced by a check
 	// constraint.
 	CheckConstraintColumns(ck CheckConstraint) []Column

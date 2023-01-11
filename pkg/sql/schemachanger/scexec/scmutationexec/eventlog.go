@@ -183,8 +183,8 @@ func asCommentEventPayload(
 			return nil, err
 		}
 		var constraintName string
-		if constraint, err := tbl.FindConstraintWithID(e.ConstraintID); err != nil {
-			// FindConstraintWithID excludes dropping indexes for no good reason.
+		if constraint, err := catalog.MustFindConstraintByID(tbl, e.ConstraintID); err != nil {
+			// MustFindConstraintByID excludes dropping indexes for no good reason.
 			// TODO(postamar): improve catalog.TableDescriptor interface
 			for _, idx := range tbl.AllIndexes() {
 				if idx.Dropped() && idx.GetConstraintID() == e.ConstraintID {
