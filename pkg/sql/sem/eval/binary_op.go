@@ -198,7 +198,11 @@ func (e *evaluator) EvalCompareTupleOp(
 				return tree.DNull, nil
 			}
 		} else {
-			cmp = leftElem.Compare(e.ctx(), rightElem)
+			var err error
+			cmp, err = leftElem.CompareError(e.ctx(), rightElem)
+			if err != nil {
+				return tree.DNull, err
+			}
 			if cmp != 0 {
 				break
 			}
@@ -502,7 +506,9 @@ func (e *evaluator) EvalInTupleOp(
 		for _, val := range vtuple.D {
 			if val == tree.DNull {
 				sawNull = true
-			} else if val.Compare(e.ctx(), arg) == 0 {
+			} else if cmp, err := val.CompareError(e.ctx(), arg); err != nil {
+				return tree.DNull, err
+			} else if cmp == 0 {
 				return tree.DBoolTrue, nil
 			}
 		}
@@ -515,10 +521,12 @@ func (e *evaluator) EvalInTupleOp(
 				sawNull = true
 			} else {
 				// Use the EQ function which properly handles NULLs.
-				if res := cmpOpTupleFn(
+				if res, err := cmpOpTupleFn(
 					e.ctx(), *argTuple, *val.(*tree.DTuple),
 					treecmp.MakeComparisonOperator(treecmp.EQ),
-				); res == tree.DNull {
+				); err != nil {
+					return tree.DNull, err
+				} else if res == tree.DNull {
 					sawNull = true
 				} else if res == tree.DBoolTrue {
 					return tree.DBoolTrue, nil
