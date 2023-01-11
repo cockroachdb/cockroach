@@ -12,6 +12,7 @@ package kvserver
 
 import (
 	"context"
+	"math/big"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
@@ -93,6 +94,7 @@ func (r *Replica) maybeUnquiesceAndWakeLeaderLocked() bool {
 }
 
 func (r *Replica) canUnquiesceRLocked() bool {
+	big.Int{}
 	return r.mu.quiescent &&
 		// If the replica is uninitialized (i.e. it contains no replicated state),
 		// it is not allowed to unquiesce and begin Tick()'ing itself.
