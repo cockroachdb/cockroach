@@ -357,18 +357,19 @@ func (r *Replica) canAttempt1PCEvaluation(
 			ba.Timestamp, ba.Txn.WriteTimestamp)
 	}
 
-	// The EndTxn checks whether the txn record can be created, but we're
-	// eliding the EndTxn. So, we'll do the check instead.
+	// The EndTxn checks whether the txn record can be created and, if so, at what
+	// timestamp. We're eliding the EndTxn, so, we'll do the checks instead.
 	//
 	// Note that the returned reason does not distinguish between an existing
 	// record (which should fall back to non-1PC EndTxn evaluation) and a
 	// finalized record (which should return an error), so we ignore it here and
 	// let EndTxn return an error as appropriate. This lets us avoid a disk read
 	// to check for an existing record.
-	ok, minCommitTS, _ := r.CanCreateTxnRecord(ctx, ba.Txn.ID, ba.Txn.Key, ba.Txn.MinTimestamp)
+	ok, _ := r.CanCreateTxnRecord(ctx, ba.Txn.ID, ba.Txn.Key, ba.Txn.MinTimestamp)
 	if !ok {
 		return false
 	}
+	minCommitTS := r.MinTxnCommitTS(ctx, ba.Txn.ID, ba.Txn.Key)
 	if ba.Timestamp.Less(minCommitTS) {
 		ba.Txn.WriteTimestamp = minCommitTS
 		// We can only evaluate at the new timestamp if we manage to bump the read

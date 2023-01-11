@@ -73,7 +73,12 @@ type EvalContext interface {
 	// for details about its arguments, return values, and preconditions.
 	CanCreateTxnRecord(
 		ctx context.Context, txnID uuid.UUID, txnKey []byte, txnMinTS hlc.Timestamp,
-	) (ok bool, minCommitTS hlc.Timestamp, reason roachpb.TransactionAbortedReason)
+	) (ok bool, reason roachpb.TransactionAbortedReason)
+
+	// MinTxnCommitTS determines the minimum timestamp at which a transaction with
+	// the provided ID and key can commit. See Replica.MinTxnCommitTS for details
+	// about its arguments, return values, and preconditions.
+	MinTxnCommitTS(ctx context.Context, txnID uuid.UUID, txnKey []byte) hlc.Timestamp
 
 	// GetMVCCStats returns a snapshot of the MVCC stats for the range.
 	// If called from a command that declares a read/write span on the
@@ -157,23 +162,24 @@ type ImmutableEvalContext interface {
 // MockEvalCtx is a dummy implementation of EvalContext for testing purposes.
 // For technical reasons, the interface is implemented by a wrapper .EvalContext().
 type MockEvalCtx struct {
-	ClusterSettings    *cluster.Settings
-	Desc               *roachpb.RangeDescriptor
-	StoreID            roachpb.StoreID
-	NodeID             roachpb.NodeID
-	Clock              *hlc.Clock
-	Stats              enginepb.MVCCStats
-	QPS                float64
-	AbortSpan          *abortspan.AbortSpan
-	GCThreshold        hlc.Timestamp
-	Term, FirstIndex   uint64
-	CanCreateTxn       func() (bool, hlc.Timestamp, roachpb.TransactionAbortedReason)
-	Lease              roachpb.Lease
-	CurrentReadSummary rspb.ReadSummary
-	ClosedTimestamp    hlc.Timestamp
-	RevokedLeaseSeq    roachpb.LeaseSequence
-	MaxBytes           int64
-	ApproxDiskBytes    uint64
+	ClusterSettings      *cluster.Settings
+	Desc                 *roachpb.RangeDescriptor
+	StoreID              roachpb.StoreID
+	NodeID               roachpb.NodeID
+	Clock                *hlc.Clock
+	Stats                enginepb.MVCCStats
+	QPS                  float64
+	AbortSpan            *abortspan.AbortSpan
+	GCThreshold          hlc.Timestamp
+	Term, FirstIndex     uint64
+	CanCreateTxnRecordFn func() (bool, roachpb.TransactionAbortedReason)
+	MinTxnCommitTSFn     func() hlc.Timestamp
+	Lease                roachpb.Lease
+	CurrentReadSummary   rspb.ReadSummary
+	ClosedTimestamp      hlc.Timestamp
+	RevokedLeaseSeq      roachpb.LeaseSequence
+	MaxBytes             int64
+	ApproxDiskBytes      uint64
 }
 
 // EvalContext returns the MockEvalCtx as an EvalContext. It will reflect future
@@ -247,8 +253,19 @@ func (m *mockEvalCtxImpl) GetLastSplitQPS(context.Context) float64 {
 }
 func (m *mockEvalCtxImpl) CanCreateTxnRecord(
 	context.Context, uuid.UUID, []byte, hlc.Timestamp,
-) (bool, hlc.Timestamp, roachpb.TransactionAbortedReason) {
-	return m.CanCreateTxn()
+) (bool, roachpb.TransactionAbortedReason) {
+	if m.CanCreateTxnRecordFn == nil {
+		return true, 0
+	}
+	return m.CanCreateTxnRecordFn()
+}
+func (m *mockEvalCtxImpl) MinTxnCommitTS(
+	ctx context.Context, txnID uuid.UUID, txnKey []byte,
+) hlc.Timestamp {
+	if m.MinTxnCommitTSFn == nil {
+		return hlc.Timestamp{}
+	}
+	return m.MinTxnCommitTSFn()
 }
 func (m *mockEvalCtxImpl) GetGCThreshold() hlc.Timestamp {
 	return m.GCThreshold
