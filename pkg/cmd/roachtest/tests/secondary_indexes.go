@@ -141,7 +141,7 @@ func registerSecondaryIndexesMultiVersionCluster(r registry.Registry) {
 		Owner:   registry.OwnerSQLSchema,
 		Cluster: r.MakeClusterSpec(3),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			if runtime.GOARCH == "arm64" {
+			if c.IsLocal() && runtime.GOARCH == "arm64" {
 				t.Skip("Skip under ARM64. See https://github.com/cockroachdb/cockroach/issues/89268")
 			}
 			predV, err := PredecessorVersion(*t.BuildVersion())

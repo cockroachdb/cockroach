@@ -363,7 +363,7 @@ func maxSupportedTPCCWarehouses(
 func runTPCCMixedHeadroom(
 	ctx context.Context, t test.Test, c cluster.Cluster, cloud string, versionsToUpgrade int,
 ) {
-	if runtime.GOARCH == "arm64" {
+	if c.IsLocal() && runtime.GOARCH == "arm64" {
 		t.Skip("Skip under ARM64. See https://github.com/cockroachdb/cockroach/issues/89268")
 	}
 	crdbNodes := c.Range(1, c.Spec().NodeCount-1)

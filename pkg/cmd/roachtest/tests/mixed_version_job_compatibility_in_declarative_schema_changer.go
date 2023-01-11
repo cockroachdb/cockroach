@@ -88,7 +88,7 @@ func registerDeclarativeSchemaChangerJobCompatibilityInMixedVersion(r registry.R
 			// Skip this roachtest until master is on 23.1
 			skip.WithIssue(t, 89345)
 
-			if runtime.GOARCH == "arm64" {
+			if c.IsLocal() && runtime.GOARCH == "arm64" {
 				t.Skip("Skip under ARM64. See https://github.com/cockroachdb/cockroach/issues/89268")
 			}
 			// An empty string means that the cockroach binary specified by flag
