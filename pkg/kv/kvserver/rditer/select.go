@@ -39,29 +39,21 @@ func Select(rangeID roachpb.RangeID, opts SelectOpts) []roachpb.Span {
 	var sl []roachpb.Span
 
 	if opts.ReplicatedByRangeID {
-		sp := makeRangeIDReplicatedSpan(rangeID)
-		sl = append(sl, sp)
+		sl = append(sl, makeRangeIDReplicatedSpan(rangeID))
 	}
 
 	if opts.UnreplicatedByRangeID {
-		sp := makeRangeIDUnreplicatedSpan(rangeID)
-		sl = append(sl, sp)
+		sl = append(sl, makeRangeIDUnreplicatedSpan(rangeID))
 	}
 
 	if in := opts.ReplicatedBySpan; !in.Equal(roachpb.RSpan{}) {
 		d := &roachpb.RangeDescriptor{StartKey: in.Key, EndKey: in.EndKey}
+		sl = append(sl, makeRangeLocalKeySpan(d))
 		{
-			sp := makeRangeLocalKeySpan(d)
-			sl = append(sl, sp)
+			ls := makeRangeLockTableKeySpans(d)
+			sl = append(sl, ls[:]...)
 		}
-		{
-			sps := makeRangeLockTableKeySpans(d)
-			sl = append(sl, sps[:]...)
-		}
-		{
-			sp := makeUserKeySpan(d)
-			sl = append(sl, sp)
-		}
+		sl = append(sl, makeUserKeySpan(d))
 	}
 	return sl
 }
