@@ -50,6 +50,13 @@ func TestSelect(t *testing.T) {
 				EndKey: roachpb.RKey("c"),
 			},
 		},
+		{
+			name: "r3",
+			sp: roachpb.RSpan{
+				Key:    roachpb.RKey("a"),
+				EndKey: roachpb.RKeyMax,
+			},
+		},
 	} {
 		t.Run(tc.name, w.Run(t, tc.name, func(t *testing.T) string {
 			var buf strings.Builder
