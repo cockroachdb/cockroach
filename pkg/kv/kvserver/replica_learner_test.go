@@ -1536,7 +1536,7 @@ func TestMergeQueueDoesNotInterruptReplicationChange(t *testing.T) {
 	// Split and then unsplit the range to clear the sticky bit, otherwise the
 	// mergeQueue will ignore the range.
 	tc.SplitRangeOrFatal(t, splitKey)
-	require.NoError(t, tc.Server(0).DB().AdminUnsplit(ctx, splitKey, roachpb.AdminUnsplitRequest_ORGANIZATION))
+	require.NoError(t, tc.Server(0).DB().AdminUnsplit(ctx, splitKey))
 
 	atomic.StoreInt64(&activateSnapshotTestingKnob, 1)
 	replicationChange := make(chan error)
@@ -1601,7 +1601,7 @@ func TestMergeQueueSeesLearnerOrJointConfig(t *testing.T) {
 	splitAndUnsplit := func() roachpb.RangeDescriptor {
 		desc, _ := tc.SplitRangeOrFatal(t, splitKey)
 		// Unsplit the range to clear the sticky bit.
-		require.NoError(t, tc.Server(0).DB().AdminUnsplit(ctx, splitKey, roachpb.AdminUnsplitRequest_ORGANIZATION))
+		require.NoError(t, tc.Server(0).DB().AdminUnsplit(ctx, splitKey))
 		return desc
 	}
 
