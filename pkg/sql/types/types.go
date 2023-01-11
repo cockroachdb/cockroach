@@ -2039,6 +2039,10 @@ func (t *T) EquivalentExact(other *T) bool {
 		if t.Width() != other.Width() {
 			return false
 		}
+	case CollatedStringFamily:
+		if t.Width() != other.Width() {
+			return false
+		}
 	}
 	return true
 }
