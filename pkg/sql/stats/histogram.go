@@ -227,6 +227,7 @@ func (h *histogram) adjustCounts(
 			h.buckets[i].DistinctRange = 0
 			h.buckets[i].NumEq *= adjustmentFactorNumEq
 		}
+		h.clampNonNegative()
 		h.removeZeroBuckets()
 		return
 	}
@@ -278,9 +279,14 @@ func (h *histogram) adjustCounts(
 				if countable {
 					maxDistRange -= h.buckets[i].DistinctRange
 
-					// Set the increment proportional to the remaining number of
-					// distinct values in the bucket.
+					// Set the increment proportional to the remaining number of distinct
+					// values in the bucket.
 					inc = remDistinctCount * (maxDistRange / maxDistinctCountRange)
+					// If the bucket has DistinctRange > maxDistRange (a rare but possible
+					// occurence, see #93892) then inc will be negative. Prevent this.
+					if inc < 0 {
+						inc = 0
+					}
 				}
 
 				h.buckets[i].NumRange += inc
@@ -320,7 +326,23 @@ func (h *histogram) adjustCounts(
 		h.buckets[i].NumEq *= adjustmentFactorRowCount
 	}
 
+	h.clampNonNegative()
 	h.removeZeroBuckets()
+}
+
+// clampNonNegative sets any negative counts to zero.
+func (h *histogram) clampNonNegative() {
+	for i := 0; i < len(h.buckets); i++ {
+		if h.buckets[i].NumEq < 0 {
+			h.buckets[i].NumEq = 0
+		}
+		if h.buckets[i].NumRange < 0 {
+			h.buckets[i].NumRange = 0
+		}
+		if h.buckets[i].DistinctRange < 0 {
+			h.buckets[i].DistinctRange = 0
+		}
+	}
 }
 
 // removeZeroBuckets removes any extra zero buckets if we don't need them
@@ -332,8 +354,8 @@ func (h *histogram) removeZeroBuckets() {
 
 	var j int
 	for i := 0; i < len(h.buckets); i++ {
-		if h.buckets[i].NumEq <= 0 && h.buckets[i].NumRange <= 0 &&
-			(i == len(h.buckets)-1 || h.buckets[i+1].NumRange <= 0) {
+		if h.buckets[i].NumEq == 0 && h.buckets[i].NumRange == 0 && h.buckets[i].DistinctRange == 0 &&
+			(i == len(h.buckets)-1 || h.buckets[i+1].NumRange == 0 && h.buckets[i+1].DistinctRange == 0) {
 			continue
 		}
 		if j != i {
@@ -486,11 +508,13 @@ func (h *histogram) addOuterBuckets(
 		maxDistRange, countable := maxDistinctRange(compareCtx, lowerBound, upperBound)
 
 		inc := avgRemPerBucket
-		if countable && colType.Family() == types.EnumFamily {
-			// Set the increment proportional to the remaining number of
-			// distinct values in the bucket. This only really matters for
-			// enums.
+		if countable {
+			// Set the increment proportional to the remaining number of distinct
+			// values in the bucket.
 			inc = remDistinctCount * (maxDistRange / maxDistinctCountExtraBuckets)
+			if inc < 0 {
+				inc = 0
+			}
 		}
 
 		h.buckets[i].NumRange += inc
