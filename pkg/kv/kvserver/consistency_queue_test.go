@@ -485,7 +485,6 @@ func testConsistencyQueueRecomputeStatsImpl(t *testing.T, hadEstimates bool) {
 			ctx,
 			key,              /* splitKey */
 			hlc.MaxTimestamp, /* expirationTime */
-			roachpb.AdminSplitRequest_INGESTION,
 		))
 
 		delta := computeDelta(db0)

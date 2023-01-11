@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/oppurpose"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
@@ -522,7 +521,7 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int) error {
 				log.Warningf(ctx, "%s failed to generate split-above key: %v", b.name, err)
 			} else {
 				beforeSplit := timeutil.Now()
-				err := b.db.AdminSplit(ctx, splitAbove, expire, roachpb.AdminSplitRequest_INGESTION)
+				err := b.db.AdminSplit(ctx, splitAbove, expire)
 				b.currentStats.SplitWait += timeutil.Since(beforeSplit)
 				if err != nil {
 					log.Warningf(ctx, "%s failed to split-above: %v", b.name, err)
@@ -537,7 +536,7 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int) error {
 			log.Warningf(ctx, "%s failed to generate split key: %v", b.name, err)
 		} else {
 			beforeSplit := timeutil.Now()
-			err := b.db.AdminSplit(ctx, splitAt, expire, roachpb.AdminSplitRequest_INGESTION)
+			err := b.db.AdminSplit(ctx, splitAt, expire)
 			b.currentStats.SplitWait += timeutil.Since(beforeSplit)
 			if err != nil {
 				log.Warningf(ctx, "%s failed to split: %v", b.name, err)
@@ -548,7 +547,7 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int) error {
 					// Now scatter the RHS before we proceed to ingest into it. We know it
 					// should be empty since we split above if there was a nextExistingKey.
 					beforeScatter := timeutil.Now()
-					resp, err := b.db.AdminScatter(ctx, splitAt, maxScatterSize, oppurpose.ScatterBulk)
+					resp, err := b.db.AdminScatter(ctx, splitAt, maxScatterSize)
 					b.currentStats.ScatterWait += timeutil.Since(beforeScatter)
 					if err != nil {
 						// err could be a max size violation, but this is unexpected since we

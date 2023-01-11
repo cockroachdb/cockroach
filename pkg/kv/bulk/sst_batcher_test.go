@@ -281,7 +281,6 @@ func runTestImport(t *testing.T, batchSizeValue int64) {
 				ctx,
 				key(split1),
 				hlc.MaxTimestamp, /* expirationTime */
-				roachpb.AdminSplitRequest_INGESTION,
 			))
 
 			// We want to make sure our range-aware batching knows about one of our
@@ -302,7 +301,6 @@ func runTestImport(t *testing.T, batchSizeValue int64) {
 				ctx,
 				key(split2),
 				hlc.MaxTimestamp, /* expirationTime */
-				roachpb.AdminSplitRequest_INGESTION,
 			))
 
 			ts := hlc.Timestamp{WallTime: 100}

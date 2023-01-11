@@ -45,8 +45,6 @@ type TestClusterConfig struct {
 	UseFakeSpanResolver bool
 	// if non-empty, overrides the default distsql mode.
 	OverrideDistSQLMode string
-	// AllowSplitAndScatter enables the AllowSplitAndScatter tenant testing knob.
-	AllowSplitAndScatter bool
 	// if non-empty, overrides the default vectorize mode.
 	OverrideVectorize string
 	// if set, queries using distSQL processors or vectorized operators that can
@@ -360,7 +358,6 @@ var LogicTestConfigs = []TestClusterConfig{
 		UseTenant:                   true,
 		IsCCLConfig:                 true,
 		OverrideDistSQLMode:         "on",
-		AllowSplitAndScatter:        true,
 		DeclarativeCorpusCollection: true,
 		Localities: map[int]roachpb.Locality{
 			1: {

@@ -60,7 +60,6 @@ func TestLogSplits(t *testing.T) {
 		ctx,
 		"splitkey",
 		hlc.MaxTimestamp, /* expirationTime */
-		roachpb.AdminSplitRequest_INGESTION,
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -187,7 +186,6 @@ func TestLogMerges(t *testing.T) {
 		ctx,
 		"a",              /* splitKey */
 		hlc.MaxTimestamp, /* expirationTime */
-		roachpb.AdminSplitRequest_INGESTION,
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -195,7 +193,6 @@ func TestLogMerges(t *testing.T) {
 		ctx,
 		"b",              /* splitKey */
 		hlc.MaxTimestamp, /* expirationTime */
-		roachpb.AdminSplitRequest_INGESTION,
 	); err != nil {
 		t.Fatal(err)
 	}

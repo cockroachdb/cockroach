@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
-	"github.com/cockroachdb/cockroach/pkg/sql/oppurpose"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -185,7 +184,7 @@ func unsplitRangesInSpan(ctx context.Context, kvDB *kv.DB, span roachpb.Span) er
 			// Swallow "key is not the start of a range" errors because it would mean
 			// that the sticky bit was removed and merged concurrently. DROP TABLE
 			// should not fail because of this.
-			if err := kvDB.AdminUnsplit(ctx, desc.StartKey, oppurpose.UnsplitGC); err != nil &&
+			if err := kvDB.AdminUnsplit(ctx, desc.StartKey); err != nil &&
 				!strings.Contains(err.Error(), "is not the start of a range") {
 				return err
 			}

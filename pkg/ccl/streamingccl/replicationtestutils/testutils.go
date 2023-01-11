@@ -24,6 +24,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -228,13 +230,17 @@ func CreateTenantStreamingClusters(
 	// Start the source cluster.
 	srcCluster, srcURL, srcCleanup := startTestCluster(ctx, t, serverArgs, args.SrcNumNodes)
 
+	clusterSettings := cluster.MakeTestingClusterSettings()
+	for _, setting := range []*settings.BoolSetting{
+		sql.SecondaryTenantSplitAtEnabled,
+		sql.SecondaryTenantScatterEnabled,
+	} {
+		setting.Override(ctx, &clusterSettings.SV, true)
+	}
 	tenantArgs := base.TestTenantArgs{
 		TenantName: args.SrcTenantName,
 		TenantID:   args.SrcTenantID,
-		TestingKnobs: base.TestingKnobs{
-			TenantTestingKnobs: &sql.TenantTestingKnobs{
-				AllowSplitAndScatter: true,
-			}},
+		Settings:   clusterSettings,
 	}
 	srcTenantServer, srcTenantConn := serverutils.StartTenant(t, srcCluster.Server(0), tenantArgs)
 	waitForTenantPodsActive(t, srcTenantServer, 1)

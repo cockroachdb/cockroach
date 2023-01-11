@@ -71,7 +71,6 @@ go_library(
         "//pkg/sql/faketreeeval",
         "//pkg/sql/gcjob",
         "//pkg/sql/lexbase",
-        "//pkg/sql/oppurpose",
         "//pkg/sql/opt/memo",
         "//pkg/sql/parser",
         "//pkg/sql/pgwire/pgcode",

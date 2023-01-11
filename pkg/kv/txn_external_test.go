@@ -531,8 +531,8 @@ func TestRevScanAndGet(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 	db := tc.Servers[0].DB()
 
-	require.NoError(t, db.AdminSplit(ctx, "b", hlc.MaxTimestamp, roachpb.AdminSplitRequest_INGESTION))
-	require.NoError(t, db.AdminSplit(ctx, "h", hlc.MaxTimestamp, roachpb.AdminSplitRequest_INGESTION))
+	require.NoError(t, db.AdminSplit(ctx, "b", hlc.MaxTimestamp))
+	require.NoError(t, db.AdminSplit(ctx, "h", hlc.MaxTimestamp))
 
 	// Setup:
 	// Ranges:      [keyMin-------b) [b--------h) [h------keyMax)

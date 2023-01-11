@@ -124,7 +124,7 @@ func splitLastRangeInSpan(
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := kvDB.AdminSplit(ctx, splitKey, hlc.MaxTimestamp, roachpb.AdminSplitRequest_INGESTION); err != nil {
+	if err := kvDB.AdminSplit(ctx, splitKey, hlc.MaxTimestamp); err != nil {
 		t.Fatal(err)
 	}
 
