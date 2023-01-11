@@ -39,6 +39,7 @@ type RangeRequestLocalityInfo struct {
 func (r RangeUsageInfo) Load() load.Load {
 	dims := load.Vector{}
 	dims[load.Queries] = r.QueriesPerSecond
+	dims[load.StoreCPU] = r.RequestCPUNanosPerSecond + r.RaftCPUNanosPerSecond
 	return dims
 }
 
@@ -47,5 +48,12 @@ func (r RangeUsageInfo) Load() load.Load {
 func (r RangeUsageInfo) TransferImpact() load.Load {
 	dims := load.Vector{}
 	dims[load.Queries] = r.QueriesPerSecond
+	// Only use the request recorded cpu. This assumes that all replicas will
+	// use the same amount of raft cpu - which may be dubious.
+	//
+	// TODO(kvoli):
+	// Investigate whether this is a valid assumption and look to separate out
+	// leaseholder vs replica cpu usage in accounting.
+	dims[load.StoreCPU] = r.RequestCPUNanosPerSecond
 	return dims
 }

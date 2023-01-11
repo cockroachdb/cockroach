@@ -10,7 +10,12 @@
 
 package load
 
-import "fmt"
+import (
+	"fmt"
+	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
+)
 
 // Dimension is a singe dimension of load that a component may track.
 type Dimension int
@@ -18,6 +23,8 @@ type Dimension int
 const (
 	// Queries refers to the number of queries.
 	Queries Dimension = iota
+	// StoreCPU refers to the sum of replica cpu time on a store.
+	StoreCPU
 
 	nDimensionsTyped
 	nDimensions = int(nDimensionsTyped)
@@ -28,6 +35,8 @@ func (d Dimension) String() string {
 	switch d {
 	case Queries:
 		return "queries-per-second"
+	case StoreCPU:
+		return "store-cpu-per-second"
 	default:
 		panic(fmt.Sprintf("cannot name: unknown dimension with ordinal %d", d))
 	}
@@ -38,6 +47,8 @@ func (d Dimension) Format(value float64) string {
 	switch d {
 	case Queries:
 		return fmt.Sprintf("%.1f", value)
+	case StoreCPU:
+		return string(humanizeutil.Duration(time.Duration(int64(value))))
 	default:
 		panic(fmt.Sprintf("cannot format value: unknown dimension with ordinal %d", d))
 	}

@@ -85,17 +85,16 @@ var LoadBasedRebalancingMode = settings.RegisterEnumSetting(
 
 // LoadBasedRebalancingDimension controls what dimension rebalancing takes into
 // account.
-// NB: This value is set to private on purpose, as this cluster setting is a
-// noop at the moment.
 var LoadBasedRebalancingDimension = settings.RegisterEnumSetting(
 	settings.SystemOnly,
 	"kv.allocator.load_based_rebalancing_dimension",
 	"what dimension of load does rebalancing consider",
-	"qps",
+	"store_cpu",
 	map[int64]string{
-		int64(LBRebalancingQueries): "qps",
+		int64(LBRebalancingQueries):  "qps",
+		int64(LBRebalancingStoreCPU): "store_cpu",
 	},
-)
+).WithPublic()
 
 // LBRebalancingMode controls if and when we do store-level rebalancing
 // based on load.
@@ -119,12 +118,19 @@ type LBRebalancingDimension int64
 const (
 	// LBRebalancingQueries is a rebalancing mode that balances queries (QPS).
 	LBRebalancingQueries LBRebalancingDimension = iota
+
+	// LBRebalancingStoreCPU is a rebalance mode that balances the store CPU
+	// usage. The store cpu usage is calculated as the sum of replica's cpu
+	// usage on the store.
+	LBRebalancingStoreCPU
 )
 
 func (d LBRebalancingDimension) ToDimension() load.Dimension {
 	switch d {
 	case LBRebalancingQueries:
 		return load.Queries
+	case LBRebalancingStoreCPU:
+		return load.StoreCPU
 	default:
 		panic("unknown dimension")
 	}
