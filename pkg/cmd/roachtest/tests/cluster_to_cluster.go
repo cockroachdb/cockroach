@@ -374,6 +374,7 @@ func registerClusterToCluster(r registry.Registry) {
 			cutover:            5 * time.Minute,
 		},
 	} {
+		sp := sp
 		clusterOps := make([]spec.Option, 0)
 		clusterOps = append(clusterOps, spec.CPU(sp.cpus))
 		if sp.pdSize != 0 {
