@@ -2395,6 +2395,9 @@ func (ex *connExecutor) execCopyIn(
 		if retErr == nil && !payloadHasError(retPayload) {
 			ex.incrementExecutedStmtCounter(cmd.Stmt)
 		}
+		if p, ok := retPayload.(payloadWithError); ok {
+			log.SqlExec.Errorf(ctx, "error executing %s: %+v", cmd, p.errorCause())
+		}
 		if retErr != nil {
 			log.SqlExec.Errorf(ctx, "error executing %s: %+v", cmd, retErr)
 		}
