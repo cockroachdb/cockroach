@@ -37,6 +37,30 @@ const (
 	// lightly loaded clusters.
 	MinQPSThresholdDifference = 100
 
+	// MinStoreCPUThresholdDifference is the minimum CPU difference from the cluster
+	// mean that this system should care about. The system won't attempt to
+	// take action if a store's CPU differs from the mean by less than this
+	// amount even if it is greater than the percentage threshold. This
+	// prevents too many lease transfers or range rebalances in lightly loaded
+	// clusters.
+	//
+	// NB: This represents 5% (1/20) utilization of 1 cpu on average.  This
+	// number was arrived at from testing to minimize thrashing. This number is
+	// set independent of processor speed and assumes identical value of cpu
+	// time across all stores. i.e. all cpu's are identical.
+	MinStoreCPUThresholdDifference = float64(50 * time.Millisecond)
+
+	// MinStoreCPUDifferenceForTransfers is the minimum CPU difference that a
+	// store rebalncer would care about to reconcile (via lease or replica
+	// rebalancing) between any two stores.
+	//
+	// NB: This is set to be two times the minimum threshold that a store needs
+	// to be above or below the mean to be considered overfull or underfull
+	// respectively. This is to make lease transfers and replica rebalances
+	// less sensistive to jitters in any given workload by introducing
+	// additional friction before taking these actions.
+	MinStoreCPUDifferenceForTransfers = 2 * MinStoreCPUThresholdDifference
+
 	// defaultLoadBasedRebalancingInterval is how frequently to check the store-level
 	// balance of the cluster.
 	defaultLoadBasedRebalancingInterval = time.Minute
@@ -99,6 +123,27 @@ var QPSRebalanceThreshold = func() *settings.FloatSetting {
 		func(f float64) error {
 			if f < 0.01 {
 				return errors.Errorf("cannot set kv.allocator.qps_rebalance_threshold to less than 0.01")
+			}
+			return nil
+		},
+	)
+	s.SetVisibility(settings.Public)
+	return s
+}()
+
+// StoreCPURebalanceThreshold is the minimum ratio of a store's cpu time to the mean
+// cpu time at which that store is considered overfull or underfull of cpu
+// usage.
+var StoreCPURebalanceThreshold = func() *settings.FloatSetting {
+	s := settings.RegisterFloatSetting(
+		settings.SystemOnly,
+		"kv.allocator.store_cpu_rebalance_threshold",
+		"minimum fraction away from the mean a store's cpu usage can be before it is considered overfull or underfull",
+		0.10,
+		settings.NonNegativeFloat,
+		func(f float64) error {
+			if f < 0.01 {
+				return errors.Errorf("cannot set kv.allocator.store_cpu_rebalance_threshold to less than 0.01")
 			}
 			return nil
 		},
