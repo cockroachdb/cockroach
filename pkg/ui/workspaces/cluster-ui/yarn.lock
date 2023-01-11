@@ -3113,20 +3113,22 @@
   resolved "https://storage.googleapis.com/cockroach-npm-deps/@cockroachlabs/icons/-/icons-0.5.2.tgz#ddf87eba8e173f7ee6c787e178f460a0a1872b80"
   integrity sha512-+2JJegu+MPb4S2l7LJwPnbkmZuBlPdMBJNr4vqLdcEePcLAgOpEfGMlF1HV1Mb8YbDEFWUT9E0gZ/PRjjMalog==
 
-"@cockroachlabs/icons@^0.4.3":
-  version "0.4.3"
-  resolved "https://storage.googleapis.com/cockroach-npm-deps/@cockroachlabs/icons/-/icons-0.4.3.tgz#cf42bd0398a71c3d70ff83f631689310e42091fb"
-  integrity sha512-PLbsDsZmgj9p/2fZkWQ+MENvxEPpdWhJBm6AqiWIYQ4A1X7+F6sfgXeHBE19qceu299MjxsjLDK+UlyU0uvlMA==
+"@cockroachlabs/icons@^0.5.5":
+  version "0.5.5"
+  resolved "https://storage.googleapis.com/cockroach-npm-deps/@cockroachlabs/icons/-/icons-0.5.5.tgz#0bcdab5bb01166a79d76d5f65753999fcc71dac5"
+  integrity sha512-WaU1/ZYV1noGBWVesLwEx43A+1BUQGnAyZLo63UAVds2dNb5CLgJxNr/rpuRMq2ZTau81Wf8RImgH8lytMkFkA==
 
-"@cockroachlabs/ui-components@0.2.20":
-  version "0.2.20"
-  resolved "https://storage.googleapis.com/cockroach-npm-deps/@cockroachlabs/ui-components/-/ui-components-0.2.20.tgz#7b4102f5063683aed625c4399fb1fec149a5c5e5"
-  integrity sha512-MXjcDrFVoP2/EKwe7pixol9l2+5r6hb4/FXvbNU0NW5wkufYBLp26CX3GjMbxobwy8NG+AkSZ3X0Vkhh9O9OXw==
+"@cockroachlabs/ui-components@0.4.2":
+  version "0.4.2"
+  resolved "https://storage.googleapis.com/cockroach-npm-deps/@cockroachlabs/ui-components/-/ui-components-0.4.2.tgz#e663b5fa7c6b2d19262e4e2199f96b80e7db85fb"
+  integrity sha512-0AnDDgcgoz5/umsssNob1peNlkccL9vHIH5lAMYiG76EQH8mO4EeWVvsDFblENH70s+4N247BKxx9sUae2PZCQ==
   dependencies:
-    "@cockroachlabs/icons" "^0.4.3"
+    "@cockroachlabs/icons" "^0.5.5"
     "@popperjs/core" "^2.9.2"
-    npm-run-all "^4.1.5"
+    "@types/recharts" "^1.8.23"
+    react-lines-ellipsis "^0.15.0"
     react-popper "^2.2.5"
+    recharts "^2.1.12"
 
 "@emotion/cache@^10.0.27":
   version "10.0.29"
@@ -3580,23 +3582,6 @@
   dependencies:
     call-me-maybe "^1.0.1"
     glob-to-regexp "^0.3.0"
-
-"@nicolo-ribaudo/chokidar-2@2.1.8-no-fsevents.2":
-  version "2.1.8-no-fsevents.2"
-  resolved "https://storage.googleapis.com/cockroach-npm-deps/@nicolo-ribaudo/chokidar-2/-/chokidar-2-2.1.8-no-fsevents.2.tgz#e324c0a247a5567192dd7180647709d7e2faf94b"
-  integrity sha512-Fb8WxUFOBQVl+CX4MWet5o7eCc6Pj04rXIwVKZ6h1NnqTo45eOQW6aWyhG25NIODvWFwTDMwBsYxrQ3imxpetg==
-  dependencies:
-    anymatch "^2.0.0"
-    async-each "^1.0.1"
-    braces "^2.3.2"
-    glob-parent "^5.1.2"
-    inherits "^2.0.3"
-    is-binary-path "^1.0.0"
-    is-glob "^4.0.0"
-    normalize-path "^3.0.0"
-    path-is-absolute "^1.0.0"
-    readdirp "^2.2.1"
-    upath "^1.1.1"
 
 "@nodelib/fs.scandir@2.1.5":
   version "2.1.5"
@@ -4601,10 +4586,39 @@
   resolved "https://storage.googleapis.com/cockroach-npm-deps/@types/d3-array/-/d3-array-2.12.3.tgz#8d16d51fb04ad5a5a8ebe14eb8263a579f1efdd1"
   integrity sha512-hN879HLPTVqZV3FQEXy7ptt083UXwguNbnxdTGzVW4y4KjX5uyNKljrQixZcSJfLyFirbpUokxpXtvR+N5+KIg==
 
+"@types/d3-color@^2":
+  version "2.0.3"
+  resolved "https://storage.googleapis.com/cockroach-npm-deps/@types/d3-color/-/d3-color-2.0.3.tgz#8bc4589073c80e33d126345542f588056511fe82"
+  integrity sha512-+0EtEjBfKEDtH9Rk3u3kLOUXM5F+iZK+WvASPb0MhIZl8J8NUvGeZRwKCXl+P3HkYx5TdU4YtcibpqHkSR9n7w==
+
 "@types/d3-format@^2.0.0":
   version "2.0.1"
   resolved "https://storage.googleapis.com/cockroach-npm-deps/@types/d3-format/-/d3-format-2.0.1.tgz#1f911f2ca829b57a29b3f0b5ee27f4656628d3d4"
   integrity sha512-1o4A+s8NvzBGKTPvNsgWjumueiauHfaLwPrYidOGzekQNJT0iucJAnEyEYLY9472jY9VHZCPAIvF4QDhSw8IHw==
+
+"@types/d3-interpolate@^2.0.0":
+  version "2.0.2"
+  resolved "https://storage.googleapis.com/cockroach-npm-deps/@types/d3-interpolate/-/d3-interpolate-2.0.2.tgz#78eddf7278b19e48e8652603045528d46897aba0"
+  integrity sha512-lElyqlUfIPyWG/cD475vl6msPL4aMU7eJvx1//Q177L8mdXoVPFl1djIESF2FKnc0NyaHvQlJpWwKJYwAhUoCw==
+  dependencies:
+    "@types/d3-color" "^2"
+
+"@types/d3-path@^1":
+  version "1.0.9"
+  resolved "https://storage.googleapis.com/cockroach-npm-deps/@types/d3-path/-/d3-path-1.0.9.tgz#73526b150d14cd96e701597cbf346cfd1fd4a58c"
+  integrity sha512-NaIeSIBiFgSC6IGUBjZWcscUJEq7vpVu7KthHN8eieTV9d9MqkSOZLH4chq1PmcKy06PNe3axLeKmRIyxJ+PZQ==
+
+"@types/d3-path@^2":
+  version "2.0.2"
+  resolved "https://storage.googleapis.com/cockroach-npm-deps/@types/d3-path/-/d3-path-2.0.2.tgz#6052f38f6186319769dfabab61b5514b0e02c75c"
+  integrity sha512-3YHpvDw9LzONaJzejXLOwZ3LqwwkoXb9LI2YN7Hbd6pkGo5nIlJ09ul4bQhBN4hQZJKmUpX8HkVqbzgUKY48cg==
+
+"@types/d3-scale@^3.0.0":
+  version "3.3.2"
+  resolved "https://storage.googleapis.com/cockroach-npm-deps/@types/d3-scale/-/d3-scale-3.3.2.tgz#18c94e90f4f1c6b1ee14a70f14bfca2bd1c61d06"
+  integrity sha512-gGqr7x1ost9px3FvIfUMi5XA/F/yAf4UkUDtdQhpH92XCT0Oa7zkkRzY61gPVJq+DxpHn/btouw5ohWkbBsCzQ==
+  dependencies:
+    "@types/d3-time" "^2"
 
 "@types/d3-scale@^3.2.0":
   version "3.3.2"
@@ -4612,6 +4626,20 @@
   integrity sha512-gGqr7x1ost9px3FvIfUMi5XA/F/yAf4UkUDtdQhpH92XCT0Oa7zkkRzY61gPVJq+DxpHn/btouw5ohWkbBsCzQ==
   dependencies:
     "@types/d3-time" "^2"
+
+"@types/d3-shape@^1":
+  version "1.3.8"
+  resolved "https://storage.googleapis.com/cockroach-npm-deps/@types/d3-shape/-/d3-shape-1.3.8.tgz#c3c15ec7436b4ce24e38de517586850f1fea8e89"
+  integrity sha512-gqfnMz6Fd5H6GOLYixOZP/xlrMtJms9BaS+6oWxTKHNqPGZ93BkWWupQSCYm6YHqx6h9wjRupuJb90bun6ZaYg==
+  dependencies:
+    "@types/d3-path" "^1"
+
+"@types/d3-shape@^2.0.0":
+  version "2.1.3"
+  resolved "https://storage.googleapis.com/cockroach-npm-deps/@types/d3-shape/-/d3-shape-2.1.3.tgz#35d397b9e687abaa0de82343b250b9897b8cacf3"
+  integrity sha512-HAhCel3wP93kh4/rq+7atLdybcESZ5bRHDEZUojClyZWsRuEMo3A52NGYJSh48SxfxEU6RZIVbZL2YFZ2OAlzQ==
+  dependencies:
+    "@types/d3-path" "^2"
 
 "@types/d3-time@^2":
   version "2.1.1"
@@ -5006,6 +5034,14 @@
     "@types/prop-types" "*"
     "@types/scheduler" "*"
     csstype "^3.0.2"
+
+"@types/recharts@^1.8.23":
+  version "1.8.24"
+  resolved "https://storage.googleapis.com/cockroach-npm-deps/@types/recharts/-/recharts-1.8.24.tgz#2eb3a857291e0aa216c83a3fea6acec113eab3ca"
+  integrity sha512-PGugStujgxjMOUUJuGIrw71MIhTtl/FeNzuWZVDTS7Kq8NdiQfMrlC6GXJIvlQcrsUIn9IcXbi6sZJjK+6kfLQ==
+  dependencies:
+    "@types/d3-shape" "^1"
+    "@types/react" "*"
 
 "@types/redux-saga@0.10.5":
   version "0.10.5"
@@ -5814,14 +5850,6 @@ antd@^3.25.2:
     shallowequal "^1.1.0"
     warning "~4.0.3"
 
-anymatch@^2.0.0:
-  version "2.0.0"
-  resolved "https://storage.googleapis.com/cockroach-npm-deps/anymatch/-/anymatch-2.0.0.tgz#bcb24b4f37934d9aa7ac17b4adaf89e7c76ef2eb"
-  integrity sha512-5teOsQWABXHHBFP9y3skS5P3d/WfWXpv3FUpy+LorMrNYaT9pI4oLMQX7jzQ2KklNpGpWHzdCXTDT2Y3XGlZBw==
-  dependencies:
-    micromatch "^3.1.4"
-    normalize-path "^2.1.1"
-
 anymatch@^3.0.0:
   version "3.1.2"
   resolved "https://storage.googleapis.com/cockroach-npm-deps/anymatch/-/anymatch-3.1.2.tgz#c0557c096af32f106198f4f4e2a383537e378716"
@@ -6120,11 +6148,6 @@ astroturf@^0.10.2:
     postcss-loader "^3.0.0"
     postcss-nested "^4.1.1"
     resolve "^1.11.1"
-
-async-each@^1.0.1:
-  version "1.0.3"
-  resolved "https://storage.googleapis.com/cockroach-npm-deps/async-each/-/async-each-1.0.3.tgz#b727dbf87d7651602f06f4d4ac387f47d91b0cbf"
-  integrity sha512-z/WhQ5FPySLdvREByI2vZiTWwCnF0moMJ1hK9YQwDTHKh6I7/uSckMetoRGb5UBZPC1z0jlw+n/XCgjeH7y1AQ==
 
 async-validator@~1.11.3:
   version "1.11.5"
@@ -6489,22 +6512,10 @@ big.js@^5.2.2:
   resolved "https://storage.googleapis.com/cockroach-npm-deps/big.js/-/big.js-5.2.2.tgz#65f0af382f578bcdc742bd9c281e9cb2d7768328"
   integrity sha512-vyL2OymJxmarO8gxMr0mhChsO9QGwhynfuu4+MHTAW6czfq9humCB7rKpUjDd9YUiDPU4mzpyupFSvOClAwbmQ==
 
-binary-extensions@^1.0.0:
-  version "1.13.1"
-  resolved "https://storage.googleapis.com/cockroach-npm-deps/binary-extensions/-/binary-extensions-1.13.1.tgz#598afe54755b2868a5330d2aff9d4ebb53209b65"
-  integrity sha512-Un7MIEDdUC5gNpcGDV97op1Ywk748MpHcFTHoYs6qnj1Z3j7I53VG3nwZhKzoBZmbdRNnb6WRdFlwl7tSDuZGw==
-
 binary-extensions@^2.0.0:
   version "2.2.0"
   resolved "https://storage.googleapis.com/cockroach-npm-deps/binary-extensions/-/binary-extensions-2.2.0.tgz#75f502eeaf9ffde42fc98829645be4ea76bd9e2d"
   integrity sha512-jDctJ/IVQbZoJykoeHbhXpOlNBqGNcwXJKJog42E5HDPUwQTSdjCHdihjj0DlnheQ7blbT6dHOafNAiS8ooQKA==
-
-bindings@^1.5.0:
-  version "1.5.0"
-  resolved "https://storage.googleapis.com/cockroach-npm-deps/bindings/-/bindings-1.5.0.tgz#10353c9e945334bc0511a6d90b38fbc7c9c504df"
-  integrity sha512-p2q/t/mhvuOj/UeLlV6566GD/guowlr0hHxClI0W9m7MWYkL1F0hLo+0Aexs9HSPCtR1SXQ0TD3MMKrXZajbiQ==
-  dependencies:
-    file-uri-to-path "1.0.0"
 
 bluebird@^3.3.5:
   version "3.7.2"
@@ -6585,22 +6596,6 @@ brace-expansion@^1.1.7:
     concat-map "0.0.1"
 
 braces@^2.3.1:
-  version "2.3.2"
-  resolved "https://storage.googleapis.com/cockroach-npm-deps/braces/-/braces-2.3.2.tgz#5979fd3f14cd531565e5fa2df1abfff1dfaee729"
-  integrity sha512-aNdbnj9P8PjdXU4ybaWLK2IF3jc/EoDYbC7AazW6to3TRsfXxscC9UXOB5iDiEQrkyIbWp2SLQda4+QAa7nc3w==
-  dependencies:
-    arr-flatten "^1.1.0"
-    array-unique "^0.3.2"
-    extend-shallow "^2.0.1"
-    fill-range "^4.0.0"
-    isobject "^3.0.1"
-    repeat-element "^1.1.2"
-    snapdragon "^0.8.1"
-    snapdragon-node "^2.0.1"
-    split-string "^3.0.2"
-    to-regex "^3.0.1"
-
-braces@^2.3.2:
   version "2.3.2"
   resolved "https://storage.googleapis.com/cockroach-npm-deps/braces/-/braces-2.3.2.tgz#5979fd3f14cd531565e5fa2df1abfff1dfaee729"
   integrity sha512-aNdbnj9P8PjdXU4ybaWLK2IF3jc/EoDYbC7AazW6to3TRsfXxscC9UXOB5iDiEQrkyIbWp2SLQda4+QAa7nc3w==
@@ -7174,49 +7169,6 @@ cheerio@^1.0.0-rc.3:
     normalize-path "~3.0.0"
     readdirp "~3.6.0"
 
-chokidar@^2.1.8:
-  version "2.1.8"
-  resolved "https://storage.googleapis.com/cockroach-npm-deps/chokidar/-/chokidar-2.1.8.tgz#804b3a7b6a99358c3c5c61e71d8728f041cff917"
-  integrity sha512-ZmZUazfOzf0Nve7duiCKD23PFSCs4JPoYyccjUFF3aQkQadqBhfzhjkwBH2mNOG9cTBwhamM37EIsIkZw3nRgg==
-  dependencies:
-    anymatch "^2.0.0"
-    async-each "^1.0.1"
-    braces "^2.3.2"
-    glob-parent "^3.1.0"
-    inherits "^2.0.3"
-    is-binary-path "^1.0.0"
-    is-glob "^4.0.0"
-    normalize-path "^3.0.0"
-    path-is-absolute "^1.0.0"
-    readdirp "^2.2.1"
-    upath "^1.1.1"
-
-chokidar@^3.4.0:
-  version "3.5.2"
-  resolved "https://storage.googleapis.com/cockroach-npm-deps/chokidar/-/chokidar-3.5.2.tgz#dba3976fcadb016f66fd365021d91600d01c1e75"
-  integrity sha512-ekGhOnNVPgT77r4K/U3GDhu+FQ2S8TnK/s2KbIGXi0SZWuwkZ2QNyfWdZW+TVfn84DpEP7rLeCt2UI6bJ8GwbQ==
-  dependencies:
-    anymatch "~3.1.2"
-    braces "~3.0.2"
-    glob-parent "~5.1.2"
-    is-binary-path "~2.1.0"
-    is-glob "~4.0.1"
-    normalize-path "~3.0.0"
-    readdirp "~3.6.0"
-
-chokidar@^3.4.1:
-  version "3.5.2"
-  resolved "https://storage.googleapis.com/cockroach-npm-deps/chokidar/-/chokidar-3.5.2.tgz#dba3976fcadb016f66fd365021d91600d01c1e75"
-  integrity sha512-ekGhOnNVPgT77r4K/U3GDhu+FQ2S8TnK/s2KbIGXi0SZWuwkZ2QNyfWdZW+TVfn84DpEP7rLeCt2UI6bJ8GwbQ==
-  dependencies:
-    anymatch "~3.1.2"
-    braces "~3.0.2"
-    glob-parent "~5.1.2"
-    is-binary-path "~2.1.0"
-    is-glob "~4.0.1"
-    normalize-path "~3.0.0"
-    readdirp "~3.6.0"
-
 chokidar@^3.4.2:
   version "3.5.2"
   resolved "https://storage.googleapis.com/cockroach-npm-deps/chokidar/-/chokidar-3.5.2.tgz#dba3976fcadb016f66fd365021d91600d01c1e75"
@@ -7376,15 +7328,6 @@ cli-width@^3.0.0:
   resolved "https://storage.googleapis.com/cockroach-npm-deps/cli-width/-/cli-width-3.0.0.tgz#a2f48437a2caa9a22436e794bf071ec9e61cedf6"
   integrity sha512-FxqpkPPwu1HjuN93Omfm4h8uIanXofW0RxVEW3k5RKx+mJJYSthzNhp32Kzxxy3YAEZ/Dc/EWN1vZRY0+kOhbw==
 
-clipboard@^2.0.0:
-  version "2.0.8"
-  resolved "https://storage.googleapis.com/cockroach-npm-deps/clipboard/-/clipboard-2.0.8.tgz#ffc6c103dd2967a83005f3f61976aa4655a4cdba"
-  integrity sha512-Y6WO0unAIQp5bLmk1zdThRhgJt/x3ks6f30s3oE3H1mgIEU33XyQjEf8gsf6DxC7NPX8Y1SsNWjUjL/ywLnnbQ==
-  dependencies:
-    good-listener "^1.2.2"
-    select "^1.1.2"
-    tiny-emitter "^2.0.0"
-
 cliui@^5.0.0:
   version "5.0.0"
   resolved "https://storage.googleapis.com/cockroach-npm-deps/cliui/-/cliui-5.0.0.tgz#deefcfdb2e800784aa34f46fa08e06851c7bbbc5"
@@ -7483,11 +7426,6 @@ colorette@^1.2.2:
   version "1.2.2"
   resolved "https://storage.googleapis.com/cockroach-npm-deps/colorette/-/colorette-1.2.2.tgz#cbcc79d5e99caea2dbf10eb3a26fd8b3e6acfa94"
   integrity sha512-MKGMzyfeuutC/ZJ1cba9NqcNpfeqMUcYmyF1ZFY6/Cn7CNSAKx6a+s48sqLqyAiZuaP2TcqMhoo+dlwFnVxT9w==
-
-colors@^1.1.2:
-  version "1.4.0"
-  resolved "https://storage.googleapis.com/cockroach-npm-deps/colors/-/colors-1.4.0.tgz#c50491479d4c1bdaed2c9ced32cf7c7dc2360f78"
-  integrity sha512-a+UqTh4kgZg/SlGvfbzDHpgRu7AAQOmmqRHJnxhRZICKFUT91brVhNNt58CMWU9PsBbv3PDCZUHbVxuDiH2mtA==
 
 combined-stream@^1.0.8:
   version "1.0.8"
@@ -8102,6 +8040,11 @@ css-select@^4.1.3:
     domutils "^2.6.0"
     nth-check "^2.0.0"
 
+css-unit-converter@^1.1.1:
+  version "1.1.2"
+  resolved "https://storage.googleapis.com/cockroach-npm-deps/css-unit-converter/-/css-unit-converter-1.1.2.tgz#4c77f5a1954e6dbff60695ecb214e3270436ab21"
+  integrity sha512-IiJwMC8rdZE0+xiEZHeru6YoONC4rfPMqGm2W85jMIbkFvv5nFTwJVFHam2eFrN6txmoUYFAFXiv8ICVeTO0MA==
+
 css-what@^5.0.0:
   version "5.0.1"
   resolved "https://storage.googleapis.com/cockroach-npm-deps/css-what/-/css-what-5.0.1.tgz#3efa820131f4669a8ac2408f9c32e7c7de9f4cad"
@@ -8197,6 +8140,29 @@ d3-format@^2.0.0:
   dependencies:
     d3-color "1 - 2"
 
+d3-interpolate@^2.0.0:
+  version "2.0.1"
+  resolved "https://storage.googleapis.com/cockroach-npm-deps/d3-interpolate/-/d3-interpolate-2.0.1.tgz#98be499cfb8a3b94d4ff616900501a64abc91163"
+  integrity sha512-c5UhwwTs/yybcmTpAVqwSFl6vrQ8JZJoT5F7xNFK9pymv5C0Ymcc9/LIJHtYIggg/yS9YHw8i8O8tgb9pupjeQ==
+  dependencies:
+    d3-color "1 - 2"
+
+"d3-path@1 - 2":
+  version "2.0.0"
+  resolved "https://storage.googleapis.com/cockroach-npm-deps/d3-path/-/d3-path-2.0.0.tgz#55d86ac131a0548adae241eebfb56b4582dd09d8"
+  integrity sha512-ZwZQxKhBnv9yHaiWd6ZU4x5BtCQ7pXszEV9CU6kRgwIQVQGLMv1oiL4M+MK/n79sYzsj+gcgpPQSctJUsLN7fA==
+
+d3-scale@^3.0.0:
+  version "3.3.0"
+  resolved "https://storage.googleapis.com/cockroach-npm-deps/d3-scale/-/d3-scale-3.3.0.tgz#28c600b29f47e5b9cd2df9749c206727966203f3"
+  integrity sha512-1JGp44NQCt5d1g+Yy+GeOnZP7xHo0ii8zsQp6PGzd+C1/dl0KGsp9A7Mxwp+1D1o4unbTTxVdU/ZOIEBoeZPbQ==
+  dependencies:
+    d3-array "^2.3.0"
+    d3-format "1 - 2"
+    d3-interpolate "1.2.0 - 2"
+    d3-time "^2.1.1"
+    d3-time-format "2 - 3"
+
 d3-scale@^3.2.3:
   version "3.3.0"
   resolved "https://storage.googleapis.com/cockroach-npm-deps/d3-scale/-/d3-scale-3.3.0.tgz#28c600b29f47e5b9cd2df9749c206727966203f3"
@@ -8207,6 +8173,13 @@ d3-scale@^3.2.3:
     d3-interpolate "1.2.0 - 2"
     d3-time "^2.1.1"
     d3-time-format "2 - 3"
+
+d3-shape@^2.0.0:
+  version "2.1.0"
+  resolved "https://storage.googleapis.com/cockroach-npm-deps/d3-shape/-/d3-shape-2.1.0.tgz#3b6a82ccafbc45de55b57fcf956c584ded3b666f"
+  integrity sha512-PnjUqfM2PpskbSLTJvAzp2Wv4CZsnAgTfcVRTwW03QR3MkXF8Uo7B1y/lWkAsmbKwuecto++4NlsYcvYpXpTHA==
+  dependencies:
+    d3-path "1 - 2"
 
 "d3-time-format@2 - 3":
   version "3.0.0"
@@ -8313,6 +8286,11 @@ decamelize@^1.2.0:
   resolved "https://storage.googleapis.com/cockroach-npm-deps/decamelize/-/decamelize-1.2.0.tgz#f6534d15148269b20352e7bee26f501f9a191290"
   integrity sha1-9lNNFRSCabIDUue+4m9QH5oZEpA=
 
+decimal.js-light@^2.4.1:
+  version "2.5.1"
+  resolved "https://storage.googleapis.com/cockroach-npm-deps/decimal.js-light/-/decimal.js-light-2.5.1.tgz#134fd32508f19e208f4fb2f8dac0d2626a867934"
+  integrity sha512-qIMFpTMZmny+MMIitAB6D7iVPEorVw6YQRWkvarTkT4tBeSLLiHzcwj6q0MmYSFCiVpiqPJTJEYIrpcPzVEIvg==
+
 decimal.js@^10.2.1:
   version "10.3.1"
   resolved "https://storage.googleapis.com/cockroach-npm-deps/decimal.js/-/decimal.js-10.3.1.tgz#d8c3a444a9c6774ba60ca6ad7261c3a94fd5e783"
@@ -8397,11 +8375,6 @@ delayed-stream@~1.0.0:
   version "1.0.0"
   resolved "https://storage.googleapis.com/cockroach-npm-deps/delayed-stream/-/delayed-stream-1.0.0.tgz#df3ae199acadfb7d440aaae0b29e2272b24ec619"
   integrity sha1-3zrhmayt+31ECqrgsp4icrJOxhk=
-
-delegate@^3.1.2:
-  version "3.2.0"
-  resolved "https://storage.googleapis.com/cockroach-npm-deps/delegate/-/delegate-3.2.0.tgz#b66b71c3158522e8ab5744f720d8ca0c2af59166"
-  integrity sha512-IofjkYBZaZivn0V8nnsMJGBr4jVLxHDheKSW88PyxS5QC4Vo9ZbZVvhzlSxY87fVq3STR6r+4cGepyHkcWOQSw==
 
 delegates@^1.0.0:
   version "1.0.0"
@@ -8534,6 +8507,13 @@ dom-converter@^0.2.0:
   integrity sha512-gd3ypIPfOMr9h5jIKq8E3sHOTCjeirnl0WK5ZdS1AW0Odt0b1PaWaHdJ4Qk4klv+YB9aJBS7mESXjFoDQPu6DA==
   dependencies:
     utila "~0.4"
+
+dom-helpers@^3.4.0:
+  version "3.4.0"
+  resolved "https://storage.googleapis.com/cockroach-npm-deps/dom-helpers/-/dom-helpers-3.4.0.tgz#e9b369700f959f62ecde5a6babde4bccd9169af8"
+  integrity sha512-LnuPJ+dwqKDIyotW1VzmOZ5TONUN7CwkCR5hrgawTUbkBGYdeoNLZo6nNfGkCrjtE1nXXaj7iMMpDa8/d9WoIA==
+  dependencies:
+    "@babel/runtime" "^7.1.2"
 
 dom-helpers@^5.0.1:
   version "5.2.1"
@@ -8953,13 +8933,6 @@ enzyme@^3.11.0:
     rst-selector-parser "^2.2.3"
     string.prototype.trim "^1.2.1"
 
-errno@^0.1.1:
-  version "0.1.8"
-  resolved "https://storage.googleapis.com/cockroach-npm-deps/errno/-/errno-0.1.8.tgz#8bb3e9c7d463be4976ff888f76b4809ebc2e811f"
-  integrity sha512-dJ6oBr5SQ1VSd9qkk7ByRgb/1SH4JZjCHSW/mr63/QcXO9zLVxvJ6Oy13nio03rxpSnVDDjFor75SjVeZWPW/A==
-  dependencies:
-    prr "~1.0.1"
-
 errno@^0.1.3:
   version "0.1.8"
   resolved "https://storage.googleapis.com/cockroach-npm-deps/errno/-/errno-0.1.8.tgz#8bb3e9c7d463be4976ff888f76b4809ebc2e811f"
@@ -9165,76 +9138,6 @@ es6-shim@^0.35.5:
   resolved "https://storage.googleapis.com/cockroach-npm-deps/es6-shim/-/es6-shim-0.35.6.tgz#d10578301a83af2de58b9eadb7c2c9945f7388a0"
   integrity sha512-EmTr31wppcaIAgblChZiuN/l9Y7DPyw8Xtbg7fIVngn6zMW+IEBJDJngeKC3x6wr0V/vcA2wqeFnaw1bFJbDdA==
 
-esbuild-android-64@0.14.43:
-  version "0.14.43"
-  resolved "https://storage.googleapis.com/cockroach-npm-deps/esbuild-android-64/-/esbuild-android-64-0.14.43.tgz#59bf3edad6863c27aa92bbb5c1d83a9a5c981495"
-  integrity sha512-kqFXAS72K6cNrB6RiM7YJ5lNvmWRDSlpi7ZuRZ1hu1S3w0zlwcoCxWAyM23LQUyZSs1PbjHgdbbfYAN8IGh6xg==
-
-esbuild-android-arm64@0.14.43:
-  version "0.14.43"
-  resolved "https://storage.googleapis.com/cockroach-npm-deps/esbuild-android-arm64/-/esbuild-android-arm64-0.14.43.tgz#0258704edf92ce2463af6d2900b844b5423bed63"
-  integrity sha512-bKS2BBFh+7XZY9rpjiHGRNA7LvWYbZWP87pLehggTG7tTaCDvj8qQGOU/OZSjCSKDYbgY7Q+oDw8RlYQ2Jt2BA==
-
-esbuild-darwin-64@0.14.43:
-  version "0.14.43"
-  resolved "https://storage.googleapis.com/cockroach-npm-deps/esbuild-darwin-64/-/esbuild-darwin-64-0.14.43.tgz#72a47295678d4aa0656979baa8cf6d5c8c92656f"
-  integrity sha512-/3PSilx011ttoieRGkSZ0XV8zjBf2C9enV4ScMMbCT4dpx0mFhMOpFnCHkOK0pWGB8LklykFyHrWk2z6DENVUg==
-
-esbuild-darwin-arm64@0.14.43:
-  version "0.14.43"
-  resolved "https://storage.googleapis.com/cockroach-npm-deps/esbuild-darwin-arm64/-/esbuild-darwin-arm64-0.14.43.tgz#5f5823170b8d85b888957f0794e186caac447aca"
-  integrity sha512-1HyFUKs8DMCBOvw1Qxpr5Vv/ThNcVIFb5xgXWK3pyT40WPvgYIiRTwJCvNs4l8i5qWF8/CK5bQxJVDjQvtv0Yw==
-
-esbuild-freebsd-64@0.14.43:
-  version "0.14.43"
-  resolved "https://storage.googleapis.com/cockroach-npm-deps/esbuild-freebsd-64/-/esbuild-freebsd-64-0.14.43.tgz#e4a48b08181053837e6cd9bda19ae0af94d493b0"
-  integrity sha512-FNWc05TPHYgaXjbPZO5/rJKSBslfG6BeMSs8GhwnqAKP56eEhvmzwnIz1QcC9cRVyO+IKqWNfmHFkCa1WJTULA==
-
-esbuild-freebsd-arm64@0.14.43:
-  version "0.14.43"
-  resolved "https://storage.googleapis.com/cockroach-npm-deps/esbuild-freebsd-arm64/-/esbuild-freebsd-arm64-0.14.43.tgz#386e780d36c1dedf3a1cdab79e0bbacd873274e6"
-  integrity sha512-amrYopclz3VohqisOPR6hA3GOWA3LZC1WDLnp21RhNmoERmJ/vLnOpnrG2P/Zao+/erKTCUqmrCIPVtj58DRoA==
-
-esbuild-linux-32@0.14.43:
-  version "0.14.43"
-  resolved "https://storage.googleapis.com/cockroach-npm-deps/esbuild-linux-32/-/esbuild-linux-32-0.14.43.tgz#040ed6b9ebf06d73acdf2acce7f1cd0c12fbc6a5"
-  integrity sha512-KoxoEra+9O3AKVvgDFvDkiuddCds6q71owSQEYwjtqRV7RwbPzKxJa6+uyzUulHcyGVq0g15K0oKG5CFBcvYDw==
-
-esbuild-linux-64@0.14.43:
-  version "0.14.43"
-  resolved "https://storage.googleapis.com/cockroach-npm-deps/esbuild-linux-64/-/esbuild-linux-64-0.14.43.tgz#8abbb7594ab6a008f2aae72d95d8a4fdc59d9000"
-  integrity sha512-EwINwGMyiJMgBby5/SbMqKcUhS5AYAZ2CpEBzSowsJPNBJEdhkCTtEjk757TN/wxgbu3QklqDM6KghY660QCUw==
-
-esbuild-linux-arm64@0.14.43:
-  version "0.14.43"
-  resolved "https://storage.googleapis.com/cockroach-npm-deps/esbuild-linux-arm64/-/esbuild-linux-arm64-0.14.43.tgz#4e8e9ce77cbf7efec65e79e512b3d2fbd2da398f"
-  integrity sha512-UlSpjMWllAc70zYbHxWuDS3FJytyuR/gHJYBr8BICcTNb/TSOYVBg6U7b3jZ3mILTrgzwJUHwhEwK18FZDouUQ==
-
-esbuild-linux-arm@0.14.43:
-  version "0.14.43"
-  resolved "https://storage.googleapis.com/cockroach-npm-deps/esbuild-linux-arm/-/esbuild-linux-arm-0.14.43.tgz#9e41ee5e099c0ffdfd150da154330c2c0226cc96"
-  integrity sha512-e6YzQUoDxxtyamuF12eVzzRC7bbEFSZohJ6igQB9tBqnNmIQY3fI6Cns3z2wxtbZ3f2o6idkD2fQnlvs2902Dg==
-
-esbuild-linux-mips64le@0.14.43:
-  version "0.14.43"
-  resolved "https://storage.googleapis.com/cockroach-npm-deps/esbuild-linux-mips64le/-/esbuild-linux-mips64le-0.14.43.tgz#4b41f465a787f91cc4fe7dffa0dcabf655935a1a"
-  integrity sha512-f+v8cInPEL1/SDP//CfSYzcDNgE4CY3xgDV81DWm3KAPWzhvxARrKxB1Pstf5mB56yAslJDxu7ryBUPX207EZA==
-
-esbuild-linux-ppc64le@0.14.43:
-  version "0.14.43"
-  resolved "https://storage.googleapis.com/cockroach-npm-deps/esbuild-linux-ppc64le/-/esbuild-linux-ppc64le-0.14.43.tgz#ca15934f5b46728dd9ac05270e783e7feaca9eaf"
-  integrity sha512-5wZYMDGAL/K2pqkdIsW+I4IR41kyfHr/QshJcNpUfK3RjB3VQcPWOaZmc+74rm4ZjVirYrtz+jWw0SgxtxRanA==
-
-esbuild-linux-riscv64@0.14.43:
-  version "0.14.43"
-  resolved "https://storage.googleapis.com/cockroach-npm-deps/esbuild-linux-riscv64/-/esbuild-linux-riscv64-0.14.43.tgz#70fce2b5a0605a67e58b5a357b0e00be1029836d"
-  integrity sha512-lYcAOUxp85hC7lSjycJUVSmj4/9oEfSyXjb/ua9bNl8afonaduuqtw7hvKMoKuYnVwOCDw4RSfKpcnIRDWq+Bw==
-
-esbuild-linux-s390x@0.14.43:
-  version "0.14.43"
-  resolved "https://storage.googleapis.com/cockroach-npm-deps/esbuild-linux-s390x/-/esbuild-linux-s390x-0.14.43.tgz#318d03b4f4ccc7fa44ac7562121cf4a4529e477a"
-  integrity sha512-27e43ZhHvhFE4nM7HqtUbMRu37I/4eNSUbb8FGZWszV+uLzMIsHDwLoBiJmw7G9N+hrehNPeQ4F5Ujad0DrUKQ==
-
 esbuild-loader@^2.19.0:
   version "2.19.0"
   resolved "https://storage.googleapis.com/cockroach-npm-deps/esbuild-loader/-/esbuild-loader-2.19.0.tgz#54f62d1da8262acfc3c5883c24da35af8324f116"
@@ -9246,36 +9149,6 @@ esbuild-loader@^2.19.0:
     loader-utils "^2.0.0"
     tapable "^2.2.0"
     webpack-sources "^2.2.0"
-
-esbuild-netbsd-64@0.14.43:
-  version "0.14.43"
-  resolved "https://storage.googleapis.com/cockroach-npm-deps/esbuild-netbsd-64/-/esbuild-netbsd-64-0.14.43.tgz#86130ce204ef0162a96e863b55851efecc92f423"
-  integrity sha512-2mH4QF6hHBn5zzAfxEI/2eBC0mspVsZ6UVo821LpAJKMvLJPBk3XJO5xwg7paDqSqpl7p6IRrAenW999AEfJhQ==
-
-esbuild-openbsd-64@0.14.43:
-  version "0.14.43"
-  resolved "https://storage.googleapis.com/cockroach-npm-deps/esbuild-openbsd-64/-/esbuild-openbsd-64-0.14.43.tgz#0229dc2db2ded97b03bb93bba7646b30ffdf5d0d"
-  integrity sha512-ZhQpiZjvqCqO8jKdGp9+8k9E/EHSA+zIWOg+grwZasI9RoblqJ1QiZqqi7jfd6ZrrG1UFBNGe4m0NFxCFbMVbg==
-
-esbuild-sunos-64@0.14.43:
-  version "0.14.43"
-  resolved "https://storage.googleapis.com/cockroach-npm-deps/esbuild-sunos-64/-/esbuild-sunos-64-0.14.43.tgz#17e316216eb9f1de25d52a9000356ae5b869e736"
-  integrity sha512-DgxSi9DaHReL9gYuul2rrQCAapgnCJkh3LSHPKsY26zytYppG0HgkgVF80zjIlvEsUbGBP/GHQzBtrezj/Zq1Q==
-
-esbuild-windows-32@0.14.43:
-  version "0.14.43"
-  resolved "https://storage.googleapis.com/cockroach-npm-deps/esbuild-windows-32/-/esbuild-windows-32-0.14.43.tgz#a173757bc6dfd0f2656ff40b64f7f9290745778e"
-  integrity sha512-Ih3+2O5oExiqm0mY6YYE5dR0o8+AspccQ3vIAtRodwFvhuyGLjb0Hbmzun/F3Lw19nuhPMu3sW2fqIJ5xBxByw==
-
-esbuild-windows-64@0.14.43:
-  version "0.14.43"
-  resolved "https://storage.googleapis.com/cockroach-npm-deps/esbuild-windows-64/-/esbuild-windows-64-0.14.43.tgz#c447b23126aad158c4fe6a394342cafd97926ed1"
-  integrity sha512-8NsuNfI8xwFuJbrCuI+aBqNTYkrWErejFO5aYM+yHqyHuL8mmepLS9EPzAzk8rvfaJrhN0+RvKWAcymViHOKEw==
-
-esbuild-windows-arm64@0.14.43:
-  version "0.14.43"
-  resolved "https://storage.googleapis.com/cockroach-npm-deps/esbuild-windows-arm64/-/esbuild-windows-arm64-0.14.43.tgz#3caed1b430d394d7a7836407b9d36c4750246e76"
-  integrity sha512-7ZlD7bo++kVRblJEoG+cepljkfP8bfuTPz5fIXzptwnPaFwGS6ahvfoYzY7WCf5v/1nX2X02HDraVItTgbHnKw==
 
 esbuild@0.14.43:
   version "0.14.43"
@@ -9546,6 +9419,11 @@ eventemitter3@^4.0.0:
   resolved "https://storage.googleapis.com/cockroach-npm-deps/eventemitter3/-/eventemitter3-4.0.7.tgz#2de9b68f6528d5644ef5c59526a1b4a07306169f"
   integrity sha512-8guHBZCwKnFhYdHr2ysuRWErTwhoN2X8XELRlrRwpmfeY2jjuUN4taQMsULKUVo1K4DvZl+0pgfyoysHxvmvEw==
 
+eventemitter3@^4.0.1:
+  version "4.0.7"
+  resolved "https://storage.googleapis.com/cockroach-npm-deps/eventemitter3/-/eventemitter3-4.0.7.tgz#2de9b68f6528d5644ef5c59526a1b4a07306169f"
+  integrity sha512-8guHBZCwKnFhYdHr2ysuRWErTwhoN2X8XELRlrRwpmfeY2jjuUN4taQMsULKUVo1K4DvZl+0pgfyoysHxvmvEw==
+
 eventlistener@0.0.1:
   version "0.0.1"
   resolved "https://storage.googleapis.com/cockroach-npm-deps/eventlistener/-/eventlistener-0.0.1.tgz#ed2baabb852227af2bcf889152c72c63ca532eb8"
@@ -9731,6 +9609,11 @@ fast-diff@^1.1.2:
   resolved "https://storage.googleapis.com/cockroach-npm-deps/fast-diff/-/fast-diff-1.2.0.tgz#73ee11982d86caaf7959828d519cfe927fac5f03"
   integrity sha512-xJuoT5+L99XlZ8twedaRf6Ax2TgQVxvgZOYoPKqZufmJib0tL2tegPBOZb1pVNgIhlqDlA0eO0c3wBvQcmzx4w==
 
+fast-equals@^2.0.0:
+  version "2.0.4"
+  resolved "https://storage.googleapis.com/cockroach-npm-deps/fast-equals/-/fast-equals-2.0.4.tgz#3add9410585e2d7364c2deeb6a707beadb24b927"
+  integrity sha512-caj/ZmjHljPrZtbzJ3kfH5ia/k4mTJe/qSiXAGzxZWRZgsgDV0cvNaQULqUX8t0/JVlzzEdYOwCN5DmzTxoD4w==
+
 fast-glob@^2.2.6:
   version "2.2.7"
   resolved "https://storage.googleapis.com/cockroach-npm-deps/fast-glob/-/fast-glob-2.2.7.tgz#6953857c3afa475fff92ee6015d52da70a4cd39d"
@@ -9890,11 +9773,6 @@ file-system-cache@^1.0.5:
     bluebird "^3.3.5"
     fs-extra "^0.30.0"
     ramda "^0.21.0"
-
-file-uri-to-path@1.0.0:
-  version "1.0.0"
-  resolved "https://storage.googleapis.com/cockroach-npm-deps/file-uri-to-path/-/file-uri-to-path-1.0.0.tgz#553a7b8446ff6f684359c445f1e37a05dacc33dd"
-  integrity sha512-0Zt+s3L7Vf1biwWZ29aARiVYLx7iMGnEUl9x33fbB/j3jR81u/O2LbqK+Bm1CDSNDKVtJ/YjwY7TUd5SkeLQLw==
 
 filesize@6.1.0:
   version "6.1.0"
@@ -10216,24 +10094,6 @@ fs.realpath@^1.0.0:
   version "1.0.0"
   resolved "https://storage.googleapis.com/cockroach-npm-deps/fs.realpath/-/fs.realpath-1.0.0.tgz#1504ad2523158caa40db4a2787cb01411994ea4f"
   integrity sha1-FQStJSMVjKpA20onh8sBQRmU6k8=
-
-fsevents@^1.2.7:
-  version "1.2.13"
-  resolved "https://storage.googleapis.com/cockroach-npm-deps/fsevents/-/fsevents-1.2.13.tgz#f325cb0455592428bcf11b383370ef70e3bfcc38"
-  integrity sha512-oWb1Z6mkHIskLzEJ/XWX0srkpkTQ7vaopMQkyaEIoq0fmtFVxOthb8cCxeT+p3ynTdkk/RZwbgG4brR5BeWECw==
-  dependencies:
-    bindings "^1.5.0"
-    nan "^2.12.1"
-
-fsevents@^2.3.2:
-  version "2.3.2"
-  resolved "https://storage.googleapis.com/cockroach-npm-deps/fsevents/-/fsevents-2.3.2.tgz#8a526f78b8fdf4623b709e0b975c52c24c02fd1a"
-  integrity sha512-xiqMQR4xAeHTuB9uWm+fFRcIOgKBMiOBP+eXiyT7jsgVCq1bkVygt00oASowB7EdtpOHaaPgKt812P9ab+DDKA==
-
-fsevents@~2.3.2:
-  version "2.3.2"
-  resolved "https://storage.googleapis.com/cockroach-npm-deps/fsevents/-/fsevents-2.3.2.tgz#8a526f78b8fdf4623b709e0b975c52c24c02fd1a"
-  integrity sha512-xiqMQR4xAeHTuB9uWm+fFRcIOgKBMiOBP+eXiyT7jsgVCq1bkVygt00oASowB7EdtpOHaaPgKt812P9ab+DDKA==
 
 fsm-iterator@^1.1.0:
   version "1.1.0"
@@ -10634,22 +10494,10 @@ globby@^9.2.0:
     pify "^4.0.1"
     slash "^2.0.0"
 
-good-listener@^1.2.2:
-  version "1.2.2"
-  resolved "https://storage.googleapis.com/cockroach-npm-deps/good-listener/-/good-listener-1.2.2.tgz#d53b30cdf9313dffb7dc9a0d477096aa6d145c50"
-  integrity sha1-1TswzfkxPf+33JoNR3CWqm0UXFA=
-  dependencies:
-    delegate "^3.1.2"
-
 google-protobuf@^3.6.1:
   version "3.18.0"
   resolved "https://storage.googleapis.com/cockroach-npm-deps/google-protobuf/-/google-protobuf-3.18.0.tgz#687449d8e858305d658dc1145852c306d8222f5a"
   integrity sha512-WlaQWRkUOo/lm9uTgNH6nk9IQt814RggWPzKBfnAVewOFzSzRUSmS1yUWRT6ixW1vS7er5p6tmLSmwzpPpmc8A==
-
-graceful-fs@^4.1.11:
-  version "4.2.6"
-  resolved "https://storage.googleapis.com/cockroach-npm-deps/graceful-fs/-/graceful-fs-4.2.6.tgz#ff040b2b0853b23c3d31027523706f1885d76bee"
-  integrity sha512-nTnJ528pbqxYanhpDYsi4Rd8MAeaBA67+RZ10CM1m3bTAVFEDcd5AuA4a6W5YkGZ1iNXHzZz8T6TBKLeBuNriQ==
 
 graceful-fs@^4.1.15:
   version "4.2.6"
@@ -10657,16 +10505,6 @@ graceful-fs@^4.1.15:
   integrity sha512-nTnJ528pbqxYanhpDYsi4Rd8MAeaBA67+RZ10CM1m3bTAVFEDcd5AuA4a6W5YkGZ1iNXHzZz8T6TBKLeBuNriQ==
 
 graceful-fs@^4.1.2:
-  version "4.2.6"
-  resolved "https://storage.googleapis.com/cockroach-npm-deps/graceful-fs/-/graceful-fs-4.2.6.tgz#ff040b2b0853b23c3d31027523706f1885d76bee"
-  integrity sha512-nTnJ528pbqxYanhpDYsi4Rd8MAeaBA67+RZ10CM1m3bTAVFEDcd5AuA4a6W5YkGZ1iNXHzZz8T6TBKLeBuNriQ==
-
-graceful-fs@^4.1.6:
-  version "4.2.6"
-  resolved "https://storage.googleapis.com/cockroach-npm-deps/graceful-fs/-/graceful-fs-4.2.6.tgz#ff040b2b0853b23c3d31027523706f1885d76bee"
-  integrity sha512-nTnJ528pbqxYanhpDYsi4Rd8MAeaBA67+RZ10CM1m3bTAVFEDcd5AuA4a6W5YkGZ1iNXHzZz8T6TBKLeBuNriQ==
-
-graceful-fs@^4.1.9:
   version "4.2.6"
   resolved "https://storage.googleapis.com/cockroach-npm-deps/graceful-fs/-/graceful-fs-4.2.6.tgz#ff040b2b0853b23c3d31027523706f1885d76bee"
   integrity sha512-nTnJ528pbqxYanhpDYsi4Rd8MAeaBA67+RZ10CM1m3bTAVFEDcd5AuA4a6W5YkGZ1iNXHzZz8T6TBKLeBuNriQ==
@@ -11182,11 +11020,6 @@ ignore@^5.2.0:
   resolved "https://storage.googleapis.com/cockroach-npm-deps/ignore/-/ignore-5.2.0.tgz#6d3bac8fa7fe0d45d9f9be7bac2fc279577e345a"
   integrity sha512-CmxgYGiEPCLhfLnpPp1MoRmifwEIOgjcHXxOBjv7mY96c+eWScsOP9c112ZyLdWHi0FxHjI+4uVhKYp/gcdRmQ==
 
-image-size@~0.5.0:
-  version "0.5.5"
-  resolved "https://storage.googleapis.com/cockroach-npm-deps/image-size/-/image-size-0.5.5.tgz#09dfd4ab9d20e29eb1c3e80b8990378df9e3cb9c"
-  integrity sha1-Cd/Uq50g4p6xw+gLiZA3jfnjy5w=
-
 immer@8.0.1:
   version "8.0.1"
   resolved "https://storage.googleapis.com/cockroach-npm-deps/immer/-/immer-8.0.1.tgz#9c73db683e2b3975c424fb0572af5889877ae656"
@@ -11201,11 +11034,6 @@ immutable@^3.7.4:
   version "3.8.2"
   resolved "https://storage.googleapis.com/cockroach-npm-deps/immutable/-/immutable-3.8.2.tgz#c2439951455bb39913daf281376f1530e104adf3"
   integrity sha1-wkOZUUVbs5kT2vKBN28VMOEErfM=
-
-"immutable@^3.8.1 || ^4.0.0-rc.1":
-  version "4.0.0-rc.12"
-  resolved "https://storage.googleapis.com/cockroach-npm-deps/immutable/-/immutable-4.0.0-rc.12.tgz#ca59a7e4c19ae8d9bf74a97bdf0f6e2f2a5d0217"
-  integrity sha512-0M2XxkZLx/mi3t8NVwIm1g8nHoEmM9p9UBl/G9k4+hm0kBgOVdMV/B3CY5dQ8qG8qc80NN4gDV4HQv6FTJ5q7A==
 
 immutable@~3.7.4:
   version "3.7.6"
@@ -11494,13 +11322,6 @@ is-bigint@^1.0.1:
   version "1.0.2"
   resolved "https://storage.googleapis.com/cockroach-npm-deps/is-bigint/-/is-bigint-1.0.2.tgz#ffb381442503235ad245ea89e45b3dbff040ee5a"
   integrity sha512-0JV5+SOCQkIdzjBK9buARcV804Ddu7A0Qet6sHi3FimE9ne6m4BGQZfRn+NZiXbBk4F4XmHfDZIipLj9pX8dSA==
-
-is-binary-path@^1.0.0:
-  version "1.0.1"
-  resolved "https://storage.googleapis.com/cockroach-npm-deps/is-binary-path/-/is-binary-path-1.0.1.tgz#75f16642b480f187a711c814161fd3a4a7655898"
-  integrity sha1-dfFmQrSA8YenEcgUFh/TpKdlWJg=
-  dependencies:
-    binary-extensions "^1.0.0"
 
 is-binary-path@~2.1.0:
   version "2.1.0"
@@ -13421,25 +13242,6 @@ micromatch@^3.1.10:
     snapdragon "^0.8.1"
     to-regex "^3.0.2"
 
-micromatch@^3.1.4:
-  version "3.1.10"
-  resolved "https://storage.googleapis.com/cockroach-npm-deps/micromatch/-/micromatch-3.1.10.tgz#70859bc95c9840952f359a068a3fc49f9ecfac23"
-  integrity sha512-MWikgl9n9M3w+bpsY3He8L+w9eF9338xRl8IAO5viDizwSzziFEyUzo2xrrloB64ADbTf8uA8vRqqttDTOmccg==
-  dependencies:
-    arr-diff "^4.0.0"
-    array-unique "^0.3.2"
-    braces "^2.3.1"
-    define-property "^2.0.2"
-    extend-shallow "^3.0.2"
-    extglob "^2.0.4"
-    fragment-cache "^0.2.1"
-    kind-of "^6.0.2"
-    nanomatch "^1.2.9"
-    object.pick "^1.3.0"
-    regex-not "^1.0.0"
-    snapdragon "^0.8.1"
-    to-regex "^3.0.2"
-
 micromatch@^4.0.2:
   version "4.0.4"
   resolved "https://storage.googleapis.com/cockroach-npm-deps/micromatch/-/micromatch-4.0.4.tgz#896d519dfe9db25fce94ceb7a500919bf881ebf9"
@@ -13496,11 +13298,6 @@ mime-types@~2.1.24:
     mime-db "1.48.0"
 
 mime@1.6.0:
-  version "1.6.0"
-  resolved "https://storage.googleapis.com/cockroach-npm-deps/mime/-/mime-1.6.0.tgz#32cd9e5c64553bd58d19a568af452acff04981b1"
-  integrity sha512-x0Vn8spI+wuJ1O6S7gnbaQg8Pxh4NNHb7KSINmEWKiPE4RKOplvijn+NkmYmmRgP68mc70j2EbeTFRsrswaQeg==
-
-mime@^1.4.1:
   version "1.6.0"
   resolved "https://storage.googleapis.com/cockroach-npm-deps/mime/-/mime-1.6.0.tgz#32cd9e5c64553bd58d19a568af452acff04981b1"
   integrity sha512-x0Vn8spI+wuJ1O6S7gnbaQg8Pxh4NNHb7KSINmEWKiPE4RKOplvijn+NkmYmmRgP68mc70j2EbeTFRsrswaQeg==
@@ -13753,11 +13550,6 @@ mute-stream@0.0.8:
   resolved "https://storage.googleapis.com/cockroach-npm-deps/mute-stream/-/mute-stream-0.0.8.tgz#1630c42b2251ff81e2a283de96a5497ea92e5e0d"
   integrity sha512-nnbWWOkoWyUsTjKrhgD0dcz22mdkSnpYqbEjIm2nhwhuxlSkpywJmBo8h0ZqJdkp73mb90SssHkN4rsRaBAfAA==
 
-nan@^2.12.1:
-  version "2.14.2"
-  resolved "https://storage.googleapis.com/cockroach-npm-deps/nan/-/nan-2.14.2.tgz#f5376400695168f4cc694ac9393d0c9585eeea19"
-  integrity sha512-M2ufzIiINKCuDfBSAUr1vWQ+vuVcA9kqx8JJUsbQi6yf1uGRyb7HfpdfUr5qLXf3B/t8dPvcjhKMmlfnP47EzQ==
-
 nanomatch@^1.2.9:
   version "1.2.13"
   resolved "https://storage.googleapis.com/cockroach-npm-deps/nanomatch/-/nanomatch-1.2.13.tgz#b87a8aa4fc0de8fe6be88895b38983ff265bd119"
@@ -13774,11 +13566,6 @@ nanomatch@^1.2.9:
     regex-not "^1.0.0"
     snapdragon "^0.8.1"
     to-regex "^3.0.1"
-
-native-request@^1.0.5:
-  version "1.0.8"
-  resolved "https://storage.googleapis.com/cockroach-npm-deps/native-request/-/native-request-1.0.8.tgz#8f66bf606e0f7ea27c0e5995eb2f5d03e33ae6fb"
-  integrity sha512-vU2JojJVelUGp6jRcLwToPoWGxSx23z/0iX+I77J3Ht17rf2INGjrhOoQnjVo60nQd8wVsgzKkPfRXBiVdD2ag==
 
 native-url@^0.2.6:
   version "0.2.6"
@@ -13964,13 +13751,6 @@ normalize-package-data@^2.5.0:
     resolve "^1.10.0"
     semver "2 || 3 || 4 || 5"
     validate-npm-package-license "^3.0.1"
-
-normalize-path@^2.1.1:
-  version "2.1.1"
-  resolved "https://storage.googleapis.com/cockroach-npm-deps/normalize-path/-/normalize-path-2.1.1.tgz#1ab28b556e198363a8c1a6f7e6fa20137fe6aed9"
-  integrity sha1-GrKLVW4Zg2Oowab35vogE3/mrtk=
-  dependencies:
-    remove-trailing-separator "^1.0.1"
 
 normalize-path@^3.0.0:
   version "3.0.0"
@@ -14924,6 +14704,11 @@ postcss-selector-parser@^6.0.2:
   dependencies:
     cssesc "^3.0.0"
     util-deprecate "^1.0.2"
+
+postcss-value-parser@^3.3.0:
+  version "3.3.1"
+  resolved "https://storage.googleapis.com/cockroach-npm-deps/postcss-value-parser/-/postcss-value-parser-3.3.1.tgz#9ff822547e2893213cf1c30efa51ac5fd1ba8281"
+  integrity sha512-pISE66AbVkp4fDQ7VHBwRNXzAAKJjw4Vw7nWI/+Q3vuly7SNfgYXvm6i5IgFylHGK5sP/xHAbB7N49OS4gWNyQ==
 
 postcss-value-parser@^4.1.0:
   version "4.1.0"
@@ -16388,6 +16173,11 @@ react-inspector@^5.1.0:
     is-dom "^1.0.0"
     prop-types "^15.0.0"
 
+react-is@^16.10.2:
+  version "16.13.1"
+  resolved "https://storage.googleapis.com/cockroach-npm-deps/react-is/-/react-is-16.13.1.tgz#789729a4dc36de2999dc156dd6c1d9c18cea56a4"
+  integrity sha512-24e6ynE2H+OKt4kqsOvNd8kBpV65zoxbA4BVsEOB3ARVWQki/DHzaUoC5KuON/BiccDaCCTZBuOcfZs70kR8bQ==
+
 react-is@^16.12.0:
   version "16.13.1"
   resolved "https://storage.googleapis.com/cockroach-npm-deps/react-is/-/react-is-16.13.1.tgz#789729a4dc36de2999dc156dd6c1d9c18cea56a4"
@@ -16448,6 +16238,11 @@ react-lifecycles-compat@^3.0.4:
   resolved "https://storage.googleapis.com/cockroach-npm-deps/react-lifecycles-compat/-/react-lifecycles-compat-3.0.4.tgz#4f1a273afdfc8f3488a8c516bfda78f872352362"
   integrity sha512-fBASbA6LnOU9dOU2eW7aQ8xmYBSXUIWr+UmF9b1efZBazGNO+rcXT/icdKnYm2pTwcRylVUYwW7H1PHfLekVzA==
 
+react-lines-ellipsis@^0.15.0:
+  version "0.15.3"
+  resolved "https://storage.googleapis.com/cockroach-npm-deps/react-lines-ellipsis/-/react-lines-ellipsis-0.15.3.tgz#eb081c12e58170b09c5bd9db2fdbde9b5a3ea6c0"
+  integrity sha512-+kIcUZJPI3QqazZbO0eeEUmfRjmYKjCRzSmXQL4otrJzwOU9MjvASGQd4SELOOBSy6oiygjfDuCocGMssX0oUQ==
+
 react-popper-tooltip@^3.1.1:
   version "3.1.1"
   resolved "https://storage.googleapis.com/cockroach-npm-deps/react-popper-tooltip/-/react-popper-tooltip-3.1.1.tgz#329569eb7b287008f04fcbddb6370452ad3f9eac"
@@ -16497,6 +16292,13 @@ react-refresh@^0.8.3:
   version "0.8.3"
   resolved "https://storage.googleapis.com/cockroach-npm-deps/react-refresh/-/react-refresh-0.8.3.tgz#721d4657672d400c5e3c75d063c4a85fb2d5d68f"
   integrity sha512-X8jZHc7nCMjaCqoU+V2I0cOhNW+QMBwSUkeXnTi8IPe6zaRWfn60ZzvFDZqWPfmSJfjub7dDW1SP0jaHWLu/hg==
+
+react-resize-detector@^7.1.2:
+  version "7.1.2"
+  resolved "https://storage.googleapis.com/cockroach-npm-deps/react-resize-detector/-/react-resize-detector-7.1.2.tgz#8ef975dd8c3d56f9a5160ac382ef7136dcd2d86c"
+  integrity sha512-zXnPJ2m8+6oq9Nn8zsep/orts9vQv3elrpA+R8XTcW7DVVUJ9vwDwMXaBtykAYjMnkCIaOoK9vObyR7ZgFNlOw==
+  dependencies:
+    lodash "^4.17.21"
 
 react-router-dom@^5.3.1:
   version "5.3.1"
@@ -16568,6 +16370,14 @@ react-slick@~0.25.2:
     lodash.debounce "^4.0.8"
     resize-observer-polyfill "^1.5.0"
 
+react-smooth@^2.0.1:
+  version "2.0.1"
+  resolved "https://storage.googleapis.com/cockroach-npm-deps/react-smooth/-/react-smooth-2.0.1.tgz#74c7309916d6ccca182c4b30c8992f179e6c5a05"
+  integrity sha512-Own9TA0GPPf3as4vSwFhDouVfXP15ie/wIHklhyKBH5AN6NFtdk0UpHBnonV11BtqDkAWlt40MOUc+5srmW7NA==
+  dependencies:
+    fast-equals "^2.0.0"
+    react-transition-group "2.9.0"
+
 react-syntax-highlighter@^13.5.3:
   version "13.5.3"
   resolved "https://storage.googleapis.com/cockroach-npm-deps/react-syntax-highlighter/-/react-syntax-highlighter-13.5.3.tgz#9712850f883a3e19eb858cf93fad7bb357eea9c6"
@@ -16607,6 +16417,16 @@ react-textarea-autosize@^8.3.0:
     "@babel/runtime" "^7.10.2"
     use-composed-ref "^1.0.0"
     use-latest "^1.0.0"
+
+react-transition-group@2.9.0:
+  version "2.9.0"
+  resolved "https://storage.googleapis.com/cockroach-npm-deps/react-transition-group/-/react-transition-group-2.9.0.tgz#df9cdb025796211151a436c69a8f3b97b5b07c8d"
+  integrity sha512-+HzNTCHpeQyl4MJ/bdE0u6XRMe9+XG/+aL4mCxVN4DnPBQ0/5bfHWPDuOZUzYdMj94daZaZdCCc1Dzt9R/xSSg==
+  dependencies:
+    dom-helpers "^3.4.0"
+    loose-envify "^1.4.0"
+    prop-types "^15.6.2"
+    react-lifecycles-compat "^3.0.4"
 
 react-transition-group@^4.3.0:
   version "4.4.2"
@@ -16803,15 +16623,6 @@ readable-stream@~2.3.6:
     string_decoder "~1.1.1"
     util-deprecate "~1.0.1"
 
-readdirp@^2.2.1:
-  version "2.2.1"
-  resolved "https://storage.googleapis.com/cockroach-npm-deps/readdirp/-/readdirp-2.2.1.tgz#0e87622a3325aa33e892285caf8b4e846529a525"
-  integrity sha512-1JU/8q+VgFZyxwrJ+SVIOsh+KywWGpds3NTqikiKpDMZWScmAYyKIgqkO+ARvNWJfXeXR1zxz7aHF4u4CyH6vQ==
-  dependencies:
-    graceful-fs "^4.1.11"
-    micromatch "^3.1.10"
-    readable-stream "^2.0.2"
-
 readdirp@~3.6.0:
   version "3.6.0"
   resolved "https://storage.googleapis.com/cockroach-npm-deps/readdirp/-/readdirp-3.6.0.tgz#74a370bd857116e245b29cc97340cd431a02a6c7"
@@ -16819,12 +16630,47 @@ readdirp@~3.6.0:
   dependencies:
     picomatch "^2.2.1"
 
+recharts-scale@^0.4.4:
+  version "0.4.5"
+  resolved "https://storage.googleapis.com/cockroach-npm-deps/recharts-scale/-/recharts-scale-0.4.5.tgz#0969271f14e732e642fcc5bd4ab270d6e87dd1d9"
+  integrity sha512-kivNFO+0OcUNu7jQquLXAxz1FIwZj8nrj+YkOKc5694NbjCvcT6aSZiIzNzd2Kul4o4rTto8QVR9lMNtxD4G1w==
+  dependencies:
+    decimal.js-light "^2.4.1"
+
+recharts@^2.1.12:
+  version "2.2.0"
+  resolved "https://storage.googleapis.com/cockroach-npm-deps/recharts/-/recharts-2.2.0.tgz#1b8ba0799ff0feb96c87f009cd2ddd8cf5108817"
+  integrity sha512-/uRJ0oaESGyz//PgAzvrwXEhrKaNha1ELLysEMRklbnsddiVQsSNicP7DWiz8qFcyYXy3BrDqrUjiLiVRTSMtA==
+  dependencies:
+    "@types/d3-interpolate" "^2.0.0"
+    "@types/d3-scale" "^3.0.0"
+    "@types/d3-shape" "^2.0.0"
+    classnames "^2.2.5"
+    d3-interpolate "^2.0.0"
+    d3-scale "^3.0.0"
+    d3-shape "^2.0.0"
+    eventemitter3 "^4.0.1"
+    lodash "^4.17.19"
+    react-is "^16.10.2"
+    react-resize-detector "^7.1.2"
+    react-smooth "^2.0.1"
+    recharts-scale "^0.4.4"
+    reduce-css-calc "^2.1.8"
+
 recursive-readdir@2.2.2:
   version "2.2.2"
   resolved "https://storage.googleapis.com/cockroach-npm-deps/recursive-readdir/-/recursive-readdir-2.2.2.tgz#9946fb3274e1628de6e36b2f6714953b4845094f"
   integrity sha512-nRCcW9Sj7NuZwa2XvH9co8NPeXUBhZP7CRKJtU+cS6PW9FpCIFoI5ib0NT1ZrbNuPoRy0ylyCaUL8Gih4LSyFg==
   dependencies:
     minimatch "3.0.4"
+
+reduce-css-calc@^2.1.8:
+  version "2.1.8"
+  resolved "https://storage.googleapis.com/cockroach-npm-deps/reduce-css-calc/-/reduce-css-calc-2.1.8.tgz#7ef8761a28d614980dc0c982f772c93f7a99de03"
+  integrity sha512-8liAVezDmUcH+tdzoEGrhfbGcP7nOV4NkGE3a74+qqvE7nt9i4sKLGBuZNOnpI4WiGksiNPklZxva80061QiPg==
+  dependencies:
+    css-unit-converter "^1.1.1"
+    postcss-value-parser "^3.3.0"
 
 redux-saga-test-plan@4.0.0-beta.2:
   version "4.0.0-beta.2"
@@ -17041,11 +16887,6 @@ remark-squeeze-paragraphs@4.0.0:
   integrity sha512-8qRqmL9F4nuLPIgl92XUuxI3pFxize+F1H0e/W3llTk0UsjJaj01+RrirkMw7P21RKe4X6goQhYRSvNWX+70Rw==
   dependencies:
     mdast-squeeze-paragraphs "^4.0.0"
-
-remove-trailing-separator@^1.0.1:
-  version "1.1.0"
-  resolved "https://storage.googleapis.com/cockroach-npm-deps/remove-trailing-separator/-/remove-trailing-separator-1.1.0.tgz#c24bce2a283adad5bc3f58e0d48249b92379d8ef"
-  integrity sha1-wkvOKig62tW8P1jg1IJJuSN52O8=
 
 renderkid@^2.0.4:
   version "2.0.7"
@@ -17518,16 +17359,6 @@ schema-utils@^3.0.0:
     "@types/json-schema" "^7.0.6"
     ajv "^6.12.5"
     ajv-keywords "^3.5.2"
-
-seamless-immutable@^7.1.3:
-  version "7.1.4"
-  resolved "https://storage.googleapis.com/cockroach-npm-deps/seamless-immutable/-/seamless-immutable-7.1.4.tgz#6e9536def083ddc4dea0207d722e0e80d0f372f8"
-  integrity sha512-XiUO1QP4ki4E2PHegiGAlu6r82o5A+6tRh7IkGGTVg/h+UoeX4nFBeCGPOhb4CYjvkqsfm/TUtvOMYC1xmV30A==
-
-select@^1.1.2:
-  version "1.1.2"
-  resolved "https://storage.googleapis.com/cockroach-npm-deps/select/-/select-1.1.2.tgz#0e7350acdec80b1108528786ec1d4418d11b396d"
-  integrity sha1-DnNQrN7ICxEIUoeG7B1EGNEbOW0=
 
 "semver@2 || 3 || 4 || 5":
   version "5.7.1"
@@ -18702,11 +18533,6 @@ timers-browserify@^2.0.4:
   dependencies:
     setimmediate "^1.0.4"
 
-tiny-emitter@^2.0.0:
-  version "2.1.0"
-  resolved "https://storage.googleapis.com/cockroach-npm-deps/tiny-emitter/-/tiny-emitter-2.1.0.tgz#1d1a56edfc51c43e863cbb5382a72330e3555423"
-  integrity sha512-NB6Dk1A9xgQPMoGqC5CVXn123gWyte215ONT5Pp5a0yt4nlEoO1ZWeCwpncaekPHXO60i47ihFnZPiRPjRMq4Q==
-
 tiny-invariant@^1.0.2:
   version "1.2.0"
   resolved "https://storage.googleapis.com/cockroach-npm-deps/tiny-invariant/-/tiny-invariant-1.2.0.tgz#a1141f86b672a9148c72e978a19a73b9b94a15a9"
@@ -19213,11 +19039,6 @@ unset-value@^1.0.0:
     has-value "^0.3.1"
     isobject "^3.0.0"
 
-upath@^1.1.1:
-  version "1.2.0"
-  resolved "https://storage.googleapis.com/cockroach-npm-deps/upath/-/upath-1.2.0.tgz#8f66dbcd55a883acdae4408af8b035a5044c1894"
-  integrity sha512-aZwGpamFO61g3OlfT7OQCHqhGnW43ieH9WZeP7QxN/G/jS4jfqUkZxoryvJgVPEcrl5NL/ggHsSmLMHuH64Lhg==
-
 uplot@^1.6.19:
   version "1.6.19"
   resolved "https://storage.googleapis.com/cockroach-npm-deps/uplot/-/uplot-1.6.19.tgz#98f461992a3f7f3bda7a62f4a028b8afa8da7942"
@@ -19489,13 +19310,6 @@ warning@~4.0.3:
   integrity sha512-rpJyN222KWIvHJ/F53XSZv0Zl/accqHR8et1kpaMTD/fLCRxtV8iX8czMzY7sVZupTI3zcUTg8eycS2kNF9l6w==
   dependencies:
     loose-envify "^1.0.0"
-
-watchpack-chokidar2@^2.0.1:
-  version "2.0.1"
-  resolved "https://storage.googleapis.com/cockroach-npm-deps/watchpack-chokidar2/-/watchpack-chokidar2-2.0.1.tgz#38500072ee6ece66f3769936950ea1771be1c957"
-  integrity sha512-nCFfBIPKr5Sh61s4LPpy1Wtfi0HE8isJ3d2Yb5/Ppw2P2B/3eVSEBjKfN0fmHJSK14+31KwMKmcrzs2GM4P0Ww==
-  dependencies:
-    chokidar "^2.1.8"
 
 watchpack@^1.7.4:
   version "1.7.5"
