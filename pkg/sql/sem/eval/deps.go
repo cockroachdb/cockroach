@@ -357,6 +357,10 @@ type Planner interface {
 	// statements, SELECT, UPDATE, INSERT, DELETE, or an EXPLAIN of one of these
 	// statements.
 	IsANSIDML() bool
+
+	// GetTenantRangeRSpanByID gets the Span of the range (specified by RangeID)
+	// and scopes it to the tenant.
+	GetTenantRangeSpanByID(context.Context, roachpb.RangeID) (roachpb.Span, error)
 }
 
 // InternalRows is an iterator interface that's exposed by the internal

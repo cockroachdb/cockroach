@@ -2398,6 +2398,32 @@ func (p *planner) IsANSIDML() bool {
 	return p.stmt.IsANSIDML()
 }
 
+// GetTenantRangeSpanByID is part of the eval.Planner interface.
+func (p *planner) GetTenantRangeSpanByID(
+	ctx context.Context, rangeID roachpb.RangeID,
+) (roachpb.Span, error) {
+	execCfg := p.execCfg
+	tenantSpan := execCfg.Codec.TenantSpan()
+	rangeDescIterator, err := execCfg.RangeDescIteratorFactory.NewIterator(ctx, tenantSpan)
+	if err != nil {
+		return roachpb.Span{}, err
+	}
+	var rangeSpan roachpb.Span
+	for rangeDescIterator.Valid() {
+		rangeDesc := rangeDescIterator.CurRangeDescriptor()
+		if rangeDesc.RangeID == rangeID {
+			rangeSpan = rangeDesc.KeySpan().AsRawSpanWithNoLocals()
+			break
+		}
+		rangeDescIterator.Next()
+	}
+	if !rangeDescIterator.Valid() {
+		return roachpb.Span{}, errors.Newf("range with ID %d not found", rangeID)
+	}
+
+	return tenantSpan.Intersect(rangeSpan), nil
+}
+
 // OptimizeSystemDatabase is part of the eval.RegionOperator interface.
 func (p *planner) OptimizeSystemDatabase(ctx context.Context) error {
 	globalTables := []string{
