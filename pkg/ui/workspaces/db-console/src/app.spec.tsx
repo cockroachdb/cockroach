@@ -498,9 +498,9 @@ describe("Routing to", () => {
     });
   });
 
-  describe("'/debug/tracez_v2/node/:nodeID/snapshot/:snapshotID' path", () => {
+  describe("'/debug/tracez/node/:nodeID/snapshot/:snapshotID' path", () => {
     test("routes to <SnapshotPage> component", () => {
-      navigateToPath("/debug/tracez_v2/node/1/snapshot/12345");
+      navigateToPath("/debug/tracez/node/1/snapshot/12345");
       screen.getByTestId("snapshotPage");
     });
   });

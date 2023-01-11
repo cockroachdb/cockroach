@@ -38,7 +38,7 @@ import { Breadcrumbs } from "src/breadcrumbs";
 // In order to provide that feature with respectable performance and an easy
 // GUI, we toggle between one of several components here based on the URL
 // params. To manage that navigation, we need to know the route prefix.
-export const ROUTE_PREFIX = "/debug/tracez_v2/";
+export const ROUTE_PREFIX = "/debug/tracez/";
 
 export interface SnapshotPageStateProps {
   sort: SortSetting;
@@ -308,11 +308,14 @@ export const SnapshotPage: React.FC<SnapshotPageProps> = props => {
 
   const breadcrumbItems = [
     {
-      link: `/debug/tracez_v2/node/${nodeID}/snapshot/${snapshotID}`,
+      link: join(ROUTE_PREFIX, `/node/${nodeID}/snapshot/${snapshotID}`),
       name: `Node ${nodeID}, Snapshot ${snapshotID}`,
     },
     {
-      link: `/debug/tracez_v2/node/${nodeID}/snapshot/${snapshotID}/span/${spanID}`,
+      link: join(
+        ROUTE_PREFIX,
+        `/node/${nodeID}/snapshot/${snapshotID}/span/${spanID}`,
+      ),
       name: `${span?.operation}`,
     },
   ];
@@ -329,7 +332,10 @@ export const SnapshotPage: React.FC<SnapshotPageProps> = props => {
         items={[
           ...breadcrumbItems,
           {
-            link: `/debug/tracez_v2/node/${nodeID}/snapshot/${snapshotID}/span/${spanID}/raw`,
+            link: join(
+              ROUTE_PREFIX,
+              `/node/${nodeID}/snapshot/${snapshotID}/span/${spanID}/raw`,
+            ),
             name: `raw trace`,
           },
         ]}
