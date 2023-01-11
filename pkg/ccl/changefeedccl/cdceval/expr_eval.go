@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -30,7 +31,21 @@ import (
 
 // Evaluator is a responsible for evaluating expressions in CDC.
 type Evaluator struct {
-	norm *NormalizedSelectClause
+	sc *tree.SelectClause
+
+	// Execution context.
+	execCfg     *sql.ExecutorConfig
+	user        username.SQLUsername
+	sessionData sessiondatapb.SessionData
+
+	familyEval map[descpb.FamilyID]*familyEvaluator
+}
+
+// familyEvaluator is a responsible for evaluating expressions in CDC
+// targeted to specific column family.
+type familyEvaluator struct {
+	norm           *NormalizedSelectClause
+	targetFamilyID descpb.FamilyID
 
 	// Plan related state.
 	cleanup      func()
@@ -63,10 +78,28 @@ func NewEvaluator(
 	user username.SQLUsername,
 	sd sessiondatapb.SessionData,
 ) (*Evaluator, error) {
-	e := Evaluator{
+	return &Evaluator{
+		sc:          sc,
 		execCfg:     execCfg,
 		user:        user,
 		sessionData: sd,
+		familyEval:  make(map[descpb.FamilyID]*familyEvaluator, 1), // usually, just 1 family.
+	}, nil
+}
+
+// NewEvaluator constructs new familyEvaluator for changefeed expression.
+func newFamilyEvaluator(
+	sc *tree.SelectClause,
+	targetFamilyID descpb.FamilyID,
+	execCfg *sql.ExecutorConfig,
+	user username.SQLUsername,
+	sd sessiondatapb.SessionData,
+) *familyEvaluator {
+	e := familyEvaluator{
+		targetFamilyID: targetFamilyID,
+		execCfg:        execCfg,
+		user:           user,
+		sessionData:    sd,
 		norm: &NormalizedSelectClause{
 			SelectClause: sc,
 		},
@@ -76,7 +109,15 @@ func NewEvaluator(
 	// Arrange to be notified when event does not match predicate.
 	predicateAsProjection(e.norm)
 
-	return &e, nil
+	return &e
+}
+
+// Close closes currently running execution.
+func (e *Evaluator) Close() {
+	for _, fe := range e.familyEval {
+		_ = fe.closeErr() // We expect to see an error, such as context cancelled.
+	}
+
 }
 
 // Eval evaluates projection for the specified updated and (optional) previous row.
@@ -92,6 +133,31 @@ func (e *Evaluator) Eval(
 			evalErr = changefeedbase.WithTerminalError(evalErr)
 		}
 	}()
+
+	fe, ok := e.familyEval[updatedRow.FamilyID]
+	if !ok {
+		fe = newFamilyEvaluator(e.sc, updatedRow.FamilyID, e.execCfg, e.user, e.sessionData)
+		e.familyEval[updatedRow.FamilyID] = fe
+	}
+
+	return fe.eval(ctx, updatedRow, prevRow)
+}
+
+// eval evaluates projection for the specified updated and (optional) previous row.
+// Returns projection result.  If the filter does not match the event, returns
+// "zero" Row.
+func (e *familyEvaluator) eval(
+	ctx context.Context, updatedRow cdcevent.Row, prevRow cdcevent.Row,
+) (projection cdcevent.Row, evalErr error) {
+	if updatedRow.FamilyID != e.targetFamilyID {
+		return cdcevent.Row{}, errors.AssertionFailedf(
+			"row family id (%d) differs from target id (%d)", updatedRow.FamilyID, e.targetFamilyID)
+	}
+
+	if prevRow.IsInitialized() && updatedRow.FamilyID != prevRow.FamilyID {
+		return cdcevent.Row{}, errors.AssertionFailedf(
+			"current family id (%d) differs from previous (%d)", updatedRow.FamilyID, prevRow.FamilyID)
+	}
 
 	havePrev := prevRow.IsInitialized()
 	if !(sameVersion(e.currDesc, updatedRow.EventDescriptor) &&
@@ -124,7 +190,7 @@ func (e *Evaluator) Eval(
 
 	// Push data into DistSQL.
 	if st := e.input.Push(encDatums, nil); st != execinfra.NeedMoreRows {
-		return cdcevent.Row{}, errors.Newf("evaluator shutting down due to status %s", st)
+		return cdcevent.Row{}, errors.Newf("familyEvaluator shutting down due to status %s", st)
 	}
 
 	// Read the evaluation result.
@@ -159,8 +225,7 @@ func (e *Evaluator) Eval(
 	}
 }
 
-// sameVersion returns true if row descriptor versions match this evaluator
-// versions.
+// sameVersion returns true if row descriptor versions match.
 func sameVersion(currentVersion, newVersion *cdcevent.EventDescriptor) bool {
 	if currentVersion == nil {
 		return false
@@ -170,7 +235,7 @@ func sameVersion(currentVersion, newVersion *cdcevent.EventDescriptor) bool {
 }
 
 // planAndRun plans CDC expression and starts execution pipeline.
-func (e *Evaluator) planAndRun(ctx context.Context) (err error) {
+func (e *familyEvaluator) planAndRun(ctx context.Context) (err error) {
 	var plan sql.CDCExpressionPlan
 	var prevCol catalog.Column
 	plan, prevCol, err = e.preparePlan(ctx)
@@ -183,7 +248,7 @@ func (e *Evaluator) planAndRun(ctx context.Context) (err error) {
 	return err
 }
 
-func (e *Evaluator) preparePlan(
+func (e *familyEvaluator) preparePlan(
 	ctx context.Context,
 ) (plan sql.CDCExpressionPlan, prevCol catalog.Column, err error) {
 	if e.cleanup != nil {
@@ -231,8 +296,8 @@ func (e *Evaluator) preparePlan(
 	return plan, prevCol, nil
 }
 
-// setupProjection configures evaluator projection.
-func (e *Evaluator) setupProjection(presentation colinfo.ResultColumns) {
+// setupProjection configures familyEvaluator projection.
+func (e *familyEvaluator) setupProjection(presentation colinfo.ResultColumns) {
 	e.projection = cdcevent.MakeProjection(e.currDesc)
 
 	// makeUniqueName returns a unique name for the specified name. We do this
@@ -289,7 +354,7 @@ func inputSpecForEventDescriptor(
 
 // executePlan starts execution of the plan and returns input which receives
 // rows that need to be evaluated.
-func (e *Evaluator) executePlan(
+func (e *familyEvaluator) executePlan(
 	ctx context.Context, plan sql.CDCExpressionPlan, prevCol catalog.Column,
 ) (inputReceiver execinfra.RowReceiver, err error) {
 	// Configure input.
@@ -298,7 +363,7 @@ func (e *Evaluator) executePlan(
 		return nil, err
 	}
 
-	// The row channel created below will have exactly 1 sender (this evaluator).
+	// The row channel created below will have exactly 1 sender (this familyEvaluator).
 	// The buffer size parameter doesn't matter much, as long as it is greater
 	// than 0 to make sure that if the main context is cancelled and the flow
 	// exits, that we can still push data into the row channel without blocking,
@@ -352,7 +417,7 @@ func (e *Evaluator) executePlan(
 }
 
 // copyPrevRow copies previous row into prevRowTuple.
-func (e *Evaluator) copyPrevRow(prev cdcevent.Row) error {
+func (e *familyEvaluator) copyPrevRow(prev cdcevent.Row) error {
 	tupleTypes := e.prevRowTuple.ResolvedType().InternalType.TupleContents
 	encDatums := prev.EncDatums()
 	if len(tupleTypes) != len(encDatums) {
@@ -371,18 +436,13 @@ func (e *Evaluator) copyPrevRow(prev cdcevent.Row) error {
 
 // setupContextForRow configures evaluation context with the provided row
 // information.
-func (e *Evaluator) setupContextForRow(ctx context.Context, updated cdcevent.Row) error {
+func (e *familyEvaluator) setupContextForRow(ctx context.Context, updated cdcevent.Row) error {
 	e.rowEvalCtx.ctx = ctx
 	e.rowEvalCtx.updatedRow = updated
 	return nil
 }
 
-// Close closes currently running execution.
-func (e *Evaluator) Close() {
-	_ = e.closeErr() // We expect to see an error, such as context cancelled.
-}
-
-func (e *Evaluator) closeErr() error {
+func (e *familyEvaluator) closeErr() error {
 	if e.errCh != nil {
 		defer close(e.errCh) // Must be deferred since planGroup  go routine might write.
 	}
