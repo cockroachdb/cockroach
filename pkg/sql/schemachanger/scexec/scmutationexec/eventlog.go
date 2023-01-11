@@ -13,6 +13,7 @@ package scmutationexec
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
@@ -166,7 +167,7 @@ func asCommentEventPayload(
 		if err != nil {
 			return nil, err
 		}
-		idx, err := tbl.FindIndexWithID(e.IndexID)
+		idx, err := catalog.MustFindIndexByID(tbl, e.IndexID)
 		if err != nil {
 			return nil, err
 		}

@@ -431,7 +431,7 @@ func TestDropIndex(t *testing.T) {
 	}
 	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
 	tests.CheckKeyCount(t, kvDB, tableDesc.TableSpan(keys.SystemSQLCodec), 3*numRows)
-	idx, err := tableDesc.FindIndexWithName("foo")
+	idx, err := catalog.MustFindIndexByName(tableDesc, "foo")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -442,7 +442,7 @@ func TestDropIndex(t *testing.T) {
 	}
 
 	tableDesc = desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
-	if _, err := tableDesc.FindIndexWithName("foo"); err == nil {
+	if _, err := catalog.MustFindIndexByName(tableDesc, "foo"); err == nil {
 		t.Fatalf("table descriptor still contains index after index is dropped")
 	}
 	// TODO (lucy): Maybe this test API should use an offset starting
@@ -464,7 +464,7 @@ func TestDropIndex(t *testing.T) {
 	}
 
 	tableDesc = desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
-	newIdx, err := tableDesc.FindIndexWithName("foo")
+	newIdx, err := catalog.MustFindIndexByName(tableDesc, "foo")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -527,7 +527,7 @@ func TestDropIndexWithZoneConfigOSS(t *testing.T) {
 		t.Fatal(err)
 	}
 	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
-	index, err := tableDesc.FindIndexWithName("foo")
+	index, err := catalog.MustFindIndexByName(tableDesc, "foo")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -566,7 +566,7 @@ func TestDropIndexWithZoneConfigOSS(t *testing.T) {
 	// declares column families.
 
 	tableDesc = desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
-	if _, err := tableDesc.FindIndexWithName("foo"); err == nil {
+	if _, err := catalog.MustFindIndexByName(tableDesc, "foo"); err == nil {
 		t.Fatalf("table descriptor still contains index after index is dropped")
 	}
 }
@@ -1215,7 +1215,7 @@ func TestDropIndexOnHashShardedIndexWithStoredShardColumn(t *testing.T) {
 			tableDesc, err = col.ByID(txn).Get().Table(ctx, tableID)
 			return err
 		}))
-	shardIdx, err := tableDesc.FindIndexWithName("idx")
+	shardIdx, err := catalog.MustFindIndexByName(tableDesc, "idx")
 	require.NoError(t, err)
 	require.True(t, shardIdx.IsSharded())
 	require.Equal(t, "crdb_internal_a_shard_7", shardIdx.GetShardColumnName())
@@ -1233,7 +1233,7 @@ func TestDropIndexOnHashShardedIndexWithStoredShardColumn(t *testing.T) {
 			tableDesc, err = col.ByID(txn).Get().Table(ctx, tableID)
 			return err
 		}))
-	_, err = tableDesc.FindIndexWithName("idx")
+	_, err = catalog.MustFindIndexByName(tableDesc, "idx")
 	require.Error(t, err)
 	shardCol, err = tableDesc.FindColumnWithName("crdb_internal_a_shard_7")
 	require.NoError(t, err)

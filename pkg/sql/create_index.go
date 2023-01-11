@@ -182,7 +182,7 @@ func makeIndexDescriptor(
 	}
 
 	// Ensure that the index name does not exist before trying to create the index.
-	if idx, _ := tableDesc.FindIndexWithName(string(n.Name)); idx != nil {
+	if idx := catalog.FindIndexByName(tableDesc, string(n.Name)); idx != nil {
 		if idx.Dropped() {
 			return nil, pgerror.Newf(pgcode.DuplicateRelation, "index with name %q already exists and is being dropped, try again later", n.Name)
 		}
@@ -710,8 +710,8 @@ func maybeCreateAndAddShardCol(
 
 func (n *createIndexNode) startExec(params runParams) error {
 	telemetry.Inc(sqltelemetry.SchemaChangeCreateCounter("index"))
-	foundIndex, err := n.tableDesc.FindIndexWithName(string(n.n.Name))
-	if err == nil {
+	foundIndex := catalog.FindIndexByName(n.tableDesc, string(n.n.Name))
+	if foundIndex != nil {
 		if foundIndex.Dropped() {
 			return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 				"index %q being dropped, try again later", string(n.n.Name))

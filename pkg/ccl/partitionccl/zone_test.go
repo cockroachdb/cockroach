@@ -312,7 +312,7 @@ func TestGenerateSubzoneSpans(t *testing.T) {
 			var actual []string
 			for _, span := range spans {
 				subzone := test.parsed.subzones[span.SubzoneIndex]
-				idx, err := test.parsed.tableDesc.FindIndexWithID(descpb.IndexID(subzone.IndexID))
+				idx, err := catalog.MustFindIndexByID(test.parsed.tableDesc, descpb.IndexID(subzone.IndexID))
 				if err != nil {
 					t.Fatalf("could not find index with ID %d: %+v", subzone.IndexID, err)
 				}
@@ -432,7 +432,7 @@ PARTITION p1 VALUES IN (DEFAULT));`)
 
 	// Find the temporary index corresponding to the new index.
 	tbl := desctestutils.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "public", "test")
-	newIndex, err := tbl.FindIndexWithName("idx")
+	newIndex, err := catalog.MustFindIndexByName(tbl, "idx")
 	if err != nil {
 		t.Fatal(err)
 	}

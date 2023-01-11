@@ -369,7 +369,7 @@ INSERT INTO foo VALUES (1), (10), (100);
 		t.Helper()
 
 		mm := mon.NewStandaloneBudget(1 << 30)
-		idx, err := table.FindIndexWithID(indexID)
+		idx, err := catalog.MustFindIndexByID(table, indexID)
 		colIDsNeeded := idx.CollectKeyColumnIDs()
 		if idx.Primary() {
 			for _, column := range table.PublicColumns() {

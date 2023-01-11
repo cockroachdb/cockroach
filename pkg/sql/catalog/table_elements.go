@@ -1019,7 +1019,7 @@ func FindTargetIndexNameByID(desc TableDescriptor, indexID descpb.IndexID) (stri
 		}
 	}
 	// Otherwise, try fetching the name from the index descriptor.
-	index, err := desc.FindIndexWithID(indexID)
+	index, err := MustFindIndexByID(desc, indexID)
 	if err != nil {
 		return "", err
 	}
@@ -1045,4 +1045,45 @@ func ColumnNamesForIDs(tbl TableDescriptor, ids descpb.ColumnIDs) ([]string, err
 		}
 	}
 	return names, nil
+}
+
+// FindIndexByID returns the first Index that matches the ID
+// in the set of all indexes, or nil if none was found.
+// The order of traversal is the canonical order, see Index.Ordinal().
+func FindIndexByID(tbl TableDescriptor, id descpb.IndexID) Index {
+	return FindIndex(tbl, IndexOpts{
+		NonPhysicalPrimaryIndex: true,
+		DropMutations:           true,
+		AddMutations:            true,
+	}, func(idx Index) bool {
+		return idx.GetID() == id
+	})
+}
+
+// MustFindIndexByID is like FindIndexByID but returns an error when no index
+// was found.
+func MustFindIndexByID(tbl TableDescriptor, id descpb.IndexID) (Index, error) {
+	if idx := FindIndexByID(tbl, id); idx != nil {
+		return idx, nil
+	}
+	return nil, errors.Errorf("index-id \"%d\" does not exist", id)
+}
+
+// FindIndexByName is like FindIndexByID but with names instead of IDs.
+func FindIndexByName(tbl TableDescriptor, name string) Index {
+	return FindIndex(tbl, IndexOpts{
+		NonPhysicalPrimaryIndex: true,
+		DropMutations:           true,
+		AddMutations:            true,
+	}, func(idx Index) bool {
+		return idx.GetName() == name
+	})
+}
+
+// MustFindIndexByName is like MustFindIndexByID but with names instead of IDs.
+func MustFindIndexByName(tbl TableDescriptor, name string) (Index, error) {
+	if idx := FindIndexByName(tbl, name); idx != nil {
+		return idx, nil
+	}
+	return nil, errors.Errorf("index %q does not exist", name)
 }
