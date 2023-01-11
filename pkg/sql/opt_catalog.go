@@ -836,7 +836,7 @@ func newOptTable(
 	// This check is done for upgrade purposes. We need to avoid adding the
 	// system column if the table has a column with this name for some reason.
 	for _, sysCol := range ot.desc.SystemColumns() {
-		found, _ := desc.FindColumnWithName(sysCol.ColName())
+		found := catalog.FindColumnByTreeName(desc, sysCol.ColName())
 		if found == nil || found.IsSystemColumn() {
 			col, ord := newColumn()
 			cd := sysCol.ColumnDesc()

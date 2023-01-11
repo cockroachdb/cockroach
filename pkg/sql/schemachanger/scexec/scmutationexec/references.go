@@ -50,7 +50,7 @@ func (m *visitor) RemoveSequenceOwner(ctx context.Context, op scop.RemoveSequenc
 	if err != nil || tbl.Dropped() {
 		return err
 	}
-	col, err := tbl.FindColumnWithID(op.ColumnID)
+	col, err := catalog.MustFindColumnByID(tbl, op.ColumnID)
 	if err != nil || col == nil {
 		return err
 	}
@@ -203,7 +203,7 @@ func (m *visitor) UpdateBackReferencesInSequences(
 			return err
 		}
 		if op.BackReferencedColumnID != 0 {
-			col, err := tbl.FindColumnWithID(op.BackReferencedColumnID)
+			col, err := catalog.MustFindColumnByID(tbl, op.BackReferencedColumnID)
 			if err != nil {
 				return err
 			}

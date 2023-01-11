@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -179,15 +178,12 @@ func ensureProtoMessagesAreEqual(expected, found protoutil.Message) error {
 // expectedTable descriptor. The comparison is not strict as several descriptor
 // fields are ignored.
 func hasColumn(storedTable, expectedTable catalog.TableDescriptor, colName string) (bool, error) {
-	storedCol, err := storedTable.FindColumnWithName(tree.Name(colName))
-	if err != nil {
-		if strings.Contains(err.Error(), "does not exist") {
-			return false, nil
-		}
-		return false, err
+	storedCol := catalog.FindColumnByName(storedTable, colName)
+	if storedCol == nil {
+		return false, nil
 	}
 
-	expectedCol, err := expectedTable.FindColumnWithName(tree.Name(colName))
+	expectedCol, err := catalog.MustFindColumnByName(expectedTable, colName)
 	if err != nil {
 		return false, errors.Wrapf(err, "columns name %s is invalid.", colName)
 	}
@@ -236,14 +232,7 @@ func hasColumn(storedTable, expectedTable catalog.TableDescriptor, colName strin
 func columnExists(
 	storedTable, expectedTable catalog.TableDescriptor, colName string,
 ) (bool, error) {
-	_, err := storedTable.FindColumnWithName(tree.Name(colName))
-	if err != nil {
-		if strings.Contains(err.Error(), "does not exist") {
-			return false, nil
-		}
-		return false, err
-	}
-	return true, nil
+	return catalog.FindColumnByName(storedTable, colName) != nil, nil
 }
 
 // columnExistsAndIsNotNull returns true if storedTable contains a non-nullable
@@ -255,14 +244,8 @@ func columnExists(
 func columnExistsAndIsNotNull(
 	storedTable, expectedTable catalog.TableDescriptor, colName string,
 ) (bool, error) {
-	storedCol, err := storedTable.FindColumnWithName(tree.Name(colName))
-	if err != nil {
-		if strings.Contains(err.Error(), "does not exist") {
-			return false, nil
-		}
-		return false, err
-	}
-	return !storedCol.IsNullable(), nil
+	storedCol := catalog.FindColumnByName(storedTable, colName)
+	return storedCol != nil && !storedCol.IsNullable(), nil
 }
 
 // hasIndex returns true if storedTable already has the given index, comparing

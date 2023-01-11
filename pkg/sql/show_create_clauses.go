@@ -376,7 +376,7 @@ func showComments(
 	}
 
 	for _, columnComment := range tc.columns {
-		col, err := table.FindColumnWithPGAttributeNum(descpb.PGAttributeNum(columnComment.subID))
+		col, err := catalog.MustFindColumnByPGAttributeNum(table, descpb.PGAttributeNum(columnComment.subID))
 		if err != nil {
 			return err
 		}
@@ -531,7 +531,7 @@ func showFamilyClause(desc catalog.TableDescriptor, f *tree.FmtCtx) {
 	for _, fam := range families {
 		activeColumnNames := make([]string, 0, len(fam.ColumnNames))
 		for i, colID := range fam.ColumnIDs {
-			if col, _ := desc.FindColumnWithID(colID); col != nil && col.Public() {
+			if col := catalog.FindColumnByID(desc, colID); col != nil && col.Public() {
 				activeColumnNames = append(activeColumnNames, fam.ColumnNames[i])
 			}
 		}

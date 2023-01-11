@@ -277,7 +277,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 							"cannot create a unique constraint on an expression, use UNIQUE INDEX instead",
 						)
 					}
-					_, err := n.tableDesc.FindColumnWithName(column.Column)
+					_, err := catalog.MustFindColumnByTreeName(n.tableDesc, column.Column)
 					if err != nil {
 						return err
 					}
@@ -574,7 +574,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 		case tree.ColumnMutationCmd:
 			// Column mutations
 			tableDesc := n.tableDesc
-			col, err := tableDesc.FindColumnWithName(t.GetColumn())
+			col, err := catalog.MustFindColumnByTreeName(tableDesc, t.GetColumn())
 			if err != nil {
 				return err
 			}
@@ -1249,8 +1249,8 @@ StatsLoop:
 
 		columnIDs := tree.NewDArray(types.Int)
 		for _, colName := range s.Columns {
-			col, err := desc.FindColumnWithName(tree.Name(colName))
-			if err != nil {
+			col := catalog.FindColumnByName(desc, colName)
+			if col == nil {
 				params.p.BufferClientNotice(
 					params.ctx,
 					pgnotice.Newf("column %q does not exist", colName),
@@ -1539,7 +1539,7 @@ func dropColumnImpl(
 		}
 	}
 
-	colToDrop, err := tableDesc.FindColumnWithName(t.Column)
+	colToDrop, err := catalog.MustFindColumnByTreeName(tableDesc, t.Column)
 	if err != nil {
 		if t.IfExists {
 			// Noop.
@@ -1786,7 +1786,7 @@ func handleTTLStorageParamChange(
 
 		// Update default expression on automated column if required.
 		if before.HasDurationExpr() && after.HasDurationExpr() && before.DurationExpr != after.DurationExpr {
-			col, err := tableDesc.FindColumnWithName(colinfo.TTLDefaultExpirationColumnName)
+			col, err := catalog.MustFindColumnByName(tableDesc, colinfo.TTLDefaultExpirationColumnName)
 			if err != nil {
 				return false, err
 			}
@@ -1828,7 +1828,7 @@ func handleTTLStorageParamChange(
 		// Adding a TTL requires adding the automatic column and deferring the TTL
 		// addition to after the column is successfully added.
 		addTTLMutation = true
-		if _, err := tableDesc.FindColumnWithName(colinfo.TTLDefaultExpirationColumnName); err == nil {
+		if catalog.FindColumnByName(tableDesc, colinfo.TTLDefaultExpirationColumnName) != nil {
 			return false, pgerror.Newf(
 				pgcode.InvalidTableDefinition,
 				"cannot add TTL to table with the %s column already defined",

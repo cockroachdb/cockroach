@@ -330,7 +330,7 @@ func inputSpecForEventDescriptor(
 	inputTypes := make([]*types.T, 0, numCols)
 	var inputCols catalog.TableColMap
 	for i, c := range ed.ResultColumns() {
-		col, err := ed.TableDescriptor().FindColumnWithName(tree.Name(c.Name))
+		col, err := catalog.MustFindColumnByName(ed.TableDescriptor(), c.Name)
 		if err != nil {
 			return inputTypes, inputCols, err
 		}

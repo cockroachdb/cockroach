@@ -365,7 +365,7 @@ func (desc *wrapper) validateInboundTableRef(
 			if colID == 0 {
 				continue
 			}
-			col, _ := backReferencedTable.FindColumnWithID(colID)
+			col := catalog.FindColumnByID(backReferencedTable, colID)
 			if col == nil {
 				return errors.AssertionFailedf("depended-on-by relation %q (%d) does not have a column with ID %d",
 					backReferencedTable.GetName(), by.ID, colID)
@@ -615,7 +615,7 @@ func (desc *wrapper) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 			}
 		}
 		for _, colID := range ref.ColumnIDs {
-			if col, _ := desc.FindColumnWithID(colID); col == nil {
+			if catalog.FindColumnByID(desc, colID) == nil {
 				vea.Report(errors.AssertionFailedf(
 					"column ID %d found in depended-on-by references, no such column in this relation",
 					colID))
@@ -874,7 +874,7 @@ func ValidateOnUpdate(desc catalog.TableDescriptor, errReportFn func(err error))
 		for i, n := 0, fk.NumOriginColumns(); i < n; i++ {
 			fkCol := fk.GetOriginColumnID(i)
 			if onUpdateCols.Contains(fkCol) {
-				col, err := desc.FindColumnWithID(fkCol)
+				col, err := catalog.MustFindColumnByID(desc, fkCol)
 				if err != nil {
 					errReportFn(err)
 				} else {
@@ -1322,7 +1322,7 @@ func (desc *wrapper) validateTableIndexes(columnsByID map[descpb.ColumnID]catalo
 			if err := desc.ensureShardedIndexNotComputed(idx.IndexDesc()); err != nil {
 				return err
 			}
-			if col, _ := desc.FindColumnWithName(tree.Name(idx.GetSharded().Name)); col == nil {
+			if catalog.FindColumnByName(desc, idx.GetSharded().Name) == nil {
 				return errors.Newf("index %q refers to non-existent shard column %q",
 					idx.GetName(), idx.GetSharded().Name)
 			}
@@ -1479,7 +1479,7 @@ func (desc *wrapper) validateTableIndexes(columnsByID map[descpb.ColumnID]catalo
 // based on another computed column B).
 func (desc *wrapper) ensureShardedIndexNotComputed(index *descpb.IndexDescriptor) error {
 	for _, colName := range index.Sharded.ColumnNames {
-		col, err := desc.FindColumnWithName(tree.Name(colName))
+		col, err := catalog.MustFindColumnByName(desc, colName)
 		if err != nil {
 			return err
 		}
@@ -1542,7 +1542,7 @@ func (desc *wrapper) validatePartitioningDescriptor(
 			if i >= idx.NumKeyColumns() {
 				continue
 			}
-			col, err := desc.FindColumnWithID(idx.GetKeyColumnID(i))
+			col, err := catalog.MustFindColumnByID(desc, idx.GetKeyColumnID(i))
 			if err != nil {
 				return err
 			}

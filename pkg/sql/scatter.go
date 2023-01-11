@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -65,7 +66,7 @@ func (p *planner) Scatter(ctx context.Context, n *tree.Scatter) (planNode, error
 		desiredTypes := make([]*types.T, index.NumKeyColumns())
 		for i := 0; i < index.NumKeyColumns(); i++ {
 			colID := index.GetKeyColumnID(i)
-			c, err := tableDesc.FindColumnWithID(colID)
+			c, err := catalog.MustFindColumnByID(tableDesc, colID)
 			if err != nil {
 				return nil, err
 			}

@@ -22,6 +22,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -500,19 +502,16 @@ func (d *familyTableDescriptor) EnforcedUniqueConstraintsWithoutIndex() []catalo
 // FindColumnWithID implements catalog.TableDescriptor and provides
 // access to extra CDC columns.
 func (d *familyTableDescriptor) FindColumnWithID(id descpb.ColumnID) (catalog.Column, error) {
-	c, err := d.TableDescriptor.FindColumnWithID(id)
-	if err != nil {
-		for _, extra := range d.extraCols {
-			if extra.GetID() == id {
-				c = extra
-				break
-			}
-		}
-		if c != nil {
-			err = nil
+	c := catalog.FindColumnByID(d.TableDescriptor, id)
+	if c != nil {
+		return c, nil
+	}
+	for _, extra := range d.extraCols {
+		if extra.GetID() == id {
+			return c, nil
 		}
 	}
-	return c, err
+	return nil, pgerror.Newf(pgcode.UndefinedColumn, "column-id \"%d\" does not exist", id)
 }
 
 // EnforcedCheckConstraints implements catalog.TableDescriptor interface.

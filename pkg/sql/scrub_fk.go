@@ -16,7 +16,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -145,7 +144,7 @@ func (o *sqlForeignKeyCheckOperation) Next(params runParams) (tree.Datums, error
 	for i, n := 0, o.constraint.NumOriginColumns(); i < n; i++ {
 		id := o.constraint.GetOriginColumnID(i)
 		idx := o.colIDToRowIdx.GetDefault(id)
-		col, err := tabledesc.FindPublicColumnWithID(o.tableDesc, id)
+		col, err := catalog.MustFindPublicColumnByID(o.tableDesc, id)
 		if err != nil {
 			return nil, err
 		}
@@ -156,7 +155,7 @@ func (o *sqlForeignKeyCheckOperation) Next(params runParams) (tree.Datums, error
 		id := o.tableDesc.GetPrimaryIndex().GetKeyColumnID(i)
 		if !originColumnIDs.Contains(id) {
 			idx := o.colIDToRowIdx.GetDefault(id)
-			col, err := tabledesc.FindPublicColumnWithID(o.tableDesc, id)
+			col, err := catalog.MustFindPublicColumnByID(o.tableDesc, id)
 			if err != nil {
 				return nil, err
 			}

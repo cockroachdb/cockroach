@@ -260,8 +260,7 @@ func alterColumnTypeGeneral(
 	}
 
 	nameExists := func(name string) bool {
-		_, err := tableDesc.FindColumnWithName(tree.Name(name))
-		return err == nil
+		return catalog.FindColumnByName(tableDesc, name) != nil
 	}
 
 	shadowColName := tabledesc.GenerateUniqueName(col.GetName(), nameExists)

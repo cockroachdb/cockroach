@@ -150,7 +150,7 @@ func BuildIndexName(tableDesc *Mutable, idx *descpb.IndexDescriptor) (string, er
 	exprCount := 0
 	for i, n := idx.ExplicitColumnStartIdx(), len(idx.KeyColumnNames); i < n; i++ {
 		var segmentName string
-		col, err := tableDesc.FindColumnWithName(tree.Name(idx.KeyColumnNames[i]))
+		col, err := catalog.MustFindColumnByName(tableDesc, idx.KeyColumnNames[i])
 		if err != nil {
 			return "", err
 		}
@@ -496,8 +496,7 @@ func (desc *Mutable) ensurePrimaryKey() error {
 	if len(desc.PrimaryIndex.KeyColumnNames) == 0 && desc.IsPhysicalTable() {
 		// Ensure a Primary Key exists.
 		nameExists := func(name string) bool {
-			_, err := desc.FindColumnWithName(tree.Name(name))
-			return err == nil
+			return catalog.FindColumnByName(desc, name) != nil
 		}
 		s := "unique_rowid()"
 		col := &descpb.ColumnDescriptor{
@@ -614,7 +613,7 @@ func (desc *Mutable) allocateIndexIDs(columnNames map[string]descpb.ColumnID) er
 				// extraColumnIDs = append(extraColumnIDs, primaryColID)
 				// However, this functionality is not supported by the execution engine,
 				// so prevent it by returning an error.
-				col, err := desc.FindColumnWithID(primaryColID)
+				col, err := catalog.MustFindColumnByID(desc, primaryColID)
 				if err != nil {
 					return err
 				}
@@ -641,7 +640,7 @@ func (desc *Mutable) allocateIndexIDs(columnNames map[string]descpb.ColumnID) er
 		// TODO(postamar): AllocateIDs should not do user input validation.
 		// The only errors it should return should be assertion failures.
 		for _, colName := range idx.IndexDesc().StoreColumnNames {
-			col, err := desc.FindColumnWithName(tree.Name(colName))
+			col, err := catalog.MustFindColumnByName(desc, colName)
 			if err != nil {
 				return err
 			}
@@ -1315,7 +1314,7 @@ func (desc *wrapper) IsPrimaryIndexDefaultRowID() bool {
 	if len(desc.PrimaryIndex.KeyColumnIDs) != 1 {
 		return false
 	}
-	col, err := desc.FindColumnWithID(desc.PrimaryIndex.KeyColumnIDs[0])
+	col, err := catalog.MustFindColumnByID(desc, desc.PrimaryIndex.KeyColumnIDs[0])
 	if err != nil {
 		// Should never be in this case.
 		panic(err)
@@ -1429,7 +1428,7 @@ func (desc *Mutable) MakeMutationComplete(m descpb.DescriptorMutation) error {
 						break
 					}
 				}
-				col, err := desc.FindColumnWithID(t.Constraint.NotNullColumn)
+				col, err := catalog.MustFindColumnByID(desc, t.Constraint.NotNullColumn)
 				if err != nil {
 					return err
 				}
@@ -1546,11 +1545,11 @@ func (desc *Mutable) MakeMutationComplete(m descpb.DescriptorMutation) error {
 
 func (desc *Mutable) performComputedColumnSwap(swap *descpb.ComputedColumnSwap) error {
 	// Get the old and new columns from the descriptor.
-	oldCol, err := desc.FindColumnWithID(swap.OldColumnId)
+	oldCol, err := catalog.MustFindColumnByID(desc, swap.OldColumnId)
 	if err != nil {
 		return err
 	}
-	newCol, err := desc.FindColumnWithID(swap.NewColumnId)
+	newCol, err := catalog.MustFindColumnByID(desc, swap.NewColumnId)
 	if err != nil {
 		return err
 	}
@@ -1563,8 +1562,7 @@ func (desc *Mutable) performComputedColumnSwap(swap *descpb.ComputedColumnSwap) 
 
 	// Generate unique name for old column.
 	nameExists := func(name string) bool {
-		_, err := desc.FindColumnWithName(tree.Name(name))
-		return err == nil
+		return catalog.FindColumnByName(desc, name) != nil
 	}
 
 	uniqueName := GenerateUniqueName(newCol.GetName(), nameExists)

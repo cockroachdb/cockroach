@@ -416,7 +416,7 @@ func shouldSkipConstraintValidation(
 		return false, nil
 	}
 
-	checkCol, err := tableDesc.FindColumnWithID(check.GetReferencedColumnID(0))
+	checkCol, err := catalog.MustFindColumnByID(tableDesc, check.GetReferencedColumnID(0))
 	if err != nil {
 		return false, err
 	}
@@ -647,7 +647,7 @@ func (sc *SchemaChanger) addConstraints(
 					// referenced table. It's possible for the unique index found during
 					// planning to have been dropped in the meantime, since only the
 					// presence of the backreference prevents it.
-					_, err = tabledesc.FindFKReferencedUniqueConstraint(backrefTable, fk)
+					_, err = catalog.FindFKReferencedUniqueConstraint(backrefTable, fk)
 					if err != nil {
 						return err
 					}
@@ -1674,7 +1674,7 @@ func countExpectedRowsForInvertedIndex(
 	}
 
 	colID := idx.InvertedColumnID()
-	col, err := desc.FindColumnWithID(colID)
+	col, err := catalog.MustFindColumnByID(desc, colID)
 	if err != nil {
 		return 0, err
 	}
