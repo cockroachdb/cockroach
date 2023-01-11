@@ -2002,10 +2002,14 @@ func (t *T) EquivalentExact(other *T) bool {
 		return false
 	}
 
-	if t.Family() == IntFamily || t.Family() == FloatFamily ||
-		t.Family() == DateFamily || t.Family() == TimestampFamily ||
-		t.Family() == IntervalFamily || t.Family() == BytesFamily ||
-		t.Family() == TimestampTZFamily || t.Family() == INetFamily ||
+	if t.Family() == IntFamily ||
+		t.Family() == FloatFamily ||
+		t.Family() == DateFamily ||
+		t.Family() == TimestampFamily ||
+		t.Family() == IntervalFamily ||
+		t.Family() == BytesFamily ||
+		t.Family() == TimestampTZFamily ||
+		t.Family() == INetFamily ||
 		t.Family() == CollatedStringFamily {
 		if t.Width() != other.Width() {
 			return false
