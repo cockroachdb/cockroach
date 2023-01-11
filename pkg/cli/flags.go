@@ -1139,6 +1139,26 @@ func extraStoreFlagInit(cmd *cobra.Command) error {
 		ss.Path = absPath
 		serverCfg.Stores.Specs[i] = ss
 	}
+
+	// Configure the external I/O directory.
+	if !fs.Changed(cliflags.ExternalIODir.Name) {
+		// Try to find a directory from the store configuration.
+		for _, ss := range serverCfg.Stores.Specs {
+			if ss.InMemory {
+				continue
+			}
+			startCtx.externalIODir = filepath.Join(ss.Path, "extern")
+			break
+		}
+	}
+	if startCtx.externalIODir != "" {
+		// Make the directory name absolute.
+		var err error
+		startCtx.externalIODir, err = base.GetAbsoluteStorePath(cliflags.ExternalIODir.Name, startCtx.externalIODir)
+		if err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
