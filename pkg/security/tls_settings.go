@@ -15,12 +15,14 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 )
 
 const (
-	ocspOff    = 0
-	ocspLax    = 1
-	ocspStrict = 2
+	ocspOff                   = 0
+	ocspLax                   = 1
+	ocspStrict                = 2
+	oldCipherSuitesEnabledEnv = "COCKROACH_TLS_ENABLE_OLD_CIPHER_SUITES"
 )
 
 // TLSSettings allows for customization of TLS behavior. It's called
@@ -31,6 +33,7 @@ type TLSSettings interface {
 	ocspEnabled() bool
 	ocspStrict() bool
 	ocspTimeout() time.Duration
+	oldCipherSuitesEnabled() bool
 }
 
 var ocspMode = settings.RegisterEnumSetting(
@@ -65,6 +68,10 @@ func (c clusterTLSSettings) ocspTimeout() time.Duration {
 	return ocspTimeout.Get(&c.settings.SV)
 }
 
+func (c clusterTLSSettings) oldCipherSuitesEnabled() bool {
+	return envutil.EnvOrDefaultBool(oldCipherSuitesEnabledEnv, false)
+}
+
 // ClusterTLSSettings creates a TLSSettings backed by the
 // given cluster settings.
 func ClusterTLSSettings(settings *cluster.Settings) TLSSettings {
@@ -87,4 +94,12 @@ func (CommandTLSSettings) ocspStrict() bool {
 
 func (CommandTLSSettings) ocspTimeout() time.Duration {
 	return 0
+}
+
+func (c CommandTLSSettings) oldCipherSuitesEnabled() bool {
+	return areOldCipherSuitesEnabled()
+}
+
+func areOldCipherSuitesEnabled() bool {
+	return envutil.EnvOrDefaultBool(oldCipherSuitesEnabledEnv, false)
 }

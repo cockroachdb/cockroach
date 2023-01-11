@@ -48,6 +48,14 @@ func newServerTLSConfig(
 		cfg.ClientCAs = certPool
 	}
 
+	if settings.oldCipherSuitesEnabled() {
+		cfg.CipherSuites = append(
+			cfg.CipherSuites,
+			tls.TLS_RSA_WITH_AES_128_GCM_SHA256,
+			tls.TLS_RSA_WITH_AES_256_GCM_SHA384,
+		)
+	}
+
 	// Should we disable session resumption? This may break forward secrecy.
 	// cfg.SessionTicketsDisabled = true
 	return cfg, nil
@@ -62,6 +70,14 @@ func newUIServerTLSConfig(settings TLSSettings, certPEM, keyPEM []byte) (*tls.Co
 	cfg, err := newBaseTLSConfigWithCertificate(settings, certPEM, keyPEM, nil)
 	if err != nil {
 		return nil, err
+	}
+
+	if settings.oldCipherSuitesEnabled() {
+		cfg.CipherSuites = append(
+			cfg.CipherSuites,
+			tls.TLS_RSA_WITH_AES_128_GCM_SHA256,
+			tls.TLS_RSA_WITH_AES_256_GCM_SHA384,
+		)
 	}
 
 	// Should we disable session resumption? This may break forward secrecy.
