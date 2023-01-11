@@ -109,7 +109,7 @@ func TestFilterRangeLookupResponseForTenant(t *testing.T) {
 	} {
 		tenantCtx := ctx
 		if !tc.skipTenantContext {
-			tenantCtx = roachpb.NewContextForTenant(ctx, tc.id)
+			tenantCtx = roachpb.ContextWithClientTenant(ctx, tc.id)
 		}
 		got := filterRangeLookupResponseForTenant(tenantCtx, tc.descs)
 		require.Len(t, got, tc.exp)

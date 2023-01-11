@@ -822,6 +822,7 @@ func makeInternalClientAdapter(
 	}
 }
 
+// tenantIDFromContext returns the tenant ID of the current server.
 func tenantIDFromContext(ctx context.Context) roachpb.TenantID {
 	var tenantID roachpb.TenantID
 	si := serverident.ServerIdentificationFromContext(ctx)

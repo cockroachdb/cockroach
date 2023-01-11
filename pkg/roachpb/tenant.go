@@ -117,9 +117,12 @@ func IsSystemTenantID(id uint64) bool {
 
 type tenantKey struct{}
 
-// NewContextForTenant creates a new context with tenant information attached.
+// ContextWithClientTenant creates a new context with information about the
+// tenant that's the client of an RPC. The tenant ID can be retrieved later with
+// ClientTenantFromContext.
+//
 // An empty tenID clears the respective key from the context.
-func NewContextForTenant(ctx context.Context, tenID TenantID) context.Context {
+func ContextWithClientTenant(ctx context.Context, tenID TenantID) context.Context {
 	var val any
 	if tenID.IsSet() {
 		val = tenID
@@ -127,7 +130,7 @@ func NewContextForTenant(ctx context.Context, tenID TenantID) context.Context {
 		val = nil
 	}
 
-	ctxTenantID, _ := TenantFromContext(ctx)
+	ctxTenantID, _ := ClientTenantFromContext(ctx)
 	if tenID == ctxTenantID {
 		// The context already has the right tenant, or no tenant at all.
 		return ctx
@@ -136,8 +139,10 @@ func NewContextForTenant(ctx context.Context, tenID TenantID) context.Context {
 	return context.WithValue(ctx, tenantKey{}, val)
 }
 
-// TenantFromContext returns the tenant information in ctx if it exists.
-func TenantFromContext(ctx context.Context) (tenID TenantID, ok bool) {
+// ClientTenantFromContext returns the ID of the tenant that's the client of the
+// current RPC, if that infomation was put in the ctx by
+// ContextWithClientTenant.
+func ClientTenantFromContext(ctx context.Context) (tenID TenantID, ok bool) {
 	tenID, ok = ctx.Value(tenantKey{}).(TenantID)
 	return
 }

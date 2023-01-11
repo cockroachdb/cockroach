@@ -307,7 +307,7 @@ func TestTenantCtx(t *testing.T) {
 						// We'll recognize a GetRequest and a PushRequest, check that the
 						// context looks as expected, and signal their channels.
 
-						tenID, isTenantRequest := roachpb.TenantFromContext(ctx)
+						tenID, isTenantRequest := roachpb.ClientTenantFromContext(ctx)
 						keyRecognized := strings.Contains(ba.Requests[0].GetInner().Header().Key.String(), magicKey)
 						if !keyRecognized {
 							return nil

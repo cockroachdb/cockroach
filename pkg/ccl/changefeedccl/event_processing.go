@@ -121,7 +121,7 @@ func newEventConsumer(
 		// CPU control is disabled.
 		var pacer *admission.Pacer = nil
 		if enablePacer {
-			tenantID, ok := roachpb.TenantFromContext(ctx)
+			tenantID, ok := roachpb.ClientTenantFromContext(ctx)
 			if !ok {
 				tenantID = roachpb.SystemTenantID
 			}

@@ -273,7 +273,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		},
 		OnIncomingPing: func(ctx context.Context, req *rpc.PingRequest) error {
 			// Decommission state is only tracked for the system tenant.
-			if tenantID, isTenant := roachpb.TenantFromContext(ctx); isTenant &&
+			if tenantID, isTenant := roachpb.ClientTenantFromContext(ctx); isTenant &&
 				!roachpb.IsSystemTenantID(tenantID.ToUint64()) {
 				return nil
 			}
