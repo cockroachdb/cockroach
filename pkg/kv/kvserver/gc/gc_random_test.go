@@ -314,7 +314,7 @@ func TestNewVsInvariants(t *testing.T) {
 					Txn:    i.Txn,
 					Status: roachpb.ABORTED,
 				}
-				_, err := storage.MVCCResolveWriteIntent(ctx, eng, &stats, l)
+				_, _, _, err := storage.MVCCResolveWriteIntent(ctx, eng, &stats, l, storage.MVCCResolveWriteIntentOptions{})
 				require.NoError(t, err, "failed to resolve intent")
 			}
 			for _, cr := range gcer.clearRanges() {

@@ -890,7 +890,7 @@ func cmdResolveIntentRange(e *evalCtx) error {
 	intent.Status = status
 
 	return e.withWriter("resolve_intent_range", func(rw storage.ReadWriter) error {
-		_, _, err := storage.MVCCResolveWriteIntentRange(e.ctx, rw, e.ms, intent, 0)
+		_, _, _, _, err := storage.MVCCResolveWriteIntentRange(e.ctx, rw, e.ms, intent, storage.MVCCResolveWriteIntentRangeOptions{})
 		return err
 	})
 }
@@ -905,7 +905,7 @@ func (e *evalCtx) resolveIntent(
 	intent := roachpb.MakeLockUpdate(txn, roachpb.Span{Key: key})
 	intent.Status = resolveStatus
 	intent.ClockWhilePending = roachpb.ObservedTimestamp{Timestamp: clockWhilePending}
-	_, err := storage.MVCCResolveWriteIntent(e.ctx, rw, e.ms, intent)
+	_, _, _, err := storage.MVCCResolveWriteIntent(e.ctx, rw, e.ms, intent, storage.MVCCResolveWriteIntentOptions{})
 	return err
 }
 
