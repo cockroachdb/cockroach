@@ -37,7 +37,7 @@ func (ec *Builtins) EncodeTableIndexKey(
 	if err != nil {
 		return nil, err
 	}
-	index, err := tableDesc.FindIndexWithID(indexID)
+	index, err := catalog.MustFindIndexByID(tableDesc, indexID)
 	if err != nil {
 		return nil, err
 	}

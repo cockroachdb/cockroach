@@ -657,7 +657,7 @@ func ExtractIndexKey(
 		return entry.Key, nil
 	}
 
-	index, err := tableDesc.FindIndexWithID(indexID)
+	index, err := catalog.MustFindIndexByID(tableDesc, indexID)
 	if err != nil {
 		return nil, err
 	}

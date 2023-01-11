@@ -201,7 +201,7 @@ func (r *rowDisposer) NumRowsDisposed() int {
 func makeFetchSpec(
 	t testing.TB, table catalog.TableDescriptor, indexName string, colNames string,
 ) fetchpb.IndexFetchSpec {
-	index, err := table.FindIndexWithName(indexName)
+	index, err := catalog.MustFindIndexByName(table, indexName)
 	if err != nil {
 		t.Fatal(err)
 	}

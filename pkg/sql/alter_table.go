@@ -311,12 +311,10 @@ func (n *alterTableNode) startExec(params runParams) error {
 				if err != nil {
 					return err
 				}
-				foundIndex, err := n.tableDesc.FindIndexWithName(string(d.Name))
-				if err == nil {
-					if foundIndex.Dropped() {
-						return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
-							"index %q being dropped, try again later", d.Name)
-					}
+				foundIndex := catalog.FindIndexByName(n.tableDesc, string(d.Name))
+				if foundIndex != nil && foundIndex.Dropped() {
+					return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+						"index %q being dropped, try again later", d.Name)
 				}
 				if err := n.tableDesc.AddIndexMutationMaybeWithTempIndex(
 					&idx, descpb.DescriptorMutation_ADD,
@@ -1431,7 +1429,7 @@ func validateConstraintNameIsNotUsed(
 		if name == "" {
 			return false, nil
 		}
-		idx, _ := tableDesc.FindIndexWithName(string(name))
+		idx := catalog.FindIndexByName(tableDesc, string(name))
 		// If an index is found and its disabled, then we know it will be dropped
 		// later on.
 		if idx == nil {

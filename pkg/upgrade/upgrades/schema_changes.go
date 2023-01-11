@@ -273,14 +273,11 @@ func columnExistsAndIsNotNull(
 // expectedTable descriptor. The comparison is not strict as several descriptor
 // fields are ignored.
 func hasIndex(storedTable, expectedTable catalog.TableDescriptor, indexName string) (bool, error) {
-	storedIdx, err := storedTable.FindIndexWithName(indexName)
-	if err != nil {
-		if strings.Contains(err.Error(), "does not exist") {
-			return false, nil
-		}
-		return false, err
+	storedIdx := catalog.FindIndexByName(storedTable, indexName)
+	if storedIdx == nil {
+		return false, nil
 	}
-	expectedIdx, err := expectedTable.FindIndexWithName(indexName)
+	expectedIdx, err := catalog.MustFindIndexByName(expectedTable, indexName)
 	if err != nil {
 		return false, errors.Wrapf(err, "index name %s is invalid", indexName)
 	}
@@ -327,7 +324,7 @@ func indexDescForComparison(idx catalog.Index) *descpb.IndexDescriptor {
 func doesNotHaveIndex(
 	storedTable, expectedTable catalog.TableDescriptor, indexName string,
 ) (bool, error) {
-	idx, _ := storedTable.FindIndexWithName(indexName)
+	idx := catalog.FindIndexByName(storedTable, indexName)
 	return idx == nil, nil
 }
 

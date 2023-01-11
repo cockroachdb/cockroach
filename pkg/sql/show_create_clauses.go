@@ -393,7 +393,7 @@ func showComments(
 	}
 
 	for _, indexComment := range tc.indexes {
-		idx, err := table.FindIndexWithID(descpb.IndexID(indexComment.subID))
+		idx, err := catalog.MustFindIndexByID(table, descpb.IndexID(indexComment.subID))
 		if err != nil {
 			return err
 		}

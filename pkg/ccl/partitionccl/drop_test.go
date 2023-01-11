@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
@@ -74,7 +75,7 @@ func TestDropIndexWithZoneConfigCCL(t *testing.T) {
 	)`)
 	codec := tenantOrSystemCodec(s)
 	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, "t", "kv")
-	index, err := tableDesc.FindIndexWithName("i")
+	index, err := catalog.MustFindIndexByName(tableDesc, "i")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -121,7 +122,7 @@ func TestDropIndexWithZoneConfigCCL(t *testing.T) {
 		}
 	}
 	tableDesc = desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, "t", "kv")
-	if _, err := tableDesc.FindIndexWithName("i"); err == nil {
+	if catalog.FindIndexByName(tableDesc, "i") != nil {
 		t.Fatalf("table descriptor still contains index after index is dropped")
 	}
 	close(asyncNotification)

@@ -190,7 +190,7 @@ func (m *visitor) MakeValidatedPrimaryIndexPublic(
 	if err != nil {
 		return err
 	}
-	index, err := tbl.FindIndexWithID(op.IndexID)
+	index, err := catalog.MustFindIndexByID(tbl, op.IndexID)
 	if err != nil {
 		return err
 	}
@@ -275,7 +275,7 @@ func (m *visitor) MakeWriteOnlyIndexDeleteOnly(
 	if err != nil {
 		return err
 	}
-	idx, err := tbl.FindIndexWithID(op.IndexID)
+	idx, err := catalog.MustFindIndexByID(tbl, op.IndexID)
 	if err != nil {
 		return err
 	}
@@ -329,7 +329,7 @@ func (m *visitor) AddIndexPartitionInfo(ctx context.Context, op scop.AddIndexPar
 	if err != nil {
 		return err
 	}
-	index, err := tbl.FindIndexWithID(op.Partitioning.IndexID)
+	index, err := catalog.MustFindIndexByID(tbl, op.Partitioning.IndexID)
 	if err != nil {
 		return err
 	}
@@ -342,7 +342,7 @@ func (m *visitor) SetIndexName(ctx context.Context, op scop.SetIndexName) error 
 	if err != nil {
 		return err
 	}
-	index, err := tbl.FindIndexWithID(op.IndexID)
+	index, err := catalog.MustFindIndexByID(tbl, op.IndexID)
 	if err != nil {
 		return err
 	}
@@ -355,7 +355,7 @@ func (m *visitor) AddColumnToIndex(ctx context.Context, op scop.AddColumnToIndex
 	if err != nil {
 		return err
 	}
-	index, err := tbl.FindIndexWithID(op.IndexID)
+	index, err := catalog.MustFindIndexByID(tbl, op.IndexID)
 	if err != nil {
 		return err
 	}
@@ -426,7 +426,7 @@ func (m *visitor) RemoveColumnFromIndex(ctx context.Context, op scop.RemoveColum
 	if err != nil {
 		return err
 	}
-	index, err := tbl.FindIndexWithID(op.IndexID)
+	index, err := catalog.MustFindIndexByID(tbl, op.IndexID)
 	if err != nil {
 		return err
 	}

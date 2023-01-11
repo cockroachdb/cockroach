@@ -52,6 +52,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
@@ -2538,8 +2539,8 @@ func (s *systemStatusServer) HotRangesV2(
 									if _, _, idxID, err := s.sqlServer.execCfg.Codec.DecodeIndexPrefix(r.Desc.StartKey.AsRawKey()); err != nil {
 										log.Warningf(ctx, "cannot decode index prefix for range descriptor: %s: %v", r.Desc, err)
 									} else {
-										if index, err := desc.FindIndexWithID(descpb.IndexID(idxID)); err != nil {
-											log.Warningf(ctx, "cannot get index name for range descriptor: %s: %v", r.Desc, err)
+										if index := catalog.FindIndexByID(desc, descpb.IndexID(idxID)); index == nil {
+											log.Warningf(ctx, "cannot get index name for range descriptor: %s: index with ID %d not found", r.Desc, idxID)
 										} else {
 											indexName = index.GetName()
 										}
