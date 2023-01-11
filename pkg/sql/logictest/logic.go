@@ -1819,6 +1819,9 @@ func (t *logicTest) setup(
 
 	if cfg.UseCockroachGoTestserver {
 		skip.UnderStress(t.t(), "test takes a long time and downloads release artifacts")
+		if runtime.GOARCH == "arm64" && strings.HasPrefix(cfg.CockroachGoBootstrapVersion, "v22.1") {
+			skip.IgnoreLint(t.t(), "Skip under ARM64. There are no ARM release artifacts for v22.1.")
+		}
 		if !bazel.BuiltWithBazel() {
 			skip.IgnoreLint(t.t(), "cockroach-go/testserver can only be uzed in bazel builds")
 		}
