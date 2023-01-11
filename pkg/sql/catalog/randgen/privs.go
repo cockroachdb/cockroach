@@ -46,7 +46,7 @@ func (g *testSchemaGenerator) checkCanCreateOnSchema(
 		}
 
 	default:
-		panic(errors.AssertionFailedf("unknown schema kind %d", sc.SchemaKind()))
+		panic(genError{errors.AssertionFailedf("unknown schema kind %d", sc.SchemaKind())})
 	}
 }
 
