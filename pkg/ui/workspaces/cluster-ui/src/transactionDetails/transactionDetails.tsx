@@ -535,6 +535,7 @@ export class TransactionDetails extends React.Component<
                       className={cx("statements-table")}
                       sortSetting={sortSetting}
                       onChangeSortSetting={this.onChangeSortSetting}
+                      pagination={pagination}
                     />
                   </div>
                 </section>
