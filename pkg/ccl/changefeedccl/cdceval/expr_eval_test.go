@@ -727,7 +727,7 @@ func randEncDatumPrimaryFamily(
 	t.Helper()
 	rng, _ := randutil.NewTestRand()
 
-	family, err := desc.FindFamilyByID(0)
+	family, err := catalog.MustFindFamilyByID(desc, 0 /* id */)
 	require.NoError(t, err)
 	for _, colID := range family.ColumnIDs {
 		col, err := desc.FindColumnWithID(colID)

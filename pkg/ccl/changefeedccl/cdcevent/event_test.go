@@ -615,7 +615,7 @@ func mustGetFamily(
 	t *testing.T, desc catalog.TableDescriptor, familyID descpb.FamilyID,
 ) *descpb.ColumnFamilyDescriptor {
 	t.Helper()
-	f, err := desc.FindFamilyByID(familyID)
+	f, err := catalog.MustFindFamilyByID(desc, familyID)
 	require.NoError(t, err)
 	return f
 }

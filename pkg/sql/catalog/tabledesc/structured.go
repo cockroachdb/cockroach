@@ -1156,17 +1156,6 @@ func (desc *Mutable) FindActiveOrNewColumnByName(name tree.Name) (catalog.Column
 	return nil, colinfo.NewUndefinedColumnError(string(name))
 }
 
-// FindFamilyByID implements the TableDescriptor interface.
-func (desc *wrapper) FindFamilyByID(id descpb.FamilyID) (*descpb.ColumnFamilyDescriptor, error) {
-	for i := range desc.Families {
-		family := &desc.Families[i]
-		if family.ID == id {
-			return family, nil
-		}
-	}
-	return nil, fmt.Errorf("family-id \"%d\" does not exist", id)
-}
-
 // DropConstraint drops a constraint, either by removing it from the table
 // descriptor or by queuing a mutation for a schema change.
 func (desc *Mutable) DropConstraint(
