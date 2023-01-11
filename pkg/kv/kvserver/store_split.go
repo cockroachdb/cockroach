@@ -66,9 +66,18 @@ func splitPreApply(
 		// If rightRepl is not nil, we are *not* holding raftMu.
 		//
 		// To apply the split, we need to "throw away" the data that would belong to
-		// the RHS, i.e. we clear the user data the RHS would have inherited from the
-		// LHS due to the split and additionally clear all of the range ID local state
-		// that the split trigger writes into the RHS.
+		// the RHS, i.e. we clear the user data the RHS would have inherited from
+		// the LHS due to the split and additionally clear all of the range ID local
+		// state that the split trigger writes into the RHS. At the time of writing,
+		// unfortunately that means that we'll also delete any data that might
+		// already be present in the RHS: the HardState and RaftReplicaID. It is
+		// important to preserve the HardState because we might however have already
+		// voted at a higher term. In general this shouldn't happen because we add
+		// learners and then promote them only after they apply a snapshot but we're
+		// going to be extra careful in case future versions of cockroach somehow
+		// promote replicas without ensuring that a snapshot has been received. So
+		// we write it back (and the RaftReplicaID too, since it's an invariant that
+		// it's always present).
 		var hs raftpb.HardState
 		if rightRepl != nil {
 			rightRepl.raftMu.Lock()
