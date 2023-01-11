@@ -11,7 +11,5 @@ StateMachineSpans():
 - /Local/Range"{a"-c"}
 - /Local/Lock/Intent/Local/Range"{a"-c"}
 - /Local/Lock/Intent"{a"-c"}
-- /Local/Lock/Intent/Local/Range"{a"-c"}
-- /Local/Lock/Intent"{a"-c"}
 - {a-c}
 NonStateMachineSpans():

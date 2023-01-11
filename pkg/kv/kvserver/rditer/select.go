@@ -83,7 +83,7 @@ func Select(rangeID roachpb.RangeID, opts SelectionOptions) Selection {
 		{
 			sps := makeRangeLockTableKeySpans(d)
 			s.all = append(s.all, sps[:]...)
-			s.statemachine = append(s.all, sps[:]...)
+			s.statemachine = append(s.statemachine, sps[:]...)
 		}
 		{
 			sp := makeUserKeySpan(d)

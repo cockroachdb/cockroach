@@ -7,10 +7,7 @@ Spans():
 - /Local/Lock/Intent"{a"-c"}
 - {a-c}
 StateMachineSpans():
-- /Local/RangeID/123/{u""-v""}
 - /Local/Range"{a"-c"}
-- /Local/Lock/Intent/Local/Range"{a"-c"}
-- /Local/Lock/Intent"{a"-c"}
 - /Local/Lock/Intent/Local/Range"{a"-c"}
 - /Local/Lock/Intent"{a"-c"}
 - {a-c}
