@@ -24,7 +24,7 @@ type SelectOpts struct {
 	// ReplicatedByRangeID selects all RangeID-keyed replicated keys. An example
 	// of a key that falls into this Span is the GCThresholdKey.
 	ReplicatedByRangeID bool
-	// ReplicatedByRangeID selects all RangeID-keyed unreplicated keys. Examples
+	// UnreplicatedByRangeID selects all RangeID-keyed unreplicated keys. Examples
 	// of keys that fall into this Span are the HardStateKey (and generally all
 	// Raft state) and the RangeTombstoneKey.
 	UnreplicatedByRangeID bool

@@ -443,6 +443,10 @@ type clearRangeDataOptions struct {
 
 // clearRangeData clears the data associated with a range descriptor selected
 // by the provided clearRangeDataOptions.
+//
+// TODO(tbg): could rename this to clearReplicaData. The use of "Range" in both the
+// "CRDB Range" and "storage.ClearRange" context in the setting of this method could
+// be confusing.
 func clearRangeData(
 	rangeID roachpb.RangeID, reader storage.Reader, writer storage.Writer, opts clearRangeDataOptions,
 ) error {
