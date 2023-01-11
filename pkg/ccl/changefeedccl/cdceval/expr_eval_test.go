@@ -63,6 +63,17 @@ CREATE TABLE foo (
   FAMILY only_c (c),
   FAMILY f_g_fam(f, g, flag)
 )`)
+	sqlDB.Exec(t, `
+CREATE FUNCTION yesterday(mvcc DECIMAL) 
+RETURNS DECIMAL IMMUTABLE LEAKPROOF LANGUAGE SQL AS $$
+  SELECT mvcc - 24 * 3600 * 1e9
+$$`)
+	sqlDB.Exec(t, `
+CREATE FUNCTION volatile() 
+RETURNS FLOAT VOLATILE LANGUAGE SQL AS $$
+  SELECT random()
+$$`)
+
 	desc := cdctest.GetHydratedTableDescriptor(t, s.ExecutorConfig(), "foo")
 
 	type decodeExpectation struct {
@@ -180,7 +191,7 @@ CREATE TABLE foo (
 				"INSERT INTO foo (a, b, e) VALUES (4, '4th test', 'closed')",
 				"INSERT INTO foo (a, b, e) VALUES (5, '4th test', 'inactive')",
 			},
-			stmt: "SELECT a FROM _ WHERE e IN ('open', 'inactive')",
+			stmt: "SELECT a FROM foo WHERE e IN ('open', 'inactive')",
 			expectMainFamily: []decodeExpectation{
 				{
 					expectFiltered: true,
@@ -237,15 +248,15 @@ CREATE TABLE foo (
 			testName:   "main/no_col_c",
 			familyName: "main",
 			actions:    []string{"INSERT INTO foo (a, b) VALUES (1, 'no_c')"},
-			stmt:       "SELECT a, c FROM _",
-			expectErr:  `column "foo.c" does not exist`,
+			stmt:       "SELECT a, c FROM foo",
+			expectErr:  `column "c" does not exist`,
 		},
 		{
 			testName:   "main/no_col_c_star",
 			familyName: "main",
 			actions:    []string{"INSERT INTO foo (a, b) VALUES (1, 'no_c')"},
-			stmt:       "SELECT *, c FROM _",
-			expectErr:  `column "foo.c" does not exist`,
+			stmt:       "SELECT *, c FROM foo",
+			expectErr:  `column "c" does not exist`,
 		},
 		{
 			testName:   "main/non_primary_family_with_var_free",
@@ -318,10 +329,10 @@ CREATE TABLE foo (
 			},
 			stmt: `SELECT
                a, b, c,
-               (CASE WHEN cdc_prev.c IS NULL THEN 'not there' ELSE cdc_prev.c END) AS old_c
+               (CASE WHEN (cdc_prev).c IS NULL THEN 'not there' ELSE (cdc_prev).c END) AS old_c
              FROM foo
-             WHERE cdc_prev.crdb_internal_mvcc_timestamp IS NULL OR
-                   cdc_prev.crdb_internal_mvcc_timestamp < crdb_internal_mvcc_timestamp`,
+             WHERE (cdc_prev).crdb_internal_mvcc_timestamp IS NULL OR
+                   (cdc_prev).crdb_internal_mvcc_timestamp < crdb_internal_mvcc_timestamp`,
 			expectMainFamily: []decodeExpectation{
 				{
 					expectUnwatchedErr: true,
@@ -345,7 +356,7 @@ CREATE TABLE foo (
 				"INSERT INTO foo (a, b) VALUES (123, 'select_if')",
 				"DELETE FROM foo where a=123",
 			},
-			stmt: "SELECT IF(cdc_is_delete(),'deleted',a::string) AS conditional FROM _",
+			stmt: "SELECT IF(cdc_is_delete(),'deleted',a::string) AS conditional FROM foo",
 			expectMainFamily: []decodeExpectation{
 				{
 					keyValues: []string{"select_if", "123"},
@@ -363,7 +374,7 @@ CREATE TABLE foo (
 			actions: []string{
 				"INSERT INTO foo (a, b) VALUES (1, '   spaced out      ')",
 			},
-			stmt: "SELECT btrim(b), parse_timetz('1:00-0') AS past FROM _",
+			stmt: "SELECT btrim(b), parse_timetz('1:00-0') AS past FROM foo",
 			expectMainFamily: []decodeExpectation{
 				{
 					keyValues: []string{"   spaced out      ", "1"},
@@ -394,24 +405,22 @@ CREATE TABLE foo (
 				"INSERT INTO foo (a, b, h) VALUES (1,  'hello', 'invisible')",
 			},
 			stmt:      "SELECT a, tableoid, h FROM foo WHERE crdb_internal_mvcc_timestamp = cdc_mvcc_timestamp()",
-			expectErr: `column "foo.h" does not exist`,
+			expectErr: `column "h" does not exist`,
 		},
-		// {
-		//  // TODO(yevgeniy): Test currently disable since session data is not serialized.
-		//  // Issue #90421
-		//	testName:   "main/trigram",
-		//	familyName: "main",
-		//	actions: []string{
-		//		"INSERT INTO foo (a, b) VALUES (1,  'hello')",
-		//	},
-		//	stmt: "SELECT a,  b % 'hel' as trigram, b % 'heh' AS trigram2 FROM foo",
-		//	expectMainFamily: []decodeExpectation{
-		//		{
-		//			keyValues: []string{"hello", "1"},
-		//			allValues: map[string]string{"a": "1", "trigram": "true", "trigram2": "false"},
-		//		},
-		//	},
-		//},
+		{
+			testName:   "main/trigram",
+			familyName: "main",
+			actions: []string{
+				"INSERT INTO foo (a, b) VALUES (1,  'hello')",
+			},
+			stmt: "SELECT a,  b % 'hel' as trigram, b % 'heh' AS trigram2 FROM foo",
+			expectMainFamily: []decodeExpectation{
+				{
+					keyValues: []string{"hello", "1"},
+					allValues: map[string]string{"a": "1", "trigram": "true", "trigram2": "false"},
+				},
+			},
+		},
 		{
 			testName:   "main/btrim_wrong_type",
 			familyName: "main",
@@ -431,7 +440,7 @@ CREATE TABLE foo (
 		{
 			testName:   "main/no_sleep",
 			familyName: "main",
-			stmt:       "SELECT *, pg_sleep(86400) AS wake_up FROM _",
+			stmt:       "SELECT *, pg_sleep(86400) AS wake_up FROM foo",
 			expectErr:  `function "pg_sleep" unsupported by CDC`,
 		},
 		{
@@ -487,7 +496,7 @@ CREATE TABLE foo (
 					"SELECT x, 'only_some_deleted_values', x::string FROM s",
 			},
 			actions:          []string{"DELETE FROM foo WHERE b='only_some_deleted_values'"},
-			stmt:             `SELECT * FROM foo WHERE cdc_is_delete() AND cdc_prev.a % 33 = 0`,
+			stmt:             `SELECT * FROM foo WHERE cdc_is_delete() AND (cdc_prev).a % 33 = 0`,
 			expectMainFamily: repeatExpectation(decodeExpectation{expectUnwatchedErr: true}, 100),
 			expectOnlyCFamily: func() (expectations []decodeExpectation) {
 				for i := 1; i <= 100; i++ {
@@ -501,6 +510,25 @@ CREATE TABLE foo (
 				}
 				return expectations
 			}(),
+		},
+		{
+			testName:   "user defined function",
+			familyName: "main",
+			actions:    []string{"INSERT INTO foo (a, b) VALUES (1, '1st test')"},
+			stmt:       "SELECT  crdb_internal_mvcc_timestamp - yesterday(crdb_internal_mvcc_timestamp) AS elapsed FROM foo",
+			expectMainFamily: []decodeExpectation{
+				{
+					keyValues: []string{"1st test", "1"},
+					allValues: map[string]string{"elapsed": "86400000000000.0000000000"},
+				},
+			},
+		},
+		{
+			testName:   "disallow volatile UDF",
+			familyName: "main",
+			actions:    []string{"INSERT INTO foo (a, b) VALUES (1, '1st test')"},
+			stmt:       "SELECT  volatile() AS v FROM foo",
+			expectErr:  `volatile functions "volatile" unsupported by CDC`,
 		},
 	} {
 		t.Run(tc.testName, func(t *testing.T) {
@@ -611,7 +639,7 @@ func TestUnsupportedCDCFunctions(t *testing.T) {
 
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 	sqlDB := sqlutils.MakeSQLRunner(db)
-	sqlDB.Exec(t, "CREATE TABLE foo (a INT PRIMARY KEY)")
+	sqlDB.Exec(t, "CREATE TABLE foo (a INT PRIMARY KEY, b STRING)")
 	desc := cdctest.GetHydratedTableDescriptor(t, s.ExecutorConfig(), "foo")
 	target := changefeedbase.Target{
 		TableID:    desc.GetID(),
@@ -633,9 +661,10 @@ func TestUnsupportedCDCFunctions(t *testing.T) {
 		"generate_series(1, 10)": "generate_series",
 
 		// Unsupported functions that take arguments from foo.
-		"generate_series(1, a)":            "generate_series",
-		"crdb_internal.read_file(b)":       "crdb_internal.read_file",
-		"crdb_internal.get_namespace_id()": "crdb_internal.get_namespace_id",
+		"generate_series(1, a)": "generate_series",
+
+		"crdb_internal.read_file(b)":               "crdb_internal.read_file",
+		"crdb_internal.get_namespace_id(0, 'foo')": "crdb_internal.get_namespace_id",
 	} {
 		t.Run(fmt.Sprintf("select/%s", errFn), func(t *testing.T) {
 			_, err := newEvaluatorWithNormCheck(&execCfg, desc, execCfg.Clock.Now(), target,
@@ -739,7 +768,7 @@ func newEvaluatorWithNormCheck(
 	}
 
 	const splitFamilies = true
-	norm, err := NormalizeExpression(
+	norm, _, _, err := normalizeAndPlan(
 		context.Background(), execCfg, username.RootUserName(), defaultDBSessionData, desc, schemaTS,
 		jobspb.ChangefeedTargetSpecification{
 			Type:       target.Type,
@@ -752,10 +781,11 @@ func newEvaluatorWithNormCheck(
 		return nil, err
 	}
 
-	return NewEvaluator(norm.SelectClause, execCfg, username.RootUserName())
+	return NewEvaluator(norm.SelectClause, execCfg, username.RootUserName(), defaultDBSessionData)
 }
 
 var defaultDBSessionData = sessiondatapb.SessionData{
-	Database:   "defaultdb",
-	SearchPath: sessiondata.DefaultSearchPath.GetPathArray(),
+	Database:                   "defaultdb",
+	SearchPath:                 sessiondata.DefaultSearchPath.GetPathArray(),
+	TrigramSimilarityThreshold: 0.3,
 }

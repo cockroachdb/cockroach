@@ -171,7 +171,7 @@ FAMILY extra (extra)
 			desc:         fooDesc,
 			targetFamily: "extra",
 			stmt:         "SELECT a, status, extra FROM foo",
-			expectErr:    `column "foo.status" does not exist`,
+			expectErr:    `column "status" does not exist`,
 		},
 		{
 			name:         "full table extra family with cdc_prev tuple",
@@ -191,7 +191,7 @@ FAMILY extra (extra)
 		{
 			name:      "full table with cdc_prev expanded",
 			desc:      fooDesc,
-			stmt:      "SELECT *, cdc_prev.* FROM foo",
+			stmt:      "SELECT *, (cdc_prev).* FROM foo",
 			planSpans: roachpb.Spans{primarySpan},
 			presentation: append(mainColumns, append(
 				// It would be nice to hide "system" columns from cdc_prev -- just like they are
@@ -204,7 +204,7 @@ FAMILY extra (extra)
 		{
 			name:         "full table with cdc_prev json",
 			desc:         fooDesc,
-			stmt:         "SELECT *, row_to_json(cdc_prev.*) AS prev_json FROM foo",
+			stmt:         "SELECT *, row_to_json((cdc_prev).*) AS prev_json FROM foo",
 			planSpans:    roachpb.Spans{primarySpan},
 			presentation: append(mainColumns, rc("prev_json", types.Jsonb)),
 		},
@@ -218,7 +218,7 @@ FAMILY extra (extra)
 		{
 			name:         "a > 10 with cdc_prev",
 			desc:         fooDesc,
-			stmt:         "SELECT * FROM foo WHERE a > 10 AND cdc_prev.status = 'closed'",
+			stmt:         "SELECT * FROM foo WHERE a > 10 AND (cdc_prev).status = 'closed'",
 			planSpans:    roachpb.Spans{{Key: mkPkKey(t, fooID, 11), EndKey: pkEnd}},
 			presentation: mainColumns,
 		},
@@ -279,7 +279,7 @@ FAMILY extra (extra)
 			}
 
 			const splitFamilies = true
-			_, plan, err := normalizeAndPlan(ctx, &execCfg, username.RootUserName(),
+			_, _, plan, err := normalizeAndPlan(ctx, &execCfg, username.RootUserName(),
 				defaultDBSessionData, tc.desc, schemaTS, target, sc, splitFamilies)
 
 			if tc.expectErr != "" {
@@ -324,27 +324,28 @@ func normalizeAndPlan(
 	target jobspb.ChangefeedTargetSpecification,
 	sc *tree.SelectClause,
 	splitFams bool,
-) (norm *NormalizedSelectClause, plan sql.CDCExpressionPlan, err error) {
-	norm, err = NormalizeExpression(ctx, execCfg, user, sd, descr, schemaTS, target, sc, splitFams)
-	if err != nil {
-		return nil, sql.CDCExpressionPlan{}, err
-	}
-
-	d, err := newEventDescriptorForTarget(descr, target, schemaTS, false, false)
-	if err != nil {
-		return nil, sql.CDCExpressionPlan{}, err
-	}
-
+) (norm *NormalizedSelectClause, withDiff bool, plan sql.CDCExpressionPlan, err error) {
 	if err := withPlanner(ctx, execCfg, user, schemaTS, sd,
-		func(ctx context.Context, execCtx sql.JobExecContext) error {
-			defer configSemaForCDC(execCtx.SemaCtx(), d)()
+		func(ctx context.Context, execCtx sql.JobExecContext, cleanup func()) error {
+			defer cleanup()
+			defer configSemaForCDC(execCtx.SemaCtx())()
 
-			plan, err = sql.PlanCDCExpression(ctx, execCtx, norm.SelectStatementForFamily())
+			norm, withDiff, err = NormalizeExpression(ctx, execCtx, descr, schemaTS, target, sc, splitFams)
+			if err != nil {
+				return err
+			}
+
+			// Add cdc_prev column; we may or may not need it, but we'll check below.
+			prevCol, err := newPrevColumnForDesc(norm.desc)
+			if err != nil {
+				return err
+			}
+			plan, err = sql.PlanCDCExpression(ctx, execCtx,
+				norm.SelectStatementForFamily(), sql.WithExtraColumn(prevCol))
 			return err
 		},
 	); err != nil {
-		return nil, sql.CDCExpressionPlan{}, err
+		return nil, false, sql.CDCExpressionPlan{}, err
 	}
-
-	return norm, plan, nil
+	return norm, withDiff, plan, nil
 }

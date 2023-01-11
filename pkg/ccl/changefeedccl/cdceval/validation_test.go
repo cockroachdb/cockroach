@@ -10,7 +10,6 @@ package cdceval
 
 import (
 	"context"
-	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -49,7 +48,6 @@ func TestNormalizeAndValidate(t *testing.T) {
 	)
 
 	fooDesc := cdctest.GetHydratedTableDescriptor(t, s.ExecutorConfig(), "foo")
-	otherFooDesc := cdctest.GetHydratedTableDescriptor(t, s.ExecutorConfig(), "other", "foo")
 	bazDesc := cdctest.GetHydratedTableDescriptor(t, s.ExecutorConfig(), "baz")
 	bopDesc := cdctest.GetHydratedTableDescriptor(t, s.ExecutorConfig(), "bop")
 
@@ -92,71 +90,46 @@ func TestNormalizeAndValidate(t *testing.T) {
 			splitColFams: false,
 		},
 		{
-			name:         "replaces table name with ref",
-			desc:         fooDesc,
-			stmt:         "SELECT * FROM foo",
-			expectStmt:   fmt.Sprintf("SELECT foo.* FROM [%d AS foo]", fooDesc.GetID()),
-			splitColFams: false,
-		},
-		{
-			name:         "replaces table name with other.ref",
-			desc:         otherFooDesc,
-			stmt:         "SELECT * FROM other.foo",
-			expectStmt:   fmt.Sprintf("SELECT foo.* FROM [%d AS foo]", otherFooDesc.GetID()),
-			splitColFams: false,
-		},
-		{
-			name:         "replaces table name with ref aliased",
-			desc:         fooDesc,
-			stmt:         "SELECT * FROM foo AS bar",
-			expectStmt:   fmt.Sprintf("SELECT bar.* FROM [%d AS bar]", fooDesc.GetID()),
-			splitColFams: false,
-		},
-		{
 			name: "UDTs fully qualified",
 			desc: fooDesc,
 			stmt: "SELECT *, 'inactive':::status FROM foo AS bar WHERE status = 'open':::status",
-			expectStmt: fmt.Sprintf(
-				"SELECT bar.*, 'inactive':::defaultdb.public.status "+
-					"FROM [%d AS bar] WHERE bar.status = 'open':::defaultdb.public.status",
-				fooDesc.GetID()),
+			expectStmt: "SELECT *, 'inactive':::defaultdb.public.status " +
+				"FROM foo AS bar WHERE status = 'open':::defaultdb.public.status",
 			splitColFams: false,
 		},
 		{
-			name: "can cast to standard type",
-			desc: fooDesc,
-			stmt: "SELECT 'cast'::string, 'type_annotation':::string FROM foo AS bar",
-			expectStmt: fmt.Sprintf(
-				"SELECT 'cast'::STRING, 'type_annotation':::STRING FROM [%d AS bar]",
-				fooDesc.GetID()),
+			name:         "can cast to standard type",
+			desc:         fooDesc,
+			stmt:         "SELECT 'cast'::string, 'type_annotation':::string FROM foo AS bar",
+			expectStmt:   "SELECT 'cast'::STRING, 'type_annotation':::STRING FROM foo AS bar",
 			splitColFams: false,
 		},
 		{
 			name:         "can target one column family",
 			desc:         bazDesc,
 			stmt:         "SELECT a, b FROM baz",
-			expectStmt:   fmt.Sprintf("SELECT baz.a, baz.b FROM [%d AS baz]", bazDesc.GetID()),
+			expectStmt:   "SELECT a, b FROM baz",
 			splitColFams: false,
 		},
 		{
 			name:         "SELECT a, b FROM bop",
 			desc:         bopDesc,
 			stmt:         "SELECT a, b FROM bop",
-			expectStmt:   fmt.Sprintf("SELECT bop.a, bop.b FROM [%d AS bop]", bopDesc.GetID()),
+			expectStmt:   "SELECT a, b FROM bop",
 			splitColFams: false,
 		},
 		{
 			name:         "SELECT a, c FROM baz",
 			desc:         bazDesc,
 			stmt:         "SELECT a, c FROM baz",
-			expectStmt:   fmt.Sprintf("SELECT baz.a, baz.c FROM [%d AS baz]", bazDesc.GetID()),
+			expectStmt:   "SELECT a, c FROM baz",
 			splitColFams: false,
 		},
 		{
 			name:         "SELECT b, b+1 AS c FROM baz",
 			desc:         bazDesc,
 			stmt:         "SELECT b, b+1 AS c FROM baz",
-			expectStmt:   fmt.Sprintf("SELECT baz.b, baz.b + 1 AS c FROM [%d AS baz]", bazDesc.GetID()),
+			expectStmt:   "SELECT b, b + 1 AS c FROM baz",
 			splitColFams: false,
 		},
 		{
@@ -170,24 +143,21 @@ func TestNormalizeAndValidate(t *testing.T) {
 			name:         "SELECT B FROM baz",
 			desc:         bazDesc,
 			stmt:         "SELECT B FROM baz",
-			expectStmt:   fmt.Sprintf("SELECT baz.b FROM [%d AS baz]", bazDesc.GetID()),
+			expectStmt:   "SELECT b FROM baz",
 			splitColFams: false,
 		},
 		{
 			name:         "SELECT baz.b FROM baz",
 			desc:         bazDesc,
 			stmt:         "SELECT baz.b FROM baz",
-			expectStmt:   fmt.Sprintf("SELECT baz.b FROM [%d AS baz]", bazDesc.GetID()),
+			expectStmt:   "SELECT baz.b FROM baz",
 			splitColFams: false,
 		},
 		{
-			name: "SELECT baz.b, row_to_json(cdc_prev.*) FROM baz",
-			desc: bazDesc,
-			stmt: "SELECT baz.b, row_to_json(cdc_prev.*) FROM baz",
-			expectStmt: fmt.Sprintf("SELECT baz.b, row_to_json(cdc_prev.*) FROM "+
-				"[%d AS baz], "+
-				"(SELECT (crdb_internal.cdc_prev_row()).*) AS cdc_prev",
-				bazDesc.GetID()),
+			name:       "SELECT baz.b, row_to_json((cdc_prev).*) FROM baz",
+			desc:       bazDesc,
+			stmt:       "SELECT baz.b, row_to_json((cdc_prev).*) FROM baz",
+			expectStmt: "SELECT baz.b, row_to_json((cdc_prev).*) FROM baz",
 			// Currently, accessing cdc_prev.* is treated in such a way as to require
 			// split column families option.  This might not be needed since the above
 			// expression targets main column family only. Perhaps this restriction
@@ -212,7 +182,7 @@ func TestNormalizeAndValidate(t *testing.T) {
 			name:         "SELECT b::string = 'c' FROM baz",
 			desc:         bazDesc,
 			stmt:         "SELECT b::string = 'c' FROM baz",
-			expectStmt:   fmt.Sprintf("SELECT baz.b::STRING = 'c' FROM [%d AS baz]", bazDesc.GetID()),
+			expectStmt:   "SELECT b::STRING = 'c' FROM baz",
 			splitColFams: false,
 		},
 		{
@@ -226,14 +196,14 @@ func TestNormalizeAndValidate(t *testing.T) {
 			name:         "no explicit column references",
 			desc:         bazDesc,
 			stmt:         "SELECT pi() FROM baz",
-			expectStmt:   fmt.Sprintf("SELECT pi() FROM [%d AS baz]", bazDesc.GetID()),
+			expectStmt:   "SELECT pi() FROM baz",
 			splitColFams: false,
 		},
 		{
 			name:      "cdc_prev is not a function",
 			desc:      fooDesc,
 			stmt:      "SELECT *, cdc_prev() FROM foo AS bar",
-			expectErr: `function "cdc_prev" unsupported by CDC`,
+			expectErr: `unknown function: cdc_prev()`,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -248,21 +218,10 @@ func TestNormalizeAndValidate(t *testing.T) {
 				StatementTimeName: tc.desc.GetName(),
 			}
 
-			d, err := newEventDescriptorForTarget(tc.desc, target, execCfg.Clock.Now(), false, false)
-			require.NoError(t, err)
-
 			schemaTS := s.Clock().Now()
-			err = withPlanner(ctx, &execCfg, username.RootUserName(), schemaTS, defaultDBSessionData,
-				func(ctx context.Context, execCtx sql.JobExecContext) error {
-					defer configSemaForCDC(execCtx.SemaCtx(), d)()
-					norm, err := normalizeAndValidateSelectForTarget(
-						ctx, execCtx.ExecCfg(), tc.desc, schemaTS, target, sc,
-						false, tc.splitColFams, execCtx.SemaCtx())
-					if err == nil {
-						sc = norm.SelectClause
-					}
-					return err
-				},
+			norm, _, _, err := normalizeAndPlan(
+				ctx, &execCfg, username.RootUserName(), defaultDBSessionData, tc.desc, schemaTS,
+				target, sc, tc.splitColFams,
 			)
 
 			if tc.expectErr != "" {
@@ -271,7 +230,7 @@ func TestNormalizeAndValidate(t *testing.T) {
 			}
 
 			require.NoError(t, err)
-			serialized := AsStringUnredacted(sc)
+			serialized := AsStringUnredacted(norm)
 			require.Equal(t, tc.expectStmt, serialized)
 
 			// Make sure we can deserialize back.
@@ -290,11 +249,11 @@ func TestSelectClauseRequiresPrev(t *testing.T) {
 
 	sqlDB := sqlutils.MakeSQLRunner(db)
 	sqlDB.Exec(t, `CREATE table foo (id int primary key, s string)`)
-	sqlDB.Exec(t, `CREATE table cdc_prev (id int primary key, s string)`)
-	sqlDB.Exec(t, `CREATE table misleading_column_name (id int primary key, cdc_prev string)`)
+	sqlDB.Exec(t, `CREATE table cdc_prev (id int primary key, cdc_prev string)`)
+	sqlDB.Exec(t, `CREATE table cdc_prev_bad (id int primary key, cdc_prev string, crdb_internal_cdc_prev string)`)
 
 	descs := make(map[string]catalog.TableDescriptor)
-	for _, name := range []string{`foo`, `cdc_prev`, `misleading_column_name`} {
+	for _, name := range []string{`foo`, `cdc_prev`, `cdc_prev_bad`} {
 		descs[name] = cdctest.GetHydratedTableDescriptor(t, s.ExecutorConfig(), tree.Name(name))
 	}
 
@@ -311,25 +270,25 @@ func TestSelectClauseRequiresPrev(t *testing.T) {
 		{
 			name:         "top level call to cdc_prev",
 			desc:         descs[`foo`],
-			stmt:         "SELECT row_to_json(cdc_prev.*) from foo",
+			stmt:         "SELECT row_to_json((cdc_prev).*) from foo",
 			requiresPrev: true,
 		},
 		{
 			name:         "nested call to cdc_prev",
 			desc:         descs[`foo`],
-			stmt:         "SELECT jsonb_build_object('op',IF(cdc_is_delete(),'u',IF(row_to_json(cdc_prev.*)::string='null','c','u'))) from foo",
+			stmt:         "SELECT jsonb_build_object('op',IF(cdc_is_delete(),'u',IF(row_to_json((cdc_prev).*)::string='null','c','u'))) from foo",
 			requiresPrev: true,
 		},
 		{
 			name:         "cdc_prev in the stmt",
 			desc:         descs[`foo`],
-			stmt:         "SELECT * from foo WHERE cdc_prev.s != s",
+			stmt:         "SELECT * from foo WHERE (cdc_prev).s != s",
 			requiresPrev: true,
 		},
 		{
 			name:         "cdc_prev case insensitive",
 			desc:         descs[`foo`],
-			stmt:         "SELECT row_to_json(CdC_pReV.*) from foo",
+			stmt:         "SELECT row_to_json((CdC_pReV).*) from foo",
 			requiresPrev: true,
 		},
 		{
@@ -339,10 +298,29 @@ func TestSelectClauseRequiresPrev(t *testing.T) {
 			requiresPrev: false,
 		},
 		{
-			name:      "misleading table name",
+			// cdc_prev table has cdc_prev column; attempt to access
+			// cdc_prev.cdc_prev column -- this is not the same as access
+			// to cdc_prev tuple (previous row).
+			name:         "cdc_prev table with cdc_prev column",
+			desc:         descs[`cdc_prev`],
+			stmt:         "SELECT * FROM cdc_prev WHERE cdc_prev='value'",
+			requiresPrev: false,
+		},
+		{
+			// Try to access cdc_prev as if it were a tuple; it's not, so we should get
+			// an error.
+			name:      "cdc_prev table with cdc_prev column: cdc_prev is not a tuple",
 			desc:      descs[`cdc_prev`],
-			stmt:      "SELECT * FROM cdc_prev",
-			expectErr: "cdc_prev is a reserved name in CDC",
+			stmt:      "SELECT * FROM cdc_prev WHERE (cdc_prev).cdc_prev='value'",
+			expectErr: "type string is not composite",
+		},
+		{
+			// When table has cdc_prev column, previous row state exposed
+			// via crdb_internal_cdc_prev tuple.
+			name:         "cdc_prev table with cdc_prev column: cdc_prev is not a tuple",
+			desc:         descs[`cdc_prev`],
+			stmt:         "SELECT * FROM cdc_prev WHERE cdc_prev='value' AND (crdb_internal_cdc_prev).cdc_prev='prev value'",
+			requiresPrev: true,
 		},
 		{
 			name:         "misleading table name with alias",
@@ -351,16 +329,10 @@ func TestSelectClauseRequiresPrev(t *testing.T) {
 			requiresPrev: false,
 		},
 		{
-			name:      "misleading column name",
-			desc:      descs[`misleading_column_name`],
-			stmt:      "SELECT cdc_prev FROM misleading_column_name",
-			expectErr: "ambiguous cdc_prev column collides with CDC reserved keyword.  Disambiguate with misleading_column_name.cdc_prev",
-		},
-		{
-			name:         "misleading column name disambiguated",
-			desc:         descs[`misleading_column_name`],
-			stmt:         "SELECT misleading_column_name.cdc_prev FROM misleading_column_name",
-			requiresPrev: false,
+			name:      "table has both cdc_prev and crdb_internal_cdc_prev",
+			desc:      descs[`cdc_prev_bad`],
+			stmt:      "SELECT cdc_prev FROM cdc_prev_bad",
+			expectErr: "Either cdc_prev or crdb_internal_cdc_prev columns must be renamed or dropped",
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -372,25 +344,14 @@ func TestSelectClauseRequiresPrev(t *testing.T) {
 			}
 
 			schemaTS := s.Clock().Now()
-			d, err := newEventDescriptorForTarget(tc.desc, target, schemaTS, false, false)
-			require.NoError(t, err)
-
-			var normalized *NormalizedSelectClause
-			err = withPlanner(ctx, &execCfg, username.RootUserName(), schemaTS, defaultDBSessionData,
-				func(ctx context.Context, execCtx sql.JobExecContext) error {
-					defer configSemaForCDC(execCtx.SemaCtx(), d)()
-					normalized, err = normalizeAndValidateSelectForTarget(
-						ctx, execCtx.ExecCfg(), tc.desc, schemaTS, target, sc,
-						false, false, execCtx.SemaCtx())
-					return err
-				},
-			)
+			_, withDiff, _, err := normalizeAndPlan(ctx, &execCfg, username.RootUserName(),
+				defaultDBSessionData, tc.desc, schemaTS, target, sc, false)
 
 			if tc.expectErr != "" {
 				require.Regexp(t, tc.expectErr, err)
 			} else {
 				require.NoError(t, err)
-				require.Equal(t, tc.requiresPrev, normalized.RequiresPrev())
+				require.Equal(t, tc.requiresPrev, withDiff)
 			}
 		})
 	}

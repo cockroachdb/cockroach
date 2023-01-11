@@ -2567,6 +2567,35 @@ func TestChangefeedBareAvro(t *testing.T) {
 	cdcTest(t, testFn, feedTestForceSink("kafka"))
 }
 
+func TestChangefeedExpressionUsesSerializedSessionData(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+
+		sqlDB.ExecMultiple(t,
+			// Create target table in a different database.
+			// Session data should be serialized to point to the
+			// correct database.
+			`CREATE DATABASE session`,
+			`USE session`,
+			`CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`,
+			`INSERT INTO foo values (0, 'hello')`,
+			`INSERT INTO foo values (1, 'howdy')`,
+		)
+
+		// Trigram similarity threshold should be 30%; so that "howdy" matches,
+		// but hello doesn't.  This threshold should be serialized
+		// in the changefeed jobs record, and correctly propagated to the aggregators.
+		foo := feed(t, f, `CREATE CHANGEFEED WITH schema_change_policy=stop `+
+			`AS SELECT * FROM foo WHERE b % 'how'`)
+		defer closeFeed(t, foo)
+		assertPayloads(t, foo, []string{`foo: [1]->{"a": 1, "b": "howdy"}`})
+	}
+	cdcTest(t, testFn, feedTestForceSink("kafka"))
+}
+
 func TestChangefeedBareJSON(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -4530,8 +4559,9 @@ func TestChangefeedPanicRecovery(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	// Panics can mess with the test setup so run these each in their own test.
 
+	defer cdceval.TestingDisableFunctionsBlacklist()()
+
 	prep := func(t *testing.T, sqlDB *sqlutils.SQLRunner) {
-		cdceval.TestingEnableVolatileFunction(`crdb_internal.force_panic`)
 		sqlDB.Exec(t, `CREATE TABLE foo(id int primary key, s string)`)
 		sqlDB.Exec(t, `INSERT INTO foo(id, s) VALUES (0, 'hello'), (1, null)`)
 	}
@@ -4785,7 +4815,7 @@ func TestCDCPrev(t *testing.T) {
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (0, 'initial')`)
 		sqlDB.Exec(t, `UPSERT INTO foo VALUES (0, 'updated')`)
 		// TODO(#85143): remove schema_change_policy='stop' from this test.
-		foo := feed(t, f, `CREATE CHANGEFEED WITH envelope='row', schema_change_policy='stop' AS SELECT cdc_prev.b AS old FROM foo`)
+		foo := feed(t, f, `CREATE CHANGEFEED WITH envelope='row', schema_change_policy='stop' AS SELECT (cdc_prev).b AS old FROM foo`)
 		defer closeFeed(t, foo)
 
 		// cdc_prev values are null during initial scan
@@ -6804,7 +6834,7 @@ CREATE TABLE foo (
 		{
 			name:   "no such column",
 			create: `CREATE CHANGEFEED INTO 'null://' AS SELECT no_such_column FROM foo`,
-			err:    `column "foo.no_such_column" does not exist`,
+			err:    `column "no_such_column" does not exist`,
 		},
 		{
 			name:   "wrong type",
@@ -7008,7 +7038,7 @@ func TestChangefeedPredicateWithSchemaChange(t *testing.T) {
 		},
 		{
 			name:           "alter enum use correct enum version",
-			createFeedStmt: "CREATE CHANGEFEED AS SELECT e, cdc_prev.e AS prev_e FROM foo",
+			createFeedStmt: "CREATE CHANGEFEED AS SELECT e, (cdc_prev).e AS prev_e FROM foo",
 			initialPayload: []string{
 				`foo: [1, "one"]->{"e": "inactive", "prev_e": null}`,
 				`foo: [2, "two"]->{"e": "open", "prev_e": null}`,
