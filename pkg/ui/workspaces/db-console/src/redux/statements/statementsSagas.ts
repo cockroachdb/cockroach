@@ -27,6 +27,8 @@ import {
   refreshStatementDiagnosticsRequests,
   invalidateStatements,
   refreshStatements,
+  invalidateExecutionInsights,
+  invalidateTransactionInsights,
 } from "src/redux/apiReducers";
 import {
   createStatementDiagnosticsAlertLocalSetting,
@@ -133,6 +135,8 @@ export function* setCombinedStatementsTimeScaleSaga(
     end: Long.fromNumber(end.unix()),
   });
   yield put(invalidateStatements());
+  yield put(invalidateExecutionInsights());
+  yield put(invalidateTransactionInsights());
   yield put(refreshStatements(req) as any);
 }
 

@@ -18,6 +18,7 @@ import { SummaryCard, SummaryCardItem } from "src/summaryCard";
 import { DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_UTC } from "src/util/format";
 import { WaitTimeInsightsLabels } from "src/detailsPanels/waitTimeInsightsPanel";
 import { TxnContentionInsightDetailsRequest } from "src/api";
+import { NO_SAMPLES_FOUND } from "src/util";
 import {
   InsightsSortedTable,
   makeInsightsColumns,
@@ -44,9 +45,6 @@ export interface TransactionInsightDetailsStateProps {
 }
 
 export interface TransactionInsightDetailsDispatchProps {
-  refreshTransactionInsightDetails: (
-    req: TxnContentionInsightDetailsRequest,
-  ) => void;
   setTimeScale: (ts: TimeScale) => void;
 }
 
@@ -102,10 +100,10 @@ export const TransactionInsightDetailsOverviewTab: React.FC<Props> = ({
 
   const rowsRead =
     stmtInsights?.reduce((count, stmt) => (count += stmt.rowsRead), 0) ??
-    "no samples";
+    NO_SAMPLES_FOUND;
   const rowsWritten =
     stmtInsights?.reduce((count, stmt) => (count += stmt.rowsWritten), 0) ??
-    "no samples";
+    NO_SAMPLES_FOUND;
 
   return (
     <div>
@@ -125,21 +123,21 @@ export const TransactionInsightDetailsOverviewTab: React.FC<Props> = ({
                     value={
                       insightDetails.startTime?.format(
                         DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_UTC,
-                      ) ?? "no samples"
+                      ) ?? NO_SAMPLES_FOUND
                     }
                   />
                   <SummaryCardItem label="Rows Read" value={rowsRead} />
                   <SummaryCardItem label="Rows Written" value={rowsWritten} />
                   <SummaryCardItem
                     label="Priority"
-                    value={insightDetails.priority ?? "no samples"}
+                    value={insightDetails.priority ?? NO_SAMPLES_FOUND}
                   />
                   <SummaryCardItem
                     label="Full Scan"
                     value={
                       insightDetails.statementInsights
                         ?.some(stmt => stmt.isFullScan)
-                        ?.toString() ?? "no samples"
+                        ?.toString() ?? NO_SAMPLES_FOUND
                     }
                   />
                 </SummaryCard>
@@ -148,7 +146,7 @@ export const TransactionInsightDetailsOverviewTab: React.FC<Props> = ({
                 <SummaryCard>
                   <SummaryCardItem
                     label="Number of Retries"
-                    value={insightDetails.retries ?? "no samples"}
+                    value={insightDetails.retries ?? NO_SAMPLES_FOUND}
                   />
                   {insightDetails.lastRetryReason && (
                     <SummaryCardItem
@@ -158,7 +156,7 @@ export const TransactionInsightDetailsOverviewTab: React.FC<Props> = ({
                   )}
                   <SummaryCardItem
                     label="Session ID"
-                    value={insightDetails.sessionID ?? "no samples"}
+                    value={insightDetails.sessionID ?? NO_SAMPLES_FOUND}
                   />
                   <SummaryCardItem
                     label="Application"

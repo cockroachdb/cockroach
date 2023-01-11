@@ -36,7 +36,7 @@ import { actions as analyticsActions } from "src/store/analytics";
 import { actions as localStorageActions } from "src/store/localStorage";
 import { actions as nodesActions } from "../store/nodes";
 import { actions as nodeLivenessActions } from "../store/liveness";
-import { selectTimeScale } from "../statementsPage/statementsPage.selectors";
+import { selectTimeScale } from "../store/utils/selectors";
 import {
   InsertStmtDiagnosticRequest,
   StatementDetailsRequest,

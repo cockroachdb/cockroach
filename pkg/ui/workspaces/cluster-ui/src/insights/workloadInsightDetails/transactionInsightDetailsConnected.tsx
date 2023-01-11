@@ -24,6 +24,7 @@ import { TimeScale } from "../../timeScaleDropdown";
 import { actions as sqlStatsActions } from "../../store/sqlStats";
 import { Dispatch } from "redux";
 import { TxnContentionInsightDetailsRequest } from "src/api";
+import { selectTimeScale } from "../../store/utils/selectors";
 
 const mapStateToProps = (
   state: AppState,
@@ -34,6 +35,7 @@ const mapStateToProps = (
   return {
     insightDetails: insightDetails,
     insightError: insightError,
+    timeScale: selectTimeScale(state),
   };
 };
 
