@@ -314,16 +314,32 @@ func CreateTenantRecord(
 	// Make it behave like usual system database ranges, for good measure.
 	tenantSpanConfig.GCPolicy.IgnoreStrictEnforcement = true
 
-	tenantPrefix := keys.MakeTenantPrefix(roachpb.MustMakeTenantID(tenID))
-	record, err := spanconfig.MakeRecord(spanconfig.MakeTargetFromSpan(roachpb.Span{
+	tenantID := roachpb.MustMakeTenantID(tenID)
+
+	// This adds a split at the start of the tenant keyspace.
+	tenantPrefix := keys.MakeTenantPrefix(tenantID)
+	startRecord, err := spanconfig.MakeRecord(spanconfig.MakeTargetFromSpan(roachpb.Span{
 		Key:    tenantPrefix,
 		EndKey: tenantPrefix.Next(),
 	}), tenantSpanConfig)
 	if err != nil {
 		return roachpb.TenantID{}, err
 	}
-	toUpsert := []spanconfig.Record{record}
-	return roachpb.MustMakeTenantID(tenID), spanConfigs.UpdateSpanConfigRecords(
+
+	// This adds a split at the end of the tenant keyspace. This split would
+	// eventually be created when the next tenant is created, but until then
+	// this tenant's EndKey will be /Max which is outside of it's keyspace.
+	tenantPrefixEnd := tenantPrefix.PrefixEnd()
+	endRecord, err := spanconfig.MakeRecord(spanconfig.MakeTargetFromSpan(roachpb.Span{
+		Key:    tenantPrefixEnd,
+		EndKey: tenantPrefixEnd.Next(),
+	}), tenantSpanConfig)
+	if err != nil {
+		return roachpb.TenantID{}, err
+	}
+
+	toUpsert := []spanconfig.Record{startRecord, endRecord}
+	return tenantID, spanConfigs.UpdateSpanConfigRecords(
 		ctx, nil, toUpsert, hlc.MinTimestamp, hlc.MaxTimestamp,
 	)
 }
