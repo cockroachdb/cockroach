@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
 )
 
 // TestGossipInfoStore verifies operation of gossip instance infostore.
@@ -945,4 +946,48 @@ func TestGossipLoopbackInfoPropagation(t *testing.T) {
 		}
 		return nil
 	})
+}
+
+func TestVisitNodesReleasesLockForVisitors(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.Background())
+
+	// Shared cluster ID by all gossipers (this ensures that the gossipers
+	// don't talk to servers from unrelated tests by accident).
+	clusterID := uuid.MakeV4()
+
+	local := startGossip(clusterID, 1, stopper, t, metric.NewRegistry())
+	const nodes = 3
+	for i := 1; i <= nodes; i++ {
+		require.NoError(t, local.AddInfo(MakeNodeLivenessKey(roachpb.NodeID(i)), nil, time.Hour))
+	}
+	require.Equal(t, nodes, local.CountInfos(KeyNodeLivenessPrefix))
+
+	// First visitor will block until chan is closed.
+	visitorResume := make(chan struct{})
+	visitorStart := make(chan struct{}, nodes)
+	go func() {
+		require.NoError(t, local.IterateInfos(KeyNodeLivenessPrefix, func(k string, info Info) error {
+			visitorStart <- struct{}{}
+			<-visitorResume
+			return nil
+		}))
+	}()
+	defer close(visitorResume)
+	// Wait for visitor to start to ensure lock is already held.
+	<-visitorStart
+
+	// Second visitor should succeed regardless of blocked first one and close its chan.
+	writerDone := make(chan struct{})
+	go func() {
+		require.NoError(t, local.AddInfo(MakeNodeLivenessKey(roachpb.NodeID(4)), nil, time.Hour))
+		close(writerDone)
+	}()
+
+	select {
+	case <-writerDone:
+	case <-time.After(30 * time.Second):
+		t.Error("updates can't proceed if gossip listener is blocking")
+	}
 }
