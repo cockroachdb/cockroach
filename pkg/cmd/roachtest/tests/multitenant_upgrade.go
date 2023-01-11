@@ -42,24 +42,24 @@ func registerMultiTenantUpgrade(r registry.Registry) {
 	})
 }
 
-// runMultiTenantUpgrade exercises upgrading tenants and their host cluster.
+// runMultiTenantUpgrade exercises upgrading tenants and their storage cluster.
 //
 // Sketch of the test:
 //
-//   - Host{Binary: Prev, Cluster: Prev}: Start host cluster.
-//   - Host{Binary: Prev, Cluster: Prev}: Run create_tenant(11) and create_tenant(12).
+//   - Storage{Binary: Prev, Cluster: Prev}: Start storage cluster.
+//   - Storage{Binary: Prev, Cluster: Prev}: Run create_tenant(11) and create_tenant(12).
 //   - Tenant11{Binary: Prev, Cluster: Prev}: Start tenant 11 and verify it works.
-//   - Host{Binary: Cur, Cluster: Prev}: Upgrade host cluster (don't finalize).
+//   - Storage{Binary: Cur, Cluster: Prev}: Upgrade storage cluster (don't finalize).
 //   - Tenant11{Binary: Prev, Cluster: Prev}: Verify tenant 11 still works.
 //   - Tenant12{Binary: Prev, Cluster: Prev}: Start tenant 12 and verify it works.
-//   - Host{Binary: Cur, Cluster: Prev}: Run create_tenant(13).
+//   - Storage{Binary: Cur, Cluster: Prev}: Run create_tenant(13).
 //   - Tenant13{Binary: Cur, Cluster: Prev}: Create tenant 13 and verify it works.
 //   - Tenant11{Binary: Cur, Cluster: Prev}: Upgrade tenant 11 binary and verify it works.
 //   - Tenant11{Binary: Cur, Cluster: Cur}: Run the version upgrade for the tenant 11.
 //   - This is supported but not necessarily desirable. Exercise it just to
 //     show that it doesn't explode. This will verify new guard-rails when
 //     and if they are added.
-//   - Host{Binary: Cur, Cluster: Cur}: Finalize the upgrade on the host.
+//   - Storage{Binary: Cur, Cluster: Cur}: Finalize the upgrade on the Storage.
 //   - Tenant12{Binary: Cur, Cluster: Prev}: Upgrade the tenant 12 binary.
 //   - Tenant12{Binary: Cur, Cluster: Cur}: Run the version upgrade for tenant 12.
 //   - Tenant12{Binary: Cur, Cluster: Cur}: Restart tenant 12 and make sure it still works.
@@ -83,7 +83,7 @@ func runMultiTenantUpgrade(ctx context.Context, t test.Test, c cluster.Cluster, 
 	const tenant11HTTPPort, tenant11SQLPort = 8011, 20011
 	const tenant11ID = 11
 	runner := sqlutils.MakeSQLRunner(c.Conn(ctx, t.L(), 1))
-	// We'll sometimes have to wait out the backoff of the host cluster
+	// We'll sometimes have to wait out the backoff of the storage cluster
 	// auto-update loop (at the time of writing 30s), plus some migrations may be
 	// genuinely long-running.
 	runner.SucceedsSoonDuration = 5 * time.Minute
@@ -188,9 +188,9 @@ func runMultiTenantUpgrade(ctx context.Context, t test.Test, c cluster.Cluster, 
 				withResults([][]string{{initialVersion}}))
 	}
 
-	t.Status("attempting to upgrade tenant 11 before host cluster is finalized and expecting a failure")
+	t.Status("attempting to upgrade tenant 11 before storage cluster is finalized and expecting a failure")
 	expectErr(t, tenant11.pgURL,
-		fmt.Sprintf("pq: preventing tenant upgrade from running as the host cluster has not yet been upgraded: host cluster version = %s, tenant cluster version = %s", initialVersion, initialVersion),
+		fmt.Sprintf("pq: preventing tenant upgrade from running as the storage cluster has not yet been upgraded: storage cluster version = %s, tenant cluster version = %s", initialVersion, initialVersion),
 		"SET CLUSTER SETTING version = crdb_internal.node_executable_version()")
 
 	t.Status("finalizing the system tenant upgrade")
