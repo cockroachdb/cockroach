@@ -30,7 +30,8 @@ type SelectOpts struct {
 	UnreplicatedByRangeID bool
 }
 
-// A Selection is a collection of Select describing a part of a Replica.
+// A Selection is a collection of Spans describing all or a part of a Replica's
+// keyspace.
 // Which fields are populated depends on the SelectOpts passed to
 // Select.
 type Selection struct {
