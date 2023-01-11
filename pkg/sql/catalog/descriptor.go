@@ -551,8 +551,6 @@ type TableDescriptor interface {
 	GetFamilies() []descpb.ColumnFamilyDescriptor
 	// NumFamilies returns the number of column families in the descriptor.
 	NumFamilies() int
-	// FindFamilyByID finds the family with specified ID.
-	FindFamilyByID(id descpb.FamilyID) (*descpb.ColumnFamilyDescriptor, error)
 	// ForeachFamily calls f for every column family key in desc until an
 	// error is returned.
 	ForeachFamily(f func(family *descpb.ColumnFamilyDescriptor) error) error
