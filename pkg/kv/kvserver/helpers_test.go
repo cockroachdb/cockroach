@@ -67,7 +67,7 @@ func (s *Store) FindTargetAndTransferLease(
 func (s *Store) AddReplica(repl *Replica) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if err := s.addReplicaToRangeMapLocked(repl); err != nil {
+	if err := s.addToReplicasByRangeIDLocked(repl); err != nil {
 		return err
 	}
 	if err := s.addToReplicasByKeyLocked(repl); err != nil {

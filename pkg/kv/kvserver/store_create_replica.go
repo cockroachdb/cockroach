@@ -335,7 +335,7 @@ func (s *Store) tryGetOrCreateReplica(
 	// key is unknown. The range will be added to replicasByKey later when a
 	// snapshot is applied.
 	// TODO(pavelkalinnikov): make this branch error-less.
-	if err := s.addReplicaToRangeMapLocked(repl); err != nil {
+	if err := s.addToReplicasByRangeIDLocked(repl); err != nil {
 		s.mu.Unlock()
 		repl.raftMu.Unlock()
 		return nil, false, err
@@ -400,8 +400,8 @@ func (s *Store) addPlaceholderLocked(placeholder *ReplicaPlaceholder) error {
 	return nil
 }
 
-// addReplicaToRangeMapLocked adds the replica to the replicas map.
-func (s *Store) addReplicaToRangeMapLocked(repl *Replica) error {
+// addToReplicasByRangeIDLocked adds the replica to the replicas map.
+func (s *Store) addToReplicasByRangeIDLocked(repl *Replica) error {
 	// It's ok for the replica to exist in the replicas map as long as it is the
 	// same replica object. This does not happen, to the best of our knowledge.
 	// TODO(pavelkalinnikov): consider asserting that existing == nil.
