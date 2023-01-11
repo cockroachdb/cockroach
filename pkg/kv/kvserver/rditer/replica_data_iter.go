@@ -64,7 +64,7 @@ func makeAllKeySpans(d *roachpb.RangeDescriptor) []roachpb.Span {
 		},
 		ReplicatedByRangeID:   true,
 		UnreplicatedByRangeID: true,
-	}).Spans()
+	})
 }
 
 // MakeReplicatedKeySpans returns all key spans that are fully Raft
@@ -81,7 +81,7 @@ func MakeReplicatedKeySpans(d *roachpb.RangeDescriptor) []roachpb.Span {
 			EndKey: d.EndKey,
 		},
 		ReplicatedByRangeID: true,
-	}).Spans()
+	})
 }
 
 // makeReplicatedKeySpansExceptLockTable returns all key spans that are fully Raft

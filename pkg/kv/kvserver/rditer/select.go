@@ -30,66 +30,38 @@ type SelectOpts struct {
 	UnreplicatedByRangeID bool
 }
 
-// A Selection is a collection of Spans describing all or a part of a Replica's
-// keyspace, depending on the supplied SelectOpts. The resulting Spans are ordered
-// in strictly ascending lexicographical (`bytes.Compare`) order.
-type Selection struct {
-	// The following slices may share backing memory.
-	statemachine []roachpb.Span
-	other        []roachpb.Span
-	all          []roachpb.Span
-}
-
-// StateMachineSpans returns the Spans in the Selection that refer to the state
-// machine (i.e. replicated keys).
-func (s Selection) StateMachineSpans() []roachpb.Span {
-	return s.statemachine
-}
-
-// Spans returns the StateMachineSpans and NonStateMachineSpans in one slice,
-// making sure to order them correctly.
-func (s Selection) Spans() []roachpb.Span {
-	return s.all
-}
-
-// NonStateMachineSpans returns all spans in the Selection that are not StateMachineSpans().
-func (s Selection) NonStateMachineSpans() []roachpb.Span {
-	return s.other
-}
-
-// Select creates a Selection according to the SelectOpts.
-func Select(rangeID roachpb.RangeID, opts SelectOpts) Selection {
-	var s Selection
+// Select returns a slice of disjoint sorted[^1] Spans describing all or a part
+// of a Replica's keyspace, depending on the supplied SelectOpts.
+//
+// [^1]: lexicographically (bytes.Compare), which means they are compatible with
+// pebble's CockroachDB-specific sort order (storage.EngineComparer).
+func Select(rangeID roachpb.RangeID, opts SelectOpts) []roachpb.Span {
+	var sl []roachpb.Span
 
 	if opts.ReplicatedByRangeID {
 		sp := makeRangeIDReplicatedSpan(rangeID)
-		s.all = append(s.all, sp)
-		s.statemachine = append(s.statemachine, sp)
+		sl = append(sl, sp)
 	}
 
 	if opts.UnreplicatedByRangeID {
 		sp := makeRangeIDUnreplicatedSpan(rangeID)
-		s.all = append(s.all, sp)
-		s.other = append(s.other, sp)
+		sl = append(sl, sp)
 	}
 
 	if in := opts.ReplicatedBySpan; !in.Equal(roachpb.RSpan{}) {
 		d := &roachpb.RangeDescriptor{StartKey: in.Key, EndKey: in.EndKey}
 		{
 			sp := makeRangeLocalKeySpan(d)
-			s.all = append(s.all, sp)
-			s.statemachine = append(s.statemachine, sp)
+			sl = append(sl, sp)
 		}
 		{
 			sps := makeRangeLockTableKeySpans(d)
-			s.all = append(s.all, sps[:]...)
-			s.statemachine = append(s.statemachine, sps[:]...)
+			sl = append(sl, sps[:]...)
 		}
 		{
 			sp := makeUserKeySpan(d)
-			s.all = append(s.all, sp)
-			s.statemachine = append(s.statemachine, sp)
+			sl = append(sl, sp)
 		}
 	}
-	return s
+	return sl
 }

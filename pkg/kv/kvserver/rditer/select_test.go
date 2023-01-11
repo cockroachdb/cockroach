@@ -30,7 +30,7 @@ func TestSelect(t *testing.T) {
 		opts SelectOpts
 
 		// Outputs.
-		s Selection
+		s []roachpb.Span
 	}
 
 	var tcs []tc
@@ -76,17 +76,8 @@ func TestSelect(t *testing.T) {
 	for _, tc := range tcs {
 		t.Run(tc.name, w.Run(t, tc.name, func(t *testing.T) string {
 			var buf strings.Builder
-			fmt.Fprintln(&buf, "Spans():")
-			for _, sp := range tc.s.Spans() {
-				fmt.Fprintf(&buf, "- %s\n", sp)
-			}
-			fmt.Fprintln(&buf, "StateMachineSpans():")
-			for _, sp := range tc.s.StateMachineSpans() {
-				fmt.Fprintf(&buf, "- %s\n", sp)
-			}
-			fmt.Fprintln(&buf, "NonStateMachineSpans():")
-			for _, sp := range tc.s.NonStateMachineSpans() {
-				fmt.Fprintf(&buf, "- %s\n", sp)
+			for _, sp := range tc.s {
+				fmt.Fprintf(&buf, "%s\n", sp)
 			}
 			return buf.String()
 		}))

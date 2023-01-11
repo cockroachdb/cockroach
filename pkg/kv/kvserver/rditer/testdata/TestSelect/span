@@ -1,13 +1,6 @@
 echo
 ----
-Spans():
-- /Local/Range"{a"-c"}
-- /Local/Lock/Intent/Local/Range"{a"-c"}
-- /Local/Lock/Intent"{a"-c"}
-- {a-c}
-StateMachineSpans():
-- /Local/Range"{a"-c"}
-- /Local/Lock/Intent/Local/Range"{a"-c"}
-- /Local/Lock/Intent"{a"-c"}
-- {a-c}
-NonStateMachineSpans():
+/Local/Range"{a"-c"}
+/Local/Lock/Intent/Local/Range"{a"-c"}
+/Local/Lock/Intent"{a"-c"}
+{a-c}
