@@ -365,55 +365,6 @@ func (desc *wrapper) DeleteOnlyNonPrimaryIndexes() []catalog.Index {
 	return desc.getExistingOrNewIndexCache().deleteOnlyNonPrimary
 }
 
-// FindIndexWithID returns the first catalog.Index that matches the id
-// in the set of all indexes, or an error if none was found. The order of
-// traversal is the canonical order, see catalog.Index.Ordinal().
-func (desc *wrapper) FindIndexWithID(id descpb.IndexID) (catalog.Index, error) {
-	if idx := catalog.FindIndex(desc, catalog.IndexOpts{
-		NonPhysicalPrimaryIndex: true,
-		DropMutations:           true,
-		AddMutations:            true,
-	}, func(idx catalog.Index) bool {
-		return idx.GetID() == id
-	}); idx != nil {
-		return idx, nil
-	}
-	return nil, errors.Errorf("index-id \"%d\" does not exist", id)
-}
-
-// FindIndexWithName returns the first catalog.Index that matches the name in
-// the set of all indexes, excluding the primary index of non-physical
-// tables, or an error if none was found. The order of traversal is the
-// canonical order, see catalog.Index.Ordinal().
-func (desc *wrapper) FindIndexWithName(name string) (catalog.Index, error) {
-	if idx := catalog.FindIndex(desc, catalog.IndexOpts{
-		NonPhysicalPrimaryIndex: false,
-		DropMutations:           true,
-		AddMutations:            true,
-	}, func(idx catalog.Index) bool {
-		return idx.GetName() == name
-	}); idx != nil {
-		return idx, nil
-	}
-	return nil, errors.Errorf("index %q does not exist", name)
-}
-
-// FindNonDropIndexWithName returns the first catalog.Index that matches the name in
-// the set of all non-drop indexes, excluding the primary index of non-physical
-// tables, or an error if none was found. The order of traversal is the
-// canonical order, see catalog.Index.Ordinal().
-func (desc *wrapper) FindNonDropIndexWithName(name string) (catalog.Index, error) {
-	if idx := catalog.FindIndex(
-		desc,
-		catalog.IndexOpts{AddMutations: true},
-		func(idx catalog.Index) bool {
-			return idx.GetName() == name
-		}); idx != nil {
-		return idx, nil
-	}
-	return nil, errors.Errorf("index %q does not exist", name)
-}
-
 // getExistingOrNewColumnCache should be the only place where the columnCache
 // field in wrapper is ever read.
 func (desc *wrapper) getExistingOrNewColumnCache() *columnCache {

@@ -321,8 +321,7 @@ func (desc *immutable) validateInboundTableRef(
 	}
 
 	for _, idxID := range by.IndexIDs {
-		_, err := backRefTbl.FindIndexWithID(idxID)
-		if err != nil {
+		if catalog.FindIndexByID(backRefTbl, idxID) == nil {
 			return errors.AssertionFailedf("depended-on-by relation %q (%d) does not have an index with ID %d",
 				backRefTbl.GetName(), by.ID, idxID)
 		}

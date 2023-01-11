@@ -292,7 +292,7 @@ func TestUnsplitRanges(t *testing.T) {
 		tableSpan := tableDesc.TableSpan(keys.SystemSQLCodec)
 		tests.CheckKeyCount(t, kvDB, tableSpan, numKeys)
 
-		idx, err := tableDesc.FindIndexWithName("foo")
+		idx, err := catalog.MustFindIndexByName(tableDesc, "foo")
 		if err != nil {
 			t.Fatal(err)
 		}

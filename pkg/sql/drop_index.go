@@ -115,7 +115,7 @@ func (n *dropIndexNode) startExec(params runParams) error {
 		// If we couldn't find the index by name, this is either a legitimate error or
 		// this statement contains an 'IF EXISTS' qualifier. Both of these cases are
 		// handled by `dropIndexByName()` below so we just ignore the error here.
-		idx, _ := tableDesc.FindIndexWithName(string(index.idxName))
+		idx := catalog.FindIndexByName(tableDesc, string(index.idxName))
 		var shardColName string
 		// If we're dropping a sharded index, record the name of its shard column to
 		// potentially drop it if no other index refers to it.
@@ -312,7 +312,7 @@ func (p *planner) dropIndexByName(
 	constraintBehavior dropIndexConstraintBehavior,
 	jobDesc string,
 ) error {
-	idx, err := tableDesc.FindIndexWithName(string(idxName))
+	idx, err := catalog.MustFindIndexByName(tableDesc, string(idxName))
 	if err != nil {
 		// Only index names of the form "table@idx" throw an error here if they
 		// don't exist.

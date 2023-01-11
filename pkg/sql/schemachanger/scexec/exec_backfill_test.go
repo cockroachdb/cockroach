@@ -93,7 +93,7 @@ func TestExecBackfiller(t *testing.T) {
 			EncodingType:                catenumpb.SecondaryIndexEncoding,
 			UseDeletePreservingEncoding: isTempIndex,
 		}, descpb.DescriptorMutation_ADD, descpb.DescriptorMutation_BACKFILLING))
-		idx, err := mut.FindIndexWithName(name)
+		idx, err := catalog.MustFindIndexByName(mut, name)
 		require.NoError(t, err)
 		return idx
 	}

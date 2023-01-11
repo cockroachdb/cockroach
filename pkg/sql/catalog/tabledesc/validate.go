@@ -609,7 +609,7 @@ func (desc *wrapper) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 	// validation.
 	for _, ref := range desc.DependedOnBy {
 		if ref.IndexID != 0 {
-			if idx, _ := desc.FindIndexWithID(ref.IndexID); idx == nil {
+			if catalog.FindIndexByID(desc, ref.IndexID) == nil {
 				vea.Report(errors.AssertionFailedf(
 					"index ID %d found in depended-on-by references, no such index in this relation",
 					ref.IndexID))
@@ -1357,7 +1357,7 @@ func (desc *wrapper) validateTableIndexes(columnsByID map[descpb.ColumnID]catalo
 		for _, mut := range desc.Mutations {
 			if mut.GetPrimaryKeySwap() != nil {
 				newPKIdxID := mut.GetPrimaryKeySwap().NewPrimaryIndexId
-				newPK, err := desc.FindIndexWithID(newPKIdxID)
+				newPK, err := catalog.MustFindIndexByID(desc, newPKIdxID)
 				if err != nil {
 					return err
 				}

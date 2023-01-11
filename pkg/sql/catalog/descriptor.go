@@ -429,23 +429,6 @@ type TableDescriptor interface {
 	// state.
 	DeleteOnlyNonPrimaryIndexes() []Index
 
-	// FindIndexWithID returns the first catalog.Index that matches the id
-	// in the set of all indexes, or an error if none was found. The order of
-	// traversal is the canonical order, see Index.Ordinal().
-	FindIndexWithID(id descpb.IndexID) (Index, error)
-
-	// FindIndexWithName returns the first catalog.Index that matches the name in
-	// the set of all indexes, excluding the primary index of non-physical
-	// tables, or an error if none was found. The order of traversal is the
-	// canonical order, see Index.Ordinal().
-	FindIndexWithName(name string) (Index, error)
-
-	// FindNonDropIndexWithName returns the first catalog.Index that matches the name in
-	// the set of all non-drp[ indexes, excluding the primary index of non-physical
-	// tables, or an error if none was found. The order of traversal is the
-	// canonical order, see catalog.Index.Ordinal().
-	FindNonDropIndexWithName(name string) (Index, error)
-
 	// GetNextIndexID returns the next unused index ID for the table. Index IDs
 	// are unique within a table, but not globally.
 	GetNextIndexID() descpb.IndexID

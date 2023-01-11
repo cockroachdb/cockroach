@@ -163,8 +163,7 @@ func (p *planner) AlterPrimaryKey(
 	}
 
 	nameExists := func(name string) bool {
-		_, err := tableDesc.FindIndexWithName(name)
-		return err == nil
+		return catalog.FindIndexByName(tableDesc, name) != nil
 	}
 
 	// Make a new index that is suitable to be a primary index.
@@ -362,7 +361,7 @@ func (p *planner) AlterPrimaryKey(
 		// as most of this code relies upon for correctness. This code will
 		// all be replaced by code in the declarative schema changer before
 		// too long where we'll model this all correctly.
-		newTempPrimaryIndex, err := tableDesc.FindIndexWithID(newPrimaryIndexDesc.ID + 1)
+		newTempPrimaryIndex, err := catalog.MustFindIndexByID(tableDesc, newPrimaryIndexDesc.ID+1)
 		if err != nil {
 			return errors.NewAssertionErrorWithWrappedErrf(err,
 				"failed to find newly created temporary index for backfill")
