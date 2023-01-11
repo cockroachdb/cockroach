@@ -12,7 +12,11 @@ package rditer
 
 import "github.com/cockroachdb/cockroach/pkg/roachpb"
 
-type StateMachineSelectionOptions struct {
+// SelectionOptions configures which spans for a Replica to return from Select.
+// A Replica comprises replicated (i.e. belonging to the state machine) spans
+// and unreplicated spans, and depending on external circumstances one may want
+// to read or erase only certain components of a Replica.
+type SelectionOptions struct {
 	// ReplicatedBySpan selects all replicated key Spans that are keyed by a user
 	// key. This includes user keys, range descriptors, and locks (separated
 	// intents).
@@ -20,14 +24,6 @@ type StateMachineSelectionOptions struct {
 	// ReplicatedByRangeID selects all RangeID-keyed replicated keys. An example
 	// of a key that falls into this Span is the GCThresholdKey.
 	ReplicatedByRangeID bool
-}
-
-// SelectionOptions configures which spans for a Replica to return from Select.
-// A Replica comprises replicated (i.e. belonging to the state machine) spans
-// and unreplicated spans, and depending on external circumstances one may want
-// to read or erase only certain components of a Replica.
-type SelectionOptions struct {
-	StateMachineSelectionOptions
 	// ReplicatedByRangeID selects all RangeID-keyed unreplicated keys. Examples
 	// of keys that fall into this Span are the HardStateKey (and generally all
 	// Raft state) and the RangeTombstoneKey.

@@ -449,10 +449,8 @@ func clearRangeData(
 	rangeID roachpb.RangeID, reader storage.Reader, writer storage.Writer, opts clearRangeDataOptions,
 ) error {
 	keySpans := rditer.Select(rangeID, rditer.SelectionOptions{
-		StateMachineSelectionOptions: rditer.StateMachineSelectionOptions{
-			ReplicatedBySpan:    opts.ClearReplicatedBySpan,
-			ReplicatedByRangeID: opts.ClearReplicatedByRangeID,
-		},
+		ReplicatedBySpan:      opts.ClearReplicatedBySpan,
+		ReplicatedByRangeID:   opts.ClearReplicatedByRangeID,
 		UnreplicatedByRangeID: opts.ClearUnreplicatedByRangeID,
 	}).Spans()
 
@@ -806,9 +804,7 @@ func (r *Replica) clearSubsumedReplicaDiskData(
 	// via the call to preDestroyRaftMuLocked.
 	getKeySpans := func(d *roachpb.RangeDescriptor) []roachpb.Span {
 		return rditer.Select(d.RangeID, rditer.SelectionOptions{
-			StateMachineSelectionOptions: rditer.StateMachineSelectionOptions{
-				ReplicatedBySpan: d.RSpan(),
-			},
+			ReplicatedBySpan: d.RSpan(),
 		}).Spans()
 	}
 	keySpans := getKeySpans(desc)

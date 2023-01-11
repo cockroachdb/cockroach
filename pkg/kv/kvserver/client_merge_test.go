@@ -3853,9 +3853,7 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 				// doesn't yet exist in the engine, so we write the Pebble range tombstone
 				// manually.
 				sl := rditer.Select(rangeID, rditer.SelectionOptions{
-					StateMachineSelectionOptions: rditer.StateMachineSelectionOptions{
-						ReplicatedByRangeID: true,
-					},
+					ReplicatedByRangeID: true,
 				}).Spans()
 				require.Len(t, sl, 1)
 				s := sl[0]

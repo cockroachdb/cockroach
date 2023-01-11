@@ -45,10 +45,8 @@ func TestSelect(t *testing.T) {
 		for _, replicatedByRangeID := range []bool{false, true} {
 			for _, unreplicatedByRangeID := range []bool{false, true} {
 				opts := SelectionOptions{
-					StateMachineSelectionOptions: StateMachineSelectionOptions{
-						ReplicatedBySpan:    span,
-						ReplicatedByRangeID: replicatedByRangeID,
-					},
+					ReplicatedBySpan:      span,
+					ReplicatedByRangeID:   replicatedByRangeID,
 					UnreplicatedByRangeID: unreplicatedByRangeID,
 				}
 				var name []string
