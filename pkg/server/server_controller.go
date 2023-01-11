@@ -803,7 +803,6 @@ func makeInMemoryTenantServerConfig(
 	baseCfg.Locality = kvServerCfg.BaseConfig.Locality
 	baseCfg.SpanConfigsDisabled = kvServerCfg.BaseConfig.SpanConfigsDisabled
 	baseCfg.EnableDemoLoginEndpoint = kvServerCfg.BaseConfig.EnableDemoLoginEndpoint
-	baseCfg.TestingKnobs = kvServerCfg.BaseConfig.SecondaryTenantKnobs
 
 	// TODO(knz): use a single network interface for all tenant servers.
 	// See: https://github.com/cockroachdb/cockroach/issues/92524
