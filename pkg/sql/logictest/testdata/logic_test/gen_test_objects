@@ -551,6 +551,22 @@ SELECT crdb_internal.generate_test_objects('foo', 10)
 statement ok
 RESET CLUSTER SETTING sql.schema.test_object_generator.enabled
 
+subtest max_counts
+
+query error invalid count
+SELECT crdb_internal.generate_test_objects('foo', 100000000)
+
+query error invalid count
+SELECT crdb_internal.generate_test_objects('{"names":"a.b.c","counts":[100000000,0,0]}'::jsonb)
+
+query error invalid count
+SELECT crdb_internal.generate_test_objects('{"names":"a.b.c","counts":[0,100000000,0]}'::jsonb)
+
+query error invalid count
+SELECT crdb_internal.generate_test_objects('{"names":"a.b.c","counts":[0,0,100000000]}'::jsonb)
+
+query error too many objects generated
+SELECT crdb_internal.generate_test_objects('{"names":"a.b.c","counts":[10000000,10000000,10000000]}'::jsonb)
 
 subtest temp_schema
 
