@@ -229,8 +229,10 @@ func (ex *connExecutor) recordStatementSummary(
 	if queryLevelStatsOk {
 		for _, ev := range queryLevelStats.ContentionEvents {
 			contentionEvent := contentionpb.ExtendedContentionEvent{
-				BlockingEvent: ev,
-				WaitingTxnID:  planner.txn.ID(),
+				BlockingEvent:            ev,
+				WaitingTxnID:             planner.txn.ID(),
+				WaitingStmtFingerprintID: stmtFingerprintID,
+				WaitingStmtID:            stmt.QueryID,
 			}
 
 			ex.server.cfg.ContentionRegistry.AddContentionEvent(contentionEvent)

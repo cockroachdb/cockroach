@@ -170,4 +170,13 @@ message ExtendedContentionEvent {
     (gogoproto.nullable) = false,
     (gogoproto.stdtime) = true
   ];
+
+  uint64 waiting_stmt_fingerprint_id = 6 [
+    (gogoproto.customname) = "WaitingStmtFingerprintID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.StmtFingerprintID"
+  ];
+
+  bytes waiting_stmt_id = 7 [(gogoproto.customname) = "WaitingStmtID",
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/sql/clusterunique.ID",
+    (gogoproto.nullable) = false];
 }

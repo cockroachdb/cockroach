@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -78,13 +79,21 @@ func (e *ExtendedContentionEvent) Valid() bool {
 }
 
 // Hash returns a hash that's unique to ExtendedContentionEvent using
-// blocking txn's txnID, waiting txn's txnID and the event collection timestamp.
+// blocking txn's txnID, waiting txn's txnID and the event waiting stmt id.
 func (e *ExtendedContentionEvent) Hash() uint64 {
 	hash := util.MakeFNV64()
 	hashUUID(e.BlockingEvent.TxnMeta.ID, &hash)
 	hashUUID(e.WaitingTxnID, &hash)
-	hash.Add(uint64(e.CollectionTs.UnixMilli()))
+	hashClusterUniqueID(e.WaitingStmtID, &hash)
 	return hash.Sum()
+}
+
+// hashClusterUniqueID adds the hash of the clusterunique.ID into the fnv.
+// A clusterunique.ID is an uint128. To hash we treat it as two uint64 integers,
+// since uint128 has a lo and hi uint64.
+func hashClusterUniqueID(id clusterunique.ID, hash *util.FNV64) {
+	hash.Add(id.Lo)
+	hash.Add(id.Hi)
 }
 
 // hashUUID adds the hash of the uuid into the fnv.
