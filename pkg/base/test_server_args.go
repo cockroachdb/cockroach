@@ -247,10 +247,6 @@ type TestTenantArgs struct {
 
 	TenantID roachpb.TenantID
 
-	// Existing, if true, indicates an existing tenant, rather than a new tenant
-	// to be created by StartTenant.
-	Existing bool
-
 	// DisableCreateTenant disables the explicit creation of a tenant when
 	// StartTenant is attempted. It's used in cases where we want to validate
 	// that a tenant doesn't start if it isn't existing.
