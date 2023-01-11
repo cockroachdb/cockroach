@@ -34,7 +34,7 @@ echo ""
 # Start node with encryption enabled.
 "$cockroach" start-single-node --insecure --listening-url-file="$urlfile" --enterprise-encryption=path=cockroach-data,key=aes-128.key,old-key=plain --pid-file="$pidfile" &
 
-trap "kill -9 $! &> /dev/null" EXIT
+trap "kill -9 $! || true" EXIT
 for i in {0..3}
 do
   [[ -f "$urlfile" ]] && break
@@ -58,7 +58,7 @@ diff -u expected actual
 
 # Attempt a clean shutdown for good measure. We'll force-kill in the atexit
 # handler if this fails.
-cat "$pidfile" | xargs kill -TERM
+kill -TERM $(cat "$pidfile") || true
 trap - EXIT
 
 # Verify reported version matches expected version.
