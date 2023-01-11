@@ -7,7 +7,7 @@ SELECT 'A' COLLATE en = 'a'
 statement error pq: unsupported comparison operator: <collatedstring{en}> = <collatedstring{de}>
 SELECT 'A' COLLATE en = 'a' COLLATE de
 
-statement error pq: unsupported comparison operator: \('a' COLLATE en_u_ks_level1\) IN \('A' COLLATE en_u_ks_level1, 'b' COLLATE en\): expected 'b' COLLATE en to be of type collatedstring\{en_u_ks_level1\}, found type collatedstring\{en\}
+statement error pq: unsupported comparison operator: 'a' COLLATE en_u_ks_level1 IN \('A' COLLATE en_u_ks_level1, 'b' COLLATE en\): expected 'b' COLLATE en to be of type collatedstring\{en_u_ks_level1\}, found type collatedstring\{en\}
 SELECT ('a' COLLATE en_u_ks_level1) IN ('A' COLLATE en_u_ks_level1, 'b' COLLATE en)
 
 statement error pq: tuples \('a' COLLATE en_u_ks_level1, 'a' COLLATE en\), \('A' COLLATE en, 'B' COLLATE en\) are not comparable at index 1: unsupported comparison operator: <collatedstring\{en_u_ks_level1\}> < <collatedstring\{en\}>
