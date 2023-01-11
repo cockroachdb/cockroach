@@ -6388,7 +6388,10 @@ CREATE TABLE crdb_internal.transaction_contention_events (
     waiting_txn_fingerprint_id   BYTES NOT NULL,
 
     contention_duration          INTERVAL NOT NULL,
-    contending_key               BYTES NOT NULL
+    contending_key               BYTES NOT NULL,
+
+    waiting_stmt_id               string NOT NULL,
+    waiting_stmt_fingerprint_id   BYTES NOT NULL
 );`,
 	generator: func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, stopper *stop.Stopper) (virtualTableGenerator, cleanupFunc, error) {
 		// Check permission first before making RPC fanout.
@@ -6460,15 +6463,22 @@ CREATE TABLE crdb_internal.transaction_contention_events (
 						tree.DBytes(resp.Events[i].BlockingEvent.Key))
 				}
 
+				waitingStmtFingerprintID := tree.NewDBytes(
+					tree.DBytes(sqlstatsutil.EncodeUint64ToBytes(uint64(resp.Events[i].WaitingStmtFingerprintID))))
+
+				waitingStmtId := tree.NewDString(hex.EncodeToString(resp.Events[i].WaitingStmtID.GetBytes()))
+
 				row = row[:0]
 				row = append(row,
 					collectionTs, // collection_ts
 					tree.NewDUuid(tree.DUuid{UUID: resp.Events[i].BlockingEvent.TxnMeta.ID}), // blocking_txn_id
 					blockingFingerprintID, // blocking_fingerprint_id
 					tree.NewDUuid(tree.DUuid{UUID: resp.Events[i].WaitingTxnID}), // waiting_txn_id
-					waitingFingerprintID, // waiting_fingerprint_id
-					contentionDuration,   // contention_duration
-					contendingKey,        // contending_key
+					waitingFingerprintID,     // waiting_fingerprint_id
+					contentionDuration,       // contention_duration
+					contendingKey,            // contending_key,
+					waitingStmtId,            // waiting_stmt_id
+					waitingStmtFingerprintID, // waiting_stmt_fingerprint_id
 				)
 
 				if err = pusher.pushRow(row...); err != nil {
