@@ -2348,10 +2348,6 @@ func startTestTenantPods(
 	var tenants []serverutils.TestTenantInterface
 	for i := 0; i < count; i++ {
 		params := tests.CreateTestTenantParams(tenantID)
-		// The first SQL pod will create the tenant keyspace in the host.
-		if i != 0 {
-			params.Existing = true
-		}
 		params.TestingKnobs = knobs
 		tenant, tenantDB := serverutils.StartTenant(t, ts, params)
 		tenant.(*server.TestTenant).PGPreServer().TestingSetTrustClientProvidedRemoteAddr(true)
