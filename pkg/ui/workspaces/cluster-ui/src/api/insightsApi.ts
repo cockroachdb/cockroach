@@ -333,7 +333,8 @@ function txnContentionDetailsQuery(filters: QueryFilterFields) {
     ` WHERE waiting_txn_id = '${filters.id}'`,
     filters,
   );
-  return `SELECT
+  return `
+SELECT DISTINCT
   collection_ts,
   blocking_txn_id,
   encode( blocking_txn_fingerprint_id, 'hex' ) AS blocking_txn_fingerprint_id,
@@ -352,8 +353,25 @@ FROM
     FROM [SHOW CLUSTER SETTING sql.insights.latency_threshold]
   ),
   crdb_internal.transaction_contention_events AS tce
-    LEFT OUTER JOIN crdb_internal.ranges AS ranges
-                    ON tce.contending_key BETWEEN ranges.start_key AND ranges.end_key
+  JOIN [SELECT database_name,
+               schema_name,
+               name AS table_name,
+               table_id
+        FROM
+          "".crdb_internal.tables] AS tables ON tce.contending_key BETWEEN crdb_internal.table_span(tables.table_id)[1]
+  AND crdb_internal.table_span(tables.table_id)[2]
+  LEFT OUTER JOIN [SELECT index_name,
+                          descriptor_id,
+                          index_id
+                   FROM
+                     "".crdb_internal.table_indexes] AS indexes ON tce.contending_key BETWEEN crdb_internal.index_span(
+  indexes.descriptor_id,
+  indexes.index_id
+  )[1]
+  AND crdb_internal.index_span(
+    indexes.descriptor_id,
+    indexes.index_id
+    )[2]
   ${whereClause}
 `;
 }
@@ -412,7 +430,7 @@ function formatTxnContentionDetailsResponse(
       indexName:
         value.index_name && value.index_name !== ""
           ? value.index_name
-          : "primary index",
+          : "index not found",
     };
   });
 
