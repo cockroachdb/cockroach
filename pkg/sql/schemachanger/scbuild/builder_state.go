@@ -343,7 +343,9 @@ func (b *builderState) IndexPartitioningDescriptor(
 		b.ctx,
 		b.clusterSettings,
 		b.evalCtx,
-		tbl.FindColumnWithName,
+		func(name tree.Name) (catalog.Column, error) {
+			return catalog.MustFindColumnByTreeName(tbl, name)
+		},
 		oldNumImplicitColumns,
 		oldKeyColumnNames,
 		partBy,

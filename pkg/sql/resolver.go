@@ -267,7 +267,7 @@ func validateColumnForHasPrivilegeSpecifier(
 	table catalog.TableDescriptor, specifier eval.HasPrivilegeSpecifier,
 ) error {
 	if specifier.ColumnName != nil {
-		_, err := table.FindColumnWithName(*specifier.ColumnName)
+		_, err := catalog.MustFindColumnByTreeName(table, *specifier.ColumnName)
 		return err
 	}
 	if specifier.ColumnAttNum != nil {

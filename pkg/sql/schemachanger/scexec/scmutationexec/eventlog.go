@@ -152,7 +152,7 @@ func asCommentEventPayload(
 		if err != nil {
 			return nil, err
 		}
-		col, err := tbl.FindColumnWithID(e.ColumnID)
+		col, err := catalog.MustFindColumnByID(tbl, e.ColumnID)
 		if err != nil {
 			return nil, err
 		}

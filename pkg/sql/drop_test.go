@@ -1220,7 +1220,7 @@ func TestDropIndexOnHashShardedIndexWithStoredShardColumn(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, shardIdx.IsSharded())
 	require.Equal(t, "crdb_internal_a_shard_7", shardIdx.GetShardColumnName())
-	shardCol, err := tableDesc.FindColumnWithName("crdb_internal_a_shard_7")
+	shardCol, err := catalog.MustFindColumnByName(tableDesc, "crdb_internal_a_shard_7")
 	require.NoError(t, err)
 	require.False(t, shardCol.IsVirtual())
 
@@ -1236,7 +1236,7 @@ func TestDropIndexOnHashShardedIndexWithStoredShardColumn(t *testing.T) {
 		}))
 	_, err = catalog.MustFindIndexByName(tableDesc, "idx")
 	require.Error(t, err)
-	shardCol, err = tableDesc.FindColumnWithName("crdb_internal_a_shard_7")
+	shardCol, err = catalog.MustFindColumnByTreeName(tableDesc, "crdb_internal_a_shard_7")
 	require.NoError(t, err)
 	require.False(t, shardCol.IsVirtual())
 

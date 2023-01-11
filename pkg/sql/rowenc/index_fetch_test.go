@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -67,7 +66,7 @@ func TestInitIndexFetchSpec(t *testing.T) {
 
 				fetchColumnIDs := make([]descpb.ColumnID, len(params.Columns))
 				for i, name := range params.Columns {
-					col, err := table.FindColumnWithName(tree.Name(name))
+					col, err := catalog.MustFindColumnByName(table, name)
 					if err != nil {
 						d.Fatalf(t, "%+v", err)
 					}

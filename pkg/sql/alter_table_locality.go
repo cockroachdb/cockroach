@@ -234,7 +234,7 @@ func (n *alterTableSetLocalityNode) alterTableLocalityToRegionalByRow(
 		mayNeedImplicitCRDBRegionCol = true
 	}
 
-	partCol, err := n.tableDesc.FindColumnWithName(partColName)
+	partCol, err := catalog.MustFindColumnByTreeName(n.tableDesc, partColName)
 	createDefaultRegionCol := mayNeedImplicitCRDBRegionCol && sqlerrors.IsUndefinedColumnError(err)
 	if err != nil && !createDefaultRegionCol {
 		return err
