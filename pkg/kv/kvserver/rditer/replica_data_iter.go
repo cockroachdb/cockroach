@@ -93,8 +93,8 @@ func MakeReplicatedKeySpans(d *roachpb.RangeDescriptor) []roachpb.Span {
 func makeReplicatedKeySpansExceptLockTable(d *roachpb.RangeDescriptor) []roachpb.Span {
 	return []roachpb.Span{
 		makeRangeIDReplicatedSpan(d.RangeID),
-		makeRangeLocalKeySpan(d),
-		makeUserKeySpan(d),
+		makeRangeLocalKeySpan(d.RSpan()),
+		d.KeySpan().AsRawSpanWithNoLocals(),
 	}
 }
 
@@ -106,7 +106,7 @@ func makeReplicatedKeySpansExceptLockTable(d *roachpb.RangeDescriptor) []roachpb
 func makeReplicatedKeySpansExcludingUserAndLockTable(d *roachpb.RangeDescriptor) []roachpb.Span {
 	return []roachpb.Span{
 		makeRangeIDReplicatedSpan(d.RangeID),
-		makeRangeLocalKeySpan(d),
+		makeRangeLocalKeySpan(d.RSpan()),
 	}
 }
 
@@ -130,31 +130,31 @@ func makeRangeIDUnreplicatedSpan(rangeID roachpb.RangeID) roachpb.Span {
 // are replicated keys that do not belong to the span they would naturally
 // sort into. For example, /Local/Range/Table/1 would sort into [/Min,
 // /System), but it actually belongs to [/Table/1, /Table/2).
-func makeRangeLocalKeySpan(d *roachpb.RangeDescriptor) roachpb.Span {
+func makeRangeLocalKeySpan(sp roachpb.RSpan) roachpb.Span {
 	return roachpb.Span{
-		Key:    keys.MakeRangeKeyPrefix(d.StartKey),
-		EndKey: keys.MakeRangeKeyPrefix(d.EndKey),
+		Key:    keys.MakeRangeKeyPrefix(sp.Key),
+		EndKey: keys.MakeRangeKeyPrefix(sp.EndKey),
 	}
 }
 
 // makeRangeLockTableKeySpans returns the 2 lock table key spans. The first one
 // will contain all local (i.e. range descriptor, etc) key locks for the span,
 // the second non-local key locks.
-func makeRangeLockTableKeySpans(d *roachpb.RangeDescriptor) [2]roachpb.Span {
+func makeRangeLockTableKeySpans(sp roachpb.RSpan) [2]roachpb.Span {
 	// Handle doubly-local lock table keys since range descriptor key
 	// is a range local key that can have a replicated lock acquired on it.
-	startRangeLocal, _ := keys.LockTableSingleKey(keys.MakeRangeKeyPrefix(d.StartKey), nil)
-	endRangeLocal, _ := keys.LockTableSingleKey(keys.MakeRangeKeyPrefix(d.EndKey), nil)
+	startRangeLocal, _ := keys.LockTableSingleKey(keys.MakeRangeKeyPrefix(sp.Key), nil)
+	endRangeLocal, _ := keys.LockTableSingleKey(keys.MakeRangeKeyPrefix(sp.EndKey), nil)
 	// The first range in the global keyspace can start earlier than LocalMax,
 	// at RKeyMin, but the actual data starts at LocalMax. We need to make this
 	// adjustment here to prevent [startRangeLocal, endRangeLocal) and
 	// [startGlobal, endGlobal) from overlapping.
-	globalStartKey := d.StartKey.AsRawKey()
-	if d.StartKey.Equal(roachpb.RKeyMin) {
+	globalStartKey := sp.Key.AsRawKey()
+	if sp.Key.Equal(roachpb.RKeyMin) {
 		globalStartKey = keys.LocalMax
 	}
 	startGlobal, _ := keys.LockTableSingleKey(globalStartKey, nil)
-	endGlobal, _ := keys.LockTableSingleKey(roachpb.Key(d.EndKey), nil)
+	endGlobal, _ := keys.LockTableSingleKey(roachpb.Key(sp.EndKey), nil)
 	return [2]roachpb.Span{
 		{
 			Key:    startRangeLocal,
@@ -164,15 +164,6 @@ func makeRangeLockTableKeySpans(d *roachpb.RangeDescriptor) [2]roachpb.Span {
 			Key:    startGlobal,
 			EndKey: endGlobal,
 		},
-	}
-}
-
-// makeUserKeySpan returns the user key span.
-func makeUserKeySpan(d *roachpb.RangeDescriptor) roachpb.Span {
-	userKeys := d.KeySpan()
-	return roachpb.Span{
-		Key:    userKeys.Key.AsRawKey(),
-		EndKey: userKeys.EndKey.AsRawKey(),
 	}
 }
 
