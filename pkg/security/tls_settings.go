@@ -31,6 +31,7 @@ type TLSSettings interface {
 	ocspEnabled() bool
 	ocspStrict() bool
 	ocspTimeout() time.Duration
+	oldCipherSuitesEnabled() bool
 }
 
 var ocspMode = settings.RegisterEnumSetting(
@@ -45,6 +46,14 @@ var ocspTimeout = settings.RegisterDurationSetting(
 	"timeout before considering the OCSP server unreachable",
 	3*time.Second,
 	settings.NonNegativeDuration,
+).WithPublic()
+
+var oldCipherSuitesEnabled = settings.RegisterBoolSetting(
+	settings.SystemOnly, "security.tls.useOldCipers",
+	"enable the use of \"old\" cipher suites, strictly for use with "+
+		"applications that support TLS v1.2 and cannot be updated to"+
+		"support \"modern\" cipher suites",
+	false,
 ).WithPublic()
 
 type clusterTLSSettings struct {
@@ -63,6 +72,10 @@ func (c clusterTLSSettings) ocspStrict() bool {
 
 func (c clusterTLSSettings) ocspTimeout() time.Duration {
 	return ocspTimeout.Get(&c.settings.SV)
+}
+
+func (c clusterTLSSettings) oldCipherSuitesEnabled() bool {
+	return oldCipherSuitesEnabled.Get(&c.settings.SV)
 }
 
 // ClusterTLSSettings creates a TLSSettings backed by the
@@ -87,4 +100,8 @@ func (CommandTLSSettings) ocspStrict() bool {
 
 func (CommandTLSSettings) ocspTimeout() time.Duration {
 	return 0
+}
+
+func (c CommandTLSSettings) oldCipherSuitesEnabled() bool {
+	return false
 }
