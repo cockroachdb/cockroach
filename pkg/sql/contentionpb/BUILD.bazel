@@ -10,6 +10,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/contentionpb",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/sql/clusterunique",
         "//pkg/util",
         "//pkg/util/encoding",
         "//pkg/util/uuid",
@@ -38,6 +39,7 @@ go_proto_library(
     deps = [
         "//pkg/roachpb",  # keep
         "//pkg/sql/catalog/descpb",  # keep
+        "//pkg/sql/clusterunique",  # keep
         "//pkg/util/uuid",  # keep
         "@com_github_gogo_protobuf//gogoproto",
     ],
