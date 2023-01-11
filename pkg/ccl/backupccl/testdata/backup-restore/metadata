@@ -1,16 +1,15 @@
+# This test that we don't back up forecasts or merged statistics.
+#
+# This also serves as a regression test for #86806 -- a bug in which 2
+# or more forecsts would break metadata SST writing.
 new-cluster name=s
 ----
 
-# Make sure that the presence of forecasted stats doesn't break
-# metadata SST writing. This is a regression test for #86806.
-#
-# We create 3 statistics manually which is the minimum needed to
-# create a forecast. Automatic collection is disabled to avoid
-# flakiness.
 exec-sql
 SET CLUSTER SETTING kv.bulkio.write_metadata_sst.enabled = true;
 ----
 
+# Automatic collection is disabled to avoid flakiness.
 exec-sql
 SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false;
 ----
@@ -19,8 +18,12 @@ exec-sql
 CREATE DATABASE db1;
 USE db1;
 CREATE TABLE tab (a INT PRIMARY KEY, b INT);
+INSERT INTO tab VALUES (1, 1), (2, 2), (100, 100);
 ----
 
+# We create 3 statistics manually which is the minimum needed to
+# create a forecast and a partial statistic on column A so that a
+# merged statistics is also generated.
 exec-sql
 CREATE STATISTICS __auto__ ON a FROM tab;
 CREATE STATISTICS __auto__ ON b FROM tab;
@@ -28,15 +31,45 @@ CREATE STATISTICS __auto__ ON a FROM tab;
 CREATE STATISTICS __auto__ ON b FROM tab;
 CREATE STATISTICS __auto__ ON a FROM tab;
 CREATE STATISTICS __auto__ ON b FROM tab;
+CREATE STATISTICS partial  ON a FROM tab USING EXTREMES;
 ----
 
-# The previous bug occurs when there are two or more forecasts since
-# forecasts do not hava a statistics ID.
+query-sql
+SELECT count(1) FROM [ SHOW STATISTICS FOR TABLE tab ]
+----
+7
+
 query-sql
 SELECT count(1) FROM [ SHOW STATISTICS FOR TABLE tab WITH FORECAST ] WHERE statistics_name = '__forecast__'
 ----
 2
 
+query-sql
+SELECT count(1) FROM [ SHOW STATISTICS FOR TABLE tab WITH MERGE ] WHERE statistics_name = '__merged__'
+----
+1
+
 exec-sql
 BACKUP DATABASE db1 INTO 'nodelocal://0/test/'
 ----
+
+# TODO(ssd): The expectation here is 6 stats rather than 7 because the
+# 'partial' stat is not backed up even though it is persisted. I think
+# we may want a different API for fetching statistics.
+query-sql
+SELECT
+    json_array_length(
+        crdb_internal.pb_to_json(
+            'cockroach.ccl.backupccl.StatsTable',
+            crdb_internal.read_file(
+                concat(
+                    'nodelocal://0/test/',
+                    (SELECT PATH FROM [SHOW BACKUPS IN 'nodelocal://0/test/']),
+                    '/BACKUP-STATISTICS'
+                )
+            )
+        )
+        -> 'statistics'
+    )
+----
+6
