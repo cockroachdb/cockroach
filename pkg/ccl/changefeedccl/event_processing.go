@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
@@ -138,7 +139,7 @@ func newEventConsumer(
 
 		execCfg := cfg.ExecutorConfig.(*sql.ExecutorConfig)
 		return newKVEventToRowConsumer(ctx, execCfg, frontier, cursor, s,
-			encoder, feed, spec.Select, spec.User(), knobs, topicNamer, pacer)
+			encoder, feed, spec, knobs, topicNamer, pacer)
 	}
 
 	numWorkers := changefeedbase.EventConsumerWorkers.Get(&cfg.Settings.SV)
@@ -211,8 +212,7 @@ func newKVEventToRowConsumer(
 	sink EventSink,
 	encoder Encoder,
 	details ChangefeedConfig,
-	expr execinfrapb.Expression,
-	userName username.SQLUsername,
+	spec execinfrapb.ChangeAggregatorSpec,
 	knobs TestingKnobs,
 	topicNamer *TopicNamer,
 	pacer *admission.Pacer,
@@ -225,8 +225,8 @@ func newKVEventToRowConsumer(
 	}
 
 	var evaluator *cdceval.Evaluator
-	if expr.Expr != "" {
-		evaluator, err = newEvaluator(cfg, userName, expr)
+	if spec.Select.Expr != "" {
+		evaluator, err = newEvaluator(cfg, spec.User(), spec.Feed.SessionData, spec.Select)
 		if err != nil {
 			return nil, err
 		}
@@ -254,14 +254,17 @@ func newKVEventToRowConsumer(
 }
 
 func newEvaluator(
-	cfg *sql.ExecutorConfig, user username.SQLUsername, expr execinfrapb.Expression,
+	cfg *sql.ExecutorConfig,
+	user username.SQLUsername,
+	sd sessiondatapb.SessionData,
+	expr execinfrapb.Expression,
 ) (*cdceval.Evaluator, error) {
 	sc, err := cdceval.ParseChangefeedExpression(expr.Expr)
 	if err != nil {
 		return nil, err
 	}
 
-	return cdceval.NewEvaluator(sc, cfg, user)
+	return cdceval.NewEvaluator(sc, cfg, user, sd)
 }
 
 func (c *kvEventToRowConsumer) topicForEvent(eventMeta cdcevent.Metadata) (TopicDescriptor, error) {

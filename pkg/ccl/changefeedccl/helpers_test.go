@@ -882,6 +882,10 @@ func makeFeedFactoryWithOptions(
 	case "sinkless":
 		sink, cleanup := pgURLForUser(username.RootUser)
 		f := makeSinklessFeedFactory(s, sink, pgURLForUser)
+		f.(*sinklessFeedFactory).currentDB = func(currentDB *string) error {
+			r := db.QueryRow("SELECT current_database()")
+			return r.Scan(currentDB)
+		}
 		return f, cleanup
 	}
 	t.Fatalf("unhandled sink type %s", sinkType)

@@ -50,8 +50,7 @@ func TestEvaluatesCDCFunctionOverloads(t *testing.T) {
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 
 	semaCtx := tree.MakeSemaContext()
-	testRow := makeEventRow(t, desc, s.Clock().Now(), false, hlc.Timestamp{})
-	defer configSemaForCDC(&semaCtx, testRow.EventDescriptor)()
+	defer configSemaForCDC(&semaCtx)()
 
 	t.Run("time", func(t *testing.T) {
 		// We'll run tests against some future time stamp to ensure
@@ -78,7 +77,7 @@ func TestEvaluatesCDCFunctionOverloads(t *testing.T) {
 				require.NoError(t, err)
 				defer e.Close()
 
-				p, err := e.Eval(ctx, testRow, testRow)
+				p, err := e.Eval(ctx, testRow, cdcevent.Row{})
 				require.NoError(t, err)
 				require.Equal(t, map[string]string{tc.fn: tc.expect}, slurpValues(t, p))
 
@@ -86,7 +85,7 @@ func TestEvaluatesCDCFunctionOverloads(t *testing.T) {
 				// We want to make sure that optimizer did not constant fold the call
 				// to the function, even though this function is marked stable.
 				testRow.MvccTimestamp = testRow.MvccTimestamp.Add(int64(time.Hour), 0)
-				p, err = e.Eval(ctx, testRow, testRow)
+				p, err = e.Eval(ctx, testRow, cdcevent.Row{})
 				require.NoError(t, err)
 				require.Equal(t, map[string]string{tc.fn: expectTSTZ(testRow.MvccTimestamp)}, slurpValues(t, p))
 			})
@@ -105,7 +104,7 @@ func TestEvaluatesCDCFunctionOverloads(t *testing.T) {
 			require.NoError(t, err)
 			defer e.Close()
 
-			p, err := e.Eval(ctx, testRow, testRow)
+			p, err := e.Eval(ctx, testRow, cdcevent.Row{})
 			require.NoError(t, err)
 
 			expectedTZ := fmt.Sprintf("%s-01:33:00",
@@ -124,7 +123,7 @@ func TestEvaluatesCDCFunctionOverloads(t *testing.T) {
 
 		for _, expectDelete := range []bool{true, false} {
 			testRow := makeEventRow(t, desc, schemaTS, expectDelete, s.Clock().Now())
-			p, err := e.Eval(ctx, testRow, testRow)
+			p, err := e.Eval(ctx, testRow, cdcevent.Row{})
 			require.NoError(t, err)
 			require.Equal(t,
 				map[string]string{"cdc_is_delete": fmt.Sprintf("%t", expectDelete)},
@@ -151,7 +150,7 @@ func TestEvaluatesCDCFunctionOverloads(t *testing.T) {
 				require.NoError(t, err)
 				defer e.Close()
 
-				p, err := e.Eval(ctx, testRow, testRow)
+				p, err := e.Eval(ctx, testRow, cdcevent.Row{})
 				require.NoError(t, err)
 				require.Equal(t,
 					map[string]string{
@@ -172,7 +171,7 @@ func TestEvaluatesCDCFunctionOverloads(t *testing.T) {
 		require.NoError(t, err)
 		defer e.Close()
 
-		p, err := e.Eval(ctx, testRow, testRow)
+		p, err := e.Eval(ctx, testRow, cdcevent.Row{})
 		require.NoError(t, err)
 		require.Equal(t, map[string]string{"col": "\"de_DE\""}, slurpValues(t, p))
 	})
@@ -342,9 +341,10 @@ func newEvaluator(
 		return nil, err
 	}
 
+	defer configSemaForCDC(semaCtx)()
 	norm, err := normalizeSelectClause(context.Background(), semaCtx, sc, ed)
 	if err != nil {
 		return nil, err
 	}
-	return NewEvaluator(norm.SelectClause, execCfg, username.RootUserName())
+	return NewEvaluator(norm.SelectClause, execCfg, username.RootUserName(), defaultDBSessionData)
 }
