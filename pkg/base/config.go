@@ -257,12 +257,14 @@ var (
 	// Raft log entries that a leader will send to a follower without hearing
 	// responses.
 	//
-	// TODO(#90314): lower this limit to something close to max rates observed in
-	// healthy clusters. Currently this value is a conservatively large multiple
-	// of defaultRaftMaxSizePerMsg * defaultRaftMaxInflightMsgs, so that it
-	// doesn't cut off traffic until we know it's ok.
-	defaultRaftMaxInflightBytes = envutil.EnvOrDefaultBytes(
-		"COCKROACH_RAFT_MAX_INFLIGHT_BYTES", 256<<20 /* 256 MB */)
+	// This env variable is used only if RaftConfig.RaftMaxInflightBytes is unset.
+	// If both the config value and the env variable are unset, then a default
+	// based on RaftConfig.RaftMaxInflightMsgs and RaftConfig.RaftMaxSizePerMsg is
+	// computed.
+	//
+	// The default is maxInflightMsgs * maxSizePerMsg * 64 which, assuming other
+	// parameters are default, amounts to 256 MB. See RaftConfig.SetDefaults().
+	defaultRaftMaxInflightBytes = envutil.EnvOrDefaultBytes("COCKROACH_RAFT_MAX_INFLIGHT_BYTES", 0)
 )
 
 // Config is embedded by server.Config. A base config is not meant to be used
@@ -577,7 +579,14 @@ func (cfg *RaftConfig) SetDefaults() {
 		cfg.RaftMaxInflightMsgs = defaultRaftMaxInflightMsgs
 	}
 	if cfg.RaftMaxInflightBytes == 0 {
-		cfg.RaftMaxInflightBytes = uint64(defaultRaftMaxInflightBytes)
+		maxInflight := uint64(defaultRaftMaxInflightBytes)
+		if maxInflight == 0 {
+			// TODO(#90314): lower this limit to something close to max rates observed
+			// in healthy clusters. Currently this value is a conservatively large
+			// multiple so that it doesn't cut off traffic until we know it's ok.
+			maxInflight = cfg.RaftMaxSizePerMsg * uint64(cfg.RaftMaxInflightMsgs) * 64
+		}
+		cfg.RaftMaxInflightBytes = maxInflight
 	}
 	if cfg.RaftDelaySplitToSuppressSnapshotTicks == 0 {
 		// The Raft Ticks interval defaults to 200ms, and an election is 10
