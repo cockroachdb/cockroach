@@ -46,20 +46,20 @@ const minGoodnessOfFit = 0.95
 
 // ForecastTableStatistics produces zero or more statistics forecasts based on
 // the given observed statistics. The observed statistics must be ordered by
-// collection time descending, with the latest collected statistics first. The
+// collection time descending, with the latest observed statistics first. The
 // observed statistics may be a mixture of statistics for different sets of
-// columns, but should not contain statistics for any old nonexistent columns.
+// columns.
 //
 // Whether a forecast is produced for a set of columns depends on how well the
 // observed statistics for that set of columns fit a linear regression model.
 // This means a forecast will not necessarily be produced for every set of
 // columns in the table. Any forecasts produced will have the same CreatedAt
-// time, which will be up to a week after the latest observed statistics (and
-// could be in the past, present, or future relative to the current time). Any
-// forecasts produced will not necessarily have the same RowCount or be
-// consistent with the other forecasts produced. (For example, DistinctCount in
-// the forecast for columns {a, b} could very well end up less than
-// DistinctCount in the forecast for column {a}.)
+// time, which will be after the latest observed statistics (and could be in the
+// past, present, or future relative to the current time). Any forecasts
+// produced will not necessarily have the same RowCount or be consistent with
+// the other forecasts produced. (For example, DistinctCount in the forecast for
+// columns {a, b} could very well end up less than DistinctCount in the forecast
+// for column {a}.)
 //
 // ForecastTableStatistics is deterministic: given the same observations it will
 // return the same forecasts.
@@ -116,7 +116,7 @@ func ForecastTableStatistics(ctx context.Context, observed []*TableStatistic) []
 // based on the given observed statistics. The observed statistics must all be
 // for the same set of columns, must not contain any inverted histograms, must
 // have a single observation per collection time, and must be ordered by
-// collection time descending with the latest collected statistics first. The
+// collection time descending with the latest observed statistics first. The
 // given time to forecast at can be in the past, present, or future.
 //
 // To create a forecast, we construct a linear regression model over time for
