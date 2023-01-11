@@ -66,7 +66,7 @@ case "${CLOUD}" in
     if [ -z "${TESTS}" ]; then
       # NB: anchor ycsb to beginning of line to avoid matching `zfs/ycsb/*` which
       # isn't supported on AWS at time of writing.
-      TESTS="awsdms|kv(0|95)|^ycsb|tpcc/(headroom/n4cpu16)|tpccbench/(nodes=3/cpu=16)|scbench/randomload/(nodes=3/ops=2000/conc=1)|backup/(KMS/AWS/n3cpu4)"
+      TESTS="awsdms|kv(0|95)|^ycsb|tpcc/(headroom/n4cpu16)|tpccbench/(nodes=3/cpu=16)|scbench/randomload/(nodes=3/ops=2000/conc=1)|backup/(KMS/AWS/n3cpu4)|restore/tpce"
     fi
     ;;
   *)
