@@ -11,7 +11,9 @@
 package rditer
 
 import (
+	"bytes"
 	"fmt"
+	"sort"
 	"strings"
 	"testing"
 
@@ -19,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestSelect(t *testing.T) {
@@ -52,11 +55,6 @@ func TestSelect(t *testing.T) {
 			var buf strings.Builder
 			for _, replicatedByRangeID := range []bool{false, true} {
 				for _, unreplicatedByRangeID := range []bool{false, true} {
-					opts := SelectOpts{
-						ReplicatedBySpan:      tc.sp,
-						ReplicatedByRangeID:   replicatedByRangeID,
-						UnreplicatedByRangeID: unreplicatedByRangeID,
-					}
 					var description []string
 					if replicatedByRangeID {
 						description = append(description, "RangeID-replicated")
@@ -64,14 +62,23 @@ func TestSelect(t *testing.T) {
 					if unreplicatedByRangeID {
 						description = append(description, "RangeID-unreplicated")
 					}
-					if rs := opts.ReplicatedBySpan; !rs.Equal(roachpb.RSpan{}) {
-						description = append(description, rs.String())
+					if !tc.sp.Equal(roachpb.RSpan{}) {
+						description = append(description, tc.sp.String())
 					}
 					if len(description) == 0 {
 						description = append(description, "nothing")
 					}
 					fmt.Fprintf(&buf, "Select(%s):\n", strings.Join(description, ", "))
-					for _, sp := range Select(roachpb.RangeID(123), opts) {
+
+					sl := Select(roachpb.RangeID(123), SelectOpts{
+						ReplicatedBySpan:      tc.sp,
+						ReplicatedByRangeID:   replicatedByRangeID,
+						UnreplicatedByRangeID: unreplicatedByRangeID,
+					})
+					assert.True(t, sort.SliceIsSorted(sl, func(i, j int) bool {
+						return bytes.Compare(sl[i].EndKey, sl[j].Key) < 0
+					}))
+					for _, sp := range sl {
 						fmt.Fprintf(&buf, "  %s\n", sp)
 					}
 				}
