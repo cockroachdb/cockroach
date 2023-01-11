@@ -699,6 +699,223 @@ func FindForeignKeyConstraint(b ElementStatusIterator) (current Status, target T
 	return current, target, element
 }
 
+func (e Function) element() {}
+
+// ForEachFunction iterates over elements of type Function.
+func ForEachFunction(
+	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *Function),
+) {
+  if b == nil {
+    return
+  }
+	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
+		if elt, ok := e.(*Function); ok {
+			fn(current, target, elt)
+		}
+	})
+}
+
+// FindFunction finds the first element of type Function.
+func FindFunction(b ElementStatusIterator) (current Status, target TargetStatus, element *Function) {
+  if b == nil {
+    return current, target, element
+  }
+	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
+		if elt, ok := e.(*Function); ok {
+			element = elt
+			current = c
+			target = t
+		}
+	})
+	return current, target, element
+}
+
+func (e FunctionBody) element() {}
+
+// ForEachFunctionBody iterates over elements of type FunctionBody.
+func ForEachFunctionBody(
+	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *FunctionBody),
+) {
+  if b == nil {
+    return
+  }
+	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
+		if elt, ok := e.(*FunctionBody); ok {
+			fn(current, target, elt)
+		}
+	})
+}
+
+// FindFunctionBody finds the first element of type FunctionBody.
+func FindFunctionBody(b ElementStatusIterator) (current Status, target TargetStatus, element *FunctionBody) {
+  if b == nil {
+    return current, target, element
+  }
+	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
+		if elt, ok := e.(*FunctionBody); ok {
+			element = elt
+			current = c
+			target = t
+		}
+	})
+	return current, target, element
+}
+
+func (e FunctionLeakProof) element() {}
+
+// ForEachFunctionLeakProof iterates over elements of type FunctionLeakProof.
+func ForEachFunctionLeakProof(
+	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *FunctionLeakProof),
+) {
+  if b == nil {
+    return
+  }
+	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
+		if elt, ok := e.(*FunctionLeakProof); ok {
+			fn(current, target, elt)
+		}
+	})
+}
+
+// FindFunctionLeakProof finds the first element of type FunctionLeakProof.
+func FindFunctionLeakProof(b ElementStatusIterator) (current Status, target TargetStatus, element *FunctionLeakProof) {
+  if b == nil {
+    return current, target, element
+  }
+	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
+		if elt, ok := e.(*FunctionLeakProof); ok {
+			element = elt
+			current = c
+			target = t
+		}
+	})
+	return current, target, element
+}
+
+func (e FunctionName) element() {}
+
+// ForEachFunctionName iterates over elements of type FunctionName.
+func ForEachFunctionName(
+	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *FunctionName),
+) {
+  if b == nil {
+    return
+  }
+	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
+		if elt, ok := e.(*FunctionName); ok {
+			fn(current, target, elt)
+		}
+	})
+}
+
+// FindFunctionName finds the first element of type FunctionName.
+func FindFunctionName(b ElementStatusIterator) (current Status, target TargetStatus, element *FunctionName) {
+  if b == nil {
+    return current, target, element
+  }
+	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
+		if elt, ok := e.(*FunctionName); ok {
+			element = elt
+			current = c
+			target = t
+		}
+	})
+	return current, target, element
+}
+
+func (e FunctionNullInputBehavior) element() {}
+
+// ForEachFunctionNullInputBehavior iterates over elements of type FunctionNullInputBehavior.
+func ForEachFunctionNullInputBehavior(
+	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *FunctionNullInputBehavior),
+) {
+  if b == nil {
+    return
+  }
+	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
+		if elt, ok := e.(*FunctionNullInputBehavior); ok {
+			fn(current, target, elt)
+		}
+	})
+}
+
+// FindFunctionNullInputBehavior finds the first element of type FunctionNullInputBehavior.
+func FindFunctionNullInputBehavior(b ElementStatusIterator) (current Status, target TargetStatus, element *FunctionNullInputBehavior) {
+  if b == nil {
+    return current, target, element
+  }
+	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
+		if elt, ok := e.(*FunctionNullInputBehavior); ok {
+			element = elt
+			current = c
+			target = t
+		}
+	})
+	return current, target, element
+}
+
+func (e FunctionParamDefaultExpression) element() {}
+
+// ForEachFunctionParamDefaultExpression iterates over elements of type FunctionParamDefaultExpression.
+func ForEachFunctionParamDefaultExpression(
+	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *FunctionParamDefaultExpression),
+) {
+  if b == nil {
+    return
+  }
+	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
+		if elt, ok := e.(*FunctionParamDefaultExpression); ok {
+			fn(current, target, elt)
+		}
+	})
+}
+
+// FindFunctionParamDefaultExpression finds the first element of type FunctionParamDefaultExpression.
+func FindFunctionParamDefaultExpression(b ElementStatusIterator) (current Status, target TargetStatus, element *FunctionParamDefaultExpression) {
+  if b == nil {
+    return current, target, element
+  }
+	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
+		if elt, ok := e.(*FunctionParamDefaultExpression); ok {
+			element = elt
+			current = c
+			target = t
+		}
+	})
+	return current, target, element
+}
+
+func (e FunctionVolatility) element() {}
+
+// ForEachFunctionVolatility iterates over elements of type FunctionVolatility.
+func ForEachFunctionVolatility(
+	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *FunctionVolatility),
+) {
+  if b == nil {
+    return
+  }
+	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
+		if elt, ok := e.(*FunctionVolatility); ok {
+			fn(current, target, elt)
+		}
+	})
+}
+
+// FindFunctionVolatility finds the first element of type FunctionVolatility.
+func FindFunctionVolatility(b ElementStatusIterator) (current Status, target TargetStatus, element *FunctionVolatility) {
+  if b == nil {
+    return current, target, element
+  }
+	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
+		if elt, ok := e.(*FunctionVolatility); ok {
+			element = elt
+			current = c
+			target = t
+		}
+	})
+	return current, target, element
+}
+
 func (e IndexColumn) element() {}
 
 // ForEachIndexColumn iterates over elements of type IndexColumn.
