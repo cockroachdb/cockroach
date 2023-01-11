@@ -12,11 +12,11 @@ package rditer
 
 import "github.com/cockroachdb/cockroach/pkg/roachpb"
 
-// SelectionOptions configures which spans for a Replica to return from Select.
+// SelectOpts configures which spans for a Replica to return from Select.
 // A Replica comprises replicated (i.e. belonging to the state machine) spans
 // and unreplicated spans, and depending on external circumstances one may want
 // to read or erase only certain components of a Replica.
-type SelectionOptions struct {
+type SelectOpts struct {
 	// ReplicatedBySpan selects all replicated key Spans that are keyed by a user
 	// key. This includes user keys, range descriptors, and locks (separated
 	// intents).
@@ -31,7 +31,7 @@ type SelectionOptions struct {
 }
 
 // A Selection is a collection of Select describing a part of a Replica.
-// Which fields are populated depends on the SelectionOptions passed to
+// Which fields are populated depends on the SelectOpts passed to
 // Select.
 type Selection struct {
 	// The following slices may share backing memory.
@@ -57,8 +57,8 @@ func (s Selection) NonStateMachineSpans() []roachpb.Span {
 	return s.other
 }
 
-// Select creates a Selection according to the SelectionOptions.
-func Select(rangeID roachpb.RangeID, opts SelectionOptions) Selection {
+// Select creates a Selection according to the SelectOpts.
+func Select(rangeID roachpb.RangeID, opts SelectOpts) Selection {
 	var s Selection
 
 	if opts.ReplicatedByRangeID {

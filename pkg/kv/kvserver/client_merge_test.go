@@ -3852,7 +3852,7 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 				// first key. In this case, the first key is RangeGCThresholdKey, which
 				// doesn't yet exist in the engine, so we write the Pebble range tombstone
 				// manually.
-				sl := rditer.Select(rangeID, rditer.SelectionOptions{
+				sl := rditer.Select(rangeID, rditer.SelectOpts{
 					ReplicatedByRangeID: true,
 				}).Spans()
 				require.Len(t, sl, 1)
@@ -3862,7 +3862,7 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 			{
 				// Ditto for the unreplicated version, where the first key happens to be
 				// the HardState.
-				sl := rditer.Select(rangeID, rditer.SelectionOptions{
+				sl := rditer.Select(rangeID, rditer.SelectOpts{
 					UnreplicatedByRangeID: true,
 				}).Spans()
 				require.Len(t, sl, 1)

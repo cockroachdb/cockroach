@@ -27,7 +27,7 @@ func TestSelect(t *testing.T) {
 	type tc struct {
 		// Inputs.
 		name string
-		opts SelectionOptions
+		opts SelectOpts
 
 		// Outputs.
 		s Selection
@@ -44,7 +44,7 @@ func TestSelect(t *testing.T) {
 	} {
 		for _, replicatedByRangeID := range []bool{false, true} {
 			for _, unreplicatedByRangeID := range []bool{false, true} {
-				opts := SelectionOptions{
+				opts := SelectOpts{
 					ReplicatedBySpan:      span,
 					ReplicatedByRangeID:   replicatedByRangeID,
 					UnreplicatedByRangeID: unreplicatedByRangeID,

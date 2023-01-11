@@ -448,7 +448,7 @@ type clearRangeDataOptions struct {
 func clearRangeData(
 	rangeID roachpb.RangeID, reader storage.Reader, writer storage.Writer, opts clearRangeDataOptions,
 ) error {
-	keySpans := rditer.Select(rangeID, rditer.SelectionOptions{
+	keySpans := rditer.Select(rangeID, rditer.SelectOpts{
 		ReplicatedBySpan:      opts.ClearReplicatedBySpan,
 		ReplicatedByRangeID:   opts.ClearReplicatedByRangeID,
 		UnreplicatedByRangeID: opts.ClearUnreplicatedByRangeID,
@@ -803,7 +803,7 @@ func (r *Replica) clearSubsumedReplicaDiskData(
 	// NB: we don't clear RangeID local key spans here. That happens
 	// via the call to preDestroyRaftMuLocked.
 	getKeySpans := func(d *roachpb.RangeDescriptor) []roachpb.Span {
-		return rditer.Select(d.RangeID, rditer.SelectionOptions{
+		return rditer.Select(d.RangeID, rditer.SelectOpts{
 			ReplicatedBySpan: d.RSpan(),
 		}).Spans()
 	}

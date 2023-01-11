@@ -57,7 +57,7 @@ type ReplicaMVCCDataIterator struct {
 // makeAllKeySpans returns all key spans for the given Range, in
 // sorted order.
 func makeAllKeySpans(d *roachpb.RangeDescriptor) []roachpb.Span {
-	return Select(d.RangeID, SelectionOptions{
+	return Select(d.RangeID, SelectOpts{
 		ReplicatedBySpan: roachpb.RSpan{
 			Key:    d.StartKey,
 			EndKey: d.EndKey,
@@ -75,7 +75,7 @@ func makeAllKeySpans(d *roachpb.RangeDescriptor) []roachpb.Span {
 // 3. Lock-table key spans.
 // 4. User key span.
 func MakeReplicatedKeySpans(d *roachpb.RangeDescriptor) []roachpb.Span {
-	return Select(d.RangeID, SelectionOptions{
+	return Select(d.RangeID, SelectOpts{
 		ReplicatedBySpan: roachpb.RSpan{
 			Key:    d.StartKey,
 			EndKey: d.EndKey,
