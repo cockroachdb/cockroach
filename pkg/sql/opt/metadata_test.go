@@ -13,6 +13,7 @@ package opt_test
 import (
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"reflect"
 	"testing"
 
@@ -460,4 +461,11 @@ func (f *fakeGetMultiregionConfigPlanner) GetMultiregionConfig(
 // IsANSIDML is part of the eval.Planner interface.
 func (f *fakeGetMultiregionConfigPlanner) IsANSIDML() bool {
 	return false
+}
+
+// GetTenantRangeSpanByID is part of the eval.Planner interface.
+func (ep *fakeGetMultiregionConfigPlanner) GetTenantRangeSpanByID(
+	context.Context, roachpb.RangeID,
+) (span roachpb.Span, err error) {
+	return
 }

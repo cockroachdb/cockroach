@@ -61,6 +61,7 @@ go_test(
     args = ["-test.timeout=55s"],
     embed = [":opt"],
     deps = [
+        "//pkg/roachpb",
         "//pkg/settings/cluster",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/opt/cat",
