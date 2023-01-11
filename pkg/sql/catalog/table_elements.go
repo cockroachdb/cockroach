@@ -1181,3 +1181,155 @@ func MustFindFamilyByID(
 	}
 	return nil, fmt.Errorf("family-id \"%d\" does not exist", id)
 }
+
+// FindColumnByID traverses the slice returned by the AllColumns
+// method on the table descriptor and returns the first Column that
+// matches the desired ID, or nil if none was found.
+func FindColumnByID(tbl TableDescriptor, id descpb.ColumnID) Column {
+	for _, col := range tbl.AllColumns() {
+		if col.GetID() == id {
+			return col
+		}
+	}
+	return nil
+}
+
+// MustFindColumnByID is like FindColumnByID but returns an error when
+// no Column was found.
+func MustFindColumnByID(tbl TableDescriptor, id descpb.ColumnID) (Column, error) {
+	if col := FindColumnByID(tbl, id); col != nil {
+		return col, nil
+	}
+	return nil, pgerror.Newf(pgcode.UndefinedColumn, "column-id \"%d\" does not exist", id)
+}
+
+// FindColumnByName is like FindColumnByID but with names instead of
+// IDs.
+func FindColumnByName(tbl TableDescriptor, name string) Column {
+	for _, col := range tbl.AllColumns() {
+		if col.GetName() == name {
+			return col
+		}
+	}
+	return nil
+}
+
+// MustFindColumnByName is like MustFindColumnByID but with names
+// instead of IDs.
+func MustFindColumnByName(tbl TableDescriptor, name string) (Column, error) {
+	if col := FindColumnByName(tbl, name); col != nil {
+		return col, nil
+	}
+	return nil, pgerror.Newf(pgcode.UndefinedColumn, "column %q does not exist", name)
+}
+
+// FindColumnByTreeName is like FindColumnByID but with names instead of
+// IDs.
+func FindColumnByTreeName(tbl TableDescriptor, name tree.Name) Column {
+	for _, col := range tbl.AllColumns() {
+		if col.ColName() == name {
+			return col
+		}
+	}
+	return nil
+}
+
+// MustFindColumnByTreeName is like MustFindColumnByID but with names
+// instead of IDs.
+func MustFindColumnByTreeName(tbl TableDescriptor, name tree.Name) (Column, error) {
+	if col := FindColumnByTreeName(tbl, name); col != nil {
+		return col, nil
+	}
+	return nil, pgerror.Newf(pgcode.UndefinedColumn, "column %q does not exist", name)
+}
+
+// FindColumnByPGAttributeNum traverses the slice returned by the AllColumns
+// method on the table descriptor and returns the first Column that
+// matches the desired PGAttributeNum, or the ID if not set.
+// Returns nil if none was found.
+func FindColumnByPGAttributeNum(tbl TableDescriptor, attNum descpb.PGAttributeNum) Column {
+	for _, col := range tbl.AllColumns() {
+		if col.GetPGAttributeNum() == attNum {
+			return col
+		}
+	}
+	return nil
+}
+
+// MustFindColumnByPGAttributeNum is like FindColumnByPGAttributeNum but returns
+// an error when no column is found.
+func MustFindColumnByPGAttributeNum(
+	tbl TableDescriptor, attNum descpb.PGAttributeNum,
+) (Column, error) {
+	if col := FindColumnByPGAttributeNum(tbl, attNum); col != nil {
+		return col, nil
+	}
+	return nil, pgerror.Newf(pgcode.UndefinedColumn,
+		"column with logical order %d does not exist", attNum)
+}
+
+// MustFindPublicColumnsByNameList is a convenience function which behaves
+// exactly like MustFindPublicColumnByTreeName applied repeatedly to the
+// names in the provided list, returning early at the first encountered error.
+func MustFindPublicColumnsByNameList(desc TableDescriptor, names tree.NameList) ([]Column, error) {
+	cols := make([]Column, len(names))
+	for i, name := range names {
+		c, err := MustFindPublicColumnByTreeName(desc, name)
+		if err != nil {
+			return nil, err
+		}
+		cols[i] = c
+	}
+	return cols, nil
+}
+
+// MustFindPublicColumnByTreeName is a convenience function which behaves exactly
+// like FindColumnByName except it ignores column mutations.
+func MustFindPublicColumnByTreeName(desc TableDescriptor, name tree.Name) (Column, error) {
+	col, err := MustFindColumnByTreeName(desc, name)
+	if err != nil {
+		return nil, err
+	}
+	if !col.Public() {
+		return nil, pgerror.Newf(pgcode.UndefinedColumn, "column %q does not exist", name)
+	}
+	return col, nil
+}
+
+// MustFindPublicColumnByID is a convenience function which behaves exactly
+// like FindColumnByID except it ignores column mutations.
+func MustFindPublicColumnByID(desc TableDescriptor, id descpb.ColumnID) (Column, error) {
+	col, err := MustFindColumnByID(desc, id)
+	if err != nil {
+		return nil, err
+	}
+	if !col.Public() {
+		return nil, fmt.Errorf("column-id \"%d\" does not exist", id)
+	}
+	return col, nil
+}
+
+// FindFKReferencedUniqueConstraint finds the first index in the supplied
+// referencedTable that can satisfy a foreign key of the supplied column ids.
+// If no such index exists, attempts to find a unique constraint on the supplied
+// column ids. If neither an index nor unique constraint is found, returns an
+// error.
+func FindFKReferencedUniqueConstraint(
+	referencedTable TableDescriptor, fk ForeignKeyConstraint,
+) (UniqueConstraint, error) {
+	for _, uwi := range referencedTable.UniqueConstraintsWithIndex() {
+		if !uwi.Dropped() && uwi.IsValidReferencedUniqueConstraint(fk) {
+			return uwi, nil
+		}
+	}
+	for _, uwoi := range referencedTable.UniqueConstraintsWithoutIndex() {
+		if !uwoi.Dropped() && uwoi.IsValidReferencedUniqueConstraint(fk) {
+			return uwoi, nil
+		}
+	}
+	return nil, pgerror.Newf(
+		pgcode.ForeignKeyViolation,
+		"there is no unique constraint matching given keys for referenced table %s",
+		referencedTable.GetName(),
+	)
+}

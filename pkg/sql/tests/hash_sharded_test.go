@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -34,7 +33,7 @@ func getShardColumnID(
 	if err != nil {
 		t.Fatal(err)
 	}
-	shardCol, err := tableDesc.FindColumnWithName(tree.Name(idx.GetShardColumnName()))
+	shardCol, err := catalog.MustFindColumnByName(tableDesc, idx.GetShardColumnName())
 	if err != nil {
 		t.Fatal(err)
 	}

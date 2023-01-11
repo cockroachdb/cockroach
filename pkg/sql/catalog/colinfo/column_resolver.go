@@ -43,7 +43,7 @@ func ProcessTargetColumns(
 	var colIDSet catalog.TableColSet
 	cols := make([]catalog.Column, len(nameList))
 	for i, colName := range nameList {
-		col, err := tableDesc.FindColumnWithName(colName)
+		col, err := catalog.MustFindColumnByTreeName(tableDesc, colName)
 		if err != nil {
 			return nil, err
 		}

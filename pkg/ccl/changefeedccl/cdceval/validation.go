@@ -366,7 +366,7 @@ func (c *checkColumnsVisitor) VisitCols(expr tree.Expr) (bool, tree.Expr) {
 		return c.VisitCols(vn)
 
 	case *tree.ColumnItem:
-		col, err := c.desc.FindColumnWithName(e.ColumnName)
+		col, err := catalog.MustFindColumnByTreeName(c.desc, e.ColumnName)
 		if err != nil {
 			c.err = err
 			return false, expr

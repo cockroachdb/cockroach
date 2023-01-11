@@ -660,7 +660,7 @@ func expectResultColumns(
 	}
 
 	for _, colName := range colNames {
-		col, err := desc.FindColumnWithName(tree.Name(colName))
+		col, err := catalog.MustFindColumnByName(desc, colName)
 		require.NoError(t, err)
 		res = append(res, ResultColumn{
 			ResultColumn: colinfo.ResultColumn{

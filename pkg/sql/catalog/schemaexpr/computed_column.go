@@ -120,7 +120,7 @@ func ValidateComputedColumnExpression(
 				return
 			}
 			var col catalog.Column
-			if col, err = desc.FindColumnWithID(colID); err != nil {
+			if col, err = catalog.MustFindColumnByID(desc, colID); err != nil {
 				err = errors.WithAssertionFailure(err)
 				return
 			}

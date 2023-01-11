@@ -521,21 +521,6 @@ type TableDescriptor interface {
 	// suffix columns, suitable for populating a fetchpb.IndexFetchSpec.
 	IndexFetchSpecKeyAndSuffixColumns(idx Index) []fetchpb.IndexFetchSpec_KeyColumn
 
-	// FindColumnWithID returns the first column found whose ID matches the
-	// provided target ID, in the canonical order.
-	// If no column is found then an error is also returned.
-	FindColumnWithID(id descpb.ColumnID) (Column, error)
-
-	// FindColumnWithPGAttributeNum returns the first column found whose
-	// PGAttributeNum (if set, otherwise ID) matches the provider id.
-	// Error is returned if no column is found.
-	FindColumnWithPGAttributeNum(id descpb.PGAttributeNum) (Column, error)
-
-	// FindColumnWithName returns the first column found whose name matches the
-	// provided target name, in the canonical order.
-	// If no column is found then an error is also returned.
-	FindColumnWithName(name tree.Name) (Column, error)
-
 	// GetNextColumnID returns the next unused column ID for this table. Column
 	// IDs are unique per table, but not unique globally.
 	GetNextColumnID() descpb.ColumnID

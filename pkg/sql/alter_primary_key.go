@@ -133,7 +133,7 @@ func (p *planner) AlterPrimaryKey(
 				"use columns instead",
 			)
 		}
-		col, err := tableDesc.FindColumnWithName(elem.Column)
+		col, err := catalog.MustFindColumnByTreeName(tableDesc, elem.Column)
 		if err != nil {
 			return err
 		}
@@ -432,7 +432,7 @@ func (p *planner) AlterPrimaryKey(
 		if idx.IsUnique() {
 			for i := 0; i < idx.NumKeyColumns(); i++ {
 				colID := idx.GetKeyColumnID(i)
-				col, err := tableDesc.FindColumnWithID(colID)
+				col, err := catalog.MustFindColumnByID(tableDesc, colID)
 				if err != nil {
 					return false, err
 				}
@@ -450,7 +450,7 @@ func (p *planner) AlterPrimaryKey(
 			newPrimaryKeyColIDs := catalog.MakeTableColSet(newPrimaryIndexDesc.KeyColumnIDs...)
 			for i := 0; i < idx.NumKeySuffixColumns(); i++ {
 				colID := idx.GetKeySuffixColumnID(i)
-				col, err := tableDesc.FindColumnWithID(colID)
+				col, err := catalog.MustFindColumnByID(tableDesc, colID)
 				if err != nil {
 					return false, err
 				}
@@ -628,7 +628,7 @@ func (p *planner) shouldCreateIndexes(
 
 	// Validate the columns on the indexes
 	for idx, elem := range alterPKNode.Columns {
-		col, err := desc.FindColumnWithName(elem.Column)
+		col, err := catalog.MustFindColumnByTreeName(desc, elem.Column)
 		if err != nil {
 			return true, err
 		}
@@ -792,7 +792,7 @@ func setKeySuffixColumnIDsFromPrimary(
 			// toAdd.KeySuffixColumnIDs = append(toAdd.KeySuffixColumnIDs, colID)
 			// However, this functionality is not supported by the execution engine,
 			// so prevent it by returning an error.
-			col, err := table.FindColumnWithID(colID)
+			col, err := catalog.MustFindColumnByID(table, colID)
 			if err != nil {
 				return err
 			}

@@ -32,8 +32,7 @@ var _ catalog.Column = (*prevCol)(nil)
 
 func newPrevColumnForDesc(desc *cdcevent.EventDescriptor) (catalog.Column, error) {
 	colExists := func(n tree.Name) bool {
-		_, err := desc.TableDescriptor().FindColumnWithName(n)
-		return err == nil
+		return catalog.FindColumnByTreeName(desc.TableDescriptor(), n) != nil
 	}
 
 	prevColName := tree.Name("cdc_prev")

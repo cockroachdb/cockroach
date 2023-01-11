@@ -76,7 +76,7 @@ func InitIndexFetchSpec(
 		s.FetchedColumns = make([]fetchpb.IndexFetchSpec_Column, len(fetchColumnIDs))
 	}
 	for i, colID := range fetchColumnIDs {
-		col, err := table.FindColumnWithID(colID)
+		col, err := catalog.MustFindColumnByID(table, colID)
 		if err != nil {
 			return err
 		}

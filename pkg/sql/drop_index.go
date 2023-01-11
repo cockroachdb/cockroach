@@ -144,7 +144,7 @@ func (n *dropIndexNode) startExec(params runParams) error {
 		if idx != nil {
 			for i, count := 0, idx.NumKeyColumns(); i < count; i++ {
 				id := idx.GetKeyColumnID(i)
-				col, err := tableDesc.FindColumnWithID(id)
+				col, err := catalog.MustFindColumnByID(tableDesc, id)
 				if err != nil {
 					return err
 				}
@@ -166,7 +166,7 @@ func (n *dropIndexNode) startExec(params runParams) error {
 
 		if shardColName != "" {
 			// Retrieve the sharded column descriptor by name.
-			shardColDesc, err := tableDesc.FindColumnWithName(tree.Name(shardColName))
+			shardColDesc, err := catalog.MustFindColumnByName(tableDesc, shardColName)
 			if err != nil {
 				return err
 			}

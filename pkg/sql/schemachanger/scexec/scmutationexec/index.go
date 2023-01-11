@@ -359,7 +359,7 @@ func (m *visitor) AddColumnToIndex(ctx context.Context, op scop.AddColumnToIndex
 	if err != nil {
 		return err
 	}
-	column, err := tbl.FindColumnWithID(op.ColumnID)
+	column, err := catalog.MustFindColumnByID(tbl, op.ColumnID)
 	if err != nil {
 		return err
 	}
@@ -430,7 +430,7 @@ func (m *visitor) RemoveColumnFromIndex(ctx context.Context, op scop.RemoveColum
 	if err != nil {
 		return err
 	}
-	column, err := tbl.FindColumnWithID(op.ColumnID)
+	column, err := catalog.MustFindColumnByID(tbl, op.ColumnID)
 	if err != nil {
 		return err
 	}

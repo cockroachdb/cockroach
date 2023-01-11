@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps/sctestdeps"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -68,7 +67,7 @@ func TestExecBackfiller(t *testing.T) {
 		var columnIDs, keySuffixColumnIDs []descpb.ColumnID
 		var columnIDSet catalog.TableColSet
 		for _, c := range columns {
-			col, err := mut.FindColumnWithName(tree.Name(c))
+			col, err := catalog.MustFindColumnByName(mut, c)
 			require.NoError(t, err)
 			dirs = append(dirs, catenumpb.IndexColumn_ASC)
 			columnIDs = append(columnIDs, col.GetID())

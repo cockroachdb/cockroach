@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
@@ -826,7 +827,7 @@ func TestRowLevelTTLJobRandomEntries(t *testing.T) {
 					// Note we can split a PRIMARY KEY partially.
 					numKeyCols := 1 + rng.Intn(tbDesc.GetPrimaryIndex().NumKeyColumns())
 					for idx := 0; idx < numKeyCols; idx++ {
-						col, err := tbDesc.FindColumnWithID(tbDesc.GetPrimaryIndex().GetKeyColumnID(idx))
+						col, err := catalog.MustFindColumnByID(tbDesc, tbDesc.GetPrimaryIndex().GetKeyColumnID(idx))
 						require.NoError(t, err)
 						placeholders = append(placeholders, fmt.Sprintf("$%d", idx+1))
 

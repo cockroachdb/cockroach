@@ -375,7 +375,7 @@ func hasNewPrimaryIndexWithNoVisibleColumnChanges(
 
 		for i, n := 0, idx.NumPrimaryStoredColumns(); i < n; i++ {
 			colID := idx.GetStoredColumnID(i)
-			col, _ := tab.FindColumnWithID(colID)
+			col := catalog.FindColumnByID(tab, colID)
 
 			// If specific columns are targeted, then only consider the column if it is targeted.
 			if col.Public() && (!hasSpecificColumnTargets || targetedCols.Contains(int(col.GetID()))) {

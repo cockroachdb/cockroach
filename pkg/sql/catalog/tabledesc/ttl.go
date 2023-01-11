@@ -102,7 +102,7 @@ func ValidateTTLExpirationColumn(desc catalog.TableDescriptor) error {
 		return nil
 	}
 	intervalExpr := desc.GetRowLevelTTL().DurationExpr
-	col, err := desc.FindColumnWithName(colinfo.TTLDefaultExpirationColumnName)
+	col, err := catalog.MustFindColumnByTreeName(desc, colinfo.TTLDefaultExpirationColumnName)
 	if err != nil {
 		return errors.Wrapf(err, "expected column %s", colinfo.TTLDefaultExpirationColumnName)
 	}

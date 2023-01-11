@@ -202,7 +202,7 @@ func iterColDescriptors(
 			return true, expr, nil
 		}
 
-		col, err := desc.FindColumnWithName(c.ColumnName)
+		col, err := catalog.MustFindColumnByTreeName(desc, c.ColumnName)
 		if err != nil || col.Dropped() {
 			return false, nil, pgerror.Newf(pgcode.UndefinedColumn,
 				"column %q does not exist, referenced in %q", c.ColumnName, rootExpr.String())
@@ -313,7 +313,7 @@ func replaceColumnVars(
 	tbl catalog.TableDescriptor, rootExpr tree.Expr,
 ) (tree.Expr, catalog.TableColSet, error) {
 	lookupFn := func(columnName tree.Name) (exists bool, accessible bool, id catid.ColumnID, typ *types.T) {
-		col, err := tbl.FindColumnWithName(columnName)
+		col, err := catalog.MustFindColumnByTreeName(tbl, columnName)
 		if err != nil || col.Dropped() {
 			return false, false, 0, nil
 		}
