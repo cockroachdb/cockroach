@@ -500,7 +500,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 			droppedViews = append(droppedViews, colDroppedViews...)
 		case *tree.AlterTableDropConstraint:
 			name := string(t.Constraint)
-			c, _ := n.tableDesc.FindConstraintWithName(name)
+			c := catalog.FindConstraintByName(n.tableDesc, name)
 			if c == nil {
 				if t.IfExists {
 					continue
@@ -520,7 +520,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 
 		case *tree.AlterTableValidateConstraint:
 			name := string(t.Constraint)
-			c, _ := n.tableDesc.FindConstraintWithName(name)
+			c := catalog.FindConstraintByName(n.tableDesc, name)
 			if c == nil {
 				return pgerror.Newf(pgcode.UndefinedObject,
 					"constraint %q of relation %q does not exist", t.Constraint, n.tableDesc.Name)
@@ -746,7 +746,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 			descriptorChanged = descriptorChanged || descChanged
 
 		case *tree.AlterTableRenameConstraint:
-			constraint, _ := n.tableDesc.FindConstraintWithName(string(t.Constraint))
+			constraint := catalog.FindConstraintByName(n.tableDesc, string(t.Constraint))
 			if constraint == nil {
 				return pgerror.Newf(pgcode.UndefinedObject,
 					"constraint %q of relation %q does not exist", tree.ErrString(&t.Constraint), n.tableDesc.Name)
@@ -763,7 +763,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 				return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 					"constraint %q in the middle of being dropped", t.Constraint)
 			}
-			if other, _ := n.tableDesc.FindConstraintWithName(string(t.NewName)); other != nil {
+			if other := catalog.FindConstraintByName(n.tableDesc, string(t.NewName)); other != nil {
 				return pgerror.Newf(pgcode.DuplicateObject,
 					"duplicate constraint name: %q", tree.ErrString(&t.NewName))
 			}
@@ -1452,7 +1452,7 @@ func validateConstraintNameIsNotUsed(
 	if name == "" {
 		return false, nil
 	}
-	constraint, _ := tableDesc.FindConstraintWithName(string(name))
+	constraint := catalog.FindConstraintByName(tableDesc, string(name))
 	if constraint == nil {
 		return false, nil
 	}

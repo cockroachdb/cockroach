@@ -58,7 +58,7 @@ func (p *planner) CommentOnConstraint(
 
 func (n *commentOnConstraintNode) startExec(params runParams) error {
 	constraintName := string(n.n.Constraint)
-	constraint, _ := n.tableDesc.FindConstraintWithName(constraintName)
+	constraint := catalog.FindConstraintByName(n.tableDesc, constraintName)
 	if constraint == nil {
 		return pgerror.Newf(pgcode.UndefinedObject,
 			"constraint %q of relation %q does not exist", constraintName, n.tableDesc.GetName())

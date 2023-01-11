@@ -409,7 +409,7 @@ func showComments(
 
 	for _, constraintComment := range tc.constraints {
 		f.WriteString(";\n")
-		c, err := table.FindConstraintWithID(descpb.ConstraintID(constraintComment.subID))
+		c, err := catalog.MustFindConstraintByID(table, descpb.ConstraintID(constraintComment.subID))
 		if err != nil {
 			return err
 		}
