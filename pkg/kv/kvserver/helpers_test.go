@@ -70,7 +70,7 @@ func (s *Store) AddReplica(repl *Replica) error {
 	if err := s.addReplicaToRangeMapLocked(repl); err != nil {
 		return err
 	}
-	if err := s.addReplicaInternalLocked(repl); err != nil {
+	if err := s.addToReplicasByKeyLocked(repl); err != nil {
 		return err
 	}
 	s.metrics.ReplicaCount.Inc(1)
