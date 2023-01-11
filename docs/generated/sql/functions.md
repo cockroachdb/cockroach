@@ -3338,6 +3338,8 @@ table. Returns an error if validation fails.</p>
 <table>
 <thead><tr><th>Function &rarr; Returns</th><th>Description</th><th>Volatility</th></tr></thead>
 <tbody>
+<tr><td><a name="col_description"></a><code>col_description(table_oid: oid, column_number: <a href="int.html">int</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the comment for a table column, which is specified by the OID of its table and its column number. (obj_description cannot be used for table columns, since columns do not have OIDs of their own.)</p>
+</span></td><td>Stable</td></tr>
 <tr><td><a name="current_setting"></a><code>current_setting(setting_name: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>System info</p>
 </span></td><td>Stable</td></tr>
 <tr><td><a name="current_setting"></a><code>current_setting(setting_name: <a href="string.html">string</a>, missing_ok: <a href="bool.html">bool</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>System info</p>
@@ -3508,6 +3510,10 @@ table. Returns an error if validation fails.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="information_schema._pg_numeric_scale"></a><code>information_schema._pg_numeric_scale(typid: oid, typmod: int4) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Returns the scale of the given type with type modifier</p>
 </span></td><td>Immutable</td></tr>
+<tr><td><a name="obj_description"></a><code>obj_description(object_oid: oid) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the comment for a database object specified by its OID alone. This is deprecated since there is no guarantee that OIDs are unique across different system catalogs; therefore, the wrong comment might be returned.</p>
+</span></td><td>Stable</td></tr>
+<tr><td><a name="obj_description"></a><code>obj_description(object_oid: oid, catalog_name: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the comment for a database object specified by its OID and the name of the containing system catalog. For example, obj_description(123456, ‘pg_class’) would retrieve the comment for the table with OID 123456.</p>
+</span></td><td>Stable</td></tr>
 <tr><td><a name="oid"></a><code>oid(int: <a href="int.html">int</a>) &rarr; oid</code></td><td><span class="funcdesc"><p>Converts an integer to an OID.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="pg_backend_pid"></a><code>pg_backend_pid() &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Returns a numerical ID attached to this session. This ID is part of the query cancellation key used by the wire protocol. This function was only added for compatibility, and unlike in Postgres, the returned value does not correspond to a real process ID.</p>
@@ -3559,6 +3565,8 @@ table. Returns an error if validation fails.</p>
 <tr><td><a name="pg_type_is_visible"></a><code>pg_type_is_visible(oid: oid) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns whether the type with the given OID belongs to one of the schemas on the search path.</p>
 </span></td><td>Stable</td></tr>
 <tr><td><a name="set_config"></a><code>set_config(setting_name: <a href="string.html">string</a>, new_value: <a href="string.html">string</a>, is_local: <a href="bool.html">bool</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>System info</p>
-</span></td><td>Volatile</td></tr></tbody>
+</span></td><td>Volatile</td></tr>
+<tr><td><a name="shobj_description"></a><code>shobj_description(object_oid: oid, catalog_name: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the comment for a shared database object specified by its OID and the name of the containing system catalog. This is just like obj_description except that it is used for retrieving comments on shared objects (e.g. databases).</p>
+</span></td><td>Stable</td></tr></tbody>
 </table>
 

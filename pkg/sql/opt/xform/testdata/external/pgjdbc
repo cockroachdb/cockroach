@@ -34,35 +34,80 @@ WHERE
     t.typnamespace = n.oid AND n.nspname != 'pg_catalog';
 ----
 project
- ├── columns: type_cat:71 type_schem:35!null type_name:3!null class_name:71 data_type:72 remarks:73 base_type:74
- ├── stable
+ ├── columns: type_cat:71 type_schem:35!null type_name:3!null class_name:71 data_type:72 remarks:122 base_type:123
  ├── fd: ()-->(71)
  ├── ensure-distinct-on
- │    ├── columns: t.oid:2!null t.typname:3!null t.typtype:8 nspname:35!null case:70 rownum:75!null
- │    ├── grouping columns: rownum:75!null
+ │    ├── columns: t.typname:3!null t.typtype:8 nspname:35!null case:70 description:79 rownum:124!null
+ │    ├── grouping columns: rownum:124!null
  │    ├── error: "more than one row returned by a subquery used as an expression"
- │    ├── key: (75)
- │    ├── fd: (75)-->(2,3,8,35,70)
+ │    ├── key: (124)
+ │    ├── fd: (124)-->(3,8,35,70,79)
  │    ├── left-join (hash)
- │    │    ├── columns: t.oid:2!null t.typname:3!null t.typnamespace:4!null t.typtype:8 t.typbasetype:26 n.oid:34!null nspname:35!null pg_catalog.pg_type.oid:39 case:70 rownum:75!null
- │    │    ├── fd: (4)==(34), (34)==(4), (75)-->(2-4,8,26,34,35)
- │    │    ├── ordinality
- │    │    │    ├── columns: t.oid:2!null t.typname:3!null t.typnamespace:4!null t.typtype:8 t.typbasetype:26 n.oid:34!null nspname:35!null rownum:75!null
- │    │    │    ├── key: (75)
- │    │    │    ├── fd: (4)==(34), (34)==(4), (75)-->(2-4,8,26,34,35)
- │    │    │    └── inner-join (hash)
- │    │    │         ├── columns: t.oid:2!null t.typname:3!null t.typnamespace:4!null t.typtype:8 t.typbasetype:26 n.oid:34!null nspname:35!null
- │    │    │         ├── fd: (4)==(34), (34)==(4)
- │    │    │         ├── scan pg_type [as=t]
- │    │    │         │    └── columns: t.oid:2!null t.typname:3!null t.typnamespace:4 t.typtype:8 t.typbasetype:26
- │    │    │         ├── select
- │    │    │         │    ├── columns: n.oid:34 nspname:35!null
- │    │    │         │    ├── scan pg_namespace [as=n]
- │    │    │         │    │    └── columns: n.oid:34 nspname:35!null
- │    │    │         │    └── filters
- │    │    │         │         └── nspname:35 != 'pg_catalog' [outer=(35), constraints=(/35: (/NULL - /'pg_catalog') [/e'pg_catalog\x00' - ]; tight)]
- │    │    │         └── filters
- │    │    │              └── t.typnamespace:4 = n.oid:34 [outer=(4,34), constraints=(/4: (/NULL - ]; /34: (/NULL - ]), fd=(4)==(34), (34)==(4)]
+ │    │    ├── columns: t.typname:3!null t.typtype:8 t.typbasetype:26 nspname:35!null pg_catalog.pg_type.oid:39 case:70 description:79 rownum:124!null
+ │    │    ├── fd: (124)-->(3,8,26,35,79)
+ │    │    ├── distinct-on
+ │    │    │    ├── columns: t.typname:3!null t.typtype:8 t.typbasetype:26 nspname:35!null description:79 rownum:124!null
+ │    │    │    ├── grouping columns: rownum:124!null
+ │    │    │    ├── key: (124)
+ │    │    │    ├── fd: (124)-->(3,8,26,35,79)
+ │    │    │    ├── left-join (hash)
+ │    │    │    │    ├── columns: t.oid:2!null t.typname:3!null t.typnamespace:4!null t.typtype:8 t.typbasetype:26 n.oid:34!null nspname:35!null objoid:76 classoid:77 objsubid:78 description:79 c.oid:81 relname:82 relnamespace:83 n.oid:118 nspname:119 rownum:124!null
+ │    │    │    │    ├── fd: (4)==(34), (34)==(4), (124)-->(2-4,8,26,34,35), (77)==(81), (81)==(77), (83)==(118), (118)==(83)
+ │    │    │    │    ├── ordinality
+ │    │    │    │    │    ├── columns: t.oid:2!null t.typname:3!null t.typnamespace:4!null t.typtype:8 t.typbasetype:26 n.oid:34!null nspname:35!null rownum:124!null
+ │    │    │    │    │    ├── key: (124)
+ │    │    │    │    │    ├── fd: (4)==(34), (34)==(4), (124)-->(2-4,8,26,34,35)
+ │    │    │    │    │    └── inner-join (hash)
+ │    │    │    │    │         ├── columns: t.oid:2!null t.typname:3!null t.typnamespace:4!null t.typtype:8 t.typbasetype:26 n.oid:34!null nspname:35!null
+ │    │    │    │    │         ├── fd: (4)==(34), (34)==(4)
+ │    │    │    │    │         ├── scan pg_type [as=t]
+ │    │    │    │    │         │    └── columns: t.oid:2!null t.typname:3!null t.typnamespace:4 t.typtype:8 t.typbasetype:26
+ │    │    │    │    │         ├── select
+ │    │    │    │    │         │    ├── columns: n.oid:34 nspname:35!null
+ │    │    │    │    │         │    ├── scan pg_namespace [as=n]
+ │    │    │    │    │         │    │    └── columns: n.oid:34 nspname:35!null
+ │    │    │    │    │         │    └── filters
+ │    │    │    │    │         │         └── nspname:35 != 'pg_catalog' [outer=(35), constraints=(/35: (/NULL - /'pg_catalog') [/e'pg_catalog\x00' - ]; tight)]
+ │    │    │    │    │         └── filters
+ │    │    │    │    │              └── t.typnamespace:4 = n.oid:34 [outer=(4,34), constraints=(/4: (/NULL - ]; /34: (/NULL - ]), fd=(4)==(34), (34)==(4)]
+ │    │    │    │    ├── inner-join (hash)
+ │    │    │    │    │    ├── columns: objoid:76 classoid:77!null objsubid:78!null description:79 c.oid:81!null relname:82!null relnamespace:83!null n.oid:118!null nspname:119!null
+ │    │    │    │    │    ├── fd: ()-->(78,82,119), (77)==(81), (81)==(77), (83)==(118), (118)==(83)
+ │    │    │    │    │    ├── inner-join (lookup pg_class@pg_class_oid_idx [as=c])
+ │    │    │    │    │    │    ├── columns: objoid:76 classoid:77!null objsubid:78!null description:79 c.oid:81!null relname:82!null relnamespace:83
+ │    │    │    │    │    │    ├── key columns: [77] = [81]
+ │    │    │    │    │    │    ├── fd: ()-->(78,82), (77)==(81), (81)==(77)
+ │    │    │    │    │    │    ├── select
+ │    │    │    │    │    │    │    ├── columns: objoid:76 classoid:77 objsubid:78!null description:79
+ │    │    │    │    │    │    │    ├── fd: ()-->(78)
+ │    │    │    │    │    │    │    ├── scan pg_description [as=d]
+ │    │    │    │    │    │    │    │    └── columns: objoid:76 classoid:77 objsubid:78 description:79
+ │    │    │    │    │    │    │    └── filters
+ │    │    │    │    │    │    │         └── objsubid:78 = 0 [outer=(78), constraints=(/78: [/0 - /0]; tight), fd=()-->(78)]
+ │    │    │    │    │    │    └── filters
+ │    │    │    │    │    │         └── relname:82 = 'pg_type' [outer=(82), constraints=(/82: [/'pg_type' - /'pg_type']; tight), fd=()-->(82)]
+ │    │    │    │    │    ├── select
+ │    │    │    │    │    │    ├── columns: n.oid:118 nspname:119!null
+ │    │    │    │    │    │    ├── fd: ()-->(119)
+ │    │    │    │    │    │    ├── scan pg_namespace [as=n]
+ │    │    │    │    │    │    │    └── columns: n.oid:118 nspname:119!null
+ │    │    │    │    │    │    └── filters
+ │    │    │    │    │    │         └── nspname:119 = 'pg_catalog' [outer=(119), constraints=(/119: [/'pg_catalog' - /'pg_catalog']; tight), fd=()-->(119)]
+ │    │    │    │    │    └── filters
+ │    │    │    │    │         └── relnamespace:83 = n.oid:118 [outer=(83,118), constraints=(/83: (/NULL - ]; /118: (/NULL - ]), fd=(83)==(118), (118)==(83)]
+ │    │    │    │    └── filters
+ │    │    │    │         └── objoid:76 = t.oid:2 [outer=(2,76), constraints=(/2: (/NULL - ]; /76: (/NULL - ]), fd=(2)==(76), (76)==(2)]
+ │    │    │    └── aggregations
+ │    │    │         ├── const-agg [as=t.typname:3, outer=(3)]
+ │    │    │         │    └── t.typname:3
+ │    │    │         ├── const-agg [as=t.typtype:8, outer=(8)]
+ │    │    │         │    └── t.typtype:8
+ │    │    │         ├── const-agg [as=t.typbasetype:26, outer=(26)]
+ │    │    │         │    └── t.typbasetype:26
+ │    │    │         ├── const-agg [as=nspname:35, outer=(35)]
+ │    │    │         │    └── nspname:35
+ │    │    │         └── first-agg [as=description:79, outer=(79)]
+ │    │    │              └── description:79
  │    │    ├── project
  │    │    │    ├── columns: case:70!null pg_catalog.pg_type.oid:39!null
  │    │    │    ├── scan pg_type
@@ -72,21 +117,21 @@ project
  │    │    └── filters
  │    │         └── pg_catalog.pg_type.oid:39 = t.typbasetype:26 [outer=(26,39), constraints=(/26: (/NULL - ]; /39: (/NULL - ]), fd=(26)==(39), (39)==(26)]
  │    └── aggregations
- │         ├── const-agg [as=t.oid:2, outer=(2)]
- │         │    └── t.oid:2
  │         ├── const-agg [as=t.typname:3, outer=(3)]
  │         │    └── t.typname:3
  │         ├── const-agg [as=t.typtype:8, outer=(8)]
  │         │    └── t.typtype:8
  │         ├── const-agg [as=nspname:35, outer=(35)]
  │         │    └── nspname:35
- │         └── const-agg [as=case:70, outer=(70)]
- │              └── case:70
+ │         ├── const-agg [as=case:70, outer=(70)]
+ │         │    └── case:70
+ │         └── const-agg [as=description:79, outer=(79)]
+ │              └── description:79
  └── projections
       ├── NULL [as=type_cat:71]
       ├── CASE WHEN t.typtype:8 = 'c' THEN 'STRUCT' ELSE 'DISTINCT' END [as=data_type:72, outer=(8)]
-      ├── obj_description(t.oid:2, 'pg_type') [as=remarks:73, outer=(2), stable]
-      └── CASE WHEN t.typtype:8 = 'd' THEN case:70 ELSE CAST(NULL AS STRING) END [as=base_type:74, outer=(8,70)]
+      ├── description:79 [as=remarks:122, outer=(79)]
+      └── CASE WHEN t.typtype:8 = 'd' THEN case:70 ELSE CAST(NULL AS STRING) END [as=base_type:123, outer=(8,70)]
 
 
 # Regression test for #55140. Avoid lookup joins for virtual tables.

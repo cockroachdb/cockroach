@@ -16,7 +16,7 @@ func BenchmarkORMQueries(b *testing.B) { reg.Run(b) }
 func init() {
 	reg.Register("ORMQueries", []RoundTripBenchTestCase{
 		{
-			Name:  "django table introspection 1 table",
+			Name:  "django column introspection 1 table",
 			Setup: `CREATE TABLE t1(a int primary key, b int);`,
 			Stmt: `SELECT
     a.attname AS column_name,
@@ -35,7 +35,7 @@ WHERE (
 		},
 
 		{
-			Name: "django table introspection 4 tables",
+			Name: "django column introspection 4 tables",
 			Setup: `CREATE TABLE t1(a int primary key, b int);
 CREATE TABLE t2(a int primary key, b int);
 CREATE TABLE t3(a int primary key, b int);
@@ -57,7 +57,7 @@ WHERE (
 		},
 
 		{
-			Name: "django table introspection 8 tables",
+			Name: "django column introspection 8 tables",
 			Setup: `CREATE TABLE t1(a int primary key, b int);
 CREATE TABLE t2(a int primary key, b int);
 CREATE TABLE t3(a int primary key, b int);
@@ -80,6 +80,49 @@ WHERE (
         (c.relname = '<target table>')
     ) AND (n.nspname NOT IN ('pg_catalog', 'pg_toast'))
 ) AND pg_table_is_visible(c.oid)`,
+		},
+
+		{
+			Name:  "django table introspection 1 table",
+			Setup: `CREATE TABLE t1(a int primary key, b int);`,
+			Stmt: `SELECT
+    c.relname,
+    CASE
+        WHEN c.relispartition THEN 'p'
+        WHEN c.relkind IN ('m', 'v') THEN 'v'
+        ELSE 't'
+    END,
+    obj_description(c.oid)
+FROM pg_catalog.pg_class c
+LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+WHERE c.relkind IN ('f', 'm', 'p', 'r', 'v')
+    AND n.nspname NOT IN ('pg_catalog', 'pg_toast')
+    AND pg_catalog.pg_table_is_visible(c.oid)`,
+		},
+
+		{
+			Name: "django table introspection 8 tables",
+			Setup: `CREATE TABLE t1(a int primary key, b int);
+CREATE TABLE t2(a int primary key, b int);
+CREATE TABLE t3(a int primary key, b int);
+CREATE TABLE t4(a int primary key, b int);
+CREATE TABLE t5(a int primary key, b int);
+CREATE TABLE t6(a int primary key, b int);
+CREATE TABLE t7(a int primary key, b int);
+CREATE TABLE t8(a int primary key, b int);`,
+			Stmt: `SELECT
+    c.relname,
+    CASE
+        WHEN c.relispartition THEN 'p'
+        WHEN c.relkind IN ('m', 'v') THEN 'v'
+        ELSE 't'
+    END,
+    obj_description(c.oid)
+FROM pg_catalog.pg_class c
+LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+WHERE c.relkind IN ('f', 'm', 'p', 'r', 'v')
+    AND n.nspname NOT IN ('pg_catalog', 'pg_toast')
+    AND pg_catalog.pg_table_is_visible(c.oid)`,
 		},
 
 		{
@@ -254,9 +297,8 @@ ORDER BY relname DESC, input`,
 		},
 
 		{
-			Name:      "hasura column descriptions",
-			SkipIssue: 88885,
-			Setup:     "CREATE TABLE t(a INT PRIMARY KEY)",
+			Name:  "hasura column descriptions",
+			Setup: "CREATE TABLE t(a INT PRIMARY KEY)",
 			Stmt: `WITH
   "tabletable" as ( SELECT "table".oid,
            "table".relkind,
@@ -284,8 +326,7 @@ LEFT JOIN LATERAL
 		},
 
 		{
-			Name:      "hasura column descriptions 8 tables",
-			SkipIssue: 88885,
+			Name: "hasura column descriptions 8 tables",
 			Setup: `CREATE TABLE t1(a int primary key, b int);
 CREATE TABLE t2(a int primary key, b int);
 CREATE TABLE t3(a int primary key, b int);
