@@ -807,10 +807,7 @@ func (r *Replica) clearSubsumedReplicaDiskData(
 	getKeySpans := func(d *roachpb.RangeDescriptor) []roachpb.Span {
 		return rditer.Select(d.RangeID, rditer.SelectionOptions{
 			StateMachineSelectionOptions: rditer.StateMachineSelectionOptions{
-				ReplicatedBySpan: roachpb.RSpan{
-					Key:    d.StartKey,
-					EndKey: d.EndKey,
-				},
+				ReplicatedBySpan: d.RSpan(),
 			},
 		}).Spans()
 	}
