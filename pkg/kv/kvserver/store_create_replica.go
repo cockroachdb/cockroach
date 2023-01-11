@@ -361,12 +361,12 @@ func fromReplicaIsTooOldRLocked(toReplica *Replica, fromReplica *roachpb.Replica
 	return !found && fromReplica.ReplicaID < desc.NextReplicaID
 }
 
-// addReplicaInternalLocked adds the replica to the replicasByKey btree. The
+// addToReplicasByKeyLocked adds the replica to the replicasByKey btree. The
 // replica must already be in replicasByRangeID. Requires that Store.mu is held.
 //
 // Returns an error if a different replica with the same range ID, or an
 // overlapping replica or placeholder exists in this Store.
-func (s *Store) addReplicaInternalLocked(repl *Replica) error {
+func (s *Store) addToReplicasByKeyLocked(repl *Replica) error {
 	if !repl.IsInitialized() {
 		return errors.Errorf("attempted to add uninitialized replica %s", repl)
 	}
@@ -375,11 +375,11 @@ func (s *Store) addReplicaInternalLocked(repl *Replica) error {
 	}
 
 	if it := s.getOverlappingKeyRangeLocked(repl.Desc()); it.item != nil {
-		return errors.Errorf("%s: cannot addReplicaInternalLocked; range %s has overlapping range %s", s, repl, it.Desc())
+		return errors.Errorf("%s: cannot addToReplicasByKeyLocked; range %s has overlapping range %s", s, repl, it.Desc())
 	}
 
 	if it := s.mu.replicasByKey.ReplaceOrInsertReplica(context.Background(), repl); it.item != nil {
-		return errors.Errorf("%s: cannot addReplicaInternalLocked; range for key %v already exists in replicasByKey btree", s,
+		return errors.Errorf("%s: cannot addToReplicasByKeyLocked; range for key %v already exists in replicasByKey btree", s,
 			it.item.key())
 	}
 

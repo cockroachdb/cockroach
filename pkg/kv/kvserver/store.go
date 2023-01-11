@@ -1897,7 +1897,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		// TODO(pavelkalinnikov): addReplicaToRangeMapLocked needs a locked repl.mu.
 		err = s.addReplicaToRangeMapLocked(rep)
 		if err == nil {
-			err = s.addReplicaInternalLocked(rep)
+			err = s.addToReplicasByKeyLocked(rep)
 		}
 		s.mu.Unlock()
 		if err != nil {
