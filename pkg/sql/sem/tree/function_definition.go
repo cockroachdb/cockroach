@@ -276,8 +276,9 @@ func (fd *ResolvedFunctionDefinition) MatchOverload(
 	paramTypes []*types.T, explicitSchema string, searchPath SearchPath,
 ) (QualifiedOverload, error) {
 	matched := func(ol QualifiedOverload, schema string) bool {
-		return schema == ol.Schema && (paramTypes == nil || ol.params().Match(paramTypes))
+		return schema == ol.Schema && (paramTypes == nil || ol.params().MatchExact(paramTypes))
 	}
+
 	typeNames := func() string {
 		ns := make([]string, len(paramTypes))
 		for i, t := range paramTypes {

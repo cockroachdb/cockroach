@@ -1959,6 +1959,10 @@ func (t *T) Equivalent(other *T) bool {
 			}
 		}
 
+		if t.Width() != other.Width() {
+			return false
+		}
+
 	case TupleFamily:
 		// If either tuple is the wildcard tuple, it's equivalent to any other
 		// tuple type. This allows overloads to specify that they take an arbitrary
@@ -1991,6 +1995,55 @@ func (t *T) Equivalent(other *T) bool {
 		}
 	}
 
+	return true
+}
+
+func (t *T) EquivalentExact(other *T) bool {
+	if t.Family() == AnyFamily || other.Family() == AnyFamily {
+		return true
+	}
+	if t.Family() != other.Family() {
+		return false
+	}
+
+	switch t.Family() {
+	case IntFamily:
+		if t.Width() != other.Width() {
+			return false
+		}
+	case FloatFamily:
+		if t.Width() != other.Width() {
+			return false
+		}
+	case DateFamily:
+		if t.Width() != other.Width() {
+			return false
+		}
+	case TimestampFamily:
+		if t.Width() != other.Width() {
+			return false
+		}
+	case IntervalFamily:
+		if t.Width() != other.Width() {
+			return false
+		}
+	case BytesFamily:
+		if t.Width() != other.Width() {
+			return false
+		}
+	case TimestampTZFamily:
+		if t.Width() != other.Width() {
+			return false
+		}
+	case INetFamily:
+		if t.Width() != other.Width() {
+			return false
+		}
+	case CollatedStringFamily:
+		if t.Width() != other.Width() {
+			return false
+		}
+	}
 	return true
 }
 
