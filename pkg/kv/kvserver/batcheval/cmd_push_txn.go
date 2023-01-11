@@ -219,14 +219,12 @@ func PushTxn(
 		reply.PusheeTxn.Status = roachpb.PENDING
 		reply.PusheeTxn.InFlightWrites = nil
 		// If the pusher is aware that the pushee's currently recorded attempt
-		// at a parallel commit failed but the transaction's epoch has not yet
-		// been incremented, upgrade PUSH_TIMESTAMPs to PUSH_ABORTs. We don't
-		// want to move the transaction back to PENDING in the same epoch, as
-		// this is not (currently) allowed by the recovery protocol. We also
-		// don't want to move the transaction to a new timestamp while retaining
-		// the STAGING status, as this could allow the transaction to enter an
-		// implicit commit state without its knowledge, leading to atomicity
-		// violations.
+		// at a parallel commit failed, upgrade PUSH_TIMESTAMPs to PUSH_ABORTs.
+		// We don't want to move the transaction back to PENDING, as this is not
+		// (currently) allowed by the recovery protocol. We also don't want to
+		// move the transaction to a new timestamp while retaining the STAGING
+		// status, as this could allow the transaction to enter an implicit
+		// commit state without its knowledge, leading to atomicity violations.
 		//
 		// This has no effect on pushes that fail with a TransactionPushError.
 		// Such pushes will still wait on the pushee to retry its commit and
@@ -236,7 +234,7 @@ func PushTxn(
 		// cases, the push acts the same as a short-circuited transaction
 		// recovery process, because the transaction recovery procedure always
 		// finalizes target transactions, even if initiated by a PUSH_TIMESTAMP.
-		if !knownHigherEpoch && pushType == roachpb.PUSH_TIMESTAMP {
+		if pushType == roachpb.PUSH_TIMESTAMP {
 			pushType = roachpb.PUSH_ABORT
 		}
 	}
@@ -306,6 +304,10 @@ func PushTxn(
 			reply.PusheeTxn.WriteTimestamp.Forward(reply.PusheeTxn.LastActive())
 		}
 	case roachpb.PUSH_TIMESTAMP:
+		if existTxn.Status != roachpb.PENDING {
+			return result.Result{}, errors.AssertionFailedf(
+				"PUSH_TIMESTAMP succeeded against non-PENDING txn: %v", existTxn)
+		}
 		// Otherwise, update timestamp to be one greater than the request's
 		// timestamp. This new timestamp will be use to update the read timestamp
 		// cache. If the transaction record was not already present then we rely on
