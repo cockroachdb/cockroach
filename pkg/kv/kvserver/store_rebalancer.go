@@ -16,6 +16,7 @@ import (
 	"math/rand"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/load"
@@ -24,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
+	"github.com/cockroachdb/cockroach/pkg/util/grunning"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -85,17 +87,16 @@ var LoadBasedRebalancingMode = settings.RegisterEnumSetting(
 
 // LoadBasedRebalancingDimension controls what dimension rebalancing takes into
 // account.
-// NB: This value is set to private on purpose, as this cluster setting is a
-// noop at the moment.
 var LoadBasedRebalancingDimension = settings.RegisterEnumSetting(
 	settings.SystemOnly,
 	"kv.allocator.load_based_rebalancing_dimension",
 	"what dimension of load does rebalancing consider",
-	"qps",
+	"store_cpu",
 	map[int64]string{
-		int64(LBRebalancingQueries): "qps",
+		int64(LBRebalancingQueries):  "qps",
+		int64(LBRebalancingStoreCPU): "store_cpu",
 	},
-)
+).WithPublic()
 
 // LBRebalancingMode controls if and when we do store-level rebalancing
 // based on load.
@@ -119,12 +120,48 @@ type LBRebalancingDimension int64
 const (
 	// LBRebalancingQueries is a rebalancing mode that balances queries (QPS).
 	LBRebalancingQueries LBRebalancingDimension = iota
+
+	// LBRebalancingStoreCPU is a rebalance mode that balances the store CPU
+	// usage. The store cpu usage is calculated as the sum of replica's cpu
+	// usage on the store.
+	LBRebalancingStoreCPU
 )
+
+// LoadBasedRebalancingObjective returns the load based rebalancing objective
+// for the cluster. In cases where a first objective cannot be used, it will
+// return a fallback.
+func LoadBasedRebalancingObjective(
+	ctx context.Context, st *cluster.Settings,
+) LBRebalancingDimension {
+	set := LoadBasedRebalancingDimension.Get(&st.SV)
+	// Queries should always be supported, return early if set.
+	if set == int64(LBRebalancingQueries) {
+		return LBRebalancingQueries
+	}
+	// When the cluster version hasn't finalized to 23.1, some unupgraded
+	// stores will not be populating additional fields in their StoreCapacity,
+	// in such cases we cannot balance another objective since the data may not
+	// exist. Fall back to QPS balancing.
+	if st.Version.IsActive(ctx, clusterversion.V23_1AllocatorCPUBalancing) {
+		return LBRebalancingQueries
+	}
+	// When the cpu timekeeping utility is unsupported on this aarch, the cpu
+	// usage cannot be gathered. Fall back to QPS balancing.
+	if !grunning.Supported() {
+		return LBRebalancingQueries
+	}
+	// The cluster is on a supported version and this local store is on aarch
+	// which supported the cpu timekeeping utility, return the cluster setting
+	// as is.
+	return LBRebalancingDimension(set)
+}
 
 func (d LBRebalancingDimension) ToDimension() load.Dimension {
 	switch d {
 	case LBRebalancingQueries:
 		return load.Queries
+	case LBRebalancingStoreCPU:
+		return load.StoreCPU
 	default:
 		panic("unknown dimension")
 	}
@@ -233,6 +270,17 @@ type RebalanceContext struct {
 	hottestRanges, rebalanceCandidates []CandidateReplica
 }
 
+// RebalanceMode returns the mode of the store rebalancer. See
+// LoadBasedRebalancingMode.
+func (sr *StoreRebalancer) RebalanceMode() LBRebalancingMode {
+	return LBRebalancingMode(LoadBasedRebalancingMode.Get(&sr.st.SV))
+}
+
+// RebalanceDimension returns the dimension the store rebalancer is balancing.
+func (sr *StoreRebalancer) RebalanceObjective(ctx context.Context) LBRebalancingDimension {
+	return LoadBasedRebalancingObjective(ctx, sr.st)
+}
+
 // LessThanMaxThresholds returns true if the local store is below the maximum
 // threshold w.r.t the balanced load dimension, false otherwise.
 func (r *RebalanceContext) LessThanMaxThresholds() bool {
@@ -270,14 +318,14 @@ func (sr *StoreRebalancer) Start(ctx context.Context, stopper *stop.Stopper) {
 				timer.Reset(jitteredInterval(allocator.LoadBasedRebalanceInterval.Get(&sr.st.SV)))
 			}
 
-			mode := LBRebalancingMode(LoadBasedRebalancingMode.Get(&sr.st.SV))
+			mode := sr.RebalanceMode()
 			if mode == LBRebalancingOff {
 				continue
 			}
 
 			hottestRanges := sr.replicaRankings.TopLoad()
 			options := sr.scorerOptions(ctx)
-			rctx := sr.NewRebalanceContext(ctx, options, hottestRanges, LBRebalancingMode(LoadBasedRebalancingMode.Get(&sr.st.SV)))
+			rctx := sr.NewRebalanceContext(ctx, options, hottestRanges, sr.RebalanceMode())
 			sr.rebalanceStore(ctx, rctx)
 		}
 	})
@@ -289,7 +337,7 @@ func (sr *StoreRebalancer) Start(ctx context.Context, stopper *stop.Stopper) {
 // Instead, we use our own implementation of `scorerOptions` that promotes load
 // balance.
 func (sr *StoreRebalancer) scorerOptions(ctx context.Context) *allocatorimpl.LoadScorerOptions {
-	lbDimension := LBRebalancingDimension(LoadBasedRebalancingDimension.Get(&sr.st.SV)).ToDimension()
+	lbDimension := sr.RebalanceObjective(ctx).ToDimension()
 	return &allocatorimpl.LoadScorerOptions{
 		StoreHealthOptions:           sr.allocator.StoreHealthOptions(ctx),
 		Deterministic:                sr.storePool.IsDeterministic(),
@@ -323,7 +371,7 @@ func (sr *StoreRebalancer) NewRebalanceContext(
 		return nil
 	}
 
-	dims := LBRebalancingDimension(LoadBasedRebalancingDimension.Get(&sr.st.SV)).ToDimension()
+	dims := sr.RebalanceObjective(ctx).ToDimension()
 	return &RebalanceContext{
 		LocalDesc:     localDesc,
 		loadDimension: dims,

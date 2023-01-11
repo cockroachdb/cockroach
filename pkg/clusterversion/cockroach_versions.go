@@ -395,6 +395,10 @@ const (
 	// V23_1AlterSystemSQLInstancesAddSqlAddr adds a sql_addr column to the
 	// system.sql_instances table.
 	V23_1AlterSystemSQLInstancesAddSQLAddr
+	// V23_1AllocatorCPUBalancing adds balancing CPU usage among stores using
+	// the allocator and store rebalancer. It assumes that at this version,
+	// stores now include their CPU in the StoreCapacity proto when gossiping.
+	V23_1AllocatorCPUBalancing
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -677,6 +681,10 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     V23_1AlterSystemSQLInstancesAddSQLAddr,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 28},
+	},
+	{
+		Key:     V23_1AllocatorCPUBalancing,
+		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 30},
 	},
 
 	// *************************************************
