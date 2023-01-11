@@ -102,6 +102,13 @@ type Builder struct {
 	// by scans. See forUpdateLocking.
 	forceForUpdateLocking bool
 
+	// planLazySubqueries is true if the builder should plan subqueries that are
+	// lazily evaluated as routines instead of a subquery which is evaluated
+	// eagerly before the main query. This is required in cases that cannot be
+	// handled by the subquery execution machinery, e.g., when building
+	// subqueries for statements inside a UDF.
+	planLazySubqueries bool
+
 	// -- output --
 
 	// IsDDL is set to true if the statement contains DDL.
