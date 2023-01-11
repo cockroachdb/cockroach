@@ -1,10 +1,10 @@
 echo
 ----
-Select(nothing):
-Select(RangeID-unreplicated):
+Select({ReplicatedBySpan:/Min ReplicatedByRangeID:false UnreplicatedByRangeID:false}):
+Select({ReplicatedBySpan:/Min ReplicatedByRangeID:false UnreplicatedByRangeID:true}):
   /Local/RangeID/123/{u""-v""}
-Select(RangeID-replicated):
+Select({ReplicatedBySpan:/Min ReplicatedByRangeID:true UnreplicatedByRangeID:false}):
   /Local/RangeID/123/{r""-s""}
-Select(RangeID-replicated, RangeID-unreplicated):
+Select({ReplicatedBySpan:/Min ReplicatedByRangeID:true UnreplicatedByRangeID:true}):
   /Local/RangeID/123/{r""-s""}
   /Local/RangeID/123/{u""-v""}

@@ -1,23 +1,23 @@
 echo
 ----
-Select({/Min-c}):
+Select({ReplicatedBySpan:{/Min-c} ReplicatedByRangeID:false UnreplicatedByRangeID:false}):
   /Local/Range{/Meta1/""-"c"}
   /Local/Lock/Intent/Local/Range{/Meta1/""-"c"}
   /Local/Lock/Intent{/Meta1/""-"c"}
   {/Meta1/-c}
-Select(RangeID-unreplicated, {/Min-c}):
+Select({ReplicatedBySpan:{/Min-c} ReplicatedByRangeID:false UnreplicatedByRangeID:true}):
   /Local/RangeID/123/{u""-v""}
   /Local/Range{/Meta1/""-"c"}
   /Local/Lock/Intent/Local/Range{/Meta1/""-"c"}
   /Local/Lock/Intent{/Meta1/""-"c"}
   {/Meta1/-c}
-Select(RangeID-replicated, {/Min-c}):
+Select({ReplicatedBySpan:{/Min-c} ReplicatedByRangeID:true UnreplicatedByRangeID:false}):
   /Local/RangeID/123/{r""-s""}
   /Local/Range{/Meta1/""-"c"}
   /Local/Lock/Intent/Local/Range{/Meta1/""-"c"}
   /Local/Lock/Intent{/Meta1/""-"c"}
   {/Meta1/-c}
-Select(RangeID-replicated, RangeID-unreplicated, {/Min-c}):
+Select({ReplicatedBySpan:{/Min-c} ReplicatedByRangeID:true UnreplicatedByRangeID:true}):
   /Local/RangeID/123/{r""-s""}
   /Local/RangeID/123/{u""-v""}
   /Local/Range{/Meta1/""-"c"}

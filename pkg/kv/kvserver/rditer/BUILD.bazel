@@ -44,6 +44,7 @@ go_test(
         "//pkg/util/randutil",
         "//pkg/util/uuid",
         "@com_github_olekukonko_tablewriter//:tablewriter",
+        "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
     ],
 )

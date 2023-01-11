@@ -55,26 +55,13 @@ func TestSelect(t *testing.T) {
 			var buf strings.Builder
 			for _, replicatedByRangeID := range []bool{false, true} {
 				for _, unreplicatedByRangeID := range []bool{false, true} {
-					var description []string
-					if replicatedByRangeID {
-						description = append(description, "RangeID-replicated")
-					}
-					if unreplicatedByRangeID {
-						description = append(description, "RangeID-unreplicated")
-					}
-					if !tc.sp.Equal(roachpb.RSpan{}) {
-						description = append(description, tc.sp.String())
-					}
-					if len(description) == 0 {
-						description = append(description, "nothing")
-					}
-					fmt.Fprintf(&buf, "Select(%s):\n", strings.Join(description, ", "))
-
-					sl := Select(roachpb.RangeID(123), SelectOpts{
+					opts := SelectOpts{
 						ReplicatedBySpan:      tc.sp,
 						ReplicatedByRangeID:   replicatedByRangeID,
 						UnreplicatedByRangeID: unreplicatedByRangeID,
-					})
+					}
+					fmt.Fprintf(&buf, "Select(%+v):\n", opts)
+					sl := Select(roachpb.RangeID(123), opts)
 					assert.True(t, sort.SliceIsSorted(sl, func(i, j int) bool {
 						return bytes.Compare(sl[i].EndKey, sl[j].Key) < 0
 					}))
