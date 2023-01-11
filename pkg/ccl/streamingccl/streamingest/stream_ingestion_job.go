@@ -376,16 +376,16 @@ func releaseDestinationTenantProtectedTimestamp(
 func (s *streamIngestionResumer) protectDestinationTenant(
 	ctx context.Context, execCtx interface{},
 ) error {
-	details := s.job.Details().(jobspb.StreamIngestionDetails)
+	oldDetails := s.job.Details().(jobspb.StreamIngestionDetails)
 
 	// If we have already protected the destination tenant keyspan in a previous
 	// resumption of the stream ingestion job, then there is nothing to do.
-	if details.ProtectedTimestampRecordID != nil {
+	if oldDetails.ProtectedTimestampRecordID != nil {
 		return nil
 	}
 
 	execCfg := execCtx.(sql.JobExecContext).ExecCfg()
-	target := ptpb.MakeTenantsTarget([]roachpb.TenantID{details.DestinationTenantID})
+	target := ptpb.MakeTenantsTarget([]roachpb.TenantID{oldDetails.DestinationTenantID})
 	ptsID := uuid.MakeV4()
 	now := execCfg.Clock.Now()
 	return execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
@@ -398,8 +398,11 @@ func (s *streamIngestionResumer) protectDestinationTenant(
 			if err := md.CheckRunningOrReverting(); err != nil {
 				return err
 			}
+
+			details := md.Payload.GetStreamIngestion()
 			details.ProtectedTimestampRecordID = &ptsID
-			md.Payload.Details = jobspb.WrapPayloadDetails(details)
+			oldDetails.ProtectedTimestampRecordID = &ptsID
+
 			ju.UpdatePayload(md.Payload)
 			return nil
 		})
