@@ -118,8 +118,22 @@ func IsSystemTenantID(id uint64) bool {
 type tenantKey struct{}
 
 // NewContextForTenant creates a new context with tenant information attached.
+// An empty tenID clears the respective key from the context.
 func NewContextForTenant(ctx context.Context, tenID TenantID) context.Context {
-	return context.WithValue(ctx, tenantKey{}, tenID)
+	var val any
+	if tenID.IsSet() {
+		val = tenID
+	} else {
+		val = nil
+	}
+
+	ctxTenantID, _ := TenantFromContext(ctx)
+	if tenID == ctxTenantID {
+		// The context already has the right tenant, or no tenant at all.
+		return ctx
+	}
+
+	return context.WithValue(ctx, tenantKey{}, val)
 }
 
 // TenantFromContext returns the tenant information in ctx if it exists.

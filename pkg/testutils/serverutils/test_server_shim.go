@@ -127,9 +127,6 @@ type TestServerInterface interface {
 	// Note: use ServingRPCAddr() instead unless specific reason not to.
 	RPCAddr() string
 
-	// DB returns a *client.DB instance for talking to this KV server.
-	DB() *kv.DB
-
 	// LeaseManager() returns the *sql.LeaseManager as an interface{}.
 	LeaseManager() interface{}
 
