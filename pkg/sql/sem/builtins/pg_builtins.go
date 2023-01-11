@@ -1065,71 +1065,66 @@ var pgBuiltins = map[string]builtinDefinition{
 
 	"col_description": makeBuiltin(defProps(),
 		tree.Overload{
+			IsUDF:      true,
 			Types:      tree.ParamTypes{{Name: "table_oid", Typ: types.Oid}, {Name: "column_number", Typ: types.Int}},
 			ReturnType: tree.FixedReturnType(types.String),
-			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				if args[0] == tree.DNull || args[1] == tree.DNull {
-					return tree.DNull, nil
-				}
-				if colID := *args[1].(*tree.DInt); colID == 0 {
-					// column ID 0 never exists, and we don't want the query
-					// below to pick up the table comment by accident.
-					return tree.DNull, nil
-				}
-				if tabOID := *args[0].(*tree.DOid); tabOID.Oid >= catconstants.MinVirtualID {
-					// Virtual table columns do not have descriptions.
-					return tree.DNull, nil
-				}
-
-				// Note: the following is equivalent to:
-				//
-				// SELECT description FROM pg_catalog.pg_description
-				//  WHERE objoid=$1 AND objsubid=$2 LIMIT 1
-				//
-				// TODO(jordanlewis): Really we'd like to query this directly
-				// on pg_description and let predicate push-down do its job.
-				r, err := evalCtx.Planner.QueryRowEx(
-					ctx, "pg_get_coldesc",
-					sessiondata.NoSessionDataOverride,
-					`
-SELECT comment FROM system.comments c
-WHERE c.type=$1::int AND c.object_id=$2::int AND c.sub_id=$3::int LIMIT 1
-`, catalogkeys.ColumnCommentType, args[0], args[1])
-				if err != nil {
-					return nil, err
-				}
-				if len(r) == 0 {
-					return tree.DNull, nil
-				}
-				return r[0], nil
-			},
-			Info:       notUsableInfo,
+			// Note: the following is equivalent to:
+			//
+			// SELECT description FROM pg_catalog.pg_description
+			//  WHERE objoid=$1 AND objsubid=$2 LIMIT 1
+			//
+			// TODO(jordanlewis): Really we'd like to query this directly
+			// on pg_description and let predicate push-down do its job.
+			Body: fmt.Sprintf(
+				`SELECT comment
+         FROM system.comments c
+				 WHERE c.type=%[1]d
+				 AND c.object_id=$1::int
+				 AND c.sub_id=$2::int
+				 AND $1 < %[2]d /* Virtual table columns do not have descriptions. */
+				 AND $2 != 0 /* Column ID 0 never exists, and we don't want the query
+					              to pick up the table comment by accident. */
+				 LIMIT 1`,
+				catalogkeys.ColumnCommentType,
+				catconstants.MinVirtualID),
+			Info: "Returns the comment for a table column, which is specified by the OID of its table and its column number. " +
+				"(obj_description cannot be used for table columns, since columns do not have OIDs of their own.)",
 			Volatility: volatility.Stable,
 		},
 	),
 
 	"obj_description": makeBuiltin(defProps(),
 		tree.Overload{
+			IsUDF:      true,
 			Types:      tree.ParamTypes{{Name: "object_oid", Typ: types.Oid}},
 			ReturnType: tree.FixedReturnType(types.String),
-			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				return getPgObjDesc(ctx, evalCtx, "", args[0].(*tree.DOid).Oid)
-			},
-			Info:       notUsableInfo,
+			Body: `SELECT description
+						 FROM pg_catalog.pg_description
+						 WHERE objoid = $1
+						 AND objsubid = 0
+						 LIMIT 1`,
+			Info: "Returns the comment for a database object specified by its OID alone. " +
+				"This is deprecated since there is no guarantee that OIDs are unique across different system catalogs; " +
+				"therefore, the wrong comment might be returned.",
 			Volatility: volatility.Stable,
 		},
 		tree.Overload{
+			IsUDF:      true,
 			Types:      tree.ParamTypes{{Name: "object_oid", Typ: types.Oid}, {Name: "catalog_name", Typ: types.String}},
 			ReturnType: tree.FixedReturnType(types.String),
-			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				return getPgObjDesc(
-					ctx,
-					evalCtx,
-					string(tree.MustBeDString(args[1])),
-					args[0].(*tree.DOid).Oid,
-				)
-			},
-			Info:       notUsableInfo,
+			Body: `SELECT d.description
+							FROM pg_catalog.pg_description d
+							JOIN pg_catalog.pg_class c
+							ON d.classoid = c.oid
+							JOIN pg_catalog.pg_namespace n
+							ON c.relnamespace = n.oid
+							WHERE d.objoid = $1
+							AND c.relname = $2
+							AND n.nspname = 'pg_catalog'
+							AND d.objsubid = 0
+							LIMIT 1`,
+			Info: "Returns the comment for a database object specified by its OID and the name of the containing system catalog. " +
+				"For example, obj_description(123456, 'pg_class') would retrieve the comment for the table with OID 123456.",
 			Volatility: volatility.Stable,
 		},
 	),
@@ -1148,39 +1143,21 @@ WHERE c.type=$1::int AND c.object_id=$2::int AND c.sub_id=$3::int LIMIT 1
 
 	"shobj_description": makeBuiltin(defProps(),
 		tree.Overload{
+			IsUDF:      true,
 			Types:      tree.ParamTypes{{Name: "object_oid", Typ: types.Oid}, {Name: "catalog_name", Typ: types.String}},
 			ReturnType: tree.FixedReturnType(types.String),
-			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				catalogName := string(tree.MustBeDString(args[1]))
-				objOid := args[0].(*tree.DOid).Oid
-
-				classOid, ok := getCatalogOidForComments(catalogName)
-				if !ok {
-					// No such catalog - return null, matching pg.
-					return tree.DNull, nil
-				}
-
-				r, err := evalCtx.Planner.QueryRowEx(
-					ctx, "pg_get_shobjdesc",
-					sessiondata.NoSessionDataOverride,
-					fmt.Sprintf(`
-SELECT description
-  FROM pg_catalog.pg_shdescription
- WHERE objoid = %[1]d
-   AND classoid = %[2]d
- LIMIT 1`,
-						objOid,
-						classOid,
-					))
-				if err != nil {
-					return nil, err
-				}
-				if len(r) == 0 {
-					return tree.DNull, nil
-				}
-				return r[0], nil
-			},
-			Info:       notUsableInfo,
+			Body: `SELECT d.description
+							FROM pg_catalog.pg_shdescription d
+							JOIN pg_catalog.pg_class c
+							ON d.classoid = c.oid
+							JOIN pg_catalog.pg_namespace n
+							ON c.relnamespace = n.oid
+							WHERE d.objoid = $1
+							AND c.relname = $2
+							AND n.nspname = 'pg_catalog'
+							LIMIT 1`,
+			Info: "Returns the comment for a shared database object specified by its OID and the name of the containing system catalog. " +
+				"This is just like obj_description except that it is used for retrieving comments on shared objects (e.g. databases). ",
 			Volatility: volatility.Stable,
 		},
 	),
@@ -2188,67 +2165,6 @@ func setSessionVar(
 		return errors.AssertionFailedf("session accessor not set")
 	}
 	return evalCtx.SessionAccessor.SetSessionVar(ctx, settingName, newVal, isLocal)
-}
-
-// getCatalogOidForComments returns the "catalog table oid" (the oid of a
-// catalog table like pg_database, in the pg_class table) for an input catalog
-// name (like pg_class or pg_database). It returns false if there is no such
-// catalog table.
-func getCatalogOidForComments(catalogName string) (id int, ok bool) {
-	switch catalogName {
-	case "pg_class":
-		return catconstants.PgCatalogClassTableID, true
-	case "pg_database":
-		return catconstants.PgCatalogDatabaseTableID, true
-	case "pg_description":
-		return catconstants.PgCatalogDescriptionTableID, true
-	case "pg_constraint":
-		return catconstants.PgCatalogConstraintTableID, true
-	case "pg_namespace":
-		return catconstants.PgCatalogNamespaceTableID, true
-	default:
-		// We currently only support comments on pg_class objects
-		// (columns, tables) in this context.
-		// see a different name, matching pg.
-		return 0, false
-	}
-}
-
-// getPgObjDesc queries pg_description for object comments. catalog_name, if not
-// empty, provides a constraint on which "system catalog" the comment is in.
-// System catalogs are things like pg_class, pg_type, pg_database, and so on.
-func getPgObjDesc(
-	ctx context.Context, evalCtx *eval.Context, catalogName string, oidVal oid.Oid,
-) (tree.Datum, error) {
-	classOidFilter := ""
-	if catalogName != "" {
-		classOid, ok := getCatalogOidForComments(catalogName)
-		if !ok {
-			// Return NULL for no comment if we can't find the catalog, matching pg.
-			return tree.DNull, nil
-		}
-		classOidFilter = fmt.Sprintf("AND classoid = %d", classOid)
-	}
-	r, err := evalCtx.Planner.QueryRowEx(
-		ctx, "pg_get_objdesc",
-		sessiondata.NoSessionDataOverride,
-		fmt.Sprintf(`
-SELECT description
-  FROM pg_catalog.pg_description
- WHERE objoid = %[1]d
-   AND objsubid = 0
-   %[2]s
- LIMIT 1`,
-			oidVal,
-			classOidFilter,
-		))
-	if err != nil {
-		return nil, err
-	}
-	if len(r) == 0 {
-		return tree.DNull, nil
-	}
-	return r[0], nil
 }
 
 func databaseHasPrivilegeSpecifier(databaseArg tree.Datum) (eval.HasPrivilegeSpecifier, error) {
