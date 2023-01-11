@@ -156,7 +156,11 @@ func (s *spanConfigStore) computeSplitKey(start, end roachpb.RKey) (roachpb.RKey
 				return roachpb.RKey(match.span.Key), nil
 			}
 		} else {
-			if !tenantCoalesceAdjacentSetting.Get(&s.settings.SV) {
+			// NB: Even if adjacent configs are the same, and can be coalesced, we do
+			// want to hard split on tenant boundaries. As such, we enforce a split
+			// if the found split key corresponds to the start of a tenant's keyspan.
+			if !tenantCoalesceAdjacentSetting.Get(&s.settings.SV) ||
+				keys.MakeTenantPrefix(matchTenID).Equal(match.span.Key) {
 				return roachpb.RKey(match.span.Key), nil
 			}
 		}

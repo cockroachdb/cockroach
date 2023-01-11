@@ -2398,6 +2398,29 @@ func (p *planner) IsANSIDML() bool {
 	return p.stmt.IsANSIDML()
 }
 
+// GetRangeDescByID is part of the eval.Planner interface.
+func (p *planner) GetRangeDescByID(
+	ctx context.Context, rangeID roachpb.RangeID,
+) (rangeDesc roachpb.RangeDescriptor, _ error) {
+	execCfg := p.execCfg
+	tenantSpan := execCfg.Codec.TenantSpan()
+	rangeDescIterator, err := execCfg.RangeDescIteratorFactory.NewIterator(ctx, tenantSpan)
+	if err != nil {
+		return rangeDesc, err
+	}
+	for rangeDescIterator.Valid() {
+		rangeDesc = rangeDescIterator.CurRangeDescriptor()
+		if rangeDesc.RangeID == rangeID {
+			break
+		}
+		rangeDescIterator.Next()
+	}
+	if !rangeDescIterator.Valid() {
+		return rangeDesc, errors.Newf("range with ID %d not found", rangeID)
+	}
+	return rangeDesc, nil
+}
+
 // OptimizeSystemDatabase is part of the eval.RegionOperator interface.
 func (p *planner) OptimizeSystemDatabase(ctx context.Context) error {
 	globalTables := []string{

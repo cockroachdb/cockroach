@@ -147,6 +147,13 @@ func (a tenantAuthorizer) authorize(
 	}
 }
 
+func checkSpanBounds(rSpan, tenSpan roachpb.RSpan) error {
+	if !tenSpan.ContainsKeyRange(rSpan.Key, rSpan.EndKey) {
+		return authErrorf("requested key span %s not fully contained in tenant keyspace %s", rSpan, tenSpan)
+	}
+	return nil
+}
+
 // authBatch authorizes the provided tenant to invoke the Batch RPC with the
 // provided args.
 func (a tenantAuthorizer) authBatch(tenID roachpb.TenantID, args *roachpb.BatchRequest) error {
@@ -195,10 +202,7 @@ func (a tenantAuthorizer) authBatch(tenID roachpb.TenantID, args *roachpb.BatchR
 		return authError(err.Error())
 	}
 	tenSpan := tenantPrefix(tenID)
-	if !tenSpan.ContainsKeyRange(rSpan.Key, rSpan.EndKey) {
-		return authErrorf("requested key span %s not fully contained in tenant keyspace %s", rSpan, tenSpan)
-	}
-	return nil
+	return checkSpanBounds(rSpan, tenSpan)
 }
 
 func (a tenantAuthorizer) authGetRangeDescriptors(
@@ -229,10 +233,7 @@ func (a tenantAuthorizer) authRangeFeed(
 		return authError(err.Error())
 	}
 	tenSpan := tenantPrefix(tenID)
-	if !tenSpan.ContainsKeyRange(rSpan.Key, rSpan.EndKey) {
-		return authErrorf("requested key span %s not fully contained in tenant keyspace %s", rSpan, tenSpan)
-	}
-	return nil
+	return checkSpanBounds(rSpan, tenSpan)
 }
 
 // authGossipSubscription authorizes the provided tenant to invoke the
@@ -440,10 +441,7 @@ func validateSpan(tenID roachpb.TenantID, sp roachpb.Span) error {
 	if err != nil {
 		return authError(err.Error())
 	}
-	if !tenSpan.ContainsKeyRange(rSpan.Key, rSpan.EndKey) {
-		return authErrorf("requested key span %s not fully contained in tenant keyspace %s", rSpan, tenSpan)
-	}
-	return nil
+	return checkSpanBounds(rSpan, tenSpan)
 }
 
 func contextWithTenant(ctx context.Context, tenID roachpb.TenantID) context.Context {
