@@ -371,7 +371,7 @@ func (sr *txnSpanRefresher) splitEndTxnAndRetrySend(
 	// Combine the responses.
 	br := brPrefix
 	br.Responses = append(br.Responses, roachpb.ResponseUnion{})
-	if err := br.Combine(brSuffix, []int{etIdx}); err != nil {
+	if err := br.Combine(brSuffix, []int{etIdx}, ba); err != nil {
 		return nil, roachpb.NewError(err)
 	}
 	return br, nil

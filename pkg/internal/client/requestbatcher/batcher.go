@@ -272,10 +272,12 @@ func (b *RequestBatcher) sendDone(ba *batch) {
 func (b *RequestBatcher) sendBatch(ctx context.Context, ba *batch) {
 	if err := b.cfg.Stopper.RunAsyncTask(ctx, "send-batch", func(ctx context.Context) {
 		defer b.sendDone(ba)
+		var batchRequest *roachpb.BatchRequest
 		var br *roachpb.BatchResponse
 		send := func(ctx context.Context) error {
+			batchRequest = ba.batchRequest(&b.cfg)
 			var pErr *roachpb.Error
-			if br, pErr = b.cfg.Sender.Send(ctx, ba.batchRequest(&b.cfg)); pErr != nil {
+			if br, pErr = b.cfg.Sender.Send(ctx, batchRequest); pErr != nil {
 				return pErr.GoError()
 			}
 			return nil
@@ -314,7 +316,7 @@ func (b *RequestBatcher) sendBatch(ctx context.Context, ba *batch) {
 					resp := br.Responses[i].GetInner()
 					if prevResps != nil {
 						prevResp := prevResps[i]
-						if cErr := roachpb.CombineResponses(prevResp, resp); cErr != nil {
+						if cErr := roachpb.CombineResponses(prevResp, resp, batchRequest); cErr != nil {
 							log.Fatalf(ctx, "%v", cErr)
 						}
 						resp = prevResp

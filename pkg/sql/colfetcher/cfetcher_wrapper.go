@@ -13,6 +13,7 @@ package colfetcher
 import (
 	"bytes"
 	"context"
+	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
@@ -20,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -67,6 +69,7 @@ var _ storage.CFetcherWrapper = &cFetcherWrapper{}
 
 func init() {
 	storage.GetCFetcherWrapper = newCFetcherWrapper
+	roachpb.DeserializeColumnarBatchesFromArrow = deserializeColumnarBatchesFromArrow
 }
 
 func (c *cFetcherWrapper) nextBatchAdapter() {
@@ -213,4 +216,49 @@ func newCFetcherWrapper(
 		}
 	}
 	return &wrapper, willSerialize, nil
+}
+
+func deserializeColumnarBatchesFromArrow(
+	serializedColBatches [][]byte, req *roachpb.BatchRequest,
+) ([]interface{}, error) {
+	// TODO: perhaps plumb the context.
+	ctx := context.Background()
+
+	monitor := mon.NewMonitor(
+		"mvcc-scan-to-cols",
+		mon.MemoryResource,
+		nil,           /* curCount */
+		nil,           /* maxHist */
+		-1,            /* increment */
+		math.MaxInt64, /* noteworthy */
+		// TODO: why nil seems ok here.
+		nil, /* settings */
+	)
+	monitor.Start(ctx, nil /* pool */, mon.NewStandaloneBudget(math.MaxInt64))
+	defer monitor.Stop(ctx)
+	allocatorAccount := monitor.MakeBoundAccount()
+	defer allocatorAccount.Close(ctx)
+	allocator := colmem.NewAllocator(ctx, &allocatorAccount, coldataext.NewExtendedColumnFactoryNoEvalCtx())
+
+	// At the moment, we always serialize the columnar batches, so it is safe to
+	// handle enum types without proper hydration - we just treat them as bytes
+	// values, and it is the responsibility of the ColBatchDirectScan to hydrate
+	// the type correctly when deserializing the batches.
+	const allowUnhydratedEnums = true
+	tableArgs, err := populateTableArgs(ctx, req.IndexFetchSpec, nil /* typeResolver */, allowUnhydratedEnums)
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]interface{}, 0, len(serializedColBatches))
+	if err = colexecerror.CatchVectorizedRuntimeError(func() {
+		var d colexecutils.Deserializer
+		d.Init(allocator, tableArgs.typs, true /* allocateFreshBatches */)
+		for _, serializedBatch := range serializedColBatches {
+			result = append(result, d.Deserialize(serializedBatch))
+		}
+	}); err != nil {
+		return nil, err
+	}
+	return result, nil
 }

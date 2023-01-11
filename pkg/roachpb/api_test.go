@@ -52,7 +52,7 @@ func TestCombineResponses(t *testing.T) {
 			IntentRows: append(append([]KeyValue(nil), left.IntentRows...), right.IntentRows...),
 		}
 
-		err := CombineResponses(left, right)
+		err := CombineResponses(left, right, nil)
 		require.NoError(t, err)
 		require.Equal(t, expCombined, left)
 	})
@@ -68,7 +68,7 @@ func TestCombineResponses(t *testing.T) {
 			Value: left.Value.ShallowClone(),
 		}
 
-		err := CombineResponses(left, right)
+		err := CombineResponses(left, right, nil)
 		require.NoError(t, err)
 		require.Equal(t, expCombined, left)
 	})
@@ -86,7 +86,7 @@ func TestCombineResponses(t *testing.T) {
 			Value: &Value{RawBytes: []byte("W")},
 		}
 
-		err := CombineResponses(left, right)
+		err := CombineResponses(left, right, nil)
 		require.Error(t, err)
 		require.Regexp(t, "can not combine", err)
 	})
@@ -104,7 +104,7 @@ func TestCombineResponses(t *testing.T) {
 			},
 		}
 
-		err := CombineResponses(left, right)
+		err := CombineResponses(left, right, nil)
 		require.Error(t, err)
 		require.Regexp(t, "can not combine", err)
 	})
@@ -152,10 +152,10 @@ func TestCombinable(t *testing.T) {
 			IntentRows: append(append([]KeyValue(nil), sr1.IntentRows...), sr2.IntentRows...),
 		}
 
-		if err := sr1.combine(sr2); err != nil {
+		if err := sr1.combine(sr2, nil); err != nil {
 			t.Fatal(err)
 		}
-		if err := sr1.combine(&ScanResponse{}); err != nil {
+		if err := sr1.combine(&ScanResponse{}, nil); err != nil {
 			t.Fatal(err)
 		}
 
@@ -180,10 +180,10 @@ func TestCombinable(t *testing.T) {
 		wantedDR := &DeleteRangeResponse{
 			Keys: []Key{[]byte("1"), []byte("2")},
 		}
-		if err := dr2.combine(dr3); err != nil {
+		if err := dr2.combine(dr3, nil); err != nil {
 			t.Fatal(err)
 		}
-		if err := dr1.combine(dr2); err != nil {
+		if err := dr1.combine(dr2, nil); err != nil {
 			t.Fatal(err)
 		}
 
@@ -222,8 +222,8 @@ func TestCombinable(t *testing.T) {
 				{RangeID: 2, StartKey: RKeyMin, EndKey: RKeyMax, Reason: "bar"},
 			},
 		}
-		require.NoError(t, v1.combine(v2))
-		require.NoError(t, v1.combine(v3))
+		require.NoError(t, v1.combine(v2, nil))
+		require.NoError(t, v1.combine(v3, nil))
 		require.EqualValues(t, &AdminVerifyProtectedTimestampResponse{
 			Verified: false,
 			DeprecatedFailedRanges: []RangeDescriptor{
@@ -275,8 +275,8 @@ func TestCombinable(t *testing.T) {
 			ReplicasScatteredBytes: 84,
 		}
 
-		require.NoError(t, ar1.combine(ar2))
-		require.NoError(t, ar1.combine(&AdminScatterResponse{}))
+		require.NoError(t, ar1.combine(ar2, nil))
+		require.NoError(t, ar1.combine(&AdminScatterResponse{}, nil))
 
 		if !reflect.DeepEqual(ar1, wantedAR) {
 			t.Errorf("wanted %v, got %v", wantedAR, ar1)

@@ -393,7 +393,7 @@ func TestBatchResponseCombine(t *testing.T) {
 				Txn: &txn,
 			},
 		}
-		if err := br.Combine(brTxn, nil); err != nil {
+		if err := br.Combine(brTxn, nil, nil); err != nil {
 			t.Fatal(err)
 		}
 		if br.Txn.Name != "test" {
@@ -420,7 +420,7 @@ func TestBatchResponseCombine(t *testing.T) {
 	// Combine twice with a single scan result: first one should simply copy over, second
 	// one should add on top. Slightly different code paths internally, hence the distinction.
 	for i := 0; i < 2; i++ {
-		if err := br.Combine(singleScanBR(), []int{0}); err != nil {
+		if err := br.Combine(singleScanBR(), []int{0}, nil); err != nil {
 			t.Fatal(err)
 		}
 		scan := br.Responses[0].GetInner().(*ScanResponse)
@@ -438,7 +438,7 @@ func TestBatchResponseCombine(t *testing.T) {
 
 	// Now we have br = [Put, Scan]. Combine should use the position to
 	// combine singleScanBR on top of the Scan at index one.
-	if err := br.Combine(singleScanBR(), []int{1}); err != nil {
+	if err := br.Combine(singleScanBR(), []int{1}, nil); err != nil {
 		t.Fatal(err)
 	}
 	scan := br.Responses[1].GetInner().(*ScanResponse)
@@ -449,7 +449,7 @@ func TestBatchResponseCombine(t *testing.T) {
 	if len(scan.IntentRows) != expRows {
 		t.Fatalf("expected %d intent rows, got %s", expRows, pretty.Sprint(scan))
 	}
-	if err := br.Combine(singleScanBR(), []int{0}); err.Error() !=
+	if err := br.Combine(singleScanBR(), []int{0}, nil); err.Error() !=
 		`can not combine *roachpb.PutResponse and *roachpb.ScanResponse` {
 		t.Fatal(err)
 	}

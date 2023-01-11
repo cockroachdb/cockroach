@@ -328,23 +328,27 @@ type Response interface {
 // combine() allows responses from individual ranges to be aggregated
 // into a single one.
 type combinable interface {
-	combine(combinable) error
+	combine(combinable, *BatchRequest) error
 }
 
 // CombineResponses attempts to combine the two provided responses. If both of
 // the responses are combinable, they will be combined. If neither are
 // combinable, the function is a no-op and returns a nil error. If one of the
 // responses is combinable and the other isn't, the function returns an error.
-func CombineResponses(left, right Response) error {
+func CombineResponses(left, right Response, ba *BatchRequest) error {
 	cLeft, lOK := left.(combinable)
 	cRight, rOK := right.(combinable)
 	if lOK && rOK {
-		return cLeft.combine(cRight)
+		return cLeft.combine(cRight, ba)
 	} else if lOK != rOK {
 		return errors.Errorf("can not combine %T and %T", left, right)
 	}
 	return nil
 }
+
+var DeserializeColumnarBatchesFromArrow func(
+	serializedColBatches [][]byte, _ *BatchRequest,
+) ([]interface{}, error)
 
 // combine is used by range-spanning Response types (e.g. Scan or DeleteRange)
 // to merge their headers.
@@ -363,15 +367,30 @@ func (rh *ResponseHeader) combine(otherRH ResponseHeader) error {
 }
 
 // combine implements the combinable interface.
-func (sr *ScanResponse) combine(c combinable) error {
+func (sr *ScanResponse) combine(c combinable, request *BatchRequest) error {
 	otherSR := c.(*ScanResponse)
 	if sr != nil {
 		sr.Rows = append(sr.Rows, otherSR.Rows...)
 		sr.IntentRows = append(sr.IntentRows, otherSR.IntentRows...)
-		sr.BatchResponses = append(sr.BatchResponses, otherSR.BatchResponses...)
-		// TODO: we cannot intertwine responses in different format when we need
-		// to maintain the ordering.
-		sr.ColBatches.ColBatches = append(sr.ColBatches.ColBatches, otherSR.ColBatches.ColBatches...)
+		if sr.ColBatches.ColBatches != nil && otherSR.BatchResponses != nil {
+			colBatches, err := DeserializeColumnarBatchesFromArrow(otherSR.BatchResponses, request)
+			if err != nil {
+				return err
+			}
+			sr.ColBatches.ColBatches = append(sr.ColBatches.ColBatches, colBatches...)
+		} else if sr.BatchResponses != nil && otherSR.ColBatches.ColBatches != nil {
+			sr.ColBatches.ColBatches = make([]interface{}, 0, len(sr.BatchResponses)+len(otherSR.ColBatches.ColBatches))
+			colBatches, err := DeserializeColumnarBatchesFromArrow(sr.BatchResponses, request)
+			if err != nil {
+				return err
+			}
+			sr.BatchResponses = nil
+			sr.ColBatches.ColBatches = append(sr.ColBatches.ColBatches, colBatches...)
+			sr.ColBatches.ColBatches = append(sr.ColBatches.ColBatches, otherSR.ColBatches.ColBatches...)
+		} else {
+			sr.BatchResponses = append(sr.BatchResponses, otherSR.BatchResponses...)
+			sr.ColBatches.ColBatches = append(sr.ColBatches.ColBatches, otherSR.ColBatches.ColBatches...)
+		}
 		if err := sr.ResponseHeader.combine(otherSR.Header()); err != nil {
 			return err
 		}
@@ -382,15 +401,30 @@ func (sr *ScanResponse) combine(c combinable) error {
 var _ combinable = &ScanResponse{}
 
 // combine implements the combinable interface.
-func (sr *ReverseScanResponse) combine(c combinable) error {
+func (sr *ReverseScanResponse) combine(c combinable, request *BatchRequest) error {
 	otherSR := c.(*ReverseScanResponse)
 	if sr != nil {
 		sr.Rows = append(sr.Rows, otherSR.Rows...)
 		sr.IntentRows = append(sr.IntentRows, otherSR.IntentRows...)
-		sr.BatchResponses = append(sr.BatchResponses, otherSR.BatchResponses...)
-		// TODO: we cannot intertwine responses in different format when we need
-		// to maintain the ordering.
-		sr.ColBatches.ColBatches = append(sr.ColBatches.ColBatches, otherSR.ColBatches.ColBatches...)
+		if sr.ColBatches.ColBatches != nil && otherSR.BatchResponses != nil {
+			colBatches, err := DeserializeColumnarBatchesFromArrow(otherSR.BatchResponses, request)
+			if err != nil {
+				return err
+			}
+			sr.ColBatches.ColBatches = append(sr.ColBatches.ColBatches, colBatches...)
+		} else if sr.BatchResponses != nil && otherSR.ColBatches.ColBatches != nil {
+			sr.ColBatches.ColBatches = make([]interface{}, 0, len(sr.BatchResponses)+len(otherSR.ColBatches.ColBatches))
+			colBatches, err := DeserializeColumnarBatchesFromArrow(sr.BatchResponses, request)
+			if err != nil {
+				return err
+			}
+			sr.BatchResponses = nil
+			sr.ColBatches.ColBatches = append(sr.ColBatches.ColBatches, colBatches...)
+			sr.ColBatches.ColBatches = append(sr.ColBatches.ColBatches, otherSR.ColBatches.ColBatches...)
+		} else {
+			sr.BatchResponses = append(sr.BatchResponses, otherSR.BatchResponses...)
+			sr.ColBatches.ColBatches = append(sr.ColBatches.ColBatches, otherSR.ColBatches.ColBatches...)
+		}
 		if err := sr.ResponseHeader.combine(otherSR.Header()); err != nil {
 			return err
 		}
@@ -401,7 +435,7 @@ func (sr *ReverseScanResponse) combine(c combinable) error {
 var _ combinable = &ReverseScanResponse{}
 
 // combine implements the combinable interface.
-func (dr *DeleteRangeResponse) combine(c combinable) error {
+func (dr *DeleteRangeResponse) combine(c combinable, request *BatchRequest) error {
 	otherDR := c.(*DeleteRangeResponse)
 	if dr != nil {
 		dr.Keys = append(dr.Keys, otherDR.Keys...)
@@ -415,7 +449,7 @@ func (dr *DeleteRangeResponse) combine(c combinable) error {
 var _ combinable = &DeleteRangeResponse{}
 
 // combine implements the combinable interface.
-func (dr *RevertRangeResponse) combine(c combinable) error {
+func (dr *RevertRangeResponse) combine(c combinable, request *BatchRequest) error {
 	otherDR := c.(*RevertRangeResponse)
 	if dr != nil {
 		if err := dr.ResponseHeader.combine(otherDR.Header()); err != nil {
@@ -428,7 +462,7 @@ func (dr *RevertRangeResponse) combine(c combinable) error {
 var _ combinable = &RevertRangeResponse{}
 
 // combine implements the combinable interface.
-func (rr *ResolveIntentRangeResponse) combine(c combinable) error {
+func (rr *ResolveIntentRangeResponse) combine(c combinable, request *BatchRequest) error {
 	otherRR := c.(*ResolveIntentRangeResponse)
 	if rr != nil {
 		if err := rr.ResponseHeader.combine(otherRR.Header()); err != nil {
@@ -441,7 +475,7 @@ func (rr *ResolveIntentRangeResponse) combine(c combinable) error {
 var _ combinable = &ResolveIntentRangeResponse{}
 
 // combine implements the combinable interface.
-func (cc *CheckConsistencyResponse) combine(c combinable) error {
+func (cc *CheckConsistencyResponse) combine(c combinable, request *BatchRequest) error {
 	if cc != nil {
 		otherCC := c.(*CheckConsistencyResponse)
 		cc.Result = append(cc.Result, otherCC.Result...)
@@ -455,7 +489,7 @@ func (cc *CheckConsistencyResponse) combine(c combinable) error {
 var _ combinable = &CheckConsistencyResponse{}
 
 // combine implements the combinable interface.
-func (er *ExportResponse) combine(c combinable) error {
+func (er *ExportResponse) combine(c combinable, request *BatchRequest) error {
 	if er != nil {
 		otherER := c.(*ExportResponse)
 		if err := er.ResponseHeader.combine(otherER.Header()); err != nil {
@@ -469,7 +503,7 @@ func (er *ExportResponse) combine(c combinable) error {
 var _ combinable = &ExportResponse{}
 
 // combine implements the combinable interface.
-func (r *AdminScatterResponse) combine(c combinable) error {
+func (r *AdminScatterResponse) combine(c combinable, request *BatchRequest) error {
 	if r != nil {
 		otherR := c.(*AdminScatterResponse)
 		if err := r.ResponseHeader.combine(otherR.Header()); err != nil {
@@ -485,7 +519,9 @@ func (r *AdminScatterResponse) combine(c combinable) error {
 
 var _ combinable = &AdminScatterResponse{}
 
-func (avptr *AdminVerifyProtectedTimestampResponse) combine(c combinable) error {
+func (avptr *AdminVerifyProtectedTimestampResponse) combine(
+	c combinable, request *BatchRequest,
+) error {
 	other := c.(*AdminVerifyProtectedTimestampResponse)
 	if avptr != nil {
 		avptr.DeprecatedFailedRanges = append(avptr.DeprecatedFailedRanges,
@@ -502,7 +538,7 @@ func (avptr *AdminVerifyProtectedTimestampResponse) combine(c combinable) error 
 var _ combinable = &AdminVerifyProtectedTimestampResponse{}
 
 // combine implements the combinable interface.
-func (r *QueryResolvedTimestampResponse) combine(c combinable) error {
+func (r *QueryResolvedTimestampResponse) combine(c combinable, request *BatchRequest) error {
 	if r != nil {
 		otherR := c.(*QueryResolvedTimestampResponse)
 		if err := r.ResponseHeader.combine(otherR.Header()); err != nil {
@@ -517,7 +553,7 @@ func (r *QueryResolvedTimestampResponse) combine(c combinable) error {
 var _ combinable = &QueryResolvedTimestampResponse{}
 
 // combine implements the combinable interface.
-func (r *BarrierResponse) combine(c combinable) error {
+func (r *BarrierResponse) combine(c combinable, request *BatchRequest) error {
 	otherR := c.(*BarrierResponse)
 	if r != nil {
 		if err := r.ResponseHeader.combine(otherR.Header()); err != nil {
@@ -531,7 +567,7 @@ func (r *BarrierResponse) combine(c combinable) error {
 var _ combinable = &BarrierResponse{}
 
 // combine implements the combinable interface.
-func (r *QueryLocksResponse) combine(c combinable) error {
+func (r *QueryLocksResponse) combine(c combinable, request *BatchRequest) error {
 	otherR := c.(*QueryLocksResponse)
 	if r != nil {
 		if err := r.ResponseHeader.combine(otherR.Header()); err != nil {
@@ -545,7 +581,7 @@ func (r *QueryLocksResponse) combine(c combinable) error {
 var _ combinable = &QueryLocksResponse{}
 
 // combine implements the combinable interface.
-func (r *IsSpanEmptyResponse) combine(c combinable) error {
+func (r *IsSpanEmptyResponse) combine(c combinable, request *BatchRequest) error {
 	otherR := c.(*IsSpanEmptyResponse)
 	if r != nil {
 		if err := r.ResponseHeader.combine(otherR.Header()); err != nil {

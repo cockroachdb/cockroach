@@ -642,7 +642,9 @@ func ResponseKeyIterate(req Request, resp Response, fn func(Key)) error {
 // the supplied BatchResponse must not be used any more.
 // It is an error to call Combine on responses with errors in them. The
 // DistSender strips the errors from any responses that it combines.
-func (br *BatchResponse) Combine(otherBatch *BatchResponse, positions []int) error {
+func (br *BatchResponse) Combine(
+	otherBatch *BatchResponse, positions []int, ba *BatchRequest,
+) error {
 	if err := br.BatchResponse_Header.combine(otherBatch.BatchResponse_Header); err != nil {
 		return err
 	}
@@ -654,7 +656,7 @@ func (br *BatchResponse) Combine(otherBatch *BatchResponse, positions []int) err
 		}
 		valLeft := br.Responses[pos].GetInner()
 		valRight := otherBatch.Responses[i].GetInner()
-		if err := CombineResponses(valLeft, valRight); err != nil {
+		if err := CombineResponses(valLeft, valRight, ba); err != nil {
 			return err
 		}
 	}
