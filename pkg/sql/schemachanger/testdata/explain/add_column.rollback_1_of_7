@@ -10,7 +10,7 @@ EXPLAIN (ddl) rollback at post-commit stage 1 of 7;
 Schema change plan for rolling back ALTER TABLE ‹db›.public.‹tbl› ADD COLUMN ‹j› INT8 NOT NULL DEFAULT ‹42›; 
  └── PostCommitNonRevertiblePhase
       └── Stage 1 of 1 in PostCommitNonRevertiblePhase
-           ├── 11 elements transitioning toward ABSENT
+           ├── 12 elements transitioning toward ABSENT
            │    ├── DELETE_ONLY   → ABSENT Column:{DescID: 106, ColumnID: 2}
            │    ├── PUBLIC        → ABSENT ColumnName:{DescID: 106, Name: j, ColumnID: 2}
            │    ├── PUBLIC        → ABSENT ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 2}
@@ -21,13 +21,15 @@ Schema change plan for rolling back ALTER TABLE ‹db›.public.‹tbl› ADD CO
            │    ├── PUBLIC        → ABSENT IndexData:{DescID: 106, IndexID: 2}
            │    ├── DELETE_ONLY   → ABSENT TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
            │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 3}
-           │    └── PUBLIC        → ABSENT IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 3}
-           └── 8 Mutation operations
+           │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 3}
+           │    └── WRITE_ONLY    → ABSENT CheckConstraint:{DescID: 106, IndexID: 2, ConstraintID: 4}
+           └── 9 Mutation operations
                 ├── SetColumnName {"ColumnID":2,"Name":"crdb_internal_co...","TableID":106}
                 ├── RemoveColumnDefaultExpression {"ColumnID":2,"TableID":106}
                 ├── MakeIndexAbsent {"IndexID":2,"TableID":106}
                 ├── CreateGCJobForIndex {"IndexID":2,"TableID":106}
                 ├── MakeIndexAbsent {"IndexID":3,"TableID":106}
+                ├── RemoveCheckConstraint {"ConstraintID":4,"TableID":106}
                 ├── MakeDeleteOnlyColumnAbsent {"ColumnID":2,"TableID":106}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":106}
                 └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}

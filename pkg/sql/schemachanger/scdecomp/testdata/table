@@ -74,6 +74,19 @@ ElementState:
     tableId: 104
     temporaryIndexId: 0
   Status: PUBLIC
+- CheckConstraint:
+    columnIds:
+    - 1
+    constraintId: 0
+    expr: ""
+    fromHashShardedColumn: false
+    indexIdForValidation: 0
+    isNotNull: true
+    referencedColumnIds: []
+    tableId: 104
+    usesSequenceIds: []
+    usesTypeIds: []
+  Status: PUBLIC
 - TableData:
     databaseId: 100
     tableId: 104
@@ -98,7 +111,6 @@ ElementState:
     columnId: 1
     computeExpr: null
     familyId: 0
-    isNullable: false
     isVirtual: false
     tableId: 104
     type:
@@ -123,7 +135,6 @@ ElementState:
     columnId: 4.294967294e+09
     computeExpr: null
     familyId: 0
-    isNullable: true
     isVirtual: false
     tableId: 104
     type:
@@ -148,7 +159,6 @@ ElementState:
     columnId: 4.294967295e+09
     computeExpr: null
     familyId: 0
-    isNullable: true
     isVirtual: false
     tableId: 104
     type:
@@ -304,6 +314,32 @@ ElementState:
     tableId: 105
     temporaryIndexId: 0
   Status: PUBLIC
+- CheckConstraint:
+    columnIds:
+    - 1
+    constraintId: 0
+    expr: ""
+    fromHashShardedColumn: false
+    indexIdForValidation: 0
+    isNotNull: true
+    referencedColumnIds: []
+    tableId: 105
+    usesSequenceIds: []
+    usesTypeIds: []
+  Status: PUBLIC
+- CheckConstraint:
+    columnIds:
+    - 2
+    constraintId: 0
+    expr: ""
+    fromHashShardedColumn: false
+    indexIdForValidation: 0
+    isNotNull: true
+    referencedColumnIds: []
+    tableId: 105
+    usesSequenceIds: []
+    usesTypeIds: []
+  Status: PUBLIC
 - ForeignKeyConstraint:
     columnIds:
     - 1
@@ -358,7 +394,6 @@ ElementState:
     columnId: 1
     computeExpr: null
     familyId: 0
-    isNullable: false
     isVirtual: false
     tableId: 105
     type:
@@ -383,7 +418,6 @@ ElementState:
     columnId: 2
     computeExpr: null
     familyId: 0
-    isNullable: false
     isVirtual: false
     tableId: 105
     type:
@@ -408,7 +442,6 @@ ElementState:
     columnId: 3
     computeExpr: null
     familyId: 0
-    isNullable: true
     isVirtual: false
     tableId: 105
     type:
@@ -433,7 +466,6 @@ ElementState:
     columnId: 4.294967294e+09
     computeExpr: null
     familyId: 0
-    isNullable: true
     isVirtual: false
     tableId: 105
     type:
@@ -458,7 +490,6 @@ ElementState:
     columnId: 4.294967295e+09
     computeExpr: null
     familyId: 0
-    isNullable: true
     isVirtual: false
     tableId: 105
     type:
@@ -694,6 +725,19 @@ ElementState:
     tableId: 104
     temporaryIndexId: 0
   Status: PUBLIC
+- CheckConstraint:
+    columnIds:
+    - 1
+    constraintId: 0
+    expr: ""
+    fromHashShardedColumn: false
+    indexIdForValidation: 0
+    isNotNull: true
+    referencedColumnIds: []
+    tableId: 104
+    usesSequenceIds: []
+    usesTypeIds: []
+  Status: PUBLIC
 - TableData:
     databaseId: 100
     tableId: 104
@@ -723,7 +767,6 @@ ElementState:
     columnId: 1
     computeExpr: null
     familyId: 0
-    isNullable: false
     isVirtual: false
     tableId: 104
     type:
@@ -748,7 +791,6 @@ ElementState:
     columnId: 2
     computeExpr: null
     familyId: 1
-    isNullable: true
     isVirtual: false
     tableId: 104
     type:
@@ -773,7 +815,6 @@ ElementState:
     columnId: 4.294967294e+09
     computeExpr: null
     familyId: 0
-    isNullable: true
     isVirtual: false
     tableId: 104
     type:
@@ -798,7 +839,6 @@ ElementState:
     columnId: 4.294967295e+09
     computeExpr: null
     familyId: 0
-    isNullable: true
     isVirtual: false
     tableId: 104
     type:
@@ -945,6 +985,19 @@ ElementState:
     tableId: 108
     temporaryIndexId: 0
   Status: PUBLIC
+- CheckConstraint:
+    columnIds:
+    - 2
+    constraintId: 0
+    expr: ""
+    fromHashShardedColumn: false
+    indexIdForValidation: 0
+    isNotNull: true
+    referencedColumnIds: []
+    tableId: 108
+    usesSequenceIds: []
+    usesTypeIds: []
+  Status: PUBLIC
 - TableData:
     databaseId: 100
     tableId: 108
@@ -980,7 +1033,6 @@ ElementState:
       - 106
       - 107
     familyId: 0
-    isNullable: true
     isVirtual: false
     tableId: 108
     type:
@@ -1005,7 +1057,6 @@ ElementState:
     columnId: 2
     computeExpr: null
     familyId: 0
-    isNullable: false
     isVirtual: false
     tableId: 108
     type:
@@ -1030,7 +1081,6 @@ ElementState:
     columnId: 4.294967294e+09
     computeExpr: null
     familyId: 0
-    isNullable: true
     isVirtual: false
     tableId: 108
     type:
@@ -1055,7 +1105,6 @@ ElementState:
     columnId: 4.294967295e+09
     computeExpr: null
     familyId: 0
-    isNullable: true
     isVirtual: false
     tableId: 108
     type:

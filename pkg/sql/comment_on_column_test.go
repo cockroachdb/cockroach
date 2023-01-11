@@ -18,11 +18,26 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
+
+func TestXiang(t *testing.T) {
+	params, _ := tests.CreateTestServerParams()
+	s, db, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.Background())
+	tdb := sqlutils.MakeSQLRunner(db)
+
+	tdb.Exec(t, "set use_declarative_schema_changer = on;")
+	tdb.Exec(t, "CREATE TABLE a (id1 INT PRIMARY KEY, id2 INT, id3 INT NOT NULL)")
+	tdb.Exec(t, "CREATE TABLE b (id1 INT PRIMARY KEY)")
+	tdb.Exec(t, "ALTER TABLE a ADD FOREIGN KEY (id2) REFERENCES a(id1);")
+	tdb.Exec(t, "ALTER TABLE a ADD FOREIGN KEY (id3) REFERENCES b(id1);")
+	tdb.Exec(t, "drop table a;")
+}
 
 func TestCommentOnColumn(t *testing.T) {
 	defer leaktest.AfterTest(t)()

@@ -177,15 +177,42 @@ ElementState:
   Status: PUBLIC
 - CheckConstraint:
     columnIds:
+    - 1
+    constraintId: 0
+    expr: ""
+    fromHashShardedColumn: false
+    indexIdForValidation: 0
+    isNotNull: true
+    referencedColumnIds: []
+    tableId: 108
+    usesSequenceIds: []
+    usesTypeIds: []
+  Status: PUBLIC
+- CheckConstraint:
+    columnIds:
     - 3
     - 5
     constraintId: 2
     expr: s::STRING = name
     fromHashShardedColumn: false
     indexIdForValidation: 0
+    isNotNull: false
     referencedColumnIds:
     - 3
     - 5
+    tableId: 108
+    usesSequenceIds: []
+    usesTypeIds: []
+  Status: PUBLIC
+- CheckConstraint:
+    columnIds:
+    - 5
+    constraintId: 0
+    expr: ""
+    fromHashShardedColumn: false
+    indexIdForValidation: 0
+    isNotNull: true
+    referencedColumnIds: []
     tableId: 108
     usesSequenceIds: []
     usesTypeIds: []
@@ -242,7 +269,6 @@ ElementState:
       - 104
       - 105
     familyId: 0
-    isNullable: true
     isVirtual: false
     tableId: 108
     type:
@@ -270,7 +296,6 @@ ElementState:
     columnId: 4
     computeExpr: null
     familyId: 0
-    isNullable: true
     isVirtual: false
     tableId: 108
     type:
@@ -319,7 +344,6 @@ ElementState:
       - 106
       - 107
     familyId: 0
-    isNullable: true
     isVirtual: true
     tableId: 108
     type:
@@ -345,7 +369,6 @@ ElementState:
     columnId: 1
     computeExpr: null
     familyId: 0
-    isNullable: false
     isVirtual: false
     tableId: 108
     type:
@@ -370,7 +393,6 @@ ElementState:
     columnId: 4.294967294e+09
     computeExpr: null
     familyId: 0
-    isNullable: true
     isVirtual: false
     tableId: 108
     type:
@@ -395,7 +417,6 @@ ElementState:
     columnId: 4.294967295e+09
     computeExpr: null
     familyId: 0
-    isNullable: true
     isVirtual: false
     tableId: 108
     type:
@@ -420,7 +441,6 @@ ElementState:
     columnId: 5
     computeExpr: null
     familyId: 0
-    isNullable: false
     isVirtual: false
     tableId: 108
     type:

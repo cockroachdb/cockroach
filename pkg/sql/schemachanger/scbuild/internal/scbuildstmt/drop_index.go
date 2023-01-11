@@ -272,11 +272,11 @@ func maybeDropAdditionallyForShardedIndex(
 	}
 
 	// This shard column is not used by any other index. Proceed to drop any check constraints
-	// that use this column as well as the column itself.
+	// that use this column.
 	scpb.ForEachCheckConstraint(b.QueryByID(toBeDroppedIndex.TableID), func(
 		current scpb.Status, target scpb.TargetStatus, e *scpb.CheckConstraint,
 	) {
-		if !descpb.ColumnIDs(e.ColumnIDs).Contains(scte.ColumnID) {
+		if !descpb.ColumnIDs(e.ColumnIDs).Contains(scte.ColumnID) || e.IsNotNull {
 			return
 		}
 

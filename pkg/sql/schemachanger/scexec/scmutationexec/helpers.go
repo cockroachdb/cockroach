@@ -219,6 +219,14 @@ func enqueueAddCheckConstraintMutation(
 	return nil
 }
 
+func enqueueAddNotNullMutation(
+	tbl *tabledesc.Mutable, notNull *descpb.TableDescriptor_CheckConstraint,
+) error {
+	tbl.AddNotNullMutation(notNull, descpb.DescriptorMutation_ADD)
+	tbl.NextMutationID--
+	return nil
+}
+
 func enqueueAddUniqueWithoutIndexConstraintMutation(
 	tbl *tabledesc.Mutable, uwi *descpb.UniqueWithoutIndexConstraint,
 ) error {

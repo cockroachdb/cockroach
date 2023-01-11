@@ -715,8 +715,8 @@ func maybeCreateAndAddShardCol(
 			TypeT:       scpb.TypeT{Type: types.Int},
 			ComputeExpr: b.WrapExpression(tbl.TableID, parsedExpr),
 			IsVirtual:   true,
-			IsNullable:  false,
 		},
+		notNull: true,
 		//TODO(fqazi): Add a check constraint for the hash sharded column.
 	}
 	addColumn(b, spec, n)
@@ -804,7 +804,7 @@ func maybeCreateVirtualColumnForIndex(
 		})
 		return found
 	})
-	// TODO(postamar): call addColumn instead of building AST.
+	// TODO(postamar): call addColumnIgnoringNotNull instead of building AST.
 	d := &tree.ColumnTableDef{
 		Name: tree.Name(colName),
 	}

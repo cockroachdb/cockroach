@@ -216,9 +216,11 @@ func dropColumn(
 			panic(errors.Wrap(scerrors.NotImplementedError(n),
 				"dropping of UNIQUE WITHOUT INDEX constraints not supported"))
 		case *scpb.CheckConstraint:
-			// TODO(ajwerner): Support dropping CHECK constraints.
-			panic(errors.Wrap(scerrors.NotImplementedError(n),
-				"dropping of CHECK constraints not supported"))
+			if !e.IsNotNull {
+				// TODO(ajwerner): Support dropping CHECK constraints.
+				panic(errors.Wrap(scerrors.NotImplementedError(n),
+					"dropping of CHECK constraints not supported"))
+			}
 		case *scpb.ForeignKeyConstraint:
 			if e.TableID != col.TableID && behavior != tree.DropCascade {
 				panic(pgerror.Newf(pgcode.DependentObjectsStillExist,

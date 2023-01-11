@@ -52,7 +52,7 @@ add synthetic descriptor #106:
   ...
 # end StatementPhase
 # begin PreCommitPhase
-## PreCommitPhase stage 1 of 1 with 13 MutationType ops
+## PreCommitPhase stage 1 of 1 with 14 MutationType ops
 delete all comments for table descriptor 106
 delete object namespace entry {100 101 v3} -> 106
 upsert descriptor #105

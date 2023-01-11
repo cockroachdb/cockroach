@@ -245,12 +245,7 @@ func checkForEarlyExit(b BuildCtx, tbl *scpb.Table, t alterPrimaryKeySpec) {
 			panic(pgerror.Newf(pgcode.InvalidSchemaDefinition, "cannot use inaccessible "+
 				"column %q in primary key", col.Column))
 		}
-		_, _, colTypeElem := scpb.FindColumnType(colElems)
-		if colTypeElem == nil {
-			panic(errors.AssertionFailedf("programming error: resolving column %v does not give a "+
-				"ColumnType element.", col.Column))
-		}
-		if colTypeElem.IsNullable {
+		if !isColNotNull(b, colElem.TableID, colElem.ColumnID) {
 			panic(pgerror.Newf(pgcode.InvalidSchemaDefinition, "cannot use nullable column "+
 				"%q in primary key", col.Column))
 		}
@@ -977,8 +972,13 @@ func checkIfRowIDColumnCanBeDropped(b BuildCtx, rowidToDrop *scpb.Column) bool {
 			if e.TableID != rowidToDrop.TableID || e.ColumnID != rowidToDrop.ColumnID {
 				canBeDropped = false
 			}
-		case *scpb.UniqueWithoutIndexConstraint, *scpb.CheckConstraint, *scpb.ForeignKeyConstraint:
+		case *scpb.UniqueWithoutIndexConstraint, *scpb.ForeignKeyConstraint:
 			canBeDropped = false
+		case *scpb.CheckConstraint:
+			// Only consider this check constraint a real dependency if it's not a dummy for NOT NULL.
+			if !e.IsNotNull {
+				canBeDropped = false
+			}
 		case *scpb.View, *scpb.Sequence:
 			canBeDropped = false
 		case *scpb.SecondaryIndex:

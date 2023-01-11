@@ -176,7 +176,7 @@ message ColumnType {
   uint32 family_id = 2 [(gogoproto.customname) = "FamilyID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.FamilyID"];
   uint32 column_id = 3 [(gogoproto.customname) = "ColumnID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ColumnID"];
   TypeT embedded_type_t = 4 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  bool is_nullable = 5;
+  reserved 5;
   Expression compute_expr = 6;
   bool is_virtual = 7;
   reserved 10;
@@ -339,6 +339,7 @@ message CheckConstraint {
   // IndexIDForValidation is the index id to hint to the check constraint validation SQL query about which index
   // to check against. It is used exclusively by sql.validateCheckExpr.
   uint32 index_id_for_validation = 6 [(gogoproto.customname) = "IndexIDForValidation", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.IndexID"];
+  bool is_not_null = 7;
 }
 
 message ForeignKeyConstraint {

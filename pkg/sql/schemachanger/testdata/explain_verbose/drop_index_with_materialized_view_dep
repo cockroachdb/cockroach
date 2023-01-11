@@ -13,7 +13,7 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
 │   │
 │   └── • Stage 1 of 1 in StatementPhase
 │       │
-│       ├── • 6 elements transitioning toward ABSENT
+│       ├── • 7 elements transitioning toward ABSENT
 │       │   │
 │       │   ├── • View:{DescID: 106}
 │       │   │     PUBLIC → TXN_DROPPED
@@ -29,6 +29,12 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
 │       │   │   │
 │       │   │   └── • skip PUBLIC → WRITE_ONLY operations
 │       │   │         rule: "skip column removal ops on relation drop"
+│       │   │
+│       │   ├── • CheckConstraint:{DescID: 106, IndexID: 0, ConstraintID: 0}
+│       │   │   │ PUBLIC → VALIDATED
+│       │   │   │
+│       │   │   └── • skip PUBLIC → VALIDATED operations
+│       │   │         rule: "skip constraint removal ops on relation drop"
 │       │   │
 │       │   ├── • Column:{DescID: 106, ColumnID: 4294967295}
 │       │   │   │ PUBLIC → WRITE_ONLY
@@ -57,7 +63,7 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
 │   │
 │   └── • Stage 1 of 1 in PreCommitPhase
 │       │
-│       ├── • 27 elements transitioning toward ABSENT
+│       ├── • 28 elements transitioning toward ABSENT
 │       │   │
 │       │   ├── • IndexColumn:{DescID: 105, ColumnID: 2, IndexID: 2}
 │       │   │   │ PUBLIC → ABSENT
@@ -218,6 +224,9 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
 │       │   │   └── • SameStagePrecedence dependency from ABSENT ColumnDefaultExpression:{DescID: 106, ColumnID: 2}
 │       │   │         rule: "column type dependents removed right before column type"
 │       │   │
+│       │   ├── • CheckConstraint:{DescID: 106, IndexID: 0, ConstraintID: 0}
+│       │   │     VALIDATED → ABSENT
+│       │   │
 │       │   ├── • ColumnDefaultExpression:{DescID: 106, ColumnID: 2}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
@@ -358,7 +367,7 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
 │       │       └── • skip PUBLIC → ABSENT operations
 │       │             rule: "skip index dependents removal ops on relation drop"
 │       │
-│       └── • 13 Mutation operations
+│       └── • 14 Mutation operations
 │           │
 │           ├── • MarkDescriptorAsDropped
 │           │     DescriptorID: 106
@@ -369,6 +378,9 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
 │           │     - 105
 │           │
 │           ├── • RemoveAllTableComments
+│           │     TableID: 106
+│           │
+│           ├── • RemoveCheckConstraint
 │           │     TableID: 106
 │           │
 │           ├── • RemoveColumnDefaultExpression

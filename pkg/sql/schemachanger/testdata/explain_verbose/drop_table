@@ -13,7 +13,7 @@ EXPLAIN (ddl, verbose) DROP TABLE db.sc.t;
 │   │
 │   └── • Stage 1 of 1 in StatementPhase
 │       │
-│       ├── • 7 elements transitioning toward ABSENT
+│       ├── • 8 elements transitioning toward ABSENT
 │       │   │
 │       │   ├── • Table:{DescID: 107}
 │       │   │     PUBLIC → TXN_DROPPED
@@ -35,6 +35,12 @@ EXPLAIN (ddl, verbose) DROP TABLE db.sc.t;
 │       │   │   │
 │       │   │   └── • skip PUBLIC → WRITE_ONLY operations
 │       │   │         rule: "skip column removal ops on relation drop"
+│       │   │
+│       │   ├── • CheckConstraint:{DescID: 107, IndexID: 0, ConstraintID: 0}
+│       │   │   │ PUBLIC → VALIDATED
+│       │   │   │
+│       │   │   └── • skip PUBLIC → VALIDATED operations
+│       │   │         rule: "skip constraint removal ops on relation drop"
 │       │   │
 │       │   ├── • Column:{DescID: 107, ColumnID: 4294967295}
 │       │   │   │ PUBLIC → WRITE_ONLY
@@ -63,7 +69,7 @@ EXPLAIN (ddl, verbose) DROP TABLE db.sc.t;
 │   │
 │   └── • Stage 1 of 1 in PreCommitPhase
 │       │
-│       ├── • 28 elements transitioning toward ABSENT
+│       ├── • 29 elements transitioning toward ABSENT
 │       │   │
 │       │   ├── • Namespace:{DescID: 107, Name: t, ReferencedDescID: 104}
 │       │   │   │ PUBLIC → ABSENT
@@ -233,6 +239,9 @@ EXPLAIN (ddl, verbose) DROP TABLE db.sc.t;
 │       │   │   └── • SameStagePrecedence dependency from ABSENT ColumnDefaultExpression:{DescID: 107, ColumnID: 3}
 │       │   │         rule: "column type dependents removed right before column type"
 │       │   │
+│       │   ├── • CheckConstraint:{DescID: 107, IndexID: 0, ConstraintID: 0}
+│       │   │     VALIDATED → ABSENT
+│       │   │
 │       │   ├── • ColumnDefaultExpression:{DescID: 107, ColumnID: 3}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
@@ -392,12 +401,15 @@ EXPLAIN (ddl, verbose) DROP TABLE db.sc.t;
 │       │       └── • skip PUBLIC → ABSENT operations
 │       │             rule: "skip index dependents removal ops on relation drop"
 │       │
-│       └── • 11 Mutation operations
+│       └── • 12 Mutation operations
 │           │
 │           ├── • MarkDescriptorAsDropped
 │           │     DescriptorID: 107
 │           │
 │           ├── • RemoveAllTableComments
+│           │     TableID: 107
+│           │
+│           ├── • RemoveCheckConstraint
 │           │     TableID: 107
 │           │
 │           ├── • RemoveColumnDefaultExpression

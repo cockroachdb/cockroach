@@ -61,7 +61,9 @@ func (m *visitor) SetAddedColumnType(ctx context.Context, op scop.SetAddedColumn
 	}
 	col := mut.AsColumn().ColumnDesc()
 	col.Type = op.ColumnType.Type
-	col.Nullable = op.ColumnType.IsNullable
+	// We default the col to be nullable. If not, we will update it when we
+	// publish the corresponding dummy CheckConstraint after we validate it.
+	col.Nullable = true
 	col.Virtual = op.ColumnType.IsVirtual
 	if ce := op.ColumnType.ComputeExpr; ce != nil {
 		expr := string(ce.Expr)

@@ -13,7 +13,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 1 of 7;
     │
     └── • Stage 1 of 1 in PostCommitNonRevertiblePhase
         │
-        ├── • 11 elements transitioning toward ABSENT
+        ├── • 12 elements transitioning toward ABSENT
         │   │
         │   ├── • Column:{DescID: 106, ColumnID: 2}
         │   │   │ DELETE_ONLY → ABSENT
@@ -103,13 +103,19 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 1 of 7;
         │   │   └── • skip PUBLIC → ABSENT operations
         │   │         rule: "skip index-column removal ops on index removal"
         │   │
-        │   └── • IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 3}
-        │       │ PUBLIC → ABSENT
+        │   ├── • IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 3}
+        │   │   │ PUBLIC → ABSENT
+        │   │   │
+        │   │   └── • skip PUBLIC → ABSENT operations
+        │   │         rule: "skip index-column removal ops on index removal"
+        │   │
+        │   └── • CheckConstraint:{DescID: 106, IndexID: 2, ConstraintID: 4}
+        │       │ WRITE_ONLY → ABSENT
         │       │
-        │       └── • skip PUBLIC → ABSENT operations
-        │             rule: "skip index-column removal ops on index removal"
+        │       └── • PreviousTransactionPrecedence dependency from WRITE_ONLY CheckConstraint:{DescID: 106, IndexID: 2, ConstraintID: 4}
+        │             rule: "CheckConstraint transitions to ABSENT uphold 2-version invariant: WRITE_ONLY->VALIDATED"
         │
-        └── • 10 Mutation operations
+        └── • 11 Mutation operations
             │
             ├── • SetColumnName
             │     ColumnID: 2
@@ -147,6 +153,10 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 1 of 7;
             │
             ├── • MakeIndexAbsent
             │     IndexID: 3
+            │     TableID: 106
+            │
+            ├── • RemoveCheckConstraint
+            │     ConstraintID: 4
             │     TableID: 106
             │
             ├── • MakeDeleteOnlyColumnAbsent

@@ -1537,8 +1537,14 @@ func ValidateConstraint(
 			return ie.WithSyntheticDescriptors(
 				[]catalog.Descriptor{tableDesc},
 				func() error {
-					return validateCheckExpr(ctx, &semaCtx, txn, sessionData, ck.GetExpr(),
+					err := validateCheckExpr(ctx, &semaCtx, txn, sessionData, ck.GetExpr(),
 						tableDesc.(*tabledesc.Mutable), ie, indexIDForValidation)
+					// Code the error with NotNullViolation if it's a NOT NULL violation.
+					// Otherwise, it'd be code CheckViolation.
+					if err != nil && ck.IsNotNullColumnConstraint() {
+						err = pgerror.WithCandidateCode(errors.UnwrapOnce(err), pgcode.NotNullViolation)
+					}
+					return err
 				},
 			)
 		case catconstants.ConstraintTypeFK:

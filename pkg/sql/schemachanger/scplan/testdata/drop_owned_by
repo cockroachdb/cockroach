@@ -23,6 +23,7 @@ StatementPhase stage 1 of 1 with 9 MutationType ops
     [[Sequence:{DescID: 106}, ABSENT], PUBLIC] -> TXN_DROPPED
     [[Table:{DescID: 109}, ABSENT], PUBLIC] -> TXN_DROPPED
     [[Column:{DescID: 109, ColumnID: 1}, ABSENT], PUBLIC] -> WRITE_ONLY
+    [[CheckConstraint:{DescID: 109, IndexID: 0, ConstraintID: 0}, ABSENT], PUBLIC] -> VALIDATED
     [[Column:{DescID: 109, ColumnID: 2}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[Column:{DescID: 109, ColumnID: 3}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[Column:{DescID: 109, ColumnID: 4294967295}, ABSENT], PUBLIC] -> WRITE_ONLY
@@ -31,6 +32,7 @@ StatementPhase stage 1 of 1 with 9 MutationType ops
     [[Sequence:{DescID: 107}, ABSENT], PUBLIC] -> TXN_DROPPED
     [[Table:{DescID: 108}, ABSENT], PUBLIC] -> TXN_DROPPED
     [[Column:{DescID: 108, ColumnID: 1}, ABSENT], PUBLIC] -> WRITE_ONLY
+    [[CheckConstraint:{DescID: 108, IndexID: 0, ConstraintID: 0}, ABSENT], PUBLIC] -> VALIDATED
     [[Column:{DescID: 108, ColumnID: 2}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[Column:{DescID: 108, ColumnID: 3}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[Column:{DescID: 108, ColumnID: 4294967295}, ABSENT], PUBLIC] -> WRITE_ONLY
@@ -66,7 +68,7 @@ StatementPhase stage 1 of 1 with 9 MutationType ops
       DescriptorID: 112
     *scop.MarkDescriptorAsSyntheticallyDropped
       DescriptorID: 113
-PreCommitPhase stage 1 of 1 with 63 MutationType ops
+PreCommitPhase stage 1 of 1 with 65 MutationType ops
   transitions:
     [[UserPrivileges:{DescID: 100, Name: r}, ABSENT], PUBLIC] -> ABSENT
     [[Namespace:{DescID: 105, Name: s, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
@@ -92,6 +94,7 @@ PreCommitPhase stage 1 of 1 with 63 MutationType ops
     [[Column:{DescID: 109, ColumnID: 1}, ABSENT], WRITE_ONLY] -> ABSENT
     [[ColumnName:{DescID: 109, Name: id, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[CheckConstraint:{DescID: 109, IndexID: 0, ConstraintID: 0}, ABSENT], VALIDATED] -> ABSENT
     [[Column:{DescID: 109, ColumnID: 2}, ABSENT], WRITE_ONLY] -> ABSENT
     [[ColumnName:{DescID: 109, Name: name, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
@@ -126,6 +129,7 @@ PreCommitPhase stage 1 of 1 with 63 MutationType ops
     [[Column:{DescID: 108, ColumnID: 1}, ABSENT], WRITE_ONLY] -> ABSENT
     [[ColumnName:{DescID: 108, Name: id, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[CheckConstraint:{DescID: 108, IndexID: 0, ConstraintID: 0}, ABSENT], VALIDATED] -> ABSENT
     [[Column:{DescID: 108, ColumnID: 2}, ABSENT], WRITE_ONLY] -> ABSENT
     [[ColumnName:{DescID: 108, Name: name, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
@@ -213,6 +217,8 @@ PreCommitPhase stage 1 of 1 with 63 MutationType ops
       DescriptorID: 109
     *scop.RemoveAllTableComments
       TableID: 109
+    *scop.RemoveCheckConstraint
+      TableID: 109
     *scop.RemoveColumnDefaultExpression
       ColumnID: 3
       TableID: 109
@@ -228,6 +234,8 @@ PreCommitPhase stage 1 of 1 with 63 MutationType ops
     *scop.MarkDescriptorAsDropped
       DescriptorID: 108
     *scop.RemoveAllTableComments
+      TableID: 108
+    *scop.RemoveCheckConstraint
       TableID: 108
     *scop.RemoveColumnDefaultExpression
       ColumnID: 3

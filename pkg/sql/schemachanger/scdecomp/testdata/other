@@ -254,7 +254,6 @@ ElementState:
     columnId: 1
     computeExpr: null
     familyId: 0
-    isNullable: true
     isVirtual: false
     tableId: 112
     type:
@@ -279,7 +278,6 @@ ElementState:
     columnId: 4.294967294e+09
     computeExpr: null
     familyId: 0
-    isNullable: true
     isVirtual: false
     tableId: 112
     type:
@@ -304,7 +302,6 @@ ElementState:
     columnId: 4.294967295e+09
     computeExpr: null
     familyId: 0
-    isNullable: true
     isVirtual: false
     tableId: 112
     type:
@@ -434,7 +431,6 @@ ElementState:
     columnId: 1
     computeExpr: null
     familyId: 0
-    isNullable: true
     isVirtual: false
     tableId: 113
     type:
@@ -459,7 +455,6 @@ ElementState:
     columnId: 2
     computeExpr: null
     familyId: 0
-    isNullable: true
     isVirtual: false
     tableId: 113
     type:
@@ -484,7 +479,6 @@ ElementState:
     columnId: 4.294967294e+09
     computeExpr: null
     familyId: 0
-    isNullable: true
     isVirtual: false
     tableId: 113
     type:
@@ -509,7 +503,6 @@ ElementState:
     columnId: 4.294967295e+09
     computeExpr: null
     familyId: 0
-    isNullable: true
     isVirtual: false
     tableId: 113
     type:

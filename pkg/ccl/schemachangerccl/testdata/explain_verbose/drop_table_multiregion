@@ -13,7 +13,7 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
 │   │
 │   └── • Stage 1 of 1 in StatementPhase
 │       │
-│       ├── • 6 elements transitioning toward ABSENT
+│       ├── • 7 elements transitioning toward ABSENT
 │       │   │
 │       │   ├── • Table:{DescID: 108}
 │       │   │     PUBLIC → TXN_DROPPED
@@ -29,6 +29,12 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
 │       │   │   │
 │       │   │   └── • skip PUBLIC → WRITE_ONLY operations
 │       │   │         rule: "skip column removal ops on relation drop"
+│       │   │
+│       │   ├── • CheckConstraint:{DescID: 108, IndexID: 0, ConstraintID: 0}
+│       │   │   │ PUBLIC → VALIDATED
+│       │   │   │
+│       │   │   └── • skip PUBLIC → VALIDATED operations
+│       │   │         rule: "skip constraint removal ops on relation drop"
 │       │   │
 │       │   ├── • Column:{DescID: 108, ColumnID: 4294967295}
 │       │   │   │ PUBLIC → WRITE_ONLY
@@ -57,7 +63,7 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
 │   │
 │   └── • Stage 1 of 1 in PreCommitPhase
 │       │
-│       ├── • 27 elements transitioning toward ABSENT
+│       ├── • 28 elements transitioning toward ABSENT
 │       │   │
 │       │   ├── • Namespace:{DescID: 108, Name: table_regional_by_row, ReferencedDescID: 104}
 │       │   │   │ PUBLIC → ABSENT
@@ -205,6 +211,9 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
 │       │   │   │
 │       │   │   └── • SameStagePrecedence dependency from ABSENT ColumnDefaultExpression:{DescID: 108, ReferencedTypeIDs: [106 107], ColumnID: 2}
 │       │   │         rule: "column type dependents removed right before column type"
+│       │   │
+│       │   ├── • CheckConstraint:{DescID: 108, IndexID: 0, ConstraintID: 0}
+│       │   │     VALIDATED → ABSENT
 │       │   │
 │       │   ├── • ColumnDefaultExpression:{DescID: 108, ReferencedTypeIDs: [106 107], ColumnID: 2}
 │       │   │   │ PUBLIC → ABSENT
@@ -361,12 +370,15 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
 │       │       └── • skip PUBLIC → ABSENT operations
 │       │             rule: "skip index dependents removal ops on relation drop"
 │       │
-│       └── • 15 Mutation operations
+│       └── • 16 Mutation operations
 │           │
 │           ├── • MarkDescriptorAsDropped
 │           │     DescriptorID: 108
 │           │
 │           ├── • RemoveAllTableComments
+│           │     TableID: 108
+│           │
+│           ├── • RemoveCheckConstraint
 │           │     TableID: 108
 │           │
 │           ├── • RemoveColumnDefaultExpression

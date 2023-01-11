@@ -63,9 +63,16 @@ func (m *visitor) MakeAbsentCheckConstraintWriteOnly(
 		ColumnIDs:             op.ColumnIDs,
 		FromHashShardedColumn: op.FromHashShardedColumn,
 		ConstraintID:          op.ConstraintID,
+		IsNonNullConstraint:   op.IsNotNull,
 	}
-	if err = enqueueAddCheckConstraintMutation(tbl, ck); err != nil {
-		return err
+	if op.IsNotNull {
+		if err = enqueueAddNotNullMutation(tbl, ck); err != nil {
+			return err
+		}
+	} else {
+		if err = enqueueAddCheckConstraintMutation(tbl, ck); err != nil {
+			return err
+		}
 	}
 	// Fast-forward the mutation state to WRITE_ONLY because this constraint
 	// is now considered as enforced.
@@ -84,7 +91,7 @@ func (m *visitor) MakeValidatedCheckConstraintPublic(
 	var found bool
 	for idx, mutation := range tbl.Mutations {
 		if c := mutation.GetConstraint(); c != nil &&
-			c.ConstraintType == descpb.ConstraintToUpdate_CHECK &&
+			(c.ConstraintType == descpb.ConstraintToUpdate_CHECK || c.ConstraintType == descpb.ConstraintToUpdate_NOT_NULL) &&
 			c.Check.ConstraintID == op.ConstraintID {
 			tbl.Checks = append(tbl.Checks, &c.Check)
 
@@ -148,7 +155,7 @@ func (m *visitor) RemoveCheckConstraint(ctx context.Context, op scop.RemoveCheck
 	}
 	for i, m := range tbl.Mutations {
 		if c := m.GetConstraint(); c != nil &&
-			c.ConstraintType == descpb.ConstraintToUpdate_CHECK &&
+			(c.ConstraintType == descpb.ConstraintToUpdate_CHECK || c.ConstraintType == descpb.ConstraintToUpdate_NOT_NULL) &&
 			c.Check.ConstraintID == op.ConstraintID {
 			tbl.Mutations = append(tbl.Mutations[:i], tbl.Mutations[i+1:]...)
 			found = true

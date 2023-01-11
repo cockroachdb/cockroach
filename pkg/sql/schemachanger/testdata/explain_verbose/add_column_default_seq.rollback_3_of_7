@@ -13,7 +13,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 3 of 7;
     │
     ├── • Stage 1 of 2 in PostCommitNonRevertiblePhase
     │   │
-    │   ├── • 8 elements transitioning toward ABSENT
+    │   ├── • 9 elements transitioning toward ABSENT
     │   │   │
     │   │   ├── • Column:{DescID: 106, ColumnID: 2}
     │   │   │   │ WRITE_ONLY → DELETE_ONLY
@@ -69,16 +69,22 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 3 of 7;
     │   │   │   └── • skip PUBLIC → ABSENT operations
     │   │   │         rule: "skip index-column removal ops on index removal"
     │   │   │
-    │   │   └── • IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 3}
-    │   │       │ PUBLIC → ABSENT
+    │   │   ├── • IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 3}
+    │   │   │   │ PUBLIC → ABSENT
+    │   │   │   │
+    │   │   │   ├── • Precedence dependency from WRITE_ONLY Column:{DescID: 106, ColumnID: 2}
+    │   │   │   │     rule: "column no longer public before dependents"
+    │   │   │   │
+    │   │   │   └── • skip PUBLIC → ABSENT operations
+    │   │   │         rule: "skip index-column removal ops on index removal"
+    │   │   │
+    │   │   └── • CheckConstraint:{DescID: 106, IndexID: 2, ConstraintID: 4}
+    │   │       │ WRITE_ONLY → ABSENT
     │   │       │
-    │   │       ├── • Precedence dependency from WRITE_ONLY Column:{DescID: 106, ColumnID: 2}
-    │   │       │     rule: "column no longer public before dependents"
-    │   │       │
-    │   │       └── • skip PUBLIC → ABSENT operations
-    │   │             rule: "skip index-column removal ops on index removal"
+    │   │       └── • PreviousTransactionPrecedence dependency from WRITE_ONLY CheckConstraint:{DescID: 106, IndexID: 2, ConstraintID: 4}
+    │   │             rule: "CheckConstraint transitions to ABSENT uphold 2-version invariant: WRITE_ONLY->VALIDATED"
     │   │
-    │   └── • 7 Mutation operations
+    │   └── • 8 Mutation operations
     │       │
     │       ├── • MakeWriteOnlyColumnDeleteOnly
     │       │     ColumnID: 2
@@ -103,6 +109,10 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 3 of 7;
     │       │         SourceElementID: 1
     │       │         SubWorkID: 1
     │       │     IndexID: 2
+    │       │     TableID: 106
+    │       │
+    │       ├── • RemoveCheckConstraint
+    │       │     ConstraintID: 4
     │       │     TableID: 106
     │       │
     │       ├── • SetJobStateOnDescriptor

@@ -2676,7 +2676,9 @@ INSERT INTO t_add_column_not_null VALUES (1), (2), (3)
 statement error pgcode 23502 null value in column "j" violates not-null constraint
 ALTER TABLE t_add_column_not_null ADD COLUMN j INT NOT NULL DEFAULT (NULL:::INT)
 
-statement error pgcode 23502 null value in column "j" violates not-null constraint
+# The actual error msg is slightly different between legacy and declarative
+# schema changer, so we only assert on the error code (23502 is NotNullViolation).
+statement error pgcode 23502 .*
 ALTER TABLE t_add_column_not_null ADD COLUMN j INT GENERATED ALWAYS AS (NULL:::INT) STORED NOT NULL;
 
 # Note that the UNIQUE here leads to a secondary index being built which will fail.

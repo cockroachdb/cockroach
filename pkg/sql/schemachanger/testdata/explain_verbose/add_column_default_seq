@@ -12,7 +12,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN l INT NOT NULL DEFAU
 │   │
 │   └── • Stage 1 of 1 in StatementPhase
 │       │
-│       ├── • 8 elements transitioning toward PUBLIC
+│       ├── • 9 elements transitioning toward PUBLIC
 │       │   │
 │       │   ├── • Column:{DescID: 106, ColumnID: 2}
 │       │   │   │ ABSENT → DELETE_ONLY
@@ -64,11 +64,17 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN l INT NOT NULL DEFAU
 │       │   │   └── • Precedence dependency from BACKFILL_ONLY PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
 │       │   │         rule: "index existence precedes index dependents"
 │       │   │
-│       │   └── • IndexData:{DescID: 106, IndexID: 2}
-│       │       │ ABSENT → PUBLIC
+│       │   ├── • IndexData:{DescID: 106, IndexID: 2}
+│       │   │   │ ABSENT → PUBLIC
+│       │   │   │
+│       │   │   └── • SameStagePrecedence dependency from BACKFILL_ONLY PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
+│       │   │         rule: "index data exists as soon as index accepts backfills"
+│       │   │
+│       │   └── • CheckConstraint:{DescID: 106, IndexID: 2, ConstraintID: 4}
+│       │       │ ABSENT → WRITE_ONLY
 │       │       │
-│       │       └── • SameStagePrecedence dependency from BACKFILL_ONLY PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
-│       │             rule: "index data exists as soon as index accepts backfills"
+│       │       └── • PreviousTransactionPrecedence dependency from ABSENT CheckConstraint:{DescID: 106, IndexID: 2, ConstraintID: 4}
+│       │             rule: "CheckConstraint transitions to PUBLIC uphold 2-version invariant: ABSENT->WRITE_ONLY"
 │       │
 │       ├── • 3 elements transitioning toward TRANSIENT_ABSENT
 │       │   │
@@ -96,7 +102,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN l INT NOT NULL DEFAU
 │       │       └── • Precedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
 │       │             rule: "temp index existence precedes index dependents"
 │       │
-│       └── • 12 Mutation operations
+│       └── • 13 Mutation operations
 │           │
 │           ├── • MakeAbsentColumnDeleteOnly
 │           │     Column:
@@ -184,11 +190,14 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN l INT NOT NULL DEFAU
 │           │     IndexID: 3
 │           │     TableID: 106
 │           │
-│           └── • AddColumnToIndex
-│                 ColumnID: 2
-│                 IndexID: 3
-│                 Kind: 2
-│                 TableID: 106
+│           ├── • AddColumnToIndex
+│           │     ColumnID: 2
+│           │     IndexID: 3
+│           │     Kind: 2
+│           │     TableID: 106
+│           │
+│           └── • MakeAbsentCheckConstraintWriteOnly
+│                 {}
 │
 ├── • PreCommitPhase
 │   │
@@ -395,29 +404,43 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN l INT NOT NULL DEFAU
 │   │       │
 │   │       └── • UpdateSchemaChangerJob
 │   │             JobID: 1
-│   │             RunningStatus: PostCommitPhase stage 7 of 7 with 1 ValidationType op pending
+│   │             RunningStatus: PostCommitPhase stage 7 of 7 with 2 ValidationType ops pending
 │   │
 │   └── • Stage 7 of 7 in PostCommitPhase
 │       │
-│       ├── • 1 element transitioning toward PUBLIC
+│       ├── • 2 elements transitioning toward PUBLIC
 │       │   │
-│       │   └── • PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
+│       │   ├── • PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
+│       │   │   │ WRITE_ONLY → VALIDATED
+│       │   │   │
+│       │   │   └── • PreviousTransactionPrecedence dependency from WRITE_ONLY PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
+│       │   │         rule: "PrimaryIndex transitions to PUBLIC uphold 2-version invariant: WRITE_ONLY->VALIDATED"
+│       │   │
+│       │   └── • CheckConstraint:{DescID: 106, IndexID: 2, ConstraintID: 4}
 │       │       │ WRITE_ONLY → VALIDATED
 │       │       │
-│       │       └── • PreviousTransactionPrecedence dependency from WRITE_ONLY PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
-│       │             rule: "PrimaryIndex transitions to PUBLIC uphold 2-version invariant: WRITE_ONLY->VALIDATED"
+│       │       ├── • Precedence dependency from VALIDATED PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
+│       │       │     rule: "index is ready to be validated before we validate constraint on it"
+│       │       │
+│       │       └── • PreviousTransactionPrecedence dependency from WRITE_ONLY CheckConstraint:{DescID: 106, IndexID: 2, ConstraintID: 4}
+│       │             rule: "CheckConstraint transitions to PUBLIC uphold 2-version invariant: WRITE_ONLY->VALIDATED"
 │       │
-│       └── • 1 Validation operation
+│       └── • 2 Validation operations
 │           │
-│           └── • ValidateIndex
-│                 IndexID: 2
+│           ├── • ValidateIndex
+│           │     IndexID: 2
+│           │     TableID: 106
+│           │
+│           └── • ValidateConstraint
+│                 ConstraintID: 4
+│                 IndexIDForValidation: 2
 │                 TableID: 106
 │
 └── • PostCommitNonRevertiblePhase
     │
     ├── • Stage 1 of 3 in PostCommitNonRevertiblePhase
     │   │
-    │   ├── • 3 elements transitioning toward PUBLIC
+    │   ├── • 4 elements transitioning toward PUBLIC
     │   │   │
     │   │   ├── • Column:{DescID: 106, ColumnID: 2}
     │   │   │   │ WRITE_ONLY → PUBLIC
@@ -462,11 +485,17 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN l INT NOT NULL DEFAU
     │   │   │   └── • Precedence dependency from PUBLIC IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 2}
     │   │   │         rule: "index dependents exist before index becomes public"
     │   │   │
-    │   │   └── • IndexName:{DescID: 106, Name: tbl_pkey, IndexID: 2}
-    │   │       │ ABSENT → PUBLIC
+    │   │   ├── • IndexName:{DescID: 106, Name: tbl_pkey, IndexID: 2}
+    │   │   │   │ ABSENT → PUBLIC
+    │   │   │   │
+    │   │   │   └── • Precedence dependency from BACKFILL_ONLY PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
+    │   │   │         rule: "index existence precedes index dependents"
+    │   │   │
+    │   │   └── • CheckConstraint:{DescID: 106, IndexID: 2, ConstraintID: 4}
+    │   │       │ VALIDATED → PUBLIC
     │   │       │
-    │   │       └── • Precedence dependency from BACKFILL_ONLY PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
-    │   │             rule: "index existence precedes index dependents"
+    │   │       └── • PreviousTransactionPrecedence dependency from VALIDATED CheckConstraint:{DescID: 106, IndexID: 2, ConstraintID: 4}
+    │   │             rule: "CheckConstraint transitions to PUBLIC uphold 2-version invariant: VALIDATED->PUBLIC"
     │   │
     │   ├── • 3 elements transitioning toward TRANSIENT_ABSENT
     │   │   │
@@ -511,7 +540,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN l INT NOT NULL DEFAU
     │   │       └── • Precedence dependency from VALIDATED PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}
     │   │             rule: "index no longer public before dependents"
     │   │
-    │   └── • 10 Mutation operations
+    │   └── • 11 Mutation operations
     │       │
     │       ├── • MakePublicPrimaryIndexWriteOnly
     │       │     IndexID: 1
@@ -529,6 +558,10 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN l INT NOT NULL DEFAU
     │       │
     │       ├── • MakeWriteOnlyIndexDeleteOnly
     │       │     IndexID: 3
+    │       │     TableID: 106
+    │       │
+    │       ├── • MakeValidatedCheckConstraintPublic
+    │       │     ConstraintID: 4
     │       │     TableID: 106
     │       │
     │       ├── • MakeValidatedPrimaryIndexPublic

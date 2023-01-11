@@ -793,3 +793,14 @@ func ExtractColumnIDsInExpr(
 
 	return colIDs, err
 }
+
+func isColNotNull(b BuildCtx, tableID catid.DescID, colID catid.ColumnID) (ret bool) {
+	scpb.ForEachCheckConstraint(b.QueryByID(tableID), func(
+		current scpb.Status, target scpb.TargetStatus, e *scpb.CheckConstraint,
+	) {
+		if e.IsNotNull && len(e.ColumnIDs) == 1 && e.ColumnIDs[0] == colID {
+			ret = true
+		}
+	})
+	return ret
+}

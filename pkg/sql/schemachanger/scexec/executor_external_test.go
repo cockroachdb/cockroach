@@ -279,10 +279,9 @@ func TestSchemaChanger(t *testing.T) {
 				scpb.MakeTarget(
 					scpb.ToPublic,
 					&scpb.ColumnType{
-						TableID:    fooTable.GetID(),
-						ColumnID:   2,
-						TypeT:      scpb.TypeT{Type: types.Int},
-						IsNullable: true,
+						TableID:  fooTable.GetID(),
+						ColumnID: 2,
+						TypeT:    scpb.TypeT{Type: types.Int},
 					},
 					metadata,
 				),

@@ -134,11 +134,11 @@ func alterTableAddColumn(
 		Name:     string(d.Name),
 	}
 	spec.colType = &scpb.ColumnType{
-		TableID:    tbl.TableID,
-		ColumnID:   spec.col.ColumnID,
-		IsNullable: desc.Nullable,
-		IsVirtual:  desc.Virtual,
+		TableID:   tbl.TableID,
+		ColumnID:  spec.col.ColumnID,
+		IsVirtual: desc.Virtual,
 	}
+	spec.notNull = !desc.Nullable
 
 	spec.colType.TypeT = b.ResolveTypeRef(d.Type)
 	if spec.colType.TypeT.Type.UserDefined() {
@@ -277,11 +277,39 @@ type addColumnSpec struct {
 	onUpdate *scpb.ColumnOnUpdateExpression
 	comment  *scpb.ColumnComment
 	unique   bool
+	notNull  bool
 }
 
-// addColumn is a helper function which adds column element targets and ensures
-// that the new column is backed by a primary index, which it returns.
+// addColumn delegates the work of adding a column to addColumnIgnoringNotNull. It then
+// adds a not null constraint, disguised as a CheckConstraint, if this column is not null.
 func addColumn(b BuildCtx, spec addColumnSpec, n tree.NodeFormatter) (backing *scpb.PrimaryIndex) {
+	backing = addColumnIgnoringNotNull(b, spec, n)
+	if spec.notNull {
+		expr := &tree.IsNotNullExpr{
+			Expr: &tree.ColumnItem{ColumnName: tree.Name(spec.name.Name)},
+		}
+		notNullAsCk := &scpb.CheckConstraint{
+			TableID:      spec.tbl.TableID,
+			ConstraintID: b.NextTableConstraintID(spec.tbl.TableID),
+			ColumnIDs:    []descpb.ColumnID{spec.col.ColumnID},
+			Expression:   *b.WrapExpression(spec.tbl.TableID, expr),
+			IsNotNull:    true,
+		}
+		if backing != nil {
+			notNullAsCk.IndexIDForValidation = backing.IndexID
+		}
+		b.Add(notNullAsCk)
+	}
+	return backing
+}
+
+// addColumnIgnoringNotNull is a helper function which adds column element targets and ensures
+// that the new column is backed by a primary index, which it returns.
+// It ignores whether this column is nullable, which will be addressed by its one and only
+// caller `addColumn`.
+func addColumnIgnoringNotNull(
+	b BuildCtx, spec addColumnSpec, n tree.NodeFormatter,
+) (backing *scpb.PrimaryIndex) {
 	b.Add(spec.col)
 	if spec.fam != nil {
 		b.Add(spec.fam)
@@ -338,7 +366,7 @@ func addColumn(b BuildCtx, spec addColumnSpec, n tree.NodeFormatter) (backing *s
 	// follow-up change in order to get this in.
 	allTargets := b.QueryByID(spec.tbl.TableID)
 	if spec.def == nil && spec.colType.ComputeExpr == nil {
-		if !spec.colType.IsNullable && spec.unique {
+		if spec.notNull && spec.unique {
 			panic(scerrors.NotImplementedErrorf(n,
 				"`ADD COLUMN NOT NULL UNIQUE` is problematic with "+
 					"concurrent insert. See issue #90174"))
