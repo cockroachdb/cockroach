@@ -136,9 +136,6 @@ func (r *Replica) SendWithWriteBytes(
 	// recorded regardless of errors that are encountered.
 	defer r.MeasureReqCPUNanos(grunning.Time())
 
-	// Record summary throughput information about the batch request for
-	// accounting.
-	r.recordBatchRequestLoad(ctx, ba)
 
 	// If the internal Raft group is not initialized, create it and wake the leader.
 	r.maybeInitializeRaftGroup(ctx)
@@ -209,6 +206,9 @@ func (r *Replica) SendWithWriteBytes(
 		r.maybeAddRangeInfoToResponse(ctx, ba, br)
 	}
 
+	// Record summary throughput information about the batch request for
+	// accounting.
+	r.recordBatchRequestLoad(ctx, ba)
 	r.recordRequestWriteBytes(writeBytes)
 	r.recordImpactOnRateLimiter(ctx, br, isReadOnly)
 	return br, writeBytes, pErr
