@@ -395,6 +395,10 @@ const (
 	// V23_1AlterSystemSQLInstancesAddSqlAddr adds a sql_addr column to the
 	// system.sql_instances table.
 	V23_1AlterSystemSQLInstancesAddSQLAddr
+	// V23_1AllocatorCPUBalancing adds balancing CPU usage among stores using
+	// the allocator and store rebalancer. It assumes that at this version,
+	// stores now include their CPU in the StoreCapacity proto when gossiping.
+	V23_1AllocatorCPUBalancing
 
 	// V23_1_ChangefeedExpressionProductionReady marks changefeed expressions (transformation)
 	// as production ready.  This gate functions as a signal to attempt to upgrade
@@ -686,6 +690,10 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     V23_1_ChangefeedExpressionProductionReady,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 30},
+	},
+	{
+		Key:     V23_1AllocatorCPUBalancing,
+		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 32},
 	},
 
 	// *************************************************
