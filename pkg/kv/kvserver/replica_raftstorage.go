@@ -576,6 +576,9 @@ func (r *Replica) applySnapshot(
 	)
 	defer logStoreSSTWriter.Close()
 
+	// Create SST to clear the RangeID-local unreplicated span. Will
+	// be combined with the SST that contains the replicated data, and
+	// in sum that is the entire Replica state we're going to write.
 	if err := kvstorage.PrepareLogStoreSnapshotSST(ctx,
 		storage.FullReplicaID{RangeID: r.RangeID, ReplicaID: r.replicaID},
 		hs,
@@ -598,6 +601,10 @@ func (r *Replica) applySnapshot(
 			return err
 		}
 	}
+
+	// Next, we might be subsuming replicas. This occurs if the snapshot reflects
+	// at least one merge that isn't reflected in the pre-snapshot state. For each
+	// such replica, we'll
 
 	// If we're subsuming a replica below, we don't have its last NextReplicaID,
 	// nor can we obtain it. That's OK: we can just be conservative and use the
@@ -771,6 +778,16 @@ func (r *Replica) clearSubsumedReplicaDiskData(
 	subsumedRepls []*Replica,
 	subsumedNextReplicaID roachpb.ReplicaID,
 ) error {
+
+	// TODO(tbg): I think this method can be simplfied quite a bit. First,
+	// better not to interleave snap creation with in-mem destruction, i.e.
+	// make preDestroyRaftMuLocked have separate parts for staging the deletion
+	// and marking a *Replica is being destroyed.
+	// Second, the "subsumed range extends past snapshot" part can be simplified.
+	// We can use a SpanGroup - init it with the snapshot desc RSpan, then subtract out all
+	// of the subsumed desc RSpans. For slices that remain, we need to clear the replicated
+	// key spans.
+
 	// NB: we don't clear RangeID local key spans here. That happens
 	// via the call to preDestroyRaftMuLocked.
 	getKeySpans := func(d *roachpb.RangeDescriptor) []roachpb.Span {
@@ -783,8 +800,9 @@ func (r *Replica) clearSubsumedReplicaDiskData(
 			},
 		}).Spans()
 	}
-	keySpans := getKeySpans(desc)
-	totalKeySpans := append([]roachpb.Span(nil), keySpans...)
+
+	keySpans := getKeySpans(desc)                             // key-based replicated spans for snap
+	totalKeySpans := append([]roachpb.Span(nil), keySpans...) // copy initially but will be adjusted
 	for _, sr := range subsumedRepls {
 		// We mark the replica as destroyed so that new commands are not
 		// accepted. This destroy status will be detected after the batch
