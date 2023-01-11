@@ -196,7 +196,7 @@ func decodeKeyCodecAndIndex(
 	if err != nil {
 		return keys.SQLCodec{}, nil, err
 	}
-	index, err := tableDesc.FindIndexWithID(indexID)
+	index, err := catalog.MustFindIndexByID(tableDesc, indexID)
 	if err != nil {
 		return keys.SQLCodec{}, nil, err
 	}

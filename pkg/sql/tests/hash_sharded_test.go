@@ -30,7 +30,7 @@ import (
 func getShardColumnID(
 	t *testing.T, tableDesc catalog.TableDescriptor, shardedIndexName string,
 ) descpb.ColumnID {
-	idx, err := tableDesc.FindIndexWithName(shardedIndexName)
+	idx, err := catalog.MustFindIndexByName(tableDesc, shardedIndexName)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -49,7 +49,7 @@ func getShardColumnID(
 func verifyTableDescriptorState(
 	t *testing.T, tableDesc catalog.TableDescriptor, shardedIndexName string,
 ) {
-	idx, err := tableDesc.FindIndexWithName(shardedIndexName)
+	idx, err := catalog.MustFindIndexByName(tableDesc, shardedIndexName)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -106,7 +106,7 @@ func TestBasicHashShardedIndexes(t *testing.T) {
 
 		// Ensure that secondary indexes on table `kv` have the shard column in their
 		// `KeySuffixColumnIDs` field so they can reconstruct the sharded primary key.
-		foo, err := tableDesc.FindIndexWithName("foo")
+		foo, err := catalog.MustFindIndexByName(tableDesc, "foo")
 		if err != nil {
 			t.Fatal(err)
 		}

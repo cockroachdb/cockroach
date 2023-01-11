@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
@@ -59,7 +60,7 @@ func TestInitIndexFetchSpec(t *testing.T) {
 					d.Fatalf(t, "failed to parse index-fetch params: %v", err)
 				}
 				table := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "testdb", params.Table)
-				index, err := table.FindIndexWithName(params.Index)
+				index, err := catalog.MustFindIndexByName(table, params.Index)
 				if err != nil {
 					d.Fatalf(t, "%+v", err)
 				}

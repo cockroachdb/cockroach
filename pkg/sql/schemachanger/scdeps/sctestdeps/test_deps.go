@@ -307,7 +307,13 @@ func (s *TestState) MayResolveIndex(
 		if tbl == nil {
 			return false, catalog.ResolvedObjectPrefix{}, nil, nil
 		}
-		idx, _ = tbl.FindNonDropIndexWithName(string(tableIndexName.Index))
+		idx = catalog.FindIndex(
+			tbl,
+			catalog.IndexOpts{AddMutations: true},
+			func(idx catalog.Index) bool {
+				return idx.GetName() == string(tableIndexName.Index)
+			},
+		)
 	} else {
 		db, schema := s.mayResolvePrefix(tableIndexName.Table.ObjectNamePrefix)
 		prefix = catalog.ResolvedObjectPrefix{
@@ -326,7 +332,13 @@ func (s *TestState) MayResolveIndex(
 			if !ok {
 				return nil
 			}
-			idx, _ = tbl.FindNonDropIndexWithName(string(tableIndexName.Index))
+			idx = catalog.FindIndex(
+				tbl,
+				catalog.IndexOpts{AddMutations: true},
+				func(idx catalog.Index) bool {
+					return idx.GetName() == string(tableIndexName.Index)
+				},
+			)
 			if idx != nil {
 				return iterutil.StopIteration()
 			}

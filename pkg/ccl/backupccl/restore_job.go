@@ -2095,7 +2095,7 @@ func (r *restoreResumer) publishDescriptors(
 
 		badIndexes := devalidateIndexes[mutTable.ID]
 		for _, badIdx := range badIndexes {
-			found, err := mutTable.FindIndexWithID(badIdx)
+			found, err := catalog.MustFindIndexByID(mutTable, badIdx)
 			if err != nil {
 				return err
 			}

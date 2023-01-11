@@ -752,7 +752,7 @@ func (p *planner) getTableAndIndexImpl(
 		return catalog.ResolvedObjectPrefix{}, nil, nil, errors.NewAssertionErrorWithWrappedErrf(err,
 			"failed to re-resolve table %d for index %s", tbl.GetID(), tableWithIndex)
 	}
-	retIdx, err := mut.FindIndexWithID(idx.GetID())
+	retIdx, err := catalog.MustFindIndexByID(mut, idx.GetID())
 	if err != nil {
 		return catalog.ResolvedObjectPrefix{}, nil, nil, errors.NewAssertionErrorWithWrappedErrf(err,
 			"retrieving index %s (%d) from table which was known to already exist for table %d",

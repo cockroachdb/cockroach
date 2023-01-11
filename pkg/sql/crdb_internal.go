@@ -7213,7 +7213,7 @@ func convertContentionEventsToJSON(
 			return nil, err
 		}
 
-		idxDesc, err := tableDesc.FindIndexWithID(descpb.IndexID(indexID))
+		idxDesc, err := catalog.MustFindIndexByID(tableDesc, descpb.IndexID(indexID))
 		if err != nil {
 			return nil, err
 		}

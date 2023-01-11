@@ -186,7 +186,7 @@ func BuildIndexName(tableDesc *Mutable, idx *descpb.IndexDescriptor) (string, er
 	baseName := strings.Join(segments, "_")
 	name := baseName
 	for i := 1; ; i++ {
-		foundIndex, _ := tableDesc.FindIndexWithName(name)
+		foundIndex := catalog.FindIndexByName(tableDesc, name)
 		if foundIndex == nil {
 			break
 		}
@@ -1472,7 +1472,7 @@ func (desc *Mutable) MakeMutationComplete(m descpb.DescriptorMutation) error {
 
 			// Promote the new primary index into the primary index position on the descriptor,
 			// and remove it from the secondary indexes list.
-			newIndex, err := desc.FindIndexWithID(args.NewPrimaryIndexId)
+			newIndex, err := catalog.MustFindIndexByID(desc, args.NewPrimaryIndexId)
 			if err != nil {
 				return err
 			}
@@ -1509,7 +1509,7 @@ func (desc *Mutable) MakeMutationComplete(m descpb.DescriptorMutation) error {
 				newID := args.NewIndexes[j]
 				// All our new indexes have been inserted into the table descriptor by now, since the primary key swap
 				// is the last mutation processed in a group of mutations under the same mutation ID.
-				newIndex, err := desc.FindIndexWithID(newID)
+				newIndex, err := catalog.MustFindIndexByID(desc, newID)
 				if err != nil {
 					return err
 				}

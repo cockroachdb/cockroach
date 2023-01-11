@@ -448,7 +448,7 @@ func resolveSubzone(
 		indexName = index.GetName()
 	} else {
 		var err error
-		index, err = table.FindIndexWithName(indexName)
+		index, err = catalog.MustFindIndexByName(table, indexName)
 		if err != nil {
 			return nil, "", err
 		}
