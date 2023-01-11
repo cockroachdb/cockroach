@@ -420,17 +420,16 @@ const transactionInsightsReducerObj = new CachedDataReducer(
 export const refreshTxnContentionInsights =
   transactionInsightsReducerObj.refresh;
 
-export const refreshTransactionInsights = (): ThunkAction<
-  any,
-  any,
-  any,
-  Action
-> => {
+export const refreshTransactionInsights = (
+  req?: clusterUiApi.ExecutionInsightsRequest,
+): ThunkAction<any, any, any, Action> => {
   return (dispatch: ThunkDispatch<unknown, unknown, Action>) => {
-    dispatch(refreshTxnContentionInsights());
-    dispatch(refreshExecutionInsights());
+    dispatch(refreshTxnContentionInsights(req));
+    dispatch(refreshExecutionInsights(req));
   };
 };
+export const invalidateTransactionInsights =
+  transactionInsightsReducerObj.invalidateData;
 
 const executionInsightsReducerObj = new CachedDataReducer(
   clusterUiApi.getClusterInsightsApi,
@@ -439,6 +438,8 @@ const executionInsightsReducerObj = new CachedDataReducer(
   moment.duration(5, "m"),
 );
 export const refreshExecutionInsights = executionInsightsReducerObj.refresh;
+export const invalidateExecutionInsights =
+  executionInsightsReducerObj.invalidateData;
 
 export const transactionInsightRequestKey = (
   req: clusterUiApi.TxnContentionInsightDetailsRequest,
@@ -460,7 +461,7 @@ export const refreshTransactionInsightDetails = (
 ): ThunkAction<any, any, any, Action> => {
   return (dispatch: ThunkDispatch<unknown, unknown, Action>) => {
     dispatch(refreshTxnContentionInsightDetails(req));
-    dispatch(refreshExecutionInsights());
+    dispatch(refreshExecutionInsights({ start: req.start, end: req.end }));
   };
 };
 

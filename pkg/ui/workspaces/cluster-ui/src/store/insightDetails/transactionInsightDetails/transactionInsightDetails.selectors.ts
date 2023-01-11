@@ -18,7 +18,7 @@ const selectTxnContentionInsightsDetails = createSelector(
   (state: AppState) => state.adminUI.transactionInsightDetails.cachedData,
   selectID,
   (cachedTxnInsightDetails, execId) => {
-    return cachedTxnInsightDetails.get(execId);
+    return cachedTxnInsightDetails[execId];
   },
 );
 
@@ -26,7 +26,7 @@ const selectTxnInsightFromExecInsight = createSelector(
   (state: AppState) => state.adminUI.executionInsights?.data,
   selectID,
   (execInsights, execID): TxnInsightEvent => {
-    return execInsights.find(txn => txn.transactionExecutionID === execID);
+    return execInsights?.find(txn => txn.transactionExecutionID === execID);
   },
 );
 
