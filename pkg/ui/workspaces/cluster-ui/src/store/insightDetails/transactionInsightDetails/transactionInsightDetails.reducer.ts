@@ -32,11 +32,13 @@ const txnInitialState: TransactionInsightDetailsState = {
 };
 
 export type TransactionInsightDetailsCachedState = {
-  cachedData: Map<string, TransactionInsightDetailsState>;
+  cachedData: {
+    [id: string]: TransactionInsightDetailsState;
+  };
 };
 
 const initialState: TransactionInsightDetailsCachedState = {
-  cachedData: new Map(),
+  cachedData: {},
 };
 
 const transactionInsightDetailsSlice = createSlice({
@@ -47,22 +49,25 @@ const transactionInsightDetailsSlice = createSlice({
       state,
       action: PayloadAction<TransactionInsightEventDetailsResponse>,
     ) => {
-      state.cachedData.set(action.payload.executionID, {
-        data: action.payload,
-        valid: true,
-        lastError: null,
-        lastUpdated: moment.utc(),
-      });
+      if (action?.payload?.executionID) {
+        state.cachedData[action.payload.executionID] = {
+          data: action.payload,
+          valid: true,
+          lastError: null,
+          lastUpdated: moment.utc(),
+        };
+      }
     },
     failed: (state, action: PayloadAction<ErrorWithKey>) => {
-      const txnInsight =
-        state.cachedData.get(action.payload.key) ?? txnInitialState;
-      txnInsight.valid = false;
-      txnInsight.lastError = action.payload.err;
-      state.cachedData.set(action.payload.key, txnInsight);
+      state.cachedData[action.payload.key] = {
+        data: null,
+        valid: false,
+        lastError: action?.payload?.err,
+        lastUpdated: null,
+      };
     },
     invalidated: (state, action: PayloadAction<{ key: string }>) => {
-      state.cachedData.delete(action.payload.key);
+      delete state.cachedData[action.payload.key];
     },
     refresh: (
       _,

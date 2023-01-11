@@ -101,7 +101,7 @@ export const StatementInsightDetails: React.FC<
   const executionID = getMatchParamByName(match, idAttr);
 
   useEffect(() => {
-    if (insightEventDetails == null) {
+    if (!insightEventDetails) {
       refreshStatementInsights();
     }
   }, [insightEventDetails, refreshStatementInsights]);
@@ -124,7 +124,7 @@ export const StatementInsightDetails: React.FC<
       </h3>
       <div>
         <Loading
-          loading={insightEventDetails == null}
+          loading={!insightEventDetails}
           page={"Transaction Insight details"}
           error={insightError}
           renderError={() => InsightsError()}

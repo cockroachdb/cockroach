@@ -161,7 +161,7 @@ export const TransactionInsightDetails: React.FC<
       </div>
       <section>
         <Loading
-          loading={insightEventDetails == null}
+          loading={!insightDetails}
           page={"Transaction Insight details"}
           error={insightError}
           renderError={() => InsightsError()}
