@@ -441,10 +441,8 @@ type clearRangeDataOptions struct {
 	MustUseClearRange bool
 }
 
-// clearRangeData clears the data associated with a range descriptor. If
-// rangeIDLocalOnly is true, then only the range-id local keys are deleted.
-// Otherwise, the range-id local keys, range local keys, and user keys are all
-// deleted.
+// clearRangeData clears the data associated with a range descriptor selected
+// by the provided clearRangeDataOptions.
 func clearRangeData(
 	rangeID roachpb.RangeID, reader storage.Reader, writer storage.Writer, opts clearRangeDataOptions,
 ) error {
