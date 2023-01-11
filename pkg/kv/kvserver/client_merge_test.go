@@ -3854,7 +3854,7 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 				// manually.
 				sl := rditer.Select(rangeID, rditer.SelectOpts{
 					ReplicatedByRangeID: true,
-				}).Spans()
+				})
 				require.Len(t, sl, 1)
 				s := sl[0]
 				require.NoError(t, sst.ClearRawRange(keys.RangeGCThresholdKey(rangeID), s.EndKey, true, false))
@@ -3864,7 +3864,7 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 				// the HardState.
 				sl := rditer.Select(rangeID, rditer.SelectOpts{
 					UnreplicatedByRangeID: true,
-				}).Spans()
+				})
 				require.Len(t, sl, 1)
 				s := sl[0]
 				require.NoError(t, sst.ClearRawRange(keys.RaftHardStateKey(rangeID), s.EndKey, true, false))

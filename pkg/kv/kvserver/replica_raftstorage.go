@@ -454,7 +454,7 @@ func clearRangeData(
 		ReplicatedBySpan:      opts.ClearReplicatedBySpan,
 		ReplicatedByRangeID:   opts.ClearReplicatedByRangeID,
 		UnreplicatedByRangeID: opts.ClearUnreplicatedByRangeID,
-	}).Spans()
+	})
 
 	pointKeyThreshold, rangeKeyThreshold := clearRangeThresholdPointKeys, clearRangeThresholdRangeKeys
 	if opts.MustUseClearRange {
@@ -807,7 +807,7 @@ func (r *Replica) clearSubsumedReplicaDiskData(
 	getKeySpans := func(d *roachpb.RangeDescriptor) []roachpb.Span {
 		return rditer.Select(d.RangeID, rditer.SelectOpts{
 			ReplicatedBySpan: d.RSpan(),
-		}).Spans()
+		})
 	}
 	keySpans := getKeySpans(desc)
 	totalKeySpans := append([]roachpb.Span(nil), keySpans...)
