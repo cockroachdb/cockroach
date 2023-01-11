@@ -3,21 +3,15 @@ module go.etcd.io/raft/v3
 go 1.19
 
 require (
-	github.com/certifi/gocertifi v0.0.0-20200922220541-2c3bb06c6054 // indirect
-	github.com/cockroachdb/datadriven v0.0.0-20200714090401-bf6692d28da5
+	github.com/cockroachdb/datadriven v1.0.2
 	github.com/gogo/protobuf v1.3.2
 	github.com/golang/protobuf v1.5.2
-	github.com/pkg/errors v0.9.1 // indirect
 	github.com/stretchr/testify v1.8.1
 )
 
 require (
-	github.com/cockroachdb/errors v1.2.4 // indirect
-	github.com/cockroachdb/logtags v0.0.0-20190617123548-eb05cc24525f // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
-	github.com/getsentry/raven-go v0.2.0 // indirect
 	github.com/google/go-cmp v0.5.8 // indirect
-	github.com/kr/pretty v0.2.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	google.golang.org/protobuf v1.27.1 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
