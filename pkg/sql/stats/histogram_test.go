@@ -753,6 +753,67 @@ func TestAdjustCounts(t *testing.T) {
 			distinctCount: 0,
 			expected:      []cat.HistogramBucket{},
 		},
+		{ // Add outer buckets.
+			h: []cat.HistogramBucket{
+				{NumRange: 0, NumEq: 1, DistinctRange: 0, UpperBound: d(-2)},
+				{NumRange: 1, NumEq: 1, DistinctRange: 1, UpperBound: d(0)},
+				{NumRange: 1, NumEq: 1, DistinctRange: 1, UpperBound: d(2)},
+			},
+			rowCount:      18,
+			distinctCount: 9,
+			expected: []cat.HistogramBucket{
+				{NumRange: 0, NumEq: 0, DistinctRange: 0, UpperBound: d(-9223372036854775808)},
+				{NumRange: 4, NumEq: 2, DistinctRange: 2, UpperBound: d(-2)},
+				{NumRange: 2, NumEq: 2, DistinctRange: 1, UpperBound: d(0)},
+				{NumRange: 2, NumEq: 2, DistinctRange: 1, UpperBound: d(2)},
+				{NumRange: 4, NumEq: 0, DistinctRange: 2, UpperBound: d(9223372036854775807)},
+			},
+		},
+		{ // Add outer buckets but do not fill in range of first outer bucket (which
+			// is then removed for being redundant.)
+			h: []cat.HistogramBucket{
+				{NumRange: 0, NumEq: 1, DistinctRange: 0, UpperBound: d(-9223372036854775807)},
+				{NumRange: 1, NumEq: 1, DistinctRange: 1, UpperBound: d(-9223372036854775805)},
+				{NumRange: 1, NumEq: 1, DistinctRange: 1, UpperBound: d(-9223372036854775803)},
+			},
+			rowCount:      11,
+			distinctCount: 6,
+			expected: []cat.HistogramBucket{
+				{NumRange: 0, NumEq: 2, DistinctRange: 0, UpperBound: d(-9223372036854775807)},
+				{NumRange: 2, NumEq: 2, DistinctRange: 1.2, UpperBound: d(-9223372036854775805)},
+				{NumRange: 2, NumEq: 2, DistinctRange: 1.2, UpperBound: d(-9223372036854775803)},
+				{NumRange: 1, NumEq: 0, DistinctRange: 0.6, UpperBound: d(9223372036854775807)},
+			},
+		},
+		{ // Avoid adding negative NumRange for zero-range buckets with NumRange = 0
+			// and DistinctRange > 0 (see #93892).
+			h: []cat.HistogramBucket{
+				{NumRange: 0, NumEq: 1, DistinctRange: 0, UpperBound: d(10)},
+				{NumRange: 0, NumEq: 1, DistinctRange: 1, UpperBound: d(11)},
+				{NumRange: 1, NumEq: 1, DistinctRange: 1, UpperBound: d(15)},
+			},
+			rowCount:      10,
+			distinctCount: 6,
+			expected: []cat.HistogramBucket{
+				{NumRange: 0, NumEq: 1.67, DistinctRange: 0, UpperBound: d(10)},
+				{NumRange: 0, NumEq: 1.67, DistinctRange: 0.75, UpperBound: d(11)},
+				{NumRange: 5, NumEq: 1.67, DistinctRange: 2.25, UpperBound: d(15)},
+			},
+		},
+		{ // Clamp negative counts to zero.
+			h: []cat.HistogramBucket{
+				{NumRange: 0, NumEq: 100, DistinctRange: 0, UpperBound: d(-80)},
+				{NumRange: 100, NumEq: -1, DistinctRange: 8, UpperBound: d(-70)},
+				{NumRange: -1, NumEq: 100, DistinctRange: -1, UpperBound: d(-60)},
+			},
+			rowCount:      298,
+			distinctCount: 9,
+			expected: []cat.HistogramBucket{
+				{NumRange: 0, NumEq: 100, DistinctRange: 0, UpperBound: d(-80)},
+				{NumRange: 100, NumEq: 0, DistinctRange: 8, UpperBound: d(-70)},
+				{NumRange: 0, NumEq: 100, DistinctRange: 0, UpperBound: d(-60)},
+			},
+		},
 	}
 
 	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
