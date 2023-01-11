@@ -41,7 +41,7 @@ add synthetic descriptor #105:
      name: public
      parentId: 104
   ...
-         withGrantOption: 2
+         withGrantOption: "2"
        version: 2
   +  state: DROP
      version: "1"
@@ -69,7 +69,7 @@ add synthetic descriptor #107:
      name: _crdb_internal_region
      parentId: 104
   ...
-         withGrantOption: 2
+         withGrantOption: "2"
        version: 2
   +  state: DROP
      version: "1"
@@ -139,7 +139,7 @@ upsert descriptor #105
      id: 105
      modificationTime: {}
   ...
-         withGrantOption: 2
+         withGrantOption: "2"
        version: 2
   -  version: "1"
   +  state: DROP
@@ -186,7 +186,7 @@ upsert descriptor #107
      id: 107
      kind: ALIAS
   ...
-         withGrantOption: 2
+         withGrantOption: "2"
        version: 2
   -  version: "1"
   +  state: DROP

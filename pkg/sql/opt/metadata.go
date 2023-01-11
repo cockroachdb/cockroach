@@ -38,7 +38,7 @@ type SchemaID int32
 // privilegeBitmap stores a union of zero or more privileges. Each privilege
 // that is present in the bitmap is represented by a bit that is shifted by
 // 1 << privilege.Kind, so that multiple privileges can be stored.
-type privilegeBitmap uint32
+type privilegeBitmap uint64
 
 // Metadata assigns unique ids to the columns, tables, and other metadata used
 // for global identification within the scope of a particular query. These ids

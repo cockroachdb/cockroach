@@ -199,12 +199,12 @@ ElementState:
   Status: PUBLIC
 - UserPrivileges:
     descriptorId: 104
-    privileges: 2
+    privileges: "2"
     userName: admin
   Status: PUBLIC
 - UserPrivileges:
     descriptorId: 104
-    privileges: 2
+    privileges: "2"
     userName: root
   Status: PUBLIC
 - ObjectParent:
@@ -599,12 +599,12 @@ ElementState:
   Status: PUBLIC
 - UserPrivileges:
     descriptorId: 105
-    privileges: 2
+    privileges: "2"
     userName: admin
   Status: PUBLIC
 - UserPrivileges:
     descriptorId: 105
-    privileges: 2
+    privileges: "2"
     userName: root
   Status: PUBLIC
 - ObjectParent:
@@ -855,12 +855,12 @@ ElementState:
   Status: PUBLIC
 - UserPrivileges:
     descriptorId: 104
-    privileges: 2
+    privileges: "2"
     userName: admin
   Status: PUBLIC
 - UserPrivileges:
     descriptorId: 104
-    privileges: 2
+    privileges: "2"
     userName: root
   Status: PUBLIC
 - ObjectParent:
@@ -1120,12 +1120,12 @@ ElementState:
   Status: PUBLIC
 - UserPrivileges:
     descriptorId: 108
-    privileges: 2
+    privileges: "2"
     userName: admin
   Status: PUBLIC
 - UserPrivileges:
     descriptorId: 108
-    privileges: 2
+    privileges: "2"
     userName: root
   Status: PUBLIC
 - ObjectParent:

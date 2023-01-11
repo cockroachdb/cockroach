@@ -412,7 +412,7 @@ func (p PrivilegeDescriptor) Validate(
 // privileges.
 func (p PrivilegeDescriptor) IsValidPrivilegesForObjectType(
 	objectType privilege.ObjectType,
-) (bool, UserPrivileges, uint32) {
+) (bool, UserPrivileges, uint64) {
 	allowedPrivilegesBits := privilege.GetValidPrivilegesForObject(objectType).ToBitField()
 
 	// Validate can be called during the fix_privileges_migration introduced in
