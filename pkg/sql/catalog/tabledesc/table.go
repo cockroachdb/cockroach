@@ -323,28 +323,6 @@ func (desc *wrapper) getExistingOrNewConstraintCache() *constraintCache {
 	return newConstraintCache(desc.TableDesc(), desc.getExistingOrNewIndexCache(), desc.getExistingOrNewMutationCache())
 }
 
-// FindConstraintWithID implements the TableDescriptor interface.
-func (desc *wrapper) FindConstraintWithID(id descpb.ConstraintID) (catalog.Constraint, error) {
-	all := desc.AllConstraints()
-	for _, c := range all {
-		if c.GetConstraintID() == id {
-			return c, nil
-		}
-	}
-	return nil, pgerror.Newf(pgcode.UndefinedObject, "constraint-id \"%d\" does not exist", id)
-}
-
-// FindConstraintWithName implements the TableDescriptor interface.
-func (desc *wrapper) FindConstraintWithName(name string) (catalog.Constraint, error) {
-	all := desc.AllConstraints()
-	for _, c := range all {
-		if c.GetName() == name {
-			return c, nil
-		}
-	}
-	return nil, pgerror.Newf(pgcode.UndefinedObject, "constraint named %q does not exist", name)
-}
-
 // AllConstraints implements the catalog.TableDescriptor interface.
 func (desc *wrapper) AllConstraints() []catalog.Constraint {
 	return desc.getExistingOrNewConstraintCache().all

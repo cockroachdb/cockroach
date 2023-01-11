@@ -18,6 +18,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/semenumpb"
@@ -1081,7 +1083,7 @@ func FindIndexByID(tbl TableDescriptor, id descpb.IndexID) Index {
 	})
 }
 
-// MustFindIndexByID is like FindIndexByID but returns an error when no index
+// MustFindIndexByID is like FindIndexByID but returns an error when no Index
 // was found.
 func MustFindIndexByID(tbl TableDescriptor, id descpb.IndexID) (Index, error) {
 	if idx := FindIndexByID(tbl, id); idx != nil {
@@ -1108,3 +1110,49 @@ func MustFindIndexByName(tbl TableDescriptor, name string) (Index, error) {
 	}
 	return nil, errors.Errorf("index %q does not exist", name)
 }
+
+// FindConstraintByID traverses the slice returned by the AllConstraints
+// method on the table descriptor and returns the first Constraint that
+// matches the desired ID, or nil if none was found.
+func FindConstraintByID(tbl TableDescriptor, id descpb.ConstraintID) Constraint {
+	all := tbl.AllConstraints()
+	for _, c := range all {
+		if c.GetConstraintID() == id {
+			return c
+		}
+	}
+	return nil
+}
+
+// MustFindConstraintByID is like FindConstraintByID but returns an error when
+// no Constraint was found.
+func MustFindConstraintByID(tbl TableDescriptor, id descpb.ConstraintID) (Constraint, error) {
+	if c := FindConstraintByID(tbl, id); c != nil {
+		return c, nil
+	}
+	return nil, pgerror.Newf(pgcode.UndefinedObject, "constraint-id \"%d\" does not exist", id)
+}
+
+// FindConstraintByName is like FindConstraintByID but with names instead of
+// IDs.
+func FindConstraintByName(tbl TableDescriptor, name string) Constraint {
+	all := tbl.AllConstraints()
+	for _, c := range all {
+		if c.GetName() == name {
+			return c
+		}
+	}
+	return nil
+}
+
+// MustFindConstraintWithName is like MustFindConstraintByID but with names
+// instead of IDs.
+func MustFindConstraintWithName(tbl TableDescriptor, name string) (Constraint, error) {
+	if c := FindConstraintByName(tbl, name); c != nil {
+		return c, nil
+	}
+	return nil, pgerror.Newf(pgcode.UndefinedObject, "constraint named %q does not exist", name)
+}
+
+// silence the linter
+var _ = MustFindConstraintWithName

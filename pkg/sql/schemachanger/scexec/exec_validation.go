@@ -62,7 +62,7 @@ func executeValidateConstraint(
 	if err != nil {
 		return err
 	}
-	constraint, err := table.FindConstraintWithID(op.ConstraintID)
+	constraint, err := catalog.MustFindConstraintByID(table, op.ConstraintID)
 	if err != nil {
 		return err
 	}
