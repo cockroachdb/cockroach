@@ -423,10 +423,7 @@ func statShouldBeIncludedInBackupRestore(stat *stats.TableStatisticProto) bool {
 	// Forecasts and merged stats are computed from the persisted
 	// stats on demand and do not need to be backed up or
 	// restored.
-	if stat.Name == jobspb.ForecastStatsName || stat.Name == jobspb.MergedStatsName {
-		return false
-	}
-	return true
+	return stat.Name != jobspb.ForecastStatsName && stat.Name != jobspb.MergedStatsName
 }
 
 type backupResumer struct {
