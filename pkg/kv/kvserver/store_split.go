@@ -97,7 +97,7 @@ func splitPreApply(
 		if err := clearRangeData(split.RightDesc.RangeID, readWriter, readWriter, clearRangeDataOptions{
 			// We know there isn't anything in these two replicated spans below in the
 			// right-hand side (before the current batch), so setting these options
-			// will in effect only mask the writes to the RHS replicated state we have
+			// will in effect only clear the writes to the RHS replicated state we have
 			// staged in this batch, which is what we're after.
 			ClearReplicatedBySpan:    split.RightDesc.RSpan(),
 			ClearReplicatedByRangeID: true,
