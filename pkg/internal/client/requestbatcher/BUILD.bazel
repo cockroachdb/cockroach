@@ -29,6 +29,7 @@ go_test(
         "//pkg/util/stop",
         "//pkg/util/timeutil",
         "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
         "@org_golang_x_sync//errgroup",
     ],
 )
