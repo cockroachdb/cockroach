@@ -272,6 +272,211 @@ func TestResolveIntentAfterPartialRollback(t *testing.T) {
 	})
 }
 
+// TestResolveIntentWithTargetBytes tests that ResolveIntent and
+// ResolveIntentRange respect the specified TargetBytes i.e. resolve the
+// correct set of intents, return the correct data in the response, and ensure
+// the underlying write batch is the expected size.
+func TestResolveIntentWithTargetBytes(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	ts := hlc.Timestamp{WallTime: 1}
+	bytes := []byte{'a', 'b', 'c', 'd', 'e'}
+	nKeys := len(bytes)
+	testKeys := make([]roachpb.Key, nKeys)
+	values := make([]roachpb.Value, nKeys)
+	for i, b := range bytes {
+		testKeys[i] = make([]byte, 1000)
+		for j := range testKeys[i] {
+			testKeys[i][j] = b
+		}
+		values[i] = roachpb.MakeValueFromBytes([]byte{b})
+	}
+	txn := roachpb.MakeTransaction("test", roachpb.Key("a"), 0, ts, 0, 1)
+
+	testutils.RunTrueAndFalse(t, "ranged", func(t *testing.T, ranged bool) {
+		db := storage.NewDefaultInMemForTesting()
+		defer db.Close()
+		batch := db.NewBatch()
+		defer batch.Close()
+		st := makeClusterSettingsUsingEngineIntentsSetting(db)
+
+		for i, testKey := range testKeys {
+			err := storage.MVCCPut(ctx, batch, nil, testKey, ts, hlc.ClockTimestamp{}, values[i], &txn)
+			require.NoError(t, err)
+		}
+		initialBytes := batch.Len()
+
+		if !ranged {
+			// Resolve a point intent for testKeys[0].
+			ri := roachpb.ResolveIntentRequest{
+				IntentTxn: txn.TxnMeta,
+				Status:    roachpb.COMMITTED,
+			}
+			ri.Key = testKeys[0]
+
+			{
+				// Case 1: TargetBytes = -1. In this case, we should not resolve any
+				// intents.
+				resp := &roachpb.ResolveIntentResponse{}
+				_, err := ResolveIntent(ctx, batch,
+					CommandArgs{
+						EvalCtx: (&MockEvalCtx{ClusterSettings: st}).EvalContext(),
+						Args:    &ri,
+						Header: roachpb.Header{
+							TargetBytes: -1,
+						},
+					},
+					resp,
+				)
+				require.NoError(t, err)
+				require.Equal(t, resp.NumBytes, int64(0))
+				require.Equal(t, resp.ResumeSpan.Key, testKeys[0])
+				require.Equal(t, resp.ResumeReason, roachpb.RESUME_BYTE_LIMIT)
+				require.NoError(t, err)
+				numBytes := batch.Len()
+				require.Equal(t, numBytes, initialBytes)
+
+				_, _, err = storage.MVCCGet(ctx, batch, testKeys[0], ts, storage.MVCCGetOptions{})
+				require.Error(t, err)
+			}
+
+			{
+				// Case 2: TargetBytes = 500. In this case, we should resolve the
+				// intent for testKeys[0].
+				resp := &roachpb.ResolveIntentResponse{}
+				_, err := ResolveIntent(ctx, batch,
+					CommandArgs{
+						EvalCtx: (&MockEvalCtx{ClusterSettings: st}).EvalContext(),
+						Args:    &ri,
+						Header: roachpb.Header{
+							TargetBytes: 500,
+						},
+					},
+					resp,
+				)
+				require.Greater(t, resp.NumBytes, int64(1000))
+				require.Less(t, resp.NumBytes, int64(1100))
+				require.Nil(t, resp.ResumeSpan)
+				require.Equal(t, resp.ResumeReason, roachpb.RESUME_UNKNOWN)
+				require.NoError(t, err)
+				numBytes := batch.Len()
+				require.Greater(t, numBytes, initialBytes+1000)
+				require.Less(t, numBytes, initialBytes+1100)
+
+				value, _, err := storage.MVCCGet(ctx, batch, testKeys[0], ts, storage.MVCCGetOptions{})
+				require.NoError(t, err)
+				require.Equal(t, values[0].RawBytes, value.RawBytes,
+					"the value %s in get result does not match the value %s in request", values[0].RawBytes, value.RawBytes)
+			}
+		} else {
+			// Resolve an intent range for testKeys[0], testKeys[1], ...,
+			// testKeys[4].
+			rir := roachpb.ResolveIntentRangeRequest{
+				IntentTxn: txn.TxnMeta,
+				Status:    roachpb.COMMITTED,
+			}
+			rir.Key = testKeys[0]
+			rir.EndKey = testKeys[nKeys-1].Next()
+
+			{
+				// Case 1: TargetBytes = -1. In this case, we should not resolve any
+				// intents.
+				respr := &roachpb.ResolveIntentRangeResponse{}
+				_, err := ResolveIntentRange(ctx, batch,
+					CommandArgs{
+						EvalCtx: (&MockEvalCtx{ClusterSettings: st}).EvalContext(),
+						Args:    &rir,
+						Header: roachpb.Header{
+							TargetBytes: -1,
+						},
+					},
+					respr,
+				)
+				require.NoError(t, err)
+				require.Equal(t, respr.NumKeys, int64(0))
+				require.Equal(t, respr.NumBytes, int64(0))
+				require.Equal(t, respr.ResumeSpan.Key, testKeys[0])
+				require.Equal(t, respr.ResumeSpan.EndKey, testKeys[nKeys-1].Next())
+				require.Equal(t, respr.ResumeReason, roachpb.RESUME_BYTE_LIMIT)
+				require.NoError(t, err)
+				numBytes := batch.Len()
+				require.Equal(t, numBytes, initialBytes)
+
+				_, _, err = storage.MVCCGet(ctx, batch, testKeys[0], ts, storage.MVCCGetOptions{})
+				require.Error(t, err)
+			}
+
+			{
+				// Case 2: TargetBytes = 2900. In this case, we should resolve the
+				// first 3 intents - testKey[0], testKeys[1], and testKeys[2] (since we
+				// resolve intents until we exceed the TargetBytes limit).
+				respr := &roachpb.ResolveIntentRangeResponse{}
+				_, err := ResolveIntentRange(ctx, batch,
+					CommandArgs{
+						EvalCtx: (&MockEvalCtx{ClusterSettings: st}).EvalContext(),
+						Args:    &rir,
+						Header: roachpb.Header{
+							TargetBytes: 2900,
+						},
+					},
+					respr,
+				)
+				require.Equal(t, respr.NumKeys, int64(3))
+				require.Greater(t, respr.NumBytes, int64(3000))
+				require.Less(t, respr.NumBytes, int64(3300))
+				require.Equal(t, respr.ResumeSpan.Key, testKeys[2].Next())
+				require.Equal(t, respr.ResumeSpan.EndKey, testKeys[nKeys-1].Next())
+				require.Equal(t, respr.ResumeReason, roachpb.RESUME_BYTE_LIMIT)
+				require.NoError(t, err)
+				numBytes := batch.Len()
+				require.Greater(t, numBytes, initialBytes+3000)
+				require.Less(t, numBytes, initialBytes+3300)
+
+				value, _, err := storage.MVCCGet(ctx, batch, testKeys[2], ts, storage.MVCCGetOptions{})
+				require.NoError(t, err)
+				require.Equal(t, values[2].RawBytes, value.RawBytes,
+					"the value %s in get result does not match the value %s in request", values[2].RawBytes, value.RawBytes)
+				_, _, err = storage.MVCCGet(ctx, batch, testKeys[3], ts, storage.MVCCGetOptions{})
+				require.Error(t, err)
+			}
+
+			{
+				// Case 3: TargetBytes = 1100 (on remaining intents - testKeys[3] and
+				// testKeys[4]). In this case, we should resolve the remaining
+				// intents - testKey[4] and testKeys[5] (since we resolve intents until
+				// we exceed the TargetBytes limit).
+				respr := &roachpb.ResolveIntentRangeResponse{}
+				_, err := ResolveIntentRange(ctx, batch,
+					CommandArgs{
+						EvalCtx: (&MockEvalCtx{ClusterSettings: st}).EvalContext(),
+						Args:    &rir,
+						Header: roachpb.Header{
+							TargetBytes: 1100,
+						},
+					},
+					respr,
+				)
+				require.Equal(t, respr.NumKeys, int64(2))
+				require.Greater(t, respr.NumBytes, int64(2000))
+				require.Less(t, respr.NumBytes, int64(2200))
+				require.Nil(t, respr.ResumeSpan)
+				require.Equal(t, respr.ResumeReason, roachpb.RESUME_UNKNOWN)
+				require.NoError(t, err)
+				numBytes := batch.Len()
+				require.Greater(t, numBytes, initialBytes+5000)
+				require.Less(t, numBytes, initialBytes+5500)
+
+				value, _, err := storage.MVCCGet(ctx, batch, testKeys[nKeys-1], ts, storage.MVCCGetOptions{})
+				require.NoError(t, err)
+				require.Equal(t, values[nKeys-1].RawBytes, value.RawBytes,
+					"the value %s in get result does not match the value %s in request", values[nKeys-1].RawBytes, value.RawBytes)
+			}
+		}
+	})
+}
+
 func makeClusterSettingsUsingEngineIntentsSetting(engine storage.Engine) *cluster.Settings {
 	version := clusterversion.TestingBinaryVersion
 	return cluster.MakeTestingClusterSettingsWithVersions(version, version, true)

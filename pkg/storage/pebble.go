@@ -1908,6 +1908,11 @@ func (p *Pebble) MinVersionIsAtLeastTargetVersion(target roachpb.Version) (bool,
 	return MinVersionIsAtLeastTargetVersion(p.unencryptedFS, p.path, target)
 }
 
+// BufferedSize implements the Engine interface.
+func (p *Pebble) BufferedSize() int {
+	return 0
+}
+
 type pebbleReadOnly struct {
 	parent *Pebble
 	// The iterator reuse optimization in pebbleReadOnly is for servicing a
@@ -2213,6 +2218,10 @@ func (p *pebbleReadOnly) LogLogicalOp(op MVCCLogicalOpType, details MVCCLogicalO
 }
 
 func (p *pebbleReadOnly) ShouldWriteLocalTimestamps(ctx context.Context) bool {
+	panic("not implemented")
+}
+
+func (p *pebbleReadOnly) BufferedSize() int {
 	panic("not implemented")
 }
 

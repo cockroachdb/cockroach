@@ -1,0 +1,127 @@
+# Test MaxKeys and TargetBytes for resolve intent and resolve intent range.
+
+# Put some test data.
+run ok
+with t=A
+  txn_begin ts=1
+  put k=a v=a
+  put k=b v=b
+  put k=c v=c
+  put k=dddddddddddddddddddddddddddddddddddddddddddddddddd v=d
+  put k=eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee v=e
+  put k=f v=f
+----
+>> at end:
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=1.000000000,0 wto=false gul=0,0
+meta: "a"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "a"/1.000000000,0 -> /BYTES/a
+meta: "b"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "b"/1.000000000,0 -> /BYTES/b
+meta: "c"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "c"/1.000000000,0 -> /BYTES/c
+meta: "dddddddddddddddddddddddddddddddddddddddddddddddddd"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "dddddddddddddddddddddddddddddddddddddddddddddddddd"/1.000000000,0 -> /BYTES/d
+meta: "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"/1.000000000,0 -> /BYTES/e
+meta: "f"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "f"/1.000000000,0 -> /BYTES/f
+
+# Resolve none since targetBytes < 0.
+run ok
+resolve_intent t=A k=c status=COMMITTED targetBytes=-1 batched
+----
+resolve_intent: batch after write is empty
+>> at end:
+meta: "a"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "a"/1.000000000,0 -> /BYTES/a
+meta: "b"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "b"/1.000000000,0 -> /BYTES/b
+meta: "c"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "c"/1.000000000,0 -> /BYTES/c
+meta: "dddddddddddddddddddddddddddddddddddddddddddddddddd"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "dddddddddddddddddddddddddddddddddddddddddddddddddd"/1.000000000,0 -> /BYTES/d
+meta: "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"/1.000000000,0 -> /BYTES/e
+meta: "f"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "f"/1.000000000,0 -> /BYTES/f
+
+# Resolve intent "b".
+run ok
+resolve_intent t=A k=b status=COMMITTED targetBytes=1 batched
+----
+resolve_intent: batch after write is non-empty
+>> at end:
+meta: "a"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "a"/1.000000000,0 -> /BYTES/a
+data: "b"/1.000000000,0 -> /BYTES/b
+meta: "c"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "c"/1.000000000,0 -> /BYTES/c
+meta: "dddddddddddddddddddddddddddddddddddddddddddddddddd"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "dddddddddddddddddddddddddddddddddddddddddddddddddd"/1.000000000,0 -> /BYTES/d
+meta: "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"/1.000000000,0 -> /BYTES/e
+meta: "f"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "f"/1.000000000,0 -> /BYTES/f
+
+# Resolve none since maxKeys < 0.
+run ok
+resolve_intent_range t=A k=a end=z status=COMMITTED maxKeys=-1 batched
+----
+resolve_intent_range: batch after write is empty
+>> at end:
+meta: "a"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "a"/1.000000000,0 -> /BYTES/a
+data: "b"/1.000000000,0 -> /BYTES/b
+meta: "c"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "c"/1.000000000,0 -> /BYTES/c
+meta: "dddddddddddddddddddddddddddddddddddddddddddddddddd"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "dddddddddddddddddddddddddddddddddddddddddddddddddd"/1.000000000,0 -> /BYTES/d
+meta: "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"/1.000000000,0 -> /BYTES/e
+meta: "f"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "f"/1.000000000,0 -> /BYTES/f
+
+# Resolve 2 intents "a" and "c".
+run ok
+resolve_intent_range t=A k=a end=z status=COMMITTED maxKeys=2 batched
+----
+resolve_intent_range: batch after write is non-empty
+>> at end:
+data: "a"/1.000000000,0 -> /BYTES/a
+data: "b"/1.000000000,0 -> /BYTES/b
+data: "c"/1.000000000,0 -> /BYTES/c
+meta: "dddddddddddddddddddddddddddddddddddddddddddddddddd"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "dddddddddddddddddddddddddddddddddddddddddddddddddd"/1.000000000,0 -> /BYTES/d
+meta: "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"/1.000000000,0 -> /BYTES/e
+meta: "f"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "f"/1.000000000,0 -> /BYTES/f
+
+# Resolve none since targetBytes < 0.
+run ok
+resolve_intent_range t=A k=a end=z status=COMMITTED targetBytes=-1 batched
+----
+resolve_intent_range: batch after write is empty
+>> at end:
+data: "a"/1.000000000,0 -> /BYTES/a
+data: "b"/1.000000000,0 -> /BYTES/b
+data: "c"/1.000000000,0 -> /BYTES/c
+meta: "dddddddddddddddddddddddddddddddddddddddddddddddddd"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "dddddddddddddddddddddddddddddddddddddddddddddddddd"/1.000000000,0 -> /BYTES/d
+meta: "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"/1.000000000,0 -> /BYTES/e
+meta: "f"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "f"/1.000000000,0 -> /BYTES/f
+
+run ok
+resolve_intent_range t=A k=a end=z status=COMMITTED targetBytes=99 batched
+----
+resolve_intent_range: batch after write is non-empty
+>> at end:
+data: "a"/1.000000000,0 -> /BYTES/a
+data: "b"/1.000000000,0 -> /BYTES/b
+data: "c"/1.000000000,0 -> /BYTES/c
+data: "dddddddddddddddddddddddddddddddddddddddddddddddddd"/1.000000000,0 -> /BYTES/d
+data: "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"/1.000000000,0 -> /BYTES/e
+meta: "f"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "f"/1.000000000,0 -> /BYTES/f
