@@ -490,12 +490,12 @@ type UpdateBackReferencesInSequences struct {
 	SequenceIDs            []descpb.ID
 }
 
-// RemoveViewBackReferencesInRelations removes back references to a view in
+// RemoveBackReferencesInRelations removes back references to a view in
 // the specified tables, views or sequences.
-type RemoveViewBackReferencesInRelations struct {
+type RemoveBackReferencesInRelations struct {
 	mutationOp
-	BackReferencedViewID descpb.ID
-	RelationIDs          []descpb.ID
+	BackReferencedID descpb.ID
+	RelationIDs      []descpb.ID
 }
 
 // SetColumnName renames a column.

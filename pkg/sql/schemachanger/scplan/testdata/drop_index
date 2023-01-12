@@ -674,8 +674,8 @@ PreCommitPhase stage 1 of 1 with 10 MutationType ops
   ops:
     *scop.MarkDescriptorAsDropped
       DescriptorID: 105
-    *scop.RemoveViewBackReferencesInRelations
-      BackReferencedViewID: 105
+    *scop.RemoveBackReferencesInRelations
+      BackReferencedID: 105
       RelationIDs:
       - 104
     *scop.MakePublicSecondaryIndexWriteOnly
@@ -1026,8 +1026,8 @@ PreCommitPhase stage 1 of 1 with 12 MutationType ops
   ops:
     *scop.MarkDescriptorAsDropped
       DescriptorID: 107
-    *scop.RemoveViewBackReferencesInRelations
-      BackReferencedViewID: 107
+    *scop.RemoveBackReferencesInRelations
+      BackReferencedID: 107
       RelationIDs:
       - 106
     *scop.RemoveColumnDefaultExpression
