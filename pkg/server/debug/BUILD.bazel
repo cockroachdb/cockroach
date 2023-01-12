@@ -52,12 +52,14 @@ go_test(
     args = ["-test.timeout=55s"],
     embed = [":debug"],
     deps = [
+        "//pkg/roachpb",
         "//pkg/testutils",
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/log/logpb",
         "//pkg/util/syncutil",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
     ],
 )
 
