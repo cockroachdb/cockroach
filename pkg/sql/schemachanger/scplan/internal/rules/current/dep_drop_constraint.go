@@ -8,11 +8,12 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package rules
+package current
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/rel"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	. "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/rules"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scgraph"
 )
 
@@ -28,11 +29,11 @@ func init() {
 		scgraph.Precedence,
 		"constraint", "dependent",
 		scpb.Status_VALIDATED, scpb.Status_ABSENT,
-		func(from, to nodeVars) rel.Clauses {
+		func(from, to NodeVars) rel.Clauses {
 			return rel.Clauses{
-				from.typeFilter(isSupportedNonIndexBackedConstraint),
-				to.typeFilter(isConstraintDependent),
-				joinOnConstraintID(from, to, "table-id", "constraint-id"),
+				from.TypeFilter(IsSupportedNonIndexBackedConstraint),
+				to.TypeFilter(IsConstraintDependent),
+				JoinOnConstraintID(from, to, "table-id", "constraint-id"),
 			}
 		},
 	)
@@ -42,11 +43,11 @@ func init() {
 		scgraph.Precedence,
 		"dependents", "constraint",
 		scpb.Status_ABSENT, scpb.Status_ABSENT,
-		func(from, to nodeVars) rel.Clauses {
+		func(from, to NodeVars) rel.Clauses {
 			return rel.Clauses{
-				from.typeFilter(isConstraintDependent),
-				to.typeFilter(isSupportedNonIndexBackedConstraint),
-				joinOnConstraintID(from, to, "table-id", "constraint-id"),
+				from.TypeFilter(IsConstraintDependent),
+				to.TypeFilter(IsSupportedNonIndexBackedConstraint),
+				JoinOnConstraintID(from, to, "table-id", "constraint-id"),
 			}
 		},
 	)
