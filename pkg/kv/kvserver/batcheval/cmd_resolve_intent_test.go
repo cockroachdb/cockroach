@@ -338,7 +338,7 @@ func TestResolveIntentWithTargetBytes(t *testing.T) {
 				numBytes := batch.Len()
 				require.Equal(t, numBytes, initialBytes)
 
-				_, _, err = storage.MVCCGet(ctx, batch, testKeys[0], ts, storage.MVCCGetOptions{})
+				_, err = storage.MVCCGet(ctx, batch, testKeys[0], ts, storage.MVCCGetOptions{})
 				require.Error(t, err)
 			}
 
@@ -365,10 +365,10 @@ func TestResolveIntentWithTargetBytes(t *testing.T) {
 				require.Greater(t, numBytes, initialBytes+1000)
 				require.Less(t, numBytes, initialBytes+1100)
 
-				value, _, err := storage.MVCCGet(ctx, batch, testKeys[0], ts, storage.MVCCGetOptions{})
+				valueRes, err := storage.MVCCGet(ctx, batch, testKeys[0], ts, storage.MVCCGetOptions{})
 				require.NoError(t, err)
-				require.Equal(t, values[0].RawBytes, value.RawBytes,
-					"the value %s in get result does not match the value %s in request", values[0].RawBytes, value.RawBytes)
+				require.Equal(t, values[0].RawBytes, valueRes.Value.RawBytes,
+					"the value %s in get result does not match the value %s in request", values[0].RawBytes, valueRes.Value.RawBytes)
 			}
 		} else {
 			// Resolve an intent range for testKeys[0], testKeys[1], ...,
@@ -404,7 +404,7 @@ func TestResolveIntentWithTargetBytes(t *testing.T) {
 				numBytes := batch.Len()
 				require.Equal(t, numBytes, initialBytes)
 
-				_, _, err = storage.MVCCGet(ctx, batch, testKeys[0], ts, storage.MVCCGetOptions{})
+				_, err = storage.MVCCGet(ctx, batch, testKeys[0], ts, storage.MVCCGetOptions{})
 				require.Error(t, err)
 			}
 
@@ -434,11 +434,11 @@ func TestResolveIntentWithTargetBytes(t *testing.T) {
 				require.Greater(t, numBytes, initialBytes+3000)
 				require.Less(t, numBytes, initialBytes+3300)
 
-				value, _, err := storage.MVCCGet(ctx, batch, testKeys[2], ts, storage.MVCCGetOptions{})
+				valueRes, err := storage.MVCCGet(ctx, batch, testKeys[2], ts, storage.MVCCGetOptions{})
 				require.NoError(t, err)
-				require.Equal(t, values[2].RawBytes, value.RawBytes,
-					"the value %s in get result does not match the value %s in request", values[2].RawBytes, value.RawBytes)
-				_, _, err = storage.MVCCGet(ctx, batch, testKeys[3], ts, storage.MVCCGetOptions{})
+				require.Equal(t, values[2].RawBytes, valueRes.Value.RawBytes,
+					"the value %s in get result does not match the value %s in request", values[2].RawBytes, valueRes.Value.RawBytes)
+				_, err = storage.MVCCGet(ctx, batch, testKeys[3], ts, storage.MVCCGetOptions{})
 				require.Error(t, err)
 			}
 
@@ -468,10 +468,10 @@ func TestResolveIntentWithTargetBytes(t *testing.T) {
 				require.Greater(t, numBytes, initialBytes+5000)
 				require.Less(t, numBytes, initialBytes+5500)
 
-				value, _, err := storage.MVCCGet(ctx, batch, testKeys[nKeys-1], ts, storage.MVCCGetOptions{})
+				valueRes, err := storage.MVCCGet(ctx, batch, testKeys[nKeys-1], ts, storage.MVCCGetOptions{})
 				require.NoError(t, err)
-				require.Equal(t, values[nKeys-1].RawBytes, value.RawBytes,
-					"the value %s in get result does not match the value %s in request", values[nKeys-1].RawBytes, value.RawBytes)
+				require.Equal(t, values[nKeys-1].RawBytes, valueRes.Value.RawBytes,
+					"the value %s in get result does not match the value %s in request", values[nKeys-1].RawBytes, valueRes.Value.RawBytes)
 			}
 		}
 	})
