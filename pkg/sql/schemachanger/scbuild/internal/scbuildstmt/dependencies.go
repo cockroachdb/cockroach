@@ -287,8 +287,8 @@ type NameResolver interface {
 	// ResolveSchema retrieves a schema by name and returns its elements.
 	ResolveSchema(name tree.ObjectNamePrefix, p ResolveParams) ElementResultSet
 
-	// ResolveEnumType retrieves a type by name and returns its elements.
-	ResolveEnumType(name *tree.UnresolvedObjectName, p ResolveParams) ElementResultSet
+	// ResolveUserDefinedTypeType retrieves a type by name and returns its elements.
+	ResolveUserDefinedTypeType(name *tree.UnresolvedObjectName, p ResolveParams) ElementResultSet
 
 	// ResolveRelation retrieves a relation by name and returns its elements.
 	ResolveRelation(name *tree.UnresolvedObjectName, p ResolveParams) ElementResultSet

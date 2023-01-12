@@ -1,5 +1,6 @@
 setup
-CREATE TYPE defaultdb.typ AS ENUM('a')
+CREATE TYPE defaultdb.typ AS ENUM('a');
+CREATE TYPE defaultdb.ctyp AS (a INT, b INT)
 ----
 
 build
@@ -35,3 +36,41 @@ DROP TYPE defaultdb.typ
   {closedTypeIds: [104, 105], type: {arrayContents: {family: EnumFamily, oid: 100104, udtMetadata: {arrayTypeOid: 100105}}, arrayElemType: EnumFamily, family: ArrayFamily, oid: 100105}, typeId: 105}
 - [[ObjectParent:{DescID: 105, ReferencedDescID: 101}, ABSENT], PUBLIC]
   {objectId: 105, parentSchemaId: 101}
+
+build
+DROP TYPE defaultdb.ctyp
+----
+- [[Namespace:{DescID: 106, Name: ctyp, ReferencedDescID: 100}, ABSENT], PUBLIC]
+  {databaseId: 100, descriptorId: 106, name: ctyp, schemaId: 101}
+- [[Owner:{DescID: 106}, ABSENT], PUBLIC]
+  {descriptorId: 106, owner: root}
+- [[UserPrivileges:{DescID: 106, Name: admin}, ABSENT], PUBLIC]
+  {descriptorId: 106, privileges: "2", userName: admin}
+- [[UserPrivileges:{DescID: 106, Name: public}, ABSENT], PUBLIC]
+  {descriptorId: 106, privileges: "512", userName: public}
+- [[UserPrivileges:{DescID: 106, Name: root}, ABSENT], PUBLIC]
+  {descriptorId: 106, privileges: "2", userName: root}
+- [[CompositeType:{DescID: 106}, ABSENT], PUBLIC]
+  {arrayTypeId: 107, typeId: 106}
+- [[CompositeTypeAttrName:{DescID: 106, Name: a}, ABSENT], PUBLIC]
+  {compositeTypeId: 106, name: a}
+- [[CompositeTypeAttrType:{DescID: 106}, ABSENT], PUBLIC]
+  {compositeTypeId: 106, type: {family: IntFamily, oid: 20, width: 64}}
+- [[CompositeTypeAttrName:{DescID: 106, Name: b}, ABSENT], PUBLIC]
+  {compositeTypeId: 106, name: b}
+- [[ObjectParent:{DescID: 106, ReferencedDescID: 101}, ABSENT], PUBLIC]
+  {objectId: 106, parentSchemaId: 101}
+- [[Namespace:{DescID: 107, Name: _ctyp, ReferencedDescID: 100}, ABSENT], PUBLIC]
+  {databaseId: 100, descriptorId: 107, name: _ctyp, schemaId: 101}
+- [[Owner:{DescID: 107}, ABSENT], PUBLIC]
+  {descriptorId: 107, owner: root}
+- [[UserPrivileges:{DescID: 107, Name: admin}, ABSENT], PUBLIC]
+  {descriptorId: 107, privileges: "2", userName: admin}
+- [[UserPrivileges:{DescID: 107, Name: public}, ABSENT], PUBLIC]
+  {descriptorId: 107, privileges: "512", userName: public}
+- [[UserPrivileges:{DescID: 107, Name: root}, ABSENT], PUBLIC]
+  {descriptorId: 107, privileges: "2", userName: root}
+- [[AliasType:{DescID: 107, ReferencedTypeIDs: [106 107]}, ABSENT], PUBLIC]
+  {closedTypeIds: [106, 107], type: {arrayContents: {family: TupleFamily, oid: 100106, tupleContents: [{family: IntFamily, oid: 20, width: 64}, {family: IntFamily, oid: 20, width: 64}], tupleLabels: [a, b], udtMetadata: {arrayTypeOid: 100107}}, arrayElemType: TupleFamily, family: ArrayFamily, oid: 100107}, typeId: 107}
+- [[ObjectParent:{DescID: 107, ReferencedDescID: 101}, ABSENT], PUBLIC]
+  {objectId: 107, parentSchemaId: 101}
