@@ -4346,9 +4346,16 @@ func TestMergeQueue(t *testing.T) {
 	})
 
 	t.Run("load-based-merging", func(t *testing.T) {
-		const splitByLoadQPS = 10
-		const mergeByLoadQPS = splitByLoadQPS / 2 // see conservativeLoadBasedSplitThreshold
+		// NB: It is possible for the ranges being checked to record load
+		// during the test. To avoid flakiness, we set the splitByLoadStat high
+		// enough that any recorded load from testing won't exceed it.
+		const splitByLoadStat = 10e9
+		const mergeByLoadStat = splitByLoadStat / 2 // see conservativeLoadBasedSplitThreshold
 		const splitByLoadMergeDelay = 500 * time.Millisecond
+
+		setSplitDimension := func(dim kvserver.LBRebalancingDimension) {
+			kvserver.LoadBasedRebalancingDimension.Override(ctx, sv, int64(dim))
+		}
 
 		resetForLoadBasedSubtest := func(t *testing.T) {
 			reset(t)
@@ -4366,7 +4373,8 @@ func TestMergeQueue(t *testing.T) {
 			// meaning that it was a maximum measurement over some extended period of
 			// time.
 			kvserver.SplitByLoadEnabled.Override(ctx, sv, true)
-			kvserver.SplitByLoadQPSThreshold.Override(ctx, sv, splitByLoadQPS)
+			kvserver.SplitByLoadQPSThreshold.Override(ctx, sv, splitByLoadStat)
+			kvserver.SplitByLoadCPUThreshold.Override(ctx, sv, splitByLoadStat)
 
 			// Drop the load-based splitting merge delay setting, which also dictates
 			// the duration that a leaseholder must measure QPS before considering its
@@ -4381,47 +4389,104 @@ func TestMergeQueue(t *testing.T) {
 			rhs().LoadBasedSplitter().Reset(tc.Servers[1].Clock().PhysicalTime())
 			manualClock.Increment(splitByLoadMergeDelay.Nanoseconds())
 		}
+		for _, splitDimension := range []kvserver.LBRebalancingDimension{
+			kvserver.LBRebalancingQueries,
+			kvserver.LBRebalancingStoreCPU,
+		} {
+			setSplitDimension(splitDimension)
+			t.Run(fmt.Sprintf("unreliable-lhs-%s", splitDimension.ToDimension().String()), func(t *testing.T) {
+				resetForLoadBasedSubtest(t)
 
-		t.Run("unreliable-lhs-qps", func(t *testing.T) {
-			resetForLoadBasedSubtest(t)
+				lhs().LoadBasedSplitter().Reset(tc.Servers[0].Clock().PhysicalTime())
 
-			lhs().LoadBasedSplitter().Reset(tc.Servers[0].Clock().PhysicalTime())
+				clearRange(t, lhsStartKey, rhsEndKey)
+				verifyUnmergedSoon(t, store, lhsStartKey, rhsStartKey)
+			})
 
-			clearRange(t, lhsStartKey, rhsEndKey)
-			verifyUnmergedSoon(t, store, lhsStartKey, rhsStartKey)
-		})
+			t.Run(fmt.Sprintf("unreliable-rhs-%s", splitDimension.ToDimension().String()), func(t *testing.T) {
+				resetForLoadBasedSubtest(t)
 
-		t.Run("unreliable-rhs-qps", func(t *testing.T) {
-			resetForLoadBasedSubtest(t)
+				rhs().LoadBasedSplitter().Reset(tc.Servers[1].Clock().PhysicalTime())
 
-			rhs().LoadBasedSplitter().Reset(tc.Servers[1].Clock().PhysicalTime())
+				clearRange(t, lhsStartKey, rhsEndKey)
+				verifyUnmergedSoon(t, store, lhsStartKey, rhsStartKey)
+			})
 
-			clearRange(t, lhsStartKey, rhsEndKey)
-			verifyUnmergedSoon(t, store, lhsStartKey, rhsStartKey)
-		})
+			t.Run(fmt.Sprintf("combined-%s-above-threshold", splitDimension.ToDimension().String()), func(t *testing.T) {
+				resetForLoadBasedSubtest(t)
 
-		t.Run("combined-qps-above-threshold", func(t *testing.T) {
-			resetForLoadBasedSubtest(t)
+				moreThanHalfStat := mergeByLoadStat/2 + 1
+				rhs().LoadBasedSplitter().RecordMax(tc.Servers[0].Clock().PhysicalTime(), moreThanHalfStat)
+				lhs().LoadBasedSplitter().RecordMax(tc.Servers[1].Clock().PhysicalTime(), moreThanHalfStat)
 
-			moreThanHalfQPS := mergeByLoadQPS/2 + 1
-			rhs().LoadBasedSplitter().RecordMax(tc.Servers[0].Clock().PhysicalTime(), float64(moreThanHalfQPS))
-			lhs().LoadBasedSplitter().RecordMax(tc.Servers[1].Clock().PhysicalTime(), float64(moreThanHalfQPS))
+				clearRange(t, lhsStartKey, rhsEndKey)
+				verifyUnmergedSoon(t, store, lhsStartKey, rhsStartKey)
+			})
 
-			clearRange(t, lhsStartKey, rhsEndKey)
-			verifyUnmergedSoon(t, store, lhsStartKey, rhsStartKey)
-		})
+			t.Run(fmt.Sprintf("combined-%s-below-threshold", splitDimension.ToDimension().String()), func(t *testing.T) {
+				resetForLoadBasedSubtest(t)
 
-		t.Run("combined-qps-below-threshold", func(t *testing.T) {
-			resetForLoadBasedSubtest(t)
+				manualClock.Increment(splitByLoadMergeDelay.Nanoseconds())
+				lessThanHalfStat := mergeByLoadStat/2 - 1
+				rhs().LoadBasedSplitter().RecordMax(tc.Servers[0].Clock().PhysicalTime(), lessThanHalfStat)
+				lhs().LoadBasedSplitter().RecordMax(tc.Servers[1].Clock().PhysicalTime(), lessThanHalfStat)
 
-			manualClock.Increment(splitByLoadMergeDelay.Nanoseconds())
-			lessThanHalfQPS := mergeByLoadQPS/2 - 1
-			rhs().LoadBasedSplitter().RecordMax(tc.Servers[0].Clock().PhysicalTime(), float64(lessThanHalfQPS))
-			lhs().LoadBasedSplitter().RecordMax(tc.Servers[1].Clock().PhysicalTime(), float64(lessThanHalfQPS))
+				clearRange(t, lhsStartKey, rhsEndKey)
+				verifyMergedSoon(t, store, lhsStartKey, rhsStartKey)
+			})
 
-			clearRange(t, lhsStartKey, rhsEndKey)
-			verifyMergedSoon(t, store, lhsStartKey, rhsStartKey)
-		})
+			// These nested tests assert that after changing the split
+			// dimension, any previous load is discarded and the range will not
+			// merge, even if the previous load was above or below the
+			// threshold.
+			for _, secondSplitDimension := range []kvserver.LBRebalancingDimension{
+				kvserver.LBRebalancingQueries,
+				kvserver.LBRebalancingStoreCPU,
+			} {
+				if splitDimension == secondSplitDimension {
+					// Nothing to do when there is no change. We expect the
+					// same outcome as the above tests.
+					continue
+				}
+				t.Run(fmt.Sprintf("switch-%s-to-%s-prev-combined-above-threshold",
+					splitDimension.ToDimension().String(),
+					secondSplitDimension.ToDimension().String(),
+				), func(t *testing.T) {
+					// Set the split dimension again, since we have modified it
+					// at the bottom of this loop.
+					setSplitDimension(splitDimension)
+					resetForLoadBasedSubtest(t)
+
+					moreThanHalfStat := mergeByLoadStat/2 + 1
+					rhs().LoadBasedSplitter().RecordMax(tc.Servers[0].Clock().PhysicalTime(), moreThanHalfStat)
+					lhs().LoadBasedSplitter().RecordMax(tc.Servers[1].Clock().PhysicalTime(), moreThanHalfStat)
+
+					clearRange(t, lhsStartKey, rhsEndKey)
+					// Switch the dimension, so that any recorded load should
+					// be discarded and despite being above the threshold (for
+					// both dimensions), it shouldn't merge.
+					setSplitDimension(secondSplitDimension)
+					verifyUnmergedSoon(t, store, lhsStartKey, rhsStartKey)
+				})
+
+				t.Run(fmt.Sprintf("switch-%s-to-%s-prev-combined-below-threshold",
+					splitDimension.ToDimension().String(),
+					secondSplitDimension.ToDimension().String(),
+				), func(t *testing.T) {
+					setSplitDimension(splitDimension)
+					resetForLoadBasedSubtest(t)
+
+					manualClock.Increment(splitByLoadMergeDelay.Nanoseconds())
+					lessThanHalfStat := mergeByLoadStat/2 - 1
+					rhs().LoadBasedSplitter().RecordMax(tc.Servers[0].Clock().PhysicalTime(), lessThanHalfStat)
+					lhs().LoadBasedSplitter().RecordMax(tc.Servers[1].Clock().PhysicalTime(), lessThanHalfStat)
+
+					clearRange(t, lhsStartKey, rhsEndKey)
+					setSplitDimension(secondSplitDimension)
+					verifyUnmergedSoon(t, store, lhsStartKey, rhsStartKey)
+				})
+			}
+		}
 	})
 
 	t.Run("sticky-bit", func(t *testing.T) {

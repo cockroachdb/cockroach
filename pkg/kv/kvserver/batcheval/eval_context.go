@@ -89,6 +89,13 @@ type EvalContext interface {
 	// is disabled.
 	GetMaxSplitQPS(context.Context) (float64, bool)
 
+	// GetMaxSplitCPU returns the Replicas maximum request cpu/s rate over a
+	// configured retention period.
+	//
+	// NOTE: This should not be used when the load based splitting cluster setting
+	// is disabled.
+	GetMaxSplitCPU(context.Context) (float64, bool)
+
 	GetGCThreshold() hlc.Timestamp
 	ExcludeDataFromBackup() bool
 	GetLastReplicaGCTimestamp(context.Context) (hlc.Timestamp, error)
@@ -156,6 +163,7 @@ type MockEvalCtx struct {
 	Clock              *hlc.Clock
 	Stats              enginepb.MVCCStats
 	QPS                float64
+	CPU                float64
 	AbortSpan          *abortspan.AbortSpan
 	GCThreshold        hlc.Timestamp
 	Term, FirstIndex   uint64
@@ -233,6 +241,9 @@ func (m *mockEvalCtxImpl) GetMVCCStats() enginepb.MVCCStats {
 }
 func (m *mockEvalCtxImpl) GetMaxSplitQPS(context.Context) (float64, bool) {
 	return m.QPS, true
+}
+func (m *mockEvalCtxImpl) GetMaxSplitCPU(context.Context) (float64, bool) {
+	return m.CPU, true
 }
 func (m *mockEvalCtxImpl) CanCreateTxnRecord(
 	context.Context, uuid.UUID, []byte, hlc.Timestamp,
