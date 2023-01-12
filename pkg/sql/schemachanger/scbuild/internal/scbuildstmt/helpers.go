@@ -329,6 +329,30 @@ func getColumnIDFromColumnName(
 	return colElem.ColumnID
 }
 
+// mustGetColumnIDFromColumnName looks up a column's ID by its name.
+// If no column with this name exists, panic.
+func mustGetColumnIDFromColumnName(
+	b BuildCtx, tableID catid.DescID, columnName tree.Name,
+) catid.ColumnID {
+	colID := getColumnIDFromColumnName(b, tableID, columnName)
+	if colID == 0 {
+		panic(errors.AssertionFailedf("cannot find column with name %v", columnName))
+	}
+	return colID
+}
+
+func mustGetTableIDFromTableName(b BuildCtx, tableName tree.TableName) catid.DescID {
+	tableElems := b.ResolveTable(tableName.ToUnresolvedObjectName(), ResolveParams{
+		IsExistenceOptional: false,
+		RequiredPrivilege:   privilege.CREATE,
+	})
+	_, _, tableElem := scpb.FindTable(tableElems)
+	if tableElem == nil {
+		panic(errors.AssertionFailedf("programming error: cannot find a Table element for table %v", tableName))
+	}
+	return tableElem.TableID
+}
+
 func toPublicNotCurrentlyPublicFilter(
 	status scpb.Status, target scpb.TargetStatus, _ scpb.Element,
 ) bool {

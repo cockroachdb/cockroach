@@ -81,7 +81,7 @@ begin transaction #2
 commit transaction #2
 begin transaction #3
 ## PostCommitPhase stage 1 of 2 with 1 ValidationType op
-validate check constraint crdb_internal_constraint_2_name_placeholder in table #104
+validate CHECK constraint crdb_internal_constraint_2_name_placeholder in table #104
 commit transaction #3
 begin transaction #4
 ## PostCommitPhase stage 2 of 2 with 4 MutationType ops

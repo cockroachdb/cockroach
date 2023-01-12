@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/semenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -472,17 +473,17 @@ func showForeignKeyConstraint(
 	formatQuoteNames(buf, refNames...)
 	buf.WriteByte(')')
 	// We omit MATCH SIMPLE because it is the default.
-	if fk.Match != descpb.ForeignKeyReference_SIMPLE {
+	if fk.Match != semenumpb.Match_SIMPLE {
 		buf.WriteByte(' ')
-		buf.WriteString(fk.Match.String())
+		buf.WriteString(tree.CompositeKeyMatchMethodType[fk.Match].String())
 	}
-	if fk.OnDelete != catpb.ForeignKeyAction_NO_ACTION {
+	if fk.OnDelete != semenumpb.ForeignKeyAction_NO_ACTION {
 		buf.WriteString(" ON DELETE ")
-		buf.WriteString(fk.OnDelete.String())
+		buf.WriteString(tree.ForeignKeyReferenceActionType[fk.OnDelete].String())
 	}
-	if fk.OnUpdate != catpb.ForeignKeyAction_NO_ACTION {
+	if fk.OnUpdate != semenumpb.ForeignKeyAction_NO_ACTION {
 		buf.WriteString(" ON UPDATE ")
-		buf.WriteString(fk.OnUpdate.String())
+		buf.WriteString(tree.ForeignKeyReferenceActionType[fk.OnUpdate].String())
 	}
 	if fk.Validity != descpb.ConstraintValidity_Validated {
 		buf.WriteString(" NOT VALID")
