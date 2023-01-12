@@ -407,6 +407,7 @@ go_test(
         "//pkg/base",
         "//pkg/base/serverident",
         "//pkg/build",
+        "//pkg/ccl/kvccl/kvtenantccl",
         "//pkg/cli/exit",
         "//pkg/clusterversion",
         "//pkg/config",
