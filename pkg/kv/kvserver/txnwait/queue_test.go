@@ -118,6 +118,44 @@ func TestShouldPushImmediately(t *testing.T) {
 	}
 }
 
+func TestCanPushWithPriority(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	min := enginepb.MinTxnPriority
+	max := enginepb.MaxTxnPriority
+	mid1 := enginepb.TxnPriority(1)
+	mid2 := enginepb.TxnPriority(2)
+	testCases := []struct {
+		pusher enginepb.TxnPriority
+		pushee enginepb.TxnPriority
+		exp    bool
+	}{
+		{min, min, false},
+		{min, mid1, false},
+		{min, mid2, false},
+		{min, max, false},
+		{mid1, min, true},
+		{mid1, mid1, false},
+		{mid1, mid2, false},
+		{mid1, max, false},
+		{mid2, min, true},
+		{mid2, mid1, false},
+		{mid2, mid2, false},
+		{mid2, max, false},
+		{max, min, true},
+		{max, mid1, true},
+		{max, mid2, true},
+		{max, max, false},
+	}
+	for _, test := range testCases {
+		name := fmt.Sprintf("pusher=%d/pushee=%d", test.pusher, test.pushee)
+		t.Run(name, func(t *testing.T) {
+			canPush := CanPushWithPriority(test.pusher, test.pushee)
+			require.Equal(t, test.exp, canPush)
+		})
+	}
+}
+
 func makeTS(w int64, l int32) hlc.Timestamp {
 	return hlc.Timestamp{WallTime: w, Logical: l}
 }
