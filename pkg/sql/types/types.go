@@ -1994,6 +1994,30 @@ func (t *T) Equivalent(other *T) bool {
 	return true
 }
 
+func (t *T) EquivalentExact(other *T) bool {
+	if t.Family() == AnyFamily || other.Family() == AnyFamily {
+		return true
+	}
+	if t.Family() != other.Family() {
+		return false
+	}
+
+	if t.Family() == IntFamily ||
+		t.Family() == FloatFamily ||
+		t.Family() == DateFamily ||
+		t.Family() == TimestampFamily ||
+		t.Family() == IntervalFamily ||
+		t.Family() == BytesFamily ||
+		t.Family() == TimestampTZFamily ||
+		t.Family() == INetFamily ||
+		t.Family() == CollatedStringFamily {
+		if t.Width() != other.Width() {
+			return false
+		}
+	}
+	return true
+}
+
 // EquivalentOrNull is the same as Equivalent, except it returns true if:
 // * `t` is Unknown (i.e., NULL) AND (allowNullTupleEquivalence OR `other` is not a tuple),
 // * `t` is a tuple with all non-Unknown elements matching the types in `other`.
