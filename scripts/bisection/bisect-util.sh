@@ -58,7 +58,7 @@ jq_exec() {
 
 test_hash() { local hash=$1; local test=$2; local count=$3
   {
-    abase="artifacts/${hash}-dirty"
+    abase="artifacts/${hash}"
     if [ -d "$abase/$test" ]; then
       echo "[$hash] Using stats from existing run"
       return
@@ -87,11 +87,7 @@ build_hash() { local hash=$1; local duration_override_mins=$2
 
     fullsha=$(git rev-parse "$hash")
 
-    sed -i "s/opts\.duration = 30 \* time\.Minute/opts.duration = $duration_override_mins * time.Minute/"  pkg/cmd/roachtest/tests/kv.go || exit 2
-    sed -i "s/ifLocal(c, \"10s\", \"30m\")/ifLocal(c, \"10s\", \"${duration_override_mins}m\")/"  pkg/cmd/roachtest/tests/ycsb.go || exit 2
-
-    # always mark dirty since we've applied timeout changes
-    abase="artifacts/${hash}-dirty"
+    abase="artifacts/${hash}"
     mkdir -p "${abase}"
 
     # Locations of the binaries.
@@ -118,6 +114,12 @@ build_hash() { local hash=$1; local duration_override_mins=$2
     fi
 
     if [ ! -f "${rt}" ]; then
+      if [[ -n $duration_override_mins ]]; then
+        echo "Building roachtest with duration override of $duration_override_mins mins"
+        sed -i "s/opts\.duration = 30 \* time\.Minute/opts.duration = $duration_override_mins * time.Minute/"  pkg/cmd/roachtest/tests/kv.go || exit 2
+        sed -i "s/ifLocal(c, \"10s\", \"30m\")/ifLocal(c, \"10s\", \"${duration_override_mins}m\")/"  pkg/cmd/roachtest/tests/ycsb.go || exit 2
+        echo "duration override: $duration_override_mins mins" > "$abase/_dirty"
+      fi
       ./dev build roachtest
       cp "bin/roachtest" "${rt}"
     fi
