@@ -42,7 +42,7 @@ create-function
  ├── CREATE FUNCTION f()
  │   	RETURNS workday
  │   	LANGUAGE SQL
- │   	AS $$SELECT w FROM t.public.workdays;$$
+ │   	AS $$SELECT w FROM [55(1) AS workdays];$$
  └── dependencies
       ├── workdays [columns: w]
       └── workday
@@ -65,7 +65,7 @@ create-function
  ├── CREATE FUNCTION f()
  │   	RETURNS STRING
  │   	LANGUAGE SQL
- │   	AS $$SELECT w::STRING FROM t.public.workdays;$$
+ │   	AS $$SELECT w::STRING FROM [55(1) AS workdays];$$
  └── dependencies
       └── workdays [columns: w]
 
@@ -76,7 +76,7 @@ create-function
  ├── CREATE FUNCTION f(IN a INT8)
  │   	RETURNS INT8
  │   	LANGUAGE SQL
- │   	AS $$SELECT a FROM t.public.ab;$$
+ │   	AS $$SELECT a FROM [53(1, 2) AS ab];$$
  └── dependencies
       └── ab [columns: a]
 
@@ -87,7 +87,7 @@ create-function
  ├── CREATE FUNCTION f()
  │   	RETURNS INT8
  │   	LANGUAGE SQL
- │   	AS $$SELECT b FROM t.public.ab@idx;$$
+ │   	AS $$SELECT b FROM [53(1, 2) AS ab]@idx;$$
  └── dependencies
       └── ab@idx [columns: b]
 
@@ -101,16 +101,22 @@ create-function
  ├── CREATE FUNCTION f()
  │   	RETURNS INT8
  │   	LANGUAGE SQL
- │   	AS $$SELECT a FROM t.public.ab;
+ │   	AS $$SELECT a FROM [53(1, 2) AS ab];
  │   SELECT nextval('s');$$
  └── dependencies
       ├── ab [columns: a]
       └── s
 
 build
-CREATE FUNCTION f() RETURNS INT LANGUAGE SQL AS $$ SELECT * FROM ab $$
+CREATE FUNCTION f() RETURNS ab LANGUAGE SQL AS $$ SELECT * FROM ab $$
 ----
-error (0A000): unimplemented: functions do not currently support * expressions
+create-function
+ ├── CREATE FUNCTION f()
+ │   	RETURNS ab
+ │   	LANGUAGE SQL
+ │   	AS $$SELECT * FROM [53(1, 2) AS ab];$$
+ └── dependencies
+      └── ab [columns: a b]
 
 build
 CREATE FUNCTION f() RETURNS INT LANGUAGE SQL BEGIN ATOMIC SELECT 1; END;

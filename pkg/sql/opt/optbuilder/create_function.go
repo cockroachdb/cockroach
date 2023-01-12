@@ -27,6 +27,7 @@ import (
 
 func (b *Builder) buildCreateFunction(cf *tree.CreateFunction, inScope *scope) (outScope *scope) {
 	b.DisableMemoReuse = true
+	b.useIDsInAST = true
 	if cf.FuncName.ExplicitCatalog {
 		if string(cf.FuncName.CatalogName) != b.evalCtx.SessionData().Database {
 			panic(unimplemented.New("CREATE FUNCTION", "cross-db references not supported"))

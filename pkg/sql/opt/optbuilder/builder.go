@@ -143,6 +143,10 @@ type Builder struct {
 	// using AST annotations.
 	qualifyDataSourceNamesInAST bool
 
+	// If set, the data source names in the AST are rewritten to the table ID and
+	// all the visible column IDs.
+	useIDsInAST bool
+
 	// isCorrelated is set to true if we already reported to telemetry that the
 	// query contains a correlated subquery.
 	isCorrelated bool
