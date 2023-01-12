@@ -620,7 +620,7 @@ DROP INDEX idx3 CASCADE
 ops
 DROP INDEX idx4 CASCADE
 ----
-StatementPhase stage 1 of 1 with 4 MutationType ops
+StatementPhase stage 1 of 1 with 5 MutationType ops
   transitions:
     [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 8}, ABSENT], PUBLIC] -> ABSENT
     [[IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 8}, ABSENT], PUBLIC] -> ABSENT
@@ -643,10 +643,13 @@ StatementPhase stage 1 of 1 with 4 MutationType ops
   ops:
     *scop.MarkDescriptorAsDropped
       DescriptorID: 105
-    *scop.RemoveViewBackReferencesInRelations
-      BackReferencedViewID: 105
+    *scop.RemoveBackReferencesInRelations
+      BackReferencedID: 105
       RelationIDs:
       - 104
+    *scop.RemoveObjectParent
+      ObjectID: 105
+      ParentSchemaID: 101
     *scop.MakePublicSecondaryIndexWriteOnly
       IndexID: 8
       TableID: 104
@@ -679,7 +682,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
   ops:
     *scop.UndoAllInTxnImmediateMutationOpSideEffects
       {}
-PreCommitPhase stage 2 of 2 with 10 MutationType ops
+PreCommitPhase stage 2 of 2 with 11 MutationType ops
   transitions:
     [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 8}, ABSENT], PUBLIC] -> ABSENT
     [[IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 8}, ABSENT], PUBLIC] -> ABSENT
@@ -706,6 +709,9 @@ PreCommitPhase stage 2 of 2 with 10 MutationType ops
       BackReferencedID: 105
       RelationIDs:
       - 104
+    *scop.RemoveObjectParent
+      ObjectID: 105
+      ParentSchemaID: 101
     *scop.MakePublicSecondaryIndexWriteOnly
       IndexID: 8
       TableID: 104
@@ -958,7 +964,7 @@ DROP INDEX idx4 CASCADE
 ops
 DROP INDEX v2@idx CASCADE;
 ----
-StatementPhase stage 1 of 1 with 5 MutationType ops
+StatementPhase stage 1 of 1 with 6 MutationType ops
   transitions:
     [[IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[IndexColumn:{DescID: 106, ColumnID: 3, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
@@ -990,10 +996,13 @@ StatementPhase stage 1 of 1 with 5 MutationType ops
   ops:
     *scop.MarkDescriptorAsDropped
       DescriptorID: 107
-    *scop.RemoveViewBackReferencesInRelations
-      BackReferencedViewID: 107
+    *scop.RemoveBackReferencesInRelations
+      BackReferencedID: 107
       RelationIDs:
       - 106
+    *scop.RemoveObjectParent
+      ObjectID: 107
+      ParentSchemaID: 101
     *scop.RemoveColumnDefaultExpression
       ColumnID: 2
       TableID: 107
@@ -1038,7 +1047,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
   ops:
     *scop.UndoAllInTxnImmediateMutationOpSideEffects
       {}
-PreCommitPhase stage 2 of 2 with 12 MutationType ops
+PreCommitPhase stage 2 of 2 with 13 MutationType ops
   transitions:
     [[IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[IndexColumn:{DescID: 106, ColumnID: 3, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
@@ -1074,6 +1083,9 @@ PreCommitPhase stage 2 of 2 with 12 MutationType ops
       BackReferencedID: 107
       RelationIDs:
       - 106
+    *scop.RemoveObjectParent
+      ObjectID: 107
+      ParentSchemaID: 101
     *scop.RemoveColumnDefaultExpression
       ColumnID: 2
       TableID: 107

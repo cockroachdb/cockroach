@@ -343,6 +343,10 @@ func (pb payloadBuilder) build(b buildCtx) logpb.EventPayload {
 			Comment:        e.Comment,
 			NullComment:    pb.TargetStatus != scpb.Status_PUBLIC,
 		}
+	case *scpb.Function:
+		return &eventpb.DropFunction{
+			FunctionName: fullyQualifiedName(b, e),
+		}
 	}
 	if _, _, tbl := scpb.FindTable(b.QueryByID(screl.GetDescID(pb.Element()))); tbl != nil {
 		return &eventpb.AlterTable{

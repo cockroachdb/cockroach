@@ -1,4 +1,4 @@
-// Copyright 2022 The Cockroach Authors.
+// Copyright 2023 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -16,24 +16,30 @@ import (
 )
 
 func init() {
-	opRegistry.register((*scpb.ObjectParent)(nil),
+	opRegistry.register((*scpb.Function)(nil),
 		toPublic(
 			scpb.Status_ABSENT,
+			equiv(scpb.Status_DROPPED),
 			to(scpb.Status_PUBLIC,
-				emit(func(this *scpb.ObjectParent) *scop.NotImplemented {
+				emit(func(this *scpb.Function) *scop.NotImplemented {
 					return notImplemented(this)
 				}),
 			),
 		),
 		toAbsent(
 			scpb.Status_PUBLIC,
-			to(scpb.Status_ABSENT,
-				// TODO(postamar): remove revertibility constraint when possible
+			to(scpb.Status_DROPPED,
 				revertible(false),
-				emit(func(this *scpb.ObjectParent) *scop.RemoveObjectParent {
-					return &scop.RemoveObjectParent{
-						ObjectID:       this.ObjectID,
-						ParentSchemaID: this.ParentSchemaID,
+				emit(func(this *scpb.Function) *scop.MarkDescriptorAsDropped {
+					return &scop.MarkDescriptorAsDropped{
+						DescriptorID: this.FunctionID,
+					}
+				}),
+			),
+			to(scpb.Status_ABSENT,
+				emit(func(this *scpb.Function) *scop.DeleteDescriptor {
+					return &scop.DeleteDescriptor{
+						DescriptorID: this.FunctionID,
 					}
 				}),
 			),

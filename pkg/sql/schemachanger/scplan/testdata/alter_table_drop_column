@@ -14,7 +14,7 @@ SET sql_safe_updates = false;
 ops
 ALTER TABLE defaultdb.foo DROP COLUMN v1 CASCADE;
 ----
-StatementPhase stage 1 of 1 with 15 MutationType ops
+StatementPhase stage 1 of 1 with 16 MutationType ops
   transitions:
     [[Column:{DescID: 107, ColumnID: 2}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[ColumnName:{DescID: 107, Name: v1, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
@@ -67,10 +67,13 @@ StatementPhase stage 1 of 1 with 15 MutationType ops
       BackReferencedDescriptorID: 108
       TypeIDs:
       - 104
-    *scop.RemoveViewBackReferencesInRelations
-      BackReferencedViewID: 108
+    *scop.RemoveBackReferencesInRelations
+      BackReferencedID: 108
       RelationIDs:
       - 107
+    *scop.RemoveObjectParent
+      ObjectID: 108
+      ParentSchemaID: 101
     *scop.RemoveDroppedColumnType
       ColumnID: 2
       TableID: 108
@@ -331,7 +334,7 @@ PostCommitPhase stage 7 of 7 with 1 ValidationType op
     *scop.ValidateIndex
       IndexID: 3
       TableID: 107
-PostCommitNonRevertiblePhase stage 1 of 3 with 24 MutationType ops
+PostCommitNonRevertiblePhase stage 1 of 3 with 25 MutationType ops
   transitions:
     [[Column:{DescID: 107, ColumnID: 2}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
     [[IndexColumn:{DescID: 107, ColumnID: 1, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
@@ -391,6 +394,9 @@ PostCommitNonRevertiblePhase stage 1 of 3 with 24 MutationType ops
       BackReferencedID: 108
       RelationIDs:
       - 107
+    *scop.RemoveObjectParent
+      ObjectID: 108
+      ParentSchemaID: 101
     *scop.RemoveDroppedColumnType
       ColumnID: 2
       TableID: 108
@@ -991,7 +997,7 @@ ALTER TABLE defaultdb.foo DROP COLUMN v1 CASCADE;
 ops
 ALTER TABLE defaultdb.foo DROP COLUMN v2 CASCADE;
 ----
-StatementPhase stage 1 of 1 with 15 MutationType ops
+StatementPhase stage 1 of 1 with 16 MutationType ops
   transitions:
     [[Column:{DescID: 107, ColumnID: 3}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[ColumnName:{DescID: 107, Name: v2, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
@@ -1037,10 +1043,13 @@ StatementPhase stage 1 of 1 with 15 MutationType ops
       BackReferencedDescriptorID: 108
       TypeIDs:
       - 104
-    *scop.RemoveViewBackReferencesInRelations
-      BackReferencedViewID: 108
+    *scop.RemoveBackReferencesInRelations
+      BackReferencedID: 108
       RelationIDs:
       - 107
+    *scop.RemoveObjectParent
+      ObjectID: 108
+      ParentSchemaID: 101
     *scop.RemoveDroppedColumnType
       ColumnID: 2
       TableID: 108
@@ -1320,7 +1329,7 @@ PostCommitPhase stage 7 of 7 with 1 ValidationType op
     *scop.ValidateIndex
       IndexID: 3
       TableID: 107
-PostCommitNonRevertiblePhase stage 1 of 3 with 25 MutationType ops
+PostCommitNonRevertiblePhase stage 1 of 3 with 26 MutationType ops
   transitions:
     [[Column:{DescID: 107, ColumnID: 3}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
     [[IndexColumn:{DescID: 107, ColumnID: 1, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
@@ -1380,6 +1389,9 @@ PostCommitNonRevertiblePhase stage 1 of 3 with 25 MutationType ops
       BackReferencedID: 108
       RelationIDs:
       - 107
+    *scop.RemoveObjectParent
+      ObjectID: 108
+      ParentSchemaID: 101
     *scop.RemoveDroppedColumnType
       ColumnID: 2
       TableID: 108

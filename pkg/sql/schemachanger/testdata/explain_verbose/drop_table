@@ -304,10 +304,14 @@ EXPLAIN (ddl, verbose) DROP TABLE db.sc.t;
 │       │       └── • skip PUBLIC → ABSENT operations
 │       │             rule: "skip index dependents removal ops on relation drop"
 │       │
-│       └── • 4 Mutation operations
+│       └── • 5 Mutation operations
 │           │
 │           ├── • MarkDescriptorAsDropped
 │           │     DescriptorID: 107
+│           │
+│           ├── • RemoveObjectParent
+│           │     ObjectID: 107
+│           │     ParentSchemaID: 106
 │           │
 │           ├── • RemoveTableComment
 │           │     TableID: 107
@@ -791,10 +795,14 @@ EXPLAIN (ddl, verbose) DROP TABLE db.sc.t;
 │       │       └── • skip PUBLIC → ABSENT operations
 │       │             rule: "skip index dependents removal ops on relation drop"
 │       │
-│       └── • 11 Mutation operations
+│       └── • 12 Mutation operations
 │           │
 │           ├── • MarkDescriptorAsDropped
 │           │     DescriptorID: 107
+│           │
+│           ├── • RemoveObjectParent
+│           │     ObjectID: 107
+│           │     ParentSchemaID: 106
 │           │
 │           ├── • RemoveTableComment
 │           │     TableID: 107
