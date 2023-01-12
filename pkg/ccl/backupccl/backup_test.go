@@ -10627,7 +10627,6 @@ CREATE FUNCTION sc1.f1(a sc1.enum1) RETURNS INT LANGUAGE SQL AS $$
   SELECT nextval('sc1.sq1');
 $$;
 `)
-
 	rows := srcSQLDB.QueryStr(t, `SELECT function_id FROM crdb_internal.create_function_statements WHERE function_name = 'f1'`)
 	require.Equal(t, 1, len(rows))
 	require.Equal(t, 1, len(rows[0]))
@@ -10674,7 +10673,7 @@ $$;
 	})
 	require.NoError(t, err)
 
-	// Bakcup the whole src cluster.
+	// Backup the whole src cluster.
 	srcSQLDB.Exec(t, `BACKUP INTO $1`, localFoo)
 
 	// Restore into target cluster.

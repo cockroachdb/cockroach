@@ -1166,3 +1166,35 @@ project
                           │    └── projections
                           │         └── variable: i:10 [as=i:13]
                           └── const: 1
+
+# --------------------------------------------------
+# UDFs with * expressions.
+# --------------------------------------------------
+
+exec-ddl
+CREATE TABLE tstar (
+  a INT
+)
+----
+
+exec-ddl
+CREATE FUNCTION fn_star() RETURNS INT LANGUAGE SQL AS 'SELECT * FROM tstar'
+----
+
+build format=show-scalars
+SELECT fn_star()
+----
+project
+ ├── columns: fn_star:5
+ ├── values
+ │    └── tuple
+ └── projections
+      └── udf: fn_star [as=fn_star:5]
+           └── body
+                └── limit
+                     ├── columns: a:1
+                     ├── project
+                     │    ├── columns: a:1
+                     │    └── scan tstar
+                     │         └── columns: a:1 rowid:2!null crdb_internal_mvcc_timestamp:3 tableoid:4
+                     └── const: 1

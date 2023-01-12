@@ -44,14 +44,14 @@ import (
 // See Builder.buildStmt for a description of the remaining input and
 // return values.
 func (b *Builder) buildDataSource(
-	texpr tree.TableExpr, indexFlags *tree.IndexFlags, locking lockingSpec, inScope *scope,
+	texpr *tree.TableExpr, indexFlags *tree.IndexFlags, locking lockingSpec, inScope *scope,
 ) (outScope *scope) {
 	defer func(prevAtRoot bool) {
 		inScope.atRoot = prevAtRoot
 	}(inScope.atRoot)
 	inScope.atRoot = false
 	// NB: The case statements are sorted lexicographically.
-	switch source := texpr.(type) {
+	switch source := (*texpr).(type) {
 	case *tree.AliasedTableExpr:
 		if source.IndexFlags != nil {
 			telemetry.Inc(sqltelemetry.IndexHintUseCounter)
@@ -64,7 +64,7 @@ func (b *Builder) buildDataSource(
 			locking = locking.filter(source.As.Alias)
 		}
 
-		outScope = b.buildDataSource(source.Expr, indexFlags, locking, inScope)
+		outScope = b.buildDataSource(&source.Expr, indexFlags, locking, inScope)
 
 		if source.Ordinality {
 			outScope = b.buildWithOrdinality(outScope)
@@ -110,7 +110,6 @@ func (b *Builder) buildDataSource(
 		}
 
 		ds, depName, resName := b.resolveDataSource(tn, privilege.SELECT)
-
 		locking = locking.filter(tn.ObjectName)
 		if locking.isSet() {
 			// SELECT ... FOR [KEY] UPDATE/SHARE also requires UPDATE privileges.
@@ -142,7 +141,7 @@ func (b *Builder) buildDataSource(
 		}
 
 	case *tree.ParenTableExpr:
-		return b.buildDataSource(source.Expr, indexFlags, locking, inScope)
+		return b.buildDataSource(&source.Expr, indexFlags, locking, inScope)
 
 	case *tree.RowsFromExpr:
 		return b.buildZip(source.Items, inScope)
@@ -1052,7 +1051,7 @@ func (b *Builder) buildSelectClause(
 	// function that refers to variables in fromScope or an ancestor scope,
 	// buildAggregateFunction is called which adds columns to the appropriate
 	// aggInScope and aggOutScope.
-	b.analyzeProjectionList(sel.Exprs, desiredTypes, fromScope, projectionsScope)
+	b.analyzeProjectionList(&sel.Exprs, desiredTypes, fromScope, projectionsScope)
 
 	// Any aggregates in the HAVING, ORDER BY and DISTINCT ON clauses (if they
 	// exist) will be added here.
@@ -1216,7 +1215,7 @@ func (b *Builder) buildFromTables(
 func (b *Builder) buildFromTablesRightDeep(
 	tables tree.TableExprs, locking lockingSpec, inScope *scope,
 ) (outScope *scope) {
-	outScope = b.buildDataSource(tables[0], nil /* indexFlags */, locking, inScope)
+	outScope = b.buildDataSource(&tables[0], nil /* indexFlags */, locking, inScope)
 
 	// Recursively build table join.
 	tables = tables[1:]
@@ -1266,7 +1265,7 @@ func (b *Builder) exprIsLateral(t tree.TableExpr) bool {
 func (b *Builder) buildFromWithLateral(
 	tables tree.TableExprs, locking lockingSpec, inScope *scope,
 ) (outScope *scope) {
-	outScope = b.buildDataSource(tables[0], nil /* indexFlags */, locking, inScope)
+	outScope = b.buildDataSource(&tables[0], nil /* indexFlags */, locking, inScope)
 	for i := 1; i < len(tables); i++ {
 		scope := inScope
 		// Lateral expressions need to be able to refer to the expressions that
@@ -1275,7 +1274,7 @@ func (b *Builder) buildFromWithLateral(
 			scope = outScope
 			scope.context = exprKindLateralJoin
 		}
-		tableScope := b.buildDataSource(tables[i], nil /* indexFlags */, locking, scope)
+		tableScope := b.buildDataSource(&tables[i], nil /* indexFlags */, locking, scope)
 
 		// Check that the same table name is not used multiple times.
 		b.validateJoinTableNames(outScope, tableScope)

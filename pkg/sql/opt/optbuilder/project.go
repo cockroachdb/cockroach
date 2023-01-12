@@ -79,7 +79,7 @@ func (b *Builder) dropOrderingAndExtraCols(s *scope) {
 // and adds the resulting aliases and typed expressions to outScope. See the
 // header comment for analyzeSelectList.
 func (b *Builder) analyzeProjectionList(
-	selects tree.SelectExprs, desiredTypes []*types.T, inScope, outScope *scope,
+	selects *tree.SelectExprs, desiredTypes []*types.T, inScope, outScope *scope,
 ) {
 	// We need to save and restore the previous values of the replaceSRFs field
 	// and the field in semaCtx in case we are recursively called within a
@@ -98,7 +98,7 @@ func (b *Builder) analyzeProjectionList(
 // and adds the resulting aliases and typed expressions to outScope. See the
 // header comment for analyzeSelectList.
 func (b *Builder) analyzeReturningList(
-	returning tree.ReturningExprs, desiredTypes []*types.T, inScope, outScope *scope,
+	returning *tree.ReturningExprs, desiredTypes []*types.T, inScope, outScope *scope,
 ) {
 	// We need to save and restore the previous value of the field in
 	// semaCtx in case we are recursively called within a subquery
@@ -109,7 +109,7 @@ func (b *Builder) analyzeReturningList(
 	b.semaCtx.Properties.Require(exprKindReturning.String(), tree.RejectSpecial)
 	inScope.context = exprKindReturning
 
-	b.analyzeSelectList(tree.SelectExprs(returning), desiredTypes, inScope, outScope)
+	b.analyzeSelectList((*tree.SelectExprs)(returning), desiredTypes, inScope, outScope)
 }
 
 // analyzeSelectList is a helper function used by analyzeProjectionList and
@@ -119,10 +119,15 @@ func (b *Builder) analyzeReturningList(
 //
 // As a side-effect, the appropriate scopes are updated with aggregations
 // (scope.groupby.aggs)
+//
+// If we are building a function, the `selects` expressions will be overwritten
+// with expressions that replace any `*` expressions with their columns.
 func (b *Builder) analyzeSelectList(
-	selects tree.SelectExprs, desiredTypes []*types.T, inScope, outScope *scope,
+	selects *tree.SelectExprs, desiredTypes []*types.T, inScope, outScope *scope,
 ) {
-	for i, e := range selects {
+	var expansions tree.SelectExprs
+	expanded := false
+	for i, e := range *selects {
 		// Start with fast path, looking for simple column reference.
 		texpr := b.resolveColRef(e.Expr, inScope)
 		if texpr == nil {
@@ -142,13 +147,24 @@ func (b *Builder) analyzeSelectList(
 					}
 
 					aliases, exprs := b.expandStar(e.Expr, inScope)
+					if b.insideFuncDef {
+						expanded = true
+						for _, expr := range exprs {
+							col := expr.(*scopeColumn)
+							expansions = append(expansions, tree.SelectExpr{Expr: tree.NewColumnItem(&col.table, col.name.ReferenceName())})
+						}
+					}
 					if outScope.cols == nil {
-						outScope.cols = make([]scopeColumn, 0, len(selects)+len(exprs)-1)
+						outScope.cols = make([]scopeColumn, 0, len(*selects)+len(exprs)-1)
 					}
 					for j, e := range exprs {
 						outScope.addColumn(scopeColName(tree.Name(aliases[j])), e)
 					}
 					continue
+				default:
+					if b.insideFuncDef {
+						expansions = append(expansions, e)
+					}
 				}
 			}
 
@@ -158,16 +174,21 @@ func (b *Builder) analyzeSelectList(
 			}
 
 			texpr = inScope.resolveType(e.Expr, desired)
+		} else if b.insideFuncDef {
+			expansions = append(expansions, e)
 		}
 
 		// Output column names should exactly match the original expression, so we
 		// have to determine the output column name before we perform type
 		// checking.
 		if outScope.cols == nil {
-			outScope.cols = make([]scopeColumn, 0, len(selects))
+			outScope.cols = make([]scopeColumn, 0, len(*selects))
 		}
 		alias := b.getColName(e)
 		outScope.addColumn(scopeColName(tree.Name(alias)), texpr)
+	}
+	if b.insideFuncDef && expanded {
+		*selects = expansions
 	}
 }
 
