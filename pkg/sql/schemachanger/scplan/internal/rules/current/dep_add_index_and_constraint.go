@@ -8,11 +8,12 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package rules
+package current
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/rel"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	. "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/rules"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scgraph"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 )
@@ -24,17 +25,17 @@ func init() {
 		"index is ready to be validated before we validate constraint on it",
 		scgraph.Precedence,
 		"index", "constraint",
-		func(from, to nodeVars) rel.Clauses {
+		func(from, to NodeVars) rel.Clauses {
 			return rel.Clauses{
 				from.Type((*scpb.PrimaryIndex)(nil)),
-				to.typeFilter(isSupportedNonIndexBackedConstraint),
-				joinOnDescID(from, to, "table-id"),
-				joinOn(
+				to.TypeFilter(IsSupportedNonIndexBackedConstraint),
+				JoinOnDescID(from, to, "table-id"),
+				JoinOn(
 					from, screl.IndexID,
 					to, screl.IndexID,
 					"index-id-for-validation",
 				),
-				statusesToPublicOrTransient(from, scpb.Status_VALIDATED, to, scpb.Status_VALIDATED),
+				StatusesToPublicOrTransient(from, scpb.Status_VALIDATED, to, scpb.Status_VALIDATED),
 			}
 		},
 	)

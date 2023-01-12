@@ -8,11 +8,12 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package rules
+package current
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/rel"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	. "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/rules"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scgraph"
 )
 
@@ -25,11 +26,11 @@ func init() {
 		scgraph.Precedence,
 		"column", "dependent",
 		scpb.Status_WRITE_ONLY, scpb.Status_ABSENT,
-		func(from, to nodeVars) rel.Clauses {
+		func(from, to NodeVars) rel.Clauses {
 			return rel.Clauses{
 				from.Type((*scpb.Column)(nil)),
-				to.typeFilter(isColumnDependent),
-				joinOnColumnID(from, to, "table-id", "col-id"),
+				to.TypeFilter(IsColumnDependent),
+				JoinOnColumnID(from, to, "table-id", "col-id"),
 			}
 		},
 	)
@@ -39,11 +40,11 @@ func init() {
 		scgraph.Precedence,
 		"dependent", "column",
 		scpb.Status_ABSENT, scpb.Status_ABSENT,
-		func(from, to nodeVars) rel.Clauses {
+		func(from, to NodeVars) rel.Clauses {
 			return rel.Clauses{
-				from.typeFilter(isColumnDependent),
+				from.TypeFilter(IsColumnDependent),
 				to.Type((*scpb.Column)(nil)),
-				joinOnColumnID(from, to, "table-id", "col-id"),
+				JoinOnColumnID(from, to, "table-id", "col-id"),
 			}
 		},
 	)
@@ -56,12 +57,12 @@ func init() {
 		"column type dependents removed right before column type",
 		scgraph.SameStagePrecedence,
 		"dependent", "column-type",
-		func(from, to nodeVars) rel.Clauses {
+		func(from, to NodeVars) rel.Clauses {
 			return rel.Clauses{
-				from.typeFilter(isColumnTypeDependent),
+				from.TypeFilter(IsColumnTypeDependent),
 				to.Type((*scpb.ColumnType)(nil)),
-				joinOnColumnID(from, to, "table-id", "col-id"),
-				statusesToAbsent(from, scpb.Status_ABSENT, to, scpb.Status_ABSENT),
+				JoinOnColumnID(from, to, "table-id", "col-id"),
+				StatusesToAbsent(from, scpb.Status_ABSENT, to, scpb.Status_ABSENT),
 			}
 		},
 	)
@@ -85,13 +86,13 @@ func init() {
 		"column type removed right before column when not dropping relation",
 		scgraph.SameStagePrecedence,
 		"column-type", "column",
-		func(from, to nodeVars) rel.Clauses {
+		func(from, to NodeVars) rel.Clauses {
 			return rel.Clauses{
 				from.Type((*scpb.ColumnType)(nil)),
-				from.descriptorIsNotBeingDropped(),
+				from.DescriptorIsNotBeingDropped(),
 				to.Type((*scpb.Column)(nil)),
-				joinOnColumnID(from, to, "table-id", "col-id"),
-				statusesToAbsent(from, scpb.Status_ABSENT, to, scpb.Status_ABSENT),
+				JoinOnColumnID(from, to, "table-id", "col-id"),
+				StatusesToAbsent(from, scpb.Status_ABSENT, to, scpb.Status_ABSENT),
 			}
 		},
 	)

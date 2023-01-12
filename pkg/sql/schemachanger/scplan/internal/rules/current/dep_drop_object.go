@@ -8,11 +8,12 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package rules
+package current
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/rel"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	. "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/rules"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scgraph"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 )
@@ -36,24 +37,24 @@ func init() {
 		"descriptor TXN_DROPPED before DROPPED",
 		scgraph.PreviousStagePrecedence,
 		"txn_dropped", "dropped",
-		func(from, to nodeVars) rel.Clauses {
+		func(from, to NodeVars) rel.Clauses {
 			return rel.Clauses{
-				from.typeFilter(IsDescriptor),
-				from.el.AttrEqVar(screl.DescID, "_"),
-				from.el.AttrEqVar(rel.Self, to.el),
-				statusesToAbsent(from, scpb.Status_TXN_DROPPED, to, scpb.Status_DROPPED),
+				from.TypeFilter(IsDescriptor),
+				from.El.AttrEqVar(screl.DescID, "_"),
+				from.El.AttrEqVar(rel.Self, to.El),
+				StatusesToAbsent(from, scpb.Status_TXN_DROPPED, to, scpb.Status_DROPPED),
 			}
 		})
 	registerDepRule(
 		"descriptor DROPPED in transaction before removal",
 		scgraph.PreviousTransactionPrecedence,
 		"dropped", "absent",
-		func(from, to nodeVars) rel.Clauses {
+		func(from, to NodeVars) rel.Clauses {
 			return rel.Clauses{
-				from.typeFilter(IsDescriptor),
-				from.el.AttrEqVar(screl.DescID, "_"),
-				from.el.AttrEqVar(rel.Self, to.el),
-				statusesToAbsent(from, scpb.Status_DROPPED, to, scpb.Status_ABSENT),
+				from.TypeFilter(IsDescriptor),
+				from.El.AttrEqVar(screl.DescID, "_"),
+				from.El.AttrEqVar(rel.Self, to.El),
+				StatusesToAbsent(from, scpb.Status_DROPPED, to, scpb.Status_ABSENT),
 			}
 		})
 
@@ -61,13 +62,13 @@ func init() {
 		"descriptor drop right before dependent element removal",
 		scgraph.Precedence,
 		"descriptor", "dependent",
-		func(from, to nodeVars) rel.Clauses {
+		func(from, to NodeVars) rel.Clauses {
 			return rel.Clauses{
-				from.typeFilter(IsDescriptor),
-				to.typeFilter(isSimpleDependent),
-				joinOnDescID(from, to, "desc-id"),
-				statusesToAbsent(from, scpb.Status_DROPPED, to, scpb.Status_ABSENT),
-				fromHasPublicStatusIfFromIsTableAndToIsRowLevelTTL(from.target, from.el, to.el),
+				from.TypeFilter(IsDescriptor),
+				to.TypeFilter(IsSimpleDependent),
+				JoinOnDescID(from, to, "desc-id"),
+				StatusesToAbsent(from, scpb.Status_DROPPED, to, scpb.Status_ABSENT),
+				FromHasPublicStatusIfFromIsTableAndToIsRowLevelTTL(from.Target, from.El, to.El),
 			}
 		})
 }
@@ -87,12 +88,12 @@ func init() {
 		"descriptor drop right before removing dependent with attr ref",
 		scgraph.SameStagePrecedence,
 		"referenced-descriptor", "referencing-via-attr",
-		func(from, to nodeVars) rel.Clauses {
+		func(from, to NodeVars) rel.Clauses {
 			return rel.Clauses{
-				from.typeFilter(IsDescriptor),
-				to.typeFilter(isSimpleDependent),
-				joinReferencedDescID(to, from, "desc-id"),
-				statusesToAbsent(from, scpb.Status_DROPPED, to, scpb.Status_ABSENT),
+				from.TypeFilter(IsDescriptor),
+				to.TypeFilter(IsSimpleDependent),
+				JoinReferencedDescID(to, from, "desc-id"),
+				StatusesToAbsent(from, scpb.Status_DROPPED, to, scpb.Status_ABSENT),
 			}
 		},
 	)
@@ -101,14 +102,14 @@ func init() {
 		"descriptor drop right before removing dependent with type ref",
 		scgraph.SameStagePrecedence,
 		"referenced-descriptor", "referencing-via-type",
-		func(from, to nodeVars) rel.Clauses {
+		func(from, to NodeVars) rel.Clauses {
 			fromDescID := rel.Var("fromDescID")
 			return rel.Clauses{
-				from.typeFilter(isTypeDescriptor),
-				from.descIDEq(fromDescID),
-				to.referencedTypeDescIDsContain(fromDescID),
-				to.typeFilter(isSimpleDependent, or(isWithTypeT, isWithExpression)),
-				statusesToAbsent(from, scpb.Status_DROPPED, to, scpb.Status_ABSENT),
+				from.TypeFilter(IsTypeDescriptor),
+				from.DescIDEq(fromDescID),
+				to.ReferencedTypeDescIDsContain(fromDescID),
+				to.TypeFilter(IsSimpleDependent, Or(IsWithTypeT, IsWithExpression)),
+				StatusesToAbsent(from, scpb.Status_DROPPED, to, scpb.Status_ABSENT),
 			}
 		},
 	)
@@ -117,14 +118,14 @@ func init() {
 		"descriptor drop right before removing dependent with expr ref to sequence",
 		scgraph.SameStagePrecedence,
 		"referenced-descriptor", "referencing-via-expr",
-		func(from, to nodeVars) rel.Clauses {
+		func(from, to NodeVars) rel.Clauses {
 			seqID := rel.Var("seqID")
 			return rel.Clauses{
 				from.Type((*scpb.Sequence)(nil)),
-				from.descIDEq(seqID),
-				to.referencedSequenceIDsContains(seqID),
-				to.typeFilter(isSimpleDependent, isWithExpression),
-				statusesToAbsent(from, scpb.Status_DROPPED, to, scpb.Status_ABSENT),
+				from.DescIDEq(seqID),
+				to.ReferencedSequenceIDsContains(seqID),
+				to.TypeFilter(IsSimpleDependent, IsWithExpression),
+				StatusesToAbsent(from, scpb.Status_DROPPED, to, scpb.Status_ABSENT),
 			}
 		},
 	)
