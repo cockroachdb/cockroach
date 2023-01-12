@@ -405,6 +405,7 @@ go_test(
     deps = [
         "//pkg/base",
         "//pkg/build",
+        "//pkg/ccl/kvccl/kvtenantccl",
         "//pkg/cli/exit",
         "//pkg/clusterversion",
         "//pkg/config",
