@@ -793,7 +793,8 @@ func (ba BatchRequest) SafeFormat(s redact.SafePrinter, _ rune) {
 			h := req.Header()
 			if req.Method() == PushTxn {
 				pushReq := req.(*PushTxnRequest)
-				s.Printf("PushTxn(%s->%s)", pushReq.PusherTxn.Short(), pushReq.PusheeTxn.Short())
+				s.Printf("PushTxn(%s,%s->%s)",
+					pushReq.PushType, pushReq.PusherTxn.Short(), pushReq.PusheeTxn.Short())
 			} else {
 				s.Print(req.Method())
 			}
