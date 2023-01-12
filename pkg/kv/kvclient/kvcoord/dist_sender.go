@@ -700,7 +700,7 @@ func (ds *DistSender) initAndVerifyBatch(ctx context.Context, ba *kvpb.BatchRequ
 				foundReverse = true
 
 			case *kvpb.QueryIntentRequest, *kvpb.EndTxnRequest,
-				*kvpb.GetRequest, *kvpb.DeleteRequest:
+				*kvpb.GetRequest, *kvpb.ResolveIntentRequest, *kvpb.DeleteRequest:
 				// Accepted point requests that can be in batches with limit.
 
 			default:
