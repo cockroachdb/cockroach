@@ -17,6 +17,7 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -732,6 +733,27 @@ func (tabStat *TableStatistic) String() string {
 	)
 }
 
+// IsPartial returns true if this statistic was collected with a where clause.
+func (tsp *TableStatisticProto) IsPartial() bool {
+	return tsp.PartialPredicate != ""
+}
+
+// IsMerged returns true if this statistic was created by merging a partial and
+// a full statistic.
+func (tsp *TableStatisticProto) IsMerged() bool {
+	return tsp.Name == jobspb.MergedStatsName
+}
+
+// IsForecast returns true if this statistic was created by forecasting.
+func (tsp *TableStatisticProto) IsForecast() bool {
+	return tsp.Name == jobspb.ForecastStatsName
+}
+
+// IsAuto returns true if this statistic was collected automatically.
+func (tsp *TableStatisticProto) IsAuto() bool {
+	return tsp.Name == jobspb.AutoStatsName
+}
+
 // getTableStatsFromDB retrieves the statistics in system.table_statistics
 // for the given table ID.
 //
@@ -778,8 +800,7 @@ ORDER BY "createdAt" DESC, "columnIDs" DESC, "statisticID" DESC
 		return nil, err
 	}
 
-	var fullStatsList []*TableStatistic
-	var partialStatsList []*TableStatistic
+	var statsList []*TableStatistic
 	var ok bool
 	for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
 		stats, err := sc.parseStats(ctx, it.Cur(), partialStatisticsColumnsVerActive)
@@ -787,11 +808,7 @@ ORDER BY "createdAt" DESC, "columnIDs" DESC, "statisticID" DESC
 			log.Warningf(ctx, "could not decode statistic for table %d: %v", tableID, err)
 			continue
 		}
-		if stats.PartialPredicate != "" {
-			partialStatsList = append(partialStatsList, stats)
-		} else {
-			fullStatsList = append(fullStatsList, stats)
-		}
+		statsList = append(statsList, stats)
 	}
 	if err != nil {
 		return nil, err
@@ -799,15 +816,13 @@ ORDER BY "createdAt" DESC, "columnIDs" DESC, "statisticID" DESC
 
 	// TODO(faizaanmadhani): Wrap merging behind a boolean so
 	// that it can be turned off.
-	if len(partialStatsList) > 0 {
-		mergedStats := MergedStatistics(ctx, partialStatsList, fullStatsList)
-		fullStatsList = append(mergedStats, fullStatsList...)
-	}
+	merged := MergedStatistics(ctx, statsList)
+	statsList = append(merged, statsList...)
 
 	if forecast {
-		forecasts := ForecastTableStatistics(ctx, fullStatsList)
-		fullStatsList = append(forecasts, fullStatsList...)
+		forecasts := ForecastTableStatistics(ctx, statsList)
+		statsList = append(forecasts, statsList...)
 	}
 
-	return fullStatsList, nil
+	return statsList, nil
 }

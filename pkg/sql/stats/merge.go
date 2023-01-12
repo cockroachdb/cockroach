@@ -28,27 +28,29 @@ import (
 // are the merged combinations of the latest full statistic and the latest partial
 // statistic for a specific column set. If merging a partial stat with the full
 // stat is not possible, we don't include that statistic as part of the resulting array.
-func MergedStatistics(
-	ctx context.Context, partialStatsList []*TableStatistic, fullStatsList []*TableStatistic,
-) []*TableStatistic {
+func MergedStatistics(ctx context.Context, stats []*TableStatistic) []*TableStatistic {
 	// Map the ColumnIDs to the latest full table statistic,
 	// and map the keys to the number of columns in the set.
 	// It relies on the fact that the first full statistic
 	// is the latest.
 	fullStatsMap := make(map[descpb.ColumnID]*TableStatistic)
-	for _, stat := range fullStatsList {
-		if len(stat.ColumnIDs) == 1 {
-			col := stat.ColumnIDs[0]
-			_, ok := fullStatsMap[col]
-			if !ok {
-				fullStatsMap[col] = stat
-			}
+	for _, stat := range stats {
+		if stat.IsPartial() || len(stat.ColumnIDs) != 1 {
+			continue
+		}
+		col := stat.ColumnIDs[0]
+		_, ok := fullStatsMap[col]
+		if !ok {
+			fullStatsMap[col] = stat
 		}
 	}
 
 	mergedStats := make([]*TableStatistic, 0, len(fullStatsMap))
 	var seenCols intsets.Fast
-	for _, partialStat := range partialStatsList {
+	for _, partialStat := range stats {
+		if !partialStat.IsPartial() || len(partialStat.ColumnIDs) != 1 {
+			continue
+		}
 		col := partialStat.ColumnIDs[0]
 		if !seenCols.Contains(int(col)) {
 			seenCols.Add(int(col))
