@@ -702,6 +702,10 @@ func (s spanSetWriter) ShouldWriteLocalTimestamps(ctx context.Context) bool {
 	return s.w.ShouldWriteLocalTimestamps(ctx)
 }
 
+func (s spanSetWriter) BufferedSize() int {
+	return s.w.BufferedSize()
+}
+
 // ReadWriter is used outside of the spanset package internally, in ccl.
 type ReadWriter struct {
 	spanSetReader

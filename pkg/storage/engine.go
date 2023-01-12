@@ -827,6 +827,12 @@ type Writer interface {
 	// This method is temporary, to handle the transition from clusters where not
 	// all nodes understand local timestamps.
 	ShouldWriteLocalTimestamps(ctx context.Context) bool
+
+	// BufferedSize returns the size of the underlying buffered writes if the
+	// Writer implementation is buffered, and 0 if the Writer implementation is
+	// not buffered. Buffered writers are expected to always give a monotonically
+	// increasing size.
+	BufferedSize() int
 }
 
 // ReadWriter is the read/write interface to an engine's data.
