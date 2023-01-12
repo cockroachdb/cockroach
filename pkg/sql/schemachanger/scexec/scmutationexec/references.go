@@ -294,11 +294,11 @@ func updateBackReferencesInSequences(
 	return nil
 }
 
-func (m *immediateVisitor) RemoveBackReferencesInRelations(
+func (i *immediateVisitor) RemoveBackReferencesInRelations(
 	ctx context.Context, op scop.RemoveBackReferencesInRelations,
 ) error {
 	for _, relationID := range op.RelationIDs {
-		if err := removeViewBackReferencesInRelation(ctx, m, relationID, op.BackReferencedID); err != nil {
+		if err := removeViewBackReferencesInRelation(ctx, i, relationID, op.BackReferencedID); err != nil {
 			return err
 		}
 	}
@@ -320,5 +320,23 @@ func removeViewBackReferencesInRelation(
 		}
 	}
 	tbl.DependedOnBy = newBackRefs
+	return nil
+}
+
+func (i *immediateVisitor) RemoveObjectParent(
+	ctx context.Context, op scop.RemoveObjectParent,
+) error {
+	obj, err := i.checkOutDescriptor(ctx, op.ObjectID)
+	if err != nil {
+		return err
+	}
+	switch obj.DescriptorType() {
+	case catalog.Function:
+		sc, err := i.checkOutSchema(ctx, op.ParentSchemaID)
+		if err != nil {
+			return err
+		}
+		sc.RemoveFunction(obj.GetName(), obj.GetID())
+	}
 	return nil
 }

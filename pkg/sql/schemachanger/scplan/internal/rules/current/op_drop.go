@@ -241,6 +241,10 @@ func init() {
 				(*scpb.UserPrivileges)(nil),
 				(*scpb.EnumTypeValue)(nil),
 				(*scpb.TablePartitioning)(nil),
+				(*scpb.FunctionName)(nil),
+				(*scpb.FunctionVolatility)(nil),
+				(*scpb.FunctionLeakProof)(nil),
+				(*scpb.FunctionNullInputBehavior)(nil),
 			),
 
 			JoinOnDescID(desc, dep, descID),

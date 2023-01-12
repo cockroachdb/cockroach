@@ -97,6 +97,7 @@ type ImmediateMutationVisitor interface {
 	RemoveConstraintComment(context.Context, RemoveConstraintComment) error
 	AddColumnToIndex(context.Context, AddColumnToIndex) error
 	RemoveColumnFromIndex(context.Context, RemoveColumnFromIndex) error
+	RemoveObjectParent(context.Context, RemoveObjectParent) error
 }
 
 // Visit is part of the ImmediateMutationOp interface.
@@ -472,4 +473,9 @@ func (op AddColumnToIndex) Visit(ctx context.Context, v ImmediateMutationVisitor
 // Visit is part of the ImmediateMutationOp interface.
 func (op RemoveColumnFromIndex) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
 	return v.RemoveColumnFromIndex(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
+func (op RemoveObjectParent) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.RemoveObjectParent(ctx, op)
 }

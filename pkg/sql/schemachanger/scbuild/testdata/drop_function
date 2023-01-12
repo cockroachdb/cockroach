@@ -1,0 +1,43 @@
+setup
+CREATE TABLE t(
+  a INT PRIMARY KEY,
+  b INT,
+  C INT,
+  INDEX t_idx_b(b),
+  INDEX t_idx_c(c)
+);
+CREATE SEQUENCE sq1;
+CREATE VIEW v AS SELECT a FROM t;
+CREATE TYPE notmyworkday AS ENUM ('Monday', 'Tuesday');
+CREATE FUNCTION f(a notmyworkday) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$
+  SELECT a FROM t;
+  SELECT b FROM t@t_idx_b;
+  SELECT c FROM t@t_idx_c;
+  SELECT a FROM v;
+  SELECT nextval('sq1');
+$$;
+----
+
+build
+DROP FUNCTION f;
+----
+- [[Owner:{DescID: 109}, ABSENT], PUBLIC]
+  {descriptorId: 109, owner: root}
+- [[UserPrivileges:{DescID: 109, Name: admin}, ABSENT], PUBLIC]
+  {descriptorId: 109, privileges: "2", userName: admin}
+- [[UserPrivileges:{DescID: 109, Name: root}, ABSENT], PUBLIC]
+  {descriptorId: 109, privileges: "2", userName: root}
+- [[Function:{DescID: 109}, ABSENT], PUBLIC]
+  {functionId: 109, params: [{class: {class: IN}, name: a, type: {closedTypeIds: [107, 108], type: {family: EnumFamily, oid: 100107, udtMetadata: {arrayTypeOid: 100108}}}}], returnType: {type: {family: IntFamily, oid: 20, width: 64}}}
+- [[ObjectParent:{DescID: 109, ReferencedDescID: 101}, ABSENT], PUBLIC]
+  {objectId: 109, parentSchemaId: 101}
+- [[FunctionName:{DescID: 109}, ABSENT], PUBLIC]
+  {functionId: 109, name: f}
+- [[FunctionVolatility:{DescID: 109}, ABSENT], PUBLIC]
+  {functionId: 109, volatility: {volatility: IMMUTABLE}}
+- [[FunctionLeakProof:{DescID: 109}, ABSENT], PUBLIC]
+  {functionId: 109}
+- [[FunctionNullInputBehavior:{DescID: 109}, ABSENT], PUBLIC]
+  {functionId: 109, nullInputBehavior: {nullInputBehavior: CALLED_ON_NULL_INPUT}}
+- [[FunctionBody:{DescID: 109}, ABSENT], PUBLIC]
+  {body: "SELECT a FROM defaultdb.public.t;\nSELECT b FROM defaultdb.public.t@t_idx_b;\nSELECT c FROM defaultdb.public.t@t_idx_c;\nSELECT a FROM defaultdb.public.v;\nSELECT nextval(105:::REGCLASS);", functionId: 109, lang: {lang: SQL}, usesSequenceIds: [105], usesTables: [{columnIds: [1], tableId: 104}, {columnIds: [2], indexId: 2, tableId: 104}, {columnIds: [3], indexId: 3, tableId: 104}], usesTypeIds: [107, 108], usesViews: [{columnIds: [1], viewId: 106}]}

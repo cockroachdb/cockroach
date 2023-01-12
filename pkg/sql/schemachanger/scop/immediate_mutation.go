@@ -625,3 +625,9 @@ type RemoveColumnFromIndex struct {
 	Ordinal      uint32
 	InvertedKind catpb.InvertedIndexColumnKind
 }
+
+type RemoveObjectParent struct {
+	immediateMutationOp
+	ObjectID       descpb.ID
+	ParentSchemaID descpb.ID
+}

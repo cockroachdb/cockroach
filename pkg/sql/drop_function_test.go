@@ -147,7 +147,7 @@ SELECT nextval(105:::REGCLASS);`,
 	err = sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
 		_, err := col.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Function(ctx, 109)
 		require.Error(t, err)
-		require.Regexp(t, "descriptor is being dropped", err.Error())
+		require.Regexp(t, "function undefined", err.Error())
 
 		// Make sure columns and indexes has correct back references.
 		tn := tree.MakeTableNameWithSchema("defaultdb", "public", "t")
@@ -197,6 +197,7 @@ CREATE TABLE t(
   a INT PRIMARY KEY,
   b INT,
   C INT,
+  d INT,
   INDEX t_idx_b(b),
   INDEX t_idx_c(c)
 );
@@ -209,6 +210,7 @@ CREATE FUNCTION test_sc.f(a notmyworkday) RETURNS INT IMMUTABLE LANGUAGE SQL AS 
   SELECT a FROM t;
   SELECT b FROM t@t_idx_b;
   SELECT c FROM t@t_idx_c;
+  SELECT d FROM t;
   SELECT a FROM v;
   SELECT nextval('sq1');
 $$;
@@ -225,20 +227,23 @@ USE defaultdb;
 	tDB.Exec(t, "SET use_declarative_schema_changer = off;")
 
 	testCases := []struct {
-		stmt        string
-		expectedErr string
+		stmt           string
+		expectedErr    string
+		dscExpectedErr string
 	}{
 		{
 			stmt:        "DROP SEQUENCE sq1",
 			expectedErr: "pq: cannot drop sequence sq1 because other objects depend on it",
 		},
 		{
-			stmt:        "DROP TABLE t",
-			expectedErr: `pq: cannot drop relation "t" because function "f" depends on it`,
+			stmt:           "DROP TABLE t",
+			expectedErr:    `pq: cannot drop relation "t" because function "f" depends on it`,
+			dscExpectedErr: `pq: cannot drop table t because other objects depend on it`,
 		},
 		{
-			stmt:        "DROP VIEW v",
-			expectedErr: `pq: cannot drop relation "v" because function "f" depends on it`,
+			stmt:           "DROP VIEW v",
+			expectedErr:    `pq: cannot drop relation "v" because function "f" depends on it`,
+			dscExpectedErr: `pq: cannot drop view v because other objects depend on it`,
 		},
 		{
 			stmt:        "ALTER TABLE t RENAME TO t_new",
@@ -249,8 +254,8 @@ USE defaultdb;
 			expectedErr: `pq: cannot set schema on relation "t" because function "f" depends on it`,
 		},
 		{
-			stmt:        "ALTER TABLE t DROP COLUMN b",
-			expectedErr: `pq: cannot drop column "b" because function "f" depends on it`,
+			stmt:        "ALTER TABLE t DROP COLUMN d",
+			expectedErr: `pq: cannot drop column "d" because function "f" depends on it`,
 		},
 		{
 			stmt:        "ALTER TABLE t RENAME COLUMN b TO bb",
@@ -296,7 +301,11 @@ USE defaultdb;
 	for i, tc := range testCases {
 		t.Run(strconv.Itoa(i), func(t *testing.T) {
 			_, err := sqlDB.Exec(tc.stmt)
-			require.Equal(t, tc.expectedErr, err.Error())
+			if tc.dscExpectedErr != "" {
+				require.Equal(t, tc.dscExpectedErr, err.Error())
+			} else {
+				require.Equal(t, tc.expectedErr, err.Error())
+			}
 		})
 	}
 }
@@ -312,6 +321,7 @@ CREATE TABLE t(
   a INT PRIMARY KEY,
   b INT,
   C INT,
+  d INT,
   INDEX t_idx_b(b),
   INDEX t_idx_c(c)
 );
@@ -324,6 +334,7 @@ CREATE FUNCTION test_sc.f(a notmyworkday) RETURNS INT IMMUTABLE LANGUAGE SQL AS 
   SELECT a FROM t;
   SELECT b FROM t@t_idx_b;
   SELECT c FROM t@t_idx_c;
+  SELECT d FROM t;
   SELECT a FROM v;
   SELECT nextval('sq1');
 $$;
@@ -347,7 +358,7 @@ $$;
 		},
 		{
 			testName: "drop column",
-			stmt:     "ALTER TABLE t DROP COLUMN b CASCADE",
+			stmt:     "ALTER TABLE t DROP COLUMN d CASCADE",
 		},
 		{
 			testName: "drop index",
@@ -420,7 +431,7 @@ $$;
 			err = sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
 				_, err := col.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Function(ctx, 113)
 				require.Error(t, err)
-				require.Regexp(t, "descriptor is being dropped", err.Error())
+				require.Regexp(t, "function undefined", err.Error())
 				return nil
 			})
 			require.NoError(t, err)

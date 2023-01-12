@@ -458,7 +458,7 @@ func (desc *Mutable) AddFunction(name string, f descpb.SchemaDescriptor_Function
 // RemoveFunction removes a UDF overload signature from the schema descriptor.
 func (desc *Mutable) RemoveFunction(name string, id descpb.ID) {
 	if fn, ok := desc.Functions[name]; ok {
-		updated := fn.Overloads[:0]
+		var updated []descpb.SchemaDescriptor_FunctionOverload
 		for _, ol := range fn.Overloads {
 			if ol.ID != id {
 				updated = append(updated, ol)

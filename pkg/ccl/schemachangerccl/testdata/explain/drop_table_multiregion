@@ -38,8 +38,9 @@ Schema change plan for DROP TABLE ‹multi_region_test_db›.‹public›.‹tab
  │         │    ├── PUBLIC → VALIDATED  PrimaryIndex:{DescID: 108, IndexID: 1, ConstraintID: 1}
  │         │    ├── PUBLIC → ABSENT     IndexPartitioning:{DescID: 108, IndexID: 1}
  │         │    └── PUBLIC → ABSENT     IndexName:{DescID: 108, Name: table_regional_by_row_pkey, IndexID: 1}
- │         └── 6 Mutation operations
+ │         └── 7 Mutation operations
  │              ├── MarkDescriptorAsDropped {"DescriptorID":108}
+ │              ├── RemoveObjectParent {"ObjectID":108,"ParentSchemaID":105}
  │              ├── RemoveColumnDefaultExpression {"ColumnID":2,"TableID":108}
  │              ├── UpdateTableBackReferencesInTypes {"BackReferencedTableID":108}
  │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":108,"Name":"table_regional_b...","SchemaID":105}}
@@ -106,8 +107,9 @@ Schema change plan for DROP TABLE ‹multi_region_test_db›.‹public›.‹tab
  │         │    ├── PUBLIC → ABSENT  PrimaryIndex:{DescID: 108, IndexID: 1, ConstraintID: 1}
  │         │    ├── PUBLIC → ABSENT  IndexPartitioning:{DescID: 108, IndexID: 1}
  │         │    └── PUBLIC → ABSENT  IndexName:{DescID: 108, Name: table_regional_by_row_pkey, IndexID: 1}
- │         └── 14 Mutation operations
+ │         └── 15 Mutation operations
  │              ├── MarkDescriptorAsDropped {"DescriptorID":108}
+ │              ├── RemoveObjectParent {"ObjectID":108,"ParentSchemaID":105}
  │              ├── RemoveColumnDefaultExpression {"ColumnID":2,"TableID":108}
  │              ├── UpdateTableBackReferencesInTypes {"BackReferencedTableID":108}
  │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":108,"Name":"table_regional_b...","SchemaID":105}}

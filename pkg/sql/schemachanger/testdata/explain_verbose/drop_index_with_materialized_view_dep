@@ -278,15 +278,19 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
 │       │       └── • skip PUBLIC → ABSENT operations
 │       │             rule: "skip index dependents removal ops on relation drop"
 │       │
-│       └── • 5 Mutation operations
+│       └── • 6 Mutation operations
 │           │
 │           ├── • MarkDescriptorAsDropped
 │           │     DescriptorID: 106
 │           │
-│           ├── • RemoveViewBackReferencesInRelations
-│           │     BackReferencedViewID: 106
+│           ├── • RemoveBackReferencesInRelations
+│           │     BackReferencedID: 106
 │           │     RelationIDs:
 │           │     - 105
+│           │
+│           ├── • RemoveObjectParent
+│           │     ObjectID: 106
+│           │     ParentSchemaID: 101
 │           │
 │           ├── • RemoveColumnDefaultExpression
 │           │     ColumnID: 2
@@ -725,7 +729,7 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
 │       │       └── • skip PUBLIC → ABSENT operations
 │       │             rule: "skip index dependents removal ops on relation drop"
 │       │
-│       └── • 12 Mutation operations
+│       └── • 13 Mutation operations
 │           │
 │           ├── • MarkDescriptorAsDropped
 │           │     DescriptorID: 106
@@ -734,6 +738,10 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
 │           │     BackReferencedID: 106
 │           │     RelationIDs:
 │           │     - 105
+│           │
+│           ├── • RemoveObjectParent
+│           │     ObjectID: 106
+│           │     ParentSchemaID: 101
 │           │
 │           ├── • RemoveColumnDefaultExpression
 │           │     ColumnID: 2
