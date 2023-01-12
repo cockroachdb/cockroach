@@ -18,7 +18,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
-	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -1280,9 +1279,24 @@ func (ts *TableStat) HistogramType() *types.T {
 	return ts.histogramType
 }
 
+// IsPartial is part of the cat.TableStatistic interface.
+func (ts *TableStat) IsPartial() bool {
+	return ts.js.IsPartial()
+}
+
+// IsMerged is part of the cat.TableStatistic interface.
+func (ts *TableStat) IsMerged() bool {
+	return ts.js.IsMerged()
+}
+
 // IsForecast is part of the cat.TableStatistic interface.
 func (ts *TableStat) IsForecast() bool {
-	return ts.js.Name == jobspb.ForecastStatsName
+	return ts.js.IsForecast()
+}
+
+// IsAuto is part of the cat.TableStatistic interface.
+func (ts *TableStat) IsAuto() bool {
+	return ts.js.IsAuto()
 }
 
 // TableStats is a slice of TableStat pointers.
