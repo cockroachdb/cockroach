@@ -44,12 +44,20 @@ func RangeStats(
 ) (result.Result, error) {
 	reply := resp.(*roachpb.RangeStatsResponse)
 	reply.MVCCStats = cArgs.EvalCtx.GetMVCCStats()
-	if qps, ok := cArgs.EvalCtx.GetMaxSplitQPS(ctx); ok {
-		reply.MaxQueriesPerSecond = qps
-	} else {
-		// See comment on MaxQueriesPerSecond. -1 means !ok.
-		reply.MaxQueriesPerSecond = -1
+
+	maxQPS, qpsOK := cArgs.EvalCtx.GetMaxSplitQPS(ctx)
+	maxCPU, cpuOK := cArgs.EvalCtx.GetMaxSplitCPU(ctx)
+	// See comment on MaxQueriesPerSecond and MaxCPUPerSecond. -1 means !ok.
+	reply.MaxCPUPerSecond, reply.MaxQueriesPerSecond = -1, -1
+	// NB: We don't expect both cpuOk and qpsOK to be true, however we don't
+	// prevent both being set.
+	if qpsOK {
+		reply.MaxQueriesPerSecond = maxQPS
 	}
+	if cpuOK {
+		reply.MaxCPUPerSecond = maxCPU
+	}
+
 	reply.MaxQueriesPerSecondSet = true
 	reply.RangeInfo = cArgs.EvalCtx.GetRangeInfo(ctx)
 	return result.Result{}, nil

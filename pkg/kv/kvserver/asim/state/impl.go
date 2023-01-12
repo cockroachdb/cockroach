@@ -333,10 +333,7 @@ func (s *state) AddStore(nodeID NodeID) (Store, bool) {
 	s.stores[storeID] = store
 
 	// Add a range load splitter for this store.
-	s.loadsplits[storeID] = NewSplitDecider(s.settings.Seed,
-		s.settings.SplitQPSThresholdFn(),
-		s.settings.SplitQPSRetentionFn(),
-	)
+	s.loadsplits[storeID] = NewSplitDecider(s.settings)
 
 	return store, true
 }

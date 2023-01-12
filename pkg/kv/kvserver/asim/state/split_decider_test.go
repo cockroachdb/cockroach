@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/workload"
 	"github.com/stretchr/testify/require"
 )
@@ -21,11 +22,11 @@ import (
 var testingSequence = []Key{10, 1, 9, 2, 8, 3, 4, 7, 5, 6}
 
 func TestSplitDecider(t *testing.T) {
-	testingSeed := 42
-	testingThreshold := func() float64 { return 2500 }
-	testingRetention := func() time.Duration { return 60 * time.Second }
+	testSettings := config.DefaultSimulationSettings()
+	testSettings.SplitQPSThreshold = 2500
+	testSettings.SplitStatRetention = 60 * time.Second
 	startTime := TestingStartTime()
-	decider := NewSplitDecider(int64(testingSeed), testingThreshold, testingRetention)
+	decider := NewSplitDecider(testSettings)
 
 	// A decider should be created for a range when a load event is first
 	// recorded against it.
@@ -45,8 +46,8 @@ func TestSplitDecider(t *testing.T) {
 	sequence := testingSequence
 
 	// Register load greater than the threshold.
-	for i := 0; int64(i) < int64(testingRetention()/time.Second); i++ {
-		for j := 0; j < int(testingThreshold())+100; j++ {
+	for i := 0; int64(i) < int64(testSettings.SplitStatRetention/time.Second); i++ {
+		for j := 0; j < int(testSettings.SplitQPSThreshold)+100; j++ {
 			decider.Record(
 				OffsetTick(startTime, int64(i)),
 				1,
@@ -58,7 +59,7 @@ func TestSplitDecider(t *testing.T) {
 	// There should now be 1 suggested range for splitting which corresponds to
 	// the midpoint of the testing sequence.
 	require.Equal(t, []RangeID{1}, decider.ClearSplitKeys())
-	splitKey, found = decider.SplitKey(startTime.Add(testingRetention()), 1)
+	splitKey, found = decider.SplitKey(startTime.Add(testSettings.SplitStatRetention), 1)
 	require.True(t, found)
 	require.Equal(t, Key(6), splitKey)
 
@@ -67,7 +68,6 @@ func TestSplitDecider(t *testing.T) {
 }
 
 func TestSplitDeciderWorkload(t *testing.T) {
-	testingSeed := 42
 	testingRangeID := FirstRangeID
 	startTime := TestingStartTime()
 
@@ -105,11 +105,10 @@ func TestSplitDeciderWorkload(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
-			splitDecider := NewSplitDecider(
-				int64(testingSeed),
-				func() float64 { return tc.threshold },
-				func() time.Duration { return tc.retention },
-			)
+			testSettings := config.DefaultSimulationSettings()
+			testSettings.SplitQPSThreshold = tc.threshold
+			testSettings.SplitStatRetention = tc.retention
+			splitDecider := NewSplitDecider(testSettings)
 			lastTick := int64(0)
 
 			for _, tick := range tc.ticks {
