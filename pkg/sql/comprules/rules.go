@@ -25,7 +25,7 @@ import (
 func GetCompMethods() []compengine.Method {
 	return []compengine.Method{
 		method("keywords", completeKeyword),
-		method("builtins", completeBuiltin),
+		method("functions", completeFunction),
 		method("objects", completeObjectInCurrentDatabase),
 		method("schemas", completeSchemaInCurrentDatabase),
 		method("dbs", completeDatabase),
@@ -96,41 +96,27 @@ var compNotQualProcRe = regexp.MustCompile(`[^.](i'|_)`)
 // A qualified possible builtin name.
 var compMaybeQualProcRe = regexp.MustCompile(`i\.['_]|i\.i'`)
 
-var compVSchemaRe = regexp.MustCompile(`pg_catalog|crdb_internal|information_schema`)
-
-func completeBuiltin(ctx context.Context, c compengine.Context) (compengine.Rows, error) {
-	// Complete builtin names:
+func completeFunction(ctx context.Context, c compengine.Context) (compengine.Rows, error) {
+	// Complete function names:
 	//
 	// - at whitespace after keywords.
-	// - after a period, if the identifier before the period is a vschema.
+	// - after a period.
 	//
 	var prefix string
 	var start, end int
-	var extraPrefix string
+	var schemaName string
 	atWord := c.AtWord()
 	sketch := c.Sketch()
 	switch {
-	case compMaybeQualProcRe.MatchString(sketch) &&
-		((!atWord && compVSchemaRe.MatchString(c.RelToken(-1).Str)) ||
-			(atWord && compVSchemaRe.MatchString(c.RelToken(-2).Str))):
+	case compMaybeQualProcRe.MatchString(sketch):
 		start = int(c.RelToken(-1).Start)
-		prefix = c.RelToken(-1).Str + "."
+		schemaName = c.RelToken(-1).Str
 		if atWord {
 			start = int(c.RelToken(-2).Start)
-			prefix = c.RelToken(-2).Str + "."
-		}
-		// crdb has this weird thing where every unqualified built-in "X"
-		// also exists as "pg_catalog.X". So when we search for
-		// completions after "pg_catalog.", we can strip that prefix from
-		// the search. However, we must be careful to add it back in the
-		// completion results, so that the prefix does not get stripped
-		// when the completion occurs.
-		if prefix == "pg_catalog." {
-			prefix = ""
-			extraPrefix = "pg_catalog."
+			schemaName = c.RelToken(-2).Str
 		}
 		if atWord {
-			prefix += c.RelToken(0).Str
+			prefix = c.RelToken(0).Str
 		}
 		end = int(c.RelToken(0).End)
 
@@ -152,13 +138,17 @@ func completeBuiltin(ctx context.Context, c compengine.Context) (compengine.Rows
 		return nil, nil
 	}
 
-	c.Trace("completing for %q (%d,%d)", prefix, start, end)
+	qualifiedPrefix := prefix
+	if len(schemaName) > 0 {
+		qualifiedPrefix = schemaName + "." + qualifiedPrefix
+	}
+	c.Trace("completing for %q (%d,%d)", qualifiedPrefix, start, end)
 	// TODO(knz): use the comment extraction functions from pg_catalog
 	// instead of crdb_internal. This requires exposing comments for
 	// built-in functions through pg_catalog.
 	const query = `
-WITH p AS (SELECT DISTINCT proname FROM pg_catalog.pg_proc)
-SELECT $4:::STRING || proname || '(' AS completion,
+WITH p AS (SELECT DISTINCT proname, nspname FROM pg_catalog.pg_proc JOIN pg_catalog.pg_namespace n ON n.oid = pronamespace)
+SELECT $4:::STRING || IF(length($4) > 0, '.', '') || proname || '(' AS completion,
        'functions' AS category,
        substr(COALESCE((SELECT details
           FROM "".crdb_internal.builtin_functions f2
@@ -167,8 +157,9 @@ SELECT $4:::STRING || proname || '(' AS completion,
        $2:::INT AS start,
        $3:::INT AS end
   FROM p
- WHERE left(proname, length($1:::STRING)) = $1:::STRING`
-	iter, err := c.Query(ctx, query, prefix, start, end, extraPrefix)
+ WHERE left(proname, length($1:::STRING)) = $1:::STRING
+ AND ((length($4) > 0 AND $4 = nspname) OR (length($4) = 0 AND nspname = ANY current_schemas(true)))`
+	iter, err := c.Query(ctx, query, prefix, start, end, schemaName)
 	return iter, err
 }
 

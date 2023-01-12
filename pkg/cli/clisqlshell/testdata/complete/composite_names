@@ -11,3 +11,55 @@ msg: ""
 completions:
 - "functions":
   "crdb_internal.force_error(" (This function is used only by CockroachDB's developers for testing purposes.) -> "crdb_internal.force_error(" (0, 25)
+
+sql
+create schema my_schema
+----
+ok
+
+sql
+CREATE FUNCTION my_func(i INT) RETURNS INT LANGUAGE SQL AS 'SELECT i'
+----
+ok
+
+sql
+CREATE FUNCTION my_schema.my_other_func(i INT) RETURNS INT LANGUAGE SQL AS 'SELECT i'
+----
+ok
+
+complete
+select my@
+----
+complete 0 9
+msg: ""
+completions:
+- "functions":
+  "my_func(" () -> "my_func(" (0, 2)
+- "schema":
+  "my_schema" () -> "my_schema" (0, 2)
+
+complete
+select my_schema.@
+----
+complete 0 17
+msg: ""
+completions:
+- "functions":
+  "my_schema.my_other_func(" () -> "my_schema.my_other_func(" (0, 10)
+
+complete
+select pg_catalog.array_l@
+----
+complete 0 25
+msg: ""
+completions:
+- "functions":
+  "pg_catalog.array_length(" (Calculates the length of `input` on the provided `array_dimension`. However, bec) -> "pg_catalog.array_length(" (0, 18)
+  "pg_catalog.array_lower(" (Calculates the minimum value of `input` on the provided `array_dimension`. Howev) -> "pg_catalog.array_lower(" (0, 18)
+
+complete
+select "PG_CATALOG".@
+----
+complete 0 20
+msg: ""
+(no completions generated)
