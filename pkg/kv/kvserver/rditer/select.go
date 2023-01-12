@@ -50,9 +50,15 @@ func Select(rangeID roachpb.RangeID, opts SelectOpts) []roachpb.Span {
 	}
 
 	if !opts.ReplicatedBySpan.Equal(roachpb.RSpan{}) {
-		// Make sure we call KeySpan here, as r1 really only starts at LocalMax. See
-		// comment on KeySpan for details.
-		in := opts.ReplicatedBySpan.KeySpan()
+		// r1 "really" only starts at LocalMax. But because we use a StartKey of RKeyMin
+		// for r1, we actually do anchor range descriptors (and their locks and txn records)
+		// at RKeyMin as well. On the other hand, the "user key space" cannot start at RKeyMin
+		// because then it encompasses the special-cased prefix \x02... (/Local/).
+		// So awkwardly for key-based local keyspace we must not call KeySpan, for
+		// user keys we have to.
+		//
+		// See also the comment on KeySpan.
+		in := opts.ReplicatedBySpan
 		sl = append(sl, makeRangeLocalKeySpan(in))
 
 		// Lock table.
@@ -61,8 +67,9 @@ func Select(rangeID roachpb.RangeID, opts SelectOpts) []roachpb.Span {
 			// is a range local key that can have a replicated lock acquired on it.
 			startRangeLocal, _ := keys.LockTableSingleKey(keys.MakeRangeKeyPrefix(in.Key), nil)
 			endRangeLocal, _ := keys.LockTableSingleKey(keys.MakeRangeKeyPrefix(in.EndKey), nil)
-			startGlobal, _ := keys.LockTableSingleKey(in.Key.AsRawKey(), nil)
-			endGlobal, _ := keys.LockTableSingleKey(in.EndKey.AsRawKey(), nil)
+			// Need .KeySpan() to avoid overlapping with the local lock span right above.
+			startGlobal, _ := keys.LockTableSingleKey(in.KeySpan().Key.AsRawKey(), nil)
+			endGlobal, _ := keys.LockTableSingleKey(in.KeySpan().EndKey.AsRawKey(), nil)
 			sl = append(sl, roachpb.Span{
 				Key:    startRangeLocal,
 				EndKey: endRangeLocal,
@@ -71,6 +78,7 @@ func Select(rangeID roachpb.RangeID, opts SelectOpts) []roachpb.Span {
 				EndKey: endGlobal,
 			})
 		}
+		// Call KeySpan() because r1's "normal" keyspace starts only at LocalMax, not RKeyMin.
 		sl = append(sl, in.KeySpan().AsRawSpanWithNoLocals())
 	}
 	return sl
