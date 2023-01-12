@@ -358,7 +358,11 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
 │       │       └── • skip PUBLIC → ABSENT operations
 │       │             rule: "skip index dependents removal ops on relation drop"
 │       │
+<<<<<<< HEAD
 │       └── • 12 Mutation operations
+=======
+│       └── • 14 Mutation operations
+>>>>>>> be3b07d938 (sql/schemachanger: declarative drop function)
 │           │
 │           ├── • MarkDescriptorAsDropped
 │           │     DescriptorID: 106
@@ -368,6 +372,16 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
 │           │     RelationIDs:
 │           │     - 105
 │           │
+<<<<<<< HEAD
+=======
+│           ├── • RemoveAllTableComments
+│           │     TableID: 106
+│           │
+│           ├── • RemoveObjectParent
+│           │     ObjectID: 106
+│           │     ParentSchemaID: 101
+│           │
+>>>>>>> be3b07d938 (sql/schemachanger: declarative drop function)
 │           ├── • RemoveColumnDefaultExpression
 │           │     ColumnID: 2
 │           │     TableID: 106

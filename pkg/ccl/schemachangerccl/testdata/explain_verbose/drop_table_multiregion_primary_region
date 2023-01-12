@@ -261,10 +261,14 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
 │       │       └── • skip PUBLIC → ABSENT operations
 │       │             rule: "skip index dependents removal ops on relation drop"
 │       │
-│       └── • 9 Mutation operations
+│       └── • 10 Mutation operations
 │           │
 │           ├── • MarkDescriptorAsDropped
 │           │     DescriptorID: 108
+│           │
+│           ├── • RemoveObjectParent
+│           │     ObjectID: 108
+│           │     ParentSchemaID: 105
 │           │
 │           ├── • RemoveBackReferenceInTypes
 │           │     BackReferencedDescriptorID: 108

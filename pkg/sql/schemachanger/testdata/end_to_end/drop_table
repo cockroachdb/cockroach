@@ -39,6 +39,10 @@ add synthetic descriptor #107:
 # end StatementPhase
 # begin PreCommitPhase
 ## PreCommitPhase stage 1 of 1 with 12 MutationType ops
+<<<<<<< HEAD
+=======
+delete all comments for table descriptor 107
+>>>>>>> be3b07d938 (sql/schemachanger: declarative drop function)
 delete object namespace entry {104 106 t} -> 107
 upsert descriptor #107
   ...

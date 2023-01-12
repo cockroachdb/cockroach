@@ -55,8 +55,13 @@ Schema change plan for DROP TABLE ‹db›.‹sc›.‹t›;
  │         │    └── PUBLIC      → ABSENT  IndexName:{DescID: 107, Name: t_pkey, IndexID: 1}
  │         └── 12 Mutation operations
  │              ├── MarkDescriptorAsDropped {"DescriptorID":107}
+<<<<<<< HEAD
  │              ├── RemoveTableComment {"TableID":107}
  │              ├── LogEvent {"TargetStatus":1}
+=======
+ │              ├── RemoveAllTableComments {"TableID":107}
+ │              ├── RemoveObjectParent {"ObjectID":107,"ParentSchemaID":106}
+>>>>>>> be3b07d938 (sql/schemachanger: declarative drop function)
  │              ├── RemoveColumnDefaultExpression {"ColumnID":3,"TableID":107}
  │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":107,"Name":"t","SchemaID":106}}
  │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":1,"TableID":107}

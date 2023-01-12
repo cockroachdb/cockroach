@@ -407,6 +407,7 @@ EXPLAIN (ddl, verbose) DROP TABLE db.sc.t;
 │           ├── • RemoveTableComment
 │           │     TableID: 107
 │           │
+<<<<<<< HEAD
 │           ├── • LogEvent
 │           │     Element:
 │           │       TableComment:
@@ -421,6 +422,11 @@ EXPLAIN (ddl, verbose) DROP TABLE db.sc.t;
 │           │         SourceElementID: 1
 │           │         SubWorkID: 1
 │           │     TargetStatus: 1
+=======
+│           ├── • RemoveObjectParent
+│           │     ObjectID: 107
+│           │     ParentSchemaID: 106
+>>>>>>> be3b07d938 (sql/schemachanger: declarative drop function)
 │           │
 │           ├── • RemoveColumnDefaultExpression
 │           │     ColumnID: 3

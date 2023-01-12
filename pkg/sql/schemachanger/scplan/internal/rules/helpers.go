@@ -245,7 +245,7 @@ func forEachElement(fn func(element scpb.Element) error) error {
 func IsDescriptor(e scpb.Element) bool {
 	switch e.(type) {
 	case *scpb.Database, *scpb.Schema, *scpb.Table, *scpb.View, *scpb.Sequence,
-		*scpb.AliasType, *scpb.EnumType, *scpb.CompositeType:
+		*scpb.AliasType, *scpb.EnumType, *scpb.CompositeType, *scpb.Function:
 		return true
 	}
 	return false
@@ -319,6 +319,11 @@ func getExpression(element scpb.Element) (*scpb.Expression, error) {
 		}
 		return &e.Expression, nil
 	case *scpb.CheckConstraint:
+		if e == nil {
+			return nil, nil
+		}
+		return &e.Expression, nil
+	case *scpb.FunctionParamDefaultExpression:
 		if e == nil {
 			return nil, nil
 		}

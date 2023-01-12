@@ -30,6 +30,11 @@ import (
 
 func qualifiedName(b BuildCtx, id catid.DescID) string {
 	_, _, ns := scpb.FindNamespace(b.QueryByID(id))
+	if ns == nil {
+		// Function descriptors don't have namespace. So we need to handle this
+		// special case here.
+		return qualifiedFunctionName(b, id)
+	}
 	_, _, sc := scpb.FindNamespace(b.QueryByID(ns.SchemaID))
 	_, _, db := scpb.FindNamespace(b.QueryByID(ns.DatabaseID))
 	if db == nil {
@@ -39,6 +44,16 @@ func qualifiedName(b BuildCtx, id catid.DescID) string {
 		return db.Name + "." + ns.Name
 	}
 	return db.Name + "." + sc.Name + "." + ns.Name
+}
+
+func qualifiedFunctionName(b BuildCtx, id catid.DescID) string {
+	elts := b.QueryByID(id)
+	_, _, fnName := scpb.FindFunctionName(elts)
+	_, _, objParent := scpb.FindObjectParent(elts)
+	_, _, scName := scpb.FindNamespace(b.QueryByID(objParent.ParentSchemaID))
+	_, _, scParent := scpb.FindSchemaParent(b.QueryByID(objParent.ParentSchemaID))
+	_, _, dbName := scpb.FindNamespace(b.QueryByID(scParent.ParentDatabaseID))
+	return dbName.Name + "." + scName.Name + "." + fnName.Name
 }
 
 func simpleName(b BuildCtx, id catid.DescID) string {
@@ -204,6 +219,8 @@ func dropCascadeDescriptor(b BuildCtx, id catid.DescID) {
 			dropCascadeDescriptor(next, t.TypeID)
 		case *scpb.CompositeType:
 			dropCascadeDescriptor(next, t.TypeID)
+		case *scpb.FunctionBody:
+			dropCascadeDescriptor(next, t.FunctionID)
 		case *scpb.Column, *scpb.ColumnType, *scpb.SecondaryIndexPartial:
 			// These only have type references.
 			break

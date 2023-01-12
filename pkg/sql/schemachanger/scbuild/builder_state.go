@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/seqexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -926,6 +927,44 @@ func (b *builderState) ResolveConstraint(
 		idI, _ := screl.Schema.GetAttribute(screl.ConstraintID, e)
 		return idI != nil && idI.(catid.ConstraintID) == constraintID
 	})
+}
+
+func (b *builderState) ResolveUDF(
+	fnObj *tree.FuncObj, p scbuildstmt.ResolveParams,
+) scbuildstmt.ElementResultSet {
+	fd, err := b.cr.ResolveFunction(b.ctx, fnObj.FuncName.ToUnresolvedObjectName().ToUnresolvedName(), b.semaCtx.SearchPath)
+	if err != nil {
+		if p.IsExistenceOptional && errors.Is(err, tree.ErrFunctionUndefined) {
+			return nil
+		}
+		panic(err)
+	}
+
+	paramTypes, err := fnObj.ParamTypes(b.ctx, b.cr)
+	if err != nil {
+		return nil
+	}
+	ol, err := fd.MatchOverload(paramTypes, fnObj.FuncName.Schema(), b.semaCtx.SearchPath)
+	if err != nil {
+		if p.IsExistenceOptional && errors.Is(err, tree.ErrFunctionUndefined) {
+			return nil
+		}
+		panic(err)
+	}
+
+	if !ol.IsUDF {
+		panic(
+			errors.Errorf(
+				"cannot perform schema change on function %s%s because it is required by the database system",
+				fnObj.FuncName.Object(), ol.Signature(true),
+			),
+		)
+	}
+
+	fnID := funcdesc.UserDefinedFunctionOIDToID(ol.Oid)
+	b.mustOwn(fnID)
+	b.ensureDescriptor(fnID)
+	return b.descCache[fnID].ers
 }
 
 func (b *builderState) ensureDescriptor(id catid.DescID) {

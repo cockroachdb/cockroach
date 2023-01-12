@@ -66,7 +66,11 @@ StatementPhase stage 1 of 1 with 9 MutationType ops
       DescriptorID: 112
     *scop.MarkDescriptorAsSyntheticallyDropped
       DescriptorID: 113
+<<<<<<< HEAD
 PreCommitPhase stage 1 of 1 with 57 MutationType ops
+=======
+PreCommitPhase stage 1 of 1 with 71 MutationType ops
+>>>>>>> be3b07d938 (sql/schemachanger: declarative drop function)
   transitions:
     [[UserPrivileges:{DescID: 100, Name: r}, ABSENT], PUBLIC] -> ABSENT
     [[Namespace:{DescID: 105, Name: s, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
@@ -207,8 +211,23 @@ PreCommitPhase stage 1 of 1 with 57 MutationType ops
       User: r
     *scop.MarkDescriptorAsDropped
       DescriptorID: 106
+<<<<<<< HEAD
     *scop.MarkDescriptorAsDropped
       DescriptorID: 109
+=======
+    *scop.RemoveAllTableComments
+      TableID: 106
+    *scop.RemoveObjectParent
+      ObjectID: 106
+      ParentSchemaID: 101
+    *scop.MarkDescriptorAsDropped
+      DescriptorID: 109
+    *scop.RemoveAllTableComments
+      TableID: 109
+    *scop.RemoveObjectParent
+      ObjectID: 109
+      ParentSchemaID: 101
+>>>>>>> be3b07d938 (sql/schemachanger: declarative drop function)
     *scop.RemoveColumnDefaultExpression
       ColumnID: 3
       TableID: 109
@@ -219,8 +238,23 @@ PreCommitPhase stage 1 of 1 with 57 MutationType ops
       - 106
     *scop.MarkDescriptorAsDropped
       DescriptorID: 107
+<<<<<<< HEAD
     *scop.MarkDescriptorAsDropped
       DescriptorID: 108
+=======
+    *scop.RemoveAllTableComments
+      TableID: 107
+    *scop.RemoveObjectParent
+      ObjectID: 107
+      ParentSchemaID: 105
+    *scop.MarkDescriptorAsDropped
+      DescriptorID: 108
+    *scop.RemoveAllTableComments
+      TableID: 108
+    *scop.RemoveObjectParent
+      ObjectID: 108
+      ParentSchemaID: 105
+>>>>>>> be3b07d938 (sql/schemachanger: declarative drop function)
     *scop.RemoveColumnDefaultExpression
       ColumnID: 3
       TableID: 108
@@ -235,10 +269,24 @@ PreCommitPhase stage 1 of 1 with 57 MutationType ops
       BackReferencedID: 110
       RelationIDs:
       - 108
+<<<<<<< HEAD
+=======
+    *scop.RemoveAllTableComments
+      TableID: 110
+    *scop.RemoveObjectParent
+      ObjectID: 110
+      ParentSchemaID: 105
+>>>>>>> be3b07d938 (sql/schemachanger: declarative drop function)
     *scop.MarkDescriptorAsDropped
       DescriptorID: 111
+    *scop.RemoveObjectParent
+      ObjectID: 111
+      ParentSchemaID: 105
     *scop.MarkDescriptorAsDropped
       DescriptorID: 112
+    *scop.RemoveObjectParent
+      ObjectID: 112
+      ParentSchemaID: 105
     *scop.MarkDescriptorAsDropped
       DescriptorID: 113
     *scop.RemoveBackReferenceInTypes
@@ -250,6 +298,14 @@ PreCommitPhase stage 1 of 1 with 57 MutationType ops
       BackReferencedID: 113
       RelationIDs:
       - 110
+<<<<<<< HEAD
+=======
+    *scop.RemoveAllTableComments
+      TableID: 113
+    *scop.RemoveObjectParent
+      ObjectID: 113
+      ParentSchemaID: 105
+>>>>>>> be3b07d938 (sql/schemachanger: declarative drop function)
     *scop.DrainDescriptorName
       Namespace:
         DatabaseID: 100

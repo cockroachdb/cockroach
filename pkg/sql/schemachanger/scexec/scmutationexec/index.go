@@ -486,3 +486,19 @@ func (m *visitor) RemoveColumnFromIndex(ctx context.Context, op scop.RemoveColum
 	}
 	return nil
 }
+
+func (m *visitor) RemoveObjectParent(ctx context.Context, op scop.RemoveObjectParent) error {
+	obj, err := m.s.CheckOutDescriptor(ctx, op.ObjectID)
+	if err != nil {
+		return err
+	}
+	switch obj.DescriptorType() {
+	case catalog.Function:
+		sc, err := m.checkOutSchema(ctx, op.ParentSchemaID)
+		if err != nil {
+			return err
+		}
+		sc.RemoveFunction(obj.GetName(), obj.GetID())
+	}
+	return nil
+}
