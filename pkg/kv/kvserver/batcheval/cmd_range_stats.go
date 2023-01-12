@@ -44,11 +44,18 @@ func RangeStats(
 ) (result.Result, error) {
 	reply := resp.(*roachpb.RangeStatsResponse)
 	reply.MVCCStats = cArgs.EvalCtx.GetMVCCStats()
+
 	if qps, ok := cArgs.EvalCtx.GetMaxSplitQPS(ctx); ok {
 		reply.MaxQueriesPerSecond = qps
 	} else {
 		// See comment on MaxQueriesPerSecond. -1 means !ok.
 		reply.MaxQueriesPerSecond = -1
+	}
+	if cpu, ok := cArgs.EvalCtx.GetMaxSplitCPU(ctx); ok {
+		reply.MaxCPUPerSecond = cpu
+	} else {
+		// See comment on MaxCPUPerSecond. -1 means !ok.
+		reply.MaxCPUPerSecond = -1
 	}
 	reply.RangeInfo = cArgs.EvalCtx.GetRangeInfo(ctx)
 	return result.Result{}, nil
