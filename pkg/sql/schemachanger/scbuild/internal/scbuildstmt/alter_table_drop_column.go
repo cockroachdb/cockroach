@@ -260,6 +260,15 @@ func dropColumn(
 				dropRestrictDescriptor(b, e.SequenceID)
 				undroppedSeqBackrefsToCheck.Add(e.SequenceID)
 			}
+		case *scpb.FunctionBody:
+			if behavior != tree.DropCascade {
+				_, _, fnName := scpb.FindFunctionName(b.QueryByID(e.FunctionID))
+				panic(sqlerrors.NewDependentObjectErrorf(
+					"cannot drop column %q because function %q depends on it",
+					cn.Name, fnName.Name),
+				)
+			}
+			dropCascadeDescriptor(b, e.FunctionID)
 		default:
 			b.Drop(e)
 		}
@@ -360,6 +369,12 @@ func walkDropColumnDependencies(b BuildCtx, col *scpb.Column, fn func(e scpb.Ele
 			if elt.ReferencedTableID == col.TableID &&
 				catalog.MakeTableColSet(elt.ReferencedColumnIDs...).Contains(col.ColumnID) {
 				fn(e)
+			}
+		case *scpb.FunctionBody:
+			for _, ref := range elt.UsesTables {
+				if ref.TableID == col.TableID && catalog.MakeTableColSet(ref.ColumnIDs...).Contains(col.ColumnID) {
+					fn(e)
+				}
 			}
 		}
 	})

@@ -1,0 +1,276 @@
+/* setup */
+CREATE TABLE t(
+  a INT PRIMARY KEY,
+  b INT,
+  C INT,
+  INDEX t_idx_b(b),
+  INDEX t_idx_c(c)
+);
+CREATE SEQUENCE sq1;
+CREATE VIEW v AS SELECT a FROM t;
+CREATE TYPE notmyworkday AS ENUM ('Monday', 'Tuesday');
+CREATE FUNCTION f(a notmyworkday) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$
+  SELECT a FROM t;
+  SELECT b FROM t@t_idx_b;
+  SELECT c FROM t@t_idx_c;
+  SELECT a FROM v;
+  SELECT nextval('sq1');
+$$;
+CREATE TABLE t2(a notmyworkday);
+
+/* test */
+EXPLAIN (ddl, verbose) DROP FUNCTION f;
+----
+• Schema change plan for DROP FUNCTION ‹""›.‹""›.‹f›; 
+│
+├── • StatementPhase
+│   │
+│   └── • Stage 1 of 1 in StatementPhase
+│       │
+│       ├── • 1 element transitioning toward ABSENT
+│       │   │
+│       │   └── • Function:{DescID: 109}
+│       │         PUBLIC → TXN_DROPPED
+│       │
+│       └── • 1 Mutation operation
+│           │
+│           └── • MarkDescriptorAsSyntheticallyDropped
+│                 DescriptorID: 109
+│
+├── • PreCommitPhase
+│   │
+│   └── • Stage 1 of 1 in PreCommitPhase
+│       │
+│       ├── • 10 elements transitioning toward ABSENT
+│       │   │
+│       │   ├── • Owner:{DescID: 109}
+│       │   │   │ PUBLIC → ABSENT
+│       │   │   │
+│       │   │   ├── • Precedence dependency from DROPPED Function:{DescID: 109}
+│       │   │   │     rule: "descriptor drop right before dependent element removal"
+│       │   │   │
+│       │   │   └── • skip PUBLIC → ABSENT operations
+│       │   │         rule: "skip element removal ops on descriptor drop"
+│       │   │
+│       │   ├── • UserPrivileges:{DescID: 109, Name: admin}
+│       │   │   │ PUBLIC → ABSENT
+│       │   │   │
+│       │   │   ├── • Precedence dependency from DROPPED Function:{DescID: 109}
+│       │   │   │     rule: "descriptor drop right before dependent element removal"
+│       │   │   │
+│       │   │   └── • skip PUBLIC → ABSENT operations
+│       │   │         rule: "skip element removal ops on descriptor drop"
+│       │   │
+│       │   ├── • UserPrivileges:{DescID: 109, Name: root}
+│       │   │   │ PUBLIC → ABSENT
+│       │   │   │
+│       │   │   ├── • Precedence dependency from DROPPED Function:{DescID: 109}
+│       │   │   │     rule: "descriptor drop right before dependent element removal"
+│       │   │   │
+│       │   │   └── • skip PUBLIC → ABSENT operations
+│       │   │         rule: "skip element removal ops on descriptor drop"
+│       │   │
+│       │   ├── • Function:{DescID: 109}
+│       │   │   │ TXN_DROPPED → DROPPED
+│       │   │   │
+│       │   │   └── • PreviousStagePrecedence dependency from TXN_DROPPED Function:{DescID: 109}
+│       │   │         rule: "descriptor TXN_DROPPED before DROPPED"
+│       │   │
+│       │   ├── • ObjectParent:{DescID: 109, ReferencedDescID: 101}
+│       │   │   │ PUBLIC → ABSENT
+│       │   │   │
+│       │   │   └── • Precedence dependency from DROPPED Function:{DescID: 109}
+│       │   │         rule: "descriptor drop right before dependent element removal"
+│       │   │
+│       │   ├── • FunctionName:{DescID: 109}
+│       │   │   │ PUBLIC → ABSENT
+│       │   │   │
+│       │   │   ├── • Precedence dependency from DROPPED Function:{DescID: 109}
+│       │   │   │     rule: "descriptor drop right before dependent element removal"
+│       │   │   │
+│       │   │   └── • skip PUBLIC → ABSENT operations
+│       │   │         rule: "skip element removal ops on descriptor drop"
+│       │   │
+│       │   ├── • FunctionVolatility:{DescID: 109}
+│       │   │   │ PUBLIC → ABSENT
+│       │   │   │
+│       │   │   ├── • Precedence dependency from DROPPED Function:{DescID: 109}
+│       │   │   │     rule: "descriptor drop right before dependent element removal"
+│       │   │   │
+│       │   │   └── • skip PUBLIC → ABSENT operations
+│       │   │         rule: "skip element removal ops on descriptor drop"
+│       │   │
+│       │   ├── • FunctionLeakProof:{DescID: 109}
+│       │   │   │ PUBLIC → ABSENT
+│       │   │   │
+│       │   │   ├── • Precedence dependency from DROPPED Function:{DescID: 109}
+│       │   │   │     rule: "descriptor drop right before dependent element removal"
+│       │   │   │
+│       │   │   └── • skip PUBLIC → ABSENT operations
+│       │   │         rule: "skip element removal ops on descriptor drop"
+│       │   │
+│       │   ├── • FunctionNullInputBehavior:{DescID: 109}
+│       │   │   │ PUBLIC → ABSENT
+│       │   │   │
+│       │   │   ├── • Precedence dependency from DROPPED Function:{DescID: 109}
+│       │   │   │     rule: "descriptor drop right before dependent element removal"
+│       │   │   │
+│       │   │   └── • skip PUBLIC → ABSENT operations
+│       │   │         rule: "skip element removal ops on descriptor drop"
+│       │   │
+│       │   └── • FunctionBody:{DescID: 109}
+│       │       │ PUBLIC → ABSENT
+│       │       │
+│       │       └── • Precedence dependency from DROPPED Function:{DescID: 109}
+│       │             rule: "descriptor drop right before dependent element removal"
+│       │
+│       └── • 11 Mutation operations
+│           │
+│           ├── • MarkDescriptorAsDropped
+│           │     DescriptorID: 109
+│           │
+│           ├── • RemoveObjectParent
+│           │     ObjectID: 109
+│           │     ParentSchemaID: 101
+│           │
+│           ├── • RemoveBackReferenceInTypes
+│           │     BackReferencedDescriptorID: 109
+│           │     TypeIDs:
+│           │     - 107
+│           │     - 108
+│           │
+│           ├── • RemoveBackReferencesInRelations
+│           │     BackReferencedID: 109
+│           │     RelationIDs:
+│           │     - 104
+│           │     - 104
+│           │     - 104
+│           │     - 106
+│           │     - 105
+│           │
+│           ├── • SetJobStateOnDescriptor
+│           │     DescriptorID: 104
+│           │     Initialize: true
+│           │
+│           ├── • SetJobStateOnDescriptor
+│           │     DescriptorID: 105
+│           │     Initialize: true
+│           │
+│           ├── • SetJobStateOnDescriptor
+│           │     DescriptorID: 106
+│           │     Initialize: true
+│           │
+│           ├── • SetJobStateOnDescriptor
+│           │     DescriptorID: 107
+│           │     Initialize: true
+│           │
+│           ├── • SetJobStateOnDescriptor
+│           │     DescriptorID: 108
+│           │     Initialize: true
+│           │
+│           ├── • SetJobStateOnDescriptor
+│           │     DescriptorID: 109
+│           │     Initialize: true
+│           │
+│           └── • CreateSchemaChangerJob
+│                 Authorization:
+│                   UserName: root
+│                 DescriptorIDs:
+│                 - 104
+│                 - 105
+│                 - 106
+│                 - 107
+│                 - 108
+│                 - 109
+│                 JobID: 1
+│                 NonCancelable: true
+│                 RunningStatus: PostCommitNonRevertiblePhase stage 1 of 1 with 2 MutationType ops pending
+│                 Statements:
+│                 - statement: DROP FUNCTION f
+│                   redactedstatement: DROP FUNCTION ‹""›.‹""›.‹f›
+│                   statementtag: DROP FUNCTION
+│
+└── • PostCommitNonRevertiblePhase
+    │
+    └── • Stage 1 of 1 in PostCommitNonRevertiblePhase
+        │
+        ├── • 1 element transitioning toward ABSENT
+        │   │
+        │   └── • Function:{DescID: 109}
+        │       │ DROPPED → ABSENT
+        │       │
+        │       └── • PreviousTransactionPrecedence dependency from DROPPED Function:{DescID: 109}
+        │             rule: "descriptor DROPPED in transaction before removal"
+        │
+        └── • 9 Mutation operations
+            │
+            ├── • LogEvent
+            │     Element:
+            │       Function:
+            │         functionId: 109
+            │         params:
+            │         - class:
+            │             class: IN
+            │           name: a
+            │           type:
+            │             closedTypeIds:
+            │             - 107
+            │             - 108
+            │             type:
+            │               family: EnumFamily
+            │               oid: 100107
+            │               udtMetadata:
+            │                 arrayTypeOid: 100108
+            │         returnType:
+            │           type:
+            │             family: IntFamily
+            │             oid: 20
+            │             width: 64
+            │     EventBase:
+            │       Authorization:
+            │         UserName: root
+            │       Statement: DROP FUNCTION ‹""›.‹""›.‹f›
+            │       StatementTag: DROP FUNCTION
+            │       TargetMetadata:
+            │         SourceElementID: 1
+            │         SubWorkID: 1
+            │     TargetStatus: 1
+            │
+            ├── • DeleteDescriptor
+            │     DescriptorID: 109
+            │
+            ├── • RemoveJobStateFromDescriptor
+            │     DescriptorID: 104
+            │     JobID: 1
+            │
+            ├── • RemoveJobStateFromDescriptor
+            │     DescriptorID: 105
+            │     JobID: 1
+            │
+            ├── • RemoveJobStateFromDescriptor
+            │     DescriptorID: 106
+            │     JobID: 1
+            │
+            ├── • RemoveJobStateFromDescriptor
+            │     DescriptorID: 107
+            │     JobID: 1
+            │
+            ├── • RemoveJobStateFromDescriptor
+            │     DescriptorID: 108
+            │     JobID: 1
+            │
+            ├── • RemoveJobStateFromDescriptor
+            │     DescriptorID: 109
+            │     JobID: 1
+            │
+            └── • UpdateSchemaChangerJob
+                  DescriptorIDsToRemove:
+                  - 104
+                  - 105
+                  - 106
+                  - 107
+                  - 108
+                  - 109
+                  IsNonCancelable: true
+                  JobID: 1
+                  RunningStatus: all stages completed

@@ -76,6 +76,8 @@ func asEventPayload(
 		case *scpb.TableComment, *scpb.ColumnComment, *scpb.IndexComment, *scpb.ConstraintComment,
 			*scpb.DatabaseComment, *scpb.SchemaComment:
 			return asCommentEventPayload(ctx, fullName, e, targetStatus, m, true /* isNullComment */)
+		case *scpb.Function:
+			return &eventpb.DropFunction{FunctionName: fullName}, nil
 		}
 	}
 	switch e := e.(type) {

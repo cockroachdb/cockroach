@@ -90,7 +90,7 @@ add synthetic descriptor #108:
      version: "1"
 # end StatementPhase
 # begin PreCommitPhase
-## PreCommitPhase stage 1 of 1 with 22 MutationType ops
+## PreCommitPhase stage 1 of 1 with 25 MutationType ops
 delete database namespace entry {0 0 multi_region_test_db} -> 104
 delete schema namespace entry {104 0 public} -> 105
 delete object namespace entry {104 105 crdb_internal_region} -> 106

@@ -126,6 +126,9 @@ func dropSecondaryIndex(
 		// dependents.
 		maybeDropDependentViews(next, sie, indexName.Index.String(), dropBehavior)
 
+		// Maybe drop dependent functions.
+		maybeDropDependentFunctions(next, sie, indexName.Index.String(), dropBehavior)
+
 		// Maybe drop dependent FK constraints.
 		// A PK or unique constraint is required to serve an inbound FK constraint.
 		// It is possible that there is an inbound FK constraint 'fk' and it's
@@ -178,6 +181,33 @@ func maybeDropDependentViews(
 						toBeDroppedIndexName, ns.Name), "you can drop %q instead.", ns.Name))
 			} else {
 				dropCascadeDescriptor(b, ve.ViewID)
+			}
+		}
+	})
+}
+
+func maybeDropDependentFunctions(
+	b BuildCtx,
+	toBeDroppedIndex *scpb.SecondaryIndex,
+	toBeDroppedIndexName string,
+	dropBehavior tree.DropBehavior,
+) {
+	scpb.ForEachFunctionBody(b.BackReferences(toBeDroppedIndex.TableID), func(
+		current scpb.Status, target scpb.TargetStatus, e *scpb.FunctionBody,
+	) {
+		for _, forwardRef := range e.UsesTables {
+			if forwardRef.IndexID != toBeDroppedIndex.IndexID {
+				continue
+			}
+			// This view depends on the to-be-dropped index;
+			if dropBehavior != tree.DropCascade {
+				// Get view name for the error message
+				_, _, fnName := scpb.FindFunctionName(b.QueryByID(e.FunctionID))
+				panic(errors.WithHintf(
+					sqlerrors.NewDependentObjectErrorf("cannot drop index %q because function %q depends on it",
+						toBeDroppedIndexName, fnName.Name), "you can drop %q instead.", fnName.Name))
+			} else {
+				dropCascadeDescriptor(b, e.FunctionID)
 			}
 		}
 	})

@@ -36,7 +36,7 @@ add synthetic descriptor #108:
      version: "1"
 # end StatementPhase
 # begin PreCommitPhase
-## PreCommitPhase stage 1 of 1 with 14 MutationType ops
+## PreCommitPhase stage 1 of 1 with 15 MutationType ops
 delete object namespace entry {104 105 table_regional_by_row} -> 108
 upsert descriptor #106
    type:

@@ -49,9 +49,10 @@ Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹v2›@‹idx�
  │         │    ├── PUBLIC      → ABSENT    IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 1}
  │         │    ├── VALIDATED   → ABSENT    PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}
  │         │    └── PUBLIC      → ABSENT    IndexName:{DescID: 106, Name: v3_pkey, IndexID: 1}
- │         └── 12 Mutation operations
+ │         └── 13 Mutation operations
  │              ├── MarkDescriptorAsDropped {"DescriptorID":106}
  │              ├── RemoveBackReferencesInRelations {"BackReferencedID":106}
+ │              ├── RemoveObjectParent {"ObjectID":106,"ParentSchemaID":101}
  │              ├── RemoveColumnDefaultExpression {"ColumnID":2,"TableID":106}
  │              ├── MakePublicSecondaryIndexWriteOnly {"IndexID":2,"TableID":105}
  │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":100,"DescriptorID":106,"Name":"v3","SchemaID":101}}

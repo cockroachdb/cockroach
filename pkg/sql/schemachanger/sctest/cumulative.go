@@ -676,6 +676,7 @@ FROM
 		SELECT descriptor_id, create_statement FROM crdb_internal.create_schema_statements
 		UNION ALL SELECT descriptor_id, create_statement FROM crdb_internal.create_statements
 		UNION ALL SELECT descriptor_id, create_statement FROM crdb_internal.create_type_statements
+    UNION ALL SELECT function_id as descriptor_id, create_statement FROM crdb_internal.create_function_statements
 	)
 WHERE descriptor_id IN (SELECT id FROM system.namespace)
 ORDER BY

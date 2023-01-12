@@ -26,6 +26,7 @@ go_library(
         "//pkg/sql/catalog/dbdesc",
         "//pkg/sql/catalog/descbuilder",
         "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/funcdesc",
         "//pkg/sql/catalog/nstree",
         "//pkg/sql/catalog/schemadesc",
         "//pkg/sql/catalog/tabledesc",

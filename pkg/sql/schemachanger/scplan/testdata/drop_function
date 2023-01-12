@@ -1,0 +1,160 @@
+setup
+CREATE TABLE t(
+  a INT PRIMARY KEY,
+  b INT,
+  C INT,
+  INDEX t_idx_b(b),
+  INDEX t_idx_c(c)
+);
+CREATE SEQUENCE sq1;
+CREATE VIEW v AS SELECT a FROM t;
+CREATE TYPE notmyworkday AS ENUM ('Monday', 'Tuesday');
+CREATE FUNCTION f(a notmyworkday) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$
+  SELECT a FROM t;
+  SELECT b FROM t@t_idx_b;
+  SELECT c FROM t@t_idx_c;
+  SELECT a FROM v;
+  SELECT nextval('sq1');
+$$;
+----
+
+ops
+DROP FUNCTION f;
+----
+StatementPhase stage 1 of 1 with 1 MutationType op
+  transitions:
+    [[Function:{DescID: 109}, ABSENT], PUBLIC] -> TXN_DROPPED
+  ops:
+    *scop.MarkDescriptorAsSyntheticallyDropped
+      DescriptorID: 109
+PreCommitPhase stage 1 of 1 with 11 MutationType ops
+  transitions:
+    [[Owner:{DescID: 109}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 109, Name: admin}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 109, Name: root}, ABSENT], PUBLIC] -> ABSENT
+    [[Function:{DescID: 109}, ABSENT], TXN_DROPPED] -> DROPPED
+    [[ObjectParent:{DescID: 109, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
+    [[FunctionName:{DescID: 109}, ABSENT], PUBLIC] -> ABSENT
+    [[FunctionVolatility:{DescID: 109}, ABSENT], PUBLIC] -> ABSENT
+    [[FunctionLeakProof:{DescID: 109}, ABSENT], PUBLIC] -> ABSENT
+    [[FunctionNullInputBehavior:{DescID: 109}, ABSENT], PUBLIC] -> ABSENT
+    [[FunctionBody:{DescID: 109}, ABSENT], PUBLIC] -> ABSENT
+  ops:
+    *scop.MarkDescriptorAsDropped
+      DescriptorID: 109
+    *scop.RemoveObjectParent
+      ObjectID: 109
+      ParentSchemaID: 101
+    *scop.RemoveBackReferenceInTypes
+      BackReferencedDescriptorID: 109
+      TypeIDs:
+      - 107
+      - 108
+    *scop.RemoveBackReferencesInRelations
+      BackReferencedID: 109
+      RelationIDs:
+      - 104
+      - 104
+      - 104
+      - 106
+      - 105
+    *scop.SetJobStateOnDescriptor
+      DescriptorID: 104
+      Initialize: true
+    *scop.SetJobStateOnDescriptor
+      DescriptorID: 105
+      Initialize: true
+    *scop.SetJobStateOnDescriptor
+      DescriptorID: 106
+      Initialize: true
+    *scop.SetJobStateOnDescriptor
+      DescriptorID: 107
+      Initialize: true
+    *scop.SetJobStateOnDescriptor
+      DescriptorID: 108
+      Initialize: true
+    *scop.SetJobStateOnDescriptor
+      DescriptorID: 109
+      Initialize: true
+    *scop.CreateSchemaChangerJob
+      Authorization:
+        UserName: root
+      DescriptorIDs:
+      - 104
+      - 105
+      - 106
+      - 107
+      - 108
+      - 109
+      JobID: 1
+      NonCancelable: true
+      RunningStatus: PostCommitNonRevertiblePhase stage 1 of 1 with 2 MutationType ops pending
+      Statements:
+      - statement: DROP FUNCTION f
+        redactedstatement: DROP FUNCTION ‹""›.‹""›.‹f›
+        statementtag: DROP FUNCTION
+PostCommitNonRevertiblePhase stage 1 of 1 with 9 MutationType ops
+  transitions:
+    [[Function:{DescID: 109}, ABSENT], DROPPED] -> ABSENT
+  ops:
+    *scop.LogEvent
+      Element:
+        Function:
+          functionId: 109
+          params:
+          - class:
+              class: IN
+            name: a
+            type:
+              closedTypeIds:
+              - 107
+              - 108
+              type:
+                family: EnumFamily
+                oid: 100107
+                udtMetadata:
+                  arrayTypeOid: 100108
+          returnType:
+            type:
+              family: IntFamily
+              oid: 20
+              width: 64
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: DROP FUNCTION ‹""›.‹""›.‹f›
+        StatementTag: DROP FUNCTION
+        TargetMetadata:
+          SourceElementID: 1
+          SubWorkID: 1
+      TargetStatus: 1
+    *scop.DeleteDescriptor
+      DescriptorID: 109
+    *scop.RemoveJobStateFromDescriptor
+      DescriptorID: 104
+      JobID: 1
+    *scop.RemoveJobStateFromDescriptor
+      DescriptorID: 105
+      JobID: 1
+    *scop.RemoveJobStateFromDescriptor
+      DescriptorID: 106
+      JobID: 1
+    *scop.RemoveJobStateFromDescriptor
+      DescriptorID: 107
+      JobID: 1
+    *scop.RemoveJobStateFromDescriptor
+      DescriptorID: 108
+      JobID: 1
+    *scop.RemoveJobStateFromDescriptor
+      DescriptorID: 109
+      JobID: 1
+    *scop.UpdateSchemaChangerJob
+      DescriptorIDsToRemove:
+      - 104
+      - 105
+      - 106
+      - 107
+      - 108
+      - 109
+      IsNonCancelable: true
+      JobID: 1

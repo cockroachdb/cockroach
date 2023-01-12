@@ -56,7 +56,7 @@ StatementPhase stage 1 of 1 with 3 MutationType ops
       DescriptorID: 110
     *scop.MarkDescriptorAsSyntheticallyDropped
       DescriptorID: 111
-PreCommitPhase stage 1 of 1 with 47 MutationType ops
+PreCommitPhase stage 1 of 1 with 50 MutationType ops
   transitions:
     [[Namespace:{DescID: 109, Name: shipments, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 109}, ABSENT], PUBLIC] -> ABSENT
@@ -137,6 +137,9 @@ PreCommitPhase stage 1 of 1 with 47 MutationType ops
   ops:
     *scop.MarkDescriptorAsDropped
       DescriptorID: 109
+    *scop.RemoveObjectParent
+      ObjectID: 109
+      ParentSchemaID: 101
     *scop.RemoveTableComment
       TableID: 109
     *scop.LogEvent
@@ -233,12 +236,18 @@ PreCommitPhase stage 1 of 1 with 47 MutationType ops
       TargetStatus: 1
     *scop.MarkDescriptorAsDropped
       DescriptorID: 110
+    *scop.RemoveObjectParent
+      ObjectID: 110
+      ParentSchemaID: 101
     *scop.MarkDescriptorAsDropped
       DescriptorID: 111
     *scop.RemoveBackReferencesInRelations
       BackReferencedID: 111
       RelationIDs:
       - 109
+    *scop.RemoveObjectParent
+      ObjectID: 111
+      ParentSchemaID: 101
     *scop.DrainDescriptorName
       Namespace:
         DatabaseID: 100
@@ -1283,7 +1292,7 @@ StatementPhase stage 1 of 1 with 1 MutationType op
   ops:
     *scop.MarkDescriptorAsSyntheticallyDropped
       DescriptorID: 114
-PreCommitPhase stage 1 of 1 with 20 MutationType ops
+PreCommitPhase stage 1 of 1 with 21 MutationType ops
   transitions:
     [[Namespace:{DescID: 114, Name: greeter, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 114}, ABSENT], PUBLIC] -> ABSENT
@@ -1324,6 +1333,9 @@ PreCommitPhase stage 1 of 1 with 20 MutationType ops
   ops:
     *scop.MarkDescriptorAsDropped
       DescriptorID: 114
+    *scop.RemoveObjectParent
+      ObjectID: 114
+      ParentSchemaID: 101
     *scop.RemoveColumnDefaultExpression
       ColumnID: 1
       TableID: 114

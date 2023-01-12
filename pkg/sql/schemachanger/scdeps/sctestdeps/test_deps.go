@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
@@ -1150,14 +1151,26 @@ func (s *TestState) AddTableForStatsRefresh(id descpb.ID) {
 func (s *TestState) ResolveFunction(
 	ctx context.Context, name *tree.UnresolvedName, path tree.SearchPath,
 ) (*tree.ResolvedFunctionDefinition, error) {
-	// TODO(chengxiong): add UDF support for test.
-	fn, err := name.ToFunctionName()
+	fnName, err := name.ToFunctionName()
 	if err != nil {
 		return nil, err
 	}
-	fd, err := tree.GetBuiltinFuncDefinitionOrFail(fn, path)
+	fd, err := tree.GetBuiltinFuncDefinition(fnName, path)
 	if err != nil {
 		return nil, err
+	}
+	if fd != nil {
+		return fd, nil
+	}
+
+	_, sc := s.mayResolvePrefix(fnName.ObjectNamePrefix)
+	scDesc, err := catalog.AsSchemaDescriptor(sc)
+	if err != nil {
+		return nil, err
+	}
+	fd, found := scDesc.GetResolvedFuncDefinition(fnName.Object())
+	if !found {
+		return nil, errors.Newf("function %s not found", fnName.String())
 	}
 	return fd, nil
 }
@@ -1166,18 +1179,34 @@ func (s *TestState) ResolveFunction(
 func (s *TestState) ResolveFunctionByOID(
 	ctx context.Context, oid oid.Oid,
 ) (string, *tree.Overload, error) {
-	// TODO(chengxiong): add UDF support for test.
-	name, ok := tree.OidToBuiltinName[oid]
-	if !ok {
+	if !funcdesc.IsOIDUserDefinedFunc(oid) {
+		name, ok := tree.OidToBuiltinName[oid]
+		if !ok {
+			return "", nil, errors.Newf("function %d not found", oid)
+		}
+		funcDef := tree.FunDefs[name]
+		for _, o := range funcDef.Definition {
+			if o.Oid == oid {
+				return funcDef.Name, o, nil
+			}
+		}
 		return "", nil, errors.Newf("function %d not found", oid)
 	}
-	funcDef := tree.FunDefs[name]
-	for _, o := range funcDef.Definition {
-		if o.Oid == oid {
-			return funcDef.Name, o, nil
-		}
+
+	fnID := funcdesc.UserDefinedFunctionOIDToID(oid)
+	desc, err := s.mustReadImmutableDescriptor(fnID)
+	if err != nil {
+		return "", nil, err
 	}
-	return "", nil, errors.Newf("function %d not found", oid)
+	fnDesc, err := catalog.AsFunctionDescriptor(desc)
+	if err != nil {
+		return "", nil, err
+	}
+	ol, err := fnDesc.ToOverload()
+	if err != nil {
+		return "", nil, err
+	}
+	return fnDesc.GetName(), ol, nil
 }
 
 // ZoneConfigGetter implement scexec.Dependencies.

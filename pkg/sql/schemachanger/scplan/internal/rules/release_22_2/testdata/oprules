@@ -11,7 +11,7 @@ ColumnInSwappedInPrimaryIndex($index-column, $index, $table-id, $column-id, $ind
     - sourceIndexIsSet($index)
 DescriptorIsNotBeingDropped($element):
     not-join:
-        - $descriptor[Type] IN ['*scpb.Database', '*scpb.Schema', '*scpb.View', '*scpb.Sequence', '*scpb.Table', '*scpb.EnumType', '*scpb.AliasType', '*scpb.CompositeType']
+        - $descriptor[Type] IN ['*scpb.Database', '*scpb.Schema', '*scpb.View', '*scpb.Sequence', '*scpb.Table', '*scpb.EnumType', '*scpb.AliasType', '*scpb.CompositeType', '*scpb.Function']
         - joinTarget($descriptor, $descriptor-Target)
         - joinOnDescID($descriptor, $element, $id)
         - $descriptor-Target[TargetStatus] = ABSENT
@@ -163,7 +163,7 @@ oprules
 - name: skip element removal ops on descriptor drop
   from: dep-Node
   query:
-    - $desc[Type] IN ['*scpb.Database', '*scpb.Schema', '*scpb.View', '*scpb.Sequence', '*scpb.Table', '*scpb.EnumType', '*scpb.AliasType', '*scpb.CompositeType']
+    - $desc[Type] IN ['*scpb.Database', '*scpb.Schema', '*scpb.View', '*scpb.Sequence', '*scpb.Table', '*scpb.EnumType', '*scpb.AliasType', '*scpb.CompositeType', '*scpb.Function']
     - $dep[Type] IN ['*scpb.ColumnFamily', '*scpb.Owner', '*scpb.UserPrivileges', '*scpb.EnumTypeValue']
     - joinOnDescID($desc, $dep, $desc-id)
     - joinTarget($desc, $desc-Target)

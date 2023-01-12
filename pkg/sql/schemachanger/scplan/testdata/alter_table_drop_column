@@ -214,7 +214,7 @@ PostCommitPhase stage 7 of 7 with 1 ValidationType op
     *scop.ValidateIndex
       IndexID: 3
       TableID: 107
-PostCommitNonRevertiblePhase stage 1 of 3 with 25 MutationType ops
+PostCommitNonRevertiblePhase stage 1 of 3 with 26 MutationType ops
   transitions:
     [[Column:{DescID: 107, ColumnID: 2}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
     [[IndexColumn:{DescID: 107, ColumnID: 1, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
@@ -274,6 +274,9 @@ PostCommitNonRevertiblePhase stage 1 of 3 with 25 MutationType ops
       BackReferencedID: 108
       RelationIDs:
       - 107
+    *scop.RemoveObjectParent
+      ObjectID: 108
+      ParentSchemaID: 101
     *scop.RemoveDroppedColumnType
       ColumnID: 2
       TableID: 108
@@ -1173,7 +1176,7 @@ PostCommitPhase stage 7 of 7 with 1 ValidationType op
     *scop.ValidateIndex
       IndexID: 3
       TableID: 107
-PostCommitNonRevertiblePhase stage 1 of 3 with 26 MutationType ops
+PostCommitNonRevertiblePhase stage 1 of 3 with 27 MutationType ops
   transitions:
     [[Column:{DescID: 107, ColumnID: 3}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
     [[IndexColumn:{DescID: 107, ColumnID: 1, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
@@ -1233,6 +1236,9 @@ PostCommitNonRevertiblePhase stage 1 of 3 with 26 MutationType ops
       BackReferencedID: 108
       RelationIDs:
       - 107
+    *scop.RemoveObjectParent
+      ObjectID: 108
+      ParentSchemaID: 101
     *scop.RemoveDroppedColumnType
       ColumnID: 2
       TableID: 108
