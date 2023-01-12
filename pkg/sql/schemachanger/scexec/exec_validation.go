@@ -50,8 +50,8 @@ func executeValidateUniqueIndex(
 	return nil
 }
 
-func executeValidateCheckConstraint(
-	ctx context.Context, deps Dependencies, op *scop.ValidateCheckConstraint,
+func executeValidateConstraint(
+	ctx context.Context, deps Dependencies, op *scop.ValidateConstraint,
 ) error {
 	descs, err := deps.Catalog().MustReadImmutableDescriptors(ctx, op.TableID)
 	if err != nil {
@@ -66,15 +66,10 @@ func executeValidateCheckConstraint(
 	if err != nil {
 		return err
 	}
-	check := constraint.AsCheck()
-	if check == nil {
-		return errors.Newf("constraint ID %v does not identify a check constraint in table %v.",
-			op.ConstraintID, op.TableID)
-	}
 
 	// Execute the validation operation as a root user.
 	execOverride := sessiondata.RootUserSessionDataOverride
-	err = deps.Validator().ValidateCheckConstraint(ctx, table, check, op.IndexIDForValidation, execOverride)
+	err = deps.Validator().ValidateConstraint(ctx, table, constraint, op.IndexIDForValidation, execOverride)
 	if err != nil {
 		return scerrors.SchemaChangerUserError(err)
 	}
@@ -99,8 +94,8 @@ func executeValidationOp(ctx context.Context, deps Dependencies, op scop.Op) (er
 			}
 			return err
 		}
-	case *scop.ValidateCheckConstraint:
-		if err = executeValidateCheckConstraint(ctx, deps, op); err != nil {
+	case *scop.ValidateConstraint:
+		if err = executeValidateConstraint(ctx, deps, op); err != nil {
 			if !scerrors.HasSchemaChangerUserError(err) {
 				return errors.Wrapf(err, "%T: %v", op, op)
 			}

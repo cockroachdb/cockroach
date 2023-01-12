@@ -80,6 +80,7 @@ object UniqueWithoutIndexConstraint
 UniqueWithoutIndexConstraint :  TableID
 UniqueWithoutIndexConstraint :  ConstraintID
 UniqueWithoutIndexConstraint : []ColumnIDs
+UniqueWithoutIndexConstraint :  Predicate
 
 object CheckConstraint
 
@@ -97,6 +98,10 @@ ForeignKeyConstraint :  ConstraintID
 ForeignKeyConstraint : []ColumnIDs
 ForeignKeyConstraint :  ReferencedTableID
 ForeignKeyConstraint : []ReferencedColumnIDs
+ForeignKeyConstraint :  OnUpdateAction
+ForeignKeyConstraint :  OnDeleteAction
+ForeignKeyConstraint :  CompositeKeyMatchMethod
+ForeignKeyConstraint :  IndexIDForValidation
 
 object TableComment
 

@@ -1,0 +1,51 @@
+// Copyright 2022 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+// This file should contain only EMUN definitions for concepts that
+// are internal and not visible to the SQL layer.
+// It uses proto3 so other packages can import those enum definitions
+// when needed.
+syntax = "proto3";
+package cockroach.sql.catalog.catpb;
+option go_package = "catpb";
+
+import "gogoproto/gogo.proto";
+
+// SystemColumnKind is an enum representing the different kind of system
+// columns that can be synthesized by the execution engine.
+enum SystemColumnKind {
+  // Default value, unused.
+  NONE = 0;
+  // A system column containing the value of the MVCC timestamp associated
+  // with the kv's corresponding to the row.
+  MVCCTIMESTAMP = 1;
+  // A system column containing the OID of the table that the row came from.
+  TABLEOID = 2;
+}
+
+// InvertedIndexColumnKind is the kind of the inverted index on a column. The
+// reason this needs to be stored is that we need to be able to check that the
+// "opclass" passed into an inverted index declaration (for example,
+// gin_trgm_ops) is compatible with the datatype of a particular column
+// (gin_tgrm_ops is only valid on text). A future reason is that it's possible
+// to desire having more than one type of inverted index on a particular
+// datatype - for example, you might want to create a "stemming" inverted index
+// on text. And without this extra kind, it wouldn't be possible to distinguish
+// a text inverted index that uses trigrams, vs a text inverted index that uses
+// stemming.
+enum InvertedIndexColumnKind {
+  // DEFAULT is the default kind of inverted index column. JSON, Array, and
+  // geo inverted indexes all are DEFAULT, though prior to 22.2 they had no
+  // kind at all.
+  DEFAULT = 0;
+  // TRIGRAM is the trigram kind of inverted index column. It's only valid on
+  // text columns.
+  TRIGRAM = 1;
+}

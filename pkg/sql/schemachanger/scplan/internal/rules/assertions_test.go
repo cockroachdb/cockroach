@@ -58,8 +58,13 @@ func nonNilElement(element scpb.Element) scpb.Element {
 
 // Assert that only simple dependents (non-descriptor, non-index, non-column)
 // and data elements have screl.ReferencedDescID attributes.
+// One exception is foreign key constraint, which is not simple dependent nor data
+// element but it has a screl.ReferencedDescID attribute.
 func checkSimpleDependentsReferenceDescID(e scpb.Element) error {
 	if isSimpleDependent(e) || isData(e) {
+		return nil
+	}
+	if _, ok := e.(*scpb.ForeignKeyConstraint); ok {
 		return nil
 	}
 	if _, err := screl.Schema.GetAttribute(screl.ReferencedDescID, e); err == nil {

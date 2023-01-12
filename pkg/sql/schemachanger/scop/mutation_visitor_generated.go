@@ -58,6 +58,9 @@ type MutationVisitor interface {
 	MakeAbsentCheckConstraintWriteOnly(context.Context, MakeAbsentCheckConstraintWriteOnly) error
 	MakePublicCheckConstraintValidated(context.Context, MakePublicCheckConstraintValidated) error
 	MakeValidatedCheckConstraintPublic(context.Context, MakeValidatedCheckConstraintPublic) error
+	MakeAbsentForeignKeyConstraintWriteOnly(context.Context, MakeAbsentForeignKeyConstraintWriteOnly) error
+	MakeValidatedForeignKeyConstraintPublic(context.Context, MakeValidatedForeignKeyConstraintPublic) error
+	MakePublicForeignKeyConstraintValidated(context.Context, MakePublicForeignKeyConstraintValidated) error
 	RemoveForeignKeyConstraint(context.Context, RemoveForeignKeyConstraint) error
 	RemoveForeignKeyBackReference(context.Context, RemoveForeignKeyBackReference) error
 	RemoveSchemaParent(context.Context, RemoveSchemaParent) error
@@ -280,6 +283,21 @@ func (op MakePublicCheckConstraintValidated) Visit(ctx context.Context, v Mutati
 // Visit is part of the MutationOp interface.
 func (op MakeValidatedCheckConstraintPublic) Visit(ctx context.Context, v MutationVisitor) error {
 	return v.MakeValidatedCheckConstraintPublic(ctx, op)
+}
+
+// Visit is part of the MutationOp interface.
+func (op MakeAbsentForeignKeyConstraintWriteOnly) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.MakeAbsentForeignKeyConstraintWriteOnly(ctx, op)
+}
+
+// Visit is part of the MutationOp interface.
+func (op MakeValidatedForeignKeyConstraintPublic) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.MakeValidatedForeignKeyConstraintPublic(ctx, op)
+}
+
+// Visit is part of the MutationOp interface.
+func (op MakePublicForeignKeyConstraintValidated) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.MakePublicForeignKeyConstraintValidated(ctx, op)
 }
 
 // Visit is part of the MutationOp interface.

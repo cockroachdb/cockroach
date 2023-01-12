@@ -974,9 +974,9 @@ func newOptTable(
 			referencedTable:   cat.StableID(fk.GetReferencedTableID()),
 			referencedColumns: fk.ForeignKeyDesc().ReferencedColumnIDs,
 			validity:          fk.GetConstraintValidity(),
-			match:             fk.Match(),
-			deleteAction:      fk.OnDelete(),
-			updateAction:      fk.OnUpdate(),
+			match:             tree.CompositeKeyMatchMethodType[fk.Match()],
+			deleteAction:      tree.ForeignKeyReferenceActionType[fk.OnDelete()],
+			updateAction:      tree.ForeignKeyReferenceActionType[fk.OnUpdate()],
 		})
 	}
 	for _, fk := range ot.desc.InboundForeignKeys() {
@@ -987,9 +987,9 @@ func newOptTable(
 			referencedTable:   ot.ID(),
 			referencedColumns: fk.ForeignKeyDesc().ReferencedColumnIDs,
 			validity:          fk.GetConstraintValidity(),
-			match:             fk.Match(),
-			deleteAction:      fk.OnDelete(),
-			updateAction:      fk.OnUpdate(),
+			match:             tree.CompositeKeyMatchMethodType[fk.Match()],
+			deleteAction:      tree.ForeignKeyReferenceActionType[fk.OnDelete()],
+			updateAction:      tree.ForeignKeyReferenceActionType[fk.OnUpdate()],
 		})
 	}
 
@@ -1902,9 +1902,9 @@ type optForeignKeyConstraint struct {
 	referencedColumns []descpb.ColumnID
 
 	validity     descpb.ConstraintValidity
-	match        descpb.ForeignKeyReference_Match
-	deleteAction catpb.ForeignKeyAction
-	updateAction catpb.ForeignKeyAction
+	match        tree.CompositeKeyMatchMethod
+	deleteAction tree.ReferenceAction
+	updateAction tree.ReferenceAction
 }
 
 var _ cat.ForeignKeyConstraint = &optForeignKeyConstraint{}
@@ -1963,17 +1963,17 @@ func (fk *optForeignKeyConstraint) Validated() bool {
 
 // MatchMethod is part of the cat.ForeignKeyConstraint interface.
 func (fk *optForeignKeyConstraint) MatchMethod() tree.CompositeKeyMatchMethod {
-	return descpb.ForeignKeyReferenceMatchValue[fk.match]
+	return fk.match
 }
 
 // DeleteReferenceAction is part of the cat.ForeignKeyConstraint interface.
 func (fk *optForeignKeyConstraint) DeleteReferenceAction() tree.ReferenceAction {
-	return descpb.ForeignKeyReferenceActionType[fk.deleteAction]
+	return fk.deleteAction
 }
 
 // UpdateReferenceAction is part of the cat.ForeignKeyConstraint interface.
 func (fk *optForeignKeyConstraint) UpdateReferenceAction() tree.ReferenceAction {
-	return descpb.ForeignKeyReferenceActionType[fk.updateAction]
+	return fk.updateAction
 }
 
 // optVirtualTable is similar to optTable but is used with virtual tables.

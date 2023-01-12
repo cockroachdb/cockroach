@@ -61,6 +61,11 @@ var supportedAlterTableStatements = map[reflect.Type]supportedAlterTableCommand{
 			return true
 		}
 
+		// Support ALTER TABLE ... ADD CONSTRAINT FOREIGN KEY
+		if _, ok := t.ConstraintDef.(*tree.ForeignKeyConstraintTableDef); ok && t.ValidationBehavior == tree.ValidationDefault {
+			return true
+		}
+
 		return false
 	}},
 }
@@ -72,6 +77,7 @@ var supportedAlterTableStatements = map[reflect.Type]supportedAlterTableCommand{
 var alterTableAddConstraintMinSupportedClusterVersion = map[string]clusterversion.Key{
 	"ADD_PRIMARY_KEY_DEFAULT": clusterversion.V22_2Start,
 	"ADD_CHECK_DEFAULT":       clusterversion.V23_1Start,
+	"ADD_FOREIGN_KEY_DEFAULT": clusterversion.V23_1Start,
 }
 
 func init() {
@@ -163,6 +169,8 @@ func alterTableAddConstraintSupportedInCurrentClusterVersion(
 		}
 	case *tree.CheckConstraintTableDef:
 		cmdKey = "ADD_CHECK"
+	case *tree.ForeignKeyConstraintTableDef:
+		cmdKey = "ADD_FOREIGN_KEY"
 	}
 	// Figure out command validation behavior: DEFAULT or SKIP
 	if constraint.ValidationBehavior == tree.ValidationDefault {

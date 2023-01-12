@@ -99,7 +99,7 @@ func TableDescs(
 			table.ViewQuery = viewQuery
 		}
 
-		// TODO(lucy): deal with outbound foreign key mutations here as well.
+		// Rewrite outbound FKs in both `OutboundFKs` and `Mutations` slice.
 		origFKs := table.OutboundFKs
 		table.OutboundFKs = nil
 		for i := range origFKs {
@@ -119,6 +119,16 @@ func TableDescs(
 			// a db and name matching the one the FK pointed to at backup, should
 			// we update the FK to point to it?
 			table.OutboundFKs = append(table.OutboundFKs, *fk)
+		}
+		for idx := range table.Mutations {
+			if c := table.Mutations[idx].GetConstraint(); c != nil &&
+				c.ConstraintType == descpb.ConstraintToUpdate_FOREIGN_KEY {
+				fk := &c.ForeignKey
+				if rewriteOfReferencedTable, ok := descriptorRewrites[fk.ReferencedTableID]; ok {
+					fk.ReferencedTableID = rewriteOfReferencedTable.ID
+					fk.OriginTableID = tableRewrite.ID
+				}
+			}
 		}
 
 		origInboundFks := table.InboundFKs

@@ -17,6 +17,7 @@ go_library(
     deps = [
         "//pkg/sql/catalog/catpb",  # keep
         "//pkg/sql/sem/catid",  # keep
+        "//pkg/sql/sem/tree",  # keep
         "//pkg/util/protoutil",
         "@com_github_cockroachdb_errors//:errors",
     ],
@@ -33,6 +34,7 @@ go_proto_library(
         "//pkg/sql/catalog/catenumpb",
         "//pkg/sql/catalog/catpb",
         "//pkg/sql/sem/catid",  # keep
+        "//pkg/sql/sem/semenumpb",
         "//pkg/sql/types",
         "@com_github_gogo_protobuf//gogoproto",
     ],
@@ -50,6 +52,7 @@ proto_library(
         "//pkg/geo/geoindex:geoindex_proto",
         "//pkg/sql/catalog/catenumpb:catenumpb_proto",
         "//pkg/sql/catalog/catpb:catpb_proto",
+        "//pkg/sql/sem/semenumpb:semenumpb_proto",
         "//pkg/sql/types:types_proto",
         "@com_github_gogo_protobuf//gogoproto:gogo_proto",
     ],

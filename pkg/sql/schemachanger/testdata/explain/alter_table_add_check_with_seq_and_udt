@@ -28,7 +28,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD CHEC
       │    ├── 1 element transitioning toward PUBLIC
       │    │    └── WRITE_ONLY → VALIDATED CheckConstraint:{DescID: 107, ReferencedTypeIDs: [105 106], IndexID: 0, ConstraintID: 2, ReferencedSequenceIDs: [104]}
       │    └── 1 Validation operation
-      │         └── ValidateCheckConstraint {"ConstraintID":2,"TableID":107}
+      │         └── ValidateConstraint {"ConstraintID":2,"TableID":107}
       └── Stage 2 of 2 in PostCommitPhase
            ├── 2 elements transitioning toward PUBLIC
            │    ├── VALIDATED → PUBLIC CheckConstraint:{DescID: 107, ReferencedTypeIDs: [105 106], IndexID: 0, ConstraintID: 2, ReferencedSequenceIDs: [104]}

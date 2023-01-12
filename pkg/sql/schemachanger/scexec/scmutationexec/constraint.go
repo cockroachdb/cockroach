@@ -169,20 +169,131 @@ func (m *visitor) RemoveForeignKeyConstraint(
 	if err != nil || out.Dropped() {
 		return err
 	}
+	var found bool
 	for i, fk := range out.OutboundFKs {
 		if fk.ConstraintID == op.ConstraintID {
 			out.OutboundFKs = append(out.OutboundFKs[:i], out.OutboundFKs[i+1:]...)
-			return nil
+			if len(out.OutboundFKs) == 0 {
+				out.OutboundFKs = nil
+			}
+			found = true
+			break
 		}
 	}
 	for i, m := range out.Mutations {
 		if c := m.GetConstraint(); c != nil &&
-			c.ConstraintType != descpb.ConstraintToUpdate_FOREIGN_KEY &&
+			c.ConstraintType == descpb.ConstraintToUpdate_FOREIGN_KEY &&
 			c.ForeignKey.ConstraintID == op.ConstraintID {
 			out.Mutations = append(out.Mutations[:i], out.Mutations[i+1:]...)
-			return nil
+			if len(out.Mutations) == 0 {
+				out.Mutations = nil
+			}
+			found = true
+			break
 		}
 	}
-	return errors.AssertionFailedf("foreign key with ID %d not found in origin table %q (%d)",
-		op.ConstraintID, out.GetName(), out.GetID())
+	if !found {
+		return errors.AssertionFailedf("foreign key with ID %d not found in origin table %q (%d)",
+			op.ConstraintID, out.GetName(), out.GetID())
+	}
+	return nil
+}
+
+func (m *visitor) MakeAbsentForeignKeyConstraintWriteOnly(
+	ctx context.Context, op scop.MakeAbsentForeignKeyConstraintWriteOnly,
+) error {
+	out, err := m.checkOutTable(ctx, op.TableID)
+	if err != nil || out.Dropped() {
+		return err
+	}
+	if op.ConstraintID >= out.NextConstraintID {
+		out.NextConstraintID = op.ConstraintID + 1
+	}
+
+	fk := &descpb.ForeignKeyConstraint{
+		OriginTableID:       op.TableID,
+		OriginColumnIDs:     op.ColumnIDs,
+		ReferencedColumnIDs: op.ReferencedColumnIDs,
+		ReferencedTableID:   op.ReferencedTableID,
+		Name:                tabledesc.ConstraintNamePlaceholder(op.ConstraintID),
+		Validity:            descpb.ConstraintValidity_Validating,
+		OnDelete:            op.OnDeleteAction,
+		OnUpdate:            op.OnUpdateAction,
+		Match:               op.CompositeKeyMatchMethod,
+		ConstraintID:        op.ConstraintID,
+	}
+	if err = enqueueAddForeignKeyConstraintMutation(out, fk); err != nil {
+		return err
+	}
+	out.Mutations[len(out.Mutations)-1].State = descpb.DescriptorMutation_WRITE_ONLY
+	return nil
+}
+
+func (m *visitor) MakeValidatedForeignKeyConstraintPublic(
+	ctx context.Context, op scop.MakeValidatedForeignKeyConstraintPublic,
+) error {
+	out, err := m.checkOutTable(ctx, op.TableID)
+	if err != nil || out.Dropped() {
+		return err
+	}
+	in, err := m.checkOutTable(ctx, op.ReferencedTableID)
+	if err != nil || in.Dropped() {
+		return err
+	}
+
+	var found bool
+	for idx, mutation := range out.Mutations {
+		if c := mutation.GetConstraint(); c != nil &&
+			c.ConstraintType == descpb.ConstraintToUpdate_FOREIGN_KEY &&
+			c.ForeignKey.ConstraintID == op.ConstraintID {
+			out.OutboundFKs = append(out.OutboundFKs, c.ForeignKey)
+			in.InboundFKs = append(in.InboundFKs, c.ForeignKey)
+
+			// Remove the mutation from the mutation slice. The `MakeMutationComplete`
+			// call will also mark the above added check as VALIDATED.
+			// If this is a rollback of a drop, we are trying to add the foreign key constraint
+			// back, so swap the direction before making it complete.
+			mutation.Direction = descpb.DescriptorMutation_ADD
+			err = out.MakeMutationComplete(mutation)
+			if err != nil {
+				return err
+			}
+			out.Mutations = append(out.Mutations[:idx], out.Mutations[idx+1:]...)
+
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		return errors.AssertionFailedf("failed to find foreign key constraint %d in table %q (%d)",
+			op.ConstraintID, out.GetName(), out.GetID())
+	}
+
+	if len(out.Mutations) == 0 {
+		out.Mutations = nil
+	}
+
+	return nil
+}
+
+func (m *visitor) MakePublicForeignKeyConstraintValidated(
+	ctx context.Context, op scop.MakePublicForeignKeyConstraintValidated,
+) error {
+	tbl, err := m.checkOutTable(ctx, op.TableID)
+	if err != nil {
+		return err
+	}
+	for i, fk := range tbl.OutboundFKs {
+		if fk.ConstraintID == op.ConstraintID {
+			tbl.OutboundFKs = append(tbl.OutboundFKs[:i], tbl.OutboundFKs[i+1:]...)
+			if len(tbl.OutboundFKs) == 0 {
+				tbl.OutboundFKs = nil
+			}
+			fk.Validity = descpb.ConstraintValidity_Dropping
+			return enqueueDropForeignKeyConstraintMutation(tbl, &fk)
+		}
+	}
+
+	return errors.AssertionFailedf("failed to find FK constraint %d in descriptor %v", op.ConstraintID, tbl)
 }

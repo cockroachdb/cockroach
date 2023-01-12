@@ -318,9 +318,6 @@ func (DescriptorMutation_State) SafeValue() {}
 // SafeValue implements the redact.SafeValue interface.
 func (DescriptorState) SafeValue() {}
 
-// SafeValue implements the redact.SafeValue interface.
-func (ConstraintType) SafeValue() {}
-
 // IsPartial returns true if the constraint is a partial unique constraint.
 func (u *UniqueWithoutIndexConstraint) IsPartial() bool {
 	return u.Predicate != ""

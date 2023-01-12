@@ -9,6 +9,7 @@ proto_library(
     name = "catpb_proto",
     srcs = [
         "catalog.proto",
+        "enum.proto",
         "function.proto",
         "privilege.proto",
     ],
@@ -33,7 +34,6 @@ go_library(
     name = "catpb",
     srcs = [
         "catalog.go",
-        "constraint.go",
         "default_privilege.go",
         "doc.go",
         "expression.go",
@@ -53,7 +53,6 @@ go_library(
         "//pkg/sql/sem/catconstants",
         "//pkg/sql/sem/catid",
         "@com_github_cockroachdb_errors//:errors",
-        "@com_github_cockroachdb_redact//:redact",
     ],
 )
 
