@@ -753,6 +753,7 @@ type Store struct {
 	ctSender            *sidetransport.Sender
 	storeGossip         *StoreGossip
 	rebalanceObjManager *RebalanceObjectiveManager
+	splitConfig         *replicaSplitConfig
 
 	coalescedMu struct {
 		syncutil.Mutex
@@ -1227,6 +1228,8 @@ func NewStore(
 				return true
 			})
 		})
+	s.splitConfig = newReplicaSplitConfig(s.cfg.Settings, s.rebalanceObjManager)
+
 	s.replRankings = NewReplicaRankings()
 	s.replRankingsByTenant = NewReplicaRankingsMap()
 
