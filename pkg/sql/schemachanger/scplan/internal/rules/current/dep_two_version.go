@@ -8,16 +8,16 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package rules
+package current
 
 import (
 	"fmt"
 	"reflect"
-	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/rel"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/opgen"
+	. "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/rules"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scgraph"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 )
@@ -54,7 +54,7 @@ func init() {
 		return statusMap
 	}
 	clausesForTwoVersionEdge := func(
-		from, to nodeVars,
+		from, to NodeVars,
 		el scpb.Element,
 		targetStatus scpb.TargetStatus,
 		t opgen.Transition,
@@ -63,17 +63,17 @@ func init() {
 		clauses := rel.Clauses{
 			from.Type(el),
 			to.Type(el),
-			from.el.AttrEqVar(screl.DescID, "_"),
-			from.el.AttrEqVar(rel.Self, to.el),
-			from.target.AttrEqVar(rel.Self, to.target),
-			from.target.AttrEq(screl.TargetStatus, targetStatus.Status()),
-			from.node.AttrEq(screl.CurrentStatus, t.From()),
-			to.node.AttrEq(screl.CurrentStatus, t.To()),
-			from.descriptorIsNotBeingDropped(),
+			from.El.AttrEqVar(screl.DescID, "_"),
+			from.El.AttrEqVar(rel.Self, to.El),
+			from.Target.AttrEqVar(rel.Self, to.Target),
+			from.Target.AttrEq(screl.TargetStatus, targetStatus.Status()),
+			from.Node.AttrEq(screl.CurrentStatus, t.From()),
+			to.Node.AttrEq(screl.CurrentStatus, t.To()),
+			from.DescriptorIsNotBeingDropped(),
 		}
 		if len(prePrevStatuses) > 0 {
 			clauses = append(clauses,
-				getNotJoinOnNodeWithStatusIn(prePrevStatuses)(from.target),
+				GetNotJoinOnNodeWithStatusIn(prePrevStatuses)(from.Target),
 			)
 		}
 		return clauses
@@ -92,7 +92,7 @@ func init() {
 				ruleName,
 				scgraph.PreviousTransactionPrecedence,
 				"prev", "next",
-				func(from, to nodeVars) rel.Clauses {
+				func(from, to NodeVars) rel.Clauses {
 					return clausesForTwoVersionEdge(
 						from, to, el, targetStatus, t, statusMap[t.From()],
 					)
@@ -103,8 +103,8 @@ func init() {
 			panic(err)
 		}
 	}
-	_ = forEachElement(func(el scpb.Element) error {
-		if !isSubjectTo2VersionInvariant(el) {
+	_ = ForEachElement(func(el scpb.Element) error {
+		if !IsSubjectTo2VersionInvariant(el) {
 			return nil
 		}
 		if opgen.HasPublic(el) {
@@ -116,47 +116,4 @@ func init() {
 		addRules(el, scpb.ToAbsent) // every element has ToAbsent
 		return nil
 	})
-}
-
-// notJoinOnNodeWithStatusIn is a cache to memoize getNotJoinOnNodeWithStatusIn.
-var notJoinOnNodeWithStatusIn = map[string]rel.Rule1{}
-
-// getNoJoinOnNodeWithStatusIn returns a not-join rule which takes a variable
-// corresponding to a target in the graph as input and will exclude that target
-// if the graph contains a node with that target in any of the listed status
-// values.
-func getNotJoinOnNodeWithStatusIn(statues []scpb.Status) rel.Rule1 {
-	makeStatusesStrings := func(statuses []scpb.Status) []string {
-		ret := make([]string, len(statuses))
-		for i, status := range statuses {
-			ret[i] = status.String()
-		}
-		return ret
-	}
-	makeStatusesString := func(statuses []scpb.Status) string {
-		return strings.Join(makeStatusesStrings(statuses), "_")
-	}
-	boxStatuses := func(input []scpb.Status) []interface{} {
-		ret := make([]interface{}, len(input))
-		for i, s := range input {
-			ret[i] = s
-		}
-		return ret
-	}
-	name := makeStatusesString(statues)
-	if got, ok := notJoinOnNodeWithStatusIn[name]; ok {
-		return got
-	}
-	r := screl.Schema.DefNotJoin1(
-		fmt.Sprintf("nodeNotExistsWithStatusIn_%s", name),
-		"sharedTarget", func(target rel.Var) rel.Clauses {
-			n := rel.Var("n")
-			return rel.Clauses{
-				n.Type((*screl.Node)(nil)),
-				n.AttrEqVar(screl.Target, target),
-				n.AttrIn(screl.CurrentStatus, boxStatuses(statues)...),
-			}
-		})
-	notJoinOnNodeWithStatusIn[name] = r
-	return r
 }

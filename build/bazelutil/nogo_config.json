@@ -1547,7 +1547,8 @@
             "cockroach/pkg/.*\\.eg\\.go$": "generated code",
             ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
-            "cockroach/pkg/.*_generated\\.go$": "generated code"
+            "cockroach/pkg/.*_generated\\.go$": "generated code",
+            "cockroach/pkg/sql/schemachanger/scplan/internal/rules/.*/.*.go$":  "schema changer rules"
         },
         "only_files": {
             "cockroach/pkg/.*$": "first-party code"

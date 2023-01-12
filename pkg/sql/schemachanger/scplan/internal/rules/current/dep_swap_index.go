@@ -8,11 +8,12 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package rules
+package current
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/rel"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	. "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/rules"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scgraph"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 )
@@ -26,20 +27,20 @@ func init() {
 		"primary index swap",
 		scgraph.SameStagePrecedence,
 		"old-index", "new-index",
-		func(from, to nodeVars) rel.Clauses {
+		func(from, to NodeVars) rel.Clauses {
 			return rel.Clauses{
 				from.Type((*scpb.PrimaryIndex)(nil)),
 				to.Type((*scpb.PrimaryIndex)(nil)),
-				joinOnDescID(from, to, "table-id"),
-				joinOn(
+				JoinOnDescID(from, to, "table-id"),
+				JoinOn(
 					from, screl.IndexID,
 					to, screl.SourceIndexID,
 					"old-index-id",
 				),
-				from.targetStatus(scpb.ToAbsent),
-				from.currentStatus(scpb.Status_VALIDATED),
-				to.targetStatus(scpb.ToPublic, scpb.Transient),
-				to.currentStatus(scpb.Status_PUBLIC),
+				from.TargetStatus(scpb.ToAbsent),
+				from.CurrentStatus(scpb.Status_VALIDATED),
+				to.TargetStatus(scpb.ToPublic, scpb.Transient),
+				to.CurrentStatus(scpb.Status_PUBLIC),
 			}
 		},
 	)
@@ -48,20 +49,20 @@ func init() {
 		"primary index swap",
 		scgraph.SameStagePrecedence,
 		"old-index", "new-index",
-		func(from, to nodeVars) rel.Clauses {
+		func(from, to NodeVars) rel.Clauses {
 			return rel.Clauses{
 				from.Type((*scpb.PrimaryIndex)(nil)),
 				to.Type((*scpb.PrimaryIndex)(nil)),
-				joinOnDescID(from, to, "table-id"),
-				joinOn(
+				JoinOnDescID(from, to, "table-id"),
+				JoinOn(
 					from, screl.IndexID,
 					to, screl.SourceIndexID,
 					"old-index-id",
 				),
-				from.targetStatus(scpb.Transient),
-				from.currentStatus(scpb.Status_TRANSIENT_VALIDATED),
-				to.targetStatus(scpb.ToPublic, scpb.Transient),
-				to.currentStatus(scpb.Status_PUBLIC),
+				from.TargetStatus(scpb.Transient),
+				from.CurrentStatus(scpb.Status_TRANSIENT_VALIDATED),
+				to.TargetStatus(scpb.ToPublic, scpb.Transient),
+				to.CurrentStatus(scpb.Status_PUBLIC),
 			}
 		},
 	)
@@ -70,20 +71,20 @@ func init() {
 		"primary index swap",
 		scgraph.SameStagePrecedence,
 		"new-index", "old-index",
-		func(from, to nodeVars) rel.Clauses {
+		func(from, to NodeVars) rel.Clauses {
 			return rel.Clauses{
 				from.Type((*scpb.PrimaryIndex)(nil)),
 				to.Type((*scpb.PrimaryIndex)(nil)),
-				joinOnDescID(from, to, "table-id"),
-				joinOn(
+				JoinOnDescID(from, to, "table-id"),
+				JoinOn(
 					from, screl.SourceIndexID,
 					to, screl.IndexID,
 					"old-index-id",
 				),
-				from.targetStatus(scpb.ToAbsent),
-				from.currentStatus(scpb.Status_VALIDATED),
-				to.targetStatus(scpb.ToPublic),
-				to.currentStatus(scpb.Status_PUBLIC),
+				from.TargetStatus(scpb.ToAbsent),
+				from.CurrentStatus(scpb.Status_VALIDATED),
+				to.TargetStatus(scpb.ToPublic),
+				to.CurrentStatus(scpb.Status_PUBLIC),
 			}
 		},
 	)
@@ -97,29 +98,29 @@ func init() {
 		"old index absent before new index public when swapping with transient",
 		scgraph.Precedence,
 		"old-primary-index", "new-primary-index",
-		func(from, to nodeVars) rel.Clauses {
-			union := mkNodeVars("transient-primary-index")
+		func(from, to NodeVars) rel.Clauses {
+			union := MkNodeVars("transient-primary-index")
 			relationID := rel.Var("table-id")
 			return rel.Clauses{
 				from.Type((*scpb.PrimaryIndex)(nil)),
 				union.Type((*scpb.PrimaryIndex)(nil)),
 				to.Type((*scpb.PrimaryIndex)(nil)),
-				joinOnDescID(from, union, relationID),
-				joinOn(
+				JoinOnDescID(from, union, relationID),
+				JoinOn(
 					from, screl.IndexID,
 					union, screl.SourceIndexID,
 					"old-index-id",
 				),
-				joinOnDescID(union, to, relationID),
-				joinOn(
+				JoinOnDescID(union, to, relationID),
+				JoinOn(
 					union, screl.IndexID,
 					to, screl.SourceIndexID,
 					"transient-index-id",
 				),
-				from.targetStatus(scpb.ToAbsent),
-				from.currentStatus(scpb.Status_ABSENT),
-				to.targetStatus(scpb.ToPublic),
-				to.currentStatus(scpb.Status_PUBLIC),
+				from.TargetStatus(scpb.ToAbsent),
+				from.CurrentStatus(scpb.Status_ABSENT),
+				to.TargetStatus(scpb.ToPublic),
+				to.CurrentStatus(scpb.Status_PUBLIC),
 			}
 		},
 	)

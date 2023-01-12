@@ -8,11 +8,12 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package rules
+package current
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/rel"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	. "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/rules"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scgraph"
 )
 
@@ -25,11 +26,11 @@ func init() {
 		scgraph.Precedence,
 		"index", "dependent",
 		scpb.Status_VALIDATED, scpb.Status_ABSENT,
-		func(from, to nodeVars) rel.Clauses {
+		func(from, to NodeVars) rel.Clauses {
 			return rel.Clauses{
-				from.typeFilter(isIndex),
-				to.typeFilter(isIndexDependent),
-				joinOnIndexID(from, to, "table-id", "index-id"),
+				from.TypeFilter(IsIndex),
+				to.TypeFilter(IsIndexDependent),
+				JoinOnIndexID(from, to, "table-id", "index-id"),
 			}
 		},
 	)
@@ -38,11 +39,11 @@ func init() {
 		scgraph.Precedence,
 		"dependent", "index",
 		scpb.Status_ABSENT, scpb.Status_ABSENT,
-		func(from, to nodeVars) rel.Clauses {
+		func(from, to NodeVars) rel.Clauses {
 			return rel.Clauses{
-				from.typeFilter(isIndexDependent),
-				to.typeFilter(isIndex),
-				joinOnIndexID(from, to, "table-id", "index-id"),
+				from.TypeFilter(IsIndexDependent),
+				to.TypeFilter(IsIndex),
+				JoinOnIndexID(from, to, "table-id", "index-id"),
 			}
 		},
 	)
@@ -53,11 +54,11 @@ func init() {
 		scgraph.Precedence,
 		"index", "name",
 		scpb.Status_DELETE_ONLY, scpb.Status_ABSENT,
-		func(from, to nodeVars) rel.Clauses {
+		func(from, to NodeVars) rel.Clauses {
 			return rel.Clauses{
 				from.Type((*scpb.SecondaryIndex)(nil)),
 				to.Type((*scpb.IndexName)(nil)),
-				joinOnIndexID(from, to, "table-id", "index-id"),
+				JoinOnIndexID(from, to, "table-id", "index-id"),
 			}
 		},
 	)
@@ -83,11 +84,11 @@ func init() {
 		scgraph.Precedence,
 		"index-column", "index",
 		scpb.Status_DELETE_ONLY, scpb.Status_ABSENT,
-		func(from, to nodeVars) rel.Clauses {
+		func(from, to NodeVars) rel.Clauses {
 			return rel.Clauses{
 				from.Type((*scpb.IndexColumn)(nil)),
-				to.typeFilter(isIndex),
-				joinOnIndexID(from, to, "table-id", "index-id"),
+				to.TypeFilter(IsIndex),
+				JoinOnIndexID(from, to, "table-id", "index-id"),
 			}
 		},
 	)
@@ -109,12 +110,12 @@ func init() {
 		scgraph.SameStagePrecedence,
 		"partial-predicate", "index",
 		scpb.Status_ABSENT, scpb.Status_ABSENT,
-		func(from, to nodeVars) rel.Clauses {
+		func(from, to NodeVars) rel.Clauses {
 			return rel.Clauses{
 				from.Type((*scpb.SecondaryIndexPartial)(nil)),
-				from.descriptorIsNotBeingDropped(),
+				from.DescriptorIsNotBeingDropped(),
 				to.Type((*scpb.SecondaryIndex)(nil)),
-				joinOnIndexID(from, to, "table-id", "index-id"),
+				JoinOnIndexID(from, to, "table-id", "index-id"),
 			}
 		},
 	)
@@ -130,11 +131,11 @@ func init() {
 		scgraph.Precedence,
 		"view", "index",
 		scpb.Status_DROPPED, scpb.Status_VALIDATED,
-		func(from, to nodeVars) rel.Clauses {
+		func(from, to NodeVars) rel.Clauses {
 			return rel.Clauses{
 				from.Type((*scpb.View)(nil)),
 				to.Type((*scpb.SecondaryIndex)(nil)),
-				filterElements("viewReferencesIndex", from, to, func(from *scpb.View, to *scpb.SecondaryIndex) bool {
+				FilterElements("viewReferencesIndex", from, to, func(from *scpb.View, to *scpb.SecondaryIndex) bool {
 					for _, ref := range from.ForwardReferences {
 						if ref.ToID == to.TableID &&
 							ref.IndexID == to.IndexID {
@@ -151,11 +152,11 @@ func init() {
 		scgraph.Precedence,
 		"index", "view",
 		scpb.Status_VALIDATED, scpb.Status_ABSENT,
-		func(from, to nodeVars) rel.Clauses {
+		func(from, to NodeVars) rel.Clauses {
 			return rel.Clauses{
 				from.Type((*scpb.SecondaryIndex)(nil)),
 				to.Type((*scpb.View)(nil)),
-				filterElements("viewReferencesIndex", from, to, func(from *scpb.SecondaryIndex, to *scpb.View) bool {
+				FilterElements("viewReferencesIndex", from, to, func(from *scpb.SecondaryIndex, to *scpb.View) bool {
 					for _, ref := range to.ForwardReferences {
 						if ref.ToID == from.TableID &&
 							ref.IndexID == from.IndexID {
@@ -172,11 +173,11 @@ func init() {
 		scgraph.Precedence,
 		"view", "index",
 		scpb.Status_ABSENT, scpb.Status_ABSENT,
-		func(from, to nodeVars) rel.Clauses {
+		func(from, to NodeVars) rel.Clauses {
 			return rel.Clauses{
 				from.Type((*scpb.View)(nil)),
 				to.Type((*scpb.SecondaryIndex)(nil)),
-				filterElements("viewReferencesIndex", from, to, func(from *scpb.View, to *scpb.SecondaryIndex) bool {
+				FilterElements("viewReferencesIndex", from, to, func(from *scpb.View, to *scpb.SecondaryIndex) bool {
 					for _, ref := range from.ForwardReferences {
 						if ref.ToID == to.TableID &&
 							ref.IndexID == to.IndexID {
