@@ -2333,9 +2333,10 @@ func addPgProcBuiltinRow(name string, addRow func(...tree.Datum) error) error {
 	isAggregate := props.Class == tree.AggregateClass
 	isWindow := props.Class == tree.WindowClass
 	nspOid := tree.NewDOid(catconstants.PgCatalogID)
-	if strings.HasPrefix(name, "crdb_internal.") {
+	const crdbInternal = catconstants.CRDBInternalSchemaName + "."
+	if strings.HasPrefix(name, crdbInternal) {
 		nspOid = tree.NewDOid(catconstants.CrdbInternalID)
-		name = name[len("crdb_internal."):]
+		name = name[len(crdbInternal):]
 	}
 
 	for _, builtin := range overloads {
