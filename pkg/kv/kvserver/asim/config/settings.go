@@ -24,7 +24,7 @@ const (
 	defaultStateExchangeInterval   = 10 * time.Second
 	defaultStateExchangeDelay      = 500 * time.Millisecond
 	defaultSplitQPSThreshold       = 2500
-	defaultSplitQPSRetention       = 10 * time.Minute
+	defaultSplitStatRetention      = 10 * time.Minute
 	defaultSeed                    = 42
 	defaultLBRebalancingMode       = 2 // Leases and replicas.
 	defaultLBRebalancingInterval   = time.Minute
@@ -79,9 +79,9 @@ type SimulationSettings struct {
 	// SplitQPSThreshold is the threshold above which a range will be a
 	// candidate for load based splitting.
 	SplitQPSThreshold float64
-	// SplitQPSRetention is the duration which recorded load will be retained
+	// SplitStatRetention is the duration which recorded load will be retained
 	// and factored into load based splitting decisions.
-	SplitQPSRetention time.Duration
+	SplitStatRetention time.Duration
 	// LBRebalancingMode controls if and when we do store-level rebalancing
 	// based on load. It maps to kvserver.LBRebalancingMode.
 	LBRebalancingMode int64
@@ -114,7 +114,7 @@ func DefaultSimulationSettings() *SimulationSettings {
 		StateExchangeInterval:   defaultStateExchangeInterval,
 		StateExchangeDelay:      defaultStateExchangeDelay,
 		SplitQPSThreshold:       defaultSplitQPSThreshold,
-		SplitQPSRetention:       defaultSplitQPSRetention,
+		SplitStatRetention:      defaultSplitStatRetention,
 		LBRebalancingMode:       defaultLBRebalancingMode,
 		LBRebalancingObjective:  defaultLBRebalancingObjective,
 		LBRebalancingInterval:   defaultLBRebalancingInterval,
@@ -156,6 +156,6 @@ func (s *SimulationSettings) SplitQPSThresholdFn() func() float64 {
 // split decisions.
 func (s *SimulationSettings) SplitQPSRetentionFn() func() time.Duration {
 	return func() time.Duration {
-		return s.SplitQPSRetention
+		return s.SplitStatRetention
 	}
 }
