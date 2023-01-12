@@ -281,9 +281,9 @@ func (b *Builder) buildInsert(ins *tree.Insert, inScope *scope) (outScope *scope
 	// See mutationBuilder.buildCheckInputScan.
 	mb.insertExpr = mb.outScope.expr
 
-	var returning tree.ReturningExprs
+	var returning *tree.ReturningExprs
 	if resultsNeeded(ins.Returning) {
-		returning = *ins.Returning.(*tree.ReturningExprs)
+		returning = ins.Returning.(*tree.ReturningExprs)
 	}
 
 	switch {
@@ -669,7 +669,7 @@ func (mb *mutationBuilder) addSynthesizedColsForInsert() {
 
 // buildInsert constructs an Insert operator, possibly wrapped by a Project
 // operator that corresponds to the given RETURNING clause.
-func (mb *mutationBuilder) buildInsert(returning tree.ReturningExprs) {
+func (mb *mutationBuilder) buildInsert(returning *tree.ReturningExprs) {
 	// Disambiguate names so that references in any expressions, such as a
 	// check constraint, refer to the correct columns.
 	mb.disambiguateColumns()
@@ -874,7 +874,7 @@ func (mb *mutationBuilder) setUpsertCols(insertCols tree.NameList) {
 
 // buildUpsert constructs an Upsert operator, possibly wrapped by a Project
 // operator that corresponds to the given RETURNING clause.
-func (mb *mutationBuilder) buildUpsert(returning tree.ReturningExprs) {
+func (mb *mutationBuilder) buildUpsert(returning *tree.ReturningExprs) {
 	// Merge input insert and update columns using CASE expressions.
 	mb.projectUpsertColumns()
 
