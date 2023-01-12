@@ -224,6 +224,7 @@ func (sq *splitQueue) processAttempt(
 		batchHandledQPS := loadStats.QueriesPerSecond
 		raftAppliedQPS := loadStats.WriteKeysPerSecond
 		splitQPS := r.loadBasedSplitter.LastQPS(ctx, now)
+
 		reason := fmt.Sprintf(
 			"load at key %s (%.2f splitQPS, %.2f batches/sec, %.2f raft mutations/sec)",
 			splitByLoadKey,

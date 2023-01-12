@@ -1124,16 +1124,6 @@ func (r *Replica) GetMaxSplitQPS(ctx context.Context) (float64, bool) {
 	return r.loadBasedSplitter.MaxQPS(ctx, r.Clock().PhysicalTime())
 }
 
-// GetLastSplitQPS returns the Replica's most recent queries/s request rate.
-//
-// NOTE: This should only be used for load based splitting, only
-// works when the load based splitting cluster setting is enabled.
-//
-// Use QueriesPerSecond() for current QPS stats for all other purposes.
-func (r *Replica) GetLastSplitQPS(ctx context.Context) float64 {
-	return r.loadBasedSplitter.LastQPS(ctx, r.Clock().PhysicalTime())
-}
-
 // ContainsKey returns whether this range contains the specified key.
 //
 // TODO(bdarnell): This is not the same as RangeDescriptor.ContainsKey.

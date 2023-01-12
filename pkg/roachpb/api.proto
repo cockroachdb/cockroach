@@ -2083,13 +2083,6 @@ message RangeStatsResponse {
     (gogoproto.customname) = "MVCCStats"
   ];
 
-  // DeprecatedLastQueriesPerSecond is the most recent rate of request/s or QPS
-  // for the range. The field is deprecated in favor of MaxQueriesPerSecond.
-  //
-  // TODO(nvanbenschoten): remove this field in v22.1 when all nodes in the
-  // cluster are guaranteed to return MaxQueriesPerSecond.
-  double deprecated_last_queries_per_second = 3;
-
   // MaxQueriesPerSecond is the maximum rate of request/s or QPS that the range
   // has served over a configured measurement period. Set to -1 if the replica
   // serving the RangeStats request has not been the leaseholder long enough to
@@ -2098,19 +2091,11 @@ message RangeStatsResponse {
   // base important decisions off of.
   double max_queries_per_second = 5;
 
-  // MaxQueriesPerSecondSet indicates that the MaxQueriesPerSecond field is set
-  // by the server. Used to distinguish 0 qps set by a new server from the field
-  // not being set at all by an old server.
-  //
-  // TODO(nvanbenschoten): stop consulting this field on the receiver in v22.1
-  // when all nodes in the cluster are guaranteed to return MaxQueriesPerSecond.
-  //
-  // TODO(nvanbenschoten): stop setting this field and remove it in v22.2 when
-  // no nodes in the cluster consult this field.
-  bool max_queries_per_second_set = 6;
-
   // range_info contains descriptor and lease information.
   RangeInfo range_info = 4 [(gogoproto.nullable) = false];
+
+  reserved 3;
+  reserved 6;
 }
 
 // MigrateRequest is used instruct all ranges overlapping with it to exercise
