@@ -59,6 +59,11 @@ type Coster interface {
 	// real-world metric, but does expect costs to be comparable to one another,
 	// as well as summable.
 	ComputeCost(candidate memo.RelExpr, required *physical.Required) memo.Cost
+
+	// MaybeGetBestCostRelation returns the best-cost relation for the given memo
+	// group if the group has been fully optimized for the `required` physical
+	// properties.
+	MaybeGetBestCostRelation(grp memo.RelExpr, required *physical.Required) (best memo.RelExpr, ok bool)
 }
 
 // coster encapsulates the default cost model for the optimizer. The coster
@@ -88,17 +93,22 @@ type coster struct {
 
 	// rng is used for deterministic perturbation.
 	rng *rand.Rand
+
+	o *Optimizer
 }
 
 var _ Coster = &coster{}
 
 // MakeDefaultCoster creates an instance of the default coster.
-func MakeDefaultCoster(ctx context.Context, evalCtx *eval.Context, mem *memo.Memo) Coster {
+func MakeDefaultCoster(
+	ctx context.Context, evalCtx *eval.Context, mem *memo.Memo, o *Optimizer,
+) Coster {
 	return &coster{
 		ctx:      ctx,
 		evalCtx:  evalCtx,
 		mem:      mem,
 		locality: evalCtx.Locality,
+		o:        o,
 	}
 }
 
@@ -163,9 +173,35 @@ const (
 	// stale.
 	largeMaxCardinalityScanCostPenalty = unboundedMaxCardinalityScanCostPenalty / 2
 
+	// SmallDistributeCost is the per-operation cost overhead for scans which may
+	// access remote regions, but the scanned table is unpartitioned with no lease
+	// preferences, so locality information is not available. The distribution
+	// cost is unknown, so a small overhead cost is added to give optimizations
+	// like locality-optimized search a chance to get picked.
+	SmallDistributeCost = randIOCostFactor
+
+	// DistributeCost is the per-operation cost overhead for Distribute operations
+	// or scans which access remote regions.
+	// TODO(msirek): Measure actual latencies between regions and produce a table
+	//               for determining the maximum latency between the most remote
+	//               region in a distribution and the gateway region.
+	DistributeCost = 200
+
 	// LargeDistributeCost is the cost to use for Distribute operations when a
 	// session mode is set to error out on access of rows from remote regions.
+	// hugeCost cannot be used for this because index hinting used hugeCost to
+	// "force" use of an index. If a LargeDistributeCost of hugeCost were added to
+	// a plan with the forced index, it may cause a plan with different index to
+	// get selected, and error out.
 	LargeDistributeCost = hugeCost / 100
+
+	// LargeDistributeCostWithHomeRegion is the cost to use for Distribute
+	// operations when a session mode is set to error out on access of rows from
+	// remote regions, and the query plan has a home region.
+	// TODO(msirek): Is there a better way of preferring plans that have a home
+	//               region instead of relying on costing, which may not guarantee
+	//               the correct plan is found?
+	LargeDistributeCostWithHomeRegion = LargeDistributeCost / 2
 
 	// preferLookupJoinFactor is a scale factor for the cost of a lookup join when
 	// we have a hint for preferring a lookup join.
@@ -456,7 +492,12 @@ var fnCost = map[string]memo.Cost{
 
 // Init initializes a new coster structure with the given memo.
 func (c *coster) Init(
-	ctx context.Context, evalCtx *eval.Context, mem *memo.Memo, perturbation float64, rng *rand.Rand,
+	ctx context.Context,
+	evalCtx *eval.Context,
+	mem *memo.Memo,
+	perturbation float64,
+	rng *rand.Rand,
+	o *Optimizer,
 ) {
 	// This initialization pattern ensures that fields are not unwittingly
 	// reused. Field reuse must be explicit.
@@ -467,7 +508,15 @@ func (c *coster) Init(
 		locality:     evalCtx.Locality,
 		perturbation: perturbation,
 		rng:          rng,
+		o:            o,
 	}
+}
+
+// MaybeGetBestCostRelation is part of the xform.Coster interface.
+func (c *coster) MaybeGetBestCostRelation(
+	grp memo.RelExpr, required *physical.Required,
+) (best memo.RelExpr, ok bool) {
+	return c.o.MaybeGetBestCostRelation(grp, required)
 }
 
 // ComputeCost calculates the estimated cost of the top-level operator in a
@@ -527,7 +576,7 @@ func (c *coster) ComputeCost(candidate memo.RelExpr, required *physical.Required
 
 	case opt.UnionOp, opt.IntersectOp, opt.ExceptOp,
 		opt.UnionAllOp, opt.IntersectAllOp, opt.ExceptAllOp, opt.LocalityOptimizedSearchOp:
-		cost = c.computeSetCost(candidate)
+		cost = c.computeSetCost(candidate, required)
 
 	case opt.GroupByOp, opt.ScalarGroupByOp, opt.DistinctOnOp, opt.EnsureDistinctOnOp,
 		opt.UpsertDistinctOnOp, opt.EnsureUpsertDistinctOnOp:
@@ -677,13 +726,23 @@ func (c *coster) computeDistributeCost(
 		// If the distribution will be elided, the cost is zero.
 		return memo.Cost(0)
 	}
+	if target, source, ok := distribute.GetDistributions(); ok {
+		if distributionIsLocal(target, c.evalCtx) {
+			return c.distributionCost(source)
+		}
+	}
 	if c.evalCtx != nil && c.evalCtx.SessionData().EnforceHomeRegion && c.evalCtx.Planner.IsANSIDML() {
+		if distribute.HasHomeRegion() {
+			// Query plans with a home region are favored over those without one.
+			return LargeDistributeCostWithHomeRegion
+		}
 		return LargeDistributeCost
 	}
 
-	// TODO(rytaft): Compute a real cost here. Currently we just add a tiny cost
-	// as a placeholder.
-	return cpuCostFactor
+	// TODO(rytaft,msirek): Compute a real cost here. Currently this is a rough
+	//                      estimate of latency overhead, but actual measurements
+	//                      would be useful.
+	return DistributeCost
 }
 
 func (c *coster) computeScanCost(scan *memo.ScanExpr, required *physical.Required) memo.Cost {
@@ -774,15 +833,64 @@ func (c *coster) computeScanCost(scan *memo.ScanExpr, required *physical.Require
 
 	cost := baseCost + memo.Cost(rowCount)*(seqIOCostFactor+perRowCost)
 
-	// If this scan is locality optimized, divide the cost by 3 in order to make
-	// the total cost of the two scans in the locality optimized plan less than
-	// the cost of the single scan in the non-locality optimized plan.
-	// TODO(rytaft): This is hacky. We should really be making this determination
-	// based on the latency between regions.
-	if scan.LocalityOptimized {
-		cost /= 3
+	var regionsAccessed physical.Distribution
+	if scan.Distribution.Regions != nil {
+		regionsAccessed = scan.Distribution
+	} else {
+		tabMeta := scan.Memo().Metadata().TableMeta(scan.Table)
+		regionsAccessed.FromIndexScan(c.ctx, c.evalCtx, tabMeta, scan.Index, scan.Constraint)
 	}
+	if scan.LocalityOptimized {
+		return cost
+	}
+	extraCost := c.distributionCost(regionsAccessed)
+	cost += extraCost
 	return cost
+}
+
+func distributionIsLocal(regionsAccessed physical.Distribution, evalCtx *eval.Context) bool {
+	if len(regionsAccessed.Regions) == 1 {
+		var localDist physical.Distribution
+		localDist.FromLocality(evalCtx.Locality)
+		return localDist.Equals(regionsAccessed)
+	}
+	return false
+}
+
+// distributionCost returns the cost to perform a distribution from
+// `regionsAccessed` to the gateway region.
+func (c *coster) distributionCost(regionsAccessed physical.Distribution) (cost memo.Cost) {
+	if len(regionsAccessed.Regions) == 1 {
+		var localDist physical.Distribution
+		localDist.FromLocality(c.evalCtx.Locality)
+		if localDist.Equals(regionsAccessed) {
+			// Operations accessing only the local region don't have a remote latency cost.
+			return cost
+		}
+	}
+	// Operations that read rows outside of the gateway region incur a
+	// distribution cost.
+	// TODO(rytaft,msirek): Compute a real cost here. Currently this is a rough
+	//                      estimate of latency overhead, but actual measurements
+	//                      would be useful.
+	extraCost := memo.Cost(DistributeCost)
+	if regionsAccessed.Any() {
+		// Non-multiregion tables may have no regions populated in regionsAccessed.
+		// To avoid potential plan regressions involving non-multiregion tables,
+		// don't add the somewhat large `DistributeCost` when
+		// `regionsAccessed.Any()` is true because query planning can't be done in
+		// that case to try and avoid the distribution anyway.
+		extraCost = memo.Cost(SmallDistributeCost)
+	} else if !regionsAccessed.Any() && c.evalCtx != nil &&
+		c.evalCtx.SessionData().EnforceHomeRegion && c.evalCtx.Planner.IsANSIDML() {
+		if len(regionsAccessed.Regions) == 1 {
+			// Query plans with a home region are favored over those without one.
+			extraCost = LargeDistributeCostWithHomeRegion
+		} else {
+			extraCost = LargeDistributeCost
+		}
+	}
+	return extraCost
 }
 
 func (c *coster) computeSelectCost(sel *memo.SelectExpr, required *physical.Required) memo.Cost {
@@ -925,6 +1033,75 @@ func (c *coster) computeIndexJoinCost(
 	)
 }
 
+// getCRBDRegionColFromInput examines the input to a lookup join. If it is a
+// Scan or LocalityOptimizedSearch from a REGIONAL BY ROW table, the column id
+// of the crdb_region column and Distribution of the operation are returned.
+// Otherwise, 0 and an empty Distribution are returned.
+func (c *coster) getCRBDRegionColFromInput(
+	join *memo.LookupJoinExpr, required *physical.Required,
+) (crdbRegionColID opt.ColumnID, inputDistribution physical.Distribution) {
+	var needRemap bool
+	var setOpCols opt.ColSet
+	if bestCostInputRel, ok := c.MaybeGetBestCostRelation(join.Input, required); ok {
+		maybeScan := bestCostInputRel
+		var projectExpr *memo.ProjectExpr
+		if projectExpr, ok = maybeScan.(*memo.ProjectExpr); ok {
+			maybeScan, ok = c.MaybeGetBestCostRelation(projectExpr.Input, required)
+			if !ok {
+				return 0, physical.Distribution{}
+			}
+		}
+		if selectExpr, ok := maybeScan.(*memo.SelectExpr); ok {
+			maybeScan, ok = c.MaybeGetBestCostRelation(selectExpr.Input, required)
+			if !ok {
+				return 0, physical.Distribution{}
+			}
+		}
+		if indexJoinExpr, ok := maybeScan.(*memo.IndexJoinExpr); ok {
+			maybeScan, ok = c.MaybeGetBestCostRelation(indexJoinExpr.Input, required)
+			if !ok {
+				return 0, physical.Distribution{}
+			}
+		}
+		if localityOptimizedScan, ok := maybeScan.(*memo.LocalityOptimizedSearchExpr); ok {
+			maybeScan = localityOptimizedScan.Local
+			needRemap = true
+			setOpCols = localityOptimizedScan.Relational().OutputCols
+		}
+		scanExpr, ok := maybeScan.(*memo.ScanExpr)
+		if !ok {
+			return 0, physical.Distribution{}
+		}
+		tab := maybeScan.Memo().Metadata().Table(scanExpr.Table)
+		if !tab.IsRegionalByRow() {
+			return 0, physical.Distribution{}
+		}
+		inputDistribution =
+			distribution.BuildProvided(c.ctx, c.evalCtx, scanExpr, &required.Distribution)
+		index := tab.Index(scanExpr.Index)
+		crdbRegionColID = scanExpr.Table.IndexColumnID(index, 0)
+		if needRemap {
+			scanCols := scanExpr.Relational().OutputCols
+			if scanCols.Len() == setOpCols.Len() {
+				destCol, _ := setOpCols.Next(0)
+				for srcCol, ok := scanCols.Next(0); ok; srcCol, ok = scanCols.Next(srcCol + 1) {
+					if srcCol == crdbRegionColID {
+						crdbRegionColID = destCol
+						break
+					}
+					destCol, _ = setOpCols.Next(destCol + 1)
+				}
+			}
+		}
+		if projectExpr != nil {
+			if !projectExpr.Passthrough.Contains(crdbRegionColID) {
+				return 0, physical.Distribution{}
+			}
+		}
+	}
+	return crdbRegionColID, inputDistribution
+}
+
 func (c *coster) computeLookupJoinCost(
 	join *memo.LookupJoinExpr, required *physical.Required,
 ) memo.Cost {
@@ -942,17 +1119,10 @@ func (c *coster) computeLookupJoinCost(
 		join.Flags,
 		join.LocalityOptimized,
 	)
-	if c.evalCtx != nil && c.evalCtx.SessionData().EnforceHomeRegion && c.evalCtx.Planner.IsANSIDML() {
-		provided := distribution.BuildLookupJoinLookupTableDistribution(c.ctx, c.evalCtx, join)
-		if provided.Any() || len(provided.Regions) != 1 {
-			cost += LargeDistributeCost
-		}
-		var localDist physical.Distribution
-		localDist.FromLocality(c.evalCtx.Locality)
-		if !localDist.Equals(provided) {
-			cost += LargeDistributeCost
-		}
-	}
+	crdbRegionColID, inputDistribution := c.getCRBDRegionColFromInput(join, required)
+	provided := distribution.BuildLookupJoinLookupTableDistribution(c.ctx, c.evalCtx, join, crdbRegionColID, inputDistribution)
+	extraCost := c.distributionCost(provided)
+	cost += extraCost
 	return cost
 }
 
@@ -1108,17 +1278,9 @@ func (c *coster) computeInvertedJoinCost(
 
 	cost += memo.Cost(rowsProcessed) * perRowCost
 
-	if c.evalCtx != nil && c.evalCtx.SessionData().EnforceHomeRegion && c.evalCtx.Planner.IsANSIDML() {
-		provided := distribution.BuildInvertedJoinLookupTableDistribution(c.ctx, c.evalCtx, join)
-		if provided.Any() || len(provided.Regions) != 1 {
-			cost += LargeDistributeCost
-		}
-		var localDist physical.Distribution
-		localDist.FromLocality(c.evalCtx.Locality)
-		if !localDist.Equals(provided) {
-			cost += LargeDistributeCost
-		}
-	}
+	provided := distribution.BuildInvertedJoinLookupTableDistribution(c.ctx, c.evalCtx, join)
+	extraCost := c.distributionCost(provided)
+	cost += extraCost
 	return cost
 }
 
@@ -1228,9 +1390,12 @@ func isStreamingSetOperator(relation memo.RelExpr) bool {
 	return false
 }
 
-func (c *coster) computeSetCost(set memo.RelExpr) memo.Cost {
+func (c *coster) computeSetCost(set memo.RelExpr, required *physical.Required) memo.Cost {
 	// Add the CPU cost of emitting the rows.
 	outputRowCount := set.Relational().Statistics().RowCount
+	if outputRowCount != 0 && required.LimitHint != 0 && outputRowCount > required.LimitHint {
+		outputRowCount = required.LimitHint
+	}
 	cost := memo.Cost(outputRowCount) * cpuCostFactor
 
 	// A set operation must process every row from both tables once. UnionAll and

@@ -38,7 +38,7 @@ memo (not optimized, ~3KB, required=[], cycle=[G1->G1])
  ├── G2: (scan ab,cols=(1,2)) (scan ab@ab_b_idx,cols=(1,2))
  │    └── []
  │         ├── best: (scan ab,cols=(1,2))
- │         └── cost: 1064.42
+ │         └── cost: 1068.42
  ├── G3: (filters G4)
  ├── G4: (eq G5 G6)
  ├── G5: (variable b)
@@ -67,7 +67,7 @@ memo (not optimized, ~15KB, required=[], cycle=[G1->G3->G5->G5])
  ├── G2: (scan ab,cols=()) (scan ab@ab_b_idx,cols=())
  │    └── []
  │         ├── best: (scan ab,cols=())
- │         └── cost: 1044.22
+ │         └── cost: 1048.22
  ├── G3: (left-join G5 G6 G4)
  ├── G4: (filters)
  ├── G5: (memo-cycle-test-rel G7 G8) (memo-cycle-test-rel G5 G8)
@@ -75,7 +75,7 @@ memo (not optimized, ~15KB, required=[], cycle=[G1->G3->G5->G5])
  ├── G7: (scan uv,cols=(5,6)) (scan uv@uv_v_idx,cols=(5,6))
  │    └── []
  │         ├── best: (scan uv,cols=(5,6))
- │         └── cost: 1064.42
+ │         └── cost: 1068.42
  ├── G8: (filters G9)
  ├── G9: (eq G10 G11)
  ├── G10: (variable v)
@@ -95,10 +95,10 @@ memo (not optimized, ~4KB, required=[], cycle=[G1->G4->G6->G9->G1])
  ├── G2: (scan uv,cols=(1,2)) (scan uv@uv_v_idx,cols=(1,2))
  │    ├── [limit hint: 1000.00]
  │    │    ├── best: (scan uv,cols=(1,2))
- │    │    └── cost: 1054.02
+ │    │    └── cost: 1058.02
  │    └── []
  │         ├── best: (scan uv,cols=(1,2))
- │         └── cost: 1064.42
+ │         └── cost: 1068.42
  ├── G3: (filters G5)
  ├── G4: (filters G6)
  ├── G5: (eq G7 G8)

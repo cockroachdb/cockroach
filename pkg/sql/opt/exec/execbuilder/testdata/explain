@@ -1303,7 +1303,7 @@ EXPLAIN (OPT,VERBOSE) SELECT * FROM tc WHERE a = 10 ORDER BY b
 distribute
  ├── columns: a:1 b:2
  ├── stats: [rows=10, distinct(1)=1, null(1)=0]
- ├── cost: 86.8543864
+ ├── cost: 290.844386
  ├── fd: ()-->(1)
  ├── ordering: +2 opt(1) [actual: +2]
  ├── distribution: test
@@ -1312,21 +1312,21 @@ distribute
  └── sort
       ├── columns: a:1 b:2
       ├── stats: [rows=10, distinct(1)=1, null(1)=0]
-      ├── cost: 86.8243864
+      ├── cost: 90.8243864
       ├── fd: ()-->(1)
       ├── ordering: +2 opt(1) [actual: +2]
       ├── prune: (2)
       └── index-join tc
            ├── columns: a:1 b:2
            ├── stats: [rows=10, distinct(1)=1, null(1)=0]
-           ├── cost: 85.7400007
+           ├── cost: 89.7400007
            ├── fd: ()-->(1)
            ├── prune: (2)
            └── scan tc@c
                 ├── columns: a:1 rowid:3
                 ├── constraint: /1/3: [/10 - /10]
                 ├── stats: [rows=10, distinct(1)=1, null(1)=0]
-                ├── cost: 24.8200001
+                ├── cost: 28.8200001
                 ├── key: (3)
                 └── fd: ()-->(1)
 
@@ -1336,7 +1336,7 @@ EXPLAIN (OPT,TYPES) SELECT * FROM tc WHERE a = 10 ORDER BY b
 distribute
  ├── columns: a:1(int!null) b:2(int)
  ├── stats: [rows=10, distinct(1)=1, null(1)=0]
- ├── cost: 86.8543864
+ ├── cost: 290.844386
  ├── fd: ()-->(1)
  ├── ordering: +2 opt(1) [actual: +2]
  ├── distribution: test
@@ -1345,21 +1345,21 @@ distribute
  └── sort
       ├── columns: a:1(int!null) b:2(int)
       ├── stats: [rows=10, distinct(1)=1, null(1)=0]
-      ├── cost: 86.8243864
+      ├── cost: 90.8243864
       ├── fd: ()-->(1)
       ├── ordering: +2 opt(1) [actual: +2]
       ├── prune: (2)
       └── index-join tc
            ├── columns: a:1(int!null) b:2(int)
            ├── stats: [rows=10, distinct(1)=1, null(1)=0]
-           ├── cost: 85.7400007
+           ├── cost: 89.7400007
            ├── fd: ()-->(1)
            ├── prune: (2)
            └── scan tc@c
                 ├── columns: a:1(int!null) rowid:3(int!null)
                 ├── constraint: /1/3: [/10 - /10]
                 ├── stats: [rows=10, distinct(1)=1, null(1)=0]
-                ├── cost: 24.8200001
+                ├── cost: 28.8200001
                 ├── key: (3)
                 └── fd: ()-->(1)
 
@@ -1408,14 +1408,14 @@ inner-join (hash)
  ├── columns: a:1 b:2 k:6 v:7
  ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
  ├── stats: [rows=990, distinct(1)=99, null(1)=0, distinct(6)=99, null(6)=0]
- ├── cost: 2269.90625
+ ├── cost: 2277.90625
  ├── fd: (6)-->(7), (1)==(6), (6)==(1)
  ├── distribution: test
  ├── prune: (2,7)
  ├── scan tc
  │    ├── columns: a:1 b:2
  │    ├── stats: [rows=1000, distinct(1)=100, null(1)=10]
- │    ├── cost: 1125.02
+ │    ├── cost: 1129.02
  │    ├── distribution: test
  │    ├── prune: (1,2)
  │    ├── interesting orderings: (+1)
@@ -1423,7 +1423,7 @@ inner-join (hash)
  ├── scan t
  │    ├── columns: k:6 v:7
  │    ├── stats: [rows=1000, distinct(6)=1000, null(6)=0]
- │    ├── cost: 1104.82
+ │    ├── cost: 1108.82
  │    ├── key: (6)
  │    ├── fd: (6)-->(7)
  │    ├── distribution: test
@@ -1453,7 +1453,7 @@ distribute
  ├── columns: a:1 b:2  [hidden: column6:6]
  ├── immutable
  ├── stats: [rows=333.3333]
- ├── cost: 1214.33951
+ ├── cost: 1418.32951
  ├── fd: (1,2)-->(6)
  ├── ordering: +6
  ├── distribution: test
@@ -1464,7 +1464,7 @@ distribute
       ├── columns: a:1 b:2 column6:6
       ├── immutable
       ├── stats: [rows=333.3333]
-      ├── cost: 1214.30951
+      ├── cost: 1218.30951
       ├── fd: (1,2)-->(6)
       ├── ordering: +6
       ├── prune: (1,2,6)
@@ -1473,7 +1473,7 @@ distribute
            ├── columns: column6:6 a:1 b:2
            ├── immutable
            ├── stats: [rows=333.3333]
-           ├── cost: 1141.73667
+           ├── cost: 1145.73667
            ├── fd: (1,2)-->(6)
            ├── prune: (1,2,6)
            ├── interesting orderings: (+1)
@@ -1481,12 +1481,12 @@ distribute
            │    ├── columns: a:1 b:2
            │    ├── immutable
            │    ├── stats: [rows=333.3333]
-           │    ├── cost: 1135.05
+           │    ├── cost: 1139.05
            │    ├── interesting orderings: (+1)
            │    ├── scan tc
            │    │    ├── columns: a:1 b:2
            │    │    ├── stats: [rows=1000]
-           │    │    ├── cost: 1125.02
+           │    │    ├── cost: 1129.02
            │    │    ├── prune: (1,2)
            │    │    └── interesting orderings: (+1)
            │    └── filters
@@ -1501,7 +1501,7 @@ distribute
  ├── columns: a:1(int) b:2(int)  [hidden: column6:6(int)]
  ├── immutable
  ├── stats: [rows=333.3333]
- ├── cost: 1214.33951
+ ├── cost: 1418.32951
  ├── fd: (1,2)-->(6)
  ├── ordering: +6
  ├── distribution: test
@@ -1512,7 +1512,7 @@ distribute
       ├── columns: a:1(int) b:2(int) column6:6(int)
       ├── immutable
       ├── stats: [rows=333.3333]
-      ├── cost: 1214.30951
+      ├── cost: 1218.30951
       ├── fd: (1,2)-->(6)
       ├── ordering: +6
       ├── prune: (1,2,6)
@@ -1521,7 +1521,7 @@ distribute
            ├── columns: column6:6(int) a:1(int) b:2(int)
            ├── immutable
            ├── stats: [rows=333.3333]
-           ├── cost: 1141.73667
+           ├── cost: 1145.73667
            ├── fd: (1,2)-->(6)
            ├── prune: (1,2,6)
            ├── interesting orderings: (+1)
@@ -1529,12 +1529,12 @@ distribute
            │    ├── columns: a:1(int) b:2(int)
            │    ├── immutable
            │    ├── stats: [rows=333.3333]
-           │    ├── cost: 1135.05
+           │    ├── cost: 1139.05
            │    ├── interesting orderings: (+1)
            │    ├── scan tc
            │    │    ├── columns: a:1(int) b:2(int)
            │    │    ├── stats: [rows=1000]
-           │    │    ├── cost: 1125.02
+           │    │    ├── cost: 1129.02
            │    │    ├── prune: (1,2)
            │    │    └── interesting orderings: (+1)
            │    └── filters
@@ -1844,53 +1844,53 @@ regions: <hidden>
 query T
 EXPLAIN (OPT, MEMO) SELECT * FROM tc JOIN t ON k=a
 ----
-memo (optimized, ~11KB, required=[presentation: info:10] [distribution: test])
+memo (optimized, ~12KB, required=[presentation: info:10] [distribution: test])
  ├── G1: (explain G2 [presentation: a:1,b:2,k:6,v:7] [distribution: test])
  │    └── [presentation: info:10] [distribution: test]
  │         ├── best: (explain G2="[presentation: a:1,b:2,k:6,v:7] [distribution: test]" [presentation: a:1,b:2,k:6,v:7] [distribution: test])
- │         └── cost: 2269.93
+ │         └── cost: 2277.93
  ├── G2: (inner-join G3 G4 G5) (inner-join G4 G3 G5) (merge-join G3 G4 G6 inner-join,+1,+6) (lookup-join G3 G6 t,keyCols=[1],outCols=(1,2,6,7)) (merge-join G4 G3 G6 inner-join,+6,+1) (lookup-join G7 G6 tc,keyCols=[3],outCols=(1,2,6,7))
  │    ├── [presentation: a:1,b:2,k:6,v:7] [distribution: test]
  │    │    ├── best: (inner-join G3="[distribution: test]" G4="[distribution: test]" G5)
- │    │    └── cost: 2269.91
+ │    │    └── cost: 2277.91
  │    └── []
  │         ├── best: (inner-join G3 G4 G5)
- │         └── cost: 2269.91
+ │         └── cost: 2277.91
  ├── G3: (scan tc,cols=(1,2))
  │    ├── [distribution: test]
  │    │    ├── best: (scan tc,cols=(1,2))
- │    │    └── cost: 1125.02
+ │    │    └── cost: 1129.02
  │    ├── [ordering: +1]
  │    │    ├── best: (sort G3)
- │    │    └── cost: 1364.50
+ │    │    └── cost: 1368.50
  │    ├── [ordering: +1] [distribution: test]
  │    │    ├── best: (distribute G3="[ordering: +1]")
- │    │    └── cost: 1364.53
+ │    │    └── cost: 1568.52
  │    └── []
  │         ├── best: (scan tc,cols=(1,2))
- │         └── cost: 1125.02
+ │         └── cost: 1129.02
  ├── G4: (scan t,cols=(6,7))
  │    ├── [distribution: test]
  │    │    ├── best: (scan t,cols=(6,7))
- │    │    └── cost: 1104.82
+ │    │    └── cost: 1108.82
  │    ├── [ordering: +6]
  │    │    ├── best: (scan t,cols=(6,7))
- │    │    └── cost: 1104.82
+ │    │    └── cost: 1108.82
  │    ├── [ordering: +6] [distribution: test]
  │    │    ├── best: (scan t,cols=(6,7))
- │    │    └── cost: 1104.82
+ │    │    └── cost: 1108.82
  │    └── []
  │         ├── best: (scan t,cols=(6,7))
- │         └── cost: 1104.82
+ │         └── cost: 1108.82
  ├── G5: (filters G8)
  ├── G6: (filters)
  ├── G7: (lookup-join G4 G6 tc@c,keyCols=[6],outCols=(1,3,6,7))
  │    ├── [distribution: test]
  │    │    ├── best: (lookup-join G4="[distribution: test]" G6 tc@c,keyCols=[6],outCols=(1,3,6,7))
- │    │    └── cost: 23173.94
+ │    │    └── cost: 23181.94
  │    └── []
  │         ├── best: (lookup-join G4 G6 tc@c,keyCols=[6],outCols=(1,3,6,7))
- │         └── cost: 23173.94
+ │         └── cost: 23181.94
  ├── G8: (eq G9 G10)
  ├── G9: (variable k)
  └── G10: (variable a)
@@ -1921,53 +1921,53 @@ TABLE t
  ├── tableoid oid [hidden] [system]
  └── PRIMARY INDEX t_pkey
       └── k int not null
-memo (optimized, ~11KB, required=[presentation: info:10] [distribution: test])
+memo (optimized, ~12KB, required=[presentation: info:10] [distribution: test])
  ├── G1: (explain G2 [presentation: a:1,b:2,k:6,v:7] [distribution: test])
  │    └── [presentation: info:10] [distribution: test]
  │         ├── best: (explain G2="[presentation: a:1,b:2,k:6,v:7] [distribution: test]" [presentation: a:1,b:2,k:6,v:7] [distribution: test])
- │         └── cost: 2269.93
+ │         └── cost: 2277.93
  ├── G2: (inner-join G3 G4 G5) (inner-join G4 G3 G5) (merge-join G3 G4 G6 inner-join,+1,+6) (lookup-join G3 G6 t,keyCols=[1],outCols=(1,2,6,7)) (merge-join G4 G3 G6 inner-join,+6,+1) (lookup-join G7 G6 tc,keyCols=[3],outCols=(1,2,6,7))
  │    ├── [presentation: a:1,b:2,k:6,v:7] [distribution: test]
  │    │    ├── best: (inner-join G3="[distribution: test]" G4="[distribution: test]" G5)
- │    │    └── cost: 2269.91
+ │    │    └── cost: 2277.91
  │    └── []
  │         ├── best: (inner-join G3 G4 G5)
- │         └── cost: 2269.91
+ │         └── cost: 2277.91
  ├── G3: (scan tc,cols=(1,2))
  │    ├── [distribution: test]
  │    │    ├── best: (scan tc,cols=(1,2))
- │    │    └── cost: 1125.02
+ │    │    └── cost: 1129.02
  │    ├── [ordering: +1]
  │    │    ├── best: (sort G3)
- │    │    └── cost: 1364.50
+ │    │    └── cost: 1368.50
  │    ├── [ordering: +1] [distribution: test]
  │    │    ├── best: (distribute G3="[ordering: +1]")
- │    │    └── cost: 1364.53
+ │    │    └── cost: 1568.52
  │    └── []
  │         ├── best: (scan tc,cols=(1,2))
- │         └── cost: 1125.02
+ │         └── cost: 1129.02
  ├── G4: (scan t,cols=(6,7))
  │    ├── [distribution: test]
  │    │    ├── best: (scan t,cols=(6,7))
- │    │    └── cost: 1104.82
+ │    │    └── cost: 1108.82
  │    ├── [ordering: +6]
  │    │    ├── best: (scan t,cols=(6,7))
- │    │    └── cost: 1104.82
+ │    │    └── cost: 1108.82
  │    ├── [ordering: +6] [distribution: test]
  │    │    ├── best: (scan t,cols=(6,7))
- │    │    └── cost: 1104.82
+ │    │    └── cost: 1108.82
  │    └── []
  │         ├── best: (scan t,cols=(6,7))
- │         └── cost: 1104.82
+ │         └── cost: 1108.82
  ├── G5: (filters G8)
  ├── G6: (filters)
  ├── G7: (lookup-join G4 G6 tc@c,keyCols=[6],outCols=(1,3,6,7))
  │    ├── [distribution: test]
  │    │    ├── best: (lookup-join G4="[distribution: test]" G6 tc@c,keyCols=[6],outCols=(1,3,6,7))
- │    │    └── cost: 23173.94
+ │    │    └── cost: 23181.94
  │    └── []
  │         ├── best: (lookup-join G4 G6 tc@c,keyCols=[6],outCols=(1,3,6,7))
- │         └── cost: 23173.94
+ │         └── cost: 23181.94
  ├── G8: (eq G9 G10)
  ├── G9: (variable k)
  └── G10: (variable a)
@@ -1975,14 +1975,14 @@ inner-join (hash)
  ├── columns: a:1 b:2 k:6 v:7
  ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
  ├── stats: [rows=990, distinct(1)=99, null(1)=0, distinct(6)=99, null(6)=0]
- ├── cost: 2269.90625
+ ├── cost: 2277.90625
  ├── fd: (6)-->(7), (1)==(6), (6)==(1)
  ├── distribution: test
  ├── prune: (2,7)
  ├── scan tc
  │    ├── columns: a:1 b:2
  │    ├── stats: [rows=1000, distinct(1)=100, null(1)=10]
- │    ├── cost: 1125.02
+ │    ├── cost: 1129.02
  │    ├── distribution: test
  │    ├── prune: (1,2)
  │    ├── interesting orderings: (+1)
@@ -1990,7 +1990,7 @@ inner-join (hash)
  ├── scan t
  │    ├── columns: k:6 v:7
  │    ├── stats: [rows=1000, distinct(6)=1000, null(6)=0]
- │    ├── cost: 1104.82
+ │    ├── cost: 1108.82
  │    ├── key: (6)
  │    ├── fd: (6)-->(7)
  │    ├── distribution: test

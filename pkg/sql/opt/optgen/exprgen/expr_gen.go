@@ -112,7 +112,7 @@ func buildAndOptimize(
 			mem: factory.Memo(),
 			cat: catalog,
 		},
-		coster: xform.MakeDefaultCoster(ctx, factory.EvalContext(), factory.Memo()),
+		coster: xform.MakeDefaultCoster(ctx, factory.EvalContext(), factory.Memo(), optimizer),
 	}
 
 	// To create a valid optgen "file", we create a rule with a bogus match.
