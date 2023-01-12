@@ -2294,3 +2294,21 @@ ORDER BY a;
 ----
 {09:20:35.19023}
 {09:20:35.19023,03:23:06.042923}
+
+# Regression tests for not checking whether the left argument of a comparison
+# operator with a sub-operator for being non-NULL (#95158).
+statement ok
+CREATE TABLE t95158 (c STRING);
+INSERT INTO t95158 VALUES (NULL);
+
+query I
+SELECT * FROM t95158 WHERE c !~ ALL (ARRAY['x']::STRING[])
+----
+
+query I
+SELECT * FROM t95158 WHERE c !~ ANY (ARRAY['x']::STRING[])
+----
+
+query I
+SELECT * FROM t95158 WHERE c !~ SOME (ARRAY['x']::STRING[])
+----

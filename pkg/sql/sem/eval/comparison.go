@@ -19,7 +19,7 @@ import (
 )
 
 // ComparisonExprWithSubOperator evaluates a comparison expression that has
-// sub-operator.
+// sub-operator (which are ANY, SOME, and ALL).
 func ComparisonExprWithSubOperator(
 	ctx *Context, expr *tree.ComparisonExpr, left, right tree.Datum,
 ) (tree.Datum, error) {
@@ -81,7 +81,7 @@ func evalDatumsCmp(
 	any := !all
 	sawNull := false
 	for _, elem := range right {
-		if elem == tree.DNull {
+		if left == tree.DNull || elem == tree.DNull {
 			sawNull = true
 			continue
 		}
