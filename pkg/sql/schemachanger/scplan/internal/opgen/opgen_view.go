@@ -59,13 +59,13 @@ func init() {
 						TypeIDs:                    this.UsesTypeIDs,
 					}
 				}),
-				emit(func(this *scpb.View) *scop.RemoveViewBackReferencesInRelations {
+				emit(func(this *scpb.View) *scop.RemoveBackReferencesInRelations {
 					if len(this.UsesRelationIDs) == 0 {
 						return nil
 					}
-					return &scop.RemoveViewBackReferencesInRelations{
-						BackReferencedViewID: this.ViewID,
-						RelationIDs:          this.UsesRelationIDs,
+					return &scop.RemoveBackReferencesInRelations{
+						BackReferencedID: this.ViewID,
+						RelationIDs:      this.UsesRelationIDs,
 					}
 				}),
 			),

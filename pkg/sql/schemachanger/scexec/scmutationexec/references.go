@@ -290,11 +290,11 @@ func updateBackReferencesInSequences(
 	return nil
 }
 
-func (m *visitor) RemoveViewBackReferencesInRelations(
-	ctx context.Context, op scop.RemoveViewBackReferencesInRelations,
+func (m *visitor) RemoveBackReferencesInRelations(
+	ctx context.Context, op scop.RemoveBackReferencesInRelations,
 ) error {
 	for _, relationID := range op.RelationIDs {
-		if err := removeViewBackReferencesInRelation(ctx, m, relationID, op.BackReferencedViewID); err != nil {
+		if err := removeViewBackReferencesInRelation(ctx, m, relationID, op.BackReferencedID); err != nil {
 			return err
 		}
 	}
@@ -302,7 +302,7 @@ func (m *visitor) RemoveViewBackReferencesInRelations(
 }
 
 func removeViewBackReferencesInRelation(
-	ctx context.Context, m *visitor, relationID, viewID descpb.ID,
+	ctx context.Context, m *visitor, relationID, backReferencedID descpb.ID,
 ) error {
 	tbl, err := m.checkOutTable(ctx, relationID)
 	if err != nil || tbl.Dropped() {
@@ -311,7 +311,7 @@ func removeViewBackReferencesInRelation(
 	}
 	var newBackRefs []descpb.TableDescriptor_Reference
 	for _, by := range tbl.DependedOnBy {
-		if by.ID != viewID {
+		if by.ID != backReferencedID {
 			newBackRefs = append(newBackRefs, by)
 		}
 	}
