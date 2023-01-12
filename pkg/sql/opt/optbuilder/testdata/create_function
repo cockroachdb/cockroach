@@ -108,9 +108,15 @@ create-function
       └── s
 
 build
-CREATE FUNCTION f() RETURNS INT LANGUAGE SQL AS $$ SELECT * FROM ab $$
+CREATE FUNCTION f() RETURNS ab LANGUAGE SQL AS $$ SELECT * FROM ab $$
 ----
-error (0A000): unimplemented: functions do not currently support * expressions
+create-function
+ ├── CREATE FUNCTION f()
+ │   	RETURNS ab
+ │   	LANGUAGE SQL
+ │   	AS $$SELECT ab.a, ab.b FROM t.public.ab;$$
+ └── dependencies
+      └── ab [columns: a b]
 
 build
 CREATE FUNCTION f() RETURNS INT LANGUAGE SQL BEGIN ATOMIC SELECT 1; END;

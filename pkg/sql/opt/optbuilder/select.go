@@ -51,7 +51,7 @@ func (b *Builder) buildDataSource(
 	}(inScope.atRoot)
 	inScope.atRoot = false
 	// NB: The case statements are sorted lexicographically.
-	switch source := texpr.(type) {
+	switch source := (texpr).(type) {
 	case *tree.AliasedTableExpr:
 		if source.IndexFlags != nil {
 			telemetry.Inc(sqltelemetry.IndexHintUseCounter)
@@ -110,7 +110,6 @@ func (b *Builder) buildDataSource(
 		}
 
 		ds, depName, resName := b.resolveDataSource(tn, privilege.SELECT)
-
 		locking = locking.filter(tn.ObjectName)
 		if locking.isSet() {
 			// SELECT ... FOR [KEY] UPDATE/SHARE also requires UPDATE privileges.
@@ -1052,7 +1051,7 @@ func (b *Builder) buildSelectClause(
 	// function that refers to variables in fromScope or an ancestor scope,
 	// buildAggregateFunction is called which adds columns to the appropriate
 	// aggInScope and aggOutScope.
-	b.analyzeProjectionList(sel.Exprs, desiredTypes, fromScope, projectionsScope)
+	b.analyzeProjectionList(&sel.Exprs, desiredTypes, fromScope, projectionsScope)
 
 	// Any aggregates in the HAVING, ORDER BY and DISTINCT ON clauses (if they
 	// exist) will be added here.
