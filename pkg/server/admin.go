@@ -4093,3 +4093,51 @@ func (s *adminServer) RecoveryVerify(
 ) (*serverpb.RecoveryVerifyResponse, error) {
 	return nil, errors.AssertionFailedf("To be implemented by #93043")
 }
+
+// ListTenants returns a list of active tenants in the cluster. Calling this
+// function will start in-process tenants if they are not already running.
+func (s *systemAdminServer) ListTenants(
+	ctx context.Context, _ *serverpb.ListTenantsRequest,
+) (*serverpb.ListTenantsResponse, error) {
+
+	ie := s.internalExecutor
+	rowIter, err := ie.QueryIterator(ctx, "list-tenants", nil, /* txn */
+		`SELECT name FROM system.tenants WHERE active = true`)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rowIter.Close() }()
+
+	var tenantNames []roachpb.TenantName
+
+	var hasNext bool
+	for hasNext, err = rowIter.Next(ctx); hasNext && err == nil; hasNext, err = rowIter.Next(ctx) {
+		row := rowIter.Cur()
+		tenantName, ok := tree.AsDString(row[0])
+		if !ok {
+			// If tenant name is NULL, we skip it because serverController will not support it.
+			continue
+		}
+		tenantNames = append(tenantNames, roachpb.TenantName(tenantName))
+	}
+
+	var tenantList []*serverpb.Tenant
+
+	for _, tenantName := range tenantNames {
+		server, err := s.server.serverController.getOrCreateServer(ctx, tenantName)
+		if err != nil {
+			return nil, err
+		}
+		tenantID := server.getTenantID()
+		tenantList = append(tenantList, &serverpb.Tenant{
+			TenantId:   &tenantID,
+			TenantName: string(tenantName),
+			SqlAddr:    server.getSQLAddr(),
+			RpcAddr:    server.getRPCAddr(),
+		})
+	}
+
+	return &serverpb.ListTenantsResponse{
+		Tenants: tenantList,
+	}, nil
+}
