@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/errors"
 )
 
 func init() {
@@ -44,12 +45,21 @@ func RangeStats(
 ) (result.Result, error) {
 	reply := resp.(*roachpb.RangeStatsResponse)
 	reply.MVCCStats = cArgs.EvalCtx.GetMVCCStats()
-	if qps, ok := cArgs.EvalCtx.GetMaxSplitQPS(ctx); ok {
-		reply.MaxQueriesPerSecond = qps
-	} else {
-		// See comment on MaxQueriesPerSecond. -1 means !ok.
-		reply.MaxQueriesPerSecond = -1
+
+	maxQPS, qpsOK := cArgs.EvalCtx.GetMaxSplitQPS(ctx)
+	maxCPU, cpuOK := cArgs.EvalCtx.GetMaxSplitCPU(ctx)
+	// See comment on MaxQueriesPerSecond and MaxCPUPerSecond. -1 means !ok.
+	reply.MaxCPUPerSecond, reply.MaxQueriesPerSecond = -1, -1
+	if qpsOK && cpuOK {
+		return result.Result{}, errors.AssertionFailedf("unexpected both QPS and CPU range statistics set")
 	}
+	if qpsOK {
+		reply.MaxQueriesPerSecond = maxQPS
+	}
+	if cpuOK {
+		reply.MaxCPUPerSecond = maxCPU
+	}
+
 	reply.MaxQueriesPerSecondSet = true
 	reply.RangeInfo = cArgs.EvalCtx.GetRangeInfo(ctx)
 	return result.Result{}, nil
