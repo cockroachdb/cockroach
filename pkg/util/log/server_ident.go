@@ -37,7 +37,7 @@ type ServerIdentificationKey int
 const (
 	// TenantIDLogTagKey is the log tag key used when tagging
 	// log entries with a tenant ID.
-	TenantIDLogTagKey = "T"
+	TenantIDLogTagKey = 'T'
 	// IdentifyClusterID retrieves the cluster ID of the server.
 	IdentifyClusterID ServerIdentificationKey = iota
 	// IdentifyKVNodeID retrieves the KV node ID of the server.
