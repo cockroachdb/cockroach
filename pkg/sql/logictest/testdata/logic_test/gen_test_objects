@@ -568,6 +568,14 @@ SELECT crdb_internal.generate_test_objects('{"names":"a.b.c","counts":[0,0,10000
 query error too many objects generated
 SELECT crdb_internal.generate_test_objects('{"names":"a.b.c","counts":[10000000,10000000,10000000]}'::jsonb)
 
+subtest invalid_count
+
+query error invalid count
+SELECT crdb_internal.generate_test_objects('foo', ARRAY[]::INT8[])
+
+query error invalid count
+SELECT crdb_internal.generate_test_objects('foo', ARRAY[1, 2, 3, 4, 5]::INT8[])
+
 subtest temp_schema
 
 # Force create the temp schema.

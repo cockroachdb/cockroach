@@ -314,7 +314,7 @@ func (g *testSchemaGenerator) prepareCounts(
 	const reasonableMaxCount = 10000000
 	for _, sz := range counts {
 		// We cap the individual count to a maximum number for two purposes.
-		// One is that abnormally large values are likely indicative of
+		// One is that abnormally large values are likely indicative
 		// of a user mistake; in which case we want an informative error message
 		// instead of something related to memory usage.
 		// The second is that we want to avoid an overflow in the computation
@@ -328,8 +328,8 @@ func (g *testSchemaGenerator) prepareCounts(
 	g.gencfg.createDatabases = false
 	g.gencfg.createSchemas = false
 	g.gencfg.useGeneratedPublicSchema = false
-	if len(counts) > 3 {
-		panic(genError{errors.WithHint(pgerror.Newf(pgcode.Syntax, "too many counts"),
+	if len(counts) < 1 || len(counts) > 3 {
+		panic(genError{errors.WithHint(pgerror.Newf(pgcode.Syntax, "invalid count"),
 			"Must specify between 1 and 3 counts.")})
 	}
 	numNewDatabases := 0
