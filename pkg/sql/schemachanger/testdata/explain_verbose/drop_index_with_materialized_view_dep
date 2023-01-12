@@ -730,8 +730,8 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
 │           ├── • MarkDescriptorAsDropped
 │           │     DescriptorID: 106
 │           │
-│           ├── • RemoveViewBackReferencesInRelations
-│           │     BackReferencedViewID: 106
+│           ├── • RemoveBackReferencesInRelations
+│           │     BackReferencedID: 106
 │           │     RelationIDs:
 │           │     - 105
 │           │

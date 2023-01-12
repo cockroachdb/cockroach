@@ -371,8 +371,8 @@ PreCommitPhase stage 2 of 2 with 43 MutationType ops
       DescriptorID: 110
     *scop.MarkDescriptorAsDropped
       DescriptorID: 111
-    *scop.RemoveViewBackReferencesInRelations
-      BackReferencedViewID: 111
+    *scop.RemoveBackReferencesInRelations
+      BackReferencedID: 111
       RelationIDs:
       - 109
     *scop.DrainDescriptorName
