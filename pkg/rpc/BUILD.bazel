@@ -88,6 +88,7 @@ go_test(
         "heartbeat_test.go",
         "helpers_test.go",
         "main_test.go",
+        "snappy_test.go",
         "tls_test.go",
     ],
     args = ["-test.timeout=55s"],
