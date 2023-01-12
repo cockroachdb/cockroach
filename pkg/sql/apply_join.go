@@ -332,7 +332,7 @@ func runPlanInsidePlan(
 	planCtx.stmtType = recv.stmtType
 
 	params.p.extendedEvalCtx.ExecCfg.DistSQLPlanner.PlanAndRun(
-		ctx, evalCtx, planCtx, params.p.Txn(), plan.main, recv,
+		ctx, evalCtx, planCtx, params.p.Txn(), plan.main, recv, nil, /* finishedSetupFn */
 	)
 	return resultWriter.Err()
 }
