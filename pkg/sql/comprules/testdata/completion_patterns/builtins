@@ -1,5 +1,5 @@
 filter
-builtins:
+functions:
 ----
 
 subtest at_ident
@@ -10,10 +10,10 @@ select xor
 ii'
   ^
 --
-builtins: completing for "xor" (7,10)
+functions: completing for "xor" (7,10)
 --sql:
-WITH p AS (SELECT DISTINCT proname FROM pg_catalog.pg_proc)
-SELECT $4:::STRING || proname || '(' AS completion,
+WITH p AS (SELECT DISTINCT proname, nspname FROM pg_catalog.pg_proc JOIN pg_catalog.pg_namespace n ON n.oid = pronamespace)
+SELECT $4:::STRING || IF(length($4) > 0, '.', '') || proname || '(' AS completion,
        'functions' AS category,
        substr(COALESCE((SELECT details
           FROM "".crdb_internal.builtin_functions f2
@@ -23,6 +23,7 @@ SELECT $4:::STRING || proname || '(' AS completion,
        $3:::INT AS end
   FROM p
  WHERE left(proname, length($1:::STRING)) = $1:::STRING
+ AND ((length($4) > 0 AND $4 = nspname) OR (length($4) = 0 AND nspname = ANY current_schemas(true)))
 --placeholders: []interface {}{"xor", 7, 10, ""}
 
 comp at=12
@@ -31,10 +32,10 @@ select xor
 ii_
   ^
 --
-builtins: completing for "" (12,12)
+functions: completing for "" (12,12)
 --sql:
-WITH p AS (SELECT DISTINCT proname FROM pg_catalog.pg_proc)
-SELECT $4:::STRING || proname || '(' AS completion,
+WITH p AS (SELECT DISTINCT proname, nspname FROM pg_catalog.pg_proc JOIN pg_catalog.pg_namespace n ON n.oid = pronamespace)
+SELECT $4:::STRING || IF(length($4) > 0, '.', '') || proname || '(' AS completion,
        'functions' AS category,
        substr(COALESCE((SELECT details
           FROM "".crdb_internal.builtin_functions f2
@@ -44,6 +45,7 @@ SELECT $4:::STRING || proname || '(' AS completion,
        $3:::INT AS end
   FROM p
  WHERE left(proname, length($1:::STRING)) = $1:::STRING
+ AND ((length($4) > 0 AND $4 = nspname) OR (length($4) = 0 AND nspname = ANY current_schemas(true)))
 --placeholders: []interface {}{"", 12, 12, ""}
 
 subtest end
@@ -56,7 +58,21 @@ select a.xor
 ii.i'
     ^
 --
-builtins: not completing
+functions: completing for "a.xor" (7,12)
+--sql:
+WITH p AS (SELECT DISTINCT proname, nspname FROM pg_catalog.pg_proc JOIN pg_catalog.pg_namespace n ON n.oid = pronamespace)
+SELECT $4:::STRING || IF(length($4) > 0, '.', '') || proname || '(' AS completion,
+       'functions' AS category,
+       substr(COALESCE((SELECT details
+          FROM "".crdb_internal.builtin_functions f2
+         WHERE f2.function = p.proname
+         LIMIT 1), ''), e'[^\n]{0,80}') AS description,
+       $2:::INT AS start,
+       $3:::INT AS end
+  FROM p
+ WHERE left(proname, length($1:::STRING)) = $1:::STRING
+ AND ((length($4) > 0 AND $4 = nspname) OR (length($4) = 0 AND nspname = ANY current_schemas(true)))
+--placeholders: []interface {}{"xor", 7, 12, "a"}
 
 comp at=10
 select a.
@@ -64,7 +80,21 @@ select a.
 ii._
    ^
 --
-builtins: not completing
+functions: completing for "a." (7,9)
+--sql:
+WITH p AS (SELECT DISTINCT proname, nspname FROM pg_catalog.pg_proc JOIN pg_catalog.pg_namespace n ON n.oid = pronamespace)
+SELECT $4:::STRING || IF(length($4) > 0, '.', '') || proname || '(' AS completion,
+       'functions' AS category,
+       substr(COALESCE((SELECT details
+          FROM "".crdb_internal.builtin_functions f2
+         WHERE f2.function = p.proname
+         LIMIT 1), ''), e'[^\n]{0,80}') AS description,
+       $2:::INT AS start,
+       $3:::INT AS end
+  FROM p
+ WHERE left(proname, length($1:::STRING)) = $1:::STRING
+ AND ((length($4) > 0 AND $4 = nspname) OR (length($4) = 0 AND nspname = ANY current_schemas(true)))
+--placeholders: []interface {}{"", 7, 9, "a"}
 
 subtest end
 
@@ -76,10 +106,10 @@ select crdb_internal.xor
 ii.i'
     ^
 --
-builtins: completing for "crdb_internal.xor" (7,24)
+functions: completing for "crdb_internal.xor" (7,24)
 --sql:
-WITH p AS (SELECT DISTINCT proname FROM pg_catalog.pg_proc)
-SELECT $4:::STRING || proname || '(' AS completion,
+WITH p AS (SELECT DISTINCT proname, nspname FROM pg_catalog.pg_proc JOIN pg_catalog.pg_namespace n ON n.oid = pronamespace)
+SELECT $4:::STRING || IF(length($4) > 0, '.', '') || proname || '(' AS completion,
        'functions' AS category,
        substr(COALESCE((SELECT details
           FROM "".crdb_internal.builtin_functions f2
@@ -89,7 +119,8 @@ SELECT $4:::STRING || proname || '(' AS completion,
        $3:::INT AS end
   FROM p
  WHERE left(proname, length($1:::STRING)) = $1:::STRING
---placeholders: []interface {}{"crdb_internal.xor", 7, 24, ""}
+ AND ((length($4) > 0 AND $4 = nspname) OR (length($4) = 0 AND nspname = ANY current_schemas(true)))
+--placeholders: []interface {}{"xor", 7, 24, "crdb_internal"}
 
 comp at=21
 select crdb_internal.
@@ -97,10 +128,10 @@ select crdb_internal.
 ii.'
    ^
 --
-builtins: completing for "crdb_internal." (7,21)
+functions: completing for "crdb_internal." (7,21)
 --sql:
-WITH p AS (SELECT DISTINCT proname FROM pg_catalog.pg_proc)
-SELECT $4:::STRING || proname || '(' AS completion,
+WITH p AS (SELECT DISTINCT proname, nspname FROM pg_catalog.pg_proc JOIN pg_catalog.pg_namespace n ON n.oid = pronamespace)
+SELECT $4:::STRING || IF(length($4) > 0, '.', '') || proname || '(' AS completion,
        'functions' AS category,
        substr(COALESCE((SELECT details
           FROM "".crdb_internal.builtin_functions f2
@@ -110,7 +141,8 @@ SELECT $4:::STRING || proname || '(' AS completion,
        $3:::INT AS end
   FROM p
  WHERE left(proname, length($1:::STRING)) = $1:::STRING
---placeholders: []interface {}{"crdb_internal.", 7, 21, ""}
+ AND ((length($4) > 0 AND $4 = nspname) OR (length($4) = 0 AND nspname = ANY current_schemas(true)))
+--placeholders: []interface {}{"", 7, 21, "crdb_internal"}
 
 
 comp at=20
@@ -119,10 +151,10 @@ select pg_catalog.xor
 ii.i'
     ^
 --
-builtins: completing for "xor" (7,21)
+functions: completing for "pg_catalog.xor" (7,21)
 --sql:
-WITH p AS (SELECT DISTINCT proname FROM pg_catalog.pg_proc)
-SELECT $4:::STRING || proname || '(' AS completion,
+WITH p AS (SELECT DISTINCT proname, nspname FROM pg_catalog.pg_proc JOIN pg_catalog.pg_namespace n ON n.oid = pronamespace)
+SELECT $4:::STRING || IF(length($4) > 0, '.', '') || proname || '(' AS completion,
        'functions' AS category,
        substr(COALESCE((SELECT details
           FROM "".crdb_internal.builtin_functions f2
@@ -132,7 +164,8 @@ SELECT $4:::STRING || proname || '(' AS completion,
        $3:::INT AS end
   FROM p
  WHERE left(proname, length($1:::STRING)) = $1:::STRING
---placeholders: []interface {}{"xor", 7, 21, "pg_catalog."}
+ AND ((length($4) > 0 AND $4 = nspname) OR (length($4) = 0 AND nspname = ANY current_schemas(true)))
+--placeholders: []interface {}{"xor", 7, 21, "pg_catalog"}
 
 comp at=18
 select pg_catalog.
@@ -140,10 +173,10 @@ select pg_catalog.
 ii.'
    ^
 --
-builtins: completing for "" (7,18)
+functions: completing for "pg_catalog." (7,18)
 --sql:
-WITH p AS (SELECT DISTINCT proname FROM pg_catalog.pg_proc)
-SELECT $4:::STRING || proname || '(' AS completion,
+WITH p AS (SELECT DISTINCT proname, nspname FROM pg_catalog.pg_proc JOIN pg_catalog.pg_namespace n ON n.oid = pronamespace)
+SELECT $4:::STRING || IF(length($4) > 0, '.', '') || proname || '(' AS completion,
        'functions' AS category,
        substr(COALESCE((SELECT details
           FROM "".crdb_internal.builtin_functions f2
@@ -153,7 +186,8 @@ SELECT $4:::STRING || proname || '(' AS completion,
        $3:::INT AS end
   FROM p
  WHERE left(proname, length($1:::STRING)) = $1:::STRING
---placeholders: []interface {}{"", 7, 18, "pg_catalog."}
+ AND ((length($4) > 0 AND $4 = nspname) OR (length($4) = 0 AND nspname = ANY current_schemas(true)))
+--placeholders: []interface {}{"", 7, 18, "pg_catalog"}
 
 
 comp at=27
@@ -162,10 +196,10 @@ select information_schema.xor
 ii.i'
     ^
 --
-builtins: completing for "information_schema.xor" (7,29)
+functions: completing for "information_schema.xor" (7,29)
 --sql:
-WITH p AS (SELECT DISTINCT proname FROM pg_catalog.pg_proc)
-SELECT $4:::STRING || proname || '(' AS completion,
+WITH p AS (SELECT DISTINCT proname, nspname FROM pg_catalog.pg_proc JOIN pg_catalog.pg_namespace n ON n.oid = pronamespace)
+SELECT $4:::STRING || IF(length($4) > 0, '.', '') || proname || '(' AS completion,
        'functions' AS category,
        substr(COALESCE((SELECT details
           FROM "".crdb_internal.builtin_functions f2
@@ -175,7 +209,8 @@ SELECT $4:::STRING || proname || '(' AS completion,
        $3:::INT AS end
   FROM p
  WHERE left(proname, length($1:::STRING)) = $1:::STRING
---placeholders: []interface {}{"information_schema.xor", 7, 29, ""}
+ AND ((length($4) > 0 AND $4 = nspname) OR (length($4) = 0 AND nspname = ANY current_schemas(true)))
+--placeholders: []interface {}{"xor", 7, 29, "information_schema"}
 
 comp at=26
 select information_schema.
@@ -183,10 +218,10 @@ select information_schema.
 ii.'
    ^
 --
-builtins: completing for "information_schema." (7,26)
+functions: completing for "information_schema." (7,26)
 --sql:
-WITH p AS (SELECT DISTINCT proname FROM pg_catalog.pg_proc)
-SELECT $4:::STRING || proname || '(' AS completion,
+WITH p AS (SELECT DISTINCT proname, nspname FROM pg_catalog.pg_proc JOIN pg_catalog.pg_namespace n ON n.oid = pronamespace)
+SELECT $4:::STRING || IF(length($4) > 0, '.', '') || proname || '(' AS completion,
        'functions' AS category,
        substr(COALESCE((SELECT details
           FROM "".crdb_internal.builtin_functions f2
@@ -196,7 +231,8 @@ SELECT $4:::STRING || proname || '(' AS completion,
        $3:::INT AS end
   FROM p
  WHERE left(proname, length($1:::STRING)) = $1:::STRING
---placeholders: []interface {}{"information_schema.", 7, 26, ""}
+ AND ((length($4) > 0 AND $4 = nspname) OR (length($4) = 0 AND nspname = ANY current_schemas(true)))
+--placeholders: []interface {}{"", 7, 26, "information_schema"}
 
 subtest end
 
@@ -208,10 +244,10 @@ select "pg_catalog".xor
 ii.i'
     ^
 --
-builtins: completing for "xor" (7,23)
+functions: completing for "pg_catalog.xor" (7,23)
 --sql:
-WITH p AS (SELECT DISTINCT proname FROM pg_catalog.pg_proc)
-SELECT $4:::STRING || proname || '(' AS completion,
+WITH p AS (SELECT DISTINCT proname, nspname FROM pg_catalog.pg_proc JOIN pg_catalog.pg_namespace n ON n.oid = pronamespace)
+SELECT $4:::STRING || IF(length($4) > 0, '.', '') || proname || '(' AS completion,
        'functions' AS category,
        substr(COALESCE((SELECT details
           FROM "".crdb_internal.builtin_functions f2
@@ -221,17 +257,31 @@ SELECT $4:::STRING || proname || '(' AS completion,
        $3:::INT AS end
   FROM p
  WHERE left(proname, length($1:::STRING)) = $1:::STRING
---placeholders: []interface {}{"xor", 7, 23, "pg_catalog."}
+ AND ((length($4) > 0 AND $4 = nspname) OR (length($4) = 0 AND nspname = ANY current_schemas(true)))
+--placeholders: []interface {}{"xor", 7, 23, "pg_catalog"}
 
 # Quoted uppercase is an entire schema entirely.
-# Not completing in that case.
 comp at=22
 select "PG_CATALOG".xor
 ----
 ii.i'
     ^
 --
-builtins: not completing
+functions: completing for "PG_CATALOG.xor" (7,23)
+--sql:
+WITH p AS (SELECT DISTINCT proname, nspname FROM pg_catalog.pg_proc JOIN pg_catalog.pg_namespace n ON n.oid = pronamespace)
+SELECT $4:::STRING || IF(length($4) > 0, '.', '') || proname || '(' AS completion,
+       'functions' AS category,
+       substr(COALESCE((SELECT details
+          FROM "".crdb_internal.builtin_functions f2
+         WHERE f2.function = p.proname
+         LIMIT 1), ''), e'[^\n]{0,80}') AS description,
+       $2:::INT AS start,
+       $3:::INT AS end
+  FROM p
+ WHERE left(proname, length($1:::STRING)) = $1:::STRING
+ AND ((length($4) > 0 AND $4 = nspname) OR (length($4) = 0 AND nspname = ANY current_schemas(true)))
+--placeholders: []interface {}{"xor", 7, 23, "PG_CATALOG"}
 
 
 subtest end
