@@ -47,7 +47,9 @@ import (
 
 func TestTenantStatusAPI(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
+	s := log.ScopeWithoutShowLogs(t)
+	defer s.Close(t)
+	defer s.SetupSingleFileLogging()()
 
 	// The liveness session might expire before the stress race can finish.
 	skip.UnderStressRace(t, "expensive tests")
@@ -156,6 +158,14 @@ func testTenantLogs(ctx context.Context, t *testing.T, helper serverccl.TenantTe
 	})
 	require.NoError(t, err)
 	require.NotEmpty(t, logsFileResp.Entries)
+	systemTenantIDStr := fmt.Sprintf("%d", roachpb.SystemTenantID.InternalValue)
+	for _, resp := range []*serverpb.LogEntriesResponse{logsResp, logsFileResp} {
+		for _, entry := range resp.Entries {
+			// Logs belonging to the system tenant ID should never show up in a response
+			// provided by an app tenant server. Verify this filtering.
+			require.NotEqual(t, entry.TenantID, systemTenantIDStr)
+		}
+	}
 }
 
 func TestTenantCannotSeeNonTenantStats(t *testing.T) {
