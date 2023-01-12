@@ -76,8 +76,8 @@ PreCommitPhase stage 2 of 2 with 9 MutationType ops
   ops:
     *scop.MarkDescriptorAsDropped
       DescriptorID: 105
-    *scop.RemoveViewBackReferencesInRelations
-      BackReferencedViewID: 105
+    *scop.RemoveBackReferencesInRelations
+      BackReferencedID: 105
       RelationIDs:
       - 104
     *scop.DrainDescriptorName
@@ -605,27 +605,27 @@ PreCommitPhase stage 2 of 2 with 45 MutationType ops
   ops:
     *scop.MarkDescriptorAsDropped
       DescriptorID: 105
-    *scop.RemoveViewBackReferencesInRelations
-      BackReferencedViewID: 105
+    *scop.RemoveBackReferencesInRelations
+      BackReferencedID: 105
       RelationIDs:
       - 104
     *scop.MarkDescriptorAsDropped
       DescriptorID: 106
-    *scop.RemoveViewBackReferencesInRelations
-      BackReferencedViewID: 106
+    *scop.RemoveBackReferencesInRelations
+      BackReferencedID: 106
       RelationIDs:
       - 105
     *scop.MarkDescriptorAsDropped
       DescriptorID: 107
-    *scop.RemoveViewBackReferencesInRelations
-      BackReferencedViewID: 107
+    *scop.RemoveBackReferencesInRelations
+      BackReferencedID: 107
       RelationIDs:
       - 105
       - 106
     *scop.MarkDescriptorAsDropped
       DescriptorID: 108
-    *scop.RemoveViewBackReferencesInRelations
-      BackReferencedViewID: 108
+    *scop.RemoveBackReferencesInRelations
+      BackReferencedID: 108
       RelationIDs:
       - 106
     *scop.MarkDescriptorAsDropped
@@ -635,8 +635,8 @@ PreCommitPhase stage 2 of 2 with 45 MutationType ops
       TypeIDs:
       - 109
       - 110
-    *scop.RemoveViewBackReferencesInRelations
-      BackReferencedViewID: 111
+    *scop.RemoveBackReferencesInRelations
+      BackReferencedID: 111
       RelationIDs:
       - 108
     *scop.DrainDescriptorName

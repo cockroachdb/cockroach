@@ -387,8 +387,8 @@ PostCommitNonRevertiblePhase stage 1 of 3 with 24 MutationType ops
       BackReferencedDescriptorID: 108
       TypeIDs:
       - 104
-    *scop.RemoveViewBackReferencesInRelations
-      BackReferencedViewID: 108
+    *scop.RemoveBackReferencesInRelations
+      BackReferencedID: 108
       RelationIDs:
       - 107
     *scop.RemoveDroppedColumnType
@@ -1376,8 +1376,8 @@ PostCommitNonRevertiblePhase stage 1 of 3 with 25 MutationType ops
       BackReferencedDescriptorID: 108
       TypeIDs:
       - 104
-    *scop.RemoveViewBackReferencesInRelations
-      BackReferencedViewID: 108
+    *scop.RemoveBackReferencesInRelations
+      BackReferencedID: 108
       RelationIDs:
       - 107
     *scop.RemoveDroppedColumnType
