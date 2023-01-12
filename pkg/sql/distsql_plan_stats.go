@@ -228,14 +228,22 @@ func (dsp *DistSQLPlanner) createPartialStatsPlan(
 		// someone could create a statistic named __forecast__ or __merged__.
 		// Update system.table_statistics to add an enum to indicate which
 		// type of statistic it is.
-		if len(t.ColumnIDs) == 1 && column.GetID() == t.ColumnIDs[0] && t.PartialPredicate == "" &&
-			t.Name != jobspb.ForecastStatsName &&
-			t.Name != jobspb.MergedStatsName {
+		if len(t.ColumnIDs) == 1 && column.GetID() == t.ColumnIDs[0] &&
+			!t.IsPartial() && !t.IsMerged() && !t.IsForecast() {
 			if t.HistogramData == nil || t.HistogramData.ColumnType == nil || len(t.Histogram) == 0 {
-				return nil, pgerror.Newf(pgcode.ObjectNotInPrerequisiteState, "the latest full statistic for column %s has no histogram", column.GetName())
+				return nil, pgerror.Newf(
+					pgcode.ObjectNotInPrerequisiteState,
+					"the latest full statistic for column %s has no histogram",
+					column.GetName(),
+				)
 			}
-			if colinfo.ColumnTypeIsInvertedIndexable(column.GetType()) && t.HistogramData.ColumnType.Family() == types.BytesFamily {
-				return nil, pgerror.Newf(pgcode.ObjectNotInPrerequisiteState, "the latest full statistic histogram for column %s is an inverted index histogram", column.GetName())
+			if colinfo.ColumnTypeIsInvertedIndexable(column.GetType()) &&
+				t.HistogramData.ColumnType.Family() == types.BytesFamily {
+				return nil, pgerror.Newf(
+					pgcode.ObjectNotInPrerequisiteState,
+					"the latest full statistic histogram for column %s is an inverted index histogram",
+					column.GetName(),
+				)
 			}
 			stat = t
 			histogram = t.Histogram

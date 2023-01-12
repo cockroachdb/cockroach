@@ -322,8 +322,8 @@ func TestAverageRefreshTime(t *testing.T) {
 			if err != nil {
 				return err
 			}
-			if actual := avgRefreshTime(stats).Round(time.Minute); actual != expected {
-				return fmt.Errorf("expected avgRefreshTime %s but found %s",
+			if actual := avgFullRefreshTime(stats).Round(time.Minute); actual != expected {
+				return fmt.Errorf("expected avgFullRefreshTime %s but found %s",
 					expected.String(), actual.String())
 			}
 			return nil
@@ -356,7 +356,7 @@ func TestAverageRefreshTime(t *testing.T) {
 		})
 	}
 
-	// Since there are no stats yet, avgRefreshTime should return the default
+	// Since there are no stats yet, avgFullRefreshTime should return the default
 	// value.
 	if err := checkAverageRefreshTime(defaultAverageTimeBetweenRefreshes); err != nil {
 		t.Fatal(err)
@@ -416,7 +416,7 @@ func TestAverageRefreshTime(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// None of the stats have the name AutoStatsName, so avgRefreshTime
+	// None of the stats have the name AutoStatsName, so avgFullRefreshTime
 	// should still return the default value.
 	if err := checkAverageRefreshTime(defaultAverageTimeBetweenRefreshes); err != nil {
 		t.Fatal(err)
