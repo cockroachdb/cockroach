@@ -6,5 +6,8 @@ CREATE TENANT nope
 statement error only the system tenant can show other tenants
 SHOW TENANT nope
 
+statement error only the system tenant can show other tenants
+SHOW TENANTS
+
 statement error only the system tenant can destroy other tenants
 DROP TENANT nope
