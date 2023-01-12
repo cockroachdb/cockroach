@@ -66,7 +66,7 @@ func (b *Builder) buildDelete(del *tree.Delete, inScope *scope) (outScope *scope
 
 	// Build the final delete statement, including any returned expressions.
 	if resultsNeeded(del.Returning) {
-		mb.buildDelete(*del.Returning.(*tree.ReturningExprs))
+		mb.buildDelete(del.Returning.(*tree.ReturningExprs))
 	} else {
 		mb.buildDelete(nil /* returning */)
 	}
@@ -76,7 +76,7 @@ func (b *Builder) buildDelete(del *tree.Delete, inScope *scope) (outScope *scope
 
 // buildDelete constructs a Delete operator, possibly wrapped by a Project
 // operator that corresponds to the given RETURNING clause.
-func (mb *mutationBuilder) buildDelete(returning tree.ReturningExprs) {
+func (mb *mutationBuilder) buildDelete(returning *tree.ReturningExprs) {
 	mb.buildFKChecksAndCascadesForDelete()
 
 	// Project partial index DEL boolean columns.
