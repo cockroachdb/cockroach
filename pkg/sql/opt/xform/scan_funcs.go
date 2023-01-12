@@ -17,7 +17,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/partition"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/errors"
 )
@@ -40,7 +42,9 @@ import (
 //	rows from the table. See GenerateConstrainedScans,
 //	GenerateLimitedScans, and GenerateLimitedGroupByScans for cases where
 //	index joins are introduced into the memo.
-func (c *CustomFuncs) GenerateIndexScans(grp memo.RelExpr, scanPrivate *memo.ScanPrivate) {
+func (c *CustomFuncs) GenerateIndexScans(
+	grp memo.RelExpr, required *physical.Required, scanPrivate *memo.ScanPrivate,
+) {
 	// Iterate over all non-inverted and non-partial secondary indexes.
 	var pkCols opt.ColSet
 	var iter scanIndexIter
@@ -61,6 +65,9 @@ func (c *CustomFuncs) GenerateIndexScans(grp memo.RelExpr, scanPrivate *memo.Sca
 		if isCovering {
 			scan := memo.ScanExpr{ScanPrivate: *scanPrivate}
 			scan.Index = index.Ordinal()
+			md := c.e.mem.Metadata()
+			tabMeta := md.TableMeta(scan.Table)
+			scan.Distribution.FromIndexScan(c.e.ctx, c.e.evalCtx, tabMeta, scan.Index, scan.Constraint)
 			c.e.mem.AddScanToGroup(&scan, grp)
 			return
 		}
@@ -87,6 +94,7 @@ func (c *CustomFuncs) GenerateIndexScans(grp memo.RelExpr, scanPrivate *memo.Sca
 		// Scan whatever columns we need which are available from the index, plus
 		// the PK columns.
 		newScanPrivate := *scanPrivate
+		newScanPrivate.Distribution.Regions = nil
 		newScanPrivate.Index = index.Ordinal()
 		newScanPrivate.Cols = indexCols.Intersection(scanPrivate.Cols)
 		newScanPrivate.Cols.UnionWith(pkCols)
@@ -150,21 +158,28 @@ func (c *CustomFuncs) CanMaybeGenerateLocalityOptimizedScan(scanPrivate *memo.Sc
 	return true
 }
 
-// GenerateLocalityOptimizedScan generates a locality optimized scan if possible
-// from the given scan private. This function should only be called if
-// CanMaybeGenerateLocalityOptimizedScan returns true. See the comment above the
-// GenerateLocalityOptimizedScan rule for more details.
-func (c *CustomFuncs) GenerateLocalityOptimizedScan(
-	grp memo.RelExpr, scanPrivate *memo.ScanPrivate,
-) {
+// IsCardinalityAboveMaxForLocalityOptimizedScan returns true if the cardinality
+// of `relExpr` is above the upper limit allowed for generation of a
+// locality-optimized scan.
+func (c *CustomFuncs) IsCardinalityAboveMaxForLocalityOptimizedScan(relExpr memo.RelExpr) bool {
 	// We can only generate a locality optimized scan if we know there is a hard
 	// upper bound on the number of rows produced by the local spans. We use the
 	// kv batch size as the limit, since it's probably better to use DistSQL once
 	// we're scanning multiple batches.
 	// TODO(rytaft): Revisit this when we have a more accurate cost model for data
 	// distribution.
-	maxRows := rowinfra.KeyLimit(grp.Relational().Cardinality.Max)
-	if maxRows > rowinfra.ProductionKVBatchSize {
+	maxRows := rowinfra.KeyLimit(relExpr.Relational().Cardinality.Max)
+	return maxRows > rowinfra.ProductionKVBatchSize
+}
+
+// GenerateLocalityOptimizedScan generates a locality optimized scan if possible
+// from the given scan private. This function should only be called if
+// CanMaybeGenerateLocalityOptimizedScan returns true. See the comment above the
+// GenerateLocalityOptimizedScan rule for more details.
+func (c *CustomFuncs) GenerateLocalityOptimizedScan(
+	grp memo.RelExpr, required *physical.Required, scanPrivate *memo.ScanPrivate,
+) {
+	if c.IsCardinalityAboveMaxForLocalityOptimizedScan(grp) {
 		return
 	}
 
@@ -261,6 +276,88 @@ func (c *CustomFuncs) GenerateLocalityOptimizedScan(
 		},
 	}
 	c.e.mem.AddLocalityOptimizedSearchToGroup(&locOptSearch, grp)
+}
+
+// makeColMap builds a map used to remap column IDs that are in the OutputCols
+// of `src` to refer to corresponding column IDs in `dst`. `src` and `dst` must
+// refer to the same underlying table.
+func (c *CustomFuncs) makeColMap(src, dst *memo.ScanPrivate) (colMap opt.ColMap) {
+	for srcCol, ok := src.Cols.Next(0); ok; srcCol, ok = src.Cols.Next(srcCol + 1) {
+		ord := src.Table.ColumnOrdinal(srcCol)
+		dstCol := dst.Table.ColumnID(ord)
+		colMap.Set(int(srcCol), int(dstCol))
+	}
+	return colMap
+}
+
+// getLocalAndRemoteFilters returns the filters on the `crdb_region` column
+// which target only local partitions, and those which target only remote
+// partitions. It is expected that `firstIndexCol` is the ColumnID of the
+// `crdb_region` column.
+func (c *CustomFuncs) getLocalAndRemoteFilters(
+	filters memo.FiltersExpr, ps partition.PrefixSorter, firstIndexCol opt.ColumnID,
+) (localFilters opt.ScalarExpr, remoteFilters opt.ScalarExpr, ok bool) {
+	var localFiltersItem, remoteFiltersItem memo.FiltersItem
+	for _, filter := range filters {
+		constraints := filter.ScalarProps().Constraints
+		if constraints == nil || constraints.Length() == 0 {
+			continue
+		}
+		if constraints.Length() != 1 || !filter.ScalarProps().TightConstraints {
+			continue
+		}
+		if constraints.Constraint(0).IsContradiction() ||
+			constraints.Constraint(0).IsUnconstrained() {
+			continue
+		}
+		if constraints.Constraint(0).Columns.Get(0).ID() != firstIndexCol {
+			continue
+		}
+		numSpans := constraints.Constraint(0).Spans.Count()
+		if numSpans < 1 {
+			continue
+		}
+		// We expect there to be a single local region.
+		localRegions := make(tree.Datums, 0, 1)
+		// We expect all other IN list items to be remote regions.
+		remoteRegions := make(tree.Datums, 0, numSpans)
+
+		for i := 0; i < numSpans; i++ {
+			val := constraints.Constraint(0).Spans.Get(i).StartKey().Value(0)
+			match, ok := constraint.FindMatchOnSingleColumn(val, ps)
+			if ok && match.IsLocal {
+				// Found a match and it is local.
+				localRegions = append(localRegions, val)
+			} else {
+				// Either we found a match and it is not local, or we didn't find a
+				// match, in which case we categorize it as non-local.
+				remoteRegions = append(remoteRegions, val)
+			}
+		}
+		if len(localRegions) > 0 || len(remoteRegions) > 0 {
+			// Build filters to apply solely to the input relations of lookup join.
+			// These filters will never be used as LookupExprs or RemoteExprs in a
+			// lookup join, so there is no need to disable normalization rules.
+			if len(localRegions) > 0 {
+				// Found a match and it is local.
+				localFiltersItem = c.e.f.ConstructConstFilter(firstIndexCol, localRegions)
+				localFilters = &localFiltersItem
+			}
+			if len(remoteRegions) > 0 {
+				remoteFiltersItem = c.e.f.ConstructConstFilter(firstIndexCol, remoteRegions)
+				remoteFilters = &remoteFiltersItem
+			}
+			// localFilters may be an equality expression matching the local region
+			// (should be only one) and remoteFilters may be an IN list of values
+			// which do not match the local region. For example:
+			// localFilters:  crdb_region = 'us-west1'
+			// remoteFilters: crdb_region IN ('us-east1', 'eu-west1', 'ap-southeast1')
+			// There is no guarantee about the type of expressions in localFilters and
+			// remoteFilters.
+			return localFilters, remoteFilters, true
+		}
+	}
+	return nil, nil, false
 }
 
 // buildAllPartitionsConstraint retrieves the partition filters and in between
@@ -403,4 +500,64 @@ func (c *CustomFuncs) splitSpans(
 // ScanPrivateCols returns the ColSet of a ScanPrivate.
 func (c *CustomFuncs) ScanPrivateCols(sp *memo.ScanPrivate) opt.ColSet {
 	return sp.Cols
+}
+
+// IsRegionalByRowTableScanOrSelect returns true if `input` is a scan or select
+// from a REGIONAL BY ROW table.
+func (c *CustomFuncs) IsRegionalByRowTableScanOrSelect(input memo.RelExpr) bool {
+	if selectExpr, ok := input.(*memo.SelectExpr); ok {
+		input = selectExpr.Input
+	}
+	scanExpr, ok := input.(*memo.ScanExpr)
+	if !ok {
+		return false
+	}
+	table := scanExpr.Memo().Metadata().Table(scanExpr.Table)
+	return table.IsRegionalByRow()
+}
+
+// IsSelectFromRemoteTableRowsOnly returns true if `input` is a select from a
+// REGIONAL BY TABLE or REGIONAL BY ROW table which only reads rows in a remote
+// region without bounded staleness. Bounded staleness would allow local
+// replicas to be used for the scan.
+func (c *CustomFuncs) IsSelectFromRemoteTableRowsOnly(input memo.RelExpr) bool {
+	scanExpr, inputFilters, ok := c.getfilteredCanonicalScan(input)
+	if !ok {
+		return false
+	}
+	if !ok {
+		return false
+	}
+	if c.e.evalCtx.BoundedStaleness() {
+		return false
+	}
+	table := scanExpr.Memo().Metadata().Table(scanExpr.Table)
+	if table.IsRegionalByRow() {
+		tabMeta := c.e.mem.Metadata().TableMeta(scanExpr.Table)
+		index := table.Index(scanExpr.Index)
+		ps := tabMeta.IndexPartitionLocality(scanExpr.Index)
+		if ps.Empty() {
+			// Can't tell if anything is local; treat all rows as remote
+			return true
+		}
+		firstIndexCol := scanExpr.ScanPrivate.Table.IndexColumnID(index, 0)
+		localFiltersItem, _, ok :=
+			c.getLocalAndRemoteFilters(inputFilters, ps, firstIndexCol)
+		if !ok {
+			// There is no filter on crdb_region, so all regions may be read.
+			return false
+		}
+		if localFiltersItem == nil {
+			return true
+		}
+		return false
+	} else if tableHomeRegion, ok := table.HomeRegion(); ok {
+		gatewayRegion, foundLocalRegion := c.e.evalCtx.Locality.Find("region")
+		if !foundLocalRegion {
+			// Found no gateway region, so can't tell if only remote rows are read.
+			return false
+		}
+		return gatewayRegion != tableHomeRegion
+	}
+	return false
 }

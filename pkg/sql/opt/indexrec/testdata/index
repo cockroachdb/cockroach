@@ -54,7 +54,7 @@ optimal plan:
 scan t1@existing_t1_i
  ├── columns: i:2!null
  ├── constraint: /2: [/3 - ]
- ├── cost: 354.263333
+ ├── cost: 358.263333
  └── key: (2)
 
 # No recommendations because an index with the same explicit columns exists
@@ -68,7 +68,7 @@ optimal plan:
 scan t1@existing_t1_k
  ├── columns: k:1!null
  ├── constraint: /1/5: [/3 - ]
- └── cost: 360.686667
+ └── cost: 364.686667
 
 # There is a replacement recommendation because an index with the same explicit
 # columns exists already and new columns are being stored here. We stored the
@@ -81,11 +81,11 @@ replacement: CREATE INDEX ON t1 (k) STORING (i, s); DROP INDEX t1@existing_t1_k;
 optimal plan:
 project
  ├── columns: i:2
- ├── cost: 374.04
+ ├── cost: 378.04
  └── scan t1@_hyp_3
       ├── columns: k:1!null i:2
       ├── constraint: /1/5: [/3 - ]
-      ├── cost: 370.686667
+      ├── cost: 374.686667
       ├── lax-key: (1,2)
       └── fd: (2)~~>(1)
 
@@ -100,19 +100,19 @@ creation: CREATE INDEX ON t2 (i) STORING (k);
 optimal plan:
 project
  ├── columns: k:1!null
- ├── cost: 766.796132
+ ├── cost: 774.796132
  └── inner-join (hash)
       ├── columns: t1.k:1!null t1.i:2!null t2.k:8!null t2.i:9!null
-      ├── cost: 755.793689
+      ├── cost: 763.793689
       ├── fd: (2)-->(1), (1)==(8), (8)==(1)
       ├── scan t2@_hyp_3
       │    ├── columns: t2.k:8 t2.i:9!null
       │    ├── constraint: /9/11: [/4 - ]
-      │    └── cost: 367.353333
+      │    └── cost: 371.353333
       ├── scan t1@_hyp_4
       │    ├── columns: t1.k:1 t1.i:2!null
       │    ├── constraint: /2/5: [/4 - ]
-      │    ├── cost: 367.476667
+      │    ├── cost: 371.476667
       │    ├── lax-key: (1,2)
       │    └── fd: (2)-->(1)
       └── filters
@@ -152,7 +152,7 @@ optimal plan:
 scan t1@_hyp_1
  ├── columns: k:1 i:2!null f:3 s:4
  ├── constraint: /2/5: [/3 - ]
- └── cost: 377.353333
+ └── cost: 381.353333
 
 
 index-candidates
@@ -170,7 +170,7 @@ optimal plan:
 scan t1@_hyp_1
  ├── columns: f:3!null k:1
  ├── constraint: /3/5: [/2.0000000000000004 - /7.999999999999999]
- └── cost: 132.908889
+ └── cost: 136.908889
 
 index-candidates
 SELECT i FROM t1 WHERE k < 3 AND i > 5
@@ -187,14 +187,14 @@ creation: CREATE INDEX ON t1 (k) STORING (i);
 optimal plan:
 project
  ├── columns: i:2!null
- ├── cost: 377.181111
+ ├── cost: 381.181111
  └── select
       ├── columns: k:1!null i:2!null
-      ├── cost: 374.05
+      ├── cost: 378.05
       ├── scan t1@_hyp_1
       │    ├── columns: k:1!null i:2
       │    ├── constraint: /1/5: (/NULL - /2]
-      │    └── cost: 370.686667
+      │    └── cost: 374.686667
       └── filters
            └── i:2 > 5 [outer=(2), constraints=(/2: [/6 - ]; tight)]
 
@@ -215,30 +215,30 @@ creation: CREATE INDEX ON t1 (f) STORING (k, i);
 optimal plan:
 project
  ├── columns: i:2
- ├── cost: 814.144374
+ ├── cost: 822.144374
  └── project
       ├── columns: k:1 i:2 f:3
-      ├── cost: 808.716967
+      ├── cost: 816.716967
       └── distinct-on
            ├── columns: k:1 i:2 f:3 rowid:5!null
            ├── grouping columns: rowid:5!null
-           ├── cost: 803.289559
+           ├── cost: 811.289559
            ├── key: (5)
            ├── fd: (5)-->(1-3)
            ├── union-all
            │    ├── columns: k:1 i:2 f:3 rowid:5!null
            │    ├── left columns: k:8 i:9 f:10 rowid:12
            │    ├── right columns: k:15 i:16 f:17 rowid:19
-           │    ├── cost: 764.534445
+           │    ├── cost: 772.534445
            │    ├── select
            │    │    ├── columns: k:8!null i:9!null f:10 rowid:12!null
-           │    │    ├── cost: 380.716667
+           │    │    ├── cost: 384.716667
            │    │    ├── key: (12)
            │    │    ├── fd: (12)-->(8-10)
            │    │    ├── scan t1@_hyp_1
            │    │    │    ├── columns: k:8!null i:9 f:10 rowid:12!null
            │    │    │    ├── constraint: /8/12: (/NULL - /2]
-           │    │    │    ├── cost: 377.353333
+           │    │    │    ├── cost: 381.353333
            │    │    │    ├── key: (12)
            │    │    │    └── fd: (12)-->(8-10)
            │    │    └── filters
@@ -246,7 +246,7 @@ project
            │    └── scan t1@_hyp_3
            │         ├── columns: k:15 i:16 f:17!null rowid:19!null
            │         ├── constraint: /17/19: (/NULL - /6.999999999999999]
-           │         ├── cost: 377.353333
+           │         ├── cost: 381.353333
            │         ├── key: (19)
            │         └── fd: (19)-->(15-17)
            └── aggregations
@@ -272,7 +272,7 @@ optimal plan:
 scan t1@_hyp_1
  ├── columns: s:4!null
  ├── constraint: /4/5: [/'NG' - /'NG']
- ├── cost: 24.6200001
+ ├── cost: 28.6200001
  └── fd: ()-->(4)
 
 index-candidates
@@ -292,20 +292,20 @@ creation: CREATE INDEX ON t2 (i);
 optimal plan:
 project
  ├── columns: k:1!null
- ├── cost: 2375.2
+ ├── cost: 2383.2
  └── inner-join (merge)
       ├── columns: t1.k:1!null t2.i:9!null
       ├── left ordering: +1
       ├── right ordering: +9
-      ├── cost: 2277.17
+      ├── cost: 2285.17
       ├── fd: (1)==(9), (9)==(1)
       ├── scan t1@_hyp_1
       │    ├── columns: t1.k:1
-      │    ├── cost: 1084.62
+      │    ├── cost: 1088.62
       │    └── ordering: +1
       ├── scan t2@_hyp_1
       │    ├── columns: t2.i:9
-      │    ├── cost: 1074.52
+      │    ├── cost: 1078.52
       │    └── ordering: +9
       └── filters (true)
 
@@ -327,16 +327,16 @@ no index recommendations
 optimal plan:
 project
  ├── columns: s:10
- ├── cost: 15522.6696
+ ├── cost: 15530.6696
  └── left-join (cross)
       ├── columns: t1.s:4 t2.s:10
-      ├── cost: 12189.3163
+      ├── cost: 12197.3163
       ├── scan t2
       │    ├── columns: t2.s:10
-      │    └── cost: 1074.52
+      │    └── cost: 1078.52
       ├── scan t1
       │    ├── columns: t1.s:4
-      │    └── cost: 1084.62
+      │    └── cost: 1088.62
       └── filters
            └── t1.s:4 LIKE t2.s:10 [outer=(4,10), constraints=(/4: (/NULL - ]; /10: (/NULL - ])]
 
@@ -354,7 +354,7 @@ creation: CREATE INDEX ON t1 (i);
 optimal plan:
 scan t1@_hyp_1
  ├── columns: i:2
- ├── cost: 1084.62
+ ├── cost: 1088.62
  └── ordering: +2
 
 
@@ -372,7 +372,7 @@ creation: CREATE INDEX ON t1 (k DESC, i);
 optimal plan:
 scan t1@_hyp_1
  ├── columns: k:1 i:2
- ├── cost: 1094.72
+ ├── cost: 1098.72
  └── ordering: -1,+2
 
 # Only one index candidate is created with nested ORDER BY clauses.
@@ -398,7 +398,7 @@ creation: CREATE INDEX ON t1 (k, i DESC);
 optimal plan:
 scan t1@_hyp_1
  ├── columns: k:1 i:2
- ├── cost: 1094.72
+ ├── cost: 1098.72
  └── ordering: +1,-2
 
 # Redundant index candidates are created but only one index is recommended.
@@ -425,17 +425,17 @@ union-all
  ├── columns: k:15!null
  ├── left columns: t1.k:1
  ├── right columns: t1.k:8
- ├── cost: 741.393334
+ ├── cost: 749.393334
  ├── ordering: -15
  ├── scan t1@_hyp_1
  │    ├── columns: t1.k:1!null
  │    ├── constraint: /-1/5: [ - /4]
- │    ├── cost: 367.353333
+ │    ├── cost: 371.353333
  │    └── ordering: -1
  └── scan t1@_hyp_1
       ├── columns: t1.k:8!null
       ├── constraint: /-8/12: [/9 - /NULL)
-      ├── cost: 367.353333
+      ├── cost: 371.353333
       └── ordering: -8
 
 index-candidates
@@ -452,17 +452,17 @@ creation: CREATE INDEX ON t1 (k);
 optimal plan:
 project
  ├── columns: count:8!null
- ├── cost: 1106.67
+ ├── cost: 1110.67
  └── group-by (streaming)
       ├── columns: k:1 count_rows:8!null
       ├── grouping columns: k:1
       ├── internal-ordering: +1
-      ├── cost: 1105.65
+      ├── cost: 1109.65
       ├── key: (1)
       ├── fd: (1)-->(8)
       ├── scan t1@_hyp_1
       │    ├── columns: k:1
-      │    ├── cost: 1084.62
+      │    ├── cost: 1088.62
       │    └── ordering: +1
       └── aggregations
            └── count-rows [as=count_rows:8]
@@ -482,17 +482,17 @@ creation: CREATE INDEX ON t1 (k, i, f);
 optimal plan:
 project
  ├── columns: sum:8
- ├── cost: 1164.87
+ ├── cost: 1168.87
  └── group-by (streaming)
       ├── columns: k:1 i:2 f:3 sum:8
       ├── grouping columns: k:1 i:2 f:3
       ├── internal-ordering: +1,+2,+3
-      ├── cost: 1154.85
+      ├── cost: 1158.85
       ├── key: (1-3)
       ├── fd: (1-3)-->(8)
       ├── scan t1@_hyp_1
       │    ├── columns: k:1 i:2 f:3
-      │    ├── cost: 1104.82
+      │    ├── cost: 1108.82
       │    └── ordering: +1,+2,+3
       └── aggregations
            └── sum [as=sum:8, outer=(1)]
@@ -526,13 +526,13 @@ optimal plan:
 full-join (cross)
  ├── columns: f:3 k:8 i:9
  ├── stable
- ├── cost: 12199.4263
+ ├── cost: 12207.4263
  ├── scan t1
  │    ├── columns: f:3
- │    └── cost: 1084.62
+ │    └── cost: 1088.62
  ├── scan t2
  │    ├── columns: t2.k:8 t2.i:9
- │    └── cost: 1084.62
+ │    └── cost: 1088.62
  └── filters
       ├── t2.k:8 IS NULL [outer=(8), constraints=(/8: [/NULL - /NULL]; tight), fd=()-->(8)]
       └── f:3::STRING NOT LIKE t2.i:9::STRING [outer=(3,9), stable]
@@ -565,14 +565,14 @@ creation: CREATE INDEX ON t2 (i) STORING (k);
 optimal plan:
 left-join (cross)
  ├── columns: k:1 s:4 k:8 i:9
- ├── cost: 1232.055
+ ├── cost: 1240.055
  ├── scan t1
  │    ├── columns: t1.k:1 t1.s:4
- │    └── cost: 1094.72
+ │    └── cost: 1098.72
  ├── scan t2@_hyp_1
  │    ├── columns: t2.k:8 t2.i:9
  │    ├── constraint: /9/11: [/NULL - /NULL]
- │    ├── cost: 24.6200002
+ │    ├── cost: 28.6200002
  │    └── fd: ()-->(9)
  └── filters
       ├── t1.k:1 != t2.k:8 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ])]
@@ -600,7 +600,7 @@ optimal plan:
 scan t1@_hyp_3
  ├── columns: k:1!null i:2!null
  ├── constraint: /1/2/5: [/1/2 - /1/2]
- ├── cost: 14.9945676
+ ├── cost: 18.9945676
  └── fd: ()-->(1,2)
 
 # Multi-column combinations used: EQ + R.
@@ -621,7 +621,7 @@ optimal plan:
 scan t1@_hyp_3
  ├── columns: k:1!null i:2 f:3!null s:4
  ├── constraint: /1/3/5: [/1/5e-324 - /1]
- ├── cost: 24.1933333
+ ├── cost: 28.1933333
  └── fd: ()-->(1)
 
 # Multi-column combinations used: EQ, EQ + R.
@@ -673,17 +673,17 @@ creation: CREATE INDEX ON t1 (f) STORING (k);
 optimal plan:
 project
  ├── columns: k:1!null f:3!null
- ├── cost: 5885.93736
+ ├── cost: 5893.93736
  └── inner-join (cross)
       ├── columns: t1.k:1!null f:3!null t2.k:8!null
-      ├── cost: 4796.91736
+      ├── cost: 4804.91736
       ├── scan t2
       │    ├── columns: t2.k:8
-      │    └── cost: 1074.52
+      │    └── cost: 1078.52
       ├── scan t1@_hyp_1
       │    ├── columns: t1.k:1 f:3!null
       │    ├── constraint: /3/5: [/5e-324 - ]
-      │    └── cost: 370.686667
+      │    └── cost: 374.686667
       └── filters
            └── t1.k:1 != t2.k:8 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ])]
 
@@ -708,19 +708,19 @@ creation: CREATE INDEX ON t1 (i, s) STORING (k);
 optimal plan:
 project
  ├── columns: i:2!null s:4!null
- ├── cost: 1114.17334
+ ├── cost: 1122.17334
  ├── fd: ()-->(2,4)
  └── inner-join (cross)
       ├── columns: t1.k:1!null t1.i:2!null t1.s:4!null t2.k:8!null
-      ├── cost: 1111.17772
+      ├── cost: 1119.17772
       ├── fd: ()-->(2,4)
       ├── scan t2
       │    ├── columns: t2.k:8
-      │    └── cost: 1074.52
+      │    └── cost: 1078.52
       ├── scan t1@_hyp_4
       │    ├── columns: t1.k:1 t1.i:2!null t1.s:4!null
       │    ├── constraint: /2/4/5: [/2/'NG' - /2/'NG']
-      │    ├── cost: 15.0036757
+      │    ├── cost: 19.0036757
       │    └── fd: ()-->(2,4)
       └── filters
            └── t1.k:1 != t2.k:8 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ])]
@@ -778,25 +778,25 @@ union-all
  ├── left columns: count_rows:14
  ├── right columns: count_rows:22
  ├── cardinality: [1 - ]
- ├── cost: 25598.0782
+ ├── cost: 25610.0782
  ├── project
  │    ├── columns: count_rows:14!null
- │    ├── cost: 25563.0458
+ │    ├── cost: 25571.0458
  │    └── group-by (hash)
  │         ├── columns: t2.i:9 t2.s:10 count_rows:14!null
  │         ├── grouping columns: t2.i:9 t2.s:10
- │         ├── cost: 25553.0258
+ │         ├── cost: 25561.0258
  │         ├── key: (9,10)
  │         ├── fd: (9,10)-->(14)
  │         ├── left-join (cross)
  │         │    ├── columns: t1.k:1 t2.k:8 t2.i:9 t2.s:10
- │         │    ├── cost: 12209.5163
+ │         │    ├── cost: 12217.5163
  │         │    ├── scan t1
  │         │    │    ├── columns: t1.k:1
- │         │    │    └── cost: 1084.62
+ │         │    │    └── cost: 1088.62
  │         │    ├── scan t2
  │         │    │    ├── columns: t2.k:8 t2.i:9 t2.s:10
- │         │    │    └── cost: 1094.72
+ │         │    │    └── cost: 1098.72
  │         │    └── filters
  │         │         └── t1.k:1 != t2.k:8 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ])]
  │         └── aggregations
@@ -804,17 +804,17 @@ union-all
  └── scalar-group-by
       ├── columns: count_rows:22!null
       ├── cardinality: [1 - 1]
-      ├── cost: 25.002367
+      ├── cost: 29.002367
       ├── key: ()
       ├── fd: ()-->(22)
       ├── select
       │    ├── columns: t1.i:16!null f:17!null t1.s:18!null
-      │    ├── cost: 24.9391
+      │    ├── cost: 28.9391
       │    ├── fd: ()-->(18)
       │    ├── scan t1@_hyp_5
       │    │    ├── columns: t1.i:16 f:17!null t1.s:18!null
       │    │    ├── constraint: /18/17/19: (/'NG'/NULL - /'NG']
-      │    │    ├── cost: 24.8092
+      │    │    ├── cost: 28.8092
       │    │    └── fd: ()-->(18)
       │    └── filters
       │         └── f:17 > t1.i:16 [outer=(16,17), constraints=(/16: (/NULL - ]; /17: (/NULL - ])]
@@ -854,70 +854,70 @@ creation: CREATE INDEX ON t3 (f) STORING (k, i);
 optimal plan:
 sort (segmented)
  ├── columns: k:1 i:2 i:9
- ├── cost: 2416.08954
+ ├── cost: 2432.08954
  ├── ordering: +1,+9,-2
  └── project
       ├── columns: t1.k:1 t1.i:2 t2.i:9
-      ├── cost: 2263.40821
+      ├── cost: 2279.40821
       ├── ordering: +1
       └── left-join (merge)
            ├── columns: t1.k:1 t1.i:2 t2.k:8 t2.i:9
            ├── left ordering: +1
            ├── right ordering: +8
-           ├── cost: 2252.08102
+           ├── cost: 2268.08102
            ├── ordering: +1
            ├── select
            │    ├── columns: t1.k:1 t1.i:2
-           │    ├── cost: 1122.09358
+           │    ├── cost: 1130.09358
            │    ├── ordering: +1
            │    ├── scan t1@_hyp_1
            │    │    ├── columns: t1.k:1 t1.i:2
-           │    │    ├── cost: 1094.72
+           │    │    ├── cost: 1098.72
            │    │    └── ordering: +1
            │    └── filters
            │         └── exists [subquery]
            │              └── limit
            │                   ├── columns: t3.k:14!null t3.i:15 t3.f:16!null
            │                   ├── cardinality: [0 - 1]
-           │                   ├── cost: 17.3435766
+           │                   ├── cost: 21.3435766
            │                   ├── key: ()
            │                   ├── fd: ()-->(14-16)
            │                   ├── select
            │                   │    ├── columns: t3.k:14!null t3.i:15 t3.f:16!null
-           │                   │    ├── cost: 17.3235766
+           │                   │    ├── cost: 21.3235766
            │                   │    ├── limit hint: 1.00
            │                   │    ├── scan t3@_hyp_1
            │                   │    │    ├── columns: t3.k:14 t3.i:15 t3.f:16!null
            │                   │    │    ├── constraint: /16/18: (/NULL - ]
-           │                   │    │    ├── cost: 17.2632432
+           │                   │    │    ├── cost: 21.2632432
            │                   │    │    └── limit hint: 3.00
            │                   │    └── filters
            │                   │         └── t3.f:16 > t3.k:14 [outer=(14,16), constraints=(/14: (/NULL - ]; /16: (/NULL - ])]
            │                   └── 1
            ├── select
            │    ├── columns: t2.k:8 t2.i:9
-           │    ├── cost: 1111.99358
+           │    ├── cost: 1119.99358
            │    ├── ordering: +8
            │    ├── scan t2@_hyp_2
            │    │    ├── columns: t2.k:8 t2.i:9
-           │    │    ├── cost: 1084.62
+           │    │    ├── cost: 1088.62
            │    │    └── ordering: +8
            │    └── filters
            │         └── exists [subquery]
            │              └── limit
            │                   ├── columns: t3.k:14!null t3.i:15 t3.f:16!null
            │                   ├── cardinality: [0 - 1]
-           │                   ├── cost: 17.3435766
+           │                   ├── cost: 21.3435766
            │                   ├── key: ()
            │                   ├── fd: ()-->(14-16)
            │                   ├── select
            │                   │    ├── columns: t3.k:14!null t3.i:15 t3.f:16!null
-           │                   │    ├── cost: 17.3235766
+           │                   │    ├── cost: 21.3235766
            │                   │    ├── limit hint: 1.00
            │                   │    ├── scan t3@_hyp_1
            │                   │    │    ├── columns: t3.k:14 t3.i:15 t3.f:16!null
            │                   │    │    ├── constraint: /16/18: (/NULL - ]
-           │                   │    │    ├── cost: 17.2632432
+           │                   │    │    ├── cost: 21.2632432
            │                   │    │    └── limit hint: 3.00
            │                   │    └── filters
            │                   │         └── t3.f:16 > t3.k:14 [outer=(14,16), constraints=(/14: (/NULL - ]; /16: (/NULL - ])]
@@ -945,15 +945,15 @@ union
  ├── left columns: t1.k:1
  ├── right columns: i:9
  ├── internal-ordering: +15
- ├── cost: 2171.26
+ ├── cost: 2179.26
  ├── key: (15)
  ├── scan t1@_hyp_1
  │    ├── columns: t1.k:1
- │    ├── cost: 1084.62
+ │    ├── cost: 1088.62
  │    └── ordering: +1
  └── scan t1@_hyp_2
       ├── columns: i:9
-      ├── cost: 1084.62
+      ├── cost: 1088.62
       └── ordering: +9
 
 index-candidates
@@ -975,15 +975,15 @@ intersect
  ├── left columns: k:1
  ├── right columns: i:9
  ├── internal-ordering: +1
- ├── cost: 2170.26
+ ├── cost: 2178.26
  ├── key: (1)
  ├── scan t1@_hyp_1
  │    ├── columns: k:1
- │    ├── cost: 1084.62
+ │    ├── cost: 1088.62
  │    └── ordering: +1
  └── scan t1@_hyp_2
       ├── columns: i:9
-      ├── cost: 1084.62
+      ├── cost: 1088.62
       └── ordering: +9
 
 index-candidates
@@ -1005,14 +1005,14 @@ intersect-all
  ├── left columns: k:1
  ├── right columns: i:9
  ├── internal-ordering: +1
- ├── cost: 2179.26
+ ├── cost: 2187.26
  ├── scan t1@_hyp_1
  │    ├── columns: k:1
- │    ├── cost: 1084.62
+ │    ├── cost: 1088.62
  │    └── ordering: +1
  └── scan t1@_hyp_2
       ├── columns: i:9
-      ├── cost: 1084.62
+      ├── cost: 1088.62
       └── ordering: +9
 
 index-candidates
@@ -1034,15 +1034,15 @@ except
  ├── left columns: k:1
  ├── right columns: i:9
  ├── internal-ordering: +1
- ├── cost: 2170.26
+ ├── cost: 2178.26
  ├── key: (1)
  ├── scan t1@_hyp_1
  │    ├── columns: k:1
- │    ├── cost: 1084.62
+ │    ├── cost: 1088.62
  │    └── ordering: +1
  └── scan t1@_hyp_2
       ├── columns: i:9
-      ├── cost: 1084.62
+      ├── cost: 1088.62
       └── ordering: +9
 
 index-candidates
@@ -1064,14 +1064,14 @@ except-all
  ├── left columns: k:1
  ├── right columns: i:9
  ├── internal-ordering: +1
- ├── cost: 2179.26
+ ├── cost: 2187.26
  ├── scan t1@_hyp_1
  │    ├── columns: k:1
- │    ├── cost: 1084.62
+ │    ├── cost: 1088.62
  │    └── ordering: +1
  └── scan t1@_hyp_2
       ├── columns: i:9
-      ├── cost: 1084.62
+      ├── cost: 1088.62
       └── ordering: +9
 
 index-candidates
@@ -1093,15 +1093,15 @@ union
  ├── left columns: t1.k:1 t1.f:3
  ├── right columns: i:9 t1.f:10
  ├── internal-ordering: +15,+16
- ├── cost: 2209.46
+ ├── cost: 2217.46
  ├── key: (15,16)
  ├── scan t1@_hyp_1
  │    ├── columns: t1.k:1 t1.f:3
- │    ├── cost: 1094.72
+ │    ├── cost: 1098.72
  │    └── ordering: +1,+3
  └── scan t1@_hyp_2
       ├── columns: i:9 t1.f:10
-      ├── cost: 1094.72
+      ├── cost: 1098.72
       └── ordering: +9,+10
 
 # Tests for inverted index recommendations. See rule 7 of
@@ -1122,16 +1122,16 @@ optimal plan:
 project
  ├── columns: k:1 f:3
  ├── immutable
- ├── cost: 807.393333
+ ├── cost: 811.393333
  └── index-join t4
       ├── columns: k:1 f:3 j:4
       ├── immutable
-      ├── cost: 806.262222
+      ├── cost: 810.262222
       └── scan t4@_hyp_1
            ├── columns: rowid:6!null
            ├── inverted constraint: /9/6
            │    └── spans: ["7a\x00\x01*\x02\x00", "7a\x00\x01*\x02\x00"]
-           ├── cost: 128.464444
+           ├── cost: 132.464444
            └── key: (6)
 
 index-candidates
@@ -1149,16 +1149,16 @@ optimal plan:
 project
  ├── columns: k:1 f:3
  ├── immutable
- ├── cost: 805.048889
+ ├── cost: 809.048889
  └── index-join t4
       ├── columns: k:1 f:3 j:4!null
       ├── immutable
-      ├── cost: 803.928889
+      ├── cost: 807.928889
       └── scan t4@_hyp_1
            ├── columns: rowid:6!null
            ├── inverted constraint: /9/6
            │    └── spans: ["7foo\x00\x01\x121\x00\x01", "7foo\x00\x01\x121\x00\x01"]
-           ├── cost: 128.464444
+           ├── cost: 132.464444
            └── key: (6)
 
 index-candidates
@@ -1176,14 +1176,14 @@ optimal plan:
 project
  ├── columns: k:1 f:3
  ├── immutable
- ├── cost: 816.998889
+ ├── cost: 820.998889
  └── select
       ├── columns: k:1 f:3 j:4
       ├── immutable
-      ├── cost: 813.645556
+      ├── cost: 817.645556
       ├── index-join t4
       │    ├── columns: k:1 f:3 j:4
-      │    ├── cost: 812.504444
+      │    ├── cost: 816.504444
       │    └── inverted-filter
       │         ├── columns: rowid:6!null
       │         ├── inverted expression: /9
@@ -1191,7 +1191,7 @@ project
       │         │    └── union spans
       │         │         ├── ["7\x00\x019", "7\x00\x019"]
       │         │         └── ["7foo\x00\x01\x121\x00\x01", "7foo\x00\x01\x121\x00\x01"]
-      │         ├── cost: 134.706667
+      │         ├── cost: 138.706667
       │         ├── key: (6)
       │         └── scan t4@_hyp_1
       │              ├── columns: rowid:6!null j_inverted_key:9!null
@@ -1199,7 +1199,7 @@ project
       │              │    └── spans
       │              │         ├── ["7\x00\x019", "7\x00\x019"]
       │              │         └── ["7foo\x00\x01\x121\x00\x01", "7foo\x00\x01\x121\x00\x01"]
-      │              ├── cost: 133.575556
+      │              ├── cost: 137.575556
       │              ├── key: (6)
       │              └── fd: (6)-->(9)
       └── filters
@@ -1222,7 +1222,7 @@ inner-join (lookup t4)
  ├── key columns: [6] = [6]
  ├── lookup columns are key
  ├── immutable
- ├── cost: 234.247531
+ ├── cost: 238.247531
  ├── inner-join (zigzag t4@_hyp_1 t4@_hyp_1)
  │    ├── columns: rowid:6!null
  │    ├── eq columns: [6] = [6]
@@ -1250,16 +1250,16 @@ optimal plan:
 project
  ├── columns: k:1!null f:3
  ├── immutable
- ├── cost: 22.1100001
+ ├── cost: 26.1100001
  ├── fd: ()-->(1)
  └── select
       ├── columns: k:1!null f:3 j:4
       ├── immutable
-      ├── cost: 22.0566667
+      ├── cost: 26.0566667
       ├── fd: ()-->(1)
       ├── index-join t4
       │    ├── columns: k:1 f:3 j:4
-      │    ├── cost: 22.0155556
+      │    ├── cost: 26.0155556
       │    └── inverted-filter
       │         ├── columns: rowid:6!null
       │         ├── inverted expression: /10
@@ -1267,7 +1267,7 @@ project
       │         │    └── union spans
       │         │         ├── ["7\x00\x019", "7\x00\x019"]
       │         │         └── ["7foo\x00\x01\x121\x00\x01", "7foo\x00\x01\x121\x00\x01"]
-      │         ├── cost: 15.2177778
+      │         ├── cost: 19.2177778
       │         ├── key: (6)
       │         └── scan t4@_hyp_3
       │              ├── columns: rowid:6!null j_inverted_key:10!null
@@ -1276,7 +1276,7 @@ project
       │              │    └── spans
       │              │         ├── ["7\x00\x019", "7\x00\x019"]
       │              │         └── ["7foo\x00\x01\x121\x00\x01", "7foo\x00\x01\x121\x00\x01"]
-      │              ├── cost: 15.1866667
+      │              ├── cost: 19.1866667
       │              ├── key: (6)
       │              └── fd: (6)-->(10)
       └── filters
@@ -1334,15 +1334,15 @@ optimal plan:
 project
  ├── columns: k:1 f:3
  ├── immutable
- ├── cost: 1125.07
+ ├── cost: 1129.07
  └── select
       ├── columns: k:1 f:3 j:4
       ├── immutable
-      ├── cost: 1124.95
+      ├── cost: 1128.95
       ├── fd: ()-->(4)
       ├── scan t4
       │    ├── columns: k:1 f:3 j:4
-      │    └── cost: 1114.92
+      │    └── cost: 1118.92
       └── filters
            └── j:4 IS NULL [outer=(4), immutable, constraints=(/4: [/NULL - /NULL]; tight), fd=()-->(4)]
 
@@ -1360,11 +1360,11 @@ creation: CREATE INDEX ON t4 (a) STORING (k, f);
 optimal plan:
 project
  ├── columns: k:1 f:3
- ├── cost: 25.0400002
+ ├── cost: 29.0400002
  └── scan t4@_hyp_1
       ├── columns: k:1 f:3 a:5
       ├── constraint: /5/6: [/NULL - /NULL]
-      ├── cost: 24.9200002
+      ├── cost: 28.9200002
       └── fd: ()-->(5)
 
 index-candidates
@@ -1387,14 +1387,14 @@ optimal plan:
 project
  ├── columns: k:1 f:3
  ├── immutable
- ├── cost: 1126.07
+ ├── cost: 1130.07
  └── select
       ├── columns: k:1 f:3 a:5!null
       ├── immutable
-      ├── cost: 1124.95
+      ├── cost: 1128.95
       ├── scan t4
       │    ├── columns: k:1 f:3 a:5
-      │    └── cost: 1114.92
+      │    └── cost: 1118.92
       └── filters
            └── a:5 @> ARRAY[1] [outer=(5), immutable, constraints=(/5: (/NULL - ])]
 
@@ -1412,11 +1412,11 @@ creation: CREATE INDEX ON t4 (a) STORING (k, f);
 optimal plan:
 project
  ├── columns: k:1 f:3
- ├── cost: 25.0400001
+ ├── cost: 29.0400001
  └── scan t4@_hyp_1
       ├── columns: k:1 f:3 a:5!null
       ├── constraint: /5/6: [/ARRAY[1] - /ARRAY[1]]
-      ├── cost: 24.9200001
+      ├── cost: 28.9200001
       └── fd: ()-->(5)
 
 index-candidates
@@ -1435,16 +1435,16 @@ optimal plan:
 project
  ├── columns: k:1 f:3
  ├── immutable
- ├── cost: 25.1810001
+ ├── cost: 29.1810001
  └── select
       ├── columns: k:1 i:2!null f:3 a:5!null
       ├── immutable
-      ├── cost: 25.1500001
+      ├── cost: 29.1500001
       ├── fd: ()-->(2)
       ├── scan t4@_hyp_2
       │    ├── columns: k:1 i:2!null f:3 a:5
       │    ├── constraint: /2/6: [/1 - /1]
-      │    ├── cost: 25.0200001
+      │    ├── cost: 29.0200001
       │    └── fd: ()-->(2)
       └── filters
            └── a:5 @> ARRAY[1] [outer=(5), immutable, constraints=(/5: (/NULL - ])]
@@ -1465,15 +1465,15 @@ optimal plan:
 project
  ├── columns: k:1 f:3!null
  ├── immutable
- ├── cost: 381.103333
+ ├── cost: 385.103333
  └── select
       ├── columns: k:1 f:3!null a:5!null
       ├── immutable
-      ├── cost: 380.716667
+      ├── cost: 384.716667
       ├── scan t4@_hyp_2
       │    ├── columns: k:1 f:3!null a:5
       │    ├── constraint: /3/6: [/3.0000000000000004 - ]
-      │    └── cost: 377.353333
+      │    └── cost: 381.353333
       └── filters
            └── a:5 @> ARRAY[1] [outer=(5), immutable, constraints=(/5: (/NULL - ])]
 
@@ -1496,14 +1496,14 @@ optimal plan:
 index-join t4
  ├── columns: k:1!null j:4
  ├── immutable
- ├── cost: 21.9622223
+ ├── cost: 25.9622223
  ├── fd: ()-->(1)
  └── scan t4@inverted
       ├── columns: rowid:6!null
       ├── constraint: /1: [/1 - /1]
       ├── inverted constraint: /9/6
       │    └── spans: ["7a\x00\x01*\x02\x00", "7a\x00\x01*\x02\x00"]
-      ├── cost: 15.1755556
+      ├── cost: 19.1755556
       └── key: (6)
 
 exec-ddl
@@ -1527,12 +1527,12 @@ no index recommendations
 optimal plan:
 project
  ├── columns: i:2!null
- ├── cost: 23.84
+ ├── cost: 27.84
  ├── fd: ()-->(2)
  └── scan t4@partial_idx,partial
       ├── columns: i:2!null rowid:6!null
       ├── constraint: /2/6: [/1 - /1]
-      ├── cost: 23.7266667
+      ├── cost: 27.7266667
       ├── key: (6)
       └── fd: ()-->(2)
 
@@ -1548,11 +1548,11 @@ no index recommendations
 optimal plan:
 project
  ├── columns: f:3!null
- ├── cost: 340.706667
+ ├── cost: 344.706667
  └── scan t4@partial_unique_idx,partial
       ├── columns: f:3!null rowid:6!null
       ├── constraint: /3: [/5.000000000000001 - ]
-      ├── cost: 337.575556
+      ├── cost: 341.575556
       ├── key: (6)
       └── fd: (6)-->(3), (3)-->(6)
 
@@ -1569,17 +1569,17 @@ optimal plan:
 project
  ├── columns: j:4
  ├── immutable
- ├── cost: 21.9822223
+ ├── cost: 25.9822223
  └── index-join t4
       ├── columns: i:2!null j:4
       ├── immutable
-      ├── cost: 21.9511112
+      ├── cost: 25.9511112
       ├── fd: ()-->(2)
       └── scan t4@partial_inverted_idx,partial
            ├── columns: rowid:6!null
            ├── inverted constraint: /10/6
            │    └── spans: ["7a\x00\x01*\x02\x00", "7a\x00\x01*\x02\x00"]
-           ├── cost: 15.1644445
+           ├── cost: 19.1644445
            └── key: (6)
 
 # Ensure that we don't recommend replacing partial indexes, partial unique
@@ -1594,7 +1594,7 @@ optimal plan:
 scan t4@_hyp_4
  ├── columns: i:2!null
  ├── constraint: /2/6: [/6 - ]
- └── cost: 377.353333
+ └── cost: 381.353333
 
 index-recommendations
 SELECT i, f FROM t4 WHERE f > 5
@@ -1605,7 +1605,7 @@ optimal plan:
 scan t4@_hyp_4
  ├── columns: i:2 f:3!null
  ├── constraint: /3/6: [/5.000000000000001 - ]
- └── cost: 380.686667
+ └── cost: 384.686667
 
 index-recommendations
 SELECT j FROM t4 WHERE j->'a' = '1'
@@ -1616,12 +1616,12 @@ optimal plan:
 index-join t4
  ├── columns: j:4
  ├── immutable
- ├── cost: 804.04
+ ├── cost: 808.04
  └── scan t4@_hyp_4
       ├── columns: rowid:6!null
       ├── inverted constraint: /11/6
       │    └── spans: ["7a\x00\x01*\x02\x00", "7a\x00\x01*\x02\x00"]
-      ├── cost: 128.464444
+      ├── cost: 132.464444
       └── key: (6)
 
 exec-ddl
@@ -1651,12 +1651,12 @@ optimal plan:
 project
  ├── columns: k:1!null
  ├── immutable
- ├── cost: 15.0296847
+ ├── cost: 19.0296847
  ├── fd: ()-->(1)
  └── scan t1@expr
       ├── columns: k:1!null rowid:5!null
       ├── constraint: /1/8/5: [/1/'cockroach' - /1/'cockroach']
-      ├── cost: 14.9763514
+      ├── cost: 18.9763514
       ├── key: (5)
       └── fd: ()-->(1)
 
@@ -1715,27 +1715,27 @@ scalar-group-by
  │    │    │    │    ├── cost: 1.00225268e+10
  │    │    │    │    ├── inner-join (cross)
  │    │    │    │    │    ├── columns: t83965e.c:21
- │    │    │    │    │    ├── cost: 10025690.6
+ │    │    │    │    │    ├── cost: 10025702.6
  │    │    │    │    │    ├── inner-join (cross)
  │    │    │    │    │    │    ├── columns: t83965e.c:21
- │    │    │    │    │    │    ├── cost: 12128.7063
+ │    │    │    │    │    │    ├── cost: 12136.7063
  │    │    │    │    │    │    ├── scan t83965d
- │    │    │    │    │    │    │    └── cost: 1044.22
+ │    │    │    │    │    │    │    └── cost: 1048.22
  │    │    │    │    │    │    ├── scan t83965e
  │    │    │    │    │    │    │    ├── columns: t83965e.c:21
- │    │    │    │    │    │    │    └── cost: 1054.32
+ │    │    │    │    │    │    │    └── cost: 1058.32
  │    │    │    │    │    │    └── filters (true)
  │    │    │    │    │    ├── scan t83965b
- │    │    │    │    │    │    └── cost: 1044.22
+ │    │    │    │    │    │    └── cost: 1048.22
  │    │    │    │    │    └── filters (true)
  │    │    │    │    ├── scan t83965c
- │    │    │    │    │    └── cost: 1044.22
+ │    │    │    │    │    └── cost: 1048.22
  │    │    │    │    └── filters (true)
  │    │    │    ├── scan t83965a
- │    │    │    │    └── cost: 1044.22
+ │    │    │    │    └── cost: 1048.22
  │    │    │    └── filters (true)
  │    │    ├── scan t83965f
- │    │    │    └── cost: 1044.22
+ │    │    │    └── cost: 1048.22
  │    │    └── filters (true)
  │    └── projections
  │         └── (t83965e.c:21 IS NOT DISTINCT FROM CAST(NULL AS VARBIT(1)[])) AND CAST(NULL AS BOOL) [as=column25:25, outer=(21)]
@@ -1771,11 +1771,11 @@ replacement: CREATE INDEX ON t5 (v) STORING (i, j); DROP INDEX t5@idx_2;
 optimal plan:
 project
  ├── columns: i:3 j:4
- ├── cost: 374.04
+ ├── cost: 378.04
  └── scan t5@_hyp_3
       ├── columns: v:2!null i:3 j:4
       ├── constraint: /2/1: [/2 - ]
-      └── cost: 370.686667
+      └── cost: 374.686667
 
 exec-ddl
 DROP INDEX idx_2
@@ -1795,11 +1795,11 @@ replacement: CREATE INDEX ON t5 (v) STORING (i, j); DROP INDEX t5@idx_1;
 optimal plan:
 project
  ├── columns: i:3 j:4
- ├── cost: 374.04
+ ├── cost: 378.04
  └── scan t5@_hyp_3
       ├── columns: v:2!null i:3 j:4
       ├── constraint: /2/1: [/2 - ]
-      └── cost: 370.686667
+      └── cost: 374.686667
 
 # The following tests check for not visible indexes. Note that for alter index
 # visibility, the output, optimal plan, for index recommendations uses the
@@ -1827,7 +1827,7 @@ optimal plan:
 scan t_notvisible@idx_i_visible
  ├── columns: i:3!null
  ├── constraint: /3/1: [/2 - ]
- └── cost: 357.353333
+ └── cost: 361.353333
 
 # If the index is not visible and stores the same column, recommend alter index.
 # visible.
@@ -1840,7 +1840,7 @@ optimal plan:
 scan t_notvisible@_hyp_3
  ├── columns: v:2!null
  ├── constraint: /2/1: [/2 - ]
- └── cost: 360.686667
+ └── cost: 364.686667
 
 # If the index is not visible and need to store more columns, still recommend
 # create index. We do not want to recommend dropping any invisible index.
@@ -1852,11 +1852,11 @@ creation: CREATE INDEX ON t_notvisible (v) STORING (i);
 optimal plan:
 project
  ├── columns: i:3
- ├── cost: 367.373333
+ ├── cost: 371.373333
  └── scan t_notvisible@_hyp_3
       ├── columns: v:2!null i:3
       ├── constraint: /2/1: [/2 - ]
-      └── cost: 364.02
+      └── cost: 368.02
 
 # If there exists both not visible and visible indexes storing the same explicit
 # column, the index recommendation should not recommend alter index just because
@@ -1874,7 +1874,7 @@ optimal plan:
 scan t_notvisible@idx_v_visible
  ├── columns: v:2!null
  ├── constraint: /2/1: [/2 - ]
- └── cost: 357.353333
+ └── cost: 361.353333
 
 # If there exists both visible and invisible index, the index recommendation
 # should not recommend dropping the not visible index even if it stores the same
@@ -1887,8 +1887,8 @@ replacement: CREATE INDEX ON t_notvisible (v) STORING (i); DROP INDEX t_notvisib
 optimal plan:
 project
  ├── columns: i:3
- ├── cost: 367.373333
+ ├── cost: 371.373333
  └── scan t_notvisible@_hyp_4
       ├── columns: v:2!null i:3
       ├── constraint: /2/1: [/2 - ]
-      └── cost: 364.02
+      └── cost: 368.02

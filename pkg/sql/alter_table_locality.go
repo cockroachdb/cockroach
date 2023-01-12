@@ -294,10 +294,10 @@ func (n *alterTableSetLocalityNode) alterTableLocalityToRegionalByRow(
 		// so that it is backfilled this way. When the backfill is complete,
 		// we will change this to use gateway_region.
 		defaultColDef := &tree.AlterTableAddColumn{
-			ColumnDef: regionalByRowDefaultColDef(
+			ColumnDef: multiregion.RegionalByRowDefaultColDef(
 				enumOID,
 				regionalByRowRegionDefaultExpr(enumOID, tree.Name(primaryRegion)),
-				maybeRegionalByRowOnUpdateExpr(params.EvalContext(), enumOID),
+				multiregion.MaybeRegionalByRowOnUpdateExpr(params.EvalContext(), enumOID),
 			),
 		}
 		tn, err := params.p.getQualifiedTableName(params.ctx, n.tableDesc)
@@ -343,7 +343,7 @@ func (n *alterTableSetLocalityNode) alterTableLocalityToRegionalByRow(
 		col := n.tableDesc.Mutations[mutationIdx].GetColumn()
 		finalDefaultExpr, err := schemaexpr.SanitizeVarFreeExpr(
 			params.ctx,
-			regionalByRowGatewayRegionDefaultExpr(enumOID),
+			multiregion.RegionalByRowGatewayRegionDefaultExpr(enumOID),
 			col.Type,
 			"REGIONAL BY ROW DEFAULT",
 			params.p.SemaCtx(),

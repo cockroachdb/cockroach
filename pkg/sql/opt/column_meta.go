@@ -66,6 +66,24 @@ func (cl ColList) Equals(other ColList) bool {
 	return true
 }
 
+// CopyAndMaybeRemapColumns copies this ColList, remapping any columns present
+// in the provided ColMap.
+func (cl ColList) CopyAndMaybeRemapColumns(m ColMap) (res ColList) {
+	if len(cl) == 0 {
+		return nil
+	}
+	res = make(ColList, len(cl))
+	for i := range cl {
+		val, ok := m.Get(int(cl[i]))
+		if !ok {
+			res[i] = cl[i]
+		} else {
+			res[i] = ColumnID(val)
+		}
+	}
+	return res
+}
+
 // OptionalColList is a list of column IDs where some of the IDs can be unset.
 // It is used when the columns map 1-to-1 to a known list of objects (e.g. table
 // columns).

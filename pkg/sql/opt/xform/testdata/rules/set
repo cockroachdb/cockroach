@@ -25,257 +25,257 @@ memo (optimized, ~11KB, required=[presentation: u:13,v:14,w:15])
  ├── G1: (union G2 G3) (union G2 G3 ordering=+13,+14,+15) (union G2 G3 ordering=+15,+14,+13) (union G2 G3 ordering=+14,+15,+13) (union G2 G3 ordering=+14,+13,+15)
  │    └── [presentation: u:13,v:14,w:15]
  │         ├── best: (union G2="[ordering: +2,+3,+4]" G3="[ordering: +10,+9,+8]" ordering=+13,+14,+15)
- │         └── cost: 2209.46
+ │         └── cost: 2217.46
  ├── G2: (scan kuvw,cols=(2-4)) (scan kuvw@uvw,cols=(2-4)) (scan kuvw@wvu,cols=(2-4)) (scan kuvw@vw,cols=(2-4)) (scan kuvw@w,cols=(2-4))
  │    ├── [ordering: +2,+3,+4]
  │    │    ├── best: (scan kuvw@uvw,cols=(2-4))
- │    │    └── cost: 1094.72
+ │    │    └── cost: 1098.72
  │    ├── [ordering: +3,+2,+4]
  │    │    ├── best: (sort G2="[ordering: +3]")
- │    │    └── cost: 1225.50
+ │    │    └── cost: 1229.50
  │    ├── [ordering: +3,+4,+2]
  │    │    ├── best: (sort G2="[ordering: +3,+4]")
- │    │    └── cost: 1164.74
+ │    │    └── cost: 1168.74
  │    ├── [ordering: +3,+4]
  │    │    ├── best: (scan kuvw@vw,cols=(2-4))
- │    │    └── cost: 1094.72
+ │    │    └── cost: 1098.72
  │    ├── [ordering: +3]
  │    │    ├── best: (scan kuvw@vw,cols=(2-4))
- │    │    └── cost: 1094.72
+ │    │    └── cost: 1098.72
  │    ├── [ordering: +4,+3,+2]
  │    │    ├── best: (scan kuvw@wvu,cols=(2-4))
- │    │    └── cost: 1094.72
+ │    │    └── cost: 1098.72
  │    └── []
  │         ├── best: (scan kuvw,cols=(2-4))
- │         └── cost: 1094.72
+ │         └── cost: 1098.72
  └── G3: (scan kuvw,cols=(8-10)) (scan kuvw@uvw,cols=(8-10)) (scan kuvw@wvu,cols=(8-10)) (scan kuvw@vw,cols=(8-10)) (scan kuvw@w,cols=(8-10))
       ├── [ordering: +10,+9,+8]
       │    ├── best: (scan kuvw@wvu,cols=(8-10))
-      │    └── cost: 1094.72
+      │    └── cost: 1098.72
       ├── [ordering: +8,+9,+10]
       │    ├── best: (scan kuvw@uvw,cols=(8-10))
-      │    └── cost: 1094.72
+      │    └── cost: 1098.72
       ├── [ordering: +9,+10,+8]
       │    ├── best: (sort G3="[ordering: +9,+10]")
-      │    └── cost: 1164.74
+      │    └── cost: 1168.74
       ├── [ordering: +9,+10]
       │    ├── best: (scan kuvw@vw,cols=(8-10))
-      │    └── cost: 1094.72
+      │    └── cost: 1098.72
       ├── [ordering: +9,+8,+10]
       │    ├── best: (sort G3="[ordering: +9]")
-      │    └── cost: 1225.50
+      │    └── cost: 1229.50
       ├── [ordering: +9]
       │    ├── best: (scan kuvw@vw,cols=(8-10))
-      │    └── cost: 1094.72
+      │    └── cost: 1098.72
       └── []
            ├── best: (scan kuvw,cols=(8-10))
-           └── cost: 1094.72
+           └── cost: 1098.72
 
 memo expect=GenerateStreamingSetOp
 SELECT * FROM kuvw INTERSECT SELECT * FROM kuvw
 ----
-memo (optimized, ~11KB, required=[presentation: k:1,u:2,v:3,w:4])
+memo (optimized, ~12KB, required=[presentation: k:1,u:2,v:3,w:4])
  ├── G1: (intersect-all G2 G3) (intersect-all G2 G3 ordering=+1,+2,+3,+4) (intersect-all G2 G3 ordering=+2,+3,+4,+1) (intersect-all G2 G3 ordering=+4,+3,+2,+1) (intersect-all G2 G3 ordering=+3,+4,+1,+2) (intersect-all G2 G3 ordering=+4,+1,+2,+3)
  │    └── [presentation: k:1,u:2,v:3,w:4]
  │         ├── best: (intersect-all G2="[ordering: +1]" G3="[ordering: +7]" ordering=+1,+2,+3,+4)
- │         └── cost: 2219.66
+ │         └── cost: 2227.66
  ├── G2: (scan kuvw,cols=(1-4)) (scan kuvw@uvw,cols=(1-4)) (scan kuvw@wvu,cols=(1-4)) (scan kuvw@vw,cols=(1-4)) (scan kuvw@w,cols=(1-4))
  │    ├── [ordering: +1]
  │    │    ├── best: (scan kuvw,cols=(1-4))
- │    │    └── cost: 1104.82
+ │    │    └── cost: 1108.82
  │    ├── [ordering: +2,+3,+4,+1]
  │    │    ├── best: (scan kuvw@uvw,cols=(1-4))
- │    │    └── cost: 1104.82
+ │    │    └── cost: 1108.82
  │    ├── [ordering: +3,+4,+1]
  │    │    ├── best: (scan kuvw@vw,cols=(1-4))
- │    │    └── cost: 1104.82
+ │    │    └── cost: 1108.82
  │    ├── [ordering: +4,+1]
  │    │    ├── best: (scan kuvw@w,cols=(1-4))
- │    │    └── cost: 1104.82
+ │    │    └── cost: 1108.82
  │    ├── [ordering: +4,+3,+2,+1]
  │    │    ├── best: (scan kuvw@wvu,cols=(1-4))
- │    │    └── cost: 1104.82
+ │    │    └── cost: 1108.82
  │    └── []
  │         ├── best: (scan kuvw,cols=(1-4))
- │         └── cost: 1104.82
+ │         └── cost: 1108.82
  └── G3: (scan kuvw,cols=(7-10)) (scan kuvw@uvw,cols=(7-10)) (scan kuvw@wvu,cols=(7-10)) (scan kuvw@vw,cols=(7-10)) (scan kuvw@w,cols=(7-10))
       ├── [ordering: +10,+7]
       │    ├── best: (scan kuvw@w,cols=(7-10))
-      │    └── cost: 1104.82
+      │    └── cost: 1108.82
       ├── [ordering: +10,+9,+8,+7]
       │    ├── best: (scan kuvw@wvu,cols=(7-10))
-      │    └── cost: 1104.82
+      │    └── cost: 1108.82
       ├── [ordering: +7]
       │    ├── best: (scan kuvw,cols=(7-10))
-      │    └── cost: 1104.82
+      │    └── cost: 1108.82
       ├── [ordering: +8,+9,+10,+7]
       │    ├── best: (scan kuvw@uvw,cols=(7-10))
-      │    └── cost: 1104.82
+      │    └── cost: 1108.82
       ├── [ordering: +9,+10,+7]
       │    ├── best: (scan kuvw@vw,cols=(7-10))
-      │    └── cost: 1104.82
+      │    └── cost: 1108.82
       └── []
            ├── best: (scan kuvw,cols=(7-10))
-           └── cost: 1104.82
+           └── cost: 1108.82
 
 memo expect=GenerateStreamingSetOp
 SELECT * FROM kuvw INTERSECT ALL SELECT * FROM kuvw
 ----
-memo (optimized, ~11KB, required=[presentation: k:1,u:2,v:3,w:4])
+memo (optimized, ~12KB, required=[presentation: k:1,u:2,v:3,w:4])
  ├── G1: (intersect-all G2 G3) (intersect-all G2 G3 ordering=+1,+2,+3,+4) (intersect-all G2 G3 ordering=+2,+3,+4,+1) (intersect-all G2 G3 ordering=+4,+3,+2,+1) (intersect-all G2 G3 ordering=+3,+4,+1,+2) (intersect-all G2 G3 ordering=+4,+1,+2,+3)
  │    └── [presentation: k:1,u:2,v:3,w:4]
  │         ├── best: (intersect-all G2="[ordering: +1]" G3="[ordering: +7]" ordering=+1,+2,+3,+4)
- │         └── cost: 2219.66
+ │         └── cost: 2227.66
  ├── G2: (scan kuvw,cols=(1-4)) (scan kuvw@uvw,cols=(1-4)) (scan kuvw@wvu,cols=(1-4)) (scan kuvw@vw,cols=(1-4)) (scan kuvw@w,cols=(1-4))
  │    ├── [ordering: +1]
  │    │    ├── best: (scan kuvw,cols=(1-4))
- │    │    └── cost: 1104.82
+ │    │    └── cost: 1108.82
  │    ├── [ordering: +2,+3,+4,+1]
  │    │    ├── best: (scan kuvw@uvw,cols=(1-4))
- │    │    └── cost: 1104.82
+ │    │    └── cost: 1108.82
  │    ├── [ordering: +3,+4,+1]
  │    │    ├── best: (scan kuvw@vw,cols=(1-4))
- │    │    └── cost: 1104.82
+ │    │    └── cost: 1108.82
  │    ├── [ordering: +4,+1]
  │    │    ├── best: (scan kuvw@w,cols=(1-4))
- │    │    └── cost: 1104.82
+ │    │    └── cost: 1108.82
  │    ├── [ordering: +4,+3,+2,+1]
  │    │    ├── best: (scan kuvw@wvu,cols=(1-4))
- │    │    └── cost: 1104.82
+ │    │    └── cost: 1108.82
  │    └── []
  │         ├── best: (scan kuvw,cols=(1-4))
- │         └── cost: 1104.82
+ │         └── cost: 1108.82
  └── G3: (scan kuvw,cols=(7-10)) (scan kuvw@uvw,cols=(7-10)) (scan kuvw@wvu,cols=(7-10)) (scan kuvw@vw,cols=(7-10)) (scan kuvw@w,cols=(7-10))
       ├── [ordering: +10,+7]
       │    ├── best: (scan kuvw@w,cols=(7-10))
-      │    └── cost: 1104.82
+      │    └── cost: 1108.82
       ├── [ordering: +10,+9,+8,+7]
       │    ├── best: (scan kuvw@wvu,cols=(7-10))
-      │    └── cost: 1104.82
+      │    └── cost: 1108.82
       ├── [ordering: +7]
       │    ├── best: (scan kuvw,cols=(7-10))
-      │    └── cost: 1104.82
+      │    └── cost: 1108.82
       ├── [ordering: +8,+9,+10,+7]
       │    ├── best: (scan kuvw@uvw,cols=(7-10))
-      │    └── cost: 1104.82
+      │    └── cost: 1108.82
       ├── [ordering: +9,+10,+7]
       │    ├── best: (scan kuvw@vw,cols=(7-10))
-      │    └── cost: 1104.82
+      │    └── cost: 1108.82
       └── []
            ├── best: (scan kuvw,cols=(7-10))
-           └── cost: 1104.82
+           └── cost: 1108.82
 
 memo expect=GenerateStreamingSetOp
 SELECT * FROM kuvw EXCEPT SELECT * FROM kuvw
 ----
-memo (optimized, ~11KB, required=[presentation: k:1,u:2,v:3,w:4])
+memo (optimized, ~12KB, required=[presentation: k:1,u:2,v:3,w:4])
  ├── G1: (except-all G2 G3) (except-all G2 G3 ordering=+1,+2,+3,+4) (except-all G2 G3 ordering=+2,+3,+4,+1) (except-all G2 G3 ordering=+4,+3,+2,+1) (except-all G2 G3 ordering=+3,+4,+1,+2) (except-all G2 G3 ordering=+4,+1,+2,+3)
  │    └── [presentation: k:1,u:2,v:3,w:4]
  │         ├── best: (except-all G2="[ordering: +1]" G3="[ordering: +7]" ordering=+1,+2,+3,+4)
- │         └── cost: 2219.66
+ │         └── cost: 2227.66
  ├── G2: (scan kuvw,cols=(1-4)) (scan kuvw@uvw,cols=(1-4)) (scan kuvw@wvu,cols=(1-4)) (scan kuvw@vw,cols=(1-4)) (scan kuvw@w,cols=(1-4))
  │    ├── [ordering: +1]
  │    │    ├── best: (scan kuvw,cols=(1-4))
- │    │    └── cost: 1104.82
+ │    │    └── cost: 1108.82
  │    ├── [ordering: +2,+3,+4,+1]
  │    │    ├── best: (scan kuvw@uvw,cols=(1-4))
- │    │    └── cost: 1104.82
+ │    │    └── cost: 1108.82
  │    ├── [ordering: +3,+4,+1]
  │    │    ├── best: (scan kuvw@vw,cols=(1-4))
- │    │    └── cost: 1104.82
+ │    │    └── cost: 1108.82
  │    ├── [ordering: +4,+1]
  │    │    ├── best: (scan kuvw@w,cols=(1-4))
- │    │    └── cost: 1104.82
+ │    │    └── cost: 1108.82
  │    ├── [ordering: +4,+3,+2,+1]
  │    │    ├── best: (scan kuvw@wvu,cols=(1-4))
- │    │    └── cost: 1104.82
+ │    │    └── cost: 1108.82
  │    └── []
  │         ├── best: (scan kuvw,cols=(1-4))
- │         └── cost: 1104.82
+ │         └── cost: 1108.82
  └── G3: (scan kuvw,cols=(7-10)) (scan kuvw@uvw,cols=(7-10)) (scan kuvw@wvu,cols=(7-10)) (scan kuvw@vw,cols=(7-10)) (scan kuvw@w,cols=(7-10))
       ├── [ordering: +10,+7]
       │    ├── best: (scan kuvw@w,cols=(7-10))
-      │    └── cost: 1104.82
+      │    └── cost: 1108.82
       ├── [ordering: +10,+9,+8,+7]
       │    ├── best: (scan kuvw@wvu,cols=(7-10))
-      │    └── cost: 1104.82
+      │    └── cost: 1108.82
       ├── [ordering: +7]
       │    ├── best: (scan kuvw,cols=(7-10))
-      │    └── cost: 1104.82
+      │    └── cost: 1108.82
       ├── [ordering: +8,+9,+10,+7]
       │    ├── best: (scan kuvw@uvw,cols=(7-10))
-      │    └── cost: 1104.82
+      │    └── cost: 1108.82
       ├── [ordering: +9,+10,+7]
       │    ├── best: (scan kuvw@vw,cols=(7-10))
-      │    └── cost: 1104.82
+      │    └── cost: 1108.82
       └── []
            ├── best: (scan kuvw,cols=(7-10))
-           └── cost: 1104.82
+           └── cost: 1108.82
 
 memo expect=GenerateStreamingSetOp
 SELECT * FROM kuvw EXCEPT ALL SELECT * FROM kuvw
 ----
-memo (optimized, ~11KB, required=[presentation: k:1,u:2,v:3,w:4])
+memo (optimized, ~12KB, required=[presentation: k:1,u:2,v:3,w:4])
  ├── G1: (except-all G2 G3) (except-all G2 G3 ordering=+1,+2,+3,+4) (except-all G2 G3 ordering=+2,+3,+4,+1) (except-all G2 G3 ordering=+4,+3,+2,+1) (except-all G2 G3 ordering=+3,+4,+1,+2) (except-all G2 G3 ordering=+4,+1,+2,+3)
  │    └── [presentation: k:1,u:2,v:3,w:4]
  │         ├── best: (except-all G2="[ordering: +1]" G3="[ordering: +7]" ordering=+1,+2,+3,+4)
- │         └── cost: 2219.66
+ │         └── cost: 2227.66
  ├── G2: (scan kuvw,cols=(1-4)) (scan kuvw@uvw,cols=(1-4)) (scan kuvw@wvu,cols=(1-4)) (scan kuvw@vw,cols=(1-4)) (scan kuvw@w,cols=(1-4))
  │    ├── [ordering: +1]
  │    │    ├── best: (scan kuvw,cols=(1-4))
- │    │    └── cost: 1104.82
+ │    │    └── cost: 1108.82
  │    ├── [ordering: +2,+3,+4,+1]
  │    │    ├── best: (scan kuvw@uvw,cols=(1-4))
- │    │    └── cost: 1104.82
+ │    │    └── cost: 1108.82
  │    ├── [ordering: +3,+4,+1]
  │    │    ├── best: (scan kuvw@vw,cols=(1-4))
- │    │    └── cost: 1104.82
+ │    │    └── cost: 1108.82
  │    ├── [ordering: +4,+1]
  │    │    ├── best: (scan kuvw@w,cols=(1-4))
- │    │    └── cost: 1104.82
+ │    │    └── cost: 1108.82
  │    ├── [ordering: +4,+3,+2,+1]
  │    │    ├── best: (scan kuvw@wvu,cols=(1-4))
- │    │    └── cost: 1104.82
+ │    │    └── cost: 1108.82
  │    └── []
  │         ├── best: (scan kuvw,cols=(1-4))
- │         └── cost: 1104.82
+ │         └── cost: 1108.82
  └── G3: (scan kuvw,cols=(7-10)) (scan kuvw@uvw,cols=(7-10)) (scan kuvw@wvu,cols=(7-10)) (scan kuvw@vw,cols=(7-10)) (scan kuvw@w,cols=(7-10))
       ├── [ordering: +10,+7]
       │    ├── best: (scan kuvw@w,cols=(7-10))
-      │    └── cost: 1104.82
+      │    └── cost: 1108.82
       ├── [ordering: +10,+9,+8,+7]
       │    ├── best: (scan kuvw@wvu,cols=(7-10))
-      │    └── cost: 1104.82
+      │    └── cost: 1108.82
       ├── [ordering: +7]
       │    ├── best: (scan kuvw,cols=(7-10))
-      │    └── cost: 1104.82
+      │    └── cost: 1108.82
       ├── [ordering: +8,+9,+10,+7]
       │    ├── best: (scan kuvw@uvw,cols=(7-10))
-      │    └── cost: 1104.82
+      │    └── cost: 1108.82
       ├── [ordering: +9,+10,+7]
       │    ├── best: (scan kuvw@vw,cols=(7-10))
-      │    └── cost: 1104.82
+      │    └── cost: 1108.82
       └── []
            ├── best: (scan kuvw,cols=(7-10))
-           └── cost: 1104.82
+           └── cost: 1108.82
 
 # There is no benefit to generating a streaming UnionAll.
 memo expect-not=GenerateStreamingSetOp
 SELECT * FROM kuvw UNION ALL SELECT * FROM kuvw
 ----
-memo (optimized, ~9KB, required=[presentation: k:13,u:14,v:15,w:16])
+memo (optimized, ~10KB, required=[presentation: k:13,u:14,v:15,w:16])
  ├── G1: (union-all G2 G3)
  │    └── [presentation: k:13,u:14,v:15,w:16]
  │         ├── best: (union-all G2 G3)
- │         └── cost: 2229.66
+ │         └── cost: 2237.66
  ├── G2: (scan kuvw,cols=(1-4)) (scan kuvw@uvw,cols=(1-4)) (scan kuvw@wvu,cols=(1-4)) (scan kuvw@vw,cols=(1-4)) (scan kuvw@w,cols=(1-4))
  │    └── []
  │         ├── best: (scan kuvw,cols=(1-4))
- │         └── cost: 1104.82
+ │         └── cost: 1108.82
  └── G3: (scan kuvw,cols=(7-10)) (scan kuvw@uvw,cols=(7-10)) (scan kuvw@wvu,cols=(7-10)) (scan kuvw@vw,cols=(7-10)) (scan kuvw@w,cols=(7-10))
       └── []
            ├── best: (scan kuvw,cols=(7-10))
-           └── cost: 1104.82
+           └── cost: 1108.82
 
 # Regression test for #73084. Ensure that we do not create empty streaming set
 # op orderings.

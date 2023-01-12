@@ -282,13 +282,33 @@ func (n FiltersExpr) Difference(other FiltersExpr) FiltersExpr {
 // NoOpDistribution returns true if a DistributeExpr has the same distribution
 // as its input.
 func (e *DistributeExpr) NoOpDistribution() bool {
+	if target, source, ok := e.GetDistributions(); ok {
+		return target.Equals(source)
+	}
+	return false
+}
+
+// GetDistributions returns the target and source Distributions of this
+// `DistributeExpr`, if the provided physical properties have been built.
+func (e *DistributeExpr) GetDistributions() (target, source physical.Distribution, ok bool) {
 	distributionProvidedPhysical := e.ProvidedPhysical()
 	inputDistributionProvidedPhysical := e.Input.ProvidedPhysical()
-
 	if distributionProvidedPhysical != nil && inputDistributionProvidedPhysical != nil {
-		distribution := distributionProvidedPhysical.Distribution
+		target = distributionProvidedPhysical.Distribution
+		source = inputDistributionProvidedPhysical.Distribution
+		return target, source, ok
+	}
+	return physical.Distribution{}, physical.Distribution{}, false
+}
+
+// HasHomeRegion returns true if the operation tree being distributed has a home
+// region.
+func (e *DistributeExpr) HasHomeRegion() bool {
+	inputDistributionProvidedPhysical := e.Input.ProvidedPhysical()
+
+	if inputDistributionProvidedPhysical != nil {
 		inputDistribution := inputDistributionProvidedPhysical.Distribution
-		return distribution.Equals(inputDistribution)
+		return len(inputDistribution.Regions) == 1
 	}
 	return false
 }
@@ -706,6 +726,8 @@ func (f *WindowFrame) String() string {
 
 // IsCanonical returns true if the ScanPrivate indicates an original unaltered
 // primary index Scan operator (i.e. unconstrained and not limited).
+// s.InvertedConstraint is implicitly nil because a primary index cannot
+// be inverted.
 func (s *ScanPrivate) IsCanonical() bool {
 	return s.Index == cat.PrimaryIndex &&
 		s.Constraint == nil &&
@@ -847,6 +869,30 @@ func (lj *LookupJoinPrivate) GetConstPrefixFilter(md *opt.Metadata) (pos int, ok
 		}
 	}
 	return 0, false
+}
+
+// ColIsEquivalentWithLookupIndexPrefix returns true if there is a term in
+// `LookupExpr` equating the first column in the lookup index with `col`.
+func (lj *LookupJoinPrivate) ColIsEquivalentWithLookupIndexPrefix(
+	md *opt.Metadata, col opt.ColumnID,
+) bool {
+	lookupTable := md.Table(lj.Table)
+	lookupIndex := lookupTable.Index(lj.Index)
+
+	idxCol := lj.Table.IndexColumnID(lookupIndex, 0)
+	var desiredEquivalentCols opt.ColSet
+	desiredEquivalentCols.Add(idxCol)
+	desiredEquivalentCols.Add(col)
+
+	for i := range lj.LookupExpr {
+		props := lj.LookupExpr[i].ScalarProps()
+
+		equivCols := props.FuncDeps.ComputeEquivGroup(idxCol)
+		if desiredEquivalentCols.SubsetOf(equivCols) {
+			return true
+		}
+	}
+	return false
 }
 
 // NeedResults returns true if the mutation operator can return the rows that

@@ -19,7 +19,7 @@ limit
  ├── columns: x:11 y:12 z:13
  ├── cardinality: [0 - 1]
  ├── stats: [rows=1]
- ├── cost: 152.280001
+ ├── cost: 160.090001
  ├── key: ()
  ├── fd: ()-->(11-13)
  ├── distribution: test
@@ -29,14 +29,14 @@ limit
  │    ├── left columns: a.x:1 a.y:2 a.z:3
  │    ├── right columns: a.x:6 a.y:7 a.z:8
  │    ├── stats: [rows=20]
- │    ├── cost: 152.260001
+ │    ├── cost: 160.070001
  │    ├── limit hint: 1.00
  │    ├── distribution: test
  │    ├── prune: (11,13)
  │    ├── index-join a
  │    │    ├── columns: a.x:1 a.y:2 a.z:3
  │    │    ├── stats: [rows=10, distinct(2)=1, null(2)=0]
- │    │    ├── cost: 76.0200006
+ │    │    ├── cost: 80.0200006
  │    │    ├── key: (1)
  │    │    ├── fd: ()-->(2), (1)-->(3)
  │    │    ├── limit hint: 1.00
@@ -46,7 +46,7 @@ limit
  │    │         ├── columns: a.x:1 a.y:2
  │    │         ├── constraint: /2/1: [/1 - /1]
  │    │         ├── stats: [rows=10, distinct(2)=1, null(2)=0]
- │    │         ├── cost: 15.1
+ │    │         ├── cost: 19.1
  │    │         ├── key: (1)
  │    │         ├── fd: ()-->(2)
  │    │         ├── limit hint: 1.00
@@ -54,7 +54,7 @@ limit
  │    └── index-join a
  │         ├── columns: a.x:6 a.y:7 a.z:8
  │         ├── stats: [rows=10, distinct(7)=1, null(7)=0]
- │         ├── cost: 76.0200006
+ │         ├── cost: 80.0200006
  │         ├── key: (6)
  │         ├── fd: ()-->(7), (6)-->(8)
  │         ├── limit hint: 1.00
@@ -64,7 +64,7 @@ limit
  │              ├── columns: a.x:6 a.y:7
  │              ├── constraint: /7/6: [/2 - /2]
  │              ├── stats: [rows=10, distinct(7)=1, null(7)=0]
- │              ├── cost: 15.1
+ │              ├── cost: 19.1
  │              ├── key: (6)
  │              ├── fd: ()-->(7)
  │              ├── limit hint: 1.00
@@ -266,7 +266,7 @@ project
  ├── columns: x:6
  ├── cardinality: [0 - 1]
  ├── stats: [rows=1]
- ├── cost: 21.145
+ ├── cost: 29.145
  ├── key: ()
  ├── fd: ()-->(6)
  ├── distribution: test
@@ -275,7 +275,7 @@ project
       ├── columns: a.x:1 b.x:6
       ├── cardinality: [0 - 1]
       ├── stats: [rows=1]
-      ├── cost: 21.125
+      ├── cost: 29.125
       ├── key: ()
       ├── fd: ()-->(1,6), (6)==(1), (1)==(6)
       ├── distribution: test
@@ -284,7 +284,7 @@ project
       │    ├── key columns: [1] = [6]
       │    ├── lookup columns are key
       │    ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(6)=1, null(6)=0]
-      │    ├── cost: 21.105
+      │    ├── cost: 29.105
       │    ├── key: (6)
       │    ├── fd: (1)==(6), (6)==(1)
       │    ├── limit hint: 1.00
@@ -292,7 +292,7 @@ project
       │    ├── scan a@a_y_idx
       │    │    ├── columns: a.x:1
       │    │    ├── stats: [rows=1, distinct(1)=1, null(1)=0]
-      │    │    ├── cost: 15.035
+      │    │    ├── cost: 19.035
       │    │    ├── key: (1)
       │    │    ├── limit hint: 1.00
       │    │    ├── distribution: test
@@ -357,7 +357,7 @@ limit
  ├── internal-ordering: +2,+(1|6)
  ├── cardinality: [0 - 2]
  ├── stats: [rows=2]
- ├── cost: 55.99
+ ├── cost: 63.99
  ├── key: (6,7)
  ├── fd: (1)-->(2), (1)==(6), (6)==(1)
  ├── ordering: +2,+(1|6) [actual: +2,+1]
@@ -369,7 +369,7 @@ limit
  │    ├── flags: force lookup join (into right side)
  │    ├── key columns: [1] = [6]
  │    ├── stats: [rows=10, distinct(1)=1, null(1)=0, distinct(6)=1, null(6)=0]
- │    ├── cost: 55.96
+ │    ├── cost: 63.96
  │    ├── key: (6,7)
  │    ├── fd: (1)-->(2), (1)==(6), (6)==(1)
  │    ├── ordering: +2,+(1|6) [actual: +2,+1]
@@ -380,7 +380,7 @@ limit
  │    ├── scan a@a_y_idx
  │    │    ├── columns: a.x:1 a.y:2
  │    │    ├── stats: [rows=1, distinct(1)=1, null(1)=0]
- │    │    ├── cost: 15.04
+ │    │    ├── cost: 19.04
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(2)
  │    │    ├── ordering: +2,+1

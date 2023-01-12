@@ -182,29 +182,29 @@ memo (optimized, ~8KB, required=[presentation: info:6] [distribution: test])
  ├── G1: (explain G2 [presentation: i:1,j:2,k:3] [distribution: test])
  │    └── [presentation: info:6] [distribution: test]
  │         ├── best: (explain G2="[presentation: i:1,j:2,k:3] [distribution: test]" [presentation: i:1,j:2,k:3] [distribution: test])
- │         └── cost: 5.18
+ │         └── cost: 9.18
  ├── G2: (select G3 G4) (select G5 G6)
  │    ├── [presentation: i:1,j:2,k:3] [distribution: test]
  │    │    ├── best: (select G5="[distribution: test]" G6)
- │    │    └── cost: 5.16
+ │    │    └── cost: 9.16
  │    └── []
  │         ├── best: (select G5 G6)
- │         └── cost: 5.16
+ │         └── cost: 9.16
  ├── G3: (scan t,cols=(1-3)) (scan t@t_k_key,cols=(1-3))
  │    ├── [distribution: test]
  │    │    ├── best: (scan t,cols=(1-3))
- │    │    └── cost: 1145.22
+ │    │    └── cost: 1149.22
  │    └── []
  │         ├── best: (scan t,cols=(1-3))
- │         └── cost: 1145.22
+ │         └── cost: 1149.22
  ├── G4: (filters G7 G8)
  ├── G5: (scan t,cols=(1-3),constrained)
  │    ├── [distribution: test]
  │    │    ├── best: (scan t,cols=(1-3),constrained)
- │    │    └── cost: 5.13
+ │    │    └── cost: 9.13
  │    └── []
  │         ├── best: (scan t,cols=(1-3),constrained)
- │         └── cost: 5.13
+ │         └── cost: 9.13
  ├── G6: (filters G7)
  ├── G7: (eq G9 G10)
  ├── G8: (eq G11 G12)
