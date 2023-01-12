@@ -8,11 +8,12 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package rules
+package current
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/rel"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/rules/common"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scgraph"
 )
 
@@ -27,32 +28,32 @@ func init() {
 		scgraph.Precedence,
 		"index", "column",
 		scpb.Status_ABSENT, scpb.Status_ABSENT,
-		func(from, to nodeVars) rel.Clauses {
-			ic := mkNodeVars("index-column")
+		func(from, to common.NodeVars) rel.Clauses {
+			ic := common.MkNodeVars("index-column")
 			relationID, columnID := rel.Var("table-id"), rel.Var("column-id")
 			return rel.Clauses{
 				from.Type((*scpb.PrimaryIndex)(nil), (*scpb.SecondaryIndex)(nil)),
 				to.Type((*scpb.Column)(nil)),
-				columnInIndex(ic, from, relationID, columnID, "index-id"),
-				joinOnColumnID(ic, to, relationID, columnID),
-				ic.descriptorIsNotBeingDropped(),
+				common.ColumnInIndex(ic, from, relationID, columnID, "index-id"),
+				common.JoinOnColumnID(ic, to, relationID, columnID),
+				ic.DescriptorIsNotBeingDropped(),
 			}
 		})
 
 	registerDepRule("secondary indexes containing column as key reach write-only before column",
 		scgraph.Precedence,
 		"index", "column",
-		func(from, to nodeVars) rel.Clauses {
-			ic := mkNodeVars("index-column")
+		func(from, to common.NodeVars) rel.Clauses {
+			ic := common.MkNodeVars("index-column")
 			relationID, columnID := rel.Var("table-id"), rel.Var("column-id")
 			return rel.Clauses{
 				from.Type((*scpb.SecondaryIndex)(nil)),
 				to.Type((*scpb.Column)(nil)),
-				columnInIndex(ic, from, relationID, columnID, "index-id"),
-				joinOnColumnID(ic, to, relationID, columnID),
-				statusesToAbsent(from, scpb.Status_VALIDATED, to, scpb.Status_WRITE_ONLY),
-				ic.descriptorIsNotBeingDropped(),
-				rel.Filter("isIndexKeyColumnKey", ic.el)(
+				common.ColumnInIndex(ic, from, relationID, columnID, "index-id"),
+				common.JoinOnColumnID(ic, to, relationID, columnID),
+				common.StatusesToAbsent(from, scpb.Status_VALIDATED, to, scpb.Status_WRITE_ONLY),
+				ic.DescriptorIsNotBeingDropped(),
+				rel.Filter("isIndexKeyColumnKey", ic.El)(
 					func(ic *scpb.IndexColumn) bool {
 						return ic.Kind == scpb.IndexColumn_KEY
 					},

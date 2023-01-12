@@ -8,11 +8,12 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package rules
+package current
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/rel"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/rules/common"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scgraph"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 )
@@ -28,12 +29,12 @@ func init() {
 		"table removed right before garbage collection",
 		scgraph.SameStagePrecedence,
 		"table", "data",
-		func(from, to nodeVars) rel.Clauses {
+		func(from, to common.NodeVars) rel.Clauses {
 			return rel.Clauses{
-				from.typeFilter(IsDescriptor),
+				from.TypeFilter(common.IsDescriptor),
 				to.Type((*scpb.TableData)(nil)),
-				joinOnDescID(from, to, "table-id"),
-				statusesToAbsent(from, scpb.Status_ABSENT, to, scpb.Status_DROPPED),
+				common.JoinOnDescID(from, to, "table-id"),
+				common.StatusesToAbsent(from, scpb.Status_ABSENT, to, scpb.Status_DROPPED),
 			}
 		},
 	)
@@ -42,12 +43,12 @@ func init() {
 		"descriptor removed right before garbage collection",
 		scgraph.SameStagePrecedence,
 		"database", "data",
-		func(from, to nodeVars) rel.Clauses {
+		func(from, to common.NodeVars) rel.Clauses {
 			return rel.Clauses{
-				from.typeFilter(IsDescriptor),
+				from.TypeFilter(common.IsDescriptor),
 				to.Type((*scpb.DatabaseData)(nil)),
-				joinOnDescID(from, to, "db-id"),
-				statusesToAbsent(from, scpb.Status_ABSENT, to, scpb.Status_DROPPED),
+				common.JoinOnDescID(from, to, "db-id"),
+				common.StatusesToAbsent(from, scpb.Status_ABSENT, to, scpb.Status_DROPPED),
 			}
 		},
 	)
@@ -57,11 +58,11 @@ func init() {
 		scgraph.Precedence,
 		"index", "index-data",
 		scpb.Status_ABSENT, scpb.Status_DROPPED,
-		func(from, to nodeVars) rel.Clauses {
+		func(from, to common.NodeVars) rel.Clauses {
 			return rel.Clauses{
-				from.typeFilter(isIndex),
+				from.TypeFilter(common.IsIndex),
 				to.Type((*scpb.IndexData)(nil)),
-				joinOnIndexID(from, to, "table-id", "index-id"),
+				common.JoinOnIndexID(from, to, "table-id", "index-id"),
 			}
 		},
 	)
@@ -84,12 +85,12 @@ func init() {
 		scgraph.SameStagePrecedence,
 		"data-a", "data-b",
 		scpb.Status_DROPPED, scpb.Status_DROPPED,
-		func(from, to nodeVars) rel.Clauses {
+		func(from, to common.NodeVars) rel.Clauses {
 			return rel.Clauses{
-				from.typeFilter(isData),
-				to.typeFilter(isData),
-				joinOnDescID(from, to, "desc-id"),
-				filterElements("SmallerIDsFirst", from, to, func(a, b scpb.Element) bool {
+				from.TypeFilter(common.IsData),
+				to.TypeFilter(common.IsData),
+				common.JoinOnDescID(from, to, "desc-id"),
+				common.FilterElements("SmallerIDsFirst", from, to, func(a, b scpb.Element) bool {
 					aDescID, aIdxID := dataIDs(a)
 					bDescID, bIdxID := dataIDs(b)
 					if aDescID == bDescID {
@@ -110,15 +111,15 @@ func init() {
 		"index data exists as soon as index accepts backfills",
 		scgraph.SameStagePrecedence,
 		"index-name", "index",
-		func(from, to nodeVars) rel.Clauses {
+		func(from, to common.NodeVars) rel.Clauses {
 			return rel.Clauses{
 				from.Type(
 					(*scpb.PrimaryIndex)(nil),
 					(*scpb.SecondaryIndex)(nil),
 				),
 				to.Type((*scpb.IndexData)(nil)),
-				joinOnIndexID(from, to, "table-id", "index-id"),
-				statusesToPublicOrTransient(from, scpb.Status_BACKFILL_ONLY, to, scpb.Status_PUBLIC),
+				common.JoinOnIndexID(from, to, "table-id", "index-id"),
+				common.StatusesToPublicOrTransient(from, scpb.Status_BACKFILL_ONLY, to, scpb.Status_PUBLIC),
 			}
 		},
 	)
@@ -127,12 +128,12 @@ func init() {
 		"temp index data exists as soon as temp index accepts writes",
 		scgraph.SameStagePrecedence,
 		"temp-index", "temp-index-data",
-		func(from, to nodeVars) rel.Clauses {
+		func(from, to common.NodeVars) rel.Clauses {
 			return rel.Clauses{
 				from.Type((*scpb.TemporaryIndex)(nil)),
 				to.Type((*scpb.IndexData)(nil)),
-				joinOnIndexID(from, to, "table-id", "index-id"),
-				statusesToPublicOrTransient(from, scpb.Status_WRITE_ONLY, to, scpb.Status_PUBLIC),
+				common.JoinOnIndexID(from, to, "table-id", "index-id"),
+				common.StatusesToPublicOrTransient(from, scpb.Status_WRITE_ONLY, to, scpb.Status_PUBLIC),
 			}
 		},
 	)

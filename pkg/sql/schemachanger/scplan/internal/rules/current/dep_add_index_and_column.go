@@ -8,11 +8,12 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package rules
+package current
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/rel"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/rules/common"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scgraph"
 )
 
@@ -25,12 +26,12 @@ func init() {
 	registerDepRule("index-column added to index before index is backfilled",
 		scgraph.Precedence,
 		"index-column", "index",
-		func(from, to nodeVars) rel.Clauses {
+		func(from, to common.NodeVars) rel.Clauses {
 			return rel.Clauses{
 				from.Type((*scpb.IndexColumn)(nil)),
 				to.Type((*scpb.PrimaryIndex)(nil), (*scpb.SecondaryIndex)(nil)),
-				joinOnIndexID(from, to, "table-id", "index-id"),
-				statusesToPublicOrTransient(from, scpb.Status_PUBLIC, to, scpb.Status_BACKFILLED),
+				common.JoinOnIndexID(from, to, "table-id", "index-id"),
+				common.StatusesToPublicOrTransient(from, scpb.Status_PUBLIC, to, scpb.Status_BACKFILLED),
 			}
 		})
 
@@ -39,12 +40,12 @@ func init() {
 	registerDepRule("index-column added to index before temp index receives writes",
 		scgraph.Precedence,
 		"index-column", "index",
-		func(from, to nodeVars) rel.Clauses {
+		func(from, to common.NodeVars) rel.Clauses {
 			return rel.Clauses{
 				from.Type((*scpb.IndexColumn)(nil)),
 				to.Type((*scpb.TemporaryIndex)(nil)),
-				joinOnIndexID(from, to, "table-id", "index-id"),
-				statusesTransient(from, scpb.Status_PUBLIC, to, scpb.Status_WRITE_ONLY),
+				common.JoinOnIndexID(from, to, "table-id", "index-id"),
+				common.StatusesTransient(from, scpb.Status_PUBLIC, to, scpb.Status_WRITE_ONLY),
 			}
 		})
 
@@ -52,15 +53,15 @@ func init() {
 		"column existence precedes index existence",
 		scgraph.Precedence,
 		"column", "index",
-		func(from, to nodeVars) rel.Clauses {
-			ic := mkNodeVars("index-column")
+		func(from, to common.NodeVars) rel.Clauses {
+			ic := common.MkNodeVars("index-column")
 			relationID, columnID := rel.Var("table-id"), rel.Var("column-id")
 			return rel.Clauses{
 				from.Type((*scpb.Column)(nil)),
 				to.Type((*scpb.PrimaryIndex)(nil), (*scpb.SecondaryIndex)(nil)),
-				joinOnColumnID(from, ic, relationID, columnID),
-				columnInIndex(ic, to, relationID, columnID, "index-id"),
-				statusesToPublicOrTransient(from, scpb.Status_DELETE_ONLY, to, scpb.Status_BACKFILL_ONLY),
+				common.JoinOnColumnID(from, ic, relationID, columnID),
+				common.ColumnInIndex(ic, to, relationID, columnID, "index-id"),
+				common.StatusesToPublicOrTransient(from, scpb.Status_DELETE_ONLY, to, scpb.Status_BACKFILL_ONLY),
 			}
 		},
 	)
@@ -69,15 +70,15 @@ func init() {
 		"column existence precedes temp index existence",
 		scgraph.Precedence,
 		"column", "index",
-		func(from, to nodeVars) rel.Clauses {
-			ic := mkNodeVars("index-column")
+		func(from, to common.NodeVars) rel.Clauses {
+			ic := common.MkNodeVars("index-column")
 			relationID, columnID := rel.Var("table-id"), rel.Var("column-id")
 			return rel.Clauses{
 				from.Type((*scpb.Column)(nil)),
 				to.Type((*scpb.TemporaryIndex)(nil)),
-				joinOnColumnID(ic, from, relationID, columnID),
-				columnInIndex(ic, to, relationID, columnID, "index-id"),
-				statusesToPublicOrTransient(from, scpb.Status_DELETE_ONLY, to, scpb.Status_DELETE_ONLY),
+				common.JoinOnColumnID(ic, from, relationID, columnID),
+				common.ColumnInIndex(ic, to, relationID, columnID, "index-id"),
+				common.StatusesToPublicOrTransient(from, scpb.Status_DELETE_ONLY, to, scpb.Status_DELETE_ONLY),
 			}
 		},
 	)
@@ -91,15 +92,15 @@ func init() {
 		"column is WRITE_ONLY before temporary index is WRITE_ONLY",
 		scgraph.Precedence,
 		"column", "index",
-		func(from, to nodeVars) rel.Clauses {
-			ic := mkNodeVars("index-column")
+		func(from, to common.NodeVars) rel.Clauses {
+			ic := common.MkNodeVars("index-column")
 			relationID, columnID := rel.Var("table-id"), rel.Var("column-id")
 			return rel.Clauses{
-				from.el.Type((*scpb.Column)(nil)),
-				to.el.Type((*scpb.TemporaryIndex)(nil)),
-				joinOnColumnID(ic, from, relationID, columnID),
-				columnInIndex(ic, to, relationID, columnID, "index-id"),
-				statusesToPublicOrTransient(from, scpb.Status_WRITE_ONLY, to, scpb.Status_WRITE_ONLY),
+				from.El.Type((*scpb.Column)(nil)),
+				to.El.Type((*scpb.TemporaryIndex)(nil)),
+				common.JoinOnColumnID(ic, from, relationID, columnID),
+				common.ColumnInIndex(ic, to, relationID, columnID, "index-id"),
+				common.StatusesToPublicOrTransient(from, scpb.Status_WRITE_ONLY, to, scpb.Status_WRITE_ONLY),
 			}
 		},
 	)
@@ -108,15 +109,15 @@ func init() {
 		"swapped primary index public before column",
 		scgraph.Precedence,
 		"index", "column",
-		func(from, to nodeVars) rel.Clauses {
-			ic := mkNodeVars("index-column")
+		func(from, to common.NodeVars) rel.Clauses {
+			ic := common.MkNodeVars("index-column")
 			relationID, columnID := rel.Var("table-id"), rel.Var("column-id")
 			return rel.Clauses{
 				from.Type((*scpb.PrimaryIndex)(nil)),
 				to.Type((*scpb.Column)(nil)),
-				columnInSwappedInPrimaryIndex(ic, from, relationID, columnID, "index-id"),
-				joinOnColumnID(ic, to, relationID, columnID),
-				statusesToPublicOrTransient(from, scpb.Status_PUBLIC, to, scpb.Status_PUBLIC),
+				common.ColumnInSwappedInPrimaryIndex(ic, from, relationID, columnID, "index-id"),
+				common.JoinOnColumnID(ic, to, relationID, columnID),
+				common.StatusesToPublicOrTransient(from, scpb.Status_PUBLIC, to, scpb.Status_PUBLIC),
 			}
 		},
 	)

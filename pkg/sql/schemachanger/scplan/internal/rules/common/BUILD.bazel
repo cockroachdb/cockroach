@@ -1,0 +1,26 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+
+go_library(
+    name = "common",
+    srcs = [
+        "helpers.go",
+        "registry.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/rules/common",
+    visibility = ["//pkg/sql/schemachanger/scplan:__subpackages__"],
+    deps = [
+        "//pkg/sql/schemachanger/rel",
+        "//pkg/sql/schemachanger/scpb",
+        "//pkg/sql/schemachanger/scplan/internal/scgraph",
+        "//pkg/sql/schemachanger/screl",
+        "//pkg/sql/sem/catid",
+        "//pkg/util/iterutil",
+        "//pkg/util/log",
+        "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@in_gopkg_yaml_v3//:yaml_v3",
+    ],
+)
+
+get_x_data(name = "get_x_data")
