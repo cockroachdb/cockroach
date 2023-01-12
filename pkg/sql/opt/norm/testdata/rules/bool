@@ -434,28 +434,11 @@ FROM
 WHERE
 	(NOT (t.g ~ t.g));
 ----
-project
- ├── columns: "?column?":2 g:1
- ├── cardinality: [0 - 1]
- ├── immutable
+values
+ ├── columns: "?column?":2!null g:1!null
+ ├── cardinality: [0 - 0]
  ├── key: ()
- ├── fd: ()-->(1,2)
- ├── select
- │    ├── columns: column1:1
- │    ├── cardinality: [0 - 1]
- │    ├── immutable
- │    ├── key: ()
- │    ├── fd: ()-->(1)
- │    ├── values
- │    │    ├── columns: column1:1
- │    │    ├── cardinality: [1 - 1]
- │    │    ├── key: ()
- │    │    ├── fd: ()-->(1)
- │    │    └── (NULL,)
- │    └── filters
- │         └── NOT (CAST(NULL AS GEOMETRY) ~ CAST(NULL AS GEOMETRY)) [immutable]
- └── projections
-      └── NULL [as="?column?":2]
+ └── fd: ()-->(1,2)
 
 # --------------------------------------------------
 # EliminateNot

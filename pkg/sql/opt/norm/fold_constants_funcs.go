@@ -294,7 +294,13 @@ func (c *CustomFuncs) FoldBinary(
 	}
 
 	lDatum, rDatum := memo.ExtractConstDatum(left), memo.ExtractConstDatum(right)
-	result, err := eval.BinaryOp(c.f.ctx, c.f.evalCtx, o.EvalOp, lDatum, rDatum)
+	var result tree.Datum
+	var err error
+	if !o.CalledOnNullInput && (lDatum == tree.DNull || rDatum == tree.DNull) {
+		result = tree.DNull
+	} else {
+		result, err = eval.BinaryOp(c.f.ctx, c.f.evalCtx, o.EvalOp, lDatum, rDatum)
+	}
 	if err != nil {
 		return nil, false
 	}
@@ -511,7 +517,13 @@ func (c *CustomFuncs) FoldComparison(
 		lDatum, rDatum = rDatum, lDatum
 	}
 
-	result, err := eval.BinaryOp(c.f.ctx, c.f.evalCtx, o.EvalOp, lDatum, rDatum)
+	var result tree.Datum
+	var err error
+	if !o.CalledOnNullInput && (lDatum == tree.DNull || rDatum == tree.DNull) {
+		result = tree.DNull
+	} else {
+		result, err = eval.BinaryOp(c.f.ctx, c.f.evalCtx, o.EvalOp, lDatum, rDatum)
+	}
 	if err != nil {
 		return nil, false
 	}
