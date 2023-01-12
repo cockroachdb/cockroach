@@ -54,15 +54,15 @@ func Refresh(
 	// specifying consistent=false. Note that we include tombstones,
 	// which must be considered as updates on refresh.
 	log.VEventf(ctx, 2, "refresh %s @[%s-%s]", args.Span(), refreshFrom, refreshTo)
-	val, intent, err := storage.MVCCGet(ctx, reader, args.Key, refreshTo, storage.MVCCGetOptions{
+	res, err := storage.MVCCGet(ctx, reader, args.Key, refreshTo, storage.MVCCGetOptions{
 		Inconsistent: true,
 		Tombstones:   true,
 	})
 
 	if err != nil {
 		return result.Result{}, err
-	} else if val != nil {
-		if ts := val.Timestamp; refreshFrom.Less(ts) {
+	} else if res.Value != nil {
+		if ts := res.Value.Timestamp; refreshFrom.Less(ts) {
 			return result.Result{},
 				roachpb.NewRefreshFailedError(roachpb.RefreshFailedError_REASON_COMMITTED_VALUE, args.Key, ts)
 		}
@@ -70,9 +70,9 @@ func Refresh(
 
 	// Check if an intent which is not owned by this transaction was written
 	// at or beneath the refresh timestamp.
-	if intent != nil && intent.Txn.ID != h.Txn.ID {
+	if res.Intent != nil && res.Intent.Txn.ID != h.Txn.ID {
 		return result.Result{}, roachpb.NewRefreshFailedError(roachpb.RefreshFailedError_REASON_INTENT,
-			intent.Key, intent.Txn.WriteTimestamp)
+			res.Intent.Key, res.Intent.Txn.WriteTimestamp)
 	}
 
 	return result.Result{}, nil
