@@ -781,7 +781,8 @@ func newEvaluatorWithNormCheck(
 		return nil, err
 	}
 
-	return NewEvaluator(norm.SelectClause, execCfg, username.RootUserName(), defaultDBSessionData)
+	return NewEvaluator(norm.SelectClause, execCfg, username.RootUserName(),
+		defaultDBSessionData, hlc.Timestamp{}), nil
 }
 
 var defaultDBSessionData = sessiondatapb.SessionData{

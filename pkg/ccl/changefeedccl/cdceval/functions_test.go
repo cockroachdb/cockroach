@@ -53,45 +53,106 @@ func TestEvaluatesCDCFunctionOverloads(t *testing.T) {
 	defer configSemaForCDC(&semaCtx)()
 
 	t.Run("time", func(t *testing.T) {
-		// We'll run tests against some future time stamp to ensure
-		// that time functions use correct values.
-		futureTS := s.Clock().Now().Add(int64(60*time.Minute), 0)
-		expectTSTZ := func(ts hlc.Timestamp) string {
+		expectTSTZ := func(ts hlc.Timestamp) tree.Datum {
 			t.Helper()
 			d, err := tree.MakeDTimestampTZ(ts.GoTime(), time.Microsecond)
 			require.NoError(t, err)
-			return tree.AsStringWithFlags(d, tree.FmtExport)
+			return d
+		}
+		expectTS := func(ts hlc.Timestamp) tree.Datum {
+			t.Helper()
+			d, err := tree.MakeDTimestamp(ts.GoTime(), time.Microsecond)
+			require.NoError(t, err)
+			return d
+		}
+		expectHLC := func(ts hlc.Timestamp) tree.Datum {
+			t.Helper()
+			return eval.TimestampToDecimalDatum(ts)
 		}
 
-		for _, tc := range []struct {
-			fn     string
-			expect string
-		}{
-			{fn: "statement_timestamp", expect: expectTSTZ(futureTS)},
-			{fn: "transaction_timestamp", expect: expectTSTZ(futureTS)},
+		type preferredFn func(ts hlc.Timestamp) tree.Datum
+		for fn, preferredOverload := range map[string]preferredFn{
+			"statement_timestamp":           expectTSTZ,
+			"transaction_timestamp":         expectTSTZ,
+			"cdc_mvcc_timestamp":            expectHLC,
+			"cdc_updated_timestamp":         expectHLC,
+			"changefeed_creation_timestamp": expectHLC,
 		} {
-			t.Run(tc.fn, func(t *testing.T) {
-				testRow := makeEventRow(t, desc, s.Clock().Now(), false, futureTS)
+			t.Run(fn, func(t *testing.T) {
+				createTS := s.Clock().Now().Add(-int64(60*time.Minute), 0)
+				schemaTS := s.Clock().Now()
+				rowTS := schemaTS.Add(int64(60*time.Minute), 0)
+
+				targetTS := rowTS
+				switch fn {
+				case "cdc_updated_timestamp":
+					targetTS = schemaTS
+				case "changefeed_creation_timestamp":
+					targetTS = createTS
+				}
+				// We'll run tests against some future time stamp to ensure
+				// that time functions use correct values.
+				testRow := makeEventRow(t, desc, schemaTS, false, rowTS)
 				e, err := newEvaluator(&execCfg, &semaCtx, testRow.EventDescriptor,
-					fmt.Sprintf("SELECT %s() FROM foo", tc.fn))
+					fmt.Sprintf("SELECT "+
+						"%[1]s() AS preferred,"+ // Preferred overload.
+						"%[1]s():::TIMESTAMPTZ  AS tstz,"+ // Force timestamptz overload.
+						"%[1]s():::TIMESTAMP AS ts,"+ // Force timestamp overload.
+						"%[1]s():::DECIMAL AS dec,"+ // Force decimal overload.
+						"%[1]s()::STRING AS str"+ // Casts preferred overload to string.
+						" FROM foo", fn))
 				require.NoError(t, err)
 				defer e.Close()
+				e.statementTS = createTS
 
 				p, err := e.Eval(ctx, testRow, cdcevent.Row{})
 				require.NoError(t, err)
-				require.Equal(t, map[string]string{tc.fn: tc.expect}, slurpValues(t, p))
 
-				// Emit again, this time advancing MVCC timestamp of the row.
-				// We want to make sure that optimizer did not constant fold the call
-				// to the function, even though this function is marked stable.
+				initialExpectations := map[string]string{
+					"preferred": tree.AsStringWithFlags(preferredOverload(targetTS), tree.FmtExport),
+					"tstz":      tree.AsStringWithFlags(expectTSTZ(targetTS), tree.FmtExport),
+					"ts":        tree.AsStringWithFlags(expectTS(targetTS), tree.FmtExport),
+					"dec":       tree.AsStringWithFlags(eval.TimestampToDecimalDatum(targetTS), tree.FmtExport),
+					"str":       tree.AsStringWithFlags(preferredOverload(targetTS), tree.FmtExport),
+				}
+				require.Equal(t, initialExpectations, slurpValues(t, p))
+
+				// Modify row/schema timestamps, and evaluate again.
 				testRow.MvccTimestamp = testRow.MvccTimestamp.Add(int64(time.Hour), 0)
+				targetTS = testRow.MvccTimestamp
+				testRow.SchemaTS = schemaTS.Add(1, 0)
+				e.statementTS = e.statementTS.Add(-1, 0)
 				p, err = e.Eval(ctx, testRow, cdcevent.Row{})
 				require.NoError(t, err)
-				require.Equal(t, map[string]string{tc.fn: expectTSTZ(testRow.MvccTimestamp)}, slurpValues(t, p))
+
+				var updatedExpectations map[string]string
+				switch fn {
+				case "changefeed_creation_timestamp":
+					// this function is stable; So, advancing evaluator timestamp
+					// should have no bearing on the returned values -- we should see
+					// the same thing we saw before.
+					updatedExpectations = initialExpectations
+				case "cdc_updated_timestamp":
+					targetTS = testRow.SchemaTS
+					fallthrough
+				default:
+					updatedExpectations = map[string]string{
+						"preferred": tree.AsStringWithFlags(preferredOverload(targetTS), tree.FmtExport),
+						"tstz":      tree.AsStringWithFlags(expectTSTZ(targetTS), tree.FmtExport),
+						"ts":        tree.AsStringWithFlags(expectTS(targetTS), tree.FmtExport),
+						"dec":       tree.AsStringWithFlags(eval.TimestampToDecimalDatum(targetTS), tree.FmtExport),
+						"str":       tree.AsStringWithFlags(preferredOverload(targetTS), tree.FmtExport),
+					}
+				}
+				require.Equal(t, updatedExpectations, slurpValues(t, p))
 			})
 		}
 
 		t.Run("timezone", func(t *testing.T) {
+			// We'll run tests against some future time stamp to ensure
+			// that time functions use correct values.
+			futureTS := s.Clock().Now().Add(int64(60*time.Minute), 0)
+
 			// Timezone has many overrides, some are immutable, and some are Stable.
 			// Call "stable" overload which relies on session data containing
 			// timezone. Since we don't do any special setup with session data, the
@@ -137,31 +198,6 @@ func TestEvaluatesCDCFunctionOverloads(t *testing.T) {
 		require.NoError(t, err)
 		return j
 	}
-
-	t.Run("cdc_{mvcc,updated}_timestamp", func(t *testing.T) {
-		for _, cast := range []string{"", "::decimal", "::string"} {
-			t.Run(cast, func(t *testing.T) {
-				schemaTS := s.Clock().Now()
-				mvccTS := schemaTS.Add(int64(30*time.Minute), 0)
-				testRow := makeEventRow(t, desc, schemaTS, false, mvccTS)
-				e, err := newEvaluator(&execCfg, &semaCtx, testRow.EventDescriptor, fmt.Sprintf(
-					"SELECT cdc_mvcc_timestamp()%[1]s as mvcc, cdc_updated_timestamp()%[1]s as updated FROM foo", cast,
-				))
-				require.NoError(t, err)
-				defer e.Close()
-
-				p, err := e.Eval(ctx, testRow, cdcevent.Row{})
-				require.NoError(t, err)
-				require.Equal(t,
-					map[string]string{
-						"mvcc":    eval.TimestampToDecimalDatum(mvccTS).String(),
-						"updated": eval.TimestampToDecimalDatum(schemaTS).String(),
-					},
-					slurpValues(t, p),
-				)
-			})
-		}
-	})
 
 	t.Run("pg_collation_for", func(t *testing.T) {
 		testRow := makeEventRow(t, desc, s.Clock().Now(), false, s.Clock().Now())
@@ -346,5 +382,6 @@ func newEvaluator(
 	if err != nil {
 		return nil, err
 	}
-	return NewEvaluator(norm.SelectClause, execCfg, username.RootUserName(), defaultDBSessionData)
+	return NewEvaluator(norm.SelectClause, execCfg, username.RootUserName(),
+		defaultDBSessionData, execCfg.Clock.Now()), nil
 }

@@ -95,13 +95,17 @@ func PlanCDCExpression(
 	if err != nil {
 		return cdcPlan, err
 	}
+
 	cdcCat := &cdcOptCatalog{
 		optCatalog:     opc.catalog.(*optCatalog),
 		cdcConfig:      cfg,
 		targetFamilyID: familyID,
 		semaCtx:        &p.semaCtx,
 	}
+
+	// Reset catalog to cdc specific implementation.
 	opc.catalog = cdcCat
+	opc.optimizer.Init(ctx, p.EvalContext(), opc.catalog)
 
 	memo, err := opc.buildExecMemo(ctx)
 	if err != nil {
