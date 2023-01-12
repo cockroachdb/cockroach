@@ -135,6 +135,12 @@ func (rec SpanSetReplicaEvalContext) GetMaxSplitQPS(ctx context.Context) (float6
 	return rec.i.GetMaxSplitQPS(ctx)
 }
 
+// GetMaxSplitCPU returns the Replica's maximum CPU/s rate for splitting and
+// merging purposes.
+func (rec SpanSetReplicaEvalContext) GetMaxSplitCPU(ctx context.Context) (float64, bool) {
+	return rec.i.GetMaxSplitCPU(ctx)
+}
+
 // CanCreateTxnRecord determines whether a transaction record can be created
 // for the provided transaction information. See Replica.CanCreateTxnRecord
 // for details about its arguments, return values, and preconditions.

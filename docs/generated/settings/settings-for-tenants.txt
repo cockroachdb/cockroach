@@ -43,6 +43,7 @@ kv.closed_timestamp.follower_reads_enabled	boolean	true	allow (all) replicas to 
 kv.log_range_and_node_events.enabled	boolean	true	set to true to transactionally log range events (e.g., split, merge, add/remove voter/non-voter) into system.rangelogand node join and restart events into system.eventolog
 kv.protectedts.reconciliation.interval	duration	5m0s	the frequency for reconciling jobs with protected timestamp records
 kv.range_split.by_load_enabled	boolean	true	allow automatic splits of ranges based on where load is concentrated
+kv.range_split.load_cpu_threshold	duration	250ms	the CPU use per second over which, the range becomes a candidate for load based splitting
 kv.range_split.load_qps_threshold	integer	2500	the QPS over which, the range becomes a candidate for load based splitting
 kv.rangefeed.enabled	boolean	false	if set, rangefeed registration is enabled
 kv.rangefeed.range_stuck_threshold	duration	1m0s	restart rangefeeds if they don't emit anything for the specified threshold; 0 disables (kv.closed_timestamp.side_transport_interval takes precedence)

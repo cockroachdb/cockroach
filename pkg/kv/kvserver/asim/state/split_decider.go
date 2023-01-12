@@ -15,6 +15,7 @@ import (
 	"math/rand"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/workload"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/split"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -38,32 +39,50 @@ type LoadSplitter interface {
 	ResetRange(rangeID RangeID)
 }
 
+type loadSplitConfig struct {
+	randSource split.RandSource
+	settings   *config.SimulationSettings
+}
+
+// NewLoadBasedSplitter returns a new LoadBasedSplitter that may be used to
+// find the midpoint based on recorded load.
+func (lsc loadSplitConfig) NewLoadBasedSplitter(startTime time.Time) split.LoadBasedSplitter {
+	return split.NewUnweightedFinder(startTime, lsc.randSource)
+}
+
+// StatRetention returns the duration that recorded load is to be retained.
+func (lsc loadSplitConfig) StatRetention() time.Duration {
+	return lsc.settings.SplitStatRetention
+}
+
+// StatThreshold returns the threshold for load above which the range
+// should be considered split.
+func (lsc loadSplitConfig) StatThreshold() float64 {
+	return lsc.settings.SplitQPSThreshold
+}
+
 // SplitDecider implements the LoadSplitter interface.
 type SplitDecider struct {
-	deciders     map[RangeID]*split.Decider
-	suggestions  []RangeID
-	qpsThreshold func() float64
-	qpsRetention func() time.Duration
-	seed         int64
+	deciders    map[RangeID]*split.Decider
+	suggestions []RangeID
+	splitConfig split.LoadSplitConfig
 }
 
 // NewSplitDecider returns a new SplitDecider.
-func NewSplitDecider(
-	seed int64, qpsThresholdFn func() float64, qpsRetentionFn func() time.Duration,
-) *SplitDecider {
+func NewSplitDecider(settings *config.SimulationSettings) *SplitDecider {
 	return &SplitDecider{
-		deciders:     make(map[RangeID]*split.Decider),
-		suggestions:  []RangeID{},
-		seed:         seed,
-		qpsThreshold: qpsThresholdFn,
-		qpsRetention: qpsRetentionFn,
+		deciders:    make(map[RangeID]*split.Decider),
+		suggestions: []RangeID{},
+		splitConfig: loadSplitConfig{
+			randSource: rand.New(rand.NewSource(settings.Seed)),
+			settings:   settings,
+		},
 	}
 }
 
 func (s *SplitDecider) newDecider() *split.Decider {
-	rand := rand.New(rand.NewSource(s.seed))
 	decider := &split.Decider{}
-	split.Init(decider, nil, rand, s.qpsThreshold, s.qpsRetention, &split.LoadSplitterMetrics{
+	split.Init(decider, s.splitConfig, &split.LoadSplitterMetrics{
 		PopularKeyCount: metric.NewCounter(metric.Metadata{}),
 		NoSplitKeyCount: metric.NewCounter(metric.Metadata{}),
 	})
