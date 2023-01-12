@@ -498,7 +498,7 @@ func TestCopyTrace(t *testing.T) {
 					require.NoError(t, err)
 					err = stmt.Close()
 					require.Error(t, err)
-					require.ErrorContains(t, err, `duplicate key value violates unique constraint "t_pkey"`)
+					require.True(t, strings.Contains(err.Error(), `duplicate key value violates unique constraint "t_pkey"`))
 				}
 				require.NoError(t, txn.Rollback())
 			})
