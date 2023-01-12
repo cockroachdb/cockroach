@@ -24,6 +24,7 @@ import (
 
 	apd "github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvtenantccl"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -4092,4 +4093,61 @@ func (s *adminServer) RecoveryVerify(
 	ctx context.Context, request *serverpb.RecoveryVerifyRequest,
 ) (*serverpb.RecoveryVerifyResponse, error) {
 	return nil, errors.AssertionFailedf("To be implemented by #93043")
+}
+
+// ListTenants returns a list of active tenants in the cluster. Calling this
+// function will start in-process tenants if they are not already running.
+func (s *systemAdminServer) ListTenants(
+	ctx context.Context, _ *serverpb.ListTenantsRequest,
+) (*serverpb.ListTenantsResponse, error) {
+	// Dummy import to pull in kvtenantccl. This allows us to start tenants.
+	var _ = kvtenantccl.Connector{}
+
+	ie := s.internalExecutor
+	rowIter, err := ie.QueryIterator(ctx, "list-tenants", nil, /* txn */
+		`SELECT name FROM system.tenants WHERE active = true`)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rowIter.Close() }()
+
+	var tenantNames []roachpb.TenantName
+
+	var hasNext bool
+	for hasNext, err = rowIter.Next(ctx); hasNext && err == nil; hasNext, err = rowIter.Next(ctx) {
+		row := rowIter.Cur()
+		tenantName, ok := tree.AsDString(row[0])
+		if !ok {
+			tenantName = ""
+		}
+		tenantNames = append(tenantNames, roachpb.TenantName(tenantName))
+	}
+
+	var tenantList []*serverpb.Tenant
+
+	for _, tenantName := range tenantNames {
+		server, err := s.server.serverController.getOrCreateServer(ctx, tenantName)
+		if err != nil {
+			return nil, err
+		}
+		if tenantServer, ok := server.(*tenantServerWrapper); ok {
+			tenantList = append(tenantList, &serverpb.Tenant{
+				TenantId:   &tenantServer.server.sqlCfg.TenantID,
+				TenantName: string(tenantName),
+				SqlAddr:    tenantServer.server.sqlServer.cfg.SQLAdvertiseAddr,
+				RpcAddr:    tenantServer.server.sqlServer.cfg.AdvertiseAddr,
+			})
+		} else if systemServer, ok := server.(*systemServerWrapper); ok {
+			tenantList = append(tenantList, &serverpb.Tenant{
+				TenantId:   &systemServer.server.cfg.TenantID,
+				TenantName: string(tenantName),
+				SqlAddr:    systemServer.server.sqlServer.cfg.SQLAdvertiseAddr,
+				RpcAddr:    systemServer.server.sqlServer.cfg.AdvertiseAddr,
+			})
+		}
+	}
+
+	return &serverpb.ListTenantsResponse{
+		Tenants: tenantList,
+	}, nil
 }
