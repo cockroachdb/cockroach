@@ -84,8 +84,18 @@ func ShouldPushImmediately(req *roachpb.PushTxnRequest) bool {
 // CanPushWithPriority returns true if the given pusher can push the pushee
 // based on its priority.
 func CanPushWithPriority(pusher, pushee enginepb.TxnPriority) bool {
-	return pusher > pushee &&
-		(pusher == enginepb.MaxTxnPriority || pushee == enginepb.MinTxnPriority)
+	// Normalize the transaction priorities so that normal user priorities are
+	// considered equal for the purposes of pushing.
+	normalize := func(p enginepb.TxnPriority) enginepb.TxnPriority {
+		switch p {
+		case enginepb.MinTxnPriority, enginepb.MaxTxnPriority:
+			return p
+		default /* normal txn priorities */ :
+			return enginepb.MinTxnPriority + 1
+		}
+	}
+	pusher, pushee = normalize(pusher), normalize(pushee)
+	return pusher > pushee
 }
 
 // isPushed returns whether the PushTxn request has already been
