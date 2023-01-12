@@ -44,7 +44,6 @@ func RangeStats(
 ) (result.Result, error) {
 	reply := resp.(*roachpb.RangeStatsResponse)
 	reply.MVCCStats = cArgs.EvalCtx.GetMVCCStats()
-	reply.DeprecatedLastQueriesPerSecond = cArgs.EvalCtx.GetLastSplitQPS(ctx)
 	if qps, ok := cArgs.EvalCtx.GetMaxSplitQPS(ctx); ok {
 		reply.MaxQueriesPerSecond = qps
 	} else {

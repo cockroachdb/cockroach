@@ -135,12 +135,6 @@ func (rec SpanSetReplicaEvalContext) GetMaxSplitQPS(ctx context.Context) (float6
 	return rec.i.GetMaxSplitQPS(ctx)
 }
 
-// GetLastSplitQPS returns the Replica's most recent queries/s rate for
-// splitting and merging purposes.
-func (rec SpanSetReplicaEvalContext) GetLastSplitQPS(ctx context.Context) float64 {
-	return rec.i.GetLastSplitQPS(ctx)
-}
-
 // CanCreateTxnRecord determines whether a transaction record can be created
 // for the provided transaction information. See Replica.CanCreateTxnRecord
 // for details about its arguments, return values, and preconditions.
