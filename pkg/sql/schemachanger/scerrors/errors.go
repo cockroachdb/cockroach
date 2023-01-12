@@ -66,15 +66,21 @@ func (el EventLogger) HandlePanicAndLogError(ctx context.Context, err *error) {
 	if errors.Is(*err, context.Canceled) {
 		return
 	}
-	if *err == nil {
+	// We use a depth of 2 because this function is generally called with defer;
+	// using a depth of 1 would show that the caller was runtime/panic.go.
+	const depth = 2
+	switch {
+	case *err == nil:
 		if log.ExpensiveLogEnabled(ctx, 2) {
-			log.InfofDepth(ctx, 1, "done %s in %s", el.msg, redact.Safe(timeutil.Since(el.start)))
+			log.InfofDepth(ctx, depth, "done %s in %s", el.msg, redact.Safe(timeutil.Since(el.start)))
 		}
-		return
-	}
-	log.WarningfDepth(ctx, 1, "failed %s with error: %v", el.msg, *err)
-	if errors.HasAssertionFailure(*err) {
+	case HasNotImplemented(*err):
+		log.InfofDepth(ctx, depth, "failed %s with error: %v", el.msg, *err)
+	case errors.HasAssertionFailure(*err):
 		*err = errors.Wrapf(*err, "%s", el.msg)
+		fallthrough
+	default:
+		log.WarningfDepth(ctx, depth, "failed %s with error: %v", el.msg, *err)
 	}
 }
 
