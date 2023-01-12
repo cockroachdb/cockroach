@@ -879,6 +879,12 @@ func (s StatementOptions) ForceDiff() {
 	s.cache.EncodingOptions = EncodingOptions{}
 }
 
+// ClearDiff clears diff option.
+func (s StatementOptions) ClearDiff() {
+	delete(s.m, OptDiff)
+	s.cache.EncodingOptions = EncodingOptions{}
+}
+
 // SetDefaultEnvelope sets the envelope if not already set.
 func (s StatementOptions) SetDefaultEnvelope(t EnvelopeType) {
 	if _, ok := s.m[OptEnvelope]; !ok {

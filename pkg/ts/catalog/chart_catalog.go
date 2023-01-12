@@ -1402,6 +1402,12 @@ var charts = []sectionDescription{
 				},
 			},
 			{
+				Title: "Filtered Messages",
+				Metrics: []string{
+					"changefeed.filtered_messages",
+				},
+			},
+			{
 				Title: "Entries",
 				Metrics: []string{
 					"changefeed.buffer_entries.in",
