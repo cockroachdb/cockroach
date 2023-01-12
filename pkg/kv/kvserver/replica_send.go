@@ -134,8 +134,8 @@ func (r *Replica) SendWithWriteBytes(
 
 	// Record the CPU time processing the request for this replica. This is
 	// recorded regardless of errors that are encountered.
-	defer r.MeasureReqCPUNanos(grunning.Time())
-
+	startCPU := grunning.Time()
+	defer r.MeasureReqCPUNanos(startCPU)
 
 	// If the internal Raft group is not initialized, create it and wake the leader.
 	r.maybeInitializeRaftGroup(ctx)
@@ -198,16 +198,17 @@ func (r *Replica) SendWithWriteBytes(
 		}
 	}
 
-	// Return range information if it was requested. Note that we don't return it
-	// on errors because the code doesn't currently support returning both a br
-	// and a pErr here. Also, some errors (e.g. NotLeaseholderError) have custom
-	// ways of returning range info.
 	if pErr == nil {
+		// Return range information if it was requested. Note that we don't return it
+		// on errors because the code doesn't currently support returning both a br
+		// and a pErr here. Also, some errors (e.g. NotLeaseholderError) have custom
+		// ways of returning range info.
 		r.maybeAddRangeInfoToResponse(ctx, ba, br)
+		// Handle load-based splitting, if necessary.
+		r.recordBatchForLoadBasedSplitting(ctx, ba, br, int(grunning.Difference(startCPU, grunning.Time())))
 	}
 
-	// Record summary throughput information about the batch request for
-	// accounting.
+	// Record the summary throughput informationa about the batch request for accounting.
 	r.recordBatchRequestLoad(ctx, ba)
 	r.recordRequestWriteBytes(writeBytes)
 	r.recordImpactOnRateLimiter(ctx, br, isReadOnly)
@@ -405,17 +406,6 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 	var requestEvalKind concurrency.RequestEvalKind
 	var g *concurrency.Guard
 	defer func() {
-		// Handle load-based splitting, if necessary.
-		if pErr == nil && br != nil {
-			if len(ba.Requests) != len(br.Responses) {
-				log.KvDistribution.Errorf(ctx,
-					"Requests and responses should be equal lengths: # of requests = %d, # of responses = %d",
-					len(ba.Requests), len(br.Responses))
-			} else {
-				r.recordBatchForLoadBasedSplitting(ctx, ba, br)
-			}
-		}
-
 		// NB: wrapped to delay g evaluation to its value when returning.
 		if g != nil {
 			r.concMgr.FinishReq(g)
@@ -1005,8 +995,9 @@ func (r *Replica) executeAdminBatch(
 	return br, nil
 }
 
-// recordBatchRequestLoad records the load information about a batch request issued
-// against this replica.
+// recordBatchRequestLoad records the load information about a batch request
+// completed against this replica. This also handles load based splitting based
+// on the request load.
 func (r *Replica) recordBatchRequestLoad(ctx context.Context, ba *roachpb.BatchRequest) {
 	if r.loadStats == nil {
 		log.VEventf(

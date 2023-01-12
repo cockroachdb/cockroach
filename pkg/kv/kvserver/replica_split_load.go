@@ -12,11 +12,24 @@ package kvserver
 
 import (
 	"context"
+	"fmt"
+	"strings"
+	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/split"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
+
+// transitions (cluster setting change)
+//  add rpc field MaxCPU
+//  maxCPU / maxQPS alwasy return not ok when being used
+//  decider reset
+//  set threshold function
+//  set finder creation fn
 
 // SplitByLoadEnabled wraps "kv.range_split.by_load_enabled".
 var SplitByLoadEnabled = settings.RegisterBoolSetting(
@@ -26,6 +39,16 @@ var SplitByLoadEnabled = settings.RegisterBoolSetting(
 	true,
 ).WithPublic()
 
+var EnableUnweightedLBSplitFinder = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.unweighted_lb_split_finder.enabled",
+	"if enabled, use the un-weighted finder for load-based splitting; "+
+		"the unweighted finder will attempt to find a key during when splitting "+
+		"a range based on load that evenly divides the QPS among the resulting "+
+		"left and right hand side ranges",
+	false,
+)
+
 // SplitByLoadQPSThreshold wraps "kv.range_split.load_qps_threshold".
 var SplitByLoadQPSThreshold = settings.RegisterIntSetting(
 	settings.TenantWritable,
@@ -34,9 +57,35 @@ var SplitByLoadQPSThreshold = settings.RegisterIntSetting(
 	2500, // 2500 req/s
 ).WithPublic()
 
-// SplitByLoadQPSThreshold returns the QPS request rate for a given replica.
-func (r *Replica) SplitByLoadQPSThreshold() float64 {
-	return float64(SplitByLoadQPSThreshold.Get(&r.store.cfg.Settings.SV))
+// SplitByLoadCPUThreshold wraps "kv.range_split.load_qps_threshold".
+var SplitByLoadCPUThreshold = settings.RegisterDurationSetting(
+	settings.TenantWritable,
+	"kv.range_split.load_cpu_threshold",
+	"the CPU use per second over which, the range becomes a candidate for load based splitting",
+	250*time.Millisecond,
+).WithPublic()
+
+func (r *Replica) SplitByLoadThreshold() float64 {
+	return SplitByLoadThresholdFn(&r.store.cfg.Settings.SV)()
+}
+
+func SplitByLoadThresholdFn(sv *settings.Values) func() float64 {
+	return func() float64 {
+		if QPSSplittingEnabled(sv) {
+			return float64(SplitByLoadQPSThreshold.Get(sv))
+		}
+		return float64(SplitByLoadCPUThreshold.Get(sv))
+	}
+}
+
+func NewFinderFn(sv *settings.Values) func(time.Time, split.RandSource) split.LoadBasedSplitter {
+	return func(startTime time.Time, randSource split.RandSource) split.LoadBasedSplitter {
+		if QPSSplittingEnabled(sv) {
+			return split.NewUnweightedFinder(startTime, randSource)
+		} else {
+			return split.NewWeightedFinder(startTime, randSource)
+		}
+	}
 }
 
 // SplitByLoadEnabled returns whether load based splitting is enabled.
@@ -45,6 +94,20 @@ func (r *Replica) SplitByLoadQPSThreshold() float64 {
 func (r *Replica) SplitByLoadEnabled() bool {
 	return SplitByLoadEnabled.Get(&r.store.cfg.Settings.SV) &&
 		!r.store.TestingKnobs().DisableLoadBasedSplitting
+}
+
+func QPSSplittingEnabled(sv *settings.Values) bool {
+	dim := LBRebalancingDimension(LoadBasedRebalancingDimension.Get(sv))
+	return dim == LBRebalancingQueries || EnableUnweightedLBSplitFinder.Get(sv)
+
+}
+
+func (r *Replica) QPSSplittingEnabled() bool {
+	return QPSSplittingEnabled(&r.store.cfg.Settings.SV)
+}
+
+func (r *Replica) setOnDimensionChange(ctx context.Context) {
+	r.loadBasedSplitter.Reset(r.Clock().PhysicalTime())
 }
 
 // getResponseBoundarySpan computes the union span of the true spans that were
@@ -120,15 +183,81 @@ func getResponseBoundarySpan(
 	return
 }
 
+type loadSplitStat struct {
+	max float64
+	ok  bool
+}
+
+func (ls loadSplitStat) merge(other loadSplitStat) loadSplitStat {
+	return loadSplitStat{
+		ok:  ls.ok && other.ok,
+		max: ls.max + other.max,
+	}
+}
+
+type loadSplitStats struct {
+	CPU loadSplitStat
+	QPS loadSplitStat
+}
+
+func (lss loadSplitStats) merge(other loadSplitStats) loadSplitStats {
+	return loadSplitStats{
+		CPU: lss.CPU.merge(other.CPU),
+		QPS: lss.QPS.merge(other.QPS),
+	}
+}
+
+func (lss loadSplitStats) String() string {
+	var buf strings.Builder
+
+	if lss.CPU.ok {
+		fmt.Fprintf(&buf, "cpu-per-second=%s", string(humanizeutil.Duration(time.Duration(int64(lss.CPU.max)))))
+	}
+	if lss.QPS.ok {
+		fmt.Fprintf(&buf, "queries-per-second=%.2f", lss.QPS.max)
+	}
+	return buf.String()
+}
+
+func (r *Replica) GetLoadSplitStats(ctx context.Context) loadSplitStats {
+	lss := loadSplitStats{}
+	max, ok := r.loadBasedSplitter.MaxStat(ctx, r.Clock().PhysicalTime())
+	if r.QPSSplittingEnabled() {
+		lss.QPS = loadSplitStat{max: max, ok: ok}
+	} else {
+		lss.CPU = loadSplitStat{max: max, ok: ok}
+	}
+	return lss
+}
+
 // recordBatchForLoadBasedSplitting records the batch's spans to be considered
 // for load based splitting.
 func (r *Replica) recordBatchForLoadBasedSplitting(
-	ctx context.Context, ba *roachpb.BatchRequest, br *roachpb.BatchResponse,
+	ctx context.Context, ba *roachpb.BatchRequest, br *roachpb.BatchResponse, stat int,
 ) {
 	if !r.SplitByLoadEnabled() {
 		return
 	}
-	shouldInitSplit := r.loadBasedSplitter.Record(ctx, timeutil.Now(), len(ba.Requests), func() roachpb.Span {
+
+	// When there is nothing to do when either the batch request or batch
+	// response are nil.
+	if ba == nil || br == nil {
+		return
+	}
+
+	if len(ba.Requests) != len(br.Responses) {
+		log.KvDistribution.Errorf(ctx,
+			"Requests and responses should be equal lengths: # of requests = %d, # of responses = %d",
+			len(ba.Requests), len(br.Responses))
+	}
+
+	// When QPS splitting is enabled, use the number of requests rather than
+	// the given stat for recording load.
+	if r.QPSSplittingEnabled() {
+		stat = len(ba.Requests)
+	}
+
+	shouldInitSplit := r.loadBasedSplitter.Record(ctx, timeutil.Now(), stat, func() roachpb.Span {
 		return getResponseBoundarySpan(ba, br)
 	})
 	if shouldInitSplit {

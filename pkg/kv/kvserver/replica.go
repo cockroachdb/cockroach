@@ -1118,9 +1118,28 @@ func (r *Replica) SetMVCCStatsForTesting(stats *enginepb.MVCCStats) {
 // NOTE: This should only be used for load based splitting, only
 // works when the load based splitting cluster setting is enabled.
 //
-// Use QueriesPerSecond() for current QPS stats for all other purposes.
+// Use LoadStats.QueriesPerSecond for all other purposes.
 func (r *Replica) GetMaxSplitQPS(ctx context.Context) (float64, bool) {
-	return r.loadBasedSplitter.MaxQPS(ctx, r.Clock().PhysicalTime())
+	if !r.QPSSplittingEnabled() {
+		return 0, false
+	}
+	return r.loadBasedSplitter.MaxStat(ctx, r.Clock().PhysicalTime())
+}
+
+// GetMaxSplitCPU returns the Replica's maximum CPU/s rate over a configured
+// measurement period. If the Replica has not been recording CPU for at least
+// an entire measurement period, the method will return false.
+//
+// NOTE: This should only be used for load based splitting, only
+// works when the load based splitting cluster setting is enabled.
+//
+// Use LoadStats.RaftCPUNanosPerSecond and RequestCPUNanosPerSecond for current
+// CPU stats for all other purposes.
+func (r *Replica) GetMaxSplitCPU(ctx context.Context) (float64, bool) {
+	if r.QPSSplittingEnabled() {
+		return 0, false
+	}
+	return r.loadBasedSplitter.MaxStat(ctx, r.Clock().PhysicalTime())
 }
 
 // ContainsKey returns whether this range contains the specified key.
