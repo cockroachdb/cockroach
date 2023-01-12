@@ -1,14 +1,12 @@
 #bisect helpers
-#expects TEST_NAME, BRANCH, FROM_DATE, TO_DATE
+#expects BISECT_DIR
 
 log() { local msg=$1
   echo "$(date -u +"%Y-%m-%dT%H:%M:%SZ")   $msg" >> "$INFO_LOG"
 }
 
 create_conf_if_not_exists() {
-   if [ ! -f "$CONF_NAME" ]; then
-     echo "{}" > "$CONF_NAME"
-   fi
+  [[ -f $CONF_NAME ]] || echo "{}" > "$CONF_NAME"
 }
 
 get_conf_val() { local key=$1
@@ -31,7 +29,6 @@ set_conf_val() { local key=$1; local val=$2
   echo "$updated" > "$CONF_NAME"
 }
 
-#TODO: flock
 set_hash_result() { local hash=$1; local val=$2
   create_conf_if_not_exists
   updated=$(jq ".hashResults += {\"$hash\": \"$val\"}" "$CONF_NAME")
@@ -39,97 +36,95 @@ set_hash_result() { local hash=$1; local val=$2
 }
 
 get_hash_result() { local hash=$1
-  get_conf_val ".hashResults.$hash"
-}
-
-clean_name_for_dir() {
-  echo "${1//[^[:alnum:]]/-}"
-}
-
-current_hash() {
-  git rev-parse --short HEAD
+  get_conf_val ".hashResults.\"$hash\""
 }
 
 calc_avg_ops() { local hash=$1; local test=$2
-  jq_expression=$'group_by(.Elapsed) |
-      map(
-        {
-          elapsed: (.[0].Elapsed / 1000000000) | rint,
-          count: map(.Hist.Counts | add) | add
-        }
-      ) |
-      ( (([.[].count] | add)) / ([.[].elapsed] | add) | rint )'
+  jq_exec "artifacts/$hash*/$test/run_*/*.perf/stats.json"
+}
 
-  jq -sc "$jq_expression" "artifacts/$hash*/$test/run_*/*.perf/stats.json"
+jq_exec() {
+  jq_expression=$'group_by(.Elapsed) |
+        map(
+          {
+            elapsed: (.[0].Elapsed / 1000000000) | rint,
+            count: map(.Hist.Counts | add) | add
+          }
+        ) |
+        ( (([.[].count] | add)) / ([.[].elapsed] | add) | rint )'
+
+  jq -sc "$jq_expression" $@
 }
 
 test_hash() { local hash=$1; local test=$2; local count=$3
-  abase="artifacts/${hash}-dirty"
-  if [ -d "$abase/$test" ]; then
-    echo "[$hash] Using stats from existing run"
-    return
-  fi
+  {
+    abase="artifacts/${hash}-dirty"
+    if [ -d "$abase/$test" ]; then
+      echo "[$hash] Using stats from existing run"
+      return
+    fi
 
-  echo "[$hash] Running..."
+    echo "[$hash] Running..."
 
-  args=(
-    "run" "^${test}\$"
-    "--port" "$((8080+RANDOM % 1000))"
-    "--workload" "${abase}/workload"
-    "--cockroach" "${abase}/cockroach"
-    "--artifacts" "${abase}/"
-    "--count" "${count}"
-    "--cpu-quota" "640"
-  )
-  args+=("${@:4}")
-  "${abase}/roachtest" "${args[@]}"
+    args=(
+      "run" "^${test}\$"
+      "--port" "$((8080+RANDOM % 1000))"
+      "--workload" "${abase}/workload"
+      "--cockroach" "${abase}/cockroach"
+      "--artifacts" "${abase}/"
+      "--count" "${count}"
+      "--cpu-quota" "640"
+    )
+    args+=("${@:4}")
+    "${abase}/roachtest" "${args[@]}"
+  } &> "$BISECT_DIR/$hash-test.log"
 }
 
 build_hash() { local hash=$1; local duration_override_mins=$2
-  git reset --hard
-  git checkout "$hash"
+ {
+    git reset --hard
+    git checkout "$hash"
 
-  fullsha=$(git rev-parse "$hash")
+    fullsha=$(git rev-parse "$hash")
 
-  sed -i "s/opts\.duration = 30 \* time\.Minute/opts.duration = $duration_override_mins * time.Minute/"  pkg/cmd/roachtest/tests/kv.go || exit 2
-  sed -i "s/ifLocal(c, \"10s\", \"30m\")/ifLocal(c, \"10s\", \"${duration_override_mins}m\")/"  pkg/cmd/roachtest/tests/ycsb.go || exit 2
+    sed -i "s/opts\.duration = 30 \* time\.Minute/opts.duration = $duration_override_mins * time.Minute/"  pkg/cmd/roachtest/tests/kv.go || exit 2
+    sed -i "s/ifLocal(c, \"10s\", \"30m\")/ifLocal(c, \"10s\", \"${duration_override_mins}m\")/"  pkg/cmd/roachtest/tests/ycsb.go || exit 2
 
-#  git apply ./scripts/bisection/roachtest.patch || echo "unable to patch roachtest - cluster will not be reused next time"
+    # always mark dirty since we've applied timeout changes
+    abase="artifacts/${hash}-dirty"
+    mkdir -p "${abase}"
 
-  # always mark dirty since we've applied timeout changes
-  abase="artifacts/${hash}-dirty"
-  mkdir -p "${abase}"
+    # Locations of the binaries.
+    rt="${abase}/roachtest"
+    wl="${abase}/workload"
+    cr="${abase}/cockroach"
 
-  # Locations of the binaries.
-  rt="${abase}/roachtest"
-  wl="${abase}/workload"
-  cr="${abase}/cockroach"
-
-  if [ ! -f "${cr}" ]; then
-    if gsutil cp "gs://cockroach-edge-artifacts-prod/cockroach/cockroach.linux-gnu-amd64.$fullsha" "${cr}"; then
-        echo "Copied cockroach binary from GCS"
-    else
-        ./dev build "cockroach-short" --cross=linux
-        cp "artifacts/cockroach-short" "${cr}"
+    if [ ! -f "${cr}" ]; then
+      if gsutil cp "gs://cockroach-edge-artifacts-prod/cockroach/cockroach.linux-gnu-amd64.$fullsha" "${cr}"; then
+          echo "Copied cockroach binary from GCS"
+      else
+          ./dev build "cockroach-short" --cross=linux
+          cp "artifacts/cockroach-short" "${cr}"
+      fi
     fi
-  fi
 
-  if [ ! -f "${wl}" ]; then
-    if gsutil cp "gs://cockroach-edge-artifacts-prod/cockroach/workload.$fullsha" "${wl}"; then
-      echo "Copied workload from GCS"
-    else
-      ./dev build workload --cross=linux
-      cp "artifacts/workload" "${wl}"
+    if [ ! -f "${wl}" ]; then
+      if gsutil cp "gs://cockroach-edge-artifacts-prod/cockroach/workload.$fullsha" "${wl}"; then
+        echo "Copied workload from GCS"
+      else
+        ./dev build workload --cross=linux
+        cp "artifacts/workload" "${wl}"
+      fi
     fi
-  fi
 
-  if [ ! -f "${rt}" ]; then
-    ./dev build roachtest
-    cp "bin/roachtest" "${rt}"
-  fi
+    if [ ! -f "${rt}" ]; then
+      ./dev build roachtest
+      cp "bin/roachtest" "${rt}"
+    fi
 
-  chmod +x "$cr" "$wl" "$rt"
-  git reset --hard
+    chmod +x "$cr" "$wl" "$rt"
+    git reset --hard
+  } &> "$BISECT_DIR/$hash-build.log"
 }
 
 # if ops == -1, this is a trapped ^C from which we want to collect user input
@@ -179,7 +174,11 @@ prompt_user() { local hash=$1; local ops=$2;
   done
 }
 
-export BISECT_DIR="$(clean_name_for_dir "$TEST_NAME")/$(clean_name_for_dir "$BRANCH")/$FROM_DATE,$TO_DATE"
+[[ -n $BISECT_DIR ]] || { echo "BISECT_DIR not set"; return 1; }
+[[ -d ./pkg/cmd/cockroach ]] || { echo "bisection must be run from cockroach root"; return 1; }
+
+mkdir -p "$BISECT_DIR"
+
 export BISECT_LOG="$BISECT_DIR/bisect.log"
 export INFO_LOG="$BISECT_DIR/info.log"
 export CONF_NAME="$BISECT_DIR/config.json"

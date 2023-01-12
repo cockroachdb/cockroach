@@ -7,7 +7,7 @@ duration_mins=$3
 SCRIPT_DIR=$(dirname "$0")
 . "$SCRIPT_DIR"/bisect-util.sh
 
-CURRENT_HASH="$(current_hash)"
+CURRENT_HASH="$(git rev-parse --short HEAD)"
 
 #first lets check our saved results
 opsPerSec=$(get_hash_result "$CURRENT_HASH")
@@ -33,8 +33,6 @@ case $opsPerSec in
     ;;
 esac
 
-#./pkg/cmd/roachtest/roachstress.sh -b -c 2 "^$test\$" -- --parallelism 1 -c "$cluster" --debug-reuse
-
 goodThreshold=$(get_conf_val ".goodThreshold")
 badThreshold=$(get_conf_val ".badThreshold")
 
@@ -45,5 +43,6 @@ elif [ -n "$badThreshold" ] && [[ opsPerSec -le badThreshold ]]; then
   log "[$CURRENT_HASH] Average ops/s: [$opsPerSec]. Auto marked as bad." "$LOG_NAME"
   exit 1;
 else
+  # we don't have thresholds to compare, or the value doesn't meet them
   prompt_user "$CURRENT_HASH" "$opsPerSec"
 fi

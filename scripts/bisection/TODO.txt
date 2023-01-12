@@ -1,1 +1,2 @@
-
+- JQ per file instead of aggregate, allowing us to report mean + stddev, or use median
+- flock when updating json
