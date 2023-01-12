@@ -933,7 +933,7 @@ message ChangefeedDetails {
   repeated ChangefeedTargetSpecification target_specifications = 8 [(gogoproto.nullable) = false];
 
   string select = 10;
-  sessiondatapb.SessionData session_data = 11 [(gogoproto.nullable) = false];
+  sessiondatapb.SessionData session_data = 11;
   reserved 1, 2, 5;
   reserved "targets";
 }
