@@ -851,10 +851,9 @@ func (expr *ComparisonExpr) TypeCheck(
 ) (TypedExpr, error) {
 	var leftTyped, rightTyped TypedExpr
 	var cmpOp *CmpOp
-	var alwaysNull bool
-	var err error
 	if expr.Operator.Symbol.HasSubOperator() {
-		leftTyped, rightTyped, cmpOp, alwaysNull, err = typeCheckComparisonOpWithSubOperator(
+		var err error
+		leftTyped, rightTyped, cmpOp, err = typeCheckComparisonOpWithSubOperator(
 			ctx,
 			semaCtx,
 			expr.Operator,
@@ -862,7 +861,12 @@ func (expr *ComparisonExpr) TypeCheck(
 			expr.Left,
 			expr.Right,
 		)
+		if err != nil {
+			return nil, err
+		}
 	} else {
+		var alwaysNull bool
+		var err error
 		leftTyped, rightTyped, cmpOp, alwaysNull, err = typeCheckComparisonOp(
 			ctx,
 			semaCtx,
@@ -870,13 +874,12 @@ func (expr *ComparisonExpr) TypeCheck(
 			expr.Left,
 			expr.Right,
 		)
-	}
-	if err != nil {
-		return nil, err
-	}
-
-	if alwaysNull {
-		return DNull, nil
+		if err != nil {
+			return nil, err
+		}
+		if alwaysNull {
+			return DNull, nil
+		}
 	}
 
 	if err := semaCtx.checkVolatility(cmpOp.Volatility); err != nil {
@@ -2021,7 +2024,7 @@ const (
 
 func typeCheckComparisonOpWithSubOperator(
 	ctx context.Context, semaCtx *SemaContext, op, subOp treecmp.ComparisonOperator, left, right Expr,
-) (_ TypedExpr, _ TypedExpr, _ *CmpOp, alwaysNull bool, _ error) {
+) (TypedExpr, TypedExpr, *CmpOp, error) {
 	// Parentheses are semantically unimportant and can be removed/replaced
 	// with its nested expression in our plan. This makes type checking cleaner.
 	left = StripParens(left)
@@ -2044,7 +2047,7 @@ func typeCheckComparisonOpWithSubOperator(
 		typedSubExprs, retType, err := typeCheckSameTypedExprs(ctx, semaCtx, types.Any, sameTypeExprs...)
 		if err != nil {
 			sigWithErr := fmt.Sprintf(compExprsWithSubOpFmt, left, subOp, op, right, err)
-			return nil, nil, nil, false,
+			return nil, nil, nil,
 				pgerror.Newf(pgcode.InvalidParameterValue, unsupportedCompErrFmt, sigWithErr)
 		}
 
@@ -2061,18 +2064,13 @@ func typeCheckComparisonOpWithSubOperator(
 
 		rightTyped = array
 		cmpTypeRight = retType
-
-		// Return early without looking up a CmpOp if the comparison type is types.Null.
-		if leftTyped.ResolvedType().Family() == types.UnknownFamily || retType.Family() == types.UnknownFamily {
-			return leftTyped, rightTyped, nil, true /* alwaysNull */, nil
-		}
 	} else {
 		// If the right expression is not an array constructor, we type the left
 		// expression in isolation.
 		var err error
 		leftTyped, err = left.TypeCheck(ctx, semaCtx, types.Any)
 		if err != nil {
-			return nil, nil, nil, false, err
+			return nil, nil, nil, err
 		}
 		cmpTypeLeft = leftTyped.ResolvedType()
 
@@ -2081,7 +2079,7 @@ func typeCheckComparisonOpWithSubOperator(
 			// type is equivalent to the left's type.
 			rightTyped, err = typeCheckAndRequireTupleElems(ctx, semaCtx, leftTyped, tuple, subOp)
 			if err != nil {
-				return nil, nil, nil, false, err
+				return nil, nil, nil, err
 			}
 		} else {
 			// Try to type the right expression as an array of the left's type.
@@ -2090,16 +2088,11 @@ func typeCheckComparisonOpWithSubOperator(
 			// propagate the left type as a desired type for the result column.
 			rightTyped, err = right.TypeCheck(ctx, semaCtx, types.MakeArray(cmpTypeLeft))
 			if err != nil {
-				return nil, nil, nil, false, err
+				return nil, nil, nil, err
 			}
 		}
 
-		rightReturn := rightTyped.ResolvedType()
-		if cmpTypeLeft.Family() == types.UnknownFamily || rightReturn.Family() == types.UnknownFamily {
-			return leftTyped, rightTyped, nil, true /* alwaysNull */, nil
-		}
-
-		switch rightReturn.Family() {
+		switch rightReturn := rightTyped.ResolvedType(); rightReturn.Family() {
 		case types.ArrayFamily:
 			cmpTypeRight = rightReturn.ArrayContents()
 		case types.TupleFamily:
@@ -2118,14 +2111,14 @@ func typeCheckComparisonOpWithSubOperator(
 		default:
 			sigWithErr := fmt.Sprintf(compExprsWithSubOpFmt, left, subOp, op, right,
 				fmt.Sprintf("op %s <right> requires array, tuple or subquery on right side", op))
-			return nil, nil, nil, false, pgerror.Newf(pgcode.InvalidParameterValue, unsupportedCompErrFmt, sigWithErr)
+			return nil, nil, nil, pgerror.Newf(pgcode.InvalidParameterValue, unsupportedCompErrFmt, sigWithErr)
 		}
 	}
 	fn, ok := ops.LookupImpl(cmpTypeLeft, cmpTypeRight)
 	if !ok || !deepCheckValidCmpOp(ops, cmpTypeLeft, cmpTypeRight) {
-		return nil, nil, nil, false, subOpCompError(cmpTypeLeft, rightTyped.ResolvedType(), subOp, op)
+		return nil, nil, nil, subOpCompError(cmpTypeLeft, rightTyped.ResolvedType(), subOp, op)
 	}
-	return leftTyped, rightTyped, fn, false, nil
+	return leftTyped, rightTyped, fn, nil
 }
 
 // deepCheckValidCmpOp performs extra checks that a given operation is valid

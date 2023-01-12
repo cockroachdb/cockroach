@@ -303,3 +303,34 @@ eval
 NULL::string LIKE ANY(ARRAY['bar', NULL])
 ----
 NULL
+
+eval
+NULL <> ALL (ARRAY[]::TEXT[])
+----
+true
+
+eval
+NULL <> ANY (ARRAY[]::TEXT[])
+----
+false
+
+eval
+NULL <> SOME (ARRAY[]::TEXT[])
+----
+false
+
+# Note that Postgres requires an explicit cast of empty arrays while we don't.
+eval
+NULL <> ALL (ARRAY[])
+----
+true
+
+eval
+NULL <> ANY (ARRAY[])
+----
+false
+
+eval
+NULL <> SOME (ARRAY[])
+----
+false
