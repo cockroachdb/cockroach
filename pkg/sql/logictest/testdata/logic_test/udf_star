@@ -1,0 +1,123 @@
+statement ok
+CREATE TABLE t_onecol (a INT);
+INSERT INTO t_onecol VALUES (1)
+
+statement ok
+CREATE TABLE t_twocol (a INT, b INT);
+INSERT INTO t_twocol VALUES (1,2)
+
+statement ok
+CREATE FUNCTION f_unqualified_onecol() RETURNS INT AS
+$$
+  SELECT * FROM t_onecol;
+$$ LANGUAGE SQL;
+
+statement ok
+CREATE FUNCTION f_subquery() RETURNS INT AS
+$$
+  SELECT * FROM (SELECT a FROM (SELECT * FROM t_onecol) AS foo) AS bar;
+$$ LANGUAGE SQL;
+
+statement ok
+CREATE FUNCTION f_unqualified_twocol() RETURNS t_twocol AS
+$$
+  SELECT * FROM t_twocol;
+$$ LANGUAGE SQL;
+
+statement ok
+CREATE FUNCTION f_allcolsel() RETURNS t_twocol AS
+$$
+  SELECT t_twocol.* FROM t_twocol;
+$$ LANGUAGE SQL;
+
+statement ok
+CREATE FUNCTION f_allcolsel_alias() RETURNS t_twocol AS
+$$
+  SELECT t1.* FROM t_twocol AS t1, t_twocol AS t2 WHERE t1.a = t2.a;
+$$ LANGUAGE SQL;
+
+statement ok
+CREATE FUNCTION f_tuplestar() RETURNS t_twocol AS
+$$
+  SELECT (t_twocol.*).* FROM t_twocol;
+$$ LANGUAGE SQL;
+
+query TTT
+SELECT oid, proname, prosrc
+FROM pg_catalog.pg_proc WHERE proname LIKE 'f\_%' ORDER BY oid;
+----
+100108  f_unqualified_onecol   SELECT * FROM [106(1) AS t_onecol];
+100109  f_subquery  SELECT * FROM (SELECT a FROM (SELECT * FROM [106(1) AS t_onecol]) AS foo) AS bar;
+100110  f_unqualified_twocol   SELECT * FROM [107(1, 2) AS t_twocol];
+100111  f_allcolsel   SELECT t_twocol.* FROM [107(1, 2) AS t_twocol];
+100112  f_allcolsel_alias   SELECT t1.* FROM [107(1, 2) AS t_twocol] AS t1, [107(1, 2) AS t_twocol] AS t2 WHERE t1.a = t2.a;
+100113  f_tuplestar   SELECT (t_twocol.*).* FROM [107(1, 2) AS t_twocol];
+
+query I
+SELECT f_unqualified_onecol()
+----
+1
+
+query I
+SELECT f_subquery()
+----
+1
+
+statement ok
+ALTER TABLE t_onecol ADD COLUMN b INT DEFAULT 5;
+
+query I
+SELECT f_unqualified_onecol()
+----
+1
+
+query I
+SELECT f_subquery()
+----
+1
+
+# It's ok to drop a column that was not used by the original UDF.
+statement ok
+ALTER TABLE t_onecol DROP COLUMN b;
+
+query T
+SELECT f_unqualified_twocol()
+----
+(1,2)
+
+query T
+SELECT f_allcolsel()
+----
+(1,2)
+
+query T
+SELECT f_allcolsel_alias()
+----
+(1,2)
+
+statement ok
+ALTER TABLE t_twocol ADD COLUMN c INT DEFAULT 5;
+
+# TODO(#95558): With early binding, postgres returns an error after adding a
+# column when the table is used as the return type. Note that this behavior is
+# ok for late binding.
+query T
+SELECT f_unqualified_twocol()
+----
+(1,2)
+
+# Altering a column type is not allowed in postgres or CRDB.
+statement error pq: cannot alter type of column "b" because function "f_unqualified_twocol" depends on it
+ALTER TABLE t_twocol ALTER b TYPE FLOAT;
+
+# TODO(harding): Postgres allows column renaming when only referenced by UDFs.
+statement error pq: cannot rename column "a" because function "f_unqualified_twocol" depends on it
+ALTER TABLE t_twocol RENAME COLUMN a TO d;
+
+# TODO(harding): Postgres allows table renaming when only referenced by UDFs.
+statement error pq: cannot rename relation "t_twocol" because function "f_unqualified_twocol" depends on it
+ALTER TABLE t_twocol RENAME TO t_twocol_prime;
+
+# Dropping a column a UDF depends on is not allowed.
+statement error pq: cannot drop column "b" because function "f_unqualified_twocol" depends on it
+ALTER TABLE t_twocol DROP COLUMN b;

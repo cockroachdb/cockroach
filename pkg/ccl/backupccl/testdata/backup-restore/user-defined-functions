@@ -59,7 +59,7 @@ CREATE FUNCTION sc1.f1(IN a db1.sc1.enum1)
 	CALLED ON NULL INPUT
 	LANGUAGE SQL
 	AS $$
-	SELECT a FROM db1.sc1.tbl1;
+	SELECT a FROM [110(1) AS tbl1];
 	SELECT nextval('sc1.sq1'::REGCLASS);
 $$
 

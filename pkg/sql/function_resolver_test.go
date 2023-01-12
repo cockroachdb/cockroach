@@ -120,9 +120,9 @@ CREATE FUNCTION f(INT) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$ SELECT a FROM t 
 
 		_, overload, err := funcResolver.ResolveFunctionByOID(ctx, funcDef.Overloads[0].Oid)
 		require.NoError(t, err)
-		require.Equal(t, `SELECT a FROM defaultdb.public.t;
-SELECT b FROM defaultdb.public.t@t_idx_b;
-SELECT c FROM defaultdb.public.t@t_idx_c;
+		require.Equal(t, `SELECT a FROM [104(1, 2, 3) AS t];
+SELECT b FROM [104(1, 2, 3) AS t]@t_idx_b;
+SELECT c FROM [104(1, 2, 3) AS t]@t_idx_c;
 SELECT a FROM defaultdb.public.v;
 SELECT nextval(105:::REGCLASS);`, overload.Body)
 		require.True(t, overload.IsUDF)
@@ -142,7 +142,7 @@ SELECT nextval(105:::REGCLASS);`, overload.Body)
 
 		_, overload, err = funcResolver.ResolveFunctionByOID(ctx, funcDef.Overloads[2].Oid)
 		require.NoError(t, err)
-		require.Equal(t, `SELECT a FROM defaultdb.public.t;`, overload.Body)
+		require.Equal(t, `SELECT a FROM [104(1, 2, 3) AS t];`, overload.Body)
 		require.True(t, overload.IsUDF)
 		require.False(t, overload.UDFContainsOnlySignature)
 		require.Equal(t, 1, len(overload.Types.Types()))

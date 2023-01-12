@@ -52,24 +52,6 @@ CREATE FUNCTION err(i INT) RETURNS INT LANGUAGE SQL AS 'SELECT j'
 statement error pgcode 42703 column \"j\" does not exist
 CREATE FUNCTION err(i INT) RETURNS INT LANGUAGE SQL AS 'SELECT a FROM ab WHERE a = j'
 
-statement error pgcode 0A000 functions do not currently support \* expressions
-CREATE FUNCTION err(i INT) RETURNS ab LANGUAGE SQL AS 'SELECT * FROM ab'
-
-statement error pgcode 0A000 functions do not currently support \* expressions
-CREATE FUNCTION err(i INT) RETURNS ab LANGUAGE SQL AS 'SELECT ab.* FROM ab'
-
-statement error pgcode 0A000 functions do not currently support \* expressions
-CREATE FUNCTION err(i INT) RETURNS ab LANGUAGE SQL AS $$
-  SELECT 1;
-  SELECT * FROM ab;
-$$
-
-statement error pgcode 0A000 functions do not currently support \* expressions
-CREATE FUNCTION err(i INT) RETURNS INT LANGUAGE SQL AS $$
-  SELECT * FROM ab;
-  SELECT 1;
-$$
-
 statement ok
 CREATE FUNCTION d(i INT2) RETURNS INT4 LANGUAGE SQL AS 'SELECT i'
 
@@ -142,9 +124,9 @@ CREATE FUNCTION public.f(IN a test.public.notmyworkday)
   CALLED ON NULL INPUT
   LANGUAGE SQL
   AS $$
-  SELECT a FROM test.public.t;
-  SELECT b FROM test.public.t@t_idx_b;
-  SELECT c FROM test.public.t@t_idx_c;
+  SELECT a FROM [113(1, 2, 3) AS t];
+  SELECT b FROM [113(1, 2, 3) AS t]@t_idx_b;
+  SELECT c FROM [113(1, 2, 3) AS t]@t_idx_c;
   SELECT nextval('public.sq1'::REGCLASS);
 $$
 
@@ -2321,7 +2303,7 @@ CREATE FUNCTION public.get_l(IN i INT8)
     CALLED ON NULL INPUT
     LANGUAGE SQL
     AS $$
-    SELECT v FROM test.public.kv WHERE k = i;
+    SELECT v FROM [225(1, 2) AS kv] WHERE k = i;
 $$
 
 query T
@@ -2788,7 +2770,7 @@ SELECT oid, proname, pronamespace, proowner, prolang, proleakproof, proisstrict,
 FROM pg_catalog.pg_proc WHERE proname IN ('f_93314', 'f_93314_alias', 'f_93314_comp', 'f_93314_comp_t')
 ORDER BY oid;
 ----
-100257  f_93314         105  1546506610  14  false  false  false  v  0  100256  ·  {}  NULL  SELECT i, e FROM test.public.t_93314 ORDER BY i LIMIT 1;
-100259  f_93314_alias   105  1546506610  14  false  false  false  v  0  100258  ·  {}  NULL  SELECT i, e FROM test.public.t_93314_alias ORDER BY i LIMIT 1;
+100257  f_93314         105  1546506610  14  false  false  false  v  0  100256  ·  {}  NULL  SELECT i, e FROM [256(1, 2) AS t_93314] ORDER BY i LIMIT 1;
+100259  f_93314_alias   105  1546506610  14  false  false  false  v  0  100258  ·  {}  NULL  SELECT i, e FROM [258(1, 2) AS t_93314_alias] ORDER BY i LIMIT 1;
 100263  f_93314_comp    105  1546506610  14  false  false  false  v  0  100260  ·  {}  NULL  SELECT (1, 2);
-100264  f_93314_comp_t  105  1546506610  14  false  false  false  v  0  100262  ·  {}  NULL  SELECT a, c FROM test.public.t_93314_comp LIMIT 1;
+100264  f_93314_comp_t  105  1546506610  14  false  false  false  v  0  100262  ·  {}  NULL  SELECT a, c FROM [262(1, 2) AS t_93314_comp] LIMIT 1;

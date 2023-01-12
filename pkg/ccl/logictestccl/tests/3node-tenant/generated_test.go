@@ -1995,6 +1995,13 @@ func TestTenantLogic_udf(
 	runLogicTest(t, "udf")
 }
 
+func TestTenantLogic_udf_star(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "udf_star")
+}
+
 func TestTenantLogic_union(
 	t *testing.T,
 ) {
