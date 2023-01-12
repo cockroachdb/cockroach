@@ -199,13 +199,8 @@ func (mq *mergeQueue) requestRangeStats(
 
 	desc = &res.RangeInfo.Desc
 	stats = res.MVCCStats
-	if res.MaxQueriesPerSecondSet {
-		qps = res.MaxQueriesPerSecond
-		qpsOK = qps >= 0
-	} else {
-		qps = res.DeprecatedLastQueriesPerSecond
-		qpsOK = true
-	}
+	qps = res.MaxQueriesPerSecond
+	qpsOK = qps >= 0
 	return desc, stats, qps, qpsOK, nil
 }
 
