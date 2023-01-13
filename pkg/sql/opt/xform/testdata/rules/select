@@ -9770,3 +9770,117 @@ select
  │    └── columns: col2:3!null col3:4!null col4:5!null
  └── filters
       └── col2:3 < 4 [outer=(3), constraints=(/3: (/NULL - /3]; tight)]
+
+# Regression test for #85356
+exec-ddl
+CREATE TABLE t85356 (c0 DECIMAL(15,3));
+----
+
+# Inlining of DECIMAL 3/2 as INT column rowid is not allowed.
+opt expect-not=InlineConstVar
+SELECT * FROM t85356
+WHERE (CASE WHEN t85356.rowid < t85356.rowid THEN t85356.rowid ELSE 1 END) IN (t85356.rowid) AND NOT t85356.rowid!=3/2;
+----
+project
+ ├── columns: c0:1
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── select
+      ├── columns: c0:1 rowid:2!null
+      ├── cardinality: [0 - 1]
+      ├── key: ()
+      ├── fd: ()-->(1,2)
+      ├── scan t85356
+      │    ├── columns: c0:1 rowid:2!null
+      │    ├── key: (2)
+      │    └── fd: (2)-->(1)
+      └── filters
+           ├── rowid:2 = CASE WHEN (rowid:2 IS NOT DISTINCT FROM CAST(NULL AS INT8)) AND CAST(NULL AS BOOL) THEN rowid:2 ELSE 1 END [outer=(2), constraints=(/2: (/NULL - ])]
+           └── rowid:2 = 1.5000000000000000000 [outer=(2), constraints=(/2: (/NULL - ]), fd=()-->(2)]
+
+# Inlining of INT2 constant 2 as INT column rowid is allowed.
+opt expect=InlineConstVar
+SELECT * FROM t85356
+WHERE (CASE WHEN t85356.rowid < t85356.rowid THEN t85356.rowid ELSE 1 END) IN (t85356.rowid) AND NOT t85356.rowid!=2::INT2;
+----
+values
+ ├── columns: c0:1!null
+ ├── cardinality: [0 - 0]
+ ├── key: ()
+ └── fd: ()-->(1)
+
+# Inlining of INTEGER 2 as DECIMAL column c0 is not allowed because
+# `CanHaveCompositeKeyEncoding` returns `true` for decimals.
+opt expect-not=InlineConstVar
+SELECT * FROM t85356
+WHERE (CASE WHEN t85356.c0 < t85356.c0 THEN t85356.c0 ELSE 1.1 END) IN (t85356.c0) AND NOT t85356.c0!=2;
+----
+select
+ ├── columns: c0:1!null
+ ├── immutable
+ ├── fd: ()-->(1)
+ ├── scan t85356
+ │    └── columns: c0:1
+ └── filters
+      ├── c0:1 = CASE WHEN (c0:1 IS NOT DISTINCT FROM CAST(NULL AS DECIMAL(15,3))) AND CAST(NULL AS BOOL) THEN c0:1 ELSE 1.100 END [outer=(1), immutable, constraints=(/1: (/NULL - ])]
+      └── c0:1 = 2 [outer=(1), immutable, constraints=(/1: [/2 - /2]; tight), fd=()-->(1)]
+
+exec-ddl
+CREATE TABLE t85356_2 (c0 TIMESTAMP, c1 DATE);
+----
+
+# Inlining of a DATE constant as a TIMESTAMP is allowed.
+opt expect=InlineConstVar
+SELECT * FROM t85356_2
+WHERE (CASE WHEN t85356_2.c0 < t85356_2.c0 THEN t85356_2.c0 ELSE '2000-01-01T02:00:00'::timestamp END) IN
+        (t85356_2.c0) AND NOT t85356_2.c0!='12/01/01'::date;
+----
+values
+ ├── columns: c0:1!null c1:2!null
+ ├── cardinality: [0 - 0]
+ ├── key: ()
+ └── fd: ()-->(1,2)
+
+# The lossy CAST of timestamp to DATE is not allowed for inlining.
+opt expect-not=InlineConstVar
+SELECT * FROM t85356_2
+WHERE (CASE WHEN t85356_2.c1 < t85356_2.c1 THEN t85356_2.c1 ELSE '12/01/01'::date END) IN
+        (t85356_2.c1) AND NOT t85356_2.c1!='2000-01-01T02:00:00'::timestamp;
+----
+select
+ ├── columns: c0:1 c1:2!null
+ ├── immutable
+ ├── fd: ()-->(2)
+ ├── scan t85356_2
+ │    └── columns: c0:1 c1:2
+ └── filters
+      ├── c1:2 = CASE WHEN (c1:2 IS NOT DISTINCT FROM CAST(NULL AS DATE)) AND CAST(NULL AS BOOL) THEN c1:2 ELSE '2001-12-01' END [outer=(2), constraints=(/2: (/NULL - ])]
+      └── c1:2 = '2000-01-01 02:00:00' [outer=(2), immutable, constraints=(/2: (/NULL - ]), fd=()-->(2)]
+
+# A non-lossy CAST of timestamp to DATE is allowed for inlining.
+opt expect=InlineConstVar
+SELECT * FROM t85356_2
+WHERE (CASE WHEN t85356_2.c1 < t85356_2.c1 THEN t85356_2.c1 ELSE '12/01/01'::date END) IN
+        (t85356_2.c1) AND NOT t85356_2.c1!='2000-01-01T00:00:00'::timestamp;
+----
+values
+ ├── columns: c0:1!null c1:2!null
+ ├── cardinality: [0 - 0]
+ ├── key: ()
+ └── fd: ()-->(1,2)
+
+# A statement which could actually return rows is inlined but correctly is not
+# simplified into a `norows` values expression.
+opt expect=InlineConstVar
+SELECT * FROM t85356_2
+WHERE (CASE WHEN t85356_2.c0 < t85356_2.c0 THEN t85356_2.c0 ELSE '12/01/01'::date::timestamp END) IN
+        (t85356_2.c0) AND NOT t85356_2.c0!='12/01/01'::date;
+----
+select
+ ├── columns: c0:1!null c1:2
+ ├── fd: ()-->(1)
+ ├── scan t85356_2
+ │    └── columns: c0:1 c1:2
+ └── filters
+      └── c0:1 = '2001-12-01 00:00:00' [outer=(1), constraints=(/1: [/'2001-12-01 00:00:00' - /'2001-12-01 00:00:00']; tight), fd=()-->(1)]
