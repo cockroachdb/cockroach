@@ -2719,14 +2719,16 @@ replaced by the number. If ‘#’ is not present, the number is added at the en
 <li>“noise”: whether to add noise to the generated names (default true).
 It adds a non-zero probability for each of the probability options below left to zero.
 (To enable noise generally but disable one type of noise, set its probability to -1.)</li>
-<li>“punctuate”: probability of adding punctuation to the generated names.</li>
-<li>“quote”: probabiltiy of adding single or double quotes to the generated names.</li>
-<li>“emote”: probability of adding emojis to the generated names.</li>
-<li>“space”: probability of adding simple spaces to the generated names.</li>
-<li>“whitespace”: probability of adding complex whitespace to the generated names.</li>
-<li>“capitals”: probability of using capital letters in the generated names.
+<li>“punctuate”: probability of adding punctuation.</li>
+<li>“fmt”: probability of adding random Go/C formatting directives.</li>
+<li>“escapes”: probability of adding random escape sequences.</li>
+<li>“quote”: probabiltiy of adding single or double quotes.</li>
+<li>“emote”: probability of adding emojis.</li>
+<li>“space”: probability of adding simple spaces.</li>
+<li>“whitespace”: probability of adding complex whitespace.</li>
+<li>“capitals”: probability of using capital letters.
 Note: the name pattern must contain ASCII letters already for capital letters to be used.</li>
-<li>“diacritics”: probability of adding diacritics in the generated names.</li>
+<li>“diacritics”: probability of adding diacritics.</li>
 <li>“diacritic_depth”: max number of diacritics to add at a time (default 1).</li>
 <li>“zalgo”: special option that overrides diacritics and diacritic_depth (default false).</li>
 </ul>
@@ -3134,14 +3136,16 @@ replaced by the number. If ‘#’ is not present, the number is added at the en
 <li>“noise”: whether to add noise to the generated names (default true).
 It adds a non-zero probability for each of the probability options below left to zero.
 (To enable noise generally but disable one type of noise, set its probability to -1.)</li>
-<li>“punctuate”: probability of adding punctuation to the generated names.</li>
-<li>“quote”: probabiltiy of adding single or double quotes to the generated names.</li>
-<li>“emote”: probability of adding emojis to the generated names.</li>
-<li>“space”: probability of adding simple spaces to the generated names.</li>
-<li>“whitespace”: probability of adding complex whitespace to the generated names.</li>
-<li>“capitals”: probability of using capital letters in the generated names.
+<li>“punctuate”: probability of adding punctuation.</li>
+<li>“fmt”: probability of adding random Go/C formatting directives.</li>
+<li>“escapes”: probability of adding random escape sequences.</li>
+<li>“quote”: probabiltiy of adding single or double quotes.</li>
+<li>“emote”: probability of adding emojis.</li>
+<li>“space”: probability of adding simple spaces.</li>
+<li>“whitespace”: probability of adding complex whitespace.</li>
+<li>“capitals”: probability of using capital letters.
 Note: the name pattern must contain ASCII letters already for capital letters to be used.</li>
-<li>“diacritics”: probability of adding diacritics in the generated names.</li>
+<li>“diacritics”: probability of adding diacritics.</li>
 <li>“diacritic_depth”: max number of diacritics to add at a time (default 1).</li>
 <li>“zalgo”: special option that overrides diacritics and diacritic_depth (default false).</li>
 </ul>
