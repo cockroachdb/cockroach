@@ -168,6 +168,21 @@ func getCases(format string) []testCase {
 			dataPaths: []string{"/5/redactable.log"},
 			flags:     []string{"--redact=true", "--redactable-output=true", "--file-pattern", ".*"},
 		},
+		{
+			name:      "6.no-tenant-filter",
+			dataPaths: []string{"/6/*/*"},
+			flags:     []string{"--redact=false", "--redactable-output=false", "--file-pattern", ".*"},
+		},
+		{
+			name:      "6.app-tenants-filter",
+			dataPaths: []string{"/6/*/*"},
+			flags:     []string{"--redact=false", "--redactable-output=false", "--file-pattern", ".*", "--tenant-ids=2,3"},
+		},
+		{
+			name:      "6.system-tenant-filter",
+			dataPaths: []string{"/6/*/*"},
+			flags:     []string{"--redact=false", "--redactable-output=false", "--file-pattern", ".*", "--tenant-ids=1"},
+		},
 	}
 	for i := range cases {
 		cases[i].format = format
@@ -181,6 +196,9 @@ func resetDebugMergeLogFlags(errorFn func(s string)) {
 			errorFn(fmt.Sprintf("Failed to set flag to default: %v", err))
 		}
 	})
+	// (Value).Set() for Slice flags has weird behavior where it appends to the existing
+	// slice instead of truly clearing the value. Manually reset it instead.
+	debugMergeLogsOpts.tenantIDsFilter = []string{}
 }
 
 func (c testCase) run(t *testing.T) {

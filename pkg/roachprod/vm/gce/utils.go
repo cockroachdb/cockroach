@@ -99,6 +99,7 @@ elif [ "${#disks[@]}" -eq "1" ] || [ -n "$use_multiple_disks" ]; then
     mkfs.ext4 -q -F ${disk}
     mount -o ${mount_opts} ${disk} ${mountpoint}
     echo "${d} ${mountpoint} ext4 ${mount_opts} 1 1" | tee -a /etc/fstab
+    tune2fs -m 0 ${disk}
 {{ end }}
     chmod 777 ${mountpoint}
   done
@@ -115,6 +116,7 @@ else
   mkfs.ext4 -q -F ${raiddisk}
   mount -o ${mount_opts} ${raiddisk} ${mountpoint}
   echo "${raiddisk} ${mountpoint} ext4 ${mount_opts} 1 1" | tee -a /etc/fstab
+  tune2fs -m 0 ${raiddisk}
 {{ end }}
   chmod 777 ${mountpoint}
 fi
