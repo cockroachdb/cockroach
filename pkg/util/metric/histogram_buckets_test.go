@@ -77,6 +77,11 @@ func TestHistogramBuckets(t *testing.T) {
 		verifyAndPrint(t, exp, Percent100Buckets, "")
 	})
 
+	t.Run("Percent100Buckets", func(t *testing.T) {
+		exp := prometheus.LinearBuckets(2e9, 2e9, 10)
+		verifyAndPrint(t, exp, Percent100Buckets, "")
+	})
+
 	t.Run("DataSize16MBBuckets", func(t *testing.T) {
 		exp := prometheus.ExponentialBuckets(1e3, 2, 15)
 		verifyAndPrint(t, exp, DataSize16MBBuckets, SIZE)

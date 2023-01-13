@@ -708,6 +708,10 @@ var charts = []sectionDescription{
 				Title:   "CPU Nanos Used Per Second",
 				Metrics: []string{"rebalancing.cpunanospersecond"},
 			},
+			{
+				Title:   "CPU Nanos Used Per Second Distribution",
+				Metrics: []string{"rebalancing.cpunanospersecond.distribution"},
+			},
 		},
 	},
 	{

@@ -360,6 +360,12 @@ var (
 		Measurement: "Nanoseconds/Sec",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
+	metaAverageCPUNanosPerSecondDistribution = metric.Metadata{
+		Name:        "rebalancing.cpunanospersecond.distribution",
+		Help:        "Average CPU nanoseconds spent on processing replica operations in the last 30 minutes.",
+		Measurement: "Nanoseconds/Sec",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
 
 	// Metric for tracking follower reads.
 	metaFollowerReadsCount = metric.Metadata{
@@ -1745,13 +1751,14 @@ type StoreMetrics struct {
 	Reserved           *metric.Gauge
 
 	// Rebalancing metrics.
-	AverageQueriesPerSecond    *metric.GaugeFloat64
-	AverageWritesPerSecond     *metric.GaugeFloat64
-	AverageReadsPerSecond      *metric.GaugeFloat64
-	AverageRequestsPerSecond   *metric.GaugeFloat64
-	AverageWriteBytesPerSecond *metric.GaugeFloat64
-	AverageReadBytesPerSecond  *metric.GaugeFloat64
-	AverageCPUNanosPerSecond   *metric.GaugeFloat64
+	AverageQueriesPerSecond              *metric.GaugeFloat64
+	AverageWritesPerSecond               *metric.GaugeFloat64
+	AverageReadsPerSecond                *metric.GaugeFloat64
+	AverageRequestsPerSecond             *metric.GaugeFloat64
+	AverageWriteBytesPerSecond           *metric.GaugeFloat64
+	AverageReadBytesPerSecond            *metric.GaugeFloat64
+	AverageCPUNanosPerSecond             *metric.GaugeFloat64
+	AverageCPUNanosPerSecondDistribution *metric.Histogram
 	// l0SublevelsWindowedMax doesn't get recorded to metrics itself, it maintains
 	// an ad-hoc history for gosipping information for allocator use.
 	l0SublevelsWindowedMax syncutil.AtomicFloat64
@@ -2287,13 +2294,14 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		Reserved:  metric.NewGauge(metaReserved),
 
 		// Rebalancing metrics.
-		AverageQueriesPerSecond:    metric.NewGaugeFloat64(metaAverageQueriesPerSecond),
-		AverageWritesPerSecond:     metric.NewGaugeFloat64(metaAverageWritesPerSecond),
-		AverageRequestsPerSecond:   metric.NewGaugeFloat64(metaAverageRequestsPerSecond),
-		AverageReadsPerSecond:      metric.NewGaugeFloat64(metaAverageReadsPerSecond),
-		AverageWriteBytesPerSecond: metric.NewGaugeFloat64(metaAverageWriteBytesPerSecond),
-		AverageReadBytesPerSecond:  metric.NewGaugeFloat64(metaAverageReadBytesPerSecond),
-		AverageCPUNanosPerSecond:   metric.NewGaugeFloat64(metaAverageCPUNanosPerSecond),
+		AverageQueriesPerSecond:              metric.NewGaugeFloat64(metaAverageQueriesPerSecond),
+		AverageWritesPerSecond:               metric.NewGaugeFloat64(metaAverageWritesPerSecond),
+		AverageRequestsPerSecond:             metric.NewGaugeFloat64(metaAverageRequestsPerSecond),
+		AverageReadsPerSecond:                metric.NewGaugeFloat64(metaAverageReadsPerSecond),
+		AverageWriteBytesPerSecond:           metric.NewGaugeFloat64(metaAverageWriteBytesPerSecond),
+		AverageReadBytesPerSecond:            metric.NewGaugeFloat64(metaAverageReadBytesPerSecond),
+		AverageCPUNanosPerSecond:             metric.NewGaugeFloat64(metaAverageCPUNanosPerSecond),
+		AverageCPUNanosPerSecondDistribution: metric.NewHistogram(metaAverageCPUNanosPerSecondDistribution, histogramWindow, metric.IOLatencyBuckets),
 
 		// Follower reads metrics.
 		FollowerReadsCount: metric.NewCounter(metaFollowerReadsCount),
