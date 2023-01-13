@@ -2042,3 +2042,10 @@ func fileExists(path string) (bool, error) {
 	}
 	return exists, err
 }
+
+func (c *transientCluster) TenantName() string {
+	if c.demoCtx.Multitenant {
+		return demoTenantName
+	}
+	return catconstants.SystemTenantName
+}
