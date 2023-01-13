@@ -82,10 +82,6 @@ const (
 // See 'generateStartCmd' which sets 'ENV_VARS' for the systemd startup script (start.sh).
 func DefaultEnvVars() []string {
 	return []string{
-		// RPC compressions costs around 5% on kv95, so we disable it. It might help
-		// when moving snapshots around, though.
-		// (For other perf. related knobs, see https://github.com/cockroachdb/cockroach/issues/17165)
-		"COCKROACH_ENABLE_RPC_COMPRESSION=false",
 		// Get rid of an annoying popup in the UI.
 		"COCKROACH_UI_RELEASE_NOTES_SIGNUP_DISMISSED=true",
 	}
