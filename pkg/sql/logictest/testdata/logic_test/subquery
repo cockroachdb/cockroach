@@ -444,6 +444,85 @@ query I
 SELECT col0 FROM tab4 WHERE (col0 <= 0 AND col4 <= 5.38) OR (col4 IN (SELECT col1 FROM tab4 WHERE col1 > 8.27)) AND (col3 <= 5 AND (col3 BETWEEN 7 AND 9))
 ----
 
+subtest correlated
+
+statement ok
+CREATE TABLE corr (
+  k INT PRIMARY KEY,
+  i INT
+)
+
+statement ok
+INSERT INTO corr VALUES (1, 10), (2, 22), (3, 30), (4, 40), (5, 50);
+
+query II
+SELECT * FROM corr
+WHERE CASE WHEN k < 5 THEN k*10 = (SELECT i FROM corr tmp WHERE k = corr.k) END
+----
+1  10
+3  30
+4  40
+
+query III colnames
+SELECT k, i, CASE WHEN k > 1 THEN (SELECT i FROM corr tmp WHERE k = corr.k-1) END AS prev_i
+FROM corr
+----
+k  i   prev_i
+1  10  NULL
+2  22  10
+3  30  22
+4  40  30
+5  50  40
+
+# A test similar to the previous showing that the physical ordering requested by
+# the ORDER BY is respected when re-optimizing the subquery.
+query IIR colnames
+SELECT k, i,
+  CASE WHEN k > 1 THEN (SELECT i/1 FROM corr tmp WHERE i < corr.i ORDER BY i DESC LIMIT 1) END prev_i
+FROM corr
+----
+k  i   prev_i
+1  10  NULL
+2  22  10
+3  30  22
+4  40  30
+5  50  40
+
+# Correlated subqueries can reference outer with expressions.
+query III colnames
+WITH w AS MATERIALIZED (
+  (VALUES (1))
+)
+SELECT k, i,
+  CASE WHEN k > 0 THEN (SELECT i+corr.i FROM corr tmp UNION ALL SELECT * FROM w LIMIT 1) END i_plus_first_i
+FROM corr
+----
+k  i   i_plus_first_i
+1  10  20
+2  22  32
+3  30  40
+4  40  50
+5  50  60
+
+# Uncorrelated subqueries within correlated subqueries can reference outer with
+# expressions.
+query III colnames
+WITH w AS MATERIALIZED (
+  (VALUES (1))
+)
+SELECT k, i,
+  CASE WHEN k > 0 THEN (SELECT i+corr.i FROM corr tmp WHERE k = (SELECT * FROM w)) END i_plus_first_i
+FROM corr
+----
+k  i   i_plus_first_i
+1  10  20
+2  22  32
+3  30  40
+4  40  50
+5  50  60
+
+subtest regressions
+
 statement ok
 CREATE TABLE z (z INT PRIMARY KEY)
 
