@@ -440,16 +440,21 @@ type hotRangesResponse struct {
 //
 // swagger:model hotRangeInfo
 type hotRangeInfo struct {
-	RangeID           roachpb.RangeID  `json:"range_id"`
-	NodeID            roachpb.NodeID   `json:"node_id"`
-	QPS               float64          `json:"qps"`
-	LeaseholderNodeID roachpb.NodeID   `json:"leaseholder_node_id"`
-	TableName         string           `json:"table_name"`
-	DatabaseName      string           `json:"database_name"`
-	IndexName         string           `json:"index_name"`
-	SchemaName        string           `json:"schema_name"`
-	ReplicaNodeIDs    []roachpb.NodeID `json:"replica_node_ids"`
-	StoreID           roachpb.StoreID  `json:"store_id"`
+	RangeID             roachpb.RangeID  `json:"range_id"`
+	NodeID              roachpb.NodeID   `json:"node_id"`
+	QPS                 float64          `json:"qps"`
+	WritesPerSecond     float64          `json:"writes_per_second"`
+	ReadsPerSecond      float64          `json:"reads_per_second"`
+	WriteBytesPerSecond float64          `json:"write_bytes_per_second"`
+	ReadBytesPerSecond  float64          `json:"read_bytes_per_second"`
+	CPUTimePerSecond    float64          `json:"cpu_time_per_second"`
+	LeaseholderNodeID   roachpb.NodeID   `json:"leaseholder_node_id"`
+	TableName           string           `json:"table_name"`
+	DatabaseName        string           `json:"database_name"`
+	IndexName           string           `json:"index_name"`
+	SchemaName          string           `json:"schema_name"`
+	ReplicaNodeIDs      []roachpb.NodeID `json:"replica_node_ids"`
+	StoreID             roachpb.StoreID  `json:"store_id"`
 }
 
 // swagger:operation GET /ranges/hot/ listHotRanges
@@ -522,16 +527,21 @@ func (a *apiV2Server) listHotRanges(w http.ResponseWriter, r *http.Request) {
 		var hotRangeInfos = make([]hotRangeInfo, len(resp.Ranges))
 		for i, r := range resp.Ranges {
 			hotRangeInfos[i] = hotRangeInfo{
-				RangeID:           r.RangeID,
-				NodeID:            r.NodeID,
-				QPS:               r.QPS,
-				LeaseholderNodeID: r.LeaseholderNodeID,
-				TableName:         r.TableName,
-				DatabaseName:      r.DatabaseName,
-				IndexName:         r.IndexName,
-				ReplicaNodeIDs:    r.ReplicaNodeIds,
-				SchemaName:        r.SchemaName,
-				StoreID:           r.StoreID,
+				RangeID:             r.RangeID,
+				NodeID:              r.NodeID,
+				QPS:                 r.QPS,
+				WritesPerSecond:     r.WritesPerSecond,
+				ReadsPerSecond:      r.ReadsPerSecond,
+				WriteBytesPerSecond: r.WriteBytesPerSecond,
+				ReadBytesPerSecond:  r.ReadBytesPerSecond,
+				CPUTimePerSecond:    r.CPUTimePerSecond,
+				LeaseholderNodeID:   r.LeaseholderNodeID,
+				TableName:           r.TableName,
+				DatabaseName:        r.DatabaseName,
+				IndexName:           r.IndexName,
+				ReplicaNodeIDs:      r.ReplicaNodeIds,
+				SchemaName:          r.SchemaName,
+				StoreID:             r.StoreID,
 			}
 		}
 		return hotRangeInfos, nil
