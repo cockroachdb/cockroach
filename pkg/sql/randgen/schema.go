@@ -17,7 +17,7 @@ import (
 	"math/rand"
 	"strings"
 
-	"github.com/cockroachdb/apd/v3"
+	apd "github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -27,6 +27,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/randident"
+	"github.com/cockroachdb/cockroach/pkg/util/randident/randidentcfg"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
@@ -101,6 +103,12 @@ func RandCreateTable(
 		isMultiRegion, nil /* generateColumnIndexNumber */)
 }
 
+var nameGenCfg = func() randidentcfg.Config {
+	cfg := randident.DefaultNameGeneratorConfig()
+	cfg.Finalize()
+	return cfg
+}()
+
 // RandCreateTableWithColumnIndexNumberGenerator creates a random CreateTable definition
 // using the passed function to generate column index numbers for column names.
 func RandCreateTableWithColumnIndexNumberGenerator(
@@ -110,7 +118,8 @@ func RandCreateTableWithColumnIndexNumberGenerator(
 	isMultiRegion bool,
 	generateColumnIndexNumber func() int64,
 ) *tree.CreateTable {
-	tableName := fmt.Sprintf("%s%d", prefix, tableIdx)
+	g := randident.NewNameGenerator(&nameGenCfg, rng, prefix)
+	tableName := g.GenerateOne(tableIdx)
 	// columnDefs contains the list of Columns we'll add to our table.
 	nColumns := randutil.RandIntInRange(rng, 1, 20)
 	columnDefs := make([]*tree.ColumnTableDef, 0, nColumns)
@@ -417,10 +426,12 @@ func GenerateRandInterestingTable(db *gosql.DB, dbName, tableName string) error 
 // randColumnTableDef produces a random ColumnTableDef for a non-computed
 // column, with a random type and nullability.
 func randColumnTableDef(rand *rand.Rand, tableIdx int, colIdx int) *tree.ColumnTableDef {
+	g := randident.NewNameGenerator(&nameGenCfg, rand, fmt.Sprintf("col%d_", tableIdx))
+	colName := g.GenerateOne(colIdx)
 	columnDef := &tree.ColumnTableDef{
 		// We make a unique name for all columns by prefixing them with the table
 		// index to make it easier to reference columns from different tables.
-		Name: tree.Name(fmt.Sprintf("col%d_%d", tableIdx, colIdx)),
+		Name: tree.Name(colName),
 		Type: RandColumnType(rand),
 	}
 	// Slightly prefer non-nullable columns
@@ -579,12 +590,13 @@ func randIndexTableDefFromCols(
 		prefixLen := 1 + rng.Intn(len(prefix))
 		def.PartitionByIndex.Fields = prefix[:prefixLen]
 
+		g := randident.NewNameGenerator(&nameGenCfg, rng, fmt.Sprintf("%s_part", tableName))
 		// Add up to 10 partitions.
 		numPartitions := rng.Intn(10) + 1
 		numExpressions := rng.Intn(10) + 1
 		for i := 0; i < numPartitions; i++ {
 			var partition tree.ListPartition
-			partition.Name = tree.UnrestrictedName(fmt.Sprintf("%s_part_%d", tableName, i))
+			partition.Name = tree.Name(g.GenerateOne(i))
 			// Add up to 10 expressions in each partition.
 			for j := 0; j < numExpressions; j++ {
 				// Use a tuple to contain the expressions in case there are multiple

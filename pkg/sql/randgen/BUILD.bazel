@@ -44,6 +44,8 @@ go_library(
         "//pkg/util/encoding",
         "//pkg/util/ipaddr",
         "//pkg/util/json",
+        "//pkg/util/randident",
+        "//pkg/util/randident/randidentcfg",
         "//pkg/util/randutil",
         "//pkg/util/timeofday",
         "//pkg/util/timeutil",

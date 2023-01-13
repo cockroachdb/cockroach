@@ -1005,8 +1005,8 @@ func (node *Insert) doc(p *PrettyCfg) pretty.Doc {
 
 func (node *NameList) doc(p *PrettyCfg) pretty.Doc {
 	d := make([]pretty.Doc, len(*node))
-	for i, n := range *node {
-		d[i] = p.Doc(&n)
+	for i := range *node {
+		d[i] = p.Doc(&(*node)[i])
 	}
 	return p.commaSeparated(d...)
 }
