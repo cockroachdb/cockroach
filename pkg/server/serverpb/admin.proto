@@ -885,7 +885,8 @@ message RecoveryNodeStatusRequest {
 }
 
 message RecoveryNodeStatusResponse {
-  cockroach.kv.kvserver.loqrecovery.loqrecoverypb.NodeRecoveryStatus status = 1;
+  cockroach.kv.kvserver.loqrecovery.loqrecoverypb.NodeRecoveryStatus status = 1 [
+    (gogoproto.nullable) = false];
 }
 
 message RecoveryVerifyRequest {
@@ -903,10 +904,11 @@ message RecoveryVerifyResponse {
   // Statuses contain a list of recovery statuses of nodes updated during recovery. It
   // also contains nodes that were expected to be live (not decommissioned by recovery)
   // but failed to return status response.
-  repeated cockroach.kv.kvserver.loqrecovery.loqrecoverypb.NodeRecoveryStatus statuses = 1;
-  // Unavailable ranges contains descriptors of ranges that failed health checks.
+  repeated cockroach.kv.kvserver.loqrecovery.loqrecoverypb.NodeRecoveryStatus statuses = 1 [
+    (gogoproto.nullable) = false];
+  // UnavailableRanges contains descriptors of ranges that failed health checks.
   repeated roachpb.RangeDescriptor unavailable_ranges = 2 [
-    (gogoproto.customname) = "UnavailableRanges"];
+    (gogoproto.nullable) = false];
   // DecommissionedNodeIDs contains list of decommissioned node id's. Only nodes that
   // were decommissioned by the plan would be listed here, not all historically
   // decommissioned ones.
