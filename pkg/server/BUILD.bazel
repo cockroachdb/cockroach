@@ -479,6 +479,7 @@ go_test(
         "//pkg/util/netutil",
         "//pkg/util/netutil/addr",
         "//pkg/util/protoutil",
+        "//pkg/util/randident",
         "//pkg/util/randutil",
         "//pkg/util/stop",
         "//pkg/util/syncutil",

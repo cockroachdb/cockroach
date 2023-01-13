@@ -388,6 +388,7 @@ func getDatabaseIndexRecommendations(
 		return []*serverpb.IndexRecommendation{}, err
 	}
 
+	escDBName := tree.NameStringP(&dbName)
 	query := fmt.Sprintf(`
 		SELECT
 			ti.descriptor_id as table_id,
@@ -397,7 +398,7 @@ func getDatabaseIndexRecommendations(
 			ti.created_at
 		FROM %[1]s.crdb_internal.index_usage_statistics AS us
 		 JOIN %[1]s.crdb_internal.table_indexes AS ti ON (us.index_id = ti.index_id AND us.table_id = ti.descriptor_id AND index_type = 'secondary')
-		 JOIN %[1]s.crdb_internal.tables AS t ON (ti.descriptor_id = t.table_id AND t.database_name != 'system');`, dbName)
+		 JOIN %[1]s.crdb_internal.tables AS t ON (ti.descriptor_id = t.table_id AND t.database_name != 'system');`, escDBName)
 
 	it, err := ie.QueryIteratorEx(ctx, "db-index-recommendations", nil,
 		sessiondata.InternalExecutorOverride{
