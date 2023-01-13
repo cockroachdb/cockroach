@@ -487,6 +487,7 @@ go_test(
         "//pkg/util/encoding",
         "//pkg/util/envutil",
         "//pkg/util/grpcutil",
+        "//pkg/util/grunning",
         "//pkg/util/hlc",
         "//pkg/util/httputil",
         "//pkg/util/humanizeutil",
