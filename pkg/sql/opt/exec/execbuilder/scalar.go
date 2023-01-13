@@ -722,12 +722,36 @@ func (b *Builder) buildUDF(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Typ
 		}
 	}
 
+	// Create a tree.RoutinePlanFn that can plan the statements in the UDF body.
+	planFn := b.buildRoutinePlanFn(udf.Params, udf.Body)
+
+	// Enable stepping for volatile functions so that statements within the UDF
+	// see mutations made by the invoking statement and by previous executed
+	// statements.
+	enableStepping := udf.Volatility == volatility.Volatile
+
+	return tree.NewTypedRoutineExpr(
+		udf.Name,
+		args,
+		planFn,
+		len(udf.Body),
+		udf.Typ,
+		enableStepping,
+		udf.CalledOnNullInput,
+	), nil
+}
+
+// buildRoutinePlanFn returns a tree.RoutinePlanFn that can plan the statements
+// in a routine.
+func (b *Builder) buildRoutinePlanFn(
+	params opt.ColList, stmts memo.RelListExpr,
+) tree.RoutinePlanFn {
 	// argOrd returns the ordinal of the argument within the arguments list that
 	// can be substituted for each reference to the given function parameter
 	// column. If the given column does not represent a function parameter,
 	// ok=false is returned.
 	argOrd := func(col opt.ColumnID) (ord int, ok bool) {
-		for i, param := range udf.Params {
+		for i, param := range params {
 			if col == param {
 				return i, true
 			}
@@ -735,8 +759,7 @@ func (b *Builder) buildUDF(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Typ
 		return 0, false
 	}
 
-	// Create a tree.RoutinePlanFn that can plan the statements in the UDF body.
-	// We do this planning in a separate memo. We use an exec.Factory passed to
+	// Plan the statements in a separate memo. We use an exec.Factory passed to
 	// the closure rather than b.factory to support executing plans that are
 	// generated with explain.Factory.
 	//
@@ -750,7 +773,7 @@ func (b *Builder) buildUDF(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Typ
 	) (tree.RoutinePlan, error) {
 		o.Init(ctx, b.evalCtx, b.catalog)
 		f := o.Factory()
-		stmt := udf.Body[stmtIdx]
+		stmt := stmts[stmtIdx]
 
 		// Copy the expression into a new memo. Replace parameter references
 		// with argument datums.
@@ -790,21 +813,18 @@ func (b *Builder) buildUDF(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Typ
 			}
 			return nil, err
 		}
+		if len(eb.subqueries) > 0 {
+			return nil, expectedLazyRoutineError("subquery")
+		}
+		if len(eb.cascades) > 0 {
+			return nil, expectedLazyRoutineError("cascade")
+		}
+		if len(eb.checks) > 0 {
+			return nil, expectedLazyRoutineError("check")
+		}
 		return plan, nil
 	}
-	// Enable stepping for volatile functions so that statements within the UDF
-	// see mutations made by the invoking statement and by previous executed
-	// statements.
-	enableStepping := udf.Volatility == volatility.Volatile
-	return tree.NewTypedRoutineExpr(
-		udf.Name,
-		args,
-		planFn,
-		len(udf.Body),
-		udf.Typ,
-		enableStepping,
-		udf.CalledOnNullInput,
-	), nil
+	return planFn
 }
 
 func expectedLazyRoutineError(typ string) error {
