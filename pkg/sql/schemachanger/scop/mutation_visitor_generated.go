@@ -63,6 +63,10 @@ type MutationVisitor interface {
 	MakePublicForeignKeyConstraintValidated(context.Context, MakePublicForeignKeyConstraintValidated) error
 	RemoveForeignKeyConstraint(context.Context, RemoveForeignKeyConstraint) error
 	RemoveForeignKeyBackReference(context.Context, RemoveForeignKeyBackReference) error
+	MakeAbsentUniqueWithoutIndexConstraintWriteOnly(context.Context, MakeAbsentUniqueWithoutIndexConstraintWriteOnly) error
+	MakeValidatedUniqueWithoutIndexConstraintPublic(context.Context, MakeValidatedUniqueWithoutIndexConstraintPublic) error
+	MakePublicUniqueWithoutIndexConstraintValidated(context.Context, MakePublicUniqueWithoutIndexConstraintValidated) error
+	RemoveUniqueWithoutIndexConstraint(context.Context, RemoveUniqueWithoutIndexConstraint) error
 	RemoveSchemaParent(context.Context, RemoveSchemaParent) error
 	AddIndexPartitionInfo(context.Context, AddIndexPartitionInfo) error
 	LogEvent(context.Context, LogEvent) error
@@ -308,6 +312,26 @@ func (op RemoveForeignKeyConstraint) Visit(ctx context.Context, v MutationVisito
 // Visit is part of the MutationOp interface.
 func (op RemoveForeignKeyBackReference) Visit(ctx context.Context, v MutationVisitor) error {
 	return v.RemoveForeignKeyBackReference(ctx, op)
+}
+
+// Visit is part of the MutationOp interface.
+func (op MakeAbsentUniqueWithoutIndexConstraintWriteOnly) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.MakeAbsentUniqueWithoutIndexConstraintWriteOnly(ctx, op)
+}
+
+// Visit is part of the MutationOp interface.
+func (op MakeValidatedUniqueWithoutIndexConstraintPublic) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.MakeValidatedUniqueWithoutIndexConstraintPublic(ctx, op)
+}
+
+// Visit is part of the MutationOp interface.
+func (op MakePublicUniqueWithoutIndexConstraintValidated) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.MakePublicUniqueWithoutIndexConstraintValidated(ctx, op)
+}
+
+// Visit is part of the MutationOp interface.
+func (op RemoveUniqueWithoutIndexConstraint) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.RemoveUniqueWithoutIndexConstraint(ctx, op)
 }
 
 // Visit is part of the MutationOp interface.
