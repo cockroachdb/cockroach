@@ -55,6 +55,7 @@ else
     sudo mount -o "${mount_opts}" "${disk}" "${mount}"
     echo "${disk} ${mount} ext4 ${mount_opts} 1 1" | sudo tee -a /etc/fstab
     ln -s "${mount}" "/mnt/$(basename $mount)"
+    tune2fs -m 0 ${disk}
   done
   chown {{.RemoteUser}} /data*
 fi
