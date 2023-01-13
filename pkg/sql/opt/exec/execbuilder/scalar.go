@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinsregistry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -540,6 +541,8 @@ func (b *Builder) buildItem(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Ty
 func (b *Builder) buildAny(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.TypedExpr, error) {
 	any := scalar.(*memo.AnyExpr)
 	// We cannot execute correlated subqueries.
+	// TODO(mgartner): Plan correlated ANY subqueries using tree.RoutineExpr.
+	// See buildSubquery.
 	if !any.Input.Relational().OuterCols.Empty() {
 		return nil, b.decorrelationError()
 	}
@@ -581,6 +584,8 @@ func (b *Builder) buildExistsSubquery(
 ) (tree.TypedExpr, error) {
 	exists := scalar.(*memo.ExistsExpr)
 	// We cannot execute correlated subqueries.
+	// TODO(mgartner): Plan correlated EXISTS subqueries using tree.RoutineExpr.
+	// See buildSubquery.
 	if !exists.Input.Relational().OuterCols.Empty() {
 		return nil, b.decorrelationError()
 	}
@@ -610,16 +615,56 @@ func (b *Builder) buildSubquery(
 		return nil, errors.Errorf("subquery input with multiple columns")
 	}
 
-	// We cannot execute correlated subqueries.
-	// TODO(mgartner): We can execute correlated subqueries by making them
-	// routines, like we do below.
-	if !input.Relational().OuterCols.Empty() {
-		return nil, b.decorrelationError()
+	// Build correlated subqueries as lazily-evaluated routines.
+	if outerCols := input.Relational().OuterCols; !outerCols.Empty() {
+		// Routines do not yet support mutations.
+		// TODO(mgartner): Lift this restriction once routines support
+		// mutations.
+		if input.Relational().CanMutate {
+			return nil, b.decorrelationError()
+		}
+
+		// The outer columns of the subquery become the parameters of the
+		// routine.
+		params := outerCols.ToList()
+
+		// The outer columns of the subquery, as indexed columns, are the
+		// arguments of the routine.
+		// The arguments are indexed variables representing the outer columns.
+		args := make(tree.TypedExprs, len(params))
+		for i := range args {
+			args[i] = b.indexedVar(ctx, b.mem.Metadata(), params[i])
+		}
+
+		// Create a single-element RelListExpr representing the subquery.
+		outputCol := input.Relational().OutputCols.SingleColumn()
+		aliasedCol := opt.AliasedColumn{
+			Alias: b.mem.Metadata().ColumnMeta(outputCol).Alias,
+			ID:    outputCol,
+		}
+		stmts := memo.RelListExpr{memo.RelRequiredPropsExpr{
+			RelExpr: input,
+			PhysProps: &physical.Required{
+				Presentation: physical.Presentation{aliasedCol},
+			},
+		}}
+
+		// Create a tree.RoutinePlanFn that can plan the single statement
+		// representing the subquery.
+		planFn := b.buildRoutinePlanFn(params, stmts, true /* allowOuterWithRefs */)
+		return tree.NewTypedRoutineExpr(
+			"subquery",
+			args,
+			planFn,
+			1, /* numStmts */
+			subquery.Typ,
+			false, /* enableStepping */
+			true,  /* calledOnNullInput */
+		), nil
 	}
 
+	// Build lazily-evaluated, uncorrelated subqueries as routines.
 	if b.planLazySubqueries {
-		// Build lazily-evaluated subqueries as routines.
-		//
 		// Note: We reuse the optimizer and memo from the original expression
 		// because we don't need to optimize the subquery input any further.
 		// It's already been fully optimized because it is uncorrelated and has
@@ -629,11 +674,14 @@ func (b *Builder) buildSubquery(
 		// once. We should cache their result to avoid all this overhead for
 		// every invocation.
 		inputRowCount := int64(input.Relational().Statistics().RowCountIfAvailable())
+		withExprs := make([]builtWithExpr, len(b.withExprs))
+		copy(withExprs, b.withExprs)
 		planFn := func(
 			ctx context.Context, ref tree.RoutineExecFactory, stmtIdx int, args tree.Datums,
 		) (tree.RoutinePlan, error) {
 			ef := ref.(exec.Factory)
 			eb := New(ctx, ef, b.optimizer, b.mem, b.catalog, input, b.evalCtx, false /* allowAutoCommit */, b.IsANSIDML)
+			eb.withExprs = withExprs
 			eb.disableTelemetry = true
 			eb.planLazySubqueries = true
 			plan, err := eb.buildRelational(input)
@@ -723,7 +771,8 @@ func (b *Builder) buildUDF(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Typ
 	}
 
 	// Create a tree.RoutinePlanFn that can plan the statements in the UDF body.
-	planFn := b.buildRoutinePlanFn(udf.Params, udf.Body)
+	// TODO(mgartner): Add support for WITH expressions inside UDF bodies.
+	planFn := b.buildRoutinePlanFn(udf.Params, udf.Body, false /* allowOuterWithRefs */)
 
 	// Enable stepping for volatile functions so that statements within the UDF
 	// see mutations made by the invoking statement and by previous executed
@@ -742,9 +791,9 @@ func (b *Builder) buildUDF(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Typ
 }
 
 // buildRoutinePlanFn returns a tree.RoutinePlanFn that can plan the statements
-// in a routine.
+// in a routine that has one or more arguments.
 func (b *Builder) buildRoutinePlanFn(
-	params opt.ColList, stmts memo.RelListExpr,
+	params opt.ColList, stmts memo.RelListExpr, allowOuterWithRefs bool,
 ) tree.RoutinePlanFn {
 	// argOrd returns the ordinal of the argument within the arguments list that
 	// can be substituted for each reference to the given function parameter
@@ -757,6 +806,13 @@ func (b *Builder) buildRoutinePlanFn(
 			}
 		}
 		return 0, false
+	}
+
+	// We will pre-populate the withExprs of the new execbuilder.
+	var withExprs []builtWithExpr
+	if allowOuterWithRefs {
+		withExprs = make([]builtWithExpr, len(b.withExprs))
+		copy(withExprs, b.withExprs)
 	}
 
 	// Plan the statements in a separate memo. We use an exec.Factory passed to
@@ -777,28 +833,53 @@ func (b *Builder) buildRoutinePlanFn(
 
 		// Copy the expression into a new memo. Replace parameter references
 		// with argument datums.
+		addedWithBindings := false
 		var replaceFn norm.ReplaceFunc
 		replaceFn = func(e opt.Expr) opt.Expr {
-			if v, ok := e.(*memo.VariableExpr); ok {
-				if ord, ok := argOrd(v.Col); ok {
-					return f.ConstructConstVal(args[ord], v.Typ)
+			switch t := e.(type) {
+			case *memo.VariableExpr:
+				if ord, ok := argOrd(t.Col); ok {
+					return f.ConstructConstVal(args[ord], t.Typ)
 				}
+
+			case *memo.WithScanExpr:
+				// Allow referring to "outer" With expressions, if
+				// allowOuterWithRefs is true. The bound expressions are not
+				// part of this Memo, but they are used only for their
+				// relational properties, which should be valid.
+				//
+				// We must add all With expressions to the metadata even if they
+				// aren't referred to directly because they might be referred to
+				// transitively through other With expressions. For example, if
+				// stmt refers to With expression &1, and &1 refers to With
+				// expression &2, we must include &2 in the metadata so that its
+				// relational properties are available. See #87733.
+				//
+				// We lazily add these With expressions to the metadata here
+				// because the call to Factory.CopyAndReplace below clears With
+				// expressions in the metadata.
+				if allowOuterWithRefs && !addedWithBindings {
+					b.mem.Metadata().ForEachWithBinding(func(id opt.WithID, expr opt.Expr) {
+						f.Metadata().AddWithBinding(id, expr)
+					})
+					addedWithBindings = true
+				}
+				// Fall through.
 			}
 			return f.CopyAndReplaceDefault(e, replaceFn)
 		}
 		f.CopyAndReplace(stmt, stmt.PhysProps, replaceFn)
 
 		// Optimize the memo.
-		newRightSide, err := o.Optimize()
+		optimizedExpr, err := o.Optimize()
 		if err != nil {
 			return nil, err
 		}
 
 		// Build the memo into a plan.
-		// TODO(mgartner): Add support for WITH expressions inside UDF bodies.
-		// TODO(mgartner): Add support for subqueries inside UDF bodies.
 		ef := ref.(exec.Factory)
-		eb := New(ctx, ef, &o, f.Memo(), b.catalog, newRightSide, b.evalCtx, false /* allowAutoCommit */, b.IsANSIDML)
+		eb := New(ctx, ef, &o, f.Memo(), b.catalog, optimizedExpr, b.evalCtx, false /* allowAutoCommit */, b.IsANSIDML)
+		eb.withExprs = withExprs
 		eb.disableTelemetry = true
 		eb.planLazySubqueries = true
 		plan, err := eb.Build()
@@ -808,7 +889,7 @@ func (b *Builder) buildRoutinePlanFn(
 				// inner expression.
 				fmtFlags := memo.ExprFmtHideQualifications | memo.ExprFmtHideScalars |
 					memo.ExprFmtHideTypes
-				explainOpt := o.FormatExpr(newRightSide, fmtFlags)
+				explainOpt := o.FormatExpr(optimizedExpr, fmtFlags)
 				err = errors.WithDetailf(err, "routineExpr:\n%s", explainOpt)
 			}
 			return nil, err
