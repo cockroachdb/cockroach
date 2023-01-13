@@ -8,6 +8,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/col/coldata",
+        "//pkg/sql/sem/tree",
         "//pkg/sql/types",
         "//pkg/util/bufalloc",
         "//pkg/util/timeutil",
@@ -33,6 +34,7 @@ go_test(
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
+        "//pkg/sql/sem/tree",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",

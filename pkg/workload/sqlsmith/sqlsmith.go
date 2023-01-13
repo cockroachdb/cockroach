@@ -82,7 +82,7 @@ func (g *sqlSmith) Tables() []workload.Table {
 	for idx := 0; idx < g.tables; idx++ {
 		schema := randgen.RandCreateTable(rng, "table", idx, false /* isMultiRegion */)
 		table := workload.Table{
-			Name:   schema.Table.String(),
+			Name:   string(schema.Table.ObjectName),
 			Schema: tree.Serialize(schema),
 		}
 		// workload expects the schema to be missing the CREATE TABLE "name", so

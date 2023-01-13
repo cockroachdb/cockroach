@@ -101,7 +101,7 @@ func (w *random) Tables() []workload.Table {
 		ctx := tree.NewFmtCtx(tree.FmtParsable)
 		createTable.FormatBody(ctx)
 		tables[i] = workload.Table{
-			Name:   createTable.Table.String(),
+			Name:   string(createTable.Table.ObjectName),
 			Schema: ctx.CloseAndGetString(),
 		}
 	}
@@ -165,7 +165,8 @@ func (w *random) Ops(
 	}
 
 	var relid int
-	if err := db.QueryRow(fmt.Sprintf("SELECT '%s'::REGCLASS::OID", tableName)).Scan(&relid); err != nil {
+	sqlName := tree.Name(tableName)
+	if err := db.QueryRow("SELECT $1::REGCLASS::OID", sqlName.String()).Scan(&relid); err != nil {
 		return workload.QueryLoad{}, err
 	}
 
@@ -235,9 +236,9 @@ AND    i.indisprimary`, relid)
 				return workload.QueryLoad{}, err
 			}
 			if w.primaryKey != "" {
-				w.primaryKey += "," + colname
+				w.primaryKey += "," + tree.NameString(colname)
 			} else {
-				w.primaryKey += colname
+				w.primaryKey += tree.NameString(colname)
 			}
 		}
 		if err = rows.Err(); err != nil {
@@ -272,7 +273,7 @@ AND    i.indisprimary`, relid)
 			if i > 0 {
 				dmlSuffix.WriteString(",")
 			}
-			dmlSuffix.WriteString(fmt.Sprintf("%s=EXCLUDED.%s", c.name, c.name))
+			dmlSuffix.WriteString(fmt.Sprintf("%s=EXCLUDED.%s", tree.NameString(c.name), tree.NameString(c.name)))
 		}
 	default:
 		return workload.QueryLoad{}, errors.Errorf("%s DML method not valid", w.primaryKey)
@@ -285,12 +286,12 @@ AND    i.indisprimary`, relid)
 		}
 	}
 
-	fmt.Fprintf(&buf, `%s INTO %s.%s (`, dmlMethod, sqlDatabase, tableName)
+	fmt.Fprintf(&buf, `%s INTO %s.%s (`, dmlMethod, tree.NameString(sqlDatabase), tree.NameString(tableName))
 	for i, c := range nonComputedCols {
 		if i > 0 {
 			buf.WriteString(",")
 		}
-		buf.WriteString(c.name)
+		buf.WriteString(tree.NameString(c.name))
 	}
 	buf.WriteString(`) VALUES `)
 
