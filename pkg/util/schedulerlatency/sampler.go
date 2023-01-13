@@ -298,11 +298,43 @@ func percentile(h *metrics.Float64Histogram, p float64) float64 {
 		total += h.Counts[i]
 	}
 
-	// Iterate backwards (we're optimizing for higher percentiles) until we find
-	// the right bucket.
+	// Linear approximation of the target value corresponding to percentile, p:
+	//
+	// Goal: we want the `p * total`-th value from the histogram.
+	// 		- p * total is the ordinal rank (or simply, rank) of the target value
+	//			within the histogram bounds.
+	//
+	// Step 1: Find the bucket[i] which contains the target value.
+	//		- This will be the largest bucket[i] where the left-bound cumulative
+	//			count of bucket[i] <= p*total.
+	//
+	// Step 2: Determine the rank within the bucket (subset of histogram)
+	// 		- Since the bucket is a subset of the original data set, we can simply
+	//			subtract left-bound cumulative to get the subset rank.
+	//
+	// Step 3: Apply the approximation to the bucket's lower boundary.
+	//    - Calculate the subset_percentile.
+	//				Since,
+	//								rank = percentile * count
+	//				we get,
+	//								percentile = rank / count
+	//        scoping this to the subset dataset,
+	//       					subset_percentile = subset_rank / subset_count
+	//    - The value within the bucket will be:
+	//   		          bucket_size * subset_percentile
+	//        where,
+	//       					bucket_size = bucket_start - bucket_end
+	//        Thus, our target value will be given by,
+	//                bucket_start + (bucket_start - bucket_end) * subset_percentile
+	//
+
+	// (Step 1) Iterate backwards (we're optimizing for higher percentiles) until
+	// we find the first bucket for which total-cumulative <= rank, which will be
+	// by design the largest bucket that meets that condition.
 	var cumulative uint64  // cumulative count of all buckets we've iterated through
 	var start, end float64 // start and end of current bucket
-	for i := len(h.Counts) - 1; i >= 0; i-- {
+	var i int              // index of current bucket
+	for i = len(h.Counts) - 1; i >= 0; i-- {
 		start, end = h.Buckets[i], h.Buckets[i+1]
 		if i == 0 && math.IsInf(h.Buckets[0], -1) { // -Inf
 			// Buckets[0] is permitted to have -Inf; avoid interpolating with
@@ -332,15 +364,10 @@ func percentile(h *metrics.Float64Histogram, p float64) float64 {
 		}
 	}
 
-	return (start + end) / 2 // grab the mid-point within the bucket
+	// (Step 2) Find the target rank within bucket boundaries.
+	subsetRank := float64(total)*p - float64(total-cumulative)
 
-	// TODO(irfansharif): Implement proper linear interpolation instead and then
-	// write test comparing against it against metric.ValueAtQuantileWindowed.
-	// If pmax, we'll return the bucket max. If pmin, we'll return the bucket
-	// min. If the 90th and 100th percentile values lie within some bucket, and
-	// we're looking for 99.9th percentile, we'll interpolate to the 99% point
-	// between bucket start and end. Because we're doing this naive mid-point
-	// thing, it makes for a confusing difference when comparing the p99
-	// computed off of go.scheduler_latency vs.
-	// admission.scheduler_latency_listener.p99_nanos.
+	// (Step 3) Using rank and the percentile to calculate the approximated value.
+	subsetPercentile := subsetRank / float64(h.Counts[i])
+	return start + (end-start)*subsetPercentile
 }
