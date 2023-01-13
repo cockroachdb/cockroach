@@ -2224,10 +2224,10 @@ func (node *SuperRegion) Format(ctx *FmtCtx) {
 	ctx.WriteString(" SUPER REGION ")
 	ctx.FormatNode(&node.Name)
 	ctx.WriteString(" VALUES ")
-	for i, region := range node.Regions {
+	for i := range node.Regions {
 		if i != 0 {
 			ctx.WriteString(",")
 		}
-		ctx.FormatNode(&region)
+		ctx.FormatNode(&node.Regions[i])
 	}
 }
