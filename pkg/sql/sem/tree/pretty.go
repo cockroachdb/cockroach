@@ -1116,8 +1116,9 @@ func (node *Tuple) doc(p *PrettyCfg) pretty.Doc {
 	d := p.bracket("(", exprDoc, ")")
 	if len(node.Labels) > 0 {
 		labels := make([]pretty.Doc, len(node.Labels))
-		for i, n := range node.Labels {
-			labels[i] = p.Doc((*Name)(&n))
+		for i := range node.Labels {
+			n := &node.Labels[i]
+			labels[i] = p.Doc((*Name)(n))
 		}
 		d = p.bracket("(", pretty.Stack(
 			d,
