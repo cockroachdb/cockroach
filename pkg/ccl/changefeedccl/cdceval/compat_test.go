@@ -64,6 +64,18 @@ func TestCompatRewrite(t *testing.T) {
 			oldExpr: "SELECT foo.*, cdc_prev() FROM " + fooRef + " WHERE cdc_prev()->>'field' = 'blah'",
 			newExpr: "SELECT foo.*, row_to_json((cdc_prev).*) FROM " + fooRef + " WHERE (row_to_json((cdc_prev).*)->>'field') = 'blah'",
 		},
+		{
+			oldExpr: "SELECT foo.*, cdc_is_delete() FROM " + fooRef,
+			newExpr: "SELECT foo.*, (event_op() = 'delete') FROM " + fooRef,
+		},
+		{
+			oldExpr: "SELECT foo.*, cdc_is_delete() AS was_deleted FROM " + fooRef,
+			newExpr: "SELECT foo.*, (event_op() = 'delete') AS was_deleted FROM " + fooRef,
+		},
+		{
+			oldExpr: "SELECT foo.*, cdc_mvcc_timestamp() FROM " + fooRef,
+			newExpr: "SELECT foo.*, crdb_internal_mvcc_timestamp FROM " + fooRef,
+		},
 	} {
 		sc, err := ParseChangefeedExpression(tc.oldExpr)
 		require.NoError(t, err)

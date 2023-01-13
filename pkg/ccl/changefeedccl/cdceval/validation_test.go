@@ -276,7 +276,7 @@ func TestSelectClauseRequiresPrev(t *testing.T) {
 		{
 			name:         "nested call to cdc_prev",
 			desc:         descs[`foo`],
-			stmt:         "SELECT jsonb_build_object('op',IF(cdc_is_delete(),'u',IF(row_to_json((cdc_prev).*)::string='null','c','u'))) from foo",
+			stmt:         "SELECT jsonb_build_object('op',IF(event_op() = 'delete','u',IF(row_to_json((cdc_prev).*)::string='null','c','u'))) from foo",
 			requiresPrev: true,
 		},
 		{
