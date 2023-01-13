@@ -147,20 +147,23 @@ message ReplicaRecoveryRecord {
 // NodeRecoveryStatus contains information about loss of quorum recovery
 // operations of a node.
 message NodeRecoveryStatus {
+  // NodeID contains id of the node that status belongs to.
+  int32 node_id = 1 [(gogoproto.customname) = "NodeID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
   // PendingPlanID contains an ID or recovery plan that is staged on the node for
   // application on the next restart.
-  bytes pending_plan_id = 1 [
+  bytes pending_plan_id = 2 [
     (gogoproto.customname) = "PendingPlanID",
     (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"];
   // AppliedPlanID contains an ID of recovery plan that was processed last.
   // If plan application succeeded, then ApplyError will be nil, otherwise it will
   // contain an error message.
-  bytes applied_plan_id = 2 [
+  bytes applied_plan_id = 3 [
     (gogoproto.customname) = "AppliedPlanID",
     (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"];
   // LastProcessingTime is a node wall clock time when last recovery plan was applied.
-  google.protobuf.Timestamp apply_timestamp = 3 [(gogoproto.stdtime) = true];
+  google.protobuf.Timestamp apply_timestamp = 4 [(gogoproto.stdtime) = true];
   // If most recent recovery plan application failed, Error will contain
   // aggregated error messages containing all encountered errors.
-  string error = 4;
+  string error = 5;
 }
