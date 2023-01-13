@@ -1329,6 +1329,7 @@ only.
 | reads_per_second | [double](#cockroach.server.serverpb.RaftDebugResponse-double) |  | Reads per second served is the number of keys read from this range per second, averaged over the last 30 minute period. | [reserved](#support-status) |
 | write_bytes_per_second | [double](#cockroach.server.serverpb.RaftDebugResponse-double) |  | Writes (bytes) per second is the number of bytes written to this range per second, averaged over the last 30 minute period. | [reserved](#support-status) |
 | read_bytes_per_second | [double](#cockroach.server.serverpb.RaftDebugResponse-double) |  | Reads (bytes) per second is the number of bytes read from this range per second, averaged over the last 30 minute period. | [reserved](#support-status) |
+| cpu_time_per_second | [double](#cockroach.server.serverpb.RaftDebugResponse-double) |  | CPU time (ns) per second is the cpu usage of this range per second, averaged over the last 30 minute period. | [reserved](#support-status) |
 
 
 
@@ -1575,6 +1576,7 @@ only.
 | reads_per_second | [double](#cockroach.server.serverpb.RangesResponse-double) |  | Reads per second served is the number of keys read from this range per second, averaged over the last 30 minute period. | [reserved](#support-status) |
 | write_bytes_per_second | [double](#cockroach.server.serverpb.RangesResponse-double) |  | Writes (bytes) per second is the number of bytes written to this range per second, averaged over the last 30 minute period. | [reserved](#support-status) |
 | read_bytes_per_second | [double](#cockroach.server.serverpb.RangesResponse-double) |  | Reads (bytes) per second is the number of bytes read from this range per second, averaged over the last 30 minute period. | [reserved](#support-status) |
+| cpu_time_per_second | [double](#cockroach.server.serverpb.RangesResponse-double) |  | CPU time (ns) per second is the cpu usage of this range per second, averaged over the last 30 minute period. | [reserved](#support-status) |
 
 
 
@@ -1784,6 +1786,7 @@ only.
 | reads_per_second | [double](#cockroach.server.serverpb.TenantRangesResponse-double) |  | Reads per second served is the number of keys read from this range per second, averaged over the last 30 minute period. | [reserved](#support-status) |
 | write_bytes_per_second | [double](#cockroach.server.serverpb.TenantRangesResponse-double) |  | Writes (bytes) per second is the number of bytes written to this range per second, averaged over the last 30 minute period. | [reserved](#support-status) |
 | read_bytes_per_second | [double](#cockroach.server.serverpb.TenantRangesResponse-double) |  | Reads (bytes) per second is the number of bytes read from this range per second, averaged over the last 30 minute period. | [reserved](#support-status) |
+| cpu_time_per_second | [double](#cockroach.server.serverpb.TenantRangesResponse-double) |  | CPU time (ns) per second is the cpu usage of this range per second, averaged over the last 30 minute period. | [reserved](#support-status) |
 
 
 
@@ -3495,6 +3498,7 @@ target node(s) selected in a HotRangesRequest.
 | reads_per_second | [double](#cockroach.server.serverpb.HotRangesResponse-double) |  | Reads per second is the recent number of keys read per second on this range. | [reserved](#support-status) |
 | write_bytes_per_second | [double](#cockroach.server.serverpb.HotRangesResponse-double) |  | Write bytes per second is the recent number of bytes written per second on this range. | [reserved](#support-status) |
 | read_bytes_per_second | [double](#cockroach.server.serverpb.HotRangesResponse-double) |  | Read bytes per second is the recent number of bytes read per second on this range. | [reserved](#support-status) |
+| cpu_time_per_second | [double](#cockroach.server.serverpb.HotRangesResponse-double) |  | CPU time per second is the recent cpu usage in nanoseconds of this range. | [reserved](#support-status) |
 
 
 
@@ -3881,6 +3885,7 @@ only.
 | reads_per_second | [double](#cockroach.server.serverpb.RangeResponse-double) |  | Reads per second served is the number of keys read from this range per second, averaged over the last 30 minute period. | [reserved](#support-status) |
 | write_bytes_per_second | [double](#cockroach.server.serverpb.RangeResponse-double) |  | Writes (bytes) per second is the number of bytes written to this range per second, averaged over the last 30 minute period. | [reserved](#support-status) |
 | read_bytes_per_second | [double](#cockroach.server.serverpb.RangeResponse-double) |  | Reads (bytes) per second is the number of bytes read from this range per second, averaged over the last 30 minute period. | [reserved](#support-status) |
+| cpu_time_per_second | [double](#cockroach.server.serverpb.RangeResponse-double) |  | CPU time (ns) per second is the cpu usage of this range per second, averaged over the last 30 minute period. | [reserved](#support-status) |
 
 
 
