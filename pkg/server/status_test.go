@@ -1096,6 +1096,17 @@ func TestHotRanges2Response(t *testing.T) {
 		if r.RangeID == 0 {
 			t.Errorf("unexpected empty range id: %d", r.RangeID)
 		}
+		if r.QPS > 0 {
+			if r.ReadsPerSecond == 0 && r.WritesPerSecond == 0 {
+				t.Errorf("qps %.2f > 0, expected either reads=%.2f or writes=%.2f to be non-zero",
+					r.QPS, r.ReadsPerSecond, r.WritesPerSecond)
+			}
+			// If the architecture doesn't support sampling CPU, it
+			// will also be zero.
+			if grunning.Supported() && r.CPUTimePerSecond == 0 {
+				t.Errorf("qps %.2f > 0, expected cpu=%.2f to be non-zero", r.QPS, r.CPUTimePerSecond)
+			}
+		}
 		if r.QPS > lastQPS {
 			t.Errorf("unexpected increase in qps between ranges; prev=%.2f, current=%.2f", lastQPS, r.QPS)
 		}
