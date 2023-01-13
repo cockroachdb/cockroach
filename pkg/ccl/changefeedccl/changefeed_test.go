@@ -7075,7 +7075,7 @@ INSERT INTO foo (a, b, e) VALUES (2, 'two', 'closed');
 CREATE CHANGEFEED 
 WITH schema_change_policy='stop'
 AS SELECT * FROM `+fromClause+` 
-WHERE e IN ('open', 'closed') AND NOT cdc_is_delete()`)
+WHERE e IN ('open', 'closed') AND event_op() != 'delete'`)
 			defer closeFeed(t, feed)
 
 			assertPayloads(t, feed, []string{
