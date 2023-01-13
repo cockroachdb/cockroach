@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
@@ -38,22 +39,25 @@ import (
 func startReplicationProducerJob(
 	ctx context.Context, evalCtx *eval.Context, txn *kv.Txn, tenantName roachpb.TenantName,
 ) (streampb.ReplicationProducerSpec, error) {
-	tenantRecord, err := sql.GetTenantRecordByName(ctx, evalCtx.Planner.ExecutorConfig().(*sql.ExecutorConfig), txn, tenantName)
-	if err != nil {
-		return streampb.ReplicationProducerSpec{}, err
-	}
-	tenantID := tenantRecord.ID
-
 	execConfig := evalCtx.Planner.ExecutorConfig().(*sql.ExecutorConfig)
 	hasAdminRole, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
-
 	if err != nil {
 		return streampb.ReplicationProducerSpec{}, err
 	}
 
 	if !hasAdminRole {
-		return streampb.ReplicationProducerSpec{}, errors.New("admin role required to start stream replication jobs")
+		return streampb.ReplicationProducerSpec{}, errors.New("admin role required to start a replication jobs")
 	}
+
+	if !kvserver.RangefeedEnabled.Get(&evalCtx.Settings.SV) {
+		return streampb.ReplicationProducerSpec{}, errors.Errorf("kv.rangefeed.enabled must be true to start a replication job")
+	}
+
+	tenantRecord, err := sql.GetTenantRecordByName(ctx, evalCtx.Planner.ExecutorConfig().(*sql.ExecutorConfig), txn, tenantName)
+	if err != nil {
+		return streampb.ReplicationProducerSpec{}, err
+	}
+	tenantID := tenantRecord.ID
 
 	registry := execConfig.JobRegistry
 	timeout := streamingccl.StreamReplicationJobLivenessTimeout.Get(&evalCtx.Settings.SV)
