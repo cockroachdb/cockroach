@@ -41,3 +41,11 @@ func (r RangeUsageInfo) Load() load.Load {
 	dims[load.Queries] = r.QueriesPerSecond
 	return dims
 }
+
+// TransferImpact returns the impact of transferring the lease for the range,
+// given the usage information.
+func (r RangeUsageInfo) TransferImpact() load.Load {
+	dims := load.Vector{}
+	dims[load.Queries] = r.QueriesPerSecond
+	return dims
+}

@@ -715,17 +715,17 @@ func (sr *StoreRebalancer) chooseLeaseToTransfer(
 		// store's load. It's just unnecessary churn with no benefit to move leases
 		// responsible for, for example, 1 load unit on a store with 5000 load units.
 		const minLoadFraction = .001
-		if candidateReplica.RangeUsageInfo().Load().Dim(rctx.loadDimension) <
+		if candidateReplica.RangeUsageInfo().TransferImpact().Dim(rctx.loadDimension) <
 			rctx.LocalDesc.Capacity.Load().Dim(rctx.loadDimension)*minLoadFraction {
 			log.KvDistribution.VEventf(ctx, 3, "r%d's %s load is too little to matter relative to s%d's %s total load",
-				candidateReplica.GetRangeID(), candidateReplica.RangeUsageInfo().Load(),
+				candidateReplica.GetRangeID(), candidateReplica.RangeUsageInfo().TransferImpact(),
 				rctx.LocalDesc.StoreID, rctx.LocalDesc.Capacity.Load())
 			continue
 		}
 
 		desc, conf := candidateReplica.DescAndSpanConfig()
 		log.KvDistribution.VEventf(ctx, 3, "considering lease transfer for r%d with %s load",
-			desc.RangeID, candidateReplica.RangeUsageInfo().Load())
+			desc.RangeID, candidateReplica.RangeUsageInfo().TransferImpact())
 
 		// Check all the other voting replicas in order of increasing load.
 		// Learners or non-voters aren't allowed to become leaseholders or raft
@@ -787,7 +787,7 @@ func (sr *StoreRebalancer) chooseLeaseToTransfer(
 				1,
 				"transferring lease for r%d load=%s to store s%d load=%s from local store s%d load=%s",
 				desc.RangeID,
-				candidateReplica.RangeUsageInfo().Load(),
+				candidateReplica.RangeUsageInfo().TransferImpact(),
 				targetStore.StoreID,
 				targetStore.Capacity.Load(),
 				rctx.LocalDesc.StoreID,
