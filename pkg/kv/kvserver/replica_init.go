@@ -188,13 +188,14 @@ func (r *Replica) setStartKeyLocked(startKey roachpb.RKey) {
 func (r *Replica) loadRaftMuLockedReplicaMuLocked(desc *roachpb.RangeDescriptor) error {
 	ctx := r.AnnotateCtx(context.TODO())
 	if !desc.IsInitialized() {
-		log.Fatalf(ctx, "r%d: cannot load an uninitialized replica", desc.RangeID)
+		return errors.AssertionFailedf("r%d: cannot load an uninitialized replica", desc.RangeID)
 	}
 	if r.IsInitialized() {
-		log.Fatalf(ctx, "r%d: cannot reinitialize an initialized replica", desc.RangeID)
+		return errors.AssertionFailedf("r%d: cannot reinitialize an initialized replica", desc.RangeID)
 	} else if r.replicaID == 0 {
 		// NB: This is just a defensive check as r.mu.replicaID should never be 0.
-		log.Fatalf(ctx, "r%d: cannot initialize replica without a replicaID", desc.RangeID)
+		return errors.AssertionFailedf("r%d: cannot initialize replica without a replicaID",
+			desc.RangeID)
 	}
 	r.setStartKeyLocked(desc.StartKey)
 
@@ -215,14 +216,15 @@ func (r *Replica) loadRaftMuLockedReplicaMuLocked(desc *roachpb.RangeDescriptor)
 
 	// Ensure that we're not trying to load a replica with a different ID than
 	// was used to construct this Replica.
-	replicaID := r.replicaID
+	var replicaID roachpb.ReplicaID
 	if replicaDesc, found := r.mu.state.Desc.GetReplicaDescriptor(r.StoreID()); found {
 		replicaID = replicaDesc.ReplicaID
 	} else {
-		log.Fatalf(ctx, "r%d: cannot initialize replica which is not in descriptor %v", desc.RangeID, desc)
+		return errors.AssertionFailedf("r%d: cannot initialize replica which is not in descriptor %v",
+			desc.RangeID, desc)
 	}
 	if r.replicaID != replicaID {
-		log.Fatalf(ctx, "attempting to initialize a replica which has ID %d with ID %d",
+		return errors.AssertionFailedf("attempting to initialize a replica which has ID %d with ID %d",
 			r.replicaID, replicaID)
 	}
 
