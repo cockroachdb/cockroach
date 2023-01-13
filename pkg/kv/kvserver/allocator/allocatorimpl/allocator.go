@@ -2189,7 +2189,7 @@ func (a *Allocator) TransferLeaseTarget(
 		return candidates[a.randGen.Intn(len(candidates))]
 
 	case allocator.LoadConvergence:
-		leaseReplLoad := usageInfo.Load()
+		leaseReplLoad := usageInfo.TransferImpact()
 		candidates := make([]roachpb.StoreID, 0, len(existing)-1)
 		for _, repl := range existing {
 			if repl.StoreID != leaseRepl.StoreID() {
