@@ -9,6 +9,8 @@
 package cdceval
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
 )
@@ -23,18 +25,39 @@ func RewritePreviewExpression(oldExpr *tree.SelectClause) (*tree.SelectClause, e
 		default:
 			return true, expr, nil
 		case *tree.FuncExpr:
-			// Old style cdc_prev() function returned JSONb object.
-			// Replace this call with a call to row_to_json((cdc_prev).*)
-			if n, ok := t.Func.FunctionReference.(*tree.UnresolvedName); ok && n.Parts[0] == "cdc_prev" {
-				rowToJSON := &tree.FuncExpr{
-					Func: tree.ResolvableFunctionReference{
-						FunctionReference: tree.FunDefs["row_to_json"],
-					},
-					Exprs: tree.Exprs{
-						&tree.TupleStar{Expr: tree.NewUnresolvedName("cdc_prev")},
-					},
+			if n, ok := t.Func.FunctionReference.(*tree.UnresolvedName); ok {
+				switch n.Parts[0] {
+				case "cdc_prev":
+					// Old style cdc_prev() function returned JSONb object.
+					// Replace this call with a call to row_to_json((cdc_prev).*)
+					rowToJSON := &tree.FuncExpr{
+						Func: tree.ResolvableFunctionReference{
+							FunctionReference: tree.FunDefs["row_to_json"],
+						},
+						Exprs: tree.Exprs{
+							&tree.TupleStar{Expr: tree.NewUnresolvedName("cdc_prev")},
+						},
+					}
+					return true, rowToJSON, nil
+				case "cdc_is_delete":
+					// Old style cdc_is_delete returned boolean; use event_op instead.
+					newExpr, err := parser.ParseExpr("(event_op() = 'delete')")
+					if err != nil {
+						return false, expr, err
+					}
+					return true, newExpr, nil
+				case "cdc_mvcc_timestamp":
+					// Old cdc_mvcc_timestamp() function gets replaced with crdb_intenral_mvcc_timestamp column.
+					return true, tree.NewUnresolvedName(colinfo.MVCCTimestampColumnName), nil
+				case "cdc_updated_timestamp":
+					// Old cdc_updated_timestamp gets replaced with event_schema_timestamp.
+					newExpr := &tree.FuncExpr{
+						Func: tree.ResolvableFunctionReference{
+							FunctionReference: tree.NewUnresolvedName("changefeed_event_schema_timestamp"),
+						},
+					}
+					return true, newExpr, nil
 				}
-				return true, rowToJSON, nil
 			}
 		}
 		return true, expr, nil
