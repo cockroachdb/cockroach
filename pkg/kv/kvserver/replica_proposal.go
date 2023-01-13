@@ -132,8 +132,8 @@ type ProposalData struct {
 // MaxLeaseIndex. This implies that the current log entry will have been
 // rejected and should not be reproposed.
 //
-// Note that some commands (such as leases) don't use MaxLeaseIndex.
-// For these, false will be returned.
+// Note that some commands such as lease requests (but not transfers) don't use
+// MaxLeaseIndex. For these, false will be returned.
 //
 // See (*Replica).mu.proposals for a detailed explanation of reproposals.
 func (proposal *ProposalData) Supersedes(entryMaxLeaseIndex uint64) bool {
