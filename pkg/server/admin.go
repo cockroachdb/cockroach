@@ -382,6 +382,7 @@ func (s *adminServer) databasesHelper(
 	sessionUser username.SQLUsername,
 	limit, offset int,
 ) (_ *serverpb.DatabasesResponse, retErr error) {
+	fmt.Println("databasesHelper")
 	it, err := s.internalExecutor.QueryIteratorEx(
 		ctx, "admin-show-dbs", nil, /* txn */
 		sessiondata.InternalExecutorOverride{User: sessionUser},
@@ -430,6 +431,8 @@ func maybeHandleNotFoundError(ctx context.Context, err error) error {
 func (s *adminServer) DatabaseDetails(
 	ctx context.Context, req *serverpb.DatabaseDetailsRequest,
 ) (_ *serverpb.DatabaseDetailsResponse, retErr error) {
+	log.Infof(ctx, "DatabaseDetails: %s\n", req.Database)
+	fmt.Printf("DatabaseDetails %s\n", req.Database)
 	ctx = s.AnnotateCtx(ctx)
 	userName, err := userFromContext(ctx)
 	if err != nil {
