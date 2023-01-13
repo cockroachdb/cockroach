@@ -467,6 +467,7 @@ func (sf *streamIngestionFrontier) maybeUpdatePartitionProgress() error {
 	sf.metrics.JobProgressUpdates.Inc(1)
 	sf.persistedHighWater = f.Frontier()
 	sf.metrics.FrontierCheckpointSpanCount.Update(int64(len(frontierResolvedSpans)))
+	sf.metrics.FrontierLagSeconds.Update(timeutil.Since(sf.persistedHighWater.GoTime()).Seconds())
 
 	return nil
 }
