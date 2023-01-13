@@ -25,6 +25,7 @@ import classNames from "classnames/bind";
 import { round } from "lodash";
 import styles from "./hotRanges.module.styl";
 import { cockroach } from "src/js/protos";
+import { util } from "@cockroachlabs/cluster-ui";
 import {
   performanceBestPracticesHotSpots,
   readsAndWritesOverviewPage,
@@ -95,6 +96,71 @@ const HotRangesTable = ({
         ),
         cell: val => <>{round(val.qps, 2)}</>,
         sort: val => val.qps,
+      },
+      {
+        name: "cpuPerSecond",
+        title: (
+          <Tooltip
+            placement="bottom"
+            title="The total CPU time per second used in processing this range."
+          >
+            CPU
+          </Tooltip>
+        ),
+        cell: val => <>{util.Duration(val.cpu_time_per_second)}</>,
+        sort: val => val.cpu_time_per_second,
+      },
+      {
+        name: "writesPerSecond",
+        title: (
+          <Tooltip
+            placement="bottom"
+            title="The total number of keys written per second on this range."
+          >
+          Write (keys)
+          </Tooltip>
+        ),
+        cell: val => <>{round(val.writes_per_second, 2)}</>,
+        sort: val => val.writes_per_second,
+      },
+      {
+        name: "writeBytesPerSecond",
+        title: (
+          <Tooltip
+            placement="bottom"
+            title="The total number of bytes written per second on this range."
+          >
+            Write (bytes)
+          </Tooltip>
+        ),
+        cell: val => <>{util.Bytes(val.write_bytes_per_second)}</>,
+        sort: val => val.write_bytes_per_second,
+      },
+      {
+        name: "readsPerSecond",
+        title: (
+          <Tooltip
+            placement="bottom"
+            title="The total number of keys read per second on this range."
+          >
+            Read (keys)
+          </Tooltip>
+        ),
+        cell: val => <>{round(val.reads_per_second, 2)}</>,
+        sort: val => val.reads_per_second,
+      },
+      {
+        name: "readsBytesPerSecond",
+        title: (
+          <Tooltip
+            placement="bottom"
+            title="The total number of bytes read per second on this range."
+          >
+            Read (bytes)
+          </Tooltip>
+        ),
+        cell: val => <>{util.Bytes(val.read_bytes_per_second)}</>,
+        sort: val => val.read_bytes_per_second,
       },
       {
         name: "nodes",
