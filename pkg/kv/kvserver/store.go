@@ -3398,7 +3398,7 @@ type HotReplicaInfo struct {
 	WriteKeysPerSecond  float64
 	WriteBytesPerSecond float64
 	ReadBytesPerSecond  float64
-	CPUNanosPerSecond   float64
+	CPUTimePerSecond    float64
 }
 
 // HottestReplicas returns the hottest replicas on a store, sorted by their
@@ -3430,6 +3430,7 @@ func mapToHotReplicasInfo(repls []CandidateReplica) []HotReplicaInfo {
 		hotRepls[i].ReadKeysPerSecond = loadStats.ReadKeysPerSecond
 		hotRepls[i].WriteBytesPerSecond = loadStats.WriteBytesPerSecond
 		hotRepls[i].ReadBytesPerSecond = loadStats.ReadBytesPerSecond
+		hotRepls[i].CPUTimePerSecond = loadStats.RaftCPUNanosPerSecond + loadStats.RequestCPUNanosPerSecond
 	}
 	return hotRepls
 }
