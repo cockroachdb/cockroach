@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -63,9 +64,14 @@ func ValidateTableLocalityConfig(
 	if err != nil {
 		return err
 	}
-	regionsEnumDesc, err := vdg.GetTypeDescriptor(regionsEnumID)
+	typeDesc, err := vdg.GetTypeDescriptor(regionsEnumID)
 	if err != nil {
 		return errors.Wrapf(err, "multi-region enum with ID %d does not exist", regionsEnumID)
+	}
+	regionsEnumDesc := typeDesc.AsRegionEnumTypeDescriptor()
+	if regionsEnumDesc == nil {
+		return errors.AssertionFailedf("expected region enum type, not %s for type %q (%d)",
+			typeDesc.GetKind(), typeDesc.GetName(), typeDesc.GetID())
 	}
 	if regionsEnumDesc.Dropped() {
 		return errors.AssertionFailedf("multi-region enum type %q (%d) is dropped",
@@ -138,22 +144,19 @@ func ValidateTableLocalityConfig(
 		// and each transitioning region name to possibly have a partition.
 		// We do validation that ensures all index partitions are the same on
 		// PARTITION ALL BY.
-		regions, err := regionsEnumDesc.RegionNames()
-		if err != nil {
-			return err
-		}
-		regionNames := make(map[catpb.RegionName]struct{}, len(regions))
-		for _, region := range regions {
-			regionNames[region] = struct{}{}
-		}
-		transitioningRegions, err := regionsEnumDesc.TransitioningRegionNames()
-		if err != nil {
-			return err
-		}
+		var regions, transitioningRegions catpb.RegionNames
+		regionNames := make(map[catpb.RegionName]struct{})
 		transitioningRegionNames := make(map[catpb.RegionName]struct{}, len(regions))
-		for _, region := range transitioningRegions {
-			transitioningRegionNames[region] = struct{}{}
-		}
+		_ = regionsEnumDesc.ForEachRegion(func(name catpb.RegionName, transition descpb.TypeDescriptor_EnumMember_Direction) error {
+			if transition == descpb.TypeDescriptor_EnumMember_NONE {
+				regions = append(regions, name)
+				regionNames[name] = struct{}{}
+			} else {
+				transitioningRegions = append(transitioningRegions, name)
+				transitioningRegionNames[name] = struct{}{}
+			}
+			return nil
+		})
 
 		part := desc.GetPrimaryIndex().GetPartitioning()
 		err = part.ForEachList(func(name string, _ [][]byte, _ catalog.Partitioning) error {
@@ -192,10 +195,19 @@ func ValidateTableLocalityConfig(
 		// Table is homed in an explicit (non-primary) region.
 		if lc.RegionalByTable.Region != nil {
 			foundRegion := false
-			regions, err := regionsEnumDesc.RegionNamesForValidation()
-			if err != nil {
-				return err
-			}
+			var regions catpb.RegionNames
+			_ = regionsEnumDesc.ForEachRegion(func(name catpb.RegionName, transition descpb.TypeDescriptor_EnumMember_Direction) error {
+				// Since the partitions and zone configs are only updated when a transaction
+				// commits, this must ignore all regions being added (since they will not be
+				// reflected in the zone configuration yet), but it must include all region
+				// being dropped (since they will not be dropped from the zone configuration
+				// until they are fully removed from the type descriptor, again, at the end
+				// of the transaction).
+				if transition != descpb.TypeDescriptor_EnumMember_ADD {
+					regions = append(regions, name)
+				}
+				return nil
+			})
 			for _, r := range regions {
 				if *lc.RegionalByTable.Region == r {
 					foundRegion = true

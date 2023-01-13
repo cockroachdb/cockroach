@@ -21,10 +21,10 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// TableImplicitRecordType is an implementation of catalog.TypeDescriptor that
+// tableImplicitRecordType is an implementation of catalog.TypeDescriptor that
 // represents a record type for a particular table: meaning, the composite type
 // that contains, in order, all of the visible columns for the table.
-type TableImplicitRecordType struct {
+type tableImplicitRecordType struct {
 	// desc is the TableDescriptor that this implicit record type is created from.
 	desc catalog.TableDescriptor
 	// privs holds the privileges for this implicit record type. It's calculated
@@ -34,7 +34,7 @@ type TableImplicitRecordType struct {
 	privs *catpb.PrivilegeDescriptor
 }
 
-var _ catalog.TypeDescriptor = (*TableImplicitRecordType)(nil)
+var _ catalog.TableImplicitRecordTypeDescriptor = (*tableImplicitRecordType)(nil)
 
 // CreateImplicitRecordTypeFromTableDesc creates a TypeDescriptor that represents
 // the implicit record type for a table, which has 1 field for every visible
@@ -59,7 +59,7 @@ func CreateImplicitRecordTypeFromTableDesc(
 		}
 	}
 
-	return &TableImplicitRecordType{
+	return &tableImplicitRecordType{
 		desc: descriptor,
 		privs: &catpb.PrivilegeDescriptor{
 			Users:      newPrivs,
@@ -69,78 +69,78 @@ func CreateImplicitRecordTypeFromTableDesc(
 	}, nil
 }
 
-// GetName implements the Namespace interface.
-func (v TableImplicitRecordType) GetName() string { return v.desc.GetName() }
+// GetName implements the catalog.NameKey interface.
+func (v *tableImplicitRecordType) GetName() string { return v.desc.GetName() }
 
-// GetParentID implements the Namespace interface.
-func (v TableImplicitRecordType) GetParentID() descpb.ID { return v.desc.GetParentID() }
+// GetParentID implements the catalog.NameKey interface.
+func (v *tableImplicitRecordType) GetParentID() descpb.ID { return v.desc.GetParentID() }
 
-// GetParentSchemaID implements the Namespace interface.
-func (v TableImplicitRecordType) GetParentSchemaID() descpb.ID { return v.desc.GetParentSchemaID() }
+// GetParentSchemaID implements the catalog.NameKey interface.
+func (v *tableImplicitRecordType) GetParentSchemaID() descpb.ID { return v.desc.GetParentSchemaID() }
 
 // GetID implements the NameEntry interface.
-func (v TableImplicitRecordType) GetID() descpb.ID { return v.desc.GetID() }
+func (v *tableImplicitRecordType) GetID() descpb.ID { return v.desc.GetID() }
 
-// IsUncommittedVersion implements the Descriptor interface.
-func (v TableImplicitRecordType) IsUncommittedVersion() bool { return v.desc.IsUncommittedVersion() }
+// IsUncommittedVersion implements the catalog.Descriptor interface.
+func (v *tableImplicitRecordType) IsUncommittedVersion() bool { return v.desc.IsUncommittedVersion() }
 
-// GetVersion implements the Descriptor interface.
-func (v TableImplicitRecordType) GetVersion() descpb.DescriptorVersion { return v.desc.GetVersion() }
+// GetVersion implements the catalog.Descriptor interface.
+func (v *tableImplicitRecordType) GetVersion() descpb.DescriptorVersion { return v.desc.GetVersion() }
 
-// GetModificationTime implements the Descriptor interface.
-func (v TableImplicitRecordType) GetModificationTime() hlc.Timestamp {
+// GetModificationTime implements the catalog.Descriptor interface.
+func (v *tableImplicitRecordType) GetModificationTime() hlc.Timestamp {
 	return v.desc.GetModificationTime()
 }
 
-// GetPrivileges implements the Descriptor interface.
-func (v TableImplicitRecordType) GetPrivileges() *catpb.PrivilegeDescriptor {
+// GetPrivileges implements the catalog.Descriptor interface.
+func (v *tableImplicitRecordType) GetPrivileges() *catpb.PrivilegeDescriptor {
 	return v.privs
 }
 
-// DescriptorType implements the Descriptor interface.
-func (v TableImplicitRecordType) DescriptorType() catalog.DescriptorType {
+// DescriptorType implements the catalog.Descriptor interface.
+func (v *tableImplicitRecordType) DescriptorType() catalog.DescriptorType {
 	return catalog.Type
 }
 
-// GetAuditMode implements the Descriptor interface.
-func (v TableImplicitRecordType) GetAuditMode() descpb.TableDescriptor_AuditMode {
+// GetAuditMode implements the catalog.Descriptor interface.
+func (v *tableImplicitRecordType) GetAuditMode() descpb.TableDescriptor_AuditMode {
 	return descpb.TableDescriptor_DISABLED
 }
 
-// Public implements the Descriptor interface.
-func (v TableImplicitRecordType) Public() bool { return v.desc.Public() }
+// Public implements the catalog.Descriptor interface.
+func (v *tableImplicitRecordType) Public() bool { return v.desc.Public() }
 
-// Adding implements the Descriptor interface.
-func (v TableImplicitRecordType) Adding() bool {
+// Adding implements the catalog.Descriptor interface.
+func (v *tableImplicitRecordType) Adding() bool {
 	v.panicNotSupported("Adding")
 	return false
 }
 
-// Dropped implements the Descriptor interface.
-func (v TableImplicitRecordType) Dropped() bool {
+// Dropped implements the catalog.Descriptor interface.
+func (v *tableImplicitRecordType) Dropped() bool {
 	return v.desc.Dropped()
 }
 
-// Offline implements the Descriptor interface.
-func (v TableImplicitRecordType) Offline() bool {
+// Offline implements the catalog.Descriptor interface.
+func (v *tableImplicitRecordType) Offline() bool {
 	v.panicNotSupported("Offline")
 	return false
 }
 
-// GetOfflineReason implements the Descriptor interface.
-func (v TableImplicitRecordType) GetOfflineReason() string {
+// GetOfflineReason implements the catalog.Descriptor interface.
+func (v *tableImplicitRecordType) GetOfflineReason() string {
 	v.panicNotSupported("GetOfflineReason")
 	return ""
 }
 
-// DescriptorProto implements the Descriptor interface.
-func (v TableImplicitRecordType) DescriptorProto() *descpb.Descriptor {
+// DescriptorProto implements the catalog.Descriptor interface.
+func (v *tableImplicitRecordType) DescriptorProto() *descpb.Descriptor {
 	v.panicNotSupported("DescriptorProto")
 	return nil
 }
 
-// ByteSize implements the Descriptor interface.
-func (v TableImplicitRecordType) ByteSize() int64 {
+// ByteSize implements the catalog.Descriptor interface.
+func (v *tableImplicitRecordType) ByteSize() int64 {
 	mem := v.desc.ByteSize()
 	if v.privs != nil {
 		mem += int64(v.privs.Size())
@@ -148,58 +148,58 @@ func (v TableImplicitRecordType) ByteSize() int64 {
 	return mem
 }
 
-// NewBuilder implements the Descriptor interface.
-func (v TableImplicitRecordType) NewBuilder() catalog.DescriptorBuilder {
+// NewBuilder implements the catalog.Descriptor interface.
+func (v *tableImplicitRecordType) NewBuilder() catalog.DescriptorBuilder {
 	v.panicNotSupported("NewBuilder")
 	return nil
 }
 
-// GetReferencedDescIDs implements the Descriptor interface.
-func (v TableImplicitRecordType) GetReferencedDescIDs() (catalog.DescriptorIDSet, error) {
+// GetReferencedDescIDs implements the catalog.Descriptor interface.
+func (v *tableImplicitRecordType) GetReferencedDescIDs() (catalog.DescriptorIDSet, error) {
 	return catalog.DescriptorIDSet{}, errors.AssertionFailedf(
 		"GetReferencedDescIDs are unsupported for implicit table record types")
 }
 
-// ValidateSelf implements the Descriptor interface.
-func (v TableImplicitRecordType) ValidateSelf(_ catalog.ValidationErrorAccumulator) {
+// ValidateSelf implements the catalog.Descriptor interface.
+func (v *tableImplicitRecordType) ValidateSelf(_ catalog.ValidationErrorAccumulator) {
 }
 
-// ValidateForwardReferences implements the Descriptor interface.
-func (v TableImplicitRecordType) ValidateForwardReferences(
+// ValidateForwardReferences implements the catalog.Descriptor interface.
+func (v *tableImplicitRecordType) ValidateForwardReferences(
 	_ catalog.ValidationErrorAccumulator, _ catalog.ValidationDescGetter,
 ) {
 }
 
-// ValidateBackReferences implements the Descriptor interface.
-func (v TableImplicitRecordType) ValidateBackReferences(
+// ValidateBackReferences implements the catalog.Descriptor interface.
+func (v *tableImplicitRecordType) ValidateBackReferences(
 	_ catalog.ValidationErrorAccumulator, _ catalog.ValidationDescGetter,
 ) {
 }
 
-// ValidateTxnCommit implements the Descriptor interface.
-func (v TableImplicitRecordType) ValidateTxnCommit(
+// ValidateTxnCommit implements the catalog.Descriptor interface.
+func (v *tableImplicitRecordType) ValidateTxnCommit(
 	_ catalog.ValidationErrorAccumulator, _ catalog.ValidationDescGetter,
 ) {
 }
 
 // GetRawBytesInStorage implements the catalog.Descriptor interface.
-func (v TableImplicitRecordType) GetRawBytesInStorage() []byte {
+func (v *tableImplicitRecordType) GetRawBytesInStorage() []byte {
 	return nil
 }
 
 // ForEachUDTDependentForHydration implements the catalog.Descriptor interface.
-func (v TableImplicitRecordType) ForEachUDTDependentForHydration(_ func(t *types.T) error) error {
+func (v *tableImplicitRecordType) ForEachUDTDependentForHydration(_ func(t *types.T) error) error {
 	return nil
 }
 
-// TypeDesc implements the TypeDescriptor interface.
-func (v TableImplicitRecordType) TypeDesc() *descpb.TypeDescriptor {
+// TypeDesc implements the catalog.TypeDescriptor interface.
+func (v *tableImplicitRecordType) TypeDesc() *descpb.TypeDescriptor {
 	v.panicNotSupported("TypeDesc")
 	return nil
 }
 
-// AsTypesT implements the TypeDescriptor interface.
-func (v TableImplicitRecordType) AsTypesT() *types.T {
+// AsTypesT implements the catalog.TypeDescriptor interface.
+func (v *tableImplicitRecordType) AsTypesT() *types.T {
 	cols := v.desc.VisibleColumns()
 	typs := make([]*types.T, len(cols))
 	names := make([]string, len(cols))
@@ -207,7 +207,7 @@ func (v TableImplicitRecordType) AsTypesT() *types.T {
 		typs[i] = col.GetType()
 		names[i] = col.GetName()
 	}
-	// The TypeDescriptor will be an alias to this Tuple type, which contains
+	// the catalog.TypeDescriptor will be an alias to this Tuple type, which contains
 	// all of the table's visible columns in order, labeled by the table's column
 	// names.
 	typ := types.MakeLabeledTuple(typs, names)
@@ -229,122 +229,111 @@ func (v TableImplicitRecordType) AsTypesT() *types.T {
 	return typ
 }
 
-// HasPendingSchemaChanges implements the TypeDescriptor interface.
-func (v TableImplicitRecordType) HasPendingSchemaChanges() bool { return false }
+// HasPendingSchemaChanges implements the catalog.TypeDescriptor interface.
+func (v *tableImplicitRecordType) HasPendingSchemaChanges() bool { return false }
 
 // GetIDClosure implements the TypeDescriptor interface.
-func (v TableImplicitRecordType) GetIDClosure() catalog.DescriptorIDSet {
+func (v *tableImplicitRecordType) GetIDClosure() catalog.DescriptorIDSet {
 	v.panicNotSupported("GetIDClosure")
 	return catalog.DescriptorIDSet{}
 }
 
-// IsCompatibleWith implements the TypeDescriptorInterface.
-func (v TableImplicitRecordType) IsCompatibleWith(_ catalog.TypeDescriptor) error {
+// IsCompatibleWith implements the catalog.TypeDescriptor interface.
+func (v *tableImplicitRecordType) IsCompatibleWith(_ catalog.TypeDescriptor) error {
 	return errors.AssertionFailedf("compatibility comparison unsupported for implicit table record types")
 }
 
-// PrimaryRegionName implements the TypeDescriptorInterface.
-func (v TableImplicitRecordType) PrimaryRegionName() (catpb.RegionName, error) {
-	return "", errors.AssertionFailedf(
-		"can not get primary region of a implicit table record type")
-}
-
-// RegionNames implements the TypeDescriptorInterface.
-func (v TableImplicitRecordType) RegionNames() (catpb.RegionNames, error) {
-	return nil, errors.AssertionFailedf(
-		"can not get region names of a implicit table record type")
-}
-
-// RegionNamesIncludingTransitioning implements the TypeDescriptorInterface.
-func (v TableImplicitRecordType) RegionNamesIncludingTransitioning() (catpb.RegionNames, error) {
-	return nil, errors.AssertionFailedf(
-		"can not get region names of a implicit table record type")
-}
-
-// RegionNamesForValidation implements the TypeDescriptorInterface.
-func (v TableImplicitRecordType) RegionNamesForValidation() (catpb.RegionNames, error) {
-	return nil, errors.AssertionFailedf(
-		"can not get region names of a implicit table record type")
-}
-
-// TransitioningRegionNames implements the TypeDescriptorInterface.
-func (v TableImplicitRecordType) TransitioningRegionNames() (catpb.RegionNames, error) {
-	return nil, errors.AssertionFailedf(
-		"can not get region names of a implicit table record type")
-}
-
-// SuperRegions implements the TypeDescriptor interface.
-func (v TableImplicitRecordType) SuperRegions() ([]descpb.SuperRegion, error) {
-	return nil, errors.AssertionFailedf(
-		"can not get super regions of a implicit table record type",
-	)
-}
-
-// ZoneConfigExtensions implements the TypeDescriptorInterface.
-func (v TableImplicitRecordType) ZoneConfigExtensions() (descpb.ZoneConfigExtensions, error) {
-	return descpb.ZoneConfigExtensions{}, errors.AssertionFailedf(
-		"can not get the zone config extensions of a implicit table record type")
-}
-
-// GetArrayTypeID implements the TypeDescriptorInterface.
-func (v TableImplicitRecordType) GetArrayTypeID() descpb.ID {
+// GetArrayTypeID implements the catalog.TypeDescriptor interface.
+func (v *tableImplicitRecordType) GetArrayTypeID() descpb.ID {
 	return 0
 }
 
-// GetKind implements the TypeDescriptorInterface.
-func (v TableImplicitRecordType) GetKind() descpb.TypeDescriptor_Kind {
+// GetKind implements the catalog.TypeDescriptor interface.
+func (v *tableImplicitRecordType) GetKind() descpb.TypeDescriptor_Kind {
 	return descpb.TypeDescriptor_TABLE_IMPLICIT_RECORD_TYPE
 }
 
-// NumEnumMembers implements the TypeDescriptorInterface.
-func (v TableImplicitRecordType) NumEnumMembers() int { return 0 }
+// NumEnumMembers implements the catalog.TypeDescriptor interface.
+func (v *tableImplicitRecordType) NumEnumMembers() int { return 0 }
 
-// GetMemberPhysicalRepresentation implements the TypeDescriptorInterface.
-func (v TableImplicitRecordType) GetMemberPhysicalRepresentation(_ int) []byte { return nil }
+// GetMemberPhysicalRepresentation implements the catalog.TypeDescriptor interface.
+func (v *tableImplicitRecordType) GetMemberPhysicalRepresentation(_ int) []byte { return nil }
 
-// GetMemberLogicalRepresentation implements the TypeDescriptorInterface.
-func (v TableImplicitRecordType) GetMemberLogicalRepresentation(_ int) string { return "" }
+// GetMemberLogicalRepresentation implements the catalog.TypeDescriptor interface.
+func (v *tableImplicitRecordType) GetMemberLogicalRepresentation(_ int) string { return "" }
 
-// IsMemberReadOnly implements the TypeDescriptorInterface.
-func (v TableImplicitRecordType) IsMemberReadOnly(_ int) bool { return false }
+// IsMemberReadOnly implements the catalog.TypeDescriptor interface.
+func (v *tableImplicitRecordType) IsMemberReadOnly(_ int) bool { return false }
 
-// NumReferencingDescriptors implements the TypeDescriptorInterface.
-func (v TableImplicitRecordType) NumReferencingDescriptors() int { return 0 }
+// NumReferencingDescriptors implements the catalog.TypeDescriptor interface.
+func (v *tableImplicitRecordType) NumReferencingDescriptors() int { return 0 }
 
-// GetReferencingDescriptorID implements the TypeDescriptorInterface.
-func (v TableImplicitRecordType) GetReferencingDescriptorID(_ int) descpb.ID { return 0 }
+// GetReferencingDescriptorID implements the catalog.TypeDescriptor interface.
+func (v *tableImplicitRecordType) GetReferencingDescriptorID(_ int) descpb.ID { return 0 }
 
-// GetReferencingDescriptorIDs implements the TypeDescriptorInterface.
-func (v TableImplicitRecordType) GetReferencingDescriptorIDs() []descpb.ID { return nil }
+// GetReferencingDescriptorIDs implements the catalog.TypeDescriptor interface.
+func (v *tableImplicitRecordType) GetReferencingDescriptorIDs() []descpb.ID { return nil }
 
-// GetPostDeserializationChanges implements the Descriptor interface.
-func (v TableImplicitRecordType) GetPostDeserializationChanges() catalog.PostDeserializationChanges {
+// GetPostDeserializationChanges implements the catalog.Descriptor interface.
+func (v *tableImplicitRecordType) GetPostDeserializationChanges() catalog.PostDeserializationChanges {
 	return catalog.PostDeserializationChanges{}
 }
 
 // HasConcurrentSchemaChanges implements catalog.Descriptor.
-func (v TableImplicitRecordType) HasConcurrentSchemaChanges() bool {
+func (v *tableImplicitRecordType) HasConcurrentSchemaChanges() bool {
 	return false
 }
 
 // SkipNamespace implements catalog.Descriptor. We never store table implicit
 // record type which is always constructed in memory.
-func (v TableImplicitRecordType) SkipNamespace() bool {
+func (v *tableImplicitRecordType) SkipNamespace() bool {
 	return true
 }
 
-func (v TableImplicitRecordType) panicNotSupported(message string) {
+func (v *tableImplicitRecordType) panicNotSupported(message string) {
 	panic(errors.AssertionFailedf("implicit table record type for table %q: not supported: %s", v.GetName(), message))
 }
 
-// GetDeclarativeSchemaChangerState implements the Descriptor interface.
-func (v TableImplicitRecordType) GetDeclarativeSchemaChangerState() *scpb.DescriptorState {
+// GetDeclarativeSchemaChangerState implements the catalog.Descriptor interface.
+func (v *tableImplicitRecordType) GetDeclarativeSchemaChangerState() *scpb.DescriptorState {
 	v.panicNotSupported("GetDeclarativeSchemaChangeState")
 	return nil
 }
 
 // GetObjectType implements the Object interface.
-func (v TableImplicitRecordType) GetObjectType() privilege.ObjectType {
+func (v *tableImplicitRecordType) GetObjectType() privilege.ObjectType {
 	v.panicNotSupported("GetObjectType")
 	return ""
+}
+
+// AsEnumTypeDescriptor implements the catalog.TypeDescriptor interface.
+func (v *tableImplicitRecordType) AsEnumTypeDescriptor() catalog.EnumTypeDescriptor {
+	return nil
+}
+
+// AsRegionEnumTypeDescriptor implements the catalog.TypeDescriptor interface.
+func (v *tableImplicitRecordType) AsRegionEnumTypeDescriptor() catalog.RegionEnumTypeDescriptor {
+	return nil
+}
+
+// AsAliasTypeDescriptor implements the catalog.TypeDescriptor interface.
+func (v *tableImplicitRecordType) AsAliasTypeDescriptor() catalog.AliasTypeDescriptor {
+	return nil
+}
+
+// AsCompositeTypeDescriptor implements the catalog.TypeDescriptor interface.
+func (v *tableImplicitRecordType) AsCompositeTypeDescriptor() catalog.CompositeTypeDescriptor {
+	return nil
+}
+
+// AsTableImplicitRecordTypeDescriptor implements the catalog.TypeDescriptor
+// interface.
+func (v *tableImplicitRecordType) AsTableImplicitRecordTypeDescriptor() catalog.TableImplicitRecordTypeDescriptor {
+	return v
+}
+
+// UnderlyingTableDescriptor implements the
+// catalog.TableImplicitRecordTypeDescriptor interface.
+func (v *tableImplicitRecordType) UnderlyingTableDescriptor() catalog.TableDescriptor {
+	return v.desc
 }

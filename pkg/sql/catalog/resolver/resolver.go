@@ -163,7 +163,7 @@ func ResolveMutableType(
 	switch t := desc.(type) {
 	case *typedesc.Mutable:
 		return prefix, t, nil
-	case *typedesc.TableImplicitRecordType:
+	case catalog.TableImplicitRecordTypeDescriptor:
 		return catalog.ResolvedObjectPrefix{}, nil, pgerror.Newf(pgcode.DependentObjectsStillExist,
 			"cannot modify table record type %q", desc.GetName())
 	default:

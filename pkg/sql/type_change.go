@@ -219,8 +219,8 @@ func refreshTypeDescriptorLeases(
 ) error {
 	var err error
 	var ids = []descpb.ID{typeDesc.GetID()}
-	if typeDesc.GetArrayTypeID() != descpb.InvalidID {
-		ids = append(ids, typeDesc.GetArrayTypeID())
+	if aID := typeDesc.TypeDesc().ArrayTypeID; aID != descpb.InvalidID {
+		ids = append(ids, aID)
 	}
 	for _, id := range ids {
 		if _, updateErr := WaitToUpdateLeases(ctx, leaseMgr, id); updateErr != nil {
@@ -263,9 +263,7 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 	// For all the read only members the current job is responsible for, either
 	// promote them to writeable or remove them from the descriptor entirely,
 	// as dictated by the direction.
-	if (typeDesc.GetKind() == descpb.TypeDescriptor_ENUM ||
-		typeDesc.GetKind() == descpb.TypeDescriptor_MULTIREGION_ENUM) &&
-		len(t.transitioningMembers) != 0 {
+	if typeDesc.AsEnumTypeDescriptor() != nil && len(t.transitioningMembers) != 0 {
 		if fn := t.execCfg.TypeSchemaChangerTestingKnobs.RunBeforeEnumMemberPromotion; fn != nil {
 			if err := fn(ctx); err != nil {
 				return err
@@ -1169,14 +1167,16 @@ func (t *typeSchemaChanger) canRemoveEnumValueFromArrayUsages(
 }
 
 func enumHasNonPublic(typeDesc catalog.TypeDescriptor) bool {
-	hasNonPublic := false
-	for i := 0; i < typeDesc.NumEnumMembers(); i++ {
-		if typeDesc.IsMemberReadOnly(i) {
-			hasNonPublic = true
-			break
+	e := typeDesc.AsEnumTypeDescriptor()
+	if e == nil {
+		return false
+	}
+	for i := 0; i < e.NumEnumMembers(); i++ {
+		if e.IsMemberReadOnly(i) {
+			return true
 		}
 	}
-	return hasNonPublic
+	return false
 }
 
 func enumMemberIsAdding(member *descpb.TypeDescriptor_EnumMember) bool {

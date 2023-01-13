@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
@@ -595,22 +596,28 @@ func checkMultiRegionCompatible(
 		// For REGION BY TABLE IN <region> tables, allow the restore if the
 		// database has the region.
 		regionEnumID := database.GetRegionConfig().RegionEnumID
-		regionEnum, err := col.ByID(txn).Get().Type(ctx, regionEnumID)
+		typeDesc, err := col.ByID(txn).Get().Type(ctx, regionEnumID)
 		if err != nil {
 			return err
 		}
-		dbRegionNames, err := regionEnum.RegionNames()
-		if err != nil {
-			return err
+		regionEnum := typeDesc.AsRegionEnumTypeDescriptor()
+		if regionEnum == nil {
+			return errors.AssertionFailedf("expected region enum type, not %s for type %q (%d)",
+				typeDesc.GetKind(), typeDesc.GetName(), typeDesc.GetID())
 		}
-		existingRegions := make([]string, len(dbRegionNames))
-		for i, dbRegionName := range dbRegionNames {
+		var existingRegions []string
+		var found bool
+		_ = regionEnum.ForEachPublicRegion(func(dbRegionName catpb.RegionName) error {
 			if dbRegionName == regionName {
-				return nil
+				found = true
+				return iterutil.StopIteration()
 			}
-			existingRegions[i] = fmt.Sprintf("%q", dbRegionName)
+			existingRegions = append(existingRegions, fmt.Sprintf("%q", dbRegionName))
+			return nil
+		})
+		if found {
+			return nil
 		}
-
 		return errors.Newf(
 			"cannot restore REGIONAL BY TABLE %s IN REGION %q (table ID: %d) into database %q; region %q not found in database regions %s",
 			table.GetName(), regionName, table.GetID(),
