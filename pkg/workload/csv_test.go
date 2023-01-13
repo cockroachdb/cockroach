@@ -46,6 +46,8 @@ func TestHandleCSV(t *testing.T) {
 		},
 	}
 
+	// assertions depend on this seed
+	bank.RandomSeed.Set(1)
 	meta := bank.FromRows(0).Meta()
 	for _, test := range tests {
 		t.Run(test.params, func(t *testing.T) {
@@ -114,6 +116,8 @@ func BenchmarkWriteCSVRows(b *testing.B) {
 func TestCSVRowsReader(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	// assertions depend on this seed
+	bank.RandomSeed.Set(1)
 	table := bank.FromRows(10).Tables()[0]
 	r := workload.NewCSVRowsReader(table, 1, 3)
 	b, err := io.ReadAll(r)
