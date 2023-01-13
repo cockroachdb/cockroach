@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
+	"github.com/stretchr/testify/require"
 )
 
 // TestTelemetryLogging verifies that telemetry events are logged to the telemetry log
@@ -112,6 +113,7 @@ func TestTelemetryLogging(t *testing.T) {
 		expectedErr             string // Empty string means no error is expected.
 		queryLevelStats         execstats.QueryLevelStats
 		enableTracing           bool
+		enableInjectTxErrors    bool
 	}{
 		{
 			// Test case with statement that is not of type DML.
@@ -320,10 +322,33 @@ func TestTelemetryLogging(t *testing.T) {
 			},
 			enableTracing: true,
 		},
+		{
+			name:                    "sql-transaction-error",
+			query:                   "SELECT * FROM u WHERE x > 10 LIMIT 3;",
+			queryNoConstants:        "SELECT * FROM u WHERE x > _ LIMIT _",
+			execTimestampsSeconds:   []float64{11, 11.01, 11.02, 11.03, 11.04, 11.05},
+			expectedLogStatement:    `SELECT * FROM \"\".\"\".u WHERE x > ‹10› LIMIT ‹3›`,
+			stubMaxEventFrequency:   10,
+			expectedSkipped:         []int{0},
+			expectedUnredactedTags:  []string{"client"},
+			expectedApplicationName: "telemetry-logging-test",
+			expectedFullScan:        true,
+			expectedStatsAvailable:  true,
+			expectedRead:            true,
+			expectedWrite:           false,
+			expectedIndexes:         false,
+			expectedErr:             "TransactionRetryWithProtoRefreshError: injected by `inject_retry_errors_enabled` session variable",
+			enableTracing:           false,
+			enableInjectTxErrors:    true,
+		},
 	}
 
 	for _, tc := range testData {
 		telemetryMaxEventFrequency.Override(context.Background(), &s.ClusterSettings().SV, tc.stubMaxEventFrequency)
+		if tc.enableInjectTxErrors {
+			_, err := db.DB.ExecContext(context.Background(), "SET inject_retry_errors_enabled = 'true'")
+			require.NoError(t, err)
+		}
 		for _, execTimestamp := range tc.execTimestampsSeconds {
 			stubTime := timeutil.FromUnixMicros(int64(execTimestamp * 1e6))
 			st.SetTime(stubTime)
@@ -333,6 +358,10 @@ func TestTelemetryLogging(t *testing.T) {
 			if err != nil && tc.expectedErr == "" {
 				t.Errorf("unexpected error executing query `%s`: %v", tc.query, err)
 			}
+		}
+		if tc.enableInjectTxErrors {
+			_, err := db.DB.ExecContext(context.Background(), "SET inject_retry_errors_enabled = 'false'")
+			require.NoError(t, err)
 		}
 	}
 

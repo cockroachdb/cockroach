@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/redact"
 )
 
 // MockTransactionalSender allows a function to be used as a TxnSender.
@@ -178,7 +179,9 @@ func (m *MockTransactionalSender) UpdateStateOnRemoteRetryableErr(
 func (m *MockTransactionalSender) DisablePipelining() error { return nil }
 
 // PrepareRetryableError is part of the client.TxnSender interface.
-func (m *MockTransactionalSender) PrepareRetryableError(ctx context.Context, msg string) error {
+func (m *MockTransactionalSender) PrepareRetryableError(
+	ctx context.Context, msg redact.RedactableString,
+) error {
 	return roachpb.NewTransactionRetryWithProtoRefreshError(msg, m.txn.ID, *m.txn.Clone())
 }
 

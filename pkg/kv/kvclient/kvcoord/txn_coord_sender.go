@@ -12,7 +12,6 @@ package kvcoord
 
 import (
 	"context"
-	"fmt"
 	"runtime/debug"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -25,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
+	"github.com/cockroachdb/redact"
 	"go.opentelemetry.io/otel/attribute"
 )
 
@@ -424,7 +424,7 @@ func generateTxnDeadlineExceededErr(
 	txn *roachpb.Transaction, deadline hlc.Timestamp,
 ) *roachpb.Error {
 	exceededBy := txn.WriteTimestamp.GoTime().Sub(deadline.GoTime())
-	extraMsg := fmt.Sprintf(
+	extraMsg := redact.Sprintf(
 		"txn timestamp pushed too much; deadline exceeded by %s (%s > %s)",
 		exceededBy, txn.WriteTimestamp, deadline)
 	return roachpb.NewErrorWithTxn(
@@ -699,7 +699,7 @@ func (tc *TxnCoordSender) maybeRejectClientLocked(
 	case txnError:
 		return tc.mu.storedErr
 	case txnFinalized:
-		msg := fmt.Sprintf("client already committed or rolled back the transaction. "+
+		msg := redact.Sprintf("client already committed or rolled back the transaction. "+
 			"Trying to execute: %s", ba.Summary())
 		stack := string(debug.Stack())
 		log.Errorf(ctx, "%s. stack:\n%s", msg, stack)
@@ -813,7 +813,7 @@ func (tc *TxnCoordSender) handleRetryableErrLocked(
 
 	// We'll pass a TransactionRetryWithProtoRefreshError up to the next layer.
 	retErr := roachpb.NewTransactionRetryWithProtoRefreshError(
-		pErr.String(),
+		redact.Sprint(pErr),
 		errTxnID, // the id of the transaction that encountered the error
 		newTxn)
 
@@ -1270,7 +1270,9 @@ func (tc *TxnCoordSender) TestingCloneTxn() *roachpb.Transaction {
 }
 
 // PrepareRetryableError is part of the client.TxnSender interface.
-func (tc *TxnCoordSender) PrepareRetryableError(ctx context.Context, msg string) error {
+func (tc *TxnCoordSender) PrepareRetryableError(
+	ctx context.Context, msg redact.RedactableString,
+) error {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
 	if tc.mu.txnState != txnPending {
