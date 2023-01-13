@@ -34,6 +34,10 @@ case "${cmd}" in
       read COCKROACH_DEV_LICENSE
     fi
 
+    gsuite_account_for_label="$(gcloud auth list | \
+        grep '^\*' | \
+        sed -e 's/\* *//' -e 's/@/__at__/g' -e 's/\./__dot__/g'\
+        )"
     gcloud compute instances \
            create "${NAME}" \
            --machine-type "n2-custom-24-32768" \
@@ -44,7 +48,8 @@ case "${cmd}" in
            --boot-disk-size "100" \
            --boot-disk-type "pd-ssd" \
            --boot-disk-device-name "${NAME}" \
-           --scopes "cloud-platform"
+           --scopes "cloud-platform" \
+           --labels "created-by=${gsuite_account_for_label:0:63}"
     gcloud compute firewall-rules create "${NAME}-mosh" --allow udp:60000-61000
 
     # wait a bit to let gcloud create the instance before retrying
