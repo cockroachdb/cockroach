@@ -12,44 +12,44 @@ query T
 SELECT crdb_internal.gen_rand_ident('helloworld', 10, '{"seed":123}')
 ----
 helloworld1
-hellowOrld2
-hel'low&orld3
-h😆eļloworld4
+heLlowor%pld   2
+hell😆oworld3
+helloworld4
 helloworld5
 helloworld6
-helloworld7
+helloWorld7
 helloworld8
-hellOworld9
-helloworld10
+h%velloworld9
+hellowo        rld10
 
 query T
 SELECT crdb_internal.gen_rand_ident('helloworld', 10, '{"seed":123,"number":false}')
 ----
 helloworld
-hellowOrld
-hel'low&orld
-h😆eļloworld
+heLlowor%pld
+hell😆oworld
 helloworld
 helloworld
 helloworld
+helloWorld
 helloworld
-hellOworld
-helloworld
+h%velloworld
+hellowo       rld
 
 # All types of noise enabled except for one: set prob to -1.
 query T
 SELECT crdb_internal.gen_rand_ident('helloworld', 10, '{"seed":123,"noise":true,"emote":-1}')
 ----
 helloworld1
-helloworlD2
-hellowo rld3
-"hellowo rl/d4
+hell\roworld%562
+he"llowo rld3
+helloworld4
 helloworld5
 helloworld6
 helloworld7
-helloworld8
+helloworld8
 helloworld9
-helloworlD10
+h elloworld10
 
 query T
 SELECT crdb_internal.gen_rand_ident('helloworld', 10, '{"seed":123,"noise":false}')
