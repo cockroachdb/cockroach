@@ -1231,11 +1231,11 @@ func (n *ShowDefaultPrivileges) Format(ctx *FmtCtx) {
 	ctx.WriteString("SHOW DEFAULT PRIVILEGES ")
 	if len(n.Roles) > 0 {
 		ctx.WriteString("FOR ROLE ")
-		for i, role := range n.Roles {
+		for i := range n.Roles {
 			if i > 0 {
 				ctx.WriteString(", ")
 			}
-			ctx.FormatNode(&role)
+			ctx.FormatNode(&n.Roles[i])
 		}
 		ctx.WriteString(" ")
 	} else if n.ForAllRoles {
