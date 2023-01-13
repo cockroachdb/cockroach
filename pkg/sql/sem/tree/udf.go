@@ -280,11 +280,11 @@ type FuncParams []FuncParam
 
 // Format implements the NodeFormatter interface.
 func (node FuncParams) Format(ctx *FmtCtx) {
-	for i, arg := range node {
+	for i := range node {
 		if i > 0 {
 			ctx.WriteString(", ")
 		}
-		ctx.FormatNode(&arg)
+		ctx.FormatNode(&node[i])
 	}
 }
 
@@ -367,11 +367,11 @@ type FuncObjs []FuncObj
 
 // Format implements the NodeFormatter interface.
 func (node FuncObjs) Format(ctx *FmtCtx) {
-	for i, f := range node {
+	for i := range node {
 		if i > 0 {
 			ctx.WriteString(", ")
 		}
-		ctx.FormatNode(f)
+		ctx.FormatNode(&node[i])
 	}
 }
 
@@ -382,7 +382,7 @@ type FuncObj struct {
 }
 
 // Format implements the NodeFormatter interface.
-func (node FuncObj) Format(ctx *FmtCtx) {
+func (node *FuncObj) Format(ctx *FmtCtx) {
 	ctx.FormatNode(&node.FuncName)
 	if node.Params != nil {
 		ctx.WriteString("(")
@@ -419,7 +419,7 @@ type AlterFunctionOptions struct {
 // Format implements the NodeFormatter interface.
 func (node *AlterFunctionOptions) Format(ctx *FmtCtx) {
 	ctx.WriteString("ALTER FUNCTION ")
-	ctx.FormatNode(node.Function)
+	ctx.FormatNode(&node.Function)
 	for _, option := range node.Options {
 		ctx.WriteString(" ")
 		ctx.FormatNode(option)
@@ -435,7 +435,7 @@ type AlterFunctionRename struct {
 // Format implements the NodeFormatter interface.
 func (node *AlterFunctionRename) Format(ctx *FmtCtx) {
 	ctx.WriteString("ALTER FUNCTION ")
-	ctx.FormatNode(node.Function)
+	ctx.FormatNode(&node.Function)
 	ctx.WriteString(" RENAME TO ")
 	ctx.WriteString(string(node.NewName))
 }
@@ -449,7 +449,7 @@ type AlterFunctionSetSchema struct {
 // Format implements the NodeFormatter interface.
 func (node *AlterFunctionSetSchema) Format(ctx *FmtCtx) {
 	ctx.WriteString("ALTER FUNCTION ")
-	ctx.FormatNode(node.Function)
+	ctx.FormatNode(&node.Function)
 	ctx.WriteString(" SET SCHEMA ")
 	ctx.WriteString(string(node.NewSchemaName))
 }
@@ -463,7 +463,7 @@ type AlterFunctionSetOwner struct {
 // Format implements the NodeFormatter interface.
 func (node *AlterFunctionSetOwner) Format(ctx *FmtCtx) {
 	ctx.WriteString("ALTER FUNCTION ")
-	ctx.FormatNode(node.Function)
+	ctx.FormatNode(&node.Function)
 	ctx.WriteString(" OWNER TO ")
 	ctx.FormatNode(&node.NewOwner)
 }
@@ -478,7 +478,7 @@ type AlterFunctionDepExtension struct {
 // Format implements the NodeFormatter interface.
 func (node *AlterFunctionDepExtension) Format(ctx *FmtCtx) {
 	ctx.WriteString("ALTER FUNCTION  ")
-	ctx.FormatNode(node.Function)
+	ctx.FormatNode(&node.Function)
 	if node.Remove {
 		ctx.WriteString(" NO")
 	}
