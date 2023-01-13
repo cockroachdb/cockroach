@@ -25,6 +25,7 @@ import classNames from "classnames/bind";
 import { round } from "lodash";
 import styles from "./hotRanges.module.styl";
 import { cockroach } from "src/js/protos";
+import { util } from "@cockroachlabs/cluster-ui";
 import {
   performanceBestPracticesHotSpots,
   readsAndWritesOverviewPage,
@@ -95,6 +96,71 @@ const HotRangesTable = ({
         ),
         cell: val => <>{round(val.qps, 2)}</>,
         sort: val => val.qps,
+      },
+      {
+        name: "cpuTimePerSecond",
+        title: (
+          <Tooltip
+            placement="bottom"
+            title=""
+          >
+            CPU
+          </Tooltip>
+        ),
+        cell: val => <>{round(util.NanoToMilli(val.cpu_time_per_second), 2)}</>,
+        sort: val => val.cpu_time_per_second,
+      },
+      {
+        name: "writesPerSecond",
+        title: (
+          <Tooltip
+            placement="bottom"
+            title=""
+          >
+            Keys Written
+          </Tooltip>
+        ),
+        cell: val => <>{round(val.writes_per_second, 2)}</>,
+        sort: val => val.writes_per_second,
+      },
+      {
+        name: "writeBytesPerSecond",
+        title: (
+          <Tooltip
+            placement="bottom"
+            title=""
+          >
+            Bytes Written
+          </Tooltip>
+        ),
+        cell: val => <>{util.Bytes(val.write_bytes_per_second)}</>,
+        sort: val => val.write_bytes_per_second,
+      },
+      {
+        name: "readsPerSecond",
+        title: (
+          <Tooltip
+            placement="bottom"
+            title=""
+          >
+            Keys Read
+          </Tooltip>
+        ),
+        cell: val => <>{round(val.reads_per_second, 2)}</>,
+        sort: val => val.reads_per_second,
+      },
+      {
+        name: "readsBytesPerSecond",
+        title: (
+          <Tooltip
+            placement="bottom"
+            title=""
+          >
+            Bytes Read
+          </Tooltip>
+        ),
+        cell: val => <>{util.Bytes(val.read_bytes_per_second)}</>,
+        sort: val => val.read_bytes_per_second,
       },
       {
         name: "nodes",
