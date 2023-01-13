@@ -235,8 +235,8 @@ func TestRandomParquetExports(t *testing.T) {
 		}
 		sqlDB.Exec(t, sb.String())
 
-		for i = 1; i < numTables; i++ {
-			tableName = tablePrefix + fmt.Sprint(i)
+		for i = 0; i < numTables; i++ {
+			tableName = string(stmts[i].(*tree.CreateTable).Table.ObjectName)
 			numRows, err := randgen.PopulateTableWithRandData(rng, db, tableName, 20)
 			require.NoError(t, err)
 			if numRows > 5 {
@@ -250,13 +250,13 @@ func TestRandomParquetExports(t *testing.T) {
 						sessiondata.InternalExecutorOverride{
 							User:     username.RootUserName(),
 							Database: dbName},
-						fmt.Sprintf("SELECT * FROM %s LIMIT 1", tableName))
+						fmt.Sprintf("SELECT * FROM %s LIMIT 1", tree.NameString(tableName)))
 					require.NoError(t, err)
 
 					for _, col := range cols {
 						_, err := importer.NewParquetColumn(col.Typ, "", false)
 						if err != nil {
-							_, err = sqlDB.DB.ExecContext(ctx, fmt.Sprintf(`ALTER TABLE %s DROP COLUMN %s`, tableName, col.Name))
+							_, err = sqlDB.DB.ExecContext(ctx, fmt.Sprintf(`ALTER TABLE %s DROP COLUMN %s`, tree.NameString(tableName), tree.NameString(col.Name)))
 							if err != nil {
 								return err
 							}
@@ -272,14 +272,14 @@ func TestRandomParquetExports(t *testing.T) {
 		}
 		require.Equal(t, true, success, "test flake: failed to create a random table")
 	}
-	t.Logf("exporting as parquet from random table with schema: \n %s", sqlDB.QueryStr(t, `SHOW CREATE TABLE `+tableName))
+	t.Logf("exporting as parquet from random table with schema: \n %s", sqlDB.QueryStr(t, `SHOW CREATE TABLE `+tree.NameString(tableName)))
 	// TODO (msbutler): iterate over random select statements
 	test := parquetTest{
-		filePrefix: tableName,
+		filePrefix: "outputfile",
 		dbName:     dbName,
 		dir:        dir,
-		stmt: fmt.Sprintf("EXPORT INTO PARQUET 'nodelocal://0/%s' FROM SELECT * FROM %s",
-			tableName, tableName),
+		stmt: fmt.Sprintf("EXPORT INTO PARQUET 'nodelocal://0/outputfile' FROM SELECT * FROM %s",
+			tree.NameString(tableName)),
 	}
 	sqlDB.Exec(t, test.stmt)
 	err := validateParquetFile(t, ctx, idb.Executor(), test)

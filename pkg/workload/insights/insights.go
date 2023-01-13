@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -184,12 +185,12 @@ var insightsTypes = []*types.T{
 }
 
 func (b *insights) CreateDbAndTables(db *gosql.DB, dbName string, tableCount int) (err error) {
-	_, err = db.Exec(fmt.Sprintf("CREATE DATABASE IF NOT EXISTS %s;", dbName))
+	_, err = db.Exec(fmt.Sprintf("CREATE DATABASE IF NOT EXISTS %s;", tree.NameString(dbName)))
 	if err != nil {
 		return err
 	}
 
-	rowTableCount := db.QueryRow(fmt.Sprintf("SELECT count(*) from [show tables from %s]", dbName))
+	rowTableCount := db.QueryRow(fmt.Sprintf("SELECT count(*) FROM [SHOW TABLES FROM %s]", tree.NameString(dbName)))
 	var currTableCount int
 	err = rowTableCount.Scan(&currTableCount)
 	if err != nil {
@@ -203,7 +204,8 @@ func (b *insights) CreateDbAndTables(db *gosql.DB, dbName string, tableCount int
 
 	for j := 0; j < tableCount; j++ {
 		tableName := generateTableName(j)
-		query := fmt.Sprintf("CREATE TABLE %s.%s %s;", dbName, tableName, insightsTableSchema)
+		query := fmt.Sprintf("CREATE TABLE %s.%s %s;",
+			tree.NameString(dbName), tree.NameString(tableName), insightsTableSchema)
 		_, errTableCreate := db.Exec(query)
 		if errTableCreate != nil {
 			err = errors.CombineErrors(err, errTableCreate)
@@ -362,7 +364,7 @@ func joinOnNonIndexColumn(
 	query := fmt.Sprintf(`
 				SELECT a.balance, b.balance FROM %s a
 				LEFT JOIN %s b ON a.shared_key = b.shared_key
-				WHERE a.balance < 0;`, tableName1, tableName2)
+				WHERE a.balance < 0;`, tree.NameString(tableName1), tree.NameString(tableName2))
 	_, err := db.ExecContext(ctx, query)
 	return err
 }
@@ -372,7 +374,7 @@ func orderByOnNonIndexColumn(
 ) error {
 	rowLimit := (rand.Uint32() % uint32(rowCount)) + 1
 	query := fmt.Sprintf(`SELECT balance
-			FROM %s ORDER BY balance DESC limit $1;`, tableName)
+			FROM %s ORDER BY balance DESC limit $1;`, tree.NameString(tableName))
 	_, err := db.ExecContext(ctx, query, rowLimit)
 	return err
 }
@@ -395,7 +397,7 @@ func useTxnToMoveBalance(
 
 	query := fmt.Sprintf(`
 			UPDATE %s
-			SET balance = balance - $1 WHERE id = $2`, tableName)
+			SET balance = balance - $1 WHERE id = $2`, tree.NameString(tableName))
 	_, err = txn.ExecContext(ctx, query, amount, from)
 	if err != nil {
 		return err
@@ -408,7 +410,7 @@ func useTxnToMoveBalance(
 
 	query = fmt.Sprintf(`
 			UPDATE %s
-					SET balance = balance + $1 WHERE id = $2`, tableName)
+					SET balance = balance + $1 WHERE id = $2`, tree.NameString(tableName))
 	_, err = txn.ExecContext(ctx, query, amount, to)
 	if err != nil {
 		return err
@@ -449,7 +451,7 @@ func updateWithContention(
 			return
 		}
 
-		backgroundQuery := fmt.Sprintf("UPDATE %s SET balance = $1 WHERE id = $2;", tableName)
+		backgroundQuery := fmt.Sprintf("UPDATE %s SET balance = $1 WHERE id = $2;", tree.NameString(tableName))
 		_, errTxn = tx.ExecContext(ctx, backgroundQuery, 42, rowToBlock)
 		wgTxnStarted.Done()
 		if errTxn != nil {
@@ -472,7 +474,7 @@ func updateWithContention(
 
 	// This will be blocked until the background go func commits the txn.
 	amount := rng.Intn(maxTransfer)
-	query := fmt.Sprintf("UPDATE %s SET balance = $1 WHERE id = $2;", tableName)
+	query := fmt.Sprintf("UPDATE %s SET balance = $1 WHERE id = $2;", tree.NameString(tableName))
 	_, err := db.ExecContext(ctx, query, amount, rowToBlock)
 
 	// wait for the background go func to complete
