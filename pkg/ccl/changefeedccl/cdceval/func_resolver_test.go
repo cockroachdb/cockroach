@@ -60,12 +60,12 @@ $$`)
 		},
 		{
 			testName:       "cdc name without schema",
-			fnName:         tree.MakeUnresolvedName("cdc_mvcc_timestamp"),
+			fnName:         tree.MakeUnresolvedName("changefeed_creation_timestamp"),
 			expectedSchema: "public",
 		},
 		{
 			testName:       "uppercase cdc name without schema",
-			fnName:         tree.MakeUnresolvedName("cdc_mVCC_timeStamp"),
+			fnName:         tree.MakeUnresolvedName("changefeed_creATIon_TimeStamp"),
 			expectedSchema: "public",
 		},
 		{

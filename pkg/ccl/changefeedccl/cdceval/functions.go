@@ -90,38 +90,26 @@ var cdcFunctions = map[string]*tree.ResolvedFunctionDefinition{
 	//"st_asgeojson",
 	//"st_estimatedextent",
 
-	// NB: even though some cdc functions appear to be stable (e.g. cdc_is_delete()),
+	// NB: even though some cdc functions appear to be stable (e.g. event_op()),
 	// we should not mark custom CDC functions as stable.  Doing so will cause
 	// optimizer to (constant) fold this function during optimization step -- something
 	// we definitely don't want to do because we need to evaluate those functions
 	// for each event.
-	"cdc_is_delete": makeCDCBuiltIn(
-		"cdc_is_delete",
+	"event_op": makeCDCBuiltIn(
+		"event_op",
 		tree.Overload{
 			Types:      tree.ParamTypes{},
-			ReturnType: tree.FixedReturnType(types.Bool),
+			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, datums tree.Datums) (tree.Datum, error) {
 				rowEvalCtx := rowEvalContextFromEvalContext(evalCtx)
-				if rowEvalCtx.updatedRow.IsDeleted() {
-					return tree.DBoolTrue, nil
-				}
-				return tree.DBoolFalse, nil
+				return rowEvalCtx.op, nil
 			},
-			Info:       "Returns true if the event is a deletion",
+			Info:       "Returns 'insert', 'update', 'upsert' or 'delete' to describe the type of the operation.",
 			Volatility: volatility.Volatile,
 		}),
-	"cdc_mvcc_timestamp": cdcTimestampBuiltin(
-		"cdc_mvcc_timestamp",
-		"Returns MVCC timestamp of the event",
-		volatility.Volatile,
-		types.Decimal,
-		func(rowEvalCtx *rowEvalContext) hlc.Timestamp {
-			return rowEvalCtx.updatedRow.MvccTimestamp
-		},
-	),
-	"cdc_updated_timestamp": cdcTimestampBuiltin(
-		"cdc_updated_timestamp",
-		"Returns schema timestamp of the event",
+	"event_schema_timestamp": cdcTimestampBuiltin(
+		"event_schema_timestamp",
+		"Returns schema timestamp of the event.",
 		volatility.Volatile,
 		types.Decimal,
 		func(rowEvalCtx *rowEvalContext) hlc.Timestamp {
@@ -130,7 +118,7 @@ var cdcFunctions = map[string]*tree.ResolvedFunctionDefinition{
 	),
 	"changefeed_creation_timestamp": cdcTimestampBuiltin(
 		"changefeed_creation_timestamp",
-		"Returns changefeed creation time",
+		"Returns changefeed creation time.",
 		volatility.Stable,
 		types.Decimal,
 		func(rowEvalCtx *rowEvalContext) hlc.Timestamp {
@@ -138,6 +126,13 @@ var cdcFunctions = map[string]*tree.ResolvedFunctionDefinition{
 		},
 	),
 }
+
+var (
+	eventTypeInsert = tree.NewDString("insert")
+	eventTypeUpdate = tree.NewDString("update")
+	eventTypeUpsert = tree.NewDString("upsert")
+	eventTypeDelete = tree.NewDString("delete")
+)
 
 const cdcFnCategory = "CDC builtin"
 
@@ -253,7 +248,7 @@ func init() {
 			case volatility.Stable:
 				// If the stable function is not on the white list,
 				// then it is blacklisted.
-				if _, whitelisted := cdcFunctions[fnDef.Name]; !whitelisted {
+				if _, allowed := cdcFunctions[fnDef.Name]; !allowed {
 					functionDenyList[fnDef.Name] = struct{}{}
 				}
 			}
