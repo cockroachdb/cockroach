@@ -450,7 +450,11 @@ func (e *familyEvaluator) setupContextForRow(ctx context.Context, updated cdceve
 
 func (e *familyEvaluator) closeErr() error {
 	if e.errCh != nil {
-		defer close(e.errCh) // Must be deferred since planGroup  go routine might write.
+		// Must be deferred since planGroup  go routine might write.
+		defer func() {
+			close(e.errCh)
+			e.errCh = nil
+		}()
 	}
 
 	if e.input != nil {
