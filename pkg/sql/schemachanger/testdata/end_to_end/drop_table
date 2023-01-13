@@ -3,6 +3,7 @@ CREATE DATABASE db;
 CREATE SCHEMA db.sc;
 CREATE TABLE db.sc.t (k INT, v STRING);
 CREATE TYPE db.sc.e AS ENUM('a', 'b', 'c');
+CREATE VIEW db.sc.v AS SELECT 1;
 ----
 ...
 +database {0 0 db} -> 104

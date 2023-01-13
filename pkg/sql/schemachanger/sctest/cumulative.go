@@ -668,12 +668,12 @@ func Rollback(t *testing.T, relPath string, newCluster NewClusterFunc) {
 
 const fetchDescriptorStateQuery = `
 SELECT
-	create_statement
+	object_type, create_statement
 FROM
 	( 
-		SELECT descriptor_id, create_statement FROM crdb_internal.create_schema_statements
-		UNION ALL SELECT descriptor_id, create_statement FROM crdb_internal.create_statements
-		UNION ALL SELECT descriptor_id, create_statement FROM crdb_internal.create_type_statements
+		SELECT 'schema' as object_type, descriptor_id, create_statement FROM crdb_internal.create_schema_statements
+		UNION ALL SELECT 'relation' as object_type, descriptor_id, create_statement FROM crdb_internal.create_statements
+		UNION ALL SELECT 'udt' as object_type, descriptor_id, create_statement FROM crdb_internal.create_type_statements
 	)
 WHERE descriptor_id IN (SELECT id FROM system.namespace)
 ORDER BY
@@ -1131,9 +1131,10 @@ func Backup(t *testing.T, path string, newCluster NewClusterFunc) {
 			// reaches the expected state as if the back/restore had not happened at all.
 			// Skip a backup randomly.
 			type backupConsumptionFlavor struct {
-				name         string
-				restoreSetup []string
-				restoreQuery string
+				name                string
+				restoreSetup        []string
+				restoreQuery        string
+				expectedObjectTypes map[string]struct{}
 			}
 			flavors := []backupConsumptionFlavor{
 				{
@@ -1175,6 +1176,7 @@ func Backup(t *testing.T, path string, newCluster NewClusterFunc) {
 					},
 					restoreQuery: fmt.Sprintf("RESTORE TABLE %s FROM LATEST IN '%s' WITH skip_missing_sequences",
 						strings.Join(tablesToRestore, ","), b.url),
+					expectedObjectTypes: map[string]struct{}{"relation": {}, "schema": {}},
 				})
 			}
 
@@ -1194,10 +1196,30 @@ func Backup(t *testing.T, path string, newCluster NewClusterFunc) {
 					tdb.Exec(t, fmt.Sprintf("USE %q", dbName))
 					waitForSchemaChangesToFinish(t, tdb)
 					afterRestore := tdb.QueryStr(t, fetchDescriptorStateQuery)
+					expectedBefore := before
+					expectedAfter := after
+					if flavor.expectedObjectTypes != nil {
+						// fetchDescriptorStateQuery always fetch create statements for all
+						// kinds of objects. But test flavors may only restore a subset of
+						// them (e.g. RESTORE TABLE won't restore everything in a db like
+						// RESTORE DATABASE). So we need to filter out unexpected objects.
+						expectedBefore = make([][]string, 0)
+						for _, descState := range before {
+							if _, ok := flavor.expectedObjectTypes[descState[0]]; ok {
+								expectedBefore = append(expectedBefore, descState)
+							}
+						}
+						expectedAfter = make([][]string, 0)
+						for _, descState := range after {
+							if _, ok := flavor.expectedObjectTypes[descState[0]]; ok {
+								expectedAfter = append(expectedAfter, descState)
+							}
+						}
+					}
 					if b.isRollback {
-						require.Equal(t, before, afterRestore)
+						require.Equal(t, expectedBefore, afterRestore)
 					} else {
-						require.Equal(t, after, afterRestore)
+						require.Equal(t, expectedAfter, afterRestore)
 					}
 					// Hack to deal with corrupt userfiles tables due to #76764.
 					const validateQuery = `
