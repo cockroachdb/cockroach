@@ -381,7 +381,8 @@ func (node *CreateType) Format(ctx *FmtCtx) {
 		ctx.WriteString(")")
 	case Composite:
 		ctx.WriteString("AS (")
-		for i, elem := range node.CompositeTypeList {
+		for i := range node.CompositeTypeList {
+			elem := &node.CompositeTypeList[i]
 			if i != 0 {
 				ctx.WriteString(", ")
 			}
