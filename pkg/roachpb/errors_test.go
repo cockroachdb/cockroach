@@ -11,6 +11,9 @@
 package roachpb
 
 import (
+	"bytes"
+	"fmt"
+	"io"
 	"strings"
 	"testing"
 
@@ -126,6 +129,24 @@ func TestReadWithinUncertaintyIntervalError(t *testing.T) {
 	}
 }
 
+type TestPrinter struct {
+	buf io.Writer
+}
+
+func (t TestPrinter) Print(args ...interface{}) {
+	redact.Fprint(t.buf, args...)
+}
+
+func (t TestPrinter) Printf(format string, args ...interface{}) {
+	redact.Fprintf(t.buf, format, args...)
+}
+
+func (t TestPrinter) Detail() bool {
+	return false
+}
+
+var _ errors.Printer = &TestPrinter{}
+
 func TestErrorRedaction(t *testing.T) {
 	t.Run("nil", func(t *testing.T) {
 		var pErr *Error
@@ -156,6 +177,157 @@ func TestErrorRedaction(t *testing.T) {
 		const exp = "ReadWithinUncertaintyIntervalError: read at time 0.000000001,0 encountered previous write with future timestamp 0.000000002,0 within uncertainty interval `t <= (local=0.000000002,2, global=0.000000003,0)`; observed timestamps: [{12 0.000000004,0}]: \"foo\" meta={id=00000000 key=‹×› pri=0.00005746 epo=0 ts=0.000000001,0 min=0.000000001,0 seq=0} lock=true stat=PENDING rts=0.000000001,0 wto=false gul=0.000000002,0"
 		require.Equal(t, exp, string(act))
 	})
+
+	// The purpose of these tests is to ensure that most of the error is printed
+	// without redaction markers. The contents of the error aren't really being
+	// tested here, although the test could be extended to care more about that.
+	for _, tc := range []struct {
+		err    errors.SafeFormatter
+		expect string
+	}{
+		{
+			err:    &NotLeaseHolderError{},
+			expect: "[NotLeaseHolderError] r0: replica not lease holder; lease holder unknown",
+		},
+		{
+			err:    &RangeNotFoundError{},
+			expect: "r0 was not found",
+		},
+		{
+			err:    &RangeKeyMismatchError{},
+			expect: "RangeKeyMismatchError (key range /Min-/Min) with empty RangeInfo slicekey range /Min-/Min outside of bounds of range /Min-/Min; suggested ranges: []",
+		},
+		{
+			err:    &ReadWithinUncertaintyIntervalError{},
+			expect: "ReadWithinUncertaintyIntervalError: read at time 0,0 encountered previous write with future timestamp 0,0 within uncertainty interval `t <= (local=0,0, global=0,0)`; observed timestamps: []",
+		},
+		{
+			err:    &TransactionAbortedError{},
+			expect: "TransactionAbortedError(ABORT_REASON_UNKNOWN)",
+		},
+		{
+			err:    &TransactionPushError{},
+			expect: "failed to push meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0,0 min=0,0 seq=0} lock=false stat=PENDING rts=0,0 wto=false gul=0,0",
+		},
+		{
+			err:    &TransactionRetryError{},
+			expect: "TransactionRetryError: retry txn (RETRY_REASON_UNKNOWN)",
+		},
+		{
+			err:    &TransactionStatusError{},
+			expect: "TransactionStatusError: ‹› (REASON_UNKNOWN)",
+		},
+		{
+			err:    &WriteIntentError{},
+			expect: "conflicting intents on ",
+		},
+		{
+			err:    &WriteTooOldError{},
+			expect: "WriteTooOldError: write at timestamp 0,0 too old; wrote at 0,0",
+		},
+		{
+			err:    &OpRequiresTxnError{},
+			expect: "the operation requires transactional context",
+		},
+		{
+			err:    &ConditionFailedError{},
+			expect: "unexpected value: ‹<nil>›",
+		},
+		{
+			err:    &LeaseRejectedError{},
+			expect: "cannot replace lease <empty> with <empty>: ‹›",
+		},
+		{err: &NodeUnavailableError{}, expect: "node unavailable; try another peer"},
+		{
+			err:    &RaftGroupDeletedError{},
+			expect: "raft group deleted",
+		},
+		{
+			err:    &ReplicaCorruptionError{},
+			expect: "replica corruption (processed=false)",
+		},
+		{
+			err:    &ReplicaTooOldError{},
+			expect: "sender replica too old, discarding message",
+		},
+		{
+			err:    &AmbiguousResultError{},
+			expect: "result is ambiguous: unknown cause",
+		},
+		{
+			err:    &StoreNotFoundError{},
+			expect: "store 0 was not found",
+		},
+		{
+			err:    &TransactionRetryWithProtoRefreshError{MsgRedactable: redact.RedactableString("this is redactable")},
+			expect: "TransactionRetryWithProtoRefreshError: this is redactable",
+		},
+		{
+			err:    &IntegerOverflowError{},
+			expect: "key /Min with value 0 incremented by 0 results in overflow",
+		},
+		{
+			err:    &UnsupportedRequestError{},
+			expect: "unsupported request",
+		},
+		{
+			err:    &BatchTimestampBeforeGCError{},
+			expect: "batch timestamp 0,0 must be after replica GC threshold 0,0",
+		},
+		{
+			err:    &TxnAlreadyEncounteredErrorError{},
+			expect: "txn already encountered an error; cannot be used anymore (previous err: ‹›)",
+		},
+		{
+			err:    &IntentMissingError{},
+			expect: "intent missing",
+		},
+		{
+			err:    &MergeInProgressError{},
+			expect: "merge in progress",
+		},
+		{
+			err:    &RangeFeedRetryError{},
+			expect: "retry rangefeed (REASON_REPLICA_REMOVED)",
+		},
+		{
+			err:    &IndeterminateCommitError{},
+			expect: "found txn in indeterminate STAGING state meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=0,0 min=0,0 seq=0} lock=false stat=PENDING rts=0,0 wto=false gul=0,0",
+		},
+		{
+			err:    &InvalidLeaseError{},
+			expect: "invalid lease",
+		},
+		{
+			err:    &OptimisticEvalConflictsError{},
+			expect: "optimistic eval encountered conflict",
+		},
+		{
+			err:    &MinTimestampBoundUnsatisfiableError{},
+			expect: "bounded staleness read with minimum timestamp bound of 0,0 could not be satisfied by a local resolved timestamp of 0,0",
+		},
+		{
+			err:    &RefreshFailedError{},
+			expect: "encountered recently written committed value /Min @0,0",
+		},
+		{
+			err:    &MVCCHistoryMutationError{},
+			expect: "unexpected MVCC history mutation in span ‹/Min›",
+		},
+		{
+			err:    &UnhandledRetryableError{},
+			expect: "{<nil> 0 {<nil>} ‹<nil>› 0,0}",
+		},
+	} {
+		t.Run(fmt.Sprintf("%T", tc.err), func(t *testing.T) {
+			var b []byte
+			buf := bytes.NewBuffer(b)
+			printer := &TestPrinter{buf: buf}
+			err := tc.err.SafeFormatError(printer)
+			require.NoError(t, err)
+			require.Equal(t, tc.expect, buf.String())
+		})
+	}
 }
 
 func TestErrorGRPCStatus(t *testing.T) {

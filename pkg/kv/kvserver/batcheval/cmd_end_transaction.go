@@ -13,7 +13,6 @@ package batcheval
 import (
 	"bytes"
 	"context"
-	"fmt"
 	"math"
 	"sync/atomic"
 	"time"
@@ -35,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 func init() {
@@ -473,7 +473,7 @@ func IsEndTxnExceedingDeadline(commitTS hlc.Timestamp, deadline hlc.Timestamp) b
 // reason and possibly an extra message to be used for the error.
 func IsEndTxnTriggeringRetryError(
 	txn *roachpb.Transaction, args *roachpb.EndTxnRequest,
-) (retry bool, reason roachpb.TransactionRetryReason, extraMsg string) {
+) (retry bool, reason roachpb.TransactionRetryReason, extraMsg redact.RedactableString) {
 	// If we saw any WriteTooOldErrors, we must restart to avoid lost
 	// update anomalies.
 	if txn.WriteTooOld {
@@ -492,7 +492,7 @@ func IsEndTxnTriggeringRetryError(
 	// A transaction must obey its deadline, if set.
 	if !retry && IsEndTxnExceedingDeadline(txn.WriteTimestamp, args.Deadline) {
 		exceededBy := txn.WriteTimestamp.GoTime().Sub(args.Deadline.GoTime())
-		extraMsg = fmt.Sprintf(
+		extraMsg = redact.Sprintf(
 			"txn timestamp pushed too much; deadline exceeded by %s (%s > %s)",
 			exceededBy, txn.WriteTimestamp, args.Deadline)
 		retry, reason = true, roachpb.RETRY_COMMIT_DEADLINE_EXCEEDED
