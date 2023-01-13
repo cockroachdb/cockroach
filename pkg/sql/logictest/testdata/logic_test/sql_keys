@@ -17,7 +17,7 @@ let $tableid
 SELECT id FROM system.namespace WHERE name = 't'
 
 # Without any data in the table, there shouldn't be any keys in the range.
-query T
+query T retry
 SELECT key FROM crdb_internal.list_sql_keys_in_range($rangeid)
 ----
 

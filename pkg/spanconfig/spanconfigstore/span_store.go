@@ -31,7 +31,7 @@ var tenantCoalesceAdjacentSetting = settings.RegisterBoolSetting(
 	settings.SystemOnly,
 	"spanconfig.tenant_coalesce_adjacent.enabled",
 	`collapse adjacent ranges with the same span configs`,
-	true,
+	false,
 )
 
 // hostCoalesceAdjacentSetting is a hidden cluster setting that controls

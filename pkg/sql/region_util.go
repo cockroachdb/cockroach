@@ -13,9 +13,6 @@ package sql
 import (
 	"context"
 	"fmt"
-	"sort"
-	"strings"
-
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -41,6 +38,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/proto"
+	"sort"
+	"strings"
 )
 
 // LiveClusterRegions is a set representing regions that are live in
@@ -2420,8 +2419,7 @@ func (p *planner) GetTenantRangeSpanByID(
 	if !rangeDescIterator.Valid() {
 		return roachpb.Span{}, errors.Newf("range with ID %d not found", rangeID)
 	}
-
-	return tenantSpan.Intersect(rangeSpan), nil
+	return rangeSpan, nil
 }
 
 // OptimizeSystemDatabase is part of the eval.RegionOperator interface.
