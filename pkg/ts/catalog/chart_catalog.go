@@ -1624,6 +1624,10 @@ var charts = []sectionDescription{
 				Metrics: []string{"streaming.frontier_checkpoint_span_count"},
 			},
 			{
+				Title:   "Frontier Lag",
+				Metrics: []string{"replication.frontier_lag_seconds"},
+			},
+			{
 				Title:   "Job Progress Updates",
 				Metrics: []string{"streaming.job_progress_updates"},
 			},

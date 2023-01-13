@@ -92,6 +92,12 @@ var (
 		Measurement: "Resolved Spans",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaFrontierLagSeconds = metric.Metadata{
+		Name:        "replication.frontier_lag_seconds",
+		Help:        "Time the replication frontier lags",
+		Measurement: "Seconds",
+		Unit:        metric.Unit_SECONDS,
+	}
 	metaJobProgressUpdates = metric.Metadata{
 		Name:        "streaming.job_progress_updates",
 		Help:        "Total number of updates to the ingestion job progress",
@@ -115,6 +121,7 @@ type Metrics struct {
 	LatestDataCheckpointSpan    *metric.Gauge
 	DataCheckpointSpanCount     *metric.Gauge
 	FrontierCheckpointSpanCount *metric.Gauge
+	FrontierLagSeconds          *metric.GaugeFloat64
 }
 
 // MetricStruct implements the metric.Struct interface.
@@ -139,6 +146,7 @@ func MakeMetrics(histogramWindow time.Duration) metric.Struct {
 		LatestDataCheckpointSpan:    metric.NewGauge(metaLatestDataCheckpointSpan),
 		DataCheckpointSpanCount:     metric.NewGauge(metaDataCheckpointSpanCount),
 		FrontierCheckpointSpanCount: metric.NewGauge(metaFrontierCheckpointSpanCount),
+		FrontierLagSeconds:          metric.NewGaugeFloat64(metaFrontierLagSeconds),
 	}
 	return m
 }

@@ -198,7 +198,7 @@ func (h *heartbeatSender) maybeHeartbeat(
 	return true, s, err
 }
 
-func (h *heartbeatSender) startHeartbeatLoop(ctx context.Context) {
+func (h *heartbeatSender) startHeartbeatLoop(ctx context.Context, metrics *Metrics) {
 	ctx, cancel := context.WithCancel(ctx)
 	h.cancel = cancel
 	h.cg = ctxgroup.WithContext(ctx)
@@ -221,6 +221,7 @@ func (h *heartbeatSender) startHeartbeatLoop(ctx context.Context) {
 				case frontier := <-h.frontierUpdates:
 					h.frontier.Forward(frontier)
 				}
+				metrics.FrontierLagSeconds.Update(timeutil.Since(h.frontier.GoTime()).Seconds())
 				sent, streamStatus, err := h.maybeHeartbeat(ctx, h.frontier)
 				// TODO(casper): add unit tests to test different kinds of client errors.
 				if err != nil {
@@ -269,7 +270,7 @@ func (sf *streamIngestionFrontier) Start(ctx context.Context) {
 	ctx = sf.StartInternal(ctx, streamIngestionFrontierProcName)
 	sf.metrics.RunningCount.Inc(1)
 	sf.input.Start(ctx)
-	sf.heartbeatSender.startHeartbeatLoop(ctx)
+	sf.heartbeatSender.startHeartbeatLoop(ctx, sf.metrics)
 }
 
 // Next is part of the RowSource interface.
