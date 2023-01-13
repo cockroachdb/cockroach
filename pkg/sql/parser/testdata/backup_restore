@@ -346,6 +346,16 @@ BACKUP TABLE (foo) TO ('bar') WITH revision_history = (true), detached, kms = ((
 BACKUP TABLE foo TO '_' WITH revision_history = _, detached, kms = ('_', '_') -- literals removed
 BACKUP TABLE _ TO 'bar' WITH revision_history = true, detached, kms = ('foo', 'bar') -- identifiers removed
 
+
+# Regression test for #95235.
+parse
+BACKUP foo TO 'bar' WITH OPTIONS (detached = false)
+----
+BACKUP TABLE foo TO 'bar' WITH detached = FALSE -- normalized!
+BACKUP TABLE (foo) TO ('bar') WITH detached = FALSE -- fully parenthesized
+BACKUP TABLE foo TO '_' WITH detached = FALSE -- literals removed
+BACKUP TABLE _ TO 'bar' WITH detached = FALSE -- identifiers removed
+
 parse
 BACKUP TENANT 36 TO 'bar'
 ----
