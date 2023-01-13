@@ -2132,6 +2132,7 @@ func (s *systemStatusServer) rangesHelper(
 				ReadsPerSecond:      loadStats.ReadKeysPerSecond,
 				WriteBytesPerSecond: loadStats.WriteKeysPerSecond,
 				ReadBytesPerSecond:  loadStats.ReadBytesPerSecond,
+				CPUTimePerSecond:    loadStats.RaftCPUNanosPerSecond + loadStats.RequestCPUNanosPerSecond,
 			},
 			Problems: serverpb.RangeProblems{
 				Unavailable:            metrics.Unavailable,
@@ -2676,6 +2677,7 @@ func (s *systemStatusServer) localHotRanges(
 			storeResp.HotRanges[i].ReadsPerSecond = r.ReadKeysPerSecond
 			storeResp.HotRanges[i].WriteBytesPerSecond = r.WriteBytesPerSecond
 			storeResp.HotRanges[i].ReadBytesPerSecond = r.ReadBytesPerSecond
+			storeResp.HotRanges[i].CPUTimePerSecond = r.CPUTimePerSecond
 		}
 		resp.Stores = append(resp.Stores, storeResp)
 		return nil

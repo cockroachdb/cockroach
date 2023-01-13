@@ -414,6 +414,9 @@ message RangeStatistics {
   // Reads (bytes) per second is the number of bytes read from this range per
   // second, averaged over the last 30 minute period.
   double read_bytes_per_second = 6;
+  // CPU time (ns) per second is the cpu usage of this range per second,
+  // averaged over the last 30 minute period.
+  double cpu_time_per_second = 7 [(gogoproto.customname) = "CPUTimePerSecond"];
 }
 
 message PrettySpan {
@@ -1340,6 +1343,8 @@ message HotRangesResponse {
     // Read bytes per second is the recent number of bytes read per second on
     // this range.
     double read_bytes_per_second = 8;
+    // CPU time per second is the recent cpu usage in nanoseconds of this range.
+    double cpu_time_per_second = 9 [(gogoproto.customname) = "CPUTimePerSecond"];
   }
 
   // StoreResponse contains the part of a hot ranges report that
