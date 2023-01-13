@@ -791,6 +791,18 @@ var charts = []sectionDescription{
 				Title:   "Time Spent",
 				Metrics: []string{"queue.split.processingnanos"},
 			},
+			{
+				Title:   "Sized Based Splits",
+				Metrics: []string{"queue.split.size_based"},
+			},
+			{
+				Title:   "Load Based Splits",
+				Metrics: []string{"queue.split.load_based"},
+			},
+			{
+				Title:   "Span Configuration Based Splits",
+				Metrics: []string{"queue.split.span_config_based"},
+			},
 		},
 	},
 	{
