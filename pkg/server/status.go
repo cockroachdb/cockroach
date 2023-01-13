@@ -2585,16 +2585,21 @@ func (s *systemStatusServer) HotRangesV2(
 					}
 
 					ranges = append(ranges, &serverpb.HotRangesResponseV2_HotRange{
-						RangeID:           r.Desc.RangeID,
-						NodeID:            requestedNodeID,
-						QPS:               r.QueriesPerSecond,
-						TableName:         tableName,
-						SchemaName:        schemaName,
-						DatabaseName:      dbName,
-						IndexName:         indexName,
-						ReplicaNodeIds:    replicaNodeIDs,
-						LeaseholderNodeID: r.LeaseholderNodeID,
-						StoreID:           store.StoreID,
+						RangeID:             r.Desc.RangeID,
+						NodeID:              requestedNodeID,
+						QPS:                 r.QueriesPerSecond,
+						WritesPerSecond:     r.WritesPerSecond,
+						ReadsPerSecond:      r.ReadsPerSecond,
+						WriteBytesPerSecond: r.WriteBytesPerSecond,
+						ReadBytesPerSecond:  r.ReadBytesPerSecond,
+						CPUTimePerSecond:    r.CPUTimePerSecond,
+						TableName:           tableName,
+						SchemaName:          schemaName,
+						DatabaseName:        dbName,
+						IndexName:           indexName,
+						ReplicaNodeIds:      replicaNodeIDs,
+						LeaseholderNodeID:   r.LeaseholderNodeID,
+						StoreID:             store.StoreID,
 					})
 				}
 			}
