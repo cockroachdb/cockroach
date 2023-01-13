@@ -1264,6 +1264,7 @@ func (t *logicTest) newTestServerCluster(bootstrapBinaryPath string, upgradeBina
 		testserver.StoreOnDiskOpt(),
 		testserver.CockroachBinaryPathOpt(bootstrapBinaryPath),
 		testserver.UpgradeCockroachBinaryPathOpt(upgradeBinaryPath),
+		testserver.PollListenURLTimeoutOpt(120),
 		testserver.AddListenAddrPortOpt(ports[0]),
 		testserver.AddListenAddrPortOpt(ports[1]),
 		testserver.AddListenAddrPortOpt(ports[2]),
