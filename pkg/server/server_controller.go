@@ -223,7 +223,7 @@ const TenantSelectCookieName = `tenant`
 // DefaultTenantSelectSettingName is the name of the setting that
 // configures the default tenant to use when a client does not specify
 // a specific tenant.
-var DefaultTenantSelectSettingName = "server.connector.default_tenant"
+var DefaultTenantSelectSettingName = "server.controller.default_tenant"
 
 var defaultTenantSelect = settings.RegisterStringSetting(
 	settings.SystemOnly,
