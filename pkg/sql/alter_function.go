@@ -148,7 +148,7 @@ func (n *alterFunctionRenameNode) startExec(params runParams) error {
 	if existing != nil {
 		return pgerror.Newf(
 			pgcode.DuplicateFunction, "function %s already exists in schema %q",
-			tree.AsString(maybeExistingFuncObj), scDesc.GetName(),
+			tree.AsString(&maybeExistingFuncObj), scDesc.GetName(),
 		)
 	}
 
@@ -312,7 +312,7 @@ func (n *alterFunctionSetSchemaNode) startExec(params runParams) error {
 	if existing != nil {
 		return pgerror.Newf(
 			pgcode.DuplicateFunction, "function %s already exists in schema %q",
-			tree.AsString(maybeExistingFuncObj), targetSc.GetName(),
+			tree.AsString(&maybeExistingFuncObj), targetSc.GetName(),
 		)
 	}
 
