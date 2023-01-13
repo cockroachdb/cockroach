@@ -34,6 +34,9 @@ import (
 type KVFetcher struct {
 	KVBatchFetcher
 
+	pushKV               storage.PushKVFn
+	mvccDecodingStrategy storage.MVCCDecodingStrategy
+
 	kvs []roachpb.KeyValue
 
 	batchResponse []byte
@@ -272,13 +275,20 @@ func (f *KVFetcher) nextKV(
 	}
 }
 
+// Init implements the storage.NextKVer interface.
+// gcassert:inline
+func (f *KVFetcher) Init(
+	pushKV storage.PushKVFn, mvccDecodingStrategy storage.MVCCDecodingStrategy,
+) {
+	f.pushKV = pushKV
+	f.mvccDecodingStrategy = mvccDecodingStrategy
+}
+
 // NextKV implements the storage.NextKVer interface.
 // gcassert:inline
-func (f *KVFetcher) NextKV(
-	ctx context.Context, mvccDecodeStrategy storage.MVCCDecodingStrategy,
-) (ok bool, kv roachpb.KeyValue, needsCopy bool, err error) {
-	ok, kv, _, needsCopy, err = f.nextKV(ctx, mvccDecodeStrategy)
-	return ok, kv, needsCopy, err
+func (f *KVFetcher) NextKV(ctx context.Context) {
+	ok, kv, _, needsCopy, err := f.nextKV(ctx, f.mvccDecodingStrategy)
+	f.pushKV(ok, kv, needsCopy, err)
 }
 
 // SetupNextFetch overrides the same method from the wrapped KVBatchFetcher in

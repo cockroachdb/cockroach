@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
@@ -87,9 +86,13 @@ import (
 // case with multiple column families. (This case is handled by the
 // storage.pebbleResults via tracking offsets into the pebbleResults.repr).
 
+type PushKVFn func(ok bool, kv roachpb.KeyValue, needsCopy bool, err error)
+
 // NextKVer can fetch a new KV from somewhere. If MVCCDecodingStrategy is set
 // to MVCCDecodingRequired, the returned KV will include a timestamp.
 type NextKVer interface {
+	Init(PushKVFn, MVCCDecodingStrategy)
+
 	// NextKV returns the next kv from this NextKVer. Returns false if there are
 	// no more kvs to fetch, the kv that was fetched, and any errors that may
 	// have occurred.
@@ -101,9 +104,7 @@ type NextKVer interface {
 	// new memory, and by copying the returned KeyValue into a small slice that
 	// the caller owns, we avoid retaining two large backing byte slices at
 	// once.
-	NextKV(context.Context, MVCCDecodingStrategy) (
-		ok bool, kv roachpb.KeyValue, needsCopy bool, err error,
-	)
+	NextKV(context.Context)
 }
 
 // CFetcherWrapper is a wrapper around a colfetcher.cFetcher that populates only
@@ -171,31 +172,69 @@ const (
 // until the next call to NextKV.
 type mvccScanFetchAdapter struct {
 	scanner *pebbleMVCCScanner
+	pushKV  PushKVFn
 	machine onNextKVFn
 	results singleResults
 }
 
 var _ NextKVer = &mvccScanFetchAdapter{}
 
+// Init implements the NextKVer interface.
+func (f *mvccScanFetchAdapter) Init(pushKV PushKVFn, mvccDecodingStrategy MVCCDecodingStrategy) {
+	f.pushKV = pushKV
+	switch mvccDecodingStrategy {
+	case MVCCDecodingRequired:
+		f.results.onPut = func(key, value []byte) {
+			ok := true
+			kv := roachpb.KeyValue{Value: roachpb.Value{RawBytes: value}}
+			var err error
+			kv.Key, kv.Value.Timestamp, err = enginepb.DecodeKey(key)
+			if err != nil {
+				ok = false
+				err = errors.AssertionFailedf("invalid encoded mvcc key: %x", key)
+			}
+			// The caller must copy this KV if the table has multiple column
+			// families (which is the case when wholeRows is set).
+			needsCopy := f.scanner.wholeRows
+			pushKV(ok, kv, needsCopy, err)
+		}
+	case MVCCDecodingNotRequired:
+		f.results.onPut = func(key, value []byte) {
+			var ok bool
+			kv := roachpb.KeyValue{Value: roachpb.Value{RawBytes: value}}
+			var err error
+			kv.Key, _, ok = enginepb.SplitMVCCKey(key)
+			if !ok {
+				err = errors.AssertionFailedf("invalid encoded mvcc key: %x", key)
+			}
+			// The caller must copy this KV if the table has multiple column
+			// families (which is the case when wholeRows is set).
+			needsCopy := f.scanner.wholeRows
+			pushKV(ok, kv, needsCopy, err)
+		}
+	}
+}
+
 // NextKV implements the NextKVer interface.
-func (f *mvccScanFetchAdapter) NextKV(
-	ctx context.Context, mvccDecodingStrategy MVCCDecodingStrategy,
-) (ok bool, kv roachpb.KeyValue, needsCopy bool, err error) {
+func (f *mvccScanFetchAdapter) NextKV(ctx context.Context) {
 	// Perform the action according to the current state.
 	switch f.machine {
 	case onNextKVSeek:
 		if !f.scanner.seekToStartOfScan() {
-			return false, roachpb.KeyValue{}, false, f.scanner.err
+			f.pushKV(false, roachpb.KeyValue{}, false, f.scanner.err)
+			return
 		}
 		f.machine = onNextKVAdvance
 	case onNextKVAdvance:
 		if !f.scanner.advance() {
 			// No more keys in the scan.
-			return false, roachpb.KeyValue{}, false, nil
+			f.pushKV(false, roachpb.KeyValue{}, false, nil)
+			return
 		}
 	case onNextKVDone:
 		// No more keys in the scan.
-		return false, roachpb.KeyValue{}, false, nil
+		f.pushKV(false, roachpb.KeyValue{}, false, nil)
+		return
 	}
 	// Attempt to get one KV.
 	ok, added := f.scanner.getOne(ctx)
@@ -207,32 +246,8 @@ func (f *mvccScanFetchAdapter) NextKV(
 	if !added {
 		// The KV wasn't added for whatever reason (e.g. it could have been
 		// skipped over due to having been deleted), so just move on.
-		return f.NextKV(ctx, mvccDecodingStrategy)
+		f.NextKV(ctx)
 	}
-	// We have a KV to return. Decode it according to mvccDecodingStrategy.
-	kv = f.results.getLastKV()
-	encKey := kv.Key
-	if buildutil.CrdbTestBuild {
-		if len(encKey) == 0 || len(kv.Value.RawBytes) == 0 {
-			return false, kv, false, errors.AssertionFailedf("unexpectedly received an empty lastKV")
-		}
-	}
-	switch mvccDecodingStrategy {
-	case MVCCDecodingRequired:
-		kv.Key, kv.Value.Timestamp, err = enginepb.DecodeKey(encKey)
-		if err != nil {
-			return false, kv, false, errors.AssertionFailedf("invalid encoded mvcc key: %x", encKey)
-		}
-	case MVCCDecodingNotRequired:
-		kv.Key, _, ok = enginepb.SplitMVCCKey(encKey)
-		if !ok {
-			return false, kv, false, errors.AssertionFailedf("invalid encoded mvcc key: %x", encKey)
-		}
-	}
-	// The caller must copy this KV if the table has multiple column families
-	// (which is the case when wholeRows is set).
-	needsCopy = f.scanner.wholeRows
-	return true, kv, needsCopy, nil
 }
 
 // singleResults is an implementation of the results interface that is able to
@@ -254,9 +269,9 @@ type singleResults struct {
 	wrapper      CFetcherWrapper
 	maxFamilyID  uint32
 	onClear      func()
+	onPut        func(key, value []byte)
 	count, bytes int64
 	encKey       []byte
-	value        []byte
 }
 
 var _ results = &singleResults{}
@@ -294,7 +309,7 @@ func (s *singleResults) put(
 	s.count++
 	s.bytes += bytesInc
 	s.encKey = key
-	s.value = value
+	s.onPut(key, value)
 	return nil
 }
 
@@ -322,13 +337,6 @@ func (s *singleResults) lastRowHasFinalColumnFamily(reverse bool) bool {
 		return colFamilyID == 0
 	}
 	return colFamilyID == s.maxFamilyID
-}
-
-func (s *singleResults) getLastKV() roachpb.KeyValue {
-	return roachpb.KeyValue{
-		Key:   s.encKey,
-		Value: roachpb.Value{RawBytes: s.value},
-	}
 }
 
 // MVCCScanToCols is like MVCCScan, but it returns KVData in a serialized

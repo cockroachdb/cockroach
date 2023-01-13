@@ -239,6 +239,14 @@ type cFetcher struct {
 	bytesRead           int64
 	batchRequestsIssued int64
 
+	pushAdapter struct {
+		ok        bool
+		kv        roachpb.KeyValue
+		needsCopy bool
+		err       error
+		cb        storage.PushKVFn
+	}
+
 	// machine contains fields that get updated during the run of the fetcher.
 	machine struct {
 		// state is the queue of next states of the state machine. The 0th entry
@@ -482,6 +490,10 @@ func (cf *cFetcher) Init(
 	if kvFetcher, ok := nextKVer.(*row.KVFetcher); ok {
 		cf.fetcher = kvFetcher
 	}
+	cf.pushAdapter.cb = func(ok bool, kv roachpb.KeyValue, needsCopy bool, err error) {
+		cf.pushAdapter.ok, cf.pushAdapter.kv, cf.pushAdapter.needsCopy, cf.pushAdapter.err = ok, kv, needsCopy, err
+	}
+	cf.nextKVer.Init(cf.pushAdapter.cb, cf.mvccDecodeStrategy)
 	cf.accountingHelper.Init(allocator, cf.memoryLimit, cf.table.typs)
 	cf.machine.state[0] = stateResetBatch
 	cf.machine.state[1] = stateInitFetch
@@ -665,7 +677,8 @@ func (cf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 			return nil, errors.New("invalid fetcher state")
 		case stateInitFetch:
 			cf.machine.firstKeyInRow = nil
-			moreKVs, kv, needsCopy, err := cf.nextKVer.NextKV(ctx, cf.mvccDecodeStrategy)
+			cf.nextKVer.NextKV(ctx)
+			moreKVs, kv, needsCopy, err := cf.pushAdapter.ok, cf.pushAdapter.kv, cf.pushAdapter.needsCopy, cf.pushAdapter.err
 			if err != nil {
 				return nil, convertFetchError(&cf.table.spec, err)
 			}
@@ -816,7 +829,8 @@ func (cf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 			cf.machine.state[0] = stateFetchNextKVWithUnfinishedRow
 
 		case stateFetchNextKVWithUnfinishedRow:
-			moreKVs, kv, needsCopy, err := cf.nextKVer.NextKV(ctx, cf.mvccDecodeStrategy)
+			cf.nextKVer.NextKV(ctx)
+			moreKVs, kv, needsCopy, err := cf.pushAdapter.ok, cf.pushAdapter.kv, cf.pushAdapter.needsCopy, cf.pushAdapter.err
 			if err != nil {
 				return nil, convertFetchError(&cf.table.spec, err)
 			}
