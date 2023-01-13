@@ -451,3 +451,64 @@ vectorized: true
       estimated row count: 1,000 (missing stats)
       table: abc@abc_pkey
       spans: FULL SCAN
+
+statement ok
+CREATE TABLE corr (
+  k INT PRIMARY KEY,
+  i INT,
+  FAMILY (k, i)
+);
+INSERT INTO corr VALUES (1, 10), (2, 22), (3, 30), (4, 40), (5, 50)
+
+# Case where the subquery in a filter cannot be hoisted into an apply-join.
+query T
+EXPLAIN (VERBOSE)
+SELECT * FROM corr
+WHERE CASE WHEN k < 5 THEN k*10 = (SELECT i FROM corr tmp WHERE k = corr.k) END
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ columns: (k, i)
+│ estimated row count: 333 (missing stats)
+│ filter: CASE WHEN k < 5 THEN (k * 10) = subquery(k) ELSE CAST(NULL AS BOOL) END
+│
+└── • scan
+      columns: (k, i)
+      estimated row count: 1,000 (missing stats)
+      table: corr@corr_pkey
+      spans: FULL SCAN
+
+# Case where the subquery in a projection cannot be hoisted into an apply-join.
+query T
+EXPLAIN (VERBOSE)
+SELECT k, i, CASE WHEN k > 1 THEN (SELECT i FROM corr tmp WHERE k = corr.k-1) ELSE 0 END AS prev_i
+FROM corr
+----
+distribution: local
+vectorized: true
+·
+• render
+│ columns: (k, i, prev_i)
+│ render prev_i: CASE WHEN k > 1 THEN subquery(k) ELSE 0 END
+│ render k: k
+│ render i: i
+│
+└── • scan
+      columns: (k, i)
+      estimated row count: 1,000 (missing stats)
+      table: corr@corr_pkey
+      spans: FULL SCAN
+
+# Each invocation of the subquery is re-optimized, so the scans are constrained
+# by constant values substituted for corr.k.
+query T kvtrace
+SELECT k, i, CASE WHEN k > 1 THEN (SELECT i FROM corr tmp WHERE k = corr.k-1) ELSE 0 END AS prev_i
+FROM corr
+----
+Scan /Table/110/{1-2}
+Scan /Table/110/1/1/0
+Scan /Table/110/1/2/0
+Scan /Table/110/1/3/0
+Scan /Table/110/1/4/0
