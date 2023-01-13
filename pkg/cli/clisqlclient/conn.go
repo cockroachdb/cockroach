@@ -430,13 +430,13 @@ func (c *sqlConn) checkServerMetadata(ctx context.Context) error {
 	// Report the cluster ID only if it it could be fetched
 	// successfully, and it has changed since the last connection.
 	if old := c.clusterID; newClusterID != c.clusterID {
-		c.clusterID = newClusterID
+		label := ""
 		if old != "" {
-			return errors.Errorf("the cluster ID has changed!\nPrevious ID: %s\nNew ID: %s",
-				old, newClusterID)
+			label = "New "
+			fmt.Fprintf(c.errw, "\nwarning: the cluster ID has changed!\n# Previous ID: %s\n", old)
 		}
 		c.clusterID = newClusterID
-		fmt.Fprintln(c.infow, "# Cluster ID:", c.clusterID)
+		fmt.Fprintf(c.infow, "# %sCluster ID: %v\n", label, c.clusterID)
 		if c.clusterOrganization != "" {
 			fmt.Fprintln(c.infow, "# Organization:", c.clusterOrganization)
 		}

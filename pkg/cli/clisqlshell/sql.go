@@ -1679,7 +1679,7 @@ func (c *cliState) switchToURL(newURL *pgurl.URL) error {
 	}
 	c.conn.SetURL(newURL.ToPQ().String())
 	c.conn.SetMissingPassword(!usePw || !pwSet)
-	return nil
+	return c.conn.EnsureConn(context.Background())
 }
 
 const maxRecursionLevels = 10
