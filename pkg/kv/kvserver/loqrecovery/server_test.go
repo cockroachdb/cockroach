@@ -12,6 +12,7 @@ package loqrecovery_test
 
 import (
 	"context"
+	"strconv"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -20,12 +21,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/loqrecovery"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/loqrecovery/loqrecoverypb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )
 
@@ -179,4 +182,104 @@ func getInfoCounters(info loqrecoverypb.ClusterReplicaInfo) clusterInfoCounters 
 		replicas:    totalReplicas,
 		descriptors: len(info.Descriptors),
 	}
+}
+
+func TestGetRecoveryState(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	reg := server.NewStickyInMemEnginesRegistry()
+	defer reg.CloseAllStickyInMemEngines()
+
+	args := base.TestClusterArgs{
+		ServerArgsPerNode: make(map[int]base.TestServerArgs),
+	}
+	for i := 0; i < 3; i++ {
+		args.ServerArgsPerNode[i] = base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				Server: &server.TestingKnobs{
+					StickyEngineRegistry: reg,
+				},
+			},
+			StoreSpecs: []base.StoreSpec{
+				{
+					InMemory:               true,
+					StickyInMemoryEngineID: strconv.FormatInt(int64(i), 10),
+				},
+			},
+		}
+	}
+	tc := testcluster.NewTestCluster(t, 3, args)
+	tc.Start(t)
+	defer tc.Stopper().Stop(ctx)
+
+	planStores := prepInMemPlanStores(t, args.ServerArgsPerNode)
+
+	adm, err := tc.GetAdminClient(ctx, t, 0)
+	require.NoError(t, err, "failed to get admin client")
+
+	resp, err := adm.RecoveryVerify(ctx, &serverpb.RecoveryVerifyRequest{})
+	require.NoError(t, err)
+	for _, s := range resp.Statuses {
+		require.Nil(t, s.PendingPlanID, "no pending plan")
+	}
+
+	// Injecting plan into 2 nodes out of 3.
+	plan := loqrecoverypb.ReplicaUpdatePlan{
+		PlanID: uuid.MakeV4(),
+	}
+	for i := 0; i < 2; i++ {
+		require.NoError(t, planStores[i].SavePlan(plan), "failed to save plan on node n%d", i)
+	}
+
+	// First we test that plans are successfully picked up by status call.
+	resp, err = adm.RecoveryVerify(ctx, &serverpb.RecoveryVerifyRequest{})
+	require.NoError(t, err)
+	statuses := aggregateStatusByNode(resp)
+	require.Equal(t, &plan.PlanID, statuses[1].PendingPlanID, "incorrect plan id on node 0")
+	require.Equal(t, &plan.PlanID, statuses[2].PendingPlanID, "incorrect plan id on node 1")
+	require.Nil(t, statuses[3].PendingPlanID, "unexpected plan id on node 2")
+
+	// Check we can collect partial results.
+	tc.StopServer(1)
+
+	testutils.SucceedsSoon(t, func() error {
+		resp, err = adm.RecoveryVerify(ctx, &serverpb.RecoveryVerifyRequest{})
+		if err != nil {
+			return err
+		}
+		if len(resp.Statuses) > 2 {
+			return errors.New("too many statuses in response")
+		}
+		return nil
+	})
+
+	statuses = aggregateStatusByNode(resp)
+	require.Equal(t, &plan.PlanID, statuses[1].PendingPlanID, "incorrect plan id")
+	require.Nil(t, statuses[3].PendingPlanID, "unexpected plan id")
+}
+
+func aggregateStatusByNode(
+	resp *serverpb.RecoveryVerifyResponse,
+) map[roachpb.NodeID]loqrecoverypb.NodeRecoveryStatus {
+	statuses := make(map[roachpb.NodeID]loqrecoverypb.NodeRecoveryStatus)
+	for _, s := range resp.Statuses {
+		statuses[s.NodeID] = s
+	}
+	return statuses
+}
+
+func prepInMemPlanStores(
+	t *testing.T, serverArgs map[int]base.TestServerArgs,
+) map[int]loqrecovery.PlanStore {
+	pss := make(map[int]loqrecovery.PlanStore)
+	for id, args := range serverArgs {
+		reg := args.Knobs.Server.(*server.TestingKnobs).StickyEngineRegistry
+		store, err := reg.GetUnderlyingFS(args.StoreSpecs[0])
+		require.NoError(t, err, "can't create loq recovery plan store")
+		pss[id] = loqrecovery.NewPlanStore(".", store)
+	}
+	return pss
 }

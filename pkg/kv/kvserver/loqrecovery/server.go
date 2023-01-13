@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
 
@@ -51,6 +52,7 @@ type visitNodesFn func(ctx context.Context, retryOpts retry.Options,
 ) error
 
 type Server struct {
+	nodeIDContainer      *base.NodeIDContainer
 	stores               *kvserver.Stores
 	visitNodes           visitNodesFn
 	planStore            PlanStore
@@ -59,6 +61,7 @@ type Server struct {
 }
 
 func NewServer(
+	nodeIDContainer *base.NodeIDContainer,
 	stores *kvserver.Stores,
 	planStore PlanStore,
 	g *gossip.Gossip,
@@ -78,6 +81,7 @@ func NewServer(
 		forwardReplicaFilter = rk.ForwardReplicaFilter
 	}
 	return &Server{
+		nodeIDContainer:      nodeIDContainer,
 		stores:               stores,
 		visitNodes:           makeVisitAvailableNodes(g, loc, rpcCtx),
 		planStore:            planStore,
@@ -205,6 +209,52 @@ func (s Server) ServeClusterReplicas(
 			nodes++
 			return nil
 		})
+}
+
+func (s Server) NodeStatus(
+	_ context.Context, _ *serverpb.RecoveryNodeStatusRequest,
+) (*serverpb.RecoveryNodeStatusResponse, error) {
+	// TODO: report full status.
+	plan, err := s.planStore.HasPlan()
+	if err != nil {
+		return nil, err
+	}
+	var planID *uuid.UUID
+	if !plan.Empty() {
+		planID = &plan.PlanID
+	}
+	return &serverpb.RecoveryNodeStatusResponse{
+		Status: &loqrecoverypb.NodeRecoveryStatus{
+			NodeID:        s.nodeIDContainer.Get(),
+			PendingPlanID: planID,
+		},
+	}, nil
+}
+
+func (s Server) Verify(
+	ctx context.Context, request *serverpb.RecoveryVerifyRequest,
+) (*serverpb.RecoveryVerifyResponse, error) {
+	var nss []loqrecoverypb.NodeRecoveryStatus
+	err := s.visitNodes(ctx, replicaInfoStreamRetryOptions,
+		func(nodeID roachpb.NodeID, client serverpb.AdminClient) error {
+			res, err := client.RecoveryNodeStatus(ctx, &serverpb.RecoveryNodeStatusRequest{})
+			if err != nil {
+				return errors.Mark(errors.Wrapf(err, "failed to retrieve status of n%d", nodeID), errMarkRetry)
+			}
+			if res.Status != nil {
+				nss = append(nss, *res.Status)
+			}
+			return nil
+		})
+	if err != nil {
+		return nil, err
+	}
+
+	// TODO: retrieve status of requested nodes (for decommission check)
+	// TODO: retrieve unavailable ranges report
+	return &serverpb.RecoveryVerifyResponse{
+		Statuses: nss,
+	}, nil
 }
 
 func makeVisitAvailableNodes(

@@ -1026,7 +1026,15 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create loss of quorum recovery server")
 	}
-	recoveryServer := loqrecovery.NewServer(stores, planStore, g, cfg.Locality, rpcContext, cfg.TestingKnobs.LOQRecovery)
+	recoveryServer := loqrecovery.NewServer(
+		nodeIDContainer,
+		stores,
+		planStore,
+		g,
+		cfg.Locality,
+		rpcContext,
+		cfg.TestingKnobs.LOQRecovery,
+	)
 
 	*lateBoundServer = Server{
 		nodeIDContainer:        nodeIDContainer,
