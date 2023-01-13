@@ -74,8 +74,7 @@ func TestEvaluatesCDCFunctionOverloads(t *testing.T) {
 		for fn, preferredOverload := range map[string]preferredFn{
 			"statement_timestamp":           expectTSTZ,
 			"transaction_timestamp":         expectTSTZ,
-			"cdc_mvcc_timestamp":            expectHLC,
-			"cdc_updated_timestamp":         expectHLC,
+			"event_schema_timestamp":        expectHLC,
 			"changefeed_creation_timestamp": expectHLC,
 		} {
 			t.Run(fn, func(t *testing.T) {
@@ -85,7 +84,7 @@ func TestEvaluatesCDCFunctionOverloads(t *testing.T) {
 
 				targetTS := rowTS
 				switch fn {
-				case "cdc_updated_timestamp":
+				case "event_schema_timestamp":
 					targetTS = schemaTS
 				case "changefeed_creation_timestamp":
 					targetTS = createTS
@@ -132,7 +131,7 @@ func TestEvaluatesCDCFunctionOverloads(t *testing.T) {
 					// should have no bearing on the returned values -- we should see
 					// the same thing we saw before.
 					updatedExpectations = initialExpectations
-				case "cdc_updated_timestamp":
+				case "event_schema_timestamp":
 					targetTS = testRow.SchemaTS
 					fallthrough
 				default:
@@ -174,11 +173,11 @@ func TestEvaluatesCDCFunctionOverloads(t *testing.T) {
 		})
 	})
 
-	t.Run("cdc_is_delete", func(t *testing.T) {
+	t.Run("event_op", func(t *testing.T) {
 		schemaTS := s.Clock().Now()
 		testRow := makeEventRow(t, desc, schemaTS, false, s.Clock().Now())
 		e, err := newEvaluator(&execCfg, &semaCtx, testRow.EventDescriptor,
-			"SELECT cdc_is_delete() FROM foo")
+			"SELECT event_op() = 'delete' AS row_deleted FROM foo")
 		require.NoError(t, err)
 		defer e.Close()
 
@@ -187,7 +186,7 @@ func TestEvaluatesCDCFunctionOverloads(t *testing.T) {
 			p, err := e.Eval(ctx, testRow, cdcevent.Row{})
 			require.NoError(t, err)
 			require.Equal(t,
-				map[string]string{"cdc_is_delete": fmt.Sprintf("%t", expectDelete)},
+				map[string]string{"row_deleted": fmt.Sprintf("%t", expectDelete)},
 				slurpValues(t, p))
 		}
 	})

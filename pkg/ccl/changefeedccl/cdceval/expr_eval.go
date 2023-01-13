@@ -183,7 +183,7 @@ func (e *familyEvaluator) eval(
 	}
 
 	// Setup context.
-	if err := e.setupContextForRow(ctx, updatedRow); err != nil {
+	if err := e.setupContextForRow(ctx, updatedRow, prevRow.IsDeleted()); err != nil {
 		return cdcevent.Row{}, err
 	}
 
@@ -447,9 +447,12 @@ func (e *familyEvaluator) copyPrevRow(prev cdcevent.Row) error {
 
 // setupContextForRow configures evaluation context with the provided row
 // information.
-func (e *familyEvaluator) setupContextForRow(ctx context.Context, updated cdcevent.Row) error {
+func (e *familyEvaluator) setupContextForRow(
+	ctx context.Context, updated cdcevent.Row, isNew bool,
+) error {
 	e.rowEvalCtx.ctx = ctx
 	e.rowEvalCtx.updatedRow = updated
+	e.rowEvalCtx.isNewRow = isNew
 	return nil
 }
 
@@ -479,6 +482,7 @@ type rowEvalContext struct {
 	ctx        context.Context
 	startTime  hlc.Timestamp
 	updatedRow cdcevent.Row
+	isNewRow   bool
 }
 
 // cdcAnnotationAddr is the address used to store relevant information
