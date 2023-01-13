@@ -130,6 +130,9 @@ func (a tenantAuthorizer) authorize(
 	case "/cockroach.roachpb.Internal/GetRangeDescriptors":
 		return a.authGetRangeDescriptors(tenID, req.(*roachpb.GetRangeDescriptorsRequest))
 
+	case "/cockroach.server.serverpb.Status/HotRangesV2":
+		return a.authHotRangesV2(tenID)
+
 	default:
 		return authErrorf("unknown method %q", fullMethod)
 	}
@@ -348,6 +351,16 @@ func (a tenantAuthorizer) authUpdateSpanConfigs(
 		}
 	}
 
+	return nil
+}
+
+// authHotRangesV2 authorizes the provided tenant to invoke the
+// HotRangesV2 RPC with the provided args. It requires that an authorized
+// tenantID has been set.
+func (a tenantAuthorizer) authHotRangesV2(tenID roachpb.TenantID) error {
+	if !tenID.IsSet() {
+		return authErrorf("hot ranges request with unspecified tenant not permitted")
+	}
 	return nil
 }
 
