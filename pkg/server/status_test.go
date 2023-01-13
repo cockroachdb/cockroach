@@ -1054,6 +1054,16 @@ func TestHotRangesResponse(t *testing.T) {
 				if r.Desc.RangeID == 0 || (len(r.Desc.StartKey) == 0 && len(r.Desc.EndKey) == 0) {
 					t.Errorf("unexpected empty/unpopulated range descriptor: %+v", r.Desc)
 				}
+				if r.QueriesPerSecond > 0 {
+					if r.ReadsPerSecond == 0 && r.WritesPerSecond == 0 {
+						t.Errorf("qps %.2f > 0, expected either reads=%.2f or writes=%.2f to be non-zero",
+							r.QueriesPerSecond, r.ReadsPerSecond, r.WritesPerSecond)
+					}
+					if r.CPUTimePerSecond == 0 {
+						t.Errorf("qps %.2f > 0, expected cpu=%.2f to be non-zero",
+							r.QueriesPerSecond, r.CPUTimePerSecond)
+					}
+				}
 				if r.QueriesPerSecond > lastQPS {
 					t.Errorf("unexpected increase in qps between ranges; prev=%.2f, current=%.2f, desc=%v",
 						lastQPS, r.QueriesPerSecond, r.Desc)
