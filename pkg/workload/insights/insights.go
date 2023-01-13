@@ -48,12 +48,12 @@ const (
 )
 
 var tableNames = []string{tableNameA, tableNameB}
+var RandomSeed = workload.NewUint64RandomSeed()
 
 type insights struct {
 	flags     workload.Flags
 	connFlags *workload.ConnFlags
 
-	seed                 uint64
 	rowCount, batchSize  int
 	payloadBytes, ranges int
 }
@@ -66,6 +66,7 @@ var insightsMeta = workload.Meta{
 	Name:         `insights`,
 	Description:  `This workload executes queries that will be detected by insights`,
 	Version:      `1.0.0`,
+	RandomSeed:   RandomSeed,
 	PublicFacing: false,
 	New: func() workload.Generator {
 		g := &insights{}
@@ -73,11 +74,11 @@ var insightsMeta = workload.Meta{
 		g.flags.Meta = map[string]workload.FlagMeta{
 			`batch-size`: {RuntimeOnly: true},
 		}
-		g.flags.Uint64Var(&g.seed, `seed`, 1, `Key hash seed.`)
 		g.flags.IntVar(&g.rowCount, `rows`, defaultRows, `Initial number of accounts in insights table.`)
 		g.flags.IntVar(&g.batchSize, `batch-size`, defaultBatchSize, `Number of rows in each batch of initial data.`)
 		g.flags.IntVar(&g.payloadBytes, `payload-bytes`, defaultPayloadBytes, `Size of the payload field in each initial row.`)
 		g.flags.IntVar(&g.ranges, `ranges`, defaultRanges, `Initial number of ranges in insights table.`)
+		RandomSeed.AddFlag(&g.flags)
 		g.connFlags = workload.NewConnFlags(&g.flags)
 		return g
 	},
@@ -150,7 +151,7 @@ func (b *insights) Tables() []workload.Table {
 			InitialRows: workload.BatchedTuples{
 				NumBatches: numBatches,
 				FillBatch: func(batchIdx int, cb coldata.Batch, a *bufalloc.ByteAllocator) {
-					rng := rand.NewSource(b.seed + uint64(batchIdx))
+					rng := rand.NewSource(RandomSeed.Seed() + uint64(batchIdx))
 
 					rowBegin, rowEnd := batchIdx*b.batchSize, (batchIdx+1)*b.batchSize
 					if rowEnd > b.rowCount {
@@ -207,7 +208,7 @@ func (b *insights) Ops(
 	db.SetMaxIdleConns(b.connFlags.Concurrency + 1)
 
 	ql := workload.QueryLoad{SQLDatabase: sqlDatabase}
-	rng := rand.New(rand.NewSource(b.seed))
+	rng := rand.New(rand.NewSource(RandomSeed.Seed()))
 	for i := 0; i < b.connFlags.Concurrency; i++ {
 		temp := i
 		hists := reg.GetHandle()

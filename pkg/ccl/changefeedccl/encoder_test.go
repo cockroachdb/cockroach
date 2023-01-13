@@ -824,6 +824,8 @@ func TestAvroLedger(t *testing.T) {
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		ctx := context.Background()
+		// assertions depend on this seed
+		ledger.RandomSeed.Set(1)
 		gen := ledger.FromFlags(`--customers=1`)
 		var l workloadsql.InsertsDataLoader
 		_, err := workloadsql.Setup(ctx, s.DB, gen, l)

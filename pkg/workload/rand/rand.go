@@ -33,13 +33,13 @@ import (
 	"github.com/spf13/pflag"
 )
 
+var RandomSeed = workload.NewInt64RandomSeed()
+
 type random struct {
 	flags     workload.Flags
 	connFlags *workload.ConnFlags
 
 	batchSize int
-
-	seed int64
 
 	tableName string
 
@@ -56,6 +56,7 @@ func init() {
 var randMeta = workload.Meta{
 	Name:        `rand`,
 	Description: `random writes to table`,
+	RandomSeed:  RandomSeed,
 	Version:     `1.0.0`,
 	New: func() workload.Generator {
 		g := &random{}
@@ -67,9 +68,9 @@ var randMeta = workload.Meta{
 		g.flags.StringVar(&g.tableName, `table`, ``, `Table to write to`)
 		g.flags.IntVar(&g.batchSize, `batch`, 1, `Number of rows to insert in a single SQL statement`)
 		g.flags.StringVar(&g.method, `method`, `upsert`, `Choice of DML name: insert, upsert, ioc-update (insert on conflict update), ioc-nothing (insert on conflict no nothing)`)
-		g.flags.Int64Var(&g.seed, `seed`, 1, `Key hash seed.`)
 		g.flags.StringVar(&g.primaryKey, `primary-key`, ``, `ioc-update and ioc-nothing require primary key`)
 		g.flags.IntVar(&g.nullPct, `null-percent`, 5, `Percent random nulls`)
+		RandomSeed.AddFlag(&g.flags)
 		g.connFlags = workload.NewConnFlags(&g.flags)
 		return g
 	},
@@ -89,7 +90,7 @@ func (w *random) Hooks() workload.Hooks {
 // Tables implements the Generator interface.
 func (w *random) Tables() []workload.Table {
 	tables := make([]workload.Table, w.tables)
-	rng := rand.New(rand.NewSource(w.seed))
+	rng := rand.New(rand.NewSource(RandomSeed.Seed()))
 	for i := 0; i < w.tables; i++ {
 		createTable := randgen.RandCreateTable(rng, "table", rng.Int(), false /* isMultiRegion */)
 		ctx := tree.NewFmtCtx(tree.FmtParsable)
@@ -291,7 +292,7 @@ AND    i.indisprimary`, relid)
 			hists:     reg.GetHandle(),
 			db:        db,
 			cols:      nonComputedCols,
-			rng:       rand.New(rand.NewSource(w.seed + int64(i))),
+			rng:       rand.New(rand.NewSource(RandomSeed.Seed() + int64(i))),
 			writeStmt: writeStmt,
 		}
 		ql.WorkerFns = append(ql.WorkerFns, op.run)

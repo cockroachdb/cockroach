@@ -84,11 +84,12 @@ const (
 	timeFormatTemplate = `2006-01-02 15:04:05.000000-07:00`
 )
 
+var RandomSeed = workload.NewUint64RandomSeed()
+
 type ycsb struct {
 	flags     workload.Flags
 	connFlags *workload.ConnFlags
 
-	seed        uint64
 	timeString  bool
 	insertHash  bool
 	zeroPadding int
@@ -115,6 +116,7 @@ var ycsbMeta = workload.Meta{
 	Name:         `ycsb`,
 	Description:  `YCSB is the Yahoo! Cloud Serving Benchmark`,
 	Version:      `1.0.0`,
+	RandomSeed:   RandomSeed,
 	PublicFacing: true,
 	New: func() workload.Generator {
 		g := &ycsb{}
@@ -122,7 +124,6 @@ var ycsbMeta = workload.Meta{
 		g.flags.Meta = map[string]workload.FlagMeta{
 			`workload`: {RuntimeOnly: true},
 		}
-		g.flags.Uint64Var(&g.seed, `seed`, 1, `Key hash seed.`)
 		g.flags.BoolVar(&g.timeString, `time-string`, false, `Prepend field[0-9] data with current time in microsecond precision.`)
 		g.flags.BoolVar(&g.insertHash, `insert-hash`, true, `Key to be hashed or ordered.`)
 		g.flags.IntVar(&g.zeroPadding, `zero-padding`, 1, `Key using "insert-hash=false" has zeros padded to left to make this length of digits.`)
@@ -138,6 +139,7 @@ var ycsbMeta = workload.Meta{
 		g.flags.StringVar(&g.scanLengthDistribution, `scan-length-distribution`, `uniform`, `Distribution for scan length generation [zipfian, uniform]. Primarily used for workload E.`)
 		g.flags.Uint64Var(&g.minScanLength, `min-scan-length`, 1, `The minimum length for scan operations. Primarily used for workload E.`)
 		g.flags.Uint64Var(&g.maxScanLength, `max-scan-length`, 1000, `The maximum length for scan operations. Primarily used for workload E.`)
+		RandomSeed.AddFlag(&g.flags)
 
 		// TODO(dan): g.flags.Uint64Var(&g.maxWrites, `max-writes`,
 		//     7*24*3600*1500,  // 7 days at 5% writes and 30k ops/s
@@ -345,7 +347,7 @@ func (g *ycsb) Tables() []workload.Table {
 					config:   g,
 					hashFunc: fnv.New64(),
 				}
-				rng := rand.NewSource(g.seed + uint64(batchIdx))
+				rng := rand.NewSource(RandomSeed.Seed() + uint64(batchIdx))
 
 				var tmpbuf [fieldLength]byte
 				for rowIdx := rowBegin; rowIdx < rowEnd; rowIdx++ {
@@ -426,7 +428,7 @@ func (g *ycsb) Ops(
 	rowCounter := NewAcknowledgedCounter((uint64)(g.recordCount))
 
 	var requestGen randGenerator
-	requestGenRng := rand.New(rand.NewSource(g.seed))
+	requestGenRng := rand.New(rand.NewSource(RandomSeed.Seed()))
 	switch strings.ToLower(g.requestDistribution) {
 	case "zipfian":
 		requestGen, err = NewZipfGenerator(
@@ -444,7 +446,7 @@ func (g *ycsb) Ops(
 	}
 
 	var scanLengthGen randGenerator
-	scanLengthGenRng := rand.New(rand.NewSource(g.seed + 1))
+	scanLengthGenRng := rand.New(rand.NewSource(RandomSeed.Seed() + 1))
 	switch strings.ToLower(g.scanLengthDistribution) {
 	case "zipfian":
 		scanLengthGen, err = NewZipfGenerator(scanLengthGenRng, g.minScanLength, g.maxScanLength, defaultTheta, false /* verbose */)
@@ -477,6 +479,7 @@ func (g *ycsb) Ops(
 			}
 		}
 		conn, err := db.Conn(ctx)
+		rng := rand.New(rand.NewSource(RandomSeed.Seed() + uint64(i)))
 		if err != nil {
 			return workload.QueryLoad{}, err
 		}
@@ -509,7 +512,6 @@ func (g *ycsb) Ops(
 			updateStmts[i] = stmt
 		}
 
-		rng := rand.New(rand.NewSource(g.seed + uint64(i)))
 		w := &ycsbWorker{
 			config:                  g,
 			hists:                   reg.GetHandle(),

@@ -175,11 +175,12 @@ var cities = []struct {
 	{city: "rome", region: "europe-west1"},
 }
 
+var RandomSeed = workload.NewUint64RandomSeed()
+
 type movr struct {
 	flags     workload.Flags
 	connFlags *workload.ConnFlags
 
-	seed                              uint64
 	users, vehicles, rides, histories cityDistributor
 	numPromoCodes                     int
 	numUserPromoCodes                 int
@@ -203,11 +204,11 @@ var movrMeta = workload.Meta{
 	Name:         `movr`,
 	Description:  `MovR is a fictional vehicle sharing company`,
 	Version:      `1.0.0`,
+	RandomSeed:   RandomSeed,
 	PublicFacing: true,
 	New: func() workload.Generator {
 		g := &movr{}
 		g.flags.FlagSet = pflag.NewFlagSet(`movr`, pflag.ContinueOnError)
-		g.flags.Uint64Var(&g.seed, `seed`, 1, `Key hash seed.`)
 		g.flags.IntVar(&g.users.numRows, `num-users`, 50, `Initial number of users.`)
 		g.flags.IntVar(&g.vehicles.numRows, `num-vehicles`, 15, `Initial number of vehicles.`)
 		g.flags.IntVar(&g.rides.numRows, `num-rides`, 500, `Initial number of rides.`)
@@ -235,6 +236,7 @@ Otherwise defaults to the gateway_region.`,
 		g.flags.IntVar(&g.numPromoCodes, `num-promo-codes`, 1000, `Initial number of promo codes.`)
 		g.flags.IntVar(&g.numUserPromoCodes, `num-user-promos`, 5, `Initial number of promo codes in use.`)
 		g.flags.IntVar(&g.ranges, `num-ranges`, 9, `Initial number of ranges to break the tables into`)
+		RandomSeed.AddFlag(&g.flags)
 		g.connFlags = workload.NewConnFlags(&g.flags)
 		g.creationTime = time.Date(2019, 1, 2, 3, 4, 5, 6, time.UTC)
 		return g
@@ -607,7 +609,7 @@ func (d cityDistributor) randRowInCity(rng *rand.Rand, cityIdx int) int {
 }
 
 func (g *movr) movrUsersInitialRow(rowIdx int) []interface{} {
-	rng := rand.New(rand.NewSource(g.seed + uint64(rowIdx)))
+	rng := rand.New(rand.NewSource(RandomSeed.Seed() + uint64(rowIdx)))
 	cityIdx := g.users.cityForRow(rowIdx)
 	city := cities[cityIdx]
 
@@ -625,7 +627,7 @@ func (g *movr) movrUsersInitialRow(rowIdx int) []interface{} {
 }
 
 func (g *movr) movrVehiclesInitialRow(rowIdx int) []interface{} {
-	rng := rand.New(rand.NewSource(g.seed + uint64(rowIdx)))
+	rng := rand.New(rand.NewSource(RandomSeed.Seed() + uint64(rowIdx)))
 	cityIdx := g.vehicles.cityForRow(rowIdx)
 	city := cities[cityIdx]
 
@@ -650,7 +652,7 @@ func (g *movr) movrVehiclesInitialRow(rowIdx int) []interface{} {
 }
 
 func (g *movr) movrRidesInitialRow(rowIdx int) []interface{} {
-	rng := rand.New(rand.NewSource(g.seed + uint64(rowIdx)))
+	rng := rand.New(rand.NewSource(RandomSeed.Seed() + uint64(rowIdx)))
 	cityIdx := g.rides.cityForRow(rowIdx)
 	city := cities[cityIdx]
 
@@ -680,7 +682,7 @@ func (g *movr) movrRidesInitialRow(rowIdx int) []interface{} {
 }
 
 func (g *movr) movrVehicleLocationHistoriesInitialRow(rowIdx int) []interface{} {
-	rng := rand.New(rand.NewSource(g.seed + uint64(rowIdx)))
+	rng := rand.New(rand.NewSource(RandomSeed.Seed() + uint64(rowIdx)))
 	cityIdx := g.histories.cityForRow(rowIdx)
 	city := cities[cityIdx]
 
@@ -699,7 +701,7 @@ func (g *movr) movrVehicleLocationHistoriesInitialRow(rowIdx int) []interface{} 
 }
 
 func (g *movr) movrPromoCodesInitialRow(rowIdx int) []interface{} {
-	rng := rand.New(rand.NewSource(g.seed + uint64(rowIdx)))
+	rng := rand.New(rand.NewSource(RandomSeed.Seed() + uint64(rowIdx)))
 	code := strings.ToLower(strings.Join(g.faker.Words(rng, 3), `_`))
 	code = fmt.Sprintf("%d_%s", rowIdx, code)
 	description := g.faker.Paragraph(rng)
@@ -718,7 +720,7 @@ func (g *movr) movrPromoCodesInitialRow(rowIdx int) []interface{} {
 }
 
 func (g *movr) movrUserPromoCodesInitialRow(rowIdx int) []interface{} {
-	rng := rand.New(rand.NewSource(g.seed + uint64(rowIdx)))
+	rng := rand.New(rand.NewSource(RandomSeed.Seed() + uint64(rowIdx)))
 	// Make evenly-spaced UUIDs sorted in the same order as the rows.
 	var id uuid.UUID
 	id.DeterministicV4(uint64(rowIdx), uint64(g.users.numRows))

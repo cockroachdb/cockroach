@@ -42,11 +42,12 @@ const (
 	maxTransfer         = 999
 )
 
+var RandomSeed = workload.NewUint64RandomSeed()
+
 type bank struct {
 	flags     workload.Flags
 	connFlags *workload.ConnFlags
 
-	seed                 uint64
 	rows, batchSize      int
 	payloadBytes, ranges int
 }
@@ -60,17 +61,18 @@ var bankMeta = workload.Meta{
 	Description:  `Bank models a set of accounts with currency balances`,
 	Version:      `1.0.0`,
 	PublicFacing: true,
+	RandomSeed:   RandomSeed,
 	New: func() workload.Generator {
 		g := &bank{}
 		g.flags.FlagSet = pflag.NewFlagSet(`bank`, pflag.ContinueOnError)
 		g.flags.Meta = map[string]workload.FlagMeta{
 			`batch-size`: {RuntimeOnly: true},
 		}
-		g.flags.Uint64Var(&g.seed, `seed`, 1, `Key hash seed.`)
 		g.flags.IntVar(&g.rows, `rows`, defaultRows, `Initial number of accounts in bank table.`)
 		g.flags.IntVar(&g.batchSize, `batch-size`, defaultBatchSize, `Number of rows in each batch of initial data.`)
 		g.flags.IntVar(&g.payloadBytes, `payload-bytes`, defaultPayloadBytes, `Size of the payload field in each initial row.`)
 		g.flags.IntVar(&g.ranges, `ranges`, defaultRanges, `Initial number of ranges in bank table.`)
+		RandomSeed.AddFlag(&g.flags)
 		g.connFlags = workload.NewConnFlags(&g.flags)
 		return g
 	},
@@ -138,7 +140,7 @@ func (b *bank) Tables() []workload.Table {
 		InitialRows: workload.BatchedTuples{
 			NumBatches: numBatches,
 			FillBatch: func(batchIdx int, cb coldata.Batch, a *bufalloc.ByteAllocator) {
-				rng := rand.NewSource(b.seed + uint64(batchIdx))
+				rng := rand.NewSource(RandomSeed.Seed() + uint64(batchIdx))
 
 				rowBegin, rowEnd := batchIdx*b.batchSize, (batchIdx+1)*b.batchSize
 				if rowEnd > b.rows {
@@ -204,7 +206,7 @@ func (b *bank) Ops(
 
 	ql := workload.QueryLoad{SQLDatabase: sqlDatabase}
 	for i := 0; i < b.connFlags.Concurrency; i++ {
-		rng := rand.New(rand.NewSource(b.seed))
+		rng := rand.New(rand.NewSource(RandomSeed.Seed()))
 		hists := reg.GetHandle()
 		workerFn := func(ctx context.Context) error {
 			from := rng.Intn(b.rows)
