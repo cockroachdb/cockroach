@@ -1427,44 +1427,35 @@ func SynthesizeRegionConfig(
 
 	regionConfig := multiregion.RegionConfig{}
 
-	var regionNames catpb.RegionNames
-	if o.forValidation {
-		regionNames, err = regionEnumDesc.RegionNamesForValidation()
-	} else {
-		regionNames, err = regionEnumDesc.RegionNames()
-	}
-	if err != nil {
-		return regionConfig, err
-	}
-
-	zoneCfgExtensions, err := regionEnumDesc.ZoneConfigExtensions()
-	if err != nil {
-		return regionConfig, err
-	}
-
-	transitioningRegionNames, err := regionEnumDesc.TransitioningRegionNames()
-	if err != nil {
-		return regionConfig, err
-	}
-
-	superRegions, err := regionEnumDesc.SuperRegions()
-	if err != nil {
-		return regionConfig, err
-	}
-
-	regionEnumID, err := dbDesc.MultiRegionEnumID()
-	if err != nil {
-		return regionConfig, err
-	}
-
+	var regionNames, transitioningRegionNames catpb.RegionNames
+	_ = regionEnumDesc.ForEachRegion(func(name catpb.RegionName, transition descpb.TypeDescriptor_EnumMember_Direction) error {
+		switch transition {
+		case descpb.TypeDescriptor_EnumMember_NONE:
+			regionNames = append(regionNames, name)
+		case descpb.TypeDescriptor_EnumMember_ADD:
+			transitioningRegionNames = append(transitioningRegionNames, name)
+		case descpb.TypeDescriptor_EnumMember_REMOVE:
+			transitioningRegionNames = append(transitioningRegionNames, name)
+			if o.forValidation {
+				// Since the partitions and zone configs are only updated when a transaction
+				// commits, this must ignore all regions being added (since they will not be
+				// reflected in the zone configuration yet), but it must include all region
+				// being dropped (since they will not be dropped from the zone configuration
+				// until they are fully removed from the type descriptor, again, at the end
+				// of the transaction).
+				regionNames = append(regionNames, name)
+			}
+		}
+		return nil
+	})
 	regionConfig = multiregion.MakeRegionConfig(
 		regionNames,
 		dbDesc.GetRegionConfig().PrimaryRegion,
 		dbDesc.GetRegionConfig().SurvivalGoal,
-		regionEnumID,
+		regionEnumDesc.GetID(),
 		dbDesc.GetRegionConfig().Placement,
-		superRegions,
-		zoneCfgExtensions,
+		regionEnumDesc.TypeDesc().RegionConfig.SuperRegions,
+		regionEnumDesc.TypeDesc().RegionConfig.ZoneConfigExtensions,
 		multiregion.WithTransitioningRegions(transitioningRegionNames),
 		multiregion.WithSecondaryRegion(dbDesc.GetRegionConfig().SecondaryRegion),
 	)
@@ -1549,7 +1540,7 @@ func getDBAndRegionEnumDescs(
 	descsCol *descs.Collection,
 	useCache bool,
 	includeOffline bool,
-) (dbDesc catalog.DatabaseDescriptor, regionEnumDesc catalog.TypeDescriptor, _ error) {
+) (dbDesc catalog.DatabaseDescriptor, regionEnumDesc catalog.RegionEnumTypeDescriptor, _ error) {
 	var b descs.ByIDGetterBuilder
 	if useCache {
 		b = descsCol.ByIDWithLeased(txn)
@@ -1571,9 +1562,15 @@ func getDBAndRegionEnumDescs(
 	if err != nil {
 		return nil, nil, err
 	}
-	regionEnumDesc, err = g.Type(ctx, regionEnumID)
+	typeDesc, err := g.Type(ctx, regionEnumID)
 	if err != nil {
 		return nil, nil, err
+	}
+	regionEnumDesc = typeDesc.AsRegionEnumTypeDescriptor()
+	if regionEnumDesc == nil {
+		return nil, nil, errors.AssertionFailedf(
+			"expected region enum type, not %s for type %q (%d)",
+			typeDesc.GetKind(), typeDesc.GetName(), typeDesc.GetID())
 	}
 	return dbDesc, regionEnumDesc, nil
 }
