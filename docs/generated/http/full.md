@@ -3562,6 +3562,11 @@ HotRange message describes a single hot range, ie its QPS, node ID it belongs to
 | range_id | [int32](#cockroach.server.serverpb.HotRangesResponseV2-int32) |  | range_id indicates Range ID that's identified as hot range. | [reserved](#support-status) |
 | node_id | [int32](#cockroach.server.serverpb.HotRangesResponseV2-int32) |  | node_id indicates the node that contains the current hot range. | [reserved](#support-status) |
 | qps | [double](#cockroach.server.serverpb.HotRangesResponseV2-double) |  | qps (queries per second) shows the amount of queries that interact with current range. | [reserved](#support-status) |
+| writes_per_second | [double](#cockroach.server.serverpb.HotRangesResponseV2-double) |  | writes_per_second is the recent number of keys written per second on this range. | [reserved](#support-status) |
+| reads_per_second | [double](#cockroach.server.serverpb.HotRangesResponseV2-double) |  | reads_per_second is the recent number of keys read per second on this range. | [reserved](#support-status) |
+| write_bytes_per_second | [double](#cockroach.server.serverpb.HotRangesResponseV2-double) |  | write_bytes_per_second is the recent number of bytes written per second on this range. | [reserved](#support-status) |
+| read_bytes_per_second | [double](#cockroach.server.serverpb.HotRangesResponseV2-double) |  | read_bytes_per_second is the recent number of bytes read per second on this range. | [reserved](#support-status) |
+| cpu_time_per_second | [double](#cockroach.server.serverpb.HotRangesResponseV2-double) |  | CPU time (ns) per second is the recent cpu usage per second on this range | [reserved](#support-status) |
 | table_name | [string](#cockroach.server.serverpb.HotRangesResponseV2-string) |  | table_name indicates the SQL table that the range belongs to. | [reserved](#support-status) |
 | database_name | [string](#cockroach.server.serverpb.HotRangesResponseV2-string) |  | database_name indicates on database that has current hot range. | [reserved](#support-status) |
 | index_name | [string](#cockroach.server.serverpb.HotRangesResponseV2-string) |  | index_name indicates the index name for current range. | [reserved](#support-status) |
