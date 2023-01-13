@@ -102,3 +102,13 @@ msg: ""
 completions:
 - "relation":
   "mytable" () -> "mytable" (0, 0)
+
+complete
+select array_l@
+----
+complete 0 14
+msg: ""
+completions:
+- "functions":
+  "array_length(" (Calculates the length of `input` on the provided `array_dimension`. However, bec) -> "array_length(" (0, 7)
+  "array_lower(" (Calculates the minimum value of `input` on the provided `array_dimension`. Howev) -> "array_lower(" (0, 7)

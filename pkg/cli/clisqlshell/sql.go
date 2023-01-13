@@ -1326,7 +1326,22 @@ func (c *cliState) doHandleCliCmd(loopState, nextState cliStateEnum) cliStateEnu
 
 	case `\hf`:
 		if len(cmd) == 1 {
-			c.concatLines = `SELECT DISTINCT proname AS function FROM pg_proc ORDER BY 1`
+			// The following query lists all functions. It prefixes
+			// functions with their schema but only if the schema is not in
+			// the search path. This ensures that "common" functions
+			// are not prefixed by "pg_catalog", but crdb_internal functions
+			// get prefixed with "crdb_internal."
+			//
+			// TODO(knz): Replace this by the \df logic when that is implemented;
+			// see: https://github.com/cockroachdb/cockroach/pull/88061
+			c.concatLines = `
+SELECT DISTINCT
+       IF(n.nspname = ANY current_schemas(TRUE), '',
+          pg_catalog.quote_ident(n.nspname) || '.') ||
+       pg_catalog.quote_ident(p.proname) AS function
+  FROM pg_catalog.pg_proc p
+  JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
+ORDER BY 1`
 			return cliRunStatement
 		}
 		return c.handleFunctionHelp(cmd[1:], loopState, errState)

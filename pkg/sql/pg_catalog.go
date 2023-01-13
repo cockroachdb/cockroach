@@ -2328,10 +2328,17 @@ https://www.postgresql.org/docs/9.6/view-pg-prepared-statements.html`,
 	},
 }
 
-func addPgProcBuiltinRow(nspOid *tree.DOid, name string, addRow func(...tree.Datum) error) error {
+func addPgProcBuiltinRow(name string, addRow func(...tree.Datum) error) error {
 	props, overloads := builtinsregistry.GetBuiltinProperties(name)
 	isAggregate := props.Class == tree.AggregateClass
 	isWindow := props.Class == tree.WindowClass
+	nspOid := tree.NewDOid(catconstants.PgCatalogID)
+	const crdbInternal = catconstants.CRDBInternalSchemaName + "."
+	if strings.HasPrefix(name, crdbInternal) {
+		nspOid = tree.NewDOid(catconstants.CrdbInternalID)
+		name = name[len(crdbInternal):]
+	}
+
 	for _, builtin := range overloads {
 		dName := tree.NewDName(name)
 		dSrc := tree.NewDString(name)
@@ -2524,7 +2531,6 @@ https://www.postgresql.org/docs/9.5/catalog-pg-proc.html`,
 
 		err := forEachDatabaseDesc(ctx, p, dbContext, false, /* requiresPrivileges */
 			func(db catalog.DatabaseDescriptor) error {
-				nspOid := tree.NewDOid(catconstants.PgCatalogID)
 				for _, name := range builtins.AllBuiltinNames() {
 					// parser.Builtins contains duplicate uppercase and lowercase keys.
 					// Only return the lowercase ones for compatibility with postgres.
@@ -2536,7 +2542,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-proc.html`,
 					if unicode.IsUpper(first) {
 						continue
 					}
-					err := addPgProcBuiltinRow(nspOid, name, addRow)
+					err := addPgProcBuiltinRow(name, addRow)
 					if err != nil {
 						return err
 					}
@@ -2598,7 +2604,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-proc.html`,
 					return true, nil
 
 				} else {
-					err := addPgProcBuiltinRow(tree.NewDOid(catconstants.PgCatalogID), name, addRow)
+					err := addPgProcBuiltinRow(name, addRow)
 					if err != nil {
 						return false, err
 					}
