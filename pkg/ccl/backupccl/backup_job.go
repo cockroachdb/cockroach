@@ -349,39 +349,14 @@ func backup(
 		return roachpb.RowCount{}, err
 	}
 
-	var tableStatistics []*stats.TableStatisticProto
-	for i := range backupManifest.Descriptors {
-		if tbl, _, _, _, _ := descpb.GetDescriptors(&backupManifest.Descriptors[i]); tbl != nil {
-			tableDesc := tabledesc.NewBuilder(tbl).BuildImmutableTable()
-			// Collect all the table stats for this table.
-			tableStatisticsAcc, err := statsCache.GetTableStats(ctx, tableDesc)
-			if err != nil {
-				// Successfully backed up data is more valuable than table stats that can
-				// be recomputed after restore, and so if we fail to collect the stats of a
-				// table we do not want to mark the job as failed.
-				// The lack of stats on restore could lead to suboptimal performance when
-				// reading/writing to this table until the stats have been recomputed.
-				log.Warningf(ctx, "failed to collect stats for table: %s, "+
-					"table ID: %d during a backup: %s", tableDesc.GetName(), tableDesc.GetID(),
-					err.Error())
-				continue
-			}
-			for _, stat := range tableStatisticsAcc {
-				tableStatistics = append(tableStatistics, &stat.TableStatisticProto)
-			}
-		}
-	}
-	statsTable := backuppb.StatsTable{
-		Statistics: tableStatistics,
-	}
-
+	statsTable := getTableStatsForBackup(ctx, statsCache, backupManifest.Descriptors)
 	if err := backupinfo.WriteTableStatistics(ctx, defaultStore, encryption, &kmsEnv, &statsTable); err != nil {
 		return roachpb.RowCount{}, err
 	}
 
 	if backupinfo.WriteMetadataSST.Get(&settings.SV) {
 		if err := backupinfo.WriteBackupMetadataSST(ctx, defaultStore, encryption, &kmsEnv, backupManifest,
-			tableStatistics); err != nil {
+			statsTable.Statistics); err != nil {
 			err = errors.Wrap(err, "writing forward-compat metadata sst")
 			if !build.IsRelease() {
 				return roachpb.RowCount{}, err
@@ -408,6 +383,47 @@ func releaseProtectedTimestamp(
 		err = nil
 	}
 	return err
+}
+
+// getTableStatsForBackup collects all stats for tables found in descs.
+//
+// We do not fail if we can't retrieve statistiscs. Successfully
+// backed up data is more valuable than table stats that can be
+// recomputed after restore. The lack of stats on restore could lead
+// to suboptimal performance when reading/writing to this table until
+// the stats have been recomputed.
+func getTableStatsForBackup(
+	ctx context.Context, statsCache *stats.TableStatisticsCache, descs []descpb.Descriptor,
+) backuppb.StatsTable {
+	var tableStatistics []*stats.TableStatisticProto
+	for i := range descs {
+		if tbl, _, _, _, _ := descpb.GetDescriptors(&descs[i]); tbl != nil {
+			tableDesc := tabledesc.NewBuilder(tbl).BuildImmutableTable()
+			tableStatisticsAcc, err := statsCache.GetTableStats(ctx, tableDesc)
+			if err != nil {
+				log.Warningf(ctx, "failed to collect stats for table: %s, "+
+					"table ID: %d during a backup: %s", tableDesc.GetName(), tableDesc.GetID(),
+					err.Error())
+				continue
+			}
+
+			for _, stat := range tableStatisticsAcc {
+				if statShouldBeIncludedInBackupRestore(&stat.TableStatisticProto) {
+					tableStatistics = append(tableStatistics, &stat.TableStatisticProto)
+				}
+			}
+		}
+	}
+	return backuppb.StatsTable{
+		Statistics: tableStatistics,
+	}
+}
+
+func statShouldBeIncludedInBackupRestore(stat *stats.TableStatisticProto) bool {
+	// Forecasts and merged stats are computed from the persisted
+	// stats on demand and do not need to be backed up or
+	// restored.
+	return stat.Name != jobspb.ForecastStatsName && stat.Name != jobspb.MergedStatsName
 }
 
 type backupResumer struct {
