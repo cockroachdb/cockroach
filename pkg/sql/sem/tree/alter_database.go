@@ -131,11 +131,11 @@ func (node *AlterDatabaseAddSuperRegion) Format(ctx *FmtCtx) {
 	ctx.WriteString(" ADD SUPER REGION ")
 	ctx.FormatNode(&node.SuperRegionName)
 	ctx.WriteString(" VALUES ")
-	for i, region := range node.Regions {
+	for i := range node.Regions {
 		if i != 0 {
 			ctx.WriteString(",")
 		}
-		ctx.FormatNode(&region)
+		ctx.FormatNode(&node.Regions[i])
 	}
 }
 
@@ -173,11 +173,11 @@ func (node *AlterDatabaseAlterSuperRegion) Format(ctx *FmtCtx) {
 	ctx.WriteString(" ALTER SUPER REGION ")
 	ctx.FormatNode(&node.SuperRegionName)
 	ctx.WriteString(" VALUES ")
-	for i, region := range node.Regions {
+	for i := range node.Regions {
 		if i != 0 {
 			ctx.WriteString(",")
 		}
-		ctx.FormatNode(&region)
+		ctx.FormatNode(&node.Regions[i])
 	}
 }
 
