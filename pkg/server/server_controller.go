@@ -754,26 +754,35 @@ func makeInMemoryTenantServerConfig(
 
 	tr := tracing.NewTracerWithOpt(ctx, tracing.WithClusterSettings(&st.SV))
 
-	// Find a suitable store directory.
-	tenantDir := "tenant-" + tenantID.String()
-	storeDir := ""
+	// Define a tenant store. This will be used to write the
+	// listener addresses.
+	//
+	// First, determine if there's a disk store or whether we will
+	// use an in-memory store.
+	candidateSpec := kvServerCfg.Stores.Specs[0]
 	for _, storeSpec := range kvServerCfg.Stores.Specs {
 		if storeSpec.InMemory {
 			continue
 		}
-		storeDir = filepath.Join(storeSpec.Path, tenantDir)
+		candidateSpec = storeSpec
 		break
 	}
-	if storeDir == "" {
-		storeDir = tenantDir
-	}
-	if err := os.MkdirAll(storeDir, 0700); err != nil {
-		return baseCfg, sqlCfg, err
-	}
-
-	storeSpec, err := base.NewStoreSpec(storeDir)
-	if err != nil {
-		return baseCfg, sqlCfg, errors.Wrap(err, "cannot create store spec")
+	// Then construct a spec. The logic above either selected an
+	// in-memory store (e.g. in tests) or the first on-disk store. In
+	// the on-disk case, we reuse the original spec; this propagates
+	// all the common store parameters.
+	storeSpec := candidateSpec
+	if !storeSpec.InMemory {
+		storeDir := filepath.Join(storeSpec.Path, "tenant-"+tenantID.String())
+		if err := os.MkdirAll(storeDir, 0700); err != nil {
+			return baseCfg, sqlCfg, err
+		}
+		stopper.AddCloser(stop.CloserFn(func() {
+			if err := os.RemoveAll(storeDir); err != nil {
+				log.Warningf(context.Background(), "unable to delete tenant directory: %v", err)
+			}
+		}))
+		storeSpec.Path = storeDir
 	}
 	baseCfg = MakeBaseConfig(st, tr, storeSpec)
 
