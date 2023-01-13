@@ -21,7 +21,7 @@ var cLastTokens = [...]string{
 	"ESE", "ANTI", "CALLY", "ATION", "EING"}
 
 func (w *tpcc) initNonUniformRandomConstants() {
-	rng := rand.New(rand.NewSource(w.seed))
+	rng := rand.New(rand.NewSource(RandomSeed.Seed()))
 	w.cLoad = rng.Intn(256)
 	w.cItemID = rng.Intn(1024)
 	w.cCustomerID = rng.Intn(8192)

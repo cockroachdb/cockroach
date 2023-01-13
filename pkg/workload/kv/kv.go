@@ -64,6 +64,8 @@ const (
 	)`
 )
 
+var RandomSeed = workload.NewInt64RandomSeed()
+
 type kv struct {
 	flags     workload.Flags
 	connFlags *workload.ConnFlags
@@ -77,7 +79,6 @@ type kv struct {
 	delPercent                           int
 	spanLimit                            int
 	writesUseSelectForUpdate             bool
-	seed                                 int64
 	writeSeq                             string
 	sequential                           bool
 	zipfian                              bool
@@ -106,7 +107,8 @@ var kvMeta = workload.Meta{
 	--write-seq can be used to incorporate data produced by a previous run into
 	the current run.
 	`,
-	Version: `1.0.0`,
+	Version:    `1.0.0`,
+	RandomSeed: RandomSeed,
 	New: func() workload.Generator {
 		g := &kv{}
 		g.flags.FlagSet = pflag.NewFlagSet(`kv`, pflag.ContinueOnError)
@@ -131,7 +133,6 @@ var kvMeta = workload.Meta{
 			`LIMIT count for each spanning query, or 0 for no limit`)
 		g.flags.BoolVar(&g.writesUseSelectForUpdate, `sfu-writes`, false,
 			`Use SFU and transactional writes with a sleep after SFU.`)
-		g.flags.Int64Var(&g.seed, `seed`, 1, `Key hash seed.`)
 		g.flags.BoolVar(&g.zipfian, `zipfian`, false,
 			`Pick keys in a zipfian distribution instead of randomly.`)
 		g.flags.BoolVar(&g.sequential, `sequential`, false,
@@ -154,6 +155,7 @@ var kvMeta = workload.Meta{
 			`Number of rows to insert before beginning the workload. Keys are inserted `+
 				`uniformly over the key range.`)
 		g.flags.DurationVar(&g.timeout, `timeout`, 0, `Client-side statement timeout.`)
+		RandomSeed.AddFlag(&g.flags)
 		g.connFlags = workload.NewConnFlags(&g.flags)
 		return g
 	},
@@ -310,7 +312,7 @@ func (w *kv) Tables() []workload.Table {
 				valCol := cb.ColVec(1).Bytes()
 				// coldata.Bytes only allows appends so we have to reset it.
 				valCol.Reset()
-				rndBlock := rand.New(rand.NewSource(w.seed))
+				rndBlock := rand.New(rand.NewSource(RandomSeed.Seed()))
 
 				for rowIdx := rowBegin; rowIdx < rowEnd; rowIdx++ {
 					rowOffset := rowIdx - rowBegin
@@ -705,7 +707,7 @@ func newHashGenerator(seq *sequence) *hashGenerator {
 
 func (g *hashGenerator) hash(v int64) int64 {
 	binary.BigEndian.PutUint64(g.buf[:8], uint64(v))
-	binary.BigEndian.PutUint64(g.buf[8:16], uint64(g.seq.config.seed))
+	binary.BigEndian.PutUint64(g.buf[8:16], uint64(RandomSeed.Seed()))
 	g.hasher.Reset()
 	_, _ = g.hasher.Write(g.buf[:16])
 	g.hasher.Sum(g.buf[:0])

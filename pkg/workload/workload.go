@@ -144,6 +144,9 @@ type Meta struct {
 	Name string
 	// Description is a short description of this generator.
 	Description string
+	// RandomSeed points to the random seed to be used by this
+	// generator, if any.
+	RandomSeed RandomSeed
 	// Details optionally allows specifying longer, more in-depth usage details.
 	Details string
 	// Version is a semantic version for this generator. It should be bumped

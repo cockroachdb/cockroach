@@ -55,6 +55,7 @@ func TestRandRun(t *testing.T) {
 
 	rng, seed := randutil.NewTestRand()
 	t.Logf("rand workload random seed: %v", seed)
+	RandomSeed.Set(seed)
 	tblName := "datum_to_go_sql_test"
 	colName := "c1"
 
@@ -83,7 +84,7 @@ func TestRandRun(t *testing.T) {
 			require.NoError(t, err)
 			cols := []col{{name: colName, dataType: dataType}}
 			op := randOp{
-				config:    &random{batchSize: 1, seed: seed},
+				config:    &random{batchSize: 1},
 				db:        db,
 				cols:      cols,
 				rng:       rng,
