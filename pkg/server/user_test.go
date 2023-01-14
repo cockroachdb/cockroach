@@ -95,16 +95,17 @@ func TestSQLRolesAPI(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, expRoles, res.Roles)
 
-	// One role added to the non-admin user.
+	// Role option and global privilege added to the non-admin user.
 	db.Exec(t, fmt.Sprintf("ALTER USER %s VIEWACTIVITY", authenticatedUserNameNoAdmin().Normalized()))
-	expRoles = []string{"VIEWACTIVITY"}
+	db.Exec(t, fmt.Sprintf("GRANT SYSTEM MODIFYCLUSTERSETTING TO %s", authenticatedUserNameNoAdmin().Normalized()))
+	expRoles = []string{"MODIFYCLUSTERSETTING", "VIEWACTIVITY"}
 	err = getStatusJSONProtoWithAdminOption(s, "sqlroles", &res, false)
 	require.NoError(t, err)
 	require.Equal(t, expRoles, res.Roles)
 
 	// Two roles added to the non-admin user.
 	db.Exec(t, fmt.Sprintf("ALTER USER %s VIEWACTIVITYREDACTED", authenticatedUserNameNoAdmin().Normalized()))
-	expRoles = []string{"VIEWACTIVITY", "VIEWACTIVITYREDACTED"}
+	expRoles = []string{"MODIFYCLUSTERSETTING", "VIEWACTIVITY", "VIEWACTIVITYREDACTED"}
 	err = getStatusJSONProtoWithAdminOption(s, "sqlroles", &res, false)
 	sort.Strings(res.Roles)
 	require.NoError(t, err)
@@ -112,7 +113,7 @@ func TestSQLRolesAPI(t *testing.T) {
 
 	// Remove one role from non-admin user.
 	db.Exec(t, fmt.Sprintf("ALTER USER %s NOVIEWACTIVITY", authenticatedUserNameNoAdmin().Normalized()))
-	expRoles = []string{"VIEWACTIVITYREDACTED"}
+	expRoles = []string{"MODIFYCLUSTERSETTING", "VIEWACTIVITYREDACTED"}
 	err = getStatusJSONProtoWithAdminOption(s, "sqlroles", &res, false)
 	require.NoError(t, err)
 	require.Equal(t, expRoles, res.Roles)
