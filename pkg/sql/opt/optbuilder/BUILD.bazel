@@ -64,7 +64,6 @@ go_library(
         "//pkg/sql/opt/norm",
         "//pkg/sql/opt/optgen/exprgen",
         "//pkg/sql/opt/partialidx",
-        "//pkg/sql/opt/partition",
         "//pkg/sql/opt/props",
         "//pkg/sql/opt/props/physical",
         "//pkg/sql/parser",
