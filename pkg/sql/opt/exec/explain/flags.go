@@ -12,7 +12,7 @@ package explain
 
 import "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 
-// Flags are modifiers for EXPLAIN (PLAN).
+// Flags are modifiers for EXPLAIN.
 type Flags struct {
 	// Verbose indicates that more metadata is shown, and plan columns and
 	// ordering are shown.
@@ -26,9 +26,12 @@ type Flags struct {
 	HideValues bool
 	// If OnlyShape is true, we hide fields that could be different between 2
 	// plans that otherwise have exactly the same shape, like estimated row count.
-	// This is used for EXPLAIN(SHAPE), which is used for the statement-bundle
+	// This is used for EXPLAIN (SHAPE), which is used for the statement-bundle
 	// debug tool.
 	OnlyShape bool
+	// RedactValues is similar to HideValues but indicates that we should use
+	// redaction markers instead of underscores. Used by EXPLAIN (REDACT).
+	RedactValues bool
 
 	// Redaction control (for testing purposes).
 	Redact RedactFlags
@@ -78,6 +81,11 @@ func MakeFlags(options *tree.ExplainOptions) Flags {
 		f.HideValues = true
 		f.OnlyShape = true
 		f.Redact = RedactAll
+	}
+	if options.Flags[tree.ExplainFlagRedact] {
+		// Confusingly, this doesn't use any of the RedactFlags, which have a
+		// different purpose.
+		f.RedactValues = true
 	}
 	return f
 }

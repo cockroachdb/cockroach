@@ -76,8 +76,8 @@ var collectTxnStatsSampleRate = settings.RegisterFloatSetting(
 //   - Finish() is called after query execution.
 type instrumentationHelper struct {
 	outputMode outputMode
-	// explainFlags is used when outputMode is explainAnalyzePlanOutput or
-	// explainAnalyzeDistSQLOutput.
+	// explainFlags is used when outputMode is explainAnalyzeDebugOutput,
+	// explainAnalyzePlanOutput, or explainAnalyzeDistSQLOutput.
 	explainFlags explain.Flags
 
 	// Query fingerprint (anonymized statement).
@@ -402,19 +402,16 @@ func (ih *instrumentationHelper) Finish(
 		execLatency := phaseTimes.GetServiceLatencyNoOverhead()
 		if ih.stmtDiagnosticsRecorder.IsConditionSatisfied(ih.diagRequest, execLatency) {
 			placeholders := p.extendedEvalCtx.Placeholders
-			ob := ih.emitExplainAnalyzePlanToOutputBuilder(
-				explain.Flags{Verbose: true, ShowTypes: true},
-				phaseTimes,
-				queryLevelStats,
-			)
+			ob := ih.emitExplainAnalyzePlanToOutputBuilder(ih.explainFlags, phaseTimes, queryLevelStats)
 			warnings = ob.GetWarnings()
 			var payloadErr error
 			if pwe, ok := retPayload.(payloadWithError); ok {
 				payloadErr = pwe.errorCause()
 			}
 			bundle = buildStatementBundle(
-				ctx, cfg.DB, ie.(*InternalExecutor), stmtRawSQL, &p.curPlan, ob.BuildString(), trace,
-				placeholders, res.Err(), payloadErr, retErr, &p.extendedEvalCtx.Settings.SV,
+				ctx, ih.explainFlags, cfg.DB, ie.(*InternalExecutor), stmtRawSQL, &p.curPlan,
+				ob.BuildString(), trace, placeholders, res.Err(), payloadErr, retErr,
+				&p.extendedEvalCtx.Settings.SV,
 			)
 			bundle.insert(
 				ctx, ih.fingerprint, ast, cfg.StmtDiagnosticsRecorder, ih.diagRequestID, ih.diagRequest,
