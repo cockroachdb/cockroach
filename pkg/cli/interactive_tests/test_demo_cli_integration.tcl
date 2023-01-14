@@ -129,3 +129,8 @@ eexpect eof
 set spawn_id $demo_spawn_id
 send "\\q\r"
 eexpect eof
+
+# Regression test for #95135.
+start_test "Verify that the demo command did not leave tenant directories around."
+system "if ls tenant-* >logs/tenants 2>&1; then echo Strays; cat logs/tenants; exit 1; fi"
+end_test

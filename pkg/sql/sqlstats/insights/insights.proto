@@ -79,6 +79,8 @@ message Transaction {
   int64 rows_written = 11;
   int64 retry_count = 12;
   string auto_retry_reason = 13;
+  repeated Problem problems = 14;
+  repeated Cause causes = 15;
 }
 
 message Statement {
@@ -112,14 +114,16 @@ message Statement {
   repeated string index_recommendations = 19;
   // contention_events hit at the statement level.
   repeated cockroach.roachpb.ContentionEvent contention_events = 20 [(gogoproto.nullable) = false];
+  Problem problem = 21;
+  repeated Cause causes = 22;
 }
+
 
 message Insight {
   Session session = 1 [(gogoproto.nullable) = false];
   Transaction transaction = 2;
-  Statement statement = 3;
-
-  Problem problem = 4;
-
-  repeated Cause causes = 5;
+  repeated Statement statements = 6;
+  reserved 3;
+  reserved 4;
+  reserved 5;
 }
