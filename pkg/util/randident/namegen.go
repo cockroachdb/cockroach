@@ -45,6 +45,22 @@ type nameGenerator struct {
 
 var _ NameGenerator = (*nameGenerator)(nil)
 
+var escGenerators = []func(s *strings.Builder, r *rand.Rand){
+	// C/Go hex escape sequences.
+	func(s *strings.Builder, r *rand.Rand) { fmt.Fprintf(s, `\\x%02x`, r.Int31n(256)) },
+	// C/Go special sequences.
+	func(s *strings.Builder, r *rand.Rand) {
+		const special = "rgfnv"
+		s.WriteByte('\\')
+		s.WriteByte(special[r.Intn(len(special))])
+	},
+	// HTTP escape sequences.
+	func(s *strings.Builder, r *rand.Rand) { fmt.Fprintf(s, `%%%02x`, r.Int31n(256)) },
+	// SQL escape sequences.
+	func(s *strings.Builder, r *rand.Rand) { fmt.Fprintf(s, `\\u%04X`, r.Int31n(65536)) },
+	func(s *strings.Builder, r *rand.Rand) { fmt.Fprintf(s, `\\U%08X`, r.Uint32()) },
+}
+
 // GenerateOne generates one random name.
 func (g *nameGenerator) GenerateOne(number int) string {
 	var s strings.Builder
@@ -74,6 +90,18 @@ func (g *nameGenerator) GenerateOne(number int) string {
 		// Add simple spaces if requested.
 		if g.cfg.Space > 0 && g.rand.Float32() <= g.cfg.Space/l {
 			s.WriteByte(' ')
+		}
+		// Add formatting directives if requested.
+		if g.cfg.Fmt > 0 && g.rand.Float32() <= g.cfg.Fmt/l {
+			s.WriteByte('%')
+			const verb = "pvq"
+			c := verb[g.rand.Intn(len(verb))]
+			s.WriteByte(c)
+		}
+		// Add escape sequences if requested.
+		if g.cfg.Escapes > 0 && g.rand.Float32() <= g.cfg.Escapes/l {
+			fn := escGenerators[g.rand.Intn(len(escGenerators))]
+			fn(&s, g.rand)
 		}
 		// Add complex whitespace if requested.
 		if g.cfg.Whitespace > 0 && g.rand.Float32() <= g.cfg.Whitespace/l {

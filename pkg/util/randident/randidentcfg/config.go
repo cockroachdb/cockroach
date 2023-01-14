@@ -21,14 +21,16 @@ const ConfigDoc = `
 - "noise": whether to add noise to the generated names (default true).
   It adds a non-zero probability for each of the probability options below left to zero.
   (To enable noise generally but disable one type of noise, set its probability to -1.)
-- "punctuate": probability of adding punctuation to the generated names.
-- "quote": probabiltiy of adding single or double quotes to the generated names.
-- "emote": probability of adding emojis to the generated names.
-- "space": probability of adding simple spaces to the generated names.
-- "whitespace": probability of adding complex whitespace to the generated names.
-- "capitals": probability of using capital letters in the generated names.
+- "punctuate": probability of adding punctuation.
+- "fmt": probability of adding random Go/C formatting directives.
+- "escapes": probability of adding random escape sequences.
+- "quote": probabiltiy of adding single or double quotes.
+- "emote": probability of adding emojis.
+- "space": probability of adding simple spaces.
+- "whitespace": probability of adding complex whitespace.
+- "capitals": probability of using capital letters.
   Note: the name pattern must contain ASCII letters already for capital letters to be used.
-- "diacritics": probability of adding diacritics in the generated names.
+- "diacritics": probability of adding diacritics.
 - "diacritic_depth": max number of diacritics to add at a time (default 1).
 - "zalgo": special option that overrides diacritics and diacritic_depth (default false).
 `
@@ -58,6 +60,12 @@ type Config struct {
 	// Space adds simple spaces in the generated names.
 	Space float32 `json:"space,omitempty"`
 
+	// Fmt adds Go/C formatting directives in the generated names.
+	Fmt float32 `json:"fmt,omitempty"`
+
+	// Escapes adds escape sequences in the generated names.
+	Escapes float32 `json:"escapes,omitempty"`
+
 	// Whitespace adds extra whitespace in the generated names.
 	Whitespace float32 `json:"whitespace,omitempty"`
 
@@ -84,16 +92,16 @@ func (cfg *Config) Finalize() {
 	if cfg.Noise {
 		// We want a majority of names (but not all) to contain noise.
 		//
-		// Let us reserve 30% (1/3rd) of names without noise. We have 7
+		// Let us reserve ~1/3rd of names without noise. We have 9
 		// sources of noise below. The probability of each source being
 		// activated for a given name is cumulative. So we divide the
-		// probability we want there be some noise (70%) by the number of
-		// sources (7). Hence 10%. This number should be tweaked when
+		// probability we want there be some noise (2/3rd) by the number of
+		// sources (9). Hence ~8%. This number should be tweaked when
 		// adding/removing noise sources.
 		//
 		// If the starting value is nonzero, that's a sign it was
 		// customized, in which case we keep that customization.
-		const noiseProbabilityPerSource = 0.1
+		const noiseProbabilityPerSource = 0.08
 		if cfg.Punctuate == 0 {
 			cfg.Punctuate = noiseProbabilityPerSource
 		}
@@ -105,6 +113,12 @@ func (cfg *Config) Finalize() {
 		}
 		if cfg.Space == 0 {
 			cfg.Space = noiseProbabilityPerSource
+		}
+		if cfg.Fmt == 0 {
+			cfg.Fmt = noiseProbabilityPerSource
+		}
+		if cfg.Escapes == 0 {
+			cfg.Escapes = noiseProbabilityPerSource
 		}
 		if cfg.Whitespace == 0 {
 			cfg.Whitespace = noiseProbabilityPerSource
@@ -137,6 +151,8 @@ func (cfg *Config) HasVariability() bool {
 		cfg.Quote > 0 ||
 		cfg.Emote > 0 ||
 		cfg.Space > 0 ||
+		cfg.Fmt > 0 ||
+		cfg.Escapes > 0 ||
 		cfg.Whitespace > 0 ||
 		cfg.Capitals > 0 ||
 		cfg.Diacritics > 0

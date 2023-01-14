@@ -60,6 +60,8 @@ type PrettyCfg struct {
 	// JSONFmt, when set, pretty-prints strings that are asserted or cast
 	// to JSON.
 	JSONFmt bool
+	// ValueRedaction, when set, surrounds literal values with redaction markers.
+	ValueRedaction bool
 }
 
 // DefaultPrettyCfg returns a PrettyCfg with the default
@@ -177,7 +179,10 @@ func (p *PrettyCfg) Doc(f NodeFormatter) pretty.Doc {
 }
 
 func (p *PrettyCfg) docAsString(f NodeFormatter) pretty.Doc {
-	const prettyFlags = FmtShowPasswords | FmtParsable
+	prettyFlags := FmtShowPasswords | FmtParsable
+	if p.ValueRedaction {
+		prettyFlags |= FmtMarkRedactionNode | FmtOmitNameRedaction
+	}
 	txt := AsStringWithFlags(f, prettyFlags)
 	return pretty.Text(strings.TrimSpace(txt))
 }
