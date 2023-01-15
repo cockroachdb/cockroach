@@ -1216,7 +1216,9 @@ func checkRestoreDestinationPrivileges(
 func checkRestorePrivilegesOnDatabase(
 	ctx context.Context, p sql.PlanHookState, parentDB catalog.DatabaseDescriptor,
 ) (shouldBufferNotice bool, err error) {
-	if err := p.CheckPrivilege(ctx, parentDB, privilege.RESTORE); err == nil {
+	if ok, err := p.HasPrivilege(ctx, parentDB, privilege.RESTORE, p.User()); err != nil {
+		return false, err
+	} else if ok {
 		return false, nil
 	}
 
