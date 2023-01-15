@@ -1834,29 +1834,39 @@ CREATE TABLE crdb_internal.cluster_settings (
   description   STRING NOT NULL
 )`,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		hasAdmin, err := p.HasAdminRole(ctx)
-		if err != nil {
-			return err
-		}
-		if !hasAdmin {
-			hasModify := p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.MODIFYCLUSTERSETTING) == nil
-			hasView := p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWCLUSTERSETTING) == nil
-
-			if !hasModify && !hasView {
-				hasModify, err := p.HasRoleOption(ctx, roleoption.MODIFYCLUSTERSETTING)
-				if err != nil {
-					return err
-				}
-				hasView, err := p.HasRoleOption(ctx, roleoption.VIEWCLUSTERSETTING)
-				if err != nil {
-					return err
-				}
-				if !hasModify && !hasView {
-					return pgerror.Newf(pgcode.InsufficientPrivilege,
-						"only users with either %s or %s system privileges are allowed to read "+
-							"crdb_internal.cluster_settings", privilege.MODIFYCLUSTERSETTING, privilege.VIEWCLUSTERSETTING)
-				}
+		if hasPriv, err := func() (bool, error) {
+			if hasAdmin, err := p.HasAdminRole(ctx); err != nil {
+				return false, err
+			} else if hasAdmin {
+				return true, nil
 			}
+			if hasModify, err := p.HasPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.MODIFYCLUSTERSETTING, p.User()); err != nil {
+				return false, err
+			} else if hasModify {
+				return true, nil
+			}
+			if hasView, err := p.HasPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWCLUSTERSETTING, p.User()); err != nil {
+				return false, err
+			} else if hasView {
+				return true, nil
+			}
+			if hasModify, err := p.HasRoleOption(ctx, roleoption.MODIFYCLUSTERSETTING); err != nil {
+				return false, err
+			} else if hasModify {
+				return true, nil
+			}
+			if hasView, err := p.HasRoleOption(ctx, roleoption.VIEWCLUSTERSETTING); err != nil {
+				return false, err
+			} else if hasView {
+				return true, nil
+			}
+			return false, nil
+		}(); err != nil {
+			return err
+		} else if !hasPriv {
+			return pgerror.Newf(pgcode.InsufficientPrivilege,
+				"only users with either %s or %s system privileges are allowed to read "+
+					"crdb_internal.cluster_settings", privilege.MODIFYCLUSTERSETTING, privilege.VIEWCLUSTERSETTING)
 		}
 		for _, k := range settings.Keys(p.ExecCfg().Codec.ForSystemTenant()) {
 			setting, _ := settings.Lookup(
@@ -3806,17 +3816,18 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 		}
 		descs := all.OrderedDescriptors()
 
-		privCheckerFunc := func(desc catalog.Descriptor) bool {
+		privCheckerFunc := func(desc catalog.Descriptor) (bool, error) {
 			if hasAdmin {
-				return true
+				return true, nil
 			}
-
-			return p.CheckPrivilege(ctx, desc, privilege.ZONECONFIG) == nil
+			return p.HasPrivilege(ctx, desc, privilege.ZONECONFIG, p.User())
 		}
 
 		hasPermission := false
 		for _, desc := range descs {
-			if privCheckerFunc(desc) {
+			if ok, err := privCheckerFunc(desc); err != nil {
+				return nil, nil, err
+			} else if ok {
 				hasPermission = true
 				break
 			}
@@ -5024,7 +5035,9 @@ CREATE TABLE crdb_internal.kv_catalog_descriptor (
 		// Delegate privilege check to system table.
 		{
 			sysTable := all.LookupDescriptor(systemschema.DescriptorTable.GetID())
-			if p.CheckPrivilege(ctx, sysTable, privilege.SELECT) != nil {
+			if ok, err := p.HasPrivilege(ctx, sysTable, privilege.SELECT, p.User()); err != nil {
+				return err
+			} else if !ok {
 				return nil
 			}
 		}
@@ -5058,7 +5071,9 @@ CREATE TABLE crdb_internal.kv_catalog_zones (
 		// Delegate privilege check to system table.
 		{
 			sysTable := all.LookupDescriptor(systemschema.ZonesTable.GetID())
-			if p.CheckPrivilege(ctx, sysTable, privilege.SELECT) != nil {
+			if ok, err := p.HasPrivilege(ctx, sysTable, privilege.SELECT, p.User()); err != nil {
+				return err
+			} else if !ok {
 				return nil
 			}
 		}
@@ -5095,7 +5110,9 @@ CREATE TABLE crdb_internal.kv_catalog_namespace (
 		// Delegate privilege check to system table.
 		{
 			sysTable := all.LookupDescriptor(systemschema.NamespaceTable.GetID())
-			if p.CheckPrivilege(ctx, sysTable, privilege.SELECT) != nil {
+			if ok, err := p.HasPrivilege(ctx, sysTable, privilege.SELECT, p.User()); err != nil {
+				return err
+			} else if !ok {
 				return nil
 			}
 		}
@@ -5130,7 +5147,9 @@ CREATE TABLE crdb_internal.kv_catalog_comments (
 		// Delegate privilege check to system table.
 		{
 			sysTable := all.LookupDescriptor(systemschema.CommentsTable.GetID())
-			if p.CheckPrivilege(ctx, sysTable, privilege.SELECT) != nil {
+			if ok, err := p.HasPrivilege(ctx, sysTable, privilege.SELECT, p.User()); err != nil {
+				return err
+			} else if !ok {
 				return nil
 			}
 		}
