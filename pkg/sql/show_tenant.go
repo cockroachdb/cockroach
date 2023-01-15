@@ -21,10 +21,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -49,12 +47,11 @@ type tenantValues struct {
 }
 
 type showTenantNode struct {
+	tenantSpec      tenantSpec
 	withReplication bool
-	all             bool
 	columns         colinfo.ResultColumns
 	row             int
 	tenantIds       []roachpb.TenantID
-	tenantName      roachpb.TenantName
 	values          *tenantValues
 }
 
@@ -67,16 +64,14 @@ func (p *planner) ShowTenant(ctx context.Context, n *tree.ShowTenant) (planNode,
 		return nil, err
 	}
 
-	node := &showTenantNode{
-		withReplication: n.WithReplication,
-		all:             n.All,
+	tspec, err := p.planTenantSpec(ctx, n.TenantSpec, "SHOW TENANT")
+	if err != nil {
+		return nil, err
 	}
-	if !n.All {
-		name, err := p.parseTenantName(ctx, n.Name)
-		if err != nil {
-			return nil, err
-		}
-		node.tenantName = name
+
+	node := &showTenantNode{
+		tenantSpec:      tspec,
+		withReplication: n.WithReplication,
 	}
 	if n.WithReplication {
 		node.columns = colinfo.TenantColumnsWithReplication
@@ -87,38 +82,20 @@ func (p *planner) ShowTenant(ctx context.Context, n *tree.ShowTenant) (planNode,
 	return node, nil
 }
 
-func (p *planner) parseTenantName(
-	ctx context.Context, exprName tree.Expr,
-) (roachpb.TenantName, error) {
-	var dummyHelper tree.IndexedVarHelper
-	strName := paramparse.UnresolvedNameToStrVal(exprName)
-	var err error
-	typedName, err := p.analyzeExpr(
-		ctx, strName, nil, dummyHelper, types.String,
-		true, "SHOW TENANT ... WITH REPLICATION STATUS")
-	if err != nil {
-		return "", err
-	}
-	dName, err := eval.Expr(ctx, p.EvalContext(), typedName)
-	if err != nil {
-		return "", err
-	}
-	name, ok := dName.(*tree.DString)
-	if !ok || name == nil {
-		return "", errors.Newf("expected a string, got %T", dName)
-	}
-	return roachpb.TenantName(*name), nil
-}
-
 func (n *showTenantNode) startExec(params runParams) error {
-	if n.all {
+	if _, ok := n.tenantSpec.(tenantSpecAll); ok {
 		ids, err := GetAllNonDropTenantIDs(params.ctx, params.p.execCfg, params.p.Txn())
 		if err != nil {
 			return err
 		}
 		n.tenantIds = ids
+	} else {
+		tenantRecord, err := n.tenantSpec.getTenantInfo(params.ctx, params.p)
+		if err != nil {
+			return err
+		}
+		n.tenantIds = []roachpb.TenantID{roachpb.MustMakeTenantID(tenantRecord.ID)}
 	}
-
 	return nil
 }
 
@@ -237,27 +214,15 @@ func (n *showTenantNode) getTenantValues(
 }
 
 func (n *showTenantNode) Next(params runParams) (bool, error) {
-	var tenantInfo *descpb.TenantInfo
-	if n.all {
-		if n.row >= len(n.tenantIds) {
-			return false, nil
-		}
-		var err error
-		tenantInfo, err = GetTenantRecordByID(params.ctx, params.p.execCfg, params.p.Txn(), n.tenantIds[n.row])
-		if err != nil {
-			return false, err
-		}
-	} else {
-		// We only have one tenant, return true once.
-		if n.row > 0 {
-			return false, nil
-		}
-		var err error
-		tenantInfo, err = GetTenantRecordByName(params.ctx, params.p.execCfg, params.p.Txn(), n.tenantName)
-		if err != nil {
-			return false, err
-		}
+	if n.row >= len(n.tenantIds) {
+		return false, nil
 	}
+
+	tenantInfo, err := GetTenantRecordByID(params.ctx, params.p.execCfg, params.p.Txn(), n.tenantIds[n.row])
+	if err != nil {
+		return false, err
+	}
+
 	values, err := n.getTenantValues(params, tenantInfo)
 	if err != nil {
 		return false, err

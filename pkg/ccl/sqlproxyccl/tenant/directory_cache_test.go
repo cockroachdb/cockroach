@@ -409,7 +409,7 @@ func destroyTenant(tc serverutils.TestClusterInterface, id roachpb.TenantID) err
 		context.Background(),
 		"testserver-destroy-tenant",
 		nil, /* txn */
-		"SELECT crdb_internal.destroy_tenant($1)",
+		"DROP TENANT [$1] IMMEDIATE",
 		id.ToUint64(),
 	); err != nil {
 		return err
@@ -433,7 +433,7 @@ func startTenant(
 		})
 	if err != nil {
 		// Remap tenant "not found" error to GRPC NotFound error.
-		if err.Error() == "not found" {
+		if testutils.IsError(err, "not found|no tenant found") {
 			return nil, status.Errorf(codes.NotFound, "tenant %d not found", id)
 		}
 		return nil, err

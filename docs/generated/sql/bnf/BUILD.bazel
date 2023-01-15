@@ -102,7 +102,6 @@ FILES = [
     "create_table_as_stmt",
     "create_table_with_storage_param",
     "create_table_stmt",
-    "create_tenant_stmt",
     "create_type",
     "create_view_stmt",
     "deallocate_stmt",

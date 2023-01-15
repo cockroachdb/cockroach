@@ -716,6 +716,14 @@ RESTORE TENANT _ FROM ($1, $1) AS OF SYSTEM TIME '_' -- literals removed
 RESTORE TENANT 36 FROM ($1, $2) AS OF SYSTEM TIME '1' -- identifiers removed
 
 parse
+RESTORE TENANT 36 FROM ($1, $2) WITH tenant_name = 'tenant-5'
+----
+RESTORE TENANT 36 FROM ($1, $2) WITH tenant_name = 'tenant-5'
+RESTORE TENANT 36 FROM (($1), ($2)) WITH tenant_name = ('tenant-5') -- fully parenthesized
+RESTORE TENANT _ FROM ($1, $1) WITH tenant_name = '_' -- literals removed
+RESTORE TENANT 36 FROM ($1, $2) WITH tenant_name = 'tenant-5' -- identifiers removed
+
+parse
 RESTORE TENANT 36 FROM ($1, $2) WITH tenant = '5'
 ----
 RESTORE TENANT 36 FROM ($1, $2) WITH tenant = '5'

@@ -606,8 +606,7 @@ func TestGCTenantJobWaitsForProtectedTimestamps(t *testing.T) {
 			return tenPtp.Protect(ctx, txn, rec)
 		}))
 
-		sqlDB.Exec(t, fmt.Sprintf(`SELECT crdb_internal.destroy_tenant(%d)`,
-			tenID.ToUint64()))
+		sqlDB.Exec(t, `DROP TENANT [$1]`, tenID.ToUint64())
 
 		sqlDB.CheckQueryResultsRetry(
 			t,

@@ -382,7 +382,7 @@ func TestTenantStreamingCancelIngestion(t *testing.T) {
 			[][]string{{"1"}})
 
 		// Check if we can successfully GC the tenant.
-		c.DestSysSQL.Exec(t, "SELECT crdb_internal.destroy_tenant($1, true)",
+		c.DestSysSQL.Exec(t, "DROP TENANT [$1] IMMEDIATE",
 			args.DestTenantID.ToUint64())
 		rows, err = c.DestCluster.Server(0).DB().
 			Scan(ctx, destTenantPrefix, destTenantPrefix.PrefixEnd(), 10)
