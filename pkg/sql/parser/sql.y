@@ -837,6 +837,9 @@ func (u *sqlSymUnion) tenantReplicationOptions() *tree.TenantReplicationOptions 
 func (u *sqlSymUnion) showRangesOpts() *tree.ShowRangesOptions {
     return u.val.(*tree.ShowRangesOptions)
 }
+func (u *sqlSymUnion) tenantSpec() *tree.TenantSpec {
+    return u.val.(*tree.TenantSpec)
+}
 %}
 
 // NB: the %token definitions must come before the %type definitions in this
@@ -951,7 +954,7 @@ func (u *sqlSymUnion) showRangesOpts() *tree.ShowRangesOptions {
 %token <str> STABLE START STATE STATISTICS STATUS STDIN STREAM STRICT STRING STORAGE STORE STORED STORING SUBSTRING SUPER
 %token <str> SUPPORT SURVIVE SURVIVAL SYMMETRIC SYNTAX SYSTEM SQRT SUBSCRIPTION STATEMENTS
 
-%token <str> TABLE TABLES TABLESPACE TEMP TEMPLATE TEMPORARY TENANT TENANTS TESTING_RELOCATE TEXT THEN
+%token <str> TABLE TABLES TABLESPACE TEMP TEMPLATE TEMPORARY TENANT TENANT_NAME TENANTS TESTING_RELOCATE TEXT THEN
 %token <str> TIES TIME TIMETZ TIMESTAMP TIMESTAMPTZ TO THROTTLING TRAILING TRACE
 %token <str> TRANSACTION TRANSACTIONS TRANSFER TRANSFORM TREAT TRIGGER TRIM TRUE
 %token <str> TRUNCATE TRUSTED TYPE TYPES
@@ -1039,7 +1042,10 @@ func (u *sqlSymUnion) showRangesOpts() *tree.ShowRangesOptions {
 // ALTER TENANT CLUSTER SETTINGS
 %type <tree.Statement> alter_tenant_stmt
 %type <tree.Statement> alter_tenant_csetting_stmt
+
+// Other ALTER TENANT statements.
 %type <tree.Statement> alter_tenant_replication_stmt
+%type <tree.Statement> alter_tenant_rename_stmt
 
 // ALTER PARTITION
 %type <tree.Statement> alter_zone_partition_stmt
@@ -1155,6 +1161,7 @@ func (u *sqlSymUnion) showRangesOpts() *tree.ShowRangesOptions {
 %type <tree.Statement> drop_sequence_stmt
 %type <tree.Statement> drop_func_stmt
 %type <tree.Statement> drop_tenant_stmt
+%type <bool>           opt_immediate
 
 %type <tree.Statement> analyze_stmt
 %type <tree.Statement> explain_stmt
@@ -1420,6 +1427,7 @@ func (u *sqlSymUnion) showRangesOpts() *tree.ShowRangesOptions {
 %type <tree.Exprs> execute_param_clause
 %type <types.IntervalTypeMetadata> opt_interval_qualifier interval_qualifier interval_second
 %type <tree.Expr> overlay_placing
+%type <*tree.TenantSpec> tenant_spec
 
 %type <bool> opt_unique opt_concurrently opt_cluster opt_without_index
 %type <bool> opt_index_access_method opt_index_visible alter_index_visible
@@ -3680,9 +3688,13 @@ restore_options:
 	{
 		$$.val = &tree.RestoreOptions{IncrementalStorage: $3.stringOrPlaceholderOptList()}
 	}
-| TENANT '=' string_or_placeholder
+| TENANT_NAME '=' string_or_placeholder
   {
     $$.val = &tree.RestoreOptions{AsTenant: $3.expr()}
+  }
+| TENANT '=' string_or_placeholder
+  {
+    $$.val = &tree.RestoreOptions{ForceTenantID: $3.expr()}
   }
 | SCHEMA_ONLY
 	{
@@ -4151,18 +4163,22 @@ create_stmt:
 | CREATE error         // SHOW HELP: CREATE
 
 // %Help: CREATE TENANT - create new tenant
-// %Category: Group
-// %Text: CREATE TENANT name
+// %Category: Experimental
+// %Text:
+// CREATE TENANT name
+// CREATE TENANT name FROM REPLICATION OF <tenant_spec> ON <location> [ WITH OPTIONS ... ]
 create_tenant_stmt:
-  CREATE TENANT name
+  CREATE TENANT d_expr
   {
-    $$.val = &tree.CreateTenant{Name: tree.Name($3)}
+    /* SKIP DOC */
+    $$.val = &tree.CreateTenant{TenantSpec: &tree.TenantSpec{IsName: true, Expr: $3.expr()}}
   }
-| CREATE TENANT name FROM REPLICATION OF name ON string_or_placeholder opt_with_tenant_replication_options
+| CREATE TENANT d_expr FROM REPLICATION OF d_expr ON d_expr opt_with_tenant_replication_options
   {
+    /* SKIP DOC */
     $$.val = &tree.CreateTenantFromReplication{
-      Name: tree.Name($3),
-      ReplicationSourceTenantName: tree.Name($7),
+      TenantSpec: &tree.TenantSpec{IsName: true, Expr: $3.expr()},
+      ReplicationSourceTenantName: &tree.TenantSpec{IsName: true, Expr: $7.expr()},
       ReplicationSourceAddress: $9.expr(),
       Options: *$10.tenantReplicationOptions(),
     }
@@ -4199,7 +4215,7 @@ tenant_replication_options_list:
 
 // List of valid tenant replication options.
 tenant_replication_options:
-  RETENTION '=' string_or_placeholder
+  RETENTION '=' d_expr
   {
     $$.val = &tree.TenantReplicationOptions{Retention: $3.expr()}
   }
@@ -5182,24 +5198,32 @@ drop_type_stmt:
 | DROP TYPE error // SHOW HELP: DROP TYPE
 
 // %Help: DROP TENANT - remove a tenant
-// %Category: DDL
-// %Text: DROP TENANT [IF EXISTS] <name>
+// %Category: Experimental
+// %Text: DROP TENANT [IF EXISTS] <tenant_spec> [IMMEDIATE]
 drop_tenant_stmt:
-  DROP TENANT name
+  DROP TENANT tenant_spec opt_immediate
   {
-    $$.val = &tree.DropTenant{
-      Name: tree.Name($3),
+   $$.val = &tree.DropTenant{
+      TenantSpec: $3.tenantSpec(),
       IfExists: false,
+      Immediate: $4.bool(),
     }
   }
-| DROP TENANT IF EXISTS name
+| DROP TENANT IF EXISTS tenant_spec opt_immediate
   {
     $$.val = &tree.DropTenant{
-      Name: tree.Name($5),
+      TenantSpec: $5.tenantSpec(),
       IfExists: true,
+      Immediate: $6.bool(),
     }
   }
 | DROP TENANT error // SHOW HELP: DROP TENANT
+
+opt_immediate:
+  /* EMPTY */
+  { $$.val = false }
+| IMMEDIATE
+  { $$.val = true }
 
 target_types:
   type_name_list
@@ -5540,27 +5564,49 @@ backup_kms:
 	}
 
 // %Help: SHOW TENANT - display tenant information
-// %Category: Misc
+// %Category: Experimental
 // %Text:
-// SHOW TENANT <tenant_name> [WITH REPLICATION STATUS]
-// SHOW TENANTS
+// SHOW { TENANT { <tenant_spec> | ALL } | TENANTS ] [WITH REPLICATION STATUS]
 show_tenant_stmt:
   SHOW TENANTS
   {
    $$.val = &tree.ShowTenant{
-     All: true,
+     TenantSpec: &tree.TenantSpec{All: true},
+     WithReplication: false,
    }
   }
-| SHOW TENANT d_expr
+| SHOW TENANT_ALL ALL
   {
    $$.val = &tree.ShowTenant{
-     Name: $3.expr(),
+     TenantSpec: &tree.TenantSpec{All: true},
+     WithReplication: false,
    }
   }
-| SHOW TENANT d_expr WITH REPLICATION STATUS
+| SHOW TENANTS WITH REPLICATION STATUS
   {
    $$.val = &tree.ShowTenant{
-     Name: $3.expr(),
+     TenantSpec: &tree.TenantSpec{All: true},
+     WithReplication: true,
+   }
+  }
+| SHOW TENANT_ALL ALL WITH REPLICATION STATUS
+  {
+   $$.val = &tree.ShowTenant{
+     TenantSpec: &tree.TenantSpec{All: true},
+     WithReplication: true,
+   }
+  }
+| SHOW TENANT tenant_spec
+  {
+   $$.val = &tree.ShowTenant{
+     TenantSpec: $3.tenantSpec(),
+     WithReplication: false,
+   }
+  }
+| SHOW TENANT tenant_spec WITH REPLICATION STATUS
+  {
+   $$.val = &tree.ShowTenant{
+     TenantSpec: $3.tenantSpec(),
      WithReplication: true,
    }
   }
@@ -6124,62 +6170,83 @@ set_csetting_stmt:
 
 // %Help: ALTER TENANT - alter tenant configuration
 // %Category: Group
-// %SeeAlso: ALTER TENANT REPLICATION, ALTER TENANT CLUSTER SETTING
+// %SeeAlso: ALTER TENANT REPLICATION, ALTER TENANT CLUSTER SETTING, ALTER TENANT RENAME
 alter_tenant_stmt:
   alter_tenant_replication_stmt // EXTEND WITH HELP: ALTER TENANT REPLICATION
 | alter_tenant_csetting_stmt    // EXTEND WITH HELP: ALTER TENANT CLUSTER SETTING
+| alter_tenant_rename_stmt      // EXTEND WITH HELP: ALTER TENANT RENAME
 | ALTER TENANT error            // SHOW HELP: ALTER TENANT
 
-// %Help: ALTER TENANT REPLICATION - alter tenant replication stream
-// %Category: Group
+tenant_spec:
+  d_expr
+  { $$.val = &tree.TenantSpec{IsName: true, Expr: $1.expr()} }
+| '[' d_expr ']'
+  { $$.val = &tree.TenantSpec{IsName: false, Expr: $2.expr()} }
+
+// %Help: ALTER TENANT RENAME - rename a tenant
+// %Category: Experimental
 // %Text:
-// ALTER TENANT '<tenant_name>' PAUSE REPLICATION
-// ALTER TENANT '<tenant_name>' RESUME REPLICATION
-// ALTER TENANT '<tenant_name>' COMPLETE REPLICATION TO LATEST
-// ALTER TENANT '<tenant_name>' COMPLETE REPLICATION TO SYSTEM TIME 'time'
-// ALTER TENANT '<tenant_name>' SET REPLICATION opt=value,...
+// ALTER TENANT <tenant_spec> RENAME TO <name>
+alter_tenant_rename_stmt:
+  ALTER TENANT tenant_spec RENAME TO d_expr
+  {
+    /* SKIP DOC */
+    $$.val = &tree.AlterTenantRename{
+      TenantSpec: $3.tenantSpec(),
+      NewName: $6.expr(),
+    }
+  }
+
+// %Help: ALTER TENANT REPLICATION - alter tenant replication stream
+// %Category: Experimental
+// %Text:
+// ALTER TENANT <tenant_spec> PAUSE REPLICATION
+// ALTER TENANT <tenant_spec> RESUME REPLICATION
+// ALTER TENANT <tenant_spec> COMPLETE REPLICATION TO LATEST
+// ALTER TENANT <tenant_spec> COMPLETE REPLICATION TO SYSTEM TIME 'time'
+// ALTER TENANT <tenant_spec> SET REPLICATION opt=value,...
 alter_tenant_replication_stmt:
-  ALTER TENANT d_expr PAUSE REPLICATION
+  ALTER TENANT tenant_spec PAUSE REPLICATION
   {
     /* SKIP DOC */
     $$.val = &tree.AlterTenantReplication{
-      TenantName: $3.expr(),
+      TenantSpec: $3.tenantSpec(),
       Command: tree.PauseJob,
     }
   }
-| ALTER TENANT d_expr RESUME REPLICATION
+| ALTER TENANT tenant_spec RESUME REPLICATION
   {
     /* SKIP DOC */
     $$.val = &tree.AlterTenantReplication{
-      TenantName: $3.expr(),
+      TenantSpec: $3.tenantSpec(),
       Command: tree.ResumeJob,
     }
   }
-| ALTER TENANT d_expr COMPLETE REPLICATION TO SYSTEM TIME a_expr
+| ALTER TENANT tenant_spec COMPLETE REPLICATION TO SYSTEM TIME a_expr
   {
     /* SKIP DOC */
     $$.val = &tree.AlterTenantReplication{
-      TenantName: $3.expr(),
+      TenantSpec: $3.tenantSpec(),
       Cutover: &tree.ReplicationCutoverTime{
         Timestamp: $9.expr(),
       },
     }
   }
-| ALTER TENANT d_expr COMPLETE REPLICATION TO LATEST
+| ALTER TENANT tenant_spec COMPLETE REPLICATION TO LATEST
   {
     /* SKIP DOC */
     $$.val = &tree.AlterTenantReplication{
-      TenantName: $3.expr(),
+      TenantSpec: $3.tenantSpec(),
       Cutover: &tree.ReplicationCutoverTime{
         Latest: true,
       },
     }
   }
-| ALTER TENANT d_expr SET REPLICATION tenant_replication_options_list
+| ALTER TENANT tenant_spec SET REPLICATION tenant_replication_options_list
   {
     /* SKIP DOC */
     $$.val = &tree.AlterTenantReplication{
-      TenantName: $3.expr(),
+      TenantSpec: $3.tenantSpec(),
       Options: *$6.tenantReplicationOptions(),
     }
   }
@@ -6188,17 +6255,17 @@ alter_tenant_replication_stmt:
 // %Help: ALTER TENANT CLUSTER SETTING - alter tenant cluster settings
 // %Category: Group
 // %Text:
-// ALTER TENANT { <tenant_id> | ALL } SET CLUSTER SETTING <var> { TO | = } <value>
-// ALTER TENANT { <tenant_id> | ALL } RESET CLUSTER SETTING <var>
+// ALTER TENANT { <tenant_spec> | ALL } SET CLUSTER SETTING <var> { TO | = } <value>
+// ALTER TENANT { <tenant_spec> | ALL } RESET CLUSTER SETTING <var>
 // %SeeAlso: SET CLUSTER SETTING
 alter_tenant_csetting_stmt:
-  ALTER TENANT d_expr set_or_reset_csetting_stmt
+  ALTER TENANT tenant_spec set_or_reset_csetting_stmt
   {
     /* SKIP DOC */
     csettingStmt := $4.stmt().(*tree.SetClusterSetting)
     $$.val = &tree.AlterTenantSetClusterSetting{
       SetClusterSetting: *csettingStmt,
-      TenantID: $3.expr(),
+      TenantSpec: $3.tenantSpec(),
     }
   }
 | ALTER TENANT_ALL ALL set_or_reset_csetting_stmt
@@ -6207,7 +6274,7 @@ alter_tenant_csetting_stmt:
     csettingStmt := $4.stmt().(*tree.SetClusterSetting)
     $$.val = &tree.AlterTenantSetClusterSetting{
       SetClusterSetting: *csettingStmt,
-      TenantAll: true,
+      TenantSpec: &tree.TenantSpec{All: true},
     }
   }
 | ALTER TENANT_ALL ALL error // SHOW HELP: ALTER TENANT CLUSTER SETTING
@@ -6992,8 +7059,8 @@ show_backup_details:
 // %Help: SHOW CLUSTER SETTING - display cluster settings
 // %Category: Cfg
 // %Text:
-// SHOW CLUSTER SETTING <var> [ FOR TENANT <tenant_id> ]
-// SHOW [ PUBLIC | ALL ] CLUSTER SETTINGS [ FOR TENANT <tenant_id> ]
+// SHOW CLUSTER SETTING <var> [ FOR TENANT <tenant_spec> ]
+// SHOW [ PUBLIC | ALL ] CLUSTER SETTINGS [ FOR TENANT <tenant_spec> ]
 // %SeeAlso: WEBDOCS/cluster-settings.html
 show_csettings_stmt:
   SHOW CLUSTER SETTING var_name
@@ -7023,18 +7090,18 @@ show_csettings_stmt:
 show_local_or_tenant_csettings_stmt:
   show_csettings_stmt
   { $$.val = $1.stmt() }
-| show_csettings_stmt FOR TENANT d_expr
+| show_csettings_stmt FOR TENANT tenant_spec
   {
     switch t := $1.stmt().(type) {
     case *tree.ShowClusterSetting:
        $$.val = &tree.ShowTenantClusterSetting{
           ShowClusterSetting: t,
-          TenantID: $4.expr(),
+          TenantSpec: $4.tenantSpec(),
        }
     case *tree.ShowClusterSettingList:
        $$.val = &tree.ShowTenantClusterSettingList{
           ShowClusterSettingList: t,
-          TenantID: $4.expr(),
+          TenantSpec: $4.tenantSpec(),
        }
     }
   }
@@ -16035,6 +16102,7 @@ unreserved_keyword:
 | TEMPLATE
 | TEMPORARY
 | TENANT
+| TENANT_NAME
 | TENANTS
 | TESTING_RELOCATE
 | TEXT

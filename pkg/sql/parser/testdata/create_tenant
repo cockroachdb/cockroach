@@ -2,7 +2,7 @@ parse
 CREATE TENANT bar
 ----
 CREATE TENANT bar
-CREATE TENANT bar -- fully parenthesized
+CREATE TENANT (bar) -- fully parenthesized
 CREATE TENANT bar -- literals removed
 CREATE TENANT _ -- identifiers removed
 
@@ -10,7 +10,7 @@ parse
 CREATE TENANT "bar-with-hyphen"
 ----
 CREATE TENANT "bar-with-hyphen"
-CREATE TENANT "bar-with-hyphen" -- fully parenthesized
+CREATE TENANT ("bar-with-hyphen") -- fully parenthesized
 CREATE TENANT "bar-with-hyphen" -- literals removed
 CREATE TENANT _ -- identifiers removed
 
@@ -18,7 +18,7 @@ parse
 CREATE TENANT destination FROM REPLICATION OF source ON 'pgurl'
 ----
 CREATE TENANT destination FROM REPLICATION OF source ON 'pgurl'
-CREATE TENANT destination FROM REPLICATION OF source ON ('pgurl') -- fully parenthesized
+CREATE TENANT (destination) FROM REPLICATION OF (source) ON ('pgurl') -- fully parenthesized
 CREATE TENANT destination FROM REPLICATION OF source ON '_' -- literals removed
 CREATE TENANT _ FROM REPLICATION OF _ ON 'pgurl' -- identifiers removed
 
@@ -26,7 +26,7 @@ parse
 CREATE TENANT "destination-hyphen" FROM REPLICATION OF "source-hyphen" ON 'pgurl'
 ----
 CREATE TENANT "destination-hyphen" FROM REPLICATION OF "source-hyphen" ON 'pgurl'
-CREATE TENANT "destination-hyphen" FROM REPLICATION OF "source-hyphen" ON ('pgurl') -- fully parenthesized
+CREATE TENANT ("destination-hyphen") FROM REPLICATION OF ("source-hyphen") ON ('pgurl') -- fully parenthesized
 CREATE TENANT "destination-hyphen" FROM REPLICATION OF "source-hyphen" ON '_' -- literals removed
 CREATE TENANT _ FROM REPLICATION OF _ ON 'pgurl' -- identifiers removed
 
@@ -34,7 +34,7 @@ parse
 CREATE TENANT "destination-hyphen" FROM REPLICATION OF "source-hyphen" ON 'pgurl' WITH RETENTION = '36h'
 ----
 CREATE TENANT "destination-hyphen" FROM REPLICATION OF "source-hyphen" ON 'pgurl' WITH RETENTION = '36h'
-CREATE TENANT "destination-hyphen" FROM REPLICATION OF "source-hyphen" ON ('pgurl') WITH RETENTION = ('36h') -- fully parenthesized
+CREATE TENANT ("destination-hyphen") FROM REPLICATION OF ("source-hyphen") ON ('pgurl') WITH RETENTION = ('36h') -- fully parenthesized
 CREATE TENANT "destination-hyphen" FROM REPLICATION OF "source-hyphen" ON '_' WITH RETENTION = '_' -- literals removed
 CREATE TENANT _ FROM REPLICATION OF _ ON 'pgurl' WITH RETENTION = '36h' -- identifiers removed
 
@@ -42,6 +42,14 @@ parse
 CREATE TENANT "destination-hyphen" FROM REPLICATION OF "source-hyphen" ON 'pgurl' WITH OPTIONS (RETENTION = '36h')
 ----
 CREATE TENANT "destination-hyphen" FROM REPLICATION OF "source-hyphen" ON 'pgurl' WITH RETENTION = '36h' -- normalized!
-CREATE TENANT "destination-hyphen" FROM REPLICATION OF "source-hyphen" ON ('pgurl') WITH RETENTION = ('36h') -- fully parenthesized
+CREATE TENANT ("destination-hyphen") FROM REPLICATION OF ("source-hyphen") ON ('pgurl') WITH RETENTION = ('36h') -- fully parenthesized
 CREATE TENANT "destination-hyphen" FROM REPLICATION OF "source-hyphen" ON '_' WITH RETENTION = '_' -- literals removed
 CREATE TENANT _ FROM REPLICATION OF _ ON 'pgurl' WITH RETENTION = '36h' -- identifiers removed
+
+parse
+CREATE TENANT destination FROM REPLICATION OF ('a'||'b') ON ('pg'||'url')
+----
+CREATE TENANT destination FROM REPLICATION OF ('a' || 'b') ON ('pg' || 'url') -- normalized!
+CREATE TENANT (destination) FROM REPLICATION OF (((('a') || ('b')))) ON (((('pg') || ('url')))) -- fully parenthesized
+CREATE TENANT destination FROM REPLICATION OF ('_' || '_') ON ('_' || '_') -- literals removed
+CREATE TENANT _ FROM REPLICATION OF ('a' || 'b') ON ('pg' || 'url') -- identifiers removed

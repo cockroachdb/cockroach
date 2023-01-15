@@ -13,33 +13,45 @@ package sql
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
 type dropTenantNode struct {
-	name     roachpb.TenantName
-	ifExists bool
+	tenantSpec tenantSpec
+	ifExists   bool
+	immediate  bool
 }
 
-func (p *planner) DropTenant(_ context.Context, n *tree.DropTenant) (planNode, error) {
+func (p *planner) DropTenant(ctx context.Context, n *tree.DropTenant) (planNode, error) {
+	// Even though the call to DropTenantByID in startExec also
+	// performs this check, we need to do this early because otherwise
+	// the lookup of the ID from the name will fail.
+	if err := rejectIfCantCoordinateMultiTenancy(p.execCfg.Codec, "drop"); err != nil {
+		return nil, err
+	}
+
+	tspec, err := p.planTenantSpec(ctx, n.TenantSpec, "DROP TENANT")
+	if err != nil {
+		return nil, err
+	}
 	return &dropTenantNode{
-		name:     roachpb.TenantName(n.Name),
-		ifExists: n.IfExists,
+		tenantSpec: tspec,
+		ifExists:   n.IfExists,
+		immediate:  n.Immediate,
 	}, nil
 }
 
 func (n *dropTenantNode) startExec(params runParams) error {
-	err := params.p.DestroyTenant(params.ctx, n.name, false /* synchronous */)
+	tenInfo, err := n.tenantSpec.getTenantInfo(params.ctx, params.p)
 	if err != nil {
 		if pgerror.GetPGCode(err) == pgcode.UndefinedObject && n.ifExists {
 			return nil
 		}
 		return err
 	}
-	return nil
+	return params.p.DropTenantByID(params.ctx, tenInfo.ID, n.immediate)
 }
 
 func (n *dropTenantNode) Next(_ runParams) (bool, error) { return false, nil }

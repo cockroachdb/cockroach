@@ -1052,12 +1052,6 @@ GRANT CONNECT ON DATABASE test TO testuser
 statement error cannot execute create_tenant\(\) in a read-only transaction
 SELECT crdb_internal.create_tenant(3)
 
-statement error cannot execute rename_tenant\(\) in a read-only transaction
-SELECT crdb_internal.rename_tenant(3, 'new')
-
-statement error cannot execute destroy_tenant\(\) in a read-only transaction
-SELECT crdb_internal.destroy_tenant(3)
-
 # SET session variable should work in a read-only txn.
 statement ok
 SET intervalstyle = 'postgres'

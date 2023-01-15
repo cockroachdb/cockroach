@@ -194,7 +194,7 @@ func TestTenantStreamingCreationErrors(t *testing.T) {
 	srcPgURL, cleanupSink := sqlutils.PGUrl(t, srcServer.ServingSQLAddr(), t.Name(), url.User(username.RootUser))
 	defer cleanupSink()
 
-	DestSysSQL.ExpectErr(t, "pq: neither the source tenant \"source\" nor the destination tenant \"system\" can be the system tenant",
+	DestSysSQL.ExpectErr(t, "pq: neither the source tenant \"source\" nor the destination tenant \"system\" \\(0\\) can be the system tenant",
 		`CREATE TENANT system FROM REPLICATION OF source ON $1`, srcPgURL.String())
 
 	DestSysSQL.Exec(t, "CREATE TENANT \"100\"")

@@ -828,34 +828,53 @@ func (ts *TestServer) StartTenant(
 			}
 		} else if params.TenantName != "" {
 			_, err := ts.InternalExecutor().(*sql.InternalExecutor).Exec(ctx, "rename-test-tenant", nil,
-				`SELECT crdb_internal.rename_tenant($1, $2)`, params.TenantID.ToUint64(), params.TenantName)
+				`ALTER TENANT [$1] RENAME TO $2`,
+				params.TenantID.ToUint64(), params.TenantName)
 			if err != nil {
 				return nil, err
 			}
 		}
 	} else if !params.SkipTenantCheck {
-		row, err := ts.InternalExecutor().(*sql.InternalExecutor).QueryRow(
+		requestedID := uint64(0)
+		if params.TenantID.IsSet() {
+			requestedID = params.TenantID.ToUint64()
+		}
+		rows, err := ts.InternalExecutor().(*sql.InternalExecutor).QueryBuffered(
 			ctx, "testserver-check-tenant-active", nil,
-			"SELECT name FROM system.tenants WHERE id=$1 AND active=true",
-			params.TenantID.ToUint64(),
+			"SELECT id, name FROM system.tenants WHERE ($1 <> 0 AND id=$1) OR ($2 <> '' AND name = $2) AND active=true",
+			requestedID, string(params.TenantName),
 		)
 		if err != nil {
 			return nil, err
 		}
-		if row == nil {
-			return nil, errors.New("not found")
+		if len(rows) == 0 {
+			return nil, errors.Newf("no tenant found with ID %d or name %q",
+				requestedID, params.TenantName)
 		}
+		if len(rows) > 1 {
+			return nil, errors.Newf("ambiguous tenant spec: found separate entries for tenant ID %d and name %q\n%+v",
+				requestedID, params.TenantName, rows)
+		}
+		row := rows[0]
 		// Check that the name passed in via params matches the name persisted in
 		// the system.tenants table.
-		if row[0] != tree.DNull {
-			actualName := (*string)(row[0].(*tree.DString))
-			if *actualName != string(params.TenantName) {
-				return nil, errors.Newf("name mismatch; tenant %d has name %s, but params specifies name %s",
-					params.TenantID.ToUint64(), *actualName, params.TenantName)
+		if params.TenantName != "" {
+			if row[1] == tree.DNull || string(params.TenantName) != string(tree.MustBeDString(row[1])) {
+				return nil, errors.Newf("name mismatch; tenant %d has name %q, but params specifies name %q",
+					row[0], row[1], params.TenantName)
 			}
-		} else if params.TenantName != "" {
-			return nil, errors.Newf("name mismatch; tenant %d has no name, but params specifies name %s",
-				params.TenantID.ToUint64(), params.TenantName)
+		}
+		if params.TenantID.IsSet() {
+			if params.TenantID.ToUint64() != uint64(tree.MustBeDInt(row[0])) {
+				return nil, errors.Newf("ID mismatch; tenant %q has ID %d, but params specifies ID %d",
+					row[1], row[0], params.TenantID.ToUint64())
+			}
+		}
+		if row[1] != tree.DNull {
+			params.TenantName = roachpb.TenantName(tree.MustBeDString(row[1]))
+		}
+		if row[0] != tree.DNull {
+			params.TenantID = roachpb.MustMakeTenantID(uint64(tree.MustBeDInt(row[0])))
 		}
 	}
 

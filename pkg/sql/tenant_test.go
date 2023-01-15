@@ -25,9 +25,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestDestroyTenantSynchronous tests that destroying a tenant synchronously
-// with crdb_internal.destroy_tenant(<ten_id>, true) works.
-func TestDestroyTenantSynchronous(t *testing.T) {
+// TestDropTenantSynchronous tests that destroying a tenant synchronously
+// with DROP TENANT IMMEDIATE works.
+func TestDropTenantSynchronous(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -57,7 +57,7 @@ SELECT id, active FROM system.tenants WHERE id = 10
 	checkKVsExistForTenant(t, true /* shouldExist */)
 
 	// Destroy the tenant, make sure it does not have data and state.
-	tdb.Exec(t, "SELECT crdb_internal.destroy_tenant(10, true)")
+	tdb.Exec(t, "DROP TENANT [10] IMMEDIATE")
 	tdb.CheckQueryResults(t, tenantStateQuery, [][]string{})
 	checkKVsExistForTenant(t, false /* shouldExist */)
 }
