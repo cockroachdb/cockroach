@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
+	"github.com/cockroachdb/cockroach/pkg/sql/oidext"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -262,27 +263,16 @@ func makePGGetViewDef(paramTypes tree.ParamTypes) tree.Overload {
 	return tree.Overload{
 		Types:      paramTypes,
 		ReturnType: tree.FixedReturnType(types.String),
-		Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-			r, err := evalCtx.Planner.QueryRowEx(
-				ctx, "pg_get_viewdef",
-				sessiondata.NoSessionDataOverride,
-				`SELECT definition
- FROM pg_catalog.pg_views v
- JOIN pg_catalog.pg_class c ON c.relname=v.viewname
-WHERE c.oid=$1
-UNION ALL
-SELECT definition
- FROM pg_catalog.pg_matviews v
- JOIN pg_catalog.pg_class c ON c.relname=v.matviewname
-WHERE c.oid=$1`, args[0])
-			if err != nil {
-				return nil, err
-			}
-			if len(r) == 0 {
-				return tree.DNull, nil
-			}
-			return r[0], nil
-		},
+		IsUDF:      true,
+		Body: `SELECT definition
+		FROM pg_catalog.pg_views v
+		JOIN pg_catalog.pg_class c ON c.relname=v.viewname
+		WHERE c.oid=$1
+		UNION ALL
+		SELECT definition
+		FROM pg_catalog.pg_matviews v
+		JOIN pg_catalog.pg_class c ON c.relname=v.matviewname
+		WHERE c.oid=$1`,
 		Info:       "Returns the CREATE statement for an existing view.",
 		Volatility: volatility.Stable,
 	}
@@ -293,19 +283,8 @@ func makePGGetConstraintDef(paramTypes tree.ParamTypes) tree.Overload {
 	return tree.Overload{
 		Types:      paramTypes,
 		ReturnType: tree.FixedReturnType(types.String),
-		Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-			r, err := evalCtx.Planner.QueryRowEx(
-				ctx, "pg_get_constraintdef",
-				sessiondata.NoSessionDataOverride,
-				"SELECT condef FROM pg_catalog.pg_constraint WHERE oid=$1", args[0])
-			if err != nil {
-				return nil, err
-			}
-			if len(r) == 0 {
-				return nil, pgerror.Newf(pgcode.InvalidParameterValue, "unknown constraint (OID=%s)", args[0])
-			}
-			return r[0], nil
-		},
+		IsUDF:      true,
+		Body:       `SELECT condef FROM pg_catalog.pg_constraint WHERE oid=$1 LIMIT 1`,
 		Info:       notUsableInfo,
 		Volatility: volatility.Stable,
 	}
@@ -540,6 +519,19 @@ func makeToRegOverload(typ *types.T, helpText string) builtinDefinition {
 	)
 }
 
+// Format the array {type,othertype} as type, othertype.
+// If there are no args, output the empty string.
+const getFunctionArgStringQuery = `SELECT 
+										COALESCE(
+										    (SELECT trim('{}' FROM replace(
+										        array_agg(unnest(proargtypes)::REGTYPE::TEXT)::TEXT,
+										        ',', ', ')))
+										    , '')
+                    FROM pg_catalog.pg_proc
+                    WHERE oid=$1
+                    GROUP BY oid, proargtypes
+                    LIMIT 1`
+
 var pgBuiltins = map[string]builtinDefinition{
 	// See https://www.postgresql.org/docs/9.6/static/functions-info.html.
 	"pg_backend_pid": makeBuiltin(defProps(),
@@ -659,27 +651,15 @@ var pgBuiltins = map[string]builtinDefinition{
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "func_oid", Typ: types.Oid}},
 			ReturnType: tree.FixedReturnType(types.String),
-			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				idToQuery := catid.DescID(tree.MustBeDOid(args[0]).Oid)
-				getFuncQuery := `SELECT prosrc FROM pg_proc WHERE oid=$1`
-				if catid.IsOIDUserDefined(oid.Oid(idToQuery)) {
-					getFuncQuery = `SELECT create_statement FROM crdb_internal.create_function_statements WHERE function_id=$1`
-					idToQuery = catid.UserDefinedOIDToID(oid.Oid(idToQuery))
-				}
-				results, err := evalCtx.Planner.QueryRowEx(
-					ctx, "pg_get_functiondef",
-					sessiondata.NoSessionDataOverride,
-					getFuncQuery,
-					idToQuery,
-				)
-				if err != nil {
-					return nil, err
-				}
-				if len(results) == 0 {
-					return tree.DNull, nil
-				}
-				return results[0], nil
-			},
+			IsUDF:      true,
+			Body: fmt.Sprintf(
+				`SELECT COALESCE(create_statement, prosrc)
+             FROM pg_catalog.pg_proc
+             LEFT JOIN crdb_internal.create_function_statements
+             ON schema_id=pronamespace
+             AND function_id=oid::int-%d
+             WHERE oid=$1
+             LIMIT 1`, oidext.CockroachPredefinedOIDMax),
 			Info: "For user-defined functions, returns the definition of the specified function. " +
 				"For builtin functions, returns the name of the function.",
 			Volatility: volatility.Stable,
@@ -691,39 +671,8 @@ var pgBuiltins = map[string]builtinDefinition{
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "func_oid", Typ: types.Oid}},
 			ReturnType: tree.FixedReturnType(types.String),
-			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				funcOid := tree.MustBeDOid(args[0])
-				t, err := evalCtx.Planner.QueryRowEx(
-					ctx, "pg_get_function_arguments",
-					sessiondata.NoSessionDataOverride,
-					`SELECT array_agg(unnest(proargtypes)::REGTYPE::TEXT) FROM pg_proc WHERE oid=$1`, funcOid.Oid)
-				if err != nil {
-					return nil, err
-				}
-				if len(t) == 0 || t[0] == tree.DNull {
-					return tree.NewDString(""), nil
-				}
-				arr := tree.MustBeDArray(t[0])
-				var sb strings.Builder
-				for i, elem := range arr.Array {
-					if i > 0 {
-						sb.WriteString(", ")
-					}
-					if elem == tree.DNull {
-						// This shouldn't ever happen, but let's be safe about it.
-						sb.WriteString("NULL")
-						continue
-					}
-					str, ok := tree.AsDString(elem)
-					if !ok {
-						// This also shouldn't happen.
-						sb.WriteString(elem.String())
-						continue
-					}
-					sb.WriteString(string(str))
-				}
-				return tree.NewDString(sb.String()), nil
-			},
+			IsUDF:      true,
+			Body:       getFunctionArgStringQuery,
 			Info: "Returns the argument list (with defaults) necessary to identify a function, " +
 				"in the form it would need to appear in within CREATE FUNCTION.",
 			Volatility: volatility.Stable,
@@ -739,20 +688,12 @@ var pgBuiltins = map[string]builtinDefinition{
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "func_oid", Typ: types.Oid}},
 			ReturnType: tree.FixedReturnType(types.String),
-			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				funcOid := tree.MustBeDOid(args[0])
-				t, err := evalCtx.Planner.QueryRowEx(
-					ctx, "pg_get_function_result",
-					sessiondata.NoSessionDataOverride,
-					`SELECT prorettype::REGTYPE::TEXT FROM pg_proc WHERE oid=$1`, funcOid.Oid)
-				if err != nil {
-					return nil, err
-				}
-				if len(t) == 0 {
-					return tree.NewDString(""), nil
-				}
-				return t[0], nil
-			},
+			IsUDF:      true,
+			Body: `SELECT t.typname
+             FROM pg_catalog.pg_proc p
+             JOIN pg_catalog.pg_type t
+             ON prorettype=t.oid
+             WHERE p.oid=$1 LIMIT 1`,
 			Info:       "Returns the types of the result of the specified function.",
 			Volatility: volatility.Stable,
 		},
@@ -767,39 +708,8 @@ var pgBuiltins = map[string]builtinDefinition{
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "func_oid", Typ: types.Oid}},
 			ReturnType: tree.FixedReturnType(types.String),
-			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				funcOid := tree.MustBeDOid(args[0])
-				t, err := evalCtx.Planner.QueryRowEx(
-					ctx, "pg_get_function_identity_arguments",
-					sessiondata.NoSessionDataOverride,
-					`SELECT array_agg(unnest(proargtypes)::REGTYPE::TEXT) FROM pg_proc WHERE oid=$1`, funcOid.Oid)
-				if err != nil {
-					return nil, err
-				}
-				if len(t) == 0 || t[0] == tree.DNull {
-					return tree.NewDString(""), nil
-				}
-				arr := tree.MustBeDArray(t[0])
-				var sb strings.Builder
-				for i, elem := range arr.Array {
-					if i > 0 {
-						sb.WriteString(", ")
-					}
-					if elem == tree.DNull {
-						// This shouldn't ever happen, but let's be safe about it.
-						sb.WriteString("NULL")
-						continue
-					}
-					str, ok := tree.AsDString(elem)
-					if !ok {
-						// This also shouldn't happen.
-						sb.WriteString(elem.String())
-						continue
-					}
-					sb.WriteString(string(str))
-				}
-				return tree.NewDString(sb.String()), nil
-			},
+			IsUDF:      true,
+			Body:       getFunctionArgStringQuery,
 			Info: "Returns the argument list (without defaults) necessary to identify a function, " +
 				"in the form it would need to appear in within ALTER FUNCTION, for instance.",
 			Volatility: volatility.Stable,
@@ -963,20 +873,8 @@ var pgBuiltins = map[string]builtinDefinition{
 				{Name: "role_oid", Typ: types.Oid},
 			},
 			ReturnType: tree.FixedReturnType(types.String),
-			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				oid := args[0]
-				t, err := evalCtx.Planner.QueryRowEx(
-					ctx, "pg_get_userbyid",
-					sessiondata.NoSessionDataOverride,
-					"SELECT rolname FROM pg_catalog.pg_roles WHERE oid=$1", oid)
-				if err != nil {
-					return nil, err
-				}
-				if len(t) == 0 {
-					return tree.NewDString(fmt.Sprintf("unknown (OID=%s)", args[0])), nil
-				}
-				return t[0], nil
-			},
+			IsUDF:      true,
+			Body:       `SELECT COALESCE((SELECT rolname FROM pg_catalog.pg_roles WHERE oid=$1 LIMIT 1), 'unknown (OID=' || $1 || ')')`,
 			Info:       notUsableInfo,
 			Volatility: volatility.Stable,
 		},
@@ -988,29 +886,16 @@ var pgBuiltins = map[string]builtinDefinition{
 		// at least one UI tool, so we provide an implementation for compatibility.
 		// The real implementation returns a record; we fake it by returning a
 		// comma-delimited string enclosed by parentheses.
-		// TODO(jordan): convert this to return a record type once we support that.
 		tree.Overload{
-			Types:      tree.ParamTypes{{Name: "sequence_oid", Typ: types.Oid}},
-			ReturnType: tree.FixedReturnType(types.String),
-			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				r, err := evalCtx.Planner.QueryRowEx(
-					ctx, "pg_sequence_parameters",
-					sessiondata.NoSessionDataOverride,
-					`SELECT seqstart, seqmin, seqmax, seqincrement, seqcycle, seqcache, seqtypid `+
-						`FROM pg_catalog.pg_sequence WHERE seqrelid=$1`, args[0])
-				if err != nil {
-					return nil, err
-				}
-				if len(r) == 0 {
-					return nil, pgerror.Newf(pgcode.UndefinedTable, "unknown sequence (OID=%s)", args[0])
-				}
-				seqstart, seqmin, seqmax, seqincrement, seqcycle, seqcache, seqtypid := r[0], r[1], r[2], r[3], r[4], r[5], r[6]
-				seqcycleStr := "t"
-				if seqcycle.(*tree.DBool) == tree.DBoolFalse {
-					seqcycleStr = "f"
-				}
-				return tree.NewDString(fmt.Sprintf("(%s,%s,%s,%s,%s,%s,%s)", seqstart, seqmin, seqmax, seqincrement, seqcycleStr, seqcache, seqtypid)), nil
-			},
+			Types: tree.ParamTypes{{Name: "sequence_oid", Typ: types.Oid}},
+			ReturnType: tree.FixedReturnType(types.MakeLabeledTuple(
+				[]*types.T{types.Int, types.Int, types.Int, types.Int, types.Bool, types.Int, types.Oid},
+				[]string{"start_value", "minimum_value", "maxmimum_value", "increment", "cycle_option", "cache_size", "data_type"},
+			)),
+			IsUDF: true,
+			Body: `SELECT COALESCE ((SELECT (seqstart, seqmin, seqmax, seqincrement, seqcycle, seqcache, seqtypid)
+             FROM pg_catalog.pg_sequence WHERE seqrelid=$1 LIMIT 1),
+             CASE WHEN crdb_internal.force_error('42P01', 'relation with OID ' || $1 || ' does not exist') > 0 THEN NULL ELSE NULL END)`,
 			Info:       notUsableInfo,
 			Volatility: volatility.Stable,
 		},
@@ -1209,8 +1094,8 @@ var pgBuiltins = map[string]builtinDefinition{
 			Types:      tree.ParamTypes{{Name: "oid", Typ: types.Oid}},
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Body: `SELECT n.nspname = any current_schemas(true)
-             FROM pg_proc p
-             INNER LOOKUP JOIN pg_namespace n
+             FROM pg_catalog.pg_proc p
+             INNER LOOKUP JOIN pg_catalog.pg_namespace n
              ON p.pronamespace = n.oid
              WHERE p.oid=$1 LIMIT 1`,
 			Info:       "Returns whether the function with the given OID belongs to one of the schemas on the search path.",
@@ -1226,8 +1111,8 @@ var pgBuiltins = map[string]builtinDefinition{
 			Types:      tree.ParamTypes{{Name: "oid", Typ: types.Oid}},
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Body: `SELECT n.nspname = any current_schemas(true)
-             FROM pg_class c
-             INNER LOOKUP JOIN pg_namespace n
+             FROM pg_catalog.pg_class c
+             INNER LOOKUP JOIN pg_catalog.pg_namespace n
              ON c.relnamespace = n.oid
              WHERE c.oid=$1 LIMIT 1`,
 			Info:       "Returns whether the table with the given OID belongs to one of the schemas on the search path.",
@@ -1247,8 +1132,8 @@ var pgBuiltins = map[string]builtinDefinition{
 			Types:      tree.ParamTypes{{Name: "oid", Typ: types.Oid}},
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Body: `SELECT n.nspname = any current_schemas(true)
-             FROM pg_type t
-             INNER LOOKUP JOIN pg_namespace n
+             FROM pg_catalog.pg_type t
+             INNER LOOKUP JOIN pg_catalog.pg_namespace n
              ON t.typnamespace = n.oid
              WHERE t.oid=$1 LIMIT 1`,
 			Info:       "Returns whether the type with the given OID belongs to one of the schemas on the search path.",
