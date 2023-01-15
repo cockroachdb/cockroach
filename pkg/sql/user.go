@@ -321,7 +321,9 @@ func retrieveAuthInfo(
 		return aInfo, err
 	}
 	if !hasAdmin {
-		if noSQLLogin := aa.CheckPrivilegeForUser(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.NOSQLLOGIN, user) == nil; noSQLLogin {
+		if ok, err = aa.HasPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.NOSQLLOGIN, user); err != nil {
+			return aInfo, err
+		} else if ok {
 			aInfo.CanLoginSQL = false
 		}
 	}

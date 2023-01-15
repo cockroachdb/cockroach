@@ -1276,7 +1276,12 @@ func checkPrivilegesForRestore(
 	// error. In 22.2 we continue to check for old style privileges and role
 	// options.
 	if len(restoreStmt.Targets.Databases) > 0 {
-		hasRestoreSystemPrivilege := p.CheckPrivilegeForUser(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.RESTORE, p.User()) == nil
+		var hasRestoreSystemPrivilege bool
+		if ok, err := p.HasPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.RESTORE, p.User()); err != nil {
+			return err
+		} else {
+			hasRestoreSystemPrivilege = ok
+		}
 		if hasRestoreSystemPrivilege {
 			return checkRestoreDestinationPrivileges(ctx, p, from)
 		}
