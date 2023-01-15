@@ -1362,7 +1362,7 @@ func (node *PartitionBy) formatListOrRange(ctx *FmtCtx) {
 
 // ListPartition represents a PARTITION definition within a PARTITION BY LIST.
 type ListPartition struct {
-	Name         UnrestrictedName
+	Name         Name
 	Exprs        Exprs
 	Subpartition *PartitionBy
 }
@@ -1381,7 +1381,7 @@ func (node *ListPartition) Format(ctx *FmtCtx) {
 
 // RangePartition represents a PARTITION definition within a PARTITION BY RANGE.
 type RangePartition struct {
-	Name         UnrestrictedName
+	Name         Name
 	From         Exprs
 	To           Exprs
 	Subpartition *PartitionBy

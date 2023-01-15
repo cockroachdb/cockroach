@@ -21,7 +21,7 @@ CREATE TABLE students_by_list (
 				VALUES IN ('CA', 'US'),
 			PARTITION australia
 				VALUES IN ('AU', 'NZ'),
-			PARTITION default
+			PARTITION "default"
 				VALUES IN (DEFAULT)
 		)
 
