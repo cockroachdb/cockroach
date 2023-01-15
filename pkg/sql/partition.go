@@ -61,7 +61,7 @@ func partitionByFromTableDescImpl(
 	a := &tree.DatumAlloc{}
 	err := part.ForEachList(func(name string, values [][]byte, subPartitioning catalog.Partitioning) (err error) {
 		lp := tree.ListPartition{
-			Name:  tree.UnrestrictedName(name),
+			Name:  tree.Name(name),
 			Exprs: make(tree.Exprs, len(values)),
 		}
 		for j, values := range values {
@@ -101,7 +101,7 @@ func partitionByFromTableDescImpl(
 
 	// Copy the RANGE of the PARTITION BY clause.
 	err = part.ForEachRange(func(name string, from, to []byte) error {
-		rp := tree.RangePartition{Name: tree.UnrestrictedName(name)}
+		rp := tree.RangePartition{Name: tree.Name(name)}
 		fromTuple, _, err := rowenc.DecodePartitionTuple(
 			a, codec, tableDesc, idx, part, from, fakePrefixDatums)
 		if err != nil {
