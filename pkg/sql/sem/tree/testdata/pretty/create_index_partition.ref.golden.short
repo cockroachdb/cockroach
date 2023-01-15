@@ -8,7 +8,7 @@ CREATE INDEX foo_b_idx
 		(
 			PARTITION baz
 				VALUES IN ('baz'),
-			PARTITION default
+			PARTITION "default"
 				VALUES IN (DEFAULT)
 		)
 

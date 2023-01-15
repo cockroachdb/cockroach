@@ -11,7 +11,7 @@ CREATE INDEX foo_b_idx ON foo (b, c, d)
 								VALUES IN (
 									'baz'
 								),
-							PARTITION default
+							PARTITION "default"
 								VALUES IN (
 									DEFAULT
 								)
