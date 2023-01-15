@@ -106,7 +106,7 @@ func TestShowChangefeedJobsBasic(t *testing.T) {
 
 	// TODO: Webhook disabled since the query parameters on the sinkURI are
 	// correct but out of order
-	cdcTest(t, testFn, feedTestOmitSinks("webhook", "sinkless"))
+	cdcTest(t, testFn, feedTestOmitSinks("webhook", "sinkless"), feedTestNoExternalConnection)
 }
 
 func TestShowChangefeedJobs(t *testing.T) {
@@ -426,5 +426,5 @@ func TestShowChangefeedJobsAlterChangefeed(t *testing.T) {
 	}
 
 	// Force kafka to validate topics
-	cdcTest(t, testFn, feedTestForceSink("kafka"))
+	cdcTest(t, testFn, feedTestForceSink("kafka"), feedTestNoExternalConnection)
 }

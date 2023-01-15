@@ -11,11 +11,14 @@ package changefeedccl
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn"
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn/connectionpb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/errors"
@@ -61,5 +64,69 @@ func makeExternalConnectionSink(
 		return getSink(ctx, serverCfg, feedCfg, timestampOracle, user, jobID, m)
 	default:
 		return nil, errors.Newf("cannot connect to %T; unsupported resource for a Sink connection", d)
+	}
+}
+
+func validateExternalConnectionSinkURI(
+	ctx context.Context, execCfg interface{}, user username.SQLUsername, uri string,
+) error {
+
+	serverCfg := execinfra.ServerConfig{ExternalStorageFromURI: func(ctx context.Context, uri string,
+		user username.SQLUsername, opts ...cloud.ExternalStorageOption) (cloud.ExternalStorage, error) {
+		return nil, nil
+	}}
+
+	// Pass through the server config, except for the WrapSink testing knob since that often assumes it's
+	// inside a job.
+	if actualExecCfg, ok := execCfg.(*sql.ExecutorConfig); ok {
+		serverCfg = actualExecCfg.DistSQLSrv.ServerConfig
+		if knobs, ok := serverCfg.TestingKnobs.Changefeed.(*TestingKnobs); ok && knobs.WrapSink != nil {
+			wrapSink := knobs.WrapSink
+			knobs.WrapSink = nil
+			defer func() { knobs.WrapSink = wrapSink }()
+		}
+	}
+
+	// Validate the URI by creating a canary sink.
+	//
+	// TODO(adityamaru): When we add `CREATE EXTERNAL CONNECTION ... WITH` support
+	// to accept JSONConfig we should validate that here too.
+	_, err := getSink(ctx, &serverCfg, jobspb.ChangefeedDetails{SinkURI: uri}, nil, user,
+		jobspb.JobID(0), nil)
+	if err != nil {
+		return errors.Wrap(err, "invalid changefeed sink URI")
+	}
+
+	return nil
+}
+
+var supportedExternalConnectionTypes = map[string]connectionpb.ConnectionProvider{
+	changefeedbase.SinkSchemeCloudStorageAzure:     connectionpb.ConnectionProvider_azure_storage,
+	changefeedbase.SinkSchemeCloudStorageGCS:       connectionpb.ConnectionProvider_gs,
+	GcpScheme:                                      connectionpb.ConnectionProvider_gcpubsub,
+	changefeedbase.SinkSchemeCloudStorageHTTP:      connectionpb.ConnectionProvider_http,
+	changefeedbase.SinkSchemeCloudStorageHTTPS:     connectionpb.ConnectionProvider_https,
+	changefeedbase.SinkSchemeCloudStorageNodelocal: connectionpb.ConnectionProvider_nodelocal,
+	changefeedbase.SinkSchemeCloudStorageS3:        connectionpb.ConnectionProvider_s3,
+	changefeedbase.SinkSchemeKafka:                 connectionpb.ConnectionProvider_kafka,
+	changefeedbase.SinkSchemeWebhookHTTP:           connectionpb.ConnectionProvider_webhookhttp,
+	changefeedbase.SinkSchemeWebhookHTTPS:          connectionpb.ConnectionProvider_webhookhttps,
+	// TODO (zinger): Not including SinkSchemeExperimentalSQL for now because A: it's undocumented
+	// and B, in tests it leaks a *gosql.DB and I can't figure out why.
+}
+
+func init() {
+	for scheme, provider := range supportedExternalConnectionTypes {
+		externalconn.RegisterConnectionDetailsFromURIFactory(
+			scheme,
+			provider,
+			externalconn.SimpleURIFactory,
+		)
+
+		externalconn.RegisterNamedValidation(
+			scheme,
+			`changefeed`,
+			validateExternalConnectionSinkURI,
+		)
 	}
 }

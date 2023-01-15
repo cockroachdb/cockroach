@@ -111,6 +111,10 @@ type pubsubSink struct {
 	format changefeedbase.FormatType
 }
 
+func (p *pubsubSink) getConcreteType() sinkType {
+	return sinkTypePubsub
+}
+
 // TODO: unify gcp credentials code with gcp cloud storage credentials code
 // getGCPCredentials returns gcp credentials parsed out from url
 func getGCPCredentials(ctx context.Context, u sinkURL) (option.ClientOption, error) {
