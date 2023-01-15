@@ -507,7 +507,7 @@ user testuser
 query error permission denied to create database
 SELECT crdb_internal.generate_test_objects('foo._._', ARRAY[1,0,0])
 
-query error user testuser has no privileges on relation foo
+query error user has no privileges on foo
 SELECT crdb_internal.generate_test_objects('{"table_templates":["rootonly.foo"]}'::jsonb)
 
 query error template name expansion did not find any usable tables

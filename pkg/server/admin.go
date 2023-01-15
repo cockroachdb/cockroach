@@ -3902,6 +3902,7 @@ func (c *adminPrivilegeChecker) checkHasGlobalPrivilege(
 	planner, cleanup := c.makePlanner("check-system-privilege")
 	defer cleanup()
 	aa := planner.(sql.AuthorizationAccessor)
+	// TODO(rafi): switch to HasPrivilege check, and propogate error.
 	err := aa.CheckPrivilegeForUser(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege, user)
 	return err == nil
 }
