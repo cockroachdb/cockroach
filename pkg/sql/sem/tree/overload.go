@@ -357,7 +357,7 @@ func (p ParamTypes) MatchParamAt(typ *types.T, i int) bool {
 	if typ.Family() == types.TupleFamily {
 		typ = types.AnyTuple
 	}
-	return i < len(p) && (typ.Family() == types.UnknownFamily || p[i].Typ.EquivalentExact(typ))
+	return i < len(p) && (typ.Family() == types.UnknownFamily || p[i].Typ.Identical(typ))
 }
 
 // MatchLen is part of the TypeList interface.
