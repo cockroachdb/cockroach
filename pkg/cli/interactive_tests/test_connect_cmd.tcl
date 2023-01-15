@@ -224,3 +224,26 @@ end_test
 
 stop_server $argv
 
+system "rm -rf logs/db"
+start_server $argv
+
+start_test "Check that the connect cmd does not generate an error when the cluster ID changes"
+send "\\c - root\r"
+eexpect "warning: the cluster ID has changed"
+eexpect "Previous ID"
+eexpect "New Cluster ID"
+eexpect "system>"
+
+send "\\q\r"
+expect {
+    "ERROR" {
+	report "reconnect generated an unexpected error"
+	exit 1
+    }
+    eof { }
+}
+
+end_test
+
+
+stop_server $argv
