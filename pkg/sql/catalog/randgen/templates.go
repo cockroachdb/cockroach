@@ -97,11 +97,19 @@ outer:
 	// Extract the templates.
 	for _, desc := range descs {
 		// Can this user even see this table?
-		if err := g.ext.cat.CheckAnyPrivilege(ctx, desc); err != nil {
+		if ok, err := g.ext.cat.HasAnyPrivilege(ctx, desc); err != nil {
+			panic(genError{err})
+		} else if !ok {
 			if len(descs) == 1 {
 				// The pattern was specific to just one table, so let's be
 				// helpful to the user about why it can't be used.
-				panic(genError{err})
+				panic(genError{
+					pgerror.Newf(
+						pgcode.InsufficientPrivilege,
+						"user has no privileges on %s",
+						desc.GetName(),
+					),
+				})
 			} else {
 				// The expansion resulted in multiple objects; we simply
 				// ignore objects the user can't use.

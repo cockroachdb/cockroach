@@ -2795,10 +2795,21 @@ func userCanSeeDescriptor(
 	// TODO(richardjcai): We may possibly want to remove the ability to view
 	// the descriptor if they have any privilege on the descriptor and only
 	// allow the descriptor to be viewed if they have CONNECT on the DB. #59827.
-	canSeeDescriptor := p.CheckAnyPrivilege(ctx, desc) == nil
+	canSeeDescriptor := false
+	if ok, err := p.HasAnyPrivilege(ctx, desc); err != nil {
+		return false, err
+	} else {
+		canSeeDescriptor = ok
+	}
 	// Users can see objects in the database if they have connect privilege.
 	if parentDBDesc != nil {
-		canSeeDescriptor = canSeeDescriptor || p.CheckPrivilege(ctx, parentDBDesc, privilege.CONNECT) == nil
+		if !canSeeDescriptor {
+			if ok, err := p.HasPrivilege(ctx, parentDBDesc, privilege.CONNECT, p.User()); err != nil {
+				return false, err
+			} else {
+				canSeeDescriptor = ok
+			}
+		}
 	}
 	return canSeeDescriptor, nil
 }
