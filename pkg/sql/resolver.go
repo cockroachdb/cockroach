@@ -161,11 +161,10 @@ func (p *planner) HasAnyPrivilegeForSpecifier(
 			continue
 		}
 
-		if err := p.CheckPrivilegeForUser(ctx, desc, priv.Kind, user); err != nil {
-			if pgerror.GetPGCode(err) == pgcode.InsufficientPrivilege {
-				continue
-			}
+		if ok, err := p.HasPrivilege(ctx, desc, priv.Kind, user); err != nil {
 			return eval.HasNoPrivilege, err
+		} else if !ok {
+			continue
 		}
 
 		if priv.GrantOption {
