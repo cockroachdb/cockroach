@@ -89,7 +89,7 @@ func (p *planner) checkDescriptorPermissions(ctx context.Context, id descpb.ID) 
 		return err
 	}
 	if err := p.CheckAnyPrivilege(ctx, desc); err != nil {
-		return pgerror.New(pgcode.InsufficientPrivilege, "insufficient privilege")
+		return pgerror.Wrapf(err, pgcode.InsufficientPrivilege, "insufficient privilege")
 	}
 	return nil
 }
