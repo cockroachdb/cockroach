@@ -40,6 +40,11 @@ object AliasType
 AliasType :  TypeID
 AliasType :  TypeT
 
+object CompositeType
+
+CompositeType :  TypeID
+CompositeType :  ArrayTypeID
+
 object ColumnFamily
 
 ColumnFamily :  TableID
@@ -75,6 +80,8 @@ object UniqueWithoutIndexConstraint
 UniqueWithoutIndexConstraint :  TableID
 UniqueWithoutIndexConstraint :  ConstraintID
 UniqueWithoutIndexConstraint : []ColumnIDs
+UniqueWithoutIndexConstraint :  Predicate
+UniqueWithoutIndexConstraint :  IndexIDForValidation
 
 object CheckConstraint
 
@@ -92,6 +99,10 @@ ForeignKeyConstraint :  ConstraintID
 ForeignKeyConstraint : []ColumnIDs
 ForeignKeyConstraint :  ReferencedTableID
 ForeignKeyConstraint : []ReferencedColumnIDs
+ForeignKeyConstraint :  OnUpdateAction
+ForeignKeyConstraint :  OnDeleteAction
+ForeignKeyConstraint :  CompositeKeyMatchMethod
+ForeignKeyConstraint :  IndexIDForValidation
 
 object TableComment
 
@@ -286,6 +297,16 @@ EnumTypeValue :  TypeID
 EnumTypeValue : []PhysicalRepresentation
 EnumTypeValue :  LogicalRepresentation
 
+object CompositeTypeAttrType
+
+CompositeTypeAttrType :  CompositeTypeID
+CompositeTypeAttrType :  TypeT
+
+object CompositeTypeAttrName
+
+CompositeTypeAttrName :  CompositeTypeID
+CompositeTypeAttrName :  Name
+
 Table <|-- ColumnFamily
 Table <|-- Column
 View <|-- Column
@@ -373,4 +394,6 @@ Table <|-- ObjectParent
 View <|-- ObjectParent
 Sequence <|-- ObjectParent
 EnumType <|-- EnumTypeValue
+CompositeType <|-- CompositeTypeAttrType
+CompositeType <|-- CompositeTypeAttrName
 @enduml

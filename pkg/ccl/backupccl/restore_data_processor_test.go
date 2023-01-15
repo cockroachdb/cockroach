@@ -36,7 +36,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/oppurpose"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -365,7 +364,6 @@ func runTestIngest(t *testing.T, init func(*cluster.Settings)) {
 				ctx,
 				reqMidKey1,
 				hlc.MaxTimestamp, /* expirationTime */
-				oppurpose.SplitBackup,
 			); err != nil {
 				t.Fatal(err)
 			}
@@ -373,7 +371,6 @@ func runTestIngest(t *testing.T, init func(*cluster.Settings)) {
 				ctx,
 				reqMidKey2,
 				hlc.MaxTimestamp, /* expirationTime */
-				oppurpose.SplitBackup,
 			); err != nil {
 				t.Fatal(err)
 			}

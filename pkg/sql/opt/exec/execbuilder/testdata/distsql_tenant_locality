@@ -1,5 +1,5 @@
 # LogicTest: 3node-tenant-multiregion
-# tenant-cluster-setting-override-opt: allow-zone-configs-for-secondary-tenants allow-multi-region-abstractions-for-secondary-tenants
+# tenant-cluster-setting-override-opt: allow-split-at-for-secondary-tenants allow-zone-configs-for-secondary-tenants allow-multi-region-abstractions-for-secondary-tenants
 
 # Create a table on the secondary tenant.
 statement ok
@@ -98,3 +98,42 @@ vectorized: true
   limit: 10
 ·
 Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyMUF9LvEAUff99iuE8_YpZnDHoYSAoNiPB_ZMKBSVhellkXcecMQrxu4f60G7Q1tucc-85c87tYF5LKHgP6-DKX7L_134UR3fBCYu8wJvH7JTdhKsFs-z-1gs9tmVPrRBndMEkC_yFHzMpwFHpnJbpjgzUIyQ4XCQcdaMzMkY3A92NS37-DiU4iqpu7UAnHJluCKqDLWxJUFjqma6dwSUnmxbluNZz6NZ-iYxNNwTl9nzPWB43jtOXkkJKc2occWAPe2mf6y19gGOuy3ZXGcW2nL2BI6rTATlSnDvSkbPx4YIjKHaFHfr_FE4ehPuldUim1pWhP9UWfcJB-YamyxrdNhmtG52N30xwNepGIidjp6k7Ab-aRkPAfbE8KhbfxEn_7zMAAP__RR61bw==
+
+
+# Regression test for #93887 - don't panic when generating index recommendations
+# with a mix of local and remote partitions.
+statement ok
+CREATE TABLE t93887 (x INT PRIMARY KEY, y INT) PARTITION BY LIST (x) (
+    PARTITION p1 VALUES IN (1),
+    PARTITION p2 VALUES IN (2),
+    PARTITION p3 VALUES IN (3)
+)
+
+statement ok
+ALTER PARTITION p1 OF TABLE t93887 CONFIGURE ZONE USING constraints='[+region=test]';
+ALTER PARTITION p2 OF TABLE t93887 CONFIGURE ZONE USING constraints='[+region=test1]';
+ALTER PARTITION p3 OF TABLE t93887 CONFIGURE ZONE USING constraints='[+region=test2]'
+
+statement ok
+SET index_recommendations_enabled = true;
+
+query T retry
+EXPLAIN SELECT * FROM t93887 WHERE y = 1
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ filter: y = 1
+│
+└── • scan
+      missing stats
+      table: t93887@t93887_pkey
+      spans: FULL SCAN
+·
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INDEX ON t93887 (y);
+
+statement ok
+RESET index_recommendations_enabled;

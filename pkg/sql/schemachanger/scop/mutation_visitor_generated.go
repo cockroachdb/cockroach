@@ -58,8 +58,15 @@ type MutationVisitor interface {
 	MakeAbsentCheckConstraintWriteOnly(context.Context, MakeAbsentCheckConstraintWriteOnly) error
 	MakePublicCheckConstraintValidated(context.Context, MakePublicCheckConstraintValidated) error
 	MakeValidatedCheckConstraintPublic(context.Context, MakeValidatedCheckConstraintPublic) error
+	MakeAbsentForeignKeyConstraintWriteOnly(context.Context, MakeAbsentForeignKeyConstraintWriteOnly) error
+	MakeValidatedForeignKeyConstraintPublic(context.Context, MakeValidatedForeignKeyConstraintPublic) error
+	MakePublicForeignKeyConstraintValidated(context.Context, MakePublicForeignKeyConstraintValidated) error
 	RemoveForeignKeyConstraint(context.Context, RemoveForeignKeyConstraint) error
 	RemoveForeignKeyBackReference(context.Context, RemoveForeignKeyBackReference) error
+	MakeAbsentUniqueWithoutIndexConstraintWriteOnly(context.Context, MakeAbsentUniqueWithoutIndexConstraintWriteOnly) error
+	MakeValidatedUniqueWithoutIndexConstraintPublic(context.Context, MakeValidatedUniqueWithoutIndexConstraintPublic) error
+	MakePublicUniqueWithoutIndexConstraintValidated(context.Context, MakePublicUniqueWithoutIndexConstraintValidated) error
+	RemoveUniqueWithoutIndexConstraint(context.Context, RemoveUniqueWithoutIndexConstraint) error
 	RemoveSchemaParent(context.Context, RemoveSchemaParent) error
 	AddIndexPartitionInfo(context.Context, AddIndexPartitionInfo) error
 	LogEvent(context.Context, LogEvent) error
@@ -69,6 +76,7 @@ type MutationVisitor interface {
 	AddColumnOnUpdateExpression(context.Context, AddColumnOnUpdateExpression) error
 	RemoveColumnOnUpdateExpression(context.Context, RemoveColumnOnUpdateExpression) error
 	UpdateTableBackReferencesInTypes(context.Context, UpdateTableBackReferencesInTypes) error
+	UpdateTypeBackReferencesInTypes(context.Context, UpdateTypeBackReferencesInTypes) error
 	RemoveBackReferenceInTypes(context.Context, RemoveBackReferenceInTypes) error
 	UpdateBackReferencesInSequences(context.Context, UpdateBackReferencesInSequences) error
 	RemoveViewBackReferencesInRelations(context.Context, RemoveViewBackReferencesInRelations) error
@@ -282,6 +290,21 @@ func (op MakeValidatedCheckConstraintPublic) Visit(ctx context.Context, v Mutati
 }
 
 // Visit is part of the MutationOp interface.
+func (op MakeAbsentForeignKeyConstraintWriteOnly) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.MakeAbsentForeignKeyConstraintWriteOnly(ctx, op)
+}
+
+// Visit is part of the MutationOp interface.
+func (op MakeValidatedForeignKeyConstraintPublic) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.MakeValidatedForeignKeyConstraintPublic(ctx, op)
+}
+
+// Visit is part of the MutationOp interface.
+func (op MakePublicForeignKeyConstraintValidated) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.MakePublicForeignKeyConstraintValidated(ctx, op)
+}
+
+// Visit is part of the MutationOp interface.
 func (op RemoveForeignKeyConstraint) Visit(ctx context.Context, v MutationVisitor) error {
 	return v.RemoveForeignKeyConstraint(ctx, op)
 }
@@ -289,6 +312,26 @@ func (op RemoveForeignKeyConstraint) Visit(ctx context.Context, v MutationVisito
 // Visit is part of the MutationOp interface.
 func (op RemoveForeignKeyBackReference) Visit(ctx context.Context, v MutationVisitor) error {
 	return v.RemoveForeignKeyBackReference(ctx, op)
+}
+
+// Visit is part of the MutationOp interface.
+func (op MakeAbsentUniqueWithoutIndexConstraintWriteOnly) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.MakeAbsentUniqueWithoutIndexConstraintWriteOnly(ctx, op)
+}
+
+// Visit is part of the MutationOp interface.
+func (op MakeValidatedUniqueWithoutIndexConstraintPublic) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.MakeValidatedUniqueWithoutIndexConstraintPublic(ctx, op)
+}
+
+// Visit is part of the MutationOp interface.
+func (op MakePublicUniqueWithoutIndexConstraintValidated) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.MakePublicUniqueWithoutIndexConstraintValidated(ctx, op)
+}
+
+// Visit is part of the MutationOp interface.
+func (op RemoveUniqueWithoutIndexConstraint) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.RemoveUniqueWithoutIndexConstraint(ctx, op)
 }
 
 // Visit is part of the MutationOp interface.
@@ -334,6 +377,11 @@ func (op RemoveColumnOnUpdateExpression) Visit(ctx context.Context, v MutationVi
 // Visit is part of the MutationOp interface.
 func (op UpdateTableBackReferencesInTypes) Visit(ctx context.Context, v MutationVisitor) error {
 	return v.UpdateTableBackReferencesInTypes(ctx, op)
+}
+
+// Visit is part of the MutationOp interface.
+func (op UpdateTypeBackReferencesInTypes) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.UpdateTypeBackReferencesInTypes(ctx, op)
 }
 
 // Visit is part of the MutationOp interface.

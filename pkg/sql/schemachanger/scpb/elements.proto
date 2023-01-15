@@ -14,6 +14,7 @@ option go_package = "scpb";
 
 import "sql/catalog/catenumpb/index.proto";
 import "sql/catalog/catpb/catalog.proto";
+import "sql/sem/semenumpb/constraint.proto";
 import "sql/types/types.proto";
 import "gogoproto/gogo.proto";
 import "geo/geoindex/config.proto";
@@ -59,6 +60,7 @@ message ElementProto {
   Table table = 5;
   EnumType enum_type = 6;
   AliasType alias_type = 7;
+  CompositeType composite_type = 8;
 
   // Relation elements.
   ColumnFamily column_family = 20 [(gogoproto.moretags) = "parent:\"Table\""];
@@ -122,7 +124,11 @@ message ElementProto {
   // Enum type elements.
   EnumTypeValue enum_type_value = 120 [(gogoproto.moretags) = "parent:\"EnumType\""];
 
-  // Next element group start id: 140
+  // Composite type elements.
+  CompositeTypeAttrType composite_type_attr_type = 140 [(gogoproto.moretags) = "parent:\"CompositeType\""];
+  CompositeTypeAttrName composite_type_attr_name = 141 [(gogoproto.moretags) = "parent:\"CompositeType\""];
+
+  // Next element group start id: 160
 }
 
 // TypeT is a wrapper for a types.T which contains its user-defined type ID
@@ -320,6 +326,12 @@ message UniqueWithoutIndexConstraint {
   uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
   uint32 constraint_id = 2 [(gogoproto.customname) = "ConstraintID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ConstraintID"];
   repeated uint32 column_ids = 3 [(gogoproto.customname) = "ColumnIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ColumnID"];
+  // Predicate, if non-nil, means a partial uniqueness constraint.
+  Expression predicate = 4 [(gogoproto.customname) = "Predicate"];
+  // IndexIDForValidation is the index id to hint to the unique_without_index
+  // constraint validation SQL query about which index to validate against.
+  // It is used exclusively by sql.validateUniqueConstraint.
+  uint32 index_id_for_validation = 5 [(gogoproto.customname) = "IndexIDForValidation", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.IndexID"];
 }
 
 message CheckConstraint {
@@ -340,6 +352,12 @@ message ForeignKeyConstraint {
   repeated uint32 column_ids = 3 [(gogoproto.customname) = "ColumnIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ColumnID"];
   uint32 referenced_table_id = 4 [(gogoproto.customname) = "ReferencedTableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
   repeated uint32 referenced_column_ids = 5 [(gogoproto.customname) = "ReferencedColumnIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ColumnID"];
+  cockroach.sql.sem.semenumpb.ForeignKeyAction on_update_action = 6 [(gogoproto.customname) = "OnUpdateAction"];
+  cockroach.sql.sem.semenumpb.ForeignKeyAction on_delete_action = 7 [(gogoproto.customname) = "OnDeleteAction"];
+  cockroach.sql.sem.semenumpb.Match composite_key_match_method = 8 [(gogoproto.customname) = "CompositeKeyMatchMethod"];
+  // IndexIDForValidation is the index id to hint to the foreign key constraint validation SQL query about which index
+  // to validate against. It is used exclusively by sql.validateFKExpr.
+  uint32 index_id_for_validation = 9 [(gogoproto.customname) = "IndexIDForValidation", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.IndexID"];
 }
 
 message EnumType {
@@ -351,6 +369,11 @@ message EnumType {
 message AliasType {
   uint32 type_id = 1 [(gogoproto.customname) = "TypeID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
   TypeT embedded_type_t = 2 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
+message CompositeType {
+  uint32 type_id = 1 [(gogoproto.customname) = "TypeID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  uint32 array_type_id = 2 [(gogoproto.customname) = "ArrayTypeID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
 }
 
 message Schema {
@@ -380,7 +403,7 @@ message Owner {
 message UserPrivileges {
   uint32 descriptor_id = 1 [(gogoproto.customname) = "DescriptorID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
   string user_name = 2;
-  uint32 privileges = 3;
+  uint64 privileges = 3;
 }
 
 message TableLocalityGlobal {
@@ -507,6 +530,16 @@ message EnumTypeValue {
   uint32 type_id = 1 [(gogoproto.customname) = "TypeID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
   bytes physical_representation = 2;
   string logical_representation = 3;
+}
+
+message CompositeTypeAttrName {
+  uint32 composite_type_id = 1 [(gogoproto.customname) = "CompositeTypeID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  string name = 2;
+}
+
+message CompositeTypeAttrType {
+  uint32 composite_type_id = 1 [(gogoproto.customname) = "CompositeTypeID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  TypeT embedded_type_t = 2 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
 // TableZoneConfig temporary place holder just to allow blocking operations.

@@ -34,7 +34,7 @@ upsert descriptor #104
   +  version: "2"
 upsert descriptor #105
   ...
-         withGrantOption: 2
+         withGrantOption: "2"
        version: 2
   -  version: "1"
   +  referencingDescriptorIds:
@@ -42,7 +42,7 @@ upsert descriptor #105
   +  version: "2"
 upsert descriptor #106
   ...
-         withGrantOption: 2
+         withGrantOption: "2"
        version: 2
   -  version: "1"
   +  referencingDescriptorIds:
@@ -164,7 +164,7 @@ begin transaction #2
 commit transaction #2
 begin transaction #3
 ## PostCommitPhase stage 1 of 2 with 1 ValidationType op
-validate check constraint crdb_internal_constraint_2_name_placeholder in table #107
+validate CHECK constraint crdb_internal_constraint_2_name_placeholder in table #107
 commit transaction #3
 begin transaction #4
 ## PostCommitPhase stage 2 of 2 with 7 MutationType ops

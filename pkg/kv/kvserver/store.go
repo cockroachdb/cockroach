@@ -916,6 +916,9 @@ type Store struct {
 		// INVARIANT: Any ReplicaPlaceholder in this map is also in replicaPlaceholders.
 		// INVARIANT: Any Replica with Replica.IsInitialized()==true is also in replicasByRangeID.
 		replicasByKey *storeReplicaBTree
+		// creatingReplicas stores IDs of all ranges for which there is an ongoing
+		// attempt to create a replica.
+		creatingReplicas map[roachpb.RangeID]struct{}
 		// All *Replica objects for which Replica.IsInitialized is false.
 		//
 		// INVARIANT: any entry in this map is also in replicasByRangeID.
@@ -1290,6 +1293,7 @@ func NewStore(
 	s.mu.Lock()
 	s.mu.replicaPlaceholders = map[roachpb.RangeID]*ReplicaPlaceholder{}
 	s.mu.replicasByKey = newStoreReplicaBTree()
+	s.mu.creatingReplicas = map[roachpb.RangeID]struct{}{}
 	s.mu.uninitReplicas = map[roachpb.RangeID]*Replica{}
 	s.mu.Unlock()
 
@@ -1889,7 +1893,11 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		// constraint (*Replica).raftMu < (*Store).mu. See the comment on
 		// (Store).mu.
 		s.mu.Lock()
-		err = s.addReplicaInternalLocked(rep)
+		// TODO(pavelkalinnikov): hide these in Store's replica create functions.
+		err = s.addToReplicasByRangeIDLocked(rep)
+		if err == nil {
+			err = s.addToReplicasByKeyLocked(rep)
+		}
 		s.mu.Unlock()
 		if err != nil {
 			return err

@@ -29,7 +29,6 @@ go_library(
         "//pkg/sql/catalog/descs",
         "//pkg/sql/catalog/nstree",
         "//pkg/sql/catalog/resolver",
-        "//pkg/sql/oppurpose",
         "//pkg/sql/rowenc",
         "//pkg/sql/schemachanger/scbuild",
         "//pkg/sql/schemachanger/scexec",

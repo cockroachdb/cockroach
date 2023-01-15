@@ -76,6 +76,7 @@ elif [ "${#disks[@]}" -eq "1" ] || [ -n "$use_multiple_disks" ]; then
     mount -o ${mount_opts} ${disk} ${mountpoint}
     chmod 777 ${mountpoint}
     echo "${disk} ${mountpoint} ext4 ${mount_opts} 1 1" | tee -a /etc/fstab
+    tune2fs -m 0 ${disk}
   done
 else
   mountpoint="${mount_prefix}1"
@@ -87,6 +88,7 @@ else
   mount -o ${mount_opts} ${raiddisk} ${mountpoint}
   chmod 777 ${mountpoint}
   echo "${raiddisk} ${mountpoint} ext4 ${mount_opts} 1 1" | tee -a /etc/fstab
+  tune2fs -m 0 ${raiddisk}
 fi
 
 sudo apt-get install -qy chrony

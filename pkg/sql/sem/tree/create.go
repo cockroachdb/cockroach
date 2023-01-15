@@ -48,6 +48,7 @@ type CreateDatabase struct {
 	SurvivalGoal    SurvivalGoal
 	Placement       DataPlacement
 	Owner           RoleSpec
+	SuperRegion     SuperRegion
 	SecondaryRegion Name
 }
 
@@ -119,6 +120,10 @@ func (node *CreateDatabase) Format(ctx *FmtCtx) {
 	if node.Owner.Name != "" {
 		ctx.WriteString(" OWNER = ")
 		ctx.FormatNode(&node.Owner)
+	}
+
+	if node.SuperRegion.Name != "" {
+		ctx.FormatNode(&node.SuperRegion)
 	}
 
 	if node.SecondaryRegion != "" {
@@ -1126,73 +1131,6 @@ func (node *UniqueConstraintTableDef) Format(ctx *FmtCtx) {
 	if node.NotVisible {
 		ctx.WriteString(" NOT VISIBLE")
 	}
-}
-
-// ReferenceAction is the method used to maintain referential integrity through
-// foreign keys.
-type ReferenceAction int
-
-// The values for ReferenceAction.
-const (
-	NoAction ReferenceAction = iota
-	Restrict
-	SetNull
-	SetDefault
-	Cascade
-)
-
-var referenceActionName = [...]string{
-	NoAction:   "NO ACTION",
-	Restrict:   "RESTRICT",
-	SetNull:    "SET NULL",
-	SetDefault: "SET DEFAULT",
-	Cascade:    "CASCADE",
-}
-
-func (ra ReferenceAction) String() string {
-	return referenceActionName[ra]
-}
-
-// ReferenceActions contains the actions specified to maintain referential
-// integrity through foreign keys for different operations.
-type ReferenceActions struct {
-	Delete ReferenceAction
-	Update ReferenceAction
-}
-
-// Format implements the NodeFormatter interface.
-func (node *ReferenceActions) Format(ctx *FmtCtx) {
-	if node.Delete != NoAction {
-		ctx.WriteString(" ON DELETE ")
-		ctx.WriteString(node.Delete.String())
-	}
-	if node.Update != NoAction {
-		ctx.WriteString(" ON UPDATE ")
-		ctx.WriteString(node.Update.String())
-	}
-}
-
-// CompositeKeyMatchMethod is the algorithm use when matching composite keys.
-// See https://github.com/cockroachdb/cockroach/issues/20305 or
-// https://www.postgresql.org/docs/11/sql-createtable.html for details on the
-// different composite foreign key matching methods.
-type CompositeKeyMatchMethod int
-
-// The values for CompositeKeyMatchMethod.
-const (
-	MatchSimple CompositeKeyMatchMethod = iota
-	MatchFull
-	MatchPartial // Note: PARTIAL not actually supported at this point.
-)
-
-var compositeKeyMatchMethodName = [...]string{
-	MatchSimple:  "MATCH SIMPLE",
-	MatchFull:    "MATCH FULL",
-	MatchPartial: "MATCH PARTIAL",
-}
-
-func (c CompositeKeyMatchMethod) String() string {
-	return compositeKeyMatchMethodName[c]
 }
 
 // ForeignKeyConstraintTableDef represents a FOREIGN KEY constraint in the AST.
@@ -2275,4 +2213,21 @@ func (o *TenantReplicationOptions) CombineWith(other *TenantReplicationOptions) 
 func (o TenantReplicationOptions) IsDefault() bool {
 	options := TenantReplicationOptions{}
 	return o.Retention == options.Retention
+}
+
+type SuperRegion struct {
+	Name    Name
+	Regions NameList
+}
+
+func (node *SuperRegion) Format(ctx *FmtCtx) {
+	ctx.WriteString(" SUPER REGION ")
+	ctx.FormatNode(&node.Name)
+	ctx.WriteString(" VALUES ")
+	for i, region := range node.Regions {
+		if i != 0 {
+			ctx.WriteString(",")
+		}
+		ctx.FormatNode(&region)
+	}
 }

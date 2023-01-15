@@ -76,7 +76,8 @@ func undroppedElements(b BuildCtx, id catid.DescID) ElementResultSet {
 			// are decomposed to elements, these are then given scpb.InvalidTarget
 			// target states by the decomposition logic.
 			switch e.(type) {
-			case *scpb.Database, *scpb.Schema, *scpb.Table, *scpb.Sequence, *scpb.View, *scpb.EnumType, *scpb.AliasType:
+			case *scpb.Database, *scpb.Schema, *scpb.Table, *scpb.Sequence, *scpb.View, *scpb.EnumType, *scpb.AliasType,
+				*scpb.CompositeType:
 				panic(errors.Wrapf(pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 					"object state is %s instead of PUBLIC, cannot be targeted by DROP", current),
 					"%s", errMsgPrefix(b, id)))
@@ -111,7 +112,7 @@ func errMsgPrefix(b BuildCtx, id catid.DescID) string {
 			typ = "sequence"
 		case *scpb.View:
 			typ = "view"
-		case *scpb.EnumType, *scpb.AliasType:
+		case *scpb.EnumType, *scpb.AliasType, *scpb.CompositeType:
 			typ = "type"
 		case *scpb.Namespace:
 			// Set the name either from the first encountered Namespace element, or
@@ -161,7 +162,7 @@ func dropCascadeDescriptor(b BuildCtx, id catid.DescID) {
 			if t.IsTemporary {
 				panic(scerrors.NotImplementedErrorf(nil, "dropping a temporary view"))
 			}
-		case *scpb.EnumType, *scpb.AliasType:
+		case *scpb.EnumType, *scpb.AliasType, *scpb.CompositeType:
 			break
 		default:
 			return
@@ -178,6 +179,8 @@ func dropCascadeDescriptor(b BuildCtx, id catid.DescID) {
 		b.Drop(e)
 		switch t := e.(type) {
 		case *scpb.EnumType:
+			dropCascadeDescriptor(next, t.ArrayTypeID)
+		case *scpb.CompositeType:
 			dropCascadeDescriptor(next, t.ArrayTypeID)
 		case *scpb.SequenceOwner:
 			dropCascadeDescriptor(next, t.SequenceID)
@@ -198,6 +201,8 @@ func dropCascadeDescriptor(b BuildCtx, id catid.DescID) {
 		case *scpb.AliasType:
 			dropCascadeDescriptor(next, t.TypeID)
 		case *scpb.EnumType:
+			dropCascadeDescriptor(next, t.TypeID)
+		case *scpb.CompositeType:
 			dropCascadeDescriptor(next, t.TypeID)
 		case *scpb.Column, *scpb.ColumnType, *scpb.SecondaryIndexPartial:
 			// These only have type references.
@@ -322,6 +327,30 @@ func getColumnIDFromColumnName(
 		panic(errors.AssertionFailedf("programming error: cannot find a Column element for column %v", columnName))
 	}
 	return colElem.ColumnID
+}
+
+// mustGetColumnIDFromColumnName looks up a column's ID by its name.
+// If no column with this name exists, panic.
+func mustGetColumnIDFromColumnName(
+	b BuildCtx, tableID catid.DescID, columnName tree.Name,
+) catid.ColumnID {
+	colID := getColumnIDFromColumnName(b, tableID, columnName)
+	if colID == 0 {
+		panic(errors.AssertionFailedf("cannot find column with name %v", columnName))
+	}
+	return colID
+}
+
+func mustGetTableIDFromTableName(b BuildCtx, tableName tree.TableName) catid.DescID {
+	tableElems := b.ResolveTable(tableName.ToUnresolvedObjectName(), ResolveParams{
+		IsExistenceOptional: false,
+		RequiredPrivilege:   privilege.CREATE,
+	})
+	_, _, tableElem := scpb.FindTable(tableElems)
+	if tableElem == nil {
+		panic(errors.AssertionFailedf("programming error: cannot find a Table element for table %v", tableName))
+	}
+	return tableElem.TableID
 }
 
 func toPublicNotCurrentlyPublicFilter(

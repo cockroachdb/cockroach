@@ -12,8 +12,8 @@ package randgen
 
 import (
 	"context"
-	"math"
 	"math/rand"
+	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
 )
 
@@ -47,6 +48,7 @@ func NewTestSchemaGenerator(
 	currentSearchPath sessiondata.SearchPath,
 	kvTrace bool,
 	idGen eval.DescIDGenerator,
+	mon *mon.BytesMonitor,
 	rand *rand.Rand,
 ) TestSchemaGenerator {
 	dbPrivs := catpb.NewBaseDatabasePrivilegeDescriptor(callingUser)
@@ -62,6 +64,7 @@ func NewTestSchemaGenerator(
 	g.ext.cat = cat
 	g.ext.coll = descCollection
 	g.ext.idGen = idGen
+	g.ext.mon = mon
 
 	g.cfg.TestSchemaGeneratorConfig = cfg
 	g.cfg.user = callingUser
@@ -179,6 +182,11 @@ func (g *testSchemaGenerator) Generate(
 				"only admin users can generate more than %d descriptors at a time", maxNewDescsPerNonAdmin)
 		}
 
+		// Check that we have enough memory upfront.
+		acc := g.ext.mon.MakeBoundAccount()
+		defer acc.Close(ctx)
+		g.checkMemoryUsage(ctx, &acc, expDbs, expScs, expTbs)
+
 		// Where are we creating the objects?
 		g.lookupBaseNamespaces(ctx, tn)
 
@@ -237,6 +245,7 @@ type testSchemaGenerator struct {
 	ext struct {
 		txn *kv.Txn
 		st  *cluster.Settings
+		mon *mon.BytesMonitor
 
 		// Catalog interface.
 		cat Catalog
@@ -302,18 +311,25 @@ func (g *testSchemaGenerator) prepareCounts(
 	namePattern *tree.TableName,
 ) (expectedNewDbs, expectedNewSchemas, expectedNewTables int) {
 	counts := g.cfg.Counts
+	const reasonableMaxCount = 10000000
 	for _, sz := range counts {
-		if sz < 0 || sz > math.MaxInt {
+		// We cap the individual count to a maximum number for two purposes.
+		// One is that abnormally large values are likely indicative
+		// of a user mistake; in which case we want an informative error message
+		// instead of something related to memory usage.
+		// The second is that we want to avoid an overflow in the computation
+		// of the byte monitor pre-allocation in checkMemoryUsage().
+		if sz < 0 || sz > reasonableMaxCount {
 			panic(genError{errors.WithHintf(pgerror.Newf(pgcode.Syntax, "invalid count"),
-				"Each count must be between 0 and %d.", math.MaxInt)})
+				"Each count must be between 0 and %d.", reasonableMaxCount)})
 		}
 	}
 
 	g.gencfg.createDatabases = false
 	g.gencfg.createSchemas = false
 	g.gencfg.useGeneratedPublicSchema = false
-	if len(counts) > 3 {
-		panic(genError{errors.WithHint(pgerror.Newf(pgcode.Syntax, "too many counts"),
+	if len(counts) < 1 || len(counts) > 3 {
+		panic(genError{errors.WithHint(pgerror.Newf(pgcode.Syntax, "invalid count"),
 			"Must specify between 1 and 3 counts.")})
 	}
 	numNewDatabases := 0
@@ -362,7 +378,48 @@ func (g *testSchemaGenerator) prepareCounts(
 	if g.gencfg.createDatabases {
 		numNewTables = numNewTables * g.gencfg.numDatabases
 	}
+	if numNewDatabases+numNewSchemas+numNewTables > reasonableMaxCount {
+		panic(genError{errors.WithHintf(
+			pgerror.Newf(pgcode.Syntax, "too many objects generated"),
+			"Can generate max %d at a time.", reasonableMaxCount)})
+	}
 	return numNewDatabases, numNewSchemas, numNewTables
+}
+
+func (g *testSchemaGenerator) checkMemoryUsage(
+	ctx context.Context, acc *mon.BoundAccount, expDbs, expScs, expTbs int,
+) {
+	// Below we count the descriptors two times, one for the go struct
+	// stored in the catalog and one for the protobuf encoding in the
+	// KV batch.
+	// We also count the length of the name patterns 4 times, because
+	// we estimate that the noise generation can add up to 4 bytes
+	// per byte in the name on average.
+	if err := acc.Grow(ctx,
+		// Descriptors.
+		int64(expDbs)*(int64(2*unsafe.Sizeof(g.models.db))+
+			int64(2*unsafe.Sizeof(g.models.publicSc)))+
+			// Names and IDs.
+			int64(g.gencfg.numDatabases)*(int64(4*len(g.gencfg.dbNamePat))+
+				int64(unsafe.Sizeof(descpb.ID(0))))); err != nil {
+		panic(genError{err})
+	}
+	if err := acc.Grow(ctx,
+		// Descriptors.
+		int64(expScs)*int64(2*unsafe.Sizeof(g.models.sc))+
+			// Names and IDs.
+			int64(g.gencfg.numSchemasPerDatabase)*(int64(4*len(g.gencfg.scNamePat))+
+				int64(unsafe.Sizeof(descpb.ID(0))))); err != nil {
+		panic(genError{err})
+	}
+	if err := acc.Grow(ctx,
+		// Descriptors.
+		int64(expTbs)*int64(2*unsafe.Sizeof(g.models.tb))+
+			// Names and IDs.
+			int64(g.gencfg.numTablesPerSchema)*(int64(4*len(g.gencfg.tbNamePat))+
+				int64(unsafe.Sizeof(descpb.ID(0))))); err != nil {
+		panic(genError{err})
+	}
 }
 
 func (g *testSchemaGenerator) lookupBaseNamespaces(

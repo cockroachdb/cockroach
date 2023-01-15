@@ -214,7 +214,7 @@ data: "g"/1.000000000,0 -> /BYTES/g1
 data: "i"/1.000000000,0 -> /INT/1
 data: "j"/1.000000000,0 -> /INT/1
 stats: key_count=7 key_bytes=146 val_count=11 val_bytes=115 range_key_count=2 range_key_bytes=35 range_val_count=3 live_count=4 live_bytes=131 gc_bytes_age=16010 intent_count=1 intent_bytes=18 separated_intent_count=1 intent_age=93
-error: (*roachpb.ConditionFailedError:) unexpected value: timestamp:<wall_time:5000000000 > 
+error: (*roachpb.ConditionFailedError:) unexpected value: timestamp:<wall_time:5000000000 >
 
 # A CPut replay of an intent expecting a value covered by a range tombstone
 # should error because of the range tombstone covering it.
@@ -240,7 +240,7 @@ data: "g"/1.000000000,0 -> /BYTES/g1
 data: "i"/1.000000000,0 -> /INT/1
 data: "j"/1.000000000,0 -> /INT/1
 stats: key_count=7 key_bytes=146 val_count=11 val_bytes=115 range_key_count=2 range_key_bytes=35 range_val_count=3 live_count=4 live_bytes=131 gc_bytes_age=16010 intent_count=1 intent_bytes=18 separated_intent_count=1 intent_age=93
-error: (*roachpb.ConditionFailedError:) unexpected value: timestamp:<wall_time:5000000000 > 
+error: (*roachpb.ConditionFailedError:) unexpected value: timestamp:<wall_time:5000000000 >
 
 # A CPut replacing an existing but ignored intent expecting a value covered
 # by a range tombstone should error because of the range tombstone covering it.
@@ -269,7 +269,7 @@ data: "g"/1.000000000,0 -> /BYTES/g1
 data: "i"/1.000000000,0 -> /INT/1
 data: "j"/1.000000000,0 -> /INT/1
 stats: key_count=7 key_bytes=146 val_count=11 val_bytes=115 range_key_count=2 range_key_bytes=35 range_val_count=3 live_count=4 live_bytes=131 gc_bytes_age=16010 intent_count=1 intent_bytes=18 separated_intent_count=1 intent_age=93
-error: (*roachpb.ConditionFailedError:) unexpected value: timestamp:<wall_time:5000000000 > 
+error: (*roachpb.ConditionFailedError:) unexpected value: timestamp:<wall_time:5000000000 >
 
 # An InitPut with failOnTombstones above a range tombstone should error.
 run stats error
@@ -293,7 +293,7 @@ data: "g"/1.000000000,0 -> /BYTES/g1
 data: "i"/1.000000000,0 -> /INT/1
 data: "j"/1.000000000,0 -> /INT/1
 stats: key_count=7 key_bytes=146 val_count=11 val_bytes=115 range_key_count=2 range_key_bytes=35 range_val_count=3 live_count=4 live_bytes=131 gc_bytes_age=16010 intent_count=1 intent_bytes=18 separated_intent_count=1 intent_age=93
-error: (*roachpb.ConditionFailedError:) unexpected value: timestamp:<wall_time:5000000000 > 
+error: (*roachpb.ConditionFailedError:) unexpected value: timestamp:<wall_time:5000000000 >
 
 # An InitPut with a different value as an existing key should succeed when there's
 # a range tombstone covering the existing value.

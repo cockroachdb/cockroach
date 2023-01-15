@@ -153,6 +153,25 @@ func TestNameGen(t *testing.T) {
 		},
 	)
 
+	cfg = NameGeneratorConfig{Fmt: 0.5}
+	testNameGen("fmt", &cfg, "hellouniverse",
+		preds{
+			probs: []pred{
+				func(n string) bool { return strings.Contains(n, "%") },
+			},
+		},
+	)
+
+	cfg = NameGeneratorConfig{Escapes: 0.5}
+	testNameGen("fmt", &cfg, "hellouniverse",
+		preds{
+			probs: []pred{
+				func(n string) bool { return strings.Contains(n, `\`) },
+				func(n string) bool { return strings.Contains(n, `%`) },
+			},
+		},
+	)
+
 	cfg = NameGeneratorConfig{Space: 0.5}
 	testNameGen("space", &cfg, "hellouniverse",
 		preds{

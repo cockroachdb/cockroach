@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/semenumpb"
 )
 
 //go:generate go run ./generate_visitor.go scop Mutation mutation.go mutation_visitor_generated.go
@@ -320,6 +321,37 @@ type MakeValidatedCheckConstraintPublic struct {
 	ConstraintID descpb.ConstraintID
 }
 
+// MakeAbsentForeignKeyConstraintWriteOnly adds a non-existent foreign key
+// constraint to the table in the WRITE_ONLY state.
+type MakeAbsentForeignKeyConstraintWriteOnly struct {
+	mutationOp
+	TableID                 descpb.ID
+	ConstraintID            descpb.ConstraintID
+	ColumnIDs               []descpb.ColumnID
+	ReferencedTableID       descpb.ID
+	ReferencedColumnIDs     []descpb.ColumnID
+	OnUpdateAction          semenumpb.ForeignKeyAction
+	OnDeleteAction          semenumpb.ForeignKeyAction
+	CompositeKeyMatchMethod semenumpb.Match
+}
+
+// MakeValidatedForeignKeyConstraintPublic moves a new, validated foreign key
+// constraint from mutation to public.
+type MakeValidatedForeignKeyConstraintPublic struct {
+	mutationOp
+	TableID           descpb.ID
+	ConstraintID      descpb.ConstraintID
+	ReferencedTableID descpb.ID
+}
+
+// MakePublicForeignKeyConstraintValidated moves a public
+// check constraint to VALIDATED.
+type MakePublicForeignKeyConstraintValidated struct {
+	mutationOp
+	TableID      descpb.ID
+	ConstraintID descpb.ConstraintID
+}
+
 // RemoveForeignKeyConstraint removes a foreign key from the origin table.
 type RemoveForeignKeyConstraint struct {
 	mutationOp
@@ -334,6 +366,39 @@ type RemoveForeignKeyBackReference struct {
 	ReferencedTableID  descpb.ID
 	OriginTableID      descpb.ID
 	OriginConstraintID descpb.ConstraintID
+}
+
+// MakeAbsentUniqueWithoutIndexConstraintWriteOnly adds a non-existent
+// unique_without_index constraint to the table in the WRITE_ONLY state.
+type MakeAbsentUniqueWithoutIndexConstraintWriteOnly struct {
+	mutationOp
+	TableID      descpb.ID
+	ConstraintID descpb.ConstraintID
+	ColumnIDs    []descpb.ColumnID
+	Predicate    *scpb.Expression
+}
+
+// MakeValidatedUniqueWithoutIndexConstraintPublic moves a new, validated unique_without_index
+// constraint from mutation to public.
+type MakeValidatedUniqueWithoutIndexConstraintPublic struct {
+	mutationOp
+	TableID      descpb.ID
+	ConstraintID descpb.ConstraintID
+}
+
+// MakePublicUniqueWithoutIndexConstraintValidated moves a public
+// unique_without_index constraint to VALIDATED.
+type MakePublicUniqueWithoutIndexConstraintValidated struct {
+	mutationOp
+	TableID      descpb.ID
+	ConstraintID descpb.ConstraintID
+}
+
+// RemoveUniqueWithoutIndexConstraint removes a unique_without_index from the origin table.
+type RemoveUniqueWithoutIndexConstraint struct {
+	mutationOp
+	TableID      descpb.ID
+	ConstraintID descpb.ConstraintID
 }
 
 // RemoveSchemaParent removes the schema - parent database relationship.
@@ -396,6 +461,14 @@ type UpdateTableBackReferencesInTypes struct {
 	mutationOp
 	TypeIDs               []descpb.ID
 	BackReferencedTableID descpb.ID
+}
+
+// UpdateTypeBackReferencesInTypes updates back references to a type
+// in the specified types.
+type UpdateTypeBackReferencesInTypes struct {
+	mutationOp
+	TypeIDs              []descpb.ID
+	BackReferencedTypeID descpb.ID
 }
 
 // RemoveBackReferenceInTypes removes back references to a descriptor in the

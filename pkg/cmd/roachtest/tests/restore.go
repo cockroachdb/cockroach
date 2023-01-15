@@ -762,18 +762,12 @@ type hardwareSpecs struct {
 	volumeSize int
 }
 
-// String prints the hardware specs. If full==false, only non default specs are printed.
+// String prints the hardware specs. If full==true, verbose specs are printed.
 func (hw hardwareSpecs) String(full bool) string {
 	var builder strings.Builder
-	if full || hw.cloud != defaultHardware.cloud {
-		builder.WriteString("/" + hw.cloud)
-	}
-	if full || hw.nodes != defaultHardware.nodes {
-		builder.WriteString(fmt.Sprintf("/nodes=%d", hw.nodes))
-	}
-	if full || hw.cpus != defaultHardware.cpus {
-		builder.WriteString(fmt.Sprintf("/cpus=%d", hw.cpus))
-	}
+	builder.WriteString("/" + hw.cloud)
+	builder.WriteString(fmt.Sprintf("/nodes=%d", hw.nodes))
+	builder.WriteString(fmt.Sprintf("/cpus=%d", hw.cpus))
 	if full {
 		builder.WriteString(fmt.Sprintf("/volSize=%dGB", hw.volumeSize))
 	}

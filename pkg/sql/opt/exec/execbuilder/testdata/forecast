@@ -196,7 +196,7 @@ scan g
  ├── stats: [rows=12, distinct(1)=12, null(1)=0]
  │   histogram(1)=  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1  0  1   0  1
  │                <--- 0 --- 1 --- 2 --- 3 --- 4 --- 5 --- 6 --- 7 --- 8 --- 9 --- 10 --- 11
- ├── cost: 21.13
+ ├── cost: 25.13
  ├── key: (1)
  └── distribution: test
 
@@ -415,7 +415,7 @@ scan s
  ├── cardinality: [0 - 100]
  ├── stats: [rows=1, distinct(1)=1, null(1)=0]
  │   histogram(1)=
- ├── cost: 10.02
+ ├── cost: 14.02
  ├── key: (1)
  └── distribution: test
 
@@ -594,7 +594,7 @@ scan c
  ├── stats: [rows=24, distinct(1)=24, null(1)=0]
  │   histogram(1)=  0               1               5               1               5               1               5               1               5               0
  │                <--- '1988-08-07 00:00:00+00:00' --- '1988-08-07 06:00:00+00:00' --- '1988-08-07 12:00:00+00:00' --- '1988-08-07 18:00:00+00:00' --- '1988-08-08 00:00:00+00:00'
- ├── cost: 39.7
+ ├── cost: 43.7
  ├── key: (1)
  └── distribution: test
 
@@ -879,7 +879,7 @@ scan d
  ├── stats: [rows=3, distinct(1)=3, null(1)=0]
  │   histogram(1)=  0       0        3       0
  │                <--- '1999-12-16' --- '1999-12-31'
- ├── cost: 17.11
+ ├── cost: 21.11
  ├── key: (1)
  └── distribution: test
 
@@ -907,7 +907,7 @@ scan g
  ├── constraint: /1: [/9 - ]
  ├── stats: [rows=1.8e-09, distinct(1)=1.8e-09, null(1)=0]
  │   histogram(1)=
- ├── cost: 14.02
+ ├── cost: 18.02
  ├── key: (1)
  └── distribution: test
 
@@ -931,7 +931,7 @@ scan s
  ├── stats: [rows=3, distinct(1)=3, null(1)=0]
  │   histogram(1)=  0  1  0  1  0  1
  │                <--- 0 --- 1 --- 2
- ├── cost: 17.05
+ ├── cost: 21.05
  ├── key: (1)
  └── distribution: test
 
@@ -954,7 +954,7 @@ scan c
  ├── constraint: /1: [/'1988-08-07 00:00:00.000001+00:00' - ]
  ├── stats: [rows=4.8e-09, distinct(1)=4.8e-09, null(1)=0]
  │   histogram(1)=
- ├── cost: 14.02
+ ├── cost: 18.02
  ├── key: (1)
  └── distribution: test
 
@@ -977,7 +977,7 @@ scan x
  ├── constraint: /1: [/17 - ]
  ├── stats: [rows=8e-10, distinct(1)=8e-10, null(1)=0]
  │   histogram(1)=
- ├── cost: 14.02
+ ├── cost: 18.02
  ├── key: (1)
  └── distribution: test
 
@@ -1001,7 +1001,7 @@ scan d
  ├── stats: [rows=3, distinct(1)=3, null(1)=0]
  │   histogram(1)=  0       0        3       0
  │                <--- '1999-12-16' --- '1999-12-31'
- ├── cost: 17.11
+ ├── cost: 21.11
  ├── key: (1)
  └── distribution: test
 
@@ -1028,7 +1028,7 @@ scan g
  ├── stats: [rows=3, distinct(1)=3, null(1)=0]
  │   histogram(1)=  0  1  0  1   0  1
  │                <--- 9 --- 10 --- 11
- ├── cost: 17.05
+ ├── cost: 21.05
  ├── key: (1)
  └── distribution: test
 
@@ -1051,7 +1051,7 @@ scan s
  ├── constraint: /1: [ - /2]
  ├── stats: [rows=1, distinct(1)=1, null(1)=0]
  │   histogram(1)=
- ├── cost: 15.03
+ ├── cost: 19.03
  ├── key: (1)
  └── distribution: test
 
@@ -1075,7 +1075,7 @@ scan c
  ├── stats: [rows=23, distinct(1)=23, null(1)=0]
  │   histogram(1)=  0               0               5               1               5               1               5               1               5               0
  │                <--- '1988-08-07 00:00:00+00:00' --- '1988-08-07 06:00:00+00:00' --- '1988-08-07 12:00:00+00:00' --- '1988-08-07 18:00:00+00:00' --- '1988-08-08 00:00:00+00:00'
- ├── cost: 38.63
+ ├── cost: 42.63
  ├── key: (1)
  └── distribution: test
 
@@ -1099,7 +1099,7 @@ scan x
  ├── stats: [rows=2, distinct(1)=2, null(1)=0]
  │   histogram(1)=  0  0   2  0
  │                <--- 16 --- 19
- ├── cost: 16.04
+ ├── cost: 20.04
  ├── key: (1)
  └── distribution: test
 
@@ -1123,7 +1123,7 @@ scan d
  ├── stats: [rows=3, distinct(1)=3, null(1)=0]
  │   histogram(1)=  0       0        3       0
  │                <--- '1999-12-16' --- '1999-12-31'
- ├── cost: 17.11
+ ├── cost: 21.11
  ├── key: (1)
  └── distribution: test
 
@@ -1536,7 +1536,7 @@ select
  │   histogram(1)=
  │   histogram(2)=  0 2e-08
  │                <--- 13 -
- ├── cost: 14.05
+ ├── cost: 18.05
  ├── fd: ()-->(1,2)
  ├── distribution: test
  ├── scan t@t_a_idx
@@ -1544,7 +1544,7 @@ select
  │    ├── constraint: /1/3: [/3 - /3]
  │    ├── stats: [rows=2e-08, distinct(1)=2e-08, null(1)=0]
  │    │   histogram(1)=
- │    ├── cost: 14.02
+ │    ├── cost: 18.02
  │    ├── fd: ()-->(1)
  │    └── distribution: test
  └── filters
@@ -1577,7 +1577,7 @@ select
  │   histogram(1)=  0 2e-08
  │                <---- 3 -
  │   histogram(2)=
- ├── cost: 14.05
+ ├── cost: 18.05
  ├── fd: ()-->(1,2)
  ├── distribution: test
  ├── scan t@t_b_idx
@@ -1585,7 +1585,7 @@ select
  │    ├── constraint: /2/3: [/13 - /13]
  │    ├── stats: [rows=2e-08, distinct(2)=2e-08, null(2)=0]
  │    │   histogram(2)=
- │    ├── cost: 14.02
+ │    ├── cost: 18.02
  │    ├── fd: ()-->(2)
  │    └── distribution: test
  └── filters

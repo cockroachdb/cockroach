@@ -1213,7 +1213,7 @@ func TestAlterChangefeedAddTargetsDuringBackfill(t *testing.T) {
 		}
 	}
 
-	cdcTestWithSystem(t, testFn, feedTestEnterpriseSinks)
+	cdcTestWithSystem(t, testFn, feedTestEnterpriseSinks, feedTestNoForcedSyntheticTimestamps)
 }
 
 func TestAlterChangefeedUpdateFilter(t *testing.T) {

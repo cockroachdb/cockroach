@@ -49,7 +49,7 @@ upsert descriptor #106
      enumMembers:
      - logicalRepresentation: us-east1
   ...
-         withGrantOption: 2
+         withGrantOption: "2"
        version: 2
   -  referencingDescriptorIds:
   -  - 108

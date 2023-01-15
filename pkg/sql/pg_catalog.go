@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/semenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
@@ -846,22 +847,22 @@ var (
 	fkActionSetNull    = tree.NewDString("n")
 	fkActionSetDefault = tree.NewDString("d")
 
-	fkActionMap = map[catpb.ForeignKeyAction]tree.Datum{
-		catpb.ForeignKeyAction_NO_ACTION:   fkActionNone,
-		catpb.ForeignKeyAction_RESTRICT:    fkActionRestrict,
-		catpb.ForeignKeyAction_CASCADE:     fkActionCascade,
-		catpb.ForeignKeyAction_SET_NULL:    fkActionSetNull,
-		catpb.ForeignKeyAction_SET_DEFAULT: fkActionSetDefault,
+	fkActionMap = map[semenumpb.ForeignKeyAction]tree.Datum{
+		semenumpb.ForeignKeyAction_NO_ACTION:   fkActionNone,
+		semenumpb.ForeignKeyAction_RESTRICT:    fkActionRestrict,
+		semenumpb.ForeignKeyAction_CASCADE:     fkActionCascade,
+		semenumpb.ForeignKeyAction_SET_NULL:    fkActionSetNull,
+		semenumpb.ForeignKeyAction_SET_DEFAULT: fkActionSetDefault,
 	}
 
 	fkMatchTypeFull    = tree.NewDString("f")
 	fkMatchTypePartial = tree.NewDString("p")
 	fkMatchTypeSimple  = tree.NewDString("s")
 
-	fkMatchMap = map[descpb.ForeignKeyReference_Match]tree.Datum{
-		descpb.ForeignKeyReference_SIMPLE:  fkMatchTypeSimple,
-		descpb.ForeignKeyReference_FULL:    fkMatchTypeFull,
-		descpb.ForeignKeyReference_PARTIAL: fkMatchTypePartial,
+	fkMatchMap = map[semenumpb.Match]tree.Datum{
+		semenumpb.Match_SIMPLE:  fkMatchTypeSimple,
+		semenumpb.Match_FULL:    fkMatchTypeFull,
+		semenumpb.Match_PARTIAL: fkMatchTypePartial,
 	}
 )
 
@@ -2327,10 +2328,17 @@ https://www.postgresql.org/docs/9.6/view-pg-prepared-statements.html`,
 	},
 }
 
-func addPgProcBuiltinRow(nspOid *tree.DOid, name string, addRow func(...tree.Datum) error) error {
+func addPgProcBuiltinRow(name string, addRow func(...tree.Datum) error) error {
 	props, overloads := builtinsregistry.GetBuiltinProperties(name)
 	isAggregate := props.Class == tree.AggregateClass
 	isWindow := props.Class == tree.WindowClass
+	nspOid := tree.NewDOid(catconstants.PgCatalogID)
+	const crdbInternal = catconstants.CRDBInternalSchemaName + "."
+	if strings.HasPrefix(name, crdbInternal) {
+		nspOid = tree.NewDOid(catconstants.CrdbInternalID)
+		name = name[len(crdbInternal):]
+	}
+
 	for _, builtin := range overloads {
 		dName := tree.NewDName(name)
 		dSrc := tree.NewDString(name)
@@ -2523,7 +2531,6 @@ https://www.postgresql.org/docs/9.5/catalog-pg-proc.html`,
 
 		err := forEachDatabaseDesc(ctx, p, dbContext, false, /* requiresPrivileges */
 			func(db catalog.DatabaseDescriptor) error {
-				nspOid := tree.NewDOid(catconstants.PgCatalogID)
 				for _, name := range builtins.AllBuiltinNames() {
 					// parser.Builtins contains duplicate uppercase and lowercase keys.
 					// Only return the lowercase ones for compatibility with postgres.
@@ -2535,7 +2542,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-proc.html`,
 					if unicode.IsUpper(first) {
 						continue
 					}
-					err := addPgProcBuiltinRow(nspOid, name, addRow)
+					err := addPgProcBuiltinRow(name, addRow)
 					if err != nil {
 						return err
 					}
@@ -2597,7 +2604,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-proc.html`,
 					return true, nil
 
 				} else {
-					err := addPgProcBuiltinRow(tree.NewDOid(catconstants.PgCatalogID), name, addRow)
+					err := addPgProcBuiltinRow(name, addRow)
 					if err != nil {
 						return false, err
 					}

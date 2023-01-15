@@ -5544,6 +5544,7 @@ func TestTableValidityWhileAddingFK(t *testing.T) {
 CREATE DATABASE t;
 CREATE TABLE t.child (a INT PRIMARY KEY, b INT, INDEX (b));
 CREATE TABLE t.parent (a INT PRIMARY KEY);
+SET use_declarative_schema_changer = off;
 `); err != nil {
 		t.Fatal(err)
 	}
@@ -5626,6 +5627,7 @@ func TestTableValidityWhileAddingUniqueConstraint(t *testing.T) {
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
 CREATE TABLE t.tab (a INT PRIMARY KEY, b INT, c INT);
+SET use_declarative_schema_changer = off;
 `); err != nil {
 		t.Fatal(err)
 	}
@@ -6763,6 +6765,7 @@ func TestRollbackForeignKeyAddition(t *testing.T) {
 	tdb.Exec(t, `CREATE DATABASE db`)
 	tdb.Exec(t, `CREATE TABLE db.t (a INT PRIMARY KEY)`)
 	tdb.Exec(t, `CREATE TABLE db.t2 (a INT)`)
+	tdb.Exec(t, `SET use_declarative_schema_changer = off`)
 
 	g := ctxgroup.WithContext(ctx)
 	g.GoCtx(func(ctx context.Context) error {

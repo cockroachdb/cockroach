@@ -318,7 +318,7 @@ func TestReliableIntentCleanup(t *testing.T) {
 		// Split off 16 ranges by the first hex digit (4 bits) after prefix:
 		// key\x00\x00 key\x00\x10 key\x00\x20 key\x00\x30 ...
 		for i := 0; i < 16; i++ {
-			require.NoError(t, db.AdminSplit(ctx, append(prefix, byte(i<<4)), hlc.MaxTimestamp, roachpb.AdminSplitRequest_INGESTION))
+			require.NoError(t, db.AdminSplit(ctx, append(prefix, byte(i<<4)), hlc.MaxTimestamp))
 		}
 		require.NoError(t, tc.WaitForFullReplication())
 

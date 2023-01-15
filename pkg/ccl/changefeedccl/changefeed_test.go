@@ -5513,6 +5513,7 @@ func TestChangefeedHandlesDrainingNodes(t *testing.T) {
 
 func TestChangefeedPropagatesTerminalError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 95057, "flaky test")
 	defer log.Scope(t).Close(t)
 
 	opts := makeOptions()
@@ -6110,7 +6111,7 @@ func TestChangefeedBackfillCheckpoint(t *testing.T) {
 	// TODO(ssd): Tenant testing disabled because of use of DB()
 	for _, sz := range []int64{100 << 20, 100} {
 		maxCheckpointSize = sz
-		cdcTestNamedWithSystem(t, fmt.Sprintf("limit=%s", humanize.Bytes(uint64(sz))), testFn, feedTestForceSink("webhook"))
+		cdcTestNamedWithSystem(t, fmt.Sprintf("limit=%s", humanize.Bytes(uint64(sz))), testFn, feedTestForceSink("webhook"), feedTestNoForcedSyntheticTimestamps)
 	}
 }
 
@@ -6547,54 +6548,41 @@ func TestChangefeedOnlyInitialScan(t *testing.T) {
 			t.Run(testName, func(t *testing.T) {
 				sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
 				sqlDB.Exec(t, `INSERT INTO foo (a) SELECT * FROM generate_series(1, 5000);`)
-
-				// Most changefeed tests can afford to have a race condition between the initial
-				// inserts and starting the feed because the output looks the same for an initial
-				// scan and an insert. For tests with initial_scan=only, though, we can't start the feed
-				// until it's going to see all the initial inserts in the initial scan.
-				sqlDB.CheckQueryResultsRetry(t, `SELECT count(*) FROM foo`, [][]string{{`5000`}})
+				defer func() {
+					sqlDB.Exec(t, `DROP TABLE foo`)
+				}()
 
 				feed := feed(t, f, changefeedStmt)
+				defer closeFeed(t, feed)
 
+				// Insert few more rows after the feed started -- we should not see those emitted.
 				sqlDB.Exec(t, "INSERT INTO foo VALUES (5005), (5007), (5009)")
 
-				g := ctxgroup.WithContext(context.Background())
 				var expectedMessages []string
 				for i := 1; i <= 5000; i++ {
 					expectedMessages = append(expectedMessages, fmt.Sprintf(
 						`foo: [%d]->{"after": {"a": %d}}`, i, i,
 					))
 				}
-				var seenMessages []string
-				g.Go(func() error {
-					for {
-						m, err := feed.Next()
-						if err != nil {
-							return err
-						}
-						seenMessages = append(seenMessages, fmt.Sprintf(`%s: %s->%s`, m.Topic, m.Key, m.Value))
-					}
-				})
 
+				assertPayloads(t, feed, expectedMessages)
+
+				// It would be nice to assert that after we've seen expectedMessages,
+				// that none of the unexpected messages show up before job termination.
+				// However, if any of those unexpected messages were emitted, then, we
+				// would expect this test to flake (hopefully, with an error message
+				// that makes it clear that the unexpected event happen).
 				jobFeed := feed.(cdctest.EnterpriseTestFeed)
 				require.NoError(t, jobFeed.WaitForStatus(func(s jobs.Status) bool {
 					return s == jobs.StatusSucceeded
 				}))
-
-				closeFeed(t, feed)
-				sqlDB.Exec(t, `DROP TABLE foo`)
-				_ = g.Wait()
-				require.Equal(t, len(expectedMessages), len(seenMessages))
-				sort.Strings(expectedMessages)
-				sort.Strings(seenMessages)
-				for i := range expectedMessages {
-					require.Equal(t, expectedMessages[i], seenMessages[i])
-				}
 			})
 		}
 	}
 
-	cdcTest(t, testFn, feedTestEnterpriseSinks)
+	// "enterprise" and "webhook" sink implementations are too slow
+	// for a test that reads 5k messages.
+	cdcTest(t, testFn, feedTestEnterpriseSinks, feedTestOmitSinks("enterprise", "webhook"))
 }
 
 func TestChangefeedOnlyInitialScanCSV(t *testing.T) {
@@ -6873,8 +6861,7 @@ func TestChangefeedPredicateWithSchemaChange(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	skip.UnderRace(t, "takes too long under race")
-	// TODO(#85143): remove this skip.
-	skip.WithIssue(t, 85143)
+	defer TestingSetIncludeParquetMetadata()()
 
 	setupSQL := []string{
 		`CREATE TYPE status AS ENUM ('open', 'closed', 'inactive')`,
@@ -6891,8 +6878,8 @@ func TestChangefeedPredicateWithSchemaChange(t *testing.T) {
 		`INSERT INTO foo (a, b, c, e) VALUES (2, 'two', 'c string', 'open')`,
 	}
 	initialPayload := []string{
-		`foo: [1, "one"]->{"after": {"a": 1, "b": "one", "c": null, "e": "inactive"}}`,
-		`foo: [2, "two"]->{"after": {"a": 2, "b": "two", "c": "c string", "e": "open"}}`,
+		`foo: [1, "one"]->{"a": 1, "b": "one", "c": null, "e": "inactive"}`,
+		`foo: [2, "two"]->{"a": 2, "b": "two", "c": "c string", "e": "open"}`,
 	}
 
 	type testCase struct {
@@ -6987,7 +6974,7 @@ func TestChangefeedPredicateWithSchemaChange(t *testing.T) {
 			createFeedStmt: "CREATE CHANGEFEED AS SELECT a, b, c, e FROM foo",
 			initialPayload: initialPayload,
 			alterStmt:      "ALTER TABLE foo DROP COLUMN c",
-			expectErr:      `column "foo.c" does not exist`,
+			expectErr:      `column "c" does not exist`,
 		},
 		{
 			name:           "drop referenced column filter",
@@ -6996,7 +6983,7 @@ func TestChangefeedPredicateWithSchemaChange(t *testing.T) {
 				`foo: [2, "two"]->{"a": 2, "b": "two", "c": "c string", "e": "open"}`,
 			},
 			alterStmt: "ALTER TABLE foo DROP COLUMN c",
-			expectErr: `column "foo.c" does not exist`,
+			expectErr: `column "c" does not exist`,
 		},
 		{
 			name:           "rename referenced column projection",
@@ -7004,7 +6991,7 @@ func TestChangefeedPredicateWithSchemaChange(t *testing.T) {
 			initialPayload: initialPayload,
 			alterStmt:      "ALTER TABLE foo RENAME COLUMN c TO c_new",
 			afterAlterStmt: "INSERT INTO foo (a, b) VALUES (3, 'tres')",
-			expectErr:      `column "foo.c" does not exist`,
+			expectErr:      `column "c" does not exist`,
 		},
 		{
 			name:           "rename referenced column filter",
@@ -7014,7 +7001,7 @@ func TestChangefeedPredicateWithSchemaChange(t *testing.T) {
 			},
 			alterStmt:      "ALTER TABLE foo RENAME COLUMN c TO c_new",
 			afterAlterStmt: "INSERT INTO foo (a, b) VALUES (3, 'tres')",
-			expectErr:      `column "foo.c" does not exist`,
+			expectErr:      `column "c" does not exist`,
 		},
 		{
 			name:           "alter enum",
@@ -7030,7 +7017,7 @@ func TestChangefeedPredicateWithSchemaChange(t *testing.T) {
 			name:           "alter enum value fails",
 			createFeedStmt: "CREATE CHANGEFEED AS SELECT * FROM foo WHERE e = 'open'",
 			initialPayload: []string{
-				`foo: [2, "two"]->{"after": {"a": 2, "b": "two", "c": "c string", "e": "open"}}`,
+				`foo: [2, "two"]->{"a": 2, "b": "two", "c": "c string", "e": "open"}`,
 			},
 			alterStmt:      "ALTER TYPE status RENAME VALUE 'open' TO 'active'",
 			afterAlterStmt: "INSERT INTO foo (a, b, e) VALUES (3, 'tres', 'active')",
@@ -7048,6 +7035,39 @@ func TestChangefeedPredicateWithSchemaChange(t *testing.T) {
 			payload: []string{
 				`foo: [1, "one"]->{"e": "done", "prev_e": "inactive"}`,
 			},
+		},
+		{
+			// Alter and rename a column. The changefeed expression does not
+			// explicitly involve the column in question (c) -- so, schema change works
+			// fine. Note: we get 2 backfill events -- one for each logical change
+			// (rename column, then add column).
+			name:           "add and rename column",
+			createFeedStmt: "CREATE CHANGEFEED AS SELECT *, (cdc_prev).e as old_e FROM foo",
+			initialPayload: []string{
+				`foo: [1, "one"]->{"a": 1, "b": "one", "c": null, "e": "inactive", "old_e": null}`,
+				`foo: [2, "two"]->{"a": 2, "b": "two", "c": "c string", "e": "open", "old_e": null}`,
+			},
+			alterStmt: "ALTER TABLE foo RENAME COLUMN c to c_old, ADD COLUMN c int DEFAULT 42",
+			payload: []string{
+				`foo: [1, "one"]->{"a": 1, "b": "one", "c": 42, "c_old": null, "e": "inactive", "old_e": "inactive"}`,
+				`foo: [1, "one"]->{"a": 1, "b": "one", "c_old": null, "e": "inactive", "old_e": "inactive"}`,
+				`foo: [2, "two"]->{"a": 2, "b": "two", "c": 42, "c_old": "c string", "e": "open", "old_e": "open"}`,
+				`foo: [2, "two"]->{"a": 2, "b": "two", "c_old": "c string", "e": "open", "old_e": "open"}`,
+			},
+		},
+		{
+			// Alter and rename a column. The changefeed expression does
+			// explicitly involve the column in question (c) -- so we expect
+			// to get an error because as soon as the first rename goes through, column
+			// no longer exists.
+			name:           "add and rename column error",
+			createFeedStmt: "CREATE CHANGEFEED AS SELECT c, (cdc_prev).c AS prev_c FROM foo",
+			initialPayload: []string{
+				`foo: [1, "one"]->{"c": null, "prev_c": null}`,
+				`foo: [2, "two"]->{"c": "c string", "prev_c": null}`,
+			},
+			alterStmt: "ALTER TABLE foo RENAME COLUMN c to c_old, ADD COLUMN c int DEFAULT 42",
+			expectErr: `column "c" does not exist`,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

@@ -1257,6 +1257,13 @@ func (s *statusServer) LogFile(
 	if err != nil {
 		return nil, serverError(ctx, err)
 	}
+	// Unless we're the system tenant, clients should only be able
+	// to view logs that pertain to their own tenant. Set the filter
+	// accordingly.
+	tenantIDFilter := ""
+	if s.rpcCtx.TenantID != roachpb.SystemTenantID {
+		tenantIDFilter = s.rpcCtx.TenantID.String()
+	}
 	for {
 		var entry logpb.Entry
 		if err := decoder.Decode(&entry); err != nil {
@@ -1264,6 +1271,9 @@ func (s *statusServer) LogFile(
 				break
 			}
 			return nil, serverError(ctx, err)
+		}
+		if tenantIDFilter != "" && entry.TenantID != tenantIDFilter {
+			continue
 		}
 		resp.Entries = append(resp.Entries, entry)
 	}
@@ -1372,7 +1382,22 @@ func (s *statusServer) Logs(
 		return nil, serverError(ctx, err)
 	}
 
-	return &serverpb.LogEntriesResponse{Entries: entries}, nil
+	out := &serverpb.LogEntriesResponse{}
+	// Unless we're the system tenant, clients should only be able
+	// to view logs that pertain to their own tenant. Set the filter
+	// accordingly.
+	tenantIDFilter := ""
+	if s.rpcCtx.TenantID != roachpb.SystemTenantID {
+		tenantIDFilter = s.rpcCtx.TenantID.String()
+	}
+	for _, e := range entries {
+		if tenantIDFilter != "" && e.TenantID != tenantIDFilter {
+			continue
+		}
+		out.Entries = append(out.Entries, e)
+	}
+
+	return out, nil
 }
 
 // Stacks returns goroutine or thread stack traces.
@@ -2374,7 +2399,7 @@ func (s *systemStatusServer) HotRanges(
 
 		// Only hot ranges from the local node.
 		if local {
-			response.HotRangesByNodeID[requestedNodeID] = s.localHotRanges(ctx)
+			response.HotRangesByNodeID[requestedNodeID] = s.localHotRanges(ctx, roachpb.TenantID{})
 			return response, nil
 		}
 
@@ -2420,13 +2445,30 @@ type tableMeta struct {
 	indexName  string
 }
 
-// HotRangesV2 returns hot ranges from all stores on requested node or all nodes in case
-// request message doesn't include specific node ID.
-func (s *statusServer) HotRangesV2(
+func (t *statusServer) HotRangesV2(
 	ctx context.Context, req *serverpb.HotRangesRequest,
 ) (*serverpb.HotRangesResponseV2, error) {
-	if err := s.privilegeChecker.requireViewClusterMetadataPermission(ctx); err != nil {
+	return t.sqlServer.tenantConnect.HotRangesV2(ctx, req)
+}
+
+// HotRangesV2 returns hot ranges from all stores on requested node or all nodes for specified tenant
+// in case request message doesn't include specific node ID.
+func (s *systemStatusServer) HotRangesV2(
+	ctx context.Context, req *serverpb.HotRangesRequest,
+) (*serverpb.HotRangesResponseV2, error) {
+	ctx = s.AnnotateCtx(propagateGatewayMetadata(ctx))
+
+	err := s.privilegeChecker.requireViewClusterMetadataPermission(ctx)
+	if err != nil {
 		return nil, err
+	}
+
+	var tenantID roachpb.TenantID
+	if len(req.TenantID) > 0 {
+		tenantID, err = roachpb.TenantIDFromString(req.TenantID)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	size := int(req.PageSize)
@@ -2446,27 +2488,14 @@ func (s *statusServer) HotRangesV2(
 
 	var requestedNodes []roachpb.NodeID
 	if len(req.NodeID) > 0 {
-		requestedNodeID, _, err := s.parseNodeID(req.NodeID)
+		requestedNodeID, local, err := s.parseNodeID(req.NodeID)
 		if err != nil {
 			return nil, err
 		}
-		requestedNodes = []roachpb.NodeID{requestedNodeID}
-	}
-
-	dialFn := func(ctx context.Context, nodeID roachpb.NodeID) (interface{}, error) {
-		client, err := s.dialNode(ctx, nodeID)
-		return client, err
-	}
-	remoteRequest := serverpb.HotRangesRequest{NodeID: "local"}
-	nodeFn := func(ctx context.Context, client interface{}, nodeID roachpb.NodeID) (interface{}, error) {
-		status := client.(serverpb.StatusClient)
-		resp, err := status.HotRanges(ctx, &remoteRequest)
-		if err != nil || resp == nil {
-			return nil, err
-		}
-		var ranges []*serverpb.HotRangesResponseV2_HotRange
-		for nodeID, hr := range resp.HotRangesByNodeID {
-			for _, store := range hr.Stores {
+		if local {
+			resp := s.localHotRanges(ctx, tenantID)
+			var ranges []*serverpb.HotRangesResponseV2_HotRange
+			for _, store := range resp.Stores {
 				for _, r := range store.HotRanges {
 					var (
 						dbName, tableName, indexName, schemaName string
@@ -2532,7 +2561,7 @@ func (s *statusServer) HotRangesV2(
 
 					ranges = append(ranges, &serverpb.HotRangesResponseV2_HotRange{
 						RangeID:           r.Desc.RangeID,
-						NodeID:            nodeID,
+						NodeID:            requestedNodeID,
 						QPS:               r.QueriesPerSecond,
 						TableName:         tableName,
 						SchemaName:        schemaName,
@@ -2544,8 +2573,25 @@ func (s *statusServer) HotRangesV2(
 					})
 				}
 			}
+			response.Ranges = ranges
+			response.ErrorsByNodeID[requestedNodeID] = resp.ErrorMessage
+			return response, nil
 		}
-		return ranges, nil
+		requestedNodes = []roachpb.NodeID{requestedNodeID}
+	}
+
+	dialFn := func(ctx context.Context, nodeID roachpb.NodeID) (interface{}, error) {
+		client, err := s.dialNode(ctx, nodeID)
+		return client, err
+	}
+	remoteRequest := serverpb.HotRangesRequest{NodeID: "local", TenantID: req.TenantID}
+	nodeFn := func(ctx context.Context, client interface{}, nodeID roachpb.NodeID) (interface{}, error) {
+		status := client.(serverpb.StatusClient)
+		nodeResp, err := status.HotRangesV2(ctx, &remoteRequest)
+		if err != nil {
+			return nil, err
+		}
+		return nodeResp.Ranges, nil
 	}
 	responseFn := func(nodeID roachpb.NodeID, resp interface{}) {
 		if resp == nil {
@@ -2591,11 +2637,16 @@ func decodeTableID(codec keys.SQLCodec, key roachpb.Key) (roachpb.Key, uint32, b
 }
 
 func (s *systemStatusServer) localHotRanges(
-	ctx context.Context,
+	ctx context.Context, tenantID roachpb.TenantID,
 ) serverpb.HotRangesResponse_NodeResponse {
 	var resp serverpb.HotRangesResponse_NodeResponse
 	err := s.stores.VisitStores(func(store *kvserver.Store) error {
-		ranges := store.HottestReplicas()
+		var ranges []kvserver.HotReplicaInfo
+		if tenantID.IsSet() {
+			ranges = store.HottestReplicasByTenant(tenantID)
+		} else {
+			ranges = store.HottestReplicas()
+		}
 		storeResp := &serverpb.HotRangesResponse_StoreResponse{
 			StoreID:   store.StoreID(),
 			HotRanges: make([]serverpb.HotRangesResponse_HotRange, len(ranges)),

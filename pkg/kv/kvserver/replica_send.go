@@ -497,6 +497,8 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 			return nil, nil, pErr
 		}
 
+		log.VErrEventf(ctx, 2, "concurrency retry error: %s", pErr)
+
 		// The batch execution func returned a server-side concurrency retry error.
 		// It may have either handed back ownership of the concurrency guard without
 		// having already released the guard's latches, or in case of certain types

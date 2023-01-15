@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/semenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
@@ -170,12 +171,18 @@ func matchFullUnacceptableKeyQuery(
 // WHERE t.a IS NULL
 // LIMIT 1  -- if limitResults is set
 //
+// It is possible to force FK validation query to perform against a particular
+// index, as specified in `indexIDForValidation` when it's non zero. This is necessary
+// if we are validating a FK constraint on a primary index that's being added (e.g.
+// `ADD COLUMN ... REFERENCES other_table(...)`).
+//
 // TODO(radu): change this to a query which executes as an anti-join when we
 // remove the heuristic planner.
 func nonMatchingRowQuery(
 	srcTbl catalog.TableDescriptor,
 	fk *descpb.ForeignKeyConstraint,
 	targetTbl catalog.TableDescriptor,
+	indexIDForValidation descpb.IndexID,
 	limitResults bool,
 ) (sql string, originColNames []string, _ error) {
 	originColNames, err := srcTbl.NamesForColumnIDs(fk.OriginColumnIDs)
@@ -228,7 +235,7 @@ func nonMatchingRowQuery(
 	if limitResults {
 		limit = " LIMIT 1"
 	}
-	return fmt.Sprintf(
+	query := fmt.Sprintf(
 		`SELECT %[1]s FROM 
 		  (SELECT %[2]s FROM [%[3]d AS src]@{IGNORE_FOREIGN_KEYS} WHERE %[4]s) AS s
 			LEFT OUTER JOIN
@@ -244,7 +251,28 @@ func nonMatchingRowQuery(
 		// Sufficient to check the first column to see whether there was no matching row
 		targetCols[0], // 7
 		limit,         // 8
-	), originColNames, nil
+	)
+	if indexIDForValidation != 0 {
+		query = fmt.Sprintf(
+			`SELECT %[1]s FROM 
+		  (SELECT %[2]s FROM [%[3]d AS src]@{IGNORE_FOREIGN_KEYS, FORCE_INDEX=[%[4]d]} WHERE %[5]s) AS s
+			LEFT OUTER JOIN
+			[%[6]d AS target] AS t
+			ON %[7]s
+		 WHERE %[8]s IS NULL %[9]s`,
+			strings.Join(qualifiedSrcCols, ", "), // 1
+			strings.Join(srcCols, ", "),          // 2
+			srcTbl.GetID(),                       // 3
+			indexIDForValidation,                 // 4
+			strings.Join(srcWhere, " AND "),      // 5
+			targetTbl.GetID(),                    // 6
+			strings.Join(on, " AND "),            // 7
+			// Sufficient to check the first column to see whether there was no matching row
+			targetCols[0], // 8
+			limit,         // 9
+		)
+	}
+	return query, originColNames, nil
 }
 
 // validateForeignKey verifies that all the rows in the srcTable
@@ -257,8 +285,9 @@ func validateForeignKey(
 	srcTable *tabledesc.Mutable,
 	targetTable catalog.TableDescriptor,
 	fk *descpb.ForeignKeyConstraint,
-	ie sqlutil.InternalExecutor,
+	indexIDForValidation descpb.IndexID,
 	txn *kv.Txn,
+	ie sqlutil.InternalExecutor,
 ) error {
 	nCols := len(fk.OriginColumnIDs)
 
@@ -270,7 +299,7 @@ func validateForeignKey(
 	// For MATCH FULL FKs, first check whether any disallowed keys containing both
 	// null and non-null values exist.
 	// (The matching options only matter for FKs with more than one column.)
-	if nCols > 1 && fk.Match == descpb.ForeignKeyReference_FULL {
+	if nCols > 1 && fk.Match == semenumpb.Match_FULL {
 		query, colNames, err := matchFullUnacceptableKeyQuery(
 			srcTable, fk, true, /* limitResults */
 		)
@@ -298,10 +327,7 @@ func validateForeignKey(
 			), fk.Name)
 		}
 	}
-	query, colNames, err := nonMatchingRowQuery(
-		srcTable, fk, targetTable,
-		true, /* limitResults */
-	)
+	query, colNames, err := nonMatchingRowQuery(srcTable, fk, targetTable, indexIDForValidation, true /* limitResults */)
 	if err != nil {
 		return err
 	}
@@ -342,8 +368,15 @@ func validateForeignKey(
 // The pred argument is a partial unique constraint predicate, which filters the
 // subset of rows that are guaranteed unique by the constraint. If the unique
 // constraint is not partial, pred should be empty.
+//
+// `indexIDForValidation`, if non-zero, will be used to force the sql query to
+// use this particular index by hinting the query.
 func duplicateRowQuery(
-	srcTbl catalog.TableDescriptor, columnIDs []descpb.ColumnID, pred string, limitResults bool,
+	srcTbl catalog.TableDescriptor,
+	columnIDs []descpb.ColumnID,
+	pred string,
+	indexIDForValidation descpb.IndexID,
+	limitResults bool,
 ) (sql string, colNames []string, _ error) {
 	colNames, err := srcTbl.NamesForColumnIDs(columnIDs)
 	if err != nil {
@@ -371,13 +404,24 @@ func duplicateRowQuery(
 	if limitResults {
 		limit = " LIMIT 1"
 	}
-	return fmt.Sprintf(
+	query := fmt.Sprintf(
 		`SELECT %[1]s FROM [%[2]d AS tbl] WHERE %[3]s GROUP BY %[1]s HAVING count(*) > 1 %[4]s`,
 		strings.Join(srcCols, ", "),     // 1
 		srcTbl.GetID(),                  // 2
 		strings.Join(srcWhere, " AND "), // 3
 		limit,                           // 4
-	), colNames, nil
+	)
+	if indexIDForValidation != 0 {
+		query = fmt.Sprintf(
+			`SELECT %[1]s FROM [%[2]d AS tbl]@[%[3]d] WHERE %[4]s GROUP BY %[1]s HAVING count(*) > 1 %[5]s`,
+			strings.Join(srcCols, ", "),     // 1
+			srcTbl.GetID(),                  // 2
+			indexIDForValidation,            // 3
+			strings.Join(srcWhere, " AND "), // 4
+			limit,                           // 5
+		)
+	}
+	return query, colNames, nil
 }
 
 // RevalidateUniqueConstraintsInCurrentDB verifies that all unique constraints
@@ -447,6 +491,7 @@ func (p *planner) RevalidateUniqueConstraint(
 					index.GetName(),
 					index.IndexDesc().KeyColumnIDs[index.ImplicitPartitioningColumnCount():],
 					index.GetPredicate(),
+					0, /* indexIDForValidation */
 					p.ExecCfg().InternalExecutor,
 					p.Txn(),
 					p.User(),
@@ -467,6 +512,7 @@ func (p *planner) RevalidateUniqueConstraint(
 				uc.GetName(),
 				uc.CollectKeyColumnIDs().Ordered(),
 				uc.GetPredicate(),
+				0, /* indexIDForValidation */
 				p.ExecCfg().InternalExecutor,
 				p.Txn(),
 				p.User(),
@@ -531,6 +577,7 @@ func RevalidateUniqueConstraintsInTable(
 				index.GetName(),
 				index.IndexDesc().KeyColumnIDs[index.ImplicitPartitioningColumnCount():],
 				index.GetPredicate(),
+				0, /* indexIDForValidation */
 				ie,
 				txn,
 				user,
@@ -551,6 +598,7 @@ func RevalidateUniqueConstraintsInTable(
 				uc.GetName(),
 				uc.CollectKeyColumnIDs().Ordered(),
 				uc.GetPredicate(),
+				0, /* indexIDForValidation */
 				ie,
 				txn,
 				user,
@@ -569,6 +617,11 @@ func RevalidateUniqueConstraintsInTable(
 // validateUniqueConstraint verifies that all the rows in the srcTable
 // have unique values for the given columns.
 //
+// `indexIDForValidation`, if non-zero, will be used to force validation
+// against this particular index. This is used to facilitate the declarative
+// schema changer when the validation should be against a yet non-public
+// primary index.
+//
 // It operates entirely on the current goroutine and is thus able to
 // reuse an existing kv.Txn safely.
 //
@@ -580,13 +633,14 @@ func validateUniqueConstraint(
 	constraintName string,
 	columnIDs []descpb.ColumnID,
 	pred string,
+	indexIDForValidation descpb.IndexID,
 	ie sqlutil.InternalExecutor,
 	txn *kv.Txn,
 	user username.SQLUsername,
 	preExisting bool,
 ) error {
 	query, colNames, err := duplicateRowQuery(
-		srcTable, columnIDs, pred, true, /* limitResults */
+		srcTable, columnIDs, pred, indexIDForValidation, true, /* limitResults */
 	)
 	if err != nil {
 		return err

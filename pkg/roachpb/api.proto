@@ -873,13 +873,6 @@ message EndTxnResponse {
 // of hlc.Timestamp{} (I.E. The zero timestamp so they are always eligible for
 // automatic merging).
 message AdminSplitRequest {
-
-  enum Class {
-    ARBITRARY = 0;
-    INGESTION = 1;
-    ORGANIZATION = 2;
-  }
-
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   bytes split_key = 2 [(gogoproto.casttype) = "Key"];
   reserved 3;
@@ -889,8 +882,6 @@ message AdminSplitRequest {
   // cause the split to be rejected. This can be used by a caller to effectively
   // send a "conditional split" request, i.e. a split if not already split.
   repeated bytes predicate_keys = 5 [(gogoproto.casttype) = "Key"];
-
-  Class class = 6;
 }
 
 // An AdminSplitResponse is the return value from the AdminSplit()
@@ -906,15 +897,7 @@ message AdminSplitResponse {
 // Ranges that do not have the sticky bit set are eligible for
 // automatic merging.
 message AdminUnsplitRequest {
-
-  enum Class {
-    ARBITRARY = 0;
-    ORGANIZATION = 1;
-  }
-
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-
-  Class class = 2;
 }
 
 // An AdminUnsplitResponse is the return value from the
@@ -1719,20 +1702,12 @@ message ExportResponse {
 // ranges that cannot be moved will include an error detail in the response and
 // won't fail the request.
 message AdminScatterRequest {
-
-  enum Class {
-    ARBITRARY = 0;
-    INGESTION = 1;
-  }
-
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   bool randomize_leases = 2;
 
   // max_size, if > 0, specifies a range's size above with it should reject
   // this scatter request, allowing a "scatter-if-not-full" conditional request.
   int64 max_size = 3;
-
-  Class class = 4;
 }
 
 // ScatterResponse is the response to a Scatter() operation.
@@ -2517,11 +2492,22 @@ message Header {
   // complications discussed in "Unordered requests". For now, that's a good
   // enough reason to disallow such batches.
   int64 max_span_request_keys = 8;
+  // TargetBytes will have different behaviour depending on the request type.
+  //
+  // Forward and Reverse Scans:
   // If set to a non-zero value, sets a target (in bytes) for how large the
-  // response may grow. This is only supported for (forward and reverse) scans
-  // and limits the number of rows scanned (and returned). The target will only
-  // be overshot when the first result is larger than the target, unless
+  // response may grow. For forward and reverse scans, TargetBytes limits the
+  // number of rows scanned (and returned). The target will only be overshot
+  // when the first result is larger than the target, unless
   // target_bytes_allow_empty is set. A suitable resume span will be returned.
+  //
+  // Resolve Intent and Resolve Intent Range:
+  // If set to a non-zero value, sets a target (in bytes) for how large the
+  // write batch from intent resolution may grow. For resolve intent and resolve
+  // intent range: TargetBytes limits the number of intents resolved. We will
+  // resolve intents until the number of bytes added to the write batch by
+  // intent resolution exceeds the TargetBytes limit. A suitable resume span
+  // will be returned.
   //
   // The semantics around overlapping requests, unordered requests, and
   // supported requests from max_span_request_keys apply to the target_bytes

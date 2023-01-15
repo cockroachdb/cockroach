@@ -547,6 +547,10 @@ func checkSupportForPlanNode(node planNode) (distRecommendation, error) {
 		return checkSupportForPlanNode(n.plan)
 
 	case *lookupJoinNode:
+		if n.remoteLookupExpr != nil {
+			// This is a locality optimized join.
+			return cannotDistribute, nil
+		}
 		if n.table.lockingStrength != descpb.ScanLockingStrength_FOR_NONE {
 			// Lookup joins that are performing row-level locking cannot
 			// currently be distributed because their locks would not be
@@ -757,8 +761,13 @@ type PlanningCtx struct {
 	infra *physicalplan.PhysicalInfrastructure
 
 	// isLocal is set to true if we're planning this query on a single node.
-	isLocal  bool
-	planner  *planner
+	isLocal bool
+	planner *planner
+
+	// usePlannerDescriptorsForLocalFlow may be set to true to force
+	// planner.Descriptors() use for local flows.
+	usePlannerDescriptorsForLocalFlow bool
+
 	stmtType tree.StatementReturnType
 	// planDepth is set to the current depth of the planNode tree. It's used to
 	// keep track of whether it's valid to run a root node in a special fast path

@@ -167,7 +167,6 @@ func TestTxnCoordSenderHeartbeat(t *testing.T) {
 		ctx,
 		splitKey,
 		hlc.MaxTimestamp, /* expirationTime */
-		roachpb.AdminSplitRequest_INGESTION,
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -311,7 +310,6 @@ func TestDB_PrepareForRetryAfterHeartbeatFailure(t *testing.T) {
 		ctx,
 		splitKey,
 		hlc.MaxTimestamp, /* expirationTime */
-		roachpb.AdminSplitRequest_INGESTION,
 	))
 	require.NoError(t, txn.Put(ctx, keyA, "1"))
 
@@ -378,12 +376,12 @@ func verifyCleanup(
 				return fmt.Errorf("expected no heartbeat")
 			}
 		}
-		_, intent, err := storage.MVCCGet(ctx, eng, key, hlc.MaxTimestamp, storage.MVCCGetOptions{
+		intentRes, err := storage.MVCCGet(ctx, eng, key, hlc.MaxTimestamp, storage.MVCCGetOptions{
 			Inconsistent: true,
 		})
 		require.NoError(t, err)
-		if intent != nil {
-			return fmt.Errorf("found unexpected write intent: %s", intent)
+		if intentRes.Intent != nil {
+			return fmt.Errorf("found unexpected write intent: %s", intentRes.Intent)
 		}
 		return nil
 	})
@@ -959,7 +957,6 @@ func TestWTOBitTerminatedOnErrorResponses(t *testing.T) {
 		ctx,
 		keyB,             /* splitKey */
 		hlc.MaxTimestamp, /* expirationTime */
-		roachpb.AdminSplitRequest_INGESTION,
 	))
 
 	// Write a key that the txn-al CPut below doesn't expect, failing the batch
@@ -2694,7 +2691,6 @@ func TestPutsInStagingTxn(t *testing.T) {
 		ctx,
 		keyB,             /* splitKey */
 		hlc.MaxTimestamp, /* expirationTime */
-		roachpb.AdminSplitRequest_INGESTION,
 	))
 
 	txn := db.NewTxn(ctx, "test")

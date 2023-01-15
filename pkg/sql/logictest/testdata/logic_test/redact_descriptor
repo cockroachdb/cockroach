@@ -146,14 +146,14 @@ SELECT descriptor FROM redacted_descriptors WHERE id = 'foo'::REGCLASS;
             "ownerProto": "root",
             "users": [
                 {
-                    "privileges": 2,
+                    "privileges": "2",
                     "userProto": "admin",
-                    "withGrantOption": 2
+                    "withGrantOption": "2"
                 },
                 {
-                    "privileges": 2,
+                    "privileges": "2",
                     "userProto": "root",
-                    "withGrantOption": 2
+                    "withGrantOption": "2"
                 }
             ],
             "version": 2

@@ -999,15 +999,28 @@ func (s *TestState) Validator() scexec.Validator {
 	return s
 }
 
-// ValidateCheckConstraint implements the validator interface.
-func (s *TestState) ValidateCheckConstraint(
+// ValidateConstraint implements the validator interface.
+func (s *TestState) ValidateConstraint(
 	ctx context.Context,
 	tbl catalog.TableDescriptor,
-	constraint catalog.CheckConstraint,
+	constraint catalog.Constraint,
 	indexIDForValidation descpb.IndexID,
 	override sessiondata.InternalExecutorOverride,
 ) error {
-	s.LogSideEffectf("validate check constraint %v in table #%d", constraint.GetName(), tbl.GetID())
+	s.LogSideEffectf("validate %v constraint %v in table #%d",
+		catalog.GetConstraintType(constraint), constraint.GetName(), tbl.GetID())
+	return nil
+}
+
+func (s *TestState) ValidateForeignKeyConstraint(
+	ctx context.Context,
+	out catalog.TableDescriptor,
+	in catalog.TableDescriptor,
+	constraint catalog.Constraint,
+	override sessiondata.InternalExecutorOverride,
+) error {
+	s.LogSideEffectf("validate foreign key constraint %v from table #%d to table #%d",
+		constraint.GetName(), out.GetID(), in.GetID())
 	return nil
 }
 

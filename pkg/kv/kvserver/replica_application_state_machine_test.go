@@ -14,10 +14,12 @@ import (
 	"context"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/apply"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -394,4 +396,85 @@ func TestReplicaStateMachineRaftLogTruncationLooselyCoupled(t *testing.T) {
 			return nil
 		})
 	})
+}
+
+// TestReplicaStateMachineEphemeralAppBatchRejection is a regression test for
+// #94409. It verifies that if two commands are in an ephemeral batch but the
+// first command's MaxLeaseIndex prevents the second command from succeeding, we
+// don't accidentally ack the second command.
+func TestReplicaStateMachineEphemeralAppBatchRejection(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	tc := testContext{}
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	tc.Start(ctx, t, stopper)
+
+	// Lock the replica for the entire test.
+	r := tc.repl
+	r.raftMu.Lock()
+	defer r.raftMu.Unlock()
+	// Avoid additional raft processing after we're done with this replica because
+	// we've applied entries that aren't in the log.
+	defer r.mu.destroyStatus.Set(errors.New("boom"), destroyReasonRemoved)
+
+	sm := r.getStateMachine()
+
+	r.mu.Lock()
+	raftAppliedIndex := r.mu.state.RaftAppliedIndex
+	r.mu.Unlock()
+
+	descWriteRepr := func(v string) (roachpb.Request, []byte) {
+		b := tc.store.Engine().NewBatch()
+		defer b.Close()
+		key := keys.LocalMax
+		val := roachpb.MakeValueFromString("hello")
+		require.NoError(t, b.PutMVCC(storage.MVCCKey{
+			Timestamp: tc.Clock().Now(),
+			Key:       key,
+		}, storage.MVCCValue{
+			Value: val,
+		}))
+		return roachpb.NewPut(key, val), b.Repr()
+	}
+
+	// Make two commands that have the same MaxLeaseIndex. They'll go
+	// into the same ephemeral batch and we expect that batch to accept
+	// the first command and reject the second.
+	var cmds []*replicatedCmd
+	for _, s := range []string{"earlier", "later"} {
+		req, repr := descWriteRepr(s)
+		ent := &raftlog.Entry{
+			Entry: raftpb.Entry{
+				Index: raftAppliedIndex + 1,
+				Type:  raftpb.EntryNormal,
+			},
+			ID: makeIDKey(),
+			Cmd: kvserverpb.RaftCommand{
+				ProposerLeaseSequence: r.mu.state.Lease.Sequence,
+				MaxLeaseIndex:         r.mu.state.LeaseAppliedIndex + 1,
+				WriteBatch:            &kvserverpb.WriteBatch{Data: repr},
+			},
+		}
+		var ba roachpb.BatchRequest
+		ba.Add(req)
+		cmd := &replicatedCmd{
+			ctx:           ctx,
+			ReplicatedCmd: raftlog.ReplicatedCmd{Entry: ent},
+			proposal:      &ProposalData{Request: &ba},
+		}
+		require.True(t, cmd.CanAckBeforeApplication())
+		cmds = append(cmds, cmd)
+	}
+
+	var rejs []bool
+	b := sm.NewEphemeralBatch()
+	for _, cmd := range cmds {
+		checkedCmd, err := b.Stage(cmd.ctx, cmd)
+		require.NoError(t, err)
+		rejs = append(rejs, checkedCmd.Rejected())
+	}
+	b.Close()
+	require.Equal(t, []bool{false, true}, rejs)
 }

@@ -445,7 +445,7 @@ func registerBackupMixedVersion(r registry.Registry) {
 		EncryptionSupport: registry.EncryptionMetamorphic,
 		RequiresLicense:   true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			if runtime.GOARCH == "arm64" {
+			if c.IsLocal() && runtime.GOARCH == "arm64" {
 				t.Skip("Skip under ARM64. See https://github.com/cockroachdb/cockroach/issues/89268")
 			}
 			// An empty string means that the cockroach binary specified by flag
@@ -1149,7 +1149,9 @@ func runBackupMVCCRangeTombstones(ctx context.Context, t test.Test, c cluster.Cl
 	require.NoError(t, err)
 	_, err = conn.Exec(`SET CLUSTER SETTING storage.mvcc.range_tombstones.enabled = 't'`)
 	require.NoError(t, err)
-
+	_, err = conn.Exec(`SET CLUSTER SETTING server.debug.default_vmodule = 'txn=2,sst_batcher=4,
+revert=2'`)
+	require.NoError(t, err)
 	// Wait for ranges to upreplicate.
 	require.NoError(t, WaitFor3XReplication(ctx, t, conn))
 

@@ -64,6 +64,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	"github.com/lib/pq/oid"
 	"go.opentelemetry.io/otel/attribute"
 )
@@ -398,7 +399,13 @@ func (ex *connExecutor) execStmtInOpenState(
 		switch e.Mode {
 		case tree.ExplainDebug:
 			telemetry.Inc(sqltelemetry.ExplainAnalyzeDebugUseCounter)
-			ih.SetOutputMode(explainAnalyzeDebugOutput, explain.Flags{})
+			flags := explain.MakeFlags(&e.ExplainOptions)
+			flags.Verbose = true
+			flags.ShowTypes = true
+			if ex.server.cfg.TestingKnobs.DeterministicExplain {
+				flags.Redact = explain.RedactAll
+			}
+			ih.SetOutputMode(explainAnalyzeDebugOutput, flags)
 
 		case tree.ExplainPlan:
 			telemetry.Inc(sqltelemetry.ExplainAnalyzeUseCounter)
@@ -934,7 +941,7 @@ func (ex *connExecutor) commitSQLTransaction(
 			// Generating a forced retry error here, right after resetting the
 			// transaction is not exactly necessary, but it's a sound way to
 			// generate the only type of ClientVisibleRetryError we have.
-			err = ex.state.mu.txn.GenerateForcedRetryableError(ctx, err.Error())
+			err = ex.state.mu.txn.GenerateForcedRetryableError(ctx, redact.Sprint(err))
 		}
 		return ex.makeErrEvent(err, ast)
 	}

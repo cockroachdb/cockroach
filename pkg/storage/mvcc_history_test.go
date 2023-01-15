@@ -80,8 +80,8 @@ var (
 // txn_status     t=<name> status=<txnstatus>
 // txn_ignore_seqs t=<name> seqs=[<int>-<int>[,<int>-<int>...]]
 //
-// resolve_intent t=<name> k=<key> [status=<txnstatus>] [clockWhilePending=<int>[,<int>]]
-// resolve_intent_range t=<name> k=<key> end=<key> [status=<txnstatus>]
+// resolve_intent t=<name> k=<key> [status=<txnstatus>] [clockWhilePending=<int>[,<int>]] [targetBytes=<int>]
+// resolve_intent_range t=<name> k=<key> end=<key> [status=<txnstatus>] [maxKeys=<int>] [targetBytes=<int>]
 // check_intent   k=<key> [none]
 // add_lock       t=<name> k=<key>
 //
@@ -95,7 +95,7 @@ var (
 // merge          [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> v=<string> [raw]
 // put            [t=<name>] [ts=<int>[,<int>]] [localTs=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> v=<string> [raw]
 // put_rangekey   ts=<int>[,<int>] [localTs=<int>[,<int>]] k=<key> end=<key>
-// get            [t=<name>] [ts=<int>[,<int>]]                         [resolve [status=<txnstatus>]] k=<key> [inconsistent] [skipLocked] [tombstones] [failOnMoreRecent] [localUncertaintyLimit=<int>[,<int>]] [globalUncertaintyLimit=<int>[,<int>]]
+// get            [t=<name>] [ts=<int>[,<int>]]                         [resolve [status=<txnstatus>]] k=<key> [inconsistent] [skipLocked] [tombstones] [failOnMoreRecent] [localUncertaintyLimit=<int>[,<int>]] [globalUncertaintyLimit=<int>[,<int>]] [maxKeys=<int>] [targetBytes=<int>] [allowEmpty]
 // scan           [t=<name>] [ts=<int>[,<int>]]                         [resolve [status=<txnstatus>]] k=<key> [end=<key>] [inconsistent] [skipLocked] [tombstones] [reverse] [failOnMoreRecent] [localUncertaintyLimit=<int>[,<int>]] [globalUncertaintyLimit=<int>[,<int>]] [max=<max>] [targetbytes=<target>] [wholeRows[=<int>]] [allowEmpty]
 // export         [k=<key>] [end=<key>] [ts=<int>[,<int>]] [kTs=<int>[,<int>]] [startTs=<int>[,<int>]] [maxIntents=<int>] [allRevisions] [targetSize=<int>] [maxSize=<int>] [stopMidKey] [fingerprint]
 //
@@ -876,8 +876,12 @@ func cmdResolveIntent(e *evalCtx) error {
 	key := e.getKey()
 	status := e.getTxnStatus()
 	clockWhilePending := hlc.ClockTimestamp(e.getTsWithName("clockWhilePending"))
+	var targetBytes int64
+	if e.hasArg("targetBytes") {
+		e.scanArg("targetBytes", &targetBytes)
+	}
 	return e.withWriter("resolve_intent", func(rw storage.ReadWriter) error {
-		return e.resolveIntent(rw, key, txn, status, clockWhilePending)
+		return e.resolveIntent(rw, key, txn, status, clockWhilePending, targetBytes)
 	})
 }
 
@@ -889,8 +893,18 @@ func cmdResolveIntentRange(e *evalCtx) error {
 	intent := roachpb.MakeLockUpdate(txn, roachpb.Span{Key: start, EndKey: end})
 	intent.Status = status
 
+	var maxKeys int64
+	if e.hasArg("maxKeys") {
+		e.scanArg("maxKeys", &maxKeys)
+	}
+	var targetBytes int64
+	if e.hasArg("targetBytes") {
+		e.scanArg("targetBytes", &targetBytes)
+	}
+
 	return e.withWriter("resolve_intent_range", func(rw storage.ReadWriter) error {
-		_, _, _, _, err := storage.MVCCResolveWriteIntentRange(e.ctx, rw, e.ms, intent, storage.MVCCResolveWriteIntentRangeOptions{})
+		_, _, _, _, err := storage.MVCCResolveWriteIntentRange(e.ctx, rw, e.ms, intent,
+			storage.MVCCResolveWriteIntentRangeOptions{MaxKeys: maxKeys, TargetBytes: targetBytes})
 		return err
 	})
 }
@@ -901,11 +915,13 @@ func (e *evalCtx) resolveIntent(
 	txn *roachpb.Transaction,
 	resolveStatus roachpb.TransactionStatus,
 	clockWhilePending hlc.ClockTimestamp,
+	targetBytes int64,
 ) error {
 	intent := roachpb.MakeLockUpdate(txn, roachpb.Span{Key: key})
 	intent.Status = resolveStatus
 	intent.ClockWhilePending = roachpb.ObservedTimestamp{Timestamp: clockWhilePending}
-	_, _, _, err := storage.MVCCResolveWriteIntent(e.ctx, rw, e.ms, intent, storage.MVCCResolveWriteIntentOptions{})
+	_, _, _, err := storage.MVCCResolveWriteIntent(e.ctx, rw, e.ms, intent,
+		storage.MVCCResolveWriteIntentOptions{TargetBytes: targetBytes})
 	return err
 }
 
@@ -1056,7 +1072,7 @@ func cmdCPut(e *evalCtx) error {
 			return err
 		}
 		if resolve {
-			return e.resolveIntent(rw, key, txn, resolveStatus, hlc.ClockTimestamp{})
+			return e.resolveIntent(rw, key, txn, resolveStatus, hlc.ClockTimestamp{}, 0)
 		}
 		return nil
 	})
@@ -1077,7 +1093,7 @@ func cmdInitPut(e *evalCtx) error {
 			return err
 		}
 		if resolve {
-			return e.resolveIntent(rw, key, txn, resolveStatus, hlc.ClockTimestamp{})
+			return e.resolveIntent(rw, key, txn, resolveStatus, hlc.ClockTimestamp{}, 0)
 		}
 		return nil
 	})
@@ -1100,7 +1116,7 @@ func cmdDelete(e *evalCtx) error {
 			return err
 		}
 		if resolve {
-			return e.resolveIntent(rw, key, txn, resolveStatus, hlc.ClockTimestamp{})
+			return e.resolveIntent(rw, key, txn, resolveStatus, hlc.ClockTimestamp{}, 0)
 		}
 		return nil
 	})
@@ -1133,7 +1149,7 @@ func cmdDeleteRange(e *evalCtx) error {
 		}
 
 		if resolve {
-			return e.resolveIntent(rw, key, txn, resolveStatus, hlc.ClockTimestamp{})
+			return e.resolveIntent(rw, key, txn, resolveStatus, hlc.ClockTimestamp{}, 0)
 		}
 		return nil
 	})
@@ -1230,17 +1246,26 @@ func cmdGet(e *evalCtx) error {
 		}
 		opts.Uncertainty.GlobalLimit = txn.GlobalUncertaintyLimit
 	}
+	if e.hasArg("maxKeys") {
+		e.scanArg("maxKeys", &opts.MaxKeys)
+	}
+	if e.hasArg("targetBytes") {
+		e.scanArg("targetBytes", &opts.TargetBytes)
+	}
+	if e.hasArg("allowEmpty") {
+		opts.AllowEmpty = true
+	}
 
 	return e.withReader(func(r storage.Reader) error {
-		val, intent, err := storage.MVCCGet(e.ctx, r, key, ts, opts)
+		res, err := storage.MVCCGet(e.ctx, r, key, ts, opts)
 		// NB: the error is returned below. This ensures the test can
 		// ascertain no result is populated in the intent when an error
 		// occurs.
-		if intent != nil {
-			e.results.buf.Printf("get: %v -> intent {%s}\n", key, intent.Txn)
+		if res.Intent != nil {
+			e.results.buf.Printf("get: %v -> intent {%s}\n", key, res.Intent.Txn)
 		}
-		if val != nil {
-			e.results.buf.Printf("get: %v -> %v @%v\n", key, val.PrettyPrint(), val.Timestamp)
+		if res.Value != nil {
+			e.results.buf.Printf("get: %v -> %v @%v\n", key, res.Value.PrettyPrint(), res.Value.Timestamp)
 		} else {
 			e.results.buf.Printf("get: %v -> <no data>\n", key)
 		}
@@ -1270,7 +1295,7 @@ func cmdIncrement(e *evalCtx) error {
 		}
 		e.results.buf.Printf("inc: current value = %d\n", curVal)
 		if resolve {
-			return e.resolveIntent(rw, key, txn, resolveStatus, hlc.ClockTimestamp{})
+			return e.resolveIntent(rw, key, txn, resolveStatus, hlc.ClockTimestamp{}, 0)
 		}
 		return nil
 	})
@@ -1304,7 +1329,7 @@ func cmdPut(e *evalCtx) error {
 			return err
 		}
 		if resolve {
-			return e.resolveIntent(rw, key, txn, resolveStatus, hlc.ClockTimestamp{})
+			return e.resolveIntent(rw, key, txn, resolveStatus, hlc.ClockTimestamp{}, 0)
 		}
 		return nil
 	})

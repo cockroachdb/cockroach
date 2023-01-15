@@ -188,12 +188,12 @@ func TestRefreshRangeTimeBoundIterator(t *testing.T) {
 	// have previously performed a consistent read at the lower time-bound to
 	// prove that there are no intents present that would be missed by the time-
 	// bound iterator.
-	if val, intent, err := storage.MVCCGet(ctx, db, k, ts1, storage.MVCCGetOptions{}); err != nil {
+	if res, err := storage.MVCCGet(ctx, db, k, ts1, storage.MVCCGetOptions{}); err != nil {
 		t.Fatal(err)
-	} else if intent != nil {
+	} else if res.Intent != nil {
 		t.Fatalf("got unexpected intent: %v", intent)
-	} else if !val.EqualTagAndData(v) {
-		t.Fatalf("expected %v, got %v", v, val)
+	} else if !res.Value.EqualTagAndData(v) {
+		t.Fatalf("expected %v, got %v", v, res.Value)
 	}
 
 	// Now the real test: a transaction at ts2 has been pushed to ts3

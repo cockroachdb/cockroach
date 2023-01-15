@@ -98,6 +98,7 @@ func benchmarkConvertToKVs(b *testing.B, g workload.Generator) {
 			evalCtx := &eval.Context{
 				SessionDataStack: sessiondata.NewStack(&sessiondata.SessionData{}),
 				Codec:            keys.SystemSQLCodec,
+				Settings:         cluster.MakeTestingClusterSettings(),
 			}
 			semaCtx := tree.MakeSemaContext()
 			return wc.Worker(ctx, evalCtx, &semaCtx)

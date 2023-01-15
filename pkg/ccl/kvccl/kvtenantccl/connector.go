@@ -648,6 +648,29 @@ func (c *Connector) GetAllSystemSpanConfigsThatApply(
 	return spanConfigs, nil
 }
 
+// HotRangesV2 implements the serverpb.HotRangesV2 interface
+func (c *Connector) HotRangesV2(
+	ctx context.Context, req *serverpb.HotRangesRequest,
+) (*serverpb.HotRangesResponseV2, error) {
+	var resp *serverpb.HotRangesResponseV2
+	r := *req
+	// Force to assign tenant ID in request to be the same as requested tenant
+	if len(req.TenantID) == 0 {
+		r.TenantID = c.tenantID.String()
+		log.Warningf(ctx, "tenant ID is set to %s", c.tenantID)
+	} else if c.tenantID.String() != req.TenantID {
+		return nil, status.Error(codes.PermissionDenied, "cannot request hot ranges for another tenant")
+	}
+	if err := c.withClient(ctx, func(ctx context.Context, c *client) error {
+		var err error
+		resp, err = c.HotRangesV2(ctx, &r)
+		return err
+	}); err != nil {
+		return nil, err
+	}
+	return resp, nil
+}
+
 // WithTxn implements the spanconfig.KVAccessor interface.
 func (c *Connector) WithTxn(context.Context, *kv.Txn) spanconfig.KVAccessor {
 	panic("not applicable")

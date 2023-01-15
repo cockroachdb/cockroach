@@ -22,20 +22,17 @@ var insightPool = sync.Pool{
 	},
 }
 
-func makeInsight(
-	sessionID clusterunique.ID, transaction *Transaction, statement *Statement,
-) *Insight {
+func makeInsight(sessionID clusterunique.ID, transaction *Transaction) *Insight {
 	insight := insightPool.Get().(*Insight)
 	*insight = Insight{
 		Session:     Session{ID: sessionID},
 		Transaction: transaction,
-		Statement:   statement,
 	}
 	return insight
 }
 
 func releaseInsight(insight *Insight) {
-	insight.Causes = insight.Causes[:0]
-	*insight = Insight{Causes: insight.Causes}
+	insight.Statements = insight.Statements[:0]
+	*insight = Insight{Statements: insight.Statements}
 	insightPool.Put(insight)
 }

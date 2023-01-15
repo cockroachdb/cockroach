@@ -49,7 +49,7 @@ upsert descriptor #106
      enumMembers:
      - logicalRepresentation: us-east1
   ...
-         withGrantOption: 2
+         withGrantOption: "2"
        version: 2
   -  referencingDescriptorIds:
   -  - 108
@@ -69,7 +69,7 @@ upsert descriptor #107
      id: 107
      kind: ALIAS
   ...
-         withGrantOption: 2
+         withGrantOption: "2"
        version: 2
   -  referencingDescriptorIds:
   -  - 108
@@ -136,7 +136,7 @@ upsert descriptor #107
      id: 107
      kind: ALIAS
   ...
-         withGrantOption: 2
+         withGrantOption: "2"
        version: 2
   -  version: "3"
   +  version: "4"

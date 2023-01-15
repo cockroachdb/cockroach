@@ -19,14 +19,50 @@ func init() {
 	opRegistry.register((*scpb.ForeignKeyConstraint)(nil),
 		toPublic(
 			scpb.Status_ABSENT,
+			to(scpb.Status_WRITE_ONLY,
+				emit(func(this *scpb.ForeignKeyConstraint) *scop.MakeAbsentForeignKeyConstraintWriteOnly {
+					return &scop.MakeAbsentForeignKeyConstraintWriteOnly{
+						TableID:                 this.TableID,
+						ConstraintID:            this.ConstraintID,
+						ColumnIDs:               this.ColumnIDs,
+						ReferencedTableID:       this.ReferencedTableID,
+						ReferencedColumnIDs:     this.ReferencedColumnIDs,
+						OnUpdateAction:          this.OnUpdateAction,
+						OnDeleteAction:          this.OnDeleteAction,
+						CompositeKeyMatchMethod: this.CompositeKeyMatchMethod,
+					}
+				}),
+			),
+			to(scpb.Status_VALIDATED,
+				emit(func(this *scpb.ForeignKeyConstraint) *scop.ValidateConstraint {
+					return &scop.ValidateConstraint{
+						TableID:              this.TableID,
+						ConstraintID:         this.ConstraintID,
+						IndexIDForValidation: this.IndexIDForValidation,
+					}
+				}),
+			),
 			to(scpb.Status_PUBLIC,
-				emit(func(this *scpb.ForeignKeyConstraint) *scop.NotImplemented {
-					return notImplemented(this)
+				emit(func(this *scpb.ForeignKeyConstraint) *scop.MakeValidatedForeignKeyConstraintPublic {
+					return &scop.MakeValidatedForeignKeyConstraintPublic{
+						TableID:           this.TableID,
+						ConstraintID:      this.ConstraintID,
+						ReferencedTableID: this.ReferencedTableID,
+					}
 				}),
 			),
 		),
 		toAbsent(
 			scpb.Status_PUBLIC,
+			to(scpb.Status_VALIDATED,
+				emit(func(this *scpb.ForeignKeyConstraint) *scop.MakePublicForeignKeyConstraintValidated {
+					return &scop.MakePublicForeignKeyConstraintValidated{
+						TableID:      this.TableID,
+						ConstraintID: this.ConstraintID,
+					}
+				}),
+			),
+			equiv(scpb.Status_WRITE_ONLY),
 			to(scpb.Status_ABSENT,
 				// TODO(postamar): remove revertibility constraint when possible
 				revertible(false),

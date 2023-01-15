@@ -1436,22 +1436,18 @@ EXPLAIN (VERBOSE) SELECT * FROM abcd WHERE a > b ORDER BY a DESC, b DESC
 distribution: local
 vectorized: true
 ·
-• sort
+• filter
 │ columns: (a, b, c, d)
 │ ordering: -a,-b
 │ estimated row count: 333 (missing stats)
-│ order: -a,-b
+│ filter: a > b
 │
-└── • filter
-    │ columns: (a, b, c, d)
-    │ estimated row count: 333 (missing stats)
-    │ filter: a > b
-    │
-    └── • scan
-          columns: (a, b, c, d)
-          estimated row count: 1,000 (missing stats)
-          table: abcd@abcd_pkey
-          spans: FULL SCAN
+└── • revscan
+      columns: (a, b, c, d)
+      ordering: -a,-b
+      estimated row count: 1,000 (missing stats)
+      table: abcd@abcd_pkey
+      spans: FULL SCAN
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT a, b FROM abcd LIMIT 10) WHERE a > b ORDER BY a

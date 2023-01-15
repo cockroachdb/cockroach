@@ -219,10 +219,42 @@ func enqueueAddCheckConstraintMutation(
 	return nil
 }
 
+func enqueueAddUniqueWithoutIndexConstraintMutation(
+	tbl *tabledesc.Mutable, uwi *descpb.UniqueWithoutIndexConstraint,
+) error {
+	tbl.AddUniqueWithoutIndexMutation(uwi, descpb.DescriptorMutation_ADD)
+	tbl.NextMutationID--
+	return nil
+}
+
 func enqueueDropCheckConstraintMutation(
 	tbl *tabledesc.Mutable, ck *descpb.TableDescriptor_CheckConstraint,
 ) error {
 	tbl.AddCheckMutation(ck, descpb.DescriptorMutation_DROP)
+	tbl.NextMutationID--
+	return nil
+}
+
+func enqueueDropUniqueWithoutIndexConstraintMutation(
+	tbl *tabledesc.Mutable, uwi *descpb.UniqueWithoutIndexConstraint,
+) error {
+	tbl.AddUniqueWithoutIndexMutation(uwi, descpb.DescriptorMutation_DROP)
+	tbl.NextMutationID--
+	return nil
+}
+
+func enqueueAddForeignKeyConstraintMutation(
+	tbl *tabledesc.Mutable, fk *descpb.ForeignKeyConstraint,
+) error {
+	tbl.AddForeignKeyMutation(fk, descpb.DescriptorMutation_ADD)
+	tbl.NextMutationID--
+	return nil
+}
+
+func enqueueDropForeignKeyConstraintMutation(
+	tbl *tabledesc.Mutable, fk *descpb.ForeignKeyConstraint,
+) error {
+	tbl.AddForeignKeyMutation(fk, descpb.DescriptorMutation_DROP)
 	tbl.NextMutationID--
 	return nil
 }

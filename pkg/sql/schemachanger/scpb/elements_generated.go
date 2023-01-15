@@ -296,6 +296,99 @@ func FindColumnType(b ElementStatusIterator) (current Status, target TargetStatu
 	return current, target, element
 }
 
+func (e CompositeType) element() {}
+
+// ForEachCompositeType iterates over elements of type CompositeType.
+func ForEachCompositeType(
+	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *CompositeType),
+) {
+  if b == nil {
+    return
+  }
+	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
+		if elt, ok := e.(*CompositeType); ok {
+			fn(current, target, elt)
+		}
+	})
+}
+
+// FindCompositeType finds the first element of type CompositeType.
+func FindCompositeType(b ElementStatusIterator) (current Status, target TargetStatus, element *CompositeType) {
+  if b == nil {
+    return current, target, element
+  }
+	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
+		if elt, ok := e.(*CompositeType); ok {
+			element = elt
+			current = c
+			target = t
+		}
+	})
+	return current, target, element
+}
+
+func (e CompositeTypeAttrName) element() {}
+
+// ForEachCompositeTypeAttrName iterates over elements of type CompositeTypeAttrName.
+func ForEachCompositeTypeAttrName(
+	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *CompositeTypeAttrName),
+) {
+  if b == nil {
+    return
+  }
+	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
+		if elt, ok := e.(*CompositeTypeAttrName); ok {
+			fn(current, target, elt)
+		}
+	})
+}
+
+// FindCompositeTypeAttrName finds the first element of type CompositeTypeAttrName.
+func FindCompositeTypeAttrName(b ElementStatusIterator) (current Status, target TargetStatus, element *CompositeTypeAttrName) {
+  if b == nil {
+    return current, target, element
+  }
+	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
+		if elt, ok := e.(*CompositeTypeAttrName); ok {
+			element = elt
+			current = c
+			target = t
+		}
+	})
+	return current, target, element
+}
+
+func (e CompositeTypeAttrType) element() {}
+
+// ForEachCompositeTypeAttrType iterates over elements of type CompositeTypeAttrType.
+func ForEachCompositeTypeAttrType(
+	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *CompositeTypeAttrType),
+) {
+  if b == nil {
+    return
+  }
+	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
+		if elt, ok := e.(*CompositeTypeAttrType); ok {
+			fn(current, target, elt)
+		}
+	})
+}
+
+// FindCompositeTypeAttrType finds the first element of type CompositeTypeAttrType.
+func FindCompositeTypeAttrType(b ElementStatusIterator) (current Status, target TargetStatus, element *CompositeTypeAttrType) {
+  if b == nil {
+    return current, target, element
+  }
+	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
+		if elt, ok := e.(*CompositeTypeAttrType); ok {
+			element = elt
+			current = c
+			target = t
+		}
+	})
+	return current, target, element
+}
+
 func (e ConstraintComment) element() {}
 
 // ForEachConstraintComment iterates over elements of type ConstraintComment.

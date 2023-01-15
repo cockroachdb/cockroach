@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage/pebbleiter"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
@@ -45,7 +46,7 @@ type pebbleBatch struct {
 	prefixEngineIter pebbleIterator
 	normalEngineIter pebbleIterator
 
-	iter      *pebble.Iterator
+	iter      pebbleiter.Iterator
 	iterUsed  bool // avoids cloning after PinEngineStateForIterators()
 	writeOnly bool
 	closed    bool
@@ -243,9 +244,9 @@ func (p *pebbleBatch) SupportsRangeKeys() bool {
 func (p *pebbleBatch) PinEngineStateForIterators() error {
 	if p.iter == nil {
 		if p.batch.Indexed() {
-			p.iter = p.batch.NewIter(nil)
+			p.iter = pebbleiter.MaybeWrap(p.batch.NewIter(nil))
 		} else {
-			p.iter = p.db.NewIter(nil)
+			p.iter = pebbleiter.MaybeWrap(p.db.NewIter(nil))
 		}
 		// NB: p.iterUsed == false avoids cloning this in NewMVCCIterator(). We've
 		// just created it, so cloning it would just be overhead.
@@ -418,6 +419,11 @@ func (p *pebbleBatch) ClearMVCCRangeKey(rangeKey MVCCRangeKey) error {
 	}
 	return p.ClearEngineRangeKey(
 		rangeKey.StartKey, rangeKey.EndKey, EncodeMVCCTimestampSuffix(rangeKey.Timestamp))
+}
+
+// BufferedSize implements the Engine interface.
+func (p *pebbleBatch) BufferedSize() int {
+	return p.Len()
 }
 
 // PutMVCCRangeKey implements the Batch interface.

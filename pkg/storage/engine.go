@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
+	"github.com/cockroachdb/cockroach/pkg/storage/pebbleiter"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
@@ -364,7 +365,7 @@ type EngineIterator interface {
 	Value() ([]byte, error)
 	// GetRawIter is a low-level method only for use in the storage package,
 	// that returns the underlying pebble Iterator.
-	GetRawIter() *pebble.Iterator
+	GetRawIter() pebbleiter.Iterator
 	// SeekEngineKeyGEWithLimit is similar to SeekEngineKeyGE, but takes an
 	// additional exclusive upper limit parameter. The limit is semantically
 	// best-effort, and is an optimization to avoid O(n^2) iteration behavior in
@@ -826,6 +827,12 @@ type Writer interface {
 	// This method is temporary, to handle the transition from clusters where not
 	// all nodes understand local timestamps.
 	ShouldWriteLocalTimestamps(ctx context.Context) bool
+
+	// BufferedSize returns the size of the underlying buffered writes if the
+	// Writer implementation is buffered, and 0 if the Writer implementation is
+	// not buffered. Buffered writers are expected to always give a monotonically
+	// increasing size.
+	BufferedSize() int
 }
 
 // ReadWriter is the read/write interface to an engine's data.

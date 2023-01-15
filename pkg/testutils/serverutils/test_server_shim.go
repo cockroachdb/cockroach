@@ -127,9 +127,6 @@ type TestServerInterface interface {
 	// Note: use ServingRPCAddr() instead unless specific reason not to.
 	RPCAddr() string
 
-	// DB returns a *client.DB instance for talking to this KV server.
-	DB() *kv.DB
-
 	// LeaseManager() returns the *sql.LeaseManager as an interface{}.
 	LeaseManager() interface{}
 
@@ -407,6 +404,20 @@ func StartTenant(
 // into the test certificates.
 func TestTenantID() roachpb.TenantID {
 	return roachpb.MustMakeTenantID(security.EmbeddedTenantIDs()[0])
+}
+
+// TestTenantID2 returns another roachpb.TenantID that can be used when
+// starting a test Tenant. The returned tenant IDs match those built
+// into the test certificates.
+func TestTenantID2() roachpb.TenantID {
+	return roachpb.MustMakeTenantID(security.EmbeddedTenantIDs()[1])
+}
+
+// TestTenantID3 returns another roachpb.TenantID that can be used when
+// starting a test Tenant. The returned tenant IDs match those built
+// into the test certificates.
+func TestTenantID3() roachpb.TenantID {
+	return roachpb.MustMakeTenantID(security.EmbeddedTenantIDs()[2])
 }
 
 // GetJSONProto uses the supplied client to GET the URL specified by the parameters

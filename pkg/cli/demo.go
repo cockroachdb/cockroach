@@ -266,9 +266,9 @@ func runDemoInternal(
 
 		if demoCtx.Multitenant {
 			cliCtx.PrintfUnlessEmbedded(`#
-# You are connected to tenant 1, but can connect to the system tenant with
-# \connect and the SQL url below.
-`)
+# You are connected to tenant %q, but can connect to the system tenant with
+# '\connect' and the SQL url printed via '\demo ls'.
+`, c.TenantName())
 		}
 
 		if demoCtx.SimulateLatency {

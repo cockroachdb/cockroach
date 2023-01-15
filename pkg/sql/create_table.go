@@ -45,7 +45,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -1029,9 +1028,9 @@ func ResolveFK(
 		ReferencedTableID:   target.ID,
 		Name:                constraintName,
 		Validity:            validity,
-		OnDelete:            descpb.ForeignKeyReferenceActionValue[d.Actions.Delete],
-		OnUpdate:            descpb.ForeignKeyReferenceActionValue[d.Actions.Update],
-		Match:               descpb.CompositeKeyMatchMethodValue[d.Match],
+		OnDelete:            tree.ForeignKeyReferenceActionValue[d.Actions.Delete],
+		OnUpdate:            tree.ForeignKeyReferenceActionValue[d.Actions.Update],
+		Match:               tree.CompositeKeyMatchMethodValue[d.Match],
 		ConstraintID:        tbl.NextConstraintID,
 	}
 	tbl.NextConstraintID++
@@ -1427,10 +1426,10 @@ func NewTableDesc(
 			oid := catid.TypeIDToOID(regionConfig.RegionEnumID())
 			n.Defs = append(
 				n.Defs,
-				regionalByRowDefaultColDef(
+				multiregion.RegionalByRowDefaultColDef(
 					oid,
-					regionalByRowGatewayRegionDefaultExpr(oid),
-					maybeRegionalByRowOnUpdateExpr(evalCtx, oid),
+					multiregion.RegionalByRowGatewayRegionDefaultExpr(oid),
+					multiregion.MaybeRegionalByRowOnUpdateExpr(evalCtx, oid),
 				),
 			)
 			cdd = append(cdd, nil)
@@ -1438,7 +1437,7 @@ func NewTableDesc(
 
 		// Construct the partitioning for the PARTITION ALL BY.
 		desc.PartitionAllBy = true
-		partitionAllBy = partitionByForRegionalByRow(
+		partitionAllBy = multiregion.PartitionByForRegionalByRow(
 			*regionConfig,
 			regionalByRowCol,
 		)
@@ -2723,51 +2722,6 @@ func regionalByRowRegionDefaultExpr(oid oid.Oid, region tree.Name) tree.Expr {
 		Type:       &tree.OIDTypeReference{OID: oid},
 		SyntaxMode: tree.CastShort,
 	}
-}
-
-func regionalByRowGatewayRegionDefaultExpr(oid oid.Oid) tree.Expr {
-	return &tree.CastExpr{
-		Expr: &tree.FuncExpr{
-			Func: tree.WrapFunction(builtinconstants.DefaultToDatabasePrimaryRegionBuiltinName),
-			Exprs: []tree.Expr{
-				&tree.FuncExpr{
-					Func: tree.WrapFunction(builtinconstants.GatewayRegionBuiltinName),
-				},
-			},
-		},
-		Type:       &tree.OIDTypeReference{OID: oid},
-		SyntaxMode: tree.CastShort,
-	}
-}
-
-// maybeRegionalByRowOnUpdateExpr returns a gateway region default statement if
-// the auto rehoming session setting is enabled, nil otherwise.
-func maybeRegionalByRowOnUpdateExpr(evalCtx *eval.Context, enumOid oid.Oid) tree.Expr {
-	if evalCtx.SessionData().AutoRehomingEnabled {
-		return &tree.CastExpr{
-			Expr: &tree.FuncExpr{
-				Func: tree.WrapFunction(builtinconstants.RehomeRowBuiltinName),
-			},
-			Type:       &tree.OIDTypeReference{OID: enumOid},
-			SyntaxMode: tree.CastShort,
-		}
-	}
-	return nil
-}
-
-func regionalByRowDefaultColDef(
-	oid oid.Oid, defaultExpr tree.Expr, onUpdateExpr tree.Expr,
-) *tree.ColumnTableDef {
-	c := &tree.ColumnTableDef{
-		Name:   tree.RegionalByRowRegionDefaultColName,
-		Type:   &tree.OIDTypeReference{OID: oid},
-		Hidden: true,
-	}
-	c.Nullable.Nullability = tree.NotNull
-	c.DefaultExpr.Expr = defaultExpr
-	c.OnUpdateExpr.Expr = onUpdateExpr
-
-	return c
 }
 
 // setSequenceOwner adds sequence id to the sequence id list owned by a column

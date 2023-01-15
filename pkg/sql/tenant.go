@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
-	"github.com/cockroachdb/cockroach/pkg/sql/oppurpose"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -200,6 +199,36 @@ func CreateTenantRecord(
 	return roachpb.MustMakeTenantID(tenID), scKVAccessor.UpdateSpanConfigRecords(
 		ctx, nil, toUpsert, hlc.MinTimestamp, hlc.MaxTimestamp,
 	)
+}
+
+// GetAllNonDropTenantIDs returns all tenants in the system table, excluding
+// those in the DROP state.
+func GetAllNonDropTenantIDs(
+	ctx context.Context, execCfg *ExecutorConfig, txn *kv.Txn,
+) ([]roachpb.TenantID, error) {
+	rows, err := execCfg.InternalExecutor.QueryBuffered(
+		ctx, "get-tenant-ids", txn, `
+		 SELECT id
+		 FROM system.tenants
+		 WHERE crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info, true)->>'state' != 'DROP'
+		 ORDER BY id
+		 `)
+	if err != nil {
+		return nil, err
+	}
+
+	tenants := make([]roachpb.TenantID, 0, len(rows))
+	for _, tenant := range rows {
+		iTenantId := uint64(tree.MustBeDInt(tenant[0]))
+		tenantId, err := roachpb.MakeTenantID(iTenantId)
+		if err != nil {
+			return nil, errors.NewAssertionErrorWithWrappedErrf(
+				err, "stored tenant ID %d does not convert to TenantID", iTenantId)
+		}
+		tenants = append(tenants, tenantId)
+	}
+
+	return tenants, nil
 }
 
 // GetTenantRecordByName retrieves a tenant with the provided name from
@@ -424,7 +453,7 @@ func (p *planner) CreateTenantWithID(
 	// the span configs infrastructure, in `system.span_configurations`.
 	expTime := p.ExecCfg().Clock.Now().Add(time.Hour.Nanoseconds(), 0)
 	for _, key := range splits {
-		if err := p.ExecCfg().DB.AdminSplit(ctx, key, expTime, oppurpose.SplitCreateTenant); err != nil {
+		if err := p.ExecCfg().DB.AdminSplit(ctx, key, expTime); err != nil {
 			return err
 		}
 	}

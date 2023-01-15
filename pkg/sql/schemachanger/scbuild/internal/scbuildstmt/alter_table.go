@@ -54,10 +54,17 @@ var supportedAlterTableStatements = map[reflect.Type]supportedAlterTableCommand{
 		// Support ALTER TABLE ... ADD PRIMARY KEY
 		if d, ok := t.ConstraintDef.(*tree.UniqueConstraintTableDef); ok && d.PrimaryKey && t.ValidationBehavior == tree.ValidationDefault {
 			return true
+		} else if ok && d.WithoutIndex && t.ValidationBehavior == tree.ValidationDefault {
+			return true
 		}
 
 		// Support ALTER TABLE ... ADD CONSTRAINT CHECK
 		if _, ok := t.ConstraintDef.(*tree.CheckConstraintTableDef); ok && t.ValidationBehavior == tree.ValidationDefault {
+			return true
+		}
+
+		// Support ALTER TABLE ... ADD CONSTRAINT FOREIGN KEY
+		if _, ok := t.ConstraintDef.(*tree.ForeignKeyConstraintTableDef); ok && t.ValidationBehavior == tree.ValidationDefault {
 			return true
 		}
 
@@ -70,8 +77,10 @@ var supportedAlterTableStatements = map[reflect.Type]supportedAlterTableCommand{
 // They key is constructed as "ADD" + constraint type + validation behavior, joined with "_".
 // E.g. "ADD_PRIMARY_KEY_DEFAULT", "ADD_CHECK_SKIP", "ADD_FOREIGN_KEY_DEFAULT", etc.
 var alterTableAddConstraintMinSupportedClusterVersion = map[string]clusterversion.Key{
-	"ADD_PRIMARY_KEY_DEFAULT": clusterversion.V22_2Start,
-	"ADD_CHECK_DEFAULT":       clusterversion.V23_1Start,
+	"ADD_PRIMARY_KEY_DEFAULT":          clusterversion.V22_2Start,
+	"ADD_CHECK_DEFAULT":                clusterversion.V23_1Start,
+	"ADD_FOREIGN_KEY_DEFAULT":          clusterversion.V23_1Start,
+	"ADD_UNIQUE_WITHOUT_INDEX_DEFAULT": clusterversion.V23_1Start,
 }
 
 func init() {
@@ -160,9 +169,13 @@ func alterTableAddConstraintSupportedInCurrentClusterVersion(
 	case *tree.UniqueConstraintTableDef:
 		if d.PrimaryKey {
 			cmdKey = "ADD_PRIMARY_KEY"
+		} else if d.WithoutIndex {
+			cmdKey = "ADD_UNIQUE_WITHOUT_INDEX"
 		}
 	case *tree.CheckConstraintTableDef:
 		cmdKey = "ADD_CHECK"
+	case *tree.ForeignKeyConstraintTableDef:
+		cmdKey = "ADD_FOREIGN_KEY"
 	}
 	// Figure out command validation behavior: DEFAULT or SKIP
 	if constraint.ValidationBehavior == tree.ValidationDefault {

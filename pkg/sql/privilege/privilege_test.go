@@ -20,7 +20,7 @@ import (
 func TestPrivilegeDecode(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	testCases := []struct {
-		raw              uint32
+		raw              uint64
 		privileges       privilege.List
 		stringer, sorted string
 	}{

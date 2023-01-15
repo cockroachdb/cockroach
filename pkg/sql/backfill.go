@@ -33,13 +33,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/oppurpose"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -1503,18 +1503,17 @@ func (e InvalidIndexesError) Error() string {
 	return fmt.Sprintf("found %d invalid indexes", len(e.Indexes))
 }
 
-// ValidateCheckConstraint validates the check constraint against all rows
-// in index `indexIDForValidation` in table `tableDesc`.
-func ValidateCheckConstraint(
+// ValidateConstraint validates the constraint against all rows
+// in `tbl`.
+func ValidateConstraint(
 	ctx context.Context,
 	tableDesc catalog.TableDescriptor,
-	checkConstraint catalog.CheckConstraint,
+	constraint catalog.Constraint,
 	indexIDForValidation descpb.IndexID,
 	sessionData *sessiondata.SessionData,
 	runHistoricalTxn descs.HistoricalInternalExecTxnRunner,
 	execOverride sessiondata.InternalExecutorOverride,
 ) (err error) {
-
 	tableDesc, err = tableDesc.MakeFirstMutationPublic(catalog.IgnoreConstraints)
 	if err != nil {
 		return err
@@ -1531,10 +1530,44 @@ func ValidateCheckConstraint(
 		semaCtx.TableNameResolver = resolver
 		defer func() { descriptors.ReleaseAll(ctx) }()
 
-		return ie.WithSyntheticDescriptors([]catalog.Descriptor{tableDesc}, func() error {
-			return validateCheckExpr(ctx, &semaCtx, txn, sessionData, checkConstraint.GetExpr(),
-				tableDesc.(*tabledesc.Mutable), ie, indexIDForValidation)
-		})
+		switch catalog.GetConstraintType(constraint) {
+		case catconstants.ConstraintTypeCheck:
+			ck := constraint.AsCheck()
+			return ie.WithSyntheticDescriptors(
+				[]catalog.Descriptor{tableDesc},
+				func() error {
+					return validateCheckExpr(ctx, &semaCtx, txn, sessionData, ck.GetExpr(),
+						tableDesc.(*tabledesc.Mutable), ie, indexIDForValidation)
+				},
+			)
+		case catconstants.ConstraintTypeFK:
+			fk := constraint.AsForeignKey()
+			targetTable, err := descriptors.ByID(txn).Get().Table(ctx, fk.GetReferencedTableID())
+			if err != nil {
+				return err
+			}
+			if targetTable.GetID() == tableDesc.GetID() {
+				targetTable = tableDesc
+			}
+			return ie.WithSyntheticDescriptors(
+				[]catalog.Descriptor{tableDesc},
+				func() error {
+					return validateForeignKey(ctx, tableDesc.(*tabledesc.Mutable), targetTable, fk.ForeignKeyDesc(),
+						indexIDForValidation, txn, ie)
+				},
+			)
+		case catconstants.ConstraintTypeUniqueWithoutIndex:
+			uwi := constraint.AsUniqueWithoutIndex()
+			return ie.WithSyntheticDescriptors(
+				[]catalog.Descriptor{tableDesc},
+				func() error {
+					return validateUniqueConstraint(ctx, tableDesc, uwi.GetName(), uwi.CollectKeyColumnIDs().Ordered(),
+						uwi.GetPredicate(), indexIDForValidation, ie, txn, sessionData.User(), false)
+				},
+			)
+		default:
+			return errors.AssertionFailedf("validation of unsupported constraint type")
+		}
 	})
 }
 
@@ -2023,6 +2056,7 @@ func countIndexRowsAndMaybeCheckUniqueness(
 					idx.GetName(),
 					idx.IndexDesc().KeyColumnIDs[idx.ImplicitPartitioningColumnCount():],
 					idx.GetPredicate(),
+					0, /* indexIDForValidation */
 					ie,
 					txn,
 					username.NodeUserName(),
@@ -2135,7 +2169,7 @@ func (sc *SchemaChanger) backfillIndexes(
 	if sc.execCfg.Codec.ForSystemTenant() {
 		expirationTime := sc.db.Clock().Now().Add(time.Hour.Nanoseconds(), 0)
 		for _, span := range addingSpans {
-			if err := sc.db.AdminSplit(ctx, span.Key, expirationTime, oppurpose.SplitImport); err != nil {
+			if err := sc.db.AdminSplit(ctx, span.Key, expirationTime); err != nil {
 				return err
 			}
 		}
@@ -2662,7 +2696,7 @@ func validateFkInTxn(
 	return ie.WithSyntheticDescriptors(
 		syntheticDescs,
 		func() error {
-			return validateForeignKey(ctx, srcTable, targetTable, fk, ie, txn)
+			return validateForeignKey(ctx, srcTable, targetTable, fk, 0 /* indexIDForValidation */, txn, ie)
 		})
 }
 
@@ -2711,6 +2745,7 @@ func validateUniqueWithoutIndexConstraintInTxn(
 				uc.Name,
 				uc.ColumnIDs,
 				uc.Predicate,
+				0, /* indexIDForValidation */
 				ie,
 				txn,
 				user,

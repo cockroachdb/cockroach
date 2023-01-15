@@ -182,7 +182,8 @@ import (
 // are allowed to alter their zone configurations.
 // - allow-multi-region-abstractions-for-secondary-tenants: If specified,
 // secondary tenants are allowed to make use of multi-region abstractions.
-//
+// - allow-split-at-for-secondary-tenants: If specified,
+// secondary tenants are allowed to run ALTER TABLE ... SPLIT AT.
 //
 // ###########################################
 //           CLUSTER OPTION DIRECTIVES
@@ -1263,6 +1264,7 @@ func (t *logicTest) newTestServerCluster(bootstrapBinaryPath string, upgradeBina
 		testserver.StoreOnDiskOpt(),
 		testserver.CockroachBinaryPathOpt(bootstrapBinaryPath),
 		testserver.UpgradeCockroachBinaryPathOpt(upgradeBinaryPath),
+		testserver.PollListenURLTimeoutOpt(120),
 		testserver.AddListenAddrPortOpt(ports[0]),
 		testserver.AddListenAddrPortOpt(ports[1]),
 		testserver.AddListenAddrPortOpt(ports[2]),
@@ -1482,9 +1484,6 @@ func (t *logicTest) newCluster(
 					SQLStatsKnobs: &sqlstats.TestingKnobs{
 						AOSTClause: "AS OF SYSTEM TIME '-1us'",
 					},
-					TenantTestingKnobs: &sql.TenantTestingKnobs{
-						AllowSplitAndScatter: cfg.AllowSplitAndScatter,
-					},
 					RangeFeed: paramsPerNode[i].Knobs.RangeFeed,
 				},
 				MemoryPoolSize:    params.ServerArgs.SQLMemoryPoolSize,
@@ -1578,6 +1577,18 @@ func (t *logicTest) newCluster(
 				fmt.Sprintf(
 					"ALTER TENANT $1 SET CLUSTER SETTING %s = true",
 					sql.SecondaryTenantsMultiRegionAbstractionsEnabledSettingName,
+				),
+				serverutils.TestTenantID().ToUint64(),
+			); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		if clusterSettingOverrideArgs.overrideMultiTenantSplitAtAllowed {
+			if _, err := conn.Exec(
+				fmt.Sprintf(
+					"ALTER TENANT $1 SET CLUSTER SETTING %s = true",
+					sql.SecondaryTenantSplitAtEnabled.Key(),
 				),
 				serverutils.TestTenantID().ToUint64(),
 			); err != nil {
@@ -1819,6 +1830,9 @@ func (t *logicTest) setup(
 
 	if cfg.UseCockroachGoTestserver {
 		skip.UnderStress(t.t(), "test takes a long time and downloads release artifacts")
+		if runtime.GOARCH == "arm64" && strings.HasPrefix(cfg.CockroachGoBootstrapVersion, "v22.1") {
+			skip.IgnoreLint(t.t(), "Skip under ARM64. There are no ARM release artifacts for v22.1.")
+		}
 		if !bazel.BuiltWithBazel() {
 			skip.IgnoreLint(t.t(), "cockroach-go/testserver can only be uzed in bazel builds")
 		}
@@ -1887,7 +1901,7 @@ CREATE DATABASE test; USE test;
 
 type tenantClusterSettingOverrideArgs struct {
 	// If set, the sql.zone_configs.allow_for_secondary_tenant.enabled default
-	// is set to true by the host. This is allows logic tests that run on
+	// is set to true by the host. This allows logic tests that run on
 	// secondary tenants to use zone configurations.
 	overrideMultiTenantZoneConfigsAllowed bool
 	// If set, the
@@ -1895,6 +1909,10 @@ type tenantClusterSettingOverrideArgs struct {
 	// is set to true by the host. This allows logic tests that run on secondary
 	// tenants to make use of multi-region abstractions.
 	overrideMultiTenantMultiRegionAbstractionsAllowed bool
+	// If set, the sql.split_at.allow_for_secondary_tenant.enabled default
+	// is set to true by the host. This allows logic tests that run on
+	// secondary tenants to run ALTER TABLE ... SPLIT AT.
+	overrideMultiTenantSplitAtAllowed bool
 }
 
 // tenantClusterSettingOverrideOpt is implemented by options for configuring
@@ -1927,6 +1945,18 @@ func (t tenantClusterSettingOverrideMultiTenantZoneConfigsAllowed) apply(
 	args *tenantClusterSettingOverrideArgs,
 ) {
 	args.overrideMultiTenantZoneConfigsAllowed = true
+}
+
+// tenantClusterSettingOverrideMultiTenantSplitAtAllowed corresponds to
+// the allow-split-at-for-secondary-tenants directive.
+type tenantClusterSettingOverrideMultiTenantSplitAtAllowed struct{}
+
+var _ tenantClusterSettingOverrideOpt = tenantClusterSettingOverrideMultiTenantSplitAtAllowed{}
+
+func (t tenantClusterSettingOverrideMultiTenantSplitAtAllowed) apply(
+	args *tenantClusterSettingOverrideArgs,
+) {
+	args.overrideMultiTenantSplitAtAllowed = true
 }
 
 // clusterOpt is implemented by options for configuring the test cluster under
@@ -2078,6 +2108,8 @@ func readTenantClusterSettingOverrideArgs(
 			res = append(res, tenantClusterSettingOverrideMultiTenantZoneConfigsAllowed{})
 		case "allow-multi-region-abstractions-for-secondary-tenants":
 			res = append(res, tenantClusterSettingOverrideMultiTenantMultiRegionAbstractionsAllowed{})
+		case "allow-split-at-for-secondary-tenants":
+			res = append(res, tenantClusterSettingOverrideMultiTenantSplitAtAllowed{})
 		default:
 			t.Fatalf("unrecognized cluster option: %s", opt)
 		}

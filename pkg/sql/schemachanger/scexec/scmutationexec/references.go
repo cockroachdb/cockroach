@@ -91,28 +91,23 @@ func (m *visitor) RemoveForeignKeyBackReference(
 				op.OriginConstraintID, out.GetName(), out.GetID())
 		}
 	}
-	// Remove back reference.
-	var found bool
+	// Attempt to remove back reference.
+	// Note how we
+	//  1. only check to remove from `in.InboundFKs` but not from `in.Mutations`:
+	//  this is because we only add the back-reference in `in` when we publish
+	//  the adding FK in `out`, so it's impossible for a back-reference to exist
+	//  on the mutation slice.
+	//  2. only attempt to remove (i.e. we do not panic when it's not found):
+	//  this is because if we roll back before the adding FK is published in `out`,
+	//  such a back-reference won't exist in `in` yet.
 	for i, fk := range in.InboundFKs {
 		if fk.OriginTableID == op.OriginTableID && fk.Name == name {
 			in.InboundFKs = append(in.InboundFKs[:i], in.InboundFKs[i+1:]...)
-			found = true
+			if len(in.InboundFKs) == 0 {
+				in.InboundFKs = nil
+			}
 			break
 		}
-	}
-	for i, m := range in.Mutations {
-		if c := m.GetConstraint(); c != nil &&
-			c.ConstraintType != descpb.ConstraintToUpdate_FOREIGN_KEY &&
-			c.ForeignKey.OriginTableID == op.OriginTableID &&
-			c.Name == name {
-			in.Mutations = append(in.Mutations[:i], in.Mutations[i+1:]...)
-			found = true
-			break
-		}
-	}
-	if !found {
-		return errors.AssertionFailedf("foreign key %q not found in referenced table %q (%d)",
-			name, in.GetName(), in.GetID())
 	}
 	return nil
 }
@@ -189,6 +184,28 @@ func updateBackReferencesInTypes(
 		typ.ReferencingDescriptorIDs = backRefs.Ordered()
 	}
 	return nil
+}
+
+func (m *visitor) UpdateTypeBackReferencesInTypes(
+	ctx context.Context, op scop.UpdateTypeBackReferencesInTypes,
+) error {
+	var forwardRefs catalog.DescriptorIDSet
+	if desc, err := m.s.GetDescriptor(ctx, op.BackReferencedTypeID); err != nil {
+		return err
+	} else if !desc.Dropped() {
+		typ, err := catalog.AsTypeDescriptor(desc)
+		if err != nil {
+			return err
+		}
+		ids, err := typ.GetIDClosure()
+		if err != nil {
+			return err
+		}
+		for id := range ids {
+			forwardRefs.Add(id)
+		}
+	}
+	return updateBackReferencesInTypes(ctx, m, op.TypeIDs, op.BackReferencedTypeID, forwardRefs)
 }
 
 func (m *visitor) UpdateBackReferencesInSequences(

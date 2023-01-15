@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedvalidators"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -46,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/asof"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -435,17 +437,17 @@ func createChangefeedJobRecord(
 		return nil, err
 	}
 	tolerances := opts.GetCanHandle()
+	sd := p.SessionData().Clone()
+	// Add non-local session data state (localization, etc).
+	sessiondata.MarshalNonLocal(p.SessionData(), &sd.SessionData)
 	details := jobspb.ChangefeedDetails{
 		Tables:               tables,
 		SinkURI:              sinkURI,
 		StatementTime:        statementTime,
 		EndTime:              endTime,
 		TargetSpecifications: targets,
-		SessionData:          p.SessionData().SessionData,
+		SessionData:          &sd.SessionData,
 	}
-
-	// Add non-local session data state (localization, etc).
-	sessiondata.MarshalNonLocal(p.SessionData(), &details.SessionData)
 
 	specs := AllTargets(details)
 	for _, desc := range targetDescs {
@@ -468,8 +470,24 @@ func createChangefeedJobRecord(
 			return nil, err
 		}
 		if withDiff {
+			if !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.V23_1_ChangefeedExpressionProductionReady) {
+				return nil,
+					pgerror.Newf(
+						pgcode.FeatureNotSupported,
+						"cannot create new changefeed with CDC expression <%s>, "+
+							"which requires access to cdc_prev until cluster upgrade to %s finalized.",
+						tree.AsString(normalized),
+						clusterversion.V23_1_ChangefeedExpressionProductionReady.String,
+					)
+			}
 			opts.ForceDiff()
+		} else if opts.IsSet(changefeedbase.OptDiff) {
+			opts.ClearDiff()
+			p.BufferClientNotice(ctx, pgnotice.Newf(
+				"turning off unused %s option (expression <%s> does not use cdc_prev)",
+				changefeedbase.OptDiff, tree.AsString(normalized)))
 		}
+
 		// TODO: Set the default envelope to row here when using a sink and format
 		// that support it.
 		opts.SetDefaultEnvelope(changefeedbase.OptEnvelopeBare)
@@ -877,10 +895,9 @@ func logSanitizedChangefeedDestination(ctx context.Context, destination string) 
 func validateDetailsAndOptions(
 	details jobspb.ChangefeedDetails, opts changefeedbase.StatementOptions,
 ) error {
-	if err := opts.ValidateForCreateChangefeed(); err != nil {
+	if err := opts.ValidateForCreateChangefeed(details.Select != ""); err != nil {
 		return err
 	}
-
 	if opts.HasEndTime() {
 		scanType, err := opts.GetInitialScanType()
 		if err != nil {
@@ -1033,20 +1050,23 @@ func (b *changefeedResumer) resumeWithRetries(
 	var lastRunStatusUpdate time.Time
 
 	for r := getRetry(ctx); r.Next(); {
-		// startedCh is normally used to signal back to the creator of the job that
-		// the job has started; however, in this case nothing will ever receive
-		// on the channel, causing the changefeed flow to block. Replace it with
-		// a dummy channel.
-		startedCh := make(chan tree.Datums, 1)
+		err := maybeUpgradePreProductionReadyExpression(ctx, jobID, details, jobExec)
 
-		err := distChangefeedFlow(ctx, jobExec, jobID, details, progress, startedCh)
 		if err == nil {
-			return nil // Changefeed completed -- e.g. due to initial_scan=only mode.
-		}
+			// startedCh is normally used to signal back to the creator of the job that
+			// the job has started; however, in this case nothing will ever receive
+			// on the channel, causing the changefeed flow to block. Replace it with
+			// a dummy channel.
+			startedCh := make(chan tree.Datums, 1)
+			err = distChangefeedFlow(ctx, jobExec, jobID, details, progress, startedCh)
+			if err == nil {
+				return nil // Changefeed completed -- e.g. due to initial_scan=only mode.
+			}
 
-		if knobs, ok := execCfg.DistSQLSrv.TestingKnobs.Changefeed.(*TestingKnobs); ok {
-			if knobs != nil && knobs.HandleDistChangefeedError != nil {
-				err = knobs.HandleDistChangefeedError(err)
+			if knobs, ok := execCfg.DistSQLSrv.TestingKnobs.Changefeed.(*TestingKnobs); ok {
+				if knobs != nil && knobs.HandleDistChangefeedError != nil {
+					err = knobs.HandleDistChangefeedError(err)
+				}
 			}
 		}
 
@@ -1081,6 +1101,7 @@ func (b *changefeedResumer) resumeWithRetries(
 				jobID, progress.GetHighWater(), reloadErr)
 		} else {
 			progress = reloadedJob.Progress()
+			details = reloadedJob.Details().(jobspb.ChangefeedDetails)
 		}
 	}
 	return errors.Wrap(ctx.Err(), `ran out of retries`)
@@ -1301,4 +1322,89 @@ func failureTypeForStartupError(err error) changefeedbase.FailureType {
 		return tag
 	}
 	return changefeedbase.OnStartup
+}
+
+// maybeUpgradePreProductionReadyExpression updates job record for the
+// changefeed using CDC transformation, created prior to
+// clusterversion.V23_1_ChangefeedExpressionProductionReady. The update happens
+// once cluster version finalized.
+// Returns nil when nothing needs to be done.
+// Returns fatal error message, causing changefeed to fail, if automatic upgrade
+// cannot for some reason. Returns a transient error to cause job retry/reload
+// when expression was upgraded.
+func maybeUpgradePreProductionReadyExpression(
+	ctx context.Context,
+	jobID jobspb.JobID,
+	details jobspb.ChangefeedDetails,
+	jobExec sql.JobExecContext,
+) error {
+	if details.Select == "" {
+		// Not an expression based changefeed.  Nothing to do.
+		return nil
+	}
+
+	if details.SessionData != nil {
+		// Already production ready. Nothing to do.
+		return nil
+	}
+
+	if !jobExec.ExecCfg().Settings.Version.IsActive(
+		ctx, clusterversion.V23_1_ChangefeedExpressionProductionReady,
+	) {
+		// Can't upgrade job record yet -- wait until upgrade finalized.
+		return nil
+	}
+
+	// Expressions prior to
+	// clusterversion.V23_1_ChangefeedExpressionProductionReady were rewritten to
+	// fully qualify all columns/types.  Furthermore, those expressions couldn't
+	// use any functions that depend on session data.  Thus, it is safe to use
+	// minimal session data.
+	sd := sessiondatapb.SessionData{
+		Database:   "",
+		UserProto:  jobExec.User().EncodeProto(),
+		Internal:   true,
+		SearchPath: sessiondata.DefaultSearchPathForUser(jobExec.User()).GetPathArray(),
+	}
+	details.SessionData = &sd
+
+	const errUpgradeErrMsg = "error rewriting changefeed expression.  Please recreate failed changefeed manually."
+	oldExpression, err := cdceval.ParseChangefeedExpression(details.Select)
+	if err != nil {
+		// That's mighty surprising; There is nothing we can do.  Make sure
+		// we fail changefeed in this case.
+		return changefeedbase.WithTerminalError(errors.WithHint(err, errUpgradeErrMsg))
+	}
+	newExpression, err := cdceval.RewritePreviewExpression(oldExpression)
+	if err != nil {
+		// That's mighty surprising; There is nothing we can do.  Make sure
+		// we fail changefeed in this case.
+		return changefeedbase.WithTerminalError(errors.WithHint(err, errUpgradeErrMsg))
+	}
+	details.Select = cdceval.AsStringUnredacted(newExpression)
+
+	const useReadLock = false
+	if err := jobExec.ExecCfg().JobRegistry.UpdateJobWithTxn(ctx, jobID, nil, useReadLock,
+		func(txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+			payload := md.Payload
+			payload.Details = jobspb.WrapPayloadDetails(details)
+			ju.UpdatePayload(payload)
+			return nil
+		},
+	); err != nil {
+		// Failed to update job record; try again.
+		return err
+	}
+
+	// Job record upgraded.  Return transient error to reload job record and retry.
+	if newExpression == oldExpression {
+		return errors.New("changefeed expression updated")
+	}
+
+	return errors.Newf("changefeed expression %s rewritten as %s. "+
+		"Note: changefeed expression accesses the previous state of the row via deprecated cdc_prev() "+
+		"function. The rewritten expression should continue to work, but is likely to be inefficient. "+
+		"Existing changefeed needs to be recreated using new syntax. "+
+		"Please see CDC documentation on the use of new cdc_prev tuple.",
+		tree.AsString(oldExpression), tree.AsString(newExpression))
 }

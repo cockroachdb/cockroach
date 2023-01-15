@@ -21,14 +21,14 @@ import (
 type lockingStore struct {
 	mu struct {
 		syncutil.RWMutex
-		insights *cache.OrderedCache
+		insights *cache.UnorderedCache
 	}
 }
 
 func (s *lockingStore) AddInsight(insight *Insight) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.mu.insights.Add(insight.Statement.ID, insight)
+	s.mu.insights.Add(insight.Transaction.ID, insight)
 }
 
 func (s *lockingStore) IterateInsights(
@@ -36,9 +36,8 @@ func (s *lockingStore) IterateInsights(
 ) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	s.mu.insights.Do(func(_, v interface{}) bool {
-		visitor(ctx, v.(*Insight))
-		return false
+	s.mu.insights.Do(func(e *cache.Entry) {
+		visitor(ctx, e.Value.(*Insight))
 	})
 }
 
@@ -57,6 +56,6 @@ func newStore(st *cluster.Settings) *lockingStore {
 	}
 
 	s := &lockingStore{}
-	s.mu.insights = cache.NewOrderedCache(config)
+	s.mu.insights = cache.NewUnorderedCache(config)
 	return s
 }

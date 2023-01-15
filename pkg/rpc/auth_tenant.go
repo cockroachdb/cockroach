@@ -130,6 +130,9 @@ func (a tenantAuthorizer) authorize(
 	case "/cockroach.roachpb.Internal/GetRangeDescriptors":
 		return a.authGetRangeDescriptors(tenID, req.(*roachpb.GetRangeDescriptorsRequest))
 
+	case "/cockroach.server.serverpb.Status/HotRangesV2":
+		return a.authHotRangesV2(tenID)
+
 	default:
 		return authErrorf("unknown method %q", fullMethod)
 	}
@@ -141,9 +144,40 @@ func (a tenantAuthorizer) authBatch(tenID roachpb.TenantID, args *roachpb.BatchR
 	// Consult reqAllowed to determine whether each request in the batch
 	// is permitted. If not, reject the entire batch.
 	for _, ru := range args.Requests {
-		if !reqAllowed(ru.GetInner(), tenID) {
-			return authErrorf("request [%s] not permitted", args.Summary())
+		switch ru.GetInner().(type) {
+		case
+			*roachpb.AddSSTableRequest,
+			*roachpb.AdminChangeReplicasRequest,
+			*roachpb.AdminRelocateRangeRequest,
+			*roachpb.AdminScatterRequest,
+			*roachpb.AdminSplitRequest,
+			*roachpb.AdminTransferLeaseRequest,
+			*roachpb.AdminUnsplitRequest,
+			*roachpb.ClearRangeRequest,
+			*roachpb.ConditionalPutRequest,
+			*roachpb.DeleteRangeRequest,
+			*roachpb.DeleteRequest,
+			*roachpb.EndTxnRequest,
+			*roachpb.ExportRequest,
+			*roachpb.GetRequest,
+			*roachpb.HeartbeatTxnRequest,
+			*roachpb.IncrementRequest,
+			*roachpb.InitPutRequest,
+			*roachpb.IsSpanEmptyRequest,
+			*roachpb.LeaseInfoRequest,
+			*roachpb.PutRequest,
+			*roachpb.QueryIntentRequest,
+			*roachpb.QueryLocksRequest,
+			*roachpb.QueryTxnRequest,
+			*roachpb.RangeStatsRequest,
+			*roachpb.RefreshRangeRequest,
+			*roachpb.RefreshRequest,
+			*roachpb.ReverseScanRequest,
+			*roachpb.RevertRangeRequest,
+			*roachpb.ScanRequest:
+			continue
 		}
+		return authErrorf("request [%s] not permitted", args.Summary())
 	}
 
 	// All keys in the request must reside within the tenant's keyspace.
@@ -162,43 +196,6 @@ func (a tenantAuthorizer) authGetRangeDescriptors(
 	tenID roachpb.TenantID, args *roachpb.GetRangeDescriptorsRequest,
 ) error {
 	return validateSpan(tenID, args.Span)
-}
-
-func reqAllowed(r roachpb.Request, tenID roachpb.TenantID) bool {
-	switch t := r.(type) {
-	case *roachpb.GetRequest,
-		*roachpb.PutRequest,
-		*roachpb.ConditionalPutRequest,
-		*roachpb.IncrementRequest,
-		*roachpb.DeleteRequest,
-		*roachpb.DeleteRangeRequest,
-		*roachpb.ClearRangeRequest,
-		*roachpb.RevertRangeRequest,
-		*roachpb.ScanRequest,
-		*roachpb.ReverseScanRequest,
-		*roachpb.EndTxnRequest,
-		*roachpb.HeartbeatTxnRequest,
-		*roachpb.QueryTxnRequest,
-		*roachpb.QueryIntentRequest,
-		*roachpb.QueryLocksRequest,
-		*roachpb.InitPutRequest,
-		*roachpb.ExportRequest,
-		*roachpb.AddSSTableRequest,
-		*roachpb.RefreshRequest,
-		*roachpb.RefreshRangeRequest,
-		*roachpb.IsSpanEmptyRequest,
-		*roachpb.LeaseInfoRequest,
-		*roachpb.RangeStatsRequest:
-		return true
-	case *roachpb.AdminScatterRequest:
-		return t.Class != roachpb.AdminScatterRequest_ARBITRARY || tenID.IsSystem()
-	case *roachpb.AdminSplitRequest:
-		return t.Class != roachpb.AdminSplitRequest_ARBITRARY || tenID.IsSystem()
-	case *roachpb.AdminUnsplitRequest:
-		return t.Class != roachpb.AdminUnsplitRequest_ARBITRARY || tenID.IsSystem()
-	}
-
-	return false
 }
 
 // authRangeLookup authorizes the provided tenant to invoke the RangeLookup RPC
@@ -357,6 +354,16 @@ func (a tenantAuthorizer) authUpdateSpanConfigs(
 	return nil
 }
 
+// authHotRangesV2 authorizes the provided tenant to invoke the
+// HotRangesV2 RPC with the provided args. It requires that an authorized
+// tenantID has been set.
+func (a tenantAuthorizer) authHotRangesV2(tenID roachpb.TenantID) error {
+	if !tenID.IsSet() {
+		return authErrorf("hot ranges request with unspecified tenant not permitted")
+	}
+	return nil
+}
+
 // authSpanConfigConformance authorizes the provided tenant to invoke the
 // SpanConfigConformance RPC with the provided args.
 func (a tenantAuthorizer) authSpanConfigConformance(
@@ -426,7 +433,25 @@ func validateSpan(tenID roachpb.TenantID, sp roachpb.Span) error {
 
 func contextWithTenant(ctx context.Context, tenID roachpb.TenantID) context.Context {
 	ctx = roachpb.NewContextForTenant(ctx, tenID)
-	ctx = logtags.AddTag(ctx, "tenant", tenID.String())
+	const key = "tenant"
+	// Don't set a log tag if the tenant is not set and there is no existing log
+	// tag.
+	if !tenID.IsSet() {
+		found := false
+		tags := logtags.FromContext(ctx)
+		if tags != nil {
+			for _, t := range tags.Get() {
+				if t.Key() == key {
+					found = true
+					break
+				}
+			}
+		}
+		if !found {
+			return ctx
+		}
+	}
+	ctx = logtags.AddTag(ctx, key, tenID.String())
 	return ctx
 }
 

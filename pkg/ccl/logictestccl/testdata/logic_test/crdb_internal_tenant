@@ -261,10 +261,10 @@ SELECT * FROM crdb_internal.cluster_contention_events WHERE table_id < 0
 ----
 table_id  index_id  num_contention_events  cumulative_contention_time  key  txn_id  count
 
-query TTTT colnames
+query TTTTT colnames
 SELECT * FROM crdb_internal.builtin_functions WHERE function = ''
 ----
-function  signature  category  details
+function  signature  category  details  schema
 
 query ITTITTTTTTTBBBB colnames
 SELECT * FROM crdb_internal.create_statements WHERE database_name = ''
@@ -400,7 +400,7 @@ test  {}
 statement ok
 CREATE TABLE foo (a INT PRIMARY KEY, INDEX idx(a)); INSERT INTO foo VALUES(1)
 
-statement error pq: rpc error: code = Unauthenticated desc = request \[1 AdmSplit\] not permitted
+statement error tenant cluster setting sql.split_at.allow_for_secondary_tenant.enabled disabled
 ALTER TABLE foo SPLIT AT VALUES(2)
 
 # Make sure that the cluster id isn't unset.

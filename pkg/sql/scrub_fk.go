@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/semenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
@@ -65,12 +66,8 @@ func newSQLForeignKeyCheckOperation(
 func (o *sqlForeignKeyCheckOperation) Start(params runParams) error {
 	ctx := params.ctx
 
-	checkQuery, _, err := nonMatchingRowQuery(
-		o.tableDesc,
-		o.constraint.ForeignKeyDesc(),
-		o.referencedTableDesc,
-		false, /* limitResults */
-	)
+	checkQuery, _, err := nonMatchingRowQuery(o.tableDesc, o.constraint.ForeignKeyDesc(), o.referencedTableDesc,
+		0 /* indexIDForValidation */, false)
 	if err != nil {
 		return err
 	}
@@ -83,7 +80,7 @@ func (o *sqlForeignKeyCheckOperation) Start(params runParams) error {
 	}
 	o.run.rows = rows
 
-	if o.constraint.NumOriginColumns() > 1 && o.constraint.Match() == descpb.ForeignKeyReference_FULL {
+	if o.constraint.NumOriginColumns() > 1 && o.constraint.Match() == semenumpb.Match_FULL {
 		// Check if there are any disallowed references where some columns are NULL
 		// and some aren't.
 		checkNullsQuery, _, err := matchFullUnacceptableKeyQuery(

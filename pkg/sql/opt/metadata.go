@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
@@ -38,7 +39,7 @@ type SchemaID int32
 // privilegeBitmap stores a union of zero or more privileges. Each privilege
 // that is present in the bitmap is represented by a bit that is shifted by
 // 1 << privilege.Kind, so that multiple privileges can be stored.
-type privilegeBitmap uint32
+type privilegeBitmap uint64
 
 // Metadata assigns unique ids to the columns, tables, and other metadata used
 // for global identification within the scope of a particular query. These ids
@@ -628,7 +629,7 @@ func (md *Metadata) QualifiedAlias(
 
 // UpdateTableMeta allows the caller to replace the cat.Table struct that a
 // TableMeta instance stores.
-func (md *Metadata) UpdateTableMeta(tables map[cat.StableID]cat.Table) {
+func (md *Metadata) UpdateTableMeta(evalCtx *eval.Context, tables map[cat.StableID]cat.Table) {
 	for i := range md.tables {
 		oldTable := md.tables[i].Table
 		if newTable, ok := tables[oldTable.ID()]; ok {
@@ -644,6 +645,7 @@ func (md *Metadata) UpdateTableMeta(tables map[cat.StableID]cat.Table) {
 				md.SetTableAnnotation(md.tables[i].MetaID, NotNullAnnID, nil)
 			}
 			md.tables[i].Table = newTable
+			md.tables[i].CacheIndexPartitionLocalities(evalCtx)
 		}
 	}
 }

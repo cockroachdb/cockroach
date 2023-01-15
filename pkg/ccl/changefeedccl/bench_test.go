@@ -250,7 +250,7 @@ func createBenchmarkChangefeed(
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 	eventConsumer, err := newKVEventToRowConsumer(ctx, &execCfg, sf, initialHighWater,
 		sink, encoder, makeChangefeedConfigFromJobDetails(details), execinfrapb.ChangeAggregatorSpec{},
-		TestingKnobs{}, nil, nil)
+		TestingKnobs{}, nil, nil, nil)
 
 	if err != nil {
 		return nil, nil, err

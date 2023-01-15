@@ -655,6 +655,124 @@ func TestStatusLocalLogs(t *testing.T) {
 	}
 }
 
+// TestStatusLocalLogsTenantFilter checks to ensure that local/logfiles,
+// local/logfiles/{filename} and local/log function correctly filter
+// logs by tenant ID.
+func TestStatusLocalLogsTenantFilter(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	if log.V(3) {
+		skip.IgnoreLint(t, "Test only works with low verbosity levels")
+	}
+
+	s := log.ScopeWithoutShowLogs(t)
+	defer s.Close(t)
+
+	// This test cares about the number of output files. Ensure
+	// there's just one.
+	defer s.SetupSingleFileLogging()()
+
+	ts := startServer(t)
+	defer ts.Stopper().Stop(context.Background())
+
+	ctxSysTenant := context.Background()
+	ctxSysTenant = context.WithValue(ctxSysTenant, log.ServerIdentificationContextKey{}, &idProvider{
+		tenantID:  roachpb.SystemTenantID,
+		clusterID: &base.ClusterIDContainer{},
+		serverID:  &base.NodeIDContainer{},
+	})
+	appTenantID := roachpb.MustMakeTenantID(uint64(2))
+	ctxAppTenant := context.Background()
+	ctxAppTenant = context.WithValue(ctxAppTenant, log.ServerIdentificationContextKey{}, &idProvider{
+		tenantID:  appTenantID,
+		clusterID: &base.ClusterIDContainer{},
+		serverID:  &base.NodeIDContainer{},
+	})
+
+	// Log an error of each main type which we expect to be able to retrieve.
+	// The resolution of our log timestamps is such that it's possible to get
+	// two subsequent log messages with the same timestamp. This test will fail
+	// when that occurs. By adding a small sleep in here after each timestamp to
+	// ensures this isn't the case and that the log filtering doesn't filter out
+	// the log entires we're looking for. The value of 20 μs was chosen because
+	// the log timestamps have a fidelity of 10 μs and thus doubling that should
+	// be a sufficient buffer.
+	// See util/log/clog.go formatHeader() for more details.
+	const sleepBuffer = time.Microsecond * 20
+	log.Errorf(ctxSysTenant, "system tenant msg 1")
+	time.Sleep(sleepBuffer)
+	log.Errorf(ctxAppTenant, "app tenant msg 1")
+	time.Sleep(sleepBuffer)
+	log.Warningf(ctxSysTenant, "system tenant msg 2")
+	time.Sleep(sleepBuffer)
+	log.Warningf(ctxAppTenant, "app tenant msg 2")
+	time.Sleep(sleepBuffer)
+	log.Infof(ctxSysTenant, "system tenant msg 3")
+	time.Sleep(sleepBuffer)
+	log.Infof(ctxAppTenant, "app tenant msg 3")
+	timestampEnd := timeutil.Now().UnixNano()
+
+	var listFilesResp serverpb.LogFilesListResponse
+	if err := getStatusJSONProto(ts, "logfiles/local", &listFilesResp); err != nil {
+		t.Fatal(err)
+	}
+	require.Lenf(t, listFilesResp.Files, 1, "expected 1 log files; got %d", len(listFilesResp.Files))
+
+	testCases := []struct {
+		name     string
+		tenantID roachpb.TenantID
+	}{
+		{
+			name:     "logs for system tenant does not apply filter",
+			tenantID: roachpb.SystemTenantID,
+		},
+		{
+			name:     "logs for app tenant applies tenant ID filter",
+			tenantID: appTenantID,
+		},
+	}
+
+	for _, testCase := range testCases {
+		// Non-system tenant servers filter to the tenant that they belong to.
+		// Set the server tenant ID for this test case.
+		ts.rpcContext.TenantID = testCase.tenantID
+
+		var logfilesResp serverpb.LogEntriesResponse
+		if err := getStatusJSONProto(ts, "logfiles/local/"+listFilesResp.Files[0].Name, &logfilesResp); err != nil {
+			t.Fatal(err)
+		}
+		var logsResp serverpb.LogEntriesResponse
+		if err := getStatusJSONProto(ts, fmt.Sprintf("logs/local?end_time=%d", timestampEnd), &logsResp); err != nil {
+			t.Fatal(err)
+		}
+
+		// Run the same set of assertions against both responses, as they are both expected
+		// to contain the log entries we're looking for.
+		for _, response := range []serverpb.LogEntriesResponse{logfilesResp, logsResp} {
+			sysTenantFound, appTenantFound := false, false
+			for _, logEntry := range response.Entries {
+				if !strings.HasSuffix(logEntry.File, "status_test.go") {
+					continue
+				}
+
+				if testCase.tenantID != roachpb.SystemTenantID {
+					require.Equal(t, logEntry.TenantID, testCase.tenantID.String())
+				} else {
+					// Logs use the literal system tenant ID when tagging.
+					if logEntry.TenantID == fmt.Sprintf("%d", roachpb.SystemTenantID.InternalValue) {
+						sysTenantFound = true
+					} else if logEntry.TenantID == appTenantID.String() {
+						appTenantFound = true
+					}
+				}
+			}
+			if testCase.tenantID == roachpb.SystemTenantID {
+				require.True(t, sysTenantFound)
+				require.True(t, appTenantFound)
+			}
+		}
+	}
+}
+
 // TestStatusLogRedaction checks that the log file retrieval RPCs
 // honor the redaction flags.
 func TestStatusLogRedaction(t *testing.T) {

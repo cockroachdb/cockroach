@@ -19,11 +19,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
@@ -71,6 +72,8 @@ type kvEventToRowConsumer struct {
 	topicDescriptorCache map[TopicIdentifier]TopicDescriptor
 	topicNamer           *TopicNamer
 
+	metrics *sliMetrics
+
 	// This pacer is used to incorporate event consumption to elastic CPU
 	// control. This helps ensure that event encoding/decoding does not throttle
 	// foreground SQL traffic.
@@ -92,6 +95,7 @@ func newEventConsumer(
 	cursor hlc.Timestamp,
 	sink EventSink,
 	metrics *Metrics,
+	sliMetrics *sliMetrics,
 	knobs TestingKnobs,
 ) (eventConsumer, EventSink, error) {
 	encodingOpts, err := feed.Opts.GetEncodingOptions()
@@ -139,7 +143,7 @@ func newEventConsumer(
 
 		execCfg := cfg.ExecutorConfig.(*sql.ExecutorConfig)
 		return newKVEventToRowConsumer(ctx, execCfg, frontier, cursor, s,
-			encoder, feed, spec, knobs, topicNamer, pacer)
+			encoder, feed, spec, knobs, topicNamer, sliMetrics, pacer)
 	}
 
 	numWorkers := changefeedbase.EventConsumerWorkers.Get(&cfg.Settings.SV)
@@ -215,6 +219,7 @@ func newKVEventToRowConsumer(
 	spec execinfrapb.ChangeAggregatorSpec,
 	knobs TestingKnobs,
 	topicNamer *TopicNamer,
+	metrics *sliMetrics,
 	pacer *admission.Pacer,
 ) (_ *kvEventToRowConsumer, err error) {
 	includeVirtual := details.Opts.IncludeVirtual()
@@ -226,7 +231,7 @@ func newKVEventToRowConsumer(
 
 	var evaluator *cdceval.Evaluator
 	if spec.Select.Expr != "" {
-		evaluator, err = newEvaluator(cfg, spec.User(), spec.Feed.SessionData, spec.Select)
+		evaluator, err = newEvaluator(ctx, cfg, spec)
 		if err != nil {
 			return nil, err
 		}
@@ -249,22 +254,43 @@ func newKVEventToRowConsumer(
 		topicNamer:           topicNamer,
 		evaluator:            evaluator,
 		encodingFormat:       encodingOpts.Format,
+		metrics:              metrics,
 		pacer:                pacer,
 	}, nil
 }
 
 func newEvaluator(
-	cfg *sql.ExecutorConfig,
-	user username.SQLUsername,
-	sd sessiondatapb.SessionData,
-	expr execinfrapb.Expression,
+	ctx context.Context, cfg *sql.ExecutorConfig, spec execinfrapb.ChangeAggregatorSpec,
 ) (*cdceval.Evaluator, error) {
-	sc, err := cdceval.ParseChangefeedExpression(expr.Expr)
+	sc, err := cdceval.ParseChangefeedExpression(spec.Select.Expr)
 	if err != nil {
 		return nil, err
 	}
 
-	return cdceval.NewEvaluator(sc, cfg, user, sd)
+	var sd sessiondatapb.SessionData
+	if spec.Feed.SessionData == nil {
+		// This changefeed was created prior to
+		// clusterversion.V23_1_ChangefeedExpressionProductionReady; thus we must
+		// rewrite expression to comply with current cluster version.
+		newExpr, err := cdceval.RewritePreviewExpression(sc)
+		if err != nil {
+			// This is very surprising and fatal.
+			return nil, changefeedbase.WithTerminalError(errors.WithHint(err,
+				"error upgrading changefeed expression.  Please recreate changefeed manually"))
+		}
+		if newExpr != sc {
+			log.Warningf(ctx,
+				"changefeed expression %s (job %d) created prior to %s rewritten as %s",
+				tree.AsString(sc), spec.JobID,
+				clusterversion.V23_1_ChangefeedExpressionProductionReady.String(),
+				tree.AsString(newExpr))
+			sc = newExpr
+		}
+	} else {
+		sd = *spec.Feed.SessionData
+	}
+
+	return cdceval.NewEvaluator(sc, cfg, spec.User(), sd)
 }
 
 func (c *kvEventToRowConsumer) topicForEvent(eventMeta cdcevent.Metadata) (TopicDescriptor, error) {
@@ -344,7 +370,7 @@ func (c *kvEventToRowConsumer) ConsumeEvent(ctx context.Context, ev kvevent.Even
 
 		if !projection.IsInitialized() {
 			// Filter did not match.
-			// TODO(yevgeniy): Add metrics.
+			c.metrics.FilteredMessages.Inc(1)
 			a := ev.DetachAlloc()
 			a.Release(ctx)
 			return nil
