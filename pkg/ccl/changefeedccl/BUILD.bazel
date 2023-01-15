@@ -28,7 +28,6 @@ go_library(
         "sink_cloudstorage.go",
         "sink_external_connection.go",
         "sink_kafka.go",
-        "sink_kafka_connection.go",
         "sink_pubsub.go",
         "sink_sql.go",
         "sink_webhook.go",

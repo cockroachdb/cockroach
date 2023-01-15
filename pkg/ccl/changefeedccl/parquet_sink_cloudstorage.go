@@ -84,6 +84,11 @@ func makeParquetCloudStorageSink(
 	return parquetSink, nil
 }
 
+// getConcreteType implements the Sink interface.
+func (parquetSink *parquetCloudStorageSink) getConcreteType() sinkType {
+	return parquetSink.wrapped.getConcreteType()
+}
+
 // EmitRow does not do anything. It must not be called. It is present so that
 // parquetCloudStorageSink implements the Sink interface.
 func (parquetSink *parquetCloudStorageSink) EmitRow(
