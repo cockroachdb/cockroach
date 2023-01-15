@@ -303,8 +303,8 @@ func (so *importSequenceOperators) SchemaExists(
 	return false, errSequenceOperators
 }
 
-// HasAnyPrivilege is part of the eval.DatabaseCatalog interface.
-func (so *importSequenceOperators) HasAnyPrivilege(
+// HasAnyPrivilegeForSpecifier is part of the eval.DatabaseCatalog interface.
+func (so *importSequenceOperators) HasAnyPrivilegeForSpecifier(
 	ctx context.Context,
 	specifier eval.HasPrivilegeSpecifier,
 	user username.SQLUsername,
