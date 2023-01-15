@@ -916,29 +916,32 @@ func (p *planner) HasOwnershipOnSchema(
 }
 
 func (p *planner) HasViewActivityOrViewActivityRedactedRole(ctx context.Context) (bool, error) {
-	hasAdmin, err := p.HasAdminRole(ctx)
-	if err != nil {
+	if hasAdmin, err := p.HasAdminRole(ctx); err != nil {
 		return hasAdmin, err
+	} else if hasAdmin {
+		return true, nil
 	}
-	if !hasAdmin {
-		hasView := p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWACTIVITY) == nil
-		hasViewRedacted := p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWACTIVITYREDACTED) == nil
-		if !hasView && !hasViewRedacted {
-			hasView, err := p.HasRoleOption(ctx, roleoption.VIEWACTIVITY)
-			if err != nil {
-				return hasView, err
-			}
-			hasViewRedacted, err := p.HasRoleOption(ctx, roleoption.VIEWACTIVITYREDACTED)
-			if err != nil {
-				return hasViewRedacted, err
-			}
-			if !hasView && !hasViewRedacted {
-				return false, nil
-			}
-		}
+	if hasView, err := p.HasPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWACTIVITY, p.User()); err != nil {
+		return false, err
+	} else if hasView {
+		return true, nil
 	}
-
-	return true, nil
+	if hasViewRedacted, err := p.HasPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWACTIVITYREDACTED, p.User()); err != nil {
+		return false, err
+	} else if hasViewRedacted {
+		return true, nil
+	}
+	if hasView, err := p.HasRoleOption(ctx, roleoption.VIEWACTIVITY); err != nil {
+		return false, err
+	} else if hasView {
+		return true, nil
+	}
+	if hasViewRedacted, err := p.HasRoleOption(ctx, roleoption.VIEWACTIVITYREDACTED); err != nil {
+		return false, err
+	} else if hasViewRedacted {
+		return true, nil
+	}
+	return false, nil
 }
 
 func insufficientPrivilegeError(

@@ -44,8 +44,11 @@ func CheckDestinationPrivileges(ctx context.Context, p sql.PlanHookState, to []s
 		// Check if the destination requires the user to be an admin or have the
 		// `EXTERNALIOIMPLICITACCESS` privilege.
 		requiresImplicitAccess := !conf.AccessIsWithExplicitAuth()
-		hasImplicitAccessPrivilege :=
-			p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.EXTERNALIOIMPLICITACCESS) == nil
+		hasImplicitAccessPrivilege, privErr :=
+			p.HasPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.EXTERNALIOIMPLICITACCESS, p.User())
+		if privErr != nil {
+			return privErr
+		}
 		if requiresImplicitAccess && !(p.ExecCfg().ExternalIODirConfig.EnableNonAdminImplicitAndArbitraryOutbound || hasImplicitAccessPrivilege) {
 			return pgerror.Newf(
 				pgcode.InsufficientPrivilege,
