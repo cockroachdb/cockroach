@@ -289,6 +289,7 @@ func newRaftConfig(
 		MaxCommittedSizePerReady:  storeCfg.RaftMaxCommittedSizePerReady,
 		MaxSizePerMsg:             storeCfg.RaftMaxSizePerMsg,
 		MaxInflightMsgs:           storeCfg.RaftMaxInflightMsgs,
+		MaxInflightBytes:          storeCfg.RaftMaxInflightBytes,
 		Storage:                   strg,
 		Logger:                    logger,
 

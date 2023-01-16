@@ -12,6 +12,8 @@ package base
 
 import (
 	"context"
+	"math"
+	"math/big"
 	"net/url"
 	"os"
 	"time"
@@ -252,6 +254,24 @@ var (
 	// will send to a given follower without hearing a response.
 	defaultRaftMaxInflightMsgs = envutil.EnvOrDefaultInt(
 		"COCKROACH_RAFT_MAX_INFLIGHT_MSGS", 128)
+
+	// defaultRaftMaxInflightBytes specifies the maximum aggregate byte size of
+	// Raft log entries that a leader will send to a follower without hearing
+	// responses.
+	//
+	// Previously it was assumed that RaftMaxInflightMsgs * RaftMaxSizePerMsg is a
+	// proxy for the actual max inflight traffic. However, RaftMaxSizePerMsg is
+	// not a hard limit, it's rather a "target" size for the message, so the
+	// actual inflight bytes could exceed this product by a large factor.
+	// RaftMaxInflightBytes is a more accurate limit, and should be used in
+	// conjunction with the two.
+	//
+	// TODO(#90314): lower this limit to something close to max rates observed in
+	// healthy clusters. Currently, this is a conservatively large multiple of
+	// defaultRaftMaxInflightMsgs * defaultRaftMaxSizePerMsg, so that we don't
+	// abruptly break the previous assumption and cut off traffic.
+	defaultRaftMaxInflightBytes = envutil.EnvOrDefaultBytes(
+		"COCKROACH_RAFT_MAX_INFLIGHT_BYTES", 256<<20 /* 256 MB */)
 )
 
 // Config is embedded by server.Config. A base config is not meant to be used
@@ -469,24 +489,44 @@ type RaftConfig struct {
 	// value lowers the raft recovery cost (during initial probing and after
 	// message loss during normal operation). On the other hand, it limits the
 	// throughput during normal replication.
+	//
+	// Used in combination with RaftMaxInflightMsgs and RaftMaxInflightBytes.
 	RaftMaxSizePerMsg uint64
 
 	// RaftMaxCommittedSizePerReady controls the maximum aggregate byte size of
 	// committed Raft log entries a replica will receive in a single Ready.
 	RaftMaxCommittedSizePerReady uint64
 
-	// RaftMaxInflightMsgs controls how many "inflight" MsgApps Raft will send
-	// to a follower without hearing a response. The total number of Raft log
-	// entries is a combination of this setting and RaftMaxSizePerMsg. The
-	// current default settings provide for up to 4 MB of raft log to be sent
-	// without acknowledgement. With an average entry size of 1 KB that
-	// translates to ~4096 commands that might be executed in the handling of a
-	// single raft.Ready operation.
+	// RaftMaxInflightMsgs controls how many "inflight" MsgApps Raft will send to
+	// a follower without hearing a response. The total size of inflight Raft log
+	// entries is thus roughly limited by RaftMaxInflightMsgs * RaftMaxSizePerMsg,
+	// but also by RaftMaxInflightBytes. The current default settings provide for
+	// up to 4 MB of Raft log to be sent without acknowledgement. With an average
+	// entry size of 1 KB that translates to ~4096 commands that might be executed
+	// in the handling of a single raft.Ready operation.
 	//
 	// This setting is used both by sending and receiving end of Raft messages. To
 	// minimize dropped messages on the receiver, its size should at least match
 	// the sender's (being it the default size, or taken from the env variables).
 	RaftMaxInflightMsgs int
+
+	// RaftMaxInflightBytes controls the maximum aggregate byte size of Raft log
+	// entries that a leader will send to a follower without hearing responses.
+	//
+	// Normally RaftMaxSizePerMsg * RaftMaxInflightMsgs is the actual limit. But
+	// the RaftMaxSizePerMsg is soft, and Raft may send individual messages
+	// arbitrarily larger than that (e.g. with a large write, or AddSST command),
+	// so it's possible that the overall limit is exceeded by a large multiple.
+	// RaftMaxInflightBytes is a stricter limit which can only be slightly
+	// exceeded (by a single message).
+	//
+	// This effectively bounds the bandwidth-delay product. Note that especially
+	// in high-latency deployments setting this too low can lead to a dramatic
+	// reduction in throughput. For example, with a peer that has a round-trip
+	// latency of 100ms to the leader and this setting is set to 1 MB, there is a
+	// throughput limit of 10 MB/s for this group. With RTT of 400ms, this drops
+	// to 2.5 MB/s. See Little's law to understand the maths behind.
+	RaftMaxInflightBytes uint64
 
 	// Splitting a range which has a replica needing a snapshot results in two
 	// ranges in that state. The delay configured here slows down splits when in
@@ -545,6 +585,17 @@ func (cfg *RaftConfig) SetDefaults() {
 	if cfg.RaftMaxInflightMsgs == 0 {
 		cfg.RaftMaxInflightMsgs = defaultRaftMaxInflightMsgs
 	}
+
+	if cfg.RaftMaxInflightBytes == 0 {
+		cfg.RaftMaxInflightBytes = uint64(defaultRaftMaxInflightBytes)
+	}
+	// Fixup RaftMaxInflightBytes if it is lower than reasonable.
+	if other := maxInflightBytesFrom(
+		cfg.RaftMaxInflightMsgs, cfg.RaftMaxSizePerMsg,
+	); cfg.RaftMaxInflightBytes < other {
+		cfg.RaftMaxInflightBytes = other
+	}
+
 	if cfg.RaftDelaySplitToSuppressSnapshotTicks == 0 {
 		// The Raft Ticks interval defaults to 200ms, and an election is 10
 		// ticks. Add a generous amount of ticks to make sure even a backed up
@@ -639,6 +690,19 @@ func DefaultRetryOptions() retry.Options {
 		MaxBackoff:     1 * time.Second,
 		Multiplier:     2,
 	}
+}
+
+// maxInflightBytesFrom returns the minimal value for RaftMaxInflightBytes
+// config option based on RaftMaxInflightMsgs and RaftMaxSizePerMsg.
+func maxInflightBytesFrom(maxInflightMsgs int, maxSizePerMsg uint64) uint64 {
+	// Compute min(maxInflightMsgs * maxSizePerMsg, MaxUint64) safely.
+	if mul := new(big.Int).Mul(
+		big.NewInt(int64(maxInflightMsgs)),
+		new(big.Int).SetUint64(maxSizePerMsg),
+	); mul.IsUint64() {
+		return mul.Uint64()
+	}
+	return math.MaxUint64
 }
 
 // StorageConfig contains storage configs for all storage engine.
