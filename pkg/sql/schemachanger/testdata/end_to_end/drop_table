@@ -2,6 +2,7 @@ setup
 CREATE DATABASE db;
 CREATE SCHEMA db.sc;
 CREATE TABLE db.sc.t (k INT, v STRING);
+COMMENT ON TABLE db.sc.t IS 't has a comment';
 CREATE TYPE db.sc.e AS ENUM('a', 'b', 'c');
 ----
 ...
@@ -37,7 +38,7 @@ add synthetic descriptor #107:
      version: "1"
 # end StatementPhase
 # begin PreCommitPhase
-## PreCommitPhase stage 1 of 1 with 10 MutationType ops
+## PreCommitPhase stage 1 of 1 with 12 MutationType ops
 delete object namespace entry {104 106 t} -> 107
 upsert descriptor #107
   ...
@@ -65,6 +66,8 @@ upsert descriptor #107
      unexposedParentSchemaId: 106
   -  version: "1"
   +  version: "2"
+delete comment TableCommentType(objID: 107, subID: 0)
+write *eventpb.CommentOnTable to event log: DROP TABLE ‹db›.‹sc›.‹t›
 create job #1 (non-cancelable: true): "DROP TABLE db.sc.t"
   descriptor IDs: [107]
 # end PreCommitPhase
