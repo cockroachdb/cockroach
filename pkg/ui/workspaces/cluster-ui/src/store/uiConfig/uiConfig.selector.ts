@@ -25,3 +25,7 @@ export const selectHasViewActivityRedactedRole = createSelector(
   selectUIConfig,
   uiConfig => uiConfig.userSQLRoles.includes("VIEWACTIVITYREDACTED"),
 );
+
+export const selectHasAdminRole = createSelector(selectUIConfig, uiConfig =>
+  uiConfig.userSQLRoles.includes("ADMIN"),
+);
