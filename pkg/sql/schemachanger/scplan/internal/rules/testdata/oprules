@@ -206,16 +206,6 @@ oprules
     - $index-column-node[CurrentStatus] IN [PUBLIC, TRANSIENT_PUBLIC]
     - joinTarget($index, $index-target)
     - $index-target[TargetStatus] IN [ABSENT, TRANSIENT_ABSENT]
-- name: skip table comment removal ops on descriptor drop
-  from: dep-node
-  query:
-    - $desc[Type] IN ['*scpb.Table', '*scpb.View', '*scpb.Sequence']
-    - $dep[Type] IN ['*scpb.ColumnComment', '*scpb.IndexComment', '*scpb.ConstraintComment', '*scpb.TableComment']
-    - joinOnDescID($desc, $dep, $desc-id)
-    - joinTarget($desc, $desc-target)
-    - $desc-target[TargetStatus] = ABSENT
-    - joinTargetNode($dep, $dep-target, $dep-node)
-    - $dep-target[TargetStatus] = ABSENT
 - name: skip table zone config removal ops on descriptor drop
   from: dep-node
   query:

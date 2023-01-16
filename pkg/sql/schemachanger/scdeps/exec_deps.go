@@ -249,11 +249,6 @@ func (b *catalogChangeBatcher) DeleteComment(
 	return b.descsCollection.DeleteCommentInBatch(ctx, b.kvTrace, b.batch, key)
 }
 
-// DeleteTableComments implements the scexec.CatalogChangeBatcher interface.
-func (b *catalogChangeBatcher) DeleteTableComments(ctx context.Context, tblID descpb.ID) error {
-	return b.descsCollection.DeleteTableComments(ctx, b.kvTrace, b.batch, tblID)
-}
-
 var _ scexec.TransactionalJobRegistry = (*txnDeps)(nil)
 
 func (d *txnDeps) MakeJobID() jobspb.JobID {

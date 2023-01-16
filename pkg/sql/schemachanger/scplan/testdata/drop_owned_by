@@ -66,7 +66,7 @@ StatementPhase stage 1 of 1 with 9 MutationType ops
       DescriptorID: 112
     *scop.MarkDescriptorAsSyntheticallyDropped
       DescriptorID: 113
-PreCommitPhase stage 1 of 1 with 63 MutationType ops
+PreCommitPhase stage 1 of 1 with 57 MutationType ops
   transitions:
     [[UserPrivileges:{DescID: 100, Name: r}, ABSENT], PUBLIC] -> ABSENT
     [[Namespace:{DescID: 105, Name: s, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
@@ -207,12 +207,8 @@ PreCommitPhase stage 1 of 1 with 63 MutationType ops
       User: r
     *scop.MarkDescriptorAsDropped
       DescriptorID: 106
-    *scop.RemoveAllTableComments
-      TableID: 106
     *scop.MarkDescriptorAsDropped
       DescriptorID: 109
-    *scop.RemoveAllTableComments
-      TableID: 109
     *scop.RemoveColumnDefaultExpression
       ColumnID: 3
       TableID: 109
@@ -223,12 +219,8 @@ PreCommitPhase stage 1 of 1 with 63 MutationType ops
       - 106
     *scop.MarkDescriptorAsDropped
       DescriptorID: 107
-    *scop.RemoveAllTableComments
-      TableID: 107
     *scop.MarkDescriptorAsDropped
       DescriptorID: 108
-    *scop.RemoveAllTableComments
-      TableID: 108
     *scop.RemoveColumnDefaultExpression
       ColumnID: 3
       TableID: 108
@@ -243,8 +235,6 @@ PreCommitPhase stage 1 of 1 with 63 MutationType ops
       BackReferencedViewID: 110
       RelationIDs:
       - 108
-    *scop.RemoveAllTableComments
-      TableID: 110
     *scop.MarkDescriptorAsDropped
       DescriptorID: 111
     *scop.MarkDescriptorAsDropped
@@ -260,8 +250,6 @@ PreCommitPhase stage 1 of 1 with 63 MutationType ops
       BackReferencedViewID: 113
       RelationIDs:
       - 110
-    *scop.RemoveAllTableComments
-      TableID: 113
     *scop.DrainDescriptorName
       Namespace:
         DatabaseID: 100

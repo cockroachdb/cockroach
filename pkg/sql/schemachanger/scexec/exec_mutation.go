@@ -64,7 +64,6 @@ func executeDescriptorMutationOps(ctx context.Context, deps Dependencies, ops []
 		mvs.modifiedDescriptors,
 		mvs.drainedNames,
 		mvs.commentsToUpdate,
-		mvs.tableCommentsToDelete,
 		deps.Catalog(),
 	); err != nil {
 		return err
@@ -99,7 +98,6 @@ func performBatchedCatalogWrites(
 	modifiedDescriptors nstree.IDMap,
 	drainedNames map[descpb.ID][]descpb.NameInfo,
 	commentsToUpdate []commentToUpdate,
-	tableCommentsToDelete catalog.DescriptorIDSet,
 	cat Catalog,
 ) error {
 	b := cat.NewCatalogChangeBatcher()
@@ -150,16 +148,6 @@ func performBatchedCatalogWrites(
 					return err
 				}
 			}
-		}
-
-		var err error
-		tableCommentsToDelete.ForEach(func(id descpb.ID) {
-			if err == nil {
-				err = b.DeleteTableComments(ctx, id)
-			}
-		})
-		if err != nil {
-			return err
 		}
 	}
 
@@ -392,7 +380,6 @@ type mutationVisitorState struct {
 	drainedNames                 map[descpb.ID][]descpb.NameInfo
 	descriptorsToDelete          catalog.DescriptorIDSet
 	commentsToUpdate             []commentToUpdate
-	tableCommentsToDelete        catalog.DescriptorIDSet
 	databaseRoleSettingsToDelete []databaseRoleSettingToDelete
 	schemaChangerJob             *jobs.Record
 	schemaChangerJobUpdates      map[jobspb.JobID]schemaChangerJobUpdate
@@ -488,10 +475,6 @@ func (mvs *mutationVisitorState) CheckOutDescriptor(
 
 func (mvs *mutationVisitorState) DeleteDescriptor(id descpb.ID) {
 	mvs.descriptorsToDelete.Add(id)
-}
-
-func (mvs *mutationVisitorState) DeleteAllTableComments(id descpb.ID) {
-	mvs.tableCommentsToDelete.Add(id)
 }
 
 func (mvs *mutationVisitorState) AddComment(

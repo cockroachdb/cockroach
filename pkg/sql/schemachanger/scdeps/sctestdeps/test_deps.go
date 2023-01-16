@@ -751,12 +751,6 @@ func (b *testCatalogChangeBatcher) DeleteComment(
 	return nil
 }
 
-// DeleteTableComments implements the scexec.CatalogChangeBatcher interface.
-func (b *testCatalogChangeBatcher) DeleteTableComments(ctx context.Context, tblID descpb.ID) error {
-	b.s.LogSideEffectf("delete all comments for table descriptor %v", tblID)
-	return nil
-}
-
 // ValidateAndRun implements the scexec.CatalogChangeBatcher interface.
 func (b *testCatalogChangeBatcher) ValidateAndRun(ctx context.Context) error {
 	names := make([]descpb.NameInfo, 0, len(b.namesToDelete))

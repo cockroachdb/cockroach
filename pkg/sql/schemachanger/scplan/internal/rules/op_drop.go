@@ -252,39 +252,6 @@ func init() {
 	)
 }
 
-// Skip all removal ops for dropping table comments corresponding to elements
-// when dropping the table itself.
-func init() {
-	desc := mkNodeVars("desc")
-	dep := mkNodeVars("dep")
-	descID := rel.Var("desc-id")
-
-	registerOpRule(
-		"skip table comment removal ops on descriptor drop",
-		dep.node,
-		screl.MustQuery(
-			desc.Type(
-				(*scpb.Table)(nil),
-				(*scpb.View)(nil),
-				(*scpb.Sequence)(nil),
-			),
-			dep.Type(
-				(*scpb.ColumnComment)(nil),
-				(*scpb.IndexComment)(nil),
-				(*scpb.ConstraintComment)(nil),
-				(*scpb.TableComment)(nil),
-			),
-
-			joinOnDescID(desc, dep, descID),
-
-			desc.joinTarget(),
-			desc.targetStatus(scpb.ToAbsent),
-			dep.joinTargetNode(),
-			dep.targetStatus(scpb.ToAbsent),
-		),
-	)
-}
-
 // Skip all removal ops for table zone configs.
 func init() {
 	desc := mkNodeVars("desc")

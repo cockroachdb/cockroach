@@ -68,11 +68,6 @@ func init() {
 						RelationIDs:          this.UsesRelationIDs,
 					}
 				}),
-				emit(func(this *scpb.View) *scop.RemoveAllTableComments {
-					return &scop.RemoveAllTableComments{
-						TableID: this.ViewID,
-					}
-				}),
 			),
 			to(scpb.Status_ABSENT,
 				emit(func(this *scpb.View, md *opGenContext) *scop.LogEvent {

@@ -50,11 +50,6 @@ func init() {
 						DescriptorID: this.SequenceID,
 					}
 				}),
-				emit(func(this *scpb.Sequence) *scop.RemoveAllTableComments {
-					return &scop.RemoveAllTableComments{
-						TableID: this.SequenceID,
-					}
-				}),
 			),
 			to(scpb.Status_ABSENT,
 				emit(func(this *scpb.Sequence, md *opGenContext) *scop.LogEvent {

@@ -392,13 +392,10 @@ EXPLAIN (ddl, verbose) DROP TABLE db.sc.t;
 │       │       └── • skip PUBLIC → ABSENT operations
 │       │             rule: "skip index dependents removal ops on relation drop"
 │       │
-│       └── • 11 Mutation operations
+│       └── • 10 Mutation operations
 │           │
 │           ├── • MarkDescriptorAsDropped
 │           │     DescriptorID: 107
-│           │
-│           ├── • RemoveAllTableComments
-│           │     TableID: 107
 │           │
 │           ├── • RemoveColumnDefaultExpression
 │           │     ColumnID: 3

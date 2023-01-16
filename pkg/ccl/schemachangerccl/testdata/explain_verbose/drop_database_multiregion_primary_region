@@ -564,7 +564,7 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
 │       │       └── • skip PUBLIC → ABSENT operations
 │       │             rule: "skip index dependents removal ops on relation drop"
 │       │
-│       └── • 23 Mutation operations
+│       └── • 22 Mutation operations
 │           │
 │           ├── • MarkDescriptorAsDropped
 │           │     DescriptorID: 104
@@ -588,9 +588,6 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
 │           │
 │           ├── • MarkDescriptorAsDropped
 │           │     DescriptorID: 108
-│           │
-│           ├── • RemoveAllTableComments
-│           │     TableID: 108
 │           │
 │           ├── • RemoveBackReferenceInTypes
 │           │     BackReferencedDescriptorID: 108

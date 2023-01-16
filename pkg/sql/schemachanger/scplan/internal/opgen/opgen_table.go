@@ -52,11 +52,6 @@ func init() {
 						DescriptorID: this.TableID,
 					}
 				}),
-				emit(func(this *scpb.Table) *scop.RemoveAllTableComments {
-					return &scop.RemoveAllTableComments{
-						TableID: this.TableID,
-					}
-				}),
 			),
 			to(scpb.Status_ABSENT,
 				emit(func(this *scpb.Table, md *opGenContext) *scop.LogEvent {

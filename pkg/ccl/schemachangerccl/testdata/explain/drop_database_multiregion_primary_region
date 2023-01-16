@@ -81,7 +81,7 @@ Schema change plan for DROP DATABASE ‹multi_region_test_db› CASCADE;
  │         │    ├── PUBLIC      → ABSENT  IndexColumn:{DescID: 108, ColumnID: 1, IndexID: 1}
  │         │    ├── VALIDATED   → ABSENT  PrimaryIndex:{DescID: 108, IndexID: 1, ConstraintID: 1}
  │         │    └── PUBLIC      → ABSENT  IndexName:{DescID: 108, Name: table_regional_by_table_pkey, IndexID: 1}
- │         └── 23 Mutation operations
+ │         └── 22 Mutation operations
  │              ├── MarkDescriptorAsDropped {"DescriptorID":104}
  │              ├── RemoveDatabaseRoleSettings {"DatabaseID":104}
  │              ├── MarkDescriptorAsDropped {"DescriptorID":105}
@@ -89,7 +89,6 @@ Schema change plan for DROP DATABASE ‹multi_region_test_db› CASCADE;
  │              ├── MarkDescriptorAsDropped {"DescriptorID":106}
  │              ├── MarkDescriptorAsDropped {"DescriptorID":107}
  │              ├── MarkDescriptorAsDropped {"DescriptorID":108}
- │              ├── RemoveAllTableComments {"TableID":108}
  │              ├── RemoveBackReferenceInTypes {"BackReferencedDescriptorID":108}
  │              ├── DrainDescriptorName {"Namespace":{"DescriptorID":104,"Name":"multi_region_tes..."}}
  │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":105,"Name":"public"}}

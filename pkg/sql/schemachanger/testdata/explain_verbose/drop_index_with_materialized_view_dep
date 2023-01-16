@@ -358,7 +358,7 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
 │       │       └── • skip PUBLIC → ABSENT operations
 │       │             rule: "skip index dependents removal ops on relation drop"
 │       │
-│       └── • 13 Mutation operations
+│       └── • 12 Mutation operations
 │           │
 │           ├── • MarkDescriptorAsDropped
 │           │     DescriptorID: 106
@@ -367,9 +367,6 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
 │           │     BackReferencedViewID: 106
 │           │     RelationIDs:
 │           │     - 105
-│           │
-│           ├── • RemoveAllTableComments
-│           │     TableID: 106
 │           │
 │           ├── • RemoveColumnDefaultExpression
 │           │     ColumnID: 2

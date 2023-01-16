@@ -122,9 +122,6 @@ type CatalogChangeBatcher interface {
 	DeleteComment(
 		ctx context.Context, key catalogkeys.CommentKey,
 	) error
-
-	// DeleteTableComments deletes all comments created on the table.
-	DeleteTableComments(ctx context.Context, tblID descpb.ID) error
 }
 
 // TransactionalJobRegistry creates and updates jobs in the current transaction.
