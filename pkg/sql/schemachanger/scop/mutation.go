@@ -580,13 +580,6 @@ type UpsertTableComment struct {
 	Comment string
 }
 
-// RemoveAllTableComments is used to delete all comments associated with a
-// table when dropping a table.
-type RemoveAllTableComments struct {
-	mutationOp
-	TableID descpb.ID
-}
-
 // RemoveTableComment is used to delete a comment associated with a table.
 type RemoveTableComment struct {
 	mutationOp

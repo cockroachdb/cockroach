@@ -56,7 +56,7 @@ StatementPhase stage 1 of 1 with 3 MutationType ops
       DescriptorID: 110
     *scop.MarkDescriptorAsSyntheticallyDropped
       DescriptorID: 111
-PreCommitPhase stage 1 of 1 with 42 MutationType ops
+PreCommitPhase stage 1 of 1 with 47 MutationType ops
   transitions:
     [[Namespace:{DescID: 109, Name: shipments, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 109}, ABSENT], PUBLIC] -> ABSENT
@@ -137,11 +137,45 @@ PreCommitPhase stage 1 of 1 with 42 MutationType ops
   ops:
     *scop.MarkDescriptorAsDropped
       DescriptorID: 109
-    *scop.RemoveAllTableComments
+    *scop.RemoveTableComment
       TableID: 109
+    *scop.LogEvent
+      Element:
+        TableComment:
+          comment: shipment is important
+          tableId: 109
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: DROP TABLE ‹defaultdb›.public.‹shipments› CASCADE
+        StatementTag: DROP TABLE
+        TargetMetadata:
+          SourceElementID: 1
+          SubWorkID: 1
+      TargetStatus: 1
     *scop.RemoveColumnDefaultExpression
       ColumnID: 1
       TableID: 109
+    *scop.RemoveColumnComment
+      ColumnID: 1
+      PgAttributeNum: 1
+      TableID: 109
+    *scop.LogEvent
+      Element:
+        ColumnComment:
+          columnId: 1
+          comment: tracking_number is a must
+          pgAttributeNum: 1
+          tableId: 109
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: DROP TABLE ‹defaultdb›.public.‹shipments› CASCADE
+        StatementTag: DROP TABLE
+        TargetMetadata:
+          SourceElementID: 1
+          SubWorkID: 1
+      TargetStatus: 1
     *scop.RemoveDroppedColumnType
       ColumnID: 3
       TableID: 109
@@ -158,21 +192,53 @@ PreCommitPhase stage 1 of 1 with 42 MutationType ops
       BackReferencedTableID: 109
       SequenceIDs:
       - 106
+    *scop.RemoveIndexComment
+      IndexID: 1
+      TableID: 109
+    *scop.LogEvent
+      Element:
+        IndexComment:
+          comment: pkey is good
+          indexId: 1
+          tableId: 109
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: DROP TABLE ‹defaultdb›.public.‹shipments› CASCADE
+        StatementTag: DROP TABLE
+        TargetMetadata:
+          SourceElementID: 1
+          SubWorkID: 1
+      TargetStatus: 1
     *scop.RemoveDroppedIndexPartialPredicate
       IndexID: 2
       TableID: 109
+    *scop.RemoveConstraintComment
+      ConstraintID: 2
+      TableID: 109
+    *scop.LogEvent
+      Element:
+        ConstraintComment:
+          comment: customer is not god
+          constraintId: 2
+          tableId: 109
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: DROP TABLE ‹defaultdb›.public.‹shipments› CASCADE
+        StatementTag: DROP TABLE
+        TargetMetadata:
+          SourceElementID: 1
+          SubWorkID: 1
+      TargetStatus: 1
     *scop.MarkDescriptorAsDropped
       DescriptorID: 110
-    *scop.RemoveAllTableComments
-      TableID: 110
     *scop.MarkDescriptorAsDropped
       DescriptorID: 111
     *scop.RemoveViewBackReferencesInRelations
       BackReferencedViewID: 111
       RelationIDs:
       - 109
-    *scop.RemoveAllTableComments
-      TableID: 111
     *scop.DrainDescriptorName
       Namespace:
         DatabaseID: 100
@@ -1217,7 +1283,7 @@ StatementPhase stage 1 of 1 with 1 MutationType op
   ops:
     *scop.MarkDescriptorAsSyntheticallyDropped
       DescriptorID: 114
-PreCommitPhase stage 1 of 1 with 21 MutationType ops
+PreCommitPhase stage 1 of 1 with 20 MutationType ops
   transitions:
     [[Namespace:{DescID: 114, Name: greeter, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 114}, ABSENT], PUBLIC] -> ABSENT
@@ -1258,8 +1324,6 @@ PreCommitPhase stage 1 of 1 with 21 MutationType ops
   ops:
     *scop.MarkDescriptorAsDropped
       DescriptorID: 114
-    *scop.RemoveAllTableComments
-      TableID: 114
     *scop.RemoveColumnDefaultExpression
       ColumnID: 1
       TableID: 114
