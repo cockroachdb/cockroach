@@ -24,6 +24,7 @@ import {
 import {
   selectIsTenant,
   selectHasViewActivityRedactedRole,
+  selectHasAdminRole,
 } from "../store/uiConfig";
 import { nodeRegionsByIDSelector } from "../store/nodes";
 import { actions as sqlDetailsStatsActions } from "src/store/statementDetails";
@@ -69,6 +70,7 @@ const mapStateToProps = (state: AppState, props: RouteComponentProps) => {
     uiConfig: selectStatementDetailsUiConfig(state),
     isTenant: selectIsTenant(state),
     hasViewActivityRedactedRole: selectHasViewActivityRedactedRole(state),
+    hasAdminRole: selectHasAdminRole(state),
   };
 };
 
