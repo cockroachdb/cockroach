@@ -23,6 +23,7 @@ import {
 } from "./transactionDetails.fixture";
 
 import { TransactionDetails } from ".";
+import moment from "moment";
 
 storiesOf("Transactions Details", module)
   .addDecorator(storyFn => <MemoryRouter>{storyFn()}</MemoryRouter>)
@@ -43,6 +44,7 @@ storiesOf("Transactions Details", module)
       refreshData={noop}
       refreshUserSQLRoles={noop}
       onTimeScaleChange={noop}
+      refreshNodes={noop}
     />
   ))
   .add("with loading indicator", () => (
@@ -59,6 +61,7 @@ storiesOf("Transactions Details", module)
       refreshData={noop}
       refreshUserSQLRoles={noop}
       onTimeScaleChange={noop}
+      refreshNodes={noop}
     />
   ))
   .add("with error alert", () => (
@@ -76,6 +79,7 @@ storiesOf("Transactions Details", module)
       refreshData={noop}
       refreshUserSQLRoles={noop}
       onTimeScaleChange={noop}
+      refreshNodes={noop}
     />
   ))
   .add("No data for this time frame; no cached transaction text", () => {
@@ -93,6 +97,7 @@ storiesOf("Transactions Details", module)
         refreshData={noop}
         refreshUserSQLRoles={noop}
         onTimeScaleChange={noop}
+        refreshNodes={noop}
       />
     );
   });

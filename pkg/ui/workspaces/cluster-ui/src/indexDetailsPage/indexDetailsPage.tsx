@@ -11,7 +11,7 @@
 import React from "react";
 import classNames from "classnames/bind";
 import { SortSetting } from "src/sortedtable";
-
+import { UIConfigState } from "../store";
 import styles from "./indexDetailsPage.module.scss";
 import { baseHeadingClasses } from "src/transactionsPage/transactionsPageClasses";
 import { CaretRight } from "../icon/caretRight";
@@ -52,6 +52,7 @@ export interface IndexDetailsPageData {
   tableName: string;
   indexName: string;
   details: IndexDetails;
+  hasAdminRole?: UIConfigState["hasAdminRole"];
 }
 
 interface IndexDetails {
@@ -67,6 +68,7 @@ export interface IndexDetailPageActions {
   refreshIndexStats?: (database: string, table: string) => void;
   resetIndexUsageStats?: (database: string, table: string) => void;
   refreshNodes?: () => void;
+  refreshUserSQLRoles: () => void;
 }
 
 export type IndexDetailsPageProps = IndexDetailsPageData &
@@ -99,6 +101,7 @@ export class IndexDetailsPage extends React.Component<
   }
 
   private refresh() {
+    this.props.refreshUserSQLRoles();
     if (this.props.refreshNodes != null) {
       this.props.refreshNodes();
     }
@@ -119,7 +122,9 @@ export class IndexDetailsPage extends React.Component<
     }
   }
 
-  render() {
+  render(): React.ReactElement {
+    const { hasAdminRole } = this.props;
+
     return (
       <div className={cx("page-container")}>
         <div className="root table-area">
@@ -164,23 +169,25 @@ export class IndexDetailsPage extends React.Component<
                   {this.getTimestampString(this.props.details.lastReset)}
                 </div>
               </Tooltip>
-              <div>
-                <a
-                  className={cx(
-                    "action",
-                    "separator",
-                    "index-stats__reset-btn",
-                  )}
-                  onClick={() =>
-                    this.props.resetIndexUsageStats(
-                      this.props.databaseName,
-                      this.props.tableName,
-                    )
-                  }
-                >
-                  Reset all index stats
-                </a>
-              </div>
+              {hasAdminRole && (
+                <div>
+                  <a
+                    className={cx(
+                      "action",
+                      "separator",
+                      "index-stats__reset-btn",
+                    )}
+                    onClick={() =>
+                      this.props.resetIndexUsageStats(
+                        this.props.databaseName,
+                        this.props.tableName,
+                      )
+                    }
+                  >
+                    Reset all index stats
+                  </a>
+                </div>
+              )}
             </div>
           </div>
           <section className={baseHeadingClasses.wrapper}>

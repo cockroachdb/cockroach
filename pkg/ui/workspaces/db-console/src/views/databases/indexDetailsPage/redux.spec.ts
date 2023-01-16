@@ -135,6 +135,7 @@ describe("Index Details Page", function() {
         databaseName: "DATABASE",
         tableName: "TABLE",
         indexName: "INDEX",
+        hasAdminRole: undefined,
         details: {
           loading: false,
           loaded: false,
@@ -181,6 +182,7 @@ describe("Index Details Page", function() {
       databaseName: "DATABASE",
       tableName: "TABLE",
       indexName: "INDEX",
+      hasAdminRole: undefined,
       details: {
         loading: false,
         loaded: true,
