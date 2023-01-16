@@ -51,9 +51,8 @@ Schema change plan for DROP TABLE ‹db›.‹sc›.‹t›;
  │         │    ├── PUBLIC      → ABSENT  IndexColumn:{DescID: 107, ColumnID: 2, IndexID: 1}
  │         │    ├── VALIDATED   → ABSENT  PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 1}
  │         │    └── PUBLIC      → ABSENT  IndexName:{DescID: 107, Name: t_pkey, IndexID: 1}
- │         └── 11 Mutation operations
+ │         └── 10 Mutation operations
  │              ├── MarkDescriptorAsDropped {"DescriptorID":107}
- │              ├── RemoveAllTableComments {"TableID":107}
  │              ├── RemoveColumnDefaultExpression {"ColumnID":3,"TableID":107}
  │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":107,"Name":"t","SchemaID":106}}
  │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":1,"TableID":107}

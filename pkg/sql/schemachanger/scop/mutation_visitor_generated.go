@@ -89,7 +89,6 @@ type MutationVisitor interface {
 	UpdateSchemaChangerJob(context.Context, UpdateSchemaChangerJob) error
 	CreateSchemaChangerJob(context.Context, CreateSchemaChangerJob) error
 	UpsertTableComment(context.Context, UpsertTableComment) error
-	RemoveAllTableComments(context.Context, RemoveAllTableComments) error
 	RemoveTableComment(context.Context, RemoveTableComment) error
 	UpsertDatabaseComment(context.Context, UpsertDatabaseComment) error
 	RemoveDatabaseComment(context.Context, RemoveDatabaseComment) error
@@ -442,11 +441,6 @@ func (op CreateSchemaChangerJob) Visit(ctx context.Context, v MutationVisitor) e
 // Visit is part of the MutationOp interface.
 func (op UpsertTableComment) Visit(ctx context.Context, v MutationVisitor) error {
 	return v.UpsertTableComment(ctx, op)
-}
-
-// Visit is part of the MutationOp interface.
-func (op RemoveAllTableComments) Visit(ctx context.Context, v MutationVisitor) error {
-	return v.RemoveAllTableComments(ctx, op)
 }
 
 // Visit is part of the MutationOp interface.
