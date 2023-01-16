@@ -172,7 +172,7 @@ func (p Plan) explainTargets(s scstage.Stage, sn treeprinter.Node, style treepri
 			targetTypeMap.Set(k, numTransitions+1)
 		}
 		// Collect rules affecting this element's status transitions.
-		if style == treeprinter.BulletStyle {
+		if style == treeprinter.BulletStyle && !s.IsResetPreCommitStage() {
 			n, nodeFound := p.Graph.GetNode(t, before)
 			if !nodeFound {
 				return errors.Errorf("could not find node [[%s, %s], %s] in graph",

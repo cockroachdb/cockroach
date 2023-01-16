@@ -24,8 +24,37 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-func (m *visitor) checkOutTable(ctx context.Context, id descpb.ID) (*tabledesc.Mutable, error) {
-	desc, err := m.s.CheckOutDescriptor(ctx, id)
+func (i *immediateVisitor) getDescriptor(
+	ctx context.Context, id descpb.ID,
+) (catalog.Descriptor, error) {
+	if checkedOut := i.MaybeGetCheckedOutDescriptor(id); checkedOut != nil {
+		return checkedOut, nil
+	}
+	read, err := i.descriptorReader.MustReadImmutableDescriptors(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	return read[0], nil
+}
+
+func (i *immediateVisitor) checkOutDescriptor(
+	ctx context.Context, id descpb.ID,
+) (catalog.MutableDescriptor, error) {
+	if checkedOut := i.MaybeGetCheckedOutDescriptor(id); checkedOut != nil {
+		return checkedOut, nil
+	}
+	mut, err := i.descriptorReader.MustReadMutableDescriptor(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	i.AddToCheckedOutDescriptors(mut)
+	return mut, nil
+}
+
+func (i *immediateVisitor) checkOutTable(
+	ctx context.Context, id descpb.ID,
+) (*tabledesc.Mutable, error) {
+	desc, err := i.checkOutDescriptor(ctx, id)
 	if err != nil {
 		return nil, err
 	}
@@ -36,8 +65,10 @@ func (m *visitor) checkOutTable(ctx context.Context, id descpb.ID) (*tabledesc.M
 	return mut, nil
 }
 
-func (m *visitor) checkOutDatabase(ctx context.Context, id descpb.ID) (*dbdesc.Mutable, error) {
-	desc, err := m.s.CheckOutDescriptor(ctx, id)
+func (i *immediateVisitor) checkOutDatabase(
+	ctx context.Context, id descpb.ID,
+) (*dbdesc.Mutable, error) {
+	desc, err := i.checkOutDescriptor(ctx, id)
 	if err != nil {
 		return nil, err
 	}
@@ -48,8 +79,10 @@ func (m *visitor) checkOutDatabase(ctx context.Context, id descpb.ID) (*dbdesc.M
 	return mut, nil
 }
 
-func (m *visitor) checkOutSchema(ctx context.Context, id descpb.ID) (*schemadesc.Mutable, error) {
-	desc, err := m.s.CheckOutDescriptor(ctx, id)
+func (i *immediateVisitor) checkOutSchema(
+	ctx context.Context, id descpb.ID,
+) (*schemadesc.Mutable, error) {
+	desc, err := i.checkOutDescriptor(ctx, id)
 	if err != nil {
 		return nil, err
 	}
@@ -61,10 +94,12 @@ func (m *visitor) checkOutSchema(ctx context.Context, id descpb.ID) (*schemadesc
 }
 
 // Stop the linter from complaining.
-var _ = ((*visitor)(nil)).checkOutSchema
+var _ = ((*immediateVisitor)(nil)).checkOutSchema
 
-func (m *visitor) checkOutType(ctx context.Context, id descpb.ID) (*typedesc.Mutable, error) {
-	desc, err := m.s.CheckOutDescriptor(ctx, id)
+func (i *immediateVisitor) checkOutType(
+	ctx context.Context, id descpb.ID,
+) (*typedesc.Mutable, error) {
+	desc, err := i.checkOutDescriptor(ctx, id)
 	if err != nil {
 		return nil, err
 	}

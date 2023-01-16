@@ -97,7 +97,10 @@ upsert descriptor #106
   +  version: "2"
 # end StatementPhase
 # begin PreCommitPhase
-## PreCommitPhase stage 1 of 1 with 2 MutationType ops
+## PreCommitPhase stage 1 of 2 with 1 MutationType op
+undo all catalog changes within txn #1
+persist all catalog changes to storage
+## PreCommitPhase stage 2 of 2 with 6 MutationType ops
 upsert descriptor #106
   ...
      createAsOfTime:
@@ -117,11 +120,49 @@ upsert descriptor #106
   +    targets: <redacted>
      families:
      - columnIds:
+       - 1
+  +    - 2
+       columnNames:
+       - i
+  +    - j
+  +    defaultColumnId: 2
+       name: primary
+     formatVersion: 3
+     id: 106
+     modificationTime: {}
+  +  mutations:
+  +  - column:
+  +      id: 2
+  +      name: j
+  +      nullable: true
+  +      pgAttributeNum: 2
+  +      type:
+  +        family: IntFamily
+  +        oid: 20
+  +        width: 64
+  +    direction: ADD
+  +    mutationId: 1
+  +    state: DELETE_ONLY
+     name: tbl
+  -  nextColumnId: 2
+  +  nextColumnId: 3
+     nextConstraintId: 2
+     nextFamilyId: 1
+  ...
+       partitioning: {}
+       sharded: {}
+  +    storeColumnIds:
+  +    - 2
+  +    storeColumnNames:
+  +    - j
+       unique: true
+       version: 4
   ...
        time: {}
      unexposedParentSchemaId: 105
   -  version: "1"
   +  version: "2"
+persist all catalog changes to storage
 create job #1 (non-cancelable: false): "ALTER TABLE db.public.tbl ADD COLUMN j INT8"
   descriptor IDs: [106]
 # end PreCommitPhase
@@ -151,6 +192,7 @@ upsert descriptor #106
      unexposedParentSchemaId: 105
   -  version: "2"
   +  version: "3"
+persist all catalog changes to storage
 update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 1 of 1 with 2 MutationType ops pending"
 set schema change job #1 to non-cancellable
 commit transaction #3
@@ -208,6 +250,7 @@ upsert descriptor #106
      unexposedParentSchemaId: 105
   -  version: "3"
   +  version: "4"
+persist all catalog changes to storage
 adding table for stats refresh: 106
 update progress of schema change job #1: "all stages completed"
 set schema change job #1 to non-cancellable

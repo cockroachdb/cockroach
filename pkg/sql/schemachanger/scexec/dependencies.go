@@ -55,30 +55,7 @@ type Dependencies interface {
 // changes.
 type Catalog interface {
 	scmutationexec.NameResolver
-	scmutationexec.SyntheticDescriptorStateUpdater
-
-	// MustReadImmutableDescriptors reads descriptors from the catalog by ID.
-	MustReadImmutableDescriptors(ctx context.Context, ids ...descpb.ID) ([]catalog.Descriptor, error)
-
-	// MustReadMutableDescriptor the mutable equivalent to
-	// MustReadImmutableDescriptors.
-	MustReadMutableDescriptor(ctx context.Context, id descpb.ID) (catalog.MutableDescriptor, error)
-
-	// NewCatalogChangeBatcher is equivalent to creating a new kv.Batch for the
-	// current kv.Txn.
-	NewCatalogChangeBatcher() CatalogChangeBatcher
-}
-
-// Telemetry encapsulates metrics gather for the declarative schema changer.
-type Telemetry interface {
-	// IncrementSchemaChangeErrorType increments the number of errors of a given
-	// type observed by the schema changer.
-	IncrementSchemaChangeErrorType(typ string)
-}
-
-// CatalogChangeBatcher encapsulates batched updates to the catalog: descriptor
-// updates, namespace operations, etc.
-type CatalogChangeBatcher interface {
+	scmutationexec.DescriptorReader
 
 	// CreateOrUpdateDescriptor upserts a descriptor.
 	CreateOrUpdateDescriptor(ctx context.Context, desc catalog.MutableDescriptor) error
@@ -88,9 +65,6 @@ type CatalogChangeBatcher interface {
 
 	// DeleteDescriptor deletes a descriptor entry.
 	DeleteDescriptor(ctx context.Context, id descpb.ID) error
-
-	// ValidateAndRun executes the updates after validating the catalog changes.
-	ValidateAndRun(ctx context.Context) error
 
 	// DeleteZoneConfig deletes the zone config for a descriptor.
 	DeleteZoneConfig(ctx context.Context, id descpb.ID) error
@@ -104,6 +78,26 @@ type CatalogChangeBatcher interface {
 	DeleteComment(
 		ctx context.Context, key catalogkeys.CommentKey,
 	) error
+
+	// Validate validates all the uncommitted catalog changes performed
+	// in this transaction so far.
+	Validate(ctx context.Context) error
+
+	// Run persists all the uncommitted catalog changes performed in this
+	// transaction so far. Reset cannot be called after this method.
+	Run(ctx context.Context) error
+
+	// Reset undoes all the uncommitted catalog changes performed in this
+	// transaction so far, assuming that they haven't been persisted yet
+	// by calling Run.
+	Reset(ctx context.Context) error
+}
+
+// Telemetry encapsulates metrics gather for the declarative schema changer.
+type Telemetry interface {
+	// IncrementSchemaChangeErrorType increments the number of errors of a given
+	// type observed by the schema changer.
+	IncrementSchemaChangeErrorType(typ string)
 }
 
 // TransactionalJobRegistry creates and updates jobs in the current transaction.

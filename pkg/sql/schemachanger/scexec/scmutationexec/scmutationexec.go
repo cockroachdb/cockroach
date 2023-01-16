@@ -16,27 +16,38 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 )
 
-// NewMutationVisitor creates a new scop.MutationVisitor.
-func NewMutationVisitor(
-	s MutationVisitorStateUpdater, nr NameResolver, clock Clock, sd SyntheticDescriptorStateUpdater,
-) scop.MutationVisitor {
-	return &visitor{
-		nr:    nr,
-		s:     s,
-		clock: clock,
-		sd:    sd,
+// NewImmediateVisitor creates a new scop.ImmediateMutationVisitor.
+func NewImmediateVisitor(
+	s ImmediateMutationStateUpdater, clock Clock, dr DescriptorReader,
+) scop.ImmediateMutationVisitor {
+	return &immediateVisitor{
+		ImmediateMutationStateUpdater: s,
+		clock:                         clock,
+		descriptorReader:              dr,
 	}
 }
 
-var _ scop.MutationVisitor = (*visitor)(nil)
-
-type visitor struct {
-	clock Clock
-	nr    NameResolver
-	s     MutationVisitorStateUpdater
-	sd    SyntheticDescriptorStateUpdater
+type immediateVisitor struct {
+	ImmediateMutationStateUpdater
+	clock            Clock
+	descriptorReader DescriptorReader
 }
 
-func (m *visitor) NotImplemented(_ context.Context, _ scop.NotImplemented) error {
+var _ scop.ImmediateMutationVisitor = (*immediateVisitor)(nil)
+
+// NewDeferredVisitor creates a new scop.DeferredMutationVisitor.
+func NewDeferredVisitor(s DeferredMutationStateUpdater) scop.DeferredMutationVisitor {
+	return &deferredVisitor{
+		DeferredMutationStateUpdater: s,
+	}
+}
+
+var _ scop.DeferredMutationVisitor = (*deferredVisitor)(nil)
+
+type deferredVisitor struct {
+	DeferredMutationStateUpdater
+}
+
+func (i *immediateVisitor) NotImplemented(_ context.Context, _ scop.NotImplemented) error {
 	return nil
 }

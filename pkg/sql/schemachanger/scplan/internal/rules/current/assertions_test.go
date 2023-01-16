@@ -84,7 +84,7 @@ func checkToAbsentCategories(e scpb.Element) error {
 	s0 := opgen.InitialStatus(e, scpb.Status_ABSENT)
 	s1 := opgen.NextStatus(e, scpb.Status_ABSENT, s0)
 	switch s1 {
-	case scpb.Status_TXN_DROPPED, scpb.Status_DROPPED:
+	case scpb.Status_DROPPED:
 		if IsDescriptor(e) || IsData(e) {
 			return nil
 		}

@@ -34,21 +34,8 @@ import (
 func init() {
 
 	registerDepRule(
-		"descriptor TXN_DROPPED before DROPPED",
+		"descriptor dropped in transaction before removal",
 		scgraph.PreviousStagePrecedence,
-		"txn_dropped", "dropped",
-		func(from, to NodeVars) rel.Clauses {
-			return rel.Clauses{
-				from.TypeFilter(IsDescriptor),
-				from.El.AttrEqVar(screl.DescID, "_"),
-				from.El.AttrEqVar(rel.Self, to.El),
-				StatusesToAbsent(from, scpb.Status_TXN_DROPPED, to, scpb.Status_DROPPED),
-			}
-		})
-
-	registerDepRule(
-		"descriptor DROPPED in transaction before removal",
-		scgraph.PreviousTransactionPrecedence,
 		"dropped", "absent",
 		func(from, to NodeVars) rel.Clauses {
 			return rel.Clauses{
@@ -69,6 +56,32 @@ func init() {
 				to.TypeFilter(IsSimpleDependent),
 				JoinOnDescID(from, to, "desc-id"),
 				StatusesToAbsent(from, scpb.Status_DROPPED, to, scpb.Status_ABSENT),
+			}
+		})
+
+	registerDepRule(
+		"relation dropped before column no longer public",
+		scgraph.Precedence,
+		"descriptor", "column",
+		func(from, to NodeVars) rel.Clauses {
+			return rel.Clauses{
+				from.Type((*scpb.Table)(nil), (*scpb.View)(nil), (*scpb.Sequence)(nil)),
+				to.TypeFilter(IsColumn),
+				JoinOnDescID(from, to, "desc-id"),
+				StatusesToAbsent(from, scpb.Status_DROPPED, to, scpb.Status_WRITE_ONLY),
+			}
+		})
+
+	registerDepRule(
+		"relation dropped before index no longer public",
+		scgraph.Precedence,
+		"descriptor", "column",
+		func(from, to NodeVars) rel.Clauses {
+			return rel.Clauses{
+				from.Type((*scpb.Table)(nil), (*scpb.View)(nil)),
+				to.TypeFilter(IsIndex),
+				JoinOnDescID(from, to, "desc-id"),
+				StatusesToAbsent(from, scpb.Status_DROPPED, to, scpb.Status_VALIDATED),
 			}
 		},
 	)

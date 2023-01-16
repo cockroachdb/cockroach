@@ -80,9 +80,6 @@ func (et *depEdges) insertOrUpdate(rule Rule, kind DepEdgeKind, from, to *screl.
 // exists an edge in the graph between the two nodes. The logic asserts that
 // the rule kinds are compatible, and adds the rule to the list of rules that
 // this edge represents.
-//
-// TODO(ajwerner): PreviousTransactionPrecedence could be seen as compatible
-// with PreviousStagePrecedence.
 func updateExistingDepEdge(rule Rule, kind DepEdgeKind, got *DepEdge) error {
 	if got.kind != kind && kind != Precedence {
 		if got.kind != Precedence {

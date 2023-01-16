@@ -16,7 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 )
 
-func (m *visitor) RefreshStats(ctx context.Context, op scop.RefreshStats) error {
-	m.s.RefreshStats(op.TableID)
+func (d *deferredVisitor) RefreshStats(_ context.Context, op scop.RefreshStats) error {
+	d.DeferredMutationStateUpdater.RefreshStats(op.TableID)
 	return nil
 }
