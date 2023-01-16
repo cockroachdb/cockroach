@@ -284,6 +284,9 @@ message LocalOnlySessionData {
   // CopyFromAtomicEnabled controls whether implicit txn copy from operations
   // are atomic or segmented.
   bool copy_from_atomic_enabled = 77;
+  // CopyFromRetriesEnabled controls whether retries should be internally
+  // attempted for retriable errors.
+  bool copy_from_retries_enabled = 89;
   // EnforceHomeRegion, when true, causes queries which scan rows from multiple
   // regions, or which scan rows from a single home region, but initiated from
   // a gateway region which differs from that home region, to error out.
