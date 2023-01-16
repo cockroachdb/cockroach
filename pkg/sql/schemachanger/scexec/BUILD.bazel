@@ -7,6 +7,8 @@ go_library(
     srcs = [
         "dependencies.go",
         "exec_backfill.go",
+        "exec_deferred_mutation.go",
+        "exec_immediate_mutation.go",
         "exec_mutation.go",
         "exec_validation.go",
         "executor.go",
@@ -39,9 +41,6 @@ go_library(
         "//pkg/util/ctxgroup",
         "//pkg/util/hlc",
         "//pkg/util/intsets",
-        "//pkg/util/log",
-        "//pkg/util/log/eventpb",
-        "//pkg/util/log/logpb",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
@@ -70,6 +69,8 @@ go_test(
         "//pkg/settings/cluster",
         "//pkg/sql",
         "//pkg/sql/catalog",
+        # catalogkeys is required to build the generated output of mock_scexec
+        "//pkg/sql/catalog/catalogkeys",  # keep
         "//pkg/sql/catalog/catenumpb",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/descs",

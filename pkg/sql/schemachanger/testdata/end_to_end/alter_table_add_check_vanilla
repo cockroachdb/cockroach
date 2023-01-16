@@ -54,7 +54,10 @@ upsert descriptor #104
   +  version: "2"
 # end StatementPhase
 # begin PreCommitPhase
-## PreCommitPhase stage 1 of 1 with 2 MutationType ops
+## PreCommitPhase stage 1 of 2 with 1 MutationType op
+undo all catalog changes within txn #1
+persist all catalog changes to storage
+## PreCommitPhase stage 2 of 2 with 3 MutationType ops
 upsert descriptor #104
   ...
      createAsOfTime:
@@ -75,10 +78,35 @@ upsert descriptor #104
      families:
      - columnIds:
   ...
+     id: 104
+     modificationTime: {}
+  +  mutations:
+  +  - constraint:
+  +      check:
+  +        columnIds:
+  +        - 1
+  +        constraintId: 2
+  +        expr: i > 0:::INT8
+  +        name: crdb_internal_constraint_2_name_placeholder
+  +        validity: Validating
+  +      foreignKey: {}
+  +      name: crdb_internal_constraint_2_name_placeholder
+  +      uniqueWithoutIndexConstraint: {}
+  +    direction: ADD
+  +    mutationId: 1
+  +    state: WRITE_ONLY
+     name: t
+     nextColumnId: 2
+  -  nextConstraintId: 2
+  +  nextConstraintId: 3
+     nextFamilyId: 1
+     nextIndexId: 2
+  ...
        time: {}
      unexposedParentSchemaId: 101
   -  version: "1"
   +  version: "2"
+persist all catalog changes to storage
 create job #1 (non-cancelable: false): "ALTER TABLE defaultdb.public.t ADD CHECK (i > 0)"
   descriptor IDs: [104]
 # end PreCommitPhase
@@ -146,6 +174,7 @@ upsert descriptor #104
      unexposedParentSchemaId: 101
   -  version: "2"
   +  version: "3"
+persist all catalog changes to storage
 update progress of schema change job #1: "all stages completed"
 set schema change job #1 to non-cancellable
 updated schema change job #1 descriptor IDs to []

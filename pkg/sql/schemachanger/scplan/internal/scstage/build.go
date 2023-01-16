@@ -37,28 +37,30 @@ func BuildStages(
 	phase scop.Phase,
 	g *scgraph.Graph,
 	scJobIDSupplier func() jobspb.JobID,
-	enforcePlannerSanityChecks bool,
+	withSanityChecks bool,
 ) []Stage {
-	c := buildContext{
-		rollback:                   init.InRollback,
-		g:                          g,
-		isRevertibilityIgnored:     true,
-		targetState:                init.TargetState,
-		startingStatuses:           init.Current,
-		startingPhase:              phase,
-		descIDs:                    screl.AllTargetDescIDs(init.TargetState),
-		enforcePlannerSanityChecks: enforcePlannerSanityChecks,
+	// Initialize the build context.
+	bc := buildContext{
+		ctx:      ctx,
+		rollback: init.InRollback,
+		g:        g,
+		scJobID: func() func() jobspb.JobID {
+			var scJobID jobspb.JobID
+			return func() jobspb.JobID {
+				if scJobID == 0 {
+					scJobID = scJobIDSupplier()
+				}
+				return scJobID
+			}
+		}(),
+		targetState:      init.TargetState,
+		startingStatuses: init.Current,
+		startingPhase:    phase,
+		descIDs:          screl.AllTargetDescIDs(init.TargetState),
+		withSanityChecks: withSanityChecks,
 	}
-	// Try building stages while ignoring revertibility constraints.
-	// This is fine as long as there are no post-commit stages.
-	stages := buildStages(c)
-	if n := len(stages); n > 0 && stages[n-1].Phase > scop.PreCommitPhase {
-		c.isRevertibilityIgnored = false
-		stages = buildStages(c)
-	}
-	if len(stages) == 0 {
-		return nil
-	}
+	// Build stages for all remaining phases.
+	stages := buildStages(bc)
 	// Decorate stages with position in plan.
 	{
 		phaseMap := map[scop.Phase][]int{}
@@ -73,84 +75,119 @@ func BuildStages(
 			}
 		}
 	}
-	// Exit early if there is no need to create a job.
-	if stages[len(stages)-1].Phase <= scop.PreCommitPhase {
-		return stages
-	}
-	// Add job ops to the stages.
-	c.scJobID = scJobIDSupplier()
+	// Decorate stages with extra ops.
 	for i := range stages {
 		var cur, next *Stage
 		if i+1 < len(stages) {
 			next = &stages[i+1]
 		}
 		cur = &stages[i]
-		jobOps := c.computeExtraJobOps(cur, next)
-		cur.ExtraOps = jobOps
+		cur.ExtraOps = bc.computeExtraOps(cur, next)
 	}
 	return stages
 }
 
 // buildContext contains the global constants for building the stages.
-// Only the BuildStages function mutates it, it's read-only everywhere else.
+// It's read-only everywhere after being initialized in BuildStages.
 type buildContext struct {
-	rollback                   bool
-	g                          *scgraph.Graph
-	scJobID                    jobspb.JobID
-	isRevertibilityIgnored     bool
-	targetState                scpb.TargetState
-	startingStatuses           []scpb.Status
-	startingPhase              scop.Phase
-	descIDs                    catalog.DescriptorIDSet
-	enforcePlannerSanityChecks bool
+	ctx              context.Context
+	rollback         bool
+	g                *scgraph.Graph
+	scJobID          func() jobspb.JobID
+	targetState      scpb.TargetState
+	startingStatuses []scpb.Status
+	startingPhase    scop.Phase
+	descIDs          catalog.DescriptorIDSet
+	withSanityChecks bool
 }
 
+// buildStages builds all stages according to the starting parameters
+// in the build context.
 func buildStages(bc buildContext) (stages []Stage) {
-	// Initialize the build state for this buildContext.
-	bs := buildState{
-		incumbent: make([]scpb.Status, len(bc.startingStatuses)),
-		phase:     bc.startingPhase,
-		fulfilled: make(map[*screl.Node]struct{}, bc.g.Order()),
-	}
-	for i, n := range bc.nodes(bc.startingStatuses) {
-		bs.incumbent[i] = n.CurrentStatus
-		bs.fulfilled[n] = struct{}{}
-	}
-	// Build stages until reaching the terminal state.
-	for !bc.isStateTerminal(bs.incumbent) {
-		// Generate a stage builder which can make progress.
-		sb := bc.makeStageBuilder(bs)
-		// We allow mixing of revertible and non-revertible operations if there
-		// are no remaining operations which can fail. That being said, we do not
-		// want to build such a stage as PostCommit but rather as
-		// PostCommitNonRevertible. This condition is used to determine whether
-		// the phase needs to be advanced due to the presence of non-revertible
-		// operations.
-		shouldBeInPostCommitNonRevertible := func() bool {
-			return !bc.isRevertibilityIgnored &&
-				bs.phase == scop.PostCommitPhase &&
-				sb.hasAnyNonRevertibleOps()
+	// Build stages for all remaining phases.
+	currentStatuses := func() []scpb.Status {
+		if n := len(stages); n > 0 {
+			return stages[n-1].After
 		}
-		for !sb.canMakeProgress() || shouldBeInPostCommitNonRevertible() {
-			// When no further progress is possible, move to the next phase and try
-			// again, until progress is possible. We haven't reached the terminal
-			// state yet, so this is guaranteed (barring any horrible bugs).
-			if !sb.canMakeProgress() && bs.phase == scop.PreCommitPhase {
-				// This is a special case.
-				// We need to move to the post-commit phase, but this will require
-				// creating a schema changer job, which in turn will require this
-				// otherwise-empty pre-commit stage.
-				break
+		return bc.startingStatuses
+	}
+	currentPhase := bc.startingPhase
+	switch currentPhase {
+	case scop.StatementPhase:
+		// Build a stage for the statement phase.
+		// This stage moves the elements statuses towards their targets, and
+		// applies the immediate mutation operations to materialize this in the
+		// in-memory catalog, for the benefit of any potential later statement in
+		// the transaction. These status transitions and their side-effects are
+		// undone at pre-commit time and the whole schema change is re-planned
+		// taking revertibility into account.
+		//
+		// This way, the side effects of a schema change become immediately visible
+		// to the remainder of the transaction. For example, dropping a table makes
+		// any subsequent in-txn queries on it fail, which is desirable. On the
+		// other hand, persisting such statement-phase changes might be
+		// undesirable. Reusing the previous example, if the drop is followed by a
+		// constraint creation in the transaction, then the validation for that
+		// constraint may fail and the schema change will have to be rolled back;
+		// we don't want the table drop to be visible to other transactions until
+		// the schema change is guaranteed to succeed.
+		{
+			bs := initBuildState(bc, scop.StatementPhase, currentStatuses())
+			statementStage := bc.makeStageBuilder(bs).build()
+			// Schedule only immediate ops in the statement phase.
+			var immediateOps []scop.Op
+			for _, op := range statementStage.EdgeOps {
+				if _, ok := op.(scop.ImmediateMutationOp); !ok {
+					continue
+				}
+				immediateOps = append(immediateOps, op)
 			}
-			if bs.phase == scop.LatestPhase {
-				// This should never happen, we should always be able to make forward
-				// progress because we haven't reached the terminal state yet.
-				panic(errors.WithDetailf(errors.AssertionFailedf("unable to make progress"), "terminal state:\n%s", sb))
-			}
-			bs.phase++
-			sb = bc.makeStageBuilder(bs)
+			statementStage.EdgeOps = immediateOps
+			stages = append(stages, statementStage)
 		}
-		// Build the stage.
+		// Move to the pre-commit phase
+		currentPhase = scop.PreCommitPhase
+		fallthrough
+	case scop.PreCommitPhase:
+		// Build a stage to reset to the initial statuses for all targets
+		// as a prelude to the pre-commit phase's main stage.
+		{
+			resetStage := Stage{
+				Before: make([]scpb.Status, len(currentStatuses())),
+				After:  make([]scpb.Status, len(currentStatuses())),
+				Phase:  scop.PreCommitPhase,
+			}
+			copy(resetStage.Before, currentStatuses())
+			isNoOp := true
+			for i, t := range bc.targetState.Targets {
+				s := scpb.AsTargetStatus(t.TargetStatus).InitialStatus()
+				resetStage.After[i] = s
+				isNoOp = isNoOp && (s == resetStage.Before[i])
+			}
+			if !isNoOp {
+				stages = append(stages, resetStage)
+			}
+		}
+		// Build the pre-commit phase's main stage.
+		{
+			bs := initBuildState(bc, scop.PreCommitPhase, currentStatuses())
+			mainStage := bc.makeStageBuilder(bs).build()
+			stages = append(stages, mainStage)
+		}
+		// Move to the post-commit phase.
+		currentPhase = scop.PostCommitPhase
+		fallthrough
+	case scop.PostCommitPhase, scop.PostCommitNonRevertiblePhase:
+		bs := initBuildState(bc, currentPhase, currentStatuses())
+		stages = append(stages, buildPostCommitStages(bc, bs)...)
+	default:
+		panic(errors.AssertionFailedf("unknown phase %s", currentPhase))
+	}
+	return stages
+}
+
+func buildPostCommitStages(bc buildContext, bs buildState) (stages []Stage) {
+	build := func(sb stageBuilder) {
 		stage := sb.build()
 		stages = append(stages, stage)
 		// Update the build state with this stage's progress.
@@ -158,22 +195,72 @@ func buildStages(bc buildContext) (stages []Stage) {
 			bs.fulfilled[n] = struct{}{}
 		}
 		bs.incumbent = stage.After
-		switch bs.phase {
-		case scop.StatementPhase, scop.PreCommitPhase:
-			// These phases can only have at most one stage each.
-			bs.phase++
-		}
 	}
-
+	// Build post-commit phase stages, if applicable.
+	if bs.currentPhase == scop.PostCommitPhase {
+		for !bc.isStateTerminal(bs.incumbent) {
+			sb := bc.makeStageBuilder(bs)
+			// We allow mixing of revertible and non-revertible operations if there
+			// are no remaining operations which can fail. That being said, we do
+			// not want to build such a stage as PostCommit but rather as
+			// PostCommitNonRevertible.
+			if !sb.canMakeProgress() || sb.hasAnyNonRevertibleOps() {
+				break
+			}
+			build(sb)
+		}
+		// Move to the non-revertible post-commit phase.
+		bs.currentPhase = scop.PostCommitNonRevertiblePhase
+	}
+	// Build non-revertible post-commit stages.
+	for !bc.isStateTerminal(bs.incumbent) {
+		sb := bc.makeStageBuilder(bs)
+		if !sb.canMakeProgress() {
+			// We haven't reached the terminal state yet, however further progress
+			// isn't possible despite having exhausted all phases. There must be a
+			// bug somewhere in scplan/...
+			var trace []string
+			bs.trace = &trace
+			sb = bc.makeStageBuilder(bs)
+			panic(errors.WithDetailf(
+				errors.AssertionFailedf("unable to make progress"),
+				"terminal state:\n%s\nrule trace:\n%s", sb, strings.Join(trace, "\n")))
+		}
+		build(sb)
+	}
+	// We have reached the terminal state at this point.
 	return stages
 }
 
 // buildState contains the global build state for building the stages.
-// Only the buildStages function mutates it, it's read-only everywhere else.
+// Only the buildStagesInCurrentPhase function mutates it,
+// it's read-only everywhere else.
 type buildState struct {
-	incumbent []scpb.Status
-	phase     scop.Phase
-	fulfilled map[*screl.Node]struct{}
+	incumbent    []scpb.Status
+	fulfilled    map[*screl.Node]struct{}
+	currentPhase scop.Phase
+	trace        *[]string
+}
+
+// initBuildState initializes a build state for this buildContext.
+func initBuildState(bc buildContext, phase scop.Phase, current []scpb.Status) buildState {
+	bs := buildState{
+		incumbent:    make([]scpb.Status, len(bc.startingStatuses)),
+		fulfilled:    make(map[*screl.Node]struct{}, bc.g.Order()),
+		currentPhase: phase,
+	}
+	for i, n := range bc.nodes(current) {
+		bs.incumbent[i] = n.CurrentStatus
+		for {
+			bs.fulfilled[n] = struct{}{}
+			oe, ok := bc.g.GetOpEdgeTo(n)
+			if !ok {
+				break
+			}
+			n = oe.From()
+		}
+	}
+	return bs
 }
 
 // isStateTerminal returns true iff the state is terminal, according to the
@@ -191,8 +278,7 @@ func (bc buildContext) isStateTerminal(current []scpb.Status) bool {
 // progress can be made. Defaults to the mutation type if none make progress.
 func (bc buildContext) makeStageBuilder(bs buildState) (sb stageBuilder) {
 	opTypes := []scop.Type{scop.BackfillType, scop.ValidationType, scop.MutationType}
-	switch bs.phase {
-	case scop.StatementPhase, scop.PreCommitPhase:
+	if bs.currentPhase <= scop.PreCommitPhase {
 		// We don't allow expensive operations in the statement transaction.
 		opTypes = []scop.Type{scop.MutationType}
 	}
@@ -214,10 +300,11 @@ func (bc buildContext) makeStageBuilderForType(bs buildState, opType scop.Type) 
 		bs:         bs,
 		opType:     opType,
 		current:    make([]currentTargetState, numTargets),
-		fulfilling: map[*screl.Node]struct{}{},
+		fulfilling: make(map[*screl.Node]struct{}),
 		lut:        make(map[*scpb.Target]*currentTargetState, numTargets),
 		visited:    make(map[*screl.Node]uint64, numTargets),
 	}
+	sb.debugTracef("initialized stage builder for %s", opType)
 	{
 		nodes := bc.nodes(bs.incumbent)
 
@@ -246,12 +333,20 @@ func (bc buildContext) makeStageBuilderForType(bs buildState, opType scop.Type) 
 			if t.e == nil {
 				continue
 			}
+			if sb.hasDebugTrace() {
+				sb.debugTracef("- %s targeting %s stuck in %s",
+					screl.ElementString(t.n.Element()), t.n.TargetStatus, t.n.CurrentStatus)
+			}
 			if sb.hasUnmetInboundDeps(t.e.To()) {
 				continue
 			}
 			// Increment the visit epoch for the next batch of recursive calls to
 			// hasUnmeetableOutboundDeps. See comments in function body for details.
 			sb.visitEpoch++
+			if sb.hasDebugTrace() {
+				sb.debugTracef("  progress to %s prevented by unmeetable outbound deps:",
+					t.e.To().CurrentStatus)
+			}
 			if sb.hasUnmeetableOutboundDeps(t.e.To()) {
 				continue
 			}
@@ -292,6 +387,17 @@ type currentTargetState struct {
 	e *scgraph.OpEdge
 }
 
+func (sb stageBuilder) debugTracef(fmtStr string, args ...interface{}) {
+	if !sb.hasDebugTrace() {
+		return
+	}
+	*sb.bs.trace = append(*sb.bs.trace, fmt.Sprintf(fmtStr, args...))
+}
+
+func (sb stageBuilder) hasDebugTrace() bool {
+	return sb.bs.trace != nil
+}
+
 func (sb stageBuilder) makeCurrentTargetState(n *screl.Node) currentTargetState {
 	e, found := sb.bc.g.GetOpEdgeFrom(n)
 	if !found || !sb.isOutgoingOpEdgeAllowed(e) {
@@ -316,23 +422,43 @@ func (sb stageBuilder) isOutgoingOpEdgeAllowed(e *scgraph.OpEdge) bool {
 	if e.Type() != sb.opType {
 		return false
 	}
-	// We allow non-revertible ops to be included at stages preceding
-	// PostCommitNonRevertible if nothing left in the schema change at this
-	// point can fail. The caller is responsible for detecting whether any
-	// non-revertible operations are included in a phase before
-	// PostCommitNonRevertible and adjusting the phase accordingly. This is
-	// critical to allow op-edges which might otherwise be revertible to be
-	// grouped with non-revertible operations.
-	if !sb.bc.isRevertibilityIgnored &&
-		sb.bs.phase < scop.PostCommitNonRevertiblePhase &&
-		!e.Revertible() &&
-		// We can't act on the knowledge that nothing remaining can fail while in
-		// StatementPhase because we don't know about what future targets may
-		// show up which could fail.
-		(sb.bs.phase < scop.PreCommitPhase || sb.anyRemainingOpsCanFail) {
-		return false
+	// At this point, consider whether this edge is allowed based on the current
+	// phase, whether the edge is revertible, and other information.
+	switch sb.bs.currentPhase {
+	case scop.StatementPhase:
+		// We ignore revertibility in the statement phase. This ensures that
+		// the side effects of a schema change become immediately visible
+		// to the transaction. For example, dropping a table in an explicit
+		// transaction should make it impossible to query that table later
+		// in the transaction.
+		//
+		// That being said, we can't simply allow any op-edge, or the targets from
+		// previous statements in the same transaction will make progress, which is
+		// undesirable: in the statement phase we only allow up to one transition
+		// per target in the whole transaction. This is somewhat arbitrary but it's
+		// usually enough to ensure the desired in-transaction side effects.
+		//
+		// We enforce this at-most-one-transition constraint by checking whether
+		// the op-edge's origin node status is a potential target status: iff so
+		// then that node is the source node of the target transition path.
+		// Otherwise, it means that at least one transition has already occurred
+		// therefore no further transitions are allowed.
+		return scpb.AsTargetStatus(e.From().CurrentStatus) != scpb.InvalidTarget
+	case scop.PreCommitPhase, scop.PostCommitPhase:
+		// We allow non-revertible ops to be included in stages in these phases
+		// only if none of the remaining schema change operations can fail.
+		// The caller is responsible for detecting whether any non-revertible
+		// operations are included in a phase before PostCommitNonRevertible
+		// and for adjusting the phase accordingly. This is critical to allow
+		// op-edges which might otherwise be revertible to be grouped with
+		// non-revertible operations.
+		return e.Revertible() || !sb.anyRemainingOpsCanFail
+	case scop.PostCommitNonRevertiblePhase:
+		// We allow non-revertible edges in the non-revertible post-commit phase,
+		// naturally.
+		return true
 	}
-	return true
+	panic(errors.AssertionFailedf("unknown phase %s", sb.bs.currentPhase))
 }
 
 // canMakeProgress returns true if the stage built by this builder will make
@@ -354,6 +480,13 @@ func (sb stageBuilder) nextTargetState(t currentTargetState) currentTargetState 
 func (sb stageBuilder) hasUnmetInboundDeps(n *screl.Node) (ret bool) {
 	_ = sb.bc.g.ForEachDepEdgeTo(n, func(de *scgraph.DepEdge) error {
 		if ret = sb.isUnmetInboundDep(de); ret {
+			if sb.hasDebugTrace() {
+				sb.debugTracef("  progress to %s prevented by unmet inbound dep from %s",
+					n.CurrentStatus, screl.ElementString(de.From().Element()))
+				for _, rule := range de.Rules() {
+					sb.debugTracef("  - %s: %s", rule.Kind, rule.Name)
+				}
+			}
 			return iterutil.StopIteration()
 		}
 		return nil
@@ -366,14 +499,7 @@ func (sb stageBuilder) isUnmetInboundDep(de *scgraph.DepEdge) bool {
 	_, fromIsCandidate := sb.fulfilling[de.From()]
 	switch de.Kind() {
 
-	case scgraph.PreviousTransactionPrecedence:
-		return !fromIsFulfilled ||
-			(sb.bs.phase <= scop.PreCommitPhase &&
-				// If it has been fulfilled implicitly because it's the initial
-				// status, then the current stage doesn't matter.
-				de.From().CurrentStatus !=
-					scpb.TargetStatus(de.From().TargetStatus).InitialStatus())
-	case scgraph.PreviousStagePrecedence:
+	case scgraph.PreviousStagePrecedence, scgraph.PreviousTransactionPrecedence:
 		// True iff the source node has not been fulfilled in an earlier stage.
 		return !fromIsFulfilled
 
@@ -430,7 +556,7 @@ func (sb stageBuilder) hasUnmeetableOutboundDeps(n *screl.Node) (ret bool) {
 	sb.visited[n] = sb.visitEpoch
 	// Do some sanity checks.
 	if _, isFulfilled := sb.bs.fulfilled[n]; isFulfilled {
-		if sb.bc.enforcePlannerSanityChecks {
+		if sb.bc.withSanityChecks {
 			panic(errors.AssertionFailedf("%s should not yet be scheduled for this stage",
 				screl.NodeString(n)))
 		} else {
@@ -447,6 +573,10 @@ func (sb stageBuilder) hasUnmeetableOutboundDeps(n *screl.Node) (ret bool) {
 		// Either we're unable to schedule it due to some unsatisfied constraint or
 		// there are other nodes preceding it in the op-edge path that need to be
 		// scheduled first.
+		if sb.hasDebugTrace() {
+			sb.debugTracef("  - %s targeting %s hasn't reached %s yet",
+				screl.ElementString(t.n.Element()), t.n.TargetStatus, t.e.To().CurrentStatus)
+		}
 		return true
 	}
 	// At this point, the visited node might be scheduled in this stage if it,
@@ -473,10 +603,14 @@ func (sb stageBuilder) hasUnmeetableOutboundDeps(n *screl.Node) (ret bool) {
 			return iterutil.StopIteration()
 		}
 		switch de.Kind() {
-		case scgraph.PreviousTransactionPrecedence, scgraph.PreviousStagePrecedence:
+		case scgraph.PreviousStagePrecedence, scgraph.PreviousTransactionPrecedence:
 			// `de.from` might be schedulable but the dep edge requires `n` to be scheduled
 			// at a different transaction/stage, so even if `de.from` is indeed schedulable
 			// in this stage, `n` cannot be scheduled in the same stage due to this dep edge.
+			if sb.hasDebugTrace() {
+				sb.debugTracef("  - %s targeting %s must reach %s in a previous stage",
+					screl.ElementString(de.From().Element()), de.From().TargetStatus, de.From().CurrentStatus)
+			}
 			ret = true
 			return iterutil.StopIteration()
 		case scgraph.Precedence, scgraph.SameStagePrecedence:
@@ -504,14 +638,14 @@ func (sb stageBuilder) hasUnmeetableOutboundDeps(n *screl.Node) (ret bool) {
 }
 
 func (sb stageBuilder) build() Stage {
-	after := make([]scpb.Status, len(sb.current))
-	for i, t := range sb.current {
-		after[i] = t.n.CurrentStatus
-	}
 	s := Stage{
-		Before: sb.bs.incumbent,
-		After:  after,
-		Phase:  sb.bs.phase,
+		Before: make([]scpb.Status, len(sb.current)),
+		After:  make([]scpb.Status, len(sb.current)),
+		Phase:  sb.bs.currentPhase,
+	}
+	for i, t := range sb.current {
+		s.Before[i] = sb.bs.incumbent[i]
+		s.After[i] = t.n.CurrentStatus
 	}
 	for _, e := range sb.opEdges {
 		if sb.bc.g.IsNoOp(e) {
@@ -544,7 +678,8 @@ func (sb stageBuilder) String() string {
 	return str.String()
 }
 
-// computeExtraJobOps generates job-related operations to decorate a stage with.
+// computeExtraOps generates extra operations to decorate a stage with.
+// These are typically job-related.
 //
 // TODO(ajwerner): Rather than adding this above the opgen layer, it may be
 // better to do it as part of graph generation. We could treat the job as
@@ -553,13 +688,30 @@ func (sb stageBuilder) String() string {
 // may prove to be a somewhat common pattern in other cases: consider the
 // intermediate index needed when adding and dropping columns as part of the
 // same transaction.
-func (bc buildContext) computeExtraJobOps(cur, next *Stage) []scop.Op {
-	// Schema change job operations only affect mutation stages no sooner
+func (bc buildContext) computeExtraOps(cur, next *Stage) []scop.Op {
+	// Schema change extra operations only affect mutation stages no sooner
 	// than pre-commit.
-	if cur.Phase < scop.PreCommitPhase || cur.Type() != scop.MutationType {
+	if cur.Type() != scop.MutationType {
 		return nil
 	}
-	initialize := cur.Phase == scop.PreCommitPhase
+	var initializeSchemaChangeJob bool
+	switch cur.Phase {
+	case scop.StatementPhase:
+		return nil
+	case scop.PreCommitPhase:
+		if next == nil {
+			// This is the main stage, followed by no post-commit stages, do nothing.
+			return nil
+		}
+		if next.Phase == scop.PreCommitPhase {
+			// This is the reset stage, return the undo op.
+			return []scop.Op{&scop.UndoAllInTxnImmediateMutationOpSideEffects{}}
+		}
+		// Otherwise, this is the main pre-commit stage, followed by post-commit
+		// stages, add the schema change job creation ops.
+		initializeSchemaChangeJob = true
+	}
+	// Build job-related extra ops.
 	ds := bc.makeDescriptorStates(cur, next)
 	var descIDsPresentBefore, descIDsPresentAfter catalog.DescriptorIDSet
 	bc.descIDs.ForEach(func(descID descpb.ID) {
@@ -582,11 +734,11 @@ func (bc buildContext) computeExtraJobOps(cur, next *Stage) []scop.Op {
 		} else if descIDsPresentAfter.Contains(descID) {
 			// Update job state in descriptor in non-terminal stage, as long as the
 			// descriptor is still present after the execution of the stage.
-			addOp(bc.setJobStateOnDescriptorOp(initialize, descID, *ds[descID]))
+			addOp(bc.setJobStateOnDescriptorOp(initializeSchemaChangeJob, descID, *ds[descID]))
 		}
 	})
 	// Build the op which creates or updates the job.
-	if initialize {
+	if initializeSchemaChangeJob {
 		addOp(bc.createSchemaChangeJobOp(descIDsPresentAfter, next))
 	} else {
 		addOp(bc.updateJobProgressOp(descIDsPresentBefore, descIDsPresentAfter, next))
@@ -598,7 +750,7 @@ func (bc buildContext) createSchemaChangeJobOp(
 	descIDsPresentAfter catalog.DescriptorIDSet, next *Stage,
 ) scop.Op {
 	return &scop.CreateSchemaChangerJob{
-		JobID:         bc.scJobID,
+		JobID:         bc.scJobID(),
 		Statements:    bc.targetState.Statements,
 		Authorization: bc.targetState.Authorization,
 		DescriptorIDs: descIDsPresentAfter.Ordered(),
@@ -619,7 +771,7 @@ func (bc buildContext) updateJobProgressOp(
 		toRemove = descIDsPresentBefore
 	}
 	return &scop.UpdateSchemaChangerJob{
-		JobID:                 bc.scJobID,
+		JobID:                 bc.scJobID(),
 		IsNonCancelable:       !isRevertible(next),
 		RunningStatus:         runningStatus(next),
 		DescriptorIDsToRemove: toRemove.Ordered(),
@@ -639,7 +791,7 @@ func (bc buildContext) setJobStateOnDescriptorOp(
 func (bc buildContext) removeJobReferenceOp(descID descpb.ID) scop.Op {
 	return &scop.RemoveJobStateFromDescriptor{
 		DescriptorID: descID,
-		JobID:        bc.scJobID,
+		JobID:        bc.scJobID(),
 	}
 }
 
@@ -669,7 +821,7 @@ func (bc buildContext) makeDescriptorStates(cur, next *Stage) map[descpb.ID]*scp
 	bc.descIDs.ForEach(func(id descpb.ID) {
 		ds[id] = &scpb.DescriptorState{
 			Authorization: bc.targetState.Authorization,
-			JobID:         bc.scJobID,
+			JobID:         bc.scJobID(),
 			InRollback:    bc.rollback,
 			Revertible:    isRevertible(next),
 		}

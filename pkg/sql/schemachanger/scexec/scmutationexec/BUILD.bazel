@@ -38,8 +38,6 @@ go_library(
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
         "//pkg/util/iterutil",
-        "//pkg/util/log/eventpb",
-        "//pkg/util/log/logpb",
         "//pkg/util/protoutil",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",

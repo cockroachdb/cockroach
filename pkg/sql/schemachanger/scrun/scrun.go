@@ -79,7 +79,7 @@ func runTransactionPhase(
 		ActiveVersion:              deps.ClusterSettings().Version.ActiveVersion(ctx),
 		ExecutionPhase:             phase,
 		SchemaChangerJobIDSupplier: deps.TransactionalJobRegistry().SchemaChangerJobID,
-		EnforcePlannerSanityCheck:  enforcePlannerSanityCheck.Get(&deps.ClusterSettings().SV),
+		SkipPlannerSanityChecks:    !enforcePlannerSanityCheck.Get(&deps.ClusterSettings().SV),
 	})
 	if err != nil {
 		return scpb.CurrentState{}, jobspb.InvalidJobID, err
@@ -89,6 +89,14 @@ func runTransactionPhase(
 		return scpb.CurrentState{}, jobspb.InvalidJobID, nil
 	}
 	stages := sc.StagesForCurrentPhase()
+	if len(stages) == 0 {
+		// Go through the pre-commit stage execution machinery anyway, catalog
+		// change side effects are applied only in memory in the statement phase
+		// and need to be applied in storage otherwise they will be lost.
+		if err := scexec.ExecuteStage(ctx, deps, phase, nil /* ops */); err != nil {
+			return scpb.CurrentState{}, jobspb.InvalidJobID, err
+		}
+	}
 	for i := range stages {
 		if err := executeStage(ctx, knobs, deps, sc, i, stages[i]); err != nil {
 			return scpb.CurrentState{}, jobspb.InvalidJobID, err
@@ -175,7 +183,7 @@ func executeStage(
 			return err
 		}
 	}
-	if err := scexec.ExecuteStage(ctx, deps, stage.Ops()); err != nil {
+	if err := scexec.ExecuteStage(ctx, deps, stage.Phase, stage.Ops()); err != nil {
 		// Don't go through the effort to wrap the error if it's a retry or it's a
 		// cancelation.
 		if !errors.HasType(err, (*roachpb.TransactionRetryWithProtoRefreshError)(nil)) &&
@@ -250,6 +258,7 @@ func makePostCommitPlan(
 		ActiveVersion:              deps.ClusterSettings().Version.ActiveVersion(ctx),
 		ExecutionPhase:             scop.PostCommitPhase,
 		SchemaChangerJobIDSupplier: func() jobspb.JobID { return jobID },
+		SkipPlannerSanityChecks:    true,
 	})
 }
 

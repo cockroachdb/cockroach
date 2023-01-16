@@ -141,7 +141,7 @@ func (d *jobExecutionDeps) WithTxnInJob(ctx context.Context, fn scrun.JobTxnFunc
 			return err
 		}
 		createdJobs = ed.CreatedJobs()
-		tableStatsToRefresh = ed.getTablesForStatsRefresh()
+		tableStatsToRefresh = ed.tableStatsToRefresh
 		return nil
 	})
 	if err != nil {

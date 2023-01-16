@@ -14,22 +14,18 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
 // ExecuteStage executes the provided ops. The ops must all be of the same type.
-func ExecuteStage(ctx context.Context, deps Dependencies, ops []scop.Op) error {
-	// It is perfectly valid to have empty stage after optimizations /
-	// transformations.
+func ExecuteStage(ctx context.Context, deps Dependencies, phase scop.Phase, ops []scop.Op) error {
 	if len(ops) == 0 {
-		log.Infof(ctx, "skipping execution, no operations in this stage")
 		return nil
 	}
 	typ := ops[0].Type()
 	switch typ {
 	case scop.MutationType:
-		return executeDescriptorMutationOps(ctx, deps, ops)
+		return executeMutationOps(ctx, deps, phase, ops)
 	case scop.BackfillType:
 		return executeBackfillOps(ctx, deps, ops)
 	case scop.ValidationType:

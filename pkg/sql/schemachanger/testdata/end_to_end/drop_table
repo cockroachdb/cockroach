@@ -27,25 +27,29 @@ write *eventpb.DropTable to event log:
     tag: DROP TABLE
     user: root
   tableName: db.sc.t
-## StatementPhase stage 1 of 1 with 1 MutationType op
-add synthetic descriptor #107:
+## StatementPhase stage 1 of 1 with 4 MutationType ops
+delete object namespace entry {104 106 t} -> 107
+upsert descriptor #107
   ...
-     formatVersion: 3
-     id: 107
-  -  modificationTime: {}
-  +  modificationTime:
-  +    wallTime: "1640995200000000001"
-     name: t
-     nextColumnId: 4
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  +  dropTime: <redacted>"
+     families:
+     - columnIds:
   ...
      replacementOf:
        time: {}
   +  state: DROP
      unexposedParentSchemaId: 106
-     version: "1"
+  -  version: "1"
+  +  version: "2"
+delete comment TableCommentType(objID: 107, subID: 0)
 # end StatementPhase
 # begin PreCommitPhase
-## PreCommitPhase stage 1 of 1 with 11 MutationType ops
+## PreCommitPhase stage 1 of 2 with 1 MutationType op
+undo all catalog changes within txn #1
+persist all catalog changes to storage
+## PreCommitPhase stage 2 of 2 with 11 MutationType ops
 delete object namespace entry {104 106 t} -> 107
 upsert descriptor #107
   ...
@@ -74,6 +78,7 @@ upsert descriptor #107
   -  version: "1"
   +  version: "2"
 delete comment TableCommentType(objID: 107, subID: 0)
+persist all catalog changes to storage
 create job #1 (non-cancelable: true): "DROP TABLE db.sc.t"
   descriptor IDs: [107]
 # end PreCommitPhase
@@ -107,6 +112,7 @@ upsert descriptor #107
      unexposedParentSchemaId: 106
   -  version: "2"
   +  version: "3"
+persist all catalog changes to storage
 create job #2 (non-cancelable: true): "GC for DROP TABLE db.sc.t"
   descriptor IDs: [107]
 update progress of schema change job #1: "all stages completed"

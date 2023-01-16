@@ -25,25 +25,47 @@ write *eventpb.DropTable to event log:
     tag: DROP TABLE
     user: root
   tableName: multi_region_test_db.public.table_regional_by_row
-## StatementPhase stage 1 of 1 with 1 MutationType op
-add synthetic descriptor #108:
+## StatementPhase stage 1 of 1 with 6 MutationType ops
+delete object namespace entry {104 105 table_regional_by_row} -> 108
+upsert descriptor #106
   ...
-     localityConfig:
-       regionalByRow: {}
-  -  modificationTime: {}
-  +  modificationTime:
-  +    wallTime: "1640995200000000001"
-     name: table_regional_by_row
-     nextColumnId: 3
+         withGrantOption: "2"
+       version: 2
+  -  referencingDescriptorIds:
+  -  - 108
+     regionConfig:
+       primaryRegion: us-east1
+       zoneConfigExtensions: {}
+  -  version: "2"
+  +  version: "3"
+upsert descriptor #107
+  ...
+         withGrantOption: "2"
+       version: 2
+  -  referencingDescriptorIds:
+  -  - 108
+  -  version: "2"
+  +  version: "3"
+upsert descriptor #108
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  +  dropTime: <redacted>"
+     families:
+     - columnIds:
   ...
      replacementOf:
        time: {}
   +  state: DROP
      unexposedParentSchemaId: 105
-     version: "1"
+  -  version: "1"
+  +  version: "2"
 # end StatementPhase
 # begin PreCommitPhase
-## PreCommitPhase stage 1 of 1 with 14 MutationType ops
+## PreCommitPhase stage 1 of 2 with 1 MutationType op
+undo all catalog changes within txn #1
+persist all catalog changes to storage
+## PreCommitPhase stage 2 of 2 with 14 MutationType ops
 delete object namespace entry {104 105 table_regional_by_row} -> 108
 upsert descriptor #106
    type:
@@ -107,6 +129,7 @@ upsert descriptor #108
      unexposedParentSchemaId: 105
   -  version: "1"
   +  version: "2"
+persist all catalog changes to storage
 create job #1 (non-cancelable: true): "DROP TABLE multi_region_test_db.public.table_regional_by_row"
   descriptor IDs: [106 107 108]
 # end PreCommitPhase
@@ -169,6 +192,7 @@ upsert descriptor #108
      unexposedParentSchemaId: 105
   -  version: "2"
   +  version: "3"
+persist all catalog changes to storage
 create job #2 (non-cancelable: true): "GC for DROP TABLE multi_region_test_db.public.table_regional_by_row"
   descriptor IDs: [108]
 update progress of schema change job #1: "all stages completed"
