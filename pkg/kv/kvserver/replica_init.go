@@ -229,6 +229,13 @@ func (r *Replica) loadRaftMuLockedReplicaMuLocked(desc *roachpb.RangeDescriptor)
 	)
 	r.assertStateRaftMuLockedReplicaMuRLocked(ctx, r.store.Engine())
 
+	// Initialize the propBuf's closed timestamp info from the loaded replica
+	// state. This prevents the replica from proposing commands with carrying a
+	// closed timestamp below what was previously closed. This is relevant after a
+	// restart, in case the clock went backwards since the node was previously
+	// stopped.
+	r.mu.proposalBuf.forwardClosedTimestampLocked(r.mu.state.RaftClosedTimestamp)
+
 	r.sideTransportClosedTimestamp.init(r.store.cfg.ClosedTimestampReceiver, desc.RangeID)
 
 	return nil
