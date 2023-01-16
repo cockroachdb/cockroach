@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
+	"github.com/stretchr/testify/require"
 )
 
 // TestTelemetryLogging verifies that telemetry events are logged to the telemetry log
@@ -578,7 +579,7 @@ func TestNoTelemetryLogOnTroubleshootMode(t *testing.T) {
 	db.Exec(t, "CREATE TABLE t();")
 
 	stubMaxEventFrequency := int64(1)
-	telemetryMaxEventFrequency.Override(context.Background(), &s.ClusterSettings().SV, stubMaxEventFrequency)
+	TelemetryMaxEventFrequency.Override(context.Background(), &s.ClusterSettings().SV, stubMaxEventFrequency)
 
 	/*
 		Testing Cases:
@@ -694,7 +695,7 @@ func TestTelemetryLogJoinTypesAndAlgorithms(t *testing.T) {
 		");")
 
 	stubMaxEventFrequency := int64(1000000)
-	telemetryMaxEventFrequency.Override(context.Background(), &s.ClusterSettings().SV, stubMaxEventFrequency)
+	TelemetryMaxEventFrequency.Override(context.Background(), &s.ClusterSettings().SV, stubMaxEventFrequency)
 
 	testData := []struct {
 		name                   string

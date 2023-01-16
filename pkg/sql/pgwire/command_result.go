@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -71,8 +72,12 @@ type commandResult struct {
 	// CommandComplete message.
 	cmdCompleteTag string
 
-	stmtType     tree.StatementReturnType
-	descOpt      sql.RowDescOpt
+	stmtType tree.StatementReturnType
+	descOpt  sql.RowDescOpt
+
+	// rowsAffected doesn't reflect the number of changed rows for bulk job
+	// (IMPORT, BACKUP and RESTORE). For these jobs, see the usages of
+	// log/logutil.LogJobCompletion().
 	rowsAffected int
 
 	// formatCodes describes the encoding of each column of result rows. It is nil
@@ -95,6 +100,11 @@ type commandResult struct {
 	// memory can be reused. It is also used to assert against use-after-free
 	// errors.
 	released bool
+
+	// bulkJobID stores id for bulk jobs (IMPORT, BACKUP, RESTORE),
+	// It's written in commandResult.AddRow() and only if the query is
+	// IMPORT, BACKUP or RESTORE.
+	bulkJobID uint64
 }
 
 // paramStatusUpdate is a status update to send to the client when a parameter is
@@ -212,12 +222,21 @@ func (r *commandResult) beforeAdd() error {
 	return nil
 }
 
+// JobIDColIdx is based on jobs.BulkJobExecutionResultHeader and
+// jobs.DetachedJobExecutionResultHeader.
+var JobIDColIdx int
+
 // AddRow is part of the sql.RestrictedCommandResult interface.
 func (r *commandResult) AddRow(ctx context.Context, row tree.Datums) error {
 	if err := r.beforeAdd(); err != nil {
 		return err
 	}
-	r.rowsAffected++
+	switch r.cmdCompleteTag {
+	case tree.ImportTag, tree.RestoreTag, tree.BackupTag:
+		r.bulkJobID = uint64(*row[JobIDColIdx].(*tree.DInt))
+	default:
+		r.rowsAffected++
+	}
 	return r.conn.bufferRow(ctx, row, r)
 }
 
@@ -226,7 +245,12 @@ func (r *commandResult) AddBatch(ctx context.Context, batch coldata.Batch) error
 	if err := r.beforeAdd(); err != nil {
 		return err
 	}
-	r.rowsAffected += batch.Length()
+	switch r.cmdCompleteTag {
+	case tree.ImportTag, tree.RestoreTag, tree.BackupTag:
+		r.bulkJobID = uint64(batch.ColVec(JobIDColIdx).Int64()[0])
+	default:
+		r.rowsAffected += batch.Length()
+	}
 	return r.conn.bufferBatch(ctx, batch, r)
 }
 
@@ -314,6 +338,11 @@ func (r *commandResult) ResetStmtType(stmt tree.Statement) {
 	r.assertNotReleased()
 	r.stmtType = stmt.StatementReturnType()
 	r.cmdCompleteTag = stmt.StatementTag()
+}
+
+// GetBulkJobID is part of the sql.RestrictedCommandResult interface.
+func (r *commandResult) GetBulkJobID() uint64 {
+	return r.bulkJobID
 }
 
 // release frees the commandResult and allows its memory to be reused.
@@ -594,4 +623,36 @@ func (r *limitedCommandResult) rewindAndClosePortal(
 	// up back on it.
 	r.conn.stmtBuf.Rewind(ctx, rewindTo)
 	return sql.ErrLimitedResultClosed
+}
+
+// Get the column index for job id based on the result header defined in
+// jobs.BulkJobExecutionResultHeader and jobs.DetachedJobExecutionResultHeader.
+func init() {
+	jobIDIdxInBulkJobExecutionResultHeader := -1
+	jobIDIdxInDetachedJobExecutionResultHeader := -1
+	for i, col := range jobs.BulkJobExecutionResultHeader {
+		if col.Name == "job_id" {
+			jobIDIdxInBulkJobExecutionResultHeader = i
+			break
+		}
+	}
+	if jobIDIdxInBulkJobExecutionResultHeader == -1 {
+		panic("cannot find the job id column in BulkJobExecutionResultHeader")
+	}
+
+	for i, col := range jobs.DetachedJobExecutionResultHeader {
+		if col.Name == "job_id" {
+			if i != jobIDIdxInBulkJobExecutionResultHeader {
+				panic("column index of job_id in DetachedJobExecutionResultHeader and" +
+					" BulkJobExecutionResultHeader should be the same")
+			} else {
+				jobIDIdxInDetachedJobExecutionResultHeader = i
+				break
+			}
+		}
+	}
+	if jobIDIdxInDetachedJobExecutionResultHeader == -1 {
+		panic("cannot find the job id column in DetachedJobExecutionResultHeader")
+	}
+	JobIDColIdx = jobIDIdxInBulkJobExecutionResultHeader
 }

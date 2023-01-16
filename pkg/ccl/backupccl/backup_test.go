@@ -8272,6 +8272,7 @@ func TestRestoreJobEventLogging(t *testing.T) {
 
 	sqlDB.Exec(t, `CREATE DATABASE r1`)
 	sqlDB.Exec(t, `CREATE TABLE r1.foo (id INT)`)
+	sqlDB.Exec(t, `INSERT INTO r1.foo VALUES (1), (2), (3)`)
 	sqlDB.Exec(t, `BACKUP DATABASE r1 TO 'nodelocal://0/eventlogging'`)
 	sqlDB.Exec(t, `DROP DATABASE r1`)
 
@@ -8284,8 +8285,12 @@ func TestRestoreJobEventLogging(t *testing.T) {
 		&unused)
 
 	expectedStatus := []string{string(jobs.StatusSucceeded), string(jobs.StatusRunning)}
-	jobstest.CheckEmittedEvents(t, expectedStatus, beforeRestore.UnixNano(), jobID, `"EventType":"restore"`,
-		"RESTORE")
+	expectedRecoveryEvent := eventpb.RecoveryEvent{
+		RecoveryType: restoreJobEventType,
+		NumRows:      int64(3),
+	}
+	jobstest.CheckEmittedEvents(t, expectedStatus, beforeRestore.UnixNano(), jobID, "restore",
+		"RESTORE", expectedRecoveryEvent)
 
 	sqlDB.Exec(t, `DROP DATABASE r1`)
 
@@ -8301,8 +8306,12 @@ func TestRestoreJobEventLogging(t *testing.T) {
 		string(jobs.StatusFailed), string(jobs.StatusReverting),
 		string(jobs.StatusRunning),
 	}
+	expectedRecoveryEvent = eventpb.RecoveryEvent{
+		RecoveryType: restoreJobEventType,
+		NumRows:      int64(0),
+	}
 	jobstest.CheckEmittedEvents(t, expectedStatus, beforeSecondRestore.UnixNano(), jobID,
-		`"EventType":"restore"`, "RESTORE")
+		"restore", "RESTORE", expectedRecoveryEvent)
 }
 
 func TestBackupOnlyPublicIndexes(t *testing.T) {
