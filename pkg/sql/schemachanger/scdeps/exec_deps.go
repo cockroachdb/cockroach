@@ -108,6 +108,7 @@ type txnDeps struct {
 	tableStatsToRefresh []descpb.ID
 	schemaChangerJobID  jobspb.JobID
 	schemaChangerJob    *jobs.Job
+	batch               *kv.Batch
 	kvTrace             bool
 	settings            *cluster.Settings
 }
@@ -125,7 +126,7 @@ func (d *txnDeps) UpdateSchemaChangeJob(
 
 var _ scexec.Catalog = (*txnDeps)(nil)
 
-// MustReadImmutableDescriptors implements the scmutationexec.CatalogReader interface.
+// MustReadImmutableDescriptors implements the scexec.Catalog interface.
 func (d *txnDeps) MustReadImmutableDescriptors(
 	ctx context.Context, ids ...descpb.ID,
 ) ([]catalog.Descriptor, error) {
@@ -176,74 +177,67 @@ func (d *txnDeps) MustReadMutableDescriptor(
 	return d.descsCollection.MutableByID(d.txn.KV()).Desc(ctx, id)
 }
 
-// AddSyntheticDescriptor is part of the
-// scmutationexec.SyntheticDescriptorStateUpdater interface.
-func (d *txnDeps) AddSyntheticDescriptor(desc catalog.Descriptor) {
-	d.descsCollection.AddSyntheticDescriptor(desc)
-}
-
-// NewCatalogChangeBatcher implements the scexec.Catalog interface.
-func (d *txnDeps) NewCatalogChangeBatcher() scexec.CatalogChangeBatcher {
-	return &catalogChangeBatcher{
-		txnDeps: d,
-		batch:   d.txn.KV().NewBatch(),
-	}
-}
-
-type catalogChangeBatcher struct {
-	*txnDeps
-	batch *kv.Batch
-}
-
-var _ scexec.CatalogChangeBatcher = (*catalogChangeBatcher)(nil)
-
-// CreateOrUpdateDescriptor implements the scexec.CatalogWriter interface.
-func (b *catalogChangeBatcher) CreateOrUpdateDescriptor(
+// CreateOrUpdateDescriptor implements the scexec.Catalog interface.
+func (d *txnDeps) CreateOrUpdateDescriptor(
 	ctx context.Context, desc catalog.MutableDescriptor,
 ) error {
-	return b.descsCollection.WriteDescToBatch(ctx, b.kvTrace, desc, b.batch)
+	return d.descsCollection.WriteDescToBatch(ctx, d.kvTrace, desc, d.getOrCreateBatch())
 }
 
-// DeleteName implements the scexec.CatalogWriter interface.
-func (b *catalogChangeBatcher) DeleteName(
-	ctx context.Context, nameInfo descpb.NameInfo, id descpb.ID,
-) error {
-	return b.descsCollection.DeleteNamespaceEntryToBatch(ctx, b.kvTrace, &nameInfo, b.batch)
+// DeleteName implements the scexec.Catalog interface.
+func (d *txnDeps) DeleteName(ctx context.Context, nameInfo descpb.NameInfo, id descpb.ID) error {
+	return d.descsCollection.DeleteNamespaceEntryToBatch(ctx, d.kvTrace, &nameInfo, d.getOrCreateBatch())
 }
 
-// DeleteDescriptor implements the scexec.CatalogChangeBatcher interface.
-func (b *catalogChangeBatcher) DeleteDescriptor(ctx context.Context, id descpb.ID) error {
-	return b.descsCollection.DeleteDescToBatch(ctx, b.kvTrace, id, b.batch)
+// DeleteDescriptor implements the scexec.Catalog interface.
+func (d *txnDeps) DeleteDescriptor(ctx context.Context, id descpb.ID) error {
+	return d.descsCollection.DeleteDescToBatch(ctx, d.kvTrace, id, d.getOrCreateBatch())
 }
 
-// DeleteZoneConfig implements the scexec.CatalogChangeBatcher interface.
-func (b *catalogChangeBatcher) DeleteZoneConfig(ctx context.Context, id descpb.ID) error {
-	return b.descsCollection.DeleteZoneConfigInBatch(ctx, b.kvTrace, b.batch, id)
+// DeleteZoneConfig implements the scexec.Catalog interface.
+func (d *txnDeps) DeleteZoneConfig(ctx context.Context, id descpb.ID) error {
+	return d.descsCollection.DeleteZoneConfigInBatch(ctx, d.kvTrace, d.getOrCreateBatch(), id)
 }
 
-// ValidateAndRun implements the scexec.CatalogChangeBatcher interface.
-func (b *catalogChangeBatcher) ValidateAndRun(ctx context.Context) error {
-	if err := b.descsCollection.ValidateUncommittedDescriptors(ctx, b.txn.KV()); err != nil {
-		return err
+// Validate implements the scexec.Catalog interface.
+func (d *txnDeps) Validate(ctx context.Context) error {
+	return d.descsCollection.ValidateUncommittedDescriptors(ctx, d.txn.KV())
+}
+
+// Run implements the scexec.Catalog interface.
+func (d *txnDeps) Run(ctx context.Context) error {
+	if d.batch == nil {
+		return nil
 	}
-	if err := b.txn.KV().Run(ctx, b.batch); err != nil {
-		return errors.Wrap(err, "writing descriptors")
+	if err := d.txn.KV().Run(ctx, d.batch); err != nil {
+		return errors.Wrap(err, "persisting catalog mutations")
 	}
+	d.batch = nil
 	return nil
 }
 
-// UpdateComment implements the scexec.CatalogChangeBatcher interface.
-func (b *catalogChangeBatcher) UpdateComment(
-	ctx context.Context, key catalogkeys.CommentKey, cmt string,
-) error {
-	return b.descsCollection.WriteCommentToBatch(ctx, b.kvTrace, b.batch, key, cmt)
+// Reset implements the scexec.Catalog interface.
+func (d *txnDeps) Reset(ctx context.Context) error {
+	d.descsCollection.ResetUncommitted(ctx)
+	d.batch = nil
+	return nil
 }
 
-// DeleteComment implements the scexec.CatalogChangeBatcher interface.
-func (b *catalogChangeBatcher) DeleteComment(
-	ctx context.Context, key catalogkeys.CommentKey,
-) error {
-	return b.descsCollection.DeleteCommentInBatch(ctx, b.kvTrace, b.batch, key)
+func (d *txnDeps) getOrCreateBatch() *kv.Batch {
+	if d.batch == nil {
+		d.batch = d.txn.KV().NewBatch()
+	}
+	return d.batch
+}
+
+// UpdateComment implements the scexec.Catalog interface.
+func (d *txnDeps) UpdateComment(ctx context.Context, key catalogkeys.CommentKey, cmt string) error {
+	return d.descsCollection.WriteCommentToBatch(ctx, d.kvTrace, d.getOrCreateBatch(), key, cmt)
+}
+
+// DeleteComment implements the scexec.Catalog interface.
+func (d *txnDeps) DeleteComment(ctx context.Context, key catalogkeys.CommentKey) error {
+	return d.descsCollection.DeleteCommentInBatch(ctx, d.kvTrace, d.getOrCreateBatch(), key)
 }
 
 var _ scexec.TransactionalJobRegistry = (*txnDeps)(nil)
@@ -411,11 +405,6 @@ func (d *execDeps) GetTestingKnobs() *scexec.TestingKnobs {
 // executing the current transaction.
 func (d *execDeps) AddTableForStatsRefresh(id descpb.ID) {
 	d.tableStatsToRefresh = append(d.tableStatsToRefresh, id)
-}
-
-// getTablesForStatsRefresh gets tables that need refresh for stats.
-func (d *execDeps) getTablesForStatsRefresh() []descpb.ID {
-	return d.tableStatsToRefresh
 }
 
 // StatsRefresher implements scexec.Dependencies

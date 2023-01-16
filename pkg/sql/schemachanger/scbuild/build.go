@@ -77,9 +77,25 @@ func Build(
 			// Explicitly-set targets have non-zero values in the target metadata.
 			continue
 		}
-		// Exclude targets which are not yet usable in the currently active
-		// cluster version.
 		if !version.IsActive(screl.MinVersion(e.element)) {
+			// Exclude targets which are not yet usable in the currently active
+			// cluster version.
+			continue
+		}
+		if e.previous == scpb.InvalidTarget {
+			// The target was newly-defined by this build.
+			if e.target.Status() == e.current {
+				// Discard it if it's already fulfilled.
+				continue
+			}
+		} else if e.previous.InitialStatus() == scpb.Status_ABSENT && e.target == scpb.ToAbsent {
+			// The target was defined as an adding target by a previous build.
+			// This build redefines it as a dropping target.
+			// As far as the schema change is concerned, this is a no-op, so we
+			// discard this target.
+			// TODO(postamar): this might be too crude, the target's absence might
+			//   cause necessary statement-phase ops to be omitted, leading to
+			//   incorrect in-txn behaviour.
 			continue
 		}
 		t := scpb.MakeTarget(e.target, e.element, &e.metadata)
@@ -119,11 +135,11 @@ type (
 )
 
 type elementState struct {
-	element      scpb.Element
-	current      scpb.Status
-	target       scpb.TargetStatus
-	metadata     scpb.TargetMetadata
-	withLogEvent bool
+	element          scpb.Element
+	current          scpb.Status
+	previous, target scpb.TargetStatus
+	metadata         scpb.TargetMetadata
+	withLogEvent     bool
 }
 
 // builderState is the backing struct for scbuildstmt.BuilderState interface.
@@ -193,7 +209,8 @@ func newBuilderState(ctx context.Context, d Dependencies, initial scpb.CurrentSt
 		bs.ensureDescriptor(screl.GetDescID(t.Element()))
 	}
 	for i, t := range initial.TargetState.Targets {
-		bs.Ensure(initial.Current[i], scpb.AsTargetStatus(t.TargetStatus), t.Element(), t.Metadata)
+		ts := scpb.AsTargetStatus(t.TargetStatus)
+		bs.ensure(t.Element(), initial.Current[i], ts, ts, t.Metadata)
 	}
 	return &bs
 }
@@ -256,16 +273,16 @@ var _ scbuildstmt.BuildCtx = buildCtx{}
 
 // Add implements the scbuildstmt.BuildCtx interface.
 func (b buildCtx) Add(element scpb.Element) {
-	b.Ensure(scpb.Status_UNKNOWN, scpb.ToPublic, element, b.TargetMetadata())
+	b.Ensure(element, scpb.ToPublic, b.TargetMetadata())
 }
 
 func (b buildCtx) AddTransient(element scpb.Element) {
-	b.Ensure(scpb.Status_UNKNOWN, scpb.Transient, element, b.TargetMetadata())
+	b.Ensure(element, scpb.Transient, b.TargetMetadata())
 }
 
 // Drop implements the scbuildstmt.BuildCtx interface.
 func (b buildCtx) Drop(element scpb.Element) {
-	b.Ensure(scpb.Status_UNKNOWN, scpb.ToAbsent, element, b.TargetMetadata())
+	b.Ensure(element, scpb.ToAbsent, b.TargetMetadata())
 }
 
 // WithNewSourceElementID implements the scbuildstmt.BuildCtx interface.

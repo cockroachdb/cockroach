@@ -136,8 +136,6 @@ ALTER TABLE defaultdb.t DROP COLUMN k, DROP COLUMN l
   {columnId: 1, indexId: 4, tableId: 104}
 - [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 4}, PUBLIC], ABSENT]
   {columnId: 2, indexId: 4, kind: STORED, tableId: 104}
-- [[IndexColumn:{DescID: 104, ColumnID: 4, IndexID: 4}, ABSENT], ABSENT]
-  {columnId: 4, indexId: 4, kind: STORED, ordinalInKind: 1, tableId: 104}
 - [[IndexData:{DescID: 104, IndexID: 4}, PUBLIC], ABSENT]
   {indexId: 4, tableId: 104}
 - [[TemporaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], ABSENT]
@@ -146,8 +144,6 @@ ALTER TABLE defaultdb.t DROP COLUMN k, DROP COLUMN l
   {columnId: 1, indexId: 5, tableId: 104}
 - [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 5}, TRANSIENT_ABSENT], ABSENT]
   {columnId: 2, indexId: 5, kind: STORED, tableId: 104}
-- [[IndexColumn:{DescID: 104, ColumnID: 4, IndexID: 5}, ABSENT], ABSENT]
-  {columnId: 4, indexId: 5, kind: STORED, ordinalInKind: 1, tableId: 104}
 - [[IndexData:{DescID: 104, IndexID: 5}, TRANSIENT_ABSENT], ABSENT]
   {indexId: 5, tableId: 104}
 - [[Namespace:{DescID: 105, Name: t_l_seq, ReferencedDescID: 100}, ABSENT], PUBLIC]

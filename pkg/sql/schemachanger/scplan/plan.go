@@ -49,9 +49,9 @@ type Params struct {
 	// job if one should exist.
 	SchemaChangerJobIDSupplier func() jobspb.JobID
 
-	// enforcePlannerSanityCheck, if true, strictly enforces sanity checks in the
+	// SkipPlannerSanityChecks, if false, strictly enforces sanity checks in the
 	// declarative schema changer planner.
-	EnforcePlannerSanityCheck bool
+	SkipPlannerSanityChecks bool
 }
 
 // Exported internal types
@@ -108,14 +108,35 @@ func MakePlan(ctx context.Context, initial scpb.CurrentState, params Params) (p 
 func makePlan(ctx context.Context, p *Plan) (err error) {
 	{
 		start := timeutil.Now()
+		var oldCurrent []scpb.Status
+		if p.Params.ExecutionPhase <= scop.PreCommitPhase {
+			// We need the full graph at this point because the plan may transition
+			// back to the initial statuses at pre-commit time.
+			oldCurrent = append(oldCurrent, p.CurrentState.Current...)
+			for i, t := range p.Targets {
+				p.CurrentState.Current[i] = scpb.AsTargetStatus(t.TargetStatus).InitialStatus()
+			}
+		}
 		p.Graph = buildGraph(ctx, p.Params.ActiveVersion, p.CurrentState)
+		// Restore the original current statuses.
+		if oldCurrent != nil {
+			copy(p.CurrentState.Current, oldCurrent)
+		}
+
 		if log.ExpensiveLogEnabled(ctx, 2) {
 			log.Infof(ctx, "graph generation took %v", timeutil.Since(start))
 		}
 	}
 	{
 		start := timeutil.Now()
-		p.Stages = scstage.BuildStages(ctx, p.CurrentState, p.Params.ExecutionPhase, p.Graph, p.Params.SchemaChangerJobIDSupplier, p.Params.EnforcePlannerSanityCheck)
+		p.Stages = scstage.BuildStages(
+			ctx,
+			p.CurrentState,
+			p.Params.ExecutionPhase,
+			p.Graph,
+			p.Params.SchemaChangerJobIDSupplier,
+			!p.Params.SkipPlannerSanityChecks,
+		)
 		if log.ExpensiveLogEnabled(ctx, 2) {
 			log.Infof(ctx, "stage generation took %v", timeutil.Since(start))
 		}

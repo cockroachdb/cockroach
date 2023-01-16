@@ -124,6 +124,10 @@ func TestPlanDataDriven(t *testing.T) {
 func validatePlan(t *testing.T, plan *scplan.Plan) {
 	stages := plan.Stages
 	for i, stage := range stages {
+		if stage.IsResetPreCommitStage() {
+			// Skip the reset stage.
+			continue
+		}
 		expected := make([]scstage.Stage, len(stages[i:]))
 		for j, s := range stages[i:] {
 			if s.Phase == stage.Phase {
