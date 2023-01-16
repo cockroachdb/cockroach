@@ -81,9 +81,7 @@ import { isSelectedColumn } from "src/columnsSelector/utils";
 import { StatementViewType } from "./statementPageTypes";
 import moment from "moment";
 import {
-  databasesRequest,
   InsertStmtDiagnosticRequest,
-  SqlExecutionRequest,
   StatementDiagnosticsReport,
 } from "../api";
 
@@ -139,6 +137,7 @@ export interface StatementsPageStateProps {
   search: string;
   isTenant?: UIConfigState["isTenant"];
   hasViewActivityRedactedRole?: UIConfigState["hasViewActivityRedactedRole"];
+  hasAdminRole?: UIConfigState["hasAdminRole"];
 }
 
 export interface StatementsPageState {
@@ -214,11 +213,6 @@ export class StatementsPage extends React.Component<
       this.changeTimeScale(ts);
     }
   }
-
-  static defaultProps: Partial<StatementsPageProps> = {
-    isTenant: false,
-    hasViewActivityRedactedRole: false,
-  };
 
   getStateFromHistory = (): Partial<StatementsPageState> => {
     const {
@@ -675,6 +669,7 @@ export class StatementsPage extends React.Component<
       search,
       isTenant,
       nodeRegions,
+      hasAdminRole,
     } = this.props;
 
     const nodes = Object.keys(nodeRegions)
@@ -730,14 +725,18 @@ export class StatementsPage extends React.Component<
               setTimeScale={this.changeTimeScale}
             />
           </PageConfigItem>
-          <PageConfigItem
-            className={`${commonStyles("separator")} ${cx("reset-btn-area")} `}
-          >
-            <ClearStats
-              resetSQLStats={this.resetSQLStats}
-              tooltipType="statement"
-            />
-          </PageConfigItem>
+          {hasAdminRole && (
+            <PageConfigItem
+              className={`${commonStyles("separator")} ${cx(
+                "reset-btn-area",
+              )} `}
+            >
+              <ClearStats
+                resetSQLStats={this.resetSQLStats}
+                tooltipType="statement"
+              />
+            </PageConfigItem>
+          )}
         </PageConfig>
         <div className={cx("table-area")}>
           <Loading

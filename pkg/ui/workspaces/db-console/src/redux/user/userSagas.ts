@@ -16,3 +16,8 @@ export const selectHasViewActivityRedactedRole = createSelector(
   cachedData =>
     cachedData.userSQLRoles.data?.roles?.includes("VIEWACTIVITYREDACTED"),
 );
+
+export const selectHasAdminRole = createSelector(
+  (state: AdminUIState) => state.cachedData,
+  cachedData => cachedData.userSQLRoles.data?.roles?.includes("ADMIN"),
+);

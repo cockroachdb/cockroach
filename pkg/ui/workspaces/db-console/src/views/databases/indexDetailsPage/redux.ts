@@ -26,12 +26,16 @@ import {
   generateTableID,
   refreshIndexStats,
   refreshNodes,
+  refreshUserSQLRoles,
 } from "src/redux/apiReducers";
 import { resetIndexUsageStatsAction } from "src/redux/indexUsageStats";
 import { longToInt } from "src/util/fixLong";
 import { cockroach } from "src/js/protos";
 import TableIndexStatsRequest = cockroach.server.serverpb.TableIndexStatsRequest;
-import { selectHasViewActivityRedactedRole } from "src/redux/user";
+import {
+  selectHasViewActivityRedactedRole,
+  selectHasAdminRole,
+} from "src/redux/user";
 import { nodeRegionsByIDSelector } from "src/redux/nodes";
 const { RecommendationType } = cockroach.sql.IndexRecommendation;
 
@@ -45,6 +49,7 @@ export const mapStateToProps = createSelector(
   state => state.cachedData.indexStats,
   state => selectHasViewActivityRedactedRole(state),
   state => nodeRegionsByIDSelector(state),
+  state => selectHasAdminRole(state),
   (
     database,
     table,
@@ -52,6 +57,7 @@ export const mapStateToProps = createSelector(
     indexStats,
     hasViewActivityRedactedRole,
     nodeRegions,
+    hasAdminRole,
   ): IndexDetailsPageData => {
     const stats = indexStats[generateTableID(database, table)];
     const details = stats?.data?.statistics.filter(
@@ -80,6 +86,7 @@ export const mapStateToProps = createSelector(
       indexName: index,
       isTenant: false,
       hasViewActivityRedactedRole: hasViewActivityRedactedRole,
+      hasAdminRole: hasAdminRole,
       nodeRegions: nodeRegions,
       details: {
         loading: !!stats?.inFlight,
@@ -104,4 +111,5 @@ export const mapDispatchToProps = {
   },
   resetIndexUsageStats: resetIndexUsageStatsAction,
   refreshNodes,
+  refreshUserSQLRoles,
 };
