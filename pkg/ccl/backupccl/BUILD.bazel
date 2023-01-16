@@ -133,6 +133,7 @@ go_library(
         "//pkg/util/json",
         "//pkg/util/log",
         "//pkg/util/log/eventpb",
+        "//pkg/util/log/logutil",
         "//pkg/util/metric",
         "//pkg/util/mon",
         "//pkg/util/protoutil",

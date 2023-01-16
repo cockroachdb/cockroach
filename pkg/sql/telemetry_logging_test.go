@@ -344,7 +344,7 @@ func TestTelemetryLogging(t *testing.T) {
 	}
 
 	for _, tc := range testData {
-		telemetryMaxEventFrequency.Override(context.Background(), &s.ClusterSettings().SV, tc.stubMaxEventFrequency)
+		TelemetryMaxEventFrequency.Override(context.Background(), &s.ClusterSettings().SV, tc.stubMaxEventFrequency)
 		if tc.enableInjectTxErrors {
 			_, err := db.DB.ExecContext(context.Background(), "SET inject_retry_errors_enabled = 'true'")
 			require.NoError(t, err)
@@ -623,7 +623,7 @@ func TestNoTelemetryLogOnTroubleshootMode(t *testing.T) {
 	db.Exec(t, "CREATE TABLE t();")
 
 	stubMaxEventFrequency := int64(1)
-	telemetryMaxEventFrequency.Override(context.Background(), &s.ClusterSettings().SV, stubMaxEventFrequency)
+	TelemetryMaxEventFrequency.Override(context.Background(), &s.ClusterSettings().SV, stubMaxEventFrequency)
 
 	/*
 		Testing Cases:
@@ -739,7 +739,7 @@ func TestTelemetryLogJoinTypesAndAlgorithms(t *testing.T) {
 		");")
 
 	stubMaxEventFrequency := int64(1000000)
-	telemetryMaxEventFrequency.Override(context.Background(), &s.ClusterSettings().SV, stubMaxEventFrequency)
+	TelemetryMaxEventFrequency.Override(context.Background(), &s.ClusterSettings().SV, stubMaxEventFrequency)
 
 	testData := []struct {
 		name                   string
