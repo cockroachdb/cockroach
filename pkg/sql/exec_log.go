@@ -135,8 +135,8 @@ var telemetryLoggingEnabled = settings.RegisterBoolSetting(
 type executorType int
 
 const (
-	executorTypeExec executorType = iota
-	executorTypeInternal
+	ExecutorTypeExec executorType = iota
+	ExecutorTypeInternal
 )
 
 // vLevel returns the vmodule log level at which logs from the given executor
@@ -145,8 +145,8 @@ func (s executorType) vLevel() log.Level { return log.Level(s) + 2 }
 
 var logLabels = []string{"exec", "exec-internal"}
 
-// logLabel returns the log label for the given executor type.
-func (s executorType) logLabel() string { return logLabels[s] }
+// LogLabel returns the log label for the given executor type.
+func (s executorType) LogLabel() string { return logLabels[s] }
 
 var sqlPerfLogger log.ChannelLogger = log.SqlPerf
 var sqlPerfInternalLogger log.ChannelLogger = log.SqlInternalPerf
@@ -158,6 +158,7 @@ func (p *planner) maybeLogStatement(
 	execType executorType,
 	isCopy bool,
 	numRetries, txnCounter, rows int,
+	bulkJobId uint64,
 	err error,
 	queryReceived time.Time,
 	hasAdminRoleCache *HasAdminRoleCache,
@@ -165,7 +166,10 @@ func (p *planner) maybeLogStatement(
 	stmtFingerprintID roachpb.StmtFingerprintID,
 	queryStats *topLevelQueryStats,
 ) {
-	p.maybeLogStatementInternal(ctx, execType, isCopy, numRetries, txnCounter, rows, err, queryReceived, hasAdminRoleCache, telemetryLoggingMetrics, stmtFingerprintID, queryStats)
+	p.maybeLogStatementInternal(ctx, execType, isCopy, numRetries, txnCounter,
+		rows, bulkJobId, err, queryReceived, hasAdminRoleCache,
+		telemetryLoggingMetrics, stmtFingerprintID, queryStats,
+	)
 }
 
 var errTxnIsNotOpen = errors.New("txn is already committed or rolled back")
@@ -175,6 +179,7 @@ func (p *planner) maybeLogStatementInternal(
 	execType executorType,
 	isCopy bool,
 	numRetries, txnCounter, rows int,
+	bulkJobId uint64,
 	err error,
 	startTime time.Time,
 	hasAdminRoleCache *HasAdminRoleCache,
@@ -186,7 +191,6 @@ func (p *planner) maybeLogStatementInternal(
 	// do not add a test "if p.execCfg == nil { do nothing }" !
 	// Instead, make the logger work. This is critical for auditing - we
 	// can't miss any statement.
-
 	logV := log.V(2)
 	logExecuteEnabled := logStatementsExecuteEnabled.Get(&p.execCfg.Settings.SV)
 	slowLogThreshold := slowQueryLogThreshold.Get(&p.execCfg.Settings.SV)
@@ -194,10 +198,10 @@ func (p *planner) maybeLogStatementInternal(
 	slowQueryLogEnabled := slowLogThreshold != 0
 	slowInternalQueryLogEnabled := slowInternalQueryLogEnabled.Get(&p.execCfg.Settings.SV)
 	auditEventsDetected := len(p.curPlan.auditEvents) != 0
-	maxEventFrequency := telemetryMaxEventFrequency.Get(&p.execCfg.Settings.SV)
+	maxEventFrequency := TelemetryMaxEventFrequency.Get(&p.execCfg.Settings.SV)
 
 	// We only consider non-internal SQL statements for telemetry logging.
-	telemetryLoggingEnabled := telemetryLoggingEnabled.Get(&p.execCfg.Settings.SV) && execType != executorTypeInternal
+	telemetryLoggingEnabled := telemetryLoggingEnabled.Get(&p.execCfg.Settings.SV) && execType != ExecutorTypeInternal
 
 	// If hasAdminRoleCache IsSet is true iff AdminAuditLog is enabled.
 	shouldLogToAdminAuditLog := hasAdminRoleCache.IsSet && hasAdminRoleCache.HasAdminRole
@@ -227,7 +231,7 @@ func (p *planner) maybeLogStatementInternal(
 		execErrStr = redact.Sprint(err)
 	}
 	// The type of execution context (execute/prepare).
-	lbl := execType.logLabel()
+	lbl := execType.LogLabel()
 
 	if unstructuredQueryLog.Get(&p.execCfg.Settings.SV) {
 		// This entire branch exists for the sake of backward
@@ -276,12 +280,12 @@ func (p *planner) maybeLogStatementInternal(
 
 			var logger log.ChannelLogger
 			// Non-internal queries are always logged to the slow query log.
-			if execType == executorTypeExec {
+			if execType == ExecutorTypeExec {
 				logger = sqlPerfLogger
 			}
 			// Internal queries that surpass the slow query log threshold should only
 			// be logged to the slow-internal-only log if the cluster setting dictates.
-			if execType == executorTypeInternal && slowInternalQueryLogEnabled {
+			if execType == ExecutorTypeInternal && slowInternalQueryLogEnabled {
 				logger = sqlPerfInternalLogger
 			}
 
@@ -307,7 +311,6 @@ func (p *planner) maybeLogStatementInternal(
 		// Note: the current statement, application name, etc, are
 		// automatically populated by the shared logic in event_log.go.
 		ExecMode:      lbl,
-		NumRows:       uint64(rows),
 		SQLSTATE:      sqlErrState,
 		ErrorText:     execErrStr,
 		Age:           age,
@@ -315,6 +318,16 @@ func (p *planner) maybeLogStatementInternal(
 		FullTableScan: p.curPlan.flags.IsSet(planFlagContainsFullTableScan),
 		FullIndexScan: p.curPlan.flags.IsSet(planFlagContainsFullIndexScan),
 		TxnCounter:    uint32(txnCounter),
+	}
+
+	// Note that for bulk job query (IMPORT, BACKUP and RESTORE), we don't
+	// print out the number of changed rows along with the sampled query event.
+	// We emit it when the job succeeds in a recovery_event.
+	switch p.stmt.AST.(type) {
+	case *tree.Import, *tree.Restore, *tree.Backup:
+		execDetails.BulkJobId = bulkJobId
+	default:
+		execDetails.NumRows = int64(rows)
 	}
 
 	if auditEventsDetected {
@@ -357,17 +370,17 @@ func (p *planner) maybeLogStatementInternal(
 	}
 
 	if slowQueryLogEnabled && (
-	// Did the user request pumping queries into the slow query log when
-	// the logical plan has full scans?
-	(slowLogFullTableScans && (execDetails.FullTableScan || execDetails.FullIndexScan)) ||
-		// Is the query actually slow?
-		queryDuration > slowLogThreshold) {
+		// Did the user request pumping queries into the slow query log when
+		// the logical plan has full scans?
+		(slowLogFullTableScans && (execDetails.FullTableScan || execDetails.FullIndexScan)) ||
+			// Is the query actually slow?
+			queryDuration > slowLogThreshold) {
 		switch {
-		case execType == executorTypeExec:
+		case execType == ExecutorTypeExec:
 			// Non-internal queries are always logged to the slow query log.
 			p.logEventsOnlyExternally(ctx, isCopy, &eventpb.SlowQuery{CommonSQLExecDetails: execDetails})
 
-		case execType == executorTypeInternal && slowInternalQueryLogEnabled:
+		case execType == ExecutorTypeInternal && slowInternalQueryLogEnabled:
 			// Internal queries that surpass the slow query log threshold should only
 			// be logged to the slow-internal-only log if the cluster setting dictates.
 			p.logEventsOnlyExternally(ctx, isCopy, &eventpb.SlowQueryInternal{CommonSQLExecDetails: execDetails})
