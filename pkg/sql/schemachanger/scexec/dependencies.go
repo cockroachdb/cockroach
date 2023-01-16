@@ -107,8 +107,17 @@ type CatalogChangeBatcher interface {
 	// DeleteDescriptor deletes a descriptor entry.
 	DeleteDescriptor(ctx context.Context, id descpb.ID) error
 
-	// ValidateAndRun executes the updates after validating the catalog changes.
-	ValidateAndRun(ctx context.Context) error
+	// Validate validates all the catalog changes performed by all
+	// CatalogChangeBatcher instances in this transaction.
+	Validate(ctx context.Context) error
+
+	// Run persists all the catalog changes performed by all
+	// CatalogChangeBatcher instances in this transaction.
+	Run(ctx context.Context) error
+
+	// Reset undoes all the catalog changes performed by all
+	// CatalogChangeBatcher instances in this transaction.
+	Reset(ctx context.Context) error
 
 	// DeleteZoneConfig deletes the zone config for a descriptor.
 	DeleteZoneConfig(ctx context.Context, id descpb.ID) error

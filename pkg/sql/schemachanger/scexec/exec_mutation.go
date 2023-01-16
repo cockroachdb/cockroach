@@ -35,7 +35,9 @@ import (
 // executeDescriptorMutationOps will visit each operation, accumulating
 // side effects into a mutationVisitorState object, and then writing out
 // those side effects using the provided deps.
-func executeDescriptorMutationOps(ctx context.Context, deps Dependencies, ops []scop.Op) error {
+func executeDescriptorMutationOps(
+	ctx context.Context, deps Dependencies, phase scop.Phase, ops []scop.Op,
+) error {
 
 	mvs := newMutationVisitorState(deps.Catalog())
 	v := scmutationexec.NewMutationVisitor(mvs, deps.Catalog(), deps.Clock(), deps.Catalog())
@@ -57,8 +59,9 @@ func executeDescriptorMutationOps(ctx context.Context, deps Dependencies, ops []
 		deps.TransactionalJobRegistry().MakeJobID,
 		!deps.TransactionalJobRegistry().UseLegacyGCJob(ctx),
 	)
-	if err := performBatchedCatalogWrites(
+	if err := performCatalogMutations(
 		ctx,
+		phase,
 		mvs.descriptorsToDelete,
 		dbZoneConfigsToDelete,
 		mvs.modifiedDescriptors,
@@ -68,18 +71,12 @@ func executeDescriptorMutationOps(ctx context.Context, deps Dependencies, ops []
 	); err != nil {
 		return err
 	}
-	if err := logEvents(ctx, mvs, deps.EventLogger()); err != nil {
-		return err
-	}
-	if err := updateDescriptorMetadata(
-		ctx, mvs, deps.DescriptorMetadataUpdater(ctx),
+	if err := performNonCatalogMutations(
+		ctx, mvs,
+		deps.EventLogger(),
+		deps.DescriptorMetadataUpdater(ctx),
+		deps.StatsRefresher(),
 	); err != nil {
-		return err
-	}
-	if err := refreshStatsForDescriptors(
-		ctx,
-		mvs,
-		deps.StatsRefresher()); err != nil {
 		return err
 	}
 	return manageJobs(
@@ -91,8 +88,11 @@ func executeDescriptorMutationOps(ctx context.Context, deps Dependencies, ops []
 	)
 }
 
-func performBatchedCatalogWrites(
+// performCatalogMutations performs the portions of the side effects of the
+// operations which are on the catalog.
+func performCatalogMutations(
 	ctx context.Context,
+	phase scop.Phase,
 	descriptorsToDelete catalog.DescriptorIDSet,
 	dbZoneConfigsToDelete catalog.DescriptorIDSet,
 	modifiedDescriptors nstree.IDMap,
@@ -150,8 +150,14 @@ func performBatchedCatalogWrites(
 			}
 		}
 	}
-
-	return b.ValidateAndRun(ctx)
+	if err := b.Validate(ctx); err != nil {
+		return err
+	}
+	if phase == scop.StatementPhase {
+		// Defer persisting the catalog changes to storage until pre-commit.
+		return nil
+	}
+	return b.Run(ctx)
 }
 
 func logEvents(ctx context.Context, mvs *mutationVisitorState, el EventLogger) error {
@@ -268,11 +274,18 @@ func eventLogEntriesForStatement(statementEvents []eventPayload) (logEntries []e
 	return logEntries
 }
 
-// updateDescriptorMetadata performs the portions of the side effects of the
-// operations delegated to the DescriptorMetadataUpdater.
-func updateDescriptorMetadata(
-	ctx context.Context, mvs *mutationVisitorState, m DescriptorMetadataUpdater,
+// performNonCatalogMutations performs the portions of the side effects of the
+// operations which are not catalog or job mutations.
+func performNonCatalogMutations(
+	ctx context.Context,
+	mvs *mutationVisitorState,
+	eventLogger EventLogger,
+	m DescriptorMetadataUpdater,
+	statsRefresher StatsRefreshQueue,
 ) error {
+	if err := logEvents(ctx, mvs, eventLogger); err != nil {
+		return err
+	}
 	for _, dbRoleSetting := range mvs.databaseRoleSettingsToDelete {
 		err := m.DeleteDatabaseRoleSettings(ctx, dbRoleSetting.dbID)
 		if err != nil {
@@ -284,15 +297,7 @@ func updateDescriptorMetadata(
 			return err
 		}
 	}
-	return nil
-}
-
-func refreshStatsForDescriptors(
-	_ context.Context, mvs *mutationVisitorState, statsRefresher StatsRefreshQueue,
-) error {
-	for descriptorID := range mvs.statsToRefresh {
-		statsRefresher.AddTableForStatsRefresh(descriptorID)
-	}
+	mvs.statsToRefresh.ForEach(statsRefresher.AddTableForStatsRefresh)
 	return nil
 }
 
@@ -385,7 +390,7 @@ type mutationVisitorState struct {
 	schemaChangerJobUpdates      map[jobspb.JobID]schemaChangerJobUpdate
 	eventsByStatement            map[uint32][]eventPayload
 	scheduleIDsToDelete          []int64
-	statsToRefresh               map[descpb.ID]struct{}
+	statsToRefresh               catalog.DescriptorIDSet
 	gcJobs
 }
 
@@ -438,7 +443,6 @@ func newMutationVisitorState(c Catalog) *mutationVisitorState {
 		c:                 c,
 		drainedNames:      make(map[descpb.ID][]descpb.NameInfo),
 		eventsByStatement: make(map[uint32][]eventPayload),
-		statsToRefresh:    make(map[descpb.ID]struct{}),
 	}
 }
 
@@ -515,7 +519,7 @@ func (mvs *mutationVisitorState) DeleteSchedule(scheduleID int64) {
 }
 
 func (mvs *mutationVisitorState) RefreshStats(descriptorID descpb.ID) {
-	mvs.statsToRefresh[descriptorID] = struct{}{}
+	mvs.statsToRefresh.Add(descriptorID)
 }
 
 func (mvs *mutationVisitorState) AddDrainedName(id descpb.ID, nameInfo descpb.NameInfo) {

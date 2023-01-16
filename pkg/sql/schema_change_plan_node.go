@@ -266,6 +266,9 @@ func (s *schemaChangePlanNode) startExec(params runParams) error {
 		s.plannedState = state
 	}
 
+	if scs.mutationOpSideEffects == nil {
+		scs.mutationOpSideEffects = p.Txn().NewBatch()
+	}
 	runDeps := newSchemaChangerTxnRunDependencies(
 		params.ctx,
 		p.SessionData(),
@@ -276,6 +279,7 @@ func (s *schemaChangePlanNode) startExec(params runParams) error {
 		p.EvalContext(),
 		p.ExtendedEvalContext().Tracing.KVTracingEnabled(),
 		scs.jobID,
+		scs.mutationOpSideEffects,
 		scs.stmts,
 	)
 	after, jobID, err := scrun.RunStatementPhase(
@@ -299,6 +303,7 @@ func newSchemaChangerTxnRunDependencies(
 	evalContext *eval.Context,
 	kvTrace bool,
 	schemaChangerJobID jobspb.JobID,
+	mutationOpSideEffects *kv.Batch,
 	stmts []string,
 ) scexec.Dependencies {
 	metaDataUpdater := descmetadata.NewMetadataUpdater(
@@ -332,6 +337,7 @@ func newSchemaChangerTxnRunDependencies(
 		execCfg.DeclarativeSchemaChangerTestingKnobs,
 		kvTrace,
 		schemaChangerJobID,
+		mutationOpSideEffects,
 		stmts,
 	)
 }

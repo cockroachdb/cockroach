@@ -159,6 +159,7 @@ upsert descriptor #106
   -  version: "2"
   +  version: "3"
      viewQuery: SELECT j FROM defaultdb.public.v2@idx
+persist all catalog changes to storage
 create job #1 (non-cancelable: true): "DROP INDEX defaultdb.public.v2@idx CASCADE"
   descriptor IDs: [105 106]
 # end PreCommitPhase
@@ -189,6 +190,7 @@ upsert descriptor #105
   -  version: "11"
   +  version: "12"
      viewQuery: SELECT i, j FROM defaultdb.public.t1
+persist all catalog changes to storage
 write *eventpb.DropIndex to event log: DROP INDEX ‹defaultdb›.‹public›.‹v2›@‹idx› CASCADE
 create job #2 (non-cancelable: true): "GC for DROP INDEX defaultdb.public.v2@idx CASCADE"
   descriptor IDs: [106]
@@ -252,6 +254,7 @@ upsert descriptor #105
   -  version: "12"
   +  version: "13"
      viewQuery: SELECT i, j FROM defaultdb.public.t1
+persist all catalog changes to storage
 write *eventpb.FinishSchemaChange to event log
 create job #3 (non-cancelable: true): "GC for DROP INDEX defaultdb.public.v2@idx CASCADE"
   descriptor IDs: [105]

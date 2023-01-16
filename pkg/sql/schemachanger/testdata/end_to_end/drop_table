@@ -67,6 +67,7 @@ upsert descriptor #107
   -  version: "1"
   +  version: "2"
 delete comment TableCommentType(objID: 107, subID: 0)
+persist all catalog changes to storage
 write *eventpb.CommentOnTable to event log: DROP TABLE ‹db›.‹sc›.‹t›
 create job #1 (non-cancelable: true): "DROP TABLE db.sc.t"
   descriptor IDs: [107]
@@ -101,6 +102,7 @@ upsert descriptor #107
      unexposedParentSchemaId: 106
   -  version: "2"
   +  version: "3"
+persist all catalog changes to storage
 write *eventpb.DropTable to event log: DROP TABLE ‹db›.‹sc›.‹t›
 create job #2 (non-cancelable: true): "GC for DROP TABLE db.sc.t"
   descriptor IDs: [107]

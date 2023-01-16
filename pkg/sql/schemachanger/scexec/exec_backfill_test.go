@@ -170,7 +170,7 @@ func TestExecBackfiller(t *testing.T) {
 				FlushFractionCompleted(gomock.Any()).
 				After(backfillCall)
 
-			require.NoError(t, scexec.ExecuteStage(ctx, deps, []scop.Op{
+			require.NoError(t, scexec.ExecuteStage(ctx, deps, scop.PostCommitPhase, []scop.Op{
 				&scop.BackfillIndex{
 					TableID:       tab.GetID(),
 					SourceIndexID: 1,
@@ -266,7 +266,7 @@ func TestExecBackfiller(t *testing.T) {
 					backfillIndexOp(fooID, 1, 2),
 				}
 				rand.Shuffle(len(ops), func(i, j int) { ops[i], ops[j] = ops[j], ops[i] })
-				require.NoError(t, scexec.ExecuteStage(ctx, deps, ops))
+				require.NoError(t, scexec.ExecuteStage(ctx, deps, scop.PostCommitPhase, ops))
 			},
 		},
 		{name: "simple merge", f: func(t *testing.T, tdb *sqlutils.SQLRunner) {
@@ -316,7 +316,7 @@ func TestExecBackfiller(t *testing.T) {
 				FlushFractionCompleted(gomock.Any()).
 				After(mergeCall)
 
-			require.NoError(t, scexec.ExecuteStage(ctx, deps, []scop.Op{
+			require.NoError(t, scexec.ExecuteStage(ctx, deps, scop.PostCommitPhase, []scop.Op{
 				&scop.MergeIndex{
 					TableID:           tab.GetID(),
 					TemporaryIndexID:  tmpIdx.GetID(),

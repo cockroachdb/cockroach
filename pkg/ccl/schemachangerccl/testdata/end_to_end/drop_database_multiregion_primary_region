@@ -216,6 +216,7 @@ upsert descriptor #108
      unexposedParentSchemaId: 105
   -  version: "1"
   +  version: "2"
+persist all catalog changes to storage
 delete role settings for database on #104
 create job #1 (non-cancelable: true): "DROP DATABASE multi_region_test_db CASCADE"
   descriptor IDs: [104 105 106 107 108]
@@ -254,6 +255,7 @@ delete descriptor #104
 delete descriptor #105
 delete descriptor #106
 delete descriptor #107
+persist all catalog changes to storage
 write *eventpb.DropDatabase to event log: DROP DATABASE ‹multi_region_test_db› CASCADE
 create job #2 (non-cancelable: true): "GC for DROP DATABASE multi_region_test_db CASCADE"
   descriptor IDs: [108 104]

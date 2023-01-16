@@ -217,6 +217,7 @@ upsert descriptor #106
      unexposedParentSchemaId: 105
   -  version: "1"
   +  version: "2"
+persist all catalog changes to storage
 create job #1 (non-cancelable: false): "ALTER TABLE db.public.tbl ADD COLUMN j INT8 UNIQUE DEFAULT CAST(date_part('year', now()) AS INT8)"
   descriptor IDs: [106]
 # end PreCommitPhase
@@ -247,6 +248,7 @@ upsert descriptor #106
      unexposedParentSchemaId: 105
   -  version: "2"
   +  version: "3"
+persist all catalog changes to storage
 update progress of schema change job #1: "PostCommitPhase stage 2 of 15 with 1 BackfillType op pending"
 commit transaction #3
 begin transaction #4
@@ -268,6 +270,7 @@ upsert descriptor #106
      unexposedParentSchemaId: 105
   -  version: "3"
   +  version: "4"
+persist all catalog changes to storage
 update progress of schema change job #1: "PostCommitPhase stage 4 of 15 with 1 MutationType op pending"
 commit transaction #5
 begin transaction #6
@@ -285,6 +288,7 @@ upsert descriptor #106
      unexposedParentSchemaId: 105
   -  version: "4"
   +  version: "5"
+persist all catalog changes to storage
 update progress of schema change job #1: "PostCommitPhase stage 5 of 15 with 1 BackfillType op pending"
 commit transaction #6
 begin transaction #7
@@ -306,6 +310,7 @@ upsert descriptor #106
      unexposedParentSchemaId: 105
   -  version: "5"
   +  version: "6"
+persist all catalog changes to storage
 update progress of schema change job #1: "PostCommitPhase stage 7 of 15 with 1 ValidationType op pending"
 commit transaction #8
 begin transaction #9
@@ -455,6 +460,7 @@ upsert descriptor #106
      unexposedParentSchemaId: 105
   -  version: "6"
   +  version: "7"
+persist all catalog changes to storage
 update progress of schema change job #1: "PostCommitPhase stage 9 of 15 with 1 MutationType op pending"
 commit transaction #10
 begin transaction #11
@@ -472,6 +478,7 @@ upsert descriptor #106
      unexposedParentSchemaId: 105
   -  version: "7"
   +  version: "8"
+persist all catalog changes to storage
 update progress of schema change job #1: "PostCommitPhase stage 10 of 15 with 1 BackfillType op pending"
 commit transaction #11
 begin transaction #12
@@ -493,6 +500,7 @@ upsert descriptor #106
      unexposedParentSchemaId: 105
   -  version: "8"
   +  version: "9"
+persist all catalog changes to storage
 update progress of schema change job #1: "PostCommitPhase stage 12 of 15 with 1 MutationType op pending"
 commit transaction #13
 begin transaction #14
@@ -510,6 +518,7 @@ upsert descriptor #106
      unexposedParentSchemaId: 105
   -  version: "9"
   +  version: "10"
+persist all catalog changes to storage
 update progress of schema change job #1: "PostCommitPhase stage 13 of 15 with 1 BackfillType op pending"
 commit transaction #14
 begin transaction #15
@@ -531,6 +540,7 @@ upsert descriptor #106
      unexposedParentSchemaId: 105
   -  version: "10"
   +  version: "11"
+persist all catalog changes to storage
 update progress of schema change job #1: "PostCommitPhase stage 15 of 15 with 1 ValidationType op pending"
 commit transaction #16
 begin transaction #17
@@ -658,6 +668,7 @@ upsert descriptor #106
      unexposedParentSchemaId: 105
   -  version: "11"
   +  version: "12"
+persist all catalog changes to storage
 write *eventpb.CreateIndex to event log: ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹j› INT8 UNIQUE DEFAULT CAST(date_part(‹'year'›, now()) AS INT8)
 adding table for stats refresh: 106
 update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 2 with 6 MutationType ops pending"
@@ -771,6 +782,7 @@ upsert descriptor #106
      unexposedParentSchemaId: 105
   -  version: "12"
   +  version: "13"
+persist all catalog changes to storage
 write *eventpb.FinishSchemaChange to event log
 create job #2 (non-cancelable: true): "GC for ALTER TABLE db.public.tbl ADD COLUMN j INT8 UNIQUE DEFAULT CAST(date_part('year', now()) AS INT8)"
   descriptor IDs: [106]

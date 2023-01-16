@@ -154,6 +154,7 @@ upsert descriptor #107
      unexposedParentSchemaId: 101
   -  version: "1"
   +  version: "2"
+persist all catalog changes to storage
 create job #1 (non-cancelable: false): "ALTER TABLE defaultdb.public.t ADD CHECK ((i > nextval('s')) OR (j::typ = 'a'))"
   descriptor IDs: [104 105 106 107]
 # end PreCommitPhase
@@ -271,6 +272,7 @@ upsert descriptor #107
      unexposedParentSchemaId: 101
   -  version: "2"
   +  version: "3"
+persist all catalog changes to storage
 update progress of schema change job #1: "all stages completed"
 set schema change job #1 to non-cancellable
 updated schema change job #1 descriptor IDs to []

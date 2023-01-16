@@ -144,6 +144,7 @@ upsert descriptor #106
      unexposedParentSchemaId: 101
   -  version: "1"
   +  version: "2"
+persist all catalog changes to storage
 create job #1 (non-cancelable: false): "CREATE INDEX idx1 ON defaultdb.public.t (v) WHERE (v = 'a')"
   descriptor IDs: [106]
 # end PreCommitPhase
@@ -167,6 +168,7 @@ upsert descriptor #106
      unexposedParentSchemaId: 101
   -  version: "2"
   +  version: "3"
+persist all catalog changes to storage
 update progress of schema change job #1: "PostCommitPhase stage 2 of 7 with 1 BackfillType op pending"
 commit transaction #3
 begin transaction #4
@@ -188,6 +190,7 @@ upsert descriptor #106
      unexposedParentSchemaId: 101
   -  version: "3"
   +  version: "4"
+persist all catalog changes to storage
 update progress of schema change job #1: "PostCommitPhase stage 4 of 7 with 1 MutationType op pending"
 commit transaction #5
 begin transaction #6
@@ -205,6 +208,7 @@ upsert descriptor #106
      unexposedParentSchemaId: 101
   -  version: "4"
   +  version: "5"
+persist all catalog changes to storage
 update progress of schema change job #1: "PostCommitPhase stage 5 of 7 with 1 BackfillType op pending"
 commit transaction #6
 begin transaction #7
@@ -226,6 +230,7 @@ upsert descriptor #106
      unexposedParentSchemaId: 101
   -  version: "5"
   +  version: "6"
+persist all catalog changes to storage
 update progress of schema change job #1: "PostCommitPhase stage 7 of 7 with 1 ValidationType op pending"
 commit transaction #8
 begin transaction #9
@@ -314,6 +319,7 @@ upsert descriptor #106
      unexposedParentSchemaId: 101
   -  version: "6"
   +  version: "7"
+persist all catalog changes to storage
 write *eventpb.CreateIndex to event log: CREATE INDEX ‹idx1› ON ‹defaultdb›.‹public›.‹t› (‹v›) WHERE (‹v› = ‹'a'›)
 adding table for stats refresh: 106
 update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 2 with 2 MutationType ops pending"
@@ -376,6 +382,7 @@ upsert descriptor #106
      unexposedParentSchemaId: 101
   -  version: "7"
   +  version: "8"
+persist all catalog changes to storage
 write *eventpb.FinishSchemaChange to event log
 create job #2 (non-cancelable: true): "GC for CREATE INDEX idx1 ON defaultdb.public.t (v) WHERE (v = 'a')"
   descriptor IDs: [106]

@@ -181,6 +181,7 @@ upsert descriptor #104
      unexposedParentSchemaId: 101
   -  version: "8"
   +  version: "9"
+persist all catalog changes to storage
 create job #1 (non-cancelable: true): "DROP INDEX defaultdb.public.t@idx CASCADE"
   descriptor IDs: [104]
 # end PreCommitPhase
@@ -249,6 +250,7 @@ upsert descriptor #104
      unexposedParentSchemaId: 101
   -  version: "9"
   +  version: "10"
+persist all catalog changes to storage
 write *eventpb.DropIndex to event log: DROP INDEX ‹defaultdb›.‹public›.‹t›@‹idx› CASCADE
 update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 2 with 3 MutationType ops pending"
 commit transaction #3
@@ -327,6 +329,7 @@ upsert descriptor #104
      unexposedParentSchemaId: 101
   -  version: "10"
   +  version: "11"
+persist all catalog changes to storage
 write *eventpb.FinishSchemaChange to event log
 create job #2 (non-cancelable: true): "GC for DROP INDEX defaultdb.public.t@idx CASCADE"
   descriptor IDs: [104]

@@ -3384,6 +3384,7 @@ func (ex *connExecutor) runPreCommitStages(ctx context.Context) error {
 		ex.planner.EvalContext(),
 		ex.planner.ExtendedEvalContext().Tracing.KVTracingEnabled(),
 		scs.jobID,
+		scs.mutationOpSideEffects,
 		scs.stmts,
 	)
 	ex.extraTxnState.descCollection.ResetSyntheticDescriptors()

@@ -70,6 +70,7 @@ upsert descriptor #106
   -  version: "1"
   +  state: DROP
   +  version: "2"
+persist all catalog changes to storage
 create job #1 (non-cancelable: true): "DROP SCHEMA db.sc"
   descriptor IDs: [104 106]
 # end PreCommitPhase
@@ -94,6 +95,7 @@ upsert descriptor #104
   -  version: "3"
   +  version: "4"
 delete descriptor #106
+persist all catalog changes to storage
 write *eventpb.DropSchema to event log: DROP SCHEMA ‹db›.‹sc›
 update progress of schema change job #1: "all stages completed"
 set schema change job #1 to non-cancellable

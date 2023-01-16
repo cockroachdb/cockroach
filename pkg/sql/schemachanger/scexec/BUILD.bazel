@@ -39,7 +39,6 @@ go_library(
         "//pkg/util/ctxgroup",
         "//pkg/util/hlc",
         "//pkg/util/intsets",
-        "//pkg/util/log",
         "//pkg/util/log/eventpb",
         "//pkg/util/log/logpb",
         "//pkg/util/timeutil",

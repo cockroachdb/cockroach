@@ -12,6 +12,7 @@ package sql
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 )
@@ -26,4 +27,12 @@ type SchemaChangerState struct {
 	// the bare minimum of statement information we need for testing, but in the
 	// future we may want sql.Statement or something.
 	stmts []string
+	// mutationOpSideEffects contains the KV operations to persist the side
+	// effects of schema change mutation operations. This batch is initialized at
+	// the start of each mutation transaction and is run at the end of the
+	// transaction before committing it.
+	// This laziness in persisting catalog mutations makes it possible to "undo"
+	// these and re-plan when an in-txn change to the set of schema change
+	// targets warrants it.
+	mutationOpSideEffects *kv.Batch
 }

@@ -115,6 +115,7 @@ upsert descriptor #106
      unexposedParentSchemaId: 105
   -  version: "1"
   +  version: "2"
+persist all catalog changes to storage
 create job #1 (non-cancelable: false): "ALTER TABLE db.public.tbl ADD COLUMN j INT8"
   descriptor IDs: [106]
 # end PreCommitPhase
@@ -144,6 +145,7 @@ upsert descriptor #106
      unexposedParentSchemaId: 105
   -  version: "2"
   +  version: "3"
+persist all catalog changes to storage
 update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 1 of 1 with 2 MutationType ops pending"
 set schema change job #1 to non-cancellable
 commit transaction #3
@@ -201,6 +203,7 @@ upsert descriptor #106
      unexposedParentSchemaId: 105
   -  version: "3"
   +  version: "4"
+persist all catalog changes to storage
 write *eventpb.FinishSchemaChange to event log
 adding table for stats refresh: 106
 update progress of schema change job #1: "all stages completed"

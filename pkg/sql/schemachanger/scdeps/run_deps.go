@@ -112,17 +112,18 @@ func (d *jobExecutionDeps) WithTxnInJob(ctx context.Context, fn scrun.JobTxnFunc
 		pl := d.job.Payload()
 		ed := &execDeps{
 			txnDeps: txnDeps{
-				txn:                txn,
-				codec:              d.codec,
-				descsCollection:    descriptors,
-				jobRegistry:        d.jobRegistry,
-				validator:          d.indexValidator,
-				eventLogger:        d.eventLoggerFactory(txn),
-				statsRefresher:     d.statsRefresher,
-				schemaChangerJobID: d.job.ID(),
-				schemaChangerJob:   d.job,
-				kvTrace:            d.kvTrace,
-				settings:           d.settings,
+				txn:                   txn,
+				codec:                 d.codec,
+				descsCollection:       descriptors,
+				jobRegistry:           d.jobRegistry,
+				validator:             d.indexValidator,
+				eventLogger:           d.eventLoggerFactory(txn),
+				statsRefresher:        d.statsRefresher,
+				schemaChangerJobID:    d.job.ID(),
+				schemaChangerJob:      d.job,
+				mutationOpSideEffects: txn.NewBatch(),
+				kvTrace:               d.kvTrace,
+				settings:              d.settings,
 			},
 			backfiller: d.backfiller,
 			merger:     d.merger,
@@ -145,7 +146,7 @@ func (d *jobExecutionDeps) WithTxnInJob(ctx context.Context, fn scrun.JobTxnFunc
 			return err
 		}
 		createdJobs = ed.CreatedJobs()
-		tableStatsToRefresh = ed.getTablesForStatsRefresh()
+		tableStatsToRefresh = ed.tableStatsToRefresh
 		return nil
 	})
 	if err != nil {

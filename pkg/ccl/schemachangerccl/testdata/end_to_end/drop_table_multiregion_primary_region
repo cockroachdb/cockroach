@@ -85,6 +85,7 @@ upsert descriptor #108
      unexposedParentSchemaId: 105
   -  version: "1"
   +  version: "2"
+persist all catalog changes to storage
 create job #1 (non-cancelable: true): "DROP TABLE multi_region_test_db.public.table_regional_by_table CASCADE"
   descriptor IDs: [106 108]
 # end PreCommitPhase
@@ -134,6 +135,7 @@ upsert descriptor #108
      unexposedParentSchemaId: 105
   -  version: "2"
   +  version: "3"
+persist all catalog changes to storage
 write *eventpb.DropTable to event log: DROP TABLE ‹multi_region_test_db›.‹public›.‹table_regional_by_table› CASCADE
 create job #2 (non-cancelable: true): "GC for DROP TABLE multi_region_test_db.public.table_regional_by_table CASCADE"
   descriptor IDs: [108]
