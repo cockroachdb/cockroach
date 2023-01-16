@@ -969,7 +969,7 @@ func (s *Server) newConnExecutor(
 		ctxHolder:                 ctxHolder{connCtx: ctx},
 		phaseTimes:                sessionphase.NewTimes(),
 		rng:                       rand.New(rand.NewSource(timeutil.Now().UnixNano())),
-		executorType:              executorTypeExec,
+		executorType:              ExecutorTypeExec,
 		hasCreatedTemporarySchema: false,
 		stmtDiagnosticsRecorder:   s.cfg.StmtDiagnosticsRecorder,
 		indexUsageStats:           s.indexUsageStats,
@@ -2496,20 +2496,7 @@ func (ex *connExecutor) execCopyIn(
 			ex.planner.CurrentDatabase(),
 		)
 		var stats topLevelQueryStats
-		ex.planner.maybeLogStatement(
-			ctx,
-			ex.executorType,
-			true, /* isCopy */
-			int(ex.state.mu.autoRetryCounter),
-			ex.extraTxnState.txnCounter,
-			numInsertedRows,
-			copyErr,
-			ex.statsCollector.PhaseTimes().GetSessionPhaseTime(sessionphase.SessionQueryReceived),
-			&ex.extraTxnState.hasAdminRoleCache,
-			ex.server.TelemetryLoggingMetrics,
-			stmtFingerprintID,
-			&stats,
-		)
+		ex.planner.maybeLogStatement(ctx, ex.executorType, true, int(ex.state.mu.autoRetryCounter), ex.extraTxnState.txnCounter, numInsertedRows, 0 /* bulkJobId */, copyErr, ex.statsCollector.PhaseTimes().GetSessionPhaseTime(sessionphase.SessionQueryReceived), &ex.extraTxnState.hasAdminRoleCache, ex.server.TelemetryLoggingMetrics, stmtFingerprintID, &stats)
 	}()
 
 	if isCopyToExternalStorage(cmd) {

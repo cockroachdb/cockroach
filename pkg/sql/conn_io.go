@@ -775,6 +775,10 @@ type RestrictedCommandResult interface {
 	// to this CommandResult, will be flushed immediately to the client.
 	// This is currently used for sinkless changefeeds.
 	DisableBuffering()
+
+	// GetBulkJobId returns the id of the job for the query, if the query is
+	// IMPORT, BACKUP or RESTORE.
+	GetBulkJobId() uint64
 }
 
 // DescribeResult represents the result of a Describe command (for either
@@ -983,6 +987,11 @@ func (r *streamingCommandResult) SetError(err error) {
 	// in execStmtInOpenState().
 }
 
+// GetEntryFromExtraInfo is part of the sql.RestrictedCommandResult interface.
+func (r *streamingCommandResult) GetBulkJobId() uint64 {
+	panic("unimplemented")
+}
+
 // Err is part of the RestrictedCommandResult interface.
 func (r *streamingCommandResult) Err() error {
 	return r.err
@@ -1031,3 +1040,12 @@ func (r *streamingCommandResult) SetPortalOutput(
 	context.Context, colinfo.ResultColumns, []pgwirebase.FormatCode,
 ) {
 }
+
+// BulkJobInfoKey are for keys stored in pgwire.commandResult.bulkJobInfo.
+type BulkJobInfoKey string
+
+const (
+	// BulkJobIdColName is the key for the job id for bulk jobs.
+	BulkJobIdColName BulkJobInfoKey = "BulkJobId"
+	NumRows          BulkJobInfoKey = "NumRows"
+)

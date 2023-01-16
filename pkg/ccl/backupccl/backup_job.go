@@ -51,6 +51,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logutil"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -817,7 +818,7 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 			telemetry.CountBucketed("backup.speed-mbps.inc.total", mbps)
 			telemetry.CountBucketed("backup.speed-mbps.inc.per-node", mbps/int64(numClusterNodes))
 		}
-		logJobCompletion(ctx, b.getTelemetryEventType(), b.job.ID(), true, nil)
+		logutil.LogJobCompletion(ctx, b.getTelemetryEventType(), b.job.ID(), true, nil, res.Rows)
 	}
 
 	return b.maybeNotifyScheduledJobCompletion(
@@ -1069,7 +1070,7 @@ func (b *backupResumer) OnFailOrCancel(
 	telemetry.Count("backup.total.failed")
 	telemetry.CountBucketed("backup.duration-sec.failed",
 		int64(timeutil.Since(timeutil.FromUnixMicros(b.job.Payload().StartedMicros)).Seconds()))
-	logJobCompletion(ctx, b.getTelemetryEventType(), b.job.ID(), false, jobErr)
+	logutil.LogJobCompletion(ctx, b.getTelemetryEventType(), b.job.ID(), false, jobErr, b.backupStats.Rows)
 
 	p := execCtx.(sql.JobExecContext)
 	cfg := p.ExecCfg()

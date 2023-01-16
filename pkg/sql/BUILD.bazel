@@ -688,7 +688,10 @@ go_test(
     deps = [
         "//pkg/base",
         "//pkg/build/bazel",
+        "//pkg/ccl/backupccl",
         "//pkg/ccl/kvccl/kvtenantccl",
+        "//pkg/cloud/impl:cloudimpl",
+        "//pkg/cloud/nodelocal",
         "//pkg/clusterversion",
         "//pkg/config",
         "//pkg/config/zonepb",
