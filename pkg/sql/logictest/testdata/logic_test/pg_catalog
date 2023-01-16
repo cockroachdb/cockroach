@@ -2367,6 +2367,15 @@ json_extract_path  25           2         3802        3802 25      {i,v}
 
 user root
 
+query TT rowsort
+SELECT DISTINCT proname, prokind FROM pg_catalog.pg_proc
+WHERE proname IN ('lag', 'abs', 'max')
+----
+abs  f
+lag  w
+max  a
+
+
 ## pg_catalog.pg_range
 query IIIIII colnames
 SELECT * from pg_catalog.pg_range
