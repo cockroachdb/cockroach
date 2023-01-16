@@ -119,3 +119,20 @@ export function sqlResultsAreEmpty(
     )
   );
 }
+
+/**
+ * errorMessage cleans the error message returned by the sqlApi,
+ * removing information not useful for the user.
+ * e.g. "$executing stmt 1: run-query-via-api: only users with either MODIFYCLUSTERSETTING
+ * or VIEWCLUSTERSETTING privileges are allowed to show cluster settings"
+ * became
+ * "only users with either MODIFYCLUSTERSETTING or VIEWCLUSTERSETTING privileges are allowed to show cluster settings"
+ * @param message
+ */
+export function sqlApiErrorMessage(message: string) {
+  const runQueryInfo = "run-query-via-api: ";
+  if (message.includes(runQueryInfo)) {
+    return message.split(runQueryInfo)[1];
+  }
+  return message;
+}

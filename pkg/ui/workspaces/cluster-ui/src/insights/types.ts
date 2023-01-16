@@ -41,6 +41,11 @@ export type TxnContentionInsightEvent = {
   execType: InsightExecEnum;
 };
 
+export type TxnContentionInsightEventResult = {
+  error: string;
+  transactions: TxnContentionInsightEvent[];
+};
+
 // Information about the blocking transaction and schema.
 export type BlockedContentionDetails = {
   collectionTimeStamp: Moment;

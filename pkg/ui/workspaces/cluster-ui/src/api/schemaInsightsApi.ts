@@ -180,7 +180,7 @@ const schemaInsightQueries: SchemaInsightQuery<SchemaInsightResponse>[] = [
 
 // getSchemaInsights makes requests over the SQL API and transforms the corresponding
 // SQL responses into schema insights.
-export function getSchemaInsights(): Promise<InsightRecommendation[]> {
+export async function getSchemaInsights(): Promise<InsightRecommendation[]> {
   const request: SqlExecutionRequest = {
     statements: schemaInsightQueries.map(insightQuery => ({
       sql: insightQuery.query,
@@ -188,21 +188,22 @@ export function getSchemaInsights(): Promise<InsightRecommendation[]> {
     execute: true,
     timeout: LONG_TIMEOUT,
   };
-  return executeInternalSql<SchemaInsightResponse>(request).then(result => {
-    const results: InsightRecommendation[] = [];
-    if (sqlResultsAreEmpty(result)) {
-      // No data.
-      return results;
-    }
-
-    result.execution.txn_results.map(txn_result => {
-      // Note: txn_result.statement values begin at 1, not 0.
-      const insightQuery: SchemaInsightQuery<SchemaInsightResponse> =
-        schemaInsightQueries[txn_result.statement - 1];
-      if (txn_result.rows) {
-        results.push(...insightQuery.toSchemaInsight(txn_result));
-      }
-    });
+  const result = await executeInternalSql<SchemaInsightResponse>(request);
+  if (result.error) {
+    throw new Error(result.error.message);
+  }
+  const results: InsightRecommendation[] = [];
+  if (sqlResultsAreEmpty(result)) {
+    // No data.
     return results;
+  }
+  result.execution.txn_results.map(txn_result => {
+    // Note: txn_result.statement values begin at 1, not 0.
+    const insightQuery: SchemaInsightQuery<SchemaInsightResponse> =
+      schemaInsightQueries[txn_result.statement - 1];
+    if (txn_result.rows) {
+      results.push(...insightQuery.toSchemaInsight(txn_result));
+    }
   });
+  return results;
 }

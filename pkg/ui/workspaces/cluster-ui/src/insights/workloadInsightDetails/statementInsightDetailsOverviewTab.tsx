@@ -44,15 +44,16 @@ const summaryCardStylesCx = classNames.bind(summaryCardStyles);
 export interface StatementInsightDetailsOverviewTabProps {
   insightEventDetails: FlattenedStmtInsightEvent;
   setTimeScale: (ts: TimeScale) => void;
+  hasAdminRole: boolean;
 }
 
 export const StatementInsightDetailsOverviewTab: React.FC<
   StatementInsightDetailsOverviewTabProps
-> = ({ insightEventDetails, setTimeScale }) => {
+> = ({ insightEventDetails, setTimeScale, hasAdminRole }) => {
   const isCockroachCloud = useContext(CockroachCloudContext);
 
   const insightsColumns = useMemo(
-    () => makeInsightsColumns(isCockroachCloud),
+    () => makeInsightsColumns(isCockroachCloud, hasAdminRole),
     [isCockroachCloud],
   );
 
