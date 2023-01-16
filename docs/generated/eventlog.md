@@ -437,6 +437,7 @@ is directly or indirectly a member of the admin role) executes a query.
 | `FullTableScan` | Whether the query contains a full table scan. | no |
 | `FullIndexScan` | Whether the query contains a full secondary index scan of a non-partial index. | no |
 | `TxnCounter` | The sequence number of the SQL transaction inside its session. | no |
+| `BulkJobId` | The job id for bulk job (IMPORT/BACKUP/RESTORE). | no |
 
 ### `sensitive_table_access`
 
@@ -471,6 +472,7 @@ a table marked as audited.
 | `FullTableScan` | Whether the query contains a full table scan. | no |
 | `FullIndexScan` | Whether the query contains a full secondary index scan of a non-partial index. | no |
 | `TxnCounter` | The sequence number of the SQL transaction inside its session. | no |
+| `BulkJobId` | The job id for bulk job (IMPORT/BACKUP/RESTORE). | no |
 
 ## SQL Execution Log
 
@@ -512,6 +514,7 @@ and the cluster setting `sql.trace.log_statement_execute` is set.
 | `FullTableScan` | Whether the query contains a full table scan. | no |
 | `FullIndexScan` | Whether the query contains a full secondary index scan of a non-partial index. | no |
 | `TxnCounter` | The sequence number of the SQL transaction inside its session. | no |
+| `BulkJobId` | The job id for bulk job (IMPORT/BACKUP/RESTORE). | no |
 
 ## SQL Logical Schema Changes
 
@@ -2304,6 +2307,7 @@ set to a non-zero value, AND
 | `FullTableScan` | Whether the query contains a full table scan. | no |
 | `FullIndexScan` | Whether the query contains a full secondary index scan of a non-partial index. | no |
 | `TxnCounter` | The sequence number of the SQL transaction inside its session. | no |
+| `BulkJobId` | The job id for bulk job (IMPORT/BACKUP/RESTORE). | no |
 
 ### `txn_rows_read_limit`
 
@@ -2423,6 +2427,7 @@ the "slow query" condition.
 | `FullTableScan` | Whether the query contains a full table scan. | no |
 | `FullIndexScan` | Whether the query contains a full secondary index scan of a non-partial index. | no |
 | `TxnCounter` | The sequence number of the SQL transaction inside its session. | no |
+| `BulkJobId` | The job id for bulk job (IMPORT/BACKUP/RESTORE). | no |
 
 ### `txn_rows_read_limit_internal`
 
@@ -2804,6 +2809,7 @@ logged whenever a BACKUP and RESTORE job completes or fails.
 | `OnPreviousRunning` | OnPreviousRunning describes the desired behavior if the previously scheduled BACKUP is still running. | no |
 | `IgnoreExistingBackup` | IgnoreExistingBackup is true iff the BACKUP schedule should still be created even if a backup is already present in its destination. | no |
 | `ApplicationName` | The application name for the session where recovery event was created. | no |
+| `NumRows` | NumRows is the number of rows successfully imported, backed up or restored. | no |
 
 
 #### Common fields
@@ -2891,6 +2897,7 @@ contains common SQL event/execution details.
 | `FullTableScan` | Whether the query contains a full table scan. | no |
 | `FullIndexScan` | Whether the query contains a full secondary index scan of a non-partial index. | no |
 | `TxnCounter` | The sequence number of the SQL transaction inside its session. | no |
+| `BulkJobId` | The job id for bulk job (IMPORT/BACKUP/RESTORE). | no |
 
 ### `schema_descriptor`
 

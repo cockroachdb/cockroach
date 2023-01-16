@@ -1160,20 +1160,16 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	var stmtFingerprintID appstatspb.StmtFingerprintID
 	var stats topLevelQueryStats
 	defer func() {
-		planner.maybeLogStatement(
-			ctx,
-			ex.executorType,
-			false, /* isCopy */
-			int(ex.state.mu.autoRetryCounter),
-			ex.extraTxnState.txnCounter,
-			res.RowsAffected(),
-			res.Err(),
-			ex.statsCollector.PhaseTimes().GetSessionPhaseTime(sessionphase.SessionQueryReceived),
-			&ex.extraTxnState.hasAdminRoleCache,
-			ex.server.TelemetryLoggingMetrics,
-			stmtFingerprintID,
-			&stats,
-		)
+		var bulkJobId uint64
+		// Note that for bulk job query (IMPORT, BACKUP and RESTORE), we don't
+		// use this numRows entry. We emit the number of changed rows when the job
+		// completes. (see the usages of logutil.LogJobCompletion()).
+		nonBulkJobNumRows := res.RowsAffected()
+		switch planner.stmt.AST.(type) {
+		case *tree.Import, *tree.Restore, *tree.Backup:
+			bulkJobId = res.GetBulkJobId()
+		}
+		planner.maybeLogStatement(ctx, ex.executorType, false, int(ex.state.mu.autoRetryCounter), ex.extraTxnState.txnCounter, nonBulkJobNumRows, bulkJobId, res.Err(), ex.statsCollector.PhaseTimes().GetSessionPhaseTime(sessionphase.SessionQueryReceived), &ex.extraTxnState.hasAdminRoleCache, ex.server.TelemetryLoggingMetrics, stmtFingerprintID, &stats)
 	}()
 
 	ex.statsCollector.PhaseTimes().SetSessionPhaseTime(sessionphase.PlannerEndLogicalPlan, timeutil.Now())
