@@ -10,6 +10,7 @@ package streamingest
 
 import (
 	"context"
+	"fmt"
 	"net/url"
 	"strings"
 	"testing"
@@ -25,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -35,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -381,4 +384,139 @@ func TestReplicationJobResumptionStartTime(t *testing.T) {
 	c.WaitUntilHighWatermark(srcTime, jobspb.JobID(replicationJobID))
 	c.Cutover(producerJobID, replicationJobID, srcTime.GoTime())
 	jobutils.WaitForJobToSucceed(t, c.DestSysSQL, jobspb.JobID(replicationJobID))
+}
+
+func makeTableSpan(codec keys.SQLCodec, tableID uint32) roachpb.Span {
+	k := codec.TablePrefix(tableID)
+	return roachpb.Span{Key: k, EndKey: k.PrefixEnd()}
+}
+
+func TestCutoverFractionProgressed(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	respRecvd := make(chan struct{})
+	continueRevert := make(chan struct{})
+	defer close(continueRevert)
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			Store: &kvserver.StoreTestingKnobs{
+				TestingResponseFilter: func(ctx context.Context, ba *roachpb.BatchRequest, br *roachpb.BatchResponse) *roachpb.Error {
+					for _, ru := range br.Responses {
+						switch ru.GetInner().(type) {
+						case *roachpb.RevertRangeResponse:
+							respRecvd <- struct{}{}
+							<-continueRevert
+						}
+					}
+					return nil
+				},
+			},
+			Streaming: &sql.StreamingTestingKnobs{
+				OverrideRevertRangeBatchSize: 1,
+			},
+		},
+		DisableDefaultTestTenant: true,
+	})
+	defer s.Stopper().Stop(ctx)
+
+	_, err := sqlDB.Exec(`CREATE TABLE foo(id) AS SELECT generate_series(1, 10)`)
+	require.NoError(t, err)
+
+	cutover := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
+
+	// Insert some revisions which we can revert to a timestamp before the update.
+	_, err = sqlDB.Exec(`UPDATE foo SET id = id + 1`)
+	require.NoError(t, err)
+
+	// Split every other row into its own range. Progress updates are on a
+	// per-range basis so we need >1 range to see the fraction progress.
+	_, err = sqlDB.Exec(`ALTER TABLE foo SPLIT AT (SELECT rowid FROM foo WHERE rowid % 2 = 0)`)
+	require.NoError(t, err)
+
+	var nRanges int
+	require.NoError(t, sqlDB.QueryRow(
+		`SELECT count(*) FROM [SHOW RANGES FROM TABLE foo]`).Scan(&nRanges))
+
+	require.Equal(t, nRanges, 6)
+	var id int
+	err = sqlDB.QueryRow(`SELECT id FROM system.namespace WHERE name = 'foo'`).Scan(&id)
+	require.NoError(t, err)
+
+	// Create a mock replication job with the `foo` table span so that on cut over
+	// we can revert the table's ranges.
+	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
+	jobExecCtx := &sql.FakeJobExecContext{ExecutorConfig: &execCfg}
+	mockReplicationJobDetails := jobspb.StreamIngestionDetails{
+		Span: makeTableSpan(execCfg.Codec, uint32(id)),
+	}
+	mockReplicationJobRecord := jobs.Record{
+		Details: mockReplicationJobDetails,
+		Progress: jobspb.StreamIngestionProgress{
+			CutoverTime: cutover,
+		},
+		Username: username.TestUserName(),
+	}
+	registry := execCfg.JobRegistry
+	jobID := registry.MakeJobID()
+	replicationJob, err := registry.CreateJobWithTxn(ctx, mockReplicationJobRecord, jobID, nil)
+	require.NoError(t, err)
+	require.NoError(t, replicationJob.Update(ctx, nil, func(txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+		return jobs.UpdateHighwaterProgressed(cutover, md, ju)
+	}))
+
+	g := ctxgroup.WithContext(ctx)
+	g.GoCtx(func(ctx context.Context) error {
+		defer close(respRecvd)
+		revert, err := maybeRevertToCutoverTimestamp(ctx, jobExecCtx, jobID)
+		require.NoError(t, err)
+		require.True(t, revert)
+		return nil
+	})
+
+	loadProgress := func() jobspb.Progress {
+		j, err := execCfg.JobRegistry.LoadJob(ctx, jobID)
+		require.NoError(t, err)
+		return j.Progress()
+	}
+	progressMap := map[string]bool{
+		"0.00": false,
+		"0.17": false,
+		"0.33": false,
+		"0.50": false,
+		"0.67": false,
+		"0.83": false,
+	}
+	g.GoCtx(func(ctx context.Context) error {
+		for {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case _, ok := <-respRecvd:
+				if !ok {
+					return nil
+				}
+				sip := loadProgress()
+				curProgress := sip.GetFractionCompleted()
+				s := fmt.Sprintf("%.2f", curProgress)
+				if _, ok := progressMap[s]; !ok {
+					t.Fatalf("unexpected progress fraction %s", s)
+				}
+				progressMap[s] = true
+				continueRevert <- struct{}{}
+			}
+		}
+	})
+	require.NoError(t, g.Wait())
+	sip := loadProgress()
+	require.Equal(t, sip.GetFractionCompleted(), float32(1))
+
+	// Ensure we have hit all our expected progress fractions.
+	for k, v := range progressMap {
+		if !v {
+			t.Fatalf("failed to see progress fraction %s", k)
+		}
+	}
 }

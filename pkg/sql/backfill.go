@@ -843,11 +843,11 @@ func getJobIDForMutationWithDescriptor(
 		"job not found for table id %d, mutation %d", tableDesc.GetID(), mutationID)
 }
 
-// numRangesInSpans returns the number of ranges that cover a set of spans.
+// NumRangesInSpans returns the number of ranges that cover a set of spans.
 //
-// It operates entirely on the current goroutine and is thus able to
-// reuse an existing kv.Txn safely.
-func numRangesInSpans(
+// It operates entirely on the current goroutine and is thus able to reuse an
+// existing kv.Txn safely.
+func NumRangesInSpans(
 	ctx context.Context, db *kv.DB, distSQLPlanner *DistSQLPlanner, spans []roachpb.Span,
 ) (int, error) {
 	txn := db.NewTxn(ctx, "num-ranges-in-spans")
@@ -1099,7 +1099,7 @@ func (sc *SchemaChanger) distIndexBackfill(
 		if updatedTodoSpans == nil {
 			return nil
 		}
-		nRanges, err := numRangesInSpans(ctx, sc.db, sc.distSQLPlanner, updatedTodoSpans)
+		nRanges, err := NumRangesInSpans(ctx, sc.db, sc.distSQLPlanner, updatedTodoSpans)
 		if err != nil {
 			return err
 		}
@@ -1252,7 +1252,7 @@ func (sc *SchemaChanger) distColumnBackfill(
 		// schema change state machine or from a previous backfill attempt,
 		// we scale that fraction of ranges completed by the remaining fraction
 		// of the job's progress bar.
-		nRanges, err := numRangesInSpans(ctx, sc.db, sc.distSQLPlanner, todoSpans)
+		nRanges, err := NumRangesInSpans(ctx, sc.db, sc.distSQLPlanner, todoSpans)
 		if err != nil {
 			return err
 		}
@@ -2889,7 +2889,7 @@ func (sc *SchemaChanger) distIndexMerge(
 	// TODO(rui): these can be initialized along with other new schema changer dependencies.
 	planner := NewIndexBackfillerMergePlanner(sc.execCfg)
 	rc := func(ctx context.Context, spans []roachpb.Span) (int, error) {
-		return numRangesInSpans(ctx, sc.db, sc.distSQLPlanner, spans)
+		return NumRangesInSpans(ctx, sc.db, sc.distSQLPlanner, spans)
 	}
 	tracker := NewIndexMergeTracker(progress, sc.job, rc, fractionScaler)
 	periodicFlusher := newPeriodicProgressFlusher(sc.settings)

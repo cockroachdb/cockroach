@@ -131,6 +131,7 @@ go_test(
         "//pkg/testutils/storageutils",
         "//pkg/testutils/testcluster",
         "//pkg/upgrade/upgradebase",
+        "//pkg/util/ctxgroup",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
         "//pkg/util/limit",
