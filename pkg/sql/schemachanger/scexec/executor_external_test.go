@@ -139,7 +139,7 @@ CREATE TABLE db.t (
 			_, orig, err := descs.PrefixAndTable(ctx, txn.Descriptors().ByName(txn.KV()).Get(), &tn)
 			require.NoError(t, err)
 			require.Equal(t, c.orig().TableDesc(), orig.TableDesc())
-			require.NoError(t, scexec.ExecuteStage(ctx, exDeps, c.ops()))
+			require.NoError(t, scexec.ExecuteStage(ctx, exDeps, scop.PostCommitPhase, c.ops()))
 			_, after, err := descs.PrefixAndTable(ctx, txn.Descriptors().ByName(txn.KV()).Get(), &tn)
 			require.NoError(t, err)
 			require.Equal(t, c.exp().TableDesc(), after.TableDesc())
@@ -308,7 +308,7 @@ func TestSchemaChanger(t *testing.T) {
 			stages := sc.StagesForCurrentPhase()
 			for _, s := range stages {
 				exDeps := ti.newExecDeps(txn)
-				require.NoError(t, sc.DecorateErrorWithPlanDetails(scexec.ExecuteStage(ctx, exDeps, s.Ops())))
+				require.NoError(t, sc.DecorateErrorWithPlanDetails(scexec.ExecuteStage(ctx, exDeps, scop.PostCommitPhase, s.Ops())))
 				cs = scpb.CurrentState{TargetState: initial.TargetState, Current: s.After}
 			}
 			return nil
@@ -318,7 +318,7 @@ func TestSchemaChanger(t *testing.T) {
 			sc := sctestutils.MakePlan(t, cs, scop.PostCommitPhase)
 			for _, s := range sc.Stages {
 				exDeps := ti.newExecDeps(txn)
-				require.NoError(t, sc.DecorateErrorWithPlanDetails(scexec.ExecuteStage(ctx, exDeps, s.Ops())))
+				require.NoError(t, sc.DecorateErrorWithPlanDetails(scexec.ExecuteStage(ctx, exDeps, scop.PostCommitPhase, s.Ops())))
 				after = scpb.CurrentState{TargetState: cs.TargetState, Current: s.After}
 			}
 			return nil
@@ -350,7 +350,7 @@ func TestSchemaChanger(t *testing.T) {
 					sc := sctestutils.MakePlan(t, initial, scop.PreCommitPhase)
 					for _, s := range sc.StagesForCurrentPhase() {
 						exDeps := ti.newExecDeps(txn)
-						require.NoError(t, sc.DecorateErrorWithPlanDetails(scexec.ExecuteStage(ctx, exDeps, s.Ops())))
+						require.NoError(t, sc.DecorateErrorWithPlanDetails(scexec.ExecuteStage(ctx, exDeps, scop.PostCommitPhase, s.Ops())))
 						cs = scpb.CurrentState{TargetState: initial.TargetState, Current: s.After}
 					}
 				}
@@ -361,7 +361,7 @@ func TestSchemaChanger(t *testing.T) {
 			sc := sctestutils.MakePlan(t, cs, scop.PostCommitPhase)
 			for _, s := range sc.Stages {
 				exDeps := ti.newExecDeps(txn)
-				require.NoError(t, sc.DecorateErrorWithPlanDetails(scexec.ExecuteStage(ctx, exDeps, s.Ops())))
+				require.NoError(t, sc.DecorateErrorWithPlanDetails(scexec.ExecuteStage(ctx, exDeps, scop.PostCommitPhase, s.Ops())))
 			}
 			return nil
 		}))

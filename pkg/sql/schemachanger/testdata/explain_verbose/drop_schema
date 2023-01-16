@@ -11,33 +11,19 @@ EXPLAIN (ddl, verbose) DROP SCHEMA db.sc;
 │   │
 │   └── • Stage 1 of 1 in StatementPhase
 │       │
-│       ├── • 1 element transitioning toward ABSENT
-│       │   │
-│       │   └── • Schema:{DescID: 106}
-│       │         PUBLIC → TXN_DROPPED
-│       │
-│       └── • 1 Mutation operation
-│           │
-│           └── • MarkDescriptorAsSyntheticallyDropped
-│                 DescriptorID: 106
-│
-├── • PreCommitPhase
-│   │
-│   └── • Stage 1 of 1 in PreCommitPhase
-│       │
 │       ├── • 6 elements transitioning toward ABSENT
 │       │   │
 │       │   ├── • Namespace:{DescID: 106, Name: sc, ReferencedDescID: 104}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
 │       │   │   └── • Precedence dependency from DROPPED Schema:{DescID: 106}
-│       │   │         rule: "descriptor drop right before dependent element removal"
+│       │   │         rule: "descriptor dropped before dependent element removal"
 │       │   │
 │       │   ├── • Owner:{DescID: 106}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
 │       │   │   ├── • Precedence dependency from DROPPED Schema:{DescID: 106}
-│       │   │   │     rule: "descriptor drop right before dependent element removal"
+│       │   │   │     rule: "descriptor dropped before dependent element removal"
 │       │   │   │
 │       │   │   └── • skip PUBLIC → ABSENT operations
 │       │   │         rule: "skip element removal ops on descriptor drop"
@@ -46,7 +32,7 @@ EXPLAIN (ddl, verbose) DROP SCHEMA db.sc;
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
 │       │   │   ├── • Precedence dependency from DROPPED Schema:{DescID: 106}
-│       │   │   │     rule: "descriptor drop right before dependent element removal"
+│       │   │   │     rule: "descriptor dropped before dependent element removal"
 │       │   │   │
 │       │   │   └── • skip PUBLIC → ABSENT operations
 │       │   │         rule: "skip element removal ops on descriptor drop"
@@ -55,22 +41,110 @@ EXPLAIN (ddl, verbose) DROP SCHEMA db.sc;
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
 │       │   │   ├── • Precedence dependency from DROPPED Schema:{DescID: 106}
-│       │   │   │     rule: "descriptor drop right before dependent element removal"
+│       │   │   │     rule: "descriptor dropped before dependent element removal"
 │       │   │   │
 │       │   │   └── • skip PUBLIC → ABSENT operations
 │       │   │         rule: "skip element removal ops on descriptor drop"
 │       │   │
 │       │   ├── • Schema:{DescID: 106}
-│       │   │   │ TXN_DROPPED → DROPPED
-│       │   │   │
-│       │   │   └── • PreviousStagePrecedence dependency from TXN_DROPPED Schema:{DescID: 106}
-│       │   │         rule: "descriptor TXN_DROPPED before DROPPED"
+│       │   │     PUBLIC → DROPPED
 │       │   │
 │       │   └── • SchemaParent:{DescID: 106, ReferencedDescID: 104}
 │       │       │ PUBLIC → ABSENT
 │       │       │
 │       │       └── • Precedence dependency from DROPPED Schema:{DescID: 106}
-│       │             rule: "descriptor drop right before dependent element removal"
+│       │             rule: "descriptor dropped before dependent element removal"
+│       │
+│       └── • 3 Mutation operations
+│           │
+│           ├── • MarkDescriptorAsDropped
+│           │     DescriptorID: 106
+│           │
+│           ├── • RemoveSchemaParent
+│           │     Parent:
+│           │       ParentDatabaseID: 104
+│           │       SchemaID: 106
+│           │
+│           └── • DrainDescriptorName
+│                 Namespace:
+│                   DatabaseID: 104
+│                   DescriptorID: 106
+│                   Name: sc
+│
+├── • PreCommitPhase
+│   │
+│   ├── • Stage 1 of 2 in PreCommitPhase
+│   │   │
+│   │   ├── • 6 elements transitioning toward ABSENT
+│   │   │   │
+│   │   │   ├── • Namespace:{DescID: 106, Name: sc, ReferencedDescID: 104}
+│   │   │   │     ABSENT → PUBLIC
+│   │   │   │
+│   │   │   ├── • Owner:{DescID: 106}
+│   │   │   │     ABSENT → PUBLIC
+│   │   │   │
+│   │   │   ├── • UserPrivileges:{DescID: 106, Name: admin}
+│   │   │   │     ABSENT → PUBLIC
+│   │   │   │
+│   │   │   ├── • UserPrivileges:{DescID: 106, Name: root}
+│   │   │   │     ABSENT → PUBLIC
+│   │   │   │
+│   │   │   ├── • Schema:{DescID: 106}
+│   │   │   │     DROPPED → PUBLIC
+│   │   │   │
+│   │   │   └── • SchemaParent:{DescID: 106, ReferencedDescID: 104}
+│   │   │         ABSENT → PUBLIC
+│   │   │
+│   │   └── • 1 Mutation operation
+│   │       │
+│   │       └── • UndoAllInTxnImmediateMutationOpSideEffects
+│   │             {}
+│   │
+│   └── • Stage 2 of 2 in PreCommitPhase
+│       │
+│       ├── • 6 elements transitioning toward ABSENT
+│       │   │
+│       │   ├── • Namespace:{DescID: 106, Name: sc, ReferencedDescID: 104}
+│       │   │   │ PUBLIC → ABSENT
+│       │   │   │
+│       │   │   └── • Precedence dependency from DROPPED Schema:{DescID: 106}
+│       │   │         rule: "descriptor dropped before dependent element removal"
+│       │   │
+│       │   ├── • Owner:{DescID: 106}
+│       │   │   │ PUBLIC → ABSENT
+│       │   │   │
+│       │   │   ├── • Precedence dependency from DROPPED Schema:{DescID: 106}
+│       │   │   │     rule: "descriptor dropped before dependent element removal"
+│       │   │   │
+│       │   │   └── • skip PUBLIC → ABSENT operations
+│       │   │         rule: "skip element removal ops on descriptor drop"
+│       │   │
+│       │   ├── • UserPrivileges:{DescID: 106, Name: admin}
+│       │   │   │ PUBLIC → ABSENT
+│       │   │   │
+│       │   │   ├── • Precedence dependency from DROPPED Schema:{DescID: 106}
+│       │   │   │     rule: "descriptor dropped before dependent element removal"
+│       │   │   │
+│       │   │   └── • skip PUBLIC → ABSENT operations
+│       │   │         rule: "skip element removal ops on descriptor drop"
+│       │   │
+│       │   ├── • UserPrivileges:{DescID: 106, Name: root}
+│       │   │   │ PUBLIC → ABSENT
+│       │   │   │
+│       │   │   ├── • Precedence dependency from DROPPED Schema:{DescID: 106}
+│       │   │   │     rule: "descriptor dropped before dependent element removal"
+│       │   │   │
+│       │   │   └── • skip PUBLIC → ABSENT operations
+│       │   │         rule: "skip element removal ops on descriptor drop"
+│       │   │
+│       │   ├── • Schema:{DescID: 106}
+│       │   │     PUBLIC → DROPPED
+│       │   │
+│       │   └── • SchemaParent:{DescID: 106, ReferencedDescID: 104}
+│       │       │ PUBLIC → ABSENT
+│       │       │
+│       │       └── • Precedence dependency from DROPPED Schema:{DescID: 106}
+│       │             rule: "descriptor dropped before dependent element removal"
 │       │
 │       └── • 6 Mutation operations
 │           │
@@ -119,8 +193,8 @@ EXPLAIN (ddl, verbose) DROP SCHEMA db.sc;
         │   └── • Schema:{DescID: 106}
         │       │ DROPPED → ABSENT
         │       │
-        │       └── • PreviousTransactionPrecedence dependency from DROPPED Schema:{DescID: 106}
-        │             rule: "descriptor DROPPED in transaction before removal"
+        │       └── • PreviousStagePrecedence dependency from DROPPED Schema:{DescID: 106}
+        │             rule: "descriptor dropped in transaction before removal"
         │
         └── • 4 Mutation operations
             │

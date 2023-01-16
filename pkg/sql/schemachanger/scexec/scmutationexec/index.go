@@ -24,34 +24,34 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-func (m *visitor) MakeAbsentIndexBackfilling(
+func (i *immediateVisitor) MakeAbsentIndexBackfilling(
 	ctx context.Context, op scop.MakeAbsentIndexBackfilling,
 ) error {
 	return addNewIndexMutation(
-		ctx, m, op.Index, op.IsSecondaryIndex, op.IsDeletePreserving,
+		ctx, i, op.Index, op.IsSecondaryIndex, op.IsDeletePreserving,
 		descpb.DescriptorMutation_BACKFILLING,
 	)
 }
 
-func (m *visitor) MakeAbsentTempIndexDeleteOnly(
+func (i *immediateVisitor) MakeAbsentTempIndexDeleteOnly(
 	ctx context.Context, op scop.MakeAbsentTempIndexDeleteOnly,
 ) error {
 	const isDeletePreserving = true // temp indexes are always delete preserving
 	return addNewIndexMutation(
-		ctx, m, op.Index, op.IsSecondaryIndex, isDeletePreserving,
+		ctx, i, op.Index, op.IsSecondaryIndex, isDeletePreserving,
 		descpb.DescriptorMutation_DELETE_ONLY,
 	)
 }
 
 func addNewIndexMutation(
 	ctx context.Context,
-	m *visitor,
+	i *immediateVisitor,
 	opIndex scpb.Index,
 	isSecondary bool,
 	isDeletePreserving bool,
 	state descpb.DescriptorMutation_State,
 ) error {
-	tbl, err := m.checkOutTable(ctx, opIndex.TableID)
+	tbl, err := i.checkOutTable(ctx, opIndex.TableID)
 	if err != nil {
 		return err
 	}
@@ -90,7 +90,7 @@ func addNewIndexMutation(
 		StoreColumnNames:            []string{},
 	}
 	if isSecondary && !isDeletePreserving {
-		idx.CreatedAtNanos = m.clock.ApproximateTime().UnixNano()
+		idx.CreatedAtNanos = i.clock.ApproximateTime().UnixNano()
 	}
 	if opIndex.Sharding != nil {
 		idx.Sharded = *opIndex.Sharding
@@ -101,10 +101,10 @@ func addNewIndexMutation(
 	return enqueueAddIndexMutation(tbl, idx, state)
 }
 
-func (m *visitor) SetAddedIndexPartialPredicate(
+func (i *immediateVisitor) SetAddedIndexPartialPredicate(
 	ctx context.Context, op scop.SetAddedIndexPartialPredicate,
 ) error {
-	tbl, err := m.checkOutTable(ctx, op.TableID)
+	tbl, err := i.checkOutTable(ctx, op.TableID)
 	if err != nil {
 		return err
 	}
@@ -117,10 +117,10 @@ func (m *visitor) SetAddedIndexPartialPredicate(
 	return nil
 }
 
-func (m *visitor) MakeBackfillingIndexDeleteOnly(
+func (i *immediateVisitor) MakeBackfillingIndexDeleteOnly(
 	ctx context.Context, op scop.MakeBackfillingIndexDeleteOnly,
 ) error {
-	tbl, err := m.checkOutTable(ctx, op.TableID)
+	tbl, err := i.checkOutTable(ctx, op.TableID)
 	if err != nil {
 		return err
 	}
@@ -133,10 +133,10 @@ func (m *visitor) MakeBackfillingIndexDeleteOnly(
 	)
 }
 
-func (m *visitor) MakeDeleteOnlyIndexWriteOnly(
+func (i *immediateVisitor) MakeDeleteOnlyIndexWriteOnly(
 	ctx context.Context, op scop.MakeDeleteOnlyIndexWriteOnly,
 ) error {
-	tbl, err := m.checkOutTable(ctx, op.TableID)
+	tbl, err := i.checkOutTable(ctx, op.TableID)
 	if err != nil {
 		return err
 	}
@@ -149,10 +149,10 @@ func (m *visitor) MakeDeleteOnlyIndexWriteOnly(
 	)
 }
 
-func (m *visitor) MakeBackfilledIndexMerging(
+func (i *immediateVisitor) MakeBackfilledIndexMerging(
 	ctx context.Context, op scop.MakeBackfilledIndexMerging,
 ) error {
-	tbl, err := m.checkOutTable(ctx, op.TableID)
+	tbl, err := i.checkOutTable(ctx, op.TableID)
 	if err != nil {
 		return err
 	}
@@ -165,10 +165,10 @@ func (m *visitor) MakeBackfilledIndexMerging(
 	)
 }
 
-func (m *visitor) MakeMergedIndexWriteOnly(
+func (i *immediateVisitor) MakeMergedIndexWriteOnly(
 	ctx context.Context, op scop.MakeMergedIndexWriteOnly,
 ) error {
-	tbl, err := m.checkOutTable(ctx, op.TableID)
+	tbl, err := i.checkOutTable(ctx, op.TableID)
 	if err != nil {
 		return err
 	}
@@ -181,10 +181,10 @@ func (m *visitor) MakeMergedIndexWriteOnly(
 	)
 }
 
-func (m *visitor) MakeValidatedPrimaryIndexPublic(
+func (i *immediateVisitor) MakeValidatedPrimaryIndexPublic(
 	ctx context.Context, op scop.MakeValidatedPrimaryIndexPublic,
 ) error {
-	tbl, err := m.checkOutTable(ctx, op.TableID)
+	tbl, err := i.checkOutTable(ctx, op.TableID)
 	if err != nil {
 		return err
 	}
@@ -201,10 +201,10 @@ func (m *visitor) MakeValidatedPrimaryIndexPublic(
 	return err
 }
 
-func (m *visitor) MakeValidatedSecondaryIndexPublic(
+func (i *immediateVisitor) MakeValidatedSecondaryIndexPublic(
 	ctx context.Context, op scop.MakeValidatedSecondaryIndexPublic,
 ) error {
-	tbl, err := m.checkOutTable(ctx, op.TableID)
+	tbl, err := i.checkOutTable(ctx, op.TableID)
 	if err != nil {
 		return err
 	}
@@ -229,10 +229,10 @@ func (m *visitor) MakeValidatedSecondaryIndexPublic(
 	return nil
 }
 
-func (m *visitor) MakePublicPrimaryIndexWriteOnly(
+func (i *immediateVisitor) MakePublicPrimaryIndexWriteOnly(
 	ctx context.Context, op scop.MakePublicPrimaryIndexWriteOnly,
 ) error {
-	tbl, err := m.checkOutTable(ctx, op.TableID)
+	tbl, err := i.checkOutTable(ctx, op.TableID)
 	if err != nil {
 		return err
 	}
@@ -244,10 +244,10 @@ func (m *visitor) MakePublicPrimaryIndexWriteOnly(
 	return enqueueDropIndexMutation(tbl, &desc)
 }
 
-func (m *visitor) MakePublicSecondaryIndexWriteOnly(
+func (i *immediateVisitor) MakePublicSecondaryIndexWriteOnly(
 	ctx context.Context, op scop.MakePublicSecondaryIndexWriteOnly,
 ) error {
-	tbl, err := m.checkOutTable(ctx, op.TableID)
+	tbl, err := i.checkOutTable(ctx, op.TableID)
 	if err != nil {
 		return err
 	}
@@ -261,10 +261,10 @@ func (m *visitor) MakePublicSecondaryIndexWriteOnly(
 	return errors.AssertionFailedf("failed to find secondary index %d in descriptor %v", op.IndexID, tbl)
 }
 
-func (m *visitor) MakeWriteOnlyIndexDeleteOnly(
+func (i *immediateVisitor) MakeWriteOnlyIndexDeleteOnly(
 	ctx context.Context, op scop.MakeWriteOnlyIndexDeleteOnly,
 ) error {
-	tbl, err := m.checkOutTable(ctx, op.TableID)
+	tbl, err := i.checkOutTable(ctx, op.TableID)
 	if err != nil {
 		return err
 	}
@@ -285,10 +285,10 @@ func (m *visitor) MakeWriteOnlyIndexDeleteOnly(
 	)
 }
 
-func (m *visitor) RemoveDroppedIndexPartialPredicate(
+func (i *immediateVisitor) RemoveDroppedIndexPartialPredicate(
 	ctx context.Context, op scop.RemoveDroppedIndexPartialPredicate,
 ) error {
-	tbl, err := m.checkOutTable(ctx, op.TableID)
+	tbl, err := i.checkOutTable(ctx, op.TableID)
 	if err != nil || tbl.Dropped() {
 		return err
 	}
@@ -301,8 +301,8 @@ func (m *visitor) RemoveDroppedIndexPartialPredicate(
 	return nil
 }
 
-func (m *visitor) MakeIndexAbsent(ctx context.Context, op scop.MakeIndexAbsent) error {
-	tbl, err := m.checkOutTable(ctx, op.TableID)
+func (i *immediateVisitor) MakeIndexAbsent(ctx context.Context, op scop.MakeIndexAbsent) error {
+	tbl, err := i.checkOutTable(ctx, op.TableID)
 	if err != nil {
 		return err
 	}
@@ -315,8 +315,10 @@ func (m *visitor) MakeIndexAbsent(ctx context.Context, op scop.MakeIndexAbsent) 
 	return err
 }
 
-func (m *visitor) AddIndexPartitionInfo(ctx context.Context, op scop.AddIndexPartitionInfo) error {
-	tbl, err := m.checkOutTable(ctx, op.Partitioning.TableID)
+func (i *immediateVisitor) AddIndexPartitionInfo(
+	ctx context.Context, op scop.AddIndexPartitionInfo,
+) error {
+	tbl, err := i.checkOutTable(ctx, op.Partitioning.TableID)
 	if err != nil {
 		return err
 	}
@@ -328,8 +330,8 @@ func (m *visitor) AddIndexPartitionInfo(ctx context.Context, op scop.AddIndexPar
 	return nil
 }
 
-func (m *visitor) SetIndexName(ctx context.Context, op scop.SetIndexName) error {
-	tbl, err := m.checkOutTable(ctx, op.TableID)
+func (i *immediateVisitor) SetIndexName(ctx context.Context, op scop.SetIndexName) error {
+	tbl, err := i.checkOutTable(ctx, op.TableID)
 	if err != nil {
 		return err
 	}
@@ -341,8 +343,8 @@ func (m *visitor) SetIndexName(ctx context.Context, op scop.SetIndexName) error 
 	return nil
 }
 
-func (m *visitor) AddColumnToIndex(ctx context.Context, op scop.AddColumnToIndex) error {
-	tbl, err := m.checkOutTable(ctx, op.TableID)
+func (i *immediateVisitor) AddColumnToIndex(ctx context.Context, op scop.AddColumnToIndex) error {
+	tbl, err := i.checkOutTable(ctx, op.TableID)
 	if err != nil {
 		return err
 	}
@@ -412,8 +414,10 @@ func (m *visitor) AddColumnToIndex(ctx context.Context, op scop.AddColumnToIndex
 	return nil
 }
 
-func (m *visitor) RemoveColumnFromIndex(ctx context.Context, op scop.RemoveColumnFromIndex) error {
-	tbl, err := m.checkOutTable(ctx, op.TableID)
+func (i *immediateVisitor) RemoveColumnFromIndex(
+	ctx context.Context, op scop.RemoveColumnFromIndex,
+) error {
+	tbl, err := i.checkOutTable(ctx, op.TableID)
 	if err != nil {
 		return err
 	}
@@ -431,17 +435,14 @@ func (m *visitor) RemoveColumnFromIndex(ctx context.Context, op scop.RemoveColum
 	// rules to add those dependencies efficiently. Instead, we just don't
 	// and sort here.
 	idx := index.IndexDesc()
-	n := int(op.Ordinal + 1)
-	removeFromNames := func(s *[]string) {
-		(*s)[n-1] = ""
-	}
-	removeFromColumnIDs := func(s *[]descpb.ColumnID) {
-		(*s)[n-1] = 0
-	}
 	switch op.Kind {
 	case scpb.IndexColumn_KEY:
-		removeFromNames(&idx.KeyColumnNames)
-		removeFromColumnIDs(&idx.KeyColumnIDs)
+		if int(op.Ordinal) >= len(idx.KeyColumnNames) {
+			return errors.AssertionFailedf("invalid ordinal %d for key columns %v",
+				op.Ordinal, idx.KeyColumnNames)
+		}
+		idx.KeyColumnIDs[op.Ordinal] = 0
+		idx.KeyColumnNames[op.Ordinal] = ""
 		for i := len(idx.KeyColumnIDs) - 1; i >= 0 && idx.KeyColumnIDs[i] == 0; i-- {
 			idx.KeyColumnNames = idx.KeyColumnNames[:i]
 			idx.KeyColumnIDs = idx.KeyColumnIDs[:i]
@@ -451,13 +452,21 @@ func (m *visitor) RemoveColumnFromIndex(ctx context.Context, op scop.RemoveColum
 			}
 		}
 	case scpb.IndexColumn_KEY_SUFFIX:
-		removeFromColumnIDs(&idx.KeySuffixColumnIDs)
+		if int(op.Ordinal) >= len(idx.KeySuffixColumnIDs) {
+			return errors.AssertionFailedf("invalid ordinal %d for key suffix columns %v",
+				op.Ordinal, idx.KeySuffixColumnIDs)
+		}
+		idx.KeySuffixColumnIDs[op.Ordinal] = 0
 		for i := len(idx.KeySuffixColumnIDs) - 1; i >= 0 && idx.KeySuffixColumnIDs[i] == 0; i-- {
 			idx.KeySuffixColumnIDs = idx.KeySuffixColumnIDs[:i]
 		}
 	case scpb.IndexColumn_STORED:
-		removeFromNames(&idx.StoreColumnNames)
-		removeFromColumnIDs(&idx.StoreColumnIDs)
+		if int(op.Ordinal) >= len(idx.StoreColumnNames) {
+			return errors.AssertionFailedf("invalid ordinal %d for stored columns %v",
+				op.Ordinal, idx.StoreColumnNames)
+		}
+		idx.StoreColumnIDs[op.Ordinal] = 0
+		idx.StoreColumnNames[op.Ordinal] = ""
 		for i := len(idx.StoreColumnIDs) - 1; i >= 0 && idx.StoreColumnIDs[i] == 0; i-- {
 			idx.StoreColumnNames = idx.StoreColumnNames[:i]
 			idx.StoreColumnIDs = idx.StoreColumnIDs[:i]

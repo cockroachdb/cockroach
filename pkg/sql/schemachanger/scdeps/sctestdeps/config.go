@@ -39,7 +39,6 @@ func WithNamespace(c nstree.Catalog) Option {
 	return optionFunc(func(state *TestState) {
 		_ = c.ForEachNamespaceEntry(func(e nstree.NamespaceEntry) error {
 			state.committed.UpsertNamespaceEntry(e, e.GetID(), e.GetMVCCTimestamp())
-			state.uncommitted.UpsertNamespaceEntry(e, e.GetID(), e.GetMVCCTimestamp())
 			return nil
 		})
 	})
@@ -64,7 +63,6 @@ func WithDescriptors(c nstree.Catalog) Option {
 			mut.ResetModificationTime()
 			desc = mut.ImmutableCopy()
 			state.committed.UpsertDescriptor(desc)
-			state.uncommitted.UpsertDescriptor(desc)
 			return nil
 		})
 	})
@@ -80,7 +78,9 @@ func WithSessionData(sessionData sessiondata.SessionData) Option {
 // WithZoneConfigs sets the TestStates zone config map to the provided value.
 func WithZoneConfigs(zoneConfigs map[catid.DescID]catalog.ZoneConfig) Option {
 	return optionFunc(func(state *TestState) {
-		state.zoneConfigs = zoneConfigs
+		for id, zc := range zoneConfigs {
+			state.committed.UpsertZoneConfig(id, zc.ZoneConfigProto(), zc.GetRawBytesInStorage())
+		}
 	})
 }
 
@@ -126,7 +126,9 @@ func WithBackfiller(backfiller scexec.Backfiller) Option {
 // WithComments injects sets comment cache of TestState to the provided value.
 func WithComments(comments map[catalogkeys.CommentKey]string) Option {
 	return optionFunc(func(state *TestState) {
-		state.comments = comments
+		for key, cmt := range comments {
+			state.committed.UpsertComment(key, cmt)
+		}
 	})
 }
 
@@ -156,6 +158,5 @@ var defaultOptions = []Option{
 		state.merger = &testBackfiller{s: state}
 		state.indexSpanSplitter = &indexSpanSplitter{}
 		state.approximateTimestamp = defaultCreatedAt
-		state.zoneConfigs = make(map[catid.DescID]catalog.ZoneConfig)
 	}),
 }

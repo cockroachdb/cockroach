@@ -16,8 +16,18 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD CHEC
  │              ├── UpdateTableBackReferencesInTypes {"BackReferencedTableID":107}
  │              └── UpdateBackReferencesInSequences {"BackReferencedTableID":107}
  ├── PreCommitPhase
- │    └── Stage 1 of 1 in PreCommitPhase
- │         └── 5 Mutation operations
+ │    ├── Stage 1 of 2 in PreCommitPhase
+ │    │    ├── 1 element transitioning toward PUBLIC
+ │    │    │    └── WRITE_ONLY → ABSENT CheckConstraint:{DescID: 107, ReferencedTypeIDs: [105 106], IndexID: 0, ConstraintID: 2, ReferencedSequenceIDs: [104]}
+ │    │    └── 1 Mutation operation
+ │    │         └── UndoAllInTxnImmediateMutationOpSideEffects
+ │    └── Stage 2 of 2 in PreCommitPhase
+ │         ├── 1 element transitioning toward PUBLIC
+ │         │    └── ABSENT → WRITE_ONLY CheckConstraint:{DescID: 107, ReferencedTypeIDs: [105 106], IndexID: 0, ConstraintID: 2, ReferencedSequenceIDs: [104]}
+ │         └── 8 Mutation operations
+ │              ├── MakeAbsentCheckConstraintWriteOnly {"CheckExpr":"(i \u003e nextval(104...","ConstraintID":2,"TableID":107}
+ │              ├── UpdateTableBackReferencesInTypes {"BackReferencedTableID":107}
+ │              ├── UpdateBackReferencesInSequences {"BackReferencedTableID":107}
  │              ├── SetJobStateOnDescriptor {"DescriptorID":104,"Initialize":true}
  │              ├── SetJobStateOnDescriptor {"DescriptorID":105,"Initialize":true}
  │              ├── SetJobStateOnDescriptor {"DescriptorID":106,"Initialize":true}

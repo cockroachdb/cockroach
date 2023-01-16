@@ -10,6 +10,41 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COL
  ├── StatementPhase
  │    └── Stage 1 of 1 in StatementPhase
  │         ├── 3 elements transitioning toward PUBLIC
+ │         │    ├── ABSENT → BACKFILL_ONLY    PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
+ │         │    ├── ABSENT → PUBLIC           IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}
+ │         │    └── ABSENT → PUBLIC           IndexData:{DescID: 104, IndexID: 2}
+ │         ├── 2 elements transitioning toward TRANSIENT_ABSENT
+ │         │    ├── ABSENT → DELETE_ONLY      TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
+ │         │    └── ABSENT → TRANSIENT_ABSENT IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}
+ │         ├── 3 elements transitioning toward ABSENT
+ │         │    ├── PUBLIC → WRITE_ONLY       Column:{DescID: 104, ColumnID: 2}
+ │         │    ├── PUBLIC → ABSENT           ColumnName:{DescID: 104, Name: j, ColumnID: 2}
+ │         │    └── PUBLIC → ABSENT           ColumnComment:{DescID: 104, ColumnID: 2, Comment: j has a comment}
+ │         └── 7 Mutation operations
+ │              ├── MakePublicColumnWriteOnly {"ColumnID":2,"TableID":104}
+ │              ├── SetColumnName {"ColumnID":2,"Name":"crdb_internal_co...","TableID":104}
+ │              ├── RemoveColumnComment {"ColumnID":2,"PgAttributeNum":2,"TableID":104}
+ │              ├── MakeAbsentIndexBackfilling {"Index":{"ConstraintID":2,"IndexID":2,"IsUnique":true,"SourceIndexID":1,"TableID":104,"TemporaryIndexID":3}}
+ │              ├── AddColumnToIndex {"ColumnID":1,"IndexID":2,"TableID":104}
+ │              ├── MakeAbsentTempIndexDeleteOnly {"Index":{"ConstraintID":3,"IndexID":3,"IsUnique":true,"SourceIndexID":1,"TableID":104}}
+ │              └── AddColumnToIndex {"ColumnID":1,"IndexID":3,"TableID":104}
+ ├── PreCommitPhase
+ │    ├── Stage 1 of 2 in PreCommitPhase
+ │    │    ├── 3 elements transitioning toward PUBLIC
+ │    │    │    ├── BACKFILL_ONLY    → ABSENT PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
+ │    │    │    ├── PUBLIC           → ABSENT IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}
+ │    │    │    └── PUBLIC           → ABSENT IndexData:{DescID: 104, IndexID: 2}
+ │    │    ├── 2 elements transitioning toward TRANSIENT_ABSENT
+ │    │    │    ├── DELETE_ONLY      → ABSENT TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
+ │    │    │    └── TRANSIENT_ABSENT → ABSENT IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}
+ │    │    ├── 3 elements transitioning toward ABSENT
+ │    │    │    ├── WRITE_ONLY       → PUBLIC Column:{DescID: 104, ColumnID: 2}
+ │    │    │    ├── ABSENT           → PUBLIC ColumnName:{DescID: 104, Name: j, ColumnID: 2}
+ │    │    │    └── ABSENT           → PUBLIC ColumnComment:{DescID: 104, ColumnID: 2, Comment: j has a comment}
+ │    │    └── 1 Mutation operation
+ │    │         └── UndoAllInTxnImmediateMutationOpSideEffects
+ │    └── Stage 2 of 2 in PreCommitPhase
+ │         ├── 3 elements transitioning toward PUBLIC
  │         │    ├── ABSENT → BACKFILL_ONLY PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
  │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}
  │         │    └── ABSENT → PUBLIC        IndexData:{DescID: 104, IndexID: 2}
@@ -20,17 +55,14 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COL
  │         │    ├── PUBLIC → WRITE_ONLY    Column:{DescID: 104, ColumnID: 2}
  │         │    ├── PUBLIC → ABSENT        ColumnName:{DescID: 104, Name: j, ColumnID: 2}
  │         │    └── PUBLIC → ABSENT        ColumnComment:{DescID: 104, ColumnID: 2, Comment: j has a comment}
- │         └── 7 Mutation operations
+ │         └── 9 Mutation operations
  │              ├── MakePublicColumnWriteOnly {"ColumnID":2,"TableID":104}
  │              ├── SetColumnName {"ColumnID":2,"Name":"crdb_internal_co...","TableID":104}
  │              ├── RemoveColumnComment {"ColumnID":2,"PgAttributeNum":2,"TableID":104}
  │              ├── MakeAbsentIndexBackfilling {"Index":{"ConstraintID":2,"IndexID":2,"IsUnique":true,"SourceIndexID":1,"TableID":104,"TemporaryIndexID":3}}
  │              ├── AddColumnToIndex {"ColumnID":1,"IndexID":2,"TableID":104}
  │              ├── MakeAbsentTempIndexDeleteOnly {"Index":{"ConstraintID":3,"IndexID":3,"IsUnique":true,"SourceIndexID":1,"TableID":104}}
- │              └── AddColumnToIndex {"ColumnID":1,"IndexID":3,"TableID":104}
- ├── PreCommitPhase
- │    └── Stage 1 of 1 in PreCommitPhase
- │         └── 2 Mutation operations
+ │              ├── AddColumnToIndex {"ColumnID":1,"IndexID":3,"TableID":104}
  │              ├── SetJobStateOnDescriptor {"DescriptorID":104,"Initialize":true}
  │              └── CreateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
  ├── PostCommitPhase
