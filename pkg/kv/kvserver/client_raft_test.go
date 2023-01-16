@@ -3002,11 +3002,11 @@ func TestRemovePlaceholderRace(t *testing.T) {
 			for {
 				chgs := roachpb.MakeReplicationChanges(action, tc.Target(1))
 				if _, err := repl.ChangeReplicas(ctx, repl.Desc(), kvserverpb.SnapshotRequest_REBALANCE, kvserverpb.ReasonUnknown, "", chgs); err != nil {
-					if kvserver.IsRetriableReplicationChangeError(err) {
+					if kvserver.IsRetriableReplicationChangeError(err) ||
+						kvserver.IsReplicationChangeInProgressError(err) {
 						continue
-					} else {
-						t.Fatal(err)
 					}
+					t.Fatal(err)
 				}
 				break
 			}
