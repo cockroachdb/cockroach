@@ -5402,6 +5402,7 @@ explain_stmt:
 
 explainable_stmt:
   preparable_stmt
+| comment_stmt
 | execute_stmt
 
 preparable_stmt:

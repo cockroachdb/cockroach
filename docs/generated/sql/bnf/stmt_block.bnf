@@ -642,6 +642,7 @@ drop_tenant_stmt ::=
 
 explainable_stmt ::=
 	preparable_stmt
+	| comment_stmt
 	| execute_stmt
 
 explain_option_list ::=
