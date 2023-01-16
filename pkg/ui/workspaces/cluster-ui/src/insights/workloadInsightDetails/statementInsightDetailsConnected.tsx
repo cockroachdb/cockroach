@@ -15,13 +15,13 @@ import {
   StatementInsightDetailsDispatchProps,
   StatementInsightDetailsStateProps,
 } from "./statementInsightDetails";
-import { AppState } from "src/store";
+import { AppState, uiConfigActions } from "src/store";
 import {
   actions as statementInsights,
   selectStatementInsightDetails,
   selectExecutionInsightsError,
 } from "src/store/insights/statementInsights";
-import { selectIsTenant } from "src/store/uiConfig";
+import { selectHasAdminRole, selectIsTenant } from "src/store/uiConfig";
 import { TimeScale } from "../../timeScaleDropdown";
 import { actions as sqlStatsActions } from "../../store/sqlStats";
 import { selectTimeScale } from "../../store/utils/selectors";
@@ -38,6 +38,7 @@ const mapStateToProps = (
     insightError: insightError,
     isTenant: selectIsTenant(state),
     timeScale: selectTimeScale(state),
+    hasAdminRole: selectHasAdminRole(state),
   };
 };
 
@@ -54,6 +55,7 @@ const mapDispatchToProps = (
       }),
     );
   },
+  refreshUserSQLRoles: () => dispatch(uiConfigActions.refreshUserSQLRoles()),
 });
 
 export const StatementInsightDetailsConnected = withRouter(

@@ -316,6 +316,7 @@ const isIndexRec = (rec: InsightRecommendation) => {
 
 export function makeInsightsColumns(
   isCockroachCloud: boolean,
+  hasAdminRole: boolean,
   showQuery?: boolean,
   disableStmtLink?: boolean,
 ): ColumnDescriptor<InsightRecommendation>[] {
@@ -336,7 +337,8 @@ export function makeInsightsColumns(
     {
       name: "action",
       title: insightsTableTitles.actions(),
-      cell: (item: InsightRecommendation) => actionCell(item, isCockroachCloud),
+      cell: (item: InsightRecommendation) =>
+        actionCell(item, isCockroachCloud || !hasAdminRole),
     },
   ];
 }
