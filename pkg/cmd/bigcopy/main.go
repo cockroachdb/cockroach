@@ -1,14 +1,18 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"flag"
 	"fmt"
-	"github.com/jackc/pgx/v4"
+	"io"
 	"math/rand"
 	"strings"
+	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/jackc/pgx/v4"
 )
 
 var maxRows = flag.Int("max_rows", 10000, "maximum number of rows to insert per batch")
@@ -22,7 +26,7 @@ func main() {
 	flag.Parse()
 
 	ctx := context.Background()
-	fmt.Printf("connecting to db\n")
+	fmt.Printf("connecting to db %s\n", *dbUrl)
 	conn, err := pgx.Connect(ctx, *dbUrl)
 	if err != nil {
 		panic(errors.Newf("Unable to connect to database: %v", err))
@@ -41,27 +45,32 @@ func main() {
 	fmt.Printf("table created\n")
 
 	rng := rand.New(rand.NewSource(0))
-	for i := 0; i < *insertTimes; i++ {
-		fmt.Printf("beginning copy iteration %d\n", i+1)
-		var sb strings.Builder
-		for it := 0; it < *maxRows; it++ {
-			sb.WriteString(fmt.Sprintf(
-				"%d,%d,%s,%s,%s,,%s,%s\n",
-				counter,
-				100,
-				"1970-01-01 00:00:00", "1970-01-01 00:00:00", "1970-01-01 00:00:00",
-				makeLenStr(rng.Intn(2048)),
-				makeLenStr(rng.Intn(512)),
-			))
-			counter += increment
-		}
-		r, err := conn.PgConn().CopyFrom(ctx, strings.NewReader(sb.String()), "COPY test_table FROM STDIN CSV")
-		if err != nil {
-			panic(errors.Wrapf(err, "failed to copy"))
-		}
-		fmt.Printf("done with batch %d; copied %d rows\n", i+1, r.RowsAffected())
+	r, w := io.Pipe()
+	go producer(bufio.NewWriter(w), rng, *insertTimes**maxRows)
+	if _, err := conn.PgConn().CopyFrom(ctx, bufio.NewReaderSize(r, 4*(1<<20)), "COPY test_table FROM STDIN CSV"); err != nil {
+		panic(errors.Wrapf(err, "failed to copy"))
 	}
-	fmt.Printf("complete!\n")
+}
+
+func producer(w io.Writer, rng *rand.Rand, n int) {
+	l := log.Every(5 * time.Second)
+
+	for i := 0; i < n; i++ {
+		if _, err := fmt.Fprintf(
+			w,
+			"%d,%d,%s,%s,%s,,%s,%s\n",
+			i,
+			100,
+			"1970-01-01 00:00:00", "1970-01-01 00:00:00", "1970-01-01 00:00:00",
+			makeLenStr(rng.Intn(2048)),
+			makeLenStr(rng.Intn(512)),
+		); err != nil {
+			panic(err)
+		}
+		if l.ShouldLog() {
+			fmt.Printf("%d rows produced [%.2f%%]\n", i, float64(i)/float64(n))
+		}
+	}
 }
 
 func makeLenStr(i int) string {
