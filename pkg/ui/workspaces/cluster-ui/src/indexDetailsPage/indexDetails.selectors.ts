@@ -25,6 +25,7 @@ import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { IndexDetailsPageData } from "./indexDetailsPage";
 import {
   selectHasViewActivityRedactedRole,
+  selectHasAdminRole,
   selectIsTenant,
 } from "../store/uiConfig";
 import { BreadcrumbItem } from "../breadcrumbs";
@@ -45,6 +46,7 @@ export const selectIndexDetails = createSelector(
   (state: AppState) => selectIsTenant(state),
   (state: AppState) => selectHasViewActivityRedactedRole(state),
   (state: AppState) => nodeRegionsByIDSelector(state),
+  (state: AppState) => selectHasAdminRole(state),
   (
     database,
     schema,
@@ -54,6 +56,7 @@ export const selectIndexDetails = createSelector(
     isTenant,
     hasViewActivityRedactedRole,
     nodeRegions,
+    hasAdminRole,
   ): IndexDetailsPageData => {
     const stats = indexStats[generateTableID(database, table)];
     const details = stats?.data?.statistics.filter(
@@ -87,6 +90,7 @@ export const selectIndexDetails = createSelector(
       ),
       isTenant: isTenant,
       hasViewActivityRedactedRole: hasViewActivityRedactedRole,
+      hasAdminRole: hasAdminRole,
       nodeRegions: nodeRegions,
       details: {
         loading: !!stats?.inFlight,
