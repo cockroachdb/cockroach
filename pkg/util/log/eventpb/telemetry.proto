@@ -371,6 +371,9 @@ message RecoveryEvent {
 
   // The application name for the session where recovery event was created.
   string application_name = 30 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+
+  // NumRows is the number of rows successfully imported, backed up or restored.
+  int64 num_rows = 31 [(gogoproto.jsontag) = ",omitempty"];
 }
 
 // SchemaDescriptor is an event for schema telemetry, whose purpose is

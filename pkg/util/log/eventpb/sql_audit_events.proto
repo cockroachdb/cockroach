@@ -27,7 +27,7 @@ message CommonSQLExecDetails {
   string exec_mode = 1 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
   // Number of rows returned. For mutation statements (INSERT, etc) that
   // do not produce result rows, this field reports the number of rows affected.
-  uint64 num_rows = 2 [(gogoproto.jsontag) = ",omitempty"];
+  int64 num_rows = 2 [(gogoproto.jsontag) = ",omitempty"];
   // The SQLSTATE code for the error, if an error was encountered. Empty/omitted if no error.
   string sqlstate = 3 [(gogoproto.customname) = "SQLSTATE", (gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
   // The text of the error if any.
@@ -43,6 +43,8 @@ message CommonSQLExecDetails {
   bool full_index_scan = 8 [(gogoproto.jsontag) = ",omitempty"];
   // The sequence number of the SQL transaction inside its session.
   uint32 txn_counter = 9 [(gogoproto.jsontag) = ",omitempty"];
+  // The job id for bulk job (IMPORT/BACKUP/RESTORE).
+  uint64 bulk_job_id = 10 [(gogoproto.jsontag) = ",omitempty"];
 }
 
 
