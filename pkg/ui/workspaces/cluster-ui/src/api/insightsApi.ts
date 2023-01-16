@@ -13,6 +13,7 @@ import {
   INTERNAL_SQL_API_APP,
   LARGE_RESULT_SIZE,
   LONG_TIMEOUT,
+  sqlApiErrorMessage,
   SqlExecutionRequest,
   SqlExecutionResponse,
   sqlResultsAreEmpty,
@@ -210,6 +211,13 @@ export async function getTransactionInsightEventState(): Promise<TransactionInsi
     await executeInternalSql<TransactionContentionResponseColumns>(
       makeInsightsSqlRequest([txnContentionQuery]),
     );
+  if (contentionResults.error) {
+    throw new Error(
+      `Error while retrieving contention information: ${sqlApiErrorMessage(
+        contentionResults.error.message,
+      )}`,
+    );
+  }
   if (sqlResultsAreEmpty(contentionResults)) {
     return [];
   }
@@ -228,6 +236,13 @@ export async function getTransactionInsightEventState(): Promise<TransactionInsi
         txnStmtFingerprintsQuery(Array.from(txnFingerprintIDs)),
       ]),
     );
+  if (txnStmtFingerprintResults.error) {
+    throw new Error(
+      `Error while retrieving statements information: ${sqlApiErrorMessage(
+        txnStmtFingerprintResults.error.message,
+      )}`,
+    );
+  }
   if (sqlResultsAreEmpty(txnStmtFingerprintResults)) {
     return [];
   }
@@ -244,6 +259,13 @@ export async function getTransactionInsightEventState(): Promise<TransactionInsi
     await executeInternalSql<FingerprintStmtsResponseColumns>(
       fingerprintStmtsRequest,
     );
+  if (fingerprintStmtResults.error) {
+    throw new Error(
+      `Error while retrieving statements information: ${sqlApiErrorMessage(
+        fingerprintStmtResults.error.message,
+      )}`,
+    );
+  }
 
   return combineTransactionInsightEventState(
     transactionContentionResultsToEventState(contentionResults),
@@ -449,6 +471,13 @@ export async function getTransactionInsightEventDetailsState(
     await executeInternalSql<TxnContentionDetailsResponseColumns>(
       txnContentionDetailsRequest,
     );
+  if (contentionResults.error) {
+    throw new Error(
+      `Error while retrieving contention information: ${sqlApiErrorMessage(
+        contentionResults.error.message,
+      )}`,
+    );
+  }
   if (sqlResultsAreEmpty(contentionResults)) {
     return;
   }
@@ -475,21 +504,32 @@ export async function getTransactionInsightEventDetailsState(
     await executeInternalSql<TxnStmtFingerprintsResponseColumns>(
       makeInsightsSqlRequest([txnStmtFingerprintsQuery(txnFingerprintIDs)]),
     );
+  if (getStmtFingerprintsResponse.error) {
+    throw new Error(
+      `Error while retrieving statements information: ${sqlApiErrorMessage(
+        getStmtFingerprintsResponse.error.message,
+      )}`,
+    );
+  }
 
   const stmtFingerprintIDs = new Set<string>();
   getStmtFingerprintsResponse.execution.txn_results[0].rows.forEach(
     txnFingerprint =>
       txnFingerprint.query_ids.forEach(id => stmtFingerprintIDs.add(id)),
   );
-  console.log("ok");
-  console.log(txnFingerprintIDs);
-  console.log(stmtFingerprintIDs);
   const stmtQueriesResponse =
     await executeInternalSql<FingerprintStmtsResponseColumns>(
       makeInsightsSqlRequest([
         fingerprintStmtsQuery(Array.from(stmtFingerprintIDs)),
       ]),
     );
+  if (stmtQueriesResponse.error) {
+    throw new Error(
+      `Error while retrieving statements information: ${sqlApiErrorMessage(
+        stmtQueriesResponse.error.message,
+      )}`,
+    );
+  }
 
   return combineTransactionInsightEventDetailsState(
     transactionContentionDetailsResultsToEventState(contentionResults),
@@ -658,7 +698,7 @@ const statementInsightsQuery: InsightQuery<
   toState: getStatementInsightsFromClusterExecutionInsightsResponse,
 };
 
-export function getStatementInsightsApi(): Promise<StatementInsights> {
+export async function getStatementInsightsApi(): Promise<StatementInsights> {
   const request: SqlExecutionRequest = {
     statements: [
       {
@@ -669,9 +709,16 @@ export function getStatementInsightsApi(): Promise<StatementInsights> {
     max_result_size: LARGE_RESULT_SIZE,
     timeout: LONG_TIMEOUT,
   };
-  return executeInternalSql<ExecutionInsightsResponseRow>(request).then(
-    result => {
-      return statementInsightsQuery.toState(result);
-    },
+  const result = await executeInternalSql<ExecutionInsightsResponseRow>(
+    request,
   );
+  if (result.error) {
+    throw new Error(
+      `Error while retrieving insights information: ${sqlApiErrorMessage(
+        result.error.message,
+      )}`,
+    );
+  }
+
+  return statementInsightsQuery.toState(result);
 }

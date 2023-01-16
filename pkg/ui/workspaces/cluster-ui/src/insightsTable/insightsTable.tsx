@@ -286,6 +286,7 @@ function actionCell(
 
 export function makeInsightsColumns(
   isCockroachCloud: boolean,
+  hasAdminRole: boolean,
   disableStmtLink?: boolean,
 ): ColumnDescriptor<InsightRecommendation>[] {
   return [
@@ -305,7 +306,8 @@ export function makeInsightsColumns(
     {
       name: "action",
       title: insightsTableTitles.actions(),
-      cell: (item: InsightRecommendation) => actionCell(item, isCockroachCloud),
+      cell: (item: InsightRecommendation) =>
+        actionCell(item, isCockroachCloud || !hasAdminRole),
     },
   ];
 }

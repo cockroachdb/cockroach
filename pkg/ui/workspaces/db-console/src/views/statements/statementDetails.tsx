@@ -39,7 +39,10 @@ import {
   setGlobalTimeScaleAction,
 } from "src/redux/statements";
 import { createStatementDiagnosticsAlertLocalSetting } from "src/redux/alerts";
-import { selectHasViewActivityRedactedRole } from "src/redux/user";
+import {
+  selectHasAdminRole,
+  selectHasViewActivityRedactedRole,
+} from "src/redux/user";
 import {
   trackCancelDiagnosticsBundleAction,
   trackDownloadDiagnosticsBundleAction,
@@ -132,6 +135,7 @@ const mapStateToProps = (
       state.sqlActivity.statementDetailsLatestQuery,
     ),
     hasViewActivityRedactedRole: selectHasViewActivityRedactedRole(state),
+    hasAdminRole: selectHasAdminRole(state),
   };
 };
 

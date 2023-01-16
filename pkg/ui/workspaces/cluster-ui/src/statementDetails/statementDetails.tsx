@@ -16,7 +16,6 @@ import "antd/lib/tabs/style";
 import { cockroach, google } from "@cockroachlabs/crdb-protobuf-client";
 import { InlineAlert, Text } from "@cockroachlabs/ui-components";
 import { ArrowLeft } from "@cockroachlabs/icons";
-import { Location } from "history";
 import _, { isNil } from "lodash";
 import Long from "long";
 import { Helmet } from "react-helmet";
@@ -131,6 +130,7 @@ export interface StatementDetailsStateProps {
   uiConfig?: UIConfigState["pages"]["statementDetails"];
   isTenant?: UIConfigState["isTenant"];
   hasViewActivityRedactedRole?: UIConfigState["hasViewActivityRedactedRole"];
+  hasAdminRole?: UIConfigState["hasAdminRole"];
 }
 
 export type StatementDetailsOwnProps = StatementDetailsDispatchProps &
@@ -779,6 +779,7 @@ export class StatementDetails extends React.Component<
           <PlanDetails
             statementFingerprintID={this.props.statementFingerprintID}
             plans={statement_statistics_per_plan_hash}
+            hasAdminRole={this.props.hasAdminRole}
           />
         </section>
       </>
@@ -800,7 +801,7 @@ export class StatementDetails extends React.Component<
         onDownloadDiagnosticBundleClick={this.props.onDiagnosticBundleDownload}
         onDiagnosticCancelRequestClick={this.props.onDiagnosticCancelRequest}
         showDiagnosticsViewLink={
-          this.props.uiConfig.showStatementDiagnosticsLink
+          this.props.uiConfig?.showStatementDiagnosticsLink
         }
         onSortingChange={this.props.onSortingChange}
       />

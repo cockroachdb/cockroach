@@ -19,7 +19,7 @@ import {
   selectFilters,
   selectSortSetting,
 } from "src/store/schemaInsights";
-import { AppState } from "src/store";
+import { AppState, uiConfigActions } from "src/store";
 import {
   SchemaInsightsView,
   SchemaInsightsViewDispatchProps,
@@ -29,6 +29,7 @@ import { SchemaInsightEventFilters } from "../types";
 import { SortSetting } from "src/sortedtable";
 import { actions as localStorageActions } from "../../store/localStorage";
 import { Dispatch } from "redux";
+import { selectHasAdminRole } from "../../store/uiConfig";
 
 const mapStateToProps = (
   state: AppState,
@@ -40,6 +41,7 @@ const mapStateToProps = (
   schemaInsightsError: selectSchemaInsightsError(state),
   filters: selectFilters(state),
   sortSetting: selectSortSetting(state),
+  hasAdminRole: selectHasAdminRole(state),
 });
 
 const mapDispatchToProps = (
@@ -64,6 +66,7 @@ const mapDispatchToProps = (
   refreshSchemaInsights: () => {
     dispatch(actions.refresh());
   },
+  refreshUserSQLRoles: () => dispatch(uiConfigActions.refreshUserSQLRoles()),
 });
 
 export const SchemaInsightsPageConnected = withRouter(

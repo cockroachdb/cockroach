@@ -73,6 +73,7 @@ function insightsTableData(
 export interface TransactionInsightDetailsStateProps {
   insightEventDetails: TransactionInsightEventDetailsResponse;
   insightError: Error | null;
+  hasAdminRole: boolean;
 }
 
 export interface TransactionInsightDetailsDispatchProps {
@@ -80,6 +81,7 @@ export interface TransactionInsightDetailsDispatchProps {
     req: TransactionInsightEventDetailsRequest,
   ) => void;
   setTimeScale: (ts: TimeScale) => void;
+  refreshUserSQLRoles: () => void;
 }
 
 export type TransactionInsightDetailsProps =
@@ -96,6 +98,8 @@ export const TransactionInsightDetails: React.FC<
   insightEventDetails,
   insightError,
   match,
+  hasAdminRole,
+  refreshUserSQLRoles,
 }) => {
   const [insightsSortSetting, setInsightsSortSetting] = useState<SortSetting>({
     ascending: false,
@@ -105,12 +109,18 @@ export const TransactionInsightDetails: React.FC<
   const executionID = getMatchParamByName(match, idAttr);
   const noInsights = !insightEventDetails;
   useEffect(() => {
+    refreshUserSQLRoles();
     if (noInsights) {
       refreshTransactionInsightDetails({
         id: executionID,
       });
     }
-  }, [executionID, refreshTransactionInsightDetails, noInsights]);
+  }, [
+    executionID,
+    refreshTransactionInsightDetails,
+    noInsights,
+    refreshUserSQLRoles,
+  ]);
 
   const prevPage = (): void => history.goBack();
 
@@ -119,7 +129,7 @@ export const TransactionInsightDetails: React.FC<
 
   const insightQueries =
     insightDetails?.queries.join("") || "Insight not found.";
-  const insightsColumns = makeInsightsColumns(isCockroachCloud);
+  const insightsColumns = makeInsightsColumns(isCockroachCloud, hasAdminRole);
 
   const blockingExecutions: EventExecution[] =
     insightDetails?.blockingContentionDetails.map(x => {

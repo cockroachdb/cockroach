@@ -42,11 +42,13 @@ export interface StatementInsightDetailsStateProps {
   insightEventDetails: StatementInsightEvent;
   insightError: Error | null;
   isTenant?: boolean;
+  hasAdminRole: boolean;
 }
 
 export interface StatementInsightDetailsDispatchProps {
   setTimeScale: (ts: TimeScale) => void;
   refreshStatementInsights: () => void;
+  refreshUserSQLRoles: () => void;
 }
 
 export type StatementInsightDetailsProps = StatementInsightDetailsStateProps &
@@ -67,8 +69,10 @@ export const StatementInsightDetails: React.FC<
   insightError,
   match,
   isTenant,
+  hasAdminRole,
   setTimeScale,
   refreshStatementInsights,
+  refreshUserSQLRoles,
 }) => {
   const [explainPlanState, setExplainPlanState] = useState<ExplainPlanState>({
     explainPlan: null,
@@ -101,10 +105,11 @@ export const StatementInsightDetails: React.FC<
   const executionID = getMatchParamByName(match, idAttr);
 
   useEffect(() => {
+    refreshUserSQLRoles();
     if (!insightEventDetails) {
       refreshStatementInsights();
     }
-  }, [insightEventDetails, refreshStatementInsights]);
+  }, [insightEventDetails, refreshStatementInsights, refreshUserSQLRoles]);
 
   return (
     <div>
@@ -148,6 +153,7 @@ export const StatementInsightDetails: React.FC<
               <StatementInsightDetailsOverviewTab
                 insightEventDetails={insightEventDetails}
                 setTimeScale={setTimeScale}
+                hasAdminRole={hasAdminRole}
               />
             </Tabs.TabPane>
             {!isTenant && (
