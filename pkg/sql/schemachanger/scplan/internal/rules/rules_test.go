@@ -34,7 +34,7 @@ func TestRulesYAML(t *testing.T) {
 				screl.Schema.ForEachRule(func(def rel.RuleDef) {
 					s = append(s, def)
 				})
-				sort.Slice(s, func(i, j int) bool {
+				sort.SliceStable(s, func(i, j int) bool {
 					return s[i].Name < s[j].Name
 				})
 				for _, def := range s {
@@ -51,7 +51,7 @@ func TestRulesYAML(t *testing.T) {
 				return string(out)
 			case "deprules":
 				s := append(([]registeredDepRule)(nil), registry.depRules...)
-				sort.Slice(s, func(i, j int) bool {
+				sort.SliceStable(s, func(i, j int) bool {
 					return s[i].name < s[j].name
 				})
 				out, err := yaml.Marshal(s)
@@ -61,7 +61,7 @@ func TestRulesYAML(t *testing.T) {
 				return string(out)
 			case "oprules":
 				s := append(([]registeredOpRule)(nil), registry.opRules...)
-				sort.Slice(s, func(i, j int) bool {
+				sort.SliceStable(s, func(i, j int) bool {
 					return s[i].name < s[j].name
 				})
 				out, err := yaml.Marshal(s)
