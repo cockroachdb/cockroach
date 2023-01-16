@@ -550,6 +550,15 @@ CREATE TABLE a (UNIQUE (b) PARTITION BY LIST (c) (PARTITION d VALUES IN ((1)))) 
 CREATE TABLE a (UNIQUE (b) PARTITION BY LIST (c) (PARTITION d VALUES IN (_))) -- literals removed
 CREATE TABLE _ (UNIQUE (_) PARTITION BY LIST (_) (PARTITION _ VALUES IN (1))) -- identifiers removed
 
+# Regression test for #95238
+parse
+CREATE TABLE a (UNIQUE INDEX (b) PARTITION BY LIST ("c d") (PARTITION "e f" VALUES IN (1)))
+----
+CREATE TABLE a (UNIQUE (b) PARTITION BY LIST ("c d") (PARTITION "e f" VALUES IN (1))) -- normalized!
+CREATE TABLE a (UNIQUE (b) PARTITION BY LIST ("c d") (PARTITION "e f" VALUES IN ((1)))) -- fully parenthesized
+CREATE TABLE a (UNIQUE (b) PARTITION BY LIST ("c d") (PARTITION "e f" VALUES IN (_))) -- literals removed
+CREATE TABLE _ (UNIQUE (_) PARTITION BY LIST (_) (PARTITION _ VALUES IN (1))) -- identifiers removed
+
 parse
 CREATE TABLE a (b INT8 UNIQUE WITHOUT INDEX)
 ----
@@ -2468,3 +2477,12 @@ DETAIL: source SQL:
 CREATE TABLE a (b INT8, c STRING, CONSTRAINT d UNIQUE WITHOUT INDEX (b, c) NOT VISIBLE)
                                                                                ^
 HINT: try \h CREATE TABLE
+
+# Regression test for #95238
+parse
+ALTER TABLE a PARTITION ALL BY LIST ("a b", "c.d") (PARTITION "e.f" VALUES IN (1))
+----
+ALTER TABLE a PARTITION ALL BY LIST ("a b", "c.d") (PARTITION "e.f" VALUES IN (1))
+ALTER TABLE a PARTITION ALL BY LIST ("a b", "c.d") (PARTITION "e.f" VALUES IN ((1))) -- fully parenthesized
+ALTER TABLE a PARTITION ALL BY LIST ("a b", "c.d") (PARTITION "e.f" VALUES IN (_)) -- literals removed
+ALTER TABLE _ PARTITION ALL BY LIST (_, _) (PARTITION _ VALUES IN (1)) -- identifiers removed

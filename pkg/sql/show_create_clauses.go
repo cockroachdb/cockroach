@@ -617,7 +617,7 @@ func ShowCreatePartitioning(
 		if i != 0 {
 			buf.WriteString(", ")
 		}
-		buf.WriteString(idx.GetKeyColumnName(colOffset + i))
+		buf.WriteString(tree.NameString(idx.GetKeyColumnName(colOffset + i)))
 	}
 	buf.WriteString(`) (`)
 	fmtCtx := tree.NewFmtCtx(tree.FmtSimple)
@@ -630,7 +630,7 @@ func ShowCreatePartitioning(
 		buf.WriteString("\n")
 		buf.WriteString(indentStr)
 		buf.WriteString("\tPARTITION ")
-		fmtCtx.FormatNameP(&name)
+		fmtCtx.FormatName(name)
 		_, _ = fmtCtx.Buffer.WriteTo(buf)
 		buf.WriteString(` VALUES IN (`)
 		for j, values := range values {
@@ -661,7 +661,7 @@ func ShowCreatePartitioning(
 		buf.WriteString("\n")
 		buf.WriteString(indentStr)
 		buf.WriteString("\tPARTITION ")
-		buf.WriteString(name)
+		buf.WriteString(tree.NameString(name))
 		buf.WriteString(" VALUES FROM ")
 		fromTuple, _, err := rowenc.DecodePartitionTuple(
 			a, codec, tableDesc, idx, part, from, fakePrefixDatums)
