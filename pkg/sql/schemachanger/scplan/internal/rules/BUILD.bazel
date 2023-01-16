@@ -1,1 +1,18 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
 load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+
+go_library(
+    name = "rules",
+    srcs = ["apply.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/rules",
+    visibility = ["//pkg/sql/schemachanger/scplan:__subpackages__"],
+    deps = [
+        "//pkg/clusterversion",
+        "//pkg/sql/schemachanger/scplan/internal/rules/current",
+        "//pkg/sql/schemachanger/scplan/internal/rules/release_22_2",
+        "//pkg/sql/schemachanger/scplan/internal/scgraph",
+        "//pkg/util/log",
+    ],
+)
+
+get_x_data(name = "get_x_data")

@@ -15,6 +15,7 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/rel"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scgraph"
@@ -242,6 +243,22 @@ func ForEachElement(fn func(element scpb.Element) error) error {
 	return nil
 }
 
+func ForEachElementInActiveVersion(
+	fn func(element scpb.Element) error, version clusterversion.ClusterVersion,
+) error {
+	var ep scpb.ElementProto
+	vep := reflect.ValueOf(ep)
+	for i := 0; i < vep.NumField(); i++ {
+		e := vep.Field(i).Interface().(scpb.Element)
+		if version.IsActive(screl.MinVersion(e)) {
+			if err := fn(e); err != nil {
+				return iterutil.Map(err)
+			}
+		}
+	}
+	return nil
+}
+
 // IsDescriptor returns true for a descriptor-element, i.e. an element which
 // owns its corresponding descriptor.
 func IsDescriptor(e scpb.Element) bool {
@@ -257,7 +274,7 @@ func IsSubjectTo2VersionInvariant(e scpb.Element) bool {
 	// TODO(ajwerner): This should include constraints and enum values but it
 	// currently does not because we do not support dropping them unless we're
 	// dropping the descriptor and we do not support adding them.
-	return IsIndex(e) || isColumn(e) || IsSupportedNonIndexBackedConstraint(e)
+	return IsIndex(e) || IsColumn(e) || IsSupportedNonIndexBackedConstraint(e)
 }
 
 func IsIndex(e scpb.Element) bool {
@@ -268,7 +285,7 @@ func IsIndex(e scpb.Element) bool {
 	return false
 }
 
-func isColumn(e scpb.Element) bool {
+func IsColumn(e scpb.Element) bool {
 	_, ok := e.(*scpb.Column)
 	return ok
 }
@@ -425,6 +442,12 @@ func Or(predicates ...elementTypePredicate) elementTypePredicate {
 			}
 		}
 		return false
+	}
+}
+
+func Not(predicate elementTypePredicate) elementTypePredicate {
+	return func(e scpb.Element) bool {
+		return !predicate(e)
 	}
 }
 

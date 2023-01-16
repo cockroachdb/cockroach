@@ -10,6 +10,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/rules/common",
     visibility = ["//pkg/sql/schemachanger/scplan:__subpackages__"],
     deps = [
+        "//pkg/clusterversion",
         "//pkg/sql/schemachanger/rel",
         "//pkg/sql/schemachanger/scpb",
         "//pkg/sql/schemachanger/scplan/internal/scgraph",

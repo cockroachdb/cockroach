@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/opgen"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/rules/current"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/rules"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scgraph"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scstage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -135,7 +135,7 @@ func buildGraph(
 	if err != nil {
 		panic(errors.Wrapf(err, "build graph op edges"))
 	}
-	err = current.ApplyDepRules(ctx, g)
+	err = rules.ApplyDepRules(ctx, activeVersion, g)
 	if err != nil {
 		panic(errors.Wrapf(err, "build graph dep edges"))
 	}
@@ -143,7 +143,7 @@ func buildGraph(
 	if err != nil {
 		panic(errors.Wrapf(err, "validate graph"))
 	}
-	g, err = current.ApplyOpRules(ctx, g)
+	g, err = rules.ApplyOpRules(ctx, activeVersion, g)
 	if err != nil {
 		panic(errors.Wrapf(err, "mark op edges as no-op"))
 	}
