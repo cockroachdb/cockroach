@@ -12,6 +12,7 @@ package base_test
 
 import (
 	"fmt"
+	"math"
 	"testing"
 	"time"
 
@@ -20,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/davecgh/go-spew/spew"
+	"github.com/stretchr/testify/require"
 )
 
 func TestDefaultRaftConfig(t *testing.T) {
@@ -121,4 +123,37 @@ func TestDefaultRaftConfig(t *testing.T) {
 	})
 
 	echotest.Require(t, s, datapathutils.TestDataPath(t, "raft_config_recovery"))
+}
+
+func TestRaftMaxInflightBytes(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	for i, tc := range []struct {
+		msgSize uint64
+		maxMsgs int
+		maxInfl uint64
+		want    uint64
+	}{
+		// If any of these tests fail, sync the corresponding default values with
+		// config.go, and update the comments that reason about default values.
+		{want: 256 << 20},                    // assert 255 MB is still default
+		{maxMsgs: 128, want: 256 << 20},      // assert 128 is still default
+		{msgSize: 32 << 10, want: 256 << 20}, // assert 32 KB is still default
+
+		{maxMsgs: 1 << 30, want: 1 << 45}, // large maxMsgs
+		{msgSize: 1 << 50, want: 1 << 57}, // large msgSize
+
+		{msgSize: 100, maxMsgs: 10, maxInfl: 1000000, want: 1000000}, // reasonable
+		{msgSize: 100, maxMsgs: 10, maxInfl: 5, want: 1000},          // fixup applied
+		{msgSize: 1 << 50, maxMsgs: 1 << 20, want: math.MaxUint64},   // overflow
+	} {
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			cfg := base.RaftConfig{
+				RaftMaxInflightMsgs:  tc.maxMsgs,
+				RaftMaxSizePerMsg:    tc.msgSize,
+				RaftMaxInflightBytes: tc.maxInfl,
+			}
+			cfg.SetDefaults()
+			require.Equal(t, tc.want, cfg.RaftMaxInflightBytes)
+		})
+	}
 }
