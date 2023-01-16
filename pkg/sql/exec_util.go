@@ -1662,6 +1662,10 @@ type StreamingTestingKnobs struct {
 	// frontier specs generated for the replication job.
 	AfterReplicationFlowPlan func([]*execinfrapb.StreamIngestionDataSpec,
 		*execinfrapb.StreamIngestionFrontierSpec)
+
+	// OverrideRevertRangeBatchSize allows overriding the `MaxSpanRequestKeys`
+	// used when sending a RevertRange request.
+	OverrideRevertRangeBatchSize int64
 }
 
 var _ base.ModuleTestingKnobs = &StreamingTestingKnobs{}
