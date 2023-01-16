@@ -55,6 +55,7 @@ const withData: IndexDetailsPageProps = {
   refreshIndexStats: () => {},
   resetIndexUsageStats: () => {},
   refreshNodes: () => {},
+  refreshUserSQLRoles: () => {},
 };
 
 storiesOf("Index Details Page", module)

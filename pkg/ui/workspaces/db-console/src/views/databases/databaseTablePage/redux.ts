@@ -25,7 +25,9 @@ import {
   refreshNodes,
   refreshIndexStats,
   refreshSettings,
+  refreshUserSQLRoles,
 } from "src/redux/apiReducers";
+import { selectHasAdminRole } from "src/redux/user";
 import { AdminUIState } from "src/redux/state";
 import { databaseNameAttr, tableNameAttr } from "src/util/constants";
 import { FixLong, longToInt } from "src/util/fixLong";
@@ -55,7 +57,7 @@ export const mapStateToProps = createSelector(
   state => nodeRegionsByIDSelector(state),
   state => selectIsMoreThanOneNode(state),
   state => selectAutomaticStatsCollectionEnabled(state),
-
+  state => selectHasAdminRole(state),
   (
     database,
     table,
@@ -65,6 +67,7 @@ export const mapStateToProps = createSelector(
     nodeRegions,
     showNodeRegionsSection,
     automaticStatsCollectionEnabled,
+    hasAdminRole,
   ): DatabaseTablePageData => {
     const details = tableDetails[generateTableID(database, table)];
     const stats = tableStats[generateTableID(database, table)];
@@ -147,6 +150,7 @@ export const mapStateToProps = createSelector(
       },
       showNodeRegionsSection,
       automaticStatsCollectionEnabled,
+      hasAdminRole,
       stats: {
         loading: !!stats?.inFlight,
         loaded: !!stats?.valid,
@@ -176,14 +180,11 @@ export const mapDispatchToProps = {
   refreshTableStats: (database: string, table: string) => {
     return refreshTableStats(new TableStatsRequest({ database, table }));
   },
-
   refreshIndexStats: (database: string, table: string) => {
     return refreshIndexStats(new TableIndexStatsRequest({ database, table }));
   },
-
   resetIndexUsageStats: resetIndexUsageStatsAction,
-
   refreshNodes,
-
   refreshSettings,
+  refreshUserSQLRoles,
 };

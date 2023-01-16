@@ -210,15 +210,6 @@ export class StatementDetails extends React.Component<
     }
   }
 
-  static defaultProps: Partial<StatementDetailsProps> = {
-    onDiagnosticBundleDownload: _.noop,
-    uiConfig: {
-      showStatementDiagnosticsLink: true,
-    },
-    isTenant: false,
-    hasViewActivityRedactedRole: false,
-  };
-
   hasDiagnosticReports = (): boolean =>
     this.props.diagnosticsReports.length > 0;
 

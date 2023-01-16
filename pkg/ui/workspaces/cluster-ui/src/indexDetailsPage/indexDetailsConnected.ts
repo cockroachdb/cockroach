@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { AppState } from "../store";
+import { AppState, uiConfigActions } from "../store";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 import { selectIndexDetails } from "./indexDetails.selectors";
 import { Dispatch } from "redux";
@@ -42,6 +42,7 @@ const mapDispatchToProps = (dispatch: Dispatch): IndexDetailPageActions => ({
     );
   },
   refreshNodes: () => dispatch(nodesActions.refresh()),
+  refreshUserSQLRoles: () => dispatch(uiConfigActions.refreshUserSQLRoles()),
 });
 
 export const ConnectedIndexDetailsPage = withRouter<any, any>(

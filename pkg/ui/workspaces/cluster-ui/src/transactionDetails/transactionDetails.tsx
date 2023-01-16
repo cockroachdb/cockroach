@@ -150,11 +150,6 @@ export class TransactionDetails extends React.Component<
     }
   }
 
-  static defaultProps: Partial<TransactionDetailsProps> = {
-    isTenant: false,
-    hasViewActivityRedactedRole: false,
-  };
-
   getTransactionStateInfo = (prevTransactionFingerprintId: string): void => {
     const { transaction, transactionFingerprintId } = this.props;
 
