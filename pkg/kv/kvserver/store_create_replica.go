@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -221,94 +222,79 @@ func (s *Store) tryGetOrCreateReplica(
 		return nil, false, &roachpb.RaftGroupDeletedError{}
 	}
 
-	// Create a new uninitialized replica and lock it for raft processing.
-	repl := newUnloadedReplica(ctx, rangeID, s, replicaID)
-	repl.raftMu.Lock() // not unlocked
-	// Take out read-only lock. Not strictly necessary here, but follows the
-	// normal lock protocol for destroyStatus.Set().
-	repl.readOnlyCmdMu.Lock()
-	// Grab the internal Replica state lock to ensure nobody mucks with our
-	// replica even outside of raft processing.
-	repl.mu.Lock()
-	// Initialize the Replica with the replicaID.
-	if err := func() error {
-		// An uninitialized replica should have an empty HardState.Commit at
-		// all times. Failure to maintain this invariant indicates corruption.
-		// And yet, we have observed this in the wild. See #40213.
-		if hs, err := repl.mu.stateLoader.LoadHardState(ctx, s.Engine()); err != nil {
-			return err
-		} else if hs.Commit != 0 {
-			log.Fatalf(ctx, "found non-zero HardState.Commit on uninitialized replica %s. HS=%+v", repl, hs)
-		}
-
-		// Write the RaftReplicaID for this replica. This is the only place in the
-		// CockroachDB code that we are creating a new *uninitialized* replica.
-		// Note that it is possible that we have already created the HardState for
-		// an uninitialized replica, then crashed, and on recovery are receiving a
-		// raft message for the same or later replica.
-		// - Same replica: we are overwriting the RaftReplicaID with the same
-		//   value, which is harmless.
-		// - Later replica: there may be an existing HardState for the older
-		//   uninitialized replica with Commit=0 and non-zero Term and Vote. Using
-		//   the Term and Vote values for that older replica in the context of
-		//   this newer replica is harmless since it just limits the votes for
-		//   this replica.
-		//
-		//
-		// Compatibility:
-		// - v21.2 and v22.1: v22.1 unilaterally introduces RaftReplicaID (an
-		//   unreplicated range-id local key). If a v22.1 binary is rolled back at
-		//   a node, the fact that RaftReplicaID was written is harmless to a
-		//   v21.2 node since it does not read it. When a v21.2 drops an
-		//   initialized range, the RaftReplicaID will also be deleted because the
-		//   whole range-ID local key space is deleted.
-		//
-		// - v22.2: we will start relying on the presence of RaftReplicaID, and
-		//   remove any unitialized replicas that have a HardState but no
-		//   RaftReplicaID. This removal will happen in ReplicasStorage.Init and
-		//   allow us to tighten invariants. Additionally, knowing the ReplicaID
-		//   for an unitialized range could allow a node to somehow contact the
-		//   raft group (say by broadcasting to all nodes in the cluster), and if
-		//   the ReplicaID is stale, would allow the node to remove the HardState
-		//   and RaftReplicaID. See
-		//   https://github.com/cockroachdb/cockroach/issues/75740.
-		//
-		//   There is a concern that there could be some replica that survived
-		//   from v21.2 to v22.1 to v22.2 in unitialized state and will be
-		//   incorrectly removed in ReplicasStorage.Init causing the loss of the
-		//   HardState.{Term,Vote} and lead to a "split-brain" wrt leader
-		//   election.
-		//
-		//   Even though this seems theoretically possible, it is considered
-		//   practically impossible, and not just because a replica's vote is
-		//   unlikely to stay relevant across 2 upgrades. For one, we're always
-		//   going through learners and don't promote until caught up, so
-		//   uninitialized replicas generally never get to vote. Second, even if
-		//   their vote somehow mattered (perhaps we sent a learner a snap which
-		//   was not durably persisted - which we also know is impossible, but
-		//   let's assume it - and then promoted the node and it immediately
-		//   power-cycled, losing the snapshot) the fire-and-forget way in which
-		//   raft votes are requested (in the same raft cycle) makes it extremely
-		//   unlikely that the restarted node would then receive it.
-		if err := repl.mu.stateLoader.SetRaftReplicaID(ctx, s.Engine(), replicaID); err != nil {
-			return err
-		}
-
-		repl.assertStateRaftMuLockedReplicaMuRLocked(ctx, s.Engine())
-		return nil
-	}(); err != nil {
-		// Mark the replica as destroyed and remove it from the replicas maps to
-		// ensure nobody tries to use it.
-		repl.mu.destroyStatus.Set(errors.Wrapf(err, "%s: failed to initialize", repl), destroyReasonRemoved)
-		repl.mu.Unlock()
-		repl.readOnlyCmdMu.Unlock()
-		repl.raftMu.Unlock()
+	// An uninitialized replica must have an empty HardState.Commit at all times.
+	// Failure to maintain this invariant indicates corruption. And yet, we have
+	// observed this in the wild. See #40213.
+	sl := stateloader.Make(rangeID)
+	if hs, err := sl.LoadHardState(ctx, s.Engine()); err != nil {
+		return nil, false, err
+	} else if hs.Commit != 0 {
+		log.Fatalf(ctx, "found non-zero HardState.Commit on uninitialized replica r%d/%d. HS=%+v",
+			rangeID, replicaID, hs)
+	}
+	// Write the RaftReplicaID for this replica. This is the only place in the
+	// CockroachDB code that we are creating a new *uninitialized* replica.
+	// Note that it is possible that we have already created the HardState for
+	// an uninitialized replica, then crashed, and on recovery are receiving a
+	// raft message for the same or later replica.
+	// - Same replica: we are overwriting the RaftReplicaID with the same
+	//   value, which is harmless.
+	// - Later replica: there may be an existing HardState for the older
+	//   uninitialized replica with Commit=0 and non-zero Term and Vote. Using
+	//   the Term and Vote values for that older replica in the context of
+	//   this newer replica is harmless since it just limits the votes for
+	//   this replica.
+	//
+	//
+	// Compatibility:
+	// - v21.2 and v22.1: v22.1 unilaterally introduces RaftReplicaID (an
+	//   unreplicated range-id local key). If a v22.1 binary is rolled back at
+	//   a node, the fact that RaftReplicaID was written is harmless to a
+	//   v21.2 node since it does not read it. When a v21.2 drops an
+	//   initialized range, the RaftReplicaID will also be deleted because the
+	//   whole range-ID local key space is deleted.
+	//
+	// - v22.2: we will start relying on the presence of RaftReplicaID, and
+	//   remove any unitialized replicas that have a HardState but no
+	//   RaftReplicaID. This removal will happen in ReplicasStorage.Init and
+	//   allow us to tighten invariants. Additionally, knowing the ReplicaID
+	//   for an unitialized range could allow a node to somehow contact the
+	//   raft group (say by broadcasting to all nodes in the cluster), and if
+	//   the ReplicaID is stale, would allow the node to remove the HardState
+	//   and RaftReplicaID. See
+	//   https://github.com/cockroachdb/cockroach/issues/75740.
+	//
+	//   There is a concern that there could be some replica that survived
+	//   from v21.2 to v22.1 to v22.2 in unitialized state and will be
+	//   incorrectly removed in ReplicasStorage.Init causing the loss of the
+	//   HardState.{Term,Vote} and lead to a "split-brain" wrt leader
+	//   election.
+	//
+	//   Even though this seems theoretically possible, it is considered
+	//   practically impossible, and not just because a replica's vote is
+	//   unlikely to stay relevant across 2 upgrades. For one, we're always
+	//   going through learners and don't promote until caught up, so
+	//   uninitialized replicas generally never get to vote. Second, even if
+	//   their vote somehow mattered (perhaps we sent a learner a snap which
+	//   was not durably persisted - which we also know is impossible, but
+	//   let's assume it - and then promoted the node and it immediately
+	//   power-cycled, losing the snapshot) the fire-and-forget way in which
+	//   raft votes are requested (in the same raft cycle) makes it extremely
+	//   unlikely that the restarted node would then receive it.
+	if err := sl.SetRaftReplicaID(ctx, s.Engine(), replicaID); err != nil {
 		return nil, false, err
 	}
 
+	// Create a new uninitialized replica and lock it for raft processing.
+	repl := newUnloadedReplica(ctx, rangeID, s, replicaID)
+	repl.raftMu.Lock() // not unlocked
+	repl.mu.Lock()
+	// TODO(pavelkalinnikov): there is little benefit in this check, since loading
+	// ReplicaID is a no-op after the above write, and the ReplicaState load is
+	// only for making sure it's empty. Distill the useful IO and make its result
+	// the direct input into Replica creation, then this check won't be needed.
+	repl.assertStateRaftMuLockedReplicaMuRLocked(ctx, s.Engine())
 	repl.mu.Unlock()
-	repl.readOnlyCmdMu.Unlock()
-	// NB: only repl.raftMu is now locked.
 
 	// Install the replica in the store's replica map.
 	s.mu.Lock()
