@@ -350,7 +350,7 @@ func (ex *connExecutor) execStmtInOpenState(
 
 		ex.removeActiveQuery(queryID, ast)
 		cancelQuery()
-		if ex.executorType != executorTypeInternal {
+		if ex.executorType != ExecutorTypeInternal {
 			ex.metrics.EngineMetrics.SQLActiveStatements.Dec(1)
 		}
 
@@ -381,7 +381,7 @@ func (ex *connExecutor) execStmtInOpenState(
 		}
 	}(ctx, res)
 
-	if ex.executorType != executorTypeInternal {
+	if ex.executorType != ExecutorTypeInternal {
 		ex.metrics.EngineMetrics.SQLActiveStatements.Inc(1)
 	}
 
@@ -1159,20 +1159,16 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	var stmtFingerprintID roachpb.StmtFingerprintID
 	var stats topLevelQueryStats
 	defer func() {
-		planner.maybeLogStatement(
-			ctx,
-			ex.executorType,
-			false, /* isCopy */
-			int(ex.state.mu.autoRetryCounter),
-			ex.extraTxnState.txnCounter,
-			res.RowsAffected(),
-			res.Err(),
-			ex.statsCollector.PhaseTimes().GetSessionPhaseTime(sessionphase.SessionQueryReceived),
-			&ex.extraTxnState.hasAdminRoleCache,
-			ex.server.TelemetryLoggingMetrics,
-			stmtFingerprintID,
-			&stats,
-		)
+		var bulkJobId uint64
+		// Note that for bulk job query (IMPORT, BACKUP and RESTORE), we don't
+		// use this numRows entry. We emit the number of changed rows when the job
+		// completes. (see the usages of logutil.LogJobCompletion()).
+		nonBulkJobNumRows := res.RowsAffected()
+		switch planner.stmt.AST.(type) {
+		case *tree.Import, *tree.Restore, *tree.Backup:
+			bulkJobId = res.GetBulkJobId()
+		}
+		planner.maybeLogStatement(ctx, ex.executorType, false, int(ex.state.mu.autoRetryCounter), ex.extraTxnState.txnCounter, nonBulkJobNumRows, bulkJobId, res.Err(), ex.statsCollector.PhaseTimes().GetSessionPhaseTime(sessionphase.SessionQueryReceived), &ex.extraTxnState.hasAdminRoleCache, ex.server.TelemetryLoggingMetrics, stmtFingerprintID, &stats)
 	}()
 
 	ex.statsCollector.PhaseTimes().SetSessionPhaseTime(sessionphase.PlannerEndLogicalPlan, timeutil.Now())
@@ -1294,7 +1290,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 		// Set index recommendations, so it can be saved on statement statistics.
 		// TODO(yuzefovich): figure out whether we want to set isInternalPlanner
 		// to true for the internal executors.
-		isInternal := ex.executorType == executorTypeInternal || planner.isInternalPlanner
+		isInternal := ex.executorType == ExecutorTypeInternal || planner.isInternalPlanner
 		planner.instrumentation.SetIndexRecommendations(ctx, ex.server.idxRecommendationsCache, planner, isInternal)
 	}
 
@@ -1441,7 +1437,7 @@ func (ex *connExecutor) handleTxnRowsGuardrails(
 		SessionID: ex.sessionID.String(),
 		NumRows:   numRows,
 	}
-	if shouldErr && ex.executorType == executorTypeInternal {
+	if shouldErr && ex.executorType == ExecutorTypeInternal {
 		// Internal work should never err and always log if violating either
 		// limit.
 		shouldLog = true
@@ -1456,7 +1452,7 @@ func (ex *connExecutor) handleTxnRowsGuardrails(
 	if shouldLog {
 		commonSQLEventDetails := ex.planner.getCommonSQLEventDetails(defaultRedactionOptions)
 		var event logpb.EventPayload
-		if ex.executorType == executorTypeInternal {
+		if ex.executorType == ExecutorTypeInternal {
 			if isRead {
 				event = &eventpb.TxnRowsReadLimitInternal{
 					CommonSQLEventDetails:     commonSQLEventDetails,
@@ -1540,7 +1536,7 @@ func (ex *connExecutor) makeExecPlan(ctx context.Context, planner *planner) erro
 	flags := planner.curPlan.flags
 
 	if flags.IsSet(planFlagContainsFullIndexScan) || flags.IsSet(planFlagContainsFullTableScan) {
-		if ex.executorType == executorTypeExec && planner.EvalContext().SessionData().DisallowFullTableScans {
+		if ex.executorType == ExecutorTypeExec && planner.EvalContext().SessionData().DisallowFullTableScans {
 			hasLargeScan := flags.IsSet(planFlagContainsLargeFullIndexScan) || flags.IsSet(planFlagContainsLargeFullTableScan)
 			if hasLargeScan {
 				// We don't execute the statement if:
@@ -2381,7 +2377,7 @@ func (ex *connExecutor) recordTransactionStart(txnID uuid.UUID) {
 		ex.extraTxnState.shouldCollectTxnExecutionStats = txnExecStatsSampleRate > ex.rng.Float64()
 	}
 
-	if ex.executorType != executorTypeInternal {
+	if ex.executorType != ExecutorTypeInternal {
 		ex.metrics.EngineMetrics.SQLTxnsOpen.Inc(1)
 	}
 
@@ -2414,7 +2410,7 @@ func (ex *connExecutor) recordTransactionFinish(
 	txnEnd := timeutil.Now()
 	txnTime := txnEnd.Sub(txnStart)
 	ex.totalActiveTimeStopWatch.Stop()
-	if ex.executorType != executorTypeInternal {
+	if ex.executorType != ExecutorTypeInternal {
 		ex.metrics.EngineMetrics.SQLTxnsOpen.Dec(1)
 	}
 	ex.metrics.EngineMetrics.SQLTxnLatency.RecordValue(txnTime.Nanoseconds())
@@ -2467,7 +2463,7 @@ func (ex *connExecutor) recordTransactionFinish(
 	}
 
 	if ex.server.cfg.TestingKnobs.OnRecordTxnFinish != nil {
-		ex.server.cfg.TestingKnobs.OnRecordTxnFinish(ex.executorType == executorTypeInternal, ex.phaseTimes, ex.planner.stmt.SQL)
+		ex.server.cfg.TestingKnobs.OnRecordTxnFinish(ex.executorType == ExecutorTypeInternal, ex.phaseTimes, ex.planner.stmt.SQL)
 	}
 
 	return ex.statsCollector.RecordTransaction(
