@@ -1,5 +1,7 @@
 setup
-CREATE TABLE t (i INT PRIMARY KEY, j INT)
+CREATE TABLE t (i INT PRIMARY KEY, j INT);
+COMMENT ON TABLE t IS 't has a comment';
+COMMENT ON COLUMN t.j IS 'j has a comment';
 ----
 ...
 +object {100 101 t} -> 104
@@ -37,7 +39,7 @@ begin transaction #1
 checking for feature: ALTER TABLE
 increment telemetry for sql.schema.alter_table
 increment telemetry for sql.schema.alter_table.drop_column
-## StatementPhase stage 1 of 1 with 7 MutationType ops
+## StatementPhase stage 1 of 1 with 9 MutationType ops
 upsert descriptor #104
   ...
          oid: 20
@@ -139,8 +141,9 @@ upsert descriptor #104
   ...
        time: {}
      unexposedParentSchemaId: 101
-  -  version: "1"
-  +  version: "2"
+  -  version: "2"
+  +  version: "3"
+delete comment ColumnCommentType(objID: 104, subID: 2)
 write *eventpb.AlterTable to event log: ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COLUMN ‹j›
 # end StatementPhase
 # begin PreCommitPhase
@@ -167,8 +170,8 @@ upsert descriptor #104
   ...
        time: {}
      unexposedParentSchemaId: 101
-  -  version: "1"
-  +  version: "2"
+  -  version: "2"
+  +  version: "3"
 create job #1 (non-cancelable: false): "ALTER TABLE defaultdb.public.t DROP COLUMN j"
   descriptor IDs: [104]
 # end PreCommitPhase
@@ -190,8 +193,8 @@ upsert descriptor #104
   ...
        time: {}
      unexposedParentSchemaId: 101
-  -  version: "2"
-  +  version: "3"
+  -  version: "3"
+  +  version: "4"
 update progress of schema change job #1: "PostCommitPhase stage 2 of 7 with 1 BackfillType op pending"
 commit transaction #3
 begin transaction #4
@@ -211,8 +214,8 @@ upsert descriptor #104
   ...
        time: {}
      unexposedParentSchemaId: 101
-  -  version: "3"
-  +  version: "4"
+  -  version: "4"
+  +  version: "5"
 update progress of schema change job #1: "PostCommitPhase stage 4 of 7 with 1 MutationType op pending"
 commit transaction #5
 begin transaction #6
@@ -228,8 +231,8 @@ upsert descriptor #104
   ...
        time: {}
      unexposedParentSchemaId: 101
-  -  version: "4"
-  +  version: "5"
+  -  version: "5"
+  +  version: "6"
 update progress of schema change job #1: "PostCommitPhase stage 5 of 7 with 1 BackfillType op pending"
 commit transaction #6
 begin transaction #7
@@ -249,8 +252,8 @@ upsert descriptor #104
   ...
        time: {}
      unexposedParentSchemaId: 101
-  -  version: "5"
-  +  version: "6"
+  -  version: "6"
+  +  version: "7"
 update progress of schema change job #1: "PostCommitPhase stage 7 of 7 with 1 ValidationType op pending"
 commit transaction #8
 begin transaction #9
@@ -355,8 +358,8 @@ upsert descriptor #104
   ...
        time: {}
      unexposedParentSchemaId: 101
-  -  version: "6"
-  +  version: "7"
+  -  version: "7"
+  +  version: "8"
 update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 3 with 2 MutationType ops pending"
 set schema change job #1 to non-cancellable
 commit transaction #10
@@ -402,8 +405,8 @@ upsert descriptor #104
   ...
        time: {}
      unexposedParentSchemaId: 101
-  -  version: "7"
-  +  version: "8"
+  -  version: "8"
+  +  version: "9"
 update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 3 of 3 with 4 MutationType ops pending"
 commit transaction #11
 begin transaction #12
@@ -480,8 +483,8 @@ upsert descriptor #104
   ...
        time: {}
      unexposedParentSchemaId: 101
-  -  version: "8"
-  +  version: "9"
+  -  version: "9"
+  +  version: "10"
 write *eventpb.FinishSchemaChange to event log
 create job #2 (non-cancelable: true): "GC for ALTER TABLE defaultdb.public.t DROP COLUMN j"
   descriptor IDs: [104]

@@ -666,9 +666,11 @@ func Rollback(t *testing.T, relPath string, newCluster NewClusterFunc) {
 	cumulativeTest(t, relPath, testFunc)
 }
 
+// fetchDescriptorStateQuery returns the CREATE statements for all descriptors
+// minus any COMMENT ON statements because these aren't consistently backed up.
 const fetchDescriptorStateQuery = `
 SELECT
-	create_statement
+	split_part(create_statement, ';', 1) AS create_statement
 FROM
 	( 
 		SELECT descriptor_id, create_statement FROM crdb_internal.create_schema_statements

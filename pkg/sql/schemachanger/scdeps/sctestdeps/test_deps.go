@@ -692,8 +692,9 @@ func (s *TestState) GetFullyQualifiedName(ctx context.Context, id descpb.ID) (st
 // NewCatalogChangeBatcher implements the scexec.Catalog interface.
 func (s *TestState) NewCatalogChangeBatcher() scexec.CatalogChangeBatcher {
 	return &testCatalogChangeBatcher{
-		s:             s,
-		namesToDelete: make(map[descpb.NameInfo]descpb.ID),
+		s:                s,
+		namesToDelete:    make(map[descpb.NameInfo]descpb.ID),
+		commentsToUpdate: make(map[catalogkeys.CommentKey]string),
 	}
 }
 
@@ -703,6 +704,7 @@ type testCatalogChangeBatcher struct {
 	namesToDelete       map[descpb.NameInfo]descpb.ID
 	descriptorsToDelete catalog.DescriptorIDSet
 	zoneConfigsToDelete catalog.DescriptorIDSet
+	commentsToUpdate    map[catalogkeys.CommentKey]string
 }
 
 var _ scexec.CatalogChangeBatcher = (*testCatalogChangeBatcher)(nil)
@@ -739,7 +741,7 @@ func (b *testCatalogChangeBatcher) DeleteZoneConfig(ctx context.Context, id desc
 func (b *testCatalogChangeBatcher) UpdateComment(
 	ctx context.Context, key catalogkeys.CommentKey, cmt string,
 ) error {
-	b.s.LogSideEffectf("upsert comment (objID: %d, subID %d, cmtType: %d, cmt: %s)", key.ObjectID, key.SubID, key.CommentType, cmt)
+	b.commentsToUpdate[key] = cmt
 	return nil
 }
 
@@ -747,7 +749,7 @@ func (b *testCatalogChangeBatcher) UpdateComment(
 func (b *testCatalogChangeBatcher) DeleteComment(
 	ctx context.Context, key catalogkeys.CommentKey,
 ) error {
-	b.s.LogSideEffectf("delete all comments for (objID: %d, subID %d, cmtType: %d)", key.ObjectID, key.SubID, key.CommentType)
+	b.commentsToUpdate[key] = ""
 	return nil
 }
 
@@ -796,6 +798,28 @@ func (b *testCatalogChangeBatcher) ValidateAndRun(ctx context.Context) error {
 	}
 	for _, deletedID := range b.zoneConfigsToDelete.Ordered() {
 		b.s.LogSideEffectf("deleting zone config for #%d", deletedID)
+	}
+	commentKeys := make([]catalogkeys.CommentKey, 0, len(b.commentsToUpdate))
+	for key := range b.commentsToUpdate {
+		commentKeys = append(commentKeys, key)
+	}
+	sort.Slice(commentKeys, func(i, j int) bool {
+		if d := int(commentKeys[i].CommentType) - int(commentKeys[j].CommentType); d != 0 {
+			return d < 0
+		}
+		if d := int(commentKeys[i].ObjectID) - int(commentKeys[j].ObjectID); d != 0 {
+			return d < 0
+		}
+		return int(commentKeys[i].SubID)-int(commentKeys[j].SubID) < 0
+	})
+	for _, key := range commentKeys {
+		if cmt := b.commentsToUpdate[key]; cmt == "" {
+			b.s.LogSideEffectf("delete comment %s(objID: %d, subID: %d)",
+				key.CommentType, key.ObjectID, key.SubID)
+		} else {
+			b.s.LogSideEffectf("upsert comment %s(objID: %d, subID: %d) -> %q",
+				key.CommentType, key.ObjectID, key.SubID, cmt)
+		}
 	}
 	ve := b.s.uncommitted.Validate(
 		ctx,
