@@ -11,8 +11,6 @@
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
 import { merge } from "lodash";
 import { DOMAIN_NAME } from "../utils";
-import { createSelector } from "reselect";
-import { AppState } from "../reducers";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 export type UserSQLRolesRequest = cockroach.server.serverpb.UserSQLRolesRequest;
 
@@ -57,23 +55,16 @@ const uiConfigSlice = createSlice({
     update: (state, action: PayloadAction<Partial<UIConfigState>>) => {
       merge(state, action.payload);
     },
-    refreshUserSQLRoles: (_, action?: PayloadAction<UserSQLRolesRequest>) => {},
+    refreshUserSQLRoles: (
+      state,
+      action?: PayloadAction<UserSQLRolesRequest>,
+    ) => {
+      if (action?.payload) {
+        const resp = action.payload.toJSON();
+        state.userSQLRoles = resp["roles"];
+      }
+    },
   },
 });
-
-export const selectUIConfig = createSelector(
-  (state: AppState) => state.adminUI.uiConfig,
-  uiConfig => uiConfig,
-);
-
-export const selectIsTenant = createSelector(
-  selectUIConfig,
-  uiConfig => uiConfig.isTenant,
-);
-
-export const selectHasViewActivityRedactedRole = createSelector(
-  selectUIConfig,
-  uiConfig => uiConfig.userSQLRoles.includes("VIEWACTIVITYREDACTED"),
-);
 
 export const { actions, reducer } = uiConfigSlice;
