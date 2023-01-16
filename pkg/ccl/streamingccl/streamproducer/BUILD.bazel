@@ -22,6 +22,7 @@ go_library(
         "//pkg/kv",
         "//pkg/kv/kvclient/kvcoord",
         "//pkg/kv/kvclient/rangefeed",
+        "//pkg/kv/kvserver",
         "//pkg/kv/kvserver/protectedts",
         "//pkg/kv/kvserver/protectedts/ptpb",
         "//pkg/repstream",
