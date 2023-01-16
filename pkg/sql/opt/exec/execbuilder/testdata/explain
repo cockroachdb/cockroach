@@ -427,20 +427,23 @@ vectorized: true
         │       │           │   └── • virtual table
         │       │           │         table: pg_namespace@primary
         │       │           │
-        │       │           └── • hash join (left outer)
+        │       │           └── • merge join (left outer)
         │       │               │ equality: (oid) = (objoid)
         │       │               │
         │       │               ├── • filter
         │       │               │   │ filter: relkind IN ('S', 'm', 'r', 'v')
         │       │               │   │
         │       │               │   └── • virtual table
-        │       │               │         table: pg_class@primary
+        │       │               │         table: pg_class@pg_class_oid_idx
         │       │               │
-        │       │               └── • filter
-        │       │                   │ filter: objsubid = 0
+        │       │               └── • sort
+        │       │                   │ order: +objoid
         │       │                   │
-        │       │                   └── • virtual table
-        │       │                         table: pg_description@primary
+        │       │                   └── • filter
+        │       │                       │ filter: (objsubid = 0) AND (classoid = 4294967117)
+        │       │                       │
+        │       │                       └── • virtual table
+        │       │                             table: pg_description@primary
         │       │
         │       └── • virtual table
         │             table: table_row_statistics@primary

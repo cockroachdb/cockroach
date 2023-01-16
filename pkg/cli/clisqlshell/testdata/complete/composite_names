@@ -10,7 +10,7 @@ complete 0 32
 msg: ""
 completions:
 - "functions":
-  "crdb_internal.force_error(" (This function is used only by CockroachDB's developers for testing purposes.) -> "crdb_internal.force_error(" (0, 25)
+  "crdb_internal.force_error(" (This function is used only by CockroachDB's developers for testing purposes) -> "crdb_internal.force_error(" (0, 25)
 
 sql
 create schema my_schema
@@ -34,7 +34,7 @@ complete 0 9
 msg: ""
 completions:
 - "functions":
-  "my_func(" () -> "my_func(" (0, 2)
+  "my_func(" ((from schema public) ) -> "my_func(" (0, 2)
 - "schema":
   "my_schema" () -> "my_schema" (0, 2)
 
@@ -54,8 +54,8 @@ complete 0 25
 msg: ""
 completions:
 - "functions":
-  "pg_catalog.array_length(" (Calculates the length of `input` on the provided `array_dimension`. However, bec) -> "pg_catalog.array_length(" (0, 18)
-  "pg_catalog.array_lower(" (Calculates the minimum value of `input` on the provided `array_dimension`. Howev) -> "pg_catalog.array_lower(" (0, 18)
+  "pg_catalog.array_length(" (Calculates the length of `input` on the provided `array_dimension`) -> "pg_catalog.array_length(" (0, 18)
+  "pg_catalog.array_lower(" (Calculates the minimum value of `input` on the provided `array_dimension`) -> "pg_catalog.array_lower(" (0, 18)
 
 complete
 select "PG_CATALOG".@
