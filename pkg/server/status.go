@@ -336,7 +336,10 @@ func (b *baseStatusServer) checkCancelPrivilege(
 		if sessionUser != reqUser {
 			// Must have CANCELQUERY privilege to cancel other users'
 			// sessions/queries.
-			hasCancelQuery := b.privilegeChecker.checkHasGlobalPrivilege(ctx, reqUser, privilege.CANCELQUERY)
+			hasCancelQuery, err := b.privilegeChecker.hasGlobalPrivilege(ctx, reqUser, privilege.CANCELQUERY)
+			if err != nil {
+				return serverError(ctx, err)
+			}
 			if !hasCancelQuery {
 				ok, err := b.privilegeChecker.hasRoleOption(ctx, reqUser, roleoption.CANCELQUERY)
 				if err != nil {
