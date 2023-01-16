@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/grunning"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -89,8 +90,11 @@ func TestEquivalentGoroutines(t *testing.T) {
 // package.
 func TestProportionalGoroutines(t *testing.T) {
 	skip.UnderStress(t, "not applicable")
-
-	f := func(wg *sync.WaitGroup, v uint64, trip uint64, result *int64) {
+	type resultContainer struct {
+		mu    *syncutil.Mutex
+		value int64
+	}
+	f := func(wg *sync.WaitGroup, v uint64, trip uint64, result *resultContainer) {
 		defer wg.Done()
 
 		ret := v
@@ -100,10 +104,17 @@ func TestProportionalGoroutines(t *testing.T) {
 		}
 
 		nanos := grunning.Time().Nanoseconds()
-		*result = nanos
+		result.mu.Lock()
+		defer result.mu.Unlock()
+		result.value = nanos
 	}
 
-	results := make([]int64, 10)
+	results := make([]resultContainer, 10)
+	for i := 0; i < len(results); i++ {
+		results[i] = resultContainer{
+			mu: &syncutil.Mutex{},
+		}
+	}
 	var wg sync.WaitGroup
 
 	for iters := 0; iters < 10000; iters++ {
@@ -118,13 +129,13 @@ func TestProportionalGoroutines(t *testing.T) {
 
 	total := int64(0)
 	for _, result := range results {
-		total += result
+		total += result.value
 	}
 
-	initial := float64(results[0]) / float64(total)
+	initial := float64(results[0].value) / float64(total)
 
 	for i, result := range results {
-		got := float64(result) / float64(total)
+		got := float64(result.value) / float64(total)
 		mult := got / initial
 		t.Logf("thread=%02d got %5.2f%% of on-cpu time: expected≈%5.2fx got=%4.2fx ",
 			i+1, got*100, float64(i+1), mult)
