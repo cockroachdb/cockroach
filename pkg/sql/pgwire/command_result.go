@@ -71,8 +71,12 @@ type commandResult struct {
 	// CommandComplete message.
 	cmdCompleteTag string
 
-	stmtType     tree.StatementReturnType
-	descOpt      sql.RowDescOpt
+	stmtType tree.StatementReturnType
+	descOpt  sql.RowDescOpt
+
+	// rowsAffected doesn't reflect the number of changed rows for bulk job
+	// (IMPORT, BACKUP and RESTORE). For these jobs, see the usages of
+	// log/logutil.LogJobCompletion().
 	rowsAffected int
 
 	// formatCodes describes the encoding of each column of result rows. It is nil
@@ -95,6 +99,11 @@ type commandResult struct {
 	// memory can be reused. It is also used to assert against use-after-free
 	// errors.
 	released bool
+
+	// bulkJobInfo stores id for bulk jobs (IMPORT, BACKUP, RESTORE),
+	// It's written in commandResult.AddRow() and only if the query is
+	// IMPORT, BACKUP or RESTORE.
+	bulkJobId uint64
 }
 
 // paramStatusUpdate is a status update to send to the client when a parameter is
@@ -212,12 +221,31 @@ func (r *commandResult) beforeAdd() error {
 	return nil
 }
 
+// The index of the column for job_id and rows based on
+// jobs.BulkJobExecutionResultHeader.
+const (
+	jobIdColIdx = 0
+	rowsColIdx  = 3
+)
+
 // AddRow is part of the sql.RestrictedCommandResult interface.
 func (r *commandResult) AddRow(ctx context.Context, row tree.Datums) error {
 	if err := r.beforeAdd(); err != nil {
 		return err
 	}
-	r.rowsAffected++
+	switch r.cmdCompleteTag {
+	case tree.ImportTagStr, tree.RestoreTagStr, tree.BackupTagStr:
+		if row.Len() == 0 {
+			return errors.Newf("%s command should not return 0 datum", r.cmdCompleteTag)
+		}
+		// Based on jobs.BulkJobExecutionResultHeader and
+		// jobs.DetachedJobExecutionResultHeader, the returned row can have either
+		// 1 or 6 entries. The first entry is always the job id.
+		// If there are 6 entries, it must contain "rows".
+		r.bulkJobId = uint64(*row[jobIdColIdx].(*tree.DInt))
+	default:
+		r.rowsAffected++
+	}
 	return r.conn.bufferRow(ctx, row, r)
 }
 
@@ -226,7 +254,18 @@ func (r *commandResult) AddBatch(ctx context.Context, batch coldata.Batch) error
 	if err := r.beforeAdd(); err != nil {
 		return err
 	}
-	r.rowsAffected += batch.Length()
+	switch r.cmdCompleteTag {
+	case tree.ImportTagStr, tree.RestoreTagStr, tree.BackupTagStr:
+		if batch.Width() == 0 {
+			return errors.Newf("%s command should not return 0 datum", r.cmdCompleteTag)
+		}
+		// Based on jobs.BulkJobExecutionResultHeader and
+		// jobs.DetachedJobExecutionResultHeader, the returned row can have either
+		// 1 or 6 entries. The first entry is always the job id.
+		r.bulkJobId = uint64(batch.ColVec(jobIdColIdx).Int64()[0])
+	default:
+		r.rowsAffected += batch.Length()
+	}
 	return r.conn.bufferBatch(ctx, batch, r)
 }
 
@@ -314,6 +353,11 @@ func (r *commandResult) ResetStmtType(stmt tree.Statement) {
 	r.assertNotReleased()
 	r.stmtType = stmt.StatementReturnType()
 	r.cmdCompleteTag = stmt.StatementTag()
+}
+
+// GetEntryFromExtraInfo is part of the sql.RestrictedCommandResult interface.
+func (r *commandResult) GetBulkJobId() uint64 {
+	return r.bulkJobId
 }
 
 // release frees the commandResult and allows its memory to be reused.

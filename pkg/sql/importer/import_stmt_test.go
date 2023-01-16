@@ -74,6 +74,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -7020,7 +7021,11 @@ func TestImportJobEventLogging(t *testing.T) {
 		&unused)
 
 	expectedStatus := []string{string(jobs.StatusSucceeded), string(jobs.StatusRunning)}
-	jobstest.CheckEmittedEvents(t, expectedStatus, beforeImport.UnixNano(), jobID, "import", "IMPORT")
+	expectedRecoveryEvent := eventpb.RecoveryEvent{
+		RecoveryType: importJobRecoveryEventType,
+		NumRows:      int64(1000),
+	}
+	jobstest.CheckEmittedEvents(t, expectedStatus, beforeImport.UnixNano(), jobID, "import", "IMPORT", expectedRecoveryEvent)
 
 	sqlDB.Exec(t, `DROP TABLE simple`)
 
@@ -7037,7 +7042,17 @@ func TestImportJobEventLogging(t *testing.T) {
 		string(jobs.StatusFailed), string(jobs.StatusReverting),
 		string(jobs.StatusRunning),
 	}
-	jobstest.CheckEmittedEvents(t, expectedStatus, beforeSecondImport.UnixNano(), jobID, "import", "IMPORT")
+	expectedRecoveryEvent = eventpb.RecoveryEvent{
+		RecoveryType: importJobRecoveryEventType,
+		NumRows:      int64(1000),
+	}
+	// Note that different from RESTORE, for canceled or failed job, recovery
+	// events for IMPORT still shows the changed number of rows (hence we're not
+	// resetting the NumRows in expectedRecoveryEvent to 0 here). It's because
+	// we record the count of inserted rows prior to executing testingKnobs.afterImport
+	// (see `importResumer.Resume()`) so that we can test on resuming the interrupted
+	// import process (such as TestCSVImportCanBeResumed).
+	jobstest.CheckEmittedEvents(t, expectedStatus, beforeSecondImport.UnixNano(), jobID, "import", "IMPORT", expectedRecoveryEvent)
 }
 
 func TestImportDefautIntSizeSetting(t *testing.T) {
@@ -7283,7 +7298,8 @@ CREATE TABLE a (
     FAMILY (c)
 )`)
 		data = "1,1,1\n1,2,1" // 1,1,1 is unindexed, 1,2,1 is indexed
-		sqlDB.Exec(t, fmt.Sprintf(`IMPORT INTO a CSV DATA ('%s')`, srv.URL))
+		importQuery := fmt.Sprintf(`IMPORT INTO a CSV DATA ('%s')`, srv.URL)
+		sqlDB.Exec(t, importQuery)
 		sqlDB.CheckQueryResults(t, `SELECT * FROM a@idx_c_b_gt_1 WHERE b > 1`, [][]string{
 			{"1", "2", "1"},
 		})

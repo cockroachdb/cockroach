@@ -17,6 +17,8 @@ import (
 
 // BulkJobExecutionResultHeader is the header for various job commands
 // (BACKUP, RESTORE, IMPORT, etc) stmt results.
+// If this header is updated, please also update pgwire.jobIdColIdx and
+// pgwire.rowsColIdx.
 var BulkJobExecutionResultHeader = colinfo.ResultColumns{
 	{Name: "job_id", Typ: types.Int},
 	{Name: "status", Typ: types.String},
@@ -28,6 +30,8 @@ var BulkJobExecutionResultHeader = colinfo.ResultColumns{
 
 // DetachedJobExecutionResultHeader is a the header for various job commands when
 // job executes in detached mode (i.e. the caller doesn't wait for job completion).
+// If this header is updated, please also update pgwire.jobIdColIdx and
+// pgwire.rowsColIdx.
 var DetachedJobExecutionResultHeader = colinfo.ResultColumns{
 	{Name: "job_id", Typ: types.Int},
 }

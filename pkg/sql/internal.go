@@ -255,7 +255,7 @@ func (ie *InternalExecutor) initConnEx(
 		}
 	}
 
-	ex.executorType = executorTypeInternal
+	ex.executorType = ExecutorTypeInternal
 	return ex, nil
 
 }
