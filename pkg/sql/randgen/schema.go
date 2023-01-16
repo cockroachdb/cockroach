@@ -584,7 +584,7 @@ func randIndexTableDefFromCols(
 		numExpressions := rng.Intn(10) + 1
 		for i := 0; i < numPartitions; i++ {
 			var partition tree.ListPartition
-			partition.Name = tree.UnrestrictedName(fmt.Sprintf("%s_part_%d", tableName, i))
+			partition.Name = tree.Name(fmt.Sprintf("%s_part_%d", tableName, i))
 			// Add up to 10 expressions in each partition.
 			for j := 0; j < numExpressions; j++ {
 				// Use a tuple to contain the expressions in case there are multiple

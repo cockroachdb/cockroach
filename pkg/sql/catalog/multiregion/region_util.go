@@ -23,7 +23,7 @@ func PartitionByForRegionalByRow(regionConfig RegionConfig, col tree.Name) *tree
 	listPartition := make([]tree.ListPartition, len(regionConfig.Regions()))
 	for i, region := range regionConfig.Regions() {
 		listPartition[i] = tree.ListPartition{
-			Name:  tree.UnrestrictedName(region),
+			Name:  tree.Name(region),
 			Exprs: tree.Exprs{tree.NewStrVal(string(region))},
 		}
 	}
