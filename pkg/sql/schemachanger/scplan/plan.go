@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/opgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/rules/current"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/rules/release_22_2"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scgraph"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scstage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -128,6 +129,32 @@ func makePlan(ctx context.Context, p *Plan) (err error) {
 	return nil
 }
 
+func applyOpRules(
+	ctx context.Context, activeVersion clusterversion.ClusterVersion, g *scgraph.Graph,
+) (*scgraph.Graph, error) {
+	if activeVersion.IsActive(clusterversion.V23_1) {
+		return current.ApplyOpRules(ctx, g)
+	} else if activeVersion.IsActive(clusterversion.V22_2) {
+		return release_22_2.ApplyOpRules(ctx, g)
+	} else {
+		log.Warningf(ctx, "Falling back to the oldest supported version 22.2")
+		return release_22_2.ApplyOpRules(ctx, g)
+	}
+}
+
+func applyDepRules(
+	ctx context.Context, activeVersion clusterversion.ClusterVersion, g *scgraph.Graph,
+) error {
+	if activeVersion.IsActive(clusterversion.V23_1) {
+		return current.ApplyDepRules(ctx, g)
+	} else if activeVersion.IsActive(clusterversion.V22_2) {
+		return release_22_2.ApplyDepRules(ctx, g)
+	} else {
+		log.Warningf(ctx, "Falling back to the oldest supported version 22.2")
+		return release_22_2.ApplyDepRules(ctx, g)
+	}
+}
+
 func buildGraph(
 	ctx context.Context, activeVersion clusterversion.ClusterVersion, cs scpb.CurrentState,
 ) *scgraph.Graph {
@@ -135,7 +162,7 @@ func buildGraph(
 	if err != nil {
 		panic(errors.Wrapf(err, "build graph op edges"))
 	}
-	err = current.ApplyDepRules(ctx, g)
+	err = applyDepRules(ctx, activeVersion, g)
 	if err != nil {
 		panic(errors.Wrapf(err, "build graph dep edges"))
 	}
@@ -143,7 +170,7 @@ func buildGraph(
 	if err != nil {
 		panic(errors.Wrapf(err, "validate graph"))
 	}
-	g, err = current.ApplyOpRules(ctx, g)
+	g, err = applyOpRules(ctx, activeVersion, g)
 	if err != nil {
 		panic(errors.Wrapf(err, "mark op edges as no-op"))
 	}
