@@ -342,7 +342,6 @@ func (s *kafkaSink) EmitRow(
 	if err != nil {
 		return err
 	}
-
 	msg := &sarama.ProducerMessage{
 		Topic:    topic,
 		Key:      sarama.ByteEncoder(key),

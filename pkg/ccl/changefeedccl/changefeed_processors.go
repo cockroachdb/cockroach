@@ -244,6 +244,13 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 		ca.cancel()
 		return
 	}
+	if !ca.isSinkless() {
+		if err = ca.sliMetrics.initTelemetryLogging(ca.Ctx(), ca.spec.JobID, ca.flowCtx); err != nil {
+			ca.MoveToDraining(err)
+			ca.cancel()
+			return
+		}
+	}
 
 	ca.sink, err = getEventSink(ctx, ca.flowCtx.Cfg, ca.spec.Feed, timestampOracle,
 		ca.spec.User(), ca.spec.JobID, ca.sliMetrics)
@@ -439,6 +446,9 @@ func (ca *changeAggregator) close() {
 	if ca.Closed {
 		return
 	}
+	if !ca.isSinkless() {
+		ca.sliMetrics.flushTelemetryLogs()
+	}
 	ca.cancel()
 	// Wait for the poller to finish shutting down.
 	if ca.kvFeedDoneCh != nil {
@@ -618,6 +628,10 @@ func (ca *changeAggregator) emitResolved(batch jobspb.ResolvedSpans) error {
 func (ca *changeAggregator) ConsumerClosed() {
 	// The consumer is done, Next() will not be called again.
 	ca.close()
+}
+
+func (ca *changeAggregator) isSinkless() bool {
+	return ca.spec.JobID == 0
 }
 
 const (

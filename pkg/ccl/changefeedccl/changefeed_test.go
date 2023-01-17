@@ -5620,6 +5620,70 @@ func TestChangefeedTelemetry(t *testing.T) {
 	cdcTest(t, testFn, feedTestForceSink("enterprise"))
 }
 
+func TestChangefeedContinuousTelemetry(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		// Hack: since setting a zero value disabled, set a negative value to ensure we always log.
+		interval := -10 * time.Millisecond
+		ContinuousTelemetryInterval.Override(context.Background(), &s.Server.ClusterSettings().SV, interval)
+
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE TABLE foo (id INT PRIMARY KEY)`)
+
+		foo := feed(t, f, `CREATE CHANGEFEED FOR foo`)
+		defer closeFeed(t, foo)
+		jobID := foo.(cdctest.EnterpriseTestFeed).JobID()
+
+		for i := 0; i < 5; i++ {
+			beforeCreate := timeutil.Now()
+			sqlDB.Exec(t, fmt.Sprintf(`INSERT INTO foo VALUES (%d) RETURNING cluster_logical_timestamp()`, i))
+			verifyLogsWithEmittedBytes(t, jobID, beforeCreate.UnixNano(), interval.Nanoseconds(), false)
+		}
+	}
+
+	// TODO(#89421): include pubsub once it supports metrics
+	cdcTest(t, testFn, feedTestOmitSinks("sinkless", "pubsub"))
+}
+
+func TestChangefeedContinuousTelemetryOnTermination(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		interval := 24 * time.Hour
+		ContinuousTelemetryInterval.Override(context.Background(), &s.Server.ClusterSettings().SV, interval)
+		beforeCreate := timeutil.Now()
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE TABLE foo (id INT PRIMARY KEY)`)
+
+		// Insert a row and wait for logs to be created.
+		foo := feed(t, f, `CREATE CHANGEFEED FOR foo`)
+		jobID := foo.(cdctest.EnterpriseTestFeed).JobID()
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (1)`)
+		verifyLogsWithEmittedBytes(t, jobID, beforeCreate.UnixNano(), interval.Nanoseconds(), false)
+
+		// Insert more rows. No logs should be created for these since we recently
+		// published them above and the interval is 24h.
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (2)`)
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (3)`)
+		assertPayloads(t, foo, []string{
+			`foo: [1]->{"after": {"id": 1}}`,
+			`foo: [2]->{"after": {"id": 2}}`,
+			`foo: [3]->{"after": {"id": 3}}`,
+		})
+
+		// Close the changefeed and ensure logs were created after closing.
+		beforeClose := timeutil.Now()
+		require.NoError(t, foo.Close())
+		verifyLogsWithEmittedBytes(t, jobID, beforeClose.UnixNano(), interval.Nanoseconds(), true)
+	}
+
+	// TODO(#89421): include pubsub once it supports metrics
+	cdcTest(t, testFn, feedTestOmitSinks("sinkless", "pubsub"))
+}
+
 // Regression test for #41694.
 func TestChangefeedRestartDuringBackfill(t *testing.T) {
 	defer leaktest.AfterTest(t)()
