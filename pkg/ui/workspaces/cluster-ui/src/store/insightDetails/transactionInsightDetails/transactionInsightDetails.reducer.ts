@@ -12,30 +12,24 @@ import { createSlice, PayloadAction } from "@reduxjs/toolkit";
 import { DOMAIN_NAME } from "src/store/utils";
 import moment, { Moment } from "moment";
 import { ErrorWithKey } from "src/api/statementsApi";
-import { TxnContentionReq } from "src/api/txnInsightsApi";
-import { TxnContentionInsightDetails } from "src/insights";
+import {
+  TxnInsightDetailsRequest,
+  TxnInsightDetailsResponse,
+} from "src/api/txnInsightsApi";
+import { TxnInsightDetails } from "src/insights";
 
-export type TransactionInsightDetailsState = {
-  data: TxnContentionInsightDetails | null;
+export type TxnInsightDetailsState = {
+  data: TxnInsightDetails | null;
   lastUpdated: Moment | null;
-  lastError: Error;
+  errors: Error[];
   valid: boolean;
 };
 
-const txnInitialState: TransactionInsightDetailsState = {
-  data: null,
-  lastUpdated: null,
-  lastError: null,
-  valid: true,
+export type TxnInsightDetailsCachedState = {
+  cachedData: { [id: string]: TxnInsightDetailsState };
 };
 
-export type TransactionInsightDetailsCachedState = {
-  cachedData: {
-    [id: string]: TransactionInsightDetailsState;
-  };
-};
-
-const initialState: TransactionInsightDetailsCachedState = {
+const initialState: TxnInsightDetailsCachedState = {
   cachedData: {},
 };
 
@@ -43,29 +37,27 @@ const transactionInsightDetailsSlice = createSlice({
   name: `${DOMAIN_NAME}/transactionInsightDetailsSlice`,
   initialState,
   reducers: {
-    received: (state, action: PayloadAction<TxnContentionInsightDetails>) => {
-      if (action?.payload?.transactionExecutionID) {
-        state.cachedData[action.payload.transactionExecutionID] = {
-          data: action.payload,
-          valid: true,
-          lastError: null,
-          lastUpdated: moment.utc(),
-        };
-      }
+    received: (state, action: PayloadAction<TxnInsightDetailsResponse>) => {
+      state.cachedData[action.payload.txnExecutionID] = {
+        data: action.payload.result,
+        valid: true,
+        errors: action.payload.errors,
+        lastUpdated: moment.utc(),
+      };
     },
     failed: (state, action: PayloadAction<ErrorWithKey>) => {
       state.cachedData[action.payload.key] = {
         data: null,
         valid: false,
-        lastError: action?.payload?.err,
+        errors: [action?.payload?.err],
         lastUpdated: null,
       };
     },
     invalidated: (state, action: PayloadAction<{ key: string }>) => {
       delete state.cachedData[action.payload.key];
     },
-    refresh: (_, _action: PayloadAction<TxnContentionReq>) => {},
-    request: (_, _action: PayloadAction<TxnContentionReq>) => {},
+    refresh: (_, _action: PayloadAction<TxnInsightDetailsRequest>) => {},
+    request: (_, _action: PayloadAction<TxnInsightDetailsRequest>) => {},
   },
 });
 

@@ -36,7 +36,7 @@ import {
   selectStmtInsightsLoading,
 } from "src/store/insights/statementInsights";
 import {
-  actions as transactionInsights,
+  actions as txnInsights,
   selectTransactionInsights,
   selectTransactionInsightsError,
   selectFilters,
@@ -45,7 +45,7 @@ import {
 } from "src/store/insights/transactionInsights";
 import { Dispatch } from "redux";
 import { TimeScale } from "../../timeScaleDropdown";
-import { StmtInsightsReq } from "src/api";
+import { StmtInsightsReq, TxnInsightsRequest } from "src/api";
 import { selectTimeScale } from "../../store/utils/selectors";
 
 const transactionMapStateToProps = (
@@ -103,8 +103,8 @@ const TransactionDispatchProps = (
       }),
     );
   },
-  refreshTransactionInsights: (req: StmtInsightsReq) => {
-    dispatch(transactionInsights.refresh(req));
+  refreshTransactionInsights: (req: TxnInsightsRequest) => {
+    dispatch(txnInsights.refresh(req));
   },
 });
 

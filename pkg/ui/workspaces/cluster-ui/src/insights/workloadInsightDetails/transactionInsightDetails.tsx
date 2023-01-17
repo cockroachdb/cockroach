@@ -17,8 +17,8 @@ import "antd/lib/row/style";
 import { Button } from "src/button";
 import { Loading } from "src/loading";
 import { getMatchParamByName } from "src/util/query";
-import { TxnContentionReq } from "src/api";
-import { TxnInsightDetails } from "../types";
+import { TxnInsightDetailsRequest } from "src/api";
+import { InsightNameEnum, TxnInsightDetails } from "../types";
 
 import { commonStyles } from "src/common";
 import { InsightsError } from "../insightsErrorComponent";
@@ -31,13 +31,13 @@ import { timeScaleRangeToObj } from "src/timeScaleDropdown/utils";
 import "antd/lib/tabs/style";
 export interface TransactionInsightDetailsStateProps {
   insightDetails: TxnInsightDetails;
-  insightError: Error | null;
+  insightError: Error[] | null;
   timeScale?: TimeScale;
   hasAdminRole: boolean;
 }
 
 export interface TransactionInsightDetailsDispatchProps {
-  refreshTransactionInsightDetails: (req: TxnContentionReq) => void;
+  refreshTransactionInsightDetails: (req: TxnInsightDetailsRequest) => void;
   setTimeScale: (ts: TimeScale) => void;
   refreshUserSQLRoles: () => void;
 }
@@ -66,24 +66,50 @@ export const TransactionInsightDetails: React.FC<
   refreshUserSQLRoles,
 }) => {
   const executionID = getMatchParamByName(match, idAttr);
-  const noInsights = !insightDetails;
+  const txnDetails = insightDetails.txnDetails;
+  const stmts = insightDetails.statements;
+  const contentionInfo = insightDetails.blockingContentionDetails;
+
   useEffect(() => {
     refreshUserSQLRoles();
-    const execReq = timeScaleRangeToObj(timeScale);
-    if (noInsights) {
-      // Only refresh if we have no data (e.g. refresh the page)
-      refreshTransactionInsightDetails({
-        id: executionID,
-        start: execReq.start,
-        end: execReq.end,
-      });
+  }, [refreshUserSQLRoles]);
+
+  useEffect(() => {
+    const stmtsComplete =
+      stmts != null && stmts.length === txnDetails?.stmtExecutionIDs?.length;
+
+    const contentionComplete =
+      contentionInfo != null ||
+      (txnDetails != null &&
+        txnDetails.insights.find(
+          i => i.name === InsightNameEnum.highContention,
+        ) == null);
+
+    if (!stmtsComplete || !contentionComplete || txnDetails == null) {
+      // Only fetch if we are missing some information.
+      const execReq = timeScaleRangeToObj(timeScale);
+      const req = {
+        mergeResultWith: {
+          txnDetails,
+          blockingContentionDetails: contentionInfo,
+          statements: stmts,
+          start: execReq.start,
+          end: execReq.end,
+        },
+        txnExecutionID: executionID,
+        excludeTxn: txnDetails != null,
+        excludeStmts: stmtsComplete,
+        excludeContention: contentionComplete,
+      };
+      refreshTransactionInsightDetails(req);
     }
   }, [
+    timeScale,
     executionID,
     refreshTransactionInsightDetails,
-    noInsights,
-    timeScale,
-    refreshUserSQLRoles,
+    stmts,
+    txnDetails,
+    contentionInfo,
   ]);
 
   const prevPage = (): void => history.goBack();
@@ -110,9 +136,11 @@ export const TransactionInsightDetails: React.FC<
       </div>
       <section>
         <Loading
-          loading={!insightDetails || insightDetails === null}
+          loading={txnDetails == null}
           page={"Transaction Insight details"}
-          error={insightError}
+          error={
+            txnDetails == null && insightError?.length ? insightError[0] : null
+          }
           renderError={() => InsightsError()}
         >
           <Tabs
@@ -121,12 +149,14 @@ export const TransactionInsightDetails: React.FC<
           >
             <Tabs.TabPane tab="Overview" key={TabKeysEnum.OVERVIEW}>
               <TransactionInsightDetailsOverviewTab
-                insightDetails={insightDetails}
+                statements={insightDetails.statements}
+                txnDetails={insightDetails.txnDetails}
+                contentionDetails={insightDetails.blockingContentionDetails}
                 setTimeScale={setTimeScale}
                 hasAdminRole={hasAdminRole}
               />
             </Tabs.TabPane>
-            {insightDetails?.statementInsights?.length && (
+            {txnDetails?.stmtExecutionIDs?.length && (
               <Tabs.TabPane
                 tab="Statement Executions"
                 key={TabKeysEnum.STATEMENTS}
