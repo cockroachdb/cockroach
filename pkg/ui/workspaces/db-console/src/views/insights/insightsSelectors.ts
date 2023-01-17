@@ -19,10 +19,10 @@ import {
   SortSetting,
   selectID,
   selectStatementInsightDetailsCombiner,
-  selectTxnInsightsCombiner,
-  TxnContentionInsightDetails,
   selectTxnInsightDetailsCombiner,
   InsightEnumToLabel,
+  TxnInsightDetails,
+  api,
 } from "@cockroachlabs/cluster-ui";
 
 export const filtersLocalSetting = new LocalSetting<
@@ -41,50 +41,60 @@ export const sortSettingLocalSetting = new LocalSetting<
   columnTitle: "startTime",
 });
 
-export const selectTransactionInsights = createSelector(
-  (state: AdminUIState) =>
-    state.cachedData.txnInsights?.valid
-      ? state.cachedData.txnInsights?.data
-      : null,
-  selectTxnInsightsCombiner,
-);
-
 export const selectTransactionInsightsLoading = (state: AdminUIState) =>
   state.cachedData.txnInsights?.inFlight &&
   (!state.cachedData.txnInsights?.valid || !state.cachedData.txnInsights?.data);
 
-const selectTxnContentionInsightDetails = createSelector(
+export const selectTransactionInsights = (state: AdminUIState) =>
+  state.cachedData.txnInsights?.valid
+    ? state.cachedData.txnInsights?.data
+    : null;
+
+const selectCachedTxnInsightDetails = createSelector(
   [(state: AdminUIState) => state.cachedData.txnInsightDetails, selectID],
-  (insight, insightId: string): TxnContentionInsightDetails => {
+  (insight, insightId): TxnInsightDetails => {
     if (!insight) {
       return null;
     }
-    return insight[insightId]?.data;
+    return insight[insightId]?.data?.result;
   },
 );
 
-const selectTxnInsightFromExecInsight = createSelector(
-  (state: AdminUIState) => state.cachedData.stmtInsights?.data,
+const selectTxnInsight = createSelector(
+  (state: AdminUIState) => state.cachedData.txnInsights?.data,
   selectID,
-  (execInsights, execID) => {
-    return execInsights?.find(txn => txn.transactionExecutionID === execID);
+  (insights, execID) => {
+    return insights?.find(txn => txn.transactionExecutionID === execID);
   },
 );
+
+export const selectStmtInsights = (state: AdminUIState) =>
+  state.cachedData.stmtInsights?.data;
 
 export const selectTxnInsightDetails = createSelector(
-  selectTxnInsightFromExecInsight,
-  selectTxnContentionInsightDetails,
+  selectTxnInsight,
+  selectCachedTxnInsightDetails,
+  selectStmtInsights,
   selectTxnInsightDetailsCombiner,
 );
 
 export const selectTransactionInsightDetailsError = createSelector(
   (state: AdminUIState) => state.cachedData.txnInsightDetails,
   selectID,
-  (insight, insightId): Error | null => {
-    if (!insight) {
+  (insights, insightId: string): api.TxnInsightDetailsReqErrs | null => {
+    if (!insights) {
       return null;
     }
-    return insight[insightId]?.lastError;
+    const reqErrors = insights[insightId]?.data?.errors;
+    if (insights[insightId]?.lastError) {
+      Object.keys(reqErrors).forEach(
+        (key: keyof api.TxnInsightDetailsReqErrs) => {
+          reqErrors[key] = insights[insightId].lastError;
+        },
+      );
+    }
+
+    return insights[insightId]?.data?.errors;
   },
 );
 
@@ -95,11 +105,6 @@ export const selectStmtInsightsLoading = (state: AdminUIState) =>
   state.cachedData.stmtInsights?.inFlight &&
   (!state.cachedData.stmtInsights?.data ||
     !state.cachedData.stmtInsights.valid);
-
-export const selectStmtInsights = (state: AdminUIState) =>
-  state.cachedData?.stmtInsights?.valid
-    ? state.cachedData?.stmtInsights?.data
-    : null;
 
 export const selectInsightTypes = () => {
   const insights: string[] = [];

@@ -25,7 +25,7 @@ import { sqlStatsSaga } from "./sqlStats";
 import { sqlDetailsStatsSaga } from "./statementDetails";
 import { indexStatsSaga } from "./indexStats";
 import { clusterLocksSaga } from "./clusterLocks/clusterLocks.saga";
-import { transactionInsightsSaga } from "./insights/transactionInsights";
+import { transactionInsightsSaga } from "./insights/transactionInsights/transactionInsights.sagas";
 import { transactionInsightDetailsSaga } from "./insightDetails/transactionInsightDetails";
 import { statementInsightsSaga } from "./insights/statementInsights";
 import { schemaInsightsSaga } from "./schemaInsights";

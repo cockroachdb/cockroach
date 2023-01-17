@@ -11,7 +11,6 @@
 import React from "react";
 import classNames from "classnames/bind";
 import styles from "./workloadInsights/util/workloadInsights.module.scss";
-import { sqlApiErrorMessage } from "../api";
 
 const cx = classNames.bind(styles);
 

@@ -10,33 +10,30 @@
 
 import { all, call, put, takeLatest } from "redux-saga/effects";
 
-import { actions } from "./transactionInsights.reducer";
+import { actions as txnActions } from "../transactionInsights/transactionInsights.reducer";
+import { getTxnInsightsApi, TxnInsightsRequest } from "src/api/txnInsightsApi";
 import { PayloadAction } from "@reduxjs/toolkit";
-import {
-  getTxnInsightEvents,
-  ExecutionInsightsRequest,
-} from "src/api/txnInsightsApi";
 
 export function* refreshTransactionInsightsSaga(
-  action?: PayloadAction<ExecutionInsightsRequest>,
+  action?: PayloadAction<TxnInsightsRequest>,
 ) {
-  yield put(actions.request(action?.payload));
+  yield put(txnActions.request(action?.payload));
 }
 
 export function* requestTransactionInsightsSaga(
-  action?: PayloadAction<ExecutionInsightsRequest>,
+  action?: PayloadAction<TxnInsightsRequest>,
 ): any {
   try {
-    const result = yield call(getTxnInsightEvents, action?.payload);
-    yield put(actions.received(result));
+    const result = yield call(getTxnInsightsApi, action?.payload);
+    yield put(txnActions.received(result));
   } catch (e) {
-    yield put(actions.failed(e));
+    yield put(txnActions.failed(e));
   }
 }
 
 export function* transactionInsightsSaga() {
   yield all([
-    takeLatest(actions.refresh, refreshTransactionInsightsSaga),
-    takeLatest(actions.request, requestTransactionInsightsSaga),
+    takeLatest(txnActions.refresh, refreshTransactionInsightsSaga),
+    takeLatest(txnActions.request, requestTransactionInsightsSaga),
   ]);
 }
