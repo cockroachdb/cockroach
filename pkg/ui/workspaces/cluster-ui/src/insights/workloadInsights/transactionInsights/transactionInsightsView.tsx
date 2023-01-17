@@ -33,7 +33,7 @@ import {
   filterTransactionInsights,
   getAppsFromTransactionInsights,
   WorkloadInsightEventFilters,
-  MergedTxnInsightEvent,
+  TxnInsightEvent,
 } from "src/insights";
 import { EmptyInsightsTablePlaceholder } from "../util";
 import { TransactionInsightsTable } from "./transactionInsightsTable";
@@ -44,7 +44,7 @@ import {
   TimeScaleDropdown,
   timeScaleRangeToObj,
 } from "../../../timeScaleDropdown";
-import { StmtInsightsReq } from "src/api";
+import { TxnInsightsRequest } from "src/api";
 
 import styles from "src/statementsPage/statementsPage.module.scss";
 import sortableTableStyles from "src/sortedtable/sortedtable.module.scss";
@@ -54,7 +54,7 @@ const cx = classNames.bind(styles);
 const sortableTableCx = classNames.bind(sortableTableStyles);
 
 export type TransactionInsightsViewStateProps = {
-  transactions: MergedTxnInsightEvent[];
+  transactions: TxnInsightEvent[];
   transactionsError: Error | null;
   filters: WorkloadInsightEventFilters;
   sortSetting: SortSetting;
@@ -66,7 +66,7 @@ export type TransactionInsightsViewStateProps = {
 export type TransactionInsightsViewDispatchProps = {
   onFiltersChange: (filters: WorkloadInsightEventFilters) => void;
   onSortChange: (ss: SortSetting) => void;
-  refreshTransactionInsights: (req: StmtInsightsReq) => void;
+  refreshTransactionInsights: (req: TxnInsightsRequest) => void;
   setTimeScale: (ts: TimeScale) => void;
 };
 

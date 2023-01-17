@@ -119,3 +119,28 @@ export function sqlResultsAreEmpty(
     )
   );
 }
+
+/**
+ * Helper to convert stmt results to appropriate row types.
+ * Returns the execution result of the specified statement
+ * number in the transaction response, with the rows cast
+ * to the provided type.
+ * Expects the nth stmt to have rows of type T.
+ *
+ * @param result SQL API response.
+ * @param stmtNumber The desired stmt index (starts at 1).
+ * @returns
+ */
+export function getTxntNumber<T>(
+  result: SqlExecutionResponse<unknown>,
+  stmtNumber: number,
+): SqlTxnResult<T> | null {
+  const row = result.execution?.txn_results.find(
+    txn => txn.statement === stmtNumber,
+  );
+  try {
+    return row ? (row as SqlTxnResult<T>) : null;
+  } catch {
+    return null;
+  }
+}

@@ -9,26 +9,26 @@
 // licenses/APL.txt.
 
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
-import { DOMAIN_NAME } from "src/store/utils";
+import { DOMAIN_NAME } from "../../utils";
 import { TxnInsightEvent } from "src/insights";
-import { ExecutionInsightsRequest } from "src/api";
+import { TxnInsightsRequest } from "src/api";
 
-export type TransactionInsightsState = {
+export type TxnInsightsState = {
   data: TxnInsightEvent[];
   lastError: Error;
   valid: boolean;
   inFlight: boolean;
 };
 
-const initialState: TransactionInsightsState = {
+const initialState: TxnInsightsState = {
   data: null,
   lastError: null,
   valid: false,
   inFlight: false,
 };
 
-const transactionInsightsSlice = createSlice({
-  name: `${DOMAIN_NAME}/transactionInsightsSlice`,
+const txnInsightsSlice = createSlice({
+  name: `${DOMAIN_NAME}/txnInsightsSlice`,
   initialState,
   reducers: {
     received: (state, action: PayloadAction<TxnInsightEvent[]>) => {
@@ -45,13 +45,13 @@ const transactionInsightsSlice = createSlice({
     invalidated: state => {
       state.valid = false;
     },
-    refresh: (state, _action: PayloadAction<ExecutionInsightsRequest>) => {
+    refresh: (state, _action: PayloadAction<TxnInsightsRequest>) => {
       state.inFlight = true;
     },
-    request: (state, _action: PayloadAction<ExecutionInsightsRequest>) => {
+    request: (state, _action: PayloadAction<TxnInsightsRequest>) => {
       state.inFlight = true;
     },
   },
 });
 
-export const { reducer, actions } = transactionInsightsSlice;
+export const { reducer, actions } = txnInsightsSlice;

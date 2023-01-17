@@ -16,7 +16,6 @@ import {
   getAppsFromStatementInsights,
   getInsightsFromProblemsAndCauses,
   mergeTxnInsightDetails,
-  dedupInsights,
 } from "./utils";
 import {
   TxnInsightEvent,
@@ -93,7 +92,6 @@ function mockStmtInsightEvent(
 }
 
 const txnInsightEventMock: TxnInsightEvent = {
-  databaseName: "defaultDb",
   username: "craig",
   priority: "high",
   retries: 0,
@@ -103,10 +101,15 @@ const txnInsightEventMock: TxnInsightEvent = {
   transactionFingerprintID: "fingerprint",
   application: "sql_obs_fun_times",
   lastRetryReason: null,
-  contention: null,
-  statementInsights: [statementInsightMock],
+  contentionTime: null,
   insights: [failedExecutionInsight(InsightExecEnum.TRANSACTION)],
-  queries: ["select 1"],
+  query: "select 1",
+  rowsRead: 4,
+  rowsWritten: 1,
+  startTime: moment(),
+  endTime: moment(),
+  elapsedTimeMillis: 1,
+  stmtExecutionIDs: [statementInsightMock.statementExecutionID],
 };
 
 function mockTxnInsightEvent(
@@ -114,6 +117,12 @@ function mockTxnInsightEvent(
 ): TxnInsightEvent {
   return { ...txnInsightEventMock, ...fields };
 }
+
+const txnInsightDetailsMock: TxnInsightDetails = {
+  txnDetails: txnInsightEventMock,
+  blockingContentionDetails: [blockedContentionMock],
+  statements: [statementInsightMock],
+};
 
 describe("test workload insights utils", () => {
   describe("filterTransactionInsights", () => {
@@ -166,8 +175,8 @@ describe("test workload insights utils", () => {
 
     it("should filter out txns not matching search", () => {
       const txnsWithQueries = [
-        mockTxnInsightEvent({ queries: ["select foo", "update bar"] }),
-        mockTxnInsightEvent({ queries: ["hello", "world", "foo"] }),
+        mockTxnInsightEvent({ query: "select foo ; update bar" }),
+        mockTxnInsightEvent({ query: "hello ; world ; foo" }),
       ];
 
       let filtered = filterTransactionInsights(
@@ -200,16 +209,16 @@ describe("test workload insights utils", () => {
         // This should be the only txn remaining.
         mockTxnInsightEvent({
           application: "myApp",
-          queries: ["select foo"],
+          query: "select foo",
         }),
         // No required search term.
-        mockTxnInsightEvent({ application: "myApp", queries: ["update bar"] }),
+        mockTxnInsightEvent({ application: "myApp", query: "update bar" }),
         // No required app.
-        mockTxnInsightEvent({ queries: ["hello", "world", "select foo"] }),
+        mockTxnInsightEvent({ query: "hello ; world ; select foo" }),
         // Internal app should be filtered out.
         mockTxnInsightEvent({
           application: INTERNAL_APP_PREFIX,
-          queries: ["select foo"],
+          query: "select foo",
         }),
       ];
 
@@ -425,7 +434,7 @@ describe("test workload insights utils", () => {
     [InsightExecEnum.STATEMENT, InsightExecEnum.TRANSACTION].forEach(type => {
       createTestCases(type).forEach(tc => {
         const insights = getInsightsFromProblemsAndCauses(
-          tc.problem,
+          [tc.problem],
           tc.causes,
           type,
         );
@@ -441,99 +450,35 @@ describe("test workload insights utils", () => {
   });
 
   describe("mergeTxnInsightDetails", () => {
-    const txnInsightFromStmts = mockTxnInsightEvent({
+    const txnInsightFromOverview = mockTxnInsightEvent({
       insights: [slowExecutionInsight(InsightExecEnum.TRANSACTION)],
     });
-    const txnContentionDetails = {
-      transactionExecutionID: txnInsightEventMock.transactionExecutionID,
-      queries: txnInsightEventMock.queries,
-      insights: [
-        highContentionInsight(InsightExecEnum.TRANSACTION),
-        slowExecutionInsight(InsightExecEnum.TRANSACTION),
-      ],
-      startTime: moment(),
-      totalContentionTimeMs: 500,
-      contentionThreshold: 100,
-      application: txnInsightEventMock.application,
-      transactionFingerprintID: txnInsightEventMock.transactionFingerprintID,
-      blockingContentionDetails: [blockedContentionMock],
-      execType: InsightExecEnum.TRANSACTION,
-      insightName: "HighContention",
-    };
 
-    const testMergedAgainstContentionFields = (merged: TxnInsightDetails) => {
-      expect(merged.startTime.unix()).toEqual(
-        txnContentionDetails.startTime.unix(),
+    it("should choose txn details obj when it is present", () => {
+      let merged = mergeTxnInsightDetails(
+        txnInsightFromOverview,
+        [],
+        txnInsightDetailsMock,
       );
-      expect(merged.contentionThreshold).toEqual(
-        txnContentionDetails.contentionThreshold,
-      );
-      expect(merged.blockingContentionDetails).toEqual(
-        txnContentionDetails.blockingContentionDetails,
-      );
-      expect(merged.totalContentionTimeMs).toEqual(
-        txnContentionDetails.totalContentionTimeMs,
-      );
-    };
+      expect(merged).toEqual(txnInsightDetailsMock);
 
-    const testMergedAgainstTxnFromInsights = (merged: TxnInsightDetails) => {
-      expect(merged.databaseName).toEqual(txnInsightFromStmts.databaseName);
-      expect(merged.retries).toEqual(txnInsightFromStmts.retries);
-      expect(merged.implicitTxn).toEqual(txnInsightFromStmts.implicitTxn);
-      expect(merged.priority).toEqual(txnInsightFromStmts.priority);
-      expect(merged.username).toEqual(txnInsightFromStmts.username);
-      expect(merged.sessionID).toEqual(txnInsightFromStmts.sessionID);
-    };
+      merged = mergeTxnInsightDetails(
+        txnInsightFromOverview,
+        null,
+        txnInsightDetailsMock,
+      );
+      expect(merged).toEqual(txnInsightDetailsMock);
+    });
 
-    it("should merge objects when both are present", () => {
+    it("should merge details when cached txnInsightDetails obj not present", () => {
       const merged = mergeTxnInsightDetails(
-        txnInsightFromStmts,
-        txnContentionDetails,
+        txnInsightFromOverview,
+        [statementInsightMock],
+        null,
       );
-      testMergedAgainstContentionFields(merged);
-      testMergedAgainstTxnFromInsights(merged);
-      // Insights should be de-duped
-      const insightNamesUniqe = new Set(
-        txnContentionDetails.insights
-          .map(i => i.name)
-          .concat(txnInsightFromStmts.insights.map(i => i.name)),
-      );
-      expect(merged.insights.length).toEqual(insightNamesUniqe.size);
-    });
-
-    it("should return details when contention details aren't present", () => {
-      const merged = mergeTxnInsightDetails(txnInsightFromStmts, null);
-      testMergedAgainstTxnFromInsights(merged);
-      expect(merged.insights.length).toBe(txnInsightFromStmts.insights.length);
-    });
-
-    it("should return details when txn insights from stmts aren't present", () => {
-      const merged = mergeTxnInsightDetails(null, txnContentionDetails);
-      testMergedAgainstContentionFields(merged);
-      expect(merged.insights.length).toBe(txnContentionDetails.insights.length);
-    });
-  });
-
-  describe("dedupInsights", () => {
-    const e = InsightExecEnum.STATEMENT;
-    const insights = [
-      highContentionInsight(e),
-      highRetryCountInsight(e),
-      highRetryCountInsight(e),
-      slowExecutionInsight(e),
-      slowExecutionInsight(e),
-      highRetryCountInsight(e),
-    ];
-    const expected = [
-      highContentionInsight(e),
-      highRetryCountInsight(e),
-      slowExecutionInsight(e),
-    ];
-
-    const deduped = dedupInsights(insights);
-    expect(deduped.length).toEqual(expected.length);
-    deduped.forEach((insight, i) => {
-      expect(insight.name).toEqual(expected[i].name);
+      expect(merged.txnDetails).toEqual(txnInsightFromOverview);
+      expect(merged.statements).toContain(statementInsightMock);
+      expect(merged.statements.length).toEqual(1);
     });
   });
 });
