@@ -7241,7 +7241,26 @@ Support status: [reserved](#support-status)
 | ----- | ---- | ----- | ----------- | -------------- |
 | range_descriptor | [cockroach.roachpb.RangeDescriptor](#cockroach.server.serverpb.RecoveryCollectReplicaInfoResponse-cockroach.roachpb.RangeDescriptor) |  |  | [reserved](#support-status) |
 | replica_info | [cockroach.kv.kvserver.loqrecovery.loqrecoverypb.ReplicaInfo](#cockroach.server.serverpb.RecoveryCollectReplicaInfoResponse-cockroach.kv.kvserver.loqrecovery.loqrecoverypb.ReplicaInfo) |  |  | [reserved](#support-status) |
+| node_stream_restarted | [RecoveryCollectReplicaRestartNodeStream](#cockroach.server.serverpb.RecoveryCollectReplicaInfoResponse-cockroach.server.serverpb.RecoveryCollectReplicaRestartNodeStream) |  |  | [reserved](#support-status) |
 
+
+
+
+
+
+<a name="cockroach.server.serverpb.RecoveryCollectReplicaInfoResponse-cockroach.server.serverpb.RecoveryCollectReplicaRestartNodeStream"></a>
+#### RecoveryCollectReplicaRestartNodeStream
+
+RecoveryCollectReplicaRestartNodeStream is sent by collector node to client
+if it experiences a transient failure collecting data from one of the nodes.
+This message instructs client to drop any data that it collected locally
+for specified node as streaming for this node would be restarted.
+This mechanism is needed to avoid restarting the whole collection procedure
+in large cluster if one of the nodes fails transiently.
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| node_id | [int32](#cockroach.server.serverpb.RecoveryCollectReplicaInfoResponse-int32) |  |  | [reserved](#support-status) |
 
 
 

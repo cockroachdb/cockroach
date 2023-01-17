@@ -135,10 +135,11 @@ type wrappedStore struct {
 
 type quorumRecoveryEnv struct {
 	// Stores with data
-	stores map[roachpb.StoreID]wrappedStore
+	clusterID uuid.UUID
+	stores    map[roachpb.StoreID]wrappedStore
 
 	// Collected info from nodes
-	replicas []loqrecoverypb.NodeReplicaInfo
+	replicas loqrecoverypb.ClusterReplicaInfo
 
 	// plan to update replicas
 	plan loqrecoverypb.ReplicaUpdatePlan
@@ -190,6 +191,7 @@ func (e *quorumRecoveryEnv) handleReplicationData(t *testing.T, d datadriven.Tes
 	// Close existing stores in case we have multiple use cases within a data file.
 	e.cleanupStores()
 	e.stores = make(map[roachpb.StoreID]wrappedStore)
+	e.clusterID = uuid.MakeV4()
 
 	// Load yaml from data into local range info.
 	var replicaData []testReplicaInfo
@@ -390,7 +392,7 @@ func parsePrettyKey(t *testing.T, pretty string) roachpb.RKey {
 
 func (e *quorumRecoveryEnv) handleMakePlan(t *testing.T, d datadriven.TestData) (string, error) {
 	stores := e.parseStoresArg(t, d, false /* defaultToAll */)
-	plan, report, err := PlanReplicas(context.Background(), e.replicas, stores)
+	plan, report, err := PlanReplicas(context.Background(), e.replicas.LocalInfo, stores)
 	if err != nil {
 		return "", err
 	}
@@ -424,7 +426,7 @@ func (e *quorumRecoveryEnv) getOrCreateStore(
 			t.Fatalf("failed to crate in mem store: %v", err)
 		}
 		sIdent := roachpb.StoreIdent{
-			ClusterID: uuid.MakeV4(),
+			ClusterID: e.clusterID,
 			NodeID:    nodeID,
 			StoreID:   storeID,
 		}
@@ -447,13 +449,15 @@ func (e *quorumRecoveryEnv) handleCollectReplicas(
 	stores := e.parseStoresArg(t, d, true /* defaultToAll */)
 	nodes := e.groupStoresByNode(t, stores)
 	// save collected results into environment
-	e.replicas = nil
+	e.replicas = loqrecoverypb.ClusterReplicaInfo{}
 	for _, nodeStores := range nodes {
-		info, err := CollectReplicaInfo(ctx, nodeStores)
+		info, _, err := CollectStoresReplicaInfo(ctx, nodeStores)
 		if err != nil {
 			return "", err
 		}
-		e.replicas = append(e.replicas, info)
+		if err = e.replicas.Merge(info); err != nil {
+			return "", err
+		}
 	}
 	return "ok", nil
 }

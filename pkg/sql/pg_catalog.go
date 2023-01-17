@@ -2339,6 +2339,16 @@ func addPgProcBuiltinRow(name string, addRow func(...tree.Datum) error) error {
 		name = name[len(crdbInternal):]
 	}
 
+	var kind tree.Datum
+	switch {
+	case isAggregate:
+		kind = tree.NewDString("a")
+	case isWindow:
+		kind = tree.NewDString("w")
+	default:
+		kind = tree.NewDString("f")
+	}
+
 	for _, builtin := range overloads {
 		dName := tree.NewDName(name)
 		dSrc := tree.NewDString(name)
@@ -2435,8 +2445,8 @@ func addPgProcBuiltinRow(name string, addRow func(...tree.Datum) error) error {
 			tree.DNull,                                      // probin
 			tree.DNull,                                      // proconfig
 			tree.DNull,                                      // proacl
+			kind,                                            // prokind
 			// These columns were automatically created by pg_catalog_test's missing column generator.
-			tree.DNull, // prokind
 			tree.DNull, // prosupport
 		)
 		if err != nil {
@@ -2511,8 +2521,8 @@ func addPgProcUDFRow(
 		tree.DNull,                                       // probin
 		tree.DNull,                                       // proconfig
 		tree.DNull,                                       // proacl
+		tree.NewDString("f"),                             // prokind
 		// These columns were automatically created by pg_catalog_test's missing column generator.
-		tree.DNull, // prokind
 		tree.DNull, // prosupport
 	)
 }
