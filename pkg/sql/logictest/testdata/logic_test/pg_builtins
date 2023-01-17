@@ -607,3 +607,24 @@ h      float8   53  2   NULL
 i      numeric  12  10  2
 j      numeric  4   10  4
 rowid  int8     64  2   0
+
+# Test that pg_get_indexdef works for expression indexes.
+statement ok
+CREATE TABLE expr_idx_tbl (id string PRIMARY key, json JSON)
+
+statement ok
+CREATE INDEX expr_idx ON expr_idx_tbl (id, (json->>'bar'), (length(id)))
+
+query T
+SELECT pg_get_indexdef((SELECT oid FROM pg_class WHERE relname = 'expr_idx' LIMIT 1))
+----
+CREATE INDEX expr_idx ON test.public.expr_idx_tbl USING btree (id ASC, (json->>'bar'::STRING) ASC, length(id) ASC)
+
+query IT
+SELECT k, pg_get_indexdef((SELECT oid FROM pg_class WHERE relname = 'expr_idx' LIMIT 1), k, true) FROM generate_series(0,4) k ORDER BY k
+----
+0  CREATE INDEX expr_idx ON test.public.expr_idx_tbl USING btree (id ASC, (json->>'bar'::STRING) ASC, length(id) ASC)
+1  id
+2  (json->>'bar'::STRING)
+3  (length(id))
+4  ·
