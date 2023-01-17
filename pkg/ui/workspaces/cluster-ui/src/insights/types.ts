@@ -47,19 +47,8 @@ export type InsightEventBase = {
   insights: Insight[];
 };
 
-// What we store in redux for txn contention insight events in
-// the overview page.  It is missing information such as the
-// blocking txn information.
-export type TxnContentionInsightEvent = {
-  transactionID: string;
-  transactionFingerprintID: string;
-  queries: string[];
-  insights: Insight[];
-  startTime: Moment;
-  contentionDuration: moment.Duration;
-  contentionThreshold: number;
-  application: string;
-  execType: InsightExecEnum;
+export type TxnInsightEvent = InsightEventBase & {
+  stmtExecutionIDs: string[];
 };
 
 // Information about the blocking transaction and schema.
@@ -76,50 +65,8 @@ export type BlockedContentionDetails = {
   contentionTimeMs: number;
 };
 
-// TODO (xinhaoz) these fields should be placed into TxnInsightEvent
-// once they are available for contention insights.  MergedTxnInsightEvent,
-// (which marks these fields as optional) can then be deleted.
-type UnavailableForTxnContention = {
-  databaseName: string;
-  username: string;
-  priority: string;
-  retries: number;
-  implicitTxn: boolean;
-  sessionID: string;
-};
-
-export type TxnInsightEvent = UnavailableForTxnContention & {
-  transactionExecutionID: string;
-  transactionFingerprintID: string;
-  application: string;
-  lastRetryReason?: string;
-  contention?: moment.Duration;
-
-  // The full list of statements in this txn, with their stmt
-  // level insights (not all stmts in the txn may have one).
-  // Ordered by startTime.
-  statementInsights: StmtInsightEvent[];
-
-  insights: Insight[]; // De-duplicated list of insights from statement level.
-  queries: string[]; // We bubble this up from statementinsights for easy access, since txn contention details dont have stmt insights.
-  startTime?: Moment; // TODO (xinhaoz) not currently available
-  elapsedTimeMillis?: number; // TODO (xinhaoz) not currently available
-  endTime?: Moment; // TODO (xinhaoz) not currently available
-};
-
-export type MergedTxnInsightEvent = Omit<
-  TxnInsightEvent,
-  keyof UnavailableForTxnContention
-> &
-  Partial<UnavailableForTxnContention>;
-
 export type TxnContentionInsightDetails = {
   transactionExecutionID: string;
-  queries: string[];
-  insights: Insight[];
-  startTime: Moment;
-  totalContentionTimeMs: number;
-  contentionThreshold: number;
   application: string;
   transactionFingerprintID: string;
   blockingContentionDetails: BlockedContentionDetails[];
@@ -127,11 +74,13 @@ export type TxnContentionInsightDetails = {
   insightName: string;
 };
 
-export type TxnInsightDetails = Omit<MergedTxnInsightEvent, "contention"> & {
-  totalContentionTimeMs?: number;
-  contentionThreshold?: number;
+export type TxnInsightDetails = {
+  // Querying from virtual tables is expensive.
+  // This data is segemented into 3 parts so that we can
+  // selective fetch missing info on the details page.
+  txnDetails?: TxnInsightEvent;
   blockingContentionDetails?: BlockedContentionDetails[];
-  execType: InsightExecEnum;
+  statements?: StmtInsightEvent[];
 };
 
 export type BlockedStatementContentionDetails = {
@@ -176,21 +125,21 @@ export type ContentionEvent = {
 
 export const highContentionInsight = (
   execType: InsightExecEnum,
-  latencyThreshold?: number,
+  latencyThresholdMs?: number,
   contentionDuration?: number,
 ): Insight => {
   let waitDuration: string;
   if (
-    latencyThreshold &&
+    latencyThresholdMs &&
     contentionDuration &&
-    contentionDuration < latencyThreshold
+    contentionDuration < latencyThresholdMs
   ) {
     waitDuration = `${contentionDuration}ms`;
-  } else if (!latencyThreshold) {
+  } else if (!latencyThresholdMs) {
     waitDuration =
       "longer than the value of the 'sql.insights.latency_threshold' cluster setting";
   } else {
-    waitDuration = `longer than ${latencyThreshold}ms`;
+    waitDuration = `longer than ${latencyThresholdMs}ms`;
   }
   const description = `This ${execType} waited on other ${execType}s to execute for ${waitDuration}.`;
   return {
@@ -236,9 +185,20 @@ export const planRegressionInsight = (execType: InsightExecEnum): Insight => {
 };
 
 export const suboptimalPlanInsight = (execType: InsightExecEnum): Insight => {
-  const description =
-    `This ${execType} was slow because a good plan was not available, whether ` +
-    `due to outdated statistics or missing indexes.`;
+  let description = "";
+  switch (execType) {
+    case InsightExecEnum.STATEMENT:
+      description =
+        `This statement was slow because a good plan was not available, whether ` +
+        `due to outdated statistics or missing indexes.`;
+      break;
+    case InsightExecEnum.TRANSACTION:
+      description =
+        "This transaction was slow because a good plan was not available for some " +
+        "statement(s) in this transaction, whether due to outdated statistics or " +
+        "missing indexes.";
+      break;
+  }
   return {
     name: InsightNameEnum.suboptimalPlan,
     label: InsightEnumToLabel.get(InsightNameEnum.suboptimalPlan),
