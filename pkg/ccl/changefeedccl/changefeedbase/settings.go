@@ -281,3 +281,34 @@ var RequireExternalConnectionSink = settings.RegisterBoolSetting(
 		" see https://www.cockroachlabs.com/docs/stable/create-external-connection.html",
 	false,
 )
+
+// SinkWorkers specifies the maximum number of workers used by Webhook
+// sink changefeeds.
+var SinkWorkers = settings.RegisterIntSetting(
+	settings.TenantWritable,
+	"changefeed.sink_workers",
+	"the number of workers used by changefeeds when sending requests to the sink: <0 disables, "+
+		"0 assigns a reasonable default, >0 assigns the setting value.",
+	0,
+).WithPublic()
+
+// SinkPacerRequestSize specifies how often (measured in CPU time)
+// that sink emitter goroutines request CPU time from admission control.
+var SinkPacerRequestSize = settings.RegisterDurationSetting(
+	settings.TenantWritable,
+	"changefeed.cpu.per_sink_worker_allocation",
+	"a sink worker routine will perform a blocking request for CPU time before"+
+		"consuming events. After fully utilizing this CPU time, it will request more",
+	50*time.Millisecond,
+	settings.PositiveDuration,
+)
+
+// SinkPacerElasticCPUControlEnabled determines whether changefeed sink emitting
+// integrates with elastic CPU control.
+var SinkPacerElasticCPUControlEnabled = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	"changefeed.cpu.per_sink_worker_elastic_control.enabled",
+	"determines whether changefeed sink emitting integrates with elastic CPU control",
+	// TODO(shiranka): Investigate why this being enabled causes overly degraded throughput over time
+	false,
+)
