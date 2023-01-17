@@ -124,13 +124,19 @@ func (c *conn) handleAuthentication(
 		systemIdentity = found
 		ac.SetSystemIdentity(systemIdentity)
 	} else {
-		systemIdentity = c.sessionArgs.User
+		if !c.sessionArgs.SystemIdentity.Undefined() {
+			// This case is used in tests, which pass a system_identity
+			// option directly.
+			systemIdentity = c.sessionArgs.SystemIdentity
+		} else {
+			systemIdentity = c.sessionArgs.User
+		}
 	}
 	c.sessionArgs.SystemIdentity = systemIdentity
 
-	// Delegate to the AuthMethod's MapRole to choose the actual
-	// database user that a successful authentication will result in.
-	if err := c.chooseDbRole(ctx, ac, behaviors.MapRole, systemIdentity); err != nil {
+	// Delegate to the AuthMethod's MapRole to verify that the
+	// client-provided username matches one of the mappings.
+	if err := c.checkClientUsernameMatchesMapping(ctx, ac, behaviors.MapRole, systemIdentity); err != nil {
 		log.Warningf(ctx, "unable to map incoming identity %q to any database user: %+v", systemIdentity, err)
 		ac.LogAuthFailed(ctx, eventpb.AuthFailReason_USER_NOT_FOUND, err)
 		return connClose, c.sendError(ctx, execCfg, pgerror.WithCandidateCode(err, pgcode.InvalidAuthorizationSpecification))
@@ -215,27 +221,36 @@ func (c *conn) authOKMessage() error {
 	return c.msgBuilder.finishMsg(c.conn)
 }
 
-// chooseDbRole uses the provided RoleMapper to map an incoming
-// system identity to an actual database role. If a mapping is present,
-// the sessionArgs.User field will be updated.
-//
-// TODO(#sql-security): The docs for the pg_ident.conf file state that
-// if there are multiple mappings for an incoming system-user, the
-// session should act with the union of all roles granted to the mapped
-// database users. We're going to go with a first-one-wins approach
-// until the session can have multiple roles.
-func (c *conn) chooseDbRole(
+// checkClientUsernameMatchesMapping uses the provided RoleMapper to
+// verify that the client-provided username matches one of the
+// mappings for the system identity.
+// See: https://www.postgresql.org/docs/15/auth-username-maps.html
+// "There is no restriction regarding how many database users a given
+// operating system user can correspond to, nor vice versa. Thus,
+// entries in a map should be thought of as meaning “this operating
+// system user is allowed to connect as this database user”, rather
+// than implying that they are equivalent. The connection will be
+// allowed if there is any map entry that pairs the user name obtained
+// from the external authentication system with the database user name
+// that the user has requested to connect as."
+func (c *conn) checkClientUsernameMatchesMapping(
 	ctx context.Context, ac AuthConn, mapper RoleMapper, systemIdentity username.SQLUsername,
 ) error {
-	if mapped, err := mapper(ctx, systemIdentity); err != nil {
+	mapped, err := mapper(ctx, systemIdentity)
+	if err != nil {
 		return err
-	} else if len(mapped) == 0 {
-		return errors.Newf("system identity %q did not map to a database role", systemIdentity.Normalized())
-	} else {
-		c.sessionArgs.User = mapped[0]
-		ac.SetDbUser(mapped[0])
 	}
-	return nil
+	if len(mapped) == 0 {
+		return errors.Newf("system identity %q did not map to a database role", systemIdentity.Normalized())
+	}
+	for _, m := range mapped {
+		if m == c.sessionArgs.User {
+			ac.SetDbUser(m)
+			return nil
+		}
+	}
+	return errors.Newf("requested user identity %q does not correspond to any mapping for system identity %q",
+		c.sessionArgs.User, systemIdentity.Normalized())
 }
 
 func (c *conn) findAuthenticationMethod(
