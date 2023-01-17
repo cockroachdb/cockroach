@@ -13,6 +13,8 @@ package azure
 import (
 	"context"
 	"fmt"
+	_ "github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	_ "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
 	"io"
 	"net/url"
 	"path"
