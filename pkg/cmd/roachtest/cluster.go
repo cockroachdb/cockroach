@@ -2103,7 +2103,9 @@ func (c *clusterImpl) loggerForCmd(
 func (c *clusterImpl) pgURLErr(
 	ctx context.Context, l *logger.Logger, node option.NodeListOption, external bool,
 ) ([]string, error) {
-	urls, err := roachprod.PgURL(ctx, l, c.MakeNodes(node), c.localCertsDir, external, c.localCertsDir != "" /* secure */)
+	urls, err := roachprod.PgURL(ctx, l, c.MakeNodes(node), c.localCertsDir, roachprod.PGURLOptions{
+		External: external,
+		Secure:   c.localCertsDir != ""})
 	if err != nil {
 		return nil, err
 	}
