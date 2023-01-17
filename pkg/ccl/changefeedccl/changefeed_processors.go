@@ -74,6 +74,9 @@ type changeAggregator struct {
 	// span was forwarded to the frontier
 	recentKVCount uint64
 
+	// telemetryLogger is used to log telemetry events.
+	telemetryLogger periodicTelemetryLogger
+
 	// eventProducer produces the next event from the kv feed.
 	eventProducer kvevent.Reader
 	// eventConsumer consumes the event.
@@ -244,9 +247,9 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 		ca.cancel()
 		return
 	}
-
+	ca.telemetryLogger = makePeriodicTelemetryLogger()
 	ca.sink, err = getEventSink(ctx, ca.flowCtx.Cfg, ca.spec.Feed, timestampOracle,
-		ca.spec.User(), ca.spec.JobID, ca.sliMetrics)
+		ca.spec.User(), ca.spec.JobID, ca.sliMetrics, ca.telemetryLogger.sinkTelemetry)
 
 	if err != nil {
 		err = changefeedbase.MarkRetryableError(err)
@@ -556,14 +559,14 @@ func (ca *changeAggregator) noteResolvedSpan(resolved jobspb.ResolvedSpan) error
 		defer func() {
 			ca.lastFlush = timeutil.Now()
 		}()
-		return ca.flushFrontier()
+		return ca.flushFrontier(resolved.Timestamp)
 	}
 
 	return nil
 }
 
 // flushFrontier flushes sink and emits resolved timestamp if needed.
-func (ca *changeAggregator) flushFrontier() error {
+func (ca *changeAggregator) flushFrontier(resovedTimestamp hlc.Timestamp) error {
 	// Make sure to the sink before forwarding resolved spans,
 	// otherwise, we could lose buffered messages and violate the
 	// at-least-once guarantee. This is also true for checkpointing the
@@ -571,6 +574,7 @@ func (ca *changeAggregator) flushFrontier() error {
 	if err := ca.sink.Flush(ca.Ctx()); err != nil {
 		return err
 	}
+	ca.telemetryLogger.maybeLogTelemetry(ca.Ctx(), ca.spec.JobID, ca.spec.Feed, ca.spec.Stmt, resovedTimestamp, ca.flowCtx.Cfg.Settings, ca.knobs)
 
 	// Iterate frontier spans and build a list of spans to emit.
 	var batch jobspb.ResolvedSpans

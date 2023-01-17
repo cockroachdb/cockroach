@@ -2682,6 +2682,28 @@ An event of type `captured_index_usage_stats`
 | `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
 | `EventType` | The type of the event. | no |
 
+### `changefeed_emitted_bytes`
+
+An event of type `changefeed_emitted_bytes` is an event representing the bytes emitted by a changefeed over an interval.
+
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Id` | The job id for enterprise changefeeds. | no |
+| `EmittedBytes` | The number of bytes emitted. | no |
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Description` | The description of that would show up in the job's description field, redacted | no |
+| `SinkType` | The type of sink being emitted to (ex: kafka, nodelocal, webhook-https). | no |
+| `NumTables` | The number of tables listed in the query that the changefeed is to run on. | no |
+| `Resolved` | The behavior of emitted resolved spans (ex: yes, no, 10s) | no |
+| `InitialScan` | The desired behavior of initial scans (ex: yes, no, only) | no |
+| `Format` | The data format being emitted (ex: JSON, Avro). | no |
+
 ### `changefeed_failed`
 
 An event of type `changefeed_failed` is an event for any Changefeed failure since the plan hook

@@ -83,7 +83,7 @@ func setupWebhookSinkWithDetails(
 	if err != nil {
 		return nil, err
 	}
-	sinkSrc, err := makeWebhookSink(ctx, sinkURL{URL: u}, encodingOpts, sinkOpts, parallelism, source, nilMetricsRecorderBuilder)
+	sinkSrc, err := makeWebhookSink(ctx, sinkURL{URL: u}, encodingOpts, sinkOpts, parallelism, source, nilMetricsRecorderBuilder, noopTelemetryDataStore)
 	if err != nil {
 		return nil, err
 	}

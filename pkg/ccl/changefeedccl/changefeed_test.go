@@ -5486,6 +5486,65 @@ func TestChangefeedTelemetry(t *testing.T) {
 	cdcTest(t, testFn, feedTestForceSink("enterprise"))
 }
 
+func TestChangefeedContinuousTelemetry(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderRace(t)
+	skip.UnderShort(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		knobs := s.TestingKnobs.
+			DistSQL.(*execinfra.TestingKnobs).
+			Changefeed.(*TestingKnobs)
+		// Checkpoint aggregators every 50ms but require 150ms between subsequent log messages.
+		defer changefeedbase.TestingSetDefaultMinCheckpointFrequency(50 * time.Millisecond)()
+		loggingInterval := 150 * time.Millisecond
+		changefeedbase.ContinuousTelemetryInterval.Override(context.Background(), &s.Server.ClusterSettings().SV, loggingInterval)
+
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE TABLE foo (id INT PRIMARY KEY)`)
+
+		verifyLogs := func(logMessages []eventpb.ChangefeedEmittedBytes, jobID jobspb.JobID) error {
+			if len(logMessages) == 0 {
+				return errors.New("no logs found")
+			}
+			emittedBytes := false
+			for _, msg := range logMessages {
+				if msg.EmittedBytes > 0 {
+					emittedBytes = true
+				}
+
+				// The test should immediately fail if we emit logs with the wrong ID.
+				require.Equal(t, int64(jobID), msg.Id)
+			}
+			if !emittedBytes {
+				return errors.New("expected emitted bytes in log messages, but found 0")
+			}
+			return nil
+		}
+
+		knobs.ContinuousTelemetryLogCallback = func(old hlc.Timestamp, new hlc.Timestamp) {
+			require.GreaterOrEqual(t, new.WallTime-old.WallTime, loggingInterval.Nanoseconds())
+		}
+
+		foo := feed(t, f, `CREATE CHANGEFEED FOR foo`)
+		defer closeFeed(t, foo)
+		jobID := foo.(cdctest.EnterpriseTestFeed).JobID()
+
+		for i := 0; i < 5; i++ {
+			beforeCreate := timeutil.Now()
+			sqlDB.Exec(t, fmt.Sprintf(`INSERT INTO foo VALUES (%d) RETURNING cluster_logical_timestamp()`, i))
+			testutils.SucceedsSoon(t, func() error {
+				emittedBytesLogs := checkContinuousChangefeedLogs(t, beforeCreate.UnixNano())
+				return verifyLogs(emittedBytesLogs, jobID)
+			})
+		}
+	}
+
+	cdcTest(t, testFn, feedTestOmitSinks("enterprise", "sinkless"))
+}
+
 // Regression test for #41694.
 func TestChangefeedRestartDuringBackfill(t *testing.T) {
 	defer leaktest.AfterTest(t)()

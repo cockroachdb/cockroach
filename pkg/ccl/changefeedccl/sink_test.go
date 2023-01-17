@@ -247,6 +247,7 @@ func makeTestKafkaSink(
 				return nil, nil
 			},
 		},
+		sinkTelemetry: noopTelemetryDataStore,
 	}
 	err = s.Dial()
 	require.NoError(t, err)

@@ -54,6 +54,10 @@ type TestingKnobs struct {
 	// knobs as current statement time will only be available once the create changefeed statement
 	// starts executing.
 	OverrideCursor func(currentTime *hlc.Timestamp) string
+
+	// ContinuousTelemetryLogCallback is called by each aggregator when it produces a
+	// continuous telemetry log message.
+	ContinuousTelemetryLogCallback func(old hlc.Timestamp, new hlc.Timestamp)
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

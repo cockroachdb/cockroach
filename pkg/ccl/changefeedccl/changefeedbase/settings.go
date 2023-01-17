@@ -281,3 +281,13 @@ var RequireExternalConnectionSink = settings.RegisterBoolSetting(
 		" see https://www.cockroachlabs.com/docs/stable/create-external-connection.html",
 	false,
 )
+
+// ContinuousTelemetryInterval determines the interval at which each node emits telemetry events
+// during the lifespan of every enterprise changefeed
+var ContinuousTelemetryInterval = settings.RegisterDurationSetting(
+	settings.TenantWritable,
+	"changefeed.telemetry.continuous_logging.interval",
+	"determines the interval at which each node emits continuous telemetry events"+
+		" during the lifespan of every enterprise changefeed; setting a negative value disables",
+	24*time.Hour,
+)

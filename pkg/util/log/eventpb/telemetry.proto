@@ -251,6 +251,17 @@ message ChangefeedFailed {
   string failure_type = 2 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
 }
 
+// ChangefeedEmittedBytes is an event representing the bytes emitted by a changefeed over an interval.
+message ChangefeedEmittedBytes {
+  CommonChangefeedEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+
+  // The job id for enterprise changefeeds.
+  int64 id = 2 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) =  "redact:\"nonsensitive\""];
+
+  // The number of bytes emitted.
+  int32 emitted_bytes = 3 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+}
+
 // RecoveryEvent is an event that is logged on every invocation of BACKUP,
 // RESTORE, and on every BACKUP schedule creation, with the appropriate subset
 // of fields populated depending on the type of event. This event is is also

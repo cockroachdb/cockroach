@@ -77,11 +77,12 @@ type webhookSink struct {
 
 	// parallelism workers are created and controlled by the workerGroup, running with workerCtx.
 	// each worker gets its own events channel.
-	workerCtx   context.Context
-	workerGroup ctxgroup.Group
-	exitWorkers func() // Signaled to shut down all workers.
-	eventsChans []chan []messagePayload
-	metrics     metricsRecorder
+	workerCtx     context.Context
+	workerGroup   ctxgroup.Group
+	exitWorkers   func() // Signaled to shut down all workers.
+	eventsChans   []chan []messagePayload
+	metrics       metricsRecorder
+	sinkTelemetry sinkTelemetryDataStore
 }
 
 func (s *webhookSink) getConcreteType() sinkType {
@@ -278,6 +279,7 @@ func makeWebhookSink(
 	parallelism int,
 	source timeutil.TimeSource,
 	mb metricsRecorderBuilder,
+	std sinkTelemetryDataStore,
 ) (Sink, error) {
 	if u.Scheme != changefeedbase.SinkSchemeWebhookHTTPS {
 		return nil, errors.Errorf(`this sink requires %s`, changefeedbase.SinkSchemeHTTPS)
@@ -313,13 +315,14 @@ func makeWebhookSink(
 	ctx, cancel := context.WithCancel(ctx)
 
 	sink := &webhookSink{
-		workerCtx:   ctx,
-		authHeader:  opts.AuthHeader,
-		exitWorkers: cancel,
-		parallelism: parallelism,
-		ts:          source,
-		metrics:     mb(requiresResourceAccounting),
-		format:      encodingOpts.Format,
+		workerCtx:     ctx,
+		authHeader:    opts.AuthHeader,
+		exitWorkers:   cancel,
+		parallelism:   parallelism,
+		ts:            source,
+		metrics:       mb(requiresResourceAccounting),
+		format:        encodingOpts.Format,
+		sinkTelemetry: std,
 	}
 
 	var err error
@@ -609,6 +612,7 @@ func (s *webhookSink) workerLoop(workerIndex int) {
 			encoded.alloc.Release(s.workerCtx)
 			s.metrics.recordEmittedBatch(
 				encoded.emitTime, len(msgs), encoded.mvcc, len(encoded.data), sinkDoesNotCompress)
+			s.sinkTelemetry.incEmittedBytes(len(encoded.data))
 		}
 	}
 }

@@ -34,6 +34,7 @@ func makeExternalConnectionSink(
 	timestampOracle timestampLowerBoundOracle,
 	jobID jobspb.JobID,
 	m metricsRecorder,
+	std sinkTelemetryDataStore,
 ) (Sink, error) {
 	if u.Host == "" {
 		return nil, errors.Newf("host component of an external URI must refer to an "+
@@ -59,7 +60,7 @@ func makeExternalConnectionSink(
 		// Replace the external connection URI in the `feedCfg` with the URI of the
 		// underlying resource.
 		feedCfg.SinkURI = d.SimpleURI.URI
-		return getSink(ctx, serverCfg, feedCfg, timestampOracle, user, jobID, m)
+		return getSink(ctx, serverCfg, feedCfg, timestampOracle, user, jobID, m, std)
 	default:
 		return nil, errors.Newf("cannot connect to %T; unsupported resource for a Sink connection", d)
 	}
@@ -90,7 +91,7 @@ func validateExternalConnectionSinkURI(
 	// TODO(adityamaru): When we add `CREATE EXTERNAL CONNECTION ... WITH` support
 	// to accept JSONConfig we should validate that here too.
 	_, err := getSink(ctx, &serverCfg, jobspb.ChangefeedDetails{SinkURI: uri}, nil, user,
-		jobspb.JobID(0), nil)
+		jobspb.JobID(0), nil, noopTelemetryDataStore)
 	if err != nil {
 		return errors.Wrap(err, "invalid changefeed sink URI")
 	}

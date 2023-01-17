@@ -308,6 +308,7 @@ type cloudStorageSink struct {
 	dataFilePartition string
 	prevFilename      string
 	metrics           metricsRecorder
+	sinkTelemetry     sinkTelemetryDataStore
 
 	asyncFlushActive bool
 	flushGroup       ctxgroup.Group
@@ -359,6 +360,7 @@ func makeCloudStorageSink(
 	makeExternalStorageFromURI cloud.ExternalStorageFromURIFactory,
 	user username.SQLUsername,
 	mb metricsRecorderBuilder,
+	std sinkTelemetryDataStore,
 ) (Sink, error) {
 	var targetMaxFileSize int64 = 16 << 20 // 16MB
 	if fileSizeParam := u.consumeParam(changefeedbase.SinkParamFileSize); fileSizeParam != `` {
@@ -391,6 +393,7 @@ func makeCloudStorageSink(
 		files:             btree.New(8),
 		partitionFormat:   defaultPartitionFormat,
 		timestampOracle:   timestampOracle,
+		sinkTelemetry:     std,
 		// TODO(dan,ajwerner): Use the jobs framework's session ID once that's available.
 		jobSessionID:     sessID,
 		topicNamer:       tn,
@@ -713,7 +716,7 @@ func (s *cloudStorageSink) flushFile(ctx context.Context, file *cloudStorageSink
 	dest := filepath.Join(s.dataFilePartition, filename)
 
 	if !asyncFlushEnabled {
-		return file.flushToStorage(ctx, s.es, dest, s.metrics)
+		return s.flushToStorage(ctx, file, dest)
 	}
 
 	// Try to submit flush request, but produce warning message
@@ -763,7 +766,7 @@ func (s *cloudStorageSink) asyncFlusher(ctx context.Context) error {
 
 			// flush file to storage.
 			flushDone := s.metrics.recordFlushRequestCallback()
-			err := req.file.flushToStorage(ctx, s.es, req.dest, s.metrics)
+			err := s.flushToStorage(ctx, req.file, req.dest)
 			flushDone()
 
 			if err != nil {
@@ -776,8 +779,8 @@ func (s *cloudStorageSink) asyncFlusher(ctx context.Context) error {
 }
 
 // flushToStorage writes out file into external storage into 'dest'.
-func (f *cloudStorageSinkFile) flushToStorage(
-	ctx context.Context, es cloud.ExternalStorage, dest string, m metricsRecorder,
+func (s *cloudStorageSink) flushToStorage(
+	ctx context.Context, f *cloudStorageSinkFile, dest string,
 ) error {
 	defer f.alloc.Release(ctx)
 
@@ -794,10 +797,11 @@ func (f *cloudStorageSinkFile) flushToStorage(
 	}
 
 	compressedBytes := f.buf.Len()
-	if err := cloud.WriteFile(ctx, es, dest, bytes.NewReader(f.buf.Bytes())); err != nil {
+	if err := cloud.WriteFile(ctx, s.es, dest, bytes.NewReader(f.buf.Bytes())); err != nil {
 		return err
 	}
-	m.recordEmittedBatch(f.created, f.numMessages, f.oldestMVCC, f.rawSize, compressedBytes)
+	s.metrics.recordEmittedBatch(f.created, f.numMessages, f.oldestMVCC, f.rawSize, compressedBytes)
+	s.sinkTelemetry.incEmittedBytes(f.rawSize)
 
 	return nil
 }

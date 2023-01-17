@@ -1040,6 +1040,35 @@ func checkStructuredLogs(t *testing.T, eventType string, startTime int64) []stri
 	return matchingEntries
 }
 
+func checkContinuousChangefeedLogs(t *testing.T, startTime int64) []eventpb.ChangefeedEmittedBytes {
+	logs := checkStructuredLogs(t, "changefeed_emitted_bytes", startTime)
+	matchingEntries := make([]eventpb.ChangefeedEmittedBytes, len(logs))
+
+	for i, m := range logs {
+		jsonPayload := []byte(m)
+		var event eventpb.ChangefeedEmittedBytes
+		if err := gojson.Unmarshal(jsonPayload, &event); err != nil {
+			t.Errorf("unmarshalling %q: %v", m, err)
+		}
+		// Place entries in chronological order, assuming we get them in reverse chronological order.
+		matchingEntries[len(matchingEntries)-i-1] = event
+	}
+
+	// Assert entries are sorted. If this assertion fails, logs are being read out
+	// of order and we must implement a sort here.
+	if len(matchingEntries) > 0 {
+		startTS := matchingEntries[0].Timestamp
+		for _, entry := range matchingEntries {
+			if entry.Timestamp < startTS {
+				t.Fatal("telemetry logs received out of order")
+			}
+			startTS = entry.Timestamp
+		}
+	}
+
+	return matchingEntries
+}
+
 func checkCreateChangefeedLogs(t *testing.T, startTime int64) []eventpb.CreateChangefeed {
 	var matchingEntries []eventpb.CreateChangefeed
 
