@@ -7,7 +7,7 @@ duration_mins=$3
 SCRIPT_DIR=$(dirname "$0")
 . "$SCRIPT_DIR"/bisect-util.sh
 
-CURRENT_HASH="$(git rev-parse --short HEAD)"
+CURRENT_HASH="$(short_hash HEAD)"
 
 #first lets check our saved results
 opsPerSec=$(get_hash_result "$CURRENT_HASH")

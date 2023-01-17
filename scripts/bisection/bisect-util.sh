@@ -1,8 +1,11 @@
 #bisect helpers
-#expects BISECT_DIR
 
 log() { local msg=$1
   echo "$(date -u +"%Y-%m-%dT%H:%M:%SZ")   $msg" >> "$INFO_LOG"
+}
+
+short_hash() { local rev=$1
+  git rev-parse --short "$rev"
 }
 
 create_conf_if_not_exists() {
@@ -176,7 +179,7 @@ prompt_user() { local hash=$1; local ops=$2;
   done
 }
 
-[[ -n $BISECT_DIR ]] || { echo "BISECT_DIR not set"; return 1; }
+[[ -n $BISECT_DIR ]] || export BISECT_DIR="."
 [[ -d ./pkg/cmd/cockroach ]] || { echo "bisection must be run from cockroach root"; return 1; }
 
 mkdir -p "$BISECT_DIR"

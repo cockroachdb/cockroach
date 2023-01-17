@@ -3,23 +3,21 @@
 set -ex
 
 #these can be parameterised
-test="ycsb/B/nodes=3"
+test="kv95/enc=false/nodes=1/cpu=32"
 branch="origin/master"
 
 #use dates OR hashes, but not both
-from="2022-12-21 09:00:00Z"
-#to="2022-12-23 22:00:00Z"
-good=
-bad=
+#from="2022-07-05 09:00:00Z"
+#to="2022-07-07 22:00:00Z"
+good=41228d10ac5e326328507b98245fc076d67d2ecd
+bad=7405c568e482fbfff4ad2bcba101ef42678d0b1a
 
 count=4
 duration_mins=10
 
 #bisect_dir="${test//[^[:alnum:]]/-}/${branch//[^[:alnum:]]/-}/$from,$to"
-bisect_dir=/home/miral/workspace/bisections/ycsb
-#make this visible to bisect-util
-export BISECT_DIR=$bisect_dir
-
+#explicity set bisect dir
+export BISECT_DIR=/home/miral/workspace/bisections/issues-84882
 
 # first-parent is good for release branches where we generally know the merge parents are OK
 # git bisect start --first-parent
@@ -34,7 +32,7 @@ trapped() {
   #we need to be able to collect a non-zero return code from prompt_user
   set +e
   echo "interrupt!"
-  prompt_user "$(git rev-parse --short HEAD)" "-1"
+  prompt_user "$(short_hash HEAD)" "-1"
 
   if [[ $? -gt 125 ]]; then
     exit 1
@@ -56,11 +54,14 @@ else
     hashes="$(git log "$branch" --merges --pretty=format:'%h' --date=short --since "$from" --until "$to")"
     good=$(echo "$hashes" | tail -1)
     bad=$(echo "$hashes" | head -1)
+  else
+    good="$(short_hash "$good")"
+    bad="$(short_hash "$bad")"
   fi
 
   goodVal="$(get_hash_result "$good")"
 
-  # running in parallel is fine, but building saturates CPU so we do that sequentially
+  # running in parallel is fine, but building saturates CPU so we do that synchronously
   if [ -z "$goodVal" ]; then
    echo "[$good] No good threshold found. Will build/run this hash to collect an initial good value."
    build_hash "$good" "$duration_mins"
