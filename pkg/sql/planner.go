@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/exprutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/idxusage"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
@@ -515,6 +516,7 @@ func (p *planner) EvalContext() *eval.Context {
 	return &p.extendedEvalCtx.Context
 }
 
+// Descriptors implements the PlanHookState interface.
 func (p *planner) Descriptors() *descs.Collection {
 	return p.extendedEvalCtx.Descs
 }
@@ -600,6 +602,18 @@ func (p *planner) ResolveTableName(ctx context.Context, tn *tree.TableName) (tre
 		return 0, err
 	}
 	return tree.ID(desc.GetID()), nil
+}
+
+// CheckPrivilegeForTableID implements the AuthorizationAccessor interface.
+// Requires a valid transaction to be open.
+func (p *planner) CheckPrivilegeForTableID(
+	ctx context.Context, tableID descpb.ID, privilege privilege.Kind,
+) error {
+	desc, err := p.LookupTableByID(ctx, tableID)
+	if err != nil {
+		return err
+	}
+	return p.CheckPrivilegeForUser(ctx, desc, privilege, p.User())
 }
 
 // LookupTableByID looks up a table, by the given descriptor ID. Based on the

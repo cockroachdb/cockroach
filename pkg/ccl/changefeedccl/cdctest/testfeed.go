@@ -13,6 +13,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
@@ -21,12 +22,11 @@ type TestFeedFactory interface {
 	// Feed creates a new TestFeed.
 	Feed(create string, args ...interface{}) (TestFeed, error)
 
-	// AsUser connects to the database as the specified user,
-	// calls fn(), then goes back to using the same root
-	// connection. Will return an error if the initial connection
-	// to the database fails, but fn is responsible for failing
-	// the test on other errors.
-	AsUser(user string, fn func()) error
+	// AsUser connects to the database as the specified user, calls fn() with the
+	// user's connection, then goes back to using the same root connection. Will
+	// return an error if the initial connection to the database fails, but fn is
+	// responsible for failing the test on other errors.
+	AsUser(user string, fn func(runner *sqlutils.SQLRunner)) error
 }
 
 // TestFeedMessage represents one row update or resolved timestamp message from

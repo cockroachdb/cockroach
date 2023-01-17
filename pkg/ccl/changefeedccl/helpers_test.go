@@ -661,7 +661,9 @@ func feed(
 	return feed
 }
 
-func asUser(t testing.TB, f cdctest.TestFeedFactory, user string, fn func()) {
+func asUser(
+	t testing.TB, f cdctest.TestFeedFactory, user string, fn func(runner *sqlutils.SQLRunner),
+) {
 	t.Helper()
 	require.NoError(t, f.AsUser(user, fn))
 }
@@ -1107,4 +1109,48 @@ func TestingSetIncludeParquetMetadata() func() {
 	return func() {
 		includeParquetTestMetadata = false
 	}
+}
+
+// ChangefeedJobPermissionsTestSetup creates entities and users with various permissions
+// for tests which test access control for changefeed jobs.
+//
+// This helper creates the following:
+//
+//	UDT type_a
+//	TABLE table_a (with column type_a)
+//	TABLE table_b (with column type_a)
+//	USER adminUser (with admin privs)
+//	USER feedCreator (with CHANGEFEED priv on table_a and table_b)
+//	USER jobController (with the CONTROLJOB role option)
+//	USER userWithAllGrants (with CHANGEFEED on table_a and table b)
+//	USER userWithSomeGrants (with CHANGEFEED on table_a only)
+//	USER regularUser (with no privs)
+func ChangefeedJobPermissionsTestSetup(t *testing.T, s TestServer) {
+	rootDB := sqlutils.MakeSQLRunner(s.DB)
+
+	rootDB.ExecMultiple(t,
+		`CREATE TYPE type_a as enum ('a')`,
+		`CREATE TABLE table_a (id int, type type_a)`,
+		`CREATE TABLE table_b (id int, type type_a)`,
+		`INSERT INTO table_a(id) values (0)`,
+		`INSERT INTO table_b(id) values (0)`,
+
+		`CREATE USER adminUser`,
+		`GRANT ADMIN TO adminUser`,
+
+		`CREATE USER feedCreator`,
+		`GRANT CHANGEFEED ON table_a TO feedCreator`,
+		`GRANT CHANGEFEED ON table_b TO feedCreator`,
+
+		`CREATE USER jobController with CONTROLJOB`,
+
+		`CREATE USER userWithAllGrants`,
+		`GRANT CHANGEFEED ON table_a TO userWithAllGrants`,
+		`GRANT CHANGEFEED ON table_b TO userWithAllGrants`,
+
+		`CREATE USER userWithSomeGrants`,
+		`GRANT CHANGEFEED ON table_a TO userWithSomeGrants`,
+
+		`CREATE USER regularUser`,
+	)
 }

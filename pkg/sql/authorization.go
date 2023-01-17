@@ -74,6 +74,12 @@ type userRoleMembership map[username.SQLUsername]bool
 
 // AuthorizationAccessor for checking authorization (e.g. desc privileges).
 type AuthorizationAccessor interface {
+	// CheckPrivilegeForTableID verifies that the user has `privilege` on the table
+	// denoted by `tableID`.
+	CheckPrivilegeForTableID(
+		ctx context.Context, tableID descpb.ID, privilege privilege.Kind,
+	) error
+
 	// CheckPrivilege verifies that the user has `privilege` on `descriptor`.
 	CheckPrivilegeForUser(
 		ctx context.Context, privilegeObject privilege.Object, privilege privilege.Kind, user username.SQLUsername,
@@ -919,4 +925,10 @@ func insufficientPrivilegeError(
 	return pgerror.Newf(pgcode.InsufficientPrivilege,
 		"user %s does not have %s privilege on %s %s",
 		user, kind, typeForError, object.GetName())
+}
+
+// IsInsufficientPrivilegeError returns true if the error is a pgerror
+// with code pgcode.InsufficientPrivilege.
+func IsInsufficientPrivilegeError(err error) bool {
+	return pgerror.GetPGCode(err) == pgcode.InsufficientPrivilege
 }

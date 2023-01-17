@@ -169,7 +169,7 @@ func usersRestoreFunc(
 	execCfg *sql.ExecutorConfig,
 	txn *kv.Txn,
 	systemTableName, tempTableName string,
-) error {
+) (retErr error) {
 	if !execCfg.Settings.Version.IsActive(ctx, clusterversion.V22_2RoleOptionsTableHasIDColumn) {
 		return defaultSystemTableRestoreFunc(
 			ctx, execCfg, txn, systemTableName, tempTableName,
@@ -203,6 +203,9 @@ func usersRestoreFunc(
 	if err != nil {
 		return err
 	}
+	defer func() {
+		retErr = errors.CombineErrors(retErr, it.Close())
+	}()
 
 	for {
 		ok, err := it.Next(ctx)
@@ -239,12 +242,68 @@ func usersRestoreFunc(
 	return nil
 }
 
-func roleOptionsRestoreFunc(
+func roleMembersRestoreFunc(
 	ctx context.Context,
 	execCfg *sql.ExecutorConfig,
 	txn *kv.Txn,
 	systemTableName, tempTableName string,
 ) error {
+	if !execCfg.Settings.Version.IsActive(ctx, clusterversion.V23_1RoleMembersTableHasIDColumns) {
+		return defaultSystemTableRestoreFunc(ctx, execCfg, txn, systemTableName, tempTableName)
+	}
+
+	executor := execCfg.InternalExecutor
+
+	// It's enough to just check if role_id exists since member_id was added at
+	// the same time.
+	hasIDColumns, err := tableHasColumnName(ctx, txn, executor, tempTableName, "role_id")
+	if err != nil {
+		return err
+	}
+	if hasIDColumns {
+		return defaultSystemTableRestoreFunc(ctx, execCfg, txn, systemTableName, tempTableName)
+	}
+
+	deleteQuery := fmt.Sprintf("DELETE FROM system.%s WHERE true", systemTableName)
+	log.Eventf(ctx, "clearing data from system table %s with query %q", systemTableName, deleteQuery)
+
+	_, err = executor.Exec(ctx, systemTableName+"-data-deletion", txn, deleteQuery)
+	if err != nil {
+		return errors.Wrapf(err, "deleting data from system.%s", systemTableName)
+	}
+
+	roleMembers, err := executor.QueryBufferedEx(ctx, systemTableName+"-query-all-rows",
+		txn, sessiondata.NodeUserSessionDataOverride,
+		fmt.Sprintf(`SELECT * FROM %s`, tempTableName),
+	)
+	if err != nil {
+		return err
+	}
+
+	restoreQuery := fmt.Sprintf(`
+INSERT INTO system.%s ("role", "member", "isAdmin", role_id, member_id)
+VALUES ($1, $2, $3, (SELECT user_id FROM system.users WHERE username = $1), (SELECT user_id FROM system.users WHERE username = $2))`, systemTableName)
+	for _, roleMember := range roleMembers {
+		role := tree.MustBeDString(roleMember[0])
+		member := tree.MustBeDString(roleMember[1])
+		isAdmin := tree.MustBeDBool(roleMember[2])
+		if _, err := executor.ExecEx(ctx, systemTableName+"-data-insert",
+			txn, sessiondata.NodeUserSessionDataOverride,
+			restoreQuery, role, member, isAdmin,
+		); err != nil {
+			return errors.Wrapf(err, "inserting data to system.%s", systemTableName)
+		}
+	}
+
+	return nil
+}
+
+func roleOptionsRestoreFunc(
+	ctx context.Context,
+	execCfg *sql.ExecutorConfig,
+	txn *kv.Txn,
+	systemTableName, tempTableName string,
+) (retErr error) {
 	executor := execCfg.InternalExecutor
 	hasIDColumn, err := tableHasColumnName(ctx, txn, executor, tempTableName, "user_id")
 	if err != nil {
@@ -272,6 +331,9 @@ func roleOptionsRestoreFunc(
 	if err != nil {
 		return err
 	}
+	defer func() {
+		retErr = errors.CombineErrors(retErr, it.Close())
+	}()
 
 	for {
 		ok, err := it.Next(ctx)
@@ -402,6 +464,8 @@ var systemTableBackupConfiguration = map[string]systemBackupConfiguration{
 	},
 	systemschema.RoleMembersTable.GetName(): {
 		shouldIncludeInClusterBackup: optInToClusterBackup, // No desc ID columns.
+		customRestoreFunc:            roleMembersRestoreFunc,
+		restoreInOrder:               1, // Restore after system.users.
 	},
 	systemschema.RoleOptionsTable.GetName(): {
 		shouldIncludeInClusterBackup: optInToClusterBackup, // No desc ID columns.

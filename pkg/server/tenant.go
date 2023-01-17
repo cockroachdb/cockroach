@@ -54,6 +54,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
+	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -119,6 +120,8 @@ type SQLServerWrapper struct {
 
 	// promRuleExporter is used by the tenant to expose the prometheus rules.
 	promRuleExporter *metric.PrometheusRuleExporter
+
+	tenantTimeSeries *ts.TenantServer
 }
 
 // Drain idempotently activates the draining mode.
@@ -305,7 +308,7 @@ func NewTenantServer(
 	)
 
 	// Connect the various servers to RPC.
-	for _, gw := range []grpcGatewayServer{sAdmin, sStatus, sAuth} {
+	for _, gw := range []grpcGatewayServer{sAdmin, sStatus, sAuth, args.tenantTimeSeriesServer} {
 		gw.RegisterService(args.grpc.Server)
 	}
 
@@ -357,6 +360,7 @@ func NewTenantServer(
 		externalStorageBuilder: args.externalStorageBuilder,
 		costController:         args.costController,
 		promRuleExporter:       args.promRuleExporter,
+		tenantTimeSeries:       args.tenantTimeSeriesServer,
 	}, nil
 }
 
@@ -459,7 +463,7 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 	}
 
 	// Connect the various RPC handlers to the gRPC gateway.
-	for _, gw := range []grpcGatewayServer{s.tenantAdmin, s.tenantStatus, s.authentication} {
+	for _, gw := range []grpcGatewayServer{s.tenantAdmin, s.tenantStatus, s.authentication, s.tenantTimeSeries} {
 		if err := gw.RegisterGateway(gwCtx, gwMux, conn); err != nil {
 			return err
 		}
@@ -884,6 +888,8 @@ func makeTenantSQLServerArgs(
 		return sqlServerArgs{}, err
 	}
 
+	sTS := ts.MakeTenantServer(baseCfg.AmbientCtx, tenantConnect)
+
 	systemConfigWatcher := systemconfigwatcher.NewWithAdditionalProvider(
 		keys.MakeSQLCodec(sqlCfg.TenantID), clock, rangeFeedFactory, &baseCfg.DefaultZoneConfig,
 		tenantConnect,
@@ -1005,6 +1011,7 @@ func makeTenantSQLServerArgs(
 		externalStorageBuilder:   esb,
 		admissionPacerFactory:    noopElasticCPUGrantCoord,
 		rangeDescIteratorFactory: tenantConnect,
+		tenantTimeSeriesServer:   sTS,
 	}, nil
 }
 

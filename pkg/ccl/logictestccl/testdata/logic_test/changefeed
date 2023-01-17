@@ -10,15 +10,33 @@ user root
 
 # Test granting CONTROLCHANGEFEED.
 statement ok
-ALTER USER testuser CONTROLCHANGEFEED;
 GRANT CONNECT ON DATABASE test TO testuser
+
+query T noticetrace
+ALTER USER testuser CONTROLCHANGEFEED
+----
+NOTICE: The role option CONTROLCHANGEFEED will be removed in a future release, please switch to using the CHANGEFEED privilege for target tables instead: https://www.cockroachlabs.com/docs/stable/create-changefeed.html#required-privileges
 
 user testuser
 
 # We should pass the CONTROLCHANGEFEED permission check but error on missing
 # SELECT privileges.
-statement error user testuser does not have SELECT privilege on relation t
-CREATE CHANGEFEED FOR t
+statement error pq: user testuser with CONTROLCHANGEFEED role option requires the SELECT privilege on all target tables to be able to run an enterprise changefeed
+CREATE CHANGEFEED FOR t INTO 'null://sink' with initial_scan='only'
+
+user root
+
+# Test granting SELECT.
+statement ok
+GRANT SELECT ON TABLE t TO testuser
+
+user testuser
+
+# Test the deprecation notice for CONTROLCHANGEFEED
+query T noticetrace
+CREATE CHANGEFEED FOR t INTO 'null://sink' with initial_scan='only'
+----
+NOTICE: You are creating a changefeed as a user with the CONTROLCHANGEFEED role option. The role option CONTROLCHANGEFEED will be removed in a future release, please switch to using the CHANGEFEED privilege for target tables instead: https://www.cockroachlabs.com/docs/stable/create-changefeed.html#required-privileges
 
 # Test revoking CONTROLCHANGEFEED.
 user root
@@ -29,16 +47,5 @@ GRANT SELECT ON TABLE t TO testuser
 
 user testuser
 
-statement error user testuser does not have CHANGEFEED privilege on relation t
-CREATE CHANGEFEED FOR t
-
-# The CHANGEFEED privilege can be granted granularly.
-
-user root
-statement ok
-GRANT CHANGEFEED ON table t TO testuser
-
-user testuser
-
-statement ok
-CREATE CHANGEFEED FOR t with initial_scan='only'
+statement error user testuser requires the CHANGEFEED privilege on all target tables to be able to run an enterprise changefeed
+CREATE CHANGEFEED FOR t INTO 'null://sink' with initial_scan='only'

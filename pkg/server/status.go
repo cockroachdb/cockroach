@@ -1596,6 +1596,15 @@ func (s *systemStatusServer) Nodes(
 	return resp, nil
 }
 
+func (s *statusServer) NodesUI(
+	ctx context.Context, req *serverpb.NodesRequest,
+) (*serverpb.NodesResponseExternal, error) {
+	ctx = propagateGatewayMetadata(ctx)
+	ctx = s.AnnotateCtx(ctx)
+
+	return s.sqlServer.tenantConnect.NodesUI(ctx, req)
+}
+
 func (s *systemStatusServer) NodesUI(
 	ctx context.Context, req *serverpb.NodesRequest,
 ) (*serverpb.NodesResponseExternal, error) {

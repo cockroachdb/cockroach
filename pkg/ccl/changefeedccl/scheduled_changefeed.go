@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
-	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
@@ -547,13 +546,6 @@ func doCreateChangefeedSchedule(
 	spec *scheduledChangefeedSpec,
 	resultsCh chan<- tree.Datums,
 ) error {
-	hasControlChangefeed, err := p.HasRoleOption(ctx, roleoption.CONTROLCHANGEFEED)
-	if err != nil {
-		return err
-	}
-	if !hasControlChangefeed {
-		return errors.Newf("User needs CONTROLCHANGEFEED role to schedule changefeeds.")
-	}
 
 	env := sql.JobSchedulerEnv(p.ExecCfg())
 

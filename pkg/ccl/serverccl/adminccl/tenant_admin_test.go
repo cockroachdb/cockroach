@@ -57,12 +57,7 @@ func testUnimplementedRPCs(ctx context.Context, t *testing.T, helper serverccl.T
 	client := http.GetClient()
 	baseURL := http.GetBaseURL()
 
-	resp, err := client.Get(baseURL + "/_admin/v1/liveness")
-	require.NoError(t, err)
-	defer resp.Body.Close()
-	require.Equal(t, 501, resp.StatusCode)
-
-	resp, err = client.Post(baseURL+"/_admin/v1/enqueue_range", "application/json", nil)
+	resp, err := client.Post(baseURL+"/_admin/v1/enqueue_range", "application/json", nil)
 	require.NoError(t, err)
 	defer resp.Body.Close()
 	require.Equal(t, 501, resp.StatusCode)

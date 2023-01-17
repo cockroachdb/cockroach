@@ -312,8 +312,8 @@ SHOW COLUMNS FROM system.role_members
 role       STRING  false  NULL  ·  {primary,role_members_member_id_idx,role_members_member_idx,role_members_role_id_idx,role_members_role_id_member_id_key,role_members_role_idx}  false
 member     STRING  false  NULL  ·  {primary,role_members_member_id_idx,role_members_member_idx,role_members_role_id_idx,role_members_role_id_member_id_key,role_members_role_idx}  false
 isAdmin    BOOL    false  NULL  ·  {primary}                                                                                                                                       false
-role_id    OID     true   NULL  ·  {primary,role_members_role_id_idx,role_members_role_id_member_id_key}                                                                           false
-member_id  OID     true   NULL  ·  {primary,role_members_member_id_idx,role_members_role_id_member_id_key}                                                                         false
+role_id    OID     false  NULL  ·  {primary,role_members_role_id_idx,role_members_role_id_member_id_key}                                                                           false
+member_id  OID     false  NULL  ·  {primary,role_members_member_id_idx,role_members_role_id_member_id_key}                                                                         false
 
 # Verify default privileges on system tables.
 query TTTB

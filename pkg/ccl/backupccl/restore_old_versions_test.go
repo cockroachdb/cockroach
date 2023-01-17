@@ -75,6 +75,7 @@ func TestRestoreOldVersions(t *testing.T) {
 		multiRegionDirs             = testdataBase + "/multi-region"
 		publicSchemaDirs            = testdataBase + "/public-schema-remap"
 		systemUsersDirs             = testdataBase + "/system-users-restore"
+		systemRoleMembersDirs       = testdataBase + "/system-role-members-restore"
 	)
 
 	t.Run("table-restore", func(t *testing.T) {
@@ -298,6 +299,17 @@ ORDER BY object_type, object_name`, [][]string{
 			exportDir, err := filepath.Abs(filepath.Join(systemUsersDirs, dir.Name()))
 			require.NoError(t, err)
 			t.Run(dir.Name(), fullClusterRestoreUsersWithoutIDs(exportDir))
+		}
+	})
+
+	t.Run("full-cluster-restore-system-role-members-without-ids", func(t *testing.T) {
+		dirs, err := os.ReadDir(systemRoleMembersDirs)
+		require.NoError(t, err)
+		for _, dir := range dirs {
+			require.True(t, dir.IsDir())
+			exportDir, err := filepath.Abs(filepath.Join(systemRoleMembersDirs, dir.Name()))
+			require.NoError(t, err)
+			t.Run(dir.Name(), fullClusterRestoreSystemRoleMembersWithoutIDs(exportDir))
 		}
 	})
 }
@@ -1158,5 +1170,32 @@ func restoreSystemUsersWithoutIDs(exportDir string) func(t *testing.T) {
 			{"testuser6", "NULL", "false", "110"},
 		})
 
+	}
+}
+
+func fullClusterRestoreSystemRoleMembersWithoutIDs(exportDir string) func(t *testing.T) {
+	return func(t *testing.T) {
+		const numAccounts = 1000
+		_, _, tmpDir, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts, InitManualReplication)
+		defer cleanupFn()
+
+		_, sqlDB, cleanup := backupRestoreTestSetupEmpty(t, singleNode, tmpDir,
+			InitManualReplication, base.TestClusterArgs{
+				ServerArgs: base.TestServerArgs{
+					Knobs: base.TestingKnobs{
+						JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+					},
+				}})
+		defer cleanup()
+		err := os.Symlink(exportDir, filepath.Join(tmpDir, "foo"))
+		require.NoError(t, err)
+
+		sqlDB.Exec(t, fmt.Sprintf("RESTORE FROM '%s'", localFoo))
+
+		sqlDB.CheckQueryResults(t, "SELECT * FROM system.role_members", [][]string{
+			{"admin", "root", "true", "2", "1"},
+			{"testrole", "testuser1", "false", "100", "101"},
+			{"testrole", "testuser2", "true", "100", "102"},
+		})
 	}
 }
