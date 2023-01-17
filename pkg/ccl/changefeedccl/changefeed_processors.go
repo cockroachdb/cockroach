@@ -192,6 +192,34 @@ func (ca *changeAggregator) MustBeStreaming() bool {
 	return true
 }
 
+// wrapMetricsController wraps the supplied metricsRecorder to emit metrics to telemetry.
+// This method modifies ca.cancel().
+func (ca *changeAggregator) wrapMetricsController(
+	ctx context.Context, recorder metricsRecorder,
+) metricsRecorder {
+	job, err := ca.flowCtx.Cfg.JobRegistry.LoadJob(ctx, ca.spec.JobID)
+	if err != nil {
+		ca.MoveToDraining(err)
+		ca.cancel()
+		return ca.sliMetrics
+	}
+
+	recorderWithTelemetry, err := wrapMetricsRecorderWithTelemetry(ctx, job, ca.flowCtx.Cfg.Settings, recorder)
+	if err != nil {
+		ca.MoveToDraining(err)
+		ca.cancel()
+		return ca.sliMetrics
+	}
+
+	cancel := ca.cancel
+	ca.cancel = func() {
+		recorderWithTelemetry.close()
+		cancel()
+	}
+
+	return recorderWithTelemetry
+}
+
 // Start is part of the RowSource interface.
 func (ca *changeAggregator) Start(ctx context.Context) {
 	// Derive a separate context so that we can shutdown the poller.
@@ -245,9 +273,13 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 		return
 	}
 
-	ca.sink, err = getEventSink(ctx, ca.flowCtx.Cfg, ca.spec.Feed, timestampOracle,
-		ca.spec.User(), ca.spec.JobID, ca.sliMetrics)
+	recorder := metricsRecorder(ca.sliMetrics)
+	if !ca.isSinkless() {
+		recorder = ca.wrapMetricsController(ctx, recorder)
+	}
 
+	ca.sink, err = getEventSink(ctx, ca.flowCtx.Cfg, ca.spec.Feed, timestampOracle,
+		ca.spec.User(), ca.spec.JobID, recorder)
 	if err != nil {
 		err = changefeedbase.MarkRetryableError(err)
 		// Early abort in the case that there is an error creating the sink.
@@ -618,6 +650,10 @@ func (ca *changeAggregator) emitResolved(batch jobspb.ResolvedSpans) error {
 func (ca *changeAggregator) ConsumerClosed() {
 	// The consumer is done, Next() will not be called again.
 	ca.close()
+}
+
+func (ca *changeAggregator) isSinkless() bool {
+	return ca.spec.JobID == 0
 }
 
 const (
