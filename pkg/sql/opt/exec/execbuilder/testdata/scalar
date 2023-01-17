@@ -1151,3 +1151,32 @@ vectorized: true
       estimated row count: 1,000 (missing stats)
       table: t0@t0_pkey
       spans: FULL SCAN
+
+# Regression tests for not checking whether arguments to a binary op are
+# non-NULL when folding (#94264).
+query T
+EXPLAIN SELECT 2-(9223372036854775807+436256318) < (CASE WHEN false THEN -1 END)
+----
+distribution: local
+vectorized: true
+·
+• values
+  size: 1 column, 1 row
+
+query T
+EXPLAIN SELECT (9223372036854775807+436256318)-2 < (CASE WHEN false THEN -1 END)
+----
+distribution: local
+vectorized: true
+·
+• values
+  size: 1 column, 1 row
+
+query T
+EXPLAIN SELECT (9223372036854775807+436256318)+2 < (CASE WHEN false THEN -1 END)
+----
+distribution: local
+vectorized: true
+·
+• values
+  size: 1 column, 1 row
