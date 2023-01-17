@@ -18,6 +18,7 @@ export type UIConfigState = {
   isTenant: boolean;
   userSQLRoles: string[];
   hasViewActivityRedactedRole: boolean;
+  hasAdminRole: boolean;
   pages: {
     statementDetails: {
       showStatementDiagnosticsLink: boolean;
@@ -32,6 +33,7 @@ const initialState: UIConfigState = {
   isTenant: false,
   userSQLRoles: [],
   hasViewActivityRedactedRole: false,
+  hasAdminRole: false,
   pages: {
     statementDetails: {
       showStatementDiagnosticsLink: true,

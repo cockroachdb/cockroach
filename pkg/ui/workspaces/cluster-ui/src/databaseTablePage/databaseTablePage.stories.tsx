@@ -66,6 +66,7 @@ const withLoadingIndicator: DatabaseTablePageProps = {
   refreshIndexStats: () => {},
   resetIndexUsageStats: () => {},
   refreshSettings: () => {},
+  refreshUserSQLRoles: () => {},
 };
 
 const name = randomName();
@@ -167,6 +168,7 @@ const withData: DatabaseTablePageProps = {
   refreshIndexStats: () => {},
   resetIndexUsageStats: () => {},
   refreshSettings: () => {},
+  refreshUserSQLRoles: () => {},
 };
 
 storiesOf("Database Table Page", module)

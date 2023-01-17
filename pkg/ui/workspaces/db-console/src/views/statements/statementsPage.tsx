@@ -29,7 +29,10 @@ import {
   createStatementDiagnosticsAlertLocalSetting,
   cancelStatementDiagnosticsAlertLocalSetting,
 } from "src/redux/alerts";
-import { selectHasViewActivityRedactedRole } from "src/redux/user";
+import {
+  selectHasViewActivityRedactedRole,
+  selectHasAdminRole,
+} from "src/redux/user";
 import { queryByName } from "src/util/query";
 
 import {
@@ -376,6 +379,7 @@ export default withRouter(
         statementsError: state.cachedData.statements.lastError,
         totalFingerprints: selectTotalFingerprints(state),
         hasViewActivityRedactedRole: selectHasViewActivityRedactedRole(state),
+        hasAdminRole: selectHasAdminRole(state),
       },
       activePageProps: mapStateToActiveStatementViewProps(state),
     }),

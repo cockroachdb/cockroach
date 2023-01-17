@@ -925,6 +925,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
   columns: null,
   isTenant: false,
   hasViewActivityRedactedRole: false,
+  hasAdminRole: true,
   dismissAlertMessage: noop,
   refreshStatementDiagnosticsRequests: noop,
   refreshStatements: noop,

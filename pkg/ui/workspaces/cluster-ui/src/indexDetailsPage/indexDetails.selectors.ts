@@ -23,7 +23,7 @@ import {
 } from "../util";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { IndexDetailsPageData } from "./indexDetailsPage";
-import { selectIsTenant } from "../store/uiConfig";
+import { selectHasAdminRole, selectIsTenant } from "../store/uiConfig";
 import { BreadcrumbItem } from "../breadcrumbs";
 import { RecommendationType as RecType } from "./indexDetailsPage";
 const { RecommendationType } = cockroach.sql.IndexRecommendation;
@@ -39,7 +39,16 @@ export const selectIndexDetails = createSelector(
     getMatchParamByName(props.match, indexNameAttr),
   (state: AppState) => state.adminUI.indexStats.cachedData,
   (state: AppState) => selectIsTenant(state),
-  (database, schema, table, index, indexStats): IndexDetailsPageData => {
+  (state: AppState) => selectHasAdminRole(state),
+  (
+    database,
+    schema,
+    table,
+    index,
+    indexStats,
+    isTenant,
+    hasAdminRole,
+  ): IndexDetailsPageData => {
     const stats = indexStats[generateTableID(database, table)];
     const details = stats?.data?.statistics.filter(
       stat => stat.index_name === index, // index names must be unique for a table
@@ -70,6 +79,7 @@ export const selectIndexDetails = createSelector(
         table,
         index,
       ),
+      hasAdminRole: hasAdminRole,
       details: {
         loading: !!stats?.inFlight,
         loaded: !!stats?.valid,
