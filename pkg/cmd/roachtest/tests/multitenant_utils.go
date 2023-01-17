@@ -217,7 +217,9 @@ func (tn *tenantNode) start(ctx context.Context, t test.Test, c cluster.Cluster,
 	// pgURL has full paths to local certs embedded, i.e.
 	// /tmp/roachtest-certs3630333874/certs, on the cluster we want just certs
 	// (i.e. to run workload on the tenant).
-	secureUrls, err := roachprod.PgURL(ctx, t.L(), c.MakeNodes(c.Node(tn.node)), "certs", false /*external*/, true /* secure */)
+	secureUrls, err := roachprod.PgURL(ctx, t.L(), c.MakeNodes(c.Node(tn.node)), "certs", roachprod.PGURLOptions{
+		External: false,
+		Secure:   true})
 	require.NoError(t, err)
 	u, err = url.Parse(strings.Trim(secureUrls[0], "'"))
 	require.NoError(t, err)

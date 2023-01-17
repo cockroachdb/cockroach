@@ -47,6 +47,7 @@ var (
 	listMine              bool
 	listPattern           string
 	secure                = false
+	tenantName            string
 	extraSSHOptions       = ""
 	nodeEnv               []string
 	tag                   string
@@ -198,7 +199,7 @@ func initFlags() {
 		"create a cluster backup schedule once the cluster has started (by default, "+
 			"full backup hourly and incremental every 15 minutes)")
 	startCmd.Flags().StringVar(&startOpts.ScheduleBackupArgs, "schedule-backup-args", "",
-		`Recurrence and scheduled backup options specification. 
+		`Recurrence and scheduled backup options specification.
 Default is "RECURRING '*/15 * * * *' FULL BACKUP '@hourly' WITH SCHEDULE OPTIONS first_run = 'now'"`)
 
 	startTenantCmd.Flags().StringVarP(&hostCluster,
@@ -330,4 +331,9 @@ Default is "RECURRING '*/15 * * * *' FULL BACKUP '@hourly' WITH SCHEDULE OPTIONS
 		cmd.Flags().BoolVar(&secure,
 			"secure", false, "use a secure cluster")
 	}
+	for _, cmd := range []*cobra.Command{pgurlCmd, sqlCmd} {
+		cmd.Flags().StringVar(&tenantName,
+			"tenant-name", "", "specific tenant to connect to")
+	}
+
 }

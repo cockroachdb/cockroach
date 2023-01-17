@@ -21,7 +21,7 @@ import (
 )
 
 var parameterRe = regexp.MustCompile(`{[^{}]*}`)
-var pgURLRe = regexp.MustCompile(`{pgurl(:[-,0-9]+)?}`)
+var pgURLRe = regexp.MustCompile(`{pgurl(:[-,0-9]+)?(:[a-z0-9\-]+)?}`)
 var pgHostRe = regexp.MustCompile(`{pghost(:[-,0-9]+)?}`)
 var pgPortRe = regexp.MustCompile(`{pgport(:[-,0-9]+)?}`)
 var uiPortRe = regexp.MustCompile(`{uiport(:[-,0-9]+)?}`)
@@ -35,7 +35,7 @@ var certsDirRe = regexp.MustCompile(`{certs-dir}`)
 type expander struct {
 	node Node
 
-	pgURLs  map[Node]string
+	pgURLs  map[string]map[Node]string
 	pgHosts map[Node]string
 	pgPorts map[Node]string
 	uiPorts map[Node]string
@@ -119,14 +119,22 @@ func (e *expander) maybeExpandPgURL(
 	}
 
 	if e.pgURLs == nil {
+		e.pgURLs = make(map[string]map[Node]string)
+	}
+	tenant := "system"
+	if m[2] != "" {
+		// Trim off the leading ':' in the capture group.
+		tenant = m[2][1:]
+	}
+	if e.pgURLs[tenant] == nil {
 		var err error
-		e.pgURLs, err = c.pgurls(ctx, l, allNodes(len(c.VMs)))
+		e.pgURLs[tenant], err = c.pgurls(ctx, l, allNodes(len(c.VMs)), tenant)
 		if err != nil {
 			return "", false, err
 		}
 	}
 
-	s, err := e.maybeExpandMap(c, e.pgURLs, m[1])
+	s, err := e.maybeExpandMap(c, e.pgURLs[tenant], m[1])
 	return s, err == nil, err
 }
 
