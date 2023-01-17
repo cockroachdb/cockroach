@@ -13,6 +13,7 @@ package tests
 import (
 	"context"
 	gosql "database/sql"
+	b64 "encoding/base64"
 	"fmt"
 	"math/rand"
 	"os"
@@ -25,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/internal/sqlsmith"
+	"github.com/cockroachdb/cockroach/pkg/internal/workloadreplay"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -32,11 +34,33 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+const (
+	bucketName = "roachtest-snowflake-costfuzz"
+	keyTag     = "GOOGLE_EPHEMERAL_CREDENTIALS"
+)
+
 type queryComparisonTest struct {
 	name      string
 	setupName string
-	run       func(*sqlsmith.Smither, *rand.Rand, queryComparisonHelper) error
+	run       func(queryGenerator, *rand.Rand, queryComparisonHelper) error
 }
+
+// queryGenerator provides interface for tests to generate queries via method
+// Generate which will vary per test.
+type queryGenerator interface {
+	Generate() string
+}
+
+type workloadReplayGenerator struct {
+	stmt string
+}
+
+// Generate is part of the queryGenerator interface.
+func (wlrg *workloadReplayGenerator) Generate() string {
+	return wlrg.stmt
+}
+
+var _ queryGenerator = (*workloadReplayGenerator)(nil)
 
 func runQueryComparison(
 	ctx context.Context, t test.Test, c cluster.Cluster, qct *queryComparisonTest,
@@ -99,6 +123,7 @@ func runOneRoundQueryComparison(
 	// Set up a statement logger for easy reproduction. We only
 	// want to log successful statements and statements that
 	// produced a final error or panic.
+
 	logPath := filepath.Join(t.ArtifactsDir(), fmt.Sprintf("%s%03d.log", qct.name, iter))
 	log, err := os.Create(logPath)
 	if err != nil {
@@ -150,107 +175,207 @@ func runOneRoundQueryComparison(
 	t.L().Printf("seed: %d", seed)
 	t.L().Printf("setupName: %s", qct.setupName)
 
-	setup := sqlsmith.Setups[qct.setupName](rnd)
+	if qct.setupName == "workload-replay" {
 
-	t.Status("executing setup")
-	t.L().Printf("setup:\n%s", strings.Join(setup, "\n"))
-	for _, stmt := range setup {
-		if _, err := conn.Exec(stmt); err != nil {
-			t.Fatal(err)
-		} else {
-			logStmt(stmt)
-		}
-	}
-
-	setStmtTimeout := fmt.Sprintf("SET statement_timeout='%s';", statementTimeout.String())
-	t.Status("setting statement_timeout")
-	t.L().Printf("statement timeout:\n%s", setStmtTimeout)
-	if _, err := conn.Exec(setStmtTimeout); err != nil {
-		t.Fatal(err)
-	}
-	logStmt(setStmtTimeout)
-
-	setUnconstrainedStmt := "SET unconstrained_non_covering_index_scan_enabled = true;"
-	t.Status("setting unconstrained_non_covering_index_scan_enabled")
-	t.L().Printf("\n%s", setUnconstrainedStmt)
-	if _, err := conn.Exec(setUnconstrainedStmt); err != nil {
-		logStmt(setUnconstrainedStmt)
-		t.Fatal(err)
-	}
-	logStmt(setUnconstrainedStmt)
-
-	isMultiRegion := qct.setupName == sqlsmith.SeedMultiRegionSetupName
-	if isMultiRegion {
-		setupMultiRegionDatabase(t, conn, logStmt)
-	}
-
-	// Initialize a smither that generates only INSERT and UPDATE statements with
-	// the InsUpdOnly option.
-	mutatingSmither := newMutatingSmither(conn, rnd, t, true /* disableDelete */, isMultiRegion)
-	defer mutatingSmither.Close()
-
-	// Initialize a smither that generates only deterministic SELECT statements.
-	smither, err := sqlsmith.NewSmither(conn, rnd,
-		sqlsmith.DisableMutations(), sqlsmith.DisableNondeterministicFns(), sqlsmith.DisableLimits(),
-		sqlsmith.UnlikelyConstantPredicate(), sqlsmith.FavorCommonData(),
-		sqlsmith.UnlikelyRandomNulls(), sqlsmith.DisableCrossJoins(),
-		sqlsmith.DisableIndexHints(), sqlsmith.DisableWith(), sqlsmith.DisableDecimals(),
-		sqlsmith.LowProbabilityWhereClauseWithJoinTables(),
-		sqlsmith.DisableUDFs(),
-		sqlsmith.SetComplexity(.3),
-		sqlsmith.SetScalarComplexity(.1),
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer smither.Close()
-
-	t.Status("running ", qct.name)
-	until := time.After(roundTimeout)
-	done := ctx.Done()
-
-	for i := 1; ; i++ {
-		select {
-		case <-until:
-			return
-		case <-done:
-			return
-		default:
+		logTest := func(logStr string, logType string) {
+			stmt := strings.TrimSpace(logStr)
+			if stmt == "" {
+				return
+			}
+			fmt.Fprint(log, logType+":"+stmt)
+			fmt.Fprint(log, "\n")
 		}
 
-		const numInitialMutations = 1000
+		var finalStmt string
+		var signatures map[string][]string
 
-		if i == numInitialMutations {
-			t.Status("running ", qct.name, ": ", i, " initial mutations completed")
-			// Initialize a new mutating smither that generates INSERT, UPDATE and
-			// DELETE statements with the MutationsOnly option.
-			mutatingSmither = newMutatingSmither(conn, rnd, t, false /* disableDelete */, isMultiRegion)
-			defer mutatingSmither.Close()
-		}
+		for {
+			done := ctx.Done()
 
-		if i%1000 == 0 {
-			if i != numInitialMutations {
-				t.Status("running ", qct.name, ": ", i, " statements completed")
+			select {
+			case <-done:
+				return
+			default:
+			}
+
+			t.L().Printf("Choosing Random Query")
+			finalStmt, signatures = workloadreplay.ChooseRandomQuery(ctx, log)
+			if finalStmt == "" {
+				continue
+			}
+			t.L().Printf("Generating Random Data in Snowflake")
+			schemaMap := workloadreplay.CreateRandomDataSnowflake(ctx, signatures, log)
+			if schemaMap == nil {
+				continue
+			}
+			// Create tables.
+
+			for tableName, schemaInfo := range schemaMap {
+				t.L().Printf("creating table: " + tableName)
+				fmt.Println(schemaInfo[2])
+				if _, err := conn.Exec(schemaInfo[2]); err != nil {
+					t.L().Printf("error while creating table: %v", err)
+				}
+			}
+
+			// Load tables with initial data.
+
+			importStr := ""
+			for tableName, schemaInfo := range schemaMap {
+				t.L().Printf("inserting rows into table:" + tableName)
+				credKey, ok := os.LookupEnv(keyTag)
+				if !ok {
+					t.L().Printf("%s not set\n", keyTag)
+					return
+				}
+				encodedKey := b64.StdEncoding.EncodeToString([]byte(credKey))
+				importStr = "IMPORT INTO " + tableName + " (" + schemaInfo[1] + ")\n"
+				csvStr := " CSV DATA ('gs://" + bucketName + "/" + schemaInfo[0] + "?AUTH=specified&CREDENTIALS=" + encodedKey + "');"
+				queryStr := importStr + csvStr
+				logTest(queryStr, "QUERY_SNOWFLAKE_TO_GCS:")
+				if _, err := conn.Exec(queryStr); err != nil {
+					t.L().Printf("error while inserting rows: %v", err)
+					return
+				}
+			}
+
+			// Test if query will run with the schemas created.
+			t.L().Printf("Testing if valid query: %v", finalStmt)
+			_, err = conn.Query("explain " + finalStmt)
+			if err != nil {
+				t.L().Printf("Not a Valid query with respect to table schema: %v", err)
+				logTest(finalStmt, "Query/Schema Above is Invalid")
+				for tablename := range schemaMap {
+					if _, droperror := conn.Exec("drop table " + tablename); droperror != nil {
+						t.L().Printf("error while dropping table: %v", droperror)
+
+					}
+				}
+			} else { // Valid query so can run query and perform test.
+				logTest(finalStmt, "Valid Query")
+
+				h := queryComparisonHelper{
+					conn:       conn,
+					logStmt:    logStmt,
+					logFailure: logFailure,
+					printStmt:  printStmt,
+					stmtNo:     0,
+				}
+
+				workloadqg := workloadReplayGenerator{finalStmt}
+
+				if err := qct.run(&workloadqg, rnd, h); err != nil {
+					t.Fatal(err)
+				}
+
 			}
 		}
 
-		// Run `numInitialMutations` mutations first so that the tables have rows.
-		// Run a mutation every 25th iteration afterwards to continually change the
-		// state of the database.
-		if i < numInitialMutations || i%25 == 0 {
-			runMutationStatement(conn, mutatingSmither, logStmt)
-			continue
+	} else {
+
+		setup := sqlsmith.Setups[qct.setupName](rnd)
+
+		t.Status("executing setup")
+		t.L().Printf("setup:\n%s", strings.Join(setup, "\n"))
+		for _, stmt := range setup {
+			if _, err := conn.Exec(stmt); err != nil {
+				t.Fatal(err)
+			} else {
+				logStmt(stmt)
+			}
 		}
 
-		h := queryComparisonHelper{
-			conn:       conn,
-			logStmt:    logStmt,
-			logFailure: logFailure,
-			printStmt:  printStmt,
-			stmtNo:     i,
-		}
-		if err := qct.run(smither, rnd, h); err != nil {
+		setStmtTimeout := fmt.Sprintf("SET statement_timeout='%s';", statementTimeout.String())
+		t.Status("setting statement_timeout")
+		t.L().Printf("statement timeout:\n%s", setStmtTimeout)
+		if _, err := conn.Exec(setStmtTimeout); err != nil {
 			t.Fatal(err)
+		}
+		logStmt(setStmtTimeout)
+
+		setUnconstrainedStmt := "SET unconstrained_non_covering_index_scan_enabled = true;"
+		t.Status("setting unconstrained_non_covering_index_scan_enabled")
+		t.L().Printf("\n%s", setUnconstrainedStmt)
+		if _, err := conn.Exec(setUnconstrainedStmt); err != nil {
+			logStmt(setUnconstrainedStmt)
+			t.Fatal(err)
+		}
+		logStmt(setUnconstrainedStmt)
+
+		isMultiRegion := qct.setupName == sqlsmith.SeedMultiRegionSetupName
+		if isMultiRegion {
+			setupMultiRegionDatabase(t, conn, logStmt)
+		}
+
+		// Initialize a smither that generates only INSERT and UPDATE statements with
+		// the InsUpdOnly option.
+		mutatingSmither := newMutatingSmither(conn, rnd, t, true /* disableDelete */, isMultiRegion)
+		defer mutatingSmither.Close()
+
+		// Initialize a smither that generates only deterministic SELECT statements.
+		smither, err := sqlsmith.NewSmither(conn, rnd,
+			sqlsmith.DisableMutations(), sqlsmith.DisableNondeterministicFns(), sqlsmith.DisableLimits(),
+			sqlsmith.UnlikelyConstantPredicate(), sqlsmith.FavorCommonData(),
+			sqlsmith.UnlikelyRandomNulls(), sqlsmith.DisableCrossJoins(),
+			sqlsmith.DisableIndexHints(), sqlsmith.DisableWith(), sqlsmith.DisableDecimals(),
+			sqlsmith.LowProbabilityWhereClauseWithJoinTables(),
+			sqlsmith.SetComplexity(.3),
+			sqlsmith.SetScalarComplexity(.1),
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer smither.Close()
+
+		t.Status("running ", qct.name)
+		until := time.After(roundTimeout)
+		done := ctx.Done()
+
+		for i := 1; ; i++ {
+			select {
+			case <-until:
+				return
+			case <-done:
+				return
+			default:
+			}
+
+			const numInitialMutations = 1000
+
+			if i == numInitialMutations {
+				t.Status("running ", qct.name, ": ", i, " initial mutations completed")
+				// Initialize a new mutating smither that generates INSERT, UPDATE and
+				// DELETE statements with the MutationsOnly option.
+				mutatingSmither = newMutatingSmither(conn, rnd, t, false /* disableDelete */, isMultiRegion)
+				defer mutatingSmither.Close()
+			}
+
+			if i%1000 == 0 {
+				if i != numInitialMutations {
+					t.Status("running ", qct.name, ": ", i, " statements completed")
+				}
+			}
+
+			// Run `numInitialMutations` mutations first so that the tables have rows.
+			// Run a mutation every 25th iteration afterwards to continually change the
+			// state of the database.
+			if i < numInitialMutations || i%25 == 0 {
+				runMutationStatement(conn, mutatingSmither, logStmt)
+				continue
+			}
+
+			h := queryComparisonHelper{
+				conn:       conn,
+				logStmt:    logStmt,
+				logFailure: logFailure,
+				printStmt:  printStmt,
+				stmtNo:     i,
+			}
+
+			if err := qct.run(smither, rnd, h); err != nil {
+				t.Fatal(err)
+			}
+
 		}
 	}
 }
