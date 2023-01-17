@@ -49,7 +49,7 @@ SELECT k FROM geo_table WHERE ST_DWithin('POINT(2.5 2.5)'::geometry, geom, 1) OR
 statement ok
 SET CLUSTER SETTING sql.spatial.experimental_box2d_comparison_operators.enabled = on
 
-query I
+query I retry
 SELECT k FROM geo_table WHERE 'POINT(3.0 3.0)'::geometry && geom ORDER BY k
 ----
 3
