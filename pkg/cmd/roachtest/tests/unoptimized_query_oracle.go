@@ -64,7 +64,7 @@ func registerUnoptimizedQueryOracle(r registry.Registry) {
 					runQueryComparison(ctx, t, c, &queryComparisonTest{
 						name:      "unoptimized-query-oracle",
 						setupName: setupName,
-						run: func(s *sqlsmith.Smither, r *rand.Rand, h queryComparisonHelper) error {
+						run: func(s queryGenerator, r *rand.Rand, h queryComparisonHelper) error {
 							return runUnoptimizedQueryOracleImpl(s, r, h, disableRuleSpec.disableRuleProbability)
 						},
 					})
@@ -79,10 +79,7 @@ func registerUnoptimizedQueryOracle(r registry.Registry) {
 // and once with normal optimization and/or execution. If the results of the two
 // executions are not equal an error is returned.
 func runUnoptimizedQueryOracleImpl(
-	smither *sqlsmith.Smither,
-	rnd *rand.Rand,
-	h queryComparisonHelper,
-	disableRuleProbability float64,
+	qgen queryGenerator, rnd *rand.Rand, h queryComparisonHelper, disableRuleProbability float64,
 ) error {
 	var stmt string
 	// Ignore panics from Generate.
@@ -92,7 +89,7 @@ func runUnoptimizedQueryOracleImpl(
 				return
 			}
 		}()
-		stmt = smither.Generate()
+		stmt = qgen.Generate()
 	}()
 
 	var verboseLogging bool
