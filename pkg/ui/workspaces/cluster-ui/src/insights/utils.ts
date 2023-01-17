@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { limitStringArray, unset } from "src/util";
+import { unset } from "src/util";
 import {
   ExecutionDetails,
   StmtInsightEvent,
@@ -18,20 +18,18 @@ import {
   InsightNameEnum,
   InsightRecommendation,
   InsightType,
-  MergedTxnInsightEvent,
   SchemaInsightEventFilters,
-  TxnContentionInsightDetails,
   TxnInsightDetails,
   TxnInsightEvent,
   WorkloadInsightEventFilters,
 } from "./types";
 
 export const filterTransactionInsights = (
-  transactions: MergedTxnInsightEvent[] | null,
+  transactions: TxnInsightEvent[] | null,
   filters: WorkloadInsightEventFilters,
   internalAppNamePrefix: string,
   search?: string,
-): MergedTxnInsightEvent[] => {
+): TxnInsightEvent[] => {
   if (transactions == null) return [];
 
   let filteredTransactions = transactions;
@@ -62,14 +60,14 @@ export const filterTransactionInsights = (
     filteredTransactions = filteredTransactions.filter(
       txn =>
         txn.transactionExecutionID.toLowerCase()?.includes(search) ||
-        limitStringArray(txn.queries, 300).toLowerCase().includes(search),
+        txn.query.toLowerCase().includes(search),
     );
   }
   return filteredTransactions;
 };
 
 export function getAppsFromTransactionInsights(
-  transactions: MergedTxnInsightEvent[] | null,
+  transactions: TxnInsightEvent[] | null,
   internalAppNamePrefix: string,
 ): string[] {
   if (transactions == null) return [];
@@ -230,76 +228,69 @@ export function getAppsFromStatementInsights(
  * getInsightsFromProblemsAndCauses returns a list of insight objects with
  * labels and descriptions based on the problem, causes for the problem, and
  * the execution type.
- * @param problem the problem with the query e.g. SlowExecution, should be a InsightNameEnum
+ * @param problems the array of problems with the query, should be a InsightNameEnum
  * @param causes an array of strings detailing the causes for the problem, if known
  * @param execType execution type
  * @returns list of insight objects
  */
 export function getInsightsFromProblemsAndCauses(
-  problem: string,
+  problems: string[],
   causes: string[] | null,
   execType: InsightExecEnum,
 ): Insight[] {
   // TODO(ericharmeling,todd): Replace these strings when using the insights protos.
   const insights: Insight[] = [];
 
-  switch (problem) {
-    case "SlowExecution":
-      causes?.forEach(cause =>
-        insights.push(getInsightFromCause(cause, execType)),
-      );
-
-      if (insights.length === 0) {
-        insights.push(
-          getInsightFromCause(InsightNameEnum.slowExecution, execType),
+  problems.forEach(problem => {
+    switch (problem) {
+      case "SlowExecution":
+        causes?.forEach(cause =>
+          insights.push(getInsightFromCause(cause, execType)),
         );
-      }
-      break;
 
-    case "FailedExecution":
-      insights.push(
-        getInsightFromCause(InsightNameEnum.failedExecution, execType),
-      );
-      break;
+        if (insights.length === 0) {
+          insights.push(
+            getInsightFromCause(InsightNameEnum.slowExecution, execType),
+          );
+        }
+        break;
 
-    default:
-  }
+      case "FailedExecution":
+        insights.push(
+          getInsightFromCause(InsightNameEnum.failedExecution, execType),
+        );
+        break;
+
+      default:
+    }
+  });
 
   return insights;
 }
 
 export function mergeTxnInsightDetails(
-  txnDetailsFromStmts: TxnInsightEvent | null,
-  txnContentionDetails: TxnContentionInsightDetails | null,
+  overviewDetails: TxnInsightEvent | null,
+  stmtInsights: StmtInsightEvent[],
+  txnInsightDetails: TxnInsightDetails | null,
 ): TxnInsightDetails {
-  if (!txnContentionDetails)
-    return txnDetailsFromStmts
-      ? { ...txnDetailsFromStmts, execType: InsightExecEnum.TRANSACTION }
-      : null;
+  let statements: StmtInsightEvent[] = null;
+  // If the insight details exists in the cache, return that since it
+  // contains the full transaction information.
+  // Otherwise, we'll attempt to build it from other cached data, to
+  // avoid fetching all of the details since that can be expensive.
+  if (txnInsightDetails) return txnInsightDetails;
 
-  // Merge info from txnDetailsFromStmts, if it exists.
+  if (overviewDetails) {
+    statements = stmtInsights?.filter(
+      stmt =>
+        stmt.transactionExecutionID === overviewDetails.transactionExecutionID,
+    );
+    if (!statements?.length) statements = null;
+  }
+
   return {
-    transactionExecutionID: txnContentionDetails.transactionExecutionID,
-    transactionFingerprintID: txnContentionDetails.transactionFingerprintID,
-    application:
-      txnContentionDetails.application ?? txnDetailsFromStmts?.application,
-    lastRetryReason: txnDetailsFromStmts?.lastRetryReason,
-    sessionID: txnDetailsFromStmts?.sessionID,
-    retries: txnDetailsFromStmts?.retries,
-    databaseName: txnDetailsFromStmts?.databaseName,
-    implicitTxn: txnDetailsFromStmts?.implicitTxn,
-    username: txnDetailsFromStmts?.username,
-    priority: txnDetailsFromStmts?.priority,
-    statementInsights: txnDetailsFromStmts?.statementInsights,
-    insights: dedupInsights(
-      txnContentionDetails.insights.concat(txnDetailsFromStmts?.insights ?? []),
-    ),
-    queries: txnContentionDetails.queries,
-    startTime: txnContentionDetails.startTime,
-    blockingContentionDetails: txnContentionDetails.blockingContentionDetails,
-    contentionThreshold: txnContentionDetails.contentionThreshold,
-    totalContentionTimeMs: txnContentionDetails.totalContentionTimeMs,
-    execType: InsightExecEnum.TRANSACTION,
+    txnDetails: overviewDetails,
+    statements,
   };
 }
 
@@ -382,43 +373,20 @@ export function getStmtInsightRecommendations(
 }
 
 export function getTxnInsightRecommendations(
-  insightDetails: TxnInsightDetails | null,
+  insightDetails: TxnInsightEvent | null,
 ): InsightRecommendation[] {
   if (!insightDetails) return [];
 
   const execDetails: ExecutionDetails = {
     retries: insightDetails.retries,
-    databaseName: insightDetails.databaseName,
-    contentionTime: insightDetails.totalContentionTimeMs,
+    contentionTime: insightDetails.contentionTime.asMilliseconds(),
+    elapsedTimeMillis: insightDetails.elapsedTimeMillis,
   };
   const recs: InsightRecommendation[] = [];
 
-  insightDetails.statementInsights?.forEach(stmt =>
-    getStmtInsightRecommendations({
-      ...stmt,
-      ...execDetails,
-      contentionTime: stmt.contentionTime,
-    })?.forEach(rec => recs.push(rec)),
+  insightDetails?.insights?.forEach(insight =>
+    recs.push(getRecommendationForExecInsight(insight, execDetails)),
   );
 
-  // This is necessary since txn contention insight currently is not
-  // surfaced from the  stmt level for txns.
-  if (recs.length === 0) {
-    insightDetails.insights?.forEach(insight =>
-      recs.push(getRecommendationForExecInsight(insight, execDetails)),
-    );
-  }
-
   return recs;
-}
-
-export function dedupInsights(insights: Insight[]): Insight[] {
-  // De-duplicate top-level txn insights.
-  const insightsSeen = new Set<string>();
-  return insights.reduce((deduped, i) => {
-    if (insightsSeen.has(i.name)) return deduped;
-    insightsSeen.add(i.name);
-    deduped.push(i);
-    return deduped;
-  }, []);
 }
