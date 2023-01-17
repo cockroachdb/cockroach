@@ -14,7 +14,7 @@ import {
 } from "@cockroachlabs/cluster-ui";
 import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
-import { refreshTransactionInsightDetails } from "src/redux/apiReducers";
+import { refreshTxnInsightDetails } from "src/redux/apiReducers";
 import { AdminUIState } from "src/redux/state";
 import {
   selectTxnInsightDetails,
@@ -35,7 +35,7 @@ const mapStateToProps = (
 };
 
 const mapDispatchToProps: TransactionInsightDetailsDispatchProps = {
-  refreshTransactionInsightDetails: refreshTransactionInsightDetails,
+  refreshTransactionInsightDetails: refreshTxnInsightDetails,
   setTimeScale: setGlobalTimeScaleAction,
 };
 

@@ -123,13 +123,6 @@ export const StatementInsightsView: React.FC<StatementInsightsViewProps> = (
   }, [timeScale, refreshStatementInsights]);
 
   useEffect(() => {
-    if (statements === null || statements.length < 1) {
-      const req = timeScaleRangeToObj(timeScale);
-      refreshStatementInsights(req);
-    }
-  }, [statements, timeScale, refreshStatementInsights]);
-
-  useEffect(() => {
     // We use this effect to sync settings defined on the URL (sort, filters),
     // with the redux store. The only time we do this is when the user navigates
     // to the page directly via the URL and specifies settings in the query string.

@@ -84,10 +84,5 @@ type Props = {
 export const TransactionInsightsDetailsStmtsTab: React.FC<Props> = ({
   insightDetails,
 }) => {
-  return (
-    <SortedTable
-      columns={stmtColumns}
-      data={insightDetails.statementInsights}
-    />
-  );
+  return <SortedTable columns={stmtColumns} data={insightDetails.statements} />;
 };

@@ -287,7 +287,7 @@ export function Insights({
   onChangeSortSetting,
 }: InsightsProps): React.ReactElement {
   const hideAction = useContext(CockroachCloudContext) && database?.length == 0;
-  const insightsColumns = makeInsightsColumns(hideAction, false, true);
+  const insightsColumns = makeInsightsColumns(hideAction, true);
   const data = formatIdxRecommendations(
     idxRecommendations,
     database,
