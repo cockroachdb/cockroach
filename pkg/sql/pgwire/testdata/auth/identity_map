@@ -21,7 +21,7 @@ host   all      all  all     cert-password map=testing
 set_identity_map
 testing testuser carl               # Exact remapping
 testing /(.*)@cockroachlabs.com \1  # Generalized domain mapping
-testing testuser another_carl       # Verify first-one-wins
+testing testuser another_carl       # Another candidate mapping
 testing will_be_carl carl           # Another user for password testing
 testing testuser2 carl              # Cert that doesn't correspond to a db user
 testing testuser@example.com carl   # Cert with a non-SQL principal baked in
@@ -39,7 +39,7 @@ host   all      all  all     cert-password map=testing
 # Original configuration:
 # testing testuser carl               # Exact remapping
 # testing /(.*)@cockroachlabs.com \1  # Generalized domain mapping
-# testing testuser another_carl       # Verify first-one-wins
+# testing testuser another_carl       # Another candidate mapping
 # testing will_be_carl carl           # Another user for password testing
 # testing testuser2 carl              # Cert that doesn't correspond to a db user
 # testing testuser@example.com carl   # Cert with a non-SQL principal baked in
@@ -127,7 +127,7 @@ subtest end
 # Connect as the magic "testuser" since that comes pre-equipped with a cert.
 subtest certificate_good
 
-connect user=testuser database=mydb
+connect user=carl database=mydb system_identity=testuser
 ----
 ok mydb
 
@@ -149,7 +149,7 @@ subtest end
 # database username.
 subtest cert_with_principal_not_in_users
 
-connect user=testuser2 database=mydb force_certs show_system_identity
+connect system_identity=testuser2 user=carl database=mydb force_certs show_system_identity
 ----
 ok mydb testuser2
 
