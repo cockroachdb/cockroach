@@ -945,11 +945,12 @@ func TestTenantStreamingShowTenant(t *testing.T) {
 	require.GreaterOrEqual(t, protectedTime, replicationDetails.ReplicationStartTime.GoTime())
 	require.Nil(t, cutoverTime)
 
-	// Verify the SHOW command prints the right cutover timestamp.
-	futureTime := c.DestSysServer.Clock().Now().Add(24*time.Hour.Nanoseconds(), 0)
+	// Verify the SHOW command prints the right cutover timestamp. Adding some
+	// logical component to make sure we handle it correctly.
+	futureTime := c.DestSysServer.Clock().Now().Add(24*time.Hour.Nanoseconds(), 7)
 	var cutoverStr string
 	c.DestSysSQL.QueryRow(c.T, `ALTER TENANT $1 COMPLETE REPLICATION TO SYSTEM TIME $2::string`,
-		c.Args.DestTenantName, futureTime.GoTime()).Scan(&cutoverStr)
+		c.Args.DestTenantName, futureTime.AsOfSystemTime()).Scan(&cutoverStr)
 	var showCutover string
 	c.DestSysSQL.QueryRow(c.T, fmt.Sprintf("SELECT cutover_time FROM [SHOW TENANT %s WITH REPLICATION STATUS]",
 		c.Args.DestTenantName)).Scan(&showCutover)
