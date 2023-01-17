@@ -281,10 +281,16 @@ func GetParamsAndReturnType(impl overloadImpl) (TypeList, ReturnTyper) {
 type TypeList interface {
 	// Match checks if all types in the TypeList match the corresponding elements in types.
 	Match(types []*types.T) bool
+	// MatchIdentical is similar to match but checks that the types are identical matches,
+	//instead of equivalent matches. See types.T.Equivalent and types.T.Identical.
+	MatchIdentical(types []*types.T) bool
 	// MatchAt checks if the parameter type at index i of the TypeList matches type typ.
 	// In all implementations, types.Null will match with each parameter type, allowing
 	// NULL values to be used as arguments.
 	MatchAt(typ *types.T, i int) bool
+	// MatchAtIdentical is similar to MatchAt but checks that the type at index i of
+	// the Typelist matches type typ.
+	MatchAtIdentical(typ *types.T, i int) bool
 	// MatchLen checks that the TypeList can support l parameters.
 	MatchLen(l int) bool
 	// GetAt returns the type at the given index in the TypeList, or nil if the TypeList
@@ -324,6 +330,19 @@ func (p ParamTypes) Match(types []*types.T) bool {
 	return true
 }
 
+// MatchIdentical is part of the TypeList interface.
+func (p ParamTypes) MatchIdentical(types []*types.T) bool {
+	if len(types) != len(p) {
+		return false
+	}
+	for i := range types {
+		if !p.MatchAtIdentical(types[i], i) {
+			return false
+		}
+	}
+	return true
+}
+
 // MatchAt is part of the TypeList interface.
 func (p ParamTypes) MatchAt(typ *types.T, i int) bool {
 	// The parameterized types for Tuples are checked in the type checking
@@ -335,6 +354,14 @@ func (p ParamTypes) MatchAt(typ *types.T, i int) bool {
 		typ = types.AnyTuple
 	}
 	return i < len(p) && (typ.Family() == types.UnknownFamily || p[i].Typ.Equivalent(typ))
+}
+
+// MatchAtIdentical is part of the TypeList interface.
+func (p ParamTypes) MatchAtIdentical(typ *types.T, i int) bool {
+	if typ.Family() == types.TupleFamily {
+		typ = types.AnyTuple
+	}
+	return i < len(p) && (typ.Family() == types.UnknownFamily || p[i].Typ.Identical(typ))
 }
 
 // MatchLen is part of the TypeList interface.
@@ -391,8 +418,18 @@ func (HomogeneousType) Match(types []*types.T) bool {
 	return true
 }
 
+// MatchIdentical is part of the TypeList interface.
+func (HomogeneousType) MatchIdentical(types []*types.T) bool {
+	return true
+}
+
 // MatchAt is part of the TypeList interface.
 func (HomogeneousType) MatchAt(typ *types.T, i int) bool {
+	return true
+}
+
+// MatchAtIdentical is part of the TypeList interface.
+func (HomogeneousType) MatchAtIdentical(typ *types.T, i int) bool {
 	return true
 }
 
@@ -438,12 +475,23 @@ func (v VariadicType) Match(types []*types.T) bool {
 	return true
 }
 
+// MatchIdentical is part of the TypeList interface.
+func (VariadicType) MatchIdentical(types []*types.T) bool {
+	return true
+}
+
 // MatchAt is part of the TypeList interface.
 func (v VariadicType) MatchAt(typ *types.T, i int) bool {
 	if i < len(v.FixedTypes) {
 		return typ.Family() == types.UnknownFamily || v.FixedTypes[i].Equivalent(typ)
 	}
 	return typ.Family() == types.UnknownFamily || v.VarType.Equivalent(typ)
+}
+
+// MatchAtIdentical is part of the TypeList interface.
+// TODO : This will be incorrect once we add support for variadic UDFs
+func (VariadicType) MatchAtIdentical(typ *types.T, i int) bool {
+	return true
 }
 
 // MatchLen is part of the TypeList interface.
@@ -1318,4 +1366,28 @@ func getFuncSig(expr *FuncExpr, typedInputExprs []TypedExpr, desiredType *types.
 		desStr = fmt.Sprintf(" (desired <%s>)", desiredType)
 	}
 	return fmt.Sprintf("%s(%s)%s", &expr.Func, strings.Join(typeNames, ", "), desStr)
+}
+
+func fetchFuncSignature(prefix string, candidates []overloadImpl, filter []uint8) []string {
+	var fnResults []string
+	for _, idx := range filter {
+		var buf bytes.Buffer
+		candidate := candidates[idx]
+		buf.WriteString(prefix)
+		buf.WriteByte('(')
+		params := candidate.params()
+		tLen := params.Length()
+		inputTyps := make([]TypedExpr, tLen)
+		for i := 0; i < tLen; i++ {
+			t := params.GetAt(i)
+			inputTyps[i] = &TypedDummy{Typ: t}
+			if i > 0 {
+				buf.WriteString(", ")
+			}
+			buf.WriteString(t.String())
+		}
+		buf.WriteString(")")
+		fnResults = append(fnResults, buf.String())
+	}
+	return fnResults
 }

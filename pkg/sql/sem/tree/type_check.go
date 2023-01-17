@@ -3024,11 +3024,34 @@ func getMostSignificantOverload(
 			formatCandidates(expr.Func.String(), overloads, filter),
 		)
 	}
+
 	checkAmbiguity := func(oImpls []uint8) (QualifiedOverload, error) {
 		if len(oImpls) != 1 {
+			// Since there are ambiguity errors when udf with the same family parameter types,
+			// function signature has to be sorted out to directly match specific udf function
+			// for execution, e2e tests added
+			udfExactDup := false
+			matchIdx := -1
+			fnSet := make(map[string]bool)
+			fnSigs := fetchFuncSignature(expr.Func.String(), overloads, oImpls)
+			for k, sig := range fnSigs {
+				if fnSet[sig] {
+					udfExactDup = true
+					break
+				} else {
+					if sig == getFuncSig() {
+						matchIdx = k
+					}
+					fnSet[sig] = true
+				}
+			}
+
 			// Throw ambiguity error if there are more than one candidate overloads from
 			// same schema.
-			return QualifiedOverload{}, ambiguousError()
+			if udfExactDup {
+				return QualifiedOverload{}, ambiguousError()
+			}
+			return qualifiedOverloads[oImpls[matchIdx]], nil
 		}
 		return qualifiedOverloads[oImpls[0]], nil
 	}
