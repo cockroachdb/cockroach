@@ -2751,3 +2751,22 @@ SELECT count(*) from t_with_dropped_index_expr;
 
 statement ok
 RESUME JOB (SELECT job_id FROM crdb_internal.jobs WHERE description LIKE 'ALTER TABLE %t_with_dropped_index_expr DROP COLUMN j CASCADE%' AND status='paused' FETCH FIRST 1 ROWS ONLY);
+
+
+# In 23.1 we added support for default expressions which can be assignment cast
+# to the column type. This work introduced a bug whereby the backfill logic
+# would not apply the appropriate cast. This test ensures that such tables can
+# be backfilled.
+subtest add_column_with_default_expression_with_different_type
+
+statement ok
+CREATE TABLE t_93398 (c1 INT);
+INSERT INTO t_93398 VALUES (0);
+
+statement ok
+ALTER TABLE t_93398 ADD COLUMN c2 DECIMAL DEFAULT pi();
+
+query IT
+SELECT * FROM t_93398;
+----
+0  3.141592653589793
