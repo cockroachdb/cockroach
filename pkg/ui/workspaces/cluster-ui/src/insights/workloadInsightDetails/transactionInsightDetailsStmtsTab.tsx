@@ -18,6 +18,8 @@ import {
   Duration,
   limitText,
 } from "src/util";
+import { Loading } from "src/loading";
+import { InsightsError } from "../insightsErrorComponent";
 
 const stmtColumns: ColumnDescriptor<StmtInsightEvent>[] = [
   {
@@ -79,15 +81,21 @@ const stmtColumns: ColumnDescriptor<StmtInsightEvent>[] = [
 
 type Props = {
   insightDetails: TxnInsightDetails;
+  error: Error;
 };
 
 export const TransactionInsightsDetailsStmtsTab: React.FC<Props> = ({
   insightDetails,
+  error,
 }) => {
   return (
-    <SortedTable
-      columns={stmtColumns}
-      data={insightDetails.statementInsights}
-    />
+    <Loading
+      loading={insightDetails?.statements == null}
+      page="Transaction Details | Statements"
+      error={error}
+      renderError={() => InsightsError(error?.message)}
+    >
+      <SortedTable columns={stmtColumns} data={insightDetails.statements} />
+    </Loading>
   );
 };

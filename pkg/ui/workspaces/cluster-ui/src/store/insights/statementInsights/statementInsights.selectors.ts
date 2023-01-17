@@ -19,7 +19,7 @@ import { InsightEnumToLabel, StmtInsightEvent } from "src/insights";
 export const selectStmtInsights = (state: AppState): StmtInsightEvent[] =>
   state.adminUI.stmtInsights?.data;
 
-export const selectStmtInsightsError = (state: AppState) =>
+export const selectStmtInsightsError = (state: AppState): Error | null =>
   state.adminUI.stmtInsights?.lastError;
 
 export const selectStmtInsightDetails = createSelector(
@@ -28,7 +28,7 @@ export const selectStmtInsightDetails = createSelector(
   selectStatementInsightDetailsCombiner,
 );
 
-export const selectInsightTypes = () => {
+export const selectInsightTypes = (): string[] => {
   const insights: string[] = [];
   InsightEnumToLabel.forEach(insight => {
     insights.push(insight);

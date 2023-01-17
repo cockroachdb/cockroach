@@ -120,6 +120,19 @@ export function sqlResultsAreEmpty(
   );
 }
 
+// Error messages relating to upgrades in progress.
+// This is a temporary solution until we can use different queries for
+// different versions. For now we just try to give more info as to why
+// this page is unavailable for insights.
+const UPGRADE_RELATED_ERRORS = [
+  /relation "crdb_internal.txn_execution_insights" does not exist/i,
+  /column "(.*)" does not exist/i,
+];
+
+function isUpgradeError(message: string): boolean {
+  return UPGRADE_RELATED_ERRORS.some(err => message.search(err));
+}
+
 /**
  * errorMessage cleans the error message returned by the sqlApi,
  * removing information not useful for the user.
@@ -139,5 +152,9 @@ export function sqlApiErrorMessage(message: string): string {
   if (message.includes(":")) {
     return message.split(":")[1];
   }
+  if (isUpgradeError(message)) {
+    message = "This page may not be available during an upgrade.";
+  }
+
   return message;
 }

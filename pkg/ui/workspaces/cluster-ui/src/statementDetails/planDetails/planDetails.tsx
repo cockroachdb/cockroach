@@ -295,12 +295,7 @@ export function Insights({
   hasAdminRole,
 }: InsightsProps): React.ReactElement {
   const hideAction = useContext(CockroachCloudContext) || database?.length == 0;
-  const insightsColumns = makeInsightsColumns(
-    hideAction,
-    hasAdminRole,
-    false,
-    true,
-  );
+  const insightsColumns = makeInsightsColumns(hideAction, hasAdminRole, true);
   const data = formatIdxRecommendations(
     idxRecommendations,
     database,

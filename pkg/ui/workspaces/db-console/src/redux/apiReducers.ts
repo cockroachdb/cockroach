@@ -15,7 +15,6 @@ import moment from "moment";
 import {
   api as clusterUiApi,
   util,
-  TxnContentionInsightDetails,
   StmtInsightEvent,
   TxnInsightEvent,
 } from "@cockroachlabs/cluster-ui";
@@ -422,40 +421,27 @@ export const invalidateExecutionInsights =
   stmtInsightsReducerObj.invalidateData;
 
 const txnInsightsReducerObj = new CachedDataReducer(
-  clusterUiApi.getTxnInsightEvents,
+  clusterUiApi.getTxnInsightsApi,
   "txnInsights",
   null,
   moment.duration(5, "m"),
 );
-export const refreshTxnContentionInsights = txnInsightsReducerObj.refresh;
+export const refreshTxnInsights = txnInsightsReducerObj.refresh;
+export const invalidateTxnInsights = txnInsightsReducerObj.invalidateData;
 
-export const refreshTransactionInsights = txnInsightsReducerObj.refresh;
-export const invalidateTransactionInsights =
-  txnInsightsReducerObj.invalidateData;
+export const txnInsightsRequestKey = (
+  req: clusterUiApi.TxnInsightDetailsRequest,
+): string => req.txnExecutionID;
 
-export const transactionInsightRequestKey = (
-  req: clusterUiApi.TxnContentionReq,
-): string => `${req.id}`;
-
-const transactionInsightDetailsReducerObj = new KeyedCachedDataReducer(
-  clusterUiApi.getTransactionInsightEventDetailsState,
-  "transactionInsightDetails",
-  transactionInsightRequestKey,
+const txnInsightDetailsReducerObj = new KeyedCachedDataReducer(
+  clusterUiApi.getTxnInsightDetailsApi,
+  "txnInsightDetails",
+  txnInsightsRequestKey,
   null,
   moment.duration(5, "m"),
 );
 
-const refreshTxnContentionInsightDetails =
-  transactionInsightDetailsReducerObj.refresh;
-
-export const refreshTransactionInsightDetails = (
-  req: clusterUiApi.TxnContentionReq,
-): ThunkAction<any, any, any, Action> => {
-  return (dispatch: ThunkDispatch<unknown, unknown, Action>) => {
-    dispatch(refreshTxnContentionInsightDetails(req));
-    dispatch(refreshStmtInsights({ start: req.start, end: req.end }));
-  };
-};
+export const refreshTxnInsightDetails = txnInsightDetailsReducerObj.refresh;
 
 const schemaInsightsReducerObj = new CachedDataReducer(
   clusterUiApi.getSchemaInsights,
@@ -557,8 +543,8 @@ export interface APIReducersState {
   hotRanges: PaginatedCachedDataReducerState<api.HotRangesV2ResponseMessage>;
   clusterLocks: CachedDataReducerState<clusterUiApi.ClusterLocksResponse>;
   stmtInsights: CachedDataReducerState<StmtInsightEvent[]>;
+  txnInsightDetails: KeyedCachedDataReducerState<clusterUiApi.TxnInsightDetailsResponse>;
   txnInsights: CachedDataReducerState<TxnInsightEvent[]>;
-  txnInsightDetails: KeyedCachedDataReducerState<TxnContentionInsightDetails>;
   schemaInsights: CachedDataReducerState<clusterUiApi.InsightRecommendation[]>;
   schedules: KeyedCachedDataReducerState<clusterUiApi.Schedules>;
   schedule: KeyedCachedDataReducerState<clusterUiApi.Schedule>;
@@ -607,8 +593,8 @@ export const apiReducersReducer = combineReducers<APIReducersState>({
   [hotRangesReducerObj.actionNamespace]: hotRangesReducerObj.reducer,
   [clusterLocksReducerObj.actionNamespace]: clusterLocksReducerObj.reducer,
   [txnInsightsReducerObj.actionNamespace]: txnInsightsReducerObj.reducer,
-  [transactionInsightDetailsReducerObj.actionNamespace]:
-    transactionInsightDetailsReducerObj.reducer,
+  [txnInsightDetailsReducerObj.actionNamespace]:
+    txnInsightDetailsReducerObj.reducer,
   [stmtInsightsReducerObj.actionNamespace]: stmtInsightsReducerObj.reducer,
   [schemaInsightsReducerObj.actionNamespace]: schemaInsightsReducerObj.reducer,
   [schedulesReducerObj.actionNamespace]: schedulesReducerObj.reducer,
