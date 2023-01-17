@@ -1052,6 +1052,65 @@ func checkStructuredLogs(t *testing.T, eventType string, startTime int64) []stri
 	return matchingEntries
 }
 
+func checkContinuousChangefeedLogs(t *testing.T, startTime int64) []eventpb.ChangefeedEmittedBytes {
+	logs := checkStructuredLogs(t, "changefeed_emitted_bytes", startTime)
+	matchingEntries := make([]eventpb.ChangefeedEmittedBytes, len(logs))
+
+	for i, m := range logs {
+		jsonPayload := []byte(m)
+		var event eventpb.ChangefeedEmittedBytes
+		if err := gojson.Unmarshal(jsonPayload, &event); err != nil {
+			t.Errorf("unmarshalling %q: %v", m, err)
+		}
+		// Place entries in chronological order, assuming we get them in reverse chronological order.
+		matchingEntries[len(matchingEntries)-i-1] = event
+	}
+
+	// Assert entries are sorted. If this assertion fails, logs are being read out
+	// of order and we must implement a sort here.
+	if len(matchingEntries) > 0 {
+		startTS := matchingEntries[0].Timestamp
+		for _, entry := range matchingEntries {
+			if entry.Timestamp < startTS {
+				t.Fatal("telemetry logs received out of order")
+			}
+			startTS = entry.Timestamp
+		}
+	}
+
+	return matchingEntries
+}
+
+// verifyLogsWithEmittedBytes fetches changefeed_emitted_bytes telemetry logs produced
+// after startTime and asserts that at least one message has positive emitted bytes.
+// This function also asserts the LoggingInterval, Id, and Closing fields of
+// each message.
+func verifyLogsWithEmittedBytes(
+	t *testing.T, jobID jobspb.JobID, startTime int64, interval int64, closing bool,
+) {
+	testutils.SucceedsSoon(t, func() error {
+		emittedBytesLogs := checkContinuousChangefeedLogs(t, startTime)
+		if len(emittedBytesLogs) == 0 {
+			return errors.New("no logs found")
+		}
+		emittedBytes := false
+		for _, msg := range emittedBytesLogs {
+			if msg.EmittedBytes > 0 {
+				emittedBytes = true
+			}
+			require.Equal(t, int64(jobID), msg.JobId)
+			require.Equal(t, interval, msg.LoggingInterval)
+			if closing {
+				require.Equal(t, true, msg.Closing)
+			}
+		}
+		if !emittedBytes {
+			return errors.New("expected emitted bytes in log messages, but found 0")
+		}
+		return nil
+	})
+}
+
 func checkCreateChangefeedLogs(t *testing.T, startTime int64) []eventpb.CreateChangefeed {
 	var matchingEntries []eventpb.CreateChangefeed
 

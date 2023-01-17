@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/schemafeed"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -82,6 +83,8 @@ type metricsRecorder interface {
 	getBackfillCallback() func() func()
 	getBackfillRangeCallback() func(int64) (func(), func())
 	recordSizeBasedFlush()
+
+	initTelemetryLogging(ctx context.Context, job *jobs.Job, s *cluster.Settings) error
 }
 
 var _ metricsRecorder = (*sliMetrics)(nil)
@@ -109,6 +112,8 @@ type sliMetrics struct {
 	RunningCount              *aggmetric.Gauge
 	BatchReductionCount       *aggmetric.Gauge
 	InternalRetryMessageCount *aggmetric.Gauge
+
+	telemetryLogger telemetryLogger
 }
 
 // sinkDoesNotCompress is a sentinel value indicating the sink
@@ -163,6 +168,12 @@ func (m *sliMetrics) recordEmittedBatch(
 	m.BatchHistNanos.RecordValue(emitNanos)
 	if m.BackfillCount.Value() == 0 {
 		m.CommitLatency.RecordValue(timeutil.Since(mvcc.GoTime()).Nanoseconds())
+	}
+
+	// initTelemetryLogging may not have been called
+	if m.telemetryLogger != nil {
+		m.telemetryLogger.recordEmittedBytes(bytes)
+		m.telemetryLogger.maybeFlushLogs()
 	}
 }
 
@@ -232,6 +243,23 @@ func (m *sliMetrics) recordSizeBasedFlush() {
 	m.SizeBasedFlushes.Inc(1)
 }
 
+func (w *sliMetrics) initTelemetryLogging(
+	ctx context.Context, job *jobs.Job, s *cluster.Settings,
+) error {
+	tLog, err := makePeriodicTelemetryLogger(ctx, job, s)
+	if err != nil {
+		return err
+	}
+	w.telemetryLogger = tLog
+	return nil
+}
+
+func (w *sliMetrics) flushTelemetryLogs() {
+	if w.telemetryLogger != nil {
+		w.telemetryLogger.close()
+	}
+}
+
 type wrappingCostController struct {
 	ctx      context.Context
 	inner    metricsRecorder
@@ -247,23 +275,28 @@ func maybeWrapMetrics(
 	return &wrappingCostController{ctx: ctx, inner: inner, recorder: recorder}
 }
 
-func (w *wrappingCostController) recordOneMessage() recordOneMessageCallback {
-	innerCallback := w.inner.recordOneMessage()
-	return func(mvcc hlc.Timestamp, bytes int, compressedBytes int) {
-		w.recordEmittedBatch(time.Time{}, 1, mvcc, bytes, compressedBytes)
-		innerCallback(mvcc, bytes, compressedBytes)
-	}
-}
-
-func (w *wrappingCostController) recordEmittedBatch(
-	_ time.Time, _ int, _ hlc.Timestamp, bytes int, compressedBytes int,
-) {
+func (w *wrappingCostController) recordExternalIO(bytes int, compressedBytes int) {
 	if compressedBytes == sinkDoesNotCompress {
 		compressedBytes = bytes
 	}
 	// NB: We don't Wait for RUs for changefeeds; but, this call may put the RU limiter in debt which
 	// will impact future KV requests.
 	w.recorder.OnExternalIO(w.ctx, multitenant.ExternalIOUsage{EgressBytes: int64(compressedBytes)})
+}
+
+func (w *wrappingCostController) recordOneMessage() recordOneMessageCallback {
+	innerCallback := w.inner.recordOneMessage()
+	return func(mvcc hlc.Timestamp, bytes int, compressedBytes int) {
+		w.recordExternalIO(bytes, compressedBytes)
+		innerCallback(mvcc, bytes, compressedBytes)
+	}
+}
+
+func (w *wrappingCostController) recordEmittedBatch(
+	startTime time.Time, numMessages int, mvcc hlc.Timestamp, bytes int, compressedBytes int,
+) {
+	w.recordExternalIO(bytes, compressedBytes)
+	w.inner.recordEmittedBatch(startTime, numMessages, mvcc, bytes, compressedBytes)
 }
 
 func (w *wrappingCostController) recordMessageSize(sz int64) {
@@ -295,6 +328,12 @@ func (w *wrappingCostController) getBackfillRangeCallback() func(int64) (func(),
 // Record size-based flush.
 func (w *wrappingCostController) recordSizeBasedFlush() {
 	w.inner.recordSizeBasedFlush()
+}
+
+func (w *wrappingCostController) initTelemetryLogging(
+	ctx context.Context, job *jobs.Job, s *cluster.Settings,
+) error {
+	return w.inner.initTelemetryLogging(ctx, job, s)
 }
 
 var (
