@@ -73,6 +73,7 @@ func distChangefeedFlow(
 	jobID jobspb.JobID,
 	details jobspb.ChangefeedDetails,
 	progress jobspb.Progress,
+	stmt string,
 	resultsCh chan<- tree.Datums,
 ) error {
 
@@ -127,7 +128,7 @@ func distChangefeedFlow(
 	}
 
 	return startDistChangefeed(
-		ctx, execCtx, jobID, schemaTS, details, initialHighWater, checkpoint, resultsCh)
+		ctx, execCtx, jobID, schemaTS, details, initialHighWater, checkpoint, stmt, resultsCh)
 }
 
 func fetchTableDescriptors(
@@ -236,6 +237,7 @@ func startDistChangefeed(
 	details jobspb.ChangefeedDetails,
 	initialHighWater hlc.Timestamp,
 	checkpoint jobspb.ChangefeedProgress_Checkpoint,
+	stmt string,
 	resultsCh chan<- tree.Datums,
 ) error {
 	execCfg := execCtx.ExecCfg()
@@ -259,7 +261,7 @@ func startDistChangefeed(
 	dsp := execCtx.DistSQLPlanner()
 	evalCtx := execCtx.ExtendedEvalContext()
 
-	p, planCtx, err := makePlan(execCtx, jobID, details, initialHighWater, checkpoint, trackedSpans)(ctx, dsp)
+	p, planCtx, err := makePlan(execCtx, jobID, details, stmt, initialHighWater, checkpoint, trackedSpans)(ctx, dsp)
 	if err != nil {
 		return err
 	}
@@ -275,7 +277,7 @@ func startDistChangefeed(
 
 	replanner, stopReplanner := sql.PhysicalPlanChangeChecker(ctx,
 		p,
-		makePlan(execCtx, jobID, details, initialHighWater, checkpoint, trackedSpans),
+		makePlan(execCtx, jobID, details, stmt, initialHighWater, checkpoint, trackedSpans),
 		execCtx,
 		replanOracle,
 		func() time.Duration { return replanChangefeedFrequency.Get(execCtx.ExecCfg().SV()) },
@@ -338,6 +340,7 @@ func makePlan(
 	execCtx sql.JobExecContext,
 	jobID jobspb.JobID,
 	details jobspb.ChangefeedDetails,
+	stmt string,
 	initialHighWater hlc.Timestamp,
 	checkpoint jobspb.ChangefeedProgress_Checkpoint,
 	trackedSpans []roachpb.Span,
@@ -411,6 +414,7 @@ func makePlan(
 				UserProto:  execCtx.User().EncodeProto(),
 				JobID:      jobID,
 				Select:     execinfrapb.Expression{Expr: details.Select},
+				Stmt:       stmt,
 			}
 		}
 

@@ -114,8 +114,9 @@ func getEventSink(
 	user username.SQLUsername,
 	jobID jobspb.JobID,
 	m metricsRecorder,
+	std sinkTelemetryData,
 ) (EventSink, error) {
-	return getAndDialSink(ctx, serverCfg, feedCfg, timestampOracle, user, jobID, m)
+	return getAndDialSink(ctx, serverCfg, feedCfg, timestampOracle, user, jobID, m, std)
 }
 
 func getResolvedTimestampSink(
@@ -127,7 +128,7 @@ func getResolvedTimestampSink(
 	jobID jobspb.JobID,
 	m metricsRecorder,
 ) (ResolvedTimestampSink, error) {
-	return getAndDialSink(ctx, serverCfg, feedCfg, timestampOracle, user, jobID, m)
+	return getAndDialSink(ctx, serverCfg, feedCfg, timestampOracle, user, jobID, m, makeSinkTelemetryData())
 }
 
 func getAndDialSink(
@@ -138,8 +139,9 @@ func getAndDialSink(
 	user username.SQLUsername,
 	jobID jobspb.JobID,
 	m metricsRecorder,
+	std sinkTelemetryData,
 ) (Sink, error) {
-	sink, err := getSink(ctx, serverCfg, feedCfg, timestampOracle, user, jobID, m)
+	sink, err := getSink(ctx, serverCfg, feedCfg, timestampOracle, user, jobID, m, std)
 	if err != nil {
 		return nil, err
 	}
@@ -154,6 +156,7 @@ func getSink(
 	user username.SQLUsername,
 	jobID jobspb.JobID,
 	m metricsRecorder,
+	std sinkTelemetryData,
 ) (Sink, error) {
 	u, err := url.Parse(feedCfg.SinkURI)
 	if err != nil {
@@ -200,7 +203,7 @@ func getSink(
 			return makeNullSink(sinkURL{URL: u}, metricsBuilder(nullIsAccounted))
 		case u.Scheme == changefeedbase.SinkSchemeKafka:
 			return validateOptionsAndMakeSink(changefeedbase.KafkaValidOptions, func() (Sink, error) {
-				return makeKafkaSink(ctx, sinkURL{URL: u}, AllTargets(feedCfg), opts.GetKafkaConfigJSON(), serverCfg.Settings, metricsBuilder)
+				return makeKafkaSink(ctx, sinkURL{URL: u}, AllTargets(feedCfg), opts.GetKafkaConfigJSON(), serverCfg.Settings, metricsBuilder, std)
 			})
 		case isWebhookSink(u):
 			webhookOpts, err := opts.GetWebhookSinkOptions()
@@ -209,11 +212,11 @@ func getSink(
 			}
 			return validateOptionsAndMakeSink(changefeedbase.WebhookValidOptions, func() (Sink, error) {
 				return makeWebhookSink(ctx, sinkURL{URL: u}, encodingOpts, webhookOpts,
-					defaultWorkerCount(), timeutil.DefaultTimeSource{}, metricsBuilder)
+					defaultWorkerCount(), timeutil.DefaultTimeSource{}, metricsBuilder, std)
 			})
 		case isPubsubSink(u):
 			// TODO: add metrics to pubsubsink
-			return MakePubsubSink(ctx, u, encodingOpts, AllTargets(feedCfg))
+			return MakePubsubSink(ctx, u, encodingOpts, AllTargets(feedCfg), std)
 		case isCloudStorageSink(u):
 			return validateOptionsAndMakeSink(changefeedbase.CloudStorageValidOptions, func() (Sink, error) {
 				// Placeholder id for canary sink
@@ -223,7 +226,7 @@ func getSink(
 				}
 				return makeCloudStorageSink(
 					ctx, sinkURL{URL: u}, nodeID, serverCfg.Settings, encodingOpts,
-					timestampOracle, serverCfg.ExternalStorageFromURI, user, metricsBuilder,
+					timestampOracle, serverCfg.ExternalStorageFromURI, user, metricsBuilder, std,
 				)
 			})
 		case u.Scheme == changefeedbase.SinkSchemeExperimentalSQL:
@@ -233,7 +236,7 @@ func getSink(
 		case u.Scheme == changefeedbase.SinkSchemeExternalConnection:
 			return validateOptionsAndMakeSink(changefeedbase.ExternalConnectionValidOptions, func() (Sink, error) {
 				return makeExternalConnectionSink(ctx, sinkURL{URL: u}, user, serverCfg.DB,
-					serverCfg.Executor, serverCfg, feedCfg, timestampOracle, jobID, m)
+					serverCfg.Executor, serverCfg, feedCfg, timestampOracle, jobID, m, std)
 			})
 		case u.Scheme == "":
 			return nil, errors.Errorf(`no scheme found for sink URL %q`, feedCfg.SinkURI)

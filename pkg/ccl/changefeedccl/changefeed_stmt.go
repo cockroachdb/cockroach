@@ -50,7 +50,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -226,7 +225,7 @@ func changefeedPlanHook(
 
 			var err error
 			for r := getRetry(ctx); r.Next(); {
-				if err = distChangefeedFlow(ctx, p, 0 /* jobID */, details, progress, resultsCh); err == nil {
+				if err = distChangefeedFlow(ctx, p, 0 /* jobID */, details, progress, stmt.String(), resultsCh); err == nil {
 					return nil
 				}
 
@@ -801,7 +800,7 @@ func validateSink(
 	}
 	var nilOracle timestampLowerBoundOracle
 	canarySink, err := getAndDialSink(ctx, &p.ExecCfg().DistSQLSrv.ServerConfig, details,
-		nilOracle, p.User(), jobID, sli)
+		nilOracle, p.User(), jobID, sli, makeSinkTelemetryData())
 	if err != nil {
 		return err
 	}
@@ -992,7 +991,7 @@ func (b *changefeedResumer) Resume(ctx context.Context, execCtx interface{}) err
 	details := b.job.Details().(jobspb.ChangefeedDetails)
 	progress := b.job.Progress()
 
-	err := b.resumeWithRetries(ctx, jobExec, jobID, details, progress, execCfg)
+	err := b.resumeWithRetries(ctx, jobExec, jobID, details, progress, b.job.Payload().Description, execCfg)
 	if err != nil {
 		return b.handleChangefeedError(ctx, err, details, jobExec)
 	}
@@ -1045,6 +1044,7 @@ func (b *changefeedResumer) resumeWithRetries(
 	jobID jobspb.JobID,
 	details jobspb.ChangefeedDetails,
 	progress jobspb.Progress,
+	stmt string,
 	execCfg *sql.ExecutorConfig,
 ) error {
 	// We'd like to avoid failing a changefeed unnecessarily, so when an error
@@ -1062,7 +1062,7 @@ func (b *changefeedResumer) resumeWithRetries(
 			// on the channel, causing the changefeed flow to block. Replace it with
 			// a dummy channel.
 			startedCh := make(chan tree.Datums, 1)
-			err = distChangefeedFlow(ctx, jobExec, jobID, details, progress, startedCh)
+			err = distChangefeedFlow(ctx, jobExec, jobID, details, progress, stmt, startedCh)
 			if err == nil {
 				return nil // Changefeed completed -- e.g. due to initial_scan=only mode.
 			}
@@ -1235,97 +1235,6 @@ func getChangefeedTargetName(
 		return getQualifiedTableName(ctx, execCfg, txn, desc)
 	}
 	return desc.GetName(), nil
-}
-
-func logChangefeedCreateTelemetry(ctx context.Context, jr *jobs.Record) {
-	var changefeedEventDetails eventpb.CommonChangefeedEventDetails
-	if jr != nil {
-		changefeedDetails := jr.Details.(jobspb.ChangefeedDetails)
-		changefeedEventDetails = getCommonChangefeedEventDetails(ctx, changefeedDetails, jr.Description)
-	}
-
-	createChangefeedEvent := &eventpb.CreateChangefeed{
-		CommonChangefeedEventDetails: changefeedEventDetails,
-	}
-
-	log.StructuredEvent(ctx, createChangefeedEvent)
-}
-
-func logChangefeedFailedTelemetry(
-	ctx context.Context, job *jobs.Job, failureType changefeedbase.FailureType,
-) {
-	var changefeedEventDetails eventpb.CommonChangefeedEventDetails
-	if job != nil {
-		changefeedDetails := job.Details().(jobspb.ChangefeedDetails)
-		changefeedEventDetails = getCommonChangefeedEventDetails(ctx, changefeedDetails, job.Payload().Description)
-	}
-
-	changefeedFailedEvent := &eventpb.ChangefeedFailed{
-		CommonChangefeedEventDetails: changefeedEventDetails,
-		FailureType:                  failureType,
-	}
-
-	log.StructuredEvent(ctx, changefeedFailedEvent)
-}
-
-func getCommonChangefeedEventDetails(
-	ctx context.Context, details jobspb.ChangefeedDetails, description string,
-) eventpb.CommonChangefeedEventDetails {
-	opts := details.Opts
-
-	sinkType := "core"
-	if details.SinkURI != `` {
-		parsedSink, err := url.Parse(details.SinkURI)
-		if err != nil {
-			log.Warningf(ctx, "failed to parse sink for telemetry logging: %v", err)
-		}
-		sinkType = parsedSink.Scheme
-	}
-
-	var initialScan string
-	initialScanType, initialScanSet := opts[changefeedbase.OptInitialScan]
-	_, initialScanOnlySet := opts[changefeedbase.OptInitialScanOnly]
-	_, noInitialScanSet := opts[changefeedbase.OptNoInitialScan]
-	if initialScanSet && initialScanType == `` {
-		initialScan = `yes`
-	} else if initialScanSet && initialScanType != `` {
-		initialScan = initialScanType
-	} else if initialScanOnlySet {
-		initialScan = `only`
-	} else if noInitialScanSet {
-		initialScan = `no`
-	}
-
-	var resolved string
-	resolvedValue, resolvedSet := opts[changefeedbase.OptResolvedTimestamps]
-	if !resolvedSet {
-		resolved = "no"
-	} else if resolvedValue == `` {
-		resolved = "yes"
-	} else {
-		resolved = resolvedValue
-	}
-
-	changefeedEventDetails := eventpb.CommonChangefeedEventDetails{
-		Description: description,
-		SinkType:    sinkType,
-		// TODO: Rename this field to NumTargets.
-		NumTables:   int32(AllTargets(details).Size),
-		Resolved:    resolved,
-		Format:      opts[changefeedbase.OptFormat],
-		InitialScan: initialScan,
-	}
-
-	return changefeedEventDetails
-}
-
-func failureTypeForStartupError(err error) changefeedbase.FailureType {
-	if errors.Is(err, context.Canceled) { // Occurs for sinkless changefeeds
-		return changefeedbase.ConnectionClosed
-	} else if isTagged, tag := changefeedbase.IsTaggedError(err); isTagged {
-		return tag
-	}
-	return changefeedbase.OnStartup
 }
 
 // maybeUpgradePreProductionReadyExpression updates job record for the

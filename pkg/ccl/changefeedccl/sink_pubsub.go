@@ -109,6 +109,8 @@ type pubsubSink struct {
 	topicNamer *TopicNamer
 
 	format changefeedbase.FormatType
+
+	sinkTelemetry sinkTelemetryData
 }
 
 func (p *pubsubSink) getConcreteType() sinkType {
@@ -186,6 +188,7 @@ func MakePubsubSink(
 	u *url.URL,
 	encodingOpts changefeedbase.EncodingOptions,
 	targets changefeedbase.Targets,
+	std sinkTelemetryData,
 ) (Sink, error) {
 
 	pubsubURL := sinkURL{URL: u, q: u.Query()}
@@ -211,10 +214,11 @@ func MakePubsubSink(
 
 	ctx, cancel := context.WithCancel(ctx)
 	p := &pubsubSink{
-		workerCtx:   ctx,
-		numWorkers:  numOfWorkers,
-		exitWorkers: cancel,
-		format:      formatType,
+		workerCtx:     ctx,
+		numWorkers:    numOfWorkers,
+		exitWorkers:   cancel,
+		format:        formatType,
+		sinkTelemetry: std,
 	}
 
 	// creates custom pubsub object based on scheme
@@ -441,6 +445,7 @@ func (p *pubsubSink) workerLoop(workerIndex int) {
 			if err != nil {
 				p.exitWorkersWithError(err)
 			}
+			p.sinkTelemetry.incEmittedBytes(len(msg.message.Key) + len(msg.message.Value))
 			msg.alloc.Release(p.workerCtx)
 		}
 	}

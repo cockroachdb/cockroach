@@ -156,6 +156,7 @@ func (m *sliMetrics) recordEmittedBatch(
 	emitNanos := timeutil.Since(startTime).Nanoseconds()
 	m.EmittedMessages.Inc(int64(numMessages))
 	m.EmittedBytes.Inc(int64(bytes))
+
 	if compressedBytes == sinkDoesNotCompress {
 		compressedBytes = bytes
 	}

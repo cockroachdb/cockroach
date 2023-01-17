@@ -73,6 +73,8 @@ type changeAggregator struct {
 	// recentKVCount contains the number of emits since the last time a resolved
 	// span was forwarded to the frontier
 	recentKVCount uint64
+	// telemetryLogger TODO
+	telemetryLogger periodicTelemetryLogger
 
 	// eventProducer produces the next event from the kv feed.
 	eventProducer kvevent.Reader
@@ -244,9 +246,9 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 		ca.cancel()
 		return
 	}
-
+	ca.telemetryLogger = makePeriodicTelemetryLogger()
 	ca.sink, err = getEventSink(ctx, ca.flowCtx.Cfg, ca.spec.Feed, timestampOracle,
-		ca.spec.User(), ca.spec.JobID, ca.sliMetrics)
+		ca.spec.User(), ca.spec.JobID, ca.sliMetrics, ca.telemetryLogger.sinkTelemetry)
 
 	if err != nil {
 		err = changefeedbase.MarkRetryableError(err)
@@ -535,6 +537,7 @@ func (ca *changeAggregator) tick() error {
 // changeAggregator node to the changeFrontier node to allow the changeFrontier
 // to persist the overall changefeed's progress
 func (ca *changeAggregator) noteResolvedSpan(resolved jobspb.ResolvedSpan) error {
+	ca.telemetryLogger.maybeLogTelemetry(ca.Ctx(), ca.spec.JobID, ca.spec.Feed, ca.spec.Stmt, resolved.Timestamp, ca.knobs)
 	advanced, err := ca.frontier.ForwardResolvedSpan(resolved)
 	if err != nil {
 		return err

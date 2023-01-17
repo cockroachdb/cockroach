@@ -60,6 +60,9 @@ message ChangeAggregatorSpec {
 
   // select is the "select clause" for predicate changefeed.
   optional Expression select = 6 [(gogoproto.nullable) = false];
+
+  // TODO stmt is the create statement.
+  optional string stmt = 7 [(gogoproto.nullable) = false];
 }
 
 // ChangeFrontierSpec is the specification for a processor that receives

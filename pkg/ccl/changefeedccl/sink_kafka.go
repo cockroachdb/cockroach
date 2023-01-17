@@ -114,10 +114,11 @@ type kafkaSink struct {
 
 	lastMetadataRefresh time.Time
 
-	stopWorkerCh chan struct{}
-	worker       sync.WaitGroup
-	scratch      bufalloc.ByteAllocator
-	metrics      metricsRecorder
+	stopWorkerCh  chan struct{}
+	worker        sync.WaitGroup
+	scratch       bufalloc.ByteAllocator
+	metrics       metricsRecorder
+	sinkTelemetry sinkTelemetryData
 
 	knobs kafkaSinkKnobs
 
@@ -340,12 +341,15 @@ func (s *kafkaSink) EmitRow(
 	if err != nil {
 		return err
 	}
-
+	recordMessageCallback := func(mvcc hlc.Timestamp, bytes int, compressedBytes int) {
+		s.metrics.recordOneMessage()
+		s.sinkTelemetry.incEmittedBytes(bytes)
+	}
 	msg := &sarama.ProducerMessage{
 		Topic:    topic,
 		Key:      sarama.ByteEncoder(key),
 		Value:    sarama.ByteEncoder(value),
-		Metadata: messageMetadata{alloc: alloc, mvcc: mvcc, updateMetrics: s.metrics.recordOneMessage()},
+		Metadata: messageMetadata{alloc: alloc, mvcc: mvcc, updateMetrics: recordMessageCallback},
 	}
 	s.stats.startMessage(int64(msg.Key.Length() + msg.Value.Length()))
 	return s.emitMessage(ctx, msg)
@@ -948,6 +952,7 @@ func makeKafkaSink(
 	jsonStr changefeedbase.SinkSpecificJSONConfig,
 	settings *cluster.Settings,
 	mb metricsRecorderBuilder,
+	std sinkTelemetryData,
 ) (Sink, error) {
 	kafkaTopicPrefix := u.consumeParam(changefeedbase.SinkParamTopicPrefix)
 	kafkaTopicName := u.consumeParam(changefeedbase.SinkParamTopicName)
@@ -977,6 +982,7 @@ func makeKafkaSink(
 		metrics:              mb(requiresResourceAccounting),
 		topics:               topics,
 		disableInternalRetry: !internalRetryEnabled,
+		sinkTelemetry:        std,
 	}
 
 	if unknownParams := u.remainingQueryParams(); len(unknownParams) > 0 {
