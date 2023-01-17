@@ -253,11 +253,6 @@ func (tn *tenantNode) start(ctx context.Context, t test.Test, c cluster.Cluster,
 	t.L().Printf("sql server for tenant %d (instance %d) now running", tn.tenantID, tn.instanceID)
 }
 
-// conn returns a sql connection to the tenant
-func (tn *tenantNode) conn() (*gosql.DB, error) {
-	return gosql.Open("postgres", tn.pgURL)
-}
-
 func startTenantServer(
 	tenantCtx context.Context,
 	c cluster.Cluster,
