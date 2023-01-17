@@ -1496,6 +1496,15 @@ var charts = []sectionDescription{
 				},
 			},
 			{
+				Title: "Sink Emitter Event Counters",
+				Metrics: []string{
+					"changefeed.parallel_sink_emitter_admit_count",
+					"changefeed.parallel_sink_emitter_buffered_events",
+					"changefeed.batching_sink_emitter_admit_count",
+					"changefeed.batching_sink_emitter_buffered_events",
+				},
+			},
+			{
 				Title: "Flushed Bytes",
 				Metrics: []string{
 					"changefeed.flushed_bytes",
