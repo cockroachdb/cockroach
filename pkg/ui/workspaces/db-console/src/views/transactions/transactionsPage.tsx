@@ -64,6 +64,9 @@ export const selectLastReset = createSelector(
   },
 );
 
+const selectTxnsDataValid = (state: AdminUIState) =>
+  state.cachedData.statements?.valid;
+
 export const selectLastError = createSelector(
   (state: AdminUIState) => state.cachedData.statements,
   (state: CachedDataReducerState<StatementsResponseMessage>) => state.lastError,
@@ -141,6 +144,7 @@ const TransactionsPageConnected = withRouter(
         ...props,
         columns: transactionColumnsLocalSetting.selectorToArray(state),
         data: selectData(state),
+        isDataValid: selectTxnsDataValid(state),
         lastUpdated: selectStatementsLastUpdated(state),
         timeScale: selectTimeScale(state),
         error: selectLastError(state),

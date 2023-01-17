@@ -78,6 +78,7 @@ type IStatementsResponse = protos.cockroach.server.serverpb.IStatementsResponse;
 
 const cx = classNames.bind(styles);
 
+const POLLING_INTERVAL_MILLIS = 300000;
 interface TState {
   filters?: Filters;
   pagination: ISortedTablePagination;
@@ -86,6 +87,7 @@ interface TState {
 export interface TransactionsPageStateProps {
   columns: string[];
   data: IStatementsResponse;
+  isDataValid: boolean;
   lastUpdated: moment.Moment | null;
   timeScale: TimeScale;
   error?: Error | null;
@@ -117,9 +119,9 @@ export type TransactionsPageProps = TransactionsPageStateProps &
   RouteComponentProps;
 
 function statementsRequestFromProps(
-  props: TransactionsPageProps,
+  ts: TimeScale,
 ): protos.cockroach.server.serverpb.StatementsRequest {
-  const [start, end] = toRoundedDateRange(props.timeScale);
+  const [start, end] = toRoundedDateRange(ts);
   return new protos.cockroach.server.serverpb.StatementsRequest({
     combined: true,
     start: Long.fromNumber(start.unix()),
@@ -198,40 +200,50 @@ export class TransactionsPage extends React.Component<
 
   // Schedule the next data request depending on the time
   // range key.
-  resetPolling(key: string): void {
+  resetPolling(ts: TimeScale): void {
     this.clearRefreshDataTimeout();
-    if (key !== "Custom") {
+    if (ts.key !== "Custom") {
       this.refreshDataTimeout = setTimeout(
         this.refreshData,
-        300000, // 5 minutes
+        POLLING_INTERVAL_MILLIS, // 5 minutes
+        ts,
       );
     }
   }
 
-  refreshData = (): void => {
-    const req = statementsRequestFromProps(this.props);
+  refreshData = (ts?: TimeScale): void => {
+    const time = ts ?? this.props.timeScale;
+    const req = statementsRequestFromProps(time);
     this.props.refreshData(req);
-    this.resetPolling(this.props.timeScale.key);
+
+    this.resetPolling(time);
   };
 
   resetSQLStats = (): void => {
-    const req = statementsRequestFromProps(this.props);
+    const req = statementsRequestFromProps(this.props.timeScale);
     this.props.resetSQLStats(req);
-    this.resetPolling(this.props.timeScale.key);
+    this.resetPolling(this.props.timeScale);
   };
 
   componentDidMount(): void {
-    // For the first data fetch for this page, we refresh if there are:
+    // For the first data fetch for this page, we refresh immediately if:
     // - Last updated is null (no statements fetched previously)
-    // - The time interval is not custom, i.e. we have a moving window
-    // in which case we poll every 5 minutes. For the first fetch we will
-    // calculate the next time to refresh based on when the data was last
-    // updated.
-    if (this.props.timeScale.key !== "Custom" || !this.props.lastUpdated) {
-      const now = moment();
-      const nextRefresh =
-        this.props.lastUpdated?.clone().add(5, "minutes") || now;
-      setTimeout(
+    // - The data is not valid (time scale may have changed on other pages)
+    // - The time range selected is a moving window and the last udpated time
+    // is >= 5 minutes.
+    // Otherwise, we schedule a refresh at 5 mins from the lastUpdated time if
+    // the time range selected is a moving window (i.e. not custom).
+    const now = moment();
+    let nextRefresh = null;
+    if (this.props.lastUpdated == null || !this.props.isDataValid) {
+      nextRefresh = now;
+    } else if (this.props.timeScale.key !== "Custom") {
+      nextRefresh = this.props.lastUpdated
+        .clone()
+        .add(POLLING_INTERVAL_MILLIS, "milliseconds");
+    }
+    if (nextRefresh) {
+      this.refreshDataTimeout = setTimeout(
         this.refreshData,
         Math.max(0, nextRefresh.diff(now, "milliseconds")),
       );
@@ -387,7 +399,7 @@ export class TransactionsPage extends React.Component<
     if (this.props.onTimeScaleChange) {
       this.props.onTimeScaleChange(ts);
     }
-    this.resetPolling(ts.key);
+    this.refreshData(ts);
   };
 
   render(): React.ReactElement {

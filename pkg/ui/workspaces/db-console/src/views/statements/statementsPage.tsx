@@ -97,6 +97,9 @@ interface StatementsSummaryData {
   stats: StatementStatistics[];
 }
 
+const selectStatementsDataValid = (state: AdminUIState) =>
+  state.cachedData.statements?.valid;
+
 // selectStatements returns the array of AggregateStatistics to show on the
 // StatementsPage, based on if the appAttr route parameter is set.
 export const selectStatements = createSelector(
@@ -379,6 +382,7 @@ export default withRouter(
         search: searchLocalSetting.selector(state),
         sortSetting: sortSettingLocalSetting.selector(state),
         statements: selectStatements(state, props),
+        isDataValid: selectStatementsDataValid(state),
         lastUpdated: selectStatementsLastUpdated(state),
         statementsError: state.cachedData.statements.lastError,
         totalFingerprints: selectTotalFingerprints(state),

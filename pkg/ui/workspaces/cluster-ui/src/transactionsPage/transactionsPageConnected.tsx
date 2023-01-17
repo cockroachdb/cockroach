@@ -26,6 +26,7 @@ import {
   selectSortSetting,
   selectFilters,
   selectSearch,
+  selectTxnsDataValid,
 } from "./transactionsPage.selectors";
 import { selectIsTenant } from "../store/uiConfig";
 import { nodeRegionsByIDSelector } from "../store/nodes";
@@ -71,6 +72,7 @@ export const TransactionsPageConnected = withRouter(
         ...props,
         columns: selectTxnColumns(state),
         data: selectTransactionsData(state),
+        isDataValid: selectTxnsDataValid(state),
         lastUpdated: selectStatementsLastUpdated(state),
         timeScale: selectTimeScale(state),
         error: selectTransactionsLastError(state),

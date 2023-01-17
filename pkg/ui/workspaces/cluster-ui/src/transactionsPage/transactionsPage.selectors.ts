@@ -20,6 +20,13 @@ export const selectTransactionsData = createSelector(
     transactionsState.valid ? transactionsState.data : null,
 );
 
+export const selectTxnsDataValid = createSelector(
+  sqlStatsSelector,
+  (state): boolean => {
+    return state.valid;
+  },
+);
+
 export const selectTransactionsLastError = createSelector(
   sqlStatsSelector,
   state => state.lastError,
