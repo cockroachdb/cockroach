@@ -12,6 +12,7 @@ package ts
 
 import (
 	"context"
+	"fmt"
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -214,6 +215,15 @@ func (s *Server) Query(
 	ctx = s.AnnotateCtx(ctx)
 	if len(request.Queries) == 0 {
 		return nil, status.Errorf(codes.InvalidArgument, "Queries cannot be empty")
+	}
+	// TODO(aaditya): figure out how to get tenant ID here
+	// 	For System tenant, need list of all teneants
+	prefix := ""
+
+	for _, query := range request.Queries {
+		for i := range query.Sources {
+			query.Sources[i] = fmt.Sprintf("%s-%s", prefix, query.Sources[i])
+		}
 	}
 
 	// If not set, sampleNanos should default to ten second resolution.
