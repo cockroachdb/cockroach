@@ -23,6 +23,8 @@ go_library(
         "//pkg/util/contextutil",
         "//pkg/util/ioctx",
         "//pkg/util/tracing",
+        "@com_github_azure_azure_sdk_for_go_sdk_azcore//:azcore",
+        "@com_github_azure_azure_sdk_for_go_sdk_storage_azblob//:azblob",
         "@com_github_azure_azure_storage_blob_go//azblob",
         "@com_github_azure_go_autorest_autorest//azure",
         "@com_github_cockroachdb_errors//:errors",
