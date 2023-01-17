@@ -82,6 +82,7 @@ import {
 
 import { commonStyles } from "../common";
 import moment from "moment";
+
 const cx = classNames.bind(styles);
 const sortableTableCx = classNames.bind(sortableTableStyles);
 
@@ -134,6 +135,7 @@ export interface StatementsPageStateProps {
   search: string;
   isTenant?: UIConfigState["isTenant"];
   hasViewActivityRedactedRole?: UIConfigState["hasViewActivityRedactedRole"];
+  hasAdminRole?: UIConfigState["hasAdminRole"];
 }
 
 export interface StatementsPageState {
@@ -207,11 +209,6 @@ export class StatementsPage extends React.Component<
       this.changeTimeScale(ts);
     }
   }
-
-  static defaultProps: Partial<StatementsPageProps> = {
-    isTenant: false,
-    hasViewActivityRedactedRole: false,
-  };
 
   getStateFromHistory = (): Partial<StatementsPageState> => {
     const {
@@ -637,6 +634,7 @@ export class StatementsPage extends React.Component<
       search,
       isTenant,
       nodeRegions,
+      hasAdminRole,
     } = this.props;
 
     const nodes = isTenant
@@ -692,14 +690,18 @@ export class StatementsPage extends React.Component<
               setTimeScale={this.changeTimeScale}
             />
           </PageConfigItem>
-          <PageConfigItem
-            className={`${commonStyles("separator")} ${cx("reset-btn-area")} `}
-          >
-            <ClearStats
-              resetSQLStats={this.resetSQLStats}
-              tooltipType="statement"
-            />
-          </PageConfigItem>
+          {hasAdminRole && (
+            <PageConfigItem
+              className={`${commonStyles("separator")} ${cx(
+                "reset-btn-area",
+              )} `}
+            >
+              <ClearStats
+                resetSQLStats={this.resetSQLStats}
+                tooltipType="statement"
+              />
+            </PageConfigItem>
+          )}
         </PageConfig>
         <Loading
           loading={isNil(this.props.statements)}

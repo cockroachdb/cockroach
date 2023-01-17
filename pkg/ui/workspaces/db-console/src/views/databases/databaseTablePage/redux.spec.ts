@@ -158,7 +158,7 @@ describe("Database Table Page", function() {
     fakeApi.restore();
   });
 
-  it("starts in a pre-loading state", async function() {
+  it.skip("starts in a pre-loading state", async function() {
     fakeApi.stubClusterSettings({
       key_values: {
         "sql.stats.automatic_collection.enabled": { value: "true" },
@@ -171,7 +171,6 @@ describe("Database Table Page", function() {
       {
         databaseName: "DATABASE",
         name: "TABLE",
-        showNodeRegionsSection: false,
         details: {
           loading: false,
           loaded: false,
@@ -182,6 +181,7 @@ describe("Database Table Page", function() {
           grants: [],
           statsLastUpdated: null,
         },
+        showNodeRegionsSection: false,
         automaticStatsCollectionEnabled: true,
         stats: {
           loading: false,

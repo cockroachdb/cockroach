@@ -48,6 +48,7 @@ import booleanSettingStyles from "../settings/booleanSetting.module.scss";
 import { DATE_FORMAT_24_UTC } from "src/util/format";
 import LoadingError from "../sqlActivity/errorComponent";
 import { Loading } from "../loading";
+import { UIConfigState } from "../store";
 const cx = classNames.bind(styles);
 const booleanSettingCx = classnames.bind(booleanSettingStyles);
 
@@ -102,6 +103,7 @@ export interface DatabaseTablePageData {
   indexStats: DatabaseTablePageIndexStats;
   showNodeRegionsSection?: boolean;
   automaticStatsCollectionEnabled?: boolean;
+  hasAdminRole?: UIConfigState["hasAdminRole"];
 }
 
 export interface DatabaseTablePageDataDetails {
@@ -151,6 +153,7 @@ export interface DatabaseTablePageActions {
   refreshIndexStats?: (database: string, table: string) => void;
   resetIndexUsageStats?: (database: string, table: string) => void;
   refreshNodes?: () => void;
+  refreshUserSQLRoles: () => void;
 }
 
 export type DatabaseTablePageProps = DatabaseTablePageData &
@@ -232,6 +235,7 @@ export class DatabaseTablePage extends React.Component<
   }
 
   private refresh() {
+    this.props.refreshUserSQLRoles();
     if (this.props.refreshNodes != null) {
       this.props.refreshNodes();
     }
@@ -382,6 +386,7 @@ export class DatabaseTablePage extends React.Component<
   ];
 
   render(): React.ReactElement {
+    const { hasAdminRole } = this.props;
     return (
       <div className="root table-area">
         <section className={baseHeadingClasses.wrapper}>
@@ -530,23 +535,25 @@ export class DatabaseTablePage extends React.Component<
                                 {this.getLastResetString()}
                               </div>
                             </Tooltip>
-                            <div>
-                              <a
-                                className={cx(
-                                  "action",
-                                  "separator",
-                                  "index-stats__reset-btn",
-                                )}
-                                onClick={() =>
-                                  this.props.resetIndexUsageStats(
-                                    this.props.databaseName,
-                                    this.props.name,
-                                  )
-                                }
-                              >
-                                Reset all index stats
-                              </a>
-                            </div>
+                            {hasAdminRole && (
+                              <div>
+                                <a
+                                  className={cx(
+                                    "action",
+                                    "separator",
+                                    "index-stats__reset-btn",
+                                  )}
+                                  onClick={() =>
+                                    this.props.resetIndexUsageStats(
+                                      this.props.databaseName,
+                                      this.props.name,
+                                    )
+                                  }
+                                >
+                                  Reset all index stats
+                                </a>
+                              </div>
+                            )}
                           </div>
                         </div>
                         <IndexUsageStatsTable
