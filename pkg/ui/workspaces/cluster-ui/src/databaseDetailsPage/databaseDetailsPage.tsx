@@ -772,9 +772,13 @@ export class DatabaseDetailsPage extends React.Component<
         ? this.props.sortSettingTables
         : this.props.sortSettingGrants;
 
-    // Only show the filter component when the viewMode is Tables.
+    const showNodes = !isTenant && nodes.length > 1;
+    const showRegions = regions.length > 1;
+
+    // Only show the filter component when the viewMode is Tables and if at
+    // least one of drop-down is shown.
     const filterComponent =
-      this.props.viewMode == ViewMode.Tables ? (
+      this.props.viewMode == ViewMode.Tables && (showNodes || showRegions) ? (
         <PageConfigItem>
           <Filter
             hideAppNames={true}
@@ -784,8 +788,8 @@ export class DatabaseDetailsPage extends React.Component<
             activeFilters={activeFilters}
             filters={defaultFilters}
             onSubmitFilters={this.onSubmitFilters}
-            showNodes={!isTenant && nodes.length > 1}
-            showRegions={regions.length > 1}
+            showNodes={showNodes}
+            showRegions={showRegions}
           />
         </PageConfigItem>
       ) : (
