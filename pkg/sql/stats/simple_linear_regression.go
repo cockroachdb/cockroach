@@ -38,6 +38,11 @@ func float64SimpleLinearRegression(x, y []float64, xₙ float64) (yₙ, r2 float
 	// See https://en.wikipedia.org/wiki/Simple_linear_regression and
 	// https://en.wikipedia.org/wiki/Coefficient_of_determination for
 	// background.
+	//
+	// Note that this uses a naive two-pass algorithm. We expect there to be less
+	// than a dozen observations, so this is fine.
+	// TODO(michae2): Switch to a one-pass algorithm based on Welford-Knuth, see:
+	// https://www.johndcook.com/blog/running_regression/
 
 	if len(x) != len(y) {
 		panic(errors.AssertionFailedf("x and y had different numbers of observations"))
@@ -143,6 +148,11 @@ func quantileSimpleLinearRegression(
 	//
 	// See the paper, https://en.wikipedia.org/wiki/Wasserstein_metric and also
 	// https://en.wikipedia.org/wiki/Earth_mover%27s_distance for some background.
+	//
+	// Note that this uses a naive two-pass algorithm. We expect there to be less
+	// than a dozen observations, so this is fine.
+	// TODO(michae2): Switch to a one-pass algorithm based on Welford-Knuth, see:
+	// https://www.johndcook.com/blog/running_regression/
 
 	if len(x) != len(y) {
 		panic(errors.AssertionFailedf("x and y had different numbers of observations"))
