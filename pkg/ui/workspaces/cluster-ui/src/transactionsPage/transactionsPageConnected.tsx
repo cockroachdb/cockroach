@@ -29,7 +29,10 @@ import {
 } from "./transactionsPage.selectors";
 import { selectIsTenant } from "../store/uiConfig";
 import { nodeRegionsByIDSelector } from "../store/nodes";
-import { selectStatementsLastUpdated } from "src/statementsPage/statementsPage.selectors";
+import {
+  selectStatementsLastUpdated,
+  selectStatementsDataValid,
+} from "src/statementsPage/statementsPage.selectors";
 import { selectTimeScale } from "../store/utils/selectors";
 import { StatementsRequest } from "src/api/statementsApi";
 import { actions as localStorageActions } from "../store/localStorage";
@@ -71,6 +74,7 @@ export const TransactionsPageConnected = withRouter(
         ...props,
         columns: selectTxnColumns(state),
         data: selectTransactionsData(state),
+        isDataValid: selectStatementsDataValid(state),
         lastUpdated: selectStatementsLastUpdated(state),
         timeScale: selectTimeScale(state),
         error: selectTransactionsLastError(state),
