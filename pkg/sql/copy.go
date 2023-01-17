@@ -20,6 +20,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
@@ -37,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding/csv"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
 )
 
@@ -81,6 +83,7 @@ type copyMachineInterface interface {
 // See: https://www.postgresql.org/docs/current/static/sql-copy.html
 // and: https://www.postgresql.org/docs/current/static/protocol-flow.html#PROTOCOL-COPY
 type copyMachine struct {
+	copyFromAST              *tree.CopyFrom
 	table                    tree.TableExpr
 	columns                  tree.NameList
 	resultColumns            colinfo.ResultColumns
@@ -155,7 +158,8 @@ func newCopyMachine(
 	execInsertPlan func(ctx context.Context, p *planner, res RestrictedCommandResult) error,
 ) (_ *copyMachine, retErr error) {
 	c := &copyMachine{
-		conn: conn,
+		conn:        conn,
+		copyFromAST: n,
 		// TODO(georgiah): Currently, insertRows depends on Table and Columns,
 		//  but that dependency can be removed by refactoring it.
 		table:           &n.Table,
@@ -822,8 +826,34 @@ func (p *planner) preparePlannerForCopy(
 	}
 }
 
-// insertRows transforms the buffered rows into an insertNode and executes it.
-func (c *copyMachine) insertRows(ctx context.Context, finalBatch bool) (retErr error) {
+// insertRows inserts rows, retrying if necessary.
+func (c *copyMachine) insertRows(ctx context.Context, finalBatch bool) error {
+	var err error
+
+	rOpts := base.DefaultRetryOptions()
+	rOpts.MaxRetries = 5
+	r := retry.StartWithCtx(ctx, rOpts)
+	for r.Next() {
+		if err = c.insertRowsInternal(ctx, finalBatch); err == nil {
+			return nil
+		} else {
+			// It is currently only safe to retry if we are not in atomic copy mode &
+			// we are in an implicit transaction.
+			// NOTE: we cannot re-use the connExecutor retry scheme here as COPY
+			// consumes directly from the read buffer, and the data would no longer
+			// be available during the retry.
+			if c.implicitTxn && !c.p.SessionData().CopyFromAtomicEnabled && c.p.SessionData().CopyFromRetriesEnabled && errIsRetriable(err) {
+				log.SqlExec.Infof(ctx, "%s failed on attempt %d and is retrying, error %+v", c.copyFromAST.String(), r.CurrentAttempt(), err)
+				continue
+			}
+			return err
+		}
+	}
+	return err
+}
+
+// insertRowsInternal transforms the buffered rows into an insertNode and executes it.
+func (c *copyMachine) insertRowsInternal(ctx context.Context, finalBatch bool) (retErr error) {
 	cleanup := c.p.preparePlannerForCopy(ctx, &c.txnOpt, finalBatch, c.implicitTxn)
 	defer func() {
 		retErr = cleanup(ctx, retErr)
@@ -832,6 +862,12 @@ func (c *copyMachine) insertRows(ctx context.Context, finalBatch bool) (retErr e
 		return nil
 	}
 	numRows := c.rows.Len()
+
+	if c.p.ExecCfg().TestingKnobs.BeforeCopyFromInsert != nil {
+		if err := c.p.ExecCfg().TestingKnobs.BeforeCopyFromInsert(); err != nil {
+			return err
+		}
+	}
 
 	copyFastPath := c.p.SessionData().CopyFastPathEnabled
 	var vc tree.SelectStatement
