@@ -54,6 +54,8 @@ func makeSession() sqlliveness.SessionID {
 	return session
 }
 
+const noNodeID = 0
+
 // TestStorage verifies that instancestorage stores and retrieves SQL instance data correctly.
 // Also, it verifies that released instance IDs are correctly updated within the database
 // and reused for new SQL instances.
@@ -95,7 +97,7 @@ func TestStorage(t *testing.T) {
 		locality := roachpb.Locality{Tiers: []roachpb.Tier{{Key: "region", Value: "test"}, {Key: "az", Value: "a"}}}
 		const expiration = time.Minute
 		{
-			instance, err := storage.CreateInstance(ctx, sessionID, clock.Now().Add(expiration.Nanoseconds(), 0), rpcAddr, sqlAddr, locality)
+			instance, err := storage.CreateInstance(ctx, sessionID, clock.Now().Add(expiration.Nanoseconds(), 0), rpcAddr, sqlAddr, locality, noNodeID)
 			require.NoError(t, err)
 			require.Equal(t, id, instance.InstanceID)
 		}
@@ -121,7 +123,7 @@ func TestStorage(t *testing.T) {
 		}
 		sessionExpiry := clock.Now().Add(expiration.Nanoseconds(), 0)
 		for _, index := range []int{0, 1, 2} {
-			instance, err := storage.CreateInstance(ctx, sessionIDs[index], sessionExpiry, rpcAddresses[index], sqlAddresses[index], localities[index])
+			instance, err := storage.CreateInstance(ctx, sessionIDs[index], sessionExpiry, rpcAddresses[index], sqlAddresses[index], localities[index], noNodeID)
 			require.NoError(t, err)
 			require.NoError(t, slStorage.Insert(ctx, sessionIDs[index], sessionExpiry))
 			require.Equal(t, instanceIDs[index], instance.InstanceID)
@@ -151,7 +153,7 @@ func TestStorage(t *testing.T) {
 
 		// Create two more instances.
 		for _, index := range []int{3, 4} {
-			instance, err := storage.CreateInstance(ctx, sessionIDs[index], sessionExpiry, rpcAddresses[index], sqlAddresses[index], localities[index])
+			instance, err := storage.CreateInstance(ctx, sessionIDs[index], sessionExpiry, rpcAddresses[index], sqlAddresses[index], localities[index], noNodeID)
 			require.NoError(t, err)
 			require.NoError(t, slStorage.Insert(ctx, sessionIDs[index], sessionExpiry))
 			require.Equal(t, instanceIDs[index], instance.InstanceID)
@@ -196,7 +198,7 @@ func TestStorage(t *testing.T) {
 		{
 			require.NoError(t, slStorage.Delete(ctx, sessionIDs[4]))
 			require.NoError(t, slStorage.Insert(ctx, sessionID6, sessionExpiry))
-			instance, err := storage.CreateInstance(ctx, sessionID6, sessionExpiry, rpcAddr6, sqlAddr6, locality6)
+			instance, err := storage.CreateInstance(ctx, sessionID6, sessionExpiry, rpcAddr6, sqlAddr6, locality6, noNodeID)
 			require.NoError(t, err)
 			require.Equal(t, instanceIDs[4], instance.InstanceID)
 			instances, err := storage.GetAllInstancesDataForTest(ctx)
@@ -227,7 +229,7 @@ func TestStorage(t *testing.T) {
 			newRPCAddr := "rpcAddr7"
 			newSQLAddr := "sqlAddr7"
 			newLocality := roachpb.Locality{Tiers: []roachpb.Tier{{Key: "region", Value: "region7"}}}
-			instance, err := storage.CreateInstance(ctx, newSessionID, sessionExpiry, newRPCAddr, newSQLAddr, newLocality)
+			instance, err := storage.CreateInstance(ctx, newSessionID, sessionExpiry, newRPCAddr, newSQLAddr, newLocality, noNodeID)
 			require.NoError(t, err)
 			require.Equal(t, instanceIDs[0], instance.InstanceID)
 			instances, err := storage.GetAllInstancesDataForTest(ctx)
@@ -301,6 +303,7 @@ func TestSQLAccess(t *testing.T) {
 		"rpcAddr",
 		"sqlAddr",
 		locality,
+		noNodeID,
 	)
 	require.NoError(t, err)
 
@@ -398,7 +401,7 @@ func TestConcurrentCreateAndRelease(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			instance, err := storage.CreateInstance(ctx, sessionID, sessionExpiry, rpcAddr, sqlAddr, locality)
+			instance, err := storage.CreateInstance(ctx, sessionID, sessionExpiry, rpcAddr, sqlAddr, locality, noNodeID)
 			require.NoError(t, err)
 			if len(state.freeInstances) > 0 {
 				_, free := state.freeInstances[instance.InstanceID]

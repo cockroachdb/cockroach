@@ -144,6 +144,7 @@ func (s *Storage) CreateInstance(
 	rpcAddr string,
 	sqlAddr string,
 	locality roachpb.Locality,
+	nodeID roachpb.NodeID,
 ) (instance sqlinstance.InstanceInfo, _ error) {
 	if len(sqlAddr) == 0 || len(rpcAddr) == 0 {
 		return sqlinstance.InstanceInfo{}, errors.AssertionFailedf("missing sql or rpc address information for instance")
@@ -177,11 +178,21 @@ func (s *Storage) CreateInstance(
 				return err
 			}
 
-			// Try to retrieve an available instance ID. This blocks until one
-			// is available.
-			availableID, err = s.getAvailableInstanceIDForRegion(ctx, region, txn)
-			if err != nil {
-				return err
+			// TODO(dt): do we need this at all? this keeps nodeID == instanceID when
+			// running mixed KV and SQL nodes, but bakes in the assumption that any
+			// clusters where this happens will contain _only_ mixed KV and SQL nodes
+			// and thus do not need to worry about finding an _actually_ available ID
+			// and avoiding conflicts. This is true today but may not be in more
+			// complex deployments.
+			if nodeID != 0 {
+				availableID = base.SQLInstanceID(nodeID)
+			} else {
+				// Try to retrieve an available instance ID. This blocks until one
+				// is available.
+				availableID, err = s.getAvailableInstanceIDForRegion(ctx, region, txn)
+				if err != nil {
+					return err
+				}
 			}
 
 			key := s.rowcodec.encodeKey(region, availableID)

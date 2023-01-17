@@ -79,7 +79,7 @@ func TestReader(t *testing.T) {
 		// live through the test.
 		const expiration = 10 * time.Minute
 		sessionExpiry := clock.Now().Add(expiration.Nanoseconds(), 0)
-		instance, err := storage.CreateInstance(ctx, sessionID, sessionExpiry, rpcAddr, sqlAddr, locality)
+		instance, err := storage.CreateInstance(ctx, sessionID, sessionExpiry, rpcAddr, sqlAddr, locality, noNodeID)
 		require.NoError(t, err)
 		err = slStorage.Insert(ctx, sessionID, sessionExpiry)
 		require.NoError(t, err)
@@ -105,7 +105,7 @@ func TestReader(t *testing.T) {
 		const expiration = 10 * time.Minute
 		{
 			sessionExpiry := clock.Now().Add(expiration.Nanoseconds(), 0)
-			instance, err := storage.CreateInstance(ctx, sessionID, sessionExpiry, rpcAddr, sqlAddr, locality)
+			instance, err := storage.CreateInstance(ctx, sessionID, sessionExpiry, rpcAddr, sqlAddr, locality, noNodeID)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -179,7 +179,7 @@ func TestReader(t *testing.T) {
 			// Set up mock data within instance and session storage.
 			for index, rpcAddr := range rpcAddresses {
 				sessionExpiry := clock.Now().Add(expiration.Nanoseconds(), 0)
-				_, err := storage.CreateInstance(ctx, sessionIDs[index], sessionExpiry, rpcAddr, sqlAddresses[index], localities[index])
+				_, err := storage.CreateInstance(ctx, sessionIDs[index], sessionExpiry, rpcAddr, sqlAddresses[index], localities[index], noNodeID)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -238,7 +238,7 @@ func TestReader(t *testing.T) {
 			sessionID := makeSession()
 			locality := roachpb.Locality{Tiers: []roachpb.Tier{{Key: "region", Value: "region4"}}}
 			sessionExpiry := clock.Now().Add(expiration.Nanoseconds(), 0)
-			instance, err := storage.CreateInstance(ctx, sessionID, sessionExpiry, rpcAddresses[2], sqlAddresses[2], locality)
+			instance, err := storage.CreateInstance(ctx, sessionID, sessionExpiry, rpcAddresses[2], sqlAddresses[2], locality, noNodeID)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -285,7 +285,7 @@ func TestReader(t *testing.T) {
 			// Set up mock data within instance and session storage.
 			for index, rpcAddr := range rpcAddresses {
 				sessionExpiry := clock.Now().Add(expiration.Nanoseconds(), 0)
-				_, err := storage.CreateInstance(ctx, sessionIDs[index], sessionExpiry, rpcAddr, sqlAddresses[index], localities[index])
+				_, err := storage.CreateInstance(ctx, sessionIDs[index], sessionExpiry, rpcAddr, sqlAddresses[index], localities[index], noNodeID)
 				if err != nil {
 					t.Fatal(err)
 				}
