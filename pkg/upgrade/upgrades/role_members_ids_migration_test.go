@@ -94,6 +94,7 @@ func runTestRoleMembersIDMigration(t *testing.T, numUsers int) {
 
 	// Create test users.
 	expectedNumRoleMembersRows := 1
+	tdb.Exec(t, "BEGIN")
 	for i := 0; i < numUsers; i++ {
 		tdb.Exec(t, fmt.Sprintf("CREATE USER testuser%d", i))
 		if i == 0 {
@@ -107,6 +108,7 @@ func runTestRoleMembersIDMigration(t *testing.T, numUsers int) {
 		tdb.Exec(t, grantStmt)
 		expectedNumRoleMembersRows += 1
 	}
+	tdb.Exec(t, "COMMIT")
 	tdb.CheckQueryResults(t, "SELECT count(*) FROM system.role_members", [][]string{
 		{fmt.Sprintf("%d", expectedNumRoleMembersRows)},
 	})
