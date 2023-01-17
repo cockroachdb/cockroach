@@ -176,7 +176,13 @@ user testuser
 
 # testuser should no longer have the ability to control jobs.
 statement error pq: user testuser does not have CONTROLJOB privilege
-PAUSE JOB (SELECT job_id FROM [SHOW JOBS] WHERE user_name = 'testuser2' AND job_type = 'SCHEMA CHANGE GC' AND description LIKE 'GC for DROP%')
+PAUSE JOB (SELECT $job_id)
+
+statement error pq: user testuser does not have CONTROLJOB privilege
+CANCEL JOB (SELECT $job_id)
+
+statement error pq: user testuser does not have CONTROLJOB privilege
+RESUME JOB (SELECT $job_id)
 
 user root
 

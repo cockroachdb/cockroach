@@ -21,13 +21,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedpb"
+	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobstest"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs/schedulebase"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -281,29 +284,54 @@ RECURRING '@hourly' WITH SCHEDULE OPTIONS on_execution_failure = 'pause', first_
 	}
 }
 
-func TestCreateChangefeedScheduleRequiresChangefeedRole(t *testing.T) {
+// TestCreateChangefeedScheduleChecksPermissionsDuringDryRun verifies
+// that we perform a dry run of creating the changefeed (performs
+// permissions checks).
+func TestCreateChangefeedScheduleChecksPermissionsDuringDryRun(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	th, cleanup := newTestHelper(t)
-	defer cleanup()
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DisableDefaultTestTenant: true,
+		Knobs: base.TestingKnobs{
+			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+			DistSQL: &execinfra.TestingKnobs{
+				Changefeed: &TestingKnobs{
+					WrapSink: func(s Sink, _ jobspb.JobID) Sink {
+						if _, ok := s.(*externalConnectionKafkaSink); ok {
+							return s
+						}
+						return &externalConnectionKafkaSink{sink: s}
+					},
+				},
+			},
+		},
+	})
+	ctx := context.Background()
+	s := srv.(*server.TestServer)
+	defer s.Stopper().Stop(ctx)
+	rootDB := sqlutils.MakeSQLRunner(db)
+	rootDB.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
+	enableEnterprise := utilccl.TestingDisableEnterprise()
+	enableEnterprise()
 
-	th.sqlDB.Exec(t, `CREATE USER testuser`)
-	pgURL, cleanupFunc := sqlutils.PGUrl(
-		t, th.server.ServingSQLAddr(),
-		"TestCreateSchedule-testuser", url.User("testuser"),
-	)
-	defer cleanupFunc()
+	rootDB.Exec(t, `CREATE TABLE table_a (i int)`)
+	rootDB.Exec(t, `CREATE USER testuser WITH PASSWORD 'test'`)
 
-	testuser, err := gosql.Open("postgres", pgURL.String())
-	require.NoError(t, err)
-	defer func() {
-		require.NoError(t, testuser.Close())
-	}()
+	pgURL := url.URL{
+		Scheme: "postgres",
+		User:   url.UserPassword("testuser", "test"),
+		Host:   s.SQLAddr(),
+	}
+	db2, err := gosql.Open("postgres", pgURL.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db2.Close()
+	userDB := sqlutils.MakeSQLRunner(db2)
 
-	_, err = testuser.Exec(
-		"CREATE SCHEDULE FOR CHANGEFEED TABLE system.jobs INTO 'somewhere' WITH initial_scan = 'only' RECURRING '@daily'")
-	require.Regexp(t, "needs CONTROLCHANGEFEED role", err)
+	userDB.ExpectErr(t, "Failed to dry run create changefeed: user testuser requires the CHANGEFEED privilege on all target tables to be able to run an enterprise changefeed",
+		"CREATE SCHEDULE FOR CHANGEFEED TABLE table_a INTO 'somewhere' WITH initial_scan = 'only' RECURRING '@daily'")
 }
 
 // TestCreateChangefeedScheduleIfNotExists: checks if adding IF NOT EXISTS will
