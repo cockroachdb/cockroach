@@ -287,6 +287,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
     nodes: "",
   },
   lastUpdated,
+  isDataValid: true,
   // Aggregate key values in these statements will need to change if implementation
   // of 'statementKey' in appStats.ts changes.
   statements: [
@@ -589,7 +590,8 @@ const statementsPagePropsFixture: StatementsPageProps = {
       aggregatedFingerprintID: "6325213731862855938",
       aggregatedFingerprintHexID:
         Long.fromNumber(6325213731862855938).toString(16),
-      label: "INSERT INTO users VALUES ($1, $2, __more1_10__), (__more10_100__)",
+      label:
+        "INSERT INTO users VALUES ($1, $2, __more1_10__), (__more10_100__)",
       summary: "INSERT INTO users VALUES",
       aggregatedTs,
       aggregationInterval,
@@ -901,7 +903,8 @@ const statementsPagePropsFixture: StatementsPageProps = {
       aggregatedFingerprintID: "16819876564846676829",
       aggregatedFingerprintHexID:
         Long.fromNumber(16819876564846676829).toString(16),
-      label: "INSERT INTO vehicles VALUES ($1, $2, __more1_10__), (__more1_10__)",
+      label:
+        "INSERT INTO vehicles VALUES ($1, $2, __more1_10__), (__more1_10__)",
       summary: "INSERT INTO vehicles",
       aggregatedTs,
       aggregationInterval,
