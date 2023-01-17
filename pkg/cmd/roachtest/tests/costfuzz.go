@@ -26,12 +26,12 @@ import (
 )
 
 func registerCostFuzz(r registry.Registry) {
-	for _, setupName := range []string{sqlsmith.RandTableSetupName, sqlsmith.SeedMultiRegionSetupName} {
+	for _, setupName := range []string{"workloadReplay", sqlsmith.RandTableSetupName, sqlsmith.SeedMultiRegionSetupName} {
 		setupName := setupName
 		var clusterSpec spec.ClusterSpec
 		switch setupName {
 		case sqlsmith.SeedMultiRegionSetupName:
-			clusterSpec = r.MakeClusterSpec(9, spec.Geo(), spec.GatherCores())
+			clusterSpec = r.MakeClusterSpec(4, spec.Geo())
 		default:
 			clusterSpec = r.MakeClusterSpec(1)
 		}
@@ -55,7 +55,7 @@ func registerCostFuzz(r registry.Registry) {
 // runCostFuzzQuery executes the same query two times, once with normal costs
 // and once with randomly perturbed costs. If the results of the two executions
 // are not equal an error is returned.
-func runCostFuzzQuery(smither *sqlsmith.Smither, rnd *rand.Rand, h queryComparisonHelper) error {
+func runCostFuzzQuery(qgen queryGenerator, rnd *rand.Rand, h queryComparisonHelper) error {
 	// Ignore panics from Generate.
 	defer func() {
 		if r := recover(); r != nil {
@@ -63,7 +63,7 @@ func runCostFuzzQuery(smither *sqlsmith.Smither, rnd *rand.Rand, h queryComparis
 		}
 	}()
 
-	stmt := smither.Generate()
+	stmt := qgen.Generate()
 
 	// First, run the statement without cost perturbation.
 	controlRows, err := h.runQuery(stmt)

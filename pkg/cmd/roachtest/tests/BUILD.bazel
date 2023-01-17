@@ -188,6 +188,7 @@ go_library(
         "//pkg/cmd/roachtest/test",
         "//pkg/gossip",
         "//pkg/internal/sqlsmith",
+        "//pkg/internal/workloadreplay",
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
         "//pkg/kv",
