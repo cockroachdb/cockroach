@@ -603,6 +603,27 @@ export class DatabasesPage extends React.Component<
 
     const regions = unique(Object.values(nodeRegions));
     const showNodes = !isTenant && nodes.length > 1;
+    const showRegions = regions.length > 1;
+
+    // Only show the databases filter if at least one drop-down is shown.
+    const databasesFilter =
+      (showNodes || showRegions) ? (
+        <PageConfigItem>
+          <Filter
+            hideAppNames={true}
+            regions={regions}
+            hideTimeLabel={true}
+            nodes={nodes.map(n => "n" + n.toString())}
+            activeFilters={activeFilters}
+            filters={defaultFilters}
+            onSubmitFilters={this.onSubmitFilters}
+            showNodes={showNodes}
+            showRegions={showRegions}
+          />
+        </PageConfigItem>
+      ) : (
+        <></>
+      );
 
     return (
       <div>
@@ -640,19 +661,7 @@ export class DatabasesPage extends React.Component<
                 placeholder={"Search Databases"}
               />
             </PageConfigItem>
-            <PageConfigItem>
-              <Filter
-                hideAppNames={true}
-                regions={regions}
-                hideTimeLabel={true}
-                nodes={nodes.map(n => "n" + n.toString())}
-                activeFilters={activeFilters}
-                filters={defaultFilters}
-                onSubmitFilters={this.onSubmitFilters}
-                showNodes={showNodes}
-                showRegions={regions.length > 1}
-              />
-            </PageConfigItem>
+            {databasesFilter}
           </PageConfig>
           <TableStatistics
             pagination={pagination}
