@@ -252,6 +252,21 @@ func (c *serverController) httpMux(w http.ResponseWriter, r *http.Request) {
 	s, err := c.getOrCreateServer(ctx, tenantName)
 	if err != nil {
 		log.Warningf(ctx, "unable to start server for tenant %q: %v", tenantName, err)
+		// Clear session and tenant cookies after all logouts have completed.
+		http.SetCookie(w, &http.Cookie{
+			Name:     MultitenantSessionCookieName,
+			Value:    "",
+			Path:     "/",
+			HttpOnly: true,
+			Expires:  timeutil.Unix(0, 0),
+		})
+		http.SetCookie(w, &http.Cookie{
+			Name:     TenantSelectCookieName,
+			Value:    "",
+			Path:     "/",
+			HttpOnly: false,
+			Expires:  timeutil.Unix(0, 0),
+		})
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
