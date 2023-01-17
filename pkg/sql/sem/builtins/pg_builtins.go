@@ -212,48 +212,36 @@ func makePGGetIndexDef(paramTypes tree.ParamTypes) tree.Overload {
 		Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 			colNumber := *tree.NewDInt(0)
 			if len(args) == 3 {
+				// The 1 argument and 3 argument variants are equivalent when column number 0 is passed.
 				colNumber = *args[1].(*tree.DInt)
 			}
+			// The 3 argument variant for column number other than 0 returns the column name.
 			r, err := evalCtx.Planner.QueryRowEx(
 				ctx, "pg_get_indexdef",
 				sessiondata.NoSessionDataOverride,
-				"SELECT indexdef FROM pg_catalog.pg_indexes WHERE crdb_oid = $1", args[0])
+				`SELECT CASE
+    				WHEN $2 = 0 THEN defs.indexdef
+						-- If the column number does not exist in the index we return an empty string.
+						WHEN $2 < 0 OR $2 > array_length(i.indkey, 1) THEN ''
+						WHEN i.indkey[$2-1] = 0 THEN (indexprs::STRING[])[array_position(array_positions(i.indkey, 0), $2)]
+						ELSE a.attname
+					END as pg_get_indexdef
+					FROM pg_catalog.pg_index i
+					LEFT JOIN pg_attribute a ON (a.attrelid = i.indexrelid AND a.attnum = $2)
+					LEFT JOIN pg_indexes defs ON ($2 = 0 AND defs.crdb_oid = i.indexrelid)
+					WHERE i.indexrelid = $1`, args[0], colNumber)
 			if err != nil {
 				return nil, err
 			}
-			// If the index does not exist we return null.
 			if len(r) == 0 {
 				return tree.DNull, nil
-			}
-			// The 1 argument and 3 argument variants are equivalent when column number 0 is passed.
-			if colNumber == 0 {
-				return r[0], nil
-			}
-			// The 3 argument variant for column number other than 0 returns the column name.
-			r, err = evalCtx.Planner.QueryRowEx(
-				ctx, "pg_get_indexdef",
-				sessiondata.NoSessionDataOverride,
-				`SELECT ischema.column_name as pg_get_indexdef 
-		               FROM information_schema.statistics AS ischema 
-											INNER JOIN pg_catalog.pg_indexes AS pgindex 
-													ON ischema.table_schema = pgindex.schemaname 
-													AND ischema.table_name = pgindex.tablename 
-													AND ischema.index_name = pgindex.indexname 
-													AND pgindex.crdb_oid = $1 
-													AND ischema.seq_in_index = $2`, args[0], args[1])
-			if err != nil {
-				return nil, err
-			}
-			// If the column number does not exist in the index we return an empty string.
-			if len(r) == 0 {
-				return tree.NewDString(""), nil
 			}
 			if len(r) > 1 {
 				return nil, errors.AssertionFailedf("pg_get_indexdef query has more than 1 result row: %+v", r)
 			}
 			return r[0], nil
 		},
-		Info:       notUsableInfo,
+		Info:       "Gets the CREATE INDEX command for index, or definition of just one index column when given a column number",
 		Volatility: volatility.Stable,
 	}
 }
