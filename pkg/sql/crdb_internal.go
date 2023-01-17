@@ -884,19 +884,19 @@ func getInternalSystemJobsQueryFromClusterVersion(
 var crdbInternalSystemJobsTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE crdb_internal.system_jobs (
-	id                INT8      NOT NULL,      
-	status            STRING    NOT NULL,
-	created           TIMESTAMP NOT NULL,
-	payload           BYTES     NOT NULL,
-	progress          BYTES,
-	created_by_type   STRING,
-	created_by_id     INT,
-	claim_session_id  BYTES,
-	claim_instance_id INT8,
-	num_runs          INT8,
-	last_run          TIMESTAMP,
-	job_type          STRING,
-	INDEX (id),
+  id                INT8      NOT NULL,
+  status            STRING    NOT NULL,
+  created           TIMESTAMP NOT NULL,
+  payload           BYTES     NOT NULL,
+  progress          BYTES,
+  created_by_type   STRING,
+  created_by_id     INT,
+  claim_session_id  BYTES,
+  claim_instance_id INT8,
+  num_runs          INT8,
+  last_run          TIMESTAMP,
+  job_type          STRING,
+  INDEX (id),
   INDEX (job_type),
   INDEX (status)
 )`,
@@ -939,7 +939,7 @@ func populateSystemJobsTableRows(
 	addRow func(...tree.Datum) error,
 	query string,
 	params ...interface{},
-) (bool, error) {
+) (result bool, retErr error) {
 	const jobIdIdx = 0
 	const jobPayloadIdx = 3
 
@@ -969,14 +969,7 @@ func populateSystemJobsTableRows(
 
 	cleanup := func(ctx context.Context) {
 		if err := it.Close(); err != nil {
-			// TODO(yuzefovich): this error should be propagated further up
-			// and not simply being logged. Fix it (#61123).
-			//
-			// Doing that as a return parameter would require changes to
-			// `planNode.Close` signature which is a bit annoying. One other
-			// possible solution is to panic here and catch the error
-			// somewhere.
-			log.Warningf(ctx, "error closin3g an iterator: %v", err)
+			retErr = errors.CombineErrors(retErr, err)
 		}
 	}
 	defer cleanup(ctx)
