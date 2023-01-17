@@ -30,6 +30,7 @@ go_library(
         "sink_pubsub.go",
         "sink_sql.go",
         "sink_webhook.go",
+        "telemetry.go",
         "testing_knobs.go",
         "tls.go",
         "topic.go",
