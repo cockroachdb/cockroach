@@ -253,7 +253,7 @@ func (c *SyncedCluster) CertsDir(node Node) string {
 }
 
 // NodeURL constructs a postgres URL.
-func (c *SyncedCluster) NodeURL(host string, port int) string {
+func (c *SyncedCluster) NodeURL(host string, port int, tenantName string) string {
 	var u url.URL
 	u.User = url.User("root")
 	u.Scheme = "postgres"
@@ -266,6 +266,9 @@ func (c *SyncedCluster) NodeURL(host string, port int) string {
 		v.Add("sslmode", "verify-full")
 	} else {
 		v.Add("sslmode", "disable")
+	}
+	if tenantName != "" {
+		v.Add("options", fmt.Sprintf("-ccluster=%s", tenantName))
 	}
 	u.RawQuery = v.Encode()
 	return "'" + u.String() + "'"
@@ -288,14 +291,16 @@ func (c *SyncedCluster) NodeUIPort(node Node) int {
 //
 // In non-interactive mode, a command specified via the `-e` flag is run against
 // all nodes.
-func (c *SyncedCluster) SQL(ctx context.Context, l *logger.Logger, args []string) error {
+func (c *SyncedCluster) SQL(
+	ctx context.Context, l *logger.Logger, tenantName string, args []string,
+) error {
 	if len(args) == 0 || len(c.Nodes) == 1 {
 		// If no arguments, we're going to get an interactive SQL shell. Require
 		// exactly one target and ask SSH to provide a pseudoterminal.
 		if len(args) == 0 && len(c.Nodes) != 1 {
 			return fmt.Errorf("invalid number of nodes for interactive sql: %d", len(c.Nodes))
 		}
-		url := c.NodeURL("localhost", c.NodePort(c.Nodes[0]))
+		url := c.NodeURL("localhost", c.NodePort(c.Nodes[0]), tenantName)
 		binary := cockroachNodeBinary(c, c.Nodes[0])
 		allArgs := []string{binary, "sql", "--url", url}
 		allArgs = append(allArgs, ssh.Escape(args))
@@ -330,7 +335,7 @@ func (c *SyncedCluster) RunSQL(ctx context.Context, l *logger.Logger, args []str
 			cmd = fmt.Sprintf(`cd %s ; `, c.localVMDir(node))
 		}
 		cmd += cockroachNodeBinary(c, node) + " sql --url " +
-			c.NodeURL("localhost", c.NodePort(node)) + " " +
+			c.NodeURL("localhost", c.NodePort(node), "" /* tenantName */) + " " +
 			ssh.Escape(args)
 
 		out, cmdErr := sess.CombinedOutput(ctx, cmd)
@@ -680,7 +685,7 @@ func (c *SyncedCluster) generateClusterSettingCmd(l *logger.Logger, node Node) s
 
 	binary := cockroachNodeBinary(c, node)
 	path := fmt.Sprintf("%s/%s", c.NodeDir(node, 1 /* storeIndex */), "settings-initialized")
-	url := c.NodeURL("localhost", c.NodePort(node))
+	url := c.NodeURL("localhost", c.NodePort(node), "" /* tenantName */)
 
 	// We ignore failures to set remote_debugging.mode, which was
 	// removed in v21.2.
@@ -702,7 +707,7 @@ func (c *SyncedCluster) generateInitCmd(node Node) string {
 	}
 
 	path := fmt.Sprintf("%s/%s", c.NodeDir(node, 1 /* storeIndex */), "cluster-bootstrapped")
-	url := c.NodeURL("localhost", c.NodePort(node))
+	url := c.NodeURL("localhost", c.NodePort(node), "" /* tenantName */)
 	binary := cockroachNodeBinary(c, node)
 	initCmd += fmt.Sprintf(`
 		if ! test -e %[1]s ; then
@@ -796,18 +801,18 @@ func (c *SyncedCluster) createFixedBackupSchedule(
 
 	// Default scheduled backup runs a full backup every hour and an incremental
 	// every 15 minutes.
-	scheduleArgs := `RECURRING '*/15 * * * *' 
-FULL BACKUP '@hourly' 
+	scheduleArgs := `RECURRING '*/15 * * * *'
+FULL BACKUP '@hourly'
 WITH SCHEDULE OPTIONS first_run = 'now'`
 
 	if scheduledBackupArgs != "" {
 		scheduleArgs = scheduledBackupArgs
 	}
 
-	createScheduleCmd := fmt.Sprintf(`-e 
+	createScheduleCmd := fmt.Sprintf(`-e
 CREATE SCHEDULE IF NOT EXISTS test_only_backup FOR BACKUP INTO '%s' %s`,
 		collectionPath, scheduleArgs)
-	return c.SQL(ctx, l, []string{createScheduleCmd})
+	return c.SQL(ctx, l, "" /* tenantName */, []string{createScheduleCmd})
 }
 
 // getEnvVars returns all COCKROACH_* environment variables, in the form

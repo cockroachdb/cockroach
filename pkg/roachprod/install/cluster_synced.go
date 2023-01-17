@@ -1213,13 +1213,20 @@ func (c *SyncedCluster) DistributeCerts(ctx context.Context, l *logger.Logger) e
 		if c.IsLocal() {
 			cmd = fmt.Sprintf(`cd %s ; `, c.localVMDir(1))
 		}
+		// TODO(ssd): Pre-populating the certs for tenants 1
+		// through 4 helps facilitate UA testing. But we
+		// should do something better here.
 		cmd += fmt.Sprintf(`
 rm -fr certs
 mkdir -p certs
 %[1]s cert create-ca --certs-dir=certs --ca-key=certs/ca.key
-%[1]s cert create-client root --certs-dir=certs --ca-key=certs/ca.key
-%[1]s cert create-client testuser --certs-dir=certs --ca-key=certs/ca.key
+%[1]s cert create-client root --certs-dir=certs --ca-key=certs/ca.key --tenant-scope 1,2,3,4
+%[1]s cert create-client testuser --certs-dir=certs --ca-key=certs/ca.key --tenant-scope 1,2,3,4
 %[1]s cert create-node %[2]s --certs-dir=certs --ca-key=certs/ca.key
+# Pre-create a few tenant-client
+%[1]s cert create-tenant-client 2 %[2]s --certs-dir=certs --ca-key=certs/ca.key
+%[1]s cert create-tenant-client 3 %[2]s --certs-dir=certs --ca-key=certs/ca.key
+%[1]s cert create-tenant-client 4 %[2]s --certs-dir=certs --ca-key=certs/ca.key
 tar cvf %[3]s certs
 `, cockroachNodeBinary(c, 1), strings.Join(nodeNames, " "), certsTarName)
 
@@ -2166,7 +2173,7 @@ func (c *SyncedCluster) Get(l *logger.Logger, nodes Nodes, src, dest string) err
 
 // pgurls returns a map of PG URLs for the given nodes.
 func (c *SyncedCluster) pgurls(
-	ctx context.Context, l *logger.Logger, nodes Nodes,
+	ctx context.Context, l *logger.Logger, nodes Nodes, tenantName string,
 ) (map[Node]string, error) {
 	hosts, err := c.pghosts(ctx, l, nodes)
 	if err != nil {
@@ -2174,7 +2181,7 @@ func (c *SyncedCluster) pgurls(
 	}
 	m := make(map[Node]string, len(hosts))
 	for node, host := range hosts {
-		m[node] = c.NodeURL(host, c.NodePort(node))
+		m[node] = c.NodeURL(host, c.NodePort(node), tenantName)
 	}
 	return m, nil
 }
