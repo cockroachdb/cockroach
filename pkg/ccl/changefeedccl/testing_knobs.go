@@ -55,8 +55,8 @@ type TestingKnobs struct {
 	// starts executing.
 	OverrideCursor func(currentTime *hlc.Timestamp) string
 
-	// LogTelemetryEveryTime TODO
-	LogTelemetryEveryTime bool
+	// ContinuousTelemetryLoggingIntervalNanos TODO
+	ContinuousTelemetryLoggingIntervalNanos int64
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

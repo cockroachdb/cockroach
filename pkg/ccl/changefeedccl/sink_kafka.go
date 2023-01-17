@@ -342,7 +342,7 @@ func (s *kafkaSink) EmitRow(
 		return err
 	}
 	recordMessageCallback := func(mvcc hlc.Timestamp, bytes int, compressedBytes int) {
-		s.metrics.recordOneMessage()
+		s.metrics.recordOneMessage()(mvcc, bytes, compressedBytes)
 		s.sinkTelemetry.incEmittedBytes(bytes)
 	}
 	msg := &sarama.ProducerMessage{

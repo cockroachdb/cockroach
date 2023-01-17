@@ -537,7 +537,6 @@ func (ca *changeAggregator) tick() error {
 // changeAggregator node to the changeFrontier node to allow the changeFrontier
 // to persist the overall changefeed's progress
 func (ca *changeAggregator) noteResolvedSpan(resolved jobspb.ResolvedSpan) error {
-	ca.telemetryLogger.maybeLogTelemetry(ca.Ctx(), ca.spec.JobID, ca.spec.Feed, ca.spec.Stmt, resolved.Timestamp, ca.knobs)
 	advanced, err := ca.frontier.ForwardResolvedSpan(resolved)
 	if err != nil {
 		return err
@@ -559,14 +558,14 @@ func (ca *changeAggregator) noteResolvedSpan(resolved jobspb.ResolvedSpan) error
 		defer func() {
 			ca.lastFlush = timeutil.Now()
 		}()
-		return ca.flushFrontier()
+		return ca.flushFrontier(resolved.Timestamp)
 	}
 
 	return nil
 }
 
 // flushFrontier flushes sink and emits resolved timestamp if needed.
-func (ca *changeAggregator) flushFrontier() error {
+func (ca *changeAggregator) flushFrontier(resovedTime hlc.Timestamp) error {
 	// Make sure to the sink before forwarding resolved spans,
 	// otherwise, we could lose buffered messages and violate the
 	// at-least-once guarantee. This is also true for checkpointing the
@@ -574,6 +573,8 @@ func (ca *changeAggregator) flushFrontier() error {
 	if err := ca.sink.Flush(ca.Ctx()); err != nil {
 		return err
 	}
+
+	ca.telemetryLogger.maybeLogTelemetry(ca.Ctx(), ca.spec.JobID, ca.spec.Feed, ca.spec.Stmt, resovedTime, ca.knobs)
 
 	// Iterate frontier spans and build a list of spans to emit.
 	var batch jobspb.ResolvedSpans

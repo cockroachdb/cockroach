@@ -46,7 +46,7 @@ func (std *sinkTelemetryData) resetEmittedBytes() int {
 	return int(std.emittedBytes.Swap(0))
 }
 
-const ongoingTelemetryLogPeriod = 10 * time.Hour
+const continuousTelemetryLoggingPeriod = 24 * time.Hour
 
 type periodicTelemetryLogger struct {
 	sinkTelemetry sinkTelemetryData
@@ -67,8 +67,12 @@ func (ptl *periodicTelemetryLogger) maybeLogTelemetry(
 	newResolved hlc.Timestamp,
 	knobs TestingKnobs,
 ) {
+	loggingInterval := continuousTelemetryLoggingPeriod.Nanoseconds()
+	if knobs.ContinuousTelemetryLoggingIntervalNanos > 0 {
+		loggingInterval = knobs.ContinuousTelemetryLoggingIntervalNanos
+	}
 
-	if knobs.LogTelemetryEveryTime || newResolved.WallTime-ptl.lastResolved.WallTime > ongoingTelemetryLogPeriod.Nanoseconds() {
+	if newResolved.WallTime-ptl.lastResolved.WallTime > loggingInterval {
 		changefeedEventDetails := getCommonChangefeedEventDetails(ctx, details, stmt)
 		continuousTelemetryEvent := &eventpb.ChangefeedEmittedBytes{
 			CommonChangefeedEventDetails: changefeedEventDetails,
@@ -76,6 +80,7 @@ func (ptl *periodicTelemetryLogger) maybeLogTelemetry(
 			EmittedBytes:                 int32(ptl.sinkTelemetry.resetEmittedBytes()),
 		}
 		log.StructuredEvent(ctx, continuousTelemetryEvent)
+		ptl.lastResolved = newResolved
 	}
 }
 

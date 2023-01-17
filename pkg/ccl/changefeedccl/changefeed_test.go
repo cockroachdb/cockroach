@@ -5305,6 +5305,50 @@ func TestChangefeedTelemetry(t *testing.T) {
 	cdcTest(t, testFn, feedTestForceSink("enterprise"))
 }
 
+func TestChangefeedContinuousTelemetry(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+
+		knobs := s.TestingKnobs.
+			DistSQL.(*execinfra.TestingKnobs).
+			Changefeed.(*TestingKnobs)
+		defer changefeedbase.TestingSetDefaultMinCheckpointFrequency(testSinkFlushFrequency)()
+		knobs.ContinuousTelemetryLoggingIntervalNanos = testSinkFlushFrequency.Nanoseconds()
+
+		waitForResolved := make(chan struct{}, 10)
+		knobs.FilterSpanWithMutation = func(resolved *jobspb.ResolvedSpan) bool {
+			waitForResolved <- struct{}{}
+			return false
+		}
+
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (1)`)
+
+		beforeCreate := timeutil.Now()
+
+		// Start some feeds (and read from them to make sure they've started.
+		foo := feed(t, f, `CREATE CHANGEFEED FOR foo`)
+		defer closeFeed(t, foo)
+		assertPayloads(t, foo, []string{
+			`foo: [1]->{"after": {"a": 1}}`,
+		})
+
+		for i := 0; i < 10; i++ {
+			<-waitForResolved
+		}
+
+		// We implicitly wait for a resolved event and flush here since we
+		// would only create these log messages after that happens.
+		emittedBytesLogs := checkContinuousChangefeedLogs(t, beforeCreate.UnixNano())
+		require.Greater(t, emittedBytesLogs[0].EmittedBytes, int32(0))
+	}
+
+	cdcTest(t, testFn, feedTestEnterpriseSinks)
+}
+
 // Regression test for #41694.
 func TestChangefeedRestartDuringBackfill(t *testing.T) {
 	defer leaktest.AfterTest(t)()
