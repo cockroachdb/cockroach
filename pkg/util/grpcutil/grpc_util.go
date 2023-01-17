@@ -54,6 +54,15 @@ func IsTimeout(err error) bool {
 	return false
 }
 
+// IsConnectionUnavailable checks if grpc code is codes.Unavailable which is
+// set when we are not able to establish connection to remote node.
+func IsConnectionUnavailable(err error) bool {
+	if s, ok := status.FromError(errors.UnwrapAll(err)); ok {
+		return s.Code() == codes.Unavailable
+	}
+	return false
+}
+
 // IsContextCanceled returns true if err's Cause is an error produced by gRPC
 // on context cancellation.
 func IsContextCanceled(err error) bool {
