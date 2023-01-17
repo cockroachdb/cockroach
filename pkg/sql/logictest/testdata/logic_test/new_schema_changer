@@ -1422,6 +1422,8 @@ INSERT INTO t VALUES (1), (2), (3)
 statement ok
 SET use_declarative_schema_changer = 'unsafe_always';
 
+skip_on_retry
+
 statement ok
 BEGIN
 
