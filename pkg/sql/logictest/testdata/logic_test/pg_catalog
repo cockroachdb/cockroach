@@ -1078,10 +1078,10 @@ SELECT indexrelid, indrelid, indislive, indisreplident, indkey, indcollation, in
 FROM pg_catalog.pg_index
 WHERE indnkeyatts = 2
 ----
-indexrelid  indrelid  indislive  indisreplident  indkey  indcollation  indclass  indoption  indexprs            indpred
-3687884464  110       true       false           3 4     0 0           0 0       2 2        NULL                NULL
-2695335053  114       true       false           1 2 3   0 0           0 0       2 1        NULL                NULL
-2129466854  120       true       false           0 0     3403232968 0  0 0       2 2        (lower(c)) (a + b)  NULL
+indexrelid  indrelid  indislive  indisreplident  indkey  indcollation  indclass  indoption  indexprs                indpred
+3687884464  110       true       false           3 4     0 0           0 0       2 2        NULL                    NULL
+2695335053  114       true       false           1 2 3   0 0           0 0       2 1        NULL                    NULL
+2129466854  120       true       false           0 0     3403232968 0  0 0       2 2        {(lower(c)),"(a + b)"}  NULL
 
 # Index expression elements should have an indkey of 0 and be included in
 # indexprs.
@@ -1094,12 +1094,12 @@ JOIN pg_catalog.pg_class c ON i.indexrelid = c.oid
 WHERE c.relname LIKE 't6_%'
 ORDER BY 1
 ----
-relname            indkey  indexprs                                  indpred
-t6_expr_expr1_idx  0 0     (lower(c)) (a + b)                        NULL
-t6_expr_idx        0       (a + b)                                   NULL
-t6_expr_idx1       0       (m = 'foo'::constraint_db.public.mytype)  m = 'foo'::constraint_db.public.mytype
-t6_expr_key        0       (lower(c))                                NULL
-t6_pkey            6       NULL                                      NULL
+relname            indkey  indexprs                                      indpred
+t6_expr_expr1_idx  0 0     {(lower(c)),"(a + b)"}                        NULL
+t6_expr_idx        0       {"(a + b)"}                                   NULL
+t6_expr_idx1       0       {"(m = 'foo'::constraint_db.public.mytype)"}  m = 'foo'::constraint_db.public.mytype
+t6_expr_key        0       {(lower(c))}                                  NULL
+t6_pkey            6       NULL                                          NULL
 
 statement ok
 SET DATABASE = system

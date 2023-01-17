@@ -2259,7 +2259,7 @@ b
 query T
 SELECT pg_catalog.pg_get_indexdef((SELECT oid from pg_class WHERE relname='pg_indexdef_cols_idx'), 3, false)
 ----
-rowid
+·
 
 query I
 SELECT length(pg_catalog.pg_get_indexdef((SELECT oid from pg_class WHERE relname='pg_indexdef_cols_idx'), 4, false))
