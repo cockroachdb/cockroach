@@ -18,6 +18,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/base/serverident"
 	"github.com/cockroachdb/cockroach/pkg/util/jsonbytes"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/errors"
@@ -280,18 +281,18 @@ func formatJSON(entry logEntry, forFluent bool, tags tagChoice) *buffer {
 	buf.WriteByte('"')
 
 	// Server identifiers.
-	if entry.clusterID != "" {
+	if entry.ClusterID != "" {
 		buf.WriteString(`,"`)
 		buf.WriteString(jtags['x'].tags[tags])
 		buf.WriteString(`":"`)
-		escapeString(buf, entry.clusterID)
+		escapeString(buf, entry.ClusterID)
 		buf.WriteByte('"')
 	}
-	if entry.nodeID != "" {
+	if entry.NodeID != "" {
 		buf.WriteString(`,"`)
 		buf.WriteString(jtags['N'].tags[tags])
 		buf.WriteString(`":`)
-		buf.WriteString(entry.nodeID)
+		buf.WriteString(entry.NodeID)
 	}
 	// The entry's idPayload always returns a tenant ID,
 	// so write the tenant ID tag in any case.
@@ -299,11 +300,11 @@ func formatJSON(entry logEntry, forFluent bool, tags tagChoice) *buffer {
 	buf.WriteString(jtags['T'].tags[tags])
 	buf.WriteString(`":`)
 	buf.WriteString(entry.TenantID())
-	if entry.sqlInstanceID != "" {
+	if entry.SQLInstanceID != "" {
 		buf.WriteString(`,"`)
 		buf.WriteString(jtags['q'].tags[tags])
 		buf.WriteString(`":`)
-		buf.WriteString(entry.sqlInstanceID)
+		buf.WriteString(entry.SQLInstanceID)
 	}
 
 	// The binary version.
@@ -488,7 +489,7 @@ func (e *JSONEntry) populate(entry *logpb.Entry, d *entryDecoderJSON) (*redactab
 	entry.Redactable = e.Redactable == 1
 	// Default to the system tenant ID, and override if
 	// we find a tenant ID tag in the decoded entry.
-	entry.TenantID = systemTenantID
+	entry.TenantID = serverident.SystemTenantID
 	if e.TenantID != 0 {
 		entry.TenantID = fmt.Sprint(e.TenantID)
 	}

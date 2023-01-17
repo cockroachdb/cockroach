@@ -19,6 +19,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base/serverident"
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
@@ -52,8 +53,8 @@ func TestJSONFormats(t *testing.T) {
 		}(),
 		// Normal (non-header) entries.
 		{},
-		{idPayload: idPayload{clusterID: "abc", nodeID: "123"}},
-		{idPayload: idPayload{tenantID: "456", sqlInstanceID: "123"}},
+		{IDPayload: serverident.IDPayload{ClusterID: "abc", NodeID: "123"}},
+		{IDPayload: serverident.IDPayload{TenantIDInternal: "456", SQLInstanceID: "123"}},
 		makeStructuredEntry(ctx, severity.INFO, channel.DEV, 0, &logpb.TestingStructuredLogEvent{
 			CommonEventDetails: logpb.CommonEventDetails{
 				Timestamp: 123,

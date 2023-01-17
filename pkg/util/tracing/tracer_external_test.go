@@ -17,13 +17,21 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	_ "github.com/cockroachdb/cockroach/pkg/ccl" // For tenant functionality.
+	"github.com/cockroachdb/cockroach/pkg/kv/kvbase"
+	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/grpcinterceptor"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/stretchr/testify/require"
+	oteltrace "go.opentelemetry.io/otel/trace"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -89,4 +97,70 @@ func TestSpanPooling(t *testing.T) {
 	}
 	sort.Ints(spansAllocatedPerQuery)
 	require.Zero(t, spansAllocatedPerQuery[len(spansAllocatedPerQuery)/2], "spans allocated per query: %v", spansAllocatedPerQuery)
+}
+
+// Test that a shared-process tenant talking to a local KV server gets KV
+// server-side traces.
+func TestTraceForTenantWithLocalKVServer(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	st := cluster.MakeTestingClusterSettings()
+	server.RedactServerTracesForSecondaryTenants.Override(ctx, &st.SV, false)
+	args := base.TestServerArgs{Settings: st}
+	s, _, _ := serverutils.StartServer(t, args)
+	defer s.Stopper().Stop(ctx)
+
+	// Create our own test tenant with a known name.
+	const tenantName = "test-tenant"
+
+	testStmt := "SELECT 1 FROM t WHERE id=1"
+	var testStmtTrace tracingpb.Recording
+
+	_, tenantDB, err := s.StartSharedProcessTenant(ctx,
+		base.TestSharedProcessTenantArgs{
+			TenantName:  tenantName,
+			UseDatabase: "test",
+			Knobs: base.TestingKnobs{
+				SQLExecutor: &sql.ExecutorTestingKnobs{
+					WithStatementTrace: func(trace tracingpb.Recording, stmt string) {
+						if stmt == testStmt {
+							testStmtTrace = trace
+						}
+					},
+				},
+			},
+		})
+	require.NoError(t, err)
+
+	_, err = tenantDB.Exec(`CREATE DATABASE test; CREATE TABLE t(id INT PRIMARY KEY)`)
+	require.NoError(t, err)
+
+	// Execute a dummy statement that leases the `t` table descriptor, simplifying
+	// the trace for the next query.
+	_, err = tenantDB.Exec("SELECT 1 FROM t")
+	require.NoError(t, err)
+
+	_, err = tenantDB.Exec(testStmt)
+	require.NoError(t, err)
+	require.NotNil(t, testStmtTrace)
+
+	// Check that the trace contains a server-side Batch span.
+	var found bool
+	for _, sp := range testStmtTrace {
+		if sp.Operation != grpcinterceptor.BatchMethodName {
+			continue
+		}
+		tag, ok := sp.FindTagGroup(tracingpb.AnonymousTagGroupName).FindTag(tracing.SpanKindTagKey)
+		if ok && tag == oteltrace.SpanKindServer.String() {
+			found = true
+			break
+		}
+	}
+	require.True(t, found)
+
+	// Check that the RPC used the internalClientAdapter.
+	_, ok := testStmtTrace.FindLogMessage(kvbase.RoutingRequestLocallyMsg)
+	require.True(t, ok)
 }
