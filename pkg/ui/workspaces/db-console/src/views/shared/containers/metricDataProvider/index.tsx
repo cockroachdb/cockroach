@@ -42,6 +42,7 @@ import {
   selectResolution10sStorageTTL,
   selectResolution30mStorageTTL,
 } from "src/redux/clusterSettings";
+import { selectTenantsFromMultitenantSessionCookie } from "src/redux/cookies";
 
 /**
  * queryFromProps is a helper method which generates a TimeSeries Query data
@@ -50,7 +51,7 @@ import {
 function queryFromProps(
   metricProps: MetricProps,
   graphProps: MetricsDataComponentProps,
-): protos.cockroach.ts.tspb.IQuery {
+): protos.cockroach.ts.tspb.IQuery[] {
   let derivative = protos.cockroach.ts.tspb.TimeSeriesQueryDerivative.NONE;
   let sourceAggregator = protos.cockroach.ts.tspb.TimeSeriesQueryAggregator.SUM;
   let downsampler = protos.cockroach.ts.tspb.TimeSeriesQueryAggregator.MAX;
@@ -84,13 +85,29 @@ function queryFromProps(
     sourceAggregator = protos.cockroach.ts.tspb.TimeSeriesQueryAggregator.AVG;
   }
 
-  return {
-    name: metricProps.name,
-    sources: metricProps.sources || graphProps.sources || undefined,
-    downsampler: downsampler,
-    source_aggregator: sourceAggregator,
-    derivative: derivative,
-  };
+  if (metricProps.includeTenants) {
+    const tenants: string[] = ["system", "2"];
+
+    return tenants.map(tenantID => {
+      return {
+        name: `${tenantID}.${metricProps.name}`,
+        sources: metricProps.sources || graphProps.sources || undefined,
+        downsampler: downsampler,
+        source_aggregator: sourceAggregator,
+        derivative: derivative,
+      };
+    });
+  } else {
+    return [
+      {
+        name: "system." + metricProps.name,
+        sources: metricProps.sources || graphProps.sources || undefined,
+        downsampler: downsampler,
+        source_aggregator: sourceAggregator,
+        derivative: derivative,
+      },
+    ];
+  }
 }
 
 /**
@@ -168,7 +185,7 @@ class MetricsDataProvider extends React.Component<
         Metric,
       );
       // Construct a query for each found selector child.
-      return _.map(selectors, s => queryFromProps(s.props, child.props));
+      return _.flatMap(selectors, s => queryFromProps(s.props, child.props));
     },
   );
 

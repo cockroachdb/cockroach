@@ -1010,6 +1010,7 @@ func (ts *TestServer) StartTenant(
 		stopper,
 		baseCfg,
 		sqlCfg,
+		ts.recorder,
 	)
 	if err != nil {
 		return nil, err

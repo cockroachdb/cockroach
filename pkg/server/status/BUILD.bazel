@@ -132,6 +132,7 @@ go_test(
         "//pkg/base",
         "//pkg/build",
         "//pkg/roachpb",
+        "//pkg/rpc",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
@@ -149,6 +150,7 @@ go_test(
         "//pkg/util/timeutil",
         "@com_github_kr_pretty//:pretty",
         "@com_github_shirou_gopsutil_v3//net",
+        "@com_github_stretchr_testify//require",
     ],
 )
 

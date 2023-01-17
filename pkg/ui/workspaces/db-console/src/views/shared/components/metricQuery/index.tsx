@@ -98,6 +98,7 @@ export interface MetricProps {
   derivative?: TimeSeriesQueryDerivative;
   aggregator?: TimeSeriesQueryAggregator;
   downsampler?: TimeSeriesQueryAggregator;
+  includeTenants?: boolean;
 }
 
 /**
