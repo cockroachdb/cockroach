@@ -184,8 +184,6 @@ go_test(
         ],
         "@io_bazel_rules_go//go/platform:linux_s390x": [
             ":grunning",
-            "//pkg/testutils/skip",
-            "//pkg/util/syncutil",
             "@com_github_stretchr_testify//require",
         ],
         "@io_bazel_rules_go//go/platform:netbsd_386": [

@@ -10,8 +10,8 @@
 
 // See grunning.Supported() for an explanation behind this build tag.
 //
-//go:build (darwin && arm64) || freebsd || !bazel
-// +build darwin,arm64 freebsd !bazel
+//go:build (darwin && arm64) || freebsd || (linux && s390x) || !bazel
+// +build darwin,arm64 freebsd linux,s390x !bazel
 
 package grunning
 
