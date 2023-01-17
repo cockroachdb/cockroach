@@ -32,6 +32,13 @@ import (
 )
 
 func registerFailover(r registry.Registry) {
+	r.Add(registry.TestSpec{
+		Name:    "failover/partial-disconnect",
+		Owner:   registry.OwnerKV,
+		Timeout: 30 * time.Minute,
+		Cluster: r.MakeClusterSpec(6, spec.CPU(4)),
+		Run:     runDisconnect,
+	})
 	for _, failureMode := range []failureMode{
 		failureModeBlackhole,
 		failureModeBlackholeRecv,
@@ -68,6 +75,74 @@ func registerFailover(r registry.Registry) {
 			},
 		})
 	}
+}
+
+// 5 nodes fully connected. Break the connection between a pair of nodes 4 and 5
+// while running a workload against nodes 1 through 3. Before each disconnect,
+// move all the leases to nodes 4 and 5 in a different pattern.
+func runDisconnect(ctx context.Context, t test.Test, c cluster.Cluster) {
+	require.Equal(t, 6, c.Spec().NodeCount)
+	require.False(t, c.IsLocal(), "test can't use local cluster") // messes with iptables
+
+	// Create cluster.
+	opts := option.DefaultStartOpts()
+	settings := install.MakeClusterSettings()
+
+	c.Put(ctx, t.Cockroach(), "./cockroach")
+	c.Start(ctx, t.L(), opts, settings, c.Range(1, 5))
+
+	conn := c.Conn(ctx, t.L(), 1)
+	defer conn.Close()
+
+	// Wait for upreplication.
+	require.NoError(t, WaitFor3XReplication(ctx, t, conn))
+
+	t.Status("creating workload database")
+	_, err := conn.ExecContext(ctx, `CREATE DATABASE kv`)
+	require.NoError(t, err)
+
+	c.Run(ctx, c.Node(6), `./cockroach workload init kv --splits 100 {pgurl:1}`)
+
+	// Start workload on n6 using nodes 1-3 (not part of partition). We could
+	// additionally test the behavior of running SQL against nodes 4-5 however
+	// that complicates the analysis as we want to focus on KV behavior.
+	t.Status("running workload")
+	m := c.NewMonitor(ctx, c.Range(1, 3))
+	m.Go(func(ctx context.Context) error {
+		c.Run(ctx, c.Node(6), `./cockroach workload run kv --read-percent 50 `+
+			`--duration 10m --concurrency 256 --max-rate 2048 --timeout 1m --tolerate-errors `+
+			`--histograms=`+t.PerfArtifactsDir()+`/stats.json `+
+			`{pgurl:1-3}`)
+		return nil
+	})
+
+	// Start and stop partial between nodes 4 and 5 every 30 seconds.
+	m.Go(func(ctx context.Context) error {
+		// Try different combinations of the ranges between the partitioned nodes.
+		// All the system ranges will be on all the nodes, so they will all move,
+		// plus many of the non-system ranges.
+		for i := 2; i <= 7; i++ {
+			time.Sleep(30 * time.Second)
+
+			t.Status("Moving ranges to nodes 4 and 5 before partition", i)
+			relocateLeases(t, ctx, conn, `range_id = 2`, 4)
+			relocateLeases(t, ctx, conn, `voting_replicas @> ARRAY[5] AND range_id != 2`, 5)
+
+			t.Status("disconnecting n4 and n5")
+			Disconnect(t, c, ctx, []int{4, 5}, false)
+
+			time.Sleep(30 * time.Second)
+			qps := measureQPS(ctx, t, conn, 5*time.Second)
+			t.Status("Node 1 QPS after waiting 30 seconds is: ", qps)
+			// There is some rounding error with QPS, so verify that it is > 1
+			require.True(t, qps > 1.0)
+
+			t.Status("recovering n4 and n5")
+			Disconnect(t, c, ctx, []int{4, 5}, true)
+		}
+		return nil
+	})
+	m.Wait()
 }
 
 // runFailoverNonSystem benchmarks the maximum duration of range unavailability
@@ -640,6 +715,26 @@ func makeFailer(
 	}
 }
 
+// Disconnect takes a set of nodes and each nodes internal ips. It disconnects
+// each node from all the others in the list.
+func Disconnect(t test.Test, c cluster.Cluster, ctx context.Context, nodes []int, reconnect bool) {
+	ips, err := c.InternalIP(ctx, t.L(), nodes)
+	require.NoError(t, err)
+
+	// disconnect each node from every other passed in node.
+	for n := 0; n < len(nodes); n++ {
+		for ip := 0; ip < len(ips); ip++ {
+			if n != ip {
+				if reconnect {
+					c.Run(ctx, c.Node(nodes[n]), `sudo iptables -F`)
+				} else {
+					c.Run(ctx, c.Node(nodes[n]), `sudo iptables -A INPUT -s `+ips[ip]+` -j DROP`)
+				}
+			}
+		}
+	}
+}
+
 // failer fails and recovers a given node in some particular way.
 type failer interface {
 	// Setup prepares the failer. It is called before the cluster is started.
@@ -837,4 +932,25 @@ func relocateLeases(t test.Test, ctx context.Context, conn *gosql.DB, predicate 
 		}
 		time.Sleep(time.Second)
 	}
+}
+
+// measureQPS will measure the approx QPS at the time this command is run. The
+// duration is how long of an interval to wait while measuring. Setting too
+// short of an interval can mean inaccuracy in results. Setting too long of an
+// interval may mean the impact is blurred out.
+func measureQPS(ctx context.Context, t test.Test, db *gosql.DB, duration time.Duration) float64 {
+	numInserts := func() float64 {
+		var v float64
+		if err := db.QueryRowContext(
+			ctx, `SELECT value FROM crdb_internal.node_metrics WHERE name = 'sql.insert.count'`,
+		).Scan(&v); err != nil {
+			t.Fatal(err)
+		}
+		return v
+	}
+
+	before := numInserts()
+	time.Sleep(duration)
+	after := numInserts()
+	return (after - before) / duration.Seconds()
 }
