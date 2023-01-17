@@ -19,7 +19,7 @@ import { InsightEnumToLabel, StmtInsightEvent } from "src/insights";
 export const selectStmtInsights = (state: AppState): StmtInsightEvent[] =>
   state.adminUI.stmtInsights?.data;
 
-export const selectStmtInsightsError = (state: AppState) =>
+export const selectStmtInsightsError = (state: AppState): Error | null =>
   state.adminUI.stmtInsights?.lastError;
 
 export const selectStmtInsightDetails = createSelector(

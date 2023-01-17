@@ -15,7 +15,11 @@ import "antd/lib/col/style";
 import "antd/lib/row/style";
 import { SqlBox, SqlBoxSize } from "src/sql";
 import { SummaryCard, SummaryCardItem } from "src/summaryCard";
-import { DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_UTC } from "src/util/format";
+import {
+  Count,
+  DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_UTC,
+  Duration,
+} from "src/util/format";
 import { WaitTimeInsightsLabels } from "src/detailsPanels/waitTimeInsightsPanel";
 import { NO_SAMPLES_FOUND } from "src/util";
 import {
@@ -23,7 +27,13 @@ import {
   makeInsightsColumns,
 } from "src/insightsTable/insightsTable";
 import { WaitTimeDetailsTable } from "./insightDetailsTables";
-import { ContentionEvent, TxnInsightDetails } from "../types";
+import {
+  BlockedContentionDetails,
+  ContentionEvent,
+  TxnInsightEvent,
+  InsightExecEnum,
+  StmtInsightEvent,
+} from "../types";
 
 import classNames from "classnames/bind";
 import { CockroachCloudContext } from "../../contexts";
@@ -38,19 +48,18 @@ import insightsDetailsStyles from "src/insights/workloadInsightDetails/insightsD
 const cx = classNames.bind(insightsDetailsStyles);
 const tableCx = classNames.bind(insightTableStyles);
 
-export interface TransactionInsightDetailsStateProps {
-  insightDetails: TxnInsightDetails;
-  insightError: Error | null;
-}
-
 type Props = {
-  insightDetails: TxnInsightDetails;
+  txnDetails: TxnInsightEvent;
+  statements: StmtInsightEvent[] | null;
+  contentionDetails?: BlockedContentionDetails[];
   setTimeScale: (ts: TimeScale) => void;
   hasAdminRole: boolean;
 };
 
 export const TransactionInsightDetailsOverviewTab: React.FC<Props> = ({
-  insightDetails,
+  contentionDetails,
+  txnDetails,
+  statements,
   setTimeScale,
   hasAdminRole,
 }) => {
@@ -60,48 +69,31 @@ export const TransactionInsightDetailsOverviewTab: React.FC<Props> = ({
   });
   const isCockroachCloud = useContext(CockroachCloudContext);
 
+  const queryFromStmts = statements?.map(s => s.query)?.join("\n");
   const insightQueries =
-    insightDetails?.queries?.join("") || "Insight not found.";
+    queryFromStmts ?? txnDetails?.query ?? "Insight not found.";
   const insightsColumns = makeInsightsColumns(
     isCockroachCloud,
     hasAdminRole,
-    insightDetails.queries?.length > 1,
     true,
   );
 
-  const blockingExecutions: ContentionEvent[] =
-    insightDetails?.blockingContentionDetails?.map(x => {
-      return {
-        executionID: x.blockingExecutionID,
-        fingerprintID: x.blockingTxnFingerprintID,
-        queries: x.blockingQueries,
-        startTime: x.collectionTimeStamp,
-        contentionTimeMs: x.contentionTimeMs,
-        execType: insightDetails.execType,
-        schemaName: x.schemaName,
-        databaseName: x.databaseName,
-        tableName: x.tableName,
-        indexName: x.indexName,
-      };
-    });
+  const blockingExecutions: ContentionEvent[] = contentionDetails?.map(x => {
+    return {
+      executionID: x.blockingExecutionID,
+      fingerprintID: x.blockingTxnFingerprintID,
+      queries: x.blockingQueries,
+      startTime: x.collectionTimeStamp,
+      contentionTimeMs: x.contentionTimeMs,
+      execType: InsightExecEnum.TRANSACTION,
+      schemaName: x.schemaName,
+      databaseName: x.databaseName,
+      tableName: x.tableName,
+      indexName: x.indexName,
+    };
+  });
 
-  const stmtInsights = insightDetails?.statementInsights?.map(stmt => ({
-    ...stmt,
-    retries: insightDetails.retries,
-    databaseName: insightDetails.databaseName,
-  }));
-
-  // Build insight recommendations off of all stmt insights.
-  // TODO: (xinhaoz) these recs should be a bit more detailed when there
-  // is stmt info available
-  const insightRecs = getTxnInsightRecommendations(insightDetails);
-
-  const rowsRead =
-    stmtInsights?.reduce((count, stmt) => (count += stmt.rowsRead), 0) ??
-    NO_SAMPLES_FOUND;
-  const rowsWritten =
-    stmtInsights?.reduce((count, stmt) => (count += stmt.rowsWritten), 0) ??
-    NO_SAMPLES_FOUND;
+  const insightRecs = getTxnInsightRecommendations(txnDetails);
 
   return (
     <div>
@@ -111,32 +103,38 @@ export const TransactionInsightDetailsOverviewTab: React.FC<Props> = ({
             <SqlBox value={insightQueries} size={SqlBoxSize.custom} />
           </Col>
         </Row>
-        {insightDetails && (
+        {txnDetails && (
           <>
             <Row gutter={24} type="flex">
               <Col span={12}>
                 <SummaryCard>
                   <SummaryCardItem
                     label="Start Time"
-                    value={
-                      insightDetails.startTime?.format(
-                        DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_UTC,
-                      ) ?? NO_SAMPLES_FOUND
-                    }
+                    value={txnDetails.startTime.format(
+                      DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_UTC,
+                    )}
                   />
-                  <SummaryCardItem label="Rows Read" value={rowsRead} />
-                  <SummaryCardItem label="Rows Written" value={rowsWritten} />
+                  <SummaryCardItem
+                    label="End Time"
+                    value={txnDetails.endTime.format(
+                      DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_UTC,
+                    )}
+                  />
+                  <SummaryCardItem
+                    label="Elapsed Time"
+                    value={Duration(txnDetails.elapsedTimeMillis * 1e6)}
+                  />
+                  <SummaryCardItem
+                    label="Rows Read"
+                    value={Count(txnDetails.rowsRead)}
+                  />
+                  <SummaryCardItem
+                    label="Rows Written"
+                    value={Count(txnDetails.rowsWritten)}
+                  />
                   <SummaryCardItem
                     label="Priority"
-                    value={insightDetails.priority ?? NO_SAMPLES_FOUND}
-                  />
-                  <SummaryCardItem
-                    label="Full Scan"
-                    value={
-                      insightDetails.statementInsights
-                        ?.some(stmt => stmt.isFullScan)
-                        ?.toString() ?? NO_SAMPLES_FOUND
-                    }
+                    value={txnDetails.priority ?? NO_SAMPLES_FOUND}
                   />
                 </SummaryCard>
               </Col>
@@ -144,27 +142,27 @@ export const TransactionInsightDetailsOverviewTab: React.FC<Props> = ({
                 <SummaryCard>
                   <SummaryCardItem
                     label="Number of Retries"
-                    value={insightDetails.retries ?? NO_SAMPLES_FOUND}
+                    value={Count(txnDetails.retries) ?? NO_SAMPLES_FOUND}
                   />
-                  {insightDetails.lastRetryReason && (
+                  {txnDetails.lastRetryReason && (
                     <SummaryCardItem
                       label="Last Retry Reason"
-                      value={insightDetails.lastRetryReason}
+                      value={txnDetails.lastRetryReason}
                     />
                   )}
                   <SummaryCardItem
                     label="Session ID"
-                    value={insightDetails.sessionID ?? NO_SAMPLES_FOUND}
+                    value={txnDetails.sessionID ?? NO_SAMPLES_FOUND}
                   />
                   <SummaryCardItem
                     label="Application"
-                    value={insightDetails.application}
+                    value={txnDetails.application}
                   />
                   <SummaryCardItem
                     label="Transaction Fingerprint ID"
                     value={TransactionDetailsLink(
-                      insightDetails.transactionFingerprintID,
-                      insightDetails.startTime,
+                      txnDetails.transactionFingerprintID,
+                      txnDetails.startTime,
                       setTimeScale,
                     )}
                   />
@@ -184,20 +182,20 @@ export const TransactionInsightDetailsOverviewTab: React.FC<Props> = ({
           </>
         )}
       </section>
-      {blockingExecutions?.length && insightDetails && (
+      {blockingExecutions?.length && txnDetails && (
         <section className={tableCx("section")}>
           <Row gutter={24}>
             <Col>
               <Heading type="h5">
                 {WaitTimeInsightsLabels.BLOCKED_TXNS_TABLE_TITLE(
-                  insightDetails.transactionExecutionID,
-                  insightDetails.execType,
+                  txnDetails.transactionExecutionID,
+                  InsightExecEnum.TRANSACTION,
                 )}
               </Heading>
               <div className={tableCx("table-area")}>
                 <WaitTimeDetailsTable
                   data={blockingExecutions}
-                  execType={insightDetails.execType}
+                  execType={InsightExecEnum.TRANSACTION}
                   setTimeScale={setTimeScale}
                 />
               </div>

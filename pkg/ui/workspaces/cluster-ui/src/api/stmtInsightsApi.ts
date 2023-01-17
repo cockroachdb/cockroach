@@ -201,7 +201,7 @@ export function formatStmtInsights(
       contentionTime: row.contention ? moment.duration(row.contention) : null,
       indexRecommendations: row.index_recommendations,
       insights: getInsightsFromProblemsAndCauses(
-        row.problem,
+        [row.problem],
         row.causes,
         InsightExecEnum.STATEMENT,
       ),
