@@ -28,10 +28,24 @@ import {
   reducer,
   SQLDetailsStatsReducerState,
 } from "./statementDetails.reducer";
+
+import moment from "moment";
+
+const lastUpdated = moment();
+
 export type StatementDetailsRequest =
   cockroach.server.serverpb.StatementDetailsRequest;
 
 describe("SQLDetailsStats sagas", () => {
+  let spy: jest.SpyInstance;
+  beforeAll(() => {
+    spy = jest.spyOn(moment, "utc").mockImplementation(() => lastUpdated);
+  });
+
+  afterAll(() => {
+    spy.mockRestore();
+  });
+
   const action: PayloadAction<StatementDetailsRequest> = {
     payload: cockroach.server.serverpb.StatementDetailsRequest.create({
       fingerprint_id: "SELECT * FROM crdb_internal.node_build_info",
@@ -665,6 +679,7 @@ describe("SQLDetailsStats sagas", () => {
                 lastError: null,
                 valid: true,
                 inFlight: false,
+                lastUpdated: lastUpdated,
               },
           },
           latestQuery: "",
@@ -692,6 +707,7 @@ describe("SQLDetailsStats sagas", () => {
                 lastError: error,
                 valid: false,
                 inFlight: false,
+                lastUpdated: lastUpdated,
               },
           },
           latestQuery: "",
