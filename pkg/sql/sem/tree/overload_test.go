@@ -488,7 +488,7 @@ func TestGetMostSignificantOverload(t *testing.T) {
 				filters[i] = uint8(i)
 			}
 			overload, err := getMostSignificantOverload(
-				tc.overloads, impls, filters, tc.searchPath, &expr,
+				tc.overloads, impls, filters, tc.searchPath, &expr, nil,
 				func() string { return "some signature" },
 			)
 			if tc.expectedErr != "" {
