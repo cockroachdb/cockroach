@@ -102,7 +102,6 @@ BNF_SRCS = [
     "//docs/generated/sql/bnf:create_table_as_stmt.bnf",
     "//docs/generated/sql/bnf:create_table_stmt.bnf",
     "//docs/generated/sql/bnf:create_table_with_storage_param.bnf",
-    "//docs/generated/sql/bnf:create_tenant_stmt.bnf",
     "//docs/generated/sql/bnf:create_type.bnf",
     "//docs/generated/sql/bnf:create_view_stmt.bnf",
     "//docs/generated/sql/bnf:deallocate_stmt.bnf",

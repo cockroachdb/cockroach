@@ -2575,21 +2575,16 @@ https://www.postgresql.org/docs/9.5/catalog-pg-proc.html`,
 				coid := tree.MustBeDOid(unwrappedConstraint)
 				ooid := coid.Oid
 
-				name, overload, err := p.ResolveFunctionByOID(ctx, ooid)
-				if err != nil {
-					if errors.Is(err, tree.ErrFunctionUndefined) {
-						return false, nil //nolint:returnerrcheck
-					}
-					return false, err
-				}
-
 				if funcdesc.IsOIDUserDefinedFunc(ooid) {
-					fnDesc, err := p.Descriptors().ByID(p.Txn()).WithoutNonPublic().Get().Function(ctx, descpb.ID(overload.Oid))
+					fnDesc, err := p.Descriptors().ByID(p.Txn()).WithoutNonPublic().Get().Function(ctx, funcdesc.UserDefinedFunctionOIDToID(ooid))
 					if err != nil {
+						if errors.Is(err, tree.ErrFunctionUndefined) {
+							return false, nil //nolint:returnerrcheck
+						}
 						return false, err
 					}
 
-					scDesc, err := p.Descriptors().ByIDWithLeased(p.Txn()).WithoutNonPublic().Get().Schema(ctx, descpb.ID(ooid))
+					scDesc, err := p.Descriptors().ByIDWithLeased(p.Txn()).WithoutNonPublic().Get().Schema(ctx, fnDesc.GetParentSchemaID())
 					if err != nil {
 						return false, err
 					}
@@ -2604,7 +2599,15 @@ https://www.postgresql.org/docs/9.5/catalog-pg-proc.html`,
 					return true, nil
 
 				} else {
-					err := addPgProcBuiltinRow(name, addRow)
+					name, _, err := p.ResolveFunctionByOID(ctx, ooid)
+					if err != nil {
+						if errors.Is(err, tree.ErrFunctionUndefined) {
+							return false, nil //nolint:returnerrcheck
+						}
+						return false, err
+					}
+
+					err = addPgProcBuiltinRow(name, addRow)
 					if err != nil {
 						return false, err
 					}

@@ -18,7 +18,7 @@ type ReplicationCutoverTime struct {
 
 // AlterTenantReplication represents an ALTER TENANT REPLICATION statement.
 type AlterTenantReplication struct {
-	TenantName Expr
+	TenantSpec *TenantSpec
 	Command    JobCommand
 	Cutover    *ReplicationCutoverTime
 	Options    TenantReplicationOptions
@@ -29,7 +29,7 @@ var _ Statement = &AlterTenantReplication{}
 // Format implements the NodeFormatter interface.
 func (n *AlterTenantReplication) Format(ctx *FmtCtx) {
 	ctx.WriteString("ALTER TENANT ")
-	ctx.FormatNode(n.TenantName)
+	ctx.FormatNode(n.TenantSpec)
 	ctx.WriteByte(' ')
 	if n.Cutover != nil {
 		ctx.WriteString("COMPLETE REPLICATION TO ")
@@ -46,4 +46,40 @@ func (n *AlterTenantReplication) Format(ctx *FmtCtx) {
 		ctx.WriteString(JobCommandToStatement[n.Command])
 		ctx.WriteString(" REPLICATION")
 	}
+}
+
+// TenantSpec designates a tenant for the ALTER TENANT statements.
+type TenantSpec struct {
+	Expr   Expr
+	IsName bool
+	All    bool
+}
+
+// Format implements the NodeFormatter interface.
+func (n *TenantSpec) Format(ctx *FmtCtx) {
+	if n.All {
+		ctx.WriteString("ALL")
+	} else if n.IsName {
+		ctx.FormatNode(n.Expr)
+	} else {
+		ctx.WriteByte('[')
+		ctx.FormatNode(n.Expr)
+		ctx.WriteByte(']')
+	}
+}
+
+// AlterTenantRename represents an ALTER TENANT RENAME statement.
+type AlterTenantRename struct {
+	TenantSpec *TenantSpec
+	NewName    Expr
+}
+
+var _ Statement = &AlterTenantRename{}
+
+// Format implements the NodeFormatter interface.
+func (n *AlterTenantRename) Format(ctx *FmtCtx) {
+	ctx.WriteString("ALTER TENANT ")
+	ctx.FormatNode(n.TenantSpec)
+	ctx.WriteString(" RENAME TO ")
+	ctx.FormatNode(n.NewName)
 }

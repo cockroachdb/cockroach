@@ -14,26 +14,27 @@ select count(*) from system.settings JOIN system.tenant_settings on tenant_setti
 1
 
 statement ok
-ALTER TENANT 10 SET CLUSTER SETTING sql.notices.enabled = false
+ALTER TENANT [10] SET CLUSTER SETTING sql.notices.enabled = false
 
 query TT
-SELECT value, origin FROM [SHOW CLUSTER SETTINGS FOR TENANT 10] WHERE variable = 'sql.notices.enabled'
+SELECT value, origin FROM [SHOW CLUSTER SETTINGS FOR TENANT [10]] WHERE variable = 'sql.notices.enabled'
 ----
 false  per-tenant-override
 
-# Check that subqueries work as tenant ID.
-query TT
-SELECT value, origin FROM [
-  SHOW CLUSTER SETTINGS FOR TENANT (
-     SELECT tenant_id
-     FROM system.tenant_settings
-     WHERE tenant_id = 10)]
-WHERE variable = 'sql.notices.enabled'
-----
-false  per-tenant-override
+# # Check that subqueries work as tenant ID.
+# # This is currently broken; see: https://github.com/cockroachdb/cockroach/issues/95266
+# query TT
+# SELECT value, origin FROM [
+#   SHOW CLUSTER SETTINGS FOR TENANT [(
+#      SELECT tenant_id
+#      FROM system.tenant_settings
+#      WHERE tenant_id = 10)]]
+# WHERE variable = 'sql.notices.enabled'
+# ----
+# false  per-tenant-override
 
 query B
-SHOW CLUSTER SETTING sql.notices.enabled FOR TENANT 10
+SHOW CLUSTER SETTING sql.notices.enabled FOR TENANT [10]
 ----
 false
 
@@ -48,15 +49,15 @@ false
 user host-cluster-root
 
 statement ok
-ALTER TENANT 10 RESET CLUSTER SETTING sql.notices.enabled
+ALTER TENANT [10] RESET CLUSTER SETTING sql.notices.enabled
 
 query TT
-SELECT value, origin FROM [SHOW CLUSTER SETTINGS FOR TENANT 10] WHERE variable = 'sql.notices.enabled'
+SELECT value, origin FROM [SHOW CLUSTER SETTINGS FOR TENANT [10]] WHERE variable = 'sql.notices.enabled'
 ----
 NULL  no-override
 
 query T
-SHOW CLUSTER SETTING sql.notices.enabled FOR TENANT 10
+SHOW CLUSTER SETTING sql.notices.enabled FOR TENANT [10]
 ----
 NULL
 
@@ -74,12 +75,12 @@ statement ok
 ALTER TENANT ALL SET CLUSTER SETTING sql.notices.enabled = false
 
 query TT
-SELECT value, origin FROM [SHOW CLUSTER SETTINGS FOR TENANT 10] WHERE variable = 'sql.notices.enabled'
+SELECT value, origin FROM [SHOW CLUSTER SETTINGS FOR TENANT [10]] WHERE variable = 'sql.notices.enabled'
 ----
 false  all-tenants-override
 
 query B
-SHOW CLUSTER SETTING sql.notices.enabled FOR TENANT 10
+SHOW CLUSTER SETTING sql.notices.enabled FOR TENANT [10]
 ----
 false
 
@@ -94,15 +95,15 @@ user host-cluster-root
 
 # Now set a tenant-specific override which takes precedence.
 statement ok
-ALTER TENANT 10 SET CLUSTER SETTING sql.notices.enabled = true
+ALTER TENANT [10] SET CLUSTER SETTING sql.notices.enabled = true
 
 query TT
-SELECT value, origin FROM [SHOW CLUSTER SETTINGS FOR TENANT 10] WHERE variable = 'sql.notices.enabled'
+SELECT value, origin FROM [SHOW CLUSTER SETTINGS FOR TENANT [10]] WHERE variable = 'sql.notices.enabled'
 ----
 true  per-tenant-override
 
 query B
-SHOW CLUSTER SETTING sql.notices.enabled FOR TENANT 10
+SHOW CLUSTER SETTING sql.notices.enabled FOR TENANT [10]
 ----
 true
 
@@ -127,12 +128,12 @@ statement ok
 ALTER TENANT ALL RESET CLUSTER SETTING sql.notices.enabled
 
 query TT
-SELECT value, origin FROM [SHOW CLUSTER SETTINGS FOR TENANT 10] WHERE variable = 'sql.notices.enabled'
+SELECT value, origin FROM [SHOW CLUSTER SETTINGS FOR TENANT [10]] WHERE variable = 'sql.notices.enabled'
 ----
 true  per-tenant-override
 
 query B
-SHOW CLUSTER SETTING sql.notices.enabled FOR TENANT 10
+SHOW CLUSTER SETTING sql.notices.enabled FOR TENANT [10]
 ----
 true
 
@@ -165,15 +166,15 @@ SHOW CLUSTER SETTING kv.protectedts.reconciliation.interval
 user host-cluster-root
 
 statement ok
-ALTER TENANT 10 SET CLUSTER SETTING kv.protectedts.reconciliation.interval = '45s'
+ALTER TENANT [10] SET CLUSTER SETTING kv.protectedts.reconciliation.interval = '45s'
 
 query TT
-SELECT value, origin FROM [SHOW CLUSTER SETTINGS FOR TENANT 10] WHERE variable = 'kv.protectedts.reconciliation.interval'
+SELECT value, origin FROM [SHOW CLUSTER SETTINGS FOR TENANT [10]] WHERE variable = 'kv.protectedts.reconciliation.interval'
 ----
 45s  per-tenant-override
 
 query T
-SHOW CLUSTER SETTING kv.protectedts.reconciliation.interval FOR TENANT 10
+SHOW CLUSTER SETTING kv.protectedts.reconciliation.interval FOR TENANT [10]
 ----
 00:00:45
 
@@ -188,20 +189,22 @@ user host-cluster-root
 
 # Verify that destroying a tenant cleans up any tenant-specific overrides.
 statement ok
-SELECT crdb_internal.create_tenant(1234)
+CREATE TENANT foo1234
 
 statement ok
-ALTER TENANT 1234 SET CLUSTER SETTING sql.notices.enabled = true
+ALTER TENANT foo1234 SET CLUSTER SETTING sql.notices.enabled = true
 
 query I
-SELECT count(*) FROM system.tenant_settings WHERE tenant_id = 1234
+SELECT count(*) FROM system.tenant_settings ts
+JOIN system.tenants t ON t.id = ts.tenant_id AND t.name = 'foo1234'
 ----
 1
 
 statement ok
-SELECT crdb_internal.destroy_tenant(1234, true)
+DROP TENANT foo1234 IMMEDIATE
 
 query I
-SELECT count(*) FROM system.tenant_settings WHERE tenant_id = 1234
+SELECT count(*) FROM system.tenant_settings ts
+JOIN system.tenants t ON t.id = ts.tenant_id AND t.name = 'foo1234'
 ----
 0

@@ -337,6 +337,20 @@ func (rsl StateLoader) SetVersion(
 		hlc.Timestamp{}, hlc.ClockTimestamp{}, nil, version)
 }
 
+// UninitializedReplicaState returns the ReplicaState of an uninitialized
+// Replica with the given range ID. It is equivalent to StateLoader.Load from an
+// empty storage.
+func UninitializedReplicaState(rangeID roachpb.RangeID) kvserverpb.ReplicaState {
+	return kvserverpb.ReplicaState{
+		Desc:           &roachpb.RangeDescriptor{RangeID: rangeID},
+		Lease:          &roachpb.Lease{},
+		TruncatedState: &roachpb.RaftTruncatedState{},
+		GCThreshold:    &hlc.Timestamp{},
+		Stats:          &enginepb.MVCCStats{},
+		GCHint:         &roachpb.GCHint{},
+	}
+}
+
 // The rest is not technically part of ReplicaState.
 
 // SynthesizeRaftState creates a Raft state which synthesizes both a HardState

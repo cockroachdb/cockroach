@@ -242,7 +242,7 @@ SET CLUSTER SETTING sql.defaults.experimental_stream_replication.enabled = 'on';
 	}
 }
 
-// CreateTenant creates a tenant under the replication helper's server
+// CreateTenant creates a tenant under the replication helper's server.
 func (rh *ReplicationHelper) CreateTenant(
 	t *testing.T, tenantID roachpb.TenantID, tenantName roachpb.TenantName,
 ) (TenantState, func()) {

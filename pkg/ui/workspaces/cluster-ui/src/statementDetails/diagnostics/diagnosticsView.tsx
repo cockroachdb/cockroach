@@ -112,9 +112,6 @@ export class DiagnosticsView extends React.Component<
   DiagnosticsViewProps,
   DiagnosticsViewState
 > {
-  static defaultProps: Partial<DiagnosticsViewProps> = {
-    showDiagnosticsViewLink: true,
-  };
   columns: ColumnsConfig<StatementDiagnosticsReport> = [
     {
       key: "activatedOn",

@@ -1226,3 +1226,36 @@ CREATE INDEX ON partition_array (a) PARTITION BY LIST (a) (PARTITION blah VALUES
 
 statement error unimplemented: partitioning by array column
 CREATE INDEX ON partition_array (a) PARTITION BY RANGE (a) (PARTITION blah VALUES FROM (ARRAY[1]) TO (ARRAY[2]))
+
+subtest regression_95238
+
+statement ok
+CREATE TABLE "a.b" ("c.d" INT PRIMARY KEY)
+PARTITION BY LIST ("c.d") (PARTITION "e.f" VALUES IN (0));
+CREATE TABLE "g.h" ("i.j" INT PRIMARY KEY)
+PARTITION BY RANGE ("i.j") (PARTITION "k.l" VALUES FROM (0) TO (1));
+---
+
+# Check that the result of pretty-printing quotes the identifiers
+# in the partition list and the partition names properly.
+query TT
+SHOW CREATE TABLE "a.b"
+----
+"a.b"  CREATE TABLE public."a.b" (
+         "c.d" INT8 NOT NULL,
+         CONSTRAINT "a.b_pkey" PRIMARY KEY ("c.d" ASC)
+       ) PARTITION BY LIST ("c.d") (
+         PARTITION "e.f" VALUES IN ((0))
+       )
+       -- Warning: Partitioned table with no zone configurations.
+
+query TT
+SHOW CREATE TABLE "g.h"
+----
+"g.h"  CREATE TABLE public."g.h" (
+         "i.j" INT8 NOT NULL,
+         CONSTRAINT "g.h_pkey" PRIMARY KEY ("i.j" ASC)
+       ) PARTITION BY RANGE ("i.j") (
+         PARTITION "k.l" VALUES FROM (0) TO (1)
+       )
+       -- Warning: Partitioned table with no zone configurations.

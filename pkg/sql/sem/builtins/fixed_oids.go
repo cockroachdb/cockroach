@@ -1397,7 +1397,7 @@ var builtinOidsArray = []string{
 	1417: `pg_typeof(val: anyelement) -> string`,
 	1418: `pg_collation_for(str: anyelement) -> string`,
 	1419: `pg_get_userbyid(role_oid: oid) -> string`,
-	1420: `pg_sequence_parameters(sequence_oid: oid) -> string`,
+	1420: `pg_sequence_parameters(sequence_oid: oid) -> tuple{int AS start_value, int AS minimum_value, int AS maxmimum_value, int AS increment, bool AS cycle_option, int AS cache_size, oid AS data_type}`,
 	1421: `format_type(type_oid: oid, typemod: int) -> string`,
 	1422: `col_description(table_oid: oid, column_number: int) -> string`,
 	1423: `obj_description(object_oid: oid) -> string`,
@@ -2012,7 +2012,6 @@ var builtinOidsArray = []string{
 	2033: `to_regtype(text: string) -> regtype`,
 	2035: `pg_get_functiondef(func_oid: oid) -> string`,
 	2036: `crdb_internal.create_tenant(id: int, name: string) -> int`,
-	2037: `crdb_internal.rename_tenant(id: int, name: string) -> int`,
 	2038: `crdb_internal.redact_descriptor(descriptor: bytes) -> bytes`,
 	2039: `crdb_internal.descriptor_with_post_deserialization_changes(descriptor: bytes) -> bytes`,
 	2040: `to_char(timestamp: timestamp, format: string) -> string`,
@@ -2044,6 +2043,7 @@ var builtinOidsArray = []string{
 	2066: `crdb_internal.generate_test_objects(parameters: jsonb) -> jsonb`,
 	2067: `crdb_internal.gen_rand_ident(name_pattern: string, count: int) -> string`,
 	2068: `crdb_internal.gen_rand_ident(name_pattern: string, count: int, parameters: jsonb) -> string`,
+	2069: `crdb_internal.create_tenant(parameters: jsonb) -> int`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid

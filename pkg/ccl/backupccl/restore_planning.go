@@ -76,7 +76,8 @@ const (
 	restoreOptSkipMissingViews          = "skip_missing_views"
 	restoreOptSkipLocalitiesCheck       = "skip_localities_check"
 	restoreOptDebugPauseOn              = "debug_pause_on"
-	restoreOptAsTenant                  = "tenant"
+	restoreOptAsTenant                  = "tenant_name"
+	restoreOptForceTenantID             = "tenant"
 
 	// The temporary database system tables will be restored into for full
 	// cluster backups.
@@ -949,6 +950,7 @@ func restoreTypeCheck(
 			restoreStmt.Options.EncryptionPassphrase,
 			restoreStmt.Options.IntoDB,
 			restoreStmt.Options.NewDBName,
+			restoreStmt.Options.ForceTenantID,
 			restoreStmt.Options.AsTenant,
 			restoreStmt.Options.DebugPauseOn,
 		},
@@ -1096,32 +1098,58 @@ func restorePlanHook(
 	}
 
 	var newTenantID *roachpb.TenantID
-	if restoreStmt.Options.AsTenant != nil {
+	var newTenantName *roachpb.TenantName
+	if restoreStmt.Options.AsTenant != nil || restoreStmt.Options.ForceTenantID != nil {
 		if restoreStmt.DescriptorCoverage == tree.AllDescriptors || !restoreStmt.Targets.TenantID.IsSet() {
-			err := errors.Errorf("%q can only be used when running RESTORE TENANT for a single tenant", restoreOptAsTenant)
+			err := errors.Errorf("options %q/%q can only be used when running RESTORE TENANT for a single tenant",
+				restoreOptAsTenant, restoreOptForceTenantID)
 			return nil, nil, nil, false, err
 		}
-		// TODO(dt): it'd be nice to have TypeAsInt or TypeAsTenantID and then in
-		// sql.y an int_or_placeholder, but right now the hook view of planner only
-		// has TypeAsString so we'll just atoi it.
-		var err error
-		newTenantID, err = func() (*roachpb.TenantID, error) {
-			s, err := exprEval.String(ctx, restoreStmt.Options.AsTenant)
+
+		if restoreStmt.Options.ForceTenantID != nil {
+			var err error
+			newTenantID, err = func() (*roachpb.TenantID, error) {
+				s, err := exprEval.String(ctx, restoreStmt.Options.ForceTenantID)
+				if err != nil {
+					return nil, err
+				}
+				id, err := strconv.ParseUint(s, 10, 64)
+				if err != nil {
+					return nil, err
+				}
+				tid, err := roachpb.MakeTenantID(id)
+				if err != nil {
+					return nil, err
+				}
+				return &tid, err
+			}()
 			if err != nil {
-				return nil, err
+				return nil, nil, nil, false, err
 			}
-			x, err := strconv.Atoi(s)
+		}
+		if restoreStmt.Options.AsTenant != nil {
+			var err error
+			newTenantName, err = func() (*roachpb.TenantName, error) {
+				s, err := exprEval.String(ctx, restoreStmt.Options.AsTenant)
+				if err != nil {
+					return nil, err
+				}
+				tn := roachpb.TenantName(s)
+				if err := tn.IsValid(); err != nil {
+					return nil, err
+				}
+				return &tn, nil
+			}()
 			if err != nil {
-				return nil, err
+				return nil, nil, nil, false, err
 			}
-			if x < int(roachpb.MinTenantID.ToUint64()) {
-				return nil, errors.New("invalid tenant ID value")
+		}
+		if newTenantID == nil && newTenantName != nil {
+			id, err := p.GetAvailableTenantID(ctx, *newTenantName)
+			if err != nil {
+				return nil, nil, nil, false, err
 			}
-			id := roachpb.MustMakeTenantID(uint64(x))
-			return &id, nil
-		}()
-		if err != nil {
-			return nil, nil, nil, false, err
+			newTenantID = &id
 		}
 	}
 
@@ -1156,7 +1184,7 @@ func restorePlanHook(
 
 		return doRestorePlan(
 			ctx, restoreStmt, &exprEval, p, from, incStorage, pw, kms, intoDB,
-			newDBName, newTenantID, endTime, resultsCh, subdir,
+			newDBName, newTenantID, newTenantName, endTime, resultsCh, subdir,
 		)
 	}
 
@@ -1344,6 +1372,7 @@ func doRestorePlan(
 	intoDB string,
 	newDBName string,
 	newTenantID *roachpb.TenantID,
+	newTenantName *roachpb.TenantName,
 	endTime hlc.Timestamp,
 	resultsCh chan<- tree.Datums,
 	subdir string,
@@ -1641,6 +1670,9 @@ func doRestorePlan(
 			}
 			old := roachpb.MustMakeTenantID(tenants[0].ID)
 			tenants[0].ID = newTenantID.ToUint64()
+			if newTenantName != nil {
+				tenants[0].Name = *newTenantName
+			}
 			oldTenantID = &old
 		} else {
 			for _, i := range tenants {
