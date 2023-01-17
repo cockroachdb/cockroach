@@ -281,10 +281,14 @@ func GetParamsAndReturnType(impl overloadImpl) (TypeList, ReturnTyper) {
 type TypeList interface {
 	// Match checks if all types in the TypeList match the corresponding elements in types.
 	Match(types []*types.T) bool
+
+	MatchParams(types []*types.T) bool
 	// MatchAt checks if the parameter type at index i of the TypeList matches type typ.
 	// In all implementations, types.Null will match with each parameter type, allowing
 	// NULL values to be used as arguments.
 	MatchAt(typ *types.T, i int) bool
+
+	MatchParamAt(typ *types.T, i int) bool
 	// MatchLen checks that the TypeList can support l parameters.
 	MatchLen(l int) bool
 	// GetAt returns the type at the given index in the TypeList, or nil if the TypeList
@@ -324,6 +328,18 @@ func (p ParamTypes) Match(types []*types.T) bool {
 	return true
 }
 
+func (p ParamTypes) MatchParams(types []*types.T) bool {
+	if len(types) != len(p) {
+		return false
+	}
+	for i := range types {
+		if !p.MatchParamAt(types[i], i) {
+			return false
+		}
+	}
+	return true
+}
+
 // MatchAt is part of the TypeList interface.
 func (p ParamTypes) MatchAt(typ *types.T, i int) bool {
 	// The parameterized types for Tuples are checked in the type checking
@@ -335,6 +351,13 @@ func (p ParamTypes) MatchAt(typ *types.T, i int) bool {
 		typ = types.AnyTuple
 	}
 	return i < len(p) && (typ.Family() == types.UnknownFamily || p[i].Typ.Equivalent(typ))
+}
+
+func (p ParamTypes) MatchParamAt(typ *types.T, i int) bool {
+	if typ.Family() == types.TupleFamily {
+		typ = types.AnyTuple
+	}
+	return i < len(p) && (typ.Family() == types.UnknownFamily || p[i].Typ.Identical(typ))
 }
 
 // MatchLen is part of the TypeList interface.
@@ -391,8 +414,16 @@ func (HomogeneousType) Match(types []*types.T) bool {
 	return true
 }
 
+func (HomogeneousType) MatchParams(types []*types.T) bool {
+	return true
+}
+
 // MatchAt is part of the TypeList interface.
 func (HomogeneousType) MatchAt(typ *types.T, i int) bool {
+	return true
+}
+
+func (HomogeneousType) MatchParamAt(typ *types.T, i int) bool {
 	return true
 }
 
@@ -438,12 +469,20 @@ func (v VariadicType) Match(types []*types.T) bool {
 	return true
 }
 
+func (VariadicType) MatchParams(types []*types.T) bool {
+	return true
+}
+
 // MatchAt is part of the TypeList interface.
 func (v VariadicType) MatchAt(typ *types.T, i int) bool {
 	if i < len(v.FixedTypes) {
 		return typ.Family() == types.UnknownFamily || v.FixedTypes[i].Equivalent(typ)
 	}
 	return typ.Family() == types.UnknownFamily || v.VarType.Equivalent(typ)
+}
+
+func (VariadicType) MatchParamAt(typ *types.T, i int) bool {
+	return true
 }
 
 // MatchLen is part of the TypeList interface.

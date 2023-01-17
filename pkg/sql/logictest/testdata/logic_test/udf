@@ -2792,3 +2792,13 @@ ORDER BY oid;
 100259  f_93314_alias   105  1546506610  14  false  false  false  v  0  100258  ·  {}  NULL  SELECT i, e FROM test.public.t_93314_alias ORDER BY i LIMIT 1;
 100263  f_93314_comp    105  1546506610  14  false  false  false  v  0  100260  ·  {}  NULL  SELECT (1, 2);
 100264  f_93314_comp_t  105  1546506610  14  false  false  false  v  0  100262  ·  {}  NULL  SELECT a, c FROM test.public.t_93314_comp LIMIT 1;
+
+# Regression test for #94146
+statement ok
+CREATE FUNCTION f_94146(i INT2) RETURNS INT STRICT LANGUAGE SQL AS 'SELECT 2';
+CREATE FUNCTION f_94146(i INT4) RETURNS INT STRICT LANGUAGE SQL AS 'SELECT 10';
+
+query I
+SELECT f_94146(3276700) -- check with int (bigger than smallInt)
+----
+10
