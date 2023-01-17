@@ -317,10 +317,7 @@ type Server struct {
 
 	idxRecommendationsCache *idxrecommendations.IndexRecCache
 
-	mu struct {
-		syncutil.Mutex
-		connectionCount int64
-	}
+	connectionCount int64
 }
 
 // Metrics collects timeseries data about SQL activity.
@@ -751,35 +748,31 @@ func (s *Server) SetupConn(
 
 // IncrementConnectionCount increases connectionCount by 1.
 func (s *Server) IncrementConnectionCount() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.mu.connectionCount++
+	atomic.AddInt64(&s.connectionCount, 1)
 }
 
 // DecrementConnectionCount decreases connectionCount by 1.
 func (s *Server) DecrementConnectionCount() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.mu.connectionCount--
+	atomic.AddInt64(&s.connectionCount, -1)
 }
 
 // IncrementConnectionCountIfLessThan increases connectionCount by and returns true if allowedConnectionCount < max,
 // otherwise it does nothing and returns false.
 func (s *Server) IncrementConnectionCountIfLessThan(max int64) bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	lt := s.mu.connectionCount < max
-	if lt {
-		s.mu.connectionCount++
+	for {
+		connectionCount := atomic.LoadInt64(&s.connectionCount)
+		if connectionCount >= max {
+			return false
+		}
+		if atomic.CompareAndSwapInt64(&s.connectionCount, connectionCount, connectionCount+1) {
+			return true
+		}
 	}
-	return lt
 }
 
 // GetConnectionCount returns the current number of connections.
 func (s *Server) GetConnectionCount() int64 {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.mu.connectionCount
+	return atomic.LoadInt64(&s.connectionCount)
 }
 
 // ConnectionHandler is the interface between the result of SetupConn
