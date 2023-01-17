@@ -18,12 +18,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/descmetadata"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
@@ -64,21 +64,7 @@ func (p *planner) SchemaChange(ctx context.Context, stmt tree.Statement) (planNo
 	}
 	scs := p.extendedEvalCtx.SchemaChangerState
 	scs.stmts = append(scs.stmts, p.stmt.SQL)
-	deps := scdeps.NewBuilderDependencies(
-		p.ExecCfg().NodeInfo.LogicalClusterID(),
-		p.ExecCfg().Codec,
-		p.Txn(),
-		p.Descriptors(),
-		NewSkippingCacheSchemaResolver, /* schemaResolverFactory */
-		p,                              /* authAccessor */
-		p,                              /* astFormatter */
-		p,                              /* featureChecker */
-		p.SessionData(),
-		p.ExecCfg().Settings,
-		scs.stmts,
-		p.execCfg.InternalExecutor,
-		p,
-	)
+	deps := p.newSchemaChangeBuilderDependencies(scs.stmts)
 	state, err := scbuild.Build(ctx, deps, scs.state, stmt)
 	if scerrors.HasNotImplemented(err) &&
 		mode != sessiondatapb.UseNewSchemaChangerUnsafeAlways {
@@ -98,6 +84,25 @@ func (p *planner) SchemaChange(ctx context.Context, stmt tree.Statement) (planNo
 		lastState:    scs.state,
 		plannedState: state,
 	}, nil
+}
+
+func (p *planner) newSchemaChangeBuilderDependencies(statements []string) scbuild.Dependencies {
+	return scdeps.NewBuilderDependencies(
+		p.ExecCfg().NodeInfo.LogicalClusterID(),
+		p.ExecCfg().Codec,
+		p.InternalSQLTxn(),
+		NewSkippingCacheSchemaResolver, /* schemaResolverFactory */
+		p,                              /* authAccessor */
+		p,                              /* astFormatter */
+		p,                              /* featureChecker */
+		p.SessionData(),
+		p.ExecCfg().Settings,
+		statements,
+		p,
+		NewSchemaChangerBuildEventLogger(p.InternalSQLTxn(), p.ExecCfg()),
+		NewReferenceProviderFactory(p),
+		p.EvalContext().DescIDGenerator,
+	)
 }
 
 // waitForDescriptorIDGeneratorMigration polls the system.descriptor table (in
@@ -130,14 +135,15 @@ func (p *planner) waitForDescriptorIDGeneratorMigration(ctx context.Context) err
 				timeutil.Since(start),
 			)
 		}
-		if err := p.ExecCfg().InternalExecutorFactory.DescsTxn(ctx, p.ExecCfg().DB, func(
-			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+		if err := p.ExecCfg().InternalDB.DescsTxn(ctx, func(
+			ctx context.Context, txn descs.Txn,
 		) error {
-			if err := txn.SetFixedTimestamp(ctx, now); err != nil {
+			kvTxn := txn.KV()
+			if err := kvTxn.SetFixedTimestamp(ctx, now); err != nil {
 				return err
 			}
 			k := catalogkeys.MakeDescMetadataKey(p.ExecCfg().Codec, keys.DescIDSequenceID)
-			result, err := txn.Get(ctx, k)
+			result, err := txn.KV().Get(ctx, k)
 			if err != nil {
 				return err
 			}
@@ -191,13 +197,13 @@ func (p *planner) waitForDescriptorSchemaChanges(
 			)
 		}
 		blocked := false
-		if err := p.ExecCfg().InternalExecutorFactory.DescsTxn(ctx, p.ExecCfg().DB, func(
-			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+		if err := p.ExecCfg().InternalDB.DescsTxn(ctx, func(
+			ctx context.Context, txn descs.Txn,
 		) error {
-			if err := txn.SetFixedTimestamp(ctx, now); err != nil {
+			if err := txn.KV().SetFixedTimestamp(ctx, now); err != nil {
 				return err
 			}
-			desc, err := descriptors.ByID(txn).WithoutNonPublic().Get().Desc(ctx, descID)
+			desc, err := txn.Descriptors().ByID(txn.KV()).WithoutNonPublic().Get().Desc(ctx, descID)
 			if err != nil {
 				return err
 			}
@@ -243,21 +249,7 @@ func (s *schemaChangePlanNode) startExec(params runParams) error {
 	// to re-plan the state to include the current statement since the statement
 	// phase was not executed.
 	if !reflect.DeepEqual(s.lastState.Current, scs.state.Current) {
-		deps := scdeps.NewBuilderDependencies(
-			p.ExecCfg().NodeInfo.LogicalClusterID(),
-			p.ExecCfg().Codec,
-			p.Txn(),
-			p.Descriptors(),
-			NewSkippingCacheSchemaResolver,
-			p,
-			p,
-			p,
-			p.SessionData(),
-			p.ExecCfg().Settings,
-			scs.stmts,
-			p.ExecCfg().InternalExecutor,
-			p,
-		)
+		deps := p.newSchemaChangeBuilderDependencies(scs.stmts)
 		state, err := scbuild.Build(params.ctx, deps, scs.state, s.stmt)
 		if err != nil {
 			return err
@@ -266,15 +258,18 @@ func (s *schemaChangePlanNode) startExec(params runParams) error {
 		s.plannedState = state
 	}
 
+	// Disable KV tracing for statement phase execution.
+	// Operation side effects are in-memory only.
+	const kvTrace = false
 	runDeps := newSchemaChangerTxnRunDependencies(
 		params.ctx,
 		p.SessionData(),
 		p.User(),
 		p.ExecCfg(),
-		p.Txn(),
+		p.InternalSQLTxn(),
 		p.Descriptors(),
 		p.EvalContext(),
-		p.ExtendedEvalContext().Tracing.KVTracingEnabled(),
+		kvTrace,
 		scs.jobID,
 		scs.stmts,
 	)
@@ -294,7 +289,7 @@ func newSchemaChangerTxnRunDependencies(
 	sessionData *sessiondata.SessionData,
 	user username.SQLUsername,
 	execCfg *ExecutorConfig,
-	txn *kv.Txn,
+	txn isql.Txn,
 	descriptors *descs.Collection,
 	evalContext *eval.Context,
 	kvTrace bool,
@@ -303,10 +298,9 @@ func newSchemaChangerTxnRunDependencies(
 ) scexec.Dependencies {
 	metaDataUpdater := descmetadata.NewMetadataUpdater(
 		ctx,
-		execCfg.InternalExecutorFactory,
+		txn,
 		descriptors,
 		&execCfg.Settings.SV,
-		txn,
 		sessionData,
 	)
 	return scdeps.NewExecutorDependencies(
@@ -318,6 +312,7 @@ func newSchemaChangerTxnRunDependencies(
 		descriptors,
 		execCfg.JobRegistry,
 		execCfg.IndexBackfiller,
+		execCfg.IndexSpanSplitter,
 		execCfg.IndexMerger,
 		// Use a no-op tracker and flusher because while backfilling in a
 		// transaction because we know there's no existing progress and there's
@@ -327,7 +322,6 @@ func newSchemaChangerTxnRunDependencies(
 		execCfg.Validator,
 		scdeps.NewConstantClock(evalContext.GetTxnTimestamp(time.Microsecond).Time),
 		metaDataUpdater,
-		NewSchemaChangerEventLogger(txn, execCfg, 1),
 		execCfg.StatsRefresher,
 		execCfg.DeclarativeSchemaChangerTestingKnobs,
 		kvTrace,

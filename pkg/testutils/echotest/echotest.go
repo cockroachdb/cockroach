@@ -197,6 +197,7 @@ func (w *Walker) Check(t T) {
 	}
 	if len(w.missingFiles) > 0 {
 		mk := fmt.Sprintf(`mkdir -p %[1]q && cd %[1]q && echo 'echo'`, w.dir)
+		_ = os.MkdirAll(w.dir, 0755)
 		for _, f := range w.missingFiles {
 			if w.populate {
 				if err := os.WriteFile(filepath.Join(w.dir, f), []byte("echo\n"), 0644); err != nil {

@@ -14,13 +14,13 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -168,23 +168,22 @@ func withPlanner(
 	sd sessiondatapb.SessionData,
 	fn func(ctx context.Context, execCtx sql.JobExecContext, cleanup func()) error,
 ) error {
-	return sql.DescsTxn(ctx, execCfg,
-		func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
-			if err := txn.SetFixedTimestamp(ctx, schemaTS); err != nil {
-				return err
-			}
+	return sql.DescsTxn(ctx, execCfg, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+		if err := txn.KV().SetFixedTimestamp(ctx, schemaTS); err != nil {
+			return err
+		}
 
-			// Current implementation relies on row-by-row evaluation;
-			// so, ensure vectorized engine is off.
-			sd.VectorizeMode = sessiondatapb.VectorizeOff
-			planner, cleanup := sql.NewInternalPlanner(
-				"cdc-expr", txn,
-				user,
-				&sql.MemoryMetrics{}, // TODO(yevgeniy): Use appropriate metrics.
-				execCfg,
-				sd,
-				sql.WithDescCollection(col),
-			)
-			return fn(ctx, planner.(sql.JobExecContext), cleanup)
-		})
+		// Current implementation relies on row-by-row evaluation;
+		// so, ensure vectorized engine is off.
+		sd.VectorizeMode = sessiondatapb.VectorizeOff
+		planner, cleanup := sql.NewInternalPlanner(
+			"cdc-expr", txn.KV(),
+			user,
+			&sql.MemoryMetrics{}, // TODO(yevgeniy): Use appropriate metrics.
+			execCfg,
+			sd,
+			sql.WithDescCollection(col),
+		)
+		return fn(ctx, planner.(sql.JobExecContext), cleanup)
+	})
 }

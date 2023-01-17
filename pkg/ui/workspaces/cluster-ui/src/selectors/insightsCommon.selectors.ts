@@ -8,16 +8,10 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { FlattenedStmtInsights } from "src/api/insightsApi";
 import {
   mergeTxnInsightDetails,
-  flattenTxnInsightsToStmts,
-  FlattenedStmtInsightEvent,
+  StmtInsightEvent,
   TxnInsightEvent,
-  TxnContentionInsightEvent,
-  MergedTxnInsightEvent,
-  mergeTxnContentionAndStmtInsights,
-  TxnContentionInsightDetails,
   TxnInsightDetails,
 } from "src/insights";
 
@@ -25,17 +19,11 @@ import {
 // state in db-console and cluster-ui. This file contains selector functions
 // and combiners that can be reused across both packages.
 
-export const selectFlattenedStmtInsightsCombiner = (
-  executionInsights: TxnInsightEvent[],
-): FlattenedStmtInsights => {
-  return flattenTxnInsightsToStmts(executionInsights);
-};
-
 export const selectStatementInsightDetailsCombiner = (
-  statementInsights: FlattenedStmtInsights,
+  statementInsights: StmtInsightEvent[],
   executionID: string,
-): FlattenedStmtInsightEvent | null => {
-  if (!statementInsights || statementInsights?.length < 1 || !executionID) {
+): StmtInsightEvent | null => {
+  if (!statementInsights || !executionID) {
     return null;
   }
 
@@ -44,22 +32,10 @@ export const selectStatementInsightDetailsCombiner = (
   );
 };
 
-export const selectTxnInsightsCombiner = (
-  txnInsightsFromStmts: TxnInsightEvent[],
-  txnContentionInsights: TxnContentionInsightEvent[],
-): MergedTxnInsightEvent[] => {
-  if (!txnInsightsFromStmts && !txnContentionInsights) return [];
-
-  // Merge the two insights lists.
-  return mergeTxnContentionAndStmtInsights(
-    txnInsightsFromStmts,
-    txnContentionInsights,
-  );
-};
-
 export const selectTxnInsightDetailsCombiner = (
-  txnInsightsFromStmts: TxnInsightEvent,
-  txnContentionInsights: TxnContentionInsightDetails,
+  txnInsights: TxnInsightEvent,
+  txnInsightsDetails: TxnInsightDetails,
+  stmtInsights: StmtInsightEvent[] | null,
 ): TxnInsightDetails => {
-  return mergeTxnInsightDetails(txnInsightsFromStmts, txnContentionInsights);
+  return mergeTxnInsightDetails(txnInsights, stmtInsights, txnInsightsDetails);
 };

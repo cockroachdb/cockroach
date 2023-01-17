@@ -35,11 +35,11 @@ func init() {
 						BackReferencedTableID: this.TableID,
 					}
 				}),
-				emit(func(this *scpb.ColumnOnUpdateExpression) *scop.UpdateBackReferencesInSequences {
+				emit(func(this *scpb.ColumnOnUpdateExpression) *scop.UpdateTableBackReferencesInSequences {
 					if len(this.UsesSequenceIDs) == 0 {
 						return nil
 					}
-					return &scop.UpdateBackReferencesInSequences{
+					return &scop.UpdateTableBackReferencesInSequences{
 						SequenceIDs:            this.UsesSequenceIDs,
 						BackReferencedTableID:  this.TableID,
 						BackReferencedColumnID: this.ColumnID,
@@ -65,11 +65,11 @@ func init() {
 						BackReferencedTableID: this.TableID,
 					}
 				}),
-				emit(func(this *scpb.ColumnOnUpdateExpression) *scop.UpdateBackReferencesInSequences {
+				emit(func(this *scpb.ColumnOnUpdateExpression) *scop.UpdateTableBackReferencesInSequences {
 					if len(this.UsesSequenceIDs) == 0 {
 						return nil
 					}
-					return &scop.UpdateBackReferencesInSequences{
+					return &scop.UpdateTableBackReferencesInSequences{
 						SequenceIDs:            this.UsesSequenceIDs,
 						BackReferencedTableID:  this.TableID,
 						BackReferencedColumnID: this.ColumnID,

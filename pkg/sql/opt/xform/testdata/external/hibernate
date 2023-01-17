@@ -1211,30 +1211,30 @@ where
 project
  ├── columns: id1_2_:1!null address2_2_:2 createdo3_2_:3 name4_2_:4 nickname5_2_:5 version6_2_:6!null
  ├── fd: (1)-->(2-6)
- └── select
-      ├── columns: person0_.id:1!null address:2 createdon:3 name:4 nickname:5 version:6!null phones2_.id:9!null phones2_.order_id:13!null max:23!null
+ └── inner-join (lookup person [as=person0_])
+      ├── columns: person0_.id:1!null address:2 createdon:3 name:4 nickname:5 version:6!null phones2_.id:9!null phones2_.person_id:12!null phones2_.order_id:13!null max:23!null
+      ├── key columns: [12] = [1]
+      ├── lookup columns are key
       ├── key: (9)
-      ├── fd: (1)-->(2-6), (9)-->(1-6,13,23), (13)==(23), (23)==(13)
-      ├── group-by (hash)
-      │    ├── columns: person0_.id:1!null address:2 createdon:3 name:4 nickname:5 version:6!null phones2_.id:9!null phones2_.order_id:13 max:23!null
-      │    ├── grouping columns: phones2_.id:9!null
+      ├── fd: (1)-->(2-6), (9)-->(12,13,23), (13)==(23), (23)==(13), (1)==(12), (12)==(1)
+      ├── select
+      │    ├── columns: phones2_.id:9!null phones2_.person_id:12!null phones2_.order_id:13!null max:23!null
       │    ├── key: (9)
-      │    ├── fd: (1)-->(2-6), (9)-->(1-6,13,23)
-      │    ├── inner-join (hash)
-      │    │    ├── columns: person0_.id:1!null address:2 createdon:3 name:4 nickname:5 version:6!null phones2_.id:9!null phones2_.phone_type:11!null phones2_.person_id:12!null phones2_.order_id:13 phones1_.person_id:19!null phones1_.order_id:20!null
-      │    │    ├── fd: ()-->(11), (1)-->(2-6), (9)-->(12,13), (1)==(12,19), (12)==(1,19), (19)==(1,12)
-      │    │    ├── select
-      │    │    │    ├── columns: phones1_.person_id:19 phones1_.order_id:20!null
-      │    │    │    ├── scan phone [as=phones1_]
-      │    │    │    │    └── columns: phones1_.person_id:19 phones1_.order_id:20
-      │    │    │    └── filters
-      │    │    │         └── phones1_.order_id:20 IS NOT NULL [outer=(20), constraints=(/20: (/NULL - ]; tight)]
-      │    │    ├── inner-join (lookup person [as=person0_])
-      │    │    │    ├── columns: person0_.id:1!null address:2 createdon:3 name:4 nickname:5 version:6!null phones2_.id:9!null phones2_.phone_type:11!null phones2_.person_id:12!null phones2_.order_id:13
-      │    │    │    ├── key columns: [12] = [1]
-      │    │    │    ├── lookup columns are key
-      │    │    │    ├── key: (9)
-      │    │    │    ├── fd: ()-->(11), (1)-->(2-6), (9)-->(12,13), (1)==(12), (12)==(1)
+      │    ├── fd: (9)-->(12,13,23), (13)==(23), (23)==(13)
+      │    ├── group-by (hash)
+      │    │    ├── columns: phones2_.id:9!null phones2_.person_id:12!null phones2_.order_id:13 max:23!null
+      │    │    ├── grouping columns: phones2_.id:9!null
+      │    │    ├── key: (9)
+      │    │    ├── fd: (9)-->(12,13,23)
+      │    │    ├── inner-join (hash)
+      │    │    │    ├── columns: phones2_.id:9!null phones2_.phone_type:11!null phones2_.person_id:12!null phones2_.order_id:13 phones1_.person_id:19!null phones1_.order_id:20!null
+      │    │    │    ├── fd: ()-->(11), (9)-->(12,13), (12)==(19), (19)==(12)
+      │    │    │    ├── select
+      │    │    │    │    ├── columns: phones1_.person_id:19 phones1_.order_id:20!null
+      │    │    │    │    ├── scan phone [as=phones1_]
+      │    │    │    │    │    └── columns: phones1_.person_id:19 phones1_.order_id:20
+      │    │    │    │    └── filters
+      │    │    │    │         └── phones1_.order_id:20 IS NOT NULL [outer=(20), constraints=(/20: (/NULL - ]; tight)]
       │    │    │    ├── select
       │    │    │    │    ├── columns: phones2_.id:9!null phones2_.phone_type:11!null phones2_.person_id:12 phones2_.order_id:13
       │    │    │    │    ├── key: (9)
@@ -1245,28 +1245,18 @@ project
       │    │    │    │    │    └── fd: (9)-->(11-13)
       │    │    │    │    └── filters
       │    │    │    │         └── phones2_.phone_type:11 = 'LAND_LINE' [outer=(11), constraints=(/11: [/'LAND_LINE' - /'LAND_LINE']; tight), fd=()-->(11)]
-      │    │    │    └── filters (true)
-      │    │    └── filters
-      │    │         └── person0_.id:1 = phones1_.person_id:19 [outer=(1,19), constraints=(/1: (/NULL - ]; /19: (/NULL - ]), fd=(1)==(19), (19)==(1)]
-      │    └── aggregations
-      │         ├── max [as=max:23, outer=(20)]
-      │         │    └── phones1_.order_id:20
-      │         ├── const-agg [as=phones2_.order_id:13, outer=(13)]
-      │         │    └── phones2_.order_id:13
-      │         ├── const-agg [as=address:2, outer=(2)]
-      │         │    └── address:2
-      │         ├── const-agg [as=createdon:3, outer=(3)]
-      │         │    └── createdon:3
-      │         ├── const-agg [as=name:4, outer=(4)]
-      │         │    └── name:4
-      │         ├── const-agg [as=nickname:5, outer=(5)]
-      │         │    └── nickname:5
-      │         ├── const-agg [as=version:6, outer=(6)]
-      │         │    └── version:6
-      │         └── const-agg [as=person0_.id:1, outer=(1)]
-      │              └── person0_.id:1
-      └── filters
-           └── phones2_.order_id:13 = max:23 [outer=(13,23), constraints=(/13: (/NULL - ]; /23: (/NULL - ]), fd=(13)==(23), (23)==(13)]
+      │    │    │    └── filters
+      │    │    │         └── phones2_.person_id:12 = phones1_.person_id:19 [outer=(12,19), constraints=(/12: (/NULL - ]; /19: (/NULL - ]), fd=(12)==(19), (19)==(12)]
+      │    │    └── aggregations
+      │    │         ├── max [as=max:23, outer=(20)]
+      │    │         │    └── phones1_.order_id:20
+      │    │         ├── const-agg [as=phones2_.person_id:12, outer=(12)]
+      │    │         │    └── phones2_.person_id:12
+      │    │         └── const-agg [as=phones2_.order_id:13, outer=(13)]
+      │    │              └── phones2_.order_id:13
+      │    └── filters
+      │         └── phones2_.order_id:13 = max:23 [outer=(13,23), constraints=(/13: (/NULL - ]; /23: (/NULL - ]), fd=(13)==(23), (23)==(13)]
+      └── filters (true)
 
 opt
 select

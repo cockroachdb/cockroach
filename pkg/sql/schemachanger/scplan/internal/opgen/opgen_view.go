@@ -20,8 +20,7 @@ func init() {
 	opRegistry.register((*scpb.View)(nil),
 		toPublic(
 			scpb.Status_ABSENT,
-			equiv(scpb.Status_DROPPED),
-			to(scpb.Status_TXN_DROPPED,
+			to(scpb.Status_DROPPED,
 				emit(func(this *scpb.View) *scop.NotImplemented {
 					return notImplemented(this)
 				}),
@@ -36,13 +35,6 @@ func init() {
 		),
 		toAbsent(
 			scpb.Status_PUBLIC,
-			to(scpb.Status_TXN_DROPPED,
-				emit(func(this *scpb.View, md *opGenContext) *scop.MarkDescriptorAsSyntheticallyDropped {
-					return &scop.MarkDescriptorAsSyntheticallyDropped{
-						DescriptorID: this.ViewID,
-					}
-				}),
-			),
 			to(scpb.Status_DROPPED,
 				revertible(false),
 				emit(func(this *scpb.View) *scop.MarkDescriptorAsDropped {
@@ -59,25 +51,17 @@ func init() {
 						TypeIDs:                    this.UsesTypeIDs,
 					}
 				}),
-				emit(func(this *scpb.View) *scop.RemoveViewBackReferencesInRelations {
+				emit(func(this *scpb.View) *scop.RemoveBackReferencesInRelations {
 					if len(this.UsesRelationIDs) == 0 {
 						return nil
 					}
-					return &scop.RemoveViewBackReferencesInRelations{
-						BackReferencedViewID: this.ViewID,
-						RelationIDs:          this.UsesRelationIDs,
-					}
-				}),
-				emit(func(this *scpb.View) *scop.RemoveAllTableComments {
-					return &scop.RemoveAllTableComments{
-						TableID: this.ViewID,
+					return &scop.RemoveBackReferencesInRelations{
+						BackReferencedID: this.ViewID,
+						RelationIDs:      this.UsesRelationIDs,
 					}
 				}),
 			),
 			to(scpb.Status_ABSENT,
-				emit(func(this *scpb.View, md *opGenContext) *scop.LogEvent {
-					return newLogEventOp(this, md)
-				}),
 				emit(func(this *scpb.View, md *opGenContext) *scop.CreateGCJobForTable {
 					if this.IsMaterialized && !md.ActiveVersion.IsActive(clusterversion.V23_1) {
 						return &scop.CreateGCJobForTable{

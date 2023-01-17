@@ -15,8 +15,11 @@ import {
 } from "src/insightsTable/insightsTable";
 import { SummaryCard, SummaryCardItem } from "src/summaryCard";
 import { capitalize, Duration } from "src/util";
-import { DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_UTC } from "src/util/format";
-import { FlattenedStmtInsightEvent } from "../types";
+import {
+  Count,
+  DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_UTC,
+} from "src/util/format";
+import { StmtInsightEvent } from "../types";
 import classNames from "classnames/bind";
 import { CockroachCloudContext } from "../../contexts";
 
@@ -42,18 +45,19 @@ const tableCx = classNames.bind(insightTableStyles);
 const summaryCardStylesCx = classNames.bind(summaryCardStyles);
 
 export interface StatementInsightDetailsOverviewTabProps {
-  insightEventDetails: FlattenedStmtInsightEvent;
+  insightEventDetails: StmtInsightEvent;
   setTimeScale: (ts: TimeScale) => void;
+  hasAdminRole: boolean;
 }
 
 export const StatementInsightDetailsOverviewTab: React.FC<
   StatementInsightDetailsOverviewTabProps
-> = ({ insightEventDetails, setTimeScale }) => {
+> = ({ insightEventDetails, setTimeScale, hasAdminRole }) => {
   const isCockroachCloud = useContext(CockroachCloudContext);
 
   const insightsColumns = useMemo(
-    () => makeInsightsColumns(isCockroachCloud),
-    [isCockroachCloud],
+    () => makeInsightsColumns(isCockroachCloud, hasAdminRole),
+    [isCockroachCloud, hasAdminRole],
   );
 
   const insightDetails = insightEventDetails;
@@ -114,12 +118,16 @@ export const StatementInsightDetailsOverviewTab: React.FC<
               value={Duration(insightDetails.elapsedTimeMillis * 1e6)}
             />
             <SummaryCardItem
+              label={"CPU Time"}
+              value={Duration(insightDetails.cpuSQLNanos)}
+            />
+            <SummaryCardItem
               label="Rows Read"
-              value={insightDetails.rowsRead}
+              value={Count(insightDetails.rowsRead)}
             />
             <SummaryCardItem
               label="Rows Written"
-              value={insightDetails.rowsWritten}
+              value={Count(insightDetails.rowsWritten)}
             />
             <SummaryCardItem
               label="Transaction Priority"
@@ -135,7 +143,7 @@ export const StatementInsightDetailsOverviewTab: React.FC<
           <SummaryCard>
             <SummaryCardItem
               label="Transaction Retries"
-              value={insightDetails.retries}
+              value={Count(insightDetails.retries)}
             />
             {insightDetails.lastRetryReason && (
               <SummaryCardItem

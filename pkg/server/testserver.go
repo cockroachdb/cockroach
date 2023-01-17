@@ -13,6 +13,7 @@ package server
 import (
 	"bytes"
 	"context"
+	gosql "database/sql"
 	"fmt"
 	"net"
 	"net/http"
@@ -35,8 +36,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security/certnames"
@@ -50,6 +49,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/ts"
@@ -61,6 +61,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	addrutil "github.com/cockroachdb/cockroach/pkg/util/netutil/addr"
+	"github.com/cockroachdb/cockroach/pkg/util/rangedesc"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -280,6 +281,7 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 	cfg.Stores = base.StoreSpecList{Specs: params.StoreSpecs}
 	if params.TempStorageConfig.InMemory || params.TempStorageConfig.Path != "" {
 		cfg.TempStorageConfig = params.TempStorageConfig
+		cfg.TempStorageConfig.Settings = st
 	}
 
 	cfg.DisableDefaultTestTenant = params.DisableDefaultTestTenant
@@ -614,17 +616,6 @@ func (ts *TestServer) Start(ctx context.Context) error {
 	return nil
 }
 
-type tenantProtectedTSProvider struct {
-	protectedts.Provider
-	st *cluster.Settings
-}
-
-func (d tenantProtectedTSProvider) Protect(
-	ctx context.Context, txn *kv.Txn, rec *ptpb.Record,
-) error {
-	return d.Provider.Protect(ctx, txn, rec)
-}
-
 // TestTenant is an in-memory instantiation of the SQL-only process created for
 // each active Cockroach tenant. TestTenant provides tests with access to
 // internal methods and state on SQLServer. It is typically started in tests by
@@ -804,7 +795,131 @@ func (t *TestTenant) Tracer() *tracing.Tracer {
 	return t.SQLServer.ambientCtx.Tracer
 }
 
-// StartTenant starts a SQL tenant communicating with this TestServer.
+// WaitForTenantEndKeySplit is part of the TestTenantInterface.
+func (t *TestTenant) WaitForTenantEndKeySplit(ctx context.Context) error {
+	// Wait until the tenant end key split happens.
+	return testutils.SucceedsWithinError(func() error {
+		factory := t.RangeDescIteratorFactory().(rangedesc.IteratorFactory)
+
+		iterator, err := factory.NewIterator(ctx, t.Codec().TenantSpan())
+		if err != nil {
+			return err
+		}
+		if !iterator.Valid() {
+			return errors.New("range iterator has no ranges")
+		}
+
+		for iterator.Valid() {
+			rangeDesc := iterator.CurRangeDescriptor()
+			if rangeDesc.EndKey.Compare(roachpb.RKeyMax) == 0 {
+				return errors.Newf("range ID %d end key not split", rangeDesc.RangeID)
+			}
+			iterator.Next()
+		}
+		return nil
+	}, 10*time.Second)
+}
+
+// StartSharedProcessTenant is part of TestServerInterface.
+func (ts *TestServer) StartSharedProcessTenant(
+	ctx context.Context, args base.TestSharedProcessTenantArgs,
+) (serverutils.TestTenantInterface, *gosql.DB, error) {
+	if err := args.TenantName.IsValid(); err != nil {
+		return nil, nil, err
+	}
+
+	// Save the args for use if the server needs to be created.
+	ts.Server.serverController.testArgs[args.TenantName] = args
+
+	tenantRow, err := ts.InternalExecutor().(*sql.InternalExecutor).QueryRow(
+		ctx, "testserver-check-tenant-active", nil, /* txn */
+		"SELECT id FROM system.tenants WHERE name=$1 AND active=true",
+		args.TenantName,
+	)
+	if err != nil {
+		return nil, nil, err
+	}
+	tenantExists := tenantRow != nil
+
+	if tenantExists {
+		// A tenant with the given name already exists; let's check that
+		// it matches the ID that this call wants (if any).
+		id := uint64(*tenantRow[0].(*tree.DInt))
+		if args.TenantID.IsSet() && args.TenantID.ToUint64() != id {
+			return nil, nil, errors.Newf("a tenant with name %q exists, but its ID is %d instead of %d",
+				args.TenantName, id, args.TenantID)
+		}
+	} else {
+		// The tenant doesn't exist; let's create it.
+		if args.TenantID.IsSet() {
+			// Create with name and ID.
+			_, err := ts.InternalExecutor().(*sql.InternalExecutor).ExecEx(
+				ctx,
+				"create-tenant",
+				nil, /* txn */
+				sessiondata.NodeUserSessionDataOverride,
+				"SELECT crdb_internal.create_tenant($1,$2)",
+				args.TenantID.ToUint64(), args.TenantName,
+			)
+			if err != nil {
+				return nil, nil, err
+			}
+		} else {
+			// Create with name alone; allocate an ID automatically.
+			_, err := ts.InternalExecutor().(*sql.InternalExecutor).ExecEx(
+				ctx,
+				"create-tenant",
+				nil, /* txn */
+				sessiondata.NodeUserSessionDataOverride,
+				"SELECT crdb_internal.create_tenant($1)",
+				args.TenantName,
+			)
+			if err != nil {
+				return nil, nil, err
+			}
+		}
+		// Also mark it for shared-process execution.
+		_, err := ts.InternalExecutor().(*sql.InternalExecutor).ExecEx(
+			ctx,
+			"start-tenant-shared-service",
+			nil, /* txn */
+			sessiondata.NodeUserSessionDataOverride,
+			"ALTER TENANT $1 START SERVICE SHARED",
+			args.TenantName,
+		)
+		if err != nil {
+			return nil, nil, err
+		}
+	}
+
+	// Instantiate the tenant server.
+	s, err := ts.Server.serverController.startAndWaitForRunningServer(ctx, args.TenantName)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	sqlServerWrapper := s.(*tenantServerWrapper).server
+	sqlServer := sqlServerWrapper.sqlServer
+	hts := &httpTestServer{}
+	hts.t.authentication = sqlServerWrapper.authentication
+	hts.t.sqlServer = sqlServer
+	testTenant := &TestTenant{
+		SQLServer:      sqlServer,
+		Cfg:            sqlServer.cfg,
+		pgPreServer:    sqlServerWrapper.pgPreServer,
+		httpTestServer: hts,
+		drain:          sqlServerWrapper.drainServer,
+	}
+
+	sqlDB, err := serverutils.OpenDBConnE(
+		ts.SQLAddr(), "cluster:"+string(args.TenantName)+"/"+args.UseDatabase, false /* insecure */, ts.stopper)
+	if err != nil {
+		return nil, nil, err
+	}
+	return testTenant, sqlDB, err
+}
+
+// StartTenant is part of TestServerInterface.
 func (ts *TestServer) StartTenant(
 	ctx context.Context, params base.TestTenantArgs,
 ) (serverutils.TestTenantInterface, error) {
@@ -876,27 +991,6 @@ func (ts *TestServer) StartTenant(
 		if row[0] != tree.DNull {
 			params.TenantID = roachpb.MustMakeTenantID(uint64(tree.MustBeDInt(row[0])))
 		}
-	}
-
-	if params.UseServerController {
-		onDemandServer, err := ts.serverController.getOrCreateServer(ctx, params.TenantName)
-		if err != nil {
-			return nil, err
-		}
-		sw := onDemandServer.(*tenantServerWrapper)
-
-		hts := &httpTestServer{}
-		hts.t.authentication = sw.server.authentication
-		hts.t.sqlServer = sw.server.sqlServer
-		hts.t.tenantName = params.TenantName
-
-		return &TestTenant{
-			SQLServer:      sw.server.sqlServer,
-			Cfg:            sw.server.sqlServer.cfg,
-			pgPreServer:    sw.server.pgPreServer,
-			httpTestServer: hts,
-			drain:          sw.server.drainServer,
-		}, err
 	}
 
 	st := params.Settings
@@ -1010,6 +1104,8 @@ func (ts *TestServer) StartTenant(
 		stopper,
 		baseCfg,
 		sqlCfg,
+		ts.recorder,
+		roachpb.NewTenantNameContainer(params.TenantName),
 	)
 	if err != nil {
 		return nil, err
@@ -1225,9 +1321,9 @@ func (ts *TestServer) InternalExecutor() interface{} {
 	return ts.sqlServer.internalExecutor
 }
 
-// InternalExecutorFactory is part of TestServerInterface.
-func (ts *TestServer) InternalExecutorFactory() interface{} {
-	return ts.sqlServer.internalExecutorFactory
+// InternalDB is part of TestServerInterface.
+func (ts *TestServer) InternalDB() interface{} {
+	return ts.sqlServer.internalDB
 }
 
 // GetNode exposes the Server's Node.
@@ -1523,6 +1619,12 @@ func (ts *TestServer) TracerI() interface{} {
 // Tracer is like TracerI(), but returns the actual type.
 func (ts *TestServer) Tracer() *tracing.Tracer {
 	return ts.node.storeCfg.AmbientCtx.Tracer
+}
+
+// WaitForTenantEndKeySplit is part of the TestTenantInterface.
+func (ts *TestServer) WaitForTenantEndKeySplit(context.Context) error {
+	// Does not apply to system tenant.
+	return nil
 }
 
 // ForceTableGC is part of TestServerInterface.

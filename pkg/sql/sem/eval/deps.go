@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/lib/pq/oid"
@@ -65,9 +66,9 @@ type DatabaseCatalog interface {
 	// whether it exists.
 	SchemaExists(ctx context.Context, dbName, scName string) (found bool, err error)
 
-	// HasAnyPrivilege returns whether the current user has privilege to access
-	// the given object.
-	HasAnyPrivilege(ctx context.Context, specifier HasPrivilegeSpecifier, user username.SQLUsername, privs []privilege.Privilege) (HasAnyPrivilegeResult, error)
+	// HasAnyPrivilegeForSpecifier returns whether the current user has privilege
+	// to access the given object.
+	HasAnyPrivilegeForSpecifier(ctx context.Context, specifier HasPrivilegeSpecifier, user username.SQLUsername, privs []privilege.Privilege) (HasAnyPrivilegeResult, error)
 }
 
 // CastFunc is a function which cases a datum to a given type.
@@ -233,6 +234,10 @@ type Planner interface {
 	// descriptor ID. See the comment on the planner implementation.
 	ForceDeleteTableData(ctx context.Context, descID int64) error
 
+	// UpsertDroppedRelationGCTTL is used to upsert the GC TTL in the zone
+	// configuration of a dropped table, sequence or materialized view.
+	UpsertDroppedRelationGCTTL(ctx context.Context, id int64, ttl duration.Duration) error
+
 	// UnsafeUpsertNamespaceEntry is used to repair namespace entries in dire
 	// circumstances. See the comment on the planner implementation.
 	UnsafeUpsertNamespaceEntry(
@@ -357,13 +362,16 @@ type Planner interface {
 	// statements, SELECT, UPDATE, INSERT, DELETE, or an EXPLAIN of one of these
 	// statements.
 	IsANSIDML() bool
+
+	// GetRangeDescByID gets the RangeDescriptor by the specified RangeID.
+	GetRangeDescByID(context.Context, roachpb.RangeID) (roachpb.RangeDescriptor, error)
 }
 
 // InternalRows is an iterator interface that's exposed by the internal
 // executor. It provides access to the rows from a query.
 // InternalRows is a copy of the one in sql/internal.go excluding the
 // Types function - we don't need the Types function for use cases where
-// QueryIteratorEx is used from the InternalExecutor on the Planner.
+// QueryIteratorEx is used from the Executor on the Planner.
 // Furthermore, we cannot include the Types function due to a cyclic
 // dependency on colinfo.ResultColumns - we cannot import colinfo in tree.
 type InternalRows interface {
@@ -542,7 +550,7 @@ type TenantOperator interface {
 	// DropTenantByID attempts to uninstall an existing tenant from the system.
 	// It returns an error if the tenant does not exist. If synchronous is true
 	// the gc job will not wait for a GC ttl.
-	DropTenantByID(ctx context.Context, tenantID uint64, synchronous bool) error
+	DropTenantByID(ctx context.Context, tenantID uint64, synchronous, ignoreServiceMode bool) error
 
 	// GCTenant attempts to garbage collect a DROP tenant from the system. Upon
 	// success it also removes the tenant record.

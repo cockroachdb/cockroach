@@ -329,6 +329,12 @@ message ExecStats {
   // large sort where not all of the tuples fit in memory.
   optional NumericStat max_disk_usage = 6 [(gogoproto.nullable) = false];
 
+  // CPUSQLNanos collects the cumulative CPU time spent executing SQL operations in
+  // nanoseconds. Currently, it is only collected for statements without
+  // mutations that have a vectorized plan.
+  optional NumericStat cpu_sql_nanos = 7 [(gogoproto.nullable) = false,
+    (gogoproto.customname) = "CPUSQLNanos"];
+
   // Note: be sure to update `sql/app_stats.go` when adding/removing fields
   // here!
 }

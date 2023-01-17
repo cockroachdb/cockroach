@@ -1,0 +1,35 @@
+sql
+CREATE FUNCTION lalala(val INT) RETURNS INT LANGUAGE SQL AS $$ SELECT val $$;
+CREATE FUNCTION lastval(val INT) RETURNS INT LANGUAGE SQL AS $$ SELECT val $$;
+----
+ok
+
+complete
+SELECT la@
+----
+complete 0 9
+msg: ""
+completions:
+- "functions":
+  "lag(" ((from schema pg_catalog) Returns `val` evaluated at the previous row within current row's partition; if t) -> "lag(" (0, 2)
+  "lalala(" ((from schema public) ) -> "lalala(" (0, 2)
+  "last_value(" ((from schema pg_catalog) Returns `val` evaluated at the row that is the last row of the window frame) -> "last_value(" (0, 2)
+  "lastval(" ((from schema pg_catalog) Return value most recently obtained with nextval in this session) -> "lastval(" (0, 2)
+  "lastval(" ((from schema public) ) -> "lastval(" (0, 2)
+- "keyword":
+  "LABEL" (unreserved) -> "LABEL" (0, 2)
+  "LANGUAGE" (unreserved) -> "LANGUAGE" (0, 2)
+  "LAST" (unreserved) -> "LAST" (0, 2)
+  "LATERAL" (reserved) -> "LATERAL" (0, 2)
+  "LATEST" (unreserved) -> "LATEST" (0, 2)
+
+complete
+SELECT pg_catalog.la@
+----
+complete 0 20
+msg: ""
+completions:
+- "functions":
+  "pg_catalog.lag(" (Returns `val` evaluated at the previous row within current row's partition; if t) -> "pg_catalog.lag(" (0, 13)
+  "pg_catalog.last_value(" (Returns `val` evaluated at the row that is the last row of the window frame) -> "pg_catalog.last_value(" (0, 13)
+  "pg_catalog.lastval(" (Return value most recently obtained with nextval in this session) -> "pg_catalog.lastval(" (0, 13)

@@ -28,18 +28,11 @@ import {
   defaultFilters,
   Filter,
   Filters,
-  getTimeValueInSeconds,
   handleFiltersFromQueryString,
   updateFiltersQueryParamsOnTab,
 } from "../queryFilter";
 
-import {
-  calculateTotalWorkload,
-  containAny,
-  syncHistory,
-  unique,
-  unset,
-} from "src/util";
+import { calculateTotalWorkload, syncHistory, unique } from "src/util";
 import {
   AggregateStatistics,
   makeStatementsColumns,
@@ -84,9 +77,12 @@ import {
   InsertStmtDiagnosticRequest,
   StatementDiagnosticsReport,
 } from "../api";
+import { filteredStatementsData } from "../sqlActivity/util";
 
 const cx = classNames.bind(styles);
 const sortableTableCx = classNames.bind(sortableTableStyles);
+
+const POLLING_INTERVAL_MILLIS = 300000;
 
 // Most of the props are supposed to be provided as connected props
 // from redux store.
@@ -123,6 +119,7 @@ export interface StatementsPageDispatchProps {
 
 export interface StatementsPageStateProps {
   statements: AggregateStatistics[];
+  isDataValid: boolean;
   lastUpdated: moment.Moment | null;
   timeScale: TimeScale;
   statementsError: Error | null;
@@ -151,10 +148,10 @@ export type StatementsPageProps = StatementsPageDispatchProps &
   StatementsPageStateProps &
   RouteComponentProps<unknown>;
 
-function statementsRequestFromProps(
-  props: StatementsPageProps,
+function stmtsRequestFromTimeScale(
+  ts: TimeScale,
 ): cockroach.server.serverpb.StatementsRequest {
-  const [start, end] = toRoundedDateRange(props.timeScale);
+  const [start, end] = toRoundedDateRange(ts);
   return new cockroach.server.serverpb.StatementsRequest({
     combined: true,
     start: Long.fromNumber(start.unix()),
@@ -270,7 +267,7 @@ export class StatementsPage extends React.Component<
     if (this.props.onTimeScaleChange) {
       this.props.onTimeScaleChange(ts);
     }
-    this.resetPolling(ts.key);
+    this.refreshStatements(ts);
     this.setState({
       startRequest: new Date(),
     });
@@ -293,30 +290,31 @@ export class StatementsPage extends React.Component<
     }
   }
 
-  resetPolling(key: string): void {
+  resetPolling(ts: TimeScale): void {
     this.clearRefreshDataTimeout();
-    if (key !== "Custom") {
+    if (ts.key !== "Custom") {
       this.refreshDataTimeout = setTimeout(
         this.refreshStatements,
-        300000, // 5 minutes
+        POLLING_INTERVAL_MILLIS, // 5 minutes
+        ts,
       );
     }
   }
 
-  refreshStatements = (): void => {
-    const req = statementsRequestFromProps(this.props);
+  refreshStatements = (ts?: TimeScale): void => {
+    const time = ts ?? this.props.timeScale;
+    const req = stmtsRequestFromTimeScale(time);
     this.props.refreshStatements(req);
 
-    this.resetPolling(this.props.timeScale.key);
+    this.resetPolling(time);
   };
 
   refreshDatabases = (): void => {
     this.props.refreshDatabases();
-    this.resetPolling(this.props.timeScale.key);
   };
 
   resetSQLStats = (): void => {
-    const req = statementsRequestFromProps(this.props);
+    const req = stmtsRequestFromTimeScale(this.props.timeScale);
     this.props.resetSQLStats(req);
     this.setState({
       startRequest: new Date(),
@@ -328,17 +326,24 @@ export class StatementsPage extends React.Component<
       startRequest: new Date(),
     });
 
-    // For the first data fetch for this page, we refresh if there are:
+    // For the first data fetch for this page, we refresh immediately if:
     // - Last updated is null (no statements fetched previously)
-    // - The time interval is not custom, i.e. we have a moving window
-    // in which case we poll every 5 minutes. For the first fetch we will
-    // calculate the next time to refresh based on when the data was last
-    // updated.
-    if (this.props.timeScale.key !== "Custom" || !this.props.lastUpdated) {
-      const now = moment();
-      const nextRefresh =
-        this.props.lastUpdated?.clone().add(5, "minutes") || now;
-      setTimeout(
+    // - The data is not valid (time scale may have changed on other pages)
+    // - The time range selected is a moving window and the last udpated time
+    // is >= 5 minutes.
+    // Otherwise, we schedule a refresh at 5 mins from the lastUpdated time if
+    // the time range selected is a moving window (i.e. not custom).
+    const now = moment();
+    let nextRefresh = null;
+    if (this.props.lastUpdated == null || !this.props.isDataValid) {
+      nextRefresh = now;
+    } else if (this.props.timeScale.key !== "Custom") {
+      nextRefresh = this.props.lastUpdated
+        .clone()
+        .add(POLLING_INTERVAL_MILLIS, "milliseconds");
+    }
+    if (nextRefresh) {
+      this.refreshDataTimeout = setTimeout(
         this.refreshStatements,
         Math.max(0, nextRefresh.diff(now, "milliseconds")),
       );
@@ -481,80 +486,6 @@ export class StatementsPage extends React.Component<
     );
   };
 
-  filteredStatementsData = (): AggregateStatistics[] => {
-    const { filters } = this.state;
-    const { search, statements, nodeRegions, isTenant } = this.props;
-    const timeValue = getTimeValueInSeconds(filters);
-    const sqlTypes =
-      filters.sqlType.length > 0
-        ? filters.sqlType.split(",").map(function (sqlType: string) {
-            // Adding "Type" to match the value on the Statement
-            // Possible values: TypeDDL, TypeDML, TypeDCL and TypeTCL
-            return "Type" + sqlType;
-          })
-        : [];
-    const databases =
-      filters.database.length > 0 ? filters.database.split(",") : [];
-    if (databases.includes(unset)) {
-      databases.push("");
-    }
-    const regions =
-      filters.regions.length > 0 ? filters.regions.split(",") : [];
-    const nodes = filters.nodes.length > 0 ? filters.nodes.split(",") : [];
-
-    // Return statements filtered by the values selected on the filter and
-    // the search text. A statement must match all selected filters to be
-    // displayed on the table.
-    // Current filters: search text, database, fullScan, service latency,
-    // SQL Type, nodes and regions.
-    return statements
-      .filter(
-        statement =>
-          databases.length == 0 || databases.includes(statement.database),
-      )
-      .filter(statement => (filters.fullScan ? statement.fullScan : true))
-      .filter(
-        statement =>
-          statement.stats.service_lat.mean >= timeValue ||
-          timeValue === "empty",
-      )
-      .filter(
-        statement =>
-          sqlTypes.length == 0 || sqlTypes.includes(statement.stats.sql_type),
-      )
-      .filter(
-        // The statement must contain at least one value from the selected regions
-        // list if the list is not empty.
-        statement =>
-          regions.length == 0 ||
-          (statement.stats.nodes &&
-            containAny(
-              statement.stats.nodes.map(
-                node => nodeRegions[node.toString()],
-                regions,
-              ),
-              regions,
-            )),
-      )
-      .filter(
-        // The statement must contain at least one value from the selected nodes
-        // list if the list is not empty.
-        // If the cluster is a tenant cluster we don't care
-        // about nodes.
-        statement =>
-          isTenant ||
-          nodes.length == 0 ||
-          (statement.stats.nodes &&
-            containAny(
-              statement.stats.nodes.map(node => "n" + node),
-              nodes,
-            )),
-      )
-      .filter(statement =>
-        search ? filterBySearchQuery(statement, search) : true,
-      );
-  };
-
   renderStatements = (regions: string[]): React.ReactElement => {
     const { pagination, filters, activeFilters } = this.state;
     const {
@@ -569,7 +500,13 @@ export class StatementsPage extends React.Component<
       sortSetting,
       search,
     } = this.props;
-    const data = this.filteredStatementsData();
+    const data = filteredStatementsData(
+      filters,
+      search,
+      statements,
+      nodeRegions,
+      isTenant,
+    );
     const totalWorkload = calculateTotalWorkload(statements);
     const totalCount = data.length;
     const isEmptySearchResults = statements?.length > 0 && search?.length > 0;

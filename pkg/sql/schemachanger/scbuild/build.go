@@ -29,21 +29,26 @@ import (
 	"github.com/cockroachdb/redact"
 )
 
-// Build constructs a new state from an initial state and a statement.
+// Build constructs a new state from an incumbent state and a statement.
 //
 // The function takes an AST for a DDL statement and constructs targets
-// which represent schema changes to be performed.
+// which represent schema changes to be performed. The incumbent state
+// is the schema changer state for the statement transaction, which reached
+// its present value from preceding calls to Build which were followed by the
+// execution of their corresponding statement phase stages. In other words,
+// the incumbent state encodes the schema change such as it has been defined
+// prior to this call, along with any in-transaction side effects.
 func Build(
-	ctx context.Context, dependencies Dependencies, initial scpb.CurrentState, n tree.Statement,
+	ctx context.Context, dependencies Dependencies, incumbent scpb.CurrentState, n tree.Statement,
 ) (_ scpb.CurrentState, err error) {
 	defer scerrors.StartEventf(
 		ctx,
 		"building declarative schema change targets for %s",
 		redact.Safe(n.StatementTag()),
 	).HandlePanicAndLogError(ctx, &err)
-	initial = initial.DeepCopy()
-	bs := newBuilderState(ctx, dependencies, initial)
-	els := newEventLogState(dependencies, initial, n)
+	incumbent = incumbent.DeepCopy()
+	bs := newBuilderState(ctx, dependencies, incumbent)
+	els := newEventLogState(dependencies, incumbent, n)
 	// TODO(fqazi): The optimizer can end up already modifying the statement above
 	// to fully resolve names. We need to take this into account for CTAS/CREATE
 	// VIEW statements.
@@ -61,39 +66,55 @@ func Build(
 	}
 	scbuildstmt.Process(b, an.GetStatement())
 	an.ValidateAnnotations()
-	els.statements[len(els.statements)-1].RedactedStatement =
-		string(els.astFormatter.FormatAstAsRedactableString(an.GetStatement(), &an.annotation))
+	currentStatementID := uint32(len(els.statements) - 1)
+	els.statements[currentStatementID].RedactedStatement = string(
+		dependencies.AstFormatter().FormatAstAsRedactableString(an.GetStatement(), &an.annotation))
 	ts := scpb.TargetState{
 		Targets:       make([]scpb.Target, 0, len(bs.output)),
 		Statements:    els.statements,
 		Authorization: els.authorization,
 	}
+	initial := make([]scpb.Status, 0, len(bs.output))
 	current := make([]scpb.Status, 0, len(bs.output))
 	version := dependencies.ClusterSettings().Version.ActiveVersion(ctx)
+	withLogEvent := make([]scpb.Target, 0, len(bs.output))
 	for _, e := range bs.output {
 		if e.metadata.Size() == 0 {
 			// Exclude targets which weren't explicitly set.
 			// Explicitly-set targets have non-zero values in the target metadata.
 			continue
 		}
-		// Exclude targets which are not yet usable in the currently active
-		// cluster version.
 		if !version.IsActive(screl.MinVersion(e.element)) {
+			// Exclude targets which are not yet usable in the currently active
+			// cluster version.
 			continue
 		}
-		ts.Targets = append(ts.Targets, scpb.MakeTarget(e.target, e.element, &e.metadata))
+		t := scpb.MakeTarget(e.target, e.element, &e.metadata)
+		ts.Targets = append(ts.Targets, t)
+		initial = append(initial, e.initial)
 		current = append(current, e.current)
+		if e.withLogEvent {
+			withLogEvent = append(withLogEvent, t)
+		}
 	}
 	// Ensure that no concurrent schema change are on going on any targets.
 	descSet := screl.AllTargetDescIDs(ts)
 	descSet.ForEach(func(id descpb.ID) {
 		bs.ensureDescriptor(id)
-		desc := bs.descCache[id].desc
-		if desc.HasConcurrentSchemaChanges() {
-			panic(scerrors.ConcurrentSchemaChangeError(desc))
+		cached := bs.descCache[id]
+		// If a descriptor is being created, we don't need to worry about concurrent
+		// schema changes.
+		if !cached.isBeingCreated() && cached.desc.HasConcurrentSchemaChanges() {
+			panic(scerrors.ConcurrentSchemaChangeError(cached.desc))
 		}
 	})
-	return scpb.CurrentState{TargetState: ts, Current: current}, nil
+	// Write to event log and return.
+	logEvents(b, ts, withLogEvent)
+	return scpb.CurrentState{
+		TargetState: ts,
+		Initial:     initial,
+		Current:     current,
+	}, nil
 }
 
 // CheckIfSupported returns if a statement is fully supported by the declarative
@@ -112,32 +133,43 @@ type (
 )
 
 type elementState struct {
-	element  scpb.Element
-	current  scpb.Status
-	target   scpb.TargetStatus
+	// element is the element which identifies this structure.
+	element scpb.Element
+	// current is the current status of the element;
+	// initial is the status of the element at the beginning of the transaction.
+	initial, current scpb.Status
+	// target indicates the status to be fulfilled by the element.
+	target scpb.TargetStatus
+	// metadata contains the target metadata to store in the resulting
+	// scpb.TargetState produced by the current call to scbuild.Build.
 	metadata scpb.TargetMetadata
+	// withLogEvent is true iff an event should be written to the event log
+	// based on this element.
+	withLogEvent bool
 }
 
 // builderState is the backing struct for scbuildstmt.BuilderState interface.
 type builderState struct {
 	// Dependencies
-	ctx              context.Context
-	clusterSettings  *cluster.Settings
-	evalCtx          *eval.Context
-	semaCtx          *tree.SemaContext
-	cr               CatalogReader
-	tr               TableReader
-	auth             AuthorizationAccessor
-	commentGetter    scdecomp.CommentGetter
-	zoneConfigReader scdecomp.ZoneConfigGetter
-	createPartCCL    CreatePartitioningCCLCallback
-	hasAdmin         bool
+	ctx                      context.Context
+	clusterSettings          *cluster.Settings
+	evalCtx                  *eval.Context
+	semaCtx                  *tree.SemaContext
+	cr                       CatalogReader
+	tr                       TableReader
+	auth                     AuthorizationAccessor
+	commentGetter            scdecomp.CommentGetter
+	zoneConfigReader         scdecomp.ZoneConfigGetter
+	referenceProviderFactory ReferenceProviderFactory
+	createPartCCL            CreatePartitioningCCLCallback
+	hasAdmin                 bool
 
 	// output contains the schema change targets that have been planned so far.
 	output []elementState
 
-	descCache   map[catid.DescID]*cachedDesc
-	tempSchemas map[catid.DescID]catalog.SchemaDescriptor
+	descCache      map[catid.DescID]*cachedDesc
+	tempSchemas    map[catid.DescID]catalog.SchemaDescriptor
+	newDescriptors catalog.DescriptorIDSet
 }
 
 type cachedDesc struct {
@@ -159,33 +191,51 @@ type cachedDesc struct {
 	elementIndexMap map[string]int
 }
 
+func (c *cachedDesc) isBeingCreated() bool {
+	return c.desc == nil
+}
+
 // newBuilderState constructs a builderState.
-func newBuilderState(ctx context.Context, d Dependencies, initial scpb.CurrentState) *builderState {
+func newBuilderState(
+	ctx context.Context, d Dependencies, incumbent scpb.CurrentState,
+) *builderState {
 	bs := builderState{
-		ctx:              ctx,
-		clusterSettings:  d.ClusterSettings(),
-		evalCtx:          newEvalCtx(ctx, d),
-		semaCtx:          newSemaCtx(d),
-		cr:               d.CatalogReader(),
-		tr:               d.TableReader(),
-		auth:             d.AuthorizationAccessor(),
-		createPartCCL:    d.IndexPartitioningCCLCallback(),
-		output:           make([]elementState, 0, len(initial.Current)),
-		descCache:        make(map[catid.DescID]*cachedDesc),
-		tempSchemas:      make(map[catid.DescID]catalog.SchemaDescriptor),
-		commentGetter:    d.DescriptorCommentGetter(),
-		zoneConfigReader: d.ZoneConfigGetter(),
+		ctx:                      ctx,
+		clusterSettings:          d.ClusterSettings(),
+		evalCtx:                  newEvalCtx(ctx, d),
+		semaCtx:                  newSemaCtx(d),
+		cr:                       d.CatalogReader(),
+		tr:                       d.TableReader(),
+		auth:                     d.AuthorizationAccessor(),
+		createPartCCL:            d.IndexPartitioningCCLCallback(),
+		output:                   make([]elementState, 0, len(incumbent.Current)),
+		descCache:                make(map[catid.DescID]*cachedDesc),
+		tempSchemas:              make(map[catid.DescID]catalog.SchemaDescriptor),
+		commentGetter:            d.DescriptorCommentGetter(),
+		zoneConfigReader:         d.ZoneConfigGetter(),
+		referenceProviderFactory: d.ReferenceProviderFactory(),
 	}
 	var err error
 	bs.hasAdmin, err = bs.auth.HasAdminRole(ctx)
 	if err != nil {
 		panic(err)
 	}
-	for _, t := range initial.TargetState.Targets {
+	for _, t := range incumbent.TargetState.Targets {
 		bs.ensureDescriptor(screl.GetDescID(t.Element()))
 	}
-	for i, t := range initial.TargetState.Targets {
-		bs.Ensure(initial.Current[i], scpb.AsTargetStatus(t.TargetStatus), t.Element(), t.Metadata)
+	for i, t := range incumbent.TargetState.Targets {
+		src := elementState{
+			element:  t.Element(),
+			initial:  incumbent.Initial[i],
+			current:  incumbent.Current[i],
+			target:   scpb.AsTargetStatus(t.TargetStatus),
+			metadata: t.Metadata,
+		}
+		if dst := bs.getExistingElementState(src.element); dst != nil {
+			*dst = src
+		} else {
+			bs.addNewElementState(src)
+		}
 	}
 	return &bs
 }
@@ -207,14 +257,13 @@ type eventLogState struct {
 	// for any new elements added. This is used for detailed
 	// tracking during cascade operations.
 	sourceElementID *scpb.SourceElementID
-
-	// astFormatter used to format AST elements as redactable strings.
-	astFormatter AstFormatter
 }
 
 // newEventLogState constructs an eventLogState.
-func newEventLogState(d Dependencies, initial scpb.CurrentState, n tree.Statement) *eventLogState {
-	stmts := initial.Statements
+func newEventLogState(
+	d Dependencies, incumbent scpb.CurrentState, n tree.Statement,
+) *eventLogState {
+	stmts := incumbent.Statements
 	els := eventLogState{
 		statements: append(stmts, scpb.Statement{
 			Statement:    n.String(),
@@ -230,7 +279,6 @@ func newEventLogState(d Dependencies, initial scpb.CurrentState, n tree.Statemen
 			SubWorkID:       1,
 			SourceElementID: 1,
 		},
-		astFormatter: d.AstFormatter(),
 	}
 	*els.sourceElementID = 1
 	return &els
@@ -252,16 +300,16 @@ var _ scbuildstmt.BuildCtx = buildCtx{}
 
 // Add implements the scbuildstmt.BuildCtx interface.
 func (b buildCtx) Add(element scpb.Element) {
-	b.Ensure(scpb.Status_UNKNOWN, scpb.ToPublic, element, b.TargetMetadata())
+	b.Ensure(element, scpb.ToPublic, b.TargetMetadata())
 }
 
 func (b buildCtx) AddTransient(element scpb.Element) {
-	b.Ensure(scpb.Status_UNKNOWN, scpb.Transient, element, b.TargetMetadata())
+	b.Ensure(element, scpb.Transient, b.TargetMetadata())
 }
 
 // Drop implements the scbuildstmt.BuildCtx interface.
 func (b buildCtx) Drop(element scpb.Element) {
-	b.Ensure(scpb.Status_UNKNOWN, scpb.ToAbsent, element, b.TargetMetadata())
+	b.Ensure(element, scpb.ToAbsent, b.TargetMetadata())
 }
 
 // WithNewSourceElementID implements the scbuildstmt.BuildCtx interface.

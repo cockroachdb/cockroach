@@ -1146,6 +1146,12 @@ func (o UnaryOperator) String() string {
 // Operator implements tree.Operator.
 func (UnaryOperator) Operator() {}
 
+// IsUnaryComplement returns whether op is a unary complement operator.
+func IsUnaryComplement(op Operator) bool {
+	u, ok := op.(UnaryOperator)
+	return ok && u.Symbol == UnaryComplement
+}
+
 // UnaryOperatorSymbol represents a unary operator.
 type UnaryOperatorSymbol uint8
 
@@ -1289,15 +1295,8 @@ func (node *FuncExpr) ResolvedOverload() *Overload {
 
 // IsGeneratorClass returns true if the resolved overload metadata is of
 // the GeneratorClass.
-//
-// TODO(ajwerner): Figure out how this differs from IsGeneratorApplication.
 func (node *FuncExpr) IsGeneratorClass() bool {
-	return node.fnProps != nil && node.fnProps.Class == GeneratorClass
-}
-
-// IsGeneratorApplication returns true iff the function applied is a generator (SRF).
-func (node *FuncExpr) IsGeneratorApplication() bool {
-	return node.fn != nil && (node.fn.Generator != nil || node.fn.GeneratorWithExprs != nil)
+	return node.ResolvedOverload() != nil && node.ResolvedOverload().Class == GeneratorClass
 }
 
 // IsWindowFunctionApplication returns true iff the function is being applied as a window function.

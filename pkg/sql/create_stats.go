@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -26,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -160,7 +159,7 @@ func (n *createStatsNode) startJob(ctx context.Context, resultsCh chan<- tree.Da
 
 	var job *jobs.StartableJob
 	jobID := n.p.ExecCfg().JobRegistry.MakeJobID()
-	if err := n.p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
+	if err := n.p.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) (err error) {
 		return n.p.ExecCfg().JobRegistry.CreateStartableJobWithTxn(ctx, &job, jobID, txn, *record)
 	}); err != nil {
 		if job != nil {
@@ -178,7 +177,7 @@ func (n *createStatsNode) startJob(ctx context.Context, resultsCh chan<- tree.Da
 		if errors.Is(err, stats.ConcurrentCreateStatsError) {
 			// Delete the job so users don't see it and get confused by the error.
 			const stmt = `DELETE FROM system.jobs WHERE id = $1`
-			if _ /* cols */, delErr := n.p.ExecCfg().InternalExecutor.Exec(
+			if _ /* cols */, delErr := n.p.ExecCfg().InternalDB.Executor().Exec(
 				ctx, "delete-job", nil /* txn */, stmt, jobID,
 			); delErr != nil {
 				log.Warningf(ctx, "failed to delete job: %v", delErr)
@@ -270,7 +269,7 @@ func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, erro
 			return nil, err
 		}
 	} else {
-		columns, err := tabledesc.FindPublicColumnsWithNames(tableDesc, n.ColumnNames)
+		columns, err := catalog.MustFindPublicColumnsByNameList(tableDesc, n.ColumnNames)
 		if err != nil {
 			return nil, err
 		}
@@ -286,7 +285,7 @@ func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, erro
 			}
 			columnIDs[i] = columns[i].GetID()
 		}
-		col, err := tableDesc.FindColumnWithID(columnIDs[0])
+		col, err := catalog.MustFindColumnByID(tableDesc, columnIDs[0])
 		if err != nil {
 			return nil, err
 		}
@@ -399,7 +398,7 @@ func createStatsDefaultColumns(
 	// ID if they have not already been added. Histogram stats are collected for
 	// every indexed column.
 	addIndexColumnStatsIfNotExists := func(colID descpb.ColumnID, isInverted bool) error {
-		col, err := desc.FindColumnWithID(colID)
+		col, err := catalog.MustFindColumnByID(desc, colID)
 		if err != nil {
 			return err
 		}
@@ -486,7 +485,7 @@ func createStatsDefaultColumns(
 
 			colIDs := make([]descpb.ColumnID, 0, j+1)
 			for k := 0; k <= j; k++ {
-				col, err := desc.FindColumnWithID(idx.GetKeyColumnID(k))
+				col, err := catalog.MustFindColumnByID(desc, idx.GetKeyColumnID(k))
 				if err != nil {
 					return nil, err
 				}
@@ -529,7 +528,7 @@ func createStatsDefaultColumns(
 
 			// Generate stats for each column individually.
 			for _, colID := range colIDs.Ordered() {
-				col, err := desc.FindColumnWithID(colID)
+				col, err := catalog.MustFindColumnByID(desc, colID)
 				if err != nil {
 					return nil, err
 				}
@@ -602,26 +601,26 @@ func (r *createStatsResumer) Resume(ctx context.Context, execCtx interface{}) er
 	evalCtx := p.ExtendedEvalContext()
 
 	dsp := p.DistSQLPlanner()
-	if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+	if err := p.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		// Set the transaction on the EvalContext to this txn. This allows for
 		// use of the txn during processor setup during the execution of the flow.
-		evalCtx.Txn = txn
+		evalCtx.Txn = txn.KV()
 
 		if details.AsOf != nil {
 			p.ExtendedEvalContext().AsOfSystemTime = &eval.AsOfSystemTime{Timestamp: *details.AsOf}
 			p.ExtendedEvalContext().SetTxnTimestamp(details.AsOf.GoTime())
-			if err := txn.SetFixedTimestamp(ctx, *details.AsOf); err != nil {
+			if err := txn.KV().SetFixedTimestamp(ctx, *details.AsOf); err != nil {
 				return err
 			}
 		}
 
-		planCtx := dsp.NewPlanningCtx(ctx, evalCtx, nil /* planner */, txn,
+		planCtx := dsp.NewPlanningCtx(ctx, evalCtx, nil /* planner */, txn.KV(),
 			DistributionTypeSystemTenantOnly)
 		// CREATE STATS flow doesn't produce any rows and only emits the
 		// metadata, so we can use a nil rowContainerHelper.
 		resultWriter := NewRowResultWriter(nil /* rowContainer */)
 		if err := dsp.planAndRunCreateStats(
-			ctx, evalCtx, planCtx, txn, r.job, resultWriter,
+			ctx, evalCtx, planCtx, txn.KV(), r.job, resultWriter,
 		); err != nil {
 			// Check if this was a context canceled error and restart if it was.
 			if grpcutil.IsContextCanceled(err) {
@@ -635,12 +634,12 @@ func (r *createStatsResumer) Resume(ctx context.Context, execCtx interface{}) er
 			// job progress to coerce out the correct error type. If the update succeeds
 			// then return the original error, otherwise return this error instead so
 			// it can be cleaned up at a higher level.
-			if jobErr := r.job.FractionProgressed(
-				ctx, nil, /* txn */
-				func(ctx context.Context, _ jobspb.ProgressDetails) float32 {
-					// The job failed so the progress value here doesn't really matter.
-					return 0
-				},
+			if jobErr := r.job.NoTxn().FractionProgressed(ctx, func(
+				ctx context.Context, _ jobspb.ProgressDetails,
+			) float32 {
+				// The job failed so the progress value here doesn't really matter.
+				return 0
+			},
 			); jobErr != nil {
 				return jobErr
 			}
@@ -666,7 +665,7 @@ func (r *createStatsResumer) Resume(ctx context.Context, execCtx interface{}) er
 	// TODO(knz): figure out why this is not triggered for a regular
 	// CREATE STATISTICS statement.
 	// See: https://github.com/cockroachdb/cockroach/issues/57739
-	return evalCtx.ExecCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+	return evalCtx.ExecCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		return logEventInternalForSQLStatements(ctx,
 			evalCtx.ExecCfg, txn,
 			0, /* depth: use event_log=2 for vmodule filtering */
@@ -695,11 +694,13 @@ func checkRunningJobs(ctx context.Context, job *jobs.Job, p JobExecContext) erro
 	if job != nil {
 		jobID = job.ID()
 	}
-	exists, err := jobs.RunningJobExists(ctx, jobID, p.ExecCfg().InternalExecutor, nil /* txn */, func(payload *jobspb.Payload) bool {
-		return payload.Type() == jobspb.TypeCreateStats || payload.Type() == jobspb.TypeAutoCreateStats
-	})
-
-	if err != nil {
+	var exists bool
+	if err := p.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) (err error) {
+		exists, err = jobs.RunningJobExists(ctx, jobID, txn, func(payload *jobspb.Payload) bool {
+			return payload.Type() == jobspb.TypeCreateStats || payload.Type() == jobspb.TypeAutoCreateStats
+		})
+		return err
+	}); err != nil {
 		return err
 	}
 

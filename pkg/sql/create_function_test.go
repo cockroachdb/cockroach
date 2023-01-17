@@ -22,6 +22,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
@@ -42,6 +44,7 @@ func TestCreateFunction(t *testing.T) {
 	tDB := sqlutils.MakeSQLRunner(sqlDB)
 
 	tDB.Exec(t, `
+SET use_declarative_schema_changer = 'on';
 CREATE TABLE t(
   a INT PRIMARY KEY,
   b INT,
@@ -53,6 +56,10 @@ CREATE SEQUENCE sq1;
 CREATE TABLE t2(a INT PRIMARY KEY);
 CREATE VIEW v AS SELECT a FROM t2;
 CREATE TYPE notmyworkday AS ENUM ('Monday', 'Tuesday');
+`,
+	)
+
+	tDB.Exec(t, `
 CREATE FUNCTION f(a notmyworkday) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$
   SELECT a FROM t;
   SELECT b FROM t@t_idx_b;
@@ -60,12 +67,12 @@ CREATE FUNCTION f(a notmyworkday) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$
   SELECT a FROM v;
   SELECT nextval('sq1');
 $$;
-CREATE SCHEMA test_sc;
-`,
-	)
+`)
 
-	err := sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
-		funcDesc, err := col.ByIDWithLeased(txn).WithoutNonPublic().Get().Function(ctx, 110)
+	tDB.Exec(t, `CREATE SCHEMA test_sc;`)
+
+	err := sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+		funcDesc, err := col.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Function(ctx, 110)
 		require.NoError(t, err)
 		require.Equal(t, funcDesc.GetName(), "f")
 
@@ -94,7 +101,7 @@ SELECT nextval(105:::REGCLASS);`,
 
 		// Make sure columns and indexes has correct back references.
 		tn := tree.MakeTableNameWithSchema("defaultdb", "public", "t")
-		_, tbl, err := descs.PrefixAndTable(ctx, col.ByNameWithLeased(txn).Get(), &tn)
+		_, tbl, err := descs.PrefixAndTable(ctx, col.ByNameWithLeased(txn.KV()).Get(), &tn)
 		require.NoError(t, err)
 		require.Equal(t, "t", tbl.GetName())
 		require.Equal(t,
@@ -108,7 +115,7 @@ SELECT nextval(105:::REGCLASS);`,
 
 		// Make sure sequence has correct back references.
 		sqn := tree.MakeTableNameWithSchema("defaultdb", "public", "sq1")
-		_, seq, err := descs.PrefixAndTable(ctx, col.ByNameWithLeased(txn).Get(), &sqn)
+		_, seq, err := descs.PrefixAndTable(ctx, col.ByNameWithLeased(txn.KV()).Get(), &sqn)
 		require.NoError(t, err)
 		require.Equal(t, "sq1", seq.GetName())
 		require.Equal(t,
@@ -120,7 +127,7 @@ SELECT nextval(105:::REGCLASS);`,
 
 		// Make sure view has correct back references.
 		vn := tree.MakeTableNameWithSchema("defaultdb", "public", "v")
-		_, view, err := descs.PrefixAndTable(ctx, col.ByNameWithLeased(txn).Get(), &vn)
+		_, view, err := descs.PrefixAndTable(ctx, col.ByNameWithLeased(txn.KV()).Get(), &vn)
 		require.NoError(t, err)
 		require.Equal(t, "v", view.GetName())
 		require.Equal(t,
@@ -132,7 +139,7 @@ SELECT nextval(105:::REGCLASS);`,
 
 		// Make sure type has correct back references.
 		typn := tree.MakeQualifiedTypeName("defaultdb", "public", "notmyworkday")
-		_, typ, err := descs.PrefixAndType(ctx, col.ByNameWithLeased(txn).Get(), &typn)
+		_, typ, err := descs.PrefixAndType(ctx, col.ByNameWithLeased(txn.KV()).Get(), &typn)
 		require.NoError(t, err)
 		require.Equal(t, "notmyworkday", typ.GetName())
 		require.Equal(t,
@@ -145,7 +152,7 @@ SELECT nextval(105:::REGCLASS);`,
 	require.NoError(t, err)
 }
 
-func TestCreateFunctionGating(t *testing.T) {
+func TestGatingCreateFunction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	t.Run("new_schema_changer_version_enabled", func(t *testing.T) {
@@ -249,8 +256,8 @@ $$;
 `,
 	)
 
-	err := sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
-		funcDesc, err := col.ByIDWithLeased(txn).WithoutNonPublic().Get().Function(ctx, 112)
+	err := sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+		funcDesc, err := col.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Function(ctx, 112)
 		require.NoError(t, err)
 		require.Equal(t, funcDesc.GetName(), "f")
 
@@ -271,13 +278,13 @@ SELECT nextval(106:::REGCLASS);`,
 
 		// Make sure type has correct back references.
 		typn := tree.MakeQualifiedTypeName("defaultdb", "public", "notmyworkday")
-		_, typ, err := descs.PrefixAndType(ctx, col.ByNameWithLeased(txn).Get(), &typn)
+		_, typ, err := descs.PrefixAndType(ctx, col.ByNameWithLeased(txn.KV()).Get(), &typn)
 		require.NoError(t, err)
 		require.Equal(t, []descpb.ID{112}, typ.GetReferencingDescriptorIDs())
 
 		// All objects with "1" suffix should have back references to the function,
 		// "2" should have empty references since it's not used yet.
-		validateReferences(ctx, txn, col, "1", "2")
+		validateReferences(ctx, txn.KV(), col, "1", "2")
 		return nil
 	})
 	require.NoError(t, err)
@@ -292,8 +299,8 @@ CREATE OR REPLACE FUNCTION f(a notmyworkday) RETURNS INT IMMUTABLE LANGUAGE SQL 
 $$;
 `)
 
-	err = sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
-		funcDesc, err := col.ByID(txn).WithoutNonPublic().Get().Function(ctx, 112)
+	err = sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+		funcDesc, err := col.ByID(txn.KV()).WithoutNonPublic().Get().Function(ctx, 112)
 		require.NoError(t, err)
 		require.Equal(t, funcDesc.GetName(), "f")
 
@@ -314,14 +321,66 @@ SELECT nextval(107:::REGCLASS);`,
 
 		// Make sure type has correct back references.
 		typn := tree.MakeQualifiedTypeName("defaultdb", "public", "notmyworkday")
-		_, typ, err := descs.PrefixAndType(ctx, col.ByNameWithLeased(txn).Get(), &typn)
+		_, typ, err := descs.PrefixAndType(ctx, col.ByNameWithLeased(txn.KV()).Get(), &typn)
 		require.NoError(t, err)
 		require.Equal(t, []descpb.ID{112}, typ.GetReferencingDescriptorIDs())
 
 		// Now all objects with "2" suffix in name should have back references "1"
 		// had before, and "1" should have empty references.
-		validateReferences(ctx, txn, col, "2", "1")
+		validateReferences(ctx, txn.KV(), col, "2", "1")
 		return nil
 	})
 	require.NoError(t, err)
+}
+
+func TestCreateFunctionVisibilityInExplicitTransaction(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testingKnob := &scexec.TestingKnobs{}
+	ctx := context.Background()
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			SQLDeclarativeSchemaChanger: testingKnob,
+		},
+	})
+	defer s.Stopper().Stop(ctx)
+	tDB := sqlutils.MakeSQLRunner(sqlDB)
+
+	tDB.Exec(t, `SET use_declarative_schema_changer = 'unsafe_always'`)
+	tDB.Exec(t, `CREATE TABLE t (a INT PRIMARY KEY, b INT NOT NULL)`)
+	tDB.Exec(t, `INSERT INTO t VALUES (1,1), (2,1)`)
+
+	// Make sure that everything is rolled back if post commit job fails.
+	_, err := sqlDB.Exec(`
+BEGIN;
+CREATE FUNCTION f() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
+CREATE UNIQUE INDEX idx ON t(b);
+COMMIT;
+`)
+	require.Error(t, err, "")
+	require.Contains(t, err.Error(), "transaction committed but schema change aborted")
+	_, err = sqlDB.Exec(`SELECT f()`)
+	require.Error(t, err, "")
+	require.Contains(t, err.Error(), "unknown function: f(): function undefined")
+
+	// Make data valid for the unique index so that the job won't fail.
+	tDB.Exec(t, `DELETE FROM t WHERE a = 2`)
+
+	// Make sure function cannot be used before job completes.
+	testingKnob.RunBeforeBackfill = func() error {
+		_, err = sqlDB.Exec(`SELECT f()`)
+		require.Error(t, err, "")
+		require.Contains(t, err.Error(), `function "f" is being added`)
+		return nil
+	}
+
+	//tDB.Exec(t, `SET CLUSTER SETTING jobs.debug.pausepoints='newschemachanger.before.exec'`)
+	_, err = sqlDB.Exec(`
+BEGIN;
+CREATE FUNCTION f() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
+CREATE UNIQUE INDEX idx ON t(b);
+COMMIT;
+`)
+	tDB.Exec(t, `SELECT f()`)
 }

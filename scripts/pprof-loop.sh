@@ -18,6 +18,9 @@ $0 'http://localhost:8080/debug/pprof/goroutine'
 # not sampled by default; need COCKROACH_BLOCK_PROFILE_RATE
 $0 'http://localhost:8080/debug/pprof/block'
 
+# allocs within the last 3s.
+$0 'http://localhost:8080/debug/pprof/allocs?seconds=3'
+
 # 3s runtime traces
 $0 'http://localhost:8080/debug/pprof/trace?seconds=3'
 

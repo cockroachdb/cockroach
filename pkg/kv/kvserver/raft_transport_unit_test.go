@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
 )
 
 func TestRaftTransportStartNewQueue(t *testing.T) {
@@ -55,7 +56,8 @@ func TestRaftTransportStartNewQueue(t *testing.T) {
 
 	// mrs := &dummyMultiRaftServer{}
 
-	grpcServer := rpc.NewServer(rpcC)
+	grpcServer, err := rpc.NewServer(rpcC)
+	require.NoError(t, err)
 	// RegisterMultiRaftServer(grpcServer, mrs)
 
 	var addr net.Addr

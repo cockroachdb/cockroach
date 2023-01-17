@@ -741,6 +741,7 @@ func TestSchemaChangerJobErrorDetails(t *testing.T) {
 				return nil
 			},
 		},
+		EventLog:         &sql.EventLogTestingKnobs{SyncWrites: true},
 		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 	}
 
@@ -782,6 +783,18 @@ func TestSchemaChangerJobErrorDetails(t *testing.T) {
 	checkErrWithDetails(p.FinalResumeError)
 	require.LessOrEqual(t, 1, len(p.RetriableExecutionFailureLog))
 	checkErrWithDetails(p.RetriableExecutionFailureLog[0].Error)
+
+	// Check that the error is featured in the event log.
+	const eventLogCountQuery = `SELECT count(*) FROM system.eventlog WHERE "eventType" = $1`
+	results = tdb.QueryStr(t, eventLogCountQuery, "finish_schema_change")
+	require.EqualValues(t, [][]string{{"0"}}, results)
+	results = tdb.QueryStr(t, eventLogCountQuery, "finish_schema_change_rollback")
+	require.EqualValues(t, [][]string{{"1"}}, results)
+	results = tdb.QueryStr(t, eventLogCountQuery, "reverse_schema_change")
+	require.EqualValues(t, [][]string{{"1"}}, results)
+	const eventLogErrorQuery = `SELECT (info::JSONB)->>'Error' FROM system.eventlog WHERE "eventType" = 'reverse_schema_change'`
+	results = tdb.QueryStr(t, eventLogErrorQuery)
+	require.EqualValues(t, [][]string{{"boom"}}, results)
 }
 
 func TestInsertDuringAddColumnNotWritingToCurrentPrimaryIndex(t *testing.T) {

@@ -42,7 +42,6 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/build",
-        "//pkg/gossip",
         "//pkg/keys",
         "//pkg/kv",
         "//pkg/kv/kvserver/liveness",
@@ -132,11 +131,13 @@ go_test(
         "//pkg/base",
         "//pkg/build",
         "//pkg/roachpb",
+        "//pkg/rpc",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/server/status/statuspb",
         "//pkg/settings/cluster",
+        "//pkg/sql/sem/catconstants",
         "//pkg/testutils/serverutils",
         "//pkg/ts/tspb",
         "//pkg/util/hlc",
@@ -149,6 +150,7 @@ go_test(
         "//pkg/util/timeutil",
         "@com_github_kr_pretty//:pretty",
         "@com_github_shirou_gopsutil_v3//net",
+        "@com_github_stretchr_testify//require",
     ],
 )
 

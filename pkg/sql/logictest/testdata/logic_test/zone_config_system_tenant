@@ -32,6 +32,7 @@ SELECT zone_id, target FROM crdb_internal.zones ORDER BY 1
 25   TABLE system.public.replication_constraint_stats
 27   TABLE system.public.replication_stats
 45   TABLE system.public.tenant_usage
+57   TABLE system.public.span_stats_tenant_boundaries
 106  TABLE test.public.t
 
 # The tests below test semantics around named zone for the system tenant. The
@@ -104,7 +105,6 @@ SELECT crdb_internal.pb_to_json('cockroach.roachpb.SpanConfig', config)
 FROM system.span_configurations
 WHERE end_key > (SELECT crdb_internal.table_span($t_id)[1])
 ----
-{"gcPolicy": {"ttlSeconds": 14400}, "numReplicas": 3, "rangeMaxBytes": "16777216", "rangeMinBytes": "1048576"}
 
 statement ok
 CREATE TABLE db2.t2 (i INT PRIMARY KEY);
@@ -124,3 +124,62 @@ WHERE end_key > (SELECT crdb_internal.table_span($t_id)[1])
 ----
 {"gcPolicy": {"ttlSeconds": 90001}, "numReplicas": 3, "rangeMaxBytes": "16777216", "rangeMinBytes": "1048576"}
 {"gcPolicy": {"ttlSeconds": 90001}, "numReplicas": 3, "rangeMaxBytes": "1073741824", "rangeMinBytes": "67108864"}
+
+# Check that dropped relations can have their GC TTLs altered.
+subtest dropped_relation_gc_ttl
+
+statement ok
+CREATE TABLE test.public.t3 (x INT PRIMARY KEY)
+
+statement ok
+DROP TABLE test.public.t3
+
+statement ok
+DROP TABLE db2.t2
+
+query TT
+SELECT name, ttl FROM crdb_internal.kv_dropped_relations ORDER BY name;
+----
+t   25:00:01
+t2  25:00:01
+t3  04:00:00
+
+query T
+SELECT crdb_internal.pb_to_json('cockroach.roachpb.SpanConfig', config)->'gcPolicy'->>'ttlSeconds'
+FROM system.span_configurations
+WHERE start_key >= (SELECT crdb_internal.table_span(100)[1])
+ORDER BY start_key
+----
+14400
+14400
+90001
+90001
+
+query B
+SELECT crdb_internal.upsert_dropped_relation_gc_ttl(id, '1 second')
+FROM crdb_internal.kv_dropped_relations
+WHERE name IN ('t2', 't3')
+----
+true
+true
+
+query TT
+SELECT name, ttl FROM crdb_internal.kv_dropped_relations ORDER BY name;
+----
+t   25:00:01
+t2  00:00:01
+t3  00:00:01
+
+# Check that the zone config changes eventually get picked up by the span
+# config reconciler.
+query T retry
+SELECT crdb_internal.pb_to_json('cockroach.roachpb.SpanConfig', config)->'gcPolicy'->>'ttlSeconds'
+FROM system.span_configurations
+WHERE start_key >= (SELECT crdb_internal.table_span(100)[1])
+ORDER BY start_key
+----
+14400
+14400
+90001
+1
+1

@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -28,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	pgx "github.com/jackc/pgx/v4"
 	"github.com/stretchr/testify/require"
 )
 
@@ -112,7 +112,7 @@ GRANT admin TO foo`); err != nil {
 			// would report false positives.
 			unauthURL := fooURL
 			unauthURL.User = url.User("foo")
-			dbSQL, err := pgxConn(t, unauthURL)
+			dbSQL, err := sqltestutils.PGXConn(t, unauthURL)
 			if err == nil {
 				defer func() { _ = dbSQL.Close(ctx) }()
 			}
@@ -123,7 +123,7 @@ GRANT admin TO foo`); err != nil {
 
 		func() {
 			// Sanity check: verify that the new user is able to log in with password.
-			dbSQL, err := pgxConn(t, fooURL)
+			dbSQL, err := sqltestutils.PGXConn(t, fooURL)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -145,7 +145,7 @@ GRANT admin TO foo`); err != nil {
 
 		// Cache our privilege check for `SHOW is_superuser` and the
 		// underlying query to a virtual table.
-		dbSQL, err := pgxConn(t, fooURL)
+		dbSQL, err := sqltestutils.PGXConn(t, fooURL)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -169,7 +169,7 @@ GRANT admin TO foo`); err != nil {
 				// Now attempt to connect again. Since a previous authentication attempt
 				// for this user occurred, the auth-related info should be cached, so
 				// authentication should work.
-				dbSQL, err := pgxConn(t, fooURL)
+				dbSQL, err := sqltestutils.PGXConn(t, fooURL)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -189,7 +189,7 @@ GRANT admin TO foo`); err != nil {
 				// Now attempt to connect with a different user. We're expecting a timeout
 				// within 5 seconds.
 				start := timeutil.Now()
-				dbSQL, err := pgxConn(t, barURL)
+				dbSQL, err := sqltestutils.PGXConn(t, barURL)
 				if err == nil {
 					defer func() { _ = dbSQL.Close(ctx) }()
 				}
@@ -205,7 +205,7 @@ GRANT admin TO foo`); err != nil {
 			t.Log("-- no timeout for root --")
 
 			func() {
-				dbSQL, err := pgxConn(t, rootURL)
+				dbSQL, err := sqltestutils.PGXConn(t, rootURL)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -237,7 +237,7 @@ GRANT admin TO foo`); err != nil {
 				// Now attempt to connect with foo. We're expecting a timeout within 5
 				// seconds as the membership cache is invalid.
 				start := timeutil.Now()
-				dbSQL, err := pgxConn(t, fooURL)
+				dbSQL, err := sqltestutils.PGXConn(t, fooURL)
 				if err == nil {
 					defer func() { _ = dbSQL.Close(ctx) }()
 				}
@@ -251,14 +251,4 @@ GRANT admin TO foo`); err != nil {
 			}()
 		}()
 	})
-}
-
-func pgxConn(t *testing.T, connURL url.URL) (*pgx.Conn, error) {
-	t.Helper()
-	pgxConfig, err := pgx.ParseConfig(connURL.String())
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	return pgx.ConnectConfig(context.Background(), pgxConfig)
 }

@@ -323,6 +323,9 @@ message LocalOnlySessionData {
   // interesting ordering to require from the input to the group-by expression.
   // This can potentially eliminate a top-k operation.
   bool optimizer_use_limit_ordering_for_streaming_group_by = 88;
+  // CopyFromRetriesEnabled controls whether retries should be internally
+  // attempted for retriable errors.
+  bool copy_from_retries_enabled = 89;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

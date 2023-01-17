@@ -1008,7 +1008,7 @@ project
            └── i:2 < y:12 [outer=(2,12), constraints=(/2: (/NULL - ]; /12: (/NULL - ])]
 
 # ApplyJoin operator.
-norm expect=PruneJoinLeftCols
+norm expect=PruneJoinLeftCols disable=TryRemapJoinOuterColsRight
 SELECT k, i
 FROM a
 WHERE (SELECT k+1 AS r FROM xy WHERE y=k) = 1
@@ -4899,7 +4899,7 @@ anti-join (hash)
       └── abcde.a:1 = "family".a:8 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
 
 # Test using multi-level nesting so we don't decorrelate the semi-join.
-norm expect=PruneSemiAntiJoinRightCols
+norm expect=PruneSemiAntiJoinRightCols disable=(TryRemapJoinOuterColsRight,TryRemapSelectOuterCols)
 SELECT
     a, b, c
 FROM
@@ -4938,7 +4938,7 @@ semi-join-apply
       └── abcde.a:1 = "family".a:8 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
 
 # Test using multi-level nesting so we don't decorrelate the anti-join.
-norm expect=PruneSemiAntiJoinRightCols
+norm expect=PruneSemiAntiJoinRightCols disable=(TryRemapJoinOuterColsRight,TryRemapSelectOuterCols)
 SELECT
     a, b, c
 FROM

@@ -589,7 +589,7 @@ func TestValidateTableDesc(t *testing.T) {
 				NextColumnID: 2,
 				NextFamilyID: 1,
 			}},
-		{`family "baz" contains unknown column "2"`,
+		{`family "baz" contains column reference "bar" with unknown ID 2`,
 			descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,

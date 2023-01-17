@@ -3235,7 +3235,7 @@ value if you rely on the HLC for accuracy.`,
 		stringOverload1(
 			func(ctx context.Context, evalCtx *eval.Context, s string) (tree.Datum, error) {
 				ts, dependsOnContext, err := tree.ParseDTimestamp(
-					tree.NewParseTimeContext(evalCtx.GetTxnTimestamp(time.Microsecond).Time),
+					tree.NewParseContext(evalCtx.GetTxnTimestamp(time.Microsecond).Time),
 					s,
 					time.Microsecond,
 				)
@@ -3290,7 +3290,7 @@ value if you rely on the HLC for accuracy.`,
 		stringOverload1(
 			func(ctx context.Context, evalCtx *eval.Context, s string) (tree.Datum, error) {
 				ts, dependsOnContext, err := tree.ParseDDate(
-					tree.NewParseTimeContext(evalCtx.GetTxnTimestamp(time.Microsecond).Time),
+					tree.NewParseContext(evalCtx.GetTxnTimestamp(time.Microsecond).Time),
 					s,
 				)
 				if err != nil {
@@ -3340,7 +3340,7 @@ value if you rely on the HLC for accuracy.`,
 		stringOverload1(
 			func(ctx context.Context, evalCtx *eval.Context, s string) (tree.Datum, error) {
 				t, dependsOnContext, err := tree.ParseDTime(
-					tree.NewParseTimeContext(evalCtx.GetTxnTimestamp(time.Microsecond).Time),
+					tree.NewParseContext(evalCtx.GetTxnTimestamp(time.Microsecond).Time),
 					s,
 					time.Microsecond,
 				)
@@ -3422,7 +3422,7 @@ value if you rely on the HLC for accuracy.`,
 		stringOverload1(
 			func(ctx context.Context, evalCtx *eval.Context, s string) (tree.Datum, error) {
 				t, dependsOnContext, err := tree.ParseDTimeTZ(
-					tree.NewParseTimeContext(evalCtx.GetTxnTimestamp(time.Microsecond).Time),
+					tree.NewParseContext(evalCtx.GetTxnTimestamp(time.Microsecond).Time),
 					s,
 					time.Microsecond,
 				)
@@ -4209,7 +4209,7 @@ value if you rely on the HLC for accuracy.`,
 	),
 	"crdb_internal.merge_statement_stats": makeBuiltin(arrayProps(),
 		tree.Overload{
-			Types:      tree.ParamTypes{{Name: "input", Typ: types.JSONArray}},
+			Types:      tree.ParamTypes{{Name: "input", Typ: types.JSONBArray}},
 			ReturnType: tree.FixedReturnType(types.Jsonb),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				arr := tree.MustBeDArray(args[0])
@@ -4240,7 +4240,7 @@ value if you rely on the HLC for accuracy.`,
 	),
 	"crdb_internal.merge_transaction_stats": makeBuiltin(arrayProps(),
 		tree.Overload{
-			Types:      tree.ParamTypes{{Name: "input", Typ: types.JSONArray}},
+			Types:      tree.ParamTypes{{Name: "input", Typ: types.JSONBArray}},
 			ReturnType: tree.FixedReturnType(types.Jsonb),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				arr := tree.MustBeDArray(args[0])
@@ -4274,7 +4274,7 @@ value if you rely on the HLC for accuracy.`,
 	),
 	"crdb_internal.merge_stats_metadata": makeBuiltin(arrayProps(),
 		tree.Overload{
-			Types:      tree.ParamTypes{{Name: "input", Typ: types.JSONArray}},
+			Types:      tree.ParamTypes{{Name: "input", Typ: types.JSONBArray}},
 			ReturnType: tree.FixedReturnType(types.Jsonb),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				arr := tree.MustBeDArray(args[0])
@@ -4931,16 +4931,20 @@ value if you rely on the HLC for accuracy.`,
 				`Must be run by the system tenant.`,
 			Volatility: volatility.Volatile,
 		},
+		// This overload is provided for compatibility with CC Serverless
+		// v22.2 and previous versions.
 		tree.Overload{
 			Types: tree.ParamTypes{
 				{Name: "id", Typ: types.Int},
 			},
 			ReturnType: tree.FixedReturnType(types.Int),
 			IsUDF:      true,
-			Body:       `SELECT crdb_internal.create_tenant(json_build_object('id', $1))`,
-			Info:       `create_tenant(id) is an alias for create_tenant('{"id": id}'::jsonb)`,
+			Body: `SELECT crdb_internal.create_tenant(json_build_object('id', $1, 'service_mode',
+ 'external'))`,
+			Info:       `create_tenant(id) is an alias for create_tenant('{"id": id, "service_mode": "external"}'::jsonb)`,
 			Volatility: volatility.Volatile,
 		},
+		// This overload is provided for use in tests.
 		tree.Overload{
 			Types: tree.ParamTypes{
 				{Name: "id", Typ: types.Int},
@@ -4952,6 +4956,7 @@ value if you rely on the HLC for accuracy.`,
 			Info:       `create_tenant(id, name) is an alias for create_tenant('{"id": id, "name": name}'::jsonb)`,
 			Volatility: volatility.Volatile,
 		},
+		// This overload is deprecated. Use CREATE TENANT instead.
 		tree.Overload{
 			Types: tree.ParamTypes{
 				{Name: "name", Typ: types.String},
@@ -4959,7 +4964,8 @@ value if you rely on the HLC for accuracy.`,
 			ReturnType: tree.FixedReturnType(types.Int),
 			IsUDF:      true,
 			Body:       `SELECT crdb_internal.create_tenant(json_build_object('name', $1))`,
-			Info:       `create_tenant(name) is an alias for create_tenant('{"name": name}'::jsonb)`,
+			Info: `create_tenant(name) is an alias for create_tenant('{"name": name}'::jsonb).
+DO NOT USE -- USE 'CREATE TENANT' INSTEAD`,
 			Volatility: volatility.Volatile,
 		},
 	),
@@ -5026,8 +5032,11 @@ value if you rely on the HLC for accuracy.`,
 					return nil, err
 				}
 				synchronous := tree.MustBeDBool(args[1])
+
+				// Note: we pass true to ignoreServiceMode for compatibility
+				// with CC Serverless pre-v23.1.
 				if err := evalCtx.Tenant.DropTenantByID(
-					ctx, uint64(sTenID), bool(synchronous),
+					ctx, uint64(sTenID), bool(synchronous), true, /* ignoreServiceMode */
 				); err != nil {
 					return nil, err
 				}
@@ -5945,6 +5954,23 @@ value if you rely on the HLC for accuracy.`,
 			Volatility:        volatility.Stable,
 			CalledOnNullInput: true,
 		},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "val", Typ: types.TSVector},
+				{Name: "version", Typ: types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				if args[0] == tree.DNull {
+					return tree.DZero, nil
+				}
+				val := args[0].(*tree.DTSVector)
+				return tree.NewDInt(tree.DInt(len(val.TSVector))), nil
+			},
+			Info:              "This function is used only by CockroachDB's developers for testing purposes.",
+			Volatility:        volatility.Stable,
+			CalledOnNullInput: true,
+		},
 	),
 
 	// Returns true iff the current user has admin role.
@@ -6293,6 +6319,33 @@ value if you rely on the HLC for accuracy.`,
 			Volatility: volatility.Volatile,
 		},
 	),
+	"crdb_internal.upsert_dropped_relation_gc_ttl": makeBuiltin(
+		tree.FunctionProperties{
+			Category:         builtinconstants.CategorySystemRepair,
+			DistsqlBlocklist: true,
+			Undocumented:     true,
+		},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "desc_id", Typ: types.Int},
+				{Name: "gc_ttl", Typ: types.Interval},
+			},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				if err := evalCtx.Planner.UpsertDroppedRelationGCTTL(
+					ctx,
+					int64(*args[0].(*tree.DInt)),          // desc_id
+					(*args[1].(*tree.DInterval)).Duration, // gc_ttl
+				); err != nil {
+					return nil, err
+				}
+				return tree.DBoolTrue, nil
+			},
+			Info: "Administrators can use this to effectively perform " +
+				"ALTER TABLE ... CONFIGURE ZONE USING gc.ttlseconds = ...; on dropped tables",
+			Volatility: volatility.Volatile,
+		},
+	),
 
 	// Generate some objects.
 	"crdb_internal.generate_test_objects": makeBuiltin(
@@ -6403,6 +6456,9 @@ Parameters:` + randgencfg.ConfigDoc,
 	),
 
 	// Used to configure the tenant token bucket. See UpdateTenantResourceLimits.
+	//
+	// TODO(multitenantTeam): use tenantName instead of tenantID. See issue:
+	// https://github.com/cockroachdb/cockroach/issues/96176
 	"crdb_internal.update_tenant_resource_limits": makeBuiltin(
 		tree.FunctionProperties{
 			Category:     builtinconstants.CategoryMultiTenancy,
@@ -9843,6 +9899,13 @@ func arrayToString(
 	evalCtx *eval.Context, arr *tree.DArray, delim string, nullStr *string,
 ) (tree.Datum, error) {
 	f := evalCtx.FmtCtx(tree.FmtArrayToString)
+	arrayToStringHelper(evalCtx, arr, delim, nullStr, f)
+	return tree.NewDString(f.CloseAndGetString()), nil
+}
+
+func arrayToStringHelper(
+	evalCtx *eval.Context, arr *tree.DArray, delim string, nullStr *string, f *tree.FmtCtx,
+) {
 
 	for i := range arr.Array {
 		if arr.Array[i] == tree.DNull {
@@ -9851,13 +9914,17 @@ func arrayToString(
 			}
 			f.WriteString(*nullStr)
 		} else {
-			f.FormatNode(arr.Array[i])
+			if nestedArray, ok := arr.Array[i].(*tree.DArray); ok {
+				// "Unpack" nested arrays to be consistent with postgres.
+				arrayToStringHelper(evalCtx, nestedArray, delim, nullStr, f)
+			} else {
+				f.FormatNode(arr.Array[i])
+			}
 		}
 		if i < len(arr.Array)-1 {
 			f.WriteString(delim)
 		}
 	}
-	return tree.NewDString(f.CloseAndGetString()), nil
 }
 
 // encodeEscape implements the encode(..., 'escape') Postgres builtin. It's
@@ -10118,7 +10185,7 @@ func asJSONBuildObjectKey(
 		*tree.DDecimal, *tree.DEnum, *tree.DFloat, *tree.DGeography,
 		*tree.DGeometry, *tree.DIPAddr, *tree.DInt, *tree.DInterval, *tree.DOid,
 		*tree.DOidWrapper, *tree.DTime, *tree.DTimeTZ, *tree.DTimestamp,
-		*tree.DUuid, *tree.DVoid:
+		*tree.DTSQuery, *tree.DTSVector, *tree.DUuid, *tree.DVoid:
 		return tree.AsStringWithFlags(d, tree.FmtBareStrings), nil
 	default:
 		return "", errors.AssertionFailedf("unexpected type %T for key value", d)
@@ -10381,7 +10448,7 @@ func arrayNumInvertedIndexEntries(
 
 func parseContextFromDateStyle(
 	evalCtx *eval.Context, dateStyleStr string,
-) (tree.ParseTimeContext, error) {
+) (tree.ParseContext, error) {
 	ds, err := pgdate.ParseDateStyle(dateStyleStr, pgdate.DefaultDateStyle())
 	if err != nil {
 		return nil, err
@@ -10389,9 +10456,9 @@ func parseContextFromDateStyle(
 	if ds.Style != pgdate.Style_ISO {
 		return nil, unimplemented.NewWithIssue(41773, "only ISO style is supported")
 	}
-	return tree.NewParseTimeContext(
+	return tree.NewParseContext(
 		evalCtx.GetTxnTimestamp(time.Microsecond).Time,
-		tree.NewParseTimeContextOptionDateStyle(ds),
+		tree.NewParseContextOptionDateStyle(ds),
 	), nil
 }
 

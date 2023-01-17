@@ -727,26 +727,26 @@ ON CONFLICT (c1) DO UPDATE SET c3=1
 upsert nullablecols
  ├── arbiter indexes: nullablecols_c1_key
  ├── columns: <none>
- ├── canary column: rowid:24
- ├── fetch columns: c1:21 c2:22 c3:23 rowid:24
+ ├── canary column: rowid:25
+ ├── fetch columns: c1:22 c2:23 c3:24 rowid:25
  ├── insert-mapping:
  │    ├── i:8 => c1:1
  │    ├── i:8 => c2:2
  │    ├── i:8 => c3:3
  │    └── i:8 => rowid:4
  ├── update-mapping:
- │    └── upsert_c3:30 => c3:3
+ │    └── upsert_c3:31 => c3:3
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  └── project
-      ├── columns: upsert_c3:30!null i:8!null c1:21 c2:22 c3:23 rowid:24
-      ├── key: (8,24)
-      ├── fd: (24)-->(21-23), (21)~~>(22-24), (22,23)~~>(21,24), (8,24)-->(30)
+      ├── columns: upsert_c3:31!null i:8!null c1:22 c2:23 c3:24 rowid:25
+      ├── key: (8,25)
+      ├── fd: (25)-->(22-24), (22)~~>(23-25), (23,24)~~>(22,25), (8,25)-->(31)
       ├── left-join (hash)
-      │    ├── columns: i:8!null c1:21 c2:22 c3:23 rowid:24
+      │    ├── columns: i:8!null c1:22 c2:23 c3:24 rowid:25
       │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
-      │    ├── key: (8,24)
-      │    ├── fd: (24)-->(21-23), (21)~~>(22-24), (22,23)~~>(21,24)
+      │    ├── key: (8,25)
+      │    ├── fd: (25)-->(22-24), (22)~~>(23-25), (23,24)~~>(22,25)
       │    ├── ensure-upsert-distinct-on
       │    │    ├── columns: i:8!null
       │    │    ├── grouping columns: i:8!null
@@ -761,27 +761,31 @@ upsert nullablecols
       │    │         │    ├── key: (7)
       │    │         │    └── fd: (7)-->(8)
       │    │         └── filters
-      │    │              ├── exists [subquery]
-      │    │              │    └── limit
-      │    │              │         ├── columns: k:14!null i:15!null f:16 s:17!null j:18
-      │    │              │         ├── cardinality: [0 - 1]
-      │    │              │         ├── key: ()
-      │    │              │         ├── fd: ()-->(14-18)
-      │    │              │         ├── scan a
-      │    │              │         │    ├── columns: k:14!null i:15!null f:16 s:17!null j:18
-      │    │              │         │    ├── key: (14)
-      │    │              │         │    ├── fd: (14)-->(15-18), (15,17)-->(14,16,18), (15,16)~~>(14,17,18)
-      │    │              │         │    └── limit hint: 1.00
-      │    │              │         └── 1
+      │    │              ├── coalesce [subquery]
+      │    │              │    ├── subquery
+      │    │              │    │    └── project
+      │    │              │    │         ├── columns: column21:21!null
+      │    │              │    │         ├── cardinality: [0 - 1]
+      │    │              │    │         ├── key: ()
+      │    │              │    │         ├── fd: ()-->(21)
+      │    │              │    │         ├── limit
+      │    │              │    │         │    ├── cardinality: [0 - 1]
+      │    │              │    │         │    ├── key: ()
+      │    │              │    │         │    ├── scan a
+      │    │              │    │         │    │    └── limit hint: 1.00
+      │    │              │    │         │    └── 1
+      │    │              │    │         └── projections
+      │    │              │    │              └── true [as=column21:21]
+      │    │              │    └── false
       │    │              └── k:7 > 0 [outer=(7), constraints=(/7: [/1 - ]; tight)]
       │    ├── scan nullablecols
-      │    │    ├── columns: c1:21 c2:22 c3:23 rowid:24!null
-      │    │    ├── key: (24)
-      │    │    └── fd: (24)-->(21-23), (21)~~>(22-24), (22,23)~~>(21,24)
+      │    │    ├── columns: c1:22 c2:23 c3:24 rowid:25!null
+      │    │    ├── key: (25)
+      │    │    └── fd: (25)-->(22-24), (22)~~>(23-25), (23,24)~~>(22,25)
       │    └── filters
-      │         └── i:8 = c1:21 [outer=(8,21), constraints=(/8: (/NULL - ]; /21: (/NULL - ]), fd=(8)==(21), (21)==(8)]
+      │         └── i:8 = c1:22 [outer=(8,22), constraints=(/8: (/NULL - ]; /22: (/NULL - ]), fd=(8)==(22), (22)==(8)]
       └── projections
-           └── CASE WHEN rowid:24 IS NULL THEN i:8 ELSE 1 END [as=upsert_c3:30, outer=(8,24)]
+           └── CASE WHEN rowid:25 IS NULL THEN i:8 ELSE 1 END [as=upsert_c3:31, outer=(8,25)]
 
 # Don't eliminate project if it computes extra column(s).
 norm expect-not=EliminateGroupByProject

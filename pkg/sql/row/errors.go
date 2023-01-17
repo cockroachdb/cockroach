@@ -112,7 +112,7 @@ func NewUniquenessConstraintViolationError(
 			"duplicate key value got decoding error")
 	}
 	// Resolve the table index descriptor name.
-	indexName, err := tableDesc.GetIndexNameByID(index.GetID())
+	indexName, err := catalog.FindTargetIndexNameByID(tableDesc, index.GetID())
 	if err != nil {
 		log.Warningf(ctx,
 			"unable to find index by ID for NewUniquenessConstraintViolationError: %d",
@@ -196,7 +196,7 @@ func decodeKeyCodecAndIndex(
 	if err != nil {
 		return keys.SQLCodec{}, nil, err
 	}
-	index, err := tableDesc.FindIndexWithID(indexID)
+	index, err := catalog.MustFindIndexByID(tableDesc, indexID)
 	if err != nil {
 		return keys.SQLCodec{}, nil, err
 	}
@@ -247,7 +247,7 @@ func DecodeRowInfo(
 	}
 	cols := make([]catalog.Column, len(colIDs))
 	for i, colID := range colIDs {
-		col, err := tableDesc.FindColumnWithID(colID)
+		col, err := catalog.MustFindColumnByID(tableDesc, colID)
 		if err != nil {
 			return nil, nil, nil, err
 		}

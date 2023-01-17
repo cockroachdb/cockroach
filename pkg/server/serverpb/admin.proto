@@ -22,6 +22,7 @@ import "kv/kvserver/loqrecovery/loqrecoverypb/recovery.proto";
 import "kv/kvserver/kvserverpb/range_log.proto";
 import "roachpb/api.proto";
 import "roachpb/metadata.proto";
+import "roachpb/data.proto";
 import "ts/catalog/chart_catalog.proto";
 import "util/metric/metric.proto";
 import "gogoproto/gogo.proto";
@@ -479,6 +480,72 @@ message DrainResponse {
   reserved 1;
 }
 
+// DecommissionPreCheckRequest requests that preliminary checks be run to
+// ensure that the specified node(s) can be decommissioned successfully.
+message DecommissionPreCheckRequest {
+  repeated int32 node_ids = 1 [(gogoproto.customname) = "NodeIDs",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+
+  // The maximum number of ranges for which to report errors.
+  int32 num_replica_report = 2;
+
+  // If true, all ranges on the checked nodes must only need replacement or
+  // removal for decommissioning.
+  bool strict_readiness = 3;
+
+  // If true, collect traces for each range checked.
+  // Requires num_replica_report > 0.
+  bool collect_traces = 4;
+}
+
+// DecommissionPreCheckResponse returns the number of replicas that encountered
+// errors when running preliminary decommissioning checks, as well as the
+// associated error messages and traces, for each node.
+message DecommissionPreCheckResponse {
+  enum NodeReadiness {
+    UNKNOWN = 0;
+    READY = 1;
+    ALREADY_DECOMMISSIONED = 2;
+    ALLOCATION_ERRORS = 3;
+  }
+
+  // The result of checking a range's readiness for the decommission.
+  message RangeCheckResult {
+    int32 range_id = 1 [ (gogoproto.customname) = "RangeID",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"];
+    // The action determined by the allocator that is needed for the range.
+    string action = 2;
+    // All trace events collected while checking the range.
+    repeated TraceEvent events = 3;
+    // The error message from the allocator's processing, if any.
+    string error = 4;
+  }
+
+  // The result of checking a single node's readiness for decommission.
+  message NodeCheckResult {
+    int32 node_id = 1 [ (gogoproto.customname) = "NodeID",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+
+    // The node's decommission readiness status.
+    NodeReadiness decommission_readiness = 2;
+
+    // The liveness status of the given node.
+    kv.kvserver.liveness.livenesspb.NodeLivenessStatus liveness_status = 3;
+
+    // The number of total replicas on the node, computed by scanning range
+    // descriptors.
+    int64 replica_count = 4;
+
+    // The details and recorded traces from preprocessing each range with a
+    // replica on the checked nodes that resulted in error, up to the maximum
+    // specified in the request.
+    repeated RangeCheckResult checked_ranges = 5 [(gogoproto.nullable) = false];
+  }
+
+  // Status of the preliminary decommission checks across nodes.
+  repeated NodeCheckResult checked_nodes = 1 [(gogoproto.nullable) = false];
+}
+
 // DecommissionStatusRequest requests the decommissioning status for the
 // specified or, if none are specified, all nodes.
 message DecommissionStatusRequest {
@@ -837,10 +904,23 @@ message CertBundleResponse {
 
 message RecoveryCollectReplicaInfoRequest {}
 
+// RecoveryCollectReplicaRestartNodeStream is sent by collector node to client
+// if it experiences a transient failure collecting data from one of the nodes.
+// This message instructs client to drop any data that it collected locally
+// for specified node as streaming for this node would be restarted.
+// This mechanism is needed to avoid restarting the whole collection procedure
+// in large cluster if one of the nodes fails transiently.
+message RecoveryCollectReplicaRestartNodeStream {
+  int32 node_id = 1 [
+    (gogoproto.customname) = "NodeID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+}
+
 message RecoveryCollectReplicaInfoResponse {
   oneof info {
     roachpb.RangeDescriptor range_descriptor = 1;
     cockroach.kv.kvserver.loqrecovery.loqrecoverypb.ReplicaInfo replica_info = 2;
+    RecoveryCollectReplicaRestartNodeStream node_stream_restarted = 3;
   }
 }
 
@@ -872,7 +952,8 @@ message RecoveryNodeStatusRequest {
 }
 
 message RecoveryNodeStatusResponse {
-  cockroach.kv.kvserver.loqrecovery.loqrecoverypb.NodeRecoveryStatus status = 1;
+  cockroach.kv.kvserver.loqrecovery.loqrecoverypb.NodeRecoveryStatus status = 1 [
+    (gogoproto.nullable) = false];
 }
 
 message RecoveryVerifyRequest {
@@ -890,10 +971,11 @@ message RecoveryVerifyResponse {
   // Statuses contain a list of recovery statuses of nodes updated during recovery. It
   // also contains nodes that were expected to be live (not decommissioned by recovery)
   // but failed to return status response.
-  repeated cockroach.kv.kvserver.loqrecovery.loqrecoverypb.NodeRecoveryStatus statuses = 1;
-  // Unavailable ranges contains descriptors of ranges that failed health checks.
+  repeated cockroach.kv.kvserver.loqrecovery.loqrecoverypb.NodeRecoveryStatus statuses = 1 [
+    (gogoproto.nullable) = false];
+  // UnavailableRanges contains descriptors of ranges that failed health checks.
   repeated roachpb.RangeDescriptor unavailable_ranges = 2 [
-    (gogoproto.customname) = "UnavailableRanges"];
+    (gogoproto.nullable) = false];
   // DecommissionedNodeIDs contains list of decommissioned node id's. Only nodes that
   // were decommissioned by the plan would be listed here, not all historically
   // decommissioned ones.
@@ -1072,6 +1154,11 @@ service Admin {
   rpc Drain(DrainRequest) returns (stream DrainResponse) {
   }
 
+  // DecommissionPreCheck requests that the server execute preliminary checks
+  // to evaluate the possibility of successfully decommissioning a given node.
+  rpc DecommissionPreCheck(DecommissionPreCheckRequest) returns (DecommissionPreCheckResponse) {
+  }
+
   // Decommission puts the node(s) into the specified decommissioning state.
   // If this ever becomes exposed via HTTP, ensure that it performs
   // authorization. See #42567.
@@ -1210,6 +1297,25 @@ service Admin {
   // decommissioned.
   rpc RecoveryVerify(RecoveryVerifyRequest) returns (RecoveryVerifyResponse) {}
 
+  // ListTenants returns a list of active tenants in the cluster.
+  rpc ListTenants(ListTenantsRequest) returns (ListTenantsResponse) {
+    option (google.api.http) = {
+      get: "/_admin/v1/tenants"
+    };
+  }
+}
+
+message ListTenantsRequest{}
+
+message ListTenantsResponse {
+  repeated Tenant tenants = 1;
+}
+
+message Tenant {
+  roachpb.TenantID tenant_id = 1;
+  string tenant_name = 2;
+  string sql_addr = 3;
+  string rpc_addr = 4;
 }
 
 message ListTracingSnapshotsRequest {}

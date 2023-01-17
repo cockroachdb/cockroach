@@ -28,11 +28,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/settingswatcher"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
 	"github.com/cockroachdb/cockroach/pkg/upgrade/migrationstable"
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradebase"
@@ -50,8 +49,7 @@ import (
 type Manager struct {
 	deps      upgrade.SystemDeps
 	lm        *lease.Manager
-	ie        sqlutil.InternalExecutor
-	ief       descs.TxnManager
+	ie        isql.Executor
 	jr        *jobs.Registry
 	codec     keys.SQLCodec
 	settings  *cluster.Settings
@@ -77,11 +75,12 @@ func (m *Manager) SystemDeps() upgrade.SystemDeps {
 
 // NewManager constructs a new Manager. The SystemDeps parameter may be zero in
 // secondary tenants. The testingKnobs parameter may be nil.
+//
+// TODO(ajwerner): Remove the ie argument given the isql.DB in deps.
 func NewManager(
 	deps upgrade.SystemDeps,
 	lm *lease.Manager,
-	ie sqlutil.InternalExecutor,
-	ief descs.TxnManager,
+	ie isql.Executor,
 	jr *jobs.Registry,
 	codec keys.SQLCodec,
 	settings *cluster.Settings,
@@ -96,7 +95,6 @@ func NewManager(
 		deps:      deps,
 		lm:        lm,
 		ie:        ie,
-		ief:       ief,
 		jr:        jr,
 		codec:     codec,
 		settings:  settings,
@@ -174,11 +172,15 @@ func (m *Manager) RunPermanentUpgrades(ctx context.Context, upToVersion roachpb.
 	vers := m.listBetween(roachpb.Version{}, upToVersion)
 	var permanentUpgrades []upgradebase.Upgrade
 	for _, v := range vers {
-		upgrade, exists := m.GetUpgrade(v)
-		if !exists || !upgrade.Permanent() {
+		u, exists := m.GetUpgrade(v)
+		if !exists || !u.Permanent() {
 			continue
 		}
-		permanentUpgrades = append(permanentUpgrades, upgrade)
+		_, isSystemUpgrade := u.(*upgrade.SystemUpgrade)
+		if isSystemUpgrade && !m.codec.ForSystemTenant() {
+			continue
+		}
+		permanentUpgrades = append(permanentUpgrades, u)
 	}
 
 	user := username.RootUserName()
@@ -246,7 +248,7 @@ func (m *Manager) RunPermanentUpgrades(ctx context.Context, upToVersion roachpb.
 		//
 		// TODO(andrei): Get rid of this once compatibility with 22.2 is not necessary.
 		startupMigrationAlreadyRan, err := checkOldStartupMigrationRan(
-			ctx, u.V22_2StartupMigrationName(), m.deps.DB, m.codec)
+			ctx, u.V22_2StartupMigrationName(), m.deps.DB.KV(), m.codec)
 		if err != nil {
 			return err
 		}
@@ -548,13 +550,12 @@ func (m *Manager) runMigration(
 			// The TenantDeps used here are incomplete, but enough for the "permanent
 			// upgrades" that run under this testing knob.
 			if err := upg.Run(ctx, mig.Version(), upgrade.TenantDeps{
-				DB:                      m.deps.DB,
-				Codec:                   m.codec,
-				Settings:                m.settings,
-				LeaseManager:            m.lm,
-				InternalExecutor:        m.ie,
-				InternalExecutorFactory: m.ief,
-				JobRegistry:             m.jr,
+				DB:               m.deps.DB,
+				Codec:            m.codec,
+				Settings:         m.settings,
+				LeaseManager:     m.lm,
+				InternalExecutor: m.ie,
+				JobRegistry:      m.jr,
 			}); err != nil {
 				return err
 			}
@@ -577,10 +578,10 @@ func (m *Manager) runMigration(
 		}
 		if alreadyExisting {
 			log.Infof(ctx, "waiting for %s", mig.Name())
-			return m.jr.WaitForJobs(ctx, m.ie, []jobspb.JobID{id})
+			return m.jr.WaitForJobs(ctx, []jobspb.JobID{id})
 		} else {
 			log.Infof(ctx, "running %s", mig.Name())
-			return m.jr.Run(ctx, m.ie, []jobspb.JobID{id})
+			return m.jr.Run(ctx, []jobspb.JobID{id})
 		}
 	}
 }
@@ -589,10 +590,10 @@ func (m *Manager) getOrCreateMigrationJob(
 	ctx context.Context, user username.SQLUsername, version roachpb.Version, name string,
 ) (alreadyCompleted, alreadyExisting bool, jobID jobspb.JobID, _ error) {
 	newJobID := m.jr.MakeJobID()
-	if err := m.deps.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
+	if err := m.deps.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) (err error) {
 		enterpriseEnabled := base.CCLDistributionAndEnterpriseEnabled(m.settings, m.clusterID)
 		alreadyCompleted, err = migrationstable.CheckIfMigrationCompleted(
-			ctx, version, txn, m.ie, enterpriseEnabled, migrationstable.ConsistentRead,
+			ctx, version, txn.KV(), txn, enterpriseEnabled, migrationstable.ConsistentRead,
 		)
 		if err != nil && ctx.Err() == nil {
 			log.Warningf(ctx, "failed to check if migration already completed: %v", err)
@@ -615,7 +616,7 @@ func (m *Manager) getOrCreateMigrationJob(
 }
 
 func (m *Manager) getRunningMigrationJob(
-	ctx context.Context, txn *kv.Txn, version roachpb.Version,
+	ctx context.Context, txn isql.Txn, version roachpb.Version,
 ) (found bool, jobID jobspb.JobID, _ error) {
 	// Wrap the version into a ClusterVersion so that the JSON looks like what the
 	// Payload proto has inside.
@@ -638,7 +639,7 @@ SELECT id, status
 	if err != nil {
 		return false, 0, errors.Wrap(err, "failed to marshal version to JSON")
 	}
-	rows, err := m.ie.QueryBuffered(ctx, "migration-manager-find-jobs", txn, query, jsonMsg.String())
+	rows, err := txn.QueryBuffered(ctx, "migration-manager-find-jobs", txn.KV(), query, jsonMsg.String())
 	if err != nil {
 		return false, 0, err
 	}
@@ -688,13 +689,12 @@ func (m *Manager) checkPreconditions(ctx context.Context, versions []roachpb.Ver
 			continue
 		}
 		if err := tm.Precondition(ctx, clusterversion.ClusterVersion{Version: v}, upgrade.TenantDeps{
-			DB:                      m.deps.DB,
-			Codec:                   m.codec,
-			Settings:                m.settings,
-			LeaseManager:            m.lm,
-			InternalExecutor:        m.ie,
-			InternalExecutorFactory: m.ief,
-			JobRegistry:             m.jr,
+			DB:               m.deps.DB,
+			Codec:            m.codec,
+			Settings:         m.settings,
+			LeaseManager:     m.lm,
+			InternalExecutor: m.ie,
+			JobRegistry:      m.jr,
 		}); err != nil {
 			return errors.Wrapf(
 				err,

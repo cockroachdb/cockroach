@@ -739,9 +739,6 @@ func TestUpdateAbortSpan(t *testing.T) {
 				ClusterSettings: st,
 				Desc:            &desc,
 				AbortSpan:       as,
-				CanCreateTxn: func() (bool, hlc.Timestamp, roachpb.TransactionAbortedReason) {
-					return true, hlc.Timestamp{}, 0
-				},
 			}
 			ms := enginepb.MVCCStats{}
 			if c.before != nil {

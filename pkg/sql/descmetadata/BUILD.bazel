@@ -8,14 +8,13 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/keys",
-        "//pkg/kv",
         "//pkg/settings",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/descs",
+        "//pkg/sql/isql",
         "//pkg/sql/schemachanger/scexec",
         "//pkg/sql/sessiondata",
         "//pkg/sql/sessioninit",
-        "//pkg/sql/sqlutil",
     ],
 )
 

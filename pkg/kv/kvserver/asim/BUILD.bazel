@@ -12,12 +12,12 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/kv/kvserver/asim/config",
+        "//pkg/kv/kvserver/asim/gossip",
         "//pkg/kv/kvserver/asim/op",
         "//pkg/kv/kvserver/asim/queue",
         "//pkg/kv/kvserver/asim/state",
         "//pkg/kv/kvserver/asim/storerebalancer",
         "//pkg/kv/kvserver/asim/workload",
-        "//pkg/roachpb",
         "//pkg/util/encoding/csv",
         "//pkg/util/log",
     ],

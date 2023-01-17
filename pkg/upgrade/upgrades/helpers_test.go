@@ -16,11 +16,12 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/stretchr/testify/assert"
@@ -74,21 +75,36 @@ func InjectLegacyTable(
 	table catalog.TableDescriptor,
 	getDeprecatedDescriptor func() *descpb.TableDescriptor,
 ) {
-	err := s.InternalExecutorFactory().(descs.TxnManager).DescsTxn(ctx, s.DB(), func(
-		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+	err := s.InternalDB().(descs.DB).DescsTxn(ctx, func(
+		ctx context.Context, txn descs.Txn,
 	) error {
-		id := table.GetID()
-		tab, err := descriptors.MutableByID(txn).Table(ctx, id)
-		if err != nil {
-			return err
+		deprecatedDesc := getDeprecatedDescriptor()
+		var tab *tabledesc.Mutable
+		switch id := table.GetID(); id {
+		// If the table descriptor does not have a valid ID, it must be a system
+		// table with a dynamically-allocated ID.
+		case descpb.InvalidID:
+			var err error
+			tab, err = txn.Descriptors().MutableByName(txn.KV()).Table(ctx,
+				systemschema.SystemDB, schemadesc.GetPublicSchema(), table.GetName())
+			if err != nil {
+				return err
+			}
+			deprecatedDesc.ID = tab.GetID()
+		default:
+			var err error
+			tab, err = txn.Descriptors().MutableByID(txn.KV()).Table(ctx, id)
+			if err != nil {
+				return err
+			}
 		}
-		builder := tabledesc.NewBuilder(getDeprecatedDescriptor())
+		builder := tabledesc.NewBuilder(deprecatedDesc)
 		if err := builder.RunPostDeserializationChanges(); err != nil {
 			return err
 		}
 		tab.TableDescriptor = builder.BuildCreatedMutableTable().TableDescriptor
 		tab.Version = tab.ClusterVersion().Version + 1
-		return descriptors.WriteDesc(ctx, false /* kvTrace */, tab, txn)
+		return txn.Descriptors().WriteDesc(ctx, false /* kvTrace */, tab, txn.KV())
 	})
 	require.NoError(t, err)
 }
@@ -139,10 +155,10 @@ func GetTable(
 ) catalog.TableDescriptor {
 	var table catalog.TableDescriptor
 	// Retrieve the table.
-	err := s.InternalExecutorFactory().(descs.TxnManager).DescsTxn(ctx, s.DB(), func(
-		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+	err := s.InternalDB().(descs.DB).DescsTxn(ctx, func(
+		ctx context.Context, txn descs.Txn,
 	) (err error) {
-		table, err = descriptors.ByID(txn).WithoutNonPublic().Get().Table(ctx, tableID)
+		table, err = txn.Descriptors().ByID(txn.KV()).WithoutNonPublic().Get().Table(ctx, tableID)
 		return err
 	})
 	require.NoError(t, err)

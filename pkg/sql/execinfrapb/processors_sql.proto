@@ -397,6 +397,11 @@ message JoinReaderSpec {
   // a prefix of input columns followed by index (lookup) columns without
   // requiring a (buffered) sort.
   optional bool maintain_lookup_ordering = 22 [(gogoproto.nullable) = false];
+
+  // RemoteOnlyLookups is true when this join is defined with only lookups
+  // that read into remote regions, though the lookups are defined in
+  // LookupExpr, not RemoteLookupExpr.
+  optional bool remote_only_lookups = 23 [(gogoproto.nullable) = false];
 }
 
 // SorterSpec is the specification for a "sorting aggregator". A sorting

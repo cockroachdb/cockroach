@@ -421,7 +421,12 @@ func RunWithDetails(
 
 // SQL runs `cockroach sql` on a remote cluster.
 func SQL(
-	ctx context.Context, l *logger.Logger, clusterName string, secure bool, cmdArray []string,
+	ctx context.Context,
+	l *logger.Logger,
+	clusterName string,
+	secure bool,
+	tenantName string,
+	cmdArray []string,
 ) error {
 	if err := LoadClusters(); err != nil {
 		return err
@@ -430,7 +435,7 @@ func SQL(
 	if err != nil {
 		return err
 	}
-	return c.SQL(ctx, l, cmdArray)
+	return c.SQL(ctx, l, tenantName, cmdArray)
 }
 
 // IP gets the ip addresses of the nodes in a cluster.
@@ -457,10 +462,10 @@ func IP(
 		if err := c.Parallel(l, "", len(nodes), 0, func(i int) (*install.RunResultDetails, error) {
 			node := nodes[i]
 			res := &install.RunResultDetails{Node: node}
-			res.Stdout, res.Err = c.GetInternalIP(ctx, node)
+			res.Stdout, res.Err = c.GetInternalIP(l, ctx, node)
 			ips[i] = res.Stdout
 			return res, err
-		}); err != nil {
+		}, install.DefaultSSHRetryOpts); err != nil {
 			return nil, err
 		}
 	}
@@ -681,7 +686,7 @@ func Monitor(
 	if err != nil {
 		return nil, err
 	}
-	return c.Monitor(ctx, opts), nil
+	return c.Monitor(l, ctx, opts), nil
 }
 
 // StopOpts is used to pass options to Stop.
@@ -849,21 +854,27 @@ func Get(l *logger.Logger, clusterName, src, dest string) error {
 	return c.Get(l, c.Nodes, src, dest)
 }
 
+type PGURLOptions struct {
+	Secure     bool
+	External   bool
+	TenantName string
+}
+
 // PgURL generates pgurls for the nodes in a cluster.
 func PgURL(
-	ctx context.Context, l *logger.Logger, clusterName, certsDir string, external, secure bool,
+	ctx context.Context, l *logger.Logger, clusterName, certsDir string, opts PGURLOptions,
 ) ([]string, error) {
 	if err := LoadClusters(); err != nil {
 		return nil, err
 	}
-	c, err := newCluster(l, clusterName, install.SecureOption(secure), install.PGUrlCertsDirOption(certsDir))
+	c, err := newCluster(l, clusterName, install.SecureOption(opts.Secure), install.PGUrlCertsDirOption(certsDir))
 	if err != nil {
 		return nil, err
 	}
 	nodes := c.TargetNodes()
 	ips := make([]string, len(nodes))
 
-	if external {
+	if opts.External {
 		for i := 0; i < len(nodes); i++ {
 			ips[i] = c.VMs[nodes[i]-1].PublicIP
 		}
@@ -872,10 +883,10 @@ func PgURL(
 		if err := c.Parallel(l, "", len(nodes), 0, func(i int) (*install.RunResultDetails, error) {
 			node := nodes[i]
 			res := &install.RunResultDetails{Node: node}
-			res.Stdout, res.Err = c.GetInternalIP(ctx, node)
+			res.Stdout, res.Err = c.GetInternalIP(l, ctx, node)
 			ips[i] = res.Stdout
 			return res, err
-		}); err != nil {
+		}, install.DefaultSSHRetryOpts); err != nil {
 			return nil, err
 		}
 	}
@@ -885,7 +896,7 @@ func PgURL(
 		if ip == "" {
 			return nil, errors.Errorf("empty ip: %v", ips)
 		}
-		urls = append(urls, c.NodeURL(ip, c.NodePort(nodes[i])))
+		urls = append(urls, c.NodeURL(ip, c.NodePort(nodes[i]), opts.TenantName))
 	}
 	if len(urls) != len(nodes) {
 		return nil, errors.Errorf("have nodes %v, but urls %v from ips %v", nodes, urls, ips)
@@ -1063,7 +1074,7 @@ func Pprof(l *logger.Logger, clusterName string, opts PprofOpts) error {
 		outputFiles = append(outputFiles, outputFile)
 		mu.Unlock()
 		return res, nil
-	})
+	}, install.DefaultSSHRetryOpts)
 
 	for _, s := range outputFiles {
 		l.Printf("Created %s", s)
@@ -1724,7 +1735,7 @@ func sendCaptureCommand(
 				}
 			}
 			return res, res.Err
-		})
+		}, install.DefaultSSHRetryOpts)
 	return err
 }
 

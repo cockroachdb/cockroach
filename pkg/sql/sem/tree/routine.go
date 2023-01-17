@@ -16,11 +16,20 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
-// RoutinePlanFn creates a plan for the execution of one statement within a
-// routine.
-type RoutinePlanFn func(
-	_ context.Context, _ RoutineExecFactory, stmtIdx int, args Datums,
-) (RoutinePlan, error)
+// RoutinePlanGenerator generates a plan for the execution of each statement
+// within a routine. The given RoutinePlanGeneratedFunc is called for each plan
+// generated.
+//
+// A RoutinePlanGenerator must return an error if the RoutinePlanGeneratedFunc
+// returns an error.
+type RoutinePlanGenerator func(
+	_ context.Context, _ RoutineExecFactory, args Datums, fn RoutinePlanGeneratedFunc,
+) error
+
+// RoutinePlanGeneratedFunc is the function type that is called for each plan
+// enumerated by a RoutinePlanGenerator. isFinalPlan is true if no more plans
+// will be generated after the current plan.
+type RoutinePlanGeneratedFunc func(plan RoutinePlan, isFinalPlan bool) error
 
 // RoutinePlan represents a plan for a statement in a routine. It currently maps
 // to exec.Plan. We use the empty interface here rather then exec.Plan to avoid
@@ -45,11 +54,8 @@ type RoutineExpr struct {
 	// Args contains the argument expressions to the routine.
 	Args TypedExprs
 
-	// PlanFn returns an exec plan for a given statement in the routine.
-	PlanFn RoutinePlanFn
-
-	// NumStmts is the number of statements in the routine.
-	NumStmts int
+	// ForEachPlan generates a plan for each statement in the routine.
+	ForEachPlan RoutinePlanGenerator
 
 	// Typ is the type of the routine's result.
 	Typ *types.T
@@ -62,30 +68,43 @@ type RoutineExpr struct {
 	// invoking the routine.
 	EnableStepping bool
 
-	// CalledOnNullInput is true if the function should be called when any of
-	// its inputs are NULL. If false, the function will not be evaluated in the
-	// presence of null inputs, and will instead evaluate directly to NULL.
-	CalledOnNullInput bool
+	// CachedResult stores the datum that the routine evaluates to, if the
+	// routine is nullary (i.e., it has zero arguments) and stepping is
+	// disabled. It is populated during the first execution of the routine.
+	// Subsequent invocations of the routine return Result directly, rather than
+	// being executed.
+	//
+	// The cache is never cleared - it lives for the entire lifetime of the
+	// routine. Therefore, to "invalidate" the cache, a new routine must be
+	// created. For example, consider:
+	//
+	//   CREATE TABLE t (i INT);
+	//   CREATE FUNCTION f() RETURNS INT VOLATILE LANGUAGE SQL AS $$
+	//     SELECT i FROM (VALUES (1), (2)) v(i) WHERE i = (SELECT max(i) FROM t)
+	//   $$;
+	//   SELECT f() FROM (VALUES (3), (4));
+	//
+	// The optimizer query plan for the SELECT contains two expressions that are
+	// built as routines, the UDF and the subquery within it. Each invocation of
+	// the UDF's routine will re-plan the body of the function, creating a new
+	// routine for the subquery. This effectively "invalidates" the cached
+	// result in the subquery routines each time the UDF is invoked. Within a
+	// single invocation of the UDF, however, the subquery will only be executed
+	// once and the cached result will be returned if the subquery is evaluated
+	// multiple times (e.g., for each value of i in v).
+	CachedResult Datum
 }
 
 // NewTypedRoutineExpr returns a new RoutineExpr that is well-typed.
 func NewTypedRoutineExpr(
-	name string,
-	args TypedExprs,
-	planFn RoutinePlanFn,
-	numStmts int,
-	typ *types.T,
-	enableStepping bool,
-	calledOnNullInput bool,
+	name string, args TypedExprs, gen RoutinePlanGenerator, typ *types.T, enableStepping bool,
 ) *RoutineExpr {
 	return &RoutineExpr{
-		Args:              args,
-		PlanFn:            planFn,
-		NumStmts:          numStmts,
-		Typ:               typ,
-		EnableStepping:    enableStepping,
-		CalledOnNullInput: calledOnNullInput,
-		Name:              name,
+		Args:           args,
+		ForEachPlan:    gen,
+		Typ:            typ,
+		EnableStepping: enableStepping,
+		Name:           name,
 	}
 }
 

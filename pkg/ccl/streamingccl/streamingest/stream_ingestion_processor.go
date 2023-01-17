@@ -281,14 +281,14 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 	evalCtx := sip.FlowCtx.EvalCtx
 	db := sip.FlowCtx.Cfg.DB
 	var err error
-	sip.batcher, err = bulk.MakeStreamSSTBatcher(ctx, db, evalCtx.Settings,
+	sip.batcher, err = bulk.MakeStreamSSTBatcher(ctx, db.KV(), evalCtx.Settings,
 		sip.flowCtx.Cfg.BackupMonitor.MakeBoundAccount(), sip.flowCtx.Cfg.BulkSenderLimiter)
 	if err != nil {
 		sip.MoveToDraining(errors.Wrap(err, "creating stream sst batcher"))
 		return
 	}
 
-	sip.rangeBatcher = newRangeKeyBatcher(ctx, evalCtx.Settings, db)
+	sip.rangeBatcher = newRangeKeyBatcher(ctx, evalCtx.Settings, db.KV())
 
 	// Start a poller that checks if the stream ingestion job has been signaled to
 	// cutover.
@@ -825,6 +825,7 @@ func (sip *streamIngestionProcessor) flush() (*jobspb.ResolvedSpans, error) {
 			sip.metrics.CommitLatency.RecordValue(timeutil.Since(minBatchMVCCTimestamp.GoTime()).Nanoseconds())
 			sip.metrics.Flushes.Inc(1)
 			sip.metrics.IngestedBytes.Inc(int64(totalSize))
+			sip.metrics.SSTBytes.Inc(sip.batcher.GetSummary().SSTDataSize)
 			sip.metrics.IngestedEvents.Inc(int64(len(sip.curKVBatch)))
 			sip.metrics.IngestedEvents.Inc(int64(sip.rangeBatcher.size()))
 		}()

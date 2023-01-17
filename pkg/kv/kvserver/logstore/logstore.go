@@ -328,7 +328,7 @@ func LoadTerm(
 		if err != nil {
 			return 0, err
 		}
-		if typ != raftlog.EntryEncodingSideloaded {
+		if !typ.IsSideloaded() {
 			eCache.Add(rangeID, []raftpb.Entry{entry}, false /* truncate */)
 		}
 		return entry.Term, nil
@@ -405,7 +405,7 @@ func LoadEntries(
 		if err != nil {
 			return err
 		}
-		if typ == raftlog.EntryEncodingSideloaded {
+		if typ.IsSideloaded() {
 			newEnt, err := MaybeInlineSideloadedRaftCommand(
 				ctx, rangeID, ent, sideloaded, eCache,
 			)

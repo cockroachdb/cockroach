@@ -293,6 +293,14 @@ func TestDeterministicInitialData(t *testing.T) {
 			continue
 		}
 		t.Run(meta.Name, func(t *testing.T) {
+			// assertions depend on this seed
+			switch rs := meta.RandomSeed.(type) {
+			case *workload.Int64RandomSeed:
+				rs.Set(1)
+			case *workload.Uint64RandomSeed:
+				rs.Set(1)
+			}
+
 			if bigInitialData(meta) {
 				skip.UnderShort(t, fmt.Sprintf(`%s involves a lot of data`, meta.Name))
 			}

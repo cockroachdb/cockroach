@@ -24,7 +24,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
-	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
@@ -86,7 +85,8 @@ type storeMetrics interface {
 	Registry() *metric.Registry
 }
 
-var childMetricsEnabled = settings.RegisterBoolSetting(
+// ChildMetricsEnabled enables exporting of additional prometheus time series with extra labels
+var ChildMetricsEnabled = settings.RegisterBoolSetting(
 	settings.TenantWritable, "server.child_metrics.enabled",
 	"enables the exporting of child metrics, additional prometheus time series with extra labels",
 	false).WithPublic()
@@ -100,7 +100,6 @@ var childMetricsEnabled = settings.RegisterBoolSetting(
 // recorded, and they are thus kept separate.
 type MetricsRecorder struct {
 	*HealthChecker
-	gossip       *gossip.Gossip
 	nodeLiveness *liveness.NodeLiveness
 	rpcContext   *rpc.Context
 	settings     *cluster.Settings
@@ -128,6 +127,8 @@ type MetricsRecorder struct {
 		// independent.
 		storeRegistries map[roachpb.StoreID]*metric.Registry
 		stores          map[roachpb.StoreID]storeMetrics
+
+		tenantRecorders map[roachpb.TenantID]*MetricsRecorder
 	}
 
 	// prometheusExporter merges metrics into families and generates the
@@ -139,6 +140,13 @@ type MetricsRecorder struct {
 	// round-trip) that requires a mutex to be safe for concurrent usage. We
 	// therefore give it its own mutex to avoid blocking other methods.
 	writeSummaryMu syncutil.Mutex
+
+	// tenantID is the tenantID of the tenant this recorder is attached to.
+	tenantID roachpb.TenantID
+
+	// tenantNameContainer holds the tenant name of the tenant this recorder
+	// is attached to. It will be used to label metrics that are tenant-specific.
+	tenantNameContainer *roachpb.TenantNameContainer
 }
 
 // NewMetricsRecorder initializes a new MetricsRecorder object that uses the
@@ -147,21 +155,30 @@ func NewMetricsRecorder(
 	clock *hlc.Clock,
 	nodeLiveness *liveness.NodeLiveness,
 	rpcContext *rpc.Context,
-	gossip *gossip.Gossip,
 	settings *cluster.Settings,
+	tenantNameContainer *roachpb.TenantNameContainer,
 ) *MetricsRecorder {
 	mr := &MetricsRecorder{
 		HealthChecker: NewHealthChecker(trackedMetrics),
 		nodeLiveness:  nodeLiveness,
 		rpcContext:    rpcContext,
-		gossip:        gossip,
 		settings:      settings,
 	}
 	mr.mu.storeRegistries = make(map[roachpb.StoreID]*metric.Registry)
 	mr.mu.stores = make(map[roachpb.StoreID]storeMetrics)
+	mr.mu.tenantRecorders = make(map[roachpb.TenantID]*MetricsRecorder)
 	mr.prometheusExporter = metric.MakePrometheusExporter()
 	mr.clock = clock
+	mr.tenantID = rpcContext.TenantID
+	mr.tenantNameContainer = tenantNameContainer
 	return mr
+}
+
+func (mr *MetricsRecorder) AddTenantRecorder(rec *MetricsRecorder) {
+	mr.mu.Lock()
+	defer mr.mu.Unlock()
+
+	mr.mu.tenantRecorders[rec.tenantID] = rec
 }
 
 // AddNode adds the Registry from an initialized node, along with its descriptor
@@ -192,6 +209,7 @@ func (mr *MetricsRecorder) AddNode(
 	nodeIDGauge := metric.NewGauge(metadata)
 	nodeIDGauge.Update(int64(desc.NodeID))
 	reg.AddMetric(nodeIDGauge)
+	reg.AddLabel("tenant", mr.tenantNameContainer)
 }
 
 // AddStore adds the Registry from the provided store as a store-level registry
@@ -245,10 +263,13 @@ func (mr *MetricsRecorder) ScrapeIntoPrometheus(pm *metric.PrometheusExporter) {
 			log.Warning(context.TODO(), "MetricsRecorder asked to scrape metrics before NodeID allocation")
 		}
 	}
-	includeChildMetrics := childMetricsEnabled.Get(&mr.settings.SV)
+	includeChildMetrics := ChildMetricsEnabled.Get(&mr.settings.SV)
 	pm.ScrapeRegistry(mr.mu.nodeRegistry, includeChildMetrics)
 	for _, reg := range mr.mu.storeRegistries {
 		pm.ScrapeRegistry(reg, includeChildMetrics)
+	}
+	for _, ten := range mr.mu.tenantRecorders {
+		ten.ScrapeIntoPrometheus(pm)
 	}
 }
 
@@ -338,13 +359,17 @@ func (mr *MetricsRecorder) GetMetricsMetadata() map[string]metric.Metadata {
 	// Get a random storeID.
 	var sID roachpb.StoreID
 
+	storeFound := false
 	for storeID := range mr.mu.storeRegistries {
 		sID = storeID
+		storeFound = true
 		break
 	}
 
 	// Get metric metadata from that store because all stores have the same metadata.
-	mr.mu.storeRegistries[sID].WriteMetricsMetadata(metrics)
+	if storeFound {
+		mr.mu.storeRegistries[sID].WriteMetricsMetadata(metrics)
+	}
 
 	return metrics
 }
@@ -355,25 +380,17 @@ func (mr *MetricsRecorder) getNetworkActivity(
 	ctx context.Context,
 ) map[roachpb.NodeID]statuspb.NodeStatus_NetworkActivity {
 	activity := make(map[roachpb.NodeID]statuspb.NodeStatus_NetworkActivity)
-	if mr.nodeLiveness != nil && mr.gossip != nil {
+	if mr.nodeLiveness != nil {
 		isLiveMap := mr.nodeLiveness.GetIsLiveMap()
 
-		var currentAverages map[string]time.Duration
+		var currentAverages map[roachpb.NodeID]time.Duration
 		if mr.rpcContext.RemoteClocks != nil {
 			currentAverages = mr.rpcContext.RemoteClocks.AllLatencies()
 		}
 		for nodeID, entry := range isLiveMap {
-			address, err := mr.gossip.GetNodeIDAddress(nodeID)
-			if err != nil {
-				if entry.IsLive {
-					log.Warningf(ctx, "%v", err)
-				}
-				continue
-			}
 			na := statuspb.NodeStatus_NetworkActivity{}
-			key := address.String()
 			if entry.IsLive {
-				if latency, ok := currentAverages[key]; ok {
+				if latency, ok := currentAverages[nodeID]; ok {
 					na.Latency = latency.Nanoseconds()
 				}
 			}

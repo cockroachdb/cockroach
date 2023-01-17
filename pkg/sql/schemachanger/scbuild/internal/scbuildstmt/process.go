@@ -103,6 +103,8 @@ var supportedStatements = map[reflect.Type]supportedStatement{
 	reflect.TypeOf((*tree.CommentOnIndex)(nil)):      {fn: CommentOnIndex, on: true, minSupportedClusterVersion: clusterversion.V22_2Start},
 	reflect.TypeOf((*tree.CommentOnConstraint)(nil)): {fn: CommentOnConstraint, on: true, minSupportedClusterVersion: clusterversion.V22_2Start},
 	reflect.TypeOf((*tree.DropIndex)(nil)):           {fn: DropIndex, on: true, minSupportedClusterVersion: clusterversion.V23_1Start},
+	reflect.TypeOf((*tree.DropFunction)(nil)):        {fn: DropFunction, on: true, minSupportedClusterVersion: clusterversion.V23_1Start},
+	reflect.TypeOf((*tree.CreateFunction)(nil)):      {fn: CreateFunction, on: true, minSupportedClusterVersion: clusterversion.V23_1Start},
 }
 
 func init() {

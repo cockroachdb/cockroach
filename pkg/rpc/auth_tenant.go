@@ -30,13 +30,13 @@ type tenantAuthorizer struct {
 	tenantID roachpb.TenantID
 }
 
-func tenantFromCommonName(commonName string) (roachpb.TenantID, error) {
+func tenantIDFromString(commonName, field string) (roachpb.TenantID, error) {
 	tenID, err := strconv.ParseUint(commonName, 10, 64)
 	if err != nil {
-		return roachpb.TenantID{}, authErrorf("could not parse tenant ID from Common Name (CN): %s", err)
+		return roachpb.TenantID{}, authErrorf("could not parse tenant ID from %s: %s", field, err)
 	}
 	if tenID < roachpb.MinTenantID.ToUint64() || tenID > roachpb.MaxTenantID.ToUint64() {
-		return roachpb.TenantID{}, authErrorf("invalid tenant ID %d in Common Name (CN)", tenID)
+		return roachpb.TenantID{}, authErrorf("invalid tenant ID %d in %s", tenID, field)
 	}
 	return roachpb.MustMakeTenantID(tenID), nil
 }
@@ -133,9 +133,25 @@ func (a tenantAuthorizer) authorize(
 	case "/cockroach.server.serverpb.Status/HotRangesV2":
 		return a.authHotRangesV2(tenID)
 
+	case "/cockroach.server.serverpb.Status/NodesUI":
+		return a.authCapability(tenID)
+
+	case "/cockroach.server.serverpb.Admin/Liveness":
+		return a.authCapability(tenID)
+
+	case "/cockroach.ts.tspb.TimeSeries/Query":
+		return a.authCapability(tenID)
+
 	default:
 		return authErrorf("unknown method %q", fullMethod)
 	}
+}
+
+func checkSpanBounds(rSpan, tenSpan roachpb.RSpan) error {
+	if !tenSpan.ContainsKeyRange(rSpan.Key, rSpan.EndKey) {
+		return authErrorf("requested key span %s not fully contained in tenant keyspace %s", rSpan, tenSpan)
+	}
+	return nil
 }
 
 // authBatch authorizes the provided tenant to invoke the Batch RPC with the
@@ -186,10 +202,7 @@ func (a tenantAuthorizer) authBatch(tenID roachpb.TenantID, args *roachpb.BatchR
 		return authError(err.Error())
 	}
 	tenSpan := tenantPrefix(tenID)
-	if !tenSpan.ContainsKeyRange(rSpan.Key, rSpan.EndKey) {
-		return authErrorf("requested key span %s not fully contained in tenant keyspace %s", rSpan, tenSpan)
-	}
-	return nil
+	return checkSpanBounds(rSpan, tenSpan)
 }
 
 func (a tenantAuthorizer) authGetRangeDescriptors(
@@ -220,10 +233,7 @@ func (a tenantAuthorizer) authRangeFeed(
 		return authError(err.Error())
 	}
 	tenSpan := tenantPrefix(tenID)
-	if !tenSpan.ContainsKeyRange(rSpan.Key, rSpan.EndKey) {
-		return authErrorf("requested key span %s not fully contained in tenant keyspace %s", rSpan, tenSpan)
-	}
-	return nil
+	return checkSpanBounds(rSpan, tenSpan)
 }
 
 // authGossipSubscription authorizes the provided tenant to invoke the
@@ -253,6 +263,12 @@ func (a tenantAuthorizer) authTenant(id roachpb.TenantID) error {
 	if a.tenantID != id {
 		return authErrorf("request from tenant %s not permitted on tenant %s", id, a.tenantID)
 	}
+	return nil
+}
+
+// authCapability checks if the current tenant has the requested capability.
+func (a tenantAuthorizer) authCapability(id roachpb.TenantID) error {
+	// TODO(davidh): add capability-specific checks here that correspond to specific requests.
 	return nil
 }
 
@@ -425,34 +441,26 @@ func validateSpan(tenID roachpb.TenantID, sp roachpb.Span) error {
 	if err != nil {
 		return authError(err.Error())
 	}
-	if !tenSpan.ContainsKeyRange(rSpan.Key, rSpan.EndKey) {
-		return authErrorf("requested key span %s not fully contained in tenant keyspace %s", rSpan, tenSpan)
-	}
-	return nil
+	return checkSpanBounds(rSpan, tenSpan)
 }
 
-func contextWithTenant(ctx context.Context, tenID roachpb.TenantID) context.Context {
-	ctx = roachpb.NewContextForTenant(ctx, tenID)
-	const key = "tenant"
-	// Don't set a log tag if the tenant is not set and there is no existing log
-	// tag.
-	if !tenID.IsSet() {
-		found := false
-		tags := logtags.FromContext(ctx)
-		if tags != nil {
-			for _, t := range tags.Get() {
-				if t.Key() == key {
-					found = true
-					break
-				}
-			}
-		}
-		if !found {
-			return ctx
-		}
-	}
-	ctx = logtags.AddTag(ctx, key, tenID.String())
+const tenantLoggingTag = "tenant"
+
+// contextWithClientTenant inserts a tenant identifier in the context,
+// identifying the tenant that's the client for an RPC. The identifier can be
+// retrieved later through roachpb.ClientTenantFromContext(ctx). The tenant
+// information is used both as a log tag, and also for purposes like rate
+// limiting tenant calls.
+func contextWithClientTenant(ctx context.Context, tenID roachpb.TenantID) context.Context {
+	ctx = roachpb.ContextWithClientTenant(ctx, tenID)
+	ctx = logtags.AddTag(ctx, tenantLoggingTag, tenID.String())
 	return ctx
+}
+
+// contextWithoutClientTenant removes a tenant identifier in the context.
+func contextWithoutClientTenant(ctx context.Context) context.Context {
+	ctx = roachpb.ContextWithoutClientTenant(ctx)
+	return logtags.RemoveTag(ctx, tenantLoggingTag)
 }
 
 func tenantPrefix(tenID roachpb.TenantID) roachpb.RSpan {

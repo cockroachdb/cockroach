@@ -27,6 +27,10 @@ state offset=47
 /Table/5{1-2}                              database system (host)
 /Table/5{2-3}                              database system (host)
 /Table/5{3-4}                              database system (host)
+/Table/5{4-5}                              database system (host)
+/Table/5{5-6}                              database system (host)
+/Table/5{6-7}                              database system (host)
+/Table/5{7-8}                              ttl_seconds=3600 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
 /Table/10{6-7}                             range default
 
 exec-sql
@@ -54,6 +58,10 @@ state offset=47
 /Table/5{1-2}                              database system (host)
 /Table/5{2-3}                              database system (host)
 /Table/5{3-4}                              database system (host)
+/Table/5{4-5}                              database system (host)
+/Table/5{5-6}                              database system (host)
+/Table/5{6-7}                              database system (host)
+/Table/5{7-8}                              ttl_seconds=3600 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
 /Table/106{-/2}                            num_replicas=7
 /Table/106/{2-3}                           num_replicas=7 num_voters=5
 /Table/10{6/3-7}                           num_replicas=7
@@ -83,6 +91,10 @@ state offset=47
 /Table/5{1-2}                              database system (host)
 /Table/5{2-3}                              database system (host)
 /Table/5{3-4}                              database system (host)
+/Table/5{4-5}                              database system (host)
+/Table/5{5-6}                              database system (host)
+/Table/5{6-7}                              database system (host)
+/Table/5{7-8}                              ttl_seconds=3600 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
 /Table/106{-/2}                            ttl_seconds=3600 num_replicas=7
 /Table/106/{2-3}                           ttl_seconds=25 num_replicas=7 num_voters=5
 /Table/10{6/3-7}                           ttl_seconds=3600 num_replicas=7
@@ -102,6 +114,10 @@ state offset=47
 /Table/5{1-2}                              database system (host)
 /Table/5{2-3}                              database system (host)
 /Table/5{3-4}                              database system (host)
+/Table/5{4-5}                              database system (host)
+/Table/5{5-6}                              database system (host)
+/Table/5{6-7}                              database system (host)
+/Table/5{7-8}                              ttl_seconds=3600 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
 /Table/106{-/2}                            ttl_seconds=3600 num_replicas=9
 /Table/106/{2-3}                           ttl_seconds=25 num_replicas=9 num_voters=5
 /Table/10{6/3-7}                           ttl_seconds=3600 num_replicas=9
@@ -135,3 +151,7 @@ state offset=46
 /Table/5{1-2}                              database system (host)
 /Table/5{2-3}                              database system (host)
 /Table/5{3-4}                              database system (host)
+/Table/5{4-5}                              database system (host)
+/Table/5{5-6}                              database system (host)
+/Table/5{6-7}                              database system (host)
+/Table/5{7-8}                              ttl_seconds=3600 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true

@@ -1,4 +1,4 @@
-# tenant-cluster-setting-override-opt: allow-zone-configs-for-secondary-tenants
+# tenant-cluster-setting-override-opt: sql.zone_configs.allow_for_secondary_tenant.enabled=true
 # LogicTest: local
 
 statement error syntax

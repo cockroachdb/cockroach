@@ -37,7 +37,7 @@ func TestPebbleIterator_Corruption(t *testing.T) {
 	// Create a Pebble DB that can be used to back a pebbleIterator.
 	dir := t.TempDir()
 	dataDir := filepath.Join(dir, "data")
-	p, err := Open(context.Background(), Filesystem(dataDir))
+	p, err := Open(context.Background(), Filesystem(dataDir), cluster.MakeClusterSettings())
 	require.NoError(t, err)
 	defer p.Close()
 

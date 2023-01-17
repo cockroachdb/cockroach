@@ -201,7 +201,7 @@ func FormatIndexElements(
 
 	startIdx := index.ExplicitColumnStartIdx()
 	for i, n := startIdx, len(index.KeyColumnIDs); i < n; i++ {
-		col, err := table.FindColumnWithID(index.KeyColumnIDs[i])
+		col, err := catalog.MustFindColumnByID(table, index.KeyColumnIDs[i])
 		if err != nil {
 			return err
 		}
@@ -279,7 +279,7 @@ func formatStorageConfigs(
 		}
 
 		if index.GeoConfig.S2Geometry != nil {
-			col, err := table.FindColumnWithID(index.InvertedColumnID())
+			col, err := catalog.MustFindColumnByID(table, index.InvertedColumnID())
 			if err != nil {
 				return errors.Wrapf(err, "expected column %q to exist in table", index.InvertedColumnName())
 			}

@@ -7,48 +7,94 @@ CREATE TABLE multi_region_test_db.public.table_regional_by_table (
 /* test */
 EXPLAIN (ddl) DROP TABLE multi_region_test_db.public.table_regional_by_table CASCADE;
 ----
-Schema change plan for DROP TABLE ‹multi_region_test_db›.‹public›.‹table_regional_by_table› CASCADE; 
+Schema change plan for DROP TABLE ‹multi_region_test_db›.‹public›.‹table_regional_by_table› CASCADE;
  ├── StatementPhase
  │    └── Stage 1 of 1 in StatementPhase
- │         ├── 5 elements transitioning toward ABSENT
- │         │    ├── PUBLIC → TXN_DROPPED Table:{DescID: 108}
- │         │    ├── PUBLIC → WRITE_ONLY  Column:{DescID: 108, ColumnID: 1}
- │         │    ├── PUBLIC → WRITE_ONLY  Column:{DescID: 108, ColumnID: 4294967295}
- │         │    ├── PUBLIC → WRITE_ONLY  Column:{DescID: 108, ColumnID: 4294967294}
- │         │    └── PUBLIC → VALIDATED   PrimaryIndex:{DescID: 108, IndexID: 1, ConstraintID: 1}
- │         └── 1 Mutation operation
- │              └── MarkDescriptorAsSyntheticallyDropped {"DescriptorID":108}
- ├── PreCommitPhase
- │    └── Stage 1 of 1 in PreCommitPhase
- │         ├── 20 elements transitioning toward ABSENT
- │         │    ├── PUBLIC      → ABSENT  Namespace:{DescID: 108, Name: table_regional_by_table, ReferencedDescID: 104}
- │         │    ├── PUBLIC      → ABSENT  Owner:{DescID: 108}
- │         │    ├── PUBLIC      → ABSENT  UserPrivileges:{DescID: 108, Name: admin}
- │         │    ├── PUBLIC      → ABSENT  UserPrivileges:{DescID: 108, Name: root}
- │         │    ├── TXN_DROPPED → DROPPED Table:{DescID: 108}
- │         │    ├── PUBLIC      → ABSENT  ObjectParent:{DescID: 108, ReferencedDescID: 105}
- │         │    ├── PUBLIC      → ABSENT  TableLocalitySecondaryRegion:{DescID: 108, ReferencedDescID: 106}
- │         │    ├── PUBLIC      → ABSENT  ColumnFamily:{DescID: 108, Name: primary, ColumnFamilyID: 0}
- │         │    ├── WRITE_ONLY  → ABSENT  Column:{DescID: 108, ColumnID: 1}
- │         │    ├── PUBLIC      → ABSENT  ColumnName:{DescID: 108, Name: a, ColumnID: 1}
- │         │    ├── PUBLIC      → ABSENT  ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 1}
- │         │    ├── WRITE_ONLY  → ABSENT  Column:{DescID: 108, ColumnID: 4294967295}
- │         │    ├── PUBLIC      → ABSENT  ColumnName:{DescID: 108, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}
- │         │    ├── PUBLIC      → ABSENT  ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967295}
- │         │    ├── WRITE_ONLY  → ABSENT  Column:{DescID: 108, ColumnID: 4294967294}
- │         │    ├── PUBLIC      → ABSENT  ColumnName:{DescID: 108, Name: tableoid, ColumnID: 4294967294}
- │         │    ├── PUBLIC      → ABSENT  ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967294}
- │         │    ├── PUBLIC      → ABSENT  IndexColumn:{DescID: 108, ColumnID: 1, IndexID: 1}
- │         │    ├── VALIDATED   → ABSENT  PrimaryIndex:{DescID: 108, IndexID: 1, ConstraintID: 1}
- │         │    └── PUBLIC      → ABSENT  IndexName:{DescID: 108, Name: table_regional_by_table_pkey, IndexID: 1}
- │         └── 10 Mutation operations
+ │         ├── 21 elements transitioning toward ABSENT
+ │         │    ├── PUBLIC → ABSENT     Namespace:{DescID: 108, Name: table_regional_by_table, ReferencedDescID: 104}
+ │         │    ├── PUBLIC → ABSENT     Owner:{DescID: 108}
+ │         │    ├── PUBLIC → ABSENT     UserPrivileges:{DescID: 108, Name: admin}
+ │         │    ├── PUBLIC → ABSENT     UserPrivileges:{DescID: 108, Name: root}
+ │         │    ├── PUBLIC → DROPPED    Table:{DescID: 108}
+ │         │    ├── PUBLIC → ABSENT     ObjectParent:{DescID: 108, ReferencedDescID: 105}
+ │         │    ├── PUBLIC → ABSENT     TableLocalitySecondaryRegion:{DescID: 108, ReferencedDescID: 106}
+ │         │    ├── PUBLIC → ABSENT     ColumnFamily:{DescID: 108, Name: primary, ColumnFamilyID: 0}
+ │         │    ├── PUBLIC → WRITE_ONLY Column:{DescID: 108, ColumnID: 1}
+ │         │    ├── PUBLIC → ABSENT     ColumnName:{DescID: 108, Name: a, ColumnID: 1}
+ │         │    ├── PUBLIC → ABSENT     ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 1}
+ │         │    ├── PUBLIC → VALIDATED  ColumnNotNull:{DescID: 108, ColumnID: 1, IndexID: 0}
+ │         │    ├── PUBLIC → WRITE_ONLY Column:{DescID: 108, ColumnID: 4294967295}
+ │         │    ├── PUBLIC → ABSENT     ColumnName:{DescID: 108, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}
+ │         │    ├── PUBLIC → ABSENT     ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967295}
+ │         │    ├── PUBLIC → WRITE_ONLY Column:{DescID: 108, ColumnID: 4294967294}
+ │         │    ├── PUBLIC → ABSENT     ColumnName:{DescID: 108, Name: tableoid, ColumnID: 4294967294}
+ │         │    ├── PUBLIC → ABSENT     ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967294}
+ │         │    ├── PUBLIC → ABSENT     IndexColumn:{DescID: 108, ColumnID: 1, IndexID: 1}
+ │         │    ├── PUBLIC → VALIDATED  PrimaryIndex:{DescID: 108, IndexID: 1, ConstraintID: 1}
+ │         │    └── PUBLIC → ABSENT     IndexName:{DescID: 108, Name: table_regional_by_table_pkey, IndexID: 1}
+ │         └── 4 Mutation operations
  │              ├── MarkDescriptorAsDropped {"DescriptorID":108}
- │              ├── RemoveAllTableComments {"TableID":108}
+ │              ├── RemoveObjectParent {"ObjectID":108,"ParentSchemaID":105}
+ │              ├── RemoveBackReferenceInTypes {"BackReferencedDescriptorID":108}
+ │              └── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":108,"Name":"table_regional_b...","SchemaID":105}}
+ ├── PreCommitPhase
+ │    ├── Stage 1 of 2 in PreCommitPhase
+ │    │    ├── 21 elements transitioning toward ABSENT
+ │    │    │    ├── ABSENT     → PUBLIC Namespace:{DescID: 108, Name: table_regional_by_table, ReferencedDescID: 104}
+ │    │    │    ├── ABSENT     → PUBLIC Owner:{DescID: 108}
+ │    │    │    ├── ABSENT     → PUBLIC UserPrivileges:{DescID: 108, Name: admin}
+ │    │    │    ├── ABSENT     → PUBLIC UserPrivileges:{DescID: 108, Name: root}
+ │    │    │    ├── DROPPED    → PUBLIC Table:{DescID: 108}
+ │    │    │    ├── ABSENT     → PUBLIC ObjectParent:{DescID: 108, ReferencedDescID: 105}
+ │    │    │    ├── ABSENT     → PUBLIC TableLocalitySecondaryRegion:{DescID: 108, ReferencedDescID: 106}
+ │    │    │    ├── ABSENT     → PUBLIC ColumnFamily:{DescID: 108, Name: primary, ColumnFamilyID: 0}
+ │    │    │    ├── WRITE_ONLY → PUBLIC Column:{DescID: 108, ColumnID: 1}
+ │    │    │    ├── ABSENT     → PUBLIC ColumnName:{DescID: 108, Name: a, ColumnID: 1}
+ │    │    │    ├── ABSENT     → PUBLIC ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 1}
+ │    │    │    ├── VALIDATED  → PUBLIC ColumnNotNull:{DescID: 108, ColumnID: 1, IndexID: 0}
+ │    │    │    ├── WRITE_ONLY → PUBLIC Column:{DescID: 108, ColumnID: 4294967295}
+ │    │    │    ├── ABSENT     → PUBLIC ColumnName:{DescID: 108, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}
+ │    │    │    ├── ABSENT     → PUBLIC ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967295}
+ │    │    │    ├── WRITE_ONLY → PUBLIC Column:{DescID: 108, ColumnID: 4294967294}
+ │    │    │    ├── ABSENT     → PUBLIC ColumnName:{DescID: 108, Name: tableoid, ColumnID: 4294967294}
+ │    │    │    ├── ABSENT     → PUBLIC ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967294}
+ │    │    │    ├── ABSENT     → PUBLIC IndexColumn:{DescID: 108, ColumnID: 1, IndexID: 1}
+ │    │    │    ├── VALIDATED  → PUBLIC PrimaryIndex:{DescID: 108, IndexID: 1, ConstraintID: 1}
+ │    │    │    └── ABSENT     → PUBLIC IndexName:{DescID: 108, Name: table_regional_by_table_pkey, IndexID: 1}
+ │    │    └── 1 Mutation operation
+ │    │         └── UndoAllInTxnImmediateMutationOpSideEffects
+ │    └── Stage 2 of 2 in PreCommitPhase
+ │         ├── 21 elements transitioning toward ABSENT
+ │         │    ├── PUBLIC → ABSENT  Namespace:{DescID: 108, Name: table_regional_by_table, ReferencedDescID: 104}
+ │         │    ├── PUBLIC → ABSENT  Owner:{DescID: 108}
+ │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 108, Name: admin}
+ │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 108, Name: root}
+ │         │    ├── PUBLIC → DROPPED Table:{DescID: 108}
+ │         │    ├── PUBLIC → ABSENT  ObjectParent:{DescID: 108, ReferencedDescID: 105}
+ │         │    ├── PUBLIC → ABSENT  TableLocalitySecondaryRegion:{DescID: 108, ReferencedDescID: 106}
+ │         │    ├── PUBLIC → ABSENT  ColumnFamily:{DescID: 108, Name: primary, ColumnFamilyID: 0}
+ │         │    ├── PUBLIC → ABSENT  Column:{DescID: 108, ColumnID: 1}
+ │         │    ├── PUBLIC → ABSENT  ColumnName:{DescID: 108, Name: a, ColumnID: 1}
+ │         │    ├── PUBLIC → ABSENT  ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 1}
+ │         │    ├── PUBLIC → ABSENT  ColumnNotNull:{DescID: 108, ColumnID: 1, IndexID: 0}
+ │         │    ├── PUBLIC → ABSENT  Column:{DescID: 108, ColumnID: 4294967295}
+ │         │    ├── PUBLIC → ABSENT  ColumnName:{DescID: 108, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}
+ │         │    ├── PUBLIC → ABSENT  ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967295}
+ │         │    ├── PUBLIC → ABSENT  Column:{DescID: 108, ColumnID: 4294967294}
+ │         │    ├── PUBLIC → ABSENT  ColumnName:{DescID: 108, Name: tableoid, ColumnID: 4294967294}
+ │         │    ├── PUBLIC → ABSENT  ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967294}
+ │         │    ├── PUBLIC → ABSENT  IndexColumn:{DescID: 108, ColumnID: 1, IndexID: 1}
+ │         │    ├── PUBLIC → ABSENT  PrimaryIndex:{DescID: 108, IndexID: 1, ConstraintID: 1}
+ │         │    └── PUBLIC → ABSENT  IndexName:{DescID: 108, Name: table_regional_by_table_pkey, IndexID: 1}
+ │         └── 11 Mutation operations
+ │              ├── MarkDescriptorAsDropped {"DescriptorID":108}
+ │              ├── RemoveObjectParent {"ObjectID":108,"ParentSchemaID":105}
  │              ├── RemoveBackReferenceInTypes {"BackReferencedDescriptorID":108}
  │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":108,"Name":"table_regional_b...","SchemaID":105}}
- │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":1,"TableID":108}
+ │              ├── RemoveColumnNotNull {"ColumnID":1,"TableID":108}
  │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":4294967295,"TableID":108}
  │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":4294967294,"TableID":108}
+ │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":1,"TableID":108}
  │              ├── SetJobStateOnDescriptor {"DescriptorID":106,"Initialize":true}
  │              ├── SetJobStateOnDescriptor {"DescriptorID":108,"Initialize":true}
  │              └── CreateSchemaChangerJob {"NonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
@@ -58,8 +104,7 @@ Schema change plan for DROP TABLE ‹multi_region_test_db›.‹public›.‹tab
            │    ├── DROPPED → ABSENT Table:{DescID: 108}
            │    ├── PUBLIC  → ABSENT IndexData:{DescID: 108, IndexID: 1}
            │    └── PUBLIC  → ABSENT TableData:{DescID: 108, ReferencedDescID: 104}
-           └── 6 Mutation operations
-                ├── LogEvent {"TargetStatus":1}
+           └── 5 Mutation operations
                 ├── CreateGCJobForTable {"DatabaseID":104,"TableID":108}
                 ├── CreateGCJobForIndex {"IndexID":1,"TableID":108}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":106}

@@ -140,10 +140,7 @@ func newRaftTransportTestContext(t testing.TB) *raftTransportTestContext {
 	// we can't enforce some of the RPC check validation.
 	rttc.nodeRPCContext.TestingAllowNamedRPCToAnonymousServer = true
 
-	server := rpc.NewServer(rttc.nodeRPCContext) // never started
-	rttc.gossip = gossip.NewTest(
-		1, rttc.nodeRPCContext, server, rttc.stopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef(),
-	)
+	rttc.gossip = gossip.NewTest(1, rttc.stopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef())
 
 	return rttc
 }
@@ -168,7 +165,8 @@ func (rttc *raftTransportTestContext) AddNode(nodeID roachpb.NodeID) *kvserver.R
 func (rttc *raftTransportTestContext) AddNodeWithoutGossip(
 	nodeID roachpb.NodeID, addr net.Addr, stopper *stop.Stopper,
 ) (*kvserver.RaftTransport, net.Addr) {
-	grpcServer := rpc.NewServer(rttc.nodeRPCContext)
+	grpcServer, err := rpc.NewServer(rttc.nodeRPCContext)
+	require.NoError(rttc.t, err)
 	ctwWithTracer := log.MakeTestingAmbientCtxWithNewTracer()
 	transport := kvserver.NewRaftTransport(
 		ctwWithTracer,
@@ -180,9 +178,7 @@ func (rttc *raftTransportTestContext) AddNodeWithoutGossip(
 	)
 	rttc.transports[nodeID] = transport
 	ln, err := netutil.ListenAndServeGRPC(stopper, grpcServer, addr)
-	if err != nil {
-		rttc.t.Fatal(err)
-	}
+	require.NoError(rttc.t, err)
 	return transport, ln.Addr()
 }
 

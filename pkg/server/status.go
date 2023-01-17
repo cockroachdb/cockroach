@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/keyvisualizer/keyvisstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
@@ -52,6 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
@@ -63,7 +65,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insights"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
@@ -77,6 +78,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
+	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
@@ -212,30 +214,27 @@ func (b *baseStatusServer) getLocalSessions(
 	showAll := reqUsername.Undefined()
 	showInternal := SQLStatsShowInternal.Get(&b.st.SV) || req.IncludeInternal
 
-	// In order to avoid duplicate sessions showing up as both open and closed,
-	// we lock the session registry to prevent any changes to it while we
-	// serialize the sessions from the session registry and the closed session
-	// cache.
-	b.sessionRegistry.Lock()
-	sessions := b.sessionRegistry.SerializeAllLocked()
-
+	sessions := b.sessionRegistry.SerializeAll()
 	var closedSessions []serverpb.Session
+	var closedSessionIDs map[uint128.Uint128]struct{}
 	if !req.ExcludeClosedSessions {
 		closedSessions = b.closedSessionCache.GetSerializedSessions()
+		closedSessionIDs = make(map[uint128.Uint128]struct{}, len(closedSessions))
+		for _, closedSession := range closedSessions {
+			closedSessionIDs[uint128.FromBytes(closedSession.ID)] = struct{}{}
+		}
 	}
-	b.sessionRegistry.Unlock()
-
-	userSessions := make([]serverpb.Session, 0)
-	sessions = append(sessions, closedSessions...)
 
 	reqUserNameNormalized := reqUsername.Normalized()
-	for _, session := range sessions {
+
+	userSessions := make([]serverpb.Session, 0, len(sessions)+len(closedSessions))
+	addUserSession := func(session serverpb.Session) {
 		// We filter based on the session name instead of the executor type because we
 		// may want to surface certain internal sessions, such as those executed by
 		// the SQL over HTTP api, as non-internal.
 		if (reqUserNameNormalized != session.Username && !showAll) ||
 			(!showInternal && isInternalAppName(session.ApplicationName)) {
-			continue
+			return
 		}
 
 		if !isAdmin && hasViewActivityRedacted && (reqUserNameNormalized != session.Username) {
@@ -247,8 +246,21 @@ func (b *baseStatusServer) getLocalSessions(
 			}
 			session.LastActiveQuery = session.LastActiveQueryNoConstants
 		}
-
 		userSessions = append(userSessions, session)
+	}
+	for _, session := range sessions {
+		// The same session can appear as both open and closed because reading the
+		// open and closed sessions is not synchronized. Prefer the closed session
+		// over the open one if the same session appears as both because it was
+		// closed in between reading the open sessions and reading the closed ones.
+		_, ok := closedSessionIDs[uint128.FromBytes(session.ID)]
+		if ok {
+			continue
+		}
+		addUserSession(session)
+	}
+	for _, session := range closedSessions {
+		addUserSession(session)
 	}
 
 	sort.Slice(userSessions, func(i, j int) bool {
@@ -258,87 +270,42 @@ func (b *baseStatusServer) getLocalSessions(
 	return userSessions, nil
 }
 
-type sessionFinder func(sessions []serverpb.Session) (serverpb.Session, error)
-
-func findSessionBySessionID(sessionID []byte) sessionFinder {
-	return func(sessions []serverpb.Session) (serverpb.Session, error) {
-		var session serverpb.Session
-		for _, s := range sessions {
-			if bytes.Equal(sessionID, s.ID) {
-				session = s
-				break
-			}
-		}
-		if len(session.ID) == 0 {
-			return session, fmt.Errorf("session ID %s not found", clusterunique.IDFromBytes(sessionID))
-		}
-		return session, nil
-	}
-}
-
-func findSessionByQueryID(queryID string) sessionFinder {
-	return func(sessions []serverpb.Session) (serverpb.Session, error) {
-		var session serverpb.Session
-		for _, s := range sessions {
-			for _, q := range s.ActiveQueries {
-				if queryID == q.ID {
-					session = s
-					break
-				}
-			}
-		}
-		if len(session.ID) == 0 {
-			return session, fmt.Errorf("query ID %s not found", queryID)
-		}
-		return session, nil
-	}
-}
-
 // checkCancelPrivilege returns nil if the user has the necessary cancel action
 // privileges for a session. This function returns a proper gRPC error status.
 func (b *baseStatusServer) checkCancelPrivilege(
-	ctx context.Context, userName username.SQLUsername, findSession sessionFinder,
+	ctx context.Context, reqUsername username.SQLUsername, sessionUsername username.SQLUsername,
 ) error {
 	ctx = propagateGatewayMetadata(ctx)
 	ctx = b.AnnotateCtx(ctx)
-	// reqUser is the user who made the cancellation request.
-	var reqUser username.SQLUsername
-	{
-		sessionUser, isAdmin, err := b.privilegeChecker.getUserAndRole(ctx)
-		if err != nil {
-			return serverError(ctx, err)
-		}
-		if userName.Undefined() || userName == sessionUser {
-			reqUser = sessionUser
-		} else {
-			// When CANCEL QUERY is run as a SQL statement, sessionUser is always root
-			// and the user who ran the statement is passed as req.Username.
-			if !isAdmin {
-				return errRequiresAdmin
-			}
-			reqUser = userName
-		}
+
+	ctxUsername, isAdmin, err := b.privilegeChecker.getUserAndRole(ctx)
+	if err != nil {
+		return serverError(ctx, err)
+	}
+	if reqUsername.Undefined() {
+		reqUsername = ctxUsername
+	} else if reqUsername != ctxUsername && !isAdmin {
+		// When CANCEL QUERY is run as a SQL statement, sessionUser is always root
+		// and the user who ran the statement is passed as req.Username.
+		return errRequiresAdmin
 	}
 
-	hasAdmin, err := b.privilegeChecker.hasAdminRole(ctx, reqUser)
+	hasAdmin, err := b.privilegeChecker.hasAdminRole(ctx, reqUsername)
 	if err != nil {
 		return serverError(ctx, err)
 	}
 
 	if !hasAdmin {
 		// Check if the user has permission to see the session.
-		session, err := findSession(b.sessionRegistry.SerializeAll())
-		if err != nil {
-			return serverError(ctx, err)
-		}
-
-		sessionUser := username.MakeSQLUsernameFromPreNormalizedString(session.Username)
-		if sessionUser != reqUser {
+		if sessionUsername != reqUsername {
 			// Must have CANCELQUERY privilege to cancel other users'
 			// sessions/queries.
-			hasCancelQuery := b.privilegeChecker.checkHasGlobalPrivilege(ctx, reqUser, privilege.CANCELQUERY)
+			hasCancelQuery, err := b.privilegeChecker.hasGlobalPrivilege(ctx, reqUsername, privilege.CANCELQUERY)
+			if err != nil {
+				return serverError(ctx, err)
+			}
 			if !hasCancelQuery {
-				ok, err := b.privilegeChecker.hasRoleOption(ctx, reqUser, roleoption.CANCELQUERY)
+				ok, err := b.privilegeChecker.hasRoleOption(ctx, reqUsername, roleoption.CANCELQUERY)
 				if err != nil {
 					return serverError(ctx, err)
 				}
@@ -347,7 +314,7 @@ func (b *baseStatusServer) checkCancelPrivilege(
 				}
 			}
 			// Non-admins cannot cancel admins' sessions/queries.
-			isAdminSession, err := b.privilegeChecker.hasAdminRole(ctx, sessionUser)
+			isAdminSession, err := b.privilegeChecker.hasAdminRole(ctx, sessionUsername)
 			if err != nil {
 				return serverError(ctx, err)
 			}
@@ -1596,6 +1563,15 @@ func (s *systemStatusServer) Nodes(
 	return resp, nil
 }
 
+func (s *statusServer) NodesUI(
+	ctx context.Context, req *serverpb.NodesRequest,
+) (*serverpb.NodesResponseExternal, error) {
+	ctx = propagateGatewayMetadata(ctx)
+	ctx = s.AnnotateCtx(ctx)
+
+	return s.sqlServer.tenantConnect.NodesUI(ctx, req)
+}
+
 func (s *systemStatusServer) NodesUI(
 	ctx context.Context, req *serverpb.NodesRequest,
 ) (*serverpb.NodesResponseExternal, error) {
@@ -2120,6 +2096,7 @@ func (s *systemStatusServer) rangesHelper(
 				ReadsPerSecond:      loadStats.ReadKeysPerSecond,
 				WriteBytesPerSecond: loadStats.WriteKeysPerSecond,
 				ReadBytesPerSecond:  loadStats.ReadBytesPerSecond,
+				CPUTimePerSecond:    loadStats.RaftCPUNanosPerSecond + loadStats.RequestCPUNanosPerSecond,
 			},
 			Problems: serverpb.RangeProblems{
 				Unavailable:            metrics.Unavailable,
@@ -2233,8 +2210,9 @@ func (s *systemStatusServer) TenantRanges(
 		return nil, err
 	}
 
-	tID, ok := roachpb.TenantFromContext(ctx)
+	tID, ok := roachpb.ClientTenantFromContext(ctx)
 	if !ok {
+		log.Infof(ctx, "COULD NOT FIND TENANT ID")
 		return nil, status.Error(codes.Internal, "no tenant ID found in context")
 	}
 
@@ -2514,9 +2492,10 @@ func (s *systemStatusServer) HotRangesV2(
 						schemaName = meta.(tableMeta).schemaName
 						indexName = meta.(tableMeta).indexName
 					} else {
-						if err = s.sqlServer.distSQLServer.InternalExecutorFactory.DescsTxnWithExecutor(
-							ctx, s.db, nil, func(ctx context.Context, txn *kv.Txn, col *descs.Collection, ie sqlutil.InternalExecutor) error {
-								desc, err := col.ByID(txn).WithoutNonPublic().Get().Table(ctx, descpb.ID(tableID))
+						if err = s.sqlServer.distSQLServer.DB.DescsTxn(
+							ctx, func(ctx context.Context, txn descs.Txn) error {
+								col := txn.Descriptors()
+								desc, err := col.ByID(txn.KV()).WithoutNonPublic().Get().Table(ctx, descpb.ID(tableID))
 								if err != nil {
 									return errors.Wrapf(err, "cannot get table descriptor with tableID: %d, %s", tableID, r.Desc)
 								}
@@ -2526,21 +2505,21 @@ func (s *systemStatusServer) HotRangesV2(
 									if _, _, idxID, err := s.sqlServer.execCfg.Codec.DecodeIndexPrefix(r.Desc.StartKey.AsRawKey()); err != nil {
 										log.Warningf(ctx, "cannot decode index prefix for range descriptor: %s: %v", r.Desc, err)
 									} else {
-										if index, err := desc.FindIndexWithID(descpb.IndexID(idxID)); err != nil {
-											log.Warningf(ctx, "cannot get index name for range descriptor: %s: %v", r.Desc, err)
+										if index := catalog.FindIndexByID(desc, descpb.IndexID(idxID)); index == nil {
+											log.Warningf(ctx, "cannot get index name for range descriptor: %s: index with ID %d not found", r.Desc, idxID)
 										} else {
 											indexName = index.GetName()
 										}
 									}
 								}
 
-								if dbDesc, err := col.ByID(txn).WithoutNonPublic().Get().Database(ctx, desc.GetParentID()); err != nil {
+								if dbDesc, err := col.ByID(txn.KV()).WithoutNonPublic().Get().Database(ctx, desc.GetParentID()); err != nil {
 									log.Warningf(ctx, "cannot get database by descriptor ID: %s: %v", r.Desc, err)
 								} else {
 									dbName = dbDesc.GetName()
 								}
 
-								if schemaDesc, err := col.ByID(txn).WithoutNonPublic().Get().Schema(ctx, desc.GetParentSchemaID()); err != nil {
+								if schemaDesc, err := col.ByID(txn.KV()).WithoutNonPublic().Get().Schema(ctx, desc.GetParentSchemaID()); err != nil {
 									log.Warningf(ctx, "cannot get schema name for range descriptor: %s: %v", r.Desc, err)
 								} else {
 									schemaName = schemaDesc.GetName()
@@ -2560,16 +2539,21 @@ func (s *systemStatusServer) HotRangesV2(
 					}
 
 					ranges = append(ranges, &serverpb.HotRangesResponseV2_HotRange{
-						RangeID:           r.Desc.RangeID,
-						NodeID:            requestedNodeID,
-						QPS:               r.QueriesPerSecond,
-						TableName:         tableName,
-						SchemaName:        schemaName,
-						DatabaseName:      dbName,
-						IndexName:         indexName,
-						ReplicaNodeIds:    replicaNodeIDs,
-						LeaseholderNodeID: r.LeaseholderNodeID,
-						StoreID:           store.StoreID,
+						RangeID:             r.Desc.RangeID,
+						NodeID:              requestedNodeID,
+						QPS:                 r.QueriesPerSecond,
+						WritesPerSecond:     r.WritesPerSecond,
+						ReadsPerSecond:      r.ReadsPerSecond,
+						WriteBytesPerSecond: r.WriteBytesPerSecond,
+						ReadBytesPerSecond:  r.ReadBytesPerSecond,
+						CPUTimePerSecond:    r.CPUTimePerSecond,
+						TableName:           tableName,
+						SchemaName:          schemaName,
+						DatabaseName:        dbName,
+						IndexName:           indexName,
+						ReplicaNodeIds:      replicaNodeIDs,
+						LeaseholderNodeID:   r.LeaseholderNodeID,
+						StoreID:             store.StoreID,
 					})
 				}
 			}
@@ -2663,6 +2647,7 @@ func (s *systemStatusServer) localHotRanges(
 			storeResp.HotRanges[i].ReadsPerSecond = r.ReadKeysPerSecond
 			storeResp.HotRanges[i].WriteBytesPerSecond = r.WriteBytesPerSecond
 			storeResp.HotRanges[i].ReadBytesPerSecond = r.ReadBytesPerSecond
+			storeResp.HotRanges[i].CPUTimePerSecond = r.CPUTimePerSecond
 		}
 		resp.Stores = append(resp.Stores, storeResp)
 		return nil
@@ -2671,6 +2656,50 @@ func (s *systemStatusServer) localHotRanges(
 		return serverpb.HotRangesResponse_NodeResponse{ErrorMessage: err.Error()}
 	}
 	return resp
+}
+
+func (s *statusServer) KeyVisSamples(
+	ctx context.Context, req *serverpb.KeyVisSamplesRequest,
+) (*serverpb.KeyVisSamplesResponse, error) {
+
+	if _, err := s.privilegeChecker.requireAdminUser(ctx); err != nil {
+		return nil, err
+	}
+
+	uniqueKeys, err := keyvisstorage.ReadKeys(ctx, s.internalExecutor)
+	if err != nil {
+		return nil, err
+	}
+
+	prettyForKeyString := make(map[string]string)
+	prettyForUUID := make(map[string]string)
+	sorted := make([]string, 0)
+	sortedPretty := make([]string, 0)
+
+	for keyUUID, keyBytes := range uniqueKeys {
+		s := string(keyBytes)
+		pretty := keyBytes.String()
+		prettyForKeyString[s] = pretty
+		sorted = append(sorted, s)
+		prettyForUUID[keyUUID] = pretty
+	}
+
+	sort.Strings(sorted)
+	for _, s := range sorted {
+		sortedPretty = append(sortedPretty, prettyForKeyString[s])
+	}
+
+	// read samples
+	samples, err := keyvisstorage.ReadSamples(ctx, s.internalExecutor)
+	if err != nil {
+		return nil, err
+	}
+
+	return &serverpb.KeyVisSamplesResponse{
+		PrettyKeyForUuid: prettyForUUID,
+		SortedPrettyKeys: sortedPretty,
+		Samples:          samples,
+	}, nil
 }
 
 // Range returns rangeInfos for all nodes in the cluster about a specific
@@ -2993,7 +3022,13 @@ func (s *statusServer) CancelSession(
 	ctx = propagateGatewayMetadata(ctx)
 	ctx = s.AnnotateCtx(ctx)
 
-	sessionID := clusterunique.IDFromBytes(req.SessionID)
+	sessionIDBytes := req.SessionID
+	if len(sessionIDBytes) != 16 {
+		return &serverpb.CancelSessionResponse{
+			Error: fmt.Sprintf("session ID %v malformed", sessionIDBytes),
+		}, nil
+	}
+	sessionID := clusterunique.IDFromBytes(sessionIDBytes)
 	nodeID := sessionID.GetNodeID()
 	local := nodeID == int32(s.serverIterator.getID())
 	if !local {
@@ -3001,8 +3036,7 @@ func (s *statusServer) CancelSession(
 		if err != nil {
 			if errors.Is(err, sqlinstance.NonExistentInstanceError) {
 				return &serverpb.CancelSessionResponse{
-					Canceled: false,
-					Error:    fmt.Sprintf("session ID %s not found", sessionID),
+					Error: fmt.Sprintf("session ID %s not found", sessionID),
 				}, nil
 			}
 			return nil, serverError(ctx, err)
@@ -3015,17 +3049,21 @@ func (s *statusServer) CancelSession(
 		return nil, status.Errorf(codes.InvalidArgument, err.Error())
 	}
 
-	if err := s.checkCancelPrivilege(ctx, reqUsername, findSessionBySessionID(req.SessionID)); err != nil {
+	session, ok := s.sessionRegistry.GetSessionByID(sessionID)
+	if !ok {
+		return &serverpb.CancelSessionResponse{
+			Error: fmt.Sprintf("session ID %s not found", sessionID),
+		}, nil
+	}
+
+	if err := s.checkCancelPrivilege(ctx, reqUsername, session.SessionUser()); err != nil {
 		// NB: not using serverError() here since the priv checker
 		// already returns a proper gRPC error status.
 		return nil, err
 	}
 
-	r, err := s.sessionRegistry.CancelSession(req.SessionID)
-	if err != nil {
-		return nil, serverError(ctx, err)
-	}
-	return r, nil
+	session.CancelSession()
+	return &serverpb.CancelSessionResponse{Canceled: true}, nil
 }
 
 // CancelQuery responds to a query cancellation request, and cancels
@@ -3039,8 +3077,7 @@ func (s *statusServer) CancelQuery(
 	queryID, err := clusterunique.IDFromString(req.QueryID)
 	if err != nil {
 		return &serverpb.CancelQueryResponse{
-			Canceled: false,
-			Error:    errors.Wrapf(err, "query ID %s malformed", queryID).Error(),
+			Error: errors.Wrapf(err, "query ID %s malformed", queryID).Error(),
 		}, nil
 	}
 
@@ -3052,8 +3089,7 @@ func (s *statusServer) CancelQuery(
 		if err != nil {
 			if errors.Is(err, sqlinstance.NonExistentInstanceError) {
 				return &serverpb.CancelQueryResponse{
-					Canceled: false,
-					Error:    fmt.Sprintf("query ID %s not found", queryID),
+					Error: fmt.Sprintf("query ID %s not found", queryID),
 				}, nil
 			}
 			return nil, serverError(ctx, err)
@@ -3066,18 +3102,23 @@ func (s *statusServer) CancelQuery(
 		return nil, status.Errorf(codes.InvalidArgument, err.Error())
 	}
 
-	if err := s.checkCancelPrivilege(ctx, reqUsername, findSessionByQueryID(req.QueryID)); err != nil {
+	session, ok := s.sessionRegistry.GetSessionByQueryID(queryID)
+	if !ok {
+		return &serverpb.CancelQueryResponse{
+			Error: fmt.Sprintf("query ID %s not found", queryID),
+		}, nil
+	}
+
+	if err := s.checkCancelPrivilege(ctx, reqUsername, session.SessionUser()); err != nil {
 		// NB: not using serverError() here since the priv checker
 		// already returns a proper gRPC error status.
 		return nil, err
 	}
 
-	output := &serverpb.CancelQueryResponse{}
-	output.Canceled, err = s.sessionRegistry.CancelQuery(req.QueryID)
-	if err != nil {
-		output.Error = err.Error()
-	}
-	return output, nil
+	isCanceled := session.CancelQuery(queryID)
+	return &serverpb.CancelQueryResponse{
+		Canceled: isCanceled,
+	}, nil
 }
 
 // CancelQueryByKey responds to a pgwire query cancellation request, and cancels
@@ -3114,12 +3155,18 @@ func (s *statusServer) CancelQueryByKey(
 	}()
 
 	if local {
-		resp = &serverpb.CancelQueryByKeyResponse{}
-		resp.Canceled, err = s.sessionRegistry.CancelQueryByKey(req.CancelQueryKey)
-		if err != nil {
-			resp.Error = err.Error()
+		cancelQueryKey := req.CancelQueryKey
+		session, ok := s.sessionRegistry.GetSessionByCancelKey(cancelQueryKey)
+		if !ok {
+			return &serverpb.CancelQueryByKeyResponse{
+				Error: fmt.Sprintf("session for cancel key %d not found", cancelQueryKey),
+			}, nil
 		}
-		return resp, nil
+
+		isCanceled := session.CancelActiveQueries()
+		return &serverpb.CancelQueryByKeyResponse{
+			Canceled: isCanceled,
+		}, nil
 	}
 
 	// This request needs to be forwarded to another node.

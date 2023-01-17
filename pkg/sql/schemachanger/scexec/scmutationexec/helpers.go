@@ -16,18 +16,46 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/seqexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
-	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
 )
 
-func (m *visitor) checkOutTable(ctx context.Context, id descpb.ID) (*tabledesc.Mutable, error) {
-	desc, err := m.s.CheckOutDescriptor(ctx, id)
+func (i *immediateVisitor) getDescriptor(
+	ctx context.Context, id descpb.ID,
+) (catalog.Descriptor, error) {
+	if checkedOut := i.MaybeGetCheckedOutDescriptor(id); checkedOut != nil {
+		return checkedOut, nil
+	}
+	read, err := i.descriptorReader.MustReadImmutableDescriptors(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	return read[0], nil
+}
+
+func (i *immediateVisitor) checkOutDescriptor(
+	ctx context.Context, id descpb.ID,
+) (catalog.MutableDescriptor, error) {
+	if checkedOut := i.MaybeGetCheckedOutDescriptor(id); checkedOut != nil {
+		return checkedOut, nil
+	}
+	mut, err := i.descriptorReader.MustReadMutableDescriptor(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	i.AddToCheckedOutDescriptors(mut)
+	return mut, nil
+}
+
+func (i *immediateVisitor) checkOutTable(
+	ctx context.Context, id descpb.ID,
+) (*tabledesc.Mutable, error) {
+	desc, err := i.checkOutDescriptor(ctx, id)
 	if err != nil {
 		return nil, err
 	}
@@ -38,8 +66,10 @@ func (m *visitor) checkOutTable(ctx context.Context, id descpb.ID) (*tabledesc.M
 	return mut, nil
 }
 
-func (m *visitor) checkOutDatabase(ctx context.Context, id descpb.ID) (*dbdesc.Mutable, error) {
-	desc, err := m.s.CheckOutDescriptor(ctx, id)
+func (i *immediateVisitor) checkOutDatabase(
+	ctx context.Context, id descpb.ID,
+) (*dbdesc.Mutable, error) {
+	desc, err := i.checkOutDescriptor(ctx, id)
 	if err != nil {
 		return nil, err
 	}
@@ -50,8 +80,10 @@ func (m *visitor) checkOutDatabase(ctx context.Context, id descpb.ID) (*dbdesc.M
 	return mut, nil
 }
 
-func (m *visitor) checkOutSchema(ctx context.Context, id descpb.ID) (*schemadesc.Mutable, error) {
-	desc, err := m.s.CheckOutDescriptor(ctx, id)
+func (i *immediateVisitor) checkOutSchema(
+	ctx context.Context, id descpb.ID,
+) (*schemadesc.Mutable, error) {
+	desc, err := i.checkOutDescriptor(ctx, id)
 	if err != nil {
 		return nil, err
 	}
@@ -63,14 +95,30 @@ func (m *visitor) checkOutSchema(ctx context.Context, id descpb.ID) (*schemadesc
 }
 
 // Stop the linter from complaining.
-var _ = ((*visitor)(nil)).checkOutSchema
+var _ = ((*immediateVisitor)(nil)).checkOutSchema
 
-func (m *visitor) checkOutType(ctx context.Context, id descpb.ID) (*typedesc.Mutable, error) {
-	desc, err := m.s.CheckOutDescriptor(ctx, id)
+func (i *immediateVisitor) checkOutType(
+	ctx context.Context, id descpb.ID,
+) (*typedesc.Mutable, error) {
+	desc, err := i.checkOutDescriptor(ctx, id)
 	if err != nil {
 		return nil, err
 	}
 	mut, ok := desc.(*typedesc.Mutable)
+	if !ok {
+		return nil, catalog.WrapTypeDescRefErr(id, catalog.NewDescriptorTypeError(desc))
+	}
+	return mut, nil
+}
+
+func (i *immediateVisitor) checkOutFunction(
+	ctx context.Context, id descpb.ID,
+) (*funcdesc.Mutable, error) {
+	desc, err := i.checkOutDescriptor(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	mut, ok := desc.(*funcdesc.Mutable)
 	if !ok {
 		return nil, catalog.WrapTypeDescRefErr(id, catalog.NewDescriptorTypeError(desc))
 	}
@@ -97,12 +145,8 @@ func mutationStateChange(
 	return nil
 }
 
-func (m *visitor) removeMutation(
-	tbl *tabledesc.Mutable,
-	f MutationSelector,
-	metadata scpb.TargetMetadata,
-	details eventpb.CommonSQLEventDetails,
-	exp ...descpb.DescriptorMutation_State,
+func RemoveMutation(
+	tbl *tabledesc.Mutable, f MutationSelector, exp ...descpb.DescriptorMutation_State,
 ) (descpb.DescriptorMutation, error) {
 	mut, err := FindMutation(tbl, f)
 	if err != nil {
@@ -124,29 +168,6 @@ func (m *visitor) removeMutation(
 		)
 	}
 	tbl.Mutations = append(tbl.Mutations[:foundIdx], tbl.Mutations[foundIdx+1:]...)
-	// If this is the last remaining mutation, then we need to emit an event
-	// log entry.
-	hasMutationID := false
-	for _, mut := range tbl.Mutations {
-		if mut.MutationID == cpy.MutationID {
-			hasMutationID = true
-			break
-		}
-	}
-	if !hasMutationID {
-		err := m.s.EnqueueEvent(tbl.GetID(),
-			metadata,
-			details,
-			&eventpb.FinishSchemaChange{
-				CommonSchemaChangeEventDetails: eventpb.CommonSchemaChangeEventDetails{
-					DescriptorID: uint32(tbl.GetID()),
-					MutationID:   uint32(cpy.MutationID),
-				},
-			})
-		if err != nil {
-			return cpy, err
-		}
-	}
 	return cpy, nil
 }
 
@@ -199,82 +220,28 @@ func MakeMutationIDMutationSelector(mutationID descpb.MutationID) MutationSelect
 	}
 }
 
-func enqueueAddColumnMutation(tbl *tabledesc.Mutable, col *descpb.ColumnDescriptor) error {
-	tbl.AddColumnMutation(col, descpb.DescriptorMutation_ADD)
+// enqueueNonIndexMutation enqueues a non-index mutation `m` (of generic type M)
+// with direction `dir` without increasing the next mutation ID.
+// The mutation state will be DELETE_ONLY if `dir=ADD` and WRITE_ONLY if `dir=DROP`.
+func enqueueNonIndexMutation[M any](
+	tbl *tabledesc.Mutable,
+	enqueueFunc func(M, descpb.DescriptorMutation_Direction),
+	m M,
+	dir descpb.DescriptorMutation_Direction,
+) {
+	enqueueFunc(m, dir)
 	tbl.NextMutationID--
-	return nil
 }
 
-func enqueueDropColumnMutation(tbl *tabledesc.Mutable, col *descpb.ColumnDescriptor) error {
-	tbl.AddColumnMutation(col, descpb.DescriptorMutation_DROP)
-	tbl.NextMutationID--
-	return nil
-}
-
-func enqueueAddCheckConstraintMutation(
-	tbl *tabledesc.Mutable, ck *descpb.TableDescriptor_CheckConstraint,
+// enqueueIndexMutation is like enqueueNonIndexMutation but allows caller to
+// specify the mutation's initial state.
+func enqueueIndexMutation(
+	tbl *tabledesc.Mutable,
+	idx *descpb.IndexDescriptor,
+	state descpb.DescriptorMutation_State,
+	dir descpb.DescriptorMutation_Direction,
 ) error {
-	tbl.AddCheckMutation(ck, descpb.DescriptorMutation_ADD)
-	tbl.NextMutationID--
-	return nil
-}
-
-func enqueueAddUniqueWithoutIndexConstraintMutation(
-	tbl *tabledesc.Mutable, uwi *descpb.UniqueWithoutIndexConstraint,
-) error {
-	tbl.AddUniqueWithoutIndexMutation(uwi, descpb.DescriptorMutation_ADD)
-	tbl.NextMutationID--
-	return nil
-}
-
-func enqueueDropCheckConstraintMutation(
-	tbl *tabledesc.Mutable, ck *descpb.TableDescriptor_CheckConstraint,
-) error {
-	tbl.AddCheckMutation(ck, descpb.DescriptorMutation_DROP)
-	tbl.NextMutationID--
-	return nil
-}
-
-func enqueueDropUniqueWithoutIndexConstraintMutation(
-	tbl *tabledesc.Mutable, uwi *descpb.UniqueWithoutIndexConstraint,
-) error {
-	tbl.AddUniqueWithoutIndexMutation(uwi, descpb.DescriptorMutation_DROP)
-	tbl.NextMutationID--
-	return nil
-}
-
-func enqueueAddForeignKeyConstraintMutation(
-	tbl *tabledesc.Mutable, fk *descpb.ForeignKeyConstraint,
-) error {
-	tbl.AddForeignKeyMutation(fk, descpb.DescriptorMutation_ADD)
-	tbl.NextMutationID--
-	return nil
-}
-
-func enqueueDropForeignKeyConstraintMutation(
-	tbl *tabledesc.Mutable, fk *descpb.ForeignKeyConstraint,
-) error {
-	tbl.AddForeignKeyMutation(fk, descpb.DescriptorMutation_DROP)
-	tbl.NextMutationID--
-	return nil
-}
-
-func enqueueAddIndexMutation(
-	tbl *tabledesc.Mutable, idx *descpb.IndexDescriptor, state descpb.DescriptorMutation_State,
-) error {
-	if err := tbl.AddIndexMutation(
-		idx, descpb.DescriptorMutation_ADD, state,
-	); err != nil {
-		return err
-	}
-	tbl.NextMutationID--
-	return nil
-}
-
-func enqueueDropIndexMutation(tbl *tabledesc.Mutable, idx *descpb.IndexDescriptor) error {
-	if err := tbl.AddIndexMutation(
-		idx, descpb.DescriptorMutation_DROP, descpb.DescriptorMutation_WRITE_ONLY,
-	); err != nil {
+	if err := tbl.AddIndexMutation(idx, dir, state); err != nil {
 		return err
 	}
 	tbl.NextMutationID--

@@ -163,7 +163,7 @@ func ResolveMutableType(
 	switch t := desc.(type) {
 	case *typedesc.Mutable:
 		return prefix, t, nil
-	case *typedesc.TableImplicitRecordType:
+	case catalog.TableImplicitRecordTypeDescriptor:
 		return catalog.ResolvedObjectPrefix{}, nil, pgerror.Newf(pgcode.DependentObjectsStillExist,
 			"cannot modify table record type %q", desc.GetName())
 	default:
@@ -531,9 +531,14 @@ func ResolveIndex(
 			return true, resolvedPrefix, candidateTbl, candidateTbl.GetPrimaryIndex(), nil
 		}
 
-		idx, err := candidateTbl.FindNonDropIndexWithName(string(tableIndexName.Index))
-		// err == nil indicates that the index is found.
-		if err == nil && (flag.IncludeNonActiveIndex || idx.Public()) {
+		idx := catalog.FindIndex(
+			candidateTbl,
+			catalog.IndexOpts{AddMutations: true},
+			func(idx catalog.Index) bool {
+				return idx.GetName() == string(tableIndexName.Index)
+			},
+		)
+		if idx != nil && (flag.IncludeNonActiveIndex || idx.Public()) {
 			return true, resolvedPrefix, candidateTbl, idx, nil
 		}
 
@@ -738,26 +743,33 @@ func findTableContainingIndex(
 			continue
 		}
 
-		candidateIdx, err := candidateTbl.FindNonDropIndexWithName(string(indexName))
-		if err == nil {
-			if !includeNonActiveIndex && !candidateIdx.Public() {
-				continue
-			}
-			if found {
-				prefix := resolvedPrefix.NamePrefix()
-				tn1 := tree.MakeTableNameWithSchema(prefix.CatalogName, prefix.SchemaName, tree.Name(candidateTbl.GetName()))
-				tn2 := tree.MakeTableNameWithSchema(prefix.CatalogName, prefix.SchemaName, tree.Name(tblDesc.GetName()))
-				return false, nil, nil, pgerror.Newf(
-					pgcode.AmbiguousParameter, "index name %q is ambiguous (found in %s and %s)",
-					indexName,
-					tn1.String(),
-					tn2.String(),
-				)
-			}
-			found = true
-			tblDesc = candidateTbl
-			idxDesc = candidateIdx
+		candidateIdx := catalog.FindIndex(
+			candidateTbl,
+			catalog.IndexOpts{AddMutations: true},
+			func(idx catalog.Index) bool {
+				return idx.GetName() == string(indexName)
+			},
+		)
+		if candidateIdx == nil {
+			continue
 		}
+		if !includeNonActiveIndex && !candidateIdx.Public() {
+			continue
+		}
+		if found {
+			prefix := resolvedPrefix.NamePrefix()
+			tn1 := tree.MakeTableNameWithSchema(prefix.CatalogName, prefix.SchemaName, tree.Name(candidateTbl.GetName()))
+			tn2 := tree.MakeTableNameWithSchema(prefix.CatalogName, prefix.SchemaName, tree.Name(tblDesc.GetName()))
+			return false, nil, nil, pgerror.Newf(
+				pgcode.AmbiguousParameter, "index name %q is ambiguous (found in %s and %s)",
+				indexName,
+				tn1.String(),
+				tn2.String(),
+			)
+		}
+		found = true
+		tblDesc = candidateTbl
+		idxDesc = candidateIdx
 	}
 
 	return found, tblDesc, idxDesc, nil

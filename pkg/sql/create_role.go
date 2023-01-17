@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/decodeusername"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -75,6 +76,10 @@ func (p *planner) CreateRoleNode(
 	)
 	if err != nil {
 		return nil, err
+	}
+
+	if roleOptions.Contains(roleoption.CONTROLCHANGEFEED) {
+		p.BufferClientNotice(ctx, pgnotice.Newf(roleoption.ControlChangefeedDeprecationNoticeMsg))
 	}
 
 	if err := roleOptions.CheckRoleOptionConflicts(); err != nil {
@@ -132,7 +137,7 @@ func (n *CreateRoleNode) startExec(params runParams) error {
 	}
 
 	// Check if the user/role exists.
-	row, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.QueryRowEx(
+	row, err := params.p.InternalSQLTxn().QueryRowEx(
 		params.ctx,
 		opName,
 		params.p.txn,
@@ -157,9 +162,10 @@ func (n *CreateRoleNode) startExec(params runParams) error {
 	if err != nil {
 		return err
 	}
-	rowsAffected, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.Exec(
-		params.ctx, opName, params.p.txn, stmt,
-		n.roleName, hashedPassword, n.isRole, roleID,
+	rowsAffected, err := params.p.InternalSQLTxn().ExecEx(
+		params.ctx, opName, params.p.txn,
+		sessiondata.InternalExecutorOverride{User: username.NodeUserName()},
+		stmt, n.roleName, hashedPassword, n.isRole, roleID,
 	)
 	if err != nil {
 		return err
@@ -217,7 +223,7 @@ func updateRoleOptions(
 			if isNull {
 				// If the value of the role option is NULL, ensure that nil is passed
 				// into the statement placeholder, since val is string type "NULL"
-				// will not be interpreted as NULL by the InternalExecutor.
+				// will not be interpreted as NULL by the Executor.
 				qargs = append(qargs, nil)
 			} else {
 				qargs = append(qargs, val)
@@ -225,7 +231,7 @@ func updateRoleOptions(
 		}
 
 		if withID {
-			idRow, err := params.p.ExecCfg().InternalExecutor.QueryRowEx(
+			idRow, err := params.p.InternalSQLTxn().QueryRowEx(
 				params.ctx, `get-user-id`, params.p.Txn(), sessiondata.NodeUserSessionDataOverride,
 				`SELECT user_id FROM system.users WHERE username = $1`, roleName.Normalized(),
 			)
@@ -235,7 +241,7 @@ func updateRoleOptions(
 			qargs = append(qargs, tree.MustBeDOid(idRow[0]))
 		}
 
-		affected, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
+		affected, err := params.p.InternalSQLTxn().ExecEx(
 			params.ctx,
 			opName,
 			params.p.txn,

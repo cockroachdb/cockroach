@@ -1,4 +1,7 @@
 statement ok
+CLOSE ALL
+
+statement ok
 CREATE TABLE a (a INT PRIMARY KEY, b INT);
 INSERT INTO a VALUES (1, 2), (2, 3)
 
@@ -46,6 +49,38 @@ CLOSE foo
 
 statement ok
 COMMIT;
+BEGIN;
+DECLARE foo CURSOR FOR SELECT * FROM a ORDER BY a
+
+query II
+FETCH 1 foo
+----
+1  2
+
+statement ok
+CLOSE foo
+
+statement error cursor \"foo\" does not exist
+FETCH 2 foo
+
+statement ok
+ROLLBACK;
+BEGIN;
+DECLARE foo CURSOR FOR SELECT * FROM a ORDER BY a
+
+query II
+FETCH 1 foo
+----
+1  2
+
+statement ok
+CLOSE ALL
+
+statement error cursor \"foo\" does not exist
+FETCH 2 foo
+
+statement ok
+ROLLBACK;
 
 statement error cursor \"foo\" does not exist
 BEGIN;

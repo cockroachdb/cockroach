@@ -29,6 +29,15 @@ begin transaction #1
 # begin StatementPhase
 checking for feature: DROP INDEX
 increment telemetry for sql.schema.drop_index
+write *eventpb.DropIndex to event log:
+  indexName: idx
+  mutationId: 1
+  sql:
+    descriptorId: 104
+    statement: DROP INDEX ‹defaultdb›.‹public›.‹t›@‹idx› CASCADE
+    tag: DROP INDEX
+    user: root
+  tableName: defaultdb.public.t
 ## StatementPhase stage 1 of 1 with 1 MutationType op
 upsert descriptor #104
   ...
@@ -87,7 +96,10 @@ upsert descriptor #104
   +  version: "9"
 # end StatementPhase
 # begin PreCommitPhase
-## PreCommitPhase stage 1 of 1 with 2 MutationType ops
+## PreCommitPhase stage 1 of 2 with 1 MutationType op
+undo all catalog changes within txn #1
+persist all catalog changes to storage
+## PreCommitPhase stage 2 of 2 with 3 MutationType ops
 upsert descriptor #104
   ...
      createAsOfTime:
@@ -107,10 +119,60 @@ upsert descriptor #104
      families:
      - columnIds:
   ...
+     formatVersion: 3
+     id: 104
+  -  indexes:
+  -  - createdAtNanos: "1640995200000000000"
+  -    createdExplicitly: true
+  -    foreignKey: {}
+  -    geoConfig: {}
+  -    id: 2
+  -    interleave: {}
+  -    keyColumnDirections:
+  -    - ASC
+  -    keyColumnIds:
+  -    - 2
+  -    keyColumnNames:
+  -    - j
+  -    keySuffixColumnIds:
+  -    - 1
+  -    name: idx
+  -    partitioning: {}
+  -    sharded: {}
+  -    version: 4
+  +  indexes: []
+     modificationTime: {}
+  +  mutations:
+  +  - direction: DROP
+  +    index:
+  +      createdAtNanos: "1640995200000000000"
+  +      createdExplicitly: true
+  +      foreignKey: {}
+  +      geoConfig: {}
+  +      id: 2
+  +      interleave: {}
+  +      keyColumnDirections:
+  +      - ASC
+  +      keyColumnIds:
+  +      - 2
+  +      keyColumnNames:
+  +      - j
+  +      keySuffixColumnIds:
+  +      - 1
+  +      name: idx
+  +      partitioning: {}
+  +      sharded: {}
+  +      version: 4
+  +    mutationId: 1
+  +    state: WRITE_ONLY
+     name: t
+     nextColumnId: 3
+  ...
        time: {}
      unexposedParentSchemaId: 101
   -  version: "8"
   +  version: "9"
+persist all catalog changes to storage
 create job #1 (non-cancelable: true): "DROP INDEX defaultdb.public.t@idx CASCADE"
   descriptor IDs: [104]
 # end PreCommitPhase
@@ -120,7 +182,7 @@ notified job registry to adopt jobs: [1]
 begin transaction #2
 commit transaction #2
 begin transaction #3
-## PostCommitNonRevertiblePhase stage 1 of 2 with 5 MutationType ops
+## PostCommitNonRevertiblePhase stage 1 of 2 with 4 MutationType ops
 upsert descriptor #104
   ...
          keySuffixColumnIds:
@@ -140,7 +202,7 @@ upsert descriptor #104
      unexposedParentSchemaId: 101
   -  version: "9"
   +  version: "10"
-write *eventpb.DropIndex to event log: DROP INDEX ‹defaultdb›.‹public›.‹t›@‹idx› CASCADE
+persist all catalog changes to storage
 update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 2 with 2 MutationType ops pending"
 commit transaction #3
 begin transaction #4
@@ -197,12 +259,15 @@ upsert descriptor #104
      unexposedParentSchemaId: 101
   -  version: "10"
   +  version: "11"
-write *eventpb.FinishSchemaChange to event log
+persist all catalog changes to storage
 create job #2 (non-cancelable: true): "GC for DROP INDEX defaultdb.public.t@idx CASCADE"
   descriptor IDs: [104]
 update progress of schema change job #1: "all stages completed"
 set schema change job #1 to non-cancellable
 updated schema change job #1 descriptor IDs to []
+write *eventpb.FinishSchemaChange to event log:
+  sc:
+    descriptorId: 104
 commit transaction #4
 notified job registry to adopt jobs: [2]
 # end PostCommitPhase

@@ -237,6 +237,7 @@ function randomExecStats(count = 10): Required<ExecStats> {
     contention_time: randomStat(),
     network_messages: randomStat(),
     max_disk_usage: randomStat(),
+    cpu_sql_nanos: randomStat(),
   };
 }
 

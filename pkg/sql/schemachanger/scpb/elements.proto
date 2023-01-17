@@ -15,6 +15,7 @@ option go_package = "scpb";
 import "sql/catalog/catenumpb/index.proto";
 import "sql/catalog/catpb/catalog.proto";
 import "sql/sem/semenumpb/constraint.proto";
+import "sql/catalog/catpb/function.proto";
 import "sql/types/types.proto";
 import "gogoproto/gogo.proto";
 import "geo/geoindex/config.proto";
@@ -61,6 +62,7 @@ message ElementProto {
   EnumType enum_type = 6;
   AliasType alias_type = 7;
   CompositeType composite_type = 8;
+  Function function = 9;
 
   // Relation elements.
   ColumnFamily column_family = 20 [(gogoproto.moretags) = "parent:\"Table\""];
@@ -90,6 +92,7 @@ message ElementProto {
   ColumnOnUpdateExpression column_on_update_expression = 33 [(gogoproto.moretags) = "parent:\"Column\""];
   SequenceOwner sequence_owner = 34 [(gogoproto.moretags) = "parent:\"Column\""];
   ColumnComment column_comment = 35 [(gogoproto.moretags) = "parent:\"Column\""];
+  ColumnNotNull column_not_null = 36 [(gogoproto.moretags) = "parent:\"Column\""];
 
   // Index elements.
   IndexName index_name = 40 [(gogoproto.moretags) = "parent:\"PrimaryIndex, SecondaryIndex\""];
@@ -128,7 +131,15 @@ message ElementProto {
   CompositeTypeAttrType composite_type_attr_type = 140 [(gogoproto.moretags) = "parent:\"CompositeType\""];
   CompositeTypeAttrName composite_type_attr_name = 141 [(gogoproto.moretags) = "parent:\"CompositeType\""];
 
-  // Next element group start id: 160
+  // Function elements.
+  FunctionName function_name = 160 [(gogoproto.moretags) = "parent:\"Function\""];
+  FunctionVolatility function_volatility = 161 [(gogoproto.moretags) = "parent:\"Function\""];
+  FunctionLeakProof function_leak_proof = 162 [(gogoproto.moretags) = "parent:\"Function\""];
+  FunctionNullInputBehavior function_null_input_behavior = 163 [(gogoproto.moretags) = "parent:\"Function\""];
+  FunctionBody function_body = 164 [(gogoproto.moretags) = "parent:\"Function\""];
+  FunctionParamDefaultExpression function_param_default = 165 [(gogoproto.moretags) = "parent:\"Function\""];
+
+  // Next element group start id: 170
 }
 
 // TypeT is a wrapper for a types.T which contains its user-defined type ID
@@ -181,10 +192,20 @@ message ColumnType {
   uint32 family_id = 2 [(gogoproto.customname) = "FamilyID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.FamilyID"];
   uint32 column_id = 3 [(gogoproto.customname) = "ColumnID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ColumnID"];
   TypeT embedded_type_t = 4 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  bool is_nullable = 5;
+  // Deprecated
+  // We changed element modelling for NOT NULL constraint in V23_1 and thus
+  // deprecated `is_nullable`. The new way is to handle NOT NULL constraint
+  // through a newly introduced `ColumnNotNull` element. This change is
+  // necessary to support adding/dropping NOT NULL constraint on an existing
+  // column.
+  bool is_nullable = 5 [deprecated = true];
   Expression compute_expr = 6;
   bool is_virtual = 7;
-  reserved 10;
+  reserved 8, 9, 10;
+  // ElementCreationMetadata stores information about when this element is created.
+  // It can be used in a similar way to version gates to ensure compatibility
+  // in mixed version state.
+  ElementCreationMetadata element_creation_metadata= 11;
 }
 
 message ColumnFamily {
@@ -404,6 +425,7 @@ message UserPrivileges {
   uint32 descriptor_id = 1 [(gogoproto.customname) = "DescriptorID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
   string user_name = 2;
   uint64 privileges = 3;
+  uint64 with_grant_option = 4;
 }
 
 message TableLocalityGlobal {
@@ -480,6 +502,14 @@ message ColumnComment {
   uint32 column_id = 2 [(gogoproto.customname) = "ColumnID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ColumnID"];
   string comment = 3;
   uint32 pg_attribute_num = 4 [(gogoproto.customname) = "PgAttributeNum", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.PGAttributeNum"];
+}
+
+message ColumnNotNull {
+  uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  uint32 column_id = 2 [(gogoproto.customname) = "ColumnID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ColumnID"];
+  // IndexIDForValidation is the index id to hint to the check constraint validation SQL query about which index
+  // to check against the not-null-ness of the column. It is used exclusively by sql.validateCheckExpr.
+  uint32 index_id_for_validation = 3 [(gogoproto.customname) = "IndexIDForValidation", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.IndexID"];
 }
 
 message ConstraintComment {
@@ -566,4 +596,73 @@ message IndexData {
 
 message TablePartitioning {
   uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+}
+
+message Function {
+  message Parameter {
+    string name = 1;
+    cockroach.sql.catalog.catpb.FunctionParamClass class = 2 [(gogoproto.nullable) = false];
+    TypeT type = 3 [(gogoproto.nullable) = false];
+  }
+
+  uint32 function_id = 1 [(gogoproto.customname) = "FunctionID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  repeated Parameter params = 2 [(gogoproto.nullable) = false];
+
+  bool return_set = 3;
+  TypeT return_type = 4 [(gogoproto.nullable) = false];
+}
+
+message FunctionName {
+  uint32 function_id = 1 [(gogoproto.customname) = "FunctionID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  string name = 2;
+}
+
+message FunctionVolatility {
+  uint32 function_id = 1 [(gogoproto.customname) = "FunctionID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  cockroach.sql.catalog.catpb.FunctionVolatility volatility = 2 [(gogoproto.nullable) = false];
+}
+
+message FunctionLeakProof {
+  uint32 function_id = 1 [(gogoproto.customname) = "FunctionID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  bool leak_proof = 2;
+}
+
+message FunctionNullInputBehavior {
+  uint32 function_id = 1 [(gogoproto.customname) = "FunctionID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  cockroach.sql.catalog.catpb.FunctionNullInputBehavior null_input_behavior = 11 [(gogoproto.nullable) = false];
+}
+
+message FunctionBody {
+  message TableReference {
+    uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+    repeated uint32 column_ids = 2 [(gogoproto.customname) = "ColumnIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ColumnID"];
+    uint32 index_id = 3 [(gogoproto.customname) = "IndexID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.IndexID"];
+  }
+
+  message ViewReference {
+    uint32 view_id = 1 [(gogoproto.customname) = "ViewID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+    repeated uint32 column_ids = 2 [(gogoproto.customname) = "ColumnIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ColumnID"];
+  }
+
+  uint32 function_id = 1 [(gogoproto.customname) = "FunctionID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  string body = 2;
+  cockroach.sql.catalog.catpb.FunctionLanguage lang = 3 [(gogoproto.nullable) = false];
+
+  repeated TableReference uses_tables = 4 [(gogoproto.nullable) = false];
+  repeated ViewReference uses_views = 5 [(gogoproto.nullable) = false];
+  repeated uint32 uses_sequence_ids = 6 [(gogoproto.customname) = "UsesSequenceIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  repeated uint32 uses_type_ids = 7 [(gogoproto.customname) = "UsesTypeIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+}
+
+message FunctionParamDefaultExpression {
+  uint32 function_id = 1 [(gogoproto.customname) = "FunctionID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  // This is the 0-indexed ordinal of the function parameter in function
+  // signatures. With this we'd be able to tell which parameter this expression
+  // belongs to.
+  uint32 ordinal = 2;
+  Expression embedded_expr = 3 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
+message ElementCreationMetadata {
+  bool in_23_1_or_later = 1;
 }

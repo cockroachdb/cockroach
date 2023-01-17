@@ -40,12 +40,13 @@ import (
 )
 
 const (
-	createTable      = "CREATE TABLE t(i int PRIMARY KEY);"
-	systemRangeID    = "54"
-	secondaryRangeID = "55"
-	systemKey        = "/Table/53"
-	secondaryKey     = "/Tenant/10"
-	maxTimestamp     = "2262-04-11 23:47:16.854776 +0000 +0000"
+	createTable        = "CREATE TABLE t(i int PRIMARY KEY);"
+	systemRangeID      = "58"
+	secondaryRangeID   = "59"
+	systemKey          = "\xc1"
+	systemKeyPretty    = "/Table/57"
+	secondaryKeyPretty = "/Tenant/10"
+	maxTimestamp       = "2262-04-11 23:47:16.854776 +0000 +0000"
 )
 
 var ctx = context.Background()
@@ -264,6 +265,7 @@ func (tc testCase) runTest(
 		testServer.Stopper(),
 	)
 
+	var secondaryTenants []serverutils.TestTenantInterface
 	createSecondaryDB := func(tenantID roachpb.TenantID, skipSQLSystemTentantCheck bool, clusterSettings ...*settings.BoolSetting) *gosql.DB {
 		testingClusterSettings := cluster.MakeTestingClusterSettings()
 		for _, clusterSetting := range clusterSettings {
@@ -271,7 +273,7 @@ func (tc testCase) runTest(
 				clusterSetting.Override(ctx, &testingClusterSettings.SV, true)
 			}
 		}
-		_, db := serverutils.StartTenant(
+		tenant, db := serverutils.StartTenant(
 			t, testServer, base.TestTenantArgs{
 				Settings: testingClusterSettings,
 				TestingKnobs: base.TestingKnobs{
@@ -282,6 +284,7 @@ func (tc testCase) runTest(
 				TenantID: tenantID,
 			},
 		)
+		secondaryTenants = append(secondaryTenants, tenant)
 		return db
 	}
 
@@ -305,6 +308,12 @@ func (tc testCase) runTest(
 		cfg.setupClusterSetting,
 		cfg.queryClusterSetting,
 	)
+
+	// Wait for splits after starting all tenants to make test start up faster.
+	for _, tenant := range secondaryTenants {
+		err := tenant.WaitForTenantEndKeySplit(ctx)
+		require.NoError(t, err)
+	}
 
 	execQueries(testCluster, systemDB, "system", tc.system)
 	execQueries(testCluster, secondaryDB, "secondary", tc.secondary)
@@ -349,10 +358,10 @@ func TestMultiTenantAdminFunction(t *testing.T) {
 			desc:  "ALTER RANGE x RELOCATE LEASE",
 			query: "ALTER RANGE (SELECT min(range_id) FROM [SHOW RANGES FROM TABLE t]) RELOCATE LEASE TO 1;",
 			system: tenantExpected{
-				result: [][]string{{systemRangeID, systemKey, "ok"}},
+				result: [][]string{{systemRangeID, systemKeyPretty, "ok"}},
 			},
 			secondary: tenantExpected{
-				result: [][]string{{secondaryRangeID, secondaryKey, "ok"}},
+				result: [][]string{{secondaryRangeID, secondaryKeyPretty, "ok"}},
 			},
 			secondaryWithoutCapability: tenantExpected{
 				errorMessage: errorutil.UnsupportedWithMultiTenancyMessage,
@@ -362,10 +371,10 @@ func TestMultiTenantAdminFunction(t *testing.T) {
 			desc:  "ALTER RANGE RELOCATE LEASE",
 			query: "ALTER RANGE RELOCATE LEASE TO 1 FOR (SELECT min(range_id) FROM [SHOW RANGES FROM TABLE t]);",
 			system: tenantExpected{
-				result: [][]string{{systemRangeID, systemKey, "ok"}},
+				result: [][]string{{systemRangeID, systemKeyPretty, "ok"}},
 			},
 			secondary: tenantExpected{
-				result: [][]string{{secondaryRangeID, secondaryKey, "ok"}},
+				result: [][]string{{secondaryRangeID, secondaryKeyPretty, "ok"}},
 			},
 			secondaryWithoutCapability: tenantExpected{
 				errorMessage: errorutil.UnsupportedWithMultiTenancyMessage,
@@ -375,10 +384,10 @@ func TestMultiTenantAdminFunction(t *testing.T) {
 			desc:  "ALTER TABLE x EXPERIMENTAL_RELOCATE LEASE",
 			query: "ALTER TABLE t EXPERIMENTAL_RELOCATE LEASE SELECT 1, 1;",
 			system: tenantExpected{
-				result: [][]string{{"\xbd", systemKey}},
+				result: [][]string{{systemKey, systemKeyPretty}},
 			},
 			secondary: tenantExpected{
-				result: [][]string{{"\xfe\x92", secondaryKey}},
+				result: [][]string{{"\xfe\x92", secondaryKeyPretty}},
 			},
 			secondaryWithoutCapability: tenantExpected{
 				errorMessage: errorutil.UnsupportedWithMultiTenancyMessage,
@@ -483,10 +492,10 @@ func TestMultiTenantAdminFunction(t *testing.T) {
 			desc:  "ALTER TABLE x SCATTER",
 			query: "ALTER TABLE t SCATTER;",
 			system: tenantExpected{
-				result: [][]string{{"\xbd", systemKey}},
+				result: [][]string{{systemKey, systemKeyPretty}},
 			},
 			secondary: tenantExpected{
-				result: [][]string{{"\xfe\x92", secondaryKey}},
+				result: [][]string{{"\xfe\x92", secondaryKeyPretty}},
 			},
 			secondaryWithoutClusterSetting: tenantExpected{
 				errorMessage: "tenant cluster setting sql.scatter.allow_for_secondary_tenant.enabled disabled",
@@ -558,6 +567,12 @@ func TestTruncateTable(t *testing.T) {
 				{"…/104/2/1", "<after:/Tenant/11>"},
 			},
 		},
+		secondaryWithoutCapability: tenantExpected{
+			result: [][]string{
+				{"<before:/Tenant/20/Table/104/1/1>", "…/104/2/1"},
+				{"…/104/2/1", "<after:/Tenant/21>"},
+			},
+		},
 		setupClusterSetting: sql.SecondaryTenantSplitAtEnabled,
 	}
 	tc.runTest(
@@ -592,10 +607,10 @@ func TestRelocateVoters(t *testing.T) {
 			desc:  "ALTER RANGE x RELOCATE VOTERS",
 			query: "ALTER RANGE (SELECT min(range_id) FROM [SHOW RANGES FROM TABLE t]) RELOCATE VOTERS FROM %[1]s TO %[2]s;",
 			system: tenantExpected{
-				result: [][]string{{systemRangeID, systemKey, "ok"}},
+				result: [][]string{{systemRangeID, systemKeyPretty, "ok"}},
 			},
 			secondary: tenantExpected{
-				result: [][]string{{secondaryRangeID, secondaryKey, "ok"}},
+				result: [][]string{{secondaryRangeID, secondaryKeyPretty, "ok"}},
 			},
 			secondaryWithoutCapability: tenantExpected{
 				errorMessage: errorutil.UnsupportedWithMultiTenancyMessage,
@@ -605,10 +620,10 @@ func TestRelocateVoters(t *testing.T) {
 			desc:  "ALTER RANGE RELOCATE VOTERS",
 			query: "ALTER RANGE RELOCATE VOTERS FROM %[1]s TO %[2]s FOR (SELECT min(range_id) FROM [SHOW RANGES FROM TABLE t]);",
 			system: tenantExpected{
-				result: [][]string{{systemRangeID, systemKey, "ok"}},
+				result: [][]string{{systemRangeID, systemKeyPretty, "ok"}},
 			},
 			secondary: tenantExpected{
-				result: [][]string{{secondaryRangeID, secondaryKey, "ok"}},
+				result: [][]string{{secondaryRangeID, secondaryKeyPretty, "ok"}},
 			},
 			secondaryWithoutCapability: tenantExpected{
 				errorMessage: errorutil.UnsupportedWithMultiTenancyMessage,
@@ -678,10 +693,10 @@ func TestExperimentalRelocateVoters(t *testing.T) {
 			desc:  "ALTER TABLE x EXPERIMENTAL_RELOCATE VOTERS",
 			query: "ALTER TABLE t EXPERIMENTAL_RELOCATE VOTERS VALUES (ARRAY[%[1]s], 1);",
 			system: tenantExpected{
-				result: [][]string{{"\xbd", systemKey}},
+				result: [][]string{{systemKey, systemKeyPretty}},
 			},
 			secondary: tenantExpected{
-				result: [][]string{{"\xfe\x92", secondaryKey}},
+				result: [][]string{{"\xfe\x92", secondaryKeyPretty}},
 			},
 			secondaryWithoutCapability: tenantExpected{
 				errorMessage: errorutil.UnsupportedWithMultiTenancyMessage,
@@ -747,10 +762,10 @@ func TestRelocateNonVoters(t *testing.T) {
 			desc:  "ALTER RANGE x RELOCATE NONVOTERS",
 			query: "ALTER RANGE (SELECT min(range_id) FROM [SHOW RANGES FROM TABLE t]) RELOCATE NONVOTERS FROM %[1]s TO %[2]s;",
 			system: tenantExpected{
-				result: [][]string{{systemRangeID, systemKey, "ok"}},
+				result: [][]string{{systemRangeID, systemKeyPretty, "ok"}},
 			},
 			secondary: tenantExpected{
-				result: [][]string{{secondaryRangeID, secondaryKey, "ok"}},
+				result: [][]string{{secondaryRangeID, secondaryKeyPretty, "ok"}},
 			},
 			secondaryWithoutCapability: tenantExpected{
 				errorMessage: errorutil.UnsupportedWithMultiTenancyMessage,
@@ -760,10 +775,10 @@ func TestRelocateNonVoters(t *testing.T) {
 			desc:  "ALTER RANGE RELOCATE NONVOTERS",
 			query: "ALTER RANGE RELOCATE NONVOTERS FROM %[1]s TO %[2]s FOR (SELECT min(range_id) FROM [SHOW RANGES FROM TABLE t]);",
 			system: tenantExpected{
-				result: [][]string{{systemRangeID, systemKey, "ok"}},
+				result: [][]string{{systemRangeID, systemKeyPretty, "ok"}},
 			},
 			secondary: tenantExpected{
-				result: [][]string{{secondaryRangeID, secondaryKey, "ok"}},
+				result: [][]string{{secondaryRangeID, secondaryKeyPretty, "ok"}},
 			},
 			secondaryWithoutCapability: tenantExpected{
 				errorMessage: errorutil.UnsupportedWithMultiTenancyMessage,
@@ -828,10 +843,10 @@ func TestExperimentalRelocateNonVoters(t *testing.T) {
 			desc:  "ALTER TABLE x EXPERIMENTAL_RELOCATE NONVOTERS",
 			query: "ALTER TABLE t EXPERIMENTAL_RELOCATE NONVOTERS VALUES (ARRAY[%[1]s], 1);",
 			system: tenantExpected{
-				result: [][]string{{"\xbd", systemKey}},
+				result: [][]string{{systemKey, systemKeyPretty}},
 			},
 			secondary: tenantExpected{
-				result: [][]string{{"\xfe\x92", secondaryKey}},
+				result: [][]string{{"\xfe\x92", secondaryKeyPretty}},
 			},
 			secondaryWithoutCapability: tenantExpected{
 				errorMessage: errorutil.UnsupportedWithMultiTenancyMessage,

@@ -849,79 +849,99 @@ ORDER BY t1.k, t2.i, t1.i DESC
 ----
 creation: CREATE INDEX ON t1 (k, i DESC);
 creation: CREATE INDEX ON t2 (k) STORING (i);
-creation: CREATE INDEX ON t3 (f) STORING (k, i);
+creation: CREATE INDEX ON t3 (f) STORING (k);
 --
 optimal plan:
 sort (segmented)
  ├── columns: k:1 i:2 i:9
- ├── cost: 2432.08954
+ ├── cost: 2432.08948
  ├── ordering: +1,+9,-2
  └── project
       ├── columns: t1.k:1 t1.i:2 t2.i:9
-      ├── cost: 2279.40821
+      ├── cost: 2279.40815
       ├── ordering: +1
       └── left-join (merge)
            ├── columns: t1.k:1 t1.i:2 t2.k:8 t2.i:9
            ├── left ordering: +1
            ├── right ordering: +8
-           ├── cost: 2268.08102
+           ├── cost: 2268.08095
            ├── ordering: +1
            ├── select
            │    ├── columns: t1.k:1 t1.i:2
-           │    ├── cost: 1130.09358
+           │    ├── cost: 1130.09355
            │    ├── ordering: +1
            │    ├── scan t1@_hyp_1
            │    │    ├── columns: t1.k:1 t1.i:2
            │    │    ├── cost: 1098.72
            │    │    └── ordering: +1
            │    └── filters
-           │         └── exists [subquery]
-           │              └── limit
-           │                   ├── columns: t3.k:14!null t3.i:15 t3.f:16!null
-           │                   ├── cardinality: [0 - 1]
-           │                   ├── cost: 21.3435766
-           │                   ├── key: ()
-           │                   ├── fd: ()-->(14-16)
-           │                   ├── select
-           │                   │    ├── columns: t3.k:14!null t3.i:15 t3.f:16!null
-           │                   │    ├── cost: 21.3235766
-           │                   │    ├── limit hint: 1.00
-           │                   │    ├── scan t3@_hyp_1
-           │                   │    │    ├── columns: t3.k:14 t3.i:15 t3.f:16!null
-           │                   │    │    ├── constraint: /16/18: (/NULL - ]
-           │                   │    │    ├── cost: 21.2632432
-           │                   │    │    └── limit hint: 3.00
-           │                   │    └── filters
-           │                   │         └── t3.f:16 > t3.k:14 [outer=(14,16), constraints=(/14: (/NULL - ]; /16: (/NULL - ])]
-           │                   └── 1
+           │         └── coalesce [subquery]
+           │              ├── subquery
+           │              │    └── project
+           │              │         ├── columns: column21:21!null
+           │              │         ├── cardinality: [0 - 1]
+           │              │         ├── cost: 21.3435466
+           │              │         ├── key: ()
+           │              │         ├── fd: ()-->(21)
+           │              │         ├── limit
+           │              │         │    ├── columns: t3.k:14!null t3.f:16!null
+           │              │         │    ├── cardinality: [0 - 1]
+           │              │         │    ├── cost: 21.3135466
+           │              │         │    ├── key: ()
+           │              │         │    ├── fd: ()-->(14,16)
+           │              │         │    ├── select
+           │              │         │    │    ├── columns: t3.k:14!null t3.f:16!null
+           │              │         │    │    ├── cost: 21.2935466
+           │              │         │    │    ├── limit hint: 1.00
+           │              │         │    │    ├── scan t3@_hyp_1
+           │              │         │    │    │    ├── columns: t3.k:14 t3.f:16!null
+           │              │         │    │    │    ├── constraint: /16/18: (/NULL - ]
+           │              │         │    │    │    ├── cost: 21.2332132
+           │              │         │    │    │    └── limit hint: 3.00
+           │              │         │    │    └── filters
+           │              │         │    │         └── t3.f:16 > t3.k:14 [outer=(14,16), constraints=(/14: (/NULL - ]; /16: (/NULL - ])]
+           │              │         │    └── 1
+           │              │         └── projections
+           │              │              └── true [as=column21:21]
+           │              └── false
            ├── select
            │    ├── columns: t2.k:8 t2.i:9
-           │    ├── cost: 1119.99358
+           │    ├── cost: 1119.99355
            │    ├── ordering: +8
            │    ├── scan t2@_hyp_2
            │    │    ├── columns: t2.k:8 t2.i:9
            │    │    ├── cost: 1088.62
            │    │    └── ordering: +8
            │    └── filters
-           │         └── exists [subquery]
-           │              └── limit
-           │                   ├── columns: t3.k:14!null t3.i:15 t3.f:16!null
-           │                   ├── cardinality: [0 - 1]
-           │                   ├── cost: 21.3435766
-           │                   ├── key: ()
-           │                   ├── fd: ()-->(14-16)
-           │                   ├── select
-           │                   │    ├── columns: t3.k:14!null t3.i:15 t3.f:16!null
-           │                   │    ├── cost: 21.3235766
-           │                   │    ├── limit hint: 1.00
-           │                   │    ├── scan t3@_hyp_1
-           │                   │    │    ├── columns: t3.k:14 t3.i:15 t3.f:16!null
-           │                   │    │    ├── constraint: /16/18: (/NULL - ]
-           │                   │    │    ├── cost: 21.2632432
-           │                   │    │    └── limit hint: 3.00
-           │                   │    └── filters
-           │                   │         └── t3.f:16 > t3.k:14 [outer=(14,16), constraints=(/14: (/NULL - ]; /16: (/NULL - ])]
-           │                   └── 1
+           │         └── coalesce [subquery]
+           │              ├── subquery
+           │              │    └── project
+           │              │         ├── columns: column21:21!null
+           │              │         ├── cardinality: [0 - 1]
+           │              │         ├── cost: 21.3435466
+           │              │         ├── key: ()
+           │              │         ├── fd: ()-->(21)
+           │              │         ├── limit
+           │              │         │    ├── columns: t3.k:14!null t3.f:16!null
+           │              │         │    ├── cardinality: [0 - 1]
+           │              │         │    ├── cost: 21.3135466
+           │              │         │    ├── key: ()
+           │              │         │    ├── fd: ()-->(14,16)
+           │              │         │    ├── select
+           │              │         │    │    ├── columns: t3.k:14!null t3.f:16!null
+           │              │         │    │    ├── cost: 21.2935466
+           │              │         │    │    ├── limit hint: 1.00
+           │              │         │    │    ├── scan t3@_hyp_1
+           │              │         │    │    │    ├── columns: t3.k:14 t3.f:16!null
+           │              │         │    │    │    ├── constraint: /16/18: (/NULL - ]
+           │              │         │    │    │    ├── cost: 21.2332132
+           │              │         │    │    │    └── limit hint: 3.00
+           │              │         │    │    └── filters
+           │              │         │    │         └── t3.f:16 > t3.k:14 [outer=(14,16), constraints=(/14: (/NULL - ]; /16: (/NULL - ])]
+           │              │         │    └── 1
+           │              │         └── projections
+           │              │              └── true [as=column21:21]
+           │              └── false
            └── filters (true)
 
 # Tests for set operation indexes. See rule 6 in indexrec.FindIndexCandidateSet.
@@ -1222,7 +1242,7 @@ inner-join (lookup t4)
  ├── key columns: [6] = [6]
  ├── lookup columns are key
  ├── immutable
- ├── cost: 238.247531
+ ├── cost: 237.980741
  ├── inner-join (zigzag t4@_hyp_1 t4@_hyp_1)
  │    ├── columns: rowid:6!null
  │    ├── eq columns: [6] = [6]
@@ -1230,8 +1250,7 @@ inner-join (lookup t4)
  │    ├── right fixed columns: [9] = ['\x37666f6f000112310001']
  │    ├── cost: 159.155802
  │    └── filters (true)
- └── filters
-      └── j:4 @> '{"bar": "2", "foo": "1"}' [outer=(4), immutable, constraints=(/4: (/NULL - ])]
+ └── filters (true)
 
 index-candidates
 SELECT k, f FROM t4 WHERE j <@ '{"foo": "1"}' AND k = 1

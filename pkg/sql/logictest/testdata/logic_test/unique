@@ -829,10 +829,10 @@ statement error pgcode 23505 pq: duplicate key value violates unique constraint 
 INSERT INTO uniq_computed_pk (i, s, d) VALUES (1, 'a', 1.0) ON CONFLICT (s) DO UPDATE SET i = 2
 
 statement error pgcode 23505 pq: duplicate key value violates unique constraint "uniq_computed_pk_c_s_s_key"\nDETAIL: Key \(c_s,s\)=\('b','b'\) already exists\.
-UPSERT INTO uniq_computed_pk (i, s, d) VALUES (1, 'b', 1.0)
+UPSERT INTO uniq_computed_pk (i, s, d) VALUES (3, 'b', 3.0)
 
 statement error pgcode 23505 pq: duplicate key value violates unique constraint "unique_d"\nDETAIL: Key \(d\)=\(2\.00\) already exists\.
-UPSERT INTO uniq_computed_pk (i, s, d) VALUES (1, 'a', 2.00)
+UPSERT INTO uniq_computed_pk (i, s, d) VALUES (3, 'c', 2.00)
 
 query ITFTTFT colnames,rowsort
 SELECT * FROM uniq_computed_pk

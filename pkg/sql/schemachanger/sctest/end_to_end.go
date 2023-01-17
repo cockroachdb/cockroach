@@ -29,6 +29,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
@@ -56,10 +58,12 @@ import (
 // given testing knobs.
 type NewClusterFunc func(
 	t *testing.T, knobs *scexec.TestingKnobs,
-) (_ *gosql.DB, cleanup func())
+) (_ serverutils.TestServerInterface, _ *gosql.DB, cleanup func())
 
 // SingleNodeCluster is a NewClusterFunc.
-func SingleNodeCluster(t *testing.T, knobs *scexec.TestingKnobs) (*gosql.DB, func()) {
+func SingleNodeCluster(
+	t *testing.T, knobs *scexec.TestingKnobs,
+) (serverutils.TestServerInterface, *gosql.DB, func()) {
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
 		// Disabled due to a failure in TestBackupRestore. Tracked with #76378.
 		DisableDefaultTestTenant: true,
@@ -71,7 +75,7 @@ func SingleNodeCluster(t *testing.T, knobs *scexec.TestingKnobs) (*gosql.DB, fun
 			},
 		},
 	})
-	return db, func() {
+	return s, db, func() {
 		s.Stopper().Stop(context.Background())
 	}
 }
@@ -121,7 +125,7 @@ func EndToEndSideEffects(t *testing.T, relPath string, newCluster NewClusterFunc
 	ctx := context.Background()
 	path := datapathutils.RewritableDataPath(t, relPath)
 	// Create a test cluster.
-	db, cleanup := newCluster(t, nil /* knobs */)
+	s, db, cleanup := newCluster(t, nil /* knobs */)
 	tdb := sqlutils.MakeSQLRunner(db)
 	defer cleanup()
 	numTestStatementsObserved := 0
@@ -173,6 +177,14 @@ func EndToEndSideEffects(t *testing.T, relPath string, newCluster NewClusterFunc
 			// The schema changer test dependencies do not hold any reference to the
 			// test cluster, here the SQLRunner is only used to populate the mocked
 			// catalog state.
+			// Set up a reference provider factory for the purpose of proper
+			// dependency resolution.
+			execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
+			refFactory, refFactoryCleanup := sql.NewReferenceProviderFactoryForTest(
+				"test" /* opName */, kv.NewTxn(context.Background(), s.DB(), s.NodeID()), username.RootUserName(), &execCfg, "defaultdb",
+			)
+			defer refFactoryCleanup()
+
 			deps = sctestdeps.NewTestDependencies(
 				sctestdeps.WithDescriptors(sctestdeps.ReadDescriptorsFromDB(ctx, t, tdb).Catalog),
 				sctestdeps.WithNamespace(sctestdeps.ReadNamespaceFromDB(t, tdb).Catalog),
@@ -194,6 +206,8 @@ func EndToEndSideEffects(t *testing.T, relPath string, newCluster NewClusterFunc
 				}),
 				sctestdeps.WithStatements(stmtSqls...),
 				sctestdeps.WithComments(sctestdeps.ReadCommentsFromDB(t, tdb)),
+				sctestdeps.WithIDGenerator(s),
+				sctestdeps.WithReferenceProviderFactory(refFactory),
 			)
 			stmtStates := execStatementWithTestDeps(ctx, t, deps, stmts...)
 			var fileNameSuffix string
@@ -343,9 +357,8 @@ func execStatementWithTestDeps(
 		// Run post-commit phase in mock schema change job.
 		deps.IncrementPhase()
 		deps.LogSideEffectf("# begin %s", deps.Phase())
-		const rollback = false
 		err = scrun.RunSchemaChangesInJob(
-			ctx, deps.TestingKnobs(), deps, jobID, job.DescriptorIDs, rollback,
+			ctx, deps.TestingKnobs(), deps, jobID, job.DescriptorIDs, nil, /* rollbackCause */
 		)
 		require.NoError(t, err, "error in mock schema change job execution")
 		deps.LogSideEffectf("# end %s", deps.Phase())

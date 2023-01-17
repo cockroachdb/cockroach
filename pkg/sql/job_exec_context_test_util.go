@@ -52,7 +52,10 @@ func (p *FakeJobExecContext) SessionDataMutatorIterator() *sessionDataMutatorIte
 
 // DistSQLPlanner implements the JobExecContext interface.
 func (p *FakeJobExecContext) DistSQLPlanner() *DistSQLPlanner {
-	panic("unimplemented")
+	if p.ExecutorConfig == nil {
+		panic("unimplemented")
+	}
+	return p.ExecutorConfig.DistSQLPlanner
 }
 
 // LeaseMgr implements the JobExecContext interface.

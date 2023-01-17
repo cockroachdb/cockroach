@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -54,9 +55,7 @@ func runChangeReplicasMixedVersion(ctx context.Context, t test.Test, c cluster.C
 		return rng.Intn(nodeCount) + 1
 	}
 
-	// An empty string uses the cockroach binary specified by `--cockroach`.
-	const mainVersion = ""
-	preVersion, err := PredecessorVersion(*t.BuildVersion())
+	preVersion, err := clusterupgrade.PredecessorVersion(*t.BuildVersion())
 	require.NoError(t, err)
 
 	// scanTableStep runs a count(*) scan across a table, asserting the row count.
@@ -215,7 +214,7 @@ func runChangeReplicasMixedVersion(ctx context.Context, t test.Test, c cluster.C
 
 	u := newVersionUpgradeTest(c,
 		// Start the cluster with preVersion and wait for it to bootstrap, then
-		// disable auto-upgrades to mainVersion. The checkpoint fixture is not
+		// disable auto-upgrades to MainVersion. The checkpoint fixture is not
 		// necessary in this test, but we pull it in to get better test coverage of
 		// historical cluster state.
 		uploadAndStartFromCheckpointFixture(c.All(), preVersion),
@@ -231,8 +230,8 @@ func runChangeReplicasMixedVersion(ctx context.Context, t test.Test, c cluster.C
 			require.NoError(t, WaitFor3XReplication(ctx, t, conn))
 		},
 
-		// Upgrade n1,n2 to mainVersion, leave n3,n4 at preVersion.
-		binaryUpgradeStep(c.Nodes(1, 2), mainVersion),
+		// Upgrade n1,n2 to MainVersion, leave n3,n4 at preVersion.
+		binaryUpgradeStep(c.Nodes(1, 2), clusterupgrade.MainVersion),
 
 		// Scatter the table's single range, to randomize replica/lease
 		// placement -- in particular, who's responsible for splits.
@@ -280,9 +279,9 @@ func runChangeReplicasMixedVersion(ctx context.Context, t test.Test, c cluster.C
 		scatterTableStep("test"),
 		scanTableStep("test", 0),
 
-		// Upgrade n3,n4 (the remaining nodes) to mainVersion, verify that we can
+		// Upgrade n3,n4 (the remaining nodes) to MainVersion, verify that we can
 		// run a table scan, move ranges around, scatter, and scan again.
-		binaryUpgradeStep(c.Nodes(3, 4), mainVersion),
+		binaryUpgradeStep(c.Nodes(3, 4), clusterupgrade.MainVersion),
 		scanTableStep("test", 0),
 		changeReplicasRelocateFromNodeStep("test", 1),
 		changeReplicasZoneConfigFromNodeStep("test", 2),
@@ -302,10 +301,10 @@ func runChangeReplicasMixedVersion(ctx context.Context, t test.Test, c cluster.C
 		scatterTableStep("test"),
 		scanTableStep("test", 0),
 
-		// Upgrade all to mainVersion and finalize the upgrade. Verify that we can
+		// Upgrade all to MainVersion and finalize the upgrade. Verify that we can
 		// run a table scan, shuffle the ranges, scatter them, and scan again.
 		allowAutoUpgradeStep(1),
-		binaryUpgradeStep(c.All(), mainVersion),
+		binaryUpgradeStep(c.All(), clusterupgrade.MainVersion),
 		waitForUpgradeStep(c.All()),
 		scanTableStep("test", 0),
 		changeReplicasRelocateFromNodeStep("test", 1),

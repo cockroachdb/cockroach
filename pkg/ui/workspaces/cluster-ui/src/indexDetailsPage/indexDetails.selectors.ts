@@ -31,6 +31,7 @@ import {
 import { BreadcrumbItem } from "../breadcrumbs";
 import { RecommendationType as RecType } from "./indexDetailsPage";
 import { nodeRegionsByIDSelector } from "../store/nodes";
+import { selectTimeScale } from "src/store/utils/selectors";
 const { RecommendationType } = cockroach.sql.IndexRecommendation;
 
 export const selectIndexDetails = createSelector(
@@ -47,6 +48,7 @@ export const selectIndexDetails = createSelector(
   (state: AppState) => selectHasViewActivityRedactedRole(state),
   (state: AppState) => nodeRegionsByIDSelector(state),
   (state: AppState) => selectHasAdminRole(state),
+  (state: AppState) => selectTimeScale(state),
   (
     database,
     schema,
@@ -57,6 +59,7 @@ export const selectIndexDetails = createSelector(
     hasViewActivityRedactedRole,
     nodeRegions,
     hasAdminRole,
+    timeScale,
   ): IndexDetailsPageData => {
     const stats = indexStats[generateTableID(database, table)];
     const details = stats?.data?.statistics.filter(
@@ -89,6 +92,7 @@ export const selectIndexDetails = createSelector(
         index,
       ),
       isTenant: isTenant,
+      timeScale: timeScale,
       hasViewActivityRedactedRole: hasViewActivityRedactedRole,
       hasAdminRole: hasAdminRole,
       nodeRegions: nodeRegions,

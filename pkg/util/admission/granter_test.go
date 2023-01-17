@@ -35,18 +35,15 @@ import (
 //
 // init-grant-coordinator min-cpu=<int> max-cpu=<int> sql-kv-tokens=<int>
 // sql-sql-tokens=<int> sql-leaf=<int> sql-root=<int>
-// enabled-soft-slot-granting=<bool>
 // set-has-waiting-requests work=<kind> v=<true|false>
 // set-return-value-from-granted work=<kind> v=<int>
 // try-get work=<kind> [v=<int>]
 // return-grant work=<kind> [v=<int>]
 // took-without-permission work=<kind> [v=<int>]
 // continue-grant-chain work=<kind>
-// cpu-load runnable=<int> procs=<int> [infrequent=<bool>] [clamp=<int>]
+// cpu-load runnable=<int> procs=<int> [infrequent=<bool>]
 // init-store-grant-coordinator
 // set-io-tokens tokens=<int>
-// try-get-soft-slots slots=<int>
-// return-soft-slots slots=<int>
 func TestGranterBasic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -56,7 +53,6 @@ func TestGranterBasic(t *testing.T) {
 	// store grant coordinator.
 	var requesters [numWorkKinds + 1]*testRequester
 	var coord *GrantCoordinator
-	var ssg *SoftSlotGranter
 	clearRequesterAndCoord := func() {
 		coord = nil
 		for i := range requesters {
@@ -101,21 +97,9 @@ func TestGranterBasic(t *testing.T) {
 				return req
 			}
 			delayForGrantChainTermination = 0
-			opts.RunnableAlphaOverride = 1 // This gives weight to only the most recent sample.
 			coords := NewGrantCoordinators(ambientCtx, settings, opts, registry)
 			defer coords.Close()
 			coord = coords.Regular
-			var err error
-			ssg, err = MakeSoftSlotGranter(coord)
-			require.NoError(t, err)
-			if d.HasArg("enabled-soft-slot-granting") {
-				var enabledSoftSlotGranting bool
-				d.ScanArgs(t, "enabled-soft-slot-granting", &enabledSoftSlotGranting)
-				if !enabledSoftSlotGranting {
-					EnabledSoftSlotGranting.Override(context.Background(), &settings.SV, false)
-				}
-			}
-
 			return flushAndReset()
 
 		case "init-store-grant-coordinator":
@@ -125,9 +109,9 @@ func TestGranterBasic(t *testing.T) {
 			storeCoordinators := &StoreGrantCoordinators{
 				settings: settings,
 				makeStoreRequesterFunc: func(
-					ambientCtx log.AmbientContext, granters [numWorkClasses]granterWithStoreWriteDone,
+					ambientCtx log.AmbientContext, granters [admissionpb.NumWorkClasses]granterWithStoreWriteDone,
 					settings *cluster.Settings, metrics *WorkQueueMetrics, opts workQueueOptions) storeRequester {
-					makeTestRequester := func(wc workClass) *testRequester {
+					makeTestRequester := func(wc admissionpb.WorkClass) *testRequester {
 						req := &testRequester{
 							workKind:               KVWork,
 							granter:                granters[wc],
@@ -136,18 +120,18 @@ func TestGranterBasic(t *testing.T) {
 							returnValueFromGranted: 0,
 						}
 						switch wc {
-						case regularWorkClass:
+						case admissionpb.RegularWorkClass:
 							req.additionalID = "-regular"
-						case elasticWorkClass:
+						case admissionpb.ElasticWorkClass:
 							req.additionalID = "-elastic"
 						}
 						return req
 					}
 					req := &storeTestRequester{}
-					req.requesters[regularWorkClass] = makeTestRequester(regularWorkClass)
-					req.requesters[elasticWorkClass] = makeTestRequester(elasticWorkClass)
-					requesters[KVWork] = req.requesters[regularWorkClass]
-					requesters[numWorkKinds] = req.requesters[elasticWorkClass]
+					req.requesters[admissionpb.RegularWorkClass] = makeTestRequester(admissionpb.RegularWorkClass)
+					req.requesters[admissionpb.ElasticWorkClass] = makeTestRequester(admissionpb.ElasticWorkClass)
+					requesters[KVWork] = req.requesters[admissionpb.RegularWorkClass]
+					requesters[numWorkKinds] = req.requesters[admissionpb.ElasticWorkClass]
 					return req
 				},
 				kvIOTokensExhaustedDuration: metrics.KVIOTokensExhaustedDuration,
@@ -216,19 +200,23 @@ func TestGranterBasic(t *testing.T) {
 			if d.HasArg("infrequent") {
 				d.ScanArgs(t, "infrequent", &infrequent)
 			}
-			if d.HasArg("clamp") {
-				var clamp int
-				d.ScanArgs(t, "clamp", &clamp)
-				kvsa := coord.cpuLoadListener.(*kvSlotAdjuster)
-				kvsa.setModerateSlotsClamp(clamp)
-			}
 
 			samplePeriod := time.Millisecond
 			if infrequent {
 				samplePeriod = 250 * time.Millisecond
 			}
 			coord.CPULoad(runnable, procs, samplePeriod)
-			return flushAndReset()
+			str := flushAndReset()
+			kvsa := coord.cpuLoadListener.(*kvSlotAdjuster)
+			microsToMillis := func(micros int64) int64 {
+				return micros * int64(time.Microsecond) / int64(time.Millisecond)
+			}
+			return fmt.Sprintf("%sSlotAdjuster metrics: slots: %d, duration (short, long) millis: (%d, %d), inc: %d, dec: %d\n",
+				str, kvsa.totalSlotsMetric.Value(),
+				microsToMillis(kvsa.cpuLoadShortPeriodDurationMetric.Count()),
+				microsToMillis(kvsa.cpuLoadLongPeriodDurationMetric.Count()),
+				kvsa.slotAdjusterIncrementsMetric.Count(), kvsa.slotAdjusterDecrementsMetric.Count(),
+			)
 
 		case "set-io-tokens":
 			var tokens int
@@ -260,19 +248,6 @@ func TestGranterBasic(t *testing.T) {
 			requesters[scanWorkKind(t, d)].granter.(granterWithStoreWriteDone).storeWriteDone(
 				int64(origTokens), StoreWorkDoneInfo{WriteBytes: int64(writeBytes)})
 			coord.testingTryGrant()
-			return flushAndReset()
-
-		case "try-get-soft-slots":
-			var slots int
-			d.ScanArgs(t, "slots", &slots)
-			granted := ssg.TryGetSlots(slots)
-			fmt.Fprintf(&buf, "requested: %d, granted: %d\n", slots, granted)
-			return flushAndReset()
-
-		case "return-soft-slots":
-			var slots int
-			d.ScanArgs(t, "slots", &slots)
-			ssg.ReturnSlots(slots)
 			return flushAndReset()
 
 		default:
@@ -312,15 +287,15 @@ func TestStoreCoordinators(t *testing.T) {
 	opts := Options{
 		makeRequesterFunc: makeRequesterFunc,
 		makeStoreRequesterFunc: func(
-			ctx log.AmbientContext, granters [numWorkClasses]granterWithStoreWriteDone,
+			ctx log.AmbientContext, granters [admissionpb.NumWorkClasses]granterWithStoreWriteDone,
 			settings *cluster.Settings, metrics *WorkQueueMetrics, opts workQueueOptions) storeRequester {
-			reqReg := makeRequesterFunc(ctx, KVWork, granters[regularWorkClass], settings, metrics, opts)
-			reqElastic := makeRequesterFunc(ctx, KVWork, granters[elasticWorkClass], settings, metrics, opts)
+			reqReg := makeRequesterFunc(ctx, KVWork, granters[admissionpb.RegularWorkClass], settings, metrics, opts)
+			reqElastic := makeRequesterFunc(ctx, KVWork, granters[admissionpb.ElasticWorkClass], settings, metrics, opts)
 			str := &storeTestRequester{}
-			str.requesters[regularWorkClass] = reqReg.(*testRequester)
-			str.requesters[regularWorkClass].additionalID = "-regular"
-			str.requesters[elasticWorkClass] = reqElastic.(*testRequester)
-			str.requesters[elasticWorkClass].additionalID = "-elastic"
+			str.requesters[admissionpb.RegularWorkClass] = reqReg.(*testRequester)
+			str.requesters[admissionpb.RegularWorkClass].additionalID = "-regular"
+			str.requesters[admissionpb.ElasticWorkClass] = reqElastic.(*testRequester)
+			str.requesters[admissionpb.ElasticWorkClass].additionalID = "-elastic"
 			return str
 		},
 	}
@@ -418,13 +393,13 @@ func (tr *testRequester) continueGrantChain() {
 }
 
 type storeTestRequester struct {
-	requesters [numWorkClasses]*testRequester
+	requesters [admissionpb.NumWorkClasses]*testRequester
 }
 
 var _ storeRequester = &storeTestRequester{}
 
-func (str *storeTestRequester) getRequesters() [numWorkClasses]requester {
-	var rv [numWorkClasses]requester
+func (str *storeTestRequester) getRequesters() [admissionpb.NumWorkClasses]requester {
+	var rv [admissionpb.NumWorkClasses]requester
 	for i := range str.requesters {
 		rv[i] = str.requesters[i]
 	}
@@ -440,12 +415,6 @@ func (str *storeTestRequester) getStoreAdmissionStats() storeAdmissionStats {
 
 func (str *storeTestRequester) setStoreRequestEstimates(estimates storeRequestEstimates) {
 	// Only used by ioLoadListener, so don't bother.
-}
-
-// setModerateSlotsClamp is used in testing to force a value for kvsa.moderateSlotsClamp.
-func (kvsa *kvSlotAdjuster) setModerateSlotsClamp(val int) {
-	kvsa.moderateSlotsClampOverride = val
-	kvsa.moderateSlotsClamp = val
 }
 
 func scanWorkKind(t *testing.T, d *datadriven.TestData) int8 {

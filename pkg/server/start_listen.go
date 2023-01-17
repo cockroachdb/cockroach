@@ -92,6 +92,17 @@ func startListenRPCAndSQL(
 	var serveOnMux sync.Once
 
 	m := cmux.New(ln)
+	// cmux auto-retries Accept() by default. Tell it
+	// to stop doing work if we see a request to shut down.
+	m.HandleError(func(err error) bool {
+		select {
+		case <-stopper.ShouldQuiesce():
+			log.Infof(ctx, "server shutting down: instructing cmux to stop accepting")
+			return false
+		default:
+			return true
+		}
+	})
 
 	if !cfg.SplitListenSQL && enableSQLListener {
 		// If the pg port is split, it will be opened above. Otherwise,
@@ -124,8 +135,10 @@ func startListenRPCAndSQL(
 		// TODO(bdarnell): Do we need to also close the other listeners?
 		netutil.FatalIfUnexpected(anyL.Close())
 		netutil.FatalIfUnexpected(loopbackL.Close())
+		netutil.FatalIfUnexpected(ln.Close())
 	}
-	stopper.AddCloser(stop.CloserFn(func() {
+
+	stopGRPC := func() {
 		grpc.Stop()
 		serveOnMux.Do(func() {
 			// The cmux matches don't shut down properly unless serve is called on the
@@ -133,12 +146,16 @@ func startListenRPCAndSQL(
 			// if we wouldn't otherwise reach the point where we start serving on it.
 			netutil.FatalIfUnexpected(m.Serve())
 		})
-	}))
+	}
+
 	if err := stopper.RunAsyncTask(
 		workersCtx, "grpc-quiesce", waitForQuiesce,
 	); err != nil {
+		waitForQuiesce(ctx)
+		stopGRPC()
 		return nil, nil, nil, err
 	}
+	stopper.AddCloser(stop.CloserFn(stopGRPC))
 
 	// startRPCServer starts the RPC server. We do not do this
 	// immediately because we want the cluster to be ready (or ready to

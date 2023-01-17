@@ -615,7 +615,7 @@ func mustGetFamily(
 	t *testing.T, desc catalog.TableDescriptor, familyID descpb.FamilyID,
 ) *descpb.ColumnFamilyDescriptor {
 	t.Helper()
-	f, err := desc.FindFamilyByID(familyID)
+	f, err := catalog.MustFindFamilyByID(desc, familyID)
 	require.NoError(t, err)
 	return f
 }
@@ -660,7 +660,7 @@ func expectResultColumns(
 	}
 
 	for _, colName := range colNames {
-		col, err := desc.FindColumnWithName(tree.Name(colName))
+		col, err := catalog.MustFindColumnByName(desc, colName)
 		require.NoError(t, err)
 		res = append(res, ResultColumn{
 			ResultColumn: colinfo.ResultColumn{

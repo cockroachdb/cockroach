@@ -13,12 +13,10 @@ package sql
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -86,27 +84,39 @@ func (n *discardNode) startExec(params runParams) error {
 }
 
 func deleteTempTables(ctx context.Context, p *planner) error {
-	return p.WithInternalExecutor(ctx, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
-		codec := p.execCfg.Codec
-		descCol := p.Descriptors()
-		allDbDescs, err := descCol.GetAllDatabaseDescriptors(ctx, p.Txn())
+	// If this session has no temp schemas, then there is nothing to do here.
+	// This is the common case.
+	if len(p.SessionData().DatabaseIDToTempSchemaID) == 0 {
+		return nil
+	}
+	codec := p.execCfg.Codec
+	descCol := p.Descriptors()
+	// Note: grabbing all the databases here is somewhat suspect. It appears
+	// that the logic related to maintaining the set of database temp schemas
+	// is somewhat incomplete, so there can be temp schemas in the sessiondata
+	// map which don't exist any longer.
+	allDbDescs, err := descCol.GetAllDatabaseDescriptors(ctx, p.Txn())
+	if err != nil {
+		return err
+	}
+	g := p.byNameGetterBuilder().MaybeGet()
+	for _, db := range allDbDescs {
+		if _, ok := p.SessionData().DatabaseIDToTempSchemaID[uint32(db.GetID())]; !ok {
+			continue
+		}
+		sc, err := g.Schema(ctx, db, p.TemporarySchemaName())
 		if err != nil {
 			return err
 		}
-		g := p.byNameGetterBuilder().MaybeGet()
-		for _, db := range allDbDescs {
-			sc, err := g.Schema(ctx, db, p.TemporarySchemaName())
-			if err != nil {
-				return err
-			}
-			if sc == nil {
-				continue
-			}
-			err = cleanupTempSchemaObjects(ctx, p.Txn(), descCol, codec, ie, db, sc)
-			if err != nil {
-				return err
-			}
+		if sc == nil {
+			continue
 		}
-		return nil
-	})
+		err = cleanupTempSchemaObjects(
+			ctx, p.InternalSQLTxn(), descCol, codec, db, sc,
+		)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }

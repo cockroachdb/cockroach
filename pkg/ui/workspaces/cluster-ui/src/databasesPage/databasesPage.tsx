@@ -17,7 +17,7 @@ import classnames from "classnames/bind";
 
 import { Anchor } from "src/anchor";
 import { StackIcon } from "src/icon/stackIcon";
-import { Pagination, ResultsPerPageLabel } from "src/pagination";
+import { Pagination } from "src/pagination";
 import { BooleanSetting } from "src/settings/booleanSetting";
 import { PageConfig, PageConfigItem } from "src/pageConfig";
 import {
@@ -28,13 +28,11 @@ import {
   SortSetting,
 } from "src/sortedtable";
 import * as format from "src/util/format";
+import { EncodeDatabaseUri } from "src/util/format";
 
 import styles from "./databasesPage.module.scss";
 import sortableTableStyles from "src/sortedtable/sortedtable.module.scss";
-import {
-  baseHeadingClasses,
-  statisticsClasses,
-} from "src/transactionsPage/transactionsPageClasses";
+import { baseHeadingClasses } from "src/transactionsPage/transactionsPageClasses";
 import { syncHistory, tableStatsClusterSetting, unique } from "src/util";
 import booleanSettingStyles from "../settings/booleanSetting.module.scss";
 import { CircleFilled } from "../icon";
@@ -43,9 +41,9 @@ import { Loading } from "../loading";
 import { Search } from "../search";
 import {
   calculateActiveFilters,
+  defaultFilters,
   Filter,
   Filters,
-  defaultFilters,
   handleFiltersFromQueryString,
 } from "../queryFilter";
 import { merge } from "lodash";
@@ -495,7 +493,7 @@ export class DatabasesPage extends React.Component<
       ),
       cell: database => (
         <Link
-          to={`/database/${database.name}`}
+          to={EncodeDatabaseUri(database.name)}
           className={cx("icon__container")}
         >
           <StackIcon className={cx("icon--s", "icon--primary")} />
@@ -603,6 +601,27 @@ export class DatabasesPage extends React.Component<
 
     const regions = unique(Object.values(nodeRegions));
     const showNodes = !isTenant && nodes.length > 1;
+    const showRegions = regions.length > 1;
+
+    // Only show the databases filter if at least one drop-down is shown.
+    const databasesFilter =
+      showNodes || showRegions ? (
+        <PageConfigItem>
+          <Filter
+            hideAppNames={true}
+            regions={regions}
+            hideTimeLabel={true}
+            nodes={nodes.map(n => "n" + n.toString())}
+            activeFilters={activeFilters}
+            filters={defaultFilters}
+            onSubmitFilters={this.onSubmitFilters}
+            showNodes={showNodes}
+            showRegions={showRegions}
+          />
+        </PageConfigItem>
+      ) : (
+        <></>
+      );
 
     return (
       <div>
@@ -640,19 +659,7 @@ export class DatabasesPage extends React.Component<
                 placeholder={"Search Databases"}
               />
             </PageConfigItem>
-            <PageConfigItem>
-              <Filter
-                hideAppNames={true}
-                regions={regions}
-                hideTimeLabel={true}
-                nodes={nodes.map(n => "n" + n.toString())}
-                activeFilters={activeFilters}
-                filters={defaultFilters}
-                onSubmitFilters={this.onSubmitFilters}
-                showNodes={showNodes}
-                showRegions={regions.length > 1}
-              />
-            </PageConfigItem>
+            {databasesFilter}
           </PageConfig>
           <TableStatistics
             pagination={pagination}

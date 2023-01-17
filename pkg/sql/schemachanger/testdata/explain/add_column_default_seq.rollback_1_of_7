@@ -7,7 +7,7 @@ CREATE SEQUENCE db.public.sq1;
 ALTER TABLE db.public.tbl ADD COLUMN l INT NOT NULL DEFAULT nextval('db.public.sq1');
 EXPLAIN (ddl) rollback at post-commit stage 1 of 7;
 ----
-Schema change plan for rolling back ALTER TABLE ‹db›.public.‹tbl› ADD COLUMN ‹l› INT8 NOT NULL DEFAULT nextval(‹'db.public.sq1'›); 
+Schema change plan for rolling back ALTER TABLE ‹db›.public.‹tbl› ADD COLUMN ‹l› INT8 NOT NULL DEFAULT nextval(‹'db.public.sq1'›);
  └── PostCommitNonRevertiblePhase
       └── Stage 1 of 1 in PostCommitNonRevertiblePhase
            ├── 11 elements transitioning toward ABSENT
@@ -25,7 +25,7 @@ Schema change plan for rolling back ALTER TABLE ‹db›.public.‹tbl› ADD CO
            └── 10 Mutation operations
                 ├── SetColumnName {"ColumnID":2,"Name":"crdb_internal_co...","TableID":106}
                 ├── RemoveColumnDefaultExpression {"ColumnID":2,"TableID":106}
-                ├── UpdateBackReferencesInSequences {"BackReferencedColumnID":2,"BackReferencedTableID":106}
+                ├── UpdateTableBackReferencesInSequences {"BackReferencedColumnID":2,"BackReferencedTableID":106}
                 ├── MakeIndexAbsent {"IndexID":2,"TableID":106}
                 ├── CreateGCJobForIndex {"IndexID":2,"TableID":106}
                 ├── MakeIndexAbsent {"IndexID":3,"TableID":106}

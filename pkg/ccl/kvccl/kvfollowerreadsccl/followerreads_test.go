@@ -44,7 +44,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -545,17 +544,17 @@ func TestOracle(t *testing.T) {
 	leaseholder := replicas[2]
 
 	rpcContext := rpc.NewInsecureTestingContext(ctx, clock, stopper)
-	setLatency := func(addr string, latency time.Duration) {
+	setLatency := func(id roachpb.NodeID, latency time.Duration) {
 		// All test cases have to have at least 11 measurement values in order for
 		// the exponentially-weighted moving average to work properly. See the
 		// comment on the WARMUP_SAMPLES const in the ewma package for details.
 		for i := 0; i < 11; i++ {
-			rpcContext.RemoteClocks.UpdateOffset(ctx, addr, rpc.RemoteOffset{}, latency)
+			rpcContext.RemoteClocks.UpdateOffset(ctx, id, rpc.RemoteOffset{}, latency)
 		}
 	}
-	setLatency("1", 100*time.Millisecond)
-	setLatency("2", 2*time.Millisecond)
-	setLatency("3", 80*time.Millisecond)
+	setLatency(1, 100*time.Millisecond)
+	setLatency(2, 2*time.Millisecond)
+	setLatency(3, 80*time.Millisecond)
 
 	testCases := []struct {
 		name                  string
@@ -700,7 +699,6 @@ func TestFollowerReadsWithStaleDescriptor(t *testing.T) {
 	historicalQuery := `SELECT * FROM test AS OF SYSTEM TIME follower_read_timestamp() WHERE k=2`
 	recCh := make(chan tracingpb.Recording, 1)
 
-	var n2Addr, n3Addr syncutil.AtomicString
 	tc := testcluster.StartTestCluster(t, 4,
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
@@ -724,8 +722,8 @@ func TestFollowerReadsWithStaleDescriptor(t *testing.T) {
 							// heartbeated by the time the test wants to use it. Without this
 							// knob, that would cause the transport to reorder replicas.
 							DontConsiderConnHealth: true,
-							LatencyFunc: func(addr string) (time.Duration, bool) {
-								if (addr == n2Addr.Get()) || (addr == n3Addr.Get()) {
+							LatencyFunc: func(id roachpb.NodeID) (time.Duration, bool) {
+								if (id == 2) || (id == 3) {
 									return time.Millisecond, true
 								}
 								return 100 * time.Millisecond, true
@@ -743,8 +741,6 @@ func TestFollowerReadsWithStaleDescriptor(t *testing.T) {
 			},
 		})
 	defer tc.Stopper().Stop(ctx)
-	n2Addr.Set(tc.Servers[1].RPCAddr())
-	n3Addr.Set(tc.Servers[2].RPCAddr())
 
 	n1 := sqlutils.MakeSQLRunner(tc.Conns[0])
 	n1.Exec(t, `CREATE DATABASE t`)
@@ -887,11 +883,11 @@ func TestSecondaryTenantFollowerReadsRouting(t *testing.T) {
 						// For the variant where no latency information is available, we
 						// expect n2 to serve follower reads as well, but because it
 						// is in the same locality as the client.
-						LatencyFunc: func(addr string) (time.Duration, bool) {
+						LatencyFunc: func(id roachpb.NodeID) (time.Duration, bool) {
 							if !validLatencyFunc {
 								return 0, false
 							}
-							if addr == tc.Server(1).RPCAddr() {
+							if id == 2 {
 								return time.Millisecond, true
 							}
 							return 100 * time.Millisecond, true

@@ -47,6 +47,7 @@ var (
 	_ Details = StreamReplicationDetails{}
 	_ Details = RowLevelTTLDetails{}
 	_ Details = SchemaTelemetryDetails{}
+	_ Details = KeyVisualizerDetails{}
 )
 
 // ProgressDetails is a marker interface for job progress details proto structs.
@@ -66,6 +67,7 @@ var (
 	_ ProgressDetails = StreamReplicationProgress{}
 	_ ProgressDetails = RowLevelTTLProgress{}
 	_ ProgressDetails = SchemaTelemetryProgress{}
+	_ ProgressDetails = KeyVisualizerProgress{}
 )
 
 // Type returns the payload's job type and panics if the type is invalid.
@@ -86,6 +88,39 @@ func (p *Payload) CheckType() (Type, error) {
 // Import base which is in the generated proto field but won't get picked up
 // by bazel if it were not imported in a non-generated file.
 var _ base.SQLInstanceID
+
+// ReplicationStatus describes the status of the replication stream, and stored
+// on the stream ingestion job
+type ReplicationStatus uint8
+
+const (
+	InitializingReplication   ReplicationStatus = 0
+	Replicating               ReplicationStatus = 1
+	ReplicationPaused         ReplicationStatus = 2
+	ReplicationPendingCutover ReplicationStatus = 3
+	ReplicationCuttingOver    ReplicationStatus = 4
+	ReplicationError          ReplicationStatus = 5
+)
+
+// String implements fmt.Stringer.
+func (rs ReplicationStatus) String() string {
+	switch rs {
+	case InitializingReplication:
+		return "initializing replication"
+	case Replicating:
+		return "replicating"
+	case ReplicationPaused:
+		return "replication paused"
+	case ReplicationPendingCutover:
+		return "replication pending cutover"
+	case ReplicationCuttingOver:
+		return "replication cutting over"
+	case ReplicationError:
+		return "replication error"
+	default:
+		return fmt.Sprintf("unimplemented-%d", int(rs))
+	}
+}
 
 // AutoStatsName is the name to use for statistics created automatically.
 // The name is chosen to be something that users are unlikely to choose when
@@ -151,6 +186,8 @@ func DetailsType(d isPayload_Details) (Type, error) {
 		return TypeRowLevelTTL, nil
 	case *Payload_SchemaTelemetry:
 		return TypeAutoSchemaTelemetry, nil
+	case *Payload_KeyVisualizerDetails:
+		return TypeKeyVisualizer, nil
 	default:
 		return TypeUnspecified, errors.Newf("Payload.Type called on a payload with an unknown details type: %T", d)
 	}
@@ -189,6 +226,7 @@ var JobDetailsForEveryJobType = map[Type]Details{
 	TypeStreamReplication:            StreamReplicationDetails{},
 	TypeRowLevelTTL:                  RowLevelTTLDetails{},
 	TypeAutoSchemaTelemetry:          SchemaTelemetryDetails{},
+	TypeKeyVisualizer:                KeyVisualizerDetails{},
 }
 
 // WrapProgressDetails wraps a ProgressDetails object in the protobuf wrapper
@@ -232,6 +270,8 @@ func WrapProgressDetails(details ProgressDetails) interface {
 		return &Progress_RowLevelTTL{RowLevelTTL: &d}
 	case SchemaTelemetryProgress:
 		return &Progress_SchemaTelemetry{SchemaTelemetry: &d}
+	case KeyVisualizerProgress:
+		return &Progress_KeyVisualizerProgress{KeyVisualizerProgress: &d}
 	default:
 		panic(errors.AssertionFailedf("WrapProgressDetails: unknown progress type %T", d))
 	}
@@ -273,6 +313,8 @@ func (p *Payload) UnwrapDetails() Details {
 		return *d.RowLevelTTL
 	case *Payload_SchemaTelemetry:
 		return *d.SchemaTelemetry
+	case *Payload_KeyVisualizerDetails:
+		return *d.KeyVisualizerDetails
 	default:
 		return nil
 	}
@@ -314,6 +356,8 @@ func (p *Progress) UnwrapDetails() ProgressDetails {
 		return *d.RowLevelTTL
 	case *Progress_SchemaTelemetry:
 		return *d.SchemaTelemetry
+	case *Progress_KeyVisualizerProgress:
+		return *d.KeyVisualizerProgress
 	default:
 		return nil
 	}
@@ -368,6 +412,8 @@ func WrapPayloadDetails(details Details) interface {
 		return &Payload_RowLevelTTL{RowLevelTTL: &d}
 	case SchemaTelemetryDetails:
 		return &Payload_SchemaTelemetry{SchemaTelemetry: &d}
+	case KeyVisualizerDetails:
+		return &Payload_KeyVisualizerDetails{KeyVisualizerDetails: &d}
 	default:
 		panic(errors.AssertionFailedf("jobs.WrapPayloadDetails: unknown details type %T", d))
 	}
@@ -403,7 +449,7 @@ const (
 func (Type) SafeValue() {}
 
 // NumJobTypes is the number of jobs types.
-const NumJobTypes = 18
+const NumJobTypes = 19
 
 // ChangefeedDetailsMarshaler allows for dependency injection of
 // cloud.SanitizeExternalStorageURI to avoid the dependency from this

@@ -284,6 +284,7 @@ var nodeNames = [...]string{
 	controlJobsOp:          "control jobs",
 	controlSchedulesOp:     "control schedules",
 	createStatisticsOp:     "create statistics",
+	createFunctionOp:       "create function",
 	createTableOp:          "create table",
 	createTableAsOp:        "create table as",
 	createViewOp:           "create view",
@@ -423,6 +424,9 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 		}
 		if s.MaxAllocatedDisk.HasValue() {
 			e.ob.AddField("estimated max sql temp disk usage", humanize.IBytes(s.MaxAllocatedDisk.Value()))
+		}
+		if s.SQLCPUTime.HasValue() {
+			e.ob.AddField("sql cpu time", string(humanizeutil.Duration(s.SQLCPUTime.Value())))
 		}
 		if e.ob.flags.Verbose {
 			if s.StepCount.HasValue() {
@@ -949,6 +953,7 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 		explainOptOp,
 		explainOp,
 		showTraceOp,
+		createFunctionOp,
 		createTableOp,
 		createTableAsOp,
 		createViewOp,

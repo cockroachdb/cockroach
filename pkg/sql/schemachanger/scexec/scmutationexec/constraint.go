@@ -13,18 +13,19 @@ package scmutationexec
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/errors"
 )
 
-func (m *visitor) SetConstraintName(ctx context.Context, op scop.SetConstraintName) error {
-	tbl, err := m.checkOutTable(ctx, op.TableID)
+func (i *immediateVisitor) SetConstraintName(ctx context.Context, op scop.SetConstraintName) error {
+	tbl, err := i.checkOutTable(ctx, op.TableID)
 	if err != nil {
 		return err
 	}
-	constraint, err := tbl.FindConstraintWithID(op.ConstraintID)
+	constraint, err := catalog.MustFindConstraintByID(tbl, op.ConstraintID)
 	if err != nil {
 		return err
 	}
@@ -36,16 +37,29 @@ func (m *visitor) SetConstraintName(ctx context.Context, op scop.SetConstraintNa
 		constraint.AsCheck().CheckDesc().Name = op.Name
 	} else if constraint.AsForeignKey() != nil {
 		constraint.AsForeignKey().ForeignKeyDesc().Name = op.Name
+		// Also attempt to set the FK constraint name in the referenced table.
+		// This is needed on the dropping path (i.e. when dropping an existing
+		// FK constraint).
+		referencedTable, err := i.checkOutTable(ctx, constraint.AsForeignKey().GetReferencedTableID())
+		if err != nil || referencedTable.Dropped() {
+			return err
+		}
+		for _, inboundFK := range referencedTable.InboundForeignKeys() {
+			if inboundFK.GetOriginTableID() == op.TableID && inboundFK.GetConstraintID() == op.ConstraintID {
+				inboundFK.ForeignKeyDesc().Name = op.Name
+				break
+			}
+		}
 	} else {
 		return errors.AssertionFailedf("unknown constraint type")
 	}
 	return nil
 }
 
-func (m *visitor) MakeAbsentCheckConstraintWriteOnly(
+func (i *immediateVisitor) MakeAbsentCheckConstraintWriteOnly(
 	ctx context.Context, op scop.MakeAbsentCheckConstraintWriteOnly,
 ) error {
-	tbl, err := m.checkOutTable(ctx, op.TableID)
+	tbl, err := i.checkOutTable(ctx, op.TableID)
 	if err != nil || tbl.Dropped() {
 		return err
 	}
@@ -57,26 +71,48 @@ func (m *visitor) MakeAbsentCheckConstraintWriteOnly(
 	// is syntactically valid in the builder, so we just need to
 	// enqueue it to the descriptor's mutation slice.
 	ck := &descpb.TableDescriptor_CheckConstraint{
-		Expr:                  string(op.Expr),
+		Expr:                  string(op.CheckExpr),
 		Name:                  tabledesc.ConstraintNamePlaceholder(op.ConstraintID),
 		Validity:              descpb.ConstraintValidity_Validating,
 		ColumnIDs:             op.ColumnIDs,
 		FromHashShardedColumn: op.FromHashShardedColumn,
 		ConstraintID:          op.ConstraintID,
 	}
-	if err = enqueueAddCheckConstraintMutation(tbl, ck); err != nil {
-		return err
-	}
+	enqueueNonIndexMutation(tbl, tbl.AddCheckMutation, ck, descpb.DescriptorMutation_ADD)
 	// Fast-forward the mutation state to WRITE_ONLY because this constraint
 	// is now considered as enforced.
 	tbl.Mutations[len(tbl.Mutations)-1].State = descpb.DescriptorMutation_WRITE_ONLY
+	tbl.Checks = append(tbl.Checks, ck)
 	return nil
 }
 
-func (m *visitor) MakeValidatedCheckConstraintPublic(
-	ctx context.Context, op scop.MakeValidatedCheckConstraintPublic,
+func (m *immediateVisitor) MakeAbsentColumnNotNullWriteOnly(
+	ctx context.Context, op scop.MakeAbsentColumnNotNullWriteOnly,
 ) error {
 	tbl, err := m.checkOutTable(ctx, op.TableID)
+	if err != nil || tbl.Dropped() {
+		return err
+	}
+
+	col := catalog.FindColumnByID(tbl, op.ColumnID)
+	if col == nil {
+		return errors.AssertionFailedf("column-id \"%d\" does not exist", op.ColumnID)
+	}
+
+	ck := tabledesc.MakeNotNullCheckConstraint(tbl, col,
+		descpb.ConstraintValidity_Validating, 0 /* constraintID */)
+	enqueueNonIndexMutation(tbl, tbl.AddNotNullMutation, ck, descpb.DescriptorMutation_ADD)
+	// Fast-forward the mutation state to WRITE_ONLY because this constraint
+	// is now considered as enforced.
+	tbl.Mutations[len(tbl.Mutations)-1].State = descpb.DescriptorMutation_WRITE_ONLY
+	tbl.Checks = append(tbl.Checks, ck)
+	return nil
+}
+
+func (i *immediateVisitor) MakeValidatedCheckConstraintPublic(
+	ctx context.Context, op scop.MakeValidatedCheckConstraintPublic,
+) error {
+	tbl, err := i.checkOutTable(ctx, op.TableID)
 	if err != nil || tbl.Dropped() {
 		return err
 	}
@@ -86,13 +122,8 @@ func (m *visitor) MakeValidatedCheckConstraintPublic(
 		if c := mutation.GetConstraint(); c != nil &&
 			c.ConstraintType == descpb.ConstraintToUpdate_CHECK &&
 			c.Check.ConstraintID == op.ConstraintID {
-			tbl.Checks = append(tbl.Checks, &c.Check)
-
 			// Remove the mutation from the mutation slice. The `MakeMutationComplete`
-			// call will also mark the above added check as VALIDATED.
-			// If this is a rollback of a drop, we are trying to add the check constraint
-			// back, so swap the direction before making it complete.
-			mutation.Direction = descpb.DescriptorMutation_ADD
+			// call will mark the check in the public "Checks" slice as VALIDATED.
 			err = tbl.MakeMutationComplete(mutation)
 			if err != nil {
 				return err
@@ -116,25 +147,95 @@ func (m *visitor) MakeValidatedCheckConstraintPublic(
 	return nil
 }
 
-func (m *visitor) MakePublicCheckConstraintValidated(
+func (i *immediateVisitor) MakeValidatedColumnNotNullPublic(
+	ctx context.Context, op scop.MakeValidatedColumnNotNullPublic,
+) error {
+	tbl, err := i.checkOutTable(ctx, op.TableID)
+	if err != nil || tbl.Dropped() {
+		return err
+	}
+
+	var found bool
+	for idx, mutation := range tbl.Mutations {
+		if c := mutation.GetConstraint(); c != nil &&
+			c.ConstraintType == descpb.ConstraintToUpdate_NOT_NULL &&
+			c.NotNullColumn == op.ColumnID {
+			col := catalog.FindColumnByID(tbl, op.ColumnID)
+			if col == nil {
+				return errors.AssertionFailedf("column-id \"%d\" does not exist", op.ColumnID)
+			}
+			col.ColumnDesc().Nullable = false
+			tbl.Mutations = append(tbl.Mutations[:idx], tbl.Mutations[idx+1:]...)
+			if len(tbl.Mutations) == 0 {
+				tbl.Mutations = nil
+			}
+			found = true
+
+			// Don't forget to also remove the dummy check in the "Checks" slice!
+			for idx, ck := range tbl.Checks {
+				if ck.IsNonNullConstraint && ck.ColumnIDs[0] == op.ColumnID {
+					tbl.Checks = append(tbl.Checks[:idx], tbl.Checks[idx+1:]...)
+					break
+				}
+			}
+
+			break
+		}
+	}
+
+	if !found {
+		return errors.AssertionFailedf("failed to find NOT NULL mutation for column %d "+
+			"in table %q (%d)", op.ColumnID, tbl.GetName(), tbl.GetID())
+	}
+	return nil
+}
+
+func (i *immediateVisitor) MakePublicCheckConstraintValidated(
 	ctx context.Context, op scop.MakePublicCheckConstraintValidated,
 ) error {
-	tbl, err := m.checkOutTable(ctx, op.TableID)
+	tbl, err := i.checkOutTable(ctx, op.TableID)
 	if err != nil {
 		return err
 	}
 	for _, ck := range tbl.Checks {
 		if ck.ConstraintID == op.ConstraintID {
 			ck.Validity = descpb.ConstraintValidity_Dropping
-			return enqueueDropCheckConstraintMutation(tbl, ck)
+			enqueueNonIndexMutation(tbl, tbl.AddCheckMutation, ck, descpb.DescriptorMutation_DROP)
+			return nil
 		}
 	}
 
 	return errors.AssertionFailedf("failed to find check constraint %d in descriptor %v", op.ConstraintID, tbl)
 }
 
-func (m *visitor) RemoveCheckConstraint(ctx context.Context, op scop.RemoveCheckConstraint) error {
-	tbl, err := m.checkOutTable(ctx, op.TableID)
+func (i *immediateVisitor) MakePublicColumnNotNullValidated(
+	ctx context.Context, op scop.MakePublicColumnNotNullValidated,
+) error {
+	tbl, err := i.checkOutTable(ctx, op.TableID)
+	if err != nil {
+		return err
+	}
+
+	for _, col := range tbl.AllColumns() {
+		if col.GetID() == op.ColumnID {
+			col.ColumnDesc().Nullable = true
+			// Add a check constraint equivalent to the non-null constraint and drop
+			// it in the schema changer.
+			ck := tabledesc.MakeNotNullCheckConstraint(tbl, col,
+				descpb.ConstraintValidity_Dropping, 0 /* constraintID */)
+			tbl.Checks = append(tbl.Checks, ck)
+			enqueueNonIndexMutation(tbl, tbl.AddNotNullMutation, ck, descpb.DescriptorMutation_DROP)
+			return nil
+		}
+	}
+
+	return errors.AssertionFailedf("failed to find column %d in descriptor %v", op.ColumnID, tbl)
+}
+
+func (i *immediateVisitor) RemoveCheckConstraint(
+	ctx context.Context, op scop.RemoveCheckConstraint,
+) error {
+	tbl, err := i.checkOutTable(ctx, op.TableID)
 	if err != nil || tbl.Dropped() {
 		return err
 	}
@@ -162,10 +263,41 @@ func (m *visitor) RemoveCheckConstraint(ctx context.Context, op scop.RemoveCheck
 	return nil
 }
 
-func (m *visitor) RemoveForeignKeyConstraint(
+func (i *immediateVisitor) RemoveColumnNotNull(
+	ctx context.Context, op scop.RemoveColumnNotNull,
+) error {
+	tbl, err := i.checkOutTable(ctx, op.TableID)
+	if err != nil || tbl.Dropped() {
+		return err
+	}
+	var found bool
+	for i, c := range tbl.Checks {
+		if c.IsNonNullConstraint && c.ColumnIDs[0] == op.ColumnID {
+			tbl.Checks = append(tbl.Checks[:i], tbl.Checks[i+1:]...)
+			found = true
+			break
+		}
+	}
+	for i, m := range tbl.Mutations {
+		if c := m.GetConstraint(); c != nil &&
+			c.ConstraintType == descpb.ConstraintToUpdate_NOT_NULL &&
+			c.NotNullColumn == op.ColumnID {
+			tbl.Mutations = append(tbl.Mutations[:i], tbl.Mutations[i+1:]...)
+			found = true
+			break
+		}
+	}
+	if !found {
+		return errors.AssertionFailedf("failed to find NOT NULL for column %d in table %q (%d)",
+			op.ColumnID, tbl.GetName(), tbl.GetID())
+	}
+	return nil
+}
+
+func (i *immediateVisitor) RemoveForeignKeyConstraint(
 	ctx context.Context, op scop.RemoveForeignKeyConstraint,
 ) error {
-	out, err := m.checkOutTable(ctx, op.TableID)
+	out, err := i.checkOutTable(ctx, op.TableID)
 	if err != nil || out.Dropped() {
 		return err
 	}
@@ -199,10 +331,10 @@ func (m *visitor) RemoveForeignKeyConstraint(
 	return nil
 }
 
-func (m *visitor) RemoveUniqueWithoutIndexConstraint(
+func (i *immediateVisitor) RemoveUniqueWithoutIndexConstraint(
 	ctx context.Context, op scop.RemoveUniqueWithoutIndexConstraint,
 ) error {
-	tbl, err := m.checkOutTable(ctx, op.TableID)
+	tbl, err := i.checkOutTable(ctx, op.TableID)
 	if err != nil || tbl.Dropped() {
 		return err
 	}
@@ -236,10 +368,10 @@ func (m *visitor) RemoveUniqueWithoutIndexConstraint(
 	return nil
 }
 
-func (m *visitor) MakeAbsentForeignKeyConstraintWriteOnly(
+func (i *immediateVisitor) MakeAbsentForeignKeyConstraintWriteOnly(
 	ctx context.Context, op scop.MakeAbsentForeignKeyConstraintWriteOnly,
 ) error {
-	out, err := m.checkOutTable(ctx, op.TableID)
+	out, err := i.checkOutTable(ctx, op.TableID)
 	if err != nil || out.Dropped() {
 		return err
 	}
@@ -247,6 +379,7 @@ func (m *visitor) MakeAbsentForeignKeyConstraintWriteOnly(
 		out.NextConstraintID = op.ConstraintID + 1
 	}
 
+	// Enqueue a mutation in `out` to signal this mutation is now enforced.
 	fk := &descpb.ForeignKeyConstraint{
 		OriginTableID:       op.TableID,
 		OriginColumnIDs:     op.ColumnIDs,
@@ -259,21 +392,25 @@ func (m *visitor) MakeAbsentForeignKeyConstraintWriteOnly(
 		Match:               op.CompositeKeyMatchMethod,
 		ConstraintID:        op.ConstraintID,
 	}
-	if err = enqueueAddForeignKeyConstraintMutation(out, fk); err != nil {
+	enqueueNonIndexMutation(out, out.AddForeignKeyMutation, fk, descpb.DescriptorMutation_ADD)
+	out.Mutations[len(out.Mutations)-1].State = descpb.DescriptorMutation_WRITE_ONLY
+	// Add an entry in "InboundFKs" in the referenced table as company.
+	in, err := i.checkOutTable(ctx, op.ReferencedTableID)
+	if err != nil {
 		return err
 	}
-	out.Mutations[len(out.Mutations)-1].State = descpb.DescriptorMutation_WRITE_ONLY
+	in.InboundFKs = append(in.InboundFKs, *fk)
 	return nil
 }
 
-func (m *visitor) MakeValidatedForeignKeyConstraintPublic(
+func (i *immediateVisitor) MakeValidatedForeignKeyConstraintPublic(
 	ctx context.Context, op scop.MakeValidatedForeignKeyConstraintPublic,
 ) error {
-	out, err := m.checkOutTable(ctx, op.TableID)
+	out, err := i.checkOutTable(ctx, op.TableID)
 	if err != nil || out.Dropped() {
 		return err
 	}
-	in, err := m.checkOutTable(ctx, op.ReferencedTableID)
+	in, err := i.checkOutTable(ctx, op.ReferencedTableID)
 	if err != nil || in.Dropped() {
 		return err
 	}
@@ -283,19 +420,19 @@ func (m *visitor) MakeValidatedForeignKeyConstraintPublic(
 		if c := mutation.GetConstraint(); c != nil &&
 			c.ConstraintType == descpb.ConstraintToUpdate_FOREIGN_KEY &&
 			c.ForeignKey.ConstraintID == op.ConstraintID {
+			// Complete this mutation by marking the validity as validated,
+			// removing it from the mutations slice, and publishing it into
+			// OutboundFKs slice.
+			c.ForeignKey.Validity = descpb.ConstraintValidity_Validated
 			out.OutboundFKs = append(out.OutboundFKs, c.ForeignKey)
-			in.InboundFKs = append(in.InboundFKs, c.ForeignKey)
-
-			// Remove the mutation from the mutation slice. The `MakeMutationComplete`
-			// call will also mark the above added check as VALIDATED.
-			// If this is a rollback of a drop, we are trying to add the foreign key constraint
-			// back, so swap the direction before making it complete.
-			mutation.Direction = descpb.DescriptorMutation_ADD
-			err = out.MakeMutationComplete(mutation)
-			if err != nil {
-				return err
-			}
 			out.Mutations = append(out.Mutations[:idx], out.Mutations[idx+1:]...)
+
+			// Update the back-reference in the referenced table.
+			for i, inboundFK := range in.InboundFKs {
+				if inboundFK.OriginTableID == out.GetID() && inboundFK.ConstraintID == op.ConstraintID {
+					in.InboundFKs[i].Validity = descpb.ConstraintValidity_Validated
+				}
+			}
 
 			found = true
 			break
@@ -314,31 +451,53 @@ func (m *visitor) MakeValidatedForeignKeyConstraintPublic(
 	return nil
 }
 
-func (m *visitor) MakePublicForeignKeyConstraintValidated(
+func (i *immediateVisitor) MakePublicForeignKeyConstraintValidated(
 	ctx context.Context, op scop.MakePublicForeignKeyConstraintValidated,
 ) error {
-	tbl, err := m.checkOutTable(ctx, op.TableID)
+	// A helper function to update the inbound FK in referenced table to DROPPING.
+	updateInboundFKAsDropping := func(referencedTableID descpb.ID) error {
+		foundInReferencedTable := false
+		in, err := i.checkOutTable(ctx, referencedTableID)
+		if err != nil {
+			return err
+		}
+		for idx, inboundFk := range in.InboundFKs {
+			if inboundFk.OriginTableID == op.TableID && inboundFk.ConstraintID == op.ConstraintID {
+				in.InboundFKs[idx].Validity = descpb.ConstraintValidity_Dropping
+				foundInReferencedTable = true
+				break
+			}
+		}
+		if !foundInReferencedTable {
+			return errors.AssertionFailedf("failed to find accompanying inbound FK (%v) in"+
+				" referenced table %v (%v)", op.ConstraintID, in.Name, in.ID)
+		}
+		return nil
+	}
+
+	out, err := i.checkOutTable(ctx, op.TableID)
 	if err != nil {
 		return err
 	}
-	for i, fk := range tbl.OutboundFKs {
+	for idx, fk := range out.OutboundFKs {
 		if fk.ConstraintID == op.ConstraintID {
-			tbl.OutboundFKs = append(tbl.OutboundFKs[:i], tbl.OutboundFKs[i+1:]...)
-			if len(tbl.OutboundFKs) == 0 {
-				tbl.OutboundFKs = nil
+			out.OutboundFKs = append(out.OutboundFKs[:idx], out.OutboundFKs[idx+1:]...)
+			if len(out.OutboundFKs) == 0 {
+				out.OutboundFKs = nil
 			}
 			fk.Validity = descpb.ConstraintValidity_Dropping
-			return enqueueDropForeignKeyConstraintMutation(tbl, &fk)
+			enqueueNonIndexMutation(out, out.AddForeignKeyMutation, &fk, descpb.DescriptorMutation_DROP)
+			return updateInboundFKAsDropping(fk.ReferencedTableID)
 		}
 	}
 
-	return errors.AssertionFailedf("failed to find FK constraint %d in descriptor %v", op.ConstraintID, tbl)
+	return errors.AssertionFailedf("failed to find FK constraint %d in descriptor %v", op.ConstraintID, out)
 }
 
-func (m *visitor) MakeAbsentUniqueWithoutIndexConstraintWriteOnly(
+func (i *immediateVisitor) MakeAbsentUniqueWithoutIndexConstraintWriteOnly(
 	ctx context.Context, op scop.MakeAbsentUniqueWithoutIndexConstraintWriteOnly,
 ) error {
-	tbl, err := m.checkOutTable(ctx, op.TableID)
+	tbl, err := i.checkOutTable(ctx, op.TableID)
 	if err != nil || tbl.Dropped() {
 		return err
 	}
@@ -352,23 +511,19 @@ func (m *visitor) MakeAbsentUniqueWithoutIndexConstraintWriteOnly(
 		Name:         tabledesc.ConstraintNamePlaceholder(op.ConstraintID),
 		Validity:     descpb.ConstraintValidity_Validating,
 		ConstraintID: op.ConstraintID,
+		Predicate:    string(op.PartialExpr),
 	}
-	if op.Predicate != nil {
-		uwi.Predicate = string(op.Predicate.Expr)
-	}
-	if err = enqueueAddUniqueWithoutIndexConstraintMutation(tbl, uwi); err != nil {
-		return err
-	}
+	enqueueNonIndexMutation(tbl, tbl.AddUniqueWithoutIndexMutation, uwi, descpb.DescriptorMutation_ADD)
 	// Fast-forward the mutation state to WRITE_ONLY because this constraint
 	// is now considered as enforced.
 	tbl.Mutations[len(tbl.Mutations)-1].State = descpb.DescriptorMutation_WRITE_ONLY
 	return nil
 }
 
-func (m *visitor) MakeValidatedUniqueWithoutIndexConstraintPublic(
+func (i *immediateVisitor) MakeValidatedUniqueWithoutIndexConstraintPublic(
 	ctx context.Context, op scop.MakeValidatedUniqueWithoutIndexConstraintPublic,
 ) error {
-	tbl, err := m.checkOutTable(ctx, op.TableID)
+	tbl, err := i.checkOutTable(ctx, op.TableID)
 	if err != nil || tbl.Dropped() {
 		return err
 	}
@@ -408,10 +563,10 @@ func (m *visitor) MakeValidatedUniqueWithoutIndexConstraintPublic(
 	return nil
 }
 
-func (m *visitor) MakePublicUniqueWithoutIndexConstraintValidated(
+func (i *immediateVisitor) MakePublicUniqueWithoutIndexConstraintValidated(
 	ctx context.Context, op scop.MakePublicUniqueWithoutIndexConstraintValidated,
 ) error {
-	tbl, err := m.checkOutTable(ctx, op.TableID)
+	tbl, err := i.checkOutTable(ctx, op.TableID)
 	if err != nil {
 		return err
 	}
@@ -422,7 +577,8 @@ func (m *visitor) MakePublicUniqueWithoutIndexConstraintValidated(
 				tbl.UniqueWithoutIndexConstraints = nil
 			}
 			uwi.Validity = descpb.ConstraintValidity_Dropping
-			return enqueueDropUniqueWithoutIndexConstraintMutation(tbl, &uwi)
+			enqueueNonIndexMutation(tbl, tbl.AddUniqueWithoutIndexMutation, &uwi, descpb.DescriptorMutation_DROP)
+			return nil
 		}
 	}
 

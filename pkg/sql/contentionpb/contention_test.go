@@ -12,10 +12,10 @@ package contentionpb
 
 import (
 	"testing"
-	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/stretchr/testify/require"
 )
@@ -24,7 +24,7 @@ func TestExtendedContentionEventHash(t *testing.T) {
 	event1 := ExtendedContentionEvent{}
 	event1.BlockingEvent.TxnMeta.ID = uuid.FastMakeV4()
 	event1.WaitingTxnID = uuid.FastMakeV4()
-	event1.CollectionTs = timeutil.Now()
+	event1.WaitingStmtID = clusterunique.ID{Uint128: uint128.Uint128{Lo: 12, Hi: 987}}
 
 	eventWithDifferentBlockingTxnID := event1
 	eventWithDifferentBlockingTxnID.BlockingEvent.TxnMeta.ID = uuid.FastMakeV4()
@@ -35,9 +35,11 @@ func TestExtendedContentionEventHash(t *testing.T) {
 	eventWithDifferentWaitingTxnID.WaitingTxnID = uuid.FastMakeV4()
 	require.NotEqual(t, eventWithDifferentWaitingTxnID.Hash(), event1.Hash())
 
-	eventWithDifferentCollectionTs := event1
-	eventWithDifferentCollectionTs.CollectionTs = event1.CollectionTs.Add(time.Second)
-	require.NotEqual(t, eventWithDifferentCollectionTs.Hash(), event1.Hash())
+	eventWithDifferentStmtId := event1
+	stmtId := event1.WaitingStmtID
+	stmtId.Hi = 764
+	eventWithDifferentStmtId.WaitingStmtID = stmtId
+	require.NotEqual(t, eventWithDifferentStmtId.Hash(), event1.Hash())
 }
 
 func TestHashingUUID(t *testing.T) {

@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
@@ -53,7 +54,7 @@ func RandCreateType(rng *rand.Rand, name, alphabet string) tree.Statement {
 	labelsMap := make(map[string]struct{})
 	i := 0
 	for i < numLabels {
-		s := RandString(rng, rng.Intn(6)+1, alphabet)
+		s := util.RandString(rng, rng.Intn(6)+1, alphabet)
 		if _, ok := labelsMap[s]; !ok {
 			labels[i] = tree.EnumValue(s)
 			labelsMap[s] = struct{}{}
@@ -331,7 +332,10 @@ func PopulateTableWithRandData(
 				// them to the list of columns to insert data into.
 				continue
 			}
-			colTypes = append(colTypes, tree.MustBeStaticallyKnownType(col.Type.(*types.T)))
+			if _, ok := col.Type.(*types.T); !ok {
+				return 0, errors.Newf("No type for %v", col)
+			}
+			colTypes = append(colTypes, tree.MustBeStaticallyKnownType(col.Type))
 			nullable = append(nullable, col.Nullable.Nullability == tree.Null)
 
 			colNameBuilder.WriteString(comma)
@@ -729,7 +733,7 @@ func TestingMakePrimaryIndexKeyForTenant(
 		}
 		// Check that the value type matches.
 		colID := index.GetKeyColumnID(i)
-		col, _ := desc.FindColumnWithID(colID)
+		col := catalog.FindColumnByID(desc, colID)
 		if col != nil && col.Public() {
 			colTyp := datums[i].ResolvedType()
 			if t := colTyp.Family(); t != col.GetType().Family() {
@@ -785,7 +789,7 @@ func TestingMakeSecondaryIndexKey(
 		}
 		// Check that the value type matches.
 		colID := index.GetKeyColumnID(i)
-		col, _ := desc.FindColumnWithID(colID)
+		col := catalog.FindColumnByID(desc, colID)
 		if col != nil && col.Public() {
 			colTyp := datums[i].ResolvedType()
 			if t := colTyp.Family(); t != col.GetType().Family() {

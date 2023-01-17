@@ -3679,7 +3679,7 @@ func generateBytes(rng *rand.Rand, min int, max int) []byte {
 }
 
 func createEngWithSeparatedIntents(t *testing.T) Engine {
-	eng, err := Open(context.Background(), InMemory(), MaxSize(1<<20))
+	eng, err := Open(context.Background(), InMemory(), cluster.MakeClusterSettings(), MaxSize(1<<20))
 	require.NoError(t, err)
 	return eng
 }
@@ -3917,11 +3917,13 @@ func TestRandomizedSavepointRollbackAndIntentResolution(t *testing.T) {
 	fmt.Printf("seed: %d\n", seed)
 	rng := rand.New(rand.NewSource(seed))
 	ctx := context.Background()
-	eng, err := Open(context.Background(), InMemory(), func(cfg *engineConfig) error {
-		cfg.Opts.LBaseMaxBytes = int64(100 + rng.Intn(16384))
-		log.Infof(ctx, "lbase: %d", cfg.Opts.LBaseMaxBytes)
-		return nil
-	})
+	eng, err := Open(
+		context.Background(), InMemory(), cluster.MakeClusterSettings(),
+		func(cfg *engineConfig) error {
+			cfg.Opts.LBaseMaxBytes = int64(100 + rng.Intn(16384))
+			log.Infof(ctx, "lbase: %d", cfg.Opts.LBaseMaxBytes)
+			return nil
+		})
 	require.NoError(t, err)
 	defer eng.Close()
 
@@ -6441,9 +6443,12 @@ func TestMVCCExportFingerprint(t *testing.T) {
 	fingerprint := func(opts MVCCExportOptions, engine Engine) (uint64, []byte, roachpb.BulkOpSummary, MVCCKey) {
 		dest := &MemFile{}
 		var err error
-		res, resumeKey, fingerprint, err := MVCCExportFingerprint(
+		res, resumeKey, fingerprint, hasRangeKeys, err := MVCCExportFingerprint(
 			ctx, st, engine, opts, dest)
 		require.NoError(t, err)
+		if !hasRangeKeys {
+			dest = &MemFile{}
+		}
 		return fingerprint, dest.Data(), res, resumeKey
 	}
 
@@ -6750,6 +6755,10 @@ func (f *fingerprintOracle) fingerprintPointKeys(t *testing.T, dataSST []byte) u
 
 func getRangeKeys(t *testing.T, dataSST []byte) []MVCCRangeKeyStack {
 	t.Helper()
+
+	if len(dataSST) == 0 {
+		return []MVCCRangeKeyStack{}
+	}
 
 	iterOpts := IterOptions{
 		KeyTypes:   IterKeyTypeRangesOnly,

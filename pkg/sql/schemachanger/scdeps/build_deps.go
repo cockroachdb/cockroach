@@ -31,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -43,8 +42,7 @@ import (
 func NewBuilderDependencies(
 	clusterID uuid.UUID,
 	codec keys.SQLCodec,
-	txn *kv.Txn,
-	descsCollection *descs.Collection,
+	txn descs.Txn,
 	schemaResolverFactory scbuild.SchemaResolverFactory,
 	authAccessor scbuild.AuthorizationAccessor,
 	astFormatter scbuild.AstFormatter,
@@ -52,42 +50,48 @@ func NewBuilderDependencies(
 	sessionData *sessiondata.SessionData,
 	settings *cluster.Settings,
 	statements []string,
-	internalExecutor sqlutil.InternalExecutor,
 	clientNoticeSender eval.ClientNoticeSender,
+	eventLogger scbuild.EventLogger,
+	referenceProviderFactory scbuild.ReferenceProviderFactory,
+	descIDGenerator eval.DescIDGenerator,
 ) scbuild.Dependencies {
 	return &buildDeps{
-		clusterID:        clusterID,
-		codec:            codec,
-		txn:              txn,
-		descsCollection:  descsCollection,
-		authAccessor:     authAccessor,
-		sessionData:      sessionData,
-		settings:         settings,
-		statements:       statements,
-		astFormatter:     astFormatter,
-		featureChecker:   featureChecker,
-		internalExecutor: internalExecutor,
+		clusterID:       clusterID,
+		codec:           codec,
+		txn:             txn.KV(),
+		descsCollection: txn.Descriptors(),
+		authAccessor:    authAccessor,
+		sessionData:     sessionData,
+		settings:        settings,
+		statements:      statements,
+		astFormatter:    astFormatter,
+		featureChecker:  featureChecker,
 		schemaResolver: schemaResolverFactory(
-			descsCollection, sessiondata.NewStack(sessionData), txn, authAccessor,
+			txn.Descriptors(), sessiondata.NewStack(sessionData), txn.KV(), authAccessor,
 		),
-		clientNoticeSender: clientNoticeSender,
+		clientNoticeSender:       clientNoticeSender,
+		eventLogger:              eventLogger,
+		descIDGenerator:          descIDGenerator,
+		referenceProviderFactory: referenceProviderFactory,
 	}
 }
 
 type buildDeps struct {
-	clusterID          uuid.UUID
-	codec              keys.SQLCodec
-	txn                *kv.Txn
-	descsCollection    *descs.Collection
-	schemaResolver     resolver.SchemaResolver
-	authAccessor       scbuild.AuthorizationAccessor
-	sessionData        *sessiondata.SessionData
-	settings           *cluster.Settings
-	statements         []string
-	astFormatter       scbuild.AstFormatter
-	featureChecker     scbuild.FeatureChecker
-	internalExecutor   sqlutil.InternalExecutor
-	clientNoticeSender eval.ClientNoticeSender
+	clusterID                uuid.UUID
+	codec                    keys.SQLCodec
+	txn                      *kv.Txn
+	descsCollection          *descs.Collection
+	schemaResolver           resolver.SchemaResolver
+	authAccessor             scbuild.AuthorizationAccessor
+	sessionData              *sessiondata.SessionData
+	settings                 *cluster.Settings
+	statements               []string
+	astFormatter             scbuild.AstFormatter
+	featureChecker           scbuild.FeatureChecker
+	clientNoticeSender       eval.ClientNoticeSender
+	eventLogger              scbuild.EventLogger
+	referenceProviderFactory scbuild.ReferenceProviderFactory
+	descIDGenerator          eval.DescIDGenerator
 }
 
 var _ scbuild.CatalogReader = (*buildDeps)(nil)
@@ -116,6 +120,36 @@ func (d *buildDeps) MayResolveSchema(
 		panic(err)
 	}
 	return db, schema
+}
+
+func (d *buildDeps) MustResolvePrefix(
+	ctx context.Context, name tree.ObjectNamePrefix,
+) (catalog.DatabaseDescriptor, catalog.SchemaDescriptor) {
+	if !name.ExplicitCatalog {
+		name.CatalogName = tree.Name(d.schemaResolver.CurrentDatabase())
+		name.ExplicitCatalog = true
+	}
+
+	if name.ExplicitSchema {
+		db, sc := d.MayResolveSchema(ctx, name)
+		if sc == nil {
+			panic(errors.AssertionFailedf("prefix %s does not exist", name.String()))
+		}
+		return db, sc
+	}
+
+	path := d.sessionData.SearchPath
+	iter := path.IterWithoutImplicitPGSchemas()
+	for scName, ok := iter.Next(); ok; scName, ok = iter.Next() {
+		name.SchemaName = tree.Name(scName)
+		name.ExplicitSchema = true
+		db, sc := d.MayResolveSchema(ctx, name)
+		if sc != nil {
+			return db, sc
+		}
+	}
+
+	panic(errors.AssertionFailedf("prefix %s does not exist", name.String()))
 }
 
 // MayResolveTable implements the scbuild.CatalogReader interface.
@@ -395,6 +429,11 @@ func (d *buildDeps) ClientNoticeSender() eval.ClientNoticeSender {
 	return d.clientNoticeSender
 }
 
+// EventLogger implements the scbuild.Dependencies interface.
+func (d *buildDeps) EventLogger() scbuild.EventLogger {
+	return d.eventLogger
+}
+
 type zoneConfigGetter struct {
 	txn         *kv.Txn
 	descriptors *descs.Collection
@@ -404,4 +443,12 @@ func (zc *zoneConfigGetter) GetZoneConfig(
 	ctx context.Context, id descpb.ID,
 ) (catalog.ZoneConfig, error) {
 	return zc.descriptors.GetZoneConfig(ctx, zc.txn, id)
+}
+
+func (d *buildDeps) DescIDGenerator() eval.DescIDGenerator {
+	return d.descIDGenerator
+}
+
+func (d *buildDeps) ReferenceProviderFactory() scbuild.ReferenceProviderFactory {
+	return d.referenceProviderFactory
 }

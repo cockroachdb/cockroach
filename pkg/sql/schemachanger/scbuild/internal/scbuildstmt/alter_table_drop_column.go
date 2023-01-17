@@ -41,6 +41,7 @@ func alterTableDropColumn(
 	checkRowLevelTTLColumn(b, tn, tbl, n, col)
 	checkColumnNotInaccessible(col, n)
 	dropColumn(b, tn, tbl, n, col, elts, n.DropBehavior)
+	b.LogEventForExistingTarget(col)
 }
 
 func checkSafeUpdatesForDropColumn(b BuildCtx) {
@@ -217,6 +218,9 @@ func dropColumn(
 				"dropping of UNIQUE WITHOUT INDEX constraints not supported"))
 		case *scpb.CheckConstraint:
 			// TODO(ajwerner): Support dropping CHECK constraints.
+			// We might need to extend and add check constraint to dep-rule
+			// "column constraint removed right before column reaches delete only"
+			// in addition to just `b.Drop(e)`. Read its comment for more details.
 			panic(errors.Wrap(scerrors.NotImplementedError(n),
 				"dropping of CHECK constraints not supported"))
 		case *scpb.ForeignKeyConstraint:
@@ -260,6 +264,15 @@ func dropColumn(
 				dropRestrictDescriptor(b, e.SequenceID)
 				undroppedSeqBackrefsToCheck.Add(e.SequenceID)
 			}
+		case *scpb.FunctionBody:
+			if behavior != tree.DropCascade {
+				_, _, fnName := scpb.FindFunctionName(b.QueryByID(e.FunctionID))
+				panic(sqlerrors.NewDependentObjectErrorf(
+					"cannot drop column %q because function %q depends on it",
+					cn.Name, fnName.Name),
+				)
+			}
+			dropCascadeDescriptor(b, e.FunctionID)
 		default:
 			b.Drop(e)
 		}
@@ -295,7 +308,7 @@ func walkDropColumnDependencies(b BuildCtx, col *scpb.Column, fn func(e scpb.Ele
 		Filter(referencesColumnIDFilter(col.ColumnID)).
 		ForEachElementStatus(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) {
 			switch elt := e.(type) {
-			case *scpb.Column, *scpb.ColumnName, *scpb.ColumnComment:
+			case *scpb.Column, *scpb.ColumnName, *scpb.ColumnComment, *scpb.ColumnNotNull:
 				fn(e)
 			case *scpb.ColumnDefaultExpression, *scpb.ColumnOnUpdateExpression:
 				fn(e)
@@ -360,6 +373,12 @@ func walkDropColumnDependencies(b BuildCtx, col *scpb.Column, fn func(e scpb.Ele
 			if elt.ReferencedTableID == col.TableID &&
 				catalog.MakeTableColSet(elt.ReferencedColumnIDs...).Contains(col.ColumnID) {
 				fn(e)
+			}
+		case *scpb.FunctionBody:
+			for _, ref := range elt.UsesTables {
+				if ref.TableID == col.TableID && catalog.MakeTableColSet(ref.ColumnIDs...).Contains(col.ColumnID) {
+					fn(e)
+				}
 			}
 		}
 	})

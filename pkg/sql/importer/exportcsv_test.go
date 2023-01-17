@@ -658,9 +658,10 @@ func TestProcessorEncountersUncertaintyError(t *testing.T) {
 									return roachpb.NewError(
 										roachpb.NewReadWithinUncertaintyIntervalError(
 											ba.Timestamp,           /* readTs */
-											ba.Timestamp.Add(1, 0), /* existingTs */
-											hlc.Timestamp{},        /* localUncertaintyLimit */
-											ba.Txn))
+											hlc.ClockTimestamp{},   /* localUncertaintyLimit */
+											ba.Txn,                 /* txn */
+											ba.Timestamp.Add(1, 0), /* valueTS */
+											hlc.ClockTimestamp{} /* localTS */))
 								}
 								return nil
 							},

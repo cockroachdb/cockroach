@@ -7,7 +7,7 @@ CREATE TABLE ab (
 statement error pq: unimplemented: user-defined functions with SETOF return types are not supported
 CREATE FUNCTION f(a int) RETURNS SETOF INT LANGUAGE SQL AS 'SELECT 1'
 
-statement error pq: cannot set leakproof on function with non-immutable volatility: STABLE
+statement error .*cannot set leakproof on function with non-immutable volatility: STABLE.*
 CREATE FUNCTION f(a int) RETURNS INT LEAKPROOF STABLE LANGUAGE SQL AS 'SELECT 1'
 
 statement error pq: return type mismatch in function declared to return int\nDETAIL: Actual return type is string
@@ -166,13 +166,13 @@ CREATE SCHEMA sc;
 statement
 CREATE FUNCTION sc.proc_f_2(STRING) RETURNS STRING LANGUAGE SQL AS $$ SELECT 'hello' $$;
 
-query TTTTTBBBTITTTTT
-SELECT oid, proname, pronamespace, proowner, prolang, proleakproof, proisstrict, proretset, provolatile, pronargs, prorettype, proargtypes, proargmodes, proargnames, prosrc
+query TTTTTBBBTITTTTTT
+SELECT oid, proname, pronamespace, proowner, prolang, proleakproof, proisstrict, proretset, provolatile, pronargs, prorettype, proargtypes, proargmodes, proargnames, prokind, prosrc
 FROM pg_catalog.pg_proc WHERE proname IN ('proc_f', 'proc_f_2');
 ----
-100118  proc_f    105  1546506610  14  false  false  false  v  1  20  20     {i}    NULL    SELECT 1;
-100119  proc_f    105  1546506610  14  true   true   false  i  2  25  25 20  {i,i}  {"",b}  SELECT 'hello';
-100121  proc_f_2  120  1546506610  14  false  false  false  v  1  25  25     {i}    NULL    SELECT 'hello';
+100118  proc_f    105  1546506610  14  false  false  false  v  1  20  20     {i}    NULL    f  SELECT 1;
+100119  proc_f    105  1546506610  14  true   true   false  i  2  25  25 20  {i,i}  {"",b}  f  SELECT 'hello';
+100121  proc_f_2  120  1546506610  14  false  false  false  v  1  25  25     {i}    NULL    f  SELECT 'hello';
 
 # Ensure that the pg_proc virtual index works properly.
 
@@ -1788,6 +1788,9 @@ DELETE FROM system.eventlog;
 statement ok
 CREATE FUNCTION f_test_log() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
 
+# TODO(chengxiong): remove this test condition when event logging is moved build
+# time in declarative schema changer.
+onlyif config local-legacy-schema-changer
 query TTTT retry
 WITH tmp AS (
   SELECT "eventType" AS etype, info::JSONB AS info_json
@@ -1801,6 +1804,7 @@ create_function  203  "test.public.f_test_log"  "CREATE FUNCTION test.public.f_t
 statement ok
 CREATE OR REPLACE FUNCTION f_test_log() RETURNS INT LANGUAGE SQL AS $$ SELECT 2 $$;
 
+onlyif config local-legacy-schema-changer
 query TTTT retry
 WITH tmp AS (
   SELECT "eventType" AS etype, info::JSONB AS info_json
@@ -1815,6 +1819,7 @@ create_function  203  "test.public.f_test_log"  "CREATE OR REPLACE FUNCTION test
 statement ok
 ALTER FUNCTION f_test_log RENAME TO f_test_log_new;
 
+onlyif config local-legacy-schema-changer
 query TTTTT retry
 WITH tmp AS (
   SELECT "eventType" AS etype, info::JSONB AS info_json
@@ -1831,6 +1836,7 @@ ALTER FUNCTION f_test_log_new RENAME TO f_test_log;
 statement ok
 ALTER FUNCTION f_test_log OWNER TO u_test_event;
 
+onlyif config local-legacy-schema-changer
 query TTTTT retry
 WITH tmp AS (
   SELECT "eventType" AS etype, info::JSONB AS info_json
@@ -1844,6 +1850,7 @@ alter_function_owner  203  "test.public.f_test_log"  "u_test_event"  "ALTER FUNC
 statement ok
 ALTER FUNCTION f_test_log SET SCHEMA sc_test_event;
 
+onlyif config local-legacy-schema-changer
 query TTTTT retry
 WITH tmp AS (
   SELECT "eventType" AS etype, info::JSONB AS info_json
@@ -1859,6 +1866,7 @@ ALTER FUNCTION sc_test_event.f_test_log SET SCHEMA public;
 ALTER FUNCTION f_test_log IMMUTABLE;
 DROP FUNCTION f_test_log;
 
+onlyif config local-legacy-schema-changer
 query TTTT retry
 WITH tmp AS (
   SELECT "eventType" AS etype, info::JSONB AS info_json
@@ -1869,6 +1877,7 @@ SELECT etype, info_json->'DescriptorID', info_json->'FunctionName', info_json->'
 ----
 alter_function_options  203  "test.public.f_test_log"  "ALTER FUNCTION \"\".\"\".f_test_log IMMUTABLE"
 
+onlyif config local-legacy-schema-changer
 query TTTT retry
 WITH tmp AS (
   SELECT "eventType" AS etype, info::JSONB AS info_json
@@ -2157,15 +2166,15 @@ SELECT trace_fn(a) FROM trace_tab
 statement ok
 SET tracing = off
 
-query T
+query T rowsort
 SELECT message FROM [SHOW TRACE FOR SESSION] WHERE message ~ 'udf'
 ----
-=== SPAN START: udf-stmt-trace_fn-0 ===
 === SPAN START: udf-stmt-trace_fn-1 ===
-=== SPAN START: udf-stmt-trace_fn-0 ===
+=== SPAN START: udf-stmt-trace_fn-2 ===
 === SPAN START: udf-stmt-trace_fn-1 ===
-=== SPAN START: udf-stmt-trace_fn-0 ===
+=== SPAN START: udf-stmt-trace_fn-2 ===
 === SPAN START: udf-stmt-trace_fn-1 ===
+=== SPAN START: udf-stmt-trace_fn-2 ===
 
 
 subtest args
@@ -2359,6 +2368,41 @@ l1  l2  i1  i2  s1  s2  v1  v2
 2   2   2   2   2   2   12  12
 3   3   3   3   3   3   13  13
 
+statement ok
+CREATE SEQUENCE sq2;
+CREATE FUNCTION rand_i() RETURNS INT IMMUTABLE LANGUAGE SQL AS $$SELECT nextval('sq2')$$;
+CREATE FUNCTION rand_s() RETURNS INT STABLE    LANGUAGE SQL AS $$SELECT nextval('sq2')$$;
+CREATE FUNCTION rand_v() RETURNS INT VOLATILE  LANGUAGE SQL AS $$SELECT nextval('sq2')$$;
+
+# UDFs with mislabeled volatilities. The volatile functions incorrectly marked
+# immutable and stable are evaluated just once, either during optimization or
+# execution.
+#
+# Note: This particular example does not match the behavior of Postgres 14.6
+# exactly, where rand_s() returns a different value in each row. However,
+# Postgres can fold these stable functions in some situations. Specifically,
+# Postgres will fold a stable function if doing so allows it to plan a
+# constrained index scan. For example:
+#
+#   CREATE TABLE t (i INT PRIMARY KEY);
+#   INSERT INTO t SELECT * FROM generate_series(1, 1000000);
+#   ANALYZE t;
+#   CREATE FUNCTION rand_s() RETURNS INT STABLE LANGUAGE SQL AS 'SELECT (10*random())::INT';
+#   SELECT i FROM t WHERE i = rand_s();
+#
+# The query plan of the SELECT is a contrained index scan, with rand_s() only
+# being evalauated once. With this query plan, the SELECT always returns a
+# single row.
+#
+# So, our behavior is more aggressive in folding table functions, but this is
+# perfectly valid.
+query IIIIII rowsort
+SELECT rand_i(), rand_i(), rand_s(), rand_s(), rand_v(), rand_v() FROM generate_series(1, 3)
+----
+1  2  3  4  5  6
+1  2  3  4  7  8
+1  2  3  4  9  10
+
 
 subtest implicit_record_types
 
@@ -2517,6 +2561,58 @@ CREATE FUNCTION err(i imp) RETURNS INT LANGUAGE SQL AS $$
 $$
 
 
+subtest strict
+
+statement ok
+CREATE FUNCTION strict_fn(i INT, t TEXT, b BOOL) RETURNS INT STRICT LANGUAGE SQL AS $$
+  SELECT 1
+$$
+
+query I
+SELECT strict_fn(1, 'foo', true)
+----
+1
+
+# Same as above, but with non-constant arguments.
+query I
+WITH tmp(a, b, c) AS MATERIALIZED (VALUES (1, 'foo', true))
+SELECT strict_fn(a, b, c) FROM tmp
+----
+1
+
+query III
+SELECT strict_fn(NULL, 'foo', true), strict_fn(1, NULL, true), strict_fn(1, 'foo', NULL)
+----
+NULL  NULL  NULL
+
+query III
+SELECT strict_fn(NULL, NULL, true), strict_fn(1, NULL, NULL), strict_fn(NULL, 'foo', NULL)
+----
+NULL  NULL  NULL
+
+query I
+SELECT strict_fn(NULL, NULL, NULL)
+----
+NULL
+
+statement ok
+CREATE FUNCTION strict_fn_imp(t TEXT, i imp) RETURNS INT RETURNS NULL ON NULL INPUT LANGUAGE SQL AS $$
+  SELECT 1
+$$
+
+# A tuple with all NULL elements is not considered "NULL INPUT" for a UDF, even
+# though IS NULL returns true for it.
+query IB
+SELECT strict_fn_imp('foo', (NULL,NULL,NULL)), (NULL,NULL,NULL)::imp IS NULL
+----
+1  true
+
+query I
+SELECT strict_fn_imp('foo', NULL)
+----
+NULL
+
+
 subtest return_type_assignment_casts
 
 # Do not allow functions with return type mismatches that cannot be cast in an
@@ -2542,6 +2638,37 @@ a  text
 
 statement error pgcode 22001 value too long for type CHAR
 SELECT stoc('abc')
+
+
+subtest tagged_dollar_quotes
+
+statement ok
+CREATE FUNCTION single_quote(s STRING) RETURNS STRING LANGUAGE SQL AS $func$
+  SELECT $prefix$'$prefix$ || s || $suffix$'$suffix$
+$func$
+
+query T
+SELECT create_statement FROM [SHOW CREATE FUNCTION single_quote]
+----
+CREATE FUNCTION public.single_quote(IN s STRING)
+  RETURNS STRING
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  AS $$
+  SELECT (e'\'' || s) || e'\'';
+$$
+
+query T
+SELECT single_quote('hello')
+----
+'hello'
+
+statement error unterminated string
+CREATE FUNCTION err() RETURNS STRING LANGUAGE SQL AS $outer$
+  SELECT $inner$hello$outer$
+$inner$
 
 
 subtest ddl
@@ -2601,7 +2728,7 @@ statement error pgcode 42883 unknown function: other_udf()
 CREATE FUNCTION err() RETURNS INT LANGUAGE SQL AS 'SELECT other_udf()'
 
 
-subtest subqueries
+subtest subquery
 
 statement ok
 CREATE TABLE sub_all (a INT);
@@ -2677,6 +2804,42 @@ SELECT a, sub_is_odd(a) FROM sub_all WHERE sub_is_odd(a) OR sub_is_odd(a) IS NUL
 4  NULL
 5  true
 6  NULL
+
+# UDF with an uncorrelated EXISTS.
+statement ok
+CREATE FUNCTION sub_first() RETURNS INT LANGUAGE SQL AS $$
+  SELECT a FROM sub_all WHERE EXISTS (SELECT a FROM sub_odd) ORDER BY a LIMIT 1
+$$
+
+query II rowsort
+SELECT sub_first(), a FROM sub_all
+----
+1  1
+1  2
+1  3
+1  4
+1  5
+1  6
+
+# UDF with a correlated EXISTS.
+statement ok
+CREATE FUNCTION sub_two() RETURNS INT LANGUAGE SQL AS $$
+  SELECT a FROM sub_all WHERE CASE
+    WHEN a > 1 THEN EXISTS (SELECT 0 FROM sub_odd WHERE sub_odd.a = sub_all.a+1)
+    ELSE false
+  END
+  ORDER BY a LIMIT 1
+$$
+
+query II rowsort
+SELECT a, sub_two() FROM sub_all
+----
+1  2
+2  2
+3  2
+4  2
+5  2
+6  2
 
 
 subtest variadic
@@ -2792,3 +2955,56 @@ ORDER BY oid;
 100259  f_93314_alias   105  1546506610  14  false  false  false  v  0  100258  ·  {}  NULL  SELECT i, e FROM test.public.t_93314_alias ORDER BY i LIMIT 1;
 100263  f_93314_comp    105  1546506610  14  false  false  false  v  0  100260  ·  {}  NULL  SELECT (1, 2);
 100264  f_93314_comp_t  105  1546506610  14  false  false  false  v  0  100262  ·  {}  NULL  SELECT a, c FROM test.public.t_93314_comp LIMIT 1;
+
+# Regression test for #95240. Strict UDFs that are inlined should result in NULL
+# when presented with NULL arguments.
+statement ok
+CREATE FUNCTION f95240(i INT) RETURNS INT STRICT LANGUAGE SQL AS 'SELECT 33';
+CREATE TABLE t95240 (a INT);
+INSERT INTO t95240 VALUES (1), (NULL)
+
+query I
+SELECT f95240(a) FROM t95240
+----
+33
+NULL
+
+onlyif config local
+query T
+EXPLAIN CREATE FUNCTION f() RETURNS INT LANGUAGE SQL AS 'SELECT 1'
+----
+distribution: local
+vectorized: true
+·
+• create function
+
+# Regression test for #96326. Strict UDFs with no arguments should not error
+# while being called.
+statement ok
+CREATE FUNCTION f96326() RETURNS INT LANGUAGE SQL IMMUTABLE STRICT AS 'SELECT 1';
+
+query I
+SELECT f96326();
+----
+1
+
+# Regression test for #94146
+statement ok
+CREATE FUNCTION f_94146(i INT2) RETURNS INT STRICT LANGUAGE SQL AS 'SELECT 2';
+CREATE FUNCTION f_94146(i INT4) RETURNS INT STRICT LANGUAGE SQL AS 'SELECT 4';
+CREATE FUNCTION f_94146(i INT8) RETURNS INT STRICT LANGUAGE SQL AS 'SELECT 8';
+
+query I
+SELECT f_94146(1::INT8)
+----
+8
+
+query I
+SELECT f_94146(1::INT4)
+----
+4
+
+query I
+SELECT f_94146(1::INT2)
+----
+2

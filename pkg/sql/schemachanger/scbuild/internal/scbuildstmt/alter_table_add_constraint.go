@@ -115,14 +115,16 @@ func alterTableAddCheck(
 
 	// 3. Add relevant check constraint element: CheckConstraint and ConstraintName.
 	constraintID := b.NextTableConstraintID(tbl.TableID)
-	b.Add(&scpb.CheckConstraint{
+	ck := &scpb.CheckConstraint{
 		TableID:               tbl.TableID,
 		ConstraintID:          constraintID,
 		ColumnIDs:             colIDs.Ordered(),
 		Expression:            *b.WrapExpression(tbl.TableID, typedCkExpr),
 		FromHashShardedColumn: ckDef.FromHashShardedColumn,
 		IndexIDForValidation:  getIndexIDForValidationForConstraint(b, tbl.TableID),
-	})
+	}
+	b.Add(ck)
+	b.LogEventForExistingTarget(ck)
 
 	constraintName := string(ckDef.Name)
 	if constraintName == "" {
@@ -192,8 +194,7 @@ func alterTableAddForeignKey(
 	if fkDef.Actions.Delete == tree.SetNull || fkDef.Actions.Update == tree.SetNull {
 		for i, colName := range fkDef.FromCols {
 			colID := mustGetColumnIDFromColumnName(b, tbl.TableID, colName)
-			colIsNullable := mustRetrieveColumnTypeElem(b, tbl.TableID, colID).IsNullable
-			if !colIsNullable {
+			if isColNotNull(b, tbl.TableID, colID) {
 				panic(pgerror.Newf(pgcode.InvalidForeignKey,
 					"cannot add a SET NULL cascading action on column %q which has a NOT NULL constraint", fromColsFRNames[i],
 				))
@@ -209,8 +210,8 @@ func alterTableAddForeignKey(
 		for i, colName := range fkDef.FromCols {
 			colID := mustGetColumnIDFromColumnName(b, tbl.TableID, colName)
 			colHasDefault := retrieveColumnDefaultExpressionElem(b, tbl.TableID, colID) != nil
-			colIsNullable := mustRetrieveColumnTypeElem(b, tbl.TableID, colID).IsNullable
-			if !colHasDefault && !colIsNullable {
+			colIsNotNull := isColNotNull(b, tbl.TableID, colID)
+			if !colHasDefault && colIsNotNull {
 				panic(pgerror.Newf(pgcode.InvalidForeignKey,
 					"cannot add a SET DEFAULT cascading action on column %q which has a "+
 						"NOT NULL constraint and a NULL default expression", fromColsFRNames[i],
@@ -357,7 +358,7 @@ func alterTableAddForeignKey(
 	// 12. (Finally!) Add a ForeignKey_Constraint, ConstraintName element to
 	// builder state.
 	constraintID := b.NextTableConstraintID(tbl.TableID)
-	b.Add(&scpb.ForeignKeyConstraint{
+	fk := &scpb.ForeignKeyConstraint{
 		TableID:                 tbl.TableID,
 		ConstraintID:            constraintID,
 		ColumnIDs:               originColIDs,
@@ -367,7 +368,9 @@ func alterTableAddForeignKey(
 		OnDeleteAction:          tree.ForeignKeyReferenceActionValue[fkDef.Actions.Delete],
 		CompositeKeyMatchMethod: tree.CompositeKeyMatchMethodValue[fkDef.Match],
 		IndexIDForValidation:    getIndexIDForValidationForConstraint(b, tbl.TableID),
-	})
+	}
+	b.Add(fk)
+	b.LogEventForExistingTarget(fk)
 	b.Add(&scpb.ConstraintWithoutIndexName{
 		TableID:      tbl.TableID,
 		ConstraintID: constraintID,
@@ -469,6 +472,7 @@ func alterTableAddUniqueWithoutIndex(
 		uwi.Predicate = b.WrapExpression(tbl.TableID, d.Predicate)
 	}
 	b.Add(uwi)
+	b.LogEventForExistingTarget(uwi)
 	b.Add(&scpb.ConstraintWithoutIndexName{
 		TableID:      tbl.TableID,
 		ConstraintID: constraintID,

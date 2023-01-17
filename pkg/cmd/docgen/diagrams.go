@@ -400,6 +400,13 @@ var specs = []stmtSpec{
 		unlink:  []string{"table_name"},
 	},
 	{
+		name:    "alter_database",
+		stmt:    "alter_database_stmt",
+		inline:  []string{"alter_rename_database_stmt", "alter_zone_database_stmt", "alter_database_owner", "alter_database_to_schema_stmt", "alter_database_add_region_stmt", "alter_database_drop_region_stmt", "alter_database_survival_goal_stmt", "alter_database_set_stmt", "alter_database_primary_region_stmt", "alter_database_placement_stmt", "opt_equal", "alter_database_add_super_region", "alter_database_alter_super_region", "alter_database_drop_super_region", "alter_database_set_secondary_region_stmt", "alter_database_drop_secondary_region", "alter_database_set_zone_config_extension_stmt", "set_zone_config", "var_set_list", "survival_goal_clause", "primary_region_clause", "placement_clause", "secondary_region_clause", "set_or_reset_clause", "set_rest", "generic_set", "var_list", "to_or_eq"},
+		replace: map[string]string{"'RENAME' 'TO' database_name": "'RENAME' 'TO' database_new_name", "'SUPER' 'REGION' name": "'SUPER' 'REGION' region_name", "'VALUES' name_list": "'VALUES' region_name_list", "var_name": "variable", "var_value": "value"},
+		unlink:  []string{"database_new_name", "region_name_list", "variable", "value"},
+	},
+	{
 		name:   "alter_database_primary_region",
 		stmt:   "alter_database_primary_region_stmt",
 		inline: []string{"primary_region_clause", "opt_equal"},
@@ -412,6 +419,25 @@ var specs = []stmtSpec{
 		name:    "alter_default_privileges_stmt",
 		inline:  []string{"opt_for_roles", "role_or_group_or_user", "name_list", "opt_in_schemas", "schema_name_list", "abbreviated_grant_stmt", "opt_with_grant_option", "target_object_type", "abbreviated_revoke_stmt", "opt_drop_behavior"},
 		nosplit: true,
+	},
+	{
+		name:    "alter_index",
+		stmt:    "alter_index_stmt",
+		inline:  []string{"alter_oneindex_stmt", "alter_index_cmds", "alter_index_cmd", "partition_by_index", "partition_by_inner", "partition_by", "table_index_name", "alter_split_index_stmt", "alter_unsplit_index_stmt", "alter_rename_index_stmt", "alter_zone_index_stmt", "var_set_list", "alter_index_visible_stmt", "set_zone_config", "alter_index_visible"},
+		exclude: []*regexp.Regexp{regexp.MustCompile("alter_scatter_index_stmt")},
+		replace: map[string]string{"standalone_index_name": "index_name", "var_name": "variable", "var_value": "value", "'RENAME' 'TO' index_name": "'RENAME' 'TO' index_new_name"},
+		unlink:  []string{"index_new_name", "variable", "value"},
+	},
+	{
+		name:   "alter_range",
+		stmt:   "alter_range_stmt",
+		inline: []string{"alter_zone_range_stmt", "alter_range_relocate_stmt", "var_set_list", "set_zone_config", "relocate_kw", "relocate_subject_nonlease"},
+		exclude: []*regexp.Regexp{
+			regexp.MustCompile("TESTING_RELOCATE"),
+			regexp.MustCompile("EXPERIMENTAL_RELOCATE"),
+		},
+		replace: map[string]string{"'RANGE' a_expr": "'RANGE' range_id"},
+		unlink:  []string{"range_id"},
 	},
 	{
 		name:   "alter_table_reset_storage_param",
@@ -485,7 +511,8 @@ var specs = []stmtSpec{
 	{
 		name:    "alter_func_stmt",
 		inline:  []string{"alter_func_options_stmt", "alter_func_rename_stmt", "alter_func_owner_stmt", "alter_func_set_schema_stmt", "alter_func_dep_extension_stmt", "alter_func_opt_list", "common_func_opt_item", "opt_restrict", "opt_no"},
-		unlink:  []string{"alter_func_options_stmt", "alter_func_rename_stmt", "alter_func_owner_stmt", "alter_func_set_schema_stmt", "alter_func_dep_extension_stmt", "alter_func_opt_list", "common_func_opt_item", "opt_restrict", "opt_no"},
+		replace: map[string]string{"'RENAME' 'TO' name": "'RENAME' 'TO' function_new_name"},
+		unlink:  []string{"alter_func_options_stmt", "alter_func_rename_stmt", "alter_func_owner_stmt", "alter_func_set_schema_stmt", "alter_func_dep_extension_stmt", "alter_func_opt_list", "common_func_opt_item", "opt_restrict", "opt_no", "function_new_name"},
 		nosplit: true,
 	},
 	{
@@ -501,6 +528,8 @@ var specs = []stmtSpec{
 		name:    "alter_schema",
 		stmt:    "alter_schema_stmt",
 		inline:  []string{"qualifiable_schema_name"},
+		replace: map[string]string{"schema_name": "schema_new_name"},
+		unlink:  []string{"schema_new_name"},
 		nosplit: true,
 	},
 	{
@@ -512,16 +541,18 @@ var specs = []stmtSpec{
 		nosplit: true,
 	},
 	{
-		name:   "alter_table",
-		stmt:   "alter_onetable_stmt",
-		inline: []string{"alter_table_cmds", "alter_table_cmd", "column_table_def", "opt_drop_behavior", "alter_column_default", "opt_column", "opt_set_data", "table_constraint", "opt_collate", "opt_alter_column_using"},
-		replace: map[string]string{
-			"'VALIDATE' 'CONSTRAINT' name": "",
-			"opt_validate_behavior":        "",
-			"relation_expr":                "table_name",
-			"alter_column_visible":         "'SET' ('NOT' | ) 'VISIBLE'",
-		},
-		unlink:  []string{"table_name"},
+		name:    "alter_table",
+		stmt:    "alter_table_stmt",
+		inline:  []string{"alter_onetable_stmt", "alter_table_cmds", "alter_split_stmt", "alter_unsplit_stmt", "alter_zone_table_stmt", "alter_rename_table_stmt", "alter_table_set_schema_stmt", "alter_table_locality_stmt", "alter_table_owner_stmt", "set_zone_config", "var_set_list"},
+		exclude: []*regexp.Regexp{regexp.MustCompile("alter_scatter_stmt")},
+		replace: map[string]string{"relation_expr": "table_name", "'RENAME' 'TO' table_name": "'RENAME' 'TO' table_new_name", "var_name": "variable", "var_value": "value"},
+		unlink:  []string{"table_name", "table_new_name", "variable", "value"},
+	},
+	{
+		name:    "alter_table_cmds",
+		inline:  []string{"alter_table_cmd", "column_table_def", "col_qual_list", "opt_column", "opt_validate_behavior", "table_constraint", "alter_column_default", "alter_column_visible", "opt_set_data", "opt_collate", "opt_alter_column_using", "alter_column_on_update", "opt_hash_sharded", "opt_with_storage_parameter_list", "opt_drop_behavior", "audit_mode", "partition_by", "partition_by_table", "partition_by_inner", "storage_parameter_list", "storage_parameter", "storage_parameter_key_list"},
+		replace: map[string]string{"'RENAME' ( 'COLUMN' |  ) column_name 'TO' column_name": "'RENAME' ( 'COLUMN' |  ) column_name 'TO' column_new_name", "'RENAME' 'CONSTRAINT' column_name 'TO' column_name": "'RENAME' 'CONSTRAINT' constraint_name 'TO' constraint_new_name", "opt_hash_sharded_bucket_count ": "", "var_name": "variable", "var_value": "value"},
+		unlink:  []string{"column_new_name", "constraint_name", "constraint_new_name", "variable", "value"},
 		nosplit: true,
 	},
 	{
@@ -535,7 +566,8 @@ var specs = []stmtSpec{
 		name:    "alter_view",
 		stmt:    "alter_view_stmt",
 		inline:  []string{"alter_rename_view_stmt", "alter_view_set_schema_stmt", "alter_view_owner_stmt", "opt_transaction"},
-		replace: map[string]string{"relation_expr": "view_name", "qualified_name": "name"}, unlink: []string{"view_name", "name"},
+		replace: map[string]string{"relation_expr": "view_name", "'RENAME' 'TO' view_name": "'RENAME' 'TO' view_new_name"},
+		unlink:  []string{"view_name", "view_new_name"},
 	},
 	{
 		name:    "alter_zone_database_stmt",

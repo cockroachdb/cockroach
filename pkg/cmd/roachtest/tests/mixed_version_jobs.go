@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -229,9 +230,6 @@ FROM [SHOW JOBS] WHERE status = $1 OR status = $2`,
 func runJobsMixedVersions(
 	ctx context.Context, t test.Test, c cluster.Cluster, warehouses int, predecessorVersion string,
 ) {
-	// An empty string means that the cockroach binary specified by flag
-	// `cockroach` will be used.
-	const mainVersion = ""
 	roachNodes := c.All()
 	backgroundTPCC := backgroundJobsTestTPCCImport(t, warehouses)
 	resumeAllJobsAndWaitStep := makeResumeAllJobsAndWaitStep(10 * time.Second)
@@ -249,22 +247,22 @@ func runJobsMixedVersions(
 
 		// Roll the nodes into the new version one by one, while repeatedly pausing
 		// and resuming all jobs.
-		binaryUpgradeStep(c.Node(3), mainVersion),
+		binaryUpgradeStep(c.Node(3), clusterupgrade.MainVersion),
 		resumeAllJobsAndWaitStep,
 		checkForFailedJobsStep,
 		pauseAllJobsStep(),
 
-		binaryUpgradeStep(c.Node(2), mainVersion),
+		binaryUpgradeStep(c.Node(2), clusterupgrade.MainVersion),
 		resumeAllJobsAndWaitStep,
 		checkForFailedJobsStep,
 		pauseAllJobsStep(),
 
-		binaryUpgradeStep(c.Node(1), mainVersion),
+		binaryUpgradeStep(c.Node(1), clusterupgrade.MainVersion),
 		resumeAllJobsAndWaitStep,
 		checkForFailedJobsStep,
 		pauseAllJobsStep(),
 
-		binaryUpgradeStep(c.Node(4), mainVersion),
+		binaryUpgradeStep(c.Node(4), clusterupgrade.MainVersion),
 		resumeAllJobsAndWaitStep,
 		checkForFailedJobsStep,
 		pauseAllJobsStep(),
@@ -292,22 +290,22 @@ func runJobsMixedVersions(
 		pauseAllJobsStep(),
 
 		// Roll nodes forward and finalize upgrade.
-		binaryUpgradeStep(c.Node(4), mainVersion),
+		binaryUpgradeStep(c.Node(4), clusterupgrade.MainVersion),
 		resumeAllJobsAndWaitStep,
 		checkForFailedJobsStep,
 		pauseAllJobsStep(),
 
-		binaryUpgradeStep(c.Node(3), mainVersion),
+		binaryUpgradeStep(c.Node(3), clusterupgrade.MainVersion),
 		resumeAllJobsAndWaitStep,
 		checkForFailedJobsStep,
 		pauseAllJobsStep(),
 
-		binaryUpgradeStep(c.Node(1), mainVersion),
+		binaryUpgradeStep(c.Node(1), clusterupgrade.MainVersion),
 		resumeAllJobsAndWaitStep,
 		checkForFailedJobsStep,
 		pauseAllJobsStep(),
 
-		binaryUpgradeStep(c.Node(2), mainVersion),
+		binaryUpgradeStep(c.Node(2), clusterupgrade.MainVersion),
 		resumeAllJobsAndWaitStep,
 		checkForFailedJobsStep,
 		pauseAllJobsStep(),
@@ -337,7 +335,7 @@ func registerJobsMixedVersions(r registry.Registry) {
 			if c.IsLocal() && runtime.GOARCH == "arm64" {
 				t.Skip("Skip under ARM64. See https://github.com/cockroachdb/cockroach/issues/89268")
 			}
-			predV, err := PredecessorVersion(*t.BuildVersion())
+			predV, err := clusterupgrade.PredecessorVersion(*t.BuildVersion())
 			if err != nil {
 				t.Fatal(err)
 			}

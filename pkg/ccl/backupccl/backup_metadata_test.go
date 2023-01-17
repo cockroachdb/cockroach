@@ -21,11 +21,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuptestutils"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -87,9 +88,7 @@ func checkMetadata(
 		tc.Servers[0].ClusterSettings(),
 		blobs.TestEmptyBlobClientFactory,
 		username.RootUserName(),
-		tc.Servers[0].InternalExecutor().(*sql.InternalExecutor),
-		tc.Servers[0].InternalExecutorFactory().(sqlutil.InternalExecutorFactory),
-		tc.Servers[0].DB(),
+		tc.Servers[0].InternalDB().(isql.DB),
 		nil, /* limiters */
 		cloud.NilMetrics,
 	)
@@ -104,7 +103,7 @@ func checkMetadata(
 	srv := tc.Servers[0]
 	execCfg := srv.ExecutorConfig().(sql.ExecutorConfig)
 	kmsEnv := backupencryption.MakeBackupKMSEnv(srv.ClusterSettings(), &base.ExternalIODirConfig{},
-		srv.DB(), username.RootUserName(), execCfg.InternalExecutor)
+		execCfg.InternalDB, username.RootUserName())
 	bm, err := backupinfo.NewBackupMetadata(ctx, store, backupinfo.MetadataSSTName,
 		nil /* encryption */, &kmsEnv)
 	if err != nil {
@@ -189,18 +188,22 @@ func checkFiles(
 	ctx context.Context, t *testing.T, m *backuppb.BackupManifest, bm *backupinfo.BackupMetadata,
 ) {
 	var metaFiles []backuppb.BackupManifest_File
-	var file backuppb.BackupManifest_File
 	it, err := bm.NewFileIter(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer it.Close()
 
-	for it.Next(&file) {
-		metaFiles = append(metaFiles, file)
-	}
-	if it.Err() != nil {
-		t.Fatal(it.Err())
+	for ; ; it.Next() {
+		ok, err := it.Valid()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !ok {
+			break
+		}
+
+		metaFiles = append(metaFiles, *it.Value())
 	}
 
 	require.Equal(t, m.Files, metaFiles)
@@ -244,8 +247,8 @@ func checkIntroducedSpans(
 func checkTenants(
 	ctx context.Context, t *testing.T, m *backuppb.BackupManifest, bm *backupinfo.BackupMetadata,
 ) {
-	var metaTenants []descpb.TenantInfoWithUsage
-	var tenant descpb.TenantInfoWithUsage
+	var metaTenants []mtinfopb.TenantInfoWithUsage
+	var tenant mtinfopb.TenantInfoWithUsage
 	it := bm.TenantIter(ctx)
 	defer it.Close()
 

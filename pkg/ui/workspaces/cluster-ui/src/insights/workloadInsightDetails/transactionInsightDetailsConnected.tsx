@@ -14,7 +14,7 @@ import {
 } from "./transactionInsightDetails";
 import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
-import { AppState } from "src/store";
+import { AppState, uiConfigActions } from "src/store";
 import {
   selectTransactionInsightDetails,
   selectTransactionInsightDetailsError,
@@ -23,8 +23,9 @@ import {
 import { TimeScale } from "../../timeScaleDropdown";
 import { actions as sqlStatsActions } from "../../store/sqlStats";
 import { Dispatch } from "redux";
-import { TxnContentionInsightDetailsRequest } from "src/api";
 import { selectTimeScale } from "../../store/utils/selectors";
+import { selectHasAdminRole } from "../../store/uiConfig";
+import { TxnInsightDetailsRequest } from "src/api";
 
 const mapStateToProps = (
   state: AppState,
@@ -36,15 +37,14 @@ const mapStateToProps = (
     insightDetails: insightDetails,
     insightError: insightError,
     timeScale: selectTimeScale(state),
+    hasAdminRole: selectHasAdminRole(state),
   };
 };
 
 const mapDispatchToProps = (
   dispatch: Dispatch,
 ): TransactionInsightDetailsDispatchProps => ({
-  refreshTransactionInsightDetails: (
-    req: TxnContentionInsightDetailsRequest,
-  ) => {
+  refreshTransactionInsightDetails: (req: TxnInsightDetailsRequest) => {
     dispatch(actions.refresh(req));
   },
   setTimeScale: (ts: TimeScale) => {
@@ -54,6 +54,7 @@ const mapDispatchToProps = (
       }),
     );
   },
+  refreshUserSQLRoles: () => dispatch(uiConfigActions.refreshUserSQLRoles()),
 });
 
 export const TransactionInsightDetailsConnected = withRouter(

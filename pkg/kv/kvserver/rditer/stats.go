@@ -34,7 +34,7 @@ func ComputeStatsForRangeWithVisitors(
 	rangeKeyVisitor func(storage.MVCCRangeKeyValue) error,
 ) (enginepb.MVCCStats, error) {
 	var ms enginepb.MVCCStats
-	for _, keySpan := range MakeReplicatedKeySpansExceptLockTable(d) {
+	for _, keySpan := range makeReplicatedKeySpansExceptLockTable(d) {
 		msDelta, err := storage.ComputeStatsWithVisitors(reader, keySpan.Key, keySpan.EndKey, nowNanos,
 			pointKeyVisitor, rangeKeyVisitor)
 		if err != nil {

@@ -17,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
@@ -32,15 +33,17 @@ import (
 )
 
 type state struct {
-	nodes       map[NodeID]*node
-	stores      map[StoreID]*store
-	load        map[RangeID]ReplicaLoad
-	loadsplits  map[StoreID]LoadSplitter
-	ranges      *rmap
-	clusterinfo ClusterInfo
-	usageInfo   *ClusterUsageInfo
-	clock       *ManualSimClock
-	settings    *config.SimulationSettings
+	nodes                   map[NodeID]*node
+	stores                  map[StoreID]*store
+	load                    map[RangeID]ReplicaLoad
+	loadsplits              map[StoreID]LoadSplitter
+	capacityChangeListeners []CapacityChangeListener
+	newCapacityListeners    []NewCapacityListener
+	ranges                  *rmap
+	clusterinfo             ClusterInfo
+	usageInfo               *ClusterUsageInfo
+	clock                   *ManualSimClock
+	settings                *config.SimulationSettings
 
 	// Unique ID generators for Nodes and Stores. These are incremented
 	// pre-assignment. So that IDs start from 1.
@@ -58,7 +61,7 @@ func newState(settings *config.SimulationSettings) *state {
 		nodes:      make(map[NodeID]*node),
 		stores:     make(map[StoreID]*store),
 		loadsplits: make(map[StoreID]LoadSplitter),
-		clock:      &ManualSimClock{nanos: 0},
+		clock:      &ManualSimClock{nanos: settings.StartTime.UnixNano()},
 		ranges:     newRMap(),
 		usageInfo:  newClusterUsageInfo(),
 		settings:   config.DefaultSimulationSettings(),
@@ -170,20 +173,27 @@ func (s *state) Stores() []Store {
 	return stores
 }
 
-// StoreDescriptors returns the descriptors for all stores that exist in
-// this state.
-func (s *state) StoreDescriptors() []roachpb.StoreDescriptor {
+// StoreDescriptors returns the descriptors for the StoreIDs given. If the
+// first flag is false, then the capacity is generated from scratch,
+// otherwise the last calculated capacity values are used for each store.
+func (s *state) StoreDescriptors(cached bool, storeIDs ...StoreID) []roachpb.StoreDescriptor {
 	storeDescriptors := []roachpb.StoreDescriptor{}
-	for _, store := range s.Stores() {
-		s.updateStoreCapacity(store.StoreID())
-		storeDescriptors = append(storeDescriptors, store.Descriptor())
+	for _, storeID := range storeIDs {
+		if store, ok := s.Store(storeID); ok {
+			if !cached {
+				s.updateStoreCapacity(storeID)
+			}
+			storeDescriptors = append(storeDescriptors, store.Descriptor())
+		}
 	}
 	return storeDescriptors
 }
 
 func (s *state) updateStoreCapacity(storeID StoreID) {
 	if store, ok := s.stores[storeID]; ok {
-		store.desc.Capacity = Capacity(s, storeID)
+		capacity := Capacity(s, storeID)
+		store.desc.Capacity = capacity
+		s.publishNewCapacityEvent(capacity, storeID)
 	}
 }
 
@@ -363,6 +373,7 @@ func (s *state) addReplica(rangeID RangeID, storeID StoreID) (*replica, bool) {
 
 	store.replicas[rangeID] = replica.replicaID
 	rng.replicas[storeID] = replica
+	s.publishCapacityChangeEvent(kvserver.RangeAddEvent, storeID)
 
 	// This is the first replica to be added for this range. Make it the
 	// leaseholder as a placeholder. The caller can update the lease, however
@@ -437,6 +448,8 @@ func (s *state) removeReplica(rangeID RangeID, storeID StoreID) bool {
 
 	delete(store.replicas, rangeID)
 	delete(rng.replicas, storeID)
+	s.publishCapacityChangeEvent(kvserver.RangeRemoveEvent, storeID)
+
 	return true
 }
 
@@ -604,6 +617,7 @@ func (s *state) setLeaseholder(rangeID RangeID, storeID StoreID) {
 	rng.replicas[storeID].holdsLease = true
 	replicaID := s.stores[storeID].replicas[rangeID]
 	rng.leaseholder = replicaID
+	s.publishCapacityChangeEvent(kvserver.LeaseAddEvent, storeID)
 }
 
 func (s *state) removeLeaseholder(rangeID RangeID, storeID StoreID) {
@@ -611,6 +625,7 @@ func (s *state) removeLeaseholder(rangeID RangeID, storeID StoreID) {
 	if repl, ok := rng.replicas[storeID]; ok {
 		if repl.holdsLease {
 			repl.holdsLease = false
+			s.publishCapacityChangeEvent(kvserver.LeaseRemoveEvent, storeID)
 			return
 		}
 	}
@@ -698,10 +713,20 @@ func (s *state) ReplicaLoad(rangeID RangeID, storeID StoreID) ReplicaLoad {
 	// currently on the store given. Otherwise, return an empty, zero counter
 	// value.
 	store, ok := s.LeaseholderStore(rangeID)
-	if ok && store.StoreID() == storeID {
-		return s.load[rangeID]
+	if !ok {
+		panic(fmt.Sprintf("no leaseholder store found for range %d", storeID))
 	}
-	return &ReplicaLoadCounter{}
+
+	// TODO(kvoli): The requested storeID is not the leaseholder. Non
+	// leaseholder load tracking is not currently supported but is checked by
+	// other components such as hot ranges. In this case, ignore it but we
+	// should also track non leaseholder load. See load.go for more. Return an
+	// empty initialized load counter here.
+	if store.StoreID() != storeID {
+		return NewReplicaLoadCounter(s.clock)
+	}
+
+	return s.load[rangeID]
 }
 
 // ClusterUsageInfo returns the usage information for the Range with ID
@@ -721,7 +746,12 @@ func (s *state) TickClock(tick time.Time) {
 func (s *state) UpdateStorePool(
 	storeID StoreID, storeDescriptors map[roachpb.StoreID]*storepool.StoreDetail,
 ) {
-	s.stores[storeID].storepool.DetailsMu.StoreDetails = storeDescriptors
+	for gossipStoreID, detail := range storeDescriptors {
+		copiedDetail := *detail
+		copiedDesc := *detail.Desc
+		copiedDetail.Desc = &copiedDesc
+		s.stores[storeID].storepool.DetailsMu.StoreDetails[gossipStoreID] = &copiedDetail
+	}
 }
 
 // NextReplicasFn returns a function, that when called will return the current
@@ -761,7 +791,7 @@ func (s *state) MakeAllocator(storeID StoreID) allocatorimpl.Allocator {
 	return allocatorimpl.MakeAllocator(
 		s.stores[storeID].settings,
 		s.stores[storeID].storepool.IsDeterministic(),
-		func(addr string) (time.Duration, bool) { return 0, true },
+		func(id roachpb.NodeID) (time.Duration, bool) { return 0, true },
 		&allocator.TestingKnobs{
 			AllowLeaseTransfersToReplicasNeedingSnapshots: true,
 		},
@@ -841,6 +871,32 @@ func (s *state) RaftStatus(rangeID RangeID, storeID StoreID) *raft.Status {
 	}
 
 	return status
+}
+
+// RegisterCapacityChangeListener registers a listener which will be called
+// on events where there is a capacity change (lease or replica) in the
+// cluster state.
+func (s *state) RegisterCapacityChangeListener(listener CapacityChangeListener) {
+	s.capacityChangeListeners = append(s.capacityChangeListeners, listener)
+}
+
+func (s *state) publishCapacityChangeEvent(cce kvserver.CapacityChangeEvent, storeID StoreID) {
+	for _, listener := range s.capacityChangeListeners {
+		listener.CapacityChangeNotify(cce, storeID)
+	}
+}
+
+// RegisterCapacityListener registers a listener which will be called when
+// a new store capacity has been generated from scratch, for a specific
+// store.
+func (s *state) RegisterCapacityListener(listener NewCapacityListener) {
+	s.newCapacityListeners = append(s.newCapacityListeners, listener)
+}
+
+func (s *state) publishNewCapacityEvent(capacity roachpb.StoreCapacity, storeID StoreID) {
+	for _, listener := range s.newCapacityListeners {
+		listener.NewCapacityNotify(capacity, storeID)
+	}
 }
 
 // node is an implementation of the Node interface.

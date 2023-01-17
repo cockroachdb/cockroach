@@ -125,7 +125,7 @@ func newEventConsumer(
 		// CPU control is disabled.
 		var pacer *admission.Pacer = nil
 		if enablePacer {
-			tenantID, ok := roachpb.TenantFromContext(ctx)
+			tenantID, ok := roachpb.ClientTenantFromContext(ctx)
 			if !ok {
 				tenantID = roachpb.SystemTenantID
 			}
@@ -290,7 +290,7 @@ func newEvaluator(
 		sd = *spec.Feed.SessionData
 	}
 
-	return cdceval.NewEvaluator(sc, cfg, spec.User(), sd)
+	return cdceval.NewEvaluator(sc, cfg, spec.User(), sd, spec.Feed.StatementTime), nil
 }
 
 func (c *kvEventToRowConsumer) topicForEvent(eventMeta cdcevent.Metadata) (TopicDescriptor, error) {

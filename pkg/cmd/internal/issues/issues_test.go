@@ -20,6 +20,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/datadriven"
@@ -230,8 +231,11 @@ test logs left over in: /go/src/github.com/cockroachdb/cockroach/artifacts/logTe
 				return tag, nil
 			}
 
+			l, err := logger.RootLogger("", false)
+			require.NoError(t, err)
 			p := &poster{
 				Options: &opts,
+				l:       l,
 			}
 
 			createdIssue := false
@@ -246,7 +250,7 @@ test logs left over in: /go/src/github.com/cockroachdb/cockroach/artifacts/logTe
 				render := ghURL(t, title, body)
 				t.Log(render)
 				_, _ = fmt.Fprintf(&buf, "createIssue owner=%s repo=%s:\n%s\n\n%s\n\n%s\n\nRendered: %s", owner, repo, github.Stringify(issue), title, body, render)
-				return &github.Issue{ID: github.Int64(issueID)}, nil, nil
+				return &github.Issue{ID: github.Int64(issueID), Number: github.Int(issueNumber)}, nil, nil
 			}
 
 			p.searchIssues = func(_ context.Context, query string,
@@ -366,7 +370,10 @@ func TestPostEndToEnd(t *testing.T) {
 		HelpCommand: UnitTestHelpCommand(""),
 	}
 
-	require.NoError(t, Post(context.Background(), UnitTestFormatter, req))
+	l, err := logger.RootLogger("", false)
+	require.NoError(t, err)
+
+	require.NoError(t, Post(context.Background(), l, UnitTestFormatter, req))
 }
 
 // setEnv overrides the env variables corresponding to the input map. The

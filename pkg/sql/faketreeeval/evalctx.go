@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
@@ -65,8 +66,8 @@ func (so *DummySequenceOperators) SchemaExists(
 	return false, errors.WithStack(errSequenceOperators)
 }
 
-// HasAnyPrivilege is part of the eval.DatabaseCatalog interface.
-func (so *DummySequenceOperators) HasAnyPrivilege(
+// HasAnyPrivilegeForSpecifier is part of the eval.DatabaseCatalog interface.
+func (so *DummySequenceOperators) HasAnyPrivilegeForSpecifier(
 	ctx context.Context,
 	specifier eval.HasPrivilegeSpecifier,
 	user username.SQLUsername,
@@ -220,6 +221,13 @@ func (ep *DummyEvalPlanner) UnsafeDeleteNamespaceEntry(
 	return errors.WithStack(errEvalPlanner)
 }
 
+// UpsertDroppedRelationGCTTL is part of the Planner interface.
+func (ep *DummyEvalPlanner) UpsertDroppedRelationGCTTL(
+	ctx context.Context, id int64, ttl duration.Duration,
+) error {
+	return errors.WithStack(errEvalPlanner)
+}
+
 // UserHasAdminRole is part of the Planner interface.
 func (ep *DummyEvalPlanner) UserHasAdminRole(
 	ctx context.Context, user username.SQLUsername,
@@ -355,8 +363,8 @@ func (ep *DummyEvalPlanner) SchemaExists(ctx context.Context, dbName, scName str
 	return false, errors.WithStack(errEvalPlanner)
 }
 
-// HasAnyPrivilege is part of the eval.DatabaseCatalog interface.
-func (ep *DummyEvalPlanner) HasAnyPrivilege(
+// HasAnyPrivilegeForSpecifier is part of the eval.DatabaseCatalog interface.
+func (ep *DummyEvalPlanner) HasAnyPrivilegeForSpecifier(
 	ctx context.Context,
 	specifier eval.HasPrivilegeSpecifier,
 	user username.SQLUsername,
@@ -454,6 +462,13 @@ func (ep *DummyEvalPlanner) IsANSIDML() bool {
 	return false
 }
 
+// GetRangeDescByID is part of the eval.Planner interface.
+func (ep *DummyEvalPlanner) GetRangeDescByID(
+	context.Context, roachpb.RangeID,
+) (rangeDesc roachpb.RangeDescriptor, err error) {
+	return
+}
+
 // DummyPrivilegedAccessor implements the tree.PrivilegedAccessor interface by returning errors.
 type DummyPrivilegedAccessor struct{}
 
@@ -540,7 +555,7 @@ func (c *DummyTenantOperator) LookupTenantID(
 
 // DropTenantByID is part of the tree.TenantOperator interface.
 func (c *DummyTenantOperator) DropTenantByID(
-	ctx context.Context, tenantID uint64, synchronous bool,
+	ctx context.Context, tenantID uint64, synchronous, ignoreServiceMode bool,
 ) error {
 	return errors.WithStack(errEvalTenant)
 }

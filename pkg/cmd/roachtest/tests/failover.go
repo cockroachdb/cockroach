@@ -397,7 +397,7 @@ func runFailoverLiveness(
 	m.Wait()
 
 	// Export roachperf metrics from Prometheus.
-	require.NoError(t, statsCollector.Exporter().Export(ctx, c, t, startTime, timeutil.Now(),
+	_, err = statsCollector.Exporter().Export(ctx, c, t, false /* dryRun */, startTime, timeutil.Now(),
 		[]clusterstats.AggQuery{
 			{
 				Stat: clusterstats.ClusterStat{
@@ -420,7 +420,8 @@ func runFailoverLiveness(
 			t.Status(fmt.Sprintf("Max invalid leases: %d", int64(max)))
 			return "Max invalid leases", max
 		},
-	))
+	)
+	require.NoError(t, err)
 }
 
 // runFailoverSystemNonLiveness benchmarks the maximum duration of range
@@ -633,6 +634,7 @@ func makeFailer(
 			c:             c,
 			startOpts:     opts,
 			startSettings: settings,
+			staller:       &dmsetupDiskStaller{t: t, c: c},
 		}
 	default:
 		t.Fatalf("unknown failure mode %s", failureMode)
@@ -734,27 +736,11 @@ type diskStallFailer struct {
 	m             cluster.Monitor
 	startOpts     option.StartOpts
 	startSettings install.ClusterSettings
-}
-
-func (f *diskStallFailer) device() string {
-	switch f.c.Spec().Cloud {
-	case spec.GCE:
-		return "/dev/nvme0n1"
-	case spec.AWS:
-		return "/dev/nvme1n1"
-	default:
-		f.t.Fatalf("unsupported cloud %q", f.c.Spec().Cloud)
-		return ""
-	}
+	staller       diskStaller
 }
 
 func (f *diskStallFailer) Setup(ctx context.Context) {
-	dev := f.device()
-	f.c.Run(ctx, f.c.All(), `sudo umount /mnt/data1`)
-	f.c.Run(ctx, f.c.All(), `sudo dmsetup remove_all`)
-	f.c.Run(ctx, f.c.All(), `echo "0 $(sudo blockdev --getsz `+dev+`) linear `+dev+` 0" | `+
-		`sudo dmsetup create data1`)
-	f.c.Run(ctx, f.c.All(), `sudo mount /dev/mapper/data1 /mnt/data1`)
+	f.staller.Setup(ctx)
 }
 
 func (f *diskStallFailer) Ready(ctx context.Context, m cluster.Monitor) {
@@ -762,23 +748,21 @@ func (f *diskStallFailer) Ready(ctx context.Context, m cluster.Monitor) {
 }
 
 func (f *diskStallFailer) Cleanup(ctx context.Context) {
-	f.c.Run(ctx, f.c.All(), `sudo dmsetup resume data1`)
-	// We have to stop the cluster to remount /mnt/data1.
+	f.staller.Unstall(ctx, f.c.All())
+	// We have to stop the cluster before cleaning up the staller.
 	f.m.ExpectDeaths(int32(f.c.Spec().NodeCount))
 	f.c.Stop(ctx, f.t.L(), option.DefaultStopOpts(), f.c.All())
-	f.c.Run(ctx, f.c.All(), `sudo umount /mnt/data1`)
-	f.c.Run(ctx, f.c.All(), `sudo dmsetup remove_all`)
-	f.c.Run(ctx, f.c.All(), `sudo mount /mnt/data1`)
+	f.staller.Cleanup(ctx)
 }
 
 func (f *diskStallFailer) Fail(ctx context.Context, nodeID int) {
 	// Pebble's disk stall detector should crash the node.
 	f.m.ExpectDeath()
-	f.c.Run(ctx, f.c.Node(nodeID), `sudo dmsetup suspend --noflush --nolockfs data1`)
+	f.staller.Stall(ctx, f.c.Node(nodeID))
 }
 
 func (f *diskStallFailer) Recover(ctx context.Context, nodeID int) {
-	f.c.Run(ctx, f.c.Node(nodeID), `sudo dmsetup resume data1`)
+	f.staller.Unstall(ctx, f.c.Node(nodeID))
 	// Pebble's disk stall detector should have terminated the node, but in case
 	// it didn't, we explicitly stop it first.
 	f.c.Stop(ctx, f.t.L(), option.DefaultStopOpts(), f.c.Node(nodeID))

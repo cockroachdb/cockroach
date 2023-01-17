@@ -17,7 +17,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
-	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -312,7 +311,7 @@ func (oc *optCatalog) ResolveDataSourceByID(
 	tableLookup, err := oc.planner.LookupTableByID(ctx, descpb.ID(dataSourceID))
 
 	if err != nil {
-		isAdding := catalog.HasAddingTableError(err)
+		isAdding := catalog.HasAddingDescriptorError(err)
 		if errors.Is(err, catalog.ErrDescriptorNotFound) || isAdding {
 			return nil, isAdding, sqlerrors.NewUndefinedRelationError(&tree.TableRef{TableID: int64(dataSourceID)})
 		}
@@ -467,7 +466,7 @@ func (oc *optCatalog) fullyQualifiedNameWithTxn(
 
 // RoleExists is part of the cat.Catalog interface.
 func (oc *optCatalog) RoleExists(ctx context.Context, role username.SQLUsername) (bool, error) {
-	return RoleExists(ctx, oc.planner.ExecCfg().InternalExecutor, oc.planner.Txn(), role)
+	return RoleExists(ctx, oc.planner.InternalSQLTxn(), role)
 }
 
 // dataSourceForDesc returns a data source wrapper for the given descriptor.
@@ -836,7 +835,7 @@ func newOptTable(
 	// This check is done for upgrade purposes. We need to avoid adding the
 	// system column if the table has a column with this name for some reason.
 	for _, sysCol := range ot.desc.SystemColumns() {
-		found, _ := desc.FindColumnWithName(sysCol.ColName())
+		found := catalog.FindColumnByTreeName(desc, sysCol.ColName())
 		if found == nil || found.IsSystemColumn() {
 			col, ord := newColumn()
 			cd := sysCol.ColumnDesc()
@@ -1773,9 +1772,24 @@ func (os *optTableStat) HistogramType() *types.T {
 	return os.stat.HistogramData.ColumnType
 }
 
+// IsPartial is part of the cat.TableStatistic interface.
+func (os *optTableStat) IsPartial() bool {
+	return os.stat.IsPartial()
+}
+
+// IsMerged is part of the cat.TableStatistic interface.
+func (os *optTableStat) IsMerged() bool {
+	return os.stat.IsMerged()
+}
+
 // IsForecast is part of the cat.TableStatistic interface.
 func (os *optTableStat) IsForecast() bool {
-	return os.stat.Name == jobspb.ForecastStatsName
+	return os.stat.IsForecast()
+}
+
+// IsAuto is part of the cat.TableStatistic interface.
+func (os *optTableStat) IsAuto() bool {
+	return os.stat.IsAuto()
 }
 
 // optFamily is a wrapper around descpb.ColumnFamilyDescriptor that keeps a

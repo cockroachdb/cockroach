@@ -862,7 +862,7 @@ func TestTenantStatementTimeoutAdmissionQueueCancelation(t *testing.T) {
 	wg.Add(numBlockers + 1)
 
 	matchBatch := func(ctx context.Context, req *roachpb.BatchRequest) bool {
-		tid, ok := roachpb.TenantFromContext(ctx)
+		tid, ok := roachpb.ClientTenantFromContext(ctx)
 		if ok && tid == tenantID && len(req.Requests) > 0 {
 			scan, ok := req.Requests[0].GetInner().(*roachpb.ScanRequest)
 			if ok && tableSpan.ContainsKey(scan.Key) {

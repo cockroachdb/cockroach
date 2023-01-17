@@ -15,31 +15,30 @@ import { Tabs } from "antd";
 import "antd/lib/col/style";
 import "antd/lib/row/style";
 import { Button } from "src/button";
-import { Loading } from "src/loading";
 import { getMatchParamByName } from "src/util/query";
-import { TxnContentionInsightDetailsRequest } from "src/api";
-import { TxnInsightDetails } from "../types";
+import { TxnInsightDetailsRequest, TxnInsightDetailsReqErrs } from "src/api";
+import { InsightNameEnum, TxnInsightDetails } from "../types";
 
 import { commonStyles } from "src/common";
-import { InsightsError } from "../insightsErrorComponent";
 import { TimeScale } from "../../timeScaleDropdown";
 import { idAttr } from "src/util";
 import { TransactionInsightDetailsOverviewTab } from "./transactionInsightDetailsOverviewTab";
 import { TransactionInsightsDetailsStmtsTab } from "./transactionInsightDetailsStmtsTab";
+import { timeScaleRangeToObj } from "src/timeScaleDropdown/utils";
 
 import "antd/lib/tabs/style";
-import { executionInsightsRequestFromTimeScale } from "../utils";
+
 export interface TransactionInsightDetailsStateProps {
   insightDetails: TxnInsightDetails;
-  insightError: Error | null;
+  insightError: TxnInsightDetailsReqErrs | null;
   timeScale?: TimeScale;
+  hasAdminRole: boolean;
 }
 
 export interface TransactionInsightDetailsDispatchProps {
-  refreshTransactionInsightDetails: (
-    req: TxnContentionInsightDetailsRequest,
-  ) => void;
+  refreshTransactionInsightDetails: (req: TxnInsightDetailsRequest) => void;
   setTimeScale: (ts: TimeScale) => void;
+  refreshUserSQLRoles: () => void;
 }
 
 export type TransactionInsightDetailsProps =
@@ -62,20 +61,55 @@ export const TransactionInsightDetails: React.FC<
   insightError,
   timeScale,
   match,
+  hasAdminRole,
+  refreshUserSQLRoles,
 }) => {
   const executionID = getMatchParamByName(match, idAttr);
-  const noInsights = !insightDetails;
+  const txnDetails = insightDetails.txnDetails;
+  const stmts = insightDetails.statements;
+  const contentionInfo = insightDetails.blockingContentionDetails;
+
   useEffect(() => {
-    const execReq = executionInsightsRequestFromTimeScale(timeScale);
-    if (noInsights) {
-      // Only refresh if we have no data (e.g. refresh the page)
-      refreshTransactionInsightDetails({
-        id: executionID,
-        start: execReq.start,
-        end: execReq.end,
-      });
+    refreshUserSQLRoles();
+  }, [refreshUserSQLRoles]);
+
+  useEffect(() => {
+    const stmtsComplete =
+      stmts != null && stmts.length === txnDetails?.stmtExecutionIDs?.length;
+
+    const contentionComplete =
+      contentionInfo != null ||
+      (txnDetails != null &&
+        txnDetails.insights.find(
+          i => i.name === InsightNameEnum.highContention,
+        ) == null);
+
+    if (!stmtsComplete || !contentionComplete || txnDetails == null) {
+      // Only fetch if we are missing some information.
+      const execReq = timeScaleRangeToObj(timeScale);
+      const req = {
+        mergeResultWith: {
+          txnDetails,
+          blockingContentionDetails: contentionInfo,
+          statements: stmts,
+          start: execReq.start,
+          end: execReq.end,
+        },
+        txnExecutionID: executionID,
+        excludeTxn: txnDetails != null,
+        excludeStmts: stmtsComplete,
+        excludeContention: contentionComplete,
+      };
+      refreshTransactionInsightDetails(req);
     }
-  }, [executionID, refreshTransactionInsightDetails, noInsights, timeScale]);
+  }, [
+    timeScale,
+    executionID,
+    refreshTransactionInsightDetails,
+    stmts,
+    txnDetails,
+    contentionInfo,
+  ]);
 
   const prevPage = (): void => history.goBack();
 
@@ -100,34 +134,32 @@ export const TransactionInsightDetails: React.FC<
         )}`}</h3>
       </div>
       <section>
-        <Loading
-          loading={!insightDetails || insightDetails === null}
-          page={"Transaction Insight details"}
-          error={insightError}
-          renderError={() => InsightsError()}
+        <Tabs
+          className={commonStyles("cockroach--tabs")}
+          defaultActiveKey={TabKeysEnum.OVERVIEW}
         >
-          <Tabs
-            className={commonStyles("cockroach--tabs")}
-            defaultActiveKey={TabKeysEnum.OVERVIEW}
-          >
-            <Tabs.TabPane tab="Overview" key={TabKeysEnum.OVERVIEW}>
-              <TransactionInsightDetailsOverviewTab
+          <Tabs.TabPane tab="Overview" key={TabKeysEnum.OVERVIEW}>
+            <TransactionInsightDetailsOverviewTab
+              errors={insightError}
+              statements={insightDetails.statements}
+              txnDetails={insightDetails.txnDetails}
+              contentionDetails={insightDetails.blockingContentionDetails}
+              setTimeScale={setTimeScale}
+              hasAdminRole={hasAdminRole}
+            />
+          </Tabs.TabPane>
+          {txnDetails?.stmtExecutionIDs?.length && (
+            <Tabs.TabPane
+              tab="Statement Executions"
+              key={TabKeysEnum.STATEMENTS}
+            >
+              <TransactionInsightsDetailsStmtsTab
+                error={insightError?.statementsErr}
                 insightDetails={insightDetails}
-                setTimeScale={setTimeScale}
               />
             </Tabs.TabPane>
-            {insightDetails?.statementInsights?.length && (
-              <Tabs.TabPane
-                tab="Statement Executions"
-                key={TabKeysEnum.STATEMENTS}
-              >
-                <TransactionInsightsDetailsStmtsTab
-                  insightDetails={insightDetails}
-                />
-              </Tabs.TabPane>
-            )}
-          </Tabs>
-        </Loading>
+          )}
+        </Tabs>
       </section>
     </div>
   );

@@ -294,6 +294,7 @@ func TestPebbleEncryption(t *testing.T) {
 		context.Background(),
 		storage.PebbleConfig{
 			StorageConfig: base.StorageConfig{
+				Settings:          cluster.MakeTestingClusterSettings(),
 				Attrs:             roachpb.Attributes{},
 				MaxSize:           512 << 20,
 				UseFileRegistry:   true,
@@ -380,6 +381,7 @@ func TestPebbleEncryption2(t *testing.T) {
 			context.Background(),
 			storage.PebbleConfig{
 				StorageConfig: base.StorageConfig{
+					Settings:          cluster.MakeTestingClusterSettings(),
 					Attrs:             roachpb.Attributes{},
 					MaxSize:           512 << 20,
 					UseFileRegistry:   true,

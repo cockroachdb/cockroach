@@ -15,7 +15,7 @@ go_library(
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/schemachanger/scop",
         "//pkg/sql/schemachanger/scpb",
-        "//pkg/sql/schemachanger/scplan/internal/rules",
+        "//pkg/sql/schemachanger/scplan/internal/rules/current",
         "//pkg/sql/schemachanger/scplan/internal/scgraph",
         "//pkg/sql/schemachanger/screl",
         "//pkg/util/iterutil",

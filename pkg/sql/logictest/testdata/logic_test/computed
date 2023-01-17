@@ -98,8 +98,8 @@ query TTBTTTB colnames
 SHOW COLUMNS FROM x
 ----
 column_name  data_type  is_nullable  column_default  generation_expression  indices   is_hidden
-a            INT8       true         3:::INT8        ·                      {x_pkey}  false
-b            INT8       true         7:::INT8        ·                      {x_pkey}  false
+a            INT8       true         3               ·                      {x_pkey}  false
+b            INT8       true         7               ·                      {x_pkey}  false
 c            INT8       true         NULL            a                      {x_pkey}  false
 d            INT8       true         NULL            a + b                  {x_pkey}  false
 rowid        INT8       false        unique_rowid()  ·                      {x_pkey}  true

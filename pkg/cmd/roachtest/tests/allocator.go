@@ -122,12 +122,13 @@ func registerAllocator(r registry.Registry) {
 				return err
 			}
 			endTime := timeutil.Now()
-			err = statCollector.Exporter().Export(
+			_, err = statCollector.Exporter().Export(
 				ctx,
 				c,
 				t,
+				false, /* dryRun */
 				startTime, endTime,
-				joinSummaryQueries(actionsSummary, requestBalanceSummary, resourceBalanceSummary, snapshotCostSummary),
+				joinSummaryQueries(actionsSummary, requestBalanceSummary, resourceBalanceSummary, rebalanceCostSummary),
 				// NB: We record the time taken to reach balance, from when
 				// up-replication began, until the last rebalance action taken.
 				// The up replication time, is the time taken to up-replicate

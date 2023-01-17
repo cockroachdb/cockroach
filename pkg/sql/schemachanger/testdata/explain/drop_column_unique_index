@@ -7,9 +7,53 @@ ALTER TABLE t.test ADD COLUMN x DECIMAL DEFAULT (DECIMAL '1.4') CHECK (x >= 0);
 /* test */
 EXPLAIN (ddl) ALTER TABLE t.test DROP pi;
 ----
-Schema change plan for ALTER TABLE ‹t›.‹public›.‹test› DROP COLUMN ‹pi›; 
+Schema change plan for ALTER TABLE ‹t›.‹public›.‹test› DROP COLUMN ‹pi›;
  ├── StatementPhase
  │    └── Stage 1 of 1 in StatementPhase
+ │         ├── 5 elements transitioning toward PUBLIC
+ │         │    ├── ABSENT → BACKFILL_ONLY    PrimaryIndex:{DescID: 106, IndexID: 6, ConstraintID: 7, TemporaryIndexID: 7, SourceIndexID: 4}
+ │         │    ├── ABSENT → PUBLIC           IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 6}
+ │         │    ├── ABSENT → PUBLIC           IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 6}
+ │         │    ├── ABSENT → PUBLIC           IndexColumn:{DescID: 106, ColumnID: 4, IndexID: 6}
+ │         │    └── ABSENT → PUBLIC           IndexData:{DescID: 106, IndexID: 6}
+ │         ├── 4 elements transitioning toward TRANSIENT_ABSENT
+ │         │    ├── ABSENT → DELETE_ONLY      TemporaryIndex:{DescID: 106, IndexID: 7, ConstraintID: 8, SourceIndexID: 4}
+ │         │    ├── ABSENT → TRANSIENT_ABSENT IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 7}
+ │         │    ├── ABSENT → TRANSIENT_ABSENT IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 7}
+ │         │    └── ABSENT → TRANSIENT_ABSENT IndexColumn:{DescID: 106, ColumnID: 4, IndexID: 7}
+ │         ├── 2 elements transitioning toward ABSENT
+ │         │    ├── PUBLIC → WRITE_ONLY       Column:{DescID: 106, ColumnID: 3}
+ │         │    └── PUBLIC → ABSENT           ColumnName:{DescID: 106, Name: pi, ColumnID: 3}
+ │         └── 10 Mutation operations
+ │              ├── MakePublicColumnWriteOnly {"ColumnID":3,"TableID":106}
+ │              ├── SetColumnName {"ColumnID":3,"Name":"crdb_internal_co...","TableID":106}
+ │              ├── MakeAbsentIndexBackfilling {"Index":{"ConstraintID":7,"IndexID":6,"IsCreatedExplicitly":true,"IsUnique":true,"SourceIndexID":4,"TableID":106,"TemporaryIndexID":7}}
+ │              ├── AddColumnToIndex {"ColumnID":1,"IndexID":6,"TableID":106}
+ │              ├── AddColumnToIndex {"ColumnID":2,"IndexID":6,"Kind":2,"TableID":106}
+ │              ├── AddColumnToIndex {"ColumnID":4,"IndexID":6,"Kind":2,"Ordinal":1,"TableID":106}
+ │              ├── MakeAbsentTempIndexDeleteOnly {"Index":{"ConstraintID":8,"IndexID":7,"IsCreatedExplicitly":true,"IsUnique":true,"SourceIndexID":4,"TableID":106}}
+ │              ├── AddColumnToIndex {"ColumnID":1,"IndexID":7,"TableID":106}
+ │              ├── AddColumnToIndex {"ColumnID":2,"IndexID":7,"Kind":2,"TableID":106}
+ │              └── AddColumnToIndex {"ColumnID":4,"IndexID":7,"Kind":2,"Ordinal":1,"TableID":106}
+ ├── PreCommitPhase
+ │    ├── Stage 1 of 2 in PreCommitPhase
+ │    │    ├── 5 elements transitioning toward PUBLIC
+ │    │    │    ├── BACKFILL_ONLY    → ABSENT PrimaryIndex:{DescID: 106, IndexID: 6, ConstraintID: 7, TemporaryIndexID: 7, SourceIndexID: 4}
+ │    │    │    ├── PUBLIC           → ABSENT IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 6}
+ │    │    │    ├── PUBLIC           → ABSENT IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 6}
+ │    │    │    ├── PUBLIC           → ABSENT IndexColumn:{DescID: 106, ColumnID: 4, IndexID: 6}
+ │    │    │    └── PUBLIC           → ABSENT IndexData:{DescID: 106, IndexID: 6}
+ │    │    ├── 4 elements transitioning toward TRANSIENT_ABSENT
+ │    │    │    ├── DELETE_ONLY      → ABSENT TemporaryIndex:{DescID: 106, IndexID: 7, ConstraintID: 8, SourceIndexID: 4}
+ │    │    │    ├── TRANSIENT_ABSENT → ABSENT IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 7}
+ │    │    │    ├── TRANSIENT_ABSENT → ABSENT IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 7}
+ │    │    │    └── TRANSIENT_ABSENT → ABSENT IndexColumn:{DescID: 106, ColumnID: 4, IndexID: 7}
+ │    │    ├── 2 elements transitioning toward ABSENT
+ │    │    │    ├── WRITE_ONLY       → PUBLIC Column:{DescID: 106, ColumnID: 3}
+ │    │    │    └── ABSENT           → PUBLIC ColumnName:{DescID: 106, Name: pi, ColumnID: 3}
+ │    │    └── 1 Mutation operation
+ │    │         └── UndoAllInTxnImmediateMutationOpSideEffects
+ │    └── Stage 2 of 2 in PreCommitPhase
  │         ├── 5 elements transitioning toward PUBLIC
  │         │    ├── ABSENT → BACKFILL_ONLY PrimaryIndex:{DescID: 106, IndexID: 6, ConstraintID: 7, TemporaryIndexID: 7, SourceIndexID: 4}
  │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 6}
@@ -24,21 +68,19 @@ Schema change plan for ALTER TABLE ‹t›.‹public›.‹test› DROP COLUMN �
  │         ├── 2 elements transitioning toward ABSENT
  │         │    ├── PUBLIC → WRITE_ONLY    Column:{DescID: 106, ColumnID: 3}
  │         │    └── PUBLIC → ABSENT        ColumnName:{DescID: 106, Name: pi, ColumnID: 3}
- │         └── 11 Mutation operations
+ │         └── 14 Mutation operations
  │              ├── MakePublicColumnWriteOnly {"ColumnID":3,"TableID":106}
- │              ├── LogEvent {"TargetStatus":1}
  │              ├── SetColumnName {"ColumnID":3,"Name":"crdb_internal_co...","TableID":106}
  │              ├── MakeAbsentIndexBackfilling {"Index":{"ConstraintID":7,"IndexID":6,"IsCreatedExplicitly":true,"IsUnique":true,"SourceIndexID":4,"TableID":106,"TemporaryIndexID":7}}
+ │              ├── MaybeAddSplitForIndex {"IndexID":6,"TableID":106}
  │              ├── AddColumnToIndex {"ColumnID":1,"IndexID":6,"TableID":106}
  │              ├── AddColumnToIndex {"ColumnID":2,"IndexID":6,"Kind":2,"TableID":106}
  │              ├── AddColumnToIndex {"ColumnID":4,"IndexID":6,"Kind":2,"Ordinal":1,"TableID":106}
  │              ├── MakeAbsentTempIndexDeleteOnly {"Index":{"ConstraintID":8,"IndexID":7,"IsCreatedExplicitly":true,"IsUnique":true,"SourceIndexID":4,"TableID":106}}
+ │              ├── MaybeAddSplitForIndex {"IndexID":7,"TableID":106}
  │              ├── AddColumnToIndex {"ColumnID":1,"IndexID":7,"TableID":106}
  │              ├── AddColumnToIndex {"ColumnID":2,"IndexID":7,"Kind":2,"TableID":106}
- │              └── AddColumnToIndex {"ColumnID":4,"IndexID":7,"Kind":2,"Ordinal":1,"TableID":106}
- ├── PreCommitPhase
- │    └── Stage 1 of 1 in PreCommitPhase
- │         └── 2 Mutation operations
+ │              ├── AddColumnToIndex {"ColumnID":4,"IndexID":7,"Kind":2,"Ordinal":1,"TableID":106}
  │              ├── SetJobStateOnDescriptor {"DescriptorID":106,"Initialize":true}
  │              └── CreateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
  ├── PostCommitPhase

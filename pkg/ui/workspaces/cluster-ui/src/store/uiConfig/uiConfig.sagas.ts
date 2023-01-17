@@ -8,22 +8,48 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { all, call, put, takeLatest } from "redux-saga/effects";
-import { actions, UserSQLRolesRequest } from "./uiConfig.reducer";
-import { PayloadAction } from "@reduxjs/toolkit";
+import { all, call, delay, put, takeLatest } from "redux-saga/effects";
+import { actions } from "./uiConfig.reducer";
 import { getUserSQLRoles } from "../../api/userApi";
+import { CACHE_INVALIDATION_PERIOD, throttleWithReset } from "../utils";
+import { rootActions } from "../reducers";
+import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 
-export function* refreshUserSQLRoles(
-  action: PayloadAction<UserSQLRolesRequest>,
-): any {
+export function* refreshUserSQLRolesSaga(): any {
+  yield put(actions.requestUserSQLRoles());
+}
+
+export function* requestUserSQLRolesSaga(): any {
   try {
-    const result = yield call(getUserSQLRoles, action?.payload);
-    yield put(actions.refreshUserSQLRoles(result));
+    const result: cockroach.server.serverpb.UserSQLRolesResponse = yield call(
+      getUserSQLRoles,
+    );
+    yield put(actions.receivedUserSQLRoles(result.roles));
   } catch (e) {
     console.warn(e.message);
   }
 }
 
-export function* uiConfigSaga() {
-  yield all([takeLatest(actions.refreshUserSQLRoles, refreshUserSQLRoles)]);
+export function* receivedUserSQLRolesSaga(delayMs: number): any {
+  yield delay(delayMs);
+  yield put(actions.invalidatedUserSQLRoles());
+}
+
+export function* uiConfigSaga(
+  cacheInvalidationPeriod: number = CACHE_INVALIDATION_PERIOD,
+): any {
+  yield all([
+    throttleWithReset(
+      cacheInvalidationPeriod,
+      actions.refreshUserSQLRoles,
+      [actions.invalidatedUserSQLRoles, rootActions.resetState],
+      refreshUserSQLRolesSaga,
+    ),
+    takeLatest(actions.requestUserSQLRoles, requestUserSQLRolesSaga),
+    takeLatest(
+      actions.receivedUserSQLRoles,
+      receivedUserSQLRolesSaga,
+      cacheInvalidationPeriod,
+    ),
+  ]);
 }

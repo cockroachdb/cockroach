@@ -29,7 +29,6 @@ go_test(
         "//pkg/config/zonepb",
         "//pkg/gossip",
         "//pkg/roachpb",
-        "//pkg/rpc",
         "//pkg/testutils",
         "//pkg/util",
         "//pkg/util/hlc",

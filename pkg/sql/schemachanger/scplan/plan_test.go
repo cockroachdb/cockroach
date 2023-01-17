@@ -124,6 +124,11 @@ func TestPlanDataDriven(t *testing.T) {
 func validatePlan(t *testing.T, plan *scplan.Plan) {
 	stages := plan.Stages
 	for i, stage := range stages {
+		if stage.IsResetPreCommitStage() {
+			// Skip the reset stage. Otherwise, the re-planned plan will also have
+			// a reset stage and the assertions won't be verified.
+			continue
+		}
 		expected := make([]scstage.Stage, len(stages[i:]))
 		for j, s := range stages[i:] {
 			if s.Phase == stage.Phase {
@@ -134,10 +139,7 @@ func validatePlan(t *testing.T, plan *scplan.Plan) {
 			expected[j] = s
 		}
 		e := marshalOps(t, plan.TargetState, expected)
-		cs := scpb.CurrentState{
-			TargetState: plan.TargetState,
-			Current:     stage.Before,
-		}
+		cs := plan.CurrentState.WithCurrentStatuses(stage.Before)
 		truncatedPlan := sctestutils.MakePlan(t, cs, stage.Phase)
 		sctestutils.TruncateJobOps(&truncatedPlan)
 		a := marshalOps(t, plan.TargetState, truncatedPlan.Stages)

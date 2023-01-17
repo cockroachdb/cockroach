@@ -389,7 +389,7 @@ func ingestKvs(
 	// will hog memory as it tries to grow more aggressively.
 	minBufferSize, maxBufferSize := importBufferConfigSizes(flowCtx.Cfg.Settings,
 		true /* isPKAdder */)
-	pkIndexAdder, err := flowCtx.Cfg.BulkAdder(ctx, flowCtx.Cfg.DB, writeTS, kvserverbase.BulkAdderOptions{
+	pkIndexAdder, err := flowCtx.Cfg.BulkAdder(ctx, flowCtx.Cfg.DB.KV(), writeTS, kvserverbase.BulkAdderOptions{
 		Name:                     pkAdderName,
 		DisallowShadowingBelow:   writeTS,
 		SkipDuplicates:           true,
@@ -405,7 +405,7 @@ func ingestKvs(
 
 	minBufferSize, maxBufferSize = importBufferConfigSizes(flowCtx.Cfg.Settings,
 		false /* isPKAdder */)
-	indexAdder, err := flowCtx.Cfg.BulkAdder(ctx, flowCtx.Cfg.DB, writeTS, kvserverbase.BulkAdderOptions{
+	indexAdder, err := flowCtx.Cfg.BulkAdder(ctx, flowCtx.Cfg.DB.KV(), writeTS, kvserverbase.BulkAdderOptions{
 		Name:                     indexAdderName,
 		DisallowShadowingBelow:   writeTS,
 		SkipDuplicates:           true,

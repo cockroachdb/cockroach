@@ -787,6 +787,18 @@ var charts = []sectionDescription{
 				Title:   "Time Spent",
 				Metrics: []string{"queue.split.processingnanos"},
 			},
+			{
+				Title:   "Sized Based Splits",
+				Metrics: []string{"queue.split.size_based"},
+			},
+			{
+				Title:   "Load Based Splits",
+				Metrics: []string{"queue.split.load_based"},
+			},
+			{
+				Title:   "Span Configuration Based Splits",
+				Metrics: []string{"queue.split.span_config_based"},
+			},
 		},
 	},
 	{
@@ -1568,64 +1580,74 @@ var charts = []sectionDescription{
 		Charts: []chartDescription{
 			{
 				Title:   "Currently Running",
-				Metrics: []string{"streaming.running"},
+				Metrics: []string{"replication.running"},
 			},
 			{
 				Title: "Event admission latency",
 				Metrics: []string{
-					"streaming.admit_latency",
+					"replication.admit_latency",
 				},
 			},
 			{
 				Title: "Commits Latency",
 				Metrics: []string{
-					"streaming.commit_latency",
+					"replication.commit_latency",
 				},
 			},
 			{
 				Title: "Time spent",
 				Metrics: []string{
-					"streaming.flush_hist_nanos",
+					"replication.flush_hist_nanos",
 				},
 			},
 			{
 				Title: "Ingested Events",
 				Metrics: []string{
-					"streaming.events_ingested",
-					"streaming.resolved_events_ingested",
+					"replication.events_ingested",
+					"replication.resolved_events_ingested",
 				},
 			},
 			{
 				Title: "Flushes",
 				Metrics: []string{
-					"streaming.flushes",
+					"replication.flushes",
 				},
 			},
 			{
 				Title: "Ingested Bytes",
 				Metrics: []string{
-					"streaming.ingested_bytes",
+					"replication.ingested_bytes",
+				},
+			},
+			{
+				Title: "SST Bytes",
+				Metrics: []string{
+					"replication.sst_bytes",
 				},
 			},
 			{
 				Title:   "Earliest Data Processor Checkpoint Span",
-				Metrics: []string{"streaming.earliest_data_checkpoint_span"},
+				Metrics: []string{"replication.earliest_data_checkpoint_span"},
 			},
 			{
 				Title:   "Latest Data Processor Checkpoint Span",
-				Metrics: []string{"streaming.latest_data_checkpoint_span"},
+				Metrics: []string{"replication.latest_data_checkpoint_span"},
 			},
 			{
 				Title:   "Data Checkpoint Span Count",
-				Metrics: []string{"streaming.data_checkpoint_span_count"},
+				Metrics: []string{"replication.data_checkpoint_span_count"},
 			},
 			{
 				Title:   "Frontier Checkpoint Span Count",
-				Metrics: []string{"streaming.frontier_checkpoint_span_count"},
+				Metrics: []string{"replication.frontier_checkpoint_span_count"},
+			},
+			{
+				Title:   "Frontier Lag",
+				Metrics: []string{"replication.frontier_lag_seconds"},
 			},
 			{
 				Title:   "Job Progress Updates",
-				Metrics: []string{"streaming.job_progress_updates"},
+				Metrics: []string{"replication.job_progress_updates"},
 			},
 		},
 	},
@@ -3364,6 +3386,7 @@ var charts = []sectionDescription{
 					"jobs.auto_span_config_reconciliation.currently_running",
 					"jobs.auto_sql_stats_compaction.currently_running",
 					"jobs.stream_replication.currently_running",
+					"jobs.key_visualizer.currently_running",
 				},
 			},
 			{
@@ -3384,6 +3407,7 @@ var charts = []sectionDescription{
 					"jobs.stream_ingestion.currently_idle",
 					"jobs.stream_replication.currently_idle",
 					"jobs.typedesc_schema_change.currently_idle",
+					"jobs.key_visualizer.currently_idle",
 				},
 			},
 			{
@@ -3560,6 +3584,17 @@ var charts = []sectionDescription{
 					"jobs.auto_sql_stats_compaction.resume_retry_error",
 				},
 			},
+			{
+				Title: "Key Visualizer",
+				Metrics: []string{
+					"jobs.key_visualizer.fail_or_cancel_completed",
+					"jobs.key_visualizer.fail_or_cancel_failed",
+					"jobs.key_visualizer.fail_or_cancel_retry_error",
+					"jobs.key_visualizer.resume_completed",
+					"jobs.key_visualizer.resume_failed",
+					"jobs.key_visualizer.resume_retry_error",
+				},
+			},
 		},
 	},
 	{
@@ -3726,10 +3761,23 @@ var charts = []sectionDescription{
 				Metrics: []string{
 					"admission.granter.total_slots.kv",
 					"admission.granter.used_slots.kv",
-					"admission.granter.total_moderate_slots.kv",
-					"admission.granter.used_soft_slots.kv",
 					"admission.granter.used_slots.sql-leaf-start",
 					"admission.granter.used_slots.sql-root-start",
+				},
+			},
+			{
+				Title: "Granter Slot Counters",
+				Metrics: []string{
+					"admission.granter.slot_adjuster_increments.kv",
+					"admission.granter.slot_adjuster_decrements.kv",
+				},
+			},
+			{
+				Title: "Granter Slot Durations",
+				Metrics: []string{
+					"admission.granter.slots_exhausted_duration.kv",
+					"admission.granter.cpu_load_short_period_duration.kv",
+					"admission.granter.cpu_load_long_period_duration.kv",
 				},
 			},
 			{

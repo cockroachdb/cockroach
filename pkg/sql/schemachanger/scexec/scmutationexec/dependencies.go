@@ -20,16 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
-	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
-	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 )
-
-// NameResolver is used to retrieve fully qualified names from the catalog.
-type NameResolver interface {
-
-	// GetFullyQualifiedName gets the fully qualified name from a descriptor ID.
-	GetFullyQualifiedName(ctx context.Context, id descpb.ID) (string, error)
-}
 
 // Clock is used to provide a timestamp to track loosely when something
 // happened. It can be used for things like observability and telemetry and
@@ -40,44 +32,56 @@ type Clock interface {
 	ApproximateTime() time.Time
 }
 
-// SyntheticDescriptorStateUpdater is used to update the synthetic descriptor
-// state. This state is not visible to the operations in the declarative schema
-// changer execution layer. Its only purpose is to ensure that subsequent
-// queries in the same transaction as a schema change statement behave as if the
-// schema change had already completed.
-type SyntheticDescriptorStateUpdater interface {
+// NameResolver is used to retrieve fully qualified names from the catalog.
+type NameResolver interface {
 
-	// AddSyntheticDescriptor sets a synthetic descriptor to shadow any existing
-	// descriptor with the same name or the same ID for the remainder of the
-	// current transaction.
-	AddSyntheticDescriptor(desc catalog.Descriptor)
+	// GetFullyQualifiedName gets the fully qualified name from a descriptor ID.
+	GetFullyQualifiedName(ctx context.Context, id descpb.ID) (string, error)
 }
 
-// MutationVisitorStateUpdater is the interface for updating the visitor state.
-type MutationVisitorStateUpdater interface {
+// DescriptorReader is used to retrieve descriptors from the catalog.
+type DescriptorReader interface {
 
-	// GetDescriptor returns a checked-out descriptor, or reads a descriptor from
-	// the catalog by ID if it hasn't been checked out yet.
-	GetDescriptor(ctx context.Context, id descpb.ID) (catalog.Descriptor, error)
+	// MustReadImmutableDescriptors reads descriptors from the catalog by ID.
+	MustReadImmutableDescriptors(ctx context.Context, ids ...descpb.ID) ([]catalog.Descriptor, error)
 
-	// CheckOutDescriptor reads a descriptor from the catalog by ID and marks it
-	// as undergoing a change.
-	CheckOutDescriptor(ctx context.Context, id descpb.ID) (catalog.MutableDescriptor, error)
+	// MustReadMutableDescriptor the mutable equivalent to
+	// MustReadImmutableDescriptors.
+	MustReadMutableDescriptor(ctx context.Context, id descpb.ID) (catalog.MutableDescriptor, error)
+}
 
-	// AddDrainedName marks a namespace entry as being drained.
-	AddDrainedName(id descpb.ID, nameInfo descpb.NameInfo)
+// ImmediateMutationStateUpdater contains the methods used to update the
+// set of changes to bring about from executing immediate mutations.
+type ImmediateMutationStateUpdater interface {
+
+	// AddToCheckedOutDescriptors adds a mutable descriptor to the set of
+	// checked-out descriptors.
+	AddToCheckedOutDescriptors(mut catalog.MutableDescriptor)
+
+	// MaybeGetCheckedOutDescriptor looks up a checked-out descriptor by ID.
+	MaybeGetCheckedOutDescriptor(id descpb.ID) catalog.MutableDescriptor
+
+	// DeleteName marks a namespace entry as being drained.
+	DeleteName(id descpb.ID, nameInfo descpb.NameInfo)
+
+	// CreateDescriptor adds a descriptor for creation.
+	CreateDescriptor(desc catalog.MutableDescriptor)
 
 	// DeleteDescriptor adds a descriptor for deletion.
 	DeleteDescriptor(id descpb.ID)
 
-	// DeleteAllTableComments removes all comments for the table with the given id.
-	DeleteAllTableComments(id descpb.ID)
-
-	// DeleteComment removes comments for a descriptor
+	// DeleteComment removes comments for a descriptor.
 	DeleteComment(id descpb.ID, subID int, commentType catalogkeys.CommentType)
 
-	// AddComment adds comments for a descriptor
+	// AddComment adds comments for a descriptor.
 	AddComment(id descpb.ID, subID int, commentType catalogkeys.CommentType, comment string)
+
+	// Reset schedules a reset of the in-txn catalog state
+	// to undo the modifications from earlier stages.
+	Reset()
+}
+
+type DeferredMutationStateUpdater interface {
 
 	// DeleteDatabaseRoleSettings removes a database role setting
 	DeleteDatabaseRoleSettings(ctx context.Context, dbID descpb.ID) error
@@ -110,17 +114,15 @@ type MutationVisitorStateUpdater interface {
 		descriptorIDsToRemove catalog.DescriptorIDSet,
 	) error
 
-	// EnqueueEvent will enqueue an event to be written to the event log.
-	EnqueueEvent(
-		id descpb.ID,
-		metadata scpb.TargetMetadata,
-		details eventpb.CommonSQLEventDetails,
-		event logpb.EventPayload,
-	) error
-
 	// DeleteSchedule deletes a scheduled job.
 	DeleteSchedule(scheduleID int64)
 
 	// RefreshStats refresh stats for a given descriptor.
 	RefreshStats(id descpb.ID)
+
+	// AddIndexForMaybeSplitAndScatter splits and scatters rows for a given index,
+	// if it's either hash sharded or under the system tenant.
+	AddIndexForMaybeSplitAndScatter(
+		tableID catid.DescID, indexID catid.IndexID,
+	)
 }

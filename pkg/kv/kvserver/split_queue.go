@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -45,6 +46,42 @@ const (
 	splitQueueConcurrency = 4
 )
 
+var (
+	metaSizeBasedSplitCount = metric.Metadata{
+		Name:        "queue.split.size_based",
+		Help:        "Number of range splits due to a range being greater than the configured max range size",
+		Measurement: "Range Splits",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaLoadBasedSplitCount = metric.Metadata{
+		Name:        "queue.split.load_based",
+		Help:        "Number of range splits due to a range being greater than the configured max range load",
+		Measurement: "Range Splits",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaSpanConfigBasedSplitCount = metric.Metadata{
+		Name:        "queue.split.span_config_based",
+		Help:        "Number of range splits due to span configuration",
+		Measurement: "Range Splits",
+		Unit:        metric.Unit_COUNT,
+	}
+)
+
+// SplitQueueMetrics is the set of metrics for the split queue.
+type SplitQueueMetrics struct {
+	SizeBasedSplitCount       *metric.Counter
+	LoadBasedSplitCount       *metric.Counter
+	SpanConfigBasedSplitCount *metric.Counter
+}
+
+func makeSplitQueueMetrics() SplitQueueMetrics {
+	return SplitQueueMetrics{
+		SizeBasedSplitCount:       metric.NewCounter(metaSizeBasedSplitCount),
+		LoadBasedSplitCount:       metric.NewCounter(metaLoadBasedSplitCount),
+		SpanConfigBasedSplitCount: metric.NewCounter(metaSpanConfigBasedSplitCount),
+	}
+}
+
 // splitQueue manages a queue of ranges slated to be split due to size
 // or along intersecting zone config boundaries.
 type splitQueue struct {
@@ -54,6 +91,7 @@ type splitQueue struct {
 
 	// loadBasedCount counts the load-based splits performed by the queue.
 	loadBasedCount telemetry.Counter
+	metrics        SplitQueueMetrics
 }
 
 var _ queueImpl = &splitQueue{}
@@ -72,7 +110,9 @@ func newSplitQueue(store *Store, db *kv.DB) *splitQueue {
 		db:             db,
 		purgChan:       purgChan,
 		loadBasedCount: telemetry.GetCounter("kv.split.load"),
+		metrics:        makeSplitQueueMetrics(),
 	}
+	store.metrics.registry.AddMetricStruct(&sq.metrics)
 	sq.baseQueue = newBaseQueue(
 		"split", sq, store,
 		queueConfig{
@@ -198,6 +238,7 @@ func (sq *splitQueue) processAttempt(
 		); err != nil {
 			return false, errors.Wrapf(err, "unable to split %s at key %q", r, splitKey)
 		}
+		sq.metrics.SpanConfigBasedSplitCount.Inc(1)
 		return true, nil
 	}
 
@@ -207,15 +248,17 @@ func (sq *splitQueue) processAttempt(
 	size := r.GetMVCCStats().Total()
 	maxBytes := r.GetMaxBytes()
 	if maxBytes > 0 && size > maxBytes {
-		_, err := r.adminSplitWithDescriptor(
+		if _, err := r.adminSplitWithDescriptor(
 			ctx,
 			roachpb.AdminSplitRequest{},
 			desc,
 			false, /* delayable */
 			fmt.Sprintf("%s above threshold size %s", humanizeutil.IBytes(size), humanizeutil.IBytes(maxBytes)),
-		)
-
-		return err == nil, err
+		); err != nil {
+			return false, err
+		}
+		sq.metrics.SizeBasedSplitCount.Inc(1)
+		return true, nil
 	}
 
 	now := timeutil.Now()
@@ -260,6 +303,7 @@ func (sq *splitQueue) processAttempt(
 		}
 
 		telemetry.Inc(sq.loadBasedCount)
+		sq.metrics.LoadBasedSplitCount.Inc(1)
 
 		// Reset the splitter now that the bounds of the range changed.
 		r.loadBasedSplitter.Reset(sq.store.Clock().PhysicalTime())

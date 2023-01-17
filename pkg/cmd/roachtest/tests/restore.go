@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
 )
 
@@ -664,6 +665,9 @@ func registerRestore(r registry.Registry) {
 		},
 	})
 
+	durationGauge := r.PromFactory().NewGaugeVec(prometheus.GaugeOpts{Namespace: registry.
+		PrometheusNameSpace, Subsystem: "restore", Name: "duration"}, []string{"test_name"})
+
 	for _, sp := range []restoreSpecs{
 		{
 			hardware: makeHardwareSpecs(hardwareSpecs{}),
@@ -685,12 +689,20 @@ func registerRestore(r registry.Registry) {
 				workload: tpceRestore{customers: 500000}}),
 			timeout: 5 * time.Hour,
 		},
+		{
+			hardware: makeHardwareSpecs(hardwareSpecs{nodes: 15, cpus: 16, volumeSize: 5000}),
+			backup: makeBackupSpecs(backupSpecs{
+				version:  "v22.2.1",
+				aost:     "'2023-01-12 03:00:00'",
+				workload: tpceRestore{customers: 2000000}}),
+			timeout: 24 * time.Hour,
+			tags:    []string{"weekly"},
+		},
 		// TODO(msbutler): add the following tests once roachperf/grafana is hooked up and old tests are
 		// removed:
 		// - restore/tpce/400GB/nodes=10
 		// - restore/tpce/400GB/nodes=30
 		// - restore/tpce/400GB/cpu=16
-		// - restore/tpce/45TB/nodes=15/cpu=16/
 		// - restore/tpce/400GB/encryption
 	} {
 		sp := sp
@@ -707,6 +719,7 @@ func registerRestore(r registry.Registry) {
 			// These tests measure performance. To ensure consistent perf,
 			// disable metamorphic encryption.
 			EncryptionSupport: registry.EncryptionAlwaysDisabled,
+			Tags:              sp.tags,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 				t.L().Printf("Full test specs: %s", sp.computeName(true))
@@ -729,9 +742,12 @@ func registerRestore(r registry.Registry) {
 					defer dul.Done()
 					defer hc.Done()
 					t.Status(`running restore`)
+					startTime := timeutil.Now()
 					if err := sp.run(ctx, c); err != nil {
 						return err
 					}
+					promLabel := registry.PromSub(strings.Replace(sp.computeName(false), "restore/", "", 1)) + "_seconds"
+					durationGauge.WithLabelValues(promLabel).Set(timeutil.Since(startTime).Seconds())
 					return nil
 				})
 				m.Wait()
@@ -881,6 +897,8 @@ func (tpce tpceRestore) String() string {
 		builder.WriteString("400GB")
 	case 500000:
 		builder.WriteString("8TB")
+	case 2000000:
+		builder.WriteString("32TB")
 	default:
 		panic("tpce customer count not recognized")
 	}
@@ -891,6 +909,7 @@ type restoreSpecs struct {
 	hardware hardwareSpecs
 	backup   backupSpecs
 	timeout  time.Duration
+	tags     []string
 }
 
 func (sp restoreSpecs) computeName(full bool) string {

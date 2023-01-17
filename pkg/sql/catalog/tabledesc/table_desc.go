@@ -15,14 +15,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
@@ -365,55 +361,6 @@ func (desc *wrapper) DeleteOnlyNonPrimaryIndexes() []catalog.Index {
 	return desc.getExistingOrNewIndexCache().deleteOnlyNonPrimary
 }
 
-// FindIndexWithID returns the first catalog.Index that matches the id
-// in the set of all indexes, or an error if none was found. The order of
-// traversal is the canonical order, see catalog.Index.Ordinal().
-func (desc *wrapper) FindIndexWithID(id descpb.IndexID) (catalog.Index, error) {
-	if idx := catalog.FindIndex(desc, catalog.IndexOpts{
-		NonPhysicalPrimaryIndex: true,
-		DropMutations:           true,
-		AddMutations:            true,
-	}, func(idx catalog.Index) bool {
-		return idx.GetID() == id
-	}); idx != nil {
-		return idx, nil
-	}
-	return nil, errors.Errorf("index-id \"%d\" does not exist", id)
-}
-
-// FindIndexWithName returns the first catalog.Index that matches the name in
-// the set of all indexes, excluding the primary index of non-physical
-// tables, or an error if none was found. The order of traversal is the
-// canonical order, see catalog.Index.Ordinal().
-func (desc *wrapper) FindIndexWithName(name string) (catalog.Index, error) {
-	if idx := catalog.FindIndex(desc, catalog.IndexOpts{
-		NonPhysicalPrimaryIndex: false,
-		DropMutations:           true,
-		AddMutations:            true,
-	}, func(idx catalog.Index) bool {
-		return idx.GetName() == name
-	}); idx != nil {
-		return idx, nil
-	}
-	return nil, errors.Errorf("index %q does not exist", name)
-}
-
-// FindNonDropIndexWithName returns the first catalog.Index that matches the name in
-// the set of all non-drop indexes, excluding the primary index of non-physical
-// tables, or an error if none was found. The order of traversal is the
-// canonical order, see catalog.Index.Ordinal().
-func (desc *wrapper) FindNonDropIndexWithName(name string) (catalog.Index, error) {
-	if idx := catalog.FindIndex(
-		desc,
-		catalog.IndexOpts{AddMutations: true},
-		func(idx catalog.Index) bool {
-			return idx.GetName() == name
-		}); idx != nil {
-		return idx, nil
-	}
-	return nil, errors.Errorf("index %q does not exist", name)
-}
-
 // getExistingOrNewColumnCache should be the only place where the columnCache
 // field in wrapper is ever read.
 func (desc *wrapper) getExistingOrNewColumnCache() *columnCache {
@@ -554,7 +501,7 @@ func (desc *wrapper) CheckConstraintColumns(ck catalog.CheckConstraint) []catalo
 	}
 	ret := make([]catalog.Column, n)
 	for i := 0; i < n; i++ {
-		ret[i], _ = desc.FindColumnWithID(ck.GetReferencedColumnID(i))
+		ret[i] = catalog.FindColumnByID(desc, ck.GetReferencedColumnID(i))
 	}
 	return ret
 }
@@ -567,7 +514,7 @@ func (desc *wrapper) ForeignKeyReferencedColumns(fk catalog.ForeignKeyConstraint
 	}
 	ret := make([]catalog.Column, n)
 	for i := 0; i < n; i++ {
-		ret[i], _ = desc.FindColumnWithID(fk.GetReferencedColumnID(i))
+		ret[i] = catalog.FindColumnByID(desc, fk.GetReferencedColumnID(i))
 	}
 	return ret
 }
@@ -580,7 +527,7 @@ func (desc *wrapper) ForeignKeyOriginColumns(fk catalog.ForeignKeyConstraint) []
 	}
 	ret := make([]catalog.Column, n)
 	for i := 0; i < n; i++ {
-		ret[i], _ = desc.FindColumnWithID(fk.GetOriginColumnID(i))
+		ret[i] = catalog.FindColumnByID(desc, fk.GetOriginColumnID(i))
 	}
 	return ret
 }
@@ -595,7 +542,7 @@ func (desc *wrapper) UniqueWithoutIndexColumns(
 	}
 	ret := make([]catalog.Column, n)
 	for i := 0; i < n; i++ {
-		ret[i], _ = desc.FindColumnWithID(uwoi.GetKeyColumnID(i))
+		ret[i] = catalog.FindColumnByID(desc, uwoi.GetKeyColumnID(i))
 	}
 	return ret
 }
@@ -623,40 +570,6 @@ func (desc *wrapper) getExistingOrNewIndexColumnCache(idx catalog.Index) *indexC
 	return &c.index[idx.Ordinal()]
 }
 
-// FindColumnWithID implements the TableDescriptor interface.
-func (desc *wrapper) FindColumnWithID(id descpb.ColumnID) (catalog.Column, error) {
-	for _, col := range desc.AllColumns() {
-		if col.GetID() == id {
-			return col, nil
-		}
-	}
-
-	return nil, pgerror.Newf(pgcode.UndefinedColumn, "column-id \"%d\" does not exist", id)
-}
-
-// FindColumnWithPGAttributeNum implements the TableDescriptor interface.
-func (desc *wrapper) FindColumnWithPGAttributeNum(
-	id descpb.PGAttributeNum,
-) (catalog.Column, error) {
-	for _, col := range desc.AllColumns() {
-		if col.GetPGAttributeNum() == id {
-			return col, nil
-		}
-	}
-
-	return nil, pgerror.Newf(pgcode.UndefinedColumn, "column with logical order %q does not exist", id)
-}
-
-// FindColumnWithName implements the TableDescriptor interface.
-func (desc *wrapper) FindColumnWithName(name tree.Name) (catalog.Column, error) {
-	for _, col := range desc.AllColumns() {
-		if col.ColName() == name {
-			return col, nil
-		}
-	}
-	return nil, colinfo.NewUndefinedColumnError(string(name))
-}
-
 // getExistingOrNewMutationCache should be the only place where the
 // mutationCache field in wrapper is ever read.
 func (desc *wrapper) getExistingOrNewMutationCache() *mutationCache {
@@ -669,27 +582,6 @@ func (desc *wrapper) getExistingOrNewMutationCache() *mutationCache {
 // AllMutations implements the TableDescriptor interface.
 func (desc *wrapper) AllMutations() []catalog.Mutation {
 	return desc.getExistingOrNewMutationCache().all
-}
-
-func (desc *wrapper) GetIndexNameByID(indexID descpb.IndexID) (string, error) {
-	// Check if there are any ongoing schema changes and prefer the name from
-	// them.
-	if scState := desc.GetDeclarativeSchemaChangerState(); scState != nil {
-		for _, target := range scState.Targets {
-			if target.IndexName != nil &&
-				target.TargetStatus == scpb.Status_PUBLIC &&
-				target.IndexName.TableID == desc.GetID() &&
-				target.IndexName.IndexID == indexID {
-				return target.IndexName.Name, nil
-			}
-		}
-	}
-	// Otherwise, try fetching the name from the index descriptor.
-	index, err := desc.FindIndexWithID(indexID)
-	if err != nil {
-		return "", err
-	}
-	return index.GetName(), err
 }
 
 // IsRefreshViewRequired implements the TableDescriptor interface.

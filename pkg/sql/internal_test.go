@@ -620,8 +620,8 @@ func TestInternalExecutorWithUndefinedQoSOverridePanics(t *testing.T) {
 }
 
 // TODO(andrei): Test that descriptor leases are released by the
-// InternalExecutor, with and without a higher-level txn. When there is no
+// Executor, with and without a higher-level txn. When there is no
 // higher-level txn, the leases are released normally by the txn finishing. When
 // there is, they are released by the resetExtraTxnState() call in the
-// InternalExecutor. Unfortunately at the moment we don't have a great way to
+// Executor. Unfortunately at the moment we don't have a great way to
 // test lease releases.

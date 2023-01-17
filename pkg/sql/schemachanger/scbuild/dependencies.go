@@ -29,6 +29,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/redact"
 )
@@ -77,7 +79,17 @@ type Dependencies interface {
 	// ZoneConfigGetter returns a zone config reader.
 	ZoneConfigGetter() ZoneConfigGetter
 
+	// ClientNoticeSender returns a eval.ClientNoticeSender.
 	ClientNoticeSender() eval.ClientNoticeSender
+
+	// EventLogger returns an EventLogger.
+	EventLogger() EventLogger
+
+	// DescIDGenerator returns a DescIDGenerator.
+	DescIDGenerator() eval.DescIDGenerator
+
+	// ReferenceProviderFactory returns a ReferenceProviderFactory.
+	ReferenceProviderFactory() ReferenceProviderFactory
 }
 
 // CreatePartitioningCCLCallback is the type of the CCL callback for creating
@@ -113,6 +125,11 @@ type CatalogReader interface {
 
 	// MayResolveSchema looks up a schema by name.
 	MayResolveSchema(ctx context.Context, name tree.ObjectNamePrefix) (catalog.DatabaseDescriptor, catalog.SchemaDescriptor)
+
+	// MustResolvePrefix looks up a database and schema given the prefix at best
+	// effort, meaning the prefix may not have explicit catalog and schema name.
+	// It fails if the db or schema represented by the prefix does not exist.
+	MustResolvePrefix(ctx context.Context, name tree.ObjectNamePrefix) (catalog.DatabaseDescriptor, catalog.SchemaDescriptor)
 
 	// MayResolveTable looks up a table by name.
 	MayResolveTable(ctx context.Context, name tree.UnresolvedObjectName) (catalog.ResolvedObjectPrefix, catalog.TableDescriptor)
@@ -174,6 +191,12 @@ type AuthorizationAccessor interface {
 	// MemberOfWithAdminOption looks up all the roles 'member' belongs to (direct
 	// and indirect) and returns a map of "role" -> "isAdmin".
 	MemberOfWithAdminOption(ctx context.Context, member username.SQLUsername) (map[username.SQLUsername]bool, error)
+
+	// HasPrivilege checks if the user has `privilege` on `descriptor`.
+	HasPrivilege(ctx context.Context, privilegeObject privilege.Object, privilege privilege.Kind, user username.SQLUsername) (bool, error)
+
+	// HasAnyPrivilege returns true if user has any privileges at all.
+	HasAnyPrivilege(ctx context.Context, privilegeObject privilege.Object) (bool, error)
 }
 
 // AstFormatter provides interfaces for formatting AST nodes.
@@ -197,3 +220,27 @@ type SchemaResolverFactory func(
 	txn *kv.Txn,
 	authAccessor AuthorizationAccessor,
 ) resolver.SchemaResolver
+
+// EventLogger contains the dependencies required for logging schema change
+// events.
+type EventLogger interface {
+
+	// LogEvent writes an event into the event log which signals the start of a
+	// schema change.
+	LogEvent(
+		ctx context.Context, details eventpb.CommonSQLEventDetails, event logpb.EventPayload,
+	) error
+}
+
+// ReferenceProvider provides all referenced objects with in current DDL
+// statement. For example, CREATE VIEW and CREATE FUNCTION both could reference
+// other objects, and cross-references need to probably tracked.
+type ReferenceProvider interface {
+	scbuildstmt.ReferenceProvider
+}
+
+// ReferenceProviderFactory is used to construct a new ReferenceProvider which
+// provide all dependencies required by the statement.
+type ReferenceProviderFactory interface {
+	NewReferenceProvider(ctx context.Context, stmt tree.Statement) (ReferenceProvider, error)
+}

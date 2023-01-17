@@ -11,23 +11,28 @@
 package rditer
 
 import (
-	"bytes"
 	"context"
 	"encoding/binary"
 	"fmt"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/olekukonko/tablewriter"
 	"github.com/stretchr/testify/require"
 )
 
@@ -44,11 +49,9 @@ func uuidFromString(input string) uuid.UUID {
 // an ordered mix of MVCCKey and MVCCRangeKey with:
 // - the encoded keys of all created data.
 // - the subset of the encoded keys that are replicated keys.
-//
-// TODO(sumeer): add lock table and corrsponding MVCC keys.
 func createRangeData(
 	t *testing.T, eng storage.Engine, desc roachpb.RangeDescriptor,
-) ([]interface{}, []interface{}) {
+) ([]storage.MVCCKey, []storage.MVCCRangeKey) {
 
 	ctx := context.Background()
 	unreplicatedPrefix := keys.MakeRangeIDUnreplicatedPrefix(desc.RangeID)
@@ -56,80 +59,262 @@ func createRangeData(
 
 	testTxnID := uuidFromString("0ce61c17-5eb4-4587-8c36-dcf4062ada4c")
 	testTxnID2 := uuidFromString("9855a1ef-8eb9-4c06-a106-cab1dda78a2b")
+	testTxnID3 := uuidFromString("295e727c-8ca9-437c-bb5e-8e2ebbad996f")
 	value := roachpb.MakeValueFromString("value")
 
 	ts0 := hlc.Timestamp{}
 	ts := hlc.Timestamp{WallTime: 1}
 	localTS := hlc.ClockTimestamp{}
 
-	allKeys := []interface{}{
+	var ps []storage.MVCCKey
+	var rs []storage.MVCCRangeKey
+
+	ps = append(ps,
+		// StateMachine (i.e. replicated) keys that are keyed by RangeID.
 		storage.MVCCKey{Key: keys.AbortSpanKey(desc.RangeID, testTxnID), Timestamp: ts0},
 		storage.MVCCKey{Key: keys.AbortSpanKey(desc.RangeID, testTxnID2), Timestamp: ts0},
 		storage.MVCCKey{Key: keys.RangeGCThresholdKey(desc.RangeID), Timestamp: ts0},
 		storage.MVCCKey{Key: keys.RangeAppliedStateKey(desc.RangeID), Timestamp: ts0},
 		storage.MVCCKey{Key: keys.RangeLeaseKey(desc.RangeID), Timestamp: ts0},
+	)
+	rs = append(rs, storage.MVCCRangeKey{ // emitted last because we emit all point keys before range keys
+		StartKey:  append(replicatedPrefix.Clone(), []byte(":a")...),
+		EndKey:    append(replicatedPrefix.Clone(), []byte(":x")...),
+		Timestamp: ts,
+	})
+
+	ps = append(ps,
+		// Non-StateMachine (i.e. unreplicated) keys that are keyed by RangeID.
 		storage.MVCCKey{Key: keys.RangeTombstoneKey(desc.RangeID), Timestamp: ts0},
 		storage.MVCCKey{Key: keys.RaftHardStateKey(desc.RangeID), Timestamp: ts0},
 		storage.MVCCKey{Key: keys.RaftLogKey(desc.RangeID, 1), Timestamp: ts0},
 		storage.MVCCKey{Key: keys.RaftLogKey(desc.RangeID, 2), Timestamp: ts0},
 		storage.MVCCKey{Key: keys.RangeLastReplicaGCTimestampKey(desc.RangeID), Timestamp: ts0},
-		storage.MVCCRangeKey{
-			StartKey:  append(replicatedPrefix.Clone(), []byte(":a")...),
-			EndKey:    append(replicatedPrefix.Clone(), []byte(":x")...),
-			Timestamp: ts,
-		},
-		storage.MVCCRangeKey{
-			StartKey:  append(unreplicatedPrefix.Clone(), []byte(":a")...),
-			EndKey:    append(unreplicatedPrefix.Clone(), []byte(":x")...),
-			Timestamp: ts,
-		},
-		storage.MVCCKey{Key: keys.RangeDescriptorKey(desc.StartKey), Timestamp: ts},
-		storage.MVCCKey{Key: keys.TransactionKey(roachpb.Key(desc.StartKey), uuid.MakeV4()), Timestamp: ts0},
-		storage.MVCCKey{Key: keys.TransactionKey(roachpb.Key(desc.StartKey.Next()), uuid.MakeV4()), Timestamp: ts0},
-		storage.MVCCKey{Key: keys.TransactionKey(roachpb.Key(desc.EndKey).Prevish(100), uuid.MakeV4()), Timestamp: ts0},
-		// TODO(bdarnell): KeyMin.Next() results in a key in the reserved system-local space.
-		// Once we have resolved https://github.com/cockroachdb/cockroach/issues/437,
-		// replace this with something that reliably generates the first valid key in the range.
-		//{r.Desc().StartKey.Next(), ts},
-		// The following line is similar to StartKey.Next() but adds more to the key to
-		// avoid falling into the system-local space.
-		storage.MVCCKey{Key: append(desc.StartKey.AsRawKey().Clone(), '\x02'), Timestamp: ts},
-		storage.MVCCKey{Key: roachpb.Key(desc.EndKey).Prevish(100), Timestamp: ts},
-		storage.MVCCRangeKey{
-			StartKey:  desc.StartKey.AsRawKey().Clone(),
-			EndKey:    desc.EndKey.AsRawKey().Clone(),
-			Timestamp: ts,
+	)
+	rs = append(rs, storage.MVCCRangeKey{ // emitted last because we emit all point keys before range keys
+		StartKey:  append(unreplicatedPrefix.Clone(), []byte(":a")...),
+		EndKey:    append(unreplicatedPrefix.Clone(), []byte(":x")...),
+		Timestamp: ts,
+	})
+
+	ps = append(ps,
+		// Replicated system keys: range descriptor, txns, locks, user keys.
+		storage.MVCCKey{Key: keys.RangeDescriptorKey(desc.StartKey), Timestamp: ts}, // call this [1], referenced by locks
+		storage.MVCCKey{Key: keys.TransactionKey(roachpb.Key(desc.StartKey), testTxnID), Timestamp: ts0},
+		storage.MVCCKey{Key: keys.TransactionKey(roachpb.Key(desc.StartKey.Next()), testTxnID2), Timestamp: ts0},
+		storage.MVCCKey{Key: keys.TransactionKey(roachpb.Key(desc.EndKey).Prevish(5), testTxnID3), Timestamp: ts0},
+		storage.MVCCKey{Key: desc.StartKey.AsRawKey(), Timestamp: ts}, // call this [2], referenced by locks
+		storage.MVCCKey{Key: roachpb.Key(desc.EndKey).Prevish(5), Timestamp: ts},
+	)
+
+	locks := []storage.LockTableKey{
+		{
+			Key:      keys.RangeDescriptorKey(desc.StartKey), // mark [1] above as intent
+			Strength: lock.Exclusive,
+			TxnUUID:  testTxnID.GetBytes(),
+		}, {
+			Key:      desc.StartKey.AsRawKey(), // mark [2] above as intent
+			Strength: lock.Exclusive,
+			TxnUUID:  testTxnID.GetBytes(),
 		},
 	}
 
-	var replicatedKeys []interface{}
-	for _, keyI := range allKeys {
-		switch key := keyI.(type) {
-		case storage.MVCCKey:
-			require.NoError(t, storage.MVCCPut(ctx, eng, nil, key.Key, key.Timestamp, localTS, value, nil))
-			if !bytes.HasPrefix(key.Key, unreplicatedPrefix) {
-				replicatedKeys = append(replicatedKeys, key)
-			}
-		case storage.MVCCRangeKey:
-			require.NoError(t, eng.PutMVCCRangeKey(key, storage.MVCCValue{}))
-			if !bytes.HasPrefix(key.StartKey, unreplicatedPrefix) {
-				replicatedKeys = append(replicatedKeys, key)
-			}
-		}
+	rs = append(rs, storage.MVCCRangeKey{ // emitted last because we emit all point keys before range keys
+		StartKey:  desc.StartKey.AsRawKey().Clone(),
+		EndKey:    desc.EndKey.AsRawKey().Clone(),
+		Timestamp: ts,
+	})
+
+	for _, pk := range ps {
+		require.NoError(t, storage.MVCCPut(ctx, eng, nil, pk.Key, pk.Timestamp, localTS, value, nil))
+	}
+	for _, rk := range rs {
+		require.NoError(t, eng.PutMVCCRangeKey(rk, storage.MVCCValue{}))
+	}
+	for _, l := range locks {
+		sl, _ := l.ToEngineKey(nil)
+		require.NoError(t, eng.PutEngineKey(sl, []byte("fake lock")))
 	}
 
-	return allKeys, replicatedKeys
+	return ps, rs
 }
 
-func verifyRDReplicatedOnlyMVCCIter(
+// verifyIterateReplicaKeySpans verifies that IterateReplicaKeySpans returns the
+// expected keys in the expected order. The expected keys can be either MVCCKey
+// or MVCCRangeKey.
+func verifyIterateReplicaKeySpans(
 	t *testing.T,
+	tbl *tablewriter.Table,
 	desc *roachpb.RangeDescriptor,
 	eng storage.Engine,
-	expectedKeys []storage.MVCCKey,
-	expectedRangeKeys []storage.MVCCRangeKey,
+	replicatedOnly bool,
 ) {
-	t.Helper()
-	verify := func(t *testing.T, useSpanSet, reverse bool) {
+	readWriter := eng.NewSnapshot()
+	defer readWriter.Close()
+
+	tbl.SetAlignment(tablewriter.ALIGN_LEFT)
+	tbl.SetHeader([]string{
+		"span",
+		"key_hex",
+		"endKey_hex",
+		"version_hex",
+		"pretty",
+	})
+
+	require.NoError(t, IterateReplicaKeySpans(desc, readWriter, replicatedOnly,
+		func(iter storage.EngineIterator, span roachpb.Span, keyType storage.IterKeyType) error {
+			var err error
+			for ok := true; ok && err == nil; ok, err = iter.NextEngineKey() {
+				// Span should not be empty.
+				require.NotZero(t, span)
+
+				key, err := iter.UnsafeEngineKey()
+				require.NoError(t, err)
+				require.True(t, span.ContainsKey(key.Key), "%s not in %s", key, span)
+				require.True(t, key.IsLockTableKey() || key.IsMVCCKey(), "%s neither lock nor MVCC", key)
+
+				switch keyType {
+				case storage.IterKeyTypePointsOnly:
+					var mvccKey storage.MVCCKey
+					if key.IsMVCCKey() {
+						var err error
+						mvccKey, err = key.ToMVCCKey()
+						require.NoError(t, err)
+					} else { // lock key
+						ltk, err := key.ToLockTableKey()
+						require.NoError(t, err)
+						mvccKey = storage.MVCCKey{
+							Key: ltk.Key,
+						}
+					}
+					tbl.Append([]string{
+						span.String(),
+						fmt.Sprintf("%x", key.Key),
+						"",
+						fmt.Sprintf("%x", key.Version),
+						mvccKey.String(),
+					})
+
+				case storage.IterKeyTypeRangesOnly:
+					bounds, err := iter.EngineRangeBounds()
+					require.NoError(t, err)
+					require.True(t, span.Contains(bounds), "%s not contained in %s", bounds, span)
+					for _, rk := range iter.EngineRangeKeys() {
+						ts, err := storage.DecodeMVCCTimestampSuffix(rk.Version)
+						require.NoError(t, err)
+						mvccRangeKey := storage.MVCCRangeKey{
+							StartKey:  bounds.Key.Clone(),
+							EndKey:    bounds.EndKey.Clone(),
+							Timestamp: ts,
+						}
+						tbl.Append([]string{
+							span.String(),
+							fmt.Sprintf("%x", bounds.Key),
+							fmt.Sprintf("%x", bounds.EndKey),
+							fmt.Sprintf("%x", rk.Version),
+							mvccRangeKey.String(),
+						})
+					}
+
+				default:
+					t.Fatalf("unexpected key type %v", keyType)
+				}
+			}
+			return err
+		}))
+}
+
+// TestReplicaDataIterator creates three ranges (a-b, b-c, c-d) and fills each
+// with data, then verifies the contents for MVCC and Engine iterators, both
+// replicated and unreplicated.
+func TestReplicaDataIterator(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	eng := storage.NewDefaultInMemForTesting()
+	defer eng.Close()
+
+	// Create test cases with test data for each descriptor.
+	testcases := []struct {
+		desc roachpb.RangeDescriptor
+	}{
+		// TODO(tbg): add first and last range test here.
+		{
+			desc: roachpb.RangeDescriptor{
+				RangeID:  1,
+				StartKey: roachpb.RKey("a"),
+				EndKey:   roachpb.RKey("b"),
+			},
+		},
+		{
+			desc: roachpb.RangeDescriptor{
+				RangeID:  2,
+				StartKey: roachpb.RKey("b"),
+				EndKey:   roachpb.RKey("c"),
+			},
+		},
+		{
+			desc: roachpb.RangeDescriptor{
+				RangeID:  3,
+				StartKey: roachpb.RKey("c"),
+				EndKey:   roachpb.RKey("d"),
+			},
+		},
+	}
+
+	for i := range testcases {
+		createRangeData(t, eng, testcases[i].desc)
+	}
+
+	// Run tests.
+	path := datapathutils.TestDataPath(t, t.Name())
+	for _, tc := range testcases {
+		parName := fmt.Sprintf("r%d", tc.desc.RangeID)
+		t.Run(parName, func(t *testing.T) {
+			testutils.RunTrueAndFalse(t, "replicatedOnly", func(t *testing.T, replicatedOnly bool) {
+				name := "all"
+				if replicatedOnly {
+					name = "replicatedOnly"
+				}
+				w := echotest.NewWalker(t, filepath.Join(path, parName, name))
+
+				w.Run(t, "output", func(t *testing.T) string {
+					var innerBuf strings.Builder
+					tbl := tablewriter.NewWriter(&innerBuf)
+					// Print contents of the Replica according to the iterator.
+					verifyIterateReplicaKeySpans(t, tbl, &tc.desc, eng, replicatedOnly)
+
+					tbl.Render()
+					return innerBuf.String()
+				})(t)
+			})
+		})
+	}
+}
+
+func TestIterateMVCCReplicaKeySpansSpansSet(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	eng := storage.NewDefaultInMemForTesting()
+	defer eng.Close()
+
+	desc := roachpb.RangeDescriptor{
+		RangeID:  1,
+		StartKey: roachpb.RKey("a"),
+		EndKey:   roachpb.RKey("b"),
+	}
+
+	createRangeData(t, eng, desc)
+
+	// Verify that we're getting identical replicated MVCC contents across
+	// multiple ways to scan. We already have TestReplicaDataIterator above
+	// to show that the output is sane so here we only have to verify every
+	// way to scan gives the same result.
+	//
+	// TODO(oleg): This is very naive and only works if keys don't overlap.
+	// Needs some thinking on how could we use this if ranges become
+	// fragmented.
+	//
+	get := func(t *testing.T, useSpanSet, reverse bool) ([]storage.MVCCKey, []storage.MVCCRangeKey) {
 		readWriter := eng.NewReadOnly(storage.StandardDurability)
 		defer readWriter.Close()
 		if useSpanSet {
@@ -149,9 +334,9 @@ func verifyRDReplicatedOnlyMVCCIter(
 			readWriter = spanset.NewReadWriterAt(readWriter, &spans, hlc.Timestamp{WallTime: 42})
 		}
 		var rangeStart roachpb.Key
-		actualKeys := []storage.MVCCKey{}
-		actualRanges := []storage.MVCCRangeKey{}
-		err := IterateMVCCReplicaKeySpans(desc, readWriter, IterateOptions{
+		var actualKeys []storage.MVCCKey
+		var actualRanges []storage.MVCCRangeKey
+		err := IterateMVCCReplicaKeySpans(&desc, readWriter, IterateOptions{
 			CombineRangesAndPoints: false,
 			Reverse:                reverse,
 		}, func(iter storage.MVCCIterator, span roachpb.Span, keyType storage.IterKeyType) error {
@@ -195,153 +380,16 @@ func verifyRDReplicatedOnlyMVCCIter(
 			return nil
 		})
 		require.NoError(t, err, "visitor failed")
-		require.Equal(t, expectedKeys, actualKeys)
-		require.Equal(t, expectedRangeKeys, actualRanges)
+		return actualKeys, actualRanges
 	}
+	goldenActualKeys, goldenActualRanges := get(t, false /* useSpanSet */, false /* reverse */)
 	testutils.RunTrueAndFalse(t, "reverse", func(t *testing.T, reverse bool) {
 		testutils.RunTrueAndFalse(t, "spanset", func(t *testing.T, useSpanSet bool) {
-			verify(t, useSpanSet, reverse)
+			actualKeys, actualRanges := get(t, useSpanSet, reverse)
+			require.Equal(t, goldenActualKeys, actualKeys)
+			require.Equal(t, goldenActualRanges, actualRanges)
 		})
 	})
-}
-
-// verifyIterateReplicaKeySpans verifies that IterateReplicaKeySpans returns the
-// expected keys in the expected order. The expected keys can be either MVCCKey
-// or MVCCRangeKey.
-func verifyIterateReplicaKeySpans(
-	t *testing.T,
-	desc *roachpb.RangeDescriptor,
-	eng storage.Engine,
-	replicatedOnly bool,
-	expectedKeys []interface{},
-) {
-	readWriter := eng.NewSnapshot()
-	defer readWriter.Close()
-
-	actualKeys := []interface{}{}
-	require.NoError(t, IterateReplicaKeySpans(desc, readWriter, replicatedOnly,
-		func(iter storage.EngineIterator, span roachpb.Span, keyType storage.IterKeyType) error {
-			var err error
-			for ok := true; ok && err == nil; ok, err = iter.NextEngineKey() {
-				// Span should not be empty.
-				require.NotZero(t, span)
-
-				// Key should be in the given span.
-				key, err := iter.UnsafeEngineKey()
-				require.NoError(t, err)
-				require.True(t, key.IsMVCCKey())
-				require.True(t, span.ContainsKey(key.Key), "%s not in %s", key, span)
-
-				switch keyType {
-				case storage.IterKeyTypePointsOnly:
-					mvccKey, err := key.ToMVCCKey()
-					require.NoError(t, err)
-					actualKeys = append(actualKeys, mvccKey.Clone())
-
-				case storage.IterKeyTypeRangesOnly:
-					bounds, err := iter.EngineRangeBounds()
-					require.NoError(t, err)
-					require.True(t, span.Contains(bounds), "%s not contained in %s", bounds, span)
-					for _, rk := range iter.EngineRangeKeys() {
-						ts, err := storage.DecodeMVCCTimestampSuffix(rk.Version)
-						require.NoError(t, err)
-						actualKeys = append(actualKeys, storage.MVCCRangeKey{
-							StartKey:  bounds.Key.Clone(),
-							EndKey:    bounds.EndKey.Clone(),
-							Timestamp: ts,
-						})
-					}
-
-				default:
-					t.Fatalf("unexpected key type %v", keyType)
-				}
-			}
-			return err
-		}))
-	require.Equal(t, expectedKeys, actualKeys)
-}
-
-// TestReplicaDataIterator verifies correct operation of iterator if
-// a range contains no data and never has.
-func TestReplicaDataIteratorEmptyRange(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	eng := storage.NewDefaultInMemForTesting()
-	defer eng.Close()
-
-	desc := &roachpb.RangeDescriptor{
-		RangeID:  12345,
-		StartKey: roachpb.RKey("a"),
-		EndKey:   roachpb.RKey("z"),
-	}
-
-	verifyRDReplicatedOnlyMVCCIter(t, desc, eng, []storage.MVCCKey{}, []storage.MVCCRangeKey{})
-	verifyIterateReplicaKeySpans(t, desc, eng, false, []interface{}{})
-	verifyIterateReplicaKeySpans(t, desc, eng, true, []interface{}{})
-}
-
-// TestReplicaDataIterator creates three ranges (a-b, b-c, c-d) and fills each
-// with data, then verifies the contents for MVCC and Engine iterators, both
-// replicated and unreplicated.
-func TestReplicaDataIterator(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	eng := storage.NewDefaultInMemForTesting()
-	defer eng.Close()
-
-	descs := []roachpb.RangeDescriptor{
-		{
-			RangeID:  1,
-			StartKey: roachpb.RKey("a"),
-			EndKey:   roachpb.RKey("b"),
-		},
-		{
-			RangeID:  2,
-			StartKey: roachpb.RKey("b"),
-			EndKey:   roachpb.RKey("c"),
-		},
-		{
-			RangeID:  3,
-			StartKey: roachpb.RKey("c"),
-			EndKey:   roachpb.RKey("d"),
-		},
-	}
-
-	// Create test cases with test data for each descriptor.
-	testcases := make([]struct {
-		desc                    roachpb.RangeDescriptor
-		allKeys, replicatedKeys []interface{} // mixed MVCCKey and MVCCRangeKey
-	}, len(descs))
-
-	for i := range testcases {
-		testcases[i].desc = descs[i]
-		testcases[i].allKeys, testcases[i].replicatedKeys = createRangeData(t, eng, descs[i])
-	}
-
-	// Run tests.
-	for _, tc := range testcases {
-		t.Run(tc.desc.RSpan().String(), func(t *testing.T) {
-
-			// Verify the replicated and unreplicated engine contents.
-			verifyIterateReplicaKeySpans(t, &tc.desc, eng, false, tc.allKeys)
-			verifyIterateReplicaKeySpans(t, &tc.desc, eng, true, tc.replicatedKeys)
-
-			// Verify the replicated MVCC contents.
-			var pointKeys []storage.MVCCKey
-			var rangeKeys []storage.MVCCRangeKey
-			for _, key := range tc.replicatedKeys {
-				if pointKey, ok := key.(storage.MVCCKey); ok {
-					pointKeys = append(pointKeys, pointKey)
-				} else if rangeKey, ok := key.(storage.MVCCRangeKey); ok {
-					// TODO(oleg): This is very naive and only works if keys don't overlap.
-					// Needs some thinking on how could we use this if ranges become
-					// fragmented.
-					rangeKeys = append(rangeKeys, rangeKey)
-				}
-			}
-			verifyRDReplicatedOnlyMVCCIter(t, &tc.desc, eng, pointKeys, rangeKeys)
-		})
-	}
 }
 
 func checkOrdering(t *testing.T, spans []roachpb.Span) {
@@ -397,7 +445,7 @@ func TestReplicaDataIteratorGlobalRangeKey(t *testing.T) {
 				if replicatedOnly {
 					expectedSpans = MakeReplicatedKeySpans(&desc)
 				} else {
-					expectedSpans = MakeAllKeySpans(&desc)
+					expectedSpans = makeAllKeySpans(&desc)
 				}
 
 				var actualSpans []roachpb.Span
@@ -433,10 +481,9 @@ func TestReplicaKeyRanges(t *testing.T) {
 		StartKey: roachpb.RKeyMin,
 		EndKey:   roachpb.RKeyMax,
 	}
-	checkOrdering(t, MakeAllKeySpans(&desc))
+	checkOrdering(t, makeAllKeySpans(&desc))
 	checkOrdering(t, MakeReplicatedKeySpans(&desc))
-	checkOrdering(t, MakeReplicatedKeySpansExceptLockTable(&desc))
-	checkOrdering(t, MakeReplicatedKeySpansExceptRangeID(&desc))
+	checkOrdering(t, makeReplicatedKeySpansExceptLockTable(&desc))
 }
 
 func BenchmarkReplicaEngineDataIterator(b *testing.B) {
@@ -475,8 +522,8 @@ func benchReplicaEngineDataIterator(b *testing.B, numRanges, numKeysPerRange, va
 	// Write data for ranges.
 	eng, err := storage.Open(ctx,
 		storage.Filesystem(b.TempDir()),
-		storage.CacheSize(1e9),
-		storage.Settings(cluster.MakeTestingClusterSettings()))
+		cluster.MakeTestingClusterSettings(),
+		storage.CacheSize(1e9))
 	require.NoError(b, err)
 	defer eng.Close()
 
@@ -488,7 +535,7 @@ func benchReplicaEngineDataIterator(b *testing.B, numRanges, numKeysPerRange, va
 
 	for _, desc := range descs {
 		var keyBuf roachpb.Key
-		keySpans := MakeAllKeySpans(&desc)
+		keySpans := makeAllKeySpans(&desc)
 		for i := 0; i < numKeysPerRange; i++ {
 			keyBuf = append(keyBuf[:0], keySpans[i%len(keySpans)].Key...)
 			keyBuf = append(keyBuf, 0, 0, 0, 0)
@@ -604,7 +651,7 @@ func TestIterateMVCCReplicaKeySpans(t *testing.T) {
 			testutils.RunTrueAndFalse(t, "reverse", func(t *testing.T, reverse bool) {
 				// Each iteration would go through all spans because we usa a single
 				// range key covering all spans of all ranges.
-				expectedSpans := MakeReplicatedKeySpansExceptLockTable(&d.desc)
+				expectedSpans := makeReplicatedKeySpansExceptLockTable(&d.desc)
 				if reverse {
 					for i, j := 0, len(expectedSpans)-1; i < j; i, j = i+1, j-1 {
 						expectedSpans[i], expectedSpans[j] = expectedSpans[j], expectedSpans[i]

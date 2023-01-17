@@ -15,14 +15,13 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schematelemetry/schematelemetrycontroller"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/errors"
 )
@@ -49,7 +48,7 @@ func (s schemaTelemetryExecutor) OnDrop(
 	scheduleControllerEnv scheduledjobs.ScheduleControllerEnv,
 	env scheduledjobs.JobSchedulerEnv,
 	schedule *jobs.ScheduledJob,
-	txn *kv.Txn,
+	txn isql.Txn,
 	descsCol *descs.Collection,
 ) (int, error) {
 	return 0, errScheduleUndroppable
@@ -60,10 +59,10 @@ var errScheduleUndroppable = errors.New("SQL schema telemetry schedule cannot be
 // ExecuteJob is part of the jobs.ScheduledJobExecutor interface.
 func (s schemaTelemetryExecutor) ExecuteJob(
 	ctx context.Context,
+	txn isql.Txn,
 	cfg *scheduledjobs.JobExecutionConfig,
 	env scheduledjobs.JobSchedulerEnv,
 	sj *jobs.ScheduledJob,
-	txn *kv.Txn,
 ) (err error) {
 	defer func() {
 		if err == nil {
@@ -72,7 +71,7 @@ func (s schemaTelemetryExecutor) ExecuteJob(
 			s.metrics.NumFailed.Inc(1)
 		}
 	}()
-	p, cleanup := cfg.PlanHookMaker("invoke-schema-telemetry", txn, username.NodeUserName())
+	p, cleanup := cfg.PlanHookMaker("invoke-schema-telemetry", txn.KV(), username.NodeUserName())
 	defer cleanup()
 	jr := p.(sql.PlanHookState).ExecCfg().JobRegistry
 	r := schematelemetrycontroller.CreateSchemaTelemetryJobRecord(jobs.CreatedByScheduledJobs, sj.ScheduleID())
@@ -83,13 +82,12 @@ func (s schemaTelemetryExecutor) ExecuteJob(
 // NotifyJobTermination is part of the jobs.ScheduledJobExecutor interface.
 func (s schemaTelemetryExecutor) NotifyJobTermination(
 	ctx context.Context,
+	txn isql.Txn,
 	jobID jobspb.JobID,
 	jobStatus jobs.Status,
 	details jobspb.Details,
 	env scheduledjobs.JobSchedulerEnv,
 	sj *jobs.ScheduledJob,
-	ex sqlutil.InternalExecutor,
-	txn *kv.Txn,
 ) error {
 	switch jobStatus {
 	case jobs.StatusFailed:
@@ -110,12 +108,7 @@ func (s schemaTelemetryExecutor) Metrics() metric.Struct {
 
 // GetCreateScheduleStatement is part of the jobs.ScheduledJobExecutor interface.
 func (s schemaTelemetryExecutor) GetCreateScheduleStatement(
-	ctx context.Context,
-	env scheduledjobs.JobSchedulerEnv,
-	txn *kv.Txn,
-	descsCol *descs.Collection,
-	sj *jobs.ScheduledJob,
-	ex sqlutil.InternalExecutor,
+	ctx context.Context, txn isql.Txn, env scheduledjobs.JobSchedulerEnv, sj *jobs.ScheduledJob,
 ) (string, error) {
 	// This schedule cannot be created manually.
 	return "", nil

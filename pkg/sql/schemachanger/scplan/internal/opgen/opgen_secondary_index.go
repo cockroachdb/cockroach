@@ -28,6 +28,12 @@ func init() {
 						IsSecondaryIndex: true,
 					}
 				}),
+				emit(func(this *scpb.SecondaryIndex) *scop.MaybeAddSplitForIndex {
+					return &scop.MaybeAddSplitForIndex{
+						TableID: this.TableID,
+						IndexID: this.IndexID,
+					}
+				}),
 			),
 			to(scpb.Status_BACKFILLED,
 				emit(func(this *scpb.SecondaryIndex) *scop.BackfillIndex {
@@ -86,18 +92,15 @@ func init() {
 				}),
 			),
 			to(scpb.Status_PUBLIC,
-				emit(func(this *scpb.SecondaryIndex) *scop.RefreshStats {
-					return &scop.RefreshStats{
-						TableID: this.TableID,
-					}
-				}),
-				emit(func(this *scpb.SecondaryIndex, md *opGenContext) *scop.LogEvent {
-					return newLogEventOp(this, md)
-				}),
 				emit(func(this *scpb.SecondaryIndex) *scop.MakeValidatedSecondaryIndexPublic {
 					return &scop.MakeValidatedSecondaryIndexPublic{
 						TableID: this.TableID,
 						IndexID: this.IndexID,
+					}
+				}),
+				emit(func(this *scpb.SecondaryIndex) *scop.RefreshStats {
+					return &scop.RefreshStats{
+						TableID: this.TableID,
 					}
 				}),
 			),
@@ -119,9 +122,6 @@ func init() {
 			equiv(scpb.Status_MERGE_ONLY),
 			equiv(scpb.Status_MERGED),
 			to(scpb.Status_DELETE_ONLY,
-				emit(func(this *scpb.SecondaryIndex, md *opGenContext) *scop.LogEvent {
-					return newLogEventOp(this, md)
-				}),
 				emit(func(this *scpb.SecondaryIndex) *scop.MakeWriteOnlyIndexDeleteOnly {
 					return &scop.MakeWriteOnlyIndexDeleteOnly{
 						TableID: this.TableID,

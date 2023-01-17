@@ -26,8 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/scmutationexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
-	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 )
 
 // Dependencies contains all the dependencies required by the executor.
@@ -41,7 +39,6 @@ type Dependencies interface {
 	PeriodicProgressFlusher() PeriodicProgressFlusher
 	Validator() Validator
 	IndexSpanSplitter() IndexSpanSplitter
-	EventLogger() EventLogger
 	DescriptorMetadataUpdater(ctx context.Context) DescriptorMetadataUpdater
 	StatsRefresher() StatsRefreshQueue
 	GetTestingKnobs() *TestingKnobs
@@ -58,45 +55,7 @@ type Dependencies interface {
 // changes.
 type Catalog interface {
 	scmutationexec.NameResolver
-	scmutationexec.SyntheticDescriptorStateUpdater
-
-	// MustReadImmutableDescriptors reads descriptors from the catalog by ID.
-	MustReadImmutableDescriptors(ctx context.Context, ids ...descpb.ID) ([]catalog.Descriptor, error)
-
-	// MustReadMutableDescriptor the mutable equivalent to
-	// MustReadImmutableDescriptors.
-	MustReadMutableDescriptor(ctx context.Context, id descpb.ID) (catalog.MutableDescriptor, error)
-
-	// NewCatalogChangeBatcher is equivalent to creating a new kv.Batch for the
-	// current kv.Txn.
-	NewCatalogChangeBatcher() CatalogChangeBatcher
-}
-
-// EventLogger encapsulates the operations for emitting event log entries.
-type EventLogger interface {
-	// LogEvent writes to the event log.
-	LogEvent(
-		ctx context.Context,
-		details eventpb.CommonSQLEventDetails,
-		event logpb.EventPayload,
-	) error
-
-	// LogEventForSchemaChange write a schema change event entry into the event log.
-	LogEventForSchemaChange(
-		ctx context.Context, event logpb.EventPayload,
-	) error
-}
-
-// Telemetry encapsulates metrics gather for the declarative schema changer.
-type Telemetry interface {
-	// IncrementSchemaChangeErrorType increments the number of errors of a given
-	// type observed by the schema changer.
-	IncrementSchemaChangeErrorType(typ string)
-}
-
-// CatalogChangeBatcher encapsulates batched updates to the catalog: descriptor
-// updates, namespace operations, etc.
-type CatalogChangeBatcher interface {
+	scmutationexec.DescriptorReader
 
 	// CreateOrUpdateDescriptor upserts a descriptor.
 	CreateOrUpdateDescriptor(ctx context.Context, desc catalog.MutableDescriptor) error
@@ -106,9 +65,6 @@ type CatalogChangeBatcher interface {
 
 	// DeleteDescriptor deletes a descriptor entry.
 	DeleteDescriptor(ctx context.Context, id descpb.ID) error
-
-	// ValidateAndRun executes the updates after validating the catalog changes.
-	ValidateAndRun(ctx context.Context) error
 
 	// DeleteZoneConfig deletes the zone config for a descriptor.
 	DeleteZoneConfig(ctx context.Context, id descpb.ID) error
@@ -123,8 +79,25 @@ type CatalogChangeBatcher interface {
 		ctx context.Context, key catalogkeys.CommentKey,
 	) error
 
-	// DeleteTableComments deletes all comments created on the table.
-	DeleteTableComments(ctx context.Context, tblID descpb.ID) error
+	// Validate validates all the uncommitted catalog changes performed
+	// in this transaction so far.
+	Validate(ctx context.Context) error
+
+	// Run persists all the uncommitted catalog changes performed in this
+	// transaction so far. Reset cannot be called after this method.
+	Run(ctx context.Context) error
+
+	// Reset undoes all the uncommitted catalog changes performed in this
+	// transaction so far, assuming that they haven't been persisted yet
+	// by calling Run.
+	Reset(ctx context.Context) error
+}
+
+// Telemetry encapsulates metrics gather for the declarative schema changer.
+type Telemetry interface {
+	// IncrementSchemaChangeErrorType increments the number of errors of a given
+	// type observed by the schema changer.
+	IncrementSchemaChangeErrorType(typ string)
 }
 
 // TransactionalJobRegistry creates and updates jobs in the current transaction.
@@ -247,8 +220,13 @@ type Validator interface {
 // prior to backfilling.
 type IndexSpanSplitter interface {
 
-	// MaybeSplitIndexSpans will attempt to split the backfilled index span.
+	// MaybeSplitIndexSpans will attempt to split the backfilled index span, if
+	// the index is in the system tenant or is partitioned.
 	MaybeSplitIndexSpans(ctx context.Context, table catalog.TableDescriptor, indexToBackfill catalog.Index) error
+
+	// MaybeSplitIndexSpansForPartitioning will split backfilled index spans
+	// across hash-sharded index boundaries if applicable.
+	MaybeSplitIndexSpansForPartitioning(ctx context.Context, table catalog.TableDescriptor, indexToBackfill catalog.Index) error
 }
 
 // BackfillProgress tracks the progress for a Backfill.

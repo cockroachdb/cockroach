@@ -17,6 +17,8 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -189,24 +191,48 @@ func TestReplicateQueueRebalanceMultiStore(t *testing.T) {
 	allocatorimpl.LeaseRebalanceThreshold = 0.01
 	allocatorimpl.LeaseRebalanceThresholdMin = 0.0
 
+	const useDisk = false // for debugging purposes
+	spec := func(node int, store int) base.StoreSpec {
+		return base.DefaultTestStoreSpec
+	}
+	if useDisk {
+		td, err := os.MkdirTemp("", "test")
+		require.NoError(t, err)
+		t.Logf("store dirs in %s", td)
+		spec = func(node int, store int) base.StoreSpec {
+			return base.StoreSpec{
+				Path: filepath.Join(td, fmt.Sprintf("n%ds%d", node, store)),
+				Size: base.SizeSpec{},
+			}
+		}
+		t.Cleanup(func() {
+			if t.Failed() {
+				return
+			}
+			_ = os.RemoveAll(td)
+		})
+	}
 	for _, testCase := range testCases {
+
 		t.Run(testCase.name, func(t *testing.T) {
 			// Set up a test cluster with multiple stores per node if needed.
-			serverArgs := base.TestServerArgs{
-				ScanMinIdleTime: time.Millisecond,
-				ScanMaxIdleTime: time.Millisecond,
+			args := base.TestClusterArgs{
+				ReplicationMode:   base.ReplicationAuto,
+				ServerArgsPerNode: map[int]base.TestServerArgs{},
 			}
-			if testCase.storesPerNode > 1 {
-				serverArgs.StoreSpecs = make([]base.StoreSpec, testCase.storesPerNode)
-				for i := range serverArgs.StoreSpecs {
-					serverArgs.StoreSpecs[i] = base.DefaultTestStoreSpec
+			for i := 0; i < testCase.nodes; i++ {
+				perNode := base.TestServerArgs{
+					ScanMinIdleTime: time.Millisecond,
+					ScanMaxIdleTime: time.Millisecond,
 				}
+				perNode.StoreSpecs = make([]base.StoreSpec, testCase.storesPerNode)
+				for idx := range perNode.StoreSpecs {
+					perNode.StoreSpecs[idx] = spec(i+1, idx+1)
+				}
+				args.ServerArgsPerNode[i] = perNode
 			}
 			tc := testcluster.StartTestCluster(t, testCase.nodes,
-				base.TestClusterArgs{
-					ReplicationMode: base.ReplicationAuto,
-					ServerArgs:      serverArgs,
-				})
+				args)
 			defer tc.Stopper().Stop(context.Background())
 			ctx := context.Background()
 			for _, server := range tc.Servers {

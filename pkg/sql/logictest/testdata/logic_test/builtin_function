@@ -2256,10 +2256,13 @@ SELECT pg_catalog.pg_get_indexdef((SELECT oid from pg_class WHERE relname='pg_in
 ----
 b
 
+# The empty string should be returned for index 3. Previously, there was a bug
+# where this would return the primary key column name, since the primary key
+# is stored in the index.
 query T
 SELECT pg_catalog.pg_get_indexdef((SELECT oid from pg_class WHERE relname='pg_indexdef_cols_idx'), 3, false)
 ----
-rowid
+·
 
 query I
 SELECT length(pg_catalog.pg_get_indexdef((SELECT oid from pg_class WHERE relname='pg_indexdef_cols_idx'), 4, false))
@@ -2513,6 +2516,18 @@ query TT
 SELECT array_to_string(NULL, ','), array_to_string(NULL, 'foo', 'zerp')
 ----
 NULL  NULL
+
+# Builtin array_to_string should recursively search nested arrays.
+query T
+SELECT array_to_string(ARRAY[ARRAY[ARRAY[5,6], ARRAY[2,3]], ARRAY[ARRAY[7,8], ARRAY[4,44]]], ' ');
+----
+5 6 2 3 7 8 4 44
+
+# Builtin array_to_string should recursively search nested arrays.
+query T
+SELECT array_to_string(ARRAY[(SELECT ARRAY[1,2]::int2vector)],' ');
+----
+1 2
 
 # Examples from https://www.postgresql.org/docs/9.3/functions-string.html#FUNCTIONS-STRING-FORMAT
 query T

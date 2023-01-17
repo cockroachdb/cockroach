@@ -948,6 +948,32 @@ func (n *ShowTenantClusterSettingList) walkStmt(v Visitor) Statement {
 	return ret
 }
 
+func (n *AlterTenantCapability) walkStmt(v Visitor) Statement {
+	ret := n
+	copyNodeOnce := func() {
+		if ret == n {
+			stmtCopy := *n
+			ret = &stmtCopy
+		}
+	}
+	for i, capability := range n.Capabilities {
+		value := capability.Value
+		if value != nil {
+			e, changed := WalkExpr(v, value)
+			if changed {
+				copyNodeOnce()
+				ret.Capabilities[i].Value = e
+			}
+		}
+	}
+	ts, changed := walkTenantSpec(v, n.TenantSpec)
+	if changed {
+		copyNodeOnce()
+		ret.TenantSpec = ts
+	}
+	return ret
+}
+
 // copyNode makes a copy of this Statement without recursing in any child Statements.
 func (n *AlterTenantSetClusterSetting) copyNode() *AlterTenantSetClusterSetting {
 	stmtCopy := *n
@@ -994,7 +1020,7 @@ func (n *AlterTenantReplication) walkStmt(v Visitor) Statement {
 		}
 		ret.TenantSpec = ts
 	}
-	if n.Cutover != nil {
+	if n.Cutover != nil && n.Cutover.Timestamp != nil {
 		e, changed := WalkExpr(v, n.Cutover.Timestamp)
 		if changed {
 			if ret == n {
@@ -1089,6 +1115,25 @@ func (n *AlterTenantRename) walkStmt(v Visitor) Statement {
 }
 
 // copyNode makes a copy of this Statement without recursing in any child Statements.
+func (n *AlterTenantService) copyNode() *AlterTenantService {
+	stmtCopy := *n
+	return &stmtCopy
+}
+
+// walkStmt is part of the walkableStmt interface.
+func (n *AlterTenantService) walkStmt(v Visitor) Statement {
+	ret := n
+	ts, changed := walkTenantSpec(v, n.TenantSpec)
+	if changed {
+		if ret == n {
+			ret = n.copyNode()
+		}
+		ret.TenantSpec = ts
+	}
+	return ret
+}
+
+// copyNode makes a copy of this Statement without recursing in any child Statements.
 func (n *DropTenant) copyNode() *DropTenant {
 	stmtCopy := *n
 	return &stmtCopy
@@ -1151,6 +1196,15 @@ func (stmt *Backup) walkStmt(v Visitor) Statement {
 				ret = stmt.copyNode()
 			}
 			ret.Options.EncryptionPassphrase = pw
+		}
+	}
+	if stmt.Options.CaptureRevisionHistory != nil {
+		rh, changed := WalkExpr(v, stmt.Options.CaptureRevisionHistory)
+		if changed {
+			if ret == stmt {
+				ret = stmt.copyNode()
+			}
+			ret.Options.CaptureRevisionHistory = rh
 		}
 	}
 	return ret
@@ -1812,8 +1866,10 @@ func (stmt *BeginTransaction) walkStmt(v Visitor) Statement {
 	return ret
 }
 
+var _ walkableStmt = &AlterTenantCapability{}
 var _ walkableStmt = &AlterTenantRename{}
 var _ walkableStmt = &AlterTenantReplication{}
+var _ walkableStmt = &AlterTenantService{}
 var _ walkableStmt = &AlterTenantSetClusterSetting{}
 var _ walkableStmt = &Backup{}
 var _ walkableStmt = &BeginTransaction{}

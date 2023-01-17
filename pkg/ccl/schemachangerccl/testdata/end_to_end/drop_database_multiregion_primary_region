@@ -18,80 +18,74 @@ begin transaction #1
 # begin StatementPhase
 checking for feature: DROP DATABASE
 increment telemetry for sql.schema.drop_database
-## StatementPhase stage 1 of 1 with 5 MutationType ops
-add synthetic descriptor #104:
-   database:
-     id: 104
-  -  modificationTime: {}
-  +  modificationTime:
-  +    wallTime: "1640995200000000001"
-     name: multi_region_test_db
-     privileges:
+write *eventpb.DropDatabase to event log:
+  databaseName: multi_region_test_db
+  droppedSchemaObjects:
+  - multi_region_test_db.public.crdb_internal_region
+  - multi_region_test_db.public._crdb_internal_region
+  - multi_region_test_db.public.table_regional_by_table
+  sql:
+    descriptorId: 104
+    statement: DROP DATABASE ‹multi_region_test_db› CASCADE
+    tag: DROP DATABASE
+    user: root
+## StatementPhase stage 1 of 1 with 15 MutationType ops
+delete database namespace entry {0 0 multi_region_test_db} -> 104
+delete schema namespace entry {104 0 public} -> 105
+delete object namespace entry {104 105 crdb_internal_region} -> 106
+delete object namespace entry {104 105 _crdb_internal_region} -> 107
+delete object namespace entry {104 105 table_regional_by_table} -> 108
+upsert descriptor #104
   ...
-       public:
-         id: 105
+       regionEnumId: 106
+       survivalGoal: REGION_FAILURE
+  -  schemas:
+  -    public:
+  -      id: 105
+  -  version: "1"
   +  state: DROP
-     version: "1"
-add synthetic descriptor #105:
-   schema:
-     id: 105
-  -  modificationTime: {}
-  +  modificationTime:
-  +    wallTime: "1640995200000000001"
-     name: public
-     parentId: 104
+  +  version: "2"
+upsert descriptor #105
   ...
          withGrantOption: "2"
        version: 2
+  -  version: "1"
   +  state: DROP
-     version: "1"
-add synthetic descriptor #106:
-  ...
-     id: 106
-     kind: MULTIREGION_ENUM
-  -  modificationTime: {}
-  +  modificationTime:
-  +    wallTime: "1640995200000000001"
-     name: crdb_internal_region
-     parentId: 104
+  +  version: "2"
+upsert descriptor #106
   ...
        primaryRegion: us-east1
        zoneConfigExtensions: {}
+  -  version: "2"
   +  state: DROP
-     version: "2"
-add synthetic descriptor #107:
-  ...
-     id: 107
-     kind: ALIAS
-  -  modificationTime: {}
-  +  modificationTime:
-  +    wallTime: "1640995200000000001"
-     name: _crdb_internal_region
-     parentId: 104
+  +  version: "3"
+upsert descriptor #107
   ...
          withGrantOption: "2"
        version: 2
+  -  version: "1"
   +  state: DROP
-     version: "1"
-add synthetic descriptor #108:
+  +  version: "2"
+upsert descriptor #108
   ...
-       regionalByTable:
-         region: us-east2
-  -  modificationTime: {}
-  +  modificationTime:
-  +    wallTime: "1640995200000000001"
-     name: table_regional_by_table
-     nextColumnId: 2
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  +  dropTime: <redacted>"
+     families:
+     - columnIds:
   ...
      replacementOf:
        time: {}
   +  state: DROP
      unexposedParentSchemaId: 105
-     version: "1"
+  -  version: "1"
+  +  version: "2"
 # end StatementPhase
 # begin PreCommitPhase
-## PreCommitPhase stage 1 of 1 with 23 MutationType ops
-delete all comments for table descriptor 108
+## PreCommitPhase stage 1 of 2 with 1 MutationType op
+undo all catalog changes within txn #1
+persist all catalog changes to storage
+## PreCommitPhase stage 2 of 2 with 26 MutationType ops
 delete database namespace entry {0 0 multi_region_test_db} -> 104
 delete schema namespace entry {104 0 public} -> 105
 delete object namespace entry {104 105 crdb_internal_region} -> 106
@@ -111,8 +105,8 @@ upsert descriptor #104
   +        statementTag: DROP DATABASE
   +    targetRanks: <redacted>
   +    targets: <redacted>
+     defaultPrivileges: {}
      id: 104
-     modificationTime: {}
   ...
        regionEnumId: 106
        survivalGoal: REGION_FAILURE
@@ -217,6 +211,7 @@ upsert descriptor #108
      unexposedParentSchemaId: 105
   -  version: "1"
   +  version: "2"
+persist all catalog changes to storage
 delete role settings for database on #104
 create job #1 (non-cancelable: true): "DROP DATABASE multi_region_test_db CASCADE"
   descriptor IDs: [104 105 106 107 108]
@@ -227,7 +222,7 @@ notified job registry to adopt jobs: [1]
 begin transaction #2
 commit transaction #2
 begin transaction #3
-## PostCommitNonRevertiblePhase stage 1 of 1 with 18 MutationType ops
+## PostCommitNonRevertiblePhase stage 1 of 1 with 13 MutationType ops
 upsert descriptor #108
   ...
      createAsOfTime:
@@ -255,12 +250,15 @@ delete descriptor #104
 delete descriptor #105
 delete descriptor #106
 delete descriptor #107
-write *eventpb.DropDatabase to event log: DROP DATABASE ‹multi_region_test_db› CASCADE
+persist all catalog changes to storage
 create job #2 (non-cancelable: true): "GC for DROP DATABASE multi_region_test_db CASCADE"
   descriptor IDs: [108 104]
 update progress of schema change job #1: "all stages completed"
 set schema change job #1 to non-cancellable
 updated schema change job #1 descriptor IDs to []
+write *eventpb.FinishSchemaChange to event log:
+  sc:
+    descriptorId: 104
 commit transaction #3
 notified job registry to adopt jobs: [2]
 # end PostCommitPhase

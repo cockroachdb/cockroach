@@ -139,6 +139,48 @@ after being offline.
 | `StartedAt` | The time when this node was last started. | no |
 | `LastUp` | The approximate last time the node was up before the last restart. | no |
 
+### `tenant_shared_service_start`
+
+An event of type `tenant_shared_service_start` is recorded when a tenant server
+is started inside the same process as the KV layer.
+
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `OK` | Whether the startup was successful. | no |
+| `ErrorText` | If the startup failed, the text of the error. | partially |
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
+| `EventType` | The type of the event. | no |
+| `NodeID` | The node ID where the event was originated. | no |
+| `TenantID` | The ID of the tenant owning the service. | no |
+| `InstanceID` | The ID of the server instance. | no |
+| `TenantName` | The name of the tenant at the time the event was emitted. | yes |
+
+### `tenant_shared_service_stop`
+
+An event of type `tenant_shared_service_stop` is recorded when a tenant server
+is shut down inside the same process as the KV layer.
+
+
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
+| `EventType` | The type of the event. | no |
+| `NodeID` | The node ID where the event was originated. | no |
+| `TenantID` | The ID of the tenant owning the service. | no |
+| `InstanceID` | The ID of the server instance. | no |
+| `TenantName` | The name of the tenant at the time the event was emitted. | yes |
+
 ## Debugging events
 
 Events in this category pertain to debugging operations performed by
@@ -2697,7 +2739,7 @@ was triggered.
 
 | Field | Description | Sensitive |
 |--|--|--|
-| `Description` | The description of that would show up in the job's description field, redacted | no |
+| `Description` | The description of that would show up in the job's description field, redacted | yes |
 | `SinkType` | The type of sink being emitted to (ex: kafka, nodelocal, webhook-https). | no |
 | `NumTables` | The number of tables listed in the query that the changefeed is to run on. | no |
 | `Resolved` | The behavior of emitted resolved spans (ex: yes, no, 10s) | no |
@@ -2711,13 +2753,16 @@ successfully starts running.  Failed CREATE statements will show up as
 ChangefeedFailed events.
 
 
+| Field | Description | Sensitive |
+|--|--|--|
+| `Transformation` |  | no |
 
 
 #### Common fields
 
 | Field | Description | Sensitive |
 |--|--|--|
-| `Description` | The description of that would show up in the job's description field, redacted | no |
+| `Description` | The description of that would show up in the job's description field, redacted | yes |
 | `SinkType` | The type of sink being emitted to (ex: kafka, nodelocal, webhook-https). | no |
 | `NumTables` | The number of tables listed in the query that the changefeed is to run on. | no |
 | `Resolved` | The behavior of emitted resolved spans (ex: yes, no, 10s) | no |

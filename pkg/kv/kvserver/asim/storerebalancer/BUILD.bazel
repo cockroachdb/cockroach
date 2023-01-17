@@ -38,9 +38,9 @@ go_test(
         "//pkg/kv/kvserver",
         "//pkg/kv/kvserver/allocator/load",
         "//pkg/kv/kvserver/asim/config",
+        "//pkg/kv/kvserver/asim/gossip",
         "//pkg/kv/kvserver/asim/op",
         "//pkg/kv/kvserver/asim/state",
-        "//pkg/roachpb",
         "@com_github_stretchr_testify//require",
     ],
 )

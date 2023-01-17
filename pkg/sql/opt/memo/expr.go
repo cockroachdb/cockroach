@@ -296,7 +296,7 @@ func (e *DistributeExpr) GetDistributions() (target, source physical.Distributio
 	if distributionProvidedPhysical != nil && inputDistributionProvidedPhysical != nil {
 		target = distributionProvidedPhysical.Distribution
 		source = inputDistributionProvidedPhysical.Distribution
-		return target, source, ok
+		return target, source, true
 	}
 	return physical.Distribution{}, physical.Distribution{}, false
 }

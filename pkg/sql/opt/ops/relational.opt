@@ -484,10 +484,12 @@ define LookupJoinPrivate {
     # both the input table and lookup table have REGIONAL BY ROW partitioning).
     ChildOfLocalityOptimizedSearch bool
 
-    # ConstFilters contains the constant filters that are represented as equality
-    # conditions on the KeyCols. These filters are needed by the statistics code to
-    # correctly estimate selectivity.
-    ConstFilters FiltersExpr
+    # AllLookupFilters synthesizes all the filters that are represented as
+    # equality conditions on the KeyCols, as well as the filters in LookupExpr
+    # and RemoteLookupExpr. These filters are needed by the statistics code to
+    # correctly estimate selectivity as well as by the logicalPropsBuilder for
+    # calculating logical properties.
+    AllLookupFilters FiltersExpr
 
     # Locking represents the row-level locking mode of the LookupJoin in the
     # lookup table. Most lookup joins leave this unset (Strength = ForNone),
@@ -502,6 +504,11 @@ define LookupJoinPrivate {
     # different wait policies are used by SELECT .. FOR UPDATE/SHARE SKIP
     # LOCKED/NOWAIT statements to react differently to conflicting locks.
     Locking Locking
+
+    # RemoteOnlyLookups is true when this join is defined with only lookups
+    # that read into remote regions, though the lookups are defined in
+    # LookupExpr, not RemoteLookupExpr.
+    RemoteOnlyLookups bool
     _ JoinPrivate
 }
 
@@ -1286,9 +1293,11 @@ define WithPrivate {
     # it in the EXPLAIN plan).
     OriginalExpr Statement
 
-    # Mtr is used to specify whether or not to override the optimizer's
-    # default decision for materializing or not materializing tables.
-    Mtr MaterializeClause
+    # Mtr is the materialization behavior of the CTE, specified by MATERIALIZED,
+    # NOT MATERIALIZED, or an empty materialize clause. These modes partially
+    # affect whether or not a CTE is inlined during normalization. See
+    # CanInlineWith.
+    Mtr CTEMaterializeClause
 
     # Ordering specifies the order required of the binding, and thus controls
     # the order in which the rows are materialized. Can only be used when Mtr is
@@ -1335,10 +1344,9 @@ define WithScanPrivate {
     # it possible to construct WithScan expressions with no columns.
     ID UniqueID
 
-    # CanInlineInPlace is true when the WithScanExpr is allowed to be inlined
-    # when it is normalized as opposed to inlining which takes place when the
-    # WithExpr is normalized.
-    CanInlineInPlace bool
+    # Mtr is the materialization behavior of the CTE referenced by the WithScan.
+    # It matches the Mtr field of the WithPrivate with a matching WithID.
+    Mtr CTEMaterializeClause
 }
 
 # RecursiveCTE implements the logic of a recursive CTE:

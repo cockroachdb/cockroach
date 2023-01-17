@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps/sctestdeps"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -68,7 +67,7 @@ func TestExecBackfiller(t *testing.T) {
 		var columnIDs, keySuffixColumnIDs []descpb.ColumnID
 		var columnIDSet catalog.TableColSet
 		for _, c := range columns {
-			col, err := mut.FindColumnWithName(tree.Name(c))
+			col, err := catalog.MustFindColumnByName(mut, c)
 			require.NoError(t, err)
 			dirs = append(dirs, catenumpb.IndexColumn_ASC)
 			columnIDs = append(columnIDs, col.GetID())
@@ -93,7 +92,7 @@ func TestExecBackfiller(t *testing.T) {
 			EncodingType:                catenumpb.SecondaryIndexEncoding,
 			UseDeletePreservingEncoding: isTempIndex,
 		}, descpb.DescriptorMutation_ADD, descpb.DescriptorMutation_BACKFILLING))
-		idx, err := mut.FindIndexWithName(name)
+		idx, err := catalog.MustFindIndexByName(mut, name)
 		require.NoError(t, err)
 		return idx
 	}
@@ -170,7 +169,7 @@ func TestExecBackfiller(t *testing.T) {
 				FlushFractionCompleted(gomock.Any()).
 				After(backfillCall)
 
-			require.NoError(t, scexec.ExecuteStage(ctx, deps, []scop.Op{
+			require.NoError(t, scexec.ExecuteStage(ctx, deps, scop.PostCommitPhase, []scop.Op{
 				&scop.BackfillIndex{
 					TableID:       tab.GetID(),
 					SourceIndexID: 1,
@@ -266,7 +265,7 @@ func TestExecBackfiller(t *testing.T) {
 					backfillIndexOp(fooID, 1, 2),
 				}
 				rand.Shuffle(len(ops), func(i, j int) { ops[i], ops[j] = ops[j], ops[i] })
-				require.NoError(t, scexec.ExecuteStage(ctx, deps, ops))
+				require.NoError(t, scexec.ExecuteStage(ctx, deps, scop.PostCommitPhase, ops))
 			},
 		},
 		{name: "simple merge", f: func(t *testing.T, tdb *sqlutils.SQLRunner) {
@@ -316,7 +315,7 @@ func TestExecBackfiller(t *testing.T) {
 				FlushFractionCompleted(gomock.Any()).
 				After(mergeCall)
 
-			require.NoError(t, scexec.ExecuteStage(ctx, deps, []scop.Op{
+			require.NoError(t, scexec.ExecuteStage(ctx, deps, scop.PostCommitPhase, []scop.Op{
 				&scop.MergeIndex{
 					TableID:           tab.GetID(),
 					TemporaryIndexID:  tmpIdx.GetID(),

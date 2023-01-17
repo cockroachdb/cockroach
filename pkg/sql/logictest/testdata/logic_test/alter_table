@@ -50,17 +50,17 @@ ALTER TABLE t ADD CONSTRAINT foo UNIQUE (b)
 statement error pq: multiple primary keys for table "t" are not allowed
 ALTER TABLE t ADD CONSTRAINT bar PRIMARY KEY (b)
 
-query TTBITTBBB colnames
+query TTBITTTBBB colnames
 SHOW INDEXES FROM t
 ----
-table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit  visible
-t           foo         false       1             b            ASC        false    false     true
-t           foo         false       2             a            ASC        true     true      true
-t           t_f_idx     true        1             f            ASC        false    false     true
-t           t_f_idx     true        2             a            ASC        false    true      true
-t           t_pkey      false       1             a            ASC        false    false     true
-t           t_pkey      false       2             f            N/A        true     false     true
-t           t_pkey      false       3             b            N/A        true     false     true
+table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible
+t           foo         false       1             b            b           ASC        false    false     true
+t           foo         false       2             a            a           ASC        true     true      true
+t           t_f_idx     true        1             f            f           ASC        false    false     true
+t           t_f_idx     true        2             a            a           ASC        false    true      true
+t           t_pkey      false       1             a            a           ASC        false    false     true
+t           t_pkey      false       2             f            f           N/A        true     false     true
+t           t_pkey      false       3             b            b           N/A        true     false     true
 
 query III
 SELECT * FROM t
@@ -243,16 +243,16 @@ NEW SCHEMA CHANGE  DROP INDEX test.public.t@foo CASCADE         root  succeeded 
 
 
 
-query TTBITTBBB colnames
+query TTBITTTBBB colnames
 SHOW INDEXES FROM t
 ----
-table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit  visible
-t           t_f_idx     true        1             f            ASC        false    false     true
-t           t_f_idx     true        2             a            ASC        false    true      true
-t           t_pkey      false       1             a            ASC        false    false     true
-t           t_pkey      false       2             f            N/A        true     false     true
-t           t_pkey      false       3             b            N/A        true     false     true
-t           t_pkey      false       4             c            N/A        true     false     true
+table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible
+t           t_f_idx     true        1             f            f           ASC        false    false     true
+t           t_f_idx     true        2             a            a           ASC        false    true      true
+t           t_pkey      false       1             a            a           ASC        false    false     true
+t           t_pkey      false       2             f            f           N/A        true     false     true
+t           t_pkey      false       3             b            b           N/A        true     false     true
+t           t_pkey      false       4             c            c           N/A        true     false     true
 
 statement ok
 ALTER TABLE t DROP b, DROP c
@@ -414,15 +414,15 @@ ALTER TABLE t DROP COLUMN g CASCADE
 statement ok
 ALTER TABLE o DROP COLUMN h
 
-query TTBITTBBB colnames
+query TTBITTTBBB colnames
 SHOW INDEXES FROM o
 ----
-table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit  visible
-o           o_pkey      false       1             rowid        ASC        false    false     true
-o           o_pkey      false       2             gf           N/A        true     false     true
-o           o_pkey      false       3             i            N/A        true     false     true
-o           oi          true        1             i            ASC        false    false     true
-o           oi          true        2             rowid        ASC        false    true      true
+table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible
+o           o_pkey      false       1             rowid        rowid       ASC        false    false     true
+o           o_pkey      false       2             gf           gf          N/A        true     false     true
+o           o_pkey      false       3             i            i           N/A        true     false     true
+o           oi          true        1             i            i           ASC        false    false     true
+o           oi          true        2             rowid        rowid       ASC        false    true      true
 
 statement ok
 ALTER TABLE t ADD f INT CHECK (f > 1)
@@ -520,7 +520,7 @@ a            INT8       false        NULL            ·                      {tt
 q            DECIMAL    false        NULL            ·                      {tt_pkey}                    false
 r            DECIMAL    true         NULL            ·                      {tt_pkey}                    false
 s            DECIMAL    false        NULL            ·                      {tt_pkey,tt_s_key}           false
-t            DECIMAL    true         4.0:::DECIMAL   ·                      {tt_pkey,tt_t_key}           false
+t            DECIMAL    true         4.0             ·                      {tt_pkey,tt_t_key}           false
 
 # Default values can be added and changed after table creation.
 statement ok
@@ -974,7 +974,7 @@ CREATE TABLE t (a INT)
 statement ok
 INSERT INTO t VALUES (1), (NULL)
 
-statement error validation of NOT NULL constraint failed: validation of CHECK "a IS NOT NULL" failed
+statement error (.*validation of CHECK "a IS NOT NULL" failed on row: a=NULL, rowid=\d+|pq: validation of column "a" NOT NULL failed on row: a=NULL, rowid=\d+)
 ALTER TABLE t ALTER COLUMN a SET NOT NULL
 
 statement ok
@@ -2676,7 +2676,7 @@ INSERT INTO t_add_column_not_null VALUES (1), (2), (3)
 statement error pgcode 23502 null value in column "j" violates not-null constraint
 ALTER TABLE t_add_column_not_null ADD COLUMN j INT NOT NULL DEFAULT (NULL:::INT)
 
-statement error pgcode 23502 null value in column "j" violates not-null constraint
+statement error pgcode 23502 (null value in column "j" violates not-null constraint|pq: validation of column "j" NOT NULL failed on row: i=\d+, j=NULL)
 ALTER TABLE t_add_column_not_null ADD COLUMN j INT GENERATED ALWAYS AS (NULL:::INT) STORED NOT NULL;
 
 # Note that the UNIQUE here leads to a secondary index being built which will fail.
@@ -2751,3 +2751,155 @@ SELECT count(*) from t_with_dropped_index_expr;
 
 statement ok
 RESUME JOB (SELECT job_id FROM crdb_internal.jobs WHERE description LIKE 'ALTER TABLE %t_with_dropped_index_expr DROP COLUMN j CASCADE%' AND status='paused' FETCH FIRST 1 ROWS ONLY);
+
+
+# In 23.1 we added support for default expressions which can be assignment cast
+# to the column type. This work introduced a bug whereby the backfill logic
+# would not apply the appropriate cast. This test ensures that such tables can
+# be backfilled.
+subtest add_column_with_default_expression_with_different_type
+
+statement ok
+CREATE TABLE t_93398 (c1 INT);
+INSERT INTO t_93398 VALUES (0);
+
+statement ok
+ALTER TABLE t_93398 ADD COLUMN c2 DECIMAL DEFAULT pi();
+
+query IT
+SELECT * FROM t_93398;
+----
+0  3.141592653589793
+
+statement error pgcode 22001 value too long for type CHAR
+ALTER TABLE t_93398 ADD COLUMN c3 CHAR(1) DEFAULT 'foo'::TEXT;
+
+statement ok
+ALTER TABLE t_93398 ADD COLUMN c3 "char" DEFAULT 'foo'::TEXT;
+
+query IT
+SELECT c1, c3 FROM t_93398;
+----
+0  f
+
+# The following subtest tests the case when there is a check constraint
+# that references other descriptors (such as sequences and types):
+# - drop referenced sequence cascade
+# - drop the check itself
+# - drop the referencing table
+# Note that legacy schema changer won't support those cases correctly
+# so we will skip them.
+subtest cross_descriptor_checks_96115
+
+statement ok
+CREATE SEQUENCE seq_96115;
+
+statement ok
+CREATE TYPE typ_96115 AS ENUM ('a', 'b');
+
+statement ok
+CREATE TABLE t_96115 (i INT PRIMARY KEY, j STRING);
+
+statement ok
+ALTER TABLE t_96115 ADD CHECK (i > nextval('seq_96115') AND j::typ_96115 = 'a'::typ_96115);
+
+skipif config local-legacy-schema-changer
+skipif config local-mixed-22.2-23.1
+query TTTB colnames
+SELECT table_name, constraint_name, constraint_type, validated
+FROM [SHOW CONSTRAINTS FROM t_96115]
+ORDER BY constraint_type;
+----
+table_name  constraint_name  constraint_type  validated
+t_96115     check_i_j        CHECK            true
+t_96115     t_96115_pkey     PRIMARY KEY      true
+
+statement ok
+ALTER TABLE t_96115 DROP CONSTRAINT check_i_j;
+
+skipif config local-legacy-schema-changer
+skipif config local-mixed-22.2-23.1
+query TTTB colnames
+SELECT table_name, constraint_name, constraint_type, validated
+FROM [SHOW CONSTRAINTS FROM t_96115]
+ORDER BY constraint_type;
+----
+table_name  constraint_name  constraint_type  validated
+t_96115     t_96115_pkey     PRIMARY KEY      true
+
+statement ok
+ALTER TABLE t_96115 ADD CHECK (i > nextval('seq_96115') AND j::typ_96115 = 'a'::typ_96115);
+
+skipif config local-legacy-schema-changer
+skipif config local-mixed-22.2-23.1
+query TTTB colnames
+SELECT table_name, constraint_name, constraint_type, validated
+FROM [SHOW CONSTRAINTS FROM t_96115]
+ORDER BY constraint_type;
+----
+table_name  constraint_name  constraint_type  validated
+t_96115     check_i_j        CHECK            true
+t_96115     t_96115_pkey     PRIMARY KEY      true
+
+statement ok
+DROP SEQUENCE seq_96115 CASCADE;
+
+skipif config local-legacy-schema-changer
+skipif config local-mixed-22.2-23.1
+query TTTB colnames
+SELECT table_name, constraint_name, constraint_type, validated
+FROM [SHOW CONSTRAINTS FROM t_96115]
+ORDER BY constraint_type;
+----
+table_name  constraint_name  constraint_type  validated
+t_96115     t_96115_pkey     PRIMARY KEY      true
+
+statement ok
+CREATE SEQUENCE seq_96115;
+
+statement ok
+ALTER TABLE t_96115 ADD CHECK (i > nextval('seq_96115') AND j::typ_96115 = 'a'::typ_96115);
+
+statement ok
+DROP TABLE t_96115;
+
+statement ok
+DROP TYPE typ_96115;
+
+statement ok
+DROP SEQUENCE seq_96115
+
+# This subtest ensures we can drop partial unique without index.
+subtest drop_partial_unique_without_index_constraint_96115
+
+statement ok
+CREATE TABLE t_96115 (i INT PRIMARY KEY, j INT);
+
+statement ok
+set experimental_enable_unique_without_index_constraints = true;
+
+statement ok
+ALTER TABLE t_96115 ADD UNIQUE WITHOUT INDEX (j) WHERE j > 0;
+
+query TTTB colnames
+SELECT table_name, constraint_name, constraint_type, validated
+FROM [SHOW CONSTRAINTS FROM t_96115]
+ORDER BY constraint_type;
+----
+table_name  constraint_name  constraint_type  validated
+t_96115     t_96115_pkey     PRIMARY KEY      true
+t_96115     unique_j         UNIQUE           true
+
+statement ok
+ALTER TABLE t_96115 DROP CONSTRAINT unique_j;
+
+query TTTB colnames
+SELECT table_name, constraint_name, constraint_type, validated
+FROM [SHOW CONSTRAINTS FROM t_96115]
+ORDER BY constraint_type;
+----
+table_name  constraint_name  constraint_type  validated
+t_96115     t_96115_pkey     PRIMARY KEY      true
+
+statement ok
+DROP TABLE t_96115;

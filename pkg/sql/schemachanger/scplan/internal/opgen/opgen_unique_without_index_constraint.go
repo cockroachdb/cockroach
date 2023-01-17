@@ -11,6 +11,7 @@
 package opgen
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 )
@@ -21,11 +22,15 @@ func init() {
 			scpb.Status_ABSENT,
 			to(scpb.Status_WRITE_ONLY,
 				emit(func(this *scpb.UniqueWithoutIndexConstraint) *scop.MakeAbsentUniqueWithoutIndexConstraintWriteOnly {
+					var partialExpr catpb.Expression
+					if this.Predicate != nil {
+						partialExpr = this.Predicate.Expr
+					}
 					return &scop.MakeAbsentUniqueWithoutIndexConstraintWriteOnly{
 						TableID:      this.TableID,
 						ConstraintID: this.ConstraintID,
 						ColumnIDs:    this.ColumnIDs,
-						Predicate:    this.Predicate,
+						PartialExpr:  partialExpr,
 					}
 				}),
 				emit(func(this *scpb.UniqueWithoutIndexConstraint) *scop.UpdateTableBackReferencesInTypes {
@@ -37,11 +42,11 @@ func init() {
 						BackReferencedTableID: this.TableID,
 					}
 				}),
-				emit(func(this *scpb.UniqueWithoutIndexConstraint) *scop.UpdateBackReferencesInSequences {
+				emit(func(this *scpb.UniqueWithoutIndexConstraint) *scop.UpdateTableBackReferencesInSequences {
 					if this.Predicate == nil || this.Predicate.UsesSequenceIDs == nil || len(this.Predicate.UsesSequenceIDs) == 0 {
 						return nil
 					}
-					return &scop.UpdateBackReferencesInSequences{
+					return &scop.UpdateTableBackReferencesInSequences{
 						SequenceIDs:           this.Predicate.UsesSequenceIDs,
 						BackReferencedTableID: this.TableID,
 					}

@@ -13,6 +13,7 @@ package timeutil
 import (
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/grunning"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
@@ -32,12 +33,25 @@ type StopWatch struct {
 		// timeSource is the source of time used by the stop watch. It is always
 		// timeutil.Now except for tests.
 		timeSource func() time.Time
+		// cpuStopWatch is used to track CPU usage. It may be nil, in which case any
+		// operations on it are no-ops.
+		cpuStopWatch *cpuStopWatch
 	}
 }
 
 // NewStopWatch creates a new StopWatch.
 func NewStopWatch() *StopWatch {
 	return newStopWatch(Now)
+}
+
+// NewStopWatchWithCPU creates a new StopWatch that will track CPU usage in
+// addition to wall-clock time.
+func NewStopWatchWithCPU() *StopWatch {
+	w := newStopWatch(Now)
+	if grunning.Supported() {
+		w.mu.cpuStopWatch = &cpuStopWatch{}
+	}
+	return w
 }
 
 // NewTestStopWatch create a new StopWatch with the given time source. It is
@@ -59,6 +73,7 @@ func (w *StopWatch) Start() {
 	if !w.mu.started {
 		w.mu.started = true
 		w.mu.startedAt = w.mu.timeSource()
+		w.mu.cpuStopWatch.start()
 	}
 }
 
@@ -71,6 +86,7 @@ func (w *StopWatch) Stop() {
 	if w.mu.started {
 		w.mu.started = false
 		w.mu.elapsed += w.mu.timeSource().Sub(w.mu.startedAt)
+		w.mu.cpuStopWatch.stop()
 	}
 }
 
@@ -79,6 +95,15 @@ func (w *StopWatch) Elapsed() time.Duration {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	return w.mu.elapsed
+}
+
+// ElapsedCPU returns the total CPU time measured by the stop watch so far. It
+// returns zero if cpuStopWatch is nil (which is the case if NewStopWatchWithCPU
+// was not called or the platform does not support grunning).
+func (w *StopWatch) ElapsedCPU() time.Duration {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.mu.cpuStopWatch.elapsed()
 }
 
 // LastStartedAt returns the time the stopwatch was last started, and a bool
