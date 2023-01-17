@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
+	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -599,6 +600,14 @@ func createChangefeedJobRecord(
 					"without specifying %[1]q parameter.  "+
 					"Otherwise, please re-run with a different %[1]q value.",
 				changefeedbase.OptMetricsScope, defaultSLIScope)
+		}
+
+		if !status.ChildMetricsEnabled.Get(&p.ExecCfg().Settings.SV) {
+			p.BufferClientNotice(ctx, pgnotice.Newf(
+				"%s is set to false, metrics will only be published to the '%s' label when it is set to true",
+				status.ChildMetricsEnabled.Key(),
+				scope,
+			))
 		}
 	}
 

@@ -1628,6 +1628,22 @@ https://www.postgresql.org/docs/9.5/catalog-pg-description.html`,
 				return err
 			}
 		}
+
+		// Also add all built-in comments.
+		for _, name := range builtins.AllBuiltinNames() {
+			_, overloads := builtinsregistry.GetBuiltinProperties(name)
+			for _, builtin := range overloads {
+				if err := addRow(
+					tree.NewDOid(builtin.Oid),
+					tree.NewDOid(catconstants.PgCatalogProcTableID),
+					tree.DZero,
+					tree.NewDString(builtin.Info),
+				); err != nil {
+					return err
+				}
+			}
+		}
+
 		return nil
 	},
 }

@@ -86,7 +86,8 @@ type storeMetrics interface {
 	Registry() *metric.Registry
 }
 
-var childMetricsEnabled = settings.RegisterBoolSetting(
+// ChildMetricsEnabled enables exporting of additional prometheus time series with extra labels
+var ChildMetricsEnabled = settings.RegisterBoolSetting(
 	settings.TenantWritable, "server.child_metrics.enabled",
 	"enables the exporting of child metrics, additional prometheus time series with extra labels",
 	false).WithPublic()
@@ -245,7 +246,7 @@ func (mr *MetricsRecorder) ScrapeIntoPrometheus(pm *metric.PrometheusExporter) {
 			log.Warning(context.TODO(), "MetricsRecorder asked to scrape metrics before NodeID allocation")
 		}
 	}
-	includeChildMetrics := childMetricsEnabled.Get(&mr.settings.SV)
+	includeChildMetrics := ChildMetricsEnabled.Get(&mr.settings.SV)
 	pm.ScrapeRegistry(mr.mu.nodeRegistry, includeChildMetrics)
 	for _, reg := range mr.mu.storeRegistries {
 		pm.ScrapeRegistry(reg, includeChildMetrics)
