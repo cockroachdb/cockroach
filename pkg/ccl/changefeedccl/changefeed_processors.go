@@ -87,9 +87,10 @@ type changeAggregator struct {
 	// boundary information.
 	frontier *schemaChangeFrontier
 
-	metrics    *Metrics
-	sliMetrics *sliMetrics
-	knobs      TestingKnobs
+	metrics                *Metrics
+	sliMetrics             *sliMetrics
+	closeTelemetryRecorder func()
+	knobs                  TestingKnobs
 }
 
 type timestampLowerBoundOracle interface {
@@ -192,6 +193,25 @@ func (ca *changeAggregator) MustBeStreaming() bool {
 	return true
 }
 
+// wrapMetricsController wraps the supplied metricsRecorder to emit metrics to telemetry.
+// This method modifies ca.cancel().
+func (ca *changeAggregator) wrapMetricsController(
+	ctx context.Context, recorder metricsRecorder,
+) (metricsRecorder, error) {
+	job, err := ca.flowCtx.Cfg.JobRegistry.LoadJob(ctx, ca.spec.JobID)
+	if err != nil {
+		return ca.sliMetrics, err
+	}
+
+	recorderWithTelemetry, err := wrapMetricsRecorderWithTelemetry(ctx, job, ca.flowCtx.Cfg.Settings, recorder)
+	if err != nil {
+		return ca.sliMetrics, err
+	}
+	ca.closeTelemetryRecorder = recorderWithTelemetry.close
+
+	return recorderWithTelemetry, nil
+}
+
 // Start is part of the RowSource interface.
 func (ca *changeAggregator) Start(ctx context.Context) {
 	// Derive a separate context so that we can shutdown the poller.
@@ -245,9 +265,19 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 		return
 	}
 
-	ca.sink, err = getEventSink(ctx, ca.flowCtx.Cfg, ca.spec.Feed, timestampOracle,
-		ca.spec.User(), ca.spec.JobID, ca.sliMetrics)
+	// TODO(jayant): add support for sinkless changefeeds using UUID
+	recorder := metricsRecorder(ca.sliMetrics)
+	if !ca.isSinkless() {
+		recorder, err = ca.wrapMetricsController(ctx, recorder)
+		if err != nil {
+			ca.MoveToDraining(err)
+			ca.cancel()
+			return
+		}
+	}
 
+	ca.sink, err = getEventSink(ctx, ca.flowCtx.Cfg, ca.spec.Feed, timestampOracle,
+		ca.spec.User(), ca.spec.JobID, recorder)
 	if err != nil {
 		err = changefeedbase.MarkRetryableError(err)
 		// Early abort in the case that there is an error creating the sink.
@@ -449,6 +479,9 @@ func (ca *changeAggregator) close() {
 			log.Warningf(ca.Ctx(), "error closing event consumer: %s", err)
 		}
 	}
+	if ca.closeTelemetryRecorder != nil {
+		ca.closeTelemetryRecorder()
+	}
 
 	if ca.sink != nil {
 		// Best effort: context is often cancel by now, so we expect to see an error
@@ -618,6 +651,10 @@ func (ca *changeAggregator) emitResolved(batch jobspb.ResolvedSpans) error {
 func (ca *changeAggregator) ConsumerClosed() {
 	// The consumer is done, Next() will not be called again.
 	ca.close()
+}
+
+func (ca *changeAggregator) isSinkless() bool {
+	return ca.spec.JobID == 0
 }
 
 const (

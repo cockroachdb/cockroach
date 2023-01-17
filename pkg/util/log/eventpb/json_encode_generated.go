@@ -962,6 +962,49 @@ func (m *ChangeTypePrivilege) AppendJSONFields(printComma bool, b redact.Redacta
 }
 
 // AppendJSONFields implements the EventPayload interface.
+func (m *ChangefeedEmittedBytes) AppendJSONFields(printComma bool, b redact.RedactableBytes) (bool, redact.RedactableBytes) {
+
+	printComma, b = m.CommonChangefeedEventDetails.AppendJSONFields(printComma, b)
+
+	if m.JobId != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"JobId\":"...)
+		b = strconv.AppendInt(b, int64(m.JobId), 10)
+	}
+
+	if m.EmittedBytes != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"EmittedBytes\":"...)
+		b = strconv.AppendInt(b, int64(m.EmittedBytes), 10)
+	}
+
+	if m.LoggingInterval != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"LoggingInterval\":"...)
+		b = strconv.AppendInt(b, int64(m.LoggingInterval), 10)
+	}
+
+	if m.Closing {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"Closing\":true"...)
+	}
+
+	return printComma, b
+}
+
+// AppendJSONFields implements the EventPayload interface.
 func (m *ChangefeedFailed) AppendJSONFields(printComma bool, b redact.RedactableBytes) (bool, redact.RedactableBytes) {
 
 	printComma, b = m.CommonChangefeedEventDetails.AppendJSONFields(printComma, b)
