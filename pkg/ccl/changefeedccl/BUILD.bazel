@@ -75,6 +75,7 @@ go_library(
         "//pkg/scheduledjobs",
         "//pkg/scheduledjobs/schedulebase",
         "//pkg/security/username",
+        "//pkg/server/status",
         "//pkg/server/telemetry",
         "//pkg/settings",
         "//pkg/settings/cluster",

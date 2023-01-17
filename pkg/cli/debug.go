@@ -1432,7 +1432,9 @@ func init() {
 	f.StringVarP(&debugRecoverPlanOpts.outputFileName, "plan", "o", "",
 		"filename to write plan to")
 	f.IntSliceVar(&debugRecoverPlanOpts.deadStoreIDs, "dead-store-ids", nil,
-		"list of dead store IDs")
+		"list of dead store IDs (can't be used together with dead-node-ids)")
+	f.IntSliceVar(&debugRecoverPlanOpts.deadNodeIDs, "dead-node-ids", nil,
+		"list of dead node IDs (can't be used together with dead-store-ids)")
 	f.VarP(&debugRecoverPlanOpts.confirmAction, cliflags.ConfirmActions.Name, cliflags.ConfirmActions.Shorthand,
 		cliflags.ConfirmActions.Usage())
 	f.BoolVar(&debugRecoverPlanOpts.force, "force", false,

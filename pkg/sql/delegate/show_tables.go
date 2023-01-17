@@ -96,8 +96,8 @@ ORDER BY schema_name, table_name
 	var comment string
 	if n.WithComment {
 		descJoin = fmt.Sprintf(
-			`LEFT JOIN %s.pg_catalog.pg_description AS pd ON (pc.oid = pd.objoid AND pd.objsubid = 0)`,
-			&name.CatalogName,
+			`LEFT JOIN %[1]s.pg_catalog.pg_description AS pd ON (pc.oid = pd.objoid AND pd.objsubid = 0 AND pd.classoid = %[2]d)`,
+			&name.CatalogName, catconstants.PgCatalogClassTableID,
 		)
 		comment = `, COALESCE(pd.description, '') AS comment`
 	}
