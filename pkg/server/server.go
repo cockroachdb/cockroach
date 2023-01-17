@@ -275,7 +275,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		},
 		OnIncomingPing: func(ctx context.Context, req *rpc.PingRequest) error {
 			// Decommission state is only tracked for the system tenant.
-			if tenantID, isTenant := roachpb.TenantFromContext(ctx); isTenant &&
+			if tenantID, isTenant := roachpb.ClientTenantFromContext(ctx); isTenant &&
 				!roachpb.IsSystemTenantID(tenantID.ToUint64()) {
 				return nil
 			}
@@ -999,7 +999,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	// Create a server controller.
 	sc := newServerController(ctx, stopper, st,
-		lateBoundServer.newServerForTenant, &systemServerWrapper{server: lateBoundServer})
+		lateBoundServer, &systemServerWrapper{server: lateBoundServer})
 
 	// Create the debug API server.
 	debugServer := debug.NewServer(
@@ -1185,7 +1185,10 @@ func (s *Server) PreStart(ctx context.Context) error {
 
 	// Connect the node as loopback handler for RPC requests to the
 	// local node.
-	s.rpcContext.SetLocalInternalServer(s.node, s.grpc.serverInterceptorsInfo, s.rpcContext.ClientInterceptors())
+	s.rpcContext.SetLocalInternalServer(
+		s.node,
+		false, // tenant
+		s.grpc.serverInterceptorsInfo, s.rpcContext.ClientInterceptors())
 
 	// Load the TLS configuration for the HTTP server.
 	uiTLSConfig, err := s.rpcContext.GetUIServerTLSConfig()

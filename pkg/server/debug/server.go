@@ -20,6 +20,7 @@ import (
 	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/base/serverident"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/sidetransport"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
@@ -136,7 +137,7 @@ func NewServer(
 		vsrv:         vsrv,
 		setIntercept: log.InterceptWith,
 	}
-	serverTenantID := ambientContext.ServerIDs.ServerIdentityString(log.IdentifyTenantID)
+	serverTenantID := ambientContext.ServerIDs.ServerIdentityString(serverident.IdentifyTenantID)
 	if serverTenantID == "" {
 		panic("programmer error: cannot instantiate a debug.Server with no tenantID in the ambientCtx")
 	}

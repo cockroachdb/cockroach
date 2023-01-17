@@ -50,7 +50,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
-	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -157,7 +156,7 @@ var (
 		10*time.Second,
 		settings.NonNegativeDurationWithMaximum(maxGraphiteInterval),
 	).WithPublic()
-	redactServerTracesForSecondaryTenants = settings.RegisterBoolSetting(
+	RedactServerTracesForSecondaryTenants = settings.RegisterBoolSetting(
 		settings.SystemOnly,
 		"server.secondary_tenants.redact_trace.enabled",
 		"controls if server side traces are redacted for tenant operations",
@@ -1092,7 +1091,7 @@ func (n *Node) batchInternal(
 	// NB: wrapped to delay br evaluation to its value when returning.
 	defer func() {
 		var redact redactOpt
-		if redactServerTracesForSecondaryTenants.Get(&n.storeCfg.Settings.SV) {
+		if RedactServerTracesForSecondaryTenants.Get(&n.storeCfg.Settings.SV) {
 			redact = redactIfTenantRequest
 		} else {
 			redact = dontRedactEvenIfTenantRequest
@@ -1153,7 +1152,7 @@ func (n *Node) Batch(
 	// log tags more expensive and makes local calls differ from remote calls.
 	ctx = n.storeCfg.AmbientCtx.ResetAndAnnotateCtx(ctx)
 
-	tenantID, ok := roachpb.TenantFromContext(ctx)
+	tenantID, ok := roachpb.ClientTenantFromContext(ctx)
 	if !ok {
 		tenantID = roachpb.SystemTenantID
 	} else {
@@ -1262,45 +1261,35 @@ func setupSpanForIncomingRPC(
 	ctx context.Context, tenID roachpb.TenantID, ba *roachpb.BatchRequest, tr *tracing.Tracer,
 ) (context.Context, spanForRequest) {
 	var newSpan *tracing.Span
-	parentSpan := tracing.SpanFromContext(ctx)
-	localRequest := grpcutil.IsLocalRequestContext(ctx)
-	// For non-local requests, we'll need to attach the recording to the outgoing
-	// BatchResponse if the request is traced. We ignore whether the request is
-	// traced or not here; if it isn't, the recording will be empty.
-	needRecordingCollection := !localRequest
-	if localRequest {
-		// This is a local request which circumvented gRPC. Start a span now.
+	remoteParent := !ba.TraceInfo.Empty()
+	if !remoteParent {
+		// This is either a local request which circumvented gRPC, or a remote
+		// request that didn't specify tracing information. In the former case,
+		// EnsureChildSpan will create a child span, in the former case we'll get a
+		// root span.
 		ctx, newSpan = tracing.EnsureChildSpan(ctx, tr, grpcinterceptor.BatchMethodName, tracing.WithServerSpanKind)
-	} else if parentSpan == nil {
-		// Non-local call. Tracing information comes from the request proto.
-		var remoteParent tracing.SpanMeta
-		if !ba.TraceInfo.Empty() {
-			ctx, newSpan = tr.StartSpanCtx(ctx, grpcinterceptor.BatchMethodName,
-				tracing.WithRemoteParentFromTraceInfo(ba.TraceInfo),
-				tracing.WithServerSpanKind)
-		} else {
-			// For backwards compatibility with 21.2, if tracing info was passed as
-			// gRPC metadata, we use it.
-			var err error
-			remoteParent, err = grpcinterceptor.ExtractSpanMetaFromGRPCCtx(ctx, tr)
-			if err != nil {
-				log.Warningf(ctx, "error extracting tracing info from gRPC: %s", err)
-			}
-			ctx, newSpan = tr.StartSpanCtx(ctx, grpcinterceptor.BatchMethodName,
-				tracing.WithRemoteParentFromSpanMeta(remoteParent),
-				tracing.WithServerSpanKind)
-		}
 	} else {
-		// It's unexpected to find a span in the context for a non-local request.
-		// Let's create a span for the RPC anyway.
-		ctx, newSpan = tr.StartSpanCtx(ctx, grpcinterceptor.BatchMethodName,
-			tracing.WithParent(parentSpan),
+		// Non-local call. Tracing information comes from the request proto.
+
+		// Sanity check - we're not expecting a span in the context. If there was
+		// one, it'd be unclear what needRecordingCollection should be set to.
+		parentSpan := tracing.SpanFromContext(ctx)
+		if parentSpan != nil {
+			log.Fatalf(ctx, "unexpected span found in non-local RPC: %s", parentSpan)
+		}
+
+		ctx, newSpan = tr.StartSpanCtx(
+			ctx, grpcinterceptor.BatchMethodName,
+			tracing.WithRemoteParentFromTraceInfo(ba.TraceInfo),
 			tracing.WithServerSpanKind)
 	}
 
 	newSpan.SetLazyTag("request", ba.ShallowCopy())
 	return ctx, spanForRequest{
-		needRecording: needRecordingCollection,
+		// For non-local requests, we'll need to attach the recording to the
+		// outgoing BatchResponse if the request is traced. We ignore whether the
+		// request is traced or not here; if it isn't, the recording will be empty.
+		needRecording: remoteParent,
 		tenID:         tenID,
 		sp:            newSpan,
 	}
@@ -1322,7 +1311,7 @@ func tenantPrefix(tenID roachpb.TenantID) roachpb.RSpan {
 func filterRangeLookupResponseForTenant(
 	ctx context.Context, descs []roachpb.RangeDescriptor,
 ) []roachpb.RangeDescriptor {
-	tenID, ok := roachpb.TenantFromContext(ctx)
+	tenID, ok := roachpb.ClientTenantFromContext(ctx)
 	if !ok {
 		// If we do not know the tenant, don't permit any pre-fetching.
 		return []roachpb.RangeDescriptor{}
@@ -1585,7 +1574,7 @@ func (n *Node) GossipSubscription(
 	ctx := n.storeCfg.AmbientCtx.AnnotateCtx(stream.Context())
 	ctxDone := ctx.Done()
 
-	_, isSecondaryTenant := roachpb.TenantFromContext(ctx)
+	_, isSecondaryTenant := roachpb.ClientTenantFromContext(ctx)
 
 	// Register a callback for each of the requested patterns. We don't want to
 	// block the gossip callback goroutine on a slow consumer, so we instead

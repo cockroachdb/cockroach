@@ -707,7 +707,7 @@ func (sp *Span) reset(
 		}
 
 		if kind != oteltrace.SpanKindUnspecified {
-			c.setTagLocked(spanKindTagKey, attribute.StringValue(kind.String()))
+			c.setTagLocked(SpanKindTagKey, attribute.StringValue(kind.String()))
 		}
 		c.mu.Unlock()
 	}
@@ -825,7 +825,7 @@ func (sr *spanRef) empty() bool {
 // Returns true if the span's refcount dropped to zero.
 func (sr *spanRef) release() bool {
 	if sr.empty() {
-		// There's no parent; nothing to do.
+		// There's no reference; nothing to do.
 		return false
 	}
 	sp := sr.Span
