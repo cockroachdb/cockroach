@@ -12,7 +12,7 @@ import { limitStringArray, unset } from "src/util";
 import {
   ExecutionInsightsRequest,
   FlattenedStmtInsights,
-} from "src/api/insightsApi";
+} from "src/api/txnInsightsApi";
 import {
   ExecutionDetails,
   FlattenedStmtInsightEvent,

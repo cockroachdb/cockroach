@@ -15,7 +15,7 @@ import { actions as txnInsightActions } from "../transactionInsights";
 import {
   ExecutionInsightsRequest,
   getClusterInsightsApi,
-} from "src/api/insightsApi";
+} from "src/api/txnInsightsApi";
 import { PayloadAction } from "@reduxjs/toolkit";
 import {
   UpdateTimeScalePayload,

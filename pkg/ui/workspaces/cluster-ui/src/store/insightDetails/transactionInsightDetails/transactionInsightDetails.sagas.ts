@@ -14,7 +14,7 @@ import { actions } from "./transactionInsightDetails.reducer";
 import {
   getTransactionInsightEventDetailsState,
   TxnContentionInsightDetailsRequest,
-} from "src/api/insightsApi";
+} from "src/api/txnInsightsApi";
 import { TxnContentionInsightDetails } from "src/insights";
 import { PayloadAction } from "@reduxjs/toolkit";
 import { ErrorWithKey } from "src/api";

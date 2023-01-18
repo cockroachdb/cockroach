@@ -12,7 +12,7 @@ import { createSlice, PayloadAction } from "@reduxjs/toolkit";
 import { DOMAIN_NAME } from "src/store/utils";
 import moment, { Moment } from "moment";
 import { ErrorWithKey } from "src/api/statementsApi";
-import { TxnContentionInsightDetailsRequest } from "src/api/insightsApi";
+import { TxnContentionInsightDetailsRequest } from "src/api/txnInsightsApi";
 import { TxnContentionInsightDetails } from "src/insights";
 
 export type TransactionInsightDetailsState = {

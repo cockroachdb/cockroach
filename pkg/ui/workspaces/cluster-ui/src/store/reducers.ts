@@ -10,7 +10,6 @@
 
 import { createAction, createReducer } from "@reduxjs/toolkit";
 import { combineReducers, createStore } from "redux";
-import { TxnInsightEvent } from "src/insights";
 import {
   ClusterLocksReqState,
   reducer as clusterLocks,
