@@ -19,18 +19,23 @@ type With struct {
 // CTE represents a common table expression inside of a WITH clause.
 type CTE struct {
 	Name AliasClause
-	Mtr  MaterializeClause
+	Mtr  CTEMaterializeClause
 	Stmt Statement
 }
 
-// MaterializeClause represents a materialize clause inside of a WITH clause.
-type MaterializeClause struct {
-	// Set controls whether to use the Materialize bool instead of the default.
-	Set bool
+// CTEMaterializeClause represents either MATERIALIZED, NOT MATERIALIZED, or an
+// empty materialization clause.
+type CTEMaterializeClause int8
 
-	// Materialize overrides the default materialization behavior.
-	Materialize bool
-}
+// The values for NullType.
+const (
+	// CTEMaterializeDefault represents an empty materialization clause.
+	CTEMaterializeDefault CTEMaterializeClause = iota
+	// CTEMaterializeAlways represents MATERIALIZED.
+	CTEMaterializeAlways
+	// CTEMaterializeNever represents NOT MATERIALIZED.
+	CTEMaterializeNever
+)
 
 // Format implements the NodeFormatter interface.
 func (node *With) Format(ctx *FmtCtx) {
@@ -47,11 +52,11 @@ func (node *With) Format(ctx *FmtCtx) {
 		}
 		ctx.FormatNode(&cte.Name)
 		ctx.WriteString(" AS ")
-		if cte.Mtr.Set {
-			if !cte.Mtr.Materialize {
-				ctx.WriteString("NOT ")
-			}
+		switch cte.Mtr {
+		case CTEMaterializeAlways:
 			ctx.WriteString("MATERIALIZED ")
+		case CTEMaterializeNever:
+			ctx.WriteString("NOT MATERIALIZED ")
 		}
 		ctx.WriteString("(")
 		ctx.FormatNode(cte.Stmt)

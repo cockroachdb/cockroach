@@ -333,7 +333,7 @@ func (m *Memo) CheckExpr(e opt.Expr) {
 		}
 
 	case *WithExpr:
-		if !t.BindingOrdering.Any() && (!t.Mtr.Set || !t.Mtr.Materialize) {
+		if !t.BindingOrdering.Any() && t.Mtr != tree.CTEMaterializeAlways {
 			panic(errors.AssertionFailedf("with ordering can only be specified with forced materialization"))
 		}
 
