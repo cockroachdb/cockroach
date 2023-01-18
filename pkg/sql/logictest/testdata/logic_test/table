@@ -570,6 +570,7 @@ cluster_settings                       NULL
 cluster_statement_statistics           NULL
 cluster_transaction_statistics         NULL
 cluster_transactions                   NULL
+cluster_txn_execution_insights         NULL
 create_function_statements             NULL
 create_schema_statements               NULL
 create_statements                      NULL
@@ -609,6 +610,7 @@ node_sessions                          NULL
 node_statement_statistics              NULL
 node_transaction_statistics            NULL
 node_transactions                      NULL
+node_txn_execution_insights            NULL
 node_txn_stats                         NULL
 partitions                             NULL
 pg_catalog_table_is_implemented        NULL
