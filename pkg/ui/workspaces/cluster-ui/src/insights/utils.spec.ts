@@ -22,7 +22,7 @@ import {
 } from "./utils";
 import {
   TxnInsightEvent,
-  StatementInsightEvent,
+  StmtInsightEvent,
   InsightNameEnum,
   failedExecutionInsight,
   FlattenedStmtInsightEvent,
@@ -70,7 +70,7 @@ function mockTxnContentionInsightEvent(
   return { ...txnContentionEventMock, ...fields };
 }
 
-const statementInsightMock: StatementInsightEvent = {
+const statementInsightMock: StmtInsightEvent = {
   statementExecutionID: "execution",
   statementFingerprintID: "fingerprint",
   startTime: moment(),
@@ -88,7 +88,7 @@ const statementInsightMock: StatementInsightEvent = {
   planGist: "gist",
 };
 
-function mockStmtInsight(fields: Partial<StatementInsightEvent>) {
+function mockStmtInsight(fields: Partial<StmtInsightEvent>) {
   return { ...statementInsightMock, ...fields };
 }
 

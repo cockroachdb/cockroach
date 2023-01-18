@@ -11,7 +11,7 @@
 import React from "react";
 import { Link } from "react-router-dom";
 import { ColumnDescriptor, SortedTable } from "src/sortedtable";
-import { StatementInsightEvent, TxnInsightDetails } from "../types";
+import { StmtInsightEvent, TxnInsightDetails } from "../types";
 import { InsightCell } from "../workloadInsights/util/insightCell";
 import {
   DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT,
@@ -19,11 +19,11 @@ import {
   limitText,
 } from "src/util";
 
-const stmtColumns: ColumnDescriptor<StatementInsightEvent>[] = [
+const stmtColumns: ColumnDescriptor<StmtInsightEvent>[] = [
   {
     name: "executionID",
     title: "Execution ID",
-    cell: (item: StatementInsightEvent) =>
+    cell: (item: StmtInsightEvent) =>
       item.insights?.length ? (
         <Link to={`/insights/statement/${item.statementExecutionID}`}>
           {item.statementExecutionID}
@@ -31,50 +31,49 @@ const stmtColumns: ColumnDescriptor<StatementInsightEvent>[] = [
       ) : (
         item.statementExecutionID
       ),
-    sort: (item: StatementInsightEvent) => item.statementExecutionID,
+    sort: (item: StmtInsightEvent) => item.statementExecutionID,
     alwaysShow: true,
   },
   {
     name: "query",
     title: "Statement Execution",
-    cell: (item: StatementInsightEvent) => limitText(item.query, 50),
-    sort: (item: StatementInsightEvent) => item.query,
+    cell: (item: StmtInsightEvent) => limitText(item.query, 50),
+    sort: (item: StmtInsightEvent) => item.query,
   },
   {
     name: "insights",
     title: "Insights",
-    cell: (item: StatementInsightEvent) =>
+    cell: (item: StmtInsightEvent) =>
       item.insights?.map(i => InsightCell(i)) ?? "None",
-    sort: (item: StatementInsightEvent) =>
+    sort: (item: StmtInsightEvent) =>
       item.insights?.reduce((str, i) => (str += i.label), ""),
   },
   {
     name: "startTime",
     title: "Start Time (UTC)",
-    cell: (item: StatementInsightEvent) =>
+    cell: (item: StmtInsightEvent) =>
       item.startTime?.format(DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT),
-    sort: (item: StatementInsightEvent) => item.startTime.unix(),
+    sort: (item: StmtInsightEvent) => item.startTime.unix(),
   },
   {
     name: "endTime",
     title: "End Time (UTC)",
-    cell: (item: StatementInsightEvent) =>
+    cell: (item: StmtInsightEvent) =>
       item.endTime?.format(DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT),
-    sort: (item: StatementInsightEvent) => item.endTime.unix(),
+    sort: (item: StmtInsightEvent) => item.endTime.unix(),
   },
   {
     name: "executionTime",
     title: "Execution Time",
-    cell: (item: StatementInsightEvent) =>
-      Duration(item.elapsedTimeMillis * 1e6),
-    sort: (item: StatementInsightEvent) => item.elapsedTimeMillis,
+    cell: (item: StmtInsightEvent) => Duration(item.elapsedTimeMillis * 1e6),
+    sort: (item: StmtInsightEvent) => item.elapsedTimeMillis,
   },
   {
     name: "waitTime",
     title: "Time Spent Waiting",
-    cell: (item: StatementInsightEvent) =>
+    cell: (item: StmtInsightEvent) =>
       Duration((item.totalContentionTime?.asMilliseconds() ?? 0) * 1e6),
-    sort: (item: StatementInsightEvent) => item.elapsedTimeMillis,
+    sort: (item: StmtInsightEvent) => item.elapsedTimeMillis,
   },
 ];
 
