@@ -37,7 +37,7 @@ import { txnFingerprintIdAttr, getMatchParamByName } from "../util";
 import { TimeScale } from "../timeScaleDropdown";
 
 export const selectTransaction = createSelector(
-  (state: AppState) => state.adminUI.sqlStats,
+  (state: AppState) => state.adminUI?.sqlStats,
   (_state: AppState, props: RouteComponentProps) => props,
   (transactionState, props) => {
     const transactions = transactionState.data?.transactions;

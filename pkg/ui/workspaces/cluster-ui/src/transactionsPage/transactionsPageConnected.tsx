@@ -12,7 +12,7 @@ import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 import { Dispatch } from "redux";
 
-import { AppState } from "src/store";
+import { AppState, uiConfigActions } from "src/store";
 import { actions as nodesActions } from "src/store/nodes";
 import { actions as sqlStatsActions } from "src/store/sqlStats";
 import {
@@ -27,7 +27,7 @@ import {
   selectFilters,
   selectSearch,
 } from "./transactionsPage.selectors";
-import { selectIsTenant } from "../store/uiConfig";
+import { selectHasAdminRole, selectIsTenant } from "../store/uiConfig";
 import { nodeRegionsByIDSelector } from "../store/nodes";
 import { selectStatementsLastUpdated } from "src/statementsPage/statementsPage.selectors";
 import { selectTimeScale } from "../store/utils/selectors";
@@ -79,6 +79,7 @@ export const TransactionsPageConnected = withRouter(
         nodeRegions: nodeRegionsByIDSelector(state),
         search: selectSearch(state),
         sortSetting: selectSortSetting(state),
+        hasAdminRole: selectHasAdminRole(state),
       },
       activePageProps: mapStateToRecentTransactionsPageProps(state),
     }),
@@ -87,6 +88,8 @@ export const TransactionsPageConnected = withRouter(
         refreshData: (req: StatementsRequest) =>
           dispatch(sqlStatsActions.refresh(req)),
         refreshNodes: () => dispatch(nodesActions.refresh()),
+        refreshUserSQLRoles: () =>
+          dispatch(uiConfigActions.refreshUserSQLRoles()),
         resetSQLStats: (req: StatementsRequest) =>
           dispatch(sqlStatsActions.reset(req)),
         onTimeScaleChange: (ts: TimeScale) => {
