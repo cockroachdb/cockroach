@@ -34,5 +34,8 @@ export const selectFilters = createSelector(
   localStorage => localStorage["filters/InsightsPage"],
 );
 
-export const selectTransactionInsightsLoading = (state: AppState) =>
-  !state.adminUI.txnInsights?.valid || state.adminUI.txnInsights?.inFlight;
+// Show the data as 'Loading' when the request is in flight AND the
+// data is invalid or null.
+export const selectTransactionInsightsLoading = (state: AppState): boolean =>
+  state.adminUI.txnInsights?.inFlight &&
+  (!state.adminUI.txnInsights?.valid || !state.adminUI.txnInsights?.data);

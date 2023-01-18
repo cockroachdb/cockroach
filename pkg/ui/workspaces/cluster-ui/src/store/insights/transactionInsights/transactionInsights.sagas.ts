@@ -11,14 +11,7 @@
 import { all, call, put, takeLatest } from "redux-saga/effects";
 
 import { actions } from "./transactionInsights.reducer";
-import { actions as stmtInsightActions } from "../statementInsights";
 import { PayloadAction } from "@reduxjs/toolkit";
-import {
-  UpdateTimeScalePayload,
-  actions as sqlStatsActions,
-} from "../../sqlStats";
-import { actions as localStorageActions } from "../../localStorage";
-import { executionInsightsRequestFromTimeScale } from "../../../insights";
 import {
   getTxnInsightEvents,
   ExecutionInsightsRequest,
@@ -41,30 +34,9 @@ export function* requestTransactionInsightsSaga(
   }
 }
 
-export function* updateSQLStatsTimeScaleSaga(
-  action: PayloadAction<UpdateTimeScalePayload>,
-) {
-  const { ts } = action.payload;
-  yield put(
-    localStorageActions.update({
-      key: "timeScale/SQLActivity",
-      value: ts,
-    }),
-  );
-  const req = executionInsightsRequestFromTimeScale(ts);
-  yield put(actions.invalidated());
-  yield put(stmtInsightActions.invalidated());
-  yield put(sqlStatsActions.invalidated());
-  yield put(actions.refresh(req));
-}
-
 export function* transactionInsightsSaga() {
   yield all([
     takeLatest(actions.refresh, refreshTransactionInsightsSaga),
     takeLatest(actions.request, requestTransactionInsightsSaga),
-    takeLatest(
-      [actions.updateTimeScale, stmtInsightActions.updateTimeScale],
-      updateSQLStatsTimeScaleSaga,
-    ),
   ]);
 }

@@ -26,9 +26,9 @@ import { TimeScale } from "../../timeScaleDropdown";
 import { idAttr } from "src/util";
 import { TransactionInsightDetailsOverviewTab } from "./transactionInsightDetailsOverviewTab";
 import { TransactionInsightsDetailsStmtsTab } from "./transactionInsightDetailsStmtsTab";
+import { timeScaleRangeToObj } from "src/timeScaleDropdown/utils";
 
 import "antd/lib/tabs/style";
-import { executionInsightsRequestFromTimeScale } from "../utils";
 export interface TransactionInsightDetailsStateProps {
   insightDetails: TxnInsightDetails;
   insightError: Error | null;
@@ -69,7 +69,7 @@ export const TransactionInsightDetails: React.FC<
   const noInsights = !insightDetails;
   useEffect(() => {
     refreshUserSQLRoles();
-    const execReq = executionInsightsRequestFromTimeScale(timeScale);
+    const execReq = timeScaleRangeToObj(timeScale);
     if (noInsights) {
       // Only refresh if we have no data (e.g. refresh the page)
       refreshTransactionInsightDetails({

@@ -11,14 +11,15 @@
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
 import { DOMAIN_NAME } from "src/store/utils";
 import { TxnInsightEvent } from "src/insights";
-import { UpdateTimeScalePayload } from "../../sqlStats";
-import { StmtInsightsReq } from "src/api/stmtInsightsApi";
+import { ExecutionInsightsRequest } from "src/api";
+import moment, { Moment } from "moment";
 
 export type TransactionInsightsState = {
   data: TxnInsightEvent[];
   lastError: Error;
   valid: boolean;
   inFlight: boolean;
+  lastUpdated: Moment | null;
 };
 
 const initialState: TransactionInsightsState = {
@@ -26,6 +27,7 @@ const initialState: TransactionInsightsState = {
   lastError: null,
   valid: false,
   inFlight: false,
+  lastUpdated: null,
 };
 
 const transactionInsightsSlice = createSlice({
@@ -37,6 +39,7 @@ const transactionInsightsSlice = createSlice({
       state.valid = true;
       state.lastError = null;
       state.inFlight = false;
+      state.lastUpdated = moment.utc();
     },
     failed: (state, action: PayloadAction<Error>) => {
       state.valid = false;
@@ -46,12 +49,10 @@ const transactionInsightsSlice = createSlice({
     invalidated: state => {
       state.valid = false;
     },
-    refresh: (_, _action: PayloadAction<StmtInsightsReq>) => {},
-    request: (_, _action: PayloadAction<StmtInsightsReq>) => {},
-    updateTimeScale: (
-      state,
-      _action: PayloadAction<UpdateTimeScalePayload>,
-    ) => {
+    refresh: (state, _action: PayloadAction<ExecutionInsightsRequest>) => {
+      state.inFlight = true;
+    },
+    request: (state, _action: PayloadAction<ExecutionInsightsRequest>) => {
       state.inFlight = true;
     },
   },
