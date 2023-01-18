@@ -17,7 +17,6 @@ import {
 } from "./statementInsightDetails";
 import { AppState, uiConfigActions } from "src/store";
 import {
-  actions as statementInsights,
   selectStmtInsightDetails,
   selectStmtInsightsError,
 } from "src/store/insights/statementInsights";
@@ -25,7 +24,6 @@ import { selectHasAdminRole, selectIsTenant } from "src/store/uiConfig";
 import { TimeScale } from "../../timeScaleDropdown";
 import { actions as sqlStatsActions } from "../../store/sqlStats";
 import { selectTimeScale } from "../../store/utils/selectors";
-import { StmtInsightsReq } from "src/api";
 
 const mapStateToProps = (
   state: AppState,
@@ -45,9 +43,6 @@ const mapStateToProps = (
 const mapDispatchToProps = (
   dispatch: Dispatch,
 ): StatementInsightDetailsDispatchProps => ({
-  refreshStatementInsights: (req: StmtInsightsReq) => {
-    dispatch(statementInsights.refresh(req));
-  },
   setTimeScale: (ts: TimeScale) => {
     dispatch(
       sqlStatsActions.updateTimeScale({

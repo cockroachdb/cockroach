@@ -12,13 +12,14 @@ import { createSlice, PayloadAction } from "@reduxjs/toolkit";
 import { DOMAIN_NAME } from "../../utils";
 import { StmtInsightEvent } from "src/insights";
 import { StmtInsightsReq } from "src/api";
-import { UpdateTimeScalePayload } from "../../sqlStats";
+import moment from "moment";
 
 export type StmtInsightsState = {
   data: StmtInsightEvent[];
   lastError: Error;
   valid: boolean;
   inFlight: boolean;
+  lastUpdated: moment.Moment | null;
 };
 
 const initialState: StmtInsightsState = {
@@ -26,6 +27,7 @@ const initialState: StmtInsightsState = {
   lastError: null,
   valid: false,
   inFlight: false,
+  lastUpdated: null,
 };
 
 const statementInsightsSlice = createSlice({
@@ -37,6 +39,7 @@ const statementInsightsSlice = createSlice({
       state.valid = true;
       state.lastError = null;
       state.inFlight = false;
+      state.lastUpdated = moment.utc();
     },
     failed: (state, action: PayloadAction<Error>) => {
       state.valid = false;
@@ -46,12 +49,10 @@ const statementInsightsSlice = createSlice({
     invalidated: state => {
       state.valid = false;
     },
-    refresh: (_, _action: PayloadAction<StmtInsightsReq>) => {},
-    request: (_, _action: PayloadAction<StmtInsightsReq>) => {},
-    updateTimeScale: (
-      state,
-      _action: PayloadAction<UpdateTimeScalePayload>,
-    ) => {
+    refresh: (state, _action: PayloadAction<StmtInsightsReq>) => {
+      state.inFlight = true;
+    },
+    request: (state, _action: PayloadAction<StmtInsightsReq>) => {
       state.inFlight = true;
     },
   },

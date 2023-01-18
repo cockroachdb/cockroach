@@ -191,3 +191,15 @@ export const createTimeScaleFromDateRange = (
 
   return timeScale;
 };
+
+export function timeScaleRangeToObj(ts: TimeScale): {
+  start?: moment.Moment;
+  end?: moment.Moment;
+} {
+  if (ts === null) return {};
+  const [startTime, endTime] = toDateRange(ts);
+  return {
+    start: startTime,
+    end: endTime,
+  };
+}

@@ -356,7 +356,7 @@ export interface indexDetails {
 export interface ExecutionDetails {
   databaseName?: string;
   elapsedTimeMillis?: number;
-  contentionTime?: number;
+  contentionTimeMs?: number;
   fingerprintID?: string;
   implicit?: boolean;
   indexRecommendations?: string[];

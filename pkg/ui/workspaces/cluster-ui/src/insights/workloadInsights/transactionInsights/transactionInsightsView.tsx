@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import classNames from "classnames/bind";
 import { useHistory } from "react-router-dom";
 import {
@@ -35,7 +35,6 @@ import {
   getAppsFromTransactionInsights,
   WorkloadInsightEventFilters,
   MergedTxnInsightEvent,
-  executionInsightsRequestFromTimeScale,
 } from "src/insights";
 import { EmptyInsightsTablePlaceholder } from "../util";
 import { TransactionInsightsTable } from "./transactionInsightsTable";
@@ -44,17 +43,21 @@ import {
   TimeScale,
   defaultTimeScaleOptions,
   TimeScaleDropdown,
+  timeScaleRangeToObj,
 } from "../../../timeScaleDropdown";
 import { StmtInsightsReq } from "src/api";
 
 import styles from "src/statementsPage/statementsPage.module.scss";
 import sortableTableStyles from "src/sortedtable/sortedtable.module.scss";
 import { commonStyles } from "../../../common";
+import { useFetchDataWithPolling } from "src/util/hooks";
 
 const cx = classNames.bind(styles);
 const sortableTableCx = classNames.bind(sortableTableStyles);
 
 export type TransactionInsightsViewStateProps = {
+  isDataValid: boolean;
+  lastUpdated: moment.Moment;
   transactions: MergedTxnInsightEvent[];
   transactionsError: Error | null;
   insightTypes: string[];
@@ -82,6 +85,8 @@ export const TransactionInsightsView: React.FC<TransactionInsightsViewProps> = (
   props: TransactionInsightsViewProps,
 ) => {
   const {
+    isDataValid,
+    lastUpdated,
     sortSetting,
     transactions,
     transactionsError,
@@ -105,24 +110,19 @@ export const TransactionInsightsView: React.FC<TransactionInsightsViewProps> = (
     queryByName(history.location, INSIGHT_TXN_SEARCH_PARAM),
   );
 
-  useEffect(() => {
-    if (timeScale.key !== "Custom") {
-      const req = executionInsightsRequestFromTimeScale(timeScale);
-      refreshTransactionInsights(req);
-      // Refresh every 10 seconds.
-      const interval = setInterval(refreshTransactionInsights, 10 * 1000, req);
-      return () => {
-        clearInterval(interval);
-      };
-    }
-  }, [timeScale, refreshTransactionInsights]);
+  const refresh = useCallback(() => {
+    const req = timeScaleRangeToObj(timeScale);
+    refreshTransactionInsights(req);
+  }, [refreshTransactionInsights, timeScale]);
 
-  useEffect(() => {
-    if (transactions === null || transactions.length < 1) {
-      const req = executionInsightsRequestFromTimeScale(timeScale);
-      refreshTransactionInsights(req);
-    }
-  }, [transactions, timeScale, refreshTransactionInsights]);
+  const shouldPoll = timeScale.key !== "Custom";
+  const clearPolling = useFetchDataWithPolling(
+    refresh,
+    isDataValid,
+    lastUpdated,
+    shouldPoll,
+    10 * 1000, // 10s polling interval
+  );
 
   useEffect(() => {
     // We use this effect to sync settings defined on the URL (sort, filters),
@@ -214,6 +214,14 @@ export const TransactionInsightsView: React.FC<TransactionInsightsViewProps> = (
     search,
   );
 
+  const onTimeScaleChange = useCallback(
+    (ts: TimeScale) => {
+      clearPolling();
+      setTimeScale(ts);
+    },
+    [clearPolling, setTimeScale],
+  );
+
   return (
     <div className={cx("root")}>
       <PageConfig>
@@ -240,13 +248,13 @@ export const TransactionInsightsView: React.FC<TransactionInsightsViewProps> = (
           <TimeScaleDropdown
             options={defaultTimeScaleOptions}
             currentScale={timeScale}
-            setTimeScale={setTimeScale}
+            setTimeScale={onTimeScaleChange}
           />
         </PageConfigItem>
       </PageConfig>
       <div className={cx("table-area")}>
         <Loading
-          loading={transactions === null || isLoading}
+          loading={isLoading}
           page="transaction insights"
           error={transactionsError}
           renderError={() => InsightsError(transactionsError?.message)}
@@ -267,7 +275,7 @@ export const TransactionInsightsView: React.FC<TransactionInsightsViewProps> = (
                 data={filteredTransactions}
                 sortSetting={sortSetting}
                 onChangeSortSetting={onChangeSortSetting}
-                setTimeScale={setTimeScale}
+                setTimeScale={onTimeScaleChange}
                 renderNoResult={
                   <EmptyInsightsTablePlaceholder
                     isEmptySearchResults={
