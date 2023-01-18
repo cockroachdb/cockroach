@@ -37,7 +37,7 @@ const (
 )
 
 func loadSchedules(params runParams, n *tree.ShowCreateSchedules) ([]*jobs.ScheduledJob, error) {
-	env := JobSchedulerEnv(params.ExecCfg())
+	env := JobSchedulerEnv(params.ExecCfg().JobsKnobs())
 	var schedules []*jobs.ScheduledJob
 	var rows []tree.Datums
 	var cols colinfo.ResultColumns
@@ -48,7 +48,7 @@ func loadSchedules(params runParams, n *tree.ShowCreateSchedules) ([]*jobs.Sched
 			return nil, err
 		}
 
-		datums, columns, err := params.ExecCfg().InternalExecutor.QueryRowExWithCols(
+		datums, columns, err := params.p.InternalSQLTxn().QueryRowExWithCols(
 			params.ctx,
 			"load-schedules",
 			params.p.Txn(), sessiondata.RootUserSessionDataOverride,
@@ -60,7 +60,7 @@ func loadSchedules(params runParams, n *tree.ShowCreateSchedules) ([]*jobs.Sched
 		rows = append(rows, datums)
 		cols = columns
 	} else {
-		datums, columns, err := params.ExecCfg().InternalExecutor.QueryBufferedExWithCols(
+		datums, columns, err := params.p.InternalSQLTxn().QueryBufferedExWithCols(
 			params.ctx,
 			"load-schedules",
 			params.p.Txn(), sessiondata.RootUserSessionDataOverride,
@@ -112,14 +112,7 @@ func (p *planner) ShowCreateSchedule(
 					return nil, err
 				}
 
-				createStmtStr, err := ex.GetCreateScheduleStatement(
-					ctx,
-					scheduledjobs.ProdJobSchedulerEnv,
-					p.Txn(),
-					p.Descriptors(),
-					sj,
-					p.ExecCfg().InternalExecutor,
-				)
+				createStmtStr, err := ex.GetCreateScheduleStatement(ctx, p.InternalSQLTxn(), scheduledjobs.ProdJobSchedulerEnv, sj)
 				if err != nil {
 					return nil, err
 				}

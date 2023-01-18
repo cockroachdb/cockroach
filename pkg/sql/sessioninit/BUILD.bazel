@@ -10,7 +10,6 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/sessioninit",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/kv",
         "//pkg/security/password",
         "//pkg/security/username",
         "//pkg/settings",

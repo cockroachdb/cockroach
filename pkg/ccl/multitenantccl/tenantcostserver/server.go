@@ -16,14 +16,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 type instance struct {
 	db         *kv.DB
-	ief        sqlutil.InternalExecutorFactory
+	ief        isql.DB
 	metrics    Metrics
 	timeSource timeutil.TimeSource
 	settings   *cluster.Settings
@@ -41,10 +41,7 @@ var instanceInactivity = settings.RegisterDurationSetting(
 )
 
 func newInstance(
-	settings *cluster.Settings,
-	db *kv.DB,
-	ief sqlutil.InternalExecutorFactory,
-	timeSource timeutil.TimeSource,
+	settings *cluster.Settings, db *kv.DB, ief isql.DB, timeSource timeutil.TimeSource,
 ) *instance {
 	res := &instance{
 		db:         db,
@@ -67,7 +64,7 @@ func init() {
 	server.NewTenantUsageServer = func(
 		settings *cluster.Settings,
 		db *kv.DB,
-		ief sqlutil.InternalExecutorFactory,
+		ief isql.DB,
 	) multitenant.TenantUsageServer {
 		return newInstance(settings, db, ief, timeutil.DefaultTimeSource{})
 	}

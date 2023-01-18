@@ -20,13 +20,11 @@ import (
 	"os"
 
 	"github.com/cockroachdb/cockroach/pkg/cloud"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -42,7 +40,7 @@ var payloadTableNameSuffix = "_upload_payload"
 // FileToTableExecutorRows encompasses the two formats in which the
 // InternalFileToTableExecutor and SQLConnFileToTableExecutor output their rows.
 type FileToTableExecutorRows struct {
-	internalExecResultsIterator sqlutil.InternalRows
+	internalExecResultsIterator isql.Rows
 	sqlConnExecResults          driver.Rows
 }
 
@@ -60,19 +58,16 @@ type FileToTableSystemExecutor interface {
 // InternalFileToTableExecutor is the SQL query executor which uses an internal
 // SQL connection to interact with the database.
 type InternalFileToTableExecutor struct {
-	ie  sqlutil.InternalExecutor
-	ief sqlutil.InternalExecutorFactory
-	db  *kv.DB
+	ie isql.Executor
+	db isql.DB
 }
 
 var _ FileToTableSystemExecutor = &InternalFileToTableExecutor{}
 
 // MakeInternalFileToTableExecutor returns an instance of a
 // InternalFileToTableExecutor.
-func MakeInternalFileToTableExecutor(
-	ie sqlutil.InternalExecutor, ief sqlutil.InternalExecutorFactory, db *kv.DB,
-) *InternalFileToTableExecutor {
-	return &InternalFileToTableExecutor{ie, ief, db}
+func MakeInternalFileToTableExecutor(db isql.DB) *InternalFileToTableExecutor {
+	return &InternalFileToTableExecutor{ie: db.Executor(), db: db}
 }
 
 // Query implements the FileToTableSystemExecutor interface.
@@ -245,28 +240,28 @@ func NewFileToTableSystem(
 	if err != nil {
 		return nil, err
 	}
-	if err := e.ief.(descs.TxnManager).DescsTxnWithExecutor(
-		ctx, e.db, nil /* SessionData */, func(
-			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection, ie sqlutil.InternalExecutor,
+	if err := e.db.Txn(
+		ctx, func(
+			ctx context.Context, txn isql.Txn,
 		) error {
 			// TODO(adityamaru): Handle scenario where the user has already created
 			// tables with the same names not via the FileToTableSystem
 			// object. Not sure if we want to error out or work around it.
-			tablesExist, err := f.checkIfFileAndPayloadTableExist(ctx, txn, ie)
+			tablesExist, err := f.checkIfFileAndPayloadTableExist(ctx, txn)
 			if err != nil {
 				return err
 			}
 
 			if !tablesExist {
-				if err := f.createFileAndPayloadTables(ctx, txn, ie); err != nil {
+				if err := f.createFileAndPayloadTables(ctx, txn); err != nil {
 					return err
 				}
 
-				if err := f.grantCurrentUserTablePrivileges(ctx, txn, ie); err != nil {
+				if err := f.grantCurrentUserTablePrivileges(ctx, txn); err != nil {
 					return err
 				}
 
-				if err := f.revokeOtherUserTablePrivileges(ctx, txn, ie); err != nil {
+				if err := f.revokeOtherUserTablePrivileges(ctx, txn); err != nil {
 					return err
 				}
 			}
@@ -367,12 +362,10 @@ func DestroyUserFileSystem(ctx context.Context, f *FileToTableSystem) error {
 		return err
 	}
 
-	if err := e.ief.(descs.TxnManager).DescsTxnWithExecutor(
-		ctx, e.db, nil /* sd */, func(
-			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection, ie sqlutil.InternalExecutor,
-		) error {
+	if err := e.db.Txn(
+		ctx, func(ctx context.Context, txn isql.Txn) error {
 			dropPayloadTableQuery := fmt.Sprintf(`DROP TABLE %s`, f.GetFQPayloadTableName())
-			_, err := ie.ExecEx(ctx, "drop-payload-table", txn,
+			_, err := txn.ExecEx(ctx, "drop-payload-table", txn.KV(),
 				sessiondata.InternalExecutorOverride{User: f.username},
 				dropPayloadTableQuery)
 			if err != nil {
@@ -380,7 +373,7 @@ func DestroyUserFileSystem(ctx context.Context, f *FileToTableSystem) error {
 			}
 
 			dropFileTableQuery := fmt.Sprintf(`DROP TABLE %s CASCADE`, f.GetFQFileTableName())
-			_, err = ie.ExecEx(ctx, "drop-file-table", txn,
+			_, err = txn.ExecEx(ctx, "drop-file-table", txn.KV(),
 				sessiondata.InternalExecutorOverride{User: f.username},
 				dropFileTableQuery)
 			if err != nil {
@@ -412,7 +405,7 @@ SELECT file_id FROM %s WHERE filename=$1)`
 // already open explicit txn to provide transactional guarantees. This is used
 // by WriteFile to allow for overwriting of an existing file with the same name.
 func (f *FileToTableSystem) deleteFileWithoutTxn(
-	ctx context.Context, filename string, ie sqlutil.InternalExecutor,
+	ctx context.Context, filename string, ie isql.Executor,
 ) error {
 	execSessionDataOverride := sessiondata.InternalExecutorOverride{User: f.username}
 	_, err := ie.ExecEx(ctx, "delete-payload-table",
@@ -462,8 +455,7 @@ func (f *FileToTableSystem) DeleteFile(ctx context.Context, filename string) err
 // Payload table.
 type payloadWriter struct {
 	fileID                  tree.Datum
-	ief                     sqlutil.InternalExecutorFactory
-	db                      *kv.DB
+	ief                     isql.DB
 	ctx                     context.Context
 	byteOffset              int
 	execSessionDataOverride sessiondata.InternalExecutorOverride
@@ -474,11 +466,9 @@ type payloadWriter struct {
 // WriteChunk inserts a single row into the Payload table as an operation in the
 // transaction txn.
 // TODO(janexing): can the insert happen with a nil txn?
-func (p *payloadWriter) WriteChunk(
-	buf []byte, txn *kv.Txn, ie sqlutil.InternalExecutor,
-) (int, error) {
+func (p *payloadWriter) WriteChunk(buf []byte, txn isql.Txn) (int, error) {
 	insertChunkQuery := fmt.Sprintf(`INSERT INTO %s VALUES ($1, $2, $3)`, p.payloadTableName)
-	_, err := ie.ExecEx(p.ctx, "insert-file-chunk", txn, p.execSessionDataOverride,
+	_, err := txn.ExecEx(p.ctx, "insert-file-chunk", txn.KV(), p.execSessionDataOverride,
 		insertChunkQuery, p.fileID, p.byteOffset, buf)
 	if err != nil {
 		return 0, err
@@ -512,9 +502,7 @@ func newChunkWriter(
 	filename string,
 	user username.SQLUsername,
 	fileTableName, payloadTableName string,
-	ief sqlutil.InternalExecutorFactory,
-	ie sqlutil.InternalExecutor,
-	db *kv.DB,
+	db isql.DB,
 ) (*chunkWriter, error) {
 	execSessionDataOverride := sessiondata.InternalExecutorOverride{User: user}
 
@@ -524,6 +512,7 @@ func newChunkWriter(
 	fileNameQuery := fmt.Sprintf(`INSERT INTO %s VALUES ($1, DEFAULT, $2, $3) RETURNING file_id`,
 		fileTableName)
 
+	ie := db.Executor()
 	res, err := ie.QueryRowEx(ctx, "insert-file-name",
 		nil /* txn */, execSessionDataOverride, fileNameQuery, filename, 0,
 		execSessionDataOverride.User)
@@ -535,9 +524,13 @@ func newChunkWriter(
 	}
 
 	pw := &payloadWriter{
-		res[0], ief, db, ctx, 0,
-		execSessionDataOverride, fileTableName,
-		payloadTableName}
+		ctx:              ctx,
+		fileID:           res[0],
+		ief:              db,
+		byteOffset:       0,
+		fileTableName:    fileTableName,
+		payloadTableName: payloadTableName,
+	}
 	bytesBuffer := bytes.NewBuffer(make([]byte, 0, chunkSize))
 	return &chunkWriter{
 		bytesBuffer, pw, execSessionDataOverride,
@@ -582,10 +575,10 @@ func (w *chunkWriter) Write(buf []byte) (int, error) {
 		// retry loop.
 		if w.buf.Len() == w.buf.Cap() {
 			// TODO(janexing): Is it necessary to run the following within a txn?
-			if err := w.pw.ief.TxnWithExecutor(w.pw.ctx, w.pw.db, nil /* sessionData */, func(
-				ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor,
+			if err := w.pw.ief.Txn(w.pw.ctx, func(
+				ctx context.Context, txn isql.Txn,
 			) error {
-				if n, err := w.pw.WriteChunk(w.buf.Bytes(), txn, ie); err != nil {
+				if n, err := w.pw.WriteChunk(w.buf.Bytes(), txn); err != nil {
 					return err
 				} else if n != w.buf.Len() {
 					return errors.Wrap(io.ErrShortWrite, "error when writing in chunkWriter")
@@ -613,11 +606,10 @@ func (w *chunkWriter) Close() error {
 	// payloadWriter Write() method, then the txn is aborted and the error is
 	// propagated here.
 	if w.buf.Len() > 0 {
-		// TODO(janexing): Is it necessary to run the following within a txn?
-		if err := w.pw.ief.TxnWithExecutor(w.pw.ctx, w.pw.db, nil /* sessionData */, func(
-			ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor,
+		if err := w.pw.ief.Txn(w.pw.ctx, func(
+			ctx context.Context, txn isql.Txn,
 		) error {
-			if n, err := w.pw.WriteChunk(w.buf.Bytes(), txn, ie); err != nil {
+			if n, err := w.pw.WriteChunk(w.buf.Bytes(), txn); err != nil {
 				return err
 			} else if n != w.buf.Len() {
 				return errors.Wrap(io.ErrShortWrite, "error when closing chunkWriter")
@@ -632,7 +624,7 @@ func (w *chunkWriter) Close() error {
 	// were actually written to the payload table.
 	updateFileSizeQuery := fmt.Sprintf(`UPDATE %s SET file_size=$1 WHERE filename=$2`,
 		w.fileTableName)
-	ie := w.pw.ief.MakeInternalExecutorWithoutTxn()
+	ie := w.pw.ief.Executor()
 	_, err := ie.ExecEx(w.pw.ctx, "update-file-size",
 		nil /* txn */, w.execSessionDataOverride, updateFileSizeQuery, w.pw.byteOffset, w.filename)
 
@@ -795,7 +787,7 @@ func (f *FileToTableSystem) ReadFile(
 }
 
 func (f *FileToTableSystem) checkIfFileAndPayloadTableExist(
-	ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor,
+	ctx context.Context, txn isql.Txn,
 ) (bool, error) {
 	tablePrefix, err := f.GetTableName()
 	if err != nil {
@@ -824,7 +816,7 @@ func (f *FileToTableSystem) checkIfFileAndPayloadTableExist(
 	tableExistenceQuery := fmt.Sprintf(
 		`SELECT table_name FROM [SHOW TABLES FROM %s] WHERE table_name=$1 OR table_name=$2`,
 		databaseSchema)
-	numRows, err := ie.ExecEx(ctx, "tables-exist", txn,
+	numRows, err := txn.ExecEx(ctx, "tables-exist", txn.KV(),
 		sessiondata.RootUserSessionDataOverride,
 		tableExistenceQuery, fileTableName, payloadTableName)
 	if err != nil {
@@ -838,12 +830,10 @@ func (f *FileToTableSystem) checkIfFileAndPayloadTableExist(
 	return numRows == 2, nil
 }
 
-func (f *FileToTableSystem) createFileAndPayloadTables(
-	ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor,
-) error {
+func (f *FileToTableSystem) createFileAndPayloadTables(ctx context.Context, txn isql.Txn) error {
 	// Create the File and Payload tables to hold the file chunks.
 	fileTableCreateQuery := fmt.Sprintf(fileTableSchema, f.GetFQFileTableName())
-	_, err := ie.ExecEx(ctx, "create-file-table", txn,
+	_, err := txn.ExecEx(ctx, "create-file-table", txn.KV(),
 		sessiondata.InternalExecutorOverride{User: f.username},
 		fileTableCreateQuery)
 	if err != nil {
@@ -851,7 +841,7 @@ func (f *FileToTableSystem) createFileAndPayloadTables(
 	}
 
 	payloadTableCreateQuery := fmt.Sprintf(payloadTableSchema, f.GetFQPayloadTableName())
-	_, err = ie.ExecEx(ctx, "create-payload-table", txn,
+	_, err = txn.ExecEx(ctx, "create-payload-table", txn.KV(),
 		sessiondata.InternalExecutorOverride{User: f.username},
 		payloadTableCreateQuery)
 	if err != nil {
@@ -860,7 +850,7 @@ func (f *FileToTableSystem) createFileAndPayloadTables(
 
 	addFKQuery := fmt.Sprintf(`ALTER TABLE %s ADD CONSTRAINT file_id_fk FOREIGN KEY (
 file_id) REFERENCES %s (file_id)`, f.GetFQPayloadTableName(), f.GetFQFileTableName())
-	_, err = ie.ExecEx(ctx, "create-payload-table", txn,
+	_, err = txn.ExecEx(ctx, "create-payload-table", txn.KV(),
 		sessiondata.InternalExecutorOverride{User: f.username},
 		addFKQuery)
 	if err != nil {
@@ -873,11 +863,11 @@ file_id) REFERENCES %s (file_id)`, f.GetFQPayloadTableName(), f.GetFQFileTableNa
 // Grant the current user all read/edit privileges for the file and payload
 // tables.
 func (f *FileToTableSystem) grantCurrentUserTablePrivileges(
-	ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor,
+	ctx context.Context, txn isql.Txn,
 ) error {
 	grantQuery := fmt.Sprintf(`GRANT SELECT, INSERT, DROP, DELETE ON TABLE %s, %s TO %s`,
 		f.GetFQFileTableName(), f.GetFQPayloadTableName(), f.username.SQLIdentifier())
-	_, err := ie.ExecEx(ctx, "grant-user-file-payload-table-access", txn,
+	_, err := txn.ExecEx(ctx, "grant-user-file-payload-table-access", txn.KV(),
 		sessiondata.RootUserSessionDataOverride,
 		grantQuery)
 	if err != nil {
@@ -890,12 +880,12 @@ func (f *FileToTableSystem) grantCurrentUserTablePrivileges(
 // Revoke all privileges from every user and role except root/admin and the
 // current user.
 func (f *FileToTableSystem) revokeOtherUserTablePrivileges(
-	ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor,
+	ctx context.Context, txn isql.Txn,
 ) error {
 	getUsersQuery := `SELECT username FROM system.
 users WHERE NOT "username" = 'root' AND NOT "username" = 'admin' AND NOT "username" = $1`
-	it, err := ie.QueryIteratorEx(
-		ctx, "get-users", txn,
+	it, err := txn.QueryIteratorEx(
+		ctx, "get-users", txn.KV(),
 		sessiondata.RootUserSessionDataOverride,
 		getUsersQuery, f.username,
 	)
@@ -917,7 +907,7 @@ users WHERE NOT "username" = 'root' AND NOT "username" = 'admin' AND NOT "userna
 	for _, user := range users {
 		revokeQuery := fmt.Sprintf(`REVOKE ALL ON TABLE %s, %s FROM %s`,
 			f.GetFQFileTableName(), f.GetFQPayloadTableName(), user.SQLIdentifier())
-		_, err = ie.ExecEx(ctx, "revoke-user-privileges", txn,
+		_, err = txn.ExecEx(ctx, "revoke-user-privileges", txn.KV(),
 			sessiondata.RootUserSessionDataOverride,
 			revokeQuery)
 		if err != nil {
@@ -954,5 +944,5 @@ func (f *FileToTableSystem) NewFileWriter(
 	}
 
 	return newChunkWriter(ctx, chunkSize, filename, f.username, f.GetFQFileTableName(),
-		f.GetFQPayloadTableName(), e.ief, e.ie, e.db)
+		f.GetFQPayloadTableName(), e.db)
 }

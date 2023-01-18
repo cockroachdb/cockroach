@@ -15,9 +15,8 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -32,22 +31,22 @@ func TestTxnWithStepping(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
-	ief := s.InternalExecutorFactory().(descs.TxnManager)
+	db := s.InternalDB().(descs.DB)
 	scratchKey, err := s.ScratchRange()
 	require.NoError(t, err)
 	// Write a key, read in the transaction without stepping, ensure we
 	// do not see the value, step the transaction, then ensure that we do.
-	require.NoError(t, ief.DescsTxn(ctx, kvDB, func(
-		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+	require.NoError(t, db.DescsTxn(ctx, func(
+		ctx context.Context, txn descs.Txn,
 	) error {
-		if err := txn.Put(ctx, scratchKey, 1); err != nil {
+		if err := txn.KV().Put(ctx, scratchKey, 1); err != nil {
 			return err
 		}
 		{
-			got, err := txn.Get(ctx, scratchKey)
+			got, err := txn.KV().Get(ctx, scratchKey)
 			if err != nil {
 				return err
 			}
@@ -55,11 +54,11 @@ func TestTxnWithStepping(t *testing.T) {
 				return errors.AssertionFailedf("expected no value, got %v", got)
 			}
 		}
-		if err := txn.Step(ctx); err != nil {
+		if err := txn.KV().Step(ctx); err != nil {
 			return err
 		}
 		{
-			got, err := txn.Get(ctx, scratchKey)
+			got, err := txn.KV().Get(ctx, scratchKey)
 			if err != nil {
 				return err
 			}
@@ -68,5 +67,5 @@ func TestTxnWithStepping(t *testing.T) {
 			}
 		}
 		return nil
-	}, sqlutil.SteppingEnabled()))
+	}, isql.SteppingEnabled()))
 }

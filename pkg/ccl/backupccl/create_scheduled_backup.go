@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs/schedulebase"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -172,7 +171,7 @@ func doCreateBackupSchedules(
 		}
 	}
 
-	env := sql.JobSchedulerEnv(p.ExecCfg())
+	env := sql.JobSchedulerEnv(p.ExecCfg().JobsKnobs())
 
 	// Evaluate incremental and full recurrence.
 	incRecurrence, err := schedulebase.ComputeScheduleRecurrence(env.Now(), eval.recurrence)
@@ -285,13 +284,12 @@ func doCreateBackupSchedules(
 		return err
 	}
 
-	ex := p.ExecCfg().InternalExecutor
-
 	unpauseOnSuccessID := jobs.InvalidScheduleID
 
 	var chainProtectedTimestampRecords bool
 	// If needed, create incremental.
 	var inc *jobs.ScheduledJob
+	scheduledJobs := jobs.ScheduledJobTxn(p.InternalSQLTxn())
 	var incScheduledBackupArgs *backuppb.ScheduledBackupExecutionArgs
 	if incRecurrence != nil {
 		chainProtectedTimestampRecords = scheduledBackupGCProtectionEnabled.Get(&p.ExecCfg().Settings.SV)
@@ -314,7 +312,7 @@ func doCreateBackupSchedules(
 		inc.Pause()
 		inc.SetScheduleStatus("Waiting for initial backup to complete")
 
-		if err := inc.Create(ctx, ex, p.Txn()); err != nil {
+		if err := scheduledJobs.Create(ctx, inc); err != nil {
 			return err
 		}
 		if err := emitSchedule(inc, backupNode, destinations, nil, /* incrementalFrom */
@@ -347,20 +345,22 @@ func doCreateBackupSchedules(
 	}
 
 	// Create the schedule (we need its ID to link dependent schedules below).
-	if err := full.Create(ctx, ex, p.Txn()); err != nil {
+	if err := scheduledJobs.Create(ctx, full); err != nil {
 		return err
 	}
 
 	// If schedule creation has resulted in a full and incremental schedule then
 	// we update both the schedules with the ID of the other "dependent" schedule.
 	if incRecurrence != nil {
-		if err := setDependentSchedule(ctx, ex, fullScheduledBackupArgs, full, inc.ScheduleID(),
-			p.Txn()); err != nil {
+		if err := setDependentSchedule(
+			ctx, scheduledJobs, fullScheduledBackupArgs, full, inc.ScheduleID(),
+		); err != nil {
 			return errors.Wrap(err,
 				"failed to update full schedule with dependent incremental schedule id")
 		}
-		if err := setDependentSchedule(ctx, ex, incScheduledBackupArgs, inc, full.ScheduleID(),
-			p.Txn()); err != nil {
+		if err := setDependentSchedule(
+			ctx, scheduledJobs, incScheduledBackupArgs, inc, full.ScheduleID(),
+		); err != nil {
 			return errors.Wrap(err,
 				"failed to update incremental schedule with dependent full schedule id")
 		}
@@ -373,11 +373,10 @@ func doCreateBackupSchedules(
 
 func setDependentSchedule(
 	ctx context.Context,
-	ex *sql.InternalExecutor,
+	storage jobs.ScheduledJobStorage,
 	scheduleExecutionArgs *backuppb.ScheduledBackupExecutionArgs,
 	schedule *jobs.ScheduledJob,
 	dependentID int64,
-	txn *kv.Txn,
 ) error {
 	scheduleExecutionArgs.DependentScheduleID = dependentID
 	any, err := pbtypes.MarshalAny(scheduleExecutionArgs)
@@ -387,7 +386,7 @@ func setDependentSchedule(
 	schedule.SetExecutionDetails(
 		schedule.ExecutorType(), jobspb.ExecutionArguments{Args: any},
 	)
-	return schedule.Update(ctx, ex, txn)
+	return storage.Update(ctx, schedule)
 }
 
 // checkForExistingBackupsInCollection checks that there are no existing backups
@@ -536,7 +535,7 @@ func dryRunInvokeBackup(
 	if err != nil {
 		return eventpb.RecoveryEvent{}, err
 	}
-	return invokeBackup(ctx, backupFn, p.ExecCfg().JobRegistry, p.Txn())
+	return invokeBackup(ctx, backupFn, p.ExecCfg().JobRegistry, p.InternalSQLTxn())
 }
 
 // makeScheduleBackupSpec prepares helper scheduledBackupSpec struct to assist in evaluation

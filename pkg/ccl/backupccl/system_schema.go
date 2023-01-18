@@ -18,13 +18,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descidgen"
 	descpb "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -78,16 +79,21 @@ type systemBackupConfiguration struct {
 	// migrationFunc performs the necessary migrations on the system table data in
 	// the crdb_temp staging table before it is loaded into the actual system
 	// table.
-	migrationFunc func(ctx context.Context, execCtx *sql.ExecutorConfig, txn *kv.Txn, tempTableName string, rekeys jobspb.DescRewriteMap) error
+	migrationFunc func(ctx context.Context, txn isql.Txn, tempTableName string, rekeys jobspb.DescRewriteMap) error
 	// customRestoreFunc is responsible for restoring the data from a table that
 	// holds the restore system table data into the given system table. If none
 	// is provided then `defaultRestoreFunc` is used.
-	customRestoreFunc func(ctx context.Context, execCtx *sql.ExecutorConfig, txn *kv.Txn, systemTableName, tempTableName string) error
+	customRestoreFunc func(ctx context.Context, deps customRestoreFuncDeps, txn isql.Txn, systemTableName, tempTableName string) error
 
 	// The following fields are for testing.
 
 	// expectMissingInSystemTenant is true for tables that only exist in secondary tenants.
 	expectMissingInSystemTenant bool
+}
+
+type customRestoreFuncDeps struct {
+	settings *cluster.Settings
+	codec    keys.SQLCodec
 }
 
 // roleIDSequenceRestoreOrder is set to 1 since it must be after system.users
@@ -98,19 +104,15 @@ const roleIDSequenceRestoreOrder = 1
 // be overwritten with the system table's
 // systemBackupConfiguration.customRestoreFunc.
 func defaultSystemTableRestoreFunc(
-	ctx context.Context,
-	execCfg *sql.ExecutorConfig,
-	txn *kv.Txn,
-	systemTableName, tempTableName string,
+	ctx context.Context, _ customRestoreFuncDeps, txn isql.Txn, systemTableName, tempTableName string,
 ) error {
-	executor := execCfg.InternalExecutor
 
 	deleteQuery := fmt.Sprintf("DELETE FROM system.%s WHERE true", systemTableName)
 	opName := systemTableName + "-data-deletion"
 	log.Eventf(ctx, "clearing data from system table %s with query %q",
 		systemTableName, deleteQuery)
 
-	_, err := executor.Exec(ctx, opName, txn, deleteQuery)
+	_, err := txn.Exec(ctx, opName, txn.KV(), deleteQuery)
 	if err != nil {
 		return errors.Wrapf(err, "deleting data from system.%s", systemTableName)
 	}
@@ -118,7 +120,7 @@ func defaultSystemTableRestoreFunc(
 	restoreQuery := fmt.Sprintf("INSERT INTO system.%s (SELECT * FROM %s);",
 		systemTableName, tempTableName)
 	opName = systemTableName + "-data-insert"
-	if _, err := executor.Exec(ctx, opName, txn, restoreQuery); err != nil {
+	if _, err := txn.Exec(ctx, opName, txn.KV(), restoreQuery); err != nil {
 		return errors.Wrapf(err, "inserting data to system.%s", systemTableName)
 	}
 
@@ -132,15 +134,15 @@ func defaultSystemTableRestoreFunc(
 // into a non-system tenant.
 func tenantSettingsTableRestoreFunc(
 	ctx context.Context,
-	execCfg *sql.ExecutorConfig,
-	txn *kv.Txn,
+	deps customRestoreFuncDeps,
+	txn isql.Txn,
 	systemTableName, tempTableName string,
 ) error {
-	if execCfg.Codec.ForSystemTenant() {
-		return defaultSystemTableRestoreFunc(ctx, execCfg, txn, systemTableName, tempTableName)
+	if deps.codec.ForSystemTenant() {
+		return defaultSystemTableRestoreFunc(ctx, deps, txn, systemTableName, tempTableName)
 	}
 
-	if count, err := queryTableRowCount(ctx, execCfg.InternalExecutor, txn, tempTableName); err == nil && count > 0 {
+	if count, err := queryTableRowCount(ctx, txn, tempTableName); err == nil && count > 0 {
 		log.Warningf(ctx, "skipping restore of %d entries in system.tenant_settings table", count)
 	} else if err != nil {
 		log.Warningf(ctx, "skipping restore of entries in system.tenant_settings table (count failed: %s)", err.Error())
@@ -148,11 +150,9 @@ func tenantSettingsTableRestoreFunc(
 	return nil
 }
 
-func queryTableRowCount(
-	ctx context.Context, ie *sql.InternalExecutor, txn *kv.Txn, tableName string,
-) (int64, error) {
+func queryTableRowCount(ctx context.Context, txn isql.Txn, tableName string) (int64, error) {
 	countQuery := fmt.Sprintf("SELECT count(1) FROM %s", tableName)
-	row, err := ie.QueryRow(ctx, fmt.Sprintf("count-%s", tableName), txn, countQuery)
+	row, err := txn.QueryRow(ctx, fmt.Sprintf("count-%s", tableName), txn.KV(), countQuery)
 	if err != nil {
 		return 0, errors.Wrapf(err, "counting rows in %q", tableName)
 	}
@@ -166,24 +166,23 @@ func queryTableRowCount(
 
 func usersRestoreFunc(
 	ctx context.Context,
-	execCfg *sql.ExecutorConfig,
-	txn *kv.Txn,
+	deps customRestoreFuncDeps,
+	txn isql.Txn,
 	systemTableName, tempTableName string,
 ) (retErr error) {
-	if !execCfg.Settings.Version.IsActive(ctx, clusterversion.V22_2RoleOptionsTableHasIDColumn) {
+	if !deps.settings.Version.IsActive(ctx, clusterversion.V22_2RoleOptionsTableHasIDColumn) {
 		return defaultSystemTableRestoreFunc(
-			ctx, execCfg, txn, systemTableName, tempTableName,
+			ctx, deps, txn, systemTableName, tempTableName,
 		)
 	}
 
-	executor := execCfg.InternalExecutor
-	hasIDColumn, err := tableHasColumnName(ctx, txn, executor, tempTableName, "user_id")
+	hasIDColumn, err := tableHasColumnName(ctx, txn, tempTableName, "user_id")
 	if err != nil {
 		return err
 	}
 	if hasIDColumn {
 		return defaultSystemTableRestoreFunc(
-			ctx, execCfg, txn, systemTableName, tempTableName,
+			ctx, deps, txn, systemTableName, tempTableName,
 		)
 	}
 
@@ -192,13 +191,13 @@ func usersRestoreFunc(
 	log.Eventf(ctx, "clearing data from system table %s with query %q",
 		systemTableName, deleteQuery)
 
-	_, err = executor.Exec(ctx, opName, txn, deleteQuery)
+	_, err = txn.Exec(ctx, opName, txn.KV(), deleteQuery)
 	if err != nil {
 		return errors.Wrapf(err, "deleting data from system.%s", systemTableName)
 	}
 
-	it, err := executor.QueryIteratorEx(ctx, "query-system-users-in-backup",
-		txn, sessiondata.NodeUserSessionDataOverride,
+	it, err := txn.QueryIteratorEx(ctx, "query-system-users-in-backup",
+		txn.KV(), sessiondata.NodeUserSessionDataOverride,
 		fmt.Sprintf(`SELECT * FROM %s`, tempTableName))
 	if err != nil {
 		return err
@@ -226,7 +225,7 @@ func usersRestoreFunc(
 		} else if username == "admin" {
 			id = 2
 		} else {
-			id, err = descidgen.GenerateUniqueRoleID(ctx, execCfg.DB, execCfg.Codec)
+			id, err = descidgen.GenerateUniqueRoleIDInTxn(ctx, txn.KV(), deps.codec)
 			if err != nil {
 				return err
 			}
@@ -235,7 +234,7 @@ func usersRestoreFunc(
 		restoreQuery := fmt.Sprintf("INSERT INTO system.%s VALUES ($1, $2, $3, $4)",
 			systemTableName)
 		opName = systemTableName + "-data-insert"
-		if _, err := executor.Exec(ctx, opName, txn, restoreQuery, username, password, isRole, id); err != nil {
+		if _, err := txn.Exec(ctx, opName, txn.KV(), restoreQuery, username, password, isRole, id); err != nil {
 			return errors.Wrapf(err, "inserting data to system.%s", systemTableName)
 		}
 	}
@@ -244,36 +243,34 @@ func usersRestoreFunc(
 
 func roleMembersRestoreFunc(
 	ctx context.Context,
-	execCfg *sql.ExecutorConfig,
-	txn *kv.Txn,
+	deps customRestoreFuncDeps,
+	txn isql.Txn,
 	systemTableName, tempTableName string,
 ) error {
-	if !execCfg.Settings.Version.IsActive(ctx, clusterversion.V23_1RoleMembersTableHasIDColumns) {
-		return defaultSystemTableRestoreFunc(ctx, execCfg, txn, systemTableName, tempTableName)
+	if !deps.settings.Version.IsActive(ctx, clusterversion.V23_1RoleMembersTableHasIDColumns) {
+		return defaultSystemTableRestoreFunc(ctx, deps, txn, systemTableName, tempTableName)
 	}
-
-	executor := execCfg.InternalExecutor
 
 	// It's enough to just check if role_id exists since member_id was added at
 	// the same time.
-	hasIDColumns, err := tableHasColumnName(ctx, txn, executor, tempTableName, "role_id")
+	hasIDColumns, err := tableHasColumnName(ctx, txn, tempTableName, "role_id")
 	if err != nil {
 		return err
 	}
 	if hasIDColumns {
-		return defaultSystemTableRestoreFunc(ctx, execCfg, txn, systemTableName, tempTableName)
+		return defaultSystemTableRestoreFunc(ctx, deps, txn, systemTableName, tempTableName)
 	}
 
 	deleteQuery := fmt.Sprintf("DELETE FROM system.%s WHERE true", systemTableName)
 	log.Eventf(ctx, "clearing data from system table %s with query %q", systemTableName, deleteQuery)
 
-	_, err = executor.Exec(ctx, systemTableName+"-data-deletion", txn, deleteQuery)
+	_, err = txn.Exec(ctx, systemTableName+"-data-deletion", txn.KV(), deleteQuery)
 	if err != nil {
 		return errors.Wrapf(err, "deleting data from system.%s", systemTableName)
 	}
 
-	roleMembers, err := executor.QueryBufferedEx(ctx, systemTableName+"-query-all-rows",
-		txn, sessiondata.NodeUserSessionDataOverride,
+	roleMembers, err := txn.QueryBufferedEx(ctx, systemTableName+"-query-all-rows",
+		txn.KV(), sessiondata.NodeUserSessionDataOverride,
 		fmt.Sprintf(`SELECT * FROM %s`, tempTableName),
 	)
 	if err != nil {
@@ -287,8 +284,8 @@ VALUES ($1, $2, $3, (SELECT user_id FROM system.users WHERE username = $1), (SEL
 		role := tree.MustBeDString(roleMember[0])
 		member := tree.MustBeDString(roleMember[1])
 		isAdmin := tree.MustBeDBool(roleMember[2])
-		if _, err := executor.ExecEx(ctx, systemTableName+"-data-insert",
-			txn, sessiondata.NodeUserSessionDataOverride,
+		if _, err := txn.ExecEx(ctx, systemTableName+"-data-insert",
+			txn.KV(), sessiondata.NodeUserSessionDataOverride,
 			restoreQuery, role, member, isAdmin,
 		); err != nil {
 			return errors.Wrapf(err, "inserting data to system.%s", systemTableName)
@@ -300,18 +297,17 @@ VALUES ($1, $2, $3, (SELECT user_id FROM system.users WHERE username = $1), (SEL
 
 func roleOptionsRestoreFunc(
 	ctx context.Context,
-	execCfg *sql.ExecutorConfig,
-	txn *kv.Txn,
+	deps customRestoreFuncDeps,
+	txn isql.Txn,
 	systemTableName, tempTableName string,
 ) (retErr error) {
-	executor := execCfg.InternalExecutor
-	hasIDColumn, err := tableHasColumnName(ctx, txn, executor, tempTableName, "user_id")
+	hasIDColumn, err := tableHasColumnName(ctx, txn, tempTableName, "user_id")
 	if err != nil {
 		return err
 	}
 	if hasIDColumn {
 		return defaultSystemTableRestoreFunc(
-			ctx, execCfg, txn, systemTableName, tempTableName,
+			ctx, deps, txn, systemTableName, tempTableName,
 		)
 	}
 
@@ -320,13 +316,13 @@ func roleOptionsRestoreFunc(
 	log.Eventf(ctx, "clearing data from system table %s with query %q",
 		systemTableName, deleteQuery)
 
-	_, err = executor.Exec(ctx, opName, txn, deleteQuery)
+	_, err = txn.Exec(ctx, opName, txn.KV(), deleteQuery)
 	if err != nil {
 		return errors.Wrapf(err, "deleting data from system.%s", systemTableName)
 	}
 
-	it, err := executor.QueryIteratorEx(ctx, "query-system-users-in-backup",
-		txn, sessiondata.NodeUserSessionDataOverride,
+	it, err := txn.QueryIteratorEx(ctx, "query-system-users-in-backup",
+		txn.KV(), sessiondata.NodeUserSessionDataOverride,
 		fmt.Sprintf(`SELECT * FROM %s`, tempTableName))
 	if err != nil {
 		return err
@@ -354,7 +350,7 @@ func roleOptionsRestoreFunc(
 		} else if username == "admin" {
 			id = 2
 		} else {
-			row, err := executor.QueryRow(ctx, `get-user-id`, txn, `SELECT user_id FROM system.users WHERE username = $1`, username)
+			row, err := txn.QueryRow(ctx, `get-user-id`, txn.KV(), `SELECT user_id FROM system.users WHERE username = $1`, username)
 			if err != nil {
 				return err
 			}
@@ -365,7 +361,7 @@ func roleOptionsRestoreFunc(
 		restoreQuery := fmt.Sprintf("INSERT INTO system.%s VALUES ($1, $2, $3, $4)",
 			systemTableName)
 		opName = systemTableName + "-data-insert"
-		if _, err := executor.Exec(ctx, opName, txn, restoreQuery, username, option, val, id); err != nil {
+		if _, err := txn.Exec(ctx, opName, txn.KV(), restoreQuery, username, option, val, id); err != nil {
 			return errors.Wrapf(err, "inserting data to system.%s", systemTableName)
 		}
 	}
@@ -373,14 +369,10 @@ func roleOptionsRestoreFunc(
 }
 
 func tableHasColumnName(
-	ctx context.Context,
-	txn *kv.Txn,
-	executor *sql.InternalExecutor,
-	tableName string,
-	columnName string,
+	ctx context.Context, txn isql.Txn, tableName string, columnName string,
 ) (bool, error) {
 	hasColumnQuery := fmt.Sprintf(`SELECT EXISTS (SELECT 1 FROM [SHOW COLUMNS FROM %s] WHERE column_name = '%s')`, tableName, columnName)
-	row, err := executor.QueryRow(ctx, "has-column", txn, hasColumnQuery)
+	row, err := txn.QueryRow(ctx, "has-column", txn.KV(), hasColumnQuery)
 	if err != nil {
 		return false, err
 	}
@@ -392,18 +384,17 @@ func tableHasColumnName(
 // version.
 func settingsRestoreFunc(
 	ctx context.Context,
-	execCfg *sql.ExecutorConfig,
-	txn *kv.Txn,
+	deps customRestoreFuncDeps,
+	txn isql.Txn,
 	systemTableName, tempTableName string,
 ) error {
-	executor := execCfg.InternalExecutor
 
 	deleteQuery := fmt.Sprintf("DELETE FROM system.%s WHERE name <> 'version'", systemTableName)
 	opName := systemTableName + "-data-deletion"
 	log.Eventf(ctx, "clearing data from system table %s with query %q",
 		systemTableName, deleteQuery)
 
-	_, err := executor.Exec(ctx, opName, txn, deleteQuery)
+	_, err := txn.Exec(ctx, opName, txn.KV(), deleteQuery)
 	if err != nil {
 		return errors.Wrapf(err, "deleting data from system.%s", systemTableName)
 	}
@@ -411,7 +402,7 @@ func settingsRestoreFunc(
 	restoreQuery := fmt.Sprintf("INSERT INTO system.%s (SELECT * FROM %s WHERE name <> 'version');",
 		systemTableName, tempTableName)
 	opName = systemTableName + "-data-insert"
-	if _, err := executor.Exec(ctx, opName, txn, restoreQuery); err != nil {
+	if _, err := txn.Exec(ctx, opName, txn.KV(), restoreQuery); err != nil {
 		return errors.Wrapf(err, "inserting data to system.%s", systemTableName)
 	}
 	return nil
@@ -419,12 +410,12 @@ func settingsRestoreFunc(
 
 func roleIDSeqRestoreFunc(
 	ctx context.Context,
-	execCfg *sql.ExecutorConfig,
-	txn *kv.Txn,
+	deps customRestoreFuncDeps,
+	txn isql.Txn,
 	systemTableName, tempTableName string,
 ) error {
-	datums, err := execCfg.InternalExecutor.QueryRowEx(
-		ctx, "role-id-seq-custom-restore", txn,
+	datums, err := txn.QueryRowEx(
+		ctx, "role-id-seq-custom-restore", txn.KV(),
 		sessiondata.NodeUserSessionDataOverride,
 		`SELECT max(user_id) FROM system.users`,
 	)
@@ -432,7 +423,7 @@ func roleIDSeqRestoreFunc(
 		return err
 	}
 	max := tree.MustBeDOid(datums[0])
-	return execCfg.DB.Put(ctx, execCfg.Codec.SequenceKey(keys.RoleIDSequenceID), max.Oid+1)
+	return txn.KV().Put(ctx, deps.codec.SequenceKey(keys.RoleIDSequenceID), max.Oid+1)
 }
 
 // systemTableBackupConfiguration is a map from every systemTable present in the
@@ -492,12 +483,12 @@ var systemTableBackupConfiguration = map[string]systemBackupConfiguration{
 		// synthesized schedule rows in the real schedule table when we otherwise
 		// clean it out, and skipping TTL rows when we copy from the restored
 		// schedule table.
-		customRestoreFunc: func(ctx context.Context, execCfg *sql.ExecutorConfig, txn *kv.Txn, _, tempTableName string) error {
+		customRestoreFunc: func(ctx context.Context, _ customRestoreFuncDeps, txn isql.Txn, _, tempTableName string) error {
 			execType := tree.ScheduledRowLevelTTLExecutor.InternalName()
 
 			const deleteQuery = "DELETE FROM system.scheduled_jobs WHERE executor_type <> $1"
-			if _, err := execCfg.InternalExecutor.Exec(
-				ctx, "restore-scheduled_jobs-delete", txn, deleteQuery, execType,
+			if _, err := txn.Exec(
+				ctx, "restore-scheduled_jobs-delete", txn.KV(), deleteQuery, execType,
 			); err != nil {
 				return errors.Wrapf(err, "deleting existing scheduled_jobs")
 			}
@@ -507,8 +498,8 @@ var systemTableBackupConfiguration = map[string]systemBackupConfiguration{
 				tempTableName,
 			)
 
-			if _, err := execCfg.InternalExecutor.Exec(
-				ctx, "restore-scheduled_jobs-insert", txn, restoreQuery, execType,
+			if _, err := txn.Exec(
+				ctx, "restore-scheduled_jobs-insert", txn.KV(), restoreQuery, execType,
 			); err != nil {
 				return err
 			}
@@ -624,15 +615,13 @@ var systemTableBackupConfiguration = map[string]systemBackupConfiguration{
 
 func rekeySystemTable(
 	colName string,
-) func(context.Context, *sql.ExecutorConfig, *kv.Txn, string, jobspb.DescRewriteMap) error {
-	return func(ctx context.Context, execCtx *sql.ExecutorConfig, txn *kv.Txn, tempTableName string, rekeys jobspb.DescRewriteMap) error {
+) func(context.Context, isql.Txn, string, jobspb.DescRewriteMap) error {
+	return func(ctx context.Context, txn isql.Txn, tempTableName string, rekeys jobspb.DescRewriteMap) error {
 		toRekey := make(descpb.IDs, 0, len(rekeys))
 		for i := range rekeys {
 			toRekey = append(toRekey, i)
 		}
 		sort.Sort(toRekey)
-
-		executor := execCtx.InternalExecutor
 
 		// We will update every ID in the table from an old value to a new value
 		// below, but as we do so there could be yet-to-be-updated rows with old-IDs
@@ -665,7 +654,9 @@ func rekeySystemTable(
 			fmt.Fprintf(&q, "WHEN %s = %d THEN %d\n", colName, old, rekeys[old].ID+offset)
 		}
 		fmt.Fprintf(&q, "ELSE %s END)::%s", colName, typ)
-		if _, err := executor.Exec(ctx, fmt.Sprintf("remap-%s", tempTableName), txn, q.String()); err != nil {
+		if _, err := txn.Exec(
+			ctx, fmt.Sprintf("remap-%s", tempTableName), txn.KV(), q.String(),
+		); err != nil {
 			return errors.Wrapf(err, "remapping IDs %s", tempTableName)
 		}
 
@@ -677,16 +668,16 @@ func rekeySystemTable(
 		// ID system tables that we do not restore directly, and thus have no entry
 		// in our remapping, but the configuration of them (comments, zones, etc) is
 		// expected to be restored.
-		if _, err := executor.Exec(ctx, fmt.Sprintf("remap-remove-%s", tempTableName), txn,
+		if _, err := txn.Exec(ctx, fmt.Sprintf("remap-remove-%s", tempTableName), txn.KV(),
 			fmt.Sprintf("DELETE FROM %s WHERE %s >= 50 AND %s < %d", tempTableName, colName, colName, offset),
 		); err != nil {
 			return errors.Wrapf(err, "remapping IDs %s", tempTableName)
 		}
 
 		// Now slide remapped the IDs back down by offset, to their intended values.
-		if _, err := executor.Exec(ctx,
+		if _, err := txn.Exec(ctx,
 			fmt.Sprintf("remap-%s-deoffset", tempTableName),
-			txn,
+			txn.KV(),
 			fmt.Sprintf("UPDATE %s SET %s = (%s::int - %d)::%s WHERE %s::int >= %d", tempTableName, colName, colName, offset, typ, colName, offset),
 		); err != nil {
 			return errors.Wrapf(err, "remapping %s; removing offset", tempTableName)
@@ -717,9 +708,9 @@ func GetSystemTableIDsToExcludeFromClusterBackup(
 	systemTableIDsToExclude := make(map[descpb.ID]struct{})
 	for systemTableName, backupConfig := range systemTableBackupConfiguration {
 		if backupConfig.shouldIncludeInClusterBackup == optOutOfClusterBackup {
-			err := sql.DescsTxn(ctx, execCfg, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
+			err := sql.DescsTxn(ctx, execCfg, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
 				tn := tree.MakeTableNameWithSchema("system", tree.PublicSchemaName, tree.Name(systemTableName))
-				_, desc, err := descs.PrefixAndTable(ctx, col.ByNameWithLeased(txn).MaybeGet(), &tn)
+				_, desc, err := descs.PrefixAndTable(ctx, col.ByNameWithLeased(txn.KV()).MaybeGet(), &tn)
 				isNotFoundErr := errors.Is(err, catalog.ErrDescriptorNotFound)
 				if err != nil && !isNotFoundErr {
 					return err

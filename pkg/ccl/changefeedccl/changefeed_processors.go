@@ -20,13 +20,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/schemafeed"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -363,9 +363,9 @@ func (ca *changeAggregator) makeKVFeedCfg(
 	return kvfeed.Config{
 		Writer:                  buf,
 		Settings:                cfg.Settings,
-		DB:                      cfg.DB,
+		DB:                      cfg.DB.KV(),
 		Codec:                   cfg.Codec,
-		Clock:                   cfg.DB.Clock(),
+		Clock:                   cfg.DB.KV().Clock(),
 		Gossip:                  cfg.Gossip,
 		Spans:                   spans,
 		CheckpointSpans:         ca.spec.Checkpoint.Spans,
@@ -1226,8 +1226,8 @@ func (cf *changeFrontier) checkpointJobProgress(
 	var updateSkipped error
 	if cf.js.job != nil {
 
-		if err := cf.js.job.Update(cf.Ctx(), nil, func(
-			txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
+		if err := cf.js.job.NoTxn().Update(cf.Ctx(), func(
+			txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
 		) error {
 			// If we're unable to update the job due to the job state, such as during
 			// pause-requested, simply skip the checkpoint
@@ -1292,7 +1292,7 @@ func (cf *changeFrontier) checkpointJobProgress(
 // the changefeed's targets to the current highwater mark.  The record is
 // cleared during changefeedResumer.OnFailOrCancel
 func (cf *changeFrontier) manageProtectedTimestamps(
-	ctx context.Context, txn *kv.Txn, progress *jobspb.ChangefeedProgress,
+	ctx context.Context, txn isql.Txn, progress *jobspb.ChangefeedProgress,
 ) error {
 	ptsUpdateInterval := changefeedbase.ProtectTimestampInterval.Get(&cf.flowCtx.Cfg.Settings.SV)
 	if timeutil.Since(cf.lastProtectedTimestampUpdate) < ptsUpdateInterval {
@@ -1300,7 +1300,7 @@ func (cf *changeFrontier) manageProtectedTimestamps(
 	}
 	cf.lastProtectedTimestampUpdate = timeutil.Now()
 
-	pts := cf.flowCtx.Cfg.ProtectedTimestampProvider
+	pts := cf.flowCtx.Cfg.ProtectedTimestampProvider.WithTxn(txn)
 
 	// Create / advance the protected timestamp record to the highwater mark
 	highWater := cf.frontier.Frontier()
@@ -1311,12 +1311,12 @@ func (cf *changeFrontier) manageProtectedTimestamps(
 	recordID := progress.ProtectedTimestampRecord
 	if recordID == uuid.Nil {
 		ptr := createProtectedTimestampRecord(ctx, cf.flowCtx.Codec(), cf.spec.JobID, AllTargets(cf.spec.Feed), highWater, progress)
-		if err := pts.Protect(ctx, txn, ptr); err != nil {
+		if err := pts.Protect(ctx, ptr); err != nil {
 			return err
 		}
 	} else {
 		log.VEventf(ctx, 2, "updating protected timestamp %v at %v", recordID, highWater)
-		if err := pts.UpdateTimestamp(ctx, txn, recordID, highWater); err != nil {
+		if err := pts.UpdateTimestamp(ctx, recordID, highWater); err != nil {
 			return err
 		}
 	}

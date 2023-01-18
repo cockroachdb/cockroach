@@ -21,7 +21,6 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/partitionccl"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigsqltranslator"
@@ -32,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -181,12 +179,12 @@ func TestDataDriven(t *testing.T) {
 
 				var records []spanconfig.Record
 				sqlTranslatorFactory := tenant.SpanConfigSQLTranslatorFactory().(*spanconfigsqltranslator.Factory)
-				err := execCfg.InternalExecutorFactory.DescsTxnWithExecutor(ctx, execCfg.DB, nil /* session data */, func(
-					ctx context.Context, txn *kv.Txn, descsCol *descs.Collection, ie sqlutil.InternalExecutor,
+				err := execCfg.InternalDB.DescsTxn(ctx, func(
+					ctx context.Context, txn descs.Txn,
 				) error {
-					sqlTranslator := sqlTranslatorFactory.NewSQLTranslator(txn, ie, descsCol)
+					sqlTranslator := sqlTranslatorFactory.NewSQLTranslator(txn)
 					var err error
-					records, _, err = sqlTranslator.Translate(ctx, descIDs, generateSystemSpanConfigs)
+					records, err = sqlTranslator.Translate(ctx, descIDs, generateSystemSpanConfigs)
 					require.NoError(t, err)
 					return nil
 				})
@@ -213,12 +211,12 @@ func TestDataDriven(t *testing.T) {
 			case "full-translate":
 				sqlTranslatorFactory := tenant.SpanConfigSQLTranslatorFactory().(*spanconfigsqltranslator.Factory)
 				var records []spanconfig.Record
-				err := execCfg.InternalExecutorFactory.DescsTxnWithExecutor(ctx, execCfg.DB, nil /* session data */, func(
-					ctx context.Context, txn *kv.Txn, descsCol *descs.Collection, ie sqlutil.InternalExecutor,
+				err := execCfg.InternalDB.DescsTxn(ctx, func(
+					ctx context.Context, txn descs.Txn,
 				) error {
-					sqlTranslator := sqlTranslatorFactory.NewSQLTranslator(txn, ie, descsCol)
+					sqlTranslator := sqlTranslatorFactory.NewSQLTranslator(txn)
 					var err error
-					records, _, err = spanconfig.FullTranslate(ctx, sqlTranslator)
+					records, err = spanconfig.FullTranslate(ctx, sqlTranslator)
 					require.NoError(t, err)
 					return nil
 				})

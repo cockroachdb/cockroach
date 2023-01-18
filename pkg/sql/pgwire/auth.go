@@ -64,9 +64,6 @@ type authOptions struct {
 	// allow system usernames (e.g. GSSAPI principals or X.509 CN's) to
 	// be dynamically mapped to database usernames.
 	identMap *identmap.Conf
-	// ie is the server-wide internal executor, used to
-	// retrieve entries from system.users.
-	ie *sql.InternalExecutor
 
 	// The following fields are only used by tests.
 
@@ -152,7 +149,6 @@ func (c *conn) handleAuthentication(
 		sql.GetUserSessionInitInfo(
 			ctx,
 			execCfg,
-			authOpt.ie,
 			dbUser,
 			c.sessionArgs.SessionDefaults["database"],
 		)

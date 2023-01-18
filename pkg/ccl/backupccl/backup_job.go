@@ -32,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/joberror"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
@@ -44,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
@@ -140,9 +140,12 @@ func backup(
 	var lastCheckpoint time.Time
 
 	var completedSpans, completedIntroducedSpans []roachpb.Span
-	kmsEnv := backupencryption.MakeBackupKMSEnv(execCtx.ExecCfg().Settings,
-		&execCtx.ExecCfg().ExternalIODirConfig, execCtx.ExecCfg().DB, execCtx.User(),
-		execCtx.ExecCfg().InternalExecutor)
+	kmsEnv := backupencryption.MakeBackupKMSEnv(
+		execCtx.ExecCfg().Settings,
+		&execCtx.ExecCfg().ExternalIODirConfig,
+		execCtx.ExecCfg().InternalDB,
+		execCtx.User(),
+	)
 	// TODO(benesch): verify these files, rather than accepting them as truth
 	// blindly.
 	// No concurrency yet, so these assignments are safe.
@@ -369,13 +372,13 @@ func backup(
 }
 
 func releaseProtectedTimestamp(
-	ctx context.Context, txn *kv.Txn, pts protectedts.Storage, ptsID *uuid.UUID,
+	ctx context.Context, pts protectedts.Storage, ptsID *uuid.UUID,
 ) error {
 	// If the job doesn't have a protected timestamp then there's nothing to do.
 	if ptsID == nil {
 		return nil
 	}
-	err := pts.Release(ctx, txn, *ptsID)
+	err := pts.Release(ctx, *ptsID)
 	if errors.Is(err, protectedts.ErrNotExists) {
 		// No reason to return an error which might cause problems if it doesn't
 		// seem to exist.
@@ -447,8 +450,12 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	// The span is finished by the registry executing the job.
 	details := b.job.Details().(jobspb.BackupDetails)
 	p := execCtx.(sql.JobExecContext)
-	kmsEnv := backupencryption.MakeBackupKMSEnv(p.ExecCfg().Settings,
-		&p.ExecCfg().ExternalIODirConfig, p.ExecCfg().DB, p.User(), p.ExecCfg().InternalExecutor)
+	kmsEnv := backupencryption.MakeBackupKMSEnv(
+		p.ExecCfg().Settings,
+		&p.ExecCfg().ExternalIODirConfig,
+		p.ExecCfg().InternalDB,
+		p.User(),
+	)
 
 	// Resolve the backup destination. We can skip this step if we
 	// have already resolved and persisted the destination either
@@ -511,9 +518,10 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	// details and manifest in a prior resumption.
 	//
 	// TODO(adityamaru: Break this code block into helper methods.
+	insqlDB := p.ExecCfg().InternalDB
 	if details.URI == "" {
 		initialDetails := details
-		if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		if err := insqlDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 			backupDetails, m, err := getBackupDetailAndManifest(
 				ctx, p.ExecCfg(), txn, details, p.User(), backupDest,
 			)
@@ -538,9 +546,12 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 			details.ProtectedTimestampRecord = &protectedtsID
 
 			if details.ProtectedTimestampRecord != nil {
-				if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+				if err := insqlDB.Txn(ctx, func(
+					ctx context.Context, txn isql.Txn,
+				) error {
+					ptp := p.ExecCfg().ProtectedTimestampProvider.WithTxn(txn)
 					return protectTimestampForBackup(
-						ctx, p.ExecCfg(), txn, b.job.ID(), backupManifest, details,
+						ctx, b.job.ID(), ptp, backupManifest, details,
 					)
 				}); err != nil {
 					return err
@@ -562,8 +573,8 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 			return err
 		}
 
-		if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			return planSchedulePTSChaining(ctx, p.ExecCfg(), txn, &details, b.job.CreatedBy())
+		if err := insqlDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			return planSchedulePTSChaining(ctx, p.ExecCfg().JobsKnobs(), txn, &details, b.job.CreatedBy())
 		}); err != nil {
 			return err
 		}
@@ -586,7 +597,7 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		// Update the job payload (non-volatile job definition) once, with the now
 		// resolved destination, updated description, etc. If we resume again we'll
 		// skip this whole block so this isn't an excessive update of payload.
-		if err := b.job.Update(ctx, nil, func(txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+		if err := b.job.NoTxn().Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
 			if err := md.CheckRunningOrReverting(); err != nil {
 				return err
 			}
@@ -732,10 +743,12 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	}
 
 	if details.ProtectedTimestampRecord != nil && !b.testingKnobs.ignoreProtectedTimestamps {
-		if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		if err := p.ExecCfg().InternalDB.Txn(ctx, func(
+			ctx context.Context, txn isql.Txn,
+		) error {
 			details := b.job.Details().(jobspb.BackupDetails)
-			return releaseProtectedTimestamp(ctx, txn, p.ExecCfg().ProtectedTimestampProvider,
-				details.ProtectedTimestampRecord)
+			pts := p.ExecCfg().ProtectedTimestampProvider.WithTxn(txn)
+			return releaseProtectedTimestamp(ctx, pts, details.ProtectedTimestampRecord)
 		}); err != nil {
 			log.Errorf(ctx, "failed to release protected timestamp: %v", err)
 		}
@@ -807,7 +820,9 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		logJobCompletion(ctx, b.getTelemetryEventType(), b.job.ID(), true, nil)
 	}
 
-	return b.maybeNotifyScheduledJobCompletion(ctx, jobs.StatusSucceeded, p.ExecCfg())
+	return b.maybeNotifyScheduledJobCompletion(
+		ctx, jobs.StatusSucceeded, p.ExecCfg().JobsKnobs(), p.ExecCfg().InternalDB,
+	)
 }
 
 // ReportResults implements JobResultsReporter interface.
@@ -830,15 +845,19 @@ func (b *backupResumer) ReportResults(ctx context.Context, resultsCh chan<- tree
 func getBackupDetailAndManifest(
 	ctx context.Context,
 	execCfg *sql.ExecutorConfig,
-	txn *kv.Txn,
+	txn isql.Txn,
 	initialDetails jobspb.BackupDetails,
 	user username.SQLUsername,
 	backupDestination backupdest.ResolvedDestination,
 ) (jobspb.BackupDetails, backuppb.BackupManifest, error) {
 	makeCloudStorage := execCfg.DistSQLSrv.ExternalStorageFromURI
 
-	kmsEnv := backupencryption.MakeBackupKMSEnv(execCfg.Settings, &execCfg.ExternalIODirConfig,
-		execCfg.DB, user, execCfg.InternalExecutor)
+	kmsEnv := backupencryption.MakeBackupKMSEnv(
+		execCfg.Settings,
+		&execCfg.ExternalIODirConfig,
+		execCfg.InternalDB,
+		user,
+	)
 
 	mem := execCfg.RootMemoryMonitor.MakeBoundAccount()
 	defer mem.Close(ctx)
@@ -1004,22 +1023,20 @@ func (b *backupResumer) readManifestOnResume(
 }
 
 func (b *backupResumer) maybeNotifyScheduledJobCompletion(
-	ctx context.Context, jobStatus jobs.Status, exec *sql.ExecutorConfig,
+	ctx context.Context, jobStatus jobs.Status, knobs *jobs.TestingKnobs, db isql.DB,
 ) error {
 	env := scheduledjobs.ProdJobSchedulerEnv
-	if knobs, ok := exec.DistSQLSrv.TestingKnobs.JobsTestingKnobs.(*jobs.TestingKnobs); ok {
-		if knobs.JobSchedulerEnv != nil {
-			env = knobs.JobSchedulerEnv
-		}
+	if knobs != nil && knobs.JobSchedulerEnv != nil {
+		env = knobs.JobSchedulerEnv
 	}
 
-	err := exec.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+	err := db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		// We cannot rely on b.job containing created_by_id because on job
 		// resumption the registry does not populate the resumer's CreatedByInfo.
-		datums, err := exec.InternalExecutor.QueryRowEx(
+		datums, err := txn.QueryRowEx(
 			ctx,
 			"lookup-schedule-info",
-			txn,
+			txn.KV(),
 			sessiondata.NodeUserSessionDataOverride,
 			fmt.Sprintf(
 				"SELECT created_by_id FROM %s WHERE id=$1 AND created_by_type=$2",
@@ -1035,7 +1052,8 @@ func (b *backupResumer) maybeNotifyScheduledJobCompletion(
 
 		scheduleID := int64(tree.MustBeDInt(datums[0]))
 		if err := jobs.NotifyJobTermination(
-			ctx, env, b.job.ID(), jobStatus, b.job.Details(), scheduleID, exec.InternalExecutor, txn); err != nil {
+			ctx, txn, env, b.job.ID(), jobStatus, b.job.Details(), scheduleID,
+		); err != nil {
 			return errors.Wrapf(err,
 				"failed to notify schedule %d of completion of job %d", scheduleID, b.job.ID())
 		}
@@ -1056,10 +1074,10 @@ func (b *backupResumer) OnFailOrCancel(
 	p := execCtx.(sql.JobExecContext)
 	cfg := p.ExecCfg()
 	b.deleteCheckpoint(ctx, cfg, p.User())
-	if err := cfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+	if err := cfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		details := b.job.Details().(jobspb.BackupDetails)
-		return releaseProtectedTimestamp(ctx, txn, cfg.ProtectedTimestampProvider,
-			details.ProtectedTimestampRecord)
+		pts := cfg.ProtectedTimestampProvider.WithTxn(txn)
+		return releaseProtectedTimestamp(ctx, pts, details.ProtectedTimestampRecord)
 	}); err != nil {
 		return err
 	}
@@ -1067,8 +1085,9 @@ func (b *backupResumer) OnFailOrCancel(
 	// This should never return an error unless resolving the schedule that the
 	// job is being run under fails. This could happen if the schedule is dropped
 	// while the job is executing.
-	if err := b.maybeNotifyScheduledJobCompletion(ctx, jobs.StatusFailed,
-		execCtx.(sql.JobExecContext).ExecCfg()); err != nil {
+	if err := b.maybeNotifyScheduledJobCompletion(
+		ctx, jobs.StatusFailed, cfg.JobsKnobs(), cfg.InternalDB,
+	); err != nil {
 		log.Errorf(ctx, "failed to notify job %d on completion of OnFailOrCancel: %+v",
 			b.job.ID(), err)
 	}

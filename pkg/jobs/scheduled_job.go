@@ -18,13 +18,12 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 	"github.com/robfig/cron/v3"
@@ -93,31 +92,35 @@ func HasScheduledJobNotFoundError(err error) bool {
 	return errors.HasType(err, (*scheduledJobNotFoundError)(nil))
 }
 
-// LoadScheduledJob loads scheduled job record from the database.
-func LoadScheduledJob(
-	ctx context.Context,
-	env scheduledjobs.JobSchedulerEnv,
-	id int64,
-	ex sqlutil.InternalExecutor,
-	txn *kv.Txn,
-) (*ScheduledJob, error) {
-	row, cols, err := ex.QueryRowExWithCols(ctx, "lookup-schedule", txn,
-		sessiondata.RootUserSessionDataOverride,
-		fmt.Sprintf("SELECT * FROM %s WHERE schedule_id = %d",
-			env.ScheduledJobsTableName(), id))
+func ScheduledJobDB(db isql.DB) ScheduledJobStorage {
+	return scheduledJobStorageDB{db: db}
+}
 
-	if err != nil {
-		return nil, errors.CombineErrors(err, &scheduledJobNotFoundError{scheduleID: id})
-	}
-	if row == nil {
-		return nil, &scheduledJobNotFoundError{scheduleID: id}
-	}
+func ScheduledJobTxn(txn isql.Txn) ScheduledJobStorage {
+	return scheduledJobStorageTxn{txn: txn}
+}
 
-	j := NewScheduledJob(env)
-	if err := j.InitFromDatums(row, cols); err != nil {
-		return nil, err
-	}
-	return j, nil
+type ScheduledJobStorage interface {
+	// Load loads scheduled job record from the database.
+	Load(ctx context.Context, env scheduledjobs.JobSchedulerEnv, id int64) (*ScheduledJob, error)
+
+	// DeleteByID removes this schedule with the given ID.
+	// If an error is returned, it is callers responsibility to handle it (e.g. rollback transaction).
+	DeleteByID(ctx context.Context, env scheduledjobs.JobSchedulerEnv, id int64) error
+
+	// Create persists this schedule in the system.scheduled_jobs table.
+	// Sets j.scheduleID to the ID of the newly created schedule.
+	// Only the values initialized in this schedule are written to the specified transaction.
+	// If an error is returned, it is callers responsibility to handle it (e.g. rollback transaction).
+	Create(ctx context.Context, j *ScheduledJob) error
+
+	// Delete removes this schedule.
+	// If an error is returned, it is callers responsibility to handle it (e.g. rollback transaction).
+	Delete(ctx context.Context, j *ScheduledJob) error
+
+	// Update saves changes made to this schedule.
+	// If an error is returned, it is callers responsibility to handle it (e.g. rollback transaction).
+	Update(ctx context.Context, j *ScheduledJob) error
 }
 
 // ScheduleID returns schedule ID.
@@ -359,11 +362,103 @@ func (j *ScheduledJob) InitFromDatums(datums []tree.Datum, cols []colinfo.Result
 	return nil
 }
 
-// Create persists this schedule in the system.scheduled_jobs table.
-// Sets j.scheduleID to the ID of the newly created schedule.
-// Only the values initialized in this schedule are written to the specified transaction.
-// If an error is returned, it is callers responsibility to handle it (e.g. rollback transaction).
-func (j *ScheduledJob) Create(ctx context.Context, ex sqlutil.InternalExecutor, txn *kv.Txn) error {
+type scheduledJobStorageDB struct{ db isql.DB }
+
+func (s scheduledJobStorageDB) DeleteByID(
+	ctx context.Context, env scheduledjobs.JobSchedulerEnv, id int64,
+) error {
+	return s.run(ctx, func(ctx context.Context, txn scheduledJobStorageTxn) error {
+		return txn.DeleteByID(ctx, env, id)
+	})
+}
+
+func (s scheduledJobStorageDB) Load(
+	ctx context.Context, env scheduledjobs.JobSchedulerEnv, id int64,
+) (*ScheduledJob, error) {
+	var j *ScheduledJob
+	if err := s.run(ctx, func(
+		ctx context.Context, txn scheduledJobStorageTxn,
+	) (err error) {
+		j, err = txn.Load(ctx, env, id)
+		return err
+	}); err != nil {
+		return nil, err
+	}
+	return j, nil
+}
+
+func (s scheduledJobStorageDB) run(
+	ctx context.Context, f func(ctx context.Context, txn scheduledJobStorageTxn) error,
+) error {
+	return s.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) (err error) {
+		return f(ctx, scheduledJobStorageTxn{txn})
+	})
+}
+
+func (s scheduledJobStorageDB) runAction(
+	ctx context.Context,
+	f func(scheduledJobStorageTxn, context.Context, *ScheduledJob) error,
+	j *ScheduledJob,
+) error {
+	return s.run(ctx, func(ctx context.Context, txn scheduledJobStorageTxn) error {
+		return f(txn, ctx, j)
+	})
+}
+
+func (s scheduledJobStorageDB) Create(ctx context.Context, j *ScheduledJob) error {
+	return s.runAction(ctx, scheduledJobStorageTxn.Create, j)
+}
+
+func (s scheduledJobStorageDB) Delete(ctx context.Context, j *ScheduledJob) error {
+	return s.runAction(ctx, scheduledJobStorageTxn.Delete, j)
+}
+
+func (s scheduledJobStorageDB) Update(ctx context.Context, j *ScheduledJob) error {
+	return s.runAction(ctx, scheduledJobStorageTxn.Update, j)
+}
+
+type scheduledJobStorageTxn struct{ txn isql.Txn }
+
+func (s scheduledJobStorageTxn) DeleteByID(
+	ctx context.Context, env scheduledjobs.JobSchedulerEnv, id int64,
+) error {
+	_, err := s.txn.ExecEx(
+		ctx,
+		"delete-schedule",
+		s.txn.KV(),
+		sessiondata.RootUserSessionDataOverride,
+		fmt.Sprintf(
+			"DELETE FROM %s WHERE schedule_id = $1",
+			env.ScheduledJobsTableName(),
+		),
+		id,
+	)
+	return err
+}
+
+func (s scheduledJobStorageTxn) Load(
+	ctx context.Context, env scheduledjobs.JobSchedulerEnv, id int64,
+) (*ScheduledJob, error) {
+	row, cols, err := s.txn.QueryRowExWithCols(ctx, "lookup-schedule", s.txn.KV(),
+		sessiondata.RootUserSessionDataOverride,
+		fmt.Sprintf("SELECT * FROM %s WHERE schedule_id = %d",
+			env.ScheduledJobsTableName(), id))
+
+	if err != nil {
+		return nil, errors.CombineErrors(err, &scheduledJobNotFoundError{scheduleID: id})
+	}
+	if row == nil {
+		return nil, &scheduledJobNotFoundError{scheduleID: id}
+	}
+
+	j := NewScheduledJob(env)
+	if err := j.InitFromDatums(row, cols); err != nil {
+		return nil, err
+	}
+	return j, nil
+}
+
+func (s scheduledJobStorageTxn) Create(ctx context.Context, j *ScheduledJob) error {
 	if j.rec.ScheduleID != 0 {
 		return errors.New("cannot specify schedule id when creating new cron job")
 	}
@@ -377,7 +472,7 @@ func (j *ScheduledJob) Create(ctx context.Context, ex sqlutil.InternalExecutor, 
 		return err
 	}
 
-	row, retCols, err := ex.QueryRowExWithCols(ctx, "sched-create", txn,
+	row, retCols, err := s.txn.QueryRowExWithCols(ctx, "sched-create", s.txn.KV(),
 		sessiondata.RootUserSessionDataOverride,
 		fmt.Sprintf("INSERT INTO %s (%s) VALUES(%s) RETURNING schedule_id",
 			j.env.ScheduledJobsTableName(), strings.Join(cols, ","), generatePlaceholders(len(qargs))),
@@ -394,9 +489,20 @@ func (j *ScheduledJob) Create(ctx context.Context, ex sqlutil.InternalExecutor, 
 	return j.InitFromDatums(row, retCols)
 }
 
-// Update saves changes made to this schedule.
-// If an error is returned, it is callers responsibility to handle it (e.g. rollback transaction).
-func (j *ScheduledJob) Update(ctx context.Context, ex sqlutil.InternalExecutor, txn *kv.Txn) error {
+func (s scheduledJobStorageTxn) Delete(ctx context.Context, j *ScheduledJob) error {
+	if j.rec.ScheduleID == 0 {
+		return errors.New("cannot delete schedule: missing schedule id")
+	}
+	_, err := s.txn.ExecEx(ctx, "sched-delete", s.txn.KV(),
+		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+		fmt.Sprintf("DELETE FROM %s WHERE schedule_id = %d",
+			j.env.ScheduledJobsTableName(), j.ScheduleID()),
+	)
+
+	return err
+}
+
+func (s scheduledJobStorageTxn) Update(ctx context.Context, j *ScheduledJob) error {
 	if !j.isDirty() {
 		return nil
 	}
@@ -414,7 +520,7 @@ func (j *ScheduledJob) Update(ctx context.Context, ex sqlutil.InternalExecutor, 
 		return nil // Nothing changed.
 	}
 
-	n, err := ex.ExecEx(ctx, "sched-update", txn,
+	n, err := s.txn.ExecEx(ctx, "sched-update", s.txn.KV(),
 		sessiondata.RootUserSessionDataOverride,
 		fmt.Sprintf("UPDATE %s SET (%s) = (%s) WHERE schedule_id = %d",
 			j.env.ScheduledJobsTableName(), strings.Join(cols, ","),
@@ -433,20 +539,8 @@ func (j *ScheduledJob) Update(ctx context.Context, ex sqlutil.InternalExecutor, 
 	return nil
 }
 
-// Delete removes this schedule.
-// If an error is returned, it is callers responsibility to handle it (e.g. rollback transaction).
-func (j *ScheduledJob) Delete(ctx context.Context, ex sqlutil.InternalExecutor, txn *kv.Txn) error {
-	if j.rec.ScheduleID == 0 {
-		return errors.New("cannot delete schedule: missing schedule id")
-	}
-	_, err := ex.ExecEx(ctx, "sched-delete", txn,
-		sessiondata.RootUserSessionDataOverride,
-		fmt.Sprintf("DELETE FROM %s WHERE schedule_id = %d",
-			j.env.ScheduledJobsTableName(), j.ScheduleID()),
-	)
-
-	return err
-}
+var _ ScheduledJobStorage = (*scheduledJobStorageTxn)(nil)
+var _ ScheduledJobStorage = (*scheduledJobStorageDB)(nil)
 
 // marshalChanges marshals all changes in the in-memory representation and returns
 // the names of the columns and marshaled values.

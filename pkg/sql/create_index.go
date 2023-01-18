@@ -903,7 +903,7 @@ func (p *planner) configureZoneConfigForNewIndexPartitioning(
 
 		if err := ApplyZoneConfigForMultiRegionTable(
 			ctx,
-			p.txn,
+			p.Txn(),
 			p.ExecCfg(),
 			p.extendedEvalCtx.Tracing.KVTracingEnabled(),
 			p.Descriptors(),

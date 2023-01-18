@@ -75,8 +75,9 @@ func GetLiveClusterRegions(ctx context.Context, p PlanHookState) (LiveClusterReg
 	// Non-admin users can't access the crdb_internal.kv_node_status table, which
 	// this query hits, so we must override the user here.
 	override := sessiondata.RootUserSessionDataOverride
+	override.Database = "system"
 
-	it, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryIteratorEx(
+	it, err := p.InternalSQLTxn().QueryIteratorEx(
 		ctx,
 		"get_live_cluster_regions",
 		p.Txn(),
@@ -1482,20 +1483,18 @@ func SynthesizeRegionConfig(
 // This returns an ErrNotMultiRegionDatabase error if the database isn't
 // multi-region.
 func GetLocalityRegionEnumPhysicalRepresentation(
-	ctx context.Context,
-	internalExecutorFactory descs.TxnManager,
-	kvDB *kv.DB,
-	dbID descpb.ID,
-	locality roachpb.Locality,
+	ctx context.Context, db descs.DB, dbID descpb.ID, locality roachpb.Locality,
 ) ([]byte, error) {
 	var enumReps map[catpb.RegionName][]byte
 	var primaryRegion catpb.RegionName
-	if err := internalExecutorFactory.DescsTxn(ctx, kvDB, func(
-		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
+	if err := db.DescsTxn(ctx, func(
+		ctx context.Context, txn descs.Txn,
 	) error {
 		enumReps, primaryRegion = nil, "" // reset for retry
 		var err error
-		enumReps, primaryRegion, err = GetRegionEnumRepresentations(ctx, txn, dbID, descsCol)
+		enumReps, primaryRegion, err = GetRegionEnumRepresentations(
+			ctx, txn.KV(), dbID, txn.Descriptors(),
+		)
 		return err
 	}); err != nil {
 		return nil, err
@@ -2555,7 +2554,7 @@ func (p *planner) OptimizeSystemDatabase(ctx context.Context) error {
 		// Delete statistics for the table because the statistics materialize
 		// the column type for `crdb_region` and the column type is changing
 		// from bytes to an enum.
-		if _, err := p.ExecCfg().InternalExecutor.Exec(ctx, "delete-stats", p.txn,
+		if _, err := p.InternalSQLTxn().Exec(ctx, "delete-stats", p.txn,
 			`DELETE FROM system.table_statistics WHERE "tableID" = $1;`,
 			descriptor.GetID(),
 		); err != nil {

@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -38,26 +39,31 @@ import (
 func completeStreamIngestion(
 	ctx context.Context,
 	jobRegistry *jobs.Registry,
-	txn *kv.Txn,
+	txn isql.Txn,
 	ingestionJobID jobspb.JobID,
 	cutoverTimestamp hlc.Timestamp,
 ) error {
-	return jobRegistry.UpdateJobWithTxn(ctx, ingestionJobID, txn, false, /* useReadLock */
-		func(txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
-			// TODO(adityamaru): This should change in the future, a user should be
-			// allowed to correct their cutover time if the process of reverting the job
-			// has not started.
-			if jobCutoverTime := md.Progress.GetStreamIngest().CutoverTime; !jobCutoverTime.IsEmpty() {
-				return errors.Newf("cutover timestamp already set to %s, "+
-					"job %d is in the process of cutting over", jobCutoverTime.String(), ingestionJobID)
-			}
+	j, err := jobRegistry.LoadJobWithTxn(ctx, ingestionJobID, txn)
+	if err != nil {
+		return err
+	}
+	return j.WithTxn(txn).Update(ctx, func(
+		txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
+	) error {
+		// TODO(adityamaru): This should change in the future, a user should be
+		// allowed to correct their cutover time if the process of reverting the job
+		// has not started.
+		if jobCutoverTime := md.Progress.GetStreamIngest().CutoverTime; !jobCutoverTime.IsEmpty() {
+			return errors.Newf("cutover timestamp already set to %s, "+
+				"job %d is in the process of cutting over", jobCutoverTime.String(), ingestionJobID)
+		}
 
-			// Update the sentinel being polled by the stream ingestion job to
-			// check if a complete has been signaled.
-			md.Progress.GetStreamIngest().CutoverTime = cutoverTimestamp
-			ju.UpdateProgress(md.Progress)
-			return nil
-		})
+		// Update the sentinel being polled by the stream ingestion job to
+		// check if a complete has been signaled.
+		md.Progress.GetStreamIngest().CutoverTime = cutoverTimestamp
+		ju.UpdateProgress(md.Progress)
+		return nil
+	})
 }
 
 type streamIngestionResumer struct {
@@ -128,10 +134,11 @@ func waitUntilProducerActive(
 }
 
 func updateRunningStatus(ctx context.Context, ingestionJob *jobs.Job, status string) {
-	if err := ingestionJob.RunningStatus(ctx, nil,
-		func(ctx context.Context, details jobspb.Details) (jobs.RunningStatus, error) {
-			return jobs.RunningStatus(status), nil
-		}); err != nil {
+	if err := ingestionJob.NoTxn().RunningStatus(ctx, func(
+		ctx context.Context, details jobspb.Details,
+	) (jobs.RunningStatus, error) {
+		return jobs.RunningStatus(status), nil
+	}); err != nil {
 		log.Warningf(ctx, "error when updating job running status: %s", err)
 	}
 }
@@ -188,7 +195,7 @@ func ingest(ctx context.Context, execCtx sql.JobExecContext, ingestionJob *jobs.
 		}
 
 		// TODO(casper): update running status
-		err = ingestionJob.Update(ctx, nil, func(txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+		err = ingestionJob.NoTxn().Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
 			md.Progress.GetStreamIngest().StreamAddresses = topology.StreamAddresses()
 			ju.UpdateProgress(md.Progress)
 			return nil
@@ -265,8 +272,13 @@ func ingest(ctx context.Context, execCtx sql.JobExecContext, ingestionJob *jobs.
 		// Now that we have completed the cutover we can release the protected
 		// timestamp record on the destination tenant's keyspace.
 		if details.ProtectedTimestampRecordID != nil {
-			if err := execCtx.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-				return releaseDestinationTenantProtectedTimestamp(ctx, execCtx, txn, *details.ProtectedTimestampRecordID)
+			if err := execCtx.ExecCfg().InternalDB.Txn(ctx, func(
+				ctx context.Context, txn isql.Txn,
+			) error {
+				ptp := execCtx.ExecCfg().ProtectedTimestampProvider.WithTxn(txn)
+				return releaseDestinationTenantProtectedTimestamp(
+					ctx, ptp, *details.ProtectedTimestampRecordID,
+				)
 			}); err != nil {
 				return err
 			}
@@ -315,9 +327,7 @@ func ingestWithRetries(
 }
 
 // The ingestion job should never fail, only pause, as progress should never be lost.
-func (s *streamIngestionResumer) handleResumeError(
-	resumeCtx context.Context, execCtx interface{}, err error,
-) error {
+func (s *streamIngestionResumer) handleResumeError(resumeCtx context.Context, err error) error {
 	const errorFmt = "ingestion job failed (%v) but is being paused"
 	errorMessage := fmt.Sprintf(errorFmt, err)
 	log.Warningf(resumeCtx, errorFmt, err)
@@ -325,8 +335,10 @@ func (s *streamIngestionResumer) handleResumeError(
 	// The ingestion job is paused but the producer job will keep
 	// running until it times out. Users can still resume ingestion before
 	// the producer job times out.
-	return s.job.PauseRequested(resumeCtx, nil /* txn */, func(ctx context.Context,
-		planHookState interface{}, txn *kv.Txn, progress *jobspb.Progress) error {
+	return s.job.NoTxn().PauseRequestedWithFunc(resumeCtx, func(
+		ctx context.Context, planHookState interface{}, txn isql.Txn,
+		progress *jobspb.Progress,
+	) error {
 		progress.RunningStatus = errorMessage
 		return nil
 	}, errorMessage)
@@ -338,23 +350,21 @@ func (s *streamIngestionResumer) Resume(resumeCtx context.Context, execCtx inter
 	// Protect the destination tenant's keyspan from garbage collection.
 	err := s.protectDestinationTenant(resumeCtx, execCtx)
 	if err != nil {
-		return s.handleResumeError(resumeCtx, execCtx, err)
+		return s.handleResumeError(resumeCtx, err)
 	}
 
 	// Start ingesting KVs from the replication stream.
 	err = ingestWithRetries(resumeCtx, execCtx.(sql.JobExecContext), s.job)
 	if err != nil {
-		return s.handleResumeError(resumeCtx, execCtx, err)
+		return s.handleResumeError(resumeCtx, err)
 	}
 	return nil
 }
 
 func releaseDestinationTenantProtectedTimestamp(
-	ctx context.Context, execCtx interface{}, txn *kv.Txn, ptsID uuid.UUID,
+	ctx context.Context, ptp protectedts.Storage, ptsID uuid.UUID,
 ) error {
-	jobExecCtx := execCtx.(sql.JobExecContext)
-	ptp := jobExecCtx.ExecCfg().ProtectedTimestampProvider
-	if err := ptp.Release(ctx, txn, ptsID); err != nil {
+	if err := ptp.Release(ctx, ptsID); err != nil {
 		if errors.Is(err, protectedts.ErrNotExists) {
 			// No reason to return an error which might cause problems if it doesn't
 			// seem to exist.
@@ -388,13 +398,16 @@ func (s *streamIngestionResumer) protectDestinationTenant(
 	target := ptpb.MakeTenantsTarget([]roachpb.TenantID{oldDetails.DestinationTenantID})
 	ptsID := uuid.MakeV4()
 	now := execCfg.Clock.Now()
-	return execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+	return execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		ptp := execCfg.ProtectedTimestampProvider.WithTxn(txn)
 		pts := jobsprotectedts.MakeRecord(ptsID, int64(s.job.ID()), now,
 			nil /* deprecatedSpans */, jobsprotectedts.Jobs, target)
-		if err := execCfg.ProtectedTimestampProvider.Protect(ctx, txn, pts); err != nil {
+		if err := ptp.Protect(ctx, pts); err != nil {
 			return err
 		}
-		return s.job.Update(ctx, txn, func(txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+		return s.job.WithTxn(txn).Update(ctx, func(
+			txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
+		) error {
 			if err := md.CheckRunningOrReverting(); err != nil {
 				return err
 			}
@@ -480,11 +493,12 @@ func maybeRevertToCutoverTimestamp(
 		if origNRanges == -1 {
 			origNRanges = nRanges
 		}
-		return p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		return p.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 			if nRanges < origNRanges {
 				fractionRangesFinished := float32(origNRanges-nRanges) / float32(origNRanges)
-				if err := j.FractionProgressed(ctx, txn,
-					jobs.FractionUpdater(fractionRangesFinished)); err != nil {
+				if err := j.WithTxn(txn).FractionProgressed(
+					ctx, jobs.FractionUpdater(fractionRangesFinished),
+				); err != nil {
 					return jobs.SimplifyInvalidStatusError(err)
 				}
 			}
@@ -531,15 +545,17 @@ func maybeRevertToCutoverTimestamp(
 func activateTenant(ctx context.Context, execCtx interface{}, newTenantID roachpb.TenantID) error {
 	p := execCtx.(sql.JobExecContext)
 	execCfg := p.ExecCfg()
-	return execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		info, err := sql.GetTenantRecordByID(ctx, execCfg, txn, newTenantID)
+	return execCfg.InternalDB.Txn(ctx, func(
+		ctx context.Context, txn isql.Txn,
+	) error {
+		info, err := sql.GetTenantRecordByID(ctx, txn, newTenantID)
 		if err != nil {
 			return err
 		}
 
 		info.State = descpb.TenantInfo_ACTIVE
 		info.TenantReplicationJobID = 0
-		return sql.UpdateTenantRecord(ctx, execCfg, txn, info)
+		return sql.UpdateTenantRecord(ctx, p.ExecCfg().Settings, txn, info)
 	})
 }
 
@@ -579,20 +595,25 @@ func (s *streamIngestionResumer) OnFailOrCancel(
 	details := s.job.Details().(jobspb.StreamIngestionDetails)
 	s.cancelProducerJob(ctx, details)
 
-	return jobExecCtx.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		tenInfo, err := sql.GetTenantRecordByID(ctx, jobExecCtx.ExecCfg(), txn, details.DestinationTenantID)
+	execCfg := jobExecCtx.ExecCfg()
+	return execCfg.InternalDB.Txn(ctx, func(
+		ctx context.Context, txn isql.Txn,
+	) error {
+		tenInfo, err := sql.GetTenantRecordByID(ctx, txn, details.DestinationTenantID)
 		if err != nil {
 			return errors.Wrap(err, "fetch tenant info")
 		}
 
 		tenInfo.TenantReplicationJobID = 0
-		if err := sql.UpdateTenantRecord(ctx, jobExecCtx.ExecCfg(), txn, tenInfo); err != nil {
+		if err := sql.UpdateTenantRecord(ctx, execCfg.Settings, txn, tenInfo); err != nil {
 			return errors.Wrap(err, "update tenant record")
 		}
 
 		if details.ProtectedTimestampRecordID != nil {
-			if err := releaseDestinationTenantProtectedTimestamp(ctx, execCtx, txn,
-				*details.ProtectedTimestampRecordID); err != nil {
+			ptp := execCfg.ProtectedTimestampProvider.WithTxn(txn)
+			if err := releaseDestinationTenantProtectedTimestamp(
+				ctx, ptp, *details.ProtectedTimestampRecordID,
+			); err != nil {
 				return err
 			}
 		}

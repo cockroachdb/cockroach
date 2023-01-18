@@ -11,10 +11,9 @@ package backupccl
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
@@ -77,10 +76,10 @@ func tenantMetadataFromRow(row tree.Datums) (descpb.TenantInfoWithUsage, error) 
 }
 
 func retrieveSingleTenantMetadata(
-	ctx context.Context, ie *sql.InternalExecutor, txn *kv.Txn, tenantID roachpb.TenantID,
+	ctx context.Context, txn isql.Txn, tenantID roachpb.TenantID,
 ) (descpb.TenantInfoWithUsage, error) {
-	row, err := ie.QueryRow(
-		ctx, "backupccl.retrieveSingleTenantMetadata", txn,
+	row, err := txn.QueryRow(
+		ctx, "backupccl.retrieveSingleTenantMetadata", txn.KV(),
 		tenantMetadataQuery+` WHERE id = $1`, tenantID.ToUint64(),
 	)
 	if err != nil {
@@ -97,10 +96,10 @@ func retrieveSingleTenantMetadata(
 }
 
 func retrieveAllTenantsMetadata(
-	ctx context.Context, ie *sql.InternalExecutor, txn *kv.Txn,
+	ctx context.Context, txn isql.Txn,
 ) ([]descpb.TenantInfoWithUsage, error) {
-	rows, err := ie.QueryBuffered(
-		ctx, "backupccl.retrieveAllTenantsMetadata", txn,
+	rows, err := txn.QueryBuffered(
+		ctx, "backupccl.retrieveAllTenantsMetadata", txn.KV(),
 		// TODO(?): Should we add a `WHERE active`? We require the tenant to be active
 		// when it is specified.
 		// See: https://github.com/cockroachdb/cockroach/issues/89997

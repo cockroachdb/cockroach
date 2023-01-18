@@ -105,7 +105,7 @@ func (sp *bulkRowWriter) work(ctx context.Context) error {
 	semaCtx := tree.MakeSemaContext()
 	conv, err := row.NewDatumRowConverter(
 		ctx, &semaCtx, sp.tableDesc, nil /* targetColNames */, sp.EvalCtx, kvCh, nil,
-		/* seqChunkProvider */ sp.flowCtx.GetRowMetrics(), sp.flowCtx.Cfg.DB,
+		/* seqChunkProvider */ sp.flowCtx.GetRowMetrics(), sp.flowCtx.Cfg.DB.KV(),
 	)
 	if err != nil {
 		return err
@@ -137,7 +137,7 @@ func (sp *bulkRowWriter) ingestLoop(ctx context.Context, kvCh chan row.KVBatch) 
 	writeTS := sp.spec.Table.CreateAsOfTime
 	const bufferSize = 64 << 20
 	adder, err := sp.flowCtx.Cfg.BulkAdder(
-		ctx, sp.flowCtx.Cfg.DB, writeTS, kvserverbase.BulkAdderOptions{
+		ctx, sp.flowCtx.Cfg.DB.KV(), writeTS, kvserverbase.BulkAdderOptions{
 			Name:          sp.tableDesc.GetName(),
 			MinBufferSize: bufferSize,
 			// We disallow shadowing here to ensure that we report errors when builds

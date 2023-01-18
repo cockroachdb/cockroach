@@ -84,7 +84,7 @@ func (p *planner) ShowTenant(ctx context.Context, n *tree.ShowTenant) (planNode,
 
 func (n *showTenantNode) startExec(params runParams) error {
 	if _, ok := n.tenantSpec.(tenantSpecAll); ok {
-		ids, err := GetAllNonDropTenantIDs(params.ctx, params.p.execCfg, params.p.Txn())
+		ids, err := GetAllNonDropTenantIDs(params.ctx, params.p.InternalSQLTxn())
 		if err != nil {
 			return err
 		}
@@ -127,8 +127,8 @@ func getReplicationStats(
 			log.Warningf(params.ctx, "protected timestamp unavailable for tenant %q and job %d",
 				details.DestinationTenantName, job.ID())
 		} else {
-			ptp := params.p.execCfg.ProtectedTimestampProvider
-			record, err := ptp.GetRecord(params.ctx, params.p.Txn(), *stats.IngestionDetails.ProtectedTimestampRecordID)
+			ptp := params.p.execCfg.ProtectedTimestampProvider.WithTxn(params.p.InternalSQLTxn())
+			record, err := ptp.GetRecord(params.ctx, *stats.IngestionDetails.ProtectedTimestampRecordID)
 			if err != nil {
 				// Protected timestamp might not be set yet, no need to fail.
 				log.Warningf(params.ctx, "protected timestamp unavailable for tenant %q and job %d: %v",
@@ -185,7 +185,7 @@ func (n *showTenantNode) getTenantValues(
 		// There is a replication job, we need to get the job info and the
 		// replication stats in order to generate the exact tenant status.
 		registry := params.p.execCfg.JobRegistry
-		job, err := registry.LoadJobWithTxn(params.ctx, jobId, params.p.Txn())
+		job, err := registry.LoadJobWithTxn(params.ctx, jobId, params.p.InternalSQLTxn())
 		if err != nil {
 			log.Errorf(params.ctx, "cannot load job info for replicated tenant %q and job %d: %v",
 				tenantInfo.Name, jobId, err)
@@ -218,7 +218,7 @@ func (n *showTenantNode) Next(params runParams) (bool, error) {
 		return false, nil
 	}
 
-	tenantInfo, err := GetTenantRecordByID(params.ctx, params.p.execCfg, params.p.Txn(), n.tenantIds[n.row])
+	tenantInfo, err := GetTenantRecordByID(params.ctx, params.p.InternalSQLTxn(), n.tenantIds[n.row])
 	if err != nil {
 		return false, err
 	}

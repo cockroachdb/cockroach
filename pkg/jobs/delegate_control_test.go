@@ -55,12 +55,14 @@ func TestScheduleControl(t *testing.T) {
 
 	var recurringNever string
 
+	schedules := ScheduledJobDB(th.cfg.DB)
 	makeSchedule := func(name string, cron string) int64 {
 		schedule := th.newScheduledJob(t, name, "sql")
 		if cron != "" {
 			require.NoError(t, schedule.SetSchedule(cron))
 		}
-		require.NoError(t, schedule.Create(ctx, th.cfg.InternalExecutor, nil))
+
+		require.NoError(t, schedules.Create(ctx, schedule))
 		return schedule.ScheduleID()
 	}
 
@@ -83,7 +85,7 @@ func TestScheduleControl(t *testing.T) {
 		ms := time.Microsecond
 		firstRunTime := timeutil.Now().Add(10 * time.Second).Truncate(ms)
 		schedule.SetNextRun(firstRunTime)
-		require.NoError(t, schedule.Create(ctx, th.cfg.InternalExecutor, nil))
+		require.NoError(t, schedules.Create(ctx, schedule))
 		scheduleID := schedule.ScheduleID()
 		require.Equal(t, schedule.NextRun(), firstRunTime)
 		th.sqlDB.Exec(t, "RESUME SCHEDULE $1", scheduleID)
@@ -95,7 +97,7 @@ func TestScheduleControl(t *testing.T) {
 
 	t.Run("cannot-resume-one-off-schedule", func(t *testing.T) {
 		schedule := th.newScheduledJob(t, "test schedule", "select 42")
-		require.NoError(t, schedule.Create(ctx, th.cfg.InternalExecutor, nil))
+		require.NoError(t, schedules.Create(ctx, schedule))
 
 		th.sqlDB.ExpectErr(t, "cannot set next run for schedule",
 			"RESUME SCHEDULE $1", schedule.ScheduleID())
@@ -233,7 +235,7 @@ func TestJobsControlForSchedules(t *testing.T) {
 		t.Run(jobControl, func(t *testing.T) {
 			// Go through internal executor to execute job control command.
 			// This correctly reports the number of effected rows.
-			numEffected, err := th.cfg.InternalExecutor.ExecEx(
+			numEffected, err := th.cfg.DB.Executor().ExecEx(
 				context.Background(),
 				"test-num-effected",
 				nil,
@@ -315,7 +317,7 @@ func TestFilterJobsControlForSchedules(t *testing.T) {
 			// correctly reports the number of effected rows which should only be
 			// equal to the number of validStartingStates as all the other states are
 			// invalid/no-ops.
-			numEffected, err := th.cfg.InternalExecutor.ExecEx(
+			numEffected, err := th.cfg.DB.Executor().ExecEx(
 				context.Background(),
 				"test-num-effected",
 				nil,
@@ -350,7 +352,7 @@ func TestJobControlByType(t *testing.T) {
 
 	t.Run("Errors if invalid type is specified", func(t *testing.T) {
 		invalidTypeQuery := "PAUSE ALL blah JOBS"
-		_, err := th.cfg.InternalExecutor.ExecEx(
+		_, err := th.cfg.DB.Executor().ExecEx(
 			context.Background(),
 			"test-invalid-type",
 			nil,
@@ -430,7 +432,7 @@ func TestJobControlByType(t *testing.T) {
 				jobIdsClause := fmt.Sprint(strings.Join(jobIDStrings, ", "))
 
 				// Execute the command and verify its executed on the expected number of rows
-				numEffected, err := th.cfg.InternalExecutor.ExecEx(
+				numEffected, err := th.cfg.DB.Executor().ExecEx(
 					context.Background(),
 					"test-num-effected",
 					nil,

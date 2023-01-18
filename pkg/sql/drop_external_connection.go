@@ -68,7 +68,7 @@ func (p *planner) dropExternalConnection(params runParams, n *tree.DropExternalC
 	// DROP EXTERNAL CONNECTION is only allowed for users with the `DROP`
 	// privilege on this object. We run the query as `node` since the user might
 	// not have `SELECT` on the system table.
-	if _ /* rows */, err = params.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
+	if _ /* rows */, err = params.p.InternalSQLTxn().ExecEx(
 		params.ctx,
 		dropExternalConnectionOp,
 		params.p.Txn(),
@@ -80,7 +80,7 @@ func (p *planner) dropExternalConnection(params runParams, n *tree.DropExternalC
 
 	// We must also DELETE all rows from system.privileges that refer to
 	// external connection.
-	if _, err = params.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
+	if _, err = params.p.InternalSQLTxn().ExecEx(
 		params.ctx,
 		dropExternalConnectionOp,
 		params.p.Txn(),

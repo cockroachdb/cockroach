@@ -12,13 +12,12 @@ import (
 	"context"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -26,8 +25,7 @@ import (
 // of the TenantUsageServer interface; see that for more details.
 func (s *instance) ReconfigureTokenBucket(
 	ctx context.Context,
-	txn *kv.Txn,
-	ie sqlutil.InternalExecutor,
+	txn isql.Txn,
 	tenantID roachpb.TenantID,
 	availableRU float64,
 	refillRate float64,
@@ -35,11 +33,11 @@ func (s *instance) ReconfigureTokenBucket(
 	asOf time.Time,
 	asOfConsumedRequestUnits float64,
 ) error {
-	if err := s.checkTenantID(ctx, txn, ie, tenantID); err != nil {
+	if err := s.checkTenantID(ctx, txn, tenantID); err != nil {
 		return err
 	}
 	h := makeSysTableHelper(ctx, tenantID)
-	state, err := h.readTenantState(txn, ie)
+	state, err := h.readTenantState(txn)
 	if err != nil {
 		return err
 	}
@@ -49,7 +47,7 @@ func (s *instance) ReconfigureTokenBucket(
 		ctx, tenantID, availableRU, refillRate, maxBurstRU, asOf, asOfConsumedRequestUnits,
 		now, state.Consumption.RU,
 	)
-	if err := h.updateTenantState(state, ie, txn); err != nil {
+	if err := h.updateTenantState(txn, state); err != nil {
 		return err
 	}
 	return nil
@@ -57,10 +55,10 @@ func (s *instance) ReconfigureTokenBucket(
 
 // checkTenantID verifies that the tenant exists and is active.
 func (s *instance) checkTenantID(
-	ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor, tenantID roachpb.TenantID,
+	ctx context.Context, txn isql.Txn, tenantID roachpb.TenantID,
 ) error {
-	row, err := ie.QueryRowEx(
-		ctx, "check-tenant", txn, sessiondata.NodeUserSessionDataOverride,
+	row, err := txn.QueryRowEx(
+		ctx, "check-tenant", txn.KV(), sessiondata.NodeUserSessionDataOverride,
 		`SELECT active FROM system.tenants WHERE id = $1`, tenantID.ToUint64(),
 	)
 	if err != nil {

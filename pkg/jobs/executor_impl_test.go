@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
@@ -60,12 +61,14 @@ func TestInlineExecutorFailedJobsHandling(t *testing.T) {
 			j.SetScheduleDetails(jobspb.ScheduleDetails{OnError: test.onError})
 
 			ctx := context.Background()
-			require.NoError(t, j.Create(ctx, h.cfg.InternalExecutor, nil))
+			require.NoError(t, ScheduledJobDB(h.cfg.DB).Create(ctx, j))
 
 			// Pretend we failed running; we expect job to be rescheduled.
-			require.NoError(t, NotifyJobTermination(
-				ctx, h.env, 123, StatusFailed, nil, j.ScheduleID(), h.cfg.InternalExecutor, nil))
-
+			require.NoError(t, h.cfg.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+				return NotifyJobTermination(
+					ctx, txn, h.env, 123, StatusFailed, nil, j.ScheduleID(),
+				)
+			}))
 			// Verify nextRun updated
 			loaded := h.loadSchedule(t, j.ScheduleID())
 			require.Equal(t, test.expectedNextRun, loaded.NextRun())

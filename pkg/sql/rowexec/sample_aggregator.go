@@ -17,11 +17,11 @@ import (
 
 	"github.com/axiomhq/hyperloglog"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -233,10 +233,10 @@ func (s *sampleAggregator) mainLoop(ctx context.Context) (earlyExit bool, err er
 		// If it changed by less than 1%, just check for cancellation (which is more
 		// efficient).
 		if fractionCompleted < 1.0 && fractionCompleted < lastReportedFractionCompleted+0.01 {
-			return job.CheckStatus(ctx, nil /* txn */)
+			return job.NoTxn().CheckStatus(ctx)
 		}
 		lastReportedFractionCompleted = fractionCompleted
-		return job.FractionProgressed(ctx, nil /* txn */, jobs.FractionUpdater(fractionCompleted))
+		return job.NoTxn().FractionProgressed(ctx, jobs.FractionUpdater(fractionCompleted))
 	}
 
 	var rowsProcessed uint64
@@ -435,7 +435,7 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 	// internal executor instead of doing this weird thing where it uses the
 	// internal executor to execute one statement at a time inside a db.Txn()
 	// closure.
-	if err := s.FlowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+	if err := s.FlowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		for _, si := range s.sketches {
 			var histogram *stats.HistogramData
 			if si.spec.GenerateHistogram {
@@ -516,7 +516,6 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 			if si.spec.PartialPredicate == "" {
 				if err := stats.DeleteOldStatsForColumns(
 					ctx,
-					s.FlowCtx.Cfg.Executor,
 					txn,
 					s.tableID,
 					columnIDs,
@@ -529,7 +528,6 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 			if err := stats.InsertNewStat(
 				ctx,
 				s.FlowCtx.Cfg.Settings,
-				s.FlowCtx.Cfg.Executor,
 				txn,
 				s.tableID,
 				si.spec.StatName,
@@ -564,13 +562,12 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 			columnsUsed[i] = columnIDs
 		}
 		keepTime := stats.TableStatisticsRetentionPeriod.Get(&s.FlowCtx.Cfg.Settings.SV)
-		if err := s.FlowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		if err := s.FlowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 			// Delete old stats from columns that were not collected. This is
 			// important to prevent single-column stats from deleted columns or
 			// multi-column stats from deleted indexes from persisting indefinitely.
 			return stats.DeleteOldStatsForOtherColumns(
 				ctx,
-				s.FlowCtx.Cfg.Executor,
 				txn,
 				s.tableID,
 				columnsUsed,

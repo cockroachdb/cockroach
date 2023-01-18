@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
@@ -43,9 +43,8 @@ type JobSchedulerEnv interface {
 
 // JobExecutionConfig encapsulates external components needed for scheduled job execution.
 type JobExecutionConfig struct {
-	Settings         *cluster.Settings
-	InternalExecutor sqlutil.InternalExecutor
-	DB               *kv.DB
+	Settings *cluster.Settings
+	DB       isql.DB
 	// TestingKnobs is *jobs.TestingKnobs; however we cannot depend
 	// on jobs package due to circular dependencies.
 	TestingKnobs base.ModuleTestingKnobs
@@ -89,31 +88,22 @@ func (e *prodJobSchedulerEnvImpl) IsExecutorEnabled(name string) bool {
 // ScheduleControllerEnv is an environment for controlling (DROP, PAUSE)
 // scheduled jobs.
 type ScheduleControllerEnv interface {
-	InternalExecutor() sqlutil.InternalExecutor
-	PTSProvider() protectedts.Provider
+	PTSProvider() protectedts.Storage
 }
 
 // ProdScheduleControllerEnvImpl is the production implementation of
 // ScheduleControllerEnv.
 type ProdScheduleControllerEnvImpl struct {
-	pts protectedts.Provider
-	ie  sqlutil.InternalExecutor
+	pts protectedts.Storage
 }
 
 // MakeProdScheduleControllerEnv returns a ProdScheduleControllerEnvImpl
 // instance.
-func MakeProdScheduleControllerEnv(
-	pts protectedts.Provider, ie sqlutil.InternalExecutor,
-) *ProdScheduleControllerEnvImpl {
-	return &ProdScheduleControllerEnvImpl{pts: pts, ie: ie}
-}
-
-// InternalExecutor implements the ScheduleControllerEnv interface.
-func (c *ProdScheduleControllerEnvImpl) InternalExecutor() sqlutil.InternalExecutor {
-	return c.ie
+func MakeProdScheduleControllerEnv(pts protectedts.Storage) *ProdScheduleControllerEnvImpl {
+	return &ProdScheduleControllerEnvImpl{pts: pts}
 }
 
 // PTSProvider implements the ScheduleControllerEnv interface.
-func (c *ProdScheduleControllerEnvImpl) PTSProvider() protectedts.Provider {
+func (c *ProdScheduleControllerEnvImpl) PTSProvider() protectedts.Storage {
 	return c.pts
 }

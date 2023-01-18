@@ -36,8 +36,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security/certnames"
@@ -613,17 +611,6 @@ func (ts *TestServer) Start(ctx context.Context) error {
 		}
 	}()
 	return nil
-}
-
-type tenantProtectedTSProvider struct {
-	protectedts.Provider
-	st *cluster.Settings
-}
-
-func (d tenantProtectedTSProvider) Protect(
-	ctx context.Context, txn *kv.Txn, rec *ptpb.Record,
-) error {
-	return d.Provider.Protect(ctx, txn, rec)
 }
 
 // TestTenant is an in-memory instantiation of the SQL-only process created for
@@ -1290,9 +1277,9 @@ func (ts *TestServer) InternalExecutor() interface{} {
 	return ts.sqlServer.internalExecutor
 }
 
-// InternalExecutorFactory is part of TestServerInterface.
-func (ts *TestServer) InternalExecutorFactory() interface{} {
-	return ts.sqlServer.internalExecutorFactory
+// InternalDB is part of TestServerInterface.
+func (ts *TestServer) InternalDB() interface{} {
+	return ts.sqlServer.internalDB
 }
 
 // GetNode exposes the Server's Node.

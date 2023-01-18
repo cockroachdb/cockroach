@@ -78,7 +78,7 @@ func (n *changeNonDescriptorBackedPrivilegesNode) startExec(params runParams) er
 				// public means public has SELECT which
 				// is the default case.
 				if user == username.PublicRoleName() && userPrivs.Privileges == privilege.SELECT.Mask() {
-					_, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
+					_, err := params.p.InternalSQLTxn().ExecEx(
 						params.ctx,
 						`delete-system-privilege`,
 						params.p.txn,
@@ -94,7 +94,7 @@ func (n *changeNonDescriptorBackedPrivilegesNode) startExec(params runParams) er
 				}
 
 				insertStmt := fmt.Sprintf(`UPSERT INTO system.%s VALUES ($1, $2, $3, $4)`, catconstants.SystemPrivilegeTableName)
-				_, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
+				_, err := params.p.InternalSQLTxn().ExecEx(
 					params.ctx,
 					`insert-system-privilege`,
 					params.p.txn,
@@ -119,7 +119,7 @@ func (n *changeNonDescriptorBackedPrivilegesNode) startExec(params runParams) er
 				// For Public role and virtual tables, leave an empty
 				// row to indicate that SELECT has been revoked.
 				if !found && (n.grantOn == privilege.VirtualTable && user == username.PublicRoleName()) {
-					_, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
+					_, err := params.p.InternalSQLTxn().ExecEx(
 						params.ctx,
 						`insert-system-privilege`,
 						params.p.txn,
@@ -139,7 +139,7 @@ func (n *changeNonDescriptorBackedPrivilegesNode) startExec(params runParams) er
 				// If there are no entries remaining on the PrivilegeDescriptor for the user
 				// we can remove the entire row for the user.
 				if !found {
-					_, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
+					_, err := params.p.InternalSQLTxn().ExecEx(
 						params.ctx,
 						`delete-system-privilege`,
 						params.p.txn,
@@ -154,7 +154,7 @@ func (n *changeNonDescriptorBackedPrivilegesNode) startExec(params runParams) er
 					continue
 				}
 
-				_, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
+				_, err := params.p.InternalSQLTxn().ExecEx(
 					params.ctx,
 					`insert-system-privilege`,
 					params.p.txn,
@@ -222,8 +222,9 @@ func (n *changeNonDescriptorBackedPrivilegesNode) makeSystemPrivilegeObject(
 		var ret []syntheticprivilege.Object
 		for _, externalConnectionName := range n.targets.ExternalConnections {
 			// Ensure that an External Connection of this name actually exists.
-			if _, err := externalconn.LoadExternalConnection(ctx, string(externalConnectionName),
-				p.ExecCfg().InternalExecutor, p.Txn()); err != nil {
+			if _, err := externalconn.LoadExternalConnection(
+				ctx, string(externalConnectionName), p.InternalSQLTxn(),
+			); err != nil {
 				return nil, errors.Wrap(err, "failed to resolve External Connection")
 			}
 
@@ -264,7 +265,7 @@ func (p *planner) getPrivilegeDescriptor(
 				TableName:  d.GetName(),
 			}
 			return p.ExecCfg().SyntheticPrivilegeCache.Get(
-				ctx, p.Txn(), p.Descriptors(), vDesc,
+				ctx, p.InternalSQLTxn(), p.Descriptors(), vDesc,
 			)
 		}
 		return d.GetPrivileges(), nil
@@ -272,7 +273,7 @@ func (p *planner) getPrivilegeDescriptor(
 		return d.GetPrivileges(), nil
 	case syntheticprivilege.Object:
 		return p.ExecCfg().SyntheticPrivilegeCache.Get(
-			ctx, p.Txn(), p.Descriptors(), d,
+			ctx, p.InternalSQLTxn(), p.Descriptors(), d,
 		)
 	}
 	return nil, errors.AssertionFailedf("unknown privilege.Object type %T", po)

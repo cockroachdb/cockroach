@@ -17,10 +17,10 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -61,8 +61,8 @@ CREATE SCHEMA test_sc;
 `,
 	)
 
-	err := sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
-		funcDesc, err := col.ByIDWithLeased(txn).WithoutNonPublic().Get().Function(ctx, 109)
+	err := sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+		funcDesc, err := col.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Function(ctx, 109)
 		require.NoError(t, err)
 		require.Equal(t, funcDesc.GetName(), "f")
 
@@ -91,7 +91,7 @@ SELECT nextval(105:::REGCLASS);`,
 
 		// Make sure columns and indexes has correct back references.
 		tn := tree.MakeTableNameWithSchema("defaultdb", "public", "t")
-		_, tbl, err := descs.PrefixAndTable(ctx, col.ByNameWithLeased(txn).Get(), &tn)
+		_, tbl, err := descs.PrefixAndTable(ctx, col.ByNameWithLeased(txn.KV()).Get(), &tn)
 		require.NoError(t, err)
 		require.Equal(t, "t", tbl.GetName())
 		require.Equal(t,
@@ -106,7 +106,7 @@ SELECT nextval(105:::REGCLASS);`,
 
 		// Make sure sequence has correct back references.
 		sqn := tree.MakeTableNameWithSchema("defaultdb", "public", "sq1")
-		_, seq, err := descs.PrefixAndTable(ctx, col.ByNameWithLeased(txn).Get(), &sqn)
+		_, seq, err := descs.PrefixAndTable(ctx, col.ByNameWithLeased(txn.KV()).Get(), &sqn)
 		require.NoError(t, err)
 		require.Equal(t, "sq1", seq.GetName())
 		require.Equal(t,
@@ -118,7 +118,7 @@ SELECT nextval(105:::REGCLASS);`,
 
 		// Make sure view has correct back references.
 		vn := tree.MakeTableNameWithSchema("defaultdb", "public", "v")
-		_, view, err := descs.PrefixAndTable(ctx, col.ByNameWithLeased(txn).Get(), &vn)
+		_, view, err := descs.PrefixAndTable(ctx, col.ByNameWithLeased(txn.KV()).Get(), &vn)
 		require.NoError(t, err)
 		require.Equal(t, "v", view.GetName())
 		require.Equal(t,
@@ -130,7 +130,7 @@ SELECT nextval(105:::REGCLASS);`,
 
 		// Make sure type has correct back references.
 		typn := tree.MakeQualifiedTypeName("defaultdb", "public", "notmyworkday")
-		_, typ, err := descs.PrefixAndType(ctx, col.ByNameWithLeased(txn).Get(), &typn)
+		_, typ, err := descs.PrefixAndType(ctx, col.ByNameWithLeased(txn.KV()).Get(), &typn)
 		require.NoError(t, err)
 		require.Equal(t, "notmyworkday", typ.GetName())
 		require.Equal(t,
@@ -144,14 +144,14 @@ SELECT nextval(105:::REGCLASS);`,
 
 	// DROP the function and make sure dependencies are cleared.
 	tDB.Exec(t, "DROP FUNCTION f")
-	err = sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
-		_, err := col.ByIDWithLeased(txn).WithoutNonPublic().Get().Function(ctx, 109)
+	err = sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+		_, err := col.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Function(ctx, 109)
 		require.Error(t, err)
 		require.Regexp(t, "descriptor is being dropped", err.Error())
 
 		// Make sure columns and indexes has correct back references.
 		tn := tree.MakeTableNameWithSchema("defaultdb", "public", "t")
-		_, tbl, err := descs.PrefixAndTable(ctx, col.ByNameWithLeased(txn).Get(), &tn)
+		_, tbl, err := descs.PrefixAndTable(ctx, col.ByNameWithLeased(txn.KV()).Get(), &tn)
 		require.NoError(t, err)
 		require.Equal(t,
 			[]descpb.TableDescriptor_Reference{
@@ -162,19 +162,19 @@ SELECT nextval(105:::REGCLASS);`,
 
 		// Make sure sequence has correct back references.
 		sqn := tree.MakeTableNameWithSchema("defaultdb", "public", "sq1")
-		_, seq, err := descs.PrefixAndTable(ctx, col.ByNameWithLeased(txn).Get(), &sqn)
+		_, seq, err := descs.PrefixAndTable(ctx, col.ByNameWithLeased(txn.KV()).Get(), &sqn)
 		require.NoError(t, err)
 		require.Nil(t, seq.GetDependedOnBy())
 
 		// Make sure view has correct back references.
 		vn := tree.MakeTableNameWithSchema("defaultdb", "public", "v")
-		_, view, err := descs.PrefixAndTable(ctx, col.ByNameWithLeased(txn).Get(), &vn)
+		_, view, err := descs.PrefixAndTable(ctx, col.ByNameWithLeased(txn.KV()).Get(), &vn)
 		require.NoError(t, err)
 		require.Nil(t, view.GetDependedOnBy())
 
 		// Make sure type has correct back references.
 		typn := tree.MakeQualifiedTypeName("defaultdb", "public", "notmyworkday")
-		_, typ, err := descs.PrefixAndType(ctx, col.ByNameWithLeased(txn).Get(), &typn)
+		_, typ, err := descs.PrefixAndType(ctx, col.ByNameWithLeased(txn.KV()).Get(), &typn)
 		require.NoError(t, err)
 		require.Nil(t, typ.GetReferencingDescriptorIDs())
 
@@ -373,8 +373,8 @@ $$;
 			// Test drop/rename behavior in legacy schema changer.
 			tDB.Exec(t, "SET use_declarative_schema_changer = off;")
 
-			err := sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
-				fnDesc, err := col.ByIDWithLeased(txn).WithoutNonPublic().Get().Function(ctx, 113)
+			err := sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+				fnDesc, err := col.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Function(ctx, 113)
 				require.NoError(t, err)
 				require.Equal(t, "f", fnDesc.GetName())
 				require.True(t, fnDesc.Public())
@@ -384,8 +384,8 @@ $$;
 
 			tDB.Exec(t, tc.stmt)
 
-			err = sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
-				_, err := col.ByIDWithLeased(txn).WithoutNonPublic().Get().Function(ctx, 113)
+			err = sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+				_, err := col.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Function(ctx, 113)
 				require.Error(t, err)
 				require.Regexp(t, "descriptor is being dropped", err.Error())
 				return nil
@@ -406,8 +406,8 @@ $$;
 			// Test drop/rename behavior in legacy schema changer.
 			tDB.Exec(t, "SET use_declarative_schema_changer = on;")
 
-			err := sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
-				fnDesc, err := col.ByIDWithLeased(txn).WithoutNonPublic().Get().Function(ctx, 113)
+			err := sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+				fnDesc, err := col.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Function(ctx, 113)
 				require.NoError(t, err)
 				require.Equal(t, "f", fnDesc.GetName())
 				require.True(t, fnDesc.Public())
@@ -417,8 +417,8 @@ $$;
 
 			tDB.Exec(t, tc.stmt)
 
-			err = sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
-				_, err := col.ByIDWithLeased(txn).WithoutNonPublic().Get().Function(ctx, 113)
+			err = sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+				_, err := col.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Function(ctx, 113)
 				require.Error(t, err)
 				require.Regexp(t, "descriptor is being dropped", err.Error())
 				return nil
@@ -426,4 +426,5 @@ $$;
 			require.NoError(t, err)
 		})
 	}
+
 }

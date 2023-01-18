@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/zone"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -1199,14 +1200,14 @@ func writeZoneConfigUpdate(
 // reuse an existing client.Txn safely.
 func RemoveIndexZoneConfigs(
 	ctx context.Context,
-	txn *kv.Txn,
+	txn isql.Txn,
 	execCfg *ExecutorConfig,
 	kvTrace bool,
 	descriptors *descs.Collection,
 	tableDesc catalog.TableDescriptor,
 	indexIDs []uint32,
 ) error {
-	zoneWithRaw, err := descriptors.GetZoneConfig(ctx, txn, tableDesc.GetID())
+	zoneWithRaw, err := descriptors.GetZoneConfig(ctx, txn.KV(), tableDesc.GetID())
 	if err != nil {
 		return err
 	}
@@ -1235,7 +1236,9 @@ func RemoveIndexZoneConfigs(
 	if zcRewriteNecessary {
 		// Ignore CCL required error to allow schema change to progress.
 		_, err = writeZoneConfig(
-			ctx, txn, tableDesc.GetID(), tableDesc, zone, zoneWithRaw.GetRawBytesInStorage(), execCfg, descriptors, false /* hasNewSubzones */, kvTrace,
+			ctx, txn.KV(), tableDesc.GetID(), tableDesc, zone,
+			zoneWithRaw.GetRawBytesInStorage(), execCfg, descriptors,
+			false /* hasNewSubzones */, kvTrace,
 		)
 		if err != nil && !sqlerrors.IsCCLRequiredError(err) {
 			return err

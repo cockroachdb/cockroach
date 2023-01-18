@@ -200,10 +200,9 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 
 	metadataUpdater := descmetadata.NewMetadataUpdater(
 		ctx,
-		p.ExecCfg().InternalExecutorFactory,
+		p.InternalSQLTxn(),
 		p.Descriptors(),
 		&p.ExecCfg().Settings.SV,
-		p.txn,
 		p.SessionData(),
 	)
 

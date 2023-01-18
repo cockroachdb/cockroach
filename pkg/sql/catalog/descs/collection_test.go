@@ -39,10 +39,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -183,15 +183,15 @@ func TestTxnClearsCollectionOnRetry(t *testing.T) {
 
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 	err := sql.DescsTxn(ctx, &execCfg, func(
-		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+		ctx context.Context, txn isql.Txn, descriptors *descs.Collection,
 	) error {
-		txn.SetDebugName(txnName)
-		_, mut, err := descs.PrefixAndMutableTable(ctx, descriptors.MutableByName(txn), &tn)
+		txn.KV().SetDebugName(txnName)
+		_, mut, err := descs.PrefixAndMutableTable(ctx, descriptors.MutableByName(txn.KV()), &tn)
 		require.NoError(t, err)
 		// Verify that the descriptor version is always 1 prior to the write and 2
 		// after the write even after a retry.
 		require.Equal(t, descpb.DescriptorVersion(1), mut.Version)
-		require.NoError(t, descriptors.WriteDesc(ctx, false /* kvTrace */, mut, txn))
+		require.NoError(t, descriptors.WriteDesc(ctx, false /* kvTrace */, mut, txn.KV()))
 		require.Equal(t, descpb.DescriptorVersion(2), mut.Version)
 		return nil
 	},
@@ -222,13 +222,13 @@ func TestAddUncommittedDescriptorAndMutableResolution(t *testing.T) {
 	execCfg := s0.ExecutorConfig().(sql.ExecutorConfig)
 	t.Run("database descriptors", func(t *testing.T) {
 		require.NoError(t, sql.DescsTxn(ctx, &execCfg, func(
-			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+			ctx context.Context, txn isql.Txn, descriptors *descs.Collection,
 		) error {
-			mut, err := descriptors.MutableByName(txn).Database(ctx, "db")
+			mut, err := descriptors.MutableByName(txn.KV()).Database(ctx, "db")
 			require.NoError(t, err)
 
 			dbID := mut.GetID()
-			byID, err := descriptors.MutableByID(txn).Desc(ctx, dbID)
+			byID, err := descriptors.MutableByID(txn.KV()).Desc(ctx, dbID)
 			require.NoError(t, err)
 			require.Same(t, mut, byID)
 
@@ -237,12 +237,12 @@ func TestAddUncommittedDescriptorAndMutableResolution(t *testing.T) {
 
 			// Check that changes to the mutable descriptor don't impact the
 			// collection until they're added as uncommitted
-			immByName, err := descriptors.ByNameWithLeased(txn).Get().Database(ctx, "db")
+			immByName, err := descriptors.ByNameWithLeased(txn.KV()).Get().Database(ctx, "db")
 			require.NoError(t, err)
 			require.Equal(t, dbID, immByName.GetID())
 			require.Equal(t, mut.OriginalVersion(), immByName.GetVersion())
 
-			immByID, err := descriptors.ByIDWithLeased(txn).WithoutNonPublic().Get().Database(ctx, dbID)
+			immByID, err := descriptors.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Database(ctx, dbID)
 			require.NoError(t, err)
 			require.Same(t, immByName, immByID)
 
@@ -250,29 +250,29 @@ func TestAddUncommittedDescriptorAndMutableResolution(t *testing.T) {
 			b := &kv.Batch{}
 			err = descriptors.InsertNamespaceEntryToBatch(ctx, false /* kvTrace */, mut, b)
 			require.NoError(t, err)
-			err = txn.Run(ctx, b)
+			err = txn.KV().Run(ctx, b)
 			require.NoError(t, err)
 
 			// Should be able to get the database descriptor by the new name.
-			resolved, err := descriptors.ByNameWithLeased(txn).Get().Database(ctx, "new_name")
+			resolved, err := descriptors.ByNameWithLeased(txn.KV()).Get().Database(ctx, "new_name")
 			require.Nil(t, err)
 			require.Equal(t, dbID, resolved.GetID())
 
 			// Try to get the database descriptor by the old name and succeed but get
 			// the old version with the old name because the new version has not yet
 			// been written.
-			immResolvedWithNewNameButHasOldName, err := descriptors.ByNameWithLeased(txn).Get().Database(ctx, "db")
+			immResolvedWithNewNameButHasOldName, err := descriptors.ByNameWithLeased(txn.KV()).Get().Database(ctx, "db")
 			require.NoError(t, err)
 			require.Same(t, immByID, immResolvedWithNewNameButHasOldName)
 
 			require.NoError(t, descriptors.AddUncommittedDescriptor(ctx, mut))
 
-			immByNameAfter, err := descriptors.ByNameWithLeased(txn).Get().Database(ctx, "new_name")
+			immByNameAfter, err := descriptors.ByNameWithLeased(txn.KV()).Get().Database(ctx, "new_name")
 			require.NoError(t, err)
 			require.Equal(t, mut.GetVersion(), immByNameAfter.GetVersion())
 			require.Equal(t, mut.ImmutableCopy().DescriptorProto(), immByNameAfter.DescriptorProto())
 
-			immByIDAfter, err := descriptors.ByIDWithLeased(txn).WithoutNonPublic().Get().Database(ctx, dbID)
+			immByIDAfter, err := descriptors.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Database(ctx, dbID)
 			require.NoError(t, err)
 			require.Same(t, immByNameAfter, immByIDAfter)
 
@@ -281,22 +281,22 @@ func TestAddUncommittedDescriptorAndMutableResolution(t *testing.T) {
 	})
 	t.Run("schema descriptors", func(t *testing.T) {
 		require.NoError(t, sql.DescsTxn(ctx, &execCfg, func(
-			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+			ctx context.Context, txn isql.Txn, descriptors *descs.Collection,
 		) error {
-			db, err := descriptors.MutableByName(txn).Database(ctx, "db")
+			db, err := descriptors.MutableByName(txn.KV()).Database(ctx, "db")
 			require.NoError(t, err)
 
-			schema, err := descriptors.MutableByName(txn).Schema(ctx, db, "sc")
+			schema, err := descriptors.MutableByName(txn.KV()).Schema(ctx, db, "sc")
 			require.NoError(t, err)
 			require.NotNil(t, schema)
 
-			resolved, err := descriptors.MutableByName(txn).Schema(ctx, db, "sc")
+			resolved, err := descriptors.MutableByName(txn.KV()).Schema(ctx, db, "sc")
 			require.NoError(t, err)
 			require.NotNil(t, schema)
 
 			require.Same(t, schema, resolved)
 
-			byID, err := descriptors.MutableByID(txn).Desc(ctx, schema.GetID())
+			byID, err := descriptors.MutableByID(txn.KV()).Desc(ctx, schema.GetID())
 			require.NoError(t, err)
 
 			require.Same(t, schema, byID)
@@ -305,19 +305,19 @@ func TestAddUncommittedDescriptorAndMutableResolution(t *testing.T) {
 	})
 	t.Run("table descriptors", func(t *testing.T) {
 		require.NoError(t, sql.DescsTxn(ctx, &execCfg, func(
-			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+			ctx context.Context, txn isql.Txn, descriptors *descs.Collection,
 		) error {
 			tn := tree.MakeTableNameWithSchema("db", "sc", "tab")
 
-			_, tab, err := descs.PrefixAndMutableTable(ctx, descriptors.MutableByName(txn), &tn)
+			_, tab, err := descs.PrefixAndMutableTable(ctx, descriptors.MutableByName(txn.KV()), &tn)
 			require.NoError(t, err)
 
-			_, resolved, err := descs.PrefixAndMutableTable(ctx, descriptors.MutableByName(txn), &tn)
+			_, resolved, err := descs.PrefixAndMutableTable(ctx, descriptors.MutableByName(txn.KV()), &tn)
 			require.NoError(t, err)
 
 			require.Same(t, tab, resolved)
 
-			byID, err := descriptors.MutableByID(txn).Desc(ctx, tab.GetID())
+			byID, err := descriptors.MutableByID(txn.KV()).Desc(ctx, tab.GetID())
 			require.NoError(t, err)
 
 			require.Same(t, tab, byID)
@@ -326,18 +326,18 @@ func TestAddUncommittedDescriptorAndMutableResolution(t *testing.T) {
 	})
 	t.Run("type descriptors", func(t *testing.T) {
 		require.NoError(t, sql.DescsTxn(ctx, &execCfg, func(
-			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+			ctx context.Context, txn isql.Txn, descriptors *descs.Collection,
 		) error {
 			tn := tree.MakeQualifiedTypeName("db", "sc", "typ")
-			_, typ, err := descs.PrefixAndMutableType(ctx, descriptors.MutableByName(txn), &tn)
+			_, typ, err := descs.PrefixAndMutableType(ctx, descriptors.MutableByName(txn.KV()), &tn)
 			require.NoError(t, err)
 
-			_, resolved, err := descs.PrefixAndMutableType(ctx, descriptors.MutableByName(txn), &tn)
+			_, resolved, err := descs.PrefixAndMutableType(ctx, descriptors.MutableByName(txn.KV()), &tn)
 			require.NoError(t, err)
 
 			require.Same(t, typ, resolved)
 
-			byID, err := descriptors.MutableByID(txn).Type(ctx, typ.GetID())
+			byID, err := descriptors.MutableByID(txn.KV()).Type(ctx, typ.GetID())
 			require.NoError(t, err)
 
 			require.Same(t, typ, byID)
@@ -369,11 +369,11 @@ func TestSyntheticDescriptorResolution(t *testing.T) {
 
 	execCfg := s0.ExecutorConfig().(sql.ExecutorConfig)
 	require.NoError(t, sql.DescsTxn(ctx, &execCfg, func(
-		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+		ctx context.Context, txn isql.Txn, descriptors *descs.Collection,
 	) error {
 		// Resolve the descriptor so we can mutate it.
 		tn := tree.MakeTableNameWithSchema("db", tree.PublicSchemaName, "tbl")
-		_, desc, err := descs.PrefixAndTable(ctx, descriptors.ByNameWithLeased(txn).MaybeGet(), &tn)
+		_, desc, err := descs.PrefixAndTable(ctx, descriptors.ByNameWithLeased(txn.KV()).MaybeGet(), &tn)
 		require.NotNil(t, desc)
 		require.NoError(t, err)
 
@@ -382,23 +382,23 @@ func TestSyntheticDescriptorResolution(t *testing.T) {
 		descriptors.SetSyntheticDescriptors([]catalog.Descriptor{desc})
 
 		// Resolve the table by name again.
-		_, desc, err = descs.PrefixAndTable(ctx, descriptors.ByNameWithLeased(txn).MaybeGet(), &tn)
+		_, desc, err = descs.PrefixAndTable(ctx, descriptors.ByNameWithLeased(txn.KV()).MaybeGet(), &tn)
 		require.NotNil(t, desc)
 		require.NoError(t, err)
 		require.Equal(t, "bar", desc.PublicColumns()[0].GetName())
 
 		// Attempting to resolve the table mutably is not allowed.
-		_, _, err = descs.PrefixAndMutableTable(ctx, descriptors.MutableByName(txn), &tn)
+		_, _, err = descs.PrefixAndMutableTable(ctx, descriptors.MutableByName(txn.KV()), &tn)
 		require.EqualError(t, err, fmt.Sprintf("attempted mutable access of synthetic descriptor %d", tableID))
 
 		// Resolution by ID.
 
-		desc, err = descriptors.ByIDWithLeased(txn).WithoutNonPublic().Get().Table(ctx, tableID)
+		desc, err = descriptors.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Table(ctx, tableID)
 		require.NoError(t, err)
 		require.Equal(t, "bar", desc.PublicColumns()[0].GetName())
 
 		// Attempting to resolve the table mutably is not allowed.
-		_, err = descriptors.MutableByID(txn).Table(ctx, tableID)
+		_, err = descriptors.MutableByID(txn.KV()).Table(ctx, tableID)
 		require.EqualError(t, err, fmt.Sprintf("attempted mutable access of synthetic descriptor %d", tableID))
 
 		return nil
@@ -427,9 +427,9 @@ func TestDistSQLTypeResolver_GetTypeDescriptor_FromTable(t *testing.T) {
 	var name tree.TypeName
 	var tdesc catalog.TypeDescriptor
 	err := sql.DescsTxn(ctx, &execCfg, func(
-		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+		ctx context.Context, txn isql.Txn, descriptors *descs.Collection,
 	) error {
-		tr := descs.NewDistSQLTypeResolver(descriptors, txn)
+		tr := descs.NewDistSQLTypeResolver(descriptors, txn.KV())
 		var err error
 		name, tdesc, err = tr.GetTypeDescriptor(ctx, id)
 		return err
@@ -472,13 +472,13 @@ CREATE TABLE test.schema.t(x INT);
 
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 	require.NoError(t, sql.DescsTxn(ctx, &execCfg, func(
-		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
+		ctx context.Context, txn isql.Txn, descsCol *descs.Collection,
 	) error {
-		dbDesc, err := descsCol.ByNameWithLeased(txn).Get().Database(ctx, "test")
+		dbDesc, err := descsCol.ByNameWithLeased(txn.KV()).Get().Database(ctx, "test")
 		if err != nil {
 			return err
 		}
-		schemaDesc, err := descsCol.MutableByName(txn).Schema(ctx, dbDesc, "schema")
+		schemaDesc, err := descsCol.MutableByName(txn.KV()).Schema(ctx, dbDesc, "schema")
 		if err != nil {
 			return err
 		}
@@ -496,7 +496,7 @@ CREATE TABLE test.schema.t(x INT);
 		}
 
 		descsCol.SkipValidationOnWrite()
-		return descsCol.WriteDesc(ctx, false, schemaDesc, txn)
+		return descsCol.WriteDesc(ctx, false, schemaDesc, txn.KV())
 	}),
 	)
 
@@ -534,14 +534,14 @@ func TestCollectionPreservesPostDeserializationChanges(t *testing.T) {
 	// they'd need post-deserialization changes.
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 	require.NoError(t, sql.DescsTxn(ctx, &execCfg, func(
-		ctx context.Context, txn *kv.Txn, col *descs.Collection,
+		ctx context.Context, txn isql.Txn, col *descs.Collection,
 	) error {
-		descs, err := col.MutableByID(txn).Descs(ctx, []descpb.ID{dbID, scID, typID, tabID})
+		descs, err := col.MutableByID(txn.KV()).Descs(ctx, []descpb.ID{dbID, scID, typID, tabID})
 		if err != nil {
 			return err
 		}
 		// Set version lower than minimum to force post-deserialization change.
-		b := txn.NewBatch()
+		b := txn.KV().NewBatch()
 		for _, d := range descs {
 			p := d.GetPrivileges()
 			p.SetVersion(catpb.Version21_2 - 1)
@@ -549,12 +549,12 @@ func TestCollectionPreservesPostDeserializationChanges(t *testing.T) {
 				return err
 			}
 		}
-		return txn.Run(ctx, b)
+		return txn.KV().Run(ctx, b)
 	}))
 	require.NoError(t, sql.DescsTxn(ctx, &execCfg, func(
-		ctx context.Context, txn *kv.Txn, col *descs.Collection,
+		ctx context.Context, txn isql.Txn, col *descs.Collection,
 	) error {
-		immuts, err := col.ByID(txn).WithoutNonPublic().Get().Descs(ctx, []descpb.ID{dbID, scID, typID, tabID})
+		immuts, err := col.ByID(txn.KV()).WithoutNonPublic().Get().Descs(ctx, []descpb.ID{dbID, scID, typID, tabID})
 		if err != nil {
 			return err
 		}
@@ -569,9 +569,9 @@ func TestCollectionPreservesPostDeserializationChanges(t *testing.T) {
 		return nil
 	}))
 	require.NoError(t, sql.DescsTxn(ctx, &execCfg, func(
-		ctx context.Context, txn *kv.Txn, col *descs.Collection,
+		ctx context.Context, txn isql.Txn, col *descs.Collection,
 	) error {
-		muts, err := col.MutableByID(txn).Descs(ctx, []descpb.ID{dbID, scID, typID, tabID})
+		muts, err := col.MutableByID(txn.KV()).Descs(ctx, []descpb.ID{dbID, scID, typID, tabID})
 		if err != nil {
 			return err
 		}
@@ -676,17 +676,17 @@ func TestDescriptorCache(t *testing.T) {
 	execCfg := s0.ExecutorConfig().(sql.ExecutorConfig)
 	t.Run("all descriptors", func(t *testing.T) {
 		require.NoError(t, sql.DescsTxn(ctx, &execCfg, func(
-			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+			ctx context.Context, txn isql.Txn, descriptors *descs.Collection,
 		) error {
 			descriptors.SkipValidationOnWrite()
 			// Warm up cache.
-			_, err := descriptors.GetAllDescriptors(ctx, txn)
+			_, err := descriptors.GetAllDescriptors(ctx, txn.KV())
 			if err != nil {
 				return err
 			}
 			// Modify table descriptor.
 			tn := tree.MakeTableNameWithSchema("db", "schema", "table")
-			_, mut, err := descs.PrefixAndMutableTable(ctx, descriptors.MutableByName(txn), &tn)
+			_, mut, err := descs.PrefixAndMutableTable(ctx, descriptors.MutableByName(txn.KV()), &tn)
 			if err != nil {
 				return err
 			}
@@ -698,7 +698,7 @@ func TestDescriptorCache(t *testing.T) {
 				return err
 			}
 			// The collection's all descriptors should include the modification.
-			cat, err := descriptors.GetAllDescriptors(ctx, txn)
+			cat, err := descriptors.GetAllDescriptors(ctx, txn.KV())
 			if err != nil {
 				return err
 			}
@@ -710,17 +710,17 @@ func TestDescriptorCache(t *testing.T) {
 	})
 	t.Run("all db descriptors", func(t *testing.T) {
 		require.NoError(t, sql.DescsTxn(ctx, &execCfg, func(
-			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+			ctx context.Context, txn isql.Txn, descriptors *descs.Collection,
 		) error {
 			descriptors.SkipValidationOnWrite()
 			// Warm up cache.
-			dbDescs, err := descriptors.GetAllDatabaseDescriptors(ctx, txn)
+			dbDescs, err := descriptors.GetAllDatabaseDescriptors(ctx, txn.KV())
 			if err != nil {
 				return err
 			}
 			require.Len(t, dbDescs, 4)
 			// Modify database descriptor.
-			mut, err := descriptors.MutableByName(txn).Database(ctx, "db")
+			mut, err := descriptors.MutableByName(txn.KV()).Database(ctx, "db")
 			if err != nil {
 				return err
 			}
@@ -732,7 +732,7 @@ func TestDescriptorCache(t *testing.T) {
 			}
 			// The collection's all database descriptors should reflect the
 			// modification.
-			dbDescs, err = descriptors.GetAllDatabaseDescriptors(ctx, txn)
+			dbDescs, err = descriptors.GetAllDatabaseDescriptors(ctx, txn.KV())
 			if err != nil {
 				return err
 			}
@@ -743,21 +743,21 @@ func TestDescriptorCache(t *testing.T) {
 	})
 	t.Run("schemas for database", func(t *testing.T) {
 		require.NoError(t, sql.DescsTxn(ctx, &execCfg, func(
-			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+			ctx context.Context, txn isql.Txn, descriptors *descs.Collection,
 		) error {
 			descriptors.SkipValidationOnWrite()
 			// Warm up cache.
-			dbDesc, err := descriptors.MutableByName(txn).Database(ctx, "db")
+			dbDesc, err := descriptors.MutableByName(txn.KV()).Database(ctx, "db")
 			if err != nil {
 				return err
 			}
-			_, err = descriptors.GetSchemasForDatabase(ctx, txn, dbDesc)
+			_, err = descriptors.GetSchemasForDatabase(ctx, txn.KV(), dbDesc)
 			if err != nil {
 				return err
 			}
 			// Modify schema name.
 			var db catalog.DatabaseDescriptor = dbDesc
-			schemaDesc, err := descriptors.MutableByName(txn).Schema(ctx, db, "schema")
+			schemaDesc, err := descriptors.MutableByName(txn.KV()).Schema(ctx, db, "schema")
 			if err != nil {
 				return err
 			}
@@ -775,7 +775,7 @@ func TestDescriptorCache(t *testing.T) {
 				return err
 			}
 			// The collection's schemas for database should reflect the modification.
-			schemas, err := descriptors.GetSchemasForDatabase(ctx, txn, dbDesc)
+			schemas, err := descriptors.GetSchemasForDatabase(ctx, txn.KV(), dbDesc)
 			if err != nil {
 				return err
 			}
@@ -804,18 +804,17 @@ func TestGetAllDescriptorsInDatabase(t *testing.T) {
 	tdb.Exec(t, `CREATE TABLE db.schema.table()`)
 
 	s0 := tc.Server(0)
-	tm := s0.InternalExecutorFactory().(descs.TxnManager)
+	tm := s0.InternalDB().(descs.DB)
 
-	sd := sql.NewFakeSessionData(&s0.ClusterSettings().SV)
-	sd.Database = "db"
-	require.NoError(t, tm.DescsTxnWithExecutor(ctx, s0.DB(), sd, func(
-		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection, ie sqlutil.InternalExecutor,
+	run := func(
+		ctx context.Context, txn descs.Txn,
 	) error {
-		dbDesc, err := descriptors.ByName(txn).Get().Database(ctx, "db")
+		descriptors := txn.Descriptors()
+		dbDesc, err := descriptors.ByName(txn.KV()).Get().Database(ctx, "db")
 		if err != nil {
 			return err
 		}
-		allDescs, err := descriptors.GetAllDescriptorsForDatabase(ctx, txn, dbDesc)
+		allDescs, err := txn.Descriptors().GetAllDescriptorsForDatabase(ctx, txn.KV(), dbDesc)
 		if err != nil {
 			return err
 		}
@@ -835,11 +834,11 @@ parent schema name   id  kind     version dropped public
 			`CREATE FUNCTION f() RETURNS INT LANGUAGE SQL IMMUTABLE AS $$ SELECT 1 $$`,
 			`CREATE FUNCTION sc_foo.f() RETURNS INT LANGUAGE SQL IMMUTABLE AS $$ SELECT 1 $$`,
 		} {
-			if _, err = ie.Exec(ctx, "test", txn, stmt); err != nil {
+			if _, err = txn.Exec(ctx, "test", txn.KV(), stmt); err != nil {
 				return err
 			}
 		}
-		allDescs, err = descriptors.GetAllDescriptorsForDatabase(ctx, txn, dbDesc)
+		allDescs, err = txn.Descriptors().GetAllDescriptorsForDatabase(ctx, txn.KV(), dbDesc)
 		if err != nil {
 			return err
 		}
@@ -856,7 +855,10 @@ parent schema name   id  kind     version dropped public
 104    109    f      112 function 1       false   true
 `, formatCatalog(allDescs.OrderedDescriptors()))
 		return nil
-	}))
+	}
+	sd := sql.NewFakeSessionData(&s0.ClusterSettings().SV)
+	sd.Database = "db"
+	require.NoError(t, tm.DescsTxn(ctx, run, isql.WithSessionData(sd)))
 }
 
 // formatDescriptors formats descriptors into a text string
@@ -920,12 +922,12 @@ func TestCollectionTimeTravelLookingTooFarBack(t *testing.T) {
 	execCfg := s0.ExecutorConfig().(sql.ExecutorConfig)
 
 	goFarBackInTime := func(fn func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error) error {
-		return sql.DescsTxn(ctx, &execCfg, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
+		return sql.DescsTxn(ctx, &execCfg, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
 			veryFarBack := execCfg.Clock.Now().Add(-1000*time.Hour.Nanoseconds(), 0)
-			if err := txn.SetFixedTimestamp(ctx, veryFarBack); err != nil {
+			if err := txn.KV().SetFixedTimestamp(ctx, veryFarBack); err != nil {
 				return err
 			}
-			return fn(ctx, txn, col)
+			return fn(ctx, txn.KV(), col)
 		})
 	}
 
@@ -1017,9 +1019,9 @@ func TestHydrateCatalog(t *testing.T) {
 			{replaceTypeDescWithNonTypeDesc("ctyp"), "referenced type ID 109: descriptor is a *dbdesc." + "" + "immutable: unexpected descriptor type"},
 		} {
 			require.NoError(t, sql.DescsTxn(ctx, &execCfg, func(
-				ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+				ctx context.Context, txn isql.Txn, descriptors *descs.Collection,
 			) error {
-				cat, err := descriptors.GetAllFromStorageUnvalidated(ctx, txn)
+				cat, err := descriptors.GetAllFromStorageUnvalidated(ctx, txn.KV())
 				if err != nil {
 					return err
 				}
@@ -1033,15 +1035,15 @@ func TestHydrateCatalog(t *testing.T) {
 	})
 	t.Run("valid catalog", func(t *testing.T) {
 		require.NoError(t, sql.DescsTxn(ctx, &execCfg, func(
-			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+			ctx context.Context, txn isql.Txn, descriptors *descs.Collection,
 		) error {
-			cat, err := descriptors.GetAllFromStorageUnvalidated(ctx, txn)
+			cat, err := descriptors.GetAllFromStorageUnvalidated(ctx, txn.KV())
 			if err != nil {
 				return err
 			}
 			mc := nstree.MutableCatalog{Catalog: cat}
 			require.NoError(t, descs.HydrateCatalog(ctx, mc))
-			tbl := desctestutils.TestingGetTableDescriptor(txn.DB(), keys.SystemSQLCodec, "db", "schema", "table")
+			tbl := desctestutils.TestingGetTableDescriptor(txn.KV().DB(), keys.SystemSQLCodec, "db", "schema", "table")
 			tblDesc := cat.LookupDescriptor(tbl.GetID()).(catalog.TableDescriptor)
 			expectedEnum := types.UserDefinedTypeMetadata{
 				Name: &types.UserDefinedTypeName{
@@ -1114,15 +1116,16 @@ SELECT id
 	ec := s.ExecutorConfig().(sql.ExecutorConfig)
 	codec := ec.Codec
 	descIDGen := ec.DescIDGenerator
-	require.NoError(t, ec.InternalExecutorFactory.DescsTxnWithExecutor(ctx, s.DB(), nil /* sessionData */, func(
-		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection, ie sqlutil.InternalExecutor,
+	require.NoError(t, ec.InternalDB.DescsTxn(ctx, func(
+		ctx context.Context, txn descs.Txn,
 	) error {
+		descriptors := txn.Descriptors()
 		checkImmutableDescriptor := func(id descpb.ID, expName string, f func(t *testing.T, desc catalog.Descriptor)) error {
-			tabImm, err := descriptors.ByIDWithLeased(txn).WithoutOffline().Get().Table(ctx, id)
+			tabImm, err := descriptors.ByIDWithLeased(txn.KV()).WithoutOffline().Get().Table(ctx, id)
 			require.NoError(t, err)
 			require.Equal(t, expName, tabImm.GetName())
 			f(t, tabImm)
-			all, err := descriptors.GetAllDescriptors(ctx, txn)
+			all, err := txn.Descriptors().GetAllDescriptors(ctx, txn.KV())
 			if err != nil {
 				return err
 			}
@@ -1132,14 +1135,14 @@ SELECT id
 
 		// Modify the table to have the name "bar", synthetically
 		{
-			tab, err := descriptors.MutableByID(txn).Table(ctx, tabID)
+			tab, err := descriptors.MutableByID(txn.KV()).Table(ctx, tabID)
 			if err != nil {
 				return err
 			}
 			tab = tabledesc.NewBuilder(tab.TableDesc()).BuildCreatedMutableTable()
 			tab.Name = "bar"
 			tab.SetDropped()
-			descriptors.AddSyntheticDescriptor(tab)
+			txn.Descriptors().AddSyntheticDescriptor(tab)
 		}
 		// Retrieve the immutable descriptor, find the name "bar"
 		if err := checkImmutableDescriptor(tabID, "bar", func(t *testing.T, desc catalog.Descriptor) {
@@ -1149,28 +1152,28 @@ SELECT id
 			return err
 		}
 		// Attempt to retrieve the mutable descriptor, validate the error.
-		_, err := descriptors.MutableByID(txn).Table(ctx, tabID)
+		_, err := descriptors.MutableByID(txn.KV()).Table(ctx, tabID)
 		require.Regexp(t, `attempted mutable access of synthetic descriptor \d+`, err)
-		descriptors.ResetSyntheticDescriptors()
+		txn.Descriptors().ResetSyntheticDescriptors()
 		// Retrieve the mutable descriptor, find the unmodified "foo".
 		// Then modify the name to "baz" and write it.
 		{
-			tabMut, err := descriptors.MutableByID(txn).Table(ctx, tabID)
+			tabMut, err := descriptors.MutableByID(txn.KV()).Table(ctx, tabID)
 			require.NoError(t, err)
 			require.Equal(t, "foo", tabMut.GetName())
 			tabMut.Name = "baz"
-			if _, err := txn.Del(ctx, catalogkeys.EncodeNameKey(codec, &descpb.NameInfo{
+			if _, err := txn.KV().Del(ctx, catalogkeys.EncodeNameKey(codec, &descpb.NameInfo{
 				ParentID:       tabMut.GetParentID(),
 				ParentSchemaID: tabMut.GetParentSchemaID(),
 				Name:           tabMut.OriginalName(),
 			})); err != nil {
 				return err
 			}
-			if err := txn.Put(ctx, catalogkeys.EncodeNameKey(codec, tabMut), int64(tabMut.ID)); err != nil {
+			if err := txn.KV().Put(ctx, catalogkeys.EncodeNameKey(codec, tabMut), int64(tabMut.ID)); err != nil {
 				return err
 			}
 			const kvTrace = false
-			if err := descriptors.WriteDesc(ctx, kvTrace, tabMut, txn); err != nil {
+			if err := txn.Descriptors().WriteDesc(ctx, kvTrace, tabMut, txn.KV()); err != nil {
 				return err
 			}
 		}
@@ -1186,16 +1189,16 @@ SELECT id
 		newDBID, err := descIDGen.GenerateUniqueDescID(ctx)
 		require.NoError(t, err)
 		newDB := dbdesc.NewInitial(newDBID, "newDB", username.RootUserName())
-		descriptors.AddSyntheticDescriptor(newDB)
+		txn.Descriptors().AddSyntheticDescriptor(newDB)
 
-		curDatabase, err := descriptors.ByIDWithLeased(txn).WithoutNonPublic().Get().Database(ctx, curDatabaseID)
+		curDatabase, err := descriptors.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Database(ctx, curDatabaseID)
 		if err != nil {
 			return err
 		}
 
 		// Check that AllDatabaseDescriptors includes the synthetic database.
 		{
-			allDBs, err := descriptors.GetAllDatabaseDescriptors(ctx, txn)
+			allDBs, err := txn.Descriptors().GetAllDatabaseDescriptors(ctx, txn.KV())
 			require.NoError(t, err)
 			require.ElementsMatch(t, []string{
 				"system", "postgres", "defaultdb", "newDB", "otherDB",
@@ -1203,7 +1206,7 @@ SELECT id
 		}
 
 		{
-			defaultDBSchemaNames, err := descriptors.GetSchemasForDatabase(ctx, txn, curDatabase)
+			defaultDBSchemaNames, err := txn.Descriptors().GetSchemasForDatabase(ctx, txn.KV(), curDatabase)
 			if err != nil {
 				return err
 			}
@@ -1212,20 +1215,20 @@ SELECT id
 		}
 
 		// Rename a schema synthetically, make sure that that propagates.
-		scDesc, err := descriptors.MutableByID(txn).Schema(ctx, scID)
+		scDesc, err := descriptors.MutableByID(txn.KV()).Schema(ctx, scID)
 		if err != nil {
 			return err
 		}
 		scDesc.SetName("sc2")
 		scDesc.Version++
-		require.NoError(t, descriptors.AddUncommittedDescriptor(ctx, scDesc))
+		require.NoError(t, txn.Descriptors().AddUncommittedDescriptor(ctx, scDesc))
 		newSchema, _, err := sql.CreateSchemaDescriptorWithPrivileges(ctx, descIDGen,
 			curDatabase, "newSC", username.RootUserName(), username.RootUserName(), true)
 		require.NoError(t, err)
-		descriptors.AddSyntheticDescriptor(newSchema)
+		txn.Descriptors().AddSyntheticDescriptor(newSchema)
 
 		{
-			defaultDBSchemaNames, err := descriptors.GetSchemasForDatabase(ctx, txn, curDatabase)
+			defaultDBSchemaNames, err := txn.Descriptors().GetSchemasForDatabase(ctx, txn.KV(), curDatabase)
 			if err != nil {
 				return err
 			}
@@ -1235,7 +1238,7 @@ SELECT id
 
 		// Rename schema back to old name to prevent validation failure on commit.
 		scDesc.SetName("sc")
-		require.NoError(t, descriptors.AddUncommittedDescriptor(ctx, scDesc))
+		require.NoError(t, txn.Descriptors().AddUncommittedDescriptor(ctx, scDesc))
 		return nil
 	}))
 }

@@ -18,7 +18,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
@@ -31,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -146,20 +146,21 @@ func (s *Tenant) KVAccessorRecorder() *spanconfigtestutils.KVAccessorRecorder {
 func (s *Tenant) WithMutableDatabaseDescriptor(
 	ctx context.Context, dbName string, f func(*dbdesc.Mutable),
 ) {
-	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
-	require.NoError(s.t, sql.DescsTxn(ctx, &execCfg, func(
-		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
+	descsDB := s.ExecutorConfig().(sql.ExecutorConfig).InternalDB
+	require.NoError(s.t, descsDB.DescsTxn(ctx, func(
+		ctx context.Context, txn descs.Txn,
 	) error {
-		imm, err := descsCol.ByName(txn).WithOffline().Get().Database(ctx, dbName)
+		imm, err := txn.Descriptors().ByName(txn.KV()).WithOffline().Get().Database(ctx, dbName)
 		if err != nil {
 			return err
 		}
-		mut, err := descsCol.MutableByID(txn).Database(ctx, imm.GetID())
+		mut, err := txn.Descriptors().MutableByID(txn.KV()).Database(ctx, imm.GetID())
 		if err != nil {
 			return err
 		}
 		f(mut)
-		return descsCol.WriteDesc(ctx, false, mut, txn)
+		const kvTrace = false
+		return txn.Descriptors().WriteDesc(ctx, kvTrace, mut, txn.KV())
 	}))
 }
 
@@ -171,20 +172,20 @@ func (s *Tenant) WithMutableTableDescriptor(
 ) {
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 	require.NoError(s.t, sql.DescsTxn(ctx, &execCfg, func(
-		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
+		ctx context.Context, txn isql.Txn, descsCol *descs.Collection,
 	) error {
-		g := descsCol.ByName(txn).WithOffline().Get()
+		g := descsCol.ByName(txn.KV()).WithOffline().Get()
 		tn := tree.NewTableNameWithSchema(tree.Name(dbName), "public", tree.Name(tbName))
 		_, imm, err := descs.PrefixAndTable(ctx, g, tn)
 		if err != nil {
 			return err
 		}
-		mut, err := descsCol.MutableByID(txn).Table(ctx, imm.GetID())
+		mut, err := descsCol.MutableByID(txn.KV()).Table(ctx, imm.GetID())
 		if err != nil {
 			return err
 		}
 		f(mut)
-		return descsCol.WriteDesc(ctx, false /* kvTrace */, mut, txn)
+		return descsCol.WriteDesc(ctx, false /* kvTrace */, mut, txn.KV())
 	}))
 }
 
@@ -194,10 +195,10 @@ func (s *Tenant) LookupTableDescriptorByID(
 ) (desc catalog.TableDescriptor) {
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 	require.NoError(s.t, sql.DescsTxn(ctx, &execCfg, func(
-		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
+		ctx context.Context, txn isql.Txn, descsCol *descs.Collection,
 	) error {
 		var err error
-		desc, err = descsCol.ByID(txn).Get().Table(ctx, id)
+		desc, err = descsCol.ByID(txn.KV()).Get().Table(ctx, id)
 		return err
 	}))
 	return desc
@@ -209,10 +210,10 @@ func (s *Tenant) LookupTableByName(
 ) (desc catalog.TableDescriptor) {
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 	require.NoError(s.t, sql.DescsTxn(ctx, &execCfg, func(
-		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
+		ctx context.Context, txn isql.Txn, descsCol *descs.Collection,
 	) error {
 		var err error
-		g := descsCol.ByName(txn).WithOffline().MaybeGet()
+		g := descsCol.ByName(txn.KV()).WithOffline().MaybeGet()
 		tn := tree.NewTableNameWithSchema(tree.Name(dbName), "public", tree.Name(tbName))
 		_, desc, err = descs.PrefixAndTable(ctx, g, tn)
 		return err
@@ -227,9 +228,9 @@ func (s *Tenant) LookupDatabaseByName(
 ) (desc catalog.DatabaseDescriptor) {
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 	require.NoError(s.t, sql.DescsTxn(ctx, &execCfg,
-		func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
+		func(ctx context.Context, txn isql.Txn, descsCol *descs.Collection) error {
 			var err error
-			desc, err = descsCol.ByName(txn).WithOffline().Get().Database(ctx, dbName)
+			desc, err = descsCol.ByName(txn.KV()).WithOffline().Get().Database(ctx, dbName)
 			return err
 		}))
 	return desc
@@ -241,8 +242,8 @@ func (s *Tenant) MakeProtectedTimestampRecordAndProtect(
 	ctx context.Context, recordID string, protectTS int, target *ptpb.Target,
 ) {
 	jobID := s.JobsRegistry().MakeJobID()
-	require.NoError(s.t, s.ExecCfg().DB.Txn(ctx,
-		func(ctx context.Context, txn *kv.Txn) (err error) {
+	require.NoError(s.t, s.ExecCfg().InternalDB.Txn(ctx,
+		func(ctx context.Context, txn isql.Txn) (err error) {
 			require.Len(s.t, recordID, 1,
 				"datadriven test only supports single character record IDs")
 			recID, err := uuid.FromBytes([]byte(strings.Repeat(recordID, 16)))
@@ -250,20 +251,20 @@ func (s *Tenant) MakeProtectedTimestampRecordAndProtect(
 			rec := jobsprotectedts.MakeRecord(recID, int64(jobID),
 				hlc.Timestamp{WallTime: int64(protectTS)}, nil, /* deprecatedSpans */
 				jobsprotectedts.Jobs, target)
-			return s.ProtectedTimestampProvider().Protect(ctx, txn, rec)
+			return s.ProtectedTimestampProvider().WithTxn(txn).Protect(ctx, rec)
 		}))
 	s.updateTimestampAfterLastSQLChange()
 }
 
 // ReleaseProtectedTimestampRecord will release a ptpb.Record.
 func (s *Tenant) ReleaseProtectedTimestampRecord(ctx context.Context, recordID string) {
-	require.NoError(s.t, s.ExecCfg().DB.Txn(ctx,
-		func(ctx context.Context, txn *kv.Txn) error {
+	require.NoError(s.t, s.ExecCfg().InternalDB.Txn(ctx,
+		func(ctx context.Context, txn isql.Txn) error {
 			require.Len(s.t, recordID, 1,
 				"datadriven test only supports single character record IDs")
 			recID, err := uuid.FromBytes([]byte(strings.Repeat(recordID, 16)))
 			require.NoError(s.t, err)
-			return s.ProtectedTimestampProvider().Release(ctx, txn, recID)
+			return s.ProtectedTimestampProvider().WithTxn(txn).Release(ctx, recID)
 		}))
 	s.updateTimestampAfterLastSQLChange()
 }

@@ -20,7 +20,6 @@ import (
 	"unicode/utf8"
 
 	"github.com/cockroachdb/cockroach/pkg/docs"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
@@ -29,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinsregistry"
@@ -36,7 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/semenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/vtable"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
@@ -252,25 +252,25 @@ func populateRoleHierarchy(
 	if err != nil {
 		return err
 	}
-	return forEachRoleMembership(
-		ctx, p.ExecCfg().InternalExecutor, p.Txn(),
-		func(role, member username.SQLUsername, isAdmin bool) error {
-			// The ADMIN OPTION is inherited through the role hierarchy, and grantee
-			// is supposed to be the role that has the ADMIN OPTION. The current user
-			// inherits all the ADMIN OPTIONs of its ancestors.
-			isRole := member == p.User()
-			_, hasRole := allRoles[member]
-			if (hasRole || isRole) && (!onlyIsAdmin || isAdmin) {
-				if err := addRow(
-					tree.NewDString(member.Normalized()), // grantee
-					tree.NewDString(role.Normalized()),   // role_name
-					yesOrNoDatum(isAdmin),                // is_grantable
-				); err != nil {
-					return err
-				}
+	return forEachRoleMembership(ctx, p.InternalSQLTxn(), func(
+		role, member username.SQLUsername, isAdmin bool,
+	) error {
+		// The ADMIN OPTION is inherited through the role hierarchy, and grantee
+		// is supposed to be the role that has the ADMIN OPTION. The current user
+		// inherits all the ADMIN OPTIONs of its ancestors.
+		isRole := member == p.User()
+		_, hasRole := allRoles[member]
+		if (hasRole || isRole) && (!onlyIsAdmin || isAdmin) {
+			if err := addRow(
+				tree.NewDString(member.Normalized()), // grantee
+				tree.NewDString(role.Normalized()),   // role_name
+				yesOrNoDatum(isAdmin),                // is_grantable
+			); err != nil {
+				return err
 			}
-			return nil
-		},
+		}
+		return nil
+	},
 	)
 }
 
@@ -2721,8 +2721,10 @@ func forEachRole(
 	// logic test fail in 3node-tenant config with 'txn already encountered an
 	// error' (because of the context cancellation), so we buffer all roles
 	// first.
-	rows, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryBuffered(
-		ctx, "read-roles", p.txn, query,
+	rows, err := p.InternalSQLTxn().QueryBufferedEx(
+		ctx, "read-roles", p.txn,
+		sessiondata.InternalExecutorOverride{User: username.NodeUserName()},
+		query,
 	)
 	if err != nil {
 		return err
@@ -2753,13 +2755,12 @@ func forEachRole(
 }
 
 func forEachRoleMembership(
-	ctx context.Context,
-	ie sqlutil.InternalExecutor,
-	txn *kv.Txn,
-	fn func(role, member username.SQLUsername, isAdmin bool) error,
+	ctx context.Context, txn isql.Txn, fn func(role, member username.SQLUsername, isAdmin bool) error,
 ) (retErr error) {
 	const query = `SELECT "role", "member", "isAdmin" FROM system.role_members`
-	it, err := ie.QueryIterator(ctx, "read-members", txn, query)
+	it, err := txn.QueryIteratorEx(ctx, "read-members", txn.KV(), sessiondata.InternalExecutorOverride{
+		User: username.NodeUserName(),
+	}, query)
 	if err != nil {
 		return err
 	}

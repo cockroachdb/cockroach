@@ -232,12 +232,16 @@ func checkForEarlyExit(b BuildCtx, tbl *scpb.Table, t alterPrimaryKeySpec) {
 			RequiredPrivilege:   privilege.CREATE,
 		})
 
-		colCurrentStatus, _, colElem := scpb.FindColumn(colElems)
+		colCurrentStatus, colTargetStatus, colElem := scpb.FindColumn(colElems)
 		if colElem == nil {
 			panic(errors.AssertionFailedf("programming error: resolving column %v does not give a "+
 				"Column element.", col.Column))
 		}
 		if colCurrentStatus == scpb.Status_DROPPED || colCurrentStatus == scpb.Status_ABSENT {
+			if colTargetStatus == scpb.ToPublic {
+				panic(pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+					"column %q is being added", col.Column))
+			}
 			panic(pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 				"column %q is being dropped", col.Column))
 		}

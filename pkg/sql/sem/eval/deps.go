@@ -363,7 +363,7 @@ type Planner interface {
 // executor. It provides access to the rows from a query.
 // InternalRows is a copy of the one in sql/internal.go excluding the
 // Types function - we don't need the Types function for use cases where
-// QueryIteratorEx is used from the InternalExecutor on the Planner.
+// QueryIteratorEx is used from the Executor on the Planner.
 // Furthermore, we cannot include the Types function due to a cyclic
 // dependency on colinfo.ResultColumns - we cannot import colinfo in tree.
 type InternalRows interface {

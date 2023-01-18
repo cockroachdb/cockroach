@@ -58,6 +58,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/idxusage"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -701,7 +702,7 @@ CREATE TABLE crdb_internal.table_row_statistics (
                   ) AS l ON l."tableID" = s."tableID" AND l.last_dt = s."createdAt"
             AS OF SYSTEM TIME '%s'
             GROUP BY s."tableID"`, statsAsOfTimeClusterMode.String(&p.ExecCfg().Settings.SV))
-		statRows, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryBufferedEx(
+		statRows, err := p.ExtendedEvalContext().ExecCfg.InternalDB.Executor().QueryBufferedEx(
 			ctx, "crdb-internal-statistics-table", nil,
 			sessiondata.RootUserSessionDataOverride,
 			query)
@@ -949,7 +950,7 @@ func populateSystemJobsTableRows(
 	matched := false
 
 	// Note: we query system.jobs as root, so we must be careful about which rows we return.
-	it, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryIteratorEx(ctx,
+	it, err := p.InternalSQLTxn().QueryIteratorEx(ctx,
 		"system-jobs-scan",
 		p.Txn(),
 		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
@@ -1071,7 +1072,7 @@ func makeJobsTableRows(
 	// instead of using InternalExecutor.QueryIterator because
 	// the latter is being deprecated for sometimes executing
 	// the query as the root user.
-	it, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryIteratorEx(
+	it, err := p.InternalSQLTxn().QueryIteratorEx(
 		ctx, "crdb-internal-jobs-table", p.txn,
 		sessiondata.InternalExecutorOverride{User: p.User()},
 		query, params...)
@@ -3898,24 +3899,21 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 // getAllNames returns a map from ID to namespaceKey for every entry in
 // system.namespace.
 func (p *planner) getAllNames(ctx context.Context) (map[descpb.ID]catalog.NameKey, error) {
-	return getAllNames(ctx, p.txn, p.ExtendedEvalContext().ExecCfg.InternalExecutor)
+	return getAllNames(ctx, p.InternalSQLTxn())
 }
 
 // TestingGetAllNames is a wrapper for getAllNames.
-func TestingGetAllNames(
-	ctx context.Context, txn *kv.Txn, executor *InternalExecutor,
-) (map[descpb.ID]catalog.NameKey, error) {
-	return getAllNames(ctx, txn, executor)
+func TestingGetAllNames(ctx context.Context, txn isql.Txn) (map[descpb.ID]catalog.NameKey, error) {
+	return getAllNames(ctx, txn)
 }
 
 // getAllNames is the testable implementation of getAllNames.
 // It is public so that it can be tested outside the sql package.
-func getAllNames(
-	ctx context.Context, txn *kv.Txn, executor *InternalExecutor,
-) (map[descpb.ID]catalog.NameKey, error) {
+func getAllNames(ctx context.Context, txn isql.Txn) (map[descpb.ID]catalog.NameKey, error) {
 	namespace := map[descpb.ID]catalog.NameKey{}
-	it, err := executor.QueryIterator(
-		ctx, "get-all-names", txn,
+	it, err := txn.QueryIteratorEx(
+		ctx, "get-all-names", txn.KV(),
+		sessiondata.NodeUserSessionDataOverride,
 		`SELECT id, "parentID", "parentSchemaID", name FROM system.namespace`,
 	)
 	if err != nil {
@@ -3982,8 +3980,10 @@ CREATE TABLE crdb_internal.zones (
 
 		// For some reason, if we use the iterator API here, "concurrent txn use
 		// detected" error might occur, so we buffer up all zones first.
-		rows, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryBuffered(
-			ctx, "crdb-internal-zones-table", p.txn, `SELECT id, config FROM system.zones`)
+		rows, err := p.InternalSQLTxn().QueryBufferedEx(
+			ctx, "crdb-internal-zones-table", p.txn, sessiondata.NodeUserSessionDataOverride,
+			`SELECT id, config FROM system.zones`,
+		)
 		if err != nil {
 			return err
 		}
@@ -5213,7 +5213,7 @@ func collectMarshaledJobMetadataMap(
 	// Build job map with referenced job IDs.
 	m := make(marshaledJobMetadataMap)
 	query := `SELECT id, status, payload, progress FROM system.jobs`
-	it, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryIteratorEx(
+	it, err := p.InternalSQLTxn().QueryIteratorEx(
 		ctx, "crdb-internal-jobs-table", p.Txn(),
 		sessiondata.RootUserSessionDataOverride,
 		query)

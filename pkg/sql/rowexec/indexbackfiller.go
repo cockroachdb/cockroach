@@ -14,7 +14,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -22,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -189,7 +189,7 @@ func (ib *indexBackfiller) ingestIndexEntries(
 		InitialSplitsIfUnordered: int(ib.spec.InitialSplits),
 		WriteAtBatchTimestamp:    ib.spec.WriteAtBatchTimestamp,
 	}
-	adder, err := ib.flowCtx.Cfg.BulkAdder(ctx, ib.flowCtx.Cfg.DB, ib.spec.WriteAsOf, opts)
+	adder, err := ib.flowCtx.Cfg.BulkAdder(ctx, ib.flowCtx.Cfg.DB.KV(), ib.spec.WriteAsOf, opts)
 	if err != nil {
 		return err
 	}
@@ -425,15 +425,15 @@ func (ib *indexBackfiller) buildIndexEntryBatch(
 	defer traceSpan.Finish()
 	start := timeutil.Now()
 	var entries []rowenc.IndexEntry
-	if err := ib.flowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		if err := txn.SetFixedTimestamp(ctx, readAsOf); err != nil {
+	if err := ib.flowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		if err := txn.KV().SetFixedTimestamp(ctx, readAsOf); err != nil {
 			return err
 		}
 
 		// TODO(knz): do KV tracing in DistSQL processors.
 		var err error
 		entries, key, memUsedBuildingBatch, err = ib.BuildIndexEntriesChunk(
-			ctx, txn, ib.desc, sp, ib.spec.ChunkSize, false, /* traceKV */
+			ctx, txn.KV(), ib.desc, sp, ib.spec.ChunkSize, false, /* traceKV */
 		)
 		return err
 	}); err != nil {

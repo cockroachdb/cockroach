@@ -16,7 +16,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -74,11 +73,11 @@ func InjectLegacyTable(
 	table catalog.TableDescriptor,
 	getDeprecatedDescriptor func() *descpb.TableDescriptor,
 ) {
-	err := s.InternalExecutorFactory().(descs.TxnManager).DescsTxn(ctx, s.DB(), func(
-		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+	err := s.InternalDB().(descs.DB).DescsTxn(ctx, func(
+		ctx context.Context, txn descs.Txn,
 	) error {
 		id := table.GetID()
-		tab, err := descriptors.MutableByID(txn).Table(ctx, id)
+		tab, err := txn.Descriptors().MutableByID(txn.KV()).Table(ctx, id)
 		if err != nil {
 			return err
 		}
@@ -88,7 +87,7 @@ func InjectLegacyTable(
 		}
 		tab.TableDescriptor = builder.BuildCreatedMutableTable().TableDescriptor
 		tab.Version = tab.ClusterVersion().Version + 1
-		return descriptors.WriteDesc(ctx, false /* kvTrace */, tab, txn)
+		return txn.Descriptors().WriteDesc(ctx, false /* kvTrace */, tab, txn.KV())
 	})
 	require.NoError(t, err)
 }
@@ -139,10 +138,10 @@ func GetTable(
 ) catalog.TableDescriptor {
 	var table catalog.TableDescriptor
 	// Retrieve the table.
-	err := s.InternalExecutorFactory().(descs.TxnManager).DescsTxn(ctx, s.DB(), func(
-		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+	err := s.InternalDB().(descs.DB).DescsTxn(ctx, func(
+		ctx context.Context, txn descs.Txn,
 	) (err error) {
-		table, err = descriptors.ByID(txn).WithoutNonPublic().Get().Table(ctx, tableID)
+		table, err = txn.Descriptors().ByID(txn.KV()).WithoutNonPublic().Get().Table(ctx, tableID)
 		return err
 	})
 	require.NoError(t, err)

@@ -42,7 +42,10 @@ test       root  NULL  NULL  {}  NULL
 
 skipif config local-legacy-schema-changer
 query TT
-SELECT job_type, status FROM [SHOW JOBS] WHERE user_name = 'root' and job_type != 'MIGRATION'
+  SELECT job_type, status
+    FROM [SHOW JOBS]
+   WHERE user_name = 'root' AND job_type != 'MIGRATION'
+ORDER BY job_type DESC
 ----
 SCHEMA CHANGE      succeeded
 SCHEMA CHANGE      succeeded

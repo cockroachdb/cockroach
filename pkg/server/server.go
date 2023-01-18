@@ -502,13 +502,13 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	ctSender := sidetransport.NewSender(stopper, st, clock, nodeDialer)
 	ctReceiver := sidetransport.NewReceiver(nodeIDContainer, stopper, stores, nil /* testingKnobs */)
 
-	// The InternalExecutor will be further initialized later, as we create more
+	// The Executor will be further initialized later, as we create more
 	// of the server's components. There's a circular dependency - many things
-	// need an InternalExecutor, but the InternalExecutor needs an executorConfig,
+	// need an Executor, but the Executor needs an executorConfig,
 	// which in turn needs many things. That's why everybody that needs an
-	// InternalExecutor uses this one instance.
+	// Executor uses this one instance.
 	internalExecutor := &sql.InternalExecutor{}
-	internalExecutorFactory := &sql.InternalExecutorFactory{}
+	insqlDB := sql.NewShimInternalDB(db)
 	jobRegistry := &jobs.Registry{} // ditto
 
 	// Create an ExternalStorageBuilder. This is only usable after Start() where
@@ -519,15 +519,16 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	protectedtsKnobs, _ := cfg.TestingKnobs.ProtectedTS.(*protectedts.TestingKnobs)
 	protectedtsProvider, err := ptprovider.New(ptprovider.Config{
-		DB:               db,
-		InternalExecutor: internalExecutor,
-		Settings:         st,
-		Knobs:            protectedtsKnobs,
+		DB:       insqlDB,
+		Settings: st,
+		Knobs:    protectedtsKnobs,
 		ReconcileStatusFuncs: ptreconcile.StatusFuncs{
 			jobsprotectedts.GetMetaType(jobsprotectedts.Jobs): jobsprotectedts.MakeStatusFunc(
-				jobRegistry, internalExecutor, jobsprotectedts.Jobs),
-			jobsprotectedts.GetMetaType(jobsprotectedts.Schedules): jobsprotectedts.MakeStatusFunc(jobRegistry,
-				internalExecutor, jobsprotectedts.Schedules),
+				jobRegistry, jobsprotectedts.Jobs,
+			),
+			jobsprotectedts.GetMetaType(jobsprotectedts.Schedules): jobsprotectedts.MakeStatusFunc(
+				jobRegistry, jobsprotectedts.Schedules,
+			),
 		},
 	})
 	if err != nil {
@@ -747,7 +748,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		updates.TestingKnobs = &cfg.TestingKnobs.Server.(*TestingKnobs).DiagnosticsTestingKnobs
 	}
 
-	tenantUsage := NewTenantUsageServer(st, db, internalExecutorFactory)
+	tenantUsage := NewTenantUsageServer(st, db, insqlDB)
 	registry.AddMetricStruct(tenantUsage.Metrics())
 
 	tenantSettingsWatcher := tenantsettingswatcher.New(
@@ -933,7 +934,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		closedSessionCache:       closedSessionCache,
 		remoteFlowRunner:         remoteFlowRunner,
 		circularInternalExecutor: internalExecutor,
-		internalExecutorFactory:  internalExecutorFactory,
+		internalDB:               insqlDB,
 		circularJobRegistry:      jobRegistry,
 		protectedtsProvider:      protectedtsProvider,
 		rangeFeedFactory:         rangeFeedFactory,
@@ -1220,7 +1221,6 @@ func (s *Server) PreStart(ctx context.Context) error {
 	ieMon := sql.MakeInternalExecutorMemMonitor(sql.MemoryMetrics{}, s.ClusterSettings())
 	ieMon.StartNoReserved(ctx, s.PGServer().SQLServer.GetBytesMonitor())
 	s.stopper.AddCloser(stop.CloserFn(func() { ieMon.Stop(ctx) }))
-	fileTableInternalExecutor := sql.MakeInternalExecutor(s.PGServer().SQLServer, sql.MemoryMetrics{}, ieMon)
 	s.externalStorageBuilder.init(
 		ctx,
 		s.cfg.ExternalIODirConfig,
@@ -1228,9 +1228,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 		s.nodeIDContainer,
 		s.nodeDialer,
 		s.cfg.TestingKnobs,
-		&fileTableInternalExecutor,
-		s.sqlServer.execCfg.InternalExecutorFactory,
-		s.db,
+		s.sqlServer.execCfg.InternalDB.CloneWithMemoryMonitor(sql.MemoryMetrics{}, ieMon),
 		nil, /* TenantExternalIORecorder */
 		s.registry,
 	)
@@ -1844,7 +1842,10 @@ func (s *Server) PreStart(ctx context.Context) error {
 	// startup fails, and write to range log once the server is running as we need
 	// to run sql statements to update rangelog.
 	publishPendingLossOfQuorumRecoveryEvents(
-		workersCtx, s.node.execCfg.InternalExecutor, s.node.stores, s.stopper,
+		workersCtx,
+		s.node.execCfg.InternalDB.Executor(),
+		s.node.stores,
+		s.stopper,
 	)
 
 	log.Event(ctx, "server initialized")

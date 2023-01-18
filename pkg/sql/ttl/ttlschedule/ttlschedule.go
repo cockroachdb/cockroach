@@ -23,11 +23,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/ttl/ttlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -56,7 +56,7 @@ func (s rowLevelTTLExecutor) OnDrop(
 	scheduleControllerEnv scheduledjobs.ScheduleControllerEnv,
 	env scheduledjobs.JobSchedulerEnv,
 	schedule *jobs.ScheduledJob,
-	txn *kv.Txn,
+	txn isql.Txn,
 	descsCol *descs.Collection,
 ) (int, error) {
 
@@ -65,17 +65,17 @@ func (s rowLevelTTLExecutor) OnDrop(
 		return 0, err
 	}
 
-	canDrop, err := canDropTTLSchedule(ctx, txn, descsCol, schedule, args)
+	canDrop, err := canDropTTLSchedule(ctx, txn.KV(), descsCol, schedule, args)
 	if err != nil {
 		return 0, err
 	}
 
 	if !canDrop {
-		tbl, err := descsCol.ByIDWithLeased(txn).WithoutNonPublic().Get().Table(ctx, args.TableID)
+		tbl, err := descsCol.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Table(ctx, args.TableID)
 		if err != nil {
 			return 0, err
 		}
-		tn, err := descs.GetObjectName(ctx, txn, descsCol, tbl)
+		tn, err := descs.GetObjectName(ctx, txn.KV(), descsCol, tbl)
 		if err != nil {
 			return 0, err
 		}
@@ -126,10 +126,10 @@ func canDropTTLSchedule(
 // ExecuteJob implements the jobs.ScheduledJobController interface.
 func (s rowLevelTTLExecutor) ExecuteJob(
 	ctx context.Context,
+	txn isql.Txn,
 	cfg *scheduledjobs.JobExecutionConfig,
 	env scheduledjobs.JobSchedulerEnv,
 	sj *jobs.ScheduledJob,
-	txn *kv.Txn,
 ) error {
 	args := &catpb.ScheduledRowLevelTTLArgs{}
 	if err := pbtypes.UnmarshalAny(sj.ExecutionArgs().Args, args); err != nil {
@@ -138,7 +138,7 @@ func (s rowLevelTTLExecutor) ExecuteJob(
 
 	p, cleanup := cfg.PlanHookMaker(
 		fmt.Sprintf("invoke-row-level-ttl-%d", args.TableID),
-		txn,
+		txn.KV(),
 		username.NodeUserName(),
 	)
 	defer cleanup()
@@ -150,7 +150,6 @@ func (s rowLevelTTLExecutor) ExecuteJob(
 			Name: jobs.CreatedByScheduledJobs,
 		},
 		txn,
-		p.(sql.PlanHookState).ExtendedEvalContext().Descs,
 		p.(sql.PlanHookState).ExecCfg().JobRegistry,
 		*args,
 	); err != nil {
@@ -164,13 +163,12 @@ func (s rowLevelTTLExecutor) ExecuteJob(
 // NotifyJobTermination implements the jobs.ScheduledJobController interface.
 func (s rowLevelTTLExecutor) NotifyJobTermination(
 	ctx context.Context,
+	txn isql.Txn,
 	jobID jobspb.JobID,
 	jobStatus jobs.Status,
 	details jobspb.Details,
 	env scheduledjobs.JobSchedulerEnv,
 	sj *jobs.ScheduledJob,
-	ex sqlutil.InternalExecutor,
-	txn *kv.Txn,
 ) error {
 	if jobStatus == jobs.StatusFailed {
 		jobs.DefaultHandleFailedRun(
@@ -197,22 +195,18 @@ func (s rowLevelTTLExecutor) Metrics() metric.Struct {
 
 // GetCreateScheduleStatement implements the jobs.ScheduledJobController interface.
 func (s rowLevelTTLExecutor) GetCreateScheduleStatement(
-	ctx context.Context,
-	env scheduledjobs.JobSchedulerEnv,
-	txn *kv.Txn,
-	descsCol *descs.Collection,
-	sj *jobs.ScheduledJob,
-	ex sqlutil.InternalExecutor,
+	ctx context.Context, txn isql.Txn, env scheduledjobs.JobSchedulerEnv, sj *jobs.ScheduledJob,
 ) (string, error) {
+	descsCol := descs.FromTxn(txn)
 	args := &catpb.ScheduledRowLevelTTLArgs{}
 	if err := pbtypes.UnmarshalAny(sj.ExecutionArgs().Args, args); err != nil {
 		return "", err
 	}
-	tbl, err := descsCol.ByIDWithLeased(txn).WithoutNonPublic().Get().Table(ctx, args.TableID)
+	tbl, err := descsCol.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Table(ctx, args.TableID)
 	if err != nil {
 		return "", err
 	}
-	tn, err := descs.GetObjectName(ctx, txn, descsCol, tbl)
+	tn, err := descs.GetObjectName(ctx, txn.KV(), descsCol, tbl)
 	if err != nil {
 		return "", err
 	}
@@ -249,16 +243,16 @@ func makeTTLJobDescription(tableDesc catalog.TableDescriptor, tn tree.ObjectName
 func createRowLevelTTLJob(
 	ctx context.Context,
 	createdByInfo *jobs.CreatedByInfo,
-	txn *kv.Txn,
-	descsCol *descs.Collection,
+	txn isql.Txn,
 	jobRegistry *jobs.Registry,
 	ttlArgs catpb.ScheduledRowLevelTTLArgs,
 ) (jobspb.JobID, error) {
-	tableDesc, err := descsCol.ByIDWithLeased(txn).WithoutNonPublic().Get().Table(ctx, ttlArgs.TableID)
+	descsCol := descs.FromTxn(txn)
+	tableDesc, err := descsCol.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Table(ctx, ttlArgs.TableID)
 	if err != nil {
 		return 0, err
 	}
-	tn, err := descs.GetObjectName(ctx, txn, descsCol, tableDesc)
+	tn, err := descs.GetObjectName(ctx, txn.KV(), descsCol, tableDesc)
 	if err != nil {
 		return 0, err
 	}

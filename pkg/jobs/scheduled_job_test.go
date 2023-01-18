@@ -27,9 +27,10 @@ func TestCreateScheduledJob(t *testing.T) {
 	h, cleanup := newTestHelper(t)
 	defer cleanup()
 
+	schedules := ScheduledJobDB(h.cfg.DB)
 	j := h.newScheduledJob(t, "test_job", "test sql")
 	require.NoError(t, j.SetSchedule("@daily"))
-	require.NoError(t, j.Create(context.Background(), h.cfg.InternalExecutor, nil))
+	require.NoError(t, schedules.Create(context.Background(), j))
 	require.True(t, j.ScheduleID() > 0)
 }
 
@@ -41,8 +42,9 @@ func TestCreatePausedScheduledJob(t *testing.T) {
 
 	j := h.newScheduledJob(t, "test_job", "test sql")
 	require.NoError(t, j.SetSchedule("@daily"))
+	schedules := ScheduledJobDB(h.cfg.DB)
 	j.Pause()
-	require.NoError(t, j.Create(context.Background(), h.cfg.InternalExecutor, nil))
+	require.NoError(t, schedules.Create(context.Background(), j))
 	require.True(t, j.ScheduleID() > 0)
 	require.True(t, j.NextRun().Equal(time.Time{}))
 }
@@ -61,8 +63,8 @@ func TestSetsSchedule(t *testing.T) {
 	// The job is expected to run at midnight the next day.
 	// We want to ensure nextRun correctly persisted in the cron table.
 	expectedNextRun := h.env.Now().Truncate(24 * time.Hour).Add(24 * time.Hour)
-
-	require.NoError(t, j.Create(context.Background(), h.cfg.InternalExecutor, nil))
+	schedules := ScheduledJobDB(h.cfg.DB)
+	require.NoError(t, schedules.Create(context.Background(), j))
 
 	loaded := h.loadSchedule(t, j.ScheduleID())
 	require.Equal(t, j.ScheduleID(), loaded.ScheduleID())
@@ -79,7 +81,8 @@ func TestCreateOneOffJob(t *testing.T) {
 	j := h.newScheduledJob(t, "test_job", "test sql")
 	j.SetNextRun(timeutil.Now())
 
-	require.NoError(t, j.Create(context.Background(), h.cfg.InternalExecutor, nil))
+	schedules := ScheduledJobDB(h.cfg.DB)
+	require.NoError(t, schedules.Create(context.Background(), j))
 	require.True(t, j.ScheduleID() > 0)
 
 	loaded := h.loadSchedule(t, j.ScheduleID())
@@ -93,14 +96,15 @@ func TestPauseUnpauseJob(t *testing.T) {
 	h, cleanup := newTestHelper(t)
 	defer cleanup()
 
+	schedules := ScheduledJobDB(h.cfg.DB)
 	ctx := context.Background()
 	j := h.newScheduledJob(t, "test_job", "test sql")
 	require.NoError(t, j.SetSchedule("@daily"))
-	require.NoError(t, j.Create(ctx, h.cfg.InternalExecutor, nil))
+	require.NoError(t, schedules.Create(ctx, j))
 
 	// Pause and save.
 	j.Pause()
-	require.NoError(t, j.Update(ctx, h.cfg.InternalExecutor, nil))
+	require.NoError(t, schedules.Update(ctx, j))
 
 	// Verify job is paused
 	loaded := h.loadSchedule(t, j.ScheduleID())
@@ -109,7 +113,7 @@ func TestPauseUnpauseJob(t *testing.T) {
 
 	// Un-pausing the job resets next run time.
 	require.NoError(t, j.ScheduleNextRun())
-	require.NoError(t, j.Update(ctx, h.cfg.InternalExecutor, nil))
+	require.NoError(t, schedules.Update(ctx, j))
 
 	// Verify job is no longer paused
 	loaded = h.loadSchedule(t, j.ScheduleID())

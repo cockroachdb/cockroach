@@ -110,7 +110,7 @@ func backfillSystemUsersIDColumn(
 		if numUsersToUpdate-i < batchSize {
 			numIDs = numUsersToUpdate - i
 		}
-		startID, err := descidgen.IncrementUniqueRoleID(ctx, d.DB, d.Codec, int64(numIDs))
+		startID, err := descidgen.IncrementUniqueRoleID(ctx, d.DB.KV(), d.Codec, int64(numIDs))
 		if err != nil {
 			return err
 		}

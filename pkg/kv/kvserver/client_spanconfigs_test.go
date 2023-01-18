@@ -21,8 +21,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigstore"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -61,7 +61,7 @@ func TestSpanConfigUpdateAppliedToReplica(t *testing.T) {
 	s, _, _ := serverutils.StartServer(t, args)
 	defer s.Stopper().Stop(context.Background())
 
-	_, err := s.InternalExecutor().(sqlutil.InternalExecutor).ExecEx(ctx, "inline-exec", nil,
+	_, err := s.InternalExecutor().(isql.Executor).ExecEx(ctx, "inline-exec", nil,
 		sessiondata.RootUserSessionDataOverride,
 		`SET CLUSTER SETTING spanconfig.store.enabled = true`)
 	require.NoError(t, err)
@@ -124,7 +124,7 @@ func TestFallbackSpanConfigOverride(t *testing.T) {
 	s, _, _ := serverutils.StartServer(t, args)
 	defer s.Stopper().Stop(context.Background())
 
-	_, err := s.InternalExecutor().(sqlutil.InternalExecutor).ExecEx(ctx, "inline-exec", nil,
+	_, err := s.InternalDB().(isql.DB).Executor().ExecEx(ctx, "inline-exec", nil,
 		sessiondata.RootUserSessionDataOverride,
 		`SET CLUSTER SETTING spanconfig.store.enabled = true`)
 	require.NoError(t, err)

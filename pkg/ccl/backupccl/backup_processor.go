@@ -434,7 +434,7 @@ func runBackupProcessor(
 						fmt.Sprintf("ExportRequest for span %s", span.span),
 						timeoutPerAttempt.Get(&clusterSettings.SV), func(ctx context.Context) error {
 							rawResp, pErr = kv.SendWrappedWithAdmission(
-								ctx, flowCtx.Cfg.DB.NonTransactionalSender(), header, admissionHeader, req)
+								ctx, flowCtx.Cfg.DB.KV().NonTransactionalSender(), header, admissionHeader, req)
 							if pErr != nil {
 								return pErr.GoError()
 							}

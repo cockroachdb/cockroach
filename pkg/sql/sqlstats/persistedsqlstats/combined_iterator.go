@@ -15,7 +15,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/errors"
 )
 
@@ -35,14 +35,14 @@ type CombinedStmtStatsIterator struct {
 	disk struct {
 		canBeAdvanced bool
 		paused        bool
-		it            sqlutil.InternalRows
+		it            isql.Rows
 	}
 }
 
 // NewCombinedStmtStatsIterator returns a new instance of
 // CombinedStmtStatsIterator.
 func NewCombinedStmtStatsIterator(
-	memIter *memStmtStatsIterator, diskIter sqlutil.InternalRows, expectedColCnt int,
+	memIter *memStmtStatsIterator, diskIter isql.Rows, expectedColCnt int,
 ) *CombinedStmtStatsIterator {
 	c := &CombinedStmtStatsIterator{
 		expectedColCnt: expectedColCnt,
@@ -221,14 +221,14 @@ type CombinedTxnStatsIterator struct {
 	disk struct {
 		canBeAdvanced bool
 		paused        bool
-		it            sqlutil.InternalRows
+		it            isql.Rows
 	}
 }
 
 // NewCombinedTxnStatsIterator returns a new instance of
 // CombinedTxnStatsIterator.
 func NewCombinedTxnStatsIterator(
-	memIter *memTxnStatsIterator, diskIter sqlutil.InternalRows, expectedColCnt int,
+	memIter *memTxnStatsIterator, diskIter isql.Rows, expectedColCnt int,
 ) *CombinedTxnStatsIterator {
 	c := &CombinedTxnStatsIterator{
 		expectedColCnt: expectedColCnt,

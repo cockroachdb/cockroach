@@ -243,7 +243,7 @@ INSERT INTO d.t2 VALUES (2);
 
 	// Testing client.Complete()
 	err = client.Complete(ctx, streampb.StreamID(999), true)
-	require.True(t, testutils.IsError(err, fmt.Sprintf("job %d: not found in system.jobs table", 999)), err)
+	require.True(t, testutils.IsError(err, "job with ID 999 does not exist"), err)
 
 	// Makes producer job exit quickly.
 	h.SysSQL.Exec(t, `

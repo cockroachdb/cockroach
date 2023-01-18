@@ -16,17 +16,17 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/errors"
 )
 
 type ieWriter struct {
 	insertQuery string
 	deleteQuery string
-	ie          sqlutil.InternalExecutor
+	ie          isql.Executor
 }
 
-func newInternalExecutorWriter(ie sqlutil.InternalExecutor, tableName string) *ieWriter {
+func newInternalExecutorWriter(ie isql.Executor, tableName string) *ieWriter {
 	if systemschema.TestSupportMultiRegion() {
 		const (
 			deleteLease = `

@@ -18,12 +18,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptstorage"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigsqlwatcher"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -63,15 +64,16 @@ func TestProtectedTimestampDecoder(t *testing.T) {
 		},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
-			var rec *ptpb.Record
 			ts := s0.Clock().Now()
 			jobID := jr.MakeJobID()
+			pts := ptstorage.WithDatabase(ptp, s0.InternalDB().(isql.DB))
 
-			require.NoError(t, s0.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
-				rec = jobsprotectedts.MakeRecord(uuid.MakeV4(), int64(jobID), ts,
-					nil /* deprecatedSpans */, jobsprotectedts.Jobs, testCase.target)
-				return ptp.Protect(ctx, txn, rec)
-			}))
+			rec := jobsprotectedts.MakeRecord(
+				uuid.MakeV4(), int64(jobID), ts,
+				nil, /* deprecatedSpans */
+				jobsprotectedts.Jobs, testCase.target,
+			)
+			require.NoError(t, pts.Protect(ctx, rec))
 
 			rows, err := tc.Server(0).DB().Scan(ctx, k, k.PrefixEnd(), 0 /* maxRows */)
 			require.NoError(t, err)
@@ -88,9 +90,7 @@ func TestProtectedTimestampDecoder(t *testing.T) {
 			require.Truef(t, rec.Target.Equal(got),
 				"expected target=%s, got target=%s", rec.Target.String(), got.String())
 
-			require.NoError(t, s0.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
-				return ptp.Release(ctx, txn, rec.ID.GetUUID())
-			}))
+			require.NoError(t, pts.Release(ctx, rec.ID.GetUUID()))
 		})
 	}
 }

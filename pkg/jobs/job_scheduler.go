@@ -23,9 +23,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -75,19 +75,15 @@ var errScheduleNotRunnable = errors.New("schedule not runnable")
 // loadCandidateScheduleForExecution looks up and locks candidate schedule for execution.
 // The schedule is locked via FOR UPDATE clause to ensure that only this scheduler can modify it.
 // If schedule cannot execute, a errScheduleNotRunnable error is returned.
-func loadCandidateScheduleForExecution(
-	ctx context.Context,
-	scheduleID int64,
-	env scheduledjobs.JobSchedulerEnv,
-	ie sqlutil.InternalExecutor,
-	txn *kv.Txn,
+func (s scheduledJobStorageTxn) loadCandidateScheduleForExecution(
+	ctx context.Context, scheduleID int64, env scheduledjobs.JobSchedulerEnv,
 ) (*ScheduledJob, error) {
 	lookupStmt := fmt.Sprintf(
 		"SELECT * FROM %s WHERE schedule_id=%d AND next_run < %s FOR UPDATE",
 		env.ScheduledJobsTableName(), scheduleID, env.NowExpr())
-	row, cols, err := ie.QueryRowExWithCols(
+	row, cols, err := s.txn.QueryRowExWithCols(
 		ctx, "find-scheduled-jobs-exec",
-		txn,
+		s.txn.KV(),
 		sessiondata.RootUserSessionDataOverride,
 		lookupStmt)
 	if err != nil {
@@ -107,17 +103,14 @@ func loadCandidateScheduleForExecution(
 
 // lookupNumRunningJobs returns the number of running jobs for the specified schedule.
 func lookupNumRunningJobs(
-	ctx context.Context,
-	scheduleID int64,
-	env scheduledjobs.JobSchedulerEnv,
-	ie sqlutil.InternalExecutor,
+	ctx context.Context, scheduleID int64, env scheduledjobs.JobSchedulerEnv, txn isql.Txn,
 ) (int64, error) {
 	lookupStmt := fmt.Sprintf(
 		"SELECT count(*) FROM %s WHERE created_by_type = '%s' AND created_by_id = %d AND status IN %s",
 		env.SystemJobsTableName(), CreatedByScheduledJobs, scheduleID, NonTerminalStatusTupleString)
-	row, err := ie.QueryRowEx(
+	row, err := txn.QueryRowEx(
 		ctx, "lookup-num-running",
-		/*txn=*/ nil,
+		txn.KV(),
 		sessiondata.RootUserSessionDataOverride,
 		lookupStmt)
 	if err != nil {
@@ -129,8 +122,9 @@ func lookupNumRunningJobs(
 const recheckRunningAfter = 1 * time.Minute
 
 func (s *jobScheduler) processSchedule(
-	ctx context.Context, schedule *ScheduledJob, numRunning int64, txn *kv.Txn,
+	ctx context.Context, schedule *ScheduledJob, numRunning int64, txn isql.Txn,
 ) error {
+	scheduleStorage := ScheduledJobTxn(txn)
 	if numRunning > 0 {
 		switch schedule.ScheduleDetails().Wait {
 		case jobspb.ScheduleDetails_WAIT:
@@ -140,14 +134,14 @@ func (s *jobScheduler) processSchedule(
 			schedule.SetNextRun(s.env.Now().Add(recheckRunningAfter))
 			schedule.SetScheduleStatus("delayed due to %d already running", numRunning)
 			s.metrics.RescheduleWait.Inc(1)
-			return schedule.Update(ctx, s.InternalExecutor, txn)
+			return scheduleStorage.Update(ctx, schedule)
 		case jobspb.ScheduleDetails_SKIP:
 			if err := schedule.ScheduleNextRun(); err != nil {
 				return err
 			}
 			schedule.SetScheduleStatus("rescheduled due to %d already running", numRunning)
 			s.metrics.RescheduleSkip.Inc(1)
-			return schedule.Update(ctx, s.InternalExecutor, txn)
+			return scheduleStorage.Update(ctx, schedule)
 		}
 	}
 
@@ -165,7 +159,7 @@ func (s *jobScheduler) processSchedule(
 		schedule.SetNextRun(time.Time{})
 	}
 
-	if err := schedule.Update(ctx, s.InternalExecutor, txn); err != nil {
+	if err := scheduleStorage.Update(ctx, schedule); err != nil {
 		return err
 	}
 
@@ -181,14 +175,14 @@ func (s *jobScheduler) processSchedule(
 		schedule.ScheduledRunTime(), schedule.NextRun())
 
 	execCtx := logtags.AddTag(ctx, "schedule", schedule.ScheduleID())
-	if err := executor.ExecuteJob(execCtx, s.JobExecutionConfig, s.env, schedule, txn); err != nil {
+	if err := executor.ExecuteJob(execCtx, txn, s.JobExecutionConfig, s.env, schedule); err != nil {
 		return errors.Wrapf(err, "executing schedule %d", schedule.ScheduleID())
 	}
 
 	s.metrics.NumStarted.Inc(1)
 
 	// Persist any mutations to the underlying schedule.
-	return schedule.Update(ctx, s.InternalExecutor, txn)
+	return scheduleStorage.Update(ctx, schedule)
 }
 
 type savePointError struct {
@@ -235,9 +229,12 @@ func withSavePoint(ctx context.Context, txn *kv.Txn, fn func() error) error {
 // executeCandidateSchedule attempts to execute schedule.
 // The schedule is executed only if it's running.
 func (s *jobScheduler) executeCandidateSchedule(
-	ctx context.Context, candidate int64, txn *kv.Txn,
+	ctx context.Context, candidate int64, txn isql.Txn,
 ) error {
-	schedule, err := loadCandidateScheduleForExecution(ctx, candidate, s.env, s.InternalExecutor, txn)
+	sj := scheduledJobStorageTxn{txn}
+	schedule, err := sj.loadCandidateScheduleForExecution(
+		ctx, candidate, s.env,
+	)
 	if err != nil {
 		if errors.Is(err, errScheduleNotRunnable) {
 			return nil
@@ -253,13 +250,15 @@ func (s *jobScheduler) executeCandidateSchedule(
 		return nil
 	}
 
-	numRunning, err := lookupNumRunningJobs(ctx, schedule.ScheduleID(), s.env, s.InternalExecutor)
+	numRunning, err := lookupNumRunningJobs(
+		ctx, schedule.ScheduleID(), s.env, txn,
+	)
 	if err != nil {
 		return err
 	}
 
 	timeout := schedulerScheduleExecutionTimeout.Get(&s.Settings.SV)
-	if processErr := withSavePoint(ctx, txn, func() error {
+	if processErr := withSavePoint(ctx, txn.KV(), func() error {
 		if timeout > 0 {
 			return contextutil.RunWithTimeout(
 				ctx, fmt.Sprintf("process-schedule-%d", schedule.ScheduleID()), timeout,
@@ -279,7 +278,7 @@ func (s *jobScheduler) executeCandidateSchedule(
 			"error processing schedule %d: %+v", schedule.ScheduleID(), processErr)
 
 		// Try updating schedule record to indicate schedule execution error.
-		if err := withSavePoint(ctx, txn, func() error {
+		if err := withSavePoint(ctx, txn.KV(), func() error {
 			// Discard changes already made to the schedule, and treat schedule
 			// execution failure the same way we treat job failure.
 			schedule.ClearDirty()
@@ -296,7 +295,7 @@ func (s *jobScheduler) executeCandidateSchedule(
 					return err
 				}
 			}
-			return schedule.Update(ctx, s.InternalExecutor, txn)
+			return sj.Update(ctx, schedule)
 		}); err != nil {
 			if errors.HasType(err, (*savePointError)(nil)) {
 				return errors.Wrapf(err,
@@ -321,7 +320,7 @@ func (s *jobScheduler) executeSchedules(ctx context.Context, maxSchedules int64)
 	findSchedulesStmt := fmt.Sprintf(
 		`SELECT schedule_id FROM %s WHERE next_run < %s ORDER BY random() %s`,
 		s.env.ScheduledJobsTableName(), s.env.NowExpr(), limitClause)
-	it, err := s.InternalExecutor.QueryIteratorEx(
+	it, err := s.DB.Executor().QueryIteratorEx(
 		ctx, "find-scheduled-jobs",
 		/*txn=*/ nil,
 		sessiondata.RootUserSessionDataOverride,
@@ -341,7 +340,7 @@ func (s *jobScheduler) executeSchedules(ctx context.Context, maxSchedules int64)
 	for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
 		row := it.Cur()
 		candidateID := int64(tree.MustBeDInt(row[0]))
-		if err := s.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		if err := s.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 			return s.executeCandidateSchedule(ctx, candidateID, txn)
 		}); err != nil {
 			log.Errorf(ctx, "error executing candidate schedule %d: %s", candidateID, err)
