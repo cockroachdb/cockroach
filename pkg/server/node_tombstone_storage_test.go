@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -41,7 +42,7 @@ func TestNodeTombstoneStorage(t *testing.T) {
 	require.NoError(t, err)
 	for i := range engs {
 		require.NoError(t, kvserver.WriteClusterVersion(ctx, engs[i], clusterversion.TestingClusterVersion))
-		require.NoError(t, kvserver.InitEngine(ctx, engs[i], roachpb.StoreIdent{
+		require.NoError(t, kvstorage.InitEngine(ctx, engs[i], roachpb.StoreIdent{
 			ClusterID: id,
 			NodeID:    1,
 			StoreID:   roachpb.StoreID(1 + i),

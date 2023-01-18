@@ -26,6 +26,123 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// FirstNodeID is the NodeID assigned to the node bootstrapping a new cluster.
+const FirstNodeID = roachpb.NodeID(1)
+
+// FirstStoreID is the StoreID assigned to the first store on the node with ID
+// FirstNodeID.
+const FirstStoreID = roachpb.StoreID(1)
+
+// InitEngine writes a new store ident to the underlying engine. To
+// ensure that no crufty data already exists in the engine, it scans
+// the engine contents before writing the new store ident. The engine
+// should be completely empty save for a cluster version, which must
+// already have been persisted to it. Returns an error if this is not
+// the case.
+func InitEngine(ctx context.Context, eng storage.Engine, ident roachpb.StoreIdent) error {
+	exIdent, err := ReadStoreIdent(ctx, eng)
+	if err == nil {
+		return errors.Errorf("engine %s is already initialized with ident %s", eng, exIdent.String())
+	}
+	if !errors.HasType(err, (*NotBootstrappedError)(nil)) {
+		return err
+	}
+
+	if err := checkCanInitializeEngine(ctx, eng); err != nil {
+		return errors.Wrap(err, "while trying to initialize engine")
+	}
+
+	batch := eng.NewBatch()
+	if err := storage.MVCCPutProto(
+		ctx,
+		batch,
+		nil,
+		keys.StoreIdentKey(),
+		hlc.Timestamp{},
+		hlc.ClockTimestamp{},
+		nil,
+		&ident,
+	); err != nil {
+		batch.Close()
+		return err
+	}
+	if err := batch.Commit(true /* sync */); err != nil {
+		return errors.Wrap(err, "persisting engine initialization data")
+	}
+
+	return nil
+}
+
+// checkCanInitializeEngine ensures that the engine is empty except for a
+// cluster version, which must be present.
+func checkCanInitializeEngine(ctx context.Context, eng storage.Engine) error {
+	// See if this is an already-bootstrapped store.
+	ident, err := ReadStoreIdent(ctx, eng)
+	if err == nil {
+		return errors.Errorf("engine already initialized as %s", ident.String())
+	} else if !errors.HasType(err, (*NotBootstrappedError)(nil)) {
+		return errors.Wrap(err, "unable to read store ident")
+	}
+	// Engine is not bootstrapped yet (i.e. no StoreIdent). Does it contain a
+	// cluster version, cached settings and nothing else? Note that there is one
+	// cluster version key and many cached settings key, and the cluster version
+	// key precedes the cached settings.
+	//
+	// We use an EngineIterator to ensure that there are no keys that cannot be
+	// parsed as MVCCKeys (e.g. lock table keys) in the engine.
+	iter := eng.NewEngineIterator(storage.IterOptions{
+		KeyTypes:   storage.IterKeyTypePointsAndRanges,
+		UpperBound: roachpb.KeyMax,
+	})
+	defer iter.Close()
+	valid, err := iter.SeekEngineKeyGE(storage.EngineKey{Key: roachpb.KeyMin})
+	if !valid {
+		if err == nil {
+			return errors.New("no cluster version found on uninitialized engine")
+		}
+		return err
+	}
+	getMVCCKey := func() (storage.MVCCKey, error) {
+		if _, hasRange := iter.HasPointAndRange(); hasRange {
+			bounds, err := iter.EngineRangeBounds()
+			if err != nil {
+				return storage.MVCCKey{}, err
+			}
+			return storage.MVCCKey{}, errors.Errorf("found mvcc range key: %s", bounds)
+		}
+		var k storage.EngineKey
+		k, err = iter.EngineKey()
+		if err != nil {
+			return storage.MVCCKey{}, err
+		}
+		if !k.IsMVCCKey() {
+			return storage.MVCCKey{}, errors.Errorf("found non-mvcc key: %s", k)
+		}
+		return k.ToMVCCKey()
+	}
+	var k storage.MVCCKey
+	if k, err = getMVCCKey(); err != nil {
+		return err
+	}
+	if !k.Key.Equal(keys.StoreClusterVersionKey()) {
+		return errors.New("no cluster version found on uninitialized engine")
+	}
+	valid, err = iter.NextEngineKey()
+	for valid {
+		// Only allowed to find cached cluster settings on an uninitialized
+		// engine.
+		if k, err = getMVCCKey(); err != nil {
+			return err
+		}
+		if _, err := keys.DecodeStoreCachedSettingsKey(k.Key); err != nil {
+			return errors.Errorf("engine cannot be bootstrapped, contains key:\n%s", k.String())
+		}
+		// There may be more cached cluster settings, so continue iterating.
+		valid, err = iter.NextEngineKey()
+	}
+	return err
+}
+
 // IterateIDPrefixKeys helps visit system keys that use RangeID prefixing (such
 // as RaftHardStateKey, RangeTombstoneKey, and many others). Such keys could in
 // principle exist at any RangeID, and this helper efficiently discovers all the
