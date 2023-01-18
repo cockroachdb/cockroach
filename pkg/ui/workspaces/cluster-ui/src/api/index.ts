@@ -14,6 +14,7 @@ export * from "./statementsApi";
 export * from "./basePath";
 export * from "./nodesApi";
 export * from "./clusterLocksApi";
+export * from "./stmtInsightsApi";
 export * from "./txnInsightsApi";
 export * from "./indexActionsApi";
 export * from "./schemaInsightsApi";
