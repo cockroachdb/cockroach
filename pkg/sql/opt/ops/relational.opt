@@ -1286,9 +1286,9 @@ define WithPrivate {
     # it in the EXPLAIN plan).
     OriginalExpr Statement
 
-    # Mtr is used to specify whether or not to override the optimizer's
-    # default decision for materializing or not materializing tables.
-    Mtr MaterializeClause
+    # Mtr is the materialization behavior of the CTE, specified by MATERIALIZED,
+    # NOT MATERIALIZED, or an empty materialize clause.
+    Mtr CTEMaterializeClause
 
     # Ordering specifies the order required of the binding, and thus controls
     # the order in which the rows are materialized. Can only be used when Mtr is
@@ -1335,10 +1335,9 @@ define WithScanPrivate {
     # it possible to construct WithScan expressions with no columns.
     ID UniqueID
 
-    # CanInlineInPlace is true when the WithScanExpr is allowed to be inlined
-    # when it is normalized as opposed to inlining which takes place when the
-    # WithExpr is normalized.
-    CanInlineInPlace bool
+    # Mtr is the materialization behavior of the CTE referenced by the WithScan.
+    # It matches the Mtr field of the WithPrivate with a matching WithID.
+    Mtr CTEMaterializeClause
 }
 
 # RecursiveCTE implements the logic of a recursive CTE:

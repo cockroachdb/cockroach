@@ -3033,8 +3033,7 @@ bare_col_label ::=
 	| bare_label_keywords
 
 common_table_expr ::=
-	table_alias_name opt_col_def_list_no_types 'AS' '(' preparable_stmt ')'
-	| table_alias_name opt_col_def_list_no_types 'AS' materialize_clause '(' preparable_stmt ')'
+	table_alias_name opt_col_def_list_no_types 'AS' materialize_clause '(' preparable_stmt ')'
 
 index_flags_param_list ::=
 	( index_flags_param ) ( ( ',' index_flags_param ) )*
@@ -3386,6 +3385,7 @@ opt_col_def_list_no_types ::=
 materialize_clause ::=
 	'MATERIALIZED'
 	| 'NOT' 'MATERIALIZED'
+	| 
 
 index_flags_param ::=
 	'FORCE_INDEX' '=' index_name
