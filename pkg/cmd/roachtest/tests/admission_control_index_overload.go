@@ -41,7 +41,7 @@ func registerIndexOverload(r registry.Registry) {
 			workloadNode := c.Spec().NodeCount
 
 			c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
-			c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Range(1, crdbNodes))
+			c.Start(ctx, t.L(), option.DefaultStartOptsNoBackups(), install.MakeClusterSettings(), c.Range(1, crdbNodes))
 
 			{
 				promCfg := &prometheus.Config{}
