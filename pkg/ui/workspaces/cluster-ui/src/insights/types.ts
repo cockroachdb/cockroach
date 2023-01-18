@@ -77,7 +77,7 @@ export type TxnInsightEvent = UnavailableForTxnContention & {
   // The full list of statements in this txn, with their stmt
   // level insights (not all stmts in the txn may have one).
   // Ordered by startTime.
-  statementInsights: StatementInsightEvent[];
+  statementInsights: StmtInsightEvent[];
 
   insights: Insight[]; // De-duplicated list of insights from statement level.
   queries: string[]; // We bubble this up from statementinsights for easy access, since txn contention details dont have stmt insights.
@@ -125,7 +125,7 @@ export type BlockedStatementContentionDetails = {
 // Does not contain transaction information.
 // This is what is stored at the transaction insight level, shown
 // on the txn insights overview page.
-export type StatementInsightEvent = {
+export type StmtInsightEvent = {
   statementExecutionID: string;
   statementFingerprintID: string;
   startTime: Moment;
@@ -144,9 +144,9 @@ export type StatementInsightEvent = {
   planGist: string;
 };
 
-// StatementInsightEvent with their transaction level information.
+// StmtInsightEvent with their transaction level information.
 // What we show in the stmt insights overview and details pages.
-export type FlattenedStmtInsightEvent = StatementInsightEvent & {
+export type FlattenedStmtInsightEvent = StmtInsightEvent & {
   transactionExecutionID: string;
   transactionFingerprintID: string;
   implicitTxn: boolean;
