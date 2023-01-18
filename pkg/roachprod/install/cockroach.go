@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/ssh"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/gce"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -777,10 +778,17 @@ func (c *SyncedCluster) createFixedBackupSchedule(
 	if c.IsLocal() {
 		externalStoragePath = `nodelocal://1`
 	}
+	for _, cloud := range c.Clouds() {
+		if !strings.Contains(cloud, gce.ProviderName) {
+			l.Printf(`no scheduled backup created as there exists a vm not on google cloud`)
+			return nil
+		}
+	}
 	l.Printf("%s: creating backup schedule", c.Name)
+	auth := "AUTH=implicit"
 
-	collectionPath := fmt.Sprintf(`%s/roachprod-scheduled-backups/%s/%v`,
-		externalStoragePath, c.Name, timeutil.Now().UnixNano())
+	collectionPath := fmt.Sprintf(`%s/roachprod-scheduled-backups/%s/%v?%s`,
+		externalStoragePath, c.Name, timeutil.Now().UnixNano(), auth)
 
 	// Default scheduled backup runs a full backup every hour and an incremental
 	// every 15 minutes.
