@@ -703,7 +703,8 @@ func runDecommissionRandomized(ctx context.Context, t test.Test, c cluster.Clust
 			t.L().Printf("expected to fail: restarting [n%d,n%d] and attempting to recommission through n%d\n",
 				targetNodeA, targetNodeB, runNode)
 			c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.Nodes(targetNodeA, targetNodeB))
-			c.Start(ctx, t.L(), option.DefaultStartOpts(), settings, c.Nodes(targetNodeA, targetNodeB))
+			// The node is in a decomissioned state, so don't attempt to run scheduled backups.
+			c.Start(ctx, t.L(), option.DefaultStartOptsNoBackups(), settings, c.Nodes(targetNodeA, targetNodeB))
 
 			if _, err := h.recommission(ctx, c.Nodes(targetNodeA, targetNodeB), runNode); err == nil {
 				t.Fatalf("expected recommission to fail")
