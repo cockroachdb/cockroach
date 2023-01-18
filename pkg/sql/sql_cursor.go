@@ -243,6 +243,9 @@ func (p *planner) CloseCursor(ctx context.Context, n *tree.CloseCursor) (planNod
 	return &delayedNode{
 		name: n.String(),
 		constructor: func(ctx context.Context, p *planner) (planNode, error) {
+			if n.All {
+				return newZeroNode(nil /* columns */), p.sqlCursors.closeAll(false /* errorOnWithHold */)
+			}
 			return newZeroNode(nil /* columns */), p.sqlCursors.closeCursor(n.Name)
 		},
 	}, nil
