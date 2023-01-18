@@ -52,9 +52,11 @@ const transactionMapStateToProps = (
   state: AdminUIState,
   _props: RouteComponentProps,
 ): TransactionInsightsViewStateProps => ({
+  isDataValid: state.cachedData.txnInsights?.valid,
+  lastUpdated: state.cachedData.txnInsights?.setAt,
   transactions: selectTransactionInsights(state),
-  transactionsError: state.cachedData?.transactionInsights?.lastError,
   insightTypes: selectInsightTypes(),
+  transactionsError: state.cachedData?.txnInsights?.lastError,
   filters: filtersLocalSetting.selector(state),
   sortSetting: sortSettingLocalSetting.selector(state),
   timeScale: selectTimeScale(state),
@@ -65,6 +67,8 @@ const statementMapStateToProps = (
   state: AdminUIState,
   _props: RouteComponentProps,
 ): StatementInsightsViewStateProps => ({
+  isDataValid: state.cachedData.stmtInsights?.valid,
+  lastUpdated: state.cachedData.stmtInsights?.setAt,
   statements: selectStmtInsights(state),
   statementsError: state.cachedData?.stmtInsights?.lastError,
   filters: filtersLocalSetting.selector(state),
