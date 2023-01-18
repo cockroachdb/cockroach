@@ -49,9 +49,11 @@ export function* updateSQLStatsTimeScaleSaga(
       value: ts,
     }),
   );
-  yield put(sqlStatsActions.invalidated());
-  yield put(stmtInsightActions.invalidated());
-  yield put(txnInsightActions.invalidated());
+  yield all([
+    put(sqlStatsActions.invalidated()),
+    put(stmtInsightActions.invalidated()),
+    put(txnInsightActions.invalidated()),
+  ]);
 }
 
 export function* resetSQLStatsSaga(action: PayloadAction<StatementsRequest>) {

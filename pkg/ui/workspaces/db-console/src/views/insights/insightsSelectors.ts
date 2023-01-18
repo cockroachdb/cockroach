@@ -43,21 +43,18 @@ export const sortSettingLocalSetting = new LocalSetting<
 
 export const selectTransactionInsights = createSelector(
   (state: AdminUIState) =>
-    state.cachedData.transactionInsights?.valid
-      ? state.cachedData.transactionInsights?.data
+    state.cachedData.txnInsights?.valid
+      ? state.cachedData.txnInsights?.data
       : null,
   selectTxnInsightsCombiner,
 );
 
 export const selectTransactionInsightsLoading = (state: AdminUIState) =>
-  !state.cachedData.transactionInsights?.valid &&
-  state.cachedData.transactionInsights?.inFlight;
+  state.cachedData.txnInsights?.inFlight &&
+  (!state.cachedData.txnInsights?.valid || !state.cachedData.txnInsights?.data);
 
 const selectTxnContentionInsightDetails = createSelector(
-  [
-    (state: AdminUIState) => state.cachedData.transactionInsightDetails,
-    selectID,
-  ],
+  [(state: AdminUIState) => state.cachedData.txnInsightDetails, selectID],
   (insight, insightId: string): TxnContentionInsightDetails => {
     if (!insight) {
       return null;
@@ -81,7 +78,7 @@ export const selectTxnInsightDetails = createSelector(
 );
 
 export const selectTransactionInsightDetailsError = createSelector(
-  (state: AdminUIState) => state.cachedData.transactionInsightDetails,
+  (state: AdminUIState) => state.cachedData.txnInsightDetails,
   selectID,
   (insight, insightId): Error | null => {
     if (!insight) {
@@ -91,9 +88,13 @@ export const selectTransactionInsightDetailsError = createSelector(
   },
 );
 
+// Data is showed as loading when the request is in flight AND we have
+// no data, (i.e. first request), or the current loaded data is
+// invalid (e.g. time range changed)
 export const selectStmtInsightsLoading = (state: AdminUIState) =>
-  !state.cachedData.stmtInsights?.valid &&
-  state.cachedData.stmtInsights?.inFlight;
+  state.cachedData.stmtInsights?.inFlight &&
+  (!state.cachedData.stmtInsights?.data ||
+    !state.cachedData.stmtInsights.valid);
 
 export const selectStmtInsights = (state: AdminUIState) =>
   state.cachedData?.stmtInsights?.valid

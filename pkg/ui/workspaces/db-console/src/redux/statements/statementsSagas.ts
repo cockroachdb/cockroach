@@ -123,10 +123,12 @@ export function* setCombinedStatementsTimeScaleSaga(
 ) {
   const ts = action.payload;
 
-  yield put(setTimeScale(ts));
-  yield put(invalidateStatements());
-  yield put(invalidateExecutionInsights());
-  yield put(invalidateTransactionInsights());
+  yield all([
+    put(setTimeScale(ts)),
+    put(invalidateStatements()),
+    put(invalidateExecutionInsights()),
+    put(invalidateTransactionInsights()),
+  ]);
 }
 
 export function* statementsSaga() {
