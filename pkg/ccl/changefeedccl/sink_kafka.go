@@ -307,8 +307,10 @@ func (s *kafkaSink) newSyncProducer(client kafkaClient) (sarama.SyncProducer, er
 
 // Close implements the Sink interface.
 func (s *kafkaSink) Close() error {
-	close(s.stopWorkerCh)
-	s.worker.Wait()
+	if s.stopWorkerCh != nil {
+		close(s.stopWorkerCh)
+		s.worker.Wait()
+	}
 
 	if s.producer != nil {
 		// Ignore errors related to outstanding messages since we're either shutting
