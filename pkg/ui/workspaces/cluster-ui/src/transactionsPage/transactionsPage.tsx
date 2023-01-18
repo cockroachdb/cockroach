@@ -92,11 +92,13 @@ export interface TransactionsPageStateProps {
   pageSize?: number;
   search: string;
   sortSetting: SortSetting;
+  hasAdminRole?: UIConfigState["hasAdminRole"];
 }
 
 export interface TransactionsPageDispatchProps {
   refreshData: (req: StatementsRequest) => void;
   refreshNodes: () => void;
+  refreshUserSQLRoles: () => void;
   resetSQLStats: (req: StatementsRequest) => void;
   onTimeScaleChange?: (ts: TimeScale) => void;
   onColumnsChange?: (selectedColumns: string[]) => void;
@@ -196,6 +198,7 @@ export class TransactionsPage extends React.Component<
 
   componentDidMount(): void {
     this.refreshData();
+    this.props.refreshUserSQLRoles();
     if (!this.props.isTenant) {
       this.props.refreshNodes();
     }
@@ -357,6 +360,7 @@ export class TransactionsPage extends React.Component<
       columns: userSelectedColumnsToShow,
       sortSetting,
       search,
+      hasAdminRole,
     } = this.props;
     const internal_app_name_prefix = data?.internal_app_name_prefix || "";
     const statements = data?.statements || [];
@@ -433,12 +437,14 @@ export class TransactionsPage extends React.Component<
               setTimeScale={this.changeTimeScale}
             />
           </PageConfigItem>
-          <PageConfigItem className={commonStyles("separator")}>
-            <ClearStats
-              resetSQLStats={this.resetSQLStats}
-              tooltipType="transaction"
-            />
-          </PageConfigItem>
+          {hasAdminRole && (
+            <PageConfigItem className={commonStyles("separator")}>
+              <ClearStats
+                resetSQLStats={this.resetSQLStats}
+                tooltipType="transaction"
+              />
+            </PageConfigItem>
+          )}
         </PageConfig>
         <div className={cx("table-area")}>
           <Loading
