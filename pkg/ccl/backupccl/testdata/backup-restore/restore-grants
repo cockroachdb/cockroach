@@ -451,6 +451,8 @@ query-sql
 SHOW GRANTS ON SCHEMA testdb.public
 ----
 testdb public admin ALL true
+testdb public public CREATE false
+testdb public public USAGE false
 testdb public root ALL true
 
 query-sql
@@ -542,8 +544,9 @@ query-sql
 SHOW GRANTS ON SCHEMA testdb.public
 ----
 testdb public admin ALL true
+testdb public public CREATE false
+testdb public public USAGE false
 testdb public root ALL true
-testdb public testuser ALL true
 
 query-sql
 SHOW GRANTS ON testdb.sc.othertable
@@ -591,10 +594,13 @@ SELECT owner FROM [SHOW SCHEMAS] WHERE schema_name = 'sc'
 ----
 testuser
 
+# In postgres, the user "postgres" is the owner of the public schema in a
+# newly created db. In CockroachDB, admin is our substitute for the postgres
+# user.
 query-sql
 SELECT owner FROM [SHOW SCHEMAS] WHERE schema_name = 'public'
 ----
-testuser
+admin
 
 # Ensure that testuser is the owner of the type.
 query-sql
