@@ -929,12 +929,6 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	r.traceMessageSends(msgApps, "sending msgApp")
 	r.sendRaftMessagesRaftMuLocked(ctx, msgApps, pausedFollowers)
 
-	// TODO(pavelkalinnikov): find a way to move it to storeEntries.
-	if !raft.IsEmptyHardState(rd.HardState) {
-		if !r.IsInitialized() && rd.HardState.Commit != 0 {
-			log.Fatalf(ctx, "setting non-zero HardState.Commit on uninitialized replica %s. HS=%+v", r, rd.HardState)
-		}
-	}
 	// TODO(pavelkalinnikov): construct and store this in Replica.
 	// TODO(pavelkalinnikov): fields like raftEntryCache are the same across all
 	// ranges, so can be passed to LogStore methods instead of being stored in it.
@@ -949,8 +943,20 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			RaftLogCommitLatency: r.store.metrics.RaftLogCommitLatency,
 		},
 	}
-	if state, err = s.StoreEntries(ctx, state, logstore.MakeReady(rd), &stats.append); err != nil {
-		return stats, errors.Wrap(err, "while storing log entries")
+	if r.IsInitialized() {
+		if state, err = s.StoreEntries(ctx, state, logstore.MakeReady(rd), &stats.append); err != nil {
+			return stats, errors.Wrap(err, "while storing log entries")
+		}
+	} else { // TODO(pavelkalinnikov): move asserts to StoreEntries.
+		if rd.HardState.Commit != 0 {
+			log.Fatalf(ctx, "setting non-zero HardState.Commit on uninitialized replica %s. HS=%+v", r, rd.HardState)
+		}
+		if len(rd.Entries) > 0 {
+			log.Fatalf(ctx, "appending entries in uninitialized replica: %v", r)
+		}
+		if len(rd.CommittedEntries) != 0 {
+			log.Fatalf(ctx, "committing entries in uninitialized replica: %v", r)
+		}
 	}
 
 	// Update protected state - last index, last term, raft log size, and raft
@@ -1494,6 +1500,15 @@ func (r *Replica) sendRaftMessagesRaftMuLocked(
 
 // sendRaftMessageRaftMuLocked sends a Raft message.
 func (r *Replica) sendRaftMessageRaftMuLocked(ctx context.Context, msg raftpb.Message) {
+	// An uninitialized replica must not vote. This is guaranteed by filtering out
+	// incoming vote messages, so there must be no outgoing Resp messages.
+	if !r.IsInitialized() {
+		switch msg.Type {
+		case raftpb.MsgVoteResp, raftpb.MsgPreVoteResp:
+			log.Fatalf(ctx, "uninitialized replica tried to vote: %+v", msg)
+		}
+	}
+
 	r.mu.RLock()
 	fromReplica, fromErr := r.getReplicaDescriptorByIDRLocked(roachpb.ReplicaID(msg.From), r.raftMu.lastToReplica)
 	toReplica, toErr := r.getReplicaDescriptorByIDRLocked(roachpb.ReplicaID(msg.To), r.raftMu.lastFromReplica)
