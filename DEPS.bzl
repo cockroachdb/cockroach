@@ -9284,10 +9284,10 @@ def go_deps():
         name = "org_golang_google_api",
         build_file_proto_mode = "disable_global",
         importpath = "google.golang.org/api",
-        sha256 = "13442f94637aa7d95d31a99dcf144e91d3d71d478ee18b8db7a88e9cf021c558",
-        strip_prefix = "google.golang.org/api@v0.80.0",
+        sha256 = "b3378c579f4f4340403038305907d672c86f615f8233118a8873ebe4229c4f39",
+        strip_prefix = "github.com/cockroachdb/google-api-go-client@v0.80.1-0.20221117193156-6a9f7150cb93",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/google.golang.org/api/org_golang_google_api-v0.80.0.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/google-api-go-client/com_github_cockroachdb_google_api_go_client-v0.80.1-0.20221117193156-6a9f7150cb93.zip",
         ],
     )
     go_repository(
