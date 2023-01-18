@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
 )
 
@@ -24,8 +25,11 @@ import (
 //  2. binding is referenced at most once in expr.
 func (c *CustomFuncs) CanInlineWith(binding, expr memo.RelExpr, private *memo.WithPrivate) bool {
 	// If materialization is set, ignore the checks below.
-	if private.Mtr.Set {
-		return !private.Mtr.Materialize
+	if private.Mtr == tree.CTEMaterializeAlways {
+		return false
+	}
+	if private.Mtr == tree.CTEMaterializeNever {
+		return true
 	}
 	if binding.Relational().VolatilitySet.HasVolatile() {
 		return false
@@ -65,12 +69,14 @@ func (c *CustomFuncs) InlineWith(binding, input memo.RelExpr, priv *memo.WithPri
 }
 
 // CanInlineWithScan returns whether or not it's valid and heuristically cheaper
-// to inline a WithScanExpr with its bound expression from the memo. Currently
+// to inline a WithScanExpr with its bound expression from the memo. Currently,
 // this only allows inlining leak-proof constant VALUES clauses of the form
 // `column IN (VALUES(...))` or `column NOT IN(VALUES(...))`, but could likely
-// be extended to handle other expressions in the future.
+// be extended to handle other expressions in the future. This function always
+// returns false if the MATERIALIZED option was provided in the CTE.
 func (c *CustomFuncs) CanInlineWithScan(private *memo.WithScanPrivate, scalar opt.ScalarExpr) bool {
-	if !private.CanInlineInPlace {
+	// Never inline if MATERIALIZED was specified.
+	if private.Mtr == tree.CTEMaterializeAlways {
 		return false
 	}
 	// If we don't have `column IN(...)` or `column NOT IN(...)` or
