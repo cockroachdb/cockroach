@@ -12,7 +12,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 7 of 7;
     │
     ├── • Stage 1 of 2 in PostCommitNonRevertiblePhase
     │   │
-    │   ├── • 8 elements transitioning toward ABSENT
+    │   ├── • 7 elements transitioning toward ABSENT
     │   │   │
     │   │   ├── • SecondaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}
     │   │   │   │ WRITE_ONLY → DELETE_ONLY
@@ -44,9 +44,6 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 7 of 7;
     │   │   │   └── • PreviousStagePrecedence dependency from WRITE_ONLY TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}
     │   │   │         rule: "TemporaryIndex transitions to ABSENT uphold 2-version invariant: WRITE_ONLY->DELETE_ONLY"
     │   │   │
-    │   │   ├── • SecondaryIndexPartial:{DescID: 106, IndexID: 3}
-    │   │   │     PUBLIC → ABSENT
-    │   │   │
     │   │   ├── • IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 3}
     │   │   │   │ PUBLIC → ABSENT
     │   │   │   │
@@ -62,6 +59,10 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 7 of 7;
     │   └── • 10 Mutation operations
     │       │
     │       ├── • MakeWriteOnlyIndexDeleteOnly
+    │       │     IndexID: 2
+    │       │     TableID: 106
+    │       │
+    │       ├── • RemoveDroppedIndexPartialPredicate
     │       │     IndexID: 2
     │       │     TableID: 106
     │       │
@@ -85,10 +86,6 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 7 of 7;
     │       │     IndexID: 3
     │       │     TableID: 106
     │       │
-    │       ├── • RemoveDroppedIndexPartialPredicate
-    │       │     IndexID: 3
-    │       │     TableID: 106
-    │       │
     │       ├── • RemoveColumnFromIndex
     │       │     ColumnID: 2
     │       │     IndexID: 3
@@ -106,21 +103,17 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 7 of 7;
     │       └── • UpdateSchemaChangerJob
     │             IsNonCancelable: true
     │             JobID: 1
-    │             RunningStatus: PostCommitNonRevertiblePhase stage 2 of 2 with 5 MutationType ops pending
+    │             RunningStatus: PostCommitNonRevertiblePhase stage 2 of 2 with 4 MutationType ops pending
     │
     └── • Stage 2 of 2 in PostCommitNonRevertiblePhase
         │
-        ├── • 5 elements transitioning toward ABSENT
+        ├── • 4 elements transitioning toward ABSENT
         │   │
         │   ├── • SecondaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}
         │   │   │ DELETE_ONLY → ABSENT
         │   │   │
         │   │   ├── • PreviousStagePrecedence dependency from DELETE_ONLY SecondaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}
         │   │   │     rule: "SecondaryIndex transitions to ABSENT uphold 2-version invariant: DELETE_ONLY->ABSENT"
-        │   │   │
-        │   │   ├── • SameStagePrecedence dependency from ABSENT SecondaryIndexPartial:{DescID: 106, IndexID: 2}
-        │   │   │     rule: "dependents removed before index"
-        │   │   │     rule: "partial predicate removed right before secondary index when not dropping relation"
         │   │   │
         │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 2}
         │   │   │     rule: "dependents removed before index"
@@ -130,9 +123,6 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 7 of 7;
         │   │   │
         │   │   └── • Precedence dependency from ABSENT IndexName:{DescID: 106, Name: idx1, IndexID: 2}
         │   │         rule: "dependents removed before index"
-        │   │
-        │   ├── • SecondaryIndexPartial:{DescID: 106, IndexID: 2}
-        │   │     PUBLIC → ABSENT
         │   │
         │   ├── • IndexData:{DescID: 106, IndexID: 2}
         │   │   │ PUBLIC → ABSENT
@@ -145,9 +135,6 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 7 of 7;
         │   │   │
         │   │   ├── • PreviousStagePrecedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}
         │   │   │     rule: "TemporaryIndex transitions to ABSENT uphold 2-version invariant: DELETE_ONLY->ABSENT"
-        │   │   │
-        │   │   ├── • Precedence dependency from ABSENT SecondaryIndexPartial:{DescID: 106, IndexID: 3}
-        │   │   │     rule: "dependents removed before index"
         │   │   │
         │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 3}
         │   │   │     rule: "dependents removed before index"
@@ -164,15 +151,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 7 of 7;
         │       └── • Precedence dependency from ABSENT TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}
         │             rule: "index removed before garbage collection"
         │
-        └── • 7 Mutation operations
-            │
-            ├── • RemoveDroppedIndexPartialPredicate
-            │     IndexID: 2
-            │     TableID: 106
-            │
-            ├── • MakeIndexAbsent
-            │     IndexID: 3
-            │     TableID: 106
+        └── • 6 Mutation operations
             │
             ├── • MakeIndexAbsent
             │     IndexID: 2
@@ -183,6 +162,10 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 7 of 7;
             │     StatementForDropJob:
             │       Rollback: true
             │       Statement: CREATE INDEX idx1 ON defaultdb.public.t (v) WHERE (v = 'a')
+            │     TableID: 106
+            │
+            ├── • MakeIndexAbsent
+            │     IndexID: 3
             │     TableID: 106
             │
             ├── • CreateGCJobForIndex

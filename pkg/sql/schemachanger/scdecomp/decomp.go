@@ -551,15 +551,21 @@ func (w *walkCtx) walkIndex(tbl catalog.TableDescriptor, idx catalog.Index) {
 		if idx.GetEncodingType() == catenumpb.PrimaryIndexEncoding {
 			w.ev(idxStatus, &scpb.PrimaryIndex{Index: index})
 		} else {
-			sec := &scpb.SecondaryIndex{Index: index}
+			sec := &scpb.SecondaryIndex{
+				Index: index,
+			}
 			if idx.IsPartial() {
 				pp, err := w.newExpression(idx.GetPredicate())
 				onErrPanic(err)
-				w.ev(scpb.Status_PUBLIC, &scpb.SecondaryIndexPartial{
-					TableID:    index.TableID,
-					IndexID:    index.IndexID,
-					Expression: *pp,
-				})
+				if w.clusterVersion.IsActive(clusterversion.V23_1_SchemaChangerDeprecatedIndexPredicates) {
+					sec.EmbeddedExpr = pp
+				} else {
+					w.ev(scpb.Status_PUBLIC, &scpb.SecondaryIndexPartial{
+						TableID:    index.TableID,
+						IndexID:    index.IndexID,
+						Expression: *pp,
+					})
+				}
 			}
 			w.ev(idxStatus, sec)
 		}

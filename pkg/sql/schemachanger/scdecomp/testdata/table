@@ -311,6 +311,7 @@ ElementState:
   Status: PUBLIC
 - SecondaryIndex:
     constraintId: 0
+    expr: id > 0:::INT8
     geoConfig: null
     indexId: 2
     isConcurrently: false
@@ -318,10 +319,14 @@ ElementState:
     isInverted: false
     isNotVisible: false
     isUnique: false
+    referencedColumnIds:
+    - 1
     sharding: null
     sourceIndexId: 0
     tableId: 105
     temporaryIndexId: 0
+    usesSequenceIds: []
+    usesTypeIds: []
   Status: PUBLIC
 - UniqueWithoutIndexConstraint:
     columnIds:
@@ -583,15 +588,6 @@ ElementState:
     indexId: 2
     name: sec
     tableId: 105
-  Status: PUBLIC
-- SecondaryIndexPartial:
-    expr: id > 0:::INT8
-    indexId: 2
-    referencedColumnIds:
-    - 1
-    tableId: 105
-    usesSequenceIds: []
-    usesTypeIds: []
   Status: PUBLIC
 - IndexComment:
     comment: tbl_pkey is a primary key

@@ -84,9 +84,15 @@ func Build(
 			// Explicitly-set targets have non-zero values in the target metadata.
 			continue
 		}
-		if !version.IsActive(screl.MinVersion(e.element)) {
+		if !version.IsActive(screl.MinElementVersion(e.element)) {
 			// Exclude targets which are not yet usable in the currently active
 			// cluster version.
+			continue
+		}
+		maxVersion := screl.MaxElementVersion(e.element)
+		if maxVersion != nil && version.IsActive(*maxVersion) {
+			// Exclude the target which are no longer allowed at the active
+			// max version.
 			continue
 		}
 		t := scpb.MakeTarget(e.target, e.element, &e.metadata)

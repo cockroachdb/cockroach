@@ -275,7 +275,7 @@ func ForEachElementInActiveVersion(
 	vep := reflect.ValueOf(ep)
 	for i := 0; i < vep.NumField(); i++ {
 		e := vep.Field(i).Interface().(scpb.Element)
-		if version.IsActive(screl.MinVersion(e)) {
+		if version.IsActive(screl.MinElementVersion(e)) {
 			if err := fn(e); err != nil {
 				return iterutil.Map(err)
 			}
