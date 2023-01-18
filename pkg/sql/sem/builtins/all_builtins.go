@@ -98,7 +98,8 @@ func addResolvedFuncDef(
 }
 
 func registerBuiltin(name string, def builtinDefinition) {
-	for _, overload := range def.overloads {
+	for i := range def.overloads {
+		overload := &def.overloads[i]
 		fnCount := 0
 		if overload.Fn != nil {
 			fnCount++
