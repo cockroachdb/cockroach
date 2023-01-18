@@ -14,9 +14,8 @@ import (
 	"context"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 )
 
@@ -55,8 +54,7 @@ type TenantUsageServer interface {
 	//
 	ReconfigureTokenBucket(
 		ctx context.Context,
-		txn *kv.Txn,
-		ie sqlutil.InternalExecutor,
+		ie isql.Txn,
 		tenantID roachpb.TenantID,
 		availableRU float64,
 		refillRate float64,

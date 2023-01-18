@@ -50,8 +50,9 @@ func loadSchedules(
 	}
 
 	execCfg := p.ExecCfg()
-	env := sql.JobSchedulerEnv(execCfg)
-	schedule, err := jobs.LoadScheduledJob(ctx, env, int64(scheduleID), execCfg.InternalExecutor, p.Txn())
+	env := sql.JobSchedulerEnv(execCfg.JobsKnobs())
+	schedules := jobs.ScheduledJobTxn(p.InternalSQLTxn())
+	schedule, err := schedules.Load(ctx, env, int64(scheduleID))
 	if err != nil {
 		return s, err
 	}
@@ -74,7 +75,7 @@ func loadSchedules(
 	var dependentStmt *tree.Backup
 
 	if args.DependentScheduleID != 0 {
-		dependentSchedule, err = jobs.LoadScheduledJob(ctx, env, args.DependentScheduleID, execCfg.InternalExecutor, p.Txn())
+		dependentSchedule, err = schedules.Load(ctx, env, args.DependentScheduleID)
 		if err != nil {
 			return scheduleDetails{}, err
 		}
@@ -188,10 +189,11 @@ func doAlterBackupSchedules(
 	if err != nil {
 		return err
 	}
+	scheduledJobs := jobs.ScheduledJobTxn(p.InternalSQLTxn())
 	s.fullJob.SetExecutionDetails(
 		tree.ScheduledBackupExecutor.InternalName(),
 		jobspb.ExecutionArguments{Args: fullAny})
-	if err := s.fullJob.Update(ctx, p.ExecCfg().InternalExecutor, p.Txn()); err != nil {
+	if err := scheduledJobs.Update(ctx, s.fullJob); err != nil {
 		return err
 	}
 
@@ -204,7 +206,8 @@ func doAlterBackupSchedules(
 		s.incJob.SetExecutionDetails(
 			tree.ScheduledBackupExecutor.InternalName(),
 			jobspb.ExecutionArguments{Args: incAny})
-		if err := s.incJob.Update(ctx, p.ExecCfg().InternalExecutor, p.Txn()); err != nil {
+
+		if err := scheduledJobs.Update(ctx, s.incJob); err != nil {
 			return err
 		}
 
@@ -382,8 +385,8 @@ func processFullBackupRecurrence(
 		return s, nil
 	}
 
-	env := sql.JobSchedulerEnv(p.ExecCfg())
-	ex := p.ExecCfg().InternalExecutor
+	env := sql.JobSchedulerEnv(p.ExecCfg().JobsKnobs())
+	scheduledJobs := jobs.ScheduledJobTxn(p.InternalSQLTxn())
 	if fullBackupAlways {
 		if s.incJob == nil {
 			// Nothing to do.
@@ -396,7 +399,7 @@ func processFullBackupRecurrence(
 		}
 		s.fullArgs.DependentScheduleID = 0
 		s.fullArgs.UnpauseOnSuccess = 0
-		if err := s.incJob.Delete(ctx, ex, p.Txn()); err != nil {
+		if err := scheduledJobs.Delete(ctx, s.incJob); err != nil {
 			return scheduleDetails{}, err
 		}
 		s.incJob = nil
@@ -453,7 +456,7 @@ func processFullBackupRecurrence(
 			tree.ScheduledBackupExecutor.InternalName(),
 			jobspb.ExecutionArguments{Args: incAny})
 
-		if err := s.incJob.Create(ctx, ex, p.Txn()); err != nil {
+		if err := scheduledJobs.Create(ctx, s.incJob); err != nil {
 			return scheduleDetails{}, err
 		}
 		s.fullArgs.UnpauseOnSuccess = s.incJob.ScheduleID()
@@ -480,7 +483,7 @@ func validateFullIncrementalFrequencies(p sql.PlanHookState, s scheduleDetails) 
 	if s.incJob == nil {
 		return nil
 	}
-	env := sql.JobSchedulerEnv(p.ExecCfg())
+	env := sql.JobSchedulerEnv(p.ExecCfg().JobsKnobs())
 	now := env.Now()
 
 	fullFreq, err := frequencyFromCron(now, s.fullJob.ScheduleExpr())
@@ -536,7 +539,7 @@ func processInto(p sql.PlanHookState, spec *alterBackupScheduleSpec, s scheduleD
 
 	// Kick off a full backup immediately so we can unpause incrementals.
 	// This mirrors the behavior of CREATE SCHEDULE FOR BACKUP.
-	env := sql.JobSchedulerEnv(p.ExecCfg())
+	env := sql.JobSchedulerEnv(p.ExecCfg().JobsKnobs())
 	s.fullJob.SetNextRun(env.Now())
 
 	return nil

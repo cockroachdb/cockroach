@@ -43,7 +43,7 @@ SELECT replace(job_type, 'NEW SCHEMA CHANGE', 'SCHEMA CHANGE'), status
 					job_type = 'SCHEMA CHANGE'
 					AND description != 'updating privileges'
 				)
-		);
+		) ORDER BY 1, 2;
 ----
 SCHEMA CHANGE     succeeded
 SCHEMA CHANGE     succeeded

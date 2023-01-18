@@ -21,12 +21,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/sslocal"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -37,9 +36,8 @@ import (
 // Config is a configuration struct for the persisted SQL stats subsystem.
 type Config struct {
 	Settings                *cluster.Settings
-	InternalExecutor        sqlutil.InternalExecutor
 	InternalExecutorMonitor *mon.BytesMonitor
-	KvDB                    *kv.DB
+	DB                      isql.DB
 	SQLIDContainer          *base.SQLIDContainer
 	JobRegistry             *jobs.Registry
 
@@ -88,8 +86,7 @@ func New(cfg *Config, memSQLStats *sslocal.SQLStats) *PersistedSQLStats {
 
 	p.jobMonitor = jobMonitor{
 		st:           cfg.Settings,
-		ie:           cfg.InternalExecutor,
-		db:           cfg.KvDB,
+		db:           cfg.DB,
 		scanInterval: defaultScanInterval,
 		jitterFn:     p.jitterInterval,
 	}
@@ -111,7 +108,7 @@ func (s *PersistedSQLStats) Start(ctx context.Context, stopper *stop.Stopper) {
 
 // GetController returns the controller of the PersistedSQLStats.
 func (s *PersistedSQLStats) GetController(server serverpb.SQLStatusServer) *Controller {
-	return NewController(s, server, s.cfg.KvDB, s.cfg.InternalExecutor)
+	return NewController(s, server, s.cfg.DB)
 }
 
 func (s *PersistedSQLStats) startSQLStatsFlushLoop(ctx context.Context, stopper *stop.Stopper) {

@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -28,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -92,10 +92,11 @@ func testJobsProtectedTimestamp(
 			DescriptorIDs: []descpb.ID{42},
 		}
 	}
+	insqlDB := execCfg.InternalDB
 	mkJobAndRecord := func() (j *jobs.Job, rec *ptpb.Record) {
 		ts := clock.Now()
 		jobID := jr.MakeJobID()
-		require.NoError(t, execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
+		require.NoError(t, insqlDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) (err error) {
 			if j, err = jr.CreateJobWithTxn(ctx, mkJobRec(), jobID, txn); err != nil {
 				return err
 			}
@@ -103,21 +104,21 @@ func testJobsProtectedTimestamp(
 			targetToProtect := ptpb.MakeClusterTarget()
 			rec = jobsprotectedts.MakeRecord(uuid.MakeV4(), int64(jobID), ts,
 				deprecatedSpansToProtect, jobsprotectedts.Jobs, targetToProtect)
-			return ptp.Protect(ctx, txn, rec)
+			return ptp.WithTxn(txn).Protect(ctx, rec)
 		}))
 		return j, rec
 	}
 	jMovedToFailed, recMovedToFailed := mkJobAndRecord()
-	require.NoError(t, execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+	require.NoError(t, insqlDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		return jr.Failed(ctx, txn, jMovedToFailed.ID(), io.ErrUnexpectedEOF)
 	}))
 	jFinished, recFinished := mkJobAndRecord()
-	require.NoError(t, execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+	require.NoError(t, insqlDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		return jr.Succeeded(ctx, txn, jFinished.ID())
 	}))
 	_, recRemains := mkJobAndRecord()
-	ensureNotExists := func(ctx context.Context, txn *kv.Txn, ptsID uuid.UUID) (err error) {
-		_, err = ptp.GetRecord(ctx, txn, ptsID)
+	ensureNotExists := func(ctx context.Context, txn isql.Txn, ptsID uuid.UUID) (err error) {
+		_, err = ptp.WithTxn(txn).GetRecord(ctx, ptsID)
 		if err == nil {
 			return errors.New("found pts record, waiting for ErrNotExists")
 		}
@@ -127,14 +128,14 @@ func testJobsProtectedTimestamp(
 		return errors.Wrap(err, "waiting for ErrNotExists")
 	}
 	testutils.SucceedsSoon(t, func() (err error) {
-		return execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		return insqlDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 			if err := ensureNotExists(ctx, txn, recMovedToFailed.ID.GetUUID()); err != nil {
 				return err
 			}
 			if err := ensureNotExists(ctx, txn, recFinished.ID.GetUUID()); err != nil {
 				return err
 			}
-			_, err := ptp.GetRecord(ctx, txn, recRemains.ID.GetUUID())
+			_, err := ptp.WithTxn(txn).GetRecord(ctx, recRemains.ID.GetUUID())
 			require.NoError(t, err)
 			return err
 		})
@@ -212,6 +213,7 @@ func testSchedulesProtectedTimestamp(
 ) {
 	t.Helper()
 
+	insqlDB := execCfg.InternalDB
 	mkScheduledJobRec := func(scheduleLabel string) *jobs.ScheduledJob {
 		j := jobs.NewScheduledJob(scheduledjobs.ProdJobSchedulerEnv)
 		j.SetScheduleLabel(scheduleLabel)
@@ -225,24 +227,25 @@ func testSchedulesProtectedTimestamp(
 		ts := clock.Now()
 		var rec *ptpb.Record
 		var sj *jobs.ScheduledJob
-		require.NoError(t, execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
+		require.NoError(t, insqlDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) (err error) {
+			schedules := jobs.ScheduledJobTxn(txn)
 			sj = mkScheduledJobRec(scheduleLabel)
-			require.NoError(t, sj.Create(ctx, execCfg.InternalExecutor, txn))
+			require.NoError(t, schedules.Create(ctx, sj))
 			deprecatedSpansToProtect := roachpb.Spans{{Key: keys.MinKey, EndKey: keys.MaxKey}}
 			targetToProtect := ptpb.MakeClusterTarget()
 			rec = jobsprotectedts.MakeRecord(uuid.MakeV4(), sj.ScheduleID(), ts,
 				deprecatedSpansToProtect, jobsprotectedts.Schedules, targetToProtect)
-			return ptp.Protect(ctx, txn, rec)
+			return ptp.WithTxn(txn).Protect(ctx, rec)
 		}))
 		return sj, rec
 	}
 	sjDropped, recScheduleDropped := mkScheduleAndRecord("drop")
-	_, err := execCfg.InternalExecutor.Exec(ctx, "drop-schedule", nil,
+	_, err := insqlDB.Executor().Exec(ctx, "drop-schedule", nil,
 		`DROP SCHEDULE $1`, sjDropped.ScheduleID())
 	require.NoError(t, err)
 	_, recSchedule := mkScheduleAndRecord("do-not-drop")
-	ensureNotExists := func(ctx context.Context, txn *kv.Txn, ptsID uuid.UUID) (err error) {
-		_, err = ptp.GetRecord(ctx, txn, ptsID)
+	ensureNotExists := func(ctx context.Context, txn isql.Txn, ptsID uuid.UUID) (err error) {
+		_, err = ptp.WithTxn(txn).GetRecord(ctx, ptsID)
 		if err == nil {
 			return errors.New("found pts record, waiting for ErrNotExists")
 		}
@@ -252,11 +255,11 @@ func testSchedulesProtectedTimestamp(
 		return errors.Wrap(err, "waiting for ErrNotExists")
 	}
 	testutils.SucceedsSoon(t, func() (err error) {
-		return execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		return insqlDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 			if err := ensureNotExists(ctx, txn, recScheduleDropped.ID.GetUUID()); err != nil {
 				return err
 			}
-			_, err := ptp.GetRecord(ctx, txn, recSchedule.ID.GetUUID())
+			_, err := ptp.WithTxn(txn).GetRecord(ctx, recSchedule.ID.GetUUID())
 			require.NoError(t, err)
 			return err
 		})

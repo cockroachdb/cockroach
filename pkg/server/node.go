@@ -43,7 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
@@ -399,7 +399,7 @@ func NewNode(
 	return n
 }
 
-// InitLogger connects the Node to the InternalExecutor to be used for event
+// InitLogger connects the Node to the Executor to be used for event
 // logging.
 func (n *Node) InitLogger(execCfg *sql.ExecutorConfig) {
 	n.execCfg = execCfg
@@ -1803,7 +1803,7 @@ func (n *Node) TokenBucket(
 var NewTenantUsageServer = func(
 	settings *cluster.Settings,
 	db *kv.DB,
-	ief sqlutil.InternalExecutorFactory,
+	ief isql.DB,
 ) multitenant.TenantUsageServer {
 	return dummyTenantUsageServer{}
 }
@@ -1824,8 +1824,7 @@ func (dummyTenantUsageServer) TokenBucketRequest(
 // ReconfigureTokenBucket is defined in the TenantUsageServer interface.
 func (dummyTenantUsageServer) ReconfigureTokenBucket(
 	ctx context.Context,
-	txn *kv.Txn,
-	ie sqlutil.InternalExecutor,
+	txn isql.Txn,
 	tenantID roachpb.TenantID,
 	availableRU float64,
 	refillRate float64,

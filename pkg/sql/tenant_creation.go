@@ -20,14 +20,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -102,7 +103,15 @@ func (p *planner) createTenantInternal(
 
 	// Create the record. This also auto-allocates an ID if the
 	// tenantID was zero.
-	if _, err := CreateTenantRecord(ctx, p.ExecCfg(), p.Txn(), info, initialTenantZoneConfig); err != nil {
+	if _, err := CreateTenantRecord(
+		ctx,
+		p.ExecCfg().Codec,
+		p.ExecCfg().Settings,
+		p.InternalSQLTxn(),
+		p.ExecCfg().SpanConfigKVAccessor.WithTxn(ctx, p.Txn()),
+		info,
+		initialTenantZoneConfig,
+	); err != nil {
 		return tid, err
 	}
 	// Retrieve the possibly auto-generated ID.
@@ -181,20 +190,22 @@ func (p *planner) createTenantInternal(
 // consulting the system.tenants table.
 func CreateTenantRecord(
 	ctx context.Context,
-	execCfg *ExecutorConfig,
-	txn *kv.Txn,
+	codec keys.SQLCodec,
+	settings *cluster.Settings,
+	txn isql.Txn,
+	spanConfigs spanconfig.KVAccessor,
 	info *descpb.TenantInfoWithUsage,
 	initialTenantZoneConfig *zonepb.ZoneConfig,
 ) (roachpb.TenantID, error) {
 	const op = "create"
-	if err := rejectIfCantCoordinateMultiTenancy(execCfg.Codec, op); err != nil {
+	if err := rejectIfCantCoordinateMultiTenancy(codec, op); err != nil {
 		return roachpb.TenantID{}, err
 	}
 	if err := rejectIfSystemTenant(info.ID, op); err != nil {
 		return roachpb.TenantID{}, err
 	}
 	if info.Name != "" {
-		if !execCfg.Settings.Version.IsActive(ctx, clusterversion.V23_1TenantNames) {
+		if !settings.Version.IsActive(ctx, clusterversion.V23_1TenantNames) {
 			return roachpb.TenantID{}, pgerror.Newf(pgcode.FeatureNotSupported, "cannot use tenant names")
 		}
 		if err := info.Name.IsValid(); err != nil {
@@ -204,7 +215,7 @@ func CreateTenantRecord(
 
 	tenID := info.ID
 	if tenID == 0 {
-		tenantID, err := getAvailableTenantID(ctx, info.Name, execCfg, txn)
+		tenantID, err := getAvailableTenantID(ctx, info.Name, txn)
 		if err != nil {
 			return roachpb.TenantID{}, err
 		}
@@ -214,7 +225,7 @@ func CreateTenantRecord(
 
 	if info.Name == "" {
 		// No name: generate one if we are at the appropriate version.
-		if execCfg.Settings.Version.IsActive(ctx, clusterversion.V23_1TenantNames) {
+		if settings.Version.IsActive(ctx, clusterversion.V23_1TenantNames) {
 			info.Name = roachpb.TenantName(fmt.Sprintf("tenant-%d", info.ID))
 		}
 	}
@@ -227,12 +238,12 @@ func CreateTenantRecord(
 
 	// Insert into the tenant table and detect collisions.
 	if info.Name != "" {
-		if !execCfg.Settings.Version.IsActive(ctx, clusterversion.V23_1TenantNames) {
+		if !settings.Version.IsActive(ctx, clusterversion.V23_1TenantNames) {
 			return roachpb.TenantID{}, pgerror.Newf(pgcode.FeatureNotSupported, "cannot use tenant names")
 		}
 	}
-	if num, err := execCfg.InternalExecutor.ExecEx(
-		ctx, "create-tenant", txn, sessiondata.NodeUserSessionDataOverride,
+	if num, err := txn.ExecEx(
+		ctx, "create-tenant", txn.KV(), sessiondata.NodeUserSessionDataOverride,
 		`INSERT INTO system.tenants (id, active, info) VALUES ($1, $2, $3)`,
 		tenID, active, infoBytes,
 	); err != nil {
@@ -245,7 +256,7 @@ func CreateTenantRecord(
 		}
 		return roachpb.TenantID{}, errors.Wrap(err, "inserting new tenant")
 	} else if num != 1 {
-		logcrash.ReportOrPanic(ctx, &execCfg.Settings.SV, "inserting tenant %+v: unexpected number of rows affected: %d", info, num)
+		logcrash.ReportOrPanic(ctx, &settings.SV, "inserting tenant %+v: unexpected number of rows affected: %d", info, num)
 	}
 
 	if u := info.Usage; u != nil {
@@ -253,8 +264,8 @@ func CreateTenantRecord(
 		if err != nil {
 			return roachpb.TenantID{}, errors.Wrap(err, "marshaling tenant usage data")
 		}
-		if num, err := execCfg.InternalExecutor.ExecEx(
-			ctx, "create-tenant-usage", txn, sessiondata.NodeUserSessionDataOverride,
+		if num, err := txn.ExecEx(
+			ctx, "create-tenant-usage", txn.KV(), sessiondata.NodeUserSessionDataOverride,
 			`INSERT INTO system.tenant_usage (
 			  tenant_id, instance_id, next_instance_id, last_update,
 			  ru_burst_limit, ru_refill_rate, ru_current, current_share_sum,
@@ -272,7 +283,7 @@ func CreateTenantRecord(
 			}
 			return roachpb.TenantID{}, errors.Wrap(err, "inserting tenant usage data")
 		} else if num != 1 {
-			logcrash.ReportOrPanic(ctx, &execCfg.Settings.SV, "inserting usage %+v for %v: unexpected number of rows affected: %d", u, tenID, num)
+			logcrash.ReportOrPanic(ctx, &settings.SV, "inserting usage %+v for %v: unexpected number of rows affected: %d", u, tenID, num)
 		}
 	}
 
@@ -312,8 +323,7 @@ func CreateTenantRecord(
 		return roachpb.TenantID{}, err
 	}
 	toUpsert := []spanconfig.Record{record}
-	scKVAccessor := execCfg.SpanConfigKVAccessor.WithTxn(ctx, txn)
-	return roachpb.MustMakeTenantID(tenID), scKVAccessor.UpdateSpanConfigRecords(
+	return roachpb.MustMakeTenantID(tenID), spanConfigs.UpdateSpanConfigRecords(
 		ctx, nil, toUpsert, hlc.MinTimestamp, hlc.MaxTimestamp,
 	)
 }
@@ -322,19 +332,19 @@ func CreateTenantRecord(
 func (p *planner) GetAvailableTenantID(
 	ctx context.Context, tenantName roachpb.TenantName,
 ) (roachpb.TenantID, error) {
-	return getAvailableTenantID(ctx, tenantName, p.ExecCfg(), p.Txn())
+	return getAvailableTenantID(ctx, tenantName, p.InternalSQLTxn())
 }
 
 // getAvailableTenantID returns the first available ID that can be assigned to
 // the created tenant. Note, this ID could have previously belonged to another
 // tenant that has since been dropped and gc'ed.
 func getAvailableTenantID(
-	ctx context.Context, tenantName roachpb.TenantName, execCfg *ExecutorConfig, txn *kv.Txn,
+	ctx context.Context, tenantName roachpb.TenantName, txn isql.Txn,
 ) (roachpb.TenantID, error) {
 	// Find the first available ID that can be assigned to the created tenant.
 	// Note, this ID could have previously belonged to another tenant that has
 	// since been dropped and gc'ed.
-	row, err := execCfg.InternalExecutor.QueryRowEx(ctx, "next-tenant-id", txn,
+	row, err := txn.QueryRowEx(ctx, "next-tenant-id", txn.KV(),
 		sessiondata.NodeUserSessionDataOverride, `
    SELECT id+1 AS newid
     FROM (VALUES (1) UNION ALL SELECT id FROM system.tenants) AS u(id)

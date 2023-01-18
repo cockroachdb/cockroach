@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/rowencpb"
@@ -618,7 +619,7 @@ func TestMergeProcessor(t *testing.T) {
 		mm := mon.NewUnlimitedMonitor(ctx, "MemoryMonitor", mon.MemoryResource, nil, nil, math.MaxInt64, settings)
 		flowCtx := execinfra.FlowCtx{
 			Cfg: &execinfra.ServerConfig{
-				DB:                kvDB,
+				DB:                execCfg.InternalDB,
 				Settings:          settings,
 				Codec:             codec,
 				BackfillerMonitor: mm,
@@ -676,14 +677,14 @@ func TestMergeProcessor(t *testing.T) {
 		}
 
 		require.NoError(t, sql.DescsTxn(ctx, &execCfg, func(
-			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) error {
-			mut, err := descriptors.MutableByID(txn).Table(ctx, tableDesc.GetID())
+			ctx context.Context, txn isql.Txn, descriptors *descs.Collection) error {
+			mut, err := descriptors.MutableByID(txn.KV()).Table(ctx, tableDesc.GetID())
 			if err != nil {
 				return err
 			}
 
 			require.Equal(t, test.dstContentsBeforeMerge,
-				datumSliceToStrMatrix(fetchIndex(ctx, t, txn, mut, test.dstIndex)))
+				datumSliceToStrMatrix(fetchIndex(ctx, t, txn.KV(), mut, test.dstIndex)))
 
 			return nil
 		}))
@@ -709,14 +710,14 @@ func TestMergeProcessor(t *testing.T) {
 		}
 
 		require.NoError(t, sql.DescsTxn(ctx, &execCfg, func(
-			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) error {
-			mut, err := descriptors.MutableByID(txn).Table(ctx, tableDesc.GetID())
+			ctx context.Context, txn isql.Txn, descriptors *descs.Collection) error {
+			mut, err := descriptors.MutableByID(txn.KV()).Table(ctx, tableDesc.GetID())
 			if err != nil {
 				return err
 			}
 
 			require.Equal(t, test.dstContentsAfterMerge,
-				datumSliceToStrMatrix(fetchIndex(ctx, t, txn, mut, test.dstIndex)))
+				datumSliceToStrMatrix(fetchIndex(ctx, t, txn.KV(), mut, test.dstIndex)))
 			return nil
 		}))
 	}

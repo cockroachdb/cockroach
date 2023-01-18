@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -87,9 +87,7 @@ func checkMetadata(
 		tc.Servers[0].ClusterSettings(),
 		blobs.TestEmptyBlobClientFactory,
 		username.RootUserName(),
-		tc.Servers[0].InternalExecutor().(*sql.InternalExecutor),
-		tc.Servers[0].InternalExecutorFactory().(sqlutil.InternalExecutorFactory),
-		tc.Servers[0].DB(),
+		tc.Servers[0].InternalDB().(isql.DB),
 		nil, /* limiters */
 		cloud.NilMetrics,
 	)
@@ -104,7 +102,7 @@ func checkMetadata(
 	srv := tc.Servers[0]
 	execCfg := srv.ExecutorConfig().(sql.ExecutorConfig)
 	kmsEnv := backupencryption.MakeBackupKMSEnv(srv.ClusterSettings(), &base.ExternalIODirConfig{},
-		srv.DB(), username.RootUserName(), execCfg.InternalExecutor)
+		execCfg.InternalDB, username.RootUserName())
 	bm, err := backupinfo.NewBackupMetadata(ctx, store, backupinfo.MetadataSSTName,
 		nil /* encryption */, &kmsEnv)
 	if err != nil {

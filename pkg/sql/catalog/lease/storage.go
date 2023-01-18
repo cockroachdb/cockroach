@@ -27,10 +27,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/catkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/validate"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -47,14 +47,13 @@ import (
 // the manager. Some of these fields belong on the manager, in any case, since
 // they're only used by the manager and not by the store itself.
 type storage struct {
-	nodeIDContainer  *base.SQLIDContainer
-	db               *kv.DB
-	clock            *hlc.Clock
-	internalExecutor sqlutil.InternalExecutor
-	settings         *cluster.Settings
-	codec            keys.SQLCodec
-	regionPrefix     *atomic.Value
-	sysDBCache       *catkv.SystemDatabaseCache
+	nodeIDContainer *base.SQLIDContainer
+	db              isql.DB
+	clock           *hlc.Clock
+	settings        *cluster.Settings
+	codec           keys.SQLCodec
+	regionPrefix    *atomic.Value
+	sysDBCache      *catkv.SystemDatabaseCache
 
 	// group is used for all calls made to acquireNodeLease to prevent
 	// concurrent lease acquisitions from the store.
@@ -175,7 +174,7 @@ func (s storage) acquire(
 	// Run a retry loop to deal with AmbiguousResultErrors. All other error types
 	// are propagated up to the caller.
 	for r := retry.StartWithCtx(ctx, retry.Options{}); r.Next(); {
-		err := s.db.Txn(ctx, acquireInTxn)
+		err := s.db.KV().Txn(ctx, acquireInTxn)
 		var pErr *roachpb.AmbiguousResultError
 		switch {
 		case errors.As(err, &pErr):
@@ -251,7 +250,7 @@ func (s storage) getForExpiration(
 	ctx context.Context, expiration hlc.Timestamp, id descpb.ID,
 ) (catalog.Descriptor, error) {
 	var desc catalog.Descriptor
-	err := s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+	err := s.db.KV().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		prevTimestamp := expiration.Prev()
 		err := txn.SetFixedTimestamp(ctx, prevTimestamp)
 		if err != nil {

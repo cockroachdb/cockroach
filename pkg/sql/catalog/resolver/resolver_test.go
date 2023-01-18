@@ -16,7 +16,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -26,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
@@ -613,10 +613,10 @@ CREATE TABLE c (a INT, INDEX idx2(a));`,
 		require.NoError(t, protoutil.Unmarshal(sessionSerialized, &sessionData))
 	}
 
-	err := sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
+	err := sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
 		execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 		planner, cleanup := sql.NewInternalPlanner(
-			"resolve-index", txn, username.RootUserName(), &sql.MemoryMetrics{}, &execCfg, sessionData,
+			"resolve-index", txn.KV(), username.RootUserName(), &sql.MemoryMetrics{}, &execCfg, sessionData,
 		)
 		defer cleanup()
 
@@ -627,7 +627,7 @@ CREATE TABLE c (a INT, INDEX idx2(a));`,
 		searchPath := ec.SessionData().SearchPath.GetPathArray()
 		ec.SessionData().SearchPath = ec.SessionData().SearchPath.UpdatePaths(append([]string{"test_sc"}, searchPath...))
 		schemaResolver := sql.NewSkippingCacheSchemaResolver(
-			col, ec.SessionDataStack, txn, planner.(scbuild.AuthorizationAccessor),
+			col, ec.SessionDataStack, txn.KV(), planner.(scbuild.AuthorizationAccessor),
 		)
 
 		// Make sure we're looking at correct default db and search path.
@@ -676,12 +676,12 @@ CREATE TABLE baz (i INT PRIMARY KEY, s STRING);
 CREATE INDEX baz_idx ON baz (s);
 `)
 
-	err := sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
+	err := sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
 		tn := tree.NewTableNameWithSchema("defaultdb", "public", "baz")
-		_, tbl, err := descs.PrefixAndMutableTable(ctx, col.MutableByName(txn), tn)
+		_, tbl, err := descs.PrefixAndMutableTable(ctx, col.MutableByName(txn.KV()), tn)
 		require.NoError(t, err)
 		tbl.SetOffline("testing-index-resolving")
-		err = col.WriteDesc(ctx, false, tbl, txn)
+		err = col.WriteDesc(ctx, false, tbl, txn.KV())
 		require.NoError(t, err)
 		return nil
 	})
@@ -694,10 +694,10 @@ CREATE INDEX baz_idx ON baz (s);
 		require.NoError(t, protoutil.Unmarshal(sessionSerialized, &sessionData))
 	}
 
-	err = sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
+	err = sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
 		execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 		planner, cleanup := sql.NewInternalPlanner(
-			"resolve-index", txn, username.RootUserName(), &sql.MemoryMetrics{}, &execCfg, sessionData,
+			"resolve-index", txn.KV(), username.RootUserName(), &sql.MemoryMetrics{}, &execCfg, sessionData,
 		)
 		defer cleanup()
 
@@ -705,7 +705,7 @@ CREATE INDEX baz_idx ON baz (s);
 		// Set "defaultdb" as current database.
 		ec.SessionData().Database = "defaultdb"
 		schemaResolver := sql.NewSkippingCacheSchemaResolver(
-			col, ec.SessionDataStack, txn, planner.(scbuild.AuthorizationAccessor),
+			col, ec.SessionDataStack, txn.KV(), planner.(scbuild.AuthorizationAccessor),
 		)
 		// Make sure we're looking at correct default db and search path.
 		require.Equal(t, "defaultdb", schemaResolver.CurrentDatabase())

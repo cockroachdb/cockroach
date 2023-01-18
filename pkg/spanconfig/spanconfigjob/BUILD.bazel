@@ -9,11 +9,11 @@ go_library(
     deps = [
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
-        "//pkg/kv",
         "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/spanconfig",
         "//pkg/sql",
+        "//pkg/sql/isql",
         "//pkg/util",
         "//pkg/util/hlc",
         "//pkg/util/log",

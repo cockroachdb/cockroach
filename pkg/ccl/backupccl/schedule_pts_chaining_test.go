@@ -19,10 +19,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
-	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -74,9 +73,9 @@ func checkPTSRecord(
 ) {
 	var ptsRecord *ptpb.Record
 	var err error
-	require.NoError(t, th.server.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		ptsRecord, err = th.server.ExecutorConfig().(sql.ExecutorConfig).ProtectedTimestampProvider.
-			GetRecord(context.Background(), txn, id)
+	require.NoError(t, th.internalDB().Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		ptsRecord, err = th.protectedTimestamps().WithTxn(txn).
+			GetRecord(context.Background(), id)
 		require.NoError(t, err)
 		return nil
 	}))
@@ -104,7 +103,7 @@ INSERT INTO t values (1), (10), (100);
 
 	backupAsOfTimes := make([]time.Time, 0)
 	th.cfg.TestingKnobs.(*jobs.TestingKnobs).OverrideAsOfClause = func(clause *tree.AsOfClause, _ time.Time) {
-		backupAsOfTime := th.cfg.DB.Clock().PhysicalTime()
+		backupAsOfTime := th.cfg.DB.KV().Clock().PhysicalTime()
 		expr, err := tree.MakeDTimestampTZ(backupAsOfTime, time.Microsecond)
 		require.NoError(t, err)
 		clause.Expr = expr
@@ -150,9 +149,11 @@ INSERT INTO t values (1), (10), (100);
 			defer cleanupSchedules()
 			defer func() { backupAsOfTimes = backupAsOfTimes[:0] }()
 
+			schedules := jobs.ScheduledJobDB(th.internalDB())
 			fullSchedule := th.loadSchedule(t, fullID)
-			_, fullArgs, err := getScheduledBackupExecutionArgsFromSchedule(ctx, th.env, nil,
-				th.server.InternalExecutor().(*sql.InternalExecutor), fullID)
+			_, fullArgs, err := getScheduledBackupExecutionArgsFromSchedule(
+				ctx, th.env, schedules, fullID,
+			)
 			require.NoError(t, err)
 
 			// Force full backup to execute (this unpauses incremental).
@@ -160,8 +161,9 @@ INSERT INTO t values (1), (10), (100);
 
 			// Check that there is no PTS record on the full schedule.
 			incSchedule := th.loadSchedule(t, incID)
-			_, incArgs, err := getScheduledBackupExecutionArgsFromSchedule(ctx, th.env, nil,
-				th.server.InternalExecutor().(*sql.InternalExecutor), incID)
+			_, incArgs, err := getScheduledBackupExecutionArgsFromSchedule(
+				ctx, th.env, schedules, incID,
+			)
 			require.NoError(t, err)
 			require.Nil(t, fullArgs.ProtectedTimestampRecord)
 
@@ -182,7 +184,7 @@ INSERT INTO t values (1), (10), (100);
 			// to re-run the full schedule.
 			incSchedule = th.loadSchedule(t, incSchedule.ScheduleID())
 			incSchedule.Pause()
-			require.NoError(t, incSchedule.Update(context.Background(), th.cfg.InternalExecutor, nil))
+			require.NoError(t, schedules.Update(ctx, incSchedule))
 
 			clearSuccessfulJobEntryForSchedule(t, fullSchedule)
 
@@ -193,15 +195,16 @@ INSERT INTO t values (1), (10), (100);
 			// Check that the pts record on the inc schedule has been overwritten with a new
 			// record written by the full backup.
 			incSchedule = th.loadSchedule(t, incSchedule.ScheduleID())
-			_, incArgs, err = getScheduledBackupExecutionArgsFromSchedule(ctx, th.env, nil,
-				th.server.InternalExecutor().(*sql.InternalExecutor), incID)
+			_, incArgs, err = getScheduledBackupExecutionArgsFromSchedule(
+				ctx, th.env, schedules, incID,
+			)
 			require.NoError(t, err)
 			require.NotEqual(t, *ptsOnIncID, *incArgs.ProtectedTimestampRecord)
 
 			// Check that the old pts record has been released.
-			require.NoError(t, th.cfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-				_, err := th.server.ExecutorConfig().(sql.ExecutorConfig).ProtectedTimestampProvider.GetRecord(
-					ctx, txn, *ptsOnIncID)
+			require.NoError(t, th.cfg.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+				pts := th.protectedTimestamps().WithTxn(txn)
+				_, err := pts.GetRecord(ctx, *ptsOnIncID)
 				require.True(t, errors.Is(err, protectedts.ErrNotExists))
 				return nil
 			}))
@@ -227,7 +230,7 @@ INSERT INTO t values (1), (10), (100);
 
 	backupAsOfTimes := make([]time.Time, 0)
 	th.cfg.TestingKnobs.(*jobs.TestingKnobs).OverrideAsOfClause = func(clause *tree.AsOfClause, _ time.Time) {
-		backupAsOfTime := th.cfg.DB.Clock().PhysicalTime()
+		backupAsOfTime := th.cfg.DB.KV().Clock().PhysicalTime()
 		expr, err := tree.MakeDTimestampTZ(backupAsOfTime, time.Microsecond)
 		require.NoError(t, err)
 		clause.Expr = expr
@@ -265,9 +268,12 @@ INSERT INTO t values (1), (10), (100);
 		defer cleanupSchedules()
 		defer func() { backupAsOfTimes = backupAsOfTimes[:0] }()
 
+		schedules := jobs.ScheduledJobDB(th.internalDB())
+
 		fullSchedule := th.loadSchedule(t, fullID)
-		_, fullArgs, err := getScheduledBackupExecutionArgsFromSchedule(ctx, th.env, nil,
-			th.server.InternalExecutor().(*sql.InternalExecutor), fullID)
+		_, fullArgs, err := getScheduledBackupExecutionArgsFromSchedule(
+			ctx, th.env, schedules, fullID,
+		)
 		require.NoError(t, err)
 		// Force full backup to execute (this unpauses incremental).
 		runSchedule(t, fullSchedule)
@@ -277,8 +283,9 @@ INSERT INTO t values (1), (10), (100);
 
 		// Check that there is a PTS record on the incremental schedule.
 		incSchedule := th.loadSchedule(t, incID)
-		_, incArgs, err := getScheduledBackupExecutionArgsFromSchedule(ctx, th.env, nil,
-			th.server.InternalExecutor().(*sql.InternalExecutor), incID)
+		_, incArgs, err := getScheduledBackupExecutionArgsFromSchedule(
+			ctx, th.env, schedules, incID,
+		)
 		require.NoError(t, err)
 		ptsOnIncID := incArgs.ProtectedTimestampRecord
 		require.NotNil(t, ptsOnIncID)
@@ -287,14 +294,13 @@ INSERT INTO t values (1), (10), (100);
 
 		th.sqlDB.Exec(t, `DROP SCHEDULE $1`, fullID)
 
-		_, err = jobs.LoadScheduledJob(
-			context.Background(), th.env, incID, th.cfg.InternalExecutor, nil)
+		_, err = schedules.Load(ctx, th.env, incID)
 		require.Error(t, err)
 
 		// Check that the incremental schedule's PTS is dropped
-		require.NoError(t, th.cfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			_, err := th.server.ExecutorConfig().(sql.ExecutorConfig).ProtectedTimestampProvider.GetRecord(
-				ctx, txn, *ptsOnIncID)
+		require.NoError(t, th.cfg.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			pts := th.protectedTimestamps().WithTxn(txn)
+			_, err := pts.GetRecord(ctx, *ptsOnIncID)
 			require.True(t, errors.Is(err, protectedts.ErrNotExists))
 			return nil
 		}))
@@ -319,7 +325,7 @@ INSERT INTO t values (1), (10), (100);
 
 	backupAsOfTimes := make([]time.Time, 0)
 	th.cfg.TestingKnobs.(*jobs.TestingKnobs).OverrideAsOfClause = func(clause *tree.AsOfClause, _ time.Time) {
-		backupAsOfTime := th.cfg.DB.Clock().PhysicalTime()
+		backupAsOfTime := th.cfg.DB.KV().Clock().PhysicalTime()
 		expr, err := tree.MakeDTimestampTZ(backupAsOfTime, time.Microsecond)
 		require.NoError(t, err)
 		clause.Expr = expr
@@ -346,9 +352,11 @@ INSERT INTO t values (1), (10), (100);
 
 	// Check that the incremental schedule has a protected timestamp record
 	// written on it by the full schedule.
+	schedules := jobs.ScheduledJobDB(th.internalDB())
 	incSchedule := th.loadSchedule(t, incID)
-	_, incArgs, err := getScheduledBackupExecutionArgsFromSchedule(ctx, th.env, nil,
-		th.server.InternalExecutor().(*sql.InternalExecutor), incID)
+	_, incArgs, err := getScheduledBackupExecutionArgsFromSchedule(
+		ctx, th.env, schedules, incID,
+	)
 	require.NoError(t, err)
 	ptsOnIncID := incArgs.ProtectedTimestampRecord
 	require.NotNil(t, ptsOnIncID)
@@ -364,8 +372,9 @@ INSERT INTO t values (1), (10), (100);
 	require.Zero(t, numRows)
 
 	// Also ensure that the full schedule doesn't have DependentID set anymore.
-	_, fullArgs, err := getScheduledBackupExecutionArgsFromSchedule(ctx, th.env, nil,
-		th.server.InternalExecutor().(*sql.InternalExecutor), fullID)
+	_, fullArgs, err := getScheduledBackupExecutionArgsFromSchedule(
+		ctx, th.env, schedules, fullID,
+	)
 	require.NoError(t, err)
 	require.Zero(t, fullArgs.DependentScheduleID)
 }
@@ -388,7 +397,7 @@ INSERT INTO t select x, y from generate_series(1, 100) as g(x), generate_series(
 
 	backupAsOfTimes := make([]time.Time, 0)
 	th.cfg.TestingKnobs.(*jobs.TestingKnobs).OverrideAsOfClause = func(clause *tree.AsOfClause, _ time.Time) {
-		backupAsOfTime := th.cfg.DB.Clock().PhysicalTime()
+		backupAsOfTime := th.cfg.DB.KV().Clock().PhysicalTime()
 		expr, err := tree.MakeDTimestampTZ(backupAsOfTime, time.Microsecond)
 		require.NoError(t, err)
 		clause.Expr = expr
