@@ -81,6 +81,10 @@ type CatalogReader interface {
 		ctx context.Context, txn *kv.Txn, db catalog.DatabaseDescriptor, sc catalog.SchemaDescriptor,
 	) (nstree.Catalog, error)
 
+	// LoadComments returns a catalog with at least the comment of the
+	// given types for the given object. It may include more comments.
+	LoadComments(ctx context.Context, txn *kv.Txn, commentTypes []catalogkeys.CommentType, objID descpb.ID) (nstree.Catalog, error)
+
 	// GetByIDs reads the system.descriptor, system.comments and system.zone
 	// entries for the desired IDs, but looks in the system database cache
 	// first if there is one.
@@ -152,6 +156,23 @@ func (cr catalogReader) ScanAll(ctx context.Context, txn *kv.Txn) (nstree.Catalo
 		scan(ctx, b, codec.IndexPrefix(keys.NamespaceTableID, catconstants.NamespaceTablePrimaryIndexID))
 		scan(ctx, b, catalogkeys.CommentsMetadataPrefix(codec))
 		scan(ctx, b, config.ZonesPrimaryIndexPrefix(codec))
+	})
+	if err != nil {
+		return nstree.Catalog{}, err
+	}
+	return mc.Catalog, nil
+}
+
+// LoadComments is part of the CatalogReader interface.
+func (cr catalogReader) LoadComments(
+	ctx context.Context, txn *kv.Txn, commentTypes []catalogkeys.CommentType, objID descpb.ID,
+) (nstree.Catalog, error) {
+	var mc nstree.MutableCatalog
+	cq := catalogQuery{codec: cr.codec}
+	err := cq.query(ctx, txn, &mc, func(codec keys.SQLCodec, b *kv.Batch) {
+		for _, ct := range commentTypes {
+			scan(ctx, b, catalogkeys.MakeObjectCommentsMetadataPrefix(codec, ct, objID))
+		}
 	})
 	if err != nil {
 		return nstree.Catalog{}, err

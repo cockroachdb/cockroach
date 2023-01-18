@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
@@ -405,29 +406,26 @@ var informationSchemaColumnsTable = virtualSchemaTable{
 https://www.postgresql.org/docs/9.5/infoschema-columns.html`,
 	schema: vtable.InformationSchemaColumns,
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		colCommentType := []catalogkeys.CommentType{catalogkeys.ColumnCommentType}
 		// Get the collations for all comments of current database.
-		comments, err := getComments(ctx, p)
-		if err != nil {
-			return err
-		}
-		// Push all comments of columns into map.
-		commentMap := make(map[tree.DInt]map[tree.DInt]string)
-		for _, comment := range comments {
-			objID := tree.MustBeDInt(comment[0])
-			objSubID := tree.MustBeDInt(comment[1])
-			description := comment[2].String()
-			commentType := tree.MustBeDInt(comment[3])
-			if commentType == 2 {
-				if commentMap[objID] == nil {
-					commentMap[objID] = make(map[tree.DInt]string)
-				}
-				commentMap[objID][objSubID] = description
-			}
-		}
-
 		return forEachTableDesc(ctx, p, dbContext, virtualMany, func(
 			db catalog.DatabaseDescriptor, sc catalog.SchemaDescriptor, table catalog.TableDescriptor,
 		) error {
+			// Push all comments of columns into map.
+			commentMap := make(map[uint32]string)
+			columnComments, err := p.Descriptors().LoadComments(ctx, p.Txn(), colCommentType, table.GetID())
+			if err != nil {
+				return err
+			}
+			columnComments.ForEachCommentOnDescriptor(
+				table.GetID(), func(key catalogkeys.CommentKey, cmt string) error {
+					if key.CommentType != catalogkeys.ColumnCommentType {
+						return nil
+					}
+					commentMap[key.SubID] = cmt
+					return nil
+				})
+
 			dbNameStr := tree.NewDString(db.GetName())
 			scNameStr := tree.NewDString(sc.GetName())
 			for _, column := range table.AccessibleColumns() {
@@ -473,10 +471,10 @@ https://www.postgresql.org/docs/9.5/infoschema-columns.html`,
 					}
 				}
 
-				// Match the comment belonging to current column from map,using table id and column id
-				tableID := tree.DInt(table.GetID())
-				columnID := tree.DInt(column.GetID())
-				description := commentMap[tableID][columnID]
+				description := tree.DNull
+				if cmt, ok := commentMap[uint32(column.GetPGAttributeNum())]; ok {
+					description = tree.NewDString(cmt)
+				}
 
 				// udt_schema is set to pg_catalog for builtin types. If, however, the
 				// type is a user defined type, then we should fill this value based on
@@ -508,7 +506,7 @@ https://www.postgresql.org/docs/9.5/infoschema-columns.html`,
 					scNameStr,                         // table_schema
 					tree.NewDString(table.GetName()),  // table_name
 					tree.NewDString(column.GetName()), // column_name
-					tree.NewDString(description),      // column_comment
+					description,                       // column_comment
 					tree.NewDInt(tree.DInt(column.GetPGAttributeNum())), // ordinal_position
 					colDefault,                        // column_default
 					yesOrNoDatum(column.IsNullable()), // is_nullable

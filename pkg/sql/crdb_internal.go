@@ -94,6 +94,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/collector"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
+	"github.com/lib/pq/oid"
 )
 
 // CrdbInternalName is the name of the crdb_internal schema.
@@ -116,6 +117,7 @@ var crdbInternal = virtualSchema{
 		catconstants.CrdbInternalBackwardDependenciesTableID:        crdbInternalBackwardDependenciesTable,
 		catconstants.CrdbInternalBuildInfoTableID:                   crdbInternalBuildInfoTable,
 		catconstants.CrdbInternalBuiltinFunctionsTableID:            crdbInternalBuiltinFunctionsTable,
+		catconstants.CrdbInternalBuiltinFunctionCommentsTableID:     crdbInternalBuiltinFunctionCommentsTable,
 		catconstants.CrdbInternalCatalogCommentsTableID:             crdbInternalCatalogCommentsTable,
 		catconstants.CrdbInternalCatalogDescriptorTableID:           crdbInternalCatalogDescriptorTable,
 		catconstants.CrdbInternalCatalogNamespaceTableID:            crdbInternalCatalogNamespaceTable,
@@ -2737,7 +2739,8 @@ CREATE TABLE crdb_internal.builtin_functions (
   signature STRING NOT NULL,
   category  STRING NOT NULL,
   details   STRING NOT NULL,
-  schema    STRING NOT NULL
+  schema    STRING NOT NULL,
+  oid       OID NOT NULL
 )`,
 	populate: func(ctx context.Context, _ *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		for _, name := range builtins.AllBuiltinNames() {
@@ -2755,6 +2758,35 @@ CREATE TABLE crdb_internal.builtin_functions (
 					tree.NewDString(props.Category),
 					tree.NewDString(f.Info),
 					tree.NewDString(schema),
+					tree.NewDOid(f.Oid),
+				); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	},
+}
+
+// crdbInternalBuiltinFunctionCommentsTable exposes the built-in function
+// comments, for use in pg_catalog.
+var crdbInternalBuiltinFunctionCommentsTable = virtualSchemaTable{
+	comment: "built-in functions (RAM/static)",
+	schema: `
+CREATE TABLE crdb_internal.builtin_function_comments (
+  oid         OID NOT NULL,
+  description STRING NOT NULL
+)`,
+	populate: func(ctx context.Context, _ *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		for _, name := range builtins.AllBuiltinNames() {
+			_, overloads := builtinsregistry.GetBuiltinProperties(name)
+			for _, f := range overloads {
+				if f.Info == "" {
+					continue
+				}
+				if err := addRow(
+					tree.NewDOid(f.Oid),
+					tree.NewDString(f.Info),
 				); err != nil {
 					return err
 				}
@@ -5134,50 +5166,99 @@ var crdbInternalCatalogCommentsTable = virtualSchemaTable{
 	comment: `like system.comments but overlaid with in-txn in-memory changes and including virtual objects`,
 	schema: `
 CREATE TABLE crdb_internal.kv_catalog_comments (
-  type        STRING NOT NULL,
-  object_id   INT NOT NULL,
-  sub_id      INT NOT NULL,
-  comment     STRING NOT NULL
+  classoid    OID NOT NULL,
+  objoid      OID NOT NULL,
+  objsubid    INT4 NOT NULL,
+  description STRING NOT NULL,
+  INDEX(classoid) WHERE classoid = ` + strconv.Itoa(catconstants.PgCatalogDatabaseTableID) + `:::oid
 )`,
+	indexes: []virtualIndex{
+		{
+			populate: func(ctx context.Context, _ tree.Datum, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) (matched bool, err error) {
+				// FIXME: when dbContext is not nil, we want a catalog with
+				// _only_ that db desc and is comment, if any. How to build
+				// it?
+				cat, err := p.Descriptors().GetAllDatabases(ctx, p.txn)
+				if err != nil {
+					return true, err
+				}
+				return true, populateCommentsTable(ctx, p, cat, addRow)
+			},
+		},
+	},
 	populate: func(
 		ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error,
 	) error {
-		all, err := p.Descriptors().GetAll(ctx, p.Txn())
+		var all nstree.Catalog
+		var err error
+		if dbContext != nil {
+			all, err = p.Descriptors().GetAllInDatabase(ctx, p.txn, dbContext)
+		} else {
+			all, err = p.Descriptors().GetAll(ctx, p.txn)
+		}
 		if err != nil {
 			return err
 		}
-		// Delegate privilege check to system table.
-		{
-			sysTable := all.LookupDescriptor(systemschema.CommentsTable.GetID())
-			if ok, err := p.HasPrivilege(ctx, sysTable, privilege.SELECT, p.User()); err != nil {
-				return err
-			} else if !ok {
-				return nil
-			}
-		}
-		// Loop over all comment entries.
-		// NB if ever anyone were to extend this table to carry column
-		// comments, make sure to update pg_catalog.col_description to
-		// retrieve those comments.
-		// TODO(knz): extend this with vtable column comments.
-		for _, ct := range catalogkeys.AllCommentTypes {
-			dct := tree.NewDString(ct.String())
-			if err := all.ForEachComment(func(key catalogkeys.CommentKey, cmt string) error {
-				if ct != key.CommentType {
-					return nil
-				}
-				return addRow(
-					dct,
-					tree.NewDInt(tree.DInt(int64(key.ObjectID))),
-					tree.NewDInt(tree.DInt(int64(key.SubID))),
-					tree.NewDString(cmt),
-				)
-			}); err != nil {
-				return err
-			}
-		}
-		return nil
+		return populateCommentsTable(ctx, p, all, addRow)
 	},
+}
+
+func populateCommentsTable(
+	ctx context.Context, p *planner, cat nstree.Catalog, addRow func(...tree.Datum) error,
+) error {
+	// Delegate privilege check to system table.
+	{
+		sysTable, err := p.LookupTableByID(ctx, systemschema.CommentsTable.GetID())
+		if err != nil {
+			return err
+		}
+		if ok, err := p.HasPrivilege(ctx, sysTable, privilege.SELECT, p.User()); err != nil {
+			return err
+		} else if !ok {
+			return nil
+		}
+	}
+	if err := cat.ForEachComment(func(key catalogkeys.CommentKey, cmt string) error {
+		var classOid, objOid *tree.DOid
+		objSubID := tree.DZero
+		switch key.CommentType {
+		case catalogkeys.DatabaseCommentType:
+			classOid = tree.NewDOid(catconstants.PgCatalogDatabaseTableID)
+			objOid = tree.NewDOid(oid.Oid(key.ObjectID))
+
+		case catalogkeys.SchemaCommentType:
+			classOid = tree.NewDOid(catconstants.PgCatalogNamespaceTableID)
+			objOid = tree.NewDOid(oid.Oid(key.ObjectID))
+
+		case catalogkeys.ColumnCommentType, catalogkeys.TableCommentType:
+			classOid = tree.NewDOid(catconstants.PgCatalogClassTableID)
+			objOid = tree.NewDOid(oid.Oid(key.ObjectID))
+			objSubID = tree.NewDInt(tree.DInt(key.SubID))
+
+		case catalogkeys.IndexCommentType:
+			classOid = tree.NewDOid(catconstants.PgCatalogIndexTableID)
+			objOid = makeOidHasher().IndexOid(descpb.ID(key.ObjectID), descpb.IndexID(key.SubID))
+
+		case catalogkeys.ConstraintCommentType:
+			tableDesc := cat.LookupDescriptor(catid.DescID(key.ObjectID)).(catalog.TableDescriptor)
+			schema := cat.LookupDescriptor(tableDesc.GetParentSchemaID())
+			db := cat.LookupDescriptor(schema.GetParentID())
+			c, err := tableDesc.FindConstraintWithID(descpb.ConstraintID(key.SubID))
+			if err != nil {
+				return err
+			}
+			classOid = tree.NewDOid(catconstants.PgCatalogConstraintTableID)
+			objOid = getOIDFromConstraint(c, db.GetID(), schema.GetID(), tableDesc)
+		}
+
+		return addRow(
+			classOid, objOid, objSubID,
+			tree.NewDString(cmt),
+		)
+	}); err != nil {
+		return err
+	}
+	return nil
 }
 
 type marshaledJobMetadata struct {

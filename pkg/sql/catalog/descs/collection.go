@@ -737,6 +737,11 @@ func (tc *Collection) GetAllDatabases(ctx context.Context, txn *kv.Txn) (nstree.
 	if err != nil {
 		return nstree.Catalog{}, err
 	}
+
+	// FIXME: here probably I want to call LoadComments() with just
+	// DatabaseCommentType. But I only want to do so when the caller is
+	// interested in comments. Not all are.
+
 	ret, err := tc.aggregateAllLayers(ctx, txn, stored)
 	if err != nil {
 		return nstree.Catalog{}, err
@@ -843,8 +848,14 @@ func (tc *Collection) GetAllInDatabase(
 	if err != nil {
 		return nstree.Catalog{}, err
 	}
+
+	// Also ensure the db desc itself is included, which ensures we can
+	// fetch its comment if any below.
+	// FIXME: this does not seem to work. Why?
+	ret.UpsertDescriptor(db)
+
 	var inDatabaseIDs catalog.DescriptorIDSet
-	_ = ret.ForEachDescriptor(func(desc catalog.Descriptor) error {
+	if err := ret.ForEachDescriptor(func(desc catalog.Descriptor) error {
 		if desc.DescriptorType() == catalog.Schema {
 			if dbID := desc.GetParentID(); dbID != descpb.InvalidID && dbID != db.GetID() {
 				return nil
@@ -855,9 +866,30 @@ func (tc *Collection) GetAllInDatabase(
 			}
 		}
 		inDatabaseIDs.Add(desc.GetID())
+
+		// Also include all the comments for this object.
+		// FIXME: This does not seem to be the right place to call this --
+		// it should load comments into `stored` _before_ the call
+		// to aggregateLayers(), so that shadowed comments don't get overwritten.
+		comments, err := tc.cr.LoadComments(ctx, txn, catalogkeys.AllCommentTypes, desc.GetID())
+		if err != nil {
+			return err
+		}
+		ret.AddAll(comments)
 		return nil
-	})
+	}); err != nil {
+		return nstree.Catalog{}, err
+	}
+
 	return ret.FilterByIDs(inDatabaseIDs.Ordered()), nil
+}
+
+// LoadComments extends the given catalog with all comments of the given type
+// associated with descriptors already in the catalog.
+func (tc *Collection) LoadComments(
+	ctx context.Context, txn *kv.Txn, commentTypes []catalogkeys.CommentType, descID descpb.ID,
+) (nstree.Catalog, error) {
+	return tc.cr.LoadComments(ctx, txn, commentTypes, descID)
 }
 
 // GetAllTablesInDatabase is like GetAllInDatabase but filtered to tables.

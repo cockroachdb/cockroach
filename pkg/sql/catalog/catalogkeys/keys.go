@@ -45,6 +45,8 @@ type CommentType int
 //go:generate stringer --type CommentType
 
 // Note: please add the new comment types to AllCommentTypes as well.
+// Note: do not change the numeric values of this enum -- they correspond
+// to stored values in system.comments.
 const (
 	// DatabaseCommentType comment on a database.
 	DatabaseCommentType CommentType = 0

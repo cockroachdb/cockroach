@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
@@ -61,6 +62,7 @@ type byIDStateValue struct {
 	hasScanNamespaceForDatabaseEntries bool
 	hasScanNamespaceForDatabaseSchemas bool
 	hasGetDescriptorEntries            bool
+	hasLoadComments                    bool
 }
 
 type byNameStateValue struct {
@@ -177,6 +179,7 @@ func (c *cachedCatalogReader) ScanAll(ctx context.Context, txn *kv.Txn) (nstree.
 		s.hasScanNamespaceForDatabaseEntries = true
 		s.hasScanNamespaceForDatabaseSchemas = true
 		s.hasGetDescriptorEntries = true
+		s.hasLoadComments = true
 		c.byIDState[id] = s
 	}
 	for ni, s := range c.byNameState {
@@ -286,6 +289,34 @@ func (c *cachedCatalogReader) ScanNamespaceForSchemaObjects(
 		return nstree.Catalog{}, err
 	}
 	return read, nil
+}
+
+// LoadComments is part of the CatalogReader interface.
+func (c *cachedCatalogReader) LoadComments(
+	ctx context.Context, txn *kv.Txn, commentTypes []catalogkeys.CommentType, objID descpb.ID,
+) (nstree.Catalog, error) {
+	if !c.byIDState[objID].hasLoadComments {
+		// Cache miss: need to retrieve the comments from underneath.
+		// In this case we retrieve all comment types, not just the one requested.
+		read, err := c.cr.LoadComments(ctx, txn, catalogkeys.AllCommentTypes, objID)
+		if err != nil {
+			return nstree.Catalog{}, err
+		}
+		if err := c.ensure(ctx, read); err != nil {
+			return nstree.Catalog{}, err
+		}
+		s := c.byIDState[objID]
+		s.hasLoadComments = true
+		c.byIDState[objID] = s
+	}
+
+	var mc nstree.MutableCatalog
+	c.cache.ForEachCommentOnDescriptor(objID, func(key catalogkeys.CommentKey, cmt string) error {
+		mc.UpsertComment(key, cmt)
+		return nil
+	})
+
+	return mc.Catalog, nil
 }
 
 // GetByIDs is part of the CatalogReader interface.

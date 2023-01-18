@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"hash"
 	"hash/fnv"
+	"strconv"
 	"strings"
 	"time"
 	"unicode"
@@ -24,11 +25,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catformat"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
@@ -150,7 +151,7 @@ var pgCatalog = virtualSchema{
 		catconstants.PgCatalogDbRoleSettingTableID:              pgCatalogDbRoleSettingTable,
 		catconstants.PgCatalogDefaultACLTableID:                 pgCatalogDefaultACLTable,
 		catconstants.PgCatalogDependTableID:                     pgCatalogDependTable,
-		catconstants.PgCatalogDescriptionTableID:                pgCatalogDescriptionTable,
+		catconstants.PgCatalogDescriptionTableID:                pgCatalogDescriptionView,
 		catconstants.PgCatalogEnumTableID:                       pgCatalogEnumTable,
 		catconstants.PgCatalogEventTriggerTableID:               pgCatalogEventTriggerTable,
 		catconstants.PgCatalogExtensionTableID:                  pgCatalogExtensionTable,
@@ -195,7 +196,7 @@ var pgCatalog = virtualSchema{
 		catconstants.PgCatalogSequencesTableID:                  pgCatalogSequencesTable,
 		catconstants.PgCatalogSettingsTableID:                   pgCatalogSettingsTable,
 		catconstants.PgCatalogShadowTableID:                     pgCatalogShadowTable,
-		catconstants.PgCatalogSharedDescriptionTableID:          pgCatalogSharedDescriptionTable,
+		catconstants.PgCatalogSharedDescriptionTableID:          pgCatalogSharedDescriptionView,
 		catconstants.PgCatalogSharedSecurityLabelTableID:        pgCatalogSharedSecurityLabelTable,
 		catconstants.PgCatalogShdependTableID:                   pgCatalogShdependTable,
 		catconstants.PgCatalogShmemAllocationsTableID:           pgCatalogShmemAllocationsTable,
@@ -1531,121 +1532,32 @@ https://www.postgresql.org/docs/9.5/catalog-pg-depend.html`,
 	},
 }
 
-// getComments returns all comments in the database. A comment is represented
-// as a datum row, containing object id, sub id (column id in the case of
-// columns), comment text, and comment type (keys.FooCommentType).
-func getComments(ctx context.Context, p *planner) ([]tree.Datums, error) {
-	return p.InternalSQLTxn().QueryBufferedEx(
-		ctx,
-		"select-comments",
-		p.Txn(),
-		sessiondata.NodeUserSessionDataOverride,
-		`SELECT
-	object_id,
-	sub_id,
-	comment,
-	CASE type
-	WHEN 'DatabaseCommentType' THEN 0
-	WHEN 'TableCommentType' THEN 1
-	WHEN 'ColumnCommentType' THEN 2
-	WHEN 'IndexCommentType' THEN 3
-	WHEN 'SchemaCommentType' THEN 4
-	WHEN 'ConstraintCommentType' THEN 5
-	END
-		AS type
-FROM
-	"".crdb_internal.kv_catalog_comments;`)
-}
-
-var pgCatalogDescriptionTable = virtualSchemaTable{
-	comment: `object comments
-https://www.postgresql.org/docs/9.5/catalog-pg-description.html`,
-	schema: vtable.PGCatalogDescription,
-	populate: func(
-		ctx context.Context,
-		p *planner,
-		dbContext catalog.DatabaseDescriptor,
-		addRow func(...tree.Datum) error) error {
-
-		// This is less efficient than it has to be - if we see performance problems
-		// here, we can push the filter into the query that getComments runs,
-		// instead of filtering client-side below.
-		comments, err := getComments(ctx, p)
-		if err != nil {
-			return err
-		}
-		for _, comment := range comments {
-			objID := comment[0]
-			objSubID := comment[1]
-			description := comment[2]
-			commentType := catalogkeys.CommentType(tree.MustBeDInt(comment[3]))
-
-			classOid := oidZero
-
-			switch commentType {
-			case catalogkeys.DatabaseCommentType:
-				// Database comments are exported in pg_shdescription.
-				continue
-			case catalogkeys.SchemaCommentType:
-				// TODO: The type conversion to oid.Oid is safe since we use desc IDs
-				// for this, but it's not ideal. The backing column for objId should be
-				// changed to use the OID type.
-				objID = tree.NewDOid(oid.Oid(tree.MustBeDInt(objID)))
-				classOid = tree.NewDOid(catconstants.PgCatalogNamespaceTableID)
-			case catalogkeys.ColumnCommentType, catalogkeys.TableCommentType:
-				// TODO: The type conversion to oid.Oid is safe since we use desc IDs
-				// for this, but it's not ideal. The backing column for objId should be
-				// changed to use the OID type.
-				objID = tree.NewDOid(oid.Oid(tree.MustBeDInt(objID)))
-				classOid = tree.NewDOid(catconstants.PgCatalogClassTableID)
-			case catalogkeys.ConstraintCommentType:
-				tableDesc, err := p.Descriptors().ByIDWithLeased(p.txn).WithoutNonPublic().Get().Table(ctx, descpb.ID(tree.MustBeDInt(objID)))
-				if err != nil {
-					return err
-				}
-				schema, err := p.Descriptors().ByIDWithLeased(p.txn).WithoutNonPublic().Get().Schema(ctx, tableDesc.GetParentSchemaID())
-				if err != nil {
-					return err
-				}
-				c, err := tableDesc.FindConstraintWithID(descpb.ConstraintID(tree.MustBeDInt(objSubID)))
-				if err != nil {
-					return err
-				}
-				objID = getOIDFromConstraint(c, dbContext.GetID(), schema.GetID(), tableDesc)
-				objSubID = tree.DZero
-				classOid = tree.NewDOid(catconstants.PgCatalogConstraintTableID)
-			case catalogkeys.IndexCommentType:
-				objID = makeOidHasher().IndexOid(
-					descpb.ID(tree.MustBeDInt(objID)),
-					descpb.IndexID(tree.MustBeDInt(objSubID)))
-				objSubID = tree.DZero
-				classOid = tree.NewDOid(catconstants.PgCatalogClassTableID)
-			}
-			if err := addRow(
-				objID,
-				classOid,
-				objSubID,
-				description); err != nil {
-				return err
-			}
-		}
-
-		// Also add all built-in comments.
-		for _, name := range builtins.AllBuiltinNames() {
-			_, overloads := builtinsregistry.GetBuiltinProperties(name)
-			for _, builtin := range overloads {
-				if err := addRow(
-					tree.NewDOid(builtin.Oid),
-					tree.NewDOid(catconstants.PgCatalogProcTableID),
-					tree.DZero,
-					tree.NewDString(builtin.Info),
-				); err != nil {
-					return err
-				}
-			}
-		}
-
-		return nil
+var pgCatalogDescriptionView = virtualSchemaView{
+	// TODO(knz): add an explanatory comment here when this issue is fixed:
+	// https://github.com/cockroachdb/cockroach/issues/95427
+	//
+	// Note, the query uses `crdb_internal.kv_catalog_comments` without
+	// a database prefix. This is intentional: this ensures
+	// kv_catalog_comments only conains rows for the current database,
+	// which is what pg_description expects.
+	schema: `
+CREATE VIEW pg_catalog.pg_description AS SELECT
+  objoid, classoid, objsubid, description
+FROM crdb_internal.kv_catalog_comments
+WHERE classoid != ` + strconv.Itoa(catconstants.PgCatalogDatabaseTableID) + `
+UNION ALL
+SELECT
+  oid AS objoid,
+  ` + strconv.Itoa(catconstants.PgCatalogProcTableID) + `:::oid AS classoid,
+  0:::INT4 AS objsubid,
+  description AS description
+FROM crdb_internal.builtin_function_comments
+`,
+	resultColumns: colinfo.ResultColumns{
+		{Name: "objoid", Typ: types.Oid},
+		{Name: "classoid", Typ: types.Oid},
+		{Name: "objsubid", Typ: types.Int4},
+		{Name: "description", Typ: types.String},
 	},
 }
 
@@ -1696,32 +1608,19 @@ func getOIDFromConstraint(
 	return oid
 }
 
-var pgCatalogSharedDescriptionTable = virtualSchemaTable{
-	comment: `shared object comments
-https://www.postgresql.org/docs/9.5/catalog-pg-shdescription.html`,
-	schema: vtable.PGCatalogSharedDescription,
-	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		// See comment above - could make this more efficient if necessary.
-		comments, err := getComments(ctx, p)
-		if err != nil {
-			return err
-		}
-		for _, comment := range comments {
-			commentType := catalogkeys.CommentType(tree.MustBeDInt(comment[3]))
-			if commentType != catalogkeys.DatabaseCommentType {
-				// Only database comments are exported in this table.
-				continue
-			}
-			classOid := tree.NewDOid(catconstants.PgCatalogDatabaseTableID)
-			objID := descpb.ID(tree.MustBeDInt(comment[0]))
-			if err := addRow(
-				tableOid(objID),
-				classOid,
-				comment[2]); err != nil {
-				return err
-			}
-		}
-		return nil
+// Database comments.
+// https://www.postgresql.org/docs/9.5/catalog-pg-shdescription.html,
+var pgCatalogSharedDescriptionView = virtualSchemaView{
+	// TODO(knz): add an explanatory comment here when this issue is fixed:
+	// https://github.com/cockroachdb/cockroach/issues/95427
+	schema: `
+CREATE VIEW pg_catalog.pg_shdescription AS SELECT objoid, classoid, description
+FROM "".crdb_internal.kv_catalog_comments
+WHERE classoid = ` + strconv.Itoa(catconstants.PgCatalogDatabaseTableID) + `:::oid`,
+	resultColumns: colinfo.ResultColumns{
+		{Name: "objoid", Typ: types.Oid},
+		{Name: "classoid", Typ: types.Oid},
+		{Name: "description", Typ: types.String},
 	},
 }
 
