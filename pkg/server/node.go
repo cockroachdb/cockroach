@@ -303,7 +303,7 @@ func bootstrapCluster(
 	// other than the first one, and let regular node startup code deal with them.
 	var bootstrapVersion clusterversion.ClusterVersion
 	for i, eng := range engines {
-		cv, err := kvserver.ReadClusterVersion(ctx, eng)
+		cv, err := kvstorage.ReadClusterVersion(ctx, eng)
 		if err != nil {
 			return nil, errors.Wrapf(err, "reading cluster version of %s", eng)
 		} else if cv.Major == 0 {
@@ -599,7 +599,7 @@ func (n *Node) SetHLCUpperBound(ctx context.Context, hlcUpperBound int64) error 
 }
 
 func (n *Node) addStore(ctx context.Context, store *kvserver.Store) {
-	cv, err := kvserver.ReadClusterVersion(context.TODO(), store.Engine())
+	cv, err := kvstorage.ReadClusterVersion(context.TODO(), store.Engine())
 	if err != nil {
 		log.Fatalf(ctx, "%v", err)
 	}

@@ -263,7 +263,7 @@ func createTestStoreWithoutStart(
 	if opts.bootstrapVersion != (roachpb.Version{}) {
 		cv = clusterversion.ClusterVersion{Version: opts.bootstrapVersion}
 	}
-	require.NoError(t, WriteClusterVersion(ctx, eng, cv))
+	require.NoError(t, kvstorage.WriteClusterVersion(ctx, eng, cv))
 	if err := kvstorage.InitEngine(
 		ctx, eng, storeIdent,
 	); err != nil {
@@ -493,7 +493,7 @@ func TestInitializeEngineErrors(t *testing.T) {
 	err := kvstorage.InitEngine(ctx, eng, testIdent)
 	require.ErrorContains(t, err, "no cluster version")
 
-	require.NoError(t, WriteClusterVersion(ctx, eng, clusterversion.TestingClusterVersion))
+	require.NoError(t, kvstorage.WriteClusterVersion(ctx, eng, clusterversion.TestingClusterVersion))
 
 	// Put some random garbage into the engine.
 	require.NoError(t, eng.PutUnversioned(roachpb.Key("foo"), []byte("bar")))
