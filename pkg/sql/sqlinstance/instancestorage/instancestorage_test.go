@@ -339,6 +339,52 @@ func TestSQLAccess(t *testing.T) {
 	require.NoError(t, rows.Err())
 }
 
+func TestRefreshSession(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{Locality: roachpb.Locality{Tiers: []roachpb.Tier{{Key: "abc", Value: "xyz"}}}})
+	defer s.Stopper().Stop(ctx)
+
+	c1 := sqlutils.MakeSQLRunner(sqlDB)
+
+	// Everything but the session should stay the same so observe the initial row.
+	rowBeforeNoSession := c1.QueryStr(t, "SELECT id, addr, sql_addr, locality FROM system.sql_instances WHERE id = 1")
+	require.Len(t, rowBeforeNoSession, 1)
+
+	// This initial session should go away once we expire it below, but let's
+	// verify it is there for starters and remember it.
+	sess := c1.QueryStr(t, "SELECT encode(session_id, 'hex') FROM system.sql_instances WHERE id = 1")
+	require.Len(t, sess, 1)
+	require.Len(t, sess[0][0], 38)
+
+	// First let's delete the instance AND expire the session; the instance should
+	// reappear when a new session is acquired, with the new session.
+	c1.ExecRowsAffected(t, 1, "DELETE FROM system.sql_instances WHERE session_id = decode($1, 'hex')", sess[0][0])
+	c1.ExecRowsAffected(t, 1, "DELETE FROM system.sqlliveness WHERE session_id = decode($1, 'hex')", sess[0][0])
+
+	// Wait until we see the right row appear.
+	query := fmt.Sprintf(`SELECT count(*) FROM system.sql_instances WHERE id = 1 AND session_id <> decode('%s', 'hex')`, sess[0][0])
+	c1.CheckQueryResultsRetry(t, query, [][]string{{"1"}})
+
+	// Verify that everything else is the same after recreate.
+	c1.CheckQueryResults(t, "SELECT id, addr, sql_addr, locality FROM system.sql_instances WHERE id = 1", rowBeforeNoSession)
+
+	sess = c1.QueryStr(t, "SELECT encode(session_id, 'hex') FROM system.sql_instances WHERE id = 1")
+	// Now let's just expire the session and leave the row; the instance row
+	// should still become correct once it is updated with the new session.
+	c1.ExecRowsAffected(t, 1, "DELETE FROM system.sqlliveness WHERE session_id = decode($1, 'hex')", sess[0][0])
+
+	// Wait until we see the right row appear.
+	query = fmt.Sprintf(`SELECT count(*) FROM system.sql_instances WHERE id = 1 AND session_id <> decode('%s', 'hex')`, sess[0][0])
+	c1.CheckQueryResultsRetry(t, query, [][]string{{"1"}})
+
+	// Verify everything else is still the same after update.
+	c1.CheckQueryResults(t, "SELECT id, addr, sql_addr, locality FROM system.sql_instances WHERE id = 1", rowBeforeNoSession)
+
+}
+
 // TestConcurrentCreateAndRelease verifies that concurrent access to instancestorage
 // to create and release SQL instance IDs works as expected.
 func TestConcurrentCreateAndRelease(t *testing.T) {
