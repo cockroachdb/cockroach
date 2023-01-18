@@ -785,9 +785,10 @@ func (c *SyncedCluster) createFixedBackupSchedule(
 		externalStoragePath = `nodelocal://1`
 	}
 	l.Printf("%s: creating backup schedule", c.Name)
+	auth := "AUTH=implicit"
 
-	collectionPath := fmt.Sprintf(`%s/roachprod-scheduled-backups/%s/%v`,
-		externalStoragePath, c.Name, timeutil.Now().UnixNano())
+	collectionPath := fmt.Sprintf(`%s/roachprod-scheduled-backups/%s/%v?%s`,
+		externalStoragePath, c.Name, timeutil.Now().UnixNano(), auth)
 
 	// Default scheduled backup runs a full backup every hour and an incremental
 	// every 15 minutes.
