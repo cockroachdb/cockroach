@@ -199,7 +199,6 @@ PreCommitPhase stage 2 of 2 with 111 MutationType ops
     [[IndexColumn:{DescID: 109, ColumnID: 3, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[IndexColumn:{DescID: 109, ColumnID: 4, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[IndexColumn:{DescID: 109, ColumnID: 1, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
-    [[SecondaryIndexPartial:{DescID: 109, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[SecondaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 0}, ABSENT], PUBLIC] -> ABSENT
     [[IndexName:{DescID: 109, Name: partialidx, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 2, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
@@ -499,9 +498,6 @@ PreCommitPhase stage 2 of 2 with 111 MutationType ops
     *scop.MakeWriteOnlyColumnDeleteOnly
       ColumnID: 4294967294
       TableID: 109
-    *scop.RemoveDroppedIndexPartialPredicate
-      IndexID: 2
-      TableID: 109
     *scop.MakeWriteOnlyColumnDeleteOnly
       ColumnID: 1
       TableID: 109
@@ -515,6 +511,9 @@ PreCommitPhase stage 2 of 2 with 111 MutationType ops
       IndexID: 1
       TableID: 109
     *scop.MakeWriteOnlyIndexDeleteOnly
+      IndexID: 2
+      TableID: 109
+    *scop.RemoveDroppedIndexPartialPredicate
       IndexID: 2
       TableID: 109
     *scop.SetIndexName
@@ -1382,18 +1381,6 @@ DROP TABLE defaultdb.shipments CASCADE;
   to:   [IndexName:{DescID: 109, Name: partialidx, IndexID: 2}, ABSENT]
   kind: Precedence
   rule: index no longer public before dependents, excluding columns
-- from: [SecondaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 0}, VALIDATED]
-  to:   [SecondaryIndexPartial:{DescID: 109, IndexID: 2}, ABSENT]
-  kind: Precedence
-  rule: index no longer public before dependents, excluding columns
-- from: [SecondaryIndexPartial:{DescID: 109, IndexID: 2}, ABSENT]
-  to:   [SecondaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 0}, ABSENT]
-  kind: Precedence
-  rule: dependents removed before index
-- from: [SecondaryIndexPartial:{DescID: 109, IndexID: 2}, ABSENT]
-  to:   [Table:{DescID: 109}, ABSENT]
-  kind: Precedence
-  rule: non-data dependents removed before descriptor
 - from: [Sequence:{DescID: 110}, ABSENT]
   to:   [TableData:{DescID: 110, ReferencedDescID: 100}, DROPPED]
   kind: SameStagePrecedence
@@ -1611,10 +1598,6 @@ DROP TABLE defaultdb.shipments CASCADE;
   kind: Precedence
   rule: relation dropped before dependent index
 - from: [Table:{DescID: 109}, DROPPED]
-  to:   [SecondaryIndexPartial:{DescID: 109, IndexID: 2}, ABSENT]
-  kind: Precedence
-  rule: descriptor dropped before dependent element removal
-- from: [Table:{DescID: 109}, DROPPED]
   to:   [SequenceOwner:{DescID: 109, ColumnID: 2, ReferencedDescID: 110}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
@@ -1810,7 +1793,6 @@ PreCommitPhase stage 2 of 2 with 59 MutationType ops
     [[IndexName:{DescID: 114, Name: greeter_pkey, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[IndexColumn:{DescID: 114, ColumnID: 2, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[IndexColumn:{DescID: 114, ColumnID: 3, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
-    [[SecondaryIndexPartial:{DescID: 114, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[SecondaryIndex:{DescID: 114, IndexID: 2, ConstraintID: 0}, ABSENT], PUBLIC] -> ABSENT
     [[IndexName:{DescID: 114, Name: i, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[CheckConstraint:{DescID: 114, ReferencedTypeIDs: [112 113], IndexID: 0, ConstraintID: 2}, ABSENT], PUBLIC] -> ABSENT
@@ -1939,14 +1921,6 @@ PreCommitPhase stage 2 of 2 with 59 MutationType ops
     *scop.MakeWriteOnlyColumnDeleteOnly
       ColumnID: 4294967294
       TableID: 114
-    *scop.RemoveDroppedIndexPartialPredicate
-      IndexID: 2
-      TableID: 114
-    *scop.UpdateTableBackReferencesInTypes
-      BackReferencedTableID: 114
-      TypeIDs:
-      - 112
-      - 113
     *scop.MakeWriteOnlyColumnDeleteOnly
       ColumnID: 2
       TableID: 114
@@ -1965,6 +1939,14 @@ PreCommitPhase stage 2 of 2 with 59 MutationType ops
     *scop.MakeWriteOnlyIndexDeleteOnly
       IndexID: 2
       TableID: 114
+    *scop.RemoveDroppedIndexPartialPredicate
+      IndexID: 2
+      TableID: 114
+    *scop.UpdateTableBackReferencesInTypes
+      BackReferencedTableID: 114
+      TypeIDs:
+      - 112
+      - 113
     *scop.SetIndexName
       IndexID: 2
       Name: crdb_internal_index_2_name_placeholder

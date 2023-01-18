@@ -930,11 +930,7 @@ func maybeAddIndexPredicate(b BuildCtx, n *tree.CreateIndex, idxSpec *indexSpec)
 		return
 	}
 	expr := b.PartialIndexPredicateExpression(idxSpec.secondary.TableID, n.Predicate)
-	idxSpec.partial = &scpb.SecondaryIndexPartial{
-		TableID:    idxSpec.secondary.TableID,
-		IndexID:    idxSpec.secondary.IndexID,
-		Expression: *expr,
-	}
+	idxSpec.secondary.EmbeddedExpr = expr
 	b.IncrementSchemaChangeIndexCounter("partial")
 	if n.Inverted {
 		b.IncrementSchemaChangeIndexCounter("partial_inverted")

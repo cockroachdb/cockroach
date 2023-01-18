@@ -131,3 +131,15 @@ func MinVersion(el scpb.Element) clusterversion.Key {
 		panic(errors.AssertionFailedf("unknown element %T", el))
 	}
 }
+
+// MaxVersion returns the minimum cluster version at which an element may
+// be used.
+func MaxVersion(el scpb.Element) (version *clusterversion.Key) {
+	var v clusterversion.Key
+	switch el.(type) {
+	case *scpb.SecondaryIndexPartial:
+		v = clusterversion.V23_1_SchemaChangerDeprecatedIndexPredicates
+		return &v
+	}
+	return nil
+}

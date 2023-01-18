@@ -168,6 +168,7 @@ ElementState:
   Status: PUBLIC
 - SecondaryIndex:
     constraintId: 0
+    expr: g::STRING = 'hi':::STRING
     geoConfig: null
     indexId: 2
     isConcurrently: false
@@ -175,10 +176,14 @@ ElementState:
     isInverted: false
     isNotVisible: false
     isUnique: false
+    referencedColumnIds:
+    - 2
     sharding: null
     sourceIndexId: 0
     tableId: 108
     temporaryIndexId: 0
+    usesSequenceIds: []
+    usesTypeIds: []
   Status: PUBLIC
 - UniqueWithoutIndexConstraint:
     columnIds:
@@ -492,15 +497,6 @@ ElementState:
     indexId: 2
     name: partial
     tableId: 108
-  Status: PUBLIC
-- SecondaryIndexPartial:
-    expr: g::STRING = 'hi':::STRING
-    indexId: 2
-    referencedColumnIds:
-    - 2
-    tableId: 108
-    usesSequenceIds: []
-    usesTypeIds: []
   Status: PUBLIC
 - IndexColumn:
     columnId: 1
@@ -832,6 +828,7 @@ ElementState:
   Status: PUBLIC
 - SecondaryIndex:
     constraintId: 0
+    expr: (c).a = 3:::INT8
     geoConfig: null
     indexId: 2
     isConcurrently: false
@@ -839,10 +836,14 @@ ElementState:
     isInverted: false
     isNotVisible: false
     isUnique: false
+    referencedColumnIds:
+    - 2
     sharding: null
     sourceIndexId: 0
     tableId: 111
     temporaryIndexId: 0
+    usesSequenceIds: []
+    usesTypeIds: []
   Status: PUBLIC
 - CheckConstraint:
     columnIds:
@@ -1333,15 +1334,6 @@ ElementState:
     indexId: 2
     name: comppartial
     tableId: 111
-  Status: PUBLIC
-- SecondaryIndexPartial:
-    expr: (c).a = 3:::INT8
-    indexId: 2
-    referencedColumnIds:
-    - 2
-    tableId: 111
-    usesSequenceIds: []
-    usesTypeIds: []
   Status: PUBLIC
 - IndexColumn:
     columnId: 1

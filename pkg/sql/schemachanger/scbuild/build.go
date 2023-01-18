@@ -89,6 +89,10 @@ func Build(
 			// cluster version.
 			continue
 		}
+		maxVersion := screl.MaxVersion(e.element)
+		if maxVersion != nil && version.IsActive(*maxVersion) {
+			continue
+		}
 		t := scpb.MakeTarget(e.target, e.element, &e.metadata)
 		ts.Targets = append(ts.Targets, t)
 		initial = append(initial, e.initial)

@@ -204,12 +204,12 @@ PreCommitPhase stage 2 of 2 with 5 MutationType ops
       - 104
       JobID: 1
       NonCancelable: true
-      RunningStatus: PostCommitNonRevertiblePhase stage 1 of 2 with 5 MutationType ops pending
+      RunningStatus: PostCommitNonRevertiblePhase stage 1 of 2 with 6 MutationType ops pending
       Statements:
       - statement: DROP INDEX idx2 CASCADE
         redactedstatement: DROP INDEX ‹defaultdb›.public.‹t1›@‹idx2› CASCADE
         statementtag: DROP INDEX
-PostCommitNonRevertiblePhase stage 1 of 2 with 7 MutationType ops
+PostCommitNonRevertiblePhase stage 1 of 2 with 8 MutationType ops
   transitions:
     [[Column:{DescID: 104, ColumnID: 4}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
     [[IndexColumn:{DescID: 104, ColumnID: 4, IndexID: 4}, ABSENT], PUBLIC] -> ABSENT
@@ -221,6 +221,9 @@ PostCommitNonRevertiblePhase stage 1 of 2 with 7 MutationType ops
       ColumnID: 4
       TableID: 104
     *scop.MakeWriteOnlyIndexDeleteOnly
+      IndexID: 4
+      TableID: 104
+    *scop.RemoveDroppedIndexPartialPredicate
       IndexID: 4
       TableID: 104
     *scop.SetIndexName
@@ -241,17 +244,13 @@ PostCommitNonRevertiblePhase stage 1 of 2 with 7 MutationType ops
     *scop.UpdateSchemaChangerJob
       IsNonCancelable: true
       JobID: 1
-PostCommitNonRevertiblePhase stage 2 of 2 with 6 MutationType ops
+PostCommitNonRevertiblePhase stage 2 of 2 with 5 MutationType ops
   transitions:
     [[Column:{DescID: 104, ColumnID: 4}, ABSENT], DELETE_ONLY] -> ABSENT
     [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 4}, ABSENT], PUBLIC] -> ABSENT
-    [[SecondaryIndexPartial:{DescID: 104, IndexID: 4}, ABSENT], PUBLIC] -> ABSENT
     [[SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 0}, ABSENT], DELETE_ONLY] -> ABSENT
     [[IndexData:{DescID: 104, IndexID: 4}, ABSENT], PUBLIC] -> ABSENT
   ops:
-    *scop.RemoveDroppedIndexPartialPredicate
-      IndexID: 4
-      TableID: 104
     *scop.MakeIndexAbsent
       IndexID: 4
       TableID: 104
@@ -363,14 +362,6 @@ DROP INDEX idx2 CASCADE
   to:   [SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 0}, WRITE_ONLY]
   kind: PreviousStagePrecedence
   rule: SecondaryIndex transitions to ABSENT uphold 2-version invariant: VALIDATED->WRITE_ONLY
-- from: [SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 0}, VALIDATED]
-  to:   [SecondaryIndexPartial:{DescID: 104, IndexID: 4}, ABSENT]
-  kind: Precedence
-  rule: index no longer public before dependents, excluding columns
-- from: [SecondaryIndexPartial:{DescID: 104, IndexID: 4}, ABSENT]
-  to:   [SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 0}, ABSENT]
-  kind: SameStagePrecedence
-  rules: [dependents removed before index; partial predicate removed right before secondary index when not dropping relation]
 
 ops
 DROP INDEX idx3 CASCADE

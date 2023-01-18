@@ -139,6 +139,11 @@ func getExpression(element scpb.Element) (*scpb.Expression, error) {
 			return nil, nil
 		}
 		return &e.Expression, nil
+	case *scpb.SecondaryIndex:
+		if e == nil || e.EmbeddedExpr == nil {
+			return nil, nil
+		}
+		return e.EmbeddedExpr, nil
 	case *scpb.SecondaryIndexPartial:
 		if e == nil {
 			return nil, nil
