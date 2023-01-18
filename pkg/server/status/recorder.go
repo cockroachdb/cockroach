@@ -129,6 +129,8 @@ type MetricsRecorder struct {
 		// independent.
 		storeRegistries map[roachpb.StoreID]*metric.Registry
 		stores          map[roachpb.StoreID]storeMetrics
+
+		tenantRecorders map[roachpb.TenantID]*MetricsRecorder
 	}
 
 	// prometheusExporter merges metrics into families and generates the
@@ -140,6 +142,13 @@ type MetricsRecorder struct {
 	// round-trip) that requires a mutex to be safe for concurrent usage. We
 	// therefore give it its own mutex to avoid blocking other methods.
 	writeSummaryMu syncutil.Mutex
+
+	// tenantID is the tenantID of the tenant this recorder is attached to.
+	tenantID roachpb.TenantID
+
+	// tenantNameContainer holds the tenant name of the tenant this recorder
+	// is attached to. It will be used to label metrics that are tenant-specific.
+	tenantNameContainer *roachpb.TenantNameContainer
 }
 
 // NewMetricsRecorder initializes a new MetricsRecorder object that uses the
@@ -150,6 +159,7 @@ func NewMetricsRecorder(
 	rpcContext *rpc.Context,
 	gossip *gossip.Gossip,
 	settings *cluster.Settings,
+	tenantNameContainer *roachpb.TenantNameContainer,
 ) *MetricsRecorder {
 	mr := &MetricsRecorder{
 		HealthChecker: NewHealthChecker(trackedMetrics),
@@ -160,9 +170,19 @@ func NewMetricsRecorder(
 	}
 	mr.mu.storeRegistries = make(map[roachpb.StoreID]*metric.Registry)
 	mr.mu.stores = make(map[roachpb.StoreID]storeMetrics)
+	mr.mu.tenantRecorders = make(map[roachpb.TenantID]*MetricsRecorder)
 	mr.prometheusExporter = metric.MakePrometheusExporter()
 	mr.clock = clock
+	mr.tenantID = rpcContext.TenantID
+	mr.tenantNameContainer = tenantNameContainer
 	return mr
+}
+
+func (mr *MetricsRecorder) AddTenantRecorder(rec *MetricsRecorder) {
+	mr.mu.Lock()
+	defer mr.mu.Unlock()
+
+	mr.mu.tenantRecorders[rec.tenantID] = rec
 }
 
 // AddNode adds the Registry from an initialized node, along with its descriptor
@@ -193,6 +213,7 @@ func (mr *MetricsRecorder) AddNode(
 	nodeIDGauge := metric.NewGauge(metadata)
 	nodeIDGauge.Update(int64(desc.NodeID))
 	reg.AddMetric(nodeIDGauge)
+	reg.AddLabel("tenant", mr.tenantNameContainer)
 }
 
 // AddStore adds the Registry from the provided store as a store-level registry
@@ -250,6 +271,9 @@ func (mr *MetricsRecorder) ScrapeIntoPrometheus(pm *metric.PrometheusExporter) {
 	pm.ScrapeRegistry(mr.mu.nodeRegistry, includeChildMetrics)
 	for _, reg := range mr.mu.storeRegistries {
 		pm.ScrapeRegistry(reg, includeChildMetrics)
+	}
+	for _, ten := range mr.mu.tenantRecorders {
+		ten.ScrapeIntoPrometheus(pm)
 	}
 }
 

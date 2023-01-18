@@ -74,6 +74,15 @@ type serverEntry struct {
 	// server is the actual server.
 	server onDemandServer
 
+	// nameContainer holds a shared reference to the current
+	// name of the tenant within this serverEntry. If the
+	// tenant's name is updated, the `Set` method on
+	// nameContainer should be called in order to update
+	// any subscribers within the tenant. These are typically
+	// observability-related features that label data with
+	// the current tenant name.
+	nameContainer *roachpb.TenantNameContainer
+
 	// shouldStop indicates whether shutting down the controller
 	// should cause this server to stop. This is true for all
 	// servers except the one serving the system tenant.
@@ -125,7 +134,7 @@ type tenantCreator interface {
 	// can be checked with errors.Is.
 	//
 	// testArgs is used by tests to tweak the tenant server.
-	newTenant(ctx context.Context, tenantName roachpb.TenantName, index int, deregister func(),
+	newTenant(ctx context.Context, tenantNameContainer *roachpb.TenantNameContainer, index int, deregister func(),
 		testArgs base.TestSharedProcessTenantArgs,
 	) (onDemandServer, error)
 }
@@ -136,6 +145,7 @@ func newServerController(
 	st *cluster.Settings,
 	tenantCreator tenantCreator,
 	systemServer onDemandServer,
+	systemTenantNameContainer *roachpb.TenantNameContainer,
 ) *serverController {
 	c := &serverController{
 		st:            st,
@@ -144,8 +154,9 @@ func newServerController(
 	}
 	c.mu.servers = map[roachpb.TenantName]serverEntry{
 		catconstants.SystemTenantName: {
-			server:     systemServer,
-			shouldStop: false,
+			server:        systemServer,
+			shouldStop:    false,
+			nameContainer: systemTenantNameContainer,
 		},
 	}
 	parentStopper.AddCloser(c)
@@ -197,13 +208,15 @@ func (c *serverController) createServerLocked(
 	// Server does not exist yet: instantiate and start it.
 	c.mu.nextServerIdx++
 	idx := c.mu.nextServerIdx
-	s, err := c.tenantCreator.newTenant(ctx, tenantName, idx, deregisterFn, testArgs)
+	nameContainer := roachpb.NewTenantNameContainer(tenantName)
+	s, err := c.tenantCreator.newTenant(ctx, nameContainer, idx, deregisterFn, testArgs)
 	if err != nil {
 		return nil, err
 	}
 	c.mu.servers[tenantName] = serverEntry{
-		server:     s,
-		shouldStop: true,
+		server:        s,
+		shouldStop:    true,
+		nameContainer: nameContainer,
 	}
 	return s, nil
 }
@@ -620,12 +633,12 @@ var _ tenantCreator = &Server{}
 // newTenant implements the tenantCreator interface.
 func (s *Server) newTenant(
 	ctx context.Context,
-	tenantName roachpb.TenantName,
+	tenantNameContainer *roachpb.TenantNameContainer,
 	index int,
 	deregister func(),
 	testArgs base.TestSharedProcessTenantArgs,
 ) (onDemandServer, error) {
-	tenantID, err := s.getTenantID(ctx, tenantName)
+	tenantID, err := s.getTenantID(ctx, tenantNameContainer.Get())
 	if err != nil {
 		return nil, err
 	}
@@ -637,7 +650,7 @@ func (s *Server) newTenant(
 	// Apply the TestTenantArgs, if any.
 	baseCfg.TestingKnobs = testArgs.Knobs
 
-	tenantServer, err := s.startInMemoryTenantServerInternal(ctx, baseCfg, sqlCfg, tenantStopper)
+	tenantServer, err := s.startInMemoryTenantServerInternal(ctx, baseCfg, sqlCfg, tenantStopper, tenantNameContainer)
 	if err != nil {
 		// Abandon any work done so far.
 		tenantStopper.Stop(ctx)
@@ -757,7 +770,11 @@ func (s *Server) makeSharedProcessTenantConfig(
 // Note that even if an error is returned, tasks might have been started with
 // the stopper, so the caller needs to Stop() it.
 func (s *Server) startInMemoryTenantServerInternal(
-	ctx context.Context, baseCfg BaseConfig, sqlCfg SQLConfig, stopper *stop.Stopper,
+	ctx context.Context,
+	baseCfg BaseConfig,
+	sqlCfg SQLConfig,
+	stopper *stop.Stopper,
+	tenantNameContainer *roachpb.TenantNameContainer,
 ) (*SQLServerWrapper, error) {
 	ambientCtx := baseCfg.AmbientCtx
 	stopper.SetTracer(baseCfg.Tracer)
@@ -770,7 +787,7 @@ func (s *Server) startInMemoryTenantServerInternal(
 	log.Infof(startCtx, "starting tenant server")
 
 	// Now start the tenant proper.
-	tenantServer, err := NewTenantServer(startCtx, stopper, baseCfg, sqlCfg)
+	tenantServer, err := NewTenantServer(startCtx, stopper, baseCfg, sqlCfg, s.recorder, tenantNameContainer)
 	if err != nil {
 		return nil, err
 	}
