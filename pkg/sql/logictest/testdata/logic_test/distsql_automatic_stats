@@ -193,3 +193,4 @@ FROM [SHOW STATISTICS FOR TABLE my_schema.my_table] ORDER BY column_names ASC, c
 statistics_name  column_names  row_count  distinct_count  null_count
 __auto__         {k}           10         10              0
 __auto__         {v}           10         1               10
+

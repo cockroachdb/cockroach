@@ -1,0 +1,66 @@
+# LogicTest: !metamorphic-batch-sizes
+
+# Test a simple update and insert case for partial statistics
+
+# Disable automatic stats
+statement ok
+SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false
+
+statement ok
+SET CLUSTER SETTING sql.stats.automatic_partial_collection.min_stale_rows = 5
+
+statement ok
+SET CLUSTER SETTING sql.stats.automatic_collection.min_stale_rows = 100
+
+statement ok
+CREATE TABLE data (a INT, b INT, c FLOAT, d DECIMAL, PRIMARY KEY (a, b, c), INDEX c_idx (c), INDEX d_idx (d))
+
+statement ok
+INSERT INTO data SELECT a, b, c::FLOAT, NULL FROM
+   generate_series(1, 10) AS a(a),
+   generate_series(1, 10) AS b(b),
+   generate_series(1, 10) AS c(c)
+
+statement ok
+CREATE STATISTICS __auto__ FROM data;
+
+statement ok
+SET CLUSTER SETTING sql.stats.automatic_collection.enabled = true;
+
+# Test partial stats. Set the change in partial stats to 10%.
+statement ok
+UPDATE DATA SET d = 10 WHERE a = 1
+
+query TTIIIT colnames,retry
+SELECT statistics_name, column_names, row_count, distinct_count, null_count, partial_predicate
+FROM [SHOW STATISTICS FOR TABLE data] ORDER BY column_names ASC, created DESC
+----
+statistics_name   column_names  row_count  distinct_count  null_count  partial_predicate
+__auto_partial__  {a}           0          0               0           (a IS NULL) OR ((a < 1:::INT8) OR (a > 10:::INT8))
+__auto__          {a}           1000       10              0           NULL
+__auto__          {a,b}         1000       100             0           NULL
+__auto__          {a,b,c}       1000       1000            0           NULL
+__auto__          {b}           1000       10              0           NULL
+__auto_partial__  {c}           0          0               0           (c IS NULL) OR ((c < 1.0:::FLOAT8) OR (c > 10.0:::FLOAT8))
+__auto__          {c}           1000       10              0           NULL
+__auto__          {d}           1000       1               1000        NULL
+
+# INSERT some data to the end of the table.
+statement ok
+INSERT INTO data SELECT a, b, c FROM generate_series (11, 13) AS a(a), generate_series(11, 13) AS b(b), generate_series(11, 13) AS c(c);
+
+query TTIIIT colnames,retry
+SELECT statistics_name, column_names, row_count, distinct_count, null_count, partial_predicate
+FROM [SHOW STATISTICS FOR TABLE data] ORDER BY column_names ASC, created DESC
+----
+statistics_name   column_names  row_count  distinct_count  null_count  partial_predicate
+__auto_partial__  {a}           27         3               0           (a IS NULL) OR ((a < 1:::INT8) OR (a > 10:::INT8))
+__auto_partial__  {a}           0          0               0           (a IS NULL) OR ((a < 1:::INT8) OR (a > 10:::INT8))
+__auto__          {a}           1000       10              0           NULL
+__auto__          {a,b}         1000       100             0           NULL
+__auto__          {a,b,c}       1000       1000            0           NULL
+__auto__          {b}           1000       10              0           NULL
+__auto_partial__  {c}           27         3               0           (c IS NULL) OR ((c < 1.0:::FLOAT8) OR (c > 10.0:::FLOAT8))
+__auto_partial__  {c}           0          0               0           (c IS NULL) OR ((c < 1.0:::FLOAT8) OR (c > 10.0:::FLOAT8))
+__auto__          {c}           1000       10              0           NULL
+__auto__          {d}           1000       1               1000        NULL
