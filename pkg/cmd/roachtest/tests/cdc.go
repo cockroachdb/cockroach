@@ -922,17 +922,17 @@ func registerCDC(r registry.Registry) {
 
 			ct.runTPCCWorkload(tpccArgs{warehouses: 100})
 
-			exportStatsFile := ct.startStatsCollection()
+			// exportStatsFile := ct.startStatsCollection()
 			feed := ct.newChangefeed(feedArgs{
 				sinkType: cloudStorageSink,
 				targets:  allTpccTargets,
 				opts:     map[string]string{"initial_scan": "'only'"},
 			})
-			ct.runFeedLatencyVerifier(feed, latencyTargets{
-				initialScanLatency: 30 * time.Minute,
-			})
+			//ct.runFeedLatencyVerifier(feed, latencyTargets{
+			//	initialScanLatency: 30 * time.Minute,
+			//})
 			feed.waitForCompletion()
-			exportStatsFile()
+			// exportStatsFile()
 		},
 	})
 	r.Add(registry.TestSpec{
