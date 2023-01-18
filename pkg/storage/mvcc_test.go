@@ -2797,7 +2797,7 @@ func TestMVCCReverseScanSeeksOverRepeatedKeys(t *testing.T) {
 // The bug happened in this scenario.
 // (1) reverse scan is positioned at the range's smallest key and calls `prevKey()`
 // (2) `prevKey()` peeks and sees newer versions of the same logical key
-//     `iters_before_seek_-1` times, moving the iterator backwards each time
+//	   `iters_before_seek_-1` times, moving the iterator backwards each time
 // (3) on the `iters_before_seek_`th peek, there are no previous keys found
 //
 // Then, the problem was `prevKey()` treated finding no previous key as if it had found a
@@ -5465,4 +5465,30 @@ func TestWillOverflow(t *testing.T) {
 			t.Errorf("%d: overflow recognition error", i)
 		}
 	}
+}
+
+// TestMVCCExportToSSTSErrorsOnLargeKV verifies that MVCCExportToSST errors on a
+// single kv that is larger than max size.
+func TestMVCCExportToSSTSErrorsOnLargeKV(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	engine := createTestPebbleEngine()
+	defer engine.Close()
+	var testData = []testValue{value(key(1), "value1", ts(1000))}
+	require.NoError(t, fillInData(ctx, engine, testData))
+	summary, _, _, err := engine.ExportMVCCToSst(
+		ctx, ExportOptions{
+			StartKey:           MVCCKey{Key: key(1)},
+			EndKey:             key(3).Next(),
+			StartTS:            hlc.Timestamp{},
+			EndTS:              hlc.Timestamp{WallTime: 9999},
+			ExportAllRevisions: false,
+			TargetSize:         1,
+			MaxSize:            1,
+			StopMidKey:         true,
+		}, &MemFile{})
+	require.Equal(t, int64(0), summary.DataSize)
+	expectedErr := &ExceedMaxSizeError{}
+	require.ErrorAs(t, err, &expectedErr)
 }

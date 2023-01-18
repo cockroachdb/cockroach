@@ -209,11 +209,21 @@ func evalExport(
 		}
 		data := destFile.Data()
 
-		// NB: This should only happen on the first page of results. If there were
-		// more data to be read that lead to pagination then we'd see it in this
-		// page. Break out of the loop because there must be no data to export.
+		// NB: This should only happen in two cases:
+		//
+		// 1. There was nothing to export for this span.
+		//
+		// 2. We hit a resource constraint that led to an
+		//    early exit and thus have a resume key despite
+		//    not having data.
 		if summary.DataSize == 0 {
-			break
+			if resume != nil {
+				start = resume
+				resumeKeyTS = resumeTS
+				continue
+			} else {
+				break
+			}
 		}
 
 		span := roachpb.Span{Key: start}
