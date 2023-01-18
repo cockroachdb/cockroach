@@ -34,7 +34,6 @@ import {
   getAppsFromTransactionInsights,
   WorkloadInsightEventFilters,
   MergedTxnInsightEvent,
-  executionInsightsRequestFromTimeScale,
 } from "src/insights";
 import { EmptyInsightsTablePlaceholder } from "../util";
 import { TransactionInsightsTable } from "./transactionInsightsTable";
@@ -43,6 +42,7 @@ import {
   TimeScale,
   defaultTimeScaleOptions,
   TimeScaleDropdown,
+  timeScaleRangeToObj,
 } from "../../../timeScaleDropdown";
 import { StmtInsightsReq } from "src/api";
 
@@ -103,9 +103,9 @@ export const TransactionInsightsView: React.FC<TransactionInsightsViewProps> = (
   );
 
   useEffect(() => {
+    const req = timeScaleRangeToObj(timeScale);
+    refreshTransactionInsights(req);
     if (timeScale.key !== "Custom") {
-      const req = executionInsightsRequestFromTimeScale(timeScale);
-      refreshTransactionInsights(req);
       // Refresh every 10 seconds.
       const interval = setInterval(refreshTransactionInsights, 10 * 1000, req);
       return () => {
@@ -113,13 +113,6 @@ export const TransactionInsightsView: React.FC<TransactionInsightsViewProps> = (
       };
     }
   }, [timeScale, refreshTransactionInsights]);
-
-  useEffect(() => {
-    if (transactions === null || transactions.length < 1) {
-      const req = executionInsightsRequestFromTimeScale(timeScale);
-      refreshTransactionInsights(req);
-    }
-  }, [transactions, timeScale, refreshTransactionInsights]);
 
   useEffect(() => {
     // We use this effect to sync settings defined on the URL (sort, filters),
@@ -240,7 +233,7 @@ export const TransactionInsightsView: React.FC<TransactionInsightsViewProps> = (
       </PageConfig>
       <div className={cx("table-area")}>
         <Loading
-          loading={transactions === null || isLoading}
+          loading={isLoading}
           page="transaction insights"
           error={transactionsError}
           renderError={() => InsightsError()}

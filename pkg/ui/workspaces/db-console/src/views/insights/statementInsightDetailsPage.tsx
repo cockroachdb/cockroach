@@ -15,7 +15,6 @@ import {
 import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 import { AdminUIState } from "src/redux/state";
-import { refreshStmtInsights } from "src/redux/apiReducers";
 import { selectStatementInsightDetails } from "src/views/insights/insightsSelectors";
 import { setGlobalTimeScaleAction } from "src/redux/statements";
 import { selectTimeScale } from "src/redux/timeScale";
@@ -32,7 +31,6 @@ const mapStateToProps = (
 };
 
 const mapDispatchToProps: StatementInsightDetailsDispatchProps = {
-  refreshStatementInsights: refreshStmtInsights,
   setTimeScale: setGlobalTimeScaleAction,
 };
 

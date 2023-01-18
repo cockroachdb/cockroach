@@ -52,7 +52,7 @@ const transactionMapStateToProps = (
   _props: RouteComponentProps,
 ): TransactionInsightsViewStateProps => ({
   transactions: selectTransactionInsights(state),
-  transactionsError: state.cachedData?.transactionInsights?.lastError,
+  transactionsError: state.cachedData?.txnInsights?.lastError,
   filters: filtersLocalSetting.selector(state),
   sortSetting: sortSettingLocalSetting.selector(state),
   timeScale: selectTimeScale(state),

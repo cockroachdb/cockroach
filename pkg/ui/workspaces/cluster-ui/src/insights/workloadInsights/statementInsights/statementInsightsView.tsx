@@ -31,7 +31,6 @@ import { TableStatistics } from "src/tableStatistics";
 import { isSelectedColumn } from "src/columnsSelector/utils";
 
 import {
-  executionInsightsRequestFromTimeScale,
   filterStatementInsights,
   StmtInsightEvent,
   getAppsFromStatementInsights,
@@ -47,6 +46,7 @@ import {
   defaultTimeScaleOptions,
   TimeScale,
   TimeScaleDropdown,
+  timeScaleRangeToObj,
 } from "../../../timeScaleDropdown";
 import { StmtInsightsReq } from "src/api/stmtInsightsApi";
 
@@ -111,9 +111,9 @@ export const StatementInsightsView: React.FC<StatementInsightsViewProps> = (
   );
 
   useEffect(() => {
+    const req = timeScaleRangeToObj(timeScale);
+    refreshStatementInsights(req);
     if (timeScale.key !== "Custom") {
-      const req = executionInsightsRequestFromTimeScale(timeScale);
-      refreshStatementInsights(req);
       // Refresh every 10 seconds except when on custom timeScale.
       const interval = setInterval(refreshStatementInsights, 10 * 1000, req);
       return () => {
@@ -124,7 +124,7 @@ export const StatementInsightsView: React.FC<StatementInsightsViewProps> = (
 
   useEffect(() => {
     if (statements === null || statements.length < 1) {
-      const req = executionInsightsRequestFromTimeScale(timeScale);
+      const req = timeScaleRangeToObj(timeScale);
       refreshStatementInsights(req);
     }
   }, [statements, timeScale, refreshStatementInsights]);
@@ -263,7 +263,7 @@ export const StatementInsightsView: React.FC<StatementInsightsViewProps> = (
       </PageConfig>
       <div className={cx("table-area")}>
         <Loading
-          loading={statements === null || isLoading}
+          loading={isLoading}
           page="statement insights"
           error={statementsError}
           renderError={() => InsightsError()}
