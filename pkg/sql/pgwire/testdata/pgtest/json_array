@@ -518,3 +518,65 @@ ReadyForQuery
 {"Type":"DataRow","Values":[{"text":"{\"{\\\"a\\\": {\\\"b\\\": \\\"c\\\"}}\"}"}]}
 {"Type":"CommandComplete","CommandTag":"SELECT 1"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
+
+# PG's binary stores the space between kv, while crdb does not.
+# https://github.com/cockroachdb/cockroach/issues/95434.
+send
+Parse {"Query": "SELECT $1::JSON[]", "ParameterOIDs":[199]}
+Bind {"ParameterFormatCodes": [0], "ResultFormatCodes": [1], "Parameters": [{"text":"{\"{\\\"a\\\":      {}}\"}"}]}
+Describe {"ObjectType": "S"}
+Execute
+Sync
+----
+
+until crdb_only
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"ParameterDescription","ParameterOIDs":[199]}
+{"Type":"RowDescription","Fields":[{"Name":"jsonb","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":3807,"DataTypeSize":-1,"TypeModifier":-1,"Format":0}]}
+{"Type":"DataRow","Values":[{"binary":"000000010000000000000eda00000001000000010000000a017b2261223a207b7d7d"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+until noncrdb_only
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"ParameterDescription","ParameterOIDs":[199]}
+{"Type":"RowDescription","Fields":[{"Name":"json","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":199,"DataTypeSize":-1,"TypeModifier":-1,"Format":0}]}
+{"Type":"DataRow","Values":[{"binary":"00000001000000000000007200000001000000010000000e7b2261223a2020202020207b7d7d"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Parse {"Query": "SELECT $1::JSON[]", "ParameterOIDs":[199]}
+Bind {"ParameterFormatCodes": [0], "ResultFormatCodes": [1], "Parameters": [{"text":"{\"{\\\"a\\\":{}}\"}"}]}
+Describe {"ObjectType": "S"}
+Execute
+Sync
+----
+
+until noncrdb_only
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"ParameterDescription","ParameterOIDs":[199]}
+{"Type":"RowDescription","Fields":[{"Name":"json","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":199,"DataTypeSize":-1,"TypeModifier":-1,"Format":0}]}
+{"Type":"DataRow","Values":[{"binary":"0000000100000000000000720000000100000001000000087b2261223a7b7d7d"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+until crdb_only
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"ParameterDescription","ParameterOIDs":[199]}
+{"Type":"RowDescription","Fields":[{"Name":"jsonb","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":3807,"DataTypeSize":-1,"TypeModifier":-1,"Format":0}]}
+{"Type":"DataRow","Values":[{"binary":"000000010000000000000eda00000001000000010000000a017b2261223a207b7d7d"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
