@@ -124,6 +124,39 @@ func TestInsightsIntegration(t *testing.T) {
 
 		return nil
 	}, 1*time.Second)
+
+	// TODO (xzhang) Turn this into a datadriven test
+	// https://github.com/cockroachdb/cockroach/issues/95010
+	// Verify the txn table content is valid.
+	testutils.SucceedsWithin(t, func() error {
+		row = conn.QueryRowContext(ctx, "SELECT "+
+			"query, "+
+			"start_time, "+
+			"end_time, "+
+			"implicit_txn "+
+			"FROM crdb_internal.cluster_txn_execution_insights WHERE "+
+			"query = $1 and app_name = $2 ", "SELECT pg_sleep($1)", appName)
+
+		var query string
+		var startInsights, endInsights time.Time
+		var implicitTxn bool
+		err = row.Scan(&query, &startInsights, &endInsights, &implicitTxn)
+
+		if err != nil {
+			return err
+		}
+
+		if !implicitTxn {
+			return fmt.Errorf("expected implictTxn to be true")
+		}
+
+		delayFromTable := endInsights.Sub(startInsights).Seconds()
+		if delayFromTable < queryDelayInSeconds {
+			return fmt.Errorf("expected at least %f, but was %f", delayFromTable, queryDelayInSeconds)
+		}
+
+		return nil
+	}, 1*time.Second)
 }
 
 func TestInsightsPriorityIntegration(t *testing.T) {

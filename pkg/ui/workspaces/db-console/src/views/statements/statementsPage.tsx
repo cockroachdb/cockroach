@@ -67,7 +67,10 @@ import {
   mapStateToRecentStatementViewProps,
 } from "./recentStatementsSelectors";
 import { selectTimeScale } from "src/redux/timeScale";
-import { selectStatementsLastUpdated } from "src/selectors/executionFingerprintsSelectors";
+import {
+  selectStatementsLastUpdated,
+  selectStatementsDataValid,
+} from "src/selectors/executionFingerprintsSelectors";
 import { api as clusterUiApi } from "@cockroachlabs/cluster-ui";
 
 type ICollectedStatementStatistics =
@@ -379,6 +382,7 @@ export default withRouter(
         search: searchLocalSetting.selector(state),
         sortSetting: sortSettingLocalSetting.selector(state),
         statements: selectStatements(state, props),
+        isDataValid: selectStatementsDataValid(state),
         lastUpdated: selectStatementsLastUpdated(state),
         statementsError: state.cachedData.statements.lastError,
         totalFingerprints: selectTotalFingerprints(state),

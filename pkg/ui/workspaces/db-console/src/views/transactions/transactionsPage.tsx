@@ -39,7 +39,10 @@ import {
   mapStateToRecentTransactionsPageProps,
 } from "./recentTransactionsSelectors";
 import { selectTimeScale } from "src/redux/timeScale";
-import { selectStatementsLastUpdated } from "src/selectors/executionFingerprintsSelectors";
+import {
+  selectStatementsLastUpdated,
+  selectStatementsDataValid,
+} from "src/selectors/executionFingerprintsSelectors";
 
 // selectStatements returns the array of AggregateStatistics to show on the
 // TransactionsPage, based on if the appAttr route parameter is set.
@@ -141,6 +144,7 @@ const TransactionsPageConnected = withRouter(
         ...props,
         columns: transactionColumnsLocalSetting.selectorToArray(state),
         data: selectData(state),
+        isDataValid: selectStatementsDataValid(state),
         lastUpdated: selectStatementsLastUpdated(state),
         timeScale: selectTimeScale(state),
         error: selectLastError(state),
