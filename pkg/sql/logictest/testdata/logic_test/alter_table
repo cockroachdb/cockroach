@@ -2770,3 +2770,14 @@ query IT
 SELECT * FROM t_93398;
 ----
 0  3.141592653589793
+
+statement error pgcode 22001 value too long for type CHAR
+ALTER TABLE t_93398 ADD COLUMN c3 CHAR(1) DEFAULT 'foo'::TEXT;
+
+statement ok
+ALTER TABLE t_93398 ADD COLUMN c3 "char" DEFAULT 'foo'::TEXT;
+
+query IT
+SELECT c1, c3 FROM t_93398;
+----
+0  f
