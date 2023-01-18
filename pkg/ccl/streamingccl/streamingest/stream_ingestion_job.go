@@ -466,8 +466,36 @@ func maybeRevertToCutoverTimestamp(
 	}
 
 	updateRunningStatus(ctx, j, fmt.Sprintf("starting to cut over to the given timestamp %s", cutoverTime))
+
+	origNRanges := -1
 	spans := []roachpb.Span{sd.Span}
+	updateJobProgress := func() error {
+		if spans == nil {
+			return nil
+		}
+		nRanges, err := sql.NumRangesInSpans(ctx, p.ExecCfg().DB, p.DistSQLPlanner(), spans)
+		if err != nil {
+			return err
+		}
+		if origNRanges == -1 {
+			origNRanges = nRanges
+		}
+		return p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			if nRanges < origNRanges {
+				fractionRangesFinished := float32(origNRanges-nRanges) / float32(origNRanges)
+				if err := j.FractionProgressed(ctx, txn,
+					jobs.FractionUpdater(fractionRangesFinished)); err != nil {
+					return jobs.SimplifyInvalidStatusError(err)
+				}
+			}
+			return nil
+		})
+	}
+
 	for len(spans) != 0 {
+		if err := updateJobProgress(); err != nil {
+			log.Warningf(ctx, "failed to update replication job progress: %+v", err)
+		}
 		var b kv.Batch
 		for _, span := range spans {
 			b.AddRawRequest(&roachpb.RevertRangeRequest{
@@ -479,6 +507,9 @@ func maybeRevertToCutoverTimestamp(
 			})
 		}
 		b.Header.MaxSpanRequestKeys = sql.RevertTableDefaultBatchSize
+		if p.ExecCfg().StreamingTestingKnobs != nil && p.ExecCfg().StreamingTestingKnobs.OverrideRevertRangeBatchSize != 0 {
+			b.Header.MaxSpanRequestKeys = p.ExecCfg().StreamingTestingKnobs.OverrideRevertRangeBatchSize
+		}
 		if err := db.Run(ctx, &b); err != nil {
 			return false, err
 		}
@@ -494,7 +525,7 @@ func maybeRevertToCutoverTimestamp(
 			}
 		}
 	}
-	return true, j.SetProgress(ctx, nil /* txn */, *sp.StreamIngest)
+	return true, updateJobProgress()
 }
 
 func activateTenant(ctx context.Context, execCtx interface{}, newTenantID roachpb.TenantID) error {
