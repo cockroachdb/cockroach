@@ -444,6 +444,33 @@ func (s *stopperSessionEventListener) OnSessionDeleted(
 	return false
 }
 
+type refreshInstanceSessionListener struct {
+	cfg *sqlServerArgs
+}
+
+var _ slinstance.SessionEventListener = &stopperSessionEventListener{}
+
+// OnSessionDeleted implements the slinstance.SessionEventListener interface.
+func (r *refreshInstanceSessionListener) OnSessionDeleted(
+	ctx context.Context,
+) (createAnotherSession bool) {
+	if err := r.cfg.stopper.RunAsyncTask(ctx, "refresh-instance-session", func(context.Context) {
+		nodeID, _ := r.cfg.nodeIDContainer.OptionalNodeID()
+		s, err := r.cfg.sqlLivenessProvider.Session(ctx)
+		if err != nil {
+			log.Errorf(ctx, "faild to get new liveness session ID: %v", err)
+		}
+		if _, err := r.cfg.sqlInstanceStorage.CreateNodeInstance(
+			ctx, s.ID(), s.Expiration(), r.cfg.AdvertiseAddr, r.cfg.SQLAdvertiseAddr, r.cfg.Locality, nodeID,
+		); err != nil {
+			log.Errorf(ctx, "failed to update instance with new session ID: %v", err)
+		}
+	}); err != nil {
+		log.Errorf(ctx, "failed to run update of instance with new session ID: %v", err)
+	}
+	return true
+}
+
 // newSQLServer constructs a new SQLServer. The caller is responsible for
 // listening to the server's ShutdownRequested() channel (which is the same as
 // cfg.stopTrigger.C()) and stopping cfg.stopper when signaled.
@@ -495,6 +522,8 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		// use the instance ID anymore, and there's no mechanism for allocating a
 		// new one after startup.
 		sessionEventsConsumer = &stopperSessionEventListener{trigger: cfg.stopTrigger}
+	} else {
+		sessionEventsConsumer = &refreshInstanceSessionListener{cfg: &cfg}
 	}
 	cfg.sqlLivenessProvider = slprovider.New(
 		cfg.AmbientCtx,
