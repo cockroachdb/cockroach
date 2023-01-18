@@ -290,6 +290,7 @@ func excludeReallyEnormousTargets(targets []string) []string {
 	for i := 0; i < len(targets); i++ {
 		var excluded bool
 		for _, toExclude := range []string{
+			"//pkg/ccl/schemachangerccl",
 			"//pkg/ccl/sqlitelogictestccl",
 			"//pkg/sql/sqlitelogictest",
 			"//pkg/ccl/backupccl",
