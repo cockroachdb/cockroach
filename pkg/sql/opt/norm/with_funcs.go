@@ -18,23 +18,27 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// CanInlineWith returns whether or not it's valid to inline binding in expr.
-// This is the case when materialize is explicitly set to false, or when:
-//  1. binding has no volatile expressions (because once it's inlined, there's no
-//     guarantee it will be executed fully), and
-//  2. binding is referenced at most once in expr.
+// CanInlineWith returns true if it's valid to inline binding in expr. In order
+// to inline a CTE, the expression must not be volatile. In addition, the
+// materialize clause can affect whether or not a CTE is inlined:
+//
+//   - Default (empty) - Only a singly-referenced CTE is inlined. A
+//     multiply-referenced CTE is not inlined by default because it causes extra
+//     computation. It's not guaranteed in all cases that the benefits of
+//     inlining outweigh the cost of the extra computation.
+//
+//   - MATERIALIZED - The CTE is never inlined.
+//
+//   - NOT MATERIALIZED - A singly- and multiply-referenced CTE is inlined. This
+//     option allows a user to override the default behavior that does not
+//     inline a multiply-referenced CTE, if they have confidence that it will be
+//     beneficial to do so.
 func (c *CustomFuncs) CanInlineWith(binding, expr memo.RelExpr, private *memo.WithPrivate) bool {
-	// If materialization is set, ignore the checks below.
-	if private.Mtr == tree.CTEMaterializeAlways {
+	if private.Mtr == tree.CTEMaterializeAlways ||
+		binding.Relational().VolatilitySet.HasVolatile() {
 		return false
 	}
-	if private.Mtr == tree.CTEMaterializeNever {
-		return true
-	}
-	if binding.Relational().VolatilitySet.HasVolatile() {
-		return false
-	}
-	return memo.WithUses(expr)[private.ID].Count <= 1
+	return memo.WithUses(expr)[private.ID].Count <= 1 || private.Mtr == tree.CTEMaterializeNever
 }
 
 // InlineWith replaces all references to the With expression in input (via
@@ -72,8 +76,9 @@ func (c *CustomFuncs) InlineWith(binding, input memo.RelExpr, priv *memo.WithPri
 // to inline a WithScanExpr with its bound expression from the memo. Currently,
 // this only allows inlining leak-proof constant VALUES clauses of the form
 // `column IN (VALUES(...))` or `column NOT IN(VALUES(...))`, but could likely
-// be extended to handle other expressions in the future. This function always
-// returns false if the MATERIALIZED option was provided in the CTE.
+// be extended to handle other expressions in the future, as long as the rules
+// defined in CanInlineWith are obeyed. This function always returns false if
+// the MATERIALIZED option was provided in the CTE.
 func (c *CustomFuncs) CanInlineWithScan(private *memo.WithScanPrivate, scalar opt.ScalarExpr) bool {
 	// Never inline if MATERIALIZED was specified.
 	if private.Mtr == tree.CTEMaterializeAlways {

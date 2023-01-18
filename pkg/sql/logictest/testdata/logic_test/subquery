@@ -595,19 +595,16 @@ statement ok
 CREATE TABLE corr2 (i INT);
 
 # A NOT MATERIALIZED CTE with a mutation.
-# TODO(mgartner): Lift this restriction.
-statement error could not decorrelate subquery
+statement ok
 WITH tmp AS NOT MATERIALIZED (INSERT INTO corr2 VALUES (1) RETURNING i)
 SELECT * FROM corr
 WHERE CASE WHEN k < 5 THEN k+1 = (SELECT i FROM tmp WHERE i = corr.k) END
 
 # The statement above should perform the INSERT only once.
-# TODO(mgartner): This should return 1 when the statement above can be executed
-# successfully.
 query I
 SELECT count(*) FROM corr2
 ----
-0
+1
 
 
 subtest regressions
