@@ -457,10 +457,10 @@ func IP(
 		if err := c.Parallel(l, "", len(nodes), 0, func(i int) (*install.RunResultDetails, error) {
 			node := nodes[i]
 			res := &install.RunResultDetails{Node: node}
-			res.Stdout, res.Err = c.GetInternalIP(ctx, node)
+			res.Stdout, res.Err = c.GetInternalIP(l, ctx, node)
 			ips[i] = res.Stdout
 			return res, err
-		}); err != nil {
+		}, install.DefaultSSHRetryOpts); err != nil {
 			return nil, err
 		}
 	}
@@ -681,7 +681,7 @@ func Monitor(
 	if err != nil {
 		return nil, err
 	}
-	return c.Monitor(ctx, opts), nil
+	return c.Monitor(l, ctx, opts), nil
 }
 
 // StopOpts is used to pass options to Stop.
@@ -872,10 +872,10 @@ func PgURL(
 		if err := c.Parallel(l, "", len(nodes), 0, func(i int) (*install.RunResultDetails, error) {
 			node := nodes[i]
 			res := &install.RunResultDetails{Node: node}
-			res.Stdout, res.Err = c.GetInternalIP(ctx, node)
+			res.Stdout, res.Err = c.GetInternalIP(l, ctx, node)
 			ips[i] = res.Stdout
 			return res, err
-		}); err != nil {
+		}, install.DefaultSSHRetryOpts); err != nil {
 			return nil, err
 		}
 	}
@@ -1063,7 +1063,7 @@ func Pprof(l *logger.Logger, clusterName string, opts PprofOpts) error {
 		outputFiles = append(outputFiles, outputFile)
 		mu.Unlock()
 		return res, nil
-	})
+	}, install.DefaultSSHRetryOpts)
 
 	for _, s := range outputFiles {
 		l.Printf("Created %s", s)
@@ -1724,7 +1724,7 @@ func sendCaptureCommand(
 				}
 			}
 			return res, res.Err
-		})
+		}, install.DefaultSSHRetryOpts)
 	return err
 }
 
