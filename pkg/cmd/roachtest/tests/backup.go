@@ -98,7 +98,7 @@ func importBankDataSplit(
 
 	// NB: starting the cluster creates the logs dir as a side effect,
 	// needed below.
-	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
+	c.Start(ctx, t.L(), option.DefaultStartOptsNoBackups(), install.MakeClusterSettings())
 	runImportBankDataSplit(ctx, rows, ranges, t, c)
 	return dest
 }
@@ -908,7 +908,7 @@ func registerBackup(r registry.Registry) {
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			c.Put(ctx, t.Cockroach(), "./cockroach")
 			c.Put(ctx, t.DeprecatedWorkload(), "./workload")
-			c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
+			c.Start(ctx, t.L(), option.DefaultStartOptsNoBackups(), install.MakeClusterSettings())
 			conn := c.Conn(ctx, t.L(), 1)
 
 			duration := 5 * time.Minute
@@ -1137,7 +1137,7 @@ func registerBackup(r registry.Registry) {
 func runBackupMVCCRangeTombstones(ctx context.Context, t test.Test, c cluster.Cluster) {
 	c.Put(ctx, t.Cockroach(), "./cockroach")
 	c.Put(ctx, t.DeprecatedWorkload(), "./workload") // required for tpch
-	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
+	c.Start(ctx, t.L(), option.DefaultStartOptsNoBackups(), install.MakeClusterSettings())
 	t.Status("starting csv servers")
 	c.Run(ctx, c.All(), `./cockroach workload csv-server --port=8081 &> logs/workload-csv-server.log < /dev/null &`)
 

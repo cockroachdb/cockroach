@@ -25,6 +25,14 @@ type StartOpts struct {
 
 // DefaultStartOpts returns a StartOpts populated with default values.
 func DefaultStartOpts() StartOpts {
+	startOpts := StartOpts{RoachprodOpts: roachprod.DefaultStartOpts()}
+	startOpts.RoachprodOpts.ScheduleBackups = true
+	return startOpts
+}
+
+// DefaultStartOptsNoBackups returns a StartOpts with default values,
+// but a scheduled backup will not begin at the start of the roachtest.
+func DefaultStartOptsNoBackups() StartOpts {
 	return StartOpts{RoachprodOpts: roachprod.DefaultStartOpts()}
 }
 
