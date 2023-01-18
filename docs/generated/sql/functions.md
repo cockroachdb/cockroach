@@ -3538,6 +3538,10 @@ table. Returns an error if validation fails.</p>
 </span></td><td>Stable</td></tr>
 <tr><td><a name="pg_get_functiondef"></a><code>pg_get_functiondef(func_oid: oid) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>For user-defined functions, returns the definition of the specified function. For builtin functions, returns the name of the function.</p>
 </span></td><td>Stable</td></tr>
+<tr><td><a name="pg_get_indexdef"></a><code>pg_get_indexdef(index_oid: oid) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Gets the CREATE INDEX command for index</p>
+</span></td><td>Stable</td></tr>
+<tr><td><a name="pg_get_indexdef"></a><code>pg_get_indexdef(index_oid: oid, column_no: <a href="int.html">int</a>, pretty_bool: <a href="bool.html">bool</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Gets the CREATE INDEX command for index, or definition of just one index column when given a non-zero column number</p>
+</span></td><td>Stable</td></tr>
 <tr><td><a name="pg_get_serial_sequence"></a><code>pg_get_serial_sequence(table_name: <a href="string.html">string</a>, column_name: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the name of the sequence used by the given column_name in the table table_name.</p>
 </span></td><td>Stable</td></tr>
 <tr><td><a name="pg_get_viewdef"></a><code>pg_get_viewdef(view_oid: oid) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the CREATE statement for an existing view.</p>
