@@ -32,7 +32,7 @@ ALTER TABLE system.statement_diagnostics_requests
 
 	createCompletedIdxV3 = `
 CREATE INDEX completed_idx ON system.statement_diagnostics_requests (completed, ID)
-  STORING (statement_fingerprint, sampling_probability, min_execution_latency, expires_at)`
+  STORING (statement_fingerprint, min_execution_latency, expires_at, sampling_probability)`
 
 	dropCompletedIdxV2 = `DROP INDEX IF EXISTS system.statement_diagnostics_requests@completed_idx_v2`
 )
