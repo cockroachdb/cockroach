@@ -303,7 +303,7 @@ func registerRestoreNodeShutdown(r registry.Registry) {
 			gatewayNode := 2
 			nodeToShutdown := 3
 			c.Put(ctx, t.Cockroach(), "./cockroach")
-			c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
+			c.Start(ctx, t.L(), option.DefaultStartOptsNoBackups(), install.MakeClusterSettings())
 
 			jobSurvivesNodeShutdown(ctx, t, c, nodeToShutdown, makeRestoreStarter(ctx, t, c, gatewayNode))
 		},
@@ -317,7 +317,7 @@ func registerRestoreNodeShutdown(r registry.Registry) {
 			gatewayNode := 2
 			nodeToShutdown := 2
 			c.Put(ctx, t.Cockroach(), "./cockroach")
-			c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
+			c.Start(ctx, t.L(), option.DefaultStartOptsNoBackups(), install.MakeClusterSettings())
 
 			jobSurvivesNodeShutdown(ctx, t, c, nodeToShutdown, makeRestoreStarter(ctx, t, c, gatewayNode))
 		},
@@ -452,7 +452,7 @@ func registerRestore(r registry.Registry) {
 			EncryptionSupport: registry.EncryptionMetamorphic,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				c.Put(ctx, t.Cockroach(), "./cockroach")
-				c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
+				c.Start(ctx, t.L(), option.DefaultStartOptsNoBackups(), install.MakeClusterSettings())
 				m := c.NewMonitor(ctx)
 
 				// Run the disk usage logger in the monitor to guarantee its
@@ -522,7 +522,7 @@ func registerRestore(r registry.Registry) {
 		Timeout: withPauseTimeout,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			c.Put(ctx, t.Cockroach(), "./cockroach")
-			c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
+			c.Start(ctx, t.L(), option.DefaultStartOptsNoBackups(), install.MakeClusterSettings())
 			m := c.NewMonitor(ctx)
 
 			// Run the disk usage logger in the monitor to guarantee its
@@ -715,7 +715,7 @@ func registerRestore(r registry.Registry) {
 					t.Skip("test configured to run on %s", sp.hardware.cloud)
 				}
 				c.Put(ctx, t.Cockroach(), "./cockroach")
-				c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
+				c.Start(ctx, t.L(), option.DefaultStartOptsNoBackups(), install.MakeClusterSettings())
 				m := c.NewMonitor(ctx)
 
 				// Run the disk usage logger in the monitor to guarantee its
