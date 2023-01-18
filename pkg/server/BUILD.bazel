@@ -419,6 +419,7 @@ go_test(
         "//pkg/kv/kvserver/closedts/ctpb",
         "//pkg/kv/kvserver/kvserverbase",
         "//pkg/kv/kvserver/kvserverpb",
+        "//pkg/kv/kvserver/kvstorage",
         "//pkg/kv/kvserver/liveness",
         "//pkg/kv/kvserver/liveness/livenesspb",
         "//pkg/roachpb",

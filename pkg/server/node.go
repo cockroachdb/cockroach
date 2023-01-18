@@ -320,13 +320,13 @@ func bootstrapCluster(
 
 		sIdent := roachpb.StoreIdent{
 			ClusterID: clusterID,
-			NodeID:    kvserver.FirstNodeID,
-			StoreID:   kvserver.FirstStoreID + roachpb.StoreID(i),
+			NodeID:    kvstorage.FirstNodeID,
+			StoreID:   kvstorage.FirstStoreID + roachpb.StoreID(i),
 		}
 
 		// Initialize the engine backing the store with the store ident and cluster
 		// version.
-		if err := kvserver.InitEngine(ctx, eng, sIdent); err != nil {
+		if err := kvstorage.InitEngine(ctx, eng, sIdent); err != nil {
 			return nil, err
 		}
 
@@ -655,7 +655,7 @@ func (n *Node) initializeAdditionalStores(
 			StoreID:   startID,
 		}
 		for _, eng := range engines {
-			if err := kvserver.InitEngine(ctx, eng, sIdent); err != nil {
+			if err := kvstorage.InitEngine(ctx, eng, sIdent); err != nil {
 				return err
 			}
 
