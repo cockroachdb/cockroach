@@ -41,10 +41,8 @@ DROP INDEX idx2 CASCADE
   {columnId: 4, indexId: 4, tableId: 104}
 - [[IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 4}, ABSENT], PUBLIC]
   {columnId: 3, indexId: 4, kind: KEY_SUFFIX, tableId: 104}
-- [[SecondaryIndexPartial:{DescID: 104, IndexID: 4}, ABSENT], PUBLIC]
-  {expr: i > 0, indexId: 4, referencedColumnIds: [1], tableId: 104}
 - [[SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 0}, ABSENT], PUBLIC]
-  {indexId: 4, isCreatedExplicitly: true, tableId: 104}
+  {expr: i > 0, indexId: 4, isCreatedExplicitly: true, referencedColumnIds: [1], tableId: 104}
 - [[IndexName:{DescID: 104, Name: idx2, IndexID: 4}, ABSENT], PUBLIC]
   {indexId: 4, name: idx2, tableId: 104}
 - [[IndexData:{DescID: 104, IndexID: 4}, ABSENT], PUBLIC]

@@ -259,6 +259,7 @@ message PrimaryIndex {
 
 message SecondaryIndex {
   Index embedded_index = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  Expression embedded_expr = 3 [(gogoproto.nullable) = true];
 }
 
 message TemporaryIndex {

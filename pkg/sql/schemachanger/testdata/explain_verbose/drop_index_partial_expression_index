@@ -120,7 +120,7 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
 │                 - 104
 │                 JobID: 1
 │                 NonCancelable: true
-│                 RunningStatus: PostCommitNonRevertiblePhase stage 1 of 2 with 5 MutationType ops pending
+│                 RunningStatus: PostCommitNonRevertiblePhase stage 1 of 2 with 6 MutationType ops pending
 │                 Statements:
 │                 - statement: DROP INDEX idx CASCADE
 │                   redactedstatement: DROP INDEX ‹defaultdb›.‹public›.‹t›@‹idx› CASCADE
@@ -168,13 +168,17 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
     │   │       └── • Precedence dependency from VALIDATED SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
     │   │             rule: "index no longer public before dependents, excluding columns"
     │   │
-    │   └── • 7 Mutation operations
+    │   └── • 8 Mutation operations
     │       │
     │       ├── • MakeWriteOnlyColumnDeleteOnly
     │       │     ColumnID: 3
     │       │     TableID: 104
     │       │
     │       ├── • MakeWriteOnlyIndexDeleteOnly
+    │       │     IndexID: 2
+    │       │     TableID: 104
+    │       │
+    │       ├── • RemoveDroppedIndexPartialPredicate
     │       │     IndexID: 2
     │       │     TableID: 104
     │       │
@@ -200,11 +204,11 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
     │       └── • UpdateSchemaChangerJob
     │             IsNonCancelable: true
     │             JobID: 1
-    │             RunningStatus: PostCommitNonRevertiblePhase stage 2 of 2 with 4 MutationType ops pending
+    │             RunningStatus: PostCommitNonRevertiblePhase stage 2 of 2 with 3 MutationType ops pending
     │
     └── • Stage 2 of 2 in PostCommitNonRevertiblePhase
         │
-        ├── • 5 elements transitioning toward ABSENT
+        ├── • 4 elements transitioning toward ABSENT
         │   │
         │   ├── • Column:{DescID: 104, ColumnID: 3}
         │   │   │ DELETE_ONLY → ABSENT
@@ -231,12 +235,6 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
         │   │   └── • Precedence dependency from WRITE_ONLY Column:{DescID: 104, ColumnID: 3}
         │   │         rule: "column no longer public before dependents"
         │   │
-        │   ├── • SecondaryIndexPartial:{DescID: 104, IndexID: 2}
-        │   │   │ PUBLIC → ABSENT
-        │   │   │
-        │   │   └── • Precedence dependency from VALIDATED SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
-        │   │         rule: "index no longer public before dependents, excluding columns"
-        │   │
         │   ├── • SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
         │   │   │ DELETE_ONLY → ABSENT
         │   │   │
@@ -245,10 +243,6 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
         │   │   │
         │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}
         │   │   │     rule: "dependents removed before index"
-        │   │   │
-        │   │   ├── • SameStagePrecedence dependency from ABSENT SecondaryIndexPartial:{DescID: 104, IndexID: 2}
-        │   │   │     rule: "dependents removed before index"
-        │   │   │     rule: "partial predicate removed right before secondary index when not dropping relation"
         │   │   │
         │   │   ├── • PreviousStagePrecedence dependency from DELETE_ONLY SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
         │   │   │     rule: "SecondaryIndex transitions to ABSENT uphold 2-version invariant: DELETE_ONLY->ABSENT"
@@ -262,11 +256,7 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
         │       └── • Precedence dependency from ABSENT SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
         │             rule: "index removed before garbage collection"
         │
-        └── • 6 Mutation operations
-            │
-            ├── • RemoveDroppedIndexPartialPredicate
-            │     IndexID: 2
-            │     TableID: 104
+        └── • 5 Mutation operations
             │
             ├── • MakeIndexAbsent
             │     IndexID: 2

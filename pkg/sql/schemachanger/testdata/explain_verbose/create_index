@@ -11,19 +11,13 @@ EXPLAIN (ddl, verbose) CREATE INDEX idx1 ON t (v) WHERE (v = 'a');
 │   │
 │   └── • Stage 1 of 1 in StatementPhase
 │       │
-│       ├── • 6 elements transitioning toward PUBLIC
+│       ├── • 5 elements transitioning toward PUBLIC
 │       │   │
 │       │   ├── • SecondaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}
 │       │   │   │ ABSENT → BACKFILL_ONLY
 │       │   │   │
 │       │   │   └── • PreviousStagePrecedence dependency from ABSENT SecondaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}
 │       │   │         rule: "SecondaryIndex transitions to PUBLIC uphold 2-version invariant: ABSENT->BACKFILL_ONLY"
-│       │   │
-│       │   ├── • SecondaryIndexPartial:{DescID: 106, IndexID: 2}
-│       │   │   │ ABSENT → PUBLIC
-│       │   │   │
-│       │   │   └── • Precedence dependency from BACKFILL_ONLY SecondaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}
-│       │   │         rule: "index existence precedes index dependents"
 │       │   │
 │       │   ├── • IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 2}
 │       │   │   │ ABSENT → PUBLIC
@@ -49,19 +43,13 @@ EXPLAIN (ddl, verbose) CREATE INDEX idx1 ON t (v) WHERE (v = 'a');
 │       │       └── • Precedence dependency from BACKFILL_ONLY SecondaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}
 │       │             rule: "index existence precedes index dependents"
 │       │
-│       ├── • 4 elements transitioning toward TRANSIENT_ABSENT
+│       ├── • 3 elements transitioning toward TRANSIENT_ABSENT
 │       │   │
 │       │   ├── • TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}
 │       │   │   │ ABSENT → DELETE_ONLY
 │       │   │   │
 │       │   │   └── • PreviousStagePrecedence dependency from ABSENT TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}
 │       │   │         rule: "TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: ABSENT->DELETE_ONLY"
-│       │   │
-│       │   ├── • SecondaryIndexPartial:{DescID: 106, IndexID: 3}
-│       │   │   │ ABSENT → TRANSIENT_ABSENT
-│       │   │   │
-│       │   │   └── • Precedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}
-│       │   │         rule: "temp index existence precedes index dependents"
 │       │   │
 │       │   ├── • IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 3}
 │       │   │   │ ABSENT → PUBLIC
@@ -75,7 +63,7 @@ EXPLAIN (ddl, verbose) CREATE INDEX idx1 ON t (v) WHERE (v = 'a');
 │       │       └── • Precedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}
 │       │             rule: "temp index existence precedes index dependents"
 │       │
-│       └── • 10 Mutation operations
+│       └── • 8 Mutation operations
 │           │
 │           ├── • MakeAbsentIndexBackfilling
 │           │     Index:
@@ -114,37 +102,25 @@ EXPLAIN (ddl, verbose) CREATE INDEX idx1 ON t (v) WHERE (v = 'a');
 │           │       TableID: 106
 │           │     IsSecondaryIndex: true
 │           │
-│           ├── • SetAddedIndexPartialPredicate
-│           │     Expr: (v = 'a')
-│           │     IndexID: 3
-│           │     TableID: 106
-│           │
 │           ├── • AddColumnToIndex
 │           │     ColumnID: 2
 │           │     IndexID: 3
 │           │     TableID: 106
 │           │
-│           ├── • AddColumnToIndex
-│           │     ColumnID: 1
-│           │     IndexID: 3
-│           │     Kind: 1
-│           │     TableID: 106
-│           │
-│           └── • RemoveDroppedIndexPartialPredicate
+│           └── • AddColumnToIndex
+│                 ColumnID: 1
 │                 IndexID: 3
+│                 Kind: 1
 │                 TableID: 106
 │
 ├── • PreCommitPhase
 │   │
 │   ├── • Stage 1 of 2 in PreCommitPhase
 │   │   │
-│   │   ├── • 6 elements transitioning toward PUBLIC
+│   │   ├── • 5 elements transitioning toward PUBLIC
 │   │   │   │
 │   │   │   ├── • SecondaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}
 │   │   │   │     BACKFILL_ONLY → ABSENT
-│   │   │   │
-│   │   │   ├── • SecondaryIndexPartial:{DescID: 106, IndexID: 2}
-│   │   │   │     PUBLIC → ABSENT
 │   │   │   │
 │   │   │   ├── • IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 2}
 │   │   │   │     PUBLIC → ABSENT
@@ -158,13 +134,10 @@ EXPLAIN (ddl, verbose) CREATE INDEX idx1 ON t (v) WHERE (v = 'a');
 │   │   │   └── • IndexName:{DescID: 106, Name: idx1, IndexID: 2}
 │   │   │         PUBLIC → ABSENT
 │   │   │
-│   │   ├── • 4 elements transitioning toward TRANSIENT_ABSENT
+│   │   ├── • 3 elements transitioning toward TRANSIENT_ABSENT
 │   │   │   │
 │   │   │   ├── • TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}
 │   │   │   │     DELETE_ONLY → ABSENT
-│   │   │   │
-│   │   │   ├── • SecondaryIndexPartial:{DescID: 106, IndexID: 3}
-│   │   │   │     TRANSIENT_ABSENT → ABSENT
 │   │   │   │
 │   │   │   ├── • IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 3}
 │   │   │   │     PUBLIC → ABSENT
@@ -179,19 +152,13 @@ EXPLAIN (ddl, verbose) CREATE INDEX idx1 ON t (v) WHERE (v = 'a');
 │   │
 │   └── • Stage 2 of 2 in PreCommitPhase
 │       │
-│       ├── • 6 elements transitioning toward PUBLIC
+│       ├── • 5 elements transitioning toward PUBLIC
 │       │   │
 │       │   ├── • SecondaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}
 │       │   │   │ ABSENT → BACKFILL_ONLY
 │       │   │   │
 │       │   │   └── • PreviousStagePrecedence dependency from ABSENT SecondaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}
 │       │   │         rule: "SecondaryIndex transitions to PUBLIC uphold 2-version invariant: ABSENT->BACKFILL_ONLY"
-│       │   │
-│       │   ├── • SecondaryIndexPartial:{DescID: 106, IndexID: 2}
-│       │   │   │ ABSENT → PUBLIC
-│       │   │   │
-│       │   │   └── • Precedence dependency from BACKFILL_ONLY SecondaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}
-│       │   │         rule: "index existence precedes index dependents"
 │       │   │
 │       │   ├── • IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 2}
 │       │   │   │ ABSENT → PUBLIC
@@ -217,19 +184,13 @@ EXPLAIN (ddl, verbose) CREATE INDEX idx1 ON t (v) WHERE (v = 'a');
 │       │       └── • Precedence dependency from BACKFILL_ONLY SecondaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}
 │       │             rule: "index existence precedes index dependents"
 │       │
-│       ├── • 4 elements transitioning toward TRANSIENT_ABSENT
+│       ├── • 3 elements transitioning toward TRANSIENT_ABSENT
 │       │   │
 │       │   ├── • TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}
 │       │   │   │ ABSENT → DELETE_ONLY
 │       │   │   │
 │       │   │   └── • PreviousStagePrecedence dependency from ABSENT TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}
 │       │   │         rule: "TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: ABSENT->DELETE_ONLY"
-│       │   │
-│       │   ├── • SecondaryIndexPartial:{DescID: 106, IndexID: 3}
-│       │   │   │ ABSENT → PUBLIC
-│       │   │   │
-│       │   │   └── • Precedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}
-│       │   │         rule: "temp index existence precedes index dependents"
 │       │   │
 │       │   ├── • IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 3}
 │       │   │   │ ABSENT → PUBLIC
@@ -243,7 +204,7 @@ EXPLAIN (ddl, verbose) CREATE INDEX idx1 ON t (v) WHERE (v = 'a');
 │       │       └── • Precedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}
 │       │             rule: "temp index existence precedes index dependents"
 │       │
-│       └── • 13 Mutation operations
+│       └── • 12 Mutation operations
 │           │
 │           ├── • MakeAbsentIndexBackfilling
 │           │     Index:
@@ -287,11 +248,6 @@ EXPLAIN (ddl, verbose) CREATE INDEX idx1 ON t (v) WHERE (v = 'a');
 │           │     IsSecondaryIndex: true
 │           │
 │           ├── • MaybeAddSplitForIndex
-│           │     IndexID: 3
-│           │     TableID: 106
-│           │
-│           ├── • SetAddedIndexPartialPredicate
-│           │     Expr: (v = 'a')
 │           │     IndexID: 3
 │           │     TableID: 106
 │           │
@@ -503,9 +459,6 @@ EXPLAIN (ddl, verbose) CREATE INDEX idx1 ON t (v) WHERE (v = 'a');
     │   │       ├── • PreviousStagePrecedence dependency from VALIDATED SecondaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}
     │   │       │     rule: "SecondaryIndex transitions to PUBLIC uphold 2-version invariant: VALIDATED->PUBLIC"
     │   │       │
-    │   │       ├── • Precedence dependency from PUBLIC SecondaryIndexPartial:{DescID: 106, IndexID: 2}
-    │   │       │     rule: "index dependents exist before index becomes public"
-    │   │       │
     │   │       ├── • Precedence dependency from PUBLIC IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 2}
     │   │       │     rule: "index dependents exist before index becomes public"
     │   │       │
@@ -515,16 +468,13 @@ EXPLAIN (ddl, verbose) CREATE INDEX idx1 ON t (v) WHERE (v = 'a');
     │   │       └── • Precedence dependency from PUBLIC IndexName:{DescID: 106, Name: idx1, IndexID: 2}
     │   │             rule: "index dependents exist before index becomes public"
     │   │
-    │   ├── • 4 elements transitioning toward TRANSIENT_ABSENT
+    │   ├── • 3 elements transitioning toward TRANSIENT_ABSENT
     │   │   │
     │   │   ├── • TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}
     │   │   │   │ WRITE_ONLY → TRANSIENT_DELETE_ONLY
     │   │   │   │
     │   │   │   └── • PreviousStagePrecedence dependency from WRITE_ONLY TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}
     │   │   │         rule: "TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: WRITE_ONLY->TRANSIENT_DELETE_ONLY"
-    │   │   │
-    │   │   ├── • SecondaryIndexPartial:{DescID: 106, IndexID: 3}
-    │   │   │     PUBLIC → TRANSIENT_ABSENT
     │   │   │
     │   │   ├── • IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 3}
     │   │   │   │ PUBLIC → TRANSIENT_ABSENT
@@ -538,7 +488,7 @@ EXPLAIN (ddl, verbose) CREATE INDEX idx1 ON t (v) WHERE (v = 'a');
     │   │       └── • Precedence dependency from TRANSIENT_DELETE_ONLY TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}
     │   │             rule: "index drop mutation visible before cleaning up index columns"
     │   │
-    │   └── • 8 Mutation operations
+    │   └── • 7 Mutation operations
     │       │
     │       ├── • MakeValidatedSecondaryIndexPublic
     │       │     IndexID: 2
@@ -548,10 +498,6 @@ EXPLAIN (ddl, verbose) CREATE INDEX idx1 ON t (v) WHERE (v = 'a');
     │       │     TableID: 106
     │       │
     │       ├── • MakeWriteOnlyIndexDeleteOnly
-    │       │     IndexID: 3
-    │       │     TableID: 106
-    │       │
-    │       ├── • RemoveDroppedIndexPartialPredicate
     │       │     IndexID: 3
     │       │     TableID: 106
     │       │
@@ -583,9 +529,6 @@ EXPLAIN (ddl, verbose) CREATE INDEX idx1 ON t (v) WHERE (v = 'a');
         │   │   │
         │   │   ├── • PreviousStagePrecedence dependency from TRANSIENT_DELETE_ONLY TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 1, SourceIndexID: 1}
         │   │   │     rule: "TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: TRANSIENT_DELETE_ONLY->TRANSIENT_ABSENT"
-        │   │   │
-        │   │   ├── • Precedence dependency from TRANSIENT_ABSENT SecondaryIndexPartial:{DescID: 106, IndexID: 3}
-        │   │   │     rule: "dependents removed before index"
         │   │   │
         │   │   ├── • Precedence dependency from TRANSIENT_ABSENT IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 3}
         │   │   │     rule: "dependents removed before index"

@@ -97,9 +97,9 @@ func ContainsDescID(haystack scpb.Element, needle catid.DescID) (contains bool) 
 	return contains
 }
 
-// MinVersion returns the minimum cluster version at which an element may
+// MinElementVersion returns the minimum cluster version at which an element may
 // be used.
-func MinVersion(el scpb.Element) clusterversion.Key {
+func MinElementVersion(el scpb.Element) clusterversion.Key {
 	switch el.(type) {
 	case *scpb.Database, *scpb.Schema, *scpb.View, *scpb.Sequence, *scpb.Table,
 		*scpb.AliasType, *scpb.ColumnFamily, *scpb.Column, *scpb.PrimaryIndex,
@@ -130,4 +130,16 @@ func MinVersion(el scpb.Element) clusterversion.Key {
 	default:
 		panic(errors.AssertionFailedf("unknown element %T", el))
 	}
+}
+
+// MaxElementVersion returns the minimum cluster version at which an element may
+// be used.
+func MaxElementVersion(el scpb.Element) (version *clusterversion.Key) {
+	var v clusterversion.Key
+	switch el.(type) {
+	case *scpb.SecondaryIndexPartial:
+		v = clusterversion.V23_1_SchemaChangerDeprecatedIndexPredicates
+		return &v
+	}
+	return nil
 }
