@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 )
 
@@ -31,13 +32,23 @@ func (s *baseStatusServer) UserSQLRoles(
 
 	var resp serverpb.UserSQLRolesResponse
 	if !isAdmin {
-		for name := range roleoption.ByName {
-			hasRole, err := s.privilegeChecker.hasRoleOption(ctx, username, roleoption.ByName[name])
+		for _, privKind := range privilege.GlobalPrivileges {
+			privName := privKind.String()
+			hasPriv := s.privilegeChecker.checkHasGlobalPrivilege(ctx, username, privKind)
+			if hasPriv {
+				resp.Roles = append(resp.Roles, privName)
+				continue
+			}
+			roleOpt, ok := roleoption.ByName[privName]
+			if !ok {
+				continue
+			}
+			hasRole, err := s.privilegeChecker.hasRoleOption(ctx, username, roleOpt)
 			if err != nil {
 				return nil, err
 			}
 			if hasRole {
-				resp.Roles = append(resp.Roles, name)
+				resp.Roles = append(resp.Roles, privName)
 			}
 		}
 	} else {
