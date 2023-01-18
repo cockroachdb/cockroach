@@ -83,7 +83,9 @@ func registerKV(r registry.Registry) {
 		nodes := c.Spec().NodeCount - 1
 		c.Put(ctx, t.Cockroach(), "./cockroach", c.Range(1, nodes))
 		c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(nodes+1))
-		startOpts := option.DefaultStartOpts()
+
+		// Don't start a scheduled backup on this perf sensitive roachtest that reports to roachperf.
+		startOpts := option.DefaultStartOptsNoBackups()
 		if opts.ssds > 1 && !opts.raid0 {
 			startOpts.RoachprodOpts.StoreCount = opts.ssds
 		}

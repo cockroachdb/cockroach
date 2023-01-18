@@ -371,7 +371,8 @@ func setupDecommissionBench(
 	c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
 	c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(workloadNode))
 	for i := 1; i <= benchSpec.nodes; i++ {
-		startOpts := option.DefaultStartOpts()
+		// Don't start a scheduled backup as this roachtest reports to roachperf.
+		startOpts := option.DefaultStartOptsNoBackups()
 		startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs,
 			fmt.Sprintf("--attrs=node%d", i),
 			"--vmodule=store_rebalancer=5,allocator=5,allocator_scorer=5,replicate_queue=5")

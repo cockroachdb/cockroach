@@ -289,7 +289,8 @@ func setupAllocationBench(
 	c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(workloadNode))
 	t.Status("starting cluster")
 	for i := 1; i <= spec.nodes; i++ {
-		startOpts := option.DefaultStartOpts()
+		// Don't start a backup schedule as this test reports to roachperf.
+		startOpts := option.DefaultStartOptsNoBackups()
 		if attr, ok := spec.nodeAttrs[i]; ok {
 			startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs,
 				fmt.Sprintf("--attrs=%s", attr))

@@ -100,7 +100,8 @@ type tpccOptions struct {
 	// TODO(tbg): remove this once https://github.com/cockroachdb/cockroach/issues/74705 is completed.
 	EnableCircuitBreakers bool
 	// SkipPostRunCheck, if set, skips post TPC-C run checks.
-	SkipPostRunCheck bool
+	SkipPostRunCheck              bool
+	DisableDefaultScheduledBackup bool
 }
 
 type workloadInstance struct {
@@ -155,7 +156,9 @@ func setupTPCC(
 				settings.Env = append(settings.Env, "COCKROACH_SCAN_INTERVAL=200ms")
 				settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=5ms")
 			}
-			c.Start(ctx, t.L(), option.DefaultStartOpts(), settings, crdbNodes)
+			startOpts := option.DefaultStartOpts()
+			startOpts.RoachprodOpts.ScheduleBackups = !opts.DisableDefaultScheduledBackup
+			c.Start(ctx, t.L(), startOpts, settings, crdbNodes)
 		}
 	}
 

@@ -77,7 +77,8 @@ func runMVCCGC(ctx context.Context, t test.Test, c cluster.Cluster) {
 	c.Put(ctx, t.Cockroach(), "./cockroach")
 	s := install.MakeClusterSettings()
 	s.Env = append(s.Env, "COCKROACH_SCAN_INTERVAL=30s")
-	c.Start(ctx, t.L(), option.DefaultStartOpts(), s)
+	// Disable an automatic scheduled backup as it would mess with the gc ttl this test relies on.
+	c.Start(ctx, t.L(), option.DefaultStartOptsNoBackups(), s)
 
 	conn := c.Conn(ctx, t.L(), 1)
 	defer conn.Close()
