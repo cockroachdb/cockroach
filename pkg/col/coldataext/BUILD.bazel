@@ -17,6 +17,7 @@ go_library(
         "//pkg/sql/rowenc/valueside",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
+        "//pkg/util/buildutil",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )
