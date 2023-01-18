@@ -1287,7 +1287,9 @@ define WithPrivate {
     OriginalExpr Statement
 
     # Mtr is the materialization behavior of the CTE, specified by MATERIALIZED,
-    # NOT MATERIALIZED, or an empty materialize clause.
+    # NOT MATERIALIZED, or an empty materialize clause. These modes partially
+    # affect whether or not a CTE is inlined during normalization. See
+    # CanInlineWith.
     Mtr CTEMaterializeClause
 
     # Ordering specifies the order required of the binding, and thus controls
