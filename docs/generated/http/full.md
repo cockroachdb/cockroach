@@ -4945,6 +4945,60 @@ Support status: [reserved](#support-status)
 
 
 
+## NetworkConnectivity
+
+`GET /_status/connectivity`
+
+
+
+Support status: [reserved](#support-status)
+
+#### Request Parameters
+
+
+
+
+
+
+
+
+
+
+
+
+
+#### Response Parameters
+
+
+
+
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| connectivity_by_node_id | [NetworkConnectivityResponse.ConnectivityByNodeIdEntry](#cockroach.server.serverpb.NetworkConnectivityResponse-cockroach.server.serverpb.NetworkConnectivityResponse.ConnectivityByNodeIdEntry) | repeated |  | [reserved](#support-status) |
+
+
+
+
+
+
+<a name="cockroach.server.serverpb.NetworkConnectivityResponse-cockroach.server.serverpb.NetworkConnectivityResponse.ConnectivityByNodeIdEntry"></a>
+#### NetworkConnectivityResponse.ConnectivityByNodeIdEntry
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| key | [int32](#cockroach.server.serverpb.NetworkConnectivityResponse-int32) |  |  |  |
+| value | [cockroach.kv.kvserver.liveness.livenesspb.NodeLivenessStatus](#cockroach.server.serverpb.NetworkConnectivityResponse-cockroach.kv.kvserver.liveness.livenesspb.NodeLivenessStatus) |  |  |  |
+
+
+
+
+
+
 ## RequestCA
 
 `GET /_join/v1/ca`

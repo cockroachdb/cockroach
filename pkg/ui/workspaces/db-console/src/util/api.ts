@@ -231,6 +231,11 @@ export type SetTraceRecordingTypeRequestMessage =
 export type SetTraceRecordingTypeResponseMessage =
   protos.cockroach.server.serverpb.SetTraceRecordingTypeResponse;
 
+export type NetworkConnectivityRequest =
+  protos.cockroach.server.serverpb.NetworkConnectivityRequest;
+export type NetworkConnectivityResponse =
+  protos.cockroach.server.serverpb.NetworkConnectivityResponse;
+
 // API constants
 
 export const API_PREFIX = "_admin/v1";
@@ -949,6 +954,18 @@ export function setTraceRecordingType(
     serverpb.SetTraceRecordingTypeResponse,
     // TODO(davidh): Consider making this endpoint just POST to `/traces/{trace_ID}`
     `${API_PREFIX}/settracerecordingtype`,
+    req as any,
+    timeout,
+  );
+}
+
+export function getNetworkConnectivity(
+  req: NetworkConnectivityRequest,
+  timeout?: moment.Duration,
+): Promise<NetworkConnectivityResponse> {
+  return timeoutFetch(
+    serverpb.NetworkConnectivityResponse,
+    `${STATUS_PREFIX}/connectivity`,
     req as any,
     timeout,
   );

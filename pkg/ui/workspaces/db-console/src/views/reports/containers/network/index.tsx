@@ -11,11 +11,13 @@
 import { deviation as d3Deviation, mean as d3Mean } from "d3";
 import _, { capitalize } from "lodash";
 import moment from "moment";
-import React, { Fragment } from "react";
+import React, { Fragment, useCallback } from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 import { createSelector } from "reselect";
 import { withRouter, RouteComponentProps } from "react-router-dom";
+import { getNetworkConnectivity } from "src/util/api";
+import * as protos from "src/js/protos";
 
 import { refreshLiveness, refreshNodes } from "src/redux/apiReducers";
 import {
@@ -41,6 +43,7 @@ import { Legend } from "./legend";
 import Sort from "./sort";
 import { getMatchParamByName } from "src/util/query";
 import "./network.styl";
+import { getNetworkConnectivity } from "src/util/api";
 
 interface NetworkOwnProps {
   nodesSummary: NodesSummary;
@@ -462,10 +465,18 @@ export class Network extends React.Component<NetworkProps, INetworkState> {
   render() {
     const { nodesSummary, location } = this.props;
     const filters = getFilters(location);
+    const onConnectivityClick = useCallback(() => {
+      getNetworkConnectivity(
+        new protos.cockroach.server.serverpb.NetworkConnectivityRequest(),
+      ).then(resp => {
+        console.log(resp);
+      });
+    }, []);
     return (
       <Fragment>
         <Helmet title="Network Diagnostics | Debug" />
         <h3 className="base-heading">Network Diagnostics</h3>
+        <button onClick={onConnectivityClick}>network connectivity</button>
         <Loading
           loading={!contentAvailable(nodesSummary)}
           page={"network"}

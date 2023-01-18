@@ -130,7 +130,7 @@ message InfoStatus {
   map<string, Info> infos = 1 [(gogoproto.nullable) = false];
   ClientStatus client = 2 [(gogoproto.nullable) = false];
   ServerStatus server = 3 [(gogoproto.nullable) = false];
-  Connectivity connectivity = 4 [(gogoproto.nullable) = false];
+  Connectivity connectivity = 4 [(gogoproto.nullable) = false, deprecated = true];
 }
 
 // Info is the basic unit of information traded over the

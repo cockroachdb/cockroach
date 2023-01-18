@@ -521,6 +521,12 @@ func (g *Gossip) GetAddresses() []util.UnresolvedAddr {
 	return append([]util.UnresolvedAddr(nil), g.addresses...)
 }
 
+func (g *Gossip) GetBootstrapAddresses() map[util.UnresolvedAddr]roachpb.NodeID {
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+	return g.bootstrapAddrs
+}
+
 // GetNodeIDAddress looks up the RPC address of the node by ID.
 func (g *Gossip) GetNodeIDAddress(nodeID roachpb.NodeID) (*util.UnresolvedAddr, error) {
 	return g.getNodeIDAddress(nodeID, false /* locked */)
@@ -984,6 +990,23 @@ func (g *Gossip) GetInfo(key string) ([]byte, error) {
 		return i.Value.GetBytes()
 	}
 	return nil, NewKeyNotPresentError(key)
+}
+
+// GetKnownNodeIDs returns list of known Node IDs around.
+func (g *Gossip) GetKnownNodeIDs() ([]roachpb.NodeID, error) {
+	g.mu.RLock()
+	infos, err := g.mu.is.getMatchedInfos(MakePrefixPattern(KeyNodeDescPrefix))
+	g.mu.RUnlock()
+	if err != nil {
+		return nil, err
+	}
+	nodeIDs := make([]roachpb.NodeID, len(infos))
+	if len(infos) > 0 {
+		for idx, info := range infos {
+			nodeIDs[idx] = info.NodeID
+		}
+	}
+	return nodeIDs, nil
 }
 
 // GetInfoProto returns an info value by key or KeyNotPresentError if specified

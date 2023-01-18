@@ -18,6 +18,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/json"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"io"
 	"net/http"
 	"os"
@@ -1855,6 +1856,90 @@ func (s *statusServer) NodeUI(
 	return &resp, nil
 }
 
+func (s *systemStatusServer) NetworkConnectivity(
+	ctx context.Context, req *serverpb.NetworkConnectivityRequest,
+) (*serverpb.NetworkConnectivityResponse, error) {
+	ctx = s.AnnotateCtx(propagateGatewayMetadata(ctx))
+
+	response := &serverpb.NetworkConnectivityResponse{
+		ConnectivityByNodeID: map[roachpb.NodeID]livenesspb.Liveness{},
+		Latencies:            map[roachpb.NodeID]serverpb.NetworkConnectivityResponse_NodeLatencies{},
+	}
+
+	if len(req.NodeID) > 0 {
+		nodeID, local, err := s.parseNodeID(req.NodeID)
+		if err != nil {
+			return nil, status.Errorf(codes.InvalidArgument, err.Error())
+		}
+
+		if local {
+			nodeLatencies := map[roachpb.NodeID]int64{}
+			// addressToNodeIdMap contains all known addresses
+			addressToNodeIdMap := s.gossip.GetBootstrapAddresses()
+			// latencies might contain incomplete list of addresses (only those that have been connected to).
+			latencies := s.rpcCtx.RemoteClocks.AllLatencies()
+
+			for addr, duration := range latencies {
+				// TODO (koorosh): enhance address resolution.
+				address := util.MakeUnresolvedAddr("tcp", addr)
+				nID, ok := addressToNodeIdMap[address]
+				if !ok {
+					continue
+				}
+				if nID == nodeID {
+					continue
+				}
+				nodeLatencies[nID] = duration.Nanoseconds()
+			}
+			response.Latencies[nodeID] = serverpb.NetworkConnectivityResponse_NodeLatencies{
+				Latencies: nodeLatencies,
+			}
+			return response, nil
+		}
+		status, err := s.dialNode(ctx, nodeID)
+		if err != nil {
+			return nil, serverError(ctx, err)
+		}
+		return status.NetworkConnectivity(ctx, req)
+	}
+
+	nodeIDs, err := s.gossip.GetKnownNodeIDs()
+	if err != nil {
+		return nil, err
+	}
+
+	dialFn := func(ctx context.Context, nodeID roachpb.NodeID) (interface{}, error) {
+		// TODO (koorosh): handle dial node error as unreachable.
+		return s.dialNode(ctx, nodeID)
+	}
+	remoteRequest := serverpb.NetworkConnectivityRequest{NodeID: "local"}
+	nodeFn := func(ctx context.Context, client interface{}, _ roachpb.NodeID) (interface{}, error) {
+		status := client.(serverpb.StatusClient)
+		return status.NetworkConnectivity(ctx, &remoteRequest)
+	}
+	responseFn := func(nodeID roachpb.NodeID, resp interface{}) {
+		r := resp.(*serverpb.NetworkConnectivityResponse)
+		response.Latencies[nodeID] = r.Latencies[nodeID]
+	}
+	errorFn := func(nodeID roachpb.NodeID, err error) {
+		// if err is node dial error then:
+		// response.ConnectivityByNodeID[nodeID] = livenesspb.NodeLivenessStatus_UNAVAILABLE
+	}
+
+	if err := s.callNodes(ctx, nodeIDs, "network connectivity", dialFn, nodeFn, responseFn, errorFn); err != nil {
+		return nil, serverError(ctx, err)
+	}
+
+	return response, nil
+}
+
+func (s *statusServer) NetworkConnectivity(
+	ctx context.Context, _ *serverpb.NetworkConnectivityRequest,
+) (*serverpb.NetworkConnectivityResponse, error) {
+	// TODO (koorosh): implement tenant version
+	return nil, serverErrorf(ctx, "NetworkConnectivity isn't implemented yet")
+}
+
 // Metrics return metrics information for the server specified.
 func (s *statusServer) Metrics(
 	ctx context.Context, req *serverpb.MetricsRequest,
@@ -2810,6 +2895,90 @@ func (s *statusServer) iterateNodes(
 				WaitForSem: true,
 			},
 			func(ctx context.Context) { nodeQuery(ctx, roachpb.NodeID(nodeID)) },
+		); err != nil {
+			return err
+		}
+	}
+
+	var resultErr error
+	for numNodes > 0 {
+		select {
+		case res := <-responseChan:
+			if res.err != nil {
+				errorFn(res.nodeID, res.err)
+			} else {
+				responseFn(res.nodeID, res.response)
+			}
+		case <-ctx.Done():
+			resultErr = errors.Errorf("request of %s canceled before completion", errorCtx)
+		}
+		numNodes--
+	}
+	return resultErr
+}
+
+// iterateNodes iterates nodeFn over all non-removed nodes concurrently.
+// It then calls nodeResponse for every valid result of nodeFn, and
+// nodeError on every error result.
+func (s *statusServer) callNodes(
+	ctx context.Context,
+	nodes []roachpb.NodeID,
+	errorCtx string,
+	dialFn func(ctx context.Context, nodeID roachpb.NodeID) (interface{}, error),
+	nodeFn func(ctx context.Context, client interface{}, nodeID roachpb.NodeID) (interface{}, error),
+	responseFn func(nodeID roachpb.NodeID, resp interface{}),
+	errorFn func(nodeID roachpb.NodeID, nodeFnError error),
+) error {
+	//nodeStatuses, err := s.serverIterator.getAllNodes(ctx)
+	//if err != nil {
+	//	return err
+	//}
+
+	// channels for responses and errors.
+	type nodeResponse struct {
+		nodeID   roachpb.NodeID
+		response interface{}
+		err      error
+	}
+
+	numNodes := len(nodes)
+	responseChan := make(chan nodeResponse, numNodes)
+
+	nodeQuery := func(ctx context.Context, nodeID roachpb.NodeID) {
+		var client interface{}
+		err := contextutil.RunWithTimeout(ctx, "dial node", base.DialTimeout, func(ctx context.Context) error {
+			var err error
+			client, err = dialFn(ctx, nodeID)
+			return err
+		})
+		if err != nil {
+			err = errors.Wrapf(err, "failed to dial into node %d", nodeID)
+			responseChan <- nodeResponse{nodeID: nodeID, err: err}
+			return
+		}
+
+		res, err := nodeFn(ctx, client, nodeID)
+		if err != nil {
+			err = errors.Wrapf(err, "error requesting %s from node %d",
+				errorCtx, nodeID)
+		}
+		responseChan <- nodeResponse{nodeID: nodeID, response: res, err: err}
+	}
+
+	// Issue the requests concurrently.
+	sem := quotapool.NewIntPool("node status", maxConcurrentRequests)
+	ctx, cancel := s.stopper.WithCancelOnQuiesce(ctx)
+	defer cancel()
+	for _, nodeID := range nodes {
+		nodeID := nodeID // needed to ensure the closure below captures a copy.
+		if err := s.stopper.RunAsyncTaskEx(
+			ctx,
+			stop.TaskOpts{
+				TaskName:   fmt.Sprintf("server.statusServer: requesting %s", errorCtx),
+				Sem:        sem,
+				WaitForSem: true,
+			},
+			func(ctx context.Context) { nodeQuery(ctx, nodeID) },
 		); err != nil {
 			return err
 		}

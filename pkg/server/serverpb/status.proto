@@ -1889,6 +1889,31 @@ message ListExecutionInsightsResponse {
   ];
 }
 
+message NetworkConnectivityRequest {
+  string node_id = 1 [
+    (gogoproto.customname) = "NodeID"
+  ];
+}
+
+message NetworkConnectivityResponse {
+  message NodeLatencies {
+    map<int32, int64> latencies = 1 [
+      (gogoproto.nullable) = false,
+      (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
+    ];
+  }
+  map<int32, kv.kvserver.liveness.livenesspb.Liveness> liveness_by_node_id = 1 [
+    (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID",
+    (gogoproto.nullable) = false,
+    (gogoproto.customname) = "ConnectivityByNodeID"
+  ];
+
+  map<int32, NodeLatencies> latencies = 2 [
+    (gogoproto.nullable) = false,
+    (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
+  ];
+}
+
 service Status {
   // Certificates retrieves a copy of the TLS certificates.
   rpc Certificates(CertificatesRequest) returns (CertificatesResponse) {
@@ -2329,4 +2354,10 @@ service Status {
   // ListExecutionInsights returns potentially problematic statements cluster-wide,
   // along with actions we suggest the application developer might take to remedy them.
   rpc ListExecutionInsights(ListExecutionInsightsRequest) returns (ListExecutionInsightsResponse) {}
+
+  rpc NetworkConnectivity(NetworkConnectivityRequest) returns (NetworkConnectivityResponse) {
+    option (google.api.http) = {
+      post: "/_status/connectivity"
+    };
+  }
 }
