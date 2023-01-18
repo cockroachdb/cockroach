@@ -34,7 +34,7 @@ import { isSelectedColumn } from "src/columnsSelector/utils";
 import {
   ExecutionInsightsRequest,
   FlattenedStmtInsights,
-} from "src/api/insightsApi";
+} from "src/api/txnInsightsApi";
 import {
   executionInsightsRequestFromTimeScale,
   filterStatementInsights,
