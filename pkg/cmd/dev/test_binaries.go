@@ -52,8 +52,8 @@ type runTemplateData struct {
 
 const stageOutputTemplateScript = `
 mkdir -p #{.StageDir#}
-cp -Lr #{.BazelOutputDir#}/#{.RunfilesDirName#} #{.StageDir#}/#{.RunfilesDirName#}
-cp -Lr #{.BazelOutputDir#}/#{.TargetBinName#} #{.StageDir#}/#{.TargetBinName#}
+ln -s #{.BazelOutputDir#}/#{.RunfilesDirName#} #{.StageDir#}/#{.RunfilesDirName#}
+ln -s #{.BazelOutputDir#}/#{.TargetBinName#} #{.StageDir#}/#{.TargetBinName#}
 
 echo #{shesc .RunScript#} > #{.StageDir#}/run.sh
 chmod +x #{.StageDir#}/run.sh
@@ -65,7 +65,9 @@ const packageTemplateScript = `
 echo Packaging staged build output...
 cd #{.ArtifactsDir#}
 tar -chf bin.tar pkg
+
 rm -rf pkg
+bazel clean
 `
 
 const runTemplateScript = `
