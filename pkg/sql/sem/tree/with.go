@@ -27,7 +27,6 @@ type CTE struct {
 // empty materialization clause.
 type CTEMaterializeClause int8
 
-// The values for NullType.
 const (
 	// CTEMaterializeDefault represents an empty materialization clause.
 	CTEMaterializeDefault CTEMaterializeClause = iota
