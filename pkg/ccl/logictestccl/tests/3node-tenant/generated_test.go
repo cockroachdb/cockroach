@@ -301,6 +301,13 @@ func TestTenantLogic_as_of(
 	runLogicTest(t, "as_of")
 }
 
+func TestTenantLogic_asyncpg(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "asyncpg")
+}
+
 func TestTenantLogic_auto_span_config_reconciliation_job(
 	t *testing.T,
 ) {

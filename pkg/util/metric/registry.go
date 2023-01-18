@@ -30,8 +30,18 @@ import (
 // when exported to prometheus.
 type Registry struct {
 	syncutil.Mutex
-	labels  []*prometheusgo.LabelPair
+	labels  []labelPair
 	tracked map[string]Iterable
+
+	// computedLabels get filled in by getLabels().
+	// We hold onto the slice to avoid a re-allocation every
+	// time the metrics get scraped.
+	computedLabels []*prometheusgo.LabelPair
+}
+
+type labelPair struct {
+	name  string
+	value interface{}
 }
 
 // Struct can be implemented by the types of members of a metric
@@ -43,26 +53,28 @@ type Struct interface {
 // NewRegistry creates a new Registry.
 func NewRegistry() *Registry {
 	return &Registry{
-		labels:  []*prometheusgo.LabelPair{},
-		tracked: map[string]Iterable{},
+		labels:         []labelPair{},
+		computedLabels: []*prometheusgo.LabelPair{},
+		tracked:        map[string]Iterable{},
 	}
 }
 
 // AddLabel adds a label/value pair for this registry.
-func (r *Registry) AddLabel(name, value string) {
+func (r *Registry) AddLabel(name string, value interface{}) {
 	r.Lock()
 	defer r.Unlock()
-	r.labels = append(r.labels,
-		&prometheusgo.LabelPair{
-			Name:  proto.String(exportedLabel(name)),
-			Value: proto.String(value),
-		})
+	r.labels = append(r.labels, labelPair{name: exportedLabel(name), value: value})
+	r.computedLabels = append(r.computedLabels, &prometheusgo.LabelPair{})
 }
 
 func (r *Registry) getLabels() []*prometheusgo.LabelPair {
 	r.Lock()
 	defer r.Unlock()
-	return r.labels
+	for i, l := range r.labels {
+		r.computedLabels[i].Name = proto.String(l.name)
+		r.computedLabels[i].Value = proto.String(fmt.Sprint(l.value))
+	}
+	return r.computedLabels
 }
 
 // AddMetric adds the passed-in metric to the registry.
