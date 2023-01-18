@@ -25,8 +25,6 @@ import {
   TxnInsightEvent,
   WorkloadInsightEventFilters,
 } from "./types";
-import { TimeScale, toDateRange } from "../timeScaleDropdown";
-import { StmtInsightsReq } from "src/api";
 
 export const filterTransactionInsights = (
   transactions: MergedTxnInsightEvent[] | null,
@@ -423,15 +421,4 @@ export function dedupInsights(insights: Insight[]): Insight[] {
     deduped.push(i);
     return deduped;
   }, []);
-}
-
-export function executionInsightsRequestFromTimeScale(
-  ts: TimeScale,
-): StmtInsightsReq {
-  if (ts === null) return {};
-  const [startTime, endTime] = toDateRange(ts);
-  return {
-    start: startTime,
-    end: endTime,
-  };
 }

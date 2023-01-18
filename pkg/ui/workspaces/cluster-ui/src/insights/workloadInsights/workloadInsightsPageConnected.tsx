@@ -12,6 +12,7 @@ import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 import { AppState } from "src/store";
 import { actions as localStorageActions } from "src/store/localStorage";
+import { actions as sqlActions } from "src/store/sqlStats";
 import {
   TransactionInsightsViewDispatchProps,
   TransactionInsightsViewStateProps,
@@ -90,7 +91,7 @@ const TransactionDispatchProps = (
     ),
   setTimeScale: (ts: TimeScale) => {
     dispatch(
-      transactionInsights.updateTimeScale({
+      sqlActions.updateTimeScale({
         ts: ts,
       }),
     );
@@ -130,7 +131,7 @@ const StatementDispatchProps = (
     ),
   setTimeScale: (ts: TimeScale) => {
     dispatch(
-      statementInsights.updateTimeScale({
+      sqlActions.updateTimeScale({
         ts: ts,
       }),
     );
