@@ -350,7 +350,14 @@ func walkDropColumnDependencies(b BuildCtx, col *scpb.Column, fn func(e scpb.Ele
 		case *scpb.SecondaryIndex:
 			if indexesToDrop.Contains(elt.IndexID) {
 				fn(e)
+			} else if elt.EmbeddedExpr != nil {
+				for _, columnID := range elt.EmbeddedExpr.ReferencedColumnIDs {
+					if columnID == col.ColumnID {
+						fn(e)
+					}
+				}
 			}
+
 		}
 	})
 	sequencesToDrop.ForEach(func(id descpb.ID) {

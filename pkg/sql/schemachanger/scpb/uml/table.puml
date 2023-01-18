@@ -76,6 +76,7 @@ PrimaryIndex :  Index
 object SecondaryIndex
 
 SecondaryIndex :  Index
+SecondaryIndex :  EmbeddedExpr
 
 object TemporaryIndex
 

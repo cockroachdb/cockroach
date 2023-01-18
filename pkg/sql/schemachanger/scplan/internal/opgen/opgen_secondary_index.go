@@ -34,6 +34,26 @@ func init() {
 						IndexID: this.IndexID,
 					}
 				}),
+				emit(func(this *scpb.SecondaryIndex) *scop.SetAddedIndexPartialPredicate {
+					if this.EmbeddedExpr == nil {
+						return nil
+					}
+					return &scop.SetAddedIndexPartialPredicate{
+						TableID: this.TableID,
+						IndexID: this.IndexID,
+						Expr:    this.EmbeddedExpr.Expr,
+					}
+				}),
+				emit(func(this *scpb.SecondaryIndex) *scop.UpdateTableBackReferencesInTypes {
+					if this.EmbeddedExpr == nil ||
+						len(this.EmbeddedExpr.UsesTypeIDs) == 0 {
+						return nil
+					}
+					return &scop.UpdateTableBackReferencesInTypes{
+						TypeIDs:               this.EmbeddedExpr.UsesTypeIDs,
+						BackReferencedTableID: this.TableID,
+					}
+				}),
 			),
 			to(scpb.Status_BACKFILLED,
 				emit(func(this *scpb.SecondaryIndex) *scop.BackfillIndex {
@@ -126,6 +146,24 @@ func init() {
 					return &scop.MakeWriteOnlyIndexDeleteOnly{
 						TableID: this.TableID,
 						IndexID: this.IndexID,
+					}
+				}),
+				emit(func(this *scpb.SecondaryIndex) *scop.RemoveDroppedIndexPartialPredicate {
+					if this.EmbeddedExpr == nil {
+						return nil
+					}
+					return &scop.RemoveDroppedIndexPartialPredicate{
+						TableID: this.TableID,
+						IndexID: this.IndexID,
+					}
+				}),
+				emit(func(this *scpb.SecondaryIndex) *scop.UpdateTableBackReferencesInTypes {
+					if this.EmbeddedExpr == nil || len(this.EmbeddedExpr.UsesTypeIDs) == 0 {
+						return nil
+					}
+					return &scop.UpdateTableBackReferencesInTypes{
+						TypeIDs:               this.EmbeddedExpr.UsesTypeIDs,
+						BackReferencedTableID: this.TableID,
 					}
 				}),
 			),

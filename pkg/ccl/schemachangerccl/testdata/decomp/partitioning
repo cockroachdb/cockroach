@@ -104,6 +104,7 @@ ElementState:
   Status: PUBLIC
 - SecondaryIndex:
     constraintId: 0
+    embeddedExpr: null
     geoConfig: null
     indexId: 2
     isConcurrently: false
@@ -514,6 +515,7 @@ ElementState:
   Status: PUBLIC
 - SecondaryIndex:
     constraintId: 1
+    embeddedExpr: null
     geoConfig: null
     indexId: 2
     isConcurrently: false
