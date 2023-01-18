@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/errors"
 )
 
 // MakeDefaultExprs returns a slice of the default expressions for the slice
@@ -70,6 +71,20 @@ func MakeDefaultExprs(
 		typedExpr, err := tree.TypeCheck(ctx, expr, semaCtx, col.GetType())
 		if err != nil {
 			return nil, err
+		}
+		// For "reasons" the CastExpr type check ignores the desired type. That
+		// means that we can get a result here that is not the right type, and
+		// we'd need to wrap that in an explicit cast. This is the equivalent of
+		// an assignment cast we'd insert when writing to the table directly.
+		if !typedExpr.ResolvedType().Equivalent(col.GetType()) {
+			if typedExpr, err = tree.TypeCheck(ctx, &tree.CastExpr{
+				Expr:       typedExpr,
+				Type:       col.GetType(),
+				SyntaxMode: tree.CastExplicit,
+			}, semaCtx, col.GetType()); err != nil {
+				return nil, errors.NewAssertionErrorWithWrappedErrf(err,
+					"failed to type check the cast of %v to %v", expr, col.GetType())
+			}
 		}
 		if typedExpr, err = txCtx.NormalizeExpr(ctx, evalCtx, typedExpr); err != nil {
 			return nil, err
