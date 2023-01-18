@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -510,7 +509,7 @@ func (s *initServer) tryBootstrap(ctx context.Context) (*initState, error) {
 
 	// We use our binary version to bootstrap the cluster.
 	cv := clusterversion.ClusterVersion{Version: s.config.binaryVersion}
-	if err := kvserver.WriteClusterVersionToEngines(ctx, s.inspectedDiskState.uninitializedEngines, cv); err != nil {
+	if err := kvstorage.WriteClusterVersionToEngines(ctx, s.inspectedDiskState.uninitializedEngines, cv); err != nil {
 		return nil, err
 	}
 
@@ -542,7 +541,7 @@ func (s *initServer) initializeFirstStoreAfterJoin(
 
 	firstEngine := s.inspectedDiskState.uninitializedEngines[0]
 	clusterVersion := clusterversion.ClusterVersion{Version: *resp.ActiveVersion}
-	if err := kvserver.WriteClusterVersion(ctx, firstEngine, clusterVersion); err != nil {
+	if err := kvstorage.WriteClusterVersion(ctx, firstEngine, clusterVersion); err != nil {
 		return nil, err
 	}
 
@@ -702,7 +701,7 @@ func inspectEngines(
 
 		initializedEngines = append(initializedEngines, eng)
 	}
-	clusterVersion, err := kvserver.SynthesizeClusterVersionFromEngines(
+	clusterVersion, err := kvstorage.SynthesizeClusterVersionFromEngines(
 		ctx, initializedEngines, binaryVersion, binaryMinSupportedVersion,
 	)
 	if err != nil {

@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -191,7 +192,7 @@ func TestBumpClusterVersion(t *testing.T) {
 			}
 
 			// Check to see that our bumped cluster version was persisted to disk.
-			synthesizedCV, err := kvserver.SynthesizeClusterVersionFromEngines(
+			synthesizedCV, err := kvstorage.SynthesizeClusterVersionFromEngines(
 				ctx, s.Engines(), test.binaryVersion,
 				test.activeClusterVersion.Version,
 			)
