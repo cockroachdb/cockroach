@@ -12,6 +12,7 @@ package install
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -20,16 +21,18 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	rperrors "github.com/cockroachdb/cockroach/pkg/roachprod/errors"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
 type session interface {
-	CombinedOutput(ctx context.Context, cmd string) ([]byte, error)
-	Run(ctx context.Context, cmd string) error
+	CombinedOutput(ctx context.Context) ([]byte, error)
+	Run(ctx context.Context) error
 	SetStdin(r io.Reader)
 	SetStdout(w io.Writer)
 	SetStderr(w io.Writer)
-	Start(cmd string) error
+	Start() error
 	StdinPipe() (io.WriteCloser, error)
 	StdoutPipe() (io.Reader, error)
 	StderrPipe() (io.Reader, error)
@@ -44,25 +47,44 @@ type remoteSession struct {
 	logfile string // captures ssh -vvv
 }
 
-func newRemoteSession(user, host string, logdir string) (*remoteSession, error) {
-	// TODO(tbg): this is disabled at the time of writing. It was difficult
-	// to assign the logfiles to the roachtest and as a bonus our CI harness
-	// never actually managed to collect the files since they had wrong
-	// permissions; instead they clogged up the roachprod dir.
-	// logfile := filepath.Join(
-	//	logdir,
-	// 	fmt.Sprintf("ssh_%s_%s", host, timeutil.Now().Format(time.RFC3339)),
-	// )
-	const logfile = ""
+type remoteCommand struct {
+	node      Node
+	user      string
+	host      string
+	cmd       string
+	debugName string
+}
+
+func newRemoteSession(l *logger.Logger, command remoteCommand) *remoteSession {
+	var loggingArgs []string
+
+	if command.debugName == "" {
+		command.debugName = GenFilenameFromArgs(20, command.cmd)
+	}
+
+	cl, err := l.ChildLogger(filepath.Join("ssh", fmt.Sprintf(
+		"ssh_%s_n%v_%s",
+		timeutil.Now().Format(`150405.000000000`),
+		command.node,
+		command.debugName,
+	)))
+
+	// Check the logger file since running roachprod from the cli will result in a fileless logger.
+	logfile := ""
+	if err == nil && l.File != nil {
+		logfile = cl.File.Name()
+		loggingArgs = []string{
+			"-vvv", "-E", logfile,
+		}
+		cl.Close()
+	} else {
+		// NB: -q suppresses -E, at least on *nix.
+		loggingArgs = []string{"-q"}
+	}
+	//const logfile = ""
 	args := []string{
-		user + "@" + host,
+		command.user + "@" + command.host,
 
-		// TODO(tbg): see above.
-		//"-vvv", "-E", logfile,
-		// NB: -q suppresses -E, at least on OSX. Difficult decisions will have
-		// to be made if omitting -q leads to annoyance on stdout/stderr.
-
-		"-q",
 		"-o", "UserKnownHostsFile=/dev/null",
 		"-o", "StrictHostKeyChecking=no",
 		// Send keep alives every minute to prevent connections without activity
@@ -75,23 +97,23 @@ func newRemoteSession(user, host string, logdir string) (*remoteSession, error) 
 		// context cancellation killing hanging roachprod processes.
 		"-o", "ConnectTimeout=5",
 	}
+	args = append(args, loggingArgs...)
 	args = append(args, sshAuthArgs()...)
+	args = append(args, command.cmd)
 	ctx, cancel := context.WithCancel(context.Background())
-	cmd := exec.CommandContext(ctx, "ssh", args...)
-	return &remoteSession{cmd, cancel, logfile}, nil
+	fullCmd := exec.CommandContext(ctx, "ssh", args...)
+	return &remoteSession{fullCmd, cancel, logfile}
 }
 
 func (s *remoteSession) errWithDebug(err error) error {
 	if err != nil && s.logfile != "" {
-		err = errors.Wrapf(err, "ssh verbose log retained in %s", s.logfile)
+		err = errors.Wrapf(err, "ssh verbose log retained in %s", filepath.Base(s.logfile))
 		s.logfile = "" // prevent removal on close
 	}
 	return err
 }
 
-func (s *remoteSession) CombinedOutput(ctx context.Context, cmd string) ([]byte, error) {
-	s.Cmd.Args = append(s.Cmd.Args, cmd)
-
+func (s *remoteSession) CombinedOutput(ctx context.Context) ([]byte, error) {
 	var b []byte
 	var err error
 	commandFinished := make(chan struct{})
@@ -111,9 +133,7 @@ func (s *remoteSession) CombinedOutput(ctx context.Context, cmd string) ([]byte,
 	}
 }
 
-func (s *remoteSession) Run(ctx context.Context, cmd string) error {
-	s.Cmd.Args = append(s.Cmd.Args, cmd)
-
+func (s *remoteSession) Run(ctx context.Context) error {
 	var err error
 	commandFinished := make(chan struct{})
 	go func() {
@@ -130,9 +150,8 @@ func (s *remoteSession) Run(ctx context.Context, cmd string) error {
 	}
 }
 
-func (s *remoteSession) Start(cmd string) error {
-	s.Cmd.Args = append(s.Cmd.Args, cmd)
-	return rperrors.ClassifyCmdError(s.Cmd.Start())
+func (s *remoteSession) Start() error {
+	return rperrors.ClassifyCmdError(s.errWithDebug(s.Cmd.Start()))
 }
 
 func (s *remoteSession) SetStdin(r io.Reader) {
@@ -182,15 +201,13 @@ type localSession struct {
 	cancel func()
 }
 
-func newLocalSession() *localSession {
+func newLocalSession(cmd string) *localSession {
 	ctx, cancel := context.WithCancel(context.Background())
-	cmd := exec.CommandContext(ctx, "/bin/bash", "-c")
-	return &localSession{cmd, cancel}
+	fullCmd := exec.CommandContext(ctx, "/bin/bash", "-c", cmd)
+	return &localSession{fullCmd, cancel}
 }
 
-func (s *localSession) CombinedOutput(ctx context.Context, cmd string) ([]byte, error) {
-	s.Cmd.Args = append(s.Cmd.Args, cmd)
-
+func (s *localSession) CombinedOutput(ctx context.Context) ([]byte, error) {
 	var b []byte
 	var err error
 	commandFinished := make(chan struct{})
@@ -209,9 +226,7 @@ func (s *localSession) CombinedOutput(ctx context.Context, cmd string) ([]byte, 
 	}
 }
 
-func (s *localSession) Run(ctx context.Context, cmd string) error {
-	s.Cmd.Args = append(s.Cmd.Args, cmd)
-
+func (s *localSession) Run(ctx context.Context) error {
 	var err error
 	commandFinished := make(chan struct{})
 	go func() {
@@ -228,8 +243,7 @@ func (s *localSession) Run(ctx context.Context, cmd string) error {
 	}
 }
 
-func (s *localSession) Start(cmd string) error {
-	s.Cmd.Args = append(s.Cmd.Args, cmd)
+func (s *localSession) Start() error {
 	return rperrors.ClassifyCmdError(s.Cmd.Start())
 }
 
