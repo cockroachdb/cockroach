@@ -10213,3 +10213,36 @@ func TestBackupDBWithViewOnAdjacentDBRange(t *testing.T) {
 	// but would fail if it was backed up.
 	sqlDB.Exec(t, `BACKUP database db into latest in 'userfile:///a' with revision_history;`)
 }
+
+// TestExportRevisionsWithTimestampPagination is a regression test for a bug
+// where in the presence of several revisions of the same key, an unstable sort
+// in the backup processor's sstSink would result in out-of-order keys being
+// written to the in-memory Pebble file. This would result in a failed backup.
+func TestExportRevisionsWithTimestampPagination(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	dir, dirCleanupFn := testutils.TempDir(t)
+	defer dirCleanupFn()
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
+		ExternalIODir: dir,
+	}})
+	defer tc.Stopper().Stop(ctx)
+
+	db := sqlutils.MakeSQLRunner(tc.Conns[0])
+	db.Exec(t, `CREATE TABLE foo (id) AS (SELECT 1)`)
+	// Generate a thousand revisions.
+	for i := 2; i < 1002; i++ {
+		db.Exec(t, `UPDATE foo SET id = $1`, i)
+	}
+	db.Exec(t, `SET CLUSTER SETTING kv.bulk_sst.max_allowed_overage = '19b'`)
+	db.Exec(t, `SET CLUSTER SETTING kv.bulk_sst.target_size = '1b'`)
+
+	// Each response is roughly 940bytes large. 845100b ensures that we have ~900
+	// revisions in our file buffer that we then sort before writing to the
+	// underlying SSTWriter. This configuration was sufficient to result in an
+	// unstable sort when the test was run under stress.
+	db.Exec(t, `SET CLUSTER SETTING bulkio.backup.merge_file_buffer_size = '845100b'`)
+	db.Exec(t, `BACKUP TABLE foo INTO 'nodelocal://1/foo' WITH revision_history`)
+}

@@ -251,6 +251,7 @@ type returnedSST struct {
 	f              BackupManifest_File
 	sst            []byte
 	revStart       hlc.Timestamp
+	endKeyTS       hlc.Timestamp
 	completedSpans int32
 	atKeyBoundary  bool
 }
@@ -536,7 +537,7 @@ func runBackupProcessor(
 							f.StartTime = span.start
 							f.EndTime = span.end
 						}
-						ret := returnedSST{f: f, sst: file.SST, revStart: res.StartTime, atKeyBoundary: file.EndKeyTS.IsEmpty()}
+						ret := returnedSST{f: f, endKeyTS: file.EndKeyTS, sst: file.SST, revStart: res.StartTime, atKeyBoundary: file.EndKeyTS.IsEmpty()}
 						// If multiple files were returned for this span, only one -- the
 						// last -- should count as completing the requested span.
 						if i == len(res.Files)-1 {
@@ -709,7 +710,34 @@ func (s *sstSink) push(ctx context.Context, resp returnedSST) error {
 	s.queueSize += len(resp.sst)
 
 	if s.queueSize >= int(s.queueCap) {
-		sort.Slice(s.queue, func(i, j int) bool { return s.queue[i].f.Span.Key.Compare(s.queue[j].f.Span.Key) < 0 })
+		sort.Slice(s.queue, func(i, j int) bool {
+			cmp := s.queue[i].f.Span.Key.Compare(s.queue[j].f.Span.Key)
+			// If two backup files have the same start key, it implies we have
+			// paginated in the middle of a key's revisions and those revisions
+			// straddle the file boundary. We must ensure that these files are sorted
+			// in decreasing order of the key's revision timestamps so that they are
+			// added in-order to the underlying SSTWriter.
+			if cmp == 0 {
+				// Since the start key of the files are equal we compare the EndKeys.
+				cmp := s.queue[i].f.Span.EndKey.Compare(s.queue[j].f.Span.EndKey)
+				// If the end keys are also equal, we know that both files only contain
+				// revisions of the same key, and so it is safe to sort in descending
+				// order of the timestamp of the last revision in each file.
+				if cmp == 0 {
+					return s.queue[j].endKeyTS.Less(s.queue[i].endKeyTS)
+				}
+				// Otherwise, we want to sort the files in increasing order of their
+				// EndKeys.
+				// This ensures that a queue such as
+				// `{[a@3, a@2, b@6] , [a@6, a@5, a@4]}`
+				// will have its files in an order that will write to the underlying
+				// SSTWriter in-order.
+				// `{[a@6, a@5, a@4], [a@3, a@2, b@6]}`
+				return cmp < 0
+			}
+
+			return cmp < 0
+		})
 
 		// Drain the first half.
 		drain := len(s.queue) / 2
