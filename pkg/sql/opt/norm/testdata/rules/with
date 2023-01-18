@@ -10,31 +10,26 @@ CREATE TABLE xy (x INT PRIMARY KEY, y INT);
 # InlineWith
 # --------------------------------------------------
 
-build format=show-all
+# Do not inline a multiply-referenced CTE.
+norm expect-not=InlineWith format=show-all
 WITH foo AS (SELECT 1) (SELECT * FROM foo) UNION ALL (SELECT * FROM foo)
 ----
 with &1 (foo)
  ├── columns: "?column?":4(int!null)
  ├── cardinality: [2 - 2]
  ├── stats: [rows=2]
- ├── cost: 0.11
+ ├── cost: 0.08
  ├── prune: (4)
- ├── project
+ ├── values
  │    ├── columns: "?column?":1(int!null)
  │    ├── cardinality: [1 - 1]
  │    ├── stats: [rows=1]
- │    ├── cost: 0.05
+ │    ├── cost: 0.02
  │    ├── key: ()
  │    ├── fd: ()-->(1)
  │    ├── prune: (1)
- │    ├── values
- │    │    ├── cardinality: [1 - 1]
- │    │    ├── stats: [rows=1]
- │    │    ├── cost: 0.02
- │    │    ├── key: ()
- │    │    └── tuple [type=tuple]
- │    └── projections
- │         └── const: 1 [as="?column?":1, type=int]
+ │    └── tuple [type=tuple{int}]
+ │         └── const: 1 [type=int]
  └── union-all
       ├── columns: "?column?":4(int!null)
       ├── left columns: "?column?":2(int)
@@ -69,6 +64,39 @@ with &1 (foo)
            ├── prune: (3)
            └── cte-uses
                 └── &1: count=1 used-columns=(1)
+
+# Inline a multiply-referenced CTE if it is NOT MATERIALIZED.
+norm expect=InlineWith format=show-all
+WITH foo AS NOT MATERIALIZED (SELECT 1) (SELECT * FROM foo) UNION ALL (SELECT * FROM foo)
+----
+union-all
+ ├── columns: "?column?":4(int!null)
+ ├── left columns: "?column?":2(int)
+ ├── right columns: "?column?":3(int)
+ ├── cardinality: [2 - 2]
+ ├── stats: [rows=2]
+ ├── cost: 0.07
+ ├── prune: (4)
+ ├── values
+ │    ├── columns: "?column?":2(int!null)
+ │    ├── cardinality: [1 - 1]
+ │    ├── stats: [rows=1]
+ │    ├── cost: 0.02
+ │    ├── key: ()
+ │    ├── fd: ()-->(2)
+ │    ├── prune: (2)
+ │    └── tuple [type=tuple{int}]
+ │         └── const: 1 [type=int]
+ └── values
+      ├── columns: "?column?":3(int!null)
+      ├── cardinality: [1 - 1]
+      ├── stats: [rows=1]
+      ├── cost: 0.02
+      ├── key: ()
+      ├── fd: ()-->(3)
+      ├── prune: (3)
+      └── tuple [type=tuple{int}]
+           └── const: 1 [type=int]
 
 norm format=show-all expect=InlineWith
 WITH foo AS (SELECT 1) SELECT * FROM foo
@@ -401,7 +429,7 @@ anti-join-apply
       └── column1:10 = k:2 [outer=(2,10), constraints=(/2: (/NULL - ]; /10: (/NULL - ]), fd=(2)==(10), (10)==(2)]
 
 # Don't inline side-effecting expressions.
-norm
+norm expect-not=InlineWith
 WITH foo AS (INSERT INTO a VALUES (1) RETURNING *) SELECT * FROM foo
 ----
 with &1 (foo)
@@ -451,6 +479,78 @@ WITH foo AS (SELECT crdb_internal.notice('foo')) SELECT * FROM foo
 ----
 with &1 (foo)
  ├── columns: crdb_internal.notice:2
+ ├── cardinality: [1 - 1]
+ ├── volatile
+ ├── key: ()
+ ├── fd: ()-->(2)
+ ├── values
+ │    ├── columns: crdb_internal.notice:1
+ │    ├── cardinality: [1 - 1]
+ │    ├── volatile
+ │    ├── key: ()
+ │    ├── fd: ()-->(1)
+ │    └── (crdb_internal.notice('foo'),)
+ └── with-scan &1 (foo)
+      ├── columns: crdb_internal.notice:2
+      ├── mapping:
+      │    └──  crdb_internal.notice:1 => crdb_internal.notice:2
+      ├── cardinality: [1 - 1]
+      ├── key: ()
+      └── fd: ()-->(2)
+
+# Don't inline side-effecting expressions, even if the CTE is NOT MATERIALIZED.
+norm expect-not=InlineWith
+WITH foo AS NOT MATERIALIZED (INSERT INTO a VALUES (1) RETURNING *) SELECT * FROM foo
+----
+with &1 (foo)
+ ├── columns: k:13!null i:14 f:15 s:16 j:17
+ ├── not-materialized
+ ├── cardinality: [1 - 1]
+ ├── volatile, mutations
+ ├── key: ()
+ ├── fd: ()-->(13-17)
+ ├── insert a
+ │    ├── columns: a.k:1!null a.i:2 a.f:3 a.s:4 a.j:5
+ │    ├── insert-mapping:
+ │    │    ├── column1:8 => a.k:1
+ │    │    ├── i_default:9 => a.i:2
+ │    │    ├── f_default:10 => a.f:3
+ │    │    ├── s_default:11 => a.s:4
+ │    │    └── j_default:12 => a.j:5
+ │    ├── return-mapping:
+ │    │    ├── column1:8 => a.k:1
+ │    │    ├── i_default:9 => a.i:2
+ │    │    ├── f_default:10 => a.f:3
+ │    │    ├── s_default:11 => a.s:4
+ │    │    └── j_default:12 => a.j:5
+ │    ├── cardinality: [1 - 1]
+ │    ├── volatile, mutations
+ │    ├── key: ()
+ │    ├── fd: ()-->(1-5)
+ │    └── values
+ │         ├── columns: column1:8!null i_default:9 f_default:10 s_default:11 j_default:12
+ │         ├── cardinality: [1 - 1]
+ │         ├── key: ()
+ │         ├── fd: ()-->(8-12)
+ │         └── (1, NULL, NULL, NULL, NULL)
+ └── with-scan &1 (foo)
+      ├── columns: k:13!null i:14 f:15 s:16 j:17
+      ├── mapping:
+      │    ├──  a.k:1 => k:13
+      │    ├──  a.i:2 => i:14
+      │    ├──  a.f:3 => f:15
+      │    ├──  a.s:4 => s:16
+      │    └──  a.j:5 => j:17
+      ├── cardinality: [1 - 1]
+      ├── key: ()
+      └── fd: ()-->(13-17)
+
+norm expect-not=InlineWith
+WITH foo AS NOT MATERIALIZED (SELECT crdb_internal.notice('foo')) SELECT * FROM foo
+----
+with &1 (foo)
+ ├── columns: crdb_internal.notice:2
+ ├── not-materialized
  ├── cardinality: [1 - 1]
  ├── volatile
  ├── key: ()
