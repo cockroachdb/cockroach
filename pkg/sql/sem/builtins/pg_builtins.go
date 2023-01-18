@@ -204,48 +204,6 @@ var (
 	datEncodingUTF8ShortName = tree.NewDString("UTF8")
 )
 
-// Make a pg_get_indexdef function with the given arguments.
-func makePGGetIndexDef(paramTypes tree.ParamTypes) tree.Overload {
-	return tree.Overload{
-		Types:      paramTypes,
-		ReturnType: tree.FixedReturnType(types.String),
-		Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-			colNumber := *tree.NewDInt(0)
-			if len(args) == 3 {
-				// The 1 argument and 3 argument variants are equivalent when column number 0 is passed.
-				colNumber = *args[1].(*tree.DInt)
-			}
-			// The 3 argument variant for column number other than 0 returns the column name.
-			r, err := evalCtx.Planner.QueryRowEx(
-				ctx, "pg_get_indexdef",
-				sessiondata.NoSessionDataOverride,
-				`SELECT CASE
-    				WHEN $2 = 0 THEN defs.indexdef
-						-- If the column number does not exist in the index we return an empty string.
-						WHEN $2 < 0 OR $2 > array_length(i.indkey, 1) THEN ''
-						WHEN i.indkey[$2-1] = 0 THEN (indexprs::STRING[])[array_position(array_positions(i.indkey, 0), $2)]
-						ELSE a.attname
-					END as pg_get_indexdef
-					FROM pg_catalog.pg_index i
-					LEFT JOIN pg_attribute a ON (a.attrelid = i.indexrelid AND a.attnum = $2)
-					LEFT JOIN pg_indexes defs ON ($2 = 0 AND defs.crdb_oid = i.indexrelid)
-					WHERE i.indexrelid = $1`, args[0], colNumber)
-			if err != nil {
-				return nil, err
-			}
-			if len(r) == 0 {
-				return tree.DNull, nil
-			}
-			if len(r) > 1 {
-				return nil, errors.AssertionFailedf("pg_get_indexdef query has more than 1 result row: %+v", r)
-			}
-			return r[0], nil
-		},
-		Info:       "Gets the CREATE INDEX command for index, or definition of just one index column when given a column number",
-		Volatility: volatility.Stable,
-	}
-}
-
 // Make a pg_get_viewdef function with the given arguments.
 func makePGGetViewDef(paramTypes tree.ParamTypes) tree.Overload {
 	return tree.Overload{
@@ -708,8 +666,36 @@ var pgBuiltins = map[string]builtinDefinition{
 	// statement.
 	"pg_get_indexdef": makeBuiltin(
 		tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo, DistsqlBlocklist: true},
-		makePGGetIndexDef(tree.ParamTypes{{Name: "index_oid", Typ: types.Oid}}),
-		makePGGetIndexDef(tree.ParamTypes{{Name: "index_oid", Typ: types.Oid}, {Name: "column_no", Typ: types.Int}, {Name: "pretty_bool", Typ: types.Bool}}),
+		tree.Overload{
+			IsUDF:      true,
+			Types:      tree.ParamTypes{{Name: "index_oid", Typ: types.Oid}},
+			ReturnType: tree.FixedReturnType(types.String),
+			Body:       `SELECT indexdef FROM pg_catalog.pg_indexes WHERE crdb_oid = $1`,
+			Info:       "Gets the CREATE INDEX command for index",
+			Volatility: volatility.Stable,
+		},
+		tree.Overload{
+			IsUDF:      true,
+			Types:      tree.ParamTypes{{Name: "index_oid", Typ: types.Oid}, {Name: "column_no", Typ: types.Int}, {Name: "pretty_bool", Typ: types.Bool}},
+			ReturnType: tree.FixedReturnType(types.String),
+			Body: `SELECT CASE
+    				WHEN $2 = 0 THEN defs.indexdef
+						WHEN $2 < 0 OR $2 > array_length(i.indkey, 1) THEN ''
+						-- array_positions(i.indkey, 0) returns the 1-based indexes of the indkey elements that are 0.
+    				-- array_position(arr, $2) returns the 1-based index of the value $2 in arr.
+    				-- indkey is an int2vector, which is accessed with 0-based indexes.
+    				-- indexprs is a string[], which is accessed with 1-based indexes.
+    				-- To put this all together, for the k-th 0 value inside of indkey, this will find the k-th indexpr.
+						WHEN i.indkey[$2-1] = 0 THEN (indexprs::STRING[])[array_position(array_positions(i.indkey, 0), $2)]
+						ELSE a.attname
+					END as pg_get_indexdef
+					FROM pg_catalog.pg_index i
+					LEFT JOIN pg_attribute a ON (a.attrelid = i.indexrelid AND a.attnum = $2)
+					LEFT JOIN pg_indexes defs ON ($2 = 0 AND defs.crdb_oid = i.indexrelid)
+					WHERE i.indexrelid = $1`,
+			Info:       "Gets the CREATE INDEX command for index, or definition of just one index column when given a non-zero column number",
+			Volatility: volatility.Stable,
+		},
 	),
 
 	// pg_get_viewdef functions like SHOW CREATE VIEW but returns the same format as
