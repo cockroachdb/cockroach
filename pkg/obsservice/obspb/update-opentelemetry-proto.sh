@@ -71,7 +71,7 @@ DEST_DIR=opentelemetry-proto
 
 echo "Copying protos."
 # Copy the protos from the repo.
-rsync -avrq --include "*/" --include="common.proto" --include="resource.proto" --include="logs.proto" --exclude="*" --prune-empty-dirs $WORK_DIR/opentelemetry/proto/* $DEST_DIR
+rsync -avrq --include "*/" --include="common.proto" --include="resource.proto" --include="logs.proto" --include="logs_service.proto" --exclude="*" --prune-empty-dirs $WORK_DIR/opentelemetry/proto/* $DEST_DIR
 
 # Massage the protos so that they work in our tree.
 echo "Editing protos."
