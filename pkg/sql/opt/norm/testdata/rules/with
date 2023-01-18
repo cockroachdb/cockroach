@@ -1009,7 +1009,7 @@ scalar-group-by
            └── n:5
 
 # --------------------------------------------------
-# InlineAnyWithScan
+# InlineAnyWithScanOfValues
 # --------------------------------------------------
 
 exec-ddl
@@ -1017,7 +1017,7 @@ CREATE TABLE t87790(i INT, j INT, k float, CONSTRAINT "primary" PRIMARY KEY (i,j
 ----
 
 # An array unnested to VALUES should be inlined.
-norm expect=InlineAnyWithScan
+norm expect=InlineAnyWithScanOfValues
 WITH ivals AS (SELECT * FROM unnest(ARRAY[1,2,3]))
 SELECT * FROM t87790 WHERE i IN (SELECT * FROM ivals)
 ----
@@ -1033,7 +1033,7 @@ select
       └── i:2 IN (1, 2, 3) [outer=(2), constraints=(/2: [/1 - /1] [/2 - /2] [/3 - /3]; tight)]
 
 # An array unnested to VALUES in a MATERIALIZED WITH should not be inlined.
-norm expect-not=InlineAnyWithScan
+norm expect-not=InlineAnyWithScanOfValues
 WITH ivals AS MATERIALIZED (SELECT * FROM unnest(ARRAY[1,2,3]))
 SELECT * FROM t87790 WHERE i IN (SELECT * FROM ivals)
 ----
@@ -1065,7 +1065,7 @@ with &1 (ivals)
            └── i:2 = unnest:7 [outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
 
 # Random (volatile) VALUES should not be inlined.
-norm expect-not=InlineAnyWithScan
+norm expect-not=InlineAnyWithScanOfValues
 WITH randvals AS (SELECT random())
 SELECT * FROM t87790 WHERE k NOT IN (SELECT * FROM randvals)
 ----
@@ -1101,7 +1101,7 @@ with &1 (randvals)
 
 # A non-constant WITH expression cannot be inlined in the middle of
 # normalization.
-norm expect-not=InlineAnyWithScan
+norm expect-not=InlineAnyWithScanOfValues
 WITH ivals AS (SELECT * FROM unnest(ARRAY(SELECT i FROM t87790)))
 SELECT * FROM t87790 WHERE i IN (SELECT * FROM ivals)
 ----
@@ -1134,7 +1134,8 @@ semi-join (hash)
  └── filters
       └── i:7 = unnest:12 [outer=(7,12), constraints=(/7: (/NULL - ]; /12: (/NULL - ]), fd=(7)==(12), (12)==(7)]
 
-# Placeholders are considered constant for the InlineAnyWithScan normalization.
+# Placeholders are considered constant for the InlineAnyWithScanOfValues
+# normalization.
 assign-placeholders-norm query-args=(1, 2, 3)
 WITH ivals AS (SELECT * FROM unnest(ARRAY[$1::INT, $2::INT, $3::INT]))
 SELECT * FROM t87790 WHERE i IN (SELECT * FROM ivals)
@@ -1150,7 +1151,7 @@ select
  └── filters
       └── i:2 IN (1, 2, 3) [outer=(2), constraints=(/2: [/1 - /1] [/2 - /2] [/3 - /3]; tight)]
 
-norm expect=InlineAnyWithScan
+norm expect=InlineAnyWithScanOfValues
 WITH v(a,b) AS (VALUES (1,2))
 SELECT 1 FROM t87790 WHERE i IN (SELECT a FROM v)
 UNION ALL
