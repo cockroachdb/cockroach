@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -895,4 +896,129 @@ func registerKVRangeLookups(r registry.Registry) {
 			},
 		})
 	}
+}
+
+// measureQPS will measure the approx QPS at the time this command is run. The
+// duration is how long of an interval to wait while measuring. Setting too
+// short of an interval can mean inaccuracy in results. Setting too long of an
+// interval may mean the impact is blurred out.
+func measureQPS(ctx context.Context, t test.Test, db *gosql.DB, duration time.Duration) float64 {
+	numInserts := func() float64 {
+		var v float64
+		if err := db.QueryRowContext(
+			ctx, `SELECT value FROM crdb_internal.node_metrics WHERE name = 'sql.insert.count'`,
+		).Scan(&v); err != nil {
+			t.Fatal(err)
+		}
+		return v
+	}
+
+	before := numInserts()
+	time.Sleep(duration)
+	after := numInserts()
+	return (after - before) / duration.Seconds()
+}
+
+// registerKVRestartImpact measures the impact of stopping and then restarting a
+// node during a write-heavy workload. Specifically the Raft log on the node
+// falls behind when the node is down and when it comes back up it goes into IO
+// Overload as it attempts to recover. Note that this test stops the replicate
+// queue during the test to help isolate the impact of Raft backlog vs snapshot
+// transfers.
+func registerKVRestartImpact(r registry.Registry) {
+	r.Add(registry.TestSpec{
+		Skip:    "#95159",
+		Name:    "kv/restart/nodes=12",
+		Owner:   registry.OwnerKV,
+		Cluster: r.MakeClusterSpec(13, spec.CPU(8)),
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			nodes := c.Spec().NodeCount - 1
+			workloadNode := c.Spec().NodeCount
+			c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
+			c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Range(1, nodes))
+
+			// The duration of the outage.
+			duration, err := time.ParseDuration(ifLocal(c, "20s", "10m"))
+			assert.NoError(t, err)
+			// Set the duration of the entire test to be 3x the outage duration.
+			testDuration := 3 * duration
+
+			db := c.Conn(ctx, t.L(), 1)
+			defer db.Close()
+
+			t.Status(fmt.Sprintf("initializing kv dataset <%s", 3*time.Minute))
+			// We need a lot of ranges so that the individual ranges don't get truncated by Raft.
+			splits := ifLocal(c, " --splits=3", " --splits=20000")
+			c.Run(ctx, c.Node(workloadNode), "./cockroach workload init kv "+splits+" {pgurl:1}")
+
+			t.Status(fmt.Sprintf("starting kv workload thread to run for %s", testDuration))
+			m := c.NewMonitor(ctx, c.Range(1, nodes))
+			m.Go(func(ctx context.Context) error {
+				testDurationStr := " --duration=" + testDuration.String()
+				concurrency := ifLocal(c, "  --concurrency=8", " --concurrency=64")
+				// Don't include the last node when starting the workload since it will
+				// stop in the middle, even with tolerate-errors set, it is still better
+				// not to use. Write enough data per value to make sure we create a
+				// large raft backlog.
+				c.Run(ctx, c.Node(workloadNode),
+					"./cockroach workload run kv --min-block-bytes=8192 --max-block-bytes=8192 --tolerate-errors --read-percent=50 "+
+						testDurationStr+concurrency+fmt.Sprintf(" {pgurl:1-%d}", nodes-1),
+				)
+				return nil
+			})
+
+			// Let some data be written to all nodes in the cluster.
+			t.Status(fmt.Sprintf("waiting %s to establish a base QPS", duration))
+			time.Sleep(duration)
+			qpsInitial := measureQPS(ctx, t, db, 5*time.Second)
+			t.Status(fmt.Sprintf("initial (single node) qps: %.0f", qpsInitial))
+
+			// Disable replicate queue on all nodes. This allows the test to reproduce
+			// the issue without a lot of fill beforehand. The system won't try and
+			// upreplicate these ranges somewhere else. We want to measure the impact
+			// of raft catchup, not snapshot movement.
+			setReplicateQueueEnabled := func(enabled bool) {
+				for n := 1; n <= nodes; n++ {
+					conn := c.Conn(ctx, t.L(), n)
+					defer conn.Close()
+					_, err := conn.ExecContext(ctx,
+						`SELECT crdb_internal.kv_set_queue_active('replicate', $1)`, enabled)
+					require.NoError(t, err)
+				}
+			}
+			setReplicateQueueEnabled(false)
+
+			// Gracefully shut down the last node to let it transfer leases cleanly.
+			// Wait enough time to let it fall behind on Raft. Since there are a lot
+			// of ranges, only a small number will be upreplicated during this time.
+			gracefulOpts := option.DefaultStopOpts()
+			gracefulOpts.RoachprodOpts.Sig = 15 // SIGTERM
+			gracefulOpts.RoachprodOpts.Wait = true
+			c.Stop(ctx, t.L(), gracefulOpts, c.Node(nodes))
+			t.Status(fmt.Sprintf("waiting %x after stopping node to allow the node to fall behind", duration))
+			time.Sleep(duration)
+
+			// Start the node again. It will attempt to catch up and go into an IO
+			// Overload scenario. Re-enable the replicate queue now so that leases
+			// begin to transfer.
+			t.Status("restarting stopped node and the replicate queue")
+			c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Node(nodes))
+			setReplicateQueueEnabled(true)
+			t.Status(fmt.Sprintf("waiting %s for the workload to finish and measuring the impact of the outage", duration))
+
+			// Wait for IO overload and enough leases to be transferred back.
+			if !c.IsLocal() {
+				time.Sleep(3 * time.Minute)
+			}
+			qpsFinal := measureQPS(ctx, t, db, 5*time.Second)
+			t.Status(fmt.Sprintf("post outage qps: %.0f", qpsFinal))
+
+			// Pass the test if the QPS is within a factor of 2. Often the qpsFinal is
+			// 0 in most rus, so avoid a divide by 0 error.
+			assert.Greater(t, qpsFinal/qpsInitial, 0.5)
+
+			// Wait for the workload to finish.
+			m.Wait()
+		},
+	})
 }
