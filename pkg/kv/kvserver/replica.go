@@ -2108,7 +2108,7 @@ func (r *Replica) MeasureRaftCPUNanos(start time.Duration) {
 // is recorded against the replica's cpu time attribution.
 func (r *Replica) measureNanosRunning(start time.Duration, f func(float64)) {
 	end := grunning.Time()
-	dur := grunning.Difference(start, end).Nanoseconds()
+	dur := grunning.Elapsed(start, end).Nanoseconds()
 	f(float64(dur))
 }
 
