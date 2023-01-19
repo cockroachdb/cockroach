@@ -182,6 +182,9 @@ type BytesMonitor struct {
 		// monitoring.
 		maxAllocated int64
 
+		// maxReported tracks the high water mark of allocations that is logged.
+		maxReported int64
+
 		// curBudget represents the budget allocated at the pool on behalf of
 		// this monitor.
 		curBudget BoundAccount
@@ -365,6 +368,8 @@ func (mm *BytesMonitor) Start(ctx context.Context, pool *BytesMonitor, reserved 
 	}
 	mm.mu.curAllocated = 0
 	mm.mu.maxAllocated = 0
+	// start reporting growth at 1 MB
+	mm.mu.maxReported = 1<<20 - 1
 	mm.mu.curBudget = pool.MakeBoundAccount()
 	mm.reserved = reserved
 	if log.V(2) {
@@ -788,6 +793,11 @@ func (mm *BytesMonitor) reserveBytes(ctx context.Context, x int64) error {
 	}
 	if mm.mu.maxAllocated < mm.mu.curAllocated {
 		mm.mu.maxAllocated = mm.mu.curAllocated
+		if mm.mu.maxAllocated > mm.mu.maxReported {
+			log.Warningf(ctx, "%s: max allocated increased to %s", mm.name, humanizeutil.IBytes(mm.mu.maxAllocated))
+			// Use bitwise or to only report doubling events.
+			mm.mu.maxReported |= mm.mu.maxAllocated
+		}
 	}
 
 	// Report "large" queries to the log for further investigation.
