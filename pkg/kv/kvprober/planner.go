@@ -156,7 +156,7 @@ func (p *meta2Planner) next(ctx context.Context) (Step, error) {
 		happyInterval := p.happyInterval()
 		if limit := p.getRateLimit(happyInterval, p.settings); timeSinceLastPlan < limit {
 			return Step{}, errors.Newf("planner rate limit hit: "+
-				"timSinceLastPlan=%v, happyInterval=%v, limit=%v", timeSinceLastPlan, happyInterval, limit)
+				"timeSinceLastPlan=%v, happyInterval=%v, limit=%v", timeSinceLastPlan, happyInterval, limit)
 		}
 		p.lastPlanTime = p.now()
 
