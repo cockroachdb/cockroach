@@ -147,32 +147,23 @@ vectorized: true
               spans: LIMITED SCAN
               limit: 1
 
-# TODO(mgartner): The uncorrelated subquery in the UDF body should be executed
-# only once.
+# The uncorrelated subquery in the UDF body is executed only once.
 query T kvtrace
 SELECT sub_fn()
 ----
 Scan /Table/112/{1-2}
 Scan /Table/113/{1-2}
-Scan /Table/113/{1-2}
-Scan /Table/113/{1-2}
 
-# TODO(mgartner): The uncorrelated subquery in the UDF body should be executed
-# only once per row produced by generate_series.
+# The uncorrelated subquery in the UDF body is executed only once per row
+# produced by generate_series.
 query T kvtrace
 SELECT sub_fn() FROM generate_series(1, 3)
 ----
 Scan /Table/112/{1-2}
 Scan /Table/113/{1-2}
-Scan /Table/113/{1-2}
-Scan /Table/113/{1-2}
 Scan /Table/112/{1-2}
 Scan /Table/113/{1-2}
-Scan /Table/113/{1-2}
-Scan /Table/113/{1-2}
 Scan /Table/112/{1-2}
-Scan /Table/113/{1-2}
-Scan /Table/113/{1-2}
 Scan /Table/113/{1-2}
 
 

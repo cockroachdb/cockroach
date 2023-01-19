@@ -61,6 +61,13 @@ type RoutineExpr struct {
 	// routine will see a snapshot of the data as of the start of the statement
 	// invoking the routine.
 	EnableStepping bool
+
+	// CachedResult stores the datum that the routine evaluates to, if the
+	// routine is nullary (zero arguments) and stepping is disabled. It is
+	// populated during the first execution of the routine. Subsequent
+	// invocations of the routine return Result directly, rather than being
+	// executed.
+	CachedResult Datum
 }
 
 // NewTypedRoutineExpr returns a new RoutineExpr that is well-typed.
