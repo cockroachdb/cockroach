@@ -143,9 +143,8 @@ func (a kvAuth) authenticate(ctx context.Context) (roachpb.TenantID, error) {
 		//
 		// Is this a connection from another SQL tenant server?
 		if security.IsTenantCertificate(clientCert) {
-			// Incoming connection originating from a tenant SQL server,
-			// into a KV node. Let through. The other server
-			// is able to use any of this server's RPCs.
+			// Incoming connection originating from a tenant SQL server. Let through.
+			// The other server is able to use any of this server's RPCs.
 			return roachpb.TenantID{}, nil
 		}
 	}
