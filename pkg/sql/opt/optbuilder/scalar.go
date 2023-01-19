@@ -731,14 +731,49 @@ func (b *Builder) buildUDF(
 	out = b.factory.ConstructUDF(
 		args,
 		&memo.UDFPrivate{
-			Name:              def.Name,
-			Params:            params,
-			Body:              rels,
-			Typ:               f.ResolvedType(),
-			Volatility:        o.Volatility,
-			CalledOnNullInput: o.CalledOnNullInput,
+			Name:       def.Name,
+			Params:     params,
+			Body:       rels,
+			Typ:        f.ResolvedType(),
+			Volatility: o.Volatility,
 		},
 	)
+
+	// If the UDF is strict, it should not be invoked when any of the arguments
+	// are NULL. To achieve this, we wrap the UDF in a CASE expression like:
+	//
+	//   CASE WHEN arg1 IS NULL OR arg2 IS NULL OR ... THEN NULL ELSE udf() END
+	//
+	if !o.CalledOnNullInput {
+		var anyArgIsNull opt.ScalarExpr
+		for i := range args {
+			// Note: We do NOT use a TupleIsNullExpr here if the argument is a
+			// tuple because a strict UDF will be called if an argument, T, is a
+			// tuple with all NULL elements, even though T IS NULL evaluates to
+			// true. For example:
+			//
+			//   SELECT strict_fn(1, (NULL, NULL)) -- the UDF will be called
+			//   SELECT (NULL, NULL) IS NULL       -- returns true
+			//
+			argIsNull := b.factory.ConstructIs(args[i], memo.NullSingleton)
+			if anyArgIsNull == nil {
+				anyArgIsNull = argIsNull
+				continue
+			}
+			anyArgIsNull = b.factory.ConstructOr(argIsNull, anyArgIsNull)
+		}
+		out = b.factory.ConstructCase(
+			memo.TrueSingleton,
+			memo.ScalarListExpr{
+				b.factory.ConstructWhen(
+					anyArgIsNull,
+					b.factory.ConstructNull(f.ResolvedType()),
+				),
+			},
+			out,
+		)
+	}
+
 	return b.finishBuildScalar(f, out, inScope, outScope, outCol)
 }
 

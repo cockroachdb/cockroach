@@ -17,6 +17,7 @@ describe("Test filter functions", (): void => {
         app: "",
         timeNumber: "0",
         timeUnit: "seconds",
+        executionStatus: "",
         fullScan: false,
         sqlType: "",
         database: "",
@@ -25,6 +26,7 @@ describe("Test filter functions", (): void => {
         sessionStatus: "",
         nodes: "",
         username: "",
+        workloadInsightType: "",
       };
       const resultFilters = getFiltersFromQueryString("");
       expect(resultFilters).toEqual(expectedFilters);
@@ -36,6 +38,7 @@ describe("Test filter functions", (): void => {
       app: "$ internal",
       timeNumber: "1",
       timeUnit: "milliseconds",
+      executionStatus: "",
       fullScan: true,
       sqlType: "DML",
       database: "movr",
@@ -44,6 +47,7 @@ describe("Test filter functions", (): void => {
       sessionStatus: "idle",
       nodes: "n1,n2",
       username: "root",
+      workloadInsightType: "",
     };
     const resultFilters = getFiltersFromQueryString(
       "app=%24+internal&timeNumber=1&timeUnit=milliseconds&fullScan=true&sqlType=DML&database=movr&sessionStatus=idle&username=root&regions=us-central&nodes=n1,n2&schemaInsightType=Drop+Unused+Index",
@@ -56,6 +60,7 @@ describe("Test filter functions", (): void => {
       app: "",
       timeNumber: "0",
       timeUnit: "seconds",
+      executionStatus: "",
       fullScan: true,
       sqlType: "",
       database: "",
@@ -64,6 +69,7 @@ describe("Test filter functions", (): void => {
       sessionStatus: "",
       nodes: "",
       username: "",
+      workloadInsightType: "",
     };
     const resultFilters = getFiltersFromQueryString("fullScan=true");
     expect(resultFilters).toEqual(expectedFilters);
@@ -74,6 +80,7 @@ describe("Test filter functions", (): void => {
       app: "",
       timeNumber: "0",
       timeUnit: "seconds",
+      executionStatus: "",
       fullScan: false,
       sqlType: "",
       database: "",
@@ -82,6 +89,7 @@ describe("Test filter functions", (): void => {
       sessionStatus: "",
       nodes: "",
       username: "",
+      workloadInsightType: "",
     };
     const resultFilters = getFiltersFromQueryString("fullScan=false");
     expect(resultFilters).toEqual(expectedFilters);
@@ -92,6 +100,7 @@ describe("Test filter functions", (): void => {
       app: "",
       timeNumber: "0",
       timeUnit: "seconds",
+      executionStatus: "",
       fullScan: false,
       sqlType: "",
       database: "",
@@ -100,6 +109,7 @@ describe("Test filter functions", (): void => {
       sessionStatus: "open",
       nodes: "",
       username: "",
+      workloadInsightType: "",
     };
     const resultFilters = getFiltersFromQueryString("sessionStatus=open");
     expect(resultFilters).toEqual(expectedFilters);
@@ -110,6 +120,7 @@ describe("Test filter functions", (): void => {
       app: "",
       timeNumber: "0",
       timeUnit: "seconds",
+      executionStatus: "",
       fullScan: false,
       sqlType: "",
       database: "",
@@ -118,6 +129,7 @@ describe("Test filter functions", (): void => {
       sessionStatus: "idle",
       nodes: "",
       username: "",
+      workloadInsightType: "",
     };
     const resultFilters = getFiltersFromQueryString("sessionStatus=idle");
     expect(resultFilters).toEqual(expectedFilters);
@@ -128,6 +140,7 @@ describe("Test filter functions", (): void => {
       app: "",
       timeNumber: "0",
       timeUnit: "seconds",
+      executionStatus: "",
       fullScan: false,
       sqlType: "",
       database: "",
@@ -136,6 +149,7 @@ describe("Test filter functions", (): void => {
       sessionStatus: "closed",
       nodes: "",
       username: "",
+      workloadInsightType: "",
     };
     const resultFilters = getFiltersFromQueryString("sessionStatus=closed");
     expect(resultFilters).toEqual(expectedFilters);
@@ -146,6 +160,7 @@ describe("Test filter functions", (): void => {
       app: "",
       timeNumber: "0",
       timeUnit: "seconds",
+      executionStatus: "",
       fullScan: false,
       sqlType: "",
       database: "",
@@ -154,6 +169,7 @@ describe("Test filter functions", (): void => {
       sessionStatus: "",
       nodes: "",
       username: "",
+      workloadInsightType: "",
     };
     const resultFilters = getFiltersFromQueryString(
       "schemaInsightType=Drop+Unused+Index",

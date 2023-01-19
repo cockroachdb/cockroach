@@ -17,6 +17,7 @@ import {
   selectStatementInsightDetailsCombiner,
 } from "src/selectors/insightsCommon.selectors";
 import { selectID } from "src/selectors/common";
+import { InsightEnumToLabel } from "src/insights";
 
 export const selectExecutionInsights = createSelector(
   (state: AppState) => state.adminUI.executionInsights?.data,
@@ -31,6 +32,14 @@ export const selectStatementInsightDetails = createSelector(
   selectID,
   selectStatementInsightDetailsCombiner,
 );
+
+export const selectInsightTypes = () => {
+  const insights: string[] = [];
+  InsightEnumToLabel.forEach(insight => {
+    insights.push(insight);
+  });
+  return insights;
+};
 
 export const selectColumns = createSelector(
   localStorageSelector,

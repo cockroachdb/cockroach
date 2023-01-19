@@ -61,8 +61,8 @@ exp,benchmark
 4,ORMQueries/django_column_introspection_1_table
 4,ORMQueries/django_column_introspection_4_tables
 4,ORMQueries/django_column_introspection_8_tables
-5,ORMQueries/django_table_introspection_1_table
-5,ORMQueries/django_table_introspection_8_tables
+3,ORMQueries/django_table_introspection_1_table
+3,ORMQueries/django_table_introspection_8_tables
 0,ORMQueries/has_column_privilege_using_attnum
 0,ORMQueries/has_column_privilege_using_column_name
 0,ORMQueries/has_schema_privilege

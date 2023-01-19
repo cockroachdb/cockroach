@@ -39,7 +39,9 @@ interface QueryFilter {
   dbNames?: string[];
   usernames?: string[];
   sessionStatuses?: string[];
+  executionStatuses?: string[];
   schemaInsightTypes?: string[];
+  workloadInsightTypes?: string[];
   regions?: string[];
   nodes?: string[];
   hideAppNames?: boolean;
@@ -47,7 +49,9 @@ interface QueryFilter {
   showDB?: boolean;
   showUsername?: boolean;
   showSessionStatus?: boolean;
+  showExecutionStatus?: boolean;
   showSchemaInsightTypes?: boolean;
+  showWorkloadInsightTypes?: boolean;
   showSqlType?: boolean;
   showScan?: boolean;
   showRegions?: boolean;
@@ -70,7 +74,9 @@ export interface Filters extends Record<string, string | boolean> {
   nodes?: string;
   username?: string;
   sessionStatus?: string;
+  executionStatus?: string;
   schemaInsightType?: string;
+  workloadInsightType?: string;
 }
 
 const timeUnit = [
@@ -91,6 +97,8 @@ export const defaultFilters: Required<Filters> = {
   username: "",
   sessionStatus: "",
   schemaInsightType: "",
+  workloadInsightType: "",
+  executionStatus: "",
 };
 
 // getFullFiltersObject returns Filters with every field defined as
@@ -253,6 +261,9 @@ export const inactiveFiltersState: Required<Omit<Filters, "timeUnit">> = {
   regions: "",
   sessionStatus: "",
   nodes: "",
+  workloadInsightType: "",
+  schemaInsightType: "",
+  executionStatus: "",
 };
 
 export const calculateActiveFilters = (filters: Filters): number => {
@@ -385,7 +396,9 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
       dbNames,
       usernames,
       sessionStatuses,
+      executionStatuses,
       schemaInsightTypes,
+      workloadInsightTypes,
       regions,
       nodes,
       activeFilters,
@@ -399,7 +412,9 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
       hideTimeLabel,
       showUsername,
       showSessionStatus,
+      showExecutionStatus,
       showSchemaInsightTypes,
+      showWorkloadInsightTypes,
     } = this.props;
     const dropdownArea = hide ? hidden : dropdown;
     const customStyles = {
@@ -530,6 +545,32 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
       </div>
     );
 
+    const executionStatusOptions = showExecutionStatus
+      ? executionStatuses.map(executionStatus => ({
+          label: executionStatus,
+          value: executionStatus,
+          isSelected: this.isOptionSelected(
+            executionStatus,
+            filters.executionStatus,
+          ),
+        }))
+      : [];
+    const executionStatusValue = executionStatusOptions.filter(option =>
+      filters.executionStatus.split(",").includes(option.label),
+    );
+    const executionStatusFilter = (
+      <div>
+        <div className={filterLabel.margin}>Execution Status</div>
+        <MultiSelectCheckbox
+          options={executionStatusOptions}
+          placeholder="All"
+          field="executionStatus"
+          parent={this}
+          value={executionStatusValue}
+        />
+      </div>
+    );
+
     const schemaInsightTypeOptions = showSchemaInsightTypes
       ? schemaInsightTypes.map(schemaInsight => ({
           label: schemaInsight,
@@ -552,6 +593,34 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
           field="schemaInsightType"
           parent={this}
           value={schemaInsightTypeValue}
+        />
+      </div>
+    );
+
+    const workloadInsightTypeOptions = showWorkloadInsightTypes
+      ? workloadInsightTypes.map(workloadInsight => ({
+          label: workloadInsight,
+          value: workloadInsight,
+          isSelected: this.isOptionSelected(
+            workloadInsight,
+            filters.workloadInsightType,
+          ),
+        }))
+      : [];
+    const workloadInsightTypeValue = workloadInsightTypeOptions.filter(
+      option => {
+        return filters.workloadInsightType.split(",").includes(option.label);
+      },
+    );
+    const workloadInsightTypeFilter = (
+      <div>
+        <div className={filterLabel.margin}>Workload Insight Type</div>
+        <MultiSelectCheckbox
+          options={workloadInsightTypeOptions}
+          placeholder="All"
+          field="workloadInsightType"
+          parent={this}
+          value={workloadInsightTypeValue}
         />
       </div>
     );
@@ -671,7 +740,9 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
             {showDB ? dbFilter : ""}
             {showUsername ? usernameFilter : ""}
             {showSessionStatus ? sessionStatusFilter : ""}
+            {showExecutionStatus ? executionStatusFilter : ""}
             {showSchemaInsightTypes ? schemaInsightTypeFilter : ""}
+            {showWorkloadInsightTypes ? workloadInsightTypeFilter : ""}
             {showSqlType ? sqlTypeFilter : ""}
             {showRegions ? regionsFilter : ""}
             {showNodes ? nodesFilter : ""}

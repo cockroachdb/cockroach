@@ -80,10 +80,12 @@ const defaultSortSettingSchemaInsights: SortSetting = {
 
 const defaultFiltersActiveExecutions = {
   app: "",
+  executionStatus: "",
 };
 
 const defaultFiltersInsights = {
   app: "",
+  workloadInsightType: "",
 };
 
 const defaultFiltersSchemaInsights = {
