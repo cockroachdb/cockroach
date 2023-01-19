@@ -60,7 +60,7 @@ func (h *ElasticCPUWorkHandle) runningTime() time.Duration {
 	if override := h.testingOverrideRunningTime; override != nil {
 		return override()
 	}
-	return grunning.Difference(grunning.Time(), h.cpuStart)
+	return grunning.Elapsed(h.cpuStart, grunning.Time())
 }
 
 // OverLimit is used to check whether we're over the allotted elastic CPU

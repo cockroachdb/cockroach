@@ -26,4 +26,5 @@ func TestDisabled(t *testing.T) {
 	require.False(t, grunning.Supported())
 	require.Zero(t, grunning.Time())
 	require.Zero(t, grunning.Difference(grunning.Time(), grunning.Time()))
+	require.Zero(t, grunning.Elapsed(grunning.Time(), grunning.Time()))
 }
