@@ -11,6 +11,7 @@
 package optbuilder
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
@@ -112,13 +113,9 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateFunction, inScope *scope) (
 		col.setParamOrd(i)
 
 		// Collect the user defined type dependencies.
-		typeIDs, err := typedesc.GetTypeDescriptorClosure(typ)
-		if err != nil {
-			panic(err)
-		}
-		for typeID := range typeIDs {
-			typeDeps.Add(int(typeID))
-		}
+		typedesc.GetTypeDescriptorClosure(typ).ForEach(func(id descpb.ID) {
+			typeDeps.Add(int(id))
+		})
 	}
 
 	// Collect the user defined type dependency of the return type.
@@ -126,13 +123,9 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateFunction, inScope *scope) (
 	if err != nil {
 		panic(err)
 	}
-	typeIDs, err := typedesc.GetTypeDescriptorClosure(funcReturnType)
-	if err != nil {
-		panic(err)
-	}
-	for typeID := range typeIDs {
-		typeDeps.Add(int(typeID))
-	}
+	typedesc.GetTypeDescriptorClosure(funcReturnType).ForEach(func(id descpb.ID) {
+		typeDeps.Add(int(id))
+	})
 
 	// Parse the function body.
 	stmts, err := parser.Parse(funcBodyStr)

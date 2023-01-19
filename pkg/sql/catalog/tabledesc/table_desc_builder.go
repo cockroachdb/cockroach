@@ -422,7 +422,7 @@ func maybeUpgradeForeignKeyRepOnIndex(
 			return false, err
 		}
 		if tbl, ok := otherUnupgradedTables[ref.Table]; ok {
-			referencedIndex, err := tbl.FindIndexWithID(ref.Index)
+			referencedIndex, err := catalog.MustFindIndexByID(tbl, ref.Index)
 			if err != nil {
 				return false, err
 			}
@@ -452,7 +452,7 @@ func maybeUpgradeForeignKeyRepOnIndex(
 			return false, err
 		}
 		if otherTable, ok := otherUnupgradedTables[ref.Table]; ok {
-			originIndexI, err := otherTable.FindIndexWithID(ref.Index)
+			originIndexI, err := catalog.MustFindIndexByID(otherTable, ref.Index)
 			if err != nil {
 				return false, err
 			}

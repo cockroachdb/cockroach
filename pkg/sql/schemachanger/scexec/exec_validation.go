@@ -33,7 +33,7 @@ func executeValidateUniqueIndex(
 	if !ok {
 		return catalog.WrapTableDescRefErr(desc.GetID(), catalog.NewDescriptorTypeError(desc))
 	}
-	index, err := table.FindIndexWithID(op.IndexID)
+	index, err := catalog.MustFindIndexByID(table, op.IndexID)
 	if err != nil {
 		return err
 	}
@@ -62,7 +62,7 @@ func executeValidateConstraint(
 	if err != nil {
 		return err
 	}
-	constraint, err := table.FindConstraintWithID(op.ConstraintID)
+	constraint, err := catalog.MustFindConstraintByID(table, op.ConstraintID)
 	if err != nil {
 		return err
 	}

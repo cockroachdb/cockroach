@@ -94,14 +94,9 @@ func (w *walkCtx) newExpression(expr string) (*scpb.Expression, error) {
 				if err != nil {
 					return nil, err
 				}
-				w.cachedTypeIDClosures[id], err = typ.GetIDClosure()
-				if err != nil {
-					return nil, err
-				}
+				w.cachedTypeIDClosures[id] = typ.GetIDClosure()
 			}
-			for id = range w.cachedTypeIDClosures[id] {
-				typIDs.Add(id)
-			}
+			w.cachedTypeIDClosures[id].ForEach(typIDs.Add)
 		}
 	}
 
@@ -119,18 +114,9 @@ func (w *walkCtx) newExpression(expr string) (*scpb.Expression, error) {
 	}, nil
 }
 
-func newTypeT(t *types.T) (*scpb.TypeT, error) {
-	ids, err := typedesc.GetTypeDescriptorClosure(t)
-	if err != nil {
-		return nil, err
-	}
-	var ret catalog.DescriptorIDSet
-	for id := range ids {
-		ret.Add(id)
-	}
-	ret.Remove(descpb.InvalidID)
+func newTypeT(t *types.T) *scpb.TypeT {
 	return &scpb.TypeT{
 		Type:          t,
-		ClosedTypeIDs: ret.Ordered(),
-	}, nil
+		ClosedTypeIDs: typedesc.GetTypeDescriptorClosure(t).Ordered(),
+	}
 }

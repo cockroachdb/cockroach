@@ -13,6 +13,7 @@ package scmutationexec
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
@@ -151,7 +152,7 @@ func asCommentEventPayload(
 		if err != nil {
 			return nil, err
 		}
-		col, err := tbl.FindColumnWithID(e.ColumnID)
+		col, err := catalog.MustFindColumnByID(tbl, e.ColumnID)
 		if err != nil {
 			return nil, err
 		}
@@ -166,7 +167,7 @@ func asCommentEventPayload(
 		if err != nil {
 			return nil, err
 		}
-		idx, err := tbl.FindIndexWithID(e.IndexID)
+		idx, err := catalog.MustFindIndexByID(tbl, e.IndexID)
 		if err != nil {
 			return nil, err
 		}
@@ -182,8 +183,8 @@ func asCommentEventPayload(
 			return nil, err
 		}
 		var constraintName string
-		if constraint, err := tbl.FindConstraintWithID(e.ConstraintID); err != nil {
-			// FindConstraintWithID excludes dropping indexes for no good reason.
+		if constraint, err := catalog.MustFindConstraintByID(tbl, e.ConstraintID); err != nil {
+			// MustFindConstraintByID excludes dropping indexes for no good reason.
 			// TODO(postamar): improve catalog.TableDescriptor interface
 			for _, idx := range tbl.AllIndexes() {
 				if idx.Dropped() && idx.GetConstraintID() == e.ConstraintID {

@@ -756,12 +756,11 @@ func ResolveUniqueWithoutIndexConstraint(
 		constraintName = tabledesc.GenerateUniqueName(
 			fmt.Sprintf("unique_%s", strings.Join(colNames, "_")),
 			func(p string) bool {
-				c, _ := tbl.FindConstraintWithName(p)
-				return c != nil
+				return catalog.FindConstraintByName(tbl, p) != nil
 			},
 		)
 	} else {
-		if c, _ := tbl.FindConstraintWithName(constraintName); c != nil {
+		if c := catalog.FindConstraintByName(tbl, constraintName); c != nil {
 			return pgerror.Newf(pgcode.DuplicateObject, "duplicate constraint name: %q", constraintName)
 		}
 	}
@@ -920,7 +919,7 @@ func ResolveFK(
 		}
 	}
 
-	referencedCols, err := tabledesc.FindPublicColumnsWithNames(target, referencedColNames)
+	referencedCols, err := catalog.MustFindPublicColumnsByNameList(target, referencedColNames)
 	if err != nil {
 		return err
 	}
@@ -963,12 +962,11 @@ func ResolveFK(
 		constraintName = tabledesc.GenerateUniqueName(
 			tabledesc.ForeignKeyConstraintName(tbl.GetName(), d.FromCols.ToStrings()),
 			func(p string) bool {
-				c, _ := tbl.FindConstraintWithName(p)
-				return c != nil
+				return catalog.FindConstraintByName(tbl, p) != nil
 			},
 		)
 	} else {
-		if c, _ := tbl.FindConstraintWithName(constraintName); c != nil {
+		if c := catalog.FindConstraintByName(tbl, constraintName); c != nil {
 			return pgerror.Newf(pgcode.DuplicateObject, "duplicate constraint name: %q", constraintName)
 		}
 	}
@@ -1041,12 +1039,12 @@ func ResolveFK(
 		tbl.AddForeignKeyMutation(&ref, descpb.DescriptorMutation_ADD)
 	}
 
-	c, err := tbl.FindConstraintWithID(ref.ConstraintID)
+	c, err := catalog.MustFindConstraintByID(tbl, ref.ConstraintID)
 	if err != nil {
 		return errors.HandleAsAssertionFailure(err)
 	}
 	// Ensure that there is a unique constraint on the referenced side to use.
-	_, err = tabledesc.FindFKReferencedUniqueConstraint(target, c.(catalog.ForeignKeyConstraint))
+	_, err = catalog.FindFKReferencedUniqueConstraint(target, c.(catalog.ForeignKeyConstraint))
 	return err
 }
 
@@ -1078,7 +1076,9 @@ func CreatePartitioning(
 		ctx,
 		st,
 		evalCtx,
-		tableDesc.FindColumnWithName,
+		func(name tree.Name) (catalog.Column, error) {
+			return catalog.MustFindColumnByTreeName(tableDesc, name)
+		},
 		int(indexDesc.Partitioning.NumImplicitColumns),
 		indexDesc.KeyColumnNames,
 		partBy,
@@ -1728,7 +1728,7 @@ func NewTableDesc(
 				if err != nil {
 					return nil, err
 				}
-				col, err := desc.FindColumnWithName(d.Name)
+				col, err := catalog.MustFindColumnByTreeName(&desc, d.Name)
 				if err != nil {
 					return nil, err
 				}
@@ -1747,7 +1747,7 @@ func NewTableDesc(
 			// indexes will be given a unique auto-generated name later on when
 			// AllocateIDs is called.
 			if d.Name != "" {
-				if idx, _ := desc.FindIndexWithName(d.Name.String()); idx != nil {
+				if idx := catalog.FindIndexByName(&desc, d.Name.String()); idx != nil {
 					return nil, pgerror.Newf(pgcode.DuplicateRelation, "duplicate index name: %q", d.Name)
 				}
 			}
@@ -1789,7 +1789,7 @@ func NewTableDesc(
 				return nil, err
 			}
 			if d.Inverted {
-				column, err := desc.FindColumnWithName(tree.Name(idx.InvertedColumnName()))
+				column, err := catalog.MustFindColumnByName(&desc, idx.InvertedColumnName())
 				if err != nil {
 					return nil, err
 				}
@@ -1860,7 +1860,7 @@ func NewTableDesc(
 			// indexes will be given a unique auto-generated name later on when
 			// AllocateIDs is called.
 			if d.Name != "" {
-				if idx, _ := desc.FindIndexWithName(d.Name.String()); idx != nil {
+				if idx := catalog.FindIndexByName(&desc, d.Name.String()); idx != nil {
 					return nil, pgerror.Newf(pgcode.DuplicateRelation, "duplicate index name: %q", d.Name)
 				}
 			}
@@ -2557,7 +2557,7 @@ func replaceLikeTableOpts(n *tree.CreateTable, params runParams) (tree.TableDefs
 					},
 					WithoutIndex: true,
 				}
-				colNames, err := td.NamesForColumnIDs(c.ColumnIDs)
+				colNames, err := catalog.ColumnNamesForIDs(td, c.ColumnIDs)
 				if err != nil {
 					return nil, err
 				}
@@ -2603,7 +2603,7 @@ func replaceLikeTableOpts(n *tree.CreateTable, params runParams) (tree.TableDefs
 						Column:    tree.Name(name),
 						Direction: tree.Ascending,
 					}
-					col, err := td.FindColumnWithID(idx.GetKeyColumnID(j))
+					col, err := catalog.MustFindColumnByID(td, idx.GetKeyColumnID(j))
 					if err != nil {
 						return nil, err
 					}
@@ -2734,7 +2734,7 @@ func setSequenceOwner(
 		return errors.Errorf("%s is not a sequence", seqDesc.Name)
 	}
 
-	col, err := table.FindColumnWithName(colName)
+	col, err := catalog.MustFindColumnByTreeName(table, colName)
 	if err != nil {
 		return err
 	}
@@ -2817,7 +2817,7 @@ func isImplicitlyCreatedBySystem(td *tabledesc.Mutable, c *descpb.ColumnDescript
 	if td.IsPrimaryIndexDefaultRowID() && c.ID == td.GetPrimaryIndex().GetKeyColumnID(0) {
 		return true, nil
 	}
-	col, err := td.FindColumnWithID(c.ID)
+	col, err := catalog.MustFindColumnByID(td, c.ID)
 	if err != nil {
 		return false, err
 	}

@@ -200,7 +200,7 @@ func (c *rowFetcherCache) RowFetcherForColumnFamily(
 		}
 	}
 
-	familyDesc, err := tableDesc.FindFamilyByID(family)
+	familyDesc, err := catalog.MustFindFamilyByID(tableDesc, family)
 	if err != nil {
 		return nil, nil, err
 	}

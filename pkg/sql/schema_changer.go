@@ -959,11 +959,8 @@ func (sc *SchemaChanger) dropViewDeps(
 	}
 	// Clean up sequence and type references from the view.
 	for _, col := range viewDesc.DeletableColumns() {
-		typeClosure, err := typedesc.GetTypeDescriptorClosure(col.GetType())
-		if err != nil {
-			return err
-		}
-		for id := range typeClosure {
+		typeClosure := typedesc.GetTypeDescriptorClosure(col.GetType())
+		for _, id := range typeClosure.Ordered() {
 			typeDesc, err := descsCol.MutableByID(txn).Type(ctx, id)
 			if err != nil {
 				log.Warningf(ctx, "error resolving type dependency %d", id)
@@ -1570,7 +1567,7 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 						// If we are adding a new REGIONAL BY ROW column, after backfilling, the
 						// default expression should be switched to utilize to gateway_region.
 						if colID := lcSwap.NewRegionalByRowColumnID; colID != nil {
-							col, err := scTable.FindColumnWithID(*colID)
+							col, err := catalog.MustFindColumnByID(scTable, *colID)
 							if err != nil {
 								return err
 							}

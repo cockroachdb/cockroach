@@ -729,7 +729,7 @@ func TestingMakePrimaryIndexKeyForTenant(
 		}
 		// Check that the value type matches.
 		colID := index.GetKeyColumnID(i)
-		col, _ := desc.FindColumnWithID(colID)
+		col := catalog.FindColumnByID(desc, colID)
 		if col != nil && col.Public() {
 			colTyp := datums[i].ResolvedType()
 			if t := colTyp.Family(); t != col.GetType().Family() {
@@ -785,7 +785,7 @@ func TestingMakeSecondaryIndexKey(
 		}
 		// Check that the value type matches.
 		colID := index.GetKeyColumnID(i)
-		col, _ := desc.FindColumnWithID(colID)
+		col := catalog.FindColumnByID(desc, colID)
 		if col != nil && col.Public() {
 			colTyp := datums[i].ResolvedType()
 			if t := colTyp.Family(); t != col.GetType().Family() {

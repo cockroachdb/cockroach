@@ -2816,7 +2816,7 @@ func (dsp *DistSQLPlanner) createPlanForInvertedJoin(
 		return nil, err
 	}
 
-	invCol, err := n.table.desc.FindColumnWithID(n.table.index.InvertedColumnID())
+	invCol, err := catalog.MustFindColumnByID(n.table.desc, n.table.index.InvertedColumnID())
 	if err != nil {
 		return nil, err
 	}

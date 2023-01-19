@@ -115,7 +115,7 @@ func (n *dropIndexNode) startExec(params runParams) error {
 		// If we couldn't find the index by name, this is either a legitimate error or
 		// this statement contains an 'IF EXISTS' qualifier. Both of these cases are
 		// handled by `dropIndexByName()` below so we just ignore the error here.
-		idx, _ := tableDesc.FindIndexWithName(string(index.idxName))
+		idx := catalog.FindIndexByName(tableDesc, string(index.idxName))
 		var shardColName string
 		// If we're dropping a sharded index, record the name of its shard column to
 		// potentially drop it if no other index refers to it.
@@ -144,7 +144,7 @@ func (n *dropIndexNode) startExec(params runParams) error {
 		if idx != nil {
 			for i, count := 0, idx.NumKeyColumns(); i < count; i++ {
 				id := idx.GetKeyColumnID(i)
-				col, err := tableDesc.FindColumnWithID(id)
+				col, err := catalog.MustFindColumnByID(tableDesc, id)
 				if err != nil {
 					return err
 				}
@@ -166,7 +166,7 @@ func (n *dropIndexNode) startExec(params runParams) error {
 
 		if shardColName != "" {
 			// Retrieve the sharded column descriptor by name.
-			shardColDesc, err := tableDesc.FindColumnWithName(tree.Name(shardColName))
+			shardColDesc, err := catalog.MustFindColumnByName(tableDesc, shardColName)
 			if err != nil {
 				return err
 			}
@@ -247,9 +247,7 @@ func (n *dropIndexNode) dropShardColumnAndConstraint(
 ) error {
 	validChecks := tableDesc.Checks[:0]
 	for _, check := range tableDesc.CheckConstraints() {
-		if used, err := tableDesc.CheckConstraintUsesColumn(check.CheckDesc(), shardCol.GetID()); err != nil {
-			return err
-		} else if used {
+		if check.CollectReferencedColumnIDs().Contains(shardCol.GetID()) {
 			if check.GetConstraintValidity() == descpb.ConstraintValidity_Validating {
 				return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 					"referencing constraint %q in the middle of being added, try again later", check.GetName())
@@ -314,7 +312,7 @@ func (p *planner) dropIndexByName(
 	constraintBehavior dropIndexConstraintBehavior,
 	jobDesc string,
 ) error {
-	idx, err := tableDesc.FindIndexWithName(string(idxName))
+	idx, err := catalog.MustFindIndexByName(tableDesc, string(idxName))
 	if err != nil {
 		// Only index names of the form "table@idx" throw an error here if they
 		// don't exist.

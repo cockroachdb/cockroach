@@ -661,13 +661,13 @@ func TestUnvalidateConstraints(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	before, _ := desc.FindConstraintWithName("fk")
+	before := catalog.FindConstraintByName(desc, "fk")
 	if before == nil || !before.IsConstraintValidated() {
 		t.Fatalf("expected to find a validated constraint fk before, found %v", before)
 	}
 	desc.InvalidateFKConstraints()
 
-	after, _ := desc.FindConstraintWithName("fk")
+	after := catalog.FindConstraintByName(desc, "fk")
 	if after == nil || before.IsConstraintValidated() {
 		t.Fatalf("expected to find an unvalidated constraint fk before, found %v", after)
 	}
@@ -743,7 +743,7 @@ func TestKeysPerRow(t *testing.T) {
 
 			desc := desctestutils.TestingGetPublicTableDescriptor(db, keys.SystemSQLCodec, "d", tableName)
 			require.NotNil(t, desc)
-			idx, err := desc.FindIndexWithID(test.indexID)
+			idx, err := catalog.MustFindIndexByID(desc, test.indexID)
 			require.NoError(t, err)
 			keys := desc.IndexKeysPerRow(idx)
 			if test.expected != keys {

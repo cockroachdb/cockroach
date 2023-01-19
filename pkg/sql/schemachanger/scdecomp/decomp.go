@@ -32,7 +32,7 @@ type walkCtx struct {
 	desc                 catalog.Descriptor
 	ev                   ElementVisitor
 	lookupFn             func(id catid.DescID) catalog.Descriptor
-	cachedTypeIDClosures map[catid.DescID]map[catid.DescID]struct{}
+	cachedTypeIDClosures map[catid.DescID]catalog.DescriptorIDSet
 	backRefs             catalog.DescriptorIDSet
 	commentReader        CommentGetter
 	zoneConfigReader     ZoneConfigGetter
@@ -70,7 +70,7 @@ func WalkDescriptor(
 		desc:                 desc,
 		ev:                   ev,
 		lookupFn:             lookupFn,
-		cachedTypeIDClosures: make(map[catid.DescID]map[catid.DescID]struct{}),
+		cachedTypeIDClosures: make(map[catid.DescID]catalog.DescriptorIDSet),
 		commentReader:        commentReader,
 		zoneConfigReader:     zoneConfigReader,
 	}
@@ -168,11 +168,7 @@ func (w *walkCtx) walkSchema(sc catalog.SchemaDescriptor) {
 func (w *walkCtx) walkType(typ catalog.TypeDescriptor) {
 	switch typ.GetKind() {
 	case descpb.TypeDescriptor_ALIAS:
-		typeT, err := newTypeT(typ.TypeDesc().Alias)
-		if err != nil {
-			panic(errors.NewAssertionErrorWithWrappedErrf(err, "alias type %q (%d)",
-				typ.GetName(), typ.GetID()))
-		}
+		typeT := newTypeT(typ.TypeDesc().Alias)
 		w.ev(descriptorStatus(typ), &scpb.AliasType{
 			TypeID: typ.GetID(),
 			TypeT:  *typeT,
@@ -197,11 +193,7 @@ func (w *walkCtx) walkType(typ catalog.TypeDescriptor) {
 		})
 		composite := typ.TypeDesc().Composite
 		for _, e := range composite.Elements {
-			typeT, err := newTypeT(e.ElementType)
-			if err != nil {
-				panic(errors.NewAssertionErrorWithWrappedErrf(err, "alias type %q (%d)",
-					typ.GetName(), typ.GetID()))
-			}
+			typeT := newTypeT(e.ElementType)
 			w.ev(descriptorStatus(typ), &scpb.CompositeTypeAttrType{
 				CompositeTypeID: typ.GetID(),
 				TypeT:           *typeT,
@@ -440,8 +432,7 @@ func (w *walkCtx) walkColumn(tbl catalog.TableDescriptor, col catalog.Column) {
 			}
 			return nil
 		})
-		typeT, err := newTypeT(col.GetType())
-		onErrPanic(err)
+		typeT := newTypeT(col.GetType())
 		columnType.TypeT = *typeT
 
 		if col.IsComputed() {

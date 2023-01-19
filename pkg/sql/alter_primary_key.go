@@ -133,7 +133,7 @@ func (p *planner) AlterPrimaryKey(
 				"use columns instead",
 			)
 		}
-		col, err := tableDesc.FindColumnWithName(elem.Column)
+		col, err := catalog.MustFindColumnByTreeName(tableDesc, elem.Column)
 		if err != nil {
 			return err
 		}
@@ -163,8 +163,7 @@ func (p *planner) AlterPrimaryKey(
 	}
 
 	nameExists := func(name string) bool {
-		_, err := tableDesc.FindIndexWithName(name)
-		return err == nil
+		return catalog.FindIndexByName(tableDesc, name) != nil
 	}
 
 	// Make a new index that is suitable to be a primary index.
@@ -362,7 +361,7 @@ func (p *planner) AlterPrimaryKey(
 		// as most of this code relies upon for correctness. This code will
 		// all be replaced by code in the declarative schema changer before
 		// too long where we'll model this all correctly.
-		newTempPrimaryIndex, err := tableDesc.FindIndexWithID(newPrimaryIndexDesc.ID + 1)
+		newTempPrimaryIndex, err := catalog.MustFindIndexByID(tableDesc, newPrimaryIndexDesc.ID+1)
 		if err != nil {
 			return errors.NewAssertionErrorWithWrappedErrf(err,
 				"failed to find newly created temporary index for backfill")
@@ -433,7 +432,7 @@ func (p *planner) AlterPrimaryKey(
 		if idx.IsUnique() {
 			for i := 0; i < idx.NumKeyColumns(); i++ {
 				colID := idx.GetKeyColumnID(i)
-				col, err := tableDesc.FindColumnWithID(colID)
+				col, err := catalog.MustFindColumnByID(tableDesc, colID)
 				if err != nil {
 					return false, err
 				}
@@ -451,7 +450,7 @@ func (p *planner) AlterPrimaryKey(
 			newPrimaryKeyColIDs := catalog.MakeTableColSet(newPrimaryIndexDesc.KeyColumnIDs...)
 			for i := 0; i < idx.NumKeySuffixColumns(); i++ {
 				colID := idx.GetKeySuffixColumnID(i)
-				col, err := tableDesc.FindColumnWithID(colID)
+				col, err := catalog.MustFindColumnByID(tableDesc, colID)
 				if err != nil {
 					return false, err
 				}
@@ -629,7 +628,7 @@ func (p *planner) shouldCreateIndexes(
 
 	// Validate the columns on the indexes
 	for idx, elem := range alterPKNode.Columns {
-		col, err := desc.FindColumnWithName(elem.Column)
+		col, err := catalog.MustFindColumnByTreeName(desc, elem.Column)
 		if err != nil {
 			return true, err
 		}
@@ -793,7 +792,7 @@ func setKeySuffixColumnIDsFromPrimary(
 			// toAdd.KeySuffixColumnIDs = append(toAdd.KeySuffixColumnIDs, colID)
 			// However, this functionality is not supported by the execution engine,
 			// so prevent it by returning an error.
-			col, err := table.FindColumnWithID(colID)
+			col, err := catalog.MustFindColumnByID(table, colID)
 			if err != nil {
 				return err
 			}

@@ -377,7 +377,7 @@ func showComments(
 	}
 
 	for _, columnComment := range tc.columns {
-		col, err := table.FindColumnWithPGAttributeNum(descpb.PGAttributeNum(columnComment.subID))
+		col, err := catalog.MustFindColumnByPGAttributeNum(table, descpb.PGAttributeNum(columnComment.subID))
 		if err != nil {
 			return err
 		}
@@ -393,7 +393,7 @@ func showComments(
 	}
 
 	for _, indexComment := range tc.indexes {
-		idx, err := table.FindIndexWithID(descpb.IndexID(indexComment.subID))
+		idx, err := catalog.MustFindIndexByID(table, descpb.IndexID(indexComment.subID))
 		if err != nil {
 			return err
 		}
@@ -410,7 +410,7 @@ func showComments(
 
 	for _, constraintComment := range tc.constraints {
 		f.WriteString(";\n")
-		c, err := table.FindConstraintWithID(descpb.ConstraintID(constraintComment.subID))
+		c, err := catalog.MustFindConstraintByID(table, descpb.ConstraintID(constraintComment.subID))
 		if err != nil {
 			return err
 		}
@@ -449,11 +449,11 @@ func showForeignKeyConstraint(
 			return err
 		}
 		fkTableName.ExplicitSchema = !searchPath.Contains(fkTableName.SchemaName.String(), false /* includeImplicit */)
-		refNames, err = fkTable.NamesForColumnIDs(fk.ReferencedColumnIDs)
+		refNames, err = catalog.ColumnNamesForIDs(fkTable, fk.ReferencedColumnIDs)
 		if err != nil {
 			return err
 		}
-		originNames, err = originTable.NamesForColumnIDs(fk.OriginColumnIDs)
+		originNames, err = catalog.ColumnNamesForIDs(originTable, fk.OriginColumnIDs)
 		if err != nil {
 			return err
 		}
@@ -532,7 +532,7 @@ func showFamilyClause(desc catalog.TableDescriptor, f *tree.FmtCtx) {
 	for _, fam := range families {
 		activeColumnNames := make([]string, 0, len(fam.ColumnNames))
 		for i, colID := range fam.ColumnIDs {
-			if col, _ := desc.FindColumnWithID(colID); col != nil && col.Public() {
+			if col := catalog.FindColumnByID(desc, colID); col != nil && col.Public() {
 				activeColumnNames = append(activeColumnNames, fam.ColumnNames[i])
 			}
 		}
@@ -725,7 +725,7 @@ func showConstraintClause(
 			f.WriteString(" ")
 		}
 		f.WriteString("UNIQUE WITHOUT INDEX (")
-		colNames, err := desc.NamesForColumnIDs(c.CollectKeyColumnIDs().Ordered())
+		colNames, err := catalog.ColumnNamesForIDs(desc, c.CollectKeyColumnIDs().Ordered())
 		if err != nil {
 			return err
 		}

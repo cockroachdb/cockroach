@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -201,14 +200,14 @@ func (r *rowDisposer) NumRowsDisposed() int {
 func makeFetchSpec(
 	t testing.TB, table catalog.TableDescriptor, indexName string, colNames string,
 ) fetchpb.IndexFetchSpec {
-	index, err := table.FindIndexWithName(indexName)
+	index, err := catalog.MustFindIndexByName(table, indexName)
 	if err != nil {
 		t.Fatal(err)
 	}
 	var colIDs []descpb.ColumnID
 	if colNames != "" {
 		for _, col := range strings.Split(colNames, ",") {
-			col, err := table.FindColumnWithName(tree.Name(col))
+			col, err := catalog.MustFindColumnByName(table, col)
 			if err != nil {
 				t.Fatal(err)
 			}

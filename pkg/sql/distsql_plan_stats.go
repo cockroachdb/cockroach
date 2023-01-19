@@ -188,7 +188,7 @@ func (dsp *DistSQLPlanner) createPartialStatsPlan(
 		return nil, err
 	}
 
-	column, err := desc.FindColumnWithID(reqStat.columns[0])
+	column, err := catalog.MustFindColumnByID(desc, reqStat.columns[0])
 	if err != nil {
 		return nil, err
 	}

@@ -13,6 +13,7 @@ package scmutationexec
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
@@ -24,7 +25,7 @@ func (m *visitor) SetConstraintName(ctx context.Context, op scop.SetConstraintNa
 	if err != nil {
 		return err
 	}
-	constraint, err := tbl.FindConstraintWithID(op.ConstraintID)
+	constraint, err := catalog.MustFindConstraintByID(tbl, op.ConstraintID)
 	if err != nil {
 		return err
 	}

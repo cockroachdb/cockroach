@@ -115,21 +115,21 @@ func (n *showFingerprintsNode) Next(params runParams) (bool, error) {
 		}
 	} else {
 		for i := 0; i < index.NumKeyColumns(); i++ {
-			col, err := n.tableDesc.FindColumnWithID(index.GetKeyColumnID(i))
+			col, err := catalog.MustFindColumnByID(n.tableDesc, index.GetKeyColumnID(i))
 			if err != nil {
 				return false, err
 			}
 			addColumn(col)
 		}
 		for i := 0; i < index.NumKeySuffixColumns(); i++ {
-			col, err := n.tableDesc.FindColumnWithID(index.GetKeySuffixColumnID(i))
+			col, err := catalog.MustFindColumnByID(n.tableDesc, index.GetKeySuffixColumnID(i))
 			if err != nil {
 				return false, err
 			}
 			addColumn(col)
 		}
 		for i := 0; i < index.NumSecondaryStoredColumns(); i++ {
-			col, err := n.tableDesc.FindColumnWithID(index.GetStoredColumnID(i))
+			col, err := catalog.MustFindColumnByID(n.tableDesc, index.GetStoredColumnID(i))
 			if err != nil {
 				return false, err
 			}

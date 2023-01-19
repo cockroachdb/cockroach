@@ -13,6 +13,7 @@ package evalcatalog
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/redact"
@@ -136,15 +137,11 @@ func (b *Builtins) PGColumnIsUpdatable(
 		return tree.DBoolFalse, nil
 	}
 
-	column, err := tableDesc.FindColumnWithPGAttributeNum(attNum)
-	if err != nil {
-		if sqlerrors.IsUndefinedColumnError(err) {
-			// When column does not exist postgres returns true.
-			return tree.DBoolTrue, nil
-		}
-		return nil, err
+	column := catalog.FindColumnByPGAttributeNum(tableDesc, attNum)
+	if column == nil {
+		// When column does not exist postgres returns true.
+		return tree.DBoolTrue, nil
 	}
-
 	// pg_column_is_updatable was created for compatibility. This
 	// will return true if is a table (not virtual) and column is not
 	// a computed column.

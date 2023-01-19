@@ -13,7 +13,6 @@ package tabledesc
 import (
 	"context"
 	"fmt"
-	"sort"
 	"strconv"
 	"strings"
 
@@ -151,7 +150,7 @@ func BuildIndexName(tableDesc *Mutable, idx *descpb.IndexDescriptor) (string, er
 	exprCount := 0
 	for i, n := idx.ExplicitColumnStartIdx(), len(idx.KeyColumnNames); i < n; i++ {
 		var segmentName string
-		col, err := tableDesc.FindColumnWithName(tree.Name(idx.KeyColumnNames[i]))
+		col, err := catalog.MustFindColumnByName(tableDesc, idx.KeyColumnNames[i])
 		if err != nil {
 			return "", err
 		}
@@ -187,7 +186,7 @@ func BuildIndexName(tableDesc *Mutable, idx *descpb.IndexDescriptor) (string, er
 	baseName := strings.Join(segments, "_")
 	name := baseName
 	for i := 1; ; i++ {
-		foundIndex, _ := tableDesc.FindIndexWithName(name)
+		foundIndex := catalog.FindIndexByName(tableDesc, name)
 		if foundIndex == nil {
 			break
 		}
@@ -326,11 +325,7 @@ func (desc *wrapper) GetAllReferencedTypeIDs(
 	if err != nil {
 		return nil, nil, err
 	}
-	referencedInColumns = make(descpb.IDs, 0, len(ids))
-	for id := range ids {
-		referencedInColumns = append(referencedInColumns, id)
-	}
-	sort.Sort(referencedInColumns)
+	referencedInColumns = ids.Ordered()
 
 	// REGIONAL BY TABLE tables may have a dependency with the multi-region enum.
 	exists := desc.GetMultiRegionEnumDependencyIfExists()
@@ -339,24 +334,16 @@ func (desc *wrapper) GetAllReferencedTypeIDs(
 		if err != nil {
 			return nil, nil, err
 		}
-		ids[regionEnumID] = struct{}{}
+		ids.Add(regionEnumID)
 	}
 
 	// Add any other type dependencies that are not
 	// used in a column (specifically for views).
 	for _, id := range desc.DependsOnTypes {
-		ids[id] = struct{}{}
+		ids.Add(id)
 	}
 
-	// Construct the output.
-	result := make(descpb.IDs, 0, len(ids))
-	for id := range ids {
-		result = append(result, id)
-	}
-
-	// Sort the output so that the order is deterministic.
-	sort.Sort(result)
-	return result, referencedInColumns, nil
+	return ids.Ordered(), referencedInColumns, nil
 }
 
 // getAllReferencedTypesInTableColumns returns a map of all user defined
@@ -371,7 +358,7 @@ func (desc *wrapper) GetAllReferencedTypeIDs(
 // GetAllReferencedTypesByID accounts for this dependency.
 func (desc *wrapper) getAllReferencedTypesInTableColumns(
 	getType func(descpb.ID) (catalog.TypeDescriptor, error),
-) (map[descpb.ID]struct{}, error) {
+) (ret catalog.DescriptorIDSet, _ error) {
 	// All serialized expressions within a table descriptor are serialized
 	// with type annotations as ID's, so this visitor will collect them all.
 	visitor := &tree.TypeCollectorVisitor{
@@ -388,52 +375,34 @@ func (desc *wrapper) getAllReferencedTypesInTableColumns(
 	}
 
 	if err := ForEachExprStringInTableDesc(desc, addOIDsInExpr); err != nil {
-		return nil, err
+		return ret, err
 	}
 
 	// For each of the collected type IDs in the table descriptor expressions,
 	// collect the closure of IDs referenced.
-	ids := make(map[descpb.ID]struct{})
 	for id := range visitor.OIDs {
 		uid := typedesc.UserDefinedTypeOIDToID(id)
 		typDesc, err := getType(uid)
 		if err != nil {
-			return nil, err
+			return ret, err
 		}
-		children, err := typDesc.GetIDClosure()
-		if err != nil {
-			return nil, err
-		}
-		for child := range children {
-			ids[child] = struct{}{}
-		}
+		typDesc.GetIDClosure().ForEach(ret.Add)
 	}
 
 	// Now add all of the column types in the table.
-	addIDsInColumn := func(c *descpb.ColumnDescriptor) error {
-		children, err := typedesc.GetTypeDescriptorClosure(c.Type)
-		if err != nil {
-			return err
-		}
-		for id := range children {
-			ids[id] = struct{}{}
-		}
-		return nil
+	addIDsInColumn := func(c *descpb.ColumnDescriptor) {
+		typedesc.GetTypeDescriptorClosure(c.Type).ForEach(ret.Add)
 	}
 	for i := range desc.Columns {
-		if err := addIDsInColumn(&desc.Columns[i]); err != nil {
-			return nil, err
-		}
+		addIDsInColumn(&desc.Columns[i])
 	}
 	for _, mut := range desc.Mutations {
 		if c := mut.GetColumn(); c != nil {
-			if err := addIDsInColumn(c); err != nil {
-				return nil, err
-			}
+			addIDsInColumn(c)
 		}
 	}
 
-	return ids, nil
+	return ret, nil
 }
 
 func (desc *Mutable) initIDs() {
@@ -527,8 +496,7 @@ func (desc *Mutable) ensurePrimaryKey() error {
 	if len(desc.PrimaryIndex.KeyColumnNames) == 0 && desc.IsPhysicalTable() {
 		// Ensure a Primary Key exists.
 		nameExists := func(name string) bool {
-			_, err := desc.FindColumnWithName(tree.Name(name))
-			return err == nil
+			return catalog.FindColumnByName(desc, name) != nil
 		}
 		s := "unique_rowid()"
 		col := &descpb.ColumnDescriptor{
@@ -645,7 +613,7 @@ func (desc *Mutable) allocateIndexIDs(columnNames map[string]descpb.ColumnID) er
 				// extraColumnIDs = append(extraColumnIDs, primaryColID)
 				// However, this functionality is not supported by the execution engine,
 				// so prevent it by returning an error.
-				col, err := desc.FindColumnWithID(primaryColID)
+				col, err := catalog.MustFindColumnByID(desc, primaryColID)
 				if err != nil {
 					return err
 				}
@@ -672,7 +640,7 @@ func (desc *Mutable) allocateIndexIDs(columnNames map[string]descpb.ColumnID) er
 		// TODO(postamar): AllocateIDs should not do user input validation.
 		// The only errors it should return should be assertion failures.
 		for _, colName := range idx.IndexDesc().StoreColumnNames {
-			col, err := desc.FindColumnWithName(tree.Name(colName))
+			col, err := catalog.MustFindColumnByName(desc, colName)
 			if err != nil {
 				return err
 			}
@@ -1187,30 +1155,6 @@ func (desc *Mutable) FindActiveOrNewColumnByName(name tree.Name) (catalog.Column
 	return nil, colinfo.NewUndefinedColumnError(string(name))
 }
 
-// FindFamilyByID implements the TableDescriptor interface.
-func (desc *wrapper) FindFamilyByID(id descpb.FamilyID) (*descpb.ColumnFamilyDescriptor, error) {
-	for i := range desc.Families {
-		family := &desc.Families[i]
-		if family.ID == id {
-			return family, nil
-		}
-	}
-	return nil, fmt.Errorf("family-id \"%d\" does not exist", id)
-}
-
-// NamesForColumnIDs implements the TableDescriptor interface.
-func (desc *wrapper) NamesForColumnIDs(ids descpb.ColumnIDs) ([]string, error) {
-	names := make([]string, len(ids))
-	for i, id := range ids {
-		col, err := desc.FindColumnWithID(id)
-		if err != nil {
-			return nil, err
-		}
-		names[i] = col.GetName()
-	}
-	return names, nil
-}
-
 // DropConstraint drops a constraint, either by removing it from the table
 // descriptor or by queuing a mutation for a schema change.
 func (desc *Mutable) DropConstraint(
@@ -1370,7 +1314,7 @@ func (desc *wrapper) IsPrimaryIndexDefaultRowID() bool {
 	if len(desc.PrimaryIndex.KeyColumnIDs) != 1 {
 		return false
 	}
-	col, err := desc.FindColumnWithID(desc.PrimaryIndex.KeyColumnIDs[0])
+	col, err := catalog.MustFindColumnByID(desc, desc.PrimaryIndex.KeyColumnIDs[0])
 	if err != nil {
 		// Should never be in this case.
 		panic(err)
@@ -1484,7 +1428,7 @@ func (desc *Mutable) MakeMutationComplete(m descpb.DescriptorMutation) error {
 						break
 					}
 				}
-				col, err := desc.FindColumnWithID(t.Constraint.NotNullColumn)
+				col, err := catalog.MustFindColumnByID(desc, t.Constraint.NotNullColumn)
 				if err != nil {
 					return err
 				}
@@ -1516,7 +1460,7 @@ func (desc *Mutable) MakeMutationComplete(m descpb.DescriptorMutation) error {
 
 			// Promote the new primary index into the primary index position on the descriptor,
 			// and remove it from the secondary indexes list.
-			newIndex, err := desc.FindIndexWithID(args.NewPrimaryIndexId)
+			newIndex, err := catalog.MustFindIndexByID(desc, args.NewPrimaryIndexId)
 			if err != nil {
 				return err
 			}
@@ -1553,7 +1497,7 @@ func (desc *Mutable) MakeMutationComplete(m descpb.DescriptorMutation) error {
 				newID := args.NewIndexes[j]
 				// All our new indexes have been inserted into the table descriptor by now, since the primary key swap
 				// is the last mutation processed in a group of mutations under the same mutation ID.
-				newIndex, err := desc.FindIndexWithID(newID)
+				newIndex, err := catalog.MustFindIndexByID(desc, newID)
 				if err != nil {
 					return err
 				}
@@ -1601,11 +1545,11 @@ func (desc *Mutable) MakeMutationComplete(m descpb.DescriptorMutation) error {
 
 func (desc *Mutable) performComputedColumnSwap(swap *descpb.ComputedColumnSwap) error {
 	// Get the old and new columns from the descriptor.
-	oldCol, err := desc.FindColumnWithID(swap.OldColumnId)
+	oldCol, err := catalog.MustFindColumnByID(desc, swap.OldColumnId)
 	if err != nil {
 		return err
 	}
-	newCol, err := desc.FindColumnWithID(swap.NewColumnId)
+	newCol, err := catalog.MustFindColumnByID(desc, swap.NewColumnId)
 	if err != nil {
 		return err
 	}
@@ -1618,8 +1562,7 @@ func (desc *Mutable) performComputedColumnSwap(swap *descpb.ComputedColumnSwap) 
 
 	// Generate unique name for old column.
 	nameExists := func(name string) bool {
-		_, err := desc.FindColumnWithName(tree.Name(name))
-		return err == nil
+		return catalog.FindColumnByName(desc, name) != nil
 	}
 
 	uniqueName := GenerateUniqueName(newCol.GetName(), nameExists)
@@ -2143,16 +2086,6 @@ func (desc *wrapper) IndexSpan(codec keys.SQLCodec, indexID descpb.IndexID) roac
 func (desc *wrapper) TableSpan(codec keys.SQLCodec) roachpb.Span {
 	prefix := codec.TablePrefix(uint32(desc.ID))
 	return roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()}
-}
-
-// CheckConstraintUsesColumn implements the TableDescriptor interface.
-func (desc *wrapper) CheckConstraintUsesColumn(
-	cc *descpb.TableDescriptor_CheckConstraint, colID descpb.ColumnID,
-) (bool, error) {
-	i := sort.Search(len(cc.ColumnIDs), func(i int) bool {
-		return cc.ColumnIDs[i] >= colID
-	})
-	return i < len(cc.ColumnIDs) && cc.ColumnIDs[i] == colID, nil
 }
 
 // GetFamilyOfColumn returns the ColumnFamilyDescriptor for the

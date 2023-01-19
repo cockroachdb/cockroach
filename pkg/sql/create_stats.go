@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -270,7 +269,7 @@ func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, erro
 			return nil, err
 		}
 	} else {
-		columns, err := tabledesc.FindPublicColumnsWithNames(tableDesc, n.ColumnNames)
+		columns, err := catalog.MustFindPublicColumnsByNameList(tableDesc, n.ColumnNames)
 		if err != nil {
 			return nil, err
 		}
@@ -286,7 +285,7 @@ func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, erro
 			}
 			columnIDs[i] = columns[i].GetID()
 		}
-		col, err := tableDesc.FindColumnWithID(columnIDs[0])
+		col, err := catalog.MustFindColumnByID(tableDesc, columnIDs[0])
 		if err != nil {
 			return nil, err
 		}
@@ -399,7 +398,7 @@ func createStatsDefaultColumns(
 	// ID if they have not already been added. Histogram stats are collected for
 	// every indexed column.
 	addIndexColumnStatsIfNotExists := func(colID descpb.ColumnID, isInverted bool) error {
-		col, err := desc.FindColumnWithID(colID)
+		col, err := catalog.MustFindColumnByID(desc, colID)
 		if err != nil {
 			return err
 		}
@@ -486,7 +485,7 @@ func createStatsDefaultColumns(
 
 			colIDs := make([]descpb.ColumnID, 0, j+1)
 			for k := 0; k <= j; k++ {
-				col, err := desc.FindColumnWithID(idx.GetKeyColumnID(k))
+				col, err := catalog.MustFindColumnByID(desc, idx.GetKeyColumnID(k))
 				if err != nil {
 					return nil, err
 				}
@@ -529,7 +528,7 @@ func createStatsDefaultColumns(
 
 			// Generate stats for each column individually.
 			for _, colID := range colIDs.Ordered() {
-				col, err := desc.FindColumnWithID(colID)
+				col, err := catalog.MustFindColumnByID(desc, colID)
 				if err != nil {
 					return nil, err
 				}

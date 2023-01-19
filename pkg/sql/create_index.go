@@ -31,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/storageparam"
 	"github.com/cockroachdb/cockroach/pkg/sql/storageparam/indexstorageparam"
@@ -182,7 +181,7 @@ func makeIndexDescriptor(
 	}
 
 	// Ensure that the index name does not exist before trying to create the index.
-	if idx, _ := tableDesc.FindIndexWithName(string(n.Name)); idx != nil {
+	if idx := catalog.FindIndexByName(tableDesc, string(n.Name)); idx != nil {
 		if idx.Dropped() {
 			return nil, pgerror.Newf(pgcode.DuplicateRelation, "index with name %q already exists and is being dropped, try again later", n.Name)
 		}
@@ -217,7 +216,7 @@ func makeIndexDescriptor(
 
 		indexDesc.Type = descpb.IndexDescriptor_INVERTED
 		invCol := columns[len(columns)-1]
-		column, err := tableDesc.FindColumnWithName(invCol.Column)
+		column, err := catalog.MustFindColumnByTreeName(tableDesc, invCol.Column)
 		if err != nil {
 			return nil, err
 		}
@@ -310,7 +309,7 @@ func checkIndexColumns(
 	desc catalog.TableDescriptor, columns tree.IndexElemList, storing tree.NameList, inverted bool,
 ) error {
 	for i, colDef := range columns {
-		col, err := desc.FindColumnWithName(colDef.Column)
+		col, err := catalog.MustFindColumnByTreeName(desc, colDef.Column)
 		if err != nil {
 			return errors.Wrapf(err, "finding column %d", i)
 		}
@@ -326,7 +325,7 @@ func checkIndexColumns(
 		}
 	}
 	for i, colName := range storing {
-		col, err := desc.FindColumnWithName(colName)
+		col, err := catalog.MustFindColumnByTreeName(desc, colName)
 		if err != nil {
 			return errors.Wrapf(err, "finding store column %d", i)
 		}
@@ -424,7 +423,7 @@ func validateColumnsAreAccessible(desc *tabledesc.Mutable, columns tree.IndexEle
 		if column.Expr != nil {
 			continue
 		}
-		foundColumn, err := desc.FindColumnWithName(column.Column)
+		foundColumn, err := catalog.MustFindColumnByTreeName(desc, column.Column)
 		if err != nil {
 			return err
 		}
@@ -446,7 +445,7 @@ func validateIndexColumnsExist(desc *tabledesc.Mutable, columns tree.IndexElemLi
 		if column.Expr != nil {
 			return errors.AssertionFailedf("index elem expression should have been replaced with a column")
 		}
-		foundColumn, err := desc.FindColumnWithName(column.Column)
+		foundColumn, err := catalog.MustFindColumnByTreeName(desc, column.Column)
 		if err != nil {
 			return err
 		}
@@ -576,8 +575,7 @@ func replaceExpressionElemsWithVirtualCols(
 
 			// Create a new virtual column and add it to the table descriptor.
 			colName := tabledesc.GenerateUniqueName("crdb_internal_idx_expr", func(name string) bool {
-				_, err := desc.FindColumnWithName(tree.Name(name))
-				return err == nil
+				return catalog.FindColumnByName(desc, name) != nil
 			})
 			col := &descpb.ColumnDescriptor{
 				Name:         colName,
@@ -680,8 +678,8 @@ func maybeCreateAndAddShardCol(
 	if err != nil {
 		return nil, err
 	}
-	existingShardCol, err := desc.FindColumnWithName(tree.Name(shardColDesc.Name))
-	if err == nil && !existingShardCol.Dropped() {
+	existingShardCol := catalog.FindColumnByName(desc, shardColDesc.Name)
+	if existingShardCol != nil && !existingShardCol.Dropped() {
 		// TODO(ajwerner): In what ways is existingShardCol allowed to differ from
 		// the newly made shardCol? Should there be some validation of
 		// existingShardCol?
@@ -693,25 +691,20 @@ func maybeCreateAndAddShardCol(
 		}
 		return existingShardCol, nil
 	}
-	columnIsUndefined := sqlerrors.IsUndefinedColumnError(err)
-	if err != nil && !columnIsUndefined {
-		return nil, err
-	}
-	if columnIsUndefined || existingShardCol.Dropped() {
+	if existingShardCol == nil || existingShardCol.Dropped() {
 		if isNewTable {
 			desc.AddColumn(shardColDesc)
 		} else {
 			desc.AddColumnMutation(shardColDesc, descpb.DescriptorMutation_ADD)
 		}
 	}
-	shardCol, err := desc.FindColumnWithName(tree.Name(shardColDesc.Name))
-	return shardCol, err
+	return catalog.MustFindColumnByName(desc, shardColDesc.Name)
 }
 
 func (n *createIndexNode) startExec(params runParams) error {
 	telemetry.Inc(sqltelemetry.SchemaChangeCreateCounter("index"))
-	foundIndex, err := n.tableDesc.FindIndexWithName(string(n.n.Name))
-	if err == nil {
+	foundIndex := catalog.FindIndexByName(n.tableDesc, string(n.n.Name))
+	if foundIndex != nil {
 		if foundIndex.Dropped() {
 			return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 				"index %q being dropped, try again later", string(n.n.Name))

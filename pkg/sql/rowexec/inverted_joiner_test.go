@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
@@ -667,7 +668,7 @@ func TestInvertedJoiner(t *testing.T) {
 				for _, c := range td.IndexFullColumns(index) {
 					fetchColIDs = append(fetchColIDs, c.GetID())
 				}
-				invCol, err := td.FindColumnWithID(index.InvertedColumnID())
+				invCol, err := catalog.MustFindColumnByID(td, index.InvertedColumnID())
 				if err != nil {
 					t.Fatal(err)
 				}
