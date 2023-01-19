@@ -1242,3 +1242,21 @@ SELECT * FROM temp;
 7
 8
 9
+
+# Regression test for #95360. A NOT MATERIALIZED CTE should not be inlined if it
+# has a mutation.
+statement ok
+CREATE TABLE t95360 (a INT, b INT)
+
+# Note: The correlated subquery with a UNION ALL forces the optimizer to use an
+# apply-join, which would execute the INSERT once for each row in v if the
+# INSERT was inlined.
+statement ok
+WITH insVals AS NOT MATERIALIZED (INSERT INTO t95360 VALUES (1, 10) RETURNING a)
+SELECT * FROM (VALUES (1), (2), (3)) v(a)
+WHERE EXISTS (SELECT * FROM insVals WHERE a = v.a UNION ALL SELECT a FROM (VALUES (4)) w(a) WHERE a = v.a)
+
+query II
+SELECT * FROM t95360
+----
+1  10

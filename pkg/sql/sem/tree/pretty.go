@@ -656,11 +656,11 @@ func (node *With) docRow(p *PrettyCfg) pretty.TableRow {
 	d := make([]pretty.Doc, len(node.CTEList))
 	for i, cte := range node.CTEList {
 		asString := "AS"
-		if cte.Mtr.Set {
-			if !cte.Mtr.Materialize {
-				asString += " NOT"
-			}
+		switch cte.Mtr {
+		case CTEMaterializeAlways:
 			asString += " MATERIALIZED"
+		case CTEMaterializeNever:
+			asString += " NOT MATERIALIZED"
 		}
 		d[i] = p.nestUnder(
 			p.Doc(&cte.Name),
