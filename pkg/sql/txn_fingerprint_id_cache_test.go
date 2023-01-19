@@ -136,7 +136,7 @@ func TestTxnFingerprintIDCache(t *testing.T) {
 	testConn.Exec(t, "SELECT * FROM test")
 	testConn.Exec(t, "BEGIN; SELECT 1; SELECT 1, 2, 3; COMMIT;")
 
-	sessions := testServer.SQLServer().(*Server).GetExecutorConfig().SessionRegistry.SerializeAll()
+	sessions := testServer.SQLServer().(*Server).GetExecutorConfig().SessionRegistry.SerializeAll(true /* lock */)
 
 	var session *serverpb.Session
 	for i, s := range sessions {

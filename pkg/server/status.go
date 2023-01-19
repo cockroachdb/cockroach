@@ -216,17 +216,18 @@ func (b *baseStatusServer) getLocalSessions(
 	// we lock the session registry to prevent any changes to it while we
 	// serialize the sessions from the session registry and the closed session
 	// cache.
-	b.sessionRegistry.Lock()
-	sessions := b.sessionRegistry.SerializeAllLocked()
-
-	var closedSessions []serverpb.Session
-	if !req.ExcludeClosedSessions {
-		closedSessions = b.closedSessionCache.GetSerializedSessions()
-	}
-	b.sessionRegistry.Unlock()
+	var sessions []serverpb.Session
+	func() {
+		b.sessionRegistry.RLock()
+		defer b.sessionRegistry.RUnlock()
+		sessions = b.sessionRegistry.SerializeAll(false /* lock */)
+		if !req.ExcludeClosedSessions {
+			closedSessions := b.closedSessionCache.GetSerializedSessions()
+			sessions = append(sessions, closedSessions...)
+		}
+	}()
 
 	userSessions := make([]serverpb.Session, 0)
-	sessions = append(sessions, closedSessions...)
 
 	reqUserNameNormalized := reqUsername.Normalized()
 	for _, session := range sessions {
@@ -327,7 +328,7 @@ func (b *baseStatusServer) checkCancelPrivilege(
 
 	if !hasAdmin {
 		// Check if the user has permission to see the session.
-		session, err := findSession(b.sessionRegistry.SerializeAll())
+		session, err := findSession(b.sessionRegistry.SerializeAll(true /* lock */))
 		if err != nil {
 			return serverError(ctx, err)
 		}
