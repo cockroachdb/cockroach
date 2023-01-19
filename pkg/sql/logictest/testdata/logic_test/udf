@@ -2653,7 +2653,7 @@ statement error pgcode 42883 unknown function: other_udf()
 CREATE FUNCTION err() RETURNS INT LANGUAGE SQL AS 'SELECT other_udf()'
 
 
-subtest subqueries
+subtest subquery
 
 statement ok
 CREATE TABLE sub_all (a INT);
