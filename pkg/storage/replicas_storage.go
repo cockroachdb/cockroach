@@ -12,6 +12,8 @@ package storage
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/redact"
+	"github.com/cockroachdb/redact/interfaces"
 	"go.etcd.io/raft/v3/raftpb"
 )
 
@@ -538,6 +540,17 @@ type FullReplicaID struct {
 	RangeID roachpb.RangeID
 	// ReplicaID is the id of the replica.
 	ReplicaID roachpb.ReplicaID
+}
+
+// SafeFormat implements redact.SafeFormatter. It prints as
+// r<rangeID>/<replicaID>.
+func (id FullReplicaID) SafeFormat(s interfaces.SafePrinter, _ rune) {
+	s.Printf("r%d/%d", id.RangeID, id.ReplicaID)
+}
+
+// String formats a store for debug output.
+func (id FullReplicaID) String() string {
+	return redact.StringWithoutMarkers(id)
 }
 
 // ReplicaInfo provides the replica ID and state pair.
