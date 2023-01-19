@@ -356,7 +356,11 @@ func (o *RestoreOptions) Format(ctx *FmtCtx) {
 	if o.EncryptionPassphrase != nil {
 		addSep = true
 		ctx.WriteString("encryption_passphrase = ")
-		ctx.FormatNode(o.EncryptionPassphrase)
+		if ctx.flags.HasFlags(FmtShowPasswords) {
+			ctx.FormatNode(o.EncryptionPassphrase)
+		} else {
+			ctx.WriteString(PasswordSubstitution)
+		}
 	}
 
 	if o.DecryptionKMSURI != nil {
