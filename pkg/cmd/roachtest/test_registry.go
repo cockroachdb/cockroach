@@ -14,17 +14,15 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"regexp"
 	"sort"
-	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/internal/team"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
-	"github.com/cockroachdb/errors"
 )
 
 var loadTeams = func() (team.Map, error) {
@@ -58,11 +56,7 @@ func makeTestRegistry(
 	}
 	v := buildTag
 	if v == "" {
-		var err error
-		v, err = loadBuildVersion()
-		if err != nil {
-			return testRegistryImpl{}, err
-		}
+		v = build.BinaryVersionPrefix()
 	}
 	if err := r.setBuildVersion(v); err != nil {
 		return testRegistryImpl{}, err
@@ -196,16 +190,4 @@ func (r *testRegistryImpl) setBuildVersion(buildTag string) error {
 	}
 	r.buildVersion = *v
 	return err
-}
-
-func loadBuildVersion() (string, error) {
-	cmd := exec.Command("git", "describe", "--abbrev=0", "--tags", "--match=v[0-9]*")
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return "", errors.Wrapf(
-			err, "failed to get version tag from git. Are you running in the "+
-				"cockroach repo directory? err=%s, out=%s",
-			err, out)
-	}
-	return strings.TrimSpace(string(out)), nil
 }
