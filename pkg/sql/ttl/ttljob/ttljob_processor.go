@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -77,7 +78,7 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 		primaryIndexDesc := desc.GetPrimaryIndex().IndexDesc()
 		pkColumns = primaryIndexDesc.KeyColumnNames
 		for _, id := range primaryIndexDesc.KeyColumnIDs {
-			col, err := desc.FindColumnWithID(id)
+			col, err := catalog.MustFindColumnByID(desc, id)
 			if err != nil {
 				return err
 			}

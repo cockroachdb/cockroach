@@ -238,7 +238,7 @@ func (m *visitor) SetColumnName(ctx context.Context, op scop.SetColumnName) erro
 	if err != nil {
 		return err
 	}
-	col, err := tbl.FindColumnWithID(op.ColumnID)
+	col, err := catalog.MustFindColumnByID(tbl, op.ColumnID)
 	if err != nil {
 		return errors.AssertionFailedf("column %d not found in table %q (%d)", op.ColumnID, tbl.GetName(), tbl.GetID())
 	}
@@ -252,7 +252,7 @@ func (m *visitor) AddColumnDefaultExpression(
 	if err != nil {
 		return err
 	}
-	col, err := tbl.FindColumnWithID(op.Default.ColumnID)
+	col, err := catalog.MustFindColumnByID(tbl, op.Default.ColumnID)
 	if err != nil {
 		return err
 	}
@@ -277,7 +277,7 @@ func (m *visitor) RemoveColumnDefaultExpression(
 	if err != nil || tbl.Dropped() {
 		return err
 	}
-	col, err := tbl.FindColumnWithID(op.ColumnID)
+	col, err := catalog.MustFindColumnByID(tbl, op.ColumnID)
 	if err != nil {
 		return err
 	}
@@ -293,7 +293,7 @@ func (m *visitor) AddColumnOnUpdateExpression(
 	if err != nil {
 		return err
 	}
-	col, err := tbl.FindColumnWithID(op.OnUpdate.ColumnID)
+	col, err := catalog.MustFindColumnByID(tbl, op.OnUpdate.ColumnID)
 	if err != nil {
 		return err
 	}
@@ -318,7 +318,7 @@ func (m *visitor) RemoveColumnOnUpdateExpression(
 	if err != nil || tbl.Dropped() {
 		return err
 	}
-	col, err := tbl.FindColumnWithID(op.ColumnID)
+	col, err := catalog.MustFindColumnByID(tbl, op.ColumnID)
 	if err != nil {
 		return err
 	}

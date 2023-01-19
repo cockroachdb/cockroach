@@ -50,7 +50,7 @@ func (m *visitor) RemoveSequenceOwner(ctx context.Context, op scop.RemoveSequenc
 	if err != nil || tbl.Dropped() {
 		return err
 	}
-	col, err := tbl.FindColumnWithID(op.ColumnID)
+	col, err := catalog.MustFindColumnByID(tbl, op.ColumnID)
 	if err != nil || col == nil {
 		return err
 	}
@@ -197,13 +197,7 @@ func (m *visitor) UpdateTypeBackReferencesInTypes(
 		if err != nil {
 			return err
 		}
-		ids, err := typ.GetIDClosure()
-		if err != nil {
-			return err
-		}
-		for id := range ids {
-			forwardRefs.Add(id)
-		}
+		forwardRefs = typ.GetIDClosure()
 	}
 	return updateBackReferencesInTypes(ctx, m, op.TypeIDs, op.BackReferencedTypeID, forwardRefs)
 }
@@ -220,7 +214,7 @@ func (m *visitor) UpdateBackReferencesInSequences(
 			return err
 		}
 		if op.BackReferencedColumnID != 0 {
-			col, err := tbl.FindColumnWithID(op.BackReferencedColumnID)
+			col, err := catalog.MustFindColumnByID(tbl, op.BackReferencedColumnID)
 			if err != nil {
 				return err
 			}

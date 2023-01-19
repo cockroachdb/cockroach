@@ -33,7 +33,7 @@ func EncodeKV(
 	var colMap catalog.TableColMap
 	for i, val := range pkeyVals {
 		datums = append(datums, nativeToDatum(t, val))
-		col, err := descr.FindColumnWithID(descpb.ColumnID(i + 1))
+		col, err := catalog.MustFindColumnByID(descr, descpb.ColumnID(i+1))
 		require.NoError(t, err)
 		colMap.Set(col.GetID(), col.Ordinal())
 	}

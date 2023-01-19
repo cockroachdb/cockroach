@@ -611,7 +611,7 @@ func (it iter) Col(fn ColumnFn) error {
 func TestingMakeEventRow(
 	desc catalog.TableDescriptor, familyID descpb.FamilyID, encRow rowenc.EncDatumRow, deleted bool,
 ) Row {
-	family, err := desc.FindFamilyByID(familyID)
+	family, err := catalog.MustFindFamilyByID(desc, familyID)
 	if err != nil {
 		panic(err) // primary column family always exists.
 	}

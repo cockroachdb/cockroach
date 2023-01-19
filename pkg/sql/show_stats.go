@@ -68,18 +68,14 @@ var showTableStatsOptValidate = map[string]exprutil.KVStringOptValidate{
 	showTableStatsOptMerge:    exprutil.KVStringOptRequireNoValue,
 }
 
-func containsDroppedColumn(colIDs tree.Datums, desc catalog.TableDescriptor) (bool, error) {
+func containsDroppedColumn(colIDs tree.Datums, desc catalog.TableDescriptor) bool {
 	for _, colID := range colIDs {
 		cid := descpb.ColumnID(*colID.(*tree.DInt))
-		if _, err := desc.FindColumnWithID(cid); err != nil {
-			if sqlerrors.IsUndefinedColumnError(err) {
-				return true, nil
-			} else {
-				return false, err
-			}
+		if catalog.FindColumnByID(desc, cid) == nil {
+			return true
 		}
 	}
-	return false, nil
+	return false
 }
 
 // ShowTableStats returns a SHOW STATISTICS statement for the specified table.
@@ -205,10 +201,7 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 				for _, row := range rows {
 					// Skip stats on dropped columns.
 					colIDs := row[columnIDsIdx].(*tree.DArray).Array
-					ignoreStatsRowWithDroppedColumn, err := containsDroppedColumn(colIDs, desc)
-					if err != nil {
-						return nil, err
-					}
+					ignoreStatsRowWithDroppedColumn := containsDroppedColumn(colIDs, desc)
 					if ignoreStatsRowWithDroppedColumn {
 						continue
 					}
@@ -388,7 +381,7 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 
 func statColumnString(desc catalog.TableDescriptor, colID tree.Datum) (colName string, err error) {
 	id := descpb.ColumnID(*colID.(*tree.DInt))
-	colDesc, err := desc.FindColumnWithID(id)
+	colDesc, err := catalog.MustFindColumnByID(desc, id)
 	if err != nil {
 		// This can happen if a column was removed.
 		return "<unknown>", err

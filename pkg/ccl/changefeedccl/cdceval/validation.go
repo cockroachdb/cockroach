@@ -228,7 +228,7 @@ func getTargetFamilyDescriptor(
 ) (*descpb.ColumnFamilyDescriptor, error) {
 	switch target.Type {
 	case jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY:
-		return desc.FindFamilyByID(0)
+		return catalog.MustFindFamilyByID(desc, 0 /* id */)
 	case jobspb.ChangefeedTargetSpecification_COLUMN_FAMILY:
 		var fd *descpb.ColumnFamilyDescriptor
 		for _, family := range desc.GetFamilies() {
@@ -366,7 +366,7 @@ func (c *checkColumnsVisitor) VisitCols(expr tree.Expr) (bool, tree.Expr) {
 		return c.VisitCols(vn)
 
 	case *tree.ColumnItem:
-		col, err := c.desc.FindColumnWithName(e.ColumnName)
+		col, err := catalog.MustFindColumnByTreeName(c.desc, e.ColumnName)
 		if err != nil {
 			c.err = err
 			return false, expr

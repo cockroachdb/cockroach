@@ -945,7 +945,7 @@ func populateTableConstraints(
 			if err != nil {
 				return err
 			}
-			if refConstraint, err := tabledesc.FindFKReferencedUniqueConstraint(referencedTable, fk); err != nil {
+			if refConstraint, err := catalog.FindFKReferencedUniqueConstraint(referencedTable, fk); err != nil {
 				// We couldn't find a unique constraint that matched. This shouldn't
 				// happen.
 				log.Warningf(ctx, "broken fk reference: %v", err)
@@ -985,7 +985,7 @@ func populateTableConstraints(
 				db.GetID(), sc.GetID(), table.GetID(), uwoi,
 			)
 			f.WriteString("UNIQUE WITHOUT INDEX (")
-			colNames, err := table.NamesForColumnIDs(uwoi.UniqueWithoutIndexDesc().ColumnIDs)
+			colNames, err := catalog.ColumnNamesForIDs(table, uwoi.UniqueWithoutIndexDesc().ColumnIDs)
 			if err != nil {
 				return err
 			}
@@ -1505,7 +1505,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-depend.html`,
 					return err
 				}
 				refObjID := oidZero
-				if refConstraint, err := tabledesc.FindFKReferencedUniqueConstraint(referencedTable, fk); err != nil {
+				if refConstraint, err := catalog.FindFKReferencedUniqueConstraint(referencedTable, fk); err != nil {
 					// We couldn't find a unique constraint that matched. This shouldn't
 					// happen.
 					log.Warningf(ctx, "broken fk reference: %v", err)
@@ -1607,7 +1607,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-description.html`,
 				if err != nil {
 					return err
 				}
-				c, err := tableDesc.FindConstraintWithID(descpb.ConstraintID(tree.MustBeDInt(objSubID)))
+				c, err := catalog.MustFindConstraintByID(tableDesc, descpb.ConstraintID(tree.MustBeDInt(objSubID)))
 				if err != nil {
 					return err
 				}
@@ -1848,7 +1848,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-index.html`,
 					exprs := make([]string, 0, index.NumKeyColumns())
 					for i := index.IndexDesc().ExplicitColumnStartIdx(); i < index.NumKeyColumns(); i++ {
 						columnID := index.GetKeyColumnID(i)
-						col, err := table.FindColumnWithID(columnID)
+						col, err := catalog.MustFindColumnByID(table, columnID)
 						if err != nil {
 							return err
 						}

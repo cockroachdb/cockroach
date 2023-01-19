@@ -313,24 +313,21 @@ func (desc *immutable) validateInboundTableRef(
 	}
 
 	for _, colID := range by.ColumnIDs {
-		_, err := backRefTbl.FindColumnWithID(colID)
-		if err != nil {
+		if catalog.FindColumnByID(backRefTbl, colID) == nil {
 			return errors.AssertionFailedf("depended-on-by relation %q (%d) does not have a column with ID %d",
 				backRefTbl.GetName(), by.ID, colID)
 		}
 	}
 
 	for _, idxID := range by.IndexIDs {
-		_, err := backRefTbl.FindIndexWithID(idxID)
-		if err != nil {
+		if catalog.FindIndexByID(backRefTbl, idxID) == nil {
 			return errors.AssertionFailedf("depended-on-by relation %q (%d) does not have an index with ID %d",
 				backRefTbl.GetName(), by.ID, idxID)
 		}
 	}
 
 	for _, cstID := range by.ConstraintIDs {
-		_, err := backRefTbl.FindConstraintWithID(cstID)
-		if err != nil {
+		if catalog.FindConstraintByID(backRefTbl, cstID) == nil {
 			return errors.AssertionFailedf("depended-on-by relation %q (%d) does not have a constraint with ID %d",
 				backRefTbl.GetName(), by.ID, cstID)
 		}

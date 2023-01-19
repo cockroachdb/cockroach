@@ -811,7 +811,7 @@ func importPlanHook(
 			var intoCols []string
 			isTargetCol := make(map[string]bool)
 			for _, name := range importStmt.IntoCols {
-				active, err := tabledesc.FindPublicColumnsWithNames(found, tree.NameList{name})
+				active, err := catalog.MustFindPublicColumnsByNameList(found, tree.NameList{name})
 				if err != nil {
 					return errors.Wrap(err, "verifying target columns")
 				}

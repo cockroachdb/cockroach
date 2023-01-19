@@ -604,9 +604,9 @@ func constructExprs(
 			if addedColSet.Contains(colID) {
 				continue
 			}
-			col, err := desc.FindColumnWithID(colID)
+			col, err := catalog.MustFindColumnByID(desc, colID)
 			if err != nil {
-				return errors.AssertionFailedf("column %d does not exist", colID)
+				return errors.HandleAsAssertionFailure(err)
 			}
 			if col.IsVirtual() {
 				continue

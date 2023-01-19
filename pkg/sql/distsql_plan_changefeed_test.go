@@ -586,7 +586,7 @@ FAMILY extra (extra)
 			var inputTypes []*types.T
 			// We target main family; so only 3 columns should be used.
 			for _, id := range fooDesc.GetFamilies()[0].ColumnIDs {
-				col, err := fooDesc.FindColumnWithID(id)
+				col, err := catalog.MustFindColumnByID(fooDesc, id)
 				require.NoError(t, err)
 				inputCols.Set(col.GetID(), len(inputTypes))
 				inputTypes = append(inputTypes, col.GetType())
@@ -690,7 +690,7 @@ func mkPkKey(t *testing.T, tableID descpb.ID, vals ...int) roachpb.Key {
 
 func copyColumnAs(t *testing.T, table catalog.TableDescriptor, from, to tree.Name) catalog.Column {
 	t.Helper()
-	src, err := table.FindColumnWithName(from)
+	src, err := catalog.MustFindColumnByTreeName(table, from)
 	require.NoError(t, err)
 	dst := src.DeepCopy()
 	desc := dst.ColumnDesc()

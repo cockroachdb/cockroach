@@ -280,7 +280,7 @@ CREATE UNIQUE INDEX test_index_to_mutate ON t.test (b);
 	_, err = sqlDB.Exec(`DELETE FROM t.test WHERE a = 2`)
 	require.NoError(t, err)
 
-	idx, err := tableDesc.FindIndexWithName("test_index_to_mutate")
+	idx, err := catalog.MustFindIndexByName(tableDesc, "test_index_to_mutate")
 	require.NoError(t, err)
 
 	span := tableDesc.IndexSpan(codec, idx.GetID())
@@ -345,7 +345,7 @@ func mutateIndexByName(
 	fn func(*descpb.IndexDescriptor) error,
 	state descpb.DescriptorMutation_State,
 ) error {
-	idx, err := tableDesc.FindIndexWithName(index)
+	idx, err := catalog.MustFindIndexByName(tableDesc, index)
 	if err != nil {
 		return err
 	}
@@ -666,12 +666,12 @@ func TestMergeProcessor(t *testing.T) {
 
 		tableDesc = desctestutils.TestingGetMutableExistingTableDescriptor(kvDB, codec, "d", "t")
 
-		dstIndex, err := tableDesc.FindIndexWithName(test.dstIndex)
+		dstIndex, err := catalog.MustFindIndexByName(tableDesc, test.dstIndex)
 		if err != nil {
 			t.Fatal(err)
 		}
 
-		srcIndex, err := tableDesc.FindIndexWithName(test.srcIndex)
+		srcIndex, err := catalog.MustFindIndexByName(tableDesc, test.srcIndex)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -740,7 +740,7 @@ func fetchIndex(
 	var alloc tree.DatumAlloc
 
 	mm := mon.NewStandaloneBudget(1 << 30)
-	idx, err := table.FindIndexWithName(indexName)
+	idx, err := catalog.MustFindIndexByName(table, indexName)
 	require.NoError(t, err)
 	colIdxMap := catalog.ColumnIDToOrdinalMap(table.PublicColumns())
 	var valsNeeded intsets.Fast

@@ -627,13 +627,7 @@ func (desc *immutable) GetReferencedDescIDs() (catalog.DescriptorIDSet, error) {
 	if desc.GetParentSchemaID() != keys.PublicSchemaID {
 		ids.Add(desc.GetParentSchemaID())
 	}
-	children, err := desc.GetIDClosure()
-	if err != nil {
-		return catalog.DescriptorIDSet{}, err
-	}
-	for id := range children {
-		ids.Add(id)
-	}
+	desc.GetIDClosure().ForEach(ids.Add)
 	return ids, nil
 }
 
@@ -980,36 +974,23 @@ func (desc *immutable) ForEachUDTDependentForHydration(fn func(t *types.T) error
 }
 
 // GetIDClosure implements the TypeDescriptor interface.
-func (desc *immutable) GetIDClosure() (map[descpb.ID]struct{}, error) {
-	ret := make(map[descpb.ID]struct{})
+func (desc *immutable) GetIDClosure() (ret catalog.DescriptorIDSet) {
 	// Collect the descriptor's own ID.
-	ret[desc.ID] = struct{}{}
+	ret.Add(desc.ID)
 	switch desc.Kind {
 	case descpb.TypeDescriptor_ALIAS:
 		// If this descriptor is an alias for another type, then get collect the
 		// closure for alias.
-		children, err := GetTypeDescriptorClosure(desc.Alias)
-		if err != nil {
-			return nil, err
-		}
-		for id := range children {
-			ret[id] = struct{}{}
-		}
+		GetTypeDescriptorClosure(desc.Alias).ForEach(ret.Add)
 	case descpb.TypeDescriptor_COMPOSITE:
 		for _, e := range desc.Composite.Elements {
-			children, err := GetTypeDescriptorClosure(e.ElementType)
-			if err != nil {
-				return nil, err
-			}
-			for id := range children {
-				ret[id] = struct{}{}
-			}
+			GetTypeDescriptorClosure(e.ElementType).ForEach(ret.Add)
 		}
 	default:
 		// Otherwise, take the array type ID.
-		ret[desc.ArrayTypeID] = struct{}{}
+		ret.Add(desc.ArrayTypeID)
 	}
-	return ret, nil
+	return ret
 }
 
 // GetObjectType implements the Object interface.
@@ -1019,42 +1000,26 @@ func (desc *immutable) GetObjectType() privilege.ObjectType {
 
 // GetTypeDescriptorClosure returns all type descriptor IDs that are
 // referenced by this input types.T.
-func GetTypeDescriptorClosure(typ *types.T) (map[descpb.ID]struct{}, error) {
+func GetTypeDescriptorClosure(typ *types.T) (ret catalog.DescriptorIDSet) {
 	if !typ.UserDefined() {
-		return map[descpb.ID]struct{}{}, nil
+		return catalog.DescriptorIDSet{}
 	}
-	id := GetUserDefinedTypeDescID(typ)
 	// Collect the type's descriptor ID.
-	ret := map[descpb.ID]struct{}{
-		id: {},
-	}
+	ret.Add(GetUserDefinedTypeDescID(typ))
 	switch typ.Family() {
 	case types.ArrayFamily:
 		// If we have an array type, then collect all types in the contents.
-		children, err := GetTypeDescriptorClosure(typ.ArrayContents())
-		if err != nil {
-			return nil, err
-		}
-		for id := range children {
-			ret[id] = struct{}{}
-		}
+		GetTypeDescriptorClosure(typ.ArrayContents()).ForEach(ret.Add)
 	case types.TupleFamily:
 		// If we have a tuple type, collect all types in the contents.
 		for _, elt := range typ.TupleContents() {
-			children, err := GetTypeDescriptorClosure(elt)
-			if err != nil {
-				return nil, err
-			}
-			for id := range children {
-				ret[id] = struct{}{}
-			}
+			GetTypeDescriptorClosure(elt).ForEach(ret.Add)
 		}
 	default:
 		// Otherwise, take the array type ID.
-		id := GetUserDefinedArrayTypeDescID(typ)
-		ret[id] = struct{}{}
+		ret.Add(GetUserDefinedArrayTypeDescID(typ))
 	}
-	return ret, nil
+	return ret
 }
 
 // SetDeclarativeSchemaChangerState is part of the catalog.MutableDescriptor

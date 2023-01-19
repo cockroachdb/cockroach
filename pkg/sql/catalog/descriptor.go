@@ -429,23 +429,6 @@ type TableDescriptor interface {
 	// state.
 	DeleteOnlyNonPrimaryIndexes() []Index
 
-	// FindIndexWithID returns the first catalog.Index that matches the id
-	// in the set of all indexes, or an error if none was found. The order of
-	// traversal is the canonical order, see Index.Ordinal().
-	FindIndexWithID(id descpb.IndexID) (Index, error)
-
-	// FindIndexWithName returns the first catalog.Index that matches the name in
-	// the set of all indexes, excluding the primary index of non-physical
-	// tables, or an error if none was found. The order of traversal is the
-	// canonical order, see Index.Ordinal().
-	FindIndexWithName(name string) (Index, error)
-
-	// FindNonDropIndexWithName returns the first catalog.Index that matches the name in
-	// the set of all non-drp[ indexes, excluding the primary index of non-physical
-	// tables, or an error if none was found. The order of traversal is the
-	// canonical order, see catalog.Index.Ordinal().
-	FindNonDropIndexWithName(name string) (Index, error)
-
 	// GetNextIndexID returns the next unused index ID for the table. Index IDs
 	// are unique within a table, but not globally.
 	GetNextIndexID() descpb.IndexID
@@ -538,34 +521,12 @@ type TableDescriptor interface {
 	// suffix columns, suitable for populating a fetchpb.IndexFetchSpec.
 	IndexFetchSpecKeyAndSuffixColumns(idx Index) []fetchpb.IndexFetchSpec_KeyColumn
 
-	// FindColumnWithID returns the first column found whose ID matches the
-	// provided target ID, in the canonical order.
-	// If no column is found then an error is also returned.
-	FindColumnWithID(id descpb.ColumnID) (Column, error)
-
-	// FindColumnWithPGAttributeNum returns the first column found whose
-	// PGAttributeNum (if set, otherwise ID) matches the provider id.
-	// Error is returned if no column is found.
-	FindColumnWithPGAttributeNum(id descpb.PGAttributeNum) (Column, error)
-
-	// FindColumnWithName returns the first column found whose name matches the
-	// provided target name, in the canonical order.
-	// If no column is found then an error is also returned.
-	FindColumnWithName(name tree.Name) (Column, error)
-
-	// NamesForColumnIDs returns the names for the given column ids, or an error
-	// if one or more column ids was missing. Note - this allocates! It's not for
-	// hot path code.
-	NamesForColumnIDs(ids descpb.ColumnIDs) ([]string, error)
 	// GetNextColumnID returns the next unused column ID for this table. Column
 	// IDs are unique per table, but not unique globally.
 	GetNextColumnID() descpb.ColumnID
 	// GetNextConstraintID returns the next unused constraint ID for this table.
 	// Constraint IDs are unique per table, but not unique globally.
 	GetNextConstraintID() descpb.ConstraintID
-	// CheckConstraintUsesColumn returns whether the check constraint uses the
-	// specified column.
-	CheckConstraintUsesColumn(cc *descpb.TableDescriptor_CheckConstraint, colID descpb.ColumnID) (bool, error)
 	// IsShardColumn returns true if col corresponds to a non-dropped hash sharded
 	// index. This method assumes that col is currently a member of desc.
 	IsShardColumn(col Column) bool
@@ -575,8 +536,6 @@ type TableDescriptor interface {
 	GetFamilies() []descpb.ColumnFamilyDescriptor
 	// NumFamilies returns the number of column families in the descriptor.
 	NumFamilies() int
-	// FindFamilyByID finds the family with specified ID.
-	FindFamilyByID(id descpb.FamilyID) (*descpb.ColumnFamilyDescriptor, error)
 	// ForeachFamily calls f for every column family key in desc until an
 	// error is returned.
 	ForeachFamily(f func(family *descpb.ColumnFamilyDescriptor) error) error
@@ -680,13 +639,6 @@ type TableDescriptor interface {
 	// in the same order.
 	EnforcedUniqueConstraintsWithoutIndex() []UniqueWithoutIndexConstraint
 
-	// FindConstraintWithID traverses the slice returned by AllConstraints and
-	// returns the first catalog.Constraint that matches the desired ID, or an
-	// error if none was found.
-	FindConstraintWithID(id descpb.ConstraintID) (Constraint, error)
-	// FindConstraintWithName is like FindConstraintWithID but for names.
-	FindConstraintWithName(name string) (Constraint, error)
-
 	// CheckConstraintColumns returns the slice of columns referenced by a check
 	// constraint.
 	CheckConstraintColumns(ck CheckConstraint) []Column
@@ -748,12 +700,6 @@ type TableDescriptor interface {
 	// enabled or disabled for this table. If ok is true, then the enabled value
 	// is valid, otherwise this has not been set at the table level.
 	ForecastStatsEnabled() (enabled bool, ok bool)
-	// GetIndexNameByID returns the name of an index based on an ID, taking into
-	// account any ongoing declarative schema changes. Declarative schema changes
-	// do not propagate the index name into the mutations until changes are fully
-	// validated and swap operations are complete (to avoid having two constraints
-	// with the same name).
-	GetIndexNameByID(indexID descpb.IndexID) (name string, err error)
 	// IsRefreshViewRequired indicates if a REFRESH VIEW operation needs to be called
 	// on a materialized view.
 	IsRefreshViewRequired() bool
@@ -779,7 +725,7 @@ type TypeDescriptor interface {
 	HasPendingSchemaChanges() bool
 	// GetIDClosure returns all type descriptor IDs that are referenced by this
 	// type descriptor.
-	GetIDClosure() (map[descpb.ID]struct{}, error)
+	GetIDClosure() DescriptorIDSet
 	// IsCompatibleWith returns whether the type "desc" is compatible with "other".
 	// As of now "compatibility" entails that disk encoded data of "desc" can be
 	// interpreted and used by "other".

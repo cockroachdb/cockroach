@@ -21,12 +21,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -102,7 +102,7 @@ func (mt mutationTest) makeMutationsActive(ctx context.Context) {
 func (mt mutationTest) writeColumnMutation(
 	ctx context.Context, column string, m descpb.DescriptorMutation,
 ) {
-	col, err := mt.tableDesc.FindColumnWithName(tree.Name(column))
+	col, err := catalog.MustFindColumnByName(mt.tableDesc, column)
 	if err != nil {
 		mt.Fatal(err)
 	}
@@ -473,7 +473,7 @@ func (mt mutationTest) writeIndexMutation(
 	ctx context.Context, index string, m descpb.DescriptorMutation,
 ) {
 	tableDesc := mt.tableDesc
-	idx, err := tableDesc.FindIndexWithName(index)
+	idx, err := catalog.MustFindIndexByName(tableDesc, index)
 	if err != nil {
 		mt.Fatal(err)
 	}

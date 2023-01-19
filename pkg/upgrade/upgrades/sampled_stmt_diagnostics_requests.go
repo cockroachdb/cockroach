@@ -57,7 +57,7 @@ func sampledStmtDiagReqsMigration(
 				// We want to determine whether the old index from 21.2 exists.
 				// That index has one stored column. The index we introduce below has
 				// four.
-				idx, _ := existing.FindIndexWithName("completed_idx")
+				idx := catalog.FindIndexByName(existing, "completed_idx")
 				// If the index does not exist, we're good to proceed.
 				if idx == nil {
 					return true, nil

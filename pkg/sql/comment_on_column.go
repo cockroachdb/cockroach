@@ -53,7 +53,7 @@ func (p *planner) CommentOnColumn(ctx context.Context, n *tree.CommentOnColumn) 
 }
 
 func (n *commentOnColumnNode) startExec(params runParams) error {
-	col, err := n.tableDesc.FindColumnWithName(n.n.ColumnItem.ColumnName)
+	col, err := catalog.MustFindColumnByTreeName(n.tableDesc, n.n.ColumnItem.ColumnName)
 	if err != nil {
 		return err
 	}

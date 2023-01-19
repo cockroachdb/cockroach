@@ -276,7 +276,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 							"cannot create a unique constraint on an expression, use UNIQUE INDEX instead",
 						)
 					}
-					_, err := n.tableDesc.FindColumnWithName(column.Column)
+					_, err := catalog.MustFindColumnByTreeName(n.tableDesc, column.Column)
 					if err != nil {
 						return err
 					}
@@ -311,12 +311,10 @@ func (n *alterTableNode) startExec(params runParams) error {
 				if err != nil {
 					return err
 				}
-				foundIndex, err := n.tableDesc.FindIndexWithName(string(d.Name))
-				if err == nil {
-					if foundIndex.Dropped() {
-						return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
-							"index %q being dropped, try again later", d.Name)
-					}
+				foundIndex := catalog.FindIndexByName(n.tableDesc, string(d.Name))
+				if foundIndex != nil && foundIndex.Dropped() {
+					return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+						"index %q being dropped, try again later", d.Name)
 				}
 				if err := n.tableDesc.AddIndexMutationMaybeWithTempIndex(
 					&idx, descpb.DescriptorMutation_ADD,
@@ -501,7 +499,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 			droppedViews = append(droppedViews, colDroppedViews...)
 		case *tree.AlterTableDropConstraint:
 			name := string(t.Constraint)
-			c, _ := n.tableDesc.FindConstraintWithName(name)
+			c := catalog.FindConstraintByName(n.tableDesc, name)
 			if c == nil {
 				if t.IfExists {
 					continue
@@ -521,7 +519,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 
 		case *tree.AlterTableValidateConstraint:
 			name := string(t.Constraint)
-			c, _ := n.tableDesc.FindConstraintWithName(name)
+			c := catalog.FindConstraintByName(n.tableDesc, name)
 			if c == nil {
 				return pgerror.Newf(pgcode.UndefinedObject,
 					"constraint %q of relation %q does not exist", t.Constraint, n.tableDesc.Name)
@@ -573,7 +571,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 		case tree.ColumnMutationCmd:
 			// Column mutations
 			tableDesc := n.tableDesc
-			col, err := tableDesc.FindColumnWithName(t.GetColumn())
+			col, err := catalog.MustFindColumnByTreeName(tableDesc, t.GetColumn())
 			if err != nil {
 				return err
 			}
@@ -745,7 +743,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 			descriptorChanged = descriptorChanged || descChanged
 
 		case *tree.AlterTableRenameConstraint:
-			constraint, _ := n.tableDesc.FindConstraintWithName(string(t.Constraint))
+			constraint := catalog.FindConstraintByName(n.tableDesc, string(t.Constraint))
 			if constraint == nil {
 				return pgerror.Newf(pgcode.UndefinedObject,
 					"constraint %q of relation %q does not exist", tree.ErrString(&t.Constraint), n.tableDesc.Name)
@@ -762,7 +760,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 				return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 					"constraint %q in the middle of being dropped", t.Constraint)
 			}
-			if other, _ := n.tableDesc.FindConstraintWithName(string(t.NewName)); other != nil {
+			if other := catalog.FindConstraintByName(n.tableDesc, string(t.NewName)); other != nil {
 				return pgerror.Newf(pgcode.DuplicateObject,
 					"duplicate constraint name: %q", tree.ErrString(&t.NewName))
 			}
@@ -1251,8 +1249,8 @@ StatsLoop:
 
 		columnIDs := tree.NewDArray(types.Int)
 		for _, colName := range s.Columns {
-			col, err := desc.FindColumnWithName(tree.Name(colName))
-			if err != nil {
+			col := catalog.FindColumnByName(desc, colName)
+			if col == nil {
 				params.p.BufferClientNotice(
 					params.ctx,
 					pgnotice.Newf("column %q does not exist", colName),
@@ -1431,7 +1429,7 @@ func validateConstraintNameIsNotUsed(
 		if name == "" {
 			return false, nil
 		}
-		idx, _ := tableDesc.FindIndexWithName(string(name))
+		idx := catalog.FindIndexByName(tableDesc, string(name))
 		// If an index is found and its disabled, then we know it will be dropped
 		// later on.
 		if idx == nil {
@@ -1453,7 +1451,7 @@ func validateConstraintNameIsNotUsed(
 	if name == "" {
 		return false, nil
 	}
-	constraint, _ := tableDesc.FindConstraintWithName(string(name))
+	constraint := catalog.FindConstraintByName(tableDesc, string(name))
 	if constraint == nil {
 		return false, nil
 	}
@@ -1540,7 +1538,7 @@ func dropColumnImpl(
 		}
 	}
 
-	colToDrop, err := tableDesc.FindColumnWithName(t.Column)
+	colToDrop, err := catalog.MustFindColumnByTreeName(tableDesc, t.Column)
 	if err != nil {
 		if t.IfExists {
 			// Noop.
@@ -1704,9 +1702,7 @@ func dropColumnImpl(
 		if check.Dropped() {
 			continue
 		}
-		if used, err := tableDesc.CheckConstraintUsesColumn(check.CheckDesc(), colToDrop.GetID()); err != nil {
-			return nil, err
-		} else if !used {
+		if !check.CollectReferencedColumnIDs().Contains(colToDrop.GetID()) {
 			continue
 		}
 		if err := tableDesc.DropConstraint(check, nil /* removeFKBackRef */); err != nil {
@@ -1788,7 +1784,7 @@ func handleTTLStorageParamChange(
 
 		// Update default expression on automated column if required.
 		if before.HasDurationExpr() && after.HasDurationExpr() && before.DurationExpr != after.DurationExpr {
-			col, err := tableDesc.FindColumnWithName(colinfo.TTLDefaultExpirationColumnName)
+			col, err := catalog.MustFindColumnByName(tableDesc, colinfo.TTLDefaultExpirationColumnName)
 			if err != nil {
 				return false, err
 			}
@@ -1830,7 +1826,7 @@ func handleTTLStorageParamChange(
 		// Adding a TTL requires adding the automatic column and deferring the TTL
 		// addition to after the column is successfully added.
 		addTTLMutation = true
-		if _, err := tableDesc.FindColumnWithName(colinfo.TTLDefaultExpirationColumnName); err == nil {
+		if catalog.FindColumnByName(tableDesc, colinfo.TTLDefaultExpirationColumnName) != nil {
 			return false, pgerror.Newf(
 				pgcode.InvalidTableDefinition,
 				"cannot add TTL to table with the %s column already defined",

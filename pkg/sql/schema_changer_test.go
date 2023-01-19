@@ -6478,7 +6478,7 @@ CREATE INDEX i ON t.test (a) WHERE b > 2
 	}
 
 	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
-	index, err := tableDesc.FindIndexWithName("i")
+	index, err := catalog.MustFindIndexByName(tableDesc, "i")
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}

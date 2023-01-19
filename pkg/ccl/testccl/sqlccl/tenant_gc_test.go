@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob"
@@ -325,7 +326,7 @@ func TestGCTableOrIndexWaitsForProtectedTimestamps(t *testing.T) {
 
 			tableDesc := desctestutils.TestingGetTableDescriptor(execCfg.DB, execCfg.Codec, "db", "public", "t")
 			tableID := tableDesc.GetID()
-			idx, err := tableDesc.FindIndexWithName("t_idx")
+			idx, err := catalog.MustFindIndexByName(tableDesc, "t_idx")
 			require.NoError(t, err)
 			indexID := idx.GetID()
 
