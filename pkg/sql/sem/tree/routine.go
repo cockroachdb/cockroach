@@ -61,11 +61,6 @@ type RoutineExpr struct {
 	// routine will see a snapshot of the data as of the start of the statement
 	// invoking the routine.
 	EnableStepping bool
-
-	// CalledOnNullInput is true if the function should be called when any of
-	// its inputs are NULL. If false, the function will not be evaluated in the
-	// presence of null inputs, and will instead evaluate directly to NULL.
-	CalledOnNullInput bool
 }
 
 // NewTypedRoutineExpr returns a new RoutineExpr that is well-typed.
@@ -76,16 +71,14 @@ func NewTypedRoutineExpr(
 	numStmts int,
 	typ *types.T,
 	enableStepping bool,
-	calledOnNullInput bool,
 ) *RoutineExpr {
 	return &RoutineExpr{
-		Args:              args,
-		PlanFn:            planFn,
-		NumStmts:          numStmts,
-		Typ:               typ,
-		EnableStepping:    enableStepping,
-		CalledOnNullInput: calledOnNullInput,
-		Name:              name,
+		Args:           args,
+		PlanFn:         planFn,
+		NumStmts:       numStmts,
+		Typ:            typ,
+		EnableStepping: enableStepping,
+		Name:           name,
 	}
 }
 
