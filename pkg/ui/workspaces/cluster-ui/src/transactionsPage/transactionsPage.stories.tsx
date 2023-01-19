@@ -43,10 +43,12 @@ storiesOf("Transactions Page", module)
       timeScale={timeScale}
       filters={filters}
       nodeRegions={nodeRegions}
+      hasAdminRole={true}
       onFilterChange={noop}
       onSortingChange={noop}
       refreshData={noop}
       refreshNodes={noop}
+      refreshUserSQLRoles={noop}
       resetSQLStats={noop}
       search={""}
       sortSetting={sortSetting}
@@ -63,10 +65,12 @@ storiesOf("Transactions Page", module)
         timeScale={timeScale}
         filters={filters}
         nodeRegions={nodeRegions}
+        hasAdminRole={true}
         onFilterChange={noop}
         onSortingChange={noop}
         refreshData={noop}
         refreshNodes={noop}
+        refreshUserSQLRoles={noop}
         resetSQLStats={noop}
         search={""}
         sortSetting={sortSetting}
@@ -91,10 +95,12 @@ storiesOf("Transactions Page", module)
         filters={filters}
         history={history}
         nodeRegions={nodeRegions}
+        hasAdminRole={true}
         onFilterChange={noop}
         onSortingChange={noop}
         refreshData={noop}
         refreshNodes={noop}
+        refreshUserSQLRoles={noop}
         resetSQLStats={noop}
         search={""}
         sortSetting={sortSetting}
@@ -112,10 +118,12 @@ storiesOf("Transactions Page", module)
         timeScale={timeScale}
         filters={filters}
         nodeRegions={nodeRegions}
+        hasAdminRole={true}
         onFilterChange={noop}
         onSortingChange={noop}
         refreshData={noop}
         refreshNodes={noop}
+        refreshUserSQLRoles={noop}
         resetSQLStats={noop}
         search={""}
         sortSetting={sortSetting}
@@ -140,10 +148,12 @@ storiesOf("Transactions Page", module)
         }
         filters={filters}
         nodeRegions={nodeRegions}
+        hasAdminRole={true}
         onFilterChange={noop}
         onSortingChange={noop}
         refreshData={noop}
         refreshNodes={noop}
+        refreshUserSQLRoles={noop}
         resetSQLStats={noop}
         search={""}
         sortSetting={sortSetting}

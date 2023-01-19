@@ -1046,9 +1046,10 @@ func TestLearnerReplicateQueueRace(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	ctx := context.Background()
+	var tc *testcluster.TestCluster
+
 	var skipReceiveSnapshotKnobAtomic int64 = 1
-	blockUntilSnapshotCh := make(chan struct{}, 2)
-	blockSnapshotsCh := make(chan struct{})
 	knobs, ltk := makeReplicationTestKnobs()
 	// We must disable eager replica removal to make this test reliable.
 	// If we don't then it's possible that the removed replica on store 2 will
@@ -1056,16 +1057,25 @@ func TestLearnerReplicateQueueRace(t *testing.T) {
 	// In this case we'll get a snapshot error from the replicate queue which
 	// will retry the up-replication with a new descriptor and succeed.
 	ltk.storeKnobs.DisableEagerReplicaRemoval = true
-	ltk.storeKnobs.ReceiveSnapshot = func(h *kvserverpb.SnapshotRequest_Header) error {
-		if atomic.LoadInt64(&skipReceiveSnapshotKnobAtomic) > 0 {
-			return nil
+	ltk.storeKnobs.VoterAddStopAfterLearnerSnapshot = func(targets []roachpb.ReplicationTarget) bool {
+		// We need to be careful not to interfere with up-replication to node 2
+		// during test setup and only invoke "concurrent queue" behavior for
+		// specific target which is on node 3.
+		if targets[0].NodeID != 3 {
+			return false
 		}
-		blockUntilSnapshotCh <- struct{}{}
-		<-blockSnapshotsCh
-		return nil
+		// Remove the learner on node 3 out from under the replicate queue. This
+		// simulates a second replicate queue running concurrently. The first thing
+		// this second replicate queue would do is remove any learners it sees,
+		// leaving the 2 voters.
+		startKey := tc.ScratchRange(t)
+		desc, err := tc.RemoveVoters(startKey, tc.Target(2))
+		require.NoError(t, err)
+		require.Len(t, desc.Replicas().VoterDescriptors(), 2)
+		require.Len(t, desc.Replicas().LearnerDescriptors(), 0)
+		return false
 	}
-	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
+	tc = testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
 		ServerArgs:      base.TestServerArgs{Knobs: knobs, SnapshotSendLimit: 1},
 		ReplicationMode: base.ReplicationManual,
 	})
@@ -1105,24 +1115,8 @@ func TestLearnerReplicateQueueRace(t *testing.T) {
 		}()
 	}()
 
-	// Wait until the snapshot starts, which happens after the learner has been
-	// added.
-	<-blockUntilSnapshotCh
-
-	// Remove the learner on node 3 out from under the replicate queue. This
-	// simulates a second replicate queue running concurrently. The first thing
-	// this second replicate queue would do is remove any learners it sees,
-	// leaving the 2 voters.
-	desc, err := tc.RemoveVoters(scratchStartKey, tc.Target(2))
-	require.NoError(t, err)
-	require.Len(t, desc.Replicas().VoterDescriptors(), 2)
-	require.Len(t, desc.Replicas().LearnerDescriptors(), 0)
-
-	// Unblock the snapshot, and surprise the replicate queue. It should retry,
-	// get a descriptor changed error, and realize it should stop.
-	close(blockSnapshotsCh)
 	require.NoError(t, <-queue1ErrCh)
-	desc = tc.LookupRangeOrFatal(t, scratchStartKey)
+	desc := tc.LookupRangeOrFatal(t, scratchStartKey)
 	require.Len(t, desc.Replicas().VoterDescriptors(), 2)
 	require.Len(t, desc.Replicas().LearnerDescriptors(), 0)
 }

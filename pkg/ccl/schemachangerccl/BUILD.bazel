@@ -51,7 +51,7 @@ sctest_gen(
     ccl = True,
     new_cluster_func = "newCluster",
     package = "schemachangerccl",
-    suffix = "base",
+    suffix = "_base",
     test_data = [
         "//pkg/sql/schemachanger:end_to_end_testdata",
     ],
@@ -68,7 +68,7 @@ sctest_gen(
     ccl = True,
     new_cluster_func = "newCluster",
     package = "schemachangerccl",
-    suffix = "ccl",
+    suffix = "_ccl",
     test_data = glob(["testdata/end_to_end/**"]),
     tests = [
         "Backup",

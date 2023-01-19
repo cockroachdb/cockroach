@@ -70,9 +70,6 @@ type MutationVisitorStateUpdater interface {
 	// DeleteDescriptor adds a descriptor for deletion.
 	DeleteDescriptor(id descpb.ID)
 
-	// DeleteAllTableComments removes all comments for the table with the given id.
-	DeleteAllTableComments(id descpb.ID)
-
 	// DeleteComment removes comments for a descriptor
 	DeleteComment(id descpb.ID, subID int, commentType catalogkeys.CommentType)
 

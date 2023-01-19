@@ -13,5 +13,5 @@ import { adminUISelector } from "../utils/selectors";
 
 export const sqlStatsSelector = createSelector(
   adminUISelector,
-  adminUiState => adminUiState.sqlStats,
+  adminUiState => adminUiState?.sqlStats,
 );

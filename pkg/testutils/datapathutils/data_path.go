@@ -11,6 +11,7 @@
 package datapathutils
 
 import (
+	"fmt"
 	"path"
 	"path/filepath"
 	"runtime"
@@ -64,7 +65,18 @@ func RewritableDataPath(t testing.TB, relative ...string) string {
 	if !ok {
 		t.Fatal("unable to get caller information")
 	}
-	cockroachWorkspace := filepath.Dir(filepath.Dir(filepath.Dir(thisFilePath)))
+	cockroachWorkspace := thisFilePath
+	for {
+		dir := filepath.Base(cockroachWorkspace)
+		cockroachWorkspace = filepath.Dir(cockroachWorkspace)
+		const target = "pkg"
+		if dir == target {
+			break
+		}
+		if len(cockroachWorkspace) < 2 {
+			panic(fmt.Errorf("did not find %q subdirectory in %q", target, thisFilePath))
+		}
+	}
 	relative = append([]string{cockroachWorkspace}, relative...)
 	return filepath.Join(relative...)
 }
