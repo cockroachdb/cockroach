@@ -516,16 +516,17 @@ func (ca *changeAggregator) tick() error {
 			ca.sliMetrics.AdmitLatency.RecordValue(timeutil.Since(event.Timestamp().GoTime()).Nanoseconds())
 		}
 		ca.recentKVCount++
-		if tf, ok := ca.sink.(tryFlush); ok {
-			if err := tf.TryFlush(ca.Ctx()); err != nil {
-				return err
-			}
-		}
+
 		return ca.eventConsumer.ConsumeEvent(ca.Ctx(), event)
 	case kvevent.TypeResolved:
 		a := event.DetachAlloc()
 		a.Release(ca.Ctx())
 		resolved := event.Resolved()
+		if tf, ok := ca.sink.(tryFlush); ok {
+			if err := tf.TryFlush(ca.Ctx()); err != nil {
+				return err
+			}
+		}
 		if ca.knobs.FilterSpanWithMutation == nil || !ca.knobs.FilterSpanWithMutation(&resolved) {
 			return ca.noteResolvedSpan(resolved)
 		}

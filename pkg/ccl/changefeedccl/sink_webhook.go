@@ -14,10 +14,8 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
-	"fmt"
+	"hash"
 	"io"
-	"math"
-	"net"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -26,9 +24,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
-	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/system"
@@ -54,43 +52,15 @@ func isWebhookSink(u *url.URL) bool {
 
 type webhookSink struct {
 	payload *batch
-
-	flushGroup       ctxgroup.Group
-	asyncFlushCh     chan webhookFlushRequest // channel for submitting flush requests.
-	asyncFlushTermCh chan struct{}            // channel closed by async flusher to indicate an error
-	asyncFlushErr    error                    // set by async flusher, prior to closing asyncFlushTermCh
+	hasher  hash.Hash32
+	io      *asyncIO
 
 	// Webhook configuration.
-	retryCfg retry.Options
-	batchCfg batchConfig
-	ts       timeutil.TimeSource
-	format   changefeedbase.FormatType
-
-	// Webhook destination.
-	url        sinkURL
-	authHeader string
-	client     *httputil.Client
+	sendMessage httpPostFn
+	batchCfg    batchConfig
+	ts          timeutil.TimeSource
 
 	metrics metricsRecorder
-	// 	parallelism int
-
-	//// messages are written onto batch channel
-	//// which batches matches based on batching configuration.
-	//batchChan chan webhookMessage
-	//
-	//// flushDone channel signaled when flushing completes.
-	//flushDone chan struct{}
-	//
-	//// errChan is written to indicate an error while sending message.
-	//errChan chan error
-	//
-	//// parallelism workers are created and controlled by the workerGroup, running with workerCtx.
-	//// each worker gets its own events channel.
-	//workerCtx   context.Context
-	//workerGroup ctxgroup.Group
-	//exitWorkers func() // Signaled to shut down all workers.
-	//eventsChans []chan []messagePayload
-	//metrics     metricsRecorder
 }
 
 func (s *webhookSink) getConcreteType() sinkType {
@@ -104,29 +74,15 @@ type webhookSinkPayload struct {
 
 type batch struct {
 	data      []json.RawMessage
+	keys      intsets.Fast
 	buffered  int
 	alloc     kvevent.Alloc
 	batchTime time.Time
 	mvcc      hlc.Timestamp
 }
-type webhookFlushRequest struct {
-	payload *batch
-	flush   chan struct{}
-}
 
-type messagePayload struct {
-	// Payload message fields.
-	key      []byte
-	val      []byte
-	alloc    kvevent.Alloc
-	emitTime time.Time
-	mvcc     hlc.Timestamp
-}
-
-// webhookMessage contains either messagePayload or a flush request.
-type webhookMessage struct {
-	flushDone *chan struct{}
-	payload   messagePayload
+func (b *batch) Keys() intsets.Fast {
+	return b.keys
 }
 
 type batchConfig struct {
@@ -188,7 +144,7 @@ type webhookSinkConfig struct {
 	Retry retryConfig `json:",omitempty"`
 }
 
-func (s *webhookSink) getWebhookSinkConfig(
+func getWebhookSinkConfig(
 	jsonStr changefeedbase.SinkSpecificJSONConfig,
 ) (batchCfg batchConfig, retryCfg retry.Options, err error) {
 	retryCfg = defaultRetryConfig()
@@ -259,53 +215,43 @@ func makeWebhookSink(
 		connTimeout = *opts.ClientTimeout
 	}
 
-	sink := &webhookSink{
-		authHeader: opts.AuthHeader,
-		ts:         source,
-		metrics:    mb(requiresResourceAccounting),
-		format:     encodingOpts.Format,
-
-		payload: &batch{},
-		// TODO (yevgeniy): Consider adding ctx to Dial method instead.
-		flushGroup:       ctxgroup.WithContext(ctx),
-		asyncFlushCh:     make(chan webhookFlushRequest, flushQueueDepth),
-		asyncFlushTermCh: make(chan struct{}),
+	// TODO(yevgeniy): Establish HTTP connection in Dial().
+	httpClient, err := makeWebhookClient(&u, connTimeout)
+	if err != nil {
+		return nil, err
 	}
 
-	var err error
-	sink.batchCfg, sink.retryCfg, err = sink.getWebhookSinkConfig(opts.JSONConfig)
+	batchCfg, retryCfg, err := getWebhookSinkConfig(opts.JSONConfig)
 	if err != nil {
 		return nil, errors.Wrapf(err, "error processing option %s", changefeedbase.OptWebhookSinkConfig)
 	}
 
-	// TODO(yevgeniy): Establish HTTP connection in Dial().
-	sink.client, err = makeWebhookClient(u, connTimeout)
-	if err != nil {
-		return nil, err
+	metrics := mb(requiresResourceAccounting)
+	httpPost := getMessageSender(httpClient, u.String(), opts.AuthHeader, encodingOpts.Format, retryCfg)
+	httpHandler := getBatchSender(encodingOpts.Format, httpPost, metrics)
+	sink := &webhookSink{
+		ts:          source,
+		batchCfg:    batchCfg,
+		sendMessage: httpPost,
+		metrics:     metrics,
+		payload:     &batch{},
+		hasher:      makeHasher(),
+		io:          newAsyncIO(httpHandler),
 	}
-
-	// remove known query params from sink URL before setting in sink config
-	sinkURLParsed, err := url.Parse(u.String())
-	if err != nil {
-		return nil, err
-	}
-	params := sinkURLParsed.Query()
-	params.Del(changefeedbase.SinkParamSkipTLSVerify)
-	params.Del(changefeedbase.SinkParamCACert)
-	params.Del(changefeedbase.SinkParamClientCert)
-	params.Del(changefeedbase.SinkParamClientKey)
-	sinkURLParsed.RawQuery = params.Encode()
-	sink.url = sinkURL{URL: sinkURLParsed}
-
+	sink.io.Start(ctx, 32)
 	return sink, nil
 }
 
-func makeWebhookClient(u sinkURL, timeout time.Duration) (*httputil.Client, error) {
+func makeWebhookClient(u *sinkURL, timeout time.Duration) (*httputil.Client, error) {
 	client := &httputil.Client{
 		Client: &http.Client{
 			Timeout: timeout,
 			Transport: &http.Transport{
-				DialContext: (&net.Dialer{Timeout: timeout}).DialContext,
+				MaxConnsPerHost:     100, // This should probably be == to parallelism.
+				MaxIdleConnsPerHost: 100,
+				MaxIdleConns:        100,
+				IdleConnTimeout:     time.Minute,
+				ForceAttemptHTTP2:   true,
 			},
 		},
 	}
@@ -370,11 +316,8 @@ func makeWebhookClient(u sinkURL, timeout time.Duration) (*httputil.Client, erro
 func defaultRetryConfig() retry.Options {
 	opts := retry.Options{
 		InitialBackoff: 500 * time.Millisecond,
-		MaxRetries:     3,
-		Multiplier:     2,
+		MaxRetries:     10,
 	}
-	// max backoff should be initial * 2 ^ maxRetries
-	opts.MaxBackoff = opts.InitialBackoff * time.Duration(int(math.Pow(2.0, float64(opts.MaxRetries))))
 	return opts
 }
 
@@ -384,18 +327,16 @@ func defaultWorkerCount() int {
 }
 
 func (s *webhookSink) Dial() error {
-	s.flushGroup.GoCtx(s.asyncFlusher)
 	return nil
 }
 
-func (s *webhookSink) shouldSendBatch() bool {
+func (s *webhookSink) shouldFlush() bool {
 	// similar to sarama, send batch if:
 	// everything is zero (default)
 	// any one of the conditions are met UNLESS the condition is zero which means never batch
 	switch {
 	// all zero values should batch every time, otherwise batch will wait forever.
-	case len(s.payload.data) > 0 &&
-		s.batchCfg.Messages == 0 && s.batchCfg.Bytes == 0 && s.batchCfg.Frequency == 0:
+	case s.batchCfg.Messages == 0 && s.batchCfg.Bytes == 0 && s.batchCfg.Frequency == 0:
 		return true
 	// messages threshold has been reached.
 	case s.batchCfg.Messages > 0 && len(s.payload.data) >= s.batchCfg.Messages:
@@ -404,8 +345,7 @@ func (s *webhookSink) shouldSendBatch() bool {
 	case s.batchCfg.Bytes > 0 && s.payload.buffered >= s.batchCfg.Bytes:
 		return true
 		// frequency threshold has been reached.
-	case len(s.payload.data) > 0 &&
-		s.batchCfg.Frequency > 0 &&
+	case s.batchCfg.Frequency > 0 &&
 		timeutil.Since(s.payload.batchTime) > time.Duration(s.batchCfg.Frequency):
 		return true
 	default:
@@ -414,14 +354,14 @@ func (s *webhookSink) shouldSendBatch() bool {
 }
 
 func (s *webhookSink) TryFlush(ctx context.Context) error {
-	if !s.shouldSendBatch() {
+	if s.payload.buffered == 0 || !s.shouldFlush() {
 		return nil
 	}
-	return s.doFlush(ctx)
+	return s.flushBatch(ctx)
 }
 
-func (s *webhookSink) doFlush(ctx context.Context) error {
-	req := webhookFlushRequest{payload: s.payload}
+func (s *webhookSink) flushBatch(ctx context.Context) error {
+	req := s.payload
 	s.payload = &batch{}
 
 	// Try to submit flush request, but produce warning message
@@ -429,9 +369,9 @@ func (s *webhookSink) doFlush(ctx context.Context) error {
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
-	case <-s.asyncFlushTermCh:
-		return s.asyncFlushErr
-	case s.asyncFlushCh <- req:
+	case <-s.io.Done:
+		return s.io.Err()
+	case s.io.Do <- req:
 		return nil
 	default:
 		if logQueueDepth.ShouldLog() {
@@ -443,53 +383,107 @@ func (s *webhookSink) doFlush(ctx context.Context) error {
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
-	case <-s.asyncFlushTermCh:
-		return s.asyncFlushErr
-	case s.asyncFlushCh <- req:
+	case <-s.io.Done:
+		return s.io.Err()
+	case s.io.Do <- req:
 		return nil
 	}
 }
 
-func (s *webhookSink) sendMessageWithRetries(ctx context.Context, reqBody []byte) error {
-	requestFunc := func() error {
-		return s.sendMessage(ctx, reqBody)
+type httpPostFn func(ctx context.Context, body []byte) error
+
+// getMessageSender returns a function that can be used to post content to the
+// provided destination URL, via specified client. Message is formatted as per
+// specified message format, and errors are retried as per specified retry
+// config.
+func getMessageSender(
+	client *httputil.Client,
+	destURL string,
+	authHeader string,
+	msgFormat changefeedbase.FormatType,
+	retryCfg retry.Options,
+) httpPostFn {
+	issueRequest := func(ctx context.Context, body []byte) error {
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, destURL, bytes.NewReader(body))
+		if err != nil {
+			return err
+		}
+		switch msgFormat {
+		case changefeedbase.OptFormatJSON:
+			req.Header.Set("Content-Type", applicationTypeJSON)
+		case changefeedbase.OptFormatCSV:
+			req.Header.Set("Content-Type", applicationTypeCSV)
+		}
+
+		if authHeader != "" {
+			req.Header.Set(authorizationHeader, authHeader)
+		}
+
+		var res *http.Response
+		res, err = client.Do(req)
+		if err != nil {
+			return err
+		}
+
+		if !(res.StatusCode >= http.StatusOK && res.StatusCode < http.StatusMultipleChoices) {
+			resBody, err := io.ReadAll(res.Body)
+			if err != nil {
+				return errors.Wrapf(err, "failed to read body for HTTP response with status: %d", res.StatusCode)
+			}
+			return errors.Newf("%s: %s", res.Status, string(resBody))
+		}
+		return nil
 	}
-	return retry.WithMaxAttempts(ctx, s.retryCfg, s.retryCfg.MaxRetries+1, requestFunc)
+
+	return func(ctx context.Context, body []byte) error {
+		return retry.WithMaxAttempts(ctx, retryCfg, retryCfg.MaxRetries+1, func() error {
+			return issueRequest(ctx, body)
+		})
+	}
 }
 
-func (s *webhookSink) sendMessage(ctx context.Context, reqBody []byte) (retErr error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.url.String(), bytes.NewReader(reqBody))
-	if err != nil {
-		return err
-	}
-	switch s.format {
-	case changefeedbase.OptFormatJSON:
-		req.Header.Set("Content-Type", applicationTypeJSON)
-	case changefeedbase.OptFormatCSV:
-		req.Header.Set("Content-Type", applicationTypeCSV)
-	}
-
-	if s.authHeader != "" {
-		req.Header.Set(authorizationHeader, s.authHeader)
-	}
-
-	var res *http.Response
-	res, err = s.client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		retErr = errors.CombineErrors(retErr, res.Body.Close())
-	}()
-
-	if !(res.StatusCode >= http.StatusOK && res.StatusCode < http.StatusMultipleChoices) {
-		resBody, err := io.ReadAll(res.Body)
-		if err != nil {
-			return errors.Wrapf(err, "failed to read body for HTTP response with status: %d", res.StatusCode)
+// getBatchSender returns IOHandler to send batches of CDC messages using provided httpPostFn.
+func getBatchSender(
+	msgFormat changefeedbase.FormatType, sendMsg httpPostFn, metrics metricsRecorder,
+) IOHandler {
+	return func(ctx context.Context, b Batch) error {
+		payload, ok := b.(*batch)
+		if !ok {
+			return errors.AssertionFailedf("expected webhook batch, found %T", b)
 		}
-		return fmt.Errorf("%s: %s", res.Status, string(resBody))
+
+		var buf bytes.Buffer
+		switch msgFormat {
+		case changefeedbase.OptFormatJSON:
+			jsonPayload := &webhookSinkPayload{
+				Payload: payload.data,
+				Length:  len(payload.data),
+			}
+			var err error
+			body, err := json.Marshal(jsonPayload)
+			if err != nil {
+				return err
+			}
+			buf.Write(body)
+		case changefeedbase.OptFormatCSV:
+			for _, m := range payload.data {
+				buf.Write(m)
+			}
+		}
+
+		defer func() {
+			metrics.recordEmittedBatch(payload.batchTime, int(payload.alloc.Events()),
+				payload.mvcc, buf.Len(), buf.Len())
+			payload.alloc.Release(ctx)
+		}()
+		return sendMsg(ctx, buf.Bytes())
 	}
-	return nil
+}
+
+func hash32(h hash.Hash32, buf []byte) uint32 {
+	h.Reset()
+	h.Write(buf)
+	return h.Sum32()
 }
 
 func (s *webhookSink) EmitRow(
@@ -500,6 +494,8 @@ func (s *webhookSink) EmitRow(
 	alloc kvevent.Alloc,
 ) error {
 	s.payload.data = append(s.payload.data, value)
+	s.payload.keys.Add(int(hash32(s.hasher, key)))
+	s.payload.buffered += len(value)
 	s.payload.alloc.Merge(&alloc)
 	if s.payload.batchTime.IsZero() {
 		s.payload.batchTime = timeutil.Now()
@@ -508,7 +504,7 @@ func (s *webhookSink) EmitRow(
 		s.payload.mvcc = mvcc
 	}
 	s.metrics.recordMessageSize(int64(len(key) + len(value)))
-	return nil
+	return s.TryFlush(ctx)
 }
 
 func (s *webhookSink) EmitResolvedTimestamp(
@@ -524,87 +520,14 @@ func (s *webhookSink) EmitResolvedTimestamp(
 }
 
 func (s *webhookSink) Flush(ctx context.Context) error {
-	s.metrics.recordFlushRequestCallback()()
-	return s.waitAsyncFlush(ctx)
-}
-
-// waitAsyncFlush waits until all async flushes complete.
-func (s *webhookSink) waitAsyncFlush(ctx context.Context) error {
-	done := make(chan struct{})
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-s.asyncFlushTermCh:
-		return s.asyncFlushErr
-	case s.asyncFlushCh <- webhookFlushRequest{flush: done}:
-	}
-
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-s.asyncFlushTermCh:
-		return s.asyncFlushErr
-	case <-done:
+	defer s.metrics.recordFlushRequestCallback()()
+	if s.payload.buffered == 0 {
 		return nil
 	}
-}
 
-func (s *webhookSink) asyncFlusher(ctx context.Context) error {
-	defer close(s.asyncFlushTermCh)
-
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case req, ok := <-s.asyncFlushCh:
-			if !ok {
-				return nil // we're done
-			}
-
-			// handle flush request.
-			if req.flush != nil {
-				close(req.flush)
-				continue
-			}
-
-			var body []byte
-			var err error
-			switch s.format {
-			case changefeedbase.OptFormatJSON:
-				jsonPayload := &webhookSinkPayload{
-					Payload: req.payload.data,
-					Length:  len(req.payload.data),
-				}
-				body, err = json.Marshal(jsonPayload)
-			case changefeedbase.OptFormatCSV:
-				for _, m := range req.payload.data {
-					body = append(body, m...)
-				}
-			}
-
-			if err == nil {
-				flushDone := s.metrics.recordFlushRequestCallback()
-				err = s.sendMessageWithRetries(ctx, body)
-				flushDone()
-			}
-
-			if err != nil {
-				log.Errorf(ctx, "error flushing file to storage: %s", err)
-				s.asyncFlushErr = err
-				return err
-			}
-		}
-	}
+	return s.io.Flush(ctx)
 }
 
 func (s *webhookSink) Close() error {
-	if s.asyncFlushCh == nil {
-		return nil
-	}
-	s.client.CloseIdleConnections()
-	err := s.waitAsyncFlush(context.Background())
-	close(s.asyncFlushCh) // signal flusher to exit.
-	s.asyncFlushCh = nil
-	err = errors.CombineErrors(err, s.flushGroup.Wait())
-	return nil
+	return s.io.Close()
 }

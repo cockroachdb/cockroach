@@ -48,7 +48,7 @@ var PerChangefeedMemLimit = settings.RegisterByteSizeSetting(
 	settings.TenantWritable,
 	"changefeed.memory.per_changefeed_limit",
 	"controls amount of data that can be buffered per changefeed",
-	1<<27, // 128MiB
+	1<<30,
 )
 
 // SlowSpanLogThreshold controls when we will log slow spans.

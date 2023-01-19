@@ -520,7 +520,8 @@ func newCDCTester(ctx context.Context, t test.Test, c cluster.Cluster) cdcTester
 	if _, err := db.Exec("SET CLUSTER SETTING server.child_metrics.enabled = true"); err != nil {
 		t.L().Printf("failed to set cluster setting: %s", err)
 	}
-
+	_, _ = db.Exec("SET CLUSTER SETTING changefeed.balance_range_distribution.enable=true")
+	_, _ = db.Exec("SET CLUSTER SETTING changefeed.memory.per_changefeed_limit='1GB'")
 	tester.startGrafana()
 	return tester
 }
@@ -924,9 +925,14 @@ func registerCDC(r registry.Registry) {
 
 			// exportStatsFile := ct.startStatsCollection()
 			feed := ct.newChangefeed(feedArgs{
-				sinkType: cloudStorageSink,
-				targets:  allTpccTargets,
-				opts:     map[string]string{"initial_scan": "'only'"},
+				sinkType: webhookSink,
+				targets:  []string{"tpcc.order_line"},
+				opts: map[string]string{
+					"initial_scan": "'only'",
+					// "webhook_sink_config": `'{"Flush": { "Bytes": 32768,  "Frequency": "30s" } }'`,
+					// "webhook_sink_config": `'{"Flush": { "Messages": 100,  "Frequency": "30s" } }'`,
+					// "webhook_sink_config": `'{"Flush": { "Bytes": 0, "Messages": 0, "Frequency": 0 } }'`,
+				},
 			})
 			//ct.runFeedLatencyVerifier(feed, latencyTargets{
 			//	initialScanLatency: 30 * time.Minute,

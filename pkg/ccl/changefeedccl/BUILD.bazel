@@ -5,6 +5,7 @@ go_library(
     name = "changefeedccl",
     srcs = [
         "alter_changefeed_stmt.go",
+        "asyncio.go",
         "authorization.go",
         "avro.go",
         "changefeed.go",
@@ -123,6 +124,7 @@ go_library(
         "//pkg/util/hlc",
         "//pkg/util/httputil",
         "//pkg/util/humanizeutil",
+        "//pkg/util/intsets",
         "//pkg/util/json",
         "//pkg/util/log",
         "//pkg/util/log/eventpb",
