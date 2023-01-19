@@ -157,3 +157,36 @@ func TestAdminAPIJobs(t *testing.T) {
 
 	require.Equal(t, backups[0], jobRes)
 }
+
+func TestListTenants(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DisableDefaultTestTenant: true,
+	})
+	defer s.Stopper().Stop(context.Background())
+
+	db := sqlutils.MakeSQLRunner(sqlDB)
+	db.Exec(t, "CREATE TENANT test;")
+
+	const path = "tenants"
+	var response serverpb.ListTenantsResponse
+
+	if err := getAdminJSONProto(s, path, &response); err != nil {
+		t.Fatalf("unexpected error: %v\n", err)
+	}
+
+	require.NotEmpty(t, response.Tenants)
+	appTenantFound := false
+	for _, tenant := range response.Tenants {
+		if tenant.TenantName == "test" {
+			appTenantFound = true
+		}
+		require.NotNil(t, tenant.TenantId)
+		require.NotEmpty(t, tenant.TenantName)
+		require.NotEmpty(t, tenant.RpcAddr)
+		require.NotEmpty(t, tenant.SqlAddr)
+	}
+	require.True(t, appTenantFound, "test tenant not found")
+}

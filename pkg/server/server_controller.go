@@ -68,6 +68,15 @@ type onDemandServer interface {
 
 	// serveConn handles an incoming SQL connection.
 	serveConn(ctx context.Context, conn net.Conn, status pgwire.PreServeStatus) error
+
+	// getSQLAddr returns the SQL address for this server.
+	getSQLAddr() string
+
+	// getRPCAddr() returns the RPC address for this server.
+	getRPCAddr() string
+
+	// getTenantID returns the TenantID for this server.
+	getTenantID() roachpb.TenantID
 }
 
 type serverEntry struct {
@@ -695,6 +704,18 @@ func (t *tenantServerWrapper) serveConn(
 	return t.server.sqlServer.pgServer.ServeConn(pgCtx, conn, status)
 }
 
+func (t *tenantServerWrapper) getSQLAddr() string {
+	return t.server.sqlServer.cfg.SQLAdvertiseAddr
+}
+
+func (t *tenantServerWrapper) getRPCAddr() string {
+	return t.server.sqlServer.cfg.AdvertiseAddr
+}
+
+func (t *tenantServerWrapper) getTenantID() roachpb.TenantID {
+	return t.server.sqlCfg.TenantID
+}
+
 // systemServerWrapper implements the onDemandServer interface for Server.
 //
 // (We can imagine a future where the SQL service for the system
@@ -732,6 +753,18 @@ func (t *systemServerWrapper) serveConn(
 	pgCtx := t.server.sqlServer.AnnotateCtx(context.Background())
 	pgCtx = logtags.AddTags(pgCtx, logtags.FromContext(ctx))
 	return t.server.sqlServer.pgServer.ServeConn(pgCtx, conn, status)
+}
+
+func (s *systemServerWrapper) getSQLAddr() string {
+	return s.server.sqlServer.cfg.SQLAdvertiseAddr
+}
+
+func (s *systemServerWrapper) getRPCAddr() string {
+	return s.server.sqlServer.cfg.AdvertiseAddr
+}
+
+func (s *systemServerWrapper) getTenantID() roachpb.TenantID {
+	return s.server.cfg.TenantID
 }
 
 func (s *Server) makeSharedProcessTenantConfig(
