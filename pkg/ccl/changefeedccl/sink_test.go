@@ -69,6 +69,17 @@ func (p *asyncProducerMock) Close() error {
 	close(p.errorsCh)
 	return nil
 }
+func (p *asyncProducerMock) IsTransactional() bool                   { panic(`unimplemented`) }
+func (p *asyncProducerMock) TxnStatus() sarama.ProducerTxnStatusFlag { panic(`unimplemented`) }
+func (p *asyncProducerMock) BeginTxn() error                         { panic(`unimplemented`) }
+func (p *asyncProducerMock) CommitTxn() error                        { panic(`unimplemented`) }
+func (p *asyncProducerMock) AbortTxn() error                         { panic(`unimplemented`) }
+func (p *asyncProducerMock) AddOffsetsToTxn(offsets map[string][]*sarama.PartitionOffsetMetadata, groupId string) error {
+	panic(`unimplemented`)
+}
+func (p *asyncProducerMock) AddMessageToTxn(msg *sarama.ConsumerMessage, groupId string, metadata *string) error {
+	panic(`unimplemented`)
+}
 
 type syncProducerMock struct {
 	overrideSend func(*sarama.ProducerMessage) error
