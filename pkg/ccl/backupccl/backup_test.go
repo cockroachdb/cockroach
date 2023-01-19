@@ -1225,19 +1225,16 @@ func TestEncryptedBackupRestoreSystemJobs(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var encryptionOption string
-			var sanitizedEncryptionOption1 string
-			var sanitizedEncryptionOption2 string
+			var sanitizedEncryptionOption string
 			if tc.useKMS {
 				correctKMSURI, _ := getAWSKMSURI(t, regionEnvVariable, keyIDEnvVariable)
 				encryptionOption = fmt.Sprintf("kms = '%s'", correctKMSURI)
 				sanitizedURI, err := redactTestKMSURI(correctKMSURI)
 				require.NoError(t, err)
-				sanitizedEncryptionOption1 = fmt.Sprintf("kms = '%s'", sanitizedURI)
-				sanitizedEncryptionOption2 = sanitizedEncryptionOption1
+				sanitizedEncryptionOption = fmt.Sprintf("kms = '%s'", sanitizedURI)
 			} else {
 				encryptionOption = "encryption_passphrase = 'abcdefg'"
-				sanitizedEncryptionOption1 = "encryption_passphrase = '*****'"
-				sanitizedEncryptionOption2 = "encryption_passphrase = 'redacted'"
+				sanitizedEncryptionOption = "encryption_passphrase = '*****'"
 			}
 			_, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, multiNode, 3, InitManualReplication)
 			conn := sqlDB.DB.(*gosql.DB)
@@ -1260,7 +1257,7 @@ func TestEncryptedBackupRestoreSystemJobs(t *testing.T) {
 					Username: username.RootUserName(),
 					Description: fmt.Sprintf(
 						`BACKUP DATABASE data TO '%s' WITH %s`,
-						backupLoc1, sanitizedEncryptionOption1),
+						backupLoc1, sanitizedEncryptionOption),
 					DescriptorIDs: descpb.IDs{
 						descpb.ID(backupDatabaseID),
 						descpb.ID(backupSchemaID),
@@ -1279,7 +1276,7 @@ into_db='restoredb', %s)`, encryptionOption), backupLoc1)
 				Username: username.RootUserName(),
 				Description: fmt.Sprintf(
 					`RESTORE TABLE data.bank FROM '%s' WITH %s, into_db = 'restoredb'`,
-					backupLoc1, sanitizedEncryptionOption2,
+					backupLoc1, sanitizedEncryptionOption,
 				),
 				DescriptorIDs: descpb.IDs{
 					descpb.ID(restoreDatabaseID + 1),
