@@ -357,6 +357,9 @@ type Planner interface {
 	// statements, SELECT, UPDATE, INSERT, DELETE, or an EXPLAIN of one of these
 	// statements.
 	IsANSIDML() bool
+
+	// GetRangeDescByID gets the RangeDescriptor by the specified RangeID.
+	GetRangeDescByID(context.Context, roachpb.RangeID) (roachpb.RangeDescriptor, error)
 }
 
 // InternalRows is an iterator interface that's exposed by the internal

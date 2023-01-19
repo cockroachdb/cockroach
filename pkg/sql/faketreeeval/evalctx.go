@@ -454,6 +454,13 @@ func (ep *DummyEvalPlanner) IsANSIDML() bool {
 	return false
 }
 
+// GetRangeDescByID is part of the eval.Planner interface.
+func (ep *DummyEvalPlanner) GetRangeDescByID(
+	context.Context, roachpb.RangeID,
+) (rangeDesc roachpb.RangeDescriptor, err error) {
+	return
+}
+
 // DummyPrivilegedAccessor implements the tree.PrivilegedAccessor interface by returning errors.
 type DummyPrivilegedAccessor struct{}
 
