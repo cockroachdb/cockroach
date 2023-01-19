@@ -1058,7 +1058,7 @@ func (t *logicTest) substituteVars(line string) string {
 		if replace, ok := t.varMap[varName]; ok {
 			return replace
 		}
-		return line
+		return varName
 	})
 }
 
