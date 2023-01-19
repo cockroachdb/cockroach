@@ -57,6 +57,34 @@ func (noopSyncCloser) Close() error {
 	return nil
 }
 
+type flusher interface {
+	Flush() error
+}
+
+// noopSyncCloserFlusher is like noopSyncCloser but also implements the flusher
+// interface.
+type noopSyncCloserFlusher struct {
+	io.Writer
+}
+
+func (noopSyncCloserFlusher) Sync() error {
+	return nil
+}
+
+func (noopSyncCloserFlusher) Close() error {
+	return nil
+}
+
+func (n noopSyncCloserFlusher) Flush() error {
+	f, ok := n.Writer.(flusher)
+	if !ok {
+		return errors.AssertionFailedf(
+			"Writer in the noopSyncCloserFlusher does not implement flusher")
+	}
+
+	return f.Flush()
+}
+
 // MakeIngestionWriterOptions returns writer options suitable for writing SSTs
 // that will subsequently be ingested (e.g. with AddSSTable).
 func MakeIngestionWriterOptions(ctx context.Context, cs *cluster.Settings) sstable.WriterOptions {
@@ -99,8 +127,15 @@ func MakeBackupSSTWriter(ctx context.Context, cs *cluster.Settings, f io.Writer)
 	// reduce compression ratio.
 	opts.BlockSize = 128 << 10
 	opts.MergerName = "nullptr"
+
+	var fw writeCloseSyncer
+	if _, ok := f.(flusher); ok {
+		fw = noopSyncCloserFlusher{f}
+	} else {
+		fw = noopSyncCloser{f}
+	}
 	return SSTWriter{
-		fw:                sstable.NewWriter(noopSyncCloser{f}, opts),
+		fw:                sstable.NewWriter(fw, opts),
 		f:                 f,
 		supportsRangeKeys: opts.TableFormat >= sstable.TableFormatPebblev2,
 	}
