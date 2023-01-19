@@ -580,7 +580,7 @@ func (dsp *DistSQLPlanner) setupFlows(
 		syncutil.Mutex
 		called bool
 	}{}
-	flow.AddOnCleanup(func() {
+	flow.AddOnCleanupStart(func() {
 		cleanupCalledMu.Lock()
 		defer cleanupCalledMu.Unlock()
 		cleanupCalledMu.called = true
@@ -599,24 +599,29 @@ func (dsp *DistSQLPlanner) setupFlows(
 		for i := 0; i < len(flows)-1; i++ {
 			res := <-resultChan
 			if res.err != nil && !seenError {
-				seenError = true
 				// The setup of at least one remote flow failed.
-				cleanupCalledMu.Lock()
-				skipCancel := cleanupCalledMu.called
-				cleanupCalledMu.Unlock()
-				if skipCancel {
-					continue
-				}
-				// First, we update the DistSQL receiver with the error to be
-				// returned to the client eventually.
-				//
-				// In order to not protect DistSQLReceiver.status with a mutex,
-				// we do not update the status here and, instead, rely on the
-				// DistSQLReceiver detecting the error the next time an object
-				// is pushed into it.
-				recv.setErrorWithoutStatusUpdate(res.err, true /* willDeferStatusUpdate */)
-				// Now explicitly cancel the local flow.
-				flow.Cancel()
+				seenError = true
+				func() {
+					cleanupCalledMu.Lock()
+					// Flow.Cancel cannot be called after or concurrently with
+					// Flow.Cleanup.
+					defer cleanupCalledMu.Unlock()
+					if cleanupCalledMu.called {
+						// Cleanup of the local flow has already been performed,
+						// so there is nothing to do.
+						return
+					}
+					// First, we update the DistSQL receiver with the error to
+					// be returned to the client eventually.
+					//
+					// In order to not protect DistSQLReceiver.status with a
+					// mutex, we do not update the status here and, instead,
+					// rely on the DistSQLReceiver detecting the error the next
+					// time an object is pushed into it.
+					recv.setErrorWithoutStatusUpdate(res.err, true /* willDeferStatusUpdate */)
+					// Now explicitly cancel the local flow.
+					flow.Cancel()
+				}()
 			}
 		}
 	})

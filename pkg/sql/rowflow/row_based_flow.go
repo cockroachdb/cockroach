@@ -439,6 +439,9 @@ func (f *rowBasedFlow) Release() {
 
 // Cleanup is part of the flowinfra.Flow interface.
 func (f *rowBasedFlow) Cleanup(ctx context.Context) {
+	startCleanup, endCleanup := f.FlowBase.GetOnCleanupFns()
+	startCleanup()
+	defer endCleanup()
 	f.FlowBase.Cleanup(ctx)
 	f.Release()
 }
