@@ -1542,6 +1542,9 @@ type ExecutorTestingKnobs struct {
 	// to use a transaction, and, in doing so, more deterministically allocate
 	// descriptor IDs at the cost of decreased parallelism.
 	UseTransactionalDescIDGenerator bool
+
+	// BeforeCopyFromInsert, if set, will be called during a COPY FROM insert statement.
+	BeforeCopyFromInsert func() error
 }
 
 // PGWireTestingKnobs contains knobs for the pgwire module.
@@ -3396,6 +3399,10 @@ func (m *sessionDataMutator) SetCopyFastPathEnabled(val bool) {
 
 func (m *sessionDataMutator) SetCopyFromAtomicEnabled(val bool) {
 	m.data.CopyFromAtomicEnabled = val
+}
+
+func (m *sessionDataMutator) SetCopyFromRetriesEnabled(val bool) {
+	m.data.CopyFromRetriesEnabled = val
 }
 
 func (m *sessionDataMutator) SetEnforceHomeRegion(val bool) {
