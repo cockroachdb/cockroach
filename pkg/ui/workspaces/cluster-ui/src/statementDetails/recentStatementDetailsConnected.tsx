@@ -12,6 +12,7 @@ import { RouteComponentProps, withRouter } from "react-router-dom";
 import { connect } from "react-redux";
 import { Dispatch } from "redux";
 import { actions as sessionsActions } from "src/store/sessions";
+import { actions as recentStatementsActions } from "src/store/recentExecutions/recentStatements";
 import { AppState } from "../store";
 import {
   RecentStatementDetails,
@@ -23,6 +24,7 @@ import {
   selectContentionDetailsForStatement,
 } from "src/selectors/recentExecutions.selectors";
 import { selectIsTenant } from "src/store/uiConfig";
+import {RecentStatementsRequestKey} from "../api";
 
 // For tenant cases, we don't show information about node, regions and
 // diagnostics.
@@ -42,6 +44,7 @@ const mapDispatchToProps = (
   dispatch: Dispatch,
 ): RecentStatementDetailsDispatchProps => ({
   refreshLiveWorkload: () => dispatch(sessionsActions.refresh()),
+  refreshRecentStatements: (req: RecentStatementsRequestKey) => dispatch(recentStatementsActions.refresh(req)),
 });
 
 export const RecentStatementDetailsPageConnected = withRouter(
