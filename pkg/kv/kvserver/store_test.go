@@ -193,7 +193,7 @@ func createTestStoreWithoutStart(
 	// TestChooseLeaseToTransfer and TestNoLeaseTransferToBehindReplicas. This is
 	// generally considered bad and should eventually be refactored away.
 	if cfg.Gossip == nil {
-		cfg.Gossip = gossip.NewTest(1, rpcContext, server, stopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef())
+		cfg.Gossip = gossip.NewTest(1, stopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef())
 	}
 	if cfg.StorePool == nil {
 		cfg.StorePool = NewTestStorePool(*cfg)
