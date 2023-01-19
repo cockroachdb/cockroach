@@ -63,39 +63,39 @@ CREATE TABLE c (
 statement ok
 COMMENT ON INDEX c_foo_idx IS 'index_comment'
 
-query TTBITTBBB colnames
+query TTBITTTBBB colnames
 SHOW INDEXES FROM c
 ----
-table_name  index_name     non_unique  seq_in_index  column_name  direction  storing  implicit  visible
-c           c_bar_key      false       1             bar          ASC        false    false     true
-c           c_bar_key      false       2             id           ASC        true     true      true
-c           c_foo_bar_idx  true        1             foo          ASC        false    false     true
-c           c_foo_bar_idx  true        2             bar          DESC       false    false     true
-c           c_foo_bar_idx  true        3             id           ASC        false    true      true
-c           c_foo_idx      true        1             foo          ASC        false    false     true
-c           c_foo_idx      true        2             id           ASC        false    true      true
-c           c_foo_idx1     true        1             foo          ASC        false    false     true
-c           c_foo_idx1     true        2             id           ASC        false    true      true
-c           c_pkey         false       1             id           ASC        false    false     true
-c           c_pkey         false       2             foo          N/A        true     false     true
-c           c_pkey         false       3             bar          N/A        true     false     true
+table_name  index_name     non_unique  seq_in_index  column_name  expression  direction  storing  implicit  visible
+c           c_bar_key      false       1             bar          N/A         ASC        false    false     true
+c           c_bar_key      false       2             id           N/A         ASC        true     true      true
+c           c_foo_bar_idx  true        1             foo          N/A         ASC        false    false     true
+c           c_foo_bar_idx  true        2             bar          N/A         DESC       false    false     true
+c           c_foo_bar_idx  true        3             id           N/A         ASC        false    true      true
+c           c_foo_idx      true        1             foo          N/A         ASC        false    false     true
+c           c_foo_idx      true        2             id           N/A         ASC        false    true      true
+c           c_foo_idx1     true        1             foo          N/A         ASC        false    false     true
+c           c_foo_idx1     true        2             id           N/A         ASC        false    true      true
+c           c_pkey         false       1             id           N/A         ASC        false    false     true
+c           c_pkey         false       2             foo          N/A         N/A        true     false     true
+c           c_pkey         false       3             bar          N/A         N/A        true     false     true
 
-query TTBITTBBBT colnames
+query TTBITTTBBBT colnames
 SHOW INDEXES FROM c WITH COMMENT
 ----
-table_name  index_name     non_unique  seq_in_index  column_name  direction  storing  implicit  visible  comment
-c           c_bar_key      false       1             bar          ASC        false    false     true     NULL
-c           c_bar_key      false       2             id           ASC        true     true      true     NULL
-c           c_foo_bar_idx  true        1             foo          ASC        false    false     true     NULL
-c           c_foo_bar_idx  true        2             bar          DESC       false    false     true     NULL
-c           c_foo_bar_idx  true        3             id           ASC        false    true      true     NULL
-c           c_foo_idx      true        1             foo          ASC        false    false     true     index_comment
-c           c_foo_idx      true        2             id           ASC        false    true      true     index_comment
-c           c_foo_idx1     true        1             foo          ASC        false    false     true     NULL
-c           c_foo_idx1     true        2             id           ASC        false    true      true     NULL
-c           c_pkey         false       1             id           ASC        false    false     true     NULL
-c           c_pkey         false       2             foo          N/A        true     false     true     NULL
-c           c_pkey         false       3             bar          N/A        true     false     true     NULL
+table_name  index_name     non_unique  seq_in_index  column_name  expression  direction  storing  implicit  visible  comment
+c           c_bar_key      false       1             bar          N/A         ASC        false    false     true     NULL
+c           c_bar_key      false       2             id           N/A         ASC        true     true      true     NULL
+c           c_foo_bar_idx  true        1             foo          N/A         ASC        false    false     true     NULL
+c           c_foo_bar_idx  true        2             bar          N/A         DESC       false    false     true     NULL
+c           c_foo_bar_idx  true        3             id           N/A         ASC        false    true      true     NULL
+c           c_foo_idx      true        1             foo          N/A         ASC        false    false     true     index_comment
+c           c_foo_idx      true        2             id           N/A         ASC        false    true      true     index_comment
+c           c_foo_idx1     true        1             foo          N/A         ASC        false    false     true     NULL
+c           c_foo_idx1     true        2             id           N/A         ASC        false    true      true     NULL
+c           c_pkey         false       1             id           N/A         ASC        false    false     true     NULL
+c           c_pkey         false       2             foo          N/A         N/A        true     false     true     NULL
+c           c_pkey         false       3             bar          N/A         N/A        true     false     true     NULL
 
 # primary keys can never be null
 
@@ -199,20 +199,20 @@ nickname     STRING        true         NULL            ·                      
 username     STRING(10)    true         NULL            ·                      {users_pkey}          false
 email        VARCHAR(100)  true         NULL            ·                      {users_pkey}          false
 
-query TTBITTBBB colnames
+query TTBITTTBBB colnames
 SHOW INDEXES FROM test.users
 ----
-table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit  visible
-users       bar         false       1             id           ASC        false    false     true
-users       bar         false       2             name         ASC        false    false     true
-users       foo         true        1             name         ASC        false    false     true
-users       foo         true        2             id           ASC        false    true      true
-users       users_pkey  false       1             id           ASC        false    false     true
-users       users_pkey  false       2             name         N/A        true     false     true
-users       users_pkey  false       3             title        N/A        true     false     true
-users       users_pkey  false       4             nickname     N/A        true     false     true
-users       users_pkey  false       5             username     N/A        true     false     true
-users       users_pkey  false       6             email        N/A        true     false     true
+table_name  index_name  non_unique  seq_in_index  column_name  expression  direction  storing  implicit  visible
+users       bar         false       1             id           N/A         ASC        false    false     true
+users       bar         false       2             name         N/A         ASC        false    false     true
+users       foo         true        1             name         N/A         ASC        false    false     true
+users       foo         true        2             id           N/A         ASC        false    true      true
+users       users_pkey  false       1             id           N/A         ASC        false    false     true
+users       users_pkey  false       2             name         N/A         N/A        true     false     true
+users       users_pkey  false       3             title        N/A         N/A        true     false     true
+users       users_pkey  false       4             nickname     N/A         N/A        true     false     true
+users       users_pkey  false       5             username     N/A         N/A        true     false     true
+users       users_pkey  false       6             email        N/A         N/A        true     false     true
 
 statement error precision for type float must be at least 1 bit
 CREATE TABLE test.precision (x FLOAT(0))

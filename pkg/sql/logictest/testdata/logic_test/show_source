@@ -221,12 +221,12 @@ database_name  schema_name  table_name  grantee  privilege_type  is_grantable
 system         public       descriptor  admin    SELECT          true
 system         public       descriptor  root     SELECT          true
 
-query TTBITTBBB colnames
+query TTBITTTBBB colnames
 SELECT * FROM [SHOW INDEX FROM system.descriptor]
 ----
-table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit  visible
-descriptor  primary     false       1             id           ASC        false    false     true
-descriptor  primary     false       2             descriptor   N/A        true     false     true
+table_name  index_name  non_unique  seq_in_index  column_name  expression  direction  storing  implicit  visible
+descriptor  primary     false       1             id           N/A         ASC        false    false     true
+descriptor  primary     false       2             descriptor   N/A         N/A        true     false     true
 
 query TTTTB colnames
 SELECT * FROM [SHOW CONSTRAINT FROM system.descriptor]
@@ -234,12 +234,12 @@ SELECT * FROM [SHOW CONSTRAINT FROM system.descriptor]
 table_name  constraint_name  constraint_type  details               validated
 descriptor  primary          PRIMARY KEY      PRIMARY KEY (id ASC)  true
 
-query TTBITTBBB colnames
+query TTBITTTBBB colnames
 SELECT * FROM [SHOW KEYS FROM system.descriptor]
 ----
-table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit  visible
-descriptor  primary     false       1             id           ASC        false    false     true
-descriptor  primary     false       2             descriptor   N/A        true     false     true
+table_name  index_name  non_unique  seq_in_index  column_name  expression  direction  storing  implicit  visible
+descriptor  primary     false       1             id           N/A         ASC        false    false     true
+descriptor  primary     false       2             descriptor   N/A         N/A        true     false     true
 
 query TT colnames,rowsort
 SELECT * FROM [SHOW SCHEMAS FROM system]
@@ -526,11 +526,11 @@ CREATE TABLE showdbindexestest.table1 (key1 INT PRIMARY KEY);
 statement ok
 CREATE TABLE showdbindexestest.table2 (key2 INT PRIMARY KEY);
 
-query TTBITTBBB
+query TTTBITTTBBB
 SHOW INDEXES FROM DATABASE showdbindexestest;
 ----
-table1  table1_pkey  false  1  key1  ASC  false  false  true
-table2  table2_pkey  false  1  key2  ASC  false  false  true
+table1  table1_pkey  public  false  1  key1  N/A  ASC  false  false  true
+table2  table2_pkey  public  false  1  key2  N/A  ASC  false  false  true
 
 statement ok
 CREATE DATABASE "$peci@l";
@@ -541,11 +541,11 @@ CREATE TABLE "$peci@l".table1 (key1 INT PRIMARY KEY);
 statement ok
 CREATE TABLE "$peci@l".table2 (key2 INT PRIMARY KEY);
 
-query TTBITTBBB
+query TTTBITTTBBB
 SHOW INDEXES FROM DATABASE "$peci@l";
 ----
-table1  table1_pkey  false  1  key1  ASC  false  false  true
-table2  table2_pkey  false  1  key2  ASC  false  false  true
+table1  table1_pkey  public  false  1  key1  N/A  ASC  false  false  true
+table2  table2_pkey  public  false  1  key2  N/A  ASC  false  false  true
 
 # Test SHOW LOCALITY telemetry.
 query T
@@ -617,30 +617,30 @@ CREATE TABLE t (
 COMMENT ON COLUMN t.z IS 'comm"en"t2';
 COMMENT ON INDEX t@i2 IS 'comm''ent3'
 
-query TTBITTBBBT
+query TTBITTTBBBT
 SHOW INDEXES FROM t WITH COMMENT
 ----
-t  i1      true   1  x      ASC  false  false  true  NULL
-t  i1      true   2  rowid  ASC  false  true   true  NULL
-t  i2      true   1  y      ASC  false  false  true  comm'ent3
-t  i2      true   2  rowid  ASC  false  true   true  comm'ent3
-t  i3      true   1  z      ASC  false  false  true  NULL
-t  i3      true   2  rowid  ASC  false  true   true  NULL
-t  t_pkey  false  1  rowid  ASC  false  false  true  NULL
-t  t_pkey  false  2  x      N/A  true   false  true  NULL
-t  t_pkey  false  3  y      N/A  true   false  true  NULL
-t  t_pkey  false  4  z      N/A  true   false  true  NULL
+t  i1      true   1  x      N/A  ASC  false  false  true  NULL
+t  i1      true   2  rowid  N/A  ASC  false  true   true  NULL
+t  i2      true   1  y      N/A  ASC  false  false  true  comm'ent3
+t  i2      true   2  rowid  N/A  ASC  false  true   true  comm'ent3
+t  i3      true   1  z      N/A  ASC  false  false  true  NULL
+t  i3      true   2  rowid  N/A  ASC  false  true   true  NULL
+t  t_pkey  false  1  rowid  N/A  ASC  false  false  true  NULL
+t  t_pkey  false  2  x      N/A  N/A  true   false  true  NULL
+t  t_pkey  false  3  y      N/A  N/A  true   false  true  NULL
+t  t_pkey  false  4  z      N/A  N/A  true   false  true  NULL
 
-query TTBITTBBBT
+query TTBITTTBBBT
 SHOW INDEXES FROM t2 WITH COMMENT
 ----
-t2  i1       true   1  x      ASC  false  false  true  NULL
-t2  i1       true   2  rowid  ASC  false  true   true  NULL
-t2  i2       true   1  y      ASC  false  false  true  NULL
-t2  i2       true   2  rowid  ASC  false  true   true  NULL
-t2  i3       true   1  z      ASC  false  false  true  NULL
-t2  i3       true   2  rowid  ASC  false  true   true  NULL
-t2  t2_pkey  false  1  rowid  ASC  false  false  true  NULL
-t2  t2_pkey  false  2  x      N/A  true   false  true  NULL
-t2  t2_pkey  false  3  y      N/A  true   false  true  NULL
-t2  t2_pkey  false  4  z      N/A  true   false  true  NULL
+t2  i1       true   1  x      N/A  ASC  false  false  true  NULL
+t2  i1       true   2  rowid  N/A  ASC  false  true   true  NULL
+t2  i2       true   1  y      N/A  ASC  false  false  true  NULL
+t2  i2       true   2  rowid  N/A  ASC  false  true   true  NULL
+t2  i3       true   1  z      N/A  ASC  false  false  true  NULL
+t2  i3       true   2  rowid  N/A  ASC  false  true   true  NULL
+t2  t2_pkey  false  1  rowid  N/A  ASC  false  false  true  NULL
+t2  t2_pkey  false  2  x      N/A  N/A  true   false  true  NULL
+t2  t2_pkey  false  3  y      N/A  N/A  true   false  true  NULL
+t2  t2_pkey  false  4  z      N/A  N/A  true   false  true  NULL

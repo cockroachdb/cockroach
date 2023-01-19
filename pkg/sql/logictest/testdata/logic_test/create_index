@@ -25,14 +25,14 @@ CREATE INDEX bar ON t (c)
 statement error index \"bar\" contains duplicate column \"b\"
 CREATE INDEX bar ON t (b, b);
 
-query TTBITTBBB colnames
+query TTBITTTBBB colnames
 SHOW INDEXES FROM t
 ----
-table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit  visible
-t           foo         true        1             b            ASC        false    false     true
-t           foo         true        2             a            ASC        false    true      true
-t           t_pkey      false       1             a            ASC        false    false     true
-t           t_pkey      false       2             b            N/A        true     false     true
+table_name  index_name  non_unique  seq_in_index  column_name  expression  direction  storing  implicit  visible
+t           foo         true        1             b            N/A         ASC        false    false     true
+t           foo         true        2             a            N/A         ASC        false    true      true
+t           t_pkey      false       1             a            N/A         ASC        false    false     true
+t           t_pkey      false       2             b            N/A         N/A        true     false     true
 
 statement ok
 INSERT INTO t VALUES (2,1)
@@ -40,14 +40,14 @@ INSERT INTO t VALUES (2,1)
 statement error pgcode 23505 violates unique constraint "bar"
 CREATE UNIQUE INDEX bar ON t (b)
 
-query TTBITTBBB colnames
+query TTBITTTBBB colnames
 SHOW INDEXES FROM t
 ----
-table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit  visible
-t           foo         true        1             b            ASC        false    false     true
-t           foo         true        2             a            ASC        false    true      true
-t           t_pkey      false       1             a            ASC        false    false     true
-t           t_pkey      false       2             b            N/A        true     false     true
+table_name  index_name  non_unique  seq_in_index  column_name  expression  direction  storing  implicit  visible
+t           foo         true        1             b            N/A         ASC        false    false     true
+t           foo         true        2             a            N/A         ASC        false    true      true
+t           t_pkey      false       1             a            N/A         ASC        false    false     true
+t           t_pkey      false       2             b            N/A         N/A        true     false     true
 
 # test for DESC index
 
@@ -70,18 +70,18 @@ CREATE INDEX b_desc ON t (b DESC)
 statement ok
 CREATE INDEX b_asc ON t (b ASC, c DESC)
 
-query TTBITTBBB colnames
+query TTBITTTBBB colnames
 SHOW INDEXES FROM t
 ----
-table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit  visible
-t           b_asc       true        1             b            ASC        false    false     true
-t           b_asc       true        2             c            DESC       false    false     true
-t           b_asc       true        3             a            ASC        false    true      true
-t           b_desc      true        1             b            DESC       false    false     true
-t           b_desc      true        2             a            ASC        false    true      true
-t           t_pkey      false       1             a            ASC        false    false     true
-t           t_pkey      false       2             b            N/A        true     false     true
-t           t_pkey      false       3             c            N/A        true     false     true
+table_name  index_name  non_unique  seq_in_index  column_name  expression  direction  storing  implicit  visible
+t           b_asc       true        1             b            N/A         ASC        false    false     true
+t           b_asc       true        2             c            N/A         DESC       false    false     true
+t           b_asc       true        3             a            N/A         ASC        false    true      true
+t           b_desc      true        1             b            N/A         DESC       false    false     true
+t           b_desc      true        2             a            N/A         ASC        false    true      true
+t           t_pkey      false       1             a            N/A         ASC        false    false     true
+t           t_pkey      false       2             b            N/A         N/A        true     false     true
+t           t_pkey      false       3             c            N/A         N/A        true     false     true
 
 statement error pgcode 42P01 relation "foo" does not exist
 CREATE INDEX fail ON foo (b DESC)
@@ -110,12 +110,12 @@ CREATE INDEX foo ON privs (b)
 
 user root
 
-query TTBITTBBB colnames
+query TTBITTTBBB colnames
 SHOW INDEXES FROM privs
 ----
-table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit  visible
-privs       privs_pkey  false       1             a            ASC        false    false     true
-privs       privs_pkey  false       2             b            N/A        true     false     true
+table_name  index_name  non_unique  seq_in_index  column_name  expression  direction  storing  implicit  visible
+privs       privs_pkey  false       1             a            N/A         ASC        false    false     true
+privs       privs_pkey  false       2             b            N/A         N/A        true     false     true
 
 statement ok
 GRANT CREATE ON privs TO testuser
@@ -125,14 +125,14 @@ user testuser
 statement ok
 CREATE INDEX foo ON privs (b)
 
-query TTBITTBBB colnames
+query TTBITTTBBB colnames
 SHOW INDEXES FROM privs
 ----
-table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit  visible
-privs       foo         true        1             b            ASC        false    false     true
-privs       foo         true        2             a            ASC        false    true      true
-privs       privs_pkey  false       1             a            ASC        false    false     true
-privs       privs_pkey  false       2             b            N/A        true     false     true
+table_name  index_name  non_unique  seq_in_index  column_name  expression  direction  storing  implicit  visible
+privs       foo         true        1             b            N/A         ASC        false    false     true
+privs       foo         true        2             a            N/A         ASC        false    true      true
+privs       privs_pkey  false       1             a            N/A         ASC        false    false     true
+privs       privs_pkey  false       2             b            N/A         N/A        true     false     true
 
 
 user root

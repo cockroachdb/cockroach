@@ -31,9 +31,15 @@ func (d *delegator) delegateShowDatabaseIndexes(
 SELECT
 	table_name,
 	index_name,
+	index_schema,
 	non_unique::BOOL,
 	seq_in_index,
 	column_name,
+    CASE
+      WHEN seq_in_index <= 0 OR seq_in_index > array_length(i.indkey, 1) THEN 'N/A'
+      WHEN i.indkey[seq_in_index-1] = 0 THEN (indexprs::STRING[])[array_position(array_positions(i.indkey, 0), seq_in_index)]
+      ELSE 'N/A'
+    END AS expression,
 	direction,
 	storing::BOOL,
 	implicit::BOOL,
@@ -41,18 +47,17 @@ SELECT
 
 	if n.WithComment {
 		getAllIndexesQuery += `,
-	obj_description(pg_class.oid) AS comment`
+	obj_description(c.oid) AS comment`
 	}
 
 	getAllIndexesQuery += `
 FROM
-	%s.information_schema.statistics`
-
-	if n.WithComment {
-		getAllIndexesQuery += `
-	LEFT JOIN pg_class ON
-		statistics.index_name = pg_class.relname`
-	}
+    %[1]s.information_schema.statistics AS s
+    JOIN %[1]s.pg_catalog.pg_class c ON c.relname = s.index_name
+    JOIN %[1]s.pg_catalog.pg_class c_table ON c_table.relname = s.table_name
+    JOIN %[1]s.pg_catalog.pg_namespace n ON c.relnamespace = n.oid AND c_table.relnamespace = n.oid AND n.nspname = s.index_schema
+    JOIN %[1]s.pg_catalog.pg_index i ON i.indexrelid = c.oid AND i.indrelid = c_table.oid
+`
 
 	getAllIndexesQuery += `
 ORDER BY 1, 2, 4`
