@@ -22,29 +22,29 @@ INSERT INTO users VALUES (1, 'tom', 'cat'),(2, 'jerry', 'rat')
 statement ok
 INSERT INTO users_dupe VALUES (1, 'tom', 'cat'),(2, 'jerry', 'rat')
 
-query TTBITTBBB colnames
+query TTBITTTBBB colnames
 SHOW INDEXES FROM users
 ----
-table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit  visible
-users       bar         false       1             id           ASC        false    false     true
-users       bar         false       2             name         ASC        false    false     true
-users       foo         true        1             name         ASC        false    false     true
-users       foo         true        2             id           ASC        false    true      true
-users       users_pkey  false       1             id           ASC        false    false     true
-users       users_pkey  false       2             name         N/A        true     false     true
-users       users_pkey  false       3             title        N/A        true     false     true
+table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible
+users       bar         false       1             id           id          ASC        false    false     true
+users       bar         false       2             name         name        ASC        false    false     true
+users       foo         true        1             name         name        ASC        false    false     true
+users       foo         true        2             id           id          ASC        false    true      true
+users       users_pkey  false       1             id           id          ASC        false    false     true
+users       users_pkey  false       2             name         name        N/A        true     false     true
+users       users_pkey  false       3             title        title       N/A        true     false     true
 
-query TTBITTBBB colnames
+query TTBITTTBBB colnames
 SHOW INDEXES FROM users_dupe
 ----
-table_name  index_name       non_unique  seq_in_index  column_name  direction  storing  implicit  visible
-users_dupe  bar              false       1             id           ASC        false    false     true
-users_dupe  bar              false       2             name         ASC        false    false     true
-users_dupe  foo              true        1             name         ASC        false    false     true
-users_dupe  foo              true        2             id           ASC        false    true      true
-users_dupe  users_dupe_pkey  false       1             id           ASC        false    false     true
-users_dupe  users_dupe_pkey  false       2             name         N/A        true     false     true
-users_dupe  users_dupe_pkey  false       3             title        N/A        true     false     true
+table_name  index_name       non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible
+users_dupe  bar              false       1             id           id          ASC        false    false     true
+users_dupe  bar              false       2             name         name        ASC        false    false     true
+users_dupe  foo              true        1             name         name        ASC        false    false     true
+users_dupe  foo              true        2             id           id          ASC        false    true      true
+users_dupe  users_dupe_pkey  false       1             id           id          ASC        false    false     true
+users_dupe  users_dupe_pkey  false       2             name         name        N/A        true     false     true
+users_dupe  users_dupe_pkey  false       3             title        title       N/A        true     false     true
 
 statement error pgcode 42P07 index name "bar" already exists
 ALTER INDEX users@foo RENAME TO bar
@@ -80,17 +80,17 @@ ALTER INDEX IF EXISTS ufooo RENAME TO ufoo
 statement ok
 ALTER INDEX ufoo RENAME TO ufo
 
-query TTBITTBBB colnames
+query TTBITTTBBB colnames
 SHOW INDEXES FROM users
 ----
-table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit  visible
-users       bar         false       1             id           ASC        false    false     true
-users       bar         false       2             name         ASC        false    false     true
-users       ufo         true        1             name         ASC        false    false     true
-users       ufo         true        2             id           ASC        false    true      true
-users       users_pkey  false       1             id           ASC        false    false     true
-users       users_pkey  false       2             name         N/A        true     false     true
-users       users_pkey  false       3             title        N/A        true     false     true
+table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible
+users       bar         false       1             id           id          ASC        false    false     true
+users       bar         false       2             name         name        ASC        false    false     true
+users       ufo         true        1             name         name        ASC        false    false     true
+users       ufo         true        2             id           id          ASC        false    true      true
+users       users_pkey  false       1             id           id          ASC        false    false     true
+users       users_pkey  false       2             name         name        N/A        true     false     true
+users       users_pkey  false       3             title        title       N/A        true     false     true
 
 user testuser
 
@@ -107,17 +107,17 @@ user testuser
 statement ok
 ALTER INDEX users@bar RENAME TO rar
 
-query TTBITTBBB colnames
+query TTBITTTBBB colnames
 SHOW INDEXES FROM users
 ----
-table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit  visible
-users       rar         false       1             id           ASC        false    false     true
-users       rar         false       2             name         ASC        false    false     true
-users       ufo         true        1             name         ASC        false    false     true
-users       ufo         true        2             id           ASC        false    true      true
-users       users_pkey  false       1             id           ASC        false    false     true
-users       users_pkey  false       2             name         N/A        true     false     true
-users       users_pkey  false       3             title        N/A        true     false     true
+table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible
+users       rar         false       1             id           id          ASC        false    false     true
+users       rar         false       2             name         name        ASC        false    false     true
+users       ufo         true        1             name         name        ASC        false    false     true
+users       ufo         true        2             id           id          ASC        false    true      true
+users       users_pkey  false       1             id           id          ASC        false    false     true
+users       users_pkey  false       2             name         name        N/A        true     false     true
+users       users_pkey  false       3             title        title       N/A        true     false     true
 
 user root
 

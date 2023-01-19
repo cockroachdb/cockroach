@@ -57,12 +57,12 @@ rowid
 rowid_1
 rowid_2
 
-query TT
+query TT rowsort
 SELECT index_name, column_name FROM [SHOW INDEXES FROM t]
 ----
 t_pkey  rowid_2
-t_pkey  rowid
 t_pkey  rowid_1
+t_pkey  rowid
 
 query TT
 SHOW CREATE t
