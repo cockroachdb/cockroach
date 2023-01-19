@@ -10,7 +10,10 @@
 
 import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
-import { refreshSchemaInsights } from "src/redux/apiReducers";
+import {
+  refreshSchemaInsights,
+  refreshUserSQLRoles,
+} from "src/redux/apiReducers";
 import { AdminUIState } from "src/redux/state";
 import {
   SchemaInsightEventFilters,
@@ -26,6 +29,7 @@ import {
   selectSchemaInsightsDatabases,
   selectSchemaInsightsTypes,
 } from "src/views/insights/insightsSelectors";
+import { selectHasAdminRole } from "src/redux/user";
 
 const mapStateToProps = (
   state: AdminUIState,
@@ -37,6 +41,7 @@ const mapStateToProps = (
   schemaInsightsError: state.cachedData?.schemaInsights.lastError,
   filters: schemaInsightsFiltersLocalSetting.selector(state),
   sortSetting: schemaInsightsSortLocalSetting.selector(state),
+  hasAdminRole: selectHasAdminRole(state),
 });
 
 const mapDispatchToProps = {
@@ -44,6 +49,7 @@ const mapDispatchToProps = {
     schemaInsightsFiltersLocalSetting.set(filters),
   onSortChange: (ss: SortSetting) => schemaInsightsSortLocalSetting.set(ss),
   refreshSchemaInsights: refreshSchemaInsights,
+  refreshUserSQLRoles: refreshUserSQLRoles,
 };
 
 const SchemaInsightsPage = withRouter(

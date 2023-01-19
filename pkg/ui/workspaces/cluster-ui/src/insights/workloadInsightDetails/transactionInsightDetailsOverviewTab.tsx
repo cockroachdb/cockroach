@@ -44,18 +44,16 @@ export interface TransactionInsightDetailsStateProps {
   insightError: Error | null;
 }
 
-export interface TransactionInsightDetailsDispatchProps {
-  setTimeScale: (ts: TimeScale) => void;
-}
-
 type Props = {
   insightDetails: TxnInsightDetails;
   setTimeScale: (ts: TimeScale) => void;
+  hasAdminRole: boolean;
 };
 
 export const TransactionInsightDetailsOverviewTab: React.FC<Props> = ({
   insightDetails,
   setTimeScale,
+  hasAdminRole,
 }) => {
   const [insightsSortSetting, setInsightsSortSetting] = useState<SortSetting>({
     ascending: false,
@@ -67,6 +65,7 @@ export const TransactionInsightDetailsOverviewTab: React.FC<Props> = ({
     insightDetails?.queries?.join("") || "Insight not found.";
   const insightsColumns = makeInsightsColumns(
     isCockroachCloud,
+    hasAdminRole,
     insightDetails.queries?.length > 1,
     true,
   );

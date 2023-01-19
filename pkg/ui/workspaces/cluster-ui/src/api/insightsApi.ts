@@ -13,6 +13,7 @@ import {
   INTERNAL_SQL_API_APP,
   LARGE_RESULT_SIZE,
   LONG_TIMEOUT,
+  sqlApiErrorMessage,
   SqlExecutionRequest,
   SqlExecutionResponse,
   sqlResultsAreEmpty,
@@ -229,6 +230,13 @@ export async function getTxnInsightEvents(
     await executeInternalSql<TransactionContentionResponseColumns>(
       makeInsightsSqlRequest([txnContentionQuery(req)]),
     );
+  if (contentionResults.error) {
+    throw new Error(
+      `Error while retrieving contention information: ${sqlApiErrorMessage(
+        contentionResults.error.message,
+      )}`,
+    );
+  }
   if (sqlResultsAreEmpty(contentionResults)) {
     return [];
   }
@@ -245,6 +253,13 @@ export async function getTxnInsightEvents(
         txnStmtFingerprintsQuery(Array.from(txnFingerprintIDs)),
       ]),
     );
+  if (txnStmtFingerprintResults.error) {
+    throw new Error(
+      `Error while retrieving statements information: ${sqlApiErrorMessage(
+        txnStmtFingerprintResults.error.message,
+      )}`,
+    );
+  }
   if (sqlResultsAreEmpty(txnStmtFingerprintResults)) {
     return [];
   }
@@ -264,6 +279,13 @@ export async function getTxnInsightEvents(
     await executeInternalSql<FingerprintStmtsResponseColumns>(
       fingerprintStmtsRequest,
     );
+  if (fingerprintStmtResults.error) {
+    throw new Error(
+      `Error while retrieving statements information: ${sqlApiErrorMessage(
+        fingerprintStmtResults.error.message,
+      )}`,
+    );
+  }
 
   return buildTxnContentionInsightEvents(
     contentionEvents,
@@ -291,7 +313,8 @@ function buildTxnContentionInsightEvents(
     queries: txnRow.queryIDs.map(stmtID => fingerprintToQuery.get(stmtID)),
   }));
 
-  const res = txnContentionState
+  // remove null entries
+  return txnContentionState
     .map(txnContention => {
       const txnQueries = txnsWithStmtQueries.find(
         txn => txn.fingerprintID === txnContention.transactionFingerprintID,
@@ -307,9 +330,7 @@ function buildTxnContentionInsightEvents(
         execType: InsightExecEnum.TRANSACTION,
       };
     })
-    .filter(txn => txn); // remove null entries
-
-  return res;
+    .filter(txn => txn);
 }
 
 // Transaction insight details.
@@ -475,6 +496,13 @@ export async function getTransactionInsightEventDetailsState(
     await executeInternalSql<TxnContentionDetailsResponseColumns>(
       makeInsightsSqlRequest([txnContentionDetailsQuery(req)]),
     );
+  if (contentionResults.error) {
+    throw new Error(
+      `Error while retrieving contention information: ${sqlApiErrorMessage(
+        contentionResults.error.message,
+      )}`,
+    );
+  }
   if (sqlResultsAreEmpty(contentionResults)) {
     return;
   }
@@ -494,6 +522,13 @@ export async function getTransactionInsightEventDetailsState(
     await executeInternalSql<TxnStmtFingerprintsResponseColumns>(
       makeInsightsSqlRequest([txnStmtFingerprintsQuery(txnFingerprintIDs)]),
     );
+  if (getStmtFingerprintsResponse.error) {
+    throw new Error(
+      `Error while retrieving statements information: ${sqlApiErrorMessage(
+        getStmtFingerprintsResponse.error.message,
+      )}`,
+    );
+  }
   const txnsWithStmtFingerprints = formatTxnFingerprintsResults(
     getStmtFingerprintsResponse,
   );
@@ -509,6 +544,13 @@ export async function getTransactionInsightEventDetailsState(
         fingerprintStmtsQuery(Array.from(stmtFingerprintIDs)),
       ]),
     );
+  if (stmtQueriesResponse.error) {
+    throw new Error(
+      `Error while retrieving statements information: ${sqlApiErrorMessage(
+        stmtQueriesResponse.error.message,
+      )}`,
+    );
+  }
 
   return buildTxnContentionInsightDetails(
     contentionDetails,
@@ -774,7 +816,7 @@ export type ExecutionInsights = TxnInsightEvent[];
 
 export type ExecutionInsightsRequest = Pick<QueryFilterFields, "start" | "end">;
 
-export function getClusterInsightsApi(
+export async function getClusterInsightsApi(
   req?: ExecutionInsightsRequest,
 ): Promise<ExecutionInsights> {
   const insightsQuery = workloadInsightsQuery(req);
@@ -785,12 +827,20 @@ export function getClusterInsightsApi(
       },
     ],
     execute: true,
-    max_result_size: LARGE_RESULT_SIZE,
+    // max_result_size: LARGE_RESULT_SIZE,
     timeout: LONG_TIMEOUT,
   };
-  return executeInternalSql<ExecutionInsightsResponseRow>(request).then(
-    result => {
-      return insightsQuery.toState(result);
-    },
+
+  const result = await executeInternalSql<ExecutionInsightsResponseRow>(
+    request,
   );
+  if (result.error) {
+    throw new Error(
+      `Error while retrieving insights information: ${sqlApiErrorMessage(
+        result.error.message,
+      )}`,
+    );
+  }
+
+  return insightsQuery.toState(result);
 }

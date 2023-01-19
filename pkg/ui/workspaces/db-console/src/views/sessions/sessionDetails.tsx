@@ -10,7 +10,6 @@
 
 import { getMatchParamByName } from "src/util/query";
 import { sessionAttr } from "src/util/constants";
-import _ from "lodash";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 import { createSelector } from "reselect";
 import { Pick } from "src/util/pick";
