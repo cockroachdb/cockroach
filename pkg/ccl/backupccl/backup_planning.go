@@ -60,14 +60,6 @@ import (
 )
 
 const (
-	backupOptRevisionHistory  = "revision_history"
-	backupOptWithPrivileges   = "privileges"
-	backupOptAsJSON           = "as_json"
-	backupOptWithDebugIDs     = "debug_ids"
-	backupOptIncStorage       = "incremental_location"
-	backupOptDebugMetadataSST = "debug_dump_metadata_sst"
-	backupOptEncDir           = "encryption_info_dir"
-	backupOptCheckFiles       = "check_files"
 	// backupPartitionDescriptorPrefix is the file name prefix for serialized
 	// BackupPartitionDescriptor protos.
 	backupPartitionDescriptorPrefix = "BACKUP_PART"

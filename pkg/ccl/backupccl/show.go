@@ -186,11 +186,15 @@ func showBackupTypeCheck(
 	}
 	if err := exprutil.TypeCheck(
 		ctx, "SHOW BACKUP", p.SemaCtx(),
-		exprutil.Strings{backup.Path},
-		exprutil.StringArrays{tree.Exprs(backup.InCollection)},
-		exprutil.KVOptions{
-			KVOptions:  backup.Options,
-			Validation: showBackupOptions,
+		exprutil.Strings{
+			backup.Path,
+			backup.Options.EncryptionPassphrase,
+			backup.Options.EncryptionInfoDir,
+		},
+		exprutil.StringArrays{
+			tree.Exprs(backup.InCollection),
+			tree.Exprs(backup.Options.IncrementalStorage),
+			tree.Exprs(backup.Options.DecryptionKMSURI),
 		},
 	); err != nil {
 		return false, nil, err
@@ -199,52 +203,40 @@ func showBackupTypeCheck(
 	return true, infoReader.header(), nil
 }
 
-var showBackupOptions = exprutil.KVOptionValidationMap{
-	backupencryption.BackupOptEncPassphrase: exprutil.KVStringOptRequireValue,
-	backupencryption.BackupOptEncKMS:        exprutil.KVStringOptRequireValue,
-	backupOptWithPrivileges:                 exprutil.KVStringOptRequireNoValue,
-	backupOptAsJSON:                         exprutil.KVStringOptRequireNoValue,
-	backupOptWithDebugIDs:                   exprutil.KVStringOptRequireNoValue,
-	backupOptIncStorage:                     exprutil.KVStringOptRequireValue,
-	backupOptDebugMetadataSST:               exprutil.KVStringOptRequireNoValue,
-	backupOptEncDir:                         exprutil.KVStringOptRequireValue,
-	backupOptCheckFiles:                     exprutil.KVStringOptRequireNoValue,
-}
-
 // showBackupPlanHook implements PlanHookFn.
 func showBackupPlanHook(
 	ctx context.Context, stmt tree.Statement, p sql.PlanHookState,
 ) (sql.PlanHookRowFn, colinfo.ResultColumns, []sql.PlanNode, bool, error) {
-	backup, ok := stmt.(*tree.ShowBackup)
+	showStmt, ok := stmt.(*tree.ShowBackup)
 	if !ok {
 		return nil, nil, nil, false, nil
 	}
 	exprEval := p.ExprEvaluator("SHOW BACKUP")
-	if backup.Path == nil && backup.InCollection != nil {
+	if showStmt.Path == nil && showStmt.InCollection != nil {
 		collection, err := exprEval.StringArray(
-			ctx, tree.Exprs(backup.InCollection),
+			ctx, tree.Exprs(showStmt.InCollection),
 		)
 		if err != nil {
 			return nil, nil, nil, false, err
 		}
-		return showBackupsInCollectionPlanHook(ctx, collection, backup, p)
+		return showBackupsInCollectionPlanHook(ctx, collection, showStmt, p)
 	}
 
-	to, err := exprEval.String(ctx, backup.Path)
+	to, err := exprEval.String(ctx, showStmt.Path)
 	if err != nil {
 		return nil, nil, nil, false, err
 	}
 
 	var inCol []string
-	if backup.InCollection != nil {
-		inCol, err = exprEval.StringArray(ctx, tree.Exprs(backup.InCollection))
+	if showStmt.InCollection != nil {
+		inCol, err = exprEval.StringArray(ctx, tree.Exprs(showStmt.InCollection))
 		if err != nil {
 			return nil, nil, nil, false, err
 		}
 	}
 
-	infoReader := getBackupInfoReader(p, backup)
-	opts, err := exprEval.KVOptions(ctx, backup.Options, showBackupOptions)
+	infoReader := getBackupInfoReader(p, showStmt)
+
 	if err != nil {
 		return nil, nil, nil, false, err
 	}
@@ -304,12 +296,13 @@ func showBackupPlanHook(
 		}
 
 		// TODO(msbutler): put encryption resolution in helper function, hopefully shared with RESTORE
-		// A user that calls SHOW BACKUP <incremental_dir> on an encrypted incremental
-		// backup will need to pass their full backup's directory to the
-		// encryption_info_dir parameter because the `ENCRYPTION-INFO` file
-		// necessary to decode the incremental backup lives in the full backup dir.
+
 		encStore := baseStores[0]
-		if encDir, ok := opts[backupOptEncDir]; ok {
+		if showStmt.Options.EncryptionInfoDir != nil {
+			encDir, err := exprEval.String(ctx, showStmt.Options.EncryptionInfoDir)
+			if err != nil {
+				return err
+			}
 			encStore, err = p.ExecCfg().DistSQLSrv.ExternalStorageFromURI(ctx, encDir, p.User())
 			if err != nil {
 				return errors.Wrap(err, "make storage")
@@ -325,7 +318,11 @@ func showBackupPlanHook(
 		)
 		showEncErr := `If you are running SHOW BACKUP exclusively on an incremental backup, 
 you must pass the 'encryption_info_dir' parameter that points to the directory of your full backup`
-		if passphrase, ok := opts[backupencryption.BackupOptEncPassphrase]; ok {
+		if showStmt.Options.EncryptionPassphrase != nil {
+			passphrase, err := exprEval.String(ctx, showStmt.Options.EncryptionPassphrase)
+			if err != nil {
+				return err
+			}
 			opts, err := backupencryption.ReadEncryptionOptions(ctx, encStore)
 			if errors.Is(err, backupencryption.ErrEncryptionInfoRead) {
 				return errors.WithHint(err, showEncErr)
@@ -338,7 +335,11 @@ you must pass the 'encryption_info_dir' parameter that points to the directory o
 				Mode: jobspb.EncryptionMode_Passphrase,
 				Key:  encryptionKey,
 			}
-		} else if kms, ok := opts[backupencryption.BackupOptEncKMS]; ok {
+		} else if showStmt.Options.DecryptionKMSURI != nil {
+			kms, err := exprEval.StringArray(ctx, tree.Exprs(showStmt.Options.DecryptionKMSURI))
+			if err != nil {
+				return err
+			}
 			opts, err := backupencryption.ReadEncryptionOptions(ctx, encStore)
 			if errors.Is(err, backupencryption.ErrEncryptionInfoRead) {
 				return errors.WithHint(err, showEncErr)
@@ -346,12 +347,11 @@ you must pass the 'encryption_info_dir' parameter that points to the directory o
 			if err != nil {
 				return err
 			}
-
 			var defaultKMSInfo *jobspb.BackupEncryptionOptions_KMSInfo
 			for _, encFile := range opts {
 				defaultKMSInfo, err = backupencryption.ValidateKMSURIsAgainstFullBackup(
 					ctx,
-					[]string{kms},
+					kms,
 					backupencryption.NewEncryptedDataKeyMapFromProtoMap(encFile.EncryptedDataKeyByKMSMasterKeyID),
 					&kmsEnv,
 				)
@@ -367,16 +367,13 @@ you must pass the 'encryption_info_dir' parameter that points to the directory o
 				KMSInfo: defaultKMSInfo,
 			}
 		}
-		explicitIncPaths := make([]string, 0)
-		explicitIncPath := opts[backupOptIncStorage]
-		if len(explicitIncPath) > 0 {
-			explicitIncPaths = append(explicitIncPaths, explicitIncPath)
-			if len(dest) > 1 {
-				return errors.New("SHOW BACKUP on locality aware backups using incremental_location is" +
-					" not supported yet")
+		var explicitIncPaths []string
+		if showStmt.Options.IncrementalStorage != nil {
+			explicitIncPaths, err = exprEval.StringArray(ctx, tree.Exprs(showStmt.Options.IncrementalStorage))
+			if err != nil {
+				return err
 			}
 		}
-
 		collection, computedSubdir := backupdest.CollectionAndSubdir(dest[0], subdir)
 		fullyResolvedIncrementalsDirectory, err := backupdest.ResolveIncrementalsBackupLocation(
 			ctx,
@@ -464,7 +461,7 @@ you must pass the 'encryption_info_dir' parameter that points to the directory o
 						len(dest)))
 			}
 		}
-		if _, ok := opts[backupOptCheckFiles]; ok {
+		if showStmt.Options.CheckFiles {
 			fileSizes, err := checkBackupFiles(ctx, info, p.ExecCfg(), p.User(), encryption, &kmsEnv)
 			if err != nil {
 				return err
@@ -474,7 +471,7 @@ you must pass the 'encryption_info_dir' parameter that points to the directory o
 		if err := infoReader.showBackup(ctx, &mem, mkStore, info, p.User(), &kmsEnv, resultsCh); err != nil {
 			return err
 		}
-		if backup.InCollection == nil {
+		if showStmt.InCollection == nil {
 			telemetry.Count("show-backup.deprecated-subdir-syntax")
 		} else {
 			telemetry.Count("show-backup.collection")
@@ -485,26 +482,26 @@ you must pass the 'encryption_info_dir' parameter that points to the directory o
 	return fn, infoReader.header(), nil, false, nil
 }
 
-func getBackupInfoReader(p sql.PlanHookState, backup *tree.ShowBackup) backupInfoReader {
+func getBackupInfoReader(p sql.PlanHookState, showStmt *tree.ShowBackup) backupInfoReader {
 	var infoReader backupInfoReader
-	if dumpSST := backup.Options.HasKey(backupOptDebugMetadataSST); dumpSST {
+	if showStmt.Options.DebugMetadataSST {
 		infoReader = metadataSSTInfoReader{}
-	} else if asJSON := backup.Options.HasKey(backupOptAsJSON); asJSON {
+	} else if showStmt.Options.AsJson {
 		infoReader = manifestInfoReader{shower: jsonShower}
 	} else {
 		var shower backupShower
-		switch backup.Details {
+		switch showStmt.Details {
 		case tree.BackupRangeDetails:
 			shower = backupShowerRanges
 		case tree.BackupFileDetails:
-			shower = backupShowerFileSetup(p, backup.InCollection)
+			shower = backupShowerFileSetup(p, showStmt.InCollection)
 		case tree.BackupSchemaDetails:
-			shower = backupShowerDefault(p, true, backup.Options)
+			shower = backupShowerDefault(p, true, showStmt.Options)
 		case tree.BackupValidateDetails:
 			shower = backupShowerDoctor
 
 		default:
-			shower = backupShowerDefault(p, false, backup.Options)
+			shower = backupShowerDefault(p, false, showStmt.Options)
 		}
 		infoReader = manifestInfoReader{shower: shower}
 	}
@@ -658,7 +655,7 @@ type backupShower struct {
 }
 
 // backupShowerHeaders defines the schema for the table presented to the user.
-func backupShowerHeaders(showSchemas bool, opts tree.KVOptions) colinfo.ResultColumns {
+func backupShowerHeaders(showSchemas bool, opts tree.ShowBackupOptions) colinfo.ResultColumns {
 	baseHeaders := colinfo.ResultColumns{
 		{Name: "database_name", Typ: types.String},
 		{Name: "parent_schema_name", Typ: types.String},
@@ -675,14 +672,14 @@ func backupShowerHeaders(showSchemas bool, opts tree.KVOptions) colinfo.ResultCo
 	if showSchemas {
 		baseHeaders = append(baseHeaders, colinfo.ResultColumn{Name: "create_statement", Typ: types.String})
 	}
-	if shouldShowPrivleges := opts.HasKey(backupOptWithPrivileges); shouldShowPrivleges {
+	if opts.Privileges {
 		baseHeaders = append(baseHeaders, colinfo.ResultColumn{Name: "privileges", Typ: types.String})
 		baseHeaders = append(baseHeaders, colinfo.ResultColumn{Name: "owner", Typ: types.String})
 	}
-	if checkFiles := opts.HasKey(backupOptCheckFiles); checkFiles {
+	if opts.CheckFiles {
 		baseHeaders = append(baseHeaders, colinfo.ResultColumn{Name: "file_bytes", Typ: types.Int})
 	}
-	if shouldShowIDs := opts.HasKey(backupOptWithDebugIDs); shouldShowIDs {
+	if opts.DebugIDs {
 		baseHeaders = append(
 			colinfo.ResultColumns{
 				baseHeaders[0],
@@ -698,10 +695,9 @@ func backupShowerHeaders(showSchemas bool, opts tree.KVOptions) colinfo.ResultCo
 	return baseHeaders
 }
 
-func backupShowerDefault(p sql.PlanHookState, showSchemas bool, opts tree.KVOptions) backupShower {
-	shouldShowPrivileges := opts.HasKey(backupOptWithPrivileges)
-	checkFiles := opts.HasKey(backupOptCheckFiles)
-	shouldShowIDs := opts.HasKey(backupOptWithDebugIDs)
+func backupShowerDefault(
+	p sql.PlanHookState, showSchemas bool, opts tree.ShowBackupOptions,
+) backupShower {
 	return backupShower{
 		header: backupShowerHeaders(showSchemas, opts),
 		fn: func(ctx context.Context, info backupInfo) ([]tree.Datums, error) {
@@ -870,15 +866,15 @@ func backupShowerDefault(p sql.PlanHookState, showSchemas bool, opts tree.KVOpti
 					if showSchemas {
 						row = append(row, createStmtDatum)
 					}
-					if shouldShowPrivileges {
+					if opts.Privileges {
 						row = append(row, tree.NewDString(showPrivileges(ctx, desc)))
 						owner := desc.GetPrivileges().Owner().SQLIdentifier()
 						row = append(row, tree.NewDString(owner))
 					}
-					if checkFiles {
+					if opts.CheckFiles {
 						row = append(row, fileSizeDatum)
 					}
-					if shouldShowIDs {
+					if opts.DebugIDs {
 						// If showing debug IDs, interleave the IDs with the corresponding object names.
 						row = append(
 							tree.Datums{
@@ -911,13 +907,13 @@ func backupShowerDefault(p sql.PlanHookState, showSchemas bool, opts tree.KVOpti
 					if showSchemas {
 						row = append(row, tree.DNull)
 					}
-					if shouldShowPrivileges {
+					if opts.Privileges {
 						row = append(row, tree.DNull)
 					}
-					if checkFiles {
+					if opts.CheckFiles {
 						row = append(row, tree.DNull)
 					}
-					if shouldShowIDs {
+					if opts.DebugIDs {
 						// If showing debug IDs, interleave the IDs with the corresponding object names.
 						row = append(
 							tree.Datums{
@@ -1435,7 +1431,7 @@ var showBackupsInCollectionHeader = colinfo.ResultColumns{
 
 // showBackupPlanHook implements PlanHookFn.
 func showBackupsInCollectionPlanHook(
-	ctx context.Context, collection []string, backup *tree.ShowBackup, p sql.PlanHookState,
+	ctx context.Context, collection []string, showStmt *tree.ShowBackup, p sql.PlanHookState,
 ) (sql.PlanHookRowFn, colinfo.ResultColumns, []sql.PlanNode, bool, error) {
 
 	if err := cloudprivilege.CheckDestinationPrivileges(ctx, p, collection); err != nil {
@@ -1443,7 +1439,7 @@ func showBackupsInCollectionPlanHook(
 	}
 
 	fn := func(ctx context.Context, _ []sql.PlanNode, resultsCh chan<- tree.Datums) error {
-		ctx, span := tracing.ChildSpan(ctx, backup.StatementTag())
+		ctx, span := tracing.ChildSpan(ctx, showStmt.StatementTag())
 		defer span.Finish()
 
 		store, err := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI(ctx, collection[0], p.User())
