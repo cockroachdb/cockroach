@@ -46,6 +46,8 @@ func SuffixFromPlatform(platform Platform) string {
 	switch platform {
 	case PlatformLinux:
 		return ".linux-2.6.32-gnu-amd64"
+	case PlatformLinuxFIPS:
+		return ".linux-2.6.32-gnu-amd64-fips"
 	case PlatformLinuxArm:
 		return ".linux-3.7.10-gnu-arm64"
 	case PlatformMacOS:
@@ -67,6 +69,8 @@ func CrossConfigFromPlatform(platform Platform) string {
 	switch platform {
 	case PlatformLinux:
 		return "crosslinuxbase"
+	case PlatformLinuxFIPS:
+		return "crosslinuxfipsbase"
 	case PlatformLinuxArm:
 		return "crosslinuxarmbase"
 	case PlatformMacOS:
@@ -86,6 +90,8 @@ func TargetTripleFromPlatform(platform Platform) string {
 	switch platform {
 	case PlatformLinux:
 		return "x86_64-pc-linux-gnu"
+	case PlatformLinuxFIPS:
+		return "x86_64-pc-linux-gnu"
 	case PlatformLinuxArm:
 		return "aarch64-unknown-linux-gnu"
 	case PlatformMacOS:
@@ -102,7 +108,7 @@ func TargetTripleFromPlatform(platform Platform) string {
 // SharedLibraryExtensionFromPlatform returns the shared library extensions for a given Platform.
 func SharedLibraryExtensionFromPlatform(platform Platform) string {
 	switch platform {
-	case PlatformLinux, PlatformLinuxArm:
+	case PlatformLinux, PlatformLinuxArm, PlatformLinuxFIPS:
 		return ".so"
 	case PlatformWindows:
 		return ".dll"
@@ -179,7 +185,7 @@ func MakeRelease(platform Platform, opts BuildOptions, pkgDir string) error {
 		return err
 	}
 
-	if platform == PlatformLinux {
+	if platform == PlatformLinux || platform == PlatformLinuxFIPS || platform == PlatformLinuxArm {
 		suffix := SuffixFromPlatform(platform)
 		binaryName := "./cockroach" + suffix
 
@@ -238,6 +244,8 @@ type Platform int
 const (
 	// PlatformLinux is the Linux x86_64 target.
 	PlatformLinux Platform = iota
+	// PlatformLinuxFIPS is the Linux x86_64 target built with FIPS support.
+	PlatformLinuxFIPS
 	// PlatformLinuxArm is the Linux aarch64 target.
 	PlatformLinuxArm
 	// PlatformMacOS is the Darwin x86_64 target.

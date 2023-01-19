@@ -643,3 +643,14 @@ new_local_repository(
     build_file_content = """exports_files[("bin/node")]""",
     path = "/usr/local",
 )
+
+# Download and register the FIPS enabled Go toolchain at the end to avoid toolchain conflicts for gazelle.
+go_download_sdk(
+    name = "go_sdk_fips",
+    sdks = {
+        "linux_amd64": ("go1.19.4.linux-amd64-fips.tar.gz", "ae787622e5288b78e1675979c2a348a12363765f0fe788b7cda2c7a92ff5c66e"),
+        "linux_arm64": ("go1.19.4.linux-arm64-fips.tar.gz", "60c3ff60470b383d1cf30d9a08592e4b2e5154368dc630648c7133bd19bd9f4f"),
+    },
+    urls = ["https://storage.googleapis.com/public-bazel-artifacts/go-fips/20230127-044832/{}"],
+    version = "1.19.4",
+)
