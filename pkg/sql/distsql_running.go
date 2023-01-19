@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -463,9 +464,12 @@ func (dsp *DistSQLPlanner) setupFlows(
 
 	// Start all the remote flows.
 	//
-	// usedWorker indicates whether we used at least one DistSQL worker
-	// goroutine to issue the SetupFlow RPC.
-	var usedWorker bool
+	// numAsyncRequests tracks the number of the SetupFlow RPCs that were
+	// delegated to the DistSQL runner goroutines.
+	var numAsyncRequests int
+	// numSerialRequests tracks the number of the SetupFlow RPCs that were
+	// issued by the current goroutine on its own.
+	var numSerialRequests int
 	if sp := tracing.SpanFromContext(origCtx); sp != nil && !sp.IsNoop() {
 		setupReq.TraceInfo = sp.Meta().ToProto()
 	}
@@ -490,6 +494,7 @@ func (dsp *DistSQLPlanner) setupFlows(
 	var runnerSpan *tracing.Span
 	// This span is necessary because it can outlive its parent.
 	runnerCtx, runnerSpan = tracing.ChildSpan(runnerCtx, "setup-flow-async" /* opName */)
+	// runnerCleanup can only be executed _after_ all issued RPCs are complete.
 	runnerCleanup := func() {
 		cancelRunnerCtx()
 		runnerSpan.Finish()
@@ -499,6 +504,23 @@ func (dsp *DistSQLPlanner) setupFlows(
 	var listenerGoroutineWillCleanup bool
 	defer func() {
 		if !listenerGoroutineWillCleanup {
+			// Make sure to receive from the result channel as many times as
+			// there were total SetupFlow RPCs issued, regardless of whether
+			// they were executed concurrently by a DistSQL worker or serially
+			// in the current goroutine. This is needed in order to block
+			// finishing the runner span (in runnerCleanup) until all concurrent
+			// requests are done since the runner span is used as the parent for
+			// the RPC span, and, thus, the runner span can only be finished
+			// when we know that all SetupFlow RPCs have already been completed.
+			//
+			// Note that even in case of an error in runnerRequest.run we still
+			// send on the result channel.
+			for i := 0; i < numAsyncRequests+numSerialRequests; i++ {
+				<-resultChan
+			}
+			// At this point, we know that all concurrent requests (if there
+			// were any) are complete, so we can safely perform the runner
+			// cleanup.
 			runnerCleanup()
 		}
 	}()
@@ -521,8 +543,9 @@ func (dsp *DistSQLPlanner) setupFlows(
 		// directly.
 		select {
 		case dsp.runnerCoordinator.runnerChan <- runReq:
-			usedWorker = true
+			numAsyncRequests++
 		default:
+			numSerialRequests++
 			// Use the context of the local flow since we're executing this
 			// SetupFlow RPC synchronously.
 			runReq.ctx = ctx
@@ -531,8 +554,16 @@ func (dsp *DistSQLPlanner) setupFlows(
 			}
 		}
 	}
+	if buildutil.CrdbTestBuild {
+		if numAsyncRequests+numSerialRequests != len(flows)-1 {
+			return ctx, flow, errors.AssertionFailedf(
+				"expected %d requests, found only %d async and %d serial",
+				len(flows)-1, numAsyncRequests, numSerialRequests,
+			)
+		}
+	}
 
-	if !usedWorker {
+	if numAsyncRequests == 0 {
 		// We executed all SetupFlow RPCs in the current goroutine, and all RPCs
 		// succeeded.
 		return ctx, flow, nil
@@ -565,6 +596,10 @@ func (dsp *DistSQLPlanner) setupFlows(
 		cancelRunnerCtx()
 	})
 	err = dsp.stopper.RunAsyncTask(origCtx, "distsql-remote-flows-setup-listener", func(ctx context.Context) {
+		// Note that in the loop below we always receive from the result channel
+		// as many times as there were SetupFlow RPCs issued, thus, by the time
+		// this defer is executed, we are certain that all RPCs were complete,
+		// and runnerCleanup() is safe to be executed.
 		defer runnerCleanup()
 		var seenError bool
 		for i := 0; i < len(flows)-1; i++ {
