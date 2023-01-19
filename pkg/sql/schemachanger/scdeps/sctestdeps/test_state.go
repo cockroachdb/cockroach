@@ -127,6 +127,18 @@ func (s *TestState) WithTxn(fn func(s *TestState)) {
 			s.uncommitted.UpsertDescriptor(d)
 			return nil
 		})
+		_ = u.ForEachComment(func(key catalogkeys.CommentKey, cmt string) error {
+			s.committed.UpsertComment(key, cmt)
+			s.uncommitted.UpsertComment(key, cmt)
+			return nil
+		})
+		_ = u.ForEachZoneConfig(func(id catid.DescID, zc catalog.ZoneConfig) error {
+			zc = zc.Clone()
+			s.committed.UpsertZoneConfig(id, zc.ZoneConfigProto(), zc.GetRawBytesInStorage())
+			zc = zc.Clone()
+			s.uncommitted.UpsertZoneConfig(id, zc.ZoneConfigProto(), zc.GetRawBytesInStorage())
+			return nil
+		})
 		s.LogSideEffectf("commit transaction #%d", s.txnCounter)
 		if len(s.createdJobsInCurrentTxn) > 0 {
 			s.LogSideEffectf("notified job registry to adopt jobs: %v", s.createdJobsInCurrentTxn)

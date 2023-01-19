@@ -651,7 +651,7 @@ StatementPhase stage 1 of 1 with 1 MutationType op
   ops:
     *scop.MarkDescriptorAsSyntheticallyDropped
       DescriptorID: 105
-PreCommitPhase stage 1 of 1 with 11 MutationType ops
+PreCommitPhase stage 1 of 1 with 10 MutationType ops
   transitions:
     [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 8}, ABSENT], PUBLIC] -> ABSENT
     [[IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 8}, ABSENT], PUBLIC] -> ABSENT
@@ -678,8 +678,6 @@ PreCommitPhase stage 1 of 1 with 11 MutationType ops
       BackReferencedViewID: 105
       RelationIDs:
       - 104
-    *scop.RemoveAllTableComments
-      TableID: 105
     *scop.MakePublicSecondaryIndexWriteOnly
       IndexID: 8
       TableID: 104
@@ -996,7 +994,7 @@ StatementPhase stage 1 of 1 with 1 MutationType op
   ops:
     *scop.MarkDescriptorAsSyntheticallyDropped
       DescriptorID: 107
-PreCommitPhase stage 1 of 1 with 13 MutationType ops
+PreCommitPhase stage 1 of 1 with 12 MutationType ops
   transitions:
     [[IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[IndexColumn:{DescID: 106, ColumnID: 3, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
@@ -1032,8 +1030,6 @@ PreCommitPhase stage 1 of 1 with 13 MutationType ops
       BackReferencedViewID: 107
       RelationIDs:
       - 106
-    *scop.RemoveAllTableComments
-      TableID: 107
     *scop.RemoveColumnDefaultExpression
       ColumnID: 2
       TableID: 107

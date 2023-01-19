@@ -2,6 +2,7 @@
 CREATE DATABASE db;
 CREATE SCHEMA db.sc;
 CREATE TABLE db.sc.t (k INT, v STRING);
+COMMENT ON TABLE db.sc.t IS 't has a comment';
 CREATE TYPE db.sc.e AS ENUM('a', 'b', 'c');
 
 /* test */
@@ -63,7 +64,7 @@ EXPLAIN (ddl, verbose) DROP TABLE db.sc.t;
 │   │
 │   └── • Stage 1 of 1 in PreCommitPhase
 │       │
-│       ├── • 28 elements transitioning toward ABSENT
+│       ├── • 29 elements transitioning toward ABSENT
 │       │   │
 │       │   ├── • Namespace:{DescID: 107, Name: t, ReferencedDescID: 104}
 │       │   │   │ PUBLIC → ABSENT
@@ -105,6 +106,12 @@ EXPLAIN (ddl, verbose) DROP TABLE db.sc.t;
 │       │   │         rule: "descriptor TXN_DROPPED before DROPPED"
 │       │   │
 │       │   ├── • ObjectParent:{DescID: 107, ReferencedDescID: 106}
+│       │   │   │ PUBLIC → ABSENT
+│       │   │   │
+│       │   │   └── • Precedence dependency from DROPPED Table:{DescID: 107}
+│       │   │         rule: "descriptor drop right before dependent element removal"
+│       │   │
+│       │   ├── • TableComment:{DescID: 107, Comment: t has a comment}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
 │       │   │   └── • Precedence dependency from DROPPED Table:{DescID: 107}
@@ -392,13 +399,28 @@ EXPLAIN (ddl, verbose) DROP TABLE db.sc.t;
 │       │       └── • skip PUBLIC → ABSENT operations
 │       │             rule: "skip index dependents removal ops on relation drop"
 │       │
-│       └── • 11 Mutation operations
+│       └── • 12 Mutation operations
 │           │
 │           ├── • MarkDescriptorAsDropped
 │           │     DescriptorID: 107
 │           │
-│           ├── • RemoveAllTableComments
+│           ├── • RemoveTableComment
 │           │     TableID: 107
+│           │
+│           ├── • LogEvent
+│           │     Element:
+│           │       TableComment:
+│           │         comment: t has a comment
+│           │         tableId: 107
+│           │     EventBase:
+│           │       Authorization:
+│           │         UserName: root
+│           │       Statement: DROP TABLE ‹db›.‹sc›.‹t›
+│           │       StatementTag: DROP TABLE
+│           │       TargetMetadata:
+│           │         SourceElementID: 1
+│           │         SubWorkID: 1
+│           │     TargetStatus: 1
 │           │
 │           ├── • RemoveColumnDefaultExpression
 │           │     ColumnID: 3
