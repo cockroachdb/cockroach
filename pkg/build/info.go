@@ -12,6 +12,7 @@ package build
 
 import (
 	"bytes"
+	_ "embed"
 	"fmt"
 	"runtime"
 	"text/tabwriter"
@@ -26,8 +27,8 @@ import (
 const TimeFormat = "2006/01/02 15:04:05"
 
 var (
-	// These variables are initialized via the linker -X flag in the
-	// top-level Makefile when compiling release binaries.
+	// These variables are initialized by Bazel via the linker -X flag
+	// when compiling release binaries.
 	tag             = "unknown" // Tag of this build (git describe --tags w/ optional '-dirty' suffix)
 	utcTime         string      // Build time in UTC (year/month/day hour:min:sec)
 	rev             string      // SHA-1 of this build (git rev-parse)
@@ -35,11 +36,13 @@ var (
 	cgoTargetTriple string
 	platform        = fmt.Sprintf("%s %s", runtime.GOOS, runtime.GOARCH)
 	// Distribution is changed by the CCL init-time hook in non-APL builds.
-	Distribution  = "OSS"
-	typ           string // Type of this build: <empty>, "development", or "release"
-	channel       = "unknown"
-	envChannel    = envutil.EnvOrDefaultString("COCKROACH_CHANNEL", "unknown")
-	binaryVersion = computeVersion(tag)
+	Distribution         = "OSS"
+	typ                  string // Type of this build: <empty>, "development", or "release"
+	channel              = "unknown"
+	envChannel           = envutil.EnvOrDefaultString("COCKROACH_CHANNEL", "unknown")
+	releaseBinaryVersion = computeVersion(tag)
+	//go:embed release-series.txt
+	releaseSeries string
 )
 
 // IsRelease returns true if the binary was produced by a "release" build.
@@ -56,23 +59,37 @@ func SeemsOfficial() bool {
 func computeVersion(tag string) string {
 	v, err := version.Parse(tag)
 	if err != nil {
+		if IsRelease() {
+			panic(fmt.Sprintf("invalid version for release binary: %v", err))
+		}
+
 		return "dev"
 	}
 	return v.String()
 }
 
-// BinaryVersion returns the version prefix, patch number and metadata of the current build.
+// BinaryVersion returns the version precise binary version (including
+// patch number) for released binaries; otherwise, it returns the
+// release series along with the revision used to build cockroach.
 func BinaryVersion() string {
-	return binaryVersion
+	// Use the binary version computed from a tag as that will be more
+	// descriptive, i.e., it will include a patch number and prerelease
+	// information. Released binaries are generated from TeamCity builds
+	// and should have reliably up-to-date tags.
+	if IsRelease() {
+		return releaseBinaryVersion
+	}
+
+	return fmt.Sprintf("v%s-%s", releaseSeries, rev)
 }
 
 // BinaryVersionPrefix returns the version prefix of the current build.
 func BinaryVersionPrefix() string {
-	v, err := version.Parse(tag)
-	if err != nil {
-		return "dev"
-	}
-	return fmt.Sprintf("v%d.%d", v.Major(), v.Minor())
+	return fmt.Sprintf("v%s", releaseSeries)
+}
+
+func ReleaseSeries() string {
+	return releaseSeries
 }
 
 func init() {
@@ -151,10 +168,10 @@ func GetInfo() Info {
 // TestingOverrideTag allows tests to override the build tag.
 func TestingOverrideTag(t string) func() {
 	prev := tag
-	prevVersion := binaryVersion
+	prevVersion := releaseBinaryVersion
 	tag = t
-	binaryVersion = computeVersion(tag)
-	return func() { tag = prev; binaryVersion = prevVersion }
+	releaseBinaryVersion = computeVersion(tag)
+	return func() { tag = prev; releaseBinaryVersion = prevVersion }
 }
 
 // MakeIssueURL produces a URL to a CockroachDB issue.

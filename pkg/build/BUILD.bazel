@@ -12,6 +12,7 @@ go_library(
     ],
     cgo = True,
     embed = [":build_go_proto"],
+    embedsrcs = ["release-series.txt"],
     importpath = "github.com/cockroachdb/cockroach/pkg/build",
     visibility = ["//visibility:public"],
     x_defs = {
