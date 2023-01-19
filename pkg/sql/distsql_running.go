@@ -43,7 +43,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -100,23 +99,25 @@ type runnerResult struct {
 // run executes the request. An error, if encountered, is both sent on the
 // result channel and returned.
 func (req runnerRequest) run() error {
-	defer physicalplan.ReleaseFlowSpec(&req.flowReq.Flow)
 	res := runnerResult{nodeID: req.sqlInstanceID}
+	defer func() {
+		req.resultChan <- res
+		physicalplan.ReleaseFlowSpec(&req.flowReq.Flow)
+	}()
 
 	conn, err := req.podNodeDialer.Dial(req.ctx, roachpb.NodeID(req.sqlInstanceID), rpc.DefaultClass)
 	if err != nil {
 		res.err = err
-	} else {
-		client := execinfrapb.NewDistSQLClient(conn)
-		// TODO(radu): do we want a timeout here?
-		resp, err := client.SetupFlow(req.ctx, req.flowReq)
-		if err != nil {
-			res.err = err
-		} else {
-			res.err = resp.Error.ErrorDetail(req.ctx)
-		}
+		return err
 	}
-	req.resultChan <- res
+	client := execinfrapb.NewDistSQLClient(conn)
+	// TODO(radu): do we want a timeout here?
+	resp, err := client.SetupFlow(req.ctx, req.flowReq)
+	if err != nil {
+		res.err = err
+	} else {
+		res.err = resp.Error.ErrorDetail(req.ctx)
+	}
 	return res.err
 }
 
@@ -464,12 +465,13 @@ func (dsp *DistSQLPlanner) setupFlows(
 
 	// Start all the remote flows.
 	//
-	// numAsyncRequests tracks the number of the SetupFlow RPCs that were
-	// delegated to the DistSQL runner goroutines.
-	var numAsyncRequests int
-	// numSerialRequests tracks the number of the SetupFlow RPCs that were
-	// issued by the current goroutine on its own.
-	var numSerialRequests int
+	// usedWorker indicates whether we used at least one DistSQL worker
+	// goroutine to issue the SetupFlow RPC.
+	var usedWorker bool
+	// numIssuedRequests tracks the number of the SetupFlow RPCs that were
+	// issued (either by the current goroutine directly or delegated to the
+	// DistSQL workers).
+	var numIssuedRequests int
 	if sp := tracing.SpanFromContext(origCtx); sp != nil && !sp.IsNoop() {
 		setupReq.TraceInfo = sp.Meta().ToProto()
 	}
@@ -515,7 +517,7 @@ func (dsp *DistSQLPlanner) setupFlows(
 			//
 			// Note that even in case of an error in runnerRequest.run we still
 			// send on the result channel.
-			for i := 0; i < numAsyncRequests+numSerialRequests; i++ {
+			for i := 0; i < numIssuedRequests; i++ {
 				<-resultChan
 			}
 			// At this point, we know that all concurrent requests (if there
@@ -541,11 +543,11 @@ func (dsp *DistSQLPlanner) setupFlows(
 
 		// Send out a request to the workers; if no worker is available, run
 		// directly.
+		numIssuedRequests++
 		select {
 		case dsp.runnerCoordinator.runnerChan <- runReq:
-			numAsyncRequests++
+			usedWorker = true
 		default:
-			numSerialRequests++
 			// Use the context of the local flow since we're executing this
 			// SetupFlow RPC synchronously.
 			runReq.ctx = ctx
@@ -554,16 +556,8 @@ func (dsp *DistSQLPlanner) setupFlows(
 			}
 		}
 	}
-	if buildutil.CrdbTestBuild {
-		if numAsyncRequests+numSerialRequests != len(flows)-1 {
-			return ctx, flow, errors.AssertionFailedf(
-				"expected %d requests, found only %d async and %d serial",
-				len(flows)-1, numAsyncRequests, numSerialRequests,
-			)
-		}
-	}
 
-	if numAsyncRequests == 0 {
+	if !usedWorker {
 		// We executed all SetupFlow RPCs in the current goroutine, and all RPCs
 		// succeeded.
 		return ctx, flow, nil
