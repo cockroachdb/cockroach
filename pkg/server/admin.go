@@ -1948,7 +1948,7 @@ func (s *adminServer) Settings(
 		keys = settings.Keys(settings.ForSystemTenant)
 	}
 
-	user, isAdmin, err := s.getUserAndRole(ctx)
+	_, isAdmin, err := s.getUserAndRole(ctx)
 	if err != nil {
 		return nil, serverError(ctx, err)
 	}
@@ -1965,24 +1965,8 @@ func (s *adminServer) Settings(
 	} else {
 		// Non-root access cannot see the values in any case.
 		lookupPurpose = settings.LookupForReporting
-
-		hasView := s.checkHasGlobalPrivilege(ctx, user, privilege.VIEWCLUSTERSETTING)
-		hasModify := s.checkHasGlobalPrivilege(ctx, user, privilege.MODIFYCLUSTERSETTING)
-		if !hasModify && !hasView {
-			hasView, err := s.hasRoleOption(ctx, user, roleoption.VIEWCLUSTERSETTING)
-			if err != nil {
-				return nil, err
-			}
-
-			hasModify, err := s.hasRoleOption(ctx, user, roleoption.MODIFYCLUSTERSETTING)
-			if err != nil {
-				return nil, err
-			}
-			if !hasModify && !hasView {
-				return nil, grpcstatus.Errorf(
-					codes.PermissionDenied, "this operation requires either %s or %s system privileges",
-					privilege.VIEWCLUSTERSETTING, privilege.MODIFYCLUSTERSETTING)
-			}
+		if err := s.adminPrivilegeChecker.requireViewClusterSettingOrModifyClusterSettingPermission(ctx); err != nil {
+			return nil, err
 		}
 	}
 
@@ -3712,21 +3696,22 @@ func (c *adminPrivilegeChecker) requireViewActivityPermission(ctx context.Contex
 	if err != nil {
 		return serverError(ctx, err)
 	}
-	if !isAdmin {
-		hasView := c.checkHasGlobalPrivilege(ctx, userName, privilege.VIEWACTIVITY)
-		if !hasView {
-			hasView, err := c.hasRoleOption(ctx, userName, roleoption.VIEWACTIVITY)
-			if err != nil {
-				return serverError(ctx, err)
-			}
-			if !hasView {
-				return grpcstatus.Errorf(
-					codes.PermissionDenied, "this operation requires the %s system privilege",
-					roleoption.VIEWACTIVITY)
-			}
-		}
+	if isAdmin {
+		return nil
 	}
-	return nil
+	if hasView, err := c.hasGlobalPrivilege(ctx, userName, privilege.VIEWACTIVITY); err != nil {
+		return serverError(ctx, err)
+	} else if hasView {
+		return nil
+	}
+	if hasView, err := c.hasRoleOption(ctx, userName, roleoption.VIEWACTIVITY); err != nil {
+		return serverError(ctx, err)
+	} else if hasView {
+		return nil
+	}
+	return grpcstatus.Errorf(
+		codes.PermissionDenied, "this operation requires the %s system privilege",
+		roleoption.VIEWACTIVITY)
 }
 
 // requireViewActivityOrViewActivityRedactedPermission's error return is a gRPC error.
@@ -3737,26 +3722,68 @@ func (c *adminPrivilegeChecker) requireViewActivityOrViewActivityRedactedPermiss
 	if err != nil {
 		return serverError(ctx, err)
 	}
-	if !isAdmin {
-		hasView := c.checkHasGlobalPrivilege(ctx, userName, privilege.VIEWACTIVITY)
-		hasViewRedacted := c.checkHasGlobalPrivilege(ctx, userName, privilege.VIEWACTIVITYREDACTED)
-		if !hasView && !hasViewRedacted {
-			hasView, err := c.hasRoleOption(ctx, userName, roleoption.VIEWACTIVITY)
-			if err != nil {
-				return serverError(ctx, err)
-			}
-			hasViewRedacted, err := c.hasRoleOption(ctx, userName, roleoption.VIEWACTIVITYREDACTED)
-			if err != nil {
-				return serverError(ctx, err)
-			}
-			if !hasView && !hasViewRedacted {
-				return grpcstatus.Errorf(
-					codes.PermissionDenied, "this operation requires the %s or %s system privileges",
-					roleoption.VIEWACTIVITY, roleoption.VIEWACTIVITYREDACTED)
-			}
-		}
+	if isAdmin {
+		return nil
 	}
-	return nil
+	if hasView, err := c.hasGlobalPrivilege(ctx, userName, privilege.VIEWACTIVITY); err != nil {
+		return serverError(ctx, err)
+	} else if hasView {
+		return nil
+	}
+	if hasViewRedacted, err := c.hasGlobalPrivilege(ctx, userName, privilege.VIEWACTIVITYREDACTED); err != nil {
+		return serverError(ctx, err)
+	} else if hasViewRedacted {
+		return nil
+	}
+	if hasView, err := c.hasRoleOption(ctx, userName, roleoption.VIEWACTIVITY); err != nil {
+		return serverError(ctx, err)
+	} else if hasView {
+		return nil
+	}
+	if hasViewRedacted, err := c.hasRoleOption(ctx, userName, roleoption.VIEWACTIVITYREDACTED); err != nil {
+		return serverError(ctx, err)
+	} else if hasViewRedacted {
+		return nil
+	}
+	return grpcstatus.Errorf(
+		codes.PermissionDenied, "this operation requires the %s or %s system privileges",
+		roleoption.VIEWACTIVITY, roleoption.VIEWACTIVITYREDACTED)
+}
+
+// requireViewClusterSettingOrModifyClusterSettingPermission's error return is a gRPC error.
+func (c *adminPrivilegeChecker) requireViewClusterSettingOrModifyClusterSettingPermission(
+	ctx context.Context,
+) (err error) {
+	userName, isAdmin, err := c.getUserAndRole(ctx)
+	if err != nil {
+		return serverError(ctx, err)
+	}
+	if isAdmin {
+		return nil
+	}
+	if hasView, err := c.hasGlobalPrivilege(ctx, userName, privilege.VIEWCLUSTERSETTING); err != nil {
+		return serverError(ctx, err)
+	} else if hasView {
+		return nil
+	}
+	if hasModify, err := c.hasGlobalPrivilege(ctx, userName, privilege.MODIFYCLUSTERSETTING); err != nil {
+		return serverError(ctx, err)
+	} else if hasModify {
+		return nil
+	}
+	if hasView, err := c.hasRoleOption(ctx, userName, roleoption.VIEWCLUSTERSETTING); err != nil {
+		return serverError(ctx, err)
+	} else if hasView {
+		return nil
+	}
+	if hasModify, err := c.hasRoleOption(ctx, userName, roleoption.MODIFYCLUSTERSETTING); err != nil {
+		return serverError(ctx, err)
+	} else if hasModify {
+		return nil
+	}
+	return grpcstatus.Errorf(
+		codes.PermissionDenied, "this operation requires the %s or %s system privileges",
+		privilege.VIEWCLUSTERSETTING, privilege.MODIFYCLUSTERSETTING)
 }
 
 // This function requires that the user have the VIEWACTIVITY role, but does not
@@ -3771,7 +3798,10 @@ func (c *adminPrivilegeChecker) requireViewActivityAndNoViewActivityRedactedPerm
 	}
 
 	if !isAdmin {
-		hasViewRedacted := c.checkHasGlobalPrivilege(ctx, userName, privilege.VIEWACTIVITYREDACTED)
+		hasViewRedacted, err := c.hasGlobalPrivilege(ctx, userName, privilege.VIEWACTIVITYREDACTED)
+		if err != nil {
+			return serverError(ctx, err)
+		}
 		if !hasViewRedacted {
 			hasViewRedacted, err := c.hasRoleOption(ctx, userName, roleoption.VIEWACTIVITYREDACTED)
 			if err != nil {
@@ -3801,14 +3831,17 @@ func (c *adminPrivilegeChecker) requireViewClusterMetadataPermission(
 	if err != nil {
 		return serverError(ctx, err)
 	}
-	if !isAdmin {
-		if hasViewClusterMetadata := c.checkHasGlobalPrivilege(ctx, userName, privilege.VIEWCLUSTERMETADATA); !hasViewClusterMetadata {
-			return grpcstatus.Errorf(
-				codes.PermissionDenied, "this operation requires the %s system privilege",
-				privilege.VIEWCLUSTERMETADATA)
-		}
+	if isAdmin {
+		return nil
 	}
-	return nil
+	if hasViewClusterMetadata, err := c.hasGlobalPrivilege(ctx, userName, privilege.VIEWCLUSTERMETADATA); err != nil {
+		return serverError(ctx, err)
+	} else if hasViewClusterMetadata {
+		return nil
+	}
+	return grpcstatus.Errorf(
+		codes.PermissionDenied, "this operation requires the %s system privilege",
+		privilege.VIEWCLUSTERMETADATA)
 }
 
 // requireViewDebugPermission requires the user have admin or the VIEWDEBUG system privilege
@@ -3818,14 +3851,17 @@ func (c *adminPrivilegeChecker) requireViewDebugPermission(ctx context.Context) 
 	if err != nil {
 		return serverError(ctx, err)
 	}
-	if !isAdmin {
-		if hasViewDebug := c.checkHasGlobalPrivilege(ctx, userName, privilege.VIEWDEBUG); !hasViewDebug {
-			return grpcstatus.Errorf(
-				codes.PermissionDenied, "this operation requires the %s system privilege",
-				privilege.VIEWDEBUG)
-		}
+	if isAdmin {
+		return nil
 	}
-	return nil
+	if hasViewDebug, err := c.hasGlobalPrivilege(ctx, userName, privilege.VIEWDEBUG); err != nil {
+		return serverError(ctx, err)
+	} else if hasViewDebug {
+		return nil
+	}
+	return grpcstatus.Errorf(
+		codes.PermissionDenied, "this operation requires the %s system privilege",
+		privilege.VIEWDEBUG)
 }
 
 // Note that the function returns plain errors, and it is the caller's
@@ -3899,17 +3935,16 @@ func (c *adminPrivilegeChecker) hasRoleOption(
 	return bool(dbDatum), nil
 }
 
-// checkHasGlobalPrivilege is a helper function which calls
+// hasGlobalPrivilege is a helper function which calls
 // CheckPrivilege and returns a true/false based on the returned
 // result.
-func (c *adminPrivilegeChecker) checkHasGlobalPrivilege(
+func (c *adminPrivilegeChecker) hasGlobalPrivilege(
 	ctx context.Context, user username.SQLUsername, privilege privilege.Kind,
-) bool {
+) (bool, error) {
 	planner, cleanup := c.makePlanner("check-system-privilege")
 	defer cleanup()
 	aa := planner.(sql.AuthorizationAccessor)
-	err := aa.CheckPrivilegeForUser(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege, user)
-	return err == nil
+	return aa.HasPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege, user)
 }
 
 var errRequiresAdmin = grpcstatus.Error(codes.PermissionDenied, "this operation requires admin privilege")

@@ -1250,7 +1250,7 @@ var pgBuiltins = map[string]builtinDefinition{
 			if err != nil {
 				return eval.HasNoPrivilege, err
 			}
-			return evalCtx.Planner.HasAnyPrivilege(ctx, specifier, user, privs)
+			return evalCtx.Planner.HasAnyPrivilegeForSpecifier(ctx, specifier, user, privs)
 		},
 	),
 
@@ -1278,7 +1278,7 @@ var pgBuiltins = map[string]builtinDefinition{
 			if err != nil {
 				return eval.HasNoPrivilege, err
 			}
-			return evalCtx.Planner.HasAnyPrivilege(ctx, specifier, user, privs)
+			return evalCtx.Planner.HasAnyPrivilegeForSpecifier(ctx, specifier, user, privs)
 		},
 	),
 
@@ -1307,7 +1307,7 @@ var pgBuiltins = map[string]builtinDefinition{
 				return eval.HasNoPrivilege, err
 			}
 
-			return evalCtx.Planner.HasAnyPrivilege(ctx, specifier, user, privs)
+			return evalCtx.Planner.HasAnyPrivilegeForSpecifier(ctx, specifier, user, privs)
 		},
 	),
 
@@ -1388,7 +1388,7 @@ var pgBuiltins = map[string]builtinDefinition{
 
 			// For user-defined function, utilize the descriptor based way.
 			if catid.IsOIDUserDefined(oid.(*tree.DOid).Oid) {
-				return evalCtx.Planner.HasAnyPrivilege(ctx, specifier, evalCtx.SessionData().User(), privs)
+				return evalCtx.Planner.HasAnyPrivilegeForSpecifier(ctx, specifier, evalCtx.SessionData().User(), privs)
 			}
 
 			// For builtin functions, all users should have `EXECUTE` privilege, but
@@ -1465,7 +1465,7 @@ var pgBuiltins = map[string]builtinDefinition{
 				return eval.ObjectNotFound, nil
 			}
 
-			return evalCtx.Planner.HasAnyPrivilege(ctx, specifier, user, privs)
+			return evalCtx.Planner.HasAnyPrivilegeForSpecifier(ctx, specifier, user, privs)
 		},
 	),
 
@@ -1491,7 +1491,7 @@ var pgBuiltins = map[string]builtinDefinition{
 			if err != nil {
 				return eval.HasPrivilege, err
 			}
-			return evalCtx.Planner.HasAnyPrivilege(ctx, specifier, user, privs)
+			return evalCtx.Planner.HasAnyPrivilegeForSpecifier(ctx, specifier, user, privs)
 		},
 	),
 
@@ -1564,7 +1564,7 @@ var pgBuiltins = map[string]builtinDefinition{
 			if err != nil {
 				return eval.HasNoPrivilege, err
 			}
-			return evalCtx.Planner.HasAnyPrivilege(ctx, specifier, user, privs)
+			return evalCtx.Planner.HasAnyPrivilegeForSpecifier(ctx, specifier, user, privs)
 		},
 	),
 

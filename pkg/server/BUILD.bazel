@@ -230,6 +230,7 @@ go_library(
         "//pkg/storage",
         "//pkg/storage/enginepb",
         "//pkg/storage/fs",
+        "//pkg/testutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/skip",
         "//pkg/ts",

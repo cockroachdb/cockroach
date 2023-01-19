@@ -26,6 +26,7 @@ state offset=47
 /Table/5{2-3}                              database system (host)
 /Table/5{3-4}                              database system (host)
 /Tenant/10{-\x00}                          database system (tenant)
+/Tenant/11{-\x00}                          database system (tenant)
 
 # Write a protected timestamp record on the system tenant cluster.
 protect record-id=1 ts=1

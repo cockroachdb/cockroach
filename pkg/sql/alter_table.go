@@ -98,7 +98,7 @@ func (p *planner) AlterTable(ctx context.Context, n *tree.AlterTable) (planNode,
 
 	// This check for CREATE privilege is kept for backwards compatibility.
 	if err := p.CheckPrivilege(ctx, tableDesc, privilege.CREATE); err != nil {
-		return nil, pgerror.Newf(pgcode.InsufficientPrivilege,
+		return nil, pgerror.Wrapf(err, pgcode.InsufficientPrivilege,
 			"must be owner of table %s or have CREATE privilege on table %s",
 			tree.Name(tableDesc.GetName()), tree.Name(tableDesc.GetName()))
 	}
@@ -860,7 +860,10 @@ func (p *planner) setAuditMode(
 	}
 	if !hasAdmin {
 		// Check for system privilege first, otherwise fall back to role options.
-		hasModify := p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.MODIFYCLUSTERSETTING) == nil
+		hasModify, err := p.HasPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.MODIFYCLUSTERSETTING, p.User())
+		if err != nil {
+			return false, err
+		}
 		if !hasModify {
 			hasModify, err = p.HasRoleOption(ctx, roleoption.MODIFYCLUSTERSETTING)
 			if err != nil {

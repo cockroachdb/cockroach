@@ -264,6 +264,7 @@ func (tc testCase) runTest(
 		testServer.Stopper(),
 	)
 
+	var secondaryTenants []serverutils.TestTenantInterface
 	createSecondaryDB := func(tenantID roachpb.TenantID, skipSQLSystemTentantCheck bool, clusterSettings ...*settings.BoolSetting) *gosql.DB {
 		testingClusterSettings := cluster.MakeTestingClusterSettings()
 		for _, clusterSetting := range clusterSettings {
@@ -271,7 +272,7 @@ func (tc testCase) runTest(
 				clusterSetting.Override(ctx, &testingClusterSettings.SV, true)
 			}
 		}
-		_, db := serverutils.StartTenant(
+		tenant, db := serverutils.StartTenant(
 			t, testServer, base.TestTenantArgs{
 				Settings: testingClusterSettings,
 				TestingKnobs: base.TestingKnobs{
@@ -282,6 +283,7 @@ func (tc testCase) runTest(
 				TenantID: tenantID,
 			},
 		)
+		secondaryTenants = append(secondaryTenants, tenant)
 		return db
 	}
 
@@ -305,6 +307,12 @@ func (tc testCase) runTest(
 		cfg.setupClusterSetting,
 		cfg.queryClusterSetting,
 	)
+
+	// Wait for splits after starting all tenants to make test start up faster.
+	for _, tenant := range secondaryTenants {
+		err := tenant.WaitForTenantEndKeySplit(ctx)
+		require.NoError(t, err)
+	}
 
 	execQueries(testCluster, systemDB, "system", tc.system)
 	execQueries(testCluster, secondaryDB, "secondary", tc.secondary)
@@ -556,6 +564,12 @@ func TestTruncateTable(t *testing.T) {
 			result: [][]string{
 				{"<before:/Tenant/10/Table/104/1/1>", "…/104/2/1"},
 				{"…/104/2/1", "<after:/Tenant/11>"},
+			},
+		},
+		secondaryWithoutCapability: tenantExpected{
+			result: [][]string{
+				{"<before:/Tenant/20/Table/104/1/1>", "…/104/2/1"},
+				{"…/104/2/1", "<after:/Tenant/21>"},
 			},
 		},
 		setupClusterSetting: sql.SecondaryTenantSplitAtEnabled,
