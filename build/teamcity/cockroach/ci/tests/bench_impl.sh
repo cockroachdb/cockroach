@@ -28,6 +28,6 @@ do
     # We need the `test_sharding_strategy` flag or else the benchmarks will
     # fail to run sharded tests like //pkg/sql/importer:importer_test.
     bazel run --config=test --config=$CROSSLINUX_CONFIG --config=ci --test_sharding_strategy=disabled $target -- \
-          -test.bench=. -test.benchtime=1ns -test.short -test.run=-
+          -test.bench=. -test.benchtime=1x -test.short -test.run=-
     tc_end_block "Bench $target"
 done
