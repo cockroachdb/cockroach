@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -637,7 +638,10 @@ func (r *Replica) applySnapshot(
 	// problematic, as it would prevent this store from ever having a new replica
 	// of the removed range. In this case, however, it's copacetic, as subsumed
 	// ranges _can't_ have new replicas.
-	if err := r.clearSubsumedReplicaDiskData(ctx, inSnap.SSTStorageScratch, desc, subsumedRepls, mergedTombstoneReplicaID); err != nil {
+	if err := clearSubsumedReplicaDiskData(
+		ctx, r.store.ClusterSettings(), r.store.Engine(), inSnap.SSTStorageScratch,
+		desc, subsumedRepls, mergedTombstoneReplicaID,
+	); err != nil {
 		return err
 	}
 	stats.subsumedReplicas = timeutil.Now()
@@ -794,9 +798,13 @@ func (r *Replica) applySnapshot(
 // replicas by creating SSTs with range deletion tombstones. We have to be
 // careful here not to have overlapping ranges with the SSTs we have already
 // created since that will throw an error while we are ingesting them. This
-// method requires that each of the subsumed replicas raftMu is held.
-func (r *Replica) clearSubsumedReplicaDiskData(
+// method requires that each of the subsumed replicas raftMu is held, and that
+// the Reader reflects the latest I/O each of the subsumed replicas has done
+// (i.e. Reader was instantiated after all raftMu were acquired).
+func clearSubsumedReplicaDiskData(
 	ctx context.Context,
+	st *cluster.Settings,
+	reader storage.Reader,
 	scratch *SSTSnapshotStorageScratch,
 	desc *roachpb.RangeDescriptor,
 	subsumedRepls []*Replica,
@@ -826,7 +834,7 @@ func (r *Replica) clearSubsumedReplicaDiskData(
 		// We have to create an SST for the subsumed replica's range-id local keys.
 		subsumedReplSSTFile := &storage.MemFile{}
 		subsumedReplSST := storage.MakeIngestionSSTWriter(
-			ctx, r.ClusterSettings(), subsumedReplSSTFile,
+			ctx, st, subsumedReplSSTFile,
 		)
 		defer subsumedReplSST.Close()
 		// NOTE: We set mustClearRange to true because we are setting
@@ -839,7 +847,7 @@ func (r *Replica) clearSubsumedReplicaDiskData(
 		}
 		if err := sr.preDestroyRaftMuLocked(
 			ctx,
-			r.store.Engine(),
+			reader,
 			&subsumedReplSST,
 			subsumedNextReplicaID,
 			opts,
@@ -888,11 +896,11 @@ func (r *Replica) clearSubsumedReplicaDiskData(
 		if totalKeySpans[i].EndKey.Compare(keySpans[i].EndKey) > 0 {
 			subsumedReplSSTFile := &storage.MemFile{}
 			subsumedReplSST := storage.MakeIngestionSSTWriter(
-				ctx, r.ClusterSettings(), subsumedReplSSTFile,
+				ctx, st, subsumedReplSSTFile,
 			)
 			defer subsumedReplSST.Close()
 			if err := storage.ClearRangeWithHeuristic(
-				r.store.Engine(),
+				reader,
 				&subsumedReplSST,
 				keySpans[i].EndKey,
 				totalKeySpans[i].EndKey,
