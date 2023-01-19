@@ -147,33 +147,39 @@ vectorized: true
               spans: LIMITED SCAN
               limit: 1
 
-# TODO(mgartner): The uncorrelated subquery in the UDF body should be executed
-# only once.
+# The uncorrelated subquery in the UDF body is executed only once.
 query T kvtrace
 SELECT sub_fn()
 ----
 Scan /Table/112/{1-2}
 Scan /Table/113/{1-2}
-Scan /Table/113/{1-2}
-Scan /Table/113/{1-2}
 
-# TODO(mgartner): The uncorrelated subquery in the UDF body should be executed
-# only once per row produced by generate_series.
+# The uncorrelated subquery in the UDF body is executed only once per row
+# produced by generate_series.
 query T kvtrace
 SELECT sub_fn() FROM generate_series(1, 3)
 ----
 Scan /Table/112/{1-2}
 Scan /Table/113/{1-2}
-Scan /Table/113/{1-2}
+Scan /Table/112/{1-2}
 Scan /Table/113/{1-2}
 Scan /Table/112/{1-2}
 Scan /Table/113/{1-2}
-Scan /Table/113/{1-2}
-Scan /Table/113/{1-2}
+
+statement ok
+CREATE FUNCTION sub_fn2() RETURNS INT LANGUAGE SQL AS 'SELECT a FROM sub1 WHERE a = (SELECT a FROM sub2 WHERE a = 30)'
+
+# The uncorrelated subquery in the UDF body is fully optimized - it performs
+# a constrained scan of sub2.
+query T kvtrace
+SELECT sub_fn2() FROM generate_series(1, 3)
+----
 Scan /Table/112/{1-2}
-Scan /Table/113/{1-2}
-Scan /Table/113/{1-2}
-Scan /Table/113/{1-2}
+Scan /Table/113/1/30/0
+Scan /Table/112/{1-2}
+Scan /Table/113/1/30/0
+Scan /Table/112/{1-2}
+Scan /Table/113/1/30/0
 
 
 subtest regressions
