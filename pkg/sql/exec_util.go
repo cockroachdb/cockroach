@@ -2062,7 +2062,7 @@ type SessionArgs struct {
 // SessionRegistry stores a set of all sessions on this node.
 // Use register() and deregister() to modify this registry.
 type SessionRegistry struct {
-	syncutil.Mutex
+	syncutil.RWMutex
 	sessions            map[clusterunique.ID]registrySession
 	sessionsByCancelKey map[pgwirecancel.BackendKeyData]registrySession
 }
@@ -2074,6 +2074,36 @@ func NewSessionRegistry() *SessionRegistry {
 		sessions:            make(map[clusterunique.ID]registrySession),
 		sessionsByCancelKey: make(map[pgwirecancel.BackendKeyData]registrySession),
 	}
+}
+
+func (r *SessionRegistry) getSessionByID(id clusterunique.ID) (registrySession, bool) {
+	r.RLock()
+	defer r.RUnlock()
+	session, ok := r.sessions[id]
+	return session, ok
+}
+
+func (r *SessionRegistry) getSessionByCancelKey(
+	cancelKey pgwirecancel.BackendKeyData,
+) (registrySession, bool) {
+	r.RLock()
+	defer r.RUnlock()
+	session, ok := r.sessionsByCancelKey[cancelKey]
+	return session, ok
+}
+
+func (r *SessionRegistry) getSessions(lock bool) []registrySession {
+	if lock {
+		r.RLock()
+		defer r.RUnlock()
+	}
+	sessions := make([]registrySession, len(r.sessions))
+	i := 0
+	for _, session := range r.sessions {
+		sessions[i] = session
+		i++
+	}
+	return sessions
 }
 
 func (r *SessionRegistry) register(
@@ -2112,10 +2142,7 @@ func (r *SessionRegistry) CancelQuery(queryIDStr string) (bool, error) {
 		return false, errors.Wrapf(err, "query ID %s malformed", queryID)
 	}
 
-	r.Lock()
-	defer r.Unlock()
-
-	for _, session := range r.sessions {
+	for _, session := range r.getSessions(true /* lock */) {
 		if session.cancelQuery(queryID) {
 			return true, nil
 		}
@@ -2129,15 +2156,11 @@ func (r *SessionRegistry) CancelQuery(queryIDStr string) (bool, error) {
 func (r *SessionRegistry) CancelQueryByKey(
 	queryCancelKey pgwirecancel.BackendKeyData,
 ) (canceled bool, err error) {
-	r.Lock()
-	defer r.Unlock()
-	if session, ok := r.sessionsByCancelKey[queryCancelKey]; ok {
-		if session.cancelCurrentQueries() {
-			return true, nil
-		}
-		return false, nil
+	session, ok := r.getSessionByCancelKey(queryCancelKey)
+	if !ok {
+		return false, fmt.Errorf("session for cancel key %d not found", queryCancelKey)
 	}
-	return false, fmt.Errorf("session for cancel key %d not found", queryCancelKey)
+	return session.cancelCurrentQueries(), nil
 }
 
 // CancelSession looks up the specified session in the session registry and
@@ -2150,37 +2173,24 @@ func (r *SessionRegistry) CancelSession(
 	}
 	sessionID := clusterunique.IDFromBytes(sessionIDBytes)
 
-	r.Lock()
-	defer r.Unlock()
-
-	for id, session := range r.sessions {
-		if id == sessionID {
-			session.cancelSession()
-			return &serverpb.CancelSessionResponse{Canceled: true}, nil
-		}
+	session, ok := r.getSessionByID(sessionID)
+	if !ok {
+		return &serverpb.CancelSessionResponse{
+			Error: fmt.Sprintf("session ID %s not found", sessionID),
+		}, nil
 	}
-
-	return &serverpb.CancelSessionResponse{
-		Error: fmt.Sprintf("session ID %s not found", sessionID),
-	}, nil
+	session.cancelSession()
+	return &serverpb.CancelSessionResponse{Canceled: true}, nil
 }
 
 // SerializeAll returns a slice of all sessions in the registry, converted to serverpb.Sessions.
-func (r *SessionRegistry) SerializeAll() []serverpb.Session {
-	r.Lock()
-	defer r.Unlock()
-
-	return r.SerializeAllLocked()
-}
-
-// SerializeAllLocked is like SerializeAll but assumes SessionRegistry's mutex is locked.
-func (r *SessionRegistry) SerializeAllLocked() []serverpb.Session {
-	response := make([]serverpb.Session, 0, len(r.sessions))
-
-	for _, s := range r.sessions {
-		response = append(response, s.serialize())
+func (r *SessionRegistry) SerializeAll(lock bool) []serverpb.Session {
+	sessions := r.getSessions(lock)
+	response := make([]serverpb.Session, len(sessions))
+	i := 0
+	for _, s := range sessions {
+		response[i] = s.serialize()
 	}
-
 	return response
 }
 
