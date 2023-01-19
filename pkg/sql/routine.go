@@ -27,12 +27,16 @@ import (
 func (p *planner) EvalRoutineExpr(
 	ctx context.Context, expr *tree.RoutineExpr, input tree.Datums,
 ) (result tree.Datum, err error) {
-	retTypes := []*types.T{expr.ResolvedType()}
+	// Return the cached result if it exists.
+	if expr.CachedResult != nil {
+		return expr.CachedResult, nil
+	}
 
 	// The result of the routine is the result of the last statement. The result
 	// of any preceding statements is ignored. We set up a rowResultWriter that
 	// can store the results of the final statement here.
 	var rch rowContainerHelper
+	retTypes := []*types.T{expr.ResolvedType()}
 	rch.Init(ctx, retTypes, p.ExtendedEvalContext(), "routine" /* opName */)
 	defer rch.Close(ctx)
 	rrw := NewRowResultWriter(&rch)
@@ -101,15 +105,25 @@ func (p *planner) EvalRoutineExpr(
 	// datum.
 	rightRowsIterator := newRowContainerIterator(ctx, rch, retTypes)
 	defer rightRowsIterator.Close()
-	res, err := rightRowsIterator.Next()
+	row, err := rightRowsIterator.Next()
 	if err != nil {
 		return nil, err
 	}
-	if res == nil {
-		// Return NULL if there are no results.
-		return tree.DNull, nil
+	var res tree.Datum
+	if row == nil {
+		// The result is NULL if no rows were returned by the last statement.
+		res = tree.DNull
+	} else {
+		// The result is the first and only column in the row returned by the
+		// last statement.
+		res = row[0]
 	}
-	return res[0], nil
+	if len(expr.Args) == 0 && !expr.EnableStepping {
+		// Cache the result if there are zero arguments and stepping is
+		// disabled.
+		expr.CachedResult = res
+	}
+	return res, nil
 }
 
 // droppingResultWriter drops all rows that are added to it. It only tracks

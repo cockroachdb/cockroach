@@ -2359,6 +2359,41 @@ l1  l2  i1  i2  s1  s2  v1  v2
 2   2   2   2   2   2   12  12
 3   3   3   3   3   3   13  13
 
+statement ok
+CREATE SEQUENCE sq2;
+CREATE FUNCTION rand_i() RETURNS INT IMMUTABLE LANGUAGE SQL AS $$SELECT nextval('sq2')$$;
+CREATE FUNCTION rand_s() RETURNS INT STABLE    LANGUAGE SQL AS $$SELECT nextval('sq2')$$;
+CREATE FUNCTION rand_v() RETURNS INT VOLATILE  LANGUAGE SQL AS $$SELECT nextval('sq2')$$;
+
+# UDFs with mislabeled volatilities. The volatile functions incorrectly marked
+# immutable and stable are evaluated just once, either during optimization or
+# execution.
+#
+# Note: This particular example does not match the behavior of Postgres 14.6
+# exactly, where rand_s() returns a different value in each row. However,
+# Postgres can fold these stable functions in some situations. Specifically,
+# Postgres will fold a stable function if doing so allows it to plan a
+# constrained index scan. For example:
+#
+#   CREATE TABLE t (i INT PRIMARY KEY);
+#   INSERT INTO t SELECT * FROM generate_series(1, 1000000);
+#   ANALYZE t;
+#   CREATE FUNCTION rand_s() RETURNS INT STABLE LANGUAGE SQL AS 'SELECT (10*random())::INT';
+#   SELECT i FROM t WHERE i = rand_s();
+#
+# The query plan of the SELECT is a contrained index scan, with rand_s() only
+# being evalauated once. With this query plan, the SELECT always returns a
+# single row.
+#
+# So, our behavior is more aggressive in folding table functions, but this is
+# perfectly valid.
+query IIIIII rowsort
+SELECT rand_i(), rand_i(), rand_s(), rand_s(), rand_v(), rand_v() FROM generate_series(1, 3)
+----
+1  2  3  4  5  6
+1  2  3  4  7  8
+1  2  3  4  9  10
+
 
 subtest implicit_record_types
 
@@ -2840,10 +2875,10 @@ SELECT oid, proname, pronamespace, proowner, prolang, proleakproof, proisstrict,
 FROM pg_catalog.pg_proc WHERE proname IN ('f_93314', 'f_93314_alias', 'f_93314_comp', 'f_93314_comp_t')
 ORDER BY oid;
 ----
-100259  f_93314         105  1546506610  14  false  false  false  v  0  100258  ·  {}  NULL  SELECT i, e FROM test.public.t_93314 ORDER BY i LIMIT 1;
-100261  f_93314_alias   105  1546506610  14  false  false  false  v  0  100260  ·  {}  NULL  SELECT i, e FROM test.public.t_93314_alias ORDER BY i LIMIT 1;
-100265  f_93314_comp    105  1546506610  14  false  false  false  v  0  100262  ·  {}  NULL  SELECT (1, 2);
-100266  f_93314_comp_t  105  1546506610  14  false  false  false  v  0  100264  ·  {}  NULL  SELECT a, c FROM test.public.t_93314_comp LIMIT 1;
+100263  f_93314         105  1546506610  14  false  false  false  v  0  100262  ·  {}  NULL  SELECT i, e FROM test.public.t_93314 ORDER BY i LIMIT 1;
+100265  f_93314_alias   105  1546506610  14  false  false  false  v  0  100264  ·  {}  NULL  SELECT i, e FROM test.public.t_93314_alias ORDER BY i LIMIT 1;
+100269  f_93314_comp    105  1546506610  14  false  false  false  v  0  100266  ·  {}  NULL  SELECT (1, 2);
+100270  f_93314_comp_t  105  1546506610  14  false  false  false  v  0  100268  ·  {}  NULL  SELECT a, c FROM test.public.t_93314_comp LIMIT 1;
 
 # Regression test for #95240. Strict UDFs that are inlined should result in NULL
 # when presented with NULL arguments.
