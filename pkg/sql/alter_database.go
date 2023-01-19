@@ -473,10 +473,13 @@ func (p *planner) checkPrivilegesForMultiRegionOp(
 		// TODO(arul): It's worth noting CREATE isn't a thing on tables in postgres,
 		// so this will require some changes when (if) we move our privilege system
 		// to be more in line with postgres.
-		err := p.CheckPrivilege(ctx, desc, privilege.CREATE)
+		hasPriv, err := p.HasPrivilege(ctx, desc, privilege.CREATE, p.User())
+		if err != nil {
+			return err
+		}
 		// Wrap an insufficient privileges error a bit better to reflect the lack
 		// of ownership as well.
-		if pgerror.GetPGCode(err) == pgcode.InsufficientPrivilege {
+		if !hasPriv {
 			return pgerror.Newf(pgcode.InsufficientPrivilege,
 				"user %s must be owner of %s or have %s privilege on %s %s",
 				p.SessionData().User(),
@@ -486,7 +489,6 @@ func (p *planner) checkPrivilegesForMultiRegionOp(
 				desc.GetName(),
 			)
 		}
-		return err
 	}
 	return nil
 }

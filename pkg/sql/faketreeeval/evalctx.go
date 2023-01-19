@@ -65,8 +65,8 @@ func (so *DummySequenceOperators) SchemaExists(
 	return false, errors.WithStack(errSequenceOperators)
 }
 
-// HasAnyPrivilege is part of the eval.DatabaseCatalog interface.
-func (so *DummySequenceOperators) HasAnyPrivilege(
+// HasAnyPrivilegeForSpecifier is part of the eval.DatabaseCatalog interface.
+func (so *DummySequenceOperators) HasAnyPrivilegeForSpecifier(
 	ctx context.Context,
 	specifier eval.HasPrivilegeSpecifier,
 	user username.SQLUsername,
@@ -355,8 +355,8 @@ func (ep *DummyEvalPlanner) SchemaExists(ctx context.Context, dbName, scName str
 	return false, errors.WithStack(errEvalPlanner)
 }
 
-// HasAnyPrivilege is part of the eval.DatabaseCatalog interface.
-func (ep *DummyEvalPlanner) HasAnyPrivilege(
+// HasAnyPrivilegeForSpecifier is part of the eval.DatabaseCatalog interface.
+func (ep *DummyEvalPlanner) HasAnyPrivilegeForSpecifier(
 	ctx context.Context,
 	specifier eval.HasPrivilegeSpecifier,
 	user username.SQLUsername,
@@ -452,6 +452,13 @@ func (ep *DummyEvalPlanner) GetMultiregionConfig(
 // IsANSIDML is part of the eval.Planner interface.
 func (ep *DummyEvalPlanner) IsANSIDML() bool {
 	return false
+}
+
+// GetRangeDescByID is part of the eval.Planner interface.
+func (ep *DummyEvalPlanner) GetRangeDescByID(
+	context.Context, roachpb.RangeID,
+) (rangeDesc roachpb.RangeDescriptor, err error) {
+	return
 }
 
 // DummyPrivilegedAccessor implements the tree.PrivilegedAccessor interface by returning errors.

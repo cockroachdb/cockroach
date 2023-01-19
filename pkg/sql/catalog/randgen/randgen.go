@@ -221,6 +221,7 @@ type genError struct {
 type Catalog interface {
 	HasAdminRole(context.Context) (bool, error)
 	CheckAnyPrivilege(context.Context, privilege.Object) error
+	HasAnyPrivilege(context.Context, privilege.Object) (bool, error)
 	CanCreateDatabase(context.Context) error
 	CheckPrivilegeForUser(context.Context, privilege.Object, privilege.Kind, username.SQLUsername) error
 	ExpandTableGlob(context.Context, tree.TablePattern) (tree.TableNames, descpb.IDs, error)

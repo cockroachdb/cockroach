@@ -79,6 +79,12 @@ type AuthorizationAccessor interface {
 		ctx context.Context, tableID descpb.ID, privilege privilege.Kind,
 	) error
 
+	// HasPrivilege checks if the user has `privilege` on `descriptor`.
+	HasPrivilege(ctx context.Context, privilegeObject privilege.Object, privilege privilege.Kind, user username.SQLUsername) (bool, error)
+
+	// HasAnyPrivilege returns true if user has any privileges at all.
+	HasAnyPrivilege(ctx context.Context, privilegeObject privilege.Object) (bool, error)
+
 	// CheckPrivilege verifies that the user has `privilege` on `descriptor`.
 	CheckPrivilegeForUser(
 		ctx context.Context, privilegeObject privilege.Object, privilege privilege.Kind, user username.SQLUsername,
@@ -121,19 +127,18 @@ type AuthorizationAccessor interface {
 
 var _ AuthorizationAccessor = &planner{}
 
-// CheckPrivilegeForUser implements the AuthorizationAccessor interface.
-// Requires a valid transaction to be open.
-func (p *planner) CheckPrivilegeForUser(
+// HasPrivilege is part of the AuthorizationAccessor interface.
+func (p *planner) HasPrivilege(
 	ctx context.Context,
 	privilegeObject privilege.Object,
 	privilegeKind privilege.Kind,
 	user username.SQLUsername,
-) error {
+) (bool, error) {
 	// Verify that the txn is valid in any case, so that
 	// we don't get the risk to say "OK" to root requests
 	// with an invalid API usage.
 	if p.txn == nil {
-		return errors.AssertionFailedf("cannot use CheckPrivilege without a txn")
+		return false, errors.AssertionFailedf("cannot use CheckPrivilege without a txn")
 	}
 
 	// root, admin and node user should always have privileges.
@@ -148,9 +153,9 @@ func (p *planner) CheckPrivilegeForUser(
 		if privilege.GetValidPrivilegesForObject(
 			privilegeObject.GetObjectType(),
 		).Contains(privilegeKind) {
-			return nil
+			return true, nil
 		}
-		return insufficientPrivilegeError(user, privilegeKind, privilegeObject)
+		return false, nil
 	}
 
 	// Test whether the object is being audited, and if so, record an
@@ -162,12 +167,12 @@ func (p *planner) CheckPrivilegeForUser(
 
 	privs, err := p.getPrivilegeDescriptor(ctx, privilegeObject)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	// Check if the 'public' pseudo-role has privileges.
 	if privs.CheckPrivilege(username.PublicRoleName(), privilegeKind) {
-		return nil
+		return true, nil
 	}
 
 	hasPriv, err := p.checkRolePredicate(ctx, user, func(role username.SQLUsername) (bool, error) {
@@ -175,12 +180,78 @@ func (p *planner) CheckPrivilegeForUser(
 		return isOwner || privs.CheckPrivilege(role, privilegeKind), err
 	})
 	if err != nil {
-		return err
+		return false, err
 	}
 	if hasPriv {
-		return nil
+		return true, nil
 	}
-	return insufficientPrivilegeError(user, privilegeKind, privilegeObject)
+	return false, nil
+}
+
+// HasAnyPrivilege is part of the AuthorizationAccessor interface.
+func (p *planner) HasAnyPrivilege(
+	ctx context.Context, privilegeObject privilege.Object,
+) (bool, error) {
+	// Verify that the txn is valid in any case, so that
+	// we don't get the risk to say "OK" to root requests
+	// with an invalid API usage.
+	if p.txn == nil {
+		return false, errors.AssertionFailedf("cannot use CheckAnyPrivilege without a txn")
+	}
+
+	user := p.SessionData().User()
+	if user.IsNodeUser() {
+		// User "node" has all privileges.
+		return true, nil
+	}
+
+	privs, err := p.getPrivilegeDescriptor(ctx, privilegeObject)
+	if err != nil {
+		return false, err
+	}
+
+	// Check if 'user' itself has privileges.
+	if privs.AnyPrivilege(user) {
+		return true, nil
+	}
+
+	// Check if 'public' has privileges.
+	if privs.AnyPrivilege(username.PublicRoleName()) {
+		return true, nil
+	}
+
+	// Expand role memberships.
+	memberOf, err := p.MemberOfWithAdminOption(ctx, user)
+	if err != nil {
+		return false, err
+	}
+
+	// Iterate over the roles that 'user' is a member of. We don't care about the admin option.
+	for role := range memberOf {
+		if privs.AnyPrivilege(role) {
+			return true, nil
+		}
+	}
+
+	return false, nil
+}
+
+// CheckPrivilegeForUser implements the AuthorizationAccessor interface.
+// Requires a valid transaction to be open.
+func (p *planner) CheckPrivilegeForUser(
+	ctx context.Context,
+	privilegeObject privilege.Object,
+	privilegeKind privilege.Kind,
+	user username.SQLUsername,
+) error {
+	ok, err := p.HasPrivilege(ctx, privilegeObject, privilegeKind, user)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return insufficientPrivilegeError(user, privilegeKind, privilegeObject)
+	}
+	return nil
 }
 
 // CheckPrivilege implements the AuthorizationAccessor interface.
@@ -335,49 +406,15 @@ func (p *planner) checkRolePredicate(
 // CheckAnyPrivilege implements the AuthorizationAccessor interface.
 // Requires a valid transaction to be open.
 func (p *planner) CheckAnyPrivilege(ctx context.Context, privilegeObject privilege.Object) error {
-	// Verify that the txn is valid in any case, so that
-	// we don't get the risk to say "OK" to root requests
-	// with an invalid API usage.
-	if p.txn == nil {
-		return errors.AssertionFailedf("cannot use CheckAnyPrivilege without a txn")
-	}
-
 	user := p.SessionData().User()
-
-	if user.IsNodeUser() {
-		// User "node" has all privileges.
-		return nil
-	}
-
-	privs, err := p.getPrivilegeDescriptor(ctx, privilegeObject)
+	ok, err := p.HasAnyPrivilege(ctx, privilegeObject)
 	if err != nil {
 		return err
 	}
-
-	// Check if 'user' itself has privileges.
-	if privs.AnyPrivilege(user) {
-		return nil
+	if !ok {
+		return insufficientPrivilegeError(user, 0 /* kind */, privilegeObject)
 	}
-
-	// Check if 'public' has privileges.
-	if privs.AnyPrivilege(username.PublicRoleName()) {
-		return nil
-	}
-
-	// Expand role memberships.
-	memberOf, err := p.MemberOfWithAdminOption(ctx, user)
-	if err != nil {
-		return err
-	}
-
-	// Iterate over the roles that 'user' is a member of. We don't care about the admin option.
-	for role := range memberOf {
-		if privs.AnyPrivilege(role) {
-			return nil
-		}
-	}
-
-	return insufficientPrivilegeError(user, 0 /* kind */, privilegeObject)
+	return nil
 }
 
 // UserHasAdminRole implements the AuthorizationAccessor interface.
@@ -871,29 +908,32 @@ func (p *planner) HasOwnershipOnSchema(
 }
 
 func (p *planner) HasViewActivityOrViewActivityRedactedRole(ctx context.Context) (bool, error) {
-	hasAdmin, err := p.HasAdminRole(ctx)
-	if err != nil {
+	if hasAdmin, err := p.HasAdminRole(ctx); err != nil {
 		return hasAdmin, err
+	} else if hasAdmin {
+		return true, nil
 	}
-	if !hasAdmin {
-		hasView := p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWACTIVITY) == nil
-		hasViewRedacted := p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWACTIVITYREDACTED) == nil
-		if !hasView && !hasViewRedacted {
-			hasView, err := p.HasRoleOption(ctx, roleoption.VIEWACTIVITY)
-			if err != nil {
-				return hasView, err
-			}
-			hasViewRedacted, err := p.HasRoleOption(ctx, roleoption.VIEWACTIVITYREDACTED)
-			if err != nil {
-				return hasViewRedacted, err
-			}
-			if !hasView && !hasViewRedacted {
-				return false, nil
-			}
-		}
+	if hasView, err := p.HasPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWACTIVITY, p.User()); err != nil {
+		return false, err
+	} else if hasView {
+		return true, nil
 	}
-
-	return true, nil
+	if hasViewRedacted, err := p.HasPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWACTIVITYREDACTED, p.User()); err != nil {
+		return false, err
+	} else if hasViewRedacted {
+		return true, nil
+	}
+	if hasView, err := p.HasRoleOption(ctx, roleoption.VIEWACTIVITY); err != nil {
+		return false, err
+	} else if hasView {
+		return true, nil
+	}
+	if hasViewRedacted, err := p.HasRoleOption(ctx, roleoption.VIEWACTIVITYREDACTED); err != nil {
+		return false, err
+	} else if hasViewRedacted {
+		return true, nil
+	}
+	return false, nil
 }
 
 func insufficientPrivilegeError(

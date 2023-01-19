@@ -425,8 +425,13 @@ func checkPrivilegesForBackup(
 		for _, desc := range targetDescs {
 			switch desc := desc.(type) {
 			case catalog.DatabaseDescriptor:
-				hasRequiredBackupPrivileges = hasRequiredBackupPrivileges &&
-					p.CheckPrivilegeForUser(ctx, desc, privilege.BACKUP, p.User()) == nil
+				if hasRequiredBackupPrivileges {
+					if ok, err := p.HasPrivilege(ctx, desc, privilege.BACKUP, p.User()); err != nil {
+						return err
+					} else {
+						hasRequiredBackupPrivileges = ok
+					}
+				}
 			}
 		}
 	} else if backupStmt.Targets.Tables.TablePatterns != nil {
@@ -439,8 +444,13 @@ func checkPrivilegesForBackup(
 		for _, desc := range targetDescs {
 			switch desc := desc.(type) {
 			case catalog.TableDescriptor:
-				hasRequiredBackupPrivileges = hasRequiredBackupPrivileges &&
-					p.CheckPrivilegeForUser(ctx, desc, privilege.BACKUP, p.User()) == nil
+				if hasRequiredBackupPrivileges {
+					if ok, err := p.HasPrivilege(ctx, desc, privilege.BACKUP, p.User()); err != nil {
+						return err
+					} else {
+						hasRequiredBackupPrivileges = ok
+					}
+				}
 			}
 		}
 	} else {

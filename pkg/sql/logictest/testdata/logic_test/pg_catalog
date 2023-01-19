@@ -1631,9 +1631,9 @@ oid     typname                typnamespace  typowner    typlen  typbyval  typty
 21      int2                   4294967127    NULL        2       true      b
 22      int2vector             4294967127    NULL        -1      false     b
 23      int4                   4294967127    NULL        4       true      b
-24      regproc                4294967127    NULL        8       true      b
+24      regproc                4294967127    NULL        4       true      b
 25      text                   4294967127    NULL        -1      false     b
-26      oid                    4294967127    NULL        8       true      b
+26      oid                    4294967127    NULL        4       true      b
 30      oidvector              4294967127    NULL        -1      false     b
 700     float4                 4294967127    NULL        4       true      b
 701     float8                 4294967127    NULL        8       true      b
@@ -1676,9 +1676,9 @@ oid     typname                typnamespace  typowner    typlen  typbyval  typty
 1562    varbit                 4294967127    NULL        -1      false     b
 1563    _varbit                4294967127    NULL        -1      false     b
 1700    numeric                4294967127    NULL        -1      false     b
-2202    regprocedure           4294967127    NULL        8       true      b
-2205    regclass               4294967127    NULL        8       true      b
-2206    regtype                4294967127    NULL        8       true      b
+2202    regprocedure           4294967127    NULL        4       true      b
+2205    regclass               4294967127    NULL        4       true      b
+2206    regtype                4294967127    NULL        4       true      b
 2207    _regprocedure          4294967127    NULL        -1      false     b
 2210    _regclass              4294967127    NULL        -1      false     b
 2211    _regtype               4294967127    NULL        -1      false     b
@@ -1695,9 +1695,9 @@ oid     typname                typnamespace  typowner    typlen  typbyval  typty
 3645    _tsquery               4294967127    NULL        -1      false     b
 3802    jsonb                  4294967127    NULL        -1      false     b
 3807    _jsonb                 4294967127    NULL        -1      false     b
-4089    regnamespace           4294967127    NULL        8       true      b
+4089    regnamespace           4294967127    NULL        4       true      b
 4090    _regnamespace          4294967127    NULL        -1      false     b
-4096    regrole                4294967127    NULL        8       true      b
+4096    regrole                4294967127    NULL        4       true      b
 4097    _regrole               4294967127    NULL        -1      false     b
 90000   geometry               4294967127    NULL        -1      false     b
 90001   _geometry              4294967127    NULL        -1      false     b

@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/local"
@@ -159,6 +160,10 @@ type c2cMetrics struct {
 	cutoverStart sizeTime
 
 	cutoverEnd sizeTime
+
+	fingerprintingStart time.Time
+
+	fingerprintingEnd time.Time
 }
 
 func (m c2cMetrics) export() map[string]exportedMetric {
@@ -427,7 +432,7 @@ func registerClusterToCluster(r registry.Registry) {
 				})
 
 				cutoverTime := chooseCutover(t, setup.dst.sql, workloadDuration, sp.cutover)
-				t.Status("cutover time chosen: %s", cutoverTime.String())
+				t.Status(fmt.Sprintf("cutover time chosen: %s", cutoverTime.String()))
 
 				// TODO(ssd): The job doesn't record the initial
 				// statement time, so we can't correctly measure the
@@ -446,23 +451,19 @@ func registerClusterToCluster(r registry.Registry) {
 				m.Wait()
 
 				t.Status("waiting for replication stream to cutover")
+				retainedTime := getReplicationRetainedTime(t, setup.dst.sql, roachpb.TenantName(setup.dst.name))
 				setup.metrics.cutoverStart = newSizeTime(ctx, du, setup.dst.kvNodes)
 				stopReplicationStream(t, setup.dst.sql, ingestionJobID, cutoverTime)
 				setup.metrics.cutoverEnd = newSizeTime(ctx, du, setup.dst.kvNodes)
 
 				t.Status("comparing fingerprints")
-				// Currently, it takes about 15 minutes to generate a fingerprint for
-				// about 30 GB of data. Once the fingerprinting job is used instead,
-				// this should only take about 5 seconds for the same amount of data. At
-				// that point, we should increase the number of warehouses in this test.
-				//
-				// The new fingerprinting job currently OOMs this test. Once it becomes
-				// more efficient, it will be used.
 				compareTenantFingerprintsAtTimestamp(
 					t,
 					m,
 					setup,
-					hlc.Timestamp{WallTime: cutoverTime.UnixNano()})
+					retainedTime,
+					cutoverTime,
+				)
 				lv.assertValid(t)
 
 				// TODO(msbutler): export metrics to roachperf or prom/grafana
@@ -492,16 +493,21 @@ func chooseCutover(
 }
 
 func compareTenantFingerprintsAtTimestamp(
-	t test.Test, m cluster.Monitor, setup *c2cSetup, ts hlc.Timestamp,
+	t test.Test, m cluster.Monitor, setup *c2cSetup, startTime, endTime time.Time,
 ) {
+	t.Status(fmt.Sprintf("comparing tenant fingerprints between start time %s and end time %s", startTime.UTC(), endTime.UTC()))
+
+	// TODO(adityamaru,lidorcarmel): Once we agree on the format and precision we
+	// display all user facing timestamps with, we should revisit how we format
+	// the start time to ensure we are fingerprinting from the most accurate lower
+	// bound.
+	microSecondRFC3339Format := "2006-01-02 15:04:05.999999"
+	startTimeStr := startTime.Format(microSecondRFC3339Format)
+	aost := hlc.Timestamp{WallTime: endTime.UnixNano()}.AsOfSystemTime()
 	fingerprintQuery := fmt.Sprintf(`
-SELECT
-    xor_agg(
-        fnv64(crdb_internal.trim_tenant_prefix(key),
-              substring(value from 5))
-    ) AS fingerprint
-FROM crdb_internal.scan(crdb_internal.tenant_span($1::INT))
-AS OF SYSTEM TIME '%s'`, ts.AsOfSystemTime())
+SELECT *
+FROM crdb_internal.fingerprint(crdb_internal.tenant_span($1::INT), '%s'::TIMESTAMPTZ, true)
+AS OF SYSTEM TIME '%s'`, startTimeStr, aost)
 
 	var srcFingerprint int64
 	m.Go(func(ctx context.Context) error {
@@ -509,7 +515,15 @@ AS OF SYSTEM TIME '%s'`, ts.AsOfSystemTime())
 		return nil
 	})
 	var destFingerprint int64
-	setup.dst.sql.QueryRow(t, fingerprintQuery, setup.dst.ID).Scan(&destFingerprint)
+	m.Go(func(ctx context.Context) error {
+		// TODO(adityamaru): Measure and record fingerprinting throughput.
+		setup.metrics.fingerprintingStart = timeutil.Now()
+		setup.dst.sql.QueryRow(t, fingerprintQuery, setup.dst.ID).Scan(&destFingerprint)
+		setup.metrics.fingerprintingEnd = timeutil.Now()
+		fingerprintingDuration := setup.metrics.fingerprintingEnd.Sub(setup.metrics.fingerprintingStart).String()
+		t.L().Printf("fingerprinting the destination tenant took %s", fingerprintingDuration)
+		return nil
+	})
 
 	// If the goroutine gets cancelled or fataled, return before comparing fingerprints.
 	require.NoError(t, m.WaitE())
@@ -571,6 +585,17 @@ func waitForHighWatermark(t test.Test, db *gosql.DB, ingestionJobID int, wait ti
 		}
 		return nil
 	}, wait)
+}
+
+// getReplicationRetainedTime returns the `retained_time` of the replication
+// job.
+func getReplicationRetainedTime(
+	t test.Test, destSQL *sqlutils.SQLRunner, destTenantName roachpb.TenantName,
+) time.Time {
+	var retainedTime time.Time
+	destSQL.QueryRow(t, `SELECT retained_time FROM [SHOW TENANT $1 WITH REPLICATION STATUS]`,
+		destTenantName).Scan(&retainedTime)
+	return retainedTime
 }
 
 func stopReplicationStream(

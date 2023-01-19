@@ -134,8 +134,8 @@ func (p *planner) SchemaExists(ctx context.Context, dbName, scName string) (foun
 	return found, err
 }
 
-// HasAnyPrivilege is part of the eval.DatabaseCatalog interface.
-func (p *planner) HasAnyPrivilege(
+// HasAnyPrivilegeForSpecifier is part of the eval.DatabaseCatalog interface.
+func (p *planner) HasAnyPrivilegeForSpecifier(
 	ctx context.Context,
 	specifier eval.HasPrivilegeSpecifier,
 	user username.SQLUsername,
@@ -161,11 +161,10 @@ func (p *planner) HasAnyPrivilege(
 			continue
 		}
 
-		if err := p.CheckPrivilegeForUser(ctx, desc, priv.Kind, user); err != nil {
-			if pgerror.GetPGCode(err) == pgcode.InsufficientPrivilege {
-				continue
-			}
+		if ok, err := p.HasPrivilege(ctx, desc, priv.Kind, user); err != nil {
 			return eval.HasNoPrivilege, err
+		} else if !ok {
+			continue
 		}
 
 		if priv.GrantOption {
