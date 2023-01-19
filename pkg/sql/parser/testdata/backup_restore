@@ -692,20 +692,21 @@ parse
 RESTORE foo FROM 'bar' WITH OPTIONS (encryption_passphrase='secret', into_db='baz', debug_pause_on='error',
 skip_missing_foreign_keys, skip_missing_sequences, skip_missing_sequence_owners, skip_missing_views, detached, skip_localities_check)
 ----
-RESTORE TABLE foo FROM 'bar' WITH encryption_passphrase = 'secret', into_db = 'baz', debug_pause_on = 'error', skip_missing_foreign_keys, skip_missing_sequence_owners, skip_missing_sequences, skip_missing_views, detached, skip_localities_check -- normalized!
-RESTORE TABLE (foo) FROM ('bar') WITH encryption_passphrase = ('secret'), into_db = ('baz'), debug_pause_on = ('error'), skip_missing_foreign_keys, skip_missing_sequence_owners, skip_missing_sequences, skip_missing_views, detached, skip_localities_check -- fully parenthesized
-RESTORE TABLE foo FROM '_' WITH encryption_passphrase = '_', into_db = '_', debug_pause_on = '_', skip_missing_foreign_keys, skip_missing_sequence_owners, skip_missing_sequences, skip_missing_views, detached, skip_localities_check -- literals removed
-RESTORE TABLE _ FROM 'bar' WITH encryption_passphrase = 'secret', into_db = 'baz', debug_pause_on = 'error', skip_missing_foreign_keys, skip_missing_sequence_owners, skip_missing_sequences, skip_missing_views, detached, skip_localities_check -- identifiers removed
+RESTORE TABLE foo FROM 'bar' WITH encryption_passphrase = '*****', into_db = 'baz', debug_pause_on = 'error', skip_missing_foreign_keys, skip_missing_sequence_owners, skip_missing_sequences, skip_missing_views, detached, skip_localities_check -- normalized!
+RESTORE TABLE (foo) FROM ('bar') WITH encryption_passphrase = '*****', into_db = ('baz'), debug_pause_on = ('error'), skip_missing_foreign_keys, skip_missing_sequence_owners, skip_missing_sequences, skip_missing_views, detached, skip_localities_check -- fully parenthesized
+RESTORE TABLE foo FROM '_' WITH encryption_passphrase = '*****', into_db = '_', debug_pause_on = '_', skip_missing_foreign_keys, skip_missing_sequence_owners, skip_missing_sequences, skip_missing_views, detached, skip_localities_check -- literals removed
+RESTORE TABLE _ FROM 'bar' WITH encryption_passphrase = '*****', into_db = 'baz', debug_pause_on = 'error', skip_missing_foreign_keys, skip_missing_sequence_owners, skip_missing_sequences, skip_missing_views, detached, skip_localities_check -- identifiers removed
+RESTORE TABLE foo FROM 'bar' WITH encryption_passphrase = 'secret', into_db = 'baz', debug_pause_on = 'error', skip_missing_foreign_keys, skip_missing_sequence_owners, skip_missing_sequences, skip_missing_views, detached, skip_localities_check -- passwords exposed
 
 parse
 RESTORE foo FROM 'bar' WITH ENCRYPTION_PASSPHRASE = 'secret', INTO_DB=baz, DEBUG_PAUSE_ON='error',
 SKIP_MISSING_FOREIGN_KEYS, SKIP_MISSING_SEQUENCES, SKIP_MISSING_SEQUENCE_OWNERS, SKIP_MISSING_VIEWS, SKIP_LOCALITIES_CHECK
 ----
-RESTORE TABLE foo FROM 'bar' WITH encryption_passphrase = 'secret', into_db = 'baz', debug_pause_on = 'error', skip_missing_foreign_keys, skip_missing_sequence_owners, skip_missing_sequences, skip_missing_views, skip_localities_check -- normalized!
-RESTORE TABLE (foo) FROM ('bar') WITH encryption_passphrase = ('secret'), into_db = ('baz'), debug_pause_on = ('error'), skip_missing_foreign_keys, skip_missing_sequence_owners, skip_missing_sequences, skip_missing_views, skip_localities_check -- fully parenthesized
-RESTORE TABLE foo FROM '_' WITH encryption_passphrase = '_', into_db = '_', debug_pause_on = '_', skip_missing_foreign_keys, skip_missing_sequence_owners, skip_missing_sequences, skip_missing_views, skip_localities_check -- literals removed
-RESTORE TABLE _ FROM 'bar' WITH encryption_passphrase = 'secret', into_db = 'baz', debug_pause_on = 'error', skip_missing_foreign_keys, skip_missing_sequence_owners, skip_missing_sequences, skip_missing_views, skip_localities_check -- identifiers removed
-
+RESTORE TABLE foo FROM 'bar' WITH encryption_passphrase = '*****', into_db = 'baz', debug_pause_on = 'error', skip_missing_foreign_keys, skip_missing_sequence_owners, skip_missing_sequences, skip_missing_views, skip_localities_check -- normalized!
+RESTORE TABLE (foo) FROM ('bar') WITH encryption_passphrase = '*****', into_db = ('baz'), debug_pause_on = ('error'), skip_missing_foreign_keys, skip_missing_sequence_owners, skip_missing_sequences, skip_missing_views, skip_localities_check -- fully parenthesized
+RESTORE TABLE foo FROM '_' WITH encryption_passphrase = '*****', into_db = '_', debug_pause_on = '_', skip_missing_foreign_keys, skip_missing_sequence_owners, skip_missing_sequences, skip_missing_views, skip_localities_check -- literals removed
+RESTORE TABLE _ FROM 'bar' WITH encryption_passphrase = '*****', into_db = 'baz', debug_pause_on = 'error', skip_missing_foreign_keys, skip_missing_sequence_owners, skip_missing_sequences, skip_missing_views, skip_localities_check -- identifiers removed
+RESTORE TABLE foo FROM 'bar' WITH encryption_passphrase = 'secret', into_db = 'baz', debug_pause_on = 'error', skip_missing_foreign_keys, skip_missing_sequence_owners, skip_missing_sequences, skip_missing_views, skip_localities_check -- passwords exposed
 
 parse
 RESTORE TENANT 36 FROM ($1, $2) AS OF SYSTEM TIME '1'
