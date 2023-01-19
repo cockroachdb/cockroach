@@ -76,6 +76,35 @@ func executeValidateConstraint(
 	return nil
 }
 
+func executeValidateColumnNotNull(
+	ctx context.Context, deps Dependencies, op *scop.ValidateColumnNotNull,
+) error {
+	descs, err := deps.Catalog().MustReadImmutableDescriptors(ctx, op.TableID)
+	if err != nil {
+		return err
+	}
+	desc := descs[0]
+	table, err := catalog.AsTableDescriptor(desc)
+	if err != nil {
+		return err
+	}
+
+	var constraint catalog.Constraint
+	for _, ck := range table.CheckConstraints() {
+		if ck.IsNotNullColumnConstraint() && ck.GetReferencedColumnID(0) == op.ColumnID {
+			constraint = ck
+		}
+	}
+
+	// Execute the validation operation as a root user.
+	execOverride := sessiondata.RootUserSessionDataOverride
+	err = deps.Validator().ValidateConstraint(ctx, table, constraint, op.IndexIDForValidation, execOverride)
+	if err != nil {
+		return scerrors.SchemaChangerUserError(err)
+	}
+	return nil
+}
+
 func executeValidationOps(ctx context.Context, deps Dependencies, ops []scop.Op) (err error) {
 	for _, op := range ops {
 		if err = executeValidationOp(ctx, deps, op); err != nil {
@@ -101,6 +130,14 @@ func executeValidationOp(ctx context.Context, deps Dependencies, op scop.Op) (er
 			}
 			return err
 		}
+	case *scop.ValidateColumnNotNull:
+		if err = executeValidateColumnNotNull(ctx, deps, op); err != nil {
+			if !scerrors.HasSchemaChangerUserError(err) {
+				return errors.Wrapf(err, "%T: %v", op, op)
+			}
+			return err
+		}
+
 	default:
 		panic("unimplemented")
 	}

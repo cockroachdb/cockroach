@@ -904,6 +904,11 @@ func (desc *wrapper) validateConstraintNamesAndIDs(vea catalog.ValidationErrorAc
 	names := make(map[string]descpb.ConstraintID, len(constraints))
 	idToName := make(map[descpb.ConstraintID]string, len(constraints))
 	for _, c := range constraints {
+		if c.AsCheck() != nil && c.AsCheck().IsNotNullColumnConstraint() {
+			// Relax validation for NOT NULL constraint when disguised as CHECK
+			// constraint, because they don't a constraintID.
+			continue
+		}
 		if c.GetConstraintID() == 0 {
 			vea.Report(errors.AssertionFailedf(
 				"constraint ID was missing for constraint %q",
@@ -997,7 +1002,21 @@ func (desc *wrapper) validateColumns() error {
 		}
 
 		if column.IsNullable() && column.IsGeneratedAsIdentity() {
-			return errors.Newf("conflicting NULL/NOT NULL declarations for column %q", column.GetName())
+			// It's possible for a NOT NULL column to temporarily be nullable
+			// during schema changes, in which case however we always ensure there
+			// is an enforced, functionally equivalent CHECK constraint in `desc`
+			// guarding the NOT-NULL-ness of the column. Thus, we will attempt to find
+			// such a CHECK constraint before we error out.
+			found := false
+			for _, ck := range desc.CheckConstraints() {
+				if ck.IsNotNullColumnConstraint() &&
+					ck.GetReferencedColumnID(0) == column.GetID() {
+					found = true
+				}
+			}
+			if !found {
+				return errors.Newf("conflicting NULL/NOT NULL declarations for column %q", column.GetName())
+			}
 		}
 
 		if column.HasOnUpdate() && column.IsGeneratedAsIdentity() {

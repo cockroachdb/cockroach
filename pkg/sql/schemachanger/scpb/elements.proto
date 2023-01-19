@@ -90,6 +90,7 @@ message ElementProto {
   ColumnOnUpdateExpression column_on_update_expression = 33 [(gogoproto.moretags) = "parent:\"Column\""];
   SequenceOwner sequence_owner = 34 [(gogoproto.moretags) = "parent:\"Column\""];
   ColumnComment column_comment = 35 [(gogoproto.moretags) = "parent:\"Column\""];
+  ColumnNotNull column_not_null = 36 [(gogoproto.moretags) = "parent:\"Column\""];
 
   // Index elements.
   IndexName index_name = 40 [(gogoproto.moretags) = "parent:\"PrimaryIndex, SecondaryIndex\""];
@@ -181,10 +182,16 @@ message ColumnType {
   uint32 family_id = 2 [(gogoproto.customname) = "FamilyID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.FamilyID"];
   uint32 column_id = 3 [(gogoproto.customname) = "ColumnID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ColumnID"];
   TypeT embedded_type_t = 4 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  bool is_nullable = 5;
+  // Deprecate and remove it in V23_2.
+  bool deprecated_is_nullable = 5;
+  // We changed element modelling for NOT NULL constraint on V23_1. This field
+  // is thus added to version gate the schema changer to behave correctly in a
+  // mixed version (V22_2 and V23_1) state.
+  // Deprecate it together with `deprecated_is_nullable` in V23_2.
+  bool is_23_1_cluster_version_active = 11;
   Expression compute_expr = 6;
   bool is_virtual = 7;
-  reserved 10;
+  reserved 8, 9, 10;
 }
 
 message ColumnFamily {
@@ -480,6 +487,14 @@ message ColumnComment {
   uint32 column_id = 2 [(gogoproto.customname) = "ColumnID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ColumnID"];
   string comment = 3;
   uint32 pg_attribute_num = 4 [(gogoproto.customname) = "PgAttributeNum", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.PGAttributeNum"];
+}
+
+message ColumnNotNull {
+  uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  uint32 column_id = 2 [(gogoproto.customname) = "ColumnID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ColumnID"];
+  // IndexIDForValidation is the index id to hint to the check constraint validation SQL query about which index
+  // to check against the not-null-ness of the column. It is used exclusively by sql.validateCheckExpr.
+  uint32 index_id_for_validation = 3 [(gogoproto.customname) = "IndexIDForValidation", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.IndexID"];
 }
 
 message ConstraintComment {

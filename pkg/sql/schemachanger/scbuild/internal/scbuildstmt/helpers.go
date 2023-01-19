@@ -798,3 +798,15 @@ func ExtractColumnIDsInExpr(
 
 	return colIDs, err
 }
+
+func isColNotNull(b BuildCtx, tableID catid.DescID, columnID catid.ColumnID) (ret bool) {
+	// A column is NOT NULL iff there is a ColumnNotNull element on this columnID
+	scpb.ForEachColumnNotNull(b.QueryByID(tableID), func(
+		current scpb.Status, target scpb.TargetStatus, e *scpb.ColumnNotNull,
+	) {
+		if e.ColumnID == columnID {
+			ret = true
+		}
+	})
+	return ret
+}

@@ -710,13 +710,14 @@ func maybeCreateAndAddShardCol(
 			Name:     shardColName,
 		},
 		colType: &scpb.ColumnType{
-			TableID:     tbl.TableID,
-			ColumnID:    shardColID,
-			TypeT:       scpb.TypeT{Type: types.Int},
-			ComputeExpr: b.WrapExpression(tbl.TableID, parsedExpr),
-			IsVirtual:   true,
-			IsNullable:  false,
+			TableID:              tbl.TableID,
+			ColumnID:             shardColID,
+			TypeT:                scpb.TypeT{Type: types.Int},
+			ComputeExpr:          b.WrapExpression(tbl.TableID, parsedExpr),
+			IsVirtual:            true,
+			DeprecatedIsNullable: false,
 		},
+		notNull: true,
 		//TODO(fqazi): Add a check constraint for the hash sharded column.
 	}
 	addColumn(b, spec, n)

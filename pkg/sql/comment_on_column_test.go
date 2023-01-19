@@ -16,13 +16,77 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
+
+func TestXiang(t *testing.T) {
+	params, _ := tests.CreateTestServerParams()
+	params.Settings = cluster.MakeTestingClusterSettingsWithVersions(clusterversion.ByKey(clusterversion.V23_1),
+		clusterversion.ByKey(clusterversion.V22_2),
+		false, /* initializeVersion */
+	)
+	params.Knobs.Server = &server.TestingKnobs{
+		DisableAutomaticVersionUpgrade: make(chan struct{}),
+		BinaryVersionOverride:          clusterversion.ByKey(clusterversion.V22_2),
+	}
+	s, db, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.Background())
+	tdb := sqlutils.MakeSQLRunner(db)
+
+	tdb.Exec(t, "set use_declarative_schema_changer = on;")
+	tdb.Exec(t, "create table t (i int primary key);")
+	tdb.Exec(t, "alter table t add column j int not null;")
+	//tdb.Exec(t, "alter table t add column k int unique not null")
+	result := tdb.QueryStr(t, "show create table t")
+	fmt.Printf("Xiang: result = \n%v\n", result)
+}
+
+func TestXiang2(t *testing.T) {
+	params, _ := tests.CreateTestServerParams()
+	s, db, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.Background())
+	tdb := sqlutils.MakeSQLRunner(db)
+
+	tdb.Exec(t, "set use_declarative_schema_changer = on;")
+	tdb.Exec(t, "CREATE TABLE t1 (id1 INT PRIMARY KEY, id2 INT, id3 INT NOT NULL)")
+	tdb.Exec(t, "CREATE TABLE t2 (id1 INT PRIMARY KEY)")
+	tdb.Exec(t, "ALTER TABLE t1 ADD FOREIGN KEY (id2) REFERENCES t1(id1);")
+	tdb.Exec(t, "ALTER TABLE t1 ADD FOREIGN KEY (id3) REFERENCES t2(id1);")
+	tdb.Exec(t, "drop table t1;")
+}
+
+func TestXiang3(t *testing.T) {
+	params, _ := tests.CreateTestServerParams()
+	s, db, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.Background())
+	tdb := sqlutils.MakeSQLRunner(db)
+
+	tdb.Exec(t, "set use_declarative_schema_changer = on;")
+	tdb.Exec(t, "CREATE TABLE t (i int primary key)")
+	tdb.Exec(t, "ALTER TABLE t ADD COLUMN j INT NOT NULL")
+	tdb.Exec(t, "alter table t drop column j")
+}
+
+func TestXiang4(t *testing.T) {
+	params, _ := tests.CreateTestServerParams()
+	s, db, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.Background())
+	tdb := sqlutils.MakeSQLRunner(db)
+
+	tdb.Exec(t, "set use_declarative_schema_changer = on;")
+	tdb.Exec(t, "CREATE TABLE t (i int primary key)")
+	tdb.Exec(t, "ALTER TABLE t ADD COLUMN j INT GENERATED ALWAYS AS IDENTITY;")
+	tdb.Exec(t, "alter table t drop column j")
+}
 
 func TestCommentOnColumn(t *testing.T) {
 	defer leaktest.AfterTest(t)()

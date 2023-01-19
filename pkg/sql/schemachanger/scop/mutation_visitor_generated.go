@@ -55,9 +55,13 @@ type MutationVisitor interface {
 	RemoveOwnerBackReferenceInSequence(context.Context, RemoveOwnerBackReferenceInSequence) error
 	RemoveSequenceOwner(context.Context, RemoveSequenceOwner) error
 	RemoveCheckConstraint(context.Context, RemoveCheckConstraint) error
+	RemoveColumnNotNull(context.Context, RemoveColumnNotNull) error
 	MakeAbsentCheckConstraintWriteOnly(context.Context, MakeAbsentCheckConstraintWriteOnly) error
+	MakeAbsentColumnNotNullWriteOnly(context.Context, MakeAbsentColumnNotNullWriteOnly) error
 	MakePublicCheckConstraintValidated(context.Context, MakePublicCheckConstraintValidated) error
+	MakePublicColumnNotNullValidated(context.Context, MakePublicColumnNotNullValidated) error
 	MakeValidatedCheckConstraintPublic(context.Context, MakeValidatedCheckConstraintPublic) error
+	MakeValidatedColumnNotNullPublic(context.Context, MakeValidatedColumnNotNullPublic) error
 	MakeAbsentForeignKeyConstraintWriteOnly(context.Context, MakeAbsentForeignKeyConstraintWriteOnly) error
 	MakeValidatedForeignKeyConstraintPublic(context.Context, MakeValidatedForeignKeyConstraintPublic) error
 	MakePublicForeignKeyConstraintValidated(context.Context, MakePublicForeignKeyConstraintValidated) error
@@ -275,8 +279,18 @@ func (op RemoveCheckConstraint) Visit(ctx context.Context, v MutationVisitor) er
 }
 
 // Visit is part of the MutationOp interface.
+func (op RemoveColumnNotNull) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.RemoveColumnNotNull(ctx, op)
+}
+
+// Visit is part of the MutationOp interface.
 func (op MakeAbsentCheckConstraintWriteOnly) Visit(ctx context.Context, v MutationVisitor) error {
 	return v.MakeAbsentCheckConstraintWriteOnly(ctx, op)
+}
+
+// Visit is part of the MutationOp interface.
+func (op MakeAbsentColumnNotNullWriteOnly) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.MakeAbsentColumnNotNullWriteOnly(ctx, op)
 }
 
 // Visit is part of the MutationOp interface.
@@ -285,8 +299,18 @@ func (op MakePublicCheckConstraintValidated) Visit(ctx context.Context, v Mutati
 }
 
 // Visit is part of the MutationOp interface.
+func (op MakePublicColumnNotNullValidated) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.MakePublicColumnNotNullValidated(ctx, op)
+}
+
+// Visit is part of the MutationOp interface.
 func (op MakeValidatedCheckConstraintPublic) Visit(ctx context.Context, v MutationVisitor) error {
 	return v.MakeValidatedCheckConstraintPublic(ctx, op)
+}
+
+// Visit is part of the MutationOp interface.
+func (op MakeValidatedColumnNotNullPublic) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.MakeValidatedColumnNotNullPublic(ctx, op)
 }
 
 // Visit is part of the MutationOp interface.

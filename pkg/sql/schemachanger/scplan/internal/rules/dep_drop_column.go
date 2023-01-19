@@ -96,4 +96,23 @@ func init() {
 		},
 	)
 
+	// When dropping a NOT NULL column, the ColumnNotNull should transition to
+	// ABSENT in the same stage as the Column transitions to ABSENT.
+	// The rule supersedes the above "dependents removed before column" rule
+	// because otherwise we risk running into the situation where the ColumnNotNull
+	// is ABSENT (meaning the NOT NULL is no longer enforced) while the column
+	// is in WRITE_ONLY (meaning still writable).
+	registerDepRuleForDrop(
+		"column not null constraint removed right before column",
+		scgraph.SameStagePrecedence,
+		"column-not-null", "column",
+		scpb.Status_ABSENT, scpb.Status_ABSENT,
+		func(from, to nodeVars) rel.Clauses {
+			return rel.Clauses{
+				from.Type((*scpb.ColumnNotNull)(nil)),
+				to.Type((*scpb.Column)(nil)),
+				joinOnColumnID(from, to, "table-id", "col-id"),
+			}
+		},
+	)
 }

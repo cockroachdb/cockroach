@@ -171,6 +171,7 @@ func init() {
 				(*scpb.CheckConstraint)(nil),
 				(*scpb.ForeignKeyConstraint)(nil),
 				(*scpb.UniqueWithoutIndexConstraint)(nil),
+				(*scpb.ColumnNotNull)(nil),
 			),
 
 			joinOnDescID(relation, constraint, relationID),

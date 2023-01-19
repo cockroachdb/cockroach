@@ -295,7 +295,7 @@ func walkDropColumnDependencies(b BuildCtx, col *scpb.Column, fn func(e scpb.Ele
 		Filter(referencesColumnIDFilter(col.ColumnID)).
 		ForEachElementStatus(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) {
 			switch elt := e.(type) {
-			case *scpb.Column, *scpb.ColumnName, *scpb.ColumnComment:
+			case *scpb.Column, *scpb.ColumnName, *scpb.ColumnComment, *scpb.ColumnNotNull:
 				fn(e)
 			case *scpb.ColumnDefaultExpression, *scpb.ColumnOnUpdateExpression:
 				fn(e)

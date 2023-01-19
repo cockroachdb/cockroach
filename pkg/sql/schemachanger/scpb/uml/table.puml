@@ -158,7 +158,8 @@ ColumnType :  TableID
 ColumnType :  FamilyID
 ColumnType :  ColumnID
 ColumnType :  TypeT
-ColumnType :  IsNullable
+ColumnType :  DeprecatedIsNullable
+ColumnType :  Is_23_1ClusterVersionActive
 ColumnType :  ComputeExpr
 ColumnType :  IsVirtual
 
@@ -186,6 +187,12 @@ ColumnComment :  TableID
 ColumnComment :  ColumnID
 ColumnComment :  Comment
 ColumnComment :  PgAttributeNum
+
+object ColumnNotNull
+
+ColumnNotNull :  TableID
+ColumnNotNull :  ColumnID
+ColumnNotNull :  IndexIDForValidation
 
 object IndexName
 
@@ -339,6 +346,7 @@ Column <|-- ColumnDefaultExpression
 Column <|-- ColumnOnUpdateExpression
 Column <|-- SequenceOwner
 Column <|-- ColumnComment
+Column <|-- ColumnNotNull
 PrimaryIndex <|-- IndexName
 SecondaryIndex <|-- IndexName
 PrimaryIndex <|-- IndexPartitioning

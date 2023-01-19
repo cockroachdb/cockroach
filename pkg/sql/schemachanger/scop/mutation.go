@@ -294,6 +294,13 @@ type RemoveCheckConstraint struct {
 	ConstraintID descpb.ConstraintID
 }
 
+// RemoveColumnNotNull removes a NOT NULL, disguised as a CHECK constraint, from a table.
+type RemoveColumnNotNull struct {
+	mutationOp
+	TableID  descpb.ID
+	ColumnID descpb.ColumnID
+}
+
 // MakeAbsentCheckConstraintWriteOnly adds a non-existent check constraint
 // to the table in the WRITE_ONLY state.
 type MakeAbsentCheckConstraintWriteOnly struct {
@@ -305,6 +312,14 @@ type MakeAbsentCheckConstraintWriteOnly struct {
 	FromHashShardedColumn bool
 }
 
+// MakeAbsentColumnNotNullWriteOnly adds a non-existent NOT NULL constraint,
+// disguised as a CHECK constraint, to the table in the WRITE_ONLY state.
+type MakeAbsentColumnNotNullWriteOnly struct {
+	mutationOp
+	TableID  descpb.ID
+	ColumnID descpb.ColumnID
+}
+
 // MakePublicCheckConstraintValidated moves a public
 // check constraint to VALIDATED.
 type MakePublicCheckConstraintValidated struct {
@@ -313,12 +328,28 @@ type MakePublicCheckConstraintValidated struct {
 	ConstraintID descpb.ConstraintID
 }
 
+// MakePublicColumnNotNullValidated moves a PUBLIC
+// column not null to VALIDATED.
+type MakePublicColumnNotNullValidated struct {
+	mutationOp
+	TableID  descpb.ID
+	ColumnID descpb.ColumnID
+}
+
 // MakeValidatedCheckConstraintPublic moves a new, validated check
 // constraint from mutation to public.
 type MakeValidatedCheckConstraintPublic struct {
 	mutationOp
 	TableID      descpb.ID
 	ConstraintID descpb.ConstraintID
+}
+
+// MakeValidatedColumnNotNullPublic moves a new, validated NOT NULL, disguised
+// as a CHECK constraint, from mutation to public.
+type MakeValidatedColumnNotNullPublic struct {
+	mutationOp
+	TableID  descpb.ID
+	ColumnID descpb.ColumnID
 }
 
 // MakeAbsentForeignKeyConstraintWriteOnly adds a non-existent foreign key

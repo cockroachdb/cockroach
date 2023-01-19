@@ -33,8 +33,9 @@ var _ catalog.Column = (*column)(nil)
 // descriptor.
 type column struct {
 	maybeMutation
-	desc    *descpb.ColumnDescriptor
-	ordinal int
+	desc              *descpb.ColumnDescriptor
+	isBecomingNotNull bool
+	ordinal           int
 }
 
 // ColumnDesc returns the underlying protobuf descriptor.

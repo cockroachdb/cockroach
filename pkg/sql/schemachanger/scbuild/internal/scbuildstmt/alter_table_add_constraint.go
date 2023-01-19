@@ -192,8 +192,7 @@ func alterTableAddForeignKey(
 	if fkDef.Actions.Delete == tree.SetNull || fkDef.Actions.Update == tree.SetNull {
 		for i, colName := range fkDef.FromCols {
 			colID := mustGetColumnIDFromColumnName(b, tbl.TableID, colName)
-			colIsNullable := mustRetrieveColumnTypeElem(b, tbl.TableID, colID).IsNullable
-			if !colIsNullable {
+			if isColNotNull(b, tbl.TableID, colID) {
 				panic(pgerror.Newf(pgcode.InvalidForeignKey,
 					"cannot add a SET NULL cascading action on column %q which has a NOT NULL constraint", fromColsFRNames[i],
 				))
@@ -209,8 +208,8 @@ func alterTableAddForeignKey(
 		for i, colName := range fkDef.FromCols {
 			colID := mustGetColumnIDFromColumnName(b, tbl.TableID, colName)
 			colHasDefault := retrieveColumnDefaultExpressionElem(b, tbl.TableID, colID) != nil
-			colIsNullable := mustRetrieveColumnTypeElem(b, tbl.TableID, colID).IsNullable
-			if !colHasDefault && !colIsNullable {
+			colIsNotNull := isColNotNull(b, tbl.TableID, colID)
+			if !colHasDefault && colIsNotNull {
 				panic(pgerror.Newf(pgcode.InvalidForeignKey,
 					"cannot add a SET DEFAULT cascading action on column %q which has a "+
 						"NOT NULL constraint and a NULL default expression", fromColsFRNames[i],
