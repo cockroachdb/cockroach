@@ -704,6 +704,9 @@ func (u *sqlSymUnion) copyOptions() *tree.CopyOptions {
 func (u *sqlSymUnion) showBackupDetails() tree.ShowBackupDetails {
   return u.val.(tree.ShowBackupDetails)
 }
+func (u *sqlSymUnion) showBackupOptions() *tree.ShowBackupOptions {
+  return u.val.(*tree.ShowBackupOptions)
+}
 func (u *sqlSymUnion) restoreOptions() *tree.RestoreOptions {
   return u.val.(*tree.RestoreOptions)
 }
@@ -875,7 +878,7 @@ func (u *sqlSymUnion) showTenantOpts() tree.ShowTenantOptions {
 
 // Ordinary key words in alphabetical order.
 %token <str> ABORT ABSOLUTE ACCESS ACTION ADD ADMIN AFTER AGGREGATE
-%token <str> ALL ALTER ALWAYS ANALYSE ANALYZE AND AND_AND ANY ANNOTATE_TYPE ARRAY AS ASC AT_AT
+%token <str> ALL ALTER ALWAYS ANALYSE ANALYZE AND AND_AND ANY ANNOTATE_TYPE ARRAY AS ASC AS_JSON AT_AT
 %token <str> ASENSITIVE ASYMMETRIC AT ATOMIC ATTRIBUTE AUTHORIZATION AUTOMATIC AVAILABILITY
 
 %token <str> BACKUP BACKUPS BACKWARD BEFORE BEGIN BETWEEN BIGINT BIGSERIAL BINARY BIT
@@ -883,7 +886,7 @@ func (u *sqlSymUnion) showTenantOpts() tree.ShowTenantOptions {
 %token <str> BOOLEAN BOTH BOX2D BUNDLE BY
 
 %token <str> CACHE CALLED CANCEL CANCELQUERY CAPABILITIES CAPABILITY CASCADE CASE CAST CBRT CHANGEFEED CHAR
-%token <str> CHARACTER CHARACTERISTICS CHECK CLOSE
+%token <str> CHARACTER CHARACTERISTICS CHECK CHECK_FILES CLOSE
 %token <str> CLUSTER COALESCE COLLATE COLLATION COLUMN COLUMNS COMMENT COMMENTS COMMIT
 %token <str> COMMITTED COMPACT COMPLETE COMPLETIONS CONCAT CONCURRENTLY CONFIGURATION CONFIGURATIONS CONFIGURE
 %token <str> CONFLICT CONNECTION CONNECTIONS CONSTRAINT CONSTRAINTS CONTAINS CONTROLCHANGEFEED CONTROLJOB
@@ -892,11 +895,11 @@ func (u *sqlSymUnion) showTenantOpts() tree.ShowTenantOptions {
 %token <str> CURRENT_ROLE CURRENT_TIME CURRENT_TIMESTAMP
 %token <str> CURRENT_USER CURSOR CYCLE
 
-%token <str> DATA DATABASE DATABASES DATE DAY DEBUG_PAUSE_ON DEC DECIMAL DEFAULT DEFAULTS DEFINER
+%token <str> DATA DATABASE DATABASES DATE DAY DEBUG_IDS DEBUG_PAUSE_ON DEC DEBUG_DUMP_METADATA_SST DECIMAL DEFAULT DEFAULTS DEFINER
 %token <str> DEALLOCATE DECLARE DEFERRABLE DEFERRED DELETE DELIMITER DEPENDS DESC DESTINATION DETACHED DETAILS
 %token <str> DISCARD DISTINCT DO DOMAIN DOUBLE DROP
 
-%token <str> ELSE ENCODING ENCRYPTED ENCRYPTION_PASSPHRASE END ENUM ENUMS ESCAPE EXCEPT EXCLUDE EXCLUDING
+%token <str> ELSE ENCODING ENCRYPTED ENCRYPTION_INFO_DIR ENCRYPTION_PASSPHRASE END ENUM ENUMS ESCAPE EXCEPT EXCLUDE EXCLUDING
 %token <str> EXISTS EXECUTE EXECUTION EXPERIMENTAL
 %token <str> EXPERIMENTAL_FINGERPRINTS EXPERIMENTAL_REPLICA
 %token <str> EXPERIMENTAL_AUDIT EXPERIMENTAL_RELOCATE
@@ -1307,6 +1310,7 @@ func (u *sqlSymUnion) showTenantOpts() tree.ShowTenantOptions {
 %type <*tree.RestoreOptions> opt_with_restore_options restore_options restore_options_list
 %type <*tree.TenantReplicationOptions> opt_with_tenant_replication_options tenant_replication_options tenant_replication_options_list
 %type <tree.ShowBackupDetails> show_backup_details
+%type <*tree.ShowBackupOptions> opt_with_show_backup_options show_backup_options show_backup_options_list
 %type <*tree.CopyOptions> opt_with_copy_options copy_options copy_options_list
 %type <str> import_format
 %type <str> storage_parameter_key
@@ -7095,63 +7099,63 @@ show_backup_stmt:
       InCollection:    $4.stringOrPlaceholderOptList(),
     }
   }
-| SHOW BACKUP show_backup_details FROM string_or_placeholder IN string_or_placeholder_opt_list opt_with_options
+| SHOW BACKUP show_backup_details FROM string_or_placeholder IN string_or_placeholder_opt_list opt_with_show_backup_options
 	{
 		$$.val = &tree.ShowBackup{
 			From:    true,
 			Details:    $3.showBackupDetails(),
 			Path:    $5.expr(),
 			InCollection: $7.stringOrPlaceholderOptList(),
-			Options: $8.kvOptions(),
+			Options: *$8.showBackupOptions(),
 		}
 	}
-| SHOW BACKUP string_or_placeholder IN string_or_placeholder_opt_list opt_with_options
+| SHOW BACKUP string_or_placeholder IN string_or_placeholder_opt_list opt_with_show_backup_options
 	{
 		$$.val = &tree.ShowBackup{
 			Details:  tree.BackupDefaultDetails,
 			Path:    $3.expr(),
 			InCollection: $5.stringOrPlaceholderOptList(),
-			Options: $6.kvOptions(),
+			Options: *$6.showBackupOptions(),
 		}
 	}
-| SHOW BACKUP string_or_placeholder opt_with_options
+| SHOW BACKUP string_or_placeholder opt_with_show_backup_options
 	{
 		$$.val = &tree.ShowBackup{
 		  Details:  tree.BackupDefaultDetails,
 			Path:    $3.expr(),
-			Options: $4.kvOptions(),
+			Options: *$4.showBackupOptions(),
 		}
 	}
-| SHOW BACKUP SCHEMAS string_or_placeholder opt_with_options
+| SHOW BACKUP SCHEMAS string_or_placeholder opt_with_show_backup_options
 	{
 		$$.val = &tree.ShowBackup{
 		  Details:  tree.BackupSchemaDetails,
 			Path:    $4.expr(),
-			Options: $5.kvOptions(),
+			Options: *$5.showBackupOptions(),
 		}
 	}
-| SHOW BACKUP FILES string_or_placeholder opt_with_options
+| SHOW BACKUP FILES string_or_placeholder opt_with_show_backup_options
 	{
 		$$.val = &tree.ShowBackup{
 		  Details:  tree.BackupFileDetails,
 			Path:    $4.expr(),
-			Options: $5.kvOptions(),
+			Options: *$5.showBackupOptions(),
 		}
 	}
-| SHOW BACKUP RANGES string_or_placeholder opt_with_options
+| SHOW BACKUP RANGES string_or_placeholder opt_with_show_backup_options
 	{
 		$$.val = &tree.ShowBackup{
 		  Details:  tree.BackupRangeDetails,
 			Path:    $4.expr(),
-			Options: $5.kvOptions(),
+			Options: *$5.showBackupOptions(),
 		}
 	}
-| SHOW BACKUP VALIDATE string_or_placeholder opt_with_options
+| SHOW BACKUP VALIDATE string_or_placeholder opt_with_show_backup_options
   	{
   		$$.val = &tree.ShowBackup{
   		  Details:  tree.BackupValidateDetails,
   			Path:    $4.expr(),
-  			Options: $5.kvOptions(),
+  			Options: *$5.showBackupOptions(),
   		}
   	}
 | SHOW BACKUP error // SHOW HELP: SHOW BACKUP
@@ -7177,6 +7181,71 @@ show_backup_details:
 	{
 	$$.val = tree.BackupValidateDetails
 	}
+
+opt_with_show_backup_options:
+  WITH show_backup_options_list
+  {
+    $$.val = $2.showBackupOptions()
+  }
+| WITH OPTIONS '(' show_backup_options_list ')'
+  {
+    $$.val = $4.showBackupOptions()
+  }
+| /* EMPTY */
+  {
+    $$.val = &tree.ShowBackupOptions{}
+  }
+
+show_backup_options_list:
+  // Require at least one option
+  show_backup_options
+  {
+    $$.val = $1.showBackupOptions()
+  }
+| show_backup_options_list ',' show_backup_options
+  {
+    if err := $1.showBackupOptions().CombineWith($3.showBackupOptions()); err != nil {
+      return setErr(sqllex, err)
+    }
+  }
+
+show_backup_options:
+ AS_JSON
+ {
+ $$.val = &tree.ShowBackupOptions{AsJson: true}
+ }
+ | CHECK_FILES
+ {
+ $$.val = &tree.ShowBackupOptions{CheckFiles: true}
+ }
+ | DEBUG_IDS
+ {
+ $$.val = &tree.ShowBackupOptions{DebugIDs: true}
+ }
+ | INCREMENTAL_LOCATION '=' string_or_placeholder_opt_list
+ {
+ $$.val = &tree.ShowBackupOptions{IncrementalStorage: $3.stringOrPlaceholderOptList()}
+ }
+ | KMS '=' string_or_placeholder_opt_list
+ {
+ $$.val = &tree.ShowBackupOptions{DecryptionKMSURI: $3.stringOrPlaceholderOptList()}
+ }
+ | ENCRYPTION_PASSPHRASE '=' string_or_placeholder
+ {
+ $$.val = &tree.ShowBackupOptions{EncryptionPassphrase: $3.expr()}
+ }
+ | PRIVILEGES
+ {
+ $$.val = &tree.ShowBackupOptions{Privileges: true}
+ }
+ | ENCRYPTION_INFO_DIR '=' string_or_placeholder
+ {
+ $$.val = &tree.ShowBackupOptions{EncryptionInfoDir: $3.expr()}
+ }
+ | DEBUG_DUMP_METADATA_SST
+ {
+ $$.val = &tree.ShowBackupOptions{DebugMetadataSST: true}
+ }
 
 // %Help: SHOW CLUSTER SETTING - display cluster settings
 // %Category: Cfg
@@ -15853,6 +15922,7 @@ unreserved_keyword:
 | ALTER
 | ALWAYS
 | ASENSITIVE
+| AS_JSON
 | AT
 | ATOMIC
 | ATTRIBUTE
@@ -15875,6 +15945,7 @@ unreserved_keyword:
 | CAPABILITY
 | CASCADE
 | CHANGEFEED
+| CHECK_FILES
 | CLOSE
 | CLUSTER
 | COLUMNS
@@ -15912,7 +15983,9 @@ unreserved_keyword:
 | DATABASES
 | DAY
 | DEALLOCATE
+| DEBUG_IDS
 | DEBUG_PAUSE_ON
+| DEBUG_DUMP_METADATA_SST
 | DECLARE
 | DELETE
 | DEFAULTS
@@ -15930,6 +16003,7 @@ unreserved_keyword:
 | ENCODING
 | ENCRYPTED
 | ENCRYPTION_PASSPHRASE
+| ENCRYPTION_INFO_DIR
 | ENUM
 | ENUMS
 | ESCAPE
@@ -16279,11 +16353,16 @@ unreserved_keyword:
 // query like "SELECT col label FROM table" where "label" is a new keyword.
 // Any new keyword should be added to this list.
 bare_label_keywords:
-  ATOMIC
+  AS_JSON
+| ATOMIC
 | CALLED
 | COST
+| CHECK_FILES
+| DEBUG_IDS
+| DEBUG_DUMP_METADATA_SST
 | DEFINER
 | DEPENDS
+| ENCRYPTION_INFO_DIR
 | EXTERNAL
 | IMMUTABLE
 | INPUT
