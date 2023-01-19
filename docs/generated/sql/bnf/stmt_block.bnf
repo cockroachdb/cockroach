@@ -771,13 +771,13 @@ use_stmt ::=
 
 show_backup_stmt ::=
 	'SHOW' 'BACKUPS' 'IN' string_or_placeholder_opt_list
-	| 'SHOW' 'BACKUP' show_backup_details 'FROM' string_or_placeholder 'IN' string_or_placeholder_opt_list opt_with_options
-	| 'SHOW' 'BACKUP' string_or_placeholder 'IN' string_or_placeholder_opt_list opt_with_options
-	| 'SHOW' 'BACKUP' string_or_placeholder opt_with_options
-	| 'SHOW' 'BACKUP' 'SCHEMAS' string_or_placeholder opt_with_options
-	| 'SHOW' 'BACKUP' 'FILES' string_or_placeholder opt_with_options
-	| 'SHOW' 'BACKUP' 'RANGES' string_or_placeholder opt_with_options
-	| 'SHOW' 'BACKUP' 'VALIDATE' string_or_placeholder opt_with_options
+	| 'SHOW' 'BACKUP' show_backup_details 'FROM' string_or_placeholder 'IN' string_or_placeholder_opt_list opt_with_show_backup_options
+	| 'SHOW' 'BACKUP' string_or_placeholder 'IN' string_or_placeholder_opt_list opt_with_show_backup_options
+	| 'SHOW' 'BACKUP' string_or_placeholder opt_with_show_backup_options
+	| 'SHOW' 'BACKUP' 'SCHEMAS' string_or_placeholder opt_with_show_backup_options
+	| 'SHOW' 'BACKUP' 'FILES' string_or_placeholder opt_with_show_backup_options
+	| 'SHOW' 'BACKUP' 'RANGES' string_or_placeholder opt_with_show_backup_options
+	| 'SHOW' 'BACKUP' 'VALIDATE' string_or_placeholder opt_with_show_backup_options
 
 show_columns_stmt ::=
 	'SHOW' 'COLUMNS' 'FROM' table_name with_comment
@@ -1010,6 +1010,7 @@ unreserved_keyword ::=
 	| 'ALTER'
 	| 'ALWAYS'
 	| 'ASENSITIVE'
+	| 'AS_JSON'
 	| 'AT'
 	| 'ATOMIC'
 	| 'ATTRIBUTE'
@@ -1032,6 +1033,7 @@ unreserved_keyword ::=
 	| 'CAPABILITY'
 	| 'CASCADE'
 	| 'CHANGEFEED'
+	| 'CHECK_FILES'
 	| 'CLOSE'
 	| 'CLUSTER'
 	| 'COLUMNS'
@@ -1069,7 +1071,9 @@ unreserved_keyword ::=
 	| 'DATABASES'
 	| 'DAY'
 	| 'DEALLOCATE'
+	| 'DEBUG_IDS'
 	| 'DEBUG_PAUSE_ON'
+	| 'DEBUG_DUMP_METADATA_SST'
 	| 'DECLARE'
 	| 'DELETE'
 	| 'DEFAULTS'
@@ -1087,6 +1091,7 @@ unreserved_keyword ::=
 	| 'ENCODING'
 	| 'ENCRYPTED'
 	| 'ENCRYPTION_PASSPHRASE'
+	| 'ENCRYPTION_INFO_DIR'
 	| 'ENUM'
 	| 'ENUMS'
 	| 'ESCAPE'
@@ -1901,6 +1906,11 @@ show_backup_details ::=
 	| 'RANGES'
 	| 'VALIDATE'
 
+opt_with_show_backup_options ::=
+	'WITH' show_backup_options_list
+	| 'WITH' 'OPTIONS' '(' show_backup_options_list ')'
+	| 
+
 with_comment ::=
 	'WITH' 'COMMENT'
 	| 
@@ -2642,6 +2652,9 @@ extra_var_value ::=
 	'ON'
 	| cockroachdb_extra_reserved_keyword
 
+show_backup_options_list ::=
+	( show_backup_options ) ( ( ',' show_backup_options ) )*
+
 targets_roles ::=
 	'ROLE' role_spec_list
 	| 'SCHEMA' schema_name_list
@@ -3180,6 +3193,17 @@ for_locking_item ::=
 
 var_list ::=
 	( var_value ) ( ( ',' var_value ) )*
+
+show_backup_options ::=
+	'AS_JSON'
+	| 'CHECK_FILES'
+	| 'DEBUG_IDS'
+	| 'INCREMENTAL_LOCATION' '=' string_or_placeholder_opt_list
+	| 'KMS' '=' string_or_placeholder_opt_list
+	| 'ENCRYPTION_PASSPHRASE' '=' string_or_placeholder
+	| 'PRIVILEGES'
+	| 'ENCRYPTION_INFO_DIR' '=' string_or_placeholder
+	| 'DEBUG_DUMP_METADATA_SST'
 
 schema_wildcard ::=
 	wildcard_pattern
