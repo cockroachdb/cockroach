@@ -1299,7 +1299,7 @@ type ExecutorConfig struct {
 
 	// RootMemoryMonitor is the root memory monitor of the entire server. Do not
 	// use this for normal purposes. It is to be used to establish any new
-	// root-level memory accounts that are not related to a user sessions.
+	// root-level memory accounts that are not related to a user session.
 	RootMemoryMonitor *mon.BytesMonitor
 
 	// CompactEngineSpanFunc is used to inform a storage engine of the need to
@@ -2062,36 +2062,64 @@ type SessionArgs struct {
 // SessionRegistry stores a set of all sessions on this node.
 // Use register() and deregister() to modify this registry.
 type SessionRegistry struct {
-	syncutil.Mutex
-	sessions            map[clusterunique.ID]registrySession
-	sessionsByCancelKey map[pgwirecancel.BackendKeyData]registrySession
+	mu struct {
+		syncutil.RWMutex
+		sessionsByID        map[clusterunique.ID]registrySession
+		sessionsByCancelKey map[pgwirecancel.BackendKeyData]registrySession
+	}
 }
 
 // NewSessionRegistry creates a new SessionRegistry with an empty set
 // of sessions.
 func NewSessionRegistry() *SessionRegistry {
-	return &SessionRegistry{
-		sessions:            make(map[clusterunique.ID]registrySession),
-		sessionsByCancelKey: make(map[pgwirecancel.BackendKeyData]registrySession),
+	r := SessionRegistry{}
+	r.mu.sessionsByID = make(map[clusterunique.ID]registrySession)
+	r.mu.sessionsByCancelKey = make(map[pgwirecancel.BackendKeyData]registrySession)
+	return &r
+}
+
+func (r *SessionRegistry) getSessionByID(id clusterunique.ID) (registrySession, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	session, ok := r.mu.sessionsByID[id]
+	return session, ok
+}
+
+func (r *SessionRegistry) getSessionByCancelKey(
+	cancelKey pgwirecancel.BackendKeyData,
+) (registrySession, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	session, ok := r.mu.sessionsByCancelKey[cancelKey]
+	return session, ok
+}
+
+func (r *SessionRegistry) getSessions() []registrySession {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	sessions := make([]registrySession, 0, len(r.mu.sessionsByID))
+	for _, session := range r.mu.sessionsByID {
+		sessions = append(sessions, session)
 	}
+	return sessions
 }
 
 func (r *SessionRegistry) register(
 	id clusterunique.ID, queryCancelKey pgwirecancel.BackendKeyData, s registrySession,
 ) {
-	r.Lock()
-	defer r.Unlock()
-	r.sessions[id] = s
-	r.sessionsByCancelKey[queryCancelKey] = s
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.mu.sessionsByID[id] = s
+	r.mu.sessionsByCancelKey[queryCancelKey] = s
 }
 
 func (r *SessionRegistry) deregister(
 	id clusterunique.ID, queryCancelKey pgwirecancel.BackendKeyData,
 ) {
-	r.Lock()
-	defer r.Unlock()
-	delete(r.sessions, id)
-	delete(r.sessionsByCancelKey, queryCancelKey)
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	delete(r.mu.sessionsByID, id)
+	delete(r.mu.sessionsByCancelKey, queryCancelKey)
 }
 
 type registrySession interface {
@@ -2112,10 +2140,7 @@ func (r *SessionRegistry) CancelQuery(queryIDStr string) (bool, error) {
 		return false, errors.Wrapf(err, "query ID %s malformed", queryID)
 	}
 
-	r.Lock()
-	defer r.Unlock()
-
-	for _, session := range r.sessions {
+	for _, session := range r.getSessions() {
 		if session.cancelQuery(queryID) {
 			return true, nil
 		}
@@ -2129,15 +2154,11 @@ func (r *SessionRegistry) CancelQuery(queryIDStr string) (bool, error) {
 func (r *SessionRegistry) CancelQueryByKey(
 	queryCancelKey pgwirecancel.BackendKeyData,
 ) (canceled bool, err error) {
-	r.Lock()
-	defer r.Unlock()
-	if session, ok := r.sessionsByCancelKey[queryCancelKey]; ok {
-		if session.cancelCurrentQueries() {
-			return true, nil
-		}
-		return false, nil
+	session, ok := r.getSessionByCancelKey(queryCancelKey)
+	if !ok {
+		return false, fmt.Errorf("session for cancel key %d not found", queryCancelKey)
 	}
-	return false, fmt.Errorf("session for cancel key %d not found", queryCancelKey)
+	return session.cancelCurrentQueries(), nil
 }
 
 // CancelSession looks up the specified session in the session registry and
@@ -2150,37 +2171,24 @@ func (r *SessionRegistry) CancelSession(
 	}
 	sessionID := clusterunique.IDFromBytes(sessionIDBytes)
 
-	r.Lock()
-	defer r.Unlock()
-
-	for id, session := range r.sessions {
-		if id == sessionID {
-			session.cancelSession()
-			return &serverpb.CancelSessionResponse{Canceled: true}, nil
-		}
+	session, ok := r.getSessionByID(sessionID)
+	if !ok {
+		return &serverpb.CancelSessionResponse{
+			Error: fmt.Sprintf("session ID %s not found", sessionID),
+		}, nil
 	}
-
-	return &serverpb.CancelSessionResponse{
-		Error: fmt.Sprintf("session ID %s not found", sessionID),
-	}, nil
+	session.cancelSession()
+	return &serverpb.CancelSessionResponse{Canceled: true}, nil
 }
 
-// SerializeAll returns a slice of all sessions in the registry, converted to serverpb.Sessions.
+// SerializeAll returns a slice of all sessions in the registry converted to
+// serverpb.Sessions.
 func (r *SessionRegistry) SerializeAll() []serverpb.Session {
-	r.Lock()
-	defer r.Unlock()
-
-	return r.SerializeAllLocked()
-}
-
-// SerializeAllLocked is like SerializeAll but assumes SessionRegistry's mutex is locked.
-func (r *SessionRegistry) SerializeAllLocked() []serverpb.Session {
-	response := make([]serverpb.Session, 0, len(r.sessions))
-
-	for _, s := range r.sessions {
+	sessions := r.getSessions()
+	response := make([]serverpb.Session, 0, len(sessions))
+	for _, s := range sessions {
 		response = append(response, s.serialize())
 	}
-
 	return response
 }
 
