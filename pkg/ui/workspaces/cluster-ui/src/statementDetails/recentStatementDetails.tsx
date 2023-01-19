@@ -42,6 +42,7 @@ export type RecentStatementDetailsStateProps = {
   contentionDetails?: ExecutionContentionDetails;
   statement: RecentStatement;
   match: match;
+  hasAdminRole: boolean;
 };
 
 export type RecentStatementDetailsDispatchProps = {
@@ -68,6 +69,7 @@ export const RecentStatementDetails: React.FC<RecentStatementDetailsProps> = ({
   statement,
   match,
   refreshLiveWorkload,
+  hasAdminRole,
 }) => {
   const history = useHistory();
   const executionID = getMatchParamByName(match, executionIdAttr);
@@ -189,6 +191,7 @@ export const RecentStatementDetails: React.FC<RecentStatementDetailsProps> = ({
                       database={statement.database}
                       sortSetting={insightsSortSetting}
                       onChangeSortSetting={setInsightsSortSetting}
+                      hasAdminRole={hasAdminRole}
                     />
                   )}
                 </Loading>

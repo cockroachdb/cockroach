@@ -47,11 +47,13 @@ const cx = classNames.bind(styles);
 interface PlanDetailsProps {
   plans: PlanHashStats[];
   statementFingerprintID: string;
+  hasAdminRole: boolean;
 }
 
 export function PlanDetails({
   plans,
   statementFingerprintID,
+  hasAdminRole,
 }: PlanDetailsProps): React.ReactElement {
   const [plan, setPlan] = useState<PlanHashStats | null>(null);
   const [plansSortSetting, setPlansSortSetting] = useState<SortSetting>({
@@ -77,6 +79,7 @@ export function PlanDetails({
         backToPlanTable={backToPlanTable}
         sortSetting={insightsSortSetting}
         onChangeSortSetting={setInsightsSortSetting}
+        hasAdminRole={hasAdminRole}
       />
     );
   } else {
@@ -124,6 +127,7 @@ interface ExplainPlanProps {
   backToPlanTable: () => void;
   sortSetting: SortSetting;
   onChangeSortSetting: (ss: SortSetting) => void;
+  hasAdminRole: boolean;
 }
 
 function ExplainPlan({
@@ -132,6 +136,7 @@ function ExplainPlan({
   backToPlanTable,
   sortSetting,
   onChangeSortSetting,
+  hasAdminRole,
 }: ExplainPlanProps): React.ReactElement {
   const explainPlan =
     `Plan Gist: ${plan.stats.plan_gists[0]} \n\n` +
@@ -218,6 +223,7 @@ function ExplainPlan({
           statementFingerprintID={statementFingerprintID}
           sortSetting={sortSetting}
           onChangeSortSetting={onChangeSortSetting}
+          hasAdminRole={hasAdminRole}
         />
       )}
     </div>
@@ -275,6 +281,7 @@ interface InsightsProps {
   statementFingerprintID?: string;
   sortSetting?: SortSetting;
   onChangeSortSetting?: (ss: SortSetting) => void;
+  hasAdminRole: boolean;
 }
 
 export function Insights({
@@ -285,9 +292,15 @@ export function Insights({
   statementFingerprintID,
   sortSetting,
   onChangeSortSetting,
+  hasAdminRole,
 }: InsightsProps): React.ReactElement {
-  const hideAction = useContext(CockroachCloudContext) && database?.length == 0;
-  const insightsColumns = makeInsightsColumns(hideAction, false, true);
+  const hideAction = useContext(CockroachCloudContext) || database?.length == 0;
+  const insightsColumns = makeInsightsColumns(
+    hideAction,
+    hasAdminRole,
+    false,
+    true,
+  );
   const data = formatIdxRecommendations(
     idxRecommendations,
     database,

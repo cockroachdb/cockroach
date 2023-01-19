@@ -14,7 +14,7 @@ import {
 } from "./transactionInsightDetails";
 import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
-import { AppState } from "src/store";
+import { AppState, uiConfigActions } from "src/store";
 import {
   selectTransactionInsightDetails,
   selectTransactionInsightDetailsError,
@@ -25,6 +25,7 @@ import { actions as sqlStatsActions } from "../../store/sqlStats";
 import { Dispatch } from "redux";
 import { TxnContentionInsightDetailsRequest } from "src/api";
 import { selectTimeScale } from "../../store/utils/selectors";
+import { selectHasAdminRole } from "../../store/uiConfig";
 
 const mapStateToProps = (
   state: AppState,
@@ -36,6 +37,7 @@ const mapStateToProps = (
     insightDetails: insightDetails,
     insightError: insightError,
     timeScale: selectTimeScale(state),
+    hasAdminRole: selectHasAdminRole(state),
   };
 };
 
@@ -54,6 +56,7 @@ const mapDispatchToProps = (
       }),
     );
   },
+  refreshUserSQLRoles: () => dispatch(uiConfigActions.refreshUserSQLRoles()),
 });
 
 export const TransactionInsightDetailsConnected = withRouter(

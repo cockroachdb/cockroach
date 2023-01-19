@@ -119,3 +119,25 @@ export function sqlResultsAreEmpty(
     )
   );
 }
+
+/**
+ * errorMessage cleans the error message returned by the sqlApi,
+ * removing information not useful for the user.
+ * e.g. the error message
+ * "$executing stmt 1: run-query-via-api: only users with either MODIFYCLUSTERSETTING
+ * or VIEWCLUSTERSETTING privileges are allowed to show cluster settings"
+ * became
+ * "only users with either MODIFYCLUSTERSETTING or VIEWCLUSTERSETTING privileges are allowed to show cluster settings"
+ * and the error message
+ * "executing stmt 1: max result size exceeded"
+ * became
+ * "max result size exceeded"
+ * @param message
+ */
+export function sqlApiErrorMessage(message: string): string {
+  message = message.replace("run-query-via-api: ", "");
+  if (message.includes(":")) {
+    return message.split(":")[1];
+  }
+  return message;
+}

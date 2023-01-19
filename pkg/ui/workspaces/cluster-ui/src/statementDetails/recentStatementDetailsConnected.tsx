@@ -22,7 +22,7 @@ import {
   selecteRecentStatement,
   selectContentionDetailsForStatement,
 } from "src/selectors/recentExecutions.selectors";
-import { selectIsTenant } from "src/store/uiConfig";
+import { selectHasAdminRole, selectIsTenant } from "src/store/uiConfig";
 
 // For tenant cases, we don't show information about node, regions and
 // diagnostics.
@@ -35,6 +35,7 @@ const mapStateToProps = (
     statement: selecteRecentStatement(state, props),
     match: props.match,
     isTenant: selectIsTenant(state),
+    hasAdminRole: selectHasAdminRole(state),
   };
 };
 
