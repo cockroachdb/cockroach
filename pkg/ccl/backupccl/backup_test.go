@@ -4253,9 +4253,8 @@ func TestEncryptedBackup(t *testing.T) {
 
 			sqlDB.Exec(t, fmt.Sprintf(`SHOW BACKUP $1 WITH %s`, encryptionOption), backupLoc1)
 
-			sqlDB.Exec(t, fmt.Sprintf(`SHOW BACKUP $1 WITH %s,encryption_info_dir='%s'`,
-				encryptionOption,
-				backupLoc1),
+			sqlDB.Exec(t, fmt.Sprintf(`SHOW BACKUP $1 WITH %s, encryption_info_dir = '%s'`,
+				encryptionOption, backupLoc1),
 				backupLoc1inc)
 
 			var expectedShowError string
@@ -4327,7 +4326,7 @@ func TestRegionalKMSEncryptedBackup(t *testing.T) {
 		backupLoc1 := localFoo + "/x?COCKROACH_LOCALITY=default"
 		backupLoc2 := localFoo + "/x2?COCKROACH_LOCALITY=" + url.QueryEscape("dc=dc1")
 
-		sqlDB.Exec(t, fmt.Sprintf(`BACKUP TO ($1, $2) WITH %s`,
+		sqlDB.Exec(t, fmt.Sprintf(`BACKUP INTO ($1, $2) WITH %s`,
 			concatMultiRegionKMSURIs(multiRegionKMSURIs)), backupLoc1,
 			backupLoc2)
 
@@ -4339,14 +4338,18 @@ func TestRegionalKMSEncryptedBackup(t *testing.T) {
 
 		checkBackupFilesEncrypted(t, rawDir)
 
-		sqlDB.Exec(t, fmt.Sprintf(`SHOW BACKUP $1 WITH KMS='%s'`, multiRegionKMSURIs[0]),
+		// check that SHOW BACKUP is valid when a single kms uri is provided and when multiple are
+		sqlDB.Exec(t, fmt.Sprintf(`SHOW BACKUP FROM LATEST IN $1 WITH KMS='%s'`, multiRegionKMSURIs[0]),
 			backupLoc1)
+
+		sqlDB.Exec(t, fmt.Sprintf(`SHOW BACKUP FROM LATEST IN ($1, $2) WITH %s`,
+			concatMultiRegionKMSURIs(multiRegionKMSURIs)), backupLoc1, backupLoc2)
 
 		// Attempt to RESTORE using each of the regional KMSs independently.
 		for _, uri := range multiRegionKMSURIs {
 			sqlDB.Exec(t, `DROP DATABASE neverappears CASCADE`)
 
-			sqlDB.Exec(t, fmt.Sprintf(`RESTORE DATABASE neverappears FROM ($1, $2) WITH %s`,
+			sqlDB.Exec(t, fmt.Sprintf(`RESTORE DATABASE neverappears FROM LATEST IN ($1, $2) WITH %s`,
 				concatMultiRegionKMSURIs([]string{uri})), backupLoc1, backupLoc2)
 
 			sqlDB.CheckQueryResults(t, `SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE neverappears.neverappears`, before)
@@ -9896,18 +9899,13 @@ func TestBackupRestoreSeparateExplicitIsDefault(t *testing.T) {
 			sqlDB.Exec(t, fmt.Sprintf("SHOW BACKUPS IN %s", dest))
 			sqlDB.Exec(t, fmt.Sprintf("SHOW BACKUP FROM LATEST IN %s", dest))
 
+			// Locality aware show backups will eventually fail if not all localities are provided,
+			// but for now, they're ok.
 			if len(br.dest) > 1 {
-				// Locality aware show backups will eventually fail if not all localities are provided,
-				// but for now, they're ok.
 				sqlDB.Exec(t, fmt.Sprintf("SHOW BACKUP FROM LATEST IN %s", br.dest[1]))
-
-				errorMsg := "SHOW BACKUP on locality aware backups using incremental_location is not" +
-					" supported yet"
-				sqlDB.ExpectErr(t, errorMsg, fmt.Sprintf("SHOW BACKUP FROM LATEST IN %s WITH incremental_location= %s", dest, br.inc[0]))
-			} else {
-				// non locality aware show backup with incremental_location should work!
-				sqlDB.Exec(t, fmt.Sprintf("SHOW BACKUP FROM LATEST IN %s WITH incremental_location= %s", dest, inc))
 			}
+
+			sqlDB.Exec(t, fmt.Sprintf("SHOW BACKUP FROM LATEST IN %s WITH incremental_location= %s", dest, inc))
 		}
 		sir := fmt.Sprintf("RESTORE DATABASE fkdb FROM LATEST IN %s WITH new_db_name = 'inc_fkdb', incremental_location = %s", dest, inc)
 		sqlDB.Exec(t, sir)

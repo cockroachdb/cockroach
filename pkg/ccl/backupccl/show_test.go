@@ -523,7 +523,7 @@ func TestShowBackups(t *testing.T) {
 
 	// check that full and remote incremental backups appear
 	b3 := sqlDBRestore.QueryStr(t,
-		`SELECT * FROM [SHOW BACKUP LATEST IN $1 WITH incremental_location= 'nodelocal://0/foo/inc'] WHERE object_type='table'`, full)
+		`SELECT * FROM [SHOW BACKUP LATEST IN $1 WITH incremental_location = $2 ] WHERE object_type ='table'`, full, remoteInc)
 	require.Equal(t, 3, len(b3))
 
 }
