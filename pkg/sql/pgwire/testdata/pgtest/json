@@ -116,3 +116,68 @@ ReadyForQuery
 {"Type":"DataRow","Values":[{"binary":"017b226b6579223a202276616c227d"}]}
 {"Type":"CommandComplete","CommandTag":"SELECT 1"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Test formatting for spaces between key and value in a json.
+# https://github.com/cockroachdb/cockroach/issues/95434.
+send
+Parse {"Query": "SELECT $1::JSON"}
+Bind {"ParameterFormatCodes": [0], "Parameters": [{"text":"{\"key\":    \"val\"}"}]}
+Describe {"ObjectType": "S"}
+Execute
+Sync
+----
+
+# PG's format output follows the input.
+until noncrdb_only
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"ParameterDescription","ParameterOIDs":[114]}
+{"Type":"RowDescription","Fields":[{"Name":"json","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":114,"DataTypeSize":-1,"TypeModifier":-1,"Format":0}]}
+{"Type":"DataRow","Values":[{"text":"{\"key\":    \"val\"}"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# CRDB has a fixed len of space between the key and value when formatting the json.
+until crdb_only
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"ParameterDescription","ParameterOIDs":[3802]}
+{"Type":"RowDescription","Fields":[{"Name":"jsonb","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":3802,"DataTypeSize":-1,"TypeModifier":-1,"Format":0}]}
+{"Type":"DataRow","Values":[{"text":"{\"key\": \"val\"}"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Parse {"Query": "SELECT $1::JSON"}
+Bind {"ParameterFormatCodes": [0], "Parameters": [{"text":"{\"key\":\"val\"}"}]}
+Describe {"ObjectType": "S"}
+Execute
+Sync
+----
+
+until noncrdb_only
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"ParameterDescription","ParameterOIDs":[114]}
+{"Type":"RowDescription","Fields":[{"Name":"json","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":114,"DataTypeSize":-1,"TypeModifier":-1,"Format":0}]}
+{"Type":"DataRow","Values":[{"text":"{\"key\":\"val\"}"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# CRDB has a fixed len of space between the key and value when formatting the json.
+until crdb_only
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"ParameterDescription","ParameterOIDs":[3802]}
+{"Type":"RowDescription","Fields":[{"Name":"jsonb","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":3802,"DataTypeSize":-1,"TypeModifier":-1,"Format":0}]}
+{"Type":"DataRow","Values":[{"text":"{\"key\": \"val\"}"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
