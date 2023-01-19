@@ -269,6 +269,7 @@ go_library(
         "//pkg/util/tracing/tracingpb",
         "//pkg/util/tracing/tracingservicepb",
         "//pkg/util/tracing/tracingui",
+        "//pkg/util/uint128",
         "//pkg/util/uuid",
         "@com_github_cenkalti_backoff//:backoff",
         "@com_github_cockroachdb_apd_v3//:apd",
