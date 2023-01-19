@@ -794,7 +794,7 @@ var sqlCmd = &cobra.Command{
 	Long:  "Run `cockroach sql` on a remote cluster.\n",
 	Args:  cobra.MinimumNArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		return roachprod.SQL(context.Background(), roachprodLibraryLogger, args[0], secure, args[1:])
+		return roachprod.SQL(context.Background(), roachprodLibraryLogger, args[0], secure, tenantName, args[1:])
 	}),
 }
 
@@ -805,7 +805,11 @@ var pgurlCmd = &cobra.Command{
 `,
 	Args: cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		urls, err := roachprod.PgURL(context.Background(), roachprodLibraryLogger, args[0], pgurlCertsDir, external, secure)
+		urls, err := roachprod.PgURL(context.Background(), roachprodLibraryLogger, args[0], pgurlCertsDir, roachprod.PGURLOptions{
+			External:   external,
+			Secure:     secure,
+			TenantName: tenantName,
+		})
 		if err != nil {
 			return err
 		}

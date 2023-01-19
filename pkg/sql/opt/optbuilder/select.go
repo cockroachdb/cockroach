@@ -98,12 +98,12 @@ func (b *Builder) buildDataSource(
 			}
 
 			outScope.expr = b.factory.ConstructWithScan(&memo.WithScanPrivate{
-				With:             cte.id,
-				Name:             string(cte.name.Alias),
-				InCols:           inCols,
-				OutCols:          outCols,
-				ID:               b.factory.Metadata().NextUniqueID(),
-				CanInlineInPlace: !cte.mtr.Set || !cte.mtr.Materialize,
+				With:    cte.id,
+				Name:    string(cte.name.Alias),
+				InCols:  inCols,
+				OutCols: outCols,
+				ID:      b.factory.Metadata().NextUniqueID(),
+				Mtr:     cte.mtr,
 			})
 
 			return outScope
@@ -205,12 +205,12 @@ func (b *Builder) buildDataSource(
 		}
 
 		outScope.expr = b.factory.ConstructWithScan(&memo.WithScanPrivate{
-			With:             cte.id,
-			Name:             string(cte.name.Alias),
-			InCols:           inCols,
-			OutCols:          outCols,
-			ID:               b.factory.Metadata().NextUniqueID(),
-			CanInlineInPlace: !cte.mtr.Set || !cte.mtr.Materialize,
+			With:    cte.id,
+			Name:    string(cte.name.Alias),
+			InCols:  inCols,
+			OutCols: outCols,
+			ID:      b.factory.Metadata().NextUniqueID(),
+			Mtr:     cte.mtr,
 		})
 
 		return outScope

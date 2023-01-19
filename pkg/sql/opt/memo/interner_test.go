@@ -600,20 +600,20 @@ func TestInterner(t *testing.T) {
 			},
 		}},
 
-		{hashFn: in.hasher.HashMaterializeClause, eqFn: in.hasher.IsMaterializeClauseEqual, variations: []testVariation{
+		{hashFn: in.hasher.HashCTEMaterializeClause, eqFn: in.hasher.IsCTEMaterializeClauseEqual, variations: []testVariation{
 			{
-				val1:  tree.MaterializeClause{Set: true, Materialize: true},
-				val2:  tree.MaterializeClause{Set: true, Materialize: true},
+				val1:  tree.CTEMaterializeAlways,
+				val2:  tree.CTEMaterializeAlways,
 				equal: true,
 			},
 			{
-				val1:  tree.MaterializeClause{Set: true, Materialize: false},
-				val2:  tree.MaterializeClause{Set: true, Materialize: false},
+				val1:  tree.CTEMaterializeNever,
+				val2:  tree.CTEMaterializeNever,
 				equal: true,
 			},
 			{
-				val1:  tree.MaterializeClause{Set: true, Materialize: false},
-				val2:  tree.MaterializeClause{Set: false, Materialize: true},
+				val1:  tree.CTEMaterializeNever,
+				val2:  tree.CTEMaterializeDefault,
 				equal: false,
 			},
 		}},
