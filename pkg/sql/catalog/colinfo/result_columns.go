@@ -275,16 +275,16 @@ var ExportColumns = ResultColumns{
 	{Name: "bytes", Typ: types.Int},
 }
 
+// TenantColumns appear in all SHOW TENANT queries.
 var TenantColumns = ResultColumns{
 	{Name: "id", Typ: types.Int},
 	{Name: "name", Typ: types.String},
 	{Name: "status", Typ: types.String},
 }
 
+// TenantColumnsWithReplication is appended to TenantColumns for
+// SHOW TENANT ... WITH REPLICATION STATUS queries.
 var TenantColumnsWithReplication = ResultColumns{
-	{Name: "id", Typ: types.Int},
-	{Name: "name", Typ: types.String},
-	{Name: "status", Typ: types.String},
 	{Name: "source_tenant_name", Typ: types.String},
 	{Name: "source_cluster_uri", Typ: types.String},
 	{Name: "replication_job_id", Typ: types.Int},
