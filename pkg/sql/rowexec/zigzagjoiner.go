@@ -864,6 +864,7 @@ func (z *zigzagJoiner) execStatsForTrace() *execinfrapb.ComponentStats {
 		}
 		kvStats.TuplesRead.MaybeAdd(fis.NumTuples)
 		kvStats.KVTime.MaybeAdd(fis.WaitTime)
+		kvStats.KVCPUTime.MaybeAdd(optional.MakeTimeValue(fis.kvCPUTime))
 	}
 	ret := &execinfrapb.ComponentStats{
 		KV:     kvStats,
