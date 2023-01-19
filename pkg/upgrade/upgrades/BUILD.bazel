@@ -130,6 +130,7 @@ go_test(
         "//pkg/sql/catalog/descbuilder",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/descs",
+        "//pkg/sql/catalog/schemadesc",
         "//pkg/sql/catalog/schematelemetry/schematelemetrycontroller",
         "//pkg/sql/catalog/systemschema",
         "//pkg/sql/catalog/tabledesc",
