@@ -561,12 +561,12 @@ func TestPGPreparedQuery(t *testing.T) {
 				Results("system", "public", "users", username.RootUser, "UPDATE", true),
 		}},
 		{"SHOW INDEXES FROM system.users", []preparedQueryTest{
-			baseTest.Results("users", "primary", false, 1, "username", "ASC", false, false, true).
-				Results("users", "primary", false, 2, "hashedPassword", "N/A", true, false, true).
-				Results("users", "primary", false, 3, "isRole", "N/A", true, false, true).
-				Results("users", "primary", false, 4, "user_id", "N/A", true, false, true).
-				Results("users", "users_user_id_idx", false, 1, "user_id", "ASC", false, false, true).
-				Results("users", "users_user_id_idx", false, 2, "username", "ASC", true, true, true),
+			baseTest.Results("users", "primary", false, 1, "username", "username", "ASC", false, false, true).
+				Results("users", "primary", false, 2, "hashedPassword", "hashedPassword", "N/A", true, false, true).
+				Results("users", "primary", false, 3, "isRole", "isRole", "N/A", true, false, true).
+				Results("users", "primary", false, 4, "user_id", "user_id", "N/A", true, false, true).
+				Results("users", "users_user_id_idx", false, 1, "user_id", "user_id", "ASC", false, false, true).
+				Results("users", "users_user_id_idx", false, 2, "username", "username", "ASC", true, true, true),
 		}},
 		{"SHOW TABLES FROM system", []preparedQueryTest{
 			baseTest.Results("public", "comments", "table", gosql.NullString{}, 0, gosql.NullString{}).Others(bootstrap.NumSystemTablesForSystemTenant - 1),
