@@ -16,15 +16,20 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/gossip"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/op"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/stretchr/testify/require"
 )
 
 func testingGetStoreQPS(s state.State) map[state.StoreID]float64 {
 	ret := map[state.StoreID]float64{}
-	for _, desc := range s.StoreDescriptors() {
+	stores := s.Stores()
+	storeIDs := make([]state.StoreID, len(stores))
+	for i, store := range stores {
+		storeIDs[i] = store.StoreID()
+	}
+	for _, desc := range s.StoreDescriptors(false /* cached */, storeIDs...) {
 		ret[state.StoreID(desc.StoreID)] = desc.Capacity.QueriesPerSecond
 	}
 	return ret
@@ -35,6 +40,7 @@ func TestStoreRebalancer(t *testing.T) {
 	testingStore := state.StoreID(1)
 	testSettings := config.DefaultSimulationSettings()
 	testSettings.ReplicaChangeBaseDelay = 5 * time.Second
+	testSettings.StateExchangeDelay = 0
 
 	// NB: We trigger lease rebalancing in this test, where the end result
 	// should be a perfectly balanced QPS of 500 per store. We only simulate
@@ -179,15 +185,8 @@ func TestStoreRebalancer(t *testing.T) {
 			ctx := context.Background()
 			s := tc.s
 
-			exchange := state.NewFixedDelayExhange(
-				start,
-				time.Second,
-				time.Second*0, /* no state update delay */
-			)
-
-			// Update the storepool for informing allocator decisions.
-			exchange.Put(state.OffsetTick(start, 0), s.StoreDescriptors()...)
-			s.UpdateStorePool(testingStore, exchange.Get(state.OffsetTick(start, 1), roachpb.StoreID(testingStore)))
+			gossip := gossip.NewGossip(s, testSettings)
+			gossip.Tick(ctx, start, s)
 
 			allocator := s.MakeAllocator(testingStore)
 			storePool := s.StorePool(testingStore)
@@ -202,9 +201,7 @@ func TestStoreRebalancer(t *testing.T) {
 				s.TickClock(state.OffsetTick(start, tick))
 				changer.Tick(state.OffsetTick(start, tick), s)
 				controller.Tick(ctx, state.OffsetTick(start, tick), s)
-				exchange.Put(state.OffsetTick(start, 0), s.StoreDescriptors()...)
-				s.UpdateStorePool(testingStore, exchange.Get(state.OffsetTick(start, 1), roachpb.StoreID(testingStore)))
-
+				gossip.Tick(ctx, state.OffsetTick(start, tick), s)
 				src.Tick(ctx, state.OffsetTick(start, tick), s)
 				resultsPhase = append(resultsPhase, src.rebalancerState.phase)
 				storeQPS := testingGetStoreQPS(s)
@@ -224,6 +221,8 @@ func TestStoreRebalancerBalances(t *testing.T) {
 	testSettings := config.DefaultSimulationSettings()
 	testSettings.ReplicaAddRate = 1
 	testSettings.ReplicaChangeBaseDelay = 1 * time.Second
+	testSettings.StateExchangeInterval = 1 * time.Second
+	testSettings.StateExchangeDelay = 0
 
 	distributeQPS := func(s state.State, qpsCounts map[state.StoreID]float64) {
 		dist := make([]float64, len(qpsCounts))
@@ -288,15 +287,10 @@ func TestStoreRebalancerBalances(t *testing.T) {
 			s.TransferLease(5, 3)
 			distributeQPS(s, tc.qpsCounts)
 
-			exchange := state.NewFixedDelayExhange(
-				start,
-				time.Second,
-				time.Second*0, /* no state update delay */
-			)
+			gossip := gossip.NewGossip(s, testSettings)
 
 			// Update the storepool for informing allocator decisions.
-			exchange.Put(state.OffsetTick(start, 0), s.StoreDescriptors()...)
-			s.UpdateStorePool(testingStore, exchange.Get(state.OffsetTick(start, 1), roachpb.StoreID(testingStore)))
+			gossip.Tick(ctx, start, s)
 
 			allocator := s.MakeAllocator(testingStore)
 			storePool := s.StorePool(testingStore)
@@ -310,8 +304,7 @@ func TestStoreRebalancerBalances(t *testing.T) {
 				s.TickClock(state.OffsetTick(start, tick))
 				changer.Tick(state.OffsetTick(start, tick), s)
 				controller.Tick(ctx, state.OffsetTick(start, tick), s)
-				exchange.Put(state.OffsetTick(start, 0), s.StoreDescriptors()...)
-				s.UpdateStorePool(testingStore, exchange.Get(state.OffsetTick(start, 1), roachpb.StoreID(testingStore)))
+				gossip.Tick(ctx, state.OffsetTick(start, tick), s)
 				src.Tick(ctx, state.OffsetTick(start, tick), s)
 
 				results = append(results, testingGetStoreQPS(s))

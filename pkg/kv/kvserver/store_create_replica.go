@@ -439,7 +439,7 @@ func (s *Store) maybeMarkReplicaInitializedLockedReplLocked(
 
 	// Add the range to metrics and maybe gossip on capacity change.
 	s.metrics.ReplicaCount.Inc(1)
-	s.maybeGossipOnCapacityChange(ctx, rangeAddEvent)
+	s.storeGossip.MaybeGossipOnCapacityChange(ctx, RangeAddEvent)
 
 	return nil
 }

@@ -113,12 +113,10 @@ func Example_workload() {
 	rwg[0] = testCreateWorkloadGenerator(start, 10, 10000)
 	m := asim.NewMetricsTracker(os.Stdout)
 
-	exchange := state.NewFixedDelayExhange(start, settings.StateExchangeInterval, settings.StateExchangeDelay)
 	changer := state.NewReplicaChanger()
 	s := state.LoadConfig(state.ComplexConfig)
-	testPreGossipStores(s, exchange, start)
 
-	sim := asim.NewSimulator(start, end, interval, interval, rwg, s, exchange, changer, settings, m)
+	sim := asim.NewSimulator(start, end, interval, interval, rwg, s, changer, settings, m)
 	sim.RunSim(ctx)
 	// WIP: non deterministic
 	// Output:
