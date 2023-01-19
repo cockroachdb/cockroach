@@ -11,8 +11,11 @@
 package rules
 
 import (
+	"fmt"
 	"reflect"
+	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/rel"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scgraph"
@@ -22,100 +25,100 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-func join(a, b nodeVars, attr rel.Attr, eqVarName rel.Var) rel.Clause {
-	return joinOn(a, attr, b, attr, eqVarName)
+func join(a, b NodeVars, attr rel.Attr, eqVarName rel.Var) rel.Clause {
+	return JoinOn(a, attr, b, attr, eqVarName)
 }
 
 var _ = join
 
-func joinOn(a nodeVars, aAttr rel.Attr, b nodeVars, bAttr rel.Attr, eqVarName rel.Var) rel.Clause {
+func JoinOn(a NodeVars, aAttr rel.Attr, b NodeVars, bAttr rel.Attr, eqVarName rel.Var) rel.Clause {
 	return rel.And(
-		a.el.AttrEqVar(aAttr, eqVarName),
-		b.el.AttrEqVar(bAttr, eqVarName),
+		a.El.AttrEqVar(aAttr, eqVarName),
+		b.El.AttrEqVar(bAttr, eqVarName),
 	)
 }
 
-func filterElements(name string, a, b nodeVars, fn interface{}) rel.Clause {
-	return rel.Filter(name, a.el, b.el)(fn)
+func FilterElements(name string, a, b NodeVars, fn interface{}) rel.Clause {
+	return rel.Filter(name, a.El, b.El)(fn)
 }
 
-func toPublicOrTransient(from, to nodeVars) rel.Clause {
-	return toPublicOrTransientUntyped(from.target, to.target)
+func ToPublicOrTransient(from, to NodeVars) rel.Clause {
+	return toPublicOrTransientUntyped(from.Target, to.Target)
 }
 
-func statusesToPublicOrTransient(
-	from nodeVars, fromStatus scpb.Status, to nodeVars, toStatus scpb.Status,
+func StatusesToPublicOrTransient(
+	from NodeVars, fromStatus scpb.Status, to NodeVars, toStatus scpb.Status,
 ) rel.Clause {
 	return rel.And(
-		toPublicOrTransient(from, to),
-		from.currentStatus(fromStatus),
-		to.currentStatus(toStatus),
+		ToPublicOrTransient(from, to),
+		from.CurrentStatus(fromStatus),
+		to.CurrentStatus(toStatus),
 	)
 }
 
-func toAbsent(from, to nodeVars) rel.Clause {
-	return toAbsentUntyped(from.target, to.target)
+func toAbsent(from, to NodeVars) rel.Clause {
+	return toAbsentUntyped(from.Target, to.Target)
 }
 
-func statusesToAbsent(
-	from nodeVars, fromStatus scpb.Status, to nodeVars, toStatus scpb.Status,
+func StatusesToAbsent(
+	from NodeVars, fromStatus scpb.Status, to NodeVars, toStatus scpb.Status,
 ) rel.Clause {
 	return rel.And(
 		toAbsent(from, to),
-		from.currentStatus(fromStatus),
-		to.currentStatus(toStatus),
+		from.CurrentStatus(fromStatus),
+		to.CurrentStatus(toStatus),
 	)
 }
 
-func transient(from, to nodeVars) rel.Clause {
-	return transientUntyped(from.target, to.target)
+func transient(from, to NodeVars) rel.Clause {
+	return transientUntyped(from.Target, to.Target)
 }
 
-func statusesTransient(
-	from nodeVars, fromStatus scpb.Status, to nodeVars, toStatus scpb.Status,
+func StatusesTransient(
+	from NodeVars, fromStatus scpb.Status, to NodeVars, toStatus scpb.Status,
 ) rel.Clause {
 	return rel.And(
 		transient(from, to),
-		from.currentStatus(fromStatus),
-		to.currentStatus(toStatus),
+		from.CurrentStatus(fromStatus),
+		to.CurrentStatus(toStatus),
 	)
 }
 
-func joinOnDescID(a, b nodeVars, descriptorIDVar rel.Var) rel.Clause {
-	return joinOnDescIDUntyped(a.el, b.el, descriptorIDVar)
+func JoinOnDescID(a, b NodeVars, descriptorIDVar rel.Var) rel.Clause {
+	return joinOnDescIDUntyped(a.El, b.El, descriptorIDVar)
 }
 
-func joinReferencedDescID(a, b nodeVars, descriptorIDVar rel.Var) rel.Clause {
-	return joinReferencedDescIDUntyped(a.el, b.el, descriptorIDVar)
+func JoinReferencedDescID(a, b NodeVars, descriptorIDVar rel.Var) rel.Clause {
+	return joinReferencedDescIDUntyped(a.El, b.El, descriptorIDVar)
 }
 
-func joinOnColumnID(a, b nodeVars, relationIDVar, columnIDVar rel.Var) rel.Clause {
-	return joinOnColumnIDUntyped(a.el, b.el, relationIDVar, columnIDVar)
+func JoinOnColumnID(a, b NodeVars, relationIDVar, columnIDVar rel.Var) rel.Clause {
+	return joinOnColumnIDUntyped(a.El, b.El, relationIDVar, columnIDVar)
 }
 
-func joinOnIndexID(a, b nodeVars, relationIDVar, indexIDVar rel.Var) rel.Clause {
-	return joinOnIndexIDUntyped(a.el, b.el, relationIDVar, indexIDVar)
+func JoinOnIndexID(a, b NodeVars, relationIDVar, indexIDVar rel.Var) rel.Clause {
+	return joinOnIndexIDUntyped(a.El, b.El, relationIDVar, indexIDVar)
 }
 
-func joinOnConstraintID(a, b nodeVars, relationIDVar, constraintID rel.Var) rel.Clause {
-	return joinOnConstraintIDUntyped(a.el, b.el, relationIDVar, constraintID)
+func JoinOnConstraintID(a, b NodeVars, relationIDVar, constraintID rel.Var) rel.Clause {
+	return joinOnConstraintIDUntyped(a.El, b.El, relationIDVar, constraintID)
 }
 
-func columnInIndex(
-	indexColumn, index nodeVars, relationIDVar, columnIDVar, indexIDVar rel.Var,
+func ColumnInIndex(
+	indexColumn, index NodeVars, relationIDVar, columnIDVar, indexIDVar rel.Var,
 ) rel.Clause {
-	return columnInIndexUntyped(indexColumn.el, index.el, relationIDVar, columnIDVar, indexIDVar)
+	return columnInIndexUntyped(indexColumn.El, index.El, relationIDVar, columnIDVar, indexIDVar)
 }
 
-func columnInSwappedInPrimaryIndex(
-	indexColumn, index nodeVars, relationIDVar, columnIDVar, indexIDVar rel.Var,
+func ColumnInSwappedInPrimaryIndex(
+	indexColumn, index NodeVars, relationIDVar, columnIDVar, indexIDVar rel.Var,
 ) rel.Clause {
-	return columnInSwappedInPrimaryIndexUntyped(indexColumn.el, index.el, relationIDVar, columnIDVar, indexIDVar)
+	return columnInSwappedInPrimaryIndexUntyped(indexColumn.El, index.El, relationIDVar, columnIDVar, indexIDVar)
 }
 
 var (
 	toPublicOrTransientUntyped = screl.Schema.Def2(
-		"toPublicOrTransient",
+		"ToPublicOrTransient",
 		"target1", "target2",
 		func(target1 rel.Var, target2 rel.Var) rel.Clauses {
 			return rel.Clauses{
@@ -193,7 +196,7 @@ var (
 	)
 
 	columnInIndexUntyped = screl.Schema.Def5(
-		"columnInIndex",
+		"ColumnInIndex",
 		"index-column", "index", "table-id", "column-id", "index-id", func(
 			indexColumn, index, tableID, columnID, indexID rel.Var,
 		) rel.Clauses {
@@ -215,7 +218,7 @@ var (
 	})
 
 	columnInSwappedInPrimaryIndexUntyped = screl.Schema.Def5(
-		"columnInSwappedInPrimaryIndex",
+		"ColumnInSwappedInPrimaryIndex",
 		"index-column", "index", "table-id", "column-id", "index-id", func(
 			indexColumn, index, tableID, columnID, indexID rel.Var,
 		) rel.Clauses {
@@ -228,13 +231,29 @@ var (
 		})
 )
 
-func forEachElement(fn func(element scpb.Element) error) error {
+func ForEachElement(fn func(element scpb.Element) error) error {
 	var ep scpb.ElementProto
 	vep := reflect.ValueOf(ep)
 	for i := 0; i < vep.NumField(); i++ {
 		e := vep.Field(i).Interface().(scpb.Element)
 		if err := fn(e); err != nil {
 			return iterutil.Map(err)
+		}
+	}
+	return nil
+}
+
+func ForEachElementInActiveVersion(
+	fn func(element scpb.Element) error, version clusterversion.ClusterVersion,
+) error {
+	var ep scpb.ElementProto
+	vep := reflect.ValueOf(ep)
+	for i := 0; i < vep.NumField(); i++ {
+		e := vep.Field(i).Interface().(scpb.Element)
+		if version.IsActive(screl.MinVersion(e)) {
+			if err := fn(e); err != nil {
+				return iterutil.Map(err)
+			}
 		}
 	}
 	return nil
@@ -251,14 +270,14 @@ func IsDescriptor(e scpb.Element) bool {
 	return false
 }
 
-func isSubjectTo2VersionInvariant(e scpb.Element) bool {
+func IsSubjectTo2VersionInvariant(e scpb.Element) bool {
 	// TODO(ajwerner): This should include constraints and enum values but it
 	// currently does not because we do not support dropping them unless we're
 	// dropping the descriptor and we do not support adding them.
-	return isIndex(e) || isColumn(e) || isSupportedNonIndexBackedConstraint(e)
+	return IsIndex(e) || IsColumn(e) || IsSupportedNonIndexBackedConstraint(e)
 }
 
-func isIndex(e scpb.Element) bool {
+func IsIndex(e scpb.Element) bool {
 	switch e.(type) {
 	case *scpb.PrimaryIndex, *scpb.SecondaryIndex, *scpb.TemporaryIndex:
 		return true
@@ -266,13 +285,13 @@ func isIndex(e scpb.Element) bool {
 	return false
 }
 
-func isColumn(e scpb.Element) bool {
+func IsColumn(e scpb.Element) bool {
 	_, ok := e.(*scpb.Column)
 	return ok
 }
 
-func isSimpleDependent(e scpb.Element) bool {
-	return !IsDescriptor(e) && !isSubjectTo2VersionInvariant(e) && !isData(e)
+func IsSimpleDependent(e scpb.Element) bool {
+	return !IsDescriptor(e) && !IsSubjectTo2VersionInvariant(e) && !IsData(e)
 }
 
 func getTypeT(element scpb.Element) (*scpb.TypeT, error) {
@@ -291,7 +310,7 @@ func getTypeT(element scpb.Element) (*scpb.TypeT, error) {
 	return nil, errors.AssertionFailedf("element %T does not have an embedded scpb.TypeT", element)
 }
 
-func isWithTypeT(element scpb.Element) bool {
+func IsWithTypeT(element scpb.Element) bool {
 	_, err := getTypeT(element)
 	return err == nil
 }
@@ -327,12 +346,12 @@ func getExpression(element scpb.Element) (*scpb.Expression, error) {
 	return nil, errors.AssertionFailedf("element %T does not have an embedded scpb.Expression", element)
 }
 
-func isWithExpression(element scpb.Element) bool {
+func IsWithExpression(element scpb.Element) bool {
 	_, err := getExpression(element)
 	return err == nil
 }
 
-func isTypeDescriptor(element scpb.Element) bool {
+func IsTypeDescriptor(element scpb.Element) bool {
 	switch element.(type) {
 	case *scpb.EnumType, *scpb.AliasType, *scpb.CompositeType:
 		return true
@@ -341,17 +360,17 @@ func isTypeDescriptor(element scpb.Element) bool {
 	}
 }
 
-func isColumnDependent(e scpb.Element) bool {
+func IsColumnDependent(e scpb.Element) bool {
 	switch e.(type) {
 	case *scpb.ColumnType:
 		return true
 	case *scpb.ColumnName, *scpb.ColumnComment, *scpb.IndexColumn:
 		return true
 	}
-	return isColumnTypeDependent(e)
+	return IsColumnTypeDependent(e)
 }
 
-func isColumnTypeDependent(e scpb.Element) bool {
+func IsColumnTypeDependent(e scpb.Element) bool {
 	switch e.(type) {
 	case *scpb.SequenceOwner, *scpb.ColumnDefaultExpression, *scpb.ColumnOnUpdateExpression:
 		return true
@@ -359,7 +378,7 @@ func isColumnTypeDependent(e scpb.Element) bool {
 	return false
 }
 
-func isIndexDependent(e scpb.Element) bool {
+func IsIndexDependent(e scpb.Element) bool {
 	switch e.(type) {
 	case *scpb.IndexName, *scpb.IndexComment, *scpb.IndexColumn:
 		return true
@@ -369,11 +388,11 @@ func isIndexDependent(e scpb.Element) bool {
 	return false
 }
 
-// A non-index-backed constraint is one of {Check, FK, UniqueWithoutIndex}. We only
+// IsSupportedNonIndexBackedConstraint a non-index-backed constraint is one of {Check, FK, UniqueWithoutIndex}. We only
 // support Check for now.
 // TODO (xiang): Expand this predicate to include other non-index-backed constraints
 // when we properly support adding/dropping them in the new schema changer.
-func isSupportedNonIndexBackedConstraint(e scpb.Element) bool {
+func IsSupportedNonIndexBackedConstraint(e scpb.Element) bool {
 	switch e.(type) {
 	case *scpb.CheckConstraint, *scpb.ForeignKeyConstraint, *scpb.UniqueWithoutIndexConstraint:
 		return true
@@ -381,7 +400,7 @@ func isSupportedNonIndexBackedConstraint(e scpb.Element) bool {
 	return false
 }
 
-func isConstraint(e scpb.Element) bool {
+func IsConstraint(e scpb.Element) bool {
 	switch e.(type) {
 	case *scpb.PrimaryIndex, *scpb.SecondaryIndex, *scpb.TemporaryIndex:
 		return true
@@ -391,7 +410,7 @@ func isConstraint(e scpb.Element) bool {
 	return false
 }
 
-func isConstraintDependent(e scpb.Element) bool {
+func IsConstraintDependent(e scpb.Element) bool {
 	switch e.(type) {
 	case *scpb.ConstraintWithoutIndexName:
 		return true
@@ -401,7 +420,7 @@ func isConstraintDependent(e scpb.Element) bool {
 	return false
 }
 
-func isData(e scpb.Element) bool {
+func IsData(e scpb.Element) bool {
 	switch e.(type) {
 	case *scpb.DatabaseData:
 		return true
@@ -415,7 +434,7 @@ func isData(e scpb.Element) bool {
 
 type elementTypePredicate = func(e scpb.Element) bool
 
-func or(predicates ...elementTypePredicate) elementTypePredicate {
+func Or(predicates ...elementTypePredicate) elementTypePredicate {
 	return func(e scpb.Element) bool {
 		for _, p := range predicates {
 			if p(e) {
@@ -426,15 +445,22 @@ func or(predicates ...elementTypePredicate) elementTypePredicate {
 	}
 }
 
-// registerDepRuleForDrop is a convenience function which calls
-// registerDepRule with the cross-product of (ToAbsent,Transient)^2 target
+func Not(predicate elementTypePredicate) elementTypePredicate {
+	return func(e scpb.Element) bool {
+		return !predicate(e)
+	}
+}
+
+// RegisterDepRuleForDrop is a convenience function which calls
+// RegisterDepRule with the cross-product of (ToAbsent,Transient)^2 Target
 // states, which can't easily be composed.
-func registerDepRuleForDrop(
+func RegisterDepRuleForDrop(
+	r *Registry,
 	ruleName scgraph.RuleName,
 	kind scgraph.DepEdgeKind,
 	from, to string,
 	fromStatus, toStatus scpb.Status,
-	fn func(from, to nodeVars) rel.Clauses,
+	fn func(from, to NodeVars) rel.Clauses,
 ) {
 
 	transientFromStatus, okFrom := scpb.GetTransientEquivalent(fromStatus)
@@ -446,37 +472,37 @@ func registerDepRuleForDrop(
 		panic(errors.AssertionFailedf("Invalid 'from' status %s", toStatus))
 	}
 
-	registerDepRule(ruleName, kind, from, to, func(from, to nodeVars) rel.Clauses {
+	r.RegisterDepRule(ruleName, kind, from, to, func(from, to NodeVars) rel.Clauses {
 		return append(
 			fn(from, to),
-			statusesToAbsent(from, fromStatus, to, toStatus),
+			StatusesToAbsent(from, fromStatus, to, toStatus),
 		)
 	})
 
-	registerDepRule(ruleName, kind, from, to, func(from, to nodeVars) rel.Clauses {
+	r.RegisterDepRule(ruleName, kind, from, to, func(from, to NodeVars) rel.Clauses {
 		return append(
 			fn(from, to),
-			statusesTransient(from, transientFromStatus, to, transientToStatus),
+			StatusesTransient(from, transientFromStatus, to, transientToStatus),
 		)
 	})
 
-	registerDepRule(ruleName, kind, from, to, func(from, to nodeVars) rel.Clauses {
+	r.RegisterDepRule(ruleName, kind, from, to, func(from, to NodeVars) rel.Clauses {
 		return append(
 			fn(from, to),
-			from.targetStatus(scpb.Transient),
-			from.currentStatus(transientFromStatus),
-			to.targetStatus(scpb.ToAbsent),
-			to.currentStatus(toStatus),
+			from.TargetStatus(scpb.Transient),
+			from.CurrentStatus(transientFromStatus),
+			to.TargetStatus(scpb.ToAbsent),
+			to.CurrentStatus(toStatus),
 		)
 	})
 
-	registerDepRule(ruleName, kind, from, to, func(from, to nodeVars) rel.Clauses {
+	r.RegisterDepRule(ruleName, kind, from, to, func(from, to NodeVars) rel.Clauses {
 		return append(
 			fn(from, to),
-			from.targetStatus(scpb.ToAbsent),
-			from.currentStatus(fromStatus),
-			to.targetStatus(scpb.Transient),
-			to.currentStatus(transientToStatus),
+			from.TargetStatus(scpb.ToAbsent),
+			from.CurrentStatus(fromStatus),
+			to.TargetStatus(scpb.Transient),
+			to.CurrentStatus(transientToStatus),
 		)
 	})
 }
@@ -485,28 +511,28 @@ func registerDepRuleForDrop(
 // failing to unify if the passed element is part of a descriptor and
 // that descriptor is being dropped.
 var descriptorIsNotBeingDropped = screl.Schema.DefNotJoin1(
-	"descriptorIsNotBeingDropped", "element", func(
+	"DescriptorIsNotBeingDropped", "element", func(
 		element rel.Var,
 	) rel.Clauses {
-		descriptor := mkNodeVars("descriptor")
+		descriptor := MkNodeVars("descriptor")
 		return rel.Clauses{
-			descriptor.typeFilter(IsDescriptor),
-			descriptor.joinTarget(),
-			joinOnDescIDUntyped(descriptor.el, element, "id"),
-			descriptor.targetStatus(scpb.ToAbsent),
+			descriptor.TypeFilter(IsDescriptor),
+			descriptor.JoinTarget(),
+			joinOnDescIDUntyped(descriptor.El, element, "id"),
+			descriptor.TargetStatus(scpb.ToAbsent),
 		}
 	},
 )
 
-// fromHasPublicStatusIfFromIsTableAndToIsRowLevelTTL creates
+// FromHasPublicStatusIfFromIsTableAndToIsRowLevelTTL creates
 // a clause which leads to the outer clause failing to unify
 // if the passed element `from` is a Table, `to` is a RowLevelTTl,
-// and there does not exist a node with the same target as
+// and there does not exist a Node with the same Target as
 // `fromTarget` in PUBLIC status.
 // It is used to suppress rule "descriptor drop right before dependent element removal"
 // for the special case where we drop a rowLevelTTL table in mixed
 // version state for forward compatibility (issue #86672).
-var fromHasPublicStatusIfFromIsTableAndToIsRowLevelTTL = screl.Schema.DefNotJoin3(
+var FromHasPublicStatusIfFromIsTableAndToIsRowLevelTTL = screl.Schema.DefNotJoin3(
 	"fromHasPublicStatusIfFromIsTableAndToIsRowLevelTTL",
 	"fromTarget", "fromEl", "toEl", func(fromTarget, fromEl, toEl rel.Var) rel.Clauses {
 		n := rel.Var("n")
@@ -524,3 +550,46 @@ var fromHasPublicStatusIfFromIsTableAndToIsRowLevelTTL = screl.Schema.DefNotJoin
 			})(n),
 		}
 	})
+
+// notJoinOnNodeWithStatusIn is a cache to memoize getNotJoinOnNodeWithStatusIn.
+var notJoinOnNodeWithStatusIn = map[string]rel.Rule1{}
+
+// GetNotJoinOnNodeWithStatusIn returns a not-join rule which takes a variable
+// corresponding to a target in the graph as input and will exclude that target
+// if the graph contains a node with that target in any of the listed status
+// values.
+func GetNotJoinOnNodeWithStatusIn(statues []scpb.Status) rel.Rule1 {
+	makeStatusesStrings := func(statuses []scpb.Status) []string {
+		ret := make([]string, len(statuses))
+		for i, status := range statuses {
+			ret[i] = status.String()
+		}
+		return ret
+	}
+	makeStatusesString := func(statuses []scpb.Status) string {
+		return strings.Join(makeStatusesStrings(statuses), "_")
+	}
+	boxStatuses := func(input []scpb.Status) []interface{} {
+		ret := make([]interface{}, len(input))
+		for i, s := range input {
+			ret[i] = s
+		}
+		return ret
+	}
+	name := makeStatusesString(statues)
+	if got, ok := notJoinOnNodeWithStatusIn[name]; ok {
+		return got
+	}
+	r := screl.Schema.DefNotJoin1(
+		fmt.Sprintf("nodeNotExistsWithStatusIn_%s", name),
+		"sharedTarget", func(target rel.Var) rel.Clauses {
+			n := rel.Var("n")
+			return rel.Clauses{
+				n.Type((*screl.Node)(nil)),
+				n.AttrEqVar(screl.Target, target),
+				n.AttrIn(screl.CurrentStatus, boxStatuses(statues)...),
+			}
+		})
+	notJoinOnNodeWithStatusIn[name] = r
+	return r
+}
