@@ -166,7 +166,7 @@ func (o *ActiveQueryProfiler) takeQueryProfile(
 	}
 	defer f.Close()
 
-	writer := debug.NewActiveQueriesWriter(registry.SerializeAll(), f)
+	writer := debug.NewActiveQueriesWriter(registry.SerializeAll(true /* lock */), f)
 	err = writer.Write()
 	if err != nil {
 		log.Errorf(ctx, "error writing active queries to profile: %v", err)
