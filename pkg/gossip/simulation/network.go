@@ -116,7 +116,8 @@ func (n *Network) CreateNode(defaultZoneConfig *zonepb.ZoneConfig) (*Node, error
 		return nil, err
 	}
 	node := &Node{Server: server, Listener: ln, Registry: metric.NewRegistry()}
-	node.Gossip = gossip.NewTest(0, n.RPCContext, server, n.Stopper, node.Registry, defaultZoneConfig)
+	node.Gossip = gossip.NewTest(0, n.Stopper, node.Registry, defaultZoneConfig)
+	gossip.RegisterGossipServer(server, node.Gossip)
 	n.Stopper.AddCloser(stop.CloserFn(server.Stop))
 	_ = n.Stopper.RunAsyncTask(context.TODO(), "node-wait-quiesce", func(context.Context) {
 		<-n.Stopper.ShouldQuiesce()
@@ -130,7 +131,7 @@ func (n *Network) CreateNode(defaultZoneConfig *zonepb.ZoneConfig) (*Node, error
 // StartNode initializes a gossip instance for the simulation node and
 // starts it.
 func (n *Network) StartNode(node *Node) error {
-	node.Gossip.Start(node.Addr(), node.Addresses)
+	node.Gossip.Start(node.Addr(), node.Addresses, n.RPCContext)
 	node.Gossip.EnableSimulationCycler(true)
 	n.nodeIDAllocator++
 	node.Gossip.NodeID.Set(context.TODO(), n.nodeIDAllocator)
