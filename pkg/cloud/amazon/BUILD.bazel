@@ -23,6 +23,7 @@ go_library(
         "//pkg/server/telemetry",
         "//pkg/settings",
         "//pkg/settings/cluster",
+        "//pkg/util",
         "//pkg/util/contextutil",
         "//pkg/util/envutil",
         "//pkg/util/ioctx",
