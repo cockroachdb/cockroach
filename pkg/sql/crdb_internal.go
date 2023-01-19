@@ -401,29 +401,26 @@ CREATE TABLE crdb_internal.super_regions (
 				if err != nil {
 					return err
 				}
-
-				superRegions, err := typeDesc.SuperRegions()
-				if err != nil {
-					return err
+				regionDesc := typeDesc.AsRegionEnumTypeDescriptor()
+				if regionDesc == nil {
+					return errors.AssertionFailedf("expected region enum type, not %s for type %q (%d)",
+						typeDesc.GetKind(), typeDesc.GetName(), typeDesc.GetID())
 				}
-				for _, superRegion := range superRegions {
-					regionList := tree.NewDArray(types.String)
-					for _, region := range superRegion.Regions {
-						if err := regionList.Append(tree.NewDString(region.String())); err != nil {
-							return err
-						}
-					}
 
-					if err := addRow(
-						tree.NewDInt(tree.DInt(db.GetID())),          // id
-						tree.NewDString(db.GetName()),                // database_name
-						tree.NewDString(superRegion.SuperRegionName), // super_region_name
-						regionList, // regions
-					); err != nil {
+				return regionDesc.ForEachSuperRegion(func(superRegion string) error {
+					regionList := tree.NewDArray(types.String)
+					if err := regionDesc.ForEachRegionInSuperRegion(superRegion, func(region catpb.RegionName) error {
+						return regionList.Append(tree.NewDString(region.String()))
+					}); err != nil {
 						return err
 					}
-				}
-				return nil
+					return addRow(
+						tree.NewDInt(tree.DInt(db.GetID())), // id
+						tree.NewDString(db.GetName()),       // database_name
+						tree.NewDString(superRegion),        // super_region_name
+						regionList,                          // regions
+					)
+				})
 			})
 	},
 }
@@ -2771,18 +2768,27 @@ func writeCreateTypeDescRow(
 	typeDesc catalog.TypeDescriptor,
 	addRow func(...tree.Datum) error,
 ) (written bool, err error) {
-	switch typeDesc.GetKind() {
-	case descpb.TypeDescriptor_ENUM:
+	if typeDesc.AsAliasTypeDescriptor() != nil {
+		// Alias types are created implicitly, so we don't have create
+		// statements for them.
+		return false, nil
+	}
+	if e := typeDesc.AsEnumTypeDescriptor(); e != nil {
+		if e.AsRegionEnumTypeDescriptor() != nil {
+			// Multi-region enums are created implicitly, so we don't have create
+			// statements for them.
+			return false, nil
+		}
 		var enumLabels tree.EnumValueList
 		enumLabelsDatum := tree.NewDArray(types.String)
-		for i := 0; i < typeDesc.NumEnumMembers(); i++ {
-			rep := typeDesc.GetMemberLogicalRepresentation(i)
+		for i := 0; i < e.NumEnumMembers(); i++ {
+			rep := e.GetMemberLogicalRepresentation(i)
 			enumLabels = append(enumLabels, tree.EnumValue(rep))
 			if err := enumLabelsDatum.Append(tree.NewDString(rep)); err != nil {
 				return false, err
 			}
 		}
-		name, err := tree.NewUnresolvedObjectName(2, [3]string{typeDesc.GetName(), sc.GetName()}, 0)
+		name, err := tree.NewUnresolvedObjectName(2, [3]string{e.GetName(), sc.GetName()}, 0)
 		if err != nil {
 			return false, err
 		}
@@ -2792,33 +2798,30 @@ func writeCreateTypeDescRow(
 			EnumLabels: enumLabels,
 		}
 		return true, addRow(
-			tree.NewDInt(tree.DInt(db.GetID())),       // database_id
-			tree.NewDString(db.GetName()),             // database_name
-			tree.NewDString(sc.GetName()),             // schema_name
-			tree.NewDInt(tree.DInt(typeDesc.GetID())), // descriptor_id
-			tree.NewDString(typeDesc.GetName()),       // descriptor_name
-			tree.NewDString(tree.AsString(node)),      // create_statement
+			tree.NewDInt(tree.DInt(db.GetID())),  // database_id
+			tree.NewDString(db.GetName()),        // database_name
+			tree.NewDString(sc.GetName()),        // schema_name
+			tree.NewDInt(tree.DInt(e.GetID())),   // descriptor_id
+			tree.NewDString(e.GetName()),         // descriptor_name
+			tree.NewDString(tree.AsString(node)), // create_statement
 			enumLabelsDatum,
 		)
-	case descpb.TypeDescriptor_MULTIREGION_ENUM:
-		// Multi-region enums are created implicitly, so we don't have create
-		// statements for them.
-		return false, nil
-	case descpb.TypeDescriptor_COMPOSITE:
-		name, err := tree.NewUnresolvedObjectName(2, [3]string{typeDesc.GetName(), sc.GetName()}, 0)
+	}
+	if c := typeDesc.AsCompositeTypeDescriptor(); c != nil {
+		name, err := tree.NewUnresolvedObjectName(2, [3]string{c.GetName(), sc.GetName()}, 0)
 		if err != nil {
 			return false, err
 		}
-		composite := typeDesc.TypeDesc().Composite
-		typeList := make([]tree.CompositeTypeElem, len(composite.Elements))
-		for i := range composite.Elements {
+		typeList := make([]tree.CompositeTypeElem, c.NumElements())
+		for i := 0; i < c.NumElements(); i++ {
+			t := c.GetElementType(i)
 			if err := typedesc.EnsureTypeIsHydrated(
-				ctx, composite.Elements[i].ElementType, resolver.(catalog.TypeDescriptorResolver),
+				ctx, t, resolver.(catalog.TypeDescriptorResolver),
 			); err != nil {
 				return false, err
 			}
-			typeList[i].Type = composite.Elements[i].ElementType
-			typeList[i].Label = tree.Name(composite.Elements[i].ElementLabel)
+			typeList[i].Type = t
+			typeList[i].Label = tree.Name(c.GetElementLabel(i))
 		}
 		node := &tree.CreateType{
 			Variety:           tree.Composite,
@@ -2826,21 +2829,16 @@ func writeCreateTypeDescRow(
 			CompositeTypeList: typeList,
 		}
 		return true, addRow(
-			tree.NewDInt(tree.DInt(db.GetID())),       // database_id
-			tree.NewDString(db.GetName()),             // database_name
-			tree.NewDString(sc.GetName()),             // schema_name
-			tree.NewDInt(tree.DInt(typeDesc.GetID())), // descriptor_id
-			tree.NewDString(typeDesc.GetName()),       // descriptor_name
-			tree.NewDString(tree.AsString(node)),      // create_statement
-			tree.DNull,                                // enum_members
+			tree.NewDInt(tree.DInt(db.GetID())),  // database_id
+			tree.NewDString(db.GetName()),        // database_name
+			tree.NewDString(sc.GetName()),        // schema_name
+			tree.NewDInt(tree.DInt(c.GetID())),   // descriptor_id
+			tree.NewDString(c.GetName()),         // descriptor_name
+			tree.NewDString(tree.AsString(node)), // create_statement
+			tree.DNull,                           // enum_members
 		)
-	case descpb.TypeDescriptor_ALIAS:
-		// Alias types are created implicitly, so we don't have create
-		// statements for them.
-		return false, nil
-	default:
-		return false, errors.AssertionFailedf("unknown type descriptor kind %s", typeDesc.GetKind().String())
 	}
+	return false, errors.AssertionFailedf("unknown type descriptor kind %s", typeDesc.GetKind())
 }
 
 var crdbInternalCreateTypeStmtsTable = virtualSchemaTable{
