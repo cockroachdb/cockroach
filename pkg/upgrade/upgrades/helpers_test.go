@@ -20,6 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/stretchr/testify/assert"
@@ -76,12 +78,27 @@ func InjectLegacyTable(
 	err := s.InternalDB().(descs.DB).DescsTxn(ctx, func(
 		ctx context.Context, txn descs.Txn,
 	) error {
-		id := table.GetID()
-		tab, err := txn.Descriptors().MutableByID(txn.KV()).Table(ctx, id)
-		if err != nil {
-			return err
+		deprecatedDesc := getDeprecatedDescriptor()
+		var tab *tabledesc.Mutable
+		switch id := table.GetID(); id {
+		// If the table descriptor does not have a valid ID, it must be a system
+		// table with a dynamically-allocated ID.
+		case descpb.InvalidID:
+			var err error
+			tab, err = txn.Descriptors().MutableByName(txn.KV()).Table(ctx,
+				systemschema.SystemDB, schemadesc.GetPublicSchema(), table.GetName())
+			if err != nil {
+				return err
+			}
+			deprecatedDesc.ID = tab.GetID()
+		default:
+			var err error
+			tab, err = txn.Descriptors().MutableByID(txn.KV()).Table(ctx, id)
+			if err != nil {
+				return err
+			}
 		}
-		builder := tabledesc.NewBuilder(getDeprecatedDescriptor())
+		builder := tabledesc.NewBuilder(deprecatedDesc)
 		if err := builder.RunPostDeserializationChanges(); err != nil {
 			return err
 		}

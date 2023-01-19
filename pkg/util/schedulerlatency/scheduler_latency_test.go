@@ -119,12 +119,12 @@ func TestComputeSchedulerPercentile(t *testing.T) {
 			Buckets: []float64{0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130},
 		}
 
-		require.Equal(t, 95.0, percentile(&hist, 1.00)) // pmax
-		require.Equal(t, 05.0, percentile(&hist, 0.00)) // pmin
-		require.Equal(t, 45.0, percentile(&hist, 0.50)) // p50
-		require.Equal(t, 75.0, percentile(&hist, 0.75)) // p75
-		require.Equal(t, 95.0, percentile(&hist, 0.90)) // p90
-		require.Equal(t, 95.0, percentile(&hist, 0.99)) // p99
+		require.InDelta(t, 100.0, percentile(&hist, 1.00), 0.001)  // pmax
+		require.InDelta(t, 0.0, percentile(&hist, 0.00), 0.001)    // pmin
+		require.InDelta(t, 49.375, percentile(&hist, 0.50), 0.001) // p50
+		require.InDelta(t, 70.625, percentile(&hist, 0.75), 0.001) // p75
+		require.InDelta(t, 90.600, percentile(&hist, 0.90), 0.001) // p90
+		require.InDelta(t, 99.060, percentile(&hist, 0.99), 0.001) // p99
 	}
 
 	{
@@ -148,6 +148,44 @@ func TestComputeSchedulerPercentile(t *testing.T) {
 		require.Equal(t, 00.0, percentile(&hist, 1.00)) // pmax
 		require.Equal(t, 00.0, percentile(&hist, 0.00)) // pmin
 		require.Equal(t, 00.0, percentile(&hist, 0.50)) // p50
+	}
+}
+
+func TestComputeSchedulerPercentileAgainstPrometheus(t *testing.T) {
+	{
+		//	  ▲
+		//	8 │               ┌───┐
+		//	7 │           ┌───┤   │
+		//	6 │           │   │   ├───┐
+		//	5 │       ┌───┤   │   │   ├───┐       ┌───┐
+		//	4 │       │   │   │   │   │   ├───┐   │   │
+		//	3 │   ┌───┤   │   │   │   │   │   ├───┤   │
+		//	2 │   │   │   │   │   │   │   │   │   │   │
+		//	1 ├───┤   │   │   │   │   │   │   │   │   │
+		//	  └───┴───┴───┴───┴───┴───┴───┴───┴───┴───┴─────────────▶
+		//	     10  20  30  40  50  60  70  80  90  100 110 120 130
+		hist := metrics.Float64Histogram{
+			Counts:  []uint64{1, 3, 5, 7, 8, 6, 5, 4, 3, 5, 0, 0, 0},
+			Buckets: []float64{0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130},
+		}
+
+		// Compare values against metric.Histogram (prometheus-based implementation)
+		promhist := metric.NewHistogram(metric.Metadata{}, time.Hour, hist.Buckets)
+		for i := 0; i < len(hist.Counts); i++ {
+			for j := 0; j < int(hist.Counts[i]); j++ {
+				// Since the scheduler buckets are non-inclusive of Upper Bound and prometheus
+				// buckets are inclusive, we use i+1 below to create an identical histogram in
+				// prometheus.
+				promhist.RecordValue(int64(hist.Buckets[i+1]))
+			}
+		}
+
+		require.InDelta(t, promhist.ValueAtQuantileWindowed(100), percentile(&hist, 1.00), 1) // pmax
+		require.InDelta(t, promhist.ValueAtQuantileWindowed(0), percentile(&hist, 0.00), 1)   // pmin
+		require.InDelta(t, promhist.ValueAtQuantileWindowed(50), percentile(&hist, 0.50), 1)  // p50
+		require.InDelta(t, promhist.ValueAtQuantileWindowed(75), percentile(&hist, 0.75), 1)  // p75
+		require.InDelta(t, promhist.ValueAtQuantileWindowed(90), percentile(&hist, 0.90), 1)  // p90
+		require.InDelta(t, promhist.ValueAtQuantileWindowed(99), percentile(&hist, 0.99), 1)  // p99
 	}
 }
 
