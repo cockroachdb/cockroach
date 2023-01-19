@@ -31,7 +31,7 @@ import (
 func registerImportCancellation(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:    `import-cancellation`,
-		Owner:   registry.OwnerStorage,
+		Owner:   registry.OwnerDisasterRecovery,
 		Timeout: 4 * time.Hour,
 		Cluster: r.MakeClusterSpec(6, spec.CPU(32)),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
