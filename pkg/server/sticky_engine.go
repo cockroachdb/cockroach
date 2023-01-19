@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -157,15 +158,11 @@ func (registry *stickyInMemEnginesRegistryImpl) GetOrCreateStickyInMemEngine(
 	}
 
 	log.Infof(ctx, "creating new sticky in-mem engine %s", spec.StickyInMemoryEngineID)
-	engine := storage.InMemFromFS(ctx, fs, "", options...)
+	engine := storage.InMemFromFS(ctx, fs, "", cluster.MakeClusterSettings(), options...)
 
 	engineEntry := &stickyInMemEngine{
 		id:     spec.StickyInMemoryEngineID,
 		closed: false,
-		// This engine will stay alive after the node dies, so we don't want the
-		// caller to pass in a *cluster.Settings from the current node. Just
-		// create a random one since that is what we like to do in tests (for
-		// better test coverage).
 		Engine: engine,
 		fs:     fs,
 	}
