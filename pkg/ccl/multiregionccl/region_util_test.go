@@ -129,8 +129,10 @@ func getEnumMembers(
 		require.NoError(t, err)
 		regionEnumID, err := dbDesc.MultiRegionEnumID()
 		require.NoError(t, err)
-		regionEnumDesc, err := descsCol.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Type(ctx, regionEnumID)
+		typeDesc, err := descsCol.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Type(ctx, regionEnumID)
 		require.NoError(t, err)
+		regionEnumDesc := typeDesc.AsRegionEnumTypeDescriptor()
+		require.NotNil(t, regionEnumDesc)
 		for ord := 0; ord < regionEnumDesc.NumEnumMembers(); ord++ {
 			enumMembers[regionEnumDesc.GetMemberLogicalRepresentation(ord)] = regionEnumDesc.GetMemberPhysicalRepresentation(ord)
 		}

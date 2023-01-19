@@ -166,44 +166,42 @@ func (w *walkCtx) walkSchema(sc catalog.SchemaDescriptor) {
 }
 
 func (w *walkCtx) walkType(typ catalog.TypeDescriptor) {
-	switch typ.GetKind() {
-	case descpb.TypeDescriptor_ALIAS:
-		typeT := newTypeT(typ.TypeDesc().Alias)
+	if alias := typ.AsAliasTypeDescriptor(); alias != nil {
+		typeT := newTypeT(alias.Aliased())
 		w.ev(descriptorStatus(typ), &scpb.AliasType{
 			TypeID: typ.GetID(),
 			TypeT:  *typeT,
 		})
-	case descpb.TypeDescriptor_ENUM, descpb.TypeDescriptor_MULTIREGION_ENUM:
-		w.ev(descriptorStatus(typ), &scpb.EnumType{
-			TypeID:        typ.GetID(),
-			ArrayTypeID:   typ.GetArrayTypeID(),
-			IsMultiRegion: typ.GetKind() == descpb.TypeDescriptor_MULTIREGION_ENUM,
+	} else if enum := typ.AsEnumTypeDescriptor(); enum != nil {
+		w.ev(descriptorStatus(enum), &scpb.EnumType{
+			TypeID:        enum.GetID(),
+			ArrayTypeID:   enum.GetArrayTypeID(),
+			IsMultiRegion: enum.AsRegionEnumTypeDescriptor() != nil,
 		})
-		for ord := 0; ord < typ.NumEnumMembers(); ord++ {
-			w.ev(descriptorStatus(typ), &scpb.EnumTypeValue{
-				TypeID:                 typ.GetID(),
-				PhysicalRepresentation: typ.GetMemberPhysicalRepresentation(ord),
-				LogicalRepresentation:  typ.GetMemberLogicalRepresentation(ord),
+		for ord := 0; ord < enum.NumEnumMembers(); ord++ {
+			w.ev(descriptorStatus(enum), &scpb.EnumTypeValue{
+				TypeID:                 enum.GetID(),
+				PhysicalRepresentation: enum.GetMemberPhysicalRepresentation(ord),
+				LogicalRepresentation:  enum.GetMemberLogicalRepresentation(ord),
 			})
 		}
-	case descpb.TypeDescriptor_COMPOSITE:
+	} else if comp := typ.AsCompositeTypeDescriptor(); comp != nil {
 		w.ev(descriptorStatus(typ), &scpb.CompositeType{
-			TypeID:      typ.GetID(),
-			ArrayTypeID: typ.GetArrayTypeID(),
+			TypeID:      comp.GetID(),
+			ArrayTypeID: comp.GetArrayTypeID(),
 		})
-		composite := typ.TypeDesc().Composite
-		for _, e := range composite.Elements {
-			typeT := newTypeT(e.ElementType)
+		for i := 0; i < comp.NumElements(); i++ {
+			typeT := newTypeT(comp.GetElementType(i))
 			w.ev(descriptorStatus(typ), &scpb.CompositeTypeAttrType{
 				CompositeTypeID: typ.GetID(),
 				TypeT:           *typeT,
 			})
 			w.ev(descriptorStatus(typ), &scpb.CompositeTypeAttrName{
 				CompositeTypeID: typ.GetID(),
-				Name:            e.ElementLabel,
+				Name:            comp.GetElementLabel(i),
 			})
 		}
-	default:
+	} else {
 		panic(errors.AssertionFailedf("unsupported type kind %q", typ.GetKind()))
 	}
 	w.ev(scpb.Status_PUBLIC, &scpb.ObjectParent{

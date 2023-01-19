@@ -1733,22 +1733,21 @@ https://www.postgresql.org/docs/9.5/catalog-pg-enum.html`,
 		h := makeOidHasher()
 
 		return forEachTypeDesc(ctx, p, dbContext, func(_ catalog.DatabaseDescriptor, _ catalog.SchemaDescriptor, typDesc catalog.TypeDescriptor) error {
-			switch typDesc.GetKind() {
-			case descpb.TypeDescriptor_ENUM, descpb.TypeDescriptor_MULTIREGION_ENUM:
-			// We only want to iterate over ENUM types and multi-region enums.
-			default:
+			e := typDesc.AsEnumTypeDescriptor()
+			if e == nil {
+				// We only want to iterate over ENUM types and multi-region enums.
 				return nil
 			}
 			// Generate a row for each member of the enum. We don't represent enums
 			// internally using floats for ordering like Postgres, so just pick a
 			// float entry for the rows.
-			typOID := tree.NewDOid(catid.TypeIDToOID(typDesc.GetID()))
-			for i := 0; i < typDesc.NumEnumMembers(); i++ {
+			typOID := tree.NewDOid(catid.TypeIDToOID(e.GetID()))
+			for i := 0; i < e.NumEnumMembers(); i++ {
 				if err := addRow(
-					h.EnumEntryOid(typOID, typDesc.GetMemberPhysicalRepresentation(i)),
+					h.EnumEntryOid(typOID, e.GetMemberPhysicalRepresentation(i)),
 					typOID,
 					tree.NewDFloat(tree.DFloat(float64(i))),
-					tree.NewDString(typDesc.GetMemberLogicalRepresentation(i)),
+					tree.NewDString(e.GetMemberLogicalRepresentation(i)),
 				); err != nil {
 					return err
 				}
@@ -3330,7 +3329,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-type.html`,
 
 				// It's an entry for the implicit record type created on behalf of each
 				// table. We have special logic for this case.
-				if typDesc.GetKind() == descpb.TypeDescriptor_TABLE_IMPLICIT_RECORD_TYPE {
+				if typDesc.AsTableImplicitRecordTypeDescriptor() != nil {
 					table, err := p.Descriptors().ByIDWithLeased(p.txn).WithoutNonPublic().Get().Table(ctx, id)
 					if err != nil {
 						if errors.Is(err, catalog.ErrDescriptorNotFound) ||

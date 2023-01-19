@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/errors"
@@ -380,15 +381,22 @@ func (p *planner) AlterDatabaseDropRegion(
 		if err != nil {
 			return nil, err
 		}
+		regionEnumDesc := typeDesc.AsRegionEnumTypeDescriptor()
+		if regionEnumDesc == nil {
+			return nil, errors.AssertionFailedf(
+				"expected region enum type, not %s for type %q (%d)",
+				typeDesc.GetKind(), typeDesc.GetName(), typeDesc.GetID())
+		}
 
 		// Ensure that there's only 1 region on the multi-region enum (the primary
 		// region) as this can only be dropped once all other regions have been
 		// dropped. This check must account for regions that are transitioning,
 		// as transitions aren't guaranteed to succeed.
-		regions, err := typeDesc.RegionNamesIncludingTransitioning()
-		if err != nil {
-			return nil, err
-		}
+		var regions catpb.RegionNames
+		_ = regionEnumDesc.ForEachRegion(func(name catpb.RegionName, _ descpb.TypeDescriptor_EnumMember_Direction) error {
+			regions = append(regions, name)
+			return nil
+		})
 		if len(regions) != 1 {
 			return nil, errors.WithHintf(
 				pgerror.Newf(
@@ -1634,11 +1642,17 @@ func (p *planner) addSuperRegion(
 	superRegionName tree.Name,
 	op string,
 ) error {
-
-	regionNames, err := typeDesc.RegionNames()
-	if err != nil {
-		return err
+	regionsDesc := typeDesc.AsRegionEnumTypeDescriptor()
+	if regionsDesc == nil {
+		return errors.AssertionFailedf("expected region enum type, not %s for type %q (%d)",
+			typeDesc.GetKind(), typeDesc.GetName(), typeDesc.GetID())
 	}
+
+	var regionNames catpb.RegionNames
+	_ = regionsDesc.ForEachPublicRegion(func(name catpb.RegionName) error {
+		regionNames = append(regionNames, name)
+		return nil
+	})
 
 	regionsInDatabase := make(map[catpb.RegionName]struct{})
 	for _, regionName := range regionNames {
@@ -1670,16 +1684,18 @@ func (p *planner) addSuperRegion(
 
 	// Ensure that the super region name is not already used and that
 	// the super regions don't overlap.
-	for _, superRegion := range typeDesc.RegionConfig.SuperRegions {
-		if superRegion.SuperRegionName == string(superRegionName) {
-			return errors.Newf("super region %s already exists", superRegion.SuperRegionName)
+	if err := regionsDesc.ForEachSuperRegion(func(superRegion string) error {
+		if superRegion == string(superRegionName) {
+			return errors.Newf("super region %s already exists", superRegion)
 		}
-
-		for _, region := range superRegion.Regions {
+		return regionsDesc.ForEachRegionInSuperRegion(superRegion, func(region catpb.RegionName) error {
 			if _, found := regionSet[region]; found {
-				return errors.Newf("region %s is already part of super region %s", region, superRegion.SuperRegionName)
+				return errors.Newf("region %s is already part of super region %s", region, superRegion)
 			}
-		}
+			return nil
+		})
+	}); err != nil {
+		return err
 	}
 
 	addSuperRegion(typeDesc.RegionConfig, descpb.SuperRegion{
@@ -2069,20 +2085,22 @@ func (n *alterDatabaseSetZoneConfigExtensionNode) startExec(params runParams) er
 	if err != nil {
 		return err
 	}
-	regionNames, err := typeDesc.RegionNames()
-	if err != nil {
-		return err
+	regionsDesc := typeDesc.AsRegionEnumTypeDescriptor()
+	if regionsDesc == nil {
+		return errors.AssertionFailedf("expected region enum type, not %s for type %q (%d)",
+			typeDesc.GetKind(), typeDesc.GetName(), typeDesc.GetID())
 	}
 
 	// Verify that the region is present in the database, if necessary.
 	if n.n.LocalityLevel == tree.LocalityLevelTable && n.n.RegionName != "" {
-		found := false
-		for _, region := range regionNames {
-			if region == catpb.RegionName(n.n.RegionName) {
+		var found bool
+		_ = regionsDesc.ForEachPublicRegion(func(name catpb.RegionName) error {
+			if name == catpb.RegionName(n.n.RegionName) {
 				found = true
-				break
+				return iterutil.StopIteration()
 			}
-		}
+			return nil
+		})
 		if !found {
 			return pgerror.Newf(
 				pgcode.UndefinedObject,

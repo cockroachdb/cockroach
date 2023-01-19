@@ -435,7 +435,7 @@ func allocateDescriptorRewrites(
 			} else {
 				// The remapping logic for a type will perform the remapping for a type's
 				// array type, so don't perform this logic for the array type itself.
-				if typ.Kind == descpb.TypeDescriptor_ALIAS {
+				if typ.AsAliasTypeDescriptor() != nil {
 					continue
 				}
 
@@ -528,7 +528,7 @@ func allocateDescriptorRewrites(
 					}
 					descriptorRewrites[typ.ArrayTypeID] = &jobspb.DescriptorRewrite{
 						ParentID:   existingType.GetParentID(),
-						ID:         existingType.GetArrayTypeID(),
+						ID:         existingType.TypeDesc().ArrayTypeID,
 						ToExisting: true,
 					}
 				}
@@ -1321,18 +1321,16 @@ func checkClusterRegions(
 ) error {
 	regionSet := make(map[catpb.RegionName]struct{})
 	for _, typ := range typesByID {
-		typeDesc := typedesc.NewBuilder(typ.TypeDesc()).BuildImmutableType()
-		if typeDesc.GetKind() == descpb.TypeDescriptor_MULTIREGION_ENUM {
-			regionNames, err := typeDesc.RegionNames()
-			if err != nil {
-				return err
-			}
-			for _, region := range regionNames {
-				if _, ok := regionSet[region]; !ok {
-					regionSet[region] = struct{}{}
-				}
-			}
+		regionTypeDesc := typedesc.NewBuilder(typ.TypeDesc()).BuildImmutableType().AsRegionEnumTypeDescriptor()
+		if regionTypeDesc == nil {
+			continue
 		}
+		_ = regionTypeDesc.ForEachPublicRegion(func(name catpb.RegionName) error {
+			if _, ok := regionSet[name]; !ok {
+				regionSet[name] = struct{}{}
+			}
+			return nil
+		})
 	}
 
 	if len(regionSet) == 0 {

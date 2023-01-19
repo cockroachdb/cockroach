@@ -714,8 +714,7 @@ type MutableTableDescriptor interface {
 	MutableDescriptor
 }
 
-// TypeDescriptor will eventually be called typedesc.Descriptor.
-// It is implemented by (Imm|M)utableTypeDescriptor.
+// TypeDescriptor is an interface around the type descriptor types.
 type TypeDescriptor interface {
 	Descriptor
 	// TypeDesc returns the backing descriptor for this type, if one exists.
@@ -730,10 +729,6 @@ type TypeDescriptor interface {
 	// As of now "compatibility" entails that disk encoded data of "desc" can be
 	// interpreted and used by "other".
 	IsCompatibleWith(other TypeDescriptor) error
-	// GetArrayTypeID returns the globally unique ID for the implicitly created
-	// array type for this type. It is only set when the type descriptor points to
-	// a non-array type.
-	GetArrayTypeID() descpb.ID
 	// AsTypesT returns a reference to a types.T corresponding to this type
 	// descriptor. No guarantees are provided as to whether this object is a
 	// singleton or not, or whether it's hydrated or not.
@@ -741,36 +736,54 @@ type TypeDescriptor interface {
 	// GetKind returns the kind of this type.
 	GetKind() descpb.TypeDescriptor_Kind
 
-	// The following fields are only valid for multi-region enum types.
+	// NumReferencingDescriptors returns the number of descriptors referencing this
+	// type, directly or indirectly.
+	NumReferencingDescriptors() int
+	// GetReferencingDescriptorID returns the ID of the referencing descriptor at
+	// ordinal refOrdinal.
+	GetReferencingDescriptorID(refOrdinal int) descpb.ID
+	// GetReferencingDescriptorIDs returns IDs of descriptors referencing this
+	// type.
+	GetReferencingDescriptorIDs() []descpb.ID
 
-	// PrimaryRegionName returns the primary region for a multi-region enum.
-	PrimaryRegionName() (catpb.RegionName, error)
-	// RegionNames returns all `PUBLIC` regions on the multi-region enum. Regions
-	// that are in the process of being added/removed (`READ_ONLY`) are omitted.
-	RegionNames() (catpb.RegionNames, error)
-	// RegionNamesIncludingTransitioning returns all the regions on a multi-region
-	// enum, including `READ ONLY` regions which are in the process of transitioning.
-	RegionNamesIncludingTransitioning() (catpb.RegionNames, error)
-	// RegionNamesForValidation returns all regions on the multi-region
-	// enum to make validation with the public zone configs and partitons
-	// possible.
-	// Since the partitions and zone configs are only updated when a transaction
-	// commits, this must ignore all regions being added (since they will not be
-	// reflected in the zone configuration yet), but it must include all region
-	// being dropped (since they will not be dropped from the zone configuration
-	// until they are fully removed from the type descriptor, again, at the end
-	// of the transaction).
-	RegionNamesForValidation() (catpb.RegionNames, error)
-	// TransitioningRegionNames returns regions which are transitioning to PUBLIC
-	// or are being removed.
-	TransitioningRegionNames() (catpb.RegionNames, error)
-	// SuperRegions returns the list of super regions.
-	SuperRegions() ([]descpb.SuperRegion, error)
-	// ZoneConfigExtensions returns the zone configuration extensions on the
-	// multi-region enum.
-	ZoneConfigExtensions() (descpb.ZoneConfigExtensions, error)
+	// AsEnumTypeDescriptor returns this instance cast to EnumTypeDescriptor
+	// if this type is an enum type, nil otherwise.
+	AsEnumTypeDescriptor() EnumTypeDescriptor
 
-	// The following fields are set if the type is an enum or a multi-region enum.
+	// AsRegionEnumTypeDescriptor returns this instance cast to
+	// RegionEnumTypeDescriptor if this type is a multi-region enum type,
+	// nil otherwise.
+	AsRegionEnumTypeDescriptor() RegionEnumTypeDescriptor
+
+	// AsAliasTypeDescriptor returns this instance cast to
+	// AliasTypeDescriptor if this type is an alias type,
+	// nil otherwise.
+	AsAliasTypeDescriptor() AliasTypeDescriptor
+
+	// AsCompositeTypeDescriptor returns this instance cast to
+	// CompositeTypeDescriptor if this type is a composite type,
+	// nil otherwise.
+	AsCompositeTypeDescriptor() CompositeTypeDescriptor
+
+	// AsTableImplicitRecordTypeDescriptor returns this instance cast to
+	// TableImplicitRecordTypeDescriptor if this type is an implicit table record
+	// type, nil otherwise.
+	AsTableImplicitRecordTypeDescriptor() TableImplicitRecordTypeDescriptor
+}
+
+// NonAliasTypeDescriptor is the TypeDescriptor subtype for concrete user-defined
+// types.
+type NonAliasTypeDescriptor interface {
+	TypeDescriptor
+
+	// GetArrayTypeID returns the globally unique ID for the implicitly created
+	// array type for this type.
+	GetArrayTypeID() descpb.ID
+}
+
+// EnumTypeDescriptor is the TypeDescriptor subtype for enums (incl. regions).
+type EnumTypeDescriptor interface {
+	NonAliasTypeDescriptor
 
 	// NumEnumMembers returns the number of enum members if the type is an
 	// enumeration type, 0 otherwise.
@@ -784,16 +797,69 @@ type TypeDescriptor interface {
 	// IsMemberReadOnly returns true iff the enum member at ordinal
 	// enumMemberOrdinal is read-only.
 	IsMemberReadOnly(enumMemberOrdinal int) bool
+}
 
-	// NumReferencingDescriptors returns the number of descriptors referencing this
-	// type, directly or indirectly.
-	NumReferencingDescriptors() int
-	// GetReferencingDescriptorID returns the ID of the referencing descriptor at
-	// ordinal refOrdinal.
-	GetReferencingDescriptorID(refOrdinal int) descpb.ID
-	// GetReferencingDescriptorIDs returns IDs of descriptors referencing this
-	// type.
-	GetReferencingDescriptorIDs() []descpb.ID
+// RegionEnumTypeDescriptor is the TypeDescriptor subtype for multi-region enums.
+type RegionEnumTypeDescriptor interface {
+	EnumTypeDescriptor
+
+	// PrimaryRegion returns the primary region name.
+	PrimaryRegion() catpb.RegionName
+
+	// ForEachPublicRegion is like ForEachRegion but limited to regions
+	// which are public, i.e. not in the process of being added or removed.
+	ForEachPublicRegion(f func(regionName catpb.RegionName) error) error
+
+	// ForEachRegion applies f on each region name,
+	// Supports iterutil.StopIteration().
+	ForEachRegion(f func(regionName catpb.RegionName, transition descpb.TypeDescriptor_EnumMember_Direction) error) error
+
+	// ForEachSuperRegion applies f on each super-region name.
+	// Supports iterutil.StopIteration().
+	ForEachSuperRegion(f func(superRegionName string) error) error
+
+	// ForEachRegionInSuperRegion applies f on each region in the super region.
+	// Supports iterutil.StopIteration().
+	ForEachRegionInSuperRegion(
+		superRegion string,
+		f func(region catpb.RegionName) error,
+	) error
+}
+
+// AliasTypeDescriptor is the TypeDescriptor subtype for alias types.
+// This is used for array subtypes.
+type AliasTypeDescriptor interface {
+	TypeDescriptor
+
+	// Aliased returns the types.T which is being aliased.
+	Aliased() *types.T
+}
+
+// CompositeTypeDescriptor is the TypeDescriptor subtype for composite types,
+// which are union types.
+type CompositeTypeDescriptor interface {
+	NonAliasTypeDescriptor
+
+	// NumElements returns the number of elements forming the composite type.
+	NumElements() int
+
+	// GetElementLabel returns the label of the composite type element at the
+	// given ordinal.
+	GetElementLabel(ordinal int) string
+
+	// GetElementType returns the type of the composite type element at the
+	// given ordinal.
+	GetElementType(ordinal int) *types.T
+}
+
+// TableImplicitRecordTypeDescriptor is the TypeDescriptor subtype for the
+// record type implicitly defined by a table.
+type TableImplicitRecordTypeDescriptor interface {
+	NonAliasTypeDescriptor
+
+	// UnderlyingTableDescriptor returns the table descriptor underlying this
+	// implicit type.
+	UnderlyingTableDescriptor() TableDescriptor
 }
 
 // TypeDescriptorResolver is an interface used during hydration of type
