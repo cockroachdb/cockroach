@@ -7,6 +7,7 @@ go_library(
         "activequeryprofiler.go",
         "cgoprofiler.go",
         "cluster_settings.go",
+        "cpuprofiler.go",
         "heapprofiler.go",
         "profiler_common.go",
         "profilestore.go",
@@ -36,6 +37,7 @@ go_test(
     size = "small",
     srcs = [
         "activequeryprofiler_test.go",
+        "cpuprofile_test.go",
         "profiler_common_test.go",
         "profilestore_test.go",
     ],
@@ -45,6 +47,7 @@ go_test(
         "//pkg/clusterversion",
         "//pkg/server/dumpstore",
         "//pkg/settings/cluster",
+        "//pkg/util/timeutil",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
     ],
