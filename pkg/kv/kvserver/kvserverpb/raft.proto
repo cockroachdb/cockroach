@@ -18,6 +18,7 @@ import "roachpb/internal_raft.proto";
 import "roachpb/metadata.proto";
 import "kv/kvserver/liveness/livenesspb/liveness.proto";
 import "kv/kvserver/kvserverpb/state.proto";
+import "kv/kvserver/kvflowcontrol/kvflowcontrolpb/kvflowcontrol.proto";
 import "raft/v3/raftpb/raft.proto";
 import "gogoproto/gogo.proto";
 import "util/tracing/tracingpb/recorded_span.proto";
@@ -90,6 +91,10 @@ message RaftMessageRequest {
   // heartbeats or heartbeat_resps.
   repeated RaftHeartbeat heartbeats = 6 [(gogoproto.nullable) = false];
   repeated RaftHeartbeat heartbeat_resps = 7 [(gogoproto.nullable) = false];
+
+  // AdmittedRaftLogEntries is coalesced information about all raft log entries
+  // that were admitted below raft.
+  repeated kv.kvserver.kvflowcontrol.kvflowcontrolpb.AdmittedRaftLogEntries admitted_raft_log_entries = 11 [(gogoproto.nullable) = false];
 
   reserved 10;
 }

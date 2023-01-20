@@ -1,0 +1,118 @@
+// Copyright 2023 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+syntax = "proto3";
+package cockroach.kv.kvserver.kvflowcontrol.kvflowcontrolpb;
+option go_package = "kvflowcontrolpb";
+
+import "gogoproto/gogo.proto";
+
+// RaftAdmissionMeta contains information used by admission control for the
+// select raft commands that use replication admission control. It contains a
+// subset of the fields in RaftCommand to selectively decode state. When
+// marshaling a RaftCommand, we willfully include this data in the prefix of the
+// marshaled byte buffer. Information about whether this data is present is
+// captured in the first byte of the encoded raft proposal -- see
+// raftlog.EntryEncoding.
+message RaftAdmissionMeta {
+  // AdmissionPriority of the command (maps to admission.WorkPriority); used
+  // within a tenant below-raft for replication admission control.
+  int32 admission_priority = 18;
+  // AdmissionCreateTime is equivalent to Time.UnixNano() from the creation time
+  // of the request, or a parent request, for which this command is a part of.
+  // It's used within a tenant below-raft for replication admission control; see
+  // admission.WorkInfo.CreateTime for details.
+  int64 admission_create_time = 19;
+  // AdmissionOriginNode captures where this raft command originated. It's used
+  // to inform said node of this raft command's (virtual) admission in order for
+  // it to release flow tokens for subsequent commands.
+  int32 admission_origin_node = 20 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+
+  // TODO(irfansharif): If the {marshaling,unmarshaling} performance overhead
+  // proves costly, we could:
+  // - For Admission{Priority,CreateTime}, pack them within a single int64 by
+  //   using 8 bits for the priority (we're using an int8 in Go code) and the
+  //   remaining bits for the create timestamp with lower resolution.
+  // - For AdmissionOriginNodeID, we could re-work the MultiRaft streaming RPCs
+  //   to include upfront, during stream setup, which node the subsequent
+  //   RaftMessageRequests are coming from. But this awkward to do with our
+  //   current code layering:
+  //   - We want to find out on a per raftpb.Entry level where it came from, and
+  //     to do it once raft.Ready() tells to persist said entry into our raft log.
+  //   - We're currently encoding this data in the raft entry itself, at the
+  //     sender, so it's easy to decode at the right place in
+  //     raft-ready-handling loop.
+  //   - But if we had to "stitch in" the origin node ID once received off of
+  //     the transport, or tie together raft entries with their origin node IDs
+  //     by through some other way (the raft library only wants to "step"
+  //     through message type we can't so easily annotate), we'd have to do a
+  //     fair bit of state tracking.
+  // If it's still too costly, we could rip all this out and coarsen
+  // intra-tenant ordering with respect to Admission{Priority,CreateTime}. We
+  // could instead introduce a WorkQueue-like ordering at the origin where
+  // requests wait for flow tokens for every <tenant,destination-store> it
+  // intends to write to. Below raft we could live with just side-loaded
+  // proposals being marked as admissionpb.BulkNormalPri. Origin-side ordering
+  // would work ok for epoch-LIFO. The coarseness comes from this re-ordering
+  // only happening on individual origin nodes.
+  //
+  // TODO(irfansharif): Get rid of this TODO block after simple performance
+  // benchmarks (say, `cockroach workload run kv` with high concurrency and
+  // small write sizes). The ideas above are too complicated.
+}
+
+// AdmittedRaftLogEntries represents a set of raft log entries that were
+// admitted below raft. These are identified by:
+// - the range ID (there's one per raft group);
+// - the admission priority of all said entries;
+// - the (inclusive) raft log position up-to-which we've admitted entries;
+// - the store ID on which these raft logs were admitted.
+//
+// This is used as part replication admission control to release, at the origin,
+// the specific flow tokens acquired when replicating these log entries along
+// this particular "replication stream" (i.e. flowing to a particular store,
+// remote or otherwise).
+message AdmittedRaftLogEntries {
+  // RangeID of the raft group these entries belong to. This is the range on
+  // whose behalf work was admitted.
+  int64 range_id = 1 [(gogoproto.customname) = "RangeID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"];
+
+  // AdmissionPriority of all admitted entries.
+  int32 admission_priority = 2;
+
+  // RaftLogPosition (inclusive) of the highest entry that was admitted. Within
+  // a given priority, admission takes place in raft log order (i.e. entries
+  // with lower terms get admitted first, or with lower indexes within the same
+  // term). So the value here implies admission of all entries that sort before
+  // and have the same priority.
+  RaftLogPosition raft_log_position = 3 [(gogoproto.nullable) = false];
+
+  // StoreID on which this raft log entry was admitted.
+  //
+  // TODO(irfansharif): We can avoid sending this for every logically admitted
+  // message if the raft transport stream we were sending it on had some
+  // handshake protocol at the start, where the client identified itself by its
+  // NodeID. That way the origin replica receiving this information can infer
+  // identify the StoreID where this work was done (since we we never store
+  // multiple replicas of a range on the same node, even if containing multiple
+  // stores).
+  uint64 store_id = 4 [(gogoproto.customname) = "StoreID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.StoreID"];
+}
+
+// RaftLogPosition is a point on the raft log, identified by a term and an
+// index.
+message RaftLogPosition {
+  option (gogoproto.goproto_stringer) = false;
+
+  uint64 term = 1;
+  uint64 index = 2;
+}
