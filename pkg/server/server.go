@@ -51,7 +51,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangelog"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/reports"
 	"github.com/cockroachdb/cockroach/pkg/obs"
-	"github.com/cockroachdb/cockroach/pkg/obsservice/obspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -155,7 +154,7 @@ type Server struct {
 
 	// The Observability Server, used by the Observability Service to subscribe to
 	// CRDB data.
-	eventsServer   *obs.EventsServer
+	eventsExporter obs.EventsExporterInterface
 	recoveryServer *loqrecovery.Server
 	raftTransport  *kvserver.RaftTransport
 	stopper        *stop.Stopper
@@ -893,19 +892,27 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	})
 	registry.AddMetricStruct(kvProber.Metrics())
 
-	// Create the Obs Server. We'll call SetResourceInfo() on it and register it
-	// with gRPC later.
-	eventsServer := obs.NewEventServer(
-		cfg.AmbientCtx,
-		timeutil.DefaultTimeSource{},
-		stopper,
-		5*time.Second, // maxStaleness
-		1<<20,         // triggerSizeBytes - 1MB
-		10*1<<20,      // maxBufferSizeBytes - 10MB
-		sqlMonitorAndMetrics.rootSQLMemoryMonitor, // memMonitor - this is not "SQL" usage, but we don't have another memory pool,
-	)
-	if knobs := cfg.TestingKnobs.EventExporter; knobs != nil {
-		eventsServer.TestingKnobs = knobs.(obs.EventServerTestingKnobs)
+	// Create the Obs Server. We'll start it later, once we know our node ID.
+	var eventsExporter obs.EventsExporterInterface
+	if cfg.ObsServiceAddr != "" {
+		ee, err := obs.NewEventsExporter(
+			cfg.ObsServiceAddr,
+			timeutil.DefaultTimeSource{},
+			cfg.Tracer,
+			5*time.Second, // maxStaleness
+			1<<20,         // triggerSizeBytes - 1MB
+			10*1<<20,      // maxBufferSizeBytes - 10MB
+			sqlMonitorAndMetrics.rootSQLMemoryMonitor, // memMonitor - this is not "SQL" usage, but we don't have another memory pool
+		)
+		if err != nil {
+			log.Errorf(ctx, "failed to create events exporter: %s", err)
+		} else {
+			log.Infof(ctx, "will export events over OTLP to: %s", cfg.ObsServiceAddr)
+			eventsExporter = ee
+		}
+	}
+	if eventsExporter == nil {
+		eventsExporter = &obs.NoopEventsExporter{}
 	}
 
 	// The settings cache writer is responsible for persisting the
@@ -972,7 +979,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		tenantUsageServer:        tenantUsage,
 		monitorAndMetrics:        sqlMonitorAndMetrics,
 		settingsStorage:          settingsWriter,
-		eventsServer:             eventsServer,
+		eventsExporter:           eventsExporter,
 		admissionPacerFactory:    gcoords.Elastic,
 		rangeDescIteratorFactory: rangedesc.NewIteratorFactory(db),
 	})
@@ -1110,7 +1117,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		authentication:         sAuth,
 		tsDB:                   tsDB,
 		tsServer:               &sTS,
-		eventsServer:           eventsServer,
+		eventsExporter:         eventsExporter,
 		recoveryServer:         recoveryServer,
 		raftTransport:          raftTransport,
 		stopper:                stopper,
@@ -1365,11 +1372,6 @@ func (s *Server) PreStart(ctx context.Context) error {
 	migrationServer := &migrationServer{server: s}
 	serverpb.RegisterMigrationServer(s.grpc.Server, migrationServer)
 	s.migrationServer = migrationServer // only for testing via TestServer
-
-	// Register the Observability Server, used by the Observability Service to
-	// subscribe to CRDB data. Note that the server will reject RPCs until
-	// SetResourceInfo is called later.
-	obspb.RegisterObsServer(s.grpc.Server, s.eventsServer)
 
 	// Register the KeyVisualizer Server
 	keyvispb.RegisterKeyVisualizerServer(s.grpc.Server, s.spanStatsServer)
@@ -1855,8 +1857,13 @@ func (s *Server) PreStart(ctx context.Context) error {
 		s.startDiagnostics(workersCtx)
 	}
 
-	// Enable the Obs Server.
-	s.eventsServer.SetResourceInfo(state.clusterID, int32(state.nodeID), build.BinaryVersion())
+	if err := s.eventsExporter.Start(ctx, obs.NodeInfo{
+		ClusterID:     state.clusterID,
+		NodeID:        int32(state.nodeID),
+		BinaryVersion: build.BinaryVersion(),
+	}, s.stopper); err != nil {
+		return errors.Wrap(err, "failed to start the event exporter")
+	}
 
 	// Connect the engines to the disk stats map constructor.
 	if err := s.node.registerEnginesForDiskStatsMap(s.cfg.Stores.Specs, s.engines); err != nil {
