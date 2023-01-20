@@ -883,10 +883,9 @@ inner-join (lookup t_json_arr)
  │    ├── eq columns: [1] = [1]
  │    ├── left fixed columns: [7] = ['\x3761000112620001']
  │    ├── right fixed columns: [7] = ['\x3763000112640001']
- │    ├── stats: [rows=61.7284, distinct(1)=61.7284, null(1)=0]
+ │    ├── stats: [rows=61.7284]
  │    └── filters (true)
- └── filters
-      └── b:2 @> '{"a": "b", "c": "d"}' [type=bool, outer=(2), immutable, constraints=(/2: (/NULL - ])]
+ └── filters (true)
 
 # Should generate a select on the table with a JSON filter, since c does not
 # have an inverted index.

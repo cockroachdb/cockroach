@@ -453,7 +453,6 @@ explain(shape):
     │ table: foo@foo_pkey
     │ equality: (a) = (a)
     │ equality cols are key
-    │ pred: b @> _
     │
     └── • zigzag join
           left table: foo@b_inverted_index

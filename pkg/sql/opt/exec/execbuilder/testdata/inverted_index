@@ -945,7 +945,6 @@ vectorized: true
 │ table: d@d_pkey
 │ equality: (a) = (a)
 │ equality cols are key
-│ pred: b @> '{"a": {"b": "c"}, "f": "g"}'
 │
 └── • project
     │ columns: (a)
@@ -999,7 +998,6 @@ vectorized: true
 │ table: d@d_pkey
 │ equality: (a) = (a)
 │ equality cols are key
-│ pred: b @> '[{"a": {"b": [[2]]}}, "d"]'
 │
 └── • project
     │ columns: (a)
@@ -1029,7 +1027,6 @@ vectorized: true
 │ table: d@d_pkey
 │ equality: (a) = (a)
 │ equality cols are key
-│ pred: b @> '{"a": {"b": "c"}, "f": "g"}'
 │
 └── • project
     │ columns: (a)
@@ -1083,7 +1080,6 @@ vectorized: true
 │ table: d@d_pkey
 │ equality: (a) = (a)
 │ equality cols are key
-│ pred: b @> '[{"a": {"b": [[2]]}}, "d"]'
 │
 └── • project
     │ columns: (a)
@@ -1235,7 +1231,6 @@ vectorized: true
     │ table: d@d_pkey
     │ equality: (a) = (a)
     │ equality cols are key
-    │ pred: b @> '[1, 2]'
     │
     └── • zigzag join
           estimated row count: 1,247
@@ -1263,7 +1258,6 @@ vectorized: true
     │ table: d@d_pkey
     │ equality: (a) = (a)
     │ equality cols are key
-    │ pred: (b @> '[1]') AND (b @> '[2]')
     │
     └── • zigzag join
           estimated row count: 1,247
@@ -1392,7 +1386,6 @@ vectorized: true
 │ table: e@e_pkey
 │ equality: (a) = (a)
 │ equality cols are key
-│ pred: b @> ARRAY[1,2]
 │
 └── • project
     │ columns: (a)
@@ -1419,7 +1412,6 @@ vectorized: true
 │ table: e@e_pkey
 │ equality: (a) = (a)
 │ equality cols are key
-│ pred: (b @> ARRAY[1]) AND (b @> ARRAY[2])
 │
 └── • project
     │ columns: (a)

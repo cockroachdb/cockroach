@@ -1222,7 +1222,7 @@ inner-join (lookup t4)
  ├── key columns: [6] = [6]
  ├── lookup columns are key
  ├── immutable
- ├── cost: 238.247531
+ ├── cost: 237.980741
  ├── inner-join (zigzag t4@_hyp_1 t4@_hyp_1)
  │    ├── columns: rowid:6!null
  │    ├── eq columns: [6] = [6]
@@ -1230,8 +1230,7 @@ inner-join (lookup t4)
  │    ├── right fixed columns: [9] = ['\x37666f6f000112310001']
  │    ├── cost: 159.155802
  │    └── filters (true)
- └── filters
-      └── j:4 @> '{"bar": "2", "foo": "1"}' [outer=(4), immutable, constraints=(/4: (/NULL - ])]
+ └── filters (true)
 
 index-candidates
 SELECT k, f FROM t4 WHERE j <@ '{"foo": "1"}' AND k = 1
