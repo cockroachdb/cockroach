@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React, { ReactNode } from "react";
+import React, { ReactNode, useContext } from "react";
 import { Col, Row, Tabs } from "antd";
 import "antd/lib/col/style";
 import "antd/lib/row/style";
@@ -16,7 +16,7 @@ import "antd/lib/tabs/style";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { InlineAlert, Text } from "@cockroachlabs/ui-components";
 import { ArrowLeft } from "@cockroachlabs/icons";
-import _, { isNil } from "lodash";
+import { isNil } from "lodash";
 import Long from "long";
 import { Helmet } from "react-helmet";
 import { Link, RouteComponentProps } from "react-router-dom";
@@ -75,6 +75,7 @@ import {
   InsertStmtDiagnosticRequest,
   StatementDiagnosticsReport,
 } from "../api";
+import { CockroachCloudContext } from "src";
 
 type StatementDetailsResponse =
   cockroach.server.serverpb.StatementDetailsResponse;
@@ -797,7 +798,7 @@ export class StatementDetails extends React.Component<
     if (!hasData && !this.state.query) {
       return this.renderNoDataTabContent();
     }
-
+    const showDiagnosticsLink = !useContext(CockroachCloudContext);
     return (
       <DiagnosticsView
         activateDiagnosticsRef={this.activateDiagnosticsRef}
@@ -811,9 +812,7 @@ export class StatementDetails extends React.Component<
         onDiagnosticCancelRequestClick={report =>
           this.props.onDiagnosticCancelRequest(report)
         }
-        showDiagnosticsViewLink={
-          this.props.uiConfig?.showStatementDiagnosticsLink
-        }
+        showDiagnosticsViewLink={showDiagnosticsLink}
         onSortingChange={this.props.onSortingChange}
       />
     );

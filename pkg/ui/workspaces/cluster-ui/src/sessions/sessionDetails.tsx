@@ -382,7 +382,7 @@ export class SessionDetails extends React.Component<SessionDetailsProps> {
                 <SummaryCardItem
                   label={"Gateway Node"}
                   value={
-                    this.props.uiConfig.showGatewayNodeLink ? (
+                    this.props.uiConfig?.showGatewayNodeLink ? (
                       <div className={cx("session-details-link")}>
                         <NodeLink
                           nodeId={session.node_id.toString()}
