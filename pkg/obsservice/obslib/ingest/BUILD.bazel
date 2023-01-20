@@ -8,15 +8,16 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/obsservice/obspb",
+        "//pkg/obsservice/obspb/opentelemetry-proto/collector/logs/v1:logs_service",
         "//pkg/obsservice/obspb/opentelemetry-proto/logs/v1:logs",
         "//pkg/roachpb",
         "//pkg/util/log",
         "//pkg/util/stop",
         "//pkg/util/timeutil",
         "//pkg/util/uuid",
+        "@com_github_cockroachdb_errors//:errors",
         "@com_github_jackc_pgx_v4//pgxpool",
         "@org_golang_google_grpc//:go_default_library",
-        "@org_golang_google_grpc//credentials/insecure",
     ],
 )
 
@@ -30,7 +31,6 @@ go_test(
     embed = [":ingest"],
     deps = [
         "//pkg/base",
-        "//pkg/obs",
         "//pkg/obsservice/obslib/migrations",
         "//pkg/obsservice/obspb",
         "//pkg/obsservice/obspb/opentelemetry-proto/common/v1:common",

@@ -228,6 +228,11 @@ type BaseConfig struct {
 	// other service (typically, the serverController) will accept and
 	// route SQL connections instead.
 	DisableSQLListener bool
+
+	// ObsServiceAddr is the address of the OTLP sink to send events to, if any.
+	// These events are meant for the Observability Service, but they might pass
+	// through an OpenTelemetry Collector.
+	ObsServiceAddr string
 }
 
 // MakeBaseConfig returns a BaseConfig with default values.

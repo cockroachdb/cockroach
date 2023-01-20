@@ -1701,6 +1701,12 @@ commands, WARNING for client commands.`,
 		Description: `--sql-audit-dir=XXX is an alias for --log='sinks: {file-groups: {sql-audit: {channels: SENSITIVE_ACCESS, dir: ...}}}'.`,
 	}
 
+	ObsServiceAddr = FlagInfo{
+		Name:        "obsservice-addr",
+		EnvVar:      "",
+		Description: `Address of an OpenTelemetry OTLP sync such as the Observability Service.`,
+	}
+
 	BuildTag = FlagInfo{
 		Name: "build-tag",
 		Description: `

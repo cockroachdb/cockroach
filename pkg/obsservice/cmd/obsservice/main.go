@@ -86,9 +86,10 @@ from one or more CockroachDB clusters.`,
 		stop := stop.NewStopper()
 
 		// Run the event ingestion in the background.
-		if eventsAddr != "" {
-			ingester := ingest.EventIngester{}
-			ingester.StartIngestEvents(ctx, eventsAddr, pool, stop)
+		ingester := ingest.EventIngester{}
+		if err := ingester.StartIngestEvents(ctx, otlpAddr, pool, stop); err != nil {
+			fmt.Fprint(os.Stderr, err.Error())
+			exit.WithCode(exit.UnspecifiedError())
 		}
 		// Run the reverse HTTP proxy in the background.
 		httpproxy.NewReverseHTTPProxy(ctx, cfg).Start(ctx, stop)
@@ -132,12 +133,12 @@ from one or more CockroachDB clusters.`,
 
 // Flags.
 var (
+	otlpAddr                  string
 	httpAddr                  string
 	targetURL                 string
 	caCertPath                string
 	uiCertPath, uiCertKeyPath string
 	sinkPGURL                 string
-	eventsAddr                string
 )
 
 func main() {
@@ -146,6 +147,11 @@ func main() {
 	// --vmodule, for example.
 	RootCmd.PersistentFlags().AddGoFlagSet(flag.CommandLine)
 
+	RootCmd.PersistentFlags().StringVar(
+		&otlpAddr,
+		"otlp-addr",
+		"localhost:4317",
+		"The address on which to listen for exported events using OTLP gRPC. If the port is missing, 4317 is used.")
 	RootCmd.PersistentFlags().StringVar(
 		&httpAddr,
 		"http-addr",
@@ -182,12 +188,6 @@ func main() {
 		"postgresql://root@localhost:26257?sslmode=disable",
 		"PGURL for the sink cluster. If the url does not include a database name, "+
 			"then \"obsservice\" will be used.")
-
-	RootCmd.PersistentFlags().StringVar(
-		&eventsAddr,
-		"crdb-events-addr",
-		"localhost:26257",
-		"Address of a CRDB node that events will be ingested from.")
 
 	if err := RootCmd.Execute(); err != nil {
 		fmt.Println(err)

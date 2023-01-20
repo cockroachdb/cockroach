@@ -895,6 +895,7 @@ func TestLint(t *testing.T) {
 			":!ccl/sqlproxyccl/tenantdirsvr/test_directory_svr.go",
 			":!ccl/sqlproxyccl/tenantdirsvr/test_simple_directory_svr.go",
 			":!ccl/sqlproxyccl/tenantdirsvr/test_static_directory_svr.go",
+			":!obsservice/obslib/ingest/ingest.go",
 			":!cmd/bazci/*.go",
 		)
 		if err != nil {
