@@ -35,18 +35,15 @@ import (
 //
 // init-grant-coordinator min-cpu=<int> max-cpu=<int> sql-kv-tokens=<int>
 // sql-sql-tokens=<int> sql-leaf=<int> sql-root=<int>
-// enabled-soft-slot-granting=<bool>
 // set-has-waiting-requests work=<kind> v=<true|false>
 // set-return-value-from-granted work=<kind> v=<int>
 // try-get work=<kind> [v=<int>]
 // return-grant work=<kind> [v=<int>]
 // took-without-permission work=<kind> [v=<int>]
 // continue-grant-chain work=<kind>
-// cpu-load runnable=<int> procs=<int> [infrequent=<bool>] [clamp=<int>]
+// cpu-load runnable=<int> procs=<int> [infrequent=<bool>]
 // init-store-grant-coordinator
 // set-io-tokens tokens=<int>
-// try-get-soft-slots slots=<int>
-// return-soft-slots slots=<int>
 func TestGranterBasic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -56,7 +53,6 @@ func TestGranterBasic(t *testing.T) {
 	// store grant coordinator.
 	var requesters [numWorkKinds + 1]*testRequester
 	var coord *GrantCoordinator
-	var ssg *SoftSlotGranter
 	clearRequesterAndCoord := func() {
 		coord = nil
 		for i := range requesters {
@@ -101,21 +97,9 @@ func TestGranterBasic(t *testing.T) {
 				return req
 			}
 			delayForGrantChainTermination = 0
-			opts.RunnableAlphaOverride = 1 // This gives weight to only the most recent sample.
 			coords := NewGrantCoordinators(ambientCtx, settings, opts, registry)
 			defer coords.Close()
 			coord = coords.Regular
-			var err error
-			ssg, err = MakeSoftSlotGranter(coord)
-			require.NoError(t, err)
-			if d.HasArg("enabled-soft-slot-granting") {
-				var enabledSoftSlotGranting bool
-				d.ScanArgs(t, "enabled-soft-slot-granting", &enabledSoftSlotGranting)
-				if !enabledSoftSlotGranting {
-					EnabledSoftSlotGranting.Override(context.Background(), &settings.SV, false)
-				}
-			}
-
 			return flushAndReset()
 
 		case "init-store-grant-coordinator":
@@ -216,12 +200,6 @@ func TestGranterBasic(t *testing.T) {
 			if d.HasArg("infrequent") {
 				d.ScanArgs(t, "infrequent", &infrequent)
 			}
-			if d.HasArg("clamp") {
-				var clamp int
-				d.ScanArgs(t, "clamp", &clamp)
-				kvsa := coord.cpuLoadListener.(*kvSlotAdjuster)
-				kvsa.setModerateSlotsClamp(clamp)
-			}
 
 			samplePeriod := time.Millisecond
 			if infrequent {
@@ -270,19 +248,6 @@ func TestGranterBasic(t *testing.T) {
 			requesters[scanWorkKind(t, d)].granter.(granterWithStoreWriteDone).storeWriteDone(
 				int64(origTokens), StoreWorkDoneInfo{WriteBytes: int64(writeBytes)})
 			coord.testingTryGrant()
-			return flushAndReset()
-
-		case "try-get-soft-slots":
-			var slots int
-			d.ScanArgs(t, "slots", &slots)
-			granted := ssg.TryGetSlots(slots)
-			fmt.Fprintf(&buf, "requested: %d, granted: %d\n", slots, granted)
-			return flushAndReset()
-
-		case "return-soft-slots":
-			var slots int
-			d.ScanArgs(t, "slots", &slots)
-			ssg.ReturnSlots(slots)
 			return flushAndReset()
 
 		default:
@@ -450,12 +415,6 @@ func (str *storeTestRequester) getStoreAdmissionStats() storeAdmissionStats {
 
 func (str *storeTestRequester) setStoreRequestEstimates(estimates storeRequestEstimates) {
 	// Only used by ioLoadListener, so don't bother.
-}
-
-// setModerateSlotsClamp is used in testing to force a value for kvsa.moderateSlotsClamp.
-func (kvsa *kvSlotAdjuster) setModerateSlotsClamp(val int) {
-	kvsa.moderateSlotsClampOverride = val
-	kvsa.moderateSlotsClamp = val
 }
 
 func scanWorkKind(t *testing.T, d *datadriven.TestData) int8 {
