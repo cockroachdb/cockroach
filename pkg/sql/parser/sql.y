@@ -1928,7 +1928,6 @@ alter_database_owner:
 alter_database_set_stmt:
   ALTER DATABASE database_name set_or_reset_clause
   {
-    /* SKIP DOC */
     $$.val = &tree.AlterRoleSet{
       AllRoles: true,
       DatabaseName: tree.Name($3),
@@ -1940,7 +1939,6 @@ alter_database_set_stmt:
 alter_database_placement_stmt:
   ALTER DATABASE database_name placement_clause
   {
-    /* SKIP DOC */
     $$.val = &tree.AlterDatabasePlacement{
       Name: tree.Name($3),
       Placement: $4.dataPlacement(),
@@ -10635,12 +10633,10 @@ opt_placement_clause:
 placement_clause:
   PLACEMENT RESTRICTED
   {
-    /* SKIP DOC */
     $$.val = tree.DataPlacementRestricted
   }
 | PLACEMENT DEFAULT
   {
-    /* SKIP DOC */
     $$.val = tree.DataPlacementDefault
   }
 
