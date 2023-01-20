@@ -61,10 +61,6 @@ ALTER TABLE defaultdb.foo ALTER COLUMN i DROP STORED
 ----
 
 unimplemented
-ALTER TABLE defaultdb.foo ALTER COLUMN i SET NOT NULL
-----
-
-unimplemented
 ALTER TABLE defaultdb.foo RENAME COLUMN i TO j
 ----
 
