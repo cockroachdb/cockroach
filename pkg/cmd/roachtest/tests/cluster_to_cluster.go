@@ -208,7 +208,7 @@ func setupC2C(
 	srcNode := srcCluster.RandNode()
 	destNode := dstCluster.RandNode()
 
-	addr, err := c.ExternalPGUrl(ctx, t.L(), srcNode)
+	addr, err := c.ExternalPGUrl(ctx, t.L(), srcNode, "")
 	require.NoError(t, err)
 
 	srcDB := c.Conn(ctx, t.L(), srcNode[0])

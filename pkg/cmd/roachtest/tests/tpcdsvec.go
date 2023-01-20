@@ -91,7 +91,7 @@ func registerTPCDSVec(r registry.Registry) {
 		// We additionally open fresh connections for each query.
 		setStmtTimeout := fmt.Sprintf("SET statement_timeout='%s';", timeout)
 		firstNode := c.Node(1)
-		urls, err := c.ExternalPGUrl(ctx, t.L(), firstNode)
+		urls, err := c.ExternalPGUrl(ctx, t.L(), firstNode, "")
 		if err != nil {
 			t.Fatal(err)
 		}

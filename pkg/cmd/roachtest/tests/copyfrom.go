@@ -130,7 +130,7 @@ func runCopyFromCRDB(ctx context.Context, t test.Test, c cluster.Cluster, sf int
 	stmt := fmt.Sprintf("ALTER ROLE ALL SET copy_from_atomic_enabled = %t", atomic)
 	_, err = db.ExecContext(ctx, stmt)
 	require.NoError(t, err)
-	urls, err := c.InternalPGUrl(ctx, t.L(), c.Node(1))
+	urls, err := c.InternalPGUrl(ctx, t.L(), c.Node(1), "")
 	require.NoError(t, err)
 	m := c.NewMonitor(ctx, c.All())
 	m.Go(func(ctx context.Context) error {
