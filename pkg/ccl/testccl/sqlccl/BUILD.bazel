@@ -22,6 +22,7 @@ go_test(
         "//pkg/jobs/jobsprotectedts",
         "//pkg/keys",
         "//pkg/kv/kvserver/protectedts/ptpb",
+        "//pkg/multitenant/mtinfopb",
         "//pkg/roachpb",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
