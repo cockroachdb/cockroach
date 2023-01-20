@@ -63,6 +63,9 @@ func TestContextualHelp(t *testing.T) {
 
 		{`ALTER TENANT foo RENAME TO bar ??`, `ALTER TENANT RENAME`},
 
+		{`ALTER TENANT foo START SERVICE ??`, `ALTER TENANT SERVICE`},
+		{`ALTER TENANT foo STOP ??`, `ALTER TENANT SERVICE`},
+
 		{`ALTER TYPE ??`, `ALTER TYPE`},
 		{`ALTER TYPE t ??`, `ALTER TYPE`},
 		{`ALTER TYPE t ADD VALUE ??`, `ALTER TYPE`},

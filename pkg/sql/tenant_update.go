@@ -64,6 +64,10 @@ func validateTenantInfo(info *descpb.TenantInfo) error {
 	if info.DroppedName != "" && info.DataState != descpb.TenantInfo_DROP {
 		return errors.Newf("tenant in data state %v with dropped name %q", info.DataState, info.DroppedName)
 	}
+	if info.ServiceMode != descpb.TenantInfo_NONE && info.DataState != descpb.TenantInfo_READY {
+		return errors.Newf("cannot use tenant service mode %v with data state %v",
+			info.ServiceMode, info.DataState)
+	}
 	return nil
 }
 
@@ -108,7 +112,12 @@ func (p *planner) UpdateTenantResourceLimits(
 // The caller is responsible for checking that the user is authorized
 // to take this action.
 func ActivateTenant(
-	ctx context.Context, settings *cluster.Settings, codec keys.SQLCodec, txn isql.Txn, tenID uint64,
+	ctx context.Context,
+	settings *cluster.Settings,
+	codec keys.SQLCodec,
+	txn isql.Txn,
+	tenID uint64,
+	serviceMode descpb.TenantInfo_ServiceMode,
 ) error {
 	const op = "activate"
 	if err := rejectIfCantCoordinateMultiTenancy(codec, op); err != nil {
@@ -126,11 +135,45 @@ func ActivateTenant(
 
 	// Mark the tenant as active.
 	info.DataState = descpb.TenantInfo_READY
+	info.ServiceMode = serviceMode
 	if err := UpdateTenantRecord(ctx, settings, txn, info); err != nil {
 		return errors.Wrap(err, "activating tenant")
 	}
 
 	return nil
+}
+
+func (p *planner) setTenantService(
+	ctx context.Context, info *descpb.TenantInfo, newMode descpb.TenantInfo_ServiceMode,
+) error {
+	if p.EvalContext().TxnReadOnly {
+		return readOnlyError("ALTER TENANT SERVICE")
+	}
+
+	if err := p.RequireAdminRole(ctx, "set tenant service"); err != nil {
+		return err
+	}
+	if err := rejectIfCantCoordinateMultiTenancy(p.ExecCfg().Codec, "set tenant service"); err != nil {
+		return err
+	}
+	if err := rejectIfSystemTenant(info.ID, "set tenant service"); err != nil {
+		return err
+	}
+
+	if newMode == info.ServiceMode {
+		// No-op. Do nothing.
+		return nil
+	}
+
+	if newMode != descpb.TenantInfo_NONE && info.ServiceMode != descpb.TenantInfo_NONE {
+		return errors.WithHint(pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+			"cannot change service mode %v to %v directly",
+			info.ServiceMode, newMode),
+			"Use ALTER TENANT STOP SERVICE first.")
+	}
+
+	info.ServiceMode = newMode
+	return UpdateTenantRecord(ctx, p.ExecCfg().Settings, p.InternalSQLTxn(), info)
 }
 
 func (p *planner) renameTenant(

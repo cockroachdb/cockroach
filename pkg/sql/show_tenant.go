@@ -239,6 +239,7 @@ func (n *showTenantNode) Values() tree.Datums {
 		tree.NewDInt(tree.DInt(tenantInfo.ID)),
 		tree.NewDString(string(tenantInfo.Name)),
 		tree.NewDString(string(v.tenantStatus)),
+		tree.NewDString(tenantInfo.ServiceMode.String()),
 	}
 
 	if n.withReplication {

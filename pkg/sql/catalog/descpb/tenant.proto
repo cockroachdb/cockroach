@@ -32,6 +32,20 @@ message TenantInfo {
     DROP = 2;
   }
 
+  // The way the tenant can be served to clients.
+  enum ServiceMode {
+    // Service allowed using separate processes.
+    // This is the default value for backward-compatibility with
+    // records created for CockroachCloud Serverless pre-v23.1.
+    EXTERNAL = 0;
+    // No service allowed.
+    NONE = 1;
+    // Service allowed using shared-process multitenancy.
+    // This mode causes KV nodes to spontaneously start the SQL service
+    // for the tenant.
+    SHARED = 2;
+  }
+
   // ID is the internal numeric identifier of the tenant.
   // It remains mostly invisible to clients.
   optional uint64 id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "ID"];
@@ -65,6 +79,9 @@ message TenantInfo {
   optional cockroach.multitenant.tenantcapabilitiespb.TenantCapabilities capabilities = 6 [
     (gogoproto.nullable) = false
   ];
+
+  // ServiceMode determines how the tenant should be served.
+  optional ServiceMode service_mode = 7 [(gogoproto.nullable) = false];
 }
 
 // TenantInfoAndUsage contains the information for a tenant in a multi-tenant

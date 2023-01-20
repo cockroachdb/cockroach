@@ -3,7 +3,7 @@ query IBIT colnames
 SELECT id, active, length(info), name FROM system.tenants ORDER BY id
 ----
 id  active  length  name
-1   true    18      system
+1   true    20      system
 
 # Create three tenants.
 
@@ -37,10 +37,10 @@ FROM system.tenants
 ORDER BY id
 ----
 id  active  name                  crdb_internal.pb_to_json
-1   true    system                {"capabilities": {"canAdminSplit": false}, "dataState": "READY", "droppedName": "", "id": "1", "name": "system", "tenantReplicationJobId": "0"}
-2   true    tenant-number-eleven  {"capabilities": {"canAdminSplit": false}, "dataState": "READY", "droppedName": "", "id": "2", "name": "tenant-number-eleven", "tenantReplicationJobId": "0"}
-5   true    tenant-5              {"capabilities": {"canAdminSplit": false}, "dataState": "READY", "droppedName": "", "id": "5", "name": "tenant-5", "tenantReplicationJobId": "0"}
-10  true    tenant-number-ten     {"capabilities": {"canAdminSplit": false}, "dataState": "READY", "droppedName": "", "id": "10", "name": "tenant-number-ten", "tenantReplicationJobId": "0"}
+1   true    system                {"capabilities": {"canAdminSplit": false}, "dataState": "READY", "droppedName": "", "id": "1", "name": "system", "serviceMode": "EXTERNAL", "tenantReplicationJobId": "0"}
+2   true    tenant-number-eleven  {"capabilities": {"canAdminSplit": false}, "dataState": "READY", "droppedName": "", "id": "2", "name": "tenant-number-eleven", "serviceMode": "NONE", "tenantReplicationJobId": "0"}
+5   true    tenant-5              {"capabilities": {"canAdminSplit": false}, "dataState": "READY", "droppedName": "", "id": "5", "name": "tenant-5", "serviceMode": "EXTERNAL", "tenantReplicationJobId": "0"}
+10  true    tenant-number-ten     {"capabilities": {"canAdminSplit": false}, "dataState": "READY", "droppedName": "", "id": "10", "name": "tenant-number-ten", "serviceMode": "NONE", "tenantReplicationJobId": "0"}
 
 # Check we can add a name where none existed before.
 statement ok
@@ -96,6 +96,12 @@ id  active  name
 query error tenant 5 is not in data state DROP
 SELECT crdb_internal.gc_tenant(5)
 
+statement error cannot drop tenant "my-new-tenant-name" \(5\) in service mode EXTERNAL
+DROP TENANT [5]
+
+statement ok
+ALTER TENANT [5] STOP SERVICE
+
 # Note this just marks the tenant as dropped but does not call GC.
 
 statement ok
@@ -107,10 +113,10 @@ FROM system.tenants
 ORDER BY id
 ----
 id  active  name                  crdb_internal.pb_to_json
-1   true    system                {"capabilities": {"canAdminSplit": false}, "dataState": "READY", "droppedName": "", "id": "1", "name": "system", "tenantReplicationJobId": "0"}
-2   true    tenant-number-eleven  {"capabilities": {"canAdminSplit": false}, "dataState": "READY", "droppedName": "", "id": "2", "name": "tenant-number-eleven", "tenantReplicationJobId": "0"}
-5   false   NULL                  {"capabilities": {"canAdminSplit": false}, "dataState": "DROP", "droppedName": "my-new-tenant-name", "id": "5", "name": "", "tenantReplicationJobId": "0"}
-10  true    tenant-number-ten     {"capabilities": {"canAdminSplit": false}, "dataState": "READY", "droppedName": "", "id": "10", "name": "tenant-number-ten", "tenantReplicationJobId": "0"}
+1   true    system                {"capabilities": {"canAdminSplit": false}, "dataState": "READY", "droppedName": "", "id": "1", "name": "system", "serviceMode": "EXTERNAL", "tenantReplicationJobId": "0"}
+2   true    tenant-number-eleven  {"capabilities": {"canAdminSplit": false}, "dataState": "READY", "droppedName": "", "id": "2", "name": "tenant-number-eleven", "serviceMode": "NONE", "tenantReplicationJobId": "0"}
+5   false   NULL                  {"capabilities": {"canAdminSplit": false}, "dataState": "DROP", "droppedName": "my-new-tenant-name", "id": "5", "name": "", "serviceMode": "NONE", "tenantReplicationJobId": "0"}
+10  true    tenant-number-ten     {"capabilities": {"canAdminSplit": false}, "dataState": "READY", "droppedName": "", "id": "10", "name": "tenant-number-ten", "serviceMode": "NONE", "tenantReplicationJobId": "0"}
 
 
 # Try to recreate an existing tenant.
@@ -217,9 +223,9 @@ FROM system.tenants
 ORDER BY id
 ----
 id  active  crdb_internal.pb_to_json
-1   true    {"capabilities": {"canAdminSplit": false}, "dataState": "READY", "droppedName": "", "id": "1", "name": "system", "tenantReplicationJobId": "0"}
-2   true    {"capabilities": {"canAdminSplit": false}, "dataState": "READY", "droppedName": "", "id": "2", "name": "tenant-number-eleven", "tenantReplicationJobId": "0"}
-10  true    {"capabilities": {"canAdminSplit": false}, "dataState": "READY", "droppedName": "", "id": "10", "name": "tenant-number-ten", "tenantReplicationJobId": "0"}
+1   true    {"capabilities": {"canAdminSplit": false}, "dataState": "READY", "droppedName": "", "id": "1", "name": "system", "serviceMode": "EXTERNAL", "tenantReplicationJobId": "0"}
+2   true    {"capabilities": {"canAdminSplit": false}, "dataState": "READY", "droppedName": "", "id": "2", "name": "tenant-number-eleven", "serviceMode": "NONE", "tenantReplicationJobId": "0"}
+10  true    {"capabilities": {"canAdminSplit": false}, "dataState": "READY", "droppedName": "", "id": "10", "name": "tenant-number-ten", "serviceMode": "NONE", "tenantReplicationJobId": "0"}
 
 query error tenant resource limits require a CCL binary
 SELECT crdb_internal.update_tenant_resource_limits(10, 1000, 100, 0, now(), 0)
