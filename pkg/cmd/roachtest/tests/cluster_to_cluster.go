@@ -26,10 +26,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -487,7 +487,7 @@ func registerClusterToCluster(r registry.Registry) {
 }
 func getIngestionJobID(t test.Test, dstSQL *sqlutils.SQLRunner, dstTenantName string) int {
 	var tenantInfoBytes []byte
-	var tenantInfo descpb.TenantInfo
+	var tenantInfo mtinfopb.TenantInfo
 	dstSQL.QueryRow(t, "SELECT info FROM system.tenants WHERE name=$1",
 		dstTenantName).Scan(&tenantInfoBytes)
 	require.NoError(t, protoutil.Unmarshal(tenantInfoBytes, &tenantInfo))

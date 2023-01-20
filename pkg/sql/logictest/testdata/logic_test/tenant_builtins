@@ -3,7 +3,7 @@ query IBIT colnames
 SELECT id, active, length(info), name FROM system.tenants ORDER BY id
 ----
 id  active  length  name
-1   true    18      system
+1   true    10      system
 
 # Create three tenants.
 
@@ -11,6 +11,11 @@ query I
 SELECT crdb_internal.create_tenant(5)
 ----
 5
+
+# create_tenant auto-sets the service for backward-compatibility.
+# Reset it here so the tests below don't get confused.
+statement ok
+ALTER TENANT [5] STOP SERVICE
 
 query error invalid tenant name
 SELECT crdb_internal.create_tenant(10, 'ABC')
@@ -31,16 +36,17 @@ SELECT crdb_internal.create_tenant('tenant-number-eleven')
 ----
 2
 
-query IBTT colnames
-SELECT id, active, name, crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info, true)
+query IBTIIT colnames
+SELECT id, active, name, data_state, service_mode,
+       crdb_internal.pb_to_json('cockroach.multitenant.TenantInfo', info, true)
 FROM system.tenants
 ORDER BY id
 ----
-id  active  name                  crdb_internal.pb_to_json
-1   true    system                {"capabilities": {"canAdminSplit": false}, "droppedName": "", "id": "1", "name": "system", "state": "ACTIVE", "tenantReplicationJobId": "0"}
-2   true    tenant-number-eleven  {"capabilities": {"canAdminSplit": false}, "droppedName": "", "id": "2", "name": "tenant-number-eleven", "state": "ACTIVE", "tenantReplicationJobId": "0"}
-5   true    tenant-5              {"capabilities": {"canAdminSplit": false}, "droppedName": "", "id": "5", "name": "tenant-5", "state": "ACTIVE", "tenantReplicationJobId": "0"}
-10  true    tenant-number-ten     {"capabilities": {"canAdminSplit": false}, "droppedName": "", "id": "10", "name": "tenant-number-ten", "state": "ACTIVE", "tenantReplicationJobId": "0"}
+id  active  name                  data_state  service_mode  crdb_internal.pb_to_json
+1   true    system                1           2             {"capabilities": {"canAdminSplit": false}, "deprecatedDataState": "READY", "deprecatedId": "1", "droppedName": "", "tenantReplicationJobId": "0"}
+2   true    tenant-number-eleven  1           0             {"capabilities": {"canAdminSplit": false}, "deprecatedDataState": "READY", "deprecatedId": "2", "droppedName": "", "tenantReplicationJobId": "0"}
+5   true    tenant-5              1           0             {"capabilities": {"canAdminSplit": false}, "deprecatedDataState": "READY", "deprecatedId": "5", "droppedName": "", "tenantReplicationJobId": "0"}
+10  true    tenant-number-ten     1           0             {"capabilities": {"canAdminSplit": false}, "deprecatedDataState": "READY", "deprecatedId": "10", "droppedName": "", "tenantReplicationJobId": "0"}
 
 # Check we can add a name where none existed before.
 statement ok
@@ -93,7 +99,7 @@ id  active  name
 
 # Garbage collect a non-drop tenant fails.
 
-query error tenant 5 is not in state DROP
+query error tenant 5 is not in data state DROP
 SELECT crdb_internal.gc_tenant(5)
 
 # Note this just marks the tenant as dropped but does not call GC.
@@ -101,16 +107,17 @@ SELECT crdb_internal.gc_tenant(5)
 statement ok
 DROP TENANT [5]
 
-query IBTT colnames
-SELECT id, active, name, crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info, true)
+query IBTIIT colnames
+SELECT id, active, name, data_state, service_mode,
+       crdb_internal.pb_to_json('cockroach.multitenant.TenantInfo', info, true)
 FROM system.tenants
 ORDER BY id
 ----
-id  active  name                  crdb_internal.pb_to_json
-1   true    system                {"capabilities": {"canAdminSplit": false}, "droppedName": "", "id": "1", "name": "system", "state": "ACTIVE", "tenantReplicationJobId": "0"}
-2   true    tenant-number-eleven  {"capabilities": {"canAdminSplit": false}, "droppedName": "", "id": "2", "name": "tenant-number-eleven", "state": "ACTIVE", "tenantReplicationJobId": "0"}
-5   false   NULL                  {"capabilities": {"canAdminSplit": false}, "droppedName": "my-new-tenant-name", "id": "5", "name": "", "state": "DROP", "tenantReplicationJobId": "0"}
-10  true    tenant-number-ten     {"capabilities": {"canAdminSplit": false}, "droppedName": "", "id": "10", "name": "tenant-number-ten", "state": "ACTIVE", "tenantReplicationJobId": "0"}
+id  active  name                  data_state  service_mode  crdb_internal.pb_to_json
+1   true    system                1           2             {"capabilities": {"canAdminSplit": false}, "deprecatedDataState": "READY", "deprecatedId": "1", "droppedName": "", "tenantReplicationJobId": "0"}
+2   true    tenant-number-eleven  1           0             {"capabilities": {"canAdminSplit": false}, "deprecatedDataState": "READY", "deprecatedId": "2", "droppedName": "", "tenantReplicationJobId": "0"}
+5   false   NULL                  2           0             {"capabilities": {"canAdminSplit": false}, "deprecatedDataState": "DROP", "deprecatedId": "5", "droppedName": "my-new-tenant-name", "tenantReplicationJobId": "0"}
+10  true    tenant-number-ten     1           0             {"capabilities": {"canAdminSplit": false}, "deprecatedDataState": "READY", "deprecatedId": "10", "droppedName": "", "tenantReplicationJobId": "0"}
 
 
 # Try to recreate an existing tenant.
@@ -211,15 +218,16 @@ succeeded
 statement error pgcode 42704 tenant "5" does not exist
 DROP TENANT [5]
 
-query IBT colnames
-SELECT id, active, crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info, true)
+query IBTIIT colnames
+SELECT id, active, name, data_state, service_mode,
+       crdb_internal.pb_to_json('cockroach.multitenant.TenantInfo', info, true)
 FROM system.tenants
 ORDER BY id
 ----
-id  active  crdb_internal.pb_to_json
-1   true    {"capabilities": {"canAdminSplit": false}, "droppedName": "", "id": "1", "name": "system", "state": "ACTIVE", "tenantReplicationJobId": "0"}
-2   true    {"capabilities": {"canAdminSplit": false}, "droppedName": "", "id": "2", "name": "tenant-number-eleven", "state": "ACTIVE", "tenantReplicationJobId": "0"}
-10  true    {"capabilities": {"canAdminSplit": false}, "droppedName": "", "id": "10", "name": "tenant-number-ten", "state": "ACTIVE", "tenantReplicationJobId": "0"}
+id  active  name                  data_state  service_mode  crdb_internal.pb_to_json
+1   true    system                1           2             {"capabilities": {"canAdminSplit": false}, "deprecatedDataState": "READY", "deprecatedId": "1", "droppedName": "", "tenantReplicationJobId": "0"}
+2   true    tenant-number-eleven  1           0             {"capabilities": {"canAdminSplit": false}, "deprecatedDataState": "READY", "deprecatedId": "2", "droppedName": "", "tenantReplicationJobId": "0"}
+10  true    tenant-number-ten     1           0             {"capabilities": {"canAdminSplit": false}, "deprecatedDataState": "READY", "deprecatedId": "10", "droppedName": "", "tenantReplicationJobId": "0"}
 
 query error tenant resource limits require a CCL binary
 SELECT crdb_internal.update_tenant_resource_limits(10, 1000, 100, 0, now(), 0)

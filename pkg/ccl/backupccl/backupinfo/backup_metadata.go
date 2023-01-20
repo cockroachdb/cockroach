@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
@@ -877,7 +878,7 @@ func DebugDumpMetadataSST(
 			if err != nil {
 				return err
 			}
-			i, err := pbBytesToJSON(v, &descpb.TenantInfo{})
+			i, err := pbBytesToJSON(v, &mtinfopb.TenantInfo{})
 			if err != nil {
 				return err
 			}
@@ -1218,7 +1219,7 @@ func (ti *TenantIterator) Err() error {
 // and false if there are no more elements or if an error was encountered. When
 // Next returns false, the user should call the Err method to verify the
 // existence of an error.
-func (ti *TenantIterator) Next(tenant *descpb.TenantInfoWithUsage) bool {
+func (ti *TenantIterator) Next(tenant *mtinfopb.TenantInfoWithUsage) bool {
 	wrapper := resultWrapper{}
 	ok := ti.backing.next(&wrapper)
 	if !ok {

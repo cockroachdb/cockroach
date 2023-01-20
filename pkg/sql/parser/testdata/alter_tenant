@@ -199,3 +199,28 @@ ALTER TENANT ('string'::INTERVAL MINUTE) SET CLUSTER SETTING ident = DEFAULT -- 
 ALTER TENANT ((('string')::INTERVAL MINUTE)) SET CLUSTER SETTING ident = (DEFAULT) -- fully parenthesized
 ALTER TENANT ('_'::INTERVAL MINUTE) SET CLUSTER SETTING ident = DEFAULT -- literals removed
 ALTER TENANT ('string'::INTERVAL MINUTE) SET CLUSTER SETTING ident = DEFAULT -- identifiers removed
+
+parse
+ALTER TENANT 'foo' START SERVICE EXTERNAL
+----
+ALTER TENANT 'foo' START SERVICE EXTERNAL
+ALTER TENANT ('foo') START SERVICE EXTERNAL -- fully parenthesized
+ALTER TENANT '_' START SERVICE EXTERNAL -- literals removed
+ALTER TENANT 'foo' START SERVICE EXTERNAL -- identifiers removed
+
+parse
+ALTER TENANT 'foo' START SERVICE SHARED
+----
+ALTER TENANT 'foo' START SERVICE SHARED
+ALTER TENANT ('foo') START SERVICE SHARED -- fully parenthesized
+ALTER TENANT '_' START SERVICE SHARED -- literals removed
+ALTER TENANT 'foo' START SERVICE SHARED -- identifiers removed
+
+parse
+ALTER TENANT 'foo' STOP SERVICE
+----
+ALTER TENANT 'foo' STOP SERVICE
+ALTER TENANT ('foo') STOP SERVICE -- fully parenthesized
+ALTER TENANT '_' STOP SERVICE -- literals removed
+ALTER TENANT 'foo' STOP SERVICE -- identifiers removed
+

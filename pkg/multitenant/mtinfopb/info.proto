@@ -9,8 +9,8 @@
 // licenses/APL.txt.
 
 syntax = "proto2";
-package cockroach.sql.sqlbase;
-option go_package = "descpb";
+package cockroach.multitenant;
+option go_package = "mtinfopb";
 
 import "gogoproto/gogo.proto";
 import "roachpb/api.proto";
@@ -22,42 +22,48 @@ import "multitenant/tenantcapabilities/tenantcapabilitiespb/capabilities.proto";
 message TenantInfo {
   option (gogoproto.equal) = true;
 
-  // The state of the tenant. Dictates whether SQL sessions for the tenant
-  // should be allowed, although this is currently not enforced.
-  enum State {
-    // Tenant is online and available for SQL sessions.
-    ACTIVE = 0;
-    // Tenant is being added. Not available for SQL sessions.
+  // The state of the tenant's logical keyspace (DEPRECATED).
+  // This enum is only used when the data_state column is NULL.
+  enum DeprecatedDataState {
+    // Tenant data is ready and SQL servers can access it.
+    // DEPRECATED. Use DataStateReady.
+    READY = 0;
+    // Tenant data is being added. Not available for SQL sessions.
+    // DEPRECATED. Use DataStateAdd.
     ADD = 1;
-    // Tenant is being dropped. Not available for SQL sessions.
+    // Tenant data is being dropped. Not available for SQL sessions.
+    // DEPRECATED. Use DataStateDrop.
     DROP = 2;
   }
 
-  optional uint64 id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "ID"];
-  optional State state = 2 [(gogoproto.nullable) = false];
-  optional string name = 3 [
-    (gogoproto.nullable) = false,
-    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/roachpb.TenantName"];
+  // ID is the internal numeric identifier of the tenant (DEPRECATED).
+  // This field is redundant with the id column in system.tenants.
+  optional uint64 deprecated_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "DeprecatedID"];
+
+  // DeprecatedDataState is the state of the tenant's keyspace (DEPRECATED).
+  optional DeprecatedDataState deprecated_data_state = 2 [(gogoproto.nullable) = false];
 
   // DroppedName is the name the tenant had before DROP TENANT was
   // run on the tenant. It should be empty for active or adding
   // tenants.
-  optional string dropped_name = 4 [
+  optional string dropped_name = 3 [
     (gogoproto.nullable) = false,
-    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/roachpb.TenantName"];
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.TenantName"];
 
   // TenantReplicationJobID is set if this tenant is the target tenant
   // of a running tenant replication job.
-  optional int64 tenant_replication_job_id = 5 [
+  optional int64 tenant_replication_job_id = 4 [
      (gogoproto.nullable) = false,
      (gogoproto.customname) = "TenantReplicationJobID",
      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.JobID"];
 
   // Capabilities encapsulate a set of capabilities that a specific tenant
   // possesses.
-  optional cockroach.multitenant.tenantcapabilitiespb.TenantCapabilities capabilities = 6 [
+  optional cockroach.multitenant.tenantcapabilitiespb.TenantCapabilities capabilities = 5 [
     (gogoproto.nullable) = false
   ];
+
+  // Next ID: 7
 }
 
 // TenantInfoAndUsage contains the information for a tenant in a multi-tenant
@@ -81,4 +87,28 @@ message TenantInfoWithUsage {
   }
   optional TenantInfo info = 1 [(gogoproto.embed) = true, (gogoproto.nullable) = false];
   optional Usage usage = 2;
+
+  // ExtraColumns contain the additional metadata from the other
+  // columns in system.tenants not otherwise encoded in the info field.
+  message ExtraColumns {
+    option (gogoproto.equal) = true;
+
+    optional uint64 id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "ID"];
+
+    // Copy of the name column in system.tenants.
+    optional string name = 2 [
+          (gogoproto.nullable) = false,
+          (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.TenantName"];
+
+    // Copy of the data_state column in system.tenants.
+    optional uint32 data_state = 3 [
+          (gogoproto.nullable) = false,
+          (gogoproto.casttype) = "TenantDataState"];
+
+    // Copy of the service_mode column in system.tenants.
+    optional uint32 service_mode = 4 [
+          (gogoproto.nullable) = false,
+          (gogoproto.casttype) = "TenantServiceMode"];
+  }
+  optional ExtraColumns extra_columns = 3 [(gogoproto.embed) = true, (gogoproto.nullable) = false];
 }

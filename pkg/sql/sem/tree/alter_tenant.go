@@ -138,3 +138,37 @@ func (n *AlterTenantRename) Format(ctx *FmtCtx) {
 	ctx.WriteString(" RENAME TO ")
 	ctx.FormatNode(n.NewName)
 }
+
+// AlterTenantService represents an ALTER TENANT START/STOP SERVICE statement.
+type AlterTenantService struct {
+	TenantSpec *TenantSpec
+	Command    TenantServiceCmd
+}
+
+// TenantServiceCmd represents a parameter to ALTER TENANT.
+type TenantServiceCmd int8
+
+const (
+	// TenantStartServiceExternal encodes START SERVICE EXTERNAL.
+	TenantStartServiceExternal TenantServiceCmd = 0
+	// TenantStartServiceExternal encodes START SERVICE SHARED.
+	TenantStartServiceShared TenantServiceCmd = 1
+	// TenantStartServiceExternal encodes STOP SERVICE.
+	TenantStopService TenantServiceCmd = 2
+)
+
+var _ Statement = &AlterTenantService{}
+
+// Format implements the NodeFormatter interface.
+func (n *AlterTenantService) Format(ctx *FmtCtx) {
+	ctx.WriteString("ALTER TENANT ")
+	ctx.FormatNode(n.TenantSpec)
+	switch n.Command {
+	case TenantStartServiceExternal:
+		ctx.WriteString(" START SERVICE EXTERNAL")
+	case TenantStartServiceShared:
+		ctx.WriteString(" START SERVICE SHARED")
+	case TenantStopService:
+		ctx.WriteString(" STOP SERVICE")
+	}
+}
