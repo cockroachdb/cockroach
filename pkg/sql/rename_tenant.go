@@ -69,7 +69,7 @@ func (n *renameTenantNode) startExec(params runParams) error {
 	if err != nil {
 		return err
 	}
-	return params.p.renameTenant(params.ctx, rec.ID, newName)
+	return params.p.renameTenant(params.ctx, rec, newName)
 }
 
 func (n *renameTenantNode) Next(_ runParams) (bool, error) { return false, nil }
