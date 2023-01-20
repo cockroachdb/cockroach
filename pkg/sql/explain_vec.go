@@ -60,7 +60,7 @@ func (n *explainVecNode) startExec(params runParams) error {
 		return err
 	}
 
-	distSQLPlanner.finalizePlanWithRowCount(planCtx, physPlan, n.plan.mainRowCount)
+	distSQLPlanner.finalizePlanWithRowCount(params.ctx, planCtx, physPlan, n.plan.mainRowCount)
 	flows := physPlan.GenerateFlowSpecs()
 	flowCtx, cleanup := newFlowCtxForExplainPurposes(params.ctx, planCtx, params.p)
 	defer cleanup()

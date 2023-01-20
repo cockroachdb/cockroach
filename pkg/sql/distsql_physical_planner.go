@@ -1778,7 +1778,7 @@ func (dsp *DistSQLPlanner) planTableReaders(
 	if parallelizeLocal {
 		// If we planned multiple table readers, we need to merge the streams
 		// into one.
-		p.AddSingleGroupStage(dsp.gatewaySQLInstanceID, execinfrapb.ProcessorCoreUnion{Noop: &execinfrapb.NoopCoreSpec{}}, execinfrapb.PostProcessSpec{}, p.GetResultTypes())
+		p.AddSingleGroupStage(ctx, dsp.gatewaySQLInstanceID, execinfrapb.ProcessorCoreUnion{Noop: &execinfrapb.NoopCoreSpec{}}, execinfrapb.PostProcessSpec{}, p.GetResultTypes())
 	}
 
 	return nil
@@ -1803,9 +1803,9 @@ func (dsp *DistSQLPlanner) createPlanForRender(
 		// plan.
 		deferSerialization := len(p.MergeOrdering.Columns) == 0
 		if deferSerialization {
-			defer p.EnsureSingleStreamOnGateway()
+			defer p.EnsureSingleStreamOnGateway(ctx)
 		} else {
-			p.EnsureSingleStreamOnGateway()
+			p.EnsureSingleStreamOnGateway(ctx)
 		}
 	}
 	newColMap := identityMap(p.PlanToStreamColMap, len(n.render))
@@ -1824,7 +1824,11 @@ func (dsp *DistSQLPlanner) createPlanForRender(
 // accordingly. When alreadyOrderedPrefix is non-zero, the input is already
 // ordered on the prefix ordering[:alreadyOrderedPrefix].
 func (dsp *DistSQLPlanner) addSorters(
-	p *PhysicalPlan, ordering colinfo.ColumnOrdering, alreadyOrderedPrefix int, limit int64,
+	ctx context.Context,
+	p *PhysicalPlan,
+	ordering colinfo.ColumnOrdering,
+	alreadyOrderedPrefix int,
+	limit int64,
 ) {
 	// Sorting is needed; we add a stage of sorting processors.
 	outputOrdering := execinfrapb.ConvertToMappedSpecOrdering(ordering, p.PlanToStreamColMap)
@@ -1849,6 +1853,7 @@ func (dsp *DistSQLPlanner) addSorters(
 			Limit: uint64(limit),
 		}
 		p.AddSingleGroupStage(
+			ctx,
 			p.GatewaySQLInstanceID,
 			execinfrapb.ProcessorCoreUnion{Noop: &execinfrapb.NoopCoreSpec{}},
 			post,
@@ -2499,6 +2504,7 @@ func (dsp *DistSQLPlanner) planAggregators(
 			node = prevStageNode
 		}
 		p.AddSingleGroupStage(
+			ctx,
 			node,
 			execinfrapb.ProcessorCoreUnion{Aggregator: &finalAggsSpec},
 			finalAggsPost,
@@ -2547,7 +2553,7 @@ func (dsp *DistSQLPlanner) planAggregators(
 		// Connect the streams.
 		for bucket := 0; bucket < len(p.ResultRouters); bucket++ {
 			pIdx := pIdxStart + physicalplan.ProcessorIdx(bucket)
-			p.MergeResultStreams(p.ResultRouters, bucket, p.MergeOrdering, pIdx, 0, false, /* forceSerialization */
+			p.MergeResultStreams(ctx, p.ResultRouters, bucket, p.MergeOrdering, pIdx, 0, false, /* forceSerialization */
 				physicalplan.SerialStreamErrorSpec{},
 			)
 		}
@@ -2636,6 +2642,7 @@ func (dsp *DistSQLPlanner) createPlanForIndexJoin(
 	} else {
 		// We have a single stream, so use a single join reader on that node.
 		plan.AddSingleGroupStage(
+			ctx,
 			plan.Processors[plan.ResultRouters[0]].SQLInstanceID,
 			execinfrapb.ProcessorCoreUnion{JoinReader: &joinReaderSpec},
 			execinfrapb.PostProcessSpec{},
@@ -3031,7 +3038,7 @@ func (dsp *DistSQLPlanner) createPlanForInvertedFilter(
 	if len(plan.ResultRouters) == 1 {
 		// Last stage is a single processor.
 		lastSQLInstanceID := plan.Processors[plan.ResultRouters[0]].SQLInstanceID
-		plan.AddSingleGroupStage(lastSQLInstanceID,
+		plan.AddSingleGroupStage(ctx, lastSQLInstanceID,
 			execinfrapb.ProcessorCoreUnion{
 				InvertedFilterer: invertedFiltererSpec,
 			},
@@ -3060,6 +3067,7 @@ func (dsp *DistSQLPlanner) createPlanForInvertedFilter(
 		distinctColumns = append(distinctColumns, uint32(i))
 	}
 	plan.AddSingleGroupStage(
+		ctx,
 		dsp.gatewaySQLInstanceID,
 		execinfrapb.ProcessorCoreUnion{
 			Distinct: dsp.createDistinctSpec(
@@ -3167,11 +3175,11 @@ func (dsp *DistSQLPlanner) createPlanForJoin(
 		leftPlanDistribution:  leftPlan.GetLastStageDistribution(),
 		rightPlanDistribution: rightPlan.GetLastStageDistribution(),
 	}
-	return dsp.planJoiners(planCtx, &info, n.reqOrdering), nil
+	return dsp.planJoiners(ctx, planCtx, &info, n.reqOrdering), nil
 }
 
 func (dsp *DistSQLPlanner) planJoiners(
-	planCtx *PlanningCtx, info *joinPlanningInfo, reqOrdering ReqOrdering,
+	ctx context.Context, planCtx *PlanningCtx, info *joinPlanningInfo, reqOrdering ReqOrdering,
 ) *PhysicalPlan {
 	// Outline of the planning process for joins when given PhysicalPlans for
 	// the left and right side (with each plan having a set of output routers
@@ -3218,7 +3226,7 @@ func (dsp *DistSQLPlanner) planJoiners(
 	}
 
 	p.AddJoinStage(
-		sqlInstances, info.makeCoreSpec(), info.post,
+		ctx, sqlInstances, info.makeCoreSpec(), info.post,
 		info.leftEqCols, info.rightEqCols,
 		info.leftPlan.GetResultTypes(), info.rightPlan.GetResultTypes(),
 		info.leftMergeOrd, info.rightMergeOrd,
@@ -3347,7 +3355,7 @@ func (dsp *DistSQLPlanner) createPhysPlanForPlanNode(
 			return nil, err
 		}
 
-		dsp.addSorters(plan, n.ordering, n.alreadyOrderedPrefix, 0 /* limit */)
+		dsp.addSorters(ctx, plan, n.ordering, n.alreadyOrderedPrefix, 0 /* limit */)
 
 	case *topKNode:
 		plan, err = dsp.createPhysPlanForPlanNode(ctx, planCtx, n.plan)
@@ -3358,7 +3366,7 @@ func (dsp *DistSQLPlanner) createPhysPlanForPlanNode(
 		if n.k <= 0 {
 			return nil, errors.New("negative or zero value for LIMIT")
 		}
-		dsp.addSorters(plan, n.ordering, n.alreadyOrderedPrefix, n.k)
+		dsp.addSorters(ctx, plan, n.ordering, n.alreadyOrderedPrefix, n.k)
 
 	case *unaryNode:
 		plan, err = dsp.createPlanForUnary(planCtx, n)
@@ -3516,7 +3524,7 @@ func (dsp *DistSQLPlanner) wrapPlan(
 	if firstNotWrapped != nil {
 		// If we found a DistSQL-plannable subtree, we need to add a result stream
 		// between it and the physicalPlan we're creating here.
-		p.MergeResultStreams(p.ResultRouters, 0, p.MergeOrdering, pIdx, 0, false, /* forceSerialization */
+		p.MergeResultStreams(ctx, p.ResultRouters, 0, p.MergeOrdering, pIdx, 0, false, /* forceSerialization */
 			physicalplan.SerialStreamErrorSpec{},
 		)
 	}
@@ -3665,12 +3673,12 @@ func (dsp *DistSQLPlanner) createPlanForDistinct(
 		n.errorOnDup,
 		dsp.convertOrdering(n.reqOrdering, plan.PlanToStreamColMap),
 	)
-	dsp.addDistinctProcessors(plan, spec)
+	dsp.addDistinctProcessors(ctx, plan, spec)
 	return plan, nil
 }
 
 func (dsp *DistSQLPlanner) addDistinctProcessors(
-	plan *PhysicalPlan, spec *execinfrapb.DistinctSpec,
+	ctx context.Context, plan *PhysicalPlan, spec *execinfrapb.DistinctSpec,
 ) {
 	distinctSpec := execinfrapb.ProcessorCoreUnion{
 		Distinct: spec,
@@ -3684,7 +3692,7 @@ func (dsp *DistSQLPlanner) addDistinctProcessors(
 
 	sqlInstanceIDs := getSQLInstanceIDsOfRouters(plan.ResultRouters, plan.Processors)
 	plan.AddStageOnNodes(
-		sqlInstanceIDs, distinctSpec, execinfrapb.PostProcessSpec{},
+		ctx, sqlInstanceIDs, distinctSpec, execinfrapb.PostProcessSpec{},
 		distinctSpec.Distinct.DistinctColumns, plan.GetResultTypes(),
 		plan.GetResultTypes(), plan.MergeOrdering, plan.ResultRouters,
 	)
@@ -3708,7 +3716,7 @@ func (dsp *DistSQLPlanner) createPlanForOrdinality(
 
 	// WITH ORDINALITY never gets distributed so that the gateway node can
 	// always number each row in order.
-	plan.AddSingleGroupStage(dsp.gatewaySQLInstanceID, ordinalitySpec, execinfrapb.PostProcessSpec{}, outputTypes)
+	plan.AddSingleGroupStage(ctx, dsp.gatewaySQLInstanceID, ordinalitySpec, execinfrapb.PostProcessSpec{}, outputTypes)
 
 	return plan, nil
 }
@@ -3772,7 +3780,7 @@ func (dsp *DistSQLPlanner) addProjectSet(
 	// filtered), we could try to detect these cases and use AddNoGroupingStage
 	// instead.
 	outputTypes := append(plan.GetResultTypes(), projectSetSpec.GeneratedColumns...)
-	plan.AddSingleGroupStage(dsp.gatewaySQLInstanceID, spec, execinfrapb.PostProcessSpec{}, outputTypes)
+	plan.AddSingleGroupStage(ctx, dsp.gatewaySQLInstanceID, spec, execinfrapb.PostProcessSpec{}, outputTypes)
 
 	// Add generated columns to PlanToStreamColMap.
 	for i := range projectSetSpec.GeneratedColumns {
@@ -3960,11 +3968,10 @@ func (dsp *DistSQLPlanner) createPlanForSetOp(
 					mergeOrdering,
 				),
 			}
-			p.AddSingleGroupStage(dsp.gatewaySQLInstanceID, distinctSpec, execinfrapb.PostProcessSpec{}, resultTypes)
+			p.AddSingleGroupStage(ctx, dsp.gatewaySQLInstanceID, distinctSpec, execinfrapb.PostProcessSpec{}, resultTypes)
 		} else {
 			var serialStreamErrorSpec physicalplan.SerialStreamErrorSpec
 			if n.enforceHomeRegion {
-				serialStreamErrorSpec.Ctx = ctx
 				// When inputIdx of the SerialUnorderedSynchronizer is incremented to 1,
 				// error out.
 				serialStreamErrorSpec.SerialInputIdxExclusiveUpperBound = 1
@@ -3986,7 +3993,7 @@ func (dsp *DistSQLPlanner) createPlanForSetOp(
 				// multiple streams on the same node, we force the serialization of the
 				// merge operation (otherwise, it would be possible that we have a
 				// source of unbounded parallelism, see #51548).
-				p.EnsureSingleStreamPerNode(true /* forceSerialization */, execinfrapb.PostProcessSpec{}, serialStreamErrorSpec)
+				p.EnsureSingleStreamPerNode(ctx, true /* forceSerialization */, execinfrapb.PostProcessSpec{}, serialStreamErrorSpec)
 			} else {
 				if p.GetLastStageDistribution() != physicalplan.LocalPlan {
 					return nil, errors.AssertionFailedf("we expect that limited UNION ALL queries are only planned locally")
@@ -4001,6 +4008,7 @@ func (dsp *DistSQLPlanner) createPlanForSetOp(
 				// behavior that we want (in particular, it won't execute the
 				// right child if the limit is reached by the left child).
 				p.EnsureSingleStreamPerNode(
+					ctx,
 					true, /* forceSerialization */
 					execinfrapb.PostProcessSpec{Limit: n.hardLimit},
 					serialStreamErrorSpec,
@@ -4012,7 +4020,7 @@ func (dsp *DistSQLPlanner) createPlanForSetOp(
 			// which would violate an assumption later down the line. Check for this
 			// condition and add a no-op stage if it exists.
 			if err := p.CheckLastStagePost(); err != nil {
-				p.EnsureSingleStreamOnGateway()
+				p.EnsureSingleStreamOnGateway(ctx)
 			}
 		}
 	} else {
@@ -4057,14 +4065,14 @@ func (dsp *DistSQLPlanner) createPlanForSetOp(
 
 		if n.all {
 			p.AddJoinStage(
-				nodes, core, post, eqCols, eqCols,
+				ctx, nodes, core, post, eqCols, eqCols,
 				leftPlan.GetResultTypes(), rightPlan.GetResultTypes(),
 				leftPlan.MergeOrdering, rightPlan.MergeOrdering,
 				leftRouters, rightRouters, resultTypes,
 			)
 		} else {
 			p.AddDistinctSetOpStage(
-				nodes, core, distinctSpecs[:], post, eqCols,
+				ctx, nodes, core, distinctSpecs[:], post, eqCols,
 				leftPlan.GetResultTypes(), rightPlan.GetResultTypes(),
 				leftPlan.MergeOrdering, rightPlan.MergeOrdering,
 				leftRouters, rightRouters, resultTypes,
@@ -4152,6 +4160,7 @@ func (dsp *DistSQLPlanner) createPlanForWindow(
 			sqlInstanceID = sqlInstanceIDs[0]
 		}
 		plan.AddSingleGroupStage(
+			ctx,
 			sqlInstanceID,
 			execinfrapb.ProcessorCoreUnion{Windower: &windowerSpec},
 			execinfrapb.PostProcessSpec{},
@@ -4482,8 +4491,10 @@ func maybeMoveSingleFlowToGateway(planCtx *PlanningCtx, plan *PhysicalPlan, rowC
 
 // FinalizePlan adds a final "result" stage and a final projection if necessary
 // as well as populates the endpoints of the plan.
-func (dsp *DistSQLPlanner) FinalizePlan(planCtx *PlanningCtx, plan *PhysicalPlan) {
-	dsp.finalizePlanWithRowCount(planCtx, plan, -1 /* rowCount */)
+func (dsp *DistSQLPlanner) FinalizePlan(
+	ctx context.Context, planCtx *PlanningCtx, plan *PhysicalPlan,
+) {
+	dsp.finalizePlanWithRowCount(ctx, planCtx, plan, -1 /* rowCount */)
 }
 
 // finalizePlanWithRowCount adds a final "result" stage and a final projection
@@ -4491,12 +4502,12 @@ func (dsp *DistSQLPlanner) FinalizePlan(planCtx *PlanningCtx, plan *PhysicalPlan
 // - rowCount is the estimated number of rows that the plan outputs. Use a
 // negative number if the stats were not available to make an estimate.
 func (dsp *DistSQLPlanner) finalizePlanWithRowCount(
-	planCtx *PlanningCtx, plan *PhysicalPlan, rowCount int64,
+	ctx context.Context, planCtx *PlanningCtx, plan *PhysicalPlan, rowCount int64,
 ) {
 	maybeMoveSingleFlowToGateway(planCtx, plan, rowCount)
 
 	// Add a final "result" stage if necessary.
-	plan.EnsureSingleStreamOnGateway()
+	plan.EnsureSingleStreamOnGateway(ctx)
 
 	// Add a final projection so that DistSQLReceiver gets the rows of the
 	// desired schema.
