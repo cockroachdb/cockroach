@@ -22,19 +22,26 @@ import "multitenant/tenantcapabilities/tenantcapabilitiespb/capabilities.proto";
 message TenantInfo {
   option (gogoproto.equal) = true;
 
-  // The state of the tenant. Dictates whether SQL sessions for the tenant
-  // should be allowed, although this is currently not enforced.
-  enum State {
-    // Tenant is online and available for SQL sessions.
-    ACTIVE = 0;
-    // Tenant is being added. Not available for SQL sessions.
+  // The state of the tenant's logical keyspace.
+  enum DataState {
+    // Tenant data is ready and SQL servers can access it.
+    READY = 0;
+    // Tenant data is being added. Not available for SQL sessions.
     ADD = 1;
-    // Tenant is being dropped. Not available for SQL sessions.
+    // Tenant data is being dropped. Not available for SQL sessions.
     DROP = 2;
   }
 
+  // ID is the internal numeric identifier of the tenant.
+  // It remains mostly invisible to clients.
   optional uint64 id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "ID"];
-  optional State state = 2 [(gogoproto.nullable) = false];
+
+  // DataState is the state of the tenant's keyspace. Refer to the
+  // definition of DataState above for details.
+  optional DataState data_state = 2 [(gogoproto.nullable) = false];
+
+  // Name is the name of the tenant. Beware that the column name is "fixed"
+  // because it is referred to in a virtual column definition in system.tenants.
   optional string name = 3 [
     (gogoproto.nullable) = false,
     (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/roachpb.TenantName"];

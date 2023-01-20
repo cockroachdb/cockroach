@@ -470,9 +470,9 @@ func addSystemDatabaseToSchema(
 // system tenant entry.
 func addSystemTenantEntry(target *MetadataSchema) {
 	info := descpb.TenantInfo{
-		ID:    roachpb.SystemTenantID.ToUint64(),
-		Name:  catconstants.SystemTenantName,
-		State: descpb.TenantInfo_ACTIVE,
+		ID:        roachpb.SystemTenantID.ToUint64(),
+		Name:      catconstants.SystemTenantName,
+		DataState: descpb.TenantInfo_READY,
 	}
 	infoBytes, err := protoutil.Marshal(&info)
 	if err != nil {

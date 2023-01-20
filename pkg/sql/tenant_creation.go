@@ -90,9 +90,9 @@ func (p *planner) createTenantInternal(
 		TenantInfo: descpb.TenantInfo{
 			ID: tenantID,
 			// We synchronously initialize the tenant's keyspace below, so
-			// we can skip the ADD state and go straight to an ACTIVE state.
-			State: descpb.TenantInfo_ACTIVE,
-			Name:  name,
+			// we can skip the ADD state and go straight to the READY state.
+			DataState: descpb.TenantInfo_READY,
+			Name:      name,
 		},
 	}
 
@@ -230,7 +230,7 @@ func CreateTenantRecord(
 		}
 	}
 
-	active := info.State == descpb.TenantInfo_ACTIVE
+	active := info.DataState == descpb.TenantInfo_READY
 	infoBytes, err := protoutil.Marshal(&info.TenantInfo)
 	if err != nil {
 		return roachpb.TenantID{}, err

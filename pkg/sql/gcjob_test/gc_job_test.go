@@ -453,7 +453,7 @@ func TestGCTenant(t *testing.T) {
 			txn,
 			execCfg.SpanConfigKVAccessor.WithTxn(ctx, txn.KV()),
 			&descpb.TenantInfoWithUsage{
-				TenantInfo: descpb.TenantInfo{ID: dropTenID, State: descpb.TenantInfo_DROP},
+				TenantInfo: descpb.TenantInfo{ID: dropTenID, DataState: descpb.TenantInfo_DROP},
 			},
 			execCfg.DefaultZoneConfig,
 		)

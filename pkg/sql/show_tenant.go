@@ -176,11 +176,11 @@ func (n *showTenantNode) getTenantValues(
 		if n.withReplication {
 			return nil, errors.Newf("tenant %q does not have an active replication job", tenantInfo.Name)
 		}
-		values.tenantStatus = tenantStatus(values.tenantInfo.State.String())
+		values.tenantStatus = tenantStatus(values.tenantInfo.DataState.String())
 		return &values, nil
 	}
 
-	switch values.tenantInfo.State {
+	switch values.tenantInfo.DataState {
 	case descpb.TenantInfo_ADD:
 		// There is a replication job, we need to get the job info and the
 		// replication stats in order to generate the exact tenant status.
@@ -205,10 +205,10 @@ func (n *showTenantNode) getTenantValues(
 		}
 
 		values.tenantStatus = getTenantStatus(job.Status(), values.replicationInfo)
-	case descpb.TenantInfo_ACTIVE, descpb.TenantInfo_DROP:
-		values.tenantStatus = tenantStatus(values.tenantInfo.State.String())
+	case descpb.TenantInfo_READY, descpb.TenantInfo_DROP:
+		values.tenantStatus = tenantStatus(values.tenantInfo.DataState.String())
 	default:
-		return nil, errors.Newf("tenant %q state is unknown: %s", tenantInfo.Name, values.tenantInfo.State.String())
+		return nil, errors.Newf("tenant %q state is unknown: %s", tenantInfo.Name, values.tenantInfo.DataState.String())
 	}
 	return &values, nil
 }
