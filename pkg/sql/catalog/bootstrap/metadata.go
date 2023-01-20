@@ -561,9 +561,7 @@ func addSystemDatabaseToSchema(
 // system tenant entry.
 func addSystemTenantEntry(target *MetadataSchema) {
 	info := descpb.TenantInfo{
-		ID:    roachpb.SystemTenantID.ToUint64(),
-		Name:  catconstants.SystemTenantName,
-		State: descpb.TenantInfo_ACTIVE,
+		DeprecatedID: roachpb.SystemTenantID.ToUint64(),
 	}
 	infoBytes, err := protoutil.Marshal(&info)
 	if err != nil {
@@ -579,10 +577,18 @@ func addSystemTenantEntry(target *MetadataSchema) {
 	}
 	tenantsTableWriter := MakeKVWriter(target.codec, desc.(catalog.TableDescriptor))
 	kvs, err := tenantsTableWriter.RecordToKeyValues(
+		// ID
 		tree.NewDInt(tree.DInt(roachpb.SystemTenantID.ToUint64())),
+		// active -- deprecated.
 		tree.MakeDBool(true),
+		// info.
 		tree.NewDBytes(tree.DBytes(infoBytes)),
-		tree.NewDString(string(info.Name)),
+		// name.
+		tree.NewDString(catconstants.SystemTenantName),
+		// data_state.
+		tree.NewDInt(tree.DInt(descpb.DataStateReady)),
+		// service_mode.
+		tree.NewDInt(tree.DInt(descpb.ServiceModeShared)),
 	)
 	if err != nil {
 		panic(err)

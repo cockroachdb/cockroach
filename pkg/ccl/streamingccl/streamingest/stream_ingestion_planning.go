@@ -149,15 +149,18 @@ func ingestionPlanHook(
 				sourceTenant, dstTenantName, dstTenantID)
 		}
 
-		// Create a new tenant for the replication stream
+		// Create a new tenant for the replication stream.
 		jobID := p.ExecCfg().JobRegistry.MakeJobID()
 		tenantInfo := &descpb.TenantInfoWithUsage{
 			TenantInfo: descpb.TenantInfo{
-				// dstTenantID may be zero which will cause auto-allocation.
-				ID:                     dstTenantID,
-				State:                  descpb.TenantInfo_ADD,
-				Name:                   roachpb.TenantName(dstTenantName),
 				TenantReplicationJobID: jobID,
+			},
+			TenantInfoWithUsage_ExtraColumns: descpb.TenantInfoWithUsage_ExtraColumns{
+				// dstTenantID may be zero which will cause auto-allocation.
+				ID:          dstTenantID,
+				DataState:   descpb.DataStateAdd,
+				ServiceMode: descpb.ServiceModeNone,
+				Name:        roachpb.TenantName(dstTenantName),
 			},
 		}
 
