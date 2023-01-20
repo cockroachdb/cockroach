@@ -624,6 +624,7 @@ func (b *SSTBatcher) doFlush(ctx context.Context, reason int) error {
 		b.mu.Lock()
 		defer b.mu.Unlock()
 		summary.DataSize += int64(size)
+		summary.SSTDataSize += int64(len(data))
 		currentBatchStatsCopy.DataSize += int64(size)
 		b.mu.totalRows.Add(summary)
 
