@@ -4135,6 +4135,7 @@ bytea_output                                          hex                 NULL  
 check_function_bodies                                 on                  NULL      NULL        NULL        string
 client_encoding                                       UTF8                NULL      NULL        NULL        string
 client_min_messages                                   notice              NULL      NULL        NULL        string
+copy_from_retries_enabled                             off                 NULL      NULL        NULL        string
 cost_scans_with_default_col_size                      off                 NULL      NULL        NULL        string
 database                                              test                NULL      NULL        NULL        string
 datestyle                                             ISO, MDY            NULL      NULL        NULL        string
@@ -4265,6 +4266,7 @@ bytea_output                                          hex                 NULL  
 check_function_bodies                                 on                  NULL  user     NULL      on                  on
 client_encoding                                       UTF8                NULL  user     NULL      UTF8                UTF8
 client_min_messages                                   notice              NULL  user     NULL      notice              notice
+copy_from_retries_enabled                             off                 NULL  user     NULL      off                 off
 cost_scans_with_default_col_size                      off                 NULL  user     NULL      off                 off
 database                                              test                NULL  user     NULL      ·                   test
 datestyle                                             ISO, MDY            NULL  user     NULL      ISO, MDY            ISO, MDY
@@ -4389,6 +4391,7 @@ bytea_output                                          NULL    NULL     NULL     
 check_function_bodies                                 NULL    NULL     NULL     NULL        NULL
 client_encoding                                       NULL    NULL     NULL     NULL        NULL
 client_min_messages                                   NULL    NULL     NULL     NULL        NULL
+copy_from_retries_enabled                             NULL    NULL     NULL     NULL        NULL
 cost_scans_with_default_col_size                      NULL    NULL     NULL     NULL        NULL
 crdb_version                                          NULL    NULL     NULL     NULL        NULL
 database                                              NULL    NULL     NULL     NULL        NULL

@@ -276,6 +276,10 @@ message LocalOnlySessionData {
   // filters.
   bool optimizer_use_improved_disjunction_stats = 86;
 
+  // CopyFromRetriesEnabled controls whether retries should be internally
+  // attempted for retriable errors.
+  bool copy_from_retries_enabled = 89;
+
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
   // be propagated to the remote nodes. If so, that parameter should live  //

@@ -1482,6 +1482,9 @@ type ExecutorTestingKnobs struct {
 	// OnRecordTxnFinish, if set, will be called as we record a transaction
 	// finishing.
 	OnRecordTxnFinish func(isInternal bool, phaseTimes *sessionphase.Times, stmt string)
+
+	// BeforeCopyFromInsert, if set, will be called during a COPY FROM insert statement.
+	BeforeCopyFromInsert func() error
 }
 
 // PGWireTestingKnobs contains knobs for the pgwire module.
@@ -3272,6 +3275,10 @@ func (m *sessionDataMutator) SetTestingOptimizerCostPerturbation(val float64) {
 
 func (m *sessionDataMutator) SetTestingOptimizerDisableRuleProbability(val float64) {
 	m.data.TestingOptimizerDisableRuleProbability = val
+}
+
+func (m *sessionDataMutator) SetCopyFromRetriesEnabled(val bool) {
+	m.data.CopyFromRetriesEnabled = val
 }
 
 func (m *sessionDataMutator) SetOptimizerUseImprovedDisjunctionStats(val bool) {

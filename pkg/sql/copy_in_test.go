@@ -22,7 +22,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
@@ -36,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timetz"
 	"github.com/jackc/pgx/v4"
 	"github.com/lib/pq"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -502,6 +505,133 @@ func TestCopyTrace(t *testing.T) {
 				}
 				require.NoError(t, txn.Rollback())
 			})
+		})
+	}
+}
+
+// TestCopyFromRetries tests copy from works as expected for certain retry
+// states.
+func TestCopyFromRetries(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const numRows = 100
+
+	testCases := []struct {
+		desc           string
+		hook           func(attemptNum int) error
+		retriesEnabled bool
+		inTxn          bool
+		expectedRows   int
+		expectedErr    bool
+	}{
+		{
+			desc:           "does not attempt to retry if disabled",
+			retriesEnabled: false,
+			hook: func(attemptNum int) error {
+				if attemptNum == 1 {
+					return &roachpb.TransactionRetryWithProtoRefreshError{}
+				}
+				return nil
+			},
+			expectedErr: true,
+		},
+		{
+			desc:           "fails to retry in txn",
+			retriesEnabled: true,
+			inTxn:          true,
+			hook: func(attemptNum int) error {
+				if attemptNum == 1 {
+					return &roachpb.TransactionRetryWithProtoRefreshError{}
+				}
+				return nil
+			},
+			expectedErr: true,
+		},
+		{
+			desc:           "retries successfully on every batch",
+			retriesEnabled: true,
+			hook: func(attemptNum int) error {
+				if attemptNum%2 == 1 {
+					return &roachpb.TransactionRetryWithProtoRefreshError{}
+				}
+				return nil
+			},
+			expectedRows: numRows,
+		},
+		{
+			desc:           "eventually dies on too many restarts",
+			retriesEnabled: true,
+			hook: func(attemptNum int) error {
+				return &roachpb.TransactionRetryWithProtoRefreshError{}
+			},
+			expectedErr: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.desc, func(t *testing.T) {
+			params, _ := tests.CreateTestServerParams()
+			var attemptNumber int
+			params.Knobs.SQLExecutor = &sql.ExecutorTestingKnobs{
+				BeforeCopyFromInsert: func() error {
+					attemptNumber++
+					return tc.hook(attemptNumber)
+				},
+			}
+			s, db, _ := serverutils.StartServer(t, params)
+			defer s.Stopper().Stop(context.Background())
+
+			_, err := db.Exec(
+				`CREATE TABLE t (
+					i INT PRIMARY KEY
+				);`,
+			)
+			require.NoError(t, err)
+
+			ctx := context.Background()
+
+			// Use pgx instead of lib/pq as pgx doesn't require copy to be in a txn.
+			pgURL, cleanupGoDB := sqlutils.PGUrl(
+				t, s.ServingSQLAddr(), "StartServer" /* prefix */, url.User(security.RootUser))
+			defer cleanupGoDB()
+			pgxConn, err := pgx.Connect(ctx, pgURL.String())
+			require.NoError(t, err)
+			_, err = pgxConn.Exec(ctx, "SET copy_from_retries_enabled = $1", fmt.Sprintf("%t", tc.retriesEnabled))
+			require.NoError(t, err)
+
+			if err := func() error {
+				var rows [][]interface{}
+				for i := 0; i < numRows; i++ {
+					rows = append(rows, []interface{}{i})
+				}
+				if !tc.inTxn {
+					_, err := pgxConn.CopyFrom(ctx, pgx.Identifier{"t"}, []string{"i"}, pgx.CopyFromRows(rows))
+					return err
+				}
+
+				txn, err := pgxConn.Begin(ctx)
+				if err != nil {
+					return err
+				}
+				defer func() {
+					_ = txn.Rollback(ctx)
+				}()
+				_, err = txn.CopyFrom(ctx, pgx.Identifier{"t"}, []string{"i"}, pgx.CopyFromRows(rows))
+				if err != nil {
+					return err
+				}
+				return txn.Commit(ctx)
+			}(); err != nil {
+				assert.True(t, tc.expectedErr, "got error %+v", err)
+			} else {
+				assert.False(t, tc.expectedErr, "expected error but got none")
+			}
+
+			var actualRows int
+			err = db.QueryRow("SELECT count(1) FROM t").Scan(&actualRows)
+			require.NoError(t, err)
+			require.Equal(t, tc.expectedRows, actualRows)
 		})
 	}
 }
