@@ -32,7 +32,7 @@ CREATE UNIQUE INDEX tenants_name_idx ON system.public.tenants (name ASC)
 
 const addSystemTenantEntry = `
 UPSERT INTO system.public.tenants (id, active, info)
-VALUES (1, true, crdb_internal.json_to_pb('cockroach.sql.sqlbase.TenantInfo', '{"id":1,"state":0,"name":"` + catconstants.SystemTenantName + `"}'))
+VALUES (1, true, crdb_internal.json_to_pb('cockroach.sql.sqlbase.TenantInfo', '{"id":1,"name":"` + catconstants.SystemTenantName + `"}'))
 `
 
 func addTenantNameColumnAndSystemTenantEntry(

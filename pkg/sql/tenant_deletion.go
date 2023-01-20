@@ -77,8 +77,8 @@ func dropTenantInternal(
 		return err
 	}
 
-	if info.State == descpb.TenantInfo_DROP {
-		return errors.Errorf("tenant %d is already in state DROP", tenID)
+	if info.DataState == descpb.TenantInfo_DROP {
+		return errors.Errorf("tenant %d is already in data state DROP", tenID)
 	}
 
 	// Mark the tenant as dropping.
@@ -97,7 +97,7 @@ func dropTenantInternal(
 
 	// TODO(ssd): We may want to implement a job that waits out
 	// any running sql pods before enqueing the GC job.
-	info.State = descpb.TenantInfo_DROP
+	info.DataState = descpb.TenantInfo_DROP
 	info.DroppedName = info.Name
 	info.Name = ""
 	if err := UpdateTenantRecord(ctx, settings, txn, info); err != nil {

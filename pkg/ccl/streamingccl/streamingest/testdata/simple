@@ -28,13 +28,13 @@ IMPORT INTO d.x CSV DATA ('userfile:///dx/export*-n*.0.csv');
 query-sql as=source-system
 SHOW TENANTS
 ----
-1 system ACTIVE
-10 source ACTIVE
+1 system READY
+10 source READY
 
 query-sql as=destination-system
 SHOW TENANTS
 ----
-1 system ACTIVE
+1 system READY
 2 destination REPLICATING
 
 let $ts as=source-system

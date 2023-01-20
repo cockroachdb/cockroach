@@ -21,9 +21,9 @@ DROP TENANT [5]
 query-sql
 SELECT id,active,crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info, true) FROM system.tenants;
 ----
-1 true {"capabilities": {"canAdminSplit": false}, "droppedName": "", "id": "1", "name": "system", "state": "ACTIVE", "tenantReplicationJobId": "0"}
-5 false {"capabilities": {"canAdminSplit": false}, "droppedName": "tenant-5", "id": "5", "name": "", "state": "DROP", "tenantReplicationJobId": "0"}
-6 true {"capabilities": {"canAdminSplit": false}, "droppedName": "", "id": "6", "name": "tenant-6", "state": "ACTIVE", "tenantReplicationJobId": "0"}
+1 true {"capabilities": {"canAdminSplit": false}, "dataState": "READY", "droppedName": "", "id": "1", "name": "system", "tenantReplicationJobId": "0"}
+5 false {"capabilities": {"canAdminSplit": false}, "dataState": "DROP", "droppedName": "tenant-5", "id": "5", "name": "", "tenantReplicationJobId": "0"}
+6 true {"capabilities": {"canAdminSplit": false}, "dataState": "READY", "droppedName": "", "id": "6", "name": "tenant-6", "tenantReplicationJobId": "0"}
 
 exec-sql
 BACKUP INTO 'nodelocal://1/cluster'
@@ -49,9 +49,9 @@ RESTORE FROM LATEST IN 'nodelocal://1/cluster'
 query-sql
 SELECT id,active,crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info, true) FROM system.tenants;
 ----
-1 true {"capabilities": {"canAdminSplit": false}, "droppedName": "", "id": "1", "name": "system", "state": "ACTIVE", "tenantReplicationJobId": "0"}
-5 false {"capabilities": {"canAdminSplit": false}, "droppedName": "tenant-5", "id": "5", "name": "tenant-5", "state": "DROP", "tenantReplicationJobId": "0"}
-6 true {"capabilities": {"canAdminSplit": false}, "droppedName": "", "id": "6", "name": "tenant-6", "state": "ACTIVE", "tenantReplicationJobId": "0"}
+1 true {"capabilities": {"canAdminSplit": false}, "dataState": "READY", "droppedName": "", "id": "1", "name": "system", "tenantReplicationJobId": "0"}
+5 false {"capabilities": {"canAdminSplit": false}, "dataState": "DROP", "droppedName": "tenant-5", "id": "5", "name": "tenant-5", "tenantReplicationJobId": "0"}
+6 true {"capabilities": {"canAdminSplit": false}, "dataState": "READY", "droppedName": "", "id": "6", "name": "tenant-6", "tenantReplicationJobId": "0"}
 
 exec-sql expect-error-regex=(tenant 6 already exists)
 RESTORE TENANT 6 FROM LATEST IN 'nodelocal://1/tenant6';
@@ -75,7 +75,7 @@ RESTORE TENANT 6 FROM LATEST IN 'nodelocal://1/tenant6' WITH tenant_name = 'newn
 query-sql
 SELECT id,active,crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info, true) FROM system.tenants;
 ----
-1 true {"capabilities": {"canAdminSplit": false}, "droppedName": "", "id": "1", "name": "system", "state": "ACTIVE", "tenantReplicationJobId": "0"}
-2 true {"capabilities": {"canAdminSplit": false}, "droppedName": "", "id": "2", "name": "newname", "state": "ACTIVE", "tenantReplicationJobId": "0"}
-5 false {"capabilities": {"canAdminSplit": false}, "droppedName": "tenant-5", "id": "5", "name": "tenant-5", "state": "DROP", "tenantReplicationJobId": "0"}
-6 true {"capabilities": {"canAdminSplit": false}, "droppedName": "", "id": "6", "name": "tenant-6", "state": "ACTIVE", "tenantReplicationJobId": "0"}
+1 true {"capabilities": {"canAdminSplit": false}, "dataState": "READY", "droppedName": "", "id": "1", "name": "system", "tenantReplicationJobId": "0"}
+2 true {"capabilities": {"canAdminSplit": false}, "dataState": "READY", "droppedName": "", "id": "2", "name": "newname", "tenantReplicationJobId": "0"}
+5 false {"capabilities": {"canAdminSplit": false}, "dataState": "DROP", "droppedName": "tenant-5", "id": "5", "name": "tenant-5", "tenantReplicationJobId": "0"}
+6 true {"capabilities": {"canAdminSplit": false}, "dataState": "READY", "droppedName": "", "id": "6", "name": "tenant-6", "tenantReplicationJobId": "0"}

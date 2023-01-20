@@ -155,7 +155,7 @@ func ingestionPlanHook(
 			TenantInfo: descpb.TenantInfo{
 				// dstTenantID may be zero which will cause auto-allocation.
 				ID:                     dstTenantID,
-				State:                  descpb.TenantInfo_ADD,
+				DataState:              descpb.TenantInfo_ADD,
 				Name:                   roachpb.TenantName(dstTenantName),
 				TenantReplicationJobID: jobID,
 			},

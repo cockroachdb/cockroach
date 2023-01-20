@@ -553,7 +553,7 @@ func activateTenant(ctx context.Context, execCtx interface{}, newTenantID roachp
 			return err
 		}
 
-		info.State = descpb.TenantInfo_ACTIVE
+		info.DataState = descpb.TenantInfo_READY
 		info.TenantReplicationJobID = 0
 		return sql.UpdateTenantRecord(ctx, p.ExecCfg().Settings, txn, info)
 	})
