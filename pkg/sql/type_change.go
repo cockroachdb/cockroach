@@ -103,7 +103,7 @@ func (p *planner) writeTypeSchemaChange(
 	ctx context.Context, typeDesc *typedesc.Mutable, jobDesc string,
 ) error {
 	// Check if there is a cached specification for this type, otherwise create one.
-	record, recordExists := p.extendedEvalCtx.SchemaChangeJobRecords[typeDesc.ID]
+	record, recordExists := p.extendedEvalCtx.jobs.uniqueToCreate[typeDesc.ID]
 	transitioningMembers, beingDropped := findTransitioningMembers(typeDesc)
 	if recordExists {
 		// Update it.
@@ -142,7 +142,7 @@ func (p *planner) writeTypeSchemaChange(
 			// a transition that drops an enum member.
 			NonCancelable: !beingDropped,
 		}
-		p.extendedEvalCtx.SchemaChangeJobRecords[typeDesc.ID] = &newRecord
+		p.extendedEvalCtx.jobs.uniqueToCreate[typeDesc.ID] = &newRecord
 		log.Infof(ctx, "queued new type change job %d for type %d", newRecord.JobID, typeDesc.ID)
 	}
 

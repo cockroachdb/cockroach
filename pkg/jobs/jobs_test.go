@@ -2324,7 +2324,7 @@ func TestJobInTxn(t *testing.T) {
 
 	// Accessed atomically.
 	var hasRun int32
-	var job *jobs.Job
+	var jobID jobspb.JobID
 
 	defer sql.ClearPlanHooks()
 	// Piggy back on BACKUP to be able to create a succeeding test job.
@@ -2338,7 +2338,7 @@ func TestJobInTxn(t *testing.T) {
 			}
 			fn := func(ctx context.Context, _ []sql.PlanNode, _ chan<- tree.Datums) error {
 				var err error
-				job, err = execCtx.ExtendedEvalContext().QueueJob(ctx, execCtx.InternalSQLTxn(), jobs.Record{
+				jobID = execCtx.ExtendedEvalContext().QueueJob(&jobs.Record{
 					Description: st.String(),
 					Details:     jobspb.BackupDetails{},
 					Progress:    jobspb.BackupProgress{},
@@ -2378,7 +2378,7 @@ func TestJobInTxn(t *testing.T) {
 			}
 			fn := func(ctx context.Context, _ []sql.PlanNode, _ chan<- tree.Datums) error {
 				var err error
-				job, err = execCtx.ExtendedEvalContext().QueueJob(ctx, execCtx.InternalSQLTxn(), jobs.Record{
+				jobID = execCtx.ExtendedEvalContext().QueueJob(&jobs.Record{
 					Description: "RESTORE",
 					Details:     jobspb.RestoreDetails{},
 					Progress:    jobspb.RestoreProgress{},
@@ -2413,14 +2413,14 @@ func TestJobInTxn(t *testing.T) {
 		// If we rollback then the job should not run
 		require.NoError(t, txn.Rollback())
 		registry := s.JobRegistry().(*jobs.Registry)
-		_, err = registry.LoadJob(ctx, job.ID())
+		_, err = registry.LoadJob(ctx, jobID)
 		require.Error(t, err, "the job should not exist after the txn is rolled back")
 		require.True(t, jobs.HasJobNotFoundError(err))
 
 		sqlRunner := sqlutils.MakeSQLRunner(sqlDB)
 		// Just in case the job was scheduled let's wait for it to finish
 		// to avoid a race.
-		sqlRunner.Exec(t, "SHOW JOB WHEN COMPLETE $1", job.ID())
+		sqlRunner.Exec(t, "SHOW JOB WHEN COMPLETE $1", jobID)
 		require.Equal(t, int32(0), atomic.LoadInt32(&hasRun),
 			"job has run in transaction before txn commit")
 		require.True(t, timeutil.Since(start) < jobs.DefaultAdoptInterval, "job should have been adopted immediately")
@@ -2437,7 +2437,7 @@ func TestJobInTxn(t *testing.T) {
 		// Committing will block and wait for all jobs to run.
 		require.NoError(t, txn.Commit())
 		registry := s.JobRegistry().(*jobs.Registry)
-		j, err := registry.LoadJob(ctx, job.ID())
+		j, err := registry.LoadJob(ctx, jobID)
 		require.NoError(t, err, "queued job not found")
 		require.NotEqual(t, int32(0), atomic.LoadInt32(&hasRun),
 			"job scheduled in transaction did not run")
