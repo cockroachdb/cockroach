@@ -45,7 +45,6 @@ PROTOBUF_SRCS = [
     "//pkg/obsservice/obspb/opentelemetry-proto/common/v1:v1_go_proto",
     "//pkg/obsservice/obspb/opentelemetry-proto/logs/v1:v1_go_proto",
     "//pkg/obsservice/obspb/opentelemetry-proto/resource/v1:v1_go_proto",
-    "//pkg/obsservice/obspb:obs_go_proto",
     "//pkg/repstream/streampb:streampb_go_proto",
     "//pkg/roachpb:roachpb_go_proto",
     "//pkg/rpc:rpc_go_proto",
