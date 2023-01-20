@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
@@ -1052,6 +1053,31 @@ func (ex *connExecutor) commitSQLTransactionInternal(ctx context.Context) error 
 	if err != nil || withNewVersion == nil {
 		return err
 	}
+
+	//If there is any descriptor has new version. We want to make sure there is
+	//only one version of the descriptor in all nodes. In schema changer jobs,
+	//`WaitForOneVersion` has been called for the descriptors included in jobs. So
+	//we just need to do this for descriptors not in jobs.
+	var descIDsInJobs catalog.DescriptorIDSet
+	for _, jobID := range *ex.extraTxnState.jobs {
+		job, err := ex.server.cfg.JobRegistry.LoadJob(ctx, jobID)
+		if err != nil {
+			return err
+		}
+		payload := job.Payload()
+		for _, descID := range payload.DescriptorIDs {
+			descIDsInJobs.Add(descID)
+		}
+	}
+	for _, idVersion := range withNewVersion {
+		if descIDsInJobs.Contains(idVersion.ID) {
+			continue
+		}
+		if _, err := WaitToUpdateLeases(ctx, ex.planner.LeaseMgr(), idVersion.ID); err != nil {
+			return err
+		}
+	}
+
 	ex.extraTxnState.descCollection.ReleaseLeases(ctx)
 	return nil
 }
