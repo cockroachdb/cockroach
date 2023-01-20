@@ -17,7 +17,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -26,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catsessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
@@ -302,7 +300,6 @@ func (ie *InternalExecutor) newConnExecutorWithTxn(
 		if ie.extraTxnState != nil {
 			ex.extraTxnState.descCollection = ie.extraTxnState.descCollection
 			ex.extraTxnState.fromOuterTxn = true
-			ex.extraTxnState.schemaChangeJobRecords = ie.extraTxnState.schemaChangeJobRecords
 			ex.extraTxnState.jobs = ie.extraTxnState.jobs
 			ex.extraTxnState.schemaChangerState = ie.extraTxnState.schemaChangerState
 			ex.extraTxnState.shouldResetSyntheticDescriptors = shouldResetSyntheticDescriptors
@@ -1005,13 +1002,6 @@ func (ie *InternalExecutor) execInternal(
 	return r, nil
 }
 
-// ReleaseSchemaChangeJobRecords is to release the schema change job records.
-func (ie *InternalExecutor) releaseSchemaChangeJobRecords() {
-	for k := range ie.extraTxnState.schemaChangeJobRecords {
-		delete(ie.extraTxnState.schemaChangeJobRecords, k)
-	}
-}
-
 // commitTxn is to commit the txn bound to the internal executor.
 // It should only be used in CollectionFactory.TxnWithExecutor().
 func (ie *InternalExecutor) commitTxn(ctx context.Context) error {
@@ -1239,11 +1229,10 @@ func (ncl *noopClientLock) RTrim(_ context.Context, pos CmdPos) {
 // executor in that it may lead to surprising bugs whereby we forget to add
 // fields here and keep them in sync.
 type extraTxnState struct {
-	txn                    *kv.Txn
-	descCollection         *descs.Collection
-	jobs                   *jobsCollection
-	schemaChangeJobRecords map[descpb.ID]*jobs.Record
-	schemaChangerState     *SchemaChangerState
+	txn                *kv.Txn
+	descCollection     *descs.Collection
+	jobs               *txnJobsCollection
+	schemaChangerState *SchemaChangerState
 }
 
 // InternalDB stored information needed to construct a new
@@ -1361,11 +1350,10 @@ func (ief *InternalDB) newInternalExecutorWithTxn(
 		mon:        ief.monitor,
 		memMetrics: ief.memMetrics,
 		extraTxnState: &extraTxnState{
-			txn:                    txn,
-			descCollection:         descCol,
-			jobs:                   new(jobsCollection),
-			schemaChangeJobRecords: make(map[descpb.ID]*jobs.Record),
-			schemaChangerState:     schemaChangerState,
+			txn:                txn,
+			descCollection:     descCol,
+			jobs:               newTxnJobsCollection(),
+			schemaChangerState: schemaChangerState,
 		},
 	}
 	populateMinimalSessionData(sd)
@@ -1374,12 +1362,11 @@ func (ief *InternalDB) newInternalExecutorWithTxn(
 	commitTxnFunc := func(ctx context.Context) error {
 		defer func() {
 			ie.extraTxnState.jobs.reset()
-			ie.releaseSchemaChangeJobRecords()
 		}()
 		if err := ie.commitTxn(ctx); err != nil {
 			return err
 		}
-		return ie.s.cfg.JobRegistry.Run(ctx, *ie.extraTxnState.jobs)
+		return ie.s.cfg.JobRegistry.Run(ctx, ie.extraTxnState.jobs.created)
 	}
 
 	return ie, commitTxnFunc

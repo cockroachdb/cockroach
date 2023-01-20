@@ -45,7 +45,7 @@ func (p *planner) DropTenantByID(
 		p.ExecCfg().Settings,
 		p.InternalSQLTxn(),
 		p.ExecCfg().JobRegistry,
-		p.extendedEvalCtx.Jobs,
+		p.extendedEvalCtx.jobs,
 		p.User(),
 		info,
 		synchronousImmediateDrop,
@@ -70,7 +70,7 @@ func dropTenantInternal(
 	settings *cluster.Settings,
 	txn isql.Txn,
 	jobRegistry *jobs.Registry,
-	sessionJobs *jobsCollection,
+	sessionJobs *txnJobsCollection,
 	user username.SQLUsername,
 	info *mtinfopb.TenantInfo,
 	synchronousImmediateDrop bool,
@@ -124,7 +124,7 @@ func dropTenantInternal(
 		return errors.Wrap(err, "scheduling gc job")
 	}
 	if synchronousImmediateDrop {
-		sessionJobs.add(jobID)
+		sessionJobs.addCreatedJobID(jobID)
 	}
 	return nil
 }
