@@ -42,7 +42,7 @@ func TestUpdateTenantsTable(t *testing.T) {
 				Server: &server.TestingKnobs{
 					DisableAutomaticVersionUpgrade: make(chan struct{}),
 					BinaryVersionOverride: clusterversion.ByKey(
-						clusterversion.V23_1TenantNames - 1),
+						clusterversion.V23_1TenantNamesStateAndServiceMode - 1),
 				},
 			},
 		},
@@ -60,7 +60,10 @@ func TestUpdateTenantsTable(t *testing.T) {
 	var (
 		validationSchemas = []upgrades.Schema{
 			{Name: "name", ValidationFn: upgrades.HasColumn},
+			{Name: "data_state", ValidationFn: upgrades.HasColumn},
+			{Name: "service_mode", ValidationFn: upgrades.HasColumn},
 			{Name: "tenants_name_idx", ValidationFn: upgrades.HasIndex},
+			{Name: "tenants_service_mode_idx", ValidationFn: upgrades.HasIndex},
 		}
 	)
 
@@ -82,7 +85,7 @@ func TestUpdateTenantsTable(t *testing.T) {
 	upgrades.Upgrade(
 		t,
 		sqlDB,
-		clusterversion.V23_1TenantNames,
+		clusterversion.V23_1TenantNamesStateAndServiceMode,
 		nil,   /* done */
 		false, /* expectError */
 	)

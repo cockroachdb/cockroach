@@ -39,12 +39,12 @@ func gcTenant(
 
 	if progress.Tenant.Status == jobspb.SchemaChangeGCProgress_WAITING_FOR_CLEAR {
 		return errors.AssertionFailedf(
-			"Tenant id %d is expired and should not be in state %+v",
+			"tenant ID %d is expired and should not be in state %+v",
 			tenID, jobspb.SchemaChangeGCProgress_WAITING_FOR_CLEAR,
 		)
 	}
 
-	var info *descpb.TenantInfo
+	var info *descpb.ExtendedTenantInfo
 	if err := execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) (err error) {
 		info, err = sql.GetTenantRecordByID(ctx, txn /* txn */, roachpb.MustMakeTenantID(tenID))
 		return err
@@ -56,7 +56,7 @@ func gcTenant(
 				// This will happen if the job deletes the tenant row and fails to update
 				// its progress. In this case there's nothing to do but update the job
 				// progress.
-				log.Errorf(ctx, "tenant id %d not found while attempting to GC", tenID)
+				log.Errorf(ctx, "tenant ID %d not found while attempting to GC", tenID)
 				progress.Tenant.Status = jobspb.SchemaChangeGCProgress_CLEARED
 			}
 			return nil
@@ -66,7 +66,7 @@ func gcTenant(
 
 	// This case should never happen.
 	if progress.Tenant.Status == jobspb.SchemaChangeGCProgress_CLEARED {
-		return errors.AssertionFailedf("GC state for tenant %+v is DELETED yet the tenant row still exists", info)
+		return errors.AssertionFailedf("GC state for tenant is DELETED yet the tenant row still exists: %+v", *info)
 	}
 
 	if err := sql.GCTenantSync(ctx, execCfg, info); err != nil {

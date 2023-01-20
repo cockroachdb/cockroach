@@ -26,7 +26,7 @@ import (
 
 type tenantSpec interface {
 	fmt.Stringer
-	getTenantInfo(ctx context.Context, p *planner) (ret *descpb.TenantInfo, err error)
+	getTenantInfo(ctx context.Context, p *planner) (ret *descpb.ExtendedTenantInfo, err error)
 	getTenantParameters(ctx context.Context, p *planner) (tid roachpb.TenantID, tenantName roachpb.TenantName, err error)
 }
 
@@ -122,13 +122,13 @@ func (ts *tenantSpecId) getTenantParameters(
 
 func (tenantSpecAll) getTenantInfo(
 	ctx context.Context, p *planner,
-) (ret *descpb.TenantInfo, err error) {
+) (ret *descpb.ExtendedTenantInfo, err error) {
 	return nil, errors.AssertionFailedf("programming error: cannot use all in this context")
 }
 
 func (ts *tenantSpecName) getTenantInfo(
 	ctx context.Context, p *planner,
-) (ret *descpb.TenantInfo, err error) {
+) (ret *descpb.ExtendedTenantInfo, err error) {
 	_, tenantName, err := ts.getTenantParameters(ctx, p)
 	if err != nil {
 		return nil, err
@@ -138,7 +138,7 @@ func (ts *tenantSpecName) getTenantInfo(
 
 func (ts *tenantSpecId) getTenantInfo(
 	ctx context.Context, p *planner,
-) (ret *descpb.TenantInfo, err error) {
+) (ret *descpb.ExtendedTenantInfo, err error) {
 	tid, _, err := ts.getTenantParameters(ctx, p)
 	if err != nil {
 		return nil, err
@@ -149,7 +149,7 @@ func (ts *tenantSpecId) getTenantInfo(
 // LookupTenantInfo implements PlanHookState for the benefits of CCL statements.
 func (p *planner) LookupTenantInfo(
 	ctx context.Context, ts *tree.TenantSpec, op string,
-) (*descpb.TenantInfo, error) {
+) (*descpb.ExtendedTenantInfo, error) {
 	tspec, err := p.planTenantSpec(ctx, ts, op)
 	if err != nil {
 		return nil, err

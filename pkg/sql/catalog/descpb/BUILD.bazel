@@ -14,6 +14,7 @@ go_library(
         "join_type.go",
         "locking.go",
         "structured.go",
+        "tenant.go",
         ":gen-formatversion-stringer",  # keep
     ],
     embed = [":descpb_go_proto"],

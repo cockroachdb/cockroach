@@ -100,16 +100,19 @@ CREATE TABLE system.settings (
 	DescIDSequenceSchema = `
 CREATE SEQUENCE system.descriptor_id_seq;`
 
-	tenantNameComputeExpr = `crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo':::STRING, info)->>'name':::STRING`
-	TenantsTableSchema    = `
+	// Note: the "active" column is deprecated.
+	TenantsTableSchema = `
 CREATE TABLE system.tenants (
-	id     INT8 NOT NULL,
-	active BOOL NOT NULL DEFAULT true,
-	info   BYTES,
-	name   STRING GENERATED ALWAYS AS (` + tenantNameComputeExpr + `) VIRTUAL,
+	id           INT8 NOT NULL,
+	active       BOOL NOT NULL DEFAULT true NOT VISIBLE,
+	info         BYTES,
+	name         STRING,
+	data_state   INT,
+	service_mode INT,
 	CONSTRAINT "primary" PRIMARY KEY (id),
-	FAMILY "primary" (id, active, info),
-	UNIQUE INDEX tenants_name_idx (name ASC)
+	FAMILY "primary" (id, active, info, name, data_state, service_mode),
+	UNIQUE INDEX tenants_name_idx (name ASC),
+	INDEX tenants_service_mode_idx (service_mode ASC)
 );`
 
 	// RoleIDSequenceSchema starts at 100 so we have reserved IDs for special
@@ -120,7 +123,6 @@ CREATE SEQUENCE system.role_id_seq START 100 MINVALUE 100 MAXVALUE 2147483647;`
 	indexUsageComputeExpr = `(statistics->'statistics':::STRING)->'indexes':::STRING`
 )
 
-var tenantNameComputeExprStr = tenantNameComputeExpr
 var indexUsageComputeExprStr = indexUsageComputeExpr
 
 // These system tables are not part of the system config.
@@ -1209,17 +1211,17 @@ var (
 			keys.TenantsTableID,
 			[]descpb.ColumnDescriptor{
 				{Name: "id", ID: 1, Type: types.Int},
-				{Name: "active", ID: 2, Type: types.Bool, DefaultExpr: &trueBoolString},
+				{Name: "active", ID: 2, Type: types.Bool, DefaultExpr: &trueBoolString, Hidden: true},
 				{Name: "info", ID: 3, Type: types.Bytes, Nullable: true},
-				{Name: "name", ID: 4, Type: types.String, Nullable: true,
-					Virtual:     true,
-					ComputeExpr: &tenantNameComputeExprStr},
+				{Name: "name", ID: 4, Type: types.String, Nullable: true},
+				{Name: "data_state", ID: 5, Type: types.Int, Nullable: true},
+				{Name: "service_mode", ID: 6, Type: types.Int, Nullable: true},
 			},
 			[]descpb.ColumnFamilyDescriptor{{
 				Name:        "primary",
 				ID:          0,
-				ColumnNames: []string{"id", "active", "info"},
-				ColumnIDs:   []descpb.ColumnID{1, 2, 3},
+				ColumnNames: []string{"id", "active", "info", "name", "data_state", "service_mode"},
+				ColumnIDs:   []descpb.ColumnID{1, 2, 3, 4, 5, 6},
 			}},
 			pk("id"),
 			descpb.IndexDescriptor{
@@ -1229,6 +1231,15 @@ var (
 				KeyColumnNames:      []string{"name"},
 				KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC},
 				KeyColumnIDs:        []descpb.ColumnID{4},
+				KeySuffixColumnIDs:  []descpb.ColumnID{1},
+				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
+			},
+			descpb.IndexDescriptor{
+				Name:                "tenants_service_mode_idx",
+				ID:                  3,
+				KeyColumnNames:      []string{"service_mode"},
+				KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC},
+				KeyColumnIDs:        []descpb.ColumnID{6},
 				KeySuffixColumnIDs:  []descpb.ColumnID{1},
 				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
 			},

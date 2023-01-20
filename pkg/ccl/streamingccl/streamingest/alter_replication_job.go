@@ -201,7 +201,7 @@ func alterTenantJobCutover(
 	jobRegistry *jobs.Registry,
 	ptp protectedts.Storage,
 	alterTenantStmt *tree.AlterTenantReplication,
-	tenInfo *descpb.TenantInfo,
+	tenInfo *descpb.ExtendedTenantInfo,
 	cutoverTime hlc.Timestamp,
 ) error {
 	if alterTenantStmt == nil || alterTenantStmt.Cutover == nil {
@@ -262,7 +262,7 @@ func alterTenantOptions(
 	txn isql.Txn,
 	jobRegistry *jobs.Registry,
 	options *resolvedTenantReplicationOptions,
-	tenInfo *descpb.TenantInfo,
+	tenInfo *descpb.ExtendedTenantInfo,
 ) error {
 	return jobRegistry.UpdateJobWithTxn(ctx, tenInfo.TenantReplicationJobID, txn, false, /* useReadLock */
 		func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {

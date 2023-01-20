@@ -30,7 +30,9 @@ import (
 //
 // The caller is responsible for checking that the user is authorized
 // to take this action.
-func GCTenantSync(ctx context.Context, execCfg *ExecutorConfig, info *descpb.TenantInfo) error {
+func GCTenantSync(
+	ctx context.Context, execCfg *ExecutorConfig, info *descpb.ExtendedTenantInfo,
+) error {
 	const op = "gc"
 	if err := rejectIfCantCoordinateMultiTenancy(execCfg.Codec, op); err != nil {
 		return err
@@ -104,9 +106,11 @@ func GCTenantSync(ctx context.Context, execCfg *ExecutorConfig, info *descpb.Ten
 }
 
 // clearTenant deletes the tenant's data.
-func clearTenant(ctx context.Context, execCfg *ExecutorConfig, info *descpb.TenantInfo) error {
+func clearTenant(
+	ctx context.Context, execCfg *ExecutorConfig, info *descpb.ExtendedTenantInfo,
+) error {
 	// Confirm tenant is ready to be cleared.
-	if info.State != descpb.TenantInfo_DROP {
+	if info.DataState != descpb.DataStateDrop {
 		return errors.Errorf("tenant %d is not in state DROP", info.ID)
 	}
 
@@ -145,8 +149,8 @@ func (p *planner) GCTenant(ctx context.Context, tenID uint64) error {
 	}
 
 	// Confirm tenant is ready to be cleared.
-	if info.State != descpb.TenantInfo_DROP {
-		return errors.Errorf("tenant %d is not in state DROP", info.ID)
+	if info.DataState != descpb.DataStateDrop {
+		return errors.Errorf("tenant %d is not in data state DROP", info.ID)
 	}
 
 	_, err = createGCTenantJob(

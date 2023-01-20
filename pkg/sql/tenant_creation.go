@@ -58,8 +58,9 @@ func (p *planner) CreateTenant(
 }
 
 type createTenantConfig struct {
-	ID   *uint64 `json:"id,omitempty"`
-	Name *string `json:"name,omitempty"`
+	ID          *uint64 `json:"id,omitempty"`
+	Name        *string `json:"name,omitempty"`
+	ServiceMode *string `json:"service_mode,omitempty"`
 }
 
 func (p *planner) createTenantInternal(
@@ -72,6 +73,14 @@ func (p *planner) createTenantInternal(
 	var name roachpb.TenantName
 	if ctcfg.Name != nil {
 		name = roachpb.TenantName(*ctcfg.Name)
+	}
+	serviceMode := descpb.ServiceModeNone
+	if ctcfg.ServiceMode != nil {
+		v, ok := descpb.TenantServiceModeValues[strings.ToLower(*ctcfg.ServiceMode)]
+		if !ok {
+			return tid, pgerror.Newf(pgcode.Syntax, "unknown service mode: %q", *ctcfg.ServiceMode)
+		}
+		serviceMode = v
 	}
 
 	// tenantID uint64, name roachpb.TenantName,
@@ -87,12 +96,13 @@ func (p *planner) createTenantInternal(
 	}
 
 	info := &descpb.TenantInfoWithUsage{
-		TenantInfo: descpb.TenantInfo{
+		TenantInfoWithUsage_ExtraColumns: descpb.TenantInfoWithUsage_ExtraColumns{
 			ID: tenantID,
 			// We synchronously initialize the tenant's keyspace below, so
-			// we can skip the ADD state and go straight to an ACTIVE state.
-			State: descpb.TenantInfo_ACTIVE,
-			Name:  name,
+			// we can skip the ADD state and go straight to the READY state.
+			DataState:   descpb.DataStateReady,
+			Name:        name,
+			ServiceMode: serviceMode,
 		},
 	}
 
@@ -229,7 +239,7 @@ func CreateTenantRecord(
 		return roachpb.TenantID{}, err
 	}
 	if info.Name != "" {
-		if !settings.Version.IsActive(ctx, clusterversion.V23_1TenantNames) {
+		if !settings.Version.IsActive(ctx, clusterversion.V23_1TenantNamesStateAndServiceMode) {
 			return roachpb.TenantID{}, pgerror.Newf(pgcode.FeatureNotSupported, "cannot use tenant names")
 		}
 		if err := info.Name.IsValid(); err != nil {
@@ -249,27 +259,49 @@ func CreateTenantRecord(
 
 	if info.Name == "" {
 		// No name: generate one if we are at the appropriate version.
-		if settings.Version.IsActive(ctx, clusterversion.V23_1TenantNames) {
+		if settings.Version.IsActive(ctx, clusterversion.V23_1TenantNamesStateAndServiceMode) {
 			info.Name = roachpb.TenantName(fmt.Sprintf("tenant-%d", info.ID))
 		}
 	}
 
-	active := info.State == descpb.TenantInfo_ACTIVE
+	// Populate the deprecated DataState field for compatibility
+	// with pre-v23.1 servers.
+	switch info.DataState {
+	case descpb.DataStateReady:
+		info.DeprecatedDataState = descpb.TenantInfo_READY
+	case descpb.DataStateAdd:
+		info.DeprecatedDataState = descpb.TenantInfo_ADD
+	case descpb.DataStateDrop:
+		info.DeprecatedDataState = descpb.TenantInfo_DROP
+	default:
+		return roachpb.TenantID{}, errors.AssertionFailedf("unhandled: %d", info.DataState)
+	}
+	// DeprecatedID is populated for the benefit of pre-v23.1 servers.
+	info.DeprecatedID = info.ID
+
+	// active is an obsolete column preserved for compatibility with
+	// pre-v23.1 servers.
+	active := info.DataState == descpb.DataStateReady
+
 	infoBytes, err := protoutil.Marshal(&info.TenantInfo)
 	if err != nil {
 		return roachpb.TenantID{}, err
 	}
 
 	// Insert into the tenant table and detect collisions.
+	var name tree.Datum
 	if info.Name != "" {
-		if !settings.Version.IsActive(ctx, clusterversion.V23_1TenantNames) {
+		if !settings.Version.IsActive(ctx, clusterversion.V23_1TenantNamesStateAndServiceMode) {
 			return roachpb.TenantID{}, pgerror.Newf(pgcode.FeatureNotSupported, "cannot use tenant names")
 		}
+		name = tree.NewDString(string(info.Name))
+	} else {
+		name = tree.DNull
 	}
 	if num, err := txn.ExecEx(
 		ctx, "create-tenant", txn.KV(), sessiondata.NodeUserSessionDataOverride,
-		`INSERT INTO system.tenants (id, active, info) VALUES ($1, $2, $3)`,
-		tenID, active, infoBytes,
+		`INSERT INTO system.tenants (id, active, info, name, data_state, service_mode) VALUES ($1, $2, $3, $4, $5, $6)`,
+		tenID, active, infoBytes, name, info.DataState, info.ServiceMode,
 	); err != nil {
 		if pgerror.GetPGCode(err) == pgcode.UniqueViolation {
 			extra := redact.RedactableString("")

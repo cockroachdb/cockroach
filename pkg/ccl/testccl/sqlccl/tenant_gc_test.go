@@ -121,7 +121,12 @@ func TestGCTenantRemovesSpanConfigs(t *testing.T) {
 	) error {
 		return sql.TestingUpdateTenantRecord(
 			ctx, ts.ClusterSettings(), txn,
-			&descpb.TenantInfo{ID: tenantID.ToUint64(), State: descpb.TenantInfo_DROP},
+			&descpb.ExtendedTenantInfo{
+				TenantInfoWithUsage_ExtraColumns: descpb.TenantInfoWithUsage_ExtraColumns{
+					ID:          tenantID.ToUint64(),
+					ServiceMode: descpb.ServiceModeNone,
+					DataState:   descpb.DataStateDrop,
+				}},
 		)
 	}))
 
