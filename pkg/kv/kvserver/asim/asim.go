@@ -210,15 +210,13 @@ func (s *Simulator) RunSim(ctx context.Context) {
 
 // tickWorkload gets the next workload events and applies them to state.
 func (s *Simulator) tickWorkload(ctx context.Context, tick time.Time) {
-	if !s.bgLastTick.Add(s.bgInterval).After(tick) {
-		s.shuffler(
-			len(s.generators),
-			func(i, j int) { s.generators[i], s.generators[j] = s.generators[j], s.generators[i] },
-		)
-		for _, generator := range s.generators {
-			event := generator.Tick(tick)
-			s.state.ApplyLoad(event)
-		}
+	s.shuffler(
+		len(s.generators),
+		func(i, j int) { s.generators[i], s.generators[j] = s.generators[j], s.generators[i] },
+	)
+	for _, generator := range s.generators {
+		event := generator.Tick(tick)
+		s.state.ApplyLoad(event)
 	}
 }
 
