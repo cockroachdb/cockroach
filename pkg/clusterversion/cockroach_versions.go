@@ -327,8 +327,8 @@ const (
 	// the process of upgrading from 22.2 to 23.1.
 	V23_1Start
 
-	// V23_1TenantNames adds a name column to system.tenants.
-	V23_1TenantNames
+	// V23_1TenantNamesStateAndServiceMode adds columns to system.tenants.
+	V23_1TenantNamesStateAndServiceMode
 
 	// V23_1DescIDSequenceForSystemTenant migrates the descriptor ID generator
 	// counter from a meta key to the system.descriptor_id_seq sequence for the
@@ -639,7 +639,7 @@ var rawVersionsSingleton = keyedVersions{
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 2},
 	},
 	{
-		Key:     V23_1TenantNames,
+		Key:     V23_1TenantNamesStateAndServiceMode,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 4},
 	},
 	{

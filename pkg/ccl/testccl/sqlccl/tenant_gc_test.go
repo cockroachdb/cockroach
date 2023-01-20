@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
@@ -121,7 +122,12 @@ func TestGCTenantRemovesSpanConfigs(t *testing.T) {
 	) error {
 		return sql.TestingUpdateTenantRecord(
 			ctx, ts.ClusterSettings(), txn,
-			&descpb.TenantInfo{ID: tenantID.ToUint64(), State: descpb.TenantInfo_DROP},
+			&mtinfopb.TenantInfo{
+				SQLInfo: mtinfopb.SQLInfo{
+					ID:          tenantID.ToUint64(),
+					ServiceMode: mtinfopb.ServiceModeNone,
+					DataState:   mtinfopb.DataStateDrop,
+				}},
 		)
 	}))
 
@@ -525,7 +531,7 @@ func TestGCTenantJobWaitsForProtectedTimestamps(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, jobs.StatusSucceeded, job.Status())
 		err = insqlDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-			_, err = sql.GetTenantRecordByID(ctx, txn, tenID)
+			_, err = sql.GetTenantRecordByID(ctx, txn, tenID, srv.ClusterSettings())
 			return err
 		})
 		require.EqualError(t, err, fmt.Sprintf(`tenant "%d" does not exist`, tenID.ToUint64()))
@@ -628,7 +634,7 @@ func TestGCTenantJobWaitsForProtectedTimestamps(t *testing.T) {
 			[][]string{{"succeeded"}},
 		)
 		err := insqlDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-			_, err := sql.GetTenantRecordByID(ctx, txn, tenID)
+			_, err := sql.GetTenantRecordByID(ctx, txn, tenID, execCfg.Settings)
 			return err
 		})
 		require.EqualError(t, err, `tenant "10" does not exist`)

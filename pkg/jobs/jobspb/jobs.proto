@@ -19,7 +19,7 @@ import "roachpb/data.proto";
 import "roachpb/metadata.proto";
 import "roachpb/io-formats.proto";
 import "sql/catalog/descpb/structured.proto";
-import "sql/catalog/descpb/tenant.proto";
+import "multitenant/mtinfopb/info.proto";
 import "sql/sessiondatapb/session_data.proto";
 import "util/hlc/timestamp.proto";
 import "clusterversion/cluster_version.proto";
@@ -370,7 +370,7 @@ message RestoreDetails {
 
   // Tenants contain info on each tenant to restore. Note this field contains the backed up
   // tenant id.
-  repeated sqlbase.TenantInfoWithUsage tenants = 21 [(gogoproto.nullable) = false];
+  repeated cockroach.multitenant.TenantInfoWithUsage tenants = 21 [(gogoproto.nullable) = false];
 
   string override_db = 6 [(gogoproto.customname) = "OverrideDB"];
 

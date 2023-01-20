@@ -13,7 +13,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/cloud"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -33,14 +33,14 @@ func (m *BackupManifest) IsIncremental() bool {
 // GetTenants retrieves the tenant information from the manifest. It should be
 // used instead of Tenants to support older versions of the manifest which used
 // the deprecated field.
-func (m *BackupManifest) GetTenants() []descpb.TenantInfoWithUsage {
+func (m *BackupManifest) GetTenants() []mtinfopb.TenantInfoWithUsage {
 	if len(m.Tenants) > 0 {
 		return m.Tenants
 	}
 	if len(m.TenantsDeprecated) > 0 {
-		res := make([]descpb.TenantInfoWithUsage, len(m.TenantsDeprecated))
+		res := make([]mtinfopb.TenantInfoWithUsage, len(m.TenantsDeprecated))
 		for i := range res {
-			res[i].TenantInfo = m.TenantsDeprecated[i]
+			res[i].ProtoInfo = m.TenantsDeprecated[i]
 		}
 		return res
 	}

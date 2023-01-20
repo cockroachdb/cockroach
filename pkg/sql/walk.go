@@ -217,6 +217,7 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 
 	case *alterTenantCapabilityNode:
 	case *alterTenantSetClusterSettingNode:
+	case *alterTenantServiceNode:
 	case *createViewNode:
 	case *setVarNode:
 	case *setClusterSettingNode:
@@ -363,6 +364,7 @@ var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&alterTableSetSchemaNode{}):                 "alter table set schema",
 	reflect.TypeOf(&alterTenantCapabilityNode{}):               "alter tenant capability",
 	reflect.TypeOf(&alterTenantSetClusterSettingNode{}):        "alter tenant set cluster setting",
+	reflect.TypeOf(&alterTenantServiceNode{}):                  "alter tenant service",
 	reflect.TypeOf(&alterTypeNode{}):                           "alter type",
 	reflect.TypeOf(&alterRoleNode{}):                           "alter role",
 	reflect.TypeOf(&alterRoleSetNode{}):                        "alter role set var",
