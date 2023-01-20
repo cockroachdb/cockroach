@@ -73,6 +73,7 @@ type storeRebalancerControl struct {
 
 	allocator  allocatorimpl.Allocator
 	controller op.Controller
+	storepool  storepool.AllocatorStorePool
 }
 
 // NewStoreRebalancer returns a new simulator store rebalancer.
@@ -104,6 +105,8 @@ func newStoreRebalancerControl(
 		getRaftStatusFn,
 	)
 
+	sr.AddLogTag("s", storeID)
+
 	return &storeRebalancerControl{
 		sr:       sr,
 		settings: settings,
@@ -112,6 +115,7 @@ func newStoreRebalancerControl(
 		},
 		storeID:    storeID,
 		allocator:  allocator,
+		storepool:  storePool,
 		controller: controller,
 	}
 
@@ -142,6 +146,8 @@ func (src *storeRebalancerControl) checkPendingTicket() (done bool, next time.Ti
 }
 
 func (src *storeRebalancerControl) Tick(ctx context.Context, tick time.Time, state state.State) {
+	src.sr.AddLogTag("tick", tick)
+	ctx = src.sr.ResetAndAnnotateCtx(ctx)
 	switch src.rebalancerState.phase {
 	case rebalancerSleeping:
 		src.phaseSleep(ctx, tick, state)
@@ -202,6 +208,11 @@ func (src *storeRebalancerControl) checkPendingLeaseRebalance(ctx context.Contex
 	}
 
 	if err == nil {
+		src.storepool.UpdateLocalStoresAfterLeaseTransfer(
+			roachpb.StoreID(src.storeID),
+			src.rebalancerState.pendingTransferTarget.StoreID,
+			src.rebalancerState.pendingTransfer.RangeUsageInfo(),
+		)
 		// The transfer has completed without error, update the local
 		// state to reflect it's success.
 		src.sr.PostLeaseRebalance(
