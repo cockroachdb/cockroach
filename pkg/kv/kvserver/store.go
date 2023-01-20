@@ -1847,12 +1847,12 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	// concurrently. Note that while we can perform this initialization
 	// concurrently, all of the initialization must be performed before we start
 	// listening for Raft messages and starting the process Raft loop.
-	engRepls, err := kvstorage.LoadAndReconcileReplicas(ctx, s.engine)
+	repls, err := kvstorage.LoadAndReconcileReplicas(ctx, s.engine)
 	if err != nil {
 		return err
 	}
-	for fullID, desc := range engRepls.Initialized {
-		rep, err := newReplica(ctx, desc, s, fullID.ReplicaID)
+	for _, state := range repls.Initialized {
+		rep, err := newReplica(ctx, state.Desc, s, state.ReplicaID)
 		if err != nil {
 			return err
 		}
