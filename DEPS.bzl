@@ -2385,10 +2385,10 @@ def go_deps():
         name = "com_github_eapache_go_resiliency",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/eapache/go-resiliency",
-        sha256 = "39333303f947a85e0c35e9969d56e05776034b1ae91e75cbf9211ead5870d982",
-        strip_prefix = "github.com/eapache/go-resiliency@v1.2.0",
+        sha256 = "5b38e34482587619923cadf0dd71e9a7b4d799df763c0c5991f703eb782f115f",
+        strip_prefix = "github.com/eapache/go-resiliency@v1.3.0",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/eapache/go-resiliency/com_github_eapache_go_resiliency-v1.2.0.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/eapache/go-resiliency/com_github_eapache_go_resiliency-v1.3.0.zip",
         ],
     )
     go_repository(
@@ -4059,10 +4059,10 @@ def go_deps():
         name = "com_github_hashicorp_go_multierror",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/hashicorp/go-multierror",
-        sha256 = "3c60b77bb039c4431734883c65d645436a57c2653d00ae4cd7ea4f0303bc38e2",
-        strip_prefix = "github.com/hashicorp/go-multierror@v1.1.0",
+        sha256 = "972cd841ee51fdeac69c5a301e57f8ea27aebf15fddd7f621d5c240f28c3000c",
+        strip_prefix = "github.com/hashicorp/go-multierror@v1.1.1",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/hashicorp/go-multierror/com_github_hashicorp_go_multierror-v1.1.0.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/hashicorp/go-multierror/com_github_hashicorp_go_multierror-v1.1.1.zip",
         ],
     )
     go_repository(
@@ -4699,10 +4699,10 @@ def go_deps():
         name = "com_github_jcmturner_gofork",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/jcmturner/gofork",
-        sha256 = "5e015dd9b038f1dded0b2ded77e529d2f6ba0bed228a98831af5a3610eefcb52",
-        strip_prefix = "github.com/jcmturner/gofork@v1.0.0",
+        sha256 = "b7e42a499d6be8dd07069c031f9291a5615aa0d59660c7e322cff585ce39e8a2",
+        strip_prefix = "github.com/jcmturner/gofork@v1.7.6",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/jcmturner/gofork/com_github_jcmturner_gofork-v1.0.0.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/jcmturner/gofork/com_github_jcmturner_gofork-v1.7.6.zip",
         ],
     )
     go_repository(
@@ -4719,10 +4719,10 @@ def go_deps():
         name = "com_github_jcmturner_gokrb5_v8",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/jcmturner/gokrb5/v8",
-        sha256 = "eecd7120363321bb6b58b015395089958720271b3211659d802447d417af5970",
-        strip_prefix = "github.com/jcmturner/gokrb5/v8@v8.4.2",
+        sha256 = "a89f756a1649fb6836a18409df27766711a9d09d8ddc499cc7e38cccffb932ee",
+        strip_prefix = "github.com/jcmturner/gokrb5/v8@v8.4.3",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/jcmturner/gokrb5/v8/com_github_jcmturner_gokrb5_v8-v8.4.2.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/jcmturner/gokrb5/v8/com_github_jcmturner_gokrb5_v8-v8.4.3.zip",
         ],
     )
     go_repository(
@@ -5447,10 +5447,10 @@ def go_deps():
         name = "com_github_linkedin_goavro_v2",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/linkedin/goavro/v2",
-        sha256 = "5a0852f154b7dc68b999326cea27c9439faedbf8f09f94d1cb43e53a623f6bfc",
-        strip_prefix = "github.com/linkedin/goavro/v2@v2.10.0",
+        sha256 = "d8125b07b796030376602d66bea868af562c15eb3098c75850c4f8435b3473de",
+        strip_prefix = "github.com/linkedin/goavro/v2@v2.12.0",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/linkedin/goavro/v2/com_github_linkedin_goavro_v2-v2.10.0.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/linkedin/goavro/v2/com_github_linkedin_goavro_v2-v2.12.0.zip",
         ],
     )
     go_repository(
@@ -6897,10 +6897,20 @@ def go_deps():
         name = "com_github_pierrec_lz4",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/pierrec/lz4",
-        sha256 = "3442d00156073088858844e4e25753b683ef1d39a5ff9f912079f7f8a1d72a61",
-        strip_prefix = "github.com/pierrec/lz4@v2.6.0+incompatible",
+        sha256 = "2887f169f2f3333721eab7d59a2e444b2eabef2db5c86a895731a931e6b24982",
+        strip_prefix = "github.com/pierrec/lz4@v2.5.2+incompatible",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/pierrec/lz4/com_github_pierrec_lz4-v2.6.0+incompatible.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/pierrec/lz4/com_github_pierrec_lz4-v2.5.2+incompatible.zip",
+        ],
+    )
+    go_repository(
+        name = "com_github_pierrec_lz4_v4",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/pierrec/lz4/v4",
+        sha256 = "e79e3d8780c9ebe83d511ccef6fa2e708a5cdbb3e29ddc49ab912f1693978d12",
+        strip_prefix = "github.com/pierrec/lz4/v4@v4.1.17",
+        urls = [
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/pierrec/lz4/v4/com_github_pierrec_lz4_v4-v4.1.17.zip",
         ],
     )
     go_repository(
@@ -7564,10 +7574,10 @@ def go_deps():
         name = "com_github_shopify_sarama",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/Shopify/sarama",
-        sha256 = "e40e234e595aee956281eb80bcdda92342f2686180313cfcb379e7bcd1d49b58",
-        strip_prefix = "github.com/Shopify/sarama@v1.29.0",
+        sha256 = "a540fd5106e72d947c4ca14d226b2f688342a4fed4cebebfa388036d3740aac7",
+        strip_prefix = "github.com/Shopify/sarama@v1.37.2",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/Shopify/sarama/com_github_shopify_sarama-v1.29.0.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/Shopify/sarama/com_github_shopify_sarama-v1.37.2.zip",
         ],
     )
     go_repository(
@@ -7578,6 +7588,16 @@ def go_deps():
         strip_prefix = "github.com/Shopify/toxiproxy@v2.1.4+incompatible",
         urls = [
             "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/Shopify/toxiproxy/com_github_shopify_toxiproxy-v2.1.4+incompatible.zip",
+        ],
+    )
+    go_repository(
+        name = "com_github_shopify_toxiproxy_v2",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/Shopify/toxiproxy/v2",
+        sha256 = "c9690a3671057a8a5dbe4f7e105cbcc1913065e2ceea21fb3e49252d18a6fbff",
+        strip_prefix = "github.com/Shopify/toxiproxy/v2@v2.5.0",
+        urls = [
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/Shopify/toxiproxy/v2/com_github_shopify_toxiproxy_v2-v2.5.0.zip",
         ],
     )
     go_repository(
@@ -8294,40 +8314,40 @@ def go_deps():
         name = "com_github_xdg_go_scram",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/xdg-go/scram",
-        sha256 = "c7846f2609f2efc1d248301c2f261ff6cb1be971fa77de5790bda1fcd14fcceb",
-        strip_prefix = "github.com/xdg-go/scram@v1.0.2",
+        sha256 = "d1e4c9b5cc9a50a6029a5d655e7a04055de1de8fc611d5741958b49df8f3ba12",
+        strip_prefix = "github.com/xdg-go/scram@v1.1.1",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/xdg-go/scram/com_github_xdg_go_scram-v1.0.2.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/xdg-go/scram/com_github_xdg_go_scram-v1.1.1.zip",
         ],
     )
     go_repository(
         name = "com_github_xdg_go_stringprep",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/xdg-go/stringprep",
-        sha256 = "4f4d7c8ba09ab5fa288ff86902c2f4000f3a85cd55d9ff75a04ade18c8e33ad9",
-        strip_prefix = "github.com/xdg-go/stringprep@v1.0.2",
+        sha256 = "515150cab19dedebd979f6298f64d29e3b6e45e55d645a0f32d9f72997e3b2ed",
+        strip_prefix = "github.com/xdg-go/stringprep@v1.0.3",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/xdg-go/stringprep/com_github_xdg_go_stringprep-v1.0.2.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/xdg-go/stringprep/com_github_xdg_go_stringprep-v1.0.3.zip",
         ],
     )
     go_repository(
         name = "com_github_xdg_scram",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/xdg/scram",
-        sha256 = "56875f465f0ed3170846db4d300328b9c769c35a3c59a479c8b9ac659765e48c",
-        strip_prefix = "github.com/xdg/scram@v1.0.3",
+        sha256 = "33884d438b686676ceaa2a439634a108f7fe763ce974342d2aa811c22b34112c",
+        strip_prefix = "github.com/xdg/scram@v0.0.0-20180814205039-7eeb5667e42c",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/xdg/scram/com_github_xdg_scram-v1.0.3.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/xdg/scram/com_github_xdg_scram-v0.0.0-20180814205039-7eeb5667e42c.zip",
         ],
     )
     go_repository(
         name = "com_github_xdg_stringprep",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/xdg/stringprep",
-        sha256 = "7cb9711fd7b3c1518e1fbd4e39be11737d7006a5e4a59f1ceb4ba9c205eb90fa",
-        strip_prefix = "github.com/xdg/stringprep@v1.0.3",
+        sha256 = "2b262e4e8e9655100c98e2b7e75b517e3e83e2155818174c63ea09d3cce22721",
+        strip_prefix = "github.com/xdg/stringprep@v1.0.0",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/xdg/stringprep/com_github_xdg_stringprep-v1.0.3.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/xdg/stringprep/com_github_xdg_stringprep-v1.0.0.zip",
         ],
     )
     go_repository(
@@ -9614,10 +9634,10 @@ def go_deps():
         name = "org_golang_x_net",
         build_file_proto_mode = "disable_global",
         importpath = "golang.org/x/net",
-        sha256 = "1decf7a324a0916bc66304da1b68a834ce679379422de3a2855f3031f6dc39bd",
-        strip_prefix = "golang.org/x/net@v0.0.0-20220722155237-a158d28d115b",
+        sha256 = "8ed4339658ad9b0ba0488dab90a040990af8f49935be936f77a9638c4765fe88",
+        strip_prefix = "golang.org/x/net@v0.0.0-20220927171203-f486391704dc",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/golang.org/x/net/org_golang_x_net-v0.0.0-20220722155237-a158d28d115b.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/golang.org/x/net/org_golang_x_net-v0.0.0-20220927171203-f486391704dc.zip",
         ],
     )
     go_repository(
@@ -9644,10 +9664,10 @@ def go_deps():
         name = "org_golang_x_sync",
         build_file_proto_mode = "disable_global",
         importpath = "golang.org/x/sync",
-        sha256 = "39d2431ae1db11be34b4012b719e7bcec1572006a122d44509da038a5b498ff1",
-        strip_prefix = "golang.org/x/sync@v0.0.0-20220722155255-886fb9371eb4",
+        sha256 = "81834fca9f7e10a23bc4b32403886b9c7dc8059239231acaffc56a51be20f547",
+        strip_prefix = "golang.org/x/sync@v0.0.0-20220923202941-7f9b1623fab7",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/golang.org/x/sync/org_golang_x_sync-v0.0.0-20220722155255-886fb9371eb4.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/golang.org/x/sync/org_golang_x_sync-v0.0.0-20220923202941-7f9b1623fab7.zip",
         ],
     )
     go_repository(
