@@ -13,6 +13,7 @@ genrule(
         "//pkg/kv/kvserver/liveness/livenesspb:livenesspb_proto",
         "//pkg/kv/kvserver/loqrecovery/loqrecoverypb:loqrecoverypb_proto",
         "//pkg/kv/kvserver/readsummary/rspb:rspb_proto",
+        "//pkg/multitenant/mtinfopb:mtinfopb_proto",
         "//pkg/multitenant/tenantcapabilities/tenantcapabilitiespb:tenantcapabilitiespb_proto",
         "//pkg/roachpb:roachpb_proto",
         "//pkg/server/diagnostics/diagnosticspb:diagnosticspb_proto",

@@ -15,15 +15,15 @@ SELECT crdb_internal.create_tenant(6);
 
 # Drop one of them.
 exec-sql
-DROP TENANT [5]
+ALTER TENANT [5] STOP SERVICE; DROP TENANT [5]
 ----
 
 query-sql
-SELECT id,active,crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info, true) FROM system.tenants;
+SELECT id,name,data_state,service_mode,active,crdb_internal.pb_to_json('cockroach.multitenant.TenantInfo', info, true) FROM system.tenants;
 ----
-1 true {"capabilities": {"canAdminSplit": false}, "droppedName": "", "id": "1", "name": "system", "state": "ACTIVE", "tenantReplicationJobId": "0"}
-5 false {"capabilities": {"canAdminSplit": false}, "droppedName": "tenant-5", "id": "5", "name": "", "state": "DROP", "tenantReplicationJobId": "0"}
-6 true {"capabilities": {"canAdminSplit": false}, "droppedName": "", "id": "6", "name": "tenant-6", "state": "ACTIVE", "tenantReplicationJobId": "0"}
+1 system 0 2 true {"capabilities": {"canAdminSplit": false}, "deprecatedDataState": "READY", "deprecatedId": "1", "droppedName": "", "tenantReplicationJobId": "0"}
+5 <nil> 2 1 false {"capabilities": {"canAdminSplit": false}, "deprecatedDataState": "DROP", "deprecatedId": "5", "droppedName": "tenant-5", "tenantReplicationJobId": "0"}
+6 tenant-6 0 0 true {"capabilities": {"canAdminSplit": false}, "deprecatedDataState": "READY", "deprecatedId": "6", "droppedName": "", "tenantReplicationJobId": "0"}
 
 exec-sql
 BACKUP INTO 'nodelocal://1/cluster'
@@ -47,11 +47,11 @@ RESTORE FROM LATEST IN 'nodelocal://1/cluster'
 
 # A dropped tenant should be restored as an inactive tenant.
 query-sql
-SELECT id,active,crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info, true) FROM system.tenants;
+SELECT id,name,data_state,service_mode,active,crdb_internal.pb_to_json('cockroach.multitenant.TenantInfo', info, true) FROM system.tenants;
 ----
-1 true {"capabilities": {"canAdminSplit": false}, "droppedName": "", "id": "1", "name": "system", "state": "ACTIVE", "tenantReplicationJobId": "0"}
-5 false {"capabilities": {"canAdminSplit": false}, "droppedName": "tenant-5", "id": "5", "name": "tenant-5", "state": "DROP", "tenantReplicationJobId": "0"}
-6 true {"capabilities": {"canAdminSplit": false}, "droppedName": "", "id": "6", "name": "tenant-6", "state": "ACTIVE", "tenantReplicationJobId": "0"}
+1 system 0 2 true {"capabilities": {"canAdminSplit": false}, "deprecatedDataState": "READY", "deprecatedId": "1", "droppedName": "", "tenantReplicationJobId": "0"}
+5 tenant-5 2 1 false {"capabilities": {"canAdminSplit": false}, "deprecatedDataState": "DROP", "deprecatedId": "5", "droppedName": "tenant-5", "tenantReplicationJobId": "0"}
+6 tenant-6 0 0 true {"capabilities": {"canAdminSplit": false}, "deprecatedDataState": "READY", "deprecatedId": "6", "droppedName": "", "tenantReplicationJobId": "0"}
 
 exec-sql expect-error-regex=(tenant 6 already exists)
 RESTORE TENANT 6 FROM LATEST IN 'nodelocal://1/tenant6';
@@ -73,9 +73,9 @@ RESTORE TENANT 6 FROM LATEST IN 'nodelocal://1/tenant6' WITH tenant_name = 'newn
 ----
 
 query-sql
-SELECT id,active,crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info, true) FROM system.tenants;
+SELECT id,name,data_state,service_mode,active,crdb_internal.pb_to_json('cockroach.multitenant.TenantInfo', info, true) FROM system.tenants;
 ----
-1 true {"capabilities": {"canAdminSplit": false}, "droppedName": "", "id": "1", "name": "system", "state": "ACTIVE", "tenantReplicationJobId": "0"}
-2 true {"capabilities": {"canAdminSplit": false}, "droppedName": "", "id": "2", "name": "newname", "state": "ACTIVE", "tenantReplicationJobId": "0"}
-5 false {"capabilities": {"canAdminSplit": false}, "droppedName": "tenant-5", "id": "5", "name": "tenant-5", "state": "DROP", "tenantReplicationJobId": "0"}
-6 true {"capabilities": {"canAdminSplit": false}, "droppedName": "", "id": "6", "name": "tenant-6", "state": "ACTIVE", "tenantReplicationJobId": "0"}
+1 system 0 2 true {"capabilities": {"canAdminSplit": false}, "deprecatedDataState": "READY", "deprecatedId": "1", "droppedName": "", "tenantReplicationJobId": "0"}
+2 newname 0 0 true {"capabilities": {"canAdminSplit": false}, "deprecatedDataState": "READY", "deprecatedId": "2", "droppedName": "", "tenantReplicationJobId": "0"}
+5 tenant-5 2 1 false {"capabilities": {"canAdminSplit": false}, "deprecatedDataState": "DROP", "deprecatedId": "5", "droppedName": "tenant-5", "tenantReplicationJobId": "0"}
+6 tenant-6 0 0 true {"capabilities": {"canAdminSplit": false}, "deprecatedDataState": "READY", "deprecatedId": "6", "droppedName": "", "tenantReplicationJobId": "0"}

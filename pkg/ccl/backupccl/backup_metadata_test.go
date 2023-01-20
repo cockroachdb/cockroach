@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuptestutils"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -242,8 +243,8 @@ func checkIntroducedSpans(
 func checkTenants(
 	ctx context.Context, t *testing.T, m *backuppb.BackupManifest, bm *backupinfo.BackupMetadata,
 ) {
-	var metaTenants []descpb.TenantInfoWithUsage
-	var tenant descpb.TenantInfoWithUsage
+	var metaTenants []mtinfopb.TenantInfoWithUsage
+	var tenant mtinfopb.TenantInfoWithUsage
 	it := bm.TenantIter(ctx)
 	defer it.Close()
 
