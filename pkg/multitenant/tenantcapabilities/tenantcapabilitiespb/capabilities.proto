@@ -9,7 +9,7 @@
 // licenses/APL.txt.
 
 syntax = "proto3";
-package cockroach.multitenant.tenantcapabilities.tenantcapabilitiespb;
+package cockroach.multitenant.tenantcapabilitiespb;
 option go_package = "tenantcapabilitiespb";
 
 import "gogoproto/gogo.proto";
@@ -29,4 +29,3 @@ message TenantCapabilities {
   // successfully perform `AdminSplit` requests.
   bool can_admin_split = 1;
 };
-
