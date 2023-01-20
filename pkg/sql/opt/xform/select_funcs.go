@@ -1459,7 +1459,7 @@ func (c *CustomFuncs) GenerateInvertedIndexZigzagJoins(
 		// TODO(mgartner): Once we support multi-column inverted indexes, pass
 		// optional filters generated from CHECK constraints and computed column
 		// expressions to help constrain non-inverted prefix columns.
-		spanExpr, _, _, _, ok := invertedidx.TryFilterInvertedIndex(
+		spanExpr, _, remainingFilters, _, ok := invertedidx.TryFilterInvertedIndex(
 			c.e.ctx,
 			c.e.evalCtx,
 			c.e.f, filters,
@@ -1476,7 +1476,12 @@ func (c *CustomFuncs) GenerateInvertedIndexZigzagJoins(
 		//
 		// We'll store at most two values in vals, so initialize the slice with
 		// sufficient capacity.
+		//
+		// Also, keep track of whether the zigzag join exactly represents the
+		// spanExpr or will return some false positives (in which case tight=false,
+		// and we will need to re-apply the filters).
 		vals := make([]inverted.EncVal, 0, 2)
+		tight := true
 		var getVals func(invertedExpr inverted.Expression)
 		getVals = func(invertedExpr inverted.Expression) {
 			if len(vals) >= 2 {
@@ -1484,6 +1489,7 @@ func (c *CustomFuncs) GenerateInvertedIndexZigzagJoins(
 				// exploring further.
 				// TODO(rytaft): use stats here to choose the two most selective
 				// constraints instead of the first two.
+				tight = false
 				return
 			}
 			spanExprLocal, ok := invertedExpr.(*inverted.SpanExpression)
@@ -1492,6 +1498,7 @@ func (c *CustomFuncs) GenerateInvertedIndexZigzagJoins(
 				// to constrain the index. (This shouldn't ever happen, since
 				// TryFilterInvertedIndex should have returned ok=false in this case,
 				// but we don't want to panic if it does happen.)
+				tight = false
 				return
 			}
 			switch spanExprLocal.Operator {
@@ -1500,6 +1507,7 @@ func (c *CustomFuncs) GenerateInvertedIndexZigzagJoins(
 					// This is equivalent to a UNION between the FactoredUnionSpans and
 					// the intersected children, so we can't build a zigzag join with
 					// this subtree.
+					tight = false
 					return
 				}
 				getVals(spanExprLocal.Left)
@@ -1508,6 +1516,7 @@ func (c *CustomFuncs) GenerateInvertedIndexZigzagJoins(
 			case inverted.SetUnion:
 				// Don't recurse into UNIONs. We can't build a zigzag join with this
 				// subtree.
+				tight = false
 				return
 			}
 
@@ -1516,6 +1525,8 @@ func (c *CustomFuncs) GenerateInvertedIndexZigzagJoins(
 			if spanExprLocal.Unique && len(spanExprLocal.SpansToRead) == 1 &&
 				spanExprLocal.SpansToRead[0].IsSingleVal() {
 				vals = append(vals, spanExprLocal.SpansToRead[0].Start)
+			} else {
+				tight = false
 			}
 		}
 		getVals(spanExpr)
@@ -1523,12 +1534,16 @@ func (c *CustomFuncs) GenerateInvertedIndexZigzagJoins(
 			return
 		}
 
+		if !tight {
+			remainingFilters = filters
+		}
+
 		// We treat the fixed values for JSON and Array as DEncodedKey.
 		leftVal := tree.DEncodedKey(vals[0])
 		rightVal := tree.DEncodedKey(vals[1])
 
 		zigzagJoin := memo.ZigzagJoinExpr{
-			On: filters,
+			On: remainingFilters,
 			ZigzagJoinPrivate: memo.ZigzagJoinPrivate{
 				LeftTable:    scanPrivate.Table,
 				LeftIndex:    index.Ordinal(),
@@ -1582,7 +1597,6 @@ func (c *CustomFuncs) GenerateInvertedIndexZigzagJoins(
 			zigzagJoin.LeftEqCols[i-fixedColsCount] = colID
 			zigzagJoin.RightEqCols[i-fixedColsCount] = colID
 		}
-		zigzagJoin.On = filters
 
 		// Don't output the first column (i.e. the inverted index's JSON key
 		// col) from the zigzag join. It could contain partial values, so

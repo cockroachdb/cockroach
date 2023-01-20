@@ -172,8 +172,7 @@ inner-join (lookup inverted)
  │    ├── left locking: for-update
  │    ├── right locking: for-update
  │    └── filters (true)
- └── filters
-      └── b:2 @> ARRAY[1,2] [outer=(2), immutable, constraints=(/2: (/NULL - ])]
+ └── filters (true)
 
 opt expect=GenerateInvertedIndexScans
 SELECT * FROM inverted WHERE b <@ '{1, 2}' FOR UPDATE
@@ -292,5 +291,4 @@ inner-join (lookup zigzag)
  │    ├── left locking: for-update
  │    ├── right locking: for-update
  │    └── filters (true)
- └── filters
-      └── d:4 @> '{"a": {"b": "c"}, "f": "g"}' [outer=(4), immutable, constraints=(/4: (/NULL - ])]
+ └── filters (true)
