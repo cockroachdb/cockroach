@@ -16,7 +16,7 @@ import "roachpb/data.proto";
 import "roachpb/metadata.proto";
 import "sql/stats/table_statistic.proto";
 import "sql/catalog/descpb/structured.proto";
-import "sql/catalog/descpb/tenant.proto";
+import "multitenant/mtinfopb/info.proto";
 import "util/hlc/timestamp.proto";
 import "gogoproto/gogo.proto";
 
@@ -93,10 +93,10 @@ message BackupManifest {
 
   repeated File files = 4 [(gogoproto.nullable) = false];
   repeated sql.sqlbase.Descriptor descriptors = 5 [(gogoproto.nullable) = false];
-  repeated sql.sqlbase.TenantInfoWithUsage tenants = 26 [(gogoproto.nullable) = false];
+  repeated cockroach.multitenant.TenantInfoWithUsage tenants = 26 [(gogoproto.nullable) = false];
   // This field is deprecated; it is only retained to allow restoring older
   // backups.
-  repeated sql.sqlbase.TenantInfo tenants_deprecated = 24 [(gogoproto.nullable) = false];
+  repeated cockroach.multitenant.ProtoInfo tenants_deprecated = 24 [(gogoproto.nullable) = false];
   // databases in descriptors that have all tables also in descriptors.
   repeated uint32 complete_dbs = 14 [
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"];

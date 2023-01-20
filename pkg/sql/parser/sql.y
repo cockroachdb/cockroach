@@ -961,12 +961,12 @@ func (u *sqlSymUnion) showTenantOpts() tree.ShowTenantOptions {
 
 %token <str> SAVEPOINT SCANS SCATTER SCHEDULE SCHEDULES SCROLL SCHEMA SCHEMA_ONLY SCHEMAS SCRUB
 %token <str> SEARCH SECOND SECONDARY SECURITY SELECT SEQUENCE SEQUENCES
-%token <str> SERIALIZABLE SERVER SESSION SESSIONS SESSION_USER SET SETOF SETS SETTING SETTINGS
-%token <str> SHARE SHOW SIMILAR SIMPLE SKIP SKIP_LOCALITIES_CHECK SKIP_MISSING_FOREIGN_KEYS
+%token <str> SERIALIZABLE SERVER SERVICE SESSION SESSIONS SESSION_USER SET SETOF SETS SETTING SETTINGS
+%token <str> SHARE SHARED SHOW SIMILAR SIMPLE SKIP SKIP_LOCALITIES_CHECK SKIP_MISSING_FOREIGN_KEYS
 %token <str> SKIP_MISSING_SEQUENCES SKIP_MISSING_SEQUENCE_OWNERS SKIP_MISSING_VIEWS SMALLINT SMALLSERIAL SNAPSHOT SOME SPLIT SQL
 %token <str> SQLLOGIN
 
-%token <str> STABLE START STATE STATISTICS STATUS STDIN STREAM STRICT STRING STORAGE STORE STORED STORING SUBSTRING SUPER
+%token <str> STABLE START STATE STATISTICS STATUS STDIN STREAM STRICT STRING STOP STORAGE STORE STORED STORING SUBSTRING SUPER
 %token <str> SUPPORT SURVIVE SURVIVAL SYMMETRIC SYNTAX SYSTEM SQRT SUBSCRIPTION STATEMENTS
 
 %token <str> TABLE TABLES TABLESPACE TEMP TEMPLATE TEMPORARY TENANT TENANT_NAME TENANTS TESTING_RELOCATE TEXT THEN
@@ -1069,6 +1069,7 @@ func (u *sqlSymUnion) showTenantOpts() tree.ShowTenantOptions {
 // Other ALTER TENANT statements.
 %type <tree.Statement> alter_tenant_replication_stmt
 %type <tree.Statement> alter_tenant_rename_stmt
+%type <tree.Statement> alter_tenant_service_stmt
 
 // ALTER PARTITION
 %type <tree.Statement> alter_zone_partition_stmt
@@ -6211,6 +6212,7 @@ alter_tenant_stmt:
 | alter_tenant_csetting_stmt    // EXTEND WITH HELP: ALTER TENANT CLUSTER SETTING
 | alter_tenant_capability_stmt  // EXTEND WITH HELP: ALTER TENANT
 | alter_tenant_rename_stmt      // EXTEND WITH HELP: ALTER TENANT RENAME
+| alter_tenant_service_stmt     // EXTEND WITH HELP: ALTER TENANT SERVICE
 | ALTER TENANT error            // SHOW HELP: ALTER TENANT
 
 tenant_spec:
@@ -6232,6 +6234,41 @@ alter_tenant_rename_stmt:
       NewName: $6.expr(),
     }
   }
+
+// %Help: ALTER TENANT SERVICE - alter tenant service mode
+// %Category: Experimental
+// %Text:
+// ALTER TENANT <tenant_spec> START SERVICE EXTERNAL
+// ALTER TENANT <tenant_spec> START SERVICE SHARED
+// ALTER TENANT <tenant_spec> STOP SERVICE
+alter_tenant_service_stmt:
+  ALTER TENANT tenant_spec START SERVICE EXTERNAL
+  {
+    /* SKIP DOC */
+    $$.val = &tree.AlterTenantService{
+      TenantSpec: $3.tenantSpec(),
+      Command: tree.TenantStartServiceExternal,
+    }
+  }
+| ALTER TENANT tenant_spec START SERVICE SHARED
+  {
+    /* SKIP DOC */
+    $$.val = &tree.AlterTenantService{
+      TenantSpec: $3.tenantSpec(),
+      Command: tree.TenantStartServiceShared,
+    }
+  }
+| ALTER TENANT tenant_spec STOP SERVICE
+  {
+    /* SKIP DOC */
+    $$.val = &tree.AlterTenantService{
+      TenantSpec: $3.tenantSpec(),
+      Command: tree.TenantStopService,
+    }
+  }
+| ALTER TENANT tenant_spec START error // SHOW HELP: ALTER TENANT SERVICE
+| ALTER TENANT tenant_spec STOP error // SHOW HELP: ALTER TENANT SERVICE
+
 
 // %Help: ALTER TENANT REPLICATION - alter tenant replication stream
 // %Category: Experimental
@@ -16142,11 +16179,13 @@ unreserved_keyword:
 | SEQUENCE
 | SEQUENCES
 | SERVER
+| SERVICE
 | SESSION
 | SESSIONS
 | SET
 | SETS
 | SHARE
+| SHARED
 | SHOW
 | SIMPLE
 | SKIP
@@ -16165,6 +16204,7 @@ unreserved_keyword:
 | STATEMENTS
 | STATISTICS
 | STDIN
+| STOP
 | STORAGE
 | STORE
 | STORED

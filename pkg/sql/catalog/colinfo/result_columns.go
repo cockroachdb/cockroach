@@ -279,7 +279,8 @@ var ExportColumns = ResultColumns{
 var TenantColumns = ResultColumns{
 	{Name: "id", Typ: types.Int},
 	{Name: "name", Typ: types.String},
-	{Name: "status", Typ: types.String},
+	{Name: "data_state", Typ: types.String},
+	{Name: "service_mode", Typ: types.String},
 }
 
 // TenantColumnsWithReplication is appended to TenantColumns for
