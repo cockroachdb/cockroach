@@ -55,7 +55,7 @@ message TenantInfo {
 
   // Capabilities encapsulate a set of capabilities that a specific tenant
   // possesses.
-  optional multitenant.tenantcapabilities.tenantcapabilitiespb.TenantCapabilities capabilities = 6 [
+  optional cockroach.multitenant.tenantcapabilitiespb.TenantCapabilities capabilities = 6 [
     (gogoproto.nullable) = false
   ];
 }
