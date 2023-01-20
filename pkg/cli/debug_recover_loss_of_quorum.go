@@ -376,7 +376,8 @@ func runDebugPlanReplicaRemoval(cmd *cobra.Command, args []string) error {
 		ctx,
 		replicas,
 		deadStoreIDs,
-		deadNodeIDs)
+		deadNodeIDs,
+		uuid.DefaultGenerator)
 	if err != nil {
 		return err
 	}
@@ -613,8 +614,8 @@ func stageRecoveryOntoCluster(
 	// Proposed report
 	_, _ = fmt.Fprintf(stderr, "Proposed changes in plan %s:\n", plan.PlanID)
 	for _, u := range plan.Updates {
-		_, _ = fmt.Fprintf(stderr, "  range r%d:%s updating replica %s to %s and discarding all others.\n",
-			u.RangeID, roachpb.Key(u.StartKey), u.OldReplicaID, u.NextReplicaID)
+		_, _ = fmt.Fprintf(stderr, "  range r%d:%s updating replica %s to %s on node n%d and discarding all others.\n",
+			u.RangeID, roachpb.Key(u.StartKey), u.OldReplicaID, u.NextReplicaID, u.NodeID())
 	}
 	_, _ = fmt.Fprintf(stderr, "\nNodes %s will be marked as decommissioned.\n", strutil.JoinIDs("n", plan.DecommissionedNodeIDs))
 
@@ -690,7 +691,7 @@ To verify recovery status invoke:
 	return nil
 }
 
-func sortedKeys[T ~int32](set map[T]any) []T {
+func sortedKeys[T ~int | ~int32 | ~int64](set map[T]any) []T {
 	var sorted []T
 	for k := range set {
 		sorted = append(sorted, k)

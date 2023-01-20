@@ -144,6 +144,8 @@ var constSubKeyDict = []struct {
 	{"/nodeTombstone", localStoreNodeTombstoneSuffix},
 	{"/cachedSettings", localStoreCachedSettingsSuffix},
 	{"/lossOfQuorumRecovery/applied", localStoreUnsafeReplicaRecoverySuffix},
+	{"/lossOfQuorumRecovery/status", localStoreLossOfQuorumRecoveryStatusSuffix},
+	{"/lossOfQuorumRecovery/cleanup", localStoreLossOfQuorumRecoveryCleanupActionsSuffix},
 }
 
 func nodeTombstoneKeyPrint(buf *redact.StringBuilder, key roachpb.Key) {
