@@ -22,6 +22,7 @@ import (
 	// NewEncryptedEnvFunc in `pkg/storage`.
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/storageccl/engineccl"
 	"github.com/cockroachdb/cockroach/pkg/cli"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -49,7 +50,7 @@ func TestDecrypt(t *testing.T) {
 	require.NoError(t, err)
 	encOpts, err := encSpec.ToEncryptionOptions()
 	require.NoError(t, err)
-	p, err := storage.Open(ctx, storage.Filesystem(dir), storage.EncryptionAtRest(encOpts))
+	p, err := storage.Open(ctx, storage.Filesystem(dir), cluster.MakeClusterSettings(), storage.EncryptionAtRest(encOpts))
 	require.NoError(t, err)
 
 	// Find a manifest file to check.
@@ -128,7 +129,7 @@ func TestList(t *testing.T) {
 	require.NoError(t, err)
 	encOpts, err := encSpec.ToEncryptionOptions()
 	require.NoError(t, err)
-	p, err := storage.Open(ctx, storage.Filesystem(dir), storage.EncryptionAtRest(encOpts))
+	p, err := storage.Open(ctx, storage.Filesystem(dir), cluster.MakeClusterSettings(), storage.EncryptionAtRest(encOpts))
 	require.NoError(t, err)
 
 	// Write a key and flush, to create a table in the store.

@@ -3679,7 +3679,7 @@ func generateBytes(rng *rand.Rand, min int, max int) []byte {
 }
 
 func createEngWithSeparatedIntents(t *testing.T) Engine {
-	eng, err := Open(context.Background(), InMemory(), MaxSize(1<<20))
+	eng, err := Open(context.Background(), InMemory(), cluster.MakeClusterSettings(), MaxSize(1<<20))
 	require.NoError(t, err)
 	return eng
 }
@@ -3917,11 +3917,13 @@ func TestRandomizedSavepointRollbackAndIntentResolution(t *testing.T) {
 	fmt.Printf("seed: %d\n", seed)
 	rng := rand.New(rand.NewSource(seed))
 	ctx := context.Background()
-	eng, err := Open(context.Background(), InMemory(), func(cfg *engineConfig) error {
-		cfg.Opts.LBaseMaxBytes = int64(100 + rng.Intn(16384))
-		log.Infof(ctx, "lbase: %d", cfg.Opts.LBaseMaxBytes)
-		return nil
-	})
+	eng, err := Open(
+		context.Background(), InMemory(), cluster.MakeClusterSettings(),
+		func(cfg *engineConfig) error {
+			cfg.Opts.LBaseMaxBytes = int64(100 + rng.Intn(16384))
+			log.Infof(ctx, "lbase: %d", cfg.Opts.LBaseMaxBytes)
+			return nil
+		})
 	require.NoError(t, err)
 	defer eng.Close()
 

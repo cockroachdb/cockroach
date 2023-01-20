@@ -686,7 +686,7 @@ func TestRandomKeyAndTimestampExport(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 	mkEngine := func(t *testing.T) (e storage.Engine, cleanup func()) {
 		dir, cleanupDir := testutils.TempDir(t)
-		e, err := storage.Open(ctx, storage.Filesystem(dir), storage.CacheSize(0), storage.Settings(st))
+		e, err := storage.Open(ctx, storage.Filesystem(dir), st, storage.CacheSize(0))
 		if err != nil {
 			t.Fatal(err)
 		}
