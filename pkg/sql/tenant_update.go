@@ -50,7 +50,10 @@ func UpdateTenantRecord(
 		`UPDATE system.tenants SET active = $2, info = $3 WHERE id = $1`,
 		tenID, active, infoBytes,
 	); err != nil {
-		return errors.Wrap(err, "activating tenant")
+		if pgerror.GetPGCode(err) == pgcode.UniqueViolation {
+			return pgerror.Newf(pgcode.DuplicateObject, "name %q is already taken", info.Name)
+		}
+		return err
 	} else if num != 1 {
 		logcrash.ReportOrPanic(ctx, &settings.SV, "unexpected number of rows affected: %d", num)
 	}
@@ -63,6 +66,10 @@ func validateTenantInfo(info *descpb.TenantInfo) error {
 	}
 	if info.DroppedName != "" && info.DataState != descpb.TenantInfo_DROP {
 		return errors.Newf("tenant in data state %v with dropped name %q", info.DataState, info.DroppedName)
+	}
+	if info.ServiceMode != descpb.TenantInfo_NONE && info.DataState != descpb.TenantInfo_READY {
+		return errors.Newf("cannot use tenant service mode %v with data state %v",
+			info.ServiceMode, info.DataState)
 	}
 	return nil
 }
@@ -108,7 +115,12 @@ func (p *planner) UpdateTenantResourceLimits(
 // The caller is responsible for checking that the user is authorized
 // to take this action.
 func ActivateTenant(
-	ctx context.Context, settings *cluster.Settings, codec keys.SQLCodec, txn isql.Txn, tenID uint64,
+	ctx context.Context,
+	settings *cluster.Settings,
+	codec keys.SQLCodec,
+	txn isql.Txn,
+	tenID uint64,
+	serviceMode descpb.TenantInfo_ServiceMode,
 ) error {
 	const op = "activate"
 	if err := rejectIfCantCoordinateMultiTenancy(codec, op); err != nil {
@@ -126,6 +138,7 @@ func ActivateTenant(
 
 	// Mark the tenant as active.
 	info.DataState = descpb.TenantInfo_READY
+	info.ServiceMode = serviceMode
 	if err := UpdateTenantRecord(ctx, settings, txn, info); err != nil {
 		return errors.Wrap(err, "activating tenant")
 	}
@@ -133,8 +146,41 @@ func ActivateTenant(
 	return nil
 }
 
+func (p *planner) setTenantService(
+	ctx context.Context, info *descpb.TenantInfo, newMode descpb.TenantInfo_ServiceMode,
+) error {
+	if p.EvalContext().TxnReadOnly {
+		return readOnlyError("ALTER TENANT SERVICE")
+	}
+
+	if err := p.RequireAdminRole(ctx, "set tenant service"); err != nil {
+		return err
+	}
+	if err := rejectIfCantCoordinateMultiTenancy(p.ExecCfg().Codec, "set tenant service"); err != nil {
+		return err
+	}
+	if err := rejectIfSystemTenant(info.ID, "set tenant service"); err != nil {
+		return err
+	}
+
+	if newMode == info.ServiceMode {
+		// No-op. Do nothing.
+		return nil
+	}
+
+	if newMode != descpb.TenantInfo_NONE && info.ServiceMode != descpb.TenantInfo_NONE {
+		return errors.WithHint(pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+			"cannot change service mode %v to %v directly",
+			info.ServiceMode, newMode),
+			"Use ALTER TENANT STOP SERVICE first.")
+	}
+
+	info.ServiceMode = newMode
+	return UpdateTenantRecord(ctx, p.ExecCfg().Settings, p.InternalSQLTxn(), info)
+}
+
 func (p *planner) renameTenant(
-	ctx context.Context, tenantID uint64, tenantName roachpb.TenantName,
+	ctx context.Context, info *descpb.TenantInfo, newName roachpb.TenantName,
 ) error {
 	if p.EvalContext().TxnReadOnly {
 		return readOnlyError("ALTER TENANT RENAME TO")
@@ -146,12 +192,12 @@ func (p *planner) renameTenant(
 	if err := rejectIfCantCoordinateMultiTenancy(p.ExecCfg().Codec, "rename tenant"); err != nil {
 		return err
 	}
-	if err := rejectIfSystemTenant(tenantID, "rename"); err != nil {
+	if err := rejectIfSystemTenant(info.ID, "rename"); err != nil {
 		return err
 	}
 
-	if tenantName != "" {
-		if err := tenantName.IsValid(); err != nil {
+	if newName != "" {
+		if err := newName.IsValid(); err != nil {
 			return pgerror.WithCandidateCode(err, pgcode.Syntax)
 		}
 
@@ -160,21 +206,14 @@ func (p *planner) renameTenant(
 		}
 	}
 
-	if num, err := p.InternalSQLTxn().ExecEx(
-		ctx, "rename-tenant", p.txn, sessiondata.NodeUserSessionDataOverride,
-		`UPDATE system.public.tenants
-SET info =
-crdb_internal.json_to_pb('cockroach.sql.sqlbase.TenantInfo',
-  crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info) ||
-  json_build_object('name', $2))
-WHERE id = $1`, tenantID, tenantName); err != nil {
-		if pgerror.GetPGCode(err) == pgcode.UniqueViolation {
-			return pgerror.Newf(pgcode.DuplicateObject, "name %q is already taken", tenantName)
-		}
-		return errors.Wrap(err, "renaming tenant")
-	} else if num != 1 {
-		return pgerror.Newf(pgcode.UndefinedObject, "tenant %d not found", tenantID)
+	if info.ServiceMode != descpb.TenantInfo_NONE {
+		return errors.WithHint(pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+			"cannot rename tenant in service mode %v", info.ServiceMode),
+			"Use ALTER TENANT STOP SERVICE before renaming a tenant.")
 	}
 
-	return nil
+	info.Name = newName
+	return errors.Wrap(
+		UpdateTenantRecord(ctx, p.ExecCfg().Settings, p.InternalSQLTxn(), info),
+		"renaming tenant")
 }
