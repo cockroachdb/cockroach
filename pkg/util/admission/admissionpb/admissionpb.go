@@ -52,6 +52,44 @@ var WorkPriorityDict = map[WorkPriority]string{
 	HighPri:       "high-pri",
 }
 
+// WorkClass represents the class of work, which is defined entirely by its
+// WorkPriority. Namely, everything less than NormalPri is defined to be
+// "Elastic", while everything above and including NormalPri is considered
+// "Regular.
+type WorkClass int8
+
+const (
+	// RegularWorkClass is for work corresponding to workloads that are
+	// throughput and latency sensitive.
+	RegularWorkClass WorkClass = iota
+	// ElasticWorkClass is for work corresponding to workloads that can handle
+	// reduced throughput, possibly by taking longer to finish a workload. It is
+	// not latency sensitive.
+	ElasticWorkClass
+	// NumWorkClasses is the number of work classes.
+	NumWorkClasses
+)
+
+// WorkClassFromPri translates a WorkPriority to its given WorkClass.
+func WorkClassFromPri(pri WorkPriority) WorkClass {
+	class := RegularWorkClass
+	if pri < NormalPri {
+		class = ElasticWorkClass
+	}
+	return class
+}
+
+func (w WorkClass) String() string {
+	switch w {
+	case RegularWorkClass:
+		return "regular"
+	case ElasticWorkClass:
+		return "elastic"
+	default:
+		return "<unknown>"
+	}
+}
+
 // Prevent the linter from emitting unused warnings.
 var _ = LowPri
 var _ = TTLLowPri

@@ -405,8 +405,8 @@ func (io *ioLoadListener) adjustTokens(ctx context.Context, metrics StoreMetrics
 		io.mu.Unlock()
 		io.aux.diskBW.intervalLSMInfo = intervalLSMInfo{
 			incomingBytes:     int64(cumLSMIncomingBytes) - int64(cumDiskBW.incomingLSMBytes),
-			regularTokensUsed: diskTokensUsed[regularWorkClass],
-			elasticTokensUsed: diskTokensUsed[elasticWorkClass],
+			regularTokensUsed: diskTokensUsed[admissionpb.RegularWorkClass],
+			elasticTokensUsed: diskTokensUsed[admissionpb.ElasticWorkClass],
 		}
 		if metrics.DiskStats.ProvisionedBandwidth > 0 {
 			io.elasticDiskBWTokens = io.diskBandwidthLimiter.computeElasticTokens(ctx,
