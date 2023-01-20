@@ -8,5 +8,4 @@ r2:{b-d} [(n1,s1):20, next=21, gen=0]
 
 load-and-reconcile
 ----
-r1/10: r1:{a-c} [(n1,s1):10, next=11, gen=0]
-r2/20: r2:{b-d} [(n1,s1):20, next=21, gen=0]
+r2:{b-d} [(n1,s1):20, next=21, gen=0] overlaps r1:{a-c} [(n1,s1):10, next=11, gen=0]
