@@ -16,12 +16,13 @@ go_library(
         "//pkg/kv/kvserver/logstore",
         "//pkg/roachpb",
         "//pkg/storage",
-        "//pkg/util/buildutil",
         "//pkg/util/hlc",
         "//pkg/util/iterutil",
         "//pkg/util/log",
         "//pkg/util/protoutil",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
+        "@io_etcd_go_raft_v3//raftpb",
     ],
 )
 

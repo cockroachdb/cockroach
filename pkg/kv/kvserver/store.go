@@ -1845,14 +1845,18 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	// TODO(peter): While we have to iterate to find the replica descriptors
 	// serially, we can perform the migrations and replica creation
 	// concurrently. Note that while we can perform this initialization
-	// concurrently, all of the initialization must be performed before we start
+	// concurrently, all initialization must be performed before we start
 	// listening for Raft messages and starting the process Raft loop.
-	engRepls, err := kvstorage.LoadAndReconcileReplicas(ctx, s.engine)
+	repls, err := kvstorage.LoadAndReconcileReplicas(ctx, s.engine)
 	if err != nil {
 		return err
 	}
-	for fullID, desc := range engRepls.Initialized {
-		rep, err := newReplica(ctx, desc, s, fullID.ReplicaID)
+	for _, repl := range repls {
+		if repl.Desc == nil {
+			// Uninitialized Replicas are not currently instantiated at store start.
+			continue
+		}
+		rep, err := newReplica(ctx, repl.Desc, s, repl.ReplicaID)
 		if err != nil {
 			return err
 		}
