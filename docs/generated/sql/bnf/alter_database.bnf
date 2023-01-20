@@ -1,0 +1,41 @@
+alter_database_stmt ::=
+	'ALTER' 'DATABASE' database_name 'RENAME' 'TO' database_new_name
+	| 'ALTER' 'DATABASE' database_name 'CONFIGURE' 'ZONE' 'USING' variable '=' 'COPY' 'FROM' 'PARENT' ( ( ',' variable '=' value | ',' variable '=' 'COPY' 'FROM' 'PARENT' ) )*
+	| 'ALTER' 'DATABASE' database_name 'CONFIGURE' 'ZONE' 'USING' variable '=' value ( ( ',' variable '=' value | ',' variable '=' 'COPY' 'FROM' 'PARENT' ) )*
+	| 'ALTER' 'DATABASE' database_name 'CONFIGURE' 'ZONE' 'DISCARD'
+	| 'ALTER' 'DATABASE' database_name 'OWNER' 'TO' role_spec
+	| 'ALTER' 'DATABASE' database_name 'CONVERT' 'TO' 'SCHEMA' 'WITH' 'PARENT' database_name
+	| 'ALTER' 'DATABASE' database_name 'ADD' 'REGION' region_name
+	| 'ALTER' 'DATABASE' database_name 'ADD' 'REGION' 'IF' 'NOT' 'EXISTS' region_name
+	| 'ALTER' 'DATABASE' database_name 'DROP' 'REGION' region_name
+	| 'ALTER' 'DATABASE' database_name 'DROP' 'REGION' 'IF' 'EXISTS' region_name
+	| 'ALTER' 'DATABASE' database_name 'SURVIVE' '=' 'REGION' 'FAILURE'
+	| 'ALTER' 'DATABASE' database_name 'SURVIVE'  'REGION' 'FAILURE'
+	| 'ALTER' 'DATABASE' database_name 'SURVIVE' '=' 'ZONE' 'FAILURE'
+	| 'ALTER' 'DATABASE' database_name 'SURVIVE'  'ZONE' 'FAILURE'
+	| 'ALTER' 'DATABASE' database_name 'PRIMARY' 'REGION' '=' region_name
+	| 'ALTER' 'DATABASE' database_name 'PRIMARY' 'REGION'  region_name
+	| 'ALTER' 'DATABASE' database_name 'SET' 'PRIMARY' 'REGION' '=' region_name
+	| 'ALTER' 'DATABASE' database_name 'SET' 'PRIMARY' 'REGION'  region_name
+	| 'ALTER' 'DATABASE' database_name 'PLACEMENT' 'RESTRICTED'
+	| 'ALTER' 'DATABASE' database_name 'PLACEMENT' 'DEFAULT'
+	| 'ALTER' 'DATABASE' database_name 'SET' variable '=' value ( ( ',' value ) )*
+	| 'ALTER' 'DATABASE' database_name 'SET' variable 'TO' value ( ( ',' value ) )*
+	| 'ALTER' 'DATABASE' database_name 'RESET_ALL' 'ALL'
+	| 'ALTER' 'DATABASE' database_name 'RESET' session_var
+	| 'ALTER' 'DATABASE' database_name 'ADD' 'SUPER' 'REGION' region_name 'VALUES' region_name_list
+	| 'ALTER' 'DATABASE' database_name 'ALTER' 'SUPER' 'REGION' region_name 'VALUES' region_name_list
+	| 'ALTER' 'DATABASE' database_name 'DROP' 'SUPER' 'REGION' region_name
+	| 'ALTER' 'DATABASE' database_name 'SET' 'SECONDARY' 'REGION' '=' region_name
+	| 'ALTER' 'DATABASE' database_name 'SET' 'SECONDARY' 'REGION'  region_name
+	| 'ALTER' 'DATABASE' database_name 'DROP' 'SECONDARY' 'REGION'
+	| 'ALTER' 'DATABASE' database_name 'DROP' 'SECONDARY' 'REGION' 'IF' 'EXISTS'
+	| 'ALTER' 'DATABASE' database_name 'ALTER' 'LOCALITY' 'GLOBAL' 'CONFIGURE' 'ZONE' 'USING' variable '=' 'COPY' 'FROM' 'PARENT' ( ( ',' variable '=' value | ',' variable '=' 'COPY' 'FROM' 'PARENT' ) )*
+	| 'ALTER' 'DATABASE' database_name 'ALTER' 'LOCALITY' 'GLOBAL' 'CONFIGURE' 'ZONE' 'USING' variable '=' value ( ( ',' variable '=' value | ',' variable '=' 'COPY' 'FROM' 'PARENT' ) )*
+	| 'ALTER' 'DATABASE' database_name 'ALTER' 'LOCALITY' 'GLOBAL' 'CONFIGURE' 'ZONE' 'DISCARD'
+	| 'ALTER' 'DATABASE' database_name 'ALTER' 'LOCALITY' 'REGIONAL' 'CONFIGURE' 'ZONE' 'USING' variable '=' 'COPY' 'FROM' 'PARENT' ( ( ',' variable '=' value | ',' variable '=' 'COPY' 'FROM' 'PARENT' ) )*
+	| 'ALTER' 'DATABASE' database_name 'ALTER' 'LOCALITY' 'REGIONAL' 'CONFIGURE' 'ZONE' 'USING' variable '=' value ( ( ',' variable '=' value | ',' variable '=' 'COPY' 'FROM' 'PARENT' ) )*
+	| 'ALTER' 'DATABASE' database_name 'ALTER' 'LOCALITY' 'REGIONAL' 'CONFIGURE' 'ZONE' 'DISCARD'
+	| 'ALTER' 'DATABASE' database_name 'ALTER' 'LOCALITY' 'REGIONAL' 'IN' region_name 'CONFIGURE' 'ZONE' 'USING' variable '=' 'COPY' 'FROM' 'PARENT' ( ( ',' variable '=' value | ',' variable '=' 'COPY' 'FROM' 'PARENT' ) )*
+	| 'ALTER' 'DATABASE' database_name 'ALTER' 'LOCALITY' 'REGIONAL' 'IN' region_name 'CONFIGURE' 'ZONE' 'USING' variable '=' value ( ( ',' variable '=' value | ',' variable '=' 'COPY' 'FROM' 'PARENT' ) )*
+	| 'ALTER' 'DATABASE' database_name 'ALTER' 'LOCALITY' 'REGIONAL' 'IN' region_name 'CONFIGURE' 'ZONE' 'DISCARD'
