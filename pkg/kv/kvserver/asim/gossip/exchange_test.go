@@ -14,7 +14,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/stretchr/testify/require"
 )
@@ -30,7 +29,7 @@ func TestFixedDelayExchange(t *testing.T) {
 	}
 
 	settings := config.DefaultSimulationSettings()
-	tick := state.TestingStartTime()
+	tick := settings.StartTime
 	exchange := fixedDelayExchange{pending: []exchangeInfo{}, settings: settings}
 
 	// There should be no updates initially.
