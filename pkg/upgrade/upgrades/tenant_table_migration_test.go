@@ -32,7 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
-func TestUpdateTenantsTable(t *testing.T) {
+func TestUpdateTenantsTableWithNameColumn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -100,9 +100,9 @@ func TestUpdateTenantsTable(t *testing.T) {
 	)
 }
 
-// getDeprecatedTenantsDescriptor returns the system.tenants
-// table descriptor that was being used before adding a new column in the
-// current version.
+// getDeprecatedTenantsDescriptor returns the system.tenants table
+// descriptor that was being used before adding the "name" column in
+// the current version.
 func getDeprecatedTenantsDescriptor() *descpb.TableDescriptor {
 	trueBoolString := "true"
 	return &descpb.TableDescriptor{
@@ -136,6 +136,131 @@ func getDeprecatedTenantsDescriptor() *descpb.TableDescriptor {
 			KeyColumnIDs:        []descpb.ColumnID{1},
 		},
 		NextIndexID:      2,
+		Privileges:       catpb.NewCustomSuperuserPrivilegeDescriptor(privilege.ReadWriteData, username.NodeUserName()),
+		NextMutationID:   1,
+		NextConstraintID: 2,
+		FormatVersion:    descpb.InterleavedFormatVersion,
+	}
+}
+
+func TestUpdateTenantsTableWithServiceModeColumn(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	clusterArgs := base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				Server: &server.TestingKnobs{
+					DisableAutomaticVersionUpgrade: make(chan struct{}),
+					BinaryVersionOverride: clusterversion.ByKey(
+						clusterversion.V23_1TenantServiceMode - 1),
+				},
+			},
+		},
+	}
+
+	var (
+		ctx = context.Background()
+
+		tc    = testcluster.StartTestCluster(t, 1, clusterArgs)
+		s     = tc.Server(0)
+		sqlDB = tc.ServerConn(0)
+	)
+	defer tc.Stopper().Stop(ctx)
+
+	var (
+		validationSchemas = []upgrades.Schema{
+			{Name: "service_mode", ValidationFn: upgrades.HasColumn},
+			{Name: "tenants_service_mode_idx", ValidationFn: upgrades.HasIndex},
+		}
+	)
+
+	// Inject the old copy of the descriptor.
+	upgrades.InjectLegacyTable(ctx, t, s, systemschema.TenantsTable, getDeprecatedTenantsDescriptor2)
+	// Validate that the table sql_instances has the old schema.
+	upgrades.ValidateSchemaExists(
+		ctx,
+		t,
+		s,
+		sqlDB,
+		keys.TenantsTableID,
+		systemschema.TenantsTable,
+		[]string{},
+		validationSchemas,
+		false, /* expectExists */
+	)
+	// Run the upgrade.
+	upgrades.Upgrade(
+		t,
+		sqlDB,
+		clusterversion.V23_1TenantServiceMode,
+		nil,   /* done */
+		false, /* expectError */
+	)
+	// Validate that the table has new schema.
+	upgrades.ValidateSchemaExists(
+		ctx,
+		t,
+		s,
+		sqlDB,
+		keys.TenantsTableID,
+		systemschema.TenantsTable,
+		[]string{},
+		validationSchemas,
+		true, /* expectExists */
+	)
+}
+
+// getDeprecatedTenantsDescriptor2 returns the system.tenants table
+// descriptor that was being used before adding the "service_mode"
+// column in the current version.
+func getDeprecatedTenantsDescriptor2() *descpb.TableDescriptor {
+	trueBoolString := "true"
+	tenantNameComputeExpr := `crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo':::STRING, info)->>'name':::STRING`
+	return &descpb.TableDescriptor{
+		Name:                    string(catconstants.TenantsTableName),
+		ID:                      keys.TenantsTableID,
+		ParentID:                keys.SystemDatabaseID,
+		UnexposedParentSchemaID: keys.PublicSchemaID,
+		Version:                 1,
+		Columns: []descpb.ColumnDescriptor{
+			{Name: "id", ID: 1, Type: types.Int},
+			{Name: "active", ID: 2, Type: types.Bool, DefaultExpr: &trueBoolString},
+			{Name: "info", ID: 3, Type: types.Bytes, Nullable: true},
+			{Name: "name", ID: 4, Type: types.String, Nullable: true,
+				Virtual:     true,
+				ComputeExpr: &tenantNameComputeExpr},
+		},
+		NextColumnID: 5,
+		Families: []descpb.ColumnFamilyDescriptor{
+			{
+				Name:        "primary",
+				ID:          0,
+				ColumnNames: []string{"id", "active", "info"},
+				ColumnIDs:   []descpb.ColumnID{1, 2, 3},
+			},
+		},
+		NextFamilyID: 1,
+		PrimaryIndex: descpb.IndexDescriptor{
+			Name:                "id",
+			ID:                  1,
+			ConstraintID:        1,
+			Unique:              true,
+			KeyColumnNames:      []string{"id"},
+			KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC},
+			KeyColumnIDs:        []descpb.ColumnID{1},
+		},
+		Indexes: []descpb.IndexDescriptor{{
+			Name:                "tenants_name_idx",
+			ID:                  2,
+			Unique:              true,
+			KeyColumnNames:      []string{"name"},
+			KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC},
+			KeyColumnIDs:        []descpb.ColumnID{4},
+			KeySuffixColumnIDs:  []descpb.ColumnID{1},
+			Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
+		}},
+		NextIndexID:      3,
 		Privileges:       catpb.NewCustomSuperuserPrivilegeDescriptor(privilege.ReadWriteData, username.NodeUserName()),
 		NextMutationID:   1,
 		NextConstraintID: 2,

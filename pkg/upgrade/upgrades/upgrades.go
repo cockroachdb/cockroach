@@ -253,6 +253,11 @@ var upgrades = []upgradebase.Upgrade{
 		upgrade.NoPrecondition,
 		alterSystemSQLInstancesAddSqlAddr,
 	),
+	upgrade.NewTenantUpgrade("add a service_mode column to system.tenants and update the system tenant entry",
+		toCV(clusterversion.V23_1TenantServiceMode),
+		upgrade.NoPrecondition,
+		addTenantServiceModeColumnAndUpdateSystemTenantEntry,
+	),
 }
 
 func init() {

@@ -88,6 +88,7 @@ SELECT id, active FROM system.tenants WHERE id = 10
 	checkKVsExistForTenant(t, true /* shouldExist */)
 
 	// Destroy the tenant, make sure it does not have data and state.
+	tdb.Exec(t, "ALTER TENANT [10] STOP SERVICE")
 	tdb.Exec(t, "DROP TENANT [10] IMMEDIATE")
 	tdb.CheckQueryResults(t, tenantStateQuery, [][]string{})
 	checkKVsExistForTenant(t, false /* shouldExist */)

@@ -3,7 +3,7 @@ query IBIT colnames
 SELECT id, active, length(info), name FROM system.tenants ORDER BY id
 ----
 id  active  length  name
-1   true    18      system
+1   true    20      system
 
 # Create a few tenants.
 
@@ -38,49 +38,49 @@ FROM system.tenants
 ORDER BY id
 ----
 id  active  name        crdb_internal.pb_to_json
-1   true    system      {"capabilities": {"canAdminSplit": false}, "dataState": "READY", "droppedName": "", "id": "1", "name": "system", "tenantReplicationJobId": "0"}
-2   true    tenant-one  {"capabilities": {"canAdminSplit": false}, "dataState": "READY", "droppedName": "", "id": "2", "name": "tenant-one", "tenantReplicationJobId": "0"}
-3   true    two         {"capabilities": {"canAdminSplit": false}, "dataState": "READY", "droppedName": "", "id": "3", "name": "two", "tenantReplicationJobId": "0"}
-4   true    three       {"capabilities": {"canAdminSplit": false}, "dataState": "READY", "droppedName": "", "id": "4", "name": "three", "tenantReplicationJobId": "0"}
+1   true    system      {"capabilities": {"canAdminSplit": false}, "dataState": "READY", "droppedName": "", "id": "1", "name": "system", "serviceMode": "SHARED", "tenantReplicationJobId": "0"}
+2   true    tenant-one  {"capabilities": {"canAdminSplit": false}, "dataState": "READY", "droppedName": "", "id": "2", "name": "tenant-one", "serviceMode": "NONE", "tenantReplicationJobId": "0"}
+3   true    two         {"capabilities": {"canAdminSplit": false}, "dataState": "READY", "droppedName": "", "id": "3", "name": "two", "serviceMode": "NONE", "tenantReplicationJobId": "0"}
+4   true    three       {"capabilities": {"canAdminSplit": false}, "dataState": "READY", "droppedName": "", "id": "4", "name": "three", "serviceMode": "NONE", "tenantReplicationJobId": "0"}
 
-query ITT colnames
+query ITTT colnames
 SHOW TENANT system
 ----
-id  name    status
-1   system  READY
+id  name    data_status  service_mode
+1   system  READY        SHARED
 
-query ITT colnames
+query ITTT colnames
 SHOW TENANT "tenant-one"
 ----
-id  name        status
-2   tenant-one  READY
+id  name        data_status  service_mode
+2   tenant-one  READY        NONE
 
-query ITT colnames
+query ITTT colnames
 SHOW TENANT "two"
 ----
-id  name  status
-3   two   READY
+id  name  data_status  service_mode
+3   two   READY        NONE
 
-query ITT colnames
+query ITTT colnames
 SHOW TENANT two
 ----
-id  name  status
-3   two   READY
+id  name  data_status  service_mode
+3   two   READY        NONE
 
-query ITT colnames
+query ITTT colnames
 SHOW TENANT three
 ----
-id  name   status
-4   three  READY
+id  name   data_status  service_mode
+4   three  READY        NONE
 
-query ITT colnames
+query ITTT colnames
 SHOW TENANTS
 ----
-id  name        status
-1   system      READY
-2   tenant-one  READY
-3   two         READY
-4   three       READY
+id  name        data_status  service_mode
+1   system      READY        SHARED
+2   tenant-one  READY        NONE
+3   two         READY        NONE
+4   three       READY        NONE
 
 statement error tenant name cannot be empty
 ALTER TENANT [4] RENAME TO ""
@@ -97,20 +97,20 @@ ALTER TENANT [4] RENAME TO blux
 statement ok
 ALTER TENANT blux RENAME TO 'blix'
 
-query ITT colnames
+query ITTT colnames
 SELECT * FROM [SHOW TENANTS] WHERE id = 4
 ----
-id  name  status
-4   blix  READY
+id  name  data_status  service_mode
+4   blix  READY        NONE
 
 statement ok
 ALTER TENANT blix RENAME TO three
 
-query ITT colnames
+query ITTT colnames
 SELECT * FROM [SHOW TENANTS] WHERE id = 4
 ----
-id  name   status
-4   three  READY
+id  name   data_status  service_mode
+4   three  READY        NONE
 
 statement error tenant "seven" does not exist
 SHOW TENANT seven
@@ -158,7 +158,7 @@ FROM system.tenants WHERE name = 'four'
 ORDER BY id
 ----
 id  active  name  crdb_internal.pb_to_json
-5   true    four  {"capabilities": {"canAdminSplit": false}, "dataState": "READY", "droppedName": "", "id": "5", "name": "four", "tenantReplicationJobId": "0"}
+5   true    four  {"capabilities": {"canAdminSplit": false}, "dataState": "READY", "droppedName": "", "id": "5", "name": "four", "serviceMode": "NONE", "tenantReplicationJobId": "0"}
 
 statement ok
 DROP TENANT four
@@ -232,14 +232,14 @@ FROM system.tenants
 ORDER BY id
 ----
 id  active  name             crdb_internal.pb_to_json
-1   true    system           {"capabilities": {"canAdminSplit": false}, "dataState": "READY", "droppedName": "", "id": "1", "name": "system", "tenantReplicationJobId": "0"}
-2   true    tenant-one       {"capabilities": {"canAdminSplit": false}, "dataState": "READY", "droppedName": "", "id": "2", "name": "tenant-one", "tenantReplicationJobId": "0"}
-3   true    two              {"capabilities": {"canAdminSplit": false}, "dataState": "READY", "droppedName": "", "id": "3", "name": "two", "tenantReplicationJobId": "0"}
-4   true    three            {"capabilities": {"canAdminSplit": false}, "dataState": "READY", "droppedName": "", "id": "4", "name": "three", "tenantReplicationJobId": "0"}
-5   false   NULL             {"capabilities": {"canAdminSplit": false}, "dataState": "DROP", "droppedName": "four", "id": "5", "name": "", "tenantReplicationJobId": "0"}
-6   false   NULL             {"capabilities": {"canAdminSplit": false}, "dataState": "DROP", "droppedName": "five-requiring-quotes", "id": "6", "name": "", "tenantReplicationJobId": "0"}
-7   false   NULL             {"capabilities": {"canAdminSplit": false}, "dataState": "DROP", "droppedName": "to-be-reclaimed", "id": "7", "name": "", "tenantReplicationJobId": "0"}
-8   true    to-be-reclaimed  {"capabilities": {"canAdminSplit": false}, "dataState": "READY", "droppedName": "", "id": "8", "name": "to-be-reclaimed", "tenantReplicationJobId": "0"}
+1   true    system           {"capabilities": {"canAdminSplit": false}, "dataState": "READY", "droppedName": "", "id": "1", "name": "system", "serviceMode": "SHARED", "tenantReplicationJobId": "0"}
+2   true    tenant-one       {"capabilities": {"canAdminSplit": false}, "dataState": "READY", "droppedName": "", "id": "2", "name": "tenant-one", "serviceMode": "NONE", "tenantReplicationJobId": "0"}
+3   true    two              {"capabilities": {"canAdminSplit": false}, "dataState": "READY", "droppedName": "", "id": "3", "name": "two", "serviceMode": "NONE", "tenantReplicationJobId": "0"}
+4   true    three            {"capabilities": {"canAdminSplit": false}, "dataState": "READY", "droppedName": "", "id": "4", "name": "three", "serviceMode": "NONE", "tenantReplicationJobId": "0"}
+5   false   NULL             {"capabilities": {"canAdminSplit": false}, "dataState": "DROP", "droppedName": "four", "id": "5", "name": "", "serviceMode": "NONE", "tenantReplicationJobId": "0"}
+6   false   NULL             {"capabilities": {"canAdminSplit": false}, "dataState": "DROP", "droppedName": "five-requiring-quotes", "id": "6", "name": "", "serviceMode": "NONE", "tenantReplicationJobId": "0"}
+7   false   NULL             {"capabilities": {"canAdminSplit": false}, "dataState": "DROP", "droppedName": "to-be-reclaimed", "id": "7", "name": "", "serviceMode": "NONE", "tenantReplicationJobId": "0"}
+8   true    to-be-reclaimed  {"capabilities": {"canAdminSplit": false}, "dataState": "READY", "droppedName": "", "id": "8", "name": "to-be-reclaimed", "serviceMode": "NONE", "tenantReplicationJobId": "0"}
 
 # More valid tenant names.
 statement ok
@@ -247,15 +247,15 @@ CREATE TENANT "1";
 CREATE TENANT "a-b";
 CREATE TENANT "hello-100"
 
-query ITT colnames
+query ITTT colnames
 SHOW TENANTS
 ----
-id  name             status
-1   system           READY
-2   tenant-one       READY
-3   two              READY
-4   three            READY
-8   to-be-reclaimed  READY
-9   1                READY
-10  a-b              READY
-11  hello-100        READY
+id  name             data_status  service_mode
+1   system           READY        SHARED
+2   tenant-one       READY        NONE
+3   two              READY        NONE
+4   three            READY        NONE
+8   to-be-reclaimed  READY        NONE
+9   1                READY        NONE
+10  a-b              READY        NONE
+11  hello-100        READY        NONE

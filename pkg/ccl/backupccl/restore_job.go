@@ -1198,18 +1198,19 @@ func createImportingDescriptors(
 				if err != nil {
 					return err
 				}
-				for _, tenant := range details.Tenants {
-					switch tenant.DataState {
+				for _, tenantInfoCopy := range details.Tenants {
+					switch tenantInfoCopy.DataState {
 					case descpb.TenantInfo_READY:
 						// If the tenant was backed up in the `READY` state then we create
 						// the restored record in an `ADD` state and mark it `READY` at
 						// the end of the restore.
-						tenant.DataState = descpb.TenantInfo_ADD
+						tenantInfoCopy.ServiceMode = descpb.TenantInfo_NONE
+						tenantInfoCopy.DataState = descpb.TenantInfo_ADD
 					case descpb.TenantInfo_DROP, descpb.TenantInfo_ADD:
 					// If the tenant was backed up in a `DROP` or `ADD` state then we must
 					// create the restored tenant record in that state as well.
 					default:
-						return errors.AssertionFailedf("unknown tenant data state %v", tenant)
+						return errors.AssertionFailedf("unknown tenant data state %v", tenantInfoCopy)
 					}
 					spanConfigs := p.ExecCfg().SpanConfigKVAccessor.WithTxn(ctx, txn.KV())
 					if _, err := sql.CreateTenantRecord(
@@ -1218,7 +1219,7 @@ func createImportingDescriptors(
 						p.ExecCfg().Settings,
 						txn,
 						spanConfigs,
-						&tenant,
+						&tenantInfoCopy,
 						initialTenantZoneConfig,
 					); err != nil {
 						return err
@@ -2197,7 +2198,7 @@ func (r *restoreResumer) publishDescriptors(
 			// the tenant as the final step of the restore. The tenant has already
 			// been created at an earlier stage in the restore in an `ADD` state.
 			if err := sql.ActivateTenant(
-				ctx, r.execCfg.Settings, r.execCfg.Codec, txn, tenant.ID,
+				ctx, r.execCfg.Settings, r.execCfg.Codec, txn, tenant.ID, tenant.ServiceMode,
 			); err != nil {
 				return err
 			}

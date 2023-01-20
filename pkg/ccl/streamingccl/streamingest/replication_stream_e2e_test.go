@@ -925,6 +925,7 @@ func TestTenantStreamingShowTenant(t *testing.T) {
 		id            int
 		dest          string
 		status        string
+		serviceMode   string
 		source        string
 		sourceUri     string
 		jobId         int
@@ -933,10 +934,11 @@ func TestTenantStreamingShowTenant(t *testing.T) {
 		cutoverTime   []byte // should be nil
 	)
 	row := c.DestSysSQL.QueryRow(t, fmt.Sprintf("SHOW TENANT %s WITH REPLICATION STATUS", args.DestTenantName))
-	row.Scan(&id, &dest, &status, &source, &sourceUri, &jobId, &maxReplTime, &protectedTime, &cutoverTime)
+	row.Scan(&id, &dest, &status, &serviceMode, &source, &sourceUri, &jobId, &maxReplTime, &protectedTime, &cutoverTime)
 	require.Equal(t, 2, id)
 	require.Equal(t, "destination", dest)
 	require.Equal(t, "REPLICATING", status)
+	require.Equal(t, "NONE", serviceMode)
 	require.Equal(t, "source", source)
 	require.Equal(t, c.SrcURL.String(), sourceUri)
 	require.Equal(t, ingestionJobID, jobId)

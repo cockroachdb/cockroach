@@ -6885,7 +6885,7 @@ func TestBackupRestoreTenant(t *testing.T) {
 			{`1`,
 				`true`,
 				`system`,
-				`{"capabilities": {"canAdminSplit": false}, "dataState": "READY", "droppedName": "", "id": "1", "name": "system", "tenantReplicationJobId": "0"}`,
+				`{"capabilities": {"canAdminSplit": false}, "dataState": "READY", "droppedName": "", "id": "1", "name": "system", "serviceMode": "SHARED", "tenantReplicationJobId": "0"}`,
 			},
 		})
 		restoreDB.Exec(t, `RESTORE TENANT 10 FROM 'nodelocal://1/t10'`)
@@ -6896,13 +6896,13 @@ func TestBackupRestoreTenant(t *testing.T) {
 					`1`,
 					`true`,
 					`system`,
-					`{"capabilities": {"canAdminSplit": false}, "dataState": "READY", "droppedName": "", "id": "1", "name": "system", "tenantReplicationJobId": "0"}`,
+					`{"capabilities": {"canAdminSplit": false}, "dataState": "READY", "droppedName": "", "id": "1", "name": "system", "serviceMode": "SHARED", "tenantReplicationJobId": "0"}`,
 				},
 				{
 					`10`,
 					`true`,
 					`tenant-10`,
-					`{"capabilities": {"canAdminSplit": false}, "dataState": "READY", "droppedName": "", "id": "10", "name": "tenant-10", "tenantReplicationJobId": "0"}`,
+					`{"capabilities": {"canAdminSplit": false}, "dataState": "READY", "droppedName": "", "id": "10", "name": "tenant-10", "serviceMode": "NONE", "tenantReplicationJobId": "0"}`,
 				},
 			},
 		)
@@ -6936,13 +6936,13 @@ func TestBackupRestoreTenant(t *testing.T) {
 					`1`,
 					`true`,
 					`system`,
-					`{"capabilities": {"canAdminSplit": false}, "dataState": "READY", "droppedName": "", "id": "1", "name": "system", "tenantReplicationJobId": "0"}`,
+					`{"capabilities": {"canAdminSplit": false}, "dataState": "READY", "droppedName": "", "id": "1", "name": "system", "serviceMode": "SHARED", "tenantReplicationJobId": "0"}`,
 				},
 				{
 					`10`,
 					`false`,
 					`NULL`,
-					`{"capabilities": {"canAdminSplit": false}, "dataState": "DROP", "droppedName": "tenant-10", "id": "10", "name": "", "tenantReplicationJobId": "0"}`,
+					`{"capabilities": {"canAdminSplit": false}, "dataState": "DROP", "droppedName": "tenant-10", "id": "10", "name": "", "serviceMode": "NONE", "tenantReplicationJobId": "0"}`,
 				},
 			},
 		)
@@ -6971,13 +6971,13 @@ func TestBackupRestoreTenant(t *testing.T) {
 					`1`,
 					`true`,
 					`system`,
-					`{"capabilities": {"canAdminSplit": false}, "dataState": "READY", "droppedName": "", "id": "1", "name": "system", "tenantReplicationJobId": "0"}`,
+					`{"capabilities": {"canAdminSplit": false}, "dataState": "READY", "droppedName": "", "id": "1", "name": "system", "serviceMode": "SHARED", "tenantReplicationJobId": "0"}`,
 				},
 				{
 					`10`,
 					`true`,
 					`tenant-10`,
-					`{"capabilities": {"canAdminSplit": false}, "dataState": "READY", "droppedName": "", "id": "10", "name": "tenant-10", "tenantReplicationJobId": "0"}`,
+					`{"capabilities": {"canAdminSplit": false}, "dataState": "READY", "droppedName": "", "id": "10", "name": "tenant-10", "serviceMode": "NONE", "tenantReplicationJobId": "0"}`,
 				},
 			},
 		)
@@ -7006,7 +7006,7 @@ func TestBackupRestoreTenant(t *testing.T) {
 					`1`,
 					`true`,
 					`system`,
-					`{"capabilities": {"canAdminSplit": false}, "dataState": "READY", "droppedName": "", "id": "1", "name": "system", "tenantReplicationJobId": "0"}`,
+					`{"capabilities": {"canAdminSplit": false}, "dataState": "READY", "droppedName": "", "id": "1", "name": "system", "serviceMode": "SHARED", "tenantReplicationJobId": "0"}`,
 				},
 			})
 		restoreDB.Exec(t, `RESTORE TENANT 10 FROM 'nodelocal://1/t10'`)
@@ -7017,13 +7017,13 @@ func TestBackupRestoreTenant(t *testing.T) {
 					`1`,
 					`true`,
 					`system`,
-					`{"capabilities": {"canAdminSplit": false}, "dataState": "READY", "droppedName": "", "id": "1", "name": "system", "tenantReplicationJobId": "0"}`,
+					`{"capabilities": {"canAdminSplit": false}, "dataState": "READY", "droppedName": "", "id": "1", "name": "system", "serviceMode": "SHARED", "tenantReplicationJobId": "0"}`,
 				},
 				{
 					`10`,
 					`true`,
 					`tenant-10`,
-					`{"capabilities": {"canAdminSplit": false}, "dataState": "READY", "droppedName": "", "id": "10", "name": "tenant-10", "tenantReplicationJobId": "0"}`,
+					`{"capabilities": {"canAdminSplit": false}, "dataState": "READY", "droppedName": "", "id": "10", "name": "tenant-10", "serviceMode": "NONE", "tenantReplicationJobId": "0"}`,
 				},
 			},
 		)
@@ -7050,7 +7050,7 @@ func TestBackupRestoreTenant(t *testing.T) {
 					`1`,
 					`true`,
 					`system`,
-					`{"capabilities": {"canAdminSplit": false}, "dataState": "READY", "droppedName": "", "id": "1", "name": "system", "tenantReplicationJobId": "0"}`,
+					`{"capabilities": {"canAdminSplit": false}, "dataState": "READY", "droppedName": "", "id": "1", "name": "system", "serviceMode": "SHARED", "tenantReplicationJobId": "0"}`,
 				},
 			})
 		restoreDB.Exec(t, `RESTORE TENANT 10 FROM 'nodelocal://1/clusterwide'`)
@@ -7061,13 +7061,13 @@ func TestBackupRestoreTenant(t *testing.T) {
 					`1`,
 					`true`,
 					`system`,
-					`{"capabilities": {"canAdminSplit": false}, "dataState": "READY", "droppedName": "", "id": "1", "name": "system", "tenantReplicationJobId": "0"}`,
+					`{"capabilities": {"canAdminSplit": false}, "dataState": "READY", "droppedName": "", "id": "1", "name": "system", "serviceMode": "SHARED", "tenantReplicationJobId": "0"}`,
 				},
 				{
 					`10`,
 					`true`,
 					`tenant-10`,
-					`{"capabilities": {"canAdminSplit": false}, "dataState": "READY", "droppedName": "", "id": "10", "name": "tenant-10", "tenantReplicationJobId": "0"}`,
+					`{"capabilities": {"canAdminSplit": false}, "dataState": "READY", "droppedName": "", "id": "10", "name": "tenant-10", "serviceMode": "NONE", "tenantReplicationJobId": "0"}`,
 				},
 			},
 		)
@@ -7105,7 +7105,7 @@ func TestBackupRestoreTenant(t *testing.T) {
 					`1`,
 					`true`,
 					`system`,
-					`{"capabilities": {"canAdminSplit": false}, "dataState": "READY", "droppedName": "", "id": "1", "name": "system", "tenantReplicationJobId": "0"}`,
+					`{"capabilities": {"canAdminSplit": false}, "dataState": "READY", "droppedName": "", "id": "1", "name": "system", "serviceMode": "SHARED", "tenantReplicationJobId": "0"}`,
 				},
 			})
 		restoreDB.Exec(t, `RESTORE FROM 'nodelocal://1/clusterwide'`)
@@ -7115,25 +7115,25 @@ func TestBackupRestoreTenant(t *testing.T) {
 				{
 					`1`,
 					`true`, `system`,
-					`{"capabilities": {"canAdminSplit": false}, "dataState": "READY", "droppedName": "", "id": "1", "name": "system", "tenantReplicationJobId": "0"}`,
+					`{"capabilities": {"canAdminSplit": false}, "dataState": "READY", "droppedName": "", "id": "1", "name": "system", "serviceMode": "SHARED", "tenantReplicationJobId": "0"}`,
 				},
 				{
 					`10`,
 					`true`,
 					`tenant-10`,
-					`{"capabilities": {"canAdminSplit": false}, "dataState": "READY", "droppedName": "", "id": "10", "name": "tenant-10", "tenantReplicationJobId": "0"}`,
+					`{"capabilities": {"canAdminSplit": false}, "dataState": "READY", "droppedName": "", "id": "10", "name": "tenant-10", "serviceMode": "NONE", "tenantReplicationJobId": "0"}`,
 				},
 				{
 					`11`,
 					`true`,
 					`tenant-11`,
-					`{"capabilities": {"canAdminSplit": false}, "dataState": "READY", "droppedName": "", "id": "11", "name": "tenant-11", "tenantReplicationJobId": "0"}`,
+					`{"capabilities": {"canAdminSplit": false}, "dataState": "READY", "droppedName": "", "id": "11", "name": "tenant-11", "serviceMode": "NONE", "tenantReplicationJobId": "0"}`,
 				},
 				{
 					`20`,
 					`true`,
 					`tenant-20`,
-					`{"capabilities": {"canAdminSplit": false}, "dataState": "READY", "droppedName": "", "id": "20", "name": "tenant-20", "tenantReplicationJobId": "0"}`,
+					`{"capabilities": {"canAdminSplit": false}, "dataState": "READY", "droppedName": "", "id": "20", "name": "tenant-20", "serviceMode": "NONE", "tenantReplicationJobId": "0"}`,
 				},
 			},
 		)
