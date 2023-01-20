@@ -66,7 +66,7 @@ SELECT type_catalog AS database_name,
 FROM "".information_schema.type_privileges`
 	const systemPrivilegeQuery = `
 SELECT a.username AS grantee,
-       privilege,
+       privilege AS privilege_type,
        a.privilege
        IN (
           SELECT unnest(grant_options)
@@ -81,15 +81,15 @@ SELECT a.username AS grantee,
 	const externalConnectionPrivilegeQuery = `
 SELECT *
   FROM (
-        SELECT name,
+        SELECT name AS connection_name,
                a.username AS grantee,
-               privilege,
+               privilege AS privilege_type,
                a.privilege
                IN (
                   SELECT unnest(grant_options)
                     FROM system.privileges
                    WHERE username = a.username
-                ) AS grantable
+                ) AS is_grantable
           FROM (
                 SELECT regexp_extract(
                         path,

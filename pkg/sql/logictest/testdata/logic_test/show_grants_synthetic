@@ -10,7 +10,7 @@ GRANT SYSTEM EXTERNALCONNECTION TO testuser WITH GRANT OPTION
 query TTB colnames
 SHOW SYSTEM GRANTS
 ----
-grantee   privilege             is_grantable
+grantee   privilege_type        is_grantable
 testuser  EXTERNALCONNECTION    true
 testuser  MODIFYCLUSTERSETTING  false
 testuser  VIEWACTIVITY          false
@@ -18,7 +18,7 @@ testuser  VIEWACTIVITY          false
 query TTB colnames
 SHOW SYSTEM GRANTS FOR testuser
 ----
-grantee   privilege             is_grantable
+grantee   privilege_type        is_grantable
 testuser  EXTERNALCONNECTION    true
 testuser  MODIFYCLUSTERSETTING  false
 testuser  VIEWACTIVITY          false
@@ -29,7 +29,7 @@ REVOKE SYSTEM VIEWACTIVITY FROM testuser
 query TTB colnames
 SHOW SYSTEM GRANTS
 ----
-grantee   privilege             is_grantable
+grantee   privilege_type        is_grantable
 testuser  EXTERNALCONNECTION    true
 testuser  MODIFYCLUSTERSETTING  false
 
@@ -45,7 +45,7 @@ GRANT SYSTEM EXTERNALCONNECTION TO testuser2
 query TTB colnames
 SHOW SYSTEM GRANTS
 ----
-grantee    privilege             is_grantable
+grantee    privilege_type        is_grantable
 testuser   EXTERNALCONNECTION    true
 testuser   MODIFYCLUSTERSETTING  false
 testuser2  EXTERNALCONNECTION    false
@@ -54,14 +54,14 @@ testuser2  VIEWACTIVITY          true
 query TTB colnames
 SHOW SYSTEM GRANTS FOR testuser2
 ----
-grantee    privilege           is_grantable
+grantee    privilege_type      is_grantable
 testuser2  EXTERNALCONNECTION  false
 testuser2  VIEWACTIVITY        true
 
 query TTB colnames
 SHOW SYSTEM GRANTS FOR testuser, testuser2
 ----
-grantee    privilege             is_grantable
+grantee    privilege_type        is_grantable
 testuser   EXTERNALCONNECTION    true
 testuser   MODIFYCLUSTERSETTING  false
 testuser2  EXTERNALCONNECTION    false
