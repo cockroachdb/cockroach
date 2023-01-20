@@ -53,9 +53,6 @@ exec-sql
 BACKUP DATABASE db1 INTO 'nodelocal://0/test/'
 ----
 
-# TODO(ssd): The expectation here is 6 stats rather than 7 because the
-# 'partial' stat is not backed up even though it is persisted. I think
-# we may want a different API for fetching statistics.
 query-sql
 SELECT
     json_array_length(
@@ -72,4 +69,4 @@ SELECT
         -> 'statistics'
     )
 ----
-6
+7

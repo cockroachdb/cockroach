@@ -23,7 +23,6 @@ go_library(
     deps = [
         "//pkg/config/zonepb",
         "//pkg/geo/geoindex",
-        "//pkg/jobs/jobspb",
         "//pkg/roachpb",
         "//pkg/security/username",
         "//pkg/settings/cluster",

@@ -48,7 +48,7 @@ const minGoodnessOfFit = 0.95
 // the given observed statistics. The observed statistics must be ordered by
 // collection time descending, with the latest observed statistics first. The
 // observed statistics may be a mixture of statistics for different sets of
-// columns.
+// columns. Partial statistics will be skipped.
 //
 // Whether a forecast is produced for a set of columns depends on how well the
 // observed statistics for that set of columns fit a linear regression model.
@@ -64,23 +64,15 @@ const minGoodnessOfFit = 0.95
 // ForecastTableStatistics is deterministic: given the same observations it will
 // return the same forecasts.
 func ForecastTableStatistics(ctx context.Context, observed []*TableStatistic) []*TableStatistic {
-	// Early sanity check. We'll check this again in forecastColumnStatistics.
-	if len(observed) < minObservationsForForecast {
-		return nil
-	}
-
-	// To make forecasts deterministic, we must choose a time to forecast at based
-	// on only the observed statistics. We choose the time of the latest
-	// statistics + the average time between automatic stats collections, which
-	// should be roughly when the next automatic stats collection will occur.
-	latest := observed[0].CreatedAt
-	at := latest.Add(avgRefreshTime(observed))
-
-	// Group observed statistics by column set, and remove statistics with
-	// inverted histograms.
+	// Group observed statistics by column set, skipping over partial statistics
+	// and statistics with inverted histograms.
+	var latest time.Time
 	var forecastCols []string
 	observedByCols := make(map[string][]*TableStatistic)
 	for _, stat := range observed {
+		if stat.IsPartial() {
+			continue
+		}
 		// We don't have a good way to detect inverted statistics right now, so skip
 		// all statistics with histograms of type BYTES. This means we cannot
 		// forecast statistics for normal BYTES columns.
@@ -89,6 +81,9 @@ func ForecastTableStatistics(ctx context.Context, observed []*TableStatistic) []
 			stat.HistogramData.ColumnType.Family() == types.BytesFamily {
 			continue
 		}
+		if latest.IsZero() {
+			latest = stat.CreatedAt
+		}
 		colKey := MakeSortedColStatKey(stat.ColumnIDs)
 		obs, ok := observedByCols[colKey]
 		if !ok {
@@ -96,6 +91,16 @@ func ForecastTableStatistics(ctx context.Context, observed []*TableStatistic) []
 		}
 		observedByCols[colKey] = append(obs, stat)
 	}
+
+	// To make forecasts deterministic, we must choose a time to forecast at based
+	// on only the observed statistics. We choose the time of the latest full
+	// statistics + the average time between automatic stats collections, which
+	// should be roughly when the next automatic stats collection will occur.
+	if latest.IsZero() {
+		// No suitable stats.
+		return nil
+	}
+	at := latest.Add(avgFullRefreshTime(observed))
 
 	forecasts := make([]*TableStatistic, 0, len(forecastCols))
 	for _, colKey := range forecastCols {
@@ -114,10 +119,11 @@ func ForecastTableStatistics(ctx context.Context, observed []*TableStatistic) []
 
 // forecastColumnStatistics produces a statistics forecast at the given time,
 // based on the given observed statistics. The observed statistics must all be
-// for the same set of columns, must not contain any inverted histograms, must
-// have a single observation per collection time, and must be ordered by
-// collection time descending with the latest observed statistics first. The
-// given time to forecast at can be in the past, present, or future.
+// for the same set of columns, must all be full statistics, must not contain
+// any inverted histograms, must have a single observation per collection time,
+// and must be ordered by collection time descending with the latest observed
+// statistics first. The given time to forecast at can be in the past, present,
+// or future.
 //
 // To create a forecast, we construct a linear regression model over time for
 // each statistic (row count, null count, distinct count, average row size, and

@@ -160,6 +160,7 @@ type Server struct {
 	protectedtsProvider protectedts.Provider
 
 	spanConfigSubscriber spanconfig.KVSubscriber
+	spanConfigReporter   spanconfig.Reporter
 
 	// pgL is the SQL listener.
 	pgL net.Listener
@@ -1074,6 +1075,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		replicationReporter:    replicationReporter,
 		protectedtsProvider:    protectedtsProvider,
 		spanConfigSubscriber:   spanConfig.subscriber,
+		spanConfigReporter:     spanConfig.reporter,
 		pgPreServer:            &pgPreServer,
 		sqlServer:              sqlServer,
 		serverController:       sc,
@@ -1907,6 +1909,11 @@ func (s *Server) TempDir() string {
 // PGServer exports the pgwire server. Used by tests.
 func (s *Server) PGServer() *pgwire.Server {
 	return s.sqlServer.pgServer
+}
+
+// SpanConfigReporter returns the spanconfig.Reporter. Used by tests.
+func (s *Server) SpanConfigReporter() spanconfig.Reporter {
+	return s.spanConfigReporter
 }
 
 // LogicalClusterID implements cli.serverStartupInterface. This

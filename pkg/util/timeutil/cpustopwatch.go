@@ -95,7 +95,7 @@ func (w *cpuStopWatch) stop() {
 	if w == nil {
 		return
 	}
-	w.totalCPU += grunning.Difference(w.startCPU, grunning.Time())
+	w.totalCPU += grunning.Elapsed(w.startCPU, grunning.Time())
 }
 
 func (w *cpuStopWatch) elapsed() time.Duration {

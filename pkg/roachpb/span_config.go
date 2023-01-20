@@ -240,3 +240,16 @@ func NewAllTenantKeyspaceTargetsSetTargetType() *SystemSpanConfigTarget_Type {
 		},
 	}
 }
+
+const numSpanConfigConformanceReportSlices = 5
+
+// IsEmpty returns true if there are no entries in the report.
+func (m *SpanConfigConformanceReport) IsEmpty() bool {
+	return [numSpanConfigConformanceReportSlices]int{} == [...]int{
+		len(m.OverReplicated),
+		len(m.UnderReplicated),
+		len(m.ViolatingConstraints),
+		len(m.Unavailable),
+		len(m.UnavailableNodeIDs),
+	}
+}

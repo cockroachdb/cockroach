@@ -228,7 +228,17 @@ func TestGranterBasic(t *testing.T) {
 				samplePeriod = 250 * time.Millisecond
 			}
 			coord.CPULoad(runnable, procs, samplePeriod)
-			return flushAndReset()
+			str := flushAndReset()
+			kvsa := coord.cpuLoadListener.(*kvSlotAdjuster)
+			microsToMillis := func(micros int64) int64 {
+				return micros * int64(time.Microsecond) / int64(time.Millisecond)
+			}
+			return fmt.Sprintf("%sSlotAdjuster metrics: slots: %d, duration (short, long) millis: (%d, %d), inc: %d, dec: %d\n",
+				str, kvsa.totalSlotsMetric.Value(),
+				microsToMillis(kvsa.cpuLoadShortPeriodDurationMetric.Count()),
+				microsToMillis(kvsa.cpuLoadLongPeriodDurationMetric.Count()),
+				kvsa.slotAdjusterIncrementsMetric.Count(), kvsa.slotAdjusterDecrementsMetric.Count(),
+			)
 
 		case "set-io-tokens":
 			var tokens int

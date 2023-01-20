@@ -12,7 +12,9 @@ package stats
 
 import (
 	"context"
+	"fmt"
 	"reflect"
+	"sort"
 	"strconv"
 	"testing"
 
@@ -342,31 +344,41 @@ func TestMergedStatistics(t *testing.T) {
 	}
 	for i, tc := range testCases {
 		t.Run(strconv.Itoa(i), func(t *testing.T) {
-			fullStatList := make([]*TableStatistic, 0, len(tc.full))
-			partialStatList := make([]*TableStatistic, 0, len(tc.full))
-			expected := make([]*TableStatistic, 0, len(tc.expected))
+			statsList := make([]*TableStatistic, 0, len(tc.full)+len(tc.partial))
+			predicates := make(map[uint64]string, len(tc.full))
 			for _, s := range tc.full {
-				fullStatList = append(fullStatList, s.toTableStatistic("full", i, descpb.ColumnIDs{descpb.ColumnID(s.colID)}, uint64(s.colID) /* statID */, 0 /* fullStatID */))
+				stats := s.toTableStatistic(
+					"full", i, descpb.ColumnIDs{descpb.ColumnID(s.colID)}, uint64(s.colID), /* statID */
+					0, /* fullStatID */
+				)
+				statsList = append(statsList, stats)
+				predicates[uint64(s.colID)] = fmt.Sprintf(
+					"(c IS NULL) OR ((c < %v:::FLOAT8) OR (c > %v:::FLOAT8))",
+					s.hist[0].UpperBound, s.hist[len(s.hist)-1].UpperBound,
+				)
 			}
 			for _, s := range tc.partial {
-				partialStatList = append(partialStatList, s.toTableStatistic("partial", i, descpb.ColumnIDs{descpb.ColumnID(s.colID)}, 0 /* statID */, uint64(s.colID) /* fullStatID */))
+				stats := s.toTableStatistic(
+					"partial", i, descpb.ColumnIDs{descpb.ColumnID(s.colID)}, 0, /* statID */
+					uint64(s.colID), /* fullStatID */
+				)
+				stats.PartialPredicate = predicates[uint64(s.colID)]
+				statsList = append(statsList, stats)
 			}
+			sort.Slice(statsList, func(i, j int) bool {
+				return statsList[i].CreatedAt.After(statsList[j].CreatedAt)
+			})
+			expected := make([]*TableStatistic, 0, len(tc.expected))
 			for _, s := range tc.expected {
-				expected = append(expected, s.toTableStatistic("__merged__", i, descpb.ColumnIDs{descpb.ColumnID(s.colID)}, 0 /* statID */, 0 /* fullStatID */))
+				stats := s.toTableStatistic(
+					"__merged__", i, descpb.ColumnIDs{descpb.ColumnID(s.colID)}, 0, /* statID */
+					0, /* fullStatID */
+				)
+				expected = append(expected, stats)
 			}
-			observed := MergedStatistics(ctx, partialStatList, fullStatList)
-			observedStats := make(map[descpb.ColumnID]*TableStatistic)
-			for _, obs := range observed {
-				observedStats[obs.ColumnIDs[0]] = obs
-			}
-			for _, exp := range expected {
-				if obs, ok := observedStats[exp.ColumnIDs[0]]; ok {
-					if !reflect.DeepEqual(obs, exp) {
-						t.Errorf("test case %d incorrect merge\n%s\nexpected\n%s", i, obs, exp)
-					}
-				} else {
-					t.Errorf("test case %d, expected stats for %d not produced", i, exp.ColumnIDs[0])
-				}
+			merged := MergedStatistics(ctx, statsList)
+			if !reflect.DeepEqual(merged, expected) {
+				t.Errorf("test case %d incorrect, merged:\n%s\nexpected:\n%s", i, merged, expected)
 			}
 		})
 	}
