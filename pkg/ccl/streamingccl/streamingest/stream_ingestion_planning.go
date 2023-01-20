@@ -17,11 +17,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/exprutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -149,15 +149,18 @@ func ingestionPlanHook(
 				sourceTenant, dstTenantName, dstTenantID)
 		}
 
-		// Create a new tenant for the replication stream
+		// Create a new tenant for the replication stream.
 		jobID := p.ExecCfg().JobRegistry.MakeJobID()
-		tenantInfo := &descpb.TenantInfoWithUsage{
-			TenantInfo: descpb.TenantInfo{
-				// dstTenantID may be zero which will cause auto-allocation.
-				ID:                     dstTenantID,
-				State:                  descpb.TenantInfo_ADD,
-				Name:                   roachpb.TenantName(dstTenantName),
+		tenantInfo := &mtinfopb.TenantInfoWithUsage{
+			ProtoInfo: mtinfopb.ProtoInfo{
 				TenantReplicationJobID: jobID,
+			},
+			SQLInfo: mtinfopb.SQLInfo{
+				// dstTenantID may be zero which will cause auto-allocation.
+				ID:          dstTenantID,
+				DataState:   mtinfopb.DataStateAdd,
+				ServiceMode: mtinfopb.ServiceModeNone,
+				Name:        roachpb.TenantName(dstTenantName),
 			},
 		}
 

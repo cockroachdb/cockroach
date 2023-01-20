@@ -64,6 +64,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptutil"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -6881,28 +6882,29 @@ func TestBackupRestoreTenant(t *testing.T) {
 		defer restoreTC.Stopper().Stop(ctx)
 		restoreDB := sqlutils.MakeSQLRunner(restoreTC.Conns[0])
 
-		restoreDB.CheckQueryResults(t, `select id, active, name, crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info, true) from system.tenants`, [][]string{
-			{`1`,
-				`true`,
-				`system`,
-				`{"capabilities": {"canAdminSplit": false}, "droppedName": "", "id": "1", "name": "system", "state": "ACTIVE", "tenantReplicationJobId": "0"}`,
+		restoreDB.CheckQueryResults(t, `select id, active, name, data_state, service_mode, crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info) from system.tenants`, [][]string{
+			{
+				`1`, `true`, `system`,
+				strconv.Itoa(int(mtinfopb.DataStateReady)),
+				strconv.Itoa(int(mtinfopb.ServiceModeShared)),
+				`{"capabilities": {}, "deprecatedId": "1"}`,
 			},
 		})
 		restoreDB.Exec(t, `RESTORE TENANT 10 FROM 'nodelocal://1/t10'`)
 		restoreDB.CheckQueryResults(t,
-			`SELECT id, active, name, crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info, true) FROM system.tenants`,
+			`SELECT id, active, name, data_state, service_mode, crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info) FROM system.tenants`,
 			[][]string{
 				{
-					`1`,
-					`true`,
-					`system`,
-					`{"capabilities": {"canAdminSplit": false}, "droppedName": "", "id": "1", "name": "system", "state": "ACTIVE", "tenantReplicationJobId": "0"}`,
+					`1`, `true`, `system`,
+					strconv.Itoa(int(mtinfopb.DataStateReady)),
+					strconv.Itoa(int(mtinfopb.ServiceModeShared)),
+					`{"capabilities": {}, "deprecatedId": "1"}`,
 				},
 				{
-					`10`,
-					`true`,
-					`tenant-10`,
-					`{"capabilities": {"canAdminSplit": false}, "droppedName": "", "id": "10", "name": "tenant-10", "state": "ACTIVE", "tenantReplicationJobId": "0"}`,
+					`10`, `true`, `tenant-10`,
+					strconv.Itoa(int(mtinfopb.DataStateReady)),
+					strconv.Itoa(int(mtinfopb.ServiceModeNone)),
+					`{"capabilities": {}, "deprecatedId": "10"}`,
 				},
 			},
 		)
@@ -6930,19 +6932,19 @@ func TestBackupRestoreTenant(t *testing.T) {
 		// Mark tenant as DROP.
 		restoreDB.Exec(t, `DROP TENANT [10]`)
 		restoreDB.CheckQueryResults(t,
-			`select id, active, name, crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info, true) from system.tenants`,
+			`select id, active, name, data_state, service_mode, crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info) from system.tenants`,
 			[][]string{
 				{
-					`1`,
-					`true`,
-					`system`,
-					`{"capabilities": {"canAdminSplit": false}, "droppedName": "", "id": "1", "name": "system", "state": "ACTIVE", "tenantReplicationJobId": "0"}`,
+					`1`, `true`, `system`,
+					strconv.Itoa(int(mtinfopb.DataStateReady)),
+					strconv.Itoa(int(mtinfopb.ServiceModeShared)),
+					`{"capabilities": {}, "deprecatedId": "1"}`,
 				},
 				{
-					`10`,
-					`false`,
-					`NULL`,
-					`{"capabilities": {"canAdminSplit": false}, "droppedName": "tenant-10", "id": "10", "name": "", "state": "DROP", "tenantReplicationJobId": "0"}`,
+					`10`, `false`, `NULL`,
+					strconv.Itoa(int(mtinfopb.DataStateDrop)),
+					strconv.Itoa(int(mtinfopb.ServiceModeNone)),
+					`{"capabilities": {}, "deprecatedDataState": "DROP", "deprecatedId": "10", "droppedName": "tenant-10"}`,
 				},
 			},
 		)
@@ -6965,19 +6967,19 @@ func TestBackupRestoreTenant(t *testing.T) {
 
 		restoreDB.Exec(t, `RESTORE TENANT 10 FROM 'nodelocal://1/t10'`)
 		restoreDB.CheckQueryResults(t,
-			`select id, active, name, crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info, true) from system.tenants`,
+			`select id, active, name, data_state, service_mode, crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info) from system.tenants`,
 			[][]string{
 				{
-					`1`,
-					`true`,
-					`system`,
-					`{"capabilities": {"canAdminSplit": false}, "droppedName": "", "id": "1", "name": "system", "state": "ACTIVE", "tenantReplicationJobId": "0"}`,
+					`1`, `true`, `system`,
+					strconv.Itoa(int(mtinfopb.DataStateReady)),
+					strconv.Itoa(int(mtinfopb.ServiceModeShared)),
+					`{"capabilities": {}, "deprecatedId": "1"}`,
 				},
 				{
-					`10`,
-					`true`,
-					`tenant-10`,
-					`{"capabilities": {"canAdminSplit": false}, "droppedName": "", "id": "10", "name": "tenant-10", "state": "ACTIVE", "tenantReplicationJobId": "0"}`,
+					`10`, `true`, `tenant-10`,
+					strconv.Itoa(int(mtinfopb.DataStateReady)),
+					strconv.Itoa(int(mtinfopb.ServiceModeNone)),
+					`{"capabilities": {}, "deprecatedId": "10"}`,
 				},
 			},
 		)
@@ -7000,30 +7002,30 @@ func TestBackupRestoreTenant(t *testing.T) {
 		)
 
 		restoreDB.CheckQueryResults(t,
-			`select id, active, name, crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info, true) from system.tenants`,
+			`select id, active, name, data_state, service_mode, crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info) from system.tenants`,
 			[][]string{
 				{
-					`1`,
-					`true`,
-					`system`,
-					`{"capabilities": {"canAdminSplit": false}, "droppedName": "", "id": "1", "name": "system", "state": "ACTIVE", "tenantReplicationJobId": "0"}`,
+					`1`, `true`, `system`,
+					strconv.Itoa(int(mtinfopb.DataStateReady)),
+					strconv.Itoa(int(mtinfopb.ServiceModeShared)),
+					`{"capabilities": {}, "deprecatedId": "1"}`,
 				},
 			})
 		restoreDB.Exec(t, `RESTORE TENANT 10 FROM 'nodelocal://1/t10'`)
 		restoreDB.CheckQueryResults(t,
-			`select id, active, name, crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info, true) from system.tenants`,
+			`select id, active, name, data_state, service_mode, crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info) from system.tenants`,
 			[][]string{
 				{
-					`1`,
-					`true`,
-					`system`,
-					`{"capabilities": {"canAdminSplit": false}, "droppedName": "", "id": "1", "name": "system", "state": "ACTIVE", "tenantReplicationJobId": "0"}`,
+					`1`, `true`, `system`,
+					strconv.Itoa(int(mtinfopb.DataStateReady)),
+					strconv.Itoa(int(mtinfopb.ServiceModeShared)),
+					`{"capabilities": {}, "deprecatedId": "1"}`,
 				},
 				{
-					`10`,
-					`true`,
-					`tenant-10`,
-					`{"capabilities": {"canAdminSplit": false}, "droppedName": "", "id": "10", "name": "tenant-10", "state": "ACTIVE", "tenantReplicationJobId": "0"}`,
+					`10`, `true`, `tenant-10`,
+					strconv.Itoa(int(mtinfopb.DataStateReady)),
+					strconv.Itoa(int(mtinfopb.ServiceModeNone)),
+					`{"capabilities": {}, "deprecatedId": "10"}`,
 				},
 			},
 		)
@@ -7044,30 +7046,30 @@ func TestBackupRestoreTenant(t *testing.T) {
 		restoreDB := sqlutils.MakeSQLRunner(restoreTC.Conns[0])
 
 		restoreDB.CheckQueryResults(t,
-			`select id, active, name, crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info, true) from system.tenants`,
+			`select id, active, name, data_state, service_mode, crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info) from system.tenants`,
 			[][]string{
 				{
-					`1`,
-					`true`,
-					`system`,
-					`{"capabilities": {"canAdminSplit": false}, "droppedName": "", "id": "1", "name": "system", "state": "ACTIVE", "tenantReplicationJobId": "0"}`,
+					`1`, `true`, `system`,
+					strconv.Itoa(int(mtinfopb.DataStateReady)),
+					strconv.Itoa(int(mtinfopb.ServiceModeShared)),
+					`{"capabilities": {}, "deprecatedId": "1"}`,
 				},
 			})
 		restoreDB.Exec(t, `RESTORE TENANT 10 FROM 'nodelocal://1/clusterwide'`)
 		restoreDB.CheckQueryResults(t,
-			`select id, active, name, crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info, true) from system.tenants`,
+			`select id, active, name, data_state, service_mode, crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info) from system.tenants`,
 			[][]string{
 				{
-					`1`,
-					`true`,
-					`system`,
-					`{"capabilities": {"canAdminSplit": false}, "droppedName": "", "id": "1", "name": "system", "state": "ACTIVE", "tenantReplicationJobId": "0"}`,
+					`1`, `true`, `system`,
+					strconv.Itoa(int(mtinfopb.DataStateReady)),
+					strconv.Itoa(int(mtinfopb.ServiceModeShared)),
+					`{"capabilities": {}, "deprecatedId": "1"}`,
 				},
 				{
-					`10`,
-					`true`,
-					`tenant-10`,
-					`{"capabilities": {"canAdminSplit": false}, "droppedName": "", "id": "10", "name": "tenant-10", "state": "ACTIVE", "tenantReplicationJobId": "0"}`,
+					`10`, `true`, `tenant-10`,
+					strconv.Itoa(int(mtinfopb.DataStateReady)),
+					strconv.Itoa(int(mtinfopb.ServiceModeNone)),
+					`{"capabilities": {}, "deprecatedId": "10"}`,
 				},
 			},
 		)
@@ -7099,41 +7101,42 @@ func TestBackupRestoreTenant(t *testing.T) {
 		restoreDB := sqlutils.MakeSQLRunner(restoreTC.Conns[0])
 
 		restoreDB.CheckQueryResults(t,
-			`select id, active, name, crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info, true) from system.tenants`,
+			`select id, active, name, data_state, service_mode, crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info) from system.tenants`,
 			[][]string{
 				{
-					`1`,
-					`true`,
-					`system`,
-					`{"capabilities": {"canAdminSplit": false}, "droppedName": "", "id": "1", "name": "system", "state": "ACTIVE", "tenantReplicationJobId": "0"}`,
+					`1`, `true`, `system`,
+					strconv.Itoa(int(mtinfopb.DataStateReady)),
+					strconv.Itoa(int(mtinfopb.ServiceModeShared)),
+					`{"capabilities": {}, "deprecatedId": "1"}`,
 				},
 			})
 		restoreDB.Exec(t, `RESTORE FROM 'nodelocal://1/clusterwide'`)
 		restoreDB.CheckQueryResults(t,
-			`select id, active, name, crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info, true) from system.tenants`,
+			`select id, active, name, data_state, service_mode, crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info) from system.tenants`,
 			[][]string{
 				{
-					`1`,
-					`true`, `system`,
-					`{"capabilities": {"canAdminSplit": false}, "droppedName": "", "id": "1", "name": "system", "state": "ACTIVE", "tenantReplicationJobId": "0"}`,
+					`1`, `true`, `system`,
+					strconv.Itoa(int(mtinfopb.DataStateReady)),
+					strconv.Itoa(int(mtinfopb.ServiceModeShared)),
+					`{"capabilities": {}, "deprecatedId": "1"}`,
 				},
 				{
-					`10`,
-					`true`,
-					`tenant-10`,
-					`{"capabilities": {"canAdminSplit": false}, "droppedName": "", "id": "10", "name": "tenant-10", "state": "ACTIVE", "tenantReplicationJobId": "0"}`,
+					`10`, `true`, `tenant-10`,
+					strconv.Itoa(int(mtinfopb.DataStateReady)),
+					strconv.Itoa(int(mtinfopb.ServiceModeNone)),
+					`{"capabilities": {}, "deprecatedId": "10"}`,
 				},
 				{
-					`11`,
-					`true`,
-					`tenant-11`,
-					`{"capabilities": {"canAdminSplit": false}, "droppedName": "", "id": "11", "name": "tenant-11", "state": "ACTIVE", "tenantReplicationJobId": "0"}`,
+					`11`, `true`, `tenant-11`,
+					strconv.Itoa(int(mtinfopb.DataStateReady)),
+					strconv.Itoa(int(mtinfopb.ServiceModeNone)),
+					`{"capabilities": {}, "deprecatedId": "11"}`,
 				},
 				{
-					`20`,
-					`true`,
-					`tenant-20`,
-					`{"capabilities": {"canAdminSplit": false}, "droppedName": "", "id": "20", "name": "tenant-20", "state": "ACTIVE", "tenantReplicationJobId": "0"}`,
+					`20`, `true`, `tenant-20`,
+					strconv.Itoa(int(mtinfopb.DataStateReady)),
+					strconv.Itoa(int(mtinfopb.ServiceModeNone)),
+					`{"capabilities": {}, "deprecatedId": "20"}`,
 				},
 			},
 		)

@@ -235,9 +235,10 @@ ORDER BY database_name, schema_name, name
 "d%qbt2"  public  "join_t\\uC6F5okens"
 "d%qbt2"  public  "privIleges"
 "d%qbt2"  public  tenants
-dbt3      public  span_con😈figurations
-dbt3      public  span_stats_samples
-dbt3      public  statement_diagnostics
+dbt3      public  "n amespac'e"
+dbt3      public  "re
+                  ports_meta"
+dbt3      public  span_configurations
 
 
 statement ok

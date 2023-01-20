@@ -88,6 +88,7 @@ SELECT id, active FROM system.tenants WHERE id = 10
 	checkKVsExistForTenant(t, true /* shouldExist */)
 
 	// Destroy the tenant, make sure it does not have data and state.
+	tdb.Exec(t, "ALTER TENANT [10] STOP SERVICE")
 	tdb.Exec(t, "DROP TENANT [10] IMMEDIATE")
 	tdb.CheckQueryResults(t, tenantStateQuery, [][]string{})
 	checkKVsExistForTenant(t, false /* shouldExist */)
@@ -108,7 +109,7 @@ func TestGetTenantIds(t *testing.T) {
 
 	var ids []roachpb.TenantID
 	require.NoError(t, idb.Txn(ctx, func(ctx context.Context, txn isql.Txn) (err error) {
-		ids, err = sql.GetAllNonDropTenantIDs(ctx, txn)
+		ids, err = sql.GetAllNonDropTenantIDs(ctx, txn, s.ClusterSettings())
 		return err
 	}))
 	expectedIds := []roachpb.TenantID{
@@ -122,7 +123,7 @@ func TestGetTenantIds(t *testing.T) {
 	tdb.Exec(t, "DROP TENANT t1")
 
 	require.NoError(t, idb.Txn(ctx, func(ctx context.Context, txn isql.Txn) (err error) {
-		ids, err = sql.GetAllNonDropTenantIDs(ctx, txn)
+		ids, err = sql.GetAllNonDropTenantIDs(ctx, txn, s.ClusterSettings())
 		return err
 	}))
 	expectedIds = []roachpb.TenantID{

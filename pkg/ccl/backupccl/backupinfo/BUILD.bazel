@@ -20,6 +20,7 @@ go_library(
         "//pkg/cloud/cloudpb",
         "//pkg/jobs/jobspb",
         "//pkg/keys",
+        "//pkg/multitenant/mtinfopb",
         "//pkg/roachpb",
         "//pkg/security/username",
         "//pkg/settings",

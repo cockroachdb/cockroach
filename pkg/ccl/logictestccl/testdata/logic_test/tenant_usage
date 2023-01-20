@@ -20,6 +20,7 @@ SELECT crdb_internal.update_tenant_resource_limits(5, 1000, 100, 0, now(), 0)
 # Note this marks the tenant as dropped. The GC will not delete the tenant
 # until after the ttl expires.
 statement ok
+ALTER TENANT [5] STOP SERVICE;
 DROP TENANT [5]
 
 query error tenant "5" is not active

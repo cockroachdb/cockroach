@@ -18,12 +18,12 @@ ALTER TENANT [5] REVOKE CAPABILITY not_a_capability
 statement error no value allowed in revoke: "can_admin_split"
 ALTER TENANT [5] REVOKE CAPABILITY can_admin_split=false
 
-query ITTTT colnames
+query ITTTTT colnames
 SHOW TENANT 'five' WITH CAPABILITIES
 ----
-id  name  status  capability_name    capability_value
-5   five  ACTIVE  can_admin_split    false
-5   five  ACTIVE  can_admin_unsplit  false
+id  name  data_state  service_mode  capability_name    capability_value
+5   five  ready       none          can_admin_split    false
+5   five  ready       none          can_admin_unsplit  false
 
 statement ok
 ALTER TENANT [5] GRANT CAPABILITY can_admin_split=true
@@ -32,19 +32,19 @@ ALTER TENANT [5] GRANT CAPABILITY can_admin_split=true
 statement ok
 ALTER TENANT [5] GRANT CAPABILITY can_admin_split=(2=1+1)
 
-query ITTTT colnames
+query ITTTTT colnames
 SHOW TENANT 'five' WITH CAPABILITIES
 ----
-id  name  status  capability_name    capability_value
-5   five  ACTIVE  can_admin_split    true
-5   five  ACTIVE  can_admin_unsplit  false
+id  name  data_state  service_mode  capability_name    capability_value
+5   five  ready       none          can_admin_split    true
+5   five  ready       none          can_admin_unsplit  false
 
 statement ok
 ALTER TENANT [5] REVOKE CAPABILITY can_admin_split
 
-query ITTTT colnames
+query ITTTTT colnames
 SHOW TENANT 'five' WITH CAPABILITIES
 ----
-id  name  status  capability_name    capability_value
-5   five  ACTIVE  can_admin_split    false
-5   five  ACTIVE  can_admin_unsplit  false
+id  name  data_state  service_mode  capability_name    capability_value
+5   five  ready       none          can_admin_split    false
+5   five  ready       none          can_admin_unsplit  false

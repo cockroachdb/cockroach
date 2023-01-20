@@ -21,11 +21,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -548,12 +548,12 @@ func activateTenant(ctx context.Context, execCtx interface{}, newTenantID roachp
 	return execCfg.InternalDB.Txn(ctx, func(
 		ctx context.Context, txn isql.Txn,
 	) error {
-		info, err := sql.GetTenantRecordByID(ctx, txn, newTenantID)
+		info, err := sql.GetTenantRecordByID(ctx, txn, newTenantID, execCfg.Settings)
 		if err != nil {
 			return err
 		}
 
-		info.State = descpb.TenantInfo_ACTIVE
+		info.DataState = mtinfopb.DataStateReady
 		info.TenantReplicationJobID = 0
 		return sql.UpdateTenantRecord(ctx, p.ExecCfg().Settings, txn, info)
 	})
@@ -599,7 +599,7 @@ func (s *streamIngestionResumer) OnFailOrCancel(
 	return execCfg.InternalDB.Txn(ctx, func(
 		ctx context.Context, txn isql.Txn,
 	) error {
-		tenInfo, err := sql.GetTenantRecordByID(ctx, txn, details.DestinationTenantID)
+		tenInfo, err := sql.GetTenantRecordByID(ctx, txn, details.DestinationTenantID, execCfg.Settings)
 		if err != nil {
 			return errors.Wrap(err, "fetch tenant info")
 		}

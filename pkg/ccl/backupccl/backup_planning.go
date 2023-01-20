@@ -32,10 +32,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -1324,22 +1326,26 @@ func checkForNewTables(
 }
 
 func getTenantInfo(
-	ctx context.Context, codec keys.SQLCodec, txn isql.Txn, jobDetails jobspb.BackupDetails,
-) ([]roachpb.Span, []descpb.TenantInfoWithUsage, error) {
+	ctx context.Context,
+	settings *cluster.Settings,
+	codec keys.SQLCodec,
+	txn isql.Txn,
+	jobDetails jobspb.BackupDetails,
+) ([]roachpb.Span, []mtinfopb.TenantInfoWithUsage, error) {
 	var spans []roachpb.Span
-	var tenants []descpb.TenantInfoWithUsage
+	var tenants []mtinfopb.TenantInfoWithUsage
 	var err error
 	if jobDetails.FullCluster && codec.ForSystemTenant() {
 		// Include all tenants.
 		tenants, err = retrieveAllTenantsMetadata(
-			ctx, txn,
+			ctx, txn, settings,
 		)
 		if err != nil {
 			return nil, nil, err
 		}
 	} else if len(jobDetails.SpecificTenantIds) > 0 {
 		for _, id := range jobDetails.SpecificTenantIds {
-			tenantInfo, err := retrieveSingleTenantMetadata(ctx, txn, id)
+			tenantInfo, err := retrieveSingleTenantMetadata(ctx, txn, id, settings)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -1422,9 +1428,9 @@ func createBackupManifest(
 	}
 
 	var spans []roachpb.Span
-	var tenants []descpb.TenantInfoWithUsage
+	var tenants []mtinfopb.TenantInfoWithUsage
 	tenantSpans, tenantInfos, err := getTenantInfo(
-		ctx, execCfg.Codec, txn, jobDetails,
+		ctx, execCfg.Settings, execCfg.Codec, txn, jobDetails,
 	)
 	if err != nil {
 		return backuppb.BackupManifest{}, err

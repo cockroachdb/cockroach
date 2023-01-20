@@ -547,7 +547,7 @@ func (c *DummyTenantOperator) LookupTenantID(
 
 // DropTenantByID is part of the tree.TenantOperator interface.
 func (c *DummyTenantOperator) DropTenantByID(
-	ctx context.Context, tenantID uint64, synchronous bool,
+	ctx context.Context, tenantID uint64, synchronous, ignoreServiceMode bool,
 ) error {
 	return errors.WithStack(errEvalTenant)
 }
