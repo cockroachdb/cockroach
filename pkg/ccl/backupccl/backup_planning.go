@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -1325,9 +1326,9 @@ func checkForNewTables(
 
 func getTenantInfo(
 	ctx context.Context, codec keys.SQLCodec, txn isql.Txn, jobDetails jobspb.BackupDetails,
-) ([]roachpb.Span, []descpb.TenantInfoWithUsage, error) {
+) ([]roachpb.Span, []mtinfopb.TenantInfoWithUsage, error) {
 	var spans []roachpb.Span
-	var tenants []descpb.TenantInfoWithUsage
+	var tenants []mtinfopb.TenantInfoWithUsage
 	var err error
 	if jobDetails.FullCluster && codec.ForSystemTenant() {
 		// Include all tenants.
@@ -1422,7 +1423,7 @@ func createBackupManifest(
 	}
 
 	var spans []roachpb.Span
-	var tenants []descpb.TenantInfoWithUsage
+	var tenants []mtinfopb.TenantInfoWithUsage
 	tenantSpans, tenantInfos, err := getTenantInfo(
 		ctx, execCfg.Codec, txn, jobDetails,
 	)

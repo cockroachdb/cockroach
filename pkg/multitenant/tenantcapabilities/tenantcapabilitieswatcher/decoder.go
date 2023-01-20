@@ -15,10 +15,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed/rangefeedbuffer"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
@@ -80,7 +80,7 @@ func (d *decoder) decode(kv roachpb.KeyValue) (tenantcapabilities.Entry, error) 
 		return tenantcapabilities.Entry{}, err
 	}
 
-	var tenantInfo descpb.TenantInfo
+	var tenantInfo mtinfopb.TenantInfo
 	if i := datums[2]; i != tree.DNull {
 		infoBytes := tree.MustBeDBytes(i)
 		if err := protoutil.Unmarshal([]byte(infoBytes), &tenantInfo); err != nil {

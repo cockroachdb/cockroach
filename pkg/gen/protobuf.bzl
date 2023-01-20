@@ -37,6 +37,7 @@ PROTOBUF_SRCS = [
     "//pkg/kv/kvserver/rangelog/internal/rangelogtestpb:rangelogtestpb_go_proto",
     "//pkg/kv/kvserver/readsummary/rspb:rspb_go_proto",
     "//pkg/kv/kvserver:kvserver_go_proto",
+    "//pkg/multitenant/mtinfopb:mtinfopb_go_proto",
     "//pkg/multitenant/tenantcapabilities/tenantcapabilitiespb:tenantcapabilitiespb_go_proto",
     "//pkg/obsservice/obspb/opentelemetry-proto/common/v1:v1_go_proto",
     "//pkg/obsservice/obspb/opentelemetry-proto/logs/v1:v1_go_proto",

@@ -30,6 +30,7 @@ go_library(
         "//pkg/kv/bulk",
         "//pkg/kv/kvserver/protectedts",
         "//pkg/kv/kvserver/protectedts/ptpb",
+        "//pkg/multitenant/mtinfopb",
         "//pkg/repstream",
         "//pkg/repstream/streampb",
         "//pkg/roachpb",

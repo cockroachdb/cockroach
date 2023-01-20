@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
@@ -121,7 +122,12 @@ func TestGCTenantRemovesSpanConfigs(t *testing.T) {
 	) error {
 		return sql.TestingUpdateTenantRecord(
 			ctx, ts.ClusterSettings(), txn,
-			&descpb.TenantInfo{ID: tenantID.ToUint64(), State: descpb.TenantInfo_DROP},
+			&mtinfopb.ExtendedTenantInfo{
+				TenantInfoWithUsage_ExtraColumns: mtinfopb.TenantInfoWithUsage_ExtraColumns{
+					ID:          tenantID.ToUint64(),
+					ServiceMode: descpb.ServiceModeNone,
+					DataState:   descpb.DataStateDrop,
+				}},
 		)
 	}))
 
