@@ -18,25 +18,15 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/server/cpuprofiler"
 	"github.com/cockroachdb/cockroach/pkg/server/debug"
 	"github.com/cockroachdb/cockroach/pkg/server/dumpstore"
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
-
-var maxCombinedCPUProfFileSize = settings.RegisterByteSizeSetting(
-	settings.TenantWritable,
-	"server.cpu_profile.total_dump_size_limit",
-	"maximum combined disk size of preserved CPU profiles",
-	128<<20, // 128MiB
-)
-
-const cpuProfTimeFormat = "2006-01-02T15_04_05.000"
-const cpuProfFileNamePrefix = "cpuprof."
 
 type cpuProfiler struct{}
 
@@ -57,7 +47,7 @@ func (s cpuProfiler) PreFilter(
 
 // CheckOwnsFile is part of the dumpstore.Dumper interface.
 func (s cpuProfiler) CheckOwnsFile(_ context.Context, fi os.FileInfo) bool {
-	return strings.HasPrefix(fi.Name(), cpuProfFileNamePrefix)
+	return strings.HasPrefix(fi.Name(), cpuprofiler.CpuProfFileNamePrefix)
 }
 
 func initCPUProfile(ctx context.Context, dir string, st *cluster.Settings) {
@@ -85,7 +75,7 @@ func initCPUProfile(ctx context.Context, dir string, st *cluster.Settings) {
 		cpuProfileInterval = min
 	}
 
-	profilestore := dumpstore.NewStore(dir, maxCombinedCPUProfFileSize, st)
+	profilestore := dumpstore.NewStore(dir, cpuprofiler.MaxCombinedCPUProfFileSize, st)
 	profiler := dumpstore.Dumper(cpuProfiler{})
 
 	// TODO(knz,tbg): The caller of initCPUProfile() also defines a stopper;
@@ -122,7 +112,7 @@ func initCPUProfile(ctx context.Context, dir string, st *cluster.Settings) {
 				pprof.StopCPUProfile()
 
 				now := timeutil.Now()
-				name := cpuProfFileNamePrefix + now.Format(cpuProfTimeFormat)
+				name := cpuprofiler.CpuProfFileNamePrefix + now.Format(cpuprofiler.CpuProfTimeFormat)
 				path := profilestore.GetFullPath(name)
 				if err := os.WriteFile(path, buf.Bytes(), 0644); err != nil {
 					return err
