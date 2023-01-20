@@ -105,18 +105,16 @@ func Example_rebalance() {
 
 func Example_workload() {
 	ctx := context.Background()
-	start := state.TestingStartTime()
 	settings := config.DefaultSimulationSettings()
-	end := start.Add(200 * time.Second)
+	duration := 200 * time.Second
 	interval := 10 * time.Second
 	rwg := make([]workload.Generator, 1)
-	rwg[0] = workload.TestCreateWorkloadGenerator(settings.Seed, start, 10, 10000)
+	rwg[0] = workload.TestCreateWorkloadGenerator(settings.Seed, settings.StartTime, 10, 10000)
 	m := asim.NewMetricsTracker(os.Stdout)
 
-	changer := state.NewReplicaChanger()
 	s := state.LoadConfig(state.ComplexConfig)
 
-	sim := asim.NewSimulator(start, end, interval, interval, rwg, s, changer, settings, m)
+	sim := asim.NewSimulator(duration, interval, interval, rwg, s, settings, m)
 	sim.RunSim(ctx)
 	// WIP: non deterministic
 	// Output:

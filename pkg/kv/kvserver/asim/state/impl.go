@@ -61,7 +61,7 @@ func newState(settings *config.SimulationSettings) *state {
 		nodes:      make(map[NodeID]*node),
 		stores:     make(map[StoreID]*store),
 		loadsplits: make(map[StoreID]LoadSplitter),
-		clock:      &ManualSimClock{nanos: 0},
+		clock:      &ManualSimClock{nanos: settings.StartTime.UnixNano()},
 		ranges:     newRMap(),
 		usageInfo:  newClusterUsageInfo(),
 		settings:   config.DefaultSimulationSettings(),

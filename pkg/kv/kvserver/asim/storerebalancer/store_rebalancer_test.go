@@ -36,9 +36,9 @@ func testingGetStoreQPS(s state.State) map[state.StoreID]float64 {
 }
 
 func TestStoreRebalancer(t *testing.T) {
-	start := state.TestingStartTime()
 	testingStore := state.StoreID(1)
 	testSettings := config.DefaultSimulationSettings()
+	start := testSettings.StartTime
 	testSettings.ReplicaChangeBaseDelay = 5 * time.Second
 	testSettings.StateExchangeDelay = 0
 
@@ -215,9 +215,9 @@ func TestStoreRebalancer(t *testing.T) {
 }
 
 func TestStoreRebalancerBalances(t *testing.T) {
-	start := state.TestingStartTime()
 	testingStore := state.StoreID(1)
 	testSettings := config.DefaultSimulationSettings()
+	start := testSettings.StartTime
 	testSettings.ReplicaAddRate = 1
 	testSettings.ReplicaChangeBaseDelay = 1 * time.Second
 	testSettings.StateExchangeInterval = 1 * time.Second

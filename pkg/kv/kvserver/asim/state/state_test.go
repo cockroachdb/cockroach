@@ -290,8 +290,9 @@ func TestWorkloadApply(t *testing.T) {
 // TestReplicaLoadQPS asserts that the rated replica load accounting maintains
 // the average per second corresponding to the tick clock.
 func TestReplicaLoadQPS(t *testing.T) {
-	s := NewState(config.DefaultSimulationSettings())
-	start := TestingStartTime()
+	settings := config.DefaultSimulationSettings()
+	s := NewState(settings)
+	start := settings.StartTime
 
 	n1 := s.AddNode()
 	k1 := Key(100)
