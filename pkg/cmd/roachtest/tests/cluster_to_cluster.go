@@ -250,6 +250,9 @@ func setupC2C(
 	createSystemRole(t, srcTenantInfo.name+" system tenant", srcTenantInfo.sql)
 	createSystemRole(t, destTenantInfo.name+" system tenant", destTenantInfo.sql)
 
+	srcTenantDB := c.Conn(ctx, t.L(), srcNode[0], srcTenantName)
+	srcTenantSQL := sqlutils.MakeSQLRunner(srcTenantDB)
+	createSystemRole(t, destTenantInfo.name+" app tenant", srcTenantSQL)
 	return &c2cSetup{
 		src:          srcTenantInfo,
 		dst:          destTenantInfo,

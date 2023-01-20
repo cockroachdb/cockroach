@@ -240,7 +240,7 @@ func (tr *testRunner) maybeInitConnections() error {
 
 	tr.connCache = make([]*gosql.DB, len(tr.crdbNodes))
 	for _, node := range tr.crdbNodes {
-		conn, err := tr.cluster.ConnE(tr.ctx, tr.logger, node)
+		conn, err := tr.cluster.ConnE(tr.ctx, tr.logger, node, "")
 		if err != nil {
 			return fmt.Errorf("failed to connect to node %d: %w", node, err)
 		}
