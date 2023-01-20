@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -439,8 +440,8 @@ func TestGCTenant(t *testing.T) {
 			ctx, execCfg.Codec, execCfg.Settings,
 			txn,
 			execCfg.SpanConfigKVAccessor.WithTxn(ctx, txn.KV()),
-			&descpb.TenantInfoWithUsage{
-				TenantInfo: descpb.TenantInfo{ID: activeTenID},
+			&mtinfopb.TenantInfoWithUsage{
+				TenantInfoWithUsage_ExtraColumns: mtinfopb.TenantInfoWithUsage_ExtraColumns{ID: activeTenID},
 			},
 			execCfg.DefaultZoneConfig,
 		)
@@ -452,8 +453,11 @@ func TestGCTenant(t *testing.T) {
 			ctx, execCfg.Codec, execCfg.Settings,
 			txn,
 			execCfg.SpanConfigKVAccessor.WithTxn(ctx, txn.KV()),
-			&descpb.TenantInfoWithUsage{
-				TenantInfo: descpb.TenantInfo{ID: dropTenID, State: descpb.TenantInfo_DROP},
+			&mtinfopb.TenantInfoWithUsage{
+				TenantInfoWithUsage_ExtraColumns: mtinfopb.TenantInfoWithUsage_ExtraColumns{
+					ID:        dropTenID,
+					DataState: descpb.DataStateDrop,
+				},
 			},
 			execCfg.DefaultZoneConfig,
 		)
@@ -469,7 +473,7 @@ func TestGCTenant(t *testing.T) {
 		require.EqualError(
 			t,
 			gcClosure(10, progress),
-			"Tenant id 10 is expired and should not be in state WAITING_FOR_CLEAR",
+			"tenant ID 10 is expired and should not be in state WAITING_FOR_CLEAR",
 		)
 		require.Equal(t, jobspb.SchemaChangeGCProgress_WAITING_FOR_CLEAR, progress.Tenant.Status)
 	})
@@ -493,7 +497,9 @@ func TestGCTenant(t *testing.T) {
 		require.EqualError(
 			t,
 			gcClosure(dropTenID, progress),
-			`GC state for tenant id:11 state:DROP name:"tenant-11" dropped_name:"" tenant_replication_job_id:0 capabilities:<> is DELETED yet the tenant row still exists`,
+			`GC state for tenant is DELETED yet the tenant row still exists: `+
+				`{TenantInfo:{DeprecatedID:0 DeprecatedDataState:DROP DroppedName: TenantReplicationJobID:0 Capabilities:{CanAdminSplit:false}} `+
+				`TenantInfoWithUsage_ExtraColumns:{ID:11 Name:tenant-11 DataState:drop ServiceMode:external}}`,
 		)
 	})
 

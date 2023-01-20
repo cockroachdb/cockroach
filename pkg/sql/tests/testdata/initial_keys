@@ -1,6 +1,6 @@
 initial-keys tenant=system
 ----
-100 keys:
+101 keys:
  /System/"desc-idgen"
  /Table/3/1/1/2/1
  /Table/3/1/3/2/1
@@ -56,6 +56,7 @@ initial-keys tenant=system
  /Table/7/1/0/0
  /Table/8/1/1/0
  /Table/8/2/"system"/0
+ /Table/8/3/2/1/0
  /NamespaceTable/30/1/0/0/"system"/4/1
  /NamespaceTable/30/1/1/0/"public"/4/1
  /NamespaceTable/30/1/1/29/"comments"/4/1
