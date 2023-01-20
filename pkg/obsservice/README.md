@@ -33,9 +33,21 @@ which will produce a binary in `./bin/obsservice`.
 Assuming you're already running a local CRDB instance:
 
 ```shell
-obsservice --http-addr=localhost:8081 --crdb-http-url=http://localhost:8080 --ui-cert=certs/cert.pem --ui-cert-key=certs/key.pem --ca-cert=certs/ca.crt
+obsservice --otlp-addr=localhost:4317 --http-addr=localhost:8081 --crdb-http-url=http://localhost:8080 --ui-cert=certs/cert.pem --ui-cert-key=certs/key.pem --ca-cert=certs/ca.crt
 ```
 
+- `--otlp-addr` is the address on which the OTLP Logs gRPC service is exposed.
+  This address can be passed to CRDB nodes as `--obsservice-addr`. CRDB can also
+  be configured to export to the OpenTelemetry Collector, and the collector can
+  be configured to route events to the Obs Service with configuration like:
+```yaml
+exporters:
+  otlp:
+    endpoint: localhost:4317
+    tls:
+      insecure: true
+```
+- `--http-addr` is the address on which the DB Console is served.
 - `--crdb-http-url` is CRDB's HTTP address. For a multi-node CRDB cluster, this
   can point to a load-balancer. It can be either a HTTP or an HTTPS address,
   depending on whether the CRDB cluster is running as `--insecure`.
@@ -66,18 +78,16 @@ obsservice --http-addr=localhost:8081 --crdb-http-url=http://localhost:8080 --ui
 
 ## Functionality
 
-In the current fledgeling state, the Obs Service does a couple of things:
+In the current fledgling state, the Obs Service does a couple of things:
 
 1. The Obs Service serves the DB Console, when built with `--config=with_ui`.
 
 2. The Obs Service reverse-proxies some HTTP routes to
    CRDB (`/_admin/`, `/_status/`, `/ts/`, `/api/v2/`).
 
-3. The Obs Service connects to a source node, identified by
-   `--crdb-events-addr`, through the `SubscribeToEvents` RPC. The Obs Service
-   will receive the events exported by the CRDB node through the `EventsServer`
-   library.
-   Only insecure source clusters are supported at the moment.
+3. The Obs Service exposes the OTLP Logs gRPC service and is able to ingest
+   events received through calls to this RPC service. Only insecure gRPC
+   connections are supported at the moment.
 
 4. The Obs Service connects to a sink cluster identified by `--sink-pgurl`. The
    required schema is automatically created using SQL migrations run with
@@ -87,8 +97,11 @@ In the current fledgeling state, the Obs Service does a couple of things:
 
 ## Event ingestion
 
-The Obs Service ingests events using the `SubscribeToEvents` RPC, which returns
-a stream of OpenTelemetry log records. These records are grouped into
+The Obs Service ingests events using the
+[OTLP](https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/protocol/otlp.md)
+Logs [gRPC
+service](https://github.com/open-telemetry/opentelemetry-proto/blob/2119dc9affc4c246f9227fa5411765b81bc91f87/opentelemetry/proto/collector/logs/v1/logs_service.proto).
+CRDB exports events using a gRPC client. The events are records are grouped into
 [`ResourceLogs`](https://github.com/open-telemetry/opentelemetry-proto/blob/200ccff768a29f8bd431e0a4a463da7ed58be557/opentelemetry/proto/logs/v1/logs.proto)
 and,within that, into
 [`ScopeLogs`](https://github.com/open-telemetry/opentelemetry-proto/blob/200ccff768a29f8bd431e0a4a463da7ed58be557/opentelemetry/proto/logs/v1/logs.proto#L64).
