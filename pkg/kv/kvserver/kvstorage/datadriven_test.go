@@ -14,7 +14,6 @@ import (
 	"context"
 	"fmt"
 	"regexp"
-	"sort"
 	"strings"
 	"testing"
 
@@ -160,38 +159,15 @@ func TestDataDriven(t *testing.T) {
 				); desc != nil {
 					fmt.Fprintln(&buf, desc)
 				}
-			case "list-range-ids":
-				m, err := loadFullReplicaIDsFromDisk(ctx, e.eng)
-				require.NoError(t, err)
-				var sl []storage.FullReplicaID
-				for id := range m {
-					sl = append(sl, id)
-				}
-				sort.Slice(sl, func(i, j int) bool {
-					return sl[i].RangeID < sl[j].RangeID
-				})
-				for _, id := range sl {
-					fmt.Fprintf(&buf, "r%d/%d\n", id.RangeID, id.ReplicaID)
-				}
 			case "load-and-reconcile":
-				rs, err := LoadAndReconcileReplicas(ctx, e.eng)
+				replicas, err := LoadAndReconcileReplicas(ctx, e.eng)
 				if err != nil {
 					fmt.Fprintln(&buf, err)
 					break
 				}
-				var merged []storage.FullReplicaID
-				for id := range rs.Initialized {
-					merged = append(merged, id)
-				}
-				for id := range rs.Uninitialized {
-					merged = append(merged, id)
-				}
-				sort.Slice(merged, func(i, j int) bool {
-					return merged[i].RangeID < merged[j].RangeID
-				})
-				for _, id := range merged {
-					fmt.Fprintf(&buf, "r%d/%d: ", id.RangeID, id.ReplicaID)
-					if desc := rs.Initialized[id]; desc != nil {
+				for _, repl := range replicas {
+					fmt.Fprintf(&buf, "%s: ", repl.ID())
+					if desc := repl.Desc; desc != nil {
 						fmt.Fprint(&buf, desc)
 					} else {
 						fmt.Fprintf(&buf, "uninitialized")
