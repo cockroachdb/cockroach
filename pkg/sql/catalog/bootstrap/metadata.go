@@ -22,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
@@ -560,10 +561,8 @@ func addSystemDatabaseToSchema(
 // addSystemTenantEntry adds a kv pair to system.tenants to define the initial
 // system tenant entry.
 func addSystemTenantEntry(target *MetadataSchema) {
-	info := descpb.TenantInfo{
-		ID:    roachpb.SystemTenantID.ToUint64(),
-		Name:  catconstants.SystemTenantName,
-		State: descpb.TenantInfo_ACTIVE,
+	info := mtinfopb.TenantInfo{
+		DeprecatedID: roachpb.SystemTenantID.ToUint64(),
 	}
 	infoBytes, err := protoutil.Marshal(&info)
 	if err != nil {
@@ -579,10 +578,18 @@ func addSystemTenantEntry(target *MetadataSchema) {
 	}
 	tenantsTableWriter := MakeKVWriter(target.codec, desc.(catalog.TableDescriptor))
 	kvs, err := tenantsTableWriter.RecordToKeyValues(
+		// ID
 		tree.NewDInt(tree.DInt(roachpb.SystemTenantID.ToUint64())),
+		// active -- deprecated.
 		tree.MakeDBool(true),
+		// info.
 		tree.NewDBytes(tree.DBytes(infoBytes)),
-		tree.NewDString(string(info.Name)),
+		// name.
+		tree.NewDString(catconstants.SystemTenantName),
+		// data_state.
+		tree.NewDInt(tree.DInt(mtinfopb.DataStateReady)),
+		// service_mode.
+		tree.NewDInt(tree.DInt(mtinfopb.ServiceModeShared)),
 	)
 	if err != nil {
 		panic(err)

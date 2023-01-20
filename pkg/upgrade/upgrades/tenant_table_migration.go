@@ -12,8 +12,10 @@ package upgrades
 
 import (
 	"context"
+	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
@@ -22,22 +24,65 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
 )
 
-const addTenantNameColumn = `
-ALTER TABLE system.public.tenants ADD COLUMN name STRING
-AS (crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info)->>'name') VIRTUAL`
+// Note: the pre-existing column "active" becomes deprecated with the
+// introduction of the new column data_state, but we cannot remove it
+// right away because previous versions still depend on it.
+const addTenantColumns = `
+ALTER TABLE system.public.tenants
+  ALTER COLUMN active SET NOT VISIBLE,
+  ADD COLUMN name STRING,
+  ADD COLUMN data_state INT,
+  ADD COLUMN service_mode INT`
 
-const addTenantNameIndex = `
-CREATE UNIQUE INDEX tenants_name_idx ON system.public.tenants (name ASC)
-`
+const addTenantIndex1 = `CREATE UNIQUE INDEX tenants_name_idx ON system.public.tenants (name ASC)`
+const addTenantIndex2 = `CREATE INDEX tenants_service_mode_idx ON system.public.tenants (service_mode ASC)`
 
-const addSystemTenantEntry = `
-UPSERT INTO system.public.tenants (id, active, info)
-VALUES (1, true, crdb_internal.json_to_pb('cockroach.sql.sqlbase.TenantInfo', '{"id":1,"state":0,"name":"` + catconstants.SystemTenantName + `"}'))
-`
-
-func addTenantNameColumnAndSystemTenantEntry(
+func extendTenantsTable(
 	ctx context.Context, cs clusterversion.ClusterVersion, d upgrade.TenantDeps,
 ) error {
+	tenantsTableID, err := getTenantsTableID(ctx, d)
+	if err != nil || tenantsTableID == 0 {
+		return err
+	}
+
+	for _, op := range []operation{
+		{
+			name:           "add-tenant-columns",
+			schemaList:     []string{"name", "data_state", "service_mode"},
+			query:          addTenantColumns,
+			schemaExistsFn: hasColumn,
+		},
+		{
+			name:           "make-tenant-name-unique",
+			schemaList:     []string{"tenants_name_idx"},
+			query:          addTenantIndex1,
+			schemaExistsFn: hasIndex,
+		},
+		{
+			name:           "add-service-mode-idx",
+			schemaList:     []string{"tenants_service_mode_idx"},
+			query:          addTenantIndex2,
+			schemaExistsFn: hasIndex,
+		},
+	} {
+		if err := migrateTable(ctx, cs, d, op, tenantsTableID, systemschema.TenantsTable); err != nil {
+			return err
+		}
+	}
+
+	_, err = d.InternalExecutor.ExecEx(ctx, "add-system-entry", nil,
+		sessiondata.NodeUserSessionDataOverride,
+		`UPSERT INTO system.public.tenants (id, active, info, name, data_state, service_mode)
+VALUES (1, true,
+	crdb_internal.json_to_pb('cockroach.multitenant.TenantInfo', '{}'),
+  '`+catconstants.SystemTenantName+`',
+  `+strconv.Itoa(int(mtinfopb.DataStateReady))+`,
+  `+strconv.Itoa(int(mtinfopb.ServiceModeShared))+`)`,
+	)
+	return err
+}
+
+func getTenantsTableID(ctx context.Context, d upgrade.TenantDeps) (descpb.ID, error) {
 	rows, err := d.InternalExecutor.QueryRowEx(ctx, "get-tenant-table-id", nil,
 		sessiondata.NodeUserSessionDataOverride, `
 SELECT n2.id
@@ -50,36 +95,13 @@ SELECT n2.id
 		catconstants.TenantsTableName,
 	)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	if rows == nil {
 		// No system.tenants table. Nothing to do.
-		return nil
+		return 0, nil
 	}
-
-	// Retrieve the tenant table ID from the query above.
 	tenantsTableID := descpb.ID(int64(*rows[0].(*tree.DInt)))
 
-	for _, op := range []operation{
-		{
-			name:           "add-tenant-name-column",
-			schemaList:     []string{"name"},
-			query:          addTenantNameColumn,
-			schemaExistsFn: hasColumn,
-		},
-		{
-			name:           "make-tenant-name-unique",
-			schemaList:     []string{"tenants_name_idx"},
-			query:          addTenantNameIndex,
-			schemaExistsFn: hasIndex,
-		},
-	} {
-		if err := migrateTable(ctx, cs, d, op, tenantsTableID, systemschema.TenantsTable); err != nil {
-			return err
-		}
-	}
-
-	_, err = d.InternalExecutor.ExecEx(ctx, "add-system-entry", nil,
-		sessiondata.NodeUserSessionDataOverride, addSystemTenantEntry)
-	return err
+	return tenantsTableID, nil
 }
