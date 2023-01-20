@@ -588,12 +588,12 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 			s.stopper,
 			s.sqlServer.cfg.GoroutineDumpDirName,
 			s.sqlServer.cfg.HeapProfileDirName,
+			s.sqlServer.cfg.CPUProfileDirName,
 			s.runtime,
 			s.tenantStatus.sessionRegistry,
 		); err != nil {
 			return err
 		}
-	}
 
 	// Export statistics to graphite, if enabled by configuration.
 	var graphiteOnce sync.Once
