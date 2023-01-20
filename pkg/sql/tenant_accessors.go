@@ -15,9 +15,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -52,14 +52,17 @@ func rejectIfSystemTenant(tenID uint64, op string) error {
 
 // GetAllNonDropTenantIDs returns all tenants in the system table, excluding
 // those in the DROP state.
-func GetAllNonDropTenantIDs(ctx context.Context, txn isql.Txn) ([]roachpb.TenantID, error) {
-	rows, err := txn.QueryBuffered(
-		ctx, "get-tenant-ids", txn.KV(), `
-		 SELECT id
-		 FROM system.tenants
-		 WHERE crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info, true)->>'state' != 'DROP'
-		 ORDER BY id
-		 `)
+func GetAllNonDropTenantIDs(
+	ctx context.Context, txn isql.Txn, settings *cluster.Settings,
+) ([]roachpb.TenantID, error) {
+	q := `SELECT id FROM system.tenants WHERE data_state != $1 ORDER BY id`
+	var arg interface{} = mtinfopb.DataStateDrop
+	if !settings.Version.IsActive(ctx, clusterversion.V23_1TenantNamesStateAndServiceMode) {
+		q = `SELECT id FROM system.tenants
+WHERE crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info, true)->>'deprecatedDataState' != $1 ORDER BY id`
+		arg = "DROP"
+	}
+	rows, err := txn.QueryBuffered(ctx, "get-tenant-ids", txn.KV(), q, arg)
 	if err != nil {
 		return nil, err
 	}
@@ -82,36 +85,79 @@ func GetAllNonDropTenantIDs(ctx context.Context, txn isql.Txn) ([]roachpb.Tenant
 // system.tenants.
 func GetTenantRecordByName(
 	ctx context.Context, settings *cluster.Settings, txn isql.Txn, tenantName roachpb.TenantName,
-) (*descpb.TenantInfo, error) {
-	if !settings.Version.IsActive(ctx, clusterversion.V23_1TenantNames) {
+) (*mtinfopb.TenantInfo, error) {
+	if !settings.Version.IsActive(ctx, clusterversion.V23_1TenantNamesStateAndServiceMode) {
 		return nil, errors.Newf("tenant names not supported until upgrade to %s or higher is completed",
-			clusterversion.V23_1TenantNames.String())
+			clusterversion.V23_1TenantNamesStateAndServiceMode.String())
 	}
 	row, err := txn.QueryRowEx(
 		ctx, "get-tenant", txn.KV(), sessiondata.NodeUserSessionDataOverride,
-		`SELECT info FROM system.tenants WHERE name = $1`, tenantName,
+		`SELECT id, info, name, data_state, service_mode FROM system.tenants WHERE name = $1`, tenantName,
 	)
 	if err != nil {
 		return nil, err
 	} else if row == nil {
 		return nil, pgerror.Newf(pgcode.UndefinedObject, "tenant %q does not exist", tenantName)
 	}
+	return getTenantInfoFromRow(row)
+}
 
-	info := &descpb.TenantInfo{}
-	infoBytes := []byte(tree.MustBeDBytes(row[0]))
-	if err := protoutil.Unmarshal(infoBytes, info); err != nil {
+func getTenantInfoFromRow(row tree.Datums) (*mtinfopb.TenantInfo, error) {
+	info := &mtinfopb.TenantInfo{}
+	info.ID = uint64(tree.MustBeDInt(row[0]))
+
+	// For the benefit of pre-23.1 BACKUP/RESTORE.
+	info.DeprecatedID = info.ID
+
+	infoBytes := []byte(tree.MustBeDBytes(row[1]))
+	if err := protoutil.Unmarshal(infoBytes, &info.ProtoInfo); err != nil {
 		return nil, err
+	}
+
+	// Load the name if defined.
+	if row[2] != tree.DNull {
+		info.Name = roachpb.TenantName(tree.MustBeDString(row[2]))
+	}
+
+	// Load the data state column if defined.
+	if row[3] != tree.DNull {
+		info.DataState = mtinfopb.TenantDataState(tree.MustBeDInt(row[3]))
+	} else {
+		// Pre-v23.1 info struct.
+		switch info.ProtoInfo.DeprecatedDataState {
+		case mtinfopb.ProtoInfo_READY:
+			info.DataState = mtinfopb.DataStateReady
+		case mtinfopb.ProtoInfo_ADD:
+			info.DataState = mtinfopb.DataStateAdd
+		case mtinfopb.ProtoInfo_DROP:
+			info.DataState = mtinfopb.DataStateDrop
+		default:
+			return nil, errors.AssertionFailedf("unhandled: %d", info.ProtoInfo.DeprecatedDataState)
+		}
+	}
+
+	// Load the service mode if defined.
+	info.ServiceMode = mtinfopb.ServiceModeNone
+	if row[4] != tree.DNull {
+		info.ServiceMode = mtinfopb.TenantServiceMode(tree.MustBeDInt(row[4]))
+	} else if info.DataState == mtinfopb.DataStateReady {
+		// Records created for CC Serverless pre-v23.1.
+		info.ServiceMode = mtinfopb.ServiceModeExternal
 	}
 	return info, nil
 }
 
 // GetTenantRecordByID retrieves a tenant in system.tenants.
 func GetTenantRecordByID(
-	ctx context.Context, txn isql.Txn, tenID roachpb.TenantID,
-) (*descpb.TenantInfo, error) {
+	ctx context.Context, txn isql.Txn, tenID roachpb.TenantID, settings *cluster.Settings,
+) (*mtinfopb.TenantInfo, error) {
+	q := `SELECT id, info, name, data_state, service_mode FROM system.tenants WHERE id = $1`
+	if !settings.Version.IsActive(ctx, clusterversion.V23_1TenantNamesStateAndServiceMode) {
+		q = `SELECT id, info, NULL, NULL, NULL FROM system.tenants WHERE id = $1`
+	}
 	row, err := txn.QueryRowEx(
 		ctx, "get-tenant", txn.KV(), sessiondata.NodeUserSessionDataOverride,
-		`SELECT info FROM system.tenants WHERE id = $1`, tenID.ToUint64(),
+		q, tenID.ToUint64(),
 	)
 	if err != nil {
 		return nil, err
@@ -119,12 +165,7 @@ func GetTenantRecordByID(
 		return nil, pgerror.Newf(pgcode.UndefinedObject, "tenant \"%d\" does not exist", tenID.ToUint64())
 	}
 
-	info := &descpb.TenantInfo{}
-	infoBytes := []byte(tree.MustBeDBytes(row[0]))
-	if err := protoutil.Unmarshal(infoBytes, info); err != nil {
-		return nil, err
-	}
-	return info, nil
+	return getTenantInfoFromRow(row)
 }
 
 // LookupTenantID implements the tree.TenantOperator interface.

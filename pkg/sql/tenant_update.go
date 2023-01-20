@@ -16,12 +16,13 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -32,45 +33,91 @@ import (
 //
 // Caller is expected to check the user's permission.
 func UpdateTenantRecord(
-	ctx context.Context, settings *cluster.Settings, txn isql.Txn, info *descpb.TenantInfo,
+	ctx context.Context, settings *cluster.Settings, txn isql.Txn, info *mtinfopb.TenantInfo,
 ) error {
-	if err := validateTenantInfo(info); err != nil {
+	if err := validateTenantInfo(ctx, settings, info); err != nil {
 		return err
 	}
 
-	tenID := info.ID
-	active := info.State == descpb.TenantInfo_ACTIVE
-	infoBytes, err := protoutil.Marshal(info)
+	// Populate the deprecated DataState field for compatibility
+	// with pre-v23.1 servers.
+	switch info.DataState {
+	case mtinfopb.DataStateReady:
+		info.DeprecatedDataState = mtinfopb.ProtoInfo_READY
+	case mtinfopb.DataStateAdd:
+		info.DeprecatedDataState = mtinfopb.ProtoInfo_ADD
+	case mtinfopb.DataStateDrop:
+		info.DeprecatedDataState = mtinfopb.ProtoInfo_DROP
+	default:
+		return errors.AssertionFailedf("unhandled: %d", info.DataState)
+	}
+	// For the benefit of pre-v23.1 servers.
+	info.DeprecatedID = info.ID
+
+	infoBytes, err := protoutil.Marshal(&info.ProtoInfo)
 	if err != nil {
 		return err
 	}
+	// active is a deprecated column preserved for compatibiliy
+	// with pre-v23.1.
+	active := info.DataState == mtinfopb.DataStateReady
+	var name tree.Datum
+	if info.Name != "" {
+		name = tree.NewDString(string(info.Name))
+	} else {
+		name = tree.DNull
+	}
+
+	query := `UPDATE system.tenants
+SET active = $2, info = $3, name = $4, data_state = $5, service_mode = $6
+WHERE id = $1`
+	args := []interface{}{info.ID, active, infoBytes, name, info.DataState, info.ServiceMode}
+	if !settings.Version.IsActive(ctx, clusterversion.V23_1TenantNamesStateAndServiceMode) {
+		// Ensure the update can succeed if the upgrade is not finalized yet.
+		query = `UPDATE system.tenants SET active = $2, info = $3 WHERE id = $1`
+		args = args[:3]
+	}
 
 	if num, err := txn.ExecEx(
-		ctx, "activate-tenant", txn.KV(), sessiondata.NodeUserSessionDataOverride,
-		`UPDATE system.tenants SET active = $2, info = $3 WHERE id = $1`,
-		tenID, active, infoBytes,
+		ctx, "update-tenant", txn.KV(), sessiondata.NodeUserSessionDataOverride,
+		query, args...,
 	); err != nil {
-		return errors.Wrap(err, "activating tenant")
+		if pgerror.GetPGCode(err) == pgcode.UniqueViolation {
+			return pgerror.Newf(pgcode.DuplicateObject, "name %q is already taken", info.Name)
+		}
+		return err
 	} else if num != 1 {
 		logcrash.ReportOrPanic(ctx, &settings.SV, "unexpected number of rows affected: %d", num)
 	}
 	return nil
 }
 
-func validateTenantInfo(info *descpb.TenantInfo) error {
-	if info.TenantReplicationJobID != 0 && info.State == descpb.TenantInfo_ACTIVE {
-		return errors.Newf("tenant in state %v with replication job ID %d", info.State, info.TenantReplicationJobID)
+func validateTenantInfo(
+	ctx context.Context, settings *cluster.Settings, info *mtinfopb.TenantInfo,
+) error {
+	if info.TenantReplicationJobID != 0 && info.DataState == mtinfopb.DataStateReady {
+		return errors.Newf("tenant in data state %v with replication job ID %d", info.DataState, info.TenantReplicationJobID)
 	}
-	if info.DroppedName != "" && info.State != descpb.TenantInfo_DROP {
-		return errors.Newf("tenant in state %v with dropped name %q", info.State, info.DroppedName)
+	if info.DroppedName != "" && info.DataState != mtinfopb.DataStateDrop {
+		return errors.Newf("tenant in data state %v with dropped name %q", info.DataState, info.DroppedName)
 	}
+
+	if settings.Version.IsActive(ctx, clusterversion.V23_1TenantNamesStateAndServiceMode) {
+		// We can only check the service mode after upgrading to a version
+		// that supports the service mode column.
+		if info.ServiceMode != mtinfopb.ServiceModeNone && info.DataState != mtinfopb.DataStateReady {
+			return errors.Newf("cannot use tenant service mode %v with data state %v",
+				info.ServiceMode, info.DataState)
+		}
+	}
+
 	return nil
 }
 
 // TestingUpdateTenantRecord is a public wrapper around updateTenantRecord
 // intended for testing purposes.
 func TestingUpdateTenantRecord(
-	ctx context.Context, settings *cluster.Settings, txn isql.Txn, info *descpb.TenantInfo,
+	ctx context.Context, settings *cluster.Settings, txn isql.Txn, info *mtinfopb.TenantInfo,
 ) error {
 	return UpdateTenantRecord(ctx, settings, txn, info)
 }
@@ -108,7 +155,12 @@ func (p *planner) UpdateTenantResourceLimits(
 // The caller is responsible for checking that the user is authorized
 // to take this action.
 func ActivateTenant(
-	ctx context.Context, settings *cluster.Settings, codec keys.SQLCodec, txn isql.Txn, tenID uint64,
+	ctx context.Context,
+	settings *cluster.Settings,
+	codec keys.SQLCodec,
+	txn isql.Txn,
+	tenID uint64,
+	serviceMode mtinfopb.TenantServiceMode,
 ) error {
 	const op = "activate"
 	if err := rejectIfCantCoordinateMultiTenancy(codec, op); err != nil {
@@ -119,13 +171,14 @@ func ActivateTenant(
 	}
 
 	// Retrieve the tenant's info.
-	info, err := GetTenantRecordByID(ctx, txn, roachpb.MustMakeTenantID(tenID))
+	info, err := GetTenantRecordByID(ctx, txn, roachpb.MustMakeTenantID(tenID), settings)
 	if err != nil {
 		return errors.Wrap(err, "activating tenant")
 	}
 
 	// Mark the tenant as active.
-	info.State = descpb.TenantInfo_ACTIVE
+	info.DataState = mtinfopb.DataStateReady
+	info.ServiceMode = serviceMode
 	if err := UpdateTenantRecord(ctx, settings, txn, info); err != nil {
 		return errors.Wrap(err, "activating tenant")
 	}
@@ -133,8 +186,41 @@ func ActivateTenant(
 	return nil
 }
 
+func (p *planner) setTenantService(
+	ctx context.Context, info *mtinfopb.TenantInfo, newMode mtinfopb.TenantServiceMode,
+) error {
+	if p.EvalContext().TxnReadOnly {
+		return readOnlyError("ALTER TENANT SERVICE")
+	}
+
+	if err := p.RequireAdminRole(ctx, "set tenant service"); err != nil {
+		return err
+	}
+	if err := rejectIfCantCoordinateMultiTenancy(p.ExecCfg().Codec, "set tenant service"); err != nil {
+		return err
+	}
+	if err := rejectIfSystemTenant(info.ID, "set tenant service"); err != nil {
+		return err
+	}
+
+	if newMode == info.ServiceMode {
+		// No-op. Do nothing.
+		return nil
+	}
+
+	if newMode != mtinfopb.ServiceModeNone && info.ServiceMode != mtinfopb.ServiceModeNone {
+		return errors.WithHint(pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+			"cannot change service mode %v to %v directly",
+			info.ServiceMode, newMode),
+			"Use ALTER TENANT STOP SERVICE first.")
+	}
+
+	info.ServiceMode = newMode
+	return UpdateTenantRecord(ctx, p.ExecCfg().Settings, p.InternalSQLTxn(), info)
+}
+
 func (p *planner) renameTenant(
-	ctx context.Context, tenantID uint64, tenantName roachpb.TenantName,
+	ctx context.Context, info *mtinfopb.TenantInfo, newName roachpb.TenantName,
 ) error {
 	if p.EvalContext().TxnReadOnly {
 		return readOnlyError("ALTER TENANT RENAME TO")
@@ -146,35 +232,28 @@ func (p *planner) renameTenant(
 	if err := rejectIfCantCoordinateMultiTenancy(p.ExecCfg().Codec, "rename tenant"); err != nil {
 		return err
 	}
-	if err := rejectIfSystemTenant(tenantID, "rename"); err != nil {
+	if err := rejectIfSystemTenant(info.ID, "rename"); err != nil {
 		return err
 	}
 
-	if tenantName != "" {
-		if err := tenantName.IsValid(); err != nil {
+	if newName != "" {
+		if err := newName.IsValid(); err != nil {
 			return pgerror.WithCandidateCode(err, pgcode.Syntax)
 		}
 
-		if !p.EvalContext().Settings.Version.IsActive(ctx, clusterversion.V23_1TenantNames) {
+		if !p.EvalContext().Settings.Version.IsActive(ctx, clusterversion.V23_1TenantNamesStateAndServiceMode) {
 			return pgerror.Newf(pgcode.FeatureNotSupported, "cannot use tenant names")
 		}
 	}
 
-	if num, err := p.InternalSQLTxn().ExecEx(
-		ctx, "rename-tenant", p.txn, sessiondata.NodeUserSessionDataOverride,
-		`UPDATE system.public.tenants
-SET info =
-crdb_internal.json_to_pb('cockroach.sql.sqlbase.TenantInfo',
-  crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info) ||
-  json_build_object('name', $2))
-WHERE id = $1`, tenantID, tenantName); err != nil {
-		if pgerror.GetPGCode(err) == pgcode.UniqueViolation {
-			return pgerror.Newf(pgcode.DuplicateObject, "name %q is already taken", tenantName)
-		}
-		return errors.Wrap(err, "renaming tenant")
-	} else if num != 1 {
-		return pgerror.Newf(pgcode.UndefinedObject, "tenant %d not found", tenantID)
+	if info.ServiceMode != mtinfopb.ServiceModeNone {
+		return errors.WithHint(pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+			"cannot rename tenant in service mode %v", info.ServiceMode),
+			"Use ALTER TENANT STOP SERVICE before renaming a tenant.")
 	}
 
-	return nil
+	info.Name = newName
+	return errors.Wrap(
+		UpdateTenantRecord(ctx, p.ExecCfg().Settings, p.InternalSQLTxn(), info),
+		"renaming tenant")
 }
