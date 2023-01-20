@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgrades"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/stretchr/testify/require"
 )
 
 func TestUpdateTenantsTable(t *testing.T) {
@@ -42,7 +43,7 @@ func TestUpdateTenantsTable(t *testing.T) {
 				Server: &server.TestingKnobs{
 					DisableAutomaticVersionUpgrade: make(chan struct{}),
 					BinaryVersionOverride: clusterversion.ByKey(
-						clusterversion.V23_1TenantNames - 1),
+						clusterversion.V23_1TenantNamesStateAndServiceMode - 1),
 				},
 			},
 		},
@@ -60,9 +61,20 @@ func TestUpdateTenantsTable(t *testing.T) {
 	var (
 		validationSchemas = []upgrades.Schema{
 			{Name: "name", ValidationFn: upgrades.HasColumn},
+			{Name: "data_state", ValidationFn: upgrades.HasColumn},
+			{Name: "service_mode", ValidationFn: upgrades.HasColumn},
 			{Name: "tenants_name_idx", ValidationFn: upgrades.HasIndex},
+			{Name: "tenants_service_mode_idx", ValidationFn: upgrades.HasIndex},
 		}
 	)
+
+	// Clear the initial KV pairs set up for the system tenant entry.
+	_, err := s.DB().DelRange(ctx,
+		keys.SystemSQLCodec.TablePrefix(keys.TenantsTableID),
+		keys.SystemSQLCodec.TablePrefix(keys.TenantsTableID).PrefixEnd(),
+		false, /* returnKeys */
+	)
+	require.NoError(t, err)
 
 	// Inject the old copy of the descriptor.
 	upgrades.InjectLegacyTable(ctx, t, s, systemschema.TenantsTable, getDeprecatedTenantsDescriptor)
@@ -82,7 +94,7 @@ func TestUpdateTenantsTable(t *testing.T) {
 	upgrades.Upgrade(
 		t,
 		sqlDB,
-		clusterversion.V23_1TenantNames,
+		clusterversion.V23_1TenantNamesStateAndServiceMode,
 		nil,   /* done */
 		false, /* expectError */
 	)
