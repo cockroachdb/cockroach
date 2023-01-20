@@ -18,6 +18,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/loqrecovery/loqrecoverypb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -163,4 +165,64 @@ func UpdateRangeLogWithRecovery(
 			rows)
 	}
 	return nil
+}
+
+func writeNodeRecoveryResults(
+	ctx context.Context,
+	writer storage.ReadWriter,
+	result loqrecoverypb.PlanApplicationResult,
+	actions loqrecoverypb.DeferredRecoveryActions,
+) error {
+	var fullErr error
+	err := storage.MVCCPutProto(ctx, writer, nil, keys.StoreLossOfQuorumRecoveryStatusKey(),
+		hlc.Timestamp{}, hlc.ClockTimestamp{}, nil, &result)
+	fullErr = errors.Wrap(fullErr, "failed to write loss of quorum recovery plan application status")
+	if actions.Empty() {
+		err = storage.MVCCPutProto(ctx, writer, nil, keys.StoreLossOfQuorumRecoveryCleanupActionsKey(),
+			hlc.Timestamp{}, hlc.ClockTimestamp{}, nil, &actions)
+		fullErr = errors.CombineErrors(fullErr,
+			errors.Wrap(err, "failed to write loss of quorum recovery cleanup action"))
+	} else {
+		_, err = storage.MVCCDelete(ctx, writer, nil, keys.StoreLossOfQuorumRecoveryCleanupActionsKey(),
+			hlc.Timestamp{}, hlc.ClockTimestamp{}, nil)
+		fullErr = errors.CombineErrors(fullErr,
+			errors.Wrap(err, "failed to clean loss of quorum recovery cleanup action"))
+	}
+	return fullErr
+}
+
+func readNodeRecoveryStatusInfo(
+	ctx context.Context, reader storage.Reader,
+) (loqrecoverypb.PlanApplicationResult, bool, error) {
+	var result loqrecoverypb.PlanApplicationResult
+	ok, err := storage.MVCCGetProto(ctx, reader, keys.StoreLossOfQuorumRecoveryStatusKey(),
+		hlc.Timestamp{}, &result, storage.MVCCGetOptions{})
+	if err != nil {
+		log.Error(ctx, "failed to read loss of quorum recovery plan application status")
+		return loqrecoverypb.PlanApplicationResult{}, false, err
+	}
+	return result, ok, nil
+}
+
+// ReadCleanupActionsInfo reads cleanup actions info if it is present in the
+// reader.
+func ReadCleanupActionsInfo(
+	ctx context.Context, writer storage.ReadWriter,
+) (loqrecoverypb.DeferredRecoveryActions, bool, error) {
+	var result loqrecoverypb.DeferredRecoveryActions
+	exists, err := storage.MVCCGetProto(ctx, writer, keys.StoreLossOfQuorumRecoveryCleanupActionsKey(),
+		hlc.Timestamp{}, &result, storage.MVCCGetOptions{})
+	if err != nil {
+		log.Errorf(ctx, "failed to read loss of quorum cleanup actions key: %s", err)
+		return loqrecoverypb.DeferredRecoveryActions{}, false, err
+	}
+	return result, exists, nil
+}
+
+// RemoveCleanupActionsInfo removes cleanup actions info if it is present in the
+// reader.
+func RemoveCleanupActionsInfo(ctx context.Context, writer storage.ReadWriter) error {
+	_, err := storage.MVCCDelete(ctx, writer, nil, keys.StoreLossOfQuorumRecoveryCleanupActionsKey(),
+		hlc.Timestamp{}, hlc.ClockTimestamp{}, nil)
+	return err
 }

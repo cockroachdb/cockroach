@@ -12,13 +12,18 @@ package server
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/loqrecovery"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/loqrecovery/loqrecoverypb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble/vfs"
@@ -114,6 +119,104 @@ func publishPendingLossOfQuorumRecoveryEvents(
 			// We don't want to abort server if we can't record recovery events
 			// as it is the last thing we need if cluster is already unhealthy.
 			log.Errorf(ctx, "failed to update range log with loss of quorum recovery events: %v", err)
+		}
+	})
+}
+
+func maybeRunLossOfQuorumRecoveryCleanup(
+	ctx context.Context,
+	ie isql.Executor,
+	stores *kvserver.Stores,
+	server *Server,
+	stopper *stop.Stopper,
+) {
+	_ = stopper.RunAsyncTask(ctx, "publish-loss-of-quorum-events", func(ctx context.Context) {
+		if err := stores.VisitStores(func(s *kvserver.Store) error {
+			_, err := loqrecovery.RegisterOfflineRecoveryEvents(
+				ctx,
+				s.Engine(),
+				func(ctx context.Context, record loqrecoverypb.ReplicaRecoveryRecord) (bool, error) {
+					sqlExec := func(ctx context.Context, stmt string, args ...interface{}) (int, error) {
+						return ie.ExecEx(ctx, "", nil,
+							sessiondata.RootUserSessionDataOverride, stmt, args...)
+					}
+					if err := loqrecovery.UpdateRangeLogWithRecovery(ctx, sqlExec, record); err != nil {
+						return false, errors.Wrap(err,
+							"loss of quorum recovery failed to write RangeLog entry")
+					}
+					// We only bump metrics as the last step when all processing of events
+					// is finished. This is done to ensure that we don't increase metrics
+					// more than once.
+					// Note that if actual deletion of event fails, it is possible to
+					// duplicate rangelog and metrics, but that is very unlikely event
+					// and user should be able to identify those events.
+					s.Metrics().RangeLossOfQuorumRecoveries.Inc(1)
+					return true, nil
+				})
+			return err
+		}); err != nil {
+			// We don't want to abort server if we can't record recovery events
+			// as it is the last thing we need if cluster is already unhealthy.
+			log.Errorf(ctx, "failed to update range log with loss of quorum recovery events: %v", err)
+		}
+	})
+
+	var cleanup loqrecoverypb.DeferredRecoveryActions
+	var actionsSource storage.ReadWriter
+	err := stores.VisitStores(func(s *kvserver.Store) error {
+		c, found, err := loqrecovery.ReadCleanupActionsInfo(ctx, s.Engine())
+		if err != nil {
+			log.Errorf(ctx, "failed to read loss of quorum recovery cleanup actions info from store: %s", err)
+			return nil
+		}
+		if found {
+			cleanup = c
+			actionsSource = s.Engine()
+			return iterutil.StopIteration()
+		}
+		return nil
+	})
+	if err := iterutil.Map(err); err != nil {
+		log.Infof(ctx, "failed to iterate node stores while searching for loq recovery cleanup info: %s", err)
+		return
+	}
+	if len(cleanup.DecommissionedNodeIDs) == 0 {
+		return
+	}
+	_ = stopper.RunAsyncTask(ctx, "maybe-mark-nodes-as-decommissioned", func(ctx context.Context) {
+		retryOpts := retry.Options{
+			InitialBackoff: 10 * time.Second,
+			MaxBackoff:     time.Hour,
+			Multiplier:     2,
+		}
+		for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
+			// Nodes are already dead, but are in active state. Internal checks doesn't
+			// allow us throwing nodes away, and they need to go through legal state
+			// transitions within liveness to succeed. To achieve that we mark nodes as
+			// decommissioning first, followed by decommissioned.
+			// Those operations may fail because other nodes could be restarted
+			// concurrently and also trying this cleanup. We rely on retry and change
+			// being idempotent for operation to complete.
+			// Mind that it is valid to mark decommissioned nodes as decommissioned and
+			// that would result in a noop, so it is safe to always go through this
+			// cycle without prior checks for current state.
+			err := server.Decommission(ctx, livenesspb.MembershipStatus_DECOMMISSIONING,
+				cleanup.DecommissionedNodeIDs)
+			if err != nil {
+				log.Infof(ctx,
+					"loss of quorum recovery cleanup failed to decommissioning dead nodes, this is ok as cluster might not be healed yet: %s", err)
+				continue
+			}
+			err = server.Decommission(ctx, livenesspb.MembershipStatus_DECOMMISSIONED,
+				cleanup.DecommissionedNodeIDs)
+			if err != nil {
+				log.Infof(ctx,
+					"loss of quorum recovery cleanup failed to decommissioning dead nodes, this is ok as cluster might not be healed yet: %s", err)
+				continue
+			}
+			if err = loqrecovery.RemoveCleanupActionsInfo(ctx, actionsSource); err != nil {
+				log.Infof(ctx, "failed to remove ")
+			}
 		}
 	})
 }

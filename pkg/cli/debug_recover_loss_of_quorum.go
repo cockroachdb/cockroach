@@ -376,7 +376,8 @@ func runDebugPlanReplicaRemoval(cmd *cobra.Command, args []string) error {
 		ctx,
 		replicas,
 		deadStoreIDs,
-		deadNodeIDs)
+		deadNodeIDs,
+		uuid.DefaultGenerator)
 	if err != nil {
 		return err
 	}
@@ -690,7 +691,7 @@ To verify recovery status invoke:
 	return nil
 }
 
-func sortedKeys[T ~int32](set map[T]any) []T {
+func sortedKeys[T ~int | ~int32 | ~int64](set map[T]any) []T {
 	var sorted []T
 	for k := range set {
 		sorted = append(sorted, k)
