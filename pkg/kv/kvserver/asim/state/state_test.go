@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/workload"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/load"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/stretchr/testify/require"
 )
@@ -65,8 +66,8 @@ func TestRangeSplit(t *testing.T) {
 	// Assert that the lhs now has half the previous load counters.
 	lhsLoad := s.load[lhs.RangeID()].(*ReplicaLoadCounter)
 	rhsLoad := s.load[rhs.RangeID()].(*ReplicaLoadCounter)
-	lhsQPS, _ := lhsLoad.QPS.Sum()
-	rhsQPS, _ := rhsLoad.QPS.Sum()
+	lhsQPS := lhsLoad.loadStats.TestingGetSum(load.Queries)
+	rhsQPS := rhsLoad.loadStats.TestingGetSum(load.Queries)
 	require.Equal(t, int64(50), lhsLoad.ReadKeys)
 	require.Equal(t, int64(50), lhsLoad.WriteKeys)
 	require.Equal(t, int64(50), lhsLoad.WriteBytes)
