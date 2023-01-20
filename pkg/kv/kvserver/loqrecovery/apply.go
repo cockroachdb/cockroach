@@ -17,11 +17,15 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/loqrecovery/loqrecoverypb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/strutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
@@ -202,6 +206,11 @@ func applyReplicaUpdate(
 		report.AlreadyUpdated = true
 		return report, nil
 	}
+	// Sanity check if removed replica ID matches one in the plan.
+	if _, ok := localDesc.Replicas().GetReplicaDescriptorByID(update.OldReplicaID); !ok {
+		return PrepareReplicaReport{}, errors.Errorf(
+			"can not find replica with ID %d for range r%d", update.OldReplicaID, update.RangeID)
+	}
 
 	sl := stateloader.Make(localDesc.RangeID)
 	ms, err := sl.LoadMVCCStats(ctx, readWriter)
@@ -340,4 +349,94 @@ func CommitReplicaChanges(batches map[roachpb.StoreID]storage.Batch) (ApplyUpdat
 			"failed to commit update to one or more stores: %s", strings.Join(updateErrors, "; "))
 	}
 	return report, nil
+}
+
+// MaybeApplyPendingRecoveryPlan applies loss of quorum recovery plan if it is
+// staged in planStore. Changes would be applied to engines when their
+// identities match storeIDs of replicas in the plan.
+// Plan applications errors like mismatch of store with plan, inability to
+// deserialize values ets are only reported to logs and application status but
+// are not propagated to caller. Only serious errors that imply misconfiguration
+// or planStorage issues are propagated.
+// Regardless of application success or failure, staged plan would be removed.
+func MaybeApplyPendingRecoveryPlan(
+	ctx context.Context, planStore PlanStore, engines []storage.Engine, clock timeutil.TimeSource,
+) error {
+	if len(engines) < 1 {
+		return nil
+	}
+	var planID uuid.UUID
+	var decomNodeIDs []roachpb.NodeID
+	recordPlanApplicationResult := func(err error) {
+		r := loqrecoverypb.PlanApplicationResult{
+			AppliedPlanID:  planID,
+			ApplyTimestamp: clock.Now(),
+		}
+		if err != nil {
+			r.Error = err.Error()
+			log.Errorf(ctx, "failed to apply staged loss of quorum recovery plan %s", err)
+		}
+		writeNodeRecoveryResults(ctx, engines[0], r, decomNodeIDs)
+	}
+
+	plan, exists, err := planStore.LoadPlan()
+	if err != nil {
+		// This is fatal error, we don't write application report since we didn't
+		// check the store yet.
+		return errors.Wrap(err, "failed to check if loss of quorum recovery plan is staged")
+	}
+	if !exists {
+		return nil
+	}
+	planID = plan.PlanID
+	if err := planStore.RemovePlan(); err != nil {
+		log.Errorf(ctx, "failed to remove loss of quorum recovery plan: %s", err)
+	}
+	decomNodeIDs = plan.DecommissionedNodeIDs
+
+	// First read node parameters from the first store.
+	storeIdent, err := kvstorage.ReadStoreIdent(ctx, engines[0])
+	if err != nil {
+		if errors.Is(err, &kvstorage.NotBootstrappedError{}) {
+			// This is wrong, we must not have staged plans in a non-bootstrapped
+			// node. But we can't write an error here as store init might refuse to
+			// work if there are already some keys in store.
+			log.Errorf(ctx, "node is not bootstrapped but it already has a recovery plan staged: %s", err)
+			return nil
+		}
+		recordPlanApplicationResult(err)
+		return nil
+	}
+
+	log.Infof(ctx, "applying staged loss of quorum recovery plan %s", planID)
+	batches := make(map[roachpb.StoreID]storage.Batch)
+	for _, e := range engines {
+		ident, err := kvstorage.ReadStoreIdent(ctx, e)
+		if err != nil {
+			recordPlanApplicationResult(errors.Wrap(err, "failed to read store ident when trying to apply loss of quorum recovery plan"))
+			return nil
+		}
+		b := e.NewBatch()
+		defer b.Close()
+		batches[ident.StoreID] = b
+	}
+	prepRep, err := PrepareUpdateReplicas(ctx, plan, uuid.DefaultGenerator, clock.Now(), storeIdent.NodeID, batches)
+	if err != nil {
+		recordPlanApplicationResult(err)
+		return nil
+	}
+	if len(prepRep.MissingStores) > 0 {
+		log.Warningf(ctx, "loss of quorum recovery plan application expected stores on the node %s",
+			strutil.JoinIDs("s", prepRep.MissingStores))
+	}
+	_, err = CommitReplicaChanges(batches)
+	if err != nil {
+		// This is not very good as are in a partial success situation, but we don't
+		// have a good solution other than report that as error. Let the user
+		// decide what to do next.
+		recordPlanApplicationResult(err)
+		return nil
+	}
+	recordPlanApplicationResult(nil)
+	return nil
 }

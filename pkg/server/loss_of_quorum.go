@@ -14,10 +14,12 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/loqrecovery"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/loqrecovery/loqrecoverypb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
@@ -116,4 +118,49 @@ func publishPendingLossOfQuorumRecoveryEvents(
 			log.Errorf(ctx, "failed to update range log with loss of quorum recovery events: %v", err)
 		}
 	})
+}
+
+func maybeRunLossOfQuorumRecoveryCleanup(
+	ctx context.Context, stores *kvserver.Stores, server *Server, stopper *stop.Stopper,
+) {
+	var cleanup loqrecoverypb.DeferredRecoveryActions
+	err := stores.VisitStores(func(s *kvserver.Store) error {
+		c, found, err := loqrecovery.ConsumeCleanupActionsInfo(ctx, s.Engine())
+		if err != nil {
+			log.Errorf(ctx, "failed to read loss of quorum recovery cleanup actions info from store %s", err)
+			return nil
+		}
+		if found {
+			cleanup = c
+			return iterutil.StopIteration()
+		}
+		return nil
+	})
+	if err := iterutil.Map(err); err != nil {
+		log.Infof(ctx, "failed to iterate node stores while searching for loq recovery cleanup info", err)
+		return
+	}
+	if len(cleanup.DecommissionedNodeIDs) == 0 {
+		return
+	}
+	err = stopper.RunAsyncTask(ctx, "maybe-mark-nodes-as-decommissioned", func(ctx context.Context) {
+		// Nodes are already dead, but are in active state. Internal checks doesn't
+		// allow us throwing nodes away, and they need to go through legal state
+		// transitions within liveness to succeed. To achieve that we mark nodes as
+		// decommissioning first, followed by decommissioned.
+		// Those operations may fail because other nodes could be restarted
+		// concurrently and also trying this cleanup. We only do it as best effort.
+		err := server.Decommission(ctx, livenesspb.MembershipStatus_DECOMMISSIONING, cleanup.DecommissionedNodeIDs)
+		if err != nil {
+			log.Infof(ctx, "decommissioning of nodes failed, this is ok as cluster might not be healed yet: %s", err)
+			return
+		}
+		err = server.Decommission(ctx, livenesspb.MembershipStatus_DECOMMISSIONED, cleanup.DecommissionedNodeIDs)
+		if err != nil {
+			log.Infof(ctx, "decommissioning of nodes failed, this is ok as cluster might not be healed yet: %s", err)
+		}
+	})
+	if err != nil {
+		log.Infof(ctx, "failed to schedule async node decommission task: %s", err)
+	}
 }

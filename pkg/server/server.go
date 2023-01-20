@@ -256,6 +256,17 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	}
 	stopper.AddCloser(&engines)
 
+	// Loss of quorum recovery store is created and pending plan is applied to
+	// engines as soon as engines are created and before any data is read in a
+	// way similar to offline engine content patching.
+	planStore, err := newPlanStore(cfg)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to create loss of quorum recovery server")
+	}
+	if err := loqrecovery.MaybeApplyPendingRecoveryPlan(ctx, planStore, engines, timeutil.DefaultTimeSource{}); err != nil {
+		return nil, errors.Wrap(err, "failed to apply loss of quorum recovery plan")
+	}
+
 	nodeTombStorage, checkPingFor := getPingCheckDecommissionFn(engines)
 
 	rpcCtxOpts := rpc.ContextOptions{
@@ -1019,13 +1030,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		},
 	)
 
-	// TODO(oleg): plan store creation needs to move to the start of this method
-	// right after stores are created. We need it to retrieve pending plan and
-	// patch replicas before any initialization occurs.
-	planStore, err := newPlanStore(cfg)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to create loss of quorum recovery server")
-	}
 	recoveryServer := loqrecovery.NewServer(
 		nodeIDContainer,
 		stores,
@@ -1847,13 +1851,16 @@ func (s *Server) PreStart(ctx context.Context) error {
 		return errors.Wrapf(err, "failed to start KV prober")
 	}
 
-	// As final stage of loss of quorum recovery, write events into corresponding
-	// range logs. We do it as a separate stage to log events early just in case
-	// startup fails, and write to range log once the server is running as we need
-	// to run sql statements to update rangelog.
+	// Write events into corresponding range logs. We do it as a separate stage to
+	// log events early just in case startup fails, and write to range log once
+	// the server is running as we need to run sql statements to update rangelog.
 	publishPendingLossOfQuorumRecoveryEvents(
 		workersCtx, s.node.execCfg.InternalExecutor, s.node.stores, s.stopper,
 	)
+	// Perform loss of quorum recovery cleanup if any actions were scheduled.
+	// Cleanup actions rely on node being connected to the cluster and hopefully
+	// in a healthy or healthier stats to update node liveness records.
+	maybeRunLossOfQuorumRecoveryCleanup(ctx, s.node.stores, s, s.stopper)
 
 	log.Event(ctx, "server initialized")
 
