@@ -8,15 +8,13 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/obsservice/obspb",
+        "//pkg/obsservice/obspb/opentelemetry-proto/collector/logs/v1:logs_service",
         "//pkg/obsservice/obspb/opentelemetry-proto/logs/v1:logs",
         "//pkg/roachpb",
         "//pkg/util/log",
-        "//pkg/util/stop",
         "//pkg/util/timeutil",
         "//pkg/util/uuid",
         "@com_github_jackc_pgx_v4//pgxpool",
-        "@org_golang_google_grpc//:go_default_library",
-        "@org_golang_google_grpc//credentials/insecure",
     ],
 )
 
@@ -30,9 +28,9 @@ go_test(
     embed = [":ingest"],
     deps = [
         "//pkg/base",
-        "//pkg/obs",
         "//pkg/obsservice/obslib/migrations",
         "//pkg/obsservice/obspb",
+        "//pkg/obsservice/obspb/opentelemetry-proto/collector/logs/v1:logs_service",
         "//pkg/obsservice/obspb/opentelemetry-proto/common/v1:common",
         "//pkg/obsservice/obspb/opentelemetry-proto/logs/v1:logs",
         "//pkg/obsservice/obspb/opentelemetry-proto/resource/v1:resource",
@@ -53,6 +51,7 @@ go_test(
         "@com_github_google_uuid//:uuid",
         "@com_github_jackc_pgx_v4//pgxpool",
         "@com_github_stretchr_testify//require",
+        "@org_golang_google_grpc//:go_default_library",
     ],
 )
 

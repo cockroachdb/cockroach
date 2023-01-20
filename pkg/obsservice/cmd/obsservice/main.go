@@ -12,6 +12,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"net"
 	"os"
 	"os/signal"
 	"time"
@@ -20,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/obsservice/obslib/httpproxy"
 	"github.com/cockroachdb/cockroach/pkg/obsservice/obslib/ingest"
 	"github.com/cockroachdb/cockroach/pkg/obsservice/obslib/migrations"
+	logspb "github.com/cockroachdb/cockroach/pkg/obsservice/obspb/opentelemetry-proto/collector/logs/v1"
 	_ "github.com/cockroachdb/cockroach/pkg/ui/distoss" // web UI init hooks
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -28,6 +30,7 @@ import (
 	"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/spf13/cobra"
 	"golang.org/x/sys/unix"
+	"google.golang.org/grpc"
 )
 
 // drainSignals are the signals that will cause the server to drain and exit.
@@ -88,10 +91,21 @@ from one or more CockroachDB clusters.`,
 		stop := stop.NewStopper()
 
 		// Run the event ingestion in the background.
-		if eventsAddr != "" {
-			ingester := ingest.EventIngester{}
-			ingester.StartIngestEvents(ctx, eventsAddr, pool, stop)
+		ingester := &ingest.EventIngester{}
+		ingester.SetDB(pool)
+		listener, err := net.Listen("tcp", otlpAddr)
+		if err != nil {
+			return errors.Wrapf(err, "failed to listen for incoming HTTP connections on address %s", otlpAddr)
 		}
+		fmt.Printf("Listening for OTLP connections on %s.", otlpAddr)
+		grpcServer := grpc.NewServer()
+		logspb.RegisterLogsServiceServer(grpcServer, ingester)
+		if err := stop.RunAsyncTask(ctx, "event ingester", func(ctx context.Context) {
+			_ = grpcServer.Serve(listener)
+		}); err != nil {
+			return err
+		}
+
 		// Run the reverse HTTP proxy in the background.
 		httpproxy.NewReverseHTTPProxy(ctx, cfg).Start(ctx, stop)
 
@@ -135,12 +149,12 @@ from one or more CockroachDB clusters.`,
 
 // Flags.
 var (
+	otlpAddr                  string
 	httpAddr                  string
 	targetURL                 string
 	caCertPath                string
 	uiCertPath, uiCertKeyPath string
 	sinkPGURL                 string
-	eventsAddr                string
 )
 
 func main() {
@@ -149,6 +163,11 @@ func main() {
 	// --vmodule, for example.
 	RootCmd.PersistentFlags().AddGoFlagSet(flag.CommandLine)
 
+	RootCmd.PersistentFlags().StringVar(
+		&otlpAddr,
+		"otlp-addr",
+		"localhost:4317",
+		"The address on which to listen for exported events using OTLP gRPC. If the port is missing, 4317 is used.")
 	RootCmd.PersistentFlags().StringVar(
 		&httpAddr,
 		"http-addr",
@@ -185,12 +204,6 @@ func main() {
 		"postgresql://root@localhost:26257?sslmode=disable",
 		"PGURL for the sink cluster. If the url does not include a database name, "+
 			"then \"obsservice\" will be used.")
-
-	RootCmd.PersistentFlags().StringVar(
-		&eventsAddr,
-		"crdb-events-addr",
-		"localhost:26257",
-		"Address of a CRDB node that events will be ingested from.")
 
 	if err := RootCmd.Execute(); err != nil {
 		exit.WithCode(exit.UnspecifiedError())
