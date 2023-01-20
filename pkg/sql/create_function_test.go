@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -154,6 +155,8 @@ SELECT nextval(105:::REGCLASS);`,
 
 func TestGatingCreateFunction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	skip.WithIssue(t, 95530, "bump minBinary to 22.2. Skip 22.2 mixed-version tests for future cleanup")
 
 	t.Run("new_schema_changer_version_enabled", func(t *testing.T) {
 		params, _ := tests.CreateTestServerParams()
