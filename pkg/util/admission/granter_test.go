@@ -125,9 +125,9 @@ func TestGranterBasic(t *testing.T) {
 			storeCoordinators := &StoreGrantCoordinators{
 				settings: settings,
 				makeStoreRequesterFunc: func(
-					ambientCtx log.AmbientContext, granters [numWorkClasses]granterWithStoreWriteDone,
+					ambientCtx log.AmbientContext, granters [admissionpb.NumWorkClasses]granterWithStoreWriteDone,
 					settings *cluster.Settings, metrics *WorkQueueMetrics, opts workQueueOptions) storeRequester {
-					makeTestRequester := func(wc workClass) *testRequester {
+					makeTestRequester := func(wc admissionpb.WorkClass) *testRequester {
 						req := &testRequester{
 							workKind:               KVWork,
 							granter:                granters[wc],
@@ -136,18 +136,18 @@ func TestGranterBasic(t *testing.T) {
 							returnValueFromGranted: 0,
 						}
 						switch wc {
-						case regularWorkClass:
+						case admissionpb.RegularWorkClass:
 							req.additionalID = "-regular"
-						case elasticWorkClass:
+						case admissionpb.ElasticWorkClass:
 							req.additionalID = "-elastic"
 						}
 						return req
 					}
 					req := &storeTestRequester{}
-					req.requesters[regularWorkClass] = makeTestRequester(regularWorkClass)
-					req.requesters[elasticWorkClass] = makeTestRequester(elasticWorkClass)
-					requesters[KVWork] = req.requesters[regularWorkClass]
-					requesters[numWorkKinds] = req.requesters[elasticWorkClass]
+					req.requesters[admissionpb.RegularWorkClass] = makeTestRequester(admissionpb.RegularWorkClass)
+					req.requesters[admissionpb.ElasticWorkClass] = makeTestRequester(admissionpb.ElasticWorkClass)
+					requesters[KVWork] = req.requesters[admissionpb.RegularWorkClass]
+					requesters[numWorkKinds] = req.requesters[admissionpb.ElasticWorkClass]
 					return req
 				},
 				kvIOTokensExhaustedDuration: metrics.KVIOTokensExhaustedDuration,
@@ -322,15 +322,15 @@ func TestStoreCoordinators(t *testing.T) {
 	opts := Options{
 		makeRequesterFunc: makeRequesterFunc,
 		makeStoreRequesterFunc: func(
-			ctx log.AmbientContext, granters [numWorkClasses]granterWithStoreWriteDone,
+			ctx log.AmbientContext, granters [admissionpb.NumWorkClasses]granterWithStoreWriteDone,
 			settings *cluster.Settings, metrics *WorkQueueMetrics, opts workQueueOptions) storeRequester {
-			reqReg := makeRequesterFunc(ctx, KVWork, granters[regularWorkClass], settings, metrics, opts)
-			reqElastic := makeRequesterFunc(ctx, KVWork, granters[elasticWorkClass], settings, metrics, opts)
+			reqReg := makeRequesterFunc(ctx, KVWork, granters[admissionpb.RegularWorkClass], settings, metrics, opts)
+			reqElastic := makeRequesterFunc(ctx, KVWork, granters[admissionpb.ElasticWorkClass], settings, metrics, opts)
 			str := &storeTestRequester{}
-			str.requesters[regularWorkClass] = reqReg.(*testRequester)
-			str.requesters[regularWorkClass].additionalID = "-regular"
-			str.requesters[elasticWorkClass] = reqElastic.(*testRequester)
-			str.requesters[elasticWorkClass].additionalID = "-elastic"
+			str.requesters[admissionpb.RegularWorkClass] = reqReg.(*testRequester)
+			str.requesters[admissionpb.RegularWorkClass].additionalID = "-regular"
+			str.requesters[admissionpb.ElasticWorkClass] = reqElastic.(*testRequester)
+			str.requesters[admissionpb.ElasticWorkClass].additionalID = "-elastic"
 			return str
 		},
 	}
@@ -428,13 +428,13 @@ func (tr *testRequester) continueGrantChain() {
 }
 
 type storeTestRequester struct {
-	requesters [numWorkClasses]*testRequester
+	requesters [admissionpb.NumWorkClasses]*testRequester
 }
 
 var _ storeRequester = &storeTestRequester{}
 
-func (str *storeTestRequester) getRequesters() [numWorkClasses]requester {
-	var rv [numWorkClasses]requester
+func (str *storeTestRequester) getRequesters() [admissionpb.NumWorkClasses]requester {
+	var rv [admissionpb.NumWorkClasses]requester
 	for i := range str.requesters {
 		rv[i] = str.requesters[i]
 	}
