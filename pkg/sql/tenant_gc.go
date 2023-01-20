@@ -15,9 +15,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -30,7 +30,9 @@ import (
 //
 // The caller is responsible for checking that the user is authorized
 // to take this action.
-func GCTenantSync(ctx context.Context, execCfg *ExecutorConfig, info *descpb.TenantInfo) error {
+func GCTenantSync(
+	ctx context.Context, execCfg *ExecutorConfig, info *mtinfopb.TenantInfo,
+) error {
 	const op = "gc"
 	if err := rejectIfCantCoordinateMultiTenancy(execCfg.Codec, op); err != nil {
 		return err
@@ -104,9 +106,11 @@ func GCTenantSync(ctx context.Context, execCfg *ExecutorConfig, info *descpb.Ten
 }
 
 // clearTenant deletes the tenant's data.
-func clearTenant(ctx context.Context, execCfg *ExecutorConfig, info *descpb.TenantInfo) error {
+func clearTenant(
+	ctx context.Context, execCfg *ExecutorConfig, info *mtinfopb.TenantInfo,
+) error {
 	// Confirm tenant is ready to be cleared.
-	if info.State != descpb.TenantInfo_DROP {
+	if info.DataState != mtinfopb.DataStateDrop {
 		return errors.Errorf("tenant %d is not in state DROP", info.ID)
 	}
 
@@ -139,14 +143,14 @@ func (p *planner) GCTenant(ctx context.Context, tenID uint64) error {
 	if err := p.RequireAdminRole(ctx, "gc tenant"); err != nil {
 		return err
 	}
-	info, err := GetTenantRecordByID(ctx, p.InternalSQLTxn(), roachpb.MustMakeTenantID(tenID))
+	info, err := GetTenantRecordByID(ctx, p.InternalSQLTxn(), roachpb.MustMakeTenantID(tenID), p.ExecCfg().Settings)
 	if err != nil {
 		return errors.Wrapf(err, "retrieving tenant %d", tenID)
 	}
 
 	// Confirm tenant is ready to be cleared.
-	if info.State != descpb.TenantInfo_DROP {
-		return errors.Errorf("tenant %d is not in state DROP", info.ID)
+	if info.DataState != mtinfopb.DataStateDrop {
+		return errors.Errorf("tenant %d is not in data state DROP", info.ID)
 	}
 
 	_, err = createGCTenantJob(
