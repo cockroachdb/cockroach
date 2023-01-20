@@ -382,35 +382,40 @@ sort
            │    │    ├── c.relowner:5 IS NULL
            │    │    └── CAST(NULL AS STRING)
            │    └── subquery
-           │         └── project
+           │         └── values
            │              ├── columns: column172:172
            │              ├── outer: (5)
            │              ├── cardinality: [1 - 1]
            │              ├── immutable
            │              ├── key: ()
            │              ├── fd: ()-->(172)
-           │              ├── limit
-           │              │    ├── columns: pg_catalog.pg_roles.oid:157 rolname:158
-           │              │    ├── outer: (5)
-           │              │    ├── cardinality: [1 - 1]
-           │              │    ├── key: ()
-           │              │    ├── fd: ()-->(157,158)
-           │              │    ├── right-join (cross)
-           │              │    │    ├── columns: pg_catalog.pg_roles.oid:157 rolname:158
-           │              │    │    ├── outer: (5)
-           │              │    │    ├── cardinality: [1 - ]
-           │              │    │    ├── limit hint: 1.00
-           │              │    │    ├── scan pg_roles
-           │              │    │    │    └── columns: pg_catalog.pg_roles.oid:157 rolname:158
-           │              │    │    ├── values
-           │              │    │    │    ├── cardinality: [1 - 1]
-           │              │    │    │    ├── key: ()
-           │              │    │    │    └── ()
-           │              │    │    └── filters
-           │              │    │         └── pg_catalog.pg_roles.oid:157 = c.relowner:5 [outer=(5,157), constraints=(/5: (/NULL - ]; /157: (/NULL - ]), fd=(5)==(157), (157)==(5)]
-           │              │    └── 1
-           │              └── projections
-           │                   └── assignment-cast: STRING [as=column172:172, outer=(5,158), immutable]
-           │                        └── COALESCE(rolname:158, (('unknown (OID=' || c.relowner:5) || ')')::NAME)
+           │              └── tuple
+           │                   └── assignment-cast: STRING
+           │                        └── coalesce
+           │                             ├── subquery
+           │                             │    └── project
+           │                             │         ├── columns: rolname:158
+           │                             │         ├── outer: (5)
+           │                             │         ├── cardinality: [0 - 1]
+           │                             │         ├── key: ()
+           │                             │         ├── fd: ()-->(158)
+           │                             │         └── limit
+           │                             │              ├── columns: pg_catalog.pg_roles.oid:157!null rolname:158
+           │                             │              ├── outer: (5)
+           │                             │              ├── cardinality: [0 - 1]
+           │                             │              ├── key: ()
+           │                             │              ├── fd: ()-->(157,158)
+           │                             │              ├── select
+           │                             │              │    ├── columns: pg_catalog.pg_roles.oid:157!null rolname:158
+           │                             │              │    ├── outer: (5)
+           │                             │              │    ├── fd: ()-->(157)
+           │                             │              │    ├── limit hint: 1.00
+           │                             │              │    ├── scan pg_roles
+           │                             │              │    │    ├── columns: pg_catalog.pg_roles.oid:157 rolname:158
+           │                             │              │    │    └── limit hint: 1.01
+           │                             │              │    └── filters
+           │                             │              │         └── pg_catalog.pg_roles.oid:157 = c.relowner:5 [outer=(5,157), constraints=(/5: (/NULL - ]; /157: (/NULL - ]), fd=(5)==(157), (157)==(5)]
+           │                             │              └── 1
+           │                             └── (('unknown (OID=' || c.relowner:5) || ')')::NAME
            ├── CASE WHEN c.oid:1 IS NULL THEN CAST(NULL AS STRING) ELSE pg_catalog.pg_description.description:179 END [as=description:180, outer=(1,179)]
            └── count_rows:154 > 0 [as=inhtable:181, outer=(154)]
