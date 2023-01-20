@@ -50,8 +50,12 @@ type profiler struct {
 	// highwaterMarkBytes represents the maximum heap size that we've seen since
 	// resetting the filed (which happens periodically).
 	highwaterMarkBytes int64
-
-	knobs testingKnobs
+	// customInterval indicates a time.Duration that should be used instead
+	// of resetHighWaterMarkInterval. highwaterMarkBytes is also not set to 0
+	// if customInterval exists since we want to take a profile if both the
+	// interval has elapsed and highwaterMarkBytes has been exceeded.
+	customInterval time.Duration
+	knobs          testingKnobs
 }
 
 func (o *profiler) now() time.Time {
@@ -72,8 +76,13 @@ func (o *profiler) maybeTakeProfile(
 	}
 
 	now := o.now()
-	// If it's been too long since we took a profile, make sure we'll take one now.
-	if now.Sub(o.lastProfileTime) >= resetHighWaterMarkInterval {
+	// If it's been too long since we took a profile, make sure we'll take one now
+	// unless a customInterval has been provided.
+	if o.customInterval != 0 {
+		if now.Sub(o.lastProfileTime) < o.customInterval {
+			return
+		}
+	} else if now.Sub(o.lastProfileTime) >= resetHighWaterMarkInterval {
 		o.highwaterMarkBytes = 0
 	}
 
