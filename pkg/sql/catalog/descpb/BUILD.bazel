@@ -50,15 +50,12 @@ proto_library(
         "join_type.proto",
         "locking.proto",
         "structured.proto",
-        "tenant.proto",
     ],
     strip_import_prefix = "/pkg",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/config/zonepb:zonepb_proto",
         "//pkg/geo/geoindex:geoindex_proto",
-        "//pkg/multitenant/tenantcapabilities/tenantcapabilitiespb:tenantcapabilitiespb_proto",
-        "//pkg/roachpb:roachpb_proto",
         "//pkg/sql/catalog/catenumpb:catenumpb_proto",
         "//pkg/sql/catalog/catpb:catpb_proto",
         "//pkg/sql/schemachanger/scpb:scpb_proto",
@@ -78,7 +75,6 @@ go_proto_library(
     deps = [
         "//pkg/config/zonepb",
         "//pkg/geo/geoindex",
-        "//pkg/multitenant/tenantcapabilities/tenantcapabilitiespb",
         "//pkg/roachpb",  # keep
         "//pkg/sql/catalog/catenumpb",
         "//pkg/sql/catalog/catpb",

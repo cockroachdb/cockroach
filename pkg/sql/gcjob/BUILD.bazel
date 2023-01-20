@@ -27,6 +27,7 @@ go_library(
         "//pkg/kv/kvclient/kvcoord",
         "//pkg/kv/kvserver/protectedts",
         "//pkg/kv/kvserver/protectedts/ptpb",
+        "//pkg/multitenant/mtinfopb",
         "//pkg/roachpb",
         "//pkg/settings",
         "//pkg/settings/cluster",
