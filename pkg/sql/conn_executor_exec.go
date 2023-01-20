@@ -1059,12 +1059,15 @@ func (ex *connExecutor) commitSQLTransactionInternal(ctx context.Context) error 
 // createJobs creates jobs for the records cached in schemaChangeJobRecords
 // during this transaction.
 func (ex *connExecutor) createJobs(ctx context.Context) error {
-	if len(ex.extraTxnState.schemaChangeJobRecords) == 0 {
+	if !ex.extraTxnState.jobsInfo.hasJobsToCreate() {
 		return nil
 	}
 	var records []*jobs.Record
-	for _, record := range ex.extraTxnState.schemaChangeJobRecords {
-		records = append(records, record)
+	if err := ex.extraTxnState.jobsInfo.forEachJobToCreate(func(jobRecord *jobs.Record) error {
+		records = append(records, jobRecord)
+		return nil
+	}); err != nil {
+		return err
 	}
 	jobIDs, err := ex.server.cfg.JobRegistry.CreateJobsWithTxn(
 		ctx, ex.planner.InternalSQLTxn(), records,
@@ -1072,7 +1075,7 @@ func (ex *connExecutor) createJobs(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	ex.planner.extendedEvalCtx.Jobs.add(jobIDs...)
+	ex.planner.extendedEvalCtx.JobsInfo.addCreatedJobID(jobIDs...)
 	return nil
 }
 

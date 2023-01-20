@@ -415,8 +415,8 @@ func (p *planner) markTableMutationJobsSuccessful(
 		// in a batch only when the transaction commits. So, if a job's record exists
 		// in the cache, we can simply delete that record from cache because the
 		// job is not created yet.
-		if record, exists := p.ExtendedEvalContext().SchemaChangeJobRecords[tableDesc.ID]; exists && record.JobID == jobID {
-			delete(p.ExtendedEvalContext().SchemaChangeJobRecords, tableDesc.ID)
+		if record, exists := p.ExtendedEvalContext().JobsInfo.uniqueJobsToCreate[tableDesc.ID]; exists && record.JobID == jobID {
+			delete(p.ExtendedEvalContext().JobsInfo.uniqueJobsToCreate, tableDesc.ID)
 			continue
 		}
 		mutationJob, err := p.execCfg.JobRegistry.LoadJobWithTxn(ctx, jobID, p.InternalSQLTxn())

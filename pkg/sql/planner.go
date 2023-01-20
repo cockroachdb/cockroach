@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/repstream"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -34,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/evalcatalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/exprutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/idxusage"
-	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
@@ -94,15 +94,7 @@ type extendedEvalContext struct {
 
 	TxnModesSetter txnModesSetter
 
-	// Jobs refers to jobs in extraTxnState. Jobs is a pointer to a jobsCollection
-	// which is a slice because we need calls to resetExtraTxnState to reset the
-	// jobsCollection.
-	Jobs *jobsCollection
-
-	// SchemaChangeJobRecords refers to schemaChangeJobsCache in extraTxnState of
-	// in sql.connExecutor. sql.connExecutor.createJobs() enqueues jobs with these
-	// records when transaction is committed.
-	SchemaChangeJobRecords map[descpb.ID]*jobs.Record
+	JobsInfo *jobsInfo
 
 	statsProvider *persistedsqlstats.PersistedSQLStats
 
@@ -144,21 +136,11 @@ func (evalCtx *extendedEvalContext) copy() *extendedEvalContext {
 
 // QueueJob creates a new job from record and queues it for execution after
 // the transaction commits.
-func (evalCtx *extendedEvalContext) QueueJob(
-	ctx context.Context, txn isql.Txn, record jobs.Record,
-) (*jobs.Job, error) {
+func (evalCtx *extendedEvalContext) QueueJob(record *jobs.Record) jobspb.JobID {
 	jobID := evalCtx.ExecCfg.JobRegistry.MakeJobID()
-	job, err := evalCtx.ExecCfg.JobRegistry.CreateJobWithTxn(
-		ctx,
-		record,
-		jobID,
-		txn,
-	)
-	if err != nil {
-		return nil, err
-	}
-	evalCtx.Jobs.add(jobID)
-	return job, nil
+	record.JobID = jobID
+	evalCtx.JobsInfo.addNonUniqueJobToCreate(record)
+	return jobID
 }
 
 // planner is the centerpiece of SQL statement execution combining session
@@ -579,11 +561,10 @@ func (p *planner) InternalSQLTxn() descs.Txn {
 		ie := MakeInternalExecutor(ief.server, ief.memMetrics, ief.monitor)
 		ie.SetSessionData(p.SessionData())
 		ie.extraTxnState = &extraTxnState{
-			txn:                    p.Txn(),
-			descCollection:         p.Descriptors(),
-			jobs:                   p.extendedEvalCtx.Jobs,
-			schemaChangeJobRecords: p.extendedEvalCtx.SchemaChangeJobRecords,
-			schemaChangerState:     p.extendedEvalCtx.SchemaChangerState,
+			txn:                p.Txn(),
+			descCollection:     p.Descriptors(),
+			jobsInfo:           p.extendedEvalCtx.JobsInfo,
+			schemaChangerState: p.extendedEvalCtx.SchemaChangerState,
 		}
 		p.internalSQLTxn.init(p.txn, ie)
 	}

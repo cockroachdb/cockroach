@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catsessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descidgen"
@@ -1018,9 +1019,8 @@ func (s *Server) newConnExecutor(
 	ex.extraTxnState.descCollection = s.cfg.CollectionFactory.NewCollection(
 		ctx, descs.WithDescriptorSessionDataProvider(dsdp), descs.WithMonitor(ex.sessionMon),
 	)
-	ex.extraTxnState.jobs = new(jobsCollection)
+	ex.extraTxnState.jobsInfo = newJobsInfo()
 	ex.extraTxnState.txnRewindPos = -1
-	ex.extraTxnState.schemaChangeJobRecords = make(map[descpb.ID]*jobs.Record)
 	ex.extraTxnState.schemaChangerState = &SchemaChangerState{
 		mode: ex.sessionData().NewSchemaChangerMode,
 	}
@@ -1275,18 +1275,7 @@ type connExecutor struct {
 		// descCollection collects descriptors used by the current transaction.
 		descCollection *descs.Collection
 
-		// jobs accumulates jobs staged for execution inside the transaction.
-		// Staging happens when executing statements that are implemented with a
-		// job. The jobs are staged via the function QueueJob in
-		// pkg/sql/planner.go. The staged jobs are executed once the transaction
-		// that staged them commits.
-		jobs *jobsCollection
-
-		// schemaChangeJobRecords is a map of descriptor IDs to job Records.
-		// Used in createOrUpdateSchemaChangeJob so we can check if a job has been
-		// queued up for the given ID. The cache remains valid only for the current
-		// transaction and it is cleared after the transaction is committed.
-		schemaChangeJobRecords map[descpb.ID]*jobs.Record
+		jobsInfo *jobsInfo
 
 		// firstStmtExecuted indicates that the first statement inside this
 		// transaction has been executed.
@@ -1714,10 +1703,7 @@ func (ex *connExecutor) resetExtraTxnState(ctx context.Context, ev txnEvent) {
 		}
 	} else {
 		ex.extraTxnState.descCollection.ReleaseAll(ctx)
-		for k := range ex.extraTxnState.schemaChangeJobRecords {
-			delete(ex.extraTxnState.schemaChangeJobRecords, k)
-		}
-		ex.extraTxnState.jobs.reset()
+		ex.extraTxnState.jobsInfo.reset()
 		ex.extraTxnState.schemaChangerState = &SchemaChangerState{
 			mode: ex.sessionData().NewSchemaChangerMode,
 		}
@@ -2824,15 +2810,14 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 			DescIDGenerator:                ex.getDescIDGenerator(),
 			RangeStatsFetcher:              p.execCfg.RangeStatsFetcher,
 		},
-		Tracing:                &ex.sessionTracing,
-		MemMetrics:             &ex.memMetrics,
-		Descs:                  ex.extraTxnState.descCollection,
-		TxnModesSetter:         ex,
-		Jobs:                   ex.extraTxnState.jobs,
-		SchemaChangeJobRecords: ex.extraTxnState.schemaChangeJobRecords,
-		statsProvider:          ex.server.sqlStats,
-		indexUsageStats:        ex.indexUsageStats,
-		statementPreparer:      ex,
+		Tracing:           &ex.sessionTracing,
+		MemMetrics:        &ex.memMetrics,
+		Descs:             ex.extraTxnState.descCollection,
+		TxnModesSetter:    ex,
+		JobsInfo:          ex.extraTxnState.jobsInfo,
+		statsProvider:     ex.server.sqlStats,
+		indexUsageStats:   ex.indexUsageStats,
+		statementPreparer: ex,
 	}
 	evalCtx.copyFromExecCfg(ex.server.cfg)
 }
@@ -3077,13 +3062,27 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 		}
 		ex.notifyStatsRefresherOfNewTables(ex.Ctx())
 
+		// If there is any descriptor has new version. We want to make sure there is
+		// only one version of the descriptor in all nodes. In schema changer jobs,
+		// `WaitForOneVersion` has been called for the descriptors included in jobs.
+		// So we just need to do this for descriptors not in jobs.
+		// We need to get descriptor IDs in jobs before jobs are run because we have
+		// operations in declarative schema changer removing descriptor IDs from job
+		// payload as it's done with the descriptors.
+		descIDsInJobs, err := ex.descIDsInJobs()
+		if err != nil {
+			return advanceInfo{}, err
+		}
 		ex.statsCollector.PhaseTimes().SetSessionPhaseTime(sessionphase.SessionStartPostCommitJob, timeutil.Now())
 		if err := ex.server.cfg.JobRegistry.Run(
-			ex.ctxHolder.connCtx, *ex.extraTxnState.jobs,
+			ex.ctxHolder.connCtx, ex.extraTxnState.jobsInfo.jobsCreated,
 		); err != nil {
 			handleErr(err)
 		}
 		ex.statsCollector.PhaseTimes().SetSessionPhaseTime(sessionphase.SessionEndPostCommitJob, timeutil.Now())
+		if err := ex.waitOneVersionForNewVersionDescriptorsWithoutJobs(descIDsInJobs); err != nil {
+			return advanceInfo{}, err
+		}
 
 		fallthrough
 	case txnRestart, txnRollback:
@@ -3111,6 +3110,79 @@ func (ex *connExecutor) handleWaitingForDescriptorIDGeneratorMigration(ctx conte
 		return err
 	}
 	return ex.resetTransactionOnSchemaChangeRetry(ctx)
+}
+
+func (ex *connExecutor) waitOneVersionForNewVersionDescriptorsWithoutJobs(
+	descIDsInJobs catalog.DescriptorIDSet,
+) error {
+	withNewVersion, err := ex.extraTxnState.descCollection.GetOriginalPreviousIDVersionsForUncommitted()
+	if err != nil {
+		return err
+	}
+	for _, idVersion := range withNewVersion {
+		if descIDsInJobs.Contains(idVersion.ID) {
+			continue
+		}
+		if _, err := WaitToUpdateLeases(ex.Ctx(), ex.planner.LeaseMgr(), idVersion.ID); err != nil {
+			// In most cases (normal schema changes), deleted descriptor should have
+			// been handled by jobs. So, normally we won't hit into the situation of
+			// wait for one version of a deleted descriptor. However, we need catch
+			// ErrDescriptorNotFound here because we have a special case of descriptor
+			// repairing where we delete descriptors directly and never record the ids
+			// in jobs payload or details.
+			if errors.Is(err, catalog.ErrDescriptorNotFound) {
+				continue
+			}
+			return err
+		}
+	}
+	return nil
+}
+
+func (ex *connExecutor) descIDsInJobs() (catalog.DescriptorIDSet, error) {
+	// Get descriptor IDs from legacy schema changer jobs.
+	var descIDsInJobs catalog.DescriptorIDSet
+	if err := ex.extraTxnState.jobsInfo.forEachJobToCreate(func(jobRecord *jobs.Record) error {
+		for _, descID := range jobRecord.DescriptorIDs {
+			descIDsInJobs.Add(descID)
+		}
+		// Legacy schema changer jobs also rely on these internal fields to perform
+		// relevant changes.
+		switch t := jobRecord.Details.(type) {
+		case *jobspb.Payload_SchemaChange:
+			for _, tbl := range t.SchemaChange.DroppedTables {
+				descIDsInJobs.Add(tbl.ID)
+			}
+			for _, id := range t.SchemaChange.DroppedTypes {
+				descIDsInJobs.Add(id)
+			}
+			for _, id := range t.SchemaChange.DroppedSchemas {
+				descIDsInJobs.Add(id)
+			}
+			descIDsInJobs.Add(t.SchemaChange.DroppedDatabaseID)
+			descIDsInJobs.Add(t.SchemaChange.DescID)
+		}
+		return nil
+	}); err != nil {
+		return catalog.DescriptorIDSet{}, err
+	}
+
+	// Get descriptor IDs with declarative schema changer jobs.
+	withNewVersion, err := ex.extraTxnState.descCollection.GetOriginalPreviousIDVersionsForUncommitted()
+	if err != nil {
+		return catalog.DescriptorIDSet{}, err
+	}
+	for _, idVersion := range withNewVersion {
+		desc, err := ex.extraTxnState.descCollection.ByID(ex.state.mu.txn).Get().Desc(ex.Ctx(), idVersion.ID)
+		if err != nil {
+			return catalog.DescriptorIDSet{}, err
+		}
+		if desc.HasConcurrentSchemaChanges() {
+			continue
+		}
+		descIDsInJobs.Add(idVersion.ID)
+	}
+	return descIDsInJobs, nil
 }
 
 // initStatementResult initializes res according to a query.
@@ -3395,7 +3467,7 @@ func (ex *connExecutor) runPreCommitStages(ctx context.Context) error {
 	scs.state = after
 	scs.jobID = jobID
 	if jobID != jobspb.InvalidJobID {
-		ex.extraTxnState.jobs.add(jobID)
+		ex.extraTxnState.jobsInfo.addCreatedJobID(jobID)
 		log.Infof(ctx, "queued new schema change job %d using the new schema changer", jobID)
 	}
 	return nil
@@ -3686,4 +3758,57 @@ func init() {
 	logcrash.RegisterTagFn("gist", func(ctx context.Context) string {
 		return planGistFromCtx(ctx)
 	})
+}
+
+type jobsInfo struct {
+	jobsCreated           jobsCollection
+	uniqueJobsToCreate    map[descpb.ID]*jobs.Record
+	nonUniqueJobsToCreate []*jobs.Record
+}
+
+func newJobsInfo() *jobsInfo {
+	ret := &jobsInfo{}
+	ret.reset()
+	return ret
+}
+
+func (j *jobsInfo) addCreatedJobID(jobID ...jobspb.JobID) {
+	j.jobsCreated.add(jobID...)
+}
+
+func (j *jobsInfo) addNonUniqueJobToCreate(jobRecord *jobs.Record) {
+	j.nonUniqueJobsToCreate = append(j.nonUniqueJobsToCreate, jobRecord)
+}
+
+func (j *jobsInfo) reset() {
+	j.jobsCreated.reset()
+	j.uniqueJobsToCreate = make(map[descpb.ID]*jobs.Record)
+	j.nonUniqueJobsToCreate = nil
+}
+
+func (j *jobsInfo) numJobsToCreate() int {
+	return len(j.uniqueJobsToCreate) + len(j.nonUniqueJobsToCreate)
+}
+
+func (j *jobsInfo) hasJobsToCreate() bool {
+	return j.numJobsToCreate() > 0
+}
+
+func (j *jobsInfo) forEachJobToCreate(fn func(jobRecord *jobs.Record) error) error {
+	for _, r := range j.uniqueJobsToCreate {
+		if err := fn(r); err != nil {
+			return err
+		}
+	}
+	for _, r := range j.nonUniqueJobsToCreate {
+		if err := fn(r); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (j *jobsInfo) releaseJobsToRecreate() {
+	j.uniqueJobsToCreate = make(map[descpb.ID]*jobs.Record)
+	j.nonUniqueJobsToCreate = nil
 }
