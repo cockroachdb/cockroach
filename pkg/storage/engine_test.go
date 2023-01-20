@@ -523,7 +523,7 @@ func TestEngineMustExist(t *testing.T) {
 	tempDir, dirCleanupFn := testutils.TempDir(t)
 	defer dirCleanupFn()
 
-	_, err := Open(context.Background(), Filesystem(tempDir), MustExist)
+	_, err := Open(context.Background(), Filesystem(tempDir), cluster.MakeClusterSettings(), MustExist)
 	if err == nil {
 		t.Fatal("expected error related to missing directory")
 	}
@@ -1001,7 +1001,7 @@ func TestCreateCheckpoint(t *testing.T) {
 	db, err := Open(
 		context.Background(),
 		Filesystem(dir),
-		Settings(cluster.MakeTestingClusterSettings()))
+		cluster.MakeTestingClusterSettings())
 	assert.NoError(t, err)
 	defer db.Close()
 
@@ -1219,7 +1219,7 @@ func TestEngineFSFileNotFoundError(t *testing.T) {
 
 	dir, dirCleanup := testutils.TempDir(t)
 	defer dirCleanup()
-	db, err := Open(context.Background(), Filesystem(dir), CacheSize(testCacheSize))
+	db, err := Open(context.Background(), Filesystem(dir), cluster.MakeClusterSettings(), CacheSize(testCacheSize))
 	require.NoError(t, err)
 	defer db.Close()
 
@@ -1283,7 +1283,7 @@ func TestFS(t *testing.T) {
 	}
 	for name, loc := range engineDest {
 		t.Run(name, func(t *testing.T) {
-			fs, err := Open(context.Background(), loc, CacheSize(testCacheSize), ForTesting)
+			fs, err := Open(context.Background(), loc, cluster.MakeClusterSettings(), CacheSize(testCacheSize), ForTesting)
 			require.NoError(t, err)
 			defer fs.Close()
 
@@ -1348,7 +1348,7 @@ func TestGetIntent(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	reader, err := Open(ctx, InMemory(), CacheSize(1<<20 /* 1 MiB */))
+	reader, err := Open(ctx, InMemory(), cluster.MakeClusterSettings(), CacheSize(1<<20 /* 1 MiB */))
 	require.NoError(t, err)
 	defer reader.Close()
 
@@ -1437,7 +1437,7 @@ func TestScanIntents(t *testing.T) {
 		"1000 bytes":      {keys[0], maxKey, 0, 1000, keys},
 	}
 
-	eng, err := Open(ctx, InMemory(), CacheSize(1<<20 /* 1 MiB */))
+	eng, err := Open(ctx, InMemory(), cluster.MakeClusterSettings(), CacheSize(1<<20 /* 1 MiB */))
 	require.NoError(t, err)
 	defer eng.Close()
 
@@ -2044,7 +2044,10 @@ func TestEngineRangeKeysUnsupported(t *testing.T) {
 	version := clusterversion.ByKey(clusterversion.V22_2EnsurePebbleFormatVersionRangeKeys - 1)
 	st := cluster.MakeTestingClusterSettingsWithVersions(version, version, true)
 
-	eng := NewDefaultInMemForTesting(Settings(st))
+	eng, err := Open(context.Background(), InMemory(), st, MaxSize(1<<20))
+	if err != nil {
+		panic(err)
+	}
 	defer eng.Close()
 
 	require.NoError(t, eng.PutMVCC(pointKey("a", 1), stringValue("a1")))

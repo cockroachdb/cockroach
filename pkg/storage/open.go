@@ -65,9 +65,6 @@ var ForceWriterParallelism ConfigOption = func(cfg *engineConfig) error {
 // ForTesting configures the engine for use in testing. It may randomize some
 // config options to improve test coverage.
 var ForTesting ConfigOption = func(cfg *engineConfig) error {
-	if cfg.Settings == nil {
-		cfg.Settings = cluster.MakeTestingClusterSettings()
-	}
 	return nil
 }
 
@@ -78,9 +75,6 @@ var ForTesting ConfigOption = func(cfg *engineConfig) error {
 // we know there are only separated intents, this sidesteps any test issues
 // due to inconsistencies.
 var ForStickyEngineTesting ConfigOption = func(cfg *engineConfig) error {
-	if cfg.Settings == nil {
-		cfg.Settings = cluster.MakeTestingClusterSettings()
-	}
 	return nil
 }
 
@@ -130,14 +124,6 @@ func MaxOpenFiles(count int) ConfigOption {
 		return nil
 	}
 
-}
-
-// Settings sets the cluster settings to use.
-func Settings(settings *cluster.Settings) ConfigOption {
-	return func(cfg *engineConfig) error {
-		cfg.Settings = settings
-		return nil
-	}
 }
 
 // CacheSize configures the size of the block cache.
@@ -233,9 +219,12 @@ type engineConfig struct {
 
 // Open opens a new Pebble storage engine, reading and writing data to the
 // provided Location, configured with the provided options.
-func Open(ctx context.Context, loc Location, opts ...ConfigOption) (*Pebble, error) {
+func Open(
+	ctx context.Context, loc Location, settings *cluster.Settings, opts ...ConfigOption,
+) (*Pebble, error) {
 	var cfg engineConfig
 	cfg.Dir = loc.dir
+	cfg.Settings = settings
 	cfg.Opts = DefaultPebbleOptions()
 	cfg.Opts.FS = loc.fs
 	for _, opt := range opts {
@@ -247,11 +236,6 @@ func Open(ctx context.Context, loc Location, opts ...ConfigOption) (*Pebble, err
 		cfg.Opts.Cache = pebble.NewCache(*cfg.cacheSize)
 		defer cfg.Opts.Cache.Unref()
 	}
-	if cfg.Settings == nil {
-		// TODO(radu): this seems error-prone; should we require the use of
-		// Settings() in all cases?
-		cfg.Settings = cluster.MakeClusterSettings()
-	}
 	p, err := NewPebble(ctx, cfg.PebbleConfig)
 	if err != nil {
 		return nil, err
@@ -259,7 +243,7 @@ func Open(ctx context.Context, loc Location, opts ...ConfigOption) (*Pebble, err
 	// Set the active cluster version, ensuring the engine's format
 	// major version is ratcheted sufficiently high to match the
 	// settings cluster version.
-	if v := p.settings.Version.ActiveVersionOrEmpty(ctx).Version; v != (roachpb.Version{}) {
+	if v := settings.Version.ActiveVersionOrEmpty(ctx).Version; v != (roachpb.Version{}) {
 		if err := p.SetMinVersion(v); err != nil {
 			p.Close()
 			return nil, err

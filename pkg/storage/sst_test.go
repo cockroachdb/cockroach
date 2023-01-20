@@ -63,7 +63,10 @@ func TestCheckSSTConflictsMaxIntents(t *testing.T) {
 	sstWriter.Close()
 
 	ctx := context.Background()
-	engine := NewDefaultInMemForTesting(Settings(cs))
+	engine, err := Open(context.Background(), InMemory(), cs, MaxSize(1<<20))
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer engine.Close()
 
 	// Write some committed keys and intents at txn1TS.

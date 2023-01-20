@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -45,6 +46,7 @@ func TestCachedSettingsStoreAndLoad(t *testing.T) {
 
 	ctx := context.Background()
 	engine, err := storage.Open(ctx, storage.InMemory(),
+		cluster.MakeClusterSettings(),
 		storage.MaxSize(512<<20 /* 512 MiB */),
 		storage.ForTesting)
 	require.NoError(t, err)

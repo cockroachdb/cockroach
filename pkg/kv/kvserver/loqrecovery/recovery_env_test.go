@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -495,6 +496,7 @@ func (e *quorumRecoveryEnv) getOrCreateStore(
 		var err error
 		eng, err := storage.Open(ctx,
 			storage.InMemory(),
+			cluster.MakeClusterSettings(),
 			storage.CacheSize(1<<20 /* 1 MiB */))
 		if err != nil {
 			t.Fatalf("failed to crate in mem store: %v", err)

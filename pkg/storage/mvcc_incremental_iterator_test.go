@@ -1309,7 +1309,7 @@ func TestMVCCIncrementalIteratorIntentStraddlesSStables(t *testing.T) {
 	// regular MVCCPut operation to generate these keys, which we'll later be
 	// copying into manually created sstables.
 	ctx := context.Background()
-	db1, err := Open(ctx, InMemory(), ForTesting)
+	db1, err := Open(ctx, InMemory(), cluster.MakeClusterSettings(), ForTesting)
 	require.NoError(t, err)
 	defer db1.Close()
 
@@ -1342,7 +1342,7 @@ func TestMVCCIncrementalIteratorIntentStraddlesSStables(t *testing.T) {
 	//   SSTable 2:
 	//     a@2
 	//     b@1
-	db2, err := Open(ctx, InMemory(), ForTesting)
+	db2, err := Open(ctx, InMemory(), cluster.MakeTestingClusterSettings(), ForTesting)
 	require.NoError(t, err)
 	defer db2.Close()
 
@@ -1572,6 +1572,7 @@ func BenchmarkMVCCIncrementalIteratorForOldData(b *testing.B) {
 		eng, err := Open(
 			context.Background(),
 			InMemory(),
+			cluster.MakeClusterSettings(),
 			// Use a small cache size. Scanning large tables with mostly cold data
 			// will mostly miss the cache (especially since the block cache is meant
 			// to be scan resistant).
