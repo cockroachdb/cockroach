@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/strutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -505,7 +506,7 @@ To stage recovery application in half-online mode invoke:
 Alternatively distribute plan to below nodes and invoke 'debug recover apply-plan --store=<store-dir> %s' on:
 `, remoteArgs, planFile, planFile)
 	for _, node := range report.UpdatedNodes {
-		_, _ = fmt.Fprintf(stderr, "- node n%d, store(s) %s\n", node.NodeID, joinIDs("s", node.StoreIDs))
+		_, _ = fmt.Fprintf(stderr, "- node n%d, store(s) %s\n", node.NodeID, strutil.JoinIDs("s", node.StoreIDs))
 	}
 
 	return nil
@@ -615,7 +616,7 @@ func stageRecoveryOntoCluster(
 		_, _ = fmt.Fprintf(stderr, "  range r%d:%s updating replica %s to %s and discarding all others.\n",
 			u.RangeID, roachpb.Key(u.StartKey), u.OldReplicaID, u.NextReplicaID)
 	}
-	_, _ = fmt.Fprintf(stderr, "\nNodes %s will be marked as decommissioned.\n", joinIDs("n", plan.DecommissionedNodeIDs))
+	_, _ = fmt.Fprintf(stderr, "\nNodes %s will be marked as decommissioned.\n", strutil.JoinIDs("n", plan.DecommissionedNodeIDs))
 
 	if len(conflicts) > 0 {
 		_, _ = fmt.Fprintf(stderr, "\nConflicting staged plans will be replaced:\n")
@@ -685,7 +686,7 @@ func stageRecoveryOntoCluster(
 To verify recovery status invoke:
 
 'cockroach debug recover verify %s %s'
-`, joinIDs("n", sortedKeys(nodeSet)), remoteArgs, planFile)
+`, strutil.JoinIDs("n", sortedKeys(nodeSet)), remoteArgs, planFile)
 	return nil
 }
 
@@ -747,7 +748,7 @@ func applyRecoveryToLocalStore(
 	if len(prepReport.UpdatedReplicas) == 0 {
 		if len(prepReport.MissingStores) > 0 {
 			return errors.Newf("stores %s expected on the node but no paths were provided",
-				joinIDs("s", prepReport.MissingStores))
+				strutil.JoinIDs("s", prepReport.MissingStores))
 		}
 		_, _ = fmt.Fprintf(stderr, "No updates planned on this node.\n")
 		return nil
@@ -785,16 +786,8 @@ func applyRecoveryToLocalStore(
 
 	// Apply batches to the stores.
 	applyReport, err := loqrecovery.CommitReplicaChanges(batches)
-	_, _ = fmt.Fprintf(stderr, "Updated store(s): %s\n", joinIDs("s", applyReport.UpdatedStores))
+	_, _ = fmt.Fprintf(stderr, "Updated store(s): %s\n", strutil.JoinIDs("s", applyReport.UpdatedStores))
 	return err
-}
-
-func joinIDs[T ~int32](prefix string, ids []T) string {
-	storeNames := make([]string, 0, len(ids))
-	for _, id := range ids {
-		storeNames = append(storeNames, fmt.Sprintf("%s%d", prefix, id))
-	}
-	return strings.Join(storeNames, ", ")
 }
 
 func formatNodeStores(locations []loqrecovery.NodeStores, indent string) string {
@@ -813,7 +806,7 @@ func formatNodeStores(locations []loqrecovery.NodeStores, indent string) string 
 	nodeDetails := make([]string, 0, len(locations))
 	for _, node := range locations {
 		nodeDetails = append(nodeDetails,
-			indent+fmt.Sprintf("n%d: store(s): %s", node.NodeID, joinIDs("s", node.StoreIDs)))
+			indent+fmt.Sprintf("n%d: store(s): %s", node.NodeID, strutil.JoinIDs("s", node.StoreIDs)))
 	}
 	return strings.Join(nodeDetails, "\n")
 }
