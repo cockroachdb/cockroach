@@ -2308,6 +2308,12 @@ func TestStoreRangeGossipOnSplits(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	// 50% for testing We can't properly test how frequently changes in the
+	// number of ranges trigger the store to gossip its capacities if we have
+	// to worry about changes in the number of leases also triggering store
+	// gossip.
+	overrideCapacityFraction := 0.5
+
 	ctx := context.Background()
 	serv, _, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
@@ -2316,11 +2322,8 @@ func TestStoreRangeGossipOnSplits(t *testing.T) {
 				DisableSplitQueue: true,
 				DisableScanner:    true,
 				GossipTestingKnobs: kvserver.StoreGossipTestingKnobs{
-					OverrideGossipWhenCapacityDeltaExceedsFraction: 0.5, // 50% for testing
-					// We can't properly test how frequently changes in the number of ranges
-					// trigger the store to gossip its capacities if we have to worry about
-					// changes in the number of leases also triggering store gossip.
-					DisableLeaseCapacityGossip: true,
+					OverrideGossipWhenCapacityDeltaExceedsFraction: overrideCapacityFraction,
+					DisableLeaseCapacityGossip:                     true,
 				},
 			},
 		},
@@ -2385,7 +2388,10 @@ func TestStoreRangeGossipOnSplits(t *testing.T) {
 		}
 		select {
 		case rangeCount = <-rangeCountCh:
-			changeCount := int32(math.Ceil(math.Max(float64(lastRangeCount)*0.5, 10)))
+			changeCount := int32(math.Ceil(math.Max(
+				float64(lastRangeCount)*overrideCapacityFraction,
+				kvserver.GossipWhenRangeCountDeltaExceeds,
+			)))
 			diff := rangeCount - (lastRangeCount + changeCount)
 			if diff < -1 || diff > 1 {
 				t.Errorf("gossiped range count %d more than 1 away from expected %d", rangeCount, lastRangeCount+changeCount)

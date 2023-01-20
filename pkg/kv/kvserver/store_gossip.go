@@ -44,11 +44,11 @@ const (
 	//  gossip interval.
 	gossipWhenLeaseCountDeltaExceeds = 5
 
-	// gossipWhenRangeCountDeltaExceeds specifies the absolute change from the
+	// GossipWhenRangeCountDeltaExceeds specifies the absolute change from the
 	// last gossiped store capacity range count which needs to be exceeded
 	// before the store will gossip immediately without waiting for the
 	// periodic gossip interval.
-	gossipWhenRangeCountDeltaExceeds = 5
+	GossipWhenRangeCountDeltaExceeds = 5
 
 	// gossipWhenLoadDeltaExceedsFraction specifies the fraction from the last
 	// gossiped store capacity load which needs to be exceeded before the store
@@ -394,9 +394,6 @@ const (
 // immediate gossip of this store's descriptor, to include updated
 // capacity information.
 func (s *StoreGossip) MaybeGossipOnCapacityChange(ctx context.Context, cce CapacityChangeEvent) {
-	if s.knobs.DisableLeaseCapacityGossip && (cce == LeaseAddEvent || cce == LeaseRemoveEvent) {
-		return
-	}
 
 	// Incrementally adjust stats to keep them up to date even if the
 	// capacity is gossiped, but isn't due yet to be recomputed from scratch.
@@ -460,15 +457,17 @@ func (s *StoreGossip) shouldGossipOnCapacityDelta() (should bool, reason string)
 	updateForWPS, deltaWPS := deltaExceedsThreshold(
 		s.cachedCapacity.lastGossiped.WritesPerSecond, s.cachedCapacity.cached.WritesPerSecond,
 		gossipMinAbsoluteDelta, gossipWhenLoadDeltaExceedsFraction)
-
 	updateForRangeCount, deltaRangeCount := deltaExceedsThreshold(
 		float64(s.cachedCapacity.lastGossiped.RangeCount), float64(s.cachedCapacity.cached.RangeCount),
-		gossipWhenRangeCountDeltaExceeds, gossipWhenCapacityDeltaExceedsFraction)
-
+		GossipWhenRangeCountDeltaExceeds, gossipWhenCapacityDeltaExceedsFraction)
 	updateForLeaseCount, deltaLeaseCount := deltaExceedsThreshold(
 		float64(s.cachedCapacity.lastGossiped.LeaseCount), float64(s.cachedCapacity.cached.LeaseCount),
 		gossipWhenLeaseCountDeltaExceeds, gossipWhenCapacityDeltaExceedsFraction)
 	s.cachedCapacity.Unlock()
+
+	if s.knobs.DisableLeaseCapacityGossip {
+		updateForLeaseCount = false
+	}
 
 	if updateForQPS {
 		reason += fmt.Sprintf("queries-per-second(%.1f) ", deltaQPS)
