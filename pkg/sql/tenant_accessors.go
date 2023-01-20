@@ -57,7 +57,7 @@ func GetAllNonDropTenantIDs(ctx context.Context, txn isql.Txn) ([]roachpb.Tenant
 		ctx, "get-tenant-ids", txn.KV(), `
 		 SELECT id
 		 FROM system.tenants
-		 WHERE crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info, true)->>'state' != 'DROP'
+		 WHERE crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info, true)->>'dataState' != 'DROP'
 		 ORDER BY id
 		 `)
 	if err != nil {

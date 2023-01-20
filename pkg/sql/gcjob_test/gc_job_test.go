@@ -453,7 +453,7 @@ func TestGCTenant(t *testing.T) {
 			txn,
 			execCfg.SpanConfigKVAccessor.WithTxn(ctx, txn.KV()),
 			&descpb.TenantInfoWithUsage{
-				TenantInfo: descpb.TenantInfo{ID: dropTenID, State: descpb.TenantInfo_DROP},
+				TenantInfo: descpb.TenantInfo{ID: dropTenID, DataState: descpb.TenantInfo_DROP},
 			},
 			execCfg.DefaultZoneConfig,
 		)
@@ -493,7 +493,7 @@ func TestGCTenant(t *testing.T) {
 		require.EqualError(
 			t,
 			gcClosure(dropTenID, progress),
-			`GC state for tenant id:11 state:DROP name:"tenant-11" dropped_name:"" tenant_replication_job_id:0 capabilities:<> is DELETED yet the tenant row still exists`,
+			`GC state for tenant id:11 data_state:DROP name:"tenant-11" dropped_name:"" tenant_replication_job_id:0 capabilities:<> service_mode:EXTERNAL is DELETED yet the tenant row still exists`,
 		)
 	})
 

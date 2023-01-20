@@ -545,7 +545,7 @@ type TenantOperator interface {
 	// DropTenantByID attempts to uninstall an existing tenant from the system.
 	// It returns an error if the tenant does not exist. If synchronous is true
 	// the gc job will not wait for a GC ttl.
-	DropTenantByID(ctx context.Context, tenantID uint64, synchronous bool) error
+	DropTenantByID(ctx context.Context, tenantID uint64, synchronous, ignoreServiceMode bool) error
 
 	// GCTenant attempts to garbage collect a DROP tenant from the system. Upon
 	// success it also removes the tenant record.

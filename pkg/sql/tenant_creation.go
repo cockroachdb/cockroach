@@ -58,8 +58,9 @@ func (p *planner) CreateTenant(
 }
 
 type createTenantConfig struct {
-	ID   *uint64 `json:"id,omitempty"`
-	Name *string `json:"name,omitempty"`
+	ID          *uint64 `json:"id,omitempty"`
+	Name        *string `json:"name,omitempty"`
+	ServiceMode *string `json:"service_mode,omitempty"`
 }
 
 func (p *planner) createTenantInternal(
@@ -72,6 +73,14 @@ func (p *planner) createTenantInternal(
 	var name roachpb.TenantName
 	if ctcfg.Name != nil {
 		name = roachpb.TenantName(*ctcfg.Name)
+	}
+	serviceMode := descpb.TenantInfo_NONE
+	if ctcfg.ServiceMode != nil {
+		v, ok := descpb.TenantInfo_ServiceMode_value[strings.ToUpper(*ctcfg.ServiceMode)]
+		if !ok {
+			return tid, pgerror.Newf(pgcode.Syntax, "unknown service mode: %q", *ctcfg.ServiceMode)
+		}
+		serviceMode = descpb.TenantInfo_ServiceMode(v)
 	}
 
 	// tenantID uint64, name roachpb.TenantName,
@@ -90,9 +99,10 @@ func (p *planner) createTenantInternal(
 		TenantInfo: descpb.TenantInfo{
 			ID: tenantID,
 			// We synchronously initialize the tenant's keyspace below, so
-			// we can skip the ADD state and go straight to an ACTIVE state.
-			State: descpb.TenantInfo_ACTIVE,
-			Name:  name,
+			// we can skip the ADD state and go straight to the READY state.
+			DataState:   descpb.TenantInfo_READY,
+			Name:        name,
+			ServiceMode: serviceMode,
 		},
 	}
 
@@ -254,7 +264,7 @@ func CreateTenantRecord(
 		}
 	}
 
-	active := info.State == descpb.TenantInfo_ACTIVE
+	active := info.DataState == descpb.TenantInfo_READY
 	infoBytes, err := protoutil.Marshal(&info.TenantInfo)
 	if err != nil {
 		return roachpb.TenantID{}, err

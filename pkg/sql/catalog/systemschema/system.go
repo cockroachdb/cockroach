@@ -100,16 +100,19 @@ CREATE TABLE system.settings (
 	DescIDSequenceSchema = `
 CREATE SEQUENCE system.descriptor_id_seq;`
 
-	tenantNameComputeExpr = `crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo':::STRING, info)->>'name':::STRING`
-	TenantsTableSchema    = `
+	tenantNameComputeExpr        = `crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo':::STRING, info)->>'name':::STRING`
+	tenantServiceModeComputeExpr = `lower(crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo':::STRING, info)->>'serviceMode':::STRING)`
+	TenantsTableSchema           = `
 CREATE TABLE system.tenants (
-	id     INT8 NOT NULL,
-	active BOOL NOT NULL DEFAULT true,
-	info   BYTES,
-	name   STRING GENERATED ALWAYS AS (` + tenantNameComputeExpr + `) VIRTUAL,
+	id           INT8 NOT NULL,
+	active       BOOL NOT NULL DEFAULT true,
+	info         BYTES,
+	name         STRING GENERATED ALWAYS AS (` + tenantNameComputeExpr + `) VIRTUAL,
+	service_mode STRING GENERATED ALWAYS AS (` + tenantServiceModeComputeExpr + `) VIRTUAL,
 	CONSTRAINT "primary" PRIMARY KEY (id),
 	FAMILY "primary" (id, active, info),
-	UNIQUE INDEX tenants_name_idx (name ASC)
+	UNIQUE INDEX tenants_name_idx (name ASC),
+	INDEX tenants_service_mode_idx (service_mode ASC)
 );`
 
 	// RoleIDSequenceSchema starts at 100 so we have reserved IDs for special
@@ -121,6 +124,7 @@ CREATE SEQUENCE system.role_id_seq START 100 MINVALUE 100 MAXVALUE 2147483647;`
 )
 
 var tenantNameComputeExprStr = tenantNameComputeExpr
+var tenantServiceModeComputeExprStr = tenantServiceModeComputeExpr
 var indexUsageComputeExprStr = indexUsageComputeExpr
 
 // These system tables are not part of the system config.
@@ -1214,6 +1218,9 @@ var (
 				{Name: "name", ID: 4, Type: types.String, Nullable: true,
 					Virtual:     true,
 					ComputeExpr: &tenantNameComputeExprStr},
+				{Name: "service_mode", ID: 5, Type: types.String, Nullable: true,
+					Virtual:     true,
+					ComputeExpr: &tenantServiceModeComputeExprStr},
 			},
 			[]descpb.ColumnFamilyDescriptor{{
 				Name:        "primary",
@@ -1229,6 +1236,15 @@ var (
 				KeyColumnNames:      []string{"name"},
 				KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC},
 				KeyColumnIDs:        []descpb.ColumnID{4},
+				KeySuffixColumnIDs:  []descpb.ColumnID{1},
+				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
+			},
+			descpb.IndexDescriptor{
+				Name:                "tenants_service_mode_idx",
+				ID:                  3,
+				KeyColumnNames:      []string{"service_mode"},
+				KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC},
+				KeyColumnIDs:        []descpb.ColumnID{5},
 				KeySuffixColumnIDs:  []descpb.ColumnID{1},
 				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
 			},

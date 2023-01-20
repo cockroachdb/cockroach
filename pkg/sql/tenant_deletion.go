@@ -21,13 +21,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
 // DropTenantByID implements the tree.TenantOperator interface.
 func (p *planner) DropTenantByID(
-	ctx context.Context, tenID uint64, synchronousImmediateDrop bool,
+	ctx context.Context, tenID uint64, synchronousImmediateDrop, ignoreServiceMode bool,
 ) error {
 	if err := p.validateDropTenant(ctx); err != nil {
 		return err
@@ -46,6 +48,7 @@ func (p *planner) DropTenantByID(
 		p.User(),
 		info,
 		synchronousImmediateDrop,
+		ignoreServiceMode,
 	)
 }
 
@@ -70,6 +73,7 @@ func dropTenantInternal(
 	user username.SQLUsername,
 	info *descpb.TenantInfo,
 	synchronousImmediateDrop bool,
+	ignoreServiceMode bool,
 ) error {
 	const op = "destroy"
 	tenID := info.ID
@@ -77,8 +81,14 @@ func dropTenantInternal(
 		return err
 	}
 
-	if info.State == descpb.TenantInfo_DROP {
-		return errors.Errorf("tenant %d is already in state DROP", tenID)
+	if !ignoreServiceMode && info.ServiceMode != descpb.TenantInfo_NONE {
+		return errors.WithHint(pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+			"cannot drop tenant %q (%d) in service mode %v", info.Name, tenID, info.ServiceMode),
+			"Use ALTER TENANT STOP SERVICE before DROP TENANT.")
+	}
+
+	if info.DataState == descpb.TenantInfo_DROP {
+		return errors.Errorf("tenant %q (%d) is already in data state DROP", info.Name, tenID)
 	}
 
 	// Mark the tenant as dropping.
@@ -97,7 +107,7 @@ func dropTenantInternal(
 
 	// TODO(ssd): We may want to implement a job that waits out
 	// any running sql pods before enqueing the GC job.
-	info.State = descpb.TenantInfo_DROP
+	info.DataState = descpb.TenantInfo_DROP
 	info.DroppedName = info.Name
 	info.Name = ""
 	if err := UpdateTenantRecord(ctx, settings, txn, info); err != nil {
