@@ -67,6 +67,11 @@ func newExecFactory(ctx context.Context, p *planner) *execFactory {
 	}
 }
 
+// Ctx implements the Factory interface.
+func (ef *execFactory) Ctx() context.Context {
+	return ef.ctx
+}
+
 func (ef *execFactory) getDatumAlloc() *tree.DatumAlloc {
 	if ef.alloc == nil {
 		ef.alloc = &tree.DatumAlloc{}
