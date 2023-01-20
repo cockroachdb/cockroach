@@ -99,7 +99,7 @@ func runSysbench(ctx context.Context, t test.Test, c cluster.Cluster, opts sysbe
 	t.Status("installing cockroach")
 	c.Put(ctx, t.Cockroach(), "./cockroach", allNodes)
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), roachNodes)
-	err := WaitFor3XReplication(ctx, t, c.Conn(ctx, t.L(), allNodes[0]))
+	err := WaitFor3XReplication(ctx, t, c.Conn(ctx, t.L(), allNodes[0], ""))
 	require.NoError(t, err)
 
 	t.Status("installing haproxy")

@@ -54,7 +54,7 @@ func jobSurvivesNodeShutdown(
 	m.Go(func(ctx context.Context) error {
 		defer close(jobIDCh)
 
-		watcherDB := c.Conn(ctx, t.L(), watcherNode)
+		watcherDB := c.Conn(ctx, t.L(), watcherNode, "")
 		defer watcherDB.Close()
 
 		// Wait for 3x replication to ensure that the cluster
@@ -109,7 +109,7 @@ func jobSurvivesNodeShutdown(
 		}
 
 		// Check once a second to see if the job has started running.
-		watcherDB := c.Conn(ctx, t.L(), watcherNode)
+		watcherDB := c.Conn(ctx, t.L(), watcherNode, "")
 		defer watcherDB.Close()
 		timeToWait := time.Second
 		timer := timeutil.Timer{}

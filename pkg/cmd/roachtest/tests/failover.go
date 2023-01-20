@@ -115,7 +115,7 @@ func runFailoverNonSystem(
 	c.Put(ctx, t.Cockroach(), "./cockroach")
 	c.Start(ctx, t.L(), opts, settings, c.Range(1, 6))
 
-	conn := c.Conn(ctx, t.L(), 1)
+	conn := c.Conn(ctx, t.L(), 1, "")
 	defer conn.Close()
 
 	// Configure cluster. This test controls the ranges manually.
@@ -269,7 +269,7 @@ func runFailoverLiveness(
 	c.Put(ctx, t.Cockroach(), "./cockroach")
 	c.Start(ctx, t.L(), opts, settings, c.Range(1, 4))
 
-	conn := c.Conn(ctx, t.L(), 1)
+	conn := c.Conn(ctx, t.L(), 1, "")
 	defer conn.Close()
 
 	// Setup the prometheus instance and client. We don't collect metrics from n4
@@ -468,7 +468,7 @@ func runFailoverSystemNonLiveness(
 	c.Put(ctx, t.Cockroach(), "./cockroach")
 	c.Start(ctx, t.L(), opts, settings, c.Range(1, 6))
 
-	conn := c.Conn(ctx, t.L(), 1)
+	conn := c.Conn(ctx, t.L(), 1, "")
 	defer conn.Close()
 
 	// Configure cluster. This test controls the ranges manually.

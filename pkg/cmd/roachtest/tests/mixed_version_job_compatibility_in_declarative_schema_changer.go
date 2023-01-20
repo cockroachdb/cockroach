@@ -26,7 +26,7 @@ import (
 // and always use declarative schema changer on all nodes.
 func testSetupResetStep(c cluster.Cluster) versionStep {
 	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
-		db := c.Conn(ctx, t.L(), 1)
+		db := c.Conn(ctx, t.L(), 1, "")
 		setUpQuery := `
 CREATE DATABASE testdb; 
 CREATE SCHEMA testdb.testsc; 
@@ -43,7 +43,7 @@ CREATE VIEW testdb.testsc.v AS (SELECT i*2 FROM testdb.testsc.t);
 		// Being explicit can help catch bugs that will otherwise be
 		// buried by the fallback.
 		for _, node := range c.All() {
-			db = c.Conn(ctx, t.L(), node)
+			db = c.Conn(ctx, t.L(), node, "")
 			_, err = db.ExecContext(ctx, "SET use_declarative_schema_changer = unsafe_always")
 			require.NoError(t, err)
 		}
@@ -54,7 +54,7 @@ CREATE VIEW testdb.testsc.v AS (SELECT i*2 FROM testdb.testsc.t);
 // to be 1 second.
 func setShortGCTTLInSystemZoneConfig(c cluster.Cluster) versionStep {
 	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
-		db := c.Conn(ctx, t.L(), 1)
+		db := c.Conn(ctx, t.L(), 1, "")
 		_, err := db.ExecContext(ctx, "ALTER RANGE default CONFIGURE ZONE USING gc.ttlseconds = 1;")
 		require.NoError(t, err)
 	}
@@ -64,7 +64,7 @@ func planAndRunSchemaChange(
 	c cluster.Cluster, nodeToPlanSchemaChange option.NodeListOption, schemaChangeStmt string,
 ) versionStep {
 	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
-		gatewayDB := c.Conn(ctx, t.L(), nodeToPlanSchemaChange[0])
+		gatewayDB := c.Conn(ctx, t.L(), nodeToPlanSchemaChange[0], "")
 		defer gatewayDB.Close()
 		t.Status("Running: ", schemaChangeStmt)
 		_, err := gatewayDB.ExecContext(ctx, schemaChangeStmt)

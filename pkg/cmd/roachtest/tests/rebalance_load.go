@@ -112,7 +112,7 @@ func registerRebalanceLoad(r registry.Registry) {
 		m.Go(func() error {
 			t.Status("checking for lease balance")
 
-			db := c.Conn(ctx, t.L(), 1)
+			db := c.Conn(ctx, t.L(), 1, "")
 			defer db.Close()
 
 			t.Status("disable load based splitting")

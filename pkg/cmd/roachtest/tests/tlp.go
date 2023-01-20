@@ -108,7 +108,7 @@ func runOneTLP(
 		fmt.Fprint(tlpLog, "\n\n")
 	}
 
-	conn := c.Conn(ctx, t.L(), 1)
+	conn := c.Conn(ctx, t.L(), 1, "")
 
 	rnd, seed := randutil.NewTestRand()
 	t.L().Printf("seed: %d", seed)

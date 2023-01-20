@@ -76,7 +76,7 @@ func registerAlterPK(r registry.Registry) {
 			time.Sleep(duration / 10)
 
 			t.Status("beginning primary key change")
-			db := c.Conn(ctx, t.L(), roachNodes[0])
+			db := c.Conn(ctx, t.L(), roachNodes[0], "")
 			defer db.Close()
 			cmds := []string{
 				`USE bank;`,
@@ -149,7 +149,7 @@ func registerAlterPK(r registry.Registry) {
 			randStmt := alterStmts[rand.Intn(len(alterStmts))]
 			t.Status("Running command: ", randStmt)
 
-			db := c.Conn(ctx, t.L(), roachNodes[0])
+			db := c.Conn(ctx, t.L(), roachNodes[0], "")
 			defer db.Close()
 			alterCmd := `USE tpcc; %s;`
 			t.Status("beginning primary key change")

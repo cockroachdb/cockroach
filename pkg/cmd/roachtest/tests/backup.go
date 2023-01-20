@@ -149,7 +149,7 @@ func registerBackupNodeShutdown(r registry.Registry) {
 			dest := loadBackupData(ctx, t, c)
 			backupQuery := `BACKUP bank.bank TO 'nodelocal://1/` + dest + `' WITH DETACHED`
 			startBackup := func(c cluster.Cluster, t test.Test) (jobID string, err error) {
-				gatewayDB := c.Conn(ctx, t.L(), gatewayNode)
+				gatewayDB := c.Conn(ctx, t.L(), gatewayNode, "")
 				defer gatewayDB.Close()
 
 				err = gatewayDB.QueryRowContext(ctx, backupQuery).Scan(&jobID)
@@ -170,7 +170,7 @@ func registerBackupNodeShutdown(r registry.Registry) {
 			dest := loadBackupData(ctx, t, c)
 			backupQuery := `BACKUP bank.bank TO 'nodelocal://1/` + dest + `' WITH DETACHED`
 			startBackup := func(c cluster.Cluster, t test.Test) (jobID string, err error) {
-				gatewayDB := c.Conn(ctx, t.L(), gatewayNode)
+				gatewayDB := c.Conn(ctx, t.L(), gatewayNode, "")
 				defer gatewayDB.Close()
 
 				err = gatewayDB.QueryRowContext(ctx, backupQuery).Scan(&jobID)
@@ -308,7 +308,7 @@ func disableJobAdoptionStep(c cluster.Cluster, nodeIDs option.NodeListOption) ve
 			// Wait for no jobs to be running on the node that we have halted
 			// adoption on.
 			testutils.SucceedsSoon(t, func() error {
-				gatewayDB := c.Conn(ctx, t.L(), nodeID)
+				gatewayDB := c.Conn(ctx, t.L(), nodeID, "")
 				defer gatewayDB.Close()
 
 				row := gatewayDB.QueryRow(`SELECT count(*) FROM [SHOW JOBS] WHERE status = 'running'`)
@@ -371,7 +371,7 @@ func registerBackupMixedVersion(r registry.Registry) {
 	planAndRunBackup := func(t test.Test, c cluster.Cluster, nodeToPlanBackup option.NodeListOption,
 		nodesWithAdoptionDisabled option.NodeListOption, backupStmt string) versionStep {
 		return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
-			gatewayDB := c.Conn(ctx, t.L(), nodeToPlanBackup[0])
+			gatewayDB := c.Conn(ctx, t.L(), nodeToPlanBackup[0], "")
 			defer gatewayDB.Close()
 			t.Status("Running: ", backupStmt)
 			var jobID jobspb.JobID
@@ -694,7 +694,7 @@ func registerBackup(r registry.Registry) {
 					}
 				}
 
-				conn := c.Conn(ctx, t.L(), 1)
+				conn := c.Conn(ctx, t.L(), 1, "")
 				m := c.NewMonitor(ctx)
 				m.Go(func(ctx context.Context) error {
 					t.Status(`running backup`)
@@ -783,7 +783,7 @@ func registerBackup(r registry.Registry) {
 				}
 				dest := importBankData(ctx, rows, t, c)
 
-				conn := c.Conn(ctx, t.L(), 1)
+				conn := c.Conn(ctx, t.L(), 1, "")
 				m := c.NewMonitor(ctx)
 				m.Go(func(ctx context.Context) error {
 					_, err := conn.ExecContext(ctx, `
@@ -909,7 +909,7 @@ func registerBackup(r registry.Registry) {
 			c.Put(ctx, t.Cockroach(), "./cockroach")
 			c.Put(ctx, t.DeprecatedWorkload(), "./workload")
 			c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
-			conn := c.Conn(ctx, t.L(), 1)
+			conn := c.Conn(ctx, t.L(), 1, "")
 
 			duration := 5 * time.Minute
 			if c.IsLocal() {
@@ -1141,7 +1141,7 @@ func runBackupMVCCRangeTombstones(ctx context.Context, t test.Test, c cluster.Cl
 	t.Status("starting csv servers")
 	c.Run(ctx, c.All(), `./cockroach workload csv-server --port=8081 &> logs/workload-csv-server.log < /dev/null &`)
 
-	conn := c.Conn(ctx, t.L(), 1)
+	conn := c.Conn(ctx, t.L(), 1, "")
 
 	// Configure cluster.
 	t.Status("configuring cluster")

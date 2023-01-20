@@ -64,7 +64,7 @@ func runChangeReplicasMixedVersion(ctx context.Context, t test.Test, c cluster.C
 		return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
 			gateway := randomNodeID()
 			t.L().Printf("scanning table %s via gateway n%d", table, gateway)
-			conn := u.c.Conn(ctx, t.L(), gateway)
+			conn := u.c.Conn(ctx, t.L(), gateway, "")
 			defer conn.Close()
 			var count int
 			row := conn.QueryRowContext(ctx, `SELECT count(*) FROM `+table)
@@ -78,7 +78,7 @@ func runChangeReplicasMixedVersion(ctx context.Context, t test.Test, c cluster.C
 		return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
 			gateway := randomNodeID()
 			t.L().Printf("scattering table %s via n%d", table, gateway)
-			conn := u.c.Conn(ctx, t.L(), gateway)
+			conn := u.c.Conn(ctx, t.L(), gateway, "")
 			defer conn.Close()
 			_, err = conn.ExecContext(ctx, `ALTER TABLE test SCATTER`)
 			require.NoError(t, err)
@@ -94,7 +94,7 @@ func runChangeReplicasMixedVersion(ctx context.Context, t test.Test, c cluster.C
 			// Disable the replicate queue, but re-enable it when we're done.
 			setReplicateQueueEnabled := func(enabled bool) {
 				for n := 1; n <= nodeCount; n++ {
-					conn := u.c.Conn(ctx, t.L(), n)
+					conn := u.c.Conn(ctx, t.L(), n, "")
 					defer conn.Close()
 					_, err := conn.ExecContext(ctx,
 						`SELECT crdb_internal.kv_set_queue_active('replicate', $1)`, enabled)
@@ -117,7 +117,7 @@ func runChangeReplicasMixedVersion(ctx context.Context, t test.Test, c cluster.C
 
 			for _, target := range targets {
 				gateway := randomNodeID()
-				conn := u.c.Conn(ctx, t.L(), gateway)
+				conn := u.c.Conn(ctx, t.L(), gateway, "")
 				defer conn.Close()
 
 				var rangeErrors map[int]string
@@ -167,7 +167,7 @@ func runChangeReplicasMixedVersion(ctx context.Context, t test.Test, c cluster.C
 		return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
 			conns := map[int]*gosql.DB{}
 			for n := 1; n <= nodeCount; n++ {
-				conns[n] = u.c.Conn(ctx, t.L(), n)
+				conns[n] = u.c.Conn(ctx, t.L(), n, "")
 				defer conns[n].Close()
 			}
 			gateway := randomNodeID()
@@ -224,7 +224,7 @@ func runChangeReplicasMixedVersion(ctx context.Context, t test.Test, c cluster.C
 
 		// Create a test table and wait for upreplication.
 		func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
-			conn := u.c.Conn(ctx, t.L(), 1)
+			conn := u.c.Conn(ctx, t.L(), 1, "")
 			defer conn.Close()
 			_, err = conn.ExecContext(ctx, `CREATE TABLE test (id INT PRIMARY KEY)`)
 			require.NoError(t, err)
@@ -244,7 +244,7 @@ func runChangeReplicasMixedVersion(ctx context.Context, t test.Test, c cluster.C
 			gateway := randomNodeID()
 			t.L().Printf("splitting table test into %d ranges via gateway n%d", ranges, gateway)
 
-			conn := u.c.Conn(ctx, t.L(), gateway)
+			conn := u.c.Conn(ctx, t.L(), gateway, "")
 			defer conn.Close()
 			_, err = conn.ExecContext(ctx,
 				`ALTER TABLE test SPLIT AT SELECT i FROM generate_series(1, $1) AS g(i)`, ranges-1)

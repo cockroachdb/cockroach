@@ -61,7 +61,7 @@ func registerImportNodeShutdown(r registry.Registry) {
 				'gs://cockroach-fixtures/tpch-csv/sf-100/%[1]s.tbl.8?AUTH=implicit'
 				) WITH  delimiter='|', detached
 			`, tableName)
-			gatewayDB := c.Conn(ctx, t.L(), gatewayNode)
+			gatewayDB := c.Conn(ctx, t.L(), gatewayNode, "")
 			defer gatewayDB.Close()
 
 			createStmt, err := readCreateTableFromFixture(
@@ -215,7 +215,7 @@ func registerImportTPCH(r registry.Registry) {
 
 				c.Put(ctx, t.Cockroach(), "./cockroach")
 				c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
-				conn := c.Conn(ctx, t.L(), 1)
+				conn := c.Conn(ctx, t.L(), 1, "")
 				if _, err := conn.Exec(`CREATE DATABASE csv;`); err != nil {
 					t.Fatal(err)
 				}

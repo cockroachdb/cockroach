@@ -370,7 +370,7 @@ func setupDecommissionBench(
 	c.Run(ctx, c.Node(pinnedNode), importCmd)
 
 	{
-		db := c.Conn(ctx, t.L(), pinnedNode)
+		db := c.Conn(ctx, t.L(), pinnedNode, "")
 		defer db.Close()
 
 		if benchSpec.snapshotRate != 0 {
@@ -681,7 +681,7 @@ func runDecommissionBench(
 	m.Go(func(ctx context.Context) error {
 		hists := reg.GetHandle()
 
-		db := c.Conn(ctx, t.L(), pinnedNode)
+		db := c.Conn(ctx, t.L(), pinnedNode, "")
 		defer db.Close()
 
 		return trackBytesUsed(ctx, db, &targetNodeAtomic, hists, tickByName)
@@ -806,7 +806,7 @@ func runDecommissionBenchLong(
 	m.Go(func(ctx context.Context) error {
 		hists := reg.GetHandle()
 
-		db := c.Conn(ctx, t.L(), pinnedNode)
+		db := c.Conn(ctx, t.L(), pinnedNode, "")
 		defer db.Close()
 
 		return trackBytesUsed(ctx, db, &targetNodeAtomic, hists, tickByName)
@@ -846,7 +846,7 @@ func runSingleDecommission(
 	var bytesUsed, rangeCount, totalRanges int64
 	var candidateStores, avgBytesPerReplica int64
 	{
-		dbNode := h.c.Conn(ctx, h.t.L(), target)
+		dbNode := h.c.Conn(ctx, h.t.L(), target, "")
 		defer dbNode.Close()
 
 		if err := dbNode.QueryRow(
@@ -990,7 +990,7 @@ func runSingleDecommission(
 
 		tickByName(upreplicateMetric)
 		{
-			dbNode := h.c.Conn(ctx, h.t.L(), pinnedNode)
+			dbNode := h.c.Conn(ctx, h.t.L(), pinnedNode, "")
 			defer dbNode.Close()
 
 			h.t.Status("waiting for new node to become active")

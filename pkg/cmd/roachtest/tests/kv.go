@@ -93,7 +93,7 @@ func registerKV(r registry.Registry) {
 		}
 		c.Start(ctx, t.L(), startOpts, settings, c.Range(1, nodes))
 
-		db := c.Conn(ctx, t.L(), 1)
+		db := c.Conn(ctx, t.L(), 1, "")
 		defer db.Close()
 		if opts.disableLoadSplits {
 			if _, err := db.ExecContext(ctx, "SET CLUSTER SETTING kv.range_split.by_load_enabled = 'false'"); err != nil {
@@ -318,7 +318,7 @@ func registerKVContention(r registry.Registry) {
 			settings.Env = append(settings.Env, "COCKROACH_TXN_LIVENESS_HEARTBEAT_MULTIPLIER=600")
 			c.Start(ctx, t.L(), option.DefaultStartOpts(), settings, c.Range(1, nodes))
 
-			conn := c.Conn(ctx, t.L(), 1)
+			conn := c.Conn(ctx, t.L(), 1, "")
 			// Enable request tracing, which is a good tool for understanding
 			// how different transactions are interacting.
 			if _, err := conn.Exec(`
@@ -395,7 +395,7 @@ func registerKVQuiescenceDead(r registry.Registry) {
 				m.Wait()
 			}
 
-			db := c.Conn(ctx, t.L(), 1)
+			db := c.Conn(ctx, t.L(), 1, "")
 			defer db.Close()
 
 			err := WaitFor3XReplication(ctx, t, db)
@@ -476,7 +476,7 @@ func registerKVGracefulDraining(r registry.Registry) {
 			startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs, "--vmodule=store=2,store_rebalancer=2")
 			c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.Range(1, nodes))
 
-			db := c.Conn(ctx, t.L(), 1)
+			db := c.Conn(ctx, t.L(), 1, "")
 			defer db.Close()
 
 			err := WaitFor3XReplication(ctx, t, db)
@@ -788,7 +788,7 @@ func registerKVRangeLookups(r registry.Registry) {
 
 		conns := make([]*gosql.DB, nodes)
 		for i := 0; i < nodes; i++ {
-			conns[i] = c.Conn(ctx, t.L(), i+1)
+			conns[i] = c.Conn(ctx, t.L(), i+1, "")
 		}
 		defer func() {
 			for i := 0; i < nodes; i++ {
@@ -943,7 +943,7 @@ func registerKVRestartImpact(r registry.Registry) {
 			// Set the duration of the entire test to be 3x the outage duration.
 			testDuration := 3 * duration
 
-			db := c.Conn(ctx, t.L(), 1)
+			db := c.Conn(ctx, t.L(), 1, "")
 			defer db.Close()
 
 			t.Status(fmt.Sprintf("initializing kv dataset <%s", 3*time.Minute))
@@ -979,7 +979,7 @@ func registerKVRestartImpact(r registry.Registry) {
 			// of raft catchup, not snapshot movement.
 			setReplicateQueueEnabled := func(enabled bool) {
 				for n := 1; n <= nodes; n++ {
-					conn := c.Conn(ctx, t.L(), n)
+					conn := c.Conn(ctx, t.L(), n, "")
 					defer conn.Close()
 					_, err := conn.ExecContext(ctx,
 						`SELECT crdb_internal.kv_set_queue_active('replicate', $1)`, enabled)

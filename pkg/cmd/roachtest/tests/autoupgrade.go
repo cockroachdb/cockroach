@@ -58,7 +58,7 @@ func registerAutoUpgrade(r registry.Registry) {
 			}
 		}
 
-		db := c.Conn(ctx, t.L(), 1)
+		db := c.Conn(ctx, t.L(), 1, "")
 		defer db.Close()
 
 		if _, err := db.ExecContext(ctx,

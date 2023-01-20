@@ -95,7 +95,7 @@ func registerPgx(r registry.Registry) {
 		t.L().Printf("%s", status)
 
 		t.Status("setting up test db")
-		db, err := c.ConnE(ctx, t.L(), node[0])
+		db, err := c.ConnE(ctx, t.L(), node[0], "")
 		if err != nil {
 			t.Fatal(err)
 		}

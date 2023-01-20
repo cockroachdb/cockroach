@@ -91,7 +91,7 @@ func runNetworkAuthentication(ctx context.Context, t test.Test, c cluster.Cluste
 	}))
 
 	t.L().Printf("connecting to cluster from roachtest...")
-	db, err := c.ConnE(ctx, t.L(), 1)
+	db, err := c.ConnE(ctx, t.L(), 1, "")
 	require.NoError(t, err)
 	defer db.Close()
 

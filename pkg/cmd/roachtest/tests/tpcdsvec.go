@@ -61,7 +61,7 @@ func registerTPCDSVec(r registry.Registry) {
 		c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
 		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
 
-		clusterConn := c.Conn(ctx, t.L(), 1)
+		clusterConn := c.Conn(ctx, t.L(), 1, "")
 		t.Status("disabling automatic collection of stats")
 		if _, err := clusterConn.Exec(
 			`SET CLUSTER SETTING sql.stats.automatic_collection.enabled=false;`,

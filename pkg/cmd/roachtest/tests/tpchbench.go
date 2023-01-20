@@ -71,7 +71,7 @@ func runTPCHBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpchBen
 
 	m := c.NewMonitor(ctx, roachNodes)
 	m.Go(func(ctx context.Context) error {
-		conn := c.Conn(ctx, t.L(), 1)
+		conn := c.Conn(ctx, t.L(), 1, "")
 		defer conn.Close()
 
 		t.Status("setting up dataset")

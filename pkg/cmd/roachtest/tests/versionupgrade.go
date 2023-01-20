@@ -246,7 +246,7 @@ func checkpointName(binaryVersion string) string { return "checkpoint-v" + binar
 func (u *versionUpgradeTest) conn(ctx context.Context, t test.Test, i int) *gosql.DB {
 	if u.conns == nil {
 		for _, i := range u.c.All() {
-			u.conns = append(u.conns, u.c.Conn(ctx, t.L(), i))
+			u.conns = append(u.conns, u.c.Conn(ctx, t.L(), i, ""))
 		}
 	}
 	db := u.conns[i-1]
@@ -602,7 +602,7 @@ func makeVersionFixtureAndFatal(
 	var useLocalBinary bool
 	if makeFixtureVersion == "" {
 		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Node(1))
-		require.NoError(t, c.Conn(ctx, t.L(), 1).QueryRowContext(
+		require.NoError(t, c.Conn(ctx, t.L(), 1, "").QueryRowContext(
 			ctx,
 			`select regexp_extract(value, '^v([0-9]+\.[0-9]+\.[0-9]+)') from crdb_internal.node_build_info where field = 'Version';`,
 		).Scan(&makeFixtureVersion))

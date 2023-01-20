@@ -39,7 +39,7 @@ func runInconsistency(ctx context.Context, t test.Test, c cluster.Cluster) {
 	c.Start(ctx, t.L(), startOps, install.MakeClusterSettings(), nodes)
 
 	{
-		db := c.Conn(ctx, t.L(), 1)
+		db := c.Conn(ctx, t.L(), 1, "")
 		// Disable consistency checks. We're going to be introducing an
 		// inconsistency and wish for it to be detected when we've set up the test
 		// to expect it.
@@ -112,7 +112,7 @@ func runInconsistency(ctx context.Context, t test.Test, c cluster.Cluster) {
 	// check runs against all three nodes. If it targeted only two nodes, a random
 	// one would fatal - not what we want.
 	{
-		db := c.Conn(ctx, t.L(), 2)
+		db := c.Conn(ctx, t.L(), 2, "")
 		_, err := db.ExecContext(ctx, `SET CLUSTER SETTING server.consistency_check.interval = '10ms'`)
 		if err != nil {
 			t.Fatal(err)
@@ -126,7 +126,7 @@ func runInconsistency(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 	time.Sleep(20 * time.Second) // wait for liveness to time out for dead nodes
 
-	db := c.Conn(ctx, t.L(), 2)
+	db := c.Conn(ctx, t.L(), 2, "")
 	rows, err := db.Query(`SELECT node_id FROM crdb_internal.gossip_nodes WHERE is_live = false;`)
 	if err != nil {
 		t.Fatal(err)

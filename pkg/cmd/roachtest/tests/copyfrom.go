@@ -125,7 +125,7 @@ func runCopyFromCRDB(ctx context.Context, t test.Test, c cluster.Cluster, sf int
 	c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
 	initTest(ctx, t, c, sf)
-	db, err := c.ConnE(ctx, t.L(), 1)
+	db, err := c.ConnE(ctx, t.L(), 1, "")
 	require.NoError(t, err)
 	stmt := fmt.Sprintf("ALTER ROLE ALL SET copy_from_atomic_enabled = %t", atomic)
 	_, err = db.ExecContext(ctx, stmt)

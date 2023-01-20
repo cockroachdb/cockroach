@@ -39,7 +39,7 @@ func registerSchemaChangeDuringKV(r registry.Registry) {
 			c.Put(ctx, t.DeprecatedWorkload(), "./workload")
 
 			c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
-			db := c.Conn(ctx, t.L(), 1)
+			db := c.Conn(ctx, t.L(), 1, "")
 			defer db.Close()
 
 			m := c.NewMonitor(ctx, c.All())
@@ -388,7 +388,7 @@ func makeSchemaChangeBulkIngestTest(
 			})
 
 			m.Go(func(ctx context.Context) error {
-				db := c.Conn(ctx, t.L(), 1)
+				db := c.Conn(ctx, t.L(), 1, "")
 				defer db.Close()
 
 				if !c.IsLocal() {
@@ -480,7 +480,7 @@ func makeSchemaChangeDuringTPCC(
 func runAndLogStmts(
 	ctx context.Context, t test.Test, c cluster.Cluster, prefix string, stmts []string,
 ) error {
-	db := c.Conn(ctx, t.L(), 1)
+	db := c.Conn(ctx, t.L(), 1, "")
 	defer db.Close()
 	t.L().Printf("%s: running %d statements\n", prefix, len(stmts))
 	start := timeutil.Now()

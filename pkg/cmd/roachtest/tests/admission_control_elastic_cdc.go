@@ -84,7 +84,7 @@ func registerElasticControlForCDC(r registry.Registry) {
 				ExtraSetupArgs:     "--checks=false",
 				PrometheusConfig:   promCfg,
 				During: func(ctx context.Context) error {
-					db := c.Conn(ctx, t.L(), crdbNodes)
+					db := c.Conn(ctx, t.L(), crdbNodes, "")
 					defer db.Close()
 
 					t.Status(fmt.Sprintf("configuring cluster (<%s)", 30*time.Second))

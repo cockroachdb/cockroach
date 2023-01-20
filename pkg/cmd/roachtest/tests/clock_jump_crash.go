@@ -42,7 +42,7 @@ func runClockJump(ctx context.Context, t test.Test, c cluster.Cluster, tc clockJ
 	c.Wipe(ctx)
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
 
-	db := c.Conn(ctx, t.L(), c.Spec().NodeCount)
+	db := c.Conn(ctx, t.L(), c.Spec().NodeCount, "")
 	defer db.Close()
 	if _, err := db.Exec(
 		fmt.Sprintf(

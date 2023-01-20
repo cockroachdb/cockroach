@@ -149,7 +149,7 @@ func runMultiTenantFairness(
 	promCfg.WithGrafanaDashboard("https://go.crdb.dev/p/multi-tenant-fairness-grafana")
 
 	setRateLimit := func(ctx context.Context, val int) {
-		db := c.Conn(ctx, t.L(), crdbNodeID)
+		db := c.Conn(ctx, t.L(), crdbNodeID, "")
 		defer db.Close()
 
 		if _, err := db.ExecContext(
@@ -181,7 +181,7 @@ func runMultiTenantFairness(
 		return tenantBaseID + offset
 	}
 	setTenantResourceLimits := func(tenantID int) {
-		db := c.Conn(ctx, t.L(), crdbNodeID)
+		db := c.Conn(ctx, t.L(), crdbNodeID, "")
 		defer db.Close()
 		if _, err := db.ExecContext(
 			ctx, fmt.Sprintf(
@@ -194,7 +194,7 @@ func runMultiTenantFairness(
 	}
 
 	t.L().Printf("enabling child metrics (<%s)", 30*time.Second)
-	_, err := c.Conn(ctx, t.L(), crdbNodeID).Exec(`SET CLUSTER SETTING server.child_metrics.enabled = true`)
+	_, err := c.Conn(ctx, t.L(), crdbNodeID, "").Exec(`SET CLUSTER SETTING server.child_metrics.enabled = true`)
 	require.NoError(t, err)
 
 	// Create the tenants.
@@ -207,7 +207,7 @@ func runMultiTenantFairness(
 	tenants := make([]*tenantNode, numTenants)
 	for i := 0; i < numTenants; i++ {
 		if !t.SkipInit() {
-			_, err := c.Conn(ctx, t.L(), 1).Exec(`SELECT crdb_internal.create_tenant($1::INT)`, tenantID(i))
+			_, err := c.Conn(ctx, t.L(), 1, "").Exec(`SELECT crdb_internal.create_tenant($1::INT)`, tenantID(i))
 			require.NoError(t, err)
 		}
 

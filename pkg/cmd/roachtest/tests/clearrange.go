@@ -75,7 +75,7 @@ func runClearRange(
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
 
 	{
-		conn := c.Conn(ctx, t.L(), 1)
+		conn := c.Conn(ctx, t.L(), 1, "")
 		if _, err := conn.ExecContext(ctx,
 			`SET CLUSTER SETTING storage.mvcc.range_tombstones.enabled = $1`,
 			useRangeTombstones); err != nil {
@@ -110,7 +110,7 @@ func runClearRange(
 	defer t.WorkerStatus()
 
 	if t.BuildVersion().AtLeast(version.MustParse("v19.2.0")) {
-		conn := c.Conn(ctx, t.L(), 1)
+		conn := c.Conn(ctx, t.L(), 1, "")
 		if _, err := conn.ExecContext(ctx, `SET CLUSTER SETTING kv.bulk_io_write.concurrent_addsstable_requests = 8`); err != nil {
 			t.Fatal(err)
 		}
@@ -129,7 +129,7 @@ func runClearRange(
 	// Set up a convenience function that we can call to learn the number of
 	// ranges for the bigbank.bank table (even after it's been dropped).
 	numBankRanges := func() func() int {
-		conn := c.Conn(ctx, t.L(), 1)
+		conn := c.Conn(ctx, t.L(), 1, "")
 		defer conn.Close()
 
 		var startHex string
@@ -141,7 +141,7 @@ ORDER BY raw_start_key ASC LIMIT 1`,
 			t.Fatal(err)
 		}
 		return func() int {
-			conn := c.Conn(ctx, t.L(), 1)
+			conn := c.Conn(ctx, t.L(), 1, "")
 			defer conn.Close()
 			var n int
 			if err := conn.QueryRow(
@@ -160,7 +160,7 @@ ORDER BY raw_start_key ASC LIMIT 1`,
 		return nil
 	})
 	m.Go(func(ctx context.Context) error {
-		conn := c.Conn(ctx, t.L(), 1)
+		conn := c.Conn(ctx, t.L(), 1, "")
 		defer conn.Close()
 
 		if _, err := conn.ExecContext(ctx, `SET CLUSTER SETTING kv.range_merge.queue_enabled = true`); err != nil {

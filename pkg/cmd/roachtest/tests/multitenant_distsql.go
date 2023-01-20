@@ -80,7 +80,7 @@ func runMultiTenantDistSQL(
 		return tenantBaseSQLPort
 	}
 
-	storConn := c.Conn(ctx, t.L(), 1)
+	storConn := c.Conn(ctx, t.L(), 1, "")
 	_, err := storConn.Exec(`SELECT crdb_internal.create_tenant($1::INT)`, tenantID)
 	require.NoError(t, err)
 

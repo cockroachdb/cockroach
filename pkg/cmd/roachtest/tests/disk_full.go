@@ -45,7 +45,7 @@ func registerDiskFull(r registry.Registry) {
 			// it's possible that we end up deadlocked on a system query that requires
 			// a range on node 1, but node 1 will not restart until the query
 			// completes.
-			db := c.Conn(ctx, t.L(), 1)
+			db := c.Conn(ctx, t.L(), 1, "")
 			err := WaitFor3XReplication(ctx, t, db)
 			require.NoError(t, err)
 			_ = db.Close()
@@ -77,7 +77,7 @@ func registerDiskFull(r registry.Registry) {
 
 				// Node 1 should forcibly exit due to a full disk.
 				for isLive := true; isLive; {
-					db := c.Conn(ctx, t.L(), 2)
+					db := c.Conn(ctx, t.L(), 2, "")
 					err := db.QueryRow(`SELECT is_live FROM crdb_internal.gossip_nodes WHERE node_id = 1;`).Scan(&isLive)
 					if err != nil {
 						t.Fatal(err)

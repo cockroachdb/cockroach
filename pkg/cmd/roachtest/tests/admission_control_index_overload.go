@@ -61,7 +61,7 @@ func registerIndexOverload(r registry.Registry) {
 			assert.NoError(t, err)
 			testDuration := 3 * duration
 
-			db := c.Conn(ctx, t.L(), crdbNodes)
+			db := c.Conn(ctx, t.L(), crdbNodes, "")
 			defer db.Close()
 
 			if !t.SkipInit() {

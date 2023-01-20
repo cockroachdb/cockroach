@@ -110,7 +110,7 @@ func registerSQLSmith(r registry.Registry) {
 
 		allConns := make([]*gosql.DB, 0, numNodes)
 		for node := 1; node <= numNodes; node++ {
-			allConns = append(allConns, c.Conn(ctx, t.L(), node))
+			allConns = append(allConns, c.Conn(ctx, t.L(), node, ""))
 		}
 		conn := allConns[0]
 		t.Status("executing setup")

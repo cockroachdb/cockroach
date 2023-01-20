@@ -56,7 +56,7 @@ func runSlowDrain(ctx context.Context, t test.Test, c cluster.Cluster, duration 
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
 
 	run := func(stmt string) {
-		db := c.Conn(ctx, t.L(), pinnedNodeID)
+		db := c.Conn(ctx, t.L(), pinnedNodeID, "")
 		defer db.Close()
 
 		_, err = db.ExecContext(ctx, stmt)
@@ -66,7 +66,7 @@ func runSlowDrain(ctx context.Context, t test.Test, c cluster.Cluster, duration 
 	}
 
 	{
-		db := c.Conn(ctx, t.L(), pinnedNodeID)
+		db := c.Conn(ctx, t.L(), pinnedNodeID, "")
 		defer db.Close()
 
 		// Set the replication factor.

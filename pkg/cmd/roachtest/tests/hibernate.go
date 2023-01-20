@@ -53,7 +53,7 @@ var (
 			`HIBERNATE_CONNECTION_LEAK_DETECTION=true ./../gradlew test -Pdb=cockroachdb_spatial`,
 		blocklists: hibernateSpatialBlocklists,
 		dbSetupFunc: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			db := c.Conn(ctx, t.L(), 1)
+			db := c.Conn(ctx, t.L(), 1, "")
 			defer db.Close()
 			if _, err := db.ExecContext(
 				ctx,

@@ -57,7 +57,7 @@ func registerTPCE(r registry.Registry) {
 
 		// Configure to increase the speed of the import.
 		func() {
-			db := c.Conn(ctx, t.L(), 1)
+			db := c.Conn(ctx, t.L(), 1, "")
 			defer db.Close()
 			if _, err := db.ExecContext(
 				ctx, "SET CLUSTER SETTING kv.bulk_io_write.concurrent_addsstable_requests = $1", 4*opts.ssds,

@@ -65,7 +65,7 @@ func runImportCancellation(
 	}
 
 	// Create the tables.
-	conn := c.Conn(ctx, t.L(), 1)
+	conn := c.Conn(ctx, t.L(), 1, "")
 	t.Status("creating SQL tables")
 	if _, err := conn.Exec(`CREATE DATABASE csv;`); err != nil {
 		t.Fatal(err)
@@ -206,7 +206,7 @@ func (t *importCancellationTest) runImportSequence(
 	ctx context.Context, rng *rand.Rand, tableName string, numFiles int,
 ) {
 	n := t.c.All()[rng.Intn(len(t.c.All()))]
-	conn := t.c.Conn(ctx, t.L(), n)
+	conn := t.c.Conn(ctx, t.L(), n, "")
 	if _, err := conn.Exec(`USE csv;`); err != nil {
 		t.Fatal(err)
 	}

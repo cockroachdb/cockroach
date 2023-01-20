@@ -268,7 +268,7 @@ func (ct *cdcTester) runLedgerWorkload(args ledgerArgs) {
 }
 
 func (ct *cdcTester) DB() *gosql.DB {
-	return ct.cluster.Conn(ct.ctx, ct.t.L(), 1)
+	return ct.cluster.Conn(ct.ctx, ct.t.L(), 1, "")
 }
 
 func (ct *cdcTester) Close() {
@@ -564,7 +564,7 @@ func runCDCBank(ctx context.Context, t test.Test, c cluster.Cluster) {
 	}
 
 	c.Run(ctx, workloadNode, `./workload init bank {pgurl:1}`)
-	db := c.Conn(ctx, t.L(), 1)
+	db := c.Conn(ctx, t.L(), 1, "")
 	defer stopFeeds(db)
 
 	options := map[string]string{
@@ -727,7 +727,7 @@ func runCDCSchemaRegistry(ctx context.Context, t test.Test, c cluster.Cluster) {
 	kafka.start(ctx)
 	defer kafka.stop(ctx)
 
-	db := c.Conn(ctx, t.L(), 1)
+	db := c.Conn(ctx, t.L(), 1, "")
 	defer stopFeeds(db)
 
 	if _, err := db.Exec(`CREATE TABLE foo (a INT PRIMARY KEY)`); err != nil {
@@ -846,7 +846,7 @@ func runCDCKafkaAuth(ctx context.Context, t test.Test, c cluster.Cluster) {
 	kafka.addSCRAMUsers(ctx)
 	defer kafka.stop(ctx)
 
-	db := c.Conn(ctx, t.L(), 1)
+	db := c.Conn(ctx, t.L(), 1, "")
 	defer stopFeeds(db)
 
 	tdb := sqlutils.MakeSQLRunner(db)

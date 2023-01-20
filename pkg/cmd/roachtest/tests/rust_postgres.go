@@ -34,7 +34,7 @@ func registerRustPostgres(r registry.Registry) {
 		c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
 
 		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
-		db := c.Conn(ctx, t.L(), 1)
+		db := c.Conn(ctx, t.L(), 1, "")
 		_, err := db.Exec("create user postgres with createdb createlogin createrole cancelquery")
 		if err != nil {
 			t.Fatal(err)

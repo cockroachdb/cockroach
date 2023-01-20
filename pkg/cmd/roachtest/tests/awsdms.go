@@ -207,7 +207,7 @@ func runAWSDMS(ctx context.Context, t test.Test, c cluster.Cluster) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	targetPGConn := c.Conn(ctx, t.L(), 1)
+	targetPGConn := c.Conn(ctx, t.L(), 1, "")
 
 	checkDMSReplicated(ctx, t, sourcePGConn, targetPGConn)
 	checkDMSNoPKTableError(ctx, t, dmsCli)
@@ -389,7 +389,7 @@ func setupCockroachDBCluster(ctx context.Context, t test.Test, c cluster.Cluster
 		c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
 		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
 
-		db := c.Conn(ctx, t.L(), 1)
+		db := c.Conn(ctx, t.L(), 1, "")
 		for _, stmt := range []string{
 			fmt.Sprintf("CREATE USER %s", awsdmsCRDBUser),
 			fmt.Sprintf("GRANT admin TO %s", awsdmsCRDBUser),

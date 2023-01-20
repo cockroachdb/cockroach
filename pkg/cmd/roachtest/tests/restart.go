@@ -78,7 +78,7 @@ func runRestart(ctx context.Context, t test.Test, c cluster.Cluster, downDuratio
 	time.Sleep(15 * time.Second)
 
 	start := timeutil.Now()
-	restartNodeDB := c.Conn(ctx, t.L(), restartNode)
+	restartNodeDB := c.Conn(ctx, t.L(), restartNode, "")
 	if _, err := restartNodeDB.Exec(`SELECT count(*) FROM tpcc.order_line`); err != nil {
 		t.Fatal(err)
 	}

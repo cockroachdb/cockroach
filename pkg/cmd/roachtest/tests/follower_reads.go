@@ -172,7 +172,7 @@ func runFollowerReadsTest(
 ) {
 	var conns []*gosql.DB
 	for i := 0; i < c.Spec().NodeCount; i++ {
-		conns = append(conns, c.Conn(ctx, t.L(), i+1))
+		conns = append(conns, c.Conn(ctx, t.L(), i+1, ""))
 		defer conns[i].Close()
 	}
 	db := conns[0]
@@ -401,7 +401,7 @@ func runFollowerReadsTest(
 func initFollowerReadsDB(
 	ctx context.Context, t test.Test, c cluster.Cluster, topology topologySpec,
 ) (data map[int]int64) {
-	db := c.Conn(ctx, t.L(), 1)
+	db := c.Conn(ctx, t.L(), 1, "")
 	// Disable load based splitting and range merging because splits and merges
 	// interfere with follower reads. This test's workload regularly triggers load
 	// based splitting in the first phase creating small ranges which later

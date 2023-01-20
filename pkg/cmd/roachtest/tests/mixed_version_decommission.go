@@ -117,7 +117,7 @@ func preloadDataStep(target int) versionStep {
 		// to move on decommissioning.
 		c := u.c
 		c.Run(ctx, c.Node(target), `./cockroach workload fixtures import tpcc --warehouses=100`)
-		db := c.Conn(ctx, t.L(), target)
+		db := c.Conn(ctx, t.L(), target, "")
 		defer db.Close()
 		if err := WaitFor3XReplication(ctx, t, db); err != nil {
 			t.Fatal(err)

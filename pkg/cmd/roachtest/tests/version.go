@@ -89,7 +89,7 @@ func registerVersion(r registry.Registry) {
 				// Make sure everyone is still running.
 				for i := 1; i <= nodes; i++ {
 					t.WorkerStatus("checking ", i)
-					db := c.Conn(ctx, t.L(), i)
+					db := c.Conn(ctx, t.L(), i, "")
 					defer db.Close()
 					rows, err := db.Query(`SHOW DATABASES`)
 					if err != nil {
@@ -113,7 +113,7 @@ func registerVersion(r registry.Registry) {
 				return nil
 			}
 
-			db := c.Conn(ctx, t.L(), 1)
+			db := c.Conn(ctx, t.L(), 1, "")
 			defer db.Close()
 			// See analogous comment in the upgrade/mixedWith roachtest.
 			db.SetMaxIdleConns(0)
