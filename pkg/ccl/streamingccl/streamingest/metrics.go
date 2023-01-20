@@ -34,6 +34,12 @@ var (
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
 	}
+	metaStreamingSSTBytes = metric.Metadata{
+		Name:        "streaming.sst_bytes",
+		Help:        "SST bytes (compressed) sent to KV by all ingestion jobs",
+		Measurement: "Bytes",
+		Unit:        metric.Unit_BYTES,
+	}
 	metaStreamingFlushes = metric.Metadata{
 		Name:        "streaming.flushes",
 		Help:        "Total flushes across all ingestion jobs",
@@ -110,6 +116,7 @@ var (
 type Metrics struct {
 	IngestedEvents              *metric.Counter
 	IngestedBytes               *metric.Counter
+	SSTBytes                    *metric.Counter
 	Flushes                     *metric.Counter
 	JobProgressUpdates          *metric.Counter
 	ResolvedEvents              *metric.Counter
@@ -132,6 +139,7 @@ func MakeMetrics(histogramWindow time.Duration) metric.Struct {
 	m := &Metrics{
 		IngestedEvents:     metric.NewCounter(metaStreamingEventsIngested),
 		IngestedBytes:      metric.NewCounter(metaStreamingIngestedBytes),
+		SSTBytes:           metric.NewCounter(metaStreamingSSTBytes),
 		Flushes:            metric.NewCounter(metaStreamingFlushes),
 		ResolvedEvents:     metric.NewCounter(metaStreamingResolvedEventsIngested),
 		JobProgressUpdates: metric.NewCounter(metaJobProgressUpdates),

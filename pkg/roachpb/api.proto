@@ -1641,6 +1641,8 @@ message ExportRequest {
 message BulkOpSummary {
   // DataSize is the sum of key and value lengths.
   int64 data_size = 1;
+  // SSTDataSize is the size of the SST, post compression, sent to KV.
+  int64 sst_data_size = 6 [(gogoproto.customname) = "SSTDataSize"];
   // DeprecatedRows contained the row count when "rows" were always defined as
   // entries in the index with ID 1, however since 20.1 and the introduction of
   // PK changes, the low-level counters that produce BulkOpSummaries are unable

@@ -1620,6 +1620,12 @@ var charts = []sectionDescription{
 				},
 			},
 			{
+				Title: "SST Bytes",
+				Metrics: []string{
+					"streaming.sst_bytes",
+				},
+			},
+			{
 				Title:   "Earliest Data Processor Checkpoint Span",
 				Metrics: []string{"streaming.earliest_data_checkpoint_span"},
 			},
