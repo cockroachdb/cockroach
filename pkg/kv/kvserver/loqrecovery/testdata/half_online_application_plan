@@ -71,19 +71,16 @@ Replica updates:
 Decommissioned nodes:
 [n4, n5]
 
-apply-plan stores=(1,2)
+apply-plan stores=(1,2) restart=true
 ----
 ok
 
-dump-events stores=(1,2) remove=true
+dump-events stores=(1,2) remove=true status=true
 ----
 Events:
 updated range r1, Key:/Min, Store:s1 ReplicaID:16
 updated range r2, Key:/Table/1, Store:s1 ReplicaID:16
 updated range r3, Key:/Table/5, Store:s2 ReplicaID:16
-
-# We now try to dump stores once again to verify that record
-# consumer cleans up events if it passed them on successfully.
-dump-events stores=(1,2)
-----
-ok
+Statuses:
+node n1 applied plan 00000001-0000-4000-8000-000000000000 at 2022-02-24 01:40:00 +0000 UTC:
+node n2 applied plan 00000001-0000-4000-8000-000000000000 at 2022-02-24 01:40:00 +0000 UTC:

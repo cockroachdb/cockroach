@@ -82,7 +82,8 @@ dump-store stores=(1,2)
 
 dump-events stores=(1,2)
 ----
-Updated range r1, Key:/Min, Store:s1 ReplicaID:16
+Events:
+updated range r1, Key:/Min, Store:s1 ReplicaID:16
 
 
 # Second use case where stale replica which remained from before split
@@ -344,4 +345,5 @@ dump-store stores=(1,2)
 
 dump-events stores=(1,2)
 ----
-Updated range r1, Key:/Min, Store:s1 ReplicaID:16
+Events:
+updated range r1, Key:/Min, Store:s1 ReplicaID:16
