@@ -1726,6 +1726,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 		s.stopper,
 		s.cfg.GoroutineDumpDirName,
 		s.cfg.HeapProfileDirName,
+		s.cfg.CPUProfileDirName,
 		s.runtime,
 		s.status.sessionRegistry,
 	); err != nil {
