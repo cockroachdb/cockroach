@@ -43,7 +43,7 @@ func (p *planner) createDropDatabaseJob(
 	tableDropDetails []jobspb.DroppedTableDetails,
 	typesToDrop []*typedesc.Mutable,
 	jobDesc string,
-) error {
+) {
 	// TODO (lucy): This should probably be deleting the queued jobs for all the
 	// tables being dropped, so that we don't have duplicate schema changers.
 	tableIDs := make([]descpb.ID, 0, len(tableDropDetails))
@@ -54,7 +54,7 @@ func (p *planner) createDropDatabaseJob(
 	for _, t := range typesToDrop {
 		typeIDs = append(typeIDs, t.ID)
 	}
-	jobRecord := jobs.Record{
+	jobRecord := &jobs.Record{
 		Description:   jobDesc,
 		Username:      p.User(),
 		DescriptorIDs: tableIDs,
@@ -68,12 +68,8 @@ func (p *planner) createDropDatabaseJob(
 		Progress:      jobspb.SchemaChangeProgress{},
 		NonCancelable: true,
 	}
-	newJob, err := p.extendedEvalCtx.QueueJob(ctx, p.InternalSQLTxn(), jobRecord)
-	if err != nil {
-		return err
-	}
-	log.Infof(ctx, "queued new drop database job %d for database %d", newJob.ID(), databaseID)
-	return nil
+	jobID := p.extendedEvalCtx.QueueJob(jobRecord)
+	log.Infof(ctx, "queued new drop database job %d for database %d", jobID, databaseID)
 }
 
 // CreateNonDropDatabaseChangeJob covers all database descriptor updates other
@@ -82,8 +78,8 @@ func (p *planner) createDropDatabaseJob(
 // don't queue multiple jobs for the same database.
 func (p *planner) createNonDropDatabaseChangeJob(
 	ctx context.Context, databaseID descpb.ID, jobDesc string,
-) error {
-	jobRecord := jobs.Record{
+) {
+	jobRecord := &jobs.Record{
 		Description: jobDesc,
 		Username:    p.User(),
 		Details: jobspb.SchemaChangeDetails{
@@ -93,12 +89,8 @@ func (p *planner) createNonDropDatabaseChangeJob(
 		Progress:      jobspb.SchemaChangeProgress{},
 		NonCancelable: true,
 	}
-	newJob, err := p.extendedEvalCtx.QueueJob(ctx, p.InternalSQLTxn(), jobRecord)
-	if err != nil {
-		return err
-	}
-	log.Infof(ctx, "queued new database schema change job %d for database %d", newJob.ID(), databaseID)
-	return nil
+	jobID := p.extendedEvalCtx.QueueJob(jobRecord)
+	log.Infof(ctx, "queued new database schema change job %d for database %d", jobID, databaseID)
 }
 
 // createOrUpdateSchemaChangeJob queues a new job for the schema change if there
@@ -116,7 +108,7 @@ func (p *planner) createOrUpdateSchemaChangeJob(
 		return scerrors.ConcurrentSchemaChangeError(tableDesc)
 	}
 
-	record, recordExists := p.extendedEvalCtx.SchemaChangeJobRecords[tableDesc.ID]
+	record, recordExists := p.extendedEvalCtx.JobsInfo.uniqueToCreate[tableDesc.ID]
 	if p.extendedEvalCtx.ExecCfg.TestingKnobs.RunAfterSCJobsCacheLookup != nil {
 		p.extendedEvalCtx.ExecCfg.TestingKnobs.RunAfterSCJobsCacheLookup(record)
 	}
@@ -174,7 +166,7 @@ func (p *planner) createOrUpdateSchemaChangeJob(
 			// have mutations, e.g., in CREATE TABLE AS VALUES.
 			NonCancelable: mutationID == descpb.InvalidMutationID && !tableDesc.Adding(),
 		}
-		p.extendedEvalCtx.SchemaChangeJobRecords[tableDesc.ID] = &newRecord
+		p.extendedEvalCtx.JobsInfo.uniqueToCreate[tableDesc.ID] = &newRecord
 		// Only add a MutationJob if there's an associated mutation.
 		// TODO (lucy): get rid of this when we get rid of MutationJobs.
 		if mutationID != descpb.InvalidMutationID {
