@@ -73,9 +73,7 @@ func (p *planner) renameDatabase(
 func (p *planner) writeNonDropDatabaseChange(
 	ctx context.Context, desc *dbdesc.Mutable, jobDesc string,
 ) error {
-	if err := p.createNonDropDatabaseChangeJob(ctx, desc.ID, jobDesc); err != nil {
-		return err
-	}
+	p.createNonDropDatabaseChangeJob(ctx, desc.ID, jobDesc)
 	b := p.Txn().NewBatch()
 	if err := p.writeDatabaseChangeToBatch(ctx, desc, b); err != nil {
 		return err

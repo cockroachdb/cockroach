@@ -173,16 +173,14 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 		}
 	}
 
-	if err := p.createDropDatabaseJob(
+	p.createDropDatabaseJob(
 		ctx,
 		n.dbDesc.GetID(),
 		schemasIDsToDelete,
 		n.d.getDroppedTableDetails(),
 		n.d.typesToDelete,
 		tree.AsStringWithFQNames(n.n, params.Ann()),
-	); err != nil {
-		return err
-	}
+	)
 
 	n.dbDesc.SetDropped()
 	b := p.txn.NewBatch()

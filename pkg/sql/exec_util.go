@@ -34,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
-	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/keyvisualizer"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -2199,16 +2198,6 @@ func (r *SessionRegistry) SerializeAll() []serverpb.Session {
 // MaxSQLBytes is the maximum length in bytes of SQL statements serialized
 // into a serverpb.Session. Exported for testing.
 const MaxSQLBytes = 1000
-
-type jobsCollection []jobspb.JobID
-
-func (jc *jobsCollection) add(ids ...jobspb.JobID) {
-	*jc = append(*jc, ids...)
-}
-
-func (jc *jobsCollection) reset() {
-	*jc = nil
-}
 
 // truncateStatementStringForTelemetry truncates the string
 // representation of a statement to a maximum length, so as to not
