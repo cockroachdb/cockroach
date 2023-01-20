@@ -11,6 +11,8 @@
 package explain
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 )
@@ -25,6 +27,11 @@ type Factory struct {
 }
 
 var _ exec.ExplainFactory = &Factory{}
+
+// Ctx implements the Factory interface.
+func (f *Factory) Ctx() context.Context {
+	return f.wrappedFactory.Ctx()
+}
 
 // Node in a plan tree; records the operation and arguments passed to the
 // factory method and provides access to the corresponding exec.Node (produced
