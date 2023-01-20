@@ -376,7 +376,8 @@ func runDebugPlanReplicaRemoval(cmd *cobra.Command, args []string) error {
 		ctx,
 		replicas,
 		deadStoreIDs,
-		deadNodeIDs)
+		deadNodeIDs,
+		uuid.DefaultGenerator)
 	if err != nil {
 		return err
 	}

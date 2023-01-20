@@ -12,11 +12,13 @@ package loqrecovery
 
 import (
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/loqrecovery/loqrecoverypb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/datadriven"
 	"github.com/stretchr/testify/require"
 )
@@ -25,7 +27,11 @@ func TestQuorumRecovery(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	datadriven.Walk(t, datapathutils.TestDataPath(t), func(t *testing.T, path string) {
-		env := quorumRecoveryEnv{}
+		testTime, _ := time.Parse(time.RFC3339, "2022-02-24T01:40:00Z")
+		env := quorumRecoveryEnv{
+			uuidGen: NewSeqGen(1),
+			clock:   timeutil.NewManualTime(testTime),
+		}
 		defer env.cleanupStores()
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			return env.Handle(t, *d)
