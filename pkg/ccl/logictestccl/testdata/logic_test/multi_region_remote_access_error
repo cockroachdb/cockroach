@@ -196,9 +196,6 @@ SELECT table_name FROM [SHOW CREATE messages_global]
 ----
 messages_global
 
-# Give zone configs time to propagate.
-# sleep 8s
-
 # Non-DML SHOW RANGES statement on RBR table should succeed.
 skipif config multiregion-9node-3region-3azs-vec-off
 query I retry
