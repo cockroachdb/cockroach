@@ -41,6 +41,11 @@ type runParams struct {
 	p *planner
 }
 
+// Ctx() gives convenient access to the runParam's `ctx`.
+func (r *runParams) Ctx() context.Context {
+	return r.ctx
+}
+
 // EvalContext() gives convenient access to the runParam's EvalContext().
 func (r *runParams) EvalContext() *eval.Context {
 	return &r.extendedEvalCtx.Context
