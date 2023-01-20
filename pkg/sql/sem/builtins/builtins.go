@@ -10118,7 +10118,7 @@ func asJSONBuildObjectKey(
 		*tree.DDecimal, *tree.DEnum, *tree.DFloat, *tree.DGeography,
 		*tree.DGeometry, *tree.DIPAddr, *tree.DInt, *tree.DInterval, *tree.DOid,
 		*tree.DOidWrapper, *tree.DTime, *tree.DTimeTZ, *tree.DTimestamp,
-		*tree.DUuid, *tree.DVoid:
+		*tree.DTSQuery, *tree.DTSVector, *tree.DUuid, *tree.DVoid:
 		return tree.AsStringWithFlags(d, tree.FmtBareStrings), nil
 	default:
 		return "", errors.AssertionFailedf("unexpected type %T for key value", d)
