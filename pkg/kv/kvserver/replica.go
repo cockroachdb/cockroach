@@ -312,6 +312,15 @@ type Replica struct {
 	// tenantLimiter rate limits requests on a per-tenant basis and accumulates
 	// metrics about it. This is determined by the start key of the Replica,
 	// once initialized.
+	//
+	// The lifecycle of this is tricky. Because we can't reliably bar requests
+	// from accessing this even when the replica is destroyed[^1], this will
+	// stick around on a destroyed replica and can be accessed. The quota pool
+	// will be closed, however, so it will not accept any writes.
+	//
+	// See tenantrate.TestUseAfterRelease.
+	//
+	// [^1]: TODO(pavelkalinnikov): we can but it'd be a larger refactor.
 	tenantLimiter tenantrate.Limiter
 
 	// tenantMetricsRef is a metrics reference indicating the tenant under

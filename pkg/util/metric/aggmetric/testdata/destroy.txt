@@ -1,8 +1,8 @@
 echo
 ----
-bar_gauge 2
+bar_gauge 4
 bar_gauge{tenant_id="2"} 2
-baz_gauge 1.5
+baz_gauge 4
 baz_gauge{tenant_id="2"} 1.5
 foo_counter 6
 foo_counter{tenant_id="3"} 4
