@@ -614,12 +614,12 @@ func (sb *statisticsBuilder) makeTableStatistics(tabID opt.TableID) *props.Stati
 	// Make now and annotate the metadata table with it for next time.
 	stats = &props.Statistics{}
 
-	// Find the most recent statistic. (Stats are ordered with most recent first.)
+	// Find the most recent full statistic. (Stats are ordered with most recent first.)
 	var first int
-	if !sb.evalCtx.SessionData().OptimizerUseForecasts {
-		for first < tab.StatisticCount() && tab.Statistic(first).IsForecast() {
-			first++
-		}
+	for first < tab.StatisticCount() &&
+		(tab.Statistic(first).IsPartial() ||
+			tab.Statistic(first).IsForecast() && !sb.evalCtx.SessionData().OptimizerUseForecasts) {
+		first++
 	}
 
 	if first >= tab.StatisticCount() {
@@ -639,6 +639,9 @@ func (sb *statisticsBuilder) makeTableStatistics(tabID opt.TableID) *props.Stati
 		// column set. Stats are ordered with most recent first.
 		for i := first; i < tab.StatisticCount(); i++ {
 			stat := tab.Statistic(i)
+			if stat.IsPartial() {
+				continue
+			}
 			if stat.IsForecast() && !sb.evalCtx.SessionData().OptimizerUseForecasts {
 				continue
 			}

@@ -513,14 +513,28 @@ func DerivePruneCols(e memo.RelExpr, disabledRules intsets.Fast) opt.ColSet {
 	relProps.SetAvailable(props.PruneCols)
 
 	switch e.Op() {
-	case opt.ScanOp, opt.ValuesOp, opt.WithScanOp:
-		if disabledRules.Contains(int(opt.PruneScanCols)) ||
-			disabledRules.Contains(int(opt.PruneValuesCols)) ||
-			disabledRules.Contains(int(opt.PruneWithScanCols)) {
+	case opt.ScanOp:
+		if disabledRules.Contains(int(opt.PruneScanCols)) {
 			// Avoid rule cycles.
 			break
 		}
-		// All columns can potentially be pruned from the Scan, Values, and WithScan
+		// All columns can potentially be pruned from the Scan
+		// operators.
+		relProps.Rule.PruneCols = relProps.OutputCols.Copy()
+	case opt.ValuesOp:
+		if disabledRules.Contains(int(opt.PruneValuesCols)) {
+			// Avoid rule cycles.
+			break
+		}
+		// All columns can potentially be pruned from the Values
+		// operators.
+		relProps.Rule.PruneCols = relProps.OutputCols.Copy()
+	case opt.WithScanOp:
+		if disabledRules.Contains(int(opt.PruneWithScanCols)) {
+			// Avoid rule cycles.
+			break
+		}
+		// All columns can potentially be pruned from the WithScan
 		// operators.
 		relProps.Rule.PruneCols = relProps.OutputCols.Copy()
 

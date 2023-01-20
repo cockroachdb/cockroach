@@ -3737,6 +3737,21 @@ var charts = []sectionDescription{
 				},
 			},
 			{
+				Title: "Granter Slot Counters",
+				Metrics: []string{
+					"admission.granter.slot_adjuster_increments.kv",
+					"admission.granter.slot_adjuster_decrements.kv",
+				},
+			},
+			{
+				Title: "Granter Slot Durations",
+				Metrics: []string{
+					"admission.granter.slots_exhausted_duration.kv",
+					"admission.granter.cpu_load_short_period_duration.kv",
+					"admission.granter.cpu_load_long_period_duration.kv",
+				},
+			},
+			{
 				Title: "Elastic CPU Utilization",
 				Metrics: []string{
 					"admission.elastic_cpu.utilization",

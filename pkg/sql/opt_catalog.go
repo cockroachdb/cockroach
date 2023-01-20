@@ -17,7 +17,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
-	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -1773,9 +1772,24 @@ func (os *optTableStat) HistogramType() *types.T {
 	return os.stat.HistogramData.ColumnType
 }
 
+// IsPartial is part of the cat.TableStatistic interface.
+func (os *optTableStat) IsPartial() bool {
+	return os.stat.IsPartial()
+}
+
+// IsMerged is part of the cat.TableStatistic interface.
+func (os *optTableStat) IsMerged() bool {
+	return os.stat.IsMerged()
+}
+
 // IsForecast is part of the cat.TableStatistic interface.
 func (os *optTableStat) IsForecast() bool {
-	return os.stat.Name == jobspb.ForecastStatsName
+	return os.stat.IsForecast()
+}
+
+// IsAuto is part of the cat.TableStatistic interface.
+func (os *optTableStat) IsAuto() bool {
+	return os.stat.IsAuto()
 }
 
 // optFamily is a wrapper around descpb.ColumnFamilyDescriptor that keeps a

@@ -429,3 +429,27 @@ SELECT info FROM [EXPLAIN SELECT count(*) FROM crdb_internal.system_jobs WHERE i
     └── • virtual table
           table: system_jobs@system_jobs_id_idx
           spans: [/1 - /1]
+
+# Regression test for PruneCols fix (#94890)
+statement ok
+SET testing_optimizer_disable_rule_probability = 1.0;
+
+query T
+EXPLAIN SELECT
+  datname AS database_name
+FROM
+  pg_catalog.pg_database d
+ORDER BY
+	database_name
+----
+distribution: local
+vectorized: true
+·
+• sort
+│ order: +datname
+│
+└── • virtual table
+      table: pg_database@primary
+
+statement ok
+RESET testing_optimizer_disable_rule_probability

@@ -706,7 +706,7 @@ func (r *Refresher) maybeRefreshStats(
 		// refresh happens at exactly 2x the current average, and the average
 		// refresh time is calculated from the most recent 4 refreshes. See the
 		// comment in stats/delete_stats.go.)
-		maxTimeBetweenRefreshes := stat.CreatedAt.Add(2*avgRefreshTime(tableStats) + r.extraTime)
+		maxTimeBetweenRefreshes := stat.CreatedAt.Add(2*avgFullRefreshTime(tableStats) + r.extraTime)
 		if timeutil.Now().After(maxTimeBetweenRefreshes) {
 			mustRefresh = true
 		}
@@ -789,21 +789,20 @@ func mostRecentAutomaticStat(tableStats []*TableStatistic) *TableStatistic {
 	return nil
 }
 
-// avgRefreshTime returns the average time between automatic statistics
+// avgFullRefreshTime returns the average time between automatic full statistics
 // refreshes given a list of tableStats from one table. It does so by finding
-// the most recent automatically generated statistic (identified by the name
-// AutoStatsName), and then finds all previously generated automatic stats on
-// those same columns. The average is calculated as the average time between
-// each consecutive stat.
+// the most recent automatically generated statistic and then finds all
+// previously generated automatic stats on those same columns. The average is
+// calculated as the average time between each consecutive stat.
 //
 // If there are not at least two automatically generated statistics on the same
 // columns, the default value defaultAverageTimeBetweenRefreshes is returned.
-func avgRefreshTime(tableStats []*TableStatistic) time.Duration {
+func avgFullRefreshTime(tableStats []*TableStatistic) time.Duration {
 	var reference *TableStatistic
 	var sum time.Duration
 	var count int
 	for _, stat := range tableStats {
-		if stat.Name != jobspb.AutoStatsName {
+		if !stat.IsAuto() || stat.IsPartial() {
 			continue
 		}
 		if reference == nil {
