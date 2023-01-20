@@ -108,7 +108,7 @@ func WaitForUpdatedReplicationReport(ctx context.Context, t test.Test, db *gosql
 // setAdmissionControl sets the admission control cluster settings on the
 // given cluster.
 func setAdmissionControl(ctx context.Context, t test.Test, c cluster.Cluster, enabled bool) {
-	db := c.Conn(ctx, t.L(), 1)
+	db := c.Conn(ctx, t.L(), 1, "")
 	defer db.Close()
 	val := "true"
 	if !enabled {

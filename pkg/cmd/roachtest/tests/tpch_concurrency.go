@@ -36,7 +36,7 @@ func registerTPCHConcurrency(r registry.Registry) {
 		c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(numNodes))
 		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Range(1, numNodes-1))
 
-		conn := c.Conn(ctx, t.L(), 1)
+		conn := c.Conn(ctx, t.L(), 1, "")
 		if disableStreamer {
 			if _, err := conn.Exec("SET CLUSTER SETTING sql.distsql.use_streamer.enabled = false;"); err != nil {
 				t.Fatal(err)
@@ -68,7 +68,7 @@ func registerTPCHConcurrency(r registry.Registry) {
 
 		// Scatter the ranges so that a poor initial placement (after loading
 		// the data set) doesn't impact the results much.
-		conn := c.Conn(ctx, t.L(), 1)
+		conn := c.Conn(ctx, t.L(), 1, "")
 		if _, err := conn.Exec("USE tpch;"); err != nil {
 			t.Fatal(err)
 		}
@@ -78,7 +78,7 @@ func registerTPCHConcurrency(r registry.Registry) {
 
 		// Populate the range cache on each node.
 		for nodeIdx := 1; nodeIdx < numNodes; nodeIdx++ {
-			node := c.Conn(ctx, t.L(), nodeIdx)
+			node := c.Conn(ctx, t.L(), nodeIdx, "")
 			if _, err := node.Exec("USE tpch;"); err != nil {
 				t.Fatal(err)
 			}

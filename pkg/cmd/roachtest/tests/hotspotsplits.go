@@ -57,7 +57,7 @@ func registerHotSpotSplits(r registry.Registry) {
 			t.Status("starting checks for range sizes")
 			const sizeLimit = 3 * (1 << 29) // 3*512 MB (512 mb is default size)
 
-			db := c.Conn(ctx, t.L(), 1)
+			db := c.Conn(ctx, t.L(), 1, "")
 			defer db.Close()
 
 			var size = float64(0)

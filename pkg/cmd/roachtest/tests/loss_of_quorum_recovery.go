@@ -160,7 +160,7 @@ func runRecoverLossOfQuorum(ctx context.Context, t test.Test, c cluster.Cluster,
 	}
 	c.Run(ctx, c.All(), args...)
 
-	db := c.Conn(ctx, t.L(), 1)
+	db := c.Conn(ctx, t.L(), 1, "")
 	defer db.Close()
 
 	t.L().Printf("started cluster")
@@ -248,7 +248,7 @@ func runRecoverLossOfQuorum(ctx context.Context, t test.Test, c cluster.Cluster,
 					if ctx.Err() != nil {
 						return &recoveryImpossibleError{testOutcome: restartFailed}
 					}
-					db, err = c.ConnE(ctx, t.L(), 1)
+					db, err = c.ConnE(ctx, t.L(), 1, "")
 					if err == nil {
 						break
 					}

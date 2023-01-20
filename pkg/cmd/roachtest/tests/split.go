@@ -139,7 +139,7 @@ func runLoadSplits(ctx context.Context, t test.Test, c cluster.Cluster, params s
 
 	m := c.NewMonitor(ctx, c.All())
 	m.Go(func(ctx context.Context) error {
-		db := c.Conn(ctx, t.L(), 1)
+		db := c.Conn(ctx, t.L(), 1, "")
 		defer db.Close()
 
 		t.Status("disable load based splitting")
@@ -263,7 +263,7 @@ func runLargeRangeSplits(ctx context.Context, t test.Test, c cluster.Cluster, si
 	numNodes := c.Spec().NodeCount
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Node(1))
 
-	db := c.Conn(ctx, t.L(), 1)
+	db := c.Conn(ctx, t.L(), 1, "")
 	defer db.Close()
 
 	rangeCount := func(t test.Test) (int, string) {

@@ -211,9 +211,9 @@ func setupC2C(
 	addr, err := c.ExternalPGUrl(ctx, t.L(), srcNode, "")
 	require.NoError(t, err)
 
-	srcDB := c.Conn(ctx, t.L(), srcNode[0])
+	srcDB := c.Conn(ctx, t.L(), srcNode[0], "")
 	srcSQL := sqlutils.MakeSQLRunner(srcDB)
-	destDB := c.Conn(ctx, t.L(), destNode[0])
+	destDB := c.Conn(ctx, t.L(), destNode[0], "")
 	destSQL := sqlutils.MakeSQLRunner(destDB)
 
 	srcClusterSettings(t, srcSQL)

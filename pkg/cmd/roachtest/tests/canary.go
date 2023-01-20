@@ -71,7 +71,7 @@ func (b blocklistsForVersion) getLists(version string) (string, blocklist, strin
 func fetchCockroachVersion(
 	ctx context.Context, l *logger.Logger, c cluster.Cluster, nodeIndex int,
 ) (string, error) {
-	db, err := c.ConnE(ctx, l, nodeIndex)
+	db, err := c.ConnE(ctx, l, nodeIndex, "")
 	if err != nil {
 		return "", err
 	}

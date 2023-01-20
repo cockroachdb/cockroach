@@ -113,7 +113,7 @@ func (q *quitTest) restartNode(ctx context.Context, nodeID int) {
 	// - the particular query forces a cluster-wide RPC; which
 	//   forces any circuit breaker to trip and re-establish
 	//   the RPC connection if needed.
-	db := q.c.Conn(ctx, q.t.L(), nodeID)
+	db := q.c.Conn(ctx, q.t.L(), nodeID, "")
 	defer db.Close()
 	if _, err := db.ExecContext(ctx, `TABLE crdb_internal.cluster_sessions`); err != nil {
 		q.Fatal(err)
@@ -121,7 +121,7 @@ func (q *quitTest) restartNode(ctx context.Context, nodeID int) {
 }
 
 func (q *quitTest) waitForUpReplication(ctx context.Context) {
-	db := q.c.Conn(ctx, q.t.L(), 1)
+	db := q.c.Conn(ctx, q.t.L(), 1, "")
 	defer db.Close()
 
 	// We'll want rebalancing to be a bit faster than normal, so
@@ -162,7 +162,7 @@ func (q *quitTest) runWithTimeout(ctx context.Context, fn func(ctx context.Conte
 // to transfer all leases. This way, we exercise the iterating code in
 // quit/node drain.
 func (q *quitTest) setupIncrementalDrain(ctx context.Context) {
-	db := q.c.Conn(ctx, q.t.L(), 1)
+	db := q.c.Conn(ctx, q.t.L(), 1, "")
 	defer db.Close()
 	if _, err := db.ExecContext(ctx, `
 SET CLUSTER SETTING server.shutdown.lease_transfer_wait = '10ms'`); err != nil {
@@ -178,7 +178,7 @@ SET CLUSTER SETTING server.shutdown.lease_transfer_wait = '10ms'`); err != nil {
 func (q *quitTest) createRanges(ctx context.Context) {
 	const numRanges = 500
 
-	db := q.c.Conn(ctx, q.t.L(), 1)
+	db := q.c.Conn(ctx, q.t.L(), 1, "")
 	defer db.Close()
 	if _, err := db.ExecContext(ctx, fmt.Sprintf(`
 CREATE TABLE t(x, y, PRIMARY KEY(x)) AS SELECT i, 1 FROM generate_series(1,%[1]d) g(i)`,
@@ -350,7 +350,7 @@ func (q *quitTest) checkNoLeases(ctx context.Context, nodeID int) {
 	// For good measure, also write to the table. This ensures it remains
 	// available. We pick a node that's not the drained node.
 	otherNodeID := 1 + nodeID%q.c.Spec().NodeCount
-	db := q.c.Conn(ctx, q.t.L(), otherNodeID)
+	db := q.c.Conn(ctx, q.t.L(), otherNodeID, "")
 	defer db.Close()
 	if _, err := db.ExecContext(ctx, `UPDATE t SET y = y + 1`); err != nil {
 		q.Fatal(err)

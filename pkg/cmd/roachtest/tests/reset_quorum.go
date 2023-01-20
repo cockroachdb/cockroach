@@ -35,7 +35,7 @@ func runResetQuorum(ctx context.Context, t test.Test, c cluster.Cluster) {
 	startOpts := option.DefaultStartOpts()
 	startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs, "--attrs=A")
 	c.Start(ctx, t.L(), startOpts, settings, c.Range(1, 5))
-	db := c.Conn(ctx, t.L(), 1)
+	db := c.Conn(ctx, t.L(), 1, "")
 	defer db.Close()
 
 	rows, err := db.QueryContext(ctx, `SELECT target FROM crdb_internal.zones`)

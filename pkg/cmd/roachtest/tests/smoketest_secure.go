@@ -35,7 +35,7 @@ func registerSecure(r registry.Registry) {
 				c.Put(ctx, t.Cockroach(), "./cockroach")
 				settings := install.MakeClusterSettings(install.SecureOption(true))
 				c.Start(ctx, t.L(), option.DefaultStartOpts(), settings)
-				db := c.Conn(ctx, t.L(), 1)
+				db := c.Conn(ctx, t.L(), 1, "")
 				defer db.Close()
 				_, err := db.QueryContext(ctx, `SELECT 1`)
 				require.NoError(t, err)
@@ -58,14 +58,14 @@ func multitenantSmokeTest(ctx context.Context, t test.Test, c cluster.Cluster) {
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), settings, c.Node(1))
 
 	// make sure connections to kvserver work
-	db := c.Conn(ctx, t.L(), 1)
+	db := c.Conn(ctx, t.L(), 1, "")
 	defer db.Close()
 	_, err := db.QueryContext(ctx, `SELECT 1`)
 	require.NoError(t, err)
 
 	tenID := 11
 	ten := createTenantNode(ctx, t, c, c.Node(1), tenID, 2, 8011, 9011)
-	runner := sqlutils.MakeSQLRunner(c.Conn(ctx, t.L(), 1))
+	runner := sqlutils.MakeSQLRunner(c.Conn(ctx, t.L(), 1, ""))
 	runner.Exec(t, `SELECT crdb_internal.create_tenant($1::INT)`, tenID)
 	ten.start(ctx, t, c, "./cockroach")
 

@@ -79,7 +79,7 @@ func runMVCCGC(ctx context.Context, t test.Test, c cluster.Cluster) {
 	s.Env = append(s.Env, "COCKROACH_SCAN_INTERVAL=30s")
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), s)
 
-	conn := c.Conn(ctx, t.L(), 1)
+	conn := c.Conn(ctx, t.L(), 1, "")
 	defer conn.Close()
 
 	execSQLOrFail := func(statement string, args ...interface{}) {
@@ -382,7 +382,7 @@ func enqueueAllTableRangesForGC(
 	t.Helper()
 	var conns []*gosql.DB
 	for _, node := range c.All() {
-		conns = append(conns, c.Conn(ctx, t.L(), node))
+		conns = append(conns, c.Conn(ctx, t.L(), node, ""))
 	}
 	if err := visitTableRanges(ctx, t, conns[0], m, func(rangeID int) error {
 		for _, c := range conns {

@@ -174,7 +174,7 @@ func runSchemaChangeRandomLoad(
 	// the workload itself (if we even still want it, considering that the
 	// workload itself would be running DROP DATABASE CASCADE).
 
-	db := c.Conn(ctx, t.L(), 1)
+	db := c.Conn(ctx, t.L(), 1, "")
 	defer db.Close()
 
 	t.Status("performing validation after workload")
@@ -190,7 +190,7 @@ func runSchemaChangeRandomLoad(
 
 // saveArtifacts saves important test artifacts in the artifacts directory.
 func saveArtifacts(ctx context.Context, t test.Test, c cluster.Cluster, storeDirectory string) {
-	db := c.Conn(ctx, t.L(), 1)
+	db := c.Conn(ctx, t.L(), 1, "")
 	defer db.Close()
 
 	// Save a backup file called schemachange to the store directory.

@@ -32,7 +32,7 @@ func registerMultiStoreOverload(r registry.Registry) {
 		startOpts.RoachprodOpts.StoreCount = 2
 		c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.Range(1, nodes))
 
-		db := c.Conn(ctx, t.L(), 1)
+		db := c.Conn(ctx, t.L(), 1, "")
 		defer db.Close()
 		// db1 on store1 and db2 on store2. Writes to db2 will overload store2 and
 		// cause admission control to maintain health by queueing these

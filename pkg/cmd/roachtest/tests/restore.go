@@ -115,7 +115,7 @@ func (hc *HealthChecker) Runner(ctx context.Context) (err error) {
 		tBegin := timeutil.Now()
 
 		nodeIdx := 1 + rand.Intn(len(hc.nodes))
-		db, err := hc.c.ConnE(ctx, hc.t.L(), nodeIdx)
+		db, err := hc.c.ConnE(ctx, hc.t.L(), nodeIdx, "")
 		if err != nil {
 			return err
 		}
@@ -234,7 +234,7 @@ func registerRestoreNodeShutdown(r registry.Registry) {
 	makeRestoreStarter := func(ctx context.Context, t test.Test, c cluster.Cluster, gatewayNode int) jobStarter {
 		return func(c cluster.Cluster, t test.Test) (string, error) {
 			t.L().Printf("connecting to gateway")
-			gatewayDB := c.Conn(ctx, t.L(), gatewayNode)
+			gatewayDB := c.Conn(ctx, t.L(), gatewayNode, "")
 			defer gatewayDB.Close()
 
 			t.L().Printf("creating bank database")
@@ -358,7 +358,7 @@ func (dataBank2TB) runRestoreDetached(
 				RESTORE csv.bank FROM
 				'gs://cockroach-fixtures/workload/bank/version=1.0.0,payload-bytes=10240,ranges=0,rows=65104166,seed=1/bank?AUTH=implicit'
 				WITH into_db = 'restore2tb', detached"`)
-	db, err := c.ConnE(ctx, t.L(), c.Node(1)[0])
+	db, err := c.ConnE(ctx, t.L(), c.Node(1)[0], "")
 	if err != nil {
 		return 0, errors.Wrap(err, "failed to connect to node 1; running restore detached")
 	}
@@ -398,7 +398,7 @@ func (tpccIncData) runRestoreDetached(
 				'gs://cockroach-fixtures/tpcc-incrementals-22.2?AUTH=implicit'
 				AS OF SYSTEM TIME '2022-09-07 12:15:00'"
 				WITH detached"`)
-	db, err := c.ConnE(ctx, t.L(), c.Node(1)[0])
+	db, err := c.ConnE(ctx, t.L(), c.Node(1)[0], "")
 	if err != nil {
 		return 0, errors.Wrap(err, "failed to connect to node 1; running restore detached")
 	}
@@ -537,7 +537,7 @@ func registerRestore(r registry.Registry) {
 			maxPauses := 3
 			m.Go(func(ctx context.Context) error {
 				// Wait until the restore job has been created.
-				conn, err := c.ConnE(ctx, t.L(), c.Node(1)[0])
+				conn, err := c.ConnE(ctx, t.L(), c.Node(1)[0], "")
 				require.NoError(t, err)
 
 				// The job should be created fairly quickly once the roachtest starts.
@@ -616,7 +616,7 @@ func registerRestore(r registry.Registry) {
 				succeededJobTick := time.NewTicker(time.Minute * 1)
 				defer succeededJobTick.Stop()
 				done := ctx.Done()
-				conn, err := c.ConnE(ctx, t.L(), c.Node(1)[0])
+				conn, err := c.ConnE(ctx, t.L(), c.Node(1)[0], "")
 				require.NoError(t, err)
 				var isJobComplete bool
 				for {

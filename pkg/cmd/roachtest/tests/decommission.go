@@ -141,7 +141,7 @@ func runDrainAndDecommission(
 	c.Run(ctx, c.Node(pinnedNode), `./cockroach workload init kv --drop --splits 1000`)
 
 	run := func(stmt string) {
-		db := c.Conn(ctx, t.L(), pinnedNode)
+		db := c.Conn(ctx, t.L(), pinnedNode, "")
 		defer db.Close()
 
 		t.Status(stmt)
@@ -153,7 +153,7 @@ func runDrainAndDecommission(
 	}
 
 	{
-		db := c.Conn(ctx, t.L(), pinnedNode)
+		db := c.Conn(ctx, t.L(), pinnedNode, "")
 		defer db.Close()
 
 		run(fmt.Sprintf(`ALTER RANGE default CONFIGURE ZONE USING num_replicas=%d`, defaultReplicationFactor))
@@ -263,7 +263,7 @@ func runDecommission(
 	}
 
 	run := func(stmt string) {
-		db := c.Conn(ctx, t.L(), pinnedNode)
+		db := c.Conn(ctx, t.L(), pinnedNode, "")
 		defer db.Close()
 
 		t.Status(stmt)
@@ -335,7 +335,7 @@ func runDecommission(
 				return err
 			}
 
-			db := c.Conn(ctx, t.L(), pinnedNode)
+			db := c.Conn(ctx, t.L(), pinnedNode, "")
 			defer db.Close()
 
 			internalAddrs, err := c.InternalAddr(ctx, t.L(), c.Node(pinnedNode))
@@ -519,7 +519,7 @@ func runDecommissionRandomized(ctx context.Context, t test.Test, c cluster.Clust
 		{
 			runNode := h.getRandNode()
 			t.L().Printf("checking that we're able to create a database (from n%d)\n", runNode)
-			db := c.Conn(ctx, t.L(), runNode)
+			db := c.Conn(ctx, t.L(), runNode, "")
 			defer db.Close()
 
 			if _, err := db.Exec(`create database still_working;`); err != nil {
@@ -733,7 +733,7 @@ func runDecommissionRandomized(ctx context.Context, t test.Test, c cluster.Clust
 			// everything will seem dead to the allocator at all times, so
 			// nothing will ever happen.
 			func() {
-				db := c.Conn(ctx, t.L(), h.getRandNode())
+				db := c.Conn(ctx, t.L(), h.getRandNode(), "")
 				defer db.Close()
 				const stmt = "SET CLUSTER SETTING server.time_until_store_dead = '1m15s'"
 				if _, err := db.ExecContext(ctx, stmt); err != nil {
@@ -878,7 +878,7 @@ func runDecommissionRandomized(ctx context.Context, t test.Test, c cluster.Clust
 	if err := retry.ForDuration(time.Minute, func() error {
 		// Verify the event log has recorded exactly one decommissioned or
 		// recommissioned event for each membership operation.
-		db := c.Conn(ctx, t.L(), h.getRandNode())
+		db := c.Conn(ctx, t.L(), h.getRandNode(), "")
 		defer db.Close()
 
 		rows, err := db.Query(`
@@ -964,7 +964,7 @@ func runDecommissionDrains(ctx context.Context, t test.Test, c cluster.Cluster) 
 	}
 
 	{
-		db := c.Conn(ctx, t.L(), pinnedNodeID)
+		db := c.Conn(ctx, t.L(), pinnedNodeID, "")
 		defer db.Close()
 
 		// Increase the speed of decommissioning.
@@ -979,7 +979,7 @@ func runDecommissionDrains(ctx context.Context, t test.Test, c cluster.Cluster) 
 	}
 
 	// Connect to node 4 (the target node of the decommission).
-	decommNodeDB := c.Conn(ctx, t.L(), decommNodeID)
+	decommNodeDB := c.Conn(ctx, t.L(), decommNodeID, "")
 	defer decommNodeDB.Close()
 
 	// Decommission node 4 and poll its status during the decommission.
@@ -1057,7 +1057,7 @@ func runDecommissionSlow(ctx context.Context, t test.Test, c cluster.Cluster) {
 	}
 
 	{
-		db := c.Conn(ctx, t.L(), pinnedNodeID)
+		db := c.Conn(ctx, t.L(), pinnedNodeID, "")
 		defer db.Close()
 
 		// Set the replication factor to 5.
@@ -1162,7 +1162,7 @@ func newDecommTestHelper(t test.Test, c cluster.Cluster) *decommTestHelper {
 // obtain the logical CockroachDB nodeID of this node. This is because nodes can
 // change ID as they are continuously decommissioned, wiped, and started anew.
 func (h *decommTestHelper) getLogicalNodeID(ctx context.Context, nodeIdx int) (int, error) {
-	dbNode := h.c.Conn(ctx, h.t.L(), nodeIdx)
+	dbNode := h.c.Conn(ctx, h.t.L(), nodeIdx, "")
 	defer dbNode.Close()
 
 	var nodeID int
@@ -1213,7 +1213,7 @@ func (h *decommTestHelper) recommission(
 func (h *decommTestHelper) checkDecommissioned(
 	ctx context.Context, targetLogicalNodeID, runNode int,
 ) error {
-	db := h.c.Conn(ctx, h.t.L(), runNode)
+	db := h.c.Conn(ctx, h.t.L(), runNode, "")
 	defer db.Close()
 	var membership string
 	if err := db.QueryRow(
@@ -1235,7 +1235,7 @@ func (h *decommTestHelper) checkDecommissioned(
 func (h *decommTestHelper) waitReplicatedAwayFrom(
 	ctx context.Context, targetLogicalNodeID, runNode int,
 ) error {
-	db := h.c.Conn(ctx, h.t.L(), runNode)
+	db := h.c.Conn(ctx, h.t.L(), runNode, "")
 	defer func() {
 		_ = db.Close()
 	}()
@@ -1279,7 +1279,7 @@ func (h *decommTestHelper) waitReplicatedAwayFrom(
 func (h *decommTestHelper) waitUpReplicated(
 	ctx context.Context, targetLogicalNodeID, targetNode int, database string,
 ) error {
-	db := h.c.Conn(ctx, h.t.L(), targetNode)
+	db := h.c.Conn(ctx, h.t.L(), targetNode, "")
 	defer func() {
 		_ = db.Close()
 	}()

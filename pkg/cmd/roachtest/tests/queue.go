@@ -75,7 +75,7 @@ func runQueue(ctx context.Context, t test.Test, c cluster.Cluster) {
 	// getQueueScanTime samples the time to run a statement that scans the queue
 	// table.
 	getQueueScanTime := func() time.Duration {
-		db := c.Conn(ctx, t.L(), 1)
+		db := c.Conn(ctx, t.L(), 1, "")
 		sampleCount := 5
 		samples := make([]time.Duration, sampleCount)
 		for i := 0; i < sampleCount; i++ {
@@ -102,7 +102,7 @@ func runQueue(ctx context.Context, t test.Test, c cluster.Cluster) {
 	scanTimeBefore := getQueueScanTime()
 
 	// Set TTL on table queue.queue to 0, so that rows are deleted immediately
-	db := c.Conn(ctx, t.L(), 1)
+	db := c.Conn(ctx, t.L(), 1, "")
 	_, err := db.ExecContext(ctx, `ALTER TABLE queue.queue CONFIGURE ZONE USING gc.ttlseconds = 30`)
 	if err != nil && strings.Contains(err.Error(), "syntax error") {
 		// Pre-2.1 was EXPERIMENTAL.

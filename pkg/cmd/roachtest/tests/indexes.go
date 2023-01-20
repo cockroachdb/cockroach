@@ -47,7 +47,7 @@ func registerNIndexes(r registry.Registry, secondaryIndexes int) {
 			c.Put(ctx, t.Cockroach(), "./cockroach", roachNodes)
 			c.Put(ctx, t.DeprecatedWorkload(), "./workload", loadNode)
 			c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), roachNodes)
-			conn := c.Conn(ctx, t.L(), 1)
+			conn := c.Conn(ctx, t.L(), 1, "")
 
 			t.Status("running workload")
 			m := c.NewMonitor(ctx, roachNodes)

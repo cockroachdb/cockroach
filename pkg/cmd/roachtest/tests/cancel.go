@@ -48,7 +48,7 @@ func registerCancel(r registry.Registry) {
 
 		m := c.NewMonitor(ctx, c.All())
 		m.Go(func(ctx context.Context) error {
-			conn := c.Conn(ctx, t.L(), 1)
+			conn := c.Conn(ctx, t.L(), 1, "")
 			defer conn.Close()
 
 			t.Status("restoring TPCH dataset for Scale Factor 1")

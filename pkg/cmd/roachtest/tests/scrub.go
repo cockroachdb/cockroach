@@ -72,7 +72,7 @@ func makeScrubTPCCTest(
 						time.Sleep(sleepInterval)
 					}
 
-					conn := c.Conn(ctx, t.L(), 1)
+					conn := c.Conn(ctx, t.L(), 1, "")
 					defer conn.Close()
 
 					t.L().Printf("Starting %d SCRUB checks", numScrubRuns)

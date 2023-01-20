@@ -1213,7 +1213,7 @@ func (c *clusterImpl) FetchTimeseriesData(ctx context.Context, l *logger.Logger)
 	return contextutil.RunWithTimeout(ctx, "fetch tsdata", 5*time.Minute, func(ctx context.Context) error {
 		node := 1
 		for ; node <= c.spec.NodeCount; node++ {
-			db, err := c.ConnE(ctx, l, node)
+			db, err := c.ConnE(ctx, l, node, "")
 			if err == nil {
 				err = db.Ping()
 				db.Close()
@@ -1246,7 +1246,7 @@ func (c *clusterImpl) FetchTimeseriesData(ctx context.Context, l *logger.Logger)
 		); err != nil {
 			return errors.Wrap(err, "cluster.FetchTimeseriesData")
 		}
-		db, err := c.ConnE(ctx, l, node)
+		db, err := c.ConnE(ctx, l, node, "")
 		if err != nil {
 			return err
 		}
@@ -1354,7 +1354,7 @@ func (c *clusterImpl) FailOnReplicaDivergence(ctx context.Context, t *testImpl) 
 		if err := contextutil.RunWithTimeout(
 			ctx, "find live node", 5*time.Second,
 			func(ctx context.Context) error {
-				db = c.Conn(ctx, t.L(), i)
+				db = c.Conn(ctx, t.L(), i, "")
 				_, err := db.ExecContext(ctx, `;`)
 				return err
 			},
@@ -2104,7 +2104,9 @@ func (c *clusterImpl) loggerForCmd(
 // external IP address. In general, inter-cluster communication and should use
 // internal IPs and communication from a test driver to nodes in a cluster
 // should use external IPs.
-func (c *clusterImpl) pgURLErr(ctx context.Context, l *logger.Logger, node option.NodeListOption, external bool, tenant string) ([]string, error) {
+func (c *clusterImpl) pgURLErr(
+	ctx context.Context, l *logger.Logger, node option.NodeListOption, external bool, tenant string,
+) ([]string, error) {
 	urls, err := roachprod.PgURL(ctx, l, c.MakeNodes(node), c.localCertsDir, roachprod.PGURLOptions{
 		External:   external,
 		Secure:     c.localCertsDir != "",
@@ -2119,7 +2121,9 @@ func (c *clusterImpl) pgURLErr(ctx context.Context, l *logger.Logger, node optio
 }
 
 // InternalPGUrl returns the internal Postgres endpoint for the specified nodes.
-func (c *clusterImpl) InternalPGUrl(ctx context.Context, l *logger.Logger, node option.NodeListOption, tenant string) ([]string, error) {
+func (c *clusterImpl) InternalPGUrl(
+	ctx context.Context, l *logger.Logger, node option.NodeListOption, tenant string,
+) ([]string, error) {
 	return c.pgURLErr(ctx, l, node, false, tenant)
 }
 
@@ -2127,7 +2131,9 @@ func (c *clusterImpl) InternalPGUrl(ctx context.Context, l *logger.Logger, node 
 var _ = (&clusterImpl{}).InternalPGUrl
 
 // ExternalPGUrl returns the external Postgres endpoint for the specified nodes.
-func (c *clusterImpl) ExternalPGUrl(ctx context.Context, l *logger.Logger, node option.NodeListOption, tenant string) ([]string, error) {
+func (c *clusterImpl) ExternalPGUrl(
+	ctx context.Context, l *logger.Logger, node option.NodeListOption, tenant string,
+) ([]string, error) {
 	return c.pgURLErr(ctx, l, node, true, tenant)
 }
 
@@ -2294,8 +2300,10 @@ func (c *clusterImpl) ExternalIP(
 var _ = (&clusterImpl{}).ExternalIP
 
 // Conn returns a SQL connection to the specified node.
-func (c *clusterImpl) Conn(ctx context.Context, l *logger.Logger, node int) *gosql.DB {
-	urls, err := c.ExternalPGUrl(ctx, l, c.Node(node), "")
+func (c *clusterImpl) Conn(
+	ctx context.Context, l *logger.Logger, node int, tenant string,
+) *gosql.DB {
+	urls, err := c.ExternalPGUrl(ctx, l, c.Node(node), tenant)
 	if err != nil {
 		c.t.Fatal(err)
 	}
@@ -2307,8 +2315,10 @@ func (c *clusterImpl) Conn(ctx context.Context, l *logger.Logger, node int) *gos
 }
 
 // ConnE returns a SQL connection to the specified node.
-func (c *clusterImpl) ConnE(ctx context.Context, l *logger.Logger, node int) (*gosql.DB, error) {
-	urls, err := c.ExternalPGUrl(ctx, l, c.Node(node), "")
+func (c *clusterImpl) ConnE(
+	ctx context.Context, l *logger.Logger, node int, tenant string,
+) (*gosql.DB, error) {
+	urls, err := c.ExternalPGUrl(ctx, l, c.Node(node), tenant)
 	if err != nil {
 		return nil, err
 	}
@@ -2321,9 +2331,9 @@ func (c *clusterImpl) ConnE(ctx context.Context, l *logger.Logger, node int) (*g
 
 // ConnEAsUser returns a SQL connection to the specified node as a specific user
 func (c *clusterImpl) ConnEAsUser(
-	ctx context.Context, l *logger.Logger, node int, user string,
+	ctx context.Context, l *logger.Logger, node int, user string, tenant string,
 ) (*gosql.DB, error) {
-	urls, err := c.ExternalPGUrl(ctx, l, c.Node(node), "")
+	urls, err := c.ExternalPGUrl(ctx, l, c.Node(node), tenant)
 	if err != nil {
 		return nil, err
 	}

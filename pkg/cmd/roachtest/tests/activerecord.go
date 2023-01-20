@@ -57,7 +57,7 @@ func registerActiveRecord(r registry.Registry) {
 		}
 
 		t.Status("creating database used by tests")
-		db, err := c.ConnE(ctx, t.L(), node[0])
+		db, err := c.ConnE(ctx, t.L(), node[0], "")
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -52,7 +52,7 @@ func registerCopy(r registry.Registry) {
 
 		m := c.NewMonitor(ctx, c.All())
 		m.Go(func(ctx context.Context) error {
-			db := c.Conn(ctx, t.L(), 1)
+			db := c.Conn(ctx, t.L(), 1, "")
 			defer db.Close()
 
 			// Disable load-based splitting so that we can more accurately

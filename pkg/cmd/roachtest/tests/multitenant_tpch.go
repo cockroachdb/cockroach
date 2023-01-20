@@ -62,7 +62,7 @@ func runMultiTenantTPCH(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 	// First, use the cluster as a single tenant deployment. It is important to
 	// not create the tenant yet so that the certs directory is not overwritten.
-	singleTenantConn := c.Conn(ctx, t.L(), 1)
+	singleTenantConn := c.Conn(ctx, t.L(), 1, "")
 	runTPCH(singleTenantConn, "" /* url */, 0 /* setupIdx */)
 
 	// Now we create a tenant and run all TPCH queries within it.

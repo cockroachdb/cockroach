@@ -100,7 +100,7 @@ func runReplicaGCChangedPeers(
 	//
 	// https://github.com/cockroachdb/cockroach/issues/67910#issuecomment-884856356
 	t.Status("waiting for zero replicas on n3")
-	waitForZeroReplicasOnN3(ctx, t, c.Conn(ctx, t.L(), 1))
+	waitForZeroReplicasOnN3(ctx, t, c.Conn(ctx, t.L(), 1, ""))
 
 	// Stop the remaining two old nodes, no replicas remaining there.
 	c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.Range(1, 2))
@@ -158,7 +158,7 @@ type replicagcTestHelper struct {
 }
 
 func (h *replicagcTestHelper) waitForFullReplication(ctx context.Context) {
-	db := h.c.Conn(ctx, h.t.L(), 1)
+	db := h.c.Conn(ctx, h.t.L(), 1, "")
 	defer func() {
 		_ = db.Close()
 	}()
@@ -179,7 +179,7 @@ func (h *replicagcTestHelper) waitForFullReplication(ctx context.Context) {
 }
 
 func (h *replicagcTestHelper) waitForZeroReplicas(ctx context.Context, targetNode int) {
-	db := h.c.Conn(ctx, h.t.L(), targetNode)
+	db := h.c.Conn(ctx, h.t.L(), targetNode, "")
 	defer func() {
 		_ = db.Close()
 	}()
@@ -243,7 +243,7 @@ func (h *replicagcTestHelper) recommission(
 // nodes started with deadNodeAttr. This can then be used as a negative
 // constraint for everything.
 func (h *replicagcTestHelper) isolateDeadNodes(ctx context.Context, runNode int) {
-	db := h.c.Conn(ctx, h.t.L(), runNode)
+	db := h.c.Conn(ctx, h.t.L(), runNode, "")
 	defer func() {
 		_ = db.Close()
 	}()

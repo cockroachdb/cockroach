@@ -44,7 +44,7 @@ func runClockMonotonicity(
 	c.Wipe(ctx)
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
 
-	db := c.Conn(ctx, t.L(), c.Spec().NodeCount)
+	db := c.Conn(ctx, t.L(), c.Spec().NodeCount, "")
 	defer db.Close()
 	if _, err := db.Exec(
 		fmt.Sprintf(`SET CLUSTER SETTING server.clock.persist_upper_bound_interval = '%v'`,

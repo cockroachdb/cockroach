@@ -73,7 +73,7 @@ func runEarlyExitInConnectionWait(ctx context.Context, t test.Test, c cluster.Cl
 
 	prepareCluster(ctx, t, c, drainWaitDuration, connectionWaitDuration, queryWaitDuration)
 
-	db := c.Conn(ctx, t.L(), nodeToDrain)
+	db := c.Conn(ctx, t.L(), nodeToDrain, "")
 	defer db.Close()
 
 	db.SetConnMaxLifetime(connMaxLifetime)
@@ -167,7 +167,7 @@ func runTestWarningForConnWait(ctx context.Context, t test.Test, c cluster.Clust
 
 	prepareCluster(ctx, t, c, drainWaitDuration, connectionWaitDuration, queryWaitDuration)
 
-	db := c.Conn(ctx, t.L(), nodeToDrain)
+	db := c.Conn(ctx, t.L(), nodeToDrain, "")
 	defer db.Close()
 
 	// Get a connection from the connection pool.
@@ -209,7 +209,7 @@ func prepareCluster(
 
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
 
-	db := c.Conn(ctx, t.L(), 1)
+	db := c.Conn(ctx, t.L(), 1, "")
 	defer db.Close()
 
 	waitPhasesSettingStmts := []string{

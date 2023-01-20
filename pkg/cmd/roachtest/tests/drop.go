@@ -49,7 +49,7 @@ func registerDrop(r registry.Registry) {
 			// Otherwise the ALTER TABLE query below might fail to find the
 			// tpcc.order_line table that we just imported (!) due to what seems to
 			// be a problem with table descriptor leases (#24374).
-			db := c.Conn(ctx, t.L(), 1)
+			db := c.Conn(ctx, t.L(), 1, "")
 			defer db.Close()
 
 			run := func(maybeExperimental bool, stmtStr string, args ...interface{}) {

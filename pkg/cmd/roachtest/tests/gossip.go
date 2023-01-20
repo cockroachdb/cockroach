@@ -43,7 +43,7 @@ func registerGossip(r registry.Registry) {
 		startOpts := option.DefaultStartOpts()
 		startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs, "--vmodule=*=1")
 		c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.All())
-		err := WaitFor3XReplication(ctx, t, c.Conn(ctx, t.L(), 1))
+		err := WaitFor3XReplication(ctx, t, c.Conn(ctx, t.L(), 1, ""))
 		require.NoError(t, err)
 
 		gossipNetworkAccordingTo := func(node int) (nodes []int) {
@@ -56,7 +56,7 @@ SELECT node_id
  WHERE expiration > now();
 `
 
-			db := c.Conn(ctx, t.L(), node)
+			db := c.Conn(ctx, t.L(), node, "")
 			defer db.Close()
 
 			rows, err := db.Query(query)
@@ -153,7 +153,7 @@ SELECT node_id
 type gossipUtil struct {
 	waitTime time.Duration
 	urlMap   map[int]string
-	conn     func(ctx context.Context, l *logger.Logger, i int) *gosql.DB
+	conn     func(ctx context.Context, l *logger.Logger, i int, tenant string) *gosql.DB
 }
 
 func newGossipUtil(ctx context.Context, t test.Test, c cluster.Cluster) *gossipUtil {
@@ -242,7 +242,7 @@ func (g *gossipUtil) checkConnectedAndFunctional(
 	}
 
 	for i := 1; i <= c.Spec().NodeCount; i++ {
-		db := g.conn(ctx, t.L(), i)
+		db := g.conn(ctx, t.L(), i, "")
 		defer db.Close()
 		if i == 1 {
 			if _, err := db.Exec("CREATE DATABASE IF NOT EXISTS test"); err != nil {
@@ -341,7 +341,7 @@ func runGossipRestartNodeOne(ctx context.Context, t test.Test, c cluster.Cluster
 
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), settings)
 
-	db := c.Conn(ctx, t.L(), 1)
+	db := c.Conn(ctx, t.L(), 1, "")
 	defer db.Close()
 
 	run := func(stmtStr string) {
@@ -451,9 +451,9 @@ SELECT count(replicas)
 	// current infrastructure which doesn't know about cockroach nodes started on
 	// non-standard ports.
 	g := newGossipUtil(ctx, t, c)
-	g.conn = func(ctx context.Context, l *logger.Logger, i int) *gosql.DB {
+	g.conn = func(ctx context.Context, l *logger.Logger, i int, tenant string) *gosql.DB {
 		if i != 1 {
-			return c.Conn(ctx, l, i)
+			return c.Conn(ctx, l, i, "")
 		}
 		urls, err := c.ExternalPGUrl(ctx, l, c.Node(1), "")
 		if err != nil {
@@ -510,7 +510,7 @@ func runCheckLocalityIPAddress(ctx context.Context, t test.Test, c cluster.Clust
 	rowCount := 0
 
 	for i := 1; i <= c.Spec().NodeCount; i++ {
-		db := c.Conn(ctx, t.L(), 1)
+		db := c.Conn(ctx, t.L(), 1, "")
 		defer db.Close()
 
 		rows, err := db.Query(

@@ -92,7 +92,7 @@ func runClusterInit(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 		var dbs []*gosql.DB
 		for i := 1; i <= c.Spec().NodeCount; i++ {
-			db := c.Conn(ctx, t.L(), i)
+			db := c.Conn(ctx, t.L(), i, "")
 			defer db.Close()
 			dbs = append(dbs, db)
 		}

@@ -51,7 +51,7 @@ func registerPgjdbc(r registry.Registry) {
 		}
 
 		t.Status("create admin user for tests")
-		db, err := c.ConnE(ctx, t.L(), node[0])
+		db, err := c.ConnE(ctx, t.L(), node[0], "")
 		if err != nil {
 			t.Fatal(err)
 		}

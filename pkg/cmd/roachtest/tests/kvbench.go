@@ -236,7 +236,7 @@ func runKVBench(ctx context.Context, t test.Test, c cluster.Cluster, b kvBenchSp
 		// We currently only support one loadGroup.
 		resultChan := make(chan *kvBenchResult, 1)
 		m.Go(func(ctx context.Context) error {
-			db := c.Conn(ctx, t.L(), 1)
+			db := c.Conn(ctx, t.L(), 1, "")
 
 			var initCmd strings.Builder
 

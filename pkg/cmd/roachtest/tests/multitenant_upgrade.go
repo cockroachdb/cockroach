@@ -83,7 +83,7 @@ func runMultiTenantUpgrade(ctx context.Context, t test.Test, c cluster.Cluster, 
 
 	const tenant11HTTPPort, tenant11SQLPort = 8011, 20011
 	const tenant11ID = 11
-	runner := sqlutils.MakeSQLRunner(c.Conn(ctx, t.L(), 1))
+	runner := sqlutils.MakeSQLRunner(c.Conn(ctx, t.L(), 1, ""))
 	// We'll sometimes have to wait out the backoff of the storage cluster
 	// auto-update loop (at the time of writing 30s), plus some migrations may be
 	// genuinely long-running.

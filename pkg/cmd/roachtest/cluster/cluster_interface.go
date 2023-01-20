@@ -71,9 +71,9 @@ type Cluster interface {
 
 	// SQL clients to nodes.
 
-	Conn(ctx context.Context, l *logger.Logger, node int) *gosql.DB
-	ConnE(ctx context.Context, l *logger.Logger, node int) (*gosql.DB, error)
-	ConnEAsUser(ctx context.Context, l *logger.Logger, node int, user string) (*gosql.DB, error)
+	Conn(ctx context.Context, l *logger.Logger, node int, tenant string) *gosql.DB
+	ConnE(ctx context.Context, l *logger.Logger, node int, tenant string) (*gosql.DB, error)
+	ConnEAsUser(ctx context.Context, l *logger.Logger, node int, user string, tenant string) (*gosql.DB, error)
 
 	// URLs for the Admin UI.
 

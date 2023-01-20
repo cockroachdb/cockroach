@@ -64,7 +64,7 @@ BADGER_DIRECTORY_VALUE=/mnt/data1/jaeger.badger/data BADGER_DIRECTORY_KEY=/mnt/d
 	if err != nil {
 		return err
 	}
-	if _, err := c.Conn(ctx, l, 1).Exec(`SET CLUSTER SETTING trace.zipkin.collector = $1`, hps[0]+":9411"); err != nil {
+	if _, err := c.Conn(ctx, l, 1, "").Exec(`SET CLUSTER SETTING trace.zipkin.collector = $1`, hps[0]+":9411"); err != nil {
 		return err
 	}
 	time.Sleep(time.Second) // give jaeger a moment to start

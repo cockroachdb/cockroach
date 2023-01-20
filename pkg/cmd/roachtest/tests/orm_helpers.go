@@ -28,7 +28,7 @@ import (
 func alterZoneConfigAndClusterSettings(
 	ctx context.Context, t test.Test, version string, c cluster.Cluster, nodeIdx int,
 ) error {
-	db, err := c.ConnE(ctx, t.L(), nodeIdx)
+	db, err := c.ConnE(ctx, t.L(), nodeIdx, "")
 	if err != nil {
 		return err
 	}

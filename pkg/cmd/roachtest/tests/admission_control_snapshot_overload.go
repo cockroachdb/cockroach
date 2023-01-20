@@ -56,7 +56,7 @@ func registerSnapshotOverload(r registry.Registry) {
 				c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.Node(i))
 			}
 
-			db := c.Conn(ctx, t.L(), crdbNodes)
+			db := c.Conn(ctx, t.L(), crdbNodes, "")
 			defer db.Close()
 
 			// Set a replication factor of 1 and pin replicas to n1 by default.
