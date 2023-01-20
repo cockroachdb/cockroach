@@ -248,6 +248,8 @@ func Open(ctx context.Context, loc Location, opts ...ConfigOption) (*Pebble, err
 		defer cfg.Opts.Cache.Unref()
 	}
 	if cfg.Settings == nil {
+		// TODO(radu): this seems error-prone; should we require the use of
+		// Settings() in all cases?
 		cfg.Settings = cluster.MakeClusterSettings()
 	}
 	p, err := NewPebble(ctx, cfg.PebbleConfig)
