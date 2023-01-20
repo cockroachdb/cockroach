@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -44,7 +45,7 @@ func (th *testHelper) createSchedules(
 	}
 	backupQuery := fmt.Sprintf("%s%s", backupStmt, backupOpts)
 	schedules, err := th.createBackupSchedule(t,
-		fmt.Sprintf("CREATE SCHEDULE FOR %s RECURRING '*/5 * * * *'", backupQuery))
+		fmt.Sprintf("CREATE SCHEDULE FOR %s RECURRING '*/2 * * * *'", backupQuery))
 	require.NoError(t, err)
 
 	// We expect full & incremental schedule to be created.
@@ -95,6 +96,19 @@ func TestScheduleChainingLifecycle(t *testing.T) {
 	th, cleanup := newTestHelper(t)
 	defer cleanup()
 
+	roundedCurrentTime := th.cfg.DB.Clock().PhysicalTime().Round(time.Minute * 5)
+	if roundedCurrentTime.Hour() == 0 && roundedCurrentTime.Minute() == 0 {
+		// The backup schedule in this test uses the following crontab recurrence:
+		// '*/2 * * * *'. In english, this means "run a full backup now, and then
+		// run a full backup every day at midnight, and an incremental every 2
+		// minutes. This test relies on an incremental backup running after the
+		// first full backup. But, what happens if the first full backup gets
+		// scheduled to run within 5 minutes of midnight? A second full backup may
+		// get scheduled before the expected incremental backup, breaking the
+		// invariant the test expects. For this reason, skip the test if it's
+		// running close to midnight #spooky.
+		skip.WithIssue(t, 91640, "test flakes when the machine clock is too close to midnight")
+	}
 	th.sqlDB.Exec(t, `
 CREATE DATABASE db;
 USE db;
