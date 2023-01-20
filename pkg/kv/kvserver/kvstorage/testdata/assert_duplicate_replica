@@ -11,4 +11,4 @@ r1:{c-d} [(n1,s1):20, next=21, gen=0]
 # raft state.
 load-and-reconcile
 ----
-r1:{a-c} [(n1,s1):10, next=11, gen=0] has no persisted replicaID
+initialized replica r1/10 not present in allM
