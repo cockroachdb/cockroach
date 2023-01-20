@@ -1,0 +1,77 @@
+name: Publish Cluster UI Release
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - 'release-*'
+    paths:
+      - 'pkg/ui/workspaces/cluster-ui/**/*.tsx?'
+      - 'pkg/ui/workspaces/cluster-ui/yarn.lock'
+      - 'pkg/ui/workspaces/cluster-ui/package.json'
+
+jobs:
+  publish_cluster_ui:
+    if: github.repository == 'cockroachdb/cockroach'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: pkg/ui/workspaces/cluster-ui
+
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        submodules: true
+
+    - name: Bazel Cache
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/bazel
+        key: ${{ runner.os }}-bazel-cache
+
+    - name: Setup NodeJS
+      uses: actions/setup-node@v3
+      with:
+        node-version: 16
+        cache: 'yarn'
+        cache-dependency-path: pkg/ui/workspaces/cluster-ui/yarn.lock
+      env:
+        NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+    - name: Check if version is published
+      id: version-check
+      shell: bash
+      run: |
+        PACKAGE_VERSION=$(cat ./package.json | jq -r ".version");
+        VERSIONS=$(npm view @cockroachlabs/cluster-ui versions)
+        if [[ $VERSIONS == *"$PACKAGE_VERSION"* ]]; then
+          echo "published=yes" >> $GITHUB_OUTPUT
+          echo
+          echo "🛑 Cluster UI package version $PACKAGE_VERSION is already published"
+          echo "to npm. Publishing step should be skipped. 🛑"
+        else
+          echo "published=no" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Get Branch name
+      shell: bash
+      run: echo "branch=${GITHUB_REF#refs/heads/}" >> $GITHUB_OUTPUT
+      id: branch-name
+
+    - name: Build Cluster UI
+      if: steps.version-check.outputs.published == 'no'
+      run: |
+        yarn install --frozen-lockfile
+        bazel build //pkg/ui/workspaces/db-console/src/js:crdb-protobuf-client
+        cp ../../../../_bazel/bin/pkg/ui/workspaces/db-console/src/js/protos.* ../db-console/src/js/
+        yarn build
+
+    - name: Create version tag and push
+      if: steps.version-check.outputs.published == 'no'
+      run: |
+        TAGNAME="@cockroachlabs/cluster-ui@$(cat ./package.json | jq -r '.version')"
+        git tag $TAGNAME
+        git push origin $TAGNAME
+
+    - name: Publish patch version
+      if: steps.version-check.outputs.published == 'no'
+      run: yarn publish --access public --tag ${{ steps.branch-name.outputs.branch }}
