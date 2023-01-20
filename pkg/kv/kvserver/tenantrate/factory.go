@@ -121,6 +121,7 @@ func (rl *LimiterFactory) Release(lim Limiter) {
 	}
 	if rcLim.refCount--; rcLim.refCount == 0 {
 		l.metrics.destroy()
+		l.qp.Close("released")
 		delete(rl.mu.tenants, l.tenantID)
 	}
 }
