@@ -222,7 +222,8 @@
 /pkg/kv/kvserver/gc/                    @cockroachdb/kv-prs
 /pkg/kv/kvserver/idalloc/               @cockroachdb/kv-prs
 /pkg/kv/kvserver/intentresolver/        @cockroachdb/kv-prs
-/pkg/kv/kvserver/kvadmission/           @cockroachdb/kv-prs
+/pkg/kv/kvserver/kvadmission/           @cockroachdb/admission-control
+/pkg/kv/kvserver/kvflowcontrol/         @cockroachdb/admission-control
 /pkg/kv/kvserver/kvserverbase/          @cockroachdb/kv-prs
 /pkg/kv/kvserver/kvserverpb/            @cockroachdb/kv-prs
 /pkg/kv/kvserver/kvstorage/             @cockroachdb/repl-prs

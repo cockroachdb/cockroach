@@ -13,7 +13,9 @@ package raftlog
 import (
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
 // EntryEncoding enumerates the encodings used in CockroachDB for raftpb.Entry's
@@ -147,4 +149,24 @@ func EncodeRaftCommandPrefix(b []byte, enc EntryEncoding, commandID kvserverbase
 	}
 	b[0] = enc.prefixByte()
 	copy(b[1:], commandID)
+}
+
+// DecodeRaftAdmissionMeta decodes admission control metadata from a
+// raftpb.Entry.Data. Expects an EntryEncoding{Standard,Sideloaded}WithAC
+// encoding.
+func DecodeRaftAdmissionMeta(data []byte) (kvflowcontrolpb.RaftAdmissionMeta, error) {
+	prefix := data[0]
+	if !(prefix == entryEncodingStandardWithACPrefixByte || prefix == entryEncodingSideloadedWithACPrefixByte) {
+		panic(fmt.Sprintf("invalid encoding: prefix %v", prefix))
+	}
+
+	// TODO(irfansharif): If the decoding overhead is noticeable, we can write a
+	// custom decoder and rely on the encoding for raft admission data being
+	// present at the start of the marshaled raft command. This could speed it
+	// up slightly.
+	var raftAdmissionMeta kvflowcontrolpb.RaftAdmissionMeta
+	if err := protoutil.Unmarshal(data[1+RaftCommandIDLen:], &raftAdmissionMeta); err != nil {
+		return kvflowcontrolpb.RaftAdmissionMeta{}, err
+	}
+	return raftAdmissionMeta, nil
 }
