@@ -6416,6 +6416,7 @@ func mvccExportToWriter(
 				if isNewKey {
 					resumeKey.Timestamp = hlc.Timestamp{}
 				}
+				log.VInfof(ctx, 2, "paginating ExportRequest: CPU over-limit")
 				break
 			}
 		}
@@ -6479,6 +6480,8 @@ func mvccExportToWriter(
 					rangeKeys.Clear()
 					rangeKeysSize = 0
 					resumeKey = unsafeKey.Clone()
+					log.VInfof(ctx, 2, "paginating ExportRequest: rangekeys hit size limit: "+
+						"reachedTargetSize: %t, reachedMaxSize: %t", reachedTargetSize, reachedMaxSize)
 					break
 				}
 				if reachedMaxSize {
@@ -6543,6 +6546,8 @@ func mvccExportToWriter(
 				if isNewKey || !opts.StopMidKey {
 					resumeKey.Timestamp = hlc.Timestamp{}
 				}
+				log.VInfof(ctx, 2, "paginating ExportRequest: point keys hit size limit: "+
+					"reachedTargetSize: %t, reachedMaxSize: %t", reachedTargetSize, reachedMaxSize)
 				break
 			}
 			if reachedMaxSize {
