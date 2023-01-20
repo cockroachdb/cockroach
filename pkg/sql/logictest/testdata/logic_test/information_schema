@@ -2313,6 +2313,7 @@ system         public        tenants                          active            
 system         public        tenants                          id                                                                                                        1
 system         public        tenants                          info                                                                                                      3
 system         public        tenants                          name                                                                                                      4
+system         public        tenants                          service_mode                                                                                              5
 system         public        transaction_statistics           agg_interval                                                                                              5
 system         public        transaction_statistics           aggregated_ts                                                                                             1
 system         public        transaction_statistics           app_name                                                                                                  3

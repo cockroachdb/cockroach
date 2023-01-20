@@ -38,27 +38,10 @@ VALUES (1, true, crdb_internal.json_to_pb('cockroach.sql.sqlbase.TenantInfo', '{
 func addTenantNameColumnAndSystemTenantEntry(
 	ctx context.Context, cs clusterversion.ClusterVersion, d upgrade.TenantDeps,
 ) error {
-	rows, err := d.InternalExecutor.QueryRowEx(ctx, "get-tenant-table-id", nil,
-		sessiondata.NodeUserSessionDataOverride, `
-SELECT n2.id
-  FROM system.public.namespace n1,
-       system.public.namespace n2
- WHERE n1.name = $1
-   AND n1.id = n2."parentID"
-   AND n2.name = $2`,
-		catconstants.SystemDatabaseName,
-		catconstants.TenantsTableName,
-	)
-	if err != nil {
+	tenantsTableID, err := getTenantsTableID(ctx, d)
+	if err != nil || tenantsTableID == 0 {
 		return err
 	}
-	if rows == nil {
-		// No system.tenants table. Nothing to do.
-		return nil
-	}
-
-	// Retrieve the tenant table ID from the query above.
-	tenantsTableID := descpb.ID(int64(*rows[0].(*tree.DInt)))
 
 	for _, op := range []operation{
 		{
@@ -81,5 +64,77 @@ SELECT n2.id
 
 	_, err = d.InternalExecutor.ExecEx(ctx, "add-system-entry", nil,
 		sessiondata.NodeUserSessionDataOverride, addSystemTenantEntry)
+	return err
+}
+
+func getTenantsTableID(ctx context.Context, d upgrade.TenantDeps) (descpb.ID, error) {
+	rows, err := d.InternalExecutor.QueryRowEx(ctx, "get-tenant-table-id", nil,
+		sessiondata.NodeUserSessionDataOverride, `
+SELECT n2.id
+  FROM system.public.namespace n1,
+       system.public.namespace n2
+ WHERE n1.name = $1
+   AND n1.id = n2."parentID"
+   AND n2.name = $2`,
+		catconstants.SystemDatabaseName,
+		catconstants.TenantsTableName,
+	)
+	if err != nil {
+		return 0, err
+	}
+	if rows == nil {
+		// No system.tenants table. Nothing to do.
+		return 0, nil
+	}
+	tenantsTableID := descpb.ID(int64(*rows[0].(*tree.DInt)))
+
+	return tenantsTableID, nil
+}
+
+const addTenantServiceModeColumn = `
+ALTER TABLE system.public.tenants ADD COLUMN service_mode STRING
+AS (lower(crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info)->>'serviceMode')) VIRTUAL`
+
+const addTenantServiceModeIndex = `
+CREATE INDEX tenants_service_mode_idx ON system.public.tenants (service_mode ASC)
+`
+
+const updateSystemTenantEntry = `
+UPDATE system.public.tenants SET info =
+crdb_internal.json_to_pb('cockroach.sql.sqlbase.TenantInfo',
+crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info) ||
+json_build_object('serviceMode', 'SHARED'))
+WHERE id = 1
+`
+
+func addTenantServiceModeColumnAndUpdateSystemTenantEntry(
+	ctx context.Context, cs clusterversion.ClusterVersion, d upgrade.TenantDeps,
+) error {
+	tenantsTableID, err := getTenantsTableID(ctx, d)
+	if err != nil || tenantsTableID == 0 {
+		return err
+	}
+
+	for _, op := range []operation{
+		{
+			name:           "add-tenant-service-mode-column",
+			schemaList:     []string{"service_mode"},
+			query:          addTenantServiceModeColumn,
+			schemaExistsFn: hasColumn,
+		},
+		{
+			name:           "make-tenant-service-mode-idx",
+			schemaList:     []string{"tenants_service_mode_idx"},
+			query:          addTenantServiceModeIndex,
+			schemaExistsFn: hasIndex,
+		},
+	} {
+		if err := migrateTable(ctx, cs, d, op, tenantsTableID, systemschema.TenantsTable); err != nil {
+			return err
+		}
+	}
+
+	_, err = d.InternalExecutor.ExecEx(ctx, "update-system-entry", nil,
+		sessiondata.NodeUserSessionDataOverride, updateSystemTenantEntry)
 	return err
 }

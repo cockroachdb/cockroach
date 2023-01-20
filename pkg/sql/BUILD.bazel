@@ -244,6 +244,7 @@ go_library(
         "tenant_creation.go",
         "tenant_deletion.go",
         "tenant_gc.go",
+        "tenant_service.go",
         "tenant_settings.go",
         "tenant_spec.go",
         "tenant_update.go",
