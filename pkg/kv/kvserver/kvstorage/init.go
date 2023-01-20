@@ -13,17 +13,19 @@ package kvstorage
 import (
 	"bytes"
 	"context"
+	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
+	"go.etcd.io/raft/v3/raftpb"
 )
 
 // FirstNodeID is the NodeID assigned to the node bootstrapping a new cluster.
@@ -249,7 +251,7 @@ func IterateRangeDescriptorsFromDisk(
 
 	allCount := 0
 	matchCount := 0
-	bySuffix := make(map[string]int)
+	bySuffix := make(map[redact.RedactableString]int)
 	kvToDesc := func(kv roachpb.KeyValue) error {
 		allCount++
 		// Only consider range metadata entries; ignore others.
@@ -257,7 +259,7 @@ func IterateRangeDescriptorsFromDisk(
 		if err != nil {
 			return err
 		}
-		bySuffix[string(suffix)]++
+		bySuffix[redact.RedactableString(suffix)]++
 		if !bytes.Equal(suffix, keys.LocalRangeDescriptorSuffix) {
 			return nil
 		}
@@ -291,46 +293,93 @@ func IterateRangeDescriptorsFromDisk(
 	return err
 }
 
-type EngineReplicas struct {
-	Uninitialized map[storage.FullReplicaID]struct{}
-	Initialized   map[storage.FullReplicaID]*roachpb.RangeDescriptor
+// LoadedReplicas represents the Replicas present on a storage engine.
+type LoadedReplicas struct {
+	Uninitialized ReplicaMap
+	Initialized   ReplicaMap
 }
 
-// loadFullReplicaIDsFromDisk discovers all Replicas on this Store.
-// There will only be one entry in the map for a given RangeID.
-//
-// TODO(sep-raft-log): the reader here is for the log engine.
-func loadFullReplicaIDsFromDisk(
-	ctx context.Context, reader storage.Reader,
-) (map[storage.FullReplicaID]struct{}, error) {
-	m := map[storage.FullReplicaID]struct{}{}
-	var msg roachpb.RaftReplicaID
-	if err := IterateIDPrefixKeys(ctx, reader, func(rangeID roachpb.RangeID) roachpb.Key {
-		return keys.RaftReplicaIDKey(rangeID)
-	}, &msg, func(rangeID roachpb.RangeID) error {
-		m[storage.FullReplicaID{RangeID: rangeID, ReplicaID: msg.ReplicaID}] = struct{}{}
-		return nil
-	}); err != nil {
-		return nil, err
+// A Replica references a CockroachDB Replica. The data in this struct does not
+// represent the data of the Replica but is sufficient to access all of its
+// contents via additional calls to the storage engine.
+type Replica struct {
+	RangeID   roachpb.RangeID
+	ReplicaID roachpb.ReplicaID
+	Desc      *roachpb.RangeDescriptor // nil for uninitialized Replica
+
+	descReplicaID roachpb.ReplicaID // internal to kvstorage
+	hardState     raftpb.HardState  // internal to kvstorage
+}
+
+// ID returns the FullReplicaID.
+func (r Replica) ID() storage.FullReplicaID {
+	return storage.FullReplicaID{
+		RangeID:   r.RangeID,
+		ReplicaID: r.ReplicaID,
 	}
-
-	// TODO(sep-raft-log): if there is any other data that we mandate is present here
-	// (like a HardState), validate that here.
-
-	return m, nil
 }
 
-// LoadAndReconcileReplicas loads the Replicas present on this
+// A ReplicaMap organizes a set of Replicas with unique RangeIDs.
+type ReplicaMap map[roachpb.RangeID]Replica
+
+// SortedSlice returns the contents of the map as a RangeID-sorted slice.
+func (m ReplicaMap) SortedSlice() []Replica {
+	var sl []Replica
+	for _, repl := range m {
+		sl = append(sl, repl)
+	}
+	sort.Slice(sl, func(i, j int) bool {
+		return sl[i].RangeID < sl[j].RangeID
+	})
+	return sl
+}
+
+func (m ReplicaMap) getOrMake(rangeID roachpb.RangeID) Replica {
+	ent := m[rangeID]
+	ent.RangeID = rangeID
+	return ent
+}
+
+func (m ReplicaMap) setReplicaID(rangeID roachpb.RangeID, replicaID roachpb.ReplicaID) {
+	ent := m.getOrMake(rangeID)
+	ent.ReplicaID = replicaID
+	m[rangeID] = ent
+}
+
+func (m ReplicaMap) setHardState(rangeID roachpb.RangeID, hs raftpb.HardState) {
+	ent := m.getOrMake(rangeID)
+	ent.hardState = hs
+	m[rangeID] = ent
+}
+
+func (m ReplicaMap) setDesc(rangeID roachpb.RangeID, desc roachpb.RangeDescriptor) error {
+	ent := m.getOrMake(rangeID)
+	if ent.Desc != nil {
+		return errors.AssertionFailedf("overlapping descriptors %v and %v", ent.Desc, &desc)
+	}
+	ent.Desc = &desc
+	m[rangeID] = ent
+	return nil
+}
+
+func (m ReplicaMap) setDescReplicaID(rangeID roachpb.RangeID, descReplicaID roachpb.ReplicaID) {
+	ent := m.getOrMake(rangeID)
+	ent.descReplicaID = descReplicaID
+	m[rangeID] = ent
+}
+
+// LoadAndReconcileReplicas loads the LoadedReplicas present on this
 // store. It reconciles inconsistent state and runs validation checks.
 //
-// TOOD(sep-raft-log): consider a callback-visitor pattern here.
-func LoadAndReconcileReplicas(ctx context.Context, eng storage.Engine) (*EngineReplicas, error) {
+// TODO(sep-raft-log): consider a callback-visitor pattern here.
+func LoadAndReconcileReplicas(ctx context.Context, eng storage.Engine) (LoadedReplicas, error) {
 	ident, err := ReadStoreIdent(ctx, eng)
 	if err != nil {
-		return nil, err
+		return LoadedReplicas{}, err
 	}
 
-	initM := map[storage.FullReplicaID]*roachpb.RangeDescriptor{}
+	s := ReplicaMap{}
+
 	// INVARIANT: the latest visible committed version of the RangeDescriptor
 	// (which is what IterateRangeDescriptorsFromDisk returns) is the one reflecting
 	// the state of the Replica.
@@ -347,47 +396,103 @@ func LoadAndReconcileReplicas(ctx context.Context, eng storage.Engine) (*EngineR
 					ident.StoreID, desc)
 			}
 
-			initM[storage.FullReplicaID{
-				RangeID:   desc.RangeID,
-				ReplicaID: repDesc.ReplicaID,
-			}] = &desc
+			if err := s.setDesc(desc.RangeID, desc); err != nil {
+				return err
+			}
+			s.setDescReplicaID(desc.RangeID, repDesc.ReplicaID)
 			return nil
 		}); err != nil {
-		return nil, err
+		return LoadedReplicas{}, err
 	}
 
-	allM, err := loadFullReplicaIDsFromDisk(ctx, eng)
-	if err != nil {
-		return nil, err
-	}
+	// INVARIANT: all replicas have a persisted full ReplicaID (i.e. a "ReplicaID from disk").
+	//
+	// This invariant is true for replicas created in 22.1. Without further action, it
+	// would be violated for clusters that originated before 22.1. In this method, we
+	// backfill the ReplicaID (for initialized replicas) and we remove uninitialized
+	// replicas (see below for rationale).
+	//
+	// The migration can be removed when the KV host cluster MinSupportedVersion
+	// matches or exceeds 23.1 (i.e. once we know that a store has definitely
+	// started up on >=23.1 at least once).
 
-	for id := range initM {
-		if _, ok := allM[id]; !ok {
-			// INVARIANT: all replicas have a persisted full replicaID (i.e. a "replicaID from disk").
-			//
-			// This invariant is true for replicas created in 22.2, but no migration
-			// was ever written. So we backfill the replicaID here (as of 23.1) and
-			// remove this code in the future (the follow-up release, assuming it is
-			// forced to migrate through 23.1, otherwise later).
-			if buildutil.CrdbTestBuild {
-				return nil, errors.AssertionFailedf("%s has no persisted replicaID", initM[id])
-			}
-			if err := logstore.NewStateLoader(id.RangeID).SetRaftReplicaID(ctx, eng, id.ReplicaID); err != nil {
-				return nil, errors.Wrapf(err, "backfilling replicaID for r%d", id.RangeID)
-			}
-			log.Eventf(ctx, "backfilled replicaID for %s", id)
+	// Collect all the RangeIDs that either have a RaftReplicaID or HardState. For
+	// unmigrated replicas we see only the HardState - that is how we detect
+	// replicas that still need to be migrated.
+	//
+	// TODO(tbg): tighten up the case where we see a RaftReplicaID but no HardState.
+	// This leads to the general desire to validate the internal consistency of the
+	// entire raft state (i.e. HardState, TruncatedState, Log).
+	{
+		var msg roachpb.RaftReplicaID
+		if err := IterateIDPrefixKeys(ctx, eng, func(rangeID roachpb.RangeID) roachpb.Key {
+			return keys.RaftReplicaIDKey(rangeID)
+		}, &msg, func(rangeID roachpb.RangeID) error {
+			s.setReplicaID(rangeID, msg.ReplicaID)
+			return nil
+		}); err != nil {
+			return LoadedReplicas{}, err
 		}
-		// `allM` will be our map of uninitialized replicas.
-		//
-		// A replica is "uninitialized" if it's not in initM (i.e. is at log position
-		// zero and has no visible RangeDescriptor).
-		delete(allM, id)
+
+		var hs raftpb.HardState
+		if err := IterateIDPrefixKeys(ctx, eng, func(rangeID roachpb.RangeID) roachpb.Key {
+			return keys.RaftHardStateKey(rangeID)
+		}, &hs, func(rangeID roachpb.RangeID) error {
+			s.setHardState(rangeID, hs)
+			return nil
+		}); err != nil {
+			return LoadedReplicas{}, err
+		}
 	}
 
-	return &EngineReplicas{
-		Initialized:   initM,
-		Uninitialized: allM, // NB: init'ed ones were deleted earlier
-	}, nil
+	// Migrate for all replicas that need it. Sorted order for deterministic unit
+	// tests.
+	for _, repl := range s.SortedSlice() {
+		if repl.ReplicaID != 0 {
+			// If we have both a RaftReplicaID and a descriptor, the ReplicaIDs
+			// need to match.
+			if repl.descReplicaID != 0 && repl.descReplicaID != repl.ReplicaID {
+				return LoadedReplicas{}, errors.AssertionFailedf("conflicting RaftReplicaID %d for %s", repl.ReplicaID, repl.Desc)
+			}
+			// We have a RaftReplicaID, no need to migrate.
+			continue
+		}
+		if repl.descReplicaID != 0 {
+			// Backfill RaftReplicaID for an initialized Replica.
+			if err := logstore.NewStateLoader(repl.RangeID).SetRaftReplicaID(ctx, eng, repl.descReplicaID); err != nil {
+				return LoadedReplicas{}, errors.Wrapf(err, "backfilling ReplicaID for r%d", repl.RangeID)
+			}
+			s.setReplicaID(repl.RangeID, repl.descReplicaID)
+			log.Eventf(ctx, "backfilled replicaID for initialized replica %s", s.getOrMake(repl.RangeID).ID())
+		} else {
+			// We found an uninitialized replica that did not have a persisted
+			// ReplicaID. We can't determine the ReplicaID now, so we migrate by
+			// removing this uninitialized replica. This technically violates raft
+			// invariants if this replica has cast a vote, but the conditions under
+			// which this matters are extremely unlikely.
+			//
+			// TODO(tbg): if clearRangeData were in this package we could destroy more
+			// effectively even if for some reason we had in the past written state
+			// other than the HardState here (not supposed to happen, but still).
+			if err := eng.ClearUnversioned(logstore.NewStateLoader(repl.RangeID).RaftHardStateKey()); err != nil {
+				return LoadedReplicas{}, errors.Wrapf(err, "removing HardState for r%d", repl.RangeID)
+			}
+			delete(s, repl.RangeID)
+			log.Eventf(ctx, "removed legacy uninitialized replica for r%s", repl.RangeID)
+		}
+	}
+
+	init := ReplicaMap{}
+	uninit := ReplicaMap{}
+	for rangeID, state := range s {
+		if state.Desc != nil {
+			init[rangeID] = state
+		} else {
+			uninit[rangeID] = state
+		}
+	}
+
+	return LoadedReplicas{Initialized: init, Uninitialized: uninit}, nil
 }
 
 // A NotBootstrappedError indicates that an engine has not yet been
