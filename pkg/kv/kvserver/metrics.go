@@ -2152,24 +2152,31 @@ func (sm *TenantsStorageMetrics) releaseTenant(ctx context.Context, ref *tenantM
 	// The refCount is zero, delete this instance after destroying its metrics.
 	// Note that concurrent attempts to create an instance will detect the zero
 	// refCount value and construct a new instance.
-	m.LiveBytes.Destroy()
-	m.KeyBytes.Destroy()
-	m.ValBytes.Destroy()
-	m.RangeKeyBytes.Destroy()
-	m.RangeValBytes.Destroy()
-	m.TotalBytes.Destroy()
-	m.IntentBytes.Destroy()
-	m.LiveCount.Destroy()
-	m.KeyCount.Destroy()
-	m.ValCount.Destroy()
-	m.RangeKeyCount.Destroy()
-	m.RangeValCount.Destroy()
-	m.IntentCount.Destroy()
-	m.IntentAge.Destroy()
-	m.GcBytesAge.Destroy()
-	m.SysBytes.Destroy()
-	m.SysCount.Destroy()
-	m.AbortSpanBytes.Destroy()
+	for _, gptr := range []**aggmetric.Gauge{
+		&m.LiveBytes,
+		&m.KeyBytes,
+		&m.ValBytes,
+		&m.RangeKeyBytes,
+		&m.RangeValBytes,
+		&m.TotalBytes,
+		&m.IntentBytes,
+		&m.LiveCount,
+		&m.KeyCount,
+		&m.ValCount,
+		&m.RangeKeyCount,
+		&m.RangeValCount,
+		&m.IntentCount,
+		&m.IntentAge,
+		&m.GcBytesAge,
+		&m.SysBytes,
+		&m.SysCount,
+		&m.AbortSpanBytes,
+	} {
+		// Reset before unlinking, see Destroy.
+		(*gptr).Update(0)
+		(*gptr).Destroy()
+		*gptr = nil
+	}
 	sm.tenants.Delete(int64(ref._tenantID.ToUint64()))
 }
 
