@@ -1374,7 +1374,7 @@ type ExecutorConfig struct {
 	RangeStatsFetcher eval.RangeStatsFetcher
 
 	// EventsExporter is the client for the Observability Service.
-	EventsExporter obs.EventsExporter
+	EventsExporter obs.EventsExporterInterface
 
 	// NodeDescs stores {Store,Node}Descriptors in an in-memory cache.
 	NodeDescs kvcoord.NodeDescStore
