@@ -5,6 +5,10 @@ go_library(
     name = "metrics",
     srcs = [
         "cluster_tracker.go",
+        "mapper.go",
+        "plot.go",
+        "rated_listener.go",
+        "series_listener.go",
         "store_tracker.go",
         "tracker.go",
     ],
@@ -14,12 +18,16 @@ go_library(
         "//pkg/kv/kvserver/asim/state",
         "//pkg/util/encoding/csv",
         "//pkg/util/log",
+        "@com_github_guptarohit_asciigraph//:asciigraph",
     ],
 )
 
 go_test(
     name = "metrics_test",
-    srcs = ["metrics_test.go"],
+    srcs = [
+        "metrics_test.go",
+        "plot_example_test.go",
+    ],
     args = ["-test.timeout=295s"],
     deps = [
         ":metrics",
@@ -27,6 +35,7 @@ go_test(
         "//pkg/kv/kvserver/asim/config",
         "//pkg/kv/kvserver/asim/state",
         "//pkg/kv/kvserver/asim/workload",
+        "//pkg/util/log",
         "@com_github_stretchr_testify//require",
     ],
 )

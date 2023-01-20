@@ -13,24 +13,26 @@ package config
 import "time"
 
 const (
-	defaultReplicaChangeBaseDelay  = 100 * time.Millisecond
-	defaultReplicaAddDelayFactor   = 16
-	defaultSplitQueueDelay         = 100 * time.Millisecond
-	defaultRangeSizeSplitThreshold = 512 * 1024 * 1024 // 512mb
-	defaultRangeRebalanceThreshold = 0.05
-	defaultPacerLoopInterval       = 10 * time.Minute
-	defaultPacerMinIterInterval    = 10 * time.Millisecond
-	defaultPacerMaxIterIterval     = 1 * time.Second
-	defaultStateExchangeInterval   = 10 * time.Second
-	defaultStateExchangeDelay      = 500 * time.Millisecond
-	defaultSplitQPSThreshold       = 2500
-	defaultSplitQPSRetention       = 10 * time.Minute
-	defaultSeed                    = 42
-	defaultLBRebalancingMode       = 2 // Leases and replicas.
-	defaultLBRebalancingInterval   = time.Minute
-	defaultLBRebalanceQPSThreshold = 0.1
-	defaultLBMinRequiredQPSDiff    = 200
-	defaultLBRebalancingDimension  = 0 // QPS
+	defaultReplicaChangeBaseDelay     = 100 * time.Millisecond
+	defaultReplicaAddDelayFactor      = 16
+	defaultSplitQueueDelay            = 100 * time.Millisecond
+	defaultRangeSizeSplitThreshold    = 512 * 1024 * 1024 // 512mb
+	defaultRangeRebalanceThreshold    = 0.05
+	defaultPacerLoopInterval          = 10 * time.Minute
+	defaultPacerMinIterInterval       = 10 * time.Millisecond
+	defaultPacerMaxIterIterval        = 1 * time.Second
+	defaultStateExchangeInterval      = 10 * time.Second
+	defaultStateExchangeDelay         = 500 * time.Millisecond
+	defaultSplitQPSThreshold          = 2500
+	defaultSplitQPSRetention          = 10 * time.Minute
+	defaultSeed                       = 42
+	defaultLBRebalancingMode          = 2 // Leases and replicas.
+	defaultLBRebalancingInterval      = time.Minute
+	defaultLBRebalanceQPSThreshold    = 0.1
+	defaultLBMinRequiredQPSDiff       = 200
+	defaultLBRebalancingDimension     = 0 // QPS
+	defaultReplQueueDisabled          = false
+	defaultSpiltQueueDisabled         = false
 )
 
 // SimulationSettings controls
@@ -97,29 +99,37 @@ type SimulationSettings struct {
 	// rebalancer would care to reconcile (via lease or replica rebalancing) between
 	// any two stores.
 	LBMinRequiredQPSDiff float64
+	// ReplicateQueueDisabled is a flag declaring whether the replicate queue is
+	// disabled.
+	ReplicateQueueDisabled bool
+	// SplitQueueDisabled is a flag declaring whether the split queue is
+	// disabled.
+	SplitQueueDisabled bool
 }
 
 // DefaultSimulationSettings returns a set of default settings for simulation.
 func DefaultSimulationSettings() *SimulationSettings {
 	return &SimulationSettings{
-		Seed:                    defaultSeed,
-		ReplicaChangeBaseDelay:  defaultReplicaChangeBaseDelay,
-		ReplicaAddRate:          defaultReplicaAddDelayFactor,
-		SplitQueueDelay:         defaultSplitQueueDelay,
-		RangeSizeSplitThreshold: defaultRangeSizeSplitThreshold,
-		RangeRebalanceThreshold: defaultRangeRebalanceThreshold,
-		PacerLoopInterval:       defaultPacerLoopInterval,
-		PacerMinIterInterval:    defaultPacerMinIterInterval,
-		PacerMaxIterIterval:     defaultPacerMaxIterIterval,
-		StateExchangeInterval:   defaultStateExchangeInterval,
-		StateExchangeDelay:      defaultStateExchangeDelay,
-		SplitQPSThreshold:       defaultSplitQPSThreshold,
-		SplitQPSRetention:       defaultSplitQPSRetention,
-		LBRebalancingMode:       defaultLBRebalancingMode,
-		LBRebalancingDimension:  defaultLBRebalancingDimension,
-		LBRebalancingInterval:   defaultLBRebalancingInterval,
-		LBRebalanceQPSThreshold: defaultLBRebalanceQPSThreshold,
-		LBMinRequiredQPSDiff:    defaultLBMinRequiredQPSDiff,
+		Seed:                       defaultSeed,
+		ReplicaChangeBaseDelay:     defaultReplicaChangeBaseDelay,
+		ReplicaAddRate:             defaultReplicaAddDelayFactor,
+		SplitQueueDelay:            defaultSplitQueueDelay,
+		RangeSizeSplitThreshold:    defaultRangeSizeSplitThreshold,
+		RangeRebalanceThreshold:    defaultRangeRebalanceThreshold,
+		PacerLoopInterval:          defaultPacerLoopInterval,
+		PacerMinIterInterval:       defaultPacerMinIterInterval,
+		PacerMaxIterIterval:        defaultPacerMaxIterIterval,
+		StateExchangeInterval:      defaultStateExchangeInterval,
+		StateExchangeDelay:         defaultStateExchangeDelay,
+		SplitQPSThreshold:          defaultSplitQPSThreshold,
+		SplitQPSRetention:          defaultSplitQPSRetention,
+		LBRebalancingMode:          defaultLBRebalancingMode,
+		LBRebalancingDimension:     defaultLBRebalancingDimension,
+		LBRebalancingInterval:      defaultLBRebalancingInterval,
+		LBRebalanceQPSThreshold:    defaultLBRebalanceQPSThreshold,
+		LBMinRequiredQPSDiff:       defaultLBMinRequiredQPSDiff,
+		ReplicateQueueDisabled:     defaultReplQueueDisabled,
+		SplitQueueDisabled:         defaultSpiltQueueDisabled,
 	}
 }
 
