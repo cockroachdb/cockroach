@@ -276,6 +276,9 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 			if cfg.InflightTraceDirName == "" {
 				cfg.InflightTraceDirName = filepath.Join(storeSpec.Path, "logs", base.InflightTraceDir)
 			}
+			if cfg.CPUProfileDirName == "" {
+				cfg.CPUProfileDirName = filepath.Join(storeSpec.Path, "logs", base.CPUProfileDir)
+			}
 		}
 	}
 	cfg.Stores = base.StoreSpecList{Specs: params.StoreSpecs}

@@ -1,0 +1,34 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "cpuprofiler",
+    srcs = ["cpuprofiler.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/server/cpuprofiler",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/server/debug",
+        "//pkg/server/dumpstore",
+        "//pkg/settings",
+        "//pkg/settings/cluster",
+        "//pkg/util/log",
+        "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "cpuprofiler_test",
+    srcs = ["cpuprofiler_test.go"],
+    args = ["-test.timeout=295s"],
+    embed = [":cpuprofiler"],
+    deps = [
+        "//pkg/clusterversion",
+        "//pkg/server/dumpstore",
+        "//pkg/settings/cluster",
+        "//pkg/util/timeutil",
+        "@com_github_stretchr_testify//assert",
+    ],
+)
+
+get_x_data(name = "get_x_data")
