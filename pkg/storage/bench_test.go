@@ -663,7 +663,7 @@ func loadTestData(dir string, numKeys, numBatches, batchTimeSpan, valueBytes int
 	eng, err := Open(
 		context.Background(),
 		Filesystem(dir),
-		Settings(cluster.MakeTestingClusterSettings()))
+		cluster.MakeTestingClusterSettings())
 	if err != nil {
 		return nil, err
 	}

@@ -170,11 +170,12 @@ func OpenEngine(
 	if err != nil {
 		return nil, err
 	}
-	db, err := storage.Open(context.Background(),
+	db, err := storage.Open(
+		context.Background(),
 		storage.Filesystem(dir),
+		serverCfg.Settings,
 		storage.MaxOpenFiles(int(maxOpenFiles)),
 		storage.CacheSize(server.DefaultCacheSize),
-		storage.Settings(serverCfg.Settings),
 		storage.Hook(PopulateStorageConfigHook),
 		storage.CombineOptions(opts...))
 	if err != nil {

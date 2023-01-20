@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -382,7 +383,7 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 		// VFS to verify its contents.
 		fs, err := stickyEngineRegistry.GetUnderlyingFS(base.StoreSpec{StickyInMemoryEngineID: strconv.FormatInt(int64(i), 10)})
 		assert.NoError(t, err)
-		cpEng := storage.InMemFromFS(context.Background(), fs, cps[0], storage.CacheSize(1<<20))
+		cpEng := storage.InMemFromFS(context.Background(), fs, cps[0], cluster.MakeClusterSettings(), storage.CacheSize(1<<20))
 		defer cpEng.Close()
 
 		// Find the problematic range in the storage.
@@ -520,6 +521,7 @@ func testConsistencyQueueRecomputeStatsImpl(t *testing.T, hadEstimates bool) {
 	func() {
 		eng, err := storage.Open(ctx,
 			storage.Filesystem(path),
+			cluster.MakeClusterSettings(),
 			storage.CacheSize(1<<20 /* 1 MiB */),
 			storage.MustExist)
 		require.NoError(t, err)

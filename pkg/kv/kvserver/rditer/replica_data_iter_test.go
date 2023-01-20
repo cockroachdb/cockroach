@@ -522,8 +522,8 @@ func benchReplicaEngineDataIterator(b *testing.B, numRanges, numKeysPerRange, va
 	// Write data for ranges.
 	eng, err := storage.Open(ctx,
 		storage.Filesystem(b.TempDir()),
-		storage.CacheSize(1e9),
-		storage.Settings(cluster.MakeTestingClusterSettings()))
+		cluster.MakeTestingClusterSettings(),
+		storage.CacheSize(1e9))
 	require.NoError(b, err)
 	defer eng.Close()
 

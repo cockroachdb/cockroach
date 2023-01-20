@@ -55,7 +55,7 @@ func loadTestData(
 	eng, err := storage.Open(
 		ctx,
 		storage.Filesystem(dir),
-		storage.Settings(cluster.MakeTestingClusterSettings()))
+		cluster.MakeTestingClusterSettings())
 	if err != nil {
 		return nil, err
 	}
