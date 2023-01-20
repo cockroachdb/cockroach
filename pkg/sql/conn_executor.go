@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catsessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descidgen"
@@ -3083,6 +3084,9 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 		); err != nil {
 			handleErr(err)
 		}
+		if err := ex.waitOneVersionForNewVersionDescriptorsWithoutJobs(); err != nil {
+			return advanceInfo{}, err
+		}
 		ex.statsCollector.PhaseTimes().SetSessionPhaseTime(sessionphase.SessionEndPostCommitJob, timeutil.Now())
 
 		fallthrough
@@ -3111,6 +3115,41 @@ func (ex *connExecutor) handleWaitingForDescriptorIDGeneratorMigration(ctx conte
 		return err
 	}
 	return ex.resetTransactionOnSchemaChangeRetry(ctx)
+}
+
+func (ex *connExecutor) waitOneVersionForNewVersionDescriptorsWithoutJobs() error {
+	//If there is any descriptor has new version. We want to make sure there is
+	//only one version of the descriptor in all nodes. In schema changer jobs,
+	//`WaitForOneVersion` has been called for the descriptors included in jobs. So
+	//we just need to do this for descriptors not in jobs.
+	withNewVersion, err := ex.extraTxnState.descCollection.GetOriginalPreviousIDVersionsForUncommitted()
+	if err != nil {
+		return err
+	}
+
+	if withNewVersion != nil {
+		var descIDsInJobs catalog.DescriptorIDSet
+		for _, jobID := range *ex.extraTxnState.jobs {
+			job, err := ex.server.cfg.JobRegistry.LoadJob(ex.Ctx(), jobID)
+			if err != nil {
+				return err
+			}
+			payload := job.Payload()
+			for _, descID := range payload.DescriptorIDs {
+				descIDsInJobs.Add(descID)
+			}
+		}
+		for _, idVersion := range withNewVersion {
+			if descIDsInJobs.Contains(idVersion.ID) {
+				continue
+			}
+			if _, err := WaitToUpdateLeases(ex.Ctx(), ex.planner.LeaseMgr(), idVersion.ID); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
 }
 
 // initStatementResult initializes res according to a query.
