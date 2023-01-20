@@ -35,6 +35,7 @@ type sampleEnvironmentCfg struct {
 	minSampleInterval    time.Duration
 	goroutineDumpDirName string
 	heapProfileDirName   string
+	cpuProfileDirName    string
 	runtime              *status.RuntimeStatSampler
 	sessionRegistry      *sql.SessionRegistry
 }
@@ -47,6 +48,7 @@ func startSampleEnvironment(
 	stopper *stop.Stopper,
 	goroutineDumpDirName string,
 	heapProfileDirName string,
+	cpuProfileDirName string,
 	runtimeSampler *status.RuntimeStatSampler,
 	sessionRegistry *sql.SessionRegistry,
 ) error {
@@ -56,6 +58,7 @@ func startSampleEnvironment(
 		minSampleInterval:    base.DefaultMetricsSampleInterval,
 		goroutineDumpDirName: goroutineDumpDirName,
 		heapProfileDirName:   heapProfileDirName,
+		cpuProfileDirName:    cpuProfileDirName,
 		runtime:              runtimeSampler,
 		sessionRegistry:      sessionRegistry,
 	}
@@ -90,6 +93,7 @@ func startSampleEnvironment(
 	var nonGoAllocProfiler *heapprofiler.NonGoAllocProfiler
 	var statsProfiler *heapprofiler.StatsProfiler
 	var queryProfiler *heapprofiler.ActiveQueryProfiler
+	var cpuProfiler *heapprofiler.CpuProfiler
 	if cfg.heapProfileDirName != "" {
 		hasValidDumpDir := true
 		if err := os.MkdirAll(cfg.heapProfileDirName, 0755); err != nil {
@@ -119,6 +123,10 @@ func startSampleEnvironment(
 			queryProfiler, err = heapprofiler.NewActiveQueryProfiler(ctx, cfg.heapProfileDirName, cfg.st)
 			if err != nil {
 				log.Warningf(ctx, "failed to start query profiler worker: %v", err)
+			}
+			cpuProfiler, err = heapprofiler.NewCpuProfiler(ctx, cfg.cpuProfileDirName, cfg.st)
+			if err != nil {
+				log.Warningf(ctx, "failed to start cpu profiler worker: %v", err)
 			}
 		}
 	}
@@ -187,6 +195,9 @@ func startSampleEnvironment(
 					}
 					if queryProfiler != nil {
 						queryProfiler.MaybeDumpQueries(ctx, cfg.sessionRegistry, cfg.st)
+					}
+					if cpuProfiler != nil {
+						cpuProfiler.MaybeTakeProfile(ctx, int64(cfg.runtime.CPUCombinedPercentNorm.Value()*100))
 					}
 				}
 			}
