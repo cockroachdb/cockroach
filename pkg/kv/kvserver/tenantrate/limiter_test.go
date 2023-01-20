@@ -63,6 +63,37 @@ func TestCloser(t *testing.T) {
 	require.Regexp(t, "closer", <-errCh)
 }
 
+func TestUseAfterRelease(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	cs := cluster.MakeTestingClusterSettings()
+	factory := tenantrate.NewLimiterFactory(&cs.SV, nil)
+
+	ctx := context.Background()
+	lim := factory.GetTenant(ctx, roachpb.MinTenantID, nil)
+
+	rq := tenantcostmodel.TestingRequestInfo(
+		2 /* writeReplicas */, 7 /* writeCount */, 511 /* writeBytes */)
+	rs := tenantcostmodel.TestingResponseInfo(
+		true /* isRead */, 3 /* readCount */, 255 /* readBytes */)
+	const times = 7
+	for i := 0; i < times; i++ {
+		require.NoError(t, lim.Wait(ctx, rq))
+		lim.RecordRead(ctx, rs)
+	}
+	require.Equal(t, rs.ReadBytes()*times, factory.Metrics().ReadBytesAdmitted.Count())
+	require.Equal(t, rq.WriteBytes()*times, factory.Metrics().WriteBytesAdmitted.Count())
+
+	factory.Release(lim)
+	require.NotPanics(t, func() {
+		require.NoError(t, lim.Wait(ctx, rq))
+		lim.RecordRead(ctx, rs)
+	})
+
+	// Counters should not changed after Release.
+	require.Equal(t, rs.ReadBytes()*times, factory.Metrics().ReadBytesAdmitted.Count())
+	require.Equal(t, rq.WriteBytes()*times, factory.Metrics().WriteBytesAdmitted.Count())
+}
+
 func TestDataDriven(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	datadriven.Walk(t, datapathutils.TestDataPath(t), func(t *testing.T, path string) {
