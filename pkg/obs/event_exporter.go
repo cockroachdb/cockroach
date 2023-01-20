@@ -12,10 +12,11 @@ package obs
 
 import (
 	"context"
+	"net"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/obsservice/obspb"
+	otel_collector_pb "github.com/cockroachdb/cockroach/pkg/obsservice/obspb/opentelemetry-proto/collector/logs/v1"
 	otel_pb "github.com/cockroachdb/cockroach/pkg/obsservice/obspb/opentelemetry-proto/common/v1"
 	otel_logs_pb "github.com/cockroachdb/cockroach/pkg/obsservice/obspb/opentelemetry-proto/logs/v1"
 	otel_res_pb "github.com/cockroachdb/cockroach/pkg/obsservice/obspb/opentelemetry-proto/resource/v1"
@@ -24,45 +25,53 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/redact"
-	"google.golang.org/grpc/peer"
+	"github.com/cockroachdb/logtags"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
-// EventsExporter abstracts exporting events to the Observability Service. It is
-// implemented by EventsServer.
-type EventsExporter interface {
-	// SendEvent buffers an event to be sent to subscribers.
+// EventsExporterInterface abstracts exporting events to the Observability Service. It is
+// implemented by EventsExporter.
+type EventsExporterInterface interface {
+	Start(ctx context.Context, nodeInfo NodeInfo)
+	// SendEvent buffers an event to be sent.
 	//
 	// SendEvent does not block. If the buffer is full, old events are dropped.
 	SendEvent(ctx context.Context, typ obspb.EventType, event otel_logs_pb.LogRecord)
 }
 
-// EventsServer implements the obspb.ObsServer gRPC service. It responds to
-// requests from the Observability Service to subscribe to the events stream.
-// Once a subscription is established, new events (published through
-// SendEvent()) are sent to the subscriber.
+// NoopEventsExporter is an EventsExporter that ignores events.
+type NoopEventsExporter struct{}
+
+var _ EventsExporterInterface = &NoopEventsExporter{}
+
+func (d NoopEventsExporter) Start(ctx context.Context, nodeInfo NodeInfo) {}
+
+// SendEvent implements the EventsExporterInterface.
+func (d NoopEventsExporter) SendEvent(
+	ctx context.Context, typ obspb.EventType, event otel_logs_pb.LogRecord,
+) {
+}
+
+// EventsExporter is a buffered client for the OTLP logs gRPC service. It is
+// used to export events to the Observability Service (possibly through an
+// OpenTelemetry Collector).
 //
-// The EventsServer supports a single subscriber at a time. If a new
-// subscription request arrives while a subscriber is active (i.e. while a
-// SubscribeToEvents gRPC call is running), the previous subscriber is
-// disconnected (i.e. the RPC returns), and future events are sent to the new
-// subscriber.
+// The EventsExporter buffers events and flushes them out periodically
+// (according to flushInterval) and when a buffer size threshold is met
+// (triggerSizeBytes).
 //
-// When a subscriber is active, the EventsServer buffers events and flushes them
-// out to the subscriber periodically (according to flushInterval) and when a
-// buffer size threshold is met (triggerSizeBytes).
-// The EventsServer does not buffer events when no subscriber is active, for
-// better or worse.
-type EventsServer struct {
+// NOTE: In the future, the EventsExporter might be replaced by direct use of
+// the otel Go SDK. As of this writing, though, the SDK does not support logs.
+type EventsExporter struct {
 	ambientCtx log.AmbientContext
-	stop       *stop.Stopper
 	clock      timeutil.TimeSource
+	stop       *stop.Stopper
+	tr         *tracing.Tracer
 	resource   otel_res_pb.Resource
-	// resourceSet is set by SetResourceInfo(). The server is ready to serve RPCs
-	// once this is set.
-	resourceSet syncutil.AtomicBool
 
 	// flushInterval is the duration after which a flush is triggered.
 	// 0 disables this trigger.
@@ -72,42 +81,31 @@ type EventsServer struct {
 	triggerSizeBytes   uint64
 	maxBufferSizeBytes uint64
 
-	// buf accumulates events to be sent to a subscriber.
+	// buf accumulates events to be sent.
 	buf eventsBuffers
 
-	mu struct {
-		syncutil.Mutex
-		// sub is the current subscriber. nil if there is no subscriber.
-		sub *subscriber
-	}
-	TestingKnobs EventServerTestingKnobs
+	// flushC is used to signal the flusher goroutine to flush.
+	flushC chan struct{}
+
+	// otelClient is the client for the OpenTelemetry Logs Service. It is used
+	// to push events to the Obs Service (directly or through the Otel
+	// Collector).
+	//
+	// Nil if the EventsExporter is not configured to send out the events.
+	otelClient otel_collector_pb.LogsServiceClient
+	conn       *grpc.ClientConn
 }
 
-// EventServerTestingKnobs represents the testing knobs on EventsServer.
-type EventServerTestingKnobs struct {
-	// OnSubscriber, if set, is called when an event subscriber is registered.
-	OnConnect func(ctx context.Context)
-}
-
-var _ base.ModuleTestingKnobs = EventServerTestingKnobs{}
-
-// ModuleTestingKnobs implements base.ModuleTestingKnobs.
-func (e EventServerTestingKnobs) ModuleTestingKnobs() {}
-
-var _ EventsExporter = &EventsServer{}
-
-var _ obspb.ObsServer = &EventsServer{}
-
-// NewEventServer creates an EventServer.
+// NewEventsExporter creates an EventsExporter.
 //
-// SetResourceInfo needs to be called before the EventServer is registered with
-// a gRPC server.
+// Start() needs to be called before the EventsExporter actually exports any
+// events.
 //
-// flushInterval and triggerSize control the circumstances under which the sink
-// automatically flushes its contents to the child sink. Zero values disable
-// these flush triggers. If all triggers are disabled, the buffer is only ever
-// flushed when a flush is explicitly requested through the extraFlush or
-// forceSync options passed to output().
+// An error is returned if obsserviceAddr is invalid.
+//
+// flushInterval and triggerSize control the circumstances under which the
+// exporter flushes its contents to the network sink. Zero values disable these
+// flush triggers.
 //
 // maxBufferSize, if not zero, limits the size of the buffer. When a new message
 // is causing the buffer to overflow, old messages are dropped. The caller must
@@ -130,22 +128,36 @@ var _ obspb.ObsServer = &EventsServer{}
 // with the flush latency: only one flush is ever in flight at a time, so the
 // buffer should be sized to generally hold at least the amount of data that is
 // expected to be produced during the time it takes one flush to complete.
-func NewEventServer(
-	ambient log.AmbientContext,
+func NewEventsExporter(
+	targetAddr string,
 	clock timeutil.TimeSource,
 	stop *stop.Stopper,
+	tr *tracing.Tracer,
 	maxStaleness time.Duration,
 	triggerSizeBytes uint64,
 	maxBufferSizeBytes uint64,
 	memMonitor *mon.BytesMonitor,
-) *EventsServer {
-	s := &EventsServer{
-		ambientCtx:         ambient,
+) (*EventsExporter, error) {
+	otlpHost, otlpPort, err := net.SplitHostPort(targetAddr)
+	if err != nil {
+		return nil, errors.Newf("invalid OTLP host in --obsservice-addr=%s", targetAddr)
+	}
+	if otlpHost == "" {
+		return nil, errors.Newf("missing OTLP host in --obsservice-addr=%s", targetAddr)
+	}
+	if otlpPort == "" {
+		otlpPort = "4317"
+	}
+	targetAddr = net.JoinHostPort(otlpHost, otlpPort)
+
+	s := &EventsExporter{
 		stop:               stop,
 		clock:              clock,
+		tr:                 tr,
 		flushInterval:      maxStaleness,
 		triggerSizeBytes:   triggerSizeBytes,
 		maxBufferSizeBytes: maxBufferSizeBytes,
+		flushC:             make(chan struct{}, 1),
 	}
 	s.buf.mu.events = map[obspb.EventType]*eventsBuffer{
 		obspb.EventlogEvent: {
@@ -156,44 +168,136 @@ func NewEventServer(
 		},
 	}
 	s.buf.mu.memAccount = memMonitor.MakeBoundAccount()
-	return s
+
+	// Note that Dial is non-blocking.
+	conn, err := grpc.Dial(targetAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		return nil, err
+	}
+	s.otelClient = otel_collector_pb.NewLogsServiceClient(conn)
+	s.conn = conn
+
+	return s, nil
 }
 
-// SetResourceInfo sets identifying information that will be attached to all the
-// exported data.
+// NodeInfo groups the information identifying a node that will be included in
+// all exported events.
+type NodeInfo struct {
+	ClusterID uuid.UUID
+	// NodeID can be either a roachpb.NodeID (for KV nodes) or a
+	// base.SQLInstanceID (for SQL tenants).
+	NodeID int32
+	// BinaryVersion is the executable's version.
+	BinaryVersion string
+}
+
+// Start starts the goroutine that will periodically flush the events to the
+// configured sink.
 //
-// nodeID can be either a roachpb.NodeID (for KV nodes) or a base.SQLInstanceID
-// (for SQL tenants).
-func (s *EventsServer) SetResourceInfo(clusterID uuid.UUID, nodeID int32, version string) {
+// Flushes are triggered by the configured flush interval and by the buffer size
+// threshold.
+//
+// nodeInfo represents the node information that will be included in every batch
+// of events that gets exported. This information is passed to Start() rather
+// than to NewEventsExporter() to allow the EventsExporter to be constructed before
+// the node ID is known.
+func (s *EventsExporter) Start(ctx context.Context, nodeInfo NodeInfo) {
 	s.resource = otel_res_pb.Resource{
 		Attributes: []*otel_pb.KeyValue{
 			{
 				Key:   obspb.ClusterID,
-				Value: &otel_pb.AnyValue{Value: &otel_pb.AnyValue_StringValue{StringValue: clusterID.String()}},
+				Value: &otel_pb.AnyValue{Value: &otel_pb.AnyValue_StringValue{StringValue: nodeInfo.ClusterID.String()}},
 			},
 			{
 				Key:   obspb.NodeID,
-				Value: &otel_pb.AnyValue{Value: &otel_pb.AnyValue_IntValue{IntValue: int64(nodeID)}},
+				Value: &otel_pb.AnyValue{Value: &otel_pb.AnyValue_IntValue{IntValue: int64(nodeInfo.NodeID)}},
 			},
 			{
 				Key:   obspb.NodeBinaryVersion,
-				Value: &otel_pb.AnyValue{Value: &otel_pb.AnyValue_StringValue{StringValue: version}},
+				Value: &otel_pb.AnyValue{Value: &otel_pb.AnyValue_StringValue{StringValue: nodeInfo.BinaryVersion}},
 			},
 		},
 	}
-	s.resourceSet.Set(true)
+
+	ctx = logtags.WithTags(context.Background(), logtags.FromContext(ctx))
+	ctx, cancel := context.WithCancel(ctx)
+	s.stop.AddCloser(stop.CloserFn(func() {
+		cancel()
+	}))
+	ctx, sp := s.tr.StartSpanCtx(ctx, "obsservice flusher", tracing.WithSterile())
+	go func() {
+		defer sp.Finish()
+		defer func() {
+			_ = s.conn.Close() // nolint:grpcconnclose
+		}()
+		timer := timeutil.NewTimer()
+		defer timer.Stop()
+		if s.flushInterval != 0 {
+			timer.Reset(s.flushInterval)
+		}
+		for {
+			done := false
+			select {
+			case <-ctx.Done():
+				//	// We'll return after flushing everything.
+				done = true
+			case <-timer.C:
+				timer.Read = true
+				timer.Reset(s.flushInterval)
+			case <-s.flushC:
+			}
+
+			// Flush the buffers for all event types.
+			msgSize := uint64(0)
+			totalEvents := 0
+			req := &otel_collector_pb.ExportLogsServiceRequest{
+				ResourceLogs: []*otel_logs_pb.ResourceLogs{
+					{Resource: &s.resource},
+				},
+			}
+			s.buf.mu.Lock()
+			for _, buf := range s.buf.mu.events {
+				events, sizeBytes := buf.moveContents()
+				if len(events) == 0 {
+					continue
+				}
+				totalEvents += len(events)
+				s.buf.mu.sizeBytes -= sizeBytes
+				msgSize += sizeBytes
+				req.ResourceLogs[0].ScopeLogs = append(req.ResourceLogs[0].ScopeLogs,
+					otel_logs_pb.ScopeLogs{Scope: &buf.instrumentationScope, LogRecords: events})
+			}
+			s.buf.mu.Unlock()
+
+			if len(req.ResourceLogs[0].ScopeLogs) > 0 {
+				_, err := s.otelClient.Export(ctx, req, grpc.WaitForReady(true))
+				s.buf.mu.Lock()
+				s.buf.mu.memAccount.Shrink(ctx, int64(msgSize))
+				s.buf.mu.Unlock()
+				if err != nil {
+					log.Warningf(ctx, "failed to export events: %s", err)
+				} else {
+					log.VInfof(ctx, 2, "exported %d events totalling %d bytes", totalEvents, msgSize)
+				}
+			}
+
+			if done {
+				return
+			}
+		}
+	}()
 }
 
 // eventsBuffers groups together a buffer for each EventType.
 //
-// Ordered delivery of events (with possible dropped events) to subscribers is
-// ensured for individual EventTypes, not across them.
+// Ordered exporting of events (with possible dropped events) is ensured for
+// individual EventTypes, not across them.
 type eventsBuffers struct {
 	mu struct {
 		syncutil.Mutex
-		// events stores all the buffered data.
+		// events stores all the buffered data, grouped by the type of event.
 		events map[obspb.EventType]*eventsBuffer
-		// sizeBytes is the sum of sizes for the eventsBuffer's.
+		// sizeBytes is the sum of sizes for the eventsBuffers.
 		sizeBytes uint64
 		// memAccount tracks the memory usage of events.
 		memAccount mon.BoundAccount
@@ -304,19 +408,19 @@ func (b *eventsBuffer) dropEvents(needToClearBytes uint64) uint64 {
 var unrecognizedEventEveryN = log.Every(time.Minute)
 var unrecognizedEventPayloadEveryN = log.Every(time.Minute)
 
-// SendEvent buffers an event to be sent to subscribers.
-func (s *EventsServer) SendEvent(
+var eventTypesToLogScopes = map[obspb.EventType]otel_pb.InstrumentationScope{
+	obspb.EventlogEvent: {
+		Name:    string(obspb.EventlogEvent),
+		Version: "1.0",
+	},
+}
+
+// SendEvent buffers an event to be sent.
+func (s *EventsExporter) SendEvent(
 	ctx context.Context, typ obspb.EventType, event otel_logs_pb.LogRecord,
 ) {
-	// If there's no subscriber, short-circuit.
-	//
-	// TODO(andrei): We should buffer at least a little bit, so that we don't miss
-	// events close to the node start, before the Obs Service (if any) has had a
-	// chance to subscribe.
-	s.mu.Lock()
-	sub := s.mu.sub
-	s.mu.Unlock()
-	if sub == nil {
+	// Return early if there's no sink configured.
+	if s.otelClient == nil {
 		return
 	}
 
@@ -356,7 +460,7 @@ func (s *EventsServer) SendEvent(
 	// If we've hit the flush threshold, trigger a flush.
 	if s.triggerSizeBytes > 0 && s.buf.mu.sizeBytes > s.triggerSizeBytes {
 		select {
-		case sub.flushC <- struct{}{}:
+		case s.flushC <- struct{}{}:
 		default:
 		}
 	}
@@ -376,250 +480,4 @@ func sizeOfEvent(event otel_logs_pb.LogRecord) (uint64, error) {
 	default:
 		return 0, errors.Newf("unsupported event: %s", event.Body)
 	}
-}
-
-// subscriber represents data about an events subscrriber - a caller to the
-// SubscribeToEvents RPC.
-type subscriber struct {
-	// identity represents an identifier for the subscriber. It's used for logging
-	// purposes.
-	identity string
-	// res represents metadata attached to all events, identifying this CRDB node.
-	res otel_res_pb.Resource
-	// stopC is signaled on close().
-	stopC chan error
-	// flushAndStopC is closed to signal to the flusher that it should attempt to
-	// flush everything and then terminate.
-	flushAndStopC <-chan struct{}
-	// flusherDoneC is signaled by the flusher goroutine, informing the RPC
-	// handler that it finished.
-	flusherDoneC chan struct{}
-	// flushC is used to signal the flusher goroutine to flush.
-	flushC chan struct{}
-
-	mu struct {
-		syncutil.Mutex
-		conn obspb.Obs_SubscribeToEventsServer
-	}
-}
-
-// close closes the subscriber. Further calls to send() will return an error.
-// The call blocks until sub's flusher goroutine terminates.
-//
-// close can be called multiple times.
-func (sub *subscriber) close(err error) {
-	sub.mu.Lock()
-	defer sub.mu.Unlock()
-
-	if sub.mu.conn == nil {
-		return
-	}
-
-	// Mark ourselves as closed.
-	sub.mu.conn = nil
-	// Tell the flusher goroutine to terminate.
-	sub.stopC <- err
-	<-sub.flusherDoneC
-}
-
-var errSubscriberClosed = errors.New("subscriber closed")
-
-// send sends events to the remote subscriber. It might block if the network
-// connection buffers are full.
-//
-// If an error is returned, sub is closed and sub.send() should not be called
-// anymore.
-func (sub *subscriber) send(ctx context.Context, events []otel_logs_pb.ScopeLogs) error {
-	sub.mu.Lock()
-	defer sub.mu.Unlock()
-
-	if sub.mu.conn == nil {
-		return errSubscriberClosed
-	}
-
-	msg := &obspb.Events{
-		ResourceLogs: []*otel_logs_pb.ResourceLogs{
-			{
-				Resource:  &sub.res,
-				ScopeLogs: events,
-			},
-		},
-	}
-	err := sub.mu.conn.Send(msg)
-	if err != nil {
-		// If we failed to send, we can't use this subscriber anymore.
-		//
-		// TODO(andrei): Figure out how to tolerate errors; we should put the events
-		// back in the buffer (or not take them out of the buffer in the first
-		// place) in hope that a new subscriber comes along.
-		log.Infof(ctx, "error sending to Observability Service %s: %v", sub.identity, err)
-		sub.close(err)
-		return err
-	}
-	return nil
-}
-
-// newSubscriber creates a subscriber. Events will be sent on conn. The
-// subscriber's flusher goroutine listens to flushAndStopC for a signal to flush
-// and close.
-//
-// identity represents an identifier for the subscriber. It's used for logging
-// purposes.
-func (s *EventsServer) newSubscriber(
-	conn obspb.Obs_SubscribeToEventsServer, identity string, flushAndStopC <-chan struct{},
-) *subscriber {
-	if len(s.resource.Attributes) == 0 {
-		panic("resource not set")
-	}
-	sub := &subscriber{
-		identity:      identity,
-		res:           s.resource,
-		stopC:         make(chan error, 1),
-		flushAndStopC: flushAndStopC,
-		flusherDoneC:  make(chan struct{}, 1),
-		flushC:        make(chan struct{}, 1),
-	}
-	sub.mu.conn = conn
-	return sub
-}
-
-// errNewSubscriber is passed to an existing subscriber when a new subscriber
-// comes along.
-var errNewSubscriber = errors.New("new subscriber")
-
-// errServerNotReady is returned by SubscribeToEvents if the server is not ready
-// to process requests.
-var errServerNotReady = errors.New("server starting up; not ready to serve RPC")
-
-// SubscribeToEvents is the EventsServer's RPC interface. Events will be pushed
-// to subscriber.
-func (s *EventsServer) SubscribeToEvents(
-	req *obspb.SubscribeToEventsRequest, subscriber obspb.Obs_SubscribeToEventsServer,
-) error {
-	ctx := s.ambientCtx.AnnotateCtx(subscriber.Context())
-
-	if !s.resourceSet.Get() {
-		return errServerNotReady
-	}
-
-	var clientAddr redact.SafeString
-	client, ok := peer.FromContext(ctx)
-	if ok {
-		clientAddr = redact.SafeString(client.Addr.String())
-	}
-	log.Infof(ctx, "received events subscription request from Observability Service; "+
-		"subscriber identifying as: %s (%s)", redact.SafeString(req.Identity), clientAddr)
-
-	// Register the new subscriber, replacing any existing one.
-	sub := s.newSubscriber(subscriber, req.Identity, s.stop.ShouldQuiesce())
-	{
-		s.mu.Lock()
-		if s.mu.sub != nil {
-			s.mu.sub.close(errNewSubscriber)
-		}
-		s.mu.sub = sub
-		s.mu.Unlock()
-	}
-	if fn := s.TestingKnobs.OnConnect; fn != nil {
-		fn(ctx)
-	}
-
-	// Run the flusher. This call blocks until this subscriber is signaled to
-	// terminate in one of a couple of ways:
-	// 1. Through the remote RPC client terminating	the call by canceling ctx.
-	// 2. Through a new subscriber coming and calling close() on the old one.
-	// 3. Through the stopper quiescing.
-	err := sub.runFlusher(ctx, &s.buf, s.flushInterval)
-
-	// Close the subscription, if it hasn't been closed already by the remote
-	// subscriber.
-	sub.close(nil /* err */)
-	s.reset(ctx, sub)
-	// Return the reason why we stopped to the caller. If the caller has triggered
-	// this stop, then it's probably no longer listening for this return value.
-	return err
-}
-
-// runFlusher runs the flusher goroutine for the subscriber. The flusher will
-// consume eventsBuffer.
-//
-// flushInterval, if not zero, controls the flush's timer. Flushes are also
-// triggered by events size.
-//
-// runFlusher returns when stopC, flushAndStopC or ctx.Done() are signaled.
-func (sub *subscriber) runFlusher(
-	ctx context.Context, bufs *eventsBuffers, flushInterval time.Duration,
-) error {
-	defer close(sub.flusherDoneC)
-	timer := timeutil.NewTimer()
-	defer timer.Stop()
-	if flushInterval != 0 {
-		timer.Reset(flushInterval)
-	}
-	for {
-		done := false
-		select {
-		case err := <-sub.stopC:
-			// The sink has gone away; we need to stop consuming the buffers
-			// and terminate the flusher goroutine.
-			return err
-		case <-ctx.Done():
-			// The RPC context was canceled. This also signifies that the subscriber
-			// has gone away.
-			return ctx.Err()
-		case <-sub.flushAndStopC:
-			// We'll return after flushing everything.
-			done = true
-		case <-timer.C:
-			timer.Read = true
-			timer.Reset(flushInterval)
-		case <-sub.flushC:
-		}
-
-		// Flush the buffers for all event types.
-		var msg []otel_logs_pb.ScopeLogs
-		msgSize := uint64(0)
-		bufs.mu.Lock()
-		for _, buf := range bufs.mu.events {
-			events, sizeBytes := buf.moveContents()
-			if len(events) == 0 {
-				continue
-			}
-			bufs.mu.sizeBytes -= sizeBytes
-			msgSize += sizeBytes
-			msg = append(msg, otel_logs_pb.ScopeLogs{Scope: &buf.instrumentationScope, LogRecords: events})
-		}
-		bufs.mu.Unlock()
-
-		if len(msg) > 0 {
-			err := sub.send(ctx, msg)
-			bufs.mu.Lock()
-			bufs.mu.memAccount.Shrink(ctx, int64(msgSize))
-			bufs.mu.Unlock()
-			// If we failed to send, the subscriber has been closed and cannot be used anymore.
-			if err != nil {
-				return err
-			}
-		}
-
-		if done {
-			return errors.New("node shutting down")
-		}
-	}
-}
-
-// reset resets the server to an empty state - no subscriber and an empty events
-// buffer.
-//
-// The reset is conditional on the server's subscriber still being sub.
-func (s *EventsServer) reset(ctx context.Context, sub *subscriber) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.mu.sub != sub {
-		// We have already switched to another subscriber.
-		return
-	}
-
-	s.mu.sub = nil
-	s.buf.clear(ctx)
 }

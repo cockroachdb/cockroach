@@ -124,7 +124,6 @@ go_library(
         "//pkg/multitenant/multitenantio",
         "//pkg/multitenant/tenantcostmodel",
         "//pkg/obs",
-        "//pkg/obsservice/obspb",
         "//pkg/roachpb",
         "//pkg/rpc",
         "//pkg/rpc/nodedialer",

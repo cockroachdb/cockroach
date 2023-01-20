@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
@@ -37,7 +38,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/multitenant/multitenantcpu"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcostmodel"
 	"github.com/cockroachdb/cockroach/pkg/obs"
-	"github.com/cockroachdb/cockroach/pkg/obsservice/obspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -97,10 +97,9 @@ type SQLServerWrapper struct {
 	tenantStatus    *statusServer
 	drainServer     *drainServer
 	authentication  *authenticationServer
-	// The Observability Server, used by the Observability Service to subscribe to
-	// CRDB data.
-	eventsServer *obs.EventsServer
-	stopper      *stop.Stopper
+	// eventsExporter exports data to the Observability Service.
+	eventsExporter obs.EventsExporterInterface
+	stopper        *stop.Stopper
 
 	debug *debug.Server
 
@@ -250,7 +249,7 @@ func NewTenantServer(
 	// See: https://github.com/cockroachdb/cockroach/issues/90524
 
 	// This is the location in NewServer() where we would be creating
-	// the eventsServer. This is currently performed in
+	// the eventsExporter. This is currently performed in
 	// makeTenantSQLServerArgs().
 
 	var pgPreServer *pgwire.PreServeConnHandler
@@ -356,7 +355,7 @@ func NewTenantServer(
 		tenantStatus:    sStatus,
 		drainServer:     drainServer,
 		authentication:  sAuth,
-		eventsServer:    args.eventsServer,
+		eventsExporter:  args.eventsExporter,
 		stopper:         args.stopper,
 
 		debug: debugServer,
@@ -426,11 +425,6 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 		s.costController,
 		s.registry,
 	)
-
-	// Register the Observability Server, used by the Observability Service to
-	// subscribe to CRDB data. Note that the server will reject RPCs until
-	// SetResourceInfo is called later.
-	obspb.RegisterObsServer(s.grpc.Server, s.eventsServer)
 
 	// Start the RPC server. This opens the RPC/SQL listen socket,
 	// and dispatches the server worker for the RPC.
@@ -669,7 +663,11 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 	if instanceID == 0 {
 		log.Fatalf(ctx, "expected SQLInstanceID to be initialized after preStart")
 	}
-	s.eventsServer.SetResourceInfo(clusterID, int32(instanceID), "unknown" /* version */)
+	s.eventsExporter.Start(ctx, obs.NodeInfo{
+		ClusterID:     clusterID,
+		NodeID:        int32(instanceID),
+		BinaryVersion: build.BinaryVersion(),
+	})
 
 	// Add more context to the Sentry reporter.
 	sentry.ConfigureScope(func(scope *sentry.Scope) {
@@ -1023,17 +1021,26 @@ func makeTenantSQLServerArgs(
 
 	// Create the EventServer. It will be made operational later, after the
 	// cluster ID is known, with a SetResourceInfo() call.
-	eventsServer := obs.NewEventServer(
-		baseCfg.AmbientCtx,
-		timeutil.DefaultTimeSource{},
-		stopper,
-		5*time.Second,                          // maxStaleness
-		1<<20,                                  // triggerSizeBytes - 1MB
-		10*1<<20,                               // maxBufferSizeBytes - 10MB
-		monitorAndMetrics.rootSQLMemoryMonitor, // memMonitor - this is not "SQL" usage, but we don't have another memory pool,
-	)
-	if knobs := baseCfg.TestingKnobs.EventExporter; knobs != nil {
-		eventsServer.TestingKnobs = knobs.(obs.EventServerTestingKnobs)
+	var eventsExporter obs.EventsExporterInterface
+	if baseCfg.ObsServiceAddr != "" {
+		ee, err := obs.NewEventsExporter(
+			baseCfg.ObsServiceAddr,
+			timeutil.DefaultTimeSource{},
+			stopper,
+			baseCfg.Tracer,
+			5*time.Second,                          // maxStaleness
+			1<<20,                                  // triggerSizeBytes - 1MB
+			10*1<<20,                               // maxBufferSizeBytes - 10MB
+			monitorAndMetrics.rootSQLMemoryMonitor, // memMonitor - this is not "SQL" usage, but we don't have another memory pool
+		)
+		if err != nil {
+			log.Errorf(startupCtx, "failed to create events exporter: %s", err)
+		} else {
+			eventsExporter = ee
+		}
+	}
+	if eventsExporter == nil {
+		eventsExporter = &obs.NoopEventsExporter{}
 	}
 
 	// TODO(irfansharif): hook up NewGrantCoordinatorSQL.
@@ -1086,7 +1093,7 @@ func makeTenantSQLServerArgs(
 		costController:           costController,
 		monitorAndMetrics:        monitorAndMetrics,
 		grpc:                     grpcServer,
-		eventsServer:             eventsServer,
+		eventsExporter:           eventsExporter,
 		externalStorageBuilder:   esb,
 		admissionPacerFactory:    noopElasticCPUGrantCoord,
 		rangeDescIteratorFactory: tenantConnect,

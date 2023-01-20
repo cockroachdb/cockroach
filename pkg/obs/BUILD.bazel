@@ -10,8 +10,8 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/obs",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/base",
         "//pkg/obsservice/obspb",
+        "//pkg/obsservice/obspb/opentelemetry-proto/collector/logs/v1:logs_service",
         "//pkg/obsservice/obspb/opentelemetry-proto/common/v1:common",
         "//pkg/obsservice/obspb/opentelemetry-proto/logs/v1:logs",
         "//pkg/obsservice/obspb/opentelemetry-proto/resource/v1:resource",
@@ -20,10 +20,12 @@ go_library(
         "//pkg/util/stop",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
+        "//pkg/util/tracing",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
-        "@com_github_cockroachdb_redact//:redact",
-        "@org_golang_google_grpc//peer",
+        "@com_github_cockroachdb_logtags//:logtags",
+        "@org_golang_google_grpc//:go_default_library",
+        "@org_golang_google_grpc//credentials/insecure",
     ],
 )
 

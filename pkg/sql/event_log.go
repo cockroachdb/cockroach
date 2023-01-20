@@ -677,10 +677,16 @@ VALUES($1, $2, $3, $4, 0)`
 
 	events = make([]otel_logs_pb.LogRecord, len(entries))
 	sp := tracing.SpanFromContext(ctx)
-	var traceID, spanID [8]byte
+	var traceID [16]byte
+	var spanID [8]byte
 	if sp != nil {
-		binary.LittleEndian.PutUint64(traceID[:], uint64(sp.TraceID()))
-		binary.LittleEndian.PutUint64(spanID[:], uint64(sp.SpanID()))
+		// Our trace IDs are 8 bytes, but OTLP insists on 16. We'll use only the
+		// most significant bytes and leave the rest zero.
+		//
+		// NOTE(andrei): The BigEndian is an arbitrary decision; I don't know how
+		// others serialize their UUIDs, but I went with the network byte order.
+		binary.BigEndian.PutUint64(traceID[:], uint64(sp.TraceID()))
+		binary.BigEndian.PutUint64(spanID[:], uint64(sp.SpanID()))
 	}
 	nowNanos := timeutil.Now().UnixNano()
 	for i := 0; i < len(entries); i++ {
