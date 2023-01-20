@@ -205,6 +205,7 @@ go_library(
         "//pkg/util/retry",
         "//pkg/util/sdnotify",
         "//pkg/util/stop",
+        "//pkg/util/strutil",
         "//pkg/util/syncutil",
         "//pkg/util/sysutil",
         "//pkg/util/timeutil",

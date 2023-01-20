@@ -10,7 +10,11 @@
 
 package strutil
 
-import "strconv"
+import (
+	"fmt"
+	"strconv"
+	"strings"
+)
 
 // AppendInt appends the decimal form of x to b and returns the result.
 // If the decimal form is shorter than width, the result is padded with leading 0's.
@@ -31,4 +35,14 @@ func AppendInt(b []byte, x int, width int) []byte {
 		b = append(b, '0')
 	}
 	return append(b, xb...)
+}
+
+// JoinIDs joins a slice of any ids into a comma separated string. Each ID could
+// be prefixed with a string (e.g. n1, n2, n3 to represent nodes).
+func JoinIDs[T ~int32](prefix string, ids []T) string {
+	storeNames := make([]string, 0, len(ids))
+	for _, id := range ids {
+		storeNames = append(storeNames, fmt.Sprintf("%s%d", prefix, id))
+	}
+	return strings.Join(storeNames, ", ")
 }
