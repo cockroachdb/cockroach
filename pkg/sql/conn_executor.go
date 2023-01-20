@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catsessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descidgen"
@@ -3077,11 +3078,25 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 		}
 		ex.notifyStatsRefresherOfNewTables(ex.Ctx())
 
+		// If there is any descriptor has new version. We want to make sure there is
+		// only one version of the descriptor in all nodes. In schema changer jobs,
+		// `WaitForOneVersion` has been called for the descriptors included in jobs.
+		// So we just need to do this for descriptors not in jobs.
+		// We need to get descriptor IDs in jobs before jobs are run because we have
+		// operations in declarative schema changer removing descriptor IDs from job
+		// payload as it's done with the descriptors.
+		descIDsInJobs, err := ex.descIDsInJobs()
+		if err != nil {
+			return advanceInfo{}, err
+		}
 		ex.statsCollector.PhaseTimes().SetSessionPhaseTime(sessionphase.SessionStartPostCommitJob, timeutil.Now())
 		if err := ex.server.cfg.JobRegistry.Run(
 			ex.ctxHolder.connCtx, *ex.extraTxnState.jobs,
 		); err != nil {
 			handleErr(err)
+		}
+		if err := ex.waitOneVersionForNewVersionDescriptorsWithoutJobs(descIDsInJobs); err != nil {
+			return advanceInfo{}, err
 		}
 		ex.statsCollector.PhaseTimes().SetSessionPhaseTime(sessionphase.SessionEndPostCommitJob, timeutil.Now())
 
@@ -3111,6 +3126,64 @@ func (ex *connExecutor) handleWaitingForDescriptorIDGeneratorMigration(ctx conte
 		return err
 	}
 	return ex.resetTransactionOnSchemaChangeRetry(ctx)
+}
+
+func (ex *connExecutor) waitOneVersionForNewVersionDescriptorsWithoutJobs(
+	descIDsInJobs catalog.DescriptorIDSet,
+) error {
+	withNewVersion, err := ex.extraTxnState.descCollection.GetOriginalPreviousIDVersionsForUncommitted()
+	if err != nil {
+		return err
+	}
+	for _, idVersion := range withNewVersion {
+		if descIDsInJobs.Contains(idVersion.ID) {
+			continue
+		}
+		if _, err := WaitToUpdateLeases(ex.Ctx(), ex.planner.LeaseMgr(), idVersion.ID); err != nil {
+			// In most cases (normal schema changes), deleted descriptor should have
+			// been handled by jobs. So, normally we won't hit into the situation of
+			// wait for one version of a deleted descriptor. However, we need catch
+			// ErrDescriptorNotFound here because we have a special case of descriptor
+			// repairing where we delete descriptors directly and never record the ids
+			// in jobs payload or details.
+			if errors.Is(err, catalog.ErrDescriptorNotFound) {
+				continue
+			}
+			return err
+		}
+	}
+	return nil
+}
+
+func (ex *connExecutor) descIDsInJobs() (catalog.DescriptorIDSet, error) {
+	var descIDsInJobs catalog.DescriptorIDSet
+	for _, jobID := range *ex.extraTxnState.jobs {
+		job, err := ex.server.cfg.JobRegistry.LoadJob(ex.Ctx(), jobID)
+		if err != nil {
+			return catalog.DescriptorIDSet{}, err
+		}
+		payload := job.Payload()
+		for _, descID := range payload.DescriptorIDs {
+			descIDsInJobs.Add(descID)
+		}
+		// Legacy schema changer jobs also rely on these internal fields to perform
+		// relevant changes.
+		switch t := payload.Details.(type) {
+		case *jobspb.Payload_SchemaChange:
+			for _, tbl := range t.SchemaChange.DroppedTables {
+				descIDsInJobs.Add(tbl.ID)
+			}
+			for _, id := range t.SchemaChange.DroppedTypes {
+				descIDsInJobs.Add(id)
+			}
+			for _, id := range t.SchemaChange.DroppedSchemas {
+				descIDsInJobs.Add(id)
+			}
+			descIDsInJobs.Add(t.SchemaChange.DroppedDatabaseID)
+			descIDsInJobs.Add(t.SchemaChange.DescID)
+		}
+	}
+	return descIDsInJobs, nil
 }
 
 // initStatementResult initializes res according to a query.
