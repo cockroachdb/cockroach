@@ -33,9 +33,16 @@ const (
 	defaultLBRebalancingDimension  = 0 // QPS
 )
 
+var (
+	defaultStartTime = time.Date(2022, 03, 21, 11, 0, 0, 0, time.UTC)
+)
+
 // SimulationSettings controls
 // WIP: Thread these settings through to each of the sim parts.
 type SimulationSettings struct {
+	// StartTime is the time to start the simulation at. This is also used to
+	// init the shared state simulation clock.
+	StartTime time.Time
 	// Seed is the random source that will be used for any simulator components
 	// that accept a seed.
 	Seed int64
@@ -102,6 +109,7 @@ type SimulationSettings struct {
 // DefaultSimulationSettings returns a set of default settings for simulation.
 func DefaultSimulationSettings() *SimulationSettings {
 	return &SimulationSettings{
+		StartTime:               defaultStartTime,
 		Seed:                    defaultSeed,
 		ReplicaChangeBaseDelay:  defaultReplicaChangeBaseDelay,
 		ReplicaAddRate:          defaultReplicaAddDelayFactor,
