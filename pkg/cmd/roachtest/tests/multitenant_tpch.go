@@ -26,7 +26,9 @@ import (
 // runMultiTenantTPCH runs TPCH queries on a cluster that is first used as a
 // single-tenant deployment followed by a run of all queries in a multi-tenant
 // deployment with a single SQL instance.
-func runMultiTenantTPCH(ctx context.Context, t test.Test, c cluster.Cluster) {
+func runMultiTenantTPCH(
+	ctx context.Context, t test.Test, c cluster.Cluster, enableDirectScans bool,
+) {
 	c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
 	c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(1))
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(install.SecureOption(true)), c.All())
@@ -40,7 +42,12 @@ func runMultiTenantTPCH(ctx context.Context, t test.Test, c cluster.Cluster) {
 	// one at a time (using the given url as a parameter to the 'workload run'
 	// command). The runtimes are accumulated in the perf helper.
 	runTPCH := func(conn *gosql.DB, url string, setupIdx int) {
-		t.Status("restoring TPCH dataset for Scale Factor 1 in %s", setupNames[setupIdx])
+		setting := fmt.Sprintf("SET CLUSTER SETTING sql.distsql.direct_columnar_scans.enabled = %t", enableDirectScans)
+		t.Status(setting)
+		if _, err := conn.Exec(setting); err != nil {
+			t.Fatal(err)
+		}
+		t.Status("restoring TPCH dataset for Scale Factor 1 in ", setupNames[setupIdx])
 		if err := loadTPCHDataset(
 			ctx, t, c, conn, 1 /* sf */, c.NewMonitor(ctx), c.All(), false, /* disableMergeQueue */
 		); err != nil {
@@ -93,6 +100,17 @@ func registerMultiTenantTPCH(r registry.Registry) {
 		Name:    "multitenant/tpch",
 		Owner:   registry.OwnerSQLQueries,
 		Cluster: r.MakeClusterSpec(1 /* nodeCount */),
-		Run:     runMultiTenantTPCH,
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			runMultiTenantTPCH(ctx, t, c, false /* enableDirectScans */)
+		},
+	})
+
+	r.Add(registry.TestSpec{
+		Name:    "multitenant/tpch_direct_scans",
+		Owner:   registry.OwnerSQLQueries,
+		Cluster: r.MakeClusterSpec(1 /* nodeCount */),
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			runMultiTenantTPCH(ctx, t, c, true /* enableDirectScans */)
+		},
 	})
 }

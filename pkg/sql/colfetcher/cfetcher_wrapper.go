@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/colserde"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -26,6 +27,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/proto"
+)
+
+var DirectScansEnabled = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	"sql.distsql.direct_columnar_scans.enabled",
+	"set to true to enable the 'direct' columnar scans in the KV layer",
+	false,
 )
 
 type cFetcherWrapper struct {
