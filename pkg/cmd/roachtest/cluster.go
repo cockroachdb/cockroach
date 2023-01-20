@@ -2104,12 +2104,11 @@ func (c *clusterImpl) loggerForCmd(
 // external IP address. In general, inter-cluster communication and should use
 // internal IPs and communication from a test driver to nodes in a cluster
 // should use external IPs.
-func (c *clusterImpl) pgURLErr(
-	ctx context.Context, l *logger.Logger, node option.NodeListOption, external bool,
-) ([]string, error) {
+func (c *clusterImpl) pgURLErr(ctx context.Context, l *logger.Logger, node option.NodeListOption, external bool, tenant string) ([]string, error) {
 	urls, err := roachprod.PgURL(ctx, l, c.MakeNodes(node), c.localCertsDir, roachprod.PGURLOptions{
-		External: external,
-		Secure:   c.localCertsDir != ""})
+		External:   external,
+		Secure:     c.localCertsDir != "",
+		TenantName: tenant})
 	if err != nil {
 		return nil, err
 	}
@@ -2120,20 +2119,16 @@ func (c *clusterImpl) pgURLErr(
 }
 
 // InternalPGUrl returns the internal Postgres endpoint for the specified nodes.
-func (c *clusterImpl) InternalPGUrl(
-	ctx context.Context, l *logger.Logger, node option.NodeListOption,
-) ([]string, error) {
-	return c.pgURLErr(ctx, l, node, false /* external */)
+func (c *clusterImpl) InternalPGUrl(ctx context.Context, l *logger.Logger, node option.NodeListOption, tenant string) ([]string, error) {
+	return c.pgURLErr(ctx, l, node, false, tenant)
 }
 
 // Silence unused warning.
 var _ = (&clusterImpl{}).InternalPGUrl
 
 // ExternalPGUrl returns the external Postgres endpoint for the specified nodes.
-func (c *clusterImpl) ExternalPGUrl(
-	ctx context.Context, l *logger.Logger, node option.NodeListOption,
-) ([]string, error) {
-	return c.pgURLErr(ctx, l, node, true /* external */)
+func (c *clusterImpl) ExternalPGUrl(ctx context.Context, l *logger.Logger, node option.NodeListOption, tenant string) ([]string, error) {
+	return c.pgURLErr(ctx, l, node, true, tenant)
 }
 
 func addrToAdminUIAddr(c *clusterImpl, addr string) (string, error) {
@@ -2223,7 +2218,7 @@ func (c *clusterImpl) InternalAddr(
 	ctx context.Context, l *logger.Logger, node option.NodeListOption,
 ) ([]string, error) {
 	var addrs []string
-	urls, err := c.pgURLErr(ctx, l, node, false /* external */)
+	urls, err := c.pgURLErr(ctx, l, node, false, "")
 	if err != nil {
 		return nil, err
 	}
@@ -2262,7 +2257,7 @@ func (c *clusterImpl) ExternalAddr(
 	ctx context.Context, l *logger.Logger, node option.NodeListOption,
 ) ([]string, error) {
 	var addrs []string
-	urls, err := c.pgURLErr(ctx, l, node, true /* external */)
+	urls, err := c.pgURLErr(ctx, l, node, true, "")
 	if err != nil {
 		return nil, err
 	}
@@ -2300,7 +2295,7 @@ var _ = (&clusterImpl{}).ExternalIP
 
 // Conn returns a SQL connection to the specified node.
 func (c *clusterImpl) Conn(ctx context.Context, l *logger.Logger, node int) *gosql.DB {
-	urls, err := c.ExternalPGUrl(ctx, l, c.Node(node))
+	urls, err := c.ExternalPGUrl(ctx, l, c.Node(node), "")
 	if err != nil {
 		c.t.Fatal(err)
 	}
@@ -2313,7 +2308,7 @@ func (c *clusterImpl) Conn(ctx context.Context, l *logger.Logger, node int) *gos
 
 // ConnE returns a SQL connection to the specified node.
 func (c *clusterImpl) ConnE(ctx context.Context, l *logger.Logger, node int) (*gosql.DB, error) {
-	urls, err := c.ExternalPGUrl(ctx, l, c.Node(node))
+	urls, err := c.ExternalPGUrl(ctx, l, c.Node(node), "")
 	if err != nil {
 		return nil, err
 	}
@@ -2328,7 +2323,7 @@ func (c *clusterImpl) ConnE(ctx context.Context, l *logger.Logger, node int) (*g
 func (c *clusterImpl) ConnEAsUser(
 	ctx context.Context, l *logger.Logger, node int, user string,
 ) (*gosql.DB, error) {
-	urls, err := c.ExternalPGUrl(ctx, l, c.Node(node))
+	urls, err := c.ExternalPGUrl(ctx, l, c.Node(node), "")
 	if err != nil {
 		return nil, err
 	}
