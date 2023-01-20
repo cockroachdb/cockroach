@@ -54,6 +54,6 @@ func PlanAndRunCTAS(
 
 	// Make copy of evalCtx as Run might modify it.
 	evalCtxCopy := planner.ExtendedEvalContextCopy()
-	dsp.FinalizePlan(planCtx, physPlan)
+	dsp.FinalizePlan(ctx, planCtx, physPlan)
 	dsp.Run(ctx, planCtx, txn, physPlan, recv, evalCtxCopy, nil /* finishedSetupFn */)
 }

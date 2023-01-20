@@ -90,7 +90,7 @@ func (e *explainPlanNode) startExec(params runParams) error {
 		} else {
 			// There might be an issue making the physical plan, but that should not
 			// cause an error or panic, so swallow the error. See #40677 for example.
-			distSQLPlanner.finalizePlanWithRowCount(planCtx, physicalPlan, plan.mainRowCount)
+			distSQLPlanner.finalizePlanWithRowCount(params.Ctx(), planCtx, physicalPlan, plan.mainRowCount)
 			ob.AddDistribution(physicalPlan.Distribution.String())
 			flows := physicalPlan.GenerateFlowSpecs()
 
