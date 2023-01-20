@@ -428,7 +428,7 @@ func TestTenantStreamingDropTenantCancelsStream(t *testing.T) {
 		}
 
 		// Set GC TTL low, so that the GC job completes quickly in the test.
-		c.DestSysSQL.Exec(t, "ALTER RANGE tenants CONFIGURE ZONE USING gc.Ttlseconds = 1;")
+		c.DestSysSQL.Exec(t, "ALTER RANGE tenants CONFIGURE ZONE USING gc.ttlseconds = 1;")
 		c.DestSysSQL.Exec(t, fmt.Sprintf("DROP TENANT %s", c.Args.DestTenantName))
 		jobutils.WaitForJobToCancel(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
 		jobutils.WaitForJobToCancel(c.T, c.SrcSysSQL, jobspb.JobID(producerJobID))
@@ -854,7 +854,7 @@ func TestTenantReplicationProtectedTimestampManagement(t *testing.T) {
 		}
 
 		// Set GC TTL low, so that the GC job completes quickly in the test.
-		c.DestSysSQL.Exec(t, "ALTER RANGE tenants CONFIGURE ZONE USING gc.Ttlseconds = 1;")
+		c.DestSysSQL.Exec(t, "ALTER RANGE tenants CONFIGURE ZONE USING gc.ttlseconds = 1;")
 		c.DestSysSQL.Exec(t, fmt.Sprintf("DROP TENANT %s", c.Args.DestTenantName))
 
 		if !completeReplication {

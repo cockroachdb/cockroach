@@ -1199,17 +1199,17 @@ func createImportingDescriptors(
 					return err
 				}
 				for _, tenant := range details.Tenants {
-					switch tenant.State {
-					case descpb.TenantInfo_ACTIVE:
-						// If the tenant was backed up in an `ACTIVE` state then we create
-						// the restored record in an `ADDING` state and mark it `ACTIVE` at
+					switch tenant.DataState {
+					case descpb.TenantInfo_READY:
+						// If the tenant was backed up in the `READY` state then we create
+						// the restored record in an `ADD` state and mark it `READY` at
 						// the end of the restore.
-						tenant.State = descpb.TenantInfo_ADD
+						tenant.DataState = descpb.TenantInfo_ADD
 					case descpb.TenantInfo_DROP, descpb.TenantInfo_ADD:
 					// If the tenant was backed up in a `DROP` or `ADD` state then we must
 					// create the restored tenant record in that state as well.
 					default:
-						return errors.AssertionFailedf("unknown tenant state %v", tenant)
+						return errors.AssertionFailedf("unknown tenant data state %v", tenant)
 					}
 					spanConfigs := p.ExecCfg().SpanConfigKVAccessor.WithTxn(ctx, txn.KV())
 					if _, err := sql.CreateTenantRecord(
@@ -2191,9 +2191,9 @@ func (r *restoreResumer) publishDescriptors(
 	}
 
 	for _, tenant := range details.Tenants {
-		switch tenant.State {
-		case descpb.TenantInfo_ACTIVE:
-			// If the tenant was backed up in an `ACTIVE` state then we must activate
+		switch tenant.DataState {
+		case descpb.TenantInfo_READY:
+			// If the tenant was backed up in the `READY` state then we must activate
 			// the tenant as the final step of the restore. The tenant has already
 			// been created at an earlier stage in the restore in an `ADD` state.
 			if err := sql.ActivateTenant(
@@ -2205,7 +2205,7 @@ func (r *restoreResumer) publishDescriptors(
 		// If the tenant was backed up in a `DROP` or `ADD` state then we do not
 		// want to activate the tenant.
 		default:
-			return errors.AssertionFailedf("unknown tenant state %v", tenant)
+			return errors.AssertionFailedf("unknown tenant data state %v", tenant)
 		}
 	}
 
@@ -2325,7 +2325,7 @@ func (r *restoreResumer) OnFailOrCancel(
 		ctx context.Context, txn isql.Txn,
 	) error {
 		for _, tenant := range details.Tenants {
-			tenant.State = descpb.TenantInfo_DROP
+			tenant.DataState = descpb.TenantInfo_DROP
 			// This is already a job so no need to spin up a gc job for the tenant;
 			// instead just GC the data eagerly.
 			if err := sql.GCTenantSync(ctx, execCfg, &tenant.TenantInfo); err != nil {

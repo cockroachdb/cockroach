@@ -106,7 +106,7 @@ func GCTenantSync(ctx context.Context, execCfg *ExecutorConfig, info *descpb.Ten
 // clearTenant deletes the tenant's data.
 func clearTenant(ctx context.Context, execCfg *ExecutorConfig, info *descpb.TenantInfo) error {
 	// Confirm tenant is ready to be cleared.
-	if info.State != descpb.TenantInfo_DROP {
+	if info.DataState != descpb.TenantInfo_DROP {
 		return errors.Errorf("tenant %d is not in state DROP", info.ID)
 	}
 
@@ -145,8 +145,8 @@ func (p *planner) GCTenant(ctx context.Context, tenID uint64) error {
 	}
 
 	// Confirm tenant is ready to be cleared.
-	if info.State != descpb.TenantInfo_DROP {
-		return errors.Errorf("tenant %d is not in state DROP", info.ID)
+	if info.DataState != descpb.TenantInfo_DROP {
+		return errors.Errorf("tenant %d is not in data state DROP", info.ID)
 	}
 
 	_, err = createGCTenantJob(

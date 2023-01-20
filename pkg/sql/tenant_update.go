@@ -39,7 +39,7 @@ func UpdateTenantRecord(
 	}
 
 	tenID := info.ID
-	active := info.State == descpb.TenantInfo_ACTIVE
+	active := info.DataState == descpb.TenantInfo_READY
 	infoBytes, err := protoutil.Marshal(info)
 	if err != nil {
 		return err
@@ -58,11 +58,11 @@ func UpdateTenantRecord(
 }
 
 func validateTenantInfo(info *descpb.TenantInfo) error {
-	if info.TenantReplicationJobID != 0 && info.State == descpb.TenantInfo_ACTIVE {
-		return errors.Newf("tenant in state %v with replication job ID %d", info.State, info.TenantReplicationJobID)
+	if info.TenantReplicationJobID != 0 && info.DataState == descpb.TenantInfo_READY {
+		return errors.Newf("tenant in data state %v with replication job ID %d", info.DataState, info.TenantReplicationJobID)
 	}
-	if info.DroppedName != "" && info.State != descpb.TenantInfo_DROP {
-		return errors.Newf("tenant in state %v with dropped name %q", info.State, info.DroppedName)
+	if info.DroppedName != "" && info.DataState != descpb.TenantInfo_DROP {
+		return errors.Newf("tenant in data state %v with dropped name %q", info.DataState, info.DroppedName)
 	}
 	return nil
 }
@@ -125,7 +125,7 @@ func ActivateTenant(
 	}
 
 	// Mark the tenant as active.
-	info.State = descpb.TenantInfo_ACTIVE
+	info.DataState = descpb.TenantInfo_READY
 	if err := UpdateTenantRecord(ctx, settings, txn, info); err != nil {
 		return errors.Wrap(err, "activating tenant")
 	}
