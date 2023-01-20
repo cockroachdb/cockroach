@@ -974,7 +974,7 @@ CREATE TABLE t (a INT)
 statement ok
 INSERT INTO t VALUES (1), (NULL)
 
-statement error .*validation of CHECK "a IS NOT NULL" failed.*
+statement error (.*validation of CHECK "a IS NOT NULL" failed on row: a=NULL, rowid=\d+|pq: validation of column "a" NOT NULL failed on row: a=NULL, rowid=\d+)
 ALTER TABLE t ALTER COLUMN a SET NOT NULL
 
 statement ok

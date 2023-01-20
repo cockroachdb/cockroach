@@ -69,6 +69,7 @@ func (i *immediateVisitor) MakeAbsentCheckConstraintWriteOnly(
 	// Fast-forward the mutation state to WRITE_ONLY because this constraint
 	// is now considered as enforced.
 	tbl.Mutations[len(tbl.Mutations)-1].State = descpb.DescriptorMutation_WRITE_ONLY
+	tbl.Checks = append(tbl.Checks, ck)
 	return nil
 }
 
@@ -108,13 +109,8 @@ func (i *immediateVisitor) MakeValidatedCheckConstraintPublic(
 		if c := mutation.GetConstraint(); c != nil &&
 			c.ConstraintType == descpb.ConstraintToUpdate_CHECK &&
 			c.Check.ConstraintID == op.ConstraintID {
-			tbl.Checks = append(tbl.Checks, &c.Check)
-
 			// Remove the mutation from the mutation slice. The `MakeMutationComplete`
-			// call will also mark the above added check as VALIDATED.
-			// If this is a rollback of a drop, we are trying to add the check constraint
-			// back, so swap the direction before making it complete.
-			mutation.Direction = descpb.DescriptorMutation_ADD
+			// call will mark the check in the public "Checks" slice as VALIDATED.
 			err = tbl.MakeMutationComplete(mutation)
 			if err != nil {
 				return err
