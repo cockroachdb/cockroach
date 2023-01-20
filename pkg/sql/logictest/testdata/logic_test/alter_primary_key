@@ -1613,13 +1613,13 @@ CREATE TABLE t (a INT PRIMARY KEY, b INT NOT NULL, UNIQUE INDEX t_a_key (a));
 statement ok
 ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (b);
 
-query TTT
+query TTT rowsort
 SELECT index_name, column_name, direction FROM [SHOW INDEXES FROM t]
 ----
 t_pkey   b  ASC
-t_pkey   a  N/A
-t_a_key  a  ASC
 t_a_key  b  ASC
+t_a_key  a  ASC
+t_pkey   a  N/A
 
 # But if the existing index is not strictly equal to the (old) primary key
 # (even if, for example, the (old) primary key is a strict prefix of an

@@ -871,22 +871,22 @@ CREATE TABLE tIndx2 (a INT PRIMARY KEY, b INT, INDEX ((a+b)))
 statement ok
 CREATE TABLE tIndx3 (a INT PRIMARY KEY, b INT, INVERTED INDEX ((ARRAY[a,b])))
 
-query TTBITTBBB colnames
+query TTBITTTBBB colnames
 SHOW INDEXES FROM tIndex
 ----
-table_name  index_name   non_unique  seq_in_index  column_name               direction  storing  implicit  visible
-tindex      bar          true        1             crdb_internal_idx_expr    ASC        false    false     true
-tindex      bar          true        2             a                         ASC        false    true      true
-tindex      bar2         true        1             crdb_internal_idx_expr_1  ASC        false    false     true
-tindex      bar2         true        2             a                         ASC        false    true      true
-tindex      bar3         false       1             crdb_internal_idx_expr_1  ASC        false    false     true
-tindex      bar3         false       2             a                         ASC        true     true      true
-tindex      bar4         true        1             crdb_internal_idx_expr_2  ASC        false    false     true
-tindex      bar4         true        2             a                         ASC        false    true      true
-tindex      foo          true        1             b                         ASC        false    false     true
-tindex      foo          true        2             a                         ASC        false    true      true
-tindex      tindex_pkey  false       1             a                         ASC        false    false     true
-tindex      tindex_pkey  false       2             b                         N/A        true     false     true
+table_name  index_name   non_unique  seq_in_index  column_name               definition     direction  storing  implicit  visible
+tindex      bar          true        1             crdb_internal_idx_expr    (a + b)        ASC        false    false     true
+tindex      bar          true        2             a                         a              ASC        false    true      true
+tindex      bar2         true        1             crdb_internal_idx_expr_1  (abs(b))       ASC        false    false     true
+tindex      bar2         true        2             a                         a              ASC        false    true      true
+tindex      bar3         false       1             crdb_internal_idx_expr_1  (abs(b))       ASC        false    false     true
+tindex      bar3         false       2             a                         a              ASC        true     true      true
+tindex      bar4         true        1             crdb_internal_idx_expr_2  (ARRAY[a, b])  ASC        false    false     true
+tindex      bar4         true        2             a                         a              ASC        false    true      true
+tindex      foo          true        1             b                         b              ASC        false    false     true
+tindex      foo          true        2             a                         a              ASC        false    true      true
+tindex      tindex_pkey  false       1             a                         a              ASC        false    false     true
+tindex      tindex_pkey  false       2             b                         b              N/A        true     false     true
 
 statement error  duplicate key value violates unique constraint "bar3"
 INSERT INTO tIndex VALUES (2,1)
@@ -898,22 +898,22 @@ INSERT INTO tIndex VALUES (20000,10000)
 #statement error pgcode 23505 violates unique constraint "bar"
 #CREATE UNIQUE INDEX bar ON tIndex (b)
 
-query TTBITTBBB colnames
+query TTBITTTBBB colnames
 SHOW INDEXES FROM tIndex
 ----
-table_name  index_name   non_unique  seq_in_index  column_name               direction  storing  implicit  visible
-tindex      bar          true        1             crdb_internal_idx_expr    ASC        false    false     true
-tindex      bar          true        2             a                         ASC        false    true      true
-tindex      bar2         true        1             crdb_internal_idx_expr_1  ASC        false    false     true
-tindex      bar2         true        2             a                         ASC        false    true      true
-tindex      bar3         false       1             crdb_internal_idx_expr_1  ASC        false    false     true
-tindex      bar3         false       2             a                         ASC        true     true      true
-tindex      bar4         true        1             crdb_internal_idx_expr_2  ASC        false    false     true
-tindex      bar4         true        2             a                         ASC        false    true      true
-tindex      foo          true        1             b                         ASC        false    false     true
-tindex      foo          true        2             a                         ASC        false    true      true
-tindex      tindex_pkey  false       1             a                         ASC        false    false     true
-tindex      tindex_pkey  false       2             b                         N/A        true     false     true
+table_name  index_name   non_unique  seq_in_index  column_name               definition     direction  storing  implicit  visible
+tindex      bar          true        1             crdb_internal_idx_expr    (a + b)        ASC        false    false     true
+tindex      bar          true        2             a                         a              ASC        false    true      true
+tindex      bar2         true        1             crdb_internal_idx_expr_1  (abs(b))       ASC        false    false     true
+tindex      bar2         true        2             a                         a              ASC        false    true      true
+tindex      bar3         false       1             crdb_internal_idx_expr_1  (abs(b))       ASC        false    false     true
+tindex      bar3         false       2             a                         a              ASC        true     true      true
+tindex      bar4         true        1             crdb_internal_idx_expr_2  (ARRAY[a, b])  ASC        false    false     true
+tindex      bar4         true        2             a                         a              ASC        false    true      true
+tindex      foo          true        1             b                         b              ASC        false    false     true
+tindex      foo          true        2             a                         a              ASC        false    true      true
+tindex      tindex_pkey  false       1             a                         a              ASC        false    false     true
+tindex      tindex_pkey  false       2             b                         b              N/A        true     false     true
 
 # test for DESC index
 
@@ -936,18 +936,18 @@ CREATE INDEX b_desc ON tIndx (b DESC)
 statement ok
 CREATE INDEX b_asc ON tIndx (b ASC, c DESC)
 
-query TTBITTBBB colnames
+query TTBITTTBBB colnames
 SHOW INDEXES FROM tIndx
 ----
-table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit  visible
-tindx       b_asc       true        1             b            ASC        false    false     true
-tindx       b_asc       true        2             c            DESC       false    false     true
-tindx       b_asc       true        3             a            ASC        false    true      true
-tindx       b_desc      true        1             b            DESC       false    false     true
-tindx       b_desc      true        2             a            ASC        false    true      true
-tindx       tindx_pkey  false       1             a            ASC        false    false     true
-tindx       tindx_pkey  false       2             b            N/A        true     false     true
-tindx       tindx_pkey  false       3             c            N/A        true     false     true
+table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible
+tindx       b_asc       true        1             b            b           ASC        false    false     true
+tindx       b_asc       true        2             c            c           DESC       false    false     true
+tindx       b_asc       true        3             a            a           ASC        false    true      true
+tindx       b_desc      true        1             b            b           DESC       false    false     true
+tindx       b_desc      true        2             a            a           ASC        false    true      true
+tindx       tindx_pkey  false       1             a            a           ASC        false    false     true
+tindx       tindx_pkey  false       2             b            b           N/A        true     false     true
+tindx       tindx_pkey  false       3             c            c           N/A        true     false     true
 
 statement error pgcode 42P01 relation "foo" does not exist
 CREATE INDEX fail ON foo (b DESC)
@@ -973,12 +973,12 @@ CREATE INDEX foo ON privs (b)
 
 user root
 
-query TTBITTBBB colnames
+query TTBITTTBBB colnames
 SHOW INDEXES FROM privs
 ----
-table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit  visible
-privs       privs_pkey  false       1             a            ASC        false    false     true
-privs       privs_pkey  false       2             b            N/A        true     false     true
+table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible
+privs       privs_pkey  false       1             a            a           ASC        false    false     true
+privs       privs_pkey  false       2             b            b           N/A        true     false     true
 
 statement ok
 GRANT CREATE ON privs TO testuser
@@ -988,14 +988,14 @@ user testuser
 statement ok
 CREATE INDEX foo ON privs (b)
 
-query TTBITTBBB colnames
+query TTBITTTBBB colnames
 SHOW INDEXES FROM privs
 ----
-table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit  visible
-privs       foo         true        1             b            ASC        false    false     true
-privs       foo         true        2             a            ASC        false    true      true
-privs       privs_pkey  false       1             a            ASC        false    false     true
-privs       privs_pkey  false       2             b            N/A        true     false     true
+table_name  index_name  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible
+privs       foo         true        1             b            b           ASC        false    false     true
+privs       foo         true        2             a            a           ASC        false    true      true
+privs       privs_pkey  false       1             a            a           ASC        false    false     true
+privs       privs_pkey  false       2             b            b           N/A        true     false     true
 
 user root
 

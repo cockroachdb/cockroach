@@ -598,11 +598,37 @@ vectorized: true
 │
 └── • render
     │
-    └── • filter
-        │ filter: ((table_catalog = 'test') AND (table_schema = 'public')) AND (table_name = 'foo')
+    └── • virtual table lookup join
+        │ table: pg_namespace@pg_namespace_oid_idx
+        │ equality: (relnamespace) = (oid)
+        │ pred: nspname = index_schema
         │
-        └── • virtual table
-              table: statistics@primary
+        └── • hash join
+            │ equality: (indexrelid, indrelid) = (oid, oid)
+            │
+            ├── • virtual table
+            │     table: pg_index@primary
+            │
+            └── • hash join
+                │ equality: (relname, relnamespace) = (index_name, relnamespace)
+                │
+                ├── • virtual table
+                │     table: pg_class@primary
+                │
+                └── • merge join
+                    │ equality: (relname) = (table_name)
+                    │
+                    ├── • filter
+                    │   │ filter: relname = 'foo'
+                    │   │
+                    │   └── • virtual table
+                    │         table: pg_class@primary
+                    │
+                    └── • filter
+                        │ filter: ((table_name = 'foo') AND (table_catalog = 'test')) AND (table_schema = 'public')
+                        │
+                        └── • virtual table
+                              table: statistics@primary
 
 query T
 EXPLAIN SHOW CONSTRAINTS FROM foo

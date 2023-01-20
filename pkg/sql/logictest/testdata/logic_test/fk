@@ -295,12 +295,12 @@ CREATE TABLE missing_col (customer INT REFERENCES customers (idz))
 statement ok
 CREATE TABLE unindexed (customer INT REFERENCES customers)
 
-query TTBITTBBB colnames
+query TTBITTTBBB colnames
 SHOW INDEXES FROM unindexed
 ----
-table_name  index_name      non_unique  seq_in_index  column_name  direction  storing  implicit  visible
-unindexed   unindexed_pkey  false       1             rowid        ASC        false    false     true
-unindexed   unindexed_pkey  false       2             customer     N/A        true     false     true
+table_name  index_name      non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible
+unindexed   unindexed_pkey  false       1             rowid        rowid       ASC        false    false     true
+unindexed   unindexed_pkey  false       2             customer     customer    N/A        true     false     true
 
 statement error there is no unique constraint matching given keys for referenced table products
 CREATE TABLE non_unique (product STRING REFERENCES products (vendor))
@@ -783,32 +783,32 @@ CREATE TABLE refpairs_wrong_order (
   INDEX (b, a)
 )
 
-query TTBITTBBB colnames
+query TTBITTTBBB colnames
 SHOW INDEXES FROM refpairs_wrong_order
 ----
-table_name            index_name                    non_unique  seq_in_index  column_name  direction  storing  implicit  visible
-refpairs_wrong_order  refpairs_wrong_order_b_a_idx  true        1             b            ASC        false    false     true
-refpairs_wrong_order  refpairs_wrong_order_b_a_idx  true        2             a            ASC        false    false     true
-refpairs_wrong_order  refpairs_wrong_order_b_a_idx  true        3             rowid        ASC        false    true      true
-refpairs_wrong_order  refpairs_wrong_order_pkey     false       1             rowid        ASC        false    false     true
-refpairs_wrong_order  refpairs_wrong_order_pkey     false       2             a            N/A        true     false     true
-refpairs_wrong_order  refpairs_wrong_order_pkey     false       3             b            N/A        true     false     true
+table_name            index_name                    non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible
+refpairs_wrong_order  refpairs_wrong_order_b_a_idx  true        1             b            b           ASC        false    false     true
+refpairs_wrong_order  refpairs_wrong_order_b_a_idx  true        2             a            a           ASC        false    false     true
+refpairs_wrong_order  refpairs_wrong_order_b_a_idx  true        3             rowid        rowid       ASC        false    true      true
+refpairs_wrong_order  refpairs_wrong_order_pkey     false       1             rowid        rowid       ASC        false    false     true
+refpairs_wrong_order  refpairs_wrong_order_pkey     false       2             a            a           N/A        true     false     true
+refpairs_wrong_order  refpairs_wrong_order_pkey     false       3             b            b           N/A        true     false     true
 
 statement ok
 CREATE TABLE refpairs_c_between (a INT, b STRING, c INT, FOREIGN KEY (a, b) REFERENCES pairs (src, dest), INDEX (a, c, b))
 
-query TTBITTBBB colnames
+query TTBITTTBBB colnames
 SHOW INDEXES FROM refpairs_c_between
 ----
-table_name          index_name                    non_unique  seq_in_index  column_name  direction  storing  implicit  visible
-refpairs_c_between  refpairs_c_between_a_c_b_idx  true        1             a            ASC        false    false     true
-refpairs_c_between  refpairs_c_between_a_c_b_idx  true        2             c            ASC        false    false     true
-refpairs_c_between  refpairs_c_between_a_c_b_idx  true        3             b            ASC        false    false     true
-refpairs_c_between  refpairs_c_between_a_c_b_idx  true        4             rowid        ASC        false    true      true
-refpairs_c_between  refpairs_c_between_pkey       false       1             rowid        ASC        false    false     true
-refpairs_c_between  refpairs_c_between_pkey       false       2             a            N/A        true     false     true
-refpairs_c_between  refpairs_c_between_pkey       false       3             b            N/A        true     false     true
-refpairs_c_between  refpairs_c_between_pkey       false       4             c            N/A        true     false     true
+table_name          index_name                    non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible
+refpairs_c_between  refpairs_c_between_a_c_b_idx  true        1             a            a           ASC        false    false     true
+refpairs_c_between  refpairs_c_between_a_c_b_idx  true        2             c            c           ASC        false    false     true
+refpairs_c_between  refpairs_c_between_a_c_b_idx  true        3             b            b           ASC        false    false     true
+refpairs_c_between  refpairs_c_between_a_c_b_idx  true        4             rowid        rowid       ASC        false    true      true
+refpairs_c_between  refpairs_c_between_pkey       false       1             rowid        rowid       ASC        false    false     true
+refpairs_c_between  refpairs_c_between_pkey       false       2             a            a           N/A        true     false     true
+refpairs_c_between  refpairs_c_between_pkey       false       3             b            b           N/A        true     false     true
+refpairs_c_between  refpairs_c_between_pkey       false       4             c            c           N/A        true     false     true
 
 statement ok
 CREATE TABLE refpairs (
@@ -820,18 +820,18 @@ CREATE TABLE refpairs (
   FAMILY "primary" (a, b, c, rowid)
 )
 
-query TTBITTBBB colnames
+query TTBITTTBBB colnames
 SHOW INDEXES FROM refpairs
 ----
-table_name  index_name          non_unique  seq_in_index  column_name  direction  storing  implicit  visible
-refpairs    refpairs_a_b_c_idx  true        1             a            ASC        false    false     true
-refpairs    refpairs_a_b_c_idx  true        2             b            ASC        false    false     true
-refpairs    refpairs_a_b_c_idx  true        3             c            ASC        false    false     true
-refpairs    refpairs_a_b_c_idx  true        4             rowid        ASC        false    true      true
-refpairs    refpairs_pkey       false       1             rowid        ASC        false    false     true
-refpairs    refpairs_pkey       false       2             a            N/A        true     false     true
-refpairs    refpairs_pkey       false       3             b            N/A        true     false     true
-refpairs    refpairs_pkey       false       4             c            N/A        true     false     true
+table_name  index_name          non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible
+refpairs    refpairs_a_b_c_idx  true        1             a            a           ASC        false    false     true
+refpairs    refpairs_a_b_c_idx  true        2             b            b           ASC        false    false     true
+refpairs    refpairs_a_b_c_idx  true        3             c            c           ASC        false    false     true
+refpairs    refpairs_a_b_c_idx  true        4             rowid        rowid       ASC        false    true      true
+refpairs    refpairs_pkey       false       1             rowid        rowid       ASC        false    false     true
+refpairs    refpairs_pkey       false       2             a            a           N/A        true     false     true
+refpairs    refpairs_pkey       false       3             b            b           N/A        true     false     true
+refpairs    refpairs_pkey       false       4             c            c           N/A        true     false     true
 
 query TT
 SHOW CREATE TABLE refpairs
