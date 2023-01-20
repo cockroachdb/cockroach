@@ -42,7 +42,39 @@ new-cluster name=s2 share-io-dir=s1 disable-tenant
 ----
 
 exec-sql
+USE system;
+----
+
+exec-sql
+SET CLUSTER SETTING jobs.debug.pausepoints = 'restore.before_flow'
+----
+
+restore expect-pausepoint tag=a
 RESTORE FROM LATEST IN 'nodelocal://1/cluster'
+----
+job paused at pausepoint
+
+# Application tenants backed up in an ACTIVE state should be moved to an ADD
+# state during restore.
+query-sql
+SELECT id,active,crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info, true) FROM system.tenants;
+----
+1 true {"capabilities": {"canAdminSplit": false}, "droppedName": "", "id": "1", "name": "system", "state": "ACTIVE", "tenantReplicationJobId": "0"}
+5 false {"capabilities": {"canAdminSplit": false}, "droppedName": "tenant-5", "id": "5", "name": "tenant-5", "state": "DROP", "tenantReplicationJobId": "0"}
+6 false {"capabilities": {"canAdminSplit": false}, "droppedName": "", "id": "6", "name": "tenant-6", "state": "ADD", "tenantReplicationJobId": "0"}
+
+exec-sql
+SET CLUSTER SETTING jobs.debug.pausepoints = ''
+----
+
+job resume=a
+----
+
+job tag=a wait-for-state=succeeded
+----
+
+exec-sql
+USE defaultdb;
 ----
 
 # A dropped tenant should be restored as an inactive tenant.
