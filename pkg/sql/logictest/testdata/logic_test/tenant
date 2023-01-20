@@ -3,7 +3,7 @@ query IBIT colnames
 SELECT id, active, length(info), name FROM system.tenants ORDER BY id
 ----
 id  active  length  name
-1   true    18      system
+1   true    10      system
 
 # Create a few tenants.
 
@@ -33,54 +33,54 @@ statement ok
 CREATE TENANT three
 
 query IBTT colnames
-SELECT id, active, name, crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info, true)
+SELECT id, active, name, crdb_internal.pb_to_json('cockroach.multitenant.TenantInfo', info, true)
 FROM system.tenants
 ORDER BY id
 ----
 id  active  name        crdb_internal.pb_to_json
-1   true    system      {"capabilities": {"canAdminSplit": false}, "droppedName": "", "id": "1", "name": "system", "state": "ACTIVE", "tenantReplicationJobId": "0"}
-2   true    tenant-one  {"capabilities": {"canAdminSplit": false}, "droppedName": "", "id": "2", "name": "tenant-one", "state": "ACTIVE", "tenantReplicationJobId": "0"}
-3   true    two         {"capabilities": {"canAdminSplit": false}, "droppedName": "", "id": "3", "name": "two", "state": "ACTIVE", "tenantReplicationJobId": "0"}
-4   true    three       {"capabilities": {"canAdminSplit": false}, "droppedName": "", "id": "4", "name": "three", "state": "ACTIVE", "tenantReplicationJobId": "0"}
+1   true    system      {"capabilities": {"canAdminSplit": false}, "deprecatedDataState": "READY", "deprecatedId": "1", "droppedName": "", "tenantReplicationJobId": "0"}
+2   true    tenant-one  {"capabilities": {"canAdminSplit": false}, "deprecatedDataState": "READY", "deprecatedId": "2", "droppedName": "", "tenantReplicationJobId": "0"}
+3   true    two         {"capabilities": {"canAdminSplit": false}, "deprecatedDataState": "READY", "deprecatedId": "3", "droppedName": "", "tenantReplicationJobId": "0"}
+4   true    three       {"capabilities": {"canAdminSplit": false}, "deprecatedDataState": "READY", "deprecatedId": "4", "droppedName": "", "tenantReplicationJobId": "0"}
 
-query ITT colnames
+query ITTT colnames
 SHOW TENANT system
 ----
-id  name    status
-1   system  ACTIVE
+id  name    data_state  service_mode
+1   system  ready       shared
 
-query ITT colnames
+query ITTT colnames
 SHOW TENANT "tenant-one"
 ----
-id  name        status
-2   tenant-one  ACTIVE
+id  name        data_state  service_mode
+2   tenant-one  ready       none
 
-query ITT colnames
+query ITTT colnames
 SHOW TENANT "two"
 ----
-id  name  status
-3   two   ACTIVE
+id  name  data_state  service_mode
+3   two   ready       none
 
-query ITT colnames
+query ITTT colnames
 SHOW TENANT two
 ----
-id  name  status
-3   two   ACTIVE
+id  name  data_state  service_mode
+3   two   ready       none
 
-query ITT colnames
+query ITTT colnames
 SHOW TENANT three
 ----
-id  name   status
-4   three  ACTIVE
+id  name   data_state  service_mode
+4   three  ready       none
 
-query ITT colnames
+query ITTT colnames
 SHOW TENANTS
 ----
-id  name        status
-1   system      ACTIVE
-2   tenant-one  ACTIVE
-3   two         ACTIVE
-4   three       ACTIVE
+id  name        data_state  service_mode
+1   system      ready       shared
+2   tenant-one  ready       none
+3   two         ready       none
+4   three       ready       none
 
 statement error tenant name cannot be empty
 ALTER TENANT [4] RENAME TO ""
@@ -97,20 +97,20 @@ ALTER TENANT [4] RENAME TO blux
 statement ok
 ALTER TENANT blux RENAME TO 'blix'
 
-query ITT colnames
+query ITTT colnames
 SELECT * FROM [SHOW TENANTS] WHERE id = 4
 ----
-id  name        status
-4   blix        ACTIVE
+id  name  data_state  service_mode
+4   blix  ready       none
 
 statement ok
 ALTER TENANT blix RENAME TO three
 
-query ITT colnames
+query ITTT colnames
 SELECT * FROM [SHOW TENANTS] WHERE id = 4
 ----
-id  name        status
-4   three       ACTIVE
+id  name   data_state  service_mode
+4   three  ready       none
 
 statement error tenant "seven" does not exist
 SHOW TENANT seven
@@ -153,18 +153,18 @@ statement ok
 CREATE TENANT four
 
 query IBTT colnames
-SELECT id, active, name, crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info, true)
+SELECT id, active, name, crdb_internal.pb_to_json('cockroach.multitenant.TenantInfo', info, true)
 FROM system.tenants WHERE name = 'four'
 ORDER BY id
 ----
 id  active  name  crdb_internal.pb_to_json
-5   true    four  {"capabilities": {"canAdminSplit": false}, "droppedName": "", "id": "5", "name": "four", "state": "ACTIVE", "tenantReplicationJobId": "0"}
+5   true    four  {"capabilities": {"canAdminSplit": false}, "deprecatedDataState": "READY", "deprecatedId": "5", "droppedName": "", "tenantReplicationJobId": "0"}
 
 statement ok
 DROP TENANT four
 
 query IBTT colnames
-SELECT id, active, name, crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info, true)
+SELECT id, active, name, crdb_internal.pb_to_json('cockroach.multitenant.TenantInfo', info, true)
 FROM system.tenants WHERE name = 'four'
 ORDER BY id
 ----
@@ -227,19 +227,19 @@ statement ok
 CREATE TENANT "to-be-reclaimed"
 
 query IBTT colnames
-SELECT id, active, name, crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info, true)
+SELECT id, active, name, crdb_internal.pb_to_json('cockroach.multitenant.TenantInfo', info, true)
 FROM system.tenants
 ORDER BY id
 ----
 id  active  name             crdb_internal.pb_to_json
-1   true    system           {"capabilities": {"canAdminSplit": false}, "droppedName": "", "id": "1", "name": "system", "state": "ACTIVE", "tenantReplicationJobId": "0"}
-2   true    tenant-one       {"capabilities": {"canAdminSplit": false}, "droppedName": "", "id": "2", "name": "tenant-one", "state": "ACTIVE", "tenantReplicationJobId": "0"}
-3   true    two              {"capabilities": {"canAdminSplit": false}, "droppedName": "", "id": "3", "name": "two", "state": "ACTIVE", "tenantReplicationJobId": "0"}
-4   true    three            {"capabilities": {"canAdminSplit": false}, "droppedName": "", "id": "4", "name": "three", "state": "ACTIVE", "tenantReplicationJobId": "0"}
-5   false   NULL             {"capabilities": {"canAdminSplit": false}, "droppedName": "four", "id": "5", "name": "", "state": "DROP", "tenantReplicationJobId": "0"}
-6   false   NULL             {"capabilities": {"canAdminSplit": false}, "droppedName": "five-requiring-quotes", "id": "6", "name": "", "state": "DROP", "tenantReplicationJobId": "0"}
-7   false   NULL             {"capabilities": {"canAdminSplit": false}, "droppedName": "to-be-reclaimed", "id": "7", "name": "", "state": "DROP", "tenantReplicationJobId": "0"}
-8   true    to-be-reclaimed  {"capabilities": {"canAdminSplit": false}, "droppedName": "", "id": "8", "name": "to-be-reclaimed", "state": "ACTIVE", "tenantReplicationJobId": "0"}
+1   true    system           {"capabilities": {"canAdminSplit": false}, "deprecatedDataState": "READY", "deprecatedId": "1", "droppedName": "", "tenantReplicationJobId": "0"}
+2   true    tenant-one       {"capabilities": {"canAdminSplit": false}, "deprecatedDataState": "READY", "deprecatedId": "2", "droppedName": "", "tenantReplicationJobId": "0"}
+3   true    two              {"capabilities": {"canAdminSplit": false}, "deprecatedDataState": "READY", "deprecatedId": "3", "droppedName": "", "tenantReplicationJobId": "0"}
+4   true    three            {"capabilities": {"canAdminSplit": false}, "deprecatedDataState": "READY", "deprecatedId": "4", "droppedName": "", "tenantReplicationJobId": "0"}
+5   false   NULL             {"capabilities": {"canAdminSplit": false}, "deprecatedDataState": "DROP", "deprecatedId": "5", "droppedName": "four", "tenantReplicationJobId": "0"}
+6   false   NULL             {"capabilities": {"canAdminSplit": false}, "deprecatedDataState": "DROP", "deprecatedId": "6", "droppedName": "five-requiring-quotes", "tenantReplicationJobId": "0"}
+7   false   NULL             {"capabilities": {"canAdminSplit": false}, "deprecatedDataState": "DROP", "deprecatedId": "7", "droppedName": "to-be-reclaimed", "tenantReplicationJobId": "0"}
+8   true    to-be-reclaimed  {"capabilities": {"canAdminSplit": false}, "deprecatedDataState": "READY", "deprecatedId": "8", "droppedName": "", "tenantReplicationJobId": "0"}
 
 # More valid tenant names.
 statement ok
@@ -247,15 +247,15 @@ CREATE TENANT "1";
 CREATE TENANT "a-b";
 CREATE TENANT "hello-100"
 
-query ITT colnames
+query ITTT colnames
 SHOW TENANTS
 ----
-id   name             status
-1    system           ACTIVE
-2    tenant-one       ACTIVE
-3    two              ACTIVE
-4    three            ACTIVE
-8    to-be-reclaimed  ACTIVE
-9    1                ACTIVE
-10   a-b              ACTIVE
-11   hello-100        ACTIVE
+id  name             data_state  service_mode
+1   system           ready       shared
+2   tenant-one       ready       none
+3   two              ready       none
+4   three            ready       none
+8   to-be-reclaimed  ready       none
+9   1                ready       none
+10  a-b              ready       none
+11  hello-100        ready       none

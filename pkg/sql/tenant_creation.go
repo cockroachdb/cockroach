@@ -20,13 +20,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -58,8 +58,9 @@ func (p *planner) CreateTenant(
 }
 
 type createTenantConfig struct {
-	ID   *uint64 `json:"id,omitempty"`
-	Name *string `json:"name,omitempty"`
+	ID          *uint64 `json:"id,omitempty"`
+	Name        *string `json:"name,omitempty"`
+	ServiceMode *string `json:"service_mode,omitempty"`
 }
 
 func (p *planner) createTenantInternal(
@@ -72,6 +73,14 @@ func (p *planner) createTenantInternal(
 	var name roachpb.TenantName
 	if ctcfg.Name != nil {
 		name = roachpb.TenantName(*ctcfg.Name)
+	}
+	serviceMode := mtinfopb.ServiceModeNone
+	if ctcfg.ServiceMode != nil {
+		v, ok := mtinfopb.TenantServiceModeValues[strings.ToLower(*ctcfg.ServiceMode)]
+		if !ok {
+			return tid, pgerror.Newf(pgcode.Syntax, "unknown service mode: %q", *ctcfg.ServiceMode)
+		}
+		serviceMode = v
 	}
 
 	// tenantID uint64, name roachpb.TenantName,
@@ -86,13 +95,14 @@ func (p *planner) createTenantInternal(
 		return tid, err
 	}
 
-	info := &descpb.TenantInfoWithUsage{
-		TenantInfo: descpb.TenantInfo{
+	info := &mtinfopb.TenantInfoWithUsage{
+		TenantInfoWithUsage_ExtraColumns: mtinfopb.TenantInfoWithUsage_ExtraColumns{
 			ID: tenantID,
 			// We synchronously initialize the tenant's keyspace below, so
-			// we can skip the ADD state and go straight to an ACTIVE state.
-			State: descpb.TenantInfo_ACTIVE,
-			Name:  name,
+			// we can skip the ADD state and go straight to the READY state.
+			DataState:   mtinfopb.DataStateReady,
+			Name:        name,
+			ServiceMode: serviceMode,
 		},
 	}
 
@@ -218,7 +228,7 @@ func CreateTenantRecord(
 	settings *cluster.Settings,
 	txn isql.Txn,
 	spanConfigs spanconfig.KVAccessor,
-	info *descpb.TenantInfoWithUsage,
+	info *mtinfopb.TenantInfoWithUsage,
 	initialTenantZoneConfig *zonepb.ZoneConfig,
 ) (roachpb.TenantID, error) {
 	const op = "create"
@@ -229,7 +239,7 @@ func CreateTenantRecord(
 		return roachpb.TenantID{}, err
 	}
 	if info.Name != "" {
-		if !settings.Version.IsActive(ctx, clusterversion.V23_1TenantNames) {
+		if !settings.Version.IsActive(ctx, clusterversion.V23_1TenantNamesStateAndServiceMode) {
 			return roachpb.TenantID{}, pgerror.Newf(pgcode.FeatureNotSupported, "cannot use tenant names")
 		}
 		if err := info.Name.IsValid(); err != nil {
@@ -249,27 +259,49 @@ func CreateTenantRecord(
 
 	if info.Name == "" {
 		// No name: generate one if we are at the appropriate version.
-		if settings.Version.IsActive(ctx, clusterversion.V23_1TenantNames) {
+		if settings.Version.IsActive(ctx, clusterversion.V23_1TenantNamesStateAndServiceMode) {
 			info.Name = roachpb.TenantName(fmt.Sprintf("tenant-%d", info.ID))
 		}
 	}
 
-	active := info.State == descpb.TenantInfo_ACTIVE
+	// Populate the deprecated DataState field for compatibility
+	// with pre-v23.1 servers.
+	switch info.DataState {
+	case mtinfopb.DataStateReady:
+		info.DeprecatedDataState = mtinfopb.TenantInfo_READY
+	case mtinfopb.DataStateAdd:
+		info.DeprecatedDataState = mtinfopb.TenantInfo_ADD
+	case mtinfopb.DataStateDrop:
+		info.DeprecatedDataState = mtinfopb.TenantInfo_DROP
+	default:
+		return roachpb.TenantID{}, errors.AssertionFailedf("unhandled: %d", info.DataState)
+	}
+	// DeprecatedID is populated for the benefit of pre-v23.1 servers.
+	info.DeprecatedID = info.ID
+
+	// active is an obsolete column preserved for compatibility with
+	// pre-v23.1 servers.
+	active := info.DataState == mtinfopb.DataStateReady
+
 	infoBytes, err := protoutil.Marshal(&info.TenantInfo)
 	if err != nil {
 		return roachpb.TenantID{}, err
 	}
 
 	// Insert into the tenant table and detect collisions.
+	var name tree.Datum
 	if info.Name != "" {
-		if !settings.Version.IsActive(ctx, clusterversion.V23_1TenantNames) {
+		if !settings.Version.IsActive(ctx, clusterversion.V23_1TenantNamesStateAndServiceMode) {
 			return roachpb.TenantID{}, pgerror.Newf(pgcode.FeatureNotSupported, "cannot use tenant names")
 		}
+		name = tree.NewDString(string(info.Name))
+	} else {
+		name = tree.DNull
 	}
 	if num, err := txn.ExecEx(
 		ctx, "create-tenant", txn.KV(), sessiondata.NodeUserSessionDataOverride,
-		`INSERT INTO system.tenants (id, active, info) VALUES ($1, $2, $3)`,
-		tenID, active, infoBytes,
+		`INSERT INTO system.tenants (id, active, info, name, data_state, service_mode) VALUES ($1, $2, $3, $4, $5, $6)`,
+		tenID, active, infoBytes, name, info.DataState, info.ServiceMode,
 	); err != nil {
 		if pgerror.GetPGCode(err) == pgcode.UniqueViolation {
 			extra := redact.RedactableString("")
