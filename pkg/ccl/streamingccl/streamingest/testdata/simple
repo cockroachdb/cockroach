@@ -28,14 +28,14 @@ IMPORT INTO d.x CSV DATA ('userfile:///dx/export*-n*.0.csv');
 query-sql as=source-system
 SHOW TENANTS
 ----
-1 system READY
-10 source READY
+1 system READY EXTERNAL
+10 source READY NONE
 
 query-sql as=destination-system
 SHOW TENANTS
 ----
-1 system READY
-2 destination REPLICATING
+1 system READY EXTERNAL
+2 destination REPLICATING NONE
 
 let $ts as=source-system
 SELECT clock_timestamp()::timestamp::string

@@ -401,6 +401,9 @@ const (
 	// chagnefeeds created prior to this version.
 	V23_1_ChangefeedExpressionProductionReady
 
+	// V23_1TenantServiceMode marks the introduction of tenant service modes.
+	V23_1TenantServiceMode
+
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -686,6 +689,10 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     V23_1_ChangefeedExpressionProductionReady,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 30},
+	},
+	{
+		Key:     V23_1TenantServiceMode,
+		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 32},
 	},
 
 	// *************************************************

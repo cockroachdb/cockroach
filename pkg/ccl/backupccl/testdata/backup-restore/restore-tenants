@@ -15,15 +15,15 @@ SELECT crdb_internal.create_tenant(6);
 
 # Drop one of them.
 exec-sql
-DROP TENANT [5]
+ALTER TENANT [5] STOP SERVICE; DROP TENANT [5]
 ----
 
 query-sql
 SELECT id,active,crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info, true) FROM system.tenants;
 ----
-1 true {"capabilities": {"canAdminSplit": false}, "dataState": "READY", "droppedName": "", "id": "1", "name": "system", "tenantReplicationJobId": "0"}
-5 false {"capabilities": {"canAdminSplit": false}, "dataState": "DROP", "droppedName": "tenant-5", "id": "5", "name": "", "tenantReplicationJobId": "0"}
-6 true {"capabilities": {"canAdminSplit": false}, "dataState": "READY", "droppedName": "", "id": "6", "name": "tenant-6", "tenantReplicationJobId": "0"}
+1 true {"capabilities": {"canAdminSplit": false}, "dataState": "READY", "droppedName": "", "id": "1", "name": "system", "serviceMode": "EXTERNAL", "tenantReplicationJobId": "0"}
+5 false {"capabilities": {"canAdminSplit": false}, "dataState": "DROP", "droppedName": "tenant-5", "id": "5", "name": "", "serviceMode": "NONE", "tenantReplicationJobId": "0"}
+6 true {"capabilities": {"canAdminSplit": false}, "dataState": "READY", "droppedName": "", "id": "6", "name": "tenant-6", "serviceMode": "EXTERNAL", "tenantReplicationJobId": "0"}
 
 exec-sql
 BACKUP INTO 'nodelocal://1/cluster'
@@ -49,9 +49,9 @@ RESTORE FROM LATEST IN 'nodelocal://1/cluster'
 query-sql
 SELECT id,active,crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info, true) FROM system.tenants;
 ----
-1 true {"capabilities": {"canAdminSplit": false}, "dataState": "READY", "droppedName": "", "id": "1", "name": "system", "tenantReplicationJobId": "0"}
-5 false {"capabilities": {"canAdminSplit": false}, "dataState": "DROP", "droppedName": "tenant-5", "id": "5", "name": "tenant-5", "tenantReplicationJobId": "0"}
-6 true {"capabilities": {"canAdminSplit": false}, "dataState": "READY", "droppedName": "", "id": "6", "name": "tenant-6", "tenantReplicationJobId": "0"}
+1 true {"capabilities": {"canAdminSplit": false}, "dataState": "READY", "droppedName": "", "id": "1", "name": "system", "serviceMode": "EXTERNAL", "tenantReplicationJobId": "0"}
+5 false {"capabilities": {"canAdminSplit": false}, "dataState": "DROP", "droppedName": "tenant-5", "id": "5", "name": "tenant-5", "serviceMode": "NONE", "tenantReplicationJobId": "0"}
+6 true {"capabilities": {"canAdminSplit": false}, "dataState": "READY", "droppedName": "", "id": "6", "name": "tenant-6", "serviceMode": "EXTERNAL", "tenantReplicationJobId": "0"}
 
 exec-sql expect-error-regex=(tenant 6 already exists)
 RESTORE TENANT 6 FROM LATEST IN 'nodelocal://1/tenant6';
@@ -75,7 +75,7 @@ RESTORE TENANT 6 FROM LATEST IN 'nodelocal://1/tenant6' WITH tenant_name = 'newn
 query-sql
 SELECT id,active,crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info, true) FROM system.tenants;
 ----
-1 true {"capabilities": {"canAdminSplit": false}, "dataState": "READY", "droppedName": "", "id": "1", "name": "system", "tenantReplicationJobId": "0"}
-2 true {"capabilities": {"canAdminSplit": false}, "dataState": "READY", "droppedName": "", "id": "2", "name": "newname", "tenantReplicationJobId": "0"}
-5 false {"capabilities": {"canAdminSplit": false}, "dataState": "DROP", "droppedName": "tenant-5", "id": "5", "name": "tenant-5", "tenantReplicationJobId": "0"}
-6 true {"capabilities": {"canAdminSplit": false}, "dataState": "READY", "droppedName": "", "id": "6", "name": "tenant-6", "tenantReplicationJobId": "0"}
+1 true {"capabilities": {"canAdminSplit": false}, "dataState": "READY", "droppedName": "", "id": "1", "name": "system", "serviceMode": "EXTERNAL", "tenantReplicationJobId": "0"}
+2 true {"capabilities": {"canAdminSplit": false}, "dataState": "READY", "droppedName": "", "id": "2", "name": "newname", "serviceMode": "EXTERNAL", "tenantReplicationJobId": "0"}
+5 false {"capabilities": {"canAdminSplit": false}, "dataState": "DROP", "droppedName": "tenant-5", "id": "5", "name": "tenant-5", "serviceMode": "NONE", "tenantReplicationJobId": "0"}
+6 true {"capabilities": {"canAdminSplit": false}, "dataState": "READY", "droppedName": "", "id": "6", "name": "tenant-6", "serviceMode": "EXTERNAL", "tenantReplicationJobId": "0"}
