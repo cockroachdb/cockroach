@@ -19,21 +19,23 @@ new-replica range-id=8 replica-id=80 k=c ek=f
 ----
 r8:{c-f} [(n1,s1):80, next=81, gen=0]
 
-list-range-ids
-----
-r6/60
-r8/80
-
 # Loading the replicas returns only the ones that
 # had a ReplicaID.
 load-and-reconcile trace=true
 ----
-r7:{a-c} [(n1,s1):70, next=71, gen=0] has no persisted replicaID
+r6/60: uninitialized
+r7/70: r7:{a-c} [(n1,s1):70, next=71, gen=0]
+r8/80: r8:{c-f} [(n1,s1):80, next=81, gen=0]
 beginning range descriptor iteration
-iterated over 2 keys to find 2 range descriptors (by suffix: map[‹rdsc›:2])
+iterated over 2 keys to find 2 range descriptors (by suffix: map[rdsc:2])
+removed legacy uninitialized replica for r5
+backfilled replicaID for initialized replica r7/70
 
-# r5 was removed, and r7 had its RaftReplicaID backfilled.
-list-range-ids
+# Idempotency.
+load-and-reconcile trace=true
 ----
-r6/60
-r8/80
+r6/60: uninitialized
+r7/70: r7:{a-c} [(n1,s1):70, next=71, gen=0]
+r8/80: r8:{c-f} [(n1,s1):80, next=81, gen=0]
+beginning range descriptor iteration
+iterated over 2 keys to find 2 range descriptors (by suffix: map[rdsc:2])
