@@ -10,23 +10,22 @@ github.IssueRequest{Labels:["O-robot" "C-test-failure" "branch-release-0.1" "rel
 
 cmd/roachtest: some-roachtest failed
 
-cmd/roachtest.some-roachtest [failed](https://teamcity.example.com/viewLog.html?buildId=8008135&tab=buildLog) on release-0.1 @ [abcd123](https://github.com/cockroachdb/cockroach/commits/abcd123):
+cmd/roachtest.some-roachtest [failed](https://teamcity.example.com/buildConfiguration/nightly123/8008135?buildTab=log) on release-0.1 @ [abcd123](https://github.com/cockroachdb/cockroach/commits/abcd123):
 
 
 ```
 boom
 ```
+<p>Parameters: <code>GOFLAGS=race</code>
+, <code>ROACHTEST_cloud=gce</code>
+, <code>TAGS=deadlock</code>
+</p>
 <details><summary>Help</summary>
 <p>
 
 
 See: [FooBar README](https://github.com/cockroachdb/cockroach)
 
-Parameters in this failure:
-
-- TAGS=deadlock
-
-- GOFLAGS=race
 </p>
 </details>
 /cc @cockroachdb/idonotexistbecausethisisatest
@@ -36,6 +35,6 @@ Parameters in this failure:
 </sub>
 
 
-Rendered: https://github.com/cockroachdb/cockroach/issues/new?body=cmd%2Froachtest.some-roachtest+%5Bfailed%5D%28https%3A%2F%2Fteamcity.example.com%2FviewLog.html%3FbuildId%3D8008135%26tab%3DbuildLog%29+on+release-0.1+%40+%5Babcd123%5D%28https%3A%2F%2Fgithub.com%2Fcockroachdb%2Fcockroach%2Fcommits%2Fabcd123%29%3A%0A%0A%0A%60%60%60%0Aboom%0A%60%60%60%0A%3Cdetails%3E%3Csummary%3EHelp%3C%2Fsummary%3E%0A%3Cp%3E%0A%0A%0ASee%3A+%5BFooBar+README%5D%28https%3A%2F%2Fgithub.com%2Fcockroachdb%2Fcockroach%29%0A%0AParameters+in+this+failure%3A%0A%0A-+TAGS%3Ddeadlock%0A%0A-+GOFLAGS%3Drace%0A%3C%2Fp%3E%0A%3C%2Fdetails%3E%0A%2Fcc+%40cockroachdb%2Fidonotexistbecausethisisatest%0A%3Csub%3E%0A%0A%5BThis+test+on+roachdash%5D%28https%3A%2F%2Froachdash.crdb.dev%2F%3Ffilter%3Dstatus%3Aopen%2520t%3A.%2Asome-roachtest.%2A%26sort%3Dtitle%2Bcreated%26display%3Dlastcommented%2Bproject%29+%7C+%5BImprove+this+report%21%5D%28https%3A%2F%2Fgithub.com%2Fcockroachdb%2Fcockroach%2Ftree%2Fmaster%2Fpkg%2Fcmd%2Finternal%2Fissues%29%0A%3C%2Fsub%3E%0A&title=cmd%2Froachtest%3A+some-roachtest+failed
+Rendered: https://github.com/cockroachdb/cockroach/issues/new?body=cmd%2Froachtest.some-roachtest+%5Bfailed%5D%28https%3A%2F%2Fteamcity.example.com%2FbuildConfiguration%2Fnightly123%2F8008135%3FbuildTab%3Dlog%29+on+release-0.1+%40+%5Babcd123%5D%28https%3A%2F%2Fgithub.com%2Fcockroachdb%2Fcockroach%2Fcommits%2Fabcd123%29%3A%0A%0A%0A%60%60%60%0Aboom%0A%60%60%60%0A%3Cp%3EParameters%3A+%3Ccode%3EGOFLAGS%3Drace%3C%2Fcode%3E%0A%2C+%3Ccode%3EROACHTEST_cloud%3Dgce%3C%2Fcode%3E%0A%2C+%3Ccode%3ETAGS%3Ddeadlock%3C%2Fcode%3E%0A%3C%2Fp%3E%0A%3Cdetails%3E%3Csummary%3EHelp%3C%2Fsummary%3E%0A%3Cp%3E%0A%0A%0ASee%3A+%5BFooBar+README%5D%28https%3A%2F%2Fgithub.com%2Fcockroachdb%2Fcockroach%29%0A%0A%3C%2Fp%3E%0A%3C%2Fdetails%3E%0A%2Fcc+%40cockroachdb%2Fidonotexistbecausethisisatest%0A%3Csub%3E%0A%0A%5BThis+test+on+roachdash%5D%28https%3A%2F%2Froachdash.crdb.dev%2F%3Ffilter%3Dstatus%3Aopen%2520t%3A.%2Asome-roachtest.%2A%26sort%3Dtitle%2Bcreated%26display%3Dlastcommented%2Bproject%29+%7C+%5BImprove+this+report%21%5D%28https%3A%2F%2Fgithub.com%2Fcockroachdb%2Fcockroach%2Ftree%2Fmaster%2Fpkg%2Fcmd%2Finternal%2Fissues%29%0A%3C%2Fsub%3E%0A&title=cmd%2Froachtest%3A+some-roachtest+failed
 ----
 ----

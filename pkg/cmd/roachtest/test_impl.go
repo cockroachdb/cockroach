@@ -11,13 +11,10 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"io"
-	// For the debug http handlers.
-	_ "net/http/pprof"
-	"runtime"
+	"os"
 	"strings"
 	"time"
 
@@ -27,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
+	"github.com/cockroachdb/errors"
 	"github.com/petermattis/goid"
 )
 
@@ -39,6 +37,18 @@ type testStatus struct {
 	msg      string
 	time     time.Time
 	progress float64
+}
+
+// Holds all error information from a single invocation of t.{Fatal,Error}{,f} to
+// preserve any structured errors
+// e.g. t.Fatalf("foo %s %s %s", "hello", err1, err2) would mean that
+// failure.errors == [err1, err2], with all args (including the non error "hello")
+// being captured in the squashedErr
+type failure struct {
+	// This is the single error created from variadic args passed to t.{Fatal,Error}{,f}
+	squashedErr error
+	// errors are all the `errors` present in the variadic args
+	errors []error
 }
 
 type testImpl struct {
@@ -69,23 +79,26 @@ type testImpl struct {
 
 	mu struct {
 		syncutil.RWMutex
-		done    bool
-		failed  bool
-		timeout bool // if failed == true, this indicates whether the test timed out
+		done bool
+
 		// cancel, if set, is called from the t.Fatal() family of functions when the
 		// test is being marked as failed (i.e. when the failed field above is also
 		// set). This is used to cancel the context passed to t.spec.Run(), so async
 		// test goroutines can be notified.
-		cancel  func()
-		failLoc struct {
-			file string
-			line int
-		}
-		failureMsg string
+		cancel func()
+
+		// failures added via addFailures, in order
+		// A test can have multiple calls to t.Fail()/Error(), with each call
+		// referencing 0+ errors. failure captures all the errors
+		failures []failure
+
 		// status is a map from goroutine id to status set by that goroutine. A
 		// special goroutine is indicated by runnerID; that one provides the test's
 		// "main status".
 		status map[int64]testStatus
+
+		// TODO(test-eng): this should just be an in-mem (ring) buffer attached to
+		// `t.L()`.
 		output []byte
 	}
 	// Map from version to path to the cockroach binary to be used when
@@ -95,6 +108,10 @@ type testImpl struct {
 	//
 	// Version strings look like "20.1.4".
 	versionsBinaryOverride map[string]string
+}
+
+func newFailure(squashedErr error, errs []error) failure {
+	return failure{squashedErr: squashedErr, errors: errs}
 }
 
 // BuildVersion exposes the build version of the cluster
@@ -235,6 +252,17 @@ func (t *testImpl) Skipf(format string, args ...interface{}) {
 	panic(errTestFatal)
 }
 
+// collectErrors extracts any arg that is an error
+func collectErrors(args []interface{}) []error {
+	var errs []error
+	for _, a := range args {
+		if err, ok := a.(error); ok {
+			errs = append(errs, err)
+		}
+	}
+	return errs
+}
+
 // Fatal marks the test as failed, prints the args to t.L(), and calls
 // panic(errTestFatal). It can be called multiple times.
 //
@@ -244,145 +272,86 @@ func (t *testImpl) Skipf(format string, args ...interface{}) {
 // ATTENTION: Since this calls panic(errTestFatal), it should only be called
 // from a test's closure. The test runner itself should never call this.
 func (t *testImpl) Fatal(args ...interface{}) {
-	t.markFailedInner("" /* format */, args...)
+	t.addFailure("", args...)
 	panic(errTestFatal)
 }
 
 // Fatalf is like Fatal, but takes a format string.
 func (t *testImpl) Fatalf(format string, args ...interface{}) {
-	t.markFailedInner(format, args...)
+	t.addFailure(format, args...)
 	panic(errTestFatal)
 }
 
 // FailNow implements the TestingT interface.
 func (t *testImpl) FailNow() {
-	t.Fatal()
+	t.addFailure("FailNow called")
+	panic(errTestFatal)
+}
+
+// Error implements the TestingT interface
+func (t *testImpl) Error(args ...interface{}) {
+	t.addFailure("", args...)
 }
 
 // Errorf implements the TestingT interface.
 func (t *testImpl) Errorf(format string, args ...interface{}) {
-	t.markFailedInner(format, args...)
+	t.addFailure(format, args...)
 }
 
-func (t *testImpl) markFailedInner(format string, args ...interface{}) {
-	// Skip two frames: our own and the caller.
-	if format != "" {
-		t.printfAndFail(2 /* skip */, format, args...)
-	} else {
-		t.printAndFail(2 /* skip */, args...)
-	}
-}
-
-func (t *testImpl) printAndFail(skip int, args ...interface{}) {
-	var msg string
-	if len(args) == 1 {
-		// If we were passed only an error, then format it with "%+v" in order to
-		// get any stack traces.
-		if err, ok := args[0].(error); ok {
-			msg = fmt.Sprintf("%+v", err)
+// We take the first error from each failure which is the
+// "squashed" error that contains all information of a failure
+func formatFailure(b *strings.Builder, reportFailures ...failure) {
+	for i, failure := range reportFailures {
+		if i > 0 {
+			fmt.Fprintln(b)
 		}
+		file, line, fn, ok := errors.GetOneLineSource(failure.squashedErr)
+		if !ok {
+			file, line, fn = "<unknown>", 0, "unknown"
+		}
+		fmt.Fprintf(b, "(%s:%d).%s: %v", file, line, fn, failure.squashedErr)
 	}
-	if msg == "" {
-		msg = fmt.Sprint(args...)
-	}
-	t.failWithMsg(t.decorate(skip+1, msg))
 }
 
-func (t *testImpl) printfAndFail(skip int, format string, args ...interface{}) {
+func (t *testImpl) addFailure(format string, args ...interface{}) {
 	if format == "" {
-		panic(fmt.Sprintf("invalid empty format. args: %s", args))
+		format = strings.Repeat(" %v", len(args))[1:]
 	}
-	t.failWithMsg(t.decorate(skip+1, fmt.Sprintf(format, args...)))
-}
+	reportFailure := newFailure(errors.NewWithDepthf(2, format, args...), collectErrors(args))
 
-func (t *testImpl) failWithMsg(msg string) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	prefix := ""
-	if t.mu.failed {
-		prefix = "[not the first failure] "
-		// NB: the first failure is not always the relevant one due to:
-		// https://github.com/cockroachdb/cockroach/issues/44436
-		//
-		// So we chain all failures together in the order in which we see
-		// them.
-		msg = "\n" + msg
-	}
-	t.L().Printf("%stest failure: %s", prefix, msg)
+	t.mu.failures = append(t.mu.failures, reportFailure)
 
-	t.mu.failed = true
-	t.mu.failureMsg += msg
+	var b strings.Builder
+	formatFailure(&b, reportFailure)
+	msg := b.String()
+
+	t.L().Printf("test failure #%d: %s", len(t.mu.failures), msg)
+	// Also dump the verbose error (incl. all stack traces) to a log file, in case
+	// we need it. The stacks are sometimes helpful, but we don't want them in the
+	// main log as they are highly verbose.
+	{
+		cl, err := t.L().ChildLogger(
+			fmt.Sprintf("failure_%d", len(t.mu.failures)),
+			logger.QuietStderr, logger.QuietStdout,
+		)
+		if err == nil {
+			// We don't actually log through this logger since it adds an unrelated
+			// file:line caller (namely ours). The error already has stack traces
+			// so it's better to write only it to the file to avoid confusion.
+			path := cl.File.Name()
+			cl.Close() // we just wanted the filename
+			_ = os.WriteFile(path, []byte(fmt.Sprintf("%+v", reportFailure.squashedErr)), 0644)
+		}
+	}
+
 	t.mu.output = append(t.mu.output, msg...)
+	t.mu.output = append(t.mu.output, '\n')
 	if t.mu.cancel != nil {
 		t.mu.cancel()
 	}
-}
-
-// Args:
-// skip: The number of stack frames to exclude from the result. 0 means that
-//   the caller will be the first frame identified. 1 means the caller's caller
-//   will be the first, etc.
-func (t *testImpl) decorate(skip int, s string) string {
-	// Skip two extra frames to account for this function and runtime.Callers
-	// itself.
-	var pc [50]uintptr
-	n := runtime.Callers(2+skip, pc[:])
-	if n == 0 {
-		panic("zero callers found")
-	}
-
-	buf := new(bytes.Buffer)
-	frames := runtime.CallersFrames(pc[:n])
-	sep := "\t"
-	runnerFound := false
-	for {
-		if runnerFound {
-			break
-		}
-
-		frame, more := frames.Next()
-		if !more {
-			break
-		}
-		if frame.Function == t.runner {
-			runnerFound = true
-
-			// Handle the special case of the runner function being the caller of
-			// t.Fatal(). In that case, that's the line to be used for issue creation.
-			if t.mu.failLoc.file == "" {
-				t.mu.failLoc.file = frame.File
-				t.mu.failLoc.line = frame.Line
-			}
-		}
-		if !t.mu.failed && !runnerFound {
-			// Keep track of the highest stack frame that is lower than the t.runner
-			// stack frame. This is used to determine the author of that line of code
-			// and issue assignment.
-			t.mu.failLoc.file = frame.File
-			t.mu.failLoc.line = frame.Line
-		}
-		file := frame.File
-		if index := strings.LastIndexByte(file, '/'); index >= 0 {
-			file = file[index+1:]
-		}
-		fmt.Fprintf(buf, "%s%s:%d", sep, file, frame.Line)
-		sep = ","
-	}
-	buf.WriteString(": ")
-
-	lines := strings.Split(s, "\n")
-	if l := len(lines); l > 1 && lines[l-1] == "" {
-		lines = lines[:l-1]
-	}
-	for i, line := range lines {
-		if i > 0 {
-			buf.WriteString("\n\t\t")
-		}
-		buf.WriteString(line)
-	}
-	buf.WriteByte('\n')
-	return buf.String()
 }
 
 func (t *testImpl) duration() time.Duration {
@@ -392,13 +361,39 @@ func (t *testImpl) duration() time.Duration {
 func (t *testImpl) Failed() bool {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
-	return t.mu.failed
+	return t.failedRLocked()
 }
 
-func (t *testImpl) FailureMsg() string {
+func (t *testImpl) failedRLocked() bool {
+	return len(t.mu.failures) > 0
+}
+
+func (t *testImpl) firstFailure() failure {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
-	return t.mu.failureMsg
+	if len(t.mu.failures) <= 0 {
+		return failure{}
+	}
+	return t.mu.failures[0]
+}
+
+func (t *testImpl) failureMsg() string {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	var b strings.Builder
+	formatFailure(&b, t.mu.failures...)
+	return b.String()
+}
+
+// failureContainsError returns true if any of the errors in a given failure
+// matches the reference error
+func failureContainsError(f failure, refError error) bool {
+	for _, err := range f.errors {
+		if errors.Is(err, refError) {
+			return true
+		}
+	}
+	return errors.Is(f.squashedErr, refError)
 }
 
 func (t *testImpl) ArtifactsDir() string {

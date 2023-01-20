@@ -15,6 +15,7 @@ import (
 	"context"
 	"io/ioutil"
 	"math/rand"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
@@ -27,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -98,8 +100,8 @@ func alwaysFailingClusterAllocator(
 	alloc *quotapool.IntAlloc,
 	artifactsDir string,
 	wStatus *workerStatus,
-) (*clusterImpl, error) {
-	return nil, errors.New("cluster creation failed")
+) (*clusterImpl, *vm.CreateOpts, error) {
+	return nil, nil, errors.New("cluster creation failed")
 }
 
 func TestRunnerRun(t *testing.T) {
@@ -183,6 +185,7 @@ func TestRunnerRun(t *testing.T) {
 			if exp := c.expOut; exp != "" && !strings.Contains(out, exp) {
 				t.Fatalf("'%s' not found in output:\n%s", exp, out)
 			}
+			t.Log(out)
 		})
 	}
 }
@@ -252,7 +255,13 @@ func setupRunnerTest(t *testing.T, r testRegistryImpl, testFilters []string) *ru
 	var stdout syncedBuffer
 	var stderr syncedBuffer
 	lopt := loggingOpt{
-		l:            nilLogger(),
+		l: func() *logger.Logger {
+			l, err := logger.RootLogger(filepath.Join(t.TempDir(), "test.log"), logger.NoTee)
+			if err != nil {
+				panic(err)
+			}
+			return l
+		}(),
 		tee:          logger.NoTee,
 		stdout:       &stdout,
 		stderr:       &stderr,
