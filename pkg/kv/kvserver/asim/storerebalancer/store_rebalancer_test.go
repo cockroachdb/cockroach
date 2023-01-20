@@ -201,7 +201,6 @@ func TestStoreRebalancer(t *testing.T) {
 				s.TickClock(state.OffsetTick(start, tick))
 				changer.Tick(state.OffsetTick(start, tick), s)
 				controller.Tick(ctx, state.OffsetTick(start, tick), s)
-				gossip.Tick(ctx, state.OffsetTick(start, tick), s)
 				src.Tick(ctx, state.OffsetTick(start, tick), s)
 				resultsPhase = append(resultsPhase, src.rebalancerState.phase)
 				storeQPS := testingGetStoreQPS(s)
