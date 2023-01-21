@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
@@ -866,11 +867,8 @@ func parsePrometheusMetric(s string) (*prometheusMetric, bool) {
 func runFollowerReadsMixedVersionSingleRegionTest(
 	ctx context.Context, t test.Test, c cluster.Cluster, buildVersion version.Version,
 ) {
-	predecessorVersion, err := PredecessorVersion(buildVersion)
+	predecessorVersion, err := clusterupgrade.PredecessorVersion(buildVersion)
 	require.NoError(t, err)
-	// An empty string means that the cockroach binary specified by flag
-	// `cockroach` will be used.
-	const curVersion = ""
 
 	// Start the cluster at the old version.
 	settings := install.MakeClusterSettings()
@@ -884,7 +882,7 @@ func runFollowerReadsMixedVersionSingleRegionTest(
 	randNode := 1 + rand.Intn(c.Spec().NodeCount)
 	t.L().Printf("upgrading n%d to current version", randNode)
 	nodeToUpgrade := c.Node(randNode)
-	upgradeNodes(ctx, nodeToUpgrade, startOpts, curVersion, t, c)
+	upgradeNodes(ctx, t, c, nodeToUpgrade, startOpts, clusterupgrade.MainVersion)
 	runFollowerReadsTest(ctx, t, c, topologySpec{multiRegion: false}, exactStaleness, data)
 
 	// Upgrade the remaining nodes to the new version and run the test.
@@ -896,6 +894,6 @@ func runFollowerReadsMixedVersionSingleRegionTest(
 		remainingNodes = remainingNodes.Merge(c.Node(i + 1))
 	}
 	t.L().Printf("upgrading nodes %s to current version", remainingNodes)
-	upgradeNodes(ctx, remainingNodes, startOpts, curVersion, t, c)
+	upgradeNodes(ctx, t, c, remainingNodes, startOpts, clusterupgrade.MainVersion)
 	runFollowerReadsTest(ctx, t, c, topologySpec{multiRegion: false}, exactStaleness, data)
 }

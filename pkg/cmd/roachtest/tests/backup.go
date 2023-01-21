@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -448,13 +449,10 @@ func registerBackupMixedVersion(r registry.Registry) {
 			if c.IsLocal() && runtime.GOARCH == "arm64" {
 				t.Skip("Skip under ARM64. See https://github.com/cockroachdb/cockroach/issues/89268")
 			}
-			// An empty string means that the cockroach binary specified by flag
-			// `cockroach` will be used.
-			const mainVersion = ""
 			roachNodes := c.All()
 			upgradedNodes := c.Nodes(1, 2)
 			oldNodes := c.Nodes(3, 4)
-			predV, err := PredecessorVersion(*t.BuildVersion())
+			predV, err := clusterupgrade.PredecessorVersion(*t.BuildVersion())
 			require.NoError(t, err)
 			c.Put(ctx, t.DeprecatedWorkload(), "./workload")
 
@@ -469,7 +467,7 @@ func registerBackupMixedVersion(r registry.Registry) {
 				setShortJobIntervalsStep(1),
 				loadBackupDataStep(c),
 				// Upgrade some nodes.
-				binaryUpgradeStep(upgradedNodes, mainVersion),
+				binaryUpgradeStep(upgradedNodes, clusterupgrade.MainVersion),
 
 				// Let us first test planning and executing a backup on different node
 				// versions.
@@ -561,7 +559,7 @@ func registerBackupMixedVersion(r registry.Registry) {
 				enableJobAdoptionStep(c, upgradedNodes),
 
 				// Allow all the nodes to now finalize their cluster version.
-				binaryUpgradeStep(oldNodes, mainVersion),
+				binaryUpgradeStep(oldNodes, clusterupgrade.MainVersion),
 				allowAutoUpgradeStep(1),
 				waitForUpgradeStep(roachNodes),
 

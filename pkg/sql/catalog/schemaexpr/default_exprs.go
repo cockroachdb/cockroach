@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinsregistry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -72,16 +73,22 @@ func MakeDefaultExprs(
 		if err != nil {
 			return nil, err
 		}
-		// For "reasons" the CastExpr type check ignores the desired type. That
-		// means that we can get a result here that is not the right type, and
-		// we'd need to wrap that in an explicit cast. This is the equivalent of
-		// an assignment cast we'd insert when writing to the table directly.
-		if !typedExpr.ResolvedType().Equivalent(col.GetType()) {
-			if typedExpr, err = tree.TypeCheck(ctx, &tree.CastExpr{
-				Expr:       typedExpr,
-				Type:       col.GetType(),
-				SyntaxMode: tree.CastExplicit,
-			}, semaCtx, col.GetType()); err != nil {
+		// If the DEFAULT expression has a type that is not identical to the
+		// column's type, wrap the default expression in an assignment cast.
+		if !typedExpr.ResolvedType().Identical(col.GetType()) {
+			const fnName = "crdb_internal.assignment_cast"
+			funcRef := tree.WrapFunction(fnName)
+			props, overloads := builtinsregistry.GetBuiltinProperties(fnName)
+			if typedExpr, err = tree.TypeCheck(ctx, tree.NewTypedFuncExpr(
+				funcRef,
+				0, /* aggQualifier */
+				tree.TypedExprs{typedExpr, tree.NewTypedCastExpr(tree.DNull, col.GetType())},
+				nil, /* filter */
+				nil, /* windowDef */
+				col.GetType(),
+				props,
+				&overloads[0],
+			), semaCtx, col.GetType()); err != nil {
 				return nil, errors.NewAssertionErrorWithWrappedErrf(err,
 					"failed to type check the cast of %v to %v", expr, col.GetType())
 			}

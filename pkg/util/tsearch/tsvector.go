@@ -68,6 +68,8 @@ const (
 	// document term that begins with the search term.
 	weightStar
 	invalidWeight
+
+	weightAny = weightA | weightB | weightC | weightD
 )
 
 func (w tsWeight) String() string {
@@ -107,6 +109,19 @@ func (w tsWeight) TSVectorPGEncoding() (byte, error) {
 		return 0, nil
 	}
 	return 0, errors.Errorf("invalid tsvector weight %d", w)
+}
+
+// matches returns true if the receiver is matched by the input tsquery weight.
+func (w tsWeight) matches(queryWeight tsWeight) bool {
+	if queryWeight == weightAny {
+		return true
+	}
+	if w&queryWeight > 0 {
+		return true
+	}
+	// If we're querying for D, and the receiver has no weight, that's also a
+	// match.
+	return queryWeight&weightD > 0 && w == 0
 }
 
 func tsWeightFromVectorPGEncoding(b byte) (tsWeight, error) {
@@ -195,6 +210,23 @@ func (t tsTerm) String() string {
 		buf.WriteString(pos.weight.String())
 	}
 	return buf.String()
+}
+
+func (t tsTerm) matchesWeight(targetWeight tsWeight) bool {
+	if targetWeight == weightAny {
+		return true
+	}
+	if len(t.positions) == 0 {
+		// A "stripped" tsvector (no associated positions) always matches any input
+		// weight.
+		return true
+	}
+	for _, pos := range t.positions {
+		if pos.weight.matches(targetWeight) {
+			return true
+		}
+	}
+	return false
 }
 
 // TSVector is a sorted list of terms, each of which is a lexeme that might have
