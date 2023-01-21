@@ -266,6 +266,8 @@ type cFetcher struct {
 		// keys are compared against this prefix to determine whether they're part
 		// of a new row or not.
 		lastRowPrefix roachpb.Key
+		// firstKeyInRow, if set, is the first key in the current row.
+		firstKeyInRow roachpb.Key
 		// prettyValueBuf is a temp buffer used to create strings for tracing.
 		prettyValueBuf *bytes.Buffer
 
@@ -478,7 +480,7 @@ func (cf *cFetcher) Init(
 	if kvFetcher, ok := nextKVer.(*row.KVFetcher); ok {
 		cf.fetcher = kvFetcher
 	}
-	cf.stableKVs = nextKVer.StableKVs()
+	cf.stableKVs = nextKVer.Init(cf.getFirstKeyOfRow)
 	cf.accountingHelper.Init(allocator, cf.memoryLimit, cf.table.typs)
 	if cf.cFetcherArgs.collectStats {
 		cf.cpuStopWatch = timeutil.NewCPUStopWatch()
@@ -619,6 +621,10 @@ func (cf *cFetcher) setEstimatedRowCount(estimatedRowCount uint64) {
 	cf.estimatedRowCount = estimatedRowCount
 }
 
+func (cf *cFetcher) getFirstKeyOfRow() roachpb.Key {
+	return cf.machine.firstKeyInRow
+}
+
 // setNextKV sets the next KV to process to the input KV. The KV will be
 // deep-copied if necessary, however, the copy is only valid until the next
 // setNextKV call.
@@ -666,6 +672,7 @@ func (cf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 		case stateInvalid:
 			return nil, errors.New("invalid fetcher state")
 		case stateInitFetch:
+			cf.machine.firstKeyInRow = nil
 			cf.cpuStopWatch.Start()
 			// Here we ignore partialRow return parameter because it can only be
 			// true when moreKVs is false, in which case we have already
@@ -710,7 +717,7 @@ func (cf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 		case stateDecodeFirstKVOfRow:
 			// Reset MVCC metadata for the table, since this is the first KV of a row.
 			cf.table.rowLastModified = hlc.Timestamp{}
-			cf.nextKVer.SetFirstKeyOfRow(cf.machine.nextKV.Key)
+			cf.machine.firstKeyInRow = cf.machine.nextKV.Key
 
 			// foundNull is set when decoding a new index key for a row finds a NULL value
 			// in the index key. This is used when decoding unique secondary indexes in order

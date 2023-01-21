@@ -280,8 +280,8 @@ func (f *KVFetcher) nextKV(
 	}
 }
 
-// StableKVs implements the storage.NextKVer interface.
-func (f *KVFetcher) StableKVs() bool {
+// Init implements the storage.NextKVer interface.
+func (f *KVFetcher) Init(storage.FirstKeyOfRowGetter) (stableKVs bool) {
 	// nextKV never invalidates the returned kv, so it is always stable.
 	return true
 }
@@ -296,9 +296,6 @@ func (f *KVFetcher) NextKV(
 	partialRow = false
 	return ok, partialRow, kv, err
 }
-
-// SetFirstKeyOfRow implements the storage.NextKVer interface.
-func (f *KVFetcher) SetFirstKeyOfRow(roachpb.Key) {}
 
 // SetupNextFetch overrides the same method from the wrapped KVBatchFetcher in
 // order to reset this KVFetcher.

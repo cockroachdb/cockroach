@@ -100,13 +100,18 @@ import (
 // the mvccScanFetcherAdapter, with the adapter advancing the scanner only when
 // the next KV pair is needed.
 
+// FirstKeyOfRowGetter returns the first key included into the last incomplete
+// SQL row by the user of NextKVer. If the last row is complete, then nil is
+// returned.
+type FirstKeyOfRowGetter func() roachpb.Key
+
 // NextKVer can fetch a new KV from somewhere. If MVCCDecodingStrategy is set
 // to MVCCDecodingRequired, the returned KV will include a timestamp.
 type NextKVer interface {
-	// StableKVs returns a boolean indicating whether the KVs returned by NextKV
-	// are stable (i.e. whether they will not be invalidated by calling NextKV
-	// again).
-	StableKVs() bool
+	// Init initializes the NextKVer. It returns a boolean indicating whether
+	// the KVs returned by NextKV are stable (i.e. whether they will not be
+	// invalidated by calling NextKV again).
+	Init(getter FirstKeyOfRowGetter) (stableKVs bool)
 	// NextKV returns the next kv from this NextKVer.
 	// - ok=false indicates that there are no more kvs to fetch,
 	// - partialRow indicates whether the fetch stopped in the middle of a SQL
@@ -119,9 +124,6 @@ type NextKVer interface {
 	// The scan will be resumed from the last key provided by SetFirstKeyOfRow
 	// by the caller.
 	NextKV(context.Context, MVCCDecodingStrategy) (ok bool, partialRow bool, kv roachpb.KeyValue, err error)
-	// SetFirstKeyOfRow notifies the NextKVer about the first key of the new SQL
-	// row that the caller began constructing.
-	SetFirstKeyOfRow(key roachpb.Key)
 }
 
 // CFetcherWrapper is a wrapper around a colfetcher.cFetcher that populates only
@@ -188,8 +190,9 @@ type mvccScanFetchAdapter struct {
 
 var _ NextKVer = &mvccScanFetchAdapter{}
 
-// StableKVs implements the NextKVer interface.
-func (f *mvccScanFetchAdapter) StableKVs() bool {
+// Init implements the NextKVer interface.
+func (f *mvccScanFetchAdapter) Init(firstKeyGetter FirstKeyOfRowGetter) (stableKVs bool) {
+	f.results.firstKeyGetter = firstKeyGetter
 	// The returned kv is never stable because it'll be invalidated by the
 	// pebbleMVCCScanner on the following NextKV() call.
 	return false
@@ -250,11 +253,6 @@ func (f *mvccScanFetchAdapter) NextKV(
 	return true, false, kv, nil
 }
 
-// SetFirstKeyOfRow implements the NextKVer interface.
-func (f *mvccScanFetchAdapter) SetFirstKeyOfRow(key roachpb.Key) {
-	f.results.firstKeyOfRow = key
-}
-
 // singleResults is an implementation of the results interface that is able to
 // hold only a single KV at a time - all KVs are "accumulated" in the
 // colfetcher.cFetcher.
@@ -271,15 +269,13 @@ func (f *mvccScanFetchAdapter) SetFirstKeyOfRow(key roachpb.Key) {
 //     colfetcher.cFetcher for processing;
 //   - the colfetcher.cFetcher decodes the KV, and goes back to the first step.
 type singleResults struct {
-	maxKeysPerRow uint32
-	maxFamilyID   uint32
-	onClear       func()
-	count, bytes  int64
-	mvccKey       []byte
-	value         []byte
-	// firstKeyOfRow is the key of the first KV already included into the latest
-	// (possibly incomplete) SQL row in the cFetcher.
-	firstKeyOfRow roachpb.Key
+	maxKeysPerRow  uint32
+	maxFamilyID    uint32
+	onClear        func()
+	count, bytes   int64
+	mvccKey        []byte
+	value          []byte
+	firstKeyGetter FirstKeyOfRowGetter
 	// firstRowKeyPrefix is a deep copy of the "row prefix" of the first SQL row
 	// seen by the singleResults (only set when the table has multiple column
 	// families).
@@ -346,7 +342,10 @@ func (s *singleResults) continuesFirstRow(key roachpb.Key) bool {
 
 // maybeTrimPartialLastRow implements the results interface.
 func (s *singleResults) maybeTrimPartialLastRow(key roachpb.Key) (roachpb.Key, error) {
-	if !bytes.Equal(getRowPrefix(s.firstKeyOfRow), getRowPrefix(key)) {
+	firstKeyOfRow := s.firstKeyGetter()
+	// getRowPrefix handles the case of empty key, so we don't need to check
+	// that explicitly upfront.
+	if !bytes.Equal(getRowPrefix(firstKeyOfRow), getRowPrefix(key)) {
 		// The given key is the first KV of the next row, so we will resume the
 		// scan from this key.
 		return key, nil
@@ -356,7 +355,7 @@ func (s *singleResults) maybeTrimPartialLastRow(key roachpb.Key) (roachpb.Key, e
 	// can be completed), thus, we'll resume the scan from the first key in the
 	// last row.
 	s.partialRowTrimmed = true
-	return s.firstKeyOfRow, nil
+	return firstKeyOfRow, nil
 }
 
 // lastRowHasFinalColumnFamily implements the results interface.
