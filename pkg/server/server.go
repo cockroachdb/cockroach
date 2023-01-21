@@ -93,6 +93,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/rangedesc"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/schedulerlatency"
@@ -102,6 +103,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
 	sentry "github.com/getsentry/sentry-go"
 	"google.golang.org/grpc/codes"
@@ -164,6 +166,8 @@ type Server struct {
 
 	// pgL is the SQL listener.
 	pgL net.Listener
+	// loopbackPgL is the SQL listener for internal pgwire connections.
+	loopbackPgL *netutil.LoopbackListener
 
 	// pgPreServer handles SQL connections prior to routing them to a
 	// specific tenant.
@@ -1325,11 +1329,13 @@ func (s *Server) PreStart(ctx context.Context) error {
 	// and dispatches the server worker for the RPC.
 	// The SQL listener is returned, to start the SQL server later
 	// below when the server has initialized.
-	pgL, rpcLoopbackDialFn, startRPCServer, err := startListenRPCAndSQL(ctx, workersCtx, s.cfg.BaseConfig, s.stopper, s.grpc, true /* enableSQLListener */)
+	pgL, loopbackPgL, rpcLoopbackDialFn, startRPCServer, err := startListenRPCAndSQL(
+		ctx, workersCtx, s.cfg.BaseConfig, s.stopper, s.grpc, true /* enableSQLListener */)
 	if err != nil {
 		return err
 	}
 	s.pgL = pgL
+	s.loopbackPgL = loopbackPgL
 
 	// Tell the RPC context how to connect in-memory.
 	s.rpcContext.SetLoopbackDialer(rpcLoopbackDialFn)
@@ -1890,6 +1896,38 @@ func (s *Server) AcceptClients(ctx context.Context) error {
 
 	log.Event(ctx, "server ready")
 	return nil
+}
+
+// AcceptInternalClients starts listening for incoming SQL connections on the
+// internal loopback interface.
+func (s *Server) AcceptInternalClients(ctx context.Context) error {
+	return s.stopper.RunAsyncTaskEx(ctx,
+		stop.TaskOpts{TaskName: "sql-loopback-listener", SpanOpt: stop.SterileRootSpan},
+		func(ctx context.Context) {
+			for {
+				conn, err := s.loopbackPgL.Accept()
+				if err != nil {
+					return
+				}
+				netutil.FatalIfUnexpected(err)
+				err = s.stopper.RunAsyncTask(ctx, "internal-conn-serve", func(ctx context.Context) {
+					connCtx := s.pgPreServer.AnnotateCtxForIncomingConn(ctx, conn)
+					connCtx = logtags.AddTag(connCtx, "internal-conn", nil)
+					var status pgwire.PreServeStatus
+					var err error
+					conn, status, err = s.pgPreServer.PreServe(connCtx, conn, pgwire.SocketInternalLoopback)
+					if err != nil {
+						log.Ops.Errorf(connCtx, "serving internal SQL client conn: %v", err)
+						return
+					}
+
+					if err := s.serverController.sqlMux(connCtx, conn, status); err != nil {
+						log.Ops.Errorf(connCtx, "serving internal SQL client conn: %v", err)
+					}
+				})
+				netutil.FatalIfUnexpected(err)
+			}
+		})
 }
 
 // Stop shuts down this server instance. Note that this method exists
