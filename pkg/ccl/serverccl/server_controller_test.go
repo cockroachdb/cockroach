@@ -10,6 +10,7 @@ package serverccl
 
 import (
 	"context"
+	gosql "database/sql"
 	"fmt"
 	"io"
 	"net/http"
@@ -22,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -57,12 +59,20 @@ func TestServerControllerHTTP(t *testing.T) {
 	require.NoError(t, row.Scan(&id, &secret, &username, &created, &expires))
 
 	// Create our own test tenant with a known name.
-	_, err = db.Exec("SELECT crdb_internal.create_tenant(10, 'hello')")
+	_, err = db.Exec("CREATE TENANT hello; ALTER TENANT hello START SERVICE SHARED")
 	require.NoError(t, err)
 
 	// Get a SQL connection to the test tenant.
 	sqlAddr := s.ServingSQLAddr()
-	db2 := serverutils.OpenDBConn(t, sqlAddr, "cluster:hello/defaultdb", false, s.Stopper())
+	var db2 *gosql.DB
+	testutils.SucceedsSoon(t, func() error {
+		var err error
+		db2, err = serverutils.OpenDBConnE(sqlAddr, "cluster:hello/defaultdb", false, s.Stopper())
+		if err != nil {
+			return err
+		}
+		return db2.Ping()
+	})
 
 	// Instantiate the HTTP test username and privileges into the test tenant.
 	_, err = db2.Exec(fmt.Sprintf(`CREATE USER %s`, lexbase.EscapeSQLIdent(username)))

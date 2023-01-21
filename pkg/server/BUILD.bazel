@@ -129,6 +129,7 @@ go_library(
         "//pkg/kv/kvserver/rangelog",
         "//pkg/kv/kvserver/reports",
         "//pkg/multitenant",
+        "//pkg/multitenant/mtinfopb",
         "//pkg/multitenant/multitenantcpu",
         "//pkg/multitenant/multitenantio",
         "//pkg/multitenant/tenantcostmodel",

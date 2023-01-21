@@ -24,6 +24,7 @@ import (
 
 	apd "github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -36,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -52,6 +54,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
@@ -4219,33 +4222,42 @@ func (s *adminServer) RecoveryVerify(
 	return nil, errors.AssertionFailedf("To be implemented by #93043")
 }
 
-// ListTenants returns a list of active tenants in the cluster. Calling this
-// function will start in-process tenants if they are not already running.
+// ListTenants returns a list of tenants that are served
+// by shared-process services in this server.
 func (s *systemAdminServer) ListTenants(
 	ctx context.Context, _ *serverpb.ListTenantsRequest,
 ) (*serverpb.ListTenantsResponse, error) {
-	ie := s.internalExecutor
-	rowIter, err := ie.QueryIterator(ctx, "list-tenants", nil, /* txn */
-		`SELECT name FROM system.tenants WHERE active = true AND name IS NOT NULL`)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = rowIter.Close() }()
-
 	var tenantNames []roachpb.TenantName
-	var hasNext bool
-	for hasNext, err = rowIter.Next(ctx); hasNext && err == nil; hasNext, err = rowIter.Next(ctx) {
-		row := rowIter.Cur()
-		tenantName := tree.MustBeDString(row[0])
-		tenantNames = append(tenantNames, roachpb.TenantName(tenantName))
+	if !s.server.cfg.Settings.Version.IsActive(ctx, clusterversion.V23_1TenantNamesStateAndServiceMode) {
+		tenantNames = append(tenantNames, catconstants.SystemTenantName)
+	} else {
+		ie := s.internalExecutor
+		rowIter, err := ie.QueryIterator(ctx, "list-tenants", nil, /* txn */
+			`SELECT name FROM system.tenants WHERE service_mode = $1 AND name IS NOT NULL`, mtinfopb.ServiceModeShared)
+		if err != nil {
+			return nil, err
+		}
+		defer func() { _ = rowIter.Close() }()
+
+		var hasNext bool
+		for hasNext, err = rowIter.Next(ctx); hasNext && err == nil; hasNext, err = rowIter.Next(ctx) {
+			row := rowIter.Cur()
+			tenantName := tree.MustBeDString(row[0])
+			tenantNames = append(tenantNames, roachpb.TenantName(tenantName))
+		}
 	}
 
 	var tenantList []*serverpb.Tenant
 	for _, tenantName := range tenantNames {
-		server, err := s.server.serverController.getOrCreateServer(ctx, tenantName)
+		server, err := s.server.serverController.getServer(ctx, tenantName)
 		if err != nil {
-			log.Errorf(ctx, "unable to get or create a tenant server: %v", err)
-			continue
+			if errors.Is(err, errNoTenantServerRunning) {
+				// The service for this tenant is not started yet. This is not
+				// an error - the services are started asynchronously. The
+				// client can try again later.
+				continue
+			}
+			return nil, err
 		}
 		tenantID := server.getTenantID()
 		tenantList = append(tenantList, &serverpb.Tenant{
