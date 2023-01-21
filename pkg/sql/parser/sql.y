@@ -7918,10 +7918,11 @@ show_range_for_row_stmt:
 // SHOW RANGES FROM INDEX [ <tablename> @ ] <indexname> [ WITH <options...> ]
 //
 // Options:
-//   INDEXES
-//   TABLES
-//   DETAILS
-//   EXPLAIN
+//   INDEXES: list indexes contained per range
+//   TABLES:  list tables contained per range
+//   DETAILS: add range size, leaseholder and other details
+//   KEYS:    include binary start/end keys
+//   EXPLAIN: show the SQL queries that produces the result
 show_ranges_stmt:
   SHOW RANGES FROM INDEX table_index_name opt_show_ranges_options
   {
