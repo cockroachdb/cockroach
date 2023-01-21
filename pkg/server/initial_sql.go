@@ -30,6 +30,7 @@ import (
 func (s *Server) RunInitialSQL(
 	ctx context.Context, startSingleNode bool, adminUser, adminPassword string,
 ) error {
+	log.Infof(ctx, "!!! RunInitialSQL")
 	newCluster := s.InitialStart() && s.NodeID() == kvstorage.FirstNodeID
 	if !newCluster {
 		// The initial SQL code only runs the first time the cluster is initialized.

@@ -60,11 +60,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/schedulerlatency"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
 	sentry "github.com/getsentry/sentry-go"
 )
@@ -104,6 +106,8 @@ type SQLServerWrapper struct {
 
 	// pgL is the SQL listener.
 	pgL net.Listener
+	// loopbackPgL is the SQL listener for internal pgwire connections.
+	loopbackPgL *netutil.LoopbackListener
 
 	// pgPreServer handles SQL connections prior to routing them to a
 	// specific tenant.
@@ -444,13 +448,14 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 	// The SQL listener is returned, to start the SQL server later
 	// below when the server has initialized.
 	enableSQLListener := !s.sqlServer.cfg.DisableSQLListener
-	pgL, rpcLoopbackDialFn, startRPCServer, err := startListenRPCAndSQL(ctx, workersCtx, *s.sqlServer.cfg, s.stopper, s.grpc, enableSQLListener)
+	pgL, loopbackPgL, rpcLoopbackDialFn, startRPCServer, err := startListenRPCAndSQL(ctx, workersCtx, *s.sqlServer.cfg, s.stopper, s.grpc, enableSQLListener)
 	if err != nil {
 		return err
 	}
 	if enableSQLListener {
 		s.pgL = pgL
 	}
+	s.loopbackPgL = loopbackPgL
 
 	// Tell the RPC context how to connect in-memory.
 	s.rpcContext.SetLoopbackDialer(rpcLoopbackDialFn)
@@ -710,33 +715,31 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 	return nil
 }
 
+func (s *SQLServerWrapper) serveConn(ctx context.Context, conn net.Conn, status pgwire.PreServeStatus) error {
+	pgServer := s.PGServer()
+	switch status.State {
+	case pgwire.PreServeCancel:
+		if err := pgServer.HandleCancel(ctx, status.CancelKey); err != nil {
+			log.Sessions.Warningf(ctx, "unexpected while handling pgwire cancellation request: %v", err)
+		}
+		return nil
+	case pgwire.PreServeReady:
+		return pgServer.ServeConn(ctx, conn, status)
+	default:
+		return errors.AssertionFailedf("programming error: missing case %v", status.State)
+	}
+}
+
 // AcceptClients starts listening for incoming SQL clients over the network.
 // This mirrors the implementation of (*Server).AcceptClients.
 // TODO(knz): Find a way to implement this method only once for both.
 func (s *SQLServerWrapper) AcceptClients(ctx context.Context) error {
 	if !s.sqlServer.cfg.DisableSQLListener {
-		workersCtx := s.AnnotateCtx(context.Background())
-
-		pgServer := s.sqlServer.pgServer
-		serveConn := func(ctx context.Context, conn net.Conn, status pgwire.PreServeStatus) error {
-			switch status.State {
-			case pgwire.PreServeCancel:
-				if err := pgServer.HandleCancel(ctx, status.CancelKey); err != nil {
-					log.Sessions.Warningf(ctx, "unexpected while handling pgwire cancellation request: %v", err)
-				}
-				return nil
-			case pgwire.PreServeReady:
-				return pgServer.ServeConn(ctx, conn, status)
-			default:
-				return errors.AssertionFailedf("programming error: missing case %v", status.State)
-			}
-		}
-
 		if err := startServeSQL(
-			workersCtx,
+			s.AnnotateCtx(context.Background()),
 			s.stopper,
 			s.pgPreServer,
-			serveConn,
+			s.serveConn,
 			s.pgL,
 			&s.sqlServer.cfg.SocketFile,
 		); err != nil {
@@ -748,6 +751,32 @@ func (s *SQLServerWrapper) AcceptClients(ctx context.Context) error {
 
 	log.Event(ctx, "server ready")
 	return nil
+}
+
+// AcceptInternalClients starts listening for incoming SQL connections on the
+// internal loopback interface.
+func (s *SQLServerWrapper) AcceptInternalClients(ctx context.Context) error {
+	connManager := netutil.MakeTCPServer(ctx, s.stopper)
+
+	return s.stopper.RunAsyncTaskEx(ctx,
+		stop.TaskOpts{TaskName: "sql-internal-listener", SpanOpt: stop.SterileRootSpan},
+		func(ctx context.Context) {
+			err := connManager.ServeWith(ctx, s.loopbackPgL, func(ctx context.Context, conn net.Conn) {
+				connCtx := s.pgPreServer.AnnotateCtxForIncomingConn(ctx, conn)
+				connCtx = logtags.AddTag(connCtx, "internal-conn", nil)
+
+				conn, status, err := s.pgPreServer.PreServe(connCtx, conn, pgwire.SocketInternalLoopback)
+				if err != nil {
+					log.Ops.Errorf(connCtx, "serving SQL client conn: %v", err)
+					return
+				}
+
+				if err := s.serveConn(connCtx, conn, status); err != nil {
+					log.Ops.Errorf(connCtx, "serving internal SQL client conn: %s", err)
+				}
+			})
+			netutil.FatalIfUnexpected(err)
+		})
 }
 
 // Start calls PreStart() and AcceptClient() in sequence.

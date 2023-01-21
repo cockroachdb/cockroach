@@ -231,6 +231,8 @@ func ParseConnType(s string) (ConnType, error) {
 		return ConnHostSSL, nil
 	case "hostnossl":
 		return ConnHostNoSSL, nil
+	case "loopback":
+		return ConnInternalLoopback, nil
 	}
 	return 0, errors.Newf("unknown connection type: %q", s)
 }
