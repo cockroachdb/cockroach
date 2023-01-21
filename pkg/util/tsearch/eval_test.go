@@ -52,6 +52,40 @@ func TestEval(t *testing.T) {
 		{`a:* & ar:*`, `ar:10`, true},
 		{`a:* & ar:* & arg:*`, `ar:10`, false},
 
+		// Tests for weights.
+		{`a:d`, `a:1`, true},
+		{`a:db`, `a:1d`, true},
+		{`a:bd`, `a:2`, true},
+		{`a:abc`, `a:1`, false},
+		{`a:cab`, `a:1`, false},
+		{`a:cabd`, `a:1`, true},
+
+		{`a`, `a:1a`, true},
+		{`a:d`, `a:1a`, false},
+		{`a:bcd`, `a:1a`, false},
+		{`a`, `a:1a,2`, true},
+		{`a`, `a:1a,2d`, true},
+		{`a:cb`, `a:1a,2d,3,5c,10b`, true},
+		{`a:cb`, `a:1a,2d,3,5c,10`, true},
+		{`a:cb`, `a:1a,2d,3,5b,10`, true},
+
+		// Weight and prefix matches: must search through all prefix matches.
+		{`a:*C`, `ab:1D ad:1C`, true},
+		{`a:*C`, `ab:1C ad:1D`, true},
+		{`a:*C`, `ab:1B ad:1D`, false},
+
+		{`w:*D <-> w:*A`, `wa:1D wb:2A`, true},
+		{`w:*D <-> w:*A`, `wa:1A wb:2D`, false},
+
+		// Test for "stripped vectors" - vectors with no positions.
+		{`a:d`, `a`, true},
+		{`a:abc`, `a`, true},
+		{`a & b`, `a b`, true},
+		{`a | b`, `a b`, true},
+		{`a <-> b`, `a b`, false},
+		{`b <-> a`, `a b`, false},
+		{`!a <-> !b`, `a b`, false},
+
 		// Tests for followed-by.
 		{`a <-> b`, `a:1 b:2`, true},
 		{`a <-> b`, `a:2 b:1`, false},
@@ -77,6 +111,8 @@ func TestEval(t *testing.T) {
 		{`!a <-> !b`, `b:2 a:3`, true},
 		{`!a <-> !b`, `a:3 b:4`, true},
 		{`!a <-> !b`, `a:3`, true},
+		{`!a <-> !b`, ``, true},
+		{`!a <-> !b`, `c:3 d:4`, true},
 
 		// Or on the RHS of a follows-by.
 		{`a <-> (b|c)`, `a:1 b:2`, true},
@@ -110,15 +146,16 @@ func TestEval(t *testing.T) {
 		{`a <-> (b & (c <-> d))`, `a:1 b:2 c:3 d:4`, false},
 	}
 	for _, tc := range tcs {
-		t.Log(tc)
-		q, err := ParseTSQuery(tc.query)
-		require.NoError(t, err)
-		v, err := ParseTSVector(tc.vector)
-		require.NoError(t, err)
-		eval, err := EvalTSQuery(q, v)
-		require.NoError(t, err)
+		t.Run(tc.vector+tc.query, func(t *testing.T) {
+			q, err := ParseTSQuery(tc.query)
+			require.NoError(t, err)
+			v, err := ParseTSVector(tc.vector)
+			require.NoError(t, err)
+			eval, err := EvalTSQuery(q, v)
+			require.NoError(t, err)
 
-		assert.Equal(t, tc.expected, eval)
+			assert.Equal(t, tc.expected, eval)
+		})
 	}
 
 	// This subtest runs all the test cases against PG to ensure the behavior is

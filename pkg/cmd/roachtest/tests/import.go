@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
@@ -325,9 +326,6 @@ func successfulImportStep(warehouses, nodeID int) versionStep {
 func runImportMixedVersion(
 	ctx context.Context, t test.Test, c cluster.Cluster, warehouses int, predecessorVersion string,
 ) {
-	// An empty string means that the cockroach binary specified by flag
-	// `cockroach` will be used.
-	const mainVersion = ""
 	roachNodes := c.All()
 
 	t.Status("starting csv servers")
@@ -338,8 +336,8 @@ func runImportMixedVersion(
 		preventAutoUpgradeStep(1),
 
 		// Upgrade some of the nodes.
-		binaryUpgradeStep(c.Node(1), mainVersion),
-		binaryUpgradeStep(c.Node(2), mainVersion),
+		binaryUpgradeStep(c.Node(1), clusterupgrade.MainVersion),
+		binaryUpgradeStep(c.Node(2), clusterupgrade.MainVersion),
 
 		successfulImportStep(warehouses, 1 /* nodeID */),
 	)
@@ -356,7 +354,7 @@ func registerImportMixedVersion(r registry.Registry) {
 			if c.IsLocal() && runtime.GOARCH == "arm64" {
 				t.Skip("Skip under ARM64. See https://github.com/cockroachdb/cockroach/issues/89268")
 			}
-			predV, err := PredecessorVersion(*t.BuildVersion())
+			predV, err := clusterupgrade.PredecessorVersion(*t.BuildVersion())
 			if err != nil {
 				t.Fatal(err)
 			}
