@@ -21,14 +21,17 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/clientsecopts"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirecancel"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
@@ -172,10 +175,146 @@ func newServerController(
 	return c
 }
 
-// getOrCreateServer retrieves a reference to the current server for
-// the given tenant name, and instantiates the server if none exists
-// yet.
-func (c *serverController) getOrCreateServer(
+// start monitors changes to the service mode and updates
+// the running servers accordingly.
+func (c *serverController) start(ctx context.Context, ie isql.Executor) error {
+	// We perform one round of updates synchronously, to ensure that
+	// any tenants already in service mode SHARED get a chance to boot
+	// up before we signal readiness.
+	if err := c.startInitialSecondaryTenantServers(ctx, ie); err != nil {
+		return err
+	}
+
+	// Then update them async.
+	return c.stopper.RunAsyncTask(ctx, "update-tenant-services", func(ctx context.Context) {
+		const watchInterval = time.Second
+		for {
+			select {
+			case <-time.After(watchInterval):
+			case <-c.stopper.ShouldQuiesce():
+				return
+			}
+
+			if err := c.updateRunningTenants(ctx, ie); err != nil {
+				log.Warningf(ctx, "cannot update running tenant services: %v", err)
+			}
+		}
+	})
+}
+
+// startInitialSecondaryTenantServers starts the servers for secondary tenants
+// that should be started during server initialization.
+func (c *serverController) startInitialSecondaryTenantServers(
+	ctx context.Context, ie isql.Executor,
+) error {
+	// The list of tenants that should have a running server.
+	reqTenants, err := c.getExpectedRunningTenants(ctx, ie)
+	if err != nil {
+		return err
+	}
+	for _, name := range reqTenants {
+		if name == catconstants.SystemTenantName {
+			// We already pre-initialize the entry for the system tenant.
+			continue
+		}
+		if _, err := c.createServer(ctx, name, base.TestSharedProcessTenantArgs{}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// updateRunningTenants checks which tenants need to be started/stopped
+// and performs the necessary server lifecycle changes.
+func (c *serverController) updateRunningTenants(ctx context.Context, ie isql.Executor) error {
+	// The list of tenants that should have a running server.
+	reqTenants, err := c.getExpectedRunningTenants(ctx, ie)
+	if err != nil {
+		return err
+	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	// Create a lookup map for the first loop below.
+	nameLookup := make(map[roachpb.TenantName]struct{}, len(reqTenants))
+	for _, name := range reqTenants {
+		nameLookup[name] = struct{}{}
+	}
+
+	// First check if there are any servers that shouldn't be running right now.
+	for name, srv := range c.mu.servers {
+		if !srv.shouldStop {
+			continue
+		}
+		if _, ok := nameLookup[name]; !ok {
+			// Tenant currently running, but should not be running. Shut it down.
+			if err := c.stopper.RunAsyncTask(ctx, "stop-tenant-async", func(_ context.Context) {
+				// We use context.Background() here so that the process of
+				// stopping the tenant does not get cancelled when shutting
+				// down the outer server.
+				srv.server.stop(context.Background())
+			}); err != nil {
+				// Failed to add task: shutting down.
+				return err
+			}
+		}
+	}
+
+	// Now add all the missing servers.
+	for _, name := range reqTenants {
+		if _, ok := c.mu.servers[name]; !ok {
+			// Server not currently running, and should be running. Start it.
+			tenantName := name // copy loop iteration variable.
+			if err := c.stopper.RunAsyncTask(ctx, "start-tenant-async", func(ctx context.Context) {
+				if _, err := c.createServer(ctx, tenantName, base.TestSharedProcessTenantArgs{}); err != nil {
+					log.Warningf(ctx, "unable to start service for tenant: %v", err)
+				}
+			}); err != nil {
+				// Failed to add task: shutting down.
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// getExpectedRunningTenants retrieves the tenant IDs that should
+// be running right now.
+// TODO(knz): Use a watcher here.
+// Probably as followup to https://github.com/cockroachdb/cockroach/pull/95657.
+func (c *serverController) getExpectedRunningTenants(
+	ctx context.Context, ie isql.Executor,
+) (tenantNames []roachpb.TenantName, resErr error) {
+	if !c.st.Version.IsActive(ctx, clusterversion.V23_1TenantNamesStateAndServiceMode) {
+		// Cluster not yet upgraded - we know there is no secondary tenant
+		// with a name yet.
+		return []roachpb.TenantName{catconstants.SystemTenantName}, nil
+	}
+
+	rowIter, err := ie.QueryIterator(ctx, "list-tenants", nil, /* txn */
+		`SELECT name FROM system.tenants
+WHERE service_mode = $1
+  AND data_state = $2
+  AND name IS NOT NULL
+ORDER BY name`, mtinfopb.ServiceModeShared, mtinfopb.DataStateReady)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { resErr = errors.CombineErrors(resErr, rowIter.Close()) }()
+
+	var hasNext bool
+	for hasNext, err = rowIter.Next(ctx); hasNext && err == nil; hasNext, err = rowIter.Next(ctx) {
+		row := rowIter.Cur()
+		tenantName := tree.MustBeDString(row[0])
+		tenantNames = append(tenantNames, roachpb.TenantName(tenantName))
+	}
+	return tenantNames, err
+}
+
+// getServer retrieves a reference to the current server for the given
+// tenant name.
+func (c *serverController) getServer(
 	ctx context.Context, tenantName roachpb.TenantName,
 ) (onDemandServer, error) {
 	c.mu.Lock()
@@ -183,8 +322,14 @@ func (c *serverController) getOrCreateServer(
 	if s, ok := c.mu.servers[tenantName]; ok {
 		return s.server, nil
 	}
-	return c.createServerLocked(ctx, tenantName, base.TestSharedProcessTenantArgs{})
+	return nil, errors.Mark(errors.Newf("no server for tenant %q", tenantName), errNoTenantServerRunning)
 }
+
+type noTenantServerRunning struct{}
+
+func (noTenantServerRunning) Error() string { return "no server for tenant" }
+
+var errNoTenantServerRunning error = noTenantServerRunning{}
 
 // createServer creates a tenant server. An error is returned if a server for
 // the given tenant name already exists.
@@ -194,7 +339,7 @@ func (c *serverController) createServer(
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if _, ok := c.mu.servers[tenantName]; ok {
-		return nil, errors.Newf("tenant %s already exists", tenantName)
+		return nil, errors.AssertionFailedf("server for tenant %q already exists", tenantName)
 	}
 	return c.createServerLocked(ctx, tenantName, testArgs)
 }
@@ -203,7 +348,7 @@ func (c *serverController) createServerLocked(
 	ctx context.Context, tenantName roachpb.TenantName, testArgs base.TestSharedProcessTenantArgs,
 ) (onDemandServer, error) {
 	if _, ok := c.mu.servers[tenantName]; ok {
-		return nil, errors.AssertionFailedf("tenant %s already exists", tenantName)
+		return nil, errors.AssertionFailedf("server for tenant %q already exists", tenantName)
 	}
 
 	// deregisterFn will remove the server from
@@ -295,9 +440,9 @@ func (c *serverController) httpMux(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	s, err := c.getOrCreateServer(ctx, tenantName)
+	s, err := c.getServer(ctx, tenantName)
 	if err != nil {
-		log.Warningf(ctx, "unable to start server for tenant %q: %v", tenantName, err)
+		log.Warningf(ctx, "unable to find server for tenant %q: %v", tenantName, err)
 		// Clear session and tenant cookies after all logouts have completed.
 		http.SetCookie(w, &http.Cookie{
 			Name:     MultitenantSessionCookieName,
@@ -341,6 +486,8 @@ func getTenantNameFromHTTPRequest(
 	return roachpb.TenantName(defaultTenantSelect.Get(&st.SV)), false
 }
 
+// getCurrentTenantNames returns the names of the tenants for which we
+// already have a tenant server running.
 func (c *serverController) getCurrentTenantNames() []roachpb.TenantName {
 	var serverNames []roachpb.TenantName
 	c.mu.Lock()
@@ -380,17 +527,23 @@ func (c *serverController) attemptLoginToAllTenants() http.Handler {
 		defer r.Body.Close()
 
 		for _, name := range tenantNames {
+			server, err := c.getServer(ctx, name)
+			if err != nil {
+				if errors.Is(err, errNoTenantServerRunning) {
+					// Server has stopped after the call to
+					// getCurrentTenantNames(). This is OK. Just skip over it.
+					continue
+				}
+				log.Warningf(ctx, "looking up server for tenant %q: %v", name, err)
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+
 			// Make a new sessionWriter for every tenant. A fresh header is needed
 			// each time since the grpc method writes to it.
 			sw := &sessionWriter{header: w.Header().Clone()}
 			newReq := r.Clone(ctx)
 			newReq.Body = io.NopCloser(bytes.NewBuffer(clonedBody))
-			server, err := c.getOrCreateServer(ctx, name)
-			if err != nil {
-				log.Warningf(ctx, "unable to find tserver for tenant %q: %v", name, err)
-				w.WriteHeader(http.StatusInternalServerError)
-				return
-			}
 			// Invoke the handler, passing the new sessionWriter and the cloned
 			// request.
 			server.getHTTPHandlerFn().ServeHTTP(sw, newReq)
@@ -398,7 +551,7 @@ func (c *serverController) attemptLoginToAllTenants() http.Handler {
 			// embedded within set-cookie.
 			setCookieHeader := sw.Header().Get("set-cookie")
 			if len(setCookieHeader) == 0 {
-				log.Warningf(ctx, "unable to find session cookie for tenant %q", name)
+				log.Warningf(ctx, "unable to find session cookie for tenant %q: HTTP %d - %s", name, sw.code, &sw.buf)
 			} else {
 				tenantNameToSetCookieSlice = append(tenantNameToSetCookieSlice, sessionCookieValue{
 					name:      string(name),
@@ -464,6 +617,18 @@ func (c *serverController) attemptLogoutFromAllTenants() http.Handler {
 			return
 		}
 		for _, name := range tenantNames {
+			server, err := c.getServer(ctx, name)
+			if err != nil {
+				if errors.Is(err, errNoTenantServerRunning) {
+					// Server has stopped after the call to
+					// getCurrentTenantNames(). This is OK. Just skip over it.
+					continue
+				}
+				log.Warningf(ctx, "looking up server for tenant %q: %v", name, err)
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+
 			// Make a new sessionWriter for every tenant. A fresh header is needed
 			// each time since the grpc method writes to it.
 			sw := &sessionWriter{header: w.Header().Clone()}
@@ -476,18 +641,13 @@ func (c *serverController) attemptLogoutFromAllTenants() http.Handler {
 			// Set the matching session in the cookie so that the grpc method can
 			// logout correctly.
 			newReq.Header.Set("Cookie", "session="+relevantSession)
-			server, err := c.getOrCreateServer(ctx, name)
-			if err != nil {
-				log.Warningf(ctx, "unable to find tserver for tenant %q: %v", name, err)
-				w.WriteHeader(http.StatusInternalServerError)
-				return
-			}
 			server.getHTTPHandlerFn().ServeHTTP(sw, newReq)
-			// If a logout was unsuccessful, set cookie will be empty in which case
-			// set the header to an error status and return.
-			if sw.header.Get("Set-Cookie") == "" {
-				log.Warningf(ctx, "logout for tenant %q failed", name)
-				w.WriteHeader(http.StatusInternalServerError)
+			// If a logout was unsuccessful, set cookie will be empty. In
+			// that case, just report the failure and move to the next
+			// server. This may be because that particular server is in the
+			// process of shutting down.
+			if sw.Header().Get("Set-Cookie") == "" {
+				log.Warningf(ctx, "logout for tenant %q failed: HTTP %d - %s", name, sw.code, &sw.buf)
 				return
 			}
 		}
@@ -580,9 +740,9 @@ func (c *serverController) sqlMux(
 			tenantName = defaultTenantSelect.Get(&c.st.SV)
 		}
 
-		s, err := c.getOrCreateServer(ctx, roachpb.TenantName(tenantName))
+		s, err := c.getServer(ctx, roachpb.TenantName(tenantName))
 		if err != nil {
-			log.Warningf(ctx, "unable to start server for tenant %q: %v", tenantName, err)
+			log.Warningf(ctx, "unable to find server for tenant %q: %v", tenantName, err)
 			// TODO(knz): we might want to send a pg error to the client here.
 			// See: https://github.com/cockroachdb/cockroach/issues/92525
 			_ = conn.Close()
