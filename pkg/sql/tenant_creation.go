@@ -119,13 +119,38 @@ func (p *planner) createTenantInternal(
 	tid = roachpb.MustMakeTenantID(tenantID)
 
 	// Initialize the tenant's keyspace.
+	var tenantVersion clusterversion.ClusterVersion
 	codec := keys.MakeSQLCodec(roachpb.MustMakeTenantID(tenantID))
-	schema := bootstrap.MakeMetadataSchema(
-		codec,
-		initialTenantZoneConfig, /* defaultZoneConfig */
-		initialTenantZoneConfig, /* defaultSystemZoneConfig */
-	)
-	kvs, splits := schema.GetInitialValues()
+	var kvs []roachpb.KeyValue
+	var splits []roachpb.RKey
+	const minVersion = clusterversion.V22_2
+	curVersion := clusterversion.V23_1
+	if p.EvalContext().Settings.Version.IsActive(ctx, curVersion) {
+		// The cluster is running the latest version.
+		// Use this version to create the tenant and bootstrap it using the host
+		// cluster's bootstrapping logic.
+		tenantVersion.Version = clusterversion.ByKey(curVersion)
+		schema := bootstrap.MakeMetadataSchema(
+			codec,
+			initialTenantZoneConfig, /* defaultZoneConfig */
+			initialTenantZoneConfig, /* defaultSystemZoneConfig */
+		)
+		kvs, splits = schema.GetInitialValues()
+	} else {
+		// The cluster is not running the latest version.
+		// Use the previous major version to create the tenant and bootstrap it
+		// just like the previous major version binary would, using hardcoded
+		// initial values.
+		tenantVersion.Version = clusterversion.ByKey(minVersion)
+		kvs, splits, err = bootstrap.InitialValuesForTenantV222(
+			codec,
+			initialTenantZoneConfig, /* defaultZoneConfig */
+			initialTenantZoneConfig, /* defaultSystemZoneConfig */
+		)
+		if err != nil {
+			return tid, err
+		}
+	}
 
 	{
 		// Populate the version setting for the tenant. This will allow the tenant
@@ -135,8 +160,7 @@ func (p *planner) createTenantInternal(
 		// using code which may be too new. The expectation is that the tenant
 		// clusters will be updated to a version only after the system tenant has
 		// been upgraded.
-		v := p.EvalContext().Settings.Version.ActiveVersion(ctx)
-		tenantSettingKV, err := generateTenantClusterSettingKV(codec, v)
+		tenantSettingKV, err := generateTenantClusterSettingKV(codec, tenantVersion)
 		if err != nil {
 			return tid, err
 		}

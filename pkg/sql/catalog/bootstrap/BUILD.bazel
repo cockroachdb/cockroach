@@ -1,11 +1,12 @@
 load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "bootstrap",
     srcs = [
         "kv_writer.go",
         "metadata.go",
+        "previous_release.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap",
     visibility = ["//visibility:public"],
@@ -28,6 +29,23 @@ go_library(
         "//pkg/util/log",
         "//pkg/util/protoutil",
         "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "bootstrap_test",
+    srcs = ["bootstrap_test.go"],
+    args = ["-test.timeout=295s"],
+    data = glob(["testdata/**"]),
+    embed = [":bootstrap"],
+    deps = [
+        "//pkg/config/zonepb",
+        "//pkg/keys",
+        "//pkg/roachpb",
+        "//pkg/testutils/datapathutils",
+        "//pkg/util/leaktest",
+        "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_stretchr_testify//require",
     ],
 )
 

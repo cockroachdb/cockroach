@@ -9251,17 +9251,21 @@ func TestExcludeDataFromBackupAndRestore(t *testing.T) {
 	// Set foo to exclude_data_from_backup and back it up. The ExportRequest
 	// should be a noop and backup no data.
 	sqlDB.Exec(t, `ALTER TABLE data.foo SET (exclude_data_from_backup = true)`)
-	waitForTableSplit(t, conn, "foo", "data")
 	waitForReplicaFieldToBeSet(t, tc, conn, "foo", "data", func(r *kvserver.Replica) (bool, error) {
 		if !r.ExcludeDataFromBackup() {
-			return false, errors.New("waiting for exclude_data_from_backup to be applied")
+			return false, errors.New("waiting for the range containing table data.foo to split")
 		}
 		return true, nil
 	})
-	waitForTableSplit(t, conn, "bar", "data")
-	sqlDB.Exec(t, `BACKUP DATABASE data TO $1`, localFoo)
+	waitForReplicaFieldToBeSet(t, tc, conn, "bar", "data", func(r *kvserver.Replica) (bool, error) {
+		if r.ExcludeDataFromBackup() {
+			return false, errors.New("waiting for the range containing table data.bar to split")
+		}
+		return true, nil
+	})
+	sqlDB.Exec(t, `BACKUP DATABASE data INTO $1`, localFoo)
 
-	restoreDB.Exec(t, `RESTORE DATABASE data FROM $1`, localFoo)
+	restoreDB.Exec(t, `RESTORE DATABASE data FROM LATEST IN $1`, localFoo)
 	require.Len(t, restoreDB.QueryStr(t, `SELECT * FROM data.foo`), 0)
 	require.Len(t, restoreDB.QueryStr(t, `SELECT * FROM data.bar`), 10)
 }
