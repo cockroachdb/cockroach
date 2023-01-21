@@ -436,16 +436,17 @@ func (s *PreServeConnHandler) maybeUpgradeToSecureConn(
 
 		// Secure mode: disallow if TCP and the user did not opt into
 		// non-TLS SQL conns.
-		if !s.cfg.AcceptSQLWithoutTLS && connType != hba.ConnLocal {
+		if !s.cfg.AcceptSQLWithoutTLS && connType != hba.ConnLocal && connType != hba.ConnInternalLoopback {
 			clientErr = pgerror.New(pgcode.ProtocolViolation, ErrSSLRequired)
 		}
 		return
 	}
 
-	if connType == hba.ConnLocal {
-		// No existing PostgreSQL driver ever tries to activate TLS over
-		// a unix socket. But in case someone, sometime, somewhere, makes
-		// that mistake, let them know that we don't want it.
+	if connType == hba.ConnLocal || connType == hba.ConnInternalLoopback {
+		// No existing PostgreSQL driver ever tries to activate TLS over a unix
+		// socket. Similarly, internal loopback connections don't use TLS. But in
+		// case someone, sometime, somewhere, makes that mistake, let them know that
+		// we don't want it.
 		clientErr = pgerror.New(pgcode.ProtocolViolation,
 			"cannot use SSL/TLS over local connections")
 		return

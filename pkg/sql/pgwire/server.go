@@ -640,13 +640,17 @@ func (s *Server) drainImpl(
 
 // SocketType indicates the connection type. This is an optimization to
 // prevent a comparison against conn.LocalAddr().Network().
-type SocketType bool
+type SocketType int
 
 const (
+	SocketUnknown SocketType = iota
 	// SocketTCP is used for TCP sockets. The standard.
-	SocketTCP SocketType = true
+	SocketTCP
 	// SocketUnix is used for unix datagram sockets.
-	SocketUnix SocketType = false
+	SocketUnix
+	// SocketInternalLoopback is used for internal connections running over our
+	// loopback listener.
+	SocketInternalLoopback
 )
 
 func (s SocketType) asConnType() (hba.ConnType, error) {
@@ -655,6 +659,8 @@ func (s SocketType) asConnType() (hba.ConnType, error) {
 		return hba.ConnHostNoSSL, nil
 	case SocketUnix:
 		return hba.ConnLocal, nil
+	case SocketInternalLoopback:
+		return hba.ConnInternalLoopback, nil
 	default:
 		return 0, errors.AssertionFailedf("unimplemented socket type: %v", errors.Safe(s))
 	}

@@ -19,13 +19,15 @@ host all root 0.0.0.0/0 password
 ----
 # Active authentication configuration on this node:
 # Original configuration:
+# loopback all all all trust       # built-in CockroachDB default
 # host  all root all cert-password # CockroachDB mandatory rule
 # host all root 0.0.0.0/0 password
 #
 # Interpreted configuration:
-# TYPE DATABASE USER ADDRESS   METHOD        OPTIONS
-host   all      root all       cert-password
-host   all      root 0.0.0.0/0 password
+# TYPE   DATABASE USER ADDRESS   METHOD        OPTIONS
+loopback all      all  all       trust
+host     all      root all       cert-password
+host     all      root 0.0.0.0/0 password
 
 connect user=root password=abc sslmode=verify-ca sslcert=
 ----
@@ -51,13 +53,15 @@ host all testuser 0.0.0.0/0 cert
 ----
 # Active authentication configuration on this node:
 # Original configuration:
+# loopback all all all trust       # built-in CockroachDB default
 # host  all root all cert-password # CockroachDB mandatory rule
 # host all testuser 0.0.0.0/0 cert
 #
 # Interpreted configuration:
-# TYPE DATABASE USER     ADDRESS   METHOD        OPTIONS
-host   all      root     all       cert-password
-host   all      testuser 0.0.0.0/0 cert
+# TYPE   DATABASE USER     ADDRESS   METHOD        OPTIONS
+loopback all      all      all       trust
+host     all      root     all       cert-password
+host     all      testuser 0.0.0.0/0 cert
 
 connect user=testuser password=pass sslmode=verify-ca sslcert=
 ----
@@ -72,13 +76,15 @@ host all testuser 0.0.0.0/0 password
 ----
 # Active authentication configuration on this node:
 # Original configuration:
+# loopback all all all trust       # built-in CockroachDB default
 # host  all root all cert-password # CockroachDB mandatory rule
 # host all testuser 0.0.0.0/0 password
 #
 # Interpreted configuration:
-# TYPE DATABASE USER     ADDRESS   METHOD        OPTIONS
-host   all      root     all       cert-password
-host   all      testuser 0.0.0.0/0 password
+# TYPE   DATABASE USER     ADDRESS   METHOD        OPTIONS
+loopback all      all      all       trust
+host     all      root     all       cert-password
+host     all      testuser 0.0.0.0/0 password
 
 connect user=testuser
 ----
@@ -111,13 +117,15 @@ host all nopassword 0.0.0.0/0 password
 ----
 # Active authentication configuration on this node:
 # Original configuration:
+# loopback all all all trust       # built-in CockroachDB default
 # host  all root all cert-password # CockroachDB mandatory rule
 # host all nopassword 0.0.0.0/0 password
 #
 # Interpreted configuration:
-# TYPE DATABASE USER       ADDRESS   METHOD        OPTIONS
-host   all      root       all       cert-password
-host   all      nopassword 0.0.0.0/0 password
+# TYPE   DATABASE USER       ADDRESS   METHOD        OPTIONS
+loopback all      all        all       trust
+host     all      root       all       cert-password
+host     all      nopassword 0.0.0.0/0 password
 
 connect user=nopassword
 ----
