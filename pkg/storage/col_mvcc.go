@@ -107,10 +107,21 @@ type NextKVer interface {
 	// are stable (i.e. whether they will not be invalidated by calling NextKV
 	// again).
 	StableKVs() bool
-	// NextKV returns the next kv from this NextKVer. Returns false if there are
-	// no more kvs to fetch, the kv that was fetched, and any errors that may
-	// have occurred.
-	NextKV(context.Context, MVCCDecodingStrategy) (ok bool, kv roachpb.KeyValue, err error)
+	// NextKV returns the next kv from this NextKVer.
+	// - ok=false indicates that there are no more kvs to fetch,
+	// - partialRow indicates whether the fetch stopped in the middle of a SQL
+	// row (in this case ok will be set to false),
+	// - the kv that was fetched,
+	// - any errors that may have occurred.
+	//
+	// When (ok=false,partialRow=true) is returned, the caller is expected to
+	// discard all KVs that were part of the last SQL row that was incomplete.
+	// The scan will be resumed from the last key provided by SetFirstKeyOfRow
+	// by the caller.
+	NextKV(context.Context, MVCCDecodingStrategy) (ok bool, partialRow bool, kv roachpb.KeyValue, err error)
+	// SetFirstKeyOfRow notifies the NextKVer about the first key of the new SQL
+	// row that the caller began constructing.
+	SetFirstKeyOfRow(key roachpb.Key)
 }
 
 // CFetcherWrapper is a wrapper around a colfetcher.cFetcher that populates only
@@ -131,19 +142,6 @@ type CFetcherWrapper interface {
 	// Close release the resources held by this CFetcherWrapper. It *must* be
 	// called after use of the wrapper.
 	Close(ctx context.Context)
-
-	// MaybeTrimPartialLastRow removes the last KV pairs from the result that
-	// are part of the same SQL row as the given key, returning the earliest key
-	// removed.
-	//
-	// After this method is called, NextKVer.NextKV will return ok=false (in
-	// other words, it is only called when one of the limits of the BatchRequest
-	// is reached, so the accumulation of KVs is complete).
-	//
-	// It is only used when WholeRows option is used (which is the case if the
-	// table has multiple column families, meaning that a single SQL row can be
-	// comprised from multiple KVs).
-	MaybeTrimPartialLastRow(nextKey roachpb.Key) (roachpb.Key, error)
 }
 
 // GetCFetcherWrapper returns a CFetcherWrapper. It's injected from
@@ -200,22 +198,22 @@ func (f *mvccScanFetchAdapter) StableKVs() bool {
 // NextKV implements the NextKVer interface.
 func (f *mvccScanFetchAdapter) NextKV(
 	ctx context.Context, mvccDecodingStrategy MVCCDecodingStrategy,
-) (ok bool, kv roachpb.KeyValue, err error) {
+) (ok bool, partialRow bool, kv roachpb.KeyValue, err error) {
 	// Perform the action according to the current state.
 	switch f.machine {
 	case onNextKVSeek:
 		if !f.scanner.seekToStartOfScan() {
-			return false, roachpb.KeyValue{}, f.scanner.err
+			return false, false, roachpb.KeyValue{}, f.scanner.err
 		}
 		f.machine = onNextKVAdvance
 	case onNextKVAdvance:
 		if !f.scanner.advance() {
 			// No more keys in the scan.
-			return false, roachpb.KeyValue{}, nil
+			return false, false, roachpb.KeyValue{}, nil
 		}
 	case onNextKVDone:
 		// No more keys in the scan.
-		return false, roachpb.KeyValue{}, nil
+		return false, f.results.partialRowTrimmed, roachpb.KeyValue{}, nil
 	}
 	// Attempt to get one KV.
 	ok, added := f.scanner.getOne(ctx)
@@ -234,22 +232,27 @@ func (f *mvccScanFetchAdapter) NextKV(
 	mvccKey := kv.Key
 	if buildutil.CrdbTestBuild {
 		if len(mvccKey) == 0 || len(kv.Value.RawBytes) == 0 {
-			return false, kv, errors.AssertionFailedf("unexpectedly received an empty lastKV")
+			return false, false, kv, errors.AssertionFailedf("unexpectedly received an empty lastKV")
 		}
 	}
 	switch mvccDecodingStrategy {
 	case MVCCDecodingRequired:
 		kv.Key, kv.Value.Timestamp, err = enginepb.DecodeKey(mvccKey)
 		if err != nil {
-			return false, kv, errors.AssertionFailedf("invalid encoded mvcc key: %x", mvccKey)
+			return false, false, kv, errors.AssertionFailedf("invalid encoded mvcc key: %x", mvccKey)
 		}
 	case MVCCDecodingNotRequired:
 		kv.Key, _, ok = enginepb.SplitMVCCKey(mvccKey)
 		if !ok {
-			return false, kv, errors.AssertionFailedf("invalid encoded mvcc key: %x", mvccKey)
+			return false, false, kv, errors.AssertionFailedf("invalid encoded mvcc key: %x", mvccKey)
 		}
 	}
-	return true, kv, nil
+	return true, false, kv, nil
+}
+
+// SetFirstKeyOfRow implements the NextKVer interface.
+func (f *mvccScanFetchAdapter) SetFirstKeyOfRow(key roachpb.Key) {
+	f.results.firstKeyOfRow = key
 }
 
 // singleResults is an implementation of the results interface that is able to
@@ -268,17 +271,20 @@ func (f *mvccScanFetchAdapter) NextKV(
 //     colfetcher.cFetcher for processing;
 //   - the colfetcher.cFetcher decodes the KV, and goes back to the first step.
 type singleResults struct {
-	wrapper       CFetcherWrapper
 	maxKeysPerRow uint32
 	maxFamilyID   uint32
 	onClear       func()
 	count, bytes  int64
 	mvccKey       []byte
 	value         []byte
+	// firstKeyOfRow is the key of the first KV already included into the latest
+	// (possibly incomplete) SQL row in the cFetcher.
+	firstKeyOfRow roachpb.Key
 	// firstRowKeyPrefix is a deep copy of the "row prefix" of the first SQL row
 	// seen by the singleResults (only set when the table has multiple column
 	// families).
 	firstRowKeyPrefix []byte
+	partialRowTrimmed bool
 }
 
 var _ results = &singleResults{}
@@ -340,7 +346,17 @@ func (s *singleResults) continuesFirstRow(key roachpb.Key) bool {
 
 // maybeTrimPartialLastRow implements the results interface.
 func (s *singleResults) maybeTrimPartialLastRow(key roachpb.Key) (roachpb.Key, error) {
-	return s.wrapper.MaybeTrimPartialLastRow(key)
+	if !bytes.Equal(getRowPrefix(s.firstKeyOfRow), getRowPrefix(key)) {
+		// The given key is the first KV of the next row, so we will resume the
+		// scan from this key.
+		return key, nil
+	}
+	// The given key is part of the current last row, and it will be removed by
+	// the cFetcher (since NextKV() will return partialRow=true before the row
+	// can be completed), thus, we'll resume the scan from the first key in the
+	// last row.
+	s.partialRowTrimmed = true
+	return s.firstKeyOfRow, nil
 }
 
 // lastRowHasFinalColumnFamily implements the results interface.
@@ -440,7 +456,6 @@ func mvccScanToCols(
 		return MVCCScanResult{}, err
 	}
 	defer wrapper.Close(ctx)
-	adapter.results.wrapper = wrapper
 
 	adapter.results.onClear = func() {
 		// Discard the accumulated batches on results.clear() call - the scan

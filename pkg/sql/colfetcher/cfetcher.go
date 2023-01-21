@@ -266,8 +266,6 @@ type cFetcher struct {
 		// keys are compared against this prefix to determine whether they're part
 		// of a new row or not.
 		lastRowPrefix roachpb.Key
-		// firstKeyInRow, if set, is the first key in the current row.
-		firstKeyInRow roachpb.Key
 		// prettyValueBuf is a temp buffer used to create strings for tracing.
 		prettyValueBuf *bytes.Buffer
 
@@ -652,12 +650,6 @@ func (cf *cFetcher) setNextKV(kv roachpb.KeyValue) {
 	}
 }
 
-// keyFromNewRow returns true if the given key doesn't belong to the current
-// row. This is only used in case of multiple column families.
-func (cf *cFetcher) keyFromNewRow(key roachpb.Key) bool {
-	return !bytes.HasPrefix(key[cf.table.spec.KeyPrefixLength:], cf.machine.lastRowPrefix[cf.table.spec.KeyPrefixLength:])
-}
-
 // NextBatch processes keys until we complete one batch of rows (subject to the
 // limit hint and the memory limit while being max coldata.BatchSize() in
 // length), which are returned in columnar format as a coldata.Batch. The batch
@@ -674,9 +666,11 @@ func (cf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 		case stateInvalid:
 			return nil, errors.New("invalid fetcher state")
 		case stateInitFetch:
-			cf.machine.firstKeyInRow = nil
 			cf.cpuStopWatch.Start()
-			moreKVs, kv, err := cf.nextKVer.NextKV(ctx, cf.mvccDecodeStrategy)
+			// Here we ignore partialRow return parameter because it can only be
+			// true when moreKVs is false, in which case we have already
+			// finalized the last row and will emit the batch as is.
+			moreKVs, _, kv, err := cf.nextKVer.NextKV(ctx, cf.mvccDecodeStrategy)
 			cf.cpuStopWatch.Stop()
 			if err != nil {
 				return nil, convertFetchError(&cf.table.spec, err)
@@ -716,7 +710,7 @@ func (cf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 		case stateDecodeFirstKVOfRow:
 			// Reset MVCC metadata for the table, since this is the first KV of a row.
 			cf.table.rowLastModified = hlc.Timestamp{}
-			cf.machine.firstKeyInRow = cf.machine.nextKV.Key
+			cf.nextKVer.SetFirstKeyOfRow(cf.machine.nextKV.Key)
 
 			// foundNull is set when decoding a new index key for a row finds a NULL value
 			// in the index key. This is used when decoding unique secondary indexes in order
@@ -829,7 +823,7 @@ func (cf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 
 		case stateFetchNextKVWithUnfinishedRow:
 			cf.cpuStopWatch.Start()
-			moreKVs, kv, err := cf.nextKVer.NextKV(ctx, cf.mvccDecodeStrategy)
+			moreKVs, partialRow, kv, err := cf.nextKVer.NextKV(ctx, cf.mvccDecodeStrategy)
 			cf.cpuStopWatch.Stop()
 			if err != nil {
 				return nil, convertFetchError(&cf.table.spec, err)
@@ -841,7 +835,17 @@ func (cf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 				continue
 			}
 			if !moreKVs {
-				// No more data. Finalize the row and exit.
+				// No more data.
+				if partialRow {
+					// The stream of KVs stopped in the middle of the last row,
+					// so we need to remove that last row from the batch. We
+					// achieve this by simply not incrementing rowIdx and not
+					// finalizing this last partial row; instead, we proceed
+					// straight to emitting the last batch.
+					cf.machine.state[0] = stateEmitLastBatch
+					continue
+				}
+				// Finalize the row and exit.
 				cf.machine.state[0] = stateFinalizeRow
 				cf.machine.state[1] = stateEmitLastBatch
 				continue
@@ -852,7 +856,7 @@ func (cf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 
 			// TODO(yuzefovich): optimize this prefix check by skipping logical
 			// longest common span prefix.
-			if cf.keyFromNewRow(kv.Key) {
+			if !bytes.HasPrefix(kv.Key[cf.table.spec.KeyPrefixLength:], cf.machine.lastRowPrefix[cf.table.spec.KeyPrefixLength:]) {
 				// The kv we just found is from a different row.
 				cf.setNextKV(kv)
 				cf.machine.state[0] = stateFinalizeRow
@@ -1324,41 +1328,6 @@ func (cf *cFetcher) getCurrentColumnFamilyID() (descpb.FamilyID, error) {
 		return 0, scrub.WrapError(scrub.IndexKeyDecodingError, err)
 	}
 	return descpb.FamilyID(id), nil
-}
-
-// maybeTrimPartialLastRow removes the last KV pairs from the batch that are
-// part of the same SQL row as the given key, returning the earliest key
-// removed.
-//
-// After this method is called, storage.NextKVer.NextKV will return
-// moreKVs=false (in other words, no more KVs will be added to the cFetcher).
-func (cf *cFetcher) maybeTrimPartialLastRow(nextKey roachpb.Key) (roachpb.Key, error) {
-	if cf.machine.state[0] == stateInitFetch {
-		// The previous row was finalized, and this key is the first KV in the
-		// new row, so we don't need to remove the last row from the batch and
-		// will simply need to resume the scan from the given key.
-		//
-		// The cFetcher will transition to the stateEmitLastBatch state on its
-		// own when moreKVs=false will be returned.
-		return nextKey, nil
-	}
-	// We have at least one KV decoded into the current row. Check whether the
-	// next key is part of the same row.
-	if cf.keyFromNewRow(nextKey) {
-		// The given key is the first KV of the next row, so we don't need to
-		// remove anything and will resume from this key.
-		//
-		// The cFetcher will transition to the stateFinalizeRow state on its own
-		// when moreKVs=false will be returned.
-		return nextKey, nil
-	}
-	// The given key is part of the current last row, so we need to remove that
-	// row and will resume the fetch from the first key in that row.
-	//
-	// We want for the cFetcher to go straight to emitting the batch without
-	// finalizing the last row.
-	cf.machine.state[0] = stateEmitLastBatch
-	return cf.machine.firstKeyInRow, nil
 }
 
 // convertFetchError converts an error generated during a key-value fetch to a

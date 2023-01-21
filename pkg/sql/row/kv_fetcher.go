@@ -290,10 +290,15 @@ func (f *KVFetcher) StableKVs() bool {
 // gcassert:inline
 func (f *KVFetcher) NextKV(
 	ctx context.Context, mvccDecodeStrategy storage.MVCCDecodingStrategy,
-) (ok bool, kv roachpb.KeyValue, err error) {
+) (ok bool, partialRow bool, kv roachpb.KeyValue, err error) {
 	ok, kv, _, err = f.nextKV(ctx, mvccDecodeStrategy)
-	return ok, kv, err
+	// nextKV never splits rows.
+	partialRow = false
+	return ok, partialRow, kv, err
 }
+
+// SetFirstKeyOfRow implements the storage.NextKVer interface.
+func (f *KVFetcher) SetFirstKeyOfRow(roachpb.Key) {}
 
 // SetupNextFetch overrides the same method from the wrapped KVBatchFetcher in
 // order to reset this KVFetcher.

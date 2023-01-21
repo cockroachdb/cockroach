@@ -135,11 +135,6 @@ func (c *cFetcherWrapper) Close(ctx context.Context) {
 	c.buf = bytes.Buffer{}
 }
 
-// MaybeTrimPartialLastRow implements the storage.CFetcherWrapper interface.
-func (c *cFetcherWrapper) MaybeTrimPartialLastRow(nextKey roachpb.Key) (roachpb.Key, error) {
-	return c.fetcher.maybeTrimPartialLastRow(nextKey)
-}
-
 func newCFetcherWrapper(
 	ctx context.Context,
 	fetcherAccount *mon.BoundAccount,
