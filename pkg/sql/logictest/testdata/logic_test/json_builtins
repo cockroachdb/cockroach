@@ -594,6 +594,11 @@ query error pq: json_build_object\(\): key value must be scalar, not array, tupl
 SELECT json_build_object('{1,2,3}'::int[], 3)
 
 query T
+SELECT json_build_object('a'::tsvector, 1, 'b'::tsquery, 2)
+----
+{"'a'": 1, "'b'": 2}
+
+query T
 SELECT json_extract_path('{"a": 1}', 'a')
 ----
 1
