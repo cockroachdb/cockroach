@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 )
 
 // Watcher presents a consistent snapshot of the global tenant capabilities
@@ -51,6 +52,7 @@ type Authorizer interface {
 type Entry struct {
 	TenantID           roachpb.TenantID
 	TenantCapabilities tenantcapabilitiespb.TenantCapabilities
+	ServiceMode        descpb.TenantInfo_ServiceMode
 }
 
 // Update represents an update to the global tenant capability state.

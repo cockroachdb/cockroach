@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -43,6 +44,8 @@ type Watcher struct {
 		syncutil.RWMutex
 
 		store map[roachpb.TenantID]tenantcapabilitiespb.TenantCapabilities
+
+		sharedServiceTenants map[roachpb.TenantID]struct{}
 	}
 }
 
@@ -70,6 +73,7 @@ func New(
 		knobs:            *knobs,
 	}
 	w.mu.store = make(map[roachpb.TenantID]tenantcapabilitiespb.TenantCapabilities)
+	w.mu.sharedServiceTenants = make(map[roachpb.TenantID]struct{})
 	return w
 }
 
@@ -82,6 +86,19 @@ func (w *Watcher) GetCapabilities(
 
 	cp, found := w.mu.store[id]
 	return cp, found
+}
+
+// GetSharedServiceTenants retrieves the list of tenants with service
+// mode SHARED.
+func (w *Watcher) GetSharedServiceTenants() map[roachpb.TenantID]struct{} {
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+
+	m := make(map[roachpb.TenantID]struct{}, len(w.mu.sharedServiceTenants))
+	for k := range w.mu.sharedServiceTenants {
+		m[k] = struct{}{}
+	}
+	return m
 }
 
 // capabilityEntrySize is an estimate for a (tenantID, capability) pair that the
@@ -145,13 +162,18 @@ func (w *Watcher) handleCompleteUpdate(updates []tenantcapabilities.Update) {
 	// some reason. Either way, we want to throw away any accumulated state so
 	// far, and reconstruct it using the result of the scan.
 	freshStore := make(map[roachpb.TenantID]tenantcapabilitiespb.TenantCapabilities)
+	freshServices := make(map[roachpb.TenantID]struct{})
 	for _, up := range updates {
 		freshStore[up.TenantID] = up.TenantCapabilities
+		if up.ServiceMode == descpb.TenantInfo_SHARED {
+			freshServices[up.TenantID] = struct{}{}
+		}
 	}
 
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.mu.store = freshStore
+	w.mu.sharedServiceTenants = freshServices
 }
 
 func (w *Watcher) handleIncrementalUpdate(updates []tenantcapabilities.Update) {
@@ -161,8 +183,14 @@ func (w *Watcher) handleIncrementalUpdate(updates []tenantcapabilities.Update) {
 	for _, update := range updates {
 		if update.Deleted {
 			delete(w.mu.store, update.TenantID)
+			delete(w.mu.sharedServiceTenants, update.TenantID)
 		} else {
 			w.mu.store[update.TenantID] = update.TenantCapabilities
+			if update.ServiceMode == descpb.TenantInfo_SHARED {
+				w.mu.sharedServiceTenants[update.TenantID] = struct{}{}
+			} else {
+				delete(w.mu.sharedServiceTenants, update.TenantID)
+			}
 		}
 	}
 }
@@ -174,9 +202,14 @@ func (w *Watcher) testingFlushCapabilitiesState() (entries []tenantcapabilities.
 	defer w.mu.Unlock()
 
 	for id, capability := range w.mu.store {
+		serviceMode := descpb.TenantInfo_NONE
+		if _, ok := w.mu.sharedServiceTenants[id]; ok {
+			serviceMode = descpb.TenantInfo_SHARED
+		}
 		entries = append(entries, tenantcapabilities.Entry{
 			TenantID:           id,
 			TenantCapabilities: capability,
+			ServiceMode:        serviceMode,
 		})
 	}
 

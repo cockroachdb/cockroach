@@ -14,6 +14,7 @@ go_library(
         "//pkg/kv/kvclient/rangefeed/rangefeedcache",
         "//pkg/multitenant/tenantcapabilities/tenantcapabilitiespb",
         "//pkg/roachpb",
+        "//pkg/sql/catalog/descpb",
     ],
 )
 
