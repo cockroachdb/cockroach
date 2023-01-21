@@ -47,40 +47,40 @@ query ITTT colnames
 SHOW TENANT system
 ----
 id  name    data_status  service_mode
-1   system  READY        EXTERNAL
+1   system  ready        external
 
 query ITTT colnames
 SHOW TENANT "tenant-one"
 ----
 id  name        data_status  service_mode
-2   tenant-one  READY        NONE
+2   tenant-one  ready        none
 
 query ITTT colnames
 SHOW TENANT "two"
 ----
 id  name  data_status  service_mode
-3   two   READY        NONE
+3   two   ready        none
 
 query ITTT colnames
 SHOW TENANT two
 ----
 id  name  data_status  service_mode
-3   two   READY        NONE
+3   two   ready        none
 
 query ITTT colnames
 SHOW TENANT three
 ----
 id  name   data_status  service_mode
-4   three  READY        NONE
+4   three  ready        none
 
 query ITTT colnames
 SHOW TENANTS
 ----
 id  name        data_status  service_mode
-1   system      READY        EXTERNAL
-2   tenant-one  READY        NONE
-3   two         READY        NONE
-4   three       READY        NONE
+1   system      ready        external
+2   tenant-one  ready        none
+3   two         ready        none
+4   three       ready        none
 
 statement error tenant name cannot be empty
 ALTER TENANT [4] RENAME TO ""
@@ -101,7 +101,7 @@ query ITTT colnames
 SELECT * FROM [SHOW TENANTS] WHERE id = 4
 ----
 id  name  data_status  service_mode
-4   blix  READY        NONE
+4   blix  ready        none
 
 statement ok
 ALTER TENANT blix RENAME TO three
@@ -110,7 +110,7 @@ query ITTT colnames
 SELECT * FROM [SHOW TENANTS] WHERE id = 4
 ----
 id  name   data_status  service_mode
-4   three  READY        NONE
+4   three  ready        none
 
 statement error tenant "seven" does not exist
 SHOW TENANT seven
@@ -251,11 +251,11 @@ query ITTT colnames
 SHOW TENANTS
 ----
 id  name             data_status  service_mode
-1   system           READY        EXTERNAL
-2   tenant-one       READY        NONE
-3   two              READY        NONE
-4   three            READY        NONE
-8   to-be-reclaimed  READY        NONE
-9   1                READY        NONE
-10  a-b              READY        NONE
-11  hello-100        READY        NONE
+1   system           ready        external
+2   tenant-one       ready        none
+3   two              ready        none
+4   three            ready        none
+8   to-be-reclaimed  ready        none
+9   1                ready        none
+10  a-b              ready        none
+11  hello-100        ready        none
