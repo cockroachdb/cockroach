@@ -64,6 +64,7 @@ import hardwareDashboard from "./dashboards/hardware";
 import changefeedsDashboard from "./dashboards/changefeeds";
 import overloadDashboard from "./dashboards/overload";
 import ttlDashboard from "./dashboards/ttl";
+import crossClusterReplication from "./dashboards/crossClusterReplication";
 import { getMatchParamByName } from "src/util/query";
 import { PayloadAction } from "src/interfaces/action";
 import {
@@ -103,6 +104,10 @@ const dashboards: { [key: string]: GraphDashboard } = {
   changefeeds: { label: "Changefeeds", component: changefeedsDashboard },
   overload: { label: "Overload", component: overloadDashboard },
   ttl: { label: "TTL", component: ttlDashboard },
+  crossClusterReplication: {
+    label: "Cross-Cluster Replication",
+    component: crossClusterReplication,
+  },
 };
 
 const defaultDashboard = "overview";

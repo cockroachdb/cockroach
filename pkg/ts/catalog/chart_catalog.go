@@ -1614,9 +1614,9 @@ var charts = []sectionDescription{
 				},
 			},
 			{
-				Title: "Ingested Bytes",
+				Title: "Logical Bytes",
 				Metrics: []string{
-					"replication.ingested_bytes",
+					"replication.logical_bytes",
 				},
 			},
 			{
