@@ -152,6 +152,8 @@
 /pkg/server/pgurl/                       @cockroachdb/sql-sessions @cockroachdb/cli-prs
 /pkg/server/server_http*.go              @cockroachdb/obs-inf-prs @cockroachdb/server-prs
 /pkg/server/server_import_ts*.go         @cockroachdb/obs-inf-prs @cockroachdb/kv-prs
+/pkg/server/server_controller_http.go    @cockroachdb/obs-inf-prs @cockroachdb/server-prs
+/pkg/server/server_controller_sql.go     @cockroachdb/sql-sessions @cockroachdb/server-prs
 /pkg/server/serverpb/                    @cockroachdb/obs-inf-prs @cockroachdb/server-prs
 /pkg/server/serverpb/authentication*     @cockroachdb/obs-inf-prs @cockroachdb/prodsec @cockroachdb/server-prs
 /pkg/server/serverpb/index_reco*         @cockroachdb/sql-observability @cockroachdb/obs-inf-prs

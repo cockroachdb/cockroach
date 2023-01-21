@@ -16,6 +16,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -162,13 +163,17 @@ func TestListTenants(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+	ctx := context.Background()
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
 		DisableDefaultTestTenant: true,
 	})
-	defer s.Stopper().Stop(context.Background())
+	defer s.Stopper().Stop(ctx)
 
-	db := sqlutils.MakeSQLRunner(sqlDB)
-	db.Exec(t, "CREATE TENANT test;")
+	_, _, err := s.(*server.TestServer).StartSharedProcessTenant(ctx,
+		base.TestSharedProcessTenantArgs{
+			TenantName: "test",
+		})
+	require.NoError(t, err)
 
 	const path = "tenants"
 	var response serverpb.ListTenantsResponse

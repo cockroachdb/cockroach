@@ -52,10 +52,10 @@ func benchmarkCockroach(b *testing.B, f BenchmarkFn) {
 	f(b, sqlutils.MakeSQLRunner(db))
 }
 
-// benchmarkInProcessTenantCockroach runs the benchmark against an in-memory
-// tenant in a single-node cluster. The tenant runs in the same process as the
-// KV host.
-func benchmarkInProcessTenantCockroach(b *testing.B, f BenchmarkFn) {
+// benchmarkSharedProcessTenantCockroach runs the benchmark against a
+// shared process tenant server in a single-node cluster. The tenant
+// runs in the same process as the KV host.
+func benchmarkSharedProcessTenantCockroach(b *testing.B, f BenchmarkFn) {
 	ctx := context.Background()
 	s, db, _ := serverutils.StartServer(
 		b, base.TestServerArgs{
@@ -65,7 +65,10 @@ func benchmarkInProcessTenantCockroach(b *testing.B, f BenchmarkFn) {
 
 	// Create our own test tenant with a known name.
 	tenantName := "benchtenant"
-	_, err := db.Exec("SELECT crdb_internal.create_tenant(10, $1)", tenantName)
+	_, _, err := s.(*server.TestServer).StartSharedProcessTenant(ctx,
+		base.TestSharedProcessTenantArgs{
+			TenantName: roachpb.TenantName(tenantName),
+		})
 	require.NoError(b, err)
 
 	// Get a SQL connection to the test tenant.
@@ -203,7 +206,7 @@ func benchmarkMySQL(b *testing.B, f BenchmarkFn) {
 func ForEachDB(b *testing.B, fn BenchmarkFn) {
 	for _, dbFn := range []func(*testing.B, BenchmarkFn){
 		benchmarkCockroach,
-		benchmarkInProcessTenantCockroach,
+		benchmarkSharedProcessTenantCockroach,
 		benchmarkSepProcessTenantCockroach,
 		benchmarkMultinodeCockroach,
 		benchmarkPostgres,

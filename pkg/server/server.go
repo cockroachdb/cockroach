@@ -1020,7 +1020,9 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	sStatus.baseStatusServer.sqlServer = sqlServer
 
 	// Create a server controller.
-	sc := newServerController(ctx, stopper, st,
+	sc := newServerController(ctx,
+		node, cfg.BaseConfig.IDContainer,
+		stopper, st,
 		lateBoundServer, &systemServerWrapper{server: lateBoundServer}, systemTenantNameContainer)
 
 	// Create the debug API server.
@@ -1033,7 +1035,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		// https://github.com/cockroachdb/cockroach/issues/84585 is
 		// implemented.
 		func(ctx context.Context, name roachpb.TenantName) error {
-			d, err := sc.getOrCreateServer(ctx, name)
+			d, err := sc.getServer(ctx, name)
 			if err != nil {
 				return err
 			}
@@ -1896,6 +1898,13 @@ func (s *Server) PreStart(ctx context.Context) error {
 		s.node.stores,
 		s.stopper,
 	)
+
+	// Let the server controller start watching tenant service mode changes.
+	if err := s.serverController.start(workersCtx,
+		s.node.execCfg.InternalDB.Executor(),
+	); err != nil {
+		return errors.Wrap(err, "failed to start the server controller")
+	}
 
 	log.Event(ctx, "server initialized")
 
