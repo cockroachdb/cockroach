@@ -1937,7 +1937,16 @@ https://www.postgresql.org/docs/9.5/catalog-pg-index.html`,
 					}
 					indexprs := tree.DNull
 					if len(exprs) > 0 {
-						indexprs = tree.NewDString(strings.Join(exprs, " "))
+						// The column contains multiple elements, but must be stored as a
+						// string. Similar to Postgres, this is a list with one element for
+						// each zero entry in indkey.
+						arr := tree.NewDArray(types.String)
+						for _, expr := range exprs {
+							if err := arr.Append(tree.NewDString(expr)); err != nil {
+								return err
+							}
+						}
+						indexprs = tree.NewDString(tree.AsStringWithFlags(arr, tree.FmtPgwireText))
 					}
 					return addRow(
 						h.IndexOid(table.GetID(), index.GetID()),     // indexrelid
