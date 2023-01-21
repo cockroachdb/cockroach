@@ -46,15 +46,17 @@ host all abc2 all password
 ----
 # Active authentication configuration on this node:
 # Original configuration:
+# loopback all all all trust       # built-in CockroachDB default
 # host  all root all cert-password # CockroachDB mandatory rule
 # host all abc all password
 # host all abc2 all password
 #
 # Interpreted configuration:
-# TYPE DATABASE USER ADDRESS METHOD        OPTIONS
-host   all      root all     cert-password
-host   all      abc  all     password
-host   all      abc2 all     password
+# TYPE   DATABASE USER ADDRESS METHOD        OPTIONS
+loopback all      all  all     trust
+host     all      root all     cert-password
+host     all      abc  all     password
+host     all      abc2 all     password
 
 # User abc has SCRAM credentials, but 'mistake' is not its password.
 # Expect authn error.
@@ -108,17 +110,19 @@ host all abc2 all scram-sha-256
 ----
 # Active authentication configuration on this node:
 # Original configuration:
+# loopback all all all trust       # built-in CockroachDB default
 # host  all root all cert-password # CockroachDB mandatory rule
 # host all foo all scram-sha-256
 # host all abc all scram-sha-256
 # host all abc2 all scram-sha-256
 #
 # Interpreted configuration:
-# TYPE DATABASE USER ADDRESS METHOD        OPTIONS
-host   all      root all     cert-password
-host   all      foo  all     scram-sha-256
-host   all      abc  all     scram-sha-256
-host   all      abc2 all     scram-sha-256
+# TYPE   DATABASE USER ADDRESS METHOD        OPTIONS
+loopback all      all  all     trust
+host     all      root all     cert-password
+host     all      foo  all     scram-sha-256
+host     all      abc  all     scram-sha-256
+host     all      abc2 all     scram-sha-256
 
 subtest only_scram/conn_scram
 
@@ -193,13 +197,15 @@ host all all all cert-scram-sha-256
 ----
 # Active authentication configuration on this node:
 # Original configuration:
+# loopback all all all trust       # built-in CockroachDB default
 # host  all root all cert-password # CockroachDB mandatory rule
 # host all all all cert-scram-sha-256
 #
 # Interpreted configuration:
-# TYPE DATABASE USER ADDRESS METHOD             OPTIONS
-host   all      root all     cert-password
-host   all      all  all     cert-scram-sha-256
+# TYPE   DATABASE USER ADDRESS METHOD             OPTIONS
+loopback all      all  all     trust
+host     all      root all     cert-password
+host     all      all  all     cert-scram-sha-256
 
 subtest scram_cert/cert
 
@@ -238,15 +244,17 @@ host all abc all cert-password
 ----
 # Active authentication configuration on this node:
 # Original configuration:
+# loopback all all all trust       # built-in CockroachDB default
 # host  all root all cert-password # CockroachDB mandatory rule
 # host all foo all cert-password
 # host all abc all cert-password
 #
 # Interpreted configuration:
-# TYPE DATABASE USER ADDRESS METHOD        OPTIONS
-host   all      root all     cert-password
-host   all      foo  all     cert-password
-host   all      abc  all     cert-password
+# TYPE   DATABASE USER ADDRESS METHOD        OPTIONS
+loopback all      all  all     trust
+host     all      root all     cert-password
+host     all      foo  all     cert-password
+host     all      abc  all     cert-password
 
 # Foo uses a bcrypt hash.
 connect user=foo password=abc

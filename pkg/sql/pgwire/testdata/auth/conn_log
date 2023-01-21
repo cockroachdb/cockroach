@@ -30,6 +30,7 @@ local all all         password      # built-in CockroachDB default
 ----
 # Active authentication configuration on this node:
 # Original configuration:
+# loopback all all all trust       # built-in CockroachDB default
 # host  all root all cert-password # CockroachDB mandatory rule
 # host  all trusted all trust         # custom
 # host  all all     all cert-password # built-in CockroachDB default
@@ -37,12 +38,13 @@ local all all         password      # built-in CockroachDB default
 # local all all         password      # built-in CockroachDB default
 #
 # Interpreted configuration:
-# TYPE DATABASE USER    ADDRESS METHOD        OPTIONS
-host   all      root    all     cert-password
-host   all      trusted all     trust
-host   all      all     all     cert-password
-local  all      trusted         reject
-local  all      all             password
+# TYPE   DATABASE USER    ADDRESS METHOD        OPTIONS
+loopback all      all     all     trust
+host     all      root    all     cert-password
+host     all      trusted all     trust
+host     all      all     all     cert-password
+local    all      trusted         reject
+local    all      all             password
 
 subtest conn_tls
 
