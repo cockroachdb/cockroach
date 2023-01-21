@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -57,12 +58,21 @@ func TestServerControllerHTTP(t *testing.T) {
 	require.NoError(t, row.Scan(&id, &secret, &username, &created, &expires))
 
 	// Create our own test tenant with a known name.
-	_, err = db.Exec("SELECT crdb_internal.create_tenant(10, 'hello')")
+	_, _, err = s.(*server.TestServer).StartSharedProcessTenant(ctx,
+		base.TestSharedProcessTenantArgs{
+			TenantName: "hello",
+		})
 	require.NoError(t, err)
 
 	// Get a SQL connection to the test tenant.
 	sqlAddr := s.ServingSQLAddr()
-	db2 := serverutils.OpenDBConn(t, sqlAddr, "cluster:hello/defaultdb", false, s.Stopper())
+	db2, err := serverutils.OpenDBConnE(sqlAddr, "cluster:hello/defaultdb", false, s.Stopper())
+	// Expect no error yet: the connection is opened lazily; an
+	// error here means the parameters were incorrect.
+	require.NoError(t, err)
+
+	// This actually uses the connection.
+	require.NoError(t, db2.Ping())
 
 	// Instantiate the HTTP test username and privileges into the test tenant.
 	_, err = db2.Exec(fmt.Sprintf(`CREATE USER %s`, lexbase.EscapeSQLIdent(username)))
@@ -169,4 +179,58 @@ VALUES($1, $2, $3, $4, $5)`, id, secret, username, created, expires)
 	t.Logf("response 5:\n%#v", body)
 	require.Equal(t, len(body.Sessions), 1)
 	require.Equal(t, body.Sessions[0].ApplicationName, "hello system")
+}
+
+func TestServerStartStop(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DisableDefaultTestTenant: true,
+	})
+	defer s.Stopper().Stop(ctx)
+
+	sqlAddr := s.ServingSQLAddr()
+
+	// Create our own test tenant with a known name.
+	_, err := db.Exec("CREATE TENANT hello")
+	require.NoError(t, err)
+
+	// Make the service alive.
+	_, err = db.Exec("ALTER TENANT hello START SERVICE SHARED")
+	require.NoError(t, err)
+
+	// Check the liveness.
+	testutils.SucceedsSoon(t, func() error {
+		db2, err := serverutils.OpenDBConnE(sqlAddr, "cluster:hello/defaultdb", false, s.Stopper())
+		// Expect no error yet: the connection is opened lazily; an
+		// error here means the parameters were incorrect.
+		require.NoError(t, err)
+
+		defer db2.Close()
+		if err := db2.Ping(); err != nil {
+			return err
+		}
+		return nil
+	})
+
+	// Stop the service.     .
+	_, err = db.Exec("ALTER TENANT hello STOP SERVICE")
+	require.NoError(t, err)
+
+	// Verify that the service is indeed stopped.
+	testutils.SucceedsSoon(t, func() error {
+		db2, err := serverutils.OpenDBConnE(sqlAddr, "cluster:hello/defaultdb", false, s.Stopper())
+		// Expect no error yet: the connection is opened lazily; an
+		// error here means the parameters were incorrect.
+		require.NoError(t, err)
+		defer db2.Close()
+		if err := db2.Ping(); err != nil {
+			// Connection error: success.
+			return nil //nolint:returnerrcheck
+		}
+		return errors.New("server still alive")
+	})
 }
