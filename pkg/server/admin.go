@@ -4200,14 +4200,17 @@ func (s *adminServer) RecoveryVerify(
 	return nil, errors.AssertionFailedf("To be implemented by #93043")
 }
 
-// ListTenants returns a list of active tenants in the cluster. Calling this
-// function will start in-process tenants if they are not already running.
+// ListTenants returns a list of tenants that are served
+// by shared-process services in this server.
 func (s *systemAdminServer) ListTenants(
 	ctx context.Context, _ *serverpb.ListTenantsRequest,
 ) (*serverpb.ListTenantsResponse, error) {
 	ie := s.internalExecutor
 	rowIter, err := ie.QueryIterator(ctx, "list-tenants", nil, /* txn */
-		`SELECT name FROM system.tenants WHERE active = true AND name IS NOT NULL`)
+		`SELECT name FROM system.tenants
+WHERE active = true
+AND service_mode = 'shared'
+AND name IS NOT NULL`)
 	if err != nil {
 		return nil, err
 	}
@@ -4223,7 +4226,7 @@ func (s *systemAdminServer) ListTenants(
 
 	var tenantList []*serverpb.Tenant
 	for _, tenantName := range tenantNames {
-		server, err := s.server.serverController.getOrCreateServer(ctx, tenantName)
+		server, err := s.server.serverController.getServer(ctx, tenantName)
 		if err != nil {
 			log.Errorf(ctx, "unable to get or create a tenant server: %v", err)
 			continue

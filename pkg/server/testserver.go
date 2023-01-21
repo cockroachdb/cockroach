@@ -873,6 +873,18 @@ func (ts *TestServer) StartSharedProcessTenant(
 				return nil, nil, err
 			}
 		}
+		// Also mark it for shared-process execution.
+		_, err := ts.InternalExecutor().(*sql.InternalExecutor).ExecEx(
+			ctx,
+			"start-tenant-shared-service",
+			nil, /* txn */
+			sessiondata.NodeUserSessionDataOverride,
+			"ALTER TENANT $1 START SERVICE SHARED",
+			args.TenantName,
+		)
+		if err != nil {
+			return nil, nil, err
+		}
 	}
 
 	// Instantiate the tenant server.

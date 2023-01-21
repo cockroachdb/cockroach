@@ -1023,7 +1023,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		// https://github.com/cockroachdb/cockroach/issues/84585 is
 		// implemented.
 		func(ctx context.Context, name roachpb.TenantName) error {
-			d, err := sc.getOrCreateServer(ctx, name)
+			d, err := sc.getServer(ctx, name)
 			if err != nil {
 				return err
 			}
@@ -1829,6 +1829,13 @@ func (s *Server) PreStart(ctx context.Context) error {
 	// all the upgrade steps are traced, for use during troubleshooting.
 	if err := s.startAttemptUpgrade(ctx); err != nil {
 		return errors.Wrap(err, "cannot start upgrade task")
+	}
+
+	// Let the server controller start watching tenant service mode changes.
+	if err := s.serverController.start(workersCtx,
+		s.node.execCfg.InternalDB.Executor(),
+	); err != nil {
+		return errors.Wrap(err, "failed to start the server controller")
 	}
 
 	if err := s.node.tenantSettingsWatcher.Start(workersCtx, s.sqlServer.execCfg.SystemTableIDResolver); err != nil {
