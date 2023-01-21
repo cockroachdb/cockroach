@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
@@ -50,17 +51,39 @@ func addRootUser(
 		return err
 	}
 
-	// Upsert the role membership into the table. We intentionally override any existing entry.
-	const upsertMembership = `
-          UPSERT INTO system.role_members ("role", "member", "isAdmin", role_id, member_id) VALUES ($1, $2, true, $3, $4)
-          `
-	_, err = deps.InternalExecutor.Exec(
-		ctx, "addRootToAdminRole", nil /* txn */, upsertMembership, username.AdminRole, username.RootUser, username.AdminRoleID, username.RootUserID)
-	if err != nil {
-		return err
-	}
+	// Upsert the role membership into the table.
+	// We intentionally override any existing entry.
+	return deps.DB.Txn(ctx, addRootToAdminRole)
+}
 
-	return nil
+func addRootToAdminRole(ctx context.Context, txn isql.Txn) error {
+	var upsertStmt string
+	var upsertVals []interface{}
+	{
+		// We query the pg_attribute to determine whether the role_id and member_id
+		// columns are present because we can't rely on version gates here.
+		const pgAttributeStmt = `
+			SELECT * FROM system.pg_catalog.pg_attribute
+			         WHERE attrelid = 'system.public.role_members'::REGCLASS
+			         AND attname IN ('role_id', 'member_id')
+			         LIMIT 1
+			         `
+		if row, err := txn.QueryRow(ctx, "roleMembersColumnsGet", txn.KV(), pgAttributeStmt); err != nil {
+			return err
+		} else if row == nil {
+			upsertStmt = `
+          UPSERT INTO system.role_members ("role", "member", "isAdmin") VALUES ($1, $2, true)
+          `
+			upsertVals = []interface{}{username.AdminRole, username.RootUser}
+		} else {
+			upsertStmt = `
+          UPSERT INTO system.role_members ("role", "member", "isAdmin", role_id, member_id) VALUES ($1, $2, true, $3, $4)
+	        `
+			upsertVals = []interface{}{username.AdminRole, username.RootUser, username.AdminRoleID, username.RootUserID}
+		}
+	}
+	_, err := txn.Exec(ctx, "addRootToAdminRole", txn.KV(), upsertStmt, upsertVals...)
+	return err
 }
 
 func optInToDiagnosticsStatReporting(

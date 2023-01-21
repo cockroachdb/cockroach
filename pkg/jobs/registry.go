@@ -539,18 +539,28 @@ func (r *Registry) CreateJobWithTxn(
 			}
 			return p.String()
 		}
-		// TODO(jayant): remove this version gate in 24.1
-		// To run the upgrade below, migration and schema change jobs will need
-		// to be created using the old schema of the jobs table.
-		if !r.settings.Version.IsActive(ctx, clusterversion.V23_1AddTypeColumnToJobsTable) {
-			numCols -= 1
-		}
-
 		// We need to override the database in case we're in a situation where the
 		// database in question is being dropped.
 		override := sessiondata.RootUserSessionDataOverride
 		override.Database = catconstants.SystemDatabaseName
-		insertStmt := fmt.Sprintf(`INSERT INTO system.jobs (%s) VALUES (%s)`, strings.Join(cols[:numCols], ","), placeholders())
+		hasJobTypeColumn := r.settings.Version.IsActive(ctx, clusterversion.V23_1AddTypeColumnToJobsTable)
+		if hasJobTypeColumn {
+			// Relying on the version gate may not be sufficient.
+			const pgAttributeStmt = `
+			SELECT * FROM system.pg_catalog.pg_attribute
+			         WHERE attrelid = 'system.public.jobs'::REGCLASS
+			         AND attname = 'job_type'`
+			row, err := txn.QueryRowEx(ctx, "job-columns-get", txn.KV(), override, pgAttributeStmt)
+			if err != nil {
+				return err
+			}
+			hasJobTypeColumn = row != nil
+		}
+		if !hasJobTypeColumn {
+			numCols -= 1
+		}
+		insertStmt := fmt.Sprintf(`INSERT INTO system.jobs (%s) VALUES (%s)`,
+			strings.Join(cols[:numCols], ","), placeholders())
 		_, err = txn.ExecEx(
 			ctx, "job-row-insert", txn.KV(),
 			override,
