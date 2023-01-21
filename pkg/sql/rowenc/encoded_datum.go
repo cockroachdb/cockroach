@@ -324,7 +324,7 @@ func (ed *EncDatum) Fingerprint(
 	var err error
 	memUsageBefore := ed.Size()
 	switch typ.Family() {
-	case types.JsonFamily:
+	case types.JsonFamily, types.TSVectorFamily:
 		if err = ed.EnsureDecoded(typ, a); err != nil {
 			return nil, err
 		}

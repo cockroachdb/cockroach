@@ -300,11 +300,17 @@ type SpanExpression struct {
 	// Tight mirrors the definition of IsTight().
 	Tight bool
 
-	// Unique is true if the spans are guaranteed not to produce duplicate
-	// primary keys. Otherwise, Unique is false. Unique may be true for certain
-	// JSON or Array SpanExpressions, and it holds when unique SpanExpressions
-	// are combined with And. It does not hold when these SpanExpressions are
-	// combined with Or.
+	// Unique is true if the spans in FactoredUnionSpans are guaranteed not to
+	// produce duplicate primary keys. Otherwise, Unique is false. Unique may
+	// be true for certain JSON or Array SpanExpressions, and it holds when
+	// unique SpanExpressions are combined with And. It does not hold when
+	// these SpanExpressions are combined with Or.
+	//
+	// Once a SpanExpression is built, this field is relevant if the root
+	// SpanExpression has no children (i.e., Operator is None). In this case,
+	// Unique is used to determine whether an invertedFilter is needed on top
+	// of the inverted index scan to deduplicate keys (an invertedFilter is
+	// always necessary if Operator is not None).
 	Unique bool
 
 	// SpansToRead are the spans to read from the inverted index
