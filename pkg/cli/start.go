@@ -333,6 +333,9 @@ type serverStartupInterface interface {
 
 	// AcceptClients starts listening for incoming SQL clients over the network.
 	AcceptClients(ctx context.Context) error
+	// AcceptInternalClients starts listening for incoming internal SQL clients over the
+	// loopback interface.
+	AcceptInternalClients(ctx context.Context) error
 
 	// InitialStart returns whether this node is starting for the first time.
 	// This is (currently) used when displaying the server status report
@@ -707,6 +710,11 @@ func createAndStartServerAsync(
 			// be called by the shutdown goroutine, which in turn will cause
 			// all these startup steps to fail. So we do not need to look at
 			// the "shutdown status" in serverStatusMu any more.
+
+			// Accept internal clients early, as RunInitialSQL might need it.
+			if err := s.AcceptInternalClients(ctx); err != nil {
+				return err
+			}
 
 			// Run one-off cluster initialization.
 			if err := s.RunInitialSQL(ctx, startSingleNode, "" /* adminUser */, "" /* adminPassword */); err != nil {

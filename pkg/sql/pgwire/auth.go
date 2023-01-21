@@ -305,7 +305,7 @@ func (c *conn) lookupAuthenticationMethodUsingRules(
 	connType hba.ConnType, auth *hba.Conf,
 ) (mi methodInfo, entry *hba.Entry, err error) {
 	var ip net.IP
-	if connType != hba.ConnLocal {
+	if connType != hba.ConnLocal && connType != hba.ConnInternalLoopback {
 		// Extract the IP address of the client.
 		tcpAddr, ok := c.sessionArgs.RemoteAddr.(*net.TCPAddr)
 		if !ok {
