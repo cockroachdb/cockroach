@@ -16,7 +16,7 @@ import "github.com/cockroachdb/cockroach/pkg/roachpb"
 // into this abstract unit.
 //
 // To get an idea of the magnitude of an RU, the cost model was designed so that
-// using one CPU for a second costs 1000 RUs.
+// a small point read of < 64 bytes costs 1 RU.
 type RU float64
 
 // RUMultiplier is the multiplier for Request Unit(s). For example, a multiplier
@@ -83,6 +83,10 @@ type Config struct {
 	// ExternalIOIngressByte is the cost of transferring one byte from an external
 	// service into the SQL pod.
 	ExternalIOIngressByte RU
+
+	// KVInterRegionRUMultiplierTable is a table describing the cost multipliers
+	// for transferring between regions.
+	KVInterRegionRUMultiplierTable RegionalCostMultiplierTable
 }
 
 // KVReadCost calculates the cost of a KV read operation.
@@ -114,6 +118,13 @@ func (c *Config) ExternalIOEgressCost(bytes int64) RU {
 // ExternalIOIngressCost calculates the cost of an external read operation.
 func (c *Config) ExternalIOIngressCost(bytes int64) RU {
 	return RU(bytes) * c.ExternalIOIngressByte
+}
+
+// KVInterRegionCostMultiplier retrieves the RU multiplier for inter-region
+// transfers between r1 and r2. Ordering does not matter since the model assumes
+// that the multiplier is the same for both directions.
+func (c *Config) KVInterRegionCostMultiplier(r1, r2 string) RUMultiplier {
+	return c.KVInterRegionRUMultiplierTable.CostMultiplier(r1, r2)
 }
 
 // RequestCost returns the cost, in RUs, of the given request. If it is a write,
