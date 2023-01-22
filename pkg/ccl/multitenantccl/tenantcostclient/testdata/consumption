@@ -363,3 +363,104 @@ SQL Pods CPU seconds:  3.82
 PGWire egress:  12345 bytes
 ExternalIO egress: 1026000 bytes
 ExternalIO ingress: 1034000 bytes
+
+# Read the same amount of bytes as the first subtest. Increase in RUs should be
+# multiplied by 2 of the ones in the first subtest.
+read bytes=1048576 fromRegion=us-east1 toRegion=asia-southeast1
+----
+
+advance
+40s
+----
+00:08:13.000
+
+wait-for-event
+token-bucket-response
+----
+
+usage
+----
+RU:  2357.64
+KVRU:  72.25
+Reads:  5 requests in 4 batches (2228224 bytes)
+Writes:  5 requests in 4 batches (10240 bytes)
+SQL Pods CPU seconds:  3.82
+PGWire egress:  12345 bytes
+ExternalIO egress: 1026000 bytes
+ExternalIO ingress: 1034000 bytes
+
+# Cost should be the same in both directions.
+read bytes=1048576 toRegion=us-east1 fromRegion=asia-southeast1
+----
+
+advance
+40s
+----
+00:08:53.000
+
+wait-for-event
+token-bucket-response
+----
+
+usage
+----
+RU:  2390.89
+KVRU:  105.50
+Reads:  6 requests in 5 batches (3276800 bytes)
+Writes:  5 requests in 4 batches (10240 bytes)
+SQL Pods CPU seconds:  3.82
+PGWire egress:  12345 bytes
+ExternalIO egress: 1026000 bytes
+ExternalIO ingress: 1034000 bytes
+
+# Test write operation consumption with RU multiplier of 3.5 on the RUs
+# increased in the second subtest.
+write bytes=1024 fromRegion=eu-central1 toRegion=asia-southeast1
+----
+
+advance
+40s
+----
+00:09:33.000
+
+wait-for-event
+token-bucket-response
+----
+
+usage
+----
+RU:  2401.39
+KVRU:  116.00
+Reads:  6 requests in 5 batches (3276800 bytes)
+Writes:  6 requests in 5 batches (11264 bytes)
+SQL Pods CPU seconds:  3.82
+PGWire egress:  12345 bytes
+ExternalIO egress: 1026000 bytes
+ExternalIO ingress: 1034000 bytes
+
+# Test multiple requests in the same batch with RU multiplier of 1.
+write count=2 bytes=1024 fromRegion=us-east1 toRegion=us-east1
+----
+
+read count=2 bytes=65536 fromRegion=invalid-region toRegion=us-east1
+----
+
+advance
+40s
+----
+00:10:13.000
+
+wait-for-event
+token-bucket-response
+----
+
+usage
+----
+RU:  2407.14
+KVRU:  121.75
+Reads:  8 requests in 6 batches (3342336 bytes)
+Writes:  8 requests in 6 batches (12288 bytes)
+SQL Pods CPU seconds:  3.82
+PGWire egress:  12345 bytes
+ExternalIO egress: 1026000 bytes
+ExternalIO ingress: 1034000 bytes

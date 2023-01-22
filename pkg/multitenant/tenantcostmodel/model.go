@@ -19,6 +19,11 @@ import "github.com/cockroachdb/cockroach/pkg/roachpb"
 // using one CPU for a second costs 1000 RUs.
 type RU float64
 
+// RUMultiplier is the multiplier for Request Unit(s). For example, a multiplier
+// of 1.5 means that all Request Unit(s) are multiplied by a factor of 1.5 when
+// computing consumed RUs.
+type RUMultiplier float64
+
 // Config contains the cost model parameters. The values are controlled by
 // cluster settings.
 //
@@ -78,6 +83,10 @@ type Config struct {
 	// ExternalIOIngressByte is the cost of transferring one byte from an external
 	// service into the SQL pod.
 	ExternalIOIngressByte RU
+
+	// KVInterRegionRUMultiplierTable is a table describing the cost multipliers
+	// for transferring between regions.
+	KVInterRegionRUMultiplierTable RegionalCostMultiplierTable
 }
 
 // KVReadCost calculates the cost of a KV read operation.
@@ -122,7 +131,8 @@ func (c *Config) RequestCost(bri RequestInfo) RU {
 	cost := c.KVWriteBatch
 	cost += RU(bri.writeCount) * c.KVWriteRequest
 	cost += RU(bri.writeBytes) * c.KVWriteByte
-	return cost * RU(bri.writeReplicas)
+	rcm := c.KVInterRegionRUMultiplierTable.CostMultiplier(bri.fromRegion, bri.toRegion)
+	return cost * RU(bri.writeReplicas) * RU(rcm)
 }
 
 // ResponseCost returns the cost, in RUs, of the given response. If it is a
@@ -136,7 +146,8 @@ func (c *Config) ResponseCost(bri ResponseInfo) RU {
 	cost := c.KVReadBatch
 	cost += RU(bri.readCount) * c.KVReadRequest
 	cost += RU(bri.readBytes) * c.KVReadByte
-	return cost
+	rcm := c.KVInterRegionRUMultiplierTable.CostMultiplier(bri.fromRegion, bri.toRegion)
+	return cost * RU(rcm)
 }
 
 // RequestInfo captures the BatchRequest information that is used (together with
@@ -153,10 +164,16 @@ type RequestInfo struct {
 	// writeBytes is the total size of all batched writes in the request, in
 	// bytes, or 0 if it is a read-only batch.
 	writeBytes int64
+	// fromRegion is the name of the region that the sender node is in.
+	fromRegion string
+	// toRegion is the name of the region that the destination node is in.
+	toRegion string
 }
 
 // MakeRequestInfo extracts the relevant information from a BatchRequest.
-func MakeRequestInfo(ba *roachpb.BatchRequest, replicas int) RequestInfo {
+func MakeRequestInfo(
+	ba *roachpb.BatchRequest, replicas int, fromRegion, toRegion string,
+) RequestInfo {
 	// The cost of read-only batches is captured by MakeResponseInfo.
 	if !ba.IsWrite() {
 		return RequestInfo{}
@@ -178,7 +195,13 @@ func MakeRequestInfo(ba *roachpb.BatchRequest, replicas int) RequestInfo {
 			}
 		}
 	}
-	return RequestInfo{writeReplicas: int64(replicas), writeCount: writeCount, writeBytes: writeBytes}
+	return RequestInfo{
+		writeReplicas: int64(replicas),
+		writeCount:    writeCount,
+		writeBytes:    writeBytes,
+		fromRegion:    fromRegion,
+		toRegion:      toRegion,
+	}
 }
 
 // IsWrite is true if this was a write batch rather than a read-only batch.
@@ -205,8 +228,16 @@ func (bri RequestInfo) WriteBytes() int64 {
 }
 
 // TestingRequestInfo creates a RequestInfo for testing purposes.
-func TestingRequestInfo(writeReplicas, writeCount, writeBytes int64) RequestInfo {
-	return RequestInfo{writeReplicas: writeReplicas, writeCount: writeCount, writeBytes: writeBytes}
+func TestingRequestInfo(
+	writeReplicas, writeCount, writeBytes int64, fromRegion, toRegion string,
+) RequestInfo {
+	return RequestInfo{
+		writeReplicas: writeReplicas,
+		writeCount:    writeCount,
+		writeBytes:    writeBytes,
+		fromRegion:    fromRegion,
+		toRegion:      toRegion,
+	}
 }
 
 // ResponseInfo captures the BatchResponse information that is used (together
@@ -223,10 +254,16 @@ type ResponseInfo struct {
 	// readBytes is the total size of all batched reads in the response, in
 	// bytes, or 0 if it is a write batch.
 	readBytes int64
+	// fromRegion is the name of the region that the sender node is in.
+	fromRegion string
+	// toRegion is the name of the region that the destination node is in.
+	toRegion string
 }
 
 // MakeResponseInfo extracts the relevant information from a BatchResponse.
-func MakeResponseInfo(br *roachpb.BatchResponse, isReadOnly bool) ResponseInfo {
+func MakeResponseInfo(
+	br *roachpb.BatchResponse, isReadOnly bool, fromRegion, toRegion string,
+) ResponseInfo {
 	// The cost of non read-only batches is captured by MakeRequestInfo.
 	if !isReadOnly {
 		return ResponseInfo{}
@@ -245,7 +282,13 @@ func MakeResponseInfo(br *roachpb.BatchResponse, isReadOnly bool) ResponseInfo {
 			readBytes += resp.Header().NumBytes
 		}
 	}
-	return ResponseInfo{isRead: true, readCount: readCount, readBytes: readBytes}
+	return ResponseInfo{
+		isRead:     true,
+		readCount:  readCount,
+		readBytes:  readBytes,
+		fromRegion: fromRegion,
+		toRegion:   toRegion,
+	}
 }
 
 // IsRead is true if this was a read-only batch rather than a write batch.
@@ -266,6 +309,14 @@ func (bri ResponseInfo) ReadBytes() int64 {
 }
 
 // TestingResponseInfo creates a ResponseInfo for testing purposes.
-func TestingResponseInfo(isRead bool, readCount, readBytes int64) ResponseInfo {
-	return ResponseInfo{isRead: isRead, readCount: readCount, readBytes: readBytes}
+func TestingResponseInfo(
+	isRead bool, readCount, readBytes int64, fromRegion, toRegion string,
+) ResponseInfo {
+	return ResponseInfo{
+		isRead:     isRead,
+		readCount:  readCount,
+		readBytes:  readBytes,
+		fromRegion: fromRegion,
+		toRegion:   toRegion,
+	}
 }

@@ -2242,9 +2242,23 @@ func (ds *DistSender) sendToReplicas(
 				}
 
 				if ds.kvInterceptor != nil {
+					var fromRegion, toRegion string
+					if idx := replicas.Find(curReplica.ReplicaID); idx != -1 {
+						fromRegion, _ = ds.locality.Find("region")
+						for _, tier := range replicas[idx].Tiers {
+							if tier.Key == "region" {
+								toRegion = tier.Value
+							}
+						}
+					} else {
+						// This case should not happen at all since curReplica
+						// was obtained from replicas.
+						log.VErrEventf(ctx, 2, "could not locate replica %s in replicas=%v",
+							curReplica.String(), replicas)
+					}
 					numReplicas := len(desc.Replicas().Descriptors())
-					reqInfo := tenantcostmodel.MakeRequestInfo(ba, numReplicas)
-					respInfo := tenantcostmodel.MakeResponseInfo(br, !reqInfo.IsWrite())
+					reqInfo := tenantcostmodel.MakeRequestInfo(ba, numReplicas, fromRegion, toRegion)
+					respInfo := tenantcostmodel.MakeResponseInfo(br, !reqInfo.IsWrite(), fromRegion, toRegion)
 					if err := ds.kvInterceptor.OnResponseWait(ctx, reqInfo, respInfo); err != nil {
 						return nil, err
 					}

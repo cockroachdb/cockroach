@@ -128,6 +128,15 @@ func (ts *testState) start(t *testing.T) {
 	tenantcostclient.TargetPeriodSetting.Override(ctx, &ts.settings.SV, 10*time.Second)
 	tenantcostclient.CPUUsageAllowance.Override(ctx, &ts.settings.SV, 10*time.Millisecond)
 
+	// Set regional cost multiplier table.
+	//                     | us-east1 | eu-central1 | asia-southeast1
+	//     -----------------------------------------------------------
+	//        us-east1     |    1     |     1.5     |        2
+	//       eu-central1   |   1.5    |      1      |       3.5
+	//     asia-southeast1 |    2     |     3.5     |        1
+	tenantcostmodel.RegionalCostMultiplierTableSetting.Override(ctx, &ts.settings.SV,
+		`{"Regions":["us-east1","eu-central1","asia-southeast1"],"Matrix":[[1,1.5,2],[1,3.5],[1]]}`)
+
 	ts.stopper = stop.NewStopper()
 	var err error
 	ts.provider = newTestProvider()
@@ -164,11 +173,13 @@ func (ts *testState) stop() {
 }
 
 type cmdArgs struct {
-	count  int64
-	bytes  int64
-	repeat int64
-	label  string
-	wait   bool
+	count      int64
+	bytes      int64
+	repeat     int64
+	label      string
+	wait       bool
+	fromRegion string
+	toRegion   string
 }
 
 func parseBytesVal(arg datadriven.CmdArg) (int64, error) {
@@ -231,6 +242,18 @@ func parseArgs(t *testing.T, d *datadriven.TestData) cmdArgs {
 			default:
 				d.Fatalf(t, "invalid wait value")
 			}
+
+		case "fromRegion":
+			if len(args.Vals) != 1 {
+				d.Fatalf(t, "expected one value for fromRegion")
+			}
+			res.fromRegion = args.Vals[0]
+
+		case "toRegion":
+			if len(args.Vals) != 1 {
+				d.Fatalf(t, "expected one value for toRegion")
+			}
+			res.toRegion = args.Vals[0]
 		}
 	}
 	return res
@@ -300,6 +323,7 @@ func (ts *testState) request(
 		repeat = 1
 	}
 
+	fromRegion, toRegion := args.fromRegion, args.toRegion
 	for ; repeat > 0; repeat-- {
 		var writeCount, readCount, writeBytes, readBytes int64
 		if isWrite {
@@ -309,8 +333,8 @@ func (ts *testState) request(
 			readCount = args.count
 			readBytes = args.bytes
 		}
-		reqInfo := tenantcostmodel.TestingRequestInfo(1, writeCount, writeBytes)
-		respInfo := tenantcostmodel.TestingResponseInfo(!isWrite, readCount, readBytes)
+		reqInfo := tenantcostmodel.TestingRequestInfo(1, writeCount, writeBytes, fromRegion, toRegion)
+		respInfo := tenantcostmodel.TestingResponseInfo(!isWrite, readCount, readBytes, fromRegion, toRegion)
 		ts.runOperation(t, d, args.label, func() {
 			if err := ts.controller.OnRequestWait(ctx); err != nil {
 				t.Errorf("OnRequestWait error: %v", err)
@@ -766,7 +790,7 @@ func TestWaitingRU(t *testing.T) {
 
 	// Immediately consume the initial 10K RUs.
 	require.NoError(t, ctrl.OnResponseWait(ctx,
-		tenantcostmodel.TestingRequestInfo(1, 1, 10237952), tenantcostmodel.ResponseInfo{}))
+		tenantcostmodel.TestingRequestInfo(1, 1, 10237952, "", ""), tenantcostmodel.ResponseInfo{}))
 
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
@@ -784,8 +808,8 @@ func TestWaitingRU(t *testing.T) {
 	// Send 20 KV requests for 1K RU each.
 	const count = 20
 	const fillRate = 100
-	req := tenantcostmodel.TestingRequestInfo(1, 1, 1021952)
-	resp := tenantcostmodel.TestingResponseInfo(false, 0, 0)
+	req := tenantcostmodel.TestingRequestInfo(1, 1, 1021952, "", "")
+	resp := tenantcostmodel.TestingResponseInfo(false, 0, 0, "", "")
 
 	testutils.SucceedsSoon(t, func() error {
 		tenantcostclient.TestingSetRate(ctrl, fillRate)
