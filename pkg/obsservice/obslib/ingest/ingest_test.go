@@ -174,13 +174,6 @@ func TestEventIngestionIntegration(t *testing.T) {
 		_ = grpcServer.Serve(otlpListener)
 	}()
 
-	// !!!
-	//// Start the ingestion in the background.
-	//obsStop := stop.NewStopper()
-	//defer obsStop.Stop(ctx)
-	//e := EventIngester{}
-	//require.NoError(t, e.startIngestEventsInternal(ctx, "", otlpListener, pool, obsStop))
-
 	// Perform a schema change and check that we get an event.
 	_, err = sqlDB.Exec("create table t()")
 	require.NoError(t, err)

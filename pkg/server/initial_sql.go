@@ -13,11 +13,18 @@ package server
 import (
 	"context"
 	"fmt"
+	"net"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
+	"github.com/cockroachdb/cockroach/pkg/obsservice/obslib/ingest"
+	"github.com/cockroachdb/cockroach/pkg/obsservice/obslib/migrations"
+	logspb "github.com/cockroachdb/cockroach/pkg/obsservice/obspb/opentelemetry-proto/collector/logs/v1"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/errors"
+	"github.com/jackc/pgx/v4/pgxpool"
 )
 
 // RunInitialSQL concerns itself with running "initial SQL" code when
@@ -30,6 +37,12 @@ import (
 func (s *Server) RunInitialSQL(
 	ctx context.Context, startSingleNode bool, adminUser, adminPassword string,
 ) error {
+	if s.cfg.ObsServiceAddr == base.ObsServiceEmbedFlagValue {
+		if err := s.startEmbeddedObsService(ctx); err != nil {
+			return err
+		}
+	}
+
 	newCluster := s.InitialStart() && s.NodeID() == kvstorage.FirstNodeID
 	if !newCluster {
 		// The initial SQL code only runs the first time the cluster is initialized.
@@ -54,6 +67,66 @@ func (s *Server) RunInitialSQL(
 		}
 	}
 
+	return nil
+}
+
+// startEmbeddedObsService creates the schema for the Observability Service (if
+// it doesn't exist already), starts the internal RPC service for event
+// ingestion and hooks up the event exporter to talk to the local service.
+func (s *Server) startEmbeddedObsService(ctx context.Context) error {
+	// Create the Obs Service schema.
+	loopbackConfig, err := pgxpool.ParseConfig("")
+	if err != nil {
+		return err
+	}
+	loopbackConfig.ConnConfig.User = "root"
+	loopbackConfig.ConnConfig.Database = "obs"
+	loopbackConfig.ConnConfig.DialFunc = func(ctx context.Context, network, addr string) (net.Conn, error) {
+		return s.loopbackPgL.Connect(ctx)
+	}
+	if err := migrations.RunDBMigrations(ctx, loopbackConfig.ConnConfig); err != nil {
+		return err
+	}
+
+	// Create the internal ingester RPC server.
+	embeddedObsSvc := &ingest.EventIngester{}
+	pool, err := pgxpool.ConnectConfig(ctx, loopbackConfig)
+	if err != nil {
+		return err
+	}
+	embeddedObsSvc.SetDB(pool)
+	// We'll use an RPC server serving on a "loopback" interface implemented with
+	// in-memory pipes.
+	grpcServer := newGRPCServer(s.rpcContext)
+	grpcServer.setMode(modeOperational)
+	logspb.RegisterLogsServiceServer(grpcServer.Server, embeddedObsSvc)
+	rpcLoopbackL := netutil.NewLoopbackListener(ctx, s.stopper)
+	if err := s.stopper.RunAsyncTask(
+		ctx, "obssvc-loopback-quiesce", func(ctx context.Context) {
+			<-s.stopper.ShouldQuiesce()
+			grpcServer.Stop()
+		},
+	); err != nil {
+		return err
+	}
+	if err := s.stopper.RunAsyncTask(
+		ctx, "obssvc-listener", func(ctx context.Context) {
+			netutil.FatalIfUnexpected(grpcServer.Serve(rpcLoopbackL))
+		}); err != nil {
+		return err
+	}
+
+	// Now that the ingester is listening for RPCs, we can hook up the exporter to
+	// it and start the exporter. Note that in the non-embedded case, Start() has
+	// already been called.
+	s.eventsExporter.SetDialer(func(ctx context.Context, _ string) (net.Conn, error) {
+		conn, err := rpcLoopbackL.Connect(ctx)
+		return conn, err
+	})
+	log.Infof(ctx, "starting event exported talking to local event ingester")
+	if err := s.eventsExporter.Start(ctx, s.stopper); err != nil {
+		return err
+	}
 	return nil
 }
 

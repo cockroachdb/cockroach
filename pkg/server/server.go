@@ -170,7 +170,7 @@ type Server struct {
 	spanConfigSubscriber spanconfig.KVSubscriber
 	spanConfigReporter   spanconfig.Reporter
 
-	// pgL is the SQL listener.
+	// pgL is the SQL listener for pgwire connections coming over the network.
 	pgL net.Listener
 	// loopbackPgL is the SQL listener for internal pgwire connections.
 	loopbackPgL *netutil.LoopbackListener
@@ -884,23 +884,35 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	// Create the Obs Server. We'll start it later, once we know our node ID.
 	var eventsExporter obs.EventsExporterInterface
 	if cfg.ObsServiceAddr != "" {
-		ee, err := obs.NewEventsExporter(
-			cfg.ObsServiceAddr,
-			timeutil.DefaultTimeSource{},
-			cfg.Tracer,
-			5*time.Second, // maxStaleness
-			1<<20,         // triggerSizeBytes - 1MB
-			10*1<<20,      // maxBufferSizeBytes - 10MB
-			sqlMonitorAndMetrics.rootSQLMemoryMonitor, // memMonitor - this is not "SQL" usage, but we don't have another memory pool
-		)
-		if err != nil {
-			log.Errorf(ctx, "failed to create events exporter: %s", err)
+		if cfg.ObsServiceAddr == base.ObsServiceEmbedFlagValue {
+			ee := obs.NewEventsExporter(
+				"", // targetAddr
+				timeutil.DefaultTimeSource{},
+				cfg.Tracer,
+				5*time.Second, // maxStaleness
+				1<<20,         // triggerSizeBytes - 1MB
+				10*1<<20,      // maxBufferSizeBytes - 10MB
+				sqlMonitorAndMetrics.rootSQLMemoryMonitor, // memMonitor - this is not "SQL" usage, but we don't have another memory pool
+			)
+			eventsExporter = ee
 		} else {
+			targetAddr, err := obs.ValidateOTLPTargetAddr(cfg.ObsServiceAddr)
+			if err != nil {
+				return nil, err
+			}
+			ee := obs.NewEventsExporter(
+				targetAddr,
+				timeutil.DefaultTimeSource{},
+				cfg.Tracer,
+				5*time.Second, // maxStaleness
+				1<<20,         // triggerSizeBytes - 1MB
+				10*1<<20,      // maxBufferSizeBytes - 10MB
+				sqlMonitorAndMetrics.rootSQLMemoryMonitor, // memMonitor - this is not "SQL" usage, but we don't have another memory pool,
+			)
 			log.Infof(ctx, "will export events over OTLP to: %s", cfg.ObsServiceAddr)
 			eventsExporter = ee
 		}
-	}
-	if eventsExporter == nil {
+	} else {
 		eventsExporter = &obs.NoopEventsExporter{}
 	}
 
@@ -1852,12 +1864,15 @@ func (s *Server) PreStart(ctx context.Context) error {
 		s.startDiagnostics(workersCtx)
 	}
 
-	if err := s.eventsExporter.Start(ctx, obs.NodeInfo{
+	s.eventsExporter.SetNodeInfo(obs.NodeInfo{
 		ClusterID:     state.clusterID,
 		NodeID:        int32(state.nodeID),
 		BinaryVersion: build.BinaryVersion(),
-	}, s.stopper); err != nil {
-		return errors.Wrap(err, "failed to start the event exporter")
+	})
+	if s.cfg.ObsServiceAddr != base.ObsServiceEmbedFlagValue {
+		if err := s.eventsExporter.Start(ctx, s.stopper); err != nil {
+			return errors.Wrapf(err, "failed to start events exporter")
+		}
 	}
 
 	// Connect the engines to the disk stats map constructor.
