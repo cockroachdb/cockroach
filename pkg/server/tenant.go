@@ -676,11 +676,12 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 	if instanceID == 0 {
 		log.Fatalf(ctx, "expected SQLInstanceID to be initialized after preStart")
 	}
-	if err := s.eventsExporter.Start(ctx, obs.NodeInfo{
+	s.eventsExporter.SetNodeInfo(obs.NodeInfo{
 		ClusterID:     clusterID,
 		NodeID:        int32(instanceID),
 		BinaryVersion: build.BinaryVersion(),
-	}, s.stopper); err != nil {
+	})
+	if err := s.eventsExporter.Start(ctx, s.stopper); err != nil {
 		return errors.Wrap(err, "failed to start the event exporter")
 	}
 
@@ -715,7 +716,9 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 	return nil
 }
 
-func (s *SQLServerWrapper) serveConn(ctx context.Context, conn net.Conn, status pgwire.PreServeStatus) error {
+func (s *SQLServerWrapper) serveConn(
+	ctx context.Context, conn net.Conn, status pgwire.PreServeStatus,
+) error {
 	pgServer := s.PGServer()
 	switch status.State {
 	case pgwire.PreServeCancel:
@@ -1047,7 +1050,13 @@ func makeTenantSQLServerArgs(
 	// cluster ID is known, with a Start() call.
 	var eventsExporter obs.EventsExporterInterface
 	if baseCfg.ObsServiceAddr != "" {
-		ee, err := obs.NewEventsExporter(
+		if baseCfg.ObsServiceAddr == base.ObsServiceEmbedFlagValue {
+			// TODO(andrei): Add support for this option for tenants - at least for
+			// shared-process tenants where the event exporting should be hooked up to
+			// the ingester running in the host process.
+			return sqlServerArgs{}, errors.New("--obsservice-addr=embed is not currently supported for tenants")
+		}
+		ee := obs.NewEventsExporter(
 			baseCfg.ObsServiceAddr,
 			timeutil.DefaultTimeSource{},
 			baseCfg.Tracer,
@@ -1056,13 +1065,8 @@ func makeTenantSQLServerArgs(
 			10*1<<20,                               // maxBufferSizeBytes - 10MB
 			monitorAndMetrics.rootSQLMemoryMonitor, // memMonitor - this is not "SQL" usage, but we don't have another memory pool
 		)
-		if err != nil {
-			log.Errorf(startupCtx, "failed to create events exporter: %s", err)
-		} else {
-			eventsExporter = ee
-		}
-	}
-	if eventsExporter == nil {
+		eventsExporter = ee
+	} else {
 		eventsExporter = &obs.NoopEventsExporter{}
 	}
 

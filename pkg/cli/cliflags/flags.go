@@ -1708,7 +1708,8 @@ commands, WARNING for client commands.`,
 		EnvVar: "",
 		Description: `Address of an OpenTelemetry OTLP sink such as the
 Observability Service or the OpenTelemetry Collector. If set, telemetry
-events are exported to this address.`,
+events are exported to this address. The special value "embed" causes
+the Cockroach node to run the Observability Service internally.`,
 	}
 
 	BuildTag = FlagInfo{

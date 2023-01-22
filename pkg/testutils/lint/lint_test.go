@@ -890,6 +890,7 @@ func TestLint(t *testing.T) {
 			":!rpc/context.go",
 			":!rpc/nodedialer/nodedialer_test.go",
 			":!util/grpcutil/grpc_util_test.go",
+			":!server/initial_sql.go",
 			":!server/testserver.go",
 			":!util/tracing/*_test.go",
 			":!ccl/sqlproxyccl/tenantdirsvr/test_directory_svr.go",
