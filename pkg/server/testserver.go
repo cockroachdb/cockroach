@@ -597,9 +597,22 @@ func (ts *TestServer) maybeStartDefaultTestTenant(ctx context.Context) error {
 // Use TestServer.Stopper().Stop() to shutdown the server after the test
 // completes.
 func (ts *TestServer) Start(ctx context.Context) error {
-	if err := ts.Server.Start(ctx); err != nil {
+	if err := ts.Server.PreStart(ctx); err != nil {
 		return err
 	}
+	if err := ts.Server.AcceptInternalClients(ctx); err != nil {
+		return err
+	}
+	// In tests we need some, but not all of RunInitialSQL functionality.
+	if err := ts.Server.RunInitialSQL(
+		ctx, false /* startSingleNode */, "" /* adminUser */, "", /* adminPassword */
+	); err != nil {
+		return err
+	}
+	if err := ts.Server.AcceptClients(ctx); err != nil {
+		return err
+	}
+
 	if err := ts.maybeStartDefaultTestTenant(ctx); err != nil {
 		// We're failing the call to this function but we've already started
 		// the TestServer above. Stop it here to avoid leaking the server.
