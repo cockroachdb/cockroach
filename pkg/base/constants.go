@@ -52,4 +52,8 @@ const (
 
 	// MinRangeMaxBytes is the minimum value for range max bytes.
 	MinRangeMaxBytes = 64 << 10 // 64 KB
+
+	// ObsServiceEmbedFlagValue is the special value of the --obsservice-addr flag
+	// configuring the CRDB node to run the Obs Service internally.
+	ObsServiceEmbedFlagValue = "embed"
 )
