@@ -478,9 +478,9 @@ func NewDistSender(cfg DistSenderConfig) *DistSender {
 	}
 	ds.logicalClusterID = cfg.RPCContext.LogicalClusterID
 	ds.asyncSenderSem = quotapool.NewIntPool("DistSender async concurrency",
-		uint64(senderConcurrencyLimit.Get(&cfg.Settings.SV)))
-	senderConcurrencyLimit.SetOnChange(&cfg.Settings.SV, func(ctx context.Context) {
-		ds.asyncSenderSem.UpdateCapacity(uint64(senderConcurrencyLimit.Get(&cfg.Settings.SV)))
+		uint64(senderConcurrencyLimit.Get(&ds.st.SV)))
+	senderConcurrencyLimit.SetOnChange(&ds.st.SV, func(ctx context.Context) {
+		ds.asyncSenderSem.UpdateCapacity(uint64(senderConcurrencyLimit.Get(&ds.st.SV)))
 	})
 	ds.rpcContext.Stopper.AddCloser(ds.asyncSenderSem.Closer("stopper"))
 
@@ -2242,13 +2242,10 @@ func (ds *DistSender) sendToReplicas(
 				}
 
 				if ds.kvInterceptor != nil {
-					// Multiply RUs for write requests with the replication factor here.
-					// Read requests always have a multiplier of 1, at least for now.
-					//
-					// TODO(jaylim-crl): Update multipliers to account for cross-region transfers.
+					readMultiplier, writeMultiplier := ds.computeReadAndWriteRUMultipliers(ctx, desc, &curReplica)
 					numReplicas := len(desc.Replicas().Descriptors())
-					reqInfo := tenantcostmodel.MakeRequestInfo(ba, numReplicas, tenantcostmodel.RUMultiplier(numReplicas))
-					respInfo := tenantcostmodel.MakeResponseInfo(br, !reqInfo.IsWrite(), 1)
+					reqInfo := tenantcostmodel.MakeRequestInfo(ba, numReplicas, writeMultiplier)
+					respInfo := tenantcostmodel.MakeResponseInfo(br, !reqInfo.IsWrite(), readMultiplier)
 					if err := ds.kvInterceptor.OnResponseWait(ctx, reqInfo, respInfo); err != nil {
 						return nil, err
 					}
@@ -2382,6 +2379,109 @@ func (ds *DistSender) sendToReplicas(
 			return nil, err
 		}
 	}
+}
+
+// computeReadAndWriteRUMultipliers returns the read and write RU multipliers
+// for a batch that is sent from the current DistSender node to the node with
+// curReplica.
+//
+// NOTE: desc cannot be nil.
+func (ds *DistSender) computeReadAndWriteRUMultipliers(
+	ctx context.Context, desc *roachpb.RangeDescriptor, curReplica *roachpb.ReplicaDescriptor,
+) (read, write tenantcostmodel.RUMultiplier) {
+	// Set fallback multipliers.
+	descCount := len(desc.Replicas().Descriptors())
+	read, write = 1, tenantcostmodel.RUMultiplier(descCount)
+
+	if ds.kvInterceptor == nil {
+		return
+	}
+	costController, ok := ds.kvInterceptor.(multitenant.TenantSideCostController)
+	if !ok {
+		log.VErrEvent(ctx, 2, "kvInterceptor is not a TenantSideCostController")
+		return
+	}
+	costCfg := costController.GetCostConfig()
+	if costCfg == nil {
+		log.VErrEvent(ctx, 2, "cost controller does not have a cost config")
+		return
+	}
+
+	// A leaseholder is not needed here since we are interested in returning
+	// all replicas, which will already include the leaseholder by definition.
+	replicas, err := NewReplicaSlice(ctx, ds.nodeDescs, desc, nil /* leaseholder */, AllReplicas)
+	if err != nil {
+		log.VErrEventf(ctx, 2, "could not locate node descriptors for replicas=%v",
+			desc.Replicas().Descriptors())
+		return
+	}
+
+	// This should not happen, and if it does, is a bug.
+	if descCount < len(replicas) {
+		log.VErrEventf(ctx, 2, "there are fewer descriptors than replicas; descCount=%d, len(replicas)=%d",
+			descCount, len(replicas))
+		return
+	}
+
+	// It's unfortunate that we hardcode a particular locality tier name here.
+	// Ideally, we'd have a cluster setting that specifies the name or some
+	// other way to configure it.
+	fromRegion, _ := ds.locality.Find("region")
+	if fromRegion == "" {
+		// If we don't have the source, there's no way to locate the multiplier.
+		log.VErrEventf(ctx, 2, "could not find region tier in current node: locality=%s",
+			ds.locality.String())
+		return
+	}
+
+	curNodeFound := false
+	write = 0
+	for _, r := range replicas {
+		var toRegion string
+		for _, tier := range r.Tiers {
+			if tier.Key == "region" {
+				toRegion = tier.Value
+				break
+			}
+		}
+		if toRegion == "" {
+			log.VErrEventf(ctx, 2, "could not find region tier in n%d: tiers=%s",
+				r.NodeID, r.Tiers)
+		}
+		ruCost := costCfg.KVInterRegionCostMultiplier(fromRegion, toRegion)
+		descCount--
+
+		// The RU multipliers are computed as follows:
+		// 1. Write requests account traffic for all replicas since the data is
+		//    eventually replicated to the remaining replicas. For simplicity
+		//    of computation, we will assume that the writes were replicated
+		//    from the DistSender node instead of the node that received the
+		//    writes.
+		//
+		// 2. Read requests only require us to account traffic from the
+		//    DistSender node to the node with curReplica.
+		write += ruCost
+		if r.ReplicaID == curReplica.ReplicaID {
+			read = ruCost
+			curNodeFound = true
+		}
+	}
+
+	// Ideally, we should have len(replicas) == len(desc.Replicas().Descriptors()),
+	// but there's a possibility where that does not happen, especially when
+	// the DistSender node has not received gossip subscription data for node
+	// descriptors. When that happens, we don't have locality information, so
+	// we will assume 1 for each replica. Add remaining unaccounted replicas
+	// into the write multiplier.
+	write += tenantcostmodel.RUMultiplier(descCount)
+
+	// This case should not happen at all since curReplica was obtained from
+	// replicas in the first place.
+	if !curNodeFound {
+		log.VErrEventf(ctx, 2, "could not locate replica %s in replicas=%v",
+			curReplica.String(), replicas)
+	}
+	return
 }
 
 func (ds *DistSender) maybeIncrementErrCounters(br *roachpb.BatchResponse, err error) {
