@@ -15,6 +15,7 @@ import (
 	"net"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/obsservice/obspb"
 	otel_collector_pb "github.com/cockroachdb/cockroach/pkg/obsservice/obspb/opentelemetry-proto/collector/logs/v1"
 	otel_pb "github.com/cockroachdb/cockroach/pkg/obsservice/obspb/opentelemetry-proto/common/v1"
@@ -34,15 +35,31 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 )
 
-// EventsExporterInterface abstracts exporting events to the Observability Service. It is
-// implemented by EventsExporter.
+// EventsExporterInterface abstracts exporting events to the Observability
+// Service. It is implemented by EventsExporter.
 type EventsExporterInterface interface {
-	// Start starts the exporter, periodically flushing the buffered events to the
-	// sink.
-	Start(ctx context.Context, nodeInfo NodeInfo, stop *stop.Stopper) error
+	// SetNodeInfo initializes the node information that will be included in every
+	// batch of events that gets exported. This information is not passed to
+	// NewEventsExporter() to allow the EventsExporter to be constructed before
+	// the node ID is known.
+	SetNodeInfo(NodeInfo)
+
+	// SetDialer configures the dialer to be used when opening network connections.
+	SetDialer(dialer func(ctx context.Context, _ string) (net.Conn, error))
+
+	// Start starts the goroutine that will periodically flush the events to the
+	// configured sink.
+	//
+	// Flushes are triggered by the configured flush interval and by the buffer size
+	// threshold.
+	Start(context.Context, *stop.Stopper) error
+
 	// SendEvent buffers an event to be sent.
 	//
 	// SendEvent does not block. If the buffer is full, old events are dropped.
+	//
+	// SendEvent can be called before Start(). Such events will be buffered
+	// (within the buffering limits) and sent after Start() is eventually called.
 	SendEvent(ctx context.Context, typ obspb.EventType, event otel_logs_pb.LogRecord)
 }
 
@@ -51,17 +68,38 @@ type NoopEventsExporter struct{}
 
 var _ EventsExporterInterface = &NoopEventsExporter{}
 
-func (d NoopEventsExporter) Start(
-	ctx context.Context, nodeInfo NodeInfo, stop *stop.Stopper,
-) error {
+// SetNodeInfo is part of the EventsExporterInterface.
+func (nop NoopEventsExporter) SetNodeInfo(NodeInfo) {}
+
+// Start is part of the EventsExporterInterface.
+func (d NoopEventsExporter) Start(ctx context.Context, stop *stop.Stopper) error {
 	return nil
 }
 
-// SendEvent implements the EventsExporterInterface.
-func (d NoopEventsExporter) SendEvent(
-	ctx context.Context, typ obspb.EventType, event otel_logs_pb.LogRecord,
+// SetDialer is part of the EventsExporterInterface.
+func (nop NoopEventsExporter) SetDialer(
+	dialer func(ctx context.Context, _ string) (net.Conn, error),
 ) {
 }
+
+// SendEvent is part of the EventsExporterInterface.
+func (nop NoopEventsExporter) SendEvent(context.Context, obspb.EventType, otel_logs_pb.LogRecord) {}
+
+// EventExporterTestingKnobs can be passed to Server to adjust flushing for the
+// EventExporter.
+type EventExporterTestingKnobs struct {
+	// FlushInterval, if set, overrides the default trigger interval for the
+	// EventExporter.
+	FlushInterval time.Duration
+	// FlushTriggerByteSize, if set, overrides the default trigger value for the
+	// EventExporter.
+	FlushTriggerByteSize uint64
+}
+
+var _ base.ModuleTestingKnobs = &EventExporterTestingKnobs{}
+
+// ModuleTestingKnobs implements the ModuleTestingKnobs interface.
+func (e *EventExporterTestingKnobs) ModuleTestingKnobs() {}
 
 // EventsExporter is a buffered client for the OTLP logs gRPC service. It is
 // used to export events to the Observability Service (possibly through an
@@ -77,6 +115,8 @@ type EventsExporter struct {
 	clock      timeutil.TimeSource
 	tr         *tracing.Tracer
 	targetAddr string
+
+	dialer func(ctx context.Context, _ string) (net.Conn, error)
 
 	// flushInterval is the duration after which a flush is triggered.
 	// 0 disables this trigger.
@@ -101,6 +141,19 @@ type EventsExporter struct {
 	// Nil if the EventsExporter is not configured to send out the events.
 	otelClient otel_collector_pb.LogsServiceClient
 	conn       *grpc.ClientConn
+}
+
+// ValidateOTLPTargetAddr validates the target address filling the possible
+// missing port with the default.
+func ValidateOTLPTargetAddr(targetAddr string) (string, error) {
+	otlpHost, otlpPort, err := addr.SplitHostPort(targetAddr, "4317" /* defaultPort */)
+	if err != nil {
+		return "", errors.Newf("invalid OTLP host in --obsservice-addr=%s", targetAddr)
+	}
+	if otlpHost == "" {
+		return "", errors.Newf("missing OTLP host in --obsservice-addr=%s", targetAddr)
+	}
+	return net.JoinHostPort(otlpHost, otlpPort), nil
 }
 
 // NewEventsExporter creates an EventsExporter.
@@ -143,19 +196,7 @@ func NewEventsExporter(
 	triggerSizeBytes uint64,
 	maxBufferSizeBytes uint64,
 	memMonitor *mon.BytesMonitor,
-) (*EventsExporter, error) {
-	otlpHost, otlpPort, err := addr.SplitHostPort(targetAddr, "4317" /* defaultPort */)
-	if err != nil {
-		return nil, errors.Newf("invalid OTLP host in --obsservice-addr=%s", targetAddr)
-	}
-	if otlpHost == "" {
-		return nil, errors.Newf("missing OTLP host in --obsservice-addr=%s", targetAddr)
-	}
-	if otlpPort == "" {
-		otlpPort = "4317"
-	}
-	targetAddr = net.JoinHostPort(otlpHost, otlpPort)
-
+) *EventsExporter {
 	s := &EventsExporter{
 		clock:              clock,
 		tr:                 tr,
@@ -174,8 +215,7 @@ func NewEventsExporter(
 		},
 	}
 	s.buf.mu.memAccount = memMonitor.MakeBoundAccount()
-
-	return s, nil
+	return s
 }
 
 // NodeInfo groups the information identifying a node that will be included in
@@ -189,19 +229,16 @@ type NodeInfo struct {
 	BinaryVersion string
 }
 
-// Start starts the goroutine that will periodically flush the events to the
-// configured sink.
-//
-// Flushes are triggered by the configured flush interval and by the buffer size
-// threshold.
-//
-// nodeInfo represents the node information that will be included in every batch
-// of events that gets exported. This information is passed to Start() rather
-// than to NewEventsExporter() to allow the EventsExporter to be constructed before
+// SetDialer configures the dialer to be used when opening network connections.
+func (s *EventsExporter) SetDialer(dialer func(ctx context.Context, _ string) (net.Conn, error)) {
+	s.dialer = dialer
+}
+
+// SetNodeInfo initializes the node information that will be included in every
+// batch of events that gets exported. This information is not passed to
+// NewEventsExporter() to allow the EventsExporter to be constructed before
 // the node ID is known.
-func (s *EventsExporter) Start(
-	ctx context.Context, nodeInfo NodeInfo, stopper *stop.Stopper,
-) error {
+func (s *EventsExporter) SetNodeInfo(nodeInfo NodeInfo) {
 	s.resource = otel_res_pb.Resource{
 		Attributes: []*otel_pb.KeyValue{
 			{
@@ -218,10 +255,21 @@ func (s *EventsExporter) Start(
 			},
 		},
 	}
+}
 
-	// Note that Dial is non-blocking.
+// Start starts the goroutine that will periodically flush the events to the
+// configured sink.
+//
+// Flushes are triggered by the configured flush interval and by the buffer size
+// threshold.
+func (s *EventsExporter) Start(ctx context.Context, stopper *stop.Stopper) error {
 	// TODO(andrei): Add support for TLS / mutual TLS.
-	conn, err := grpc.Dial(s.targetAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	opts := []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())}
+	if s.dialer != nil {
+		opts = append(opts, grpc.WithContextDialer(s.dialer))
+	}
+	// Note that Dial is non-blocking.
+	conn, err := grpc.Dial(s.targetAddr, opts...)
 	if err != nil {
 		return err
 	}
@@ -410,14 +458,14 @@ var unrecognizedEventEveryN = log.Every(time.Minute)
 var unrecognizedEventPayloadEveryN = log.Every(time.Minute)
 
 // SendEvent buffers an event to be sent.
+//
+// SendEvent does not block. If the buffer is full, old events are dropped.
+//
+// SendEvent can be called before Start(). Such events will be buffered
+// (within the buffering limits) and sent after Start() is eventually called.
 func (s *EventsExporter) SendEvent(
 	ctx context.Context, typ obspb.EventType, event otel_logs_pb.LogRecord,
 ) {
-	// Return early if there's no sink configured.
-	if s.otelClient == nil {
-		return
-	}
-
 	// Make sure there's room for the new event. If there isn't, we'll drop
 	// events from the front of the buffer (the oldest), until there is room.
 	newEventSize, err := sizeOfEvent(event)
