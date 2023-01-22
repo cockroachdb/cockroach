@@ -10,12 +10,14 @@ package ingest
 
 import (
 	"context"
+	gosql "database/sql"
 	"net"
 	"net/url"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/obs"
 	"github.com/cockroachdb/cockroach/pkg/obsservice/obslib/migrations"
 	"github.com/cockroachdb/cockroach/pkg/obsservice/obspb"
 	logspb "github.com/cockroachdb/cockroach/pkg/obsservice/obspb/opentelemetry-proto/collector/logs/v1"
@@ -132,61 +134,89 @@ func TestEventIngestionIntegration(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	// Allocate a port for the ingestion service to work around a circular
-	// dependency: CRDB needs to be told what the port is, but we can only create
-	// the event ingester after having started CRDB (because the ingester wants a
-	// reference to CRDB).
-	otlpListener, err := net.Listen("tcp", "127.0.0.1:0")
-	require.NoError(t, err)
-	defer func() {
-		_ = otlpListener.Close()
-	}()
+	testutils.RunTrueAndFalse(t, "embed", func(t *testing.T, embed bool) {
+		var obsAddr string
 
-	s, sqlDB, _ := serverutils.StartServer(t,
-		base.TestServerArgs{
-			ObsServiceAddr: otlpListener.Addr().String(),
-		},
-	)
-	defer s.Stopper().Stop(ctx)
-	pgURL, cleanupFunc := sqlutils.PGUrl(
-		t, s.ServingSQLAddr(),
-		"TestPersistEvents", url.User(username.RootUser),
-	)
-	defer cleanupFunc()
+		var s serverutils.TestServerInterface
+		var sqlDB *gosql.DB
+		if !embed {
+			// Allocate a port for the ingestion service to work around a circular
+			// dependency: CRDB needs to be told what the port is, but we can only create
+			// the event ingester after having started CRDB (because the ingester wants a
+			// reference to CRDB).
+			otlpListener, err := net.Listen("tcp", "127.0.0.1:0")
+			require.NoError(t, err)
+			defer func() {
+				_ = otlpListener.Close()
+			}()
+			obsAddr = otlpListener.Addr().String()
+			s, sqlDB, _ = serverutils.StartServer(t,
+				base.TestServerArgs{
+					ObsServiceAddr: obsAddr,
+					Knobs: base.TestingKnobs{
+						EventExporter: &obs.EventExporterTestingKnobs{
+							// Flush every message.
+							FlushTriggerByteSize: 1,
+						},
+					},
+				},
+			)
+			defer s.Stopper().Stop(ctx)
 
-	config, err := pgxpool.ParseConfig(pgURL.String())
-	require.NoError(t, err)
-	config.ConnConfig.Database = "defaultdb"
-	pool, err := pgxpool.ConnectConfig(ctx, config)
-	require.NoError(t, err)
-	defer pool.Close()
-	require.NoError(t, migrations.RunDBMigrations(ctx, config.ConnConfig))
+			pgURL, cleanupFunc := sqlutils.PGUrl(
+				t, s.ServingSQLAddr(), "TestPersistEvents", url.User(username.RootUser),
+			)
+			defer cleanupFunc()
 
-	// Start the ingestion in the background.
-	obsStop := stop.NewStopper()
-	defer obsStop.Stop(ctx)
-	e, err := MakeEventIngester(ctx, config)
-	require.NoError(t, err)
-	defer e.Close()
-	grpcServer := grpc.NewServer()
-	defer grpcServer.Stop()
-	logspb.RegisterLogsServiceServer(grpcServer, &e)
-	go func() {
-		_ = grpcServer.Serve(otlpListener)
-	}()
+			config, err := pgxpool.ParseConfig(pgURL.String())
+			require.NoError(t, err)
+			config.ConnConfig.Database = "crdb_observability"
+			pool, err := pgxpool.ConnectConfig(ctx, config)
+			require.NoError(t, err)
+			defer pool.Close()
+			require.NoError(t, migrations.RunDBMigrations(ctx, config.ConnConfig))
 
-	// Perform a schema change and check that we get an event.
-	_, err = sqlDB.Exec("create table t()")
-	require.NoError(t, err)
-
-	// Wait for an event to be ingested.
-	testutils.SucceedsSoon(t, func() error {
-		r := pool.QueryRow(ctx, "select count(1) from cluster_events where event_type='create_table'")
-		var count int
-		require.NoError(t, r.Scan(&count))
-		if count < 1 {
-			return errors.Newf("no events yet")
+			// Start the ingestion in the background.
+			obsStop := stop.NewStopper()
+			defer obsStop.Stop(ctx)
+			e, err := MakeEventIngester(ctx, config)
+			require.NoError(t, err)
+			defer e.Close()
+			grpcServer := grpc.NewServer()
+			defer grpcServer.Stop()
+			logspb.RegisterLogsServiceServer(grpcServer, &e)
+			go func() {
+				_ = grpcServer.Serve(otlpListener)
+			}()
+		} else {
+			s, sqlDB, _ = serverutils.StartServer(t,
+				base.TestServerArgs{
+					ObsServiceAddr: base.ObsServiceEmbedFlagValue,
+					Knobs: base.TestingKnobs{
+						EventExporter: &obs.EventExporterTestingKnobs{
+							// Flush every message.
+							FlushTriggerByteSize: 1,
+						},
+					},
+				},
+			)
+			defer s.Stopper().Stop(ctx)
 		}
-		return nil
+
+		// Perform a schema change and check that we get an event.
+		_, err := sqlDB.Exec("create table t()")
+		require.NoError(t, err)
+
+		// Wait for an event to be ingested.
+		testutils.SucceedsSoon(t, func() error {
+			r := sqlDB.QueryRow("SELECT count(*) FROM crdb_observability.cluster_events WHERE event_type='create_table'")
+			var count int
+			require.NoError(t, r.Scan(&count))
+			if count < 1 {
+				return errors.Newf("no events yet")
+			}
+			return nil
+		})
 	})
+
 }
