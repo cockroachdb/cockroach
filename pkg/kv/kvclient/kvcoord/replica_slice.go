@@ -44,19 +44,23 @@ const (
 	// replicas that are not LEARNERs, VOTER_OUTGOING, or
 	// VOTER_DEMOTING_{LEARNER/NON_VOTER}.
 	AllExtantReplicas
+	// AllReplicas prescribes that the ReplicaSlice should include all replicas.
+	AllReplicas
 )
 
 // NewReplicaSlice creates a ReplicaSlice from the replicas listed in the range
 // descriptor and using gossip to lookup node descriptors. Replicas on nodes
 // that are not gossiped are omitted from the result.
 //
-// Generally, learners are not returned. However, if a non-nil leaseholder is
-// passed in, it will be included in the result even if the descriptor has it as
-// a learner (we assert that the leaseholder is part of the descriptor). The
-// idea is that the descriptor might be stale and list the leaseholder as a
-// learner erroneously, and lease info is a strong signal in that direction.
-// Note that the returned ReplicaSlice might still not include the leaseholder
-// if info for the respective node is missing from the NodeDescStore.
+// Generally, learners are not returned, unless AllReplicas was passed in as a
+// filter, which in that case, everything will be returned. However, if a
+// non-nil leaseholder is passed in, it will be included in the result even if
+// the descriptor has it as a learner (we assert that the leaseholder is part
+// of the descriptor). The idea is that the descriptor might be stale and list
+// the leaseholder as a learner erroneously, and lease info is a strong signal
+// in that direction. Note that the returned ReplicaSlice might still not
+// include the leaseholder if info for the respective node is missing from the
+// NodeDescStore.
 //
 // If there's no info in gossip for any of the nodes in the descriptor, a
 // sendError is returned.
@@ -95,6 +99,8 @@ func NewReplicaSlice(
 		replicas = desc.Replicas().Filter(canReceiveLease).Descriptors()
 	case AllExtantReplicas:
 		replicas = desc.Replicas().VoterAndNonVoterDescriptors()
+	case AllReplicas:
+		replicas = desc.Replicas().Descriptors()
 	default:
 		log.Fatalf(ctx, "unknown ReplicaSliceFilter %v", filter)
 	}
@@ -244,4 +250,15 @@ func (rs ReplicaSlice) Descriptors() []roachpb.ReplicaDescriptor {
 		reps[i] = rs[i].ReplicaDescriptor
 	}
 	return reps
+}
+
+// LocalityValue returns the value of the locality tier associated with the
+// given key.
+func (ri *ReplicaInfo) LocalityValue(key string) string {
+	for _, tier := range ri.Tiers {
+		if tier.Key == key {
+			return tier.Value
+		}
+	}
+	return ""
 }

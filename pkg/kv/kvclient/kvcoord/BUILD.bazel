@@ -169,6 +169,8 @@ go_test(
         "//pkg/kv/kvserver/kvserverbase",
         "//pkg/kv/kvserver/tscache",
         "//pkg/kv/kvserver/txnwait",
+        "//pkg/multitenant",
+        "//pkg/multitenant/tenantcostmodel",
         "//pkg/roachpb",
         "//pkg/roachpb/roachpbmock",  # keep
         "//pkg/rpc",
@@ -180,6 +182,7 @@ go_test(
         "//pkg/sql/catalog/desctestutils",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
+        "//pkg/sql/sqlliveness",
         "//pkg/storage",
         "//pkg/storage/enginepb",
         "//pkg/testutils",
