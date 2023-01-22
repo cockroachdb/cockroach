@@ -21,7 +21,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
@@ -663,11 +662,6 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 	if instanceID == 0 {
 		log.Fatalf(ctx, "expected SQLInstanceID to be initialized after preStart")
 	}
-	s.eventsExporter.Start(ctx, obs.NodeInfo{
-		ClusterID:     clusterID,
-		NodeID:        int32(instanceID),
-		BinaryVersion: build.BinaryVersion(),
-	})
 
 	// Add more context to the Sentry reporter.
 	sentry.ConfigureScope(func(scope *sentry.Scope) {
@@ -1023,7 +1017,13 @@ func makeTenantSQLServerArgs(
 	// cluster ID is known, with a SetResourceInfo() call.
 	var eventsExporter obs.EventsExporterInterface
 	if baseCfg.ObsServiceAddr != "" {
-		ee, err := obs.NewEventsExporter(
+		if baseCfg.ObsServiceAddr == base.ObsServiceEmbedFlagValue {
+			// TODO(andrei): Add support for this option for tenants - at least for
+			// shared-process tenants where the event exporting should be hooked up to
+			// the ingester running in the host process.
+			return sqlServerArgs{}, errors.New("--obsservice-addr=embed is not currently supported for tenants")
+		}
+		ee := obs.NewEventsExporter(
 			baseCfg.ObsServiceAddr,
 			timeutil.DefaultTimeSource{},
 			stopper,
@@ -1033,13 +1033,8 @@ func makeTenantSQLServerArgs(
 			10*1<<20,                               // maxBufferSizeBytes - 10MB
 			monitorAndMetrics.rootSQLMemoryMonitor, // memMonitor - this is not "SQL" usage, but we don't have another memory pool
 		)
-		if err != nil {
-			log.Errorf(startupCtx, "failed to create events exporter: %s", err)
-		} else {
-			eventsExporter = ee
-		}
-	}
-	if eventsExporter == nil {
+		eventsExporter = ee
+	} else {
 		eventsExporter = &obs.NoopEventsExporter{}
 	}
 
