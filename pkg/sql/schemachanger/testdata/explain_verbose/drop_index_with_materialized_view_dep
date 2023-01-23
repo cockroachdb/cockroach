@@ -7,7 +7,7 @@ CREATE MATERIALIZED VIEW v3 AS SELECT j FROM v2@idx;
 /* test */
 EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
 ----
-• Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹v2›@‹idx› CASCADE; 
+• Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹v2›@‹idx› CASCADE;
 │
 ├── • StatementPhase
 │   │

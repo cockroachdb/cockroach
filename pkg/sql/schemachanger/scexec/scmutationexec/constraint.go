@@ -58,7 +58,7 @@ func (m *visitor) MakeAbsentCheckConstraintWriteOnly(
 	// is syntactically valid in the builder, so we just need to
 	// enqueue it to the descriptor's mutation slice.
 	ck := &descpb.TableDescriptor_CheckConstraint{
-		Expr:                  string(op.Expr),
+		Expr:                  string(op.CheckExpr),
 		Name:                  tabledesc.ConstraintNamePlaceholder(op.ConstraintID),
 		Validity:              descpb.ConstraintValidity_Validating,
 		ColumnIDs:             op.ColumnIDs,
@@ -353,9 +353,7 @@ func (m *visitor) MakeAbsentUniqueWithoutIndexConstraintWriteOnly(
 		Name:         tabledesc.ConstraintNamePlaceholder(op.ConstraintID),
 		Validity:     descpb.ConstraintValidity_Validating,
 		ConstraintID: op.ConstraintID,
-	}
-	if op.Predicate != nil {
-		uwi.Predicate = string(op.Predicate.Expr)
+		Predicate:    string(op.PartialExpr),
 	}
 	if err = enqueueAddUniqueWithoutIndexConstraintMutation(tbl, uwi); err != nil {
 		return err

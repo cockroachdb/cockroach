@@ -13,6 +13,7 @@ package storage
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/pebble/vfs"
 )
 
@@ -20,11 +21,13 @@ import (
 // uses provided in mem file system and base directory to store data. The
 // caller must call obtained engine's Close method when engine is no longer
 // needed.
-func InMemFromFS(ctx context.Context, fs vfs.FS, dir string, opts ...ConfigOption) Engine {
+func InMemFromFS(
+	ctx context.Context, fs vfs.FS, dir string, settings *cluster.Settings, opts ...ConfigOption,
+) Engine {
 	// TODO(jackson): Replace this function with a special Location
 	// constructor that allows both specifying a directory and supplying your
 	// own VFS?
-	eng, err := Open(ctx, Location{dir: dir, fs: fs}, opts...)
+	eng, err := Open(ctx, Location{dir: dir, fs: fs}, settings, opts...)
 	if err != nil {
 		panic(err)
 	}
@@ -47,7 +50,10 @@ func InMemFromFS(ctx context.Context, fs vfs.FS, dir string, opts ...ConfigOptio
 // Close method when the engine is no longer needed. This method randomizes
 // whether separated intents are written.
 func NewDefaultInMemForTesting(opts ...ConfigOption) Engine {
-	eng, err := Open(context.Background(), InMemory(), ForTesting, MaxSize(1<<20), CombineOptions(opts...))
+	eng, err := Open(
+		context.Background(), InMemory(), cluster.MakeTestingClusterSettings(),
+		ForTesting, MaxSize(1<<20), CombineOptions(opts...),
+	)
 	if err != nil {
 		panic(err)
 	}

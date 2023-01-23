@@ -18,6 +18,7 @@ go_library(
         "op_drop.go",
         "op_index_and_column.go",
         "registry.go",
+        "release_22_2_helpers.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/rules/release_22_2",
     visibility = ["//pkg/sql/schemachanger/scplan:__subpackages__"],

@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/pebble"
@@ -91,7 +92,7 @@ func TestSetMinVersion(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	p, err := Open(context.Background(), InMemory(), CacheSize(0))
+	p, err := Open(context.Background(), InMemory(), cluster.MakeClusterSettings(), CacheSize(0))
 	require.NoError(t, err)
 	defer p.Close()
 	require.Equal(t, pebble.FormatMostCompatible, p.db.FormatMajorVersion())
@@ -119,6 +120,7 @@ func TestMinVersion_IsNotEncrypted(t *testing.T) {
 	p, err := Open(
 		context.Background(),
 		Location{dir: "", fs: fs},
+		cluster.MakeClusterSettings(),
 		EncryptionAtRest(nil))
 	require.NoError(t, err)
 	defer p.Close()

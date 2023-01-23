@@ -4,7 +4,7 @@ CREATE TABLE t (a INT NOT NULL);
 /* test */
 EXPLAIN (ddl) alter table t add primary key (a);
 ----
-Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD PRIMARY KEY (‹a›); 
+Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD PRIMARY KEY (‹a›);
  ├── StatementPhase
  │    └── Stage 1 of 1 in StatementPhase
  │         ├── 3 elements transitioning toward PUBLIC

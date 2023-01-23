@@ -6,13 +6,13 @@ CREATE TABLE t (i INT PRIMARY KEY, j STRING);
 /* test */
 EXPLAIN (ddl) ALTER TABLE t ADD CHECK (i > nextval('s') OR j::typ = 'a');
 ----
-Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD CHECK ((‹i› > nextval(‹'s'›)) OR (‹j›::‹typ› = ‹'a'›)); 
+Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD CHECK ((‹i› > nextval(‹'s'›)) OR (‹j›::‹typ› = ‹'a'›));
  ├── StatementPhase
  │    └── Stage 1 of 1 in StatementPhase
  │         ├── 1 element transitioning toward PUBLIC
  │         │    └── ABSENT → WRITE_ONLY CheckConstraint:{DescID: 107, ReferencedTypeIDs: [105 106], IndexID: 0, ConstraintID: 2, ReferencedSequenceIDs: [104]}
  │         └── 3 Mutation operations
- │              ├── MakeAbsentCheckConstraintWriteOnly
+ │              ├── MakeAbsentCheckConstraintWriteOnly {"CheckExpr":"(i \u003e nextval(104...","ConstraintID":2,"TableID":107}
  │              ├── UpdateTableBackReferencesInTypes {"BackReferencedTableID":107}
  │              └── UpdateBackReferencesInSequences {"BackReferencedTableID":107}
  ├── PreCommitPhase

@@ -189,10 +189,14 @@ func computeStatsDelta(
 		if err != nil {
 			return enginepb.MVCCStats{}, err
 		}
-		// If we took the fast path but race is enabled, assert stats were correctly computed.
+		// If we took the fast path but race is enabled, assert stats were correctly
+		// computed.
 		if entireRange {
-			computed.ContainsEstimates = delta.ContainsEstimates // retained for tests under race
-			if !delta.Equal(computed) {
+			// Retain the value of ContainsEstimates for tests under race.
+			computed.ContainsEstimates = delta.ContainsEstimates
+			// We only want to assert the correctness of stats that do not contain
+			// estimates.
+			if delta.ContainsEstimates == 0 && !delta.Equal(computed) {
 				log.Fatalf(ctx, "fast-path MVCCStats computation gave wrong result: diff(fast, computed) = %s",
 					pretty.Diff(delta, computed))
 			}

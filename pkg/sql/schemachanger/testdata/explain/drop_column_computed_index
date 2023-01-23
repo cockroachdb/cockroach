@@ -4,7 +4,7 @@ create table t (i INT PRIMARY KEY, j INT, INDEX((j+1)));
 /* test */
 EXPLAIN (ddl) ALTER TABLE t DROP COLUMN j CASCADE;
 ----
-Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COLUMN ‹j› CASCADE; 
+Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COLUMN ‹j› CASCADE;
  ├── StatementPhase
  │    └── Stage 1 of 1 in StatementPhase
  │         ├── 3 elements transitioning toward PUBLIC

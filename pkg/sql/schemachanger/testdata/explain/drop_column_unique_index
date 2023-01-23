@@ -7,7 +7,7 @@ ALTER TABLE t.test ADD COLUMN x DECIMAL DEFAULT (DECIMAL '1.4') CHECK (x >= 0);
 /* test */
 EXPLAIN (ddl) ALTER TABLE t.test DROP pi;
 ----
-Schema change plan for ALTER TABLE ‹t›.‹public›.‹test› DROP COLUMN ‹pi›; 
+Schema change plan for ALTER TABLE ‹t›.‹public›.‹test› DROP COLUMN ‹pi›;
  ├── StatementPhase
  │    └── Stage 1 of 1 in StatementPhase
  │         ├── 5 elements transitioning toward PUBLIC

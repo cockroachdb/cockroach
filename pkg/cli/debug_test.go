@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -37,6 +38,7 @@ func createStore(t *testing.T, path string) {
 	db, err := storage.Open(
 		context.Background(),
 		storage.Filesystem(path),
+		cluster.MakeClusterSettings(),
 		storage.CacheSize(server.DefaultCacheSize))
 	if err != nil {
 		t.Fatal(err)

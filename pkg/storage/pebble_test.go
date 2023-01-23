@@ -256,7 +256,7 @@ func TestPebbleMetricEventListener(t *testing.T) {
 
 	settings := cluster.MakeTestingClusterSettings()
 	MaxSyncDurationFatalOnExceeded.Override(ctx, &settings.SV, false)
-	p, err := Open(ctx, InMemory(), CacheSize(1<<20 /* 1 MiB */), Settings(settings))
+	p, err := Open(ctx, InMemory(), settings, CacheSize(1<<20 /* 1 MiB */))
 	require.NoError(t, err)
 	defer p.Close()
 
@@ -547,7 +547,7 @@ func TestPebbleBackgroundError(t *testing.T) {
 			errorCount: 3,
 		},
 	}
-	eng, err := Open(context.Background(), loc)
+	eng, err := Open(context.Background(), loc, cluster.MakeClusterSettings())
 	require.NoError(t, err)
 	defer eng.Close()
 
@@ -1206,7 +1206,8 @@ func TestFSOpenFd(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	dir := t.TempDir()
 
-	eng, err := Open(context.Background(), Filesystem(dir), ForTesting, MaxSize(1<<20))
+	eng, err := Open(context.Background(), Filesystem(dir), cluster.MakeClusterSettings(),
+		ForTesting, MaxSize(1<<20))
 	require.NoError(t, err)
 	defer eng.Close()
 

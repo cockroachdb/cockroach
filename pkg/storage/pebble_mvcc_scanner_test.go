@@ -35,6 +35,7 @@ func TestMVCCScanWithManyVersionsAndSeparatedIntents(t *testing.T) {
 
 	// We default to separated intents enabled.
 	eng, err := Open(context.Background(), InMemory(),
+		cluster.MakeClusterSettings(),
 		CacheSize(1<<20))
 	require.NoError(t, err)
 	defer eng.Close()

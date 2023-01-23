@@ -5,7 +5,7 @@ CREATE SCHEMA db.sc;
 /* test */
 EXPLAIN (ddl) DROP SCHEMA db.sc;
 ----
-Schema change plan for DROP SCHEMA ‹db›.‹sc›; 
+Schema change plan for DROP SCHEMA ‹db›.‹sc›;
  ├── StatementPhase
  │    └── Stage 1 of 1 in StatementPhase
  │         ├── 1 element transitioning toward ABSENT

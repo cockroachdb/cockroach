@@ -5,7 +5,7 @@ CREATE TABLE t (i INT PRIMARY KEY);
 EXPLAIN (ddl, verbose) ALTER TABLE t ADD CHECK (i > 0)
 ---;
 ----
-• Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD CHECK (‹i› > ‹0›); 
+• Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD CHECK (‹i› > ‹0›);
 │
 ├── • StatementPhase
 │   │
@@ -22,7 +22,11 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ADD CHECK (i > 0)
 │       └── • 1 Mutation operation
 │           │
 │           └── • MakeAbsentCheckConstraintWriteOnly
-│                 {}
+│                 CheckExpr: i > 0:::INT8
+│                 ColumnIDs:
+│                 - 1
+│                 ConstraintID: 2
+│                 TableID: 104
 │
 ├── • PreCommitPhase
 │   │

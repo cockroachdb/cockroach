@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -103,7 +104,7 @@ func getInitialStateEngine(
 		testutils.ReadAllFiles(filepath.Join(testRunDir, "*"))
 
 		loc := Filesystem(testRunDir)
-		e, err := Open(ctx, loc, opts...)
+		e, err := Open(ctx, loc, cluster.MakeClusterSettings(), opts...)
 		require.NoError(b, err)
 		return engineWithLocation{Engine: e, Location: loc}
 	}
@@ -124,7 +125,7 @@ func getInitialStateEngine(
 	}
 
 	loc := Location{fs: fs}
-	e, err := Open(ctx, loc, opts...)
+	e, err := Open(ctx, loc, cluster.MakeClusterSettings(), opts...)
 	require.NoError(b, err)
 	return engineWithLocation{Engine: e, Location: loc}
 }
@@ -156,7 +157,8 @@ func buildInitialState(
 		buildFS = vfs.NewMem()
 
 		var err error
-		e, err := Open(ctx, Location{fs: buildFS}, opts...)
+		e, err := Open(ctx, Location{fs: buildFS}, cluster.MakeClusterSettings(), opts...)
+
 		require.NoError(b, err)
 
 		require.NoError(b, initial.Build(ctx, b, e))

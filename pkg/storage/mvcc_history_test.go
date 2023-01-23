@@ -184,9 +184,8 @@ func TestMVCCHistories(t *testing.T) {
 		disableSeparateEngineBlocks := strings.Contains(path, "_disable_separate_engine_blocks")
 
 		// We start from a clean slate in every test file.
-		engine, err := storage.Open(ctx, storage.InMemory(),
+		engine, err := storage.Open(ctx, storage.InMemory(), st,
 			storage.CacheSize(1<<20 /* 1 MiB */),
-			storage.Settings(st),
 			storage.If(separateEngineBlocks && !disableSeparateEngineBlocks, storage.BlockSize(1)),
 		)
 		require.NoError(t, err)
