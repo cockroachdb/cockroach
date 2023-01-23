@@ -53,12 +53,14 @@ type visitNodesFn func(ctx context.Context, retryOpts retry.Options,
 type Server struct {
 	stores               *kvserver.Stores
 	visitNodes           visitNodesFn
+	planStore            PlanStore
 	metadataQueryTimeout time.Duration
 	forwardReplicaFilter func(*serverpb.RecoveryCollectLocalReplicaInfoResponse) error
 }
 
 func NewServer(
 	stores *kvserver.Stores,
+	planStore PlanStore,
 	g *gossip.Gossip,
 	loc roachpb.Locality,
 	rpcCtx *rpc.Context,
@@ -78,6 +80,7 @@ func NewServer(
 	return &Server{
 		stores:               stores,
 		visitNodes:           makeVisitAvailableNodes(g, loc, rpcCtx),
+		planStore:            planStore,
 		metadataQueryTimeout: metadataQueryTimeout,
 		forwardReplicaFilter: forwardReplicaFilter,
 	}
