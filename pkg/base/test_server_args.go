@@ -194,6 +194,12 @@ type TestClusterArgs struct {
 	// A copy of an entry from this map will be copied to each individual server
 	// and potentially adjusted according to ReplicationMode.
 	ServerArgsPerNode map[int]TestServerArgs
+
+	// If reusable listeners is true, then restart should keep listeners untouched
+	// so that servers are kept on the same ports. It is up to the test to provide
+	// proxy listeners that could be closed by test servers and then reused upon
+	// restart.
+	ReusableListeners bool
 }
 
 var (

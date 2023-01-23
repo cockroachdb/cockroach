@@ -1076,6 +1076,10 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		func(ctx context.Context, id roachpb.NodeID) error {
 			return nodeTombStorage.SetDecommissioned(ctx, id, timeutil.Now())
 		},
+		func(ctx context.Context, id roachpb.NodeID) (livenesspb.MembershipStatus, bool) {
+			r, ok := nodeLiveness.GetLiveness(id)
+			return r.Membership, ok
+		},
 	)
 
 	*lateBoundServer = Server{
