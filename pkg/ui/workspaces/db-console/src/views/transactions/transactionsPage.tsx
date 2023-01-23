@@ -11,10 +11,15 @@
 import { connect } from "react-redux";
 import { createSelector } from "reselect";
 import { RouteComponentProps, withRouter } from "react-router-dom";
-import { refreshNodes, refreshStatements } from "src/redux/apiReducers";
+import {
+  refreshNodes,
+  refreshStatements,
+  refreshUserSQLRoles,
+} from "src/redux/apiReducers";
 import { resetSQLStatsAction } from "src/redux/sqlStats";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 import { AdminUIState } from "src/redux/state";
+import { selectHasAdminRole } from "src/redux/user";
 import { StatementsResponseMessage } from "src/util/api";
 
 import { PrintTime } from "src/views/reports/containers/range/print";
@@ -96,6 +101,7 @@ export const transactionColumnsLocalSetting = new LocalSetting(
 const fingerprintsPageActions = {
   refreshData: refreshStatements,
   refreshNodes,
+  refreshUserSQLRoles,
   resetSQLStats: resetSQLStatsAction,
   onTimeScaleChange: setGlobalTimeScaleAction,
   // We use `null` when the value was never set and it will show all columns.
@@ -150,6 +156,7 @@ const TransactionsPageConnected = withRouter(
         search: searchLocalSetting.selector(state),
         sortSetting: sortSettingLocalSetting.selector(state),
         statementsError: state.cachedData.statements.lastError,
+        hasAdminRole: selectHasAdminRole(state),
       },
       activePageProps: mapStateToActiveTransactionsPageProps(state),
     }),
