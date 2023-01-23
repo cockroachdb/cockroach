@@ -1,0 +1,27 @@
+name: Add issues to project boards
+
+on:
+  issues:
+    types: [opened, labeled]
+
+jobs:
+  add-to-project:
+    name: Add issues to project boards
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/add-to-project@v0.4.0
+        with:
+          # URL of the project to add issues to
+          project-url: https://github.com/orgs/cockroachdb/projects/36
+          # A GitHub personal access token with write access to the project
+          github-token: ${{ secrets.ADD_TO_PROJECT_PAT }}
+          # A comma-separated list of labels to use as a filter for issue to be added
+          labeled: T-multitenant
+      - uses: actions/add-to-project@v0.4.0
+        with:
+          # URL of the project to add issues to
+          project-url: https://github.com/orgs/cockroachdb/projects/38
+          # A GitHub personal access token with write access to the project
+          github-token: ${{ secrets.ADD_TO_PROJECT_PAT }}
+          # A comma-separated list of labels to use as a filter for issue to be added
+          labeled: T-cdc

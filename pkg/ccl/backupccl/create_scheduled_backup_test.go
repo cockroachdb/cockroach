@@ -574,6 +574,28 @@ func TestSerializesScheduledBackupExecutionArgs(t *testing.T) {
 			},
 		},
 		{
+			name:      "full-cluster-with-revision-history-arg",
+			query:     `CREATE SCHEDULE my_backup_name FOR BACKUP INTO 'nodelocal://0/backup' WITH revision_history = $1 RECURRING '@hourly'`,
+			queryArgs: []interface{}{true},
+			user:      enterpriseUser,
+			expectedSchedules: []expectedSchedule{
+				{
+					nameRe:                        "my_backup_name",
+					backupStmt:                    "BACKUP INTO LATEST IN 'nodelocal://0/backup' WITH revision_history = true, detached",
+					period:                        time.Hour,
+					paused:                        true,
+					chainProtectedTimestampRecord: true,
+				},
+				{
+					nameRe:                        "my_backup_name",
+					backupStmt:                    "BACKUP INTO 'nodelocal://0/backup' WITH revision_history = true, detached",
+					period:                        24 * time.Hour,
+					runsNow:                       true,
+					chainProtectedTimestampRecord: true,
+				},
+			},
+		},
+		{
 			name: "multiple-tables-with-encryption",
 			user: enterpriseUser,
 			query: `
@@ -1318,7 +1340,7 @@ func TestCreateScheduledBackupTelemetry(t *testing.T) {
 	defer useRealTimeAOST()()
 
 	// Create a schedule and verify that the correct telemetry event was logged.
-	query := `CREATE SCHEDULE FOR BACKUP INTO $1 RECURRING '@hourly' FULL BACKUP '@daily' 
+	query := `CREATE SCHEDULE FOR BACKUP INTO $1 RECURRING '@hourly' FULL BACKUP '@daily'
 WITH SCHEDULE OPTIONS on_execution_failure = 'pause', ignore_existing_backups, first_run=$2`
 	loc := "userfile:///logging"
 

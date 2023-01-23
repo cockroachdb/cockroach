@@ -1031,7 +1031,14 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		},
 	)
 
-	recoveryServer := loqrecovery.NewServer(stores, g, cfg.Locality, rpcContext, cfg.TestingKnobs.LOQRecovery)
+	// TODO(oleg): plan store creation needs to move to the start of this method
+	// right after stores are created. We need it to retrieve pending plan and
+	// patch replicas before any initialization occurs.
+	planStore, err := newPlanStore(cfg)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to create loss of quorum recovery server")
+	}
+	recoveryServer := loqrecovery.NewServer(stores, planStore, g, cfg.Locality, rpcContext, cfg.TestingKnobs.LOQRecovery)
 
 	*lateBoundServer = Server{
 		nodeIDContainer:        nodeIDContainer,
