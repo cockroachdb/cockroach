@@ -10,6 +10,7 @@ go_library(
         "files.go",
         "hook.go",
         "keys.go",
+        "listener.go",
         "net.go",
         "pprof.go",
         "soon.go",
@@ -34,6 +35,7 @@ go_library(
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
     ],
 )
 
