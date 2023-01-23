@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/rewrite"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -2397,37 +2398,72 @@ func (r *restoreResumer) restoreSystemUsers(
 		newUsernames := make(map[string]bool)
 		for _, user := range users {
 			newUsernames[user[0].String()] = true
-			if _, err = executor.Exec(ctx, "insert-non-existent-users", txn, insertUser,
+			if _, err := executor.Exec(ctx, "insert-non-existent-users", txn, insertUser,
 				user[0], user[1], user[2]); err != nil {
 				return err
 			}
 		}
 
 		// We skip granting roles if the backup does not contain system.role_members.
-		if len(systemTables) == 1 {
-			return nil
-		}
+		if hasSystemRoleMembersTable(systemTables) {
+			selectNonExistentRoleMembers := "SELECT * FROM crdb_temp_system.role_members temp_rm WHERE " +
+				"NOT EXISTS (SELECT * FROM system.role_members rm WHERE temp_rm.role = rm.role AND temp_rm.member = rm.member)"
+			roleMembers, err := executor.QueryBuffered(ctx, "get-role-members",
+				txn, selectNonExistentRoleMembers)
+			if err != nil {
+				return err
+			}
 
-		selectNonExistentRoleMembers := "SELECT * FROM crdb_temp_system.role_members temp_rm WHERE " +
-			"NOT EXISTS (SELECT * FROM system.role_members rm WHERE temp_rm.role = rm.role AND temp_rm.member = rm.member)"
-		roleMembers, err := executor.QueryBuffered(ctx, "get-role-members",
-			txn, selectNonExistentRoleMembers)
-		if err != nil {
-			return err
-		}
-
-		insertRoleMember := `INSERT INTO system.role_members ("role", "member", "isAdmin") VALUES ($1, $2, $3)`
-		for _, roleMember := range roleMembers {
-			// Only grant roles to users that don't currently exist, i.e., new users we just added
-			if _, ok := newUsernames[roleMember[1].String()]; ok {
-				if _, err = executor.Exec(ctx, "insert-non-existent-role-members", txn, insertRoleMember,
-					roleMember[0], roleMember[1], roleMember[2]); err != nil {
-					return err
+			insertRoleMember := `INSERT INTO system.role_members ("role", "member", "isAdmin") VALUES ($1, $2, $3)`
+			for _, roleMember := range roleMembers {
+				// Only grant roles to users that don't currently exist, i.e., new users we just added
+				if _, ok := newUsernames[roleMember[1].String()]; ok {
+					if _, err = executor.Exec(ctx, "insert-non-existent-role-members", txn, insertRoleMember,
+						roleMember[0], roleMember[1], roleMember[2]); err != nil {
+						return err
+					}
 				}
 			}
 		}
+
+		if hasSystemRoleOptionsTable(systemTables) {
+			selectNonExistentRoleOptions := "SELECT * FROM crdb_temp_system.role_options temp_ro WHERE " +
+				"NOT EXISTS (SELECT * FROM system.role_options ro WHERE temp_ro.username = ro.username AND temp_ro.option = ro.option)"
+			roleOptions, err := executor.QueryBuffered(ctx, "get-role-options", txn, selectNonExistentRoleOptions)
+			if err != nil {
+				return err
+			}
+
+			insertRoleOption := `INSERT INTO system.role_options ("username", "option", "value") VALUES ($1, $2, $3)`
+			for _, roleOption := range roleOptions {
+				if _, ok := newUsernames[roleOption[0].String()]; ok {
+					if _, err := executor.Exec(ctx, "insert-non-existent-role-options", txn,
+						insertRoleOption, roleOption[0], roleOption[1], roleOption[2]); err != nil {
+						return err
+					}
+				}
+			}
+		}
+
 		return nil
 	})
+}
+
+func hasSystemRoleMembersTable(systemTables []catalog.TableDescriptor) bool {
+	return hasSystemTableByName(systemschema.RoleMembersTable.GetName(), systemTables)
+}
+
+func hasSystemRoleOptionsTable(systemTables []catalog.TableDescriptor) bool {
+	return hasSystemTableByName(systemschema.RoleOptionsTable.GetName(), systemTables)
+}
+
+func hasSystemTableByName(name string, systemTables []catalog.TableDescriptor) bool {
+	for _, t := range systemTables {
+		if t.GetName() == name {
+			return true
+		}
+	}
+	return false
 }
 
 // restoreSystemTables atomically replaces the contents of the system tables

@@ -9372,10 +9372,10 @@ func TestBackupRestoreSystemUsers(t *testing.T) {
 		sqlDBRestore.CheckQueryResults(t, "SHOW USERS", [][]string{
 			{"admin", "", "{}"},
 			{"app", "", "{admin,app_role}"},
-			{"app_role", "", "{}"},
+			{"app_role", "NOLOGIN", "{}"},
 			{"root", "", "{admin}"},
 			{"test", "", "{}"},
-			{"test_role", "", "{app_role}"},
+			{"test_role", "NOLOGIN", "{app_role}"},
 		})
 	})
 
