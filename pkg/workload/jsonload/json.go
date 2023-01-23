@@ -37,19 +37,21 @@ const (
 	jsonSchemaWithComputed      = `(k BIGINT AS (v->>'key')::BIGINT STORED PRIMARY KEY, v JSONB NOT NULL)`
 )
 
+var RandomSeed = workload.NewInt64RandomSeed()
+
 type jsonLoad struct {
 	flags     workload.Flags
 	connFlags *workload.ConnFlags
 
-	batchSize      int
-	cycleLength    int64
-	readPercent    int
-	writeSeq, seed int64
-	sequential     bool
-	splits         int
-	complexity     int
-	inverted       bool
-	computed       bool
+	batchSize   int
+	cycleLength int64
+	readPercent int
+	writeSeq    int64
+	sequential  bool
+	splits      int
+	complexity  int
+	inverted    bool
+	computed    bool
 }
 
 func init() {
@@ -60,7 +62,8 @@ var jsonLoadMeta = workload.Meta{
 	Name: `json`,
 	Description: `JSON reads and writes to keys spread (by default, uniformly` +
 		` at random) across the cluster`,
-	Version: `1.0.0`,
+	Version:    `1.0.0`,
+	RandomSeed: RandomSeed,
 	New: func() workload.Generator {
 		g := &jsonLoad{}
 		g.flags.FlagSet = pflag.NewFlagSet(`json`, pflag.ContinueOnError)
@@ -71,12 +74,12 @@ var jsonLoadMeta = workload.Meta{
 		g.flags.Int64Var(&g.cycleLength, `cycle-length`, math.MaxInt64, `Number of keys repeatedly accessed by each writer`)
 		g.flags.IntVar(&g.readPercent, `read-percent`, 0, `Percent (0-100) of operations that are reads of existing keys`)
 		g.flags.Int64Var(&g.writeSeq, `write-seq`, 0, `Initial write sequence value.`)
-		g.flags.Int64Var(&g.seed, `seed`, 1, `Key hash seed.`)
 		g.flags.BoolVar(&g.sequential, `sequential`, false, `Pick keys sequentially instead of randomly`)
 		g.flags.IntVar(&g.splits, `splits`, 0, `Number of splits to perform before starting normal operations`)
 		g.flags.IntVar(&g.complexity, `complexity`, 20, `Complexity of generated JSON data`)
 		g.flags.BoolVar(&g.inverted, `inverted`, false, `Whether to include an inverted index`)
 		g.flags.BoolVar(&g.computed, `computed`, false, `Whether to use a computed primary key`)
+		RandomSeed.AddFlag(&g.flags)
 		g.connFlags = workload.NewConnFlags(&g.flags)
 		return g
 	},
@@ -114,7 +117,7 @@ func (w *jsonLoad) Tables() []workload.Table {
 		Splits: workload.Tuples(
 			w.splits,
 			func(splitIdx int) []interface{} {
-				rng := rand.New(rand.NewSource(w.seed + int64(splitIdx)))
+				rng := rand.New(rand.NewSource(RandomSeed.Seed() + int64(splitIdx)))
 				g := newHashGenerator(&sequence{config: w, val: w.writeSeq})
 				return []interface{}{
 					int(g.hash(rng.Int63())),
@@ -289,14 +292,14 @@ type hashGenerator struct {
 func newHashGenerator(seq *sequence) *hashGenerator {
 	return &hashGenerator{
 		seq:    seq,
-		random: rand.New(rand.NewSource(seq.config.seed)),
+		random: rand.New(rand.NewSource(RandomSeed.Seed())),
 		hasher: sha1.New(),
 	}
 }
 
 func (g *hashGenerator) hash(v int64) int64 {
 	binary.BigEndian.PutUint64(g.buf[:8], uint64(v))
-	binary.BigEndian.PutUint64(g.buf[8:16], uint64(g.seq.config.seed))
+	binary.BigEndian.PutUint64(g.buf[8:16], uint64(RandomSeed.Seed()))
 	g.hasher.Reset()
 	_, _ = g.hasher.Write(g.buf[:16])
 	g.hasher.Sum(g.buf[:0])
@@ -327,7 +330,7 @@ type sequentialGenerator struct {
 func newSequentialGenerator(seq *sequence) *sequentialGenerator {
 	return &sequentialGenerator{
 		seq:    seq,
-		random: rand.New(rand.NewSource(seq.config.seed)),
+		random: rand.New(rand.NewSource(RandomSeed.Seed())),
 	}
 }
 

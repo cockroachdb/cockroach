@@ -26,11 +26,12 @@ import (
 	"github.com/spf13/pflag"
 )
 
+var RandomSeed = workload.NewInt64RandomSeed()
+
 type sqlSmith struct {
 	flags     workload.Flags
 	connFlags *workload.ConnFlags
 
-	seed          int64
 	tables        int
 	errorSettings int
 }
@@ -51,13 +52,14 @@ var sqlSmithMeta = workload.Meta{
 	Name:        `sqlsmith`,
 	Description: `sqlsmith is a random SQL query generator`,
 	Version:     `1.0.0`,
+	RandomSeed:  RandomSeed,
 	New: func() workload.Generator {
 		g := &sqlSmith{}
 		g.flags.FlagSet = pflag.NewFlagSet(`sqlsmith`, pflag.ContinueOnError)
-		g.flags.Int64Var(&g.seed, `seed`, 1, `Key hash seed.`)
 		g.flags.IntVar(&g.tables, `tables`, 1, `Number of tables.`)
 		g.flags.IntVar(&g.errorSettings, `error-sensitivity`, 0,
 			`SQLSmith's sensitivity to errors. 0=ignore all errors. 1=quit on internal errors. 2=quit on any error.`)
+		RandomSeed.AddFlag(&g.flags)
 		g.connFlags = workload.NewConnFlags(&g.flags)
 		return g
 	},
@@ -75,7 +77,7 @@ func (g *sqlSmith) Hooks() workload.Hooks {
 
 // Tables implements the Generator interface.
 func (g *sqlSmith) Tables() []workload.Table {
-	rng := rand.New(rand.NewSource(g.seed))
+	rng := rand.New(rand.NewSource(RandomSeed.Seed()))
 	var tables []workload.Table
 	for idx := 0; idx < g.tables; idx++ {
 		schema := randgen.RandCreateTable(rng, "table", idx, false /* isMultiRegion */)
@@ -139,7 +141,7 @@ func (g *sqlSmith) Ops(
 
 	ql := workload.QueryLoad{SQLDatabase: sqlDatabase}
 	for i := 0; i < g.connFlags.Concurrency; i++ {
-		rng := rand.New(rand.NewSource(g.seed + int64(i)))
+		rng := rand.New(rand.NewSource(RandomSeed.Seed() + int64(i)))
 		smither, err := sqlsmith.NewSmither(db, rng)
 		if err != nil {
 			return workload.QueryLoad{}, err

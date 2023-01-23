@@ -20,15 +20,12 @@ import (
 	"math/rand"
 	"reflect"
 	"strings"
-	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
@@ -38,18 +35,13 @@ import (
 	"github.com/spf13/pflag"
 )
 
-var (
-	defaultSeedOnce, logSeedOnce sync.Once
-	defaultSeed                  int64
-)
+var RandomSeed = workload.NewInt64RandomSeed()
 
 type random struct {
 	flags     workload.Flags
 	connFlags *workload.ConnFlags
 
 	batchSize int
-
-	seed int64
 
 	tableName string
 
@@ -63,20 +55,10 @@ func init() {
 	workload.Register(randMeta)
 }
 
-// defaultRandomSeed sets the `defaultSeed` package variable if it's
-// not yet set. This makes it possible for every run of the `rand`
-// workload to use a different seed by default
-func defaultRandomSeed() int64 {
-	defaultSeedOnce.Do(func() {
-		defaultSeed = randutil.NewPseudoSeed()
-	})
-
-	return defaultSeed
-}
-
 var randMeta = workload.Meta{
 	Name:        `rand`,
 	Description: `random writes to table`,
+	RandomSeed:  RandomSeed,
 	Version:     `1.0.0`,
 	New: func() workload.Generator {
 		g := &random{}
@@ -88,28 +70,17 @@ var randMeta = workload.Meta{
 		g.flags.StringVar(&g.tableName, `table`, ``, `Table to write to`)
 		g.flags.IntVar(&g.batchSize, `batch`, 1, `Number of rows to insert in a single SQL statement`)
 		g.flags.StringVar(&g.method, `method`, `upsert`, `Choice of DML name: insert, upsert, ioc-update (insert on conflict update), ioc-nothing (insert on conflict no nothing)`)
-		g.flags.Int64Var(&g.seed, `seed`, defaultRandomSeed(), "Random seed. Must be the same in 'init' and 'run'. Default changes in each run")
 		g.flags.StringVar(&g.primaryKey, `primary-key`, ``, `ioc-update and ioc-nothing require primary key`)
 		g.flags.IntVar(&g.nullPct, `null-percent`, 5, `Percent random nulls`)
+		RandomSeed.AddFlag(&g.flags)
 		g.connFlags = workload.NewConnFlags(&g.flags)
 
 		return g
 	},
 }
 
-// logSeed will log the seed used in this run of the `rand`
-// workload. It should be called by a hook that is called after the
-// command line flags are parsed so that we log the accurate seed
-// being used
-func (w *random) logSeed() {
-	logSeedOnce.Do(func() {
-		log.Infof(context.Background(), "using random seed %v", w.seed)
-	})
-}
-
 // Meta implements the Generator interface.
 func (w *random) Meta() workload.Meta {
-	w.logSeed()
 	return randMeta
 }
 
@@ -124,7 +95,7 @@ func (w *random) Hooks() workload.Hooks {
 // Tables implements the Generator interface.
 func (w *random) Tables() []workload.Table {
 	tables := make([]workload.Table, w.tables)
-	rng := rand.New(rand.NewSource(w.seed))
+	rng := rand.New(rand.NewSource(RandomSeed.Seed()))
 	for i := 0; i < w.tables; i++ {
 		createTable := randgen.RandCreateTable(rng, "table", rng.Int(), false /* isMultiRegion */)
 		ctx := tree.NewFmtCtx(tree.FmtParsable)
@@ -353,7 +324,7 @@ AND    i.indisprimary`, relid)
 			hists:     reg.GetHandle(),
 			db:        db,
 			cols:      nonComputedCols,
-			rng:       rand.New(rand.NewSource(w.seed + int64(i))),
+			rng:       rand.New(rand.NewSource(RandomSeed.Seed() + int64(i))),
 			writeStmt: writeStmt,
 		}
 		ql.WorkerFns = append(ql.WorkerFns, op.run)
