@@ -21,22 +21,24 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/loqrecovery/loqrecoverypb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
+	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"google.golang.org/grpc"
 )
 
 const rangeMetadataScanChunkSize = 100
 
-var replicaInfoStreamRetryOptions = retry.Options{
+var fanOutConnectionRetryOptions = retry.Options{
 	MaxRetries:     3,
 	InitialBackoff: time.Second,
 	Multiplier:     1,
@@ -48,17 +50,24 @@ func IsRetryableError(err error) bool {
 	return errors.Is(err, errMarkRetry)
 }
 
-type visitNodesFn func(ctx context.Context, retryOpts retry.Options,
+type visitNodeAdminFn func(ctx context.Context, retryOpts retry.Options,
+	nodeFilter func(nodeID roachpb.NodeID) bool,
 	visitor func(nodeID roachpb.NodeID, client serverpb.AdminClient) error,
 ) error
 
+type visitNodeStatusFn func(ctx context.Context, nodeID roachpb.NodeID, retryOpts retry.Options,
+	visitor func(client serverpb.StatusClient) error,
+) error
+
 type Server struct {
-	nodeIDContainer    *base.NodeIDContainer
-	clusterIDContainer *base.ClusterIDContainer
-	stores             *kvserver.Stores
-	visitNodes         visitNodesFn
-	planStore          PlanStore
-	decommissionFn     func(context.Context, roachpb.NodeID) error
+	nodeIDContainer      *base.NodeIDContainer
+	clusterIDContainer   *base.ClusterIDContainer
+	stores               *kvserver.Stores
+	visitAdminNodes      visitNodeAdminFn
+	visitStatusNode      visitNodeStatusFn
+	planStore            PlanStore
+	decommissionFn       func(context.Context, roachpb.NodeID) error
+	decommissionStatusFn func(context.Context, roachpb.NodeID) (livenesspb.MembershipStatus, bool)
 
 	metadataQueryTimeout time.Duration
 	forwardReplicaFilter func(*serverpb.RecoveryCollectLocalReplicaInfoResponse) error
@@ -73,6 +82,7 @@ func NewServer(
 	rpcCtx *rpc.Context,
 	knobs base.ModuleTestingKnobs,
 	decommission func(context.Context, roachpb.NodeID) error,
+	decommissionStatusFn func(context.Context, roachpb.NodeID) (livenesspb.MembershipStatus, bool),
 ) *Server {
 	// Server side timeouts are necessary in recovery collector since we do best
 	// effort operations where cluster info collection as an operation succeeds
@@ -89,9 +99,11 @@ func NewServer(
 		nodeIDContainer:      nodeIDContainer,
 		clusterIDContainer:   rpcCtx.StorageClusterID,
 		stores:               stores,
-		visitNodes:           makeVisitAvailableNodes(g, loc, rpcCtx),
+		visitAdminNodes:      makeVisitAvailableNodes(g, loc, rpcCtx),
+		visitStatusNode:      makeVisitNode(g, loc, rpcCtx),
 		planStore:            planStore,
 		decommissionFn:       decommission,
+		decommissionStatusFn: decommissionStatusFn,
 		metadataQueryTimeout: metadataQueryTimeout,
 		forwardReplicaFilter: forwardReplicaFilter,
 	}
@@ -167,8 +179,9 @@ func (s Server) ServeClusterReplicas(
 	}
 
 	// Stream local replica info from all nodes wrapping them in response stream.
-	return s.visitNodes(ctx,
-		replicaInfoStreamRetryOptions,
+	return s.visitAdminNodes(ctx,
+		fanOutConnectionRetryOptions,
+		allNodes,
 		func(nodeID roachpb.NodeID, client serverpb.AdminClient) error {
 			log.Infof(ctx, "trying to get info from node n%d", nodeID)
 			nodeReplicas := 0
@@ -240,10 +253,11 @@ func (s Server) StagePlan(
 	if req.AllNodes {
 		// Scan cluster for conflicting recovery plans and for stray nodes that are
 		// planned for forced decommission, but rejoined cluster.
-		foundNodes := make(map[roachpb.NodeID]struct{})
-		err := s.visitNodes(
+		foundNodes := make(map[roachpb.NodeID]bool)
+		err := s.visitAdminNodes(
 			ctx,
-			replicaInfoStreamRetryOptions,
+			fanOutConnectionRetryOptions,
+			allNodes,
 			func(nodeID roachpb.NodeID, client serverpb.AdminClient) error {
 				res, err := client.RecoveryNodeStatus(ctx, &serverpb.RecoveryNodeStatusRequest{})
 				if err != nil {
@@ -255,7 +269,7 @@ func (s Server) StagePlan(
 				if !req.ForcePlan && res.Status.PendingPlanID != nil && !res.Status.PendingPlanID.Equal(plan.PlanID) {
 					return errors.Newf("plan %s is already staged on node n%d", res.Status.PendingPlanID, nodeID)
 				}
-				foundNodes[nodeID] = struct{}{}
+				foundNodes[nodeID] = true
 				return nil
 			})
 		if err != nil {
@@ -264,14 +278,14 @@ func (s Server) StagePlan(
 
 		// Check that no nodes that must be decommissioned are present.
 		for _, dID := range plan.DecommissionedNodeIDs {
-			if _, ok := foundNodes[dID]; ok {
+			if foundNodes[dID] {
 				return nil, errors.Newf("node n%d was planned for decommission, but is present in cluster", dID)
 			}
 		}
 
 		// Check out that all nodes that should save plan are present.
 		for _, u := range plan.Updates {
-			if _, ok := foundNodes[u.NodeID()]; !ok {
+			if !foundNodes[u.NodeID()] {
 				return nil, errors.Newf("node n%d has planned changed but is unreachable in the cluster", u.NodeID())
 			}
 		}
@@ -279,9 +293,10 @@ func (s Server) StagePlan(
 		// Distribute plan - this should not use fan out to available, but use
 		// list from previous step.
 		var nodeErrors []string
-		err = s.visitNodes(
+		err = s.visitAdminNodes(
 			ctx,
-			replicaInfoStreamRetryOptions,
+			fanOutConnectionRetryOptions,
+			onlyListed(foundNodes),
 			func(nodeID roachpb.NodeID, client serverpb.AdminClient) error {
 				delete(foundNodes, nodeID)
 				res, err := client.RecoveryStagePlan(ctx, &serverpb.RecoveryStagePlanRequest{
@@ -355,30 +370,50 @@ func (s Server) StagePlan(
 }
 
 func (s Server) NodeStatus(
-	_ context.Context, _ *serverpb.RecoveryNodeStatusRequest,
+	ctx context.Context, _ *serverpb.RecoveryNodeStatusRequest,
 ) (*serverpb.RecoveryNodeStatusResponse, error) {
-	// TODO: report full status.
+	status := loqrecoverypb.NodeRecoveryStatus{
+		NodeID: s.nodeIDContainer.Get(),
+	}
 	plan, exists, err := s.planStore.LoadPlan()
 	if err != nil {
 		return nil, err
 	}
-	var planID *uuid.UUID
 	if exists {
-		planID = &plan.PlanID
+		status.PendingPlanID = &plan.PlanID
 	}
+	err = s.stores.VisitStores(func(s *kvserver.Store) error {
+		r, ok, err := readNodeRecoveryStatusInfo(ctx, s.Engine())
+		if err != nil {
+			return err
+		}
+		if ok {
+			status.AppliedPlanID = &r.AppliedPlanID
+			status.ApplyTimestamp = &r.ApplyTimestamp
+			status.Error = r.Error
+			return iterutil.StopIteration()
+		}
+		return nil
+	})
+	if err = iterutil.Map(err); err != nil {
+		log.Errorf(ctx, "failed to read loss of quorum recovery application status %s", err)
+		return nil, err
+	}
+
 	return &serverpb.RecoveryNodeStatusResponse{
-		Status: loqrecoverypb.NodeRecoveryStatus{
-			NodeID:        s.nodeIDContainer.Get(),
-			PendingPlanID: planID,
-		},
+		Status: status,
 	}, nil
 }
 
 func (s Server) Verify(
-	ctx context.Context, request *serverpb.RecoveryVerifyRequest,
+	ctx context.Context,
+	req *serverpb.RecoveryVerifyRequest,
+	liveNodes livenesspb.IsLiveMap,
+	db *kv.DB,
 ) (*serverpb.RecoveryVerifyResponse, error) {
 	var nss []loqrecoverypb.NodeRecoveryStatus
-	err := s.visitNodes(ctx, replicaInfoStreamRetryOptions,
+	err := s.visitAdminNodes(ctx, fanOutConnectionRetryOptions,
+		notListed(req.DecommissionedNodeIDs),
 		func(nodeID roachpb.NodeID, client serverpb.AdminClient) error {
 			res, err := client.RecoveryNodeStatus(ctx, &serverpb.RecoveryNodeStatusRequest{})
 			if err != nil {
@@ -391,26 +426,162 @@ func (s Server) Verify(
 		return nil, err
 	}
 
-	// TODO: retrieve status of requested nodes (for decommission check)
-	// TODO: retrieve unavailable ranges report
+	decomStatus := make(map[roachpb.NodeID]livenesspb.MembershipStatus)
+	decomNodes := make(map[roachpb.NodeID]interface{})
+	for _, plannedID := range req.DecommissionedNodeIDs {
+		decomNodes[plannedID] = struct{}{}
+		if ns, ok := s.decommissionStatusFn(ctx, plannedID); ok {
+			decomStatus[plannedID] = ns
+		}
+	}
+
+	isNodeLive := func(rd roachpb.ReplicaDescriptor) bool {
+		// Preemptively remove dead nodes as they would return Forbidden error if
+		// liveness is not stale enough.
+		if _, removed := decomNodes[rd.NodeID]; removed {
+			return false
+		}
+		l, ok := liveNodes[rd.NodeID]
+		return ok && l.IsLive
+	}
+
+	getRangeInfo := func(rID roachpb.RangeID, nID roachpb.NodeID) (serverpb.RangeInfo, error) {
+		var info serverpb.RangeInfo
+		err := s.visitStatusNode(ctx, nID, fanOutConnectionRetryOptions,
+			func(c serverpb.StatusClient) error {
+				resp, err := c.Range(ctx, &serverpb.RangeRequest{RangeId: int64(rID)})
+				if err != nil {
+					return err
+				}
+				res := resp.ResponsesByNodeID[nID]
+				if len(res.Infos) > 0 {
+					info = res.Infos[0]
+					return nil
+				}
+				return errors.Newf("range r%d not found on node n%d", rID, nID)
+			})
+		if err != nil {
+			return serverpb.RangeInfo{}, err
+		}
+		return info, nil
+	}
+
+	// Note that rangeCheckErr is a partial error, so we may have subset of ranges
+	// and an error, both of them will go to response.
+	unavailable, rangeCheckErr := func() ([]loqrecoverypb.RangeRecoveryStatus, error) {
+		var unavailable []loqrecoverypb.RangeRecoveryStatus
+		if req.MaxReportedRanges == 0 {
+			return nil, nil
+		}
+		start := keys.Meta2Prefix
+		for {
+			kvs, err := db.Scan(ctx, start, keys.MetaMax, rangeMetadataScanChunkSize)
+			if err != nil {
+				return unavailable, err
+			}
+			if len(kvs) == 0 {
+				break
+			}
+			var endKey roachpb.Key
+			for _, rangeDescKV := range kvs {
+				endKey = rangeDescKV.Key
+				var d roachpb.RangeDescriptor
+				if err := rangeDescKV.ValueProto(&d); err != nil {
+					continue
+				}
+				log.Infof(ctx, "desc for range %s", d)
+				h := checkRangeHealth(ctx, d, isNodeLive, getRangeInfo)
+				if h != loqrecoverypb.RangeHealth_Healthy {
+					if len(unavailable) >= int(req.MaxReportedRanges) {
+						return unavailable, errors.Newf("found more failed ranges than limit %d",
+							req.MaxReportedRanges)
+					}
+					unavailable = append(unavailable, loqrecoverypb.RangeRecoveryStatus{
+						RangeID:     d.RangeID,
+						StartKey:    d.StartKey.AsRawKey(),
+						FailureType: h,
+					})
+				}
+			}
+			start = endKey.Next()
+		}
+		return unavailable, nil
+	}()
+	rangeHealth := serverpb.RecoveryVerifyResponse_UnavailableRanges{
+		Ranges: unavailable,
+	}
+	if rangeCheckErr != nil {
+		rangeHealth.Error = rangeCheckErr.Error()
+	}
+
 	return &serverpb.RecoveryVerifyResponse{
-		Statuses: nss,
+		Statuses:                   nss,
+		DecommissionedNodeStatuses: decomStatus,
+		UnavailableRanges:          rangeHealth,
 	}, nil
+}
+
+func checkRangeHealth(
+	ctx context.Context,
+	d roachpb.RangeDescriptor,
+	liveFunc func(rd roachpb.ReplicaDescriptor) bool,
+	rangeInfo func(id roachpb.RangeID, nID roachpb.NodeID) (serverpb.RangeInfo, error),
+) loqrecoverypb.RangeHealth {
+	if d.Replicas().CanMakeProgress(liveFunc) {
+		return loqrecoverypb.RangeHealth_Healthy
+	}
+	log.Infof(ctx, "probing range %s as it can't make progress", d)
+	stuckReplica := false
+	healthyReplica := false
+	for _, r := range d.Replicas().Descriptors() {
+		// Check if node is in deleted nodes first.
+		log.Infof(ctx, "checking replica %s", r)
+		if liveFunc(r) {
+			info, err := rangeInfo(d.RangeID, r.NodeID)
+			if err != nil {
+				log.Infof(ctx, "failed to get range status for replica")
+				// We can't reach node which is reported as live, skip this replica
+				// for now and check if remaining nodes could serve the range.
+				continue
+			}
+			canMakeProgress := info.State.Desc.Replicas().CanMakeProgress(liveFunc)
+
+			healthyReplica = healthyReplica || canMakeProgress
+			stuckReplica = stuckReplica || !canMakeProgress
+			log.Infof(ctx, "can make progress %t", canMakeProgress)
+		}
+	}
+	// If we have a leaseholder that can't make progress it could block all
+	// operations on the range. Upreplication of healthy replica will update
+	// meta and resolve the issue.
+	if stuckReplica && healthyReplica {
+		return loqrecoverypb.RangeHealth_WaitingForMeta
+	}
+	// If we have healthy replica and no stuck replicas then this replica
+	// will respond.
+	if healthyReplica && !stuckReplica {
+		return loqrecoverypb.RangeHealth_Healthy
+	}
+	return loqrecoverypb.RangeHealth_LossOfQuorum
 }
 
 func makeVisitAvailableNodes(
 	g *gossip.Gossip, loc roachpb.Locality, rpcCtx *rpc.Context,
-) visitNodesFn {
+) visitNodeAdminFn {
 	return func(ctx context.Context, retryOpts retry.Options,
+		nodeFilter func(nodeID roachpb.NodeID) bool,
 		visitor func(nodeID roachpb.NodeID, client serverpb.AdminClient) error,
 	) error {
-		collectNodeWithRetry := func(node roachpb.NodeDescriptor) error {
+		visitWithRetry := func(node roachpb.NodeDescriptor) error {
+			if !nodeFilter(node.NodeID) {
+				return nil
+			}
 			var err error
 			for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
 				log.Infof(ctx, "visiting node n%d, attempt %d", node.NodeID, r.CurrentAttempt())
 				addr := node.AddressForLocality(loc)
-				conn, err := rpcCtx.GRPCDialNode(addr.String(), node.NodeID, rpc.DefaultClass).Connect(ctx)
-				client := serverpb.NewAdminClient(conn)
+				var conn *grpc.ClientConn
+				conn, err = rpcCtx.GRPCDialNode(addr.String(), node.NodeID, rpc.DefaultClass).Connect(ctx)
 				// Nodes would contain dead nodes that we don't need to visit. We can skip
 				// them and let caller handle incomplete info.
 				if err != nil {
@@ -421,13 +592,13 @@ func makeVisitAvailableNodes(
 					// live.
 					continue
 				}
+				client := serverpb.NewAdminClient(conn)
 				err = visitor(node.NodeID, client)
 				if err == nil {
 					return nil
 				}
 				log.Infof(ctx, "failed calling a visitor for node n%d: %s", node.NodeID, err)
 				if !IsRetryableError(err) {
-					// For non retryable errors abort immediately.
 					return err
 				}
 			}
@@ -458,10 +629,64 @@ func makeVisitAvailableNodes(
 		}
 
 		for _, node := range nodes {
-			if err := collectNodeWithRetry(node); err != nil {
+			if err := visitWithRetry(node); err != nil {
 				return err
 			}
 		}
 		return nil
+	}
+}
+
+func makeVisitNode(g *gossip.Gossip, loc roachpb.Locality, rpcCtx *rpc.Context) visitNodeStatusFn {
+	return func(ctx context.Context, nodeID roachpb.NodeID, retryOpts retry.Options,
+		visitor func(client serverpb.StatusClient) error,
+	) error {
+		node, err := g.GetNodeDescriptor(nodeID)
+		if err != nil {
+			return err
+		}
+		for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
+			log.Infof(ctx, "visiting node n%d, attempt %d", node.NodeID, r.CurrentAttempt())
+			addr := node.AddressForLocality(loc)
+			var conn *grpc.ClientConn
+			conn, err = rpcCtx.GRPCDialNode(addr.String(), node.NodeID, rpc.DefaultClass).Connect(ctx)
+			if err != nil {
+				if grpcutil.IsClosedConnection(err) {
+					return err
+				}
+				// Retry any other transient connection flakes.
+				continue
+			}
+			client := serverpb.NewStatusClient(conn)
+			err = visitor(client)
+			if err == nil {
+				return nil
+			}
+			log.Infof(ctx, "failed calling a visitor for node n%d: %s", node.NodeID, err)
+			if !IsRetryableError(err) {
+				return err
+			}
+		}
+		return err
+	}
+}
+
+func allNodes(roachpb.NodeID) bool {
+	return true
+}
+
+func onlyListed(nodes map[roachpb.NodeID]bool) func(id roachpb.NodeID) bool {
+	return func(id roachpb.NodeID) bool {
+		return nodes[id]
+	}
+}
+
+func notListed(ids []roachpb.NodeID) func(id roachpb.NodeID) bool {
+	ignored := make(map[roachpb.NodeID]bool)
+	for _, id := range ids {
+		ignored[id] = true
+	}
+	return func(id roachpb.NodeID) bool {
+		return !ignored[id]
 	}
 }

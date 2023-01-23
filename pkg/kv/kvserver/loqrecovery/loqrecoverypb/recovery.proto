@@ -185,6 +185,29 @@ message PlanApplicationResult {
   string error = 3;
 }
 
+// RangeHealth is a state of a range availability from loss of quorum recovery
+// perspective.
+enum RangeHealth {
+  // Healthy indicates that range is available.
+  Healthy = 0;
+  // WaitingForMeta means that range is not yet readable according to meta
+  // descriptor, but has a recovered replica that is waiting to be up-replicated.
+  WaitingForMeta = 1;
+  // LossOfQuorum means that range is unavailable because it lost quorum and
+  // no replicas are fixed to act as a designated survivor (yet).
+  LossOfQuorum = 2;
+}
+
+// RangeRecoveryStatus contains recovery status of a single range.
+message RangeRecoveryStatus {
+  int64 range_id = 1 [(gogoproto.customname) = "RangeID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"];
+  bytes start_key = 2 [
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.Key",
+    (gogoproto.moretags) = 'yaml:"StartKey"'];
+  RangeHealth failure_type = 3;
+}
+
 // DeferredRecoveryActions contains data for recovery actions that need to be
 // performed after node restarts if it applied a recovery plan.
 message DeferredRecoveryActions {

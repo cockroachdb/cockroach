@@ -965,23 +965,34 @@ message RecoveryVerifyRequest {
   // the cluster when loss of quorum recovery successfully applies.
   repeated int32 decommissioned_node_ids = 2 [(gogoproto.customname) = "DecommissionedNodeIDs",
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+  // MaxReportedRanges is the maximum number of failed ranges to report.
+  // If more unhealthy ranges are found, error will be returned alongside range
+  // to indicate that ranges were cut short.
+  int32 max_reported_ranges = 3;
 }
 
 message RecoveryVerifyResponse {
+  message UnavailableRanges {
+    // Ranges contains descriptors of ranges that failed health check.
+    // If there are too many ranges to report, error would contain relevant
+    // message.
+    repeated cockroach.kv.kvserver.loqrecovery.loqrecoverypb.RangeRecoveryStatus ranges = 1 [
+      (gogoproto.nullable) = false];
+    // Error contains an optional error if ranges validation can't complete.
+    string error = 2;
+  }
+
   // Statuses contain a list of recovery statuses of nodes updated during recovery. It
   // also contains nodes that were expected to be live (not decommissioned by recovery)
   // but failed to return status response.
   repeated cockroach.kv.kvserver.loqrecovery.loqrecoverypb.NodeRecoveryStatus statuses = 1 [
     (gogoproto.nullable) = false];
-  // UnavailableRanges contains descriptors of ranges that failed health checks.
-  repeated roachpb.RangeDescriptor unavailable_ranges = 2 [
-    (gogoproto.nullable) = false];
-  // DecommissionedNodeIDs contains list of decommissioned node id's. Only nodes that
-  // were decommissioned by the plan would be listed here, not all historically
-  // decommissioned ones.
-  repeated int32 decommissioned_node_ids = 3 [
-    (gogoproto.customname) = "DecommissionedNodeIDs",
-    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+  // UnavailableRanges contains information about ranges that failed health check.
+  UnavailableRanges unavailable_ranges = 2 [(gogoproto.nullable) = false];
+  // DecommissionedNodeStatuses contains a map of requested IDs with their
+  // corresponding liveness statuses.
+  map<int32, kv.kvserver.liveness.livenesspb.MembershipStatus> decommissioned_node_statuses = 3 [
+    (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
 }
 
 // Admin is the gRPC API for the admin UI. Through grpc-gateway, we offer
