@@ -35,7 +35,7 @@ func TestRulesYAML(t *testing.T) {
 				screl.Schema.ForEachRule(func(def rel.RuleDef) {
 					s = append(s, def)
 				})
-				sort.Slice(s, func(i, j int) bool {
+				sort.SliceStable(s, func(i, j int) bool {
 					return s[i].Name < s[j].Name
 				})
 				for _, def := range s {
