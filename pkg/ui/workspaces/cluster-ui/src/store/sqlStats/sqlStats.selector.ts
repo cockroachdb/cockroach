@@ -18,5 +18,5 @@ const adminUISelector = createSelector(
 
 export const sqlStatsSelector = createSelector(
   adminUISelector,
-  adminUiState => adminUiState.sqlStats,
+  adminUiState => adminUiState?.sqlStats,
 );
