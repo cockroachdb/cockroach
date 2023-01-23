@@ -4703,6 +4703,7 @@ bytea_output                                          hex
 check_function_bodies                                 on
 client_encoding                                       UTF8
 client_min_messages                                   notice
+copy_from_retries_enabled                             off
 cost_scans_with_default_col_size                      off
 database                                              test
 datestyle                                             ISO, MDY
