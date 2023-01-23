@@ -423,6 +423,14 @@ func checkExprOrdering(e opt.Expr) {
 				}
 			}
 		}
+	case *SubqueryPrivate:
+		if !ordering.Any() && e.Op() != opt.ArrayFlattenOp {
+			panic(errors.AssertionFailedf(
+				"subquery ordering not allowed in op: %s",
+				redact.Safe(e.Op()),
+			))
+		}
+		return
 	default:
 		return
 	}
