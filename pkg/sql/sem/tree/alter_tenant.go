@@ -55,12 +55,36 @@ type TenantSpec struct {
 	All    bool
 }
 
+type alreadyDelimitedAsSyntacticDExpr interface {
+	Expr
+	alreadyDelimitedAsSyntacticDExpr()
+}
+
+func (*UnresolvedName) alreadyDelimitedAsSyntacticDExpr() {}
+func (*ParenExpr) alreadyDelimitedAsSyntacticDExpr()      {}
+func (*Subquery) alreadyDelimitedAsSyntacticDExpr()       {}
+func (*Placeholder) alreadyDelimitedAsSyntacticDExpr()    {}
+func (*NumVal) alreadyDelimitedAsSyntacticDExpr()         {}
+func (*StrVal) alreadyDelimitedAsSyntacticDExpr()         {}
+func (dNull) alreadyDelimitedAsSyntacticDExpr()           {}
+func (*FuncExpr) alreadyDelimitedAsSyntacticDExpr()       {}
+
 // Format implements the NodeFormatter interface.
 func (n *TenantSpec) Format(ctx *FmtCtx) {
 	if n.All {
 		ctx.WriteString("ALL")
 	} else if n.IsName {
+		// Beware to enclose the expression within parentheses if it is
+		// not a simple identifier and is not already enclosed in
+		// parentheses.
+		_, canOmitParentheses := n.Expr.(alreadyDelimitedAsSyntacticDExpr)
+		if !canOmitParentheses {
+			ctx.WriteByte('(')
+		}
 		ctx.FormatNode(n.Expr)
+		if !canOmitParentheses {
+			ctx.WriteByte(')')
+		}
 	} else {
 		ctx.WriteByte('[')
 		ctx.FormatNode(n.Expr)
