@@ -6,7 +6,7 @@ SET experimental_enable_unique_without_index_constraints = true;
 ALTER TABLE t ADD UNIQUE WITHOUT INDEX (j);
 EXPLAIN (ddl) rollback at post-commit stage 2 of 2;
 ----
-Schema change plan for rolling back ALTER TABLE ‹defaultdb›.public.‹t› ADD CONSTRAINT ‹unique_j› UNIQUE WITHOUT INDEX (‹j›); 
+Schema change plan for rolling back ALTER TABLE ‹defaultdb›.public.‹t› ADD CONSTRAINT ‹unique_j› UNIQUE WITHOUT INDEX (‹j›);
  └── PostCommitNonRevertiblePhase
       └── Stage 1 of 1 in PostCommitNonRevertiblePhase
            ├── 1 element transitioning toward ABSENT

@@ -6,7 +6,7 @@ CREATE SEQUENCE db.public.sq1;
 /* test */
 EXPLAIN (ddl) ALTER TABLE db.public.tbl ADD COLUMN l INT NOT NULL DEFAULT nextval('db.public.sq1');
 ----
-Schema change plan for ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹l› INT8 NOT NULL DEFAULT nextval(‹'db.public.sq1'›); 
+Schema change plan for ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹l› INT8 NOT NULL DEFAULT nextval(‹'db.public.sq1'›);
  ├── StatementPhase
  │    └── Stage 1 of 1 in StatementPhase
  │         ├── 8 elements transitioning toward PUBLIC

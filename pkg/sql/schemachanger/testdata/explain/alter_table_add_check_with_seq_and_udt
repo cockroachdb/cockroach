@@ -6,7 +6,7 @@ CREATE TABLE t (i INT PRIMARY KEY, j STRING);
 /* test */
 EXPLAIN (ddl) ALTER TABLE t ADD CHECK (i > nextval('s') OR j::typ = 'a');
 ----
-Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD CHECK ((‹i› > nextval(‹'s'›)) OR (‹j›::‹typ› = ‹'a'›)); 
+Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD CHECK ((‹i› > nextval(‹'s'›)) OR (‹j›::‹typ› = ‹'a'›));
  ├── StatementPhase
  │    └── Stage 1 of 1 in StatementPhase
  │         ├── 1 element transitioning toward PUBLIC

@@ -7,7 +7,7 @@ CREATE TABLE multi_region_test_db.public.table_regional_by_table (
 /* test */
 EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
 ----
-• Schema change plan for DROP DATABASE ‹multi_region_test_db› CASCADE; 
+• Schema change plan for DROP DATABASE ‹multi_region_test_db› CASCADE;
 │
 ├── • StatementPhase
 │   │
