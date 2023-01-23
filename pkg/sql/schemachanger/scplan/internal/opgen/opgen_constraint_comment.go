@@ -27,9 +27,6 @@ func init() {
 						Comment:      this.Comment,
 					}
 				}),
-				emit(func(this *scpb.ConstraintComment, md *opGenContext) *scop.LogEvent {
-					return newLogEventOp(this, md)
-				}),
 			),
 		),
 		toAbsent(
@@ -40,9 +37,6 @@ func init() {
 						TableID:      this.TableID,
 						ConstraintID: this.ConstraintID,
 					}
-				}),
-				emit(func(this *scpb.ConstraintComment, md *opGenContext) *scop.LogEvent {
-					return newLogEventOp(this, md)
 				}),
 			),
 		),

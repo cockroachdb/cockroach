@@ -41,7 +41,15 @@ checking for feature: ALTER TABLE
 increment telemetry for sql.schema.alter_table
 increment telemetry for sql.schema.alter_table.add_column
 increment telemetry for sql.schema.new_column_type.int8
-## StatementPhase stage 1 of 1 with 5 MutationType ops
+write *eventpb.AlterTable to event log:
+  mutationId: 1
+  sql:
+    descriptorId: 106
+    statement: ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹j› INT8
+    tag: ALTER TABLE
+    user: root
+  tableName: db.public.tbl
+## StatementPhase stage 1 of 1 with 4 MutationType ops
 upsert descriptor #106
   ...
      - columnIds:
@@ -87,7 +95,6 @@ upsert descriptor #106
      unexposedParentSchemaId: 105
   -  version: "1"
   +  version: "2"
-write *eventpb.AlterTable to event log: ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹j› INT8
 # end StatementPhase
 # begin PreCommitPhase
 ## PreCommitPhase stage 1 of 1 with 2 MutationType ops
@@ -201,10 +208,12 @@ upsert descriptor #106
      unexposedParentSchemaId: 105
   -  version: "3"
   +  version: "4"
-write *eventpb.FinishSchemaChange to event log
 adding table for stats refresh: 106
 update progress of schema change job #1: "all stages completed"
 set schema change job #1 to non-cancellable
 updated schema change job #1 descriptor IDs to []
+write *eventpb.FinishSchemaChange to event log:
+  sc:
+    descriptorId: 106
 commit transaction #4
 # end PostCommitPhase

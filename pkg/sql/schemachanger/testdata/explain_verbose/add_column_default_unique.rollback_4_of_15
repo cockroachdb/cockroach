@@ -93,15 +93,6 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 4 of 15;
     │       │     TableID: 106
     │       │
     │       ├── • MakeIndexAbsent
-    │       │     EventBase:
-    │       │       Authorization:
-    │       │         UserName: root
-    │       │       Statement: ALTER TABLE ‹db›.public.‹tbl› ADD COLUMN ‹j› INT8 UNIQUE DEFAULT CAST(date_part(‹'year'›,
-    │       │         now()) AS INT8)
-    │       │       StatementTag: ALTER TABLE
-    │       │       TargetMetadata:
-    │       │         SourceElementID: 1
-    │       │         SubWorkID: 1
     │       │     IndexID: 2
     │       │     TableID: 106
     │       │
@@ -221,15 +212,6 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 4 of 15;
             │
             ├── • MakeDeleteOnlyColumnAbsent
             │     ColumnID: 2
-            │     EventBase:
-            │       Authorization:
-            │         UserName: root
-            │       Statement: ALTER TABLE ‹db›.public.‹tbl› ADD COLUMN ‹j› INT8 UNIQUE DEFAULT CAST(date_part(‹'year'›,
-            │         now()) AS INT8)
-            │       StatementTag: ALTER TABLE
-            │       TargetMetadata:
-            │         SourceElementID: 1
-            │         SubWorkID: 1
             │     TableID: 106
             │
             ├── • RemoveJobStateFromDescriptor

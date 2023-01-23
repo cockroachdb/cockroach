@@ -18,6 +18,17 @@ begin transaction #1
 # begin StatementPhase
 checking for feature: DROP DATABASE
 increment telemetry for sql.schema.drop_database
+write *eventpb.DropDatabase to event log:
+  databaseName: multi_region_test_db
+  droppedSchemaObjects:
+  - multi_region_test_db.public.crdb_internal_region
+  - multi_region_test_db.public._crdb_internal_region
+  - multi_region_test_db.public.table_regional_by_table
+  sql:
+    descriptorId: 104
+    statement: DROP DATABASE ‹multi_region_test_db› CASCADE
+    tag: DROP DATABASE
+    user: root
 ## StatementPhase stage 1 of 1 with 5 MutationType ops
 add synthetic descriptor #104:
    database:
@@ -226,7 +237,7 @@ notified job registry to adopt jobs: [1]
 begin transaction #2
 commit transaction #2
 begin transaction #3
-## PostCommitNonRevertiblePhase stage 1 of 1 with 18 MutationType ops
+## PostCommitNonRevertiblePhase stage 1 of 1 with 13 MutationType ops
 upsert descriptor #108
   ...
      createAsOfTime:
@@ -254,12 +265,14 @@ delete descriptor #104
 delete descriptor #105
 delete descriptor #106
 delete descriptor #107
-write *eventpb.DropDatabase to event log: DROP DATABASE ‹multi_region_test_db› CASCADE
 create job #2 (non-cancelable: true): "GC for DROP DATABASE multi_region_test_db CASCADE"
   descriptor IDs: [108 104]
 update progress of schema change job #1: "all stages completed"
 set schema change job #1 to non-cancellable
 updated schema change job #1 descriptor IDs to []
+write *eventpb.FinishSchemaChange to event log:
+  sc:
+    descriptorId: 104
 commit transaction #3
 notified job registry to adopt jobs: [2]
 # end PostCommitPhase

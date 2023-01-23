@@ -91,7 +91,16 @@ increment telemetry for sql.schema.alter_table
 increment telemetry for sql.schema.alter_table.add_column
 increment telemetry for sql.schema.qualifcation.default_expr
 increment telemetry for sql.schema.new_column_type.int8
-## StatementPhase stage 1 of 1 with 11 MutationType ops
+write *eventpb.AlterTable to event log:
+  mutationId: 1
+  sql:
+    descriptorId: 106
+    statement: ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹j› INT8 UNIQUE DEFAULT CAST(date_part(‹'year'›,
+      now()) AS INT8)
+    tag: ALTER TABLE
+    user: root
+  tableName: db.public.tbl
+## StatementPhase stage 1 of 1 with 10 MutationType ops
 upsert descriptor #106
   ...
      - columnIds:
@@ -187,7 +196,6 @@ upsert descriptor #106
      unexposedParentSchemaId: 105
   -  version: "1"
   +  version: "2"
-write *eventpb.AlterTable to event log: ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹j› INT8 UNIQUE DEFAULT CAST(date_part(‹'year'›, now()) AS INT8)
 # end StatementPhase
 # begin PreCommitPhase
 ## PreCommitPhase stage 1 of 1 with 2 MutationType ops
@@ -538,7 +546,7 @@ begin transaction #17
 validate forward indexes [4] in table #106
 commit transaction #17
 begin transaction #18
-## PostCommitNonRevertiblePhase stage 1 of 2 with 10 MutationType ops
+## PostCommitNonRevertiblePhase stage 1 of 2 with 9 MutationType ops
 upsert descriptor #106
   ...
          oid: 20
@@ -658,7 +666,6 @@ upsert descriptor #106
      unexposedParentSchemaId: 105
   -  version: "11"
   +  version: "12"
-write *eventpb.CreateIndex to event log: ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹j› INT8 UNIQUE DEFAULT CAST(date_part(‹'year'›, now()) AS INT8)
 adding table for stats refresh: 106
 update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 2 with 6 MutationType ops pending"
 set schema change job #1 to non-cancellable
@@ -771,12 +778,14 @@ upsert descriptor #106
      unexposedParentSchemaId: 105
   -  version: "12"
   +  version: "13"
-write *eventpb.FinishSchemaChange to event log
 create job #2 (non-cancelable: true): "GC for ALTER TABLE db.public.tbl ADD COLUMN j INT8 UNIQUE DEFAULT CAST(date_part('year', now()) AS INT8)"
   descriptor IDs: [106]
 update progress of schema change job #1: "all stages completed"
 set schema change job #1 to non-cancellable
 updated schema change job #1 descriptor IDs to []
+write *eventpb.FinishSchemaChange to event log:
+  sc:
+    descriptorId: 106
 commit transaction #19
 notified job registry to adopt jobs: [2]
 # end PostCommitPhase

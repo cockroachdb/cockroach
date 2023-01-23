@@ -269,47 +269,15 @@ PreCommitPhase stage 1 of 1 with 57 MutationType ops
         SchemaID: 101
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 1
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP OWNED BY r
-        StatementTag: DROP OWNED BY
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
       TableID: 109
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 2
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP OWNED BY r
-        StatementTag: DROP OWNED BY
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
       TableID: 109
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 4294967295
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP OWNED BY r
-        StatementTag: DROP OWNED BY
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
       TableID: 109
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 4294967294
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP OWNED BY r
-        StatementTag: DROP OWNED BY
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
       TableID: 109
     *scop.DrainDescriptorName
       Namespace:
@@ -325,47 +293,15 @@ PreCommitPhase stage 1 of 1 with 57 MutationType ops
         SchemaID: 105
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 1
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP OWNED BY r
-        StatementTag: DROP OWNED BY
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
       TableID: 108
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 2
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP OWNED BY r
-        StatementTag: DROP OWNED BY
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
       TableID: 108
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 4294967295
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP OWNED BY r
-        StatementTag: DROP OWNED BY
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
       TableID: 108
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 4294967294
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP OWNED BY r
-        StatementTag: DROP OWNED BY
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
       TableID: 108
     *scop.DrainDescriptorName
       Namespace:
@@ -375,36 +311,12 @@ PreCommitPhase stage 1 of 1 with 57 MutationType ops
         SchemaID: 105
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 1
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP OWNED BY r
-        StatementTag: DROP OWNED BY
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
       TableID: 110
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 4294967295
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP OWNED BY r
-        StatementTag: DROP OWNED BY
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
       TableID: 110
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 4294967294
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP OWNED BY r
-        StatementTag: DROP OWNED BY
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
       TableID: 110
     *scop.DrainDescriptorName
       Namespace:
@@ -426,69 +338,21 @@ PreCommitPhase stage 1 of 1 with 57 MutationType ops
         SchemaID: 105
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 1
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP OWNED BY r
-        StatementTag: DROP OWNED BY
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
       TableID: 113
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 2
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP OWNED BY r
-        StatementTag: DROP OWNED BY
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
       TableID: 113
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 4294967295
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP OWNED BY r
-        StatementTag: DROP OWNED BY
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
       TableID: 113
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 4294967294
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP OWNED BY r
-        StatementTag: DROP OWNED BY
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
       TableID: 113
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 3
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP OWNED BY r
-        StatementTag: DROP OWNED BY
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
       TableID: 109
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 3
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP OWNED BY r
-        StatementTag: DROP OWNED BY
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
       TableID: 108
     *scop.SetJobStateOnDescriptor
       DescriptorID: 100
@@ -540,13 +404,13 @@ PreCommitPhase stage 1 of 1 with 57 MutationType ops
       - 113
       JobID: 1
       NonCancelable: true
-      RunningStatus: PostCommitNonRevertiblePhase stage 1 of 1 with 20 MutationType ops
+      RunningStatus: PostCommitNonRevertiblePhase stage 1 of 1 with 11 MutationType ops
         pending
       Statements:
       - statement: DROP OWNED BY r
         redactedstatement: DROP OWNED BY r
         statementtag: DROP OWNED BY
-PostCommitNonRevertiblePhase stage 1 of 1 with 32 MutationType ops
+PostCommitNonRevertiblePhase stage 1 of 1 with 23 MutationType ops
   transitions:
     [[Schema:{DescID: 105}, ABSENT], DROPPED] -> ABSENT
     [[Sequence:{DescID: 106}, ABSENT], DROPPED] -> ABSENT
@@ -564,179 +428,34 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 32 MutationType ops
     [[AliasType:{DescID: 112, ReferencedTypeIDs: [111 112]}, ABSENT], DROPPED] -> ABSENT
     [[View:{DescID: 113}, ABSENT], DROPPED] -> ABSENT
   ops:
-    *scop.LogEvent
-      Element:
-        Schema:
-          schemaId: 105
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP OWNED BY r
-        StatementTag: DROP OWNED BY
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
-      TargetStatus: 1
     *scop.DeleteDescriptor
       DescriptorID: 105
-    *scop.LogEvent
-      Element:
-        Sequence:
-          sequenceId: 106
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP OWNED BY r
-        StatementTag: DROP OWNED BY
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
-      TargetStatus: 1
     *scop.CreateGCJobForTable
       DatabaseID: 100
       StatementForDropJob:
         Statement: DROP OWNED BY r
       TableID: 106
-    *scop.LogEvent
-      Element:
-        Table:
-          tableId: 109
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP OWNED BY r
-        StatementTag: DROP OWNED BY
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
-      TargetStatus: 1
     *scop.CreateGCJobForTable
       DatabaseID: 100
       StatementForDropJob:
         Statement: DROP OWNED BY r
       TableID: 109
-    *scop.LogEvent
-      Element:
-        Sequence:
-          sequenceId: 107
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP OWNED BY r
-        StatementTag: DROP OWNED BY
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
-      TargetStatus: 1
     *scop.CreateGCJobForTable
       DatabaseID: 100
       StatementForDropJob:
         Statement: DROP OWNED BY r
       TableID: 107
-    *scop.LogEvent
-      Element:
-        Table:
-          tableId: 108
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP OWNED BY r
-        StatementTag: DROP OWNED BY
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
-      TargetStatus: 1
     *scop.CreateGCJobForTable
       DatabaseID: 100
       StatementForDropJob:
         Statement: DROP OWNED BY r
       TableID: 108
-    *scop.LogEvent
-      Element:
-        View:
-          forwardReferences:
-          - columnIds:
-            - 2
-            toId: 108
-          usesRelationIds:
-          - 108
-          viewId: 110
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP OWNED BY r
-        StatementTag: DROP OWNED BY
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
-      TargetStatus: 1
     *scop.DeleteDescriptor
       DescriptorID: 110
-    *scop.LogEvent
-      Element:
-        EnumType:
-          arrayTypeId: 112
-          typeId: 111
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP OWNED BY r
-        StatementTag: DROP OWNED BY
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
-      TargetStatus: 1
     *scop.DeleteDescriptor
       DescriptorID: 111
-    *scop.LogEvent
-      Element:
-        AliasType:
-          closedTypeIds:
-          - 111
-          - 112
-          type:
-            arrayContents:
-              family: EnumFamily
-              oid: 100111
-              udtMetadata:
-                arrayTypeOid: 100112
-            arrayElemType: EnumFamily
-            family: ArrayFamily
-            oid: 100112
-          typeId: 112
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP OWNED BY r
-        StatementTag: DROP OWNED BY
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
-      TargetStatus: 1
     *scop.DeleteDescriptor
       DescriptorID: 112
-    *scop.LogEvent
-      Element:
-        View:
-          forwardReferences:
-          - columnIds:
-            - 1
-            toId: 110
-          usesRelationIds:
-          - 110
-          usesTypeIds:
-          - 111
-          - 112
-          viewId: 113
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP OWNED BY r
-        StatementTag: DROP OWNED BY
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
-      TargetStatus: 1
     *scop.DeleteDescriptor
       DescriptorID: 113
     *scop.CreateGCJobForIndex

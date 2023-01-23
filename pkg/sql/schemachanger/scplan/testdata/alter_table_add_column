@@ -6,7 +6,7 @@ CREATE TYPE defaultdb.footyp AS ENUM('a');
 ops
 ALTER TABLE defaultdb.foo ADD COLUMN j defaultdb.footyp;
 ----
-StatementPhase stage 1 of 1 with 6 MutationType ops
+StatementPhase stage 1 of 1 with 5 MutationType ops
   transitions:
     [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], ABSENT] -> DELETE_ONLY
     [[ColumnName:{DescID: 104, Name: j, ColumnID: 2}, PUBLIC], ABSENT] -> PUBLIC
@@ -18,21 +18,6 @@ StatementPhase stage 1 of 1 with 6 MutationType ops
         ColumnID: 2
         PgAttributeNum: 2
         TableID: 104
-    *scop.LogEvent
-      Element:
-        Column:
-          columnId: 2
-          pgAttributeNum: 2
-          tableId: 104
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹j› defaultdb.footyp
-        StatementTag: ALTER TABLE
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
-      TargetStatus: 2
     *scop.SetColumnName
       ColumnID: 2
       Name: j
@@ -108,14 +93,6 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 6 MutationType ops
   ops:
     *scop.MakeWriteOnlyColumnPublic
       ColumnID: 2
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹j› defaultdb.footyp
-        StatementTag: ALTER TABLE
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
       TableID: 104
     *scop.RefreshStats
       TableID: 104
@@ -139,7 +116,7 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 6 MutationType ops
 ops
 ALTER TABLE defaultdb.foo ADD COLUMN j INT NOT NULL DEFAULT 123
 ----
-StatementPhase stage 1 of 1 with 11 MutationType ops
+StatementPhase stage 1 of 1 with 10 MutationType ops
   transitions:
     [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], ABSENT] -> DELETE_ONLY
     [[ColumnName:{DescID: 104, Name: j, ColumnID: 2}, PUBLIC], ABSENT] -> PUBLIC
@@ -158,22 +135,6 @@ StatementPhase stage 1 of 1 with 11 MutationType ops
         ColumnID: 2
         PgAttributeNum: 2
         TableID: 104
-    *scop.LogEvent
-      Element:
-        Column:
-          columnId: 2
-          pgAttributeNum: 2
-          tableId: 104
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹j› INT8 NOT NULL DEFAULT
-          ‹123›
-        StatementTag: ALTER TABLE
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
-      TargetStatus: 2
     *scop.SetColumnName
       ColumnID: 2
       Name: j
@@ -343,28 +304,10 @@ PostCommitNonRevertiblePhase stage 1 of 3 with 9 MutationType ops
       IndexID: 3
       TableID: 104
     *scop.MakeValidatedPrimaryIndexPublic
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹j› INT8 NOT NULL DEFAULT
-          ‹123›
-        StatementTag: ALTER TABLE
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
       IndexID: 2
       TableID: 104
     *scop.MakeWriteOnlyColumnPublic
       ColumnID: 2
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹j› INT8 NOT NULL DEFAULT
-          ‹123›
-        StatementTag: ALTER TABLE
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
       TableID: 104
     *scop.RefreshStats
       TableID: 104
@@ -396,15 +339,6 @@ PostCommitNonRevertiblePhase stage 3 of 3 with 5 MutationType ops
     [[IndexData:{DescID: 104, IndexID: 3}, TRANSIENT_ABSENT], PUBLIC] -> TRANSIENT_ABSENT
   ops:
     *scop.MakeIndexAbsent
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹j› INT8 NOT NULL DEFAULT
-          ‹123›
-        StatementTag: ALTER TABLE
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
       IndexID: 1
       TableID: 104
     *scop.CreateGCJobForIndex
@@ -430,7 +364,7 @@ ops
 ALTER TABLE defaultdb.foo ADD COLUMN j INT DEFAULT 123;
 ALTER TABLE defaultdb.foo ADD COLUMN k INT DEFAULT 456;
 ----
-StatementPhase stage 1 of 1 with 18 MutationType ops
+StatementPhase stage 1 of 1 with 16 MutationType ops
   transitions:
     [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], ABSENT] -> DELETE_ONLY
     [[ColumnName:{DescID: 104, Name: j, ColumnID: 2}, PUBLIC], ABSENT] -> PUBLIC
@@ -455,21 +389,6 @@ StatementPhase stage 1 of 1 with 18 MutationType ops
         ColumnID: 2
         PgAttributeNum: 2
         TableID: 104
-    *scop.LogEvent
-      Element:
-        Column:
-          columnId: 2
-          pgAttributeNum: 2
-          tableId: 104
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹j› INT8 DEFAULT ‹123›
-        StatementTag: ALTER TABLE
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
-      TargetStatus: 2
     *scop.SetColumnName
       ColumnID: 2
       Name: j
@@ -495,22 +414,6 @@ StatementPhase stage 1 of 1 with 18 MutationType ops
         ColumnID: 3
         PgAttributeNum: 3
         TableID: 104
-    *scop.LogEvent
-      Element:
-        Column:
-          columnId: 3
-          pgAttributeNum: 3
-          tableId: 104
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹k› INT8 DEFAULT ‹456›
-        StatementTag: ALTER TABLE
-        TargetMetadata:
-          SourceElementID: 1
-          StatementID: 1
-          SubWorkID: 1
-      TargetStatus: 2
     *scop.SetColumnName
       ColumnID: 3
       Name: k
@@ -702,40 +605,15 @@ PostCommitNonRevertiblePhase stage 1 of 3 with 11 MutationType ops
       IndexID: 3
       TableID: 104
     *scop.MakeValidatedPrimaryIndexPublic
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹j› INT8 DEFAULT ‹123›
-        StatementTag: ALTER TABLE
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
       IndexID: 2
       TableID: 104
     *scop.MakeWriteOnlyColumnPublic
       ColumnID: 2
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹j› INT8 DEFAULT ‹123›
-        StatementTag: ALTER TABLE
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
       TableID: 104
     *scop.RefreshStats
       TableID: 104
     *scop.MakeWriteOnlyColumnPublic
       ColumnID: 3
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹k› INT8 DEFAULT ‹456›
-        StatementTag: ALTER TABLE
-        TargetMetadata:
-          SourceElementID: 1
-          StatementID: 1
-          SubWorkID: 1
       TableID: 104
     *scop.RefreshStats
       TableID: 104
@@ -767,14 +645,6 @@ PostCommitNonRevertiblePhase stage 3 of 3 with 5 MutationType ops
     [[IndexData:{DescID: 104, IndexID: 3}, TRANSIENT_ABSENT], PUBLIC] -> TRANSIENT_ABSENT
   ops:
     *scop.MakeIndexAbsent
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹j› INT8 DEFAULT ‹123›
-        StatementTag: ALTER TABLE
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
       IndexID: 1
       TableID: 104
     *scop.CreateGCJobForIndex
@@ -799,7 +669,7 @@ PostCommitNonRevertiblePhase stage 3 of 3 with 5 MutationType ops
 ops
 ALTER TABLE defaultdb.foo ADD COLUMN a INT AS (i+1) STORED
 ----
-StatementPhase stage 1 of 1 with 10 MutationType ops
+StatementPhase stage 1 of 1 with 9 MutationType ops
   transitions:
     [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], ABSENT] -> DELETE_ONLY
     [[ColumnName:{DescID: 104, Name: a, ColumnID: 2}, PUBLIC], ABSENT] -> PUBLIC
@@ -817,22 +687,6 @@ StatementPhase stage 1 of 1 with 10 MutationType ops
         ColumnID: 2
         PgAttributeNum: 2
         TableID: 104
-    *scop.LogEvent
-      Element:
-        Column:
-          columnId: 2
-          pgAttributeNum: 2
-          tableId: 104
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹a› INT8 AS (‹i› + ‹1›)
-          STORED
-        StatementTag: ALTER TABLE
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
-      TargetStatus: 2
     *scop.SetColumnName
       ColumnID: 2
       Name: a
@@ -1001,28 +855,10 @@ PostCommitNonRevertiblePhase stage 1 of 3 with 9 MutationType ops
       IndexID: 3
       TableID: 104
     *scop.MakeValidatedPrimaryIndexPublic
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹a› INT8 AS (‹i› + ‹1›)
-          STORED
-        StatementTag: ALTER TABLE
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
       IndexID: 2
       TableID: 104
     *scop.MakeWriteOnlyColumnPublic
       ColumnID: 2
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹a› INT8 AS (‹i› + ‹1›)
-          STORED
-        StatementTag: ALTER TABLE
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
       TableID: 104
     *scop.RefreshStats
       TableID: 104
@@ -1054,15 +890,6 @@ PostCommitNonRevertiblePhase stage 3 of 3 with 5 MutationType ops
     [[IndexData:{DescID: 104, IndexID: 3}, TRANSIENT_ABSENT], PUBLIC] -> TRANSIENT_ABSENT
   ops:
     *scop.MakeIndexAbsent
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹a› INT8 AS (‹i› + ‹1›)
-          STORED
-        StatementTag: ALTER TABLE
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
       IndexID: 1
       TableID: 104
     *scop.CreateGCJobForIndex
@@ -1093,7 +920,7 @@ ops
 ALTER TABLE defaultdb.foo ADD COLUMN a INT;
 ALTER TABLE defaultdb.bar ADD COLUMN b INT;
 ----
-StatementPhase stage 1 of 1 with 10 MutationType ops
+StatementPhase stage 1 of 1 with 8 MutationType ops
   transitions:
     [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], ABSENT] -> DELETE_ONLY
     [[ColumnName:{DescID: 104, Name: a, ColumnID: 2}, PUBLIC], ABSENT] -> PUBLIC
@@ -1109,21 +936,6 @@ StatementPhase stage 1 of 1 with 10 MutationType ops
         ColumnID: 2
         PgAttributeNum: 2
         TableID: 104
-    *scop.LogEvent
-      Element:
-        Column:
-          columnId: 2
-          pgAttributeNum: 2
-          tableId: 104
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹a› INT8
-        StatementTag: ALTER TABLE
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
-      TargetStatus: 2
     *scop.SetColumnName
       ColumnID: 2
       Name: a
@@ -1148,22 +960,6 @@ StatementPhase stage 1 of 1 with 10 MutationType ops
         ColumnID: 3
         PgAttributeNum: 3
         TableID: 107
-    *scop.LogEvent
-      Element:
-        Column:
-          columnId: 3
-          pgAttributeNum: 3
-          tableId: 107
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: ALTER TABLE ‹defaultdb›.public.‹bar› ADD COLUMN ‹b› INT8
-        StatementTag: ALTER TABLE
-        TargetMetadata:
-          SourceElementID: 1
-          StatementID: 1
-          SubWorkID: 1
-      TargetStatus: 2
     *scop.SetColumnName
       ColumnID: 3
       Name: b
@@ -1233,28 +1029,11 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 7 MutationType ops
   ops:
     *scop.MakeWriteOnlyColumnPublic
       ColumnID: 2
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹a› INT8
-        StatementTag: ALTER TABLE
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
       TableID: 104
     *scop.RefreshStats
       TableID: 104
     *scop.MakeWriteOnlyColumnPublic
       ColumnID: 3
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: ALTER TABLE ‹defaultdb›.public.‹bar› ADD COLUMN ‹b› INT8
-        StatementTag: ALTER TABLE
-        TargetMetadata:
-          SourceElementID: 1
-          StatementID: 1
-          SubWorkID: 1
       TableID: 107
     *scop.RefreshStats
       TableID: 107
@@ -1485,7 +1264,7 @@ PostCommitPhase stage 7 of 7 with 2 ValidationType ops
     *scop.ValidateIndex
       IndexID: 4
       TableID: 108
-PostCommitNonRevertiblePhase stage 1 of 3 with 11 MutationType ops
+PostCommitNonRevertiblePhase stage 1 of 3 with 10 MutationType ops
   transitions:
     [[IndexColumn:{DescID: 108, ColumnID: 1, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[IndexColumn:{DescID: 108, ColumnID: 2, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
@@ -1513,41 +1292,15 @@ PostCommitNonRevertiblePhase stage 1 of 3 with 11 MutationType ops
     *scop.MakeWriteOnlyIndexDeleteOnly
       IndexID: 3
       TableID: 108
-    *scop.RefreshStats
-      TableID: 108
-    *scop.LogEvent
-      Element:
-        SecondaryIndex:
-          constraintId: 4
-          indexId: 4
-          isUnique: true
-          sourceIndexId: 1
-          tableId: 108
-          temporaryIndexId: 5
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: ALTER TABLE ‹defaultdb›.public.‹t› ALTER PRIMARY KEY USING COLUMNS (‹j›)
-        StatementTag: ALTER TABLE
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
-      TargetStatus: 2
     *scop.MakeValidatedSecondaryIndexPublic
       IndexID: 4
+      TableID: 108
+    *scop.RefreshStats
       TableID: 108
     *scop.MakeWriteOnlyIndexDeleteOnly
       IndexID: 5
       TableID: 108
     *scop.MakeValidatedPrimaryIndexPublic
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: ALTER TABLE ‹defaultdb›.public.‹t› ALTER PRIMARY KEY USING COLUMNS (‹j›)
-        StatementTag: ALTER TABLE
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
       IndexID: 2
       TableID: 108
     *scop.SetJobStateOnDescriptor
@@ -1583,14 +1336,6 @@ PostCommitNonRevertiblePhase stage 3 of 3 with 6 MutationType ops
     [[IndexData:{DescID: 108, IndexID: 5}, TRANSIENT_ABSENT], PUBLIC] -> TRANSIENT_ABSENT
   ops:
     *scop.MakeIndexAbsent
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: ALTER TABLE ‹defaultdb›.public.‹t› ALTER PRIMARY KEY USING COLUMNS (‹j›)
-        StatementTag: ALTER TABLE
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
       IndexID: 1
       TableID: 108
     *scop.CreateGCJobForIndex
@@ -1624,7 +1369,7 @@ CREATE TABLE defaultdb.baz (i INT PRIMARY KEY);
 ops
 ALTER TABLE defaultdb.baz ADD g INT UNIQUE DEFAULT 1
 ----
-StatementPhase stage 1 of 1 with 11 MutationType ops
+StatementPhase stage 1 of 1 with 10 MutationType ops
   transitions:
     [[Column:{DescID: 109, ColumnID: 2}, PUBLIC], ABSENT] -> DELETE_ONLY
     [[ColumnName:{DescID: 109, Name: g, ColumnID: 2}, PUBLIC], ABSENT] -> PUBLIC
@@ -1643,22 +1388,6 @@ StatementPhase stage 1 of 1 with 11 MutationType ops
         ColumnID: 2
         PgAttributeNum: 2
         TableID: 109
-    *scop.LogEvent
-      Element:
-        Column:
-          columnId: 2
-          pgAttributeNum: 2
-          tableId: 109
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: ALTER TABLE ‹defaultdb›.public.‹baz› ADD COLUMN ‹g› INT8 UNIQUE DEFAULT
-          ‹1›
-        StatementTag: ALTER TABLE
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
-      TargetStatus: 2
     *scop.SetColumnName
       ColumnID: 2
       Name: g
@@ -1829,15 +1558,6 @@ PostCommitPhase stage 8 of 15 with 13 MutationType ops
       Name: baz_pkey
       TableID: 109
     *scop.MakeValidatedPrimaryIndexPublic
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: ALTER TABLE ‹defaultdb›.public.‹baz› ADD COLUMN ‹g› INT8 UNIQUE DEFAULT
-          ‹1›
-        StatementTag: ALTER TABLE
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
       IndexID: 2
       TableID: 109
     *scop.MakeAbsentIndexBackfilling
@@ -1951,7 +1671,7 @@ PostCommitPhase stage 15 of 15 with 1 ValidationType op
     *scop.ValidateIndex
       IndexID: 4
       TableID: 109
-PostCommitNonRevertiblePhase stage 1 of 2 with 10 MutationType ops
+PostCommitNonRevertiblePhase stage 1 of 2 with 9 MutationType ops
   transitions:
     [[IndexColumn:{DescID: 109, ColumnID: 1, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[PrimaryIndex:{DescID: 109, IndexID: 1, ConstraintID: 1}, ABSENT], VALIDATED] -> DELETE_ONLY
@@ -1964,44 +1684,16 @@ PostCommitNonRevertiblePhase stage 1 of 2 with 10 MutationType ops
   ops:
     *scop.MakeWriteOnlyColumnPublic
       ColumnID: 2
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: ALTER TABLE ‹defaultdb›.public.‹baz› ADD COLUMN ‹g› INT8 UNIQUE DEFAULT
-          ‹1›
-        StatementTag: ALTER TABLE
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
       TableID: 109
     *scop.RefreshStats
       TableID: 109
     *scop.MakeWriteOnlyIndexDeleteOnly
       IndexID: 3
       TableID: 109
-    *scop.RefreshStats
-      TableID: 109
-    *scop.LogEvent
-      Element:
-        SecondaryIndex:
-          constraintId: 4
-          indexId: 4
-          isUnique: true
-          sourceIndexId: 2
-          tableId: 109
-          temporaryIndexId: 5
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: ALTER TABLE ‹defaultdb›.public.‹baz› ADD COLUMN ‹g› INT8 UNIQUE DEFAULT
-          ‹1›
-        StatementTag: ALTER TABLE
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
-      TargetStatus: 2
     *scop.MakeValidatedSecondaryIndexPublic
       IndexID: 4
+      TableID: 109
+    *scop.RefreshStats
       TableID: 109
     *scop.MakeWriteOnlyIndexDeleteOnly
       IndexID: 5
@@ -2024,15 +1716,6 @@ PostCommitNonRevertiblePhase stage 2 of 2 with 8 MutationType ops
     [[IndexData:{DescID: 109, IndexID: 5}, TRANSIENT_ABSENT], PUBLIC] -> TRANSIENT_ABSENT
   ops:
     *scop.MakeIndexAbsent
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: ALTER TABLE ‹defaultdb›.public.‹baz› ADD COLUMN ‹g› INT8 UNIQUE DEFAULT
-          ‹1›
-        StatementTag: ALTER TABLE
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
       IndexID: 1
       TableID: 109
     *scop.CreateGCJobForIndex

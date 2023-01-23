@@ -70,8 +70,7 @@ Schema change plan for DROP TABLE ‹multi_region_test_db›.‹public›.‹tab
            │    ├── DROPPED → ABSENT Table:{DescID: 108}
            │    ├── PUBLIC  → ABSENT IndexData:{DescID: 108, IndexID: 1}
            │    └── PUBLIC  → ABSENT TableData:{DescID: 108, ReferencedDescID: 104}
-           └── 7 Mutation operations
-                ├── LogEvent {"TargetStatus":1}
+           └── 6 Mutation operations
                 ├── CreateGCJobForTable {"DatabaseID":104,"TableID":108}
                 ├── CreateGCJobForIndex {"IndexID":1,"TableID":108}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":106}

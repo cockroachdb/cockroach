@@ -59,24 +59,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 7 of 7;
     │   │       └── • skip PUBLIC → ABSENT operations
     │   │             rule: "skip index-column removal ops on index removal"
     │   │
-    │   └── • 7 Mutation operations
-    │       │
-    │       ├── • LogEvent
-    │       │     Element:
-    │       │       SecondaryIndex:
-    │       │         indexId: 2
-    │       │         sourceIndexId: 1
-    │       │         tableId: 106
-    │       │         temporaryIndexId: 3
-    │       │     EventBase:
-    │       │       Authorization:
-    │       │         UserName: root
-    │       │       Statement: CREATE INDEX ‹idx1› ON ‹defaultdb›.public.‹t› (‹v›) WHERE (‹v› = ‹'a'›)
-    │       │       StatementTag: CREATE INDEX
-    │       │       TargetMetadata:
-    │       │         SourceElementID: 1
-    │       │         SubWorkID: 1
-    │       │     TargetStatus: 1
+    │   └── • 6 Mutation operations
     │       │
     │       ├── • MakeWriteOnlyIndexDeleteOnly
     │       │     IndexID: 2

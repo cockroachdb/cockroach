@@ -37,7 +37,15 @@ begin transaction #1
 checking for feature: ALTER TABLE
 increment telemetry for sql.schema.alter_table
 increment telemetry for sql.schema.alter_table.add_constraint
-## StatementPhase stage 1 of 1 with 11 MutationType ops
+write *eventpb.AlterTable to event log:
+  mutationId: 1
+  sql:
+    descriptorId: 104
+    statement: ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD PRIMARY KEY (‹a›)
+    tag: ALTER TABLE
+    user: root
+  tableName: defaultdb.public.t
+## StatementPhase stage 1 of 1 with 10 MutationType ops
 upsert descriptor #104
   ...
          oid: 20
@@ -172,7 +180,6 @@ upsert descriptor #104
      unexposedParentSchemaId: 101
   -  version: "1"
   +  version: "2"
-write *eventpb.AlterTable to event log: ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD PRIMARY KEY (‹a›)
 # end StatementPhase
 # begin PreCommitPhase
 ## PreCommitPhase stage 1 of 1 with 2 MutationType ops
@@ -801,12 +808,14 @@ upsert descriptor #104
      unexposedParentSchemaId: 101
   -  version: "14"
   +  version: "15"
-write *eventpb.FinishSchemaChange to event log
 create job #2 (non-cancelable: true): "GC for ALTER TABLE defaultdb.public.t ADD PRIMARY KEY (a)"
   descriptor IDs: [104]
 update progress of schema change job #1: "all stages completed"
 set schema change job #1 to non-cancellable
 updated schema change job #1 descriptor IDs to []
+write *eventpb.FinishSchemaChange to event log:
+  sc:
+    descriptorId: 104
 commit transaction #21
 notified job registry to adopt jobs: [2]
 # end PostCommitPhase

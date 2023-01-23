@@ -280,41 +280,14 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
 │           │
 │           ├── • MakeDeleteOnlyColumnAbsent
 │           │     ColumnID: 1
-│           │     EventBase:
-│           │       Authorization:
-│           │         UserName: root
-│           │       Statement: DROP TABLE ‹multi_region_test_db›.‹public›.‹table_regional_by_table›
-│           │         CASCADE
-│           │       StatementTag: DROP TABLE
-│           │       TargetMetadata:
-│           │         SourceElementID: 1
-│           │         SubWorkID: 1
 │           │     TableID: 108
 │           │
 │           ├── • MakeDeleteOnlyColumnAbsent
 │           │     ColumnID: 4294967295
-│           │     EventBase:
-│           │       Authorization:
-│           │         UserName: root
-│           │       Statement: DROP TABLE ‹multi_region_test_db›.‹public›.‹table_regional_by_table›
-│           │         CASCADE
-│           │       StatementTag: DROP TABLE
-│           │       TargetMetadata:
-│           │         SourceElementID: 1
-│           │         SubWorkID: 1
 │           │     TableID: 108
 │           │
 │           ├── • MakeDeleteOnlyColumnAbsent
 │           │     ColumnID: 4294967294
-│           │     EventBase:
-│           │       Authorization:
-│           │         UserName: root
-│           │       Statement: DROP TABLE ‹multi_region_test_db›.‹public›.‹table_regional_by_table›
-│           │         CASCADE
-│           │       StatementTag: DROP TABLE
-│           │       TargetMetadata:
-│           │         SourceElementID: 1
-│           │         SubWorkID: 1
 │           │     TableID: 108
 │           │
 │           ├── • SetJobStateOnDescriptor
@@ -333,7 +306,7 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
 │                 - 108
 │                 JobID: 1
 │                 NonCancelable: true
-│                 RunningStatus: PostCommitNonRevertiblePhase stage 1 of 1 with 3 MutationType ops pending
+│                 RunningStatus: PostCommitNonRevertiblePhase stage 1 of 1 with 2 MutationType ops pending
 │                 Statements:
 │                 - statement: DROP TABLE multi_region_test_db.public.table_regional_by_table CASCADE
 │                   redactedstatement: DROP TABLE ‹multi_region_test_db›.‹public›.‹table_regional_by_table›
@@ -367,22 +340,7 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
         │       └── • SameStagePrecedence dependency from ABSENT Table:{DescID: 108}
         │             rule: "table removed right before garbage collection"
         │
-        └── • 6 Mutation operations
-            │
-            ├── • LogEvent
-            │     Element:
-            │       Table:
-            │         tableId: 108
-            │     EventBase:
-            │       Authorization:
-            │         UserName: root
-            │       Statement: DROP TABLE ‹multi_region_test_db›.‹public›.‹table_regional_by_table›
-            │         CASCADE
-            │       StatementTag: DROP TABLE
-            │       TargetMetadata:
-            │         SourceElementID: 1
-            │         SubWorkID: 1
-            │     TargetStatus: 1
+        └── • 5 Mutation operations
             │
             ├── • CreateGCJobForTable
             │     DatabaseID: 104
