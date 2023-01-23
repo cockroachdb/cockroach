@@ -445,6 +445,31 @@ func TestStageRecoveryPlansToWrongCluster(t *testing.T) {
 	require.ErrorContains(t, err, "attempting to stage plan from cluster", "failed to stage plan")
 }
 
+func TestRetrieveApplicationStatus(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	tc, reg, _ := prepTestCluster(t)
+	defer reg.CloseAllStickyInMemEngines()
+	defer tc.Stopper().Stop(ctx)
+
+	adm, err := tc.GetAdminClient(ctx, t, 0)
+	require.NoError(t, err, "failed to get admin client")
+
+	tc.StopServer(1)
+	tc.StopServer(2)
+
+	// Because stopped servers will stay live for some time and still server reqs.
+	<-time.After(10 * time.Second)
+
+	r, err := adm.RecoveryVerify(ctx, &serverpb.RecoveryVerifyRequest{})
+	require.NoError(t, err, "failed to get range status")
+
+	fmt.Printf("Total: %d Details: %s\n", len(r.UnavailableRanges), r.UnavailableRanges)
+}
+
 func prepTestCluster(
 	t *testing.T,
 ) (*testcluster.TestCluster, server.StickyInMemEnginesRegistry, map[int]loqrecovery.PlanStore) {
