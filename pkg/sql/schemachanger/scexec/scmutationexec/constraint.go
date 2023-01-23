@@ -72,6 +72,29 @@ func (i *immediateVisitor) MakeAbsentCheckConstraintWriteOnly(
 	return nil
 }
 
+func (m *immediateVisitor) MakeAbsentColumnNotNullWriteOnly(
+	ctx context.Context, op scop.MakeAbsentColumnNotNullWriteOnly,
+) error {
+	tbl, err := m.checkOutTable(ctx, op.TableID)
+	if err != nil || tbl.Dropped() {
+		return err
+	}
+
+	col := catalog.FindColumnByID(tbl, op.ColumnID)
+	if col == nil {
+		return errors.AssertionFailedf("column-id \"%d\" does not exist", op.ColumnID)
+	}
+
+	ck := tabledesc.MakeNotNullCheckConstraint(tbl, col,
+		descpb.ConstraintValidity_Validating, 0 /* constraintID */)
+	enqueueNonIndexMutation(tbl, tbl.AddNotNullMutation, ck, descpb.DescriptorMutation_ADD)
+	// Fast-forward the mutation state to WRITE_ONLY because this constraint
+	// is now considered as enforced.
+	tbl.Mutations[len(tbl.Mutations)-1].State = descpb.DescriptorMutation_WRITE_ONLY
+	tbl.Checks = append(tbl.Checks, ck)
+	return nil
+}
+
 func (i *immediateVisitor) MakeValidatedCheckConstraintPublic(
 	ctx context.Context, op scop.MakeValidatedCheckConstraintPublic,
 ) error {
@@ -115,6 +138,49 @@ func (i *immediateVisitor) MakeValidatedCheckConstraintPublic(
 	return nil
 }
 
+func (i *immediateVisitor) MakeValidatedColumnNotNullPublic(
+	ctx context.Context, op scop.MakeValidatedColumnNotNullPublic,
+) error {
+	tbl, err := i.checkOutTable(ctx, op.TableID)
+	if err != nil || tbl.Dropped() {
+		return err
+	}
+
+	var found bool
+	for idx, mutation := range tbl.Mutations {
+		if c := mutation.GetConstraint(); c != nil &&
+			c.ConstraintType == descpb.ConstraintToUpdate_NOT_NULL &&
+			c.NotNullColumn == op.ColumnID {
+			col := catalog.FindColumnByID(tbl, op.ColumnID)
+			if col == nil {
+				return errors.AssertionFailedf("column-id \"%d\" does not exist", op.ColumnID)
+			}
+			col.ColumnDesc().Nullable = false
+			tbl.Mutations = append(tbl.Mutations[:idx], tbl.Mutations[idx+1:]...)
+			if len(tbl.Mutations) == 0 {
+				tbl.Mutations = nil
+			}
+			found = true
+
+			// Don't forget to also remove the dummy check in the "Checks" slice!
+			for idx, ck := range tbl.Checks {
+				if ck.IsNonNullConstraint && ck.ColumnIDs[0] == op.ColumnID {
+					tbl.Checks = append(tbl.Checks[:idx], tbl.Checks[idx+1:]...)
+					break
+				}
+			}
+
+			break
+		}
+	}
+
+	if !found {
+		return errors.AssertionFailedf("failed to find NOT NULL mutation for column %d "+
+			"in table %q (%d)", op.ColumnID, tbl.GetName(), tbl.GetID())
+	}
+	return nil
+}
+
 func (i *immediateVisitor) MakePublicCheckConstraintValidated(
 	ctx context.Context, op scop.MakePublicCheckConstraintValidated,
 ) error {
@@ -131,6 +197,30 @@ func (i *immediateVisitor) MakePublicCheckConstraintValidated(
 	}
 
 	return errors.AssertionFailedf("failed to find check constraint %d in descriptor %v", op.ConstraintID, tbl)
+}
+
+func (i *immediateVisitor) MakePublicColumnNotNullValidated(
+	ctx context.Context, op scop.MakePublicColumnNotNullValidated,
+) error {
+	tbl, err := i.checkOutTable(ctx, op.TableID)
+	if err != nil {
+		return err
+	}
+
+	for _, col := range tbl.AllColumns() {
+		if col.GetID() == op.ColumnID {
+			col.ColumnDesc().Nullable = true
+			// Add a check constraint equivalent to the non-null constraint and drop
+			// it in the schema changer.
+			ck := tabledesc.MakeNotNullCheckConstraint(tbl, col,
+				descpb.ConstraintValidity_Dropping, 0 /* constraintID */)
+			tbl.Checks = append(tbl.Checks, ck)
+			enqueueNonIndexMutation(tbl, tbl.AddNotNullMutation, ck, descpb.DescriptorMutation_DROP)
+			return nil
+		}
+	}
+
+	return errors.AssertionFailedf("failed to find column %d in descriptor %v", op.ColumnID, tbl)
 }
 
 func (i *immediateVisitor) RemoveCheckConstraint(
@@ -160,6 +250,37 @@ func (i *immediateVisitor) RemoveCheckConstraint(
 	if !found {
 		return errors.AssertionFailedf("failed to find check constraint %d in table %q (%d)",
 			op.ConstraintID, tbl.GetName(), tbl.GetID())
+	}
+	return nil
+}
+
+func (i *immediateVisitor) RemoveColumnNotNull(
+	ctx context.Context, op scop.RemoveColumnNotNull,
+) error {
+	tbl, err := i.checkOutTable(ctx, op.TableID)
+	if err != nil || tbl.Dropped() {
+		return err
+	}
+	var found bool
+	for i, c := range tbl.Checks {
+		if c.IsNonNullConstraint && c.ColumnIDs[0] == op.ColumnID {
+			tbl.Checks = append(tbl.Checks[:i], tbl.Checks[i+1:]...)
+			found = true
+			break
+		}
+	}
+	for i, m := range tbl.Mutations {
+		if c := m.GetConstraint(); c != nil &&
+			c.ConstraintType == descpb.ConstraintToUpdate_NOT_NULL &&
+			c.NotNullColumn == op.ColumnID {
+			tbl.Mutations = append(tbl.Mutations[:i], tbl.Mutations[i+1:]...)
+			found = true
+			break
+		}
+	}
+	if !found {
+		return errors.AssertionFailedf("failed to find NOT NULL for column %d in table %q (%d)",
+			op.ColumnID, tbl.GetName(), tbl.GetID())
 	}
 	return nil
 }

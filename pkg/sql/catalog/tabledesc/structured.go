@@ -1695,7 +1695,10 @@ func (desc *Mutable) AddUniqueWithoutIndexMutation(
 // to add the new constraint name.
 // TODO(mgartner): Move this to schemaexpr.CheckConstraintBuilder.
 func MakeNotNullCheckConstraint(
-	tbl catalog.TableDescriptor, col catalog.Column, validity descpb.ConstraintValidity,
+	tbl catalog.TableDescriptor,
+	col catalog.Column,
+	validity descpb.ConstraintValidity,
+	constraintID descpb.ConstraintID,
 ) *descpb.TableDescriptor_CheckConstraint {
 	name := fmt.Sprintf("%s_auto_not_null", col.GetName())
 	// If generated name isn't unique, attempt to add a number to the end to
@@ -1726,7 +1729,7 @@ func MakeNotNullCheckConstraint(
 		Validity:            validity,
 		ColumnIDs:           []descpb.ColumnID{col.GetID()},
 		IsNonNullConstraint: true,
-		ConstraintID:        tbl.GetNextConstraintID(),
+		ConstraintID:        constraintID,
 	}
 }
 
