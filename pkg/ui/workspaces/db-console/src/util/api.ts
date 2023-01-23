@@ -357,9 +357,13 @@ export function getDatabaseDetails(
 ): Promise<DatabaseDetailsResponseMessage> {
   const queryString = req.include_stats ? "?include_stats=true" : "";
 
+  const promiseErr = IsValidateUriName(req.database);
+  if (promiseErr) {
+    return promiseErr;
+  }
   return timeoutFetch(
     serverpb.DatabaseDetailsResponse,
-    `${API_PREFIX}/databases/${req.database}${queryString}`,
+    `${API_PREFIX}/databases/${EncodeUriName(req.database)}${queryString}`,
     null,
     timeout,
   );
@@ -370,9 +374,16 @@ export function getTableDetails(
   req: TableDetailsRequestMessage,
   timeout?: moment.Duration,
 ): Promise<TableDetailsResponseMessage> {
+  const promiseErr = IsValidateUriName(req.database, req.table);
+  if (promiseErr) {
+    return promiseErr;
+  }
+
   return timeoutFetch(
     serverpb.TableDetailsResponse,
-    `${API_PREFIX}/databases/${req.database}/tables/${req.table}`,
+    `${API_PREFIX}/databases/${EncodeUriName(
+      req.database,
+    )}/tables/${EncodeUriName(req.table)}`,
     null,
     timeout,
   );
@@ -519,9 +530,16 @@ export function getTableStats(
   req: TableStatsRequestMessage,
   timeout?: moment.Duration,
 ): Promise<TableStatsResponseMessage> {
+  const promiseErr = IsValidateUriName(req.database, req.table);
+  if (promiseErr) {
+    return promiseErr;
+  }
+
   return timeoutFetch(
     serverpb.TableStatsResponse,
-    `${API_PREFIX}/databases/${req.database}/tables/${req.table}/stats`,
+    `${API_PREFIX}/databases/${EncodeUriName(
+      req.database,
+    )}/tables/${EncodeUriName(req.table)}/stats`,
     null,
     timeout,
   );
@@ -532,9 +550,16 @@ export function getIndexStats(
   req: IndexStatsRequestMessage,
   timeout?: moment.Duration,
 ): Promise<IndexStatsResponseMessage> {
+  const promiseErr = IsValidateUriName(req.database, req.table);
+  if (promiseErr) {
+    return promiseErr;
+  }
+
   return timeoutFetch(
     serverpb.TableIndexStatsResponse,
-    `${STATUS_PREFIX}/databases/${req.database}/tables/${req.table}/indexstats`,
+    `${STATUS_PREFIX}/databases/${EncodeUriName(
+      req.database,
+    )}/tables/${EncodeUriName(req.table)}/indexstats`,
     null,
     timeout,
   );
@@ -876,4 +901,22 @@ export function getKeyVisualizerSamples(
     req as any,
     timeout,
   );
+}
+
+export function IsValidateUriName(...args: string[]): Promise<any> {
+  for (const name in args) {
+    if (name.includes("/")) {
+      return;
+      Promise.reject(
+        new Error(
+          `util/api: The entity '${name}' contains '/' which is not currently supported in the UI.`,
+        ),
+      );
+    }
+  }
+  return null;
+}
+
+export function EncodeUriName(name: string): string {
+  return encodeURIComponent(name);
 }
