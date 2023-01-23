@@ -230,13 +230,10 @@ func (o ShowBackupOptions) IsDefault() bool {
 }
 
 func combineBools(v1 bool, v2 bool, label string) (bool, error) {
-	if v1 {
-		if v2 {
-			return false, errors.Newf("% option specified multiple times", label)
-		}
-		return v1, nil
+	if v2 && v1 {
+		return false, errors.Newf("% option specified multiple times", label)
 	}
-	return v2, nil
+	return v2 || v1, nil
 }
 func combineExpr(v1 Expr, v2 Expr, label string) (Expr, error) {
 	if v1 != nil {
