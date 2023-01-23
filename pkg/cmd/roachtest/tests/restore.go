@@ -666,7 +666,7 @@ func registerRestore(r registry.Registry) {
 	})
 
 	durationGauge := r.PromFactory().NewGaugeVec(prometheus.GaugeOpts{Namespace: registry.
-		PrometheusNameSpace, Subsystem: "restore", Name: "duration"}, []string{"test"})
+		PrometheusNameSpace, Subsystem: "restore", Name: "duration"}, []string{"test_name"})
 
 	for _, sp := range []restoreSpecs{
 		{

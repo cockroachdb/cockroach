@@ -167,7 +167,7 @@ trap 'echo Find run artifacts in ${a}' EXIT
 args=(
   "run" "${test}"
   "--port" "$((8080+RANDOM % 1000))"
-  "--prom-port" "$((2112+RANDOM % 1000))"
+  "--prom-port" "$((2113+RANDOM % 1000))"
   "--workload" "${wl}"
   "--cockroach" "${cr}"
   "--artifacts" "${a}"

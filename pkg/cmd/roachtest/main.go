@@ -264,7 +264,7 @@ runner itself.
 	runCmd.Flags().BoolVar(
 		&disableIssue, "disable-issue", false, "disable posting GitHub issue for failures")
 	runCmd.Flags().IntVar(
-		&promPort, "prom-port", 2112,
+		&promPort, "prom-port", 2113,
 		"the http port on which to expose prom metrics from the roachtest process")
 
 	var benchCmd = &cobra.Command{

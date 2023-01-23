@@ -58,8 +58,10 @@ var (
 	// reference error used when cluster creation fails for a test
 	errClusterProvisioningFailed = fmt.Errorf("cluster could not be created")
 
-	prometheusNameSpace      = "roachtest"
-	prometheusScrapeInterval = time.Second * 10
+	prometheusNameSpace = "roachtest"
+	// prometheusScrapeInterval should be consistent with the scrape interval defined in
+	// https://grafana.testeng.crdb.io/prometheus/config
+	prometheusScrapeInterval = time.Second * 15
 )
 
 // testRunner runs tests.
@@ -345,10 +347,12 @@ func (r *testRunner) Run(
 	}
 	// To ensure all prometheus metrics have been scraped, ensure shutdown takes
 	// at least one scrapeInterval, unless the roachtest fails or gets cancelled.
-	ticker := time.NewTicker(prometheusScrapeInterval - timeutil.Since(shutdownStart))
-	select {
-	case <-r.stopper.ShouldQuiesce():
-	case <-ticker.C:
+	if shutdownSleep := prometheusScrapeInterval - timeutil.Since(shutdownStart); shutdownSleep > 0 {
+		ticker := time.NewTicker(shutdownSleep)
+		select {
+		case <-r.stopper.ShouldQuiesce():
+		case <-ticker.C:
+		}
 	}
 	return nil
 }
