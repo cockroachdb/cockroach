@@ -3482,7 +3482,7 @@ func TestBackupTenantsWithRevisionHistory(t *testing.T) {
 	_, err = sqlDB.DB.ExecContext(ctx, `BACKUP TENANT 10 TO 'nodelocal://0/foo' WITH revision_history`)
 	require.Contains(t, fmt.Sprint(err), msg)
 
-	_, err = sqlDB.DB.ExecContext(ctx, `BACKUP TO 'nodelocal://0/bar' WITH revision_history`)
+	_, err = sqlDB.DB.ExecContext(ctx, `BACKUP TO 'nodelocal://0/bar' WITH revision_history, include_all_secondary_tenants`)
 	require.Contains(t, fmt.Sprint(err), msg)
 }
 
@@ -6559,7 +6559,7 @@ func TestBackupRestoreInsideTenant(t *testing.T) {
 		httpAddr, httpServerCleanup := makeInsecureHTTPServer(t)
 		defer httpServerCleanup()
 
-		systemDB.Exec(t, `BACKUP TO $1`, httpAddr)
+		systemDB.Exec(t, `BACKUP TO $1 WITH include_all_secondary_tenants`, httpAddr)
 
 		tenant20C2, cleanupT20C2 := makeTenant(srv2, 20)
 		defer cleanupT20C2()
@@ -6569,7 +6569,7 @@ func TestBackupRestoreInsideTenant(t *testing.T) {
 				// This is disallowed because the cluster restore includes other
 				// tenants, which can't be restored inside a tenant.
 				tenant20C2.ExpectErr(t, `only the system tenant can restore other tenants`,
-					`RESTORE FROM $1`, httpAddr)
+					`RESTORE FROM $1 WITH include_all_secondary_tenants`, httpAddr)
 			})
 
 			t.Run("with-no-tenant", func(t *testing.T) {
@@ -6629,13 +6629,13 @@ func TestBackupRestoreTenantSettings(t *testing.T) {
 	systemDB.Exec(t, `BACKUP TO $1`, backup2HttpAddr)
 
 	t.Run("cluster-restore-into-tenant-with-tenant-settings-succeeds", func(t *testing.T) {
-		tenant2C2.Exec(t, `RESTORE FROM $1`, backup2HttpAddr)
+		tenant2C2.Exec(t, `RESTORE FROM $1 WITH include_all_secondary_tenants`, backup2HttpAddr)
 	})
 
 	_, systemDB2, cleanupDB2 := backupRestoreTestSetupEmpty(t, singleNode, dir, InitManualReplication, base.TestClusterArgs{})
 	defer cleanupDB2()
 	t.Run("cluster-restore-into-cluster-with-tenant-settings-succeeds", func(t *testing.T) {
-		systemDB2.Exec(t, `RESTORE FROM $1`, backup2HttpAddr)
+		systemDB2.Exec(t, `RESTORE FROM $1 WITH include_all_secondary_tenants`, backup2HttpAddr)
 		systemDB2.CheckQueryResults(t, `SELECT * FROM system.tenant_settings`, systemDB.QueryStr(t, `SELECT * FROM system.tenant_settings`))
 	})
 }
@@ -6738,7 +6738,7 @@ func TestBackupRestoreInsideMultiPodTenant(t *testing.T) {
 		httpAddr, httpServerCleanup := makeInsecureHTTPServer(t)
 		defer httpServerCleanup()
 
-		systemDB.Exec(t, `BACKUP TO $1`, httpAddr)
+		systemDB.Exec(t, `BACKUP TO $1 WITH include_all_secondary_tenants`, httpAddr)
 
 		tenant20C2, cleanupT20C2 := makeTenant(srv2, 20, false)
 		defer cleanupT20C2()
@@ -6748,7 +6748,7 @@ func TestBackupRestoreInsideMultiPodTenant(t *testing.T) {
 				// This is disallowed because the cluster restore includes other
 				// tenants, which can't be restored inside a tenant.
 				tenant20C2.ExpectErr(t, `only the system tenant can restore other tenants`,
-					`RESTORE FROM $1`, httpAddr)
+					`RESTORE FROM $1 WITH include_all_secondary_tenants`, httpAddr)
 			})
 
 			t.Run("with-no-tenant", func(t *testing.T) {
@@ -6843,12 +6843,12 @@ func TestBackupRestoreTenant(t *testing.T) {
 	// BACKUP tenant 10 at ts1, before they created bar2.
 	systemDB.Exec(t, `BACKUP TENANT 10 TO 'nodelocal://1/t10' AS OF SYSTEM TIME `+ts1)
 	// Also create a full cluster backup. It should contain the tenant.
-	systemDB.Exec(t, `BACKUP TO 'nodelocal://1/clusterwide' AS OF SYSTEM TIME `+ts1)
+	systemDB.Exec(t, fmt.Sprintf("BACKUP TO 'nodelocal://1/clusterwide' AS OF SYSTEM TIME %s WITH include_all_secondary_tenants", ts1))
 
 	// Incrementally backup tenant 10 again, capturing up to ts2.
 	systemDB.Exec(t, `BACKUP TENANT 10 TO 'nodelocal://1/t10' AS OF SYSTEM TIME `+ts2)
 	// Run full cluster backup incrementally to ts2 as well.
-	systemDB.Exec(t, `BACKUP TO 'nodelocal://1/clusterwide' AS OF SYSTEM TIME `+ts2)
+	systemDB.Exec(t, fmt.Sprintf("BACKUP TO 'nodelocal://1/clusterwide' AS OF SYSTEM TIME %s WITH include_all_secondary_tenants", ts2))
 
 	systemDB.Exec(t, `BACKUP TENANT 11 TO 'nodelocal://1/t11'`)
 	systemDB.Exec(t, `BACKUP TENANT 20 TO 'nodelocal://1/t20'`)
@@ -7108,7 +7108,7 @@ func TestBackupRestoreTenant(t *testing.T) {
 					`{"capabilities": {"canAdminSplit": false}, "droppedName": "", "id": "1", "name": "system", "state": "ACTIVE", "tenantReplicationJobId": "0"}`,
 				},
 			})
-		restoreDB.Exec(t, `RESTORE FROM 'nodelocal://1/clusterwide'`)
+		restoreDB.Exec(t, `RESTORE FROM 'nodelocal://1/clusterwide' WITH include_all_secondary_tenants`)
 		restoreDB.CheckQueryResults(t,
 			`select id, active, name, crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info, true) from system.tenants`,
 			[][]string{
@@ -9491,7 +9491,7 @@ func TestProtectRestoreTargets(t *testing.T) {
 			MustMakeTenantID(10)})
 		require.NoError(t, err)
 	}
-	sqlDB.Exec(t, `BACKUP INTO $1`, localFoo)
+	sqlDB.Exec(t, `BACKUP INTO $1 WITH include_all_secondary_tenants`, localFoo)
 
 	for _, subtest := range []struct {
 		name        string

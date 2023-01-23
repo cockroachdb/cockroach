@@ -18,6 +18,14 @@ exec-sql
 DROP TENANT [5]
 ----
 
+exec-sql
+CREATE TABLE tab1 (pk int primary key)
+----
+
+exec-sql
+CREATE DATABASE db1;
+----
+
 query-sql
 SELECT id,active,crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info, true) FROM system.tenants;
 ----
@@ -26,8 +34,22 @@ SELECT id,active,crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', in
 6 true {"capabilities": {"canAdminSplit": false}, "droppedName": "", "id": "6", "name": "tenant-6", "state": "ACTIVE", "tenantReplicationJobId": "0"}
 
 exec-sql
-BACKUP INTO 'nodelocal://1/cluster'
+BACKUP INTO 'nodelocal://1/cluster_without_tenants'
 ----
+
+exec-sql
+BACKUP INTO 'nodelocal://1/cluster_with_tenants' WITH include_all_secondary_tenants
+----
+
+exec-sql expect-error-regex=(the include_all_secondary_tenants option is only supported for full cluster backups)
+BACKUP TABLE tab1 INTO 'nodelocal://1/table_backup' WITH include_all_secondary_tenants
+----
+regex matches error
+
+exec-sql expect-error-regex=(the include_all_secondary_tenants option is only supported for full cluster backups)
+BACKUP TABLE db1 INTO 'nodelocal://1/database_backup' WITH include_all_secondary_tenants
+----
+regex matches error
 
 exec-sql expect-error-regex=(tenant 5 is not active)
 BACKUP TENANT 5 INTO 'nodelocal://1/tenant5'
@@ -42,7 +64,7 @@ new-cluster name=s2 share-io-dir=s1 disable-tenant
 ----
 
 exec-sql
-RESTORE FROM LATEST IN 'nodelocal://1/cluster'
+RESTORE FROM LATEST IN 'nodelocal://1/cluster_with_tenants' WITH include_all_secondary_tenants
 ----
 
 # A dropped tenant should be restored as an inactive tenant.
@@ -52,6 +74,12 @@ SELECT id,active,crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', in
 1 true {"capabilities": {"canAdminSplit": false}, "droppedName": "", "id": "1", "name": "system", "state": "ACTIVE", "tenantReplicationJobId": "0"}
 5 false {"capabilities": {"canAdminSplit": false}, "droppedName": "tenant-5", "id": "5", "name": "tenant-5", "state": "DROP", "tenantReplicationJobId": "0"}
 6 true {"capabilities": {"canAdminSplit": false}, "droppedName": "", "id": "6", "name": "tenant-6", "state": "ACTIVE", "tenantReplicationJobId": "0"}
+
+
+exec-sql expect-error-regex=(tenant 6 not in backup)
+RESTORE TENANT 6 FROM LATEST IN 'nodelocal://1/cluster_without_tenants'
+----
+regex matches error
 
 exec-sql expect-error-regex=(tenant 6 already exists)
 RESTORE TENANT 6 FROM LATEST IN 'nodelocal://1/tenant6';
@@ -73,9 +101,30 @@ RESTORE TENANT 6 FROM LATEST IN 'nodelocal://1/tenant6' WITH tenant_name = 'newn
 ----
 
 query-sql
-SELECT id,active,crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info, true) FROM system.tenants;
+SHOW TENANTS
 ----
-1 true {"capabilities": {"canAdminSplit": false}, "droppedName": "", "id": "1", "name": "system", "state": "ACTIVE", "tenantReplicationJobId": "0"}
-2 true {"capabilities": {"canAdminSplit": false}, "droppedName": "", "id": "2", "name": "newname", "state": "ACTIVE", "tenantReplicationJobId": "0"}
-5 false {"capabilities": {"canAdminSplit": false}, "droppedName": "tenant-5", "id": "5", "name": "tenant-5", "state": "DROP", "tenantReplicationJobId": "0"}
-6 true {"capabilities": {"canAdminSplit": false}, "droppedName": "", "id": "6", "name": "tenant-6", "state": "ACTIVE", "tenantReplicationJobId": "0"}
+1 system ACTIVE
+2 newname ACTIVE
+6 tenant-6 ACTIVE
+
+new-cluster name=s3 share-io-dir=s1 disable-tenant
+----
+
+exec-sql expect-error-regex=(the include_all_secondary_tenants option is only supported for full cluster restores)
+RESTORE DATABASE db1 FROM LATEST IN 'nodelocal://1/cluster_with_tenants' WITH include_all_secondary_tenants
+----
+regex matches error
+
+exec-sql expect-error-regex=(the include_all_secondary_tenants option is only supported for full cluster restores)
+RESTORE DATABASE tab1 FROM LATEST IN 'nodelocal://1/cluster_with_tenants' WITH include_all_secondary_tenants
+----
+regex matches error
+
+exec-sql
+RESTORE FROM LATEST IN 'nodelocal://1/cluster_without_tenants'
+----
+
+query-sql
+SHOW TENANTS
+----
+1 system ACTIVE

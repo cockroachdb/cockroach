@@ -534,6 +534,7 @@ func backupTypeCheck(
 		},
 		exprutil.Bools{
 			backupStmt.Options.CaptureRevisionHistory,
+			backupStmt.Options.IncludeAllSecondaryTenants,
 		}); err != nil {
 		return false, nil, err
 	}
@@ -606,6 +607,16 @@ func backupPlanHook(
 		}
 	}
 
+	var includeAllSecondaryTenants bool
+	if backupStmt.Options.IncludeAllSecondaryTenants != nil {
+		includeAllSecondaryTenants, err = exprEval.Bool(
+			ctx, backupStmt.Options.IncludeAllSecondaryTenants,
+		)
+		if err != nil {
+			return nil, nil, nil, false, err
+		}
+	}
+
 	encryptionParams := jobspb.BackupEncryptionOptions{
 		Mode: jobspb.EncryptionMode_None,
 	}
@@ -658,6 +669,10 @@ func backupPlanHook(
 		if len(incrementalStorage) > 0 && (len(incrementalStorage) != len(to)) {
 			return errors.New("the incremental_location option must contain the same number of locality" +
 				" aware URIs as the full backup destination")
+		}
+
+		if includeAllSecondaryTenants && backupStmt.Coverage() != tree.AllDescriptors {
+			return errors.New("the include_all_secondary_tenants option is only supported for full cluster backups")
 		}
 
 		var asOfInterval int64
@@ -719,16 +734,17 @@ func backupPlanHook(
 		}
 
 		initialDetails := jobspb.BackupDetails{
-			Destination:         jobspb.BackupDetails_Destination{To: to, IncrementalStorage: incrementalStorage},
-			EndTime:             endTime,
-			RevisionHistory:     revisionHistory,
-			IncrementalFrom:     incrementalFrom,
-			FullCluster:         backupStmt.Coverage() == tree.AllDescriptors,
-			ResolvedCompleteDbs: completeDBs,
-			EncryptionOptions:   &encryptionParams,
-			AsOfInterval:        asOfInterval,
-			Detached:            detached,
-			ApplicationName:     p.SessionData().ApplicationName,
+			Destination:                jobspb.BackupDetails_Destination{To: to, IncrementalStorage: incrementalStorage},
+			EndTime:                    endTime,
+			RevisionHistory:            revisionHistory,
+			IncludeAllSecondaryTenants: includeAllSecondaryTenants,
+			IncrementalFrom:            incrementalFrom,
+			FullCluster:                backupStmt.Coverage() == tree.AllDescriptors,
+			ResolvedCompleteDbs:        completeDBs,
+			EncryptionOptions:          &encryptionParams,
+			AsOfInterval:               asOfInterval,
+			Detached:                   detached,
+			ApplicationName:            p.SessionData().ApplicationName,
 		}
 		if backupStmt.CreatedByInfo != nil && backupStmt.CreatedByInfo.Name == jobs.CreatedByScheduledJobs {
 			initialDetails.ScheduleID = backupStmt.CreatedByInfo.ID
@@ -1329,7 +1345,7 @@ func getTenantInfo(
 	var spans []roachpb.Span
 	var tenants []descpb.TenantInfoWithUsage
 	var err error
-	if jobDetails.FullCluster && codec.ForSystemTenant() {
+	if jobDetails.FullCluster && codec.ForSystemTenant() && jobDetails.IncludeAllSecondaryTenants {
 		// Include all tenants.
 		tenants, err = retrieveAllTenantsMetadata(
 			ctx, txn,

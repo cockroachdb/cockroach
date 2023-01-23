@@ -281,7 +281,10 @@ func fullClusterTargets(
 }
 
 func fullClusterTargetsRestore(
-	ctx context.Context, allDescs []catalog.Descriptor, lastBackupManifest backuppb.BackupManifest,
+	ctx context.Context,
+	allDescs []catalog.Descriptor,
+	lastBackupManifest backuppb.BackupManifest,
+	restoreAllTenants bool,
 ) (
 	[]catalog.Descriptor,
 	[]catalog.DatabaseDescriptor,
@@ -309,7 +312,13 @@ func fullClusterTargetsRestore(
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
-	return filteredDescs, filteredDBs, nil, lastBackupManifest.GetTenants(), nil
+
+	tenantsToRestore := []descpb.TenantInfoWithUsage{}
+	if restoreAllTenants {
+		tenantsToRestore = lastBackupManifest.GetTenants()
+	}
+
+	return filteredDescs, filteredDBs, nil, tenantsToRestore, nil
 }
 
 // fullClusterTargetsBackup returns the same descriptors referenced in
@@ -474,6 +483,7 @@ func selectTargets(
 	targets tree.BackupTargetList,
 	descriptorCoverage tree.DescriptorCoverage,
 	asOf hlc.Timestamp,
+	restoreAllTenants bool,
 ) (
 	[]catalog.Descriptor,
 	[]catalog.DatabaseDescriptor,
@@ -489,7 +499,7 @@ func selectTargets(
 	}
 
 	if descriptorCoverage == tree.AllDescriptors {
-		return fullClusterTargetsRestore(ctx, allDescs, lastBackupManifest)
+		return fullClusterTargetsRestore(ctx, allDescs, lastBackupManifest, restoreAllTenants)
 	}
 
 	if descriptorCoverage == tree.SystemUsers {

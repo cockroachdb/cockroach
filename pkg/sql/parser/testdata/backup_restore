@@ -755,6 +755,38 @@ RESTORE TABLE (foo) FROM ('bar') WITH skip_missing_foreign_keys, skip_missing_se
 RESTORE TABLE foo FROM '_' WITH skip_missing_foreign_keys, skip_missing_sequences, detached -- literals removed
 RESTORE TABLE _ FROM 'bar' WITH skip_missing_foreign_keys, skip_missing_sequences, detached -- identifiers removed
 
+parse
+BACKUP INTO 'bar' WITH include_all_secondary_tenants = $1, detached
+----
+BACKUP INTO 'bar' WITH detached, include_all_secondary_tenants = $1 -- normalized!
+BACKUP INTO ('bar') WITH detached, include_all_secondary_tenants = ($1) -- fully parenthesized
+BACKUP INTO '_' WITH detached, include_all_secondary_tenants = $1 -- literals removed
+BACKUP INTO 'bar' WITH detached, include_all_secondary_tenants = $1 -- identifiers removed
+
+parse
+BACKUP INTO 'bar' WITH include_all_secondary_tenants, detached
+----
+BACKUP INTO 'bar' WITH detached, include_all_secondary_tenants = true -- normalized!
+BACKUP INTO ('bar') WITH detached, include_all_secondary_tenants = (true) -- fully parenthesized
+BACKUP INTO '_' WITH detached, include_all_secondary_tenants = _ -- literals removed
+BACKUP INTO 'bar' WITH detached, include_all_secondary_tenants = true -- identifiers removed
+
+parse
+RESTORE FROM LATEST IN 'bar' WITH include_all_secondary_tenants = $1, detached
+----
+RESTORE FROM 'latest' IN 'bar' WITH detached, include_all_secondary_tenants = $1 -- normalized!
+RESTORE FROM ('latest') IN ('bar') WITH detached, include_all_secondary_tenants = ($1) -- fully parenthesized
+RESTORE FROM '_' IN '_' WITH detached, include_all_secondary_tenants = $1 -- literals removed
+RESTORE FROM 'latest' IN 'bar' WITH detached, include_all_secondary_tenants = $1 -- identifiers removed
+
+parse
+RESTORE FROM LATEST IN 'bar' WITH include_all_secondary_tenants, detached
+----
+RESTORE FROM 'latest' IN 'bar' WITH detached, include_all_secondary_tenants = true -- normalized!
+RESTORE FROM ('latest') IN ('bar') WITH detached, include_all_secondary_tenants = (true) -- fully parenthesized
+RESTORE FROM '_' IN '_' WITH detached, include_all_secondary_tenants = _ -- literals removed
+RESTORE FROM 'latest' IN 'bar' WITH detached, include_all_secondary_tenants = true -- identifiers removed
+
 error
 BACKUP foo TO 'bar' WITH key1, key2 = 'value'
 ----
@@ -797,6 +829,14 @@ BACKUP foo TO 'bar' WITH detached=true, revision_history, detached=true
                                                                    ^
 
 error
+BACKUP TO 'bar' WITH include_all_secondary_tenants=false, include_all_secondary_tenants
+----
+at or near "EOF": syntax error: include_all_secondary_tenants specified multiple times
+DETAIL: source SQL:
+BACKUP TO 'bar' WITH include_all_secondary_tenants=false, include_all_secondary_tenants
+                                                                                       ^
+
+error
 BACKUP foo TO 'bar' WITH detached=$1, revision_history
 ----
 at or near "1": syntax error
@@ -837,6 +877,14 @@ at or near "detached": syntax error: detached option specified multiple times
 DETAIL: source SQL:
 RESTORE foo FROM 'bar' WITH detached, skip_missing_views, detached
                                                           ^
+
+error
+RESTORE FROM 'bar' WITH include_all_secondary_tenants=false, include_all_secondary_tenants
+----
+at or near "EOF": syntax error: include_all_secondary_tenants specified multiple times
+DETAIL: source SQL:
+RESTORE FROM 'bar' WITH include_all_secondary_tenants=false, include_all_secondary_tenants
+                                                                                          ^
 
 error
 BACKUP ROLE foo, bar TO 'baz'

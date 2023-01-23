@@ -903,7 +903,7 @@ func (u *sqlSymUnion) cteMaterializeClause() tree.CTEMaterializeClause {
 
 %token <str> IDENTITY
 %token <str> IF IFERROR IFNULL IGNORE_FOREIGN_KEYS ILIKE IMMEDIATE IMMUTABLE IMPORT IN INCLUDE
-%token <str> INCLUDING INCREMENT INCREMENTAL INCREMENTAL_LOCATION
+%token <str> INCLUDING INCLUDE_ALL_SECONDARY_TENANTS INCREMENT INCREMENTAL INCREMENTAL_LOCATION
 %token <str> INET INET_CONTAINED_BY_OR_EQUALS
 %token <str> INET_CONTAINS_OR_EQUALS INDEX INDEXES INHERITS INJECT INITIALLY
 %token <str> INDEX_BEFORE_PAREN INDEX_BEFORE_NAME_THEN_PAREN INDEX_AFTER_ORDER_BY_BEFORE_AT
@@ -3099,6 +3099,7 @@ opt_clear_data:
 //    kms="[kms_provider]://[kms_host]/[master_key_identifier]?[parameters]" : encrypt backups using KMS
 //    detached: execute backup job asynchronously, without waiting for its completion
 //    incremental_location: specify a different path to store the incremental backup
+//    include_all_secondary_tenants: enable backups of all secondary tenants during a cluster backup in the system tenant
 //
 // %SeeAlso: RESTORE, WEBDOCS/backup.html
 backup_stmt:
@@ -3219,6 +3220,14 @@ backup_options:
 | INCREMENTAL_LOCATION '=' string_or_placeholder_opt_list
   {
   $$.val = &tree.BackupOptions{IncrementalStorage: $3.stringOrPlaceholderOptList()}
+  }
+| INCLUDE_ALL_SECONDARY_TENANTS
+  {
+    $$.val = &tree.BackupOptions{IncludeAllSecondaryTenants: tree.MakeDBool(true)}
+  }
+| INCLUDE_ALL_SECONDARY_TENANTS '=' a_expr
+  {
+    $$.val = &tree.BackupOptions{IncludeAllSecondaryTenants: $3.expr()}
   }
 
 
@@ -3532,6 +3541,7 @@ drop_external_connection_stmt:
 //    skip_localities_check: ignore difference of zone configuration between restore cluster and backup cluster
 //    debug_pause_on: describes the events that the job should pause itself on for debugging purposes.
 //    new_db_name: renames the restored database. only applies to database restores
+//    include_all_secondary_tenants: enable backups of all secondary tenants during a cluster backup in the system tenant
 // %SeeAlso: BACKUP, WEBDOCS/restore.html
 restore_stmt:
   RESTORE FROM list_of_string_or_placeholder_opt_list opt_as_of_clause opt_with_restore_options
@@ -3686,6 +3696,14 @@ restore_options:
 | NEW_DB_NAME '=' string_or_placeholder
   {
     $$.val = &tree.RestoreOptions{NewDBName: $3.expr()}
+  }
+| INCLUDE_ALL_SECONDARY_TENANTS
+  {
+    $$.val = &tree.RestoreOptions{IncludeAllSecondaryTenants: tree.MakeDBool(true)}
+  }
+| INCLUDE_ALL_SECONDARY_TENANTS '=' a_expr
+  {
+    $$.val = &tree.RestoreOptions{IncludeAllSecondaryTenants: $3.expr()}
   }
 | INCREMENTAL_LOCATION '=' string_or_placeholder_opt_list
 	{
@@ -15858,6 +15876,7 @@ unreserved_keyword:
 | IMPORT
 | INCLUDE
 | INCLUDING
+| INCLUDE_ALL_SECONDARY_TENANTS
 | INCREMENT
 | INCREMENTAL
 | INCREMENTAL_LOCATION

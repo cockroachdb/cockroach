@@ -79,10 +79,11 @@ type scheduledBackupSpec struct {
 	// We need to evaluate anything in the tree.Backup node that allows
 	// placeholders to be specified so that we store evaluated
 	// backup statement in the schedule.
-	destinations         []string
-	encryptionPassphrase *string
-	kmsURIs              []string
-	incrementalStorage   []string
+	destinations               []string
+	encryptionPassphrase       *string
+	kmsURIs                    []string
+	incrementalStorage         []string
+	includeAllSecondaryTenants *bool
 }
 
 func makeScheduleDetails(opts map[string]string) (jobspb.ScheduleDetails, error) {
@@ -219,6 +220,14 @@ func doCreateBackupSchedules(
 		backupNode.Options.EncryptionPassphrase = tree.NewStrVal(
 			*eval.encryptionPassphrase,
 		)
+	}
+
+	if eval.includeAllSecondaryTenants != nil {
+		if *eval.includeAllSecondaryTenants {
+			backupNode.Options.IncludeAllSecondaryTenants = tree.DBoolTrue
+		} else {
+			backupNode.Options.IncludeAllSecondaryTenants = tree.DBoolFalse
+		}
 	}
 
 	// Evaluate encryption KMS URIs if set.
@@ -650,6 +659,15 @@ func makeScheduledBackupSpec(
 			return nil, err
 		}
 	}
+	if schedule.BackupOptions.IncludeAllSecondaryTenants != nil {
+		includeSecondary, err := exprEval.Bool(ctx,
+			schedule.BackupOptions.IncludeAllSecondaryTenants)
+		if err != nil {
+			return nil, err
+		}
+		spec.includeAllSecondaryTenants = &includeSecondary
+	}
+
 	return spec, nil
 }
 
@@ -727,8 +745,11 @@ func createBackupScheduleTypeCheck(
 		tree.Exprs(schedule.BackupOptions.EncryptionKMSURI),
 		tree.Exprs(schedule.BackupOptions.IncrementalStorage),
 	}
+	boolExprs := exprutil.Bools{
+		schedule.BackupOptions.IncludeAllSecondaryTenants,
+	}
 	if err := exprutil.TypeCheck(
-		ctx, scheduleBackupOp, p.SemaCtx(), stringExprs, stringArrays, opts,
+		ctx, scheduleBackupOp, p.SemaCtx(), boolExprs, stringExprs, stringArrays, opts,
 	); err != nil {
 		return false, nil, err
 	}

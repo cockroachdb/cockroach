@@ -328,6 +328,10 @@ func processOptionsForArgs(inOpts tree.BackupOptions, outOpts *tree.BackupOption
 		outOpts.CaptureRevisionHistory = inOpts.CaptureRevisionHistory
 	}
 
+	if inOpts.IncludeAllSecondaryTenants != nil {
+		outOpts.IncludeAllSecondaryTenants = inOpts.IncludeAllSecondaryTenants
+	}
+
 	// If a string-y option is set to empty, interpret this as "unset."
 	if inOpts.EncryptionPassphrase != nil {
 		if tree.AsStringWithFlags(inOpts.EncryptionPassphrase, tree.FmtBareStrings) == "" {
