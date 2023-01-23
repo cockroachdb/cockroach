@@ -60,6 +60,7 @@ go_test(
     deps = [
         ":scexec",
         "//pkg/base",
+        "//pkg/clusterversion",
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
         "//pkg/security/securityassets",
@@ -80,6 +81,7 @@ go_test(
         "//pkg/sql/isql",
         "//pkg/sql/parser",
         "//pkg/sql/schemachanger/scbuild",
+        "//pkg/sql/schemachanger/scdecomp",
         "//pkg/sql/schemachanger/scdeps",
         "//pkg/sql/schemachanger/scdeps/sctestdeps",
         "//pkg/sql/schemachanger/scdeps/sctestutils",

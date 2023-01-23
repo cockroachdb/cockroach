@@ -8,9 +8,10 @@ EXPLAIN (ddl) rollback at post-commit stage 3 of 15;
 Schema change plan for rolling back ALTER TABLE ‹defaultdb›.public.‹t› ALTER PRIMARY KEY USING COLUMNS (‹a›);
  └── PostCommitNonRevertiblePhase
       ├── Stage 1 of 2 in PostCommitNonRevertiblePhase
-      │    ├── 2 elements transitioning toward PUBLIC
+      │    ├── 3 elements transitioning toward PUBLIC
       │    │    ├── WRITE_ONLY    → PUBLIC      Column:{DescID: 104, ColumnID: 2}
-      │    │    └── ABSENT        → PUBLIC      ColumnName:{DescID: 104, Name: rowid, ColumnID: 2}
+      │    │    ├── ABSENT        → PUBLIC      ColumnName:{DescID: 104, Name: rowid, ColumnID: 2}
+      │    │    └── VALIDATED     → PUBLIC      ColumnNotNull:{DescID: 104, ColumnID: 2, IndexID: 0}
       │    ├── 8 elements transitioning toward ABSENT
       │    │    ├── BACKFILL_ONLY → ABSENT      PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
       │    │    ├── PUBLIC        → ABSENT      IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}
@@ -20,8 +21,9 @@ Schema change plan for rolling back ALTER TABLE ‹defaultdb›.public.‹t› A
       │    │    ├── PUBLIC        → ABSENT      IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}
       │    │    ├── BACKFILL_ONLY → ABSENT      PrimaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2}
       │    │    └── PUBLIC        → ABSENT      IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 4}
-      │    └── 8 Mutation operations
+      │    └── 9 Mutation operations
       │         ├── SetColumnName {"ColumnID":2,"Name":"rowid","TableID":104}
+      │         ├── MakeValidatedColumnNotNullPublic {"ColumnID":2,"TableID":104}
       │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":3,"TableID":104}
       │         ├── MakeWriteOnlyColumnPublic {"ColumnID":2,"TableID":104}
       │         ├── RefreshStats {"TableID":104}

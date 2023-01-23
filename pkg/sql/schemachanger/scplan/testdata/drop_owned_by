@@ -43,6 +43,7 @@ StatementPhase stage 1 of 1 with 36 MutationType ops
     [[Column:{DescID: 109, ColumnID: 1}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[ColumnName:{DescID: 109, Name: id, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnNotNull:{DescID: 109, ColumnID: 1, IndexID: 0}, ABSENT], PUBLIC] -> VALIDATED
     [[Column:{DescID: 109, ColumnID: 2}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[ColumnName:{DescID: 109, Name: name, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
@@ -77,6 +78,7 @@ StatementPhase stage 1 of 1 with 36 MutationType ops
     [[Column:{DescID: 108, ColumnID: 1}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[ColumnName:{DescID: 108, Name: id, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnNotNull:{DescID: 108, ColumnID: 1, IndexID: 0}, ABSENT], PUBLIC] -> VALIDATED
     [[Column:{DescID: 108, ColumnID: 2}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[ColumnName:{DescID: 108, Name: name, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
@@ -304,6 +306,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
     [[Column:{DescID: 109, ColumnID: 1}, ABSENT], WRITE_ONLY] -> PUBLIC
     [[ColumnName:{DescID: 109, Name: id, ColumnID: 1}, ABSENT], ABSENT] -> PUBLIC
     [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnNotNull:{DescID: 109, ColumnID: 1, IndexID: 0}, ABSENT], VALIDATED] -> PUBLIC
     [[Column:{DescID: 109, ColumnID: 2}, ABSENT], WRITE_ONLY] -> PUBLIC
     [[ColumnName:{DescID: 109, Name: name, ColumnID: 2}, ABSENT], ABSENT] -> PUBLIC
     [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], ABSENT] -> PUBLIC
@@ -338,6 +341,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
     [[Column:{DescID: 108, ColumnID: 1}, ABSENT], WRITE_ONLY] -> PUBLIC
     [[ColumnName:{DescID: 108, Name: id, ColumnID: 1}, ABSENT], ABSENT] -> PUBLIC
     [[ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnNotNull:{DescID: 108, ColumnID: 1, IndexID: 0}, ABSENT], VALIDATED] -> PUBLIC
     [[Column:{DescID: 108, ColumnID: 2}, ABSENT], WRITE_ONLY] -> PUBLIC
     [[ColumnName:{DescID: 108, Name: name, ColumnID: 2}, ABSENT], ABSENT] -> PUBLIC
     [[ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], ABSENT] -> PUBLIC
@@ -407,7 +411,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
   ops:
     *scop.UndoAllInTxnImmediateMutationOpSideEffects
       {}
-PreCommitPhase stage 2 of 2 with 65 MutationType ops
+PreCommitPhase stage 2 of 2 with 67 MutationType ops
   transitions:
     [[UserPrivileges:{DescID: 100, Name: r}, ABSENT], PUBLIC] -> ABSENT
     [[Namespace:{DescID: 105, Name: s, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
@@ -433,6 +437,7 @@ PreCommitPhase stage 2 of 2 with 65 MutationType ops
     [[Column:{DescID: 109, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnName:{DescID: 109, Name: id, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnNotNull:{DescID: 109, ColumnID: 1, IndexID: 0}, ABSENT], PUBLIC] -> ABSENT
     [[Column:{DescID: 109, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnName:{DescID: 109, Name: name, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
@@ -467,6 +472,7 @@ PreCommitPhase stage 2 of 2 with 65 MutationType ops
     [[Column:{DescID: 108, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnName:{DescID: 108, Name: id, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnNotNull:{DescID: 108, ColumnID: 1, IndexID: 0}, ABSENT], PUBLIC] -> ABSENT
     [[Column:{DescID: 108, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnName:{DescID: 108, Name: name, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
@@ -632,6 +638,9 @@ PreCommitPhase stage 2 of 2 with 65 MutationType ops
         DescriptorID: 109
         Name: t
         SchemaID: 101
+    *scop.RemoveColumnNotNull
+      ColumnID: 1
+      TableID: 109
     *scop.DrainDescriptorName
       Namespace:
         DatabaseID: 100
@@ -644,6 +653,9 @@ PreCommitPhase stage 2 of 2 with 65 MutationType ops
         DescriptorID: 108
         Name: t
         SchemaID: 105
+    *scop.RemoveColumnNotNull
+      ColumnID: 1
+      TableID: 108
     *scop.DrainDescriptorName
       Namespace:
         DatabaseID: 100
@@ -669,9 +681,6 @@ PreCommitPhase stage 2 of 2 with 65 MutationType ops
         Name: v2
         SchemaID: 105
     *scop.MakeDeleteOnlyColumnAbsent
-      ColumnID: 1
-      TableID: 109
-    *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 2
       TableID: 109
     *scop.MakeDeleteOnlyColumnAbsent
@@ -683,9 +692,6 @@ PreCommitPhase stage 2 of 2 with 65 MutationType ops
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 4294967294
       TableID: 109
-    *scop.MakeDeleteOnlyColumnAbsent
-      ColumnID: 1
-      TableID: 108
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 2
       TableID: 108
@@ -719,6 +725,12 @@ PreCommitPhase stage 2 of 2 with 65 MutationType ops
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 4294967294
       TableID: 113
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 1
+      TableID: 109
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 1
+      TableID: 108
     *scop.SetJobStateOnDescriptor
       DescriptorID: 100
       Initialize: true

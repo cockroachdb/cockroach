@@ -37,7 +37,10 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 1 of 7;
         │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 2}
         │   │   │     rule: "dependents removed before column"
         │   │   │
-        │   │   └── • Precedence dependency from ABSENT IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 3}
+        │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 3}
+        │   │   │     rule: "dependents removed before column"
+        │   │   │
+        │   │   └── • Precedence dependency from ABSENT ColumnNotNull:{DescID: 106, ColumnID: 2, IndexID: 2}
         │   │         rule: "dependents removed before column"
         │   │
         │   ├── • ColumnName:{DescID: 106, Name: j, ColumnID: 2}

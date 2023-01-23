@@ -10,7 +10,7 @@ EXPLAIN (ddl) DROP TABLE multi_region_test_db.public.table_regional_by_row;
 Schema change plan for DROP TABLE ‹multi_region_test_db›.‹public›.‹table_regional_by_row›;
  ├── StatementPhase
  │    └── Stage 1 of 1 in StatementPhase
- │         ├── 27 elements transitioning toward ABSENT
+ │         ├── 29 elements transitioning toward ABSENT
  │         │    ├── PUBLIC → ABSENT     Namespace:{DescID: 108, Name: table_regional_by_row, ReferencedDescID: 104}
  │         │    ├── PUBLIC → ABSENT     Owner:{DescID: 108}
  │         │    ├── PUBLIC → ABSENT     UserPrivileges:{DescID: 108, Name: admin}
@@ -23,9 +23,11 @@ Schema change plan for DROP TABLE ‹multi_region_test_db›.‹public›.‹tab
  │         │    ├── PUBLIC → WRITE_ONLY Column:{DescID: 108, ColumnID: 1}
  │         │    ├── PUBLIC → ABSENT     ColumnName:{DescID: 108, Name: k, ColumnID: 1}
  │         │    ├── PUBLIC → ABSENT     ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 1}
+ │         │    ├── PUBLIC → VALIDATED  ColumnNotNull:{DescID: 108, ColumnID: 1, IndexID: 0}
  │         │    ├── PUBLIC → WRITE_ONLY Column:{DescID: 108, ColumnID: 2}
  │         │    ├── PUBLIC → ABSENT     ColumnName:{DescID: 108, Name: crdb_region, ColumnID: 2}
  │         │    ├── PUBLIC → ABSENT     ColumnType:{DescID: 108, ReferencedTypeIDs: [106 107], ColumnFamilyID: 0, ColumnID: 2}
+ │         │    ├── PUBLIC → VALIDATED  ColumnNotNull:{DescID: 108, ColumnID: 2, IndexID: 0}
  │         │    ├── PUBLIC → ABSENT     ColumnDefaultExpression:{DescID: 108, ReferencedTypeIDs: [106 107], ColumnID: 2}
  │         │    ├── PUBLIC → WRITE_ONLY Column:{DescID: 108, ColumnID: 4294967295}
  │         │    ├── PUBLIC → ABSENT     ColumnName:{DescID: 108, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}
@@ -48,7 +50,7 @@ Schema change plan for DROP TABLE ‹multi_region_test_db›.‹public›.‹tab
  │              └── UpdateTableBackReferencesInTypes {"BackReferencedTableID":108}
  ├── PreCommitPhase
  │    ├── Stage 1 of 2 in PreCommitPhase
- │    │    ├── 27 elements transitioning toward ABSENT
+ │    │    ├── 29 elements transitioning toward ABSENT
  │    │    │    ├── ABSENT     → PUBLIC Namespace:{DescID: 108, Name: table_regional_by_row, ReferencedDescID: 104}
  │    │    │    ├── ABSENT     → PUBLIC Owner:{DescID: 108}
  │    │    │    ├── ABSENT     → PUBLIC UserPrivileges:{DescID: 108, Name: admin}
@@ -61,9 +63,11 @@ Schema change plan for DROP TABLE ‹multi_region_test_db›.‹public›.‹tab
  │    │    │    ├── WRITE_ONLY → PUBLIC Column:{DescID: 108, ColumnID: 1}
  │    │    │    ├── ABSENT     → PUBLIC ColumnName:{DescID: 108, Name: k, ColumnID: 1}
  │    │    │    ├── ABSENT     → PUBLIC ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 1}
+ │    │    │    ├── VALIDATED  → PUBLIC ColumnNotNull:{DescID: 108, ColumnID: 1, IndexID: 0}
  │    │    │    ├── WRITE_ONLY → PUBLIC Column:{DescID: 108, ColumnID: 2}
  │    │    │    ├── ABSENT     → PUBLIC ColumnName:{DescID: 108, Name: crdb_region, ColumnID: 2}
  │    │    │    ├── ABSENT     → PUBLIC ColumnType:{DescID: 108, ReferencedTypeIDs: [106 107], ColumnFamilyID: 0, ColumnID: 2}
+ │    │    │    ├── VALIDATED  → PUBLIC ColumnNotNull:{DescID: 108, ColumnID: 2, IndexID: 0}
  │    │    │    ├── ABSENT     → PUBLIC ColumnDefaultExpression:{DescID: 108, ReferencedTypeIDs: [106 107], ColumnID: 2}
  │    │    │    ├── WRITE_ONLY → PUBLIC Column:{DescID: 108, ColumnID: 4294967295}
  │    │    │    ├── ABSENT     → PUBLIC ColumnName:{DescID: 108, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}
@@ -79,7 +83,7 @@ Schema change plan for DROP TABLE ‹multi_region_test_db›.‹public›.‹tab
  │    │    └── 1 Mutation operation
  │    │         └── UndoAllInTxnImmediateMutationOpSideEffects
  │    └── Stage 2 of 2 in PreCommitPhase
- │         ├── 27 elements transitioning toward ABSENT
+ │         ├── 29 elements transitioning toward ABSENT
  │         │    ├── PUBLIC → ABSENT  Namespace:{DescID: 108, Name: table_regional_by_row, ReferencedDescID: 104}
  │         │    ├── PUBLIC → ABSENT  Owner:{DescID: 108}
  │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 108, Name: admin}
@@ -92,9 +96,11 @@ Schema change plan for DROP TABLE ‹multi_region_test_db›.‹public›.‹tab
  │         │    ├── PUBLIC → ABSENT  Column:{DescID: 108, ColumnID: 1}
  │         │    ├── PUBLIC → ABSENT  ColumnName:{DescID: 108, Name: k, ColumnID: 1}
  │         │    ├── PUBLIC → ABSENT  ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 1}
+ │         │    ├── PUBLIC → ABSENT  ColumnNotNull:{DescID: 108, ColumnID: 1, IndexID: 0}
  │         │    ├── PUBLIC → ABSENT  Column:{DescID: 108, ColumnID: 2}
  │         │    ├── PUBLIC → ABSENT  ColumnName:{DescID: 108, Name: crdb_region, ColumnID: 2}
  │         │    ├── PUBLIC → ABSENT  ColumnType:{DescID: 108, ReferencedTypeIDs: [106 107], ColumnFamilyID: 0, ColumnID: 2}
+ │         │    ├── PUBLIC → ABSENT  ColumnNotNull:{DescID: 108, ColumnID: 2, IndexID: 0}
  │         │    ├── PUBLIC → ABSENT  ColumnDefaultExpression:{DescID: 108, ReferencedTypeIDs: [106 107], ColumnID: 2}
  │         │    ├── PUBLIC → ABSENT  Column:{DescID: 108, ColumnID: 4294967295}
  │         │    ├── PUBLIC → ABSENT  ColumnName:{DescID: 108, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}
@@ -107,18 +113,20 @@ Schema change plan for DROP TABLE ‹multi_region_test_db›.‹public›.‹tab
  │         │    ├── PUBLIC → ABSENT  PrimaryIndex:{DescID: 108, IndexID: 1, ConstraintID: 1}
  │         │    ├── PUBLIC → ABSENT  IndexPartitioning:{DescID: 108, IndexID: 1}
  │         │    └── PUBLIC → ABSENT  IndexName:{DescID: 108, Name: table_regional_by_row_pkey, IndexID: 1}
- │         └── 15 Mutation operations
+ │         └── 17 Mutation operations
  │              ├── MarkDescriptorAsDropped {"DescriptorID":108}
  │              ├── RemoveObjectParent {"ObjectID":108,"ParentSchemaID":105}
  │              ├── RemoveColumnDefaultExpression {"ColumnID":2,"TableID":108}
  │              ├── UpdateTableBackReferencesInTypes {"BackReferencedTableID":108}
  │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":108,"Name":"table_regional_b...","SchemaID":105}}
+ │              ├── RemoveColumnNotNull {"ColumnID":1,"TableID":108}
  │              ├── RemoveDroppedColumnType {"ColumnID":2,"TableID":108}
  │              ├── UpdateTableBackReferencesInTypes {"BackReferencedTableID":108}
- │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":1,"TableID":108}
- │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":2,"TableID":108}
+ │              ├── RemoveColumnNotNull {"ColumnID":2,"TableID":108}
  │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":4294967295,"TableID":108}
  │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":4294967294,"TableID":108}
+ │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":1,"TableID":108}
+ │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":2,"TableID":108}
  │              ├── SetJobStateOnDescriptor {"DescriptorID":106,"Initialize":true}
  │              ├── SetJobStateOnDescriptor {"DescriptorID":107,"Initialize":true}
  │              ├── SetJobStateOnDescriptor {"DescriptorID":108,"Initialize":true}

@@ -253,6 +253,8 @@ ElementState:
     closedTypeIds: []
     columnId: 1
     computeExpr: null
+    elementCreationMetadata:
+      in231OrLater: true
     familyId: 0
     isNullable: true
     isVirtual: false
@@ -278,6 +280,8 @@ ElementState:
     closedTypeIds: []
     columnId: 4.294967294e+09
     computeExpr: null
+    elementCreationMetadata:
+      in231OrLater: true
     familyId: 0
     isNullable: true
     isVirtual: false
@@ -303,6 +307,8 @@ ElementState:
     closedTypeIds: []
     columnId: 4.294967295e+09
     computeExpr: null
+    elementCreationMetadata:
+      in231OrLater: true
     familyId: 0
     isNullable: true
     isVirtual: false
@@ -433,6 +439,8 @@ ElementState:
     closedTypeIds: []
     columnId: 1
     computeExpr: null
+    elementCreationMetadata:
+      in231OrLater: true
     familyId: 0
     isNullable: true
     isVirtual: false
@@ -458,6 +466,8 @@ ElementState:
     closedTypeIds: []
     columnId: 2
     computeExpr: null
+    elementCreationMetadata:
+      in231OrLater: true
     familyId: 0
     isNullable: true
     isVirtual: false
@@ -483,6 +493,8 @@ ElementState:
     closedTypeIds: []
     columnId: 4.294967294e+09
     computeExpr: null
+    elementCreationMetadata:
+      in231OrLater: true
     familyId: 0
     isNullable: true
     isVirtual: false
@@ -508,6 +520,8 @@ ElementState:
     closedTypeIds: []
     columnId: 4.294967295e+09
     computeExpr: null
+    elementCreationMetadata:
+      in231OrLater: true
     familyId: 0
     isNullable: true
     isVirtual: false

@@ -63,7 +63,7 @@ write *eventpb.AlterTable to event log:
     tag: ALTER TABLE
     user: root
   tableName: db.public.tbl
-## StatementPhase stage 1 of 1 with 11 MutationType ops
+## StatementPhase stage 1 of 1 with 12 MutationType ops
 upsert descriptor #106
   ...
      - columnIds:
@@ -82,6 +82,7 @@ upsert descriptor #106
   +      defaultExpr: nextval(107:::REGCLASS)
   +      id: 2
   +      name: l
+  +      nullable: true
   +      pgAttributeNum: 2
   +      type:
   +        family: IntFamily
@@ -145,6 +146,22 @@ upsert descriptor #106
   +      version: 4
   +    mutationId: 1
   +    state: DELETE_ONLY
+  +  - constraint:
+  +      check:
+  +        columnIds:
+  +        - 2
+  +        expr: l IS NOT NULL
+  +        isNonNullConstraint: true
+  +        name: l_auto_not_null
+  +        validity: Validating
+  +      constraintType: NOT_NULL
+  +      foreignKey: {}
+  +      name: l_auto_not_null
+  +      notNullColumn: 2
+  +      uniqueWithoutIndexConstraint: {}
+  +    direction: ADD
+  +    mutationId: 1
+  +    state: WRITE_ONLY
      name: tbl
   -  nextColumnId: 2
   -  nextConstraintId: 2
@@ -340,8 +357,8 @@ upsert descriptor #106
        mutationId: 1
   -    state: DELETE_ONLY
   +    state: WRITE_ONLY
-     name: tbl
-     nextColumnId: 3
+     - constraint:
+         check:
   ...
        time: {}
      unexposedParentSchemaId: 105
@@ -433,15 +450,20 @@ upsert descriptor #107
      unexposedParentSchemaId: 105
   -  version: "5"
   +  version: "6"
+<<<<<<< HEAD
 persist all catalog changes to storage
 update progress of schema change job #1: "PostCommitPhase stage 7 of 7 with 1 ValidationType op pending"
+=======
+update progress of schema change job #1: "PostCommitPhase stage 7 of 7 with 2 ValidationType ops pending"
+>>>>>>> e3d5c99142 (schemachanger: Re-implement logic handling NOT NULL constraint)
 commit transaction #8
 begin transaction #9
-## PostCommitPhase stage 7 of 7 with 1 ValidationType op
+## PostCommitPhase stage 7 of 7 with 2 ValidationType ops
 validate forward indexes [2] in table #106
+validate CHECK constraint l_auto_not_null in table #106
 commit transaction #9
 begin transaction #10
-## PostCommitNonRevertiblePhase stage 1 of 3 with 10 MutationType ops
+## PostCommitNonRevertiblePhase stage 1 of 3 with 11 MutationType ops
 upsert descriptor #106
   ...
          oid: 20
@@ -471,6 +493,7 @@ upsert descriptor #106
   -      defaultExpr: nextval(107:::REGCLASS)
   -      id: 2
   -      name: l
+  -      nullable: true
   -      pgAttributeNum: 2
   -      type:
   -        family: IntFamily
@@ -538,6 +561,25 @@ upsert descriptor #106
   -      useDeletePreservingEncoding: true
          version: 4
        mutationId: 1
+       state: WRITE_ONLY
+  -  - constraint:
+  -      check:
+  -        columnIds:
+  -        - 2
+  -        expr: l IS NOT NULL
+  -        isNonNullConstraint: true
+  -        name: l_auto_not_null
+  -        validity: Validating
+  -      constraintType: NOT_NULL
+  -      foreignKey: {}
+  -      name: l_auto_not_null
+  -      notNullColumn: 2
+  -      uniqueWithoutIndexConstraint: {}
+  -    direction: ADD
+  -    mutationId: 1
+  -    state: WRITE_ONLY
+     name: tbl
+     nextColumnId: 3
   ...
      parentId: 104
      primaryIndex:

@@ -39,6 +39,7 @@ begin transaction #1
 checking for feature: ALTER TABLE
 increment telemetry for sql.schema.alter_table
 increment telemetry for sql.schema.alter_table.alter_primary_key
+<<<<<<< HEAD
 write *eventpb.AlterTable to event log:
   mutationId: 1
   sql:
@@ -49,7 +50,20 @@ write *eventpb.AlterTable to event log:
     user: root
   tableName: defaultdb.public.t
 ## StatementPhase stage 1 of 1 with 10 MutationType ops
+=======
+## StatementPhase stage 1 of 1 with 12 MutationType ops
+>>>>>>> 55cce724f0 (schemachanger: Re-implement logic handling NOT NULL constraint)
 upsert descriptor #104
+   table:
+  +  checks:
+  +  - columnIds:
+  +    - 2
+  +    expr: crdb_internal_column_2_name_placeholder IS NOT NULL
+  +    isNonNullConstraint: true
+  +    name: crdb_internal_column_2_name_placeholder_auto_not_null
+  +    validity: Dropping
+     columns:
+     - id: 1
   ...
          oid: 20
          width: 64
@@ -79,10 +93,27 @@ upsert descriptor #104
   +      hidden: true
   +      id: 2
   +      name: crdb_internal_column_2_name_placeholder
+  +      nullable: true
   +      type:
   +        family: IntFamily
   +        oid: 20
   +        width: 64
+  +    direction: DROP
+  +    mutationId: 1
+  +    state: WRITE_ONLY
+  +  - constraint:
+  +      check:
+  +        columnIds:
+  +        - 2
+  +        expr: crdb_internal_column_2_name_placeholder IS NOT NULL
+  +        isNonNullConstraint: true
+  +        name: crdb_internal_column_2_name_placeholder_auto_not_null
+  +        validity: Dropping
+  +      constraintType: NOT_NULL
+  +      foreignKey: {}
+  +      name: crdb_internal_column_2_name_placeholder_auto_not_null
+  +      notNullColumn: 2
+  +      uniqueWithoutIndexConstraint: {}
   +    direction: DROP
   +    mutationId: 1
   +    state: WRITE_ONLY
@@ -673,8 +704,19 @@ begin transaction #17
 validate forward indexes [4] in table #104
 commit transaction #17
 begin transaction #18
-## PostCommitNonRevertiblePhase stage 1 of 4 with 6 MutationType ops
+## PostCommitNonRevertiblePhase stage 1 of 4 with 7 MutationType ops
 upsert descriptor #104
+   table:
+  -  checks:
+  -  - columnIds:
+  -    - 2
+  -    expr: crdb_internal_column_2_name_placeholder IS NOT NULL
+  -    isNonNullConstraint: true
+  -    name: crdb_internal_column_2_name_placeholder_auto_not_null
+  -    validity: Dropping
+  +  checks: []
+     columns:
+     - id: 1
   ...
            statement: ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (a)
            statementTag: ALTER TABLE
@@ -684,6 +726,22 @@ upsert descriptor #104
   ...
        direction: DROP
        mutationId: 1
+  -    state: WRITE_ONLY
+  -  - constraint:
+  -      check:
+  -        columnIds:
+  -        - 2
+  -        expr: crdb_internal_column_2_name_placeholder IS NOT NULL
+  -        isNonNullConstraint: true
+  -        name: crdb_internal_column_2_name_placeholder_auto_not_null
+  -        validity: Dropping
+  -      constraintType: NOT_NULL
+  -      foreignKey: {}
+  -      name: crdb_internal_column_2_name_placeholder_auto_not_null
+  -      notNullColumn: 2
+  -      uniqueWithoutIndexConstraint: {}
+  -    direction: DROP
+  -    mutationId: 1
   -    state: WRITE_ONLY
   -  - direction: ADD
   +    state: DELETE_ONLY
@@ -913,6 +971,7 @@ upsert descriptor #104
   -      hidden: true
   -      id: 2
   -      name: crdb_internal_column_2_name_placeholder
+  -      nullable: true
   -      type:
   -        family: IntFamily
   -        oid: 20

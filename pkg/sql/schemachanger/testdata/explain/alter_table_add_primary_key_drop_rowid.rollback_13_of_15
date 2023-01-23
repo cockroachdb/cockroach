@@ -8,9 +8,10 @@ EXPLAIN (ddl) rollback at post-commit stage 13 of 15;
 Schema change plan for rolling back ALTER TABLE ‹defaultdb›.public.‹t› ADD PRIMARY KEY (‹a›);
  └── PostCommitNonRevertiblePhase
       ├── Stage 1 of 3 in PostCommitNonRevertiblePhase
-      │    ├── 4 elements transitioning toward PUBLIC
+      │    ├── 5 elements transitioning toward PUBLIC
       │    │    ├── WRITE_ONLY → PUBLIC      Column:{DescID: 104, ColumnID: 2}
       │    │    ├── ABSENT     → PUBLIC      ColumnName:{DescID: 104, Name: rowid, ColumnID: 2}
+      │    │    ├── VALIDATED  → PUBLIC      ColumnNotNull:{DescID: 104, ColumnID: 2, IndexID: 0}
       │    │    ├── VALIDATED  → PUBLIC      PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}
       │    │    └── ABSENT     → PUBLIC      IndexName:{DescID: 104, Name: t_pkey, IndexID: 1}
       │    ├── 11 elements transitioning toward ABSENT
@@ -25,8 +26,9 @@ Schema change plan for rolling back ALTER TABLE ‹defaultdb›.public.‹t› A
       │    │    ├── PUBLIC     → ABSENT      IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 4}
       │    │    ├── WRITE_ONLY → DELETE_ONLY TemporaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 5, SourceIndexID: 2}
       │    │    └── PUBLIC     → ABSENT      IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 5}
-      │    └── 12 Mutation operations
+      │    └── 13 Mutation operations
       │         ├── SetColumnName {"ColumnID":2,"Name":"rowid","TableID":104}
+      │         ├── MakeValidatedColumnNotNullPublic {"ColumnID":2,"TableID":104}
       │         ├── SetIndexName {"IndexID":1,"Name":"t_pkey","TableID":104}
       │         ├── MakePublicPrimaryIndexWriteOnly {"IndexID":2,"TableID":104}
       │         ├── SetIndexName {"IndexID":2,"Name":"crdb_internal_in...","TableID":104}

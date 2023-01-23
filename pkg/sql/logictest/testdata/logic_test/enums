@@ -624,14 +624,7 @@ statement error pq: failed to satisfy CHECK constraint \(x > 'hello':::test.publ
 INSERT INTO enum_checks VALUES ('hello')
 
 # Try adding a check that fails validation.
-# Unfortunately, error is slightly different between legacy and declarative
-# schema changer so we will test them separately
-skipif config local-legacy-schema-changer
-statement error pq: validation of CHECK "x = 'hello':::test.public.greeting" failed
-ALTER TABLE enum_checks ADD CHECK (x = 'hello')
-
-onlyif config local-legacy-schema-changer
-statement error pq: validation of CHECK "x = 'hello':::greeting" failed
+statement error pq: validation of CHECK "x = 'hello':::.*greeting" failed on row: x='(hi|howdy)', rowid=\d+
 ALTER TABLE enum_checks ADD CHECK (x = 'hello')
 
 # Check the above cases, but in a transaction.

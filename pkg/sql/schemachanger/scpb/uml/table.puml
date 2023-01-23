@@ -168,6 +168,7 @@ ColumnType :  TypeT
 ColumnType :  IsNullable
 ColumnType :  ComputeExpr
 ColumnType :  IsVirtual
+ColumnType :  ElementCreationMetadata
 
 object ColumnDefaultExpression
 
