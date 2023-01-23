@@ -79,10 +79,11 @@ type scheduledBackupSpec struct {
 	// We need to evaluate anything in the tree.Backup node that allows
 	// placeholders to be specified so that we store evaluated
 	// backup statement in the schedule.
-	destinations         []string
-	encryptionPassphrase *string
-	kmsURIs              []string
-	incrementalStorage   []string
+	destinations           []string
+	encryptionPassphrase   *string
+	captureRevisionHistory *bool
+	kmsURIs                []string
+	incrementalStorage     []string
 }
 
 func makeScheduleDetails(opts map[string]string) (jobspb.ScheduleDetails, error) {
@@ -207,11 +208,14 @@ func doCreateBackupSchedules(
 	// Prepare backup statement (full).
 	backupNode := &tree.Backup{
 		Options: tree.BackupOptions{
-			CaptureRevisionHistory: eval.BackupOptions.CaptureRevisionHistory,
-			Detached:               tree.DBoolTrue,
+			Detached: tree.DBoolTrue,
 		},
 		Nested:         true,
 		AppendToLatest: false,
+	}
+
+	if eval.captureRevisionHistory != nil {
+		backupNode.Options.CaptureRevisionHistory = tree.MakeDBool(tree.DBool(*eval.captureRevisionHistory))
 	}
 
 	// Evaluate encryption passphrase if set.
@@ -650,6 +654,16 @@ func makeScheduledBackupSpec(
 			return nil, err
 		}
 	}
+	if schedule.BackupOptions.CaptureRevisionHistory != nil {
+		capture, err := exprEval.Bool(
+			ctx, schedule.BackupOptions.CaptureRevisionHistory,
+		)
+		if err != nil {
+			return nil, err
+		}
+		spec.captureRevisionHistory = &capture
+	}
+
 	return spec, nil
 }
 
@@ -727,8 +741,11 @@ func createBackupScheduleTypeCheck(
 		tree.Exprs(schedule.BackupOptions.EncryptionKMSURI),
 		tree.Exprs(schedule.BackupOptions.IncrementalStorage),
 	}
+	bools := exprutil.Bools{
+		schedule.BackupOptions.CaptureRevisionHistory,
+	}
 	if err := exprutil.TypeCheck(
-		ctx, scheduleBackupOp, p.SemaCtx(), stringExprs, stringArrays, opts,
+		ctx, scheduleBackupOp, p.SemaCtx(), stringExprs, bools, stringArrays, opts,
 	); err != nil {
 		return false, nil, err
 	}

@@ -1153,6 +1153,15 @@ func (stmt *Backup) walkStmt(v Visitor) Statement {
 			ret.Options.EncryptionPassphrase = pw
 		}
 	}
+	if stmt.Options.CaptureRevisionHistory != nil {
+		rh, changed := WalkExpr(v, stmt.Options.CaptureRevisionHistory)
+		if changed {
+			if ret == stmt {
+				ret = stmt.copyNode()
+			}
+			ret.Options.CaptureRevisionHistory = rh
+		}
+	}
 	return ret
 }
 
