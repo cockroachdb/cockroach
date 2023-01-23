@@ -606,6 +606,16 @@ SELECT count(*) FROM corr2
 ----
 1
 
+# Uncorrelated EXISTS subqueries within correlated subqueries can be executed.
+query I
+SELECT i FROM (VALUES (1), (2)) v(i)
+WHERE CASE
+  WHEN i < 3 THEN (SELECT 1/i = 1 FROM (VALUES (1)) WHERE EXISTS (SELECT * FROM corr))
+  ELSE false
+END
+----
+1
+
 
 subtest regressions
 

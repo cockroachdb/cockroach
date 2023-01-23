@@ -2765,6 +2765,22 @@ SELECT a, sub_is_odd(a) FROM sub_all WHERE sub_is_odd(a) OR sub_is_odd(a) IS NUL
 5  true
 6  NULL
 
+# UDF with an uncorrelated EXISTS.
+statement ok
+CREATE FUNCTION sub_first() RETURNS INT LANGUAGE SQL AS $$
+  SELECT a FROM sub_all WHERE EXISTS (SELECT a FROM sub_odd) ORDER BY a LIMIT 1
+$$
+
+query II rowsort
+SELECT sub_first(), a FROM sub_all
+----
+1  1
+1  2
+1  3
+1  4
+1  5
+1  6
+
 
 subtest variadic
 
@@ -2875,10 +2891,10 @@ SELECT oid, proname, pronamespace, proowner, prolang, proleakproof, proisstrict,
 FROM pg_catalog.pg_proc WHERE proname IN ('f_93314', 'f_93314_alias', 'f_93314_comp', 'f_93314_comp_t')
 ORDER BY oid;
 ----
-100263  f_93314         105  1546506610  14  false  false  false  v  0  100262  ·  {}  NULL  SELECT i, e FROM test.public.t_93314 ORDER BY i LIMIT 1;
-100265  f_93314_alias   105  1546506610  14  false  false  false  v  0  100264  ·  {}  NULL  SELECT i, e FROM test.public.t_93314_alias ORDER BY i LIMIT 1;
-100269  f_93314_comp    105  1546506610  14  false  false  false  v  0  100266  ·  {}  NULL  SELECT (1, 2);
-100270  f_93314_comp_t  105  1546506610  14  false  false  false  v  0  100268  ·  {}  NULL  SELECT a, c FROM test.public.t_93314_comp LIMIT 1;
+100264  f_93314         105  1546506610  14  false  false  false  v  0  100263  ·  {}  NULL  SELECT i, e FROM test.public.t_93314 ORDER BY i LIMIT 1;
+100266  f_93314_alias   105  1546506610  14  false  false  false  v  0  100265  ·  {}  NULL  SELECT i, e FROM test.public.t_93314_alias ORDER BY i LIMIT 1;
+100270  f_93314_comp    105  1546506610  14  false  false  false  v  0  100267  ·  {}  NULL  SELECT (1, 2);
+100271  f_93314_comp_t  105  1546506610  14  false  false  false  v  0  100269  ·  {}  NULL  SELECT a, c FROM test.public.t_93314_comp LIMIT 1;
 
 # Regression test for #95240. Strict UDFs that are inlined should result in NULL
 # when presented with NULL arguments.
