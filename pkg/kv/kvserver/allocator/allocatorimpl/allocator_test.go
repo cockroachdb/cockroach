@@ -2112,7 +2112,7 @@ func TestAllocatorTransferLeaseTargetDraining(t *testing.T) {
 		storepool.TestTimeUntilStoreDeadOff, true, /* deterministic */
 		func() int { return 10 }, /* nodeCount */
 		livenesspb.NodeLivenessStatus_LIVE)
-	a := MakeAllocator(st, true /* deterministic */, func(string) (time.Duration, bool) {
+	a := MakeAllocator(st, true /* deterministic */, func(id roachpb.NodeID) (time.Duration, bool) {
 		return 0, true
 	}, nil)
 	defer stopper.Stop(ctx)
@@ -2501,7 +2501,7 @@ func TestAllocatorShouldTransferLeaseDraining(t *testing.T) {
 		storepool.TestTimeUntilStoreDeadOff, true, /* deterministic */
 		func() int { return 10 }, /* nodeCount */
 		livenesspb.NodeLivenessStatus_LIVE)
-	a := MakeAllocator(st, true /* deterministic */, func(string) (time.Duration, bool) {
+	a := MakeAllocator(st, true /* deterministic */, func(id roachpb.NodeID) (time.Duration, bool) {
 		return 0, true
 	}, nil)
 	defer stopper.Stop(context.Background())
@@ -2569,7 +2569,7 @@ func TestAllocatorShouldTransferSuspected(t *testing.T) {
 		storepool.TestTimeUntilStoreDeadOff, true, /* deterministic */
 		func() int { return 10 }, /* nodeCount */
 		livenesspb.NodeLivenessStatus_LIVE)
-	a := MakeAllocator(st, true /* deterministic */, func(string) (time.Duration, bool) {
+	a := MakeAllocator(st, true /* deterministic */, func(id roachpb.NodeID) (time.Duration, bool) {
 		return 0, true
 	}, nil)
 	defer stopper.Stop(context.Background())
@@ -5420,11 +5420,11 @@ func TestAllocatorTransferLeaseTargetLoadBased(t *testing.T) {
 
 	now = now.Add(MinLeaseTransferStatsDuration)
 
-	noLatency := map[string]time.Duration{}
-	highLatency := map[string]time.Duration{
-		stores[0].Node.Address.String(): 50 * time.Millisecond,
-		stores[1].Node.Address.String(): 50 * time.Millisecond,
-		stores[2].Node.Address.String(): 50 * time.Millisecond,
+	noLatency := map[roachpb.NodeID]time.Duration{}
+	highLatency := map[roachpb.NodeID]time.Duration{
+		stores[0].Node.NodeID: 50 * time.Millisecond,
+		stores[1].Node.NodeID: 50 * time.Millisecond,
+		stores[2].Node.NodeID: 50 * time.Millisecond,
 	}
 
 	existing := []roachpb.ReplicaDescriptor{
@@ -5435,7 +5435,7 @@ func TestAllocatorTransferLeaseTargetLoadBased(t *testing.T) {
 
 	testCases := []struct {
 		leaseholder      roachpb.StoreID
-		latency          map[string]time.Duration
+		latency          map[roachpb.NodeID]time.Duration
 		stats            *replicastats.ReplicaStats
 		excludeLeaseRepl bool
 		expected         roachpb.StoreID
@@ -5501,8 +5501,8 @@ func TestAllocatorTransferLeaseTargetLoadBased(t *testing.T) {
 
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
-			a := MakeAllocator(st, true /* deterministic */, func(addr string) (time.Duration, bool) {
-				return c.latency[addr], true
+			a := MakeAllocator(st, true /* deterministic */, func(id roachpb.NodeID) (time.Duration, bool) {
+				return c.latency[id], true
 			}, nil)
 			localitySummary := c.stats.SnapshotRatedSummary(now)
 			usage := allocator.RangeUsageInfo{}
@@ -7486,7 +7486,7 @@ func TestAllocatorComputeActionDynamicNumReplicas(t *testing.T) {
 		storepool.TestTimeUntilStoreDeadOff, false, /* deterministic */
 		func() int { return numNodes },
 		livenesspb.NodeLivenessStatus_LIVE)
-	a := MakeAllocator(st, false /* deterministic */, func(string) (time.Duration, bool) {
+	a := MakeAllocator(st, false /* deterministic */, func(id roachpb.NodeID) (time.Duration, bool) {
 		return 0, true
 	}, nil)
 
@@ -8237,7 +8237,7 @@ func TestAllocatorFullDisks(t *testing.T) {
 		mockNodeLiveness.NodeLivenessFunc,
 		false, /* deterministic */
 	)
-	alloc := MakeAllocator(st, false /* deterministic */, func(string) (time.Duration, bool) {
+	alloc := MakeAllocator(st, false /* deterministic */, func(id roachpb.NodeID) (time.Duration, bool) {
 		return 0, false
 	}, nil)
 
@@ -8689,7 +8689,7 @@ func exampleRebalancing(
 		storepool.NewMockNodeLiveness(livenesspb.NodeLivenessStatus_LIVE).NodeLivenessFunc,
 		/* deterministic */ true,
 	)
-	alloc := MakeAllocator(st, true /* deterministic */, func(string) (time.Duration, bool) {
+	alloc := MakeAllocator(st, true /* deterministic */, func(id roachpb.NodeID) (time.Duration, bool) {
 		return 0, false
 	}, nil)
 

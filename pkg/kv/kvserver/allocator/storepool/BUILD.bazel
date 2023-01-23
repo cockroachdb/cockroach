@@ -22,7 +22,6 @@ go_library(
         "//pkg/rpc",
         "//pkg/settings",
         "//pkg/settings/cluster",
-        "//pkg/util",
         "//pkg/util/hlc",
         "//pkg/util/humanizeutil",
         "//pkg/util/log",

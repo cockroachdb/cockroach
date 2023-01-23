@@ -291,12 +291,7 @@ func (n *Dialer) Latency(nodeID roachpb.NodeID) (time.Duration, error) {
 	if n.rpcContext.RemoteClocks == nil {
 		return 0, errors.AssertionFailedf("can't call Latency in a client command")
 	}
-	addr, err := n.resolver(nodeID)
-	if err != nil {
-		// Don't trip the breaker.
-		return 0, err
-	}
-	latency, ok := n.rpcContext.RemoteClocks.Latency(addr.String())
+	latency, ok := n.rpcContext.RemoteClocks.Latency(nodeID)
 	if !ok {
 		latency = 0
 	}

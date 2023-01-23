@@ -24,7 +24,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
-	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
@@ -101,7 +100,6 @@ var ChildMetricsEnabled = settings.RegisterBoolSetting(
 // recorded, and they are thus kept separate.
 type MetricsRecorder struct {
 	*HealthChecker
-	gossip       *gossip.Gossip
 	nodeLiveness *liveness.NodeLiveness
 	rpcContext   *rpc.Context
 	settings     *cluster.Settings
@@ -157,7 +155,6 @@ func NewMetricsRecorder(
 	clock *hlc.Clock,
 	nodeLiveness *liveness.NodeLiveness,
 	rpcContext *rpc.Context,
-	gossip *gossip.Gossip,
 	settings *cluster.Settings,
 	tenantNameContainer *roachpb.TenantNameContainer,
 ) *MetricsRecorder {
@@ -165,7 +162,6 @@ func NewMetricsRecorder(
 		HealthChecker: NewHealthChecker(trackedMetrics),
 		nodeLiveness:  nodeLiveness,
 		rpcContext:    rpcContext,
-		gossip:        gossip,
 		settings:      settings,
 	}
 	mr.mu.storeRegistries = make(map[roachpb.StoreID]*metric.Registry)
@@ -380,25 +376,17 @@ func (mr *MetricsRecorder) getNetworkActivity(
 	ctx context.Context,
 ) map[roachpb.NodeID]statuspb.NodeStatus_NetworkActivity {
 	activity := make(map[roachpb.NodeID]statuspb.NodeStatus_NetworkActivity)
-	if mr.nodeLiveness != nil && mr.gossip != nil {
+	if mr.nodeLiveness != nil {
 		isLiveMap := mr.nodeLiveness.GetIsLiveMap()
 
-		var currentAverages map[string]time.Duration
+		var currentAverages map[roachpb.NodeID]time.Duration
 		if mr.rpcContext.RemoteClocks != nil {
 			currentAverages = mr.rpcContext.RemoteClocks.AllLatencies()
 		}
 		for nodeID, entry := range isLiveMap {
-			address, err := mr.gossip.GetNodeIDAddress(nodeID)
-			if err != nil {
-				if entry.IsLive {
-					log.Warningf(ctx, "%v", err)
-				}
-				continue
-			}
 			na := statuspb.NodeStatus_NetworkActivity{}
-			key := address.String()
 			if entry.IsLive {
-				if latency, ok := currentAverages[key]; ok {
+				if latency, ok := currentAverages[nodeID]; ok {
 					na.Latency = latency.Nanoseconds()
 				}
 			}
