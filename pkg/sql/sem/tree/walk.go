@@ -994,7 +994,7 @@ func (n *AlterTenantReplication) walkStmt(v Visitor) Statement {
 		}
 		ret.TenantSpec = ts
 	}
-	if n.Cutover != nil {
+	if n.Cutover != nil && n.Cutover.Timestamp != nil {
 		e, changed := WalkExpr(v, n.Cutover.Timestamp)
 		if changed {
 			if ret == n {
