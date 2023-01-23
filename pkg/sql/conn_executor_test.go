@@ -651,7 +651,7 @@ func TestQueryProgress(t *testing.T) {
 		// stalled ch as expected.
 		defer func() {
 			select {
-			case <-stalled: //stalled was closed as expected.
+			case <-stalled: // stalled was closed as expected.
 			default:
 				panic("expected stalled to have been closed during execution")
 			}

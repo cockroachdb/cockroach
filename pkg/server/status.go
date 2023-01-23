@@ -216,7 +216,6 @@ func (b *baseStatusServer) getLocalSessions(
 			}
 			session.LastActiveQuery = ""
 		}
-
 		userSessions = append(userSessions, session)
 	}
 	return userSessions, nil
