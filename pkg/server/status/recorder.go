@@ -383,22 +383,14 @@ func (mr *MetricsRecorder) getNetworkActivity(
 	if mr.nodeLiveness != nil && mr.gossip != nil {
 		isLiveMap := mr.nodeLiveness.GetIsLiveMap()
 
-		var currentAverages map[string]time.Duration
+		var currentAverages map[roachpb.NodeID]time.Duration
 		if mr.rpcContext.RemoteClocks != nil {
 			currentAverages = mr.rpcContext.RemoteClocks.AllLatencies()
 		}
 		for nodeID, entry := range isLiveMap {
-			address, err := mr.gossip.GetNodeIDAddress(nodeID)
-			if err != nil {
-				if entry.IsLive {
-					log.Warningf(ctx, "%v", err)
-				}
-				continue
-			}
 			na := statuspb.NodeStatus_NetworkActivity{}
-			key := address.String()
 			if entry.IsLive {
-				if latency, ok := currentAverages[key]; ok {
+				if latency, ok := currentAverages[nodeID]; ok {
 					na.Latency = latency.Nanoseconds()
 				}
 			}
