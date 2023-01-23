@@ -23,7 +23,12 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ADD CHECK (i > nextval('s') OR j::typ = 'a'
 │       └── • 3 Mutation operations
 │           │
 │           ├── • MakeAbsentCheckConstraintWriteOnly
-│           │     {}
+│           │     CheckExpr: (i > nextval(104:::REGCLASS)) OR (j::@100105 = b'@':::@100105)
+│           │     ColumnIDs:
+│           │     - 1
+│           │     - 2
+│           │     ConstraintID: 2
+│           │     TableID: 107
 │           │
 │           ├── • UpdateTableBackReferencesInTypes
 │           │     BackReferencedTableID: 107

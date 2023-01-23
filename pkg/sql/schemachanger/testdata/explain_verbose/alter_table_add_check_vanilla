@@ -22,7 +22,11 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ADD CHECK (i > 0)
 │       └── • 1 Mutation operation
 │           │
 │           └── • MakeAbsentCheckConstraintWriteOnly
-│                 {}
+│                 CheckExpr: i > 0:::INT8
+│                 ColumnIDs:
+│                 - 1
+│                 ConstraintID: 2
+│                 TableID: 104
 │
 ├── • PreCommitPhase
 │   │
