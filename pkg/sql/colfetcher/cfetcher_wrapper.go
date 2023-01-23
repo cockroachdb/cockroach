@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
 
@@ -34,14 +33,7 @@ var DirectScansEnabled = settings.RegisterBoolSetting(
 	settings.TenantWritable,
 	"sql.distsql.direct_columnar_scans.enabled",
 	"set to true to enable the 'direct' columnar scans in the KV layer",
-	directScansEnabledDefault,
-)
-
-var directScansEnabledDefault = util.ConstantWithMetamorphicTestBool(
-	"direct-scans-enabled",
-	// TODO(yuzefovich, 23.1): update the default to 'true' for multi-tenant
-	// setups.
-	false,
+	true,
 )
 
 // cFetcherWrapper implements the storage.CFetcherWrapper interface. See a large
