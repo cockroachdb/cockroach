@@ -49,6 +49,7 @@ func DropSchema(b BuildCtx, n *tree.DropSchema) {
 		} else if dropRestrictDescriptor(b, sc.SchemaID) {
 			toCheckBackrefs = append(toCheckBackrefs, sc.SchemaID)
 		}
+		b.WithLogEvent(sc)
 		b.IncrementSubWorkID()
 		b.IncrementSchemaChangeDropCounter("schema")
 		b.IncrementUserDefinedSchemaCounter(sqltelemetry.UserDefinedSchemaDrop)

@@ -69,7 +69,6 @@ type MutationVisitor interface {
 	RemoveUniqueWithoutIndexConstraint(context.Context, RemoveUniqueWithoutIndexConstraint) error
 	RemoveSchemaParent(context.Context, RemoveSchemaParent) error
 	AddIndexPartitionInfo(context.Context, AddIndexPartitionInfo) error
-	LogEvent(context.Context, LogEvent) error
 	AddColumnFamily(context.Context, AddColumnFamily) error
 	AddColumnDefaultExpression(context.Context, AddColumnDefaultExpression) error
 	RemoveColumnDefaultExpression(context.Context, RemoveColumnDefaultExpression) error
@@ -341,11 +340,6 @@ func (op RemoveSchemaParent) Visit(ctx context.Context, v MutationVisitor) error
 // Visit is part of the MutationOp interface.
 func (op AddIndexPartitionInfo) Visit(ctx context.Context, v MutationVisitor) error {
 	return v.AddIndexPartitionInfo(ctx, op)
-}
-
-// Visit is part of the MutationOp interface.
-func (op LogEvent) Visit(ctx context.Context, v MutationVisitor) error {
-	return v.LogEvent(ctx, op)
 }
 
 // Visit is part of the MutationOp interface.

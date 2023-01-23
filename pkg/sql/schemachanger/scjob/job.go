@@ -37,8 +37,8 @@ func init() {
 }
 
 type newSchemaChangeResumer struct {
-	job      *jobs.Job
-	rollback bool
+	job           *jobs.Job
+	rollbackCause error
 }
 
 func (n *newSchemaChangeResumer) Resume(ctx context.Context, execCtxI interface{}) (err error) {
@@ -46,11 +46,12 @@ func (n *newSchemaChangeResumer) Resume(ctx context.Context, execCtxI interface{
 }
 
 func (n *newSchemaChangeResumer) OnFailOrCancel(
-	ctx context.Context, execCtxI interface{}, _ error,
+	ctx context.Context, execCtxI interface{}, err error,
 ) error {
 	execCtx := execCtxI.(sql.JobExecContext)
 	execCfg := execCtx.ExecCfg()
-	n.rollback = true
+	n.rollbackCause = err
+
 	// Clean up any protected timestamps as a last resort, in case the job
 	// execution never did itself.
 	if err := execCfg.ProtectedTimestampManager.Unprotect(ctx, n.job); err != nil {
@@ -81,8 +82,8 @@ func (n *newSchemaChangeResumer) run(ctx context.Context, execCtxI interface{}) 
 		execCfg.IndexBackfiller,
 		execCfg.IndexMerger,
 		NewRangeCounter(execCfg.DB, execCfg.DistSQLPlanner),
-		func(txn isql.Txn) scexec.EventLogger {
-			return sql.NewSchemaChangerEventLogger(txn, execCfg, 0)
+		func(txn isql.Txn) scrun.EventLogger {
+			return sql.NewSchemaChangerRunEventLogger(txn, execCfg)
 		},
 		execCfg.JobRegistry,
 		n.job,
@@ -115,7 +116,7 @@ func (n *newSchemaChangeResumer) run(ctx context.Context, execCtxI interface{}) 
 		deps,
 		n.job.ID(),
 		payload.DescriptorIDs,
-		n.rollback,
+		n.rollbackCause,
 	)
 	// Return permanent errors back, otherwise we will try to retry
 	if sql.IsPermanentSchemaChangeError(err) {

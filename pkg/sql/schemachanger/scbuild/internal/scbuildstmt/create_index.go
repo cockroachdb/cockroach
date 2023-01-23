@@ -201,6 +201,7 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 	}
 	idxSpec.data = &scpb.IndexData{TableID: idxSpec.secondary.TableID, IndexID: idxSpec.secondary.IndexID}
 	idxSpec.apply(b.Add)
+	b.WithLogEvent(idxSpec.secondary)
 	// Apply the name once everything else has been created since we need
 	// elements to be added, so that getImplicitSecondaryIndexName can make
 	// an implicit name if one is required.

@@ -172,6 +172,7 @@ func alterPrimaryKey(b BuildCtx, tn *tree.TableName, tbl *scpb.Table, t alterPri
 		newPrimaryIndexElem = in.primary
 		sourcePrimaryIndexElem = union.primary
 	}
+	b.WithLogEvent(newPrimaryIndexElem)
 
 	// Recreate all secondary indexes.
 	recreateAllSecondaryIndexes(b, tbl, newPrimaryIndexElem, sourcePrimaryIndexElem)

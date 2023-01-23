@@ -33,6 +33,17 @@ begin transaction #1
 # begin StatementPhase
 checking for feature: DROP INDEX
 increment telemetry for sql.schema.drop_index
+write *eventpb.DropIndex to event log:
+  cascadeDroppedViews:
+  - defaultdb.public.v3
+  indexName: idx
+  mutationId: 1
+  sql:
+    descriptorId: 105
+    statement: DROP INDEX ‹defaultdb›.‹public›.‹v2›@‹idx› CASCADE
+    tag: DROP INDEX
+    user: root
+  tableName: defaultdb.public.v2
 ## StatementPhase stage 1 of 1 with 1 MutationType op
 add synthetic descriptor #106:
   ...
@@ -168,7 +179,7 @@ notified job registry to adopt jobs: [1]
 begin transaction #2
 commit transaction #2
 begin transaction #3
-## PostCommitNonRevertiblePhase stage 1 of 2 with 8 MutationType ops
+## PostCommitNonRevertiblePhase stage 1 of 2 with 6 MutationType ops
 upsert descriptor #105
   ...
          keySuffixColumnIds:
@@ -189,7 +200,6 @@ upsert descriptor #105
   -  version: "11"
   +  version: "12"
      viewQuery: SELECT i, j FROM defaultdb.public.t1
-write *eventpb.DropIndex to event log: DROP INDEX ‹defaultdb›.‹public›.‹v2›@‹idx› CASCADE
 create job #2 (non-cancelable: true): "GC for DROP INDEX defaultdb.public.v2@idx CASCADE"
   descriptor IDs: [106]
 update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 2 with 2 MutationType ops pending"
@@ -252,12 +262,14 @@ upsert descriptor #105
   -  version: "12"
   +  version: "13"
      viewQuery: SELECT i, j FROM defaultdb.public.t1
-write *eventpb.FinishSchemaChange to event log
 create job #3 (non-cancelable: true): "GC for DROP INDEX defaultdb.public.v2@idx CASCADE"
   descriptor IDs: [105]
 update progress of schema change job #1: "all stages completed"
 set schema change job #1 to non-cancellable
 updated schema change job #1 descriptor IDs to [106]
+write *eventpb.FinishSchemaChange to event log:
+  sc:
+    descriptorId: 105
 commit transaction #4
 notified job registry to adopt jobs: [3]
 # end PostCommitPhase
