@@ -217,6 +217,9 @@ func dropColumn(
 				"dropping of UNIQUE WITHOUT INDEX constraints not supported"))
 		case *scpb.CheckConstraint:
 			// TODO(ajwerner): Support dropping CHECK constraints.
+			// We might need to extend and add check constraint to dep-rule
+			// "column constraint removed right before column reaches delete only"
+			// in addition to just `b.Drop(e)`. Read its comment for more details.
 			panic(errors.Wrap(scerrors.NotImplementedError(n),
 				"dropping of CHECK constraints not supported"))
 		case *scpb.ForeignKeyConstraint:
@@ -295,7 +298,7 @@ func walkDropColumnDependencies(b BuildCtx, col *scpb.Column, fn func(e scpb.Ele
 		Filter(referencesColumnIDFilter(col.ColumnID)).
 		ForEachElementStatus(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) {
 			switch elt := e.(type) {
-			case *scpb.Column, *scpb.ColumnName, *scpb.ColumnComment:
+			case *scpb.Column, *scpb.ColumnName, *scpb.ColumnComment, *scpb.ColumnNotNull:
 				fn(e)
 			case *scpb.ColumnDefaultExpression, *scpb.ColumnOnUpdateExpression:
 				fn(e)

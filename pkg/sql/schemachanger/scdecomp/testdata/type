@@ -241,8 +241,9 @@ ElementState:
       usesTypeIds:
       - 104
       - 105
+    deprecatedIsNullable: true
     familyId: 0
-    isNullable: true
+    is231ClusterVersionActive: false
     isVirtual: false
     tableId: 108
     type:
@@ -269,8 +270,9 @@ ElementState:
     - 105
     columnId: 4
     computeExpr: null
+    deprecatedIsNullable: true
     familyId: 0
-    isNullable: true
+    is231ClusterVersionActive: false
     isVirtual: false
     tableId: 108
     type:
@@ -318,8 +320,9 @@ ElementState:
       usesTypeIds:
       - 106
       - 107
+    deprecatedIsNullable: true
     familyId: 0
-    isNullable: true
+    is231ClusterVersionActive: false
     isVirtual: true
     tableId: 108
     type:
@@ -344,8 +347,9 @@ ElementState:
     closedTypeIds: []
     columnId: 1
     computeExpr: null
+    deprecatedIsNullable: false
     familyId: 0
-    isNullable: false
+    is231ClusterVersionActive: false
     isVirtual: false
     tableId: 108
     type:
@@ -369,8 +373,9 @@ ElementState:
     closedTypeIds: []
     columnId: 4.294967294e+09
     computeExpr: null
+    deprecatedIsNullable: true
     familyId: 0
-    isNullable: true
+    is231ClusterVersionActive: false
     isVirtual: false
     tableId: 108
     type:
@@ -394,8 +399,9 @@ ElementState:
     closedTypeIds: []
     columnId: 4.294967295e+09
     computeExpr: null
+    deprecatedIsNullable: true
     familyId: 0
-    isNullable: true
+    is231ClusterVersionActive: false
     isVirtual: false
     tableId: 108
     type:
@@ -419,8 +425,9 @@ ElementState:
     closedTypeIds: []
     columnId: 5
     computeExpr: null
+    deprecatedIsNullable: false
     familyId: 0
-    isNullable: false
+    is231ClusterVersionActive: false
     isVirtual: false
     tableId: 108
     type:
@@ -439,6 +446,16 @@ ElementState:
       udtMetadata: null
       visibleType: 0
       width: 0
+  Status: PUBLIC
+- ColumnNotNull:
+    columnId: 1
+    indexIdForValidation: 0
+    tableId: 108
+  Status: PUBLIC
+- ColumnNotNull:
+    columnId: 5
+    indexIdForValidation: 0
+    tableId: 108
   Status: PUBLIC
 - IndexName:
     indexId: 1
@@ -859,8 +876,9 @@ ElementState:
     - 110
     columnId: 3
     computeExpr: null
+    deprecatedIsNullable: true
     familyId: 0
-    isNullable: true
+    is231ClusterVersionActive: false
     isVirtual: false
     tableId: 111
     type:
@@ -933,8 +951,9 @@ ElementState:
     - 109
     columnId: 2
     computeExpr: null
+    deprecatedIsNullable: true
     familyId: 0
-    isNullable: true
+    is231ClusterVersionActive: false
     isVirtual: false
     tableId: 111
     type:
@@ -996,8 +1015,9 @@ ElementState:
       referencedColumnIds: []
       usesSequenceIds: []
       usesTypeIds: []
+    deprecatedIsNullable: true
     familyId: 0
-    isNullable: true
+    is231ClusterVersionActive: false
     isVirtual: false
     tableId: 111
     type:
@@ -1059,8 +1079,9 @@ ElementState:
       referencedColumnIds: []
       usesSequenceIds: []
       usesTypeIds: []
+    deprecatedIsNullable: true
     familyId: 0
-    isNullable: true
+    is231ClusterVersionActive: false
     isVirtual: true
     tableId: 111
     type:
@@ -1117,8 +1138,9 @@ ElementState:
     closedTypeIds: []
     columnId: 1
     computeExpr: null
+    deprecatedIsNullable: false
     familyId: 0
-    isNullable: false
+    is231ClusterVersionActive: false
     isVirtual: false
     tableId: 111
     type:
@@ -1142,8 +1164,9 @@ ElementState:
     closedTypeIds: []
     columnId: 4.294967294e+09
     computeExpr: null
+    deprecatedIsNullable: true
     familyId: 0
-    isNullable: true
+    is231ClusterVersionActive: false
     isVirtual: false
     tableId: 111
     type:
@@ -1167,8 +1190,9 @@ ElementState:
     closedTypeIds: []
     columnId: 4.294967295e+09
     computeExpr: null
+    deprecatedIsNullable: true
     familyId: 0
-    isNullable: true
+    is231ClusterVersionActive: false
     isVirtual: false
     tableId: 111
     type:
@@ -1192,8 +1216,9 @@ ElementState:
     closedTypeIds: []
     columnId: 6
     computeExpr: null
+    deprecatedIsNullable: false
     familyId: 0
-    isNullable: false
+    is231ClusterVersionActive: false
     isVirtual: false
     tableId: 111
     type:
@@ -1222,8 +1247,9 @@ ElementState:
       - 2
       usesSequenceIds: []
       usesTypeIds: []
+    deprecatedIsNullable: true
     familyId: 0
-    isNullable: true
+    is231ClusterVersionActive: false
     isVirtual: true
     tableId: 111
     type:
@@ -1242,6 +1268,16 @@ ElementState:
       udtMetadata: null
       visibleType: 0
       width: 64
+  Status: PUBLIC
+- ColumnNotNull:
+    columnId: 1
+    indexIdForValidation: 0
+    tableId: 111
+  Status: PUBLIC
+- ColumnNotNull:
+    columnId: 6
+    indexIdForValidation: 0
+    tableId: 111
   Status: PUBLIC
 - IndexName:
     indexId: 1

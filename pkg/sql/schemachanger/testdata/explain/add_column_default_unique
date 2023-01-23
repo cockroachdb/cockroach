@@ -25,7 +25,7 @@ Schema change plan for ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN �
  │              ├── MakeAbsentColumnDeleteOnly {"Column":{"ColumnID":2,"PgAttributeNum":2,"TableID":106}}
  │              ├── LogEvent {"TargetStatus":2}
  │              ├── SetColumnName {"ColumnID":2,"Name":"j","TableID":106}
- │              ├── SetAddedColumnType {"ColumnType":{"ColumnID":2,"IsNullable":true,"TableID":106}}
+ │              ├── SetAddedColumnType {"ColumnType":{"ColumnID":2,"DeprecatedIsNullable":true,"Is_23_1ClusterVersionActive":true,"TableID":106}}
  │              ├── AddColumnDefaultExpression {"Default":{"ColumnID":2,"TableID":106}}
  │              ├── MakeAbsentIndexBackfilling {"Index":{"ConstraintID":2,"IndexID":2,"IsUnique":true,"SourceIndexID":1,"TableID":106,"TemporaryIndexID":3}}
  │              ├── AddColumnToIndex {"ColumnID":1,"IndexID":2,"TableID":106}

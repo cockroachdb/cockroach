@@ -9,7 +9,7 @@ EXPLAIN (ddl) ALTER TABLE db.public.tbl ADD COLUMN l INT NOT NULL DEFAULT nextva
 Schema change plan for ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹l› INT8 NOT NULL DEFAULT nextval(‹'db.public.sq1'›);
  ├── StatementPhase
  │    └── Stage 1 of 1 in StatementPhase
- │         ├── 8 elements transitioning toward PUBLIC
+ │         ├── 9 elements transitioning toward PUBLIC
  │         │    ├── ABSENT → DELETE_ONLY   Column:{DescID: 106, ColumnID: 2}
  │         │    ├── ABSENT → PUBLIC        ColumnName:{DescID: 106, Name: l, ColumnID: 2}
  │         │    ├── ABSENT → PUBLIC        ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 2}
@@ -17,16 +17,17 @@ Schema change plan for ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN �
  │         │    ├── ABSENT → BACKFILL_ONLY PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
  │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 2}
  │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 2}
- │         │    └── ABSENT → PUBLIC        IndexData:{DescID: 106, IndexID: 2}
+ │         │    ├── ABSENT → PUBLIC        IndexData:{DescID: 106, IndexID: 2}
+ │         │    └── ABSENT → WRITE_ONLY    ColumnNotNull:{DescID: 106, ColumnID: 2, IndexID: 2}
  │         ├── 3 elements transitioning toward TRANSIENT_ABSENT
  │         │    ├── ABSENT → DELETE_ONLY   TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
  │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 3}
  │         │    └── ABSENT → PUBLIC        IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 3}
- │         └── 12 Mutation operations
+ │         └── 13 Mutation operations
  │              ├── MakeAbsentColumnDeleteOnly {"Column":{"ColumnID":2,"PgAttributeNum":2,"TableID":106}}
  │              ├── LogEvent {"TargetStatus":2}
  │              ├── SetColumnName {"ColumnID":2,"Name":"l","TableID":106}
- │              ├── SetAddedColumnType {"ColumnType":{"ColumnID":2,"TableID":106}}
+ │              ├── SetAddedColumnType {"ColumnType":{"ColumnID":2,"Is_23_1ClusterVersionActive":true,"TableID":106}}
  │              ├── AddColumnDefaultExpression {"Default":{"ColumnID":2,"TableID":106}}
  │              ├── UpdateBackReferencesInSequences {"BackReferencedColumnID":2,"BackReferencedTableID":106}
  │              ├── MakeAbsentIndexBackfilling {"Index":{"ConstraintID":2,"IndexID":2,"IsUnique":true,"SourceIndexID":1,"TableID":106,"TemporaryIndexID":3}}
@@ -34,7 +35,8 @@ Schema change plan for ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN �
  │              ├── AddColumnToIndex {"ColumnID":2,"IndexID":2,"Kind":2,"TableID":106}
  │              ├── MakeAbsentTempIndexDeleteOnly {"Index":{"ConstraintID":3,"IndexID":3,"IsUnique":true,"SourceIndexID":1,"TableID":106}}
  │              ├── AddColumnToIndex {"ColumnID":1,"IndexID":3,"TableID":106}
- │              └── AddColumnToIndex {"ColumnID":2,"IndexID":3,"Kind":2,"TableID":106}
+ │              ├── AddColumnToIndex {"ColumnID":2,"IndexID":3,"Kind":2,"TableID":106}
+ │              └── MakeAbsentColumnNotNullWriteOnly {"ColumnID":2,"TableID":106}
  ├── PreCommitPhase
  │    └── Stage 1 of 1 in PreCommitPhase
  │         └── 3 Mutation operations
@@ -89,16 +91,19 @@ Schema change plan for ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN �
  │    │         ├── SetJobStateOnDescriptor {"DescriptorID":107}
  │    │         └── UpdateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
  │    └── Stage 7 of 7 in PostCommitPhase
- │         ├── 1 element transitioning toward PUBLIC
- │         │    └── WRITE_ONLY → VALIDATED PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
- │         └── 1 Validation operation
- │              └── ValidateIndex {"IndexID":2,"TableID":106}
+ │         ├── 2 elements transitioning toward PUBLIC
+ │         │    ├── WRITE_ONLY → VALIDATED PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
+ │         │    └── WRITE_ONLY → VALIDATED ColumnNotNull:{DescID: 106, ColumnID: 2, IndexID: 2}
+ │         └── 2 Validation operations
+ │              ├── ValidateIndex {"IndexID":2,"TableID":106}
+ │              └── ValidateColumnNotNull {"ColumnID":2,"IndexIDForValidation":2,"TableID":106}
  └── PostCommitNonRevertiblePhase
       ├── Stage 1 of 3 in PostCommitNonRevertiblePhase
-      │    ├── 3 elements transitioning toward PUBLIC
+      │    ├── 4 elements transitioning toward PUBLIC
       │    │    ├── WRITE_ONLY → PUBLIC                Column:{DescID: 106, ColumnID: 2}
       │    │    ├── VALIDATED  → PUBLIC                PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
-      │    │    └── ABSENT     → PUBLIC                IndexName:{DescID: 106, Name: tbl_pkey, IndexID: 2}
+      │    │    ├── ABSENT     → PUBLIC                IndexName:{DescID: 106, Name: tbl_pkey, IndexID: 2}
+      │    │    └── VALIDATED  → PUBLIC                ColumnNotNull:{DescID: 106, ColumnID: 2, IndexID: 2}
       │    ├── 3 elements transitioning toward TRANSIENT_ABSENT
       │    │    ├── WRITE_ONLY → TRANSIENT_DELETE_ONLY TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
       │    │    ├── PUBLIC     → TRANSIENT_ABSENT      IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 3}
@@ -107,11 +112,12 @@ Schema change plan for ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN �
       │    │    ├── PUBLIC     → ABSENT                IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 1}
       │    │    ├── PUBLIC     → VALIDATED             PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}
       │    │    └── PUBLIC     → ABSENT                IndexName:{DescID: 106, Name: tbl_pkey, IndexID: 1}
-      │    └── 10 Mutation operations
+      │    └── 11 Mutation operations
       │         ├── MakePublicPrimaryIndexWriteOnly {"IndexID":1,"TableID":106}
       │         ├── SetIndexName {"IndexID":1,"Name":"crdb_internal_in...","TableID":106}
       │         ├── SetIndexName {"IndexID":2,"Name":"tbl_pkey","TableID":106}
       │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":3,"TableID":106}
+      │         ├── MakeValidatedColumnNotNullPublic {"ColumnID":2,"TableID":106}
       │         ├── MakeValidatedPrimaryIndexPublic {"IndexID":2,"TableID":106}
       │         ├── MakeWriteOnlyColumnPublic {"ColumnID":2,"TableID":106}
       │         ├── RefreshStats {"TableID":106}

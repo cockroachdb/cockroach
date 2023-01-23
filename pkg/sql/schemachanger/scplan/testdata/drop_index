@@ -380,14 +380,18 @@ DROP INDEX idx2 CASCADE
 ops
 DROP INDEX idx3 CASCADE
 ----
-StatementPhase stage 1 of 1 with 6 MutationType ops
+StatementPhase stage 1 of 1 with 7 MutationType ops
   transitions:
     [[Column:{DescID: 104, ColumnID: 5}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[ColumnName:{DescID: 104, Name: crdb_internal_i_shard_16, ColumnID: 5}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnNotNull:{DescID: 104, ColumnID: 5, IndexID: 0}, ABSENT], PUBLIC] -> VALIDATED
     [[SecondaryIndex:{DescID: 104, IndexID: 6, ConstraintID: 0}, ABSENT], PUBLIC] -> VALIDATED
     [[CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}, ABSENT], PUBLIC] -> VALIDATED
     [[ConstraintWithoutIndexName:{DescID: 104, Name: check_crdb_internal_i_shard_16, ConstraintID: 2}, ABSENT], PUBLIC] -> ABSENT
   ops:
+    *scop.MakePublicColumnNotNullValidated
+      ColumnID: 5
+      TableID: 104
     *scop.MakePublicSecondaryIndexWriteOnly
       IndexID: 6
       TableID: 104
@@ -437,23 +441,27 @@ PreCommitPhase stage 1 of 1 with 2 MutationType ops
       - 104
       JobID: 1
       NonCancelable: true
-      RunningStatus: PostCommitNonRevertiblePhase stage 1 of 2 with 5 MutationType ops pending
+      RunningStatus: PostCommitNonRevertiblePhase stage 1 of 2 with 6 MutationType ops pending
       Statements:
       - statement: DROP INDEX idx3 CASCADE
         redactedstatement: DROP INDEX ‹defaultdb›.public.‹t1›@‹idx3› CASCADE
         statementtag: DROP INDEX
-PostCommitNonRevertiblePhase stage 1 of 2 with 7 MutationType ops
+PostCommitNonRevertiblePhase stage 1 of 2 with 8 MutationType ops
   transitions:
     [[Column:{DescID: 104, ColumnID: 5}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
+    [[ColumnNotNull:{DescID: 104, ColumnID: 5, IndexID: 0}, ABSENT], VALIDATED] -> ABSENT
     [[SecondaryIndex:{DescID: 104, IndexID: 6, ConstraintID: 0}, ABSENT], VALIDATED] -> DELETE_ONLY
     [[IndexName:{DescID: 104, Name: idx3, IndexID: 6}, ABSENT], PUBLIC] -> ABSENT
     [[CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}, ABSENT], VALIDATED] -> ABSENT
   ops:
-    *scop.MakeWriteOnlyColumnDeleteOnly
+    *scop.RemoveColumnNotNull
       ColumnID: 5
       TableID: 104
     *scop.RemoveCheckConstraint
       ConstraintID: 2
+      TableID: 104
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 5
       TableID: 104
     *scop.LogEvent
       Element:
@@ -555,6 +563,10 @@ DROP INDEX idx3 CASCADE
   kind: Precedence
   rule: column no longer public before dependents
 - from: [Column:{DescID: 104, ColumnID: 5}, WRITE_ONLY]
+  to:   [ColumnNotNull:{DescID: 104, ColumnID: 5, IndexID: 0}, ABSENT]
+  kind: Precedence
+  rule: column no longer public before dependents
+- from: [Column:{DescID: 104, ColumnID: 5}, WRITE_ONLY]
   to:   [ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 5}, ABSENT]
   kind: Precedence
   rule: column no longer public before dependents
@@ -566,6 +578,22 @@ DROP INDEX idx3 CASCADE
   to:   [Column:{DescID: 104, ColumnID: 5}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
+- from: [ColumnNotNull:{DescID: 104, ColumnID: 5, IndexID: 0}, ABSENT]
+  to:   [Column:{DescID: 104, ColumnID: 5}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before column
+- from: [ColumnNotNull:{DescID: 104, ColumnID: 5, IndexID: 0}, ABSENT]
+  to:   [Column:{DescID: 104, ColumnID: 5}, DELETE_ONLY]
+  kind: SameStagePrecedence
+  rule: column constraint removed right before column reaches delete only
+- from: [ColumnNotNull:{DescID: 104, ColumnID: 5, IndexID: 0}, PUBLIC]
+  to:   [ColumnNotNull:{DescID: 104, ColumnID: 5, IndexID: 0}, VALIDATED]
+  kind: PreviousTransactionPrecedence
+  rule: ColumnNotNull transitions to ABSENT uphold 2-version invariant: PUBLIC->VALIDATED
+- from: [ColumnNotNull:{DescID: 104, ColumnID: 5, IndexID: 0}, VALIDATED]
+  to:   [ColumnNotNull:{DescID: 104, ColumnID: 5, IndexID: 0}, ABSENT]
+  kind: PreviousTransactionPrecedence
+  rule: ColumnNotNull transitions to ABSENT uphold 2-version invariant: VALIDATED->ABSENT
 - from: [ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 5}, ABSENT]
   to:   [Column:{DescID: 104, ColumnID: 5}, ABSENT]
   kind: SameStagePrecedence
@@ -988,13 +1016,14 @@ StatementPhase stage 1 of 1 with 1 MutationType op
     [[View:{DescID: 107}, ABSENT], PUBLIC] -> TXN_DROPPED
     [[Column:{DescID: 107, ColumnID: 1}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[Column:{DescID: 107, ColumnID: 2}, ABSENT], PUBLIC] -> WRITE_ONLY
+    [[ColumnNotNull:{DescID: 107, ColumnID: 2, IndexID: 0}, ABSENT], PUBLIC] -> VALIDATED
     [[Column:{DescID: 107, ColumnID: 4294967295}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[Column:{DescID: 107, ColumnID: 4294967294}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 1}, ABSENT], PUBLIC] -> VALIDATED
   ops:
     *scop.MarkDescriptorAsSyntheticallyDropped
       DescriptorID: 107
-PreCommitPhase stage 1 of 1 with 12 MutationType ops
+PreCommitPhase stage 1 of 1 with 13 MutationType ops
   transitions:
     [[IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[IndexColumn:{DescID: 106, ColumnID: 3, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
@@ -1012,6 +1041,7 @@ PreCommitPhase stage 1 of 1 with 12 MutationType ops
     [[Column:{DescID: 107, ColumnID: 2}, ABSENT], WRITE_ONLY] -> ABSENT
     [[ColumnName:{DescID: 107, Name: rowid, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnNotNull:{DescID: 107, ColumnID: 2, IndexID: 0}, ABSENT], VALIDATED] -> ABSENT
     [[ColumnDefaultExpression:{DescID: 107, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[Column:{DescID: 107, ColumnID: 4294967295}, ABSENT], WRITE_ONLY] -> ABSENT
     [[ColumnName:{DescID: 107, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
@@ -1030,6 +1060,9 @@ PreCommitPhase stage 1 of 1 with 12 MutationType ops
       BackReferencedViewID: 107
       RelationIDs:
       - 106
+    *scop.RemoveColumnNotNull
+      ColumnID: 2
+      TableID: 107
     *scop.RemoveColumnDefaultExpression
       ColumnID: 2
       TableID: 107

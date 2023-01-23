@@ -253,8 +253,9 @@ ElementState:
     closedTypeIds: []
     columnId: 1
     computeExpr: null
+    deprecatedIsNullable: true
     familyId: 0
-    isNullable: true
+    is231ClusterVersionActive: false
     isVirtual: false
     tableId: 112
     type:
@@ -278,8 +279,9 @@ ElementState:
     closedTypeIds: []
     columnId: 4.294967294e+09
     computeExpr: null
+    deprecatedIsNullable: true
     familyId: 0
-    isNullable: true
+    is231ClusterVersionActive: false
     isVirtual: false
     tableId: 112
     type:
@@ -303,8 +305,9 @@ ElementState:
     closedTypeIds: []
     columnId: 4.294967295e+09
     computeExpr: null
+    deprecatedIsNullable: true
     familyId: 0
-    isNullable: true
+    is231ClusterVersionActive: false
     isVirtual: false
     tableId: 112
     type:
@@ -433,8 +436,9 @@ ElementState:
     closedTypeIds: []
     columnId: 1
     computeExpr: null
+    deprecatedIsNullable: true
     familyId: 0
-    isNullable: true
+    is231ClusterVersionActive: false
     isVirtual: false
     tableId: 113
     type:
@@ -458,8 +462,9 @@ ElementState:
     closedTypeIds: []
     columnId: 2
     computeExpr: null
+    deprecatedIsNullable: true
     familyId: 0
-    isNullable: true
+    is231ClusterVersionActive: false
     isVirtual: false
     tableId: 113
     type:
@@ -483,8 +488,9 @@ ElementState:
     closedTypeIds: []
     columnId: 4.294967294e+09
     computeExpr: null
+    deprecatedIsNullable: true
     familyId: 0
-    isNullable: true
+    is231ClusterVersionActive: false
     isVirtual: false
     tableId: 113
     type:
@@ -508,8 +514,9 @@ ElementState:
     closedTypeIds: []
     columnId: 4.294967295e+09
     computeExpr: null
+    deprecatedIsNullable: true
     familyId: 0
-    isNullable: true
+    is231ClusterVersionActive: false
     isVirtual: false
     tableId: 113
     type:

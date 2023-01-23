@@ -11,7 +11,7 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
 │   │
 │   └── • Stage 1 of 1 in StatementPhase
 │       │
-│       ├── • 5 elements transitioning toward ABSENT
+│       ├── • 6 elements transitioning toward ABSENT
 │       │   │
 │       │   ├── • Column:{DescID: 104, ColumnID: 3}
 │       │   │   │ PUBLIC → WRITE_ONLY
@@ -27,6 +27,12 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
 │       │   │   │
 │       │   │   └── • Precedence dependency from WRITE_ONLY Column:{DescID: 104, ColumnID: 3}
 │       │   │         rule: "column no longer public before dependents"
+│       │   │
+│       │   ├── • ColumnNotNull:{DescID: 104, ColumnID: 3, IndexID: 0}
+│       │   │   │ PUBLIC → VALIDATED
+│       │   │   │
+│       │   │   └── • PreviousTransactionPrecedence dependency from PUBLIC ColumnNotNull:{DescID: 104, ColumnID: 3, IndexID: 0}
+│       │   │         rule: "ColumnNotNull transitions to ABSENT uphold 2-version invariant: PUBLIC->VALIDATED"
 │       │   │
 │       │   ├── • SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
 │       │   │   │ PUBLIC → VALIDATED
@@ -46,7 +52,11 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
 │       │       └── • Precedence dependency from VALIDATED CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
 │       │             rule: "constraint no longer public before dependents"
 │       │
-│       └── • 6 Mutation operations
+│       └── • 7 Mutation operations
+│           │
+│           ├── • MakePublicColumnNotNullValidated
+│           │     ColumnID: 3
+│           │     TableID: 104
 │           │
 │           ├── • MakePublicSecondaryIndexWriteOnly
 │           │     IndexID: 2
@@ -136,7 +146,7 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
 │                 - 104
 │                 JobID: 1
 │                 NonCancelable: true
-│                 RunningStatus: PostCommitNonRevertiblePhase stage 1 of 2 with 5 MutationType ops pending
+│                 RunningStatus: PostCommitNonRevertiblePhase stage 1 of 2 with 6 MutationType ops pending
 │                 Statements:
 │                 - statement: DROP INDEX idx CASCADE
 │                   redactedstatement: DROP INDEX ‹defaultdb›.‹public›.‹t›@‹idx› CASCADE
@@ -146,13 +156,25 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
     │
     ├── • Stage 1 of 2 in PostCommitNonRevertiblePhase
     │   │
-    │   ├── • 4 elements transitioning toward ABSENT
+    │   ├── • 5 elements transitioning toward ABSENT
     │   │   │
     │   │   ├── • Column:{DescID: 104, ColumnID: 3}
     │   │   │   │ WRITE_ONLY → DELETE_ONLY
     │   │   │   │
-    │   │   │   └── • PreviousTransactionPrecedence dependency from WRITE_ONLY Column:{DescID: 104, ColumnID: 3}
-    │   │   │         rule: "Column transitions to ABSENT uphold 2-version invariant: WRITE_ONLY->DELETE_ONLY"
+    │   │   │   ├── • PreviousTransactionPrecedence dependency from WRITE_ONLY Column:{DescID: 104, ColumnID: 3}
+    │   │   │   │     rule: "Column transitions to ABSENT uphold 2-version invariant: WRITE_ONLY->DELETE_ONLY"
+    │   │   │   │
+    │   │   │   └── • SameStagePrecedence dependency from ABSENT ColumnNotNull:{DescID: 104, ColumnID: 3, IndexID: 0}
+    │   │   │         rule: "column constraint removed right before column reaches delete only"
+    │   │   │
+    │   │   ├── • ColumnNotNull:{DescID: 104, ColumnID: 3, IndexID: 0}
+    │   │   │   │ VALIDATED → ABSENT
+    │   │   │   │
+    │   │   │   ├── • Precedence dependency from WRITE_ONLY Column:{DescID: 104, ColumnID: 3}
+    │   │   │   │     rule: "column no longer public before dependents"
+    │   │   │   │
+    │   │   │   └── • PreviousTransactionPrecedence dependency from VALIDATED ColumnNotNull:{DescID: 104, ColumnID: 3, IndexID: 0}
+    │   │   │         rule: "ColumnNotNull transitions to ABSENT uphold 2-version invariant: VALIDATED->ABSENT"
     │   │   │
     │   │   ├── • SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
     │   │   │   │ VALIDATED → DELETE_ONLY
@@ -178,14 +200,18 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
     │   │       └── • Precedence dependency from ABSENT ConstraintWithoutIndexName:{DescID: 104, Name: check_crdb_internal_j_shard_16, ConstraintID: 2}
     │   │             rule: "dependents removed before constraint"
     │   │
-    │   └── • 7 Mutation operations
+    │   └── • 8 Mutation operations
     │       │
-    │       ├── • MakeWriteOnlyColumnDeleteOnly
+    │       ├── • RemoveColumnNotNull
     │       │     ColumnID: 3
     │       │     TableID: 104
     │       │
     │       ├── • RemoveCheckConstraint
     │       │     ConstraintID: 2
+    │       │     TableID: 104
+    │       │
+    │       ├── • MakeWriteOnlyColumnDeleteOnly
+    │       │     ColumnID: 3
     │       │     TableID: 104
     │       │
     │       ├── • LogEvent
@@ -243,6 +269,9 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
         │   │   ├── • SameStagePrecedence dependency from ABSENT ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 3}
         │   │   │     rule: "dependents removed before column"
         │   │   │     rule: "column type removed right before column when not dropping relation"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT ColumnNotNull:{DescID: 104, ColumnID: 3, IndexID: 0}
+        │   │   │     rule: "dependents removed before column"
         │   │   │
         │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 2}
         │   │   │     rule: "dependents removed before column"

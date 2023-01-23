@@ -97,4 +97,33 @@ func init() {
 		},
 	)
 
+	// Column constraint transitions to absent right before column transitions
+	// to DELETE_ONLY.
+	// This strengthens and supersedes the above "dependents removed before column"
+	// rule.
+	//
+	// The reason that we don't want column constraint transitions to ABSENT
+	// "too early" (i.e. when column transitions to WRITE_ONLY) is that the
+	// constraint would no longer be enforced while the column is still writable.
+	// This can cause concurrent WRITE to mistakenly write rows into the table
+	// that violates the constraint.
+	//
+	// The reason that we don't want column constraint transition to ABSENT
+	// "too late" (i.e. when column transitions to ABSENT) is that the
+	// constraint would still be visible and enforced while the column is not writable.
+	// This can cause concurrent WRITE to see and attempt to uphold the constraint,
+	// but it wouldn't be able to find the column.
+	registerDepRuleForDrop(
+		"column constraint removed right before column reaches delete only",
+		scgraph.SameStagePrecedence,
+		"column-not-null", "column",
+		scpb.Status_ABSENT, scpb.Status_DELETE_ONLY,
+		func(from, to NodeVars) rel.Clauses {
+			return rel.Clauses{
+				from.Type((*scpb.ColumnNotNull)(nil)),
+				to.Type((*scpb.Column)(nil)),
+				JoinOnColumnID(from, to, "table-id", "col-id"),
+			}
+		},
+	)
 }

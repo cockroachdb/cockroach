@@ -40,7 +40,8 @@ StatementPhase stage 1 of 1 with 6 MutationType ops
     *scop.SetAddedColumnType
       ColumnType:
         ColumnID: 2
-        IsNullable: true
+        DeprecatedIsNullable: true
+        Is_23_1ClusterVersionActive: true
         TableID: 104
         TypeT:
           ClosedTypeIDs:
@@ -139,7 +140,7 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 6 MutationType ops
 ops
 ALTER TABLE defaultdb.foo ADD COLUMN j INT NOT NULL DEFAULT 123
 ----
-StatementPhase stage 1 of 1 with 11 MutationType ops
+StatementPhase stage 1 of 1 with 12 MutationType ops
   transitions:
     [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], ABSENT] -> DELETE_ONLY
     [[ColumnName:{DescID: 104, Name: j, ColumnID: 2}, PUBLIC], ABSENT] -> PUBLIC
@@ -152,6 +153,7 @@ StatementPhase stage 1 of 1 with 11 MutationType ops
     [[TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], ABSENT] -> DELETE_ONLY
     [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, TRANSIENT_ABSENT], ABSENT] -> PUBLIC
     [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}, TRANSIENT_ABSENT], ABSENT] -> PUBLIC
+    [[ColumnNotNull:{DescID: 104, ColumnID: 2, IndexID: 2}, PUBLIC], ABSENT] -> WRITE_ONLY
   ops:
     *scop.MakeAbsentColumnDeleteOnly
       Column:
@@ -181,6 +183,7 @@ StatementPhase stage 1 of 1 with 11 MutationType ops
     *scop.SetAddedColumnType
       ColumnType:
         ColumnID: 2
+        Is_23_1ClusterVersionActive: true
         TableID: 104
         TypeT:
           Type:
@@ -225,6 +228,9 @@ StatementPhase stage 1 of 1 with 11 MutationType ops
       ColumnID: 2
       IndexID: 3
       Kind: 2
+      TableID: 104
+    *scop.MakeAbsentColumnNotNullWriteOnly
+      ColumnID: 2
       TableID: 104
 PreCommitPhase stage 1 of 1 with 2 MutationType ops
   transitions:
@@ -309,14 +315,19 @@ PostCommitPhase stage 6 of 7 with 3 MutationType ops
       DescriptorID: 104
     *scop.UpdateSchemaChangerJob
       JobID: 1
-PostCommitPhase stage 7 of 7 with 1 ValidationType op
+PostCommitPhase stage 7 of 7 with 2 ValidationType ops
   transitions:
     [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], WRITE_ONLY] -> VALIDATED
+    [[ColumnNotNull:{DescID: 104, ColumnID: 2, IndexID: 2}, PUBLIC], WRITE_ONLY] -> VALIDATED
   ops:
     *scop.ValidateIndex
       IndexID: 2
       TableID: 104
-PostCommitNonRevertiblePhase stage 1 of 3 with 9 MutationType ops
+    *scop.ValidateColumnNotNull
+      ColumnID: 2
+      IndexIDForValidation: 2
+      TableID: 104
+PostCommitNonRevertiblePhase stage 1 of 3 with 10 MutationType ops
   transitions:
     [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}, ABSENT], PUBLIC] -> VALIDATED
@@ -327,6 +338,7 @@ PostCommitNonRevertiblePhase stage 1 of 3 with 9 MutationType ops
     [[TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], WRITE_ONLY] -> TRANSIENT_DELETE_ONLY
     [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, TRANSIENT_ABSENT], PUBLIC] -> TRANSIENT_ABSENT
     [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}, TRANSIENT_ABSENT], PUBLIC] -> TRANSIENT_ABSENT
+    [[ColumnNotNull:{DescID: 104, ColumnID: 2, IndexID: 2}, PUBLIC], VALIDATED] -> PUBLIC
   ops:
     *scop.MakePublicPrimaryIndexWriteOnly
       IndexID: 1
@@ -341,6 +353,9 @@ PostCommitNonRevertiblePhase stage 1 of 3 with 9 MutationType ops
       TableID: 104
     *scop.MakeWriteOnlyIndexDeleteOnly
       IndexID: 3
+      TableID: 104
+    *scop.MakeValidatedColumnNotNullPublic
+      ColumnID: 2
       TableID: 104
     *scop.MakeValidatedPrimaryIndexPublic
       EventBase:
@@ -477,7 +492,8 @@ StatementPhase stage 1 of 1 with 18 MutationType ops
     *scop.SetAddedColumnType
       ColumnType:
         ColumnID: 2
-        IsNullable: true
+        DeprecatedIsNullable: true
+        Is_23_1ClusterVersionActive: true
         TableID: 104
         TypeT:
           Type:
@@ -518,7 +534,8 @@ StatementPhase stage 1 of 1 with 18 MutationType ops
     *scop.SetAddedColumnType
       ColumnType:
         ColumnID: 3
-        IsNullable: true
+        DeprecatedIsNullable: true
+        Is_23_1ClusterVersionActive: true
         TableID: 104
         TypeT:
           Type:
@@ -844,7 +861,8 @@ StatementPhase stage 1 of 1 with 10 MutationType ops
           expr: i + 1:::INT8
           referencedColumnIds:
           - 1
-        IsNullable: true
+        DeprecatedIsNullable: true
+        Is_23_1ClusterVersionActive: true
         TableID: 104
         TypeT:
           Type:
@@ -1131,7 +1149,8 @@ StatementPhase stage 1 of 1 with 10 MutationType ops
     *scop.SetAddedColumnType
       ColumnType:
         ColumnID: 2
-        IsNullable: true
+        DeprecatedIsNullable: true
+        Is_23_1ClusterVersionActive: true
         TableID: 104
         TypeT:
           Type:
@@ -1171,7 +1190,8 @@ StatementPhase stage 1 of 1 with 10 MutationType ops
     *scop.SetAddedColumnType
       ColumnType:
         ColumnID: 3
-        IsNullable: true
+        DeprecatedIsNullable: true
+        Is_23_1ClusterVersionActive: true
         TableID: 107
         TypeT:
           Type:
@@ -1666,7 +1686,8 @@ StatementPhase stage 1 of 1 with 11 MutationType ops
     *scop.SetAddedColumnType
       ColumnType:
         ColumnID: 2
-        IsNullable: true
+        DeprecatedIsNullable: true
+        Is_23_1ClusterVersionActive: true
         TableID: 109
         TypeT:
           Type:

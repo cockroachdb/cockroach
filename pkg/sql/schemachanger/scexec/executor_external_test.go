@@ -268,10 +268,11 @@ func TestSchemaChanger(t *testing.T) {
 				scpb.MakeTarget(
 					scpb.ToPublic,
 					&scpb.ColumnType{
-						TableID:    fooTable.GetID(),
-						ColumnID:   2,
-						TypeT:      scpb.TypeT{Type: types.Int},
-						IsNullable: true,
+						TableID:                     fooTable.GetID(),
+						ColumnID:                    2,
+						TypeT:                       scpb.TypeT{Type: types.Int},
+						DeprecatedIsNullable:        true,
+						Is_23_1ClusterVersionActive: true,
 					},
 					metadata,
 				),

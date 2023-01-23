@@ -11,11 +11,12 @@ EXPLAIN (ddl) DROP TABLE db.sc.t;
 Schema change plan for DROP TABLE ‹db›.‹sc›.‹t›;
  ├── StatementPhase
  │    └── Stage 1 of 1 in StatementPhase
- │         ├── 7 elements transitioning toward ABSENT
+ │         ├── 8 elements transitioning toward ABSENT
  │         │    ├── PUBLIC → TXN_DROPPED Table:{DescID: 107}
  │         │    ├── PUBLIC → WRITE_ONLY  Column:{DescID: 107, ColumnID: 1}
  │         │    ├── PUBLIC → WRITE_ONLY  Column:{DescID: 107, ColumnID: 2}
  │         │    ├── PUBLIC → WRITE_ONLY  Column:{DescID: 107, ColumnID: 3}
+ │         │    ├── PUBLIC → VALIDATED   ColumnNotNull:{DescID: 107, ColumnID: 3, IndexID: 0}
  │         │    ├── PUBLIC → WRITE_ONLY  Column:{DescID: 107, ColumnID: 4294967295}
  │         │    ├── PUBLIC → WRITE_ONLY  Column:{DescID: 107, ColumnID: 4294967294}
  │         │    └── PUBLIC → VALIDATED   PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 1}
@@ -23,7 +24,7 @@ Schema change plan for DROP TABLE ‹db›.‹sc›.‹t›;
  │              └── MarkDescriptorAsSyntheticallyDropped {"DescriptorID":107}
  ├── PreCommitPhase
  │    └── Stage 1 of 1 in PreCommitPhase
- │         ├── 29 elements transitioning toward ABSENT
+ │         ├── 30 elements transitioning toward ABSENT
  │         │    ├── PUBLIC      → ABSENT  Namespace:{DescID: 107, Name: t, ReferencedDescID: 104}
  │         │    ├── PUBLIC      → ABSENT  Owner:{DescID: 107}
  │         │    ├── PUBLIC      → ABSENT  UserPrivileges:{DescID: 107, Name: admin}
@@ -41,6 +42,7 @@ Schema change plan for DROP TABLE ‹db›.‹sc›.‹t›;
  │         │    ├── WRITE_ONLY  → ABSENT  Column:{DescID: 107, ColumnID: 3}
  │         │    ├── PUBLIC      → ABSENT  ColumnName:{DescID: 107, Name: rowid, ColumnID: 3}
  │         │    ├── PUBLIC      → ABSENT  ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 3}
+ │         │    ├── VALIDATED   → ABSENT  ColumnNotNull:{DescID: 107, ColumnID: 3, IndexID: 0}
  │         │    ├── PUBLIC      → ABSENT  ColumnDefaultExpression:{DescID: 107, ColumnID: 3}
  │         │    ├── WRITE_ONLY  → ABSENT  Column:{DescID: 107, ColumnID: 4294967295}
  │         │    ├── PUBLIC      → ABSENT  ColumnName:{DescID: 107, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}
@@ -53,10 +55,11 @@ Schema change plan for DROP TABLE ‹db›.‹sc›.‹t›;
  │         │    ├── PUBLIC      → ABSENT  IndexColumn:{DescID: 107, ColumnID: 2, IndexID: 1}
  │         │    ├── VALIDATED   → ABSENT  PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 1}
  │         │    └── PUBLIC      → ABSENT  IndexName:{DescID: 107, Name: t_pkey, IndexID: 1}
- │         └── 12 Mutation operations
+ │         └── 13 Mutation operations
  │              ├── MarkDescriptorAsDropped {"DescriptorID":107}
  │              ├── RemoveTableComment {"TableID":107}
  │              ├── LogEvent {"TargetStatus":1}
+ │              ├── RemoveColumnNotNull {"ColumnID":3,"TableID":107}
  │              ├── RemoveColumnDefaultExpression {"ColumnID":3,"TableID":107}
  │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":107,"Name":"t","SchemaID":106}}
  │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":1,"TableID":107}

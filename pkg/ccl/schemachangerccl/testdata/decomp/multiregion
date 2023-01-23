@@ -166,8 +166,9 @@ ElementState:
     closedTypeIds: []
     columnId: 1
     computeExpr: null
+    deprecatedIsNullable: true
     familyId: 0
-    isNullable: true
+    is231ClusterVersionActive: false
     isVirtual: false
     tableId: 110
     type:
@@ -191,8 +192,9 @@ ElementState:
     closedTypeIds: []
     columnId: 2
     computeExpr: null
+    deprecatedIsNullable: false
     familyId: 0
-    isNullable: false
+    is231ClusterVersionActive: false
     isVirtual: false
     tableId: 110
     type:
@@ -216,8 +218,9 @@ ElementState:
     closedTypeIds: []
     columnId: 4.294967294e+09
     computeExpr: null
+    deprecatedIsNullable: true
     familyId: 0
-    isNullable: true
+    is231ClusterVersionActive: false
     isVirtual: false
     tableId: 110
     type:
@@ -241,8 +244,9 @@ ElementState:
     closedTypeIds: []
     columnId: 4.294967295e+09
     computeExpr: null
+    deprecatedIsNullable: true
     familyId: 0
-    isNullable: true
+    is231ClusterVersionActive: false
     isVirtual: false
     tableId: 110
     type:
@@ -269,6 +273,11 @@ ElementState:
     tableId: 110
     usesSequenceIds: []
     usesTypeIds: []
+  Status: PUBLIC
+- ColumnNotNull:
+    columnId: 2
+    indexIdForValidation: 0
+    tableId: 110
   Status: PUBLIC
 - IndexName:
     indexId: 1
@@ -428,8 +437,9 @@ ElementState:
     closedTypeIds: []
     columnId: 1
     computeExpr: null
+    deprecatedIsNullable: true
     familyId: 0
-    isNullable: true
+    is231ClusterVersionActive: false
     isVirtual: false
     tableId: 109
     type:
@@ -453,8 +463,9 @@ ElementState:
     closedTypeIds: []
     columnId: 2
     computeExpr: null
+    deprecatedIsNullable: false
     familyId: 0
-    isNullable: false
+    is231ClusterVersionActive: false
     isVirtual: false
     tableId: 109
     type:
@@ -478,8 +489,9 @@ ElementState:
     closedTypeIds: []
     columnId: 4.294967294e+09
     computeExpr: null
+    deprecatedIsNullable: true
     familyId: 0
-    isNullable: true
+    is231ClusterVersionActive: false
     isVirtual: false
     tableId: 109
     type:
@@ -503,8 +515,9 @@ ElementState:
     closedTypeIds: []
     columnId: 4.294967295e+09
     computeExpr: null
+    deprecatedIsNullable: true
     familyId: 0
-    isNullable: true
+    is231ClusterVersionActive: false
     isVirtual: false
     tableId: 109
     type:
@@ -531,6 +544,11 @@ ElementState:
     tableId: 109
     usesSequenceIds: []
     usesTypeIds: []
+  Status: PUBLIC
+- ColumnNotNull:
+    columnId: 2
+    indexIdForValidation: 0
+    tableId: 109
   Status: PUBLIC
 - IndexName:
     indexId: 1
@@ -713,8 +731,9 @@ ElementState:
     - 107
     columnId: 3
     computeExpr: null
+    deprecatedIsNullable: false
     familyId: 0
-    isNullable: false
+    is231ClusterVersionActive: false
     isVirtual: false
     tableId: 108
     type:
@@ -739,8 +758,9 @@ ElementState:
     closedTypeIds: []
     columnId: 1
     computeExpr: null
+    deprecatedIsNullable: false
     familyId: 0
-    isNullable: false
+    is231ClusterVersionActive: false
     isVirtual: false
     tableId: 108
     type:
@@ -764,8 +784,9 @@ ElementState:
     closedTypeIds: []
     columnId: 2
     computeExpr: null
+    deprecatedIsNullable: true
     familyId: 0
-    isNullable: true
+    is231ClusterVersionActive: false
     isVirtual: false
     tableId: 108
     type:
@@ -789,8 +810,9 @@ ElementState:
     closedTypeIds: []
     columnId: 4.294967294e+09
     computeExpr: null
+    deprecatedIsNullable: true
     familyId: 0
-    isNullable: true
+    is231ClusterVersionActive: false
     isVirtual: false
     tableId: 108
     type:
@@ -814,8 +836,9 @@ ElementState:
     closedTypeIds: []
     columnId: 4.294967295e+09
     computeExpr: null
+    deprecatedIsNullable: true
     familyId: 0
-    isNullable: true
+    is231ClusterVersionActive: false
     isVirtual: false
     tableId: 108
     type:
@@ -849,6 +872,16 @@ ElementState:
     columnId: 1
     comment: k is good
     pgAttributeNum: 1
+    tableId: 108
+  Status: PUBLIC
+- ColumnNotNull:
+    columnId: 1
+    indexIdForValidation: 0
+    tableId: 108
+  Status: PUBLIC
+- ColumnNotNull:
+    columnId: 3
+    indexIdForValidation: 0
     tableId: 108
   Status: PUBLIC
 - IndexName:

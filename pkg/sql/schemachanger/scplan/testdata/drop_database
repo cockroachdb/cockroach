@@ -27,6 +27,7 @@ StatementPhase stage 1 of 1 with 14 MutationType ops
     [[Sequence:{DescID: 107}, ABSENT], PUBLIC] -> TXN_DROPPED
     [[Table:{DescID: 110}, ABSENT], PUBLIC] -> TXN_DROPPED
     [[Column:{DescID: 110, ColumnID: 1}, ABSENT], PUBLIC] -> WRITE_ONLY
+    [[ColumnNotNull:{DescID: 110, ColumnID: 1, IndexID: 0}, ABSENT], PUBLIC] -> VALIDATED
     [[Column:{DescID: 110, ColumnID: 2}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[Column:{DescID: 110, ColumnID: 3}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[Column:{DescID: 110, ColumnID: 4294967295}, ABSENT], PUBLIC] -> WRITE_ONLY
@@ -35,6 +36,7 @@ StatementPhase stage 1 of 1 with 14 MutationType ops
     [[Sequence:{DescID: 108}, ABSENT], PUBLIC] -> TXN_DROPPED
     [[Table:{DescID: 109}, ABSENT], PUBLIC] -> TXN_DROPPED
     [[Column:{DescID: 109, ColumnID: 1}, ABSENT], PUBLIC] -> WRITE_ONLY
+    [[ColumnNotNull:{DescID: 109, ColumnID: 1, IndexID: 0}, ABSENT], PUBLIC] -> VALIDATED
     [[Column:{DescID: 109, ColumnID: 2}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[Column:{DescID: 109, ColumnID: 3}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[Column:{DescID: 109, ColumnID: 4294967295}, ABSENT], PUBLIC] -> WRITE_ONLY
@@ -96,7 +98,7 @@ StatementPhase stage 1 of 1 with 14 MutationType ops
       DescriptorID: 116
     *scop.MarkDescriptorAsSyntheticallyDropped
       DescriptorID: 117
-PreCommitPhase stage 1 of 1 with 91 MutationType ops
+PreCommitPhase stage 1 of 1 with 93 MutationType ops
   transitions:
     [[Namespace:{DescID: 104, Name: db1, ReferencedDescID: 0}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 104}, ABSENT], PUBLIC] -> ABSENT
@@ -136,6 +138,7 @@ PreCommitPhase stage 1 of 1 with 91 MutationType ops
     [[Column:{DescID: 110, ColumnID: 1}, ABSENT], WRITE_ONLY] -> ABSENT
     [[ColumnName:{DescID: 110, Name: id, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 110, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnNotNull:{DescID: 110, ColumnID: 1, IndexID: 0}, ABSENT], VALIDATED] -> ABSENT
     [[Column:{DescID: 110, ColumnID: 2}, ABSENT], WRITE_ONLY] -> ABSENT
     [[ColumnName:{DescID: 110, Name: name, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 110, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
@@ -171,6 +174,7 @@ PreCommitPhase stage 1 of 1 with 91 MutationType ops
     [[Column:{DescID: 109, ColumnID: 1}, ABSENT], WRITE_ONLY] -> ABSENT
     [[ColumnName:{DescID: 109, Name: id, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnNotNull:{DescID: 109, ColumnID: 1, IndexID: 0}, ABSENT], VALIDATED] -> ABSENT
     [[Column:{DescID: 109, ColumnID: 2}, ABSENT], WRITE_ONLY] -> ABSENT
     [[ColumnName:{DescID: 109, Name: name, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
@@ -333,6 +337,9 @@ PreCommitPhase stage 1 of 1 with 91 MutationType ops
       DescriptorID: 107
     *scop.MarkDescriptorAsDropped
       DescriptorID: 110
+    *scop.RemoveColumnNotNull
+      ColumnID: 1
+      TableID: 110
     *scop.RemoveColumnDefaultExpression
       ColumnID: 3
       TableID: 110
@@ -361,6 +368,9 @@ PreCommitPhase stage 1 of 1 with 91 MutationType ops
           SourceElementID: 6
           SubWorkID: 1
       TargetStatus: 1
+    *scop.RemoveColumnNotNull
+      ColumnID: 1
+      TableID: 109
     *scop.RemoveColumnDefaultExpression
       ColumnID: 3
       TableID: 109
@@ -436,17 +446,6 @@ PreCommitPhase stage 1 of 1 with 91 MutationType ops
         Name: t1
         SchemaID: 105
     *scop.MakeDeleteOnlyColumnAbsent
-      ColumnID: 1
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP DATABASE ‹db1› CASCADE
-        StatementTag: DROP DATABASE
-        TargetMetadata:
-          SourceElementID: 3
-          SubWorkID: 1
-      TableID: 110
-    *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 2
       EventBase:
         Authorization:
@@ -491,17 +490,6 @@ PreCommitPhase stage 1 of 1 with 91 MutationType ops
         DescriptorID: 109
         Name: t1
         SchemaID: 106
-    *scop.MakeDeleteOnlyColumnAbsent
-      ColumnID: 1
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP DATABASE ‹db1› CASCADE
-        StatementTag: DROP DATABASE
-        TargetMetadata:
-          SourceElementID: 6
-          SubWorkID: 1
-      TableID: 109
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 2
       EventBase:
@@ -798,6 +786,17 @@ PreCommitPhase stage 1 of 1 with 91 MutationType ops
           SubWorkID: 1
       TableID: 117
     *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 1
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: DROP DATABASE ‹db1› CASCADE
+        StatementTag: DROP DATABASE
+        TargetMetadata:
+          SourceElementID: 3
+          SubWorkID: 1
+      TableID: 110
+    *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 3
       EventBase:
         Authorization:
@@ -808,6 +807,17 @@ PreCommitPhase stage 1 of 1 with 91 MutationType ops
           SourceElementID: 3
           SubWorkID: 1
       TableID: 110
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 1
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: DROP DATABASE ‹db1› CASCADE
+        StatementTag: DROP DATABASE
+        TargetMetadata:
+          SourceElementID: 6
+          SubWorkID: 1
+      TableID: 109
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 3
       EventBase:
@@ -1302,6 +1312,10 @@ DROP DATABASE db1 CASCADE
   kind: Precedence
   rule: column no longer public before dependents
 - from: [Column:{DescID: 109, ColumnID: 1}, WRITE_ONLY]
+  to:   [ColumnNotNull:{DescID: 109, ColumnID: 1, IndexID: 0}, ABSENT]
+  kind: Precedence
+  rule: column no longer public before dependents
+- from: [Column:{DescID: 109, ColumnID: 1}, WRITE_ONLY]
   to:   [ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
   kind: Precedence
   rule: column no longer public before dependents
@@ -1355,6 +1369,10 @@ DROP DATABASE db1 CASCADE
   rule: column no longer public before dependents
 - from: [Column:{DescID: 110, ColumnID: 1}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 110, Name: id, ColumnID: 1}, ABSENT]
+  kind: Precedence
+  rule: column no longer public before dependents
+- from: [Column:{DescID: 110, ColumnID: 1}, WRITE_ONLY]
+  to:   [ColumnNotNull:{DescID: 110, ColumnID: 1, IndexID: 0}, ABSENT]
   kind: Precedence
   rule: column no longer public before dependents
 - from: [Column:{DescID: 110, ColumnID: 1}, WRITE_ONLY]
@@ -1705,6 +1723,22 @@ DROP DATABASE db1 CASCADE
   to:   [Column:{DescID: 117, ColumnID: 4294967294}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
+- from: [ColumnNotNull:{DescID: 109, ColumnID: 1, IndexID: 0}, ABSENT]
+  to:   [Column:{DescID: 109, ColumnID: 1}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before column
+- from: [ColumnNotNull:{DescID: 109, ColumnID: 1, IndexID: 0}, ABSENT]
+  to:   [Column:{DescID: 109, ColumnID: 1}, DELETE_ONLY]
+  kind: SameStagePrecedence
+  rule: column constraint removed right before column reaches delete only
+- from: [ColumnNotNull:{DescID: 110, ColumnID: 1, IndexID: 0}, ABSENT]
+  to:   [Column:{DescID: 110, ColumnID: 1}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before column
+- from: [ColumnNotNull:{DescID: 110, ColumnID: 1, IndexID: 0}, ABSENT]
+  to:   [Column:{DescID: 110, ColumnID: 1}, DELETE_ONLY]
+  kind: SameStagePrecedence
+  rule: column constraint removed right before column reaches delete only
 - from: [ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
   to:   [Column:{DescID: 109, ColumnID: 1}, ABSENT]
   kind: Precedence

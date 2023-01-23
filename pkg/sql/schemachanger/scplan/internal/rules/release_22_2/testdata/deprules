@@ -1645,7 +1645,7 @@ deprules
   kind: Precedence
   to: column-Node
   query:
-    - $dependent[Type] IN ['*scpb.ColumnName', '*scpb.ColumnType', '*scpb.ColumnDefaultExpression', '*scpb.ColumnOnUpdateExpression', '*scpb.SequenceOwner', '*scpb.ColumnComment', '*scpb.IndexColumn']
+    - $dependent[Type] IN ['*scpb.ColumnName', '*scpb.ColumnType', '*scpb.ColumnDefaultExpression', '*scpb.ColumnOnUpdateExpression', '*scpb.SequenceOwner', '*scpb.ColumnComment', '*scpb.ColumnNotNull', '*scpb.IndexColumn']
     - $column[Type] = '*scpb.Column'
     - joinOnColumnID($dependent, $column, $table-id, $col-id)
     - ToPublicOrTransient($dependent-Target, $column-Target)
@@ -1659,7 +1659,7 @@ deprules
   to: dependent-Node
   query:
     - $column[Type] = '*scpb.Column'
-    - $dependent[Type] IN ['*scpb.ColumnName', '*scpb.ColumnType', '*scpb.ColumnDefaultExpression', '*scpb.ColumnOnUpdateExpression', '*scpb.SequenceOwner', '*scpb.ColumnComment', '*scpb.IndexColumn']
+    - $dependent[Type] IN ['*scpb.ColumnName', '*scpb.ColumnType', '*scpb.ColumnDefaultExpression', '*scpb.ColumnOnUpdateExpression', '*scpb.SequenceOwner', '*scpb.ColumnComment', '*scpb.ColumnNotNull', '*scpb.IndexColumn']
     - joinOnColumnID($column, $dependent, $table-id, $col-id)
     - ToPublicOrTransient($column-Target, $dependent-Target)
     - $column-Node[CurrentStatus] = DELETE_ONLY
@@ -1727,7 +1727,7 @@ deprules
   to: dependent-Node
   query:
     - $column[Type] = '*scpb.Column'
-    - $dependent[Type] IN ['*scpb.ColumnName', '*scpb.ColumnType', '*scpb.ColumnDefaultExpression', '*scpb.ColumnOnUpdateExpression', '*scpb.SequenceOwner', '*scpb.ColumnComment', '*scpb.IndexColumn']
+    - $dependent[Type] IN ['*scpb.ColumnName', '*scpb.ColumnType', '*scpb.ColumnDefaultExpression', '*scpb.ColumnOnUpdateExpression', '*scpb.SequenceOwner', '*scpb.ColumnComment', '*scpb.ColumnNotNull', '*scpb.IndexColumn']
     - joinOnColumnID($column, $dependent, $table-id, $col-id)
     - toAbsent($column-Target, $dependent-Target)
     - $column-Node[CurrentStatus] = WRITE_ONLY
@@ -1740,7 +1740,7 @@ deprules
   to: dependent-Node
   query:
     - $column[Type] = '*scpb.Column'
-    - $dependent[Type] IN ['*scpb.ColumnName', '*scpb.ColumnType', '*scpb.ColumnDefaultExpression', '*scpb.ColumnOnUpdateExpression', '*scpb.SequenceOwner', '*scpb.ColumnComment', '*scpb.IndexColumn']
+    - $dependent[Type] IN ['*scpb.ColumnName', '*scpb.ColumnType', '*scpb.ColumnDefaultExpression', '*scpb.ColumnOnUpdateExpression', '*scpb.SequenceOwner', '*scpb.ColumnComment', '*scpb.ColumnNotNull', '*scpb.IndexColumn']
     - joinOnColumnID($column, $dependent, $table-id, $col-id)
     - transient($column-Target, $dependent-Target)
     - $column-Node[CurrentStatus] = TRANSIENT_WRITE_ONLY
@@ -1753,7 +1753,7 @@ deprules
   to: dependent-Node
   query:
     - $column[Type] = '*scpb.Column'
-    - $dependent[Type] IN ['*scpb.ColumnName', '*scpb.ColumnType', '*scpb.ColumnDefaultExpression', '*scpb.ColumnOnUpdateExpression', '*scpb.SequenceOwner', '*scpb.ColumnComment', '*scpb.IndexColumn']
+    - $dependent[Type] IN ['*scpb.ColumnName', '*scpb.ColumnType', '*scpb.ColumnDefaultExpression', '*scpb.ColumnOnUpdateExpression', '*scpb.SequenceOwner', '*scpb.ColumnComment', '*scpb.ColumnNotNull', '*scpb.IndexColumn']
     - joinOnColumnID($column, $dependent, $table-id, $col-id)
     - $column-Target[TargetStatus] = TRANSIENT_ABSENT
     - $column-Node[CurrentStatus] = TRANSIENT_WRITE_ONLY
@@ -1767,7 +1767,7 @@ deprules
   to: dependent-Node
   query:
     - $column[Type] = '*scpb.Column'
-    - $dependent[Type] IN ['*scpb.ColumnName', '*scpb.ColumnType', '*scpb.ColumnDefaultExpression', '*scpb.ColumnOnUpdateExpression', '*scpb.SequenceOwner', '*scpb.ColumnComment', '*scpb.IndexColumn']
+    - $dependent[Type] IN ['*scpb.ColumnName', '*scpb.ColumnType', '*scpb.ColumnDefaultExpression', '*scpb.ColumnOnUpdateExpression', '*scpb.SequenceOwner', '*scpb.ColumnComment', '*scpb.ColumnNotNull', '*scpb.IndexColumn']
     - joinOnColumnID($column, $dependent, $table-id, $col-id)
     - $column-Target[TargetStatus] = ABSENT
     - $column-Node[CurrentStatus] = WRITE_ONLY
@@ -1928,7 +1928,7 @@ deprules
   kind: Precedence
   to: column-Node
   query:
-    - $dependent[Type] IN ['*scpb.ColumnName', '*scpb.ColumnType', '*scpb.ColumnDefaultExpression', '*scpb.ColumnOnUpdateExpression', '*scpb.SequenceOwner', '*scpb.ColumnComment', '*scpb.IndexColumn']
+    - $dependent[Type] IN ['*scpb.ColumnName', '*scpb.ColumnType', '*scpb.ColumnDefaultExpression', '*scpb.ColumnOnUpdateExpression', '*scpb.SequenceOwner', '*scpb.ColumnComment', '*scpb.ColumnNotNull', '*scpb.IndexColumn']
     - $column[Type] = '*scpb.Column'
     - joinOnColumnID($dependent, $column, $table-id, $col-id)
     - toAbsent($dependent-Target, $column-Target)
@@ -1941,7 +1941,7 @@ deprules
   kind: Precedence
   to: column-Node
   query:
-    - $dependent[Type] IN ['*scpb.ColumnName', '*scpb.ColumnType', '*scpb.ColumnDefaultExpression', '*scpb.ColumnOnUpdateExpression', '*scpb.SequenceOwner', '*scpb.ColumnComment', '*scpb.IndexColumn']
+    - $dependent[Type] IN ['*scpb.ColumnName', '*scpb.ColumnType', '*scpb.ColumnDefaultExpression', '*scpb.ColumnOnUpdateExpression', '*scpb.SequenceOwner', '*scpb.ColumnComment', '*scpb.ColumnNotNull', '*scpb.IndexColumn']
     - $column[Type] = '*scpb.Column'
     - joinOnColumnID($dependent, $column, $table-id, $col-id)
     - transient($dependent-Target, $column-Target)
@@ -1954,7 +1954,7 @@ deprules
   kind: Precedence
   to: column-Node
   query:
-    - $dependent[Type] IN ['*scpb.ColumnName', '*scpb.ColumnType', '*scpb.ColumnDefaultExpression', '*scpb.ColumnOnUpdateExpression', '*scpb.SequenceOwner', '*scpb.ColumnComment', '*scpb.IndexColumn']
+    - $dependent[Type] IN ['*scpb.ColumnName', '*scpb.ColumnType', '*scpb.ColumnDefaultExpression', '*scpb.ColumnOnUpdateExpression', '*scpb.SequenceOwner', '*scpb.ColumnComment', '*scpb.ColumnNotNull', '*scpb.IndexColumn']
     - $column[Type] = '*scpb.Column'
     - joinOnColumnID($dependent, $column, $table-id, $col-id)
     - $dependent-Target[TargetStatus] = TRANSIENT_ABSENT
@@ -1968,7 +1968,7 @@ deprules
   kind: Precedence
   to: column-Node
   query:
-    - $dependent[Type] IN ['*scpb.ColumnName', '*scpb.ColumnType', '*scpb.ColumnDefaultExpression', '*scpb.ColumnOnUpdateExpression', '*scpb.SequenceOwner', '*scpb.ColumnComment', '*scpb.IndexColumn']
+    - $dependent[Type] IN ['*scpb.ColumnName', '*scpb.ColumnType', '*scpb.ColumnDefaultExpression', '*scpb.ColumnOnUpdateExpression', '*scpb.SequenceOwner', '*scpb.ColumnComment', '*scpb.ColumnNotNull', '*scpb.IndexColumn']
     - $column[Type] = '*scpb.Column'
     - joinOnColumnID($dependent, $column, $table-id, $col-id)
     - $dependent-Target[TargetStatus] = ABSENT

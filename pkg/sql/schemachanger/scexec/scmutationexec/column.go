@@ -61,7 +61,11 @@ func (m *visitor) SetAddedColumnType(ctx context.Context, op scop.SetAddedColumn
 	}
 	col := mut.AsColumn().ColumnDesc()
 	col.Type = op.ColumnType.Type
-	col.Nullable = op.ColumnType.IsNullable
+	if op.ColumnType.Is_23_1ClusterVersionActive {
+		col.Nullable = true
+	} else {
+		col.Nullable = op.ColumnType.DeprecatedIsNullable
+	}
 	col.Virtual = op.ColumnType.IsVirtual
 	if ce := op.ColumnType.ComputeExpr; ce != nil {
 		expr := string(ce.Expr)

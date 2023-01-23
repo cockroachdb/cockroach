@@ -13,7 +13,7 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
 │   │
 │   └── • Stage 1 of 1 in StatementPhase
 │       │
-│       ├── • 6 elements transitioning toward ABSENT
+│       ├── • 7 elements transitioning toward ABSENT
 │       │   │
 │       │   ├── • View:{DescID: 106}
 │       │   │     PUBLIC → TXN_DROPPED
@@ -29,6 +29,12 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
 │       │   │   │
 │       │   │   └── • skip PUBLIC → WRITE_ONLY operations
 │       │   │         rule: "skip column removal ops on relation drop"
+│       │   │
+│       │   ├── • ColumnNotNull:{DescID: 106, ColumnID: 2, IndexID: 0}
+│       │   │   │ PUBLIC → VALIDATED
+│       │   │   │
+│       │   │   └── • skip PUBLIC → VALIDATED operations
+│       │   │         rule: "skip constraint removal ops on relation drop"
 │       │   │
 │       │   ├── • Column:{DescID: 106, ColumnID: 4294967295}
 │       │   │   │ PUBLIC → WRITE_ONLY
@@ -57,7 +63,7 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
 │   │
 │   └── • Stage 1 of 1 in PreCommitPhase
 │       │
-│       ├── • 27 elements transitioning toward ABSENT
+│       ├── • 28 elements transitioning toward ABSENT
 │       │   │
 │       │   ├── • IndexColumn:{DescID: 105, ColumnID: 2, IndexID: 2}
 │       │   │   │ PUBLIC → ABSENT
@@ -179,10 +185,16 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
 │       │   ├── • Column:{DescID: 106, ColumnID: 2}
 │       │   │   │ WRITE_ONLY → ABSENT
 │       │   │   │
+│       │   │   ├── • SameStagePrecedence dependency from ABSENT ColumnNotNull:{DescID: 106, ColumnID: 2, IndexID: 0}
+│       │   │   │     rule: "column constraint removed right before column reaches delete only"
+│       │   │   │
 │       │   │   ├── • Precedence dependency from ABSENT ColumnName:{DescID: 106, Name: rowid, ColumnID: 2}
 │       │   │   │     rule: "dependents removed before column"
 │       │   │   │
 │       │   │   ├── • Precedence dependency from ABSENT ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 2}
+│       │   │   │     rule: "dependents removed before column"
+│       │   │   │
+│       │   │   ├── • Precedence dependency from ABSENT ColumnNotNull:{DescID: 106, ColumnID: 2, IndexID: 0}
 │       │   │   │     rule: "dependents removed before column"
 │       │   │   │
 │       │   │   ├── • Precedence dependency from ABSENT ColumnDefaultExpression:{DescID: 106, ColumnID: 2}
@@ -217,6 +229,12 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
 │       │   │   │
 │       │   │   └── • SameStagePrecedence dependency from ABSENT ColumnDefaultExpression:{DescID: 106, ColumnID: 2}
 │       │   │         rule: "column type dependents removed right before column type"
+│       │   │
+│       │   ├── • ColumnNotNull:{DescID: 106, ColumnID: 2, IndexID: 0}
+│       │   │   │ VALIDATED → ABSENT
+│       │   │   │
+│       │   │   └── • Precedence dependency from WRITE_ONLY Column:{DescID: 106, ColumnID: 2}
+│       │   │         rule: "column no longer public before dependents"
 │       │   │
 │       │   ├── • ColumnDefaultExpression:{DescID: 106, ColumnID: 2}
 │       │   │   │ PUBLIC → ABSENT
@@ -358,7 +376,7 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
 │       │       └── • skip PUBLIC → ABSENT operations
 │       │             rule: "skip index dependents removal ops on relation drop"
 │       │
-│       └── • 12 Mutation operations
+│       └── • 13 Mutation operations
 │           │
 │           ├── • MarkDescriptorAsDropped
 │           │     DescriptorID: 106
@@ -367,6 +385,10 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
 │           │     BackReferencedViewID: 106
 │           │     RelationIDs:
 │           │     - 105
+│           │
+│           ├── • RemoveColumnNotNull
+│           │     ColumnID: 2
+│           │     TableID: 106
 │           │
 │           ├── • RemoveColumnDefaultExpression
 │           │     ColumnID: 2

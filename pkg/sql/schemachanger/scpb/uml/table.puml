@@ -158,7 +158,8 @@ ColumnType :  TableID
 ColumnType :  FamilyID
 ColumnType :  ColumnID
 ColumnType :  TypeT
-ColumnType :  IsNullable
+ColumnType :  DeprecatedIsNullable
+ColumnType :  Is_23_1ClusterVersionActive
 ColumnType :  ComputeExpr
 ColumnType :  IsVirtual
 

@@ -418,10 +418,10 @@ func (w *walkCtx) walkColumn(tbl catalog.TableDescriptor, col catalog.Column) {
 	})
 	{
 		columnType := &scpb.ColumnType{
-			TableID:    tbl.GetID(),
-			ColumnID:   col.GetID(),
-			IsNullable: col.IsNullable(),
-			IsVirtual:  col.IsVirtual(),
+			TableID:              tbl.GetID(),
+			ColumnID:             col.GetID(),
+			DeprecatedIsNullable: col.IsNullable(),
+			IsVirtual:            col.IsVirtual(),
 		}
 		_ = tbl.ForeachFamily(func(family *descpb.ColumnFamilyDescriptor) error {
 			if catalog.MakeTableColSet(family.ColumnIDs...).Contains(col.GetID()) {
@@ -439,6 +439,14 @@ func (w *walkCtx) walkColumn(tbl catalog.TableDescriptor, col catalog.Column) {
 			columnType.ComputeExpr = expr
 		}
 		w.ev(scpb.Status_PUBLIC, columnType)
+	}
+	if !col.IsNullable() {
+		w.ev(scpb.Status_PUBLIC, &scpb.ColumnNotNull{
+			TableID:  tbl.GetID(),
+			ColumnID: col.GetID(),
+			//ConstraintID: tbl.GetNextConstraintID(),
+		})
+		//tbl.TableDesc().NextConstraintID++
 	}
 	if col.HasDefault() {
 		expr, err := w.newExpression(col.GetDefaultExpr())

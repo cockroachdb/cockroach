@@ -72,6 +72,8 @@ ALTER TABLE defaultdb.bar ALTER PRIMARY KEY USING COLUMNS (i)
   {columnId: 2, name: rowid, tableId: 105}
 - [[ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], PUBLIC]
   {columnId: 2, tableId: 105, type: {family: IntFamily, oid: 20, width: 64}}
+- [[ColumnNotNull:{DescID: 105, ColumnID: 2, IndexID: 0}, ABSENT], PUBLIC]
+  {columnId: 2, tableId: 105}
 - [[ColumnDefaultExpression:{DescID: 105, ColumnID: 2}, ABSENT], PUBLIC]
   {columnId: 2, expr: unique_rowid(), tableId: 105}
 - [[IndexColumn:{DescID: 105, ColumnID: 2, IndexID: 1}, ABSENT], PUBLIC]

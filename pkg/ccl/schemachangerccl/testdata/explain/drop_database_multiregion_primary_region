@@ -10,13 +10,14 @@ EXPLAIN (ddl) DROP DATABASE multi_region_test_db CASCADE;
 Schema change plan for DROP DATABASE ‹multi_region_test_db› CASCADE;
  ├── StatementPhase
  │    └── Stage 1 of 1 in StatementPhase
- │         ├── 9 elements transitioning toward ABSENT
+ │         ├── 10 elements transitioning toward ABSENT
  │         │    ├── PUBLIC → TXN_DROPPED Database:{DescID: 104}
  │         │    ├── PUBLIC → TXN_DROPPED Schema:{DescID: 105}
  │         │    ├── PUBLIC → TXN_DROPPED EnumType:{DescID: 106}
  │         │    ├── PUBLIC → TXN_DROPPED AliasType:{DescID: 107, ReferencedTypeIDs: [106 107]}
  │         │    ├── PUBLIC → TXN_DROPPED Table:{DescID: 108}
  │         │    ├── PUBLIC → WRITE_ONLY  Column:{DescID: 108, ColumnID: 1}
+ │         │    ├── PUBLIC → VALIDATED   ColumnNotNull:{DescID: 108, ColumnID: 1, IndexID: 0}
  │         │    ├── PUBLIC → WRITE_ONLY  Column:{DescID: 108, ColumnID: 4294967295}
  │         │    ├── PUBLIC → WRITE_ONLY  Column:{DescID: 108, ColumnID: 4294967294}
  │         │    └── PUBLIC → VALIDATED   PrimaryIndex:{DescID: 108, IndexID: 1, ConstraintID: 1}
@@ -28,7 +29,7 @@ Schema change plan for DROP DATABASE ‹multi_region_test_db› CASCADE;
  │              └── MarkDescriptorAsSyntheticallyDropped {"DescriptorID":108}
  ├── PreCommitPhase
  │    └── Stage 1 of 1 in PreCommitPhase
- │         ├── 52 elements transitioning toward ABSENT
+ │         ├── 53 elements transitioning toward ABSENT
  │         │    ├── PUBLIC      → ABSENT  Namespace:{DescID: 104, Name: multi_region_test_db, ReferencedDescID: 0}
  │         │    ├── PUBLIC      → ABSENT  Owner:{DescID: 104}
  │         │    ├── PUBLIC      → ABSENT  UserPrivileges:{DescID: 104, Name: admin}
@@ -72,6 +73,7 @@ Schema change plan for DROP DATABASE ‹multi_region_test_db› CASCADE;
  │         │    ├── WRITE_ONLY  → ABSENT  Column:{DescID: 108, ColumnID: 1}
  │         │    ├── PUBLIC      → ABSENT  ColumnName:{DescID: 108, Name: a, ColumnID: 1}
  │         │    ├── PUBLIC      → ABSENT  ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 1}
+ │         │    ├── VALIDATED   → ABSENT  ColumnNotNull:{DescID: 108, ColumnID: 1, IndexID: 0}
  │         │    ├── WRITE_ONLY  → ABSENT  Column:{DescID: 108, ColumnID: 4294967295}
  │         │    ├── PUBLIC      → ABSENT  ColumnName:{DescID: 108, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}
  │         │    ├── PUBLIC      → ABSENT  ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967295}
@@ -81,7 +83,7 @@ Schema change plan for DROP DATABASE ‹multi_region_test_db› CASCADE;
  │         │    ├── PUBLIC      → ABSENT  IndexColumn:{DescID: 108, ColumnID: 1, IndexID: 1}
  │         │    ├── VALIDATED   → ABSENT  PrimaryIndex:{DescID: 108, IndexID: 1, ConstraintID: 1}
  │         │    └── PUBLIC      → ABSENT  IndexName:{DescID: 108, Name: table_regional_by_table_pkey, IndexID: 1}
- │         └── 22 Mutation operations
+ │         └── 23 Mutation operations
  │              ├── MarkDescriptorAsDropped {"DescriptorID":104}
  │              ├── RemoveDatabaseRoleSettings {"DatabaseID":104}
  │              ├── MarkDescriptorAsDropped {"DescriptorID":105}
@@ -90,14 +92,15 @@ Schema change plan for DROP DATABASE ‹multi_region_test_db› CASCADE;
  │              ├── MarkDescriptorAsDropped {"DescriptorID":107}
  │              ├── MarkDescriptorAsDropped {"DescriptorID":108}
  │              ├── RemoveBackReferenceInTypes {"BackReferencedDescriptorID":108}
+ │              ├── RemoveColumnNotNull {"ColumnID":1,"TableID":108}
  │              ├── DrainDescriptorName {"Namespace":{"DescriptorID":104,"Name":"multi_region_tes..."}}
  │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":105,"Name":"public"}}
  │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":106,"Name":"crdb_internal_re...","SchemaID":105}}
  │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":107,"Name":"_crdb_internal_r...","SchemaID":105}}
  │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":108,"Name":"table_regional_b...","SchemaID":105}}
- │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":1,"TableID":108}
  │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":4294967295,"TableID":108}
  │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":4294967294,"TableID":108}
+ │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":1,"TableID":108}
  │              ├── SetJobStateOnDescriptor {"DescriptorID":104,"Initialize":true}
  │              ├── SetJobStateOnDescriptor {"DescriptorID":105,"Initialize":true}
  │              ├── SetJobStateOnDescriptor {"DescriptorID":106,"Initialize":true}

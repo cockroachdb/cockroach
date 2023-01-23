@@ -71,7 +71,8 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT;
 │           ├── • SetAddedColumnType
 │           │     ColumnType:
 │           │       ColumnID: 2
-│           │       IsNullable: true
+│           │       DeprecatedIsNullable: true
+│           │       Is_23_1ClusterVersionActive: true
 │           │       TableID: 106
 │           │       TypeT:
 │           │         Type:

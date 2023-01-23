@@ -182,10 +182,36 @@ message ColumnType {
   uint32 family_id = 2 [(gogoproto.customname) = "FamilyID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.FamilyID"];
   uint32 column_id = 3 [(gogoproto.customname) = "ColumnID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ColumnID"];
   TypeT embedded_type_t = 4 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  bool is_nullable = 5;
+  // We changed element modelling for NOT NULL constraint in V23_1:
+  // Previously, it was a bool field `is_nullable` in the ColumnType
+  // element. Now, we introduce a new `ColumnNotNull` element to handle the
+  // validation. Such change is necessary to support adding/dropping NOT NULL
+  // constraint on an existing column.
+  // Such a change consequently brings challenges for compatibility in mixed version
+  // state. The plan to tackle it is as follows:
+  // V23_1:
+  //  - Start deprecating `is_nullable` (rename it to `deprecated_is_nullable`);
+  //  - Introduce `is_23_1_cluster_version_active`;
+  //  - Add a version gate in the builder for `ADD COLUMN` (see addColumn function)
+  //    to set `is_23_1_cluster_version_active` if cluster version V23_1 is active.
+  //  - Use `is_23_1_cluster_version_active` field to behave differently in
+  //    scop `SetAddedColumnType`.
+  // V23_2:
+  //  - Delete `deprecated_is_nullable`;
+  //  - Remove the version gate in the builder (see addColumn function) but still
+  //    set `is_23_1_cluster_version_active` to true.
+  //  - Stop using `is_23_1_cluster_version_active` in `SetAddedColumnType`; I.e.,
+  //    always behave as if `is_23_1_cluster_version_active` is true.
+  // V23_3 (if a thing): Do nothing
+  // V24_1:
+  //  - Delete `is_23_1_cluster_version_active` field from protobuf.
+  // This plan will guarantee compatibility in all possible mixed version states
+  // as well as restoring from a old backup.
+  bool deprecated_is_nullable = 5;
+  bool is_23_1_cluster_version_active = 11;
   Expression compute_expr = 6;
   bool is_virtual = 7;
-  reserved 10;
+  reserved 8, 9, 10;
 }
 
 message ColumnFamily {
