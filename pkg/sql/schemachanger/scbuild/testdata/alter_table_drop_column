@@ -19,7 +19,9 @@ ALTER TABLE defaultdb.t DROP COLUMN j
 - [[ColumnName:{DescID: 104, Name: j, ColumnID: 2}, ABSENT], PUBLIC]
   {columnId: 2, name: j, tableId: 104}
 - [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], PUBLIC]
-  {columnId: 2, tableId: 104, type: {family: IntFamily, oid: 20, width: 64}}
+  {columnId: 2, elementCreationMetadata: {in231OrLater: true}, tableId: 104, type: {family: IntFamily, oid: 20, width: 64}}
+- [[ColumnNotNull:{DescID: 104, ColumnID: 2, IndexID: 0}, ABSENT], PUBLIC]
+  {columnId: 2, tableId: 104}
 - [[ColumnDefaultExpression:{DescID: 104, ColumnID: 2}, ABSENT], PUBLIC]
   {columnId: 2, expr: '42:::INT8', tableId: 104}
 - [[ColumnComment:{DescID: 104, ColumnID: 2, Comment: column will drop}, ABSENT], PUBLIC]
@@ -91,13 +93,17 @@ ALTER TABLE defaultdb.t DROP COLUMN k, DROP COLUMN l
 - [[ColumnName:{DescID: 104, Name: k, ColumnID: 3}, ABSENT], PUBLIC]
   {columnId: 3, name: k, tableId: 104}
 - [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 3}, ABSENT], PUBLIC]
-  {columnId: 3, tableId: 104, type: {family: IntFamily, oid: 20, width: 64}}
+  {columnId: 3, elementCreationMetadata: {in231OrLater: true}, tableId: 104, type: {family: IntFamily, oid: 20, width: 64}}
+- [[ColumnNotNull:{DescID: 104, ColumnID: 3, IndexID: 0}, ABSENT], PUBLIC]
+  {columnId: 3, tableId: 104}
 - [[Column:{DescID: 104, ColumnID: 4}, ABSENT], PUBLIC]
   {columnId: 4, pgAttributeNum: 4, tableId: 104}
 - [[ColumnName:{DescID: 104, Name: l, ColumnID: 4}, ABSENT], PUBLIC]
   {columnId: 4, name: l, tableId: 104}
 - [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 4}, ABSENT], PUBLIC]
-  {columnId: 4, tableId: 104, type: {family: IntFamily, oid: 20, width: 64}}
+  {columnId: 4, elementCreationMetadata: {in231OrLater: true}, tableId: 104, type: {family: IntFamily, oid: 20, width: 64}}
+- [[ColumnNotNull:{DescID: 104, ColumnID: 4, IndexID: 0}, ABSENT], PUBLIC]
+  {columnId: 4, tableId: 104}
 - [[ColumnDefaultExpression:{DescID: 104, ColumnID: 4, ReferencedSequenceIDs: [105]}, ABSENT], PUBLIC]
   {columnId: 4, expr: 'nextval(105:::REGCLASS)', tableId: 104, usesSequenceIds: [105]}
 - [[SequenceOwner:{DescID: 104, ColumnID: 4, ReferencedDescID: 105}, ABSENT], PUBLIC]
@@ -160,3 +166,69 @@ ALTER TABLE defaultdb.t DROP COLUMN k, DROP COLUMN l
   {objectId: 105, parentSchemaId: 101}
 - [[TableData:{DescID: 105, ReferencedDescID: 100}, ABSENT], PUBLIC]
   {databaseId: 100, tableId: 105}
+
+build
+ALTER TABLE defaultdb.t DROP COLUMN l
+----
+- [[Column:{DescID: 104, ColumnID: 4}, ABSENT], PUBLIC]
+  {columnId: 4, pgAttributeNum: 4, tableId: 104}
+- [[ColumnName:{DescID: 104, Name: l, ColumnID: 4}, ABSENT], PUBLIC]
+  {columnId: 4, name: l, tableId: 104}
+- [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 4}, ABSENT], PUBLIC]
+  {columnId: 4, elementCreationMetadata: {in231OrLater: true}, tableId: 104, type: {family: IntFamily, oid: 20, width: 64}}
+- [[ColumnNotNull:{DescID: 104, ColumnID: 4, IndexID: 0}, ABSENT], PUBLIC]
+  {columnId: 4, tableId: 104}
+- [[ColumnDefaultExpression:{DescID: 104, ColumnID: 4, ReferencedSequenceIDs: [105]}, ABSENT], PUBLIC]
+  {columnId: 4, expr: 'nextval(105:::REGCLASS)', tableId: 104, usesSequenceIds: [105]}
+- [[SequenceOwner:{DescID: 104, ColumnID: 4, ReferencedDescID: 105}, ABSENT], PUBLIC]
+  {columnId: 4, sequenceId: 105, tableId: 104}
+- [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 1}, ABSENT], PUBLIC]
+  {columnId: 1, indexId: 1, tableId: 104}
+- [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 1}, ABSENT], PUBLIC]
+  {columnId: 2, indexId: 1, kind: STORED, tableId: 104}
+- [[IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 1}, ABSENT], PUBLIC]
+  {columnId: 3, indexId: 1, kind: STORED, ordinalInKind: 1, tableId: 104}
+- [[IndexColumn:{DescID: 104, ColumnID: 4, IndexID: 1}, ABSENT], PUBLIC]
+  {columnId: 4, indexId: 1, kind: STORED, ordinalInKind: 2, tableId: 104}
+- [[PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}, ABSENT], PUBLIC]
+  {constraintId: 1, indexId: 1, isUnique: true, tableId: 104}
+- [[IndexName:{DescID: 104, Name: t_pkey, IndexID: 1}, ABSENT], PUBLIC]
+  {indexId: 1, name: t_pkey, tableId: 104}
+- [[IndexData:{DescID: 104, IndexID: 1}, ABSENT], PUBLIC]
+  {indexId: 1, tableId: 104}
+- [[Namespace:{DescID: 105, Name: t_l_seq, ReferencedDescID: 100}, ABSENT], PUBLIC]
+  {databaseId: 100, descriptorId: 105, name: t_l_seq, schemaId: 101}
+- [[Owner:{DescID: 105}, ABSENT], PUBLIC]
+  {descriptorId: 105, owner: root}
+- [[UserPrivileges:{DescID: 105, Name: admin}, ABSENT], PUBLIC]
+  {descriptorId: 105, privileges: "2", userName: admin}
+- [[UserPrivileges:{DescID: 105, Name: root}, ABSENT], PUBLIC]
+  {descriptorId: 105, privileges: "2", userName: root}
+- [[Sequence:{DescID: 105}, ABSENT], PUBLIC]
+  {sequenceId: 105}
+- [[ObjectParent:{DescID: 105, ReferencedDescID: 101}, ABSENT], PUBLIC]
+  {objectId: 105, parentSchemaId: 101}
+- [[TableData:{DescID: 105, ReferencedDescID: 100}, ABSENT], PUBLIC]
+  {databaseId: 100, tableId: 105}
+- [[PrimaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 2, TemporaryIndexID: 5, SourceIndexID: 1}, PUBLIC], ABSENT]
+  {constraintId: 2, indexId: 4, isUnique: true, sourceIndexId: 1, tableId: 104, temporaryIndexId: 5}
+- [[IndexName:{DescID: 104, Name: t_pkey, IndexID: 4}, PUBLIC], ABSENT]
+  {indexId: 4, name: t_pkey, tableId: 104}
+- [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 4}, PUBLIC], ABSENT]
+  {columnId: 1, indexId: 4, tableId: 104}
+- [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 4}, PUBLIC], ABSENT]
+  {columnId: 2, indexId: 4, kind: STORED, tableId: 104}
+- [[IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 4}, PUBLIC], ABSENT]
+  {columnId: 3, indexId: 4, kind: STORED, ordinalInKind: 1, tableId: 104}
+- [[IndexData:{DescID: 104, IndexID: 4}, PUBLIC], ABSENT]
+  {indexId: 4, tableId: 104}
+- [[TemporaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], ABSENT]
+  {constraintId: 3, indexId: 5, isUnique: true, sourceIndexId: 1, tableId: 104}
+- [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 5}, TRANSIENT_ABSENT], ABSENT]
+  {columnId: 1, indexId: 5, tableId: 104}
+- [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 5}, TRANSIENT_ABSENT], ABSENT]
+  {columnId: 2, indexId: 5, kind: STORED, tableId: 104}
+- [[IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 5}, TRANSIENT_ABSENT], ABSENT]
+  {columnId: 3, indexId: 5, kind: STORED, ordinalInKind: 1, tableId: 104}
+- [[IndexData:{DescID: 104, IndexID: 5}, TRANSIENT_ABSENT], ABSENT]
+  {indexId: 5, tableId: 104}

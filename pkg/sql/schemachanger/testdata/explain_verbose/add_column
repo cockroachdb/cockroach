@@ -118,6 +118,8 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAU
 │           ├── • SetAddedColumnType
 │           │     ColumnType:
 │           │       ColumnID: 2
+│           │       ElementCreationMetadata:
+│           │         in231OrLater: true
 │           │       TableID: 106
 │           │       TypeT:
 │           │         Type:
@@ -319,6 +321,8 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAU
 │           ├── • SetAddedColumnType
 │           │     ColumnType:
 │           │       ColumnID: 2
+│           │       ElementCreationMetadata:
+│           │         in231OrLater: true
 │           │       TableID: 106
 │           │       TypeT:
 │           │         Type:
@@ -382,7 +386,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAU
 │                 DescriptorIDs:
 │                 - 106
 │                 JobID: 1
-│                 RunningStatus: PostCommitPhase stage 1 of 7 with 2 MutationType ops pending
+│                 RunningStatus: PostCommitPhase stage 1 of 7 with 3 MutationType ops pending
 │                 Statements:
 │                 - statement: ALTER TABLE db.public.tbl ADD COLUMN j INT8 NOT NULL DEFAULT 42
 │                   redactedstatement: ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹j› INT8 NOT NULL
@@ -393,16 +397,25 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAU
 │   │
 │   ├── • Stage 1 of 7 in PostCommitPhase
 │   │   │
-│   │   ├── • 1 element transitioning toward PUBLIC
+│   │   ├── • 2 elements transitioning toward PUBLIC
 │   │   │   │
-│   │   │   └── • Column:{DescID: 106, ColumnID: 2}
-│   │   │       │ DELETE_ONLY → WRITE_ONLY
+│   │   │   ├── • Column:{DescID: 106, ColumnID: 2}
+│   │   │   │   │ DELETE_ONLY → WRITE_ONLY
+│   │   │   │   │
+│   │   │   │   ├── • PreviousStagePrecedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 2}
+│   │   │   │   │     rule: "Column transitions to PUBLIC uphold 2-version invariant: DELETE_ONLY->WRITE_ONLY"
+│   │   │   │   │
+│   │   │   │   └── • Precedence dependency from PUBLIC ColumnDefaultExpression:{DescID: 106, ColumnID: 2}
+│   │   │   │         rule: "DEFAULT or ON UPDATE existence precedes writes to column"
+│   │   │   │
+│   │   │   └── • ColumnNotNull:{DescID: 106, ColumnID: 2, IndexID: 2}
+│   │   │       │ ABSENT → WRITE_ONLY
 │   │   │       │
-│   │   │       ├── • PreviousStagePrecedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 2}
-│   │   │       │     rule: "Column transitions to PUBLIC uphold 2-version invariant: DELETE_ONLY->WRITE_ONLY"
+│   │   │       ├── • SameStagePrecedence dependency from WRITE_ONLY Column:{DescID: 106, ColumnID: 2}
+│   │   │       │     rule: "column writable right before column constraint is enforced."
 │   │   │       │
-│   │   │       └── • Precedence dependency from PUBLIC ColumnDefaultExpression:{DescID: 106, ColumnID: 2}
-│   │   │             rule: "DEFAULT or ON UPDATE existence precedes writes to column"
+│   │   │       └── • PreviousStagePrecedence dependency from ABSENT ColumnNotNull:{DescID: 106, ColumnID: 2, IndexID: 2}
+│   │   │             rule: "ColumnNotNull transitions to PUBLIC uphold 2-version invariant: ABSENT->WRITE_ONLY"
 │   │   │
 │   │   ├── • 2 elements transitioning toward TRANSIENT_ABSENT
 │   │   │   │
@@ -427,7 +440,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAU
 │   │   │       └── • SameStagePrecedence dependency from WRITE_ONLY TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
 │   │   │             rule: "temp index data exists as soon as temp index accepts writes"
 │   │   │
-│   │   └── • 4 Mutation operations
+│   │   └── • 5 Mutation operations
 │   │       │
 │   │       ├── • MakeDeleteOnlyColumnWriteOnly
 │   │       │     ColumnID: 2
@@ -435,6 +448,10 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAU
 │   │       │
 │   │       ├── • MakeDeleteOnlyIndexWriteOnly
 │   │       │     IndexID: 3
+│   │       │     TableID: 106
+│   │       │
+│   │       ├── • MakeAbsentColumnNotNullWriteOnly
+│   │       │     ColumnID: 2
 │   │       │     TableID: 106
 │   │       │
 │   │       ├── • SetJobStateOnDescriptor
@@ -554,29 +571,43 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAU
 │   │       │
 │   │       └── • UpdateSchemaChangerJob
 │   │             JobID: 1
-│   │             RunningStatus: PostCommitPhase stage 7 of 7 with 1 ValidationType op pending
+│   │             RunningStatus: PostCommitPhase stage 7 of 7 with 2 ValidationType ops pending
 │   │
 │   └── • Stage 7 of 7 in PostCommitPhase
 │       │
-│       ├── • 1 element transitioning toward PUBLIC
+│       ├── • 2 elements transitioning toward PUBLIC
 │       │   │
-│       │   └── • PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
+│       │   ├── • PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
+│       │   │   │ WRITE_ONLY → VALIDATED
+│       │   │   │
+│       │   │   └── • PreviousStagePrecedence dependency from WRITE_ONLY PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
+│       │   │         rule: "PrimaryIndex transitions to PUBLIC uphold 2-version invariant: WRITE_ONLY->VALIDATED"
+│       │   │
+│       │   └── • ColumnNotNull:{DescID: 106, ColumnID: 2, IndexID: 2}
 │       │       │ WRITE_ONLY → VALIDATED
 │       │       │
-│       │       └── • PreviousStagePrecedence dependency from WRITE_ONLY PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
-│       │             rule: "PrimaryIndex transitions to PUBLIC uphold 2-version invariant: WRITE_ONLY->VALIDATED"
+│       │       ├── • Precedence dependency from VALIDATED PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
+│       │       │     rule: "index is ready to be validated before we validate constraint on it"
+│       │       │
+│       │       └── • PreviousStagePrecedence dependency from WRITE_ONLY ColumnNotNull:{DescID: 106, ColumnID: 2, IndexID: 2}
+│       │             rule: "ColumnNotNull transitions to PUBLIC uphold 2-version invariant: WRITE_ONLY->VALIDATED"
 │       │
-│       └── • 1 Validation operation
+│       └── • 2 Validation operations
 │           │
-│           └── • ValidateIndex
-│                 IndexID: 2
+│           ├── • ValidateIndex
+│           │     IndexID: 2
+│           │     TableID: 106
+│           │
+│           └── • ValidateColumnNotNull
+│                 ColumnID: 2
+│                 IndexIDForValidation: 2
 │                 TableID: 106
 │
 └── • PostCommitNonRevertiblePhase
     │
     ├── • Stage 1 of 3 in PostCommitNonRevertiblePhase
     │   │
-    │   ├── • 3 elements transitioning toward PUBLIC
+    │   ├── • 4 elements transitioning toward PUBLIC
     │   │   │
     │   │   ├── • Column:{DescID: 106, ColumnID: 2}
     │   │   │   │ WRITE_ONLY → PUBLIC
@@ -599,7 +630,10 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAU
     │   │   │   ├── • Precedence dependency from PUBLIC IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 2}
     │   │   │   │     rule: "column dependents exist before column becomes public"
     │   │   │   │
-    │   │   │   └── • Precedence dependency from PUBLIC IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 3}
+    │   │   │   ├── • Precedence dependency from PUBLIC IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 3}
+    │   │   │   │     rule: "column dependents exist before column becomes public"
+    │   │   │   │
+    │   │   │   └── • Precedence dependency from PUBLIC ColumnNotNull:{DescID: 106, ColumnID: 2, IndexID: 2}
     │   │   │         rule: "column dependents exist before column becomes public"
     │   │   │
     │   │   ├── • PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
@@ -621,11 +655,20 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAU
     │   │   │   └── • Precedence dependency from PUBLIC IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 2}
     │   │   │         rule: "index dependents exist before index becomes public"
     │   │   │
-    │   │   └── • IndexName:{DescID: 106, Name: tbl_pkey, IndexID: 2}
-    │   │       │ ABSENT → PUBLIC
+    │   │   ├── • IndexName:{DescID: 106, Name: tbl_pkey, IndexID: 2}
+    │   │   │   │ ABSENT → PUBLIC
+    │   │   │   │
+    │   │   │   └── • Precedence dependency from BACKFILL_ONLY PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
+    │   │   │         rule: "index existence precedes index dependents"
+    │   │   │
+    │   │   └── • ColumnNotNull:{DescID: 106, ColumnID: 2, IndexID: 2}
+    │   │       │ VALIDATED → PUBLIC
     │   │       │
-    │   │       └── • Precedence dependency from BACKFILL_ONLY PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
-    │   │             rule: "index existence precedes index dependents"
+    │   │       ├── • Precedence dependency from DELETE_ONLY Column:{DescID: 106, ColumnID: 2}
+    │   │       │     rule: "column existence precedes column dependents"
+    │   │       │
+    │   │       └── • PreviousStagePrecedence dependency from VALIDATED ColumnNotNull:{DescID: 106, ColumnID: 2, IndexID: 2}
+    │   │             rule: "ColumnNotNull transitions to PUBLIC uphold 2-version invariant: VALIDATED->PUBLIC"
     │   │
     │   ├── • 3 elements transitioning toward TRANSIENT_ABSENT
     │   │   │
@@ -670,7 +713,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAU
     │   │       └── • Precedence dependency from VALIDATED PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}
     │   │             rule: "index no longer public before dependents"
     │   │
-    │   └── • 9 Mutation operations
+    │   └── • 10 Mutation operations
     │       │
     │       ├── • MakePublicPrimaryIndexWriteOnly
     │       │     IndexID: 1
@@ -688,6 +731,10 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAU
     │       │
     │       ├── • MakeWriteOnlyIndexDeleteOnly
     │       │     IndexID: 3
+    │       │     TableID: 106
+    │       │
+    │       ├── • MakeValidatedColumnNotNullPublic
+    │       │     ColumnID: 2
     │       │     TableID: 106
     │       │
     │       ├── • MakeValidatedPrimaryIndexPublic

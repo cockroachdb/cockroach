@@ -33,7 +33,7 @@ write *eventpb.DropIndex to event log:
     tag: DROP INDEX
     user: root
   tableName: defaultdb.public.t
-## StatementPhase stage 1 of 1 with 5 MutationType ops
+## StatementPhase stage 1 of 1 with 6 MutationType ops
 upsert descriptor #104
   ...
        - 3
@@ -47,6 +47,12 @@ upsert descriptor #104
        fromHashShardedColumn: true
   -    name: check_crdb_internal_j_shard_16
   +    name: crdb_internal_constraint_2_name_placeholder
+  +    validity: Dropping
+  +  - columnIds:
+  +    - 3
+  +    expr: crdb_internal_column_3_name_placeholder IS NOT NULL
+  +    isNonNullConstraint: true
+  +    name: crdb_internal_j_shard_16_auto_not_null
   +    validity: Dropping
      columns:
      - id: 1
@@ -97,6 +103,22 @@ upsert descriptor #104
   +  indexes: []
      modificationTime: {}
   +  mutations:
+  +  - constraint:
+  +      check:
+  +        columnIds:
+  +        - 3
+  +        expr: crdb_internal_column_3_name_placeholder IS NOT NULL
+  +        isNonNullConstraint: true
+  +        name: crdb_internal_j_shard_16_auto_not_null
+  +        validity: Dropping
+  +      constraintType: NOT_NULL
+  +      foreignKey: {}
+  +      name: crdb_internal_j_shard_16_auto_not_null
+  +      notNullColumn: 3
+  +      uniqueWithoutIndexConstraint: {}
+  +    direction: DROP
+  +    mutationId: 2
+  +    state: WRITE_ONLY
   +  - direction: DROP
   +    index:
   +      createdAtNanos: "1640995200000000000"
@@ -149,6 +171,7 @@ upsert descriptor #104
   +      hidden: true
   +      id: 3
   +      name: crdb_internal_column_3_name_placeholder
+  +      nullable: true
   +      type:
   +        family: IntFamily
   +        oid: 20
@@ -169,7 +192,7 @@ upsert descriptor #104
 ## PreCommitPhase stage 1 of 2 with 1 MutationType op
 undo all catalog changes within txn #1
 persist all catalog changes to storage
-## PreCommitPhase stage 2 of 2 with 7 MutationType ops
+## PreCommitPhase stage 2 of 2 with 8 MutationType ops
 upsert descriptor #104
   ...
        - 3
@@ -183,6 +206,12 @@ upsert descriptor #104
        fromHashShardedColumn: true
   -    name: check_crdb_internal_j_shard_16
   +    name: crdb_internal_constraint_2_name_placeholder
+  +    validity: Dropping
+  +  - columnIds:
+  +    - 3
+  +    expr: crdb_internal_column_3_name_placeholder IS NOT NULL
+  +    isNonNullConstraint: true
+  +    name: crdb_internal_j_shard_16_auto_not_null
   +    validity: Dropping
      columns:
      - id: 1
@@ -247,6 +276,22 @@ upsert descriptor #104
   +  indexes: []
      modificationTime: {}
   +  mutations:
+  +  - constraint:
+  +      check:
+  +        columnIds:
+  +        - 3
+  +        expr: crdb_internal_column_3_name_placeholder IS NOT NULL
+  +        isNonNullConstraint: true
+  +        name: crdb_internal_j_shard_16_auto_not_null
+  +        validity: Dropping
+  +      constraintType: NOT_NULL
+  +      foreignKey: {}
+  +      name: crdb_internal_j_shard_16_auto_not_null
+  +      notNullColumn: 3
+  +      uniqueWithoutIndexConstraint: {}
+  +    direction: DROP
+  +    mutationId: 2
+  +    state: WRITE_ONLY
   +  - direction: DROP
   +    index:
   +      createdAtNanos: "1640995200000000000"
@@ -299,6 +344,7 @@ upsert descriptor #104
   +      hidden: true
   +      id: 3
   +      name: crdb_internal_column_3_name_placeholder
+  +      nullable: true
   +      type:
   +        family: IntFamily
   +        oid: 20
@@ -324,7 +370,7 @@ notified job registry to adopt jobs: [1]
 begin transaction #2
 commit transaction #2
 begin transaction #3
-## PostCommitNonRevertiblePhase stage 1 of 2 with 6 MutationType ops
+## PostCommitNonRevertiblePhase stage 1 of 2 with 7 MutationType ops
 upsert descriptor #104
    table:
   -  checks:
@@ -337,9 +383,36 @@ upsert descriptor #104
   -    fromHashShardedColumn: true
   -    name: crdb_internal_constraint_2_name_placeholder
   -    validity: Dropping
+  -  - columnIds:
+  -    - 3
+  -    expr: crdb_internal_column_3_name_placeholder IS NOT NULL
+  -    isNonNullConstraint: true
+  -    name: crdb_internal_j_shard_16_auto_not_null
+  -    validity: Dropping
   +  checks: []
      columns:
      - id: 1
+  ...
+     modificationTime: {}
+     mutations:
+  -  - constraint:
+  -      check:
+  -        columnIds:
+  -        - 3
+  -        expr: crdb_internal_column_3_name_placeholder IS NOT NULL
+  -        isNonNullConstraint: true
+  -        name: crdb_internal_j_shard_16_auto_not_null
+  -        validity: Dropping
+  -      constraintType: NOT_NULL
+  -      foreignKey: {}
+  -      name: crdb_internal_j_shard_16_auto_not_null
+  -      notNullColumn: 3
+  -      uniqueWithoutIndexConstraint: {}
+  -    direction: DROP
+  -    mutationId: 2
+  -    state: WRITE_ONLY
+     - direction: DROP
+       index:
   ...
          keySuffixColumnIds:
          - 1
@@ -445,6 +518,7 @@ upsert descriptor #104
   -      hidden: true
   -      id: 3
   -      name: crdb_internal_column_3_name_placeholder
+  -      nullable: true
   -      type:
   -        family: IntFamily
   -        oid: 20

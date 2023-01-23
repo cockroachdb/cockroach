@@ -898,6 +898,11 @@ func (desc *wrapper) validateConstraintNamesAndIDs(vea catalog.ValidationErrorAc
 	names := make(map[string]descpb.ConstraintID, len(constraints))
 	idToName := make(map[descpb.ConstraintID]string, len(constraints))
 	for _, c := range constraints {
+		if c.AsCheck() != nil && c.AsCheck().IsNotNullColumnConstraint() {
+			// Relax validation for NOT NULL constraint when disguised as CHECK
+			// constraint, because they don't a constraintID.
+			continue
+		}
 		if c.GetConstraintID() == 0 {
 			vea.Report(errors.AssertionFailedf(
 				"constraint ID was missing for constraint %q",
@@ -990,8 +995,25 @@ func (desc *wrapper) validateColumns() error {
 			return errors.Newf("both generated identity and computed expression specified for column %q", column.GetName())
 		}
 
-		if column.IsNullable() && column.IsGeneratedAsIdentity() {
-			return errors.Newf("conflicting NULL/NOT NULL declarations for column %q", column.GetName())
+		// If the column is not in DELETE_ONLY and it's generated as identity, then
+		// the column has to have an enforced NOT NULL constraint.
+		if !column.DeleteOnly() && column.IsGeneratedAsIdentity() {
+			// A column's NOT NULL constraint is enforced when either the column
+			// descriptor is NOT NULL, or there is an enforced, functionally equivalent
+			// CHECK constraint, (col_name IS NOT NULL), in `desc`, which can happen
+			// during schema changes.
+			if column.IsNullable() {
+				found := false
+				for _, ck := range desc.CheckConstraints() {
+					if ck.IsNotNullColumnConstraint() &&
+						ck.GetReferencedColumnID(0) == column.GetID() {
+						found = true
+					}
+				}
+				if !found {
+					return errors.Newf("conflicting NULL/NOT NULL declarations for column %q", column.GetName())
+				}
+			}
 		}
 
 		if column.HasOnUpdate() && column.IsGeneratedAsIdentity() {

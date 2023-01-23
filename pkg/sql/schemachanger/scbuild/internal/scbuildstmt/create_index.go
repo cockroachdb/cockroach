@@ -718,6 +718,7 @@ func maybeCreateAndAddShardCol(
 			IsVirtual:   true,
 			IsNullable:  false,
 		},
+		notNull: true,
 		//TODO(fqazi): Add a check constraint for the hash sharded column.
 	}
 	addColumn(b, spec, n)

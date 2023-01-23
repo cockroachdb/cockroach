@@ -11,7 +11,7 @@ EXPLAIN (ddl) DROP TABLE db.sc.t;
 Schema change plan for DROP TABLE ‹db›.‹sc›.‹t›;
  ├── StatementPhase
  │    └── Stage 1 of 1 in StatementPhase
- │         ├── 29 elements transitioning toward ABSENT
+ │         ├── 30 elements transitioning toward ABSENT
  │         │    ├── PUBLIC → ABSENT     Namespace:{DescID: 107, Name: t, ReferencedDescID: 104}
  │         │    ├── PUBLIC → ABSENT     Owner:{DescID: 107}
  │         │    ├── PUBLIC → ABSENT     UserPrivileges:{DescID: 107, Name: admin}
@@ -29,6 +29,7 @@ Schema change plan for DROP TABLE ‹db›.‹sc›.‹t›;
  │         │    ├── PUBLIC → WRITE_ONLY Column:{DescID: 107, ColumnID: 3}
  │         │    ├── PUBLIC → ABSENT     ColumnName:{DescID: 107, Name: rowid, ColumnID: 3}
  │         │    ├── PUBLIC → ABSENT     ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 3}
+ │         │    ├── PUBLIC → VALIDATED  ColumnNotNull:{DescID: 107, ColumnID: 3, IndexID: 0}
  │         │    ├── PUBLIC → ABSENT     ColumnDefaultExpression:{DescID: 107, ColumnID: 3}
  │         │    ├── PUBLIC → WRITE_ONLY Column:{DescID: 107, ColumnID: 4294967295}
  │         │    ├── PUBLIC → ABSENT     ColumnName:{DescID: 107, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}
@@ -49,7 +50,7 @@ Schema change plan for DROP TABLE ‹db›.‹sc›.‹t›;
  │              └── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":107,"Name":"t","SchemaID":106}}
  ├── PreCommitPhase
  │    ├── Stage 1 of 2 in PreCommitPhase
- │    │    ├── 29 elements transitioning toward ABSENT
+ │    │    ├── 30 elements transitioning toward ABSENT
  │    │    │    ├── ABSENT     → PUBLIC Namespace:{DescID: 107, Name: t, ReferencedDescID: 104}
  │    │    │    ├── ABSENT     → PUBLIC Owner:{DescID: 107}
  │    │    │    ├── ABSENT     → PUBLIC UserPrivileges:{DescID: 107, Name: admin}
@@ -67,6 +68,7 @@ Schema change plan for DROP TABLE ‹db›.‹sc›.‹t›;
  │    │    │    ├── WRITE_ONLY → PUBLIC Column:{DescID: 107, ColumnID: 3}
  │    │    │    ├── ABSENT     → PUBLIC ColumnName:{DescID: 107, Name: rowid, ColumnID: 3}
  │    │    │    ├── ABSENT     → PUBLIC ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 3}
+ │    │    │    ├── VALIDATED  → PUBLIC ColumnNotNull:{DescID: 107, ColumnID: 3, IndexID: 0}
  │    │    │    ├── ABSENT     → PUBLIC ColumnDefaultExpression:{DescID: 107, ColumnID: 3}
  │    │    │    ├── WRITE_ONLY → PUBLIC Column:{DescID: 107, ColumnID: 4294967295}
  │    │    │    ├── ABSENT     → PUBLIC ColumnName:{DescID: 107, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}
@@ -82,7 +84,7 @@ Schema change plan for DROP TABLE ‹db›.‹sc›.‹t›;
  │    │    └── 1 Mutation operation
  │    │         └── UndoAllInTxnImmediateMutationOpSideEffects
  │    └── Stage 2 of 2 in PreCommitPhase
- │         ├── 29 elements transitioning toward ABSENT
+ │         ├── 30 elements transitioning toward ABSENT
  │         │    ├── PUBLIC → ABSENT  Namespace:{DescID: 107, Name: t, ReferencedDescID: 104}
  │         │    ├── PUBLIC → ABSENT  Owner:{DescID: 107}
  │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 107, Name: admin}
@@ -100,6 +102,7 @@ Schema change plan for DROP TABLE ‹db›.‹sc›.‹t›;
  │         │    ├── PUBLIC → ABSENT  Column:{DescID: 107, ColumnID: 3}
  │         │    ├── PUBLIC → ABSENT  ColumnName:{DescID: 107, Name: rowid, ColumnID: 3}
  │         │    ├── PUBLIC → ABSENT  ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 3}
+ │         │    ├── PUBLIC → ABSENT  ColumnNotNull:{DescID: 107, ColumnID: 3, IndexID: 0}
  │         │    ├── PUBLIC → ABSENT  ColumnDefaultExpression:{DescID: 107, ColumnID: 3}
  │         │    ├── PUBLIC → ABSENT  Column:{DescID: 107, ColumnID: 4294967295}
  │         │    ├── PUBLIC → ABSENT  ColumnName:{DescID: 107, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}
@@ -112,17 +115,18 @@ Schema change plan for DROP TABLE ‹db›.‹sc›.‹t›;
  │         │    ├── PUBLIC → ABSENT  IndexColumn:{DescID: 107, ColumnID: 2, IndexID: 1}
  │         │    ├── PUBLIC → ABSENT  PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 1}
  │         │    └── PUBLIC → ABSENT  IndexName:{DescID: 107, Name: t_pkey, IndexID: 1}
- │         └── 12 Mutation operations
+ │         └── 13 Mutation operations
  │              ├── MarkDescriptorAsDropped {"DescriptorID":107}
  │              ├── RemoveObjectParent {"ObjectID":107,"ParentSchemaID":106}
  │              ├── RemoveTableComment {"TableID":107}
  │              ├── RemoveColumnDefaultExpression {"ColumnID":3,"TableID":107}
  │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":107,"Name":"t","SchemaID":106}}
+ │              ├── RemoveColumnNotNull {"ColumnID":3,"TableID":107}
  │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":1,"TableID":107}
  │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":2,"TableID":107}
- │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":3,"TableID":107}
  │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":4294967295,"TableID":107}
  │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":4294967294,"TableID":107}
+ │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":3,"TableID":107}
  │              ├── SetJobStateOnDescriptor {"DescriptorID":107,"Initialize":true}
  │              └── CreateSchemaChangerJob {"NonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
  └── PostCommitNonRevertiblePhase

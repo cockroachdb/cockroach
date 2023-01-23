@@ -1629,6 +1629,60 @@ deprules
     - descriptorIsNotBeingDropped-23.1($prev)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
+- name: column constraint removed right before column reaches delete only
+  from: column-constraint-Node
+  kind: SameStagePrecedence
+  to: column-Node
+  query:
+    - $column-constraint[Type] = '*scpb.ColumnNotNull'
+    - $column[Type] = '*scpb.Column'
+    - joinOnColumnID($column-constraint, $column, $table-id, $col-id)
+    - toAbsent($column-constraint-Target, $column-Target)
+    - $column-constraint-Node[CurrentStatus] = ABSENT
+    - $column-Node[CurrentStatus] = DELETE_ONLY
+    - joinTargetNode($column-constraint, $column-constraint-Target, $column-constraint-Node)
+    - joinTargetNode($column, $column-Target, $column-Node)
+- name: column constraint removed right before column reaches delete only
+  from: column-constraint-Node
+  kind: SameStagePrecedence
+  to: column-Node
+  query:
+    - $column-constraint[Type] = '*scpb.ColumnNotNull'
+    - $column[Type] = '*scpb.Column'
+    - joinOnColumnID($column-constraint, $column, $table-id, $col-id)
+    - transient($column-constraint-Target, $column-Target)
+    - $column-constraint-Node[CurrentStatus] = TRANSIENT_ABSENT
+    - $column-Node[CurrentStatus] = TRANSIENT_DELETE_ONLY
+    - joinTargetNode($column-constraint, $column-constraint-Target, $column-constraint-Node)
+    - joinTargetNode($column, $column-Target, $column-Node)
+- name: column constraint removed right before column reaches delete only
+  from: column-constraint-Node
+  kind: SameStagePrecedence
+  to: column-Node
+  query:
+    - $column-constraint[Type] = '*scpb.ColumnNotNull'
+    - $column[Type] = '*scpb.Column'
+    - joinOnColumnID($column-constraint, $column, $table-id, $col-id)
+    - $column-constraint-Target[TargetStatus] = TRANSIENT_ABSENT
+    - $column-constraint-Node[CurrentStatus] = TRANSIENT_ABSENT
+    - $column-Target[TargetStatus] = ABSENT
+    - $column-Node[CurrentStatus] = DELETE_ONLY
+    - joinTargetNode($column-constraint, $column-constraint-Target, $column-constraint-Node)
+    - joinTargetNode($column, $column-Target, $column-Node)
+- name: column constraint removed right before column reaches delete only
+  from: column-constraint-Node
+  kind: SameStagePrecedence
+  to: column-Node
+  query:
+    - $column-constraint[Type] = '*scpb.ColumnNotNull'
+    - $column[Type] = '*scpb.Column'
+    - joinOnColumnID($column-constraint, $column, $table-id, $col-id)
+    - $column-constraint-Target[TargetStatus] = ABSENT
+    - $column-constraint-Node[CurrentStatus] = ABSENT
+    - $column-Target[TargetStatus] = TRANSIENT_ABSENT
+    - $column-Node[CurrentStatus] = TRANSIENT_DELETE_ONLY
+    - joinTargetNode($column-constraint, $column-constraint-Target, $column-constraint-Node)
+    - joinTargetNode($column, $column-Target, $column-Node)
 - name: column dependents exist before column becomes public
   from: dependent-Node
   kind: Precedence
@@ -1791,6 +1845,19 @@ deprules
     - $column-Node[CurrentStatus] = ABSENT
     - joinTargetNode($column-type, $column-type-Target, $column-type-Node)
     - joinTargetNode($column, $column-Target, $column-Node)
+- name: column writable right before column constraint is enforced.
+  from: column-Node
+  kind: SameStagePrecedence
+  to: column-constraint-Node
+  query:
+    - $column[Type] = '*scpb.Column'
+    - $column-constraint[Type] = '*scpb.ColumnNotNull'
+    - joinOnColumnID($column, $column-constraint, $table-id, $col-id)
+    - ToPublicOrTransient($column-Target, $column-constraint-Target)
+    - $column-Node[CurrentStatus] = WRITE_ONLY
+    - $column-constraint-Node[CurrentStatus] = WRITE_ONLY
+    - joinTargetNode($column, $column-Target, $column-Node)
+    - joinTargetNode($column-constraint, $column-constraint-Target, $column-constraint-Node)
 - name: constraint dependent public right before constraint
   from: dependent-Node
   kind: SameStagePrecedence
