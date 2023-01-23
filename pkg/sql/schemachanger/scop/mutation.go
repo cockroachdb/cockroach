@@ -298,10 +298,10 @@ type RemoveCheckConstraint struct {
 // to the table in the WRITE_ONLY state.
 type MakeAbsentCheckConstraintWriteOnly struct {
 	mutationOp
-	TableID      descpb.ID
-	ConstraintID descpb.ConstraintID
-	ColumnIDs    []descpb.ColumnID
-	scpb.Expression
+	TableID               descpb.ID
+	ConstraintID          descpb.ConstraintID
+	ColumnIDs             []descpb.ColumnID
+	CheckExpr             catpb.Expression
 	FromHashShardedColumn bool
 }
 
@@ -375,7 +375,7 @@ type MakeAbsentUniqueWithoutIndexConstraintWriteOnly struct {
 	TableID      descpb.ID
 	ConstraintID descpb.ConstraintID
 	ColumnIDs    []descpb.ColumnID
-	Predicate    *scpb.Expression
+	PartialExpr  catpb.Expression
 }
 
 // MakeValidatedUniqueWithoutIndexConstraintPublic moves a new, validated unique_without_index

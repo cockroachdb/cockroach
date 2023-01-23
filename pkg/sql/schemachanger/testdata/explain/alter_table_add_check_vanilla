@@ -11,7 +11,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD CHEC
  │         ├── 1 element transitioning toward PUBLIC
  │         │    └── ABSENT → WRITE_ONLY CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
  │         └── 1 Mutation operation
- │              └── MakeAbsentCheckConstraintWriteOnly
+ │              └── MakeAbsentCheckConstraintWriteOnly {"CheckExpr":"i \u003e 0:::INT8","ConstraintID":2,"TableID":104}
  ├── PreCommitPhase
  │    └── Stage 1 of 1 in PreCommitPhase
  │         └── 2 Mutation operations
