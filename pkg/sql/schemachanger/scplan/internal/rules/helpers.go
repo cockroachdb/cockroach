@@ -362,7 +362,7 @@ func IsTypeDescriptor(element scpb.Element) bool {
 
 func IsColumnDependent(e scpb.Element) bool {
 	switch e.(type) {
-	case *scpb.ColumnType:
+	case *scpb.ColumnType, *scpb.ColumnNotNull:
 		return true
 	case *scpb.ColumnName, *scpb.ColumnComment, *scpb.IndexColumn:
 		return true
@@ -394,7 +394,8 @@ func IsIndexDependent(e scpb.Element) bool {
 // when we properly support adding/dropping them in the new schema changer.
 func IsSupportedNonIndexBackedConstraint(e scpb.Element) bool {
 	switch e.(type) {
-	case *scpb.CheckConstraint, *scpb.ForeignKeyConstraint, *scpb.UniqueWithoutIndexConstraint:
+	case *scpb.CheckConstraint, *scpb.ForeignKeyConstraint, *scpb.UniqueWithoutIndexConstraint,
+		*scpb.ColumnNotNull:
 		return true
 	}
 	return false

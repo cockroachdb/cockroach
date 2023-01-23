@@ -187,6 +187,12 @@ ColumnComment :  ColumnID
 ColumnComment :  Comment
 ColumnComment :  PgAttributeNum
 
+object ColumnNotNull
+
+ColumnNotNull :  TableID
+ColumnNotNull :  ColumnID
+ColumnNotNull :  IndexIDForValidation
+
 object IndexName
 
 IndexName :  TableID
@@ -339,6 +345,7 @@ Column <|-- ColumnDefaultExpression
 Column <|-- ColumnOnUpdateExpression
 Column <|-- SequenceOwner
 Column <|-- ColumnComment
+Column <|-- ColumnNotNull
 PrimaryIndex <|-- IndexName
 SecondaryIndex <|-- IndexName
 PrimaryIndex <|-- IndexPartitioning

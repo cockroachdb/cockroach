@@ -90,6 +90,7 @@ message ElementProto {
   ColumnOnUpdateExpression column_on_update_expression = 33 [(gogoproto.moretags) = "parent:\"Column\""];
   SequenceOwner sequence_owner = 34 [(gogoproto.moretags) = "parent:\"Column\""];
   ColumnComment column_comment = 35 [(gogoproto.moretags) = "parent:\"Column\""];
+  ColumnNotNull column_not_null = 36 [(gogoproto.moretags) = "parent:\"Column\""];
 
   // Index elements.
   IndexName index_name = 40 [(gogoproto.moretags) = "parent:\"PrimaryIndex, SecondaryIndex\""];
@@ -480,6 +481,14 @@ message ColumnComment {
   uint32 column_id = 2 [(gogoproto.customname) = "ColumnID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ColumnID"];
   string comment = 3;
   uint32 pg_attribute_num = 4 [(gogoproto.customname) = "PgAttributeNum", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.PGAttributeNum"];
+}
+
+message ColumnNotNull {
+  uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  uint32 column_id = 2 [(gogoproto.customname) = "ColumnID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ColumnID"];
+  // IndexIDForValidation is the index id to hint to the check constraint validation SQL query about which index
+  // to check against the not-null-ness of the column. It is used exclusively by sql.validateCheckExpr.
+  uint32 index_id_for_validation = 3 [(gogoproto.customname) = "IndexIDForValidation", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.IndexID"];
 }
 
 message ConstraintComment {

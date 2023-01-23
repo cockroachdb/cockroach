@@ -304,6 +304,103 @@ deprules
     - DescriptorIsNotBeingDropped($prev)
     - joinTargetNode($prev, $prev-Target, $prev-Node)
     - joinTargetNode($next, $next-Target, $next-Node)
+- name: 'ColumnNotNull transitions to ABSENT uphold 2-version invariant: PUBLIC->VALIDATED'
+  from: prev-Node
+  kind: PreviousTransactionPrecedence
+  to: next-Node
+  query:
+    - $prev[Type] = '*scpb.ColumnNotNull'
+    - $next[Type] = '*scpb.ColumnNotNull'
+    - $prev[DescID] = $_
+    - $prev[Self] = $next
+    - $prev-Target[Self] = $next-Target
+    - $prev-Target[TargetStatus] = ABSENT
+    - $prev-Node[CurrentStatus] = PUBLIC
+    - $next-Node[CurrentStatus] = VALIDATED
+    - DescriptorIsNotBeingDropped($prev)
+    - joinTargetNode($prev, $prev-Target, $prev-Node)
+    - joinTargetNode($next, $next-Target, $next-Node)
+- name: 'ColumnNotNull transitions to ABSENT uphold 2-version invariant: VALIDATED->ABSENT'
+  from: prev-Node
+  kind: PreviousTransactionPrecedence
+  to: next-Node
+  query:
+    - $prev[Type] = '*scpb.ColumnNotNull'
+    - $next[Type] = '*scpb.ColumnNotNull'
+    - $prev[DescID] = $_
+    - $prev[Self] = $next
+    - $prev-Target[Self] = $next-Target
+    - $prev-Target[TargetStatus] = ABSENT
+    - $prev-Node[CurrentStatus] = VALIDATED
+    - $next-Node[CurrentStatus] = ABSENT
+    - DescriptorIsNotBeingDropped($prev)
+    - nodeNotExistsWithStatusIn_WRITE_ONLY($prev-Target)
+    - joinTargetNode($prev, $prev-Target, $prev-Node)
+    - joinTargetNode($next, $next-Target, $next-Node)
+- name: 'ColumnNotNull transitions to ABSENT uphold 2-version invariant: WRITE_ONLY->VALIDATED'
+  from: prev-Node
+  kind: PreviousTransactionPrecedence
+  to: next-Node
+  query:
+    - $prev[Type] = '*scpb.ColumnNotNull'
+    - $next[Type] = '*scpb.ColumnNotNull'
+    - $prev[DescID] = $_
+    - $prev[Self] = $next
+    - $prev-Target[Self] = $next-Target
+    - $prev-Target[TargetStatus] = ABSENT
+    - $prev-Node[CurrentStatus] = WRITE_ONLY
+    - $next-Node[CurrentStatus] = VALIDATED
+    - DescriptorIsNotBeingDropped($prev)
+    - joinTargetNode($prev, $prev-Target, $prev-Node)
+    - joinTargetNode($next, $next-Target, $next-Node)
+- name: 'ColumnNotNull transitions to PUBLIC uphold 2-version invariant: ABSENT->WRITE_ONLY'
+  from: prev-Node
+  kind: PreviousTransactionPrecedence
+  to: next-Node
+  query:
+    - $prev[Type] = '*scpb.ColumnNotNull'
+    - $next[Type] = '*scpb.ColumnNotNull'
+    - $prev[DescID] = $_
+    - $prev[Self] = $next
+    - $prev-Target[Self] = $next-Target
+    - $prev-Target[TargetStatus] = PUBLIC
+    - $prev-Node[CurrentStatus] = ABSENT
+    - $next-Node[CurrentStatus] = WRITE_ONLY
+    - DescriptorIsNotBeingDropped($prev)
+    - joinTargetNode($prev, $prev-Target, $prev-Node)
+    - joinTargetNode($next, $next-Target, $next-Node)
+- name: 'ColumnNotNull transitions to PUBLIC uphold 2-version invariant: VALIDATED->PUBLIC'
+  from: prev-Node
+  kind: PreviousTransactionPrecedence
+  to: next-Node
+  query:
+    - $prev[Type] = '*scpb.ColumnNotNull'
+    - $next[Type] = '*scpb.ColumnNotNull'
+    - $prev[DescID] = $_
+    - $prev[Self] = $next
+    - $prev-Target[Self] = $next-Target
+    - $prev-Target[TargetStatus] = PUBLIC
+    - $prev-Node[CurrentStatus] = VALIDATED
+    - $next-Node[CurrentStatus] = PUBLIC
+    - DescriptorIsNotBeingDropped($prev)
+    - joinTargetNode($prev, $prev-Target, $prev-Node)
+    - joinTargetNode($next, $next-Target, $next-Node)
+- name: 'ColumnNotNull transitions to PUBLIC uphold 2-version invariant: WRITE_ONLY->VALIDATED'
+  from: prev-Node
+  kind: PreviousTransactionPrecedence
+  to: next-Node
+  query:
+    - $prev[Type] = '*scpb.ColumnNotNull'
+    - $next[Type] = '*scpb.ColumnNotNull'
+    - $prev[DescID] = $_
+    - $prev[Self] = $next
+    - $prev-Target[Self] = $next-Target
+    - $prev-Target[TargetStatus] = PUBLIC
+    - $prev-Node[CurrentStatus] = WRITE_ONLY
+    - $next-Node[CurrentStatus] = VALIDATED
+    - DescriptorIsNotBeingDropped($prev)
+    - joinTargetNode($prev, $prev-Target, $prev-Node)
+    - joinTargetNode($next, $next-Target, $next-Node)
 - name: DEFAULT or ON UPDATE existence precedes writes to column
   from: expr-Node
   kind: Precedence
@@ -2023,7 +2120,7 @@ deprules
   to: idx-or-col-Node
   query:
     - $descriptor[Type] IN ['*scpb.Database', '*scpb.Schema', '*scpb.View', '*scpb.Sequence', '*scpb.Table', '*scpb.EnumType', '*scpb.AliasType', '*scpb.CompositeType']
-    - $idx-or-col[Type] IN ['*scpb.Column', '*scpb.PrimaryIndex', '*scpb.SecondaryIndex', '*scpb.TemporaryIndex', '*scpb.UniqueWithoutIndexConstraint', '*scpb.CheckConstraint', '*scpb.ForeignKeyConstraint']
+    - $idx-or-col[Type] IN ['*scpb.Column', '*scpb.PrimaryIndex', '*scpb.SecondaryIndex', '*scpb.TemporaryIndex', '*scpb.UniqueWithoutIndexConstraint', '*scpb.CheckConstraint', '*scpb.ForeignKeyConstraint', '*scpb.ColumnNotNull']
     - joinOnDescID($descriptor, $idx-or-col, $desc-id)
     - toAbsent($descriptor-Target, $idx-or-col-Target)
     - $descriptor-Node[CurrentStatus] = ABSENT

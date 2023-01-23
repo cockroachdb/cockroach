@@ -122,6 +122,8 @@ func MinVersion(el scpb.Element) clusterversion.Key {
 		return clusterversion.V22_2UseDelRangeInGCJob
 	case *scpb.DatabaseData, *scpb.TableData, *scpb.IndexData, *scpb.TablePartitioning:
 		return clusterversion.V23_1
+	case *scpb.ColumnNotNull:
+		return clusterversion.V23_1
 	default:
 		panic(errors.AssertionFailedf("unknown element %T", el))
 	}
