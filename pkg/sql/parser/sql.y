@@ -16353,11 +16353,16 @@ unreserved_keyword:
 // query like "SELECT col label FROM table" where "label" is a new keyword.
 // Any new keyword should be added to this list.
 bare_label_keywords:
-  ATOMIC
+  AS_JSON
+| ATOMIC
 | CALLED
 | COST
+| CHECK_FILES
+| DEBUG_IDS
+| DEBUG_DUMP_METADATA_SST
 | DEFINER
 | DEPENDS
+| ENCRYPTION_INFO_DIR
 | EXTERNAL
 | IMMUTABLE
 | INPUT
