@@ -428,18 +428,22 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
  └── filters
-      └── exists [subquery]
-           └── limit
-                ├── columns: k:8!null i:9
-                ├── cardinality: [0 - 1]
-                ├── key: ()
-                ├── fd: ()-->(8,9)
-                ├── scan a
-                │    ├── columns: k:8!null i:9
-                │    ├── key: (8)
-                │    ├── fd: (8)-->(9)
-                │    └── limit hint: 1.00
-                └── 1
+      └── coalesce [subquery]
+           ├── subquery
+           │    └── project
+           │         ├── columns: column17:17!null
+           │         ├── cardinality: [0 - 1]
+           │         ├── key: ()
+           │         ├── fd: ()-->(17)
+           │         ├── limit
+           │         │    ├── cardinality: [0 - 1]
+           │         │    ├── key: ()
+           │         │    ├── scan a
+           │         │    │    └── limit hint: 1.00
+           │         │    └── 1
+           │         └── projections
+           │              └── true [as=column17:17]
+           └── false
 
 # --------------------------------------------------
 # EliminateExistsGroupBy
@@ -458,20 +462,22 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
  └── filters
-      └── exists [subquery]
-           └── scalar-group-by
-                ├── columns: max:15
-                ├── cardinality: [1 - 1]
-                ├── key: ()
-                ├── fd: ()-->(15)
-                ├── values
-                │    ├── columns: s:11!null
-                │    ├── cardinality: [0 - 0]
-                │    ├── key: ()
-                │    └── fd: ()-->(11)
-                └── aggregations
-                     └── max [as=max:15, outer=(11)]
-                          └── s:11
+      └── coalesce [subquery]
+           ├── subquery
+           │    └── project
+           │         ├── columns: column16:16!null
+           │         ├── cardinality: [1 - 1]
+           │         ├── key: ()
+           │         ├── fd: ()-->(16)
+           │         ├── scalar-group-by
+           │         │    ├── cardinality: [1 - 1]
+           │         │    ├── key: ()
+           │         │    └── values
+           │         │         ├── cardinality: [0 - 0]
+           │         │         └── key: ()
+           │         └── projections
+           │              └── true [as=column16:16]
+           └── false
 
 norm expect=EliminateExistsGroupBy
 SELECT * FROM a WHERE EXISTS(SELECT DISTINCT s FROM a)
@@ -485,16 +491,22 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
  └── filters
-      └── exists [subquery]
-           └── limit
-                ├── columns: s:11
-                ├── cardinality: [0 - 1]
-                ├── key: ()
-                ├── fd: ()-->(11)
-                ├── scan a
-                │    ├── columns: s:11
-                │    └── limit hint: 1.00
-                └── 1
+      └── coalesce [subquery]
+           ├── subquery
+           │    └── project
+           │         ├── columns: column15:15!null
+           │         ├── cardinality: [0 - 1]
+           │         ├── key: ()
+           │         ├── fd: ()-->(15)
+           │         ├── limit
+           │         │    ├── cardinality: [0 - 1]
+           │         │    ├── key: ()
+           │         │    ├── scan a
+           │         │    │    └── limit hint: 1.00
+           │         │    └── 1
+           │         └── projections
+           │              └── true [as=column15:15]
+           └── false
 
 norm expect=EliminateExistsGroupBy
 SELECT * FROM a WHERE EXISTS(SELECT DISTINCT ON (i) s FROM a)
@@ -508,16 +520,22 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
  └── filters
-      └── exists [subquery]
-           └── limit
-                ├── columns: i:9 s:11
-                ├── cardinality: [0 - 1]
-                ├── key: ()
-                ├── fd: ()-->(9,11)
-                ├── scan a
-                │    ├── columns: i:9 s:11
-                │    └── limit hint: 1.00
-                └── 1
+      └── coalesce [subquery]
+           ├── subquery
+           │    └── project
+           │         ├── columns: column15:15!null
+           │         ├── cardinality: [0 - 1]
+           │         ├── key: ()
+           │         ├── fd: ()-->(15)
+           │         ├── limit
+           │         │    ├── cardinality: [0 - 1]
+           │         │    ├── key: ()
+           │         │    ├── scan a
+           │         │    │    └── limit hint: 1.00
+           │         │    └── 1
+           │         └── projections
+           │              └── true [as=column15:15]
+           └── false
 
 # Ensure that EliminateExistsGroupBy does not activate for an EnsureDistinctOn.
 norm expect-not=EliminateExistsGroupBy
@@ -532,33 +550,38 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
  └── filters
-      └── exists [subquery]
-           └── limit
-                ├── columns: k:8!null xy.y:16
-                ├── cardinality: [0 - 1]
-                ├── key: ()
-                ├── fd: ()-->(8,16)
-                ├── ensure-distinct-on
-                │    ├── columns: k:8!null xy.y:16
-                │    ├── grouping columns: k:8!null
-                │    ├── error: "more than one row returned by a subquery used as an expression"
-                │    ├── key: (8)
-                │    ├── fd: (8)-->(16)
-                │    ├── limit hint: 1.00
-                │    ├── left-join (hash)
-                │    │    ├── columns: k:8!null xy.y:16
-                │    │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-one)
-                │    │    ├── scan a
-                │    │    │    ├── columns: k:8!null
-                │    │    │    └── key: (8)
-                │    │    ├── scan xy
-                │    │    │    └── columns: xy.y:16
-                │    │    └── filters
-                │    │         └── xy.y:16 = k:8 [outer=(8,16), constraints=(/8: (/NULL - ]; /16: (/NULL - ]), fd=(8)==(16), (16)==(8)]
-                │    └── aggregations
-                │         └── const-agg [as=xy.y:16, outer=(16)]
-                │              └── xy.y:16
-                └── 1
+      └── coalesce [subquery]
+           ├── subquery
+           │    └── project
+           │         ├── columns: column20:20!null
+           │         ├── cardinality: [0 - 1]
+           │         ├── key: ()
+           │         ├── fd: ()-->(20)
+           │         ├── limit
+           │         │    ├── columns: k:8!null
+           │         │    ├── cardinality: [0 - 1]
+           │         │    ├── key: ()
+           │         │    ├── fd: ()-->(8)
+           │         │    ├── ensure-distinct-on
+           │         │    │    ├── columns: k:8!null
+           │         │    │    ├── grouping columns: k:8!null
+           │         │    │    ├── error: "more than one row returned by a subquery used as an expression"
+           │         │    │    ├── key: (8)
+           │         │    │    ├── limit hint: 1.00
+           │         │    │    └── left-join (hash)
+           │         │    │         ├── columns: k:8!null xy.y:16
+           │         │    │         ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-one)
+           │         │    │         ├── scan a
+           │         │    │         │    ├── columns: k:8!null
+           │         │    │         │    └── key: (8)
+           │         │    │         ├── scan xy
+           │         │    │         │    └── columns: xy.y:16
+           │         │    │         └── filters
+           │         │    │              └── xy.y:16 = k:8 [outer=(8,16), constraints=(/8: (/NULL - ]; /16: (/NULL - ]), fd=(8)==(16), (16)==(8)]
+           │         │    └── 1
+           │         └── projections
+           │              └── true [as=column20:20]
+           └── false
 
 # --------------------------------------------------
 # EliminateExistsGroupBy + EliminateExistsProject
@@ -575,16 +598,22 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
  └── filters
-      └── exists [subquery]
-           └── limit
-                ├── columns: i:9 s:11
-                ├── cardinality: [0 - 1]
-                ├── key: ()
-                ├── fd: ()-->(9,11)
-                ├── scan a
-                │    ├── columns: i:9 s:11
-                │    └── limit hint: 1.00
-                └── 1
+      └── coalesce [subquery]
+           ├── subquery
+           │    └── project
+           │         ├── columns: column16:16!null
+           │         ├── cardinality: [0 - 1]
+           │         ├── key: ()
+           │         ├── fd: ()-->(16)
+           │         ├── limit
+           │         │    ├── cardinality: [0 - 1]
+           │         │    ├── key: ()
+           │         │    ├── scan a
+           │         │    │    └── limit hint: 1.00
+           │         │    └── 1
+           │         └── projections
+           │              └── true [as=column16:16]
+           └── false
 
 # --------------------------------------------------
 # InlineExistsSelectTuple
@@ -707,9 +736,121 @@ semi-join (hash)
       └── b:2 = column15:15 [outer=(2,15), constraints=(/2: (/NULL - ]; /15: (/NULL - ]), fd=(2)==(15), (15)==(2)]
 
 # --------------------------------------------------
+# ConvertUncorrelatedExistsToCoalesceSubquery
+# --------------------------------------------------
+
+norm expect=ConvertUncorrelatedExistsToCoalesceSubquery
+SELECT * FROM a WHERE EXISTS(SELECT i FROM a)
+----
+select
+ ├── columns: k:1!null i:2 f:3 s:4 arr:5
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
+ ├── scan a
+ │    ├── columns: k:1!null i:2 f:3 s:4 arr:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ └── filters
+      └── coalesce [subquery]
+           ├── subquery
+           │    └── project
+           │         ├── columns: column15:15!null
+           │         ├── cardinality: [0 - 1]
+           │         ├── key: ()
+           │         ├── fd: ()-->(15)
+           │         ├── limit
+           │         │    ├── cardinality: [0 - 1]
+           │         │    ├── key: ()
+           │         │    ├── scan a
+           │         │    │    └── limit hint: 1.00
+           │         │    └── 1
+           │         └── projections
+           │              └── true [as=column15:15]
+           └── false
+
+norm expect=ConvertUncorrelatedExistsToCoalesceSubquery
+SELECT EXISTS(SELECT * FROM (VALUES (1))) FROM a
+----
+project
+ ├── columns: exists:10
+ ├── scan a
+ └── projections
+      └── coalesce [as=exists:10, subquery]
+           ├── subquery
+           │    └── values
+           │         ├── columns: column9:9!null
+           │         ├── cardinality: [1 - 1]
+           │         ├── key: ()
+           │         ├── fd: ()-->(9)
+           │         └── (true,)
+           └── false
+
+norm expect=ConvertUncorrelatedExistsToCoalesceSubquery
+SELECT * FROM a a1 JOIN a a2 ON EXISTS(SELECT * FROM (VALUES (1)))
+----
+inner-join (cross)
+ ├── columns: k:1!null i:2 f:3 s:4 arr:5 k:8!null i:9 f:10 s:11 arr:12
+ ├── key: (1,8)
+ ├── fd: (1)-->(2-5), (8)-->(9-12)
+ ├── select
+ │    ├── columns: a1.k:1!null a1.i:2 a1.f:3 a1.s:4 a1.arr:5
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-5)
+ │    ├── scan a [as=a1]
+ │    │    ├── columns: a1.k:1!null a1.i:2 a1.f:3 a1.s:4 a1.arr:5
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2-5)
+ │    └── filters
+ │         └── coalesce [subquery]
+ │              ├── subquery
+ │              │    └── values
+ │              │         ├── columns: column16:16!null
+ │              │         ├── cardinality: [1 - 1]
+ │              │         ├── key: ()
+ │              │         ├── fd: ()-->(16)
+ │              │         └── (true,)
+ │              └── false
+ ├── select
+ │    ├── columns: a2.k:8!null a2.i:9 a2.f:10 a2.s:11 a2.arr:12
+ │    ├── key: (8)
+ │    ├── fd: (8)-->(9-12)
+ │    ├── scan a [as=a2]
+ │    │    ├── columns: a2.k:8!null a2.i:9 a2.f:10 a2.s:11 a2.arr:12
+ │    │    ├── key: (8)
+ │    │    └── fd: (8)-->(9-12)
+ │    └── filters
+ │         └── coalesce [subquery]
+ │              ├── subquery
+ │              │    └── values
+ │              │         ├── columns: column16:16!null
+ │              │         ├── cardinality: [1 - 1]
+ │              │         ├── key: ()
+ │              │         ├── fd: ()-->(16)
+ │              │         └── (true,)
+ │              └── false
+ └── filters (true)
+
+# Don't convert Exists if it is correlated.
+norm expect-not=ConvertUncorrelatedExistsToCoalesceSubquery
+SELECT * FROM a a1 WHERE EXISTS(SELECT i FROM a a2 where a1.i = a2.i)
+----
+semi-join (hash)
+ ├── columns: k:1!null i:2 f:3 s:4 arr:5
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
+ ├── scan a [as=a1]
+ │    ├── columns: a1.k:1!null a1.i:2 a1.f:3 a1.s:4 a1.arr:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ ├── scan a [as=a2]
+ │    └── columns: a2.i:9
+ └── filters
+      └── a1.i:2 = a2.i:9 [outer=(2,9), constraints=(/2: (/NULL - ]; /9: (/NULL - ]), fd=(2)==(9), (9)==(2)]
+
+# --------------------------------------------------
 # IntroduceExistsLimit
 # --------------------------------------------------
-norm expect=IntroduceExistsLimit
+norm expect=IntroduceExistsLimit disable=ConvertUncorrelatedExistsToCoalesceSubquery
 SELECT * FROM a WHERE EXISTS(SELECT i FROM a)
 ----
 select
@@ -750,7 +891,7 @@ semi-join (hash)
       └── a1.i:2 = a2.i:9 [outer=(2,9), constraints=(/2: (/NULL - ]; /9: (/NULL - ]), fd=(2)==(9), (9)==(2)]
 
 # Don't introduce a limit when the subquery has one row.
-norm expect-not=IntroduceExistsLimit
+norm expect-not=IntroduceExistsLimit disable=ConvertUncorrelatedExistsToCoalesceSubquery
 SELECT * FROM a WHERE EXISTS(SELECT * FROM (VALUES (1)))
 ----
 select
@@ -815,8 +956,8 @@ values
  ├── key: ()
  └── fd: ()-->(1-5)
 
-# Don't eliminate a limit from a non-correlated subquery.
-norm expect-not=EliminateExistsLimit
+# Don't eliminate a limit from an uncorrelated subquery.
+norm expect-not=EliminateExistsLimit disable=ConvertUncorrelatedExistsToCoalesceSubquery
 SELECT * FROM a WHERE EXISTS(SELECT * FROM a LIMIT 1)
 ----
 select

@@ -2796,6 +2796,22 @@ SELECT a, sub_is_odd(a) FROM sub_all WHERE sub_is_odd(a) OR sub_is_odd(a) IS NUL
 5  true
 6  NULL
 
+# UDF with an uncorrelated EXISTS.
+statement ok
+CREATE FUNCTION sub_first() RETURNS INT LANGUAGE SQL AS $$
+  SELECT a FROM sub_all WHERE EXISTS (SELECT a FROM sub_odd) ORDER BY a LIMIT 1
+$$
+
+query II rowsort
+SELECT sub_first(), a FROM sub_all
+----
+1  1
+1  2
+1  3
+1  4
+1  5
+1  6
+
 
 subtest variadic
 
