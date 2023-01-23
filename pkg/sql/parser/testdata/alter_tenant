@@ -190,3 +190,12 @@ ALTER TENANT 'foo' RENAME TO bar
 ALTER TENANT ('foo') RENAME TO (bar) -- fully parenthesized
 ALTER TENANT '_' RENAME TO bar -- literals removed
 ALTER TENANT 'foo' RENAME TO _ -- identifiers removed
+
+# Regression test for #95612
+parse
+ALTER TENANT INTERVAL 'string' MINUTE RESET CLUSTER SETTING ident
+----
+ALTER TENANT ('string'::INTERVAL MINUTE) SET CLUSTER SETTING ident = DEFAULT -- normalized!
+ALTER TENANT ((('string')::INTERVAL MINUTE)) SET CLUSTER SETTING ident = (DEFAULT) -- fully parenthesized
+ALTER TENANT ('_'::INTERVAL MINUTE) SET CLUSTER SETTING ident = DEFAULT -- literals removed
+ALTER TENANT ('string'::INTERVAL MINUTE) SET CLUSTER SETTING ident = DEFAULT -- identifiers removed
