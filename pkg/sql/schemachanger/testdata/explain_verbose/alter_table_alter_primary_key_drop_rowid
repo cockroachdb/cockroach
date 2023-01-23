@@ -4,7 +4,7 @@ CREATE TABLE t (a INT NOT NULL);
 /* test */
 EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (a);
 ----
-• Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PRIMARY KEY USING COLUMNS (‹a›); 
+• Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PRIMARY KEY USING COLUMNS (‹a›);
 │
 ├── • StatementPhase
 │   │

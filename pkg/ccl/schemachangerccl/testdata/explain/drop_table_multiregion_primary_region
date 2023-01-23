@@ -7,7 +7,7 @@ CREATE TABLE multi_region_test_db.public.table_regional_by_table (
 /* test */
 EXPLAIN (ddl) DROP TABLE multi_region_test_db.public.table_regional_by_table CASCADE;
 ----
-Schema change plan for DROP TABLE ‹multi_region_test_db›.‹public›.‹table_regional_by_table› CASCADE; 
+Schema change plan for DROP TABLE ‹multi_region_test_db›.‹public›.‹table_regional_by_table› CASCADE;
  ├── StatementPhase
  │    └── Stage 1 of 1 in StatementPhase
  │         ├── 5 elements transitioning toward ABSENT

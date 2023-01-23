@@ -5,7 +5,7 @@ SET experimental_enable_unique_without_index_constraints = true;
 /* test */
 EXPLAIN (ddl, verbose) ALTER TABLE t ADD UNIQUE WITHOUT INDEX (j);
 ----
-• Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD CONSTRAINT ‹unique_j› UNIQUE WITHOUT INDEX (‹j›); 
+• Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD CONSTRAINT ‹unique_j› UNIQUE WITHOUT INDEX (‹j›);
 │
 ├── • StatementPhase
 │   │
