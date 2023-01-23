@@ -22,7 +22,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -33,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/replicastats"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/gossiputil"
@@ -8205,18 +8203,7 @@ func TestAllocatorFullDisks(t *testing.T) {
 	tr := tracing.NewTracer()
 	clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
 
-	// Model a set of stores in a cluster doing rebalancing, with ranges being
-	// randomly added occasionally.
-	rpcContext := rpc.NewContext(ctx, rpc.ContextOptions{
-		TenantID:  roachpb.SystemTenantID,
-		Config:    &base.Config{Insecure: true},
-		Clock:     clock.WallClock(),
-		MaxOffset: clock.MaxOffset(),
-		Stopper:   stopper,
-		Settings:  st,
-	})
-	server := rpc.NewServer(rpcContext) // never started
-	g := gossip.NewTest(1, rpcContext, server, stopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef())
+	g := gossip.NewTest(1, stopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef())
 
 	storepool.TimeUntilStoreDead.Override(ctx, &st.SV, storepool.TestTimeUntilStoreDeadOff)
 
@@ -8661,16 +8648,7 @@ func exampleRebalancing(
 
 	// Model a set of stores in a cluster,
 	// adding / rebalancing ranges of random sizes.
-	rpcContext := rpc.NewContext(ctx, rpc.ContextOptions{
-		TenantID:  roachpb.SystemTenantID,
-		Config:    &base.Config{Insecure: true},
-		Clock:     clock.WallClock(),
-		MaxOffset: clock.MaxOffset(),
-		Stopper:   stopper,
-		Settings:  st,
-	})
-	server := rpc.NewServer(rpcContext) // never started
-	g := gossip.NewTest(1, rpcContext, server, stopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef())
+	g := gossip.NewTest(1, stopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef())
 
 	storepool.TimeUntilStoreDead.Override(ctx, &st.SV, storepool.TestTimeUntilStoreDeadOff)
 

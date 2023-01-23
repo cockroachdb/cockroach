@@ -42,7 +42,6 @@ go_library(
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_logtags//:logtags",
         "@com_github_cockroachdb_redact//:redact",
-        "@org_golang_google_grpc//:go_default_library",
     ],
 )
 
