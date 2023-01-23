@@ -1207,6 +1207,17 @@ func (stmt *Backup) walkStmt(v Visitor) Statement {
 			ret.Options.CaptureRevisionHistory = rh
 		}
 	}
+
+	if stmt.Options.IncludeAllSecondaryTenants != nil {
+		include, changed := WalkExpr(v, stmt.Options.IncludeAllSecondaryTenants)
+		if changed {
+			if ret == stmt {
+				ret = stmt.copyNode()
+			}
+			ret.Options.IncludeAllSecondaryTenants = include
+		}
+	}
+
 	return ret
 }
 
@@ -1474,6 +1485,17 @@ func (stmt *Restore) walkStmt(v Visitor) Statement {
 			ret.Options.IntoDB = intoDB
 		}
 	}
+
+	if stmt.Options.IncludeAllSecondaryTenants != nil {
+		include, changed := WalkExpr(v, stmt.Options.IncludeAllSecondaryTenants)
+		if changed {
+			if ret == stmt {
+				ret = stmt.copyNode()
+			}
+			ret.Options.IncludeAllSecondaryTenants = include
+		}
+	}
+
 	return ret
 }
 

@@ -1149,6 +1149,7 @@ unreserved_keyword ::=
 	| 'IMPORT'
 	| 'INCLUDE'
 	| 'INCLUDING'
+	| 'INCLUDE_ALL_SECONDARY_TENANTS'
 	| 'INCREMENT'
 	| 'INCREMENTAL'
 	| 'INCREMENTAL_LOCATION'
@@ -2263,6 +2264,8 @@ backup_options ::=
 	| 'KMS' '=' string_or_placeholder_opt_list
 	| 'INCREMENTAL_LOCATION' '=' string_or_placeholder_opt_list
 	| 'COORDINATOR_LOCALITY' '=' string_or_placeholder
+	| 'INCLUDE_ALL_SECONDARY_TENANTS'
+	| 'INCLUDE_ALL_SECONDARY_TENANTS' '=' a_expr
 
 c_expr ::=
 	d_expr
@@ -2621,6 +2624,8 @@ restore_options ::=
 	| 'SKIP_LOCALITIES_CHECK'
 	| 'DEBUG_PAUSE_ON' '=' string_or_placeholder
 	| 'NEW_DB_NAME' '=' string_or_placeholder
+	| 'INCLUDE_ALL_SECONDARY_TENANTS'
+	| 'INCLUDE_ALL_SECONDARY_TENANTS' '=' a_expr
 	| 'INCREMENTAL_LOCATION' '=' string_or_placeholder_opt_list
 	| 'TENANT_NAME' '=' string_or_placeholder
 	| 'TENANT' '=' string_or_placeholder
