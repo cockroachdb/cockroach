@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/VividCortex/ewma"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -95,8 +96,8 @@ type RemoteClockMonitor struct {
 
 	mu struct {
 		syncutil.RWMutex
-		offsets      map[string]RemoteOffset
-		latencyInfos map[string]*latencyInfo
+		offsets      map[roachpb.NodeID]RemoteOffset
+		latencyInfos map[roachpb.NodeID]*latencyInfo
 	}
 
 	metrics RemoteClockMetrics
@@ -125,8 +126,8 @@ func newRemoteClockMonitor(
 		maxOffset: maxOffset,
 		offsetTTL: offsetTTL,
 	}
-	r.mu.offsets = make(map[string]RemoteOffset)
-	r.mu.latencyInfos = make(map[string]*latencyInfo)
+	r.mu.offsets = make(map[roachpb.NodeID]RemoteOffset)
+	r.mu.latencyInfos = make(map[roachpb.NodeID]*latencyInfo)
 	if histogramWindowInterval == 0 {
 		histogramWindowInterval = time.Duration(math.MaxInt64)
 	}
@@ -147,25 +148,25 @@ func (r *RemoteClockMonitor) Metrics() *RemoteClockMetrics {
 }
 
 // Latency returns the exponentially weighted moving average latency to the
-// given node address. Returns true if the measurement is valid, or false if
+// given node id. Returns true if the measurement is valid, or false if
 // we don't have enough samples to compute a reliable average.
-func (r *RemoteClockMonitor) Latency(addr string) (time.Duration, bool) {
+func (r *RemoteClockMonitor) Latency(id roachpb.NodeID) (time.Duration, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	if info, ok := r.mu.latencyInfos[addr]; ok && info.avgNanos.Value() != 0.0 {
+	if info, ok := r.mu.latencyInfos[id]; ok && info.avgNanos.Value() != 0.0 {
 		return time.Duration(int64(info.avgNanos.Value())), true
 	}
 	return 0, false
 }
 
 // AllLatencies returns a map of all currently valid latency measurements.
-func (r *RemoteClockMonitor) AllLatencies() map[string]time.Duration {
+func (r *RemoteClockMonitor) AllLatencies() map[roachpb.NodeID]time.Duration {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	result := make(map[string]time.Duration)
-	for addr, info := range r.mu.latencyInfos {
+	result := make(map[roachpb.NodeID]time.Duration)
+	for id, info := range r.mu.latencyInfos {
 		if info.avgNanos.Value() != 0.0 {
-			result[addr] = time.Duration(int64(info.avgNanos.Value()))
+			result[id] = time.Duration(int64(info.avgNanos.Value()))
 		}
 	}
 	return result
@@ -174,50 +175,54 @@ func (r *RemoteClockMonitor) AllLatencies() map[string]time.Duration {
 // UpdateOffset is a thread-safe way to update the remote clock and latency
 // measurements.
 //
-// It only updates the offset for addr if one of the following cases holds:
-// 1. There is no prior offset for that address.
-// 2. The old offset for addr was measured long enough ago to be considered
+// It only updates the offset for node if one of the following cases holds:
+// 1. There is no prior offset for that node.
+// 2. The old offset for node was measured long enough ago to be considered
 // stale.
 // 3. The new offset's error is smaller than the old offset's error.
 //
 // Pass a roundTripLatency of 0 or less to avoid recording the latency.
 func (r *RemoteClockMonitor) UpdateOffset(
-	ctx context.Context, addr string, offset RemoteOffset, roundTripLatency time.Duration,
+	ctx context.Context, id roachpb.NodeID, offset RemoteOffset, roundTripLatency time.Duration,
 ) {
 	emptyOffset := offset == RemoteOffset{}
+	// At startup the remote node's id may not be set. Skip recording latency.
+	if id == 0 {
+		return
+	}
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	if oldOffset, ok := r.mu.offsets[addr]; !ok {
+	if oldOffset, ok := r.mu.offsets[id]; !ok {
 		// We don't have a measurement - if the incoming measurement is not empty,
 		// set it.
 		if !emptyOffset {
-			r.mu.offsets[addr] = offset
+			r.mu.offsets[id] = offset
 		}
 	} else if oldOffset.isStale(r.offsetTTL, r.clock.Now()) {
 		// We have a measurement but it's old - if the incoming measurement is not empty,
 		// set it, otherwise delete the old measurement.
 		if !emptyOffset {
-			r.mu.offsets[addr] = offset
+			r.mu.offsets[id] = offset
 		} else {
-			delete(r.mu.offsets, addr)
+			delete(r.mu.offsets, id)
 		}
 	} else if offset.Uncertainty < oldOffset.Uncertainty {
 		// We have a measurement but its uncertainty is greater than that of the
 		// incoming measurement - if the incoming measurement is not empty, set it.
 		if !emptyOffset {
-			r.mu.offsets[addr] = offset
+			r.mu.offsets[id] = offset
 		}
 	}
 
 	if roundTripLatency > 0 {
-		info, ok := r.mu.latencyInfos[addr]
+		info, ok := r.mu.latencyInfos[id]
 		if !ok {
 			info = &latencyInfo{
 				avgNanos: ewma.NewMovingAverage(avgLatencyMeasurementAge),
 			}
-			r.mu.latencyInfos[addr] = info
+			r.mu.latencyInfos[id] = info
 		}
 
 		newLatencyf := float64(roundTripLatency.Nanoseconds())
@@ -237,7 +242,7 @@ func (r *RemoteClockMonitor) UpdateOffset(
 	}
 
 	if log.V(2) {
-		log.Dev.Infof(ctx, "update offset: %s %v", addr, r.mu.offsets[addr])
+		log.Dev.Infof(ctx, "update offset: n%d %v", id, r.mu.offsets[id])
 	}
 }
 
@@ -261,9 +266,9 @@ func (r *RemoteClockMonitor) VerifyClockOffset(ctx context.Context) error {
 		r.mu.Lock()
 		// Each measurement is recorded as its minimum and maximum value.
 		offsets := make(stats.Float64Data, 0, 2*len(r.mu.offsets))
-		for addr, offset := range r.mu.offsets {
+		for id, offset := range r.mu.offsets {
 			if offset.isStale(r.offsetTTL, now) {
-				delete(r.mu.offsets, addr)
+				delete(r.mu.offsets, id)
 				continue
 			}
 			offsets = append(offsets, float64(offset.Offset+offset.Uncertainty))

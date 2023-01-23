@@ -728,7 +728,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		clock,
 		nodeLiveness,
 		rpcContext,
-		g,
 		st,
 		systemTenantNameContainer,
 	)
