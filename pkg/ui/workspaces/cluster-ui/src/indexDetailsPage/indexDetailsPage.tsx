@@ -34,6 +34,9 @@ import {
   calculateTotalWorkload,
   Count,
   DATE_FORMAT_24_UTC,
+  EncodeDatabaseTableIndexUri,
+  EncodeDatabaseTableUri,
+  EncodeDatabaseUri,
   performanceTuningRecipes,
 } from "../util";
 import {
@@ -258,15 +261,22 @@ export class IndexDetailsPage extends React.Component<
         items={[
           { link: "/databases", name: "Databases" },
           {
-            link: `/database/${this.props.databaseName}`,
+            link: EncodeDatabaseUri(this.props.databaseName),
             name: "Tables",
           },
           {
-            link: `/database/${this.props.databaseName}/table/${this.props.tableName}`,
+            link: EncodeDatabaseTableUri(
+              this.props.databaseName,
+              this.props.tableName,
+            ),
             name: `Table: ${this.props.tableName}`,
           },
           {
-            link: `/database/${this.props.databaseName}/table/${this.props.tableName}/index/${this.props.indexName}`,
+            link: EncodeDatabaseTableIndexUri(
+              this.props.databaseName,
+              this.props.tableName,
+              this.props.indexName,
+            ),
             name: `Index: ${this.props.indexName}`,
           },
         ]}
