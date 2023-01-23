@@ -5,10 +5,11 @@ CREATE TABLE t (k INT NOT NULL, v STRING);
 ops
 ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (k);
 ----
-StatementPhase stage 1 of 1 with 13 MutationType ops
+StatementPhase stage 1 of 1 with 14 MutationType ops
   transitions:
     [[Column:{DescID: 104, ColumnID: 3}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[ColumnName:{DescID: 104, Name: rowid, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnNotNull:{DescID: 104, ColumnID: 3, IndexID: 0}, ABSENT], PUBLIC] -> VALIDATED
     [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], ABSENT] -> BACKFILL_ONLY
     [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, TRANSIENT_ABSENT], ABSENT] -> PUBLIC
     [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}, TRANSIENT_ABSENT], ABSENT] -> PUBLIC
@@ -29,6 +30,9 @@ StatementPhase stage 1 of 1 with 13 MutationType ops
     *scop.SetColumnName
       ColumnID: 3
       Name: crdb_internal_column_3_name_placeholder
+      TableID: 104
+    *scop.MakePublicColumnNotNullValidated
+      ColumnID: 3
       TableID: 104
     *scop.MakeAbsentIndexBackfilling
       Index:
@@ -96,6 +100,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
   transitions:
     [[Column:{DescID: 104, ColumnID: 3}, ABSENT], WRITE_ONLY] -> PUBLIC
     [[ColumnName:{DescID: 104, Name: rowid, ColumnID: 3}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnNotNull:{DescID: 104, ColumnID: 3, IndexID: 0}, ABSENT], VALIDATED] -> PUBLIC
     [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], BACKFILL_ONLY] -> ABSENT
     [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, TRANSIENT_ABSENT], PUBLIC] -> ABSENT
     [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}, TRANSIENT_ABSENT], PUBLIC] -> ABSENT
@@ -112,10 +117,11 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
   ops:
     *scop.UndoAllInTxnImmediateMutationOpSideEffects
       {}
-PreCommitPhase stage 2 of 2 with 18 MutationType ops
+PreCommitPhase stage 2 of 2 with 19 MutationType ops
   transitions:
     [[Column:{DescID: 104, ColumnID: 3}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[ColumnName:{DescID: 104, Name: rowid, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnNotNull:{DescID: 104, ColumnID: 3, IndexID: 0}, ABSENT], PUBLIC] -> VALIDATED
     [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], ABSENT] -> BACKFILL_ONLY
     [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, TRANSIENT_ABSENT], ABSENT] -> PUBLIC
     [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}, TRANSIENT_ABSENT], ABSENT] -> PUBLIC
@@ -136,6 +142,9 @@ PreCommitPhase stage 2 of 2 with 18 MutationType ops
     *scop.SetColumnName
       ColumnID: 3
       Name: crdb_internal_column_3_name_placeholder
+      TableID: 104
+    *scop.MakePublicColumnNotNullValidated
+      ColumnID: 3
       TableID: 104
     *scop.MakeAbsentIndexBackfilling
       Index:
@@ -406,9 +415,10 @@ PostCommitPhase stage 15 of 15 with 1 ValidationType op
     *scop.ValidateIndex
       IndexID: 4
       TableID: 104
-PostCommitNonRevertiblePhase stage 1 of 4 with 6 MutationType ops
+PostCommitNonRevertiblePhase stage 1 of 4 with 7 MutationType ops
   transitions:
     [[Column:{DescID: 104, ColumnID: 3}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
+    [[ColumnNotNull:{DescID: 104, ColumnID: 3, IndexID: 0}, ABSENT], VALIDATED] -> ABSENT
     [[IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
@@ -421,7 +431,7 @@ PostCommitNonRevertiblePhase stage 1 of 4 with 6 MutationType ops
     [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 5}, TRANSIENT_ABSENT], PUBLIC] -> TRANSIENT_ABSENT
     [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 5}, TRANSIENT_ABSENT], PUBLIC] -> TRANSIENT_ABSENT
   ops:
-    *scop.MakeWriteOnlyColumnDeleteOnly
+    *scop.RemoveColumnNotNull
       ColumnID: 3
       TableID: 104
     *scop.MakeWriteOnlyIndexDeleteOnly
@@ -429,6 +439,9 @@ PostCommitNonRevertiblePhase stage 1 of 4 with 6 MutationType ops
       TableID: 104
     *scop.MakeWriteOnlyIndexDeleteOnly
       IndexID: 5
+      TableID: 104
+    *scop.MakeWriteOnlyColumnDeleteOnly
+      ColumnID: 3
       TableID: 104
     *scop.MakeWriteOnlyIndexDeleteOnly
       IndexID: 1
@@ -564,6 +577,10 @@ ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (k);
   kind: Precedence
   rule: column no longer public before dependents
 - from: [Column:{DescID: 104, ColumnID: 3}, WRITE_ONLY]
+  to:   [ColumnNotNull:{DescID: 104, ColumnID: 3, IndexID: 0}, ABSENT]
+  kind: Precedence
+  rule: column no longer public before dependents
+- from: [Column:{DescID: 104, ColumnID: 3}, WRITE_ONLY]
   to:   [ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 3}, ABSENT]
   kind: Precedence
   rule: column no longer public before dependents
@@ -591,6 +608,22 @@ ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (k);
   to:   [Column:{DescID: 104, ColumnID: 3}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
+- from: [ColumnNotNull:{DescID: 104, ColumnID: 3, IndexID: 0}, ABSENT]
+  to:   [Column:{DescID: 104, ColumnID: 3}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before column
+- from: [ColumnNotNull:{DescID: 104, ColumnID: 3, IndexID: 0}, ABSENT]
+  to:   [Column:{DescID: 104, ColumnID: 3}, DELETE_ONLY]
+  kind: SameStagePrecedence
+  rule: column constraint removed right before column reaches delete only
+- from: [ColumnNotNull:{DescID: 104, ColumnID: 3, IndexID: 0}, PUBLIC]
+  to:   [ColumnNotNull:{DescID: 104, ColumnID: 3, IndexID: 0}, VALIDATED]
+  kind: PreviousStagePrecedence
+  rule: ColumnNotNull transitions to ABSENT uphold 2-version invariant: PUBLIC->VALIDATED
+- from: [ColumnNotNull:{DescID: 104, ColumnID: 3, IndexID: 0}, VALIDATED]
+  to:   [ColumnNotNull:{DescID: 104, ColumnID: 3, IndexID: 0}, ABSENT]
+  kind: PreviousStagePrecedence
+  rule: ColumnNotNull transitions to ABSENT uphold 2-version invariant: VALIDATED->ABSENT
 - from: [ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 3}, ABSENT]
   to:   [Column:{DescID: 104, ColumnID: 3}, ABSENT]
   kind: SameStagePrecedence

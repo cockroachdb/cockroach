@@ -62,7 +62,11 @@ func (i *immediateVisitor) SetAddedColumnType(
 	}
 	col := mut.AsColumn().ColumnDesc()
 	col.Type = op.ColumnType.Type
-	col.Nullable = op.ColumnType.IsNullable
+	if op.ColumnType.ElementCreationMetadata.In_23_1OrLater {
+		col.Nullable = true
+	} else {
+		col.Nullable = op.ColumnType.IsNullable
+	}
 	col.Virtual = op.ColumnType.IsVirtual
 	if ce := op.ColumnType.ComputeExpr; ce != nil {
 		expr := string(ce.Expr)

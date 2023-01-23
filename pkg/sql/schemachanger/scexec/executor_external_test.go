@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -29,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdecomp"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps/sctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
@@ -266,10 +268,11 @@ func TestSchemaChanger(t *testing.T) {
 				scpb.MakeTarget(
 					scpb.ToPublic,
 					&scpb.ColumnType{
-						TableID:    fooTable.GetID(),
-						ColumnID:   2,
-						TypeT:      scpb.TypeT{Type: types.Int},
-						IsNullable: true,
+						TableID:                 fooTable.GetID(),
+						ColumnID:                2,
+						TypeT:                   scpb.TypeT{Type: types.Int},
+						IsNullable:              true,
+						ElementCreationMetadata: scdecomp.NewElementCreationMetadata(clusterversion.TestingClusterVersion),
 					},
 					metadata,
 				),

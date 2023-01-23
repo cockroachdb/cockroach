@@ -25,6 +25,8 @@ StatementPhase stage 1 of 1 with 5 MutationType ops
     *scop.SetAddedColumnType
       ColumnType:
         ColumnID: 2
+        ElementCreationMetadata:
+          in231OrLater: true
         IsNullable: true
         TableID: 104
         TypeT:
@@ -74,6 +76,8 @@ PreCommitPhase stage 2 of 2 with 9 MutationType ops
     *scop.SetAddedColumnType
       ColumnType:
         ColumnID: 2
+        ElementCreationMetadata:
+          in231OrLater: true
         IsNullable: true
         TableID: 104
         TypeT:
@@ -188,6 +192,8 @@ StatementPhase stage 1 of 1 with 10 MutationType ops
     *scop.SetAddedColumnType
       ColumnType:
         ColumnID: 2
+        ElementCreationMetadata:
+          in231OrLater: true
         TableID: 104
         TypeT:
           Type:
@@ -275,6 +281,8 @@ PreCommitPhase stage 2 of 2 with 14 MutationType ops
     *scop.SetAddedColumnType
       ColumnType:
         ColumnID: 2
+        ElementCreationMetadata:
+          in231OrLater: true
         TableID: 104
         TypeT:
           Type:
@@ -335,23 +343,27 @@ PreCommitPhase stage 2 of 2 with 14 MutationType ops
       DescriptorIDs:
       - 104
       JobID: 1
-      RunningStatus: PostCommitPhase stage 1 of 7 with 2 MutationType ops pending
+      RunningStatus: PostCommitPhase stage 1 of 7 with 3 MutationType ops pending
       Statements:
       - statement: ALTER TABLE defaultdb.foo ADD COLUMN j INT8 NOT NULL DEFAULT 123
         redactedstatement: ALTER TABLE ‹defaultdb›.public.‹foo› ADD COLUMN ‹j› INT8 NOT
           NULL DEFAULT ‹123›
         statementtag: ALTER TABLE
-PostCommitPhase stage 1 of 7 with 4 MutationType ops
+PostCommitPhase stage 1 of 7 with 5 MutationType ops
   transitions:
     [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], DELETE_ONLY] -> WRITE_ONLY
     [[TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], DELETE_ONLY] -> WRITE_ONLY
     [[IndexData:{DescID: 104, IndexID: 3}, TRANSIENT_ABSENT], ABSENT] -> PUBLIC
+    [[ColumnNotNull:{DescID: 104, ColumnID: 2, IndexID: 2}, PUBLIC], ABSENT] -> WRITE_ONLY
   ops:
     *scop.MakeDeleteOnlyColumnWriteOnly
       ColumnID: 2
       TableID: 104
     *scop.MakeDeleteOnlyIndexWriteOnly
       IndexID: 3
+      TableID: 104
+    *scop.MakeAbsentColumnNotNullWriteOnly
+      ColumnID: 2
       TableID: 104
     *scop.SetJobStateOnDescriptor
       DescriptorID: 104
@@ -406,14 +418,19 @@ PostCommitPhase stage 6 of 7 with 3 MutationType ops
       DescriptorID: 104
     *scop.UpdateSchemaChangerJob
       JobID: 1
-PostCommitPhase stage 7 of 7 with 1 ValidationType op
+PostCommitPhase stage 7 of 7 with 2 ValidationType ops
   transitions:
     [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], WRITE_ONLY] -> VALIDATED
+    [[ColumnNotNull:{DescID: 104, ColumnID: 2, IndexID: 2}, PUBLIC], WRITE_ONLY] -> VALIDATED
   ops:
     *scop.ValidateIndex
       IndexID: 2
       TableID: 104
-PostCommitNonRevertiblePhase stage 1 of 3 with 9 MutationType ops
+    *scop.ValidateColumnNotNull
+      ColumnID: 2
+      IndexIDForValidation: 2
+      TableID: 104
+PostCommitNonRevertiblePhase stage 1 of 3 with 10 MutationType ops
   transitions:
     [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}, ABSENT], PUBLIC] -> VALIDATED
@@ -424,6 +441,7 @@ PostCommitNonRevertiblePhase stage 1 of 3 with 9 MutationType ops
     [[TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT], WRITE_ONLY] -> TRANSIENT_DELETE_ONLY
     [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, TRANSIENT_ABSENT], PUBLIC] -> TRANSIENT_ABSENT
     [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}, TRANSIENT_ABSENT], PUBLIC] -> TRANSIENT_ABSENT
+    [[ColumnNotNull:{DescID: 104, ColumnID: 2, IndexID: 2}, PUBLIC], VALIDATED] -> PUBLIC
   ops:
     *scop.MakePublicPrimaryIndexWriteOnly
       IndexID: 1
@@ -438,6 +456,9 @@ PostCommitNonRevertiblePhase stage 1 of 3 with 9 MutationType ops
       TableID: 104
     *scop.MakeWriteOnlyIndexDeleteOnly
       IndexID: 3
+      TableID: 104
+    *scop.MakeValidatedColumnNotNullPublic
+      ColumnID: 2
       TableID: 104
     *scop.MakeValidatedPrimaryIndexPublic
       IndexID: 2
@@ -532,6 +553,8 @@ StatementPhase stage 1 of 1 with 16 MutationType ops
     *scop.SetAddedColumnType
       ColumnType:
         ColumnID: 2
+        ElementCreationMetadata:
+          in231OrLater: true
         IsNullable: true
         TableID: 104
         TypeT:
@@ -557,6 +580,8 @@ StatementPhase stage 1 of 1 with 16 MutationType ops
     *scop.SetAddedColumnType
       ColumnType:
         ColumnID: 3
+        ElementCreationMetadata:
+          in231OrLater: true
         IsNullable: true
         TableID: 104
         TypeT:
@@ -669,6 +694,8 @@ PreCommitPhase stage 2 of 2 with 20 MutationType ops
     *scop.SetAddedColumnType
       ColumnType:
         ColumnID: 2
+        ElementCreationMetadata:
+          in231OrLater: true
         IsNullable: true
         TableID: 104
         TypeT:
@@ -694,6 +721,8 @@ PreCommitPhase stage 2 of 2 with 20 MutationType ops
     *scop.SetAddedColumnType
       ColumnType:
         ColumnID: 3
+        ElementCreationMetadata:
+          in231OrLater: true
         IsNullable: true
         TableID: 104
         TypeT:
@@ -974,6 +1003,8 @@ StatementPhase stage 1 of 1 with 9 MutationType ops
           expr: i + 1:::INT8
           referencedColumnIds:
           - 1
+        ElementCreationMetadata:
+          in231OrLater: true
         IsNullable: true
         TableID: 104
         TypeT:
@@ -1058,6 +1089,8 @@ PreCommitPhase stage 2 of 2 with 13 MutationType ops
           expr: i + 1:::INT8
           referencedColumnIds:
           - 1
+        ElementCreationMetadata:
+          in231OrLater: true
         IsNullable: true
         TableID: 104
         TypeT:
@@ -1306,6 +1339,8 @@ StatementPhase stage 1 of 1 with 8 MutationType ops
     *scop.SetAddedColumnType
       ColumnType:
         ColumnID: 2
+        ElementCreationMetadata:
+          in231OrLater: true
         IsNullable: true
         TableID: 104
         TypeT:
@@ -1330,6 +1365,8 @@ StatementPhase stage 1 of 1 with 8 MutationType ops
     *scop.SetAddedColumnType
       ColumnType:
         ColumnID: 3
+        ElementCreationMetadata:
+          in231OrLater: true
         IsNullable: true
         TableID: 107
         TypeT:
@@ -1379,6 +1416,8 @@ PreCommitPhase stage 2 of 2 with 11 MutationType ops
     *scop.SetAddedColumnType
       ColumnType:
         ColumnID: 2
+        ElementCreationMetadata:
+          in231OrLater: true
         IsNullable: true
         TableID: 104
         TypeT:
@@ -1403,6 +1442,8 @@ PreCommitPhase stage 2 of 2 with 11 MutationType ops
     *scop.SetAddedColumnType
       ColumnType:
         ColumnID: 3
+        ElementCreationMetadata:
+          in231OrLater: true
         IsNullable: true
         TableID: 107
         TypeT:
@@ -1947,6 +1988,8 @@ StatementPhase stage 1 of 1 with 10 MutationType ops
     *scop.SetAddedColumnType
       ColumnType:
         ColumnID: 2
+        ElementCreationMetadata:
+          in231OrLater: true
         IsNullable: true
         TableID: 109
         TypeT:
@@ -2035,6 +2078,8 @@ PreCommitPhase stage 2 of 2 with 14 MutationType ops
     *scop.SetAddedColumnType
       ColumnType:
         ColumnID: 2
+        ElementCreationMetadata:
+          in231OrLater: true
         IsNullable: true
         TableID: 109
         TypeT:

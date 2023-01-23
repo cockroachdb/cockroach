@@ -192,10 +192,20 @@ message ColumnType {
   uint32 family_id = 2 [(gogoproto.customname) = "FamilyID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.FamilyID"];
   uint32 column_id = 3 [(gogoproto.customname) = "ColumnID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ColumnID"];
   TypeT embedded_type_t = 4 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  bool is_nullable = 5;
+  // Deprecated
+  // We changed element modelling for NOT NULL constraint in V23_1 and thus
+  // deprecated `is_nullable`. The new way is to handle NOT NULL constraint
+  // through a newly introduced `ColumnNotNull` element. This change is
+  // necessary to support adding/dropping NOT NULL constraint on an existing
+  // column.
+  bool is_nullable = 5 [deprecated = true];
   Expression compute_expr = 6;
   bool is_virtual = 7;
-  reserved 10;
+  reserved 8, 9, 10;
+  // ElementCreationMetadata stores information about when this element is created.
+  // It can be used in a similar way to version gates to ensure compatibility
+  // in mixed version state.
+  ElementCreationMetadata element_creation_metadata= 11;
 }
 
 message ColumnFamily {
@@ -651,4 +661,8 @@ message FunctionParamDefaultExpression {
   // belongs to.
   uint32 ordinal = 2;
   Expression embedded_expr = 3 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
+message ElementCreationMetadata {
+  bool in_23_1_or_later = 1;
 }

@@ -11,6 +11,7 @@
 package scdecomp
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -118,5 +119,15 @@ func newTypeT(t *types.T) *scpb.TypeT {
 	return &scpb.TypeT{
 		Type:          t,
 		ClosedTypeIDs: typedesc.GetTypeDescriptorClosure(t).Ordered(),
+	}
+}
+
+// NewElementCreationMetadata construct a `*scpb.ElementCreationMetadata`
+// based on `clusterVersion`.
+func NewElementCreationMetadata(
+	clusterVersion clusterversion.ClusterVersion,
+) *scpb.ElementCreationMetadata {
+	return &scpb.ElementCreationMetadata{
+		In_23_1OrLater: clusterVersion.IsActive(clusterversion.V23_1),
 	}
 }

@@ -53,10 +53,10 @@ func validateCheckExpr(
 	exprStr string,
 	tableDesc *tabledesc.Mutable,
 	indexIDForValidation descpb.IndexID,
-) error {
-	expr, err := schemaexpr.FormatExprForDisplay(ctx, tableDesc, exprStr, semaCtx, sessionData, tree.FmtParsable)
+) (violatingRow tree.Datums, formattedCkExpr string, err error) {
+	formattedCkExpr, err = schemaexpr.FormatExprForDisplay(ctx, tableDesc, exprStr, semaCtx, sessionData, tree.FmtParsable)
 	if err != nil {
-		return err
+		return nil, formattedCkExpr, err
 	}
 	colSelectors := tabledesc.ColumnsSelectors(tableDesc.AccessibleColumns())
 	columns := tree.AsStringWithFlags(&colSelectors, tree.FmtSerializable)
@@ -64,22 +64,17 @@ func validateCheckExpr(
 	if indexIDForValidation != 0 {
 		queryStr = fmt.Sprintf(`SELECT %s FROM [%d AS t]@[%d] WHERE NOT (%s) LIMIT 1`, columns, tableDesc.GetID(), indexIDForValidation, exprStr)
 	}
-	log.Infof(ctx, "validating check constraint %q with query %q", expr, queryStr)
-	rows, err := txn.QueryRowEx(
+	log.Infof(ctx, "validating check constraint %q with query %q", formattedCkExpr, queryStr)
+	violatingRow, err = txn.QueryRowEx(
 		ctx,
 		"validate check constraint",
 		txn.KV(),
 		sessiondata.RootUserSessionDataOverride,
 		queryStr)
 	if err != nil {
-		return err
+		return nil, formattedCkExpr, err
 	}
-	if rows.Len() > 0 {
-		return pgerror.Newf(pgcode.CheckViolation,
-			"validation of CHECK %q failed on row: %s",
-			expr, labeledRowValues(tableDesc.AccessibleColumns(), rows))
-	}
-	return nil
+	return violatingRow, formattedCkExpr, nil
 }
 
 // matchFullUnacceptableKeyQuery generates and returns a query for rows that are
@@ -885,4 +880,20 @@ func checkMutationInput(
 		colIdx++
 	}
 	return nil
+}
+
+func newCheckViolationErr(
+	ckExpr string, tableColumns []catalog.Column, violatingRow tree.Datums,
+) error {
+	return pgerror.Newf(pgcode.CheckViolation,
+		"validation of CHECK %q failed on row: %s",
+		ckExpr, labeledRowValues(tableColumns, violatingRow))
+}
+
+func newNotNullViolationErr(
+	notNullColName string, tableColumns []catalog.Column, violatingRow tree.Datums,
+) error {
+	return pgerror.Newf(pgcode.NotNullViolation,
+		"validation of column %q NOT NULL failed on row: %s",
+		notNullColName, labeledRowValues(tableColumns, violatingRow))
 }

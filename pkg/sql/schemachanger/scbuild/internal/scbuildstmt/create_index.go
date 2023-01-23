@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdecomp"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
@@ -738,13 +739,15 @@ func maybeCreateAndAddShardCol(
 			Name:     shardColName,
 		},
 		colType: &scpb.ColumnType{
-			TableID:     tbl.TableID,
-			ColumnID:    shardColID,
-			TypeT:       scpb.TypeT{Type: types.Int},
-			ComputeExpr: b.WrapExpression(tbl.TableID, parsedExpr),
-			IsVirtual:   true,
-			IsNullable:  false,
+			TableID:                 tbl.TableID,
+			ColumnID:                shardColID,
+			TypeT:                   scpb.TypeT{Type: types.Int},
+			ComputeExpr:             b.WrapExpression(tbl.TableID, parsedExpr),
+			IsVirtual:               true,
+			IsNullable:              false,
+			ElementCreationMetadata: scdecomp.NewElementCreationMetadata(b.EvalCtx().Settings.Version.ActiveVersion(b)),
 		},
+		notNull: true,
 	}
 	addColumn(b, spec, n)
 	// Create a new check constraint for the hash sharded index column.
