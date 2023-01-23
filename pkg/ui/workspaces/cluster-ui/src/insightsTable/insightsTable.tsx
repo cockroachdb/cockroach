@@ -19,12 +19,14 @@ import {
   clusterSettings,
   computeOrUseStmtSummary,
   Duration,
+  EncodeDatabasesToIndexUri,
+  EncodeDatabaseTableIndexUri,
   performanceBestPractices,
+  performanceTuningRecipes,
   statementsRetries,
 } from "../util";
 import { Anchor } from "../anchor";
 import { Link } from "react-router-dom";
-import { performanceTuningRecipes } from "../util";
 import { InsightRecommendation, insightType } from "../insights";
 
 const cx = classNames.bind(styles);
@@ -128,8 +130,17 @@ function descriptionCell(
   );
 
   const indexLink = isCockroachCloud
-    ? `databases/${insightRec.database}/${insightRec.indexDetails?.schema}/${insightRec.indexDetails?.table}/${insightRec.indexDetails?.indexName}`
-    : `database/${insightRec.database}/table/${insightRec.indexDetails?.table}/index/${insightRec.indexDetails?.indexName}`;
+    ? EncodeDatabasesToIndexUri(
+        insightRec.database,
+        insightRec.indexDetails?.schema,
+        insightRec.indexDetails?.table,
+        insightRec.indexDetails?.indexName,
+      )
+    : EncodeDatabaseTableIndexUri(
+        insightRec.database,
+        insightRec.indexDetails?.table,
+        insightRec.indexDetails?.indexName,
+      );
 
   switch (insightRec.type) {
     case "CreateIndex":
