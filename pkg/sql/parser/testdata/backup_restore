@@ -855,3 +855,12 @@ DETAIL: source SQL:
 RESTORE ROLE foo, bar FROM 'baz'
              ^
 HINT: try \h RESTORE
+
+# Regression test for #95612
+parse
+BACKUP INTO LATEST IN UNLOGGED WITH OPTIONS ( DETACHED = FALSE )
+----
+BACKUP INTO LATEST IN 'unlogged' WITH detached = FALSE -- normalized!
+BACKUP INTO LATEST IN ('unlogged') WITH detached = FALSE -- fully parenthesized
+BACKUP INTO LATEST IN '_' WITH detached = FALSE -- literals removed
+BACKUP INTO LATEST IN 'unlogged' WITH detached = FALSE -- identifiers removed
