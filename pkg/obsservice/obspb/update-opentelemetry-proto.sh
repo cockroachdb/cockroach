@@ -71,7 +71,7 @@ DEST_DIR=opentelemetry-proto
 
 echo "Copying protos."
 # Copy the protos from the repo.
-rsync -avrq --include "*/" --include="common.proto" --include="resource.proto" --include="logs.proto" --exclude="*" --prune-empty-dirs $WORK_DIR/opentelemetry/proto/* $DEST_DIR
+rsync -avrq --include "*/" --include="common.proto" --include="resource.proto" --include="logs.proto" --include="logs_service.proto" --exclude="*" --prune-empty-dirs $WORK_DIR/opentelemetry/proto/* $DEST_DIR
 
 # Massage the protos so that they work in our tree.
 echo "Editing protos."
@@ -80,13 +80,16 @@ echo "Editing protos."
 # option go_package = "go.opentelemetry.io/proto/otlp/common/v1";
 # into:
 # option go_package = "v1";
-find $DEST_DIR -type f -name "*.proto" -exec sed -i "s/option go_package = \"go.opentelemetry.io\/proto\/otlp\/.*\/v1\"/option go_package = \"v1\"/" {} + ;
+find $DEST_DIR -type f -name "*.proto" -exec sed -i.bak -e "s/option go_package = \"go.opentelemetry.io\/proto\/otlp\/.*\/v1\"/option go_package = \"v1\"/" {} + ;
 
 # Change lines like:
 # import "obsservice/obspb/opentelemetry-proto/common/v1/common.proto";
 # into
 # import "opentelemetry/proto/common/v1/common.proto";
-find $DEST_DIR -type f -name "*.proto" -exec sed -i "s/import \"opentelemetry\/proto\/\(.*\)\/v1/import \"obsservice\/obspb\/opentelemetry-proto\/\1\/v1/" {} + ;
+find $DEST_DIR -type f -name "*.proto" -exec sed -i.bak -e "s/import \"opentelemetry\/proto\/\(.*\)\/v1/import \"obsservice\/obspb\/opentelemetry-proto\/\1\/v1/" {} + ;
+
+# delete the .bak files created in previous steps
+find . -name "*.bak" -type f -delete
 
 # Apply a final patch customizing the code generation (sprinkle some gogo.nullable=false).
 git apply opentelemetry-proto.patch

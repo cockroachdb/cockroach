@@ -827,7 +827,7 @@ export async function getClusterInsightsApi(
       },
     ],
     execute: true,
-    // max_result_size: LARGE_RESULT_SIZE,
+    max_result_size: LARGE_RESULT_SIZE,
     timeout: LONG_TIMEOUT,
   };
 
