@@ -3748,8 +3748,6 @@ var charts = []sectionDescription{
 				Metrics: []string{
 					"admission.granter.total_slots.kv",
 					"admission.granter.used_slots.kv",
-					"admission.granter.total_moderate_slots.kv",
-					"admission.granter.used_soft_slots.kv",
 					"admission.granter.used_slots.sql-leaf-start",
 					"admission.granter.used_slots.sql-root-start",
 				},

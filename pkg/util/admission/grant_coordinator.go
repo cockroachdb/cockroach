@@ -272,12 +272,8 @@ var _ CPULoadListener = &GrantCoordinator{}
 
 // Options for constructing GrantCoordinators.
 type Options struct {
-	MinCPUSlots int
-	MaxCPUSlots int
-	// RunnableAlphaOverride is used to override the alpha value used to
-	// compute the ewma of the runnable goroutine counts. It is only used
-	// during testing. A 0 value indicates that there is no override.
-	RunnableAlphaOverride          float64
+	MinCPUSlots                    int
+	MaxCPUSlots                    int
 	SQLKVResponseBurstTokens       int64
 	SQLSQLResponseBurstTokens      int64
 	SQLStatementLeafStartWorkSlots int
@@ -434,10 +430,7 @@ func makeRegularGrantCoordinator(
 		settings:                         st,
 		minCPUSlots:                      opts.MinCPUSlots,
 		maxCPUSlots:                      opts.MaxCPUSlots,
-		moderateSlotsClamp:               opts.MaxCPUSlots,
-		runnableAlphaOverride:            opts.RunnableAlphaOverride,
 		totalSlotsMetric:                 metrics.KVTotalSlots,
-		totalModerateSlotsMetric:         metrics.KVTotalModerateSlots,
 		cpuLoadShortPeriodDurationMetric: metrics.KVCPULoadShortPeriodDuration,
 		cpuLoadLongPeriodDurationMetric:  metrics.KVCPULoadLongPeriodDuration,
 		slotAdjusterIncrementsMetric:     metrics.KVSlotAdjusterIncrements,
@@ -457,10 +450,8 @@ func makeRegularGrantCoordinator(
 	kvg := &slotGranter{
 		coord:                        coord,
 		workKind:                     KVWork,
-		totalHighLoadSlots:           opts.MinCPUSlots,
-		totalModerateLoadSlots:       opts.MinCPUSlots,
+		totalSlots:                   opts.MinCPUSlots,
 		usedSlotsMetric:              metrics.KVUsedSlots,
-		usedSoftSlotsMetric:          metrics.KVUsedSoftSlots,
 		slotsExhaustedDurationMetric: metrics.KVSlotsExhaustedDuration,
 	}
 
@@ -500,11 +491,11 @@ func makeRegularGrantCoordinator(
 	coord.granters[SQLSQLResponseWork] = tg
 
 	sg := &slotGranter{
-		coord:              coord,
-		workKind:           SQLStatementLeafStartWork,
-		totalHighLoadSlots: opts.SQLStatementLeafStartWorkSlots,
-		cpuOverload:        kvSlotAdjuster,
-		usedSlotsMetric:    metrics.SQLLeafStartUsedSlots,
+		coord:           coord,
+		workKind:        SQLStatementLeafStartWork,
+		totalSlots:      opts.SQLStatementLeafStartWorkSlots,
+		cpuOverload:     kvSlotAdjuster,
+		usedSlotsMetric: metrics.SQLLeafStartUsedSlots,
 	}
 	wqMetrics = makeWorkQueueMetrics(workKindString(SQLStatementLeafStartWork), registry, admissionpb.NormalPri, admissionpb.LockingPri)
 	req = makeRequester(ambientCtx,
@@ -514,11 +505,11 @@ func makeRegularGrantCoordinator(
 	coord.granters[SQLStatementLeafStartWork] = sg
 
 	sg = &slotGranter{
-		coord:              coord,
-		workKind:           SQLStatementRootStartWork,
-		totalHighLoadSlots: opts.SQLStatementRootStartWorkSlots,
-		cpuOverload:        kvSlotAdjuster,
-		usedSlotsMetric:    metrics.SQLRootStartUsedSlots,
+		coord:           coord,
+		workKind:        SQLStatementRootStartWork,
+		totalSlots:      opts.SQLStatementRootStartWorkSlots,
+		cpuOverload:     kvSlotAdjuster,
+		usedSlotsMetric: metrics.SQLRootStartUsedSlots,
 	}
 	wqMetrics = makeWorkQueueMetrics(workKindString(SQLStatementRootStartWork), registry, admissionpb.NormalPri, admissionpb.LockingPri)
 	req = makeRequester(ambientCtx,
@@ -585,11 +576,11 @@ func NewGrantCoordinatorSQL(
 	coord.granters[SQLSQLResponseWork] = tg
 
 	sg := &slotGranter{
-		coord:              coord,
-		workKind:           SQLStatementLeafStartWork,
-		totalHighLoadSlots: opts.SQLStatementLeafStartWorkSlots,
-		cpuOverload:        sqlNodeCPU,
-		usedSlotsMetric:    metrics.SQLLeafStartUsedSlots,
+		coord:           coord,
+		workKind:        SQLStatementLeafStartWork,
+		totalSlots:      opts.SQLStatementLeafStartWorkSlots,
+		cpuOverload:     sqlNodeCPU,
+		usedSlotsMetric: metrics.SQLLeafStartUsedSlots,
 	}
 	wqMetrics = makeWorkQueueMetrics(workKindString(SQLStatementLeafStartWork), registry)
 	req = makeRequester(ambientCtx,
@@ -599,11 +590,11 @@ func NewGrantCoordinatorSQL(
 	coord.granters[SQLStatementLeafStartWork] = sg
 
 	sg = &slotGranter{
-		coord:              coord,
-		workKind:           SQLStatementRootStartWork,
-		totalHighLoadSlots: opts.SQLStatementRootStartWorkSlots,
-		cpuOverload:        sqlNodeCPU,
-		usedSlotsMetric:    metrics.SQLRootStartUsedSlots,
+		coord:           coord,
+		workKind:        SQLStatementRootStartWork,
+		totalSlots:      opts.SQLStatementRootStartWorkSlots,
+		cpuOverload:     sqlNodeCPU,
+		usedSlotsMetric: metrics.SQLRootStartUsedSlots,
 	}
 	wqMetrics = makeWorkQueueMetrics(workKindString(SQLStatementRootStartWork), registry)
 	req = makeRequester(ambientCtx,
@@ -919,13 +910,7 @@ func (coord *GrantCoordinator) SafeFormat(s redact.SafePrinter, verb rune) {
 		case KVWork:
 			switch g := coord.granters[i].(type) {
 			case *slotGranter:
-				kvsa := coord.cpuLoadListener.(*kvSlotAdjuster)
-				s.Printf(
-					"%s%s: used: %d, high(moderate)-total: %d(%d) moderate-clamp: %d", curSep, workKindString(kind),
-					g.usedSlots, g.totalHighLoadSlots, g.totalModerateLoadSlots, kvsa.moderateSlotsClamp)
-				if g.usedSoftSlots > 0 {
-					s.Printf(" used-soft: %d", g.usedSoftSlots)
-				}
+				s.Printf("%s%s: used: %d, total: %d", curSep, workKindString(kind), g.usedSlots, g.totalSlots)
 			case *kvStoreTokenGranter:
 				s.Printf(" io-avail: %d, elastic-disk-bw-tokens-avail: %d", g.availableIOTokens,
 					g.elasticDiskBWTokensAvailable)
@@ -933,7 +918,7 @@ func (coord *GrantCoordinator) SafeFormat(s redact.SafePrinter, verb rune) {
 		case SQLStatementLeafStartWork, SQLStatementRootStartWork:
 			if coord.granters[i] != nil {
 				g := coord.granters[i].(*slotGranter)
-				s.Printf("%s%s: used: %d, total: %d", curSep, workKindString(kind), g.usedSlots, g.totalHighLoadSlots)
+				s.Printf("%s%s: used: %d, total: %d", curSep, workKindString(kind), g.usedSlots, g.totalSlots)
 			}
 		case SQLKVResponseWork, SQLSQLResponseWork:
 			if coord.granters[i] != nil {
@@ -953,8 +938,6 @@ func (coord *GrantCoordinator) SafeFormat(s redact.SafePrinter, verb rune) {
 type GrantCoordinatorMetrics struct {
 	KVTotalSlots                 *metric.Gauge
 	KVUsedSlots                  *metric.Gauge
-	KVTotalModerateSlots         *metric.Gauge
-	KVUsedSoftSlots              *metric.Gauge
 	KVSlotsExhaustedDuration     *metric.Counter
 	KVCPULoadShortPeriodDuration *metric.Counter
 	KVCPULoadLongPeriodDuration  *metric.Counter
@@ -970,12 +953,8 @@ func (GrantCoordinatorMetrics) MetricStruct() {}
 
 func makeGrantCoordinatorMetrics() GrantCoordinatorMetrics {
 	m := GrantCoordinatorMetrics{
-		KVTotalSlots: metric.NewGauge(totalSlots),
-		KVUsedSlots:  metric.NewGauge(addName(workKindString(KVWork), usedSlots)),
-		// TODO(sumeer): remove moderate load slots and soft slots code and
-		// metrics #88032.
-		KVTotalModerateSlots:         metric.NewGauge(totalModerateSlots),
-		KVUsedSoftSlots:              metric.NewGauge(usedSoftSlots),
+		KVTotalSlots:                 metric.NewGauge(totalSlots),
+		KVUsedSlots:                  metric.NewGauge(addName(workKindString(KVWork), usedSlots)),
 		KVSlotsExhaustedDuration:     metric.NewCounter(kvSlotsExhaustedDuration),
 		KVCPULoadShortPeriodDuration: metric.NewCounter(kvCPULoadShortPeriodDuration),
 		KVCPULoadLongPeriodDuration:  metric.NewCounter(kvCPULoadLongPeriodDuration),

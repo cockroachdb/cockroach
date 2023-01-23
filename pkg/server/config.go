@@ -36,7 +36,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -343,10 +342,6 @@ type KVConfig struct {
 	// The value is split evenly between the stores if there are more than one.
 	CacheSize int64
 
-	// SoftSlotGranter can be optionally passed into a store to allow the store
-	// to perform additional CPU bound work.
-	SoftSlotGranter *admission.SoftSlotGranter
-
 	// TimeSeriesServerConfig contains configuration specific to the time series
 	// server.
 	TimeSeriesServerConfig ts.ServerConfig
@@ -632,19 +627,6 @@ func (e *Engines) Close() {
 	*e = nil
 }
 
-// cpuWorkPermissionGranter implements the pebble.CPUWorkPermissionGranter
-// interface.
-//type cpuWorkPermissionGranter struct {
-//*admission.SoftSlotGranter
-//}
-
-//func (c *cpuWorkPermissionGranter) TryGetProcs(count int) int {
-//return c.TryGetSlots(count)
-//}
-//func (c *cpuWorkPermissionGranter) ReturnProcs(count int) {
-//c.ReturnSlots(count)
-//}
-
 // CreateEngines creates Engines based on the specs in cfg.Stores.
 func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 	engines := Engines(nil)
@@ -775,11 +757,6 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 			pebbleConfig.Opts.TableCache = tableCache
 			pebbleConfig.Opts.MaxOpenFiles = int(openFileLimitPerStore)
 			pebbleConfig.Opts.Experimental.MaxWriterConcurrency = 2
-			// TODO(jackson): Implement the new pebble.CPUWorkPermissionGranter
-			// interface.
-			//pebbleConfig.Opts.Experimental.CPUWorkPermissionGranter = &cpuWorkPermissionGranter{
-			//cfg.SoftSlotGranter,
-			//}
 			if storeKnobs.SmallEngineBlocks {
 				for i := range pebbleConfig.Opts.Levels {
 					pebbleConfig.Opts.Levels[i].BlockSize = 1
