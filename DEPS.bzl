@@ -6024,6 +6024,16 @@ def go_deps():
         ],
     )
     go_repository(
+        name = "com_github_mkungla_bexp_v3",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/mkungla/bexp/v3",
+        sha256 = "903a932e83da8be3426e29c1484d79f814a825b2c2743c36d43b054910a9f886",
+        strip_prefix = "github.com/mkungla/bexp/v3@v3.0.1",
+        urls = [
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/mkungla/bexp/v3/com_github_mkungla_bexp_v3-v3.0.1.zip",
+        ],
+    )
+    go_repository(
         name = "com_github_mmatczuk_go_generics",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/mmatczuk/go_generics",
