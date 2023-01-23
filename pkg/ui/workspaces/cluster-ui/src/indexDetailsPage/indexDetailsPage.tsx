@@ -26,7 +26,14 @@ import { SummaryCard } from "../summaryCard";
 import moment, { Moment } from "moment";
 import { Heading } from "@cockroachlabs/ui-components";
 import { Anchor } from "../anchor";
-import { Count, DATE_FORMAT_24_UTC, performanceTuningRecipes } from "../util";
+import {
+  Count,
+  DATE_FORMAT_24_UTC,
+  EncodeDatabaseTableIndexUri,
+  EncodeDatabaseTableUri,
+  EncodeDatabaseUri,
+  performanceTuningRecipes,
+} from "../util";
 
 const cx = classNames.bind(styles);
 
@@ -195,15 +202,22 @@ export class IndexDetailsPage extends React.Component<
         items={[
           { link: "/databases", name: "Databases" },
           {
-            link: `/database/${this.props.databaseName}`,
+            link: EncodeDatabaseUri(this.props.databaseName),
             name: "Tables",
           },
           {
-            link: `/database/${this.props.databaseName}/table/${this.props.tableName}`,
+            link: EncodeDatabaseTableUri(
+              this.props.databaseName,
+              this.props.tableName,
+            ),
             name: `Table: ${this.props.tableName}`,
           },
           {
-            link: `/database/${this.props.databaseName}/table/${this.props.tableName}/index/${this.props.indexName}`,
+            link: EncodeDatabaseTableIndexUri(
+              this.props.databaseName,
+              this.props.tableName,
+              this.props.indexName,
+            ),
             name: `Index: ${this.props.indexName}`,
           },
         ]}
@@ -319,7 +333,7 @@ export class IndexDetailsPage extends React.Component<
             <Row gutter={18} className={cx("row-spaced")}>
               <Col className="gutter-row" span={18}>
                 <SummaryCard className={cx("summary-card--row")}>
-                  <Heading type="h5">Index recommendations</Heading>
+                  <Heading type="h5">Index Recommendations</Heading>
                   <table>
                     <tbody>
                       {this.renderIndexRecommendations(
