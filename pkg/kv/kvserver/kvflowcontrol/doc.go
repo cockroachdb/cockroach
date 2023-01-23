@@ -353,3 +353,5 @@ package kvflowcontrol
 //       the receiver to send messages to return tokens up to some point, and
 //   (b) the receiver has either not received the message for which we've
 //   deducted tokens, or forgotten about it.
+// - Ensure that flow tokens aren't leaked, by checking that after the tests
+//   quiesce, flow tokens are back to their original limits.
