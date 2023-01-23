@@ -81,6 +81,10 @@ type BuilderState interface {
 	// Ensure ensures the presence of the given element in the BuilderState with
 	// the given statuses and metadata.
 	Ensure(current scpb.Status, target scpb.TargetStatus, elem scpb.Element, meta scpb.TargetMetadata)
+
+	// WithLogEvent will ensure that any target matching the provided element
+	// emits an entry in the event log. No-ops if no target is found.
+	WithLogEvent(element scpb.Element)
 }
 
 // EventLogState encapsulates the state of the metadata to decorate the eventlog

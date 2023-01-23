@@ -91,7 +91,25 @@ func (b *builderState) Ensure(
 			metadata: meta,
 		})
 	}
+}
 
+// WithLogEvent implements the scbuildstmt.BuilderState interface.
+func (b *builderState) WithLogEvent(e scpb.Element) {
+	if e == nil {
+		return
+	}
+	id := screl.GetDescID(e)
+	c, ok := b.descCache[id]
+	if !ok {
+		return
+	}
+	key := screl.ElementString(e)
+	i, ok := c.elementIndexMap[key]
+	if !ok {
+		return
+	}
+	es := &b.output[i]
+	es.withLogEvent = true
 }
 
 // ForEachElementStatus implements the scpb.ElementStatusIterator interface.

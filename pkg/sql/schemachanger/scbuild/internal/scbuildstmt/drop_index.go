@@ -48,7 +48,10 @@ func DropIndex(b BuildCtx, n *tree.DropIndex) {
 
 	var anyIndexesDropped bool
 	for _, index := range n.IndexList {
-		anyIndexesDropped = dropAnIndex(b, index, n.IfExists, n.DropBehavior) || anyIndexesDropped
+		if droppedIndex := maybeDropIndex(b, index, n.IfExists, n.DropBehavior); droppedIndex != nil {
+			b.WithLogEvent(droppedIndex)
+			anyIndexesDropped = true
+		}
 		// Increment subwork ID so we know exactly which portion in
 		// a `DROP INDEX index1, index2, ...` statement is responsible
 		// for the creation of the targets.
@@ -67,11 +70,11 @@ func DropIndex(b BuildCtx, n *tree.DropIndex) {
 	}
 }
 
-// dropAnIndex resolves `index` and mark its constituent elements as ToAbsent
+// maybeDropIndex resolves `index` and mark its constituent elements as ToAbsent
 // in the builder state enclosed by `b`.
-func dropAnIndex(
+func maybeDropIndex(
 	b BuildCtx, indexName *tree.TableIndexName, ifExists bool, dropBehavior tree.DropBehavior,
-) (indexDropped bool) {
+) (droppedIndex *scpb.SecondaryIndex) {
 	toBeDroppedIndexElms := b.ResolveIndexByName(indexName, ResolveParams{
 		IsExistenceOptional: ifExists,
 		RequiredPrivilege:   privilege.CREATE,
@@ -79,7 +82,7 @@ func dropAnIndex(
 	if toBeDroppedIndexElms == nil {
 		// Attempt to resolve this index failed but `IF EXISTS` is set.
 		b.MarkNameAsNonExistent(&indexName.Table)
-		return false
+		return nil
 	}
 	// Panic if dropping primary index.
 	_, _, pie := scpb.FindPrimaryIndex(toBeDroppedIndexElms)
@@ -107,7 +110,7 @@ func dropAnIndex(
 		))
 	}
 	dropSecondaryIndex(b, indexName, dropBehavior, sie)
-	return true
+	return sie
 }
 
 // dropSecondaryIndex is a helper to drop a secondary index which may be used

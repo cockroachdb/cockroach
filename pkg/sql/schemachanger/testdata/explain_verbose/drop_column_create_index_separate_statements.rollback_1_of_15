@@ -130,28 +130,13 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 1 of 15;
         │       └── • PreviousTransactionPrecedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 3, SourceIndexID: 1}
         │             rule: "TemporaryIndex transitions to ABSENT uphold 2-version invariant: DELETE_ONLY->ABSENT"
         │
-        └── • 14 Mutation operations
-            │
-            ├── • RefreshStats
-            │     TableID: 104
-            │
-            ├── • LogEvent
-            │     Element:
-            │       SecondaryIndex:
-            │         indexId: 2
-            │         tableId: 104
-            │     EventBase:
-            │       Authorization:
-            │         UserName: root
-            │       Statement: ALTER TABLE ‹defaultdb›.public.‹t› DROP COLUMN ‹j› CASCADE
-            │       StatementTag: ALTER TABLE
-            │       TargetMetadata:
-            │         SourceElementID: 1
-            │         SubWorkID: 1
-            │     TargetStatus: 2
+        └── • 13 Mutation operations
             │
             ├── • MakeValidatedSecondaryIndexPublic
             │     IndexID: 2
+            │     TableID: 104
+            │
+            ├── • RefreshStats
             │     TableID: 104
             │
             ├── • SetColumnName
@@ -170,14 +155,6 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 1 of 15;
             │
             ├── • MakeWriteOnlyColumnPublic
             │     ColumnID: 2
-            │     EventBase:
-            │       Authorization:
-            │         UserName: root
-            │       Statement: ALTER TABLE ‹defaultdb›.public.‹t› DROP COLUMN ‹j› CASCADE
-            │       StatementTag: ALTER TABLE
-            │       TargetMetadata:
-            │         SourceElementID: 1
-            │         SubWorkID: 1
             │     TableID: 104
             │
             ├── • RefreshStats
@@ -185,28 +162,12 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 1 of 15;
             │
             ├── • MakeWriteOnlyColumnPublic
             │     ColumnID: 4
-            │     EventBase:
-            │       Authorization:
-            │         UserName: root
-            │       Statement: ALTER TABLE ‹defaultdb›.public.‹t› DROP COLUMN ‹j› CASCADE
-            │       StatementTag: ALTER TABLE
-            │       TargetMetadata:
-            │         SourceElementID: 1
-            │         SubWorkID: 1
             │     TableID: 104
             │
             ├── • RefreshStats
             │     TableID: 104
             │
             ├── • MakeIndexAbsent
-            │     EventBase:
-            │       Authorization:
-            │         UserName: root
-            │       Statement: ALTER TABLE ‹defaultdb›.public.‹t› DROP COLUMN ‹j› CASCADE
-            │       StatementTag: ALTER TABLE
-            │       TargetMetadata:
-            │         SourceElementID: 1
-            │         SubWorkID: 1
             │     IndexID: 3
             │     TableID: 104
             │

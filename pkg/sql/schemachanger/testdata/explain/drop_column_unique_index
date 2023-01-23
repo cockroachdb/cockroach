@@ -24,9 +24,8 @@ Schema change plan for ALTER TABLE ‹t›.‹public›.‹test› DROP COLUMN �
  │         ├── 2 elements transitioning toward ABSENT
  │         │    ├── PUBLIC → WRITE_ONLY    Column:{DescID: 106, ColumnID: 3}
  │         │    └── PUBLIC → ABSENT        ColumnName:{DescID: 106, Name: pi, ColumnID: 3}
- │         └── 11 Mutation operations
+ │         └── 10 Mutation operations
  │              ├── MakePublicColumnWriteOnly {"ColumnID":3,"TableID":106}
- │              ├── LogEvent {"TargetStatus":1}
  │              ├── SetColumnName {"ColumnID":3,"Name":"crdb_internal_co...","TableID":106}
  │              ├── MakeAbsentIndexBackfilling {"Index":{"ConstraintID":7,"IndexID":6,"IsCreatedExplicitly":true,"IsUnique":true,"SourceIndexID":4,"TableID":106,"TemporaryIndexID":7}}
  │              ├── AddColumnToIndex {"ColumnID":1,"IndexID":6,"TableID":106}

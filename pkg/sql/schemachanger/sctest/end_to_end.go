@@ -343,9 +343,8 @@ func execStatementWithTestDeps(
 		// Run post-commit phase in mock schema change job.
 		deps.IncrementPhase()
 		deps.LogSideEffectf("# begin %s", deps.Phase())
-		const rollback = false
 		err = scrun.RunSchemaChangesInJob(
-			ctx, deps.TestingKnobs(), deps, jobID, job.DescriptorIDs, rollback,
+			ctx, deps.TestingKnobs(), deps, jobID, job.DescriptorIDs, nil, /* rollbackCause */
 		)
 		require.NoError(t, err, "error in mock schema change job execution")
 		deps.LogSideEffectf("# end %s", deps.Phase())

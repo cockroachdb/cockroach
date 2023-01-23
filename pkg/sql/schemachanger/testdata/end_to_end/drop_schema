@@ -15,6 +15,13 @@ begin transaction #1
 checking for feature: DROP SCHEMA
 increment telemetry for sql.schema.drop_schema
 increment telemetry for sql.uds.drop_schema
+write *eventpb.DropSchema to event log:
+  schemaName: db.sc
+  sql:
+    descriptorId: 106
+    statement: DROP SCHEMA ‹db›.‹sc›
+    tag: DROP SCHEMA
+    user: root
 ## StatementPhase stage 1 of 1 with 1 MutationType op
 add synthetic descriptor #106:
    schema:
@@ -79,7 +86,7 @@ notified job registry to adopt jobs: [1]
 begin transaction #2
 commit transaction #2
 begin transaction #3
-## PostCommitNonRevertiblePhase stage 1 of 1 with 5 MutationType ops
+## PostCommitNonRevertiblePhase stage 1 of 1 with 4 MutationType ops
 upsert descriptor #104
    database:
   -  declarativeSchemaChangerState:
@@ -94,9 +101,11 @@ upsert descriptor #104
   -  version: "3"
   +  version: "4"
 delete descriptor #106
-write *eventpb.DropSchema to event log: DROP SCHEMA ‹db›.‹sc›
 update progress of schema change job #1: "all stages completed"
 set schema change job #1 to non-cancellable
 updated schema change job #1 descriptor IDs to []
+write *eventpb.FinishSchemaChange to event log:
+  sc:
+    descriptorId: 106
 commit transaction #3
 # end PostCommitPhase

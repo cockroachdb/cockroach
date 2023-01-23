@@ -61,8 +61,8 @@ func Build(
 	}
 	scbuildstmt.Process(b, an.GetStatement())
 	an.ValidateAnnotations()
-	els.statements[len(els.statements)-1].RedactedStatement =
-		string(els.astFormatter.FormatAstAsRedactableString(an.GetStatement(), &an.annotation))
+	els.statements[len(els.statements)-1].RedactedStatement = string(
+		dependencies.AstFormatter().FormatAstAsRedactableString(an.GetStatement(), &an.annotation))
 	ts := scpb.TargetState{
 		Targets:       make([]scpb.Target, 0, len(bs.output)),
 		Statements:    els.statements,
@@ -70,6 +70,7 @@ func Build(
 	}
 	current := make([]scpb.Status, 0, len(bs.output))
 	version := dependencies.ClusterSettings().Version.ActiveVersion(ctx)
+	withLogEvent := make([]scpb.Target, 0, len(bs.output))
 	for _, e := range bs.output {
 		if e.metadata.Size() == 0 {
 			// Exclude targets which weren't explicitly set.
@@ -81,8 +82,12 @@ func Build(
 		if !version.IsActive(screl.MinVersion(e.element)) {
 			continue
 		}
-		ts.Targets = append(ts.Targets, scpb.MakeTarget(e.target, e.element, &e.metadata))
+		t := scpb.MakeTarget(e.target, e.element, &e.metadata)
+		ts.Targets = append(ts.Targets, t)
 		current = append(current, e.current)
+		if e.withLogEvent {
+			withLogEvent = append(withLogEvent, t)
+		}
 	}
 	// Ensure that no concurrent schema change are on going on any targets.
 	descSet := screl.AllTargetDescIDs(ts)
@@ -93,6 +98,8 @@ func Build(
 			panic(scerrors.ConcurrentSchemaChangeError(desc))
 		}
 	})
+	// Write to event log and return.
+	logEvents(b, ts, withLogEvent)
 	return scpb.CurrentState{TargetState: ts, Current: current}, nil
 }
 
@@ -112,10 +119,11 @@ type (
 )
 
 type elementState struct {
-	element  scpb.Element
-	current  scpb.Status
-	target   scpb.TargetStatus
-	metadata scpb.TargetMetadata
+	element      scpb.Element
+	current      scpb.Status
+	target       scpb.TargetStatus
+	metadata     scpb.TargetMetadata
+	withLogEvent bool
 }
 
 // builderState is the backing struct for scbuildstmt.BuilderState interface.
@@ -207,9 +215,6 @@ type eventLogState struct {
 	// for any new elements added. This is used for detailed
 	// tracking during cascade operations.
 	sourceElementID *scpb.SourceElementID
-
-	// astFormatter used to format AST elements as redactable strings.
-	astFormatter AstFormatter
 }
 
 // newEventLogState constructs an eventLogState.
@@ -230,7 +235,6 @@ func newEventLogState(d Dependencies, initial scpb.CurrentState, n tree.Statemen
 			SubWorkID:       1,
 			SourceElementID: 1,
 		},
-		astFormatter: d.AstFormatter(),
 	}
 	*els.sourceElementID = 1
 	return &els

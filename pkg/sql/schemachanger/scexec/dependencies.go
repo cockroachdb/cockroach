@@ -26,8 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/scmutationexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
-	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 )
 
 // Dependencies contains all the dependencies required by the executor.
@@ -41,7 +39,6 @@ type Dependencies interface {
 	PeriodicProgressFlusher() PeriodicProgressFlusher
 	Validator() Validator
 	IndexSpanSplitter() IndexSpanSplitter
-	EventLogger() EventLogger
 	DescriptorMetadataUpdater(ctx context.Context) DescriptorMetadataUpdater
 	StatsRefresher() StatsRefreshQueue
 	GetTestingKnobs() *TestingKnobs
@@ -70,21 +67,6 @@ type Catalog interface {
 	// NewCatalogChangeBatcher is equivalent to creating a new kv.Batch for the
 	// current kv.Txn.
 	NewCatalogChangeBatcher() CatalogChangeBatcher
-}
-
-// EventLogger encapsulates the operations for emitting event log entries.
-type EventLogger interface {
-	// LogEvent writes to the event log.
-	LogEvent(
-		ctx context.Context,
-		details eventpb.CommonSQLEventDetails,
-		event logpb.EventPayload,
-	) error
-
-	// LogEventForSchemaChange write a schema change event entry into the event log.
-	LogEventForSchemaChange(
-		ctx context.Context, event logpb.EventPayload,
-	) error
 }
 
 // Telemetry encapsulates metrics gather for the declarative schema changer.

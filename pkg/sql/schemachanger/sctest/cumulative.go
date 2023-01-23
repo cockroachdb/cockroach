@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -630,7 +629,7 @@ func Rollback(t *testing.T, relPath string, newCluster NewClusterFunc) {
 
 		db, cleanup := newCluster(t, &scexec.TestingKnobs{
 			BeforeStage: beforeStage,
-			OnPostCommitPlanError: func(state *scpb.CurrentState, err error) error {
+			OnPostCommitPlanError: func(err error) error {
 				panic(fmt.Sprintf("%+v", err))
 			},
 			OnPostCommitError: func(p scplan.Plan, stageIdx int, err error) error {

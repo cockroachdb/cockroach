@@ -41,6 +41,7 @@ func alterTableDropColumn(
 	checkRowLevelTTLColumn(b, tn, tbl, n, col)
 	checkColumnNotInaccessible(col, n)
 	dropColumn(b, tn, tbl, n, col, elts, n.DropBehavior)
+	b.WithLogEvent(col)
 }
 
 func checkSafeUpdatesForDropColumn(b BuildCtx) {

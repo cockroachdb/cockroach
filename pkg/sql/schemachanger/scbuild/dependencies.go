@@ -29,6 +29,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/redact"
 )
@@ -77,7 +79,11 @@ type Dependencies interface {
 	// ZoneConfigGetter returns a zone config reader.
 	ZoneConfigGetter() ZoneConfigGetter
 
+	// ClientNoticeSender returns a eval.ClientNoticeSender.
 	ClientNoticeSender() eval.ClientNoticeSender
+
+	// EventLogger returns an EventLogger.
+	EventLogger() EventLogger
 }
 
 // CreatePartitioningCCLCallback is the type of the CCL callback for creating
@@ -203,3 +209,14 @@ type SchemaResolverFactory func(
 	txn *kv.Txn,
 	authAccessor AuthorizationAccessor,
 ) resolver.SchemaResolver
+
+// EventLogger contains the dependencies required for logging schema change
+// events.
+type EventLogger interface {
+
+	// LogEvent writes an event into the event log which signals the start of a
+	// schema change.
+	LogEvent(
+		ctx context.Context, details eventpb.CommonSQLEventDetails, event logpb.EventPayload,
+	) error
+}

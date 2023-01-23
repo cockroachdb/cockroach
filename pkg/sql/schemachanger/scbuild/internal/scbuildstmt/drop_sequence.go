@@ -53,6 +53,7 @@ func DropSequence(b BuildCtx, n *tree.DropSequence) {
 			)
 			toCheckBackrefs = append(toCheckBackrefs, seq.SequenceID)
 		}
+		b.WithLogEvent(seq)
 		b.IncrementSubWorkID()
 		b.IncrementSchemaChangeDropCounter("sequence")
 	}
