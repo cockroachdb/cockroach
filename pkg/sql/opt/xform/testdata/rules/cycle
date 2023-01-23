@@ -90,7 +90,7 @@ expropt disable=MemoCycleTestRelRule skip-race
 ----
 error: memo group optimization passes surpassed limit of 100000; there may be a cycle in the memo
 details:
-memo (not optimized, ~4KB, required=[], cycle=[G1->G4->G6->G9->G1])
+memo (not optimized, ~6KB, required=[], cycle=[G1->G4->G6->G9->G10->G12->G13->G1])
  ├── G1: (memo-cycle-test-rel G2 G3) (select G2 G4)
  ├── G2: (scan uv,cols=(1,2)) (scan uv@uv_v_idx,cols=(1,2))
  │    ├── [limit hint: 1000.00]
@@ -102,7 +102,13 @@ memo (not optimized, ~4KB, required=[], cycle=[G1->G4->G6->G9->G1])
  ├── G3: (filters G5)
  ├── G4: (filters G6)
  ├── G5: (eq G7 G8)
- ├── G6: (exists G9 &{<nil>  0 unknown true})
+ ├── G6: (coalesce G9)
  ├── G7: (variable v)
  ├── G8: (const 1)
- └── G9: (limit G1 G8)
+ ├── G9: (scalar-list G10 G11)
+ ├── G10: (subquery G12 &{<nil>  0 unknown false})
+ ├── G11: (false)
+ ├── G12: (project G13 G14)
+ ├── G13: (limit G1 G8)
+ ├── G14: (projections G15)
+ └── G15: (true)

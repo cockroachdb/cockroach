@@ -101,14 +101,16 @@ vectorized: true
 │
 └── • subquery
     │ id: @S1
-    │ original sql: EXISTS (SELECT a FROM abc)
-    │ exec mode: exists
+    │ original sql: (SELECT a FROM abc)
+    │ exec mode: one row
     │
-    └── • scan
-          missing stats
-          table: abc@abc_pkey
-          spans: LIMITED SCAN
-          limit: 1
+    └── • render
+        │
+        └── • scan
+              missing stats
+              table: abc@abc_pkey
+              spans: LIMITED SCAN
+              limit: 1
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM abc WHERE a = (SELECT max(a) FROM abc WHERE EXISTS(SELECT * FROM abc WHERE c=a+3))
@@ -132,23 +134,27 @@ vectorized: true
 │
 ├── • subquery
 │   │ id: @S1
-│   │ original sql: EXISTS (SELECT * FROM abc WHERE c = (a + 3))
-│   │ exec mode: exists
+│   │ original sql: (SELECT * FROM abc WHERE c = (a + 3))
+│   │ exec mode: one row
 │   │
-│   └── • limit
-│       │ columns: (a, b, c)
-│       │ count: 1
+│   └── • render
+│       │ columns: (column16)
+│       │ render column16: true
 │       │
-│       └── • filter
-│           │ columns: (a, b, c)
-│           │ estimated row count: 330 (missing stats)
-│           │ filter: c = (a + 3)
+│       └── • limit
+│           │ columns: (a, c)
+│           │ count: 1
 │           │
-│           └── • scan
-│                 columns: (a, b, c)
-│                 estimated row count: 1,000 (missing stats)
-│                 table: abc@abc_pkey
-│                 spans: FULL SCAN (SOFT LIMIT)
+│           └── • filter
+│               │ columns: (a, c)
+│               │ estimated row count: 330 (missing stats)
+│               │ filter: c = (a + 3)
+│               │
+│               └── • scan
+│                     columns: (a, c)
+│                     estimated row count: 1,000 (missing stats)
+│                     table: abc@abc_pkey
+│                     spans: FULL SCAN (SOFT LIMIT)
 │
 └── • subquery
     │ id: @S2
@@ -168,7 +174,7 @@ vectorized: true
                 │ columns: (a)
                 │ ordering: -a
                 │ estimated row count: 333 (missing stats)
-                │ filter: @S1
+                │ filter: COALESCE(@S1, false)
                 │
                 └── • revscan
                       columns: (a)

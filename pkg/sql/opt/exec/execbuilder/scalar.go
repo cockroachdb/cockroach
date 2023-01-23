@@ -592,6 +592,12 @@ func (b *Builder) buildExistsSubquery(
 
 	// Build the execution plan for the subquery. Note that the subquery could
 	// have subqueries of its own which are added to b.subqueries.
+	//
+	// TODO(mgartner): This path should never be executed because the
+	// ConvertUncorrelatedExistsToCoalesceSubquery converts all uncorrelated
+	// Exists with Coalesce+Subquery expressions. Remove this and the execution
+	// support for the Exists mode. Remember to mark
+	// ConvertUncorrelatedExistsToCoalesceSubquery as an essential rule.
 	plan, err := b.buildRelational(exists.Input)
 	if err != nil {
 		return nil, err

@@ -1557,30 +1557,39 @@ select
  │    ├── (1,)
  │    └── (2,)
  └── filters
-      └── exists [subquery]
-           └── limit
-                ├── columns: k:2!null i:3!null x:9!null y:10!null
-                ├── cardinality: [0 - 1]
-                ├── key: ()
-                ├── fd: ()-->(2,3,9,10), (9)==(2), (3)==(10), (10)==(3), (2)==(9)
-                ├── inner-join (hash)
-                │    ├── columns: k:2!null i:3!null x:9!null y:10!null
-                │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
-                │    ├── key: (9)
-                │    ├── fd: (2)-->(3), (9)-->(10), (2)==(9), (9)==(2), (3)==(10), (10)==(3)
-                │    ├── limit hint: 1.00
-                │    ├── scan a
-                │    │    ├── columns: k:2!null i:3
-                │    │    ├── key: (2)
-                │    │    └── fd: (2)-->(3)
-                │    ├── scan xy
-                │    │    ├── columns: x:9!null y:10
-                │    │    ├── key: (9)
-                │    │    └── fd: (9)-->(10)
-                │    └── filters
-                │         ├── x:9 = k:2 [outer=(2,9), constraints=(/2: (/NULL - ]; /9: (/NULL - ]), fd=(2)==(9), (9)==(2)]
-                │         └── i:3 = y:10 [outer=(3,10), constraints=(/3: (/NULL - ]; /10: (/NULL - ]), fd=(3)==(10), (10)==(3)]
-                └── 1
+      └── coalesce [subquery]
+           ├── subquery
+           │    └── project
+           │         ├── columns: column18:18!null
+           │         ├── cardinality: [0 - 1]
+           │         ├── key: ()
+           │         ├── fd: ()-->(18)
+           │         ├── limit
+           │         │    ├── columns: k:2!null i:3!null x:9!null y:10!null
+           │         │    ├── cardinality: [0 - 1]
+           │         │    ├── key: ()
+           │         │    ├── fd: ()-->(2,3,9,10), (9)==(2), (3)==(10), (10)==(3), (2)==(9)
+           │         │    ├── inner-join (hash)
+           │         │    │    ├── columns: k:2!null i:3!null x:9!null y:10!null
+           │         │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
+           │         │    │    ├── key: (9)
+           │         │    │    ├── fd: (2)-->(3), (9)-->(10), (2)==(9), (9)==(2), (3)==(10), (10)==(3)
+           │         │    │    ├── limit hint: 1.00
+           │         │    │    ├── scan a
+           │         │    │    │    ├── columns: k:2!null i:3
+           │         │    │    │    ├── key: (2)
+           │         │    │    │    └── fd: (2)-->(3)
+           │         │    │    ├── scan xy
+           │         │    │    │    ├── columns: x:9!null y:10
+           │         │    │    │    ├── key: (9)
+           │         │    │    │    └── fd: (9)-->(10)
+           │         │    │    └── filters
+           │         │    │         ├── x:9 = k:2 [outer=(2,9), constraints=(/2: (/NULL - ]; /9: (/NULL - ]), fd=(2)==(9), (9)==(2)]
+           │         │    │         └── i:3 = y:10 [outer=(3,10), constraints=(/3: (/NULL - ]; /10: (/NULL - ]), fd=(3)==(10), (10)==(3)]
+           │         │    └── 1
+           │         └── projections
+           │              └── true [as=column18:18]
+           └── false
 
 norm expect=TryDecorrelateInnerLeftJoin
 SELECT *
@@ -3834,18 +3843,22 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
  └── filters
-      └── exists [subquery]
-           └── limit
-                ├── columns: x:8!null y:9
-                ├── cardinality: [0 - 1]
-                ├── key: ()
-                ├── fd: ()-->(8,9)
-                ├── scan xy
-                │    ├── columns: x:8!null y:9
-                │    ├── key: (8)
-                │    ├── fd: (8)-->(9)
-                │    └── limit hint: 1.00
-                └── 1
+      └── coalesce [subquery]
+           ├── subquery
+           │    └── project
+           │         ├── columns: column12:12!null
+           │         ├── cardinality: [0 - 1]
+           │         ├── key: ()
+           │         ├── fd: ()-->(12)
+           │         ├── limit
+           │         │    ├── cardinality: [0 - 1]
+           │         │    ├── key: ()
+           │         │    ├── scan xy
+           │         │    │    └── limit hint: 1.00
+           │         │    └── 1
+           │         └── projections
+           │              └── true [as=column12:12]
+           └── false
 
 # Hoist nested EXISTS.
 norm expect=HoistSelectExists
@@ -3961,18 +3974,22 @@ select
  │    └── fd: (1)-->(2-5)
  └── filters
       └── not [subquery]
-           └── exists
-                └── limit
-                     ├── columns: x:8!null y:9
-                     ├── cardinality: [0 - 1]
-                     ├── key: ()
-                     ├── fd: ()-->(8,9)
-                     ├── scan xy
-                     │    ├── columns: x:8!null y:9
-                     │    ├── key: (8)
-                     │    ├── fd: (8)-->(9)
-                     │    └── limit hint: 1.00
-                     └── 1
+           └── coalesce
+                ├── subquery
+                │    └── project
+                │         ├── columns: column12:12!null
+                │         ├── cardinality: [0 - 1]
+                │         ├── key: ()
+                │         ├── fd: ()-->(12)
+                │         ├── limit
+                │         │    ├── cardinality: [0 - 1]
+                │         │    ├── key: ()
+                │         │    ├── scan xy
+                │         │    │    └── limit hint: 1.00
+                │         │    └── 1
+                │         └── projections
+                │              └── true [as=column12:12]
+                └── false
 
 # --------------------------------------------------
 # HoistSelectExists + HoistSelectNotExists
@@ -4550,37 +4567,37 @@ project
  ├── key: (1)
  ├── fd: (1)-->(2-5)
  └── select
-      ├── columns: k:1!null i:2 f:3 s:4 j:5 true_agg:17
+      ├── columns: k:1!null i:2 f:3 s:4 j:5 true_agg:18
       ├── key: (1)
-      ├── fd: (1)-->(2-5,17)
+      ├── fd: (1)-->(2-5,18)
       ├── group-by (hash)
-      │    ├── columns: k:1!null i:2 f:3 s:4 j:5 true_agg:17
+      │    ├── columns: k:1!null i:2 f:3 s:4 j:5 true_agg:18
       │    ├── grouping columns: k:1!null
       │    ├── key: (1)
-      │    ├── fd: (1)-->(2-5,17)
+      │    ├── fd: (1)-->(2-5,18)
       │    ├── left-join (hash)
-      │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5 x:12 true:16
+      │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5 x:12 true:17
       │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
       │    │    ├── key: (1)
-      │    │    ├── fd: (1)-->(2-5,12,16)
+      │    │    ├── fd: (1)-->(2-5,12,17)
       │    │    ├── scan a
       │    │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5
       │    │    │    ├── key: (1)
       │    │    │    └── fd: (1)-->(2-5)
       │    │    ├── project
-      │    │    │    ├── columns: true:16!null x:12!null
+      │    │    │    ├── columns: true:17!null x:12!null
       │    │    │    ├── key: (12)
-      │    │    │    ├── fd: ()-->(16)
+      │    │    │    ├── fd: ()-->(17)
       │    │    │    ├── scan xy
       │    │    │    │    ├── columns: x:12!null
       │    │    │    │    └── key: (12)
       │    │    │    └── projections
-      │    │    │         └── true [as=true:16]
+      │    │    │         └── true [as=true:17]
       │    │    └── filters
       │    │         └── x:12 = k:1 [outer=(1,12), constraints=(/1: (/NULL - ]; /12: (/NULL - ]), fd=(1)==(12), (12)==(1)]
       │    └── aggregations
-      │         ├── const-not-null-agg [as=true_agg:17, outer=(16)]
-      │         │    └── true:16
+      │         ├── const-not-null-agg [as=true_agg:18, outer=(17)]
+      │         │    └── true:17
       │         ├── const-agg [as=i:2, outer=(2)]
       │         │    └── i:2
       │         ├── const-agg [as=f:3, outer=(3)]
@@ -4590,20 +4607,24 @@ project
       │         └── const-agg [as=j:5, outer=(5)]
       │              └── j:5
       └── filters
-           └── or [outer=(17), subquery]
-                ├── exists
-                │    └── limit
-                │         ├── columns: x:8!null y:9
-                │         ├── cardinality: [0 - 1]
-                │         ├── key: ()
-                │         ├── fd: ()-->(8,9)
-                │         ├── scan xy
-                │         │    ├── columns: x:8!null y:9
-                │         │    ├── key: (8)
-                │         │    ├── fd: (8)-->(9)
-                │         │    └── limit hint: 1.00
-                │         └── 1
-                └── true_agg:17 IS NOT NULL
+           └── or [outer=(18), subquery]
+                ├── coalesce
+                │    ├── subquery
+                │    │    └── project
+                │    │         ├── columns: column16:16!null
+                │    │         ├── cardinality: [0 - 1]
+                │    │         ├── key: ()
+                │    │         ├── fd: ()-->(16)
+                │    │         ├── limit
+                │    │         │    ├── cardinality: [0 - 1]
+                │    │         │    ├── key: ()
+                │    │         │    ├── scan xy
+                │    │         │    │    └── limit hint: 1.00
+                │    │         │    └── 1
+                │    │         └── projections
+                │    │              └── true [as=column16:16]
+                │    └── false
+                └── true_agg:18 IS NOT NULL
 
 # --------------------------------------------------
 # HoistProjectSubquery
@@ -4641,7 +4662,7 @@ SELECT
 FROM a
 ----
 project
- ├── columns: a:29!null x:30 y:31 b:32 exists:33 count:34!null
+ ├── columns: a:29!null x:30 y:31 b:32 exists:34 count:35!null
  ├── fd: ()-->(29)
  ├── group-by (hash)
  │    ├── columns: k:1!null xy.x:8 count_rows:28!null
@@ -4691,19 +4712,23 @@ project
       │    ├── scan xy
       │    │    └── columns: xy.y:17
       │    └── 5
-      ├── exists [as=exists:33, subquery]
-      │    └── limit
-      │         ├── columns: xy.x:20!null xy.y:21
-      │         ├── cardinality: [0 - 1]
-      │         ├── key: ()
-      │         ├── fd: ()-->(20,21)
-      │         ├── scan xy
-      │         │    ├── columns: xy.x:20!null xy.y:21
-      │         │    ├── key: (20)
-      │         │    ├── fd: (20)-->(21)
-      │         │    └── limit hint: 1.00
-      │         └── 1
-      └── count_rows:28 [as=count:34, outer=(28)]
+      ├── coalesce [as=exists:34, subquery]
+      │    ├── subquery
+      │    │    └── project
+      │    │         ├── columns: column33:33!null
+      │    │         ├── cardinality: [0 - 1]
+      │    │         ├── key: ()
+      │    │         ├── fd: ()-->(33)
+      │    │         ├── limit
+      │    │         │    ├── cardinality: [0 - 1]
+      │    │         │    ├── key: ()
+      │    │         │    ├── scan xy
+      │    │         │    │    └── limit hint: 1.00
+      │    │         │    └── 1
+      │    │         └── projections
+      │    │              └── true [as=column33:33]
+      │    └── false
+      └── count_rows:28 [as=count:35, outer=(28)]
 
 # Subquery in GroupBy aggregate (optbuilder creates correlated Project).
 norm expect=HoistProjectSubquery
@@ -4904,43 +4929,45 @@ norm expect=HoistProjectSubquery
 SELECT EXISTS(SELECT EXISTS(SELECT * FROM xy WHERE y=i) FROM a)
 ----
 values
- ├── columns: exists:16
+ ├── columns: exists:17
  ├── cardinality: [1 - 1]
  ├── key: ()
- ├── fd: ()-->(16)
+ ├── fd: ()-->(17)
  └── tuple
-      └── exists
-           └── limit
-                ├── columns: k:1!null i:2 y:9 true:13
-                ├── cardinality: [0 - 1]
-                ├── key: ()
-                ├── fd: ()-->(1,2,9,13)
-                ├── left-join (hash)
-                │    ├── columns: k:1!null i:2 y:9 true:13
-                │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-one)
-                │    ├── fd: ()-->(1,2,9)
-                │    ├── limit hint: 1.00
-                │    ├── limit
-                │    │    ├── columns: k:1!null i:2
-                │    │    ├── cardinality: [0 - 1]
-                │    │    ├── key: ()
-                │    │    ├── fd: ()-->(1,2)
-                │    │    ├── scan a
-                │    │    │    ├── columns: k:1!null i:2
-                │    │    │    ├── key: (1)
-                │    │    │    ├── fd: (1)-->(2)
-                │    │    │    └── limit hint: 1.00
-                │    │    └── 1
-                │    ├── project
-                │    │    ├── columns: true:13!null y:9
-                │    │    ├── fd: ()-->(13)
-                │    │    ├── scan xy
-                │    │    │    └── columns: y:9
-                │    │    └── projections
-                │    │         └── true [as=true:13]
-                │    └── filters
-                │         └── y:9 = i:2 [outer=(2,9), constraints=(/2: (/NULL - ]; /9: (/NULL - ]), fd=(2)==(9), (9)==(2)]
-                └── 1
+      └── coalesce
+           ├── subquery
+           │    └── project
+           │         ├── columns: column16:16!null
+           │         ├── cardinality: [0 - 1]
+           │         ├── key: ()
+           │         ├── fd: ()-->(16)
+           │         ├── limit
+           │         │    ├── columns: i:2 y:9
+           │         │    ├── cardinality: [0 - 1]
+           │         │    ├── key: ()
+           │         │    ├── fd: ()-->(2,9)
+           │         │    ├── left-join (hash)
+           │         │    │    ├── columns: i:2 y:9
+           │         │    │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-one)
+           │         │    │    ├── fd: ()-->(2,9)
+           │         │    │    ├── limit hint: 1.00
+           │         │    │    ├── limit
+           │         │    │    │    ├── columns: i:2
+           │         │    │    │    ├── cardinality: [0 - 1]
+           │         │    │    │    ├── key: ()
+           │         │    │    │    ├── fd: ()-->(2)
+           │         │    │    │    ├── scan a
+           │         │    │    │    │    ├── columns: i:2
+           │         │    │    │    │    └── limit hint: 1.00
+           │         │    │    │    └── 1
+           │         │    │    ├── scan xy
+           │         │    │    │    └── columns: y:9
+           │         │    │    └── filters
+           │         │    │         └── y:9 = i:2 [outer=(2,9), constraints=(/2: (/NULL - ]; /9: (/NULL - ]), fd=(2)==(9), (9)==(2)]
+           │         │    └── 1
+           │         └── projections
+           │              └── true [as=column16:16]
+           └── false
 
 # Don't hoist uncorrelated subquery.
 norm
@@ -5711,22 +5738,31 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
  └── filters
-      └── exists [subquery]
-           └── limit
-                ├── columns: y:9!null
-                ├── cardinality: [0 - 1]
-                ├── key: ()
-                ├── fd: ()-->(9)
-                ├── select
-                │    ├── columns: y:9!null
-                │    ├── fd: ()-->(9)
-                │    ├── limit hint: 1.00
-                │    ├── scan xy
-                │    │    ├── columns: y:9
-                │    │    └── limit hint: 100.00
-                │    └── filters
-                │         └── y:9 = 5 [outer=(9), constraints=(/9: [/5 - /5]; tight), fd=()-->(9)]
-                └── 1
+      └── coalesce [subquery]
+           ├── subquery
+           │    └── project
+           │         ├── columns: column12:12!null
+           │         ├── cardinality: [0 - 1]
+           │         ├── key: ()
+           │         ├── fd: ()-->(12)
+           │         ├── limit
+           │         │    ├── columns: y:9!null
+           │         │    ├── cardinality: [0 - 1]
+           │         │    ├── key: ()
+           │         │    ├── fd: ()-->(9)
+           │         │    ├── select
+           │         │    │    ├── columns: y:9!null
+           │         │    │    ├── fd: ()-->(9)
+           │         │    │    ├── limit hint: 1.00
+           │         │    │    ├── scan xy
+           │         │    │    │    ├── columns: y:9
+           │         │    │    │    └── limit hint: 100.00
+           │         │    │    └── filters
+           │         │    │         └── y:9 = 5 [outer=(9), constraints=(/9: [/5 - /5]; tight), fd=()-->(9)]
+           │         │    └── 1
+           │         └── projections
+           │              └── true [as=column12:12]
+           └── false
 
 # ANY in Join On condition.
 norm expect=NormalizeJoinAnyFilter
@@ -5847,21 +5883,30 @@ select
  │    └── fd: (1)-->(2-5)
  └── filters
       └── not [subquery]
-           └── exists
-                └── limit
-                     ├── columns: y:9
-                     ├── cardinality: [0 - 1]
-                     ├── key: ()
-                     ├── fd: ()-->(9)
-                     ├── select
-                     │    ├── columns: y:9
-                     │    ├── limit hint: 1.00
-                     │    ├── scan xy
-                     │    │    ├── columns: y:9
-                     │    │    └── limit hint: 3.00
-                     │    └── filters
-                     │         └── (y:9 = 5) IS NOT false [outer=(9)]
-                     └── 1
+           └── coalesce
+                ├── subquery
+                │    └── project
+                │         ├── columns: column12:12!null
+                │         ├── cardinality: [0 - 1]
+                │         ├── key: ()
+                │         ├── fd: ()-->(12)
+                │         ├── limit
+                │         │    ├── columns: y:9
+                │         │    ├── cardinality: [0 - 1]
+                │         │    ├── key: ()
+                │         │    ├── fd: ()-->(9)
+                │         │    ├── select
+                │         │    │    ├── columns: y:9
+                │         │    │    ├── limit hint: 1.00
+                │         │    │    ├── scan xy
+                │         │    │    │    ├── columns: y:9
+                │         │    │    │    └── limit hint: 3.00
+                │         │    │    └── filters
+                │         │    │         └── (y:9 = 5) IS NOT false [outer=(9)]
+                │         │    └── 1
+                │         └── projections
+                │              └── true [as=column12:12]
+                └── false
 
 # NOT ANY in Join On condition.
 norm expect=NormalizeJoinNotAnyFilter
