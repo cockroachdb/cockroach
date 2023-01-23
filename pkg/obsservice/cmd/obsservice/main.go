@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
+	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/spf13/cobra"
 	"golang.org/x/sys/unix"
@@ -52,7 +53,8 @@ var RootCmd = &cobra.Command{
 	Short: "An observability service for CockroachDB",
 	Long: `The Observability Service ingests monitoring and observability data 
 from one or more CockroachDB clusters.`,
-	Run: func(cmd *cobra.Command, args []string) {
+	SilenceUsage: true,
+	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := context.Background()
 		cfg := httpproxy.ReverseHTTPProxyConfig{
 			HTTPAddr:      httpAddr,
@@ -64,7 +66,7 @@ from one or more CockroachDB clusters.`,
 
 		connCfg, err := pgxpool.ParseConfig(sinkPGURL)
 		if err != nil {
-			panic(fmt.Sprintf("invalid --sink-pgurl (%s): %s", sinkPGURL, err))
+			return errors.Wrapf(err, "invalid --sink-pgurl (%s)", sinkPGURL)
 		}
 		if connCfg.ConnConfig.Database == "" {
 			fmt.Printf("No database explicitly provided in --sink-pgurl. Using %q.\n", defaultSinkDBName)
@@ -73,11 +75,11 @@ from one or more CockroachDB clusters.`,
 
 		pool, err := pgxpool.ConnectConfig(ctx, connCfg)
 		if err != nil {
-			panic(fmt.Sprintf("failed to connect to sink database (%s): %s", sinkPGURL, err))
+			return errors.Wrapf(err, "failed to connect to sink database (%s)", sinkPGURL)
 		}
 
 		if err := migrations.RunDBMigrations(ctx, connCfg.ConnConfig); err != nil {
-			panic(fmt.Sprintf("failed to run DB migrations: %s", err))
+			return errors.Wrap(err, "failed to run DB migrations")
 		}
 
 		signalCh := make(chan os.Signal, 1)
@@ -127,6 +129,7 @@ from one or more CockroachDB clusters.`,
 				handleSignalDuringShutdown(sig)
 			}
 		}
+		return nil
 	},
 }
 
@@ -190,7 +193,6 @@ func main() {
 		"Address of a CRDB node that events will be ingested from.")
 
 	if err := RootCmd.Execute(); err != nil {
-		fmt.Println(err)
 		exit.WithCode(exit.UnspecifiedError())
 	}
 }
