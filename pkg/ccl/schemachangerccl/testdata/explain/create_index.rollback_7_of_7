@@ -23,8 +23,7 @@ Schema change plan for rolling back CREATE INDEX ‹id1› ON ‹defaultdb›.pu
       │    │    ├── PUBLIC           → ABSENT      IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}
       │    │    ├── PUBLIC           → ABSENT      IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}
       │    │    └── PUBLIC           → ABSENT      IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 3}
-      │    └── 6 Mutation operations
-      │         ├── LogEvent {"TargetStatus":1}
+      │    └── 5 Mutation operations
       │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":2,"TableID":104}
       │         ├── SetIndexName {"IndexID":2,"Name":"crdb_internal_in...","TableID":104}
       │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":3,"TableID":104}

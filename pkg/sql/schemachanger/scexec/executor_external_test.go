@@ -40,8 +40,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
-	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
 )
@@ -73,7 +71,6 @@ func (ti testInfra) newExecDeps(txn descs.Txn) scexec.Dependencies {
 		noopValidator{},
 		scdeps.NewConstantClock(timeutil.Now()),
 		noopMetadataUpdater{},
-		noopEventLogger{},
 		noopStatsReferesher{},
 		&scexec.TestingKnobs{},
 		kvTrace,
@@ -462,21 +459,9 @@ func (noopValidator) ValidateConstraint(
 	return nil
 }
 
-type noopEventLogger struct{}
-
-var _ scexec.EventLogger = noopEventLogger{}
-
-func (noopEventLogger) LogEvent(
-	_ context.Context, _ eventpb.CommonSQLEventDetails, _ logpb.EventPayload,
-) error {
-	return nil
-}
-
-func (noopEventLogger) LogEventForSchemaChange(_ context.Context, _ logpb.EventPayload) error {
-	return nil
-}
-
 type noopStatsReferesher struct{}
+
+var _ scexec.StatsRefresher = noopStatsReferesher{}
 
 func (noopStatsReferesher) NotifyMutation(table catalog.TableDescriptor, rowsAffected int) {
 }
@@ -494,9 +479,3 @@ func (noopMetadataUpdater) DeleteDatabaseRoleSettings(ctx context.Context, dbID 
 func (noopMetadataUpdater) DeleteSchedule(ctx context.Context, scheduleID int64) error {
 	return nil
 }
-
-var _ scexec.Backfiller = noopBackfiller{}
-var _ scexec.Validator = noopValidator{}
-var _ scexec.EventLogger = noopEventLogger{}
-var _ scexec.StatsRefresher = noopStatsReferesher{}
-var _ scexec.DescriptorMetadataUpdater = noopMetadataUpdater{}

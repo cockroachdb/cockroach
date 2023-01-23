@@ -21,9 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
-	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/redact"
 )
 
 func (m *visitor) MakeAbsentIndexBackfilling(
@@ -194,18 +192,13 @@ func (m *visitor) MakeValidatedPrimaryIndexPublic(
 	if err != nil {
 		return err
 	}
-	indexDesc := index.IndexDescDeepCopy()
-	if _, err := m.removeMutation(tbl, MakeIndexIDMutationSelector(op.IndexID), op.TargetMetadata, eventpb.CommonSQLEventDetails{
-		DescriptorID:    uint32(tbl.GetID()),
-		Statement:       redact.RedactableString(op.Statement),
-		Tag:             op.StatementTag,
-		ApplicationName: op.Authorization.AppName,
-		User:            op.Authorization.UserName,
-	}, descpb.DescriptorMutation_WRITE_ONLY); err != nil {
-		return err
-	}
-	tbl.PrimaryIndex = indexDesc
-	return nil
+	tbl.PrimaryIndex = index.IndexDescDeepCopy()
+	_, err = RemoveMutation(
+		tbl,
+		MakeIndexIDMutationSelector(op.IndexID),
+		descpb.DescriptorMutation_WRITE_ONLY,
+	)
+	return err
 }
 
 func (m *visitor) MakeValidatedSecondaryIndexPublic(
@@ -313,14 +306,12 @@ func (m *visitor) MakeIndexAbsent(ctx context.Context, op scop.MakeIndexAbsent) 
 	if err != nil {
 		return err
 	}
-	_, err = m.removeMutation(tbl, MakeIndexIDMutationSelector(op.IndexID), op.TargetMetadata, eventpb.CommonSQLEventDetails{
-		DescriptorID:    uint32(tbl.GetID()),
-		Statement:       redact.RedactableString(op.Statement),
-		Tag:             op.StatementTag,
-		ApplicationName: op.Authorization.AppName,
-		User:            op.Authorization.UserName,
-	}, descpb.DescriptorMutation_DELETE_ONLY,
-		descpb.DescriptorMutation_BACKFILLING)
+	_, err = RemoveMutation(
+		tbl,
+		MakeIndexIDMutationSelector(op.IndexID),
+		descpb.DescriptorMutation_DELETE_ONLY,
+		descpb.DescriptorMutation_BACKFILLING,
+	)
 	return err
 }
 

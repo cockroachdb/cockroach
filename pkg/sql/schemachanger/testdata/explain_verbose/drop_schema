@@ -104,7 +104,7 @@ EXPLAIN (ddl, verbose) DROP SCHEMA db.sc;
 │                 - 106
 │                 JobID: 1
 │                 NonCancelable: true
-│                 RunningStatus: PostCommitNonRevertiblePhase stage 1 of 1 with 2 MutationType ops pending
+│                 RunningStatus: PostCommitNonRevertiblePhase stage 1 of 1 with 1 MutationType op pending
 │                 Statements:
 │                 - statement: DROP SCHEMA db.sc
 │                   redactedstatement: DROP SCHEMA ‹db›.‹sc›
@@ -122,21 +122,7 @@ EXPLAIN (ddl, verbose) DROP SCHEMA db.sc;
         │       └── • PreviousTransactionPrecedence dependency from DROPPED Schema:{DescID: 106}
         │             rule: "descriptor DROPPED in transaction before removal"
         │
-        └── • 5 Mutation operations
-            │
-            ├── • LogEvent
-            │     Element:
-            │       Schema:
-            │         schemaId: 106
-            │     EventBase:
-            │       Authorization:
-            │         UserName: root
-            │       Statement: DROP SCHEMA ‹db›.‹sc›
-            │       StatementTag: DROP SCHEMA
-            │       TargetMetadata:
-            │         SourceElementID: 1
-            │         SubWorkID: 1
-            │     TargetStatus: 1
+        └── • 4 Mutation operations
             │
             ├── • DeleteDescriptor
             │     DescriptorID: 106

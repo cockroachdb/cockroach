@@ -209,20 +209,6 @@ func (mr *MockDependenciesMockRecorder) DescriptorMetadataUpdater(arg0 interface
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescriptorMetadataUpdater", reflect.TypeOf((*MockDependencies)(nil).DescriptorMetadataUpdater), arg0)
 }
 
-// EventLogger mocks base method.
-func (m *MockDependencies) EventLogger() scexec.EventLogger {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "EventLogger")
-	ret0, _ := ret[0].(scexec.EventLogger)
-	return ret0
-}
-
-// EventLogger indicates an expected call of EventLogger.
-func (mr *MockDependenciesMockRecorder) EventLogger() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EventLogger", reflect.TypeOf((*MockDependencies)(nil).EventLogger))
-}
-
 // GetTestingKnobs mocks base method.
 func (m *MockDependencies) GetTestingKnobs() *scexec.TestingKnobs {
 	m.ctrl.T.Helper()

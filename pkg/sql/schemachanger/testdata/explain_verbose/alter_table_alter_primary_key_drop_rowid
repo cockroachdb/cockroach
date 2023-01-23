@@ -88,29 +88,11 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (a);
 │       │       └── • Precedence dependency from WRITE_ONLY Column:{DescID: 104, ColumnID: 2}
 │       │             rule: "column no longer public before dependents"
 │       │
-│       └── • 11 Mutation operations
+│       └── • 10 Mutation operations
 │           │
 │           ├── • MakePublicColumnWriteOnly
 │           │     ColumnID: 2
 │           │     TableID: 104
-│           │
-│           ├── • LogEvent
-│           │     Element:
-│           │       Column:
-│           │         columnId: 2
-│           │         isHidden: true
-│           │         pgAttributeNum: 2
-│           │         tableId: 104
-│           │     EventBase:
-│           │       Authorization:
-│           │         UserName: root
-│           │       Statement: ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PRIMARY KEY USING COLUMNS
-│           │         (‹a›)
-│           │       StatementTag: ALTER TABLE
-│           │       TargetMetadata:
-│           │         SourceElementID: 1
-│           │         SubWorkID: 1
-│           │     TargetStatus: 1
 │           │
 │           ├── • SetColumnName
 │           │     ColumnID: 2
@@ -433,15 +415,6 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (a);
 │   │       │     TableID: 104
 │   │       │
 │   │       ├── • MakeValidatedPrimaryIndexPublic
-│   │       │     EventBase:
-│   │       │       Authorization:
-│   │       │         UserName: root
-│   │       │       Statement: ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PRIMARY KEY USING COLUMNS
-│   │       │         (‹a›)
-│   │       │       StatementTag: ALTER TABLE
-│   │       │       TargetMetadata:
-│   │       │         SourceElementID: 1
-│   │       │         SubWorkID: 1
 │   │       │     IndexID: 2
 │   │       │     TableID: 104
 │   │       │
@@ -827,15 +800,6 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (a);
     │   └── • 9 Mutation operations
     │       │
     │       ├── • MakeIndexAbsent
-    │       │     EventBase:
-    │       │       Authorization:
-    │       │         UserName: root
-    │       │       Statement: ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PRIMARY KEY USING COLUMNS
-    │       │         (‹a›)
-    │       │       StatementTag: ALTER TABLE
-    │       │       TargetMetadata:
-    │       │         SourceElementID: 1
-    │       │         SubWorkID: 1
     │       │     IndexID: 1
     │       │     TableID: 104
     │       │
@@ -862,15 +826,6 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (a);
     │       │     TableID: 104
     │       │
     │       ├── • MakeValidatedPrimaryIndexPublic
-    │       │     EventBase:
-    │       │       Authorization:
-    │       │         UserName: root
-    │       │       Statement: ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PRIMARY KEY USING COLUMNS
-    │       │         (‹a›)
-    │       │       StatementTag: ALTER TABLE
-    │       │       TargetMetadata:
-    │       │         SourceElementID: 1
-    │       │         SubWorkID: 1
     │       │     IndexID: 4
     │       │     TableID: 104
     │       │
@@ -1028,15 +983,6 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (a);
             │     TableID: 104
             │
             ├── • MakeIndexAbsent
-            │     EventBase:
-            │       Authorization:
-            │         UserName: root
-            │       Statement: ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PRIMARY KEY USING COLUMNS
-            │         (‹a›)
-            │       StatementTag: ALTER TABLE
-            │       TargetMetadata:
-            │         SourceElementID: 1
-            │         SubWorkID: 1
             │     IndexID: 2
             │     TableID: 104
             │
@@ -1060,15 +1006,6 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (a);
             │
             ├── • MakeDeleteOnlyColumnAbsent
             │     ColumnID: 2
-            │     EventBase:
-            │       Authorization:
-            │         UserName: root
-            │       Statement: ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PRIMARY KEY USING COLUMNS
-            │         (‹a›)
-            │       StatementTag: ALTER TABLE
-            │       TargetMetadata:
-            │         SourceElementID: 1
-            │         SubWorkID: 1
             │     TableID: 104
             │
             ├── • RemoveJobStateFromDescriptor

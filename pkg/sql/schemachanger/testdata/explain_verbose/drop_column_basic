@@ -66,27 +66,11 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN j;
 │       │       └── • Precedence dependency from WRITE_ONLY Column:{DescID: 104, ColumnID: 2}
 │       │             rule: "column no longer public before dependents"
 │       │
-│       └── • 9 Mutation operations
+│       └── • 7 Mutation operations
 │           │
 │           ├── • MakePublicColumnWriteOnly
 │           │     ColumnID: 2
 │           │     TableID: 104
-│           │
-│           ├── • LogEvent
-│           │     Element:
-│           │       Column:
-│           │         columnId: 2
-│           │         pgAttributeNum: 2
-│           │         tableId: 104
-│           │     EventBase:
-│           │       Authorization:
-│           │         UserName: root
-│           │       Statement: ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COLUMN ‹j›
-│           │       StatementTag: ALTER TABLE
-│           │       TargetMetadata:
-│           │         SourceElementID: 1
-│           │         SubWorkID: 1
-│           │     TargetStatus: 1
 │           │
 │           ├── • SetColumnName
 │           │     ColumnID: 2
@@ -97,23 +81,6 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN j;
 │           │     ColumnID: 2
 │           │     PgAttributeNum: 2
 │           │     TableID: 104
-│           │
-│           ├── • LogEvent
-│           │     Element:
-│           │       ColumnComment:
-│           │         columnId: 2
-│           │         comment: j has a comment
-│           │         pgAttributeNum: 2
-│           │         tableId: 104
-│           │     EventBase:
-│           │       Authorization:
-│           │         UserName: root
-│           │       Statement: ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COLUMN ‹j›
-│           │       StatementTag: ALTER TABLE
-│           │       TargetMetadata:
-│           │         SourceElementID: 1
-│           │         SubWorkID: 1
-│           │     TargetStatus: 1
 │           │
 │           ├── • MakeAbsentIndexBackfilling
 │           │     Index:
@@ -431,14 +398,6 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN j;
     │       │     TableID: 104
     │       │
     │       ├── • MakeValidatedPrimaryIndexPublic
-    │       │     EventBase:
-    │       │       Authorization:
-    │       │         UserName: root
-    │       │       Statement: ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COLUMN ‹j›
-    │       │       StatementTag: ALTER TABLE
-    │       │       TargetMetadata:
-    │       │         SourceElementID: 1
-    │       │         SubWorkID: 1
     │       │     IndexID: 2
     │       │     TableID: 104
     │       │
@@ -556,14 +515,6 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN j;
         └── • 6 Mutation operations
             │
             ├── • MakeIndexAbsent
-            │     EventBase:
-            │       Authorization:
-            │         UserName: root
-            │       Statement: ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COLUMN ‹j›
-            │       StatementTag: ALTER TABLE
-            │       TargetMetadata:
-            │         SourceElementID: 1
-            │         SubWorkID: 1
             │     IndexID: 1
             │     TableID: 104
             │
@@ -581,14 +532,6 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN j;
             │
             ├── • MakeDeleteOnlyColumnAbsent
             │     ColumnID: 2
-            │     EventBase:
-            │       Authorization:
-            │         UserName: root
-            │       Statement: ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COLUMN ‹j›
-            │       StatementTag: ALTER TABLE
-            │       TargetMetadata:
-            │         SourceElementID: 1
-            │         SubWorkID: 1
             │     TableID: 104
             │
             ├── • RemoveJobStateFromDescriptor

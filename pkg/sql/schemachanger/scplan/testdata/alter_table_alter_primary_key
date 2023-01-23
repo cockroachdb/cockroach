@@ -5,7 +5,7 @@ CREATE TABLE t (k INT NOT NULL, v STRING);
 ops
 ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (k);
 ----
-StatementPhase stage 1 of 1 with 14 MutationType ops
+StatementPhase stage 1 of 1 with 13 MutationType ops
   transitions:
     [[Column:{DescID: 104, ColumnID: 3}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[ColumnName:{DescID: 104, Name: rowid, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
@@ -26,22 +26,6 @@ StatementPhase stage 1 of 1 with 14 MutationType ops
     *scop.MakePublicColumnWriteOnly
       ColumnID: 3
       TableID: 104
-    *scop.LogEvent
-      Element:
-        Column:
-          columnId: 3
-          isHidden: true
-          pgAttributeNum: 3
-          tableId: 104
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: ALTER TABLE ‹defaultdb›.public.‹t› ALTER PRIMARY KEY USING COLUMNS (‹k›)
-        StatementTag: ALTER TABLE
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
-      TargetStatus: 1
     *scop.SetColumnName
       ColumnID: 3
       Name: crdb_internal_column_3_name_placeholder
@@ -216,14 +200,6 @@ PostCommitPhase stage 8 of 15 with 9 MutationType ops
       Name: t_pkey
       TableID: 104
     *scop.MakeValidatedPrimaryIndexPublic
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: ALTER TABLE ‹defaultdb›.public.‹t› ALTER PRIMARY KEY USING COLUMNS (‹k›)
-        StatementTag: ALTER TABLE
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
       IndexID: 2
       TableID: 104
     *scop.MakeAbsentTempIndexDeleteOnly
@@ -360,14 +336,6 @@ PostCommitNonRevertiblePhase stage 2 of 4 with 9 MutationType ops
     [[TemporaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 5, SourceIndexID: 2}, TRANSIENT_ABSENT], TRANSIENT_DELETE_ONLY] -> TRANSIENT_ABSENT
   ops:
     *scop.MakeIndexAbsent
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: ALTER TABLE ‹defaultdb›.public.‹t› ALTER PRIMARY KEY USING COLUMNS (‹k›)
-        StatementTag: ALTER TABLE
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
       IndexID: 1
       TableID: 104
     *scop.MakePublicPrimaryIndexWriteOnly
@@ -388,14 +356,6 @@ PostCommitNonRevertiblePhase stage 2 of 4 with 9 MutationType ops
       IndexID: 5
       TableID: 104
     *scop.MakeValidatedPrimaryIndexPublic
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: ALTER TABLE ‹defaultdb›.public.‹t› ALTER PRIMARY KEY USING COLUMNS (‹k›)
-        StatementTag: ALTER TABLE
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
       IndexID: 4
       TableID: 104
     *scop.SetJobStateOnDescriptor
@@ -435,14 +395,6 @@ PostCommitNonRevertiblePhase stage 4 of 4 with 9 MutationType ops
         Statement: ALTER TABLE defaultdb.public.t ALTER PRIMARY KEY USING COLUMNS (k)
       TableID: 104
     *scop.MakeIndexAbsent
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: ALTER TABLE ‹defaultdb›.public.‹t› ALTER PRIMARY KEY USING COLUMNS (‹k›)
-        StatementTag: ALTER TABLE
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
       IndexID: 2
       TableID: 104
     *scop.CreateGCJobForIndex
@@ -462,14 +414,6 @@ PostCommitNonRevertiblePhase stage 4 of 4 with 9 MutationType ops
       TableID: 104
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 3
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: ALTER TABLE ‹defaultdb›.public.‹t› ALTER PRIMARY KEY USING COLUMNS (‹k›)
-        StatementTag: ALTER TABLE
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
       TableID: 104
     *scop.RemoveJobStateFromDescriptor
       DescriptorID: 104

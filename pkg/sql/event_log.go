@@ -27,7 +27,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
@@ -341,21 +342,29 @@ type schemaChangerEventLogger struct {
 	depth   int
 }
 
-var _ scexec.EventLogger = (*schemaChangerEventLogger)(nil)
+var _ scrun.EventLogger = (*schemaChangerEventLogger)(nil)
+var _ scbuild.EventLogger = (*schemaChangerEventLogger)(nil)
 
-// NewSchemaChangerEventLogger returns a scexec.EventLogger implementation.
-func NewSchemaChangerEventLogger(
-	txn isql.Txn, execCfg *ExecutorConfig, depth int,
-) scexec.EventLogger {
+// NewSchemaChangerBuildEventLogger returns a scbuild.EventLogger implementation.
+func NewSchemaChangerBuildEventLogger(txn isql.Txn, execCfg *ExecutorConfig) scbuild.EventLogger {
 	return &schemaChangerEventLogger{
 		txn:     txn,
 		execCfg: execCfg,
-		depth:   depth,
+		depth:   1,
 	}
 }
 
-// LogEvent implements the scexec.EventLogger interface.
-func (l schemaChangerEventLogger) LogEvent(
+// NewSchemaChangerRunEventLogger returns a scrun.EventLogger implementation.
+func NewSchemaChangerRunEventLogger(txn isql.Txn, execCfg *ExecutorConfig) scrun.EventLogger {
+	return &schemaChangerEventLogger{
+		txn:     txn,
+		execCfg: execCfg,
+		depth:   0,
+	}
+}
+
+// LogEvent implements the scbuild.EventLogger interface.
+func (l *schemaChangerEventLogger) LogEvent(
 	ctx context.Context, details eventpb.CommonSQLEventDetails, event logpb.EventPayload,
 ) error {
 	return logEventInternalForSQLStatements(ctx,
@@ -367,7 +376,8 @@ func (l schemaChangerEventLogger) LogEvent(
 		event)
 }
 
-func (l schemaChangerEventLogger) LogEventForSchemaChange(
+// LogEventForSchemaChange implements the scrun.EventLogger interface.
+func (l *schemaChangerEventLogger) LogEventForSchemaChange(
 	ctx context.Context, event logpb.EventPayload,
 ) error {
 	event.CommonDetails().Timestamp = l.txn.KV().ReadTimestamp().WallTime

@@ -13,6 +13,16 @@ CREATE INDEX id1
 begin transaction #1
 # begin StatementPhase
 checking for feature: CREATE INDEX
+write *eventpb.CreateIndex to event log:
+  indexName: id1
+  mutationId: 1
+  sql:
+    descriptorId: 104
+    statement: CREATE INDEX ‹id1› ON ‹defaultdb›.‹public›.‹t1› (‹id›, ‹name›) STORING
+      (‹money›) PARTITION BY LIST (‹id›) (PARTITION ‹p1› VALUES IN (‹1›))
+    tag: CREATE INDEX
+    user: root
+  tableName: defaultdb.public.t1
 ## StatementPhase stage 1 of 1 with 11 MutationType ops
 upsert descriptor #104
   ...
@@ -218,7 +228,7 @@ begin transaction #9
 validate forward indexes [2] in table #104
 commit transaction #9
 begin transaction #10
-## PostCommitNonRevertiblePhase stage 1 of 2 with 6 MutationType ops
+## PostCommitNonRevertiblePhase stage 1 of 2 with 5 MutationType ops
 upsert descriptor #104
   ...
              BY LIST (id) (PARTITION p1 VALUES IN (1))
@@ -311,7 +321,6 @@ upsert descriptor #104
      unexposedParentSchemaId: 101
   -  version: "6"
   +  version: "7"
-write *eventpb.CreateIndex to event log: CREATE INDEX ‹id1› ON ‹defaultdb›.‹public›.‹t1› (‹id›, ‹name›) STORING (‹money›) PARTITION BY LIST (‹id›) (PARTITION ‹p1› VALUES IN (‹1›))
 adding table for stats refresh: 104
 update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 2 with 2 MutationType ops pending"
 set schema change job #1 to non-cancellable
@@ -385,12 +394,14 @@ upsert descriptor #104
      unexposedParentSchemaId: 101
   -  version: "7"
   +  version: "8"
-write *eventpb.FinishSchemaChange to event log
 create job #2 (non-cancelable: true): "GC for CREATE INDEX id1 ON defaultdb.public.t1 (id, name) STORING (money) PARTITION BY LIST (id) (PARTITION p1 VALUES IN (1))"
   descriptor IDs: [104]
 update progress of schema change job #1: "all stages completed"
 set schema change job #1 to non-cancellable
 updated schema change job #1 descriptor IDs to []
+write *eventpb.FinishSchemaChange to event log:
+  sc:
+    descriptorId: 104
 commit transaction #11
 notified job registry to adopt jobs: [2]
 # end PostCommitPhase

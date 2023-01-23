@@ -51,9 +51,6 @@ func init() {
 				}),
 			),
 			to(scpb.Status_ABSENT,
-				emit(func(this *scpb.CompositeType, md *opGenContext) *scop.LogEvent {
-					return newLogEventOp(this, md)
-				}),
 				emit(func(this *scpb.CompositeType) *scop.DeleteDescriptor {
 					return &scop.DeleteDescriptor{
 						DescriptorID: this.TypeID,

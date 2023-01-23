@@ -63,6 +63,7 @@ func DropType(b BuildCtx, n *tree.DropType) {
 				arrayTypesToAlsoCheck[typeID] = arrayTypeID
 			}
 		}
+		b.LogEventForExistingTarget(typ)
 		b.IncrementSubWorkID()
 	}
 	// Check if there are any back-references which would prevent a DROP RESTRICT.

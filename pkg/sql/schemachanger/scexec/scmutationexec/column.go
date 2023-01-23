@@ -20,10 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/redact"
 )
 
 func (m *visitor) MakeAbsentColumnDeleteOnly(
@@ -106,13 +104,11 @@ func (m *visitor) MakeWriteOnlyColumnPublic(
 	if err != nil {
 		return err
 	}
-	mut, err := m.removeMutation(tbl, MakeColumnIDMutationSelector(op.ColumnID), op.TargetMetadata, eventpb.CommonSQLEventDetails{
-		DescriptorID:    uint32(tbl.GetID()),
-		Statement:       redact.RedactableString(op.Statement),
-		Tag:             op.StatementTag,
-		ApplicationName: op.Authorization.AppName,
-		User:            op.Authorization.UserName,
-	}, descpb.DescriptorMutation_WRITE_ONLY)
+	mut, err := RemoveMutation(
+		tbl,
+		MakeColumnIDMutationSelector(op.ColumnID),
+		descpb.DescriptorMutation_WRITE_ONLY,
+	)
 	if err != nil {
 		return err
 	}
@@ -202,13 +198,11 @@ func (m *visitor) MakeDeleteOnlyColumnAbsent(
 	if err != nil || tbl.Dropped() {
 		return err
 	}
-	mut, err := m.removeMutation(tbl, MakeColumnIDMutationSelector(op.ColumnID), op.TargetMetadata, eventpb.CommonSQLEventDetails{
-		DescriptorID:    uint32(tbl.GetID()),
-		Statement:       redact.RedactableString(op.Statement),
-		Tag:             op.StatementTag,
-		ApplicationName: op.Authorization.AppName,
-		User:            op.Authorization.UserName,
-	}, descpb.DescriptorMutation_DELETE_ONLY)
+	mut, err := RemoveMutation(
+		tbl,
+		MakeColumnIDMutationSelector(op.ColumnID),
+		descpb.DescriptorMutation_DELETE_ONLY,
+	)
 	if err != nil {
 		return err
 	}

@@ -85,6 +85,7 @@ func WithBuilderDependenciesFromTestServer(
 		execCfg.Settings,
 		nil, /* statements */
 		&faketreeeval.DummyClientNoticeSender{},
+		sql.NewSchemaChangerBuildEventLogger(planner.InternalSQLTxn(), &execCfg),
 	))
 }
 
@@ -94,15 +95,15 @@ func WithBuilderDependenciesFromTestServer(
 // decoding that into a map[string]interface{}. The function will be called
 // for every object in the decoded map recursively.
 func ProtoToYAML(
-	m protoutil.Message, emitDefaults bool, rewrites func(interface{}),
+	m protoutil.Message, emitDefaults bool, rewrites ...func(interface{}),
 ) (string, error) {
 	target, err := scviz.ToMap(m, emitDefaults)
 	if err != nil {
 		return "", err
 	}
 	scviz.WalkMap(target, scviz.RewriteEmbeddedIntoParent)
-	if rewrites != nil {
-		scviz.WalkMap(target, rewrites)
+	for _, rewrite := range rewrites {
+		scviz.WalkMap(target, rewrite)
 	}
 	out, err := yaml.Marshal(target)
 	if err != nil {
@@ -150,12 +151,12 @@ func Diff(a, b string, args DiffArgs) string {
 
 // ProtoDiff generates an indented summary of the diff between two protos'
 // YAML representations. See ProtoToYAML for documentation on rewrites.
-func ProtoDiff(a, b protoutil.Message, args DiffArgs, rewrites func(interface{})) string {
+func ProtoDiff(a, b protoutil.Message, args DiffArgs, rewrites ...func(interface{})) string {
 	toYAML := func(m protoutil.Message) string {
 		if m == nil {
 			return ""
 		}
-		str, err := ProtoToYAML(m, false /* emitDefaults */, rewrites)
+		str, err := ProtoToYAML(m, false /* emitDefaults */, rewrites...)
 		if err != nil {
 			panic(err)
 		}

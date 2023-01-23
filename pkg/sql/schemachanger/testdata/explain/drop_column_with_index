@@ -18,14 +18,13 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COL
  │         │    ├── PUBLIC → WRITE_ONLY    Column:{DescID: 104, ColumnID: 2}
  │         │    ├── PUBLIC → ABSENT        ColumnName:{DescID: 104, Name: j, ColumnID: 2}
  │         │    └── PUBLIC → VALIDATED     SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
- │         └── 8 Mutation operations
+ │         └── 7 Mutation operations
  │              ├── MakePublicSecondaryIndexWriteOnly {"IndexID":2,"TableID":104}
  │              ├── MakeAbsentIndexBackfilling {"Index":{"ConstraintID":2,"IndexID":3,"IsUnique":true,"SourceIndexID":1,"TableID":104,"TemporaryIndexID":4}}
  │              ├── AddColumnToIndex {"ColumnID":1,"IndexID":3,"TableID":104}
  │              ├── MakeAbsentTempIndexDeleteOnly {"Index":{"ConstraintID":3,"IndexID":4,"IsUnique":true,"SourceIndexID":1,"TableID":104}}
  │              ├── AddColumnToIndex {"ColumnID":1,"IndexID":4,"TableID":104}
  │              ├── MakePublicColumnWriteOnly {"ColumnID":2,"TableID":104}
- │              ├── LogEvent {"TargetStatus":1}
  │              └── SetColumnName {"ColumnID":2,"Name":"crdb_internal_co...","TableID":104}
  ├── PreCommitPhase
  │    └── Stage 1 of 1 in PreCommitPhase
@@ -95,13 +94,12 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COL
       │    │    ├── PUBLIC     → ABSENT                IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}
       │    │    ├── VALIDATED  → DELETE_ONLY           SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
       │    │    └── PUBLIC     → ABSENT                IndexName:{DescID: 104, Name: t_j_idx, IndexID: 2}
-      │    └── 11 Mutation operations
+      │    └── 10 Mutation operations
       │         ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":2,"TableID":104}
       │         ├── MakePublicPrimaryIndexWriteOnly {"IndexID":1,"TableID":104}
       │         ├── SetIndexName {"IndexID":1,"Name":"crdb_internal_in...","TableID":104}
       │         ├── SetIndexName {"IndexID":3,"Name":"t_pkey","TableID":104}
       │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":4,"TableID":104}
-      │         ├── LogEvent {"TargetStatus":1}
       │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":2,"TableID":104}
       │         ├── SetIndexName {"IndexID":2,"Name":"crdb_internal_in...","TableID":104}
       │         ├── MakeValidatedPrimaryIndexPublic {"IndexID":3,"TableID":104}

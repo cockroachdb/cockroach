@@ -38,29 +38,16 @@ PreCommitPhase stage 1 of 1 with 4 MutationType ops
       - 104
       JobID: 1
       NonCancelable: true
-      RunningStatus: PostCommitNonRevertiblePhase stage 1 of 1 with 2 MutationType ops pending
+      RunningStatus: PostCommitNonRevertiblePhase stage 1 of 1 with 1 MutationType op pending
       Statements:
       - statement: DROP SEQUENCE defaultdb.sq1
         redactedstatement: DROP SEQUENCE ‹defaultdb›.public.‹sq1›
         statementtag: DROP SEQUENCE
-PostCommitNonRevertiblePhase stage 1 of 1 with 4 MutationType ops
+PostCommitNonRevertiblePhase stage 1 of 1 with 3 MutationType ops
   transitions:
     [[Sequence:{DescID: 104}, ABSENT], DROPPED] -> ABSENT
     [[TableData:{DescID: 104, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
   ops:
-    *scop.LogEvent
-      Element:
-        Sequence:
-          sequenceId: 104
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP SEQUENCE ‹defaultdb›.public.‹sq1›
-        StatementTag: DROP SEQUENCE
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
-      TargetStatus: 1
     *scop.CreateGCJobForTable
       DatabaseID: 100
       StatementForDropJob:
@@ -142,29 +129,16 @@ PreCommitPhase stage 1 of 1 with 10 MutationType ops
       - 106
       JobID: 1
       NonCancelable: true
-      RunningStatus: PostCommitNonRevertiblePhase stage 1 of 1 with 2 MutationType ops pending
+      RunningStatus: PostCommitNonRevertiblePhase stage 1 of 1 with 1 MutationType op pending
       Statements:
       - statement: DROP SEQUENCE defaultdb.sq1 CASCADE
         redactedstatement: DROP SEQUENCE ‹defaultdb›.public.‹sq1› CASCADE
         statementtag: DROP SEQUENCE
-PostCommitNonRevertiblePhase stage 1 of 1 with 6 MutationType ops
+PostCommitNonRevertiblePhase stage 1 of 1 with 5 MutationType ops
   transitions:
     [[Sequence:{DescID: 104}, ABSENT], DROPPED] -> ABSENT
     [[TableData:{DescID: 104, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
   ops:
-    *scop.LogEvent
-      Element:
-        Sequence:
-          sequenceId: 104
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP SEQUENCE ‹defaultdb›.public.‹sq1› CASCADE
-        StatementTag: DROP SEQUENCE
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
-      TargetStatus: 1
     *scop.CreateGCJobForTable
       DatabaseID: 100
       StatementForDropJob:

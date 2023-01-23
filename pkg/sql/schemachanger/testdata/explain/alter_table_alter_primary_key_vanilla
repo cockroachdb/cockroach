@@ -119,14 +119,13 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PR
       │    │    ├── PUBLIC     → ABSENT                IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 1}
       │    │    ├── PUBLIC     → VALIDATED             PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}
       │    │    └── PUBLIC     → ABSENT                IndexName:{DescID: 104, Name: t_pkey, IndexID: 1}
-      │    └── 11 Mutation operations
+      │    └── 10 Mutation operations
       │         ├── MakePublicPrimaryIndexWriteOnly {"IndexID":1,"TableID":104}
       │         ├── SetIndexName {"IndexID":1,"Name":"crdb_internal_in...","TableID":104}
       │         ├── SetIndexName {"IndexID":2,"Name":"t_pkey","TableID":104}
       │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":3,"TableID":104}
-      │         ├── RefreshStats {"TableID":104}
-      │         ├── LogEvent {"TargetStatus":2}
       │         ├── MakeValidatedSecondaryIndexPublic {"IndexID":4,"TableID":104}
+      │         ├── RefreshStats {"TableID":104}
       │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":5,"TableID":104}
       │         ├── MakeValidatedPrimaryIndexPublic {"IndexID":2,"TableID":104}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":104}

@@ -52,9 +52,6 @@ func init() {
 				}),
 			),
 			to(scpb.Status_ABSENT,
-				emit(func(this *scpb.Sequence, md *opGenContext) *scop.LogEvent {
-					return newLogEventOp(this, md)
-				}),
 				emit(func(this *scpb.Sequence, md *opGenContext) *scop.CreateGCJobForTable {
 					if !md.ActiveVersion.IsActive(clusterversion.V23_1) {
 						return &scop.CreateGCJobForTable{

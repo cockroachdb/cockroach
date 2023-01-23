@@ -97,8 +97,6 @@ go_test(
         "//pkg/util/iterutil",
         "//pkg/util/leaktest",
         "//pkg/util/log",
-        "//pkg/util/log/eventpb",
-        "//pkg/util/log/logpb",
         "//pkg/util/randutil",
         "//pkg/util/timeutil",
         "@com_github_golang_mock//gomock",

@@ -38,7 +38,15 @@ begin transaction #1
 checking for feature: ALTER TABLE
 increment telemetry for sql.schema.alter_table
 increment telemetry for sql.schema.alter_table.drop_column
-## StatementPhase stage 1 of 1 with 13 MutationType ops
+write *eventpb.AlterTable to event log:
+  mutationId: 1
+  sql:
+    descriptorId: 104
+    statement: ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COLUMN ‹j› CASCADE
+    tag: ALTER TABLE
+    user: root
+  tableName: defaultdb.public.t
+## StatementPhase stage 1 of 1 with 11 MutationType ops
 upsert descriptor #104
   ...
          oid: 20
@@ -223,8 +231,16 @@ upsert descriptor #104
      unexposedParentSchemaId: 101
   -  version: "1"
   +  version: "2"
-write *eventpb.AlterTable to event log: ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COLUMN ‹j› CASCADE
 checking for feature: CREATE INDEX
+write *eventpb.CreateIndex to event log:
+  indexName: idx
+  mutationId: 1
+  sql:
+    descriptorId: 104
+    statement: CREATE UNIQUE INDEX ‹idx› ON ‹defaultdb›.‹public›.‹t› (‹k›)
+    tag: CREATE INDEX
+    user: root
+  tableName: defaultdb.public.t
 # end StatementPhase
 # begin PreCommitPhase
 ## PreCommitPhase stage 1 of 1 with 2 MutationType ops
@@ -602,7 +618,7 @@ begin transaction #17
 validate forward indexes [5] in table #104
 commit transaction #17
 begin transaction #18
-## PostCommitNonRevertiblePhase stage 1 of 2 with 13 MutationType ops
+## PostCommitNonRevertiblePhase stage 1 of 2 with 11 MutationType ops
 upsert descriptor #104
   ...
            statementTag: CREATE INDEX
@@ -721,8 +737,6 @@ upsert descriptor #104
      unexposedParentSchemaId: 101
   -  version: "11"
   +  version: "12"
-write *eventpb.DropIndex to event log: ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COLUMN ‹j› CASCADE
-write *eventpb.CreateIndex to event log: CREATE UNIQUE INDEX ‹idx› ON ‹defaultdb›.‹public›.‹t› (‹k›)
 adding table for stats refresh: 104
 update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 2 with 10 MutationType ops pending"
 set schema change job #1 to non-cancellable
@@ -901,12 +915,14 @@ upsert descriptor #104
      unexposedParentSchemaId: 101
   -  version: "12"
   +  version: "13"
-write *eventpb.FinishSchemaChange to event log
 create job #2 (non-cancelable: true): "GC for ALTER TABLE defaultdb.public.t DROP COLUMN j CASCADE; CREATE UNIQUE INDEX idx ON defaultdb.public.t (k)"
   descriptor IDs: [104]
 update progress of schema change job #1: "all stages completed"
 set schema change job #1 to non-cancellable
 updated schema change job #1 descriptor IDs to []
+write *eventpb.FinishSchemaChange to event log:
+  sc:
+    descriptorId: 104
 commit transaction #19
 notified job registry to adopt jobs: [2]
 # end PostCommitPhase
