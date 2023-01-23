@@ -781,6 +781,12 @@ func testRandomSyntax(
 	err := db.exec(t, ctx, "SET CLUSTER SETTING schemachanger.job.max_retry_backoff='1s'")
 	require.NoError(t, err)
 
+	// Disable the test object generator. This merely causes the built-in function to report
+	// an error when called. This is OK -- we are testing syntax, so this will still ensure
+	// the function syntax is exercised.
+	err = db.exec(t, ctx, "SET CLUSTER SETTING sql.schema.test_object_generator.enabled = flase")
+	require.NoError(t, err)
+
 	yBytes, err := os.ReadFile(datapathutils.TestDataPath(t, "rsg", "sql.y"))
 	if err != nil {
 		t.Fatal(err)
