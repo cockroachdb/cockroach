@@ -45,6 +45,7 @@ func init() {
 				StatusesToAbsent(from, scpb.Status_TXN_DROPPED, to, scpb.Status_DROPPED),
 			}
 		})
+
 	registerDepRule(
 		"descriptor DROPPED in transaction before removal",
 		scgraph.PreviousTransactionPrecedence,
@@ -68,9 +69,9 @@ func init() {
 				to.TypeFilter(IsSimpleDependent),
 				JoinOnDescID(from, to, "desc-id"),
 				StatusesToAbsent(from, scpb.Status_DROPPED, to, scpb.Status_ABSENT),
-				FromHasPublicStatusIfFromIsTableAndToIsRowLevelTTL(from.Target, from.El, to.El),
 			}
-		})
+		},
+	)
 }
 
 // These rules ensure that cross-referencing simple dependent elements reach
