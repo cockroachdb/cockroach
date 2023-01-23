@@ -1,0 +1,54 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "kvflowcontroller",
+    srcs = [
+        "kvflowcontroller.go",
+        "kvflowcontroller_metrics.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontroller",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/base",
+        "//pkg/kv/kvserver/kvflowcontrol",
+        "//pkg/settings",
+        "//pkg/settings/cluster",
+        "//pkg/util/admission/admissionpb",
+        "//pkg/util/hlc",
+        "//pkg/util/log",
+        "//pkg/util/metric",
+        "//pkg/util/syncutil",
+    ],
+)
+
+go_test(
+    name = "kvflowcontroller_test",
+    srcs = [
+        "kvflowcontrol_token_adjustment_test.go",
+        "kvflowcontroller_simulation_test.go",
+    ],
+    args = ["-test.timeout=295s"],
+    data = glob(["testdata/**"]),
+    embed = [":kvflowcontroller"],
+    deps = [
+        "//pkg/kv/kvserver/kvflowcontrol",
+        "//pkg/roachpb",
+        "//pkg/settings/cluster",
+        "//pkg/testutils/datapathutils",
+        "//pkg/util/admission/admissionpb",
+        "//pkg/util/asciitsdb",
+        "//pkg/util/hlc",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/metric",
+        "//pkg/util/timeutil",
+        "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_dustin_go_humanize//:go-humanize",
+        "@com_github_guptarohit_asciigraph//:asciigraph",
+        "@com_github_mkungla_bexp_v3//:bexp",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+get_x_data(name = "get_x_data")
