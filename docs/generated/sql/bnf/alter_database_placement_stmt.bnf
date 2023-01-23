@@ -1,0 +1,2 @@
+alter_database_placement_stmt ::=
+	'ALTER' 'DATABASE' database_name placement_clause

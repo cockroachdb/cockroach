@@ -140,10 +140,7 @@ func newRaftTransportTestContext(t testing.TB) *raftTransportTestContext {
 	// we can't enforce some of the RPC check validation.
 	rttc.nodeRPCContext.TestingAllowNamedRPCToAnonymousServer = true
 
-	server := rpc.NewServer(rttc.nodeRPCContext) // never started
-	rttc.gossip = gossip.NewTest(
-		1, rttc.nodeRPCContext, server, rttc.stopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef(),
-	)
+	rttc.gossip = gossip.NewTest(1, rttc.stopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef())
 
 	return rttc
 }

@@ -14,12 +14,10 @@ import (
 	"context"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -81,17 +79,7 @@ func CreateTestStorePool(
 	mc := timeutil.NewManualTime(timeutil.Unix(0, 123))
 	clock := hlc.NewClock(mc, time.Nanosecond /* maxOffset */)
 	ambientCtx := log.MakeTestingAmbientContext(stopper.Tracer())
-	rpcContext := rpc.NewContext(ctx,
-		rpc.ContextOptions{
-			TenantID:  roachpb.SystemTenantID,
-			Config:    &base.Config{Insecure: true},
-			Clock:     clock.WallClock(),
-			MaxOffset: clock.MaxOffset(),
-			Stopper:   stopper,
-			Settings:  st,
-		})
-	server := rpc.NewServer(rpcContext) // never started
-	g := gossip.NewTest(1, rpcContext, server, stopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef())
+	g := gossip.NewTest(1, stopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef())
 	mnl := NewMockNodeLiveness(defaultNodeStatus)
 
 	TimeUntilStoreDead.Override(ctx, &st.SV, timeUntilStoreDeadValue)

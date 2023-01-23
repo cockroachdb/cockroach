@@ -212,10 +212,8 @@ func (l *simpleTransportAdapter) MoveToFront(replica roachpb.ReplicaDescriptor) 
 func (l *simpleTransportAdapter) Release() {}
 
 func makeGossip(t *testing.T, stopper *stop.Stopper, rpcContext *rpc.Context) *gossip.Gossip {
-	server := rpc.NewServer(rpcContext)
-
 	const nodeID = 1
-	g := gossip.NewTest(nodeID, rpcContext, server, stopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef())
+	g := gossip.NewTest(nodeID, stopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef())
 	if err := g.SetNodeDescriptor(newNodeDesc(nodeID)); err != nil {
 		t.Fatal(err)
 	}
