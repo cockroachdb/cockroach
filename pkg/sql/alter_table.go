@@ -1002,7 +1002,8 @@ func applyColumnMutation(
 
 		// Add a check constraint equivalent to the non-null constraint and drop
 		// it in the schema changer.
-		check := tabledesc.MakeNotNullCheckConstraint(tableDesc, col, descpb.ConstraintValidity_Dropping)
+		check := tabledesc.MakeNotNullCheckConstraint(tableDesc, col,
+			descpb.ConstraintValidity_Dropping, tableDesc.GetNextConstraintID())
 		tableDesc.Checks = append(tableDesc.Checks, check)
 		tableDesc.NextConstraintID++
 		tableDesc.AddNotNullMutation(check, descpb.DescriptorMutation_DROP)
@@ -1022,7 +1023,8 @@ func applyColumnMutation(
 }
 
 func addNotNullConstraintMutationForCol(tableDesc *tabledesc.Mutable, col catalog.Column) error {
-	check := tabledesc.MakeNotNullCheckConstraint(tableDesc, col, descpb.ConstraintValidity_Validating)
+	check := tabledesc.MakeNotNullCheckConstraint(tableDesc, col,
+		descpb.ConstraintValidity_Validating, tableDesc.GetNextConstraintID())
 	tableDesc.AddNotNullMutation(check, descpb.DescriptorMutation_ADD)
 	tableDesc.NextConstraintID++
 	return nil
