@@ -6,7 +6,7 @@ COMMENT ON COLUMN t.j IS 'j has a comment';
 /* test */
 EXPLAIN (ddl) ALTER TABLE t DROP COLUMN j;
 ----
-Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COLUMN ‹j›; 
+Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COLUMN ‹j›;
  ├── StatementPhase
  │    └── Stage 1 of 1 in StatementPhase
  │         ├── 3 elements transitioning toward PUBLIC

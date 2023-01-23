@@ -67,6 +67,7 @@ go_library(
     deps = [
         "//pkg/clusterversion",
         "//pkg/sql/catalog",
+        "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/schemachanger/rel",

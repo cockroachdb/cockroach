@@ -7,7 +7,7 @@ CREATE TABLE multi_region_test_db.public.table_regional_by_row (
 /* test */
 EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_row;
 ----
-• Schema change plan for DROP TABLE ‹multi_region_test_db›.‹public›.‹table_regional_by_row›; 
+• Schema change plan for DROP TABLE ‹multi_region_test_db›.‹public›.‹table_regional_by_row›;
 │
 ├── • StatementPhase
 │   │

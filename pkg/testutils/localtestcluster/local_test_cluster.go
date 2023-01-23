@@ -150,6 +150,7 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 	ltc.Eng, err = storage.Open(
 		ctx,
 		storage.InMemory(),
+		cfg.Settings,
 		storage.CacheSize(0),
 		storage.MaxSize(50<<20 /* 50 MiB */),
 	)

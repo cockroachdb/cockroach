@@ -5,7 +5,7 @@ CREATE TABLE t (k INT PRIMARY KEY, v e NOT NULL);
 /* test */
 EXPLAIN (ddl, verbose) CREATE INDEX idx1 ON t (v) WHERE (v = 'a');
 ----
-• Schema change plan for CREATE INDEX ‹idx1› ON ‹defaultdb›.‹public›.‹t› (‹v›) WHERE (‹v› = ‹'a'›); 
+• Schema change plan for CREATE INDEX ‹idx1› ON ‹defaultdb›.‹public›.‹t› (‹v›) WHERE (‹v› = ‹'a'›);
 │
 ├── • StatementPhase
 │   │

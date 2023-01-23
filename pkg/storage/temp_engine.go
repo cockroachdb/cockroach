@@ -75,6 +75,7 @@ func newPebbleTempEngine(
 	}
 
 	p, err := Open(ctx, loc,
+		tempStorage.Settings,
 		CacheSize(cacheSize),
 		func(cfg *engineConfig) error {
 			cfg.UseFileRegistry = storeSpec.UseFileRegistry

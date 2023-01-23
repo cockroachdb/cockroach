@@ -5,7 +5,7 @@ CREATE INDEX idx ON t(j) USING HASH;
 /* test */
 EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
 ----
-• Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹t›@‹idx› CASCADE; 
+• Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹t›@‹idx› CASCADE;
 │
 ├── • StatementPhase
 │   │

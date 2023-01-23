@@ -5,7 +5,7 @@ CREATE SCHEMA db.sc;
 /* test */
 EXPLAIN (ddl, verbose) DROP SCHEMA db.sc;
 ----
-• Schema change plan for DROP SCHEMA ‹db›.‹sc›; 
+• Schema change plan for DROP SCHEMA ‹db›.‹sc›;
 │
 ├── • StatementPhase
 │   │

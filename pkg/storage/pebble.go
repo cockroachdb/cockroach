@@ -58,8 +58,6 @@ import (
 	humanize "github.com/dustin/go-humanize"
 )
 
-const maxSyncDurationFatalOnExceededDefault = true
-
 // Default for MaxSyncDuration below.
 var maxSyncDurationDefault = envutil.EnvOrDefaultDuration("COCKROACH_ENGINE_MAX_SYNC_DURATION_DEFAULT", 20*time.Second)
 
@@ -79,7 +77,7 @@ var MaxSyncDurationFatalOnExceeded = settings.RegisterBoolSetting(
 	settings.TenantWritable,
 	"storage.max_sync_duration.fatal.enabled",
 	"if true, fatal the process when a disk operation exceeds storage.max_sync_duration",
-	maxSyncDurationFatalOnExceededDefault,
+	true,
 )
 
 // valueBlocksEnabled controls whether older versions of MVCC keys in the same
@@ -705,17 +703,15 @@ type Pebble struct {
 
 	db *pebble.DB
 
-	closed      bool
-	readOnly    bool
-	path        string
-	auxDir      string
-	ballastPath string
-	ballastSize int64
-	maxSize     int64
-	attrs       roachpb.Attributes
-	properties  roachpb.StoreProperties
-	// settings must be non-nil if this Pebble instance will be used to write
-	// intents.
+	closed       bool
+	readOnly     bool
+	path         string
+	auxDir       string
+	ballastPath  string
+	ballastSize  int64
+	maxSize      int64
+	attrs        roachpb.Attributes
+	properties   roachpb.StoreProperties
 	settings     *cluster.Settings
 	encryption   *EncryptionEnv
 	fileRegistry *PebbleFileRegistry
@@ -867,6 +863,9 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 	if cfg.Opts == nil {
 		cfg.Opts = DefaultPebbleOptions()
 	}
+	if cfg.Settings == nil {
+		return nil, errors.AssertionFailedf("NewPebble requires cfg.Settings to be set")
+	}
 
 	// Initialize the FS, wrapping it with disk health-checking and
 	// ENOSPC-detection.
@@ -888,16 +887,14 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 
 	cfg.Opts.EnsureDefaults()
 	cfg.Opts.ErrorIfNotExists = cfg.MustExist
-	if settings := cfg.Settings; settings != nil {
-		cfg.Opts.WALMinSyncInterval = func() time.Duration {
-			return minWALSyncInterval.Get(&settings.SV)
-		}
-		cfg.Opts.Experimental.EnableValueBlocks = func() bool {
-			version := settings.Version.ActiveVersionOrEmpty(logCtx)
-			return !version.Less(clusterversion.ByKey(
-				clusterversion.V23_1EnablePebbleFormatSSTableValueBlocks)) &&
-				valueBlocksEnabled.Get(&settings.SV)
-		}
+	cfg.Opts.WALMinSyncInterval = func() time.Duration {
+		return minWALSyncInterval.Get(&cfg.Settings.SV)
+	}
+	cfg.Opts.Experimental.EnableValueBlocks = func() bool {
+		version := cfg.Settings.Version.ActiveVersionOrEmpty(logCtx)
+		return !version.Less(clusterversion.ByKey(
+			clusterversion.V23_1EnablePebbleFormatSSTableValueBlocks)) &&
+			valueBlocksEnabled.Get(&cfg.Settings.SV)
 	}
 
 	auxDir := cfg.Opts.FS.PathJoin(cfg.Dir, base.AuxiliaryDir)
@@ -1063,12 +1060,8 @@ func (p *Pebble) makeMetricEtcEventListener(ctx context.Context) pebble.EventLis
 			atomic.AddInt64((*int64)(&p.writeStallDuration), stallDuration)
 		},
 		DiskSlow: func(info pebble.DiskSlowInfo) {
-			maxSyncDuration := maxSyncDurationDefault
-			fatalOnExceeded := maxSyncDurationFatalOnExceededDefault
-			if p.settings != nil {
-				maxSyncDuration = MaxSyncDuration.Get(&p.settings.SV)
-				fatalOnExceeded = MaxSyncDurationFatalOnExceeded.Get(&p.settings.SV)
-			}
+			maxSyncDuration := MaxSyncDuration.Get(&p.settings.SV)
+			fatalOnExceeded := MaxSyncDurationFatalOnExceeded.Get(&p.settings.SV)
 			if info.Duration.Seconds() >= maxSyncDuration.Seconds() {
 				atomic.AddInt64(&p.diskStallCount, 1)
 				// Note that the below log messages go to the main cockroach log, not

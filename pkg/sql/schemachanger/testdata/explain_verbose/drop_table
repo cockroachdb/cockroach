@@ -8,7 +8,7 @@ CREATE TYPE db.sc.e AS ENUM('a', 'b', 'c');
 /* test */
 EXPLAIN (ddl, verbose) DROP TABLE db.sc.t;
 ----
-• Schema change plan for DROP TABLE ‹db›.‹sc›.‹t›; 
+• Schema change plan for DROP TABLE ‹db›.‹sc›.‹t›;
 │
 ├── • StatementPhase
 │   │

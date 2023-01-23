@@ -7,7 +7,7 @@ EXPLAIN (ddl) CREATE INDEX id1
   STORING (money)
   PARTITION BY LIST (id) (PARTITION p1 VALUES IN (1));
 ----
-Schema change plan for CREATE INDEX ‹id1› ON ‹defaultdb›.‹public›.‹t1› (‹id›, ‹name›) STORING (‹money›) PARTITION BY LIST (‹id›) (PARTITION ‹p1› VALUES IN (‹1›)); 
+Schema change plan for CREATE INDEX ‹id1› ON ‹defaultdb›.‹public›.‹t1› (‹id›, ‹name›) STORING (‹money›) PARTITION BY LIST (‹id›) (PARTITION ‹p1› VALUES IN (‹1›));
  ├── StatementPhase
  │    └── Stage 1 of 1 in StatementPhase
  │         ├── 7 elements transitioning toward PUBLIC

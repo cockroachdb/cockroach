@@ -706,7 +706,6 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 					storage.CacheSize(cfg.CacheSize),
 					storage.MaxSize(sizeInBytes),
 					storage.EncryptionAtRest(spec.EncryptionOptions),
-					storage.Settings(cfg.Settings),
 					storage.If(storeKnobs.SmallEngineBlocks, storage.BlockSize(1)),
 				}
 				if len(storeKnobs.EngineKnobs) > 0 {
@@ -714,6 +713,7 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 				}
 				e, err := storage.Open(ctx,
 					storage.InMemory(),
+					cfg.Settings,
 					storageConfigs...,
 				)
 				if err != nil {

@@ -25,7 +25,7 @@ func init() {
 						TableID:               this.TableID,
 						ConstraintID:          this.ConstraintID,
 						ColumnIDs:             this.ColumnIDs,
-						Expression:            this.Expression,
+						CheckExpr:             this.Expr,
 						FromHashShardedColumn: this.FromHashShardedColumn,
 					}
 				}),
