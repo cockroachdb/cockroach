@@ -15,6 +15,7 @@ go_library(
         "//pkg/util/log",
         "//pkg/util/stop",
         "//pkg/util/sysutil",
+        "@com_github_cockroachdb_errors//:errors",
         "@com_github_jackc_pgx_v4//pgxpool",
         "@com_github_spf13_cobra//:cobra",
         "@org_golang_x_sys//unix",
