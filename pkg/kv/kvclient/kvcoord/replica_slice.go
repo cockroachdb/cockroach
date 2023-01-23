@@ -25,15 +25,7 @@ import (
 // descriptor.
 type ReplicaInfo struct {
 	roachpb.ReplicaDescriptor
-	NodeDesc *roachpb.NodeDescriptor
-}
-
-func (i ReplicaInfo) locality() []roachpb.Tier {
-	return i.NodeDesc.Locality.Tiers
-}
-
-func (i ReplicaInfo) addr() string {
-	return i.NodeDesc.Address.String()
+	Tiers []roachpb.Tier
 }
 
 // A ReplicaSlice is a slice of ReplicaInfo.
@@ -131,7 +123,7 @@ func NewReplicaSlice(
 		}
 		rs = append(rs, ReplicaInfo{
 			ReplicaDescriptor: r,
-			NodeDesc:          nd,
+			Tiers:             nd.Locality.Tiers,
 		})
 	}
 	if len(rs) == 0 {
@@ -189,7 +181,7 @@ func localityMatch(a, b []roachpb.Tier) int {
 
 // A LatencyFunc returns the latency from this node to a remote
 // address and a bool indicating whether the latency is valid.
-type LatencyFunc func(string) (time.Duration, bool)
+type LatencyFunc func(roachpb.NodeID) (time.Duration, bool)
 
 // OptimizeReplicaOrder sorts the replicas in the order in which
 // they're to be used for sending RPCs (meaning in the order in which
@@ -231,14 +223,14 @@ func (rs ReplicaSlice) OptimizeReplicaOrder(
 		}
 
 		if latencyFn != nil {
-			latencyI, okI := latencyFn(rs[i].addr())
-			latencyJ, okJ := latencyFn(rs[j].addr())
+			latencyI, okI := latencyFn(rs[i].NodeID)
+			latencyJ, okJ := latencyFn(rs[j].NodeID)
 			if okI && okJ {
 				return latencyI < latencyJ
 			}
 		}
-		attrMatchI := localityMatch(locality.Tiers, rs[i].locality())
-		attrMatchJ := localityMatch(locality.Tiers, rs[j].locality())
+		attrMatchI := localityMatch(locality.Tiers, rs[i].Tiers)
+		attrMatchJ := localityMatch(locality.Tiers, rs[j].Tiers)
 		// Longer locality matches sort first (the assumption is that
 		// they'll have better latencies).
 		return attrMatchI > attrMatchJ
