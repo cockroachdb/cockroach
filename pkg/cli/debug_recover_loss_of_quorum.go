@@ -174,14 +174,15 @@ var recoverCommands = []*cobra.Command{
 	debugRecoverCollectInfoCmd,
 	debugRecoverPlanCmd,
 	debugRecoverExecuteCmd,
-	//debugRecoverVerify,
+	debugRecoverVerifyCmd,
 }
 
 func init() {
 	debugRecoverCmd.AddCommand(
 		debugRecoverCollectInfoCmd,
 		debugRecoverPlanCmd,
-		debugRecoverExecuteCmd)
+		debugRecoverExecuteCmd,
+		debugRecoverVerifyCmd)
 }
 
 var debugRecoverCollectInfoCmd = &cobra.Command{
@@ -789,6 +790,214 @@ func applyRecoveryToLocalStore(
 	applyReport, err := loqrecovery.CommitReplicaChanges(batches)
 	_, _ = fmt.Fprintf(stderr, "Updated store(s): %s\n", strutil.JoinIDs("s", applyReport.UpdatedStores))
 	return err
+}
+
+var debugRecoverVerifyCmd = &cobra.Command{
+	Use:   "verify [plan-file]",
+	Short: "verify loss of quorum recovery application status",
+	Long: `
+Check cluster loss of quorum recovery state.
+
+Verify command will check if all nodes applied recovery plan and that all
+necessary nodes are decommissioned.
+
+If invoked without a plan file, command will print status of all nodes in the
+cluster.
+
+The address of a single healthy cluster node must be provided using the --host
+flag. This designated node will retrieve and check status of all nodes in the
+cluster.
+
+See debug recover command help for more details on how to use this command.
+`,
+	Args: cobra.MaximumNArgs(1),
+	RunE: runDebugVerify,
+}
+
+func runDebugVerify(cmd *cobra.Command, args []string) error {
+	// We must have cancellable context here to obtain grpc client connection.
+	ctx, cancel := context.WithCancel(cmd.Context())
+	defer cancel()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	var updatePlan loqrecoverypb.ReplicaUpdatePlan
+	if len(args) > 0 {
+		planFile := args[0]
+		data, err := os.ReadFile(planFile)
+		if err != nil {
+			return errors.Wrapf(err, "failed to read plan file %q", planFile)
+		}
+		jsonpb := protoutil.JSONPb{Indent: "  "}
+		if err = jsonpb.Unmarshal(data, &updatePlan); err != nil {
+			return errors.Wrapf(err, "failed to unmarshal plan from file %q", planFile)
+		}
+	}
+
+	// Plan statuses.
+	if len(updatePlan.Updates) > 0 {
+		_, _ = fmt.Printf("Checking application of recovery plan %s\n", updatePlan.PlanID)
+	}
+
+	c, finish, err := getAdminClient(ctx, serverCfg)
+	if err != nil {
+		return errors.Wrapf(err, "failed to get admin connection to cluster")
+	}
+	defer finish()
+	req := serverpb.RecoveryVerifyRequest{
+		DecommissionedNodeIDs: updatePlan.DecommissionedNodeIDs,
+		MaxReportedRanges:     10,
+	}
+	// Maybe switch to non-nullable?
+	if !updatePlan.PlanID.Equal(uuid.UUID{}) {
+		req.PendingPlanID = &updatePlan.PlanID
+	}
+	res, err := c.RecoveryVerify(ctx, &req)
+	if err != nil {
+		return errors.Wrapf(err, "failed to retrieve replica info from cluster")
+	}
+
+	if len(res.UnavailableRanges.Ranges) > 0 {
+		_, _ = fmt.Fprintf(stderr, "Unavailable ranges:\n")
+		for _, d := range res.UnavailableRanges.Ranges {
+			_, _ = fmt.Fprintf(stderr, " r%d : %s, start key %s\n",
+				d.RangeID, d.FailureType, d.StartKey)
+		}
+	}
+	if res.UnavailableRanges.Error != "" {
+		_, _ = fmt.Fprintf(stderr, "Failed to complete range health check: %s\n",
+			res.UnavailableRanges.Error)
+	}
+
+	diff := diffPlanWithNodeStatus(updatePlan, res.Statuses)
+	if len(diff.report) > 0 {
+		if len(updatePlan.Updates) > 0 {
+			_, _ = fmt.Fprintf(stderr, "Recovery plan application progress:\n")
+		} else {
+			_, _ = fmt.Fprintf(stderr, "Recovery plans:\n")
+		}
+	}
+	for _, line := range diff.report {
+		_, _ = fmt.Fprintf(stderr, "%s\n", line)
+	}
+
+	// Node statuses.
+	allDecommissioned := true
+	var b strings.Builder
+	for id, status := range res.DecommissionedNodeStatuses {
+		if !status.Decommissioned() {
+			b.WriteString(fmt.Sprintf(" n%d: %s\n", id, status))
+			allDecommissioned = false
+		}
+	}
+	if len(res.DecommissionedNodeStatuses) > 0 {
+		if allDecommissioned {
+			_, _ = fmt.Fprintf(stderr, "All dead nodes are decommissioned.\n")
+		} else {
+			_, _ = fmt.Fprintf(stderr, "Nodes not yet decommissioned:\n%s", b.String())
+		}
+	}
+
+	if len(updatePlan.Updates) > 0 {
+		if !allDecommissioned || diff.pending > 0 {
+			return errors.New("loss of quorum recovery is not finished yet")
+		}
+		if diff.errors > 0 || !res.UnavailableRanges.Empty() {
+			return errors.New("loss of quorum recovery did not fully succeed")
+		}
+		_, _ = fmt.Fprintf(stderr, "Loss of quorum recovery is complete.\n")
+	} else {
+		if diff.errors > 0 || !res.UnavailableRanges.Empty() {
+			return errors.New("cluster has unhealthy ranges")
+		}
+	}
+	return nil
+}
+
+type clusterDiff struct {
+	report  []string
+	pending int
+	errors  int
+}
+
+func (d *clusterDiff) append(line string) {
+	d.report = append(d.report, line)
+}
+
+func (d *clusterDiff) appendPending(line string) {
+	d.report = append(d.report, line)
+	d.pending++
+}
+
+func (d *clusterDiff) appendError(line string) {
+	d.report = append(d.report, line)
+	d.errors++
+}
+
+func diffPlanWithNodeStatus(
+	updatePlan loqrecoverypb.ReplicaUpdatePlan, nodes []loqrecoverypb.NodeRecoveryStatus,
+) clusterDiff {
+	var result clusterDiff
+
+	nodesWithPlan := make(map[roachpb.NodeID]interface{})
+	for _, r := range updatePlan.Updates {
+		nodesWithPlan[r.NodeID()] = struct{}{}
+	}
+
+	// Sort statuses by node id for ease of readability.
+	sort.Slice(nodes, func(i, j int) bool {
+		return nodes[i].NodeID < nodes[j].NodeID
+	})
+	// Plan statuses.
+	if len(nodesWithPlan) > 0 {
+		// Invoked with plan, need to verify application of concrete plan to the
+		// cluster.
+		for _, status := range nodes {
+			if _, ok := nodesWithPlan[status.NodeID]; ok {
+				// Nodes that we expect plan to be pending or applied.
+				switch {
+				case status.AppliedPlanID != nil && status.AppliedPlanID.Equal(updatePlan.PlanID) && status.Error != "":
+					result.appendError(fmt.Sprintf(" plan application failed on node n%d: %s", status.NodeID, status.Error))
+				case status.AppliedPlanID != nil && status.AppliedPlanID.Equal(updatePlan.PlanID):
+					result.append(fmt.Sprintf(" plan applied successfully on node n%d", status.NodeID))
+				case status.PendingPlanID != nil && status.PendingPlanID.Equal(updatePlan.PlanID):
+					result.appendPending(fmt.Sprintf(" plan application pending on node n%d", status.NodeID))
+				case status.PendingPlanID != nil:
+					result.appendError(fmt.Sprintf(" unexpected staged plan %s on node n%d", *status.PendingPlanID, status.NodeID))
+				case status.PendingPlanID == nil:
+					result.appendError(fmt.Sprintf(" failed to find staged plan on node n%d", status.NodeID))
+				}
+			} else {
+				switch {
+				case status.PendingPlanID != nil && status.PendingPlanID.Equal(updatePlan.PlanID):
+					result.appendError(fmt.Sprintf(" plan staged on n%d but no replicas is planned for update on the node", status.NodeID))
+				case status.PendingPlanID != nil:
+					result.appendError(fmt.Sprintf(" unexpected staged plan %s on node n%d", *status.PendingPlanID, status.NodeID))
+				}
+			}
+		}
+	} else {
+		// Invoked without a plan, just dump collected information without making
+		// any conclusions.
+		for _, status := range nodes {
+			if status.PendingPlanID != nil {
+				result.append(fmt.Sprintf(" node n%d staged plan: %s", status.NodeID,
+					*status.PendingPlanID))
+			}
+			switch {
+			case status.Error != "" && status.AppliedPlanID != nil:
+				result.append(fmt.Sprintf(" node n%d failed to apply plan %s: %s", status.NodeID,
+					*status.PendingPlanID, status.Error))
+			case status.Error != "":
+				result.append(fmt.Sprintf(" node n%d failed to apply plan: %s", status.NodeID,
+					status.Error))
+			case status.AppliedPlanID != nil:
+				result.append(fmt.Sprintf(" node n%d applied plan: %s at %s", status.NodeID,
+					*status.AppliedPlanID, status.ApplyTimestamp))
+			}
+		}
+	}
+	return result
 }
 
 func formatNodeStores(locations []loqrecovery.NodeStores, indent string) string {

@@ -23,6 +23,7 @@ go_library(
         "//pkg/kv/kvserver",
         "//pkg/kv/kvserver/kvserverpb",
         "//pkg/kv/kvserver/kvstorage",
+        "//pkg/kv/kvserver/liveness/livenesspb",
         "//pkg/kv/kvserver/loqrecovery/loqrecoverypb",
         "//pkg/kv/kvserver/raftlog",
         "//pkg/kv/kvserver/stateloader",
@@ -33,6 +34,7 @@ go_library(
         "//pkg/util/contextutil",
         "//pkg/util/grpcutil",
         "//pkg/util/hlc",
+        "//pkg/util/iterutil",
         "//pkg/util/log",
         "//pkg/util/protoutil",
         "//pkg/util/retry",
@@ -42,6 +44,7 @@ go_library(
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_pebble//vfs",
         "@io_etcd_go_raft_v3//raftpb",
+        "@org_golang_google_grpc//:go_default_library",
     ],
 )
 

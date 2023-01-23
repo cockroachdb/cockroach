@@ -379,3 +379,7 @@ func TestJsonSerialization(t *testing.T) {
 	require.NoError(t, jsonpb.Unmarshal(data, &crFromJSON))
 	require.Equal(t, nr, crFromJSON, "objects before and after serialization")
 }
+
+func TestUpdatePlanVsClusterDiff(t *testing.T) {
+
+}
