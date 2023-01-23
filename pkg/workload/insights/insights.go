@@ -51,11 +51,12 @@ const (
 	maxTransfer             = 999
 )
 
+var RandomSeed = workload.NewUint64RandomSeed()
+
 type insights struct {
 	flags     workload.Flags
 	connFlags *workload.ConnFlags
 
-	seed                     uint64
 	rowCount, batchSize      int
 	payloadBytes, ranges     int
 	dbCount, totalTableCount int
@@ -70,13 +71,13 @@ var insightsMeta = workload.Meta{
 	Name:        `insights`,
 	Description: `This workload executes queries that will be detected by the database insights in the web UI.`,
 	Version:     `1.0.0`,
+	RandomSeed:  RandomSeed,
 	New: func() workload.Generator {
 		g := &insights{}
 		g.flags.FlagSet = pflag.NewFlagSet(`insights`, pflag.ContinueOnError)
 		g.flags.Meta = map[string]workload.FlagMeta{
 			`batch-size`: {RuntimeOnly: true},
 		}
-		g.flags.Uint64Var(&g.seed, `seed`, 1, `Key hash seed.`)
 		g.flags.IntVar(&g.rowCount, `rows`, defaultRows, `Initial number of accounts in insights table.`)
 		g.flags.IntVar(&g.batchSize, `batch-size`, defaultBatchSize, `Number of rows in each batch of initial data.`)
 		g.flags.IntVar(&g.payloadBytes, `payload-bytes`, defaultPayloadBytes, `Size of the payload field in each initial row.`)
@@ -94,6 +95,7 @@ var insightsMeta = workload.Meta{
 			defaultMaxRndTableCount,
 			`Random number of tables are created for all additional dbs created from db-count. This defines the max random number.`)
 
+		RandomSeed.AddFlag(&g.flags)
 		g.connFlags = workload.NewConnFlags(&g.flags)
 		return g
 	},
@@ -140,7 +142,7 @@ func (b *insights) Hooks() workload.Hooks {
 				return err
 			}
 
-			rng := rand.New(rand.NewSource(b.seed))
+			rng := rand.New(rand.NewSource(RandomSeed.Seed()))
 			numDbsToCreate := b.dbCount - currDbCount
 
 			if numDbsToCreate == 0 {
@@ -228,7 +230,7 @@ func (b *insights) Tables() []workload.Table {
 			InitialRows: workload.BatchedTuples{
 				NumBatches: numBatches,
 				FillBatch: func(batchIdx int, cb coldata.Batch, a *bufalloc.ByteAllocator) {
-					rng := rand.NewSource(b.seed + uint64(batchIdx))
+					rng := rand.NewSource(RandomSeed.Seed() + uint64(batchIdx))
 
 					rowBegin, rowEnd := batchIdx*b.batchSize, (batchIdx+1)*b.batchSize
 					if rowEnd > b.rowCount {
@@ -285,7 +287,7 @@ func (b *insights) Ops(
 	db.SetMaxIdleConns(b.connFlags.Concurrency + 1)
 
 	ql := workload.QueryLoad{SQLDatabase: sqlDatabase}
-	rng := rand.New(rand.NewSource(b.seed))
+	rng := rand.New(rand.NewSource(RandomSeed.Seed()))
 	for i := 0; i < b.connFlags.Concurrency; i++ {
 		useRandomTable := i < 4
 		hists := reg.GetHandle()
@@ -369,7 +371,7 @@ func orderByOnNonIndexColumn(
 	ctx context.Context, db *gosql.DB, rowCount int, tableName string,
 ) error {
 	rowLimit := (rand.Uint32() % uint32(rowCount)) + 1
-	query := fmt.Sprintf(`SELECT balance 
+	query := fmt.Sprintf(`SELECT balance
 			FROM %s ORDER BY balance DESC limit $1;`, tableName)
 	_, err := db.ExecContext(ctx, query, rowLimit)
 	return err

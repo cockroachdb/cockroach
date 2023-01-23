@@ -24,11 +24,12 @@ import (
 	"github.com/spf13/pflag"
 )
 
+var RandomSeed = workload.NewInt64RandomSeed()
+
 type ledger struct {
 	flags     workload.Flags
 	connFlags *workload.ConnFlags
 
-	seed              int64
 	customers         int
 	inlineArgs        bool
 	splits            int
@@ -52,11 +53,11 @@ var ledgerMeta = workload.Meta{
 	Name:        `ledger`,
 	Description: `Ledger simulates an accounting system using double-entry bookkeeping`,
 	Version:     `1.0.0`,
+	RandomSeed:  RandomSeed,
 	New: func() workload.Generator {
 		g := &ledger{}
 		g.flags.FlagSet = pflag.NewFlagSet(`ledger`, pflag.ContinueOnError)
 		g.connFlags = workload.NewConnFlags(&g.flags)
-		g.flags.Int64Var(&g.seed, `seed`, 1, `Random number generator seed`)
 		g.flags.IntVar(&g.customers, `customers`, 1000, `Number of customers`)
 		g.flags.BoolVar(&g.inlineArgs, `inline-args`, false, `Use inline query arguments`)
 		g.flags.IntVar(&g.splits, `splits`, 0, `Number of splits to perform before starting normal operations`)
@@ -65,6 +66,7 @@ var ledgerMeta = workload.Meta{
 		g.flags.StringVar(&g.mix, `mix`,
 			`balance=50,withdrawal=37,deposit=12,reversal=0`,
 			`Weights for the transaction mix.`)
+		RandomSeed.AddFlag(&g.flags)
 		return g
 	},
 }
