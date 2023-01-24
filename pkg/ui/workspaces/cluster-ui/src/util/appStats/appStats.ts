@@ -81,7 +81,7 @@ export function addMaybeUnsetNumericStat(
   return a && b ? aggregateNumericStats(a, b, countA, countB) : null;
 }
 
-export function addExecStats(a: ExecStats, b: ExecStats): Required<ExecStats> {
+export function addExecStats(a: ExecStats, b: ExecStats): ExecStats {
   let countA = FixLong(a.count).toInt();
   const countB = FixLong(b.count).toInt();
   if (countA === 0 && countB === 0) {

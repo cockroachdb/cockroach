@@ -361,6 +361,19 @@ func (e *execStats) jsonFields() jsonFields {
 		{"networkMsgs", (*numericStats)(&e.NetworkMessages)},
 		{"maxDiskUsage", (*numericStats)(&e.MaxDiskUsage)},
 		{"cpuNanos", (*numericStats)(&e.CPUNanos)},
+		{"mvccStepCount", (*numericStats)(&e.MvccStepCount)},
+		{"mvccStepCountInternal", (*numericStats)(&e.MvccStepCountInternal)},
+		{"mvccSeekCount", (*numericStats)(&e.MvccSeekCount)},
+		{"mvccSeekCountInternal", (*numericStats)(&e.MvccSeekCountInternal)},
+		{"mvccBlockBytes", (*numericStats)(&e.MvccBlockBytes)},
+		{"mvccBlockBytesInCache", (*numericStats)(&e.MvccBlockBytesInCache)},
+		{"mvccKeyBytes", (*numericStats)(&e.MvccKeyBytes)},
+		{"mvccValueBytes", (*numericStats)(&e.MvccValueBytes)},
+		{"mvccPointCount", (*numericStats)(&e.MvccPointCount)},
+		{"mvccPointsCoveredByRangeTombstones", (*numericStats)(&e.MvccPointsCoveredByRangeTombstones)},
+		{"mvccRangeKeyCount", (*numericStats)(&e.MvccRangeKeyCount)},
+		{"mvccRangeKeyContainedPoints", (*numericStats)(&e.MvccRangeKeyContainedPoints)},
+		{"mvccRangeKeySkippedPoints", (*numericStats)(&e.MvccRangeKeySkippedPoints)},
 	}
 }
 

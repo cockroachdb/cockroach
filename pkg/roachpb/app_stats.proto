@@ -335,6 +335,71 @@ message ExecStats {
   optional NumericStat cpu_nanos = 7 [(gogoproto.nullable) = false,
     (gogoproto.customname) = "CPUNanos"];
 
+  // Iteration stats are directly exposed from pebble.IteratorStats.
+  // For more information, see pkg/storage/engine.go.
+
+  // InternalIteratorStats
+
+  // mvcc_step_count collects MVCC steps: the number of times that the underlying
+  // storage iterator stepped forward during the work to serve the operator's reads,
+  // including stepping over MVCC keys that were too old for user in a scan.
+  optional NumericStat mvcc_step_count = 8 [(gogoproto.nullable) = false];
+
+  // mvcc_step_count_internal collects MVCC steps from calls by the pebble Iterator to
+  // its internalIterator.
+  optional NumericStat mvcc_step_count_internal = 9 [(gogoproto.nullable) = false];
+
+  // mvcc_step_count_internal collects MVCC seeks: the number of times that the
+  // underlying storage iterator jumped (seeked) to a different data location.
+  // Seeks are more expensive than steps.
+  optional NumericStat mvcc_seek_count = 10 [(gogoproto.nullable) = false];
+
+  // mvcc_seek_count_internal collects MVCC seeks from calls by the pebble Iterator to
+  // its internalIterator.
+  optional NumericStat mvcc_seek_count_internal = 11 [(gogoproto.nullable) = false];
+
+  // mvcc_block_bytes collects the bytes in the loaded blocks. If the block was
+  // compressed, this is the compressed bytes. Currently, only the index blocks,
+  // data blocks containing points, and filter blocks are included.
+  optional NumericStat mvcc_block_bytes = 12 [(gogoproto.nullable) = false];
+
+  // mvcc_block_bytes_in_cache collects the subset of BlockBytes that were in the block cache.
+  optional NumericStat mvcc_block_bytes_in_cache = 13 [(gogoproto.nullable) = false];
+
+  // mvcc_key_bytes collects the bytes in keys that were iterated over. Currently,
+  // only point keys are included.
+  optional NumericStat mvcc_key_bytes = 14 [(gogoproto.nullable) = false];
+
+  // mvcc_value_bytes collects the bytes in values that were iterated over. Currently,
+  // only point values are included. For separated values, this is the size of the handle.
+  optional NumericStat mvcc_value_bytes = 15 [(gogoproto.nullable) = false];
+
+  // mvcc_point_count collects the count of points iterated over.
+  optional NumericStat mvcc_point_count = 16 [(gogoproto.nullable) = false];
+
+  // mvcc_points_covered_by_range_tombstones collects the points that were iterated over
+  // that were covered by range tombstones. It can be useful for discovering instances of
+  // https://github.com/cockroachdb/pebble/issues/1070.
+  optional NumericStat mvcc_points_covered_by_range_tombstones = 17 [(gogoproto.nullable) = false];
+
+  // RangeKeyIteratorStats
+
+  // mvcc_range_key_count collects the number of range keys encountered during
+  // iteration. Range keys may be counted multiple times if the iterator
+  // leaves a range key's bounds and then returns.
+  optional NumericStat mvcc_range_key_count = 18 [(gogoproto.nullable) = false];
+
+  // mvcc_range_key_contained_points collects the number of point keys encountered within the
+  // bounds of a range key. Note that this includes point keys with suffixes
+  // that sort both above and below the covering range key's suffix.
+  optional NumericStat mvcc_range_key_contained_points = 19 [(gogoproto.nullable) = false];
+
+  // mvcc_range_key_skipped_points collects the count of the subset of mvcc_range_key_contained_points
+  // point keys that were skipped during iteration due to range-key masking. It does
+  // not include point keys that were never loaded because a
+  // RangeKeyMasking.Filter excluded the entire containing block.
+  optional NumericStat mvcc_range_key_skipped_points = 20 [(gogoproto.nullable) = false];
+
   // Note: be sure to update `sql/app_stats.go` when adding/removing fields
   // here!
 }

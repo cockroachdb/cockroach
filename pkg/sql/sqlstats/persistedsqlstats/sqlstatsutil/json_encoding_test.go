@@ -129,6 +129,58 @@ func TestSQLStatsJsonEncoding(t *testing.T) {
          "cpuNanos": {
            "mean": {{.Float}},
            "sqDiff": {{.Float}}
+         },
+         "mvccStepCount": {
+           "mean": {{.Float}},
+           "sqDiff": {{.Float}}
+         },
+         "mvccStepCountInternal": {
+           "mean": {{.Float}},
+           "sqDiff": {{.Float}}
+         },
+         "mvccSeekCount": {
+           "mean": {{.Float}},
+           "sqDiff": {{.Float}}
+         },
+         "mvccSeekCountInternal": {
+           "mean": {{.Float}},
+           "sqDiff": {{.Float}}
+         },
+         "mvccBlockBytes": {
+           "mean": {{.Float}},
+           "sqDiff": {{.Float}}
+         },
+         "mvccBlockBytesInCache": {
+           "mean": {{.Float}},
+           "sqDiff": {{.Float}}
+         },
+         "mvccKeyBytes": {
+           "mean": {{.Float}},
+           "sqDiff": {{.Float}}
+         },
+         "mvccValueBytes": {
+           "mean": {{.Float}},
+           "sqDiff": {{.Float}}
+         },
+         "mvccPointCount": {
+           "mean": {{.Float}},
+           "sqDiff": {{.Float}}
+         },
+         "mvccPointsCoveredByRangeTombstones": {
+           "mean": {{.Float}},
+           "sqDiff": {{.Float}}
+         },
+         "mvccRangeKeyCount": {
+           "mean": {{.Float}},
+           "sqDiff": {{.Float}}
+         },
+         "mvccRangeKeyContainedPoints": {
+           "mean": {{.Float}},
+           "sqDiff": {{.Float}}
+         },
+         "mvccRangeKeySkippedPoints": {
+           "mean": {{.Float}},
+           "sqDiff": {{.Float}}
          }
        },
        "index_recommendations": [{{joinStrings .StringArray}}]
@@ -368,7 +420,59 @@ func TestSQLStatsJsonEncoding(t *testing.T) {
     "cpuNanos": {
       "mean": {{.Float}},
       "sqDiff": {{.Float}}
-    }
+    },
+		"mvccStepCount": {
+			"mean": {{.Float}},
+			"sqDiff": {{.Float}}
+		},
+		"mvccStepCountInternal": {
+			"mean": {{.Float}},
+			"sqDiff": {{.Float}}
+		},
+		"mvccSeekCount": {
+			"mean": {{.Float}},
+			"sqDiff": {{.Float}}
+		},
+		"mvccSeekCountInternal": {
+			"mean": {{.Float}},
+			"sqDiff": {{.Float}}
+		},
+		"mvccBlockBytes": {
+			"mean": {{.Float}},
+			"sqDiff": {{.Float}}
+		},
+		"mvccBlockBytesInCache": {
+			"mean": {{.Float}},
+			"sqDiff": {{.Float}}
+		},
+		"mvccKeyBytes": {
+			"mean": {{.Float}},
+			"sqDiff": {{.Float}}
+		},
+		"mvccValueBytes": {
+			"mean": {{.Float}},
+			"sqDiff": {{.Float}}
+		},
+		"mvccPointCount": {
+			"mean": {{.Float}},
+			"sqDiff": {{.Float}}
+		},
+		"mvccPointsCoveredByRangeTombstones": {
+			"mean": {{.Float}},
+			"sqDiff": {{.Float}}
+		},
+		"mvccRangeKeyCount": {
+			"mean": {{.Float}},
+			"sqDiff": {{.Float}}
+		},
+		"mvccRangeKeyContainedPoints": {
+			"mean": {{.Float}},
+			"sqDiff": {{.Float}}
+		},
+		"mvccRangeKeySkippedPoints": {
+			"mean": {{.Float}},
+			"sqDiff": {{.Float}}
+		 }
   }
 }
 		 `

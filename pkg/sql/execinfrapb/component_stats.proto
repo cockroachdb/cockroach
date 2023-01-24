@@ -137,6 +137,15 @@ message KVStats {
   optional util.optional.Uint num_internal_steps = 6 [(gogoproto.nullable) = false];
   optional util.optional.Uint num_interface_seeks = 7 [(gogoproto.nullable) = false];
   optional util.optional.Uint num_internal_seeks = 8 [(gogoproto.nullable) = false];
+  optional util.optional.Uint block_bytes = 12 [(gogoproto.nullable) = false];
+  optional util.optional.Uint block_bytes_in_cache = 13 [(gogoproto.nullable) = false];
+  optional util.optional.Uint key_bytes = 14 [(gogoproto.nullable) = false];
+  optional util.optional.Uint value_bytes = 15 [(gogoproto.nullable) = false];
+  optional util.optional.Uint point_count = 16 [(gogoproto.nullable) = false];
+  optional util.optional.Uint points_covered_by_range_tombstones = 17 [(gogoproto.nullable) = false];
+  optional util.optional.Uint range_key_count = 18 [(gogoproto.nullable) = false];
+  optional util.optional.Uint range_key_contained_points = 19 [(gogoproto.nullable) = false];
+  optional util.optional.Uint range_key_skipped_points = 20 [(gogoproto.nullable) = false];
 
   // contention_events hit at the statement level.
   repeated cockroach.roachpb.ContentionEvent contention_events = 10 [(gogoproto.nullable) = false];

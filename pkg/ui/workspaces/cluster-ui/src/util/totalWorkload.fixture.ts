@@ -19,7 +19,7 @@ interface AggregateStatistics {
   stats: StatementStatistics;
 }
 
-const execStats: Required<ExecStats> = {
+const execStats: ExecStats = {
   count: Long.fromNumber(1),
   network_bytes: {
     mean: 4160407,

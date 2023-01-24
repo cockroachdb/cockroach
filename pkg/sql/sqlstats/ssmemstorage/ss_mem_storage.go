@@ -454,6 +454,19 @@ func (s *stmtStats) recordExecStats(stats execstats.QueryLevelStats) {
 	s.mu.data.ExecStats.NetworkMessages.Record(count, float64(stats.NetworkMessages))
 	s.mu.data.ExecStats.MaxDiskUsage.Record(count, float64(stats.MaxDiskUsage))
 	s.mu.data.ExecStats.CPUNanos.Record(count, float64(stats.CPUTime.Nanoseconds()))
+	s.mu.data.ExecStats.MvccStepCount.Record(count, float64(stats.KVSteps))
+	s.mu.data.ExecStats.MvccStepCountInternal.Record(count, float64(stats.KVStepsInternal))
+	s.mu.data.ExecStats.MvccSeekCount.Record(count, float64(stats.KVSeeks))
+	s.mu.data.ExecStats.MvccSeekCountInternal.Record(count, float64(stats.KVSeeksInternal))
+	s.mu.data.ExecStats.MvccBlockBytes.Record(count, float64(stats.KVBlockBytes))
+	s.mu.data.ExecStats.MvccBlockBytesInCache.Record(count, float64(stats.KVBlockBytesInCache))
+	s.mu.data.ExecStats.MvccKeyBytes.Record(count, float64(stats.KVKeyBytes))
+	s.mu.data.ExecStats.MvccValueBytes.Record(count, float64(stats.KVValueBytes))
+	s.mu.data.ExecStats.MvccPointCount.Record(count, float64(stats.KVPointCount))
+	s.mu.data.ExecStats.MvccPointsCoveredByRangeTombstones.Record(count, float64(stats.KVPointsCoveredByRangeTombstones))
+	s.mu.data.ExecStats.MvccRangeKeyCount.Record(count, float64(stats.KVRangeKeyCount))
+	s.mu.data.ExecStats.MvccRangeKeyContainedPoints.Record(count, float64(stats.KVRangeKeyContainedPoints))
+	s.mu.data.ExecStats.MvccRangeKeySkippedPoints.Record(count, float64(stats.KVRangeKeySkippedPoints))
 }
 
 func (s *stmtStats) mergeStatsLocked(statistics *roachpb.CollectedStatementStatistics) {

@@ -229,7 +229,7 @@ function randomStat(scale = 1): NumericStat {
   };
 }
 
-function randomExecStats(count = 10): Required<ExecStats> {
+function randomExecStats(count = 10): ExecStats {
   return {
     count: Long.fromNumber(randomInt(count)),
     network_bytes: randomStat(),

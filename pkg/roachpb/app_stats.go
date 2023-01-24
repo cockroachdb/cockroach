@@ -214,6 +214,19 @@ func (s *ExecStats) Add(other ExecStats) {
 	s.NetworkMessages.Add(other.NetworkMessages, execStatCollectionCount, other.Count)
 	s.MaxDiskUsage.Add(other.MaxDiskUsage, execStatCollectionCount, other.Count)
 	s.CPUNanos.Add(other.CPUNanos, execStatCollectionCount, other.Count)
+	s.MvccStepCount.Add(other.MvccStepCount, execStatCollectionCount, other.Count)
+	s.MvccStepCountInternal.Add(other.MvccStepCountInternal, execStatCollectionCount, other.Count)
+	s.MvccSeekCount.Add(other.MvccSeekCount, execStatCollectionCount, other.Count)
+	s.MvccSeekCountInternal.Add(other.MvccSeekCountInternal, execStatCollectionCount, other.Count)
+	s.MvccBlockBytes.Add(other.MvccBlockBytes, execStatCollectionCount, other.Count)
+	s.MvccBlockBytesInCache.Add(other.MvccBlockBytesInCache, execStatCollectionCount, other.Count)
+	s.MvccKeyBytes.Add(other.MvccKeyBytes, execStatCollectionCount, other.Count)
+	s.MvccValueBytes.Add(other.MvccValueBytes, execStatCollectionCount, other.Count)
+	s.MvccPointCount.Add(other.MvccPointCount, execStatCollectionCount, other.Count)
+	s.MvccPointsCoveredByRangeTombstones.Add(other.MvccPointsCoveredByRangeTombstones, execStatCollectionCount, other.Count)
+	s.MvccRangeKeyCount.Add(other.MvccRangeKeyCount, execStatCollectionCount, other.Count)
+	s.MvccRangeKeyContainedPoints.Add(other.MvccRangeKeyContainedPoints, execStatCollectionCount, other.Count)
+	s.MvccRangeKeySkippedPoints.Add(other.MvccRangeKeySkippedPoints, execStatCollectionCount, other.Count)
 
 	s.Count += other.Count
 }
