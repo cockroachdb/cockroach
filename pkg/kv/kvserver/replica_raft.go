@@ -684,7 +684,7 @@ func (r *Replica) handleRaftReady(
 // non-sensitive cue as to what happened.
 func (r *Replica) handleRaftReadyRaftMuLocked(
 	ctx context.Context, inSnap IncomingSnapshot,
-) (handleRaftReadyStats, error) {
+) (stats handleRaftReadyStats, _ error) {
 	// handleRaftReadyRaftMuLocked is not prepared to handle context cancellation,
 	// so assert that it's given a non-cancellable context.
 	if ctx.Done() != nil {
@@ -692,12 +692,13 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			"handleRaftReadyRaftMuLocked cannot be called with a cancellable context")
 	}
 
-	stats := handleRaftReadyStats{
+	// NB: we need to reference the named return parameter here. If `stats` were
+	// just a local, we'd be modifying the local but not the return value in the
+	// defer below.
+	stats = handleRaftReadyStats{
 		tBegin: timeutil.Now(),
 	}
 	defer func() {
-		// NB: we need to reference the named return parameter here. If `stats` were
-		// just a local, we'd be modifying the local but not the return value.
 		stats.tEnd = timeutil.Now()
 	}()
 
