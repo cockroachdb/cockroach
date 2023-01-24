@@ -248,9 +248,9 @@ var MVCCMerger = &pebble.Merger{
 //
 // The handling of timestamps in intents is mildly complicated. Consider:
 //
-//   a@<meta>   -> <MVCCMetadata: Timestamp=t2>
-//   a@t2       -> <value>
-//   a@t1       -> <value>
+//	a@<meta>   -> <MVCCMetadata: Timestamp=t2>
+//	a@t2       -> <value>
+//	a@t1       -> <value>
 //
 // The metadata record (a.k.a. the intent) for a key always sorts first. The
 // timestamp field always points to the next record. In this case, the meta
@@ -2250,6 +2250,10 @@ func pebbleExportToSst(
 			reachedTargetSize := curSize > 0 && uint64(curSize) >= options.TargetSize
 			newSize := curSize + int64(len(unsafeKey.Key)+len(unsafeValue))
 			reachedMaxSize := options.MaxSize > 0 && newSize > int64(options.MaxSize)
+			if curSize == 0 && reachedMaxSize {
+				// This single key exceeds the MaxSize. Even if we paginate below, this will still fail.
+				return roachpb.BulkOpSummary{}, MVCCKey{}, &ExceedMaxSizeError{reached: newSize, maxSize: options.MaxSize}
+			}
 			// When paginating we stop writing in two cases:
 			// - target size is reached and we wrote all versions of a key
 			// - maximum size reached and we are allowed to stop mid key
@@ -2303,9 +2307,14 @@ func pebbleExportToSst(
 	}
 
 	if rows.BulkOpSummary.DataSize == 0 {
-		// If no records were added to the sstable, skip completing it and return a
-		// nil slice – the export code will discard it anyway (based on 0 DataSize).
-		return roachpb.BulkOpSummary{}, MVCCKey{}, nil
+		// If no records were added to the sstable, skip
+		// completing it and return an empty summary.
+		//
+		// We still propagate the resumeKey because our
+		// iteration may have been halted because of resource
+		// limitations before any keys were added to the
+		// returned SST.
+		return roachpb.BulkOpSummary{}, MVCCKey{Key: resumeKey, Timestamp: resumeTS}, nil
 	}
 
 	if err := sstWriter.Finish(); err != nil {
