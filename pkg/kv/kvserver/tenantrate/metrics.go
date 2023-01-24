@@ -123,12 +123,12 @@ func (m *Metrics) tenantMetrics(tenantID roachpb.TenantID) tenantMetrics {
 	}
 }
 
-func (tm *tenantMetrics) destroy() {
-	tm.currentBlocked.Destroy()
-	tm.readBatchesAdmitted.Destroy()
-	tm.writeBatchesAdmitted.Destroy()
-	tm.readRequestsAdmitted.Destroy()
-	tm.writeRequestsAdmitted.Destroy()
-	tm.readBytesAdmitted.Destroy()
-	tm.writeBytesAdmitted.Destroy()
+func (tm *tenantMetrics) unlink() {
+	tm.currentBlocked.Unlink()
+	tm.readBatchesAdmitted.Unlink()
+	tm.writeBatchesAdmitted.Unlink()
+	tm.readRequestsAdmitted.Unlink()
+	tm.writeRequestsAdmitted.Unlink()
+	tm.readBytesAdmitted.Unlink()
+	tm.writeBytesAdmitted.Unlink()
 }

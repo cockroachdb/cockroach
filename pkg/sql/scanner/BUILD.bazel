@@ -17,10 +17,7 @@ go_library(
 
 go_test(
     name = "scanner_test",
-    srcs = [
-        "scan_test.go",
-        "token_names_test.go",
-    ],
+    srcs = ["scan_test.go"],
     args = ["-test.timeout=295s"],
     embed = [":scanner"],
     deps = [

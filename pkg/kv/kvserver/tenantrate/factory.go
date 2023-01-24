@@ -69,7 +69,7 @@ func NewLimiterFactory(sv *settings.Values, knobs *TestingKnobs) *LimiterFactory
 }
 
 // GetTenant gets or creates a limiter for the given tenant. The limiters are
-// reference counted; call Destroy on the returned limiter when it is no longer
+// reference counted; call Unlink on the returned limiter when it is no longer
 // in use. If the closer channel is non-nil, closing it will lead to any blocked
 // requests becoming unblocked.
 func (rl *LimiterFactory) GetTenant(
@@ -120,7 +120,8 @@ func (rl *LimiterFactory) Release(lim Limiter) {
 		panic(errors.AssertionFailedf("two limiters exist for tenant %v", l.tenantID))
 	}
 	if rcLim.refCount--; rcLim.refCount == 0 {
-		l.metrics.destroy()
+		l.metrics.unlink()
+		l.qp.Close("released")
 		delete(rl.mu.tenants, l.tenantID)
 	}
 }
