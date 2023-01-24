@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/apply"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -79,8 +80,14 @@ func (r *Replica) preDestroyRaftMuLocked(
 	nextReplicaID roachpb.ReplicaID,
 	opts clearRangeDataOptions,
 ) error {
-	err := clearRangeData(r.RangeID, reader, writer, opts)
+	diskReplicaID, err := logstore.NewStateLoader(r.RangeID).LoadRaftReplicaID(ctx, reader)
 	if err != nil {
+		return err
+	}
+	if diskReplicaID.ReplicaID >= nextReplicaID {
+		return errors.AssertionFailedf("replica r%d/%d must not survive its own tombstone", r.RangeID, diskReplicaID)
+	}
+	if err := clearRangeData(r.RangeID, reader, writer, opts); err != nil {
 		return err
 	}
 
@@ -89,7 +96,7 @@ func (r *Replica) preDestroyRaftMuLocked(
 	// NB: Legacy tombstones (which are in the replicated key space) are wiped
 	// in clearRangeData, but that's OK since we're writing a new one in the same
 	// batch (and in particular, sequenced *after* the wipe).
-	return r.setTombstoneKey(ctx, reader, writer, nextReplicaID)
+	return setTombstoneKey(ctx, r.RangeID, reader, writer, nextReplicaID)
 }
 
 func (r *Replica) postDestroyRaftMuLocked(ctx context.Context, ms enginepb.MVCCStats) error {
@@ -221,32 +228,14 @@ func (r *Replica) disconnectReplicationRaftMuLocked(ctx context.Context) {
 // We have to be careful to set the right key, since a replica can be using an
 // ID that it hasn't yet received a RangeDescriptor for if it receives raft
 // requests for that replica ID (as seen in #14231).
-func (r *Replica) setTombstoneKey(
+func setTombstoneKey(
 	ctx context.Context,
+	rangeID roachpb.RangeID,
 	reader storage.Reader,
 	writer storage.Writer,
 	externalNextReplicaID roachpb.ReplicaID,
 ) error {
-	{
-		// TODO(this PR): this assertion is temporary. We'll remove it along with
-		// the dependency on *Replica. But having it in this commit and passing
-		// tests is a good sanity check.
-
-		r.mu.Lock()
-		replReplicaID := r.replicaID
-		r.mu.Unlock()
-
-		if replReplicaID >= externalNextReplicaID {
-			err := errors.AssertionFailedf(
-				"attempt to set tombstone at replicaID %d but this leaves replicaID %d alive",
-				externalNextReplicaID, replReplicaID,
-			)
-			log.Fatalf(ctx, "%s", err)
-			return err // unreachable
-		}
-	}
-
-	tombstoneKey := keys.RangeTombstoneKey(r.RangeID)
+	tombstoneKey := keys.RangeTombstoneKey(rangeID)
 
 	// Assert that the provided tombstone moves the existing one strictly forward.
 	// Failure to do so indicates that something is going wrong in the replica
