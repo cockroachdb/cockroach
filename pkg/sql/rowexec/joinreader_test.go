@@ -1702,7 +1702,11 @@ func benchmarkJoinReader(b *testing.B, bc JRBenchConfig) {
 	defer cleanupTempDir()
 	tempStoreSpec, err := base.NewStoreSpec(fmt.Sprintf("path=%s", tempStoragePath))
 	require.NoError(b, err)
-	tempEngine, _, err := storage.NewTempEngine(ctx, base.TempStorageConfig{Path: tempStoragePath, Mon: diskMonitor}, tempStoreSpec)
+	tempEngine, _, err := storage.NewTempEngine(ctx, base.TempStorageConfig{
+		Path:     tempStoragePath,
+		Mon:      diskMonitor,
+		Settings: st,
+	}, tempStoreSpec)
 	require.NoError(b, err)
 	defer tempEngine.Close()
 	flowCtx.Cfg.TempStorage = tempEngine
@@ -1967,7 +1971,11 @@ func BenchmarkJoinReaderLookupStress(b *testing.B) {
 	defer cleanupTempDir()
 	tempStoreSpec, err := base.NewStoreSpec(fmt.Sprintf("path=%s", tempStoragePath))
 	require.NoError(b, err)
-	tempEngine, _, err := storage.NewTempEngine(ctx, base.TempStorageConfig{Path: tempStoragePath, Mon: diskMonitor}, tempStoreSpec)
+	tempEngine, _, err := storage.NewTempEngine(ctx, base.TempStorageConfig{
+		Path:     tempStoragePath,
+		Mon:      diskMonitor,
+		Settings: st,
+	}, tempStoreSpec)
 	require.NoError(b, err)
 	defer tempEngine.Close()
 	flowCtx.Cfg.TempStorage = tempEngine
