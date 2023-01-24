@@ -2842,9 +2842,10 @@ project
       └── filters
            └── (j:4->'a') != '"b"' [outer=(4), immutable]
 
-# Do not generate an inverted scan when the index of the fetch val operator is
-# not a string.
-opt expect-not=GenerateInvertedIndexScans
+# Generate an inverted scan when the index of the fetch val operator is
+# not a string and right side to the equality is a JSON string. Since
+# the inverted expression is not tight, a filter should be applied.
+opt expect=GenerateInvertedIndexScans
 SELECT k FROM b WHERE j->0 = '"b"'
 ----
 project
@@ -2856,12 +2857,73 @@ project
       ├── immutable
       ├── key: (1)
       ├── fd: (1)-->(4)
-      ├── scan b
+      ├── index-join b
       │    ├── columns: k:1!null j:4
       │    ├── key: (1)
-      │    └── fd: (1)-->(4)
+      │    ├── fd: (1)-->(4)
+      │    └── scan b@j_inv_idx
+      │         ├── columns: k:1!null
+      │         ├── inverted constraint: /7/1
+      │         │    └── spans: ["7\x00\x03\x00\x01\x12b\x00\x01", "7\x00\x03\x00\x01\x12b\x00\x01"]
+      │         └── key: (1)
       └── filters
            └── (j:4->0) = '"b"' [outer=(4), immutable]
+
+# Generate an inverted scan when the index of the fetch val operator is
+# not a string and the right side right side to the equality is a JSON
+# object. Since the inverted expression is not tight, a
+# filter should be applied.
+opt expect=GenerateInvertedIndexScans
+SELECT k FROM b WHERE j->0 = '{"a": "b"}'
+----
+project
+ ├── columns: k:1!null
+ ├── immutable
+ ├── key: (1)
+ └── select
+      ├── columns: k:1!null j:4
+      ├── immutable
+      ├── key: (1)
+      ├── fd: (1)-->(4)
+      ├── index-join b
+      │    ├── columns: k:1!null j:4
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(4)
+      │    └── scan b@j_inv_idx
+      │         ├── columns: k:1!null
+      │         ├── inverted constraint: /7/1
+      │         │    └── spans: ["7\x00\x03a\x00\x01\x12b\x00\x01", "7\x00\x03a\x00\x01\x12b\x00\x01"]
+      │         └── key: (1)
+      └── filters
+           └── (j:4->0) = '{"a": "b"}' [outer=(4), immutable]
+
+# Generate an inverted scan when the index of the fetch val operator is
+# not a string and the right side right side to the equality is a JSON
+# array. Since the inverted expression is not tight, a
+# filter should be applied.
+opt expect=GenerateInvertedIndexScans
+SELECT k FROM b WHERE j->0 = '"[1, 2]"'
+----
+project
+ ├── columns: k:1!null
+ ├── immutable
+ ├── key: (1)
+ └── select
+      ├── columns: k:1!null j:4
+      ├── immutable
+      ├── key: (1)
+      ├── fd: (1)-->(4)
+      ├── index-join b
+      │    ├── columns: k:1!null j:4
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(4)
+      │    └── scan b@j_inv_idx
+      │         ├── columns: k:1!null
+      │         ├── inverted constraint: /7/1
+      │         │    └── spans: ["7\x00\x03\x00\x01\x12[1, 2]\x00\x01", "7\x00\x03\x00\x01\x12[1, 2]\x00\x01"]
+      │         └── key: (1)
+      └── filters
+           └── (j:4->0) = '"[1, 2]"' [outer=(4), immutable]
 
 # Generate an inverted scan when right side of the equality is an array.
 opt expect=GenerateInvertedIndexScans

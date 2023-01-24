@@ -529,7 +529,7 @@ func (j *jsonOrArrayFilterPlanner) extractJSONFetchValEqCondition(
 	}
 
 	// Collect a slice of keys from the fetch val expression.
-	var keys []string
+	var keys tree.Datums
 	keys = j.collectKeys(keys, left)
 	if len(keys) == 0 {
 		return inverted.NonInvertedColExpression{}
@@ -548,6 +548,15 @@ func (j *jsonOrArrayFilterPlanner) extractJSONFetchValEqCondition(
 	typ := val.JSON.Type()
 	if typ == json.ArrayJSONType || typ == json.ObjectJSONType {
 		invertedExpr.SetNotTight()
+	}
+
+	// If a key is of the type DInt, the InvertedExpression generated is
+	// not tight.
+	for i := range keys {
+		if _, ok := keys[i].(*tree.DInt); ok {
+			invertedExpr.SetNotTight()
+			break
+		}
 	}
 	return invertedExpr
 }
@@ -584,7 +593,7 @@ func (j *jsonOrArrayFilterPlanner) extractJSONFetchValContainsCondition(
 	}
 
 	// Collect a slice of keys from the fetch val expression.
-	var keys []string
+	var keys tree.Datums
 	keys = j.collectKeys(keys, left)
 	if len(keys) == 0 {
 		return inverted.NonInvertedColExpression{}
@@ -639,21 +648,24 @@ func (j *jsonOrArrayFilterPlanner) extractJSONFetchValContainsCondition(
 // As an example, when left is (j->'a'->'b') and right is ('1'), the keys
 // {"b", "a"} are collected and the JSON object {"a": {"b": 1}} is built.
 func (j *jsonOrArrayFilterPlanner) collectKeys(
-	currKeys []string, fetch *memo.FetchValExpr,
-) (keys []string) {
+	currKeys tree.Datums, fetch *memo.FetchValExpr,
+) (keys tree.Datums) {
 	// The right side of the fetch val expression, the Index field, must be
 	// a constant string. If not, then we cannot build an inverted
 	// expression.
 	if !memo.CanExtractConstDatum(fetch.Index) {
 		return nil
 	}
-	key, ok := memo.ExtractConstDatum(fetch.Index).(*tree.DString)
-	if !ok {
+	key := memo.ExtractConstDatum(fetch.Index)
+
+	switch key.(type) {
+	case *tree.DString, *tree.DInt:
+	default:
 		return nil
 	}
 
 	// Append the key to the list of keys.
-	keys = append(currKeys, string(*key))
+	keys = append(currKeys, key)
 
 	// If the left side of the fetch val expression, the Json field, is a
 	// variable or expression corresponding to the index column, then we
@@ -678,7 +690,7 @@ func (j *jsonOrArrayFilterPlanner) collectKeys(
 // {"a", "b"} as keys, "c" as val, and construct {"a": "b": ["c"]}.
 // An array of the constructed JSONs is returned.
 func buildFetchContainmentObjects(
-	keys []string, val json.JSON, containedBy bool,
+	keys tree.Datums, val json.JSON, containedBy bool,
 ) ([]json.JSON, error) {
 	var objs []json.JSON
 	typ := val.Type()
@@ -745,16 +757,18 @@ func buildFetchContainmentObjects(
 // Where the keys and val are extracted from a fetch val expression by the
 // caller. Note that key0 is the outer-most fetch val index, so the expression
 // j->'a'->'b' = 1 results in {"a": {"b": 1}}.
-func buildObject(keys []string, val json.JSON) json.JSON {
-	var obj json.JSON
+func buildObject(keys tree.Datums, val json.JSON) json.JSON {
 	for i := 0; i < len(keys); i++ {
-		b := json.NewObjectBuilder(1)
-		if i == 0 {
-			b.Add(keys[i], val)
-		} else {
-			b.Add(keys[i], obj)
+		switch t := keys[i].(type) {
+		case *tree.DString:
+			b := json.NewObjectBuilder(1)
+			b.Add(string(*t), val)
+			val = b.Build()
+		case *tree.DInt:
+			b := json.NewArrayBuilder(1)
+			b.Add(val)
+			val = b.Build()
 		}
-		obj = b.Build()
 	}
-	return obj
+	return val
 }
