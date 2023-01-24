@@ -216,6 +216,28 @@ func NewDistSQLPlanner(
 	return dsp
 }
 
+// GetAllInstancesByLocality lists all instances that match the passed locality
+// filters.
+func (dsp *DistSQLPlanner) GetAllInstancesByLocality(
+	ctx context.Context, filter roachpb.Locality,
+) ([]sqlinstance.InstanceInfo, error) {
+	all, err := dsp.sqlAddressResolver.GetAllInstances(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var pos int
+	for _, n := range all {
+		if ok, _ := n.Locality.Matches(filter); ok {
+			all[pos] = n
+			pos++
+		}
+	}
+	if pos == 0 {
+		return nil, errors.Newf("no instances found matching locality filter %s", filter.String())
+	}
+	return all[:pos], nil
+}
+
 // GetSQLInstanceInfo gets a node descriptor by node ID.
 func (dsp *DistSQLPlanner) GetSQLInstanceInfo(
 	sqlInstanceID base.SQLInstanceID,

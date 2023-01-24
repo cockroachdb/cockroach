@@ -298,6 +298,10 @@ message BackupDetails {
   // ApplicationName is the application name in the session where the backup was
   // invoked.
   string application_name = 23;
+
+  roachpb.Locality coordinator_location = 24 [(gogoproto.nullable) = false];
+
+  // NEXT ID: 25;
 }
 
 message BackupProgress {
