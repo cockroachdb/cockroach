@@ -1361,7 +1361,9 @@ func (r *Replica) poisonInflightLatches(err error) {
 	defer r.mu.Unlock()
 	for _, p := range r.mu.proposals {
 		p.ec.poison()
-		if p.ec.g.Req.PoisonPolicy == poison.Policy_Error {
+		// TODO(tbg): find out how `p.ec.done()` can have been called at this point,
+		// See: https://github.com/cockroachdb/cockroach/issues/86547
+		if p.ec.g != nil && p.ec.g.Req.PoisonPolicy == poison.Policy_Error {
 			aErr := roachpb.NewAmbiguousResultError(err)
 			// NB: this does not release the request's latches. It's important that
 			// the latches stay in place, since the command could still apply.
