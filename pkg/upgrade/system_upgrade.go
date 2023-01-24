@@ -15,9 +15,12 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/keyvisualizer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/logtags"
@@ -105,10 +108,13 @@ type Cluster interface {
 // SystemDeps are the dependencies of upgrades which perform actions at the
 // KV layer on behalf of the system tenant.
 type SystemDeps struct {
-	Cluster    Cluster
-	DB         descs.DB
-	DistSender *kvcoord.DistSender
-	Stopper    *stop.Stopper
+	Cluster     Cluster
+	DB          descs.DB
+	Settings    *cluster.Settings
+	JobRegistry *jobs.Registry
+	DistSender  *kvcoord.DistSender
+	Stopper     *stop.Stopper
+	KeyVisKnobs *keyvisualizer.TestingKnobs
 }
 
 // SystemUpgrade is an implementation of Upgrade for system-level

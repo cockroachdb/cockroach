@@ -525,6 +525,7 @@ FROM system.eventlog
 WHERE "eventType" = 'set_zone_config'
 ORDER BY "timestamp", info
 ----
+1  {"ApplicationName": "$ internal-set-SpanStatsTenantBoundariesTable-TTL", "EventType": "set_zone_config", "Options": ["\"gc.ttlseconds\" = 3600"], "PlaceholderValues": ["3600"], "Statement": "ALTER TABLE \"\".system.span_stats_tenant_boundaries CONFIGURE ZONE USING \"gc.ttlseconds\" = $1", "Tag": "CONFIGURE ZONE", "Target": "TABLE system.public.span_stats_tenant_boundaries", "User": "root"}
 1  {"EventType": "set_zone_config", "Options": ["range_max_bytes = 67108865", "range_min_bytes = 16777216"], "Statement": "ALTER TABLE \"\".\"\".a CONFIGURE ZONE USING range_max_bytes = 67108865, range_min_bytes = 16777216", "Tag": "CONFIGURE ZONE", "Target": "TABLE test.public.a", "User": "root"}
 
 skipif config 3node-tenant-default-configs

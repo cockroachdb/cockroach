@@ -219,6 +219,7 @@ go_test(
         "//pkg/jobs/jobsprotectedts",
         "//pkg/jobs/jobstest",
         "//pkg/keys",
+        "//pkg/keyvisualizer",
         "//pkg/kv",
         "//pkg/kv/bulk",
         "//pkg/kv/kvclient/kvcoord",

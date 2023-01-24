@@ -28,6 +28,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/keyvisualizer/keyvispb"
+	"github.com/cockroachdb/cockroach/pkg/keyvisualizer/keyvissubscriber"
+	"github.com/cockroachdb/cockroach/pkg/keyvisualizer/spanstatskvaccessor"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
@@ -145,6 +148,10 @@ type Server struct {
 	migrationServer *migrationServer
 	tsDB            *ts.DB
 	tsServer        *ts.Server
+
+	// spanStatsServer implements `keyvispb.KeyVisualizerServer`
+	spanStatsServer *SpanStatsServer
+
 	// The Observability Server, used by the Observability Service to subscribe to
 	// CRDB data.
 	eventsServer   *obs.EventsServer
@@ -851,6 +858,15 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		clock,
 	)
 
+	spanStatsServer := &SpanStatsServer{
+		ie:         internalExecutor,
+		settings:   st,
+		nodeDialer: nodeDialer,
+		status:     sStatus,
+		node:       node,
+	}
+	spanStatsAccessor := spanstatskvaccessor.New(spanStatsServer)
+
 	// Instantiate the KV prober.
 	kvProber := kvprober.NewProber(kvprober.Opts{
 		Tracer:                  cfg.AmbientCtx.Tracer,
@@ -920,6 +936,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		nodeDescs:                g,
 		systemConfigWatcher:      systemConfigWatcher,
 		spanConfigAccessor:       spanConfig.kvAccessor,
+		spanStatsAccessor:        spanStatsAccessor,
 		nodeDialer:               nodeDialer,
 		distSender:               distSender,
 		db:                       db,
@@ -1094,6 +1111,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		externalStorageBuilder: externalStorageBuilder,
 		storeGrantCoords:       gcoords.Stores,
 		kvMemoryMonitor:        kvMemoryMonitor,
+		spanStatsServer:        spanStatsServer,
 	}
 
 	return lateBoundServer, err
@@ -1325,6 +1343,9 @@ func (s *Server) PreStart(ctx context.Context) error {
 	// subscribe to CRDB data. Note that the server will reject RPCs until
 	// SetResourceInfo is called later.
 	obspb.RegisterObsServer(s.grpc.Server, s.eventsServer)
+
+	// Register the KeyVisualizer Server
+	keyvispb.RegisterKeyVisualizerServer(s.grpc.Server, s.spanStatsServer)
 
 	// Start the RPC server. This opens the RPC/SQL listen socket,
 	// and dispatches the server worker for the RPC.
@@ -1841,6 +1862,21 @@ func (s *Server) PreStart(ctx context.Context) error {
 	// all the upgrade steps are traced, for use during troubleshooting.
 	if err := s.startAttemptUpgrade(ctx); err != nil {
 		return errors.Wrap(err, "cannot start upgrade task")
+	}
+
+	// Initialize the key visualizer boundary subscriber rangefeed,
+	// and start the rangefeed to broadcast updates to the collector.
+	if err := keyvissubscriber.Start(
+		ctx,
+		s.stopper,
+		s.db,
+		s.ClusterSettings(),
+		s.sqlServer.execCfg.SystemTableIDResolver,
+		s.clock.Now(),
+		func(update *keyvispb.UpdateBoundariesRequest) {
+			s.node.spanStatsCollector.SaveBoundaries(update.Boundaries, update.Time)
+		}); err != nil {
+		return err
 	}
 
 	if err := s.node.tenantSettingsWatcher.Start(workersCtx, s.sqlServer.execCfg.SystemTableIDResolver); err != nil {

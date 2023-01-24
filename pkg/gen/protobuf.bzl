@@ -24,6 +24,7 @@ PROTOBUF_SRCS = [
     "//pkg/geo/geopb:geopb_go_proto",
     "//pkg/gossip:gossip_go_proto",
     "//pkg/jobs/jobspb:jobspb_go_proto",
+    "//pkg/keyvisualizer/keyvispb:keyvispb_go_proto",
     "//pkg/kv/bulk/bulkpb:bulkpb_go_proto",
     "//pkg/kv/kvnemesis:kvnemesis_go_proto",
     "//pkg/kv/kvserver/closedts/ctpb:ctpb_go_proto",
