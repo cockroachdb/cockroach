@@ -99,7 +99,7 @@ require (
 	github.com/buchgr/bazel-remote v1.3.3
 	github.com/bufbuild/buf v0.56.0
 	github.com/cenkalti/backoff v2.2.1+incompatible
-	github.com/charmbracelet/bubbles v0.14.1-0.20221007152719-9a48dca00354
+	github.com/charmbracelet/bubbles v0.15.1-0.20230123181021-a6a12c4a31eb
 	github.com/client9/misspell v0.3.4
 	github.com/cockroachdb/apd/v3 v3.1.2
 	github.com/cockroachdb/circuitbreaker v2.2.2-0.20190114160014-a614b14ccf63+incompatible
@@ -111,7 +111,7 @@ require (
 	github.com/cockroachdb/go-test-teamcity v0.0.0-20191211140407-cff980ad0a55
 	github.com/cockroachdb/gostdlib v1.19.0
 	github.com/cockroachdb/logtags v0.0.0-20230118201751-21c54148d20b
-	github.com/cockroachdb/pebble v0.0.0-20230112184329-90c810757fe6
+	github.com/cockroachdb/pebble v0.0.0-20230123220951-b418e86f4cd4
 	github.com/cockroachdb/redact v1.1.3
 	github.com/cockroachdb/returncheck v0.0.0-20200612231554-92cdbca611dd
 	github.com/cockroachdb/stress v0.0.0-20220803192808-1806698b1b7b
@@ -158,7 +158,7 @@ require (
 	github.com/kisielk/gotool v1.0.0
 	github.com/klauspost/compress v1.15.11
 	github.com/klauspost/pgzip v1.2.5
-	github.com/knz/bubbline v0.0.0-20221212162141-945aa5519a47
+	github.com/knz/bubbline v0.0.0-20230124184034-a0b62576595b
 	github.com/knz/go-libedit v1.10.1
 	github.com/knz/strtime v0.0.0-20200318182718-be999391ffa9
 	github.com/kr/pretty v0.3.0
@@ -398,6 +398,9 @@ require (
 	google.golang.org/grpc/examples v0.0.0-20210324172016-702608ffae4d // indirect
 	gopkg.in/ini.v1 v1.66.3 // indirect
 )
+
+// Until this PR is merged: https://github.com/charmbracelet/bubbletea/pull/397
+replace github.com/charmbracelet/bubbletea => github.com/cockroachdb/bubbletea v0.0.0-20230108112624-1024a1c3e9ae
 
 replace github.com/olekukonko/tablewriter => github.com/cockroachdb/tablewriter v0.0.5-0.20200105123400-bd15540e8847
 

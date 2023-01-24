@@ -527,7 +527,7 @@ func TestEngineMustExist(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error related to missing directory")
 	}
-	if !strings.Contains(fmt.Sprint(err), "no such file or directory") {
+	if !strings.Contains(fmt.Sprint(err), "does not exist") {
 		t.Fatal(err)
 	}
 }
