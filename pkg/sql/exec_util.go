@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/keyvisualizer"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvtenant"
@@ -1350,6 +1351,9 @@ type ExecutorConfig struct {
 	// InternalDB is used to create an isql.Executor bound with SessionData and
 	// other ExtraTxnState.
 	InternalDB *InternalDB
+
+	// SpanStatsConsumer is used by the key visualizer job.
+	SpanStatsConsumer keyvisualizer.SpanStatsConsumer
 
 	// ConsistencyChecker is to generate the results in calls to
 	// crdb_internal.check_consistency.

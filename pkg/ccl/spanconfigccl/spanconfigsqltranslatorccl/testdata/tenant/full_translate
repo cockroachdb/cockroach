@@ -56,6 +56,10 @@ full-translate
 /Tenant/10/Table/5{1-2}                    database system (tenant)
 /Tenant/10/Table/5{2-3}                    database system (tenant)
 /Tenant/10/Table/5{3-4}                    database system (tenant)
+/Tenant/10/Table/5{4-5}                    database system (tenant)
+/Tenant/10/Table/5{5-6}                    database system (tenant)
+/Tenant/10/Table/5{6-7}                    database system (tenant)
+/Tenant/10/Table/5{7-8}                    database system (tenant)
 /Tenant/10/Table/11{0-1}                   range default
 /Tenant/10/Table/11{1-2}                   range default
 /Tenant/10/Table/11{2-3}                   range default
@@ -102,6 +106,10 @@ translate named-zone=default
 /Tenant/10/Table/5{1-2}                    database system (tenant)
 /Tenant/10/Table/5{2-3}                    database system (tenant)
 /Tenant/10/Table/5{3-4}                    database system (tenant)
+/Tenant/10/Table/5{4-5}                    database system (tenant)
+/Tenant/10/Table/5{5-6}                    database system (tenant)
+/Tenant/10/Table/5{6-7}                    database system (tenant)
+/Tenant/10/Table/5{7-8}                    database system (tenant)
 /Tenant/10/Table/11{0-1}                   range default
 /Tenant/10/Table/11{1-2}                   range default
 /Tenant/10/Table/11{2-3}                   range default
