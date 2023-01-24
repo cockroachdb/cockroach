@@ -172,6 +172,14 @@ func (r *RemoteClockMonitor) AllLatencies() map[roachpb.NodeID]time.Duration {
 	return result
 }
 
+// OnDisconnect removes all information associated with the provided peer.
+func (r *RemoteClockMonitor) OnDisconnect(ctx context.Context, addr string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	delete(r.mu.offsets, addr)
+	delete(r.mu.latencyInfos, addr)
+}
+
 // UpdateOffset is a thread-safe way to update the remote clock and latency
 // measurements.
 //
