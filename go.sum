@@ -410,13 +410,8 @@ github.com/cespare/xxhash/v2 v2.1.1/go.mod h1:VGX0DQ3Q6kWi7AoAeZDth3/j3BFtOZR5XL
 github.com/cespare/xxhash/v2 v2.1.2 h1:YRXhKfTDauu4ajMg1TPgFO5jnlC2HCbmLXMcTG5cbYE=
 github.com/cespare/xxhash/v2 v2.1.2/go.mod h1:VGX0DQ3Q6kWi7AoAeZDth3/j3BFtOZR5XLFGgcrjCOs=
 github.com/charmbracelet/bubbles v0.13.0/go.mod h1:bbeTiXwPww4M031aGi8UK2HT9RDWoiNibae+1yCMtcc=
-github.com/charmbracelet/bubbles v0.14.1-0.20221007152719-9a48dca00354 h1:RtCsAwzKHsaF/Jps0/1CcBeu6OY6aZV/L0KhD0GYmQY=
-github.com/charmbracelet/bubbles v0.14.1-0.20221007152719-9a48dca00354/go.mod h1:5rZgJTHmgWISQnxnzzIJtQt3GC1bfJfNmr4SEtRDtTQ=
-github.com/charmbracelet/bubbletea v0.21.0/go.mod h1:GgmJMec61d08zXsOhqRC/AiOx4K4pmz+VIcRIm1FKr4=
-github.com/charmbracelet/bubbletea v0.22.1/go.mod h1:8/7hVvbPN6ZZPkczLiB8YpLkLJ0n7DMho5Wvfd2X1C0=
-github.com/charmbracelet/bubbletea v0.22.2-0.20220830200705-989d49f3e69f/go.mod h1:8/7hVvbPN6ZZPkczLiB8YpLkLJ0n7DMho5Wvfd2X1C0=
-github.com/charmbracelet/bubbletea v0.23.1 h1:CYdteX1wCiCzKNUlwm25ZHBIc1GXlYFyUIte8WPvhck=
-github.com/charmbracelet/bubbletea v0.23.1/go.mod h1:JAfGK/3/pPKHTnAS8JIE2u9f61BjWTQY57RbT25aMXU=
+github.com/charmbracelet/bubbles v0.15.1-0.20230123181021-a6a12c4a31eb h1:OYmHuDqyuzWwiurw7eeYJ2482BENoX3hScpzamwF5K8=
+github.com/charmbracelet/bubbles v0.15.1-0.20230123181021-a6a12c4a31eb/go.mod h1:Y7gSFbBzlMpUDR/XM9MhZI374Q+1p1kluf1uLl8iK74=
 github.com/charmbracelet/harmonica v0.2.0/go.mod h1:KSri/1RMQOZLbw7AHqgcBycp8pgJnQMYYT8QZRqZ1Ao=
 github.com/charmbracelet/lipgloss v0.5.0/go.mod h1:EZLha/HbzEt7cYqdFPovlqy5FZPj0xFhg5SaqxScmgs=
 github.com/charmbracelet/lipgloss v0.6.0 h1:1StyZB9vBSOyuZxQUcUwGr17JmojPNm87inij9N3wJY=
@@ -452,6 +447,8 @@ github.com/cockroachdb/apd v1.1.0 h1:3LFP3629v+1aKXU5Q37mxmRxX/pIu1nijXydLShEq5I
 github.com/cockroachdb/apd v1.1.0/go.mod h1:8Sl8LxpKi29FqWXR16WEFZRNSz3SoPzUzeMeY4+DwBQ=
 github.com/cockroachdb/apd/v3 v3.1.2 h1:DDFeYj70f6yWcWlfGNwZ7z6NSpkOZAKsse1VmBtf+zs=
 github.com/cockroachdb/apd/v3 v3.1.2/go.mod h1:klXJcjp+FffLTHlhIG69tezTDvdP065naDsHzKhYSqc=
+github.com/cockroachdb/bubbletea v0.0.0-20230108112624-1024a1c3e9ae h1:Pp/48WoPVVhTUwzQYl4oyPqwUJNFKKS4ICa84o9XnIA=
+github.com/cockroachdb/bubbletea v0.0.0-20230108112624-1024a1c3e9ae/go.mod h1:JAfGK/3/pPKHTnAS8JIE2u9f61BjWTQY57RbT25aMXU=
 github.com/cockroachdb/circuitbreaker v2.2.2-0.20190114160014-a614b14ccf63+incompatible h1:u3uQ4oAKM5g2eODBAsDdDSrTs7zRWXtvu+nvSDA9098=
 github.com/cockroachdb/circuitbreaker v2.2.2-0.20190114160014-a614b14ccf63+incompatible/go.mod h1:v3T8+rm/HmCL0D1BwDcGaHHAQDuFPW7EsnYs2nBRqUo=
 github.com/cockroachdb/cmux v0.0.0-20170110192607-30d10be49292 h1:dzj1/xcivGjNPwwifh/dWTczkwcuqsXXFHY1X/TZMtw=
@@ -1487,8 +1484,8 @@ github.com/klauspost/pgzip v1.0.2-0.20170402124221-0bf5dcad4ada/go.mod h1:Ch1tH6
 github.com/klauspost/pgzip v1.2.4/go.mod h1:Ch1tH69qFZu15pkjo5kYi6mth2Zzwzt50oCQKQE9RUs=
 github.com/klauspost/pgzip v1.2.5 h1:qnWYvvKqedOF2ulHpMG72XQol4ILEJ8k2wwRl/Km8oE=
 github.com/klauspost/pgzip v1.2.5/go.mod h1:Ch1tH69qFZu15pkjo5kYi6mth2Zzwzt50oCQKQE9RUs=
-github.com/knz/bubbline v0.0.0-20221212162141-945aa5519a47 h1:OHAQ85nbzGTan35JQJMhyNH691k957PX97kVRfs4lfo=
-github.com/knz/bubbline v0.0.0-20221212162141-945aa5519a47/go.mod h1:CjXCchXeNBPWeIOZ/MznJKX3wWXu38Wb+tcU342QvOo=
+github.com/knz/bubbline v0.0.0-20230124184034-a0b62576595b h1:WkDRZUJ4jwXPpiwaprlozeoL2nULKk2BUW+7cc8MYLg=
+github.com/knz/bubbline v0.0.0-20230124184034-a0b62576595b/go.mod h1:6A+ujZMesdx26uaMRz53ka0gtDTytz5+LXMxJefmUY0=
 github.com/knz/catwalk v0.1.2 h1:sNLvF6WOXdvedeiCpqkpsHSGavOYxZwDsgdbKiu1IOc=
 github.com/knz/catwalk v0.1.2/go.mod h1:Q+Yj4ny4AXgrOOyWyDGY/HJzmbGH8MFnsUqvCAiUT5s=
 github.com/knz/lipgloss-convert v0.1.0 h1:qUPUt6r8mqvi9DIV3nBPu3kEmFyHrZtXzv0BlPBPLNQ=
@@ -1732,7 +1729,6 @@ github.com/mschoch/smat v0.0.0-20160514031455-90eadee771ae/go.mod h1:qAyveg+e4CE
 github.com/muesli/ansi v0.0.0-20211018074035-2e021307bc4b/go.mod h1:fQuZ0gauxyBcmsdE3ZT4NasjaRdxmbCS0jRHsrWu3Ho=
 github.com/muesli/ansi v0.0.0-20211031195517-c9f0611b6c70 h1:kMlmsLSbjkikxQJ1IPwaM+7LJ9ltFu/fi8CRzvSnQmA=
 github.com/muesli/ansi v0.0.0-20211031195517-c9f0611b6c70/go.mod h1:fQuZ0gauxyBcmsdE3ZT4NasjaRdxmbCS0jRHsrWu3Ho=
-github.com/muesli/cancelreader v0.2.0/go.mod h1:3XuTXfFS2VjM+HTLZY9Ak0l6eUKfijIfMUZ4EgX0QYo=
 github.com/muesli/cancelreader v0.2.2 h1:3I4Kt4BQjOR54NavqnDogx/MIoWBFa0StPA8ELUXHmA=
 github.com/muesli/cancelreader v0.2.2/go.mod h1:3XuTXfFS2VjM+HTLZY9Ak0l6eUKfijIfMUZ4EgX0QYo=
 github.com/muesli/reflow v0.2.1-0.20210115123740-9e1d0d53df68/go.mod h1:Xk+z4oIWdQqJzsxyjgl3P22oYZnHdZ8FFTHAQQt5BMQ=
