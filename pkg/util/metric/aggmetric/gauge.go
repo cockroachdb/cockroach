@@ -107,13 +107,13 @@ func (g *Gauge) ToPrometheusMetric() *io_prometheus_client.Metric {
 	}
 }
 
-// Destroy is used to destroy the gauge associated with this child. It unlinks the
-// Gauge from the parent, meaning it will no longer be reported as contributing to
-// it. However, this Gauge will continue to be functional and it will continue to
-// update the parent.
+// Unlink unlinks this child from the parent, i.e. the parent will no longer
+// track this child (i.e. won't generate labels for it, etc). However, the child
+// will continue to be functional and reference the parent, meaning updates to
+// it will be reflected in the aggregate stored in the parent.
 //
 // See tenantrate.TestUseAfterRelease.
-func (g *Gauge) Destroy() {
+func (g *Gauge) Unlink() {
 	g.parent.remove(g)
 }
 
@@ -227,13 +227,11 @@ func (g *GaugeFloat64) ToPrometheusMetric() *io_prometheus_client.Metric {
 	}
 }
 
-// Destroy is used to destroy the gauge associated with this child. It unlinks the
-// GaugeFloat64 from the parent, meaning it will no longer be reported as contributing to
-// it. However, this Gauge will continue to be functional and it will continue to
-// update the parent.
-//
-// See tenantrate.TestUseAfterRelease.
-func (g *GaugeFloat64) Destroy() {
+// Unlink unlinks this child from the parent, i.e. the parent will no longer
+// track this child (i.e. won't generate labels for it, etc). However, the child
+// will continue to be functional and reference the parent, meaning updates to
+// it will be reflected in the aggregate stored in the parent.
+func (g *GaugeFloat64) Unlink() {
 	g.parent.remove(g)
 }
 
