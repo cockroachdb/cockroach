@@ -2224,6 +2224,9 @@ func (rpcCtx *Context) runHeartbeat(
 		} else {
 			close(conn.initialHeartbeatDone) // unblock any waiters
 		}
+		if rpcCtx.RemoteClocks != nil {
+			rpcCtx.RemoteClocks.OnDisconnect(ctx, target)
+		}
 	}()
 
 	{
