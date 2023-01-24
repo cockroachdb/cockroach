@@ -40,6 +40,8 @@ func TestJSONFormats(t *testing.T) {
 	}
 
 	ctx := context.Background()
+	sysIDPayload := testIDPayload{tenantID: "1"}
+	ctx = context.WithValue(ctx, serverident.ServerIdentificationContextKey{}, sysIDPayload)
 	ctx = logtags.AddTag(ctx, "noval", nil)
 	ctx = logtags.AddTag(ctx, "s", "1")
 	ctx = logtags.AddTag(ctx, "long", "2")
@@ -53,7 +55,7 @@ func TestJSONFormats(t *testing.T) {
 		}(),
 		// Normal (non-header) entries.
 		{},
-		{IDPayload: serverident.IDPayload{ClusterID: "abc", NodeID: "123"}},
+		{IDPayload: serverident.IDPayload{TenantIDInternal: "1", ClusterID: "abc", NodeID: "123"}},
 		{IDPayload: serverident.IDPayload{TenantIDInternal: "456", SQLInstanceID: "123"}},
 		makeStructuredEntry(ctx, severity.INFO, channel.DEV, 0, &logpb.TestingStructuredLogEvent{
 			CommonEventDetails: logpb.CommonEventDetails{

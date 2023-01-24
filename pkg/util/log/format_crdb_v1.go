@@ -316,22 +316,23 @@ func formatLogEntryInternalV1(
 	// the static size of tmp. But we do have an upper bound.
 	buf.Grow(len(entry.Tags) + 14 + len(entry.Message))
 
-	// We must always tag with tenant ID.
+	// We must always tag with tenant ID if present.
 	buf.Write(cp[ttycolor.Blue])
-	buf.WriteByte('[')
-	buf.WriteByte(TenantIDLogTagKey)
-	if entry.TenantID != "" {
-		buf.WriteString(entry.TenantID)
-	} else {
-		// If no tenant ID was set, default to the system tenant ID
-		buf.WriteString(serverident.SystemTenantID)
+	if entry.TenantID != "" || len(entry.Tags) != 0 {
+		buf.WriteByte('[')
+		if entry.TenantID != "" {
+			buf.WriteByte(TenantIDLogTagKey)
+			buf.WriteString(entry.TenantID)
+			if len(entry.Tags) != 0 {
+				buf.WriteByte(',')
+			}
+		}
+		// Display the tags if set.
+		if len(entry.Tags) != 0 {
+			buf.WriteString(entry.Tags)
+		}
+		buf.WriteString("] ")
 	}
-	// Display the tags if set.
-	if len(entry.Tags) != 0 {
-		buf.WriteByte(',')
-		buf.WriteString(entry.Tags)
-	}
-	buf.WriteString("] ")
 	buf.Write(cp[ttycolor.Reset])
 
 	// Display the counter if set and enabled.
