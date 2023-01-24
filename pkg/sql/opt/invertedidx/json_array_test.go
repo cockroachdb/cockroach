@@ -461,10 +461,12 @@ func TestTryFilterJsonOrArrayIndex(t *testing.T) {
 			unique:   true,
 		},
 		{
-			// Integer indexes are not yet supported.
-			filters:  "j->0 = '1'",
-			indexOrd: jsonOrd,
-			ok:       false,
+			filters:          "j->0 = '1'",
+			indexOrd:         jsonOrd,
+			ok:               true,
+			tight:            false,
+			unique:           true,
+			remainingFilters: "j->0 = '1'",
 		},
 		{
 			// Arrays on the right side of the equality are supported.
@@ -505,10 +507,44 @@ func TestTryFilterJsonOrArrayIndex(t *testing.T) {
 			unique:   true,
 		},
 		{
-			// Integer indexes are not yet supported.
-			filters:  "j->0->'b' = '1'",
-			indexOrd: jsonOrd,
-			ok:       false,
+			filters:          "j->0->'b' = '1'",
+			indexOrd:         jsonOrd,
+			ok:               true,
+			tight:            false,
+			unique:           true,
+			remainingFilters: "j->0->'b' = '1'",
+		},
+		{
+			filters:          "j->'b'->0->'a'->1 = '1'",
+			indexOrd:         jsonOrd,
+			ok:               true,
+			tight:            false,
+			unique:           true,
+			remainingFilters: "j->'b'->0->'a'->1 = '1'",
+		},
+		{
+			filters:          "j->'a'->0->1 = '1'",
+			indexOrd:         jsonOrd,
+			ok:               true,
+			tight:            false,
+			unique:           true,
+			remainingFilters: "j->'a'->0->1 = '1'",
+		},
+		{
+			filters:          "j->'a'->0 = '1' AND j->'a'->1 = '1'",
+			indexOrd:         jsonOrd,
+			ok:               true,
+			tight:            false,
+			unique:           true,
+			remainingFilters: "j->'a'->0 = '1' AND j->'a'->1 = '1'",
+		},
+		{
+			filters:          "j->'a'->0 = '1' OR j->'a'->1 = '1'",
+			indexOrd:         jsonOrd,
+			ok:               true,
+			tight:            false,
+			unique:           false,
+			remainingFilters: "j->'a'->0 = '1' OR j->'a'->1 = '1'",
 		},
 		{
 			// The inner most expression is not a fetch val expression with an
