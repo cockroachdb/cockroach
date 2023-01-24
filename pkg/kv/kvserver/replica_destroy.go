@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 )
 
 // DestroyReason indicates if a replica is alive, destroyed, corrupted or pending destruction.
@@ -88,7 +89,7 @@ func (r *Replica) preDestroyRaftMuLocked(
 	// NB: Legacy tombstones (which are in the replicated key space) are wiped
 	// in clearRangeData, but that's OK since we're writing a new one in the same
 	// batch (and in particular, sequenced *after* the wipe).
-	return r.setTombstoneKey(ctx, writer, nextReplicaID)
+	return r.setTombstoneKey(ctx, reader, writer, nextReplicaID)
 }
 
 func (r *Replica) postDestroyRaftMuLocked(ctx context.Context, ms enginepb.MVCCStats) error {
@@ -221,19 +222,51 @@ func (r *Replica) disconnectReplicationRaftMuLocked(ctx context.Context) {
 // ID that it hasn't yet received a RangeDescriptor for if it receives raft
 // requests for that replica ID (as seen in #14231).
 func (r *Replica) setTombstoneKey(
-	ctx context.Context, writer storage.Writer, externalNextReplicaID roachpb.ReplicaID,
+	ctx context.Context,
+	reader storage.Reader,
+	writer storage.Writer,
+	externalNextReplicaID roachpb.ReplicaID,
 ) error {
-	r.mu.Lock()
-	nextReplicaID := r.mu.state.Desc.NextReplicaID
-	if externalNextReplicaID > nextReplicaID {
-		nextReplicaID = externalNextReplicaID
+	{
+		// TODO(this PR): this assertion is temporary. We'll remove it along with
+		// the dependency on *Replica. But having it in this commit and passing
+		// tests is a good sanity check.
+
+		r.mu.Lock()
+		replReplicaID := r.replicaID
+		r.mu.Unlock()
+
+		if replReplicaID >= externalNextReplicaID {
+			err := errors.AssertionFailedf(
+				"attempt to set tombstone at replicaID %d but this leaves replicaID %d alive",
+				externalNextReplicaID, replReplicaID,
+			)
+			log.Fatalf(ctx, "%s", err)
+			return err // unreachable
+		}
 	}
-	r.mu.Unlock()
+
 	tombstoneKey := keys.RangeTombstoneKey(r.RangeID)
-	tombstone := &roachpb.RangeTombstone{
-		NextReplicaID: nextReplicaID,
+
+	// Assert that the provided tombstone moves the existing one strictly forward.
+	// Failure to do so indicates that something is going wrong in the replica
+	// lifecycle.
+	{
+		var tombstone roachpb.RangeTombstone
+		if _, err := storage.MVCCGetProto(
+			ctx, reader, tombstoneKey, hlc.Timestamp{}, &tombstone, storage.MVCCGetOptions{},
+		); err != nil {
+			return err
+		}
+		if tombstone.NextReplicaID >= externalNextReplicaID {
+			return errors.AssertionFailedf(
+				"cannot rewind tombstone from %d to %d", tombstone.NextReplicaID, externalNextReplicaID,
+			)
+		}
 	}
+
+	tombstone := roachpb.RangeTombstone{NextReplicaID: externalNextReplicaID}
 	// "Blind" because ms == nil and timestamp.IsEmpty().
 	return storage.MVCCBlindPutProto(ctx, writer, nil, tombstoneKey,
-		hlc.Timestamp{}, hlc.ClockTimestamp{}, tombstone, nil)
+		hlc.Timestamp{}, hlc.ClockTimestamp{}, &tombstone, nil)
 }
