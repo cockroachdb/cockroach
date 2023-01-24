@@ -2078,18 +2078,19 @@ func typeCheckComparisonOpWithSubOperator(
 			// If right expression is a tuple, we require that all elements' inferred
 			// type is equivalent to the left's type.
 			rightTyped, err = typeCheckAndRequireTupleElems(ctx, semaCtx, leftTyped, tuple, subOp)
-			if err != nil {
-				return nil, nil, nil, err
-			}
+		} else if right == DNull {
+			// If right expression is NULL, then we treat it as having the left
+			// expression's type.
+			rightTyped, err = right.TypeCheck(ctx, semaCtx, cmpTypeLeft)
 		} else {
 			// Try to type the right expression as an array of the left's type.
 			// If right is an sql.subquery Expr, it should already be typed.
 			// TODO(richardwu): If right is a subquery, we should really
 			// propagate the left type as a desired type for the result column.
 			rightTyped, err = right.TypeCheck(ctx, semaCtx, types.MakeArray(cmpTypeLeft))
-			if err != nil {
-				return nil, nil, nil, err
-			}
+		}
+		if err != nil {
+			return nil, nil, nil, err
 		}
 
 		switch rightReturn := rightTyped.ResolvedType(); rightReturn.Family() {
@@ -2108,6 +2109,8 @@ func typeCheckComparisonOpWithSubOperator(
 				// one with the other.
 				cmpTypeRight = rightReturn.TupleContents()[0]
 			}
+		case types.UnknownFamily:
+			cmpTypeRight = cmpTypeLeft
 		default:
 			sigWithErr := fmt.Sprintf(compExprsWithSubOpFmt, left, subOp, op, right,
 				fmt.Sprintf("op %s <right> requires array, tuple or subquery on right side", op))
