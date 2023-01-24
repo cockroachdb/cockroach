@@ -54,7 +54,6 @@ import (
 	"github.com/cockroachdb/pebble/replay"
 	"github.com/cockroachdb/pebble/sstable"
 	"github.com/cockroachdb/pebble/vfs"
-	"github.com/cockroachdb/redact"
 	humanize "github.com/dustin/go-humanize"
 )
 
@@ -1067,11 +1066,9 @@ func (p *Pebble) makeMetricEtcEventListener(ctx context.Context) pebble.EventLis
 				// Note that the below log messages go to the main cockroach log, not
 				// the pebble-specific log.
 				if fatalOnExceeded {
-					log.Fatalf(ctx, "disk stall detected: pebble unable to write to %s in %.2f seconds",
-						info.Path, redact.Safe(info.Duration.Seconds()))
+					log.Fatalf(ctx, "file write stall detected: %s", info)
 				} else {
-					log.Errorf(ctx, "disk stall detected: pebble unable to write to %s in %.2f seconds",
-						info.Path, redact.Safe(info.Duration.Seconds()))
+					log.Errorf(ctx, "file write stall detected: %s", info)
 				}
 				return
 			}

@@ -7484,10 +7484,10 @@ func TestChangefeedCreateTelemetryLogs(t *testing.T) {
 
 		createLogs := checkCreateChangefeedLogs(t, beforeCreateSinkless.UnixNano())
 		require.Equal(t, 1, len(createLogs))
-		require.Equal(t, createLogs[0].SinkType, "core")
+		require.Equal(t, "core", createLogs[0].SinkType)
 	})
 
-	t.Run(`gcpubsub_sink_type with options`, func(t *testing.T) {
+	t.Run(`gcpubsub_sink_type_with_options`, func(t *testing.T) {
 		pubsubFeedFactory := makePubsubFeedFactory(s.Server, s.DB)
 		beforeCreatePubsub := timeutil.Now()
 		pubsubFeed := feed(t, pubsubFeedFactory, `CREATE CHANGEFEED FOR foo, bar WITH resolved="10s", no_initial_scan`)
@@ -7495,10 +7495,22 @@ func TestChangefeedCreateTelemetryLogs(t *testing.T) {
 
 		createLogs := checkCreateChangefeedLogs(t, beforeCreatePubsub.UnixNano())
 		require.Equal(t, 1, len(createLogs))
-		require.Equal(t, createLogs[0].SinkType, `gcpubsub`)
-		require.Equal(t, createLogs[0].NumTables, int32(2))
-		require.Equal(t, createLogs[0].Resolved, `10s`)
-		require.Equal(t, createLogs[0].InitialScan, `no`)
+		require.Equal(t, `gcpubsub`, createLogs[0].SinkType)
+		require.Equal(t, int32(2), createLogs[0].NumTables)
+		require.Equal(t, `10s`, createLogs[0].Resolved)
+		require.Equal(t, `no`, createLogs[0].InitialScan)
+		require.Equal(t, false, createLogs[0].Transformation)
+	})
+
+	t.Run(`with_transformation`, func(t *testing.T) {
+		pubsubFeedFactory := makePubsubFeedFactory(s.Server, s.DB)
+		beforeCreateWithTransformation := timeutil.Now()
+		pubsubFeed := feed(t, pubsubFeedFactory, `CREATE CHANGEFEED AS SELECT b FROM foo`)
+		defer closeFeed(t, pubsubFeed)
+
+		createLogs := checkCreateChangefeedLogs(t, beforeCreateWithTransformation.UnixNano())
+		require.Equal(t, 1, len(createLogs))
+		require.Equal(t, true, createLogs[0].Transformation)
 	})
 }
 

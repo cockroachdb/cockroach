@@ -222,7 +222,7 @@ func changefeedPlanHook(
 			p.ExtendedEvalContext().Descs.ReleaseAll(ctx)
 
 			telemetry.Count(`changefeed.create.core`)
-			logChangefeedCreateTelemetry(ctx, jr)
+			logChangefeedCreateTelemetry(ctx, jr, changefeedStmt.Select != nil)
 
 			var err error
 			for r := getRetry(ctx); r.Next(); {
@@ -325,7 +325,7 @@ func changefeedPlanHook(
 			return err
 		}
 
-		logChangefeedCreateTelemetry(ctx, jr)
+		logChangefeedCreateTelemetry(ctx, jr, changefeedStmt.Select != nil)
 
 		select {
 		case <-ctx.Done():
@@ -1261,7 +1261,7 @@ func getChangefeedTargetName(
 	return desc.GetName(), nil
 }
 
-func logChangefeedCreateTelemetry(ctx context.Context, jr *jobs.Record) {
+func logChangefeedCreateTelemetry(ctx context.Context, jr *jobs.Record, isTransformation bool) {
 	var changefeedEventDetails eventpb.CommonChangefeedEventDetails
 	if jr != nil {
 		changefeedDetails := jr.Details.(jobspb.ChangefeedDetails)
@@ -1270,6 +1270,7 @@ func logChangefeedCreateTelemetry(ctx context.Context, jr *jobs.Record) {
 
 	createChangefeedEvent := &eventpb.CreateChangefeed{
 		CommonChangefeedEventDetails: changefeedEventDetails,
+		Transformation:               isTransformation,
 	}
 
 	log.StructuredEvent(ctx, createChangefeedEvent)

@@ -1449,6 +1449,13 @@ func TestTenantLogic_reset(
 	runLogicTest(t, "reset")
 }
 
+func TestTenantLogic_retry(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "retry")
+}
+
 func TestTenantLogic_returning(
 	t *testing.T,
 ) {
