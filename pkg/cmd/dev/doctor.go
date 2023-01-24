@@ -131,8 +131,8 @@ You can install node with: ` + "`pkg install node`"
 			if _, err := os.Stat("bin/.submodules-initialized"); err == nil {
 				return ""
 			}
-			if _, err := d.exec.CommandContextSilent(ctx, "git", "submodule", "update", "--init", "--recursive"); err != nil {
-				return err.Error()
+			if output, err := d.exec.CommandContextSilent(ctx, "git", "submodule", "update", "--init", "--recursive"); err != nil {
+				return fmt.Sprintf("failed to run `git submodule update --init --recursive`: %+v: got output %s", err, string(output))
 			}
 			if err := d.os.MkdirAll("bin"); err != nil {
 				return err.Error()
