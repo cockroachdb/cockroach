@@ -341,6 +341,10 @@ message ExecStats {
   optional NumericStat cpu_sql_nanos = 7 [(gogoproto.nullable) = false,
     (gogoproto.customname) = "CPUSQLNanos"];
 
+  // Internal storage iteration statistics.
+  optional MVCCIteratorStats mvcc_iterator_stats = 8 [(gogoproto.nullable) = false,
+    (gogoproto.customname) = "MVCCIteratorStats"];
+
   // Note: be sure to update `sql/app_stats.go` when adding/removing fields
   // here!
 }
@@ -361,4 +365,71 @@ message LatencyInfo {
 
   // P99 is the 99 Percentile in seconds for the fingerprint.
   optional double p99 = 5 [(gogoproto.nullable) = false];
+}
+
+// Internal storage iteration statistics.
+message MVCCIteratorStats {
+
+  // StepCount collects the number of times the iterator moved forward or backward over the
+  // DB's underlying storage keyspace.
+  // For details, see pkg/storage/engine.go and pkg/sql/opt/exec/factory.go.
+  optional NumericStat step_count = 1 [(gogoproto.nullable) = false];
+
+  // StepCountInternal collects the number of times the iterator moved forward or backward
+  // over LSM internal keys.
+  // For details, see pkg/storage/engine.go and pkg/sql/opt/exec/factory.go.
+  optional NumericStat step_count_internal = 2 [(gogoproto.nullable) = false];
+
+  // SeekCount collects the number of times the iterator moved to a specific key/value pair
+  // in the DB's underlying storage keyspace.
+  // For details, see pkg/storage/engine.go and pkg/sql/opt/exec/factory.go.
+  optional NumericStat seek_count = 3 [(gogoproto.nullable) = false];
+
+  // SeekCountInternal collects the number of times the iterator moved to a specific LSM
+  // internal key.
+  // For details, see pkg/storage/engine.go and pkg/sql/opt/exec/factory.go.
+  optional NumericStat seek_count_internal = 4 [(gogoproto.nullable) = false];
+
+  // BlockBytes collects the bytes in the loaded SSTable data blocks.
+  // For details, see pebble.InternalIteratorStats.
+  optional NumericStat block_bytes = 5 [(gogoproto.nullable) = false];
+
+  // BlockBytesInCache collects the subset of BlockBytes in the block cache.
+  // For details, see pebble.InternalIteratorStats.
+  optional NumericStat block_bytes_in_cache = 6 [(gogoproto.nullable) = false];
+
+  // KeyBytes collects the bytes in keys that were iterated over.
+  // For details, see pebble.InternalIteratorStats.
+  optional NumericStat key_bytes = 7 [(gogoproto.nullable) = false];
+
+  // ValueBytes collects the bytes in values that were iterated over.
+  // For details, see pebble.InternalIteratorStats.
+  optional NumericStat value_bytes = 8 [(gogoproto.nullable) = false];
+
+  // PointCount collects the count of point keys iterated over.
+  // For details, see pebble.InternalIteratorStats.
+  optional NumericStat point_count = 9 [(gogoproto.nullable) = false];
+
+  // PointsCoveredByRangeTombstones collects the count of point keys that were iterated over that
+  // were covered by range tombstones.
+  // For details, see pebble.InternalIteratorStats and
+  // https://github.com/cockroachdb/cockroach/blob/master/docs/tech-notes/mvcc-range-tombstones.md.
+  optional NumericStat points_covered_by_range_tombstones = 10 [(gogoproto.nullable) = false];
+
+  // RangeKeyCount collects the count of range keys encountered during iteration.
+  // For details, see pebble.RangeKeyIteratorStats and
+  // https://github.com/cockroachdb/cockroach/blob/master/docs/tech-notes/mvcc-range-tombstones.md.
+  optional NumericStat range_key_count = 11 [(gogoproto.nullable) = false];
+
+  // RangeKeyContainedPoints collects the count of point keys encountered within the bounds of
+  // a range key.
+  // For details, see pebble.RangeKeyIteratorStats and
+  // https://github.com/cockroachdb/cockroach/blob/master/docs/tech-notes/mvcc-range-tombstones.md.
+  optional NumericStat range_key_contained_points = 12 [(gogoproto.nullable) = false];
+
+  // RangeKeySkippedPoints collects the count of the subset of ContainedPoints point keys that
+  // were skipped during iteration due to range-key masking.
+  // For details, see pkg/storage/engine.go, pebble.RangeKeyIteratorStats, and
+  // https://github.com/cockroachdb/cockroach/blob/master/docs/tech-notes/mvcc-range-tombstones.md.
+  optional NumericStat range_key_skipped_points = 13 [(gogoproto.nullable) = false];
 }

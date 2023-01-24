@@ -137,7 +137,61 @@ func TestSQLStatsJsonEncoding(t *testing.T) {
          "cpuSQLNanos": {
            "mean": {{.Float}},
            "sqDiff": {{.Float}}
-         }
+         },
+         "mvccIteratorStats": {
+           "stepCount": {
+             "mean": {{.Float}},
+             "sqDiff": {{.Float}}
+           },
+           "stepCountInternal": {
+             "mean": {{.Float}},
+             "sqDiff": {{.Float}}
+           },
+           "seekCount": {
+             "mean": {{.Float}},
+             "sqDiff": {{.Float}}
+           },
+           "seekCountInternal": {
+             "mean": {{.Float}},
+             "sqDiff": {{.Float}}
+           },
+           "blockBytes": {
+             "mean": {{.Float}},
+             "sqDiff": {{.Float}}
+           },
+           "blockBytesInCache": {
+             "mean": {{.Float}},
+             "sqDiff": {{.Float}}
+           },
+           "keyBytes": {
+             "mean": {{.Float}},
+             "sqDiff": {{.Float}}
+           },
+           "valueBytes": {
+             "mean": {{.Float}},
+             "sqDiff": {{.Float}}
+           },
+           "pointCount": {
+             "mean": {{.Float}},
+             "sqDiff": {{.Float}}
+           },
+           "pointsCoveredByRangeTombstones": {
+             "mean": {{.Float}},
+             "sqDiff": {{.Float}}
+           },
+           "rangeKeyCount": {
+             "mean": {{.Float}},
+             "sqDiff": {{.Float}}
+           },
+           "rangeKeyContainedPoints": {
+             "mean": {{.Float}},
+             "sqDiff": {{.Float}}
+           },
+           "rangeKeySkippedPoints": {
+             "mean": {{.Float}},
+             "sqDiff": {{.Float}}
+           }
+			   }
        },
        "index_recommendations": [{{joinStrings .StringArray}}]
      }
@@ -268,7 +322,61 @@ func TestSQLStatsJsonEncoding(t *testing.T) {
          "cpuSQLNanos": {
            "mean": {{.Float}},
            "sqDiff": {{.Float}}
-         }
+         },
+         "mvccIteratorStats": {
+           "stepCount": {
+             "mean": {{.Float}},
+             "sqDiff": {{.Float}}
+           },
+           "stepCountInternal": {
+             "mean": {{.Float}},
+             "sqDiff": {{.Float}}
+           },
+           "seekCount": {
+             "mean": {{.Float}},
+             "sqDiff": {{.Float}}
+           },
+           "seekCountInternal": {
+             "mean": {{.Float}},
+             "sqDiff": {{.Float}}
+           },
+           "blockBytes": {
+             "mean": {{.Float}},
+             "sqDiff": {{.Float}}
+           },
+           "blockBytesInCache": {
+             "mean": {{.Float}},
+             "sqDiff": {{.Float}}
+           },
+           "keyBytes": {
+             "mean": {{.Float}},
+             "sqDiff": {{.Float}}
+           },
+           "valueBytes": {
+             "mean": {{.Float}},
+             "sqDiff": {{.Float}}
+           },
+           "pointCount": {
+             "mean": {{.Float}},
+             "sqDiff": {{.Float}}
+           },
+           "pointsCoveredByRangeTombstones": {
+             "mean": {{.Float}},
+             "sqDiff": {{.Float}}
+           },
+           "rangeKeyCount": {
+             "mean": {{.Float}},
+             "sqDiff": {{.Float}}
+           },
+           "rangeKeyContainedPoints": {
+             "mean": {{.Float}},
+             "sqDiff": {{.Float}}
+           },
+           "rangeKeySkippedPoints": {
+             "mean": {{.Float}},
+             "sqDiff": {{.Float}}
+           }
+			   }
        },
        "index_recommendations": [{{joinStrings .StringArray}}]
      }
@@ -384,6 +492,60 @@ func TestSQLStatsJsonEncoding(t *testing.T) {
     "cpuSQLNanos": {
       "mean": {{.Float}},
       "sqDiff": {{.Float}}
+    },
+    "mvccIteratorStats": {
+      "stepCount": {
+        "mean": {{.Float}},
+        "sqDiff": {{.Float}}
+      },
+      "stepCountInternal": {
+        "mean": {{.Float}},
+        "sqDiff": {{.Float}}
+      },
+      "seekCount": {
+        "mean": {{.Float}},
+        "sqDiff": {{.Float}}
+      },
+      "seekCountInternal": {
+        "mean": {{.Float}},
+        "sqDiff": {{.Float}}
+      },
+      "blockBytes": {
+        "mean": {{.Float}},
+        "sqDiff": {{.Float}}
+      },
+      "blockBytesInCache": {
+        "mean": {{.Float}},
+        "sqDiff": {{.Float}}
+      },
+      "keyBytes": {
+        "mean": {{.Float}},
+        "sqDiff": {{.Float}}
+      },
+      "valueBytes": {
+        "mean": {{.Float}},
+        "sqDiff": {{.Float}}
+      },
+      "pointCount": {
+        "mean": {{.Float}},
+        "sqDiff": {{.Float}}
+      },
+      "pointsCoveredByRangeTombstones": {
+        "mean": {{.Float}},
+        "sqDiff": {{.Float}}
+      },
+      "rangeKeyCount": {
+        "mean": {{.Float}},
+        "sqDiff": {{.Float}}
+      },
+      "rangeKeyContainedPoints": {
+        "mean": {{.Float}},
+        "sqDiff": {{.Float}}
+      },
+      "rangeKeySkippedPoints": {
+        "mean": {{.Float}},
+        "sqDiff": {{.Float}}
+      }
     }
   }
 }

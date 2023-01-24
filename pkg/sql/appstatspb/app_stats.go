@@ -220,6 +220,20 @@ func (s *ExecStats) Add(other ExecStats) {
 	s.MaxDiskUsage.Add(other.MaxDiskUsage, execStatCollectionCount, other.Count)
 	s.CPUSQLNanos.Add(other.CPUSQLNanos, execStatCollectionCount, other.Count)
 
+	s.MVCCIteratorStats.StepCount.Add(other.MVCCIteratorStats.StepCount, execStatCollectionCount, other.Count)
+	s.MVCCIteratorStats.StepCountInternal.Add(other.MVCCIteratorStats.StepCountInternal, execStatCollectionCount, other.Count)
+	s.MVCCIteratorStats.SeekCount.Add(other.MVCCIteratorStats.SeekCount, execStatCollectionCount, other.Count)
+	s.MVCCIteratorStats.SeekCountInternal.Add(other.MVCCIteratorStats.SeekCountInternal, execStatCollectionCount, other.Count)
+	s.MVCCIteratorStats.BlockBytes.Add(other.MVCCIteratorStats.BlockBytes, execStatCollectionCount, other.Count)
+	s.MVCCIteratorStats.BlockBytesInCache.Add(other.MVCCIteratorStats.BlockBytesInCache, execStatCollectionCount, other.Count)
+	s.MVCCIteratorStats.KeyBytes.Add(other.MVCCIteratorStats.KeyBytes, execStatCollectionCount, other.Count)
+	s.MVCCIteratorStats.ValueBytes.Add(other.MVCCIteratorStats.ValueBytes, execStatCollectionCount, other.Count)
+	s.MVCCIteratorStats.PointCount.Add(other.MVCCIteratorStats.PointCount, execStatCollectionCount, other.Count)
+	s.MVCCIteratorStats.PointsCoveredByRangeTombstones.Add(other.MVCCIteratorStats.PointsCoveredByRangeTombstones, execStatCollectionCount, other.Count)
+	s.MVCCIteratorStats.RangeKeyCount.Add(other.MVCCIteratorStats.RangeKeyCount, execStatCollectionCount, other.Count)
+	s.MVCCIteratorStats.RangeKeyContainedPoints.Add(other.MVCCIteratorStats.RangeKeyContainedPoints, execStatCollectionCount, other.Count)
+	s.MVCCIteratorStats.RangeKeySkippedPoints.Add(other.MVCCIteratorStats.RangeKeySkippedPoints, execStatCollectionCount, other.Count)
+
 	s.Count += other.Count
 }
 

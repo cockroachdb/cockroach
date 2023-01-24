@@ -541,7 +541,7 @@ function makeStats(): Required<StatementStatistics> {
   };
 }
 
-function makeExecStats(): Required<ExecStats> {
+function makeExecStats(): ExecStats {
   return {
     count: Long.fromNumber(10),
     network_bytes: makeStat(),
