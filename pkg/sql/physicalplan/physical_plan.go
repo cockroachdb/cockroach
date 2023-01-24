@@ -156,6 +156,20 @@ var infraPool = sync.Pool{
 	},
 }
 
+// SerialStreamErrorSpec specifies when to error out serial unordered stream
+// execution, and the error to use.
+type SerialStreamErrorSpec struct {
+	// SerialInputIdxExclusiveUpperBound indicates the InputIdx to error out on
+	// should execution fail to halt prior to this input. This is only valid if
+	// non-zero.
+	SerialInputIdxExclusiveUpperBound uint32
+
+	// ExceedsInputIdxExclusiveUpperBoundError is the error to return when
+	// `SerialInputIdxExclusiveUpperBound` - 1 streams have been executed to
+	// completion without satisfying the query.
+	ExceedsInputIdxExclusiveUpperBoundError error
+}
+
 // NewPhysicalInfrastructure initializes a PhysicalInfrastructure that can then
 // be used with MakePhysicalPlan.
 func NewPhysicalInfrastructure(
@@ -346,12 +360,14 @@ func (p *PhysicalPlan) AddNoGroupingStage(
 // forceSerialization determines whether the streams are forced to be serialized
 // (i.e. whether we don't want any parallelism).
 func (p *PhysicalPlan) MergeResultStreams(
+	ctx context.Context,
 	resultRouters []ProcessorIdx,
 	sourceRouterSlot int,
 	ordering execinfrapb.Ordering,
 	destProcessor ProcessorIdx,
 	destInput int,
 	forceSerialization bool,
+	serialStreamErrorSpec SerialStreamErrorSpec,
 ) {
 	proc := &p.Processors[destProcessor]
 	if len(ordering.Columns) > 0 && len(resultRouters) > 1 {
@@ -362,6 +378,16 @@ func (p *PhysicalPlan) MergeResultStreams(
 			// If we're forced to serialize the streams and we have multiple
 			// result routers, we have to use a slower serial unordered sync.
 			proc.Spec.Input[destInput].Type = execinfrapb.InputSyncSpec_SERIAL_UNORDERED
+
+			// If the serial unordered stream is limited to executing the first branch
+			// of a locality-optimized search due to the `enforce_home_region` session
+			// flag being set, set up the erroring info in the destination input spec.
+			if serialStreamErrorSpec.SerialInputIdxExclusiveUpperBound > 0 {
+				proc.Spec.Input[destInput].EnforceHomeRegionStreamExclusiveUpperBound =
+					serialStreamErrorSpec.SerialInputIdxExclusiveUpperBound
+				proc.Spec.Input[destInput].EnforceHomeRegionError =
+					execinfrapb.NewError(ctx, serialStreamErrorSpec.ExceedsInputIdxExclusiveUpperBoundError)
+			}
 		} else {
 			proc.Spec.Input[destInput].Type = execinfrapb.InputSyncSpec_PARALLEL_UNORDERED
 		}
@@ -381,6 +407,7 @@ func (p *PhysicalPlan) MergeResultStreams(
 // parallelized) which consists of a single processor on the specified node. The
 // previous stage (ResultRouters) are all connected to this processor.
 func (p *PhysicalPlan) AddSingleGroupStage(
+	ctx context.Context,
 	sqlInstanceID base.SQLInstanceID,
 	core execinfrapb.ProcessorCoreUnion,
 	post execinfrapb.PostProcessSpec,
@@ -409,7 +436,9 @@ func (p *PhysicalPlan) AddSingleGroupStage(
 	pIdx := p.AddProcessor(proc)
 
 	// Connect the result routers to the processor.
-	p.MergeResultStreams(p.ResultRouters, 0, p.MergeOrdering, pIdx, 0, false /* forceSerialization */)
+	p.MergeResultStreams(ctx, p.ResultRouters, 0, p.MergeOrdering, pIdx, 0, false, /* forceSerialization */
+		SerialStreamErrorSpec{},
+	)
 
 	// We now have a single result stream.
 	p.ResultRouters = p.ResultRouters[:1]
@@ -438,12 +467,13 @@ func (p *PhysicalPlan) ReplaceLastStage(
 // EnsureSingleStreamOnGateway ensures that there is only one stream on the
 // gateway node in the plan (meaning it possibly merges multiple streams or
 // brings a single stream from a remote node to the gateway).
-func (p *PhysicalPlan) EnsureSingleStreamOnGateway() {
+func (p *PhysicalPlan) EnsureSingleStreamOnGateway(ctx context.Context) {
 	// If we don't already have a single result router on the gateway, add a
 	// single grouping stage.
 	if len(p.ResultRouters) != 1 ||
 		p.Processors[p.ResultRouters[0]].SQLInstanceID != p.GatewaySQLInstanceID {
 		p.AddSingleGroupStage(
+			ctx,
 			p.GatewaySQLInstanceID,
 			execinfrapb.ProcessorCoreUnion{Noop: &execinfrapb.NoopCoreSpec{}},
 			execinfrapb.PostProcessSpec{},
@@ -847,6 +877,7 @@ func (p *PhysicalPlan) AddLimit(
 		post.Limit = uint64(count)
 	}
 	p.AddSingleGroupStage(
+		ctx,
 		p.GatewaySQLInstanceID,
 		execinfrapb.ProcessorCoreUnion{Noop: &execinfrapb.NoopCoreSpec{}},
 		post,
@@ -940,6 +971,7 @@ func MergePlans(
 // AddJoinStage adds join processors at each of the specified nodes, and wires
 // the left and right-side outputs to these processors.
 func (p *PhysicalPlan) AddJoinStage(
+	ctx context.Context,
 	sqlInstanceIDs []base.SQLInstanceID,
 	core execinfrapb.ProcessorCoreUnion,
 	post execinfrapb.PostProcessSpec,
@@ -999,9 +1031,13 @@ func (p *PhysicalPlan) AddJoinStage(
 
 		// Connect left routers to the processor's first input. Currently the join
 		// node doesn't care about the orderings of the left and right results.
-		p.MergeResultStreams(leftRouters, bucket, leftMergeOrd, pIdx, 0, false /* forceSerialization */)
+		p.MergeResultStreams(ctx, leftRouters, bucket, leftMergeOrd, pIdx, 0, false, /* forceSerialization */
+			SerialStreamErrorSpec{},
+		)
 		// Connect right routers to the processor's second input if it has one.
-		p.MergeResultStreams(rightRouters, bucket, rightMergeOrd, pIdx, 1, false /* forceSerialization */)
+		p.MergeResultStreams(ctx, rightRouters, bucket, rightMergeOrd, pIdx, 1, false, /* forceSerialization */
+			SerialStreamErrorSpec{},
+		)
 
 		p.ResultRouters = append(p.ResultRouters, pIdx)
 	}
@@ -1011,6 +1047,7 @@ func (p *PhysicalPlan) AddJoinStage(
 // logical stream on the specified nodes and connects them to the previous
 // stage via a hash router.
 func (p *PhysicalPlan) AddStageOnNodes(
+	ctx context.Context,
 	sqlInstanceIDs []base.SQLInstanceID,
 	core execinfrapb.ProcessorCoreUnion,
 	post execinfrapb.PostProcessSpec,
@@ -1052,7 +1089,9 @@ func (p *PhysicalPlan) AddStageOnNodes(
 	// Connect the result streams to the processors.
 	for bucket := 0; bucket < len(sqlInstanceIDs); bucket++ {
 		pIdx := ProcessorIdx(pIdxStart + bucket)
-		p.MergeResultStreams(routers, bucket, mergeOrd, pIdx, 0, false /* forceSerialization */)
+		p.MergeResultStreams(ctx, routers, bucket, mergeOrd, pIdx, 0, false, /* forceSerialization */
+			SerialStreamErrorSpec{},
+		)
 	}
 
 	// Set the new result routers.
@@ -1068,6 +1107,7 @@ func (p *PhysicalPlan) AddStageOnNodes(
 // TODO(yuzefovich): If there's a strong key on the left or right side, we
 // can elide the distinct stage on that side.
 func (p *PhysicalPlan) AddDistinctSetOpStage(
+	ctx context.Context,
 	sqlInstanceIDs []base.SQLInstanceID,
 	joinCore execinfrapb.ProcessorCoreUnion,
 	distinctCores []execinfrapb.ProcessorCoreUnion,
@@ -1086,7 +1126,7 @@ func (p *PhysicalPlan) AddDistinctSetOpStage(
 	// before the EXCEPT ALL join).
 	distinctProcs := make(map[base.SQLInstanceID][]ProcessorIdx)
 	p.AddStageOnNodes(
-		sqlInstanceIDs, distinctCores[0], execinfrapb.PostProcessSpec{}, eqCols,
+		ctx, sqlInstanceIDs, distinctCores[0], execinfrapb.PostProcessSpec{}, eqCols,
 		leftTypes, leftTypes, leftMergeOrd, leftRouters,
 	)
 	for _, leftDistinctProcIdx := range p.ResultRouters {
@@ -1094,7 +1134,7 @@ func (p *PhysicalPlan) AddDistinctSetOpStage(
 		distinctProcs[node] = append(distinctProcs[node], leftDistinctProcIdx)
 	}
 	p.AddStageOnNodes(
-		sqlInstanceIDs, distinctCores[1], execinfrapb.PostProcessSpec{}, eqCols,
+		ctx, sqlInstanceIDs, distinctCores[1], execinfrapb.PostProcessSpec{}, eqCols,
 		rightTypes, rightTypes, rightMergeOrd, rightRouters,
 	)
 	for _, rightDistinctProcIdx := range p.ResultRouters {
@@ -1146,7 +1186,10 @@ func (p *PhysicalPlan) AddDistinctSetOpStage(
 // same node. A fix for that is much more complicated, requiring remembering
 // extra state in the PhysicalPlan.
 func (p *PhysicalPlan) EnsureSingleStreamPerNode(
-	forceSerialization bool, post execinfrapb.PostProcessSpec,
+	ctx context.Context,
+	forceSerialization bool,
+	post execinfrapb.PostProcessSpec,
+	serialStreamErrorSpec SerialStreamErrorSpec,
 ) {
 	// Fast path - check if we need to do anything.
 	var nodes intsets.Fast
@@ -1199,7 +1242,9 @@ func (p *PhysicalPlan) EnsureSingleStreamPerNode(
 			},
 		}
 		mergedProcIdx := p.AddProcessor(proc)
-		p.MergeResultStreams(streams, 0 /* sourceRouterSlot */, p.MergeOrdering, mergedProcIdx, 0 /* destInput */, forceSerialization)
+		p.MergeResultStreams(ctx, streams, 0 /* sourceRouterSlot */, p.MergeOrdering, mergedProcIdx,
+			0 /* destInput */, forceSerialization, serialStreamErrorSpec,
+		)
 		p.ResultRouters[i] = mergedProcIdx
 	}
 }

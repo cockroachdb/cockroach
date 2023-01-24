@@ -291,7 +291,7 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 		)
 		physicalPlan.PlanToStreamColMap = []int{}
 
-		distSQLPlanner.FinalizePlan(planCtx, physicalPlan)
+		distSQLPlanner.FinalizePlan(ctx, planCtx, physicalPlan)
 
 		metadataCallbackWriter := sql.NewMetadataOnlyMetadataCallbackWriter()
 

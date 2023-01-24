@@ -112,6 +112,11 @@ type PlanGistFactory struct {
 
 var _ exec.Factory = &PlanGistFactory{}
 
+// Ctx implements the Factory interface.
+func (f *PlanGistFactory) Ctx() context.Context {
+	return f.wrappedFactory.Ctx()
+}
+
 // writeAndHash writes an arbitrary slice of bytes to the buffer and hashes each
 // byte.
 func (f *PlanGistFactory) writeAndHash(data []byte) int {

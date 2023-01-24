@@ -111,7 +111,7 @@ func distImport(
 
 		p.PlanToStreamColMap = []int{0, 1}
 
-		dsp.FinalizePlan(planCtx, p)
+		dsp.FinalizePlan(ctx, planCtx, p)
 		return p, planCtx, nil
 	}
 

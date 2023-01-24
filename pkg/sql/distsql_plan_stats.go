@@ -59,6 +59,7 @@ var maxTimestampAge = settings.RegisterDurationSetting(
 )
 
 func (dsp *DistSQLPlanner) createAndAttachSamplers(
+	ctx context.Context,
 	p *PhysicalPlan,
 	desc catalog.TableDescriptor,
 	tableStats []*stats.TableStatistic,
@@ -149,6 +150,7 @@ func (dsp *DistSQLPlanner) createAndAttachSamplers(
 		node = p.Processors[p.ResultRouters[0]].SQLInstanceID
 	}
 	p.AddSingleGroupStage(
+		ctx,
 		node,
 		execinfrapb.ProcessorCoreUnion{SampleAggregator: agg},
 		execinfrapb.PostProcessSpec{},
@@ -329,6 +331,7 @@ func (dsp *DistSQLPlanner) createPartialStatsPlan(
 		sketchSpec = append(sketchSpec, spec)
 	}
 	return dsp.createAndAttachSamplers(
+		ctx,
 		p,
 		desc,
 		tableStats,
@@ -450,6 +453,7 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 	}
 
 	return dsp.createAndAttachSamplers(
+		ctx,
 		p,
 		desc,
 		tableStats,
@@ -510,7 +514,7 @@ func (dsp *DistSQLPlanner) planAndRunCreateStats(
 		return err
 	}
 
-	dsp.FinalizePlan(planCtx, physPlan)
+	dsp.FinalizePlan(ctx, planCtx, physPlan)
 
 	recv := MakeDistSQLReceiver(
 		ctx,

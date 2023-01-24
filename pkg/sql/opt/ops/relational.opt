@@ -502,6 +502,11 @@ define LookupJoinPrivate {
     # different wait policies are used by SELECT .. FOR UPDATE/SHARE SKIP
     # LOCKED/NOWAIT statements to react differently to conflicting locks.
     Locking Locking
+
+    # RemoteOnlyLookups is true when this join is defined with only lookups
+    # that read into remote regions, though the lookups are defined in
+    # LookupExpr, not RemoteLookupExpr.
+    RemoteOnlyLookups bool
     _ JoinPrivate
 }
 

@@ -328,7 +328,16 @@ func (f *rowBasedFlow) setupInputSyncs(
 				if is.Type == execinfrapb.InputSyncSpec_ORDERED {
 					ordering = execinfrapb.ConvertToColumnOrdering(is.Ordering)
 				}
-				sync, err = makeSerialSync(ordering, f.EvalCtx, streams)
+				var returnErrorFunc func() error
+				if is.EnforceHomeRegionError != nil {
+					returnErrorFunc = func() error {
+						return is.EnforceHomeRegionError.ErrorDetail(ctx)
+					}
+				}
+				sync, err = makeSerialSync(ordering, f.EvalCtx, streams,
+					is.EnforceHomeRegionStreamExclusiveUpperBound,
+					returnErrorFunc,
+				)
 				if err != nil {
 					return nil, err
 				}
