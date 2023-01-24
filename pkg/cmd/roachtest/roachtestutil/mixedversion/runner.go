@@ -14,6 +14,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"math/rand"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -31,6 +32,17 @@ import (
 )
 
 type (
+	// Helper is the struct passed to user-functions providing helper
+	// functions that mixed-version tests can use.
+	Helper struct {
+		ctx       context.Context
+		context   *Context
+		conns     []*gosql.DB
+		crdbNodes option.NodeListOption
+
+		stepLogger *logger.Logger
+	}
+
 	testRunner struct {
 		ctx       context.Context
 		plan      *TestPlan
@@ -86,22 +98,28 @@ func (tr *testRunner) run() error {
 // runStep contains the logic of running a single test step, called
 // recursively in the case of sequentialRunStep and concurrentRunStep.
 func (tr *testRunner) runStep(step testStep) error {
-	if ss, ok := step.(singleStep); ok && ss.ID() > 1 {
-		// if we are running a singleStep that is *not* the first step,
-		// we can initialize the database connections. This represents the
-		// assumption that the first step in the test plan is the one that
-		// sets up binaries and make the `cockroach` process available on
-		// the nodes.
-		// TODO(renato): consider a way to make the test runner crash if
-		// the assumption does not hold
-		if err := tr.maybeInitConnections(); err != nil {
-			return err
-		}
-		if err := tr.refreshBinaryVersions(); err != nil {
-			return err
-		}
-		if err := tr.refreshClusterVersions(); err != nil {
-			return err
+	if ss, ok := step.(singleStep); ok {
+		if ss.ID() == 1 {
+			// if this is the first singleStep of the plan, ensure it is an
+			// "initialization step" (i.e., cockroach nodes are ready after
+			// it executes). This is an assumption of the test runner and
+			// makes for clear error messages if that assumption is broken.
+			if err := tr.ensureInitializationStep(ss); err != nil {
+				return err
+			}
+		} else {
+			// update the runner's view of the cluster's binary and cluster
+			// versions before every non-initialization `singleStep` is
+			// executed
+			if err := tr.maybeInitConnections(); err != nil {
+				return err
+			}
+			if err := tr.refreshBinaryVersions(); err != nil {
+				return err
+			}
+			if err := tr.refreshClusterVersions(); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -136,12 +154,13 @@ func (tr *testRunner) runStep(step testStep) error {
 		}
 
 		tr.logStep("STARTING", ss, stepLogger)
+		tr.logVersions(stepLogger)
 		start := timeutil.Now()
 		defer func() {
 			prefix := fmt.Sprintf("FINISHED [%s]", timeutil.Since(start))
 			tr.logStep(prefix, ss, stepLogger)
 		}()
-		if err := ss.Run(tr.ctx, stepLogger, tr.cluster, tr.conn); err != nil {
+		if err := ss.Run(tr.ctx, stepLogger, tr.cluster, tr.newHelper(stepLogger)); err != nil {
 			return tr.reportError(err, ss, stepLogger)
 		}
 
@@ -188,6 +207,18 @@ func (tr *testRunner) logStep(prefix string, step singleStep, l *logger.Logger) 
 	l.Printf("%[1]s %s (%d): %s %[1]s", dashes, prefix, step.ID(), step.Description())
 }
 
+// logVersions writes the current cached versions of the binary and
+// cluster versions on each node. The cached versions should exist for
+// all steps but the first one (when we start the cluster itself).
+func (tr *testRunner) logVersions(l *logger.Logger) {
+	if tr.binaryVersions == nil || tr.clusterVersions == nil {
+		return
+	}
+
+	l.Printf("binary versions: %s", formatVersions(tr.binaryVersions))
+	l.Printf("cluster versions: %s", formatVersions(tr.clusterVersions))
+}
+
 // loggerFor creates a logger instance to be used by a test step. Logs
 // will be available under `mixed-version-test/{ID}.log`, making it
 // easy to go from the IDs displayed in the test plan to the
@@ -231,6 +262,15 @@ func (tr *testRunner) refreshClusterVersions() error {
 	return nil
 }
 
+func (tr *testRunner) ensureInitializationStep(ss singleStep) error {
+	_, isInit := ss.(startFromCheckpointStep)
+	if !isInit {
+		return fmt.Errorf("unexpected initialization type in mixed-version test: %T", ss)
+	}
+
+	return nil
+}
+
 // maybeInitConnections initialize connections if the connection cache
 // is empty.
 func (tr *testRunner) maybeInitConnections() error {
@@ -251,6 +291,15 @@ func (tr *testRunner) maybeInitConnections() error {
 	return nil
 }
 
+func (tr *testRunner) newHelper(l *logger.Logger) *Helper {
+	return &Helper{
+		ctx:        tr.ctx,
+		conns:      tr.connCache,
+		crdbNodes:  tr.crdbNodes,
+		stepLogger: l,
+	}
+}
+
 // conn returns a database connection to the given node. Assumes the
 // connection cache has been previously initialized.
 func (tr *testRunner) conn(node int) *gosql.DB {
@@ -263,6 +312,48 @@ func (tr *testRunner) closeConnections() {
 			_ = db.Close()
 		}
 	}
+}
+
+// RandomDB returns a (nodeID, connection) tuple for a randomly picked
+// cockroach node according to the parameters passed.
+func (h *Helper) RandomDB(prng *rand.Rand, nodes option.NodeListOption) (int, *gosql.DB) {
+	node := nodes[prng.Intn(len(nodes))]
+	return node, h.Connect(node)
+}
+
+// QueryRow performs `db.QueryRowContext` on a randomly picked
+// database node. The query and the node picked are logged in the logs
+// of the step that calls this function.
+func (h *Helper) QueryRow(rng *rand.Rand, query string, args ...interface{}) *gosql.Row {
+	node, db := h.RandomDB(rng, h.crdbNodes)
+	h.stepLogger.Printf("running SQL statement:\n%s\nArgs: %v\nNode: %d", query, args, node)
+	return db.QueryRowContext(h.ctx, query, args...)
+}
+
+// Exec performs `db.ExecContext` on a randomly picked database node.
+// The query and the node picked are logged in the logs of the step
+// that calls this function.
+func (h *Helper) Exec(rng *rand.Rand, query string, args ...interface{}) error {
+	node, db := h.RandomDB(rng, h.crdbNodes)
+	h.stepLogger.Printf("running SQL statement:\n%s\nArgs: %v\nNode: %d", query, args, node)
+	_, err := db.ExecContext(h.ctx, query, args...)
+	return err
+}
+
+func (h *Helper) Connect(node int) *gosql.DB {
+	return h.conns[node-1]
+}
+
+// SetContext should be called by steps that need access to the test
+// context, as that is only visible to them.
+func (h *Helper) SetContext(c *Context) {
+	h.context = c
+}
+
+// Context returns the test context associated with a certain step. It
+// is made available for user-functions (see runHookStep).
+func (h *Helper) Context() *Context {
+	return h.context
 }
 
 func renameFailedLogger(l *logger.Logger) error {
