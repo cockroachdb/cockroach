@@ -13397,8 +13397,8 @@ limit
  │    │    │         ├── p.crdb_region:15 IN ('central', 'west') [outer=(15), constraints=(/15: [/'central' - /'central'] [/'west' - /'west']; tight)]
  │    │    │         └── c_p_id:25 = p_id:12 [outer=(12,25), constraints=(/12: (/NULL - ]; /25: (/NULL - ]), fd=(12)==(25), (25)==(12)]
  │    │    ├── lookup columns are key
- │    │    ├── key: (24)
- │    │    ├── fd: ()-->(15,26), (24)-->(25), (12)-->(13,14), (13)~~>(12,14), (12)==(25), (25)==(12)
+ │    │    ├── key: (12,24)
+ │    │    ├── fd: ()-->(26), (24)-->(25), (12)-->(13-15), (13)~~>(12,14,15)
  │    │    ├── limit hint: 1.00
  │    │    ├── scan child [as=c]
  │    │    │    ├── columns: c_id:24!null c_p_id:25 c.crdb_region:26!null
@@ -13456,8 +13456,8 @@ limit
  │    │    │         ├── p.crdb_region:15 IN ('central', 'west') [outer=(15), constraints=(/15: [/'central' - /'central'] [/'west' - /'west']; tight)]
  │    │    │         └── c_p_id:25 = id2:13 [outer=(13,25), constraints=(/13: (/NULL - ]; /25: (/NULL - ]), fd=(13)==(25), (25)==(13)]
  │    │    ├── lookup columns are key
- │    │    ├── key: (24)
- │    │    ├── fd: ()-->(15,26), (24)-->(25), (12)-->(13,14), (13)-->(12,14), (13)==(25), (25)==(13)
+ │    │    ├── key: (12,24)
+ │    │    ├── fd: ()-->(26), (24)-->(25), (12)-->(13-15), (13)-->(12,14,15)
  │    │    ├── limit hint: 1.00
  │    │    ├── scan child3 [as=c]
  │    │    │    ├── columns: c_id:24!null c_p_id:25 c.crdb_region:26!null
@@ -13524,8 +13524,8 @@ limit
  │    │    │    │         ├── p.crdb_region:15 IN ('central', 'west') [outer=(15), constraints=(/15: [/'central' - /'central'] [/'west' - /'west']; tight)]
  │    │    │    │         └── c_p_id:25 = id2:13 [outer=(13,25), constraints=(/13: (/NULL - ]; /25: (/NULL - ]), fd=(13)==(25), (25)==(13)]
  │    │    │    ├── lookup columns are key
- │    │    │    ├── key: (24)
- │    │    │    ├── fd: ()-->(15,26), (24)-->(25), (12)-->(13), (13)-->(12), (13)==(25), (25)==(13)
+ │    │    │    ├── key: (12,24)
+ │    │    │    ├── fd: ()-->(26), (24)-->(25), (12)-->(13,15), (13)-->(12,15)
  │    │    │    ├── limit hint: 29.67
  │    │    │    ├── scan child [as=c]
  │    │    │    │    ├── columns: c_id:24!null c_p_id:25 c.crdb_region:26!null

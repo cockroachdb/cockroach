@@ -2283,7 +2283,28 @@ func (h *joinPropsHelper) init(b *logicalPropsBuilder, joinExpr RelExpr) {
 		ensureLookupJoinInputProps(join, &b.sb)
 		h.joinType = join.JoinType
 		h.rightProps = &join.lookupProps
-		h.filters = append(join.On, join.LookupExpr...)
+		if len(join.RemoteLookupExpr) == 0 {
+			h.filters = append(join.On, join.LookupExpr...)
+		} else {
+			// If RemoteLookupExpr is not empty, the filter should
+			// be (LookupExpr OR RemoteLookupExpr).
+			var lookupExpr, remoteLookupExpr opt.ScalarExpr
+			lookupExpr = join.LookupExpr[0].Condition
+			for i := 1; i < len(join.LookupExpr); i++ {
+				lookupExpr = b.mem.MemoizeAnd(lookupExpr, join.LookupExpr[i].Condition)
+			}
+			remoteLookupExpr = join.RemoteLookupExpr[0].Condition
+			for i := 1; i < len(join.RemoteLookupExpr); i++ {
+				remoteLookupExpr = b.mem.MemoizeAnd(remoteLookupExpr, join.RemoteLookupExpr[i].Condition)
+			}
+			or := b.mem.MemoizeOr(lookupExpr, remoteLookupExpr)
+			// TODO(rytaft): If needed, we could extract the common conjuncts using
+			// logic similar to FindRedundantConjunct and ExtractRedundantConjunct
+			// from the norm package. But that seems like overkill until we have a
+			// compelling reason to.
+			h.filters = append(join.On, constructFiltersItem(or, b.mem))
+		}
+
 		b.addFiltersToFuncDep(h.filters, &h.filtersFD)
 		h.filterNotNullCols = b.rejectNullCols(h.filters)
 
