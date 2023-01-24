@@ -101,7 +101,6 @@ vectorized: true
 │ table: a@a_pkey
 │ equality: (a) = (a)
 │ equality cols are key
-│ pred: b @@ '''foo'' & ''bar'''
 │
 └── • zigzag join
       left table: a@a_b_idx
