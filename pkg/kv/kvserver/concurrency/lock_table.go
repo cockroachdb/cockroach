@@ -11,6 +11,7 @@
 package concurrency
 
 import (
+	"bytes"
 	"container/list"
 	"fmt"
 	"sort"
@@ -23,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/btree"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -143,20 +145,20 @@ func (s waitingState) String() string {
 type treeMu struct {
 	mu syncutil.RWMutex // Protects everything in this struct.
 
-	// For assigning sequence numbers to the lockState objects as required by
-	// the util/interval/generic type contract.
-	lockIDSeqNum uint64
-
 	// Container for lockState structs. Locks that are not held or reserved and
 	// have no waiting requests are garbage collected. Additionally, locks that
 	// are only held with Replicated durability and have no waiting requests may
 	// also be garbage collected since their state can be recovered from
 	// persistent storage.
-	btree
+	btree.Set[btree.WithKey[*lockState], *lockState]
 
 	// For constraining memory consumption. We need better memory accounting
 	// than this.
 	numLocks int64
+
+	// For deciding when it is time to check whether to enforce
+	// lockTableImpl.maxLocks.
+	lockIDSeqNum uint64
 
 	// For dampening the frequency with which we enforce lockTableImpl.maxLocks.
 	lockAddMaxLocksCheckInterval uint64
@@ -388,7 +390,7 @@ type lockTableGuardImpl struct {
 	// TODO(nvanbenschoten): should we be Reset-ing these btree snapshots when we
 	// Dequeue a lockTableGuardImpl? In releaseLockTableGuardImpl?
 	//
-	tableSnapshot [spanset.NumSpanScope]btree
+	tableSnapshot [spanset.NumSpanScope]btree.Set[btree.WithKey[*lockState], *lockState]
 
 	// notRemovableLock points to the lock for which this guard has incremented
 	// lockState.notRemovable. It will be set to nil when this guard has decremented
@@ -563,9 +565,11 @@ func (g *lockTableGuardImpl) CheckOptimisticNoConflicts(spanSet *spanset.SpanSet
 		startKey := span.Key
 		tree := g.tableSnapshot[g.ss]
 		iter := tree.MakeIter()
-		ltRange := &lockState{key: startKey, endKey: span.EndKey}
-		for iter.FirstOverlap(ltRange); iter.Valid(); iter.NextOverlap(ltRange) {
+		for iter.SeekGE(&lockState{key: startKey}); iter.Valid(); iter.Next() {
 			l := iter.Cur()
+			if !containsKey(span.Span, l.key) {
+				break
+			}
 			if !l.isNonConflictingLock(g, g.sa) {
 				return false
 			}
@@ -573,6 +577,12 @@ func (g *lockTableGuardImpl) CheckOptimisticNoConflicts(spanSet *spanset.SpanSet
 		span = stepToNextSpan(g)
 	}
 	return true
+}
+
+func containsKey(sp roachpb.Span, k roachpb.Key) bool {
+	c := sp.Key.Compare(k)
+	return c == 0 ||
+		(c < 0 && len(sp.EndKey) > 0 && bytes.Compare(k, sp.EndKey) < 0)
 }
 
 func (g *lockTableGuardImpl) IsKeyLockedByConflictingTxn(
@@ -583,13 +593,11 @@ func (g *lockTableGuardImpl) IsKeyLockedByConflictingTxn(
 		ss = spanset.SpanLocal
 	}
 	tree := g.tableSnapshot[ss]
-	iter := tree.MakeIter()
-	iter.SeekGE(&lockState{key: key})
-	if !iter.Valid() || !iter.Cur().key.Equal(key) {
+	l, ok := tree.Get(&lockState{key: key})
+	if !ok {
 		// No lock on key.
 		return false, nil
 	}
-	l := iter.Cur()
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if l.isEmptyLock() {
@@ -695,9 +703,11 @@ func (g *lockTableGuardImpl) findNextLockAfter(notify bool) {
 		// prevents us from specifying an exclusive start key. We need to check
 		// that the lock is not the same as our exclusive start key and only need
 		// to do that check once -- for the first lock.
-		ltRange := &lockState{key: startKey, endKey: span.EndKey}
-		for iter.FirstOverlap(ltRange); iter.Valid(); iter.NextOverlap(ltRange) {
+		for iter.SeekGE(&lockState{key: startKey}); iter.Valid(); iter.Next() {
 			l := iter.Cur()
+			if !containsKey(span.Span, l.key) {
+				break
+			}
 			if resumingInSameSpan {
 				resumingInSameSpan = false
 				if l.key.Equal(startKey) {
@@ -807,9 +817,6 @@ func (lh *lockHolderInfo) isEmpty() bool {
 // However, other objects referenced by lockState can be pooled as long as they
 // are removed from all lockStates that reference them first.
 type lockState struct {
-	id     uint64 // needed for implementing util/interval/generic type contract
-	endKey []byte // used in btree iteration and tests
-
 	// The key being locked and the scope of that key. This state is never
 	// mutated.
 	key roachpb.Key
@@ -1023,16 +1030,10 @@ type lockWaitQueue struct {
 	distinguishedWaiter *lockTableGuardImpl
 }
 
-//go:generate ../../../util/interval/generic/gen.sh *lockState concurrency
-
-// Methods required by util/interval/generic type contract.
-func (l *lockState) ID() uint64         { return l.id }
-func (l *lockState) Key() []byte        { return l.key }
-func (l *lockState) EndKey() []byte     { return l.endKey }
-func (l *lockState) New() *lockState    { return new(lockState) }
-func (l *lockState) SetID(v uint64)     { l.id = v }
-func (l *lockState) SetKey(v []byte)    { l.key = v }
-func (l *lockState) SetEndKey(v []byte) { l.endKey = v }
+// Compare compares two lockStates. It is required by util/btree.
+func (l *lockState) Compare(o *lockState) int {
+	return l.key.Compare(o.key)
+}
 
 // REQUIRES: l.mu is locked.
 func (l *lockState) String() string {
@@ -2437,10 +2438,9 @@ func (l *lockState) lockIsFree() (gc bool) {
 	return false
 }
 
-func (t *treeMu) nextLockSeqNum() (seqNum uint64, checkMaxLocks bool) {
+func (t *treeMu) shouldCheckMaxLocks() (checkMaxLocks bool) {
 	t.lockIDSeqNum++
-	checkMaxLocks = t.lockIDSeqNum%t.lockAddMaxLocksCheckInterval == 0
-	return t.lockIDSeqNum, checkMaxLocks
+	return t.lockIDSeqNum%t.lockAddMaxLocksCheckInterval == 0
 }
 
 func (t *lockTableImpl) ScanOptimistic(req Request) lockTableGuard {
@@ -2615,22 +2615,17 @@ func (t *lockTableImpl) AddDiscoveredLock(
 			return true, nil
 		}
 	}
-	var l *lockState
 	tree := &t.locks[ss]
 	tree.mu.Lock()
-	iter := tree.MakeIter()
-	iter.FirstOverlap(&lockState{key: key})
+	l, ok := tree.Get(&lockState{key: key})
 	checkMaxLocks := false
-	if !iter.Valid() {
-		var lockSeqNum uint64
-		lockSeqNum, checkMaxLocks = tree.nextLockSeqNum()
-		l = &lockState{id: lockSeqNum, key: key, ss: ss}
+	if !ok {
+		checkMaxLocks = tree.shouldCheckMaxLocks()
+		l = &lockState{key: key, ss: ss}
 		l.queuedWriters.Init()
 		l.waitingReaders.Init()
-		tree.Set(l)
+		tree.Upsert(l)
 		atomic.AddInt64(&tree.numLocks, 1)
-	} else {
-		l = iter.Cur()
 	}
 	notRemovableLock := false
 	if g.notRemovableLock == nil {
@@ -2668,17 +2663,15 @@ func (t *lockTableImpl) AcquireLock(
 	if keys.IsLocal(key) {
 		ss = spanset.SpanLocal
 	}
-	var l *lockState
 	tree := &t.locks[ss]
 	tree.mu.Lock()
 	// Can't release tree.mu until call l.acquireLock() since someone may find
 	// an empty lock and remove it from the tree. If we expect that lockState
 	// will already be in tree we can optimize this by first trying with a
 	// tree.mu.RLock().
-	iter := tree.MakeIter()
-	iter.FirstOverlap(&lockState{key: key})
+	l, ok := tree.Get(&lockState{key: key})
 	checkMaxLocks := false
-	if !iter.Valid() {
+	if !ok {
 		if durability == lock.Replicated {
 			// Don't remember uncontended replicated locks. The downside is that
 			// sometimes contention won't be noticed until when the request
@@ -2689,15 +2682,13 @@ func (t *lockTableImpl) AcquireLock(
 			tree.mu.Unlock()
 			return nil
 		}
-		var lockSeqNum uint64
-		lockSeqNum, checkMaxLocks = tree.nextLockSeqNum()
-		l = &lockState{id: lockSeqNum, key: key, ss: ss}
+		checkMaxLocks = tree.shouldCheckMaxLocks()
+		l = &lockState{key: key, ss: ss}
 		l.queuedWriters.Init()
 		l.waitingReaders.Init()
-		tree.Set(l)
+		tree.Upsert(l)
 		atomic.AddInt64(&tree.numLocks, 1)
 	} else {
-		l = iter.Cur()
 		if durability == lock.Replicated && l.tryFreeLockOnReplicatedAcquire() {
 			// Don't remember uncontended replicated locks. Just like in the
 			// case where the lock is initially added as replicated, we drop
@@ -2806,17 +2797,15 @@ func findAccessInSpans(
 func (t *lockTableImpl) tryGCLocks(tree *treeMu, locks []*lockState) {
 	tree.mu.Lock()
 	defer tree.mu.Unlock()
-	for _, l := range locks {
-		iter := tree.MakeIter()
-		iter.FirstOverlap(l)
+	for _, key := range locks {
+		l, ok := tree.Get(key)
 		// Since the same lockState can go from non-empty to empty multiple times
 		// it is possible that multiple threads are racing to delete it and
 		// multiple find it empty and one wins. If a concurrent thread made the
 		// lockState non-empty we do not want to delete it accidentally.
-		if !iter.Valid() {
+		if !ok {
 			continue
 		}
-		l = iter.Cur()
 		l.mu.Lock()
 		empty := l.isEmptyLock()
 		l.mu.Unlock()
@@ -2858,9 +2847,12 @@ func (t *lockTableImpl) updateLockInternal(up *roachpb.LockUpdate) (heldByTxn bo
 	}
 	tree.mu.RLock()
 	iter := tree.MakeIter()
-	ltRange := &lockState{key: span.Key, endKey: span.EndKey}
-	for iter.FirstOverlap(ltRange); iter.Valid(); iter.NextOverlap(ltRange) {
-		changeFunc(iter.Cur())
+	for iter.SeekGE(&lockState{key: span.Key}); iter.Valid(); iter.Next() {
+		l := iter.Cur()
+		if !containsKey(span, l.key) {
+			break
+		}
+		changeFunc(l)
 		// Optimization to avoid a second key comparison (not for correctness).
 		if len(span.EndKey) == 0 {
 			break
@@ -2949,7 +2941,7 @@ func (t *lockTableImpl) QueryLockTableState(
 	}
 
 	// Grab tree snapshot to avoid holding read lock during iteration.
-	var snap btree
+	var snap btree.Set[btree.WithKey[*lockState], *lockState]
 	{
 		tree := &t.locks[opts.KeyScope]
 		tree.mu.RLock()
@@ -2968,10 +2960,11 @@ func (t *lockTableImpl) QueryLockTableState(
 
 	// Iterate over locks and gather metadata.
 	iter := snap.MakeIter()
-	ltRange := &lockState{key: span.Key, endKey: span.EndKey}
-	for iter.FirstOverlap(ltRange); iter.Valid(); iter.NextOverlap(ltRange) {
+	for iter.SeekGE(&lockState{key: span.Key}); iter.Valid(); iter.Next() {
 		l := iter.Cur()
-
+		if !containsKey(span, l.key) {
+			break
+		}
 		if ok, lInfo := l.collectLockStateInfo(opts.IncludeUncontended, now); ok {
 			nextKey = l.key
 			nextByteSize = int64(lInfo.Size())
@@ -3008,7 +3001,7 @@ func (t *lockTableImpl) Metrics() LockTableMetrics {
 	var m LockTableMetrics
 	for i := 0; i < len(t.locks); i++ {
 		// Grab tree snapshot to avoid holding read lock during iteration.
-		var snap btree
+		var snap btree.Set[btree.WithKey[*lockState], *lockState]
 		{
 			tree := &t.locks[i]
 			tree.mu.RLock()

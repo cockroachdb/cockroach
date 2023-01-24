@@ -1,0 +1,30 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "aug",
+    srcs = [
+        "aug_btree.go",
+        "config.go",
+        "iter_stack.go",
+        "iterator.go",
+        "node.go",
+        "node_pool.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/btree/internal/aug",
+    visibility = ["//pkg/util/btree:__subpackages__"],
+    deps = ["//pkg/util/btree/ordered"],
+)
+
+go_test(
+    name = "aug_test",
+    srcs = ["iter_stack_test.go"],
+    args = ["-test.timeout=295s"],
+    embed = [":aug"],
+    deps = [
+        "//pkg/util/btree/ordered",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+get_x_data(name = "get_x_data")

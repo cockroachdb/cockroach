@@ -251,9 +251,9 @@ yarn_install(
         "--pure-lockfile",
     ],
     package_json = "//pkg/cmd/mirror/npm:package.json",
-    yarn_lock = "//pkg/cmd/mirror/npm:yarn.lock",
-    symlink_node_modules = True,
     strict_visibility = False,
+    symlink_node_modules = True,
+    yarn_lock = "//pkg/cmd/mirror/npm:yarn.lock",
 )
 
 # Install external dependencies for NPM packages in pkg/ui/ as separate bazel
