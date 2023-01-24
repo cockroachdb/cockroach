@@ -331,6 +331,13 @@ type localityWithString struct {
 	str      string
 }
 
+// CapacityChangeFn is a function which may be called on capacity changes, by
+// the storepool.
+type CapacityChangeFn func(
+	storeID roachpb.StoreID,
+	old, cur roachpb.StoreCapacity,
+)
+
 // AllocatorStorePool provides an interface for use by the allocator to a list
 // of all known stores in the cluster and information on their health.
 type AllocatorStorePool interface {
@@ -426,6 +433,12 @@ type AllocatorStorePool interface {
 		localStore roachpb.StoreID,
 		rangeUsageInfo allocator.RangeUsageInfo,
 	)
+
+	// SetOnCapacityChange installs a callback to be called when any store
+	// capacity changes in the storepool. This currently doesn't consider local
+	// updates (UpdateLocalStoreAfterRelocate, UpdateLocalStoreAfterRebalance,
+	// UpdateLocalStoresAfterLeaseTransfer) as capacity changes.
+	SetOnCapacityChange(fn CapacityChangeFn)
 }
 
 // StorePool maintains a list of all known stores in the cluster and
@@ -453,6 +466,11 @@ type StorePool struct {
 	localitiesMu struct {
 		syncutil.RWMutex
 		nodeLocalities map[roachpb.NodeID]localityWithString
+	}
+
+	changeMu struct {
+		syncutil.Mutex
+		onChange []CapacityChangeFn
 	}
 
 	// OverrideIsStoreReadyForRoutineReplicaTransferFn, if set, is used in
@@ -487,6 +505,7 @@ func NewStorePool(
 	}
 	sp.DetailsMu.StoreDetails = make(map[roachpb.StoreID]*StoreDetail)
 	sp.localitiesMu.nodeLocalities = make(map[roachpb.NodeID]localityWithString)
+	sp.changeMu.onChange = []CapacityChangeFn{}
 
 	// Enable redundant callbacks for the store keys because we use these
 	// callbacks as a clock to determine when a store was last updated even if it
@@ -539,14 +558,24 @@ func (sp *StorePool) statusString(nl NodeLivenessFunc) string {
 // storeGossipUpdate is the Gossip callback used to keep the StorePool up to date.
 func (sp *StorePool) storeGossipUpdate(_ string, content roachpb.Value) {
 	var storeDesc roachpb.StoreDescriptor
+	// We keep copies of the capacity and storeID to pass into the
+	// capacityChanged callback.
+	var oldCapacity, curCapacity roachpb.StoreCapacity
+	var storeID roachpb.StoreID
+
 	if err := content.GetProto(&storeDesc); err != nil {
 		ctx := sp.AnnotateCtx(context.TODO())
 		log.Errorf(ctx, "%v", err)
 		return
 	}
+	storeID = storeDesc.StoreID
+	curCapacity = storeDesc.Capacity
 
 	sp.DetailsMu.Lock()
-	detail := sp.GetStoreDetailLocked(storeDesc.StoreID)
+	detail := sp.GetStoreDetailLocked(storeID)
+	if detail.Desc != nil {
+		oldCapacity = detail.Desc.Capacity
+	}
 	detail.Desc = &storeDesc
 	detail.LastUpdatedTime = sp.clock.PhysicalTime()
 	sp.DetailsMu.Unlock()
@@ -555,6 +584,10 @@ func (sp *StorePool) storeGossipUpdate(_ string, content roachpb.Value) {
 	sp.localitiesMu.nodeLocalities[storeDesc.Node.NodeID] =
 		localityWithString{storeDesc.Node.Locality, storeDesc.Node.Locality.String()}
 	sp.localitiesMu.Unlock()
+
+	if oldCapacity != curCapacity {
+		sp.capacityChanged(storeID, curCapacity, oldCapacity)
+	}
 }
 
 // UpdateLocalStoreAfterRebalance is used to update the local copy of the
@@ -573,11 +606,16 @@ func (sp *StorePool) UpdateLocalStoreAfterRebalance(
 		// network). We can't update the local store at this time.
 		return
 	}
+	// Only apply the raft cpu delta on rebalance. This estimate assumes that
+	// the raft cpu usage is approximately equal across replicas for a range.
 	switch changeType {
 	case roachpb.ADD_VOTER, roachpb.ADD_NON_VOTER:
 		detail.Desc.Capacity.RangeCount++
 		detail.Desc.Capacity.LogicalBytes += rangeUsageInfo.LogicalBytes
 		detail.Desc.Capacity.WritesPerSecond += rangeUsageInfo.WritesPerSecond
+		if detail.Desc.Capacity.CPUPerSecond >= 0 {
+			detail.Desc.Capacity.CPUPerSecond += rangeUsageInfo.RaftCPUNanosPerSecond
+		}
 	case roachpb.REMOVE_VOTER, roachpb.REMOVE_NON_VOTER:
 		detail.Desc.Capacity.RangeCount--
 		if detail.Desc.Capacity.LogicalBytes <= rangeUsageInfo.LogicalBytes {
@@ -589,6 +627,15 @@ func (sp *StorePool) UpdateLocalStoreAfterRebalance(
 			detail.Desc.Capacity.WritesPerSecond = 0
 		} else {
 			detail.Desc.Capacity.WritesPerSecond -= rangeUsageInfo.WritesPerSecond
+		}
+		// When CPU attribution is unsupported, the store will set the
+		// CPUPerSecond of its store capacity to be -1.
+		if detail.Desc.Capacity.CPUPerSecond >= 0 {
+			if detail.Desc.Capacity.CPUPerSecond <= rangeUsageInfo.RaftCPUNanosPerSecond {
+				detail.Desc.Capacity.CPUPerSecond = 0
+			} else {
+				detail.Desc.Capacity.CPUPerSecond -= rangeUsageInfo.RaftCPUNanosPerSecond
+			}
 		}
 	default:
 		return
@@ -618,10 +665,17 @@ func (sp *StorePool) UpdateLocalStoreAfterRelocate(
 	sp.DetailsMu.Lock()
 	defer sp.DetailsMu.Unlock()
 
+	// Only apply the raft cpu delta on rebalance. This estimate assumes that
+	// the raft cpu usage is approximately equal across replicas for a range.
+	// TODO(kvoli): Separate into LH vs Replica, similar to the comment on
+	// range_usage_info.
 	updateTargets := func(targets []roachpb.ReplicationTarget) {
 		for _, target := range targets {
 			if toDetail := sp.GetStoreDetailLocked(target.StoreID); toDetail.Desc != nil {
 				toDetail.Desc.Capacity.RangeCount++
+				if toDetail.Desc.Capacity.CPUPerSecond >= 0 {
+					toDetail.Desc.Capacity.CPUPerSecond += rangeUsageInfo.RaftCPUNanosPerSecond
+				}
 			}
 		}
 	}
@@ -629,6 +683,16 @@ func (sp *StorePool) UpdateLocalStoreAfterRelocate(
 		for _, old := range previous {
 			if toDetail := sp.GetStoreDetailLocked(old.StoreID); toDetail.Desc != nil {
 				toDetail.Desc.Capacity.RangeCount--
+				// When CPU attribution is unsupported, the store will set the
+				// CPUPerSecond of its store capacity to be -1.
+				if toDetail.Desc.Capacity.CPUPerSecond < 0 {
+					continue
+				}
+				if toDetail.Desc.Capacity.CPUPerSecond <= rangeUsageInfo.RaftCPUNanosPerSecond {
+					toDetail.Desc.Capacity.CPUPerSecond = 0
+				} else {
+					toDetail.Desc.Capacity.CPUPerSecond -= rangeUsageInfo.RaftCPUNanosPerSecond
+				}
 			}
 		}
 	}
@@ -655,6 +719,20 @@ func (sp *StorePool) UpdateLocalStoresAfterLeaseTransfer(
 		} else {
 			fromDetail.Desc.Capacity.QueriesPerSecond -= rangeUsageInfo.QueriesPerSecond
 		}
+		// When CPU attribution is unsupported, the store will set the
+		// CPUPerSecond of its store capacity to be -1.
+		if fromDetail.Desc.Capacity.CPUPerSecond >= 0 {
+			// Only apply the request cpu (leaseholder + follower-reads) delta on
+			// transfers. Note this does not correctly account for follower reads
+			// remaining on the prior leaseholder after lease transfer. Instead,
+			// only a cpu delta specific to the lease should be applied.
+			if fromDetail.Desc.Capacity.CPUPerSecond <= rangeUsageInfo.RequestCPUNanosPerSecond {
+				fromDetail.Desc.Capacity.CPUPerSecond = 0
+			} else {
+				fromDetail.Desc.Capacity.CPUPerSecond -= rangeUsageInfo.RequestCPUNanosPerSecond
+			}
+		}
+
 		sp.DetailsMu.StoreDetails[from] = &fromDetail
 	}
 
@@ -662,6 +740,11 @@ func (sp *StorePool) UpdateLocalStoresAfterLeaseTransfer(
 	if toDetail.Desc != nil {
 		toDetail.Desc.Capacity.LeaseCount++
 		toDetail.Desc.Capacity.QueriesPerSecond += rangeUsageInfo.QueriesPerSecond
+		// When CPU attribution is unsupported, the store will set the
+		// CPUPerSecond of its store capacity to be -1.
+		if toDetail.Desc.Capacity.CPUPerSecond >= 0 {
+			toDetail.Desc.Capacity.CPUPerSecond += rangeUsageInfo.RequestCPUNanosPerSecond
+		}
 		sp.DetailsMu.StoreDetails[to] = &toDetail
 	}
 }
@@ -919,6 +1002,26 @@ func (sp *StorePool) liveAndDeadReplicasWithLiveness(
 	return
 }
 
+// SetOnCapacityChange installs a callback to be called when any store
+// capacity changes in the storepool. This currently doesn't consider local
+// updates (UpdateLocalStoreAfterRelocate, UpdateLocalStoreAfterRebalance,
+// UpdateLocalStoresAfterLeaseTransfer) as capacity changes.
+func (sp *StorePool) SetOnCapacityChange(fn CapacityChangeFn) {
+	sp.changeMu.Lock()
+	defer sp.changeMu.Unlock()
+
+	sp.changeMu.onChange = append(sp.changeMu.onChange, fn)
+}
+
+func (sp *StorePool) capacityChanged(storeID roachpb.StoreID, prev, cur roachpb.StoreCapacity) {
+	sp.changeMu.Lock()
+	defer sp.changeMu.Unlock()
+
+	for _, fn := range sp.changeMu.onChange {
+		fn(storeID, prev, cur)
+	}
+}
+
 // Stat provides a running sample size and running stats.
 type Stat struct {
 	n, Mean float64
@@ -948,6 +1051,10 @@ type StoreList struct {
 	// to be rebalance targets.
 	candidateLogicalBytes Stat
 
+	// CandidateCPU tracks store-cpu-per-second stats for Stores that are
+	// eligible to be rebalance targets.
+	CandidateCPU Stat
+
 	// CandidateQueriesPerSecond tracks queries-per-second stats for Stores that
 	// are eligible to be rebalance targets.
 	CandidateQueriesPerSecond Stat
@@ -974,6 +1081,7 @@ func MakeStoreList(descriptors []roachpb.StoreDescriptor) StoreList {
 		sl.CandidateQueriesPerSecond.update(desc.Capacity.QueriesPerSecond)
 		sl.candidateWritesPerSecond.update(desc.Capacity.WritesPerSecond)
 		sl.CandidateL0Sublevels.update(float64(desc.Capacity.L0Sublevels))
+		sl.CandidateCPU.update(desc.Capacity.CPUPerSecond)
 	}
 	return sl
 }
@@ -981,11 +1089,12 @@ func MakeStoreList(descriptors []roachpb.StoreDescriptor) StoreList {
 func (sl StoreList) String() string {
 	var buf bytes.Buffer
 	fmt.Fprintf(&buf,
-		"  candidate: avg-ranges=%v avg-leases=%v avg-disk-usage=%v avg-queries-per-second=%v",
+		"  candidate: avg-ranges=%v avg-leases=%v avg-disk-usage=%v avg-queries-per-second=%v avg-store-cpu-per-second=%v",
 		sl.CandidateRanges.Mean,
 		sl.CandidateLeases.Mean,
 		humanizeutil.IBytes(int64(sl.candidateLogicalBytes.Mean)),
 		sl.CandidateQueriesPerSecond.Mean,
+		humanizeutil.Duration(time.Duration(int64(sl.CandidateCPU.Mean))),
 	)
 	if len(sl.Stores) > 0 {
 		fmt.Fprintf(&buf, "\n")
@@ -993,10 +1102,11 @@ func (sl StoreList) String() string {
 		fmt.Fprintf(&buf, " <no candidates>")
 	}
 	for _, desc := range sl.Stores {
-		fmt.Fprintf(&buf, "  %d: ranges=%d leases=%d disk-usage=%s queries-per-second=%.2f l0-sublevels=%d\n",
+		fmt.Fprintf(&buf, "  %d: ranges=%d leases=%d disk-usage=%s queries-per-second=%.2f store-cpu-per-second=%s l0-sublevels=%d\n",
 			desc.StoreID, desc.Capacity.RangeCount,
 			desc.Capacity.LeaseCount, humanizeutil.IBytes(desc.Capacity.LogicalBytes),
 			desc.Capacity.QueriesPerSecond,
+			humanizeutil.Duration(time.Duration(int64(desc.Capacity.CPUPerSecond))),
 			desc.Capacity.L0Sublevels,
 		)
 	}
@@ -1023,6 +1133,7 @@ func (sl StoreList) ExcludeInvalid(constraints []roachpb.ConstraintsConjunction)
 func (sl StoreList) LoadMeans() load.Load {
 	dims := load.Vector{}
 	dims[load.Queries] = sl.CandidateQueriesPerSecond.Mean
+	dims[load.CPU] = sl.CandidateCPU.Mean
 	return dims
 }
 
