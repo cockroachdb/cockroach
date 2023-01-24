@@ -23,6 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -51,9 +52,10 @@ func benchmarkCockroach(b *testing.B, f BenchmarkFn) {
 	f(b, sqlutils.MakeSQLRunner(db))
 }
 
-// benchmarkTenantCockroach runs the benchmark against an in-memory tenant in a
-// single-node cluster.
-func benchmarkTenantCockroach(b *testing.B, f BenchmarkFn) {
+// benchmarkInProcessTenantCockroach runs the benchmark against an in-memory
+// tenant in a single-node cluster. The tenant runs in the same process as the
+// KV host.
+func benchmarkInProcessTenantCockroach(b *testing.B, f BenchmarkFn) {
 	ctx := context.Background()
 	s, db, _ := serverutils.StartServer(
 		b, base.TestServerArgs{
@@ -74,6 +76,35 @@ func benchmarkTenantCockroach(b *testing.B, f BenchmarkFn) {
 	// NOTE(andrei): Benchmarks drop the tables they're creating, so I'm not sure
 	// if hitting this limit is expected.
 	_, err = db.Exec(`ALTER TENANT ALL SET CLUSTER SETTING "spanconfig.tenant_limit" = 10000000`)
+	require.NoError(b, err)
+
+	_, err = tenantDB.Exec(`CREATE DATABASE bench`)
+	require.NoError(b, err)
+
+	f(b, sqlutils.MakeSQLRunner(tenantDB))
+}
+
+// benchmarkSepProcessTenantCockroach runs the benchmark against a tenant with a
+// single SQL pod and a single-node KV host cluster. The tenant runs in a
+// separate process from the KV host.
+func benchmarkSepProcessTenantCockroach(b *testing.B, f BenchmarkFn) {
+	ctx := context.Background()
+	s, db, _ := serverutils.StartServer(
+		b, base.TestServerArgs{
+			DisableDefaultTestTenant: true,
+		})
+	defer s.Stopper().Stop(ctx)
+
+	// Create our own test tenant with a known name.
+	_, tenantDB := serverutils.StartTenant(b, s, base.TestTenantArgs{
+		TenantName: "benchtenant",
+		TenantID:   roachpb.MustMakeTenantID(10),
+	})
+
+	// The benchmarks sometime hit the default span limit, so we increase it.
+	// NOTE(andrei): Benchmarks drop the tables they're creating, so I'm not sure
+	// if hitting this limit is expected.
+	_, err := db.Exec(`ALTER TENANT ALL SET CLUSTER SETTING "spanconfig.tenant_limit" = 10000000`)
 	require.NoError(b, err)
 
 	_, err = tenantDB.Exec(`CREATE DATABASE bench`)
@@ -171,7 +202,8 @@ func benchmarkMySQL(b *testing.B, f BenchmarkFn) {
 func ForEachDB(b *testing.B, fn BenchmarkFn) {
 	for _, dbFn := range []func(*testing.B, BenchmarkFn){
 		benchmarkCockroach,
-		benchmarkTenantCockroach,
+		benchmarkInProcessTenantCockroach,
+		benchmarkSepProcessTenantCockroach,
 		benchmarkMultinodeCockroach,
 		benchmarkPostgres,
 		benchmarkMySQL,
