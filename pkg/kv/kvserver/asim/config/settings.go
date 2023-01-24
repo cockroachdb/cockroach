@@ -30,7 +30,7 @@ const (
 	defaultLBRebalancingInterval   = time.Minute
 	defaultLBRebalanceQPSThreshold = 0.1
 	defaultLBMinRequiredQPSDiff    = 200
-	defaultLBRebalancingDimension  = 0 // QPS
+	defaultLBRebalancingObjective  = 0 // QPS
 )
 
 // SimulationSettings controls
@@ -85,8 +85,8 @@ type SimulationSettings struct {
 	// LBRebalancingMode controls if and when we do store-level rebalancing
 	// based on load. It maps to kvserver.LBRebalancingMode.
 	LBRebalancingMode int64
-	// LBRebalancingDimension is the load dimension to balance.
-	LBRebalancingDimension int64
+	// LBRebalancingObjective is the load objective to balance.
+	LBRebalancingObjective int64
 	// LBRebalancingInterval controls how often the store rebalancer will
 	// consider opportunities for rebalancing.
 	LBRebalancingInterval time.Duration
@@ -116,7 +116,7 @@ func DefaultSimulationSettings() *SimulationSettings {
 		SplitQPSThreshold:       defaultSplitQPSThreshold,
 		SplitQPSRetention:       defaultSplitQPSRetention,
 		LBRebalancingMode:       defaultLBRebalancingMode,
-		LBRebalancingDimension:  defaultLBRebalancingDimension,
+		LBRebalancingObjective:  defaultLBRebalancingObjective,
 		LBRebalancingInterval:   defaultLBRebalancingInterval,
 		LBRebalanceQPSThreshold: defaultLBRebalanceQPSThreshold,
 		LBMinRequiredQPSDiff:    defaultLBMinRequiredQPSDiff,

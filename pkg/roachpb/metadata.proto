@@ -323,6 +323,10 @@ message StoreCapacity {
   // instances where overlapping node-binary versions within a cluster result
   // in this this field missing.
   optional int64 l0_sublevels = 12 [(gogoproto.nullable) = false];
+  // cpu_per_second tracks the average store cpu use (ns) per second.
+  // This is the sum of all the replica's cpu time on this store, which is
+  // tracked in replica stats.
+  optional double cpu_per_second = 14 [(gogoproto.nullable) = false, (gogoproto.customname) = "CPUPerSecond"];
   optional cockroach.util.admission.admissionpb.IOThreshold io_threshold = 13 [(gogoproto.nullable) = false, (gogoproto.customname) = "IOThreshold" ];
   // bytes_per_replica and writes_per_replica contain percentiles for the
   // number of bytes and writes-per-second to each replica in the store.

@@ -408,6 +408,10 @@ const (
 	// columnar scans in the KV layer.
 	V23_1_KVDirectColumnarScans
 
+	// V23_1AllocatorCPUBalancing adds balancing CPU usage among stores using
+	// the allocator and store rebalancer. It assumes that at this version,
+	// stores now include their CPU in the StoreCapacity proto when gossiping.
+	V23_1AllocatorCPUBalancing
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -702,7 +706,10 @@ var rawVersionsSingleton = keyedVersions{
 		Key:     V23_1_KVDirectColumnarScans,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 34},
 	},
-
+	{
+		Key:     V23_1AllocatorCPUBalancing,
+		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 36},
+	},
 	// *************************************************
 	// Step (2): Add new versions here.
 	// Do not add new versions to a patch release.

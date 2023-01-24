@@ -27,6 +27,8 @@ func getLoadThreshold(dim load.Dimension, sv *settings.Values) float64 {
 	switch dim {
 	case load.Queries:
 		return allocator.QPSRebalanceThreshold.Get(sv)
+	case load.CPU:
+		return allocator.CPURebalanceThreshold.Get(sv)
 	default:
 		panic(errors.AssertionFailedf("Unkown load dimension %d", dim))
 	}
@@ -51,6 +53,8 @@ func getLoadMinThreshold(dim load.Dimension) float64 {
 	switch dim {
 	case load.Queries:
 		return allocator.MinQPSThresholdDifference
+	case load.CPU:
+		return allocator.MinCPUThresholdDifference
 	default:
 		panic(errors.AssertionFailedf("Unkown load dimension %d", dim))
 	}
@@ -76,6 +80,8 @@ func getLoadRebalanceMinRequiredDiff(dim load.Dimension, sv *settings.Values) fl
 	switch dim {
 	case load.Queries:
 		return allocator.MinQPSDifferenceForTransfers.Get(sv)
+	case load.CPU:
+		return allocator.MinCPUDifferenceForTransfers
 	default:
 		panic(errors.AssertionFailedf("Unkown load dimension %d", dim))
 	}
@@ -115,5 +121,15 @@ func UnderfullLoadThresholds(means, thresholds, minThresholds load.Load) load.Lo
 func MakeQPSOnlyDim(v float64) load.Load {
 	dims := load.Vector{}
 	dims[load.Queries] = v
+	return dims
+}
+
+// SetAllDims returns a load vector with all dimensions filled in with the
+// value given.
+func SetAllDims(v float64) load.Load {
+	dims := load.Vector{}
+	for i := range dims {
+		dims[i] = v
+	}
 	return dims
 }
