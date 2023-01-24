@@ -10,6 +10,7 @@ go_library(
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/load",
     visibility = ["//visibility:public"],
+    deps = ["//pkg/util/humanizeutil"],
 )
 
 get_x_data(name = "get_x_data")
