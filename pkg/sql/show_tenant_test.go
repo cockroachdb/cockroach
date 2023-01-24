@@ -92,6 +92,18 @@ func TestGetTenantStatus(t *testing.T) {
 			},
 			expectedStatus: cuttingOver,
 		},
+		{
+			name:      "running with pending cutover",
+			jobStatus: jobs.StatusRunning,
+			replicationInfo: &streampb.StreamIngestionStats{
+				ReplicationLagInfo: &streampb.StreamIngestionStats_ReplicationLagInfo{},
+				IngestionProgress: &jobspb.StreamIngestionProgress{
+					CutoverTime:    hlc.Timestamp{WallTime: 5},
+					CutoverStarted: true,
+				},
+			},
+			expectedStatus: pendingCutover,
+		},
 	}
 
 	for _, tc := range testCases {

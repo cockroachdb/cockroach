@@ -36,6 +36,7 @@ const (
 	initReplication   tenantStatus = "initializing replication"
 	replicating       tenantStatus = "replicating"
 	replicationPaused tenantStatus = "replication paused"
+	pendingCutover    tenantStatus = "replication pending cutover"
 	cuttingOver       tenantStatus = "replication cutting over"
 	// Users should not see this status normally.
 	replicationUnknownFormat tenantStatus = "replication unknown (%s)"
@@ -170,7 +171,10 @@ func getTenantStatus(
 		} else {
 			progress := replicationInfo.IngestionProgress
 			if progress != nil && !progress.CutoverTime.IsEmpty() {
-				return cuttingOver
+				if progress.CutoverStarted {
+					return cuttingOver
+				}
+				return pendingCutover
 			} else {
 				return replicating
 			}
