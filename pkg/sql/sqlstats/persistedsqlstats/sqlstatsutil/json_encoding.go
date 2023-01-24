@@ -96,6 +96,65 @@ func BuildStmtMetadataJSON(statistics *appstatspb.CollectedStatementStatistics) 
 //	        "type": "int",
 //	      },
 //	    },
+//	    "mvcc_iterator_stats": {
+//	      "type": "object",
+//	      "properties": {
+//	        "stepCount": {
+//	          "$ref": "#/definitions/numeric_stats"
+//	        },
+//	        "stepCountInternal": {
+//	          "$ref": "#/definitions/numeric_stats"
+//	        },
+//	        "seekCount": {
+//	          "$ref": "#/definitions/numeric_stats"
+//	        },
+//	        "seekCountInternal": {
+//	          "$ref": "#/definitions/numeric_stats"
+//	        },
+//	        "blockBytes": {
+//	          "$ref": "#/definitions/numeric_stats"
+//	        },
+//	        "blockBytesInCache": {
+//	          "$ref": "#/definitions/numeric_stats"
+//	        },
+//	        "keyBytes": {
+//	          "$ref": "#/definitions/numeric_stats"
+//	        },
+//	        "valueBytes": {
+//	          "$ref": "#/definitions/numeric_stats"
+//	        },
+//	        "pointCount": {
+//	          "$ref": "#/definitions/numeric_stats"
+//	        },
+//	        "pointsCoveredByRangeTombstones": {
+//	          "$ref": "#/definitions/numeric_stats"
+//	        },
+//	        "rangeKeyCount": {
+//	          "$ref": "#/definitions/numeric_stats"
+//	        },
+//	        "rangeKeyContainedPoints": {
+//	          "$ref": "#/definitions/numeric_stats"
+//	        },
+//	        "rangeKeySkippedPoints": {
+//	          "$ref": "#/definitions/numeric_stats"
+//	        }
+//	      },
+//	      "required": [
+//	        "stepCount",
+//	        "stepCountInternal",
+//	        "seekCount",
+//	        "seekCountInternal",
+//	        "blockBytes",
+//	        "blockBytesInCache",
+//	        "keyBytes",
+//	        "valueBytes",
+//	        "pointCount",
+//	        "pointsCoveredByRangeTombstones",
+//	        "rangeKeyCount",
+//	        "rangeKeyContainedPoints",
+//	        "rangeKeySkippedPoints"
+//	      ]
+//	    },
 //	    "statistics": {
 //	      "type": "object",
 //	      "properties": {
@@ -141,14 +200,19 @@ func BuildStmtMetadataJSON(statistics *appstatspb.CollectedStatementStatistics) 
 //	        "contentionTime":  { "$ref": "#/definitions/numeric_stats" },
 //	        "networkMsgs":     { "$ref": "#/definitions/numeric_stats" },
 //	        "maxDiskUsage":    { "$ref": "#/definitions/numeric_stats" },
+//	        "cpuSQLNanos":     { "$ref": "#/definitions/numeric_stats" },
+//	        "mvcc_iterator_stats": { "$ref": "#/definitions/MVCCIteratorStats" }
+//	        }
 //	      },
 //	      "required": [
 //	        "cnt",
 //	        "networkBytes",
 //	        "maxMemUsage",
 //	        "contentionTime",
-//	        "networkMsgs",
+//	        "networkMsg",
 //	        "maxDiskUsage",
+//	        "cpuSQLNanos",
+//	        "mvcc_iterator_stats"
 //	      ]
 //	    }
 //	  },
@@ -158,7 +222,6 @@ func BuildStmtMetadataJSON(statistics *appstatspb.CollectedStatementStatistics) 
 //	    "execStats": {
 //	      "$ref": "#/definitions/execution_statistics"
 //	    }
-//	  }
 //	}
 func BuildStmtStatisticsJSON(statistics *appstatspb.StatementStatistics) (json.JSON, error) {
 	return (*stmtStats)(statistics).encodeJSON()
@@ -213,6 +276,65 @@ func BuildTxnMetadataJSON(
 //	      },
 //	      "required": ["mean", "sqDiff"]
 //	    },
+//	    "mvcc_iterator_stats": {
+//	      "type": "object",
+//	      "properties": {
+//	        "stepCount": {
+//	          "$ref": "#/definitions/numeric_stats"
+//	        },
+//	        "stepCountInternal": {
+//	          "$ref": "#/definitions/numeric_stats"
+//	        },
+//	        "seekCount": {
+//	          "$ref": "#/definitions/numeric_stats"
+//	        },
+//	        "seekCountInternal": {
+//	          "$ref": "#/definitions/numeric_stats"
+//	        },
+//	        "blockBytes": {
+//	          "$ref": "#/definitions/numeric_stats"
+//	        },
+//	        "blockBytesInCache": {
+//	          "$ref": "#/definitions/numeric_stats"
+//	        },
+//	        "keyBytes": {
+//	          "$ref": "#/definitions/numeric_stats"
+//	        },
+//	        "valueBytes": {
+//	          "$ref": "#/definitions/numeric_stats"
+//	        },
+//	        "pointCount": {
+//	          "$ref": "#/definitions/numeric_stats"
+//	        },
+//	        "pointsCoveredByRangeTombstones": {
+//	          "$ref": "#/definitions/numeric_stats"
+//	        },
+//	        "rangeKeyCount": {
+//	          "$ref": "#/definitions/numeric_stats"
+//	        },
+//	        "rangeKeyContainedPoints": {
+//	          "$ref": "#/definitions/numeric_stats"
+//	        },
+//	        "rangeKeySkippedPoints": {
+//	          "$ref": "#/definitions/numeric_stats"
+//	        }
+//	      },
+//	      "required": [
+//	        "stepCount",
+//	        "stepCountInternal",
+//	        "seekCount",
+//	        "seekCountInternal",
+//	        "blockBytes",
+//	        "blockBytesInCache",
+//	        "keyBytes",
+//	        "valueBytes",
+//	        "pointCount",
+//	        "pointsCoveredByRangeTombstones",
+//	        "rangeKeyCount",
+//	        "rangeKeyContainedPoints",
+//	        "rangeKeySkippedPoints"
+//	      ]
+//	    },
 //	    "statistics": {
 //	      "type": "object",
 //	      "properties": {
@@ -245,6 +367,8 @@ func BuildTxnMetadataJSON(
 //	        "contentionTime":  { "$ref": "#/definitions/numeric_stats" },
 //	        "networkMsg":      { "$ref": "#/definitions/numeric_stats" },
 //	        "maxDiskUsage":    { "$ref": "#/definitions/numeric_stats" },
+//	        "cpuSQLNanos":     { "$ref": "#/definitions/numeric_stats" },
+//	        "mvcc_iterator_stats": { "$ref": "#/definitions/MVCCIteratorStats" }
 //	      },
 //	      "required": [
 //	        "cnt",
@@ -253,6 +377,8 @@ func BuildTxnMetadataJSON(
 //	        "contentionTime",
 //	        "networkMsg",
 //	        "maxDiskUsage",
+//	        "cpuSQLNanos",
+//	        "mvcc_iterator_stats"
 //	      ]
 //	    }
 //	  },

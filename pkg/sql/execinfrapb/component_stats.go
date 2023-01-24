@@ -247,6 +247,33 @@ func (s *ComponentStats) Union(other *ComponentStats) *ComponentStats {
 	if !result.KV.NumInternalSeeks.HasValue() {
 		result.KV.NumInternalSeeks = other.KV.NumInternalSeeks
 	}
+	if !result.KV.BlockBytes.HasValue() {
+		result.KV.BlockBytes = other.KV.BlockBytes
+	}
+	if !result.KV.BlockBytesInCache.HasValue() {
+		result.KV.BlockBytesInCache = other.KV.BlockBytesInCache
+	}
+	if !result.KV.KeyBytes.HasValue() {
+		result.KV.KeyBytes = other.KV.KeyBytes
+	}
+	if !result.KV.ValueBytes.HasValue() {
+		result.KV.ValueBytes = other.KV.ValueBytes
+	}
+	if !result.KV.PointCount.HasValue() {
+		result.KV.PointCount = other.KV.PointCount
+	}
+	if !result.KV.PointsCoveredByRangeTombstones.HasValue() {
+		result.KV.PointsCoveredByRangeTombstones = other.KV.PointsCoveredByRangeTombstones
+	}
+	if !result.KV.RangeKeyCount.HasValue() {
+		result.KV.RangeKeyCount = other.KV.RangeKeyCount
+	}
+	if !result.KV.RangeKeyContainedPoints.HasValue() {
+		result.KV.RangeKeyContainedPoints = other.KV.RangeKeyContainedPoints
+	}
+	if !result.KV.RangeKeySkippedPoints.HasValue() {
+		result.KV.RangeKeySkippedPoints = other.KV.RangeKeySkippedPoints
+	}
 	if !result.KV.TuplesRead.HasValue() {
 		result.KV.TuplesRead = other.KV.TuplesRead
 	}
@@ -352,6 +379,15 @@ func (s *ComponentStats) MakeDeterministic() {
 	resetUint(&s.KV.NumInternalSteps)
 	resetUint(&s.KV.NumInterfaceSeeks)
 	resetUint(&s.KV.NumInternalSeeks)
+	resetUint(&s.KV.BlockBytes)
+	resetUint(&s.KV.BlockBytesInCache)
+	resetUint(&s.KV.KeyBytes)
+	resetUint(&s.KV.ValueBytes)
+	resetUint(&s.KV.PointCount)
+	resetUint(&s.KV.PointsCoveredByRangeTombstones)
+	resetUint(&s.KV.RangeKeyCount)
+	resetUint(&s.KV.RangeKeyContainedPoints)
+	resetUint(&s.KV.RangeKeySkippedPoints)
 	if s.KV.BytesRead.HasValue() {
 		// BytesRead is overridden to a useful value for tests.
 		s.KV.BytesRead.Set(8 * s.KV.TuplesRead.Value())
