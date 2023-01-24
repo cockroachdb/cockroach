@@ -131,12 +131,12 @@ func distStreamIngest(
 
 	// The ResultRouters from the previous stage will feed in to the
 	// StreamIngestionFrontier processor.
-	p.AddSingleGroupStage(base.SQLInstanceID(gatewayNodeID),
+	p.AddSingleGroupStage(ctx, base.SQLInstanceID(gatewayNodeID),
 		execinfrapb.ProcessorCoreUnion{StreamIngestionFrontier: streamIngestionFrontierSpec},
 		execinfrapb.PostProcessSpec{}, streamIngestionResultTypes)
 
 	p.PlanToStreamColMap = []int{0}
-	dsp.FinalizePlan(planCtx, p)
+	dsp.FinalizePlan(ctx, planCtx, p)
 
 	rw := sql.NewRowResultWriter(nil /* rowContainer */)
 

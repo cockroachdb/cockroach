@@ -590,7 +590,10 @@
 # one of the other regions, the first plan would be slightly faster.
 #
 # Note: we also apply a similar optimization for other lookup joins; see
-# GenerateLocalityOptimizedLookupJoin.
+# GenerateLocalityOptimizedLookupJoin. The `enforce_home_region` setting
+# behavior of erroring out before an attempt to access remote rows is made
+# is handled by marking the second anti-join as remote-only, which is
+# propagated to structures in the execution engine to trigger the error.
 [GenerateLocalityOptimizedAntiJoin, Explore]
 (LookupJoin
     $input:*
@@ -619,11 +622,7 @@
         )
     )
     $on
-    (CreateLocalityOptimizedLookupJoinPrivate
-        $remoteExpr
-        (EmptyFiltersExpr)
-        $private
-    )
+    (CreateRemoteOnlyLookupJoinPrivate $remoteExpr $private)
 )
 
 # GenerateLocalityOptimizedLookupJoin converts a semi, inner, or left lookup

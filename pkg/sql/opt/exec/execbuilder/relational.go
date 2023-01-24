@@ -1710,6 +1710,7 @@ func (b *Builder) buildSetOp(set memo.RelExpr) (execPlan, error) {
 	}
 
 	hardLimit := uint64(0)
+	enforceHomeRegion := false
 	if set.Op() == opt.LocalityOptimizedSearchOp {
 		if !b.disableTelemetry {
 			telemetry.Inc(sqltelemetry.LocalityOptimizedSearchUseCounter)
@@ -1724,6 +1725,7 @@ func (b *Builder) buildSetOp(set memo.RelExpr) (execPlan, error) {
 		if set.Relational().Cardinality.Max != math.MaxUint32 {
 			hardLimit = uint64(set.Relational().Cardinality.Max)
 		}
+		enforceHomeRegion = b.IsANSIDML && b.evalCtx.SessionData().EnforceHomeRegion
 	}
 
 	ep := execPlan{}
@@ -1736,7 +1738,7 @@ func (b *Builder) buildSetOp(set memo.RelExpr) (execPlan, error) {
 	reqOrdering := ep.reqOrdering(set)
 
 	if typ == tree.UnionOp && all {
-		ep.root, err = b.factory.ConstructUnionAll(left.root, right.root, reqOrdering, hardLimit)
+		ep.root, err = b.factory.ConstructUnionAll(left.root, right.root, reqOrdering, hardLimit, enforceHomeRegion)
 	} else if len(streamingOrdering) > 0 {
 		if typ != tree.UnionOp {
 			b.recordJoinAlgorithm(exec.MergeJoin)
@@ -2357,6 +2359,7 @@ func (b *Builder) buildLookupJoin(join *memo.LookupJoinExpr) (execPlan, error) {
 		res.reqOrdering(join),
 		locking,
 		join.RequiredPhysical().LimitHintInt64(),
+		join.RemoteOnlyLookups,
 	)
 	if err != nil {
 		return execPlan{}, err
