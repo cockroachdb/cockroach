@@ -453,6 +453,7 @@ func (s *stmtStats) recordExecStats(stats execstats.QueryLevelStats) {
 	s.mu.data.ExecStats.ContentionTime.Record(count, stats.ContentionTime.Seconds())
 	s.mu.data.ExecStats.NetworkMessages.Record(count, float64(stats.NetworkMessages))
 	s.mu.data.ExecStats.MaxDiskUsage.Record(count, float64(stats.MaxDiskUsage))
+	s.mu.data.ExecStats.CPUNanos.Record(count, float64(stats.CPUTime.Nanoseconds()))
 }
 
 func (s *stmtStats) mergeStatsLocked(statistics *roachpb.CollectedStatementStatistics) {

@@ -213,6 +213,7 @@ func (s *ExecStats) Add(other ExecStats) {
 	s.ContentionTime.Add(other.ContentionTime, execStatCollectionCount, other.Count)
 	s.NetworkMessages.Add(other.NetworkMessages, execStatCollectionCount, other.Count)
 	s.MaxDiskUsage.Add(other.MaxDiskUsage, execStatCollectionCount, other.Count)
+	s.CPUNanos.Add(other.CPUNanos, execStatCollectionCount, other.Count)
 
 	s.Count += other.Count
 }

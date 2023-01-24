@@ -746,6 +746,8 @@ var zipInternalTablesPerNode = DebugZipTableRegistry{
 			"max_disk_usage_var",
 			"contention_time_avg",
 			"contention_time_var",
+			"cpu_nanos_avg",
+			"cpu_nanos_var",
 			"implicit_txn",
 			"full_scan",
 			"sample_plan",
@@ -781,6 +783,8 @@ var zipInternalTablesPerNode = DebugZipTableRegistry{
 			"max_disk_usage_var",
 			"contention_time_avg",
 			"contention_time_var",
+			"cpu_nanos_avg",
+			"cpu_nanos_var",
 		},
 	},
 	"crdb_internal.node_transactions": {
