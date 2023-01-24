@@ -77,7 +77,7 @@ func getCockroachVersion(
 	ctx context.Context, l *logger.Logger, c *SyncedCluster, node Node,
 ) (*version.Version, error) {
 	cmd := cockroachNodeBinary(c, node) + " version --build-tag"
-	sess := c.newSession(l, node, cmd, "get-cockroach-version")
+	sess := c.newSession(l, node, cmd, withDebugName("get-cockroach-version"))
 	defer sess.Close()
 
 	out, err := sess.CombinedOutput(ctx)
@@ -330,7 +330,7 @@ func (c *SyncedCluster) RunSQL(ctx context.Context, l *logger.Logger, args []str
 			c.NodeURL("localhost", c.NodePort(node)) + " " +
 			ssh.Escape(args)
 
-		sess := c.newSession(l, node, cmd, "run-sql")
+		sess := c.newSession(l, node, cmd, withDebugName("run-sql"))
 		defer sess.Close()
 
 		out, cmdErr := sess.CombinedOutput(ctx)
@@ -375,7 +375,7 @@ func (c *SyncedCluster) startNode(
 		}
 		cmd += `cat > cockroach.sh && chmod +x cockroach.sh`
 
-		sess := c.newSession(l, node, cmd, "")
+		sess := c.newSession(l, node, cmd)
 		defer sess.Close()
 
 		sess.SetStdin(strings.NewReader(startCmd))
@@ -394,7 +394,7 @@ func (c *SyncedCluster) startNode(
 	}
 	cmd += "./cockroach.sh"
 
-	sess := c.newSession(l, node, cmd, "")
+	sess := c.newSession(l, node, cmd)
 	defer sess.Close()
 
 	out, err := sess.CombinedOutput(ctx)
@@ -639,14 +639,14 @@ func (c *SyncedCluster) maybeScaleMem(val int) int {
 
 func (c *SyncedCluster) initializeCluster(ctx context.Context, l *logger.Logger, node Node) error {
 	l.Printf("%s: initializing cluster\n", c.Name)
-	initCmd := c.generateInitCmd(node)
+	cmd := c.generateInitCmd(node)
 
-	sess := c.newSession(l, node, initCmd, "init-cluster")
+	sess := c.newSession(l, node, cmd, withDebugName("init-cluster"))
 	defer sess.Close()
 
 	out, err := sess.CombinedOutput(ctx)
 	if err != nil {
-		return errors.Wrapf(err, "~ %s\n%s", initCmd, out)
+		return errors.Wrapf(err, "~ %s\n%s", cmd, out)
 	}
 
 	if out := strings.TrimSpace(string(out)); out != "" {
@@ -657,14 +657,14 @@ func (c *SyncedCluster) initializeCluster(ctx context.Context, l *logger.Logger,
 
 func (c *SyncedCluster) setClusterSettings(ctx context.Context, l *logger.Logger, node Node) error {
 	l.Printf("%s: setting cluster settings", c.Name)
-	clusterSettingCmd := c.generateClusterSettingCmd(l, node)
+	cmd := c.generateClusterSettingCmd(l, node)
 
-	sess := c.newSession(l, node, clusterSettingCmd, "set-cluster-settings")
+	sess := c.newSession(l, node, cmd, withDebugName("set-cluster-settings"))
 	defer sess.Close()
 
 	out, err := sess.CombinedOutput(ctx)
 	if err != nil {
-		return errors.Wrapf(err, "~ %s\n%s", clusterSettingCmd, out)
+		return errors.Wrapf(err, "~ %s\n%s", cmd, out)
 	}
 	if out := strings.TrimSpace(string(out)); out != "" {
 		l.Printf(out)

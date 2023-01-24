@@ -48,39 +48,57 @@ type remoteSession struct {
 }
 
 type remoteCommand struct {
-	node      Node
-	user      string
-	host      string
-	cmd       string
-	debugName string
+	node          Node
+	user          string
+	host          string
+	cmd           string
+	debugDisabled bool
+	debugName     string
 }
 
-func newRemoteSession(l *logger.Logger, command remoteCommand) *remoteSession {
+type remoteSessionOption = func(c *remoteCommand)
+
+func withDebugDisabled() remoteSessionOption {
+	return func(c *remoteCommand) {
+		c.debugDisabled = true
+	}
+}
+
+func withDebugName(name string) remoteSessionOption {
+	return func(c *remoteCommand) {
+		c.debugName = name
+	}
+}
+
+func newRemoteSession(l *logger.Logger, command *remoteCommand) *remoteSession {
 	var loggingArgs []string
 
-	if command.debugName == "" {
-		command.debugName = GenFilenameFromArgs(20, command.cmd)
-	}
-
-	cl, err := l.ChildLogger(filepath.Join("ssh", fmt.Sprintf(
-		"ssh_%s_n%v_%s",
-		timeutil.Now().Format(`150405.000000000`),
-		command.node,
-		command.debugName,
-	)))
-
-	// Check the logger file since running roachprod from the cli will result in a fileless logger.
+	// NB: -q suppresses -E, at least on *nix.
+	loggingArgs = []string{"-q"}
 	logfile := ""
-	if err == nil && l.File != nil {
-		logfile = cl.File.Name()
-		loggingArgs = []string{
-			"-vvv", "-E", logfile,
+	if !command.debugDisabled {
+		var debugName = command.debugName
+		if debugName == "" {
+			debugName = GenFilenameFromArgs(20, command.cmd)
 		}
-		cl.Close()
-	} else {
-		// NB: -q suppresses -E, at least on *nix.
-		loggingArgs = []string{"-q"}
+
+		cl, err := l.ChildLogger(filepath.Join("ssh", fmt.Sprintf(
+			"ssh_%s_n%v_%s",
+			timeutil.Now().Format(`150405.000000000`),
+			command.node,
+			debugName,
+		)))
+
+		// Check the logger file since running roachprod from the cli will result in a fileless logger.
+		if err == nil && l.File != nil {
+			logfile = cl.File.Name()
+			loggingArgs = []string{
+				"-vvv", "-E", logfile,
+			}
+			cl.Close()
+		}
 	}
+
 	//const logfile = ""
 	args := []string{
 		command.user + "@" + command.host,
