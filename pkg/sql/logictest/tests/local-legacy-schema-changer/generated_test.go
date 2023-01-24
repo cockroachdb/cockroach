@@ -1402,6 +1402,13 @@ func TestLogic_reset(
 	runLogicTest(t, "reset")
 }
 
+func TestLogic_retry(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "retry")
+}
+
 func TestLogic_returning(
 	t *testing.T,
 ) {

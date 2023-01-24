@@ -3123,12 +3123,7 @@ func (t *logicTest) verifyError(
 ) (bool, error) {
 	if expectErr == "" && expectErrCode == "" && err != nil {
 		t.maybeSkipOnRetry(err)
-		cont := t.unexpectedError(sql, pos, err)
-		if cont {
-			// unexpectedError() already reported via t.Errorf. no need for more.
-			err = nil
-		}
-		return cont, err
+		return t.unexpectedError(sql, pos, err)
 	}
 	if expectNotice != "" {
 		foundNotice := strings.Join(t.noticeBuffer, "\n")
@@ -3215,7 +3210,7 @@ func formatErr(err error) string {
 // when -allow-prepare-fail is specified. The argument "sql" is "" to indicate the
 // work is done on behalf of a statement, which always fail upon an
 // unexpected error.
-func (t *logicTest) unexpectedError(sql string, pos string, err error) bool {
+func (t *logicTest) unexpectedError(sql string, pos string, err error) (bool, error) {
 	if *allowPrepareFail && sql != "" {
 		// This is a query and -allow-prepare-fail is set.  Try to prepare
 		// the query. If prepare fails, this means we (probably) do not
@@ -3227,14 +3222,13 @@ func (t *logicTest) unexpectedError(sql string, pos string, err error) bool {
 				t.outf("\t-- fails prepare: %s", formatErr(err))
 			}
 			t.signalIgnoredError(err, pos, sql)
-			return true
+			return true, nil
 		}
 		if err := stmt.Close(); err != nil {
 			t.Errorf("%s: %s\nerror when closing prepared statement: %s", sql, pos, formatErr(err))
 		}
 	}
-	t.Errorf("%s: %s\nexpected success, but found\n%s", pos, sql, formatErr(err))
-	return false
+	return false, fmt.Errorf("%s: %s\nexpected success, but found\n%s", pos, sql, formatErr(err))
 }
 
 func (t *logicTest) execStatement(stmt logicStatement) (bool, error) {
