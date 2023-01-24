@@ -103,6 +103,7 @@ func newStoreRebalancerControl(
 		allocator,
 		storePool,
 		getRaftStatusFn,
+		simRebalanceObjectiveProvider{settings},
 	)
 
 	sr.AddLogTag("s", storeID)
@@ -118,7 +119,19 @@ func newStoreRebalancerControl(
 		storepool:  storePool,
 		controller: controller,
 	}
+}
 
+// simRebalanceObjectiveProvider implements the
+// kvserver.RebalanceObjectiveProvider interface.
+type simRebalanceObjectiveProvider struct {
+	settings *config.SimulationSettings
+}
+
+// Objective returns the current rebalance objective.
+func (s simRebalanceObjectiveProvider) Objective(
+	ctx context.Context,
+) kvserver.LBRebalancingObjective {
+	return kvserver.LBRebalancingObjective(s.settings.LBRebalancingObjective)
 }
 
 func (src *storeRebalancerControl) scorerOptions() *allocatorimpl.LoadScorerOptions {
@@ -179,7 +192,7 @@ func (src *storeRebalancerControl) phasePrologue(
 		ctx, src.scorerOptions(),
 		hottestRanges(
 			s, src.storeID,
-			kvserver.LBRebalancingDimension(src.settings.LBRebalancingDimension).ToDimension(),
+			kvserver.LBRebalancingObjective(src.settings.LBRebalancingObjective).ToDimension(),
 		),
 		kvserver.LBRebalancingMode(src.settings.LBRebalancingMode),
 	)
