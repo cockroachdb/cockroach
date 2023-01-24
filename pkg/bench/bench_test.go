@@ -1192,15 +1192,15 @@ func BenchmarkPlanning(b *testing.B) {
 	skip.UnderShort(b)
 	defer log.Scope(b).Close(b)
 	ForEachDB(b, func(b *testing.B, db *sqlutils.SQLRunner) {
-		db.Exec(b, `CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT, INDEX(b), UNIQUE INDEX(c))`)
+		db.Exec(b, `CREATE TABLE bench.abc (a INT PRIMARY KEY, b INT, c INT, INDEX(b), UNIQUE INDEX(c))`)
 
 		queries := []string{
-			`SELECT * FROM abc`,
-			`SELECT * FROM abc WHERE a > 5 ORDER BY a`,
-			`SELECT * FROM abc WHERE b = 5`,
-			`SELECT * FROM abc WHERE b = 5 ORDER BY a`,
-			`SELECT * FROM abc WHERE c = 5`,
-			`SELECT * FROM abc JOIN abc AS abc2 ON abc.a = abc2.a`,
+			`SELECT * FROM bench.abc`,
+			`SELECT * FROM bench.abc WHERE a > 5 ORDER BY a`,
+			`SELECT * FROM bench.abc WHERE b = 5`,
+			`SELECT * FROM bench.abc WHERE b = 5 ORDER BY a`,
+			`SELECT * FROM bench.abc WHERE c = 5`,
+			`SELECT * FROM bench.abc JOIN bench.abc AS abc2 ON abc.a = abc2.a`,
 		}
 		for _, q := range queries {
 			b.Run(q, func(b *testing.B) {
@@ -1216,7 +1216,7 @@ func setupIndexJoinBenchmark(b *testing.B, db *sqlutils.SQLRunner) {
 	// The table will have an extra column not contained in the index to force a
 	// join with the PK.
 	create := `
-		 CREATE TABLE tidx (
+		 CREATE TABLE bench.tidx (
 				 k INT NOT NULL,
 				 v INT NULL,
 				 extra STRING NULL,
@@ -1228,7 +1228,7 @@ func setupIndexJoinBenchmark(b *testing.B, db *sqlutils.SQLRunner) {
 	// We'll insert 1000 rows with random values below 1000 in the index.
 	// We'll then force scanning of the secondary index which will require
 	// performing an index join to get 'extra' column.
-	insert := "insert into tidx(k,v) select generate_series(1,1000), (random()*1000)::int"
+	insert := "insert into bench.tidx(k,v) select generate_series(1,1000), (random()*1000)::int"
 
 	db.Exec(b, create)
 	db.Exec(b, insert)
@@ -1269,7 +1269,7 @@ func BenchmarkIndexJoinColumnFamilies(b *testing.B) {
 		// The table will have an extra column not contained in the index to force a
 		// join with the PK.
 		create := `
-		 CREATE TABLE tidx (
+		 CREATE TABLE bench.tidx (
 				 k INT NOT NULL,
 				 v INT NULL,
 				 extra STRING NULL,
@@ -1282,7 +1282,7 @@ func BenchmarkIndexJoinColumnFamilies(b *testing.B) {
 		// We'll insert 1000 rows with random values below 1000 in the index.
 		// We'll then force scanning of the secondary index which will require
 		// performing an index join to get 'extra' column.
-		insert := "insert into tidx(k,v) select generate_series(1,1000), (random()*1000)::int"
+		insert := "insert into bench.tidx(k,v) select generate_series(1,1000), (random()*1000)::int"
 
 		db.Exec(b, create)
 		db.Exec(b, insert)
@@ -1300,14 +1300,14 @@ func BenchmarkIndexJoinColumnFamilies(b *testing.B) {
 func BenchmarkLookupJoinEqColsAreKeyNoOrdering(b *testing.B) {
 	defer log.Scope(b).Close(b)
 	ForEachDB(b, func(b *testing.B, db *sqlutils.SQLRunner) {
-		db.Exec(b, `CREATE TABLE t1 (a INT)`)
-		db.Exec(b, `INSERT INTO t1 SELECT generate_series(1, 1000)`)
-		db.Exec(b, `CREATE TABLE t2 (a INT PRIMARY KEY, b INT)`)
-		db.Exec(b, `INSERT INTO t2 SELECT generate_series(1, 1000), (random()*1000)::INT`)
+		db.Exec(b, `CREATE TABLE bench.t1 (a INT)`)
+		db.Exec(b, `INSERT INTO bench.t1 SELECT generate_series(1, 1000)`)
+		db.Exec(b, `CREATE TABLE bench.t2 (a INT PRIMARY KEY, b INT)`)
+		db.Exec(b, `INSERT INTO bench.t2 SELECT generate_series(1, 1000), (random()*1000)::INT`)
 		b.ResetTimer()
 
 		for i := 0; i < b.N; i++ {
-			db.Exec(b, `SELECT * FROM t1 INNER LOOKUP JOIN t2 ON t1.a = t2.a`)
+			db.Exec(b, `SELECT * FROM bench.t1 INNER LOOKUP JOIN bench.t2 ON t1.a = t2.a`)
 		}
 	})
 }
@@ -1317,14 +1317,14 @@ func BenchmarkLookupJoinEqColsAreKeyNoOrdering(b *testing.B) {
 func BenchmarkLookupJoinEqColsAreKeyOrdering(b *testing.B) {
 	defer log.Scope(b).Close(b)
 	ForEachDB(b, func(b *testing.B, db *sqlutils.SQLRunner) {
-		db.Exec(b, `CREATE TABLE t1 (a INT PRIMARY KEY)`)
-		db.Exec(b, `INSERT INTO t1 SELECT generate_series(1, 1000)`)
-		db.Exec(b, `CREATE TABLE t2 (a INT PRIMARY KEY, b INT)`)
-		db.Exec(b, `INSERT INTO t2 SELECT generate_series(1, 1000), (random()*1000)::INT`)
+		db.Exec(b, `CREATE TABLE bench.t1 (a INT PRIMARY KEY)`)
+		db.Exec(b, `INSERT INTO bench.t1 SELECT generate_series(1, 1000)`)
+		db.Exec(b, `CREATE TABLE bench.t2 (a INT PRIMARY KEY, b INT)`)
+		db.Exec(b, `INSERT INTO bench.t2 SELECT generate_series(1, 1000), (random()*1000)::INT`)
 		b.ResetTimer()
 
 		for i := 0; i < b.N; i++ {
-			db.Exec(b, `SELECT * FROM t1 INNER LOOKUP JOIN t2 ON t1.a = t2.a ORDER BY t1.a`)
+			db.Exec(b, `SELECT * FROM bench.t1 INNER LOOKUP JOIN bench.t2 ON t1.a = t2.a ORDER BY t1.a`)
 		}
 	})
 }
@@ -1334,14 +1334,14 @@ func BenchmarkLookupJoinEqColsAreKeyOrdering(b *testing.B) {
 func BenchmarkLookupJoinNoOrdering(b *testing.B) {
 	defer log.Scope(b).Close(b)
 	ForEachDB(b, func(b *testing.B, db *sqlutils.SQLRunner) {
-		db.Exec(b, `CREATE TABLE t1 (a INT)`)
-		db.Exec(b, `INSERT INTO t1 SELECT generate_series(1, 1000)`)
-		db.Exec(b, `CREATE TABLE t2 (a INT, INDEX (a))`)
-		db.Exec(b, `INSERT INTO t2 SELECT generate_series(1, 1000)`)
+		db.Exec(b, `CREATE TABLE bench.t1 (a INT)`)
+		db.Exec(b, `INSERT INTO bench.t1 SELECT generate_series(1, 1000)`)
+		db.Exec(b, `CREATE TABLE bench.t2 (a INT, INDEX (a))`)
+		db.Exec(b, `INSERT INTO bench.t2 SELECT generate_series(1, 1000)`)
 		b.ResetTimer()
 
 		for i := 0; i < b.N; i++ {
-			db.Exec(b, `SELECT * FROM t1 INNER LOOKUP JOIN t2 ON t1.a = t2.a`)
+			db.Exec(b, `SELECT * FROM bench.t1 INNER LOOKUP JOIN bench.t2 ON t1.a = t2.a`)
 		}
 	})
 }
@@ -1351,14 +1351,14 @@ func BenchmarkLookupJoinNoOrdering(b *testing.B) {
 func BenchmarkLookupJoinOrdering(b *testing.B) {
 	defer log.Scope(b).Close(b)
 	ForEachDB(b, func(b *testing.B, db *sqlutils.SQLRunner) {
-		db.Exec(b, `CREATE TABLE t1 (a INT PRIMARY KEY)`)
-		db.Exec(b, `INSERT INTO t1 SELECT generate_series(1, 1000)`)
-		db.Exec(b, `CREATE TABLE t2 (a INT, INDEX (a))`)
-		db.Exec(b, `INSERT INTO t2 SELECT generate_series(1, 1000)`)
+		db.Exec(b, `CREATE TABLE bench.t1 (a INT PRIMARY KEY)`)
+		db.Exec(b, `INSERT INTO bench.t1 SELECT generate_series(1, 1000)`)
+		db.Exec(b, `CREATE TABLE bench.t2 (a INT, INDEX (a))`)
+		db.Exec(b, `INSERT INTO bench.t2 SELECT generate_series(1, 1000)`)
 		b.ResetTimer()
 
 		for i := 0; i < b.N; i++ {
-			db.Exec(b, `SELECT * FROM t1 INNER LOOKUP JOIN t2 ON t1.a = t2.a ORDER BY t1.a`)
+			db.Exec(b, `SELECT * FROM bench.t1 INNER LOOKUP JOIN bench.t2 ON t1.a = t2.a ORDER BY t1.a`)
 		}
 	})
 }
@@ -1372,23 +1372,23 @@ func BenchmarkSortJoinAggregation(b *testing.B) {
 		}{
 			{
 				create: `
-				 CREATE TABLE abc (
+				 CREATE TABLE bench.abc (
 					 a INT PRIMARY KEY,
 					 b INT,
 					 c FLOAT
 				 )`,
 				populate: `
-				 INSERT INTO abc SELECT generate_series(1,1000), (random()*1000)::int, random()::float`,
+				 INSERT INTO bench.abc SELECT generate_series(1,1000), (random()*1000)::int, random()::float`,
 			},
 			{
 				create: `
-				 CREATE TABLE xyz (
+				 CREATE TABLE bench.xyz (
 					 x INT PRIMARY KEY,
 					 y INT,
 					 z FLOAT
 				 )`,
 				populate: `
-				 INSERT INTO xyz SELECT generate_series(1,1000), (random()*1000)::int, random()::float`,
+				 INSERT INTO bench.xyz SELECT generate_series(1,1000), (random()*1000)::int, random()::float`,
 			},
 		}
 
@@ -1399,9 +1399,9 @@ func BenchmarkSortJoinAggregation(b *testing.B) {
 
 		query := `
 			SELECT b, count(*) FROM
-				(SELECT b, avg(c) FROM (SELECT b, c FROM abc ORDER BY b) GROUP BY b)
+				(SELECT b, avg(c) FROM (SELECT b, c FROM bench.abc ORDER BY b) GROUP BY b)
 				JOIN
-				(SELECT y, sum(z) FROM (SELECT y, z FROM xyz ORDER BY y) GROUP BY y)
+				(SELECT y, sum(z) FROM (SELECT y, z FROM bench.xyz ORDER BY y) GROUP BY y)
 				ON b = y
 			GROUP BY b
 			ORDER BY b`
@@ -1417,13 +1417,13 @@ func BenchmarkNameResolution(b *testing.B) {
 	skip.UnderShort(b)
 	defer log.Scope(b).Close(b)
 	ForEachDB(b, func(b *testing.B, db *sqlutils.SQLRunner) {
-		db.Exec(b, `CREATE TABLE namespace (k INT PRIMARY KEY, v INT)`)
-		db.Exec(b, `INSERT INTO namespace VALUES(1, 2)`)
+		db.Exec(b, `CREATE TABLE bench.namespace (k INT PRIMARY KEY, v INT)`)
+		db.Exec(b, `INSERT INTO bench.namespace VALUES(1, 2)`)
 
 		b.ResetTimer()
 
 		for i := 0; i < b.N; i++ {
-			db.Exec(b, "SELECT * FROM namespace")
+			db.Exec(b, "SELECT * FROM bench.namespace")
 		}
 		b.StopTimer()
 	})
