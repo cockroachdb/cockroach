@@ -2711,6 +2711,9 @@ successfully starts running.  Failed CREATE statements will show up as
 ChangefeedFailed events.
 
 
+| Field | Description | Sensitive |
+|--|--|--|
+| `Transformation` |  | no |
 
 
 #### Common fields
