@@ -48,12 +48,14 @@ export type SchemaInsightsViewStateProps = {
   schemaInsightsError: Error | null;
   filters: SchemaInsightEventFilters;
   sortSetting: SortSetting;
+  hasAdminRole: boolean;
 };
 
 export type SchemaInsightsViewDispatchProps = {
   onFiltersChange: (filters: SchemaInsightEventFilters) => void;
   onSortChange: (ss: SortSetting) => void;
   refreshSchemaInsights: () => void;
+  refreshUserSQLRoles: () => void;
 };
 
 export type SchemaInsightsViewProps = SchemaInsightsViewStateProps &
@@ -68,7 +70,9 @@ export const SchemaInsightsView: React.FC<SchemaInsightsViewProps> = ({
   schemaInsightsTypes,
   schemaInsightsError,
   filters,
+  hasAdminRole,
   refreshSchemaInsights,
+  refreshUserSQLRoles,
   onFiltersChange,
   onSortChange,
 }: SchemaInsightsViewProps) => {
@@ -90,6 +94,15 @@ export const SchemaInsightsView: React.FC<SchemaInsightsViewProps> = ({
       clearInterval(interval);
     };
   }, [refreshSchemaInsights]);
+
+  useEffect(() => {
+    // Refresh every 5 minutes.
+    refreshUserSQLRoles();
+    const interval = setInterval(refreshUserSQLRoles, 60 * 5000);
+    return () => {
+      clearInterval(interval);
+    };
+  }, [refreshUserSQLRoles]);
 
   useEffect(() => {
     // We use this effect to sync settings defined on the URL (sort, filters),
@@ -205,7 +218,7 @@ export const SchemaInsightsView: React.FC<SchemaInsightsViewProps> = ({
           loading={schemaInsights === null}
           page="schema insights"
           error={schemaInsightsError}
-          renderError={() => InsightsError()}
+          renderError={() => InsightsError(schemaInsightsError?.message)}
         >
           <div>
             <section className={sortableTableCx("cl-table-container")}>
@@ -220,7 +233,7 @@ export const SchemaInsightsView: React.FC<SchemaInsightsViewProps> = ({
                 />
               </div>
               <InsightsSortedTable
-                columns={makeInsightsColumns(isCockroachCloud)}
+                columns={makeInsightsColumns(isCockroachCloud, hasAdminRole)}
                 data={filteredSchemaInsights}
                 sortSetting={sortSetting}
                 onChangeSortSetting={onChangeSortSetting}

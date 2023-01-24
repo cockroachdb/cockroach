@@ -115,16 +115,17 @@ const insightsTableData = (
 export interface StatementInsightDetailsOverviewTabProps {
   insightEventDetails: StatementInsightEvent;
   setTimeScale: (ts: TimeScale) => void;
+  hasAdminRole: boolean;
 }
 
 export const StatementInsightDetailsOverviewTab: React.FC<
   StatementInsightDetailsOverviewTabProps
-> = ({ insightEventDetails, setTimeScale }) => {
+> = ({ insightEventDetails, setTimeScale, hasAdminRole }) => {
   const isCockroachCloud = useContext(CockroachCloudContext);
 
   const insightsColumns = useMemo(
-    () => makeInsightsColumns(isCockroachCloud),
-    [isCockroachCloud],
+    () => makeInsightsColumns(isCockroachCloud, hasAdminRole),
+    [isCockroachCloud, hasAdminRole],
   );
 
   const insightDetails = insightEventDetails;
