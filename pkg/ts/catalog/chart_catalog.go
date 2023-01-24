@@ -1580,74 +1580,74 @@ var charts = []sectionDescription{
 		Charts: []chartDescription{
 			{
 				Title:   "Currently Running",
-				Metrics: []string{"streaming.running"},
+				Metrics: []string{"replication.running"},
 			},
 			{
 				Title: "Event admission latency",
 				Metrics: []string{
-					"streaming.admit_latency",
+					"replication.admit_latency",
 				},
 			},
 			{
 				Title: "Commits Latency",
 				Metrics: []string{
-					"streaming.commit_latency",
+					"replication.commit_latency",
 				},
 			},
 			{
 				Title: "Time spent",
 				Metrics: []string{
-					"streaming.flush_hist_nanos",
+					"replication.flush_hist_nanos",
 				},
 			},
 			{
 				Title: "Ingested Events",
 				Metrics: []string{
-					"streaming.events_ingested",
-					"streaming.resolved_events_ingested",
+					"replication.events_ingested",
+					"replication.resolved_events_ingested",
 				},
 			},
 			{
 				Title: "Flushes",
 				Metrics: []string{
-					"streaming.flushes",
+					"replication.flushes",
 				},
 			},
 			{
 				Title: "Ingested Bytes",
 				Metrics: []string{
-					"streaming.ingested_bytes",
+					"replication.ingested_bytes",
 				},
 			},
 			{
 				Title: "SST Bytes",
 				Metrics: []string{
-					"streaming.sst_bytes",
+					"replication.sst_bytes",
 				},
 			},
 			{
 				Title:   "Earliest Data Processor Checkpoint Span",
-				Metrics: []string{"streaming.earliest_data_checkpoint_span"},
+				Metrics: []string{"replication.earliest_data_checkpoint_span"},
 			},
 			{
 				Title:   "Latest Data Processor Checkpoint Span",
-				Metrics: []string{"streaming.latest_data_checkpoint_span"},
+				Metrics: []string{"replication.latest_data_checkpoint_span"},
 			},
 			{
 				Title:   "Data Checkpoint Span Count",
-				Metrics: []string{"streaming.data_checkpoint_span_count"},
+				Metrics: []string{"replication.data_checkpoint_span_count"},
 			},
 			{
 				Title:   "Frontier Checkpoint Span Count",
-				Metrics: []string{"streaming.frontier_checkpoint_span_count"},
+				Metrics: []string{"replication.frontier_checkpoint_span_count"},
 			},
 			{
 				Title:   "Frontier Lag",
-				Metrics: []string{"streaming.frontier_lag_seconds"},
+				Metrics: []string{"replication.frontier_lag_seconds"},
 			},
 			{
 				Title:   "Job Progress Updates",
-				Metrics: []string{"streaming.job_progress_updates"},
+				Metrics: []string{"replication.job_progress_updates"},
 			},
 		},
 	},
