@@ -404,6 +404,12 @@ const (
 	// V23_1KeyVisualizerTablesAndJobs adds the system tables that support the key visualizer.
 	V23_1KeyVisualizerTablesAndJobs
 
+	// V23_1UseEncodingWithBelowRaftAdmissionData enables the use of raft
+	// command encodings that include below-raft admission control data.
+	//
+	// TODO(irfansharif): Actually use this.
+	V23_1UseEncodingWithBelowRaftAdmissionData
+
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -694,6 +700,11 @@ var rawVersionsSingleton = keyedVersions{
 		Key:     V23_1KeyVisualizerTablesAndJobs,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 32},
 	},
+	{
+		Key:     V23_1UseEncodingWithBelowRaftAdmissionData,
+		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 34},
+	},
+
 	// *************************************************
 	// Step (2): Add new versions here.
 	// Do not add new versions to a patch release.
