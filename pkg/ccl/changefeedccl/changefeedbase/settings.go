@@ -129,8 +129,8 @@ var ScanRequestSize = settings.RegisterIntSetting(
 	settings.TenantWritable,
 	"changefeed.backfill.scan_request_size",
 	"the maximum number of bytes returned by each scan request",
-	16<<20, // 16 MiB
-)
+	1<<19, // 1/2 MiB
+).WithPublic()
 
 // SinkThrottleConfig describes throttling configuration for the sink.
 // 0 values for any of the settings disable that setting.
