@@ -37,6 +37,10 @@ INSERT INTO rtable VALUES
 statement ok
 SET CLUSTER SETTING sql.spatial.experimental_box2d_comparison_operators.enabled = on
 
+# Ensure the cluster setting has time to propagate to all nodes so distributed
+# execution does not see the old setting on non-gateway nodes.
+sleep 10ms
+
 query II
 SELECT lk, rk FROM ltable JOIN rtable@geom_index ON ltable.geom1 ~ rtable.geom
 ORDER BY lk, rk

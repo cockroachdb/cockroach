@@ -81,6 +81,10 @@ SELECT 'box(0 0,1 1)'::box2d && 'box(1 1,2 2)'::box2d
 statement ok
 SET CLUSTER SETTING sql.spatial.experimental_box2d_comparison_operators.enabled = on
 
+# Ensure the cluster setting has time to propagate to all nodes so distributed
+# execution does not see the old setting on non-gateway nodes.
+sleep 10ms
+
 query TTBBBB
 SELECT
   a.dsc,
