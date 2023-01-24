@@ -401,6 +401,12 @@ const (
 	// chagnefeeds created prior to this version.
 	V23_1_ChangefeedExpressionProductionReady
 
+	// V23_1UseEncodingWithBelowRaftAdmissionData enables the use of raft
+	// command encodings that include below-raft admission control data.
+	//
+	// TODO(irfansharif): Actually use this.
+	V23_1UseEncodingWithBelowRaftAdmissionData
+
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -686,6 +692,10 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     V23_1_ChangefeedExpressionProductionReady,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 30},
+	},
+	{
+		Key:     V23_1UseEncodingWithBelowRaftAdmissionData,
+		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 32},
 	},
 
 	// *************************************************
