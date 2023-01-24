@@ -2283,7 +2283,20 @@ func (h *joinPropsHelper) init(b *logicalPropsBuilder, joinExpr RelExpr) {
 		ensureLookupJoinInputProps(join, &b.sb)
 		h.joinType = join.JoinType
 		h.rightProps = &join.lookupProps
-		h.filters = append(join.On, join.LookupExpr...)
+		if len(join.RemoteLookupExpr) == 0 {
+			h.filters = append(join.On, join.LookupExpr...)
+		} else {
+			// If RemoteLookupExpr is not empty, the filter should
+			// be (LookupExpr OR RemoteLookupExpr).
+			lookupExpr := memoizeAnd(join.LookupExpr, b.mem)
+			remoteLookupExpr := memoizeAnd(join.RemoteLookupExpr, b.mem)
+			or := b.mem.MemoizeOr(lookupExpr, remoteLookupExpr)
+			h.filters = append(join.On, constructFiltersItem(or, b.mem))
+			// We also add the filters that exist in both lists as separate filters
+			// items to make it easier to detect functional dependencies from them.
+			h.filters = append(join.On, findRedundantFilters(join.LookupExpr, join.RemoteLookupExpr)...)
+		}
+
 		b.addFiltersToFuncDep(h.filters, &h.filtersFD)
 		h.filterNotNullCols = b.rejectNullCols(h.filters)
 
@@ -2383,6 +2396,31 @@ func (h *joinPropsHelper) init(b *logicalPropsBuilder, joinExpr RelExpr) {
 		h.filterIsTrue = h.filters.IsTrue()
 		h.filterIsFalse = h.filters.IsFalse()
 	}
+}
+
+// memoizeAnd converts filters to a nested AND tree.
+func memoizeAnd(filters FiltersExpr, mem *Memo) opt.ScalarExpr {
+	var andExpr opt.ScalarExpr
+	andExpr = filters[0].Condition
+	for i := 1; i < len(filters); i++ {
+		andExpr = mem.MemoizeAnd(andExpr, filters[i].Condition)
+	}
+	return andExpr
+}
+
+// findRedundantFilters finds filters that exist in both left and right.
+func findRedundantFilters(left, right FiltersExpr) FiltersExpr {
+	redundant := make(FiltersExpr, 0, len(left))
+	for i := range left {
+		cond := left[i].Condition
+		for j := range right {
+			if right[j].Condition == cond {
+				redundant = append(redundant, left[i])
+				break
+			}
+		}
+	}
+	return redundant
 }
 
 func (h *joinPropsHelper) outputCols() opt.ColSet {
