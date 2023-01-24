@@ -229,16 +229,7 @@ func (r *Replica) setTombstoneKey(
 		nextReplicaID = externalNextReplicaID
 	}
 	r.mu.Unlock()
-	return writeTombstoneKey(ctx, writer, r.RangeID, nextReplicaID)
-}
-
-func writeTombstoneKey(
-	ctx context.Context,
-	writer storage.Writer,
-	rangeID roachpb.RangeID,
-	nextReplicaID roachpb.ReplicaID,
-) error {
-	tombstoneKey := keys.RangeTombstoneKey(rangeID)
+	tombstoneKey := keys.RangeTombstoneKey(r.RangeID)
 	tombstone := &roachpb.RangeTombstone{
 		NextReplicaID: nextReplicaID,
 	}
