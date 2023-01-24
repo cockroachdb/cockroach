@@ -1805,7 +1805,6 @@ vectorized: true
 │ table: inverted@inverted_pkey
 │ equality: (a) = (a)
 │ equality cols are key
-│ pred: b @> ARRAY[1,2]
 │ locking strength: for update
 │
 └── • project
@@ -1941,7 +1940,6 @@ vectorized: true
 │ table: zigzag@zigzag_pkey
 │ equality: (a) = (a)
 │ equality cols are key
-│ pred: d @> '{"a": {"b": "c"}, "f": "g"}'
 │ locking strength: for update
 │
 └── • project

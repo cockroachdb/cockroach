@@ -203,7 +203,6 @@ vectorized: true
     │ table: array_tab@array_tab_pkey
     │ equality: (a) = (a)
     │ equality cols are key
-    │ pred: b @> ARRAY[1,2]
     │
     └── • zigzag join
           estimated row count: 0
@@ -214,4 +213,4 @@ vectorized: true
           right columns: (a, b_inverted_key)
           right fixed values: 1 column
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkk9v00AQxe98itFcCmKleJ0L2pNDa4RRiIsdCUqxok08RKbpjtldI4rl745so6ahStTe5t_v-T1rW3Q_d6gw_nI5nyULeHmR5Mv80_wV5PE8Pl-ChndZ-hG0tfpu5fU6-s68qswv-Pw-zmJYQ_StCYIpwVkrBYTdGaTZRZzB2yvQKNBwSQt9Sw7VNUosBNaWN-Qc237UDgdJ-RtVILAydeP7cSFww5ZQtegrvyNU-LXa_tHbD1wZspMABZbkdbUbdPOqJAjUY5Mo8Jx3za1xCrSANYrxVj7tNm28gmiKRSeQG78357zeEirZiacH6K1npEuyE3lof2_lvlrVN3SHAufMN00NP7gywEZB1KPpAqLw_r_Psmx2dS2VUsli-UaE_4riYZ59GHk0TPicMDlbT3YSHgaJ5Ouj8tPnyGfkajaODuSPKQddIZDKLY0PynFjN3RpeTN8ZmzTgRsGJTk_buXYJGZc9QYfwvIkHJ6Gw5Pw9D-46F78DQAA__9VuCLV
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkl1v0zAUhu_5FUfnZiAsNU7vfBXYgigq60gm8RlVbnKIzDKfYDuIEeW_oyQSXZlabXc-H8_rx5J79D8bVJh-ulq_Wl3C84tVfp1_WL-APF2n59eg4U22eQ_aOX23DXqXfGfeGvsLPr5NsxR2kHzromhJcNZLAfFwBpvsIs3g9WfQKNByRZf6ljyqryixENg6Lsl7dmOrnxZW1W9UkUBj2y6M7UJgyY5Q9RhMaAgVfjH1H12_Y2PJLSIUWFHQpplyc1MRROqhJAo856a7tV6BFrBDMe_Kx-1uuqAgWWIxCOQu7OV80DWhkoN4_ANG9Yx0RW4hD_X3Kv9O2_aG7lDgmvmma-EHGwtsFSTyvubeUR51jJ_imLML5BbxoV8iXx6NXz4lPiPfsvV0EH8sORoKgVTVNP8Tz50r6cpxOV0zl5uJmxoV-TBP5Vys7DwaBe_D8iQcn4bjk_DyP7gYnv0NAAD___D1GIU=

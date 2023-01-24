@@ -3569,9 +3569,7 @@ inner-join (lookup c)
  │    ├── left fixed columns: [6] = ['\x89']
  │    ├── right fixed columns: [6] = ['\x8a']
  │    └── filters (true)
- └── filters
-      ├── a:2 && ARRAY[1] [outer=(2), immutable]
-      └── a:2 && ARRAY[2] [outer=(2), immutable]
+ └── filters (true)
 
 # TODO: Add normalization rule to convert to no-op since predicate
 # is a contradiction
@@ -6653,8 +6651,7 @@ project
       │    ├── left fixed columns: [9] = ['\x3761000112620001']
       │    ├── right fixed columns: [9] = ['\x3763000112640001']
       │    └── filters (true)
-      └── filters
-           └── j:4 @> '{"a": "b", "c": "d"}' [outer=(4), immutable, constraints=(/4: (/NULL - ])]
+      └── filters (true)
 
 # Query requiring a zigzag join with a remaining filter.
 # TODO(itsbilal): remove filter from index join if zigzag join covers it.
@@ -6674,8 +6671,7 @@ inner-join (lookup b)
  │    ├── left fixed columns: [9] = ['\x3761000112620001']
  │    ├── right fixed columns: [9] = ['\x3763000112640001']
  │    └── filters (true)
- └── filters
-      └── j:4 @> '{"a": "b", "c": "d"}' [outer=(4), immutable, constraints=(/4: (/NULL - ])]
+ └── filters (true)
 
 opt expect=GenerateInvertedIndexZigzagJoins
 SELECT * FROM b WHERE j @> '{"a": {"b": "c", "d": "e"}, "f": "g"}'
@@ -6772,6 +6768,8 @@ ALTER TABLE c INJECT STATISTICS '[
 ]';
 ----
 
+# We need a remaining filter since only two of the three values
+# are covered by the zigzag join.
 opt expect=GenerateInvertedIndexZigzagJoins
 SELECT k FROM c WHERE a @> ARRAY[1,3,1,5]
 ----
@@ -6794,6 +6792,29 @@ project
       │    └── filters (true)
       └── filters
            └── a:2 @> ARRAY[1,3,1,5] [outer=(2), immutable, constraints=(/2: (/NULL - ])]
+
+# Regression test for #95270. We should not need any remaining filter.
+opt expect=GenerateInvertedIndexZigzagJoins
+SELECT k FROM c WHERE a @> ARRAY[1,2]
+----
+project
+ ├── columns: k:1!null
+ ├── immutable
+ ├── key: (1)
+ └── inner-join (lookup c)
+      ├── columns: k:1!null a:2!null
+      ├── key columns: [1] = [1]
+      ├── lookup columns are key
+      ├── immutable
+      ├── key: (1)
+      ├── fd: (1)-->(2)
+      ├── inner-join (zigzag c@a_inv_idx c@a_inv_idx)
+      │    ├── columns: k:1!null
+      │    ├── eq columns: [1] = [1]
+      │    ├── left fixed columns: [8] = ['\x89']
+      │    ├── right fixed columns: [8] = ['\x8a']
+      │    └── filters (true)
+      └── filters (true)
 
 # The first path can't be used for a zigzag join, but the second two can.
 opt expect=GenerateInvertedIndexZigzagJoins
@@ -6873,8 +6894,7 @@ inner-join (lookup b)
  │    ├── left locking: for-update
  │    ├── right locking: for-update
  │    └── filters (true)
- └── filters
-      └── j:4 @> '{"a": 1, "c": 2}' [outer=(4), immutable, constraints=(/4: (/NULL - ])]
+ └── filters (true)
 
 # Zigzag join should not be produced when there is a NO_ZIGZAG_JOIN hint.
 opt expect-not=GenerateInvertedIndexZigzagJoins
@@ -6972,7 +6992,6 @@ project
       │    ├── right fixed columns: [7] = ['\x376200012a0400']
       │    └── filters (true)
       └── filters
-           ├── j:2 @> '{"a": 1, "b": 2}' [outer=(2), immutable, constraints=(/2: (/NULL - ])]
            └── s:4 = 'foo' [outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
 
 # Don't generate a zigzag join when the predicate is not implied.
@@ -7010,7 +7029,6 @@ project
       │    ├── right fixed columns: [7] = ['\x376200012a0400']
       │    └── filters (true)
       └── filters
-           ├── j:2 @> '{"a": 1, "b": 2}' [outer=(2), immutable, constraints=(/2: (/NULL - ])]
            └── s:4 = 'foo' [outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
 
 # Generate an inverted zigzag join with a hint.
@@ -7035,7 +7053,6 @@ project
       │    ├── right fixed columns: [7] = ['\x376200012a0400']
       │    └── filters (true)
       └── filters
-           ├── j:2 @> '{"a": 1, "b": 2}' [outer=(2), immutable, constraints=(/2: (/NULL - ])]
            └── s:4 = 'foo' [outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
 
 exec-ddl
