@@ -1339,16 +1339,6 @@ def go_deps():
         ],
     )
     go_repository(
-        name = "com_github_cloudykit_jet",
-        build_file_proto_mode = "disable_global",
-        importpath = "github.com/CloudyKit/jet",
-        sha256 = "9191d5a10096ea10bbb4ea576131ba943a6ec600fd7358237e21f995240ec72f",
-        strip_prefix = "github.com/CloudyKit/jet@v2.1.3-0.20180809161101-62edd43e4f88+incompatible",
-        urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/CloudyKit/jet/com_github_cloudykit_jet-v2.1.3-0.20180809161101-62edd43e4f88+incompatible.zip",
-        ],
-    )
-    go_repository(
         name = "com_github_cloudykit_jet_v3",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/CloudyKit/jet/v3",
@@ -1458,10 +1448,10 @@ def go_deps():
         ],
         build_file_proto_mode = "default",
         importpath = "github.com/cockroachdb/errors",
-        sha256 = "ff3814544271799c80da14dadfe408efc4f66e02cbdf17b73e81614ed9f7ae43",
-        strip_prefix = "github.com/cockroachdb/errors@v1.9.0",
+        sha256 = "eeec411c969fb66b63af83527677cb84cceb50ed5003c51209e6bd76f1103a0b",
+        strip_prefix = "github.com/cockroachdb/errors@v1.9.1",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/errors/com_github_cockroachdb_errors-v1.9.0.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/errors/com_github_cockroachdb_errors-v1.9.1.zip",
         ],
     )
     go_repository(
@@ -2610,16 +2600,6 @@ def go_deps():
         strip_prefix = "github.com/felixge/httpsnoop@v1.0.1",
         urls = [
             "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/felixge/httpsnoop/com_github_felixge_httpsnoop-v1.0.1.zip",
-        ],
-    )
-    go_repository(
-        name = "com_github_flosch_pongo2",
-        build_file_proto_mode = "disable_global",
-        importpath = "github.com/flosch/pongo2",
-        sha256 = "814b52f668d2e2528fe9af917506cda4894d22c927283cfb8aaf6857503dfc5a",
-        strip_prefix = "github.com/flosch/pongo2@v0.0.0-20190707114632-bbf5a6c351f4",
-        urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/flosch/pongo2/com_github_flosch_pongo2-v0.0.0-20190707114632-bbf5a6c351f4.zip",
         ],
     )
     go_repository(
@@ -4496,16 +4476,6 @@ def go_deps():
         ],
     )
     go_repository(
-        name = "com_github_iris_contrib_i18n",
-        build_file_proto_mode = "disable_global",
-        importpath = "github.com/iris-contrib/i18n",
-        sha256 = "f9d637c5c887210f906f1228682239d98312b99e6d5192bec64faf597a3bab9c",
-        strip_prefix = "github.com/iris-contrib/i18n@v0.0.0-20171121225848-987a633949d0",
-        urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/iris-contrib/i18n/com_github_iris_contrib_i18n-v0.0.0-20171121225848-987a633949d0.zip",
-        ],
-    )
-    go_repository(
         name = "com_github_iris_contrib_jade",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/iris-contrib/jade",
@@ -4826,16 +4796,6 @@ def go_deps():
         ],
     )
     go_repository(
-        name = "com_github_joker_jade",
-        build_file_proto_mode = "disable_global",
-        importpath = "github.com/Joker/jade",
-        sha256 = "3fc31c80e93cb053cd4fce60a7288e3760f9fe5c571ec4c2d32c4f9bf6c487e7",
-        strip_prefix = "github.com/Joker/jade@v1.0.1-0.20190614124447-d475f43051e7",
-        urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/Joker/jade/com_github_joker_jade-v1.0.1-0.20190614124447-d475f43051e7.zip",
-        ],
-    )
-    go_repository(
         name = "com_github_jonboulle_clockwork",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/jonboulle/clockwork",
@@ -4923,36 +4883,6 @@ def go_deps():
         strip_prefix = "github.com/jtolds/gls@v4.20.0+incompatible",
         urls = [
             "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/jtolds/gls/com_github_jtolds_gls-v4.20.0+incompatible.zip",
-        ],
-    )
-    go_repository(
-        name = "com_github_juju_errors",
-        build_file_proto_mode = "disable_global",
-        importpath = "github.com/juju/errors",
-        sha256 = "b97a8b6ca1e8cc6fba715b4187a25d9ae53122edbdcaf1154e36249e6d297393",
-        strip_prefix = "github.com/juju/errors@v0.0.0-20181118221551-089d3ea4e4d5",
-        urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/juju/errors/com_github_juju_errors-v0.0.0-20181118221551-089d3ea4e4d5.zip",
-        ],
-    )
-    go_repository(
-        name = "com_github_juju_loggo",
-        build_file_proto_mode = "disable_global",
-        importpath = "github.com/juju/loggo",
-        sha256 = "64c21c4a3810a5d0e940fd11a46daa08bde2f951b59fb330ff06ab9634cc4863",
-        strip_prefix = "github.com/juju/loggo@v0.0.0-20180524022052-584905176618",
-        urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/juju/loggo/com_github_juju_loggo-v0.0.0-20180524022052-584905176618.zip",
-        ],
-    )
-    go_repository(
-        name = "com_github_juju_testing",
-        build_file_proto_mode = "disable_global",
-        importpath = "github.com/juju/testing",
-        sha256 = "a66b521a6b60dd443b86a42d0274209e385d7f3e71db775b8c2000bcfd0c6649",
-        strip_prefix = "github.com/juju/testing@v0.0.0-20180920084828-472a3e8b2073",
-        urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/juju/testing/com_github_juju_testing-v0.0.0-20180920084828-472a3e8b2073.zip",
         ],
     )
     go_repository(
@@ -5801,16 +5731,6 @@ def go_deps():
         strip_prefix = "github.com/matttproud/golang_protobuf_extensions@v1.0.2-0.20181231171920-c182affec369",
         urls = [
             "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/matttproud/golang_protobuf_extensions/com_github_matttproud_golang_protobuf_extensions-v1.0.2-0.20181231171920-c182affec369.zip",
-        ],
-    )
-    go_repository(
-        name = "com_github_mediocregopher_mediocre_go_lib",
-        build_file_proto_mode = "disable_global",
-        importpath = "github.com/mediocregopher/mediocre-go-lib",
-        sha256 = "6b9950c36810c23dfe38c9de790da689af70811f520f161fc9325b202c71fab3",
-        strip_prefix = "github.com/mediocregopher/mediocre-go-lib@v0.0.0-20181029021733-cb65787f37ed",
-        urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/mediocregopher/mediocre-go-lib/com_github_mediocregopher_mediocre_go_lib-v0.0.0-20181029021733-cb65787f37ed.zip",
         ],
     )
     go_repository(
@@ -7451,16 +7371,6 @@ def go_deps():
         ],
     )
     go_repository(
-        name = "com_github_sclevine_agouti",
-        build_file_proto_mode = "disable_global",
-        importpath = "github.com/sclevine/agouti",
-        sha256 = "b20c8a6a2c1fda0ae6a9cd6d319e78a7a5afea4bc90810cd46b99246d8219d23",
-        strip_prefix = "github.com/sclevine/agouti@v3.0.0+incompatible",
-        urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/sclevine/agouti/com_github_sclevine_agouti-v3.0.0+incompatible.zip",
-        ],
-    )
-    go_repository(
         name = "com_github_scylladb_termtables",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/scylladb/termtables",
@@ -7524,10 +7434,10 @@ def go_deps():
         name = "com_github_sergi_go_diff",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/sergi/go-diff",
-        sha256 = "a9c0203d5188745f59c29e170e8b1a7e7c8bd007634bce75932ffac042e43eac",
-        strip_prefix = "github.com/sergi/go-diff@v1.1.0",
+        sha256 = "287218ffcd136dbb28ce99a2f162048d8dfa6f97b524c17797964aacde2f8f52",
+        strip_prefix = "github.com/sergi/go-diff@v1.0.0",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/sergi/go-diff/com_github_sergi_go_diff-v1.1.0.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/sergi/go-diff/com_github_sergi_go_diff-v1.0.0.zip",
         ],
     )
     go_repository(
