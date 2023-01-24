@@ -45,6 +45,7 @@ type BackupOptions struct {
 	Detached               *DBool
 	EncryptionKMSURI       StringOrPlaceholderOptList
 	IncrementalStorage     StringOrPlaceholderOptList
+	CoordinatorLocality    Expr
 }
 
 var _ NodeFormatter = &BackupOptions{}
@@ -292,6 +293,13 @@ func (o *BackupOptions) Format(ctx *FmtCtx) {
 		ctx.WriteString("incremental_location = ")
 		ctx.FormatNode(&o.IncrementalStorage)
 	}
+
+	if o.CoordinatorLocality != nil {
+		maybeAddSep()
+		ctx.WriteString("coordinator_locality = ")
+		ctx.FormatNode(o.CoordinatorLocality)
+	}
+
 }
 
 // CombineWith merges other backup options into this backup options struct.
@@ -331,6 +339,12 @@ func (o *BackupOptions) CombineWith(other *BackupOptions) error {
 		return errors.New("incremental_location option specified multiple times")
 	}
 
+	if o.CoordinatorLocality == nil {
+		o.CoordinatorLocality = other.CoordinatorLocality
+	} else if other.CoordinatorLocality != nil {
+		return errors.New("coordinator_locality option specified multiple times")
+	}
+
 	return nil
 }
 
@@ -341,7 +355,8 @@ func (o BackupOptions) IsDefault() bool {
 		o.Detached == options.Detached &&
 		cmp.Equal(o.EncryptionKMSURI, options.EncryptionKMSURI) &&
 		o.EncryptionPassphrase == options.EncryptionPassphrase &&
-		cmp.Equal(o.IncrementalStorage, options.IncrementalStorage)
+		cmp.Equal(o.IncrementalStorage, options.IncrementalStorage) &&
+		o.CoordinatorLocality == options.CoordinatorLocality
 }
 
 // Format implements the NodeFormatter interface.
