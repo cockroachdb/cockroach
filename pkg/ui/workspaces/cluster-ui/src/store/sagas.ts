@@ -17,6 +17,7 @@ import { nodesSaga } from "./nodes";
 import { jobsSaga } from "./jobs";
 import { jobSaga } from "./jobDetails";
 import { livenessSaga } from "./liveness";
+import { databasesListSaga } from "./databasesList";
 import { sessionsSaga } from "./sessions";
 import { terminateSaga } from "./terminateQuery";
 import { notifificationsSaga } from "./notifications";
@@ -41,6 +42,7 @@ export function* sagas(cacheInvalidationPeriod?: number): SagaIterator {
     fork(statementInsightsSaga),
     fork(jobsSaga),
     fork(jobSaga),
+    fork(databasesListSaga),
     fork(sessionsSaga),
     fork(terminateSaga),
     fork(notifificationsSaga),

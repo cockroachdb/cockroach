@@ -39,8 +39,8 @@ const databasesListSlice = createSlice({
       state.valid = false;
       state.lastError = action.payload;
     },
-    refresh: (_, action: PayloadAction<SqlExecutionRequest>) => {},
-    request: (_, action: PayloadAction<SqlExecutionRequest>) => {},
+    refresh: (_, _action: PayloadAction<SqlExecutionRequest>) => {},
+    request: (_, _action: PayloadAction<SqlExecutionRequest>) => {},
   },
 });
 
