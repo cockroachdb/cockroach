@@ -104,12 +104,7 @@ func GetIdentificationPayload(ctx context.Context) IDPayload {
 }
 
 // TenantID returns the tenant ID associated with this idPayload.
-// if the idPayload has no tenant ID set, we default to the system
-// tenant ID. NB: This function should never return an empty string.
 func (ip IDPayload) TenantID() string {
-	if ip.TenantIDInternal == "" {
-		return SystemTenantID
-	}
 	return ip.TenantIDInternal
 }
 

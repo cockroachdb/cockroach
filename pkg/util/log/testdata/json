@@ -6,10 +6,10 @@ json-fluent-compact: {"tag":"logtest.unknown","header":1,"t":"1136214245.6543210
        json-compact: {"header":1,"t":"1136214245.654321000","T":1,"v":"v999.0.0","g":11,"f":"util/log/format_json_test.go","l":123,"r":1,"tags":{"noval":"","s":"‹1›","long":"‹2›"},"message":"hello ‹world›"}
                json: {"header":1,"timestamp":"1136214245.654321000","tenant_id":1,"version":"v999.0.0","goroutine":11,"file":"util/log/format_json_test.go","line":123,"redactable":1,"tags":{"noval":"","s":"‹1›","long":"‹2›"},"message":"hello ‹world›"}
 #
-json-fluent-compact: {"tag":"logtest.dev","c":0,"t":"1136214245.654321000","T":1,"s":0,"g":11,"f":"","l":123,"n":0,"r":0,"message":""}
-        json-fluent: {"tag":"logtest.dev","channel_numeric":0,"channel":"DEV","timestamp":"1136214245.654321000","tenant_id":1,"severity_numeric":0,"severity":"UNKNOWN","goroutine":11,"file":"","line":123,"entry_counter":0,"redactable":0,"message":""}
-       json-compact: {"c":0,"t":"1136214245.654321000","T":1,"s":0,"g":11,"f":"","l":123,"n":0,"r":0,"message":""}
-               json: {"channel_numeric":0,"channel":"DEV","timestamp":"1136214245.654321000","tenant_id":1,"severity_numeric":0,"severity":"UNKNOWN","goroutine":11,"file":"","line":123,"entry_counter":0,"redactable":0,"message":""}
+json-fluent-compact: {"tag":"logtest.dev","c":0,"t":"1136214245.654321000","s":0,"g":11,"f":"","l":123,"n":0,"r":0,"message":""}
+        json-fluent: {"tag":"logtest.dev","channel_numeric":0,"channel":"DEV","timestamp":"1136214245.654321000","severity_numeric":0,"severity":"UNKNOWN","goroutine":11,"file":"","line":123,"entry_counter":0,"redactable":0,"message":""}
+       json-compact: {"c":0,"t":"1136214245.654321000","s":0,"g":11,"f":"","l":123,"n":0,"r":0,"message":""}
+               json: {"channel_numeric":0,"channel":"DEV","timestamp":"1136214245.654321000","severity_numeric":0,"severity":"UNKNOWN","goroutine":11,"file":"","line":123,"entry_counter":0,"redactable":0,"message":""}
 #
 json-fluent-compact: {"tag":"logtest.dev","c":0,"t":"1136214245.654321000","x":"abc","N":123,"T":1,"s":0,"g":11,"f":"","l":123,"n":0,"r":0,"message":""}
         json-fluent: {"tag":"logtest.dev","channel_numeric":0,"channel":"DEV","timestamp":"1136214245.654321000","cluster_id":"abc","node_id":123,"tenant_id":1,"severity_numeric":0,"severity":"UNKNOWN","goroutine":11,"file":"","line":123,"entry_counter":0,"redactable":0,"message":""}

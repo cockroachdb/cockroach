@@ -53,7 +53,11 @@ func TestFormatCrdbV2(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	emptyCtx := context.Background()
+
 	sysCtx := context.Background()
+	sysIDPayload := testIDPayload{tenantID: "1"}
+	sysCtx = context.WithValue(sysCtx, serverident.ServerIdentificationContextKey{}, sysIDPayload)
 	sysCtx = logtags.AddTag(sysCtx, "noval", nil)
 	sysCtx = logtags.AddTag(sysCtx, "s", "1")
 	sysCtx = logtags.AddTag(sysCtx, "long", "2")
@@ -141,6 +145,9 @@ func TestFormatCrdbV2(t *testing.T) {
 		// Secondary tenant entries
 		makeStructuredEntry(tenantCtx, severity.INFO, channel.DEV, 0, ev),
 		makeUnstructuredEntry(tenantCtx, severity.WARNING, channel.OPS, 0, false, "hello %s", "world"),
+		// Entries with empty ctx
+		makeStructuredEntry(emptyCtx, severity.INFO, channel.DEV, 0, ev),
+		makeUnstructuredEntry(emptyCtx, severity.WARNING, channel.OPS, 0, false, "hello %s", "world"),
 	}
 
 	// We only use the datadriven framework for the ability to rewrite the output.
@@ -178,6 +185,9 @@ func TestFormatCrdbV2LongLineBreaks(t *testing.T) {
 		crdbV2LongLineLen.set(maxLen)
 
 		entry := logEntry{
+			IDPayload: serverident.IDPayload{
+				TenantIDInternal: "1",
+			},
 			payload: entryPayload{
 				redactable: redactable,
 				message:    td.Input,

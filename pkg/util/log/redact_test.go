@@ -18,6 +18,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/base/serverident"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logconfig"
@@ -43,7 +44,11 @@ func TestRedactedLogOutput(t *testing.T) {
 
 	defer TestingSetRedactable(false)()
 
-	Errorf(context.Background(), "test1 %v end", "hello")
+	ctx := context.Background()
+	sysIDPayload := testIDPayload{tenantID: "1"}
+	ctx = context.WithValue(ctx, serverident.ServerIdentificationContextKey{}, sysIDPayload)
+
+	Errorf(ctx, "test1 %v end", "hello")
 	if contains(redactableIndicator, t) {
 		t.Errorf("expected no marker indicator, got %q", contents())
 	}
@@ -54,14 +59,14 @@ func TestRedactedLogOutput(t *testing.T) {
 	// markers are disabled.
 	resetCaptured()
 
-	Errorf(context.Background(), "test2 %v end", startRedactable+"hello"+endRedactable)
+	Errorf(ctx, "test2 %v end", startRedactable+"hello"+endRedactable)
 	if !contains("test2 ?hello? end", t) {
 		t.Errorf("expected escaped markers, got %q", contents())
 	}
 
 	resetCaptured()
 	_ = TestingSetRedactable(true)
-	Errorf(context.Background(), "test3 %v end", "hello")
+	Errorf(ctx, "test3 %v end", "hello")
 	if !contains(redactableIndicator+" [T1] 3  test3", t) {
 		t.Errorf("expected marker indicator, got %q", contents())
 	}
@@ -71,7 +76,7 @@ func TestRedactedLogOutput(t *testing.T) {
 
 	// Verify that safe parts of errors don't get enclosed in redaction markers
 	resetCaptured()
-	Errorf(context.Background(), "test3e %v end",
+	Errorf(ctx, "test3e %v end",
 		errors.AssertionFailedf("hello %v",
 			errors.Newf("error-in-error %s", "world"))) // nolint:errwrap
 	if !contains(redactableIndicator+" [T1] 4  test3e", t) {
@@ -85,7 +90,7 @@ func TestRedactedLogOutput(t *testing.T) {
 	resetCaptured()
 
 	const specialString = "x" + startRedactable + "hello" + endRedactable + "y"
-	Errorf(context.Background(), "test4 %v end", specialString)
+	Errorf(ctx, "test4 %v end", specialString)
 	if contains(specialString, t) {
 		t.Errorf("expected markers to be removed, got %q", contents())
 	}
