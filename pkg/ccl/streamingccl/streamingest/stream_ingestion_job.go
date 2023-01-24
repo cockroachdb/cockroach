@@ -480,6 +480,15 @@ func maybeRevertToCutoverTimestamp(
 
 	updateRunningStatus(ctx, j, fmt.Sprintf("starting to cut over to the given timestamp %s", cutoverTime))
 
+	err = j.NoTxn().Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+		md.Progress.GetStreamIngest().CutoverStarted = true
+		ju.UpdateProgress(md.Progress)
+		return nil
+	})
+	if err != nil {
+		return false, errors.Wrap(err, "failed to set job state to cutting over")
+	}
+
 	origNRanges := -1
 	spans := []roachpb.Span{sd.Span}
 	updateJobProgress := func() error {
