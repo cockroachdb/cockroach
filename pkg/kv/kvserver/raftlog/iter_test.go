@@ -44,11 +44,11 @@ func ents(inds ...uint64) []raftpb.Entry {
 		typ := raftpb.EntryType(ind % 3)
 		switch typ {
 		case raftpb.EntryNormal:
-			prefixByte := EntryEncodingStandardPrefixByte
+			enc := EntryEncodingStandardWithAC
 			if ind%2 == 0 {
-				prefixByte = EntryEncodingSideloadedPrefixByte
+				enc = EntryEncodingSideloadedWithAC
 			}
-			data = EncodeRaftCommand(prefixByte, cmdID, b)
+			data = EncodeRaftCommand(enc, cmdID, b)
 		case raftpb.EntryConfChangeV2:
 			c := kvserverpb.ConfChangeContext{
 				CommandID: string(cmdID),
