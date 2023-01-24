@@ -25,7 +25,7 @@ type IExecStats = protos.cockroach.sql.IExecStats;
 
 const history = createMemoryHistory({ initialEntries: ["/statements"] });
 
-const execStats: Required<IExecStats> = {
+const execStats: IExecStats = {
   count: Long.fromNumber(180),
   network_bytes: {
     mean: 80,

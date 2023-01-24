@@ -216,6 +216,20 @@ func (s *ExecStats) Add(other ExecStats) {
 	s.MaxDiskUsage.Add(other.MaxDiskUsage, execStatCollectionCount, other.Count)
 	s.CPUSQLNanos.Add(other.CPUSQLNanos, execStatCollectionCount, other.Count)
 
+	s.MvccIteratorStats.StepCount.Add(other.MvccIteratorStats.StepCount, execStatCollectionCount, other.Count)
+	s.MvccIteratorStats.StepCountInternal.Add(other.MvccIteratorStats.StepCountInternal, execStatCollectionCount, other.Count)
+	s.MvccIteratorStats.SeekCount.Add(other.MvccIteratorStats.SeekCount, execStatCollectionCount, other.Count)
+	s.MvccIteratorStats.SeekCountInternal.Add(other.MvccIteratorStats.SeekCountInternal, execStatCollectionCount, other.Count)
+	s.MvccIteratorStats.BlockBytes.Add(other.MvccIteratorStats.BlockBytes, execStatCollectionCount, other.Count)
+	s.MvccIteratorStats.BlockBytesInCache.Add(other.MvccIteratorStats.BlockBytesInCache, execStatCollectionCount, other.Count)
+	s.MvccIteratorStats.KeyBytes.Add(other.MvccIteratorStats.KeyBytes, execStatCollectionCount, other.Count)
+	s.MvccIteratorStats.ValueBytes.Add(other.MvccIteratorStats.ValueBytes, execStatCollectionCount, other.Count)
+	s.MvccIteratorStats.PointCount.Add(other.MvccIteratorStats.PointCount, execStatCollectionCount, other.Count)
+	s.MvccIteratorStats.PointsCoveredByRangeTombstones.Add(other.MvccIteratorStats.PointsCoveredByRangeTombstones, execStatCollectionCount, other.Count)
+	s.MvccIteratorStats.RangeKeyCount.Add(other.MvccIteratorStats.RangeKeyCount, execStatCollectionCount, other.Count)
+	s.MvccIteratorStats.RangeKeyContainedPoints.Add(other.MvccIteratorStats.RangeKeyContainedPoints, execStatCollectionCount, other.Count)
+	s.MvccIteratorStats.RangeKeySkippedPoints.Add(other.MvccIteratorStats.RangeKeySkippedPoints, execStatCollectionCount, other.Count)
+
 	s.Count += other.Count
 }
 

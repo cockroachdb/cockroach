@@ -363,6 +363,7 @@ func (e *execStats) jsonFields() jsonFields {
 		{"networkMsgs", (*numericStats)(&e.NetworkMessages)},
 		{"maxDiskUsage", (*numericStats)(&e.MaxDiskUsage)},
 		{"cpuSQLNanos", (*numericStats)(&e.CPUSQLNanos)},
+		{"mvcc_iterator_stats", (*iteratorStats)(&e.MvccIteratorStats)},
 	}
 }
 
@@ -371,6 +372,34 @@ func (e *execStats) decodeJSON(js json.JSON) error {
 }
 
 func (e *execStats) encodeJSON() (json.JSON, error) {
+	return e.jsonFields().encodeJSON()
+}
+
+type iteratorStats appstatspb.MvccIteratorStats
+
+func (e *iteratorStats) jsonFields() jsonFields {
+	return jsonFields{
+		{"stepCount", (*numericStats)(&e.StepCount)},
+		{"stepCountInternal", (*numericStats)(&e.StepCountInternal)},
+		{"seekCount", (*numericStats)(&e.SeekCount)},
+		{"seekCountInternal", (*numericStats)(&e.SeekCountInternal)},
+		{"blockBytes", (*numericStats)(&e.BlockBytes)},
+		{"blockBytesInCache", (*numericStats)(&e.BlockBytesInCache)},
+		{"keyBytes", (*numericStats)(&e.KeyBytes)},
+		{"valueBytes", (*numericStats)(&e.ValueBytes)},
+		{"pointCount", (*numericStats)(&e.PointCount)},
+		{"pointsCoveredByRangeTombstones", (*numericStats)(&e.PointsCoveredByRangeTombstones)},
+		{"rangeKeyCount", (*numericStats)(&e.RangeKeyCount)},
+		{"rangeKeyContainedPoints", (*numericStats)(&e.RangeKeyContainedPoints)},
+		{"rangeKeySkippedPoints", (*numericStats)(&e.RangeKeySkippedPoints)},
+	}
+}
+
+func (e *iteratorStats) decodeJSON(js json.JSON) error {
+	return e.jsonFields().decodeJSON(js)
+}
+
+func (e *iteratorStats) encodeJSON() (json.JSON, error) {
 	return e.jsonFields().encodeJSON()
 }
 

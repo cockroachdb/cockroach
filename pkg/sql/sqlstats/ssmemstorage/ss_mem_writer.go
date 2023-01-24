@@ -331,6 +331,20 @@ func (s *Container) RecordTransaction(
 		stats.mu.data.ExecStats.NetworkMessages.Record(stats.mu.data.ExecStats.Count, float64(value.ExecStats.NetworkMessages))
 		stats.mu.data.ExecStats.MaxDiskUsage.Record(stats.mu.data.ExecStats.Count, float64(value.ExecStats.MaxDiskUsage))
 		stats.mu.data.ExecStats.CPUSQLNanos.Record(stats.mu.data.ExecStats.Count, float64(value.ExecStats.CPUTime.Nanoseconds()))
+
+		stats.mu.data.ExecStats.MvccIteratorStats.StepCount.Record(stats.mu.data.ExecStats.Count, float64(value.ExecStats.MvccSteps))
+		stats.mu.data.ExecStats.MvccIteratorStats.StepCountInternal.Record(stats.mu.data.ExecStats.Count, float64(value.ExecStats.MvccStepsInternal))
+		stats.mu.data.ExecStats.MvccIteratorStats.SeekCount.Record(stats.mu.data.ExecStats.Count, float64(value.ExecStats.MvccSeeks))
+		stats.mu.data.ExecStats.MvccIteratorStats.SeekCountInternal.Record(stats.mu.data.ExecStats.Count, float64(value.ExecStats.MvccSeeksInternal))
+		stats.mu.data.ExecStats.MvccIteratorStats.BlockBytes.Record(stats.mu.data.ExecStats.Count, float64(value.ExecStats.MvccBlockBytes))
+		stats.mu.data.ExecStats.MvccIteratorStats.BlockBytesInCache.Record(stats.mu.data.ExecStats.Count, float64(value.ExecStats.MvccBlockBytesInCache))
+		stats.mu.data.ExecStats.MvccIteratorStats.KeyBytes.Record(stats.mu.data.ExecStats.Count, float64(value.ExecStats.MvccKeyBytes))
+		stats.mu.data.ExecStats.MvccIteratorStats.ValueBytes.Record(stats.mu.data.ExecStats.Count, float64(value.ExecStats.MvccValueBytes))
+		stats.mu.data.ExecStats.MvccIteratorStats.PointCount.Record(stats.mu.data.ExecStats.Count, float64(value.ExecStats.MvccPointCount))
+		stats.mu.data.ExecStats.MvccIteratorStats.PointsCoveredByRangeTombstones.Record(stats.mu.data.ExecStats.Count, float64(value.ExecStats.MvccPointsCoveredByRangeTombstones))
+		stats.mu.data.ExecStats.MvccIteratorStats.RangeKeyCount.Record(stats.mu.data.ExecStats.Count, float64(value.ExecStats.MvccRangeKeyCount))
+		stats.mu.data.ExecStats.MvccIteratorStats.RangeKeyContainedPoints.Record(stats.mu.data.ExecStats.Count, float64(value.ExecStats.MvccRangeKeyContainedPoints))
+		stats.mu.data.ExecStats.MvccIteratorStats.RangeKeySkippedPoints.Record(stats.mu.data.ExecStats.Count, float64(value.ExecStats.MvccRangeKeySkippedPoints))
 	}
 
 	var retryReason string

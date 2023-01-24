@@ -74,86 +74,163 @@ func BuildStmtMetadataJSON(statistics *appstatspb.CollectedStatementStatistics) 
 //	  "$schema": "https://json-schema.org/draft/2020-12/schema",
 //	  "title": "system.statement_statistics.statistics",
 //	  "type": "object",
-//
 //	  "definitions": {
 //	    "numeric_stats": {
 //	      "type": "object",
 //	      "properties": {
-//	        "mean":   { "type": "number" },
-//	        "sqDiff": { "type": "number" }
+//	        "mean": {
+//	          "type": "number"
+//	        },
+//	        "sqDiff": {
+//	          "type": "number"
+//	        }
 //	      },
-//	      "required": ["mean", "sqDiff"]
+//	      "required": [
+//	        "mean",
+//	        "sqDiff"
+//	      ]
 //	    },
-//	    "indexes": {
-//	      "type": "array",
-//	      "items": {
-//	        "type": "string",
+//	    "mvcc_iterator_stats": {
+//	      "type": "object",
+//	      "properties": {
+//	        "stepCount": {
+//	          "$ref": "#/definitions/numeric_stats"
+//	        },
+//	        "stepCountInternal": {
+//	          "$ref": "#/definitions/numeric_stats"
+//	        },
+//	        "seekCount": {
+//	          "$ref": "#/definitions/numeric_stats"
+//	        },
+//	        "seekCountInternal": {
+//	          "$ref": "#/definitions/numeric_stats"
+//	        },
+//	        "blockBytes": {
+//	          "$ref": "#/definitions/numeric_stats"
+//	        },
+//	        "blockBytesInCache": {
+//	          "$ref": "#/definitions/numeric_stats"
+//	        },
+//	        "keyBytes": {
+//	          "$ref": "#/definitions/numeric_stats"
+//	        },
+//	        "valueBytes": {
+//	          "$ref": "#/definitions/numeric_stats"
+//	        },
+//	        "pointCount": {
+//	          "$ref": "#/definitions/numeric_stats"
+//	        },
+//	        "pointsCoveredByRangeTombstones": {
+//	          "$ref": "#/definitions/numeric_stats"
+//	        },
+//	        "rangeKeyCount": {
+//	          "$ref": "#/definitions/numeric_stats"
+//	        },
+//	        "rangeKeyContainedPoints": {
+//	          "$ref": "#/definitions/numeric_stats"
+//	        },
+//	        "rangeKeySkippedPoints": {
+//	          "$ref": "#/definitions/numeric_stats"
+//	        }
 //	      },
-//	    },
-//	    "node_ids": {
-//	      "type": "array",
-//	      "items": {
-//	        "type": "int",
-//	      },
+//	      "required": [
+//	        "stepCount",
+//	        "stepCountInternal",
+//	        "seekCount",
+//	        "seekCountInternal",
+//	        "blockBytes",
+//	        "blockBytesInCache",
+//	        "keyBytes",
+//	        "valueBytes",
+//	        "pointCount",
+//	        "pointsCoveredByRangeTombstones",
+//	        "rangeKeyCount",
+//	        "rangeKeyContainedPoints",
+//	        "rangeKeySkippedPoints"
+//	      ]
 //	    },
 //	    "statistics": {
 //	      "type": "object",
 //	      "properties": {
-//	        "firstAttemptCnt":   { "type": "number" },
-//	        "maxRetries":        { "type": "number" },
-//	        "numRows":           { "$ref": "#/definitions/numeric_stats" },
-//	        "idleLat":           { "$ref": "#/definitions/numeric_stats" },
-//	        "parseLat":          { "$ref": "#/definitions/numeric_stats" },
-//	        "planLat":           { "$ref": "#/definitions/numeric_stats" },
-//	        "runLat":            { "$ref": "#/definitions/numeric_stats" },
-//	        "svcLat":            { "$ref": "#/definitions/numeric_stats" },
-//	        "ovhLat":            { "$ref": "#/definitions/numeric_stats" },
-//	        "bytesRead":         { "$ref": "#/definitions/numeric_stats" },
-//	        "rowsRead":          { "$ref": "#/definitions/numeric_stats" },
-//	        "firstExecAt":       { "type": "string" },
-//	        "lastExecAt":        { "type": "string" },
-//	        "nodes":             { "type": "node_ids" },
-//	        "indexes":           { "type": "indexes" },
+//	        "maxRetries": {
+//	          "type": "number"
+//	        },
+//	        "numRows": {
+//	          "$ref": "#/definitions/numeric_stats"
+//	        },
+//	        "svcLat": {
+//	          "$ref": "#/definitions/numeric_stats"
+//	        },
+//	        "retryLat": {
+//	          "$ref": "#/definitions/numeric_stats"
+//	        },
+//	        "commitLat": {
+//	          "$ref": "#/definitions/numeric_stats"
+//	        },
+//	        "idleLat": {
+//	          "$ref": "#/definitions/numeric_stats"
+//	        },
+//	        "bytesRead": {
+//	          "$ref": "#/definitions/numeric_stats"
+//	        },
+//	        "rowsRead": {
+//	          "$ref": "#/definitions/numeric_stats"
+//	        }
 //	      },
 //	      "required": [
-//	        "firstAttemptCnt",
 //	        "maxRetries",
 //	        "numRows",
-//	        "idleLat",
-//	        "parseLat",
-//	        "planLat",
-//	        "runLat",
 //	        "svcLat",
-//	        "ovhLat",
+//	        "retryLat",
+//	        "commitLat",
+//	        "idleLat",
 //	        "bytesRead",
-//	        "rowsRead",
-//	        "nodes",
-//	        "indexes
+//	        "rowsRead"
 //	      ]
 //	    },
 //	    "execution_statistics": {
 //	      "type": "object",
 //	      "properties": {
-//	        "cnt":             { "type": "number" },
-//	        "networkBytes":    { "$ref": "#/definitions/numeric_stats" },
-//	        "maxMemUsage":     { "$ref": "#/definitions/numeric_stats" },
-//	        "contentionTime":  { "$ref": "#/definitions/numeric_stats" },
-//	        "networkMsgs":     { "$ref": "#/definitions/numeric_stats" },
-//	        "maxDiskUsage":    { "$ref": "#/definitions/numeric_stats" },
+//	        "cnt": {
+//	          "type": "number"
+//	        },
+//	        "networkBytes": {
+//	          "$ref": "#/definitions/numeric_stats"
+//	        },
+//	        "maxMemUsage": {
+//	          "$ref": "#/definitions/numeric_stats"
+//	        },
+//	        "contentionTime": {
+//	          "$ref": "#/definitions/numeric_stats"
+//	        },
+//	        "networkMsg": {
+//	          "$ref": "#/definitions/numeric_stats"
+//	        },
+//	        "maxDiskUsage": {
+//	          "$ref": "#/definitions/numeric_stats"
+//	        },
+//	        "cpuSQLNanos": {
+//	          "$ref": "#/definitions/numeric_stats"
+//	        },
+//	        "mvcc_iterator_stats": {
+//	          "$ref": "#/definitions/MvccIteratorStats"
+//	        }
 //	      },
 //	      "required": [
 //	        "cnt",
 //	        "networkBytes",
 //	        "maxMemUsage",
 //	        "contentionTime",
-//	        "networkMsgs",
+//	        "networkMsg",
 //	        "maxDiskUsage",
+//	       "mvcc_iterator_stats"
 //	      ]
 //	    }
 //	  },
-//
 //	  "properties": {
-//	    "stats": { "$ref": "#/definitions/statistics" },
+//	    "stats": {
+//	      "$ref": "#/definitions/statistics"
+//	    },
 //	    "execStats": {
 //	      "$ref": "#/definitions/execution_statistics"
 //	    }
@@ -202,27 +279,108 @@ func BuildTxnMetadataJSON(
 //	  "$schema": "https://json-schema.org/draft/2020-12/schema",
 //	  "title": "system.statement_statistics.statistics",
 //	  "type": "object",
-//
 //	  "definitions": {
 //	    "numeric_stats": {
 //	      "type": "object",
 //	      "properties": {
-//	        "mean":   { "type": "number" },
-//	        "sqDiff": { "type": "number" }
+//	        "mean": {
+//	          "type": "number"
+//	        },
+//	        "sqDiff": {
+//	          "type": "number"
+//	        }
 //	      },
-//	      "required": ["mean", "sqDiff"]
+//	      "required": [
+//	        "mean",
+//	        "sqDiff"
+//	      ]
+//	    },
+//	    "mvcc_iterator_stats": {
+//	      "type": "object",
+//	      "properties": {
+//	        "stepCount": {
+//	          "$ref": "#/definitions/numeric_stats"
+//	        },
+//	        "stepCountInternal": {
+//	          "$ref": "#/definitions/numeric_stats"
+//	        },
+//	        "seekCount": {
+//	          "$ref": "#/definitions/numeric_stats"
+//	        },
+//	        "seekCountInternal": {
+//	          "$ref": "#/definitions/numeric_stats"
+//	        },
+//	        "blockBytes": {
+//	          "$ref": "#/definitions/numeric_stats"
+//	        },
+//	        "blockBytesInCache": {
+//	          "$ref": "#/definitions/numeric_stats"
+//	        },
+//	        "keyBytes": {
+//	          "$ref": "#/definitions/numeric_stats"
+//	        },
+//	        "valueBytes": {
+//	          "$ref": "#/definitions/numeric_stats"
+//	        },
+//	        "pointCount": {
+//	          "$ref": "#/definitions/numeric_stats"
+//	        },
+//	        "pointsCoveredByRangeTombstones": {
+//	          "$ref": "#/definitions/numeric_stats"
+//	        },
+//	        "rangeKeyCount": {
+//	          "$ref": "#/definitions/numeric_stats"
+//	        },
+//	        "rangeKeyContainedPoints": {
+//	          "$ref": "#/definitions/numeric_stats"
+//	        },
+//	        "rangeKeySkippedPoints": {
+//	          "$ref": "#/definitions/numeric_stats"
+//	        }
+//	      },
+//	      "required": [
+//	        "stepCount",
+//	        "stepCountInternal",
+//	        "seekCount",
+//	        "seekCountInternal",
+//	        "blockBytes",
+//	        "blockBytesInCache",
+//	        "keyBytes",
+//	        "valueBytes",
+//	        "pointCount",
+//	        "pointsCoveredByRangeTombstones",
+//	        "rangeKeyCount",
+//	        "rangeKeyContainedPoints",
+//	        "rangeKeySkippedPoints"
+//	      ]
 //	    },
 //	    "statistics": {
 //	      "type": "object",
 //	      "properties": {
-//	        "maxRetries": { "type": "number" },
-//	        "numRows":    { "$ref": "#/definitions/numeric_stats" },
-//	        "svcLat":     { "$ref": "#/definitions/numeric_stats" },
-//	        "retryLat":   { "$ref": "#/definitions/numeric_stats" },
-//	        "commitLat":  { "$ref": "#/definitions/numeric_stats" },
-//	        "idleLat":    { "$ref": "#/definitions/numeric_stats" },
-//	        "bytesRead":  { "$ref": "#/definitions/numeric_stats" },
-//	        "rowsRead":   { "$ref": "#/definitions/numeric_stats" }
+//	        "maxRetries": {
+//	          "type": "number"
+//	        },
+//	        "numRows": {
+//	          "$ref": "#/definitions/numeric_stats"
+//	        },
+//	        "svcLat": {
+//	          "$ref": "#/definitions/numeric_stats"
+//	        },
+//	        "retryLat": {
+//	          "$ref": "#/definitions/numeric_stats"
+//	        },
+//	        "commitLat": {
+//	          "$ref": "#/definitions/numeric_stats"
+//	        },
+//	        "idleLat": {
+//	          "$ref": "#/definitions/numeric_stats"
+//	        },
+//	        "bytesRead": {
+//	          "$ref": "#/definitions/numeric_stats"
+//	        },
+//	        "rowsRead": {
+//	          "$ref": "#/definitions/numeric_stats"
+//	        }
 //	      },
 //	      "required": [
 //	        "maxRetries",
@@ -232,18 +390,36 @@ func BuildTxnMetadataJSON(
 //	        "commitLat",
 //	        "idleLat",
 //	        "bytesRead",
-//	        "rowsRead",
+//	        "rowsRead"
 //	      ]
 //	    },
 //	    "execution_statistics": {
 //	      "type": "object",
 //	      "properties": {
-//	        "cnt":             { "type": "number" },
-//	        "networkBytes":    { "$ref": "#/definitions/numeric_stats" },
-//	        "maxMemUsage":     { "$ref": "#/definitions/numeric_stats" },
-//	        "contentionTime":  { "$ref": "#/definitions/numeric_stats" },
-//	        "networkMsg":      { "$ref": "#/definitions/numeric_stats" },
-//	        "maxDiskUsage":    { "$ref": "#/definitions/numeric_stats" },
+//	        "cnt": {
+//	          "type": "number"
+//	        },
+//	        "networkBytes": {
+//	          "$ref": "#/definitions/numeric_stats"
+//	        },
+//	        "maxMemUsage": {
+//	          "$ref": "#/definitions/numeric_stats"
+//	        },
+//	        "contentionTime": {
+//	          "$ref": "#/definitions/numeric_stats"
+//	        },
+//	        "networkMsg": {
+//	          "$ref": "#/definitions/numeric_stats"
+//	        },
+//	        "maxDiskUsage": {
+//	          "$ref": "#/definitions/numeric_stats"
+//	        },
+//	        "cpuSQLNanos": {
+//	          "$ref": "#/definitions/numeric_stats"
+//	        },
+//	        "mvcc_iterator_stats": {
+//	          "$ref": "#/definitions/MvccIteratorStats"
+//	        }
 //	      },
 //	      "required": [
 //	        "cnt",
@@ -252,12 +428,14 @@ func BuildTxnMetadataJSON(
 //	        "contentionTime",
 //	        "networkMsg",
 //	        "maxDiskUsage",
+//	       "mvcc_iterator_stats"
 //	      ]
 //	    }
 //	  },
-//
 //	  "properties": {
-//	    "stats": { "$ref": "#/definitions/statistics" },
+//	    "stats": {
+//	      "$ref": "#/definitions/statistics"
+//	    },
 //	    "execStats": {
 //	      "$ref": "#/definitions/execution_statistics"
 //	    }
