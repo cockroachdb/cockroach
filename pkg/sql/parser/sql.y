@@ -13833,9 +13833,16 @@ a_expr:
     subOp := $2.op()
     subOpCmp, ok := subOp.(treecmp.ComparisonOperator)
     if !ok {
-      sqllex.Error(fmt.Sprintf("%s %s <array> is invalid because %q is not a boolean operator",
-        subOp, op, subOp))
-      return 1
+      // It is possible that we found `~` operator which was incorrectly typed
+      // as "unary complement" math operator. Check whether that's the case and
+      // override it to the correct "reg match" comparison operator.
+      if tree.IsUnaryComplement(subOp) {
+        subOp = treecmp.MakeComparisonOperator(treecmp.RegMatch)
+      } else {
+        sqllex.Error(fmt.Sprintf("%s %s <array> is invalid because %q is not a boolean operator",
+          subOp, op, subOp))
+        return 1
+      }
     }
     $$.val = &tree.ComparisonExpr{
       Operator: op,
