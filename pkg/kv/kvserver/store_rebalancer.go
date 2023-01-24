@@ -83,20 +83,6 @@ var LoadBasedRebalancingMode = settings.RegisterEnumSetting(
 	},
 ).WithPublic()
 
-// LoadBasedRebalancingDimension controls what dimension rebalancing takes into
-// account.
-// NB: This value is set to private on purpose, as this cluster setting is a
-// noop at the moment.
-var LoadBasedRebalancingDimension = settings.RegisterEnumSetting(
-	settings.SystemOnly,
-	"kv.allocator.load_based_rebalancing_dimension",
-	"what dimension of load does rebalancing consider",
-	"qps",
-	map[int64]string{
-		int64(LBRebalancingQueries): "qps",
-	},
-)
-
 // LBRebalancingMode controls if and when we do store-level rebalancing
 // based on load.
 type LBRebalancingMode int64
@@ -112,23 +98,6 @@ const (
 	// replicas based on store-level load imbalances.
 	LBRebalancingLeasesAndReplicas
 )
-
-// LBRebalancingDimension is the load dimension to balance.
-type LBRebalancingDimension int64
-
-const (
-	// LBRebalancingQueries is a rebalancing mode that balances queries (QPS).
-	LBRebalancingQueries LBRebalancingDimension = iota
-)
-
-func (d LBRebalancingDimension) ToDimension() load.Dimension {
-	switch d {
-	case LBRebalancingQueries:
-		return load.Queries
-	default:
-		panic("unknown dimension")
-	}
-}
 
 // RebalanceSearchOutcome returns the result of a rebalance target search. It
 // is used to determine whether to transition from lease to range based
@@ -160,21 +129,26 @@ const (
 // will best accomplish the store-level goals.
 type StoreRebalancer struct {
 	log.AmbientContext
-	metrics          StoreRebalancerMetrics
-	st               *cluster.Settings
-	storeID          roachpb.StoreID
-	allocator        allocatorimpl.Allocator
-	storePool        storepool.AllocatorStorePool
-	rr               RangeRebalancer
-	replicaRankings  *ReplicaRankings
-	getRaftStatusFn  func(replica CandidateReplica) *raft.Status
-	processTimeoutFn func(replica CandidateReplica) time.Duration
+	metrics           StoreRebalancerMetrics
+	st                *cluster.Settings
+	storeID           roachpb.StoreID
+	allocator         allocatorimpl.Allocator
+	storePool         storepool.AllocatorStorePool
+	rr                RangeRebalancer
+	replicaRankings   *ReplicaRankings
+	getRaftStatusFn   func(replica CandidateReplica) *raft.Status
+	processTimeoutFn  func(replica CandidateReplica) time.Duration
+	objectiveProvider RebalanceObjectiveProvider
 }
 
 // NewStoreRebalancer creates a StoreRebalancer to work in tandem with the
 // provided replicateQueue.
 func NewStoreRebalancer(
-	ambientCtx log.AmbientContext, st *cluster.Settings, rq *replicateQueue, rr *ReplicaRankings,
+	ambientCtx log.AmbientContext,
+	st *cluster.Settings,
+	rq *replicateQueue,
+	rr *ReplicaRankings,
+	objectiveProvider RebalanceObjectiveProvider,
 ) *StoreRebalancer {
 	var storePool storepool.AllocatorStorePool
 	if rq.store.cfg.StorePool != nil {
@@ -195,6 +169,7 @@ func NewStoreRebalancer(
 		processTimeoutFn: func(replica CandidateReplica) time.Duration {
 			return rq.processTimeoutFunc(st, replica.Repl())
 		},
+		objectiveProvider: objectiveProvider,
 	}
 	sr.AddLogTag("store-rebalancer", nil)
 	rq.store.metrics.registry.AddMetricStruct(&sr.metrics)
@@ -208,15 +183,17 @@ func SimulatorStoreRebalancer(
 	alocator allocatorimpl.Allocator,
 	storePool storepool.AllocatorStorePool,
 	getRaftStatusFn func(replica CandidateReplica) *raft.Status,
+	objectiveProvider RebalanceObjectiveProvider,
 ) *StoreRebalancer {
 	sr := &StoreRebalancer{
-		AmbientContext:  log.MakeTestingAmbientCtxWithNewTracer(),
-		metrics:         makeStoreRebalancerMetrics(),
-		st:              &cluster.Settings{},
-		storeID:         storeID,
-		allocator:       alocator,
-		storePool:       storePool,
-		getRaftStatusFn: getRaftStatusFn,
+		AmbientContext:    log.MakeTestingAmbientCtxWithNewTracer(),
+		metrics:           makeStoreRebalancerMetrics(),
+		st:                &cluster.Settings{},
+		storeID:           storeID,
+		allocator:         alocator,
+		storePool:         storePool,
+		getRaftStatusFn:   getRaftStatusFn,
+		objectiveProvider: objectiveProvider,
 	}
 	return sr
 }
@@ -231,6 +208,17 @@ type RebalanceContext struct {
 	mode                               LBRebalancingMode
 	allStoresList                      storepool.StoreList
 	hottestRanges, rebalanceCandidates []CandidateReplica
+}
+
+// RebalanceMode returns the mode of the store rebalancer. See
+// LoadBasedRebalancingMode.
+func (sr *StoreRebalancer) RebalanceMode() LBRebalancingMode {
+	return LBRebalancingMode(LoadBasedRebalancingMode.Get(&sr.st.SV))
+}
+
+// RebalanceDimension returns the dimension the store rebalancer is balancing.
+func (sr *StoreRebalancer) RebalanceObjective() LBRebalancingObjective {
+	return sr.objectiveProvider.Objective()
 }
 
 // LessThanMaxThresholds returns true if the local store is below the maximum
@@ -270,14 +258,18 @@ func (sr *StoreRebalancer) Start(ctx context.Context, stopper *stop.Stopper) {
 				timer.Reset(jitteredInterval(allocator.LoadBasedRebalanceInterval.Get(&sr.st.SV)))
 			}
 
-			mode := LBRebalancingMode(LoadBasedRebalancingMode.Get(&sr.st.SV))
+			// Once the rebalance mode and rebalance objective are defined for
+			// this loop, they are immutable and do not change. This avoids
+			// inconsistency where the rebalance objective changes and very
+			// different or contradicting actions are then taken.
+			mode := sr.RebalanceMode()
 			if mode == LBRebalancingOff {
 				continue
 			}
-
 			hottestRanges := sr.replicaRankings.TopLoad()
-			options := sr.scorerOptions(ctx)
-			rctx := sr.NewRebalanceContext(ctx, options, hottestRanges, LBRebalancingMode(LoadBasedRebalancingMode.Get(&sr.st.SV)))
+			objective := sr.RebalanceObjective()
+			options := sr.scorerOptions(ctx, objective.ToDimension())
+			rctx := sr.NewRebalanceContext(ctx, options, hottestRanges, mode)
 			sr.rebalanceStore(ctx, rctx)
 		}
 	})
@@ -288,8 +280,9 @@ func (sr *StoreRebalancer) Start(ctx context.Context, stopper *stop.Stopper) {
 // `scorerOptions` here, which sets the range count rebalance threshold.
 // Instead, we use our own implementation of `scorerOptions` that promotes load
 // balance.
-func (sr *StoreRebalancer) scorerOptions(ctx context.Context) *allocatorimpl.LoadScorerOptions {
-	lbDimension := LBRebalancingDimension(LoadBasedRebalancingDimension.Get(&sr.st.SV)).ToDimension()
+func (sr *StoreRebalancer) scorerOptions(
+	ctx context.Context, lbDimension load.Dimension,
+) *allocatorimpl.LoadScorerOptions {
 	return &allocatorimpl.LoadScorerOptions{
 		StoreHealthOptions:           sr.allocator.StoreHealthOptions(ctx),
 		Deterministic:                sr.storePool.IsDeterministic(),
@@ -323,10 +316,9 @@ func (sr *StoreRebalancer) NewRebalanceContext(
 		return nil
 	}
 
-	dims := LBRebalancingDimension(LoadBasedRebalancingDimension.Get(&sr.st.SV)).ToDimension()
 	return &RebalanceContext{
 		LocalDesc:     localDesc,
-		loadDimension: dims,
+		loadDimension: options.LoadDims[0],
 		options:       options,
 		mode:          rebalancingMode,
 		maxThresholds: allocatorimpl.OverfullLoadThresholds(
