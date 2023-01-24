@@ -95,17 +95,33 @@ func (p *testPlanner) Plan() *TestPlan {
 	}
 }
 
+func (p *testPlanner) initialContext() Context {
+	return Context{
+		FromVersion:      p.initialVersion,
+		ToVersion:        clusterupgrade.MainVersion,
+		FromVersionNodes: p.crdbNodes,
+	}
+}
+
+func (p *testPlanner) finalContext(finalizing bool) Context {
+	return Context{
+		FromVersion:    p.initialVersion,
+		ToVersion:      clusterupgrade.MainVersion,
+		ToVersionNodes: p.crdbNodes,
+		Finalizing:     finalizing,
+	}
+}
+
 // initSteps returns the sequence of steps that should be executed
 // before we start changing binaries on nodes in the process of
 // upgrading/downgrading. It will also run any startup hooks the user
 // may have provided.
 func (p *testPlanner) initSteps() []testStep {
-	preserveDowngradeNode := randomNode(p.prng, p.crdbNodes)
 	return append([]testStep{
 		startFromCheckpointStep{id: p.nextID(), version: p.initialVersion, rt: p.rt, crdbNodes: p.crdbNodes},
 		waitForStableClusterVersionStep{id: p.nextID(), nodes: p.crdbNodes},
-		preserveDowngradeOptionStep{id: p.nextID(), node: preserveDowngradeNode},
-	}, p.hooks.StartupSteps(p.nextID)...)
+		preserveDowngradeOptionStep{id: p.nextID(), prng: p.newRNG(), crdbNodes: p.crdbNodes},
+	}, p.hooks.StartupSteps(p.nextID, p.initialContext())...)
 }
 
 // finalSteps are the steps to be run once the nodes have been
@@ -115,7 +131,7 @@ func (p *testPlanner) initSteps() []testStep {
 func (p *testPlanner) finalSteps() []testStep {
 	return append([]testStep{
 		waitForStableClusterVersionStep{id: p.nextID(), nodes: p.crdbNodes},
-	}, p.hooks.AfterUpgradeFinalizedSteps(p.nextID)...)
+	}, p.hooks.AfterUpgradeFinalizedSteps(p.nextID, p.finalContext(false /* finalizing */))...)
 }
 
 func (p *testPlanner) upgradeSteps(from, to string) []testStep {
@@ -165,16 +181,18 @@ func (p *testPlanner) changeVersionSteps(from, to, label string) []testStep {
 // `preserve_downgrade_option` and potentially running mixed-version
 // hooks while the cluster version is changing.
 func (p *testPlanner) finalizeUpgradeSteps() []testStep {
-	testContext := Context{Finalizing: true}
-	finalizeNode := randomNode(p.prng, p.crdbNodes)
 	return append([]testStep{
-		finalizeUpgradeStep{id: p.nextID(), node: finalizeNode},
-	}, p.hooks.MixedVersionSteps(testContext, p.nextID)...)
+		finalizeUpgradeStep{id: p.nextID(), prng: p.newRNG(), crdbNodes: p.crdbNodes},
+	}, p.hooks.MixedVersionSteps(p.finalContext(true /* finalizing */), p.nextID)...)
 }
 
 func (p *testPlanner) nextID() int {
 	p.stepCount++
 	return p.stepCount
+}
+
+func (p *testPlanner) newRNG() *rand.Rand {
+	return rngFromRNG(p.prng)
 }
 
 // PrettyPrint displays a tree-like view of the mixed-version test
@@ -211,10 +229,6 @@ func (plan *TestPlan) prettyPrintStep(out *strings.Builder, step testStep, prefi
 	// concurrent execution), and what database node the step is
 	// connecting to.
 	writeSingle := func(rs singleStep, extraContext ...string) {
-		if node := rs.DBNode(); node != noDBNeeded {
-			dbinfo := fmt.Sprintf("with connection to node %d", node)
-			extraContext = append([]string{dbinfo}, extraContext...)
-		}
 		var extras string
 		if contextStr := strings.Join(extraContext, ", "); contextStr != "" {
 			extras = ", " + contextStr
