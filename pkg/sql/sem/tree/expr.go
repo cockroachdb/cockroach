@@ -1145,6 +1145,12 @@ func (o UnaryOperator) String() string {
 // Operator implements tree.Operator.
 func (UnaryOperator) Operator() {}
 
+// IsUnaryComplement returns whether op is a unary complement operator.
+func IsUnaryComplement(op Operator) bool {
+	u, ok := op.(UnaryOperator)
+	return ok && u.Symbol == UnaryComplement
+}
+
 // UnaryOperatorSymbol represents a unary operator.
 type UnaryOperatorSymbol uint8
 
