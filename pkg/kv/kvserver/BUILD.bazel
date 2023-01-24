@@ -29,6 +29,7 @@ go_library(
         "raft_transport_metrics.go",
         "raft_truncator_replica.go",
         "range_log.go",
+        "rebalance_objective.go",
         "replica.go",
         "replica_app_batch.go",
         "replica_application_cmd.go",

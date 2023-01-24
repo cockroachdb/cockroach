@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/split"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -23,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 )
 
 // SplitByLoadEnabled wraps "kv.range_split.by_load_enabled".
@@ -32,16 +34,6 @@ var SplitByLoadEnabled = settings.RegisterBoolSetting(
 	"allow automatic splits of ranges based on where load is concentrated",
 	true,
 ).WithPublic()
-
-var EnableUnweightedLBSplitFinder = settings.RegisterBoolSetting(
-	settings.SystemOnly,
-	"kv.unweighted_lb_split_finder.enabled",
-	"if enabled, use the un-weighted finder for load-based splitting; "+
-		"the unweighted finder will attempt to find a key during when splitting "+
-		"a range based on load that evenly divides the QPS among the resulting "+
-		"left and right hand side ranges",
-	false,
-)
 
 // SplitByLoadQPSThreshold wraps "kv.range_split.load_qps_threshold".
 var SplitByLoadQPSThreshold = settings.RegisterIntSetting(
@@ -59,28 +51,66 @@ var SplitByLoadCPUThreshold = settings.RegisterDurationSetting(
 	250*time.Millisecond,
 ).WithPublic()
 
-func (r *Replica) SplitByLoadThreshold(ctx context.Context) float64 {
-	return SplitByLoadThresholdFn(ctx, r.store.cfg.Settings)()
+// onRebalanceObjectiveChange updates the replicas on the store upon the
+// rebalance objective changing.
+func (s *Store) onRebalanceObjectiveChange(ctx context.Context, obj LBRebalancingDimension) {
+	s.VisitReplicas(func(r *Replica) bool {
+		r.loadBasedSplitter.Reset(s.Clock().PhysicalTime())
+		return true
+	})
+	log.Infof(ctx, "completed updating replicas on rebalance objective change")
 }
 
-func SplitByLoadThresholdFn(ctx context.Context, st *cluster.Settings) func() float64 {
-	return func() float64 {
-		if QPSSplittingEnabled(ctx, st) {
-			return float64(SplitByLoadQPSThreshold.Get(&st.SV))
-		}
-		return float64(SplitByLoadCPUThreshold.Get(&st.SV))
+type replicaSplitConfig struct {
+	randSource                 split.RandSource
+	rebalanceObjectiveProvider RebalanceObjectiveProvider
+	st                         *cluster.Settings
+}
+
+func newReplicaSplitConfig(
+	st *cluster.Settings, rebalanceObjectiveProvider RebalanceObjectiveProvider,
+) *replicaSplitConfig {
+	return &replicaSplitConfig{
+		randSource:                 split.GlobalRandSource(),
+		rebalanceObjectiveProvider: rebalanceObjectiveProvider,
+		st:                         st,
 	}
 }
 
-func NewFinderFn(
-	ctx context.Context, st *cluster.Settings,
-) func(time.Time, split.RandSource) split.LoadBasedSplitter {
-	return func(startTime time.Time, randSource split.RandSource) split.LoadBasedSplitter {
-		if QPSSplittingEnabled(ctx, st) {
-			return split.NewUnweightedFinder(startTime, randSource)
-		} else {
-			return split.NewWeightedFinder(startTime, randSource)
-		}
+func (c *replicaSplitConfig) QPSSplittingEnabled() bool {
+	return c.rebalanceObjectiveProvider.Objective() == LBRebalancingQueries
+}
+
+// NewLoadBasedSplitter returns a new LoadBasedSplitter that may be used to
+// find the midpoint based on recorded load.
+func (c *replicaSplitConfig) NewLoadBasedSplitter(startTime time.Time) split.LoadBasedSplitter {
+	obj := c.rebalanceObjectiveProvider.Objective()
+	switch obj {
+	case LBRebalancingQueries:
+		return split.NewUnweightedFinder(startTime, c.randSource)
+	case LBRebalancingStoreCPU:
+		return split.NewWeightedFinder(startTime, c.randSource)
+	default:
+		panic(errors.AssertionFailedf("Unkown rebalance objective %d", obj))
+	}
+}
+
+// StatRetention returns the duration that recorded load is to be retained.
+func (c *replicaSplitConfig) StatRetention() time.Duration {
+	return kvserverbase.SplitByLoadMergeDelay.Get(&c.st.SV)
+}
+
+// StatThreshold returns the threshold for load above which the range should be
+// considered split.
+func (c *replicaSplitConfig) StatThreshold() float64 {
+	obj := c.rebalanceObjectiveProvider.Objective()
+	switch obj {
+	case LBRebalancingQueries:
+		return float64(SplitByLoadQPSThreshold.Get(&c.st.SV))
+	case LBRebalancingStoreCPU:
+		return float64(SplitByLoadCPUThreshold.Get(&c.st.SV))
+	default:
+		panic(errors.AssertionFailedf("Unkown rebalance objective %d", obj))
 	}
 }
 
@@ -90,19 +120,6 @@ func NewFinderFn(
 func (r *Replica) SplitByLoadEnabled() bool {
 	return SplitByLoadEnabled.Get(&r.store.cfg.Settings.SV) &&
 		!r.store.TestingKnobs().DisableLoadBasedSplitting
-}
-
-func QPSSplittingEnabled(ctx context.Context, sv *cluster.Settings) bool {
-	rebalanceObjective := LoadBasedRebalancingObjective(ctx, sv)
-	return rebalanceObjective == LBRebalancingQueries || EnableUnweightedLBSplitFinder.Get(&sv.SV)
-}
-
-func (r *Replica) QPSSplittingEnabled(ctx context.Context) bool {
-	return QPSSplittingEnabled(ctx, r.store.cfg.Settings)
-}
-
-func (r *Replica) setOnDimensionChange(ctx context.Context) {
-	r.loadBasedSplitter.Reset(r.Clock().PhysicalTime())
 }
 
 // getResponseBoundarySpan computes the union span of the true spans that were
@@ -202,14 +219,14 @@ func (lss loadSplitStats) merge(other loadSplitStats) loadSplitStats {
 	}
 }
 
+// String returns a string representation of the load split stats.
 func (lss loadSplitStats) String() string {
 	var buf strings.Builder
-
 	if lss.CPU.ok {
-		fmt.Fprintf(&buf, "cpu-per-second=%s", string(humanizeutil.Duration(time.Duration(int64(lss.CPU.max)))))
+		fmt.Fprintf(&buf, "%s cpu", nanosToDurationString(lss.CPU.max))
 	}
 	if lss.QPS.ok {
-		fmt.Fprintf(&buf, "queries-per-second=%.2f", lss.QPS.max)
+		fmt.Fprintf(&buf, "%.2f qps", lss.QPS.max)
 	}
 	return buf.String()
 }
@@ -217,12 +234,16 @@ func (lss loadSplitStats) String() string {
 func (r *Replica) GetLoadSplitStats(ctx context.Context) loadSplitStats {
 	lss := loadSplitStats{}
 	max, ok := r.loadBasedSplitter.MaxStat(ctx, r.Clock().PhysicalTime())
-	if r.QPSSplittingEnabled(ctx) {
+	if r.store.splitConfig.QPSSplittingEnabled() {
 		lss.QPS = loadSplitStat{max: max, ok: ok}
 	} else {
 		lss.CPU = loadSplitStat{max: max, ok: ok}
 	}
 	return lss
+}
+
+func nanosToDurationString(nanos float64) string {
+	return string(humanizeutil.Duration(time.Duration(int64(nanos))))
 }
 
 // recordBatchForLoadBasedSplitting records the batch's spans to be considered
@@ -248,7 +269,7 @@ func (r *Replica) recordBatchForLoadBasedSplitting(
 
 	// When QPS splitting is enabled, use the number of requests rather than
 	// the given stat for recording load.
-	if r.QPSSplittingEnabled(ctx) {
+	if r.store.splitConfig.QPSSplittingEnabled() {
 		stat = len(ba.Requests)
 	}
 

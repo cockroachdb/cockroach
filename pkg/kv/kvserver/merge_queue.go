@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -264,54 +265,21 @@ func (mq *mergeQueue) process(
 	mergedStats := lhsStats
 	mergedStats.Add(rhsStats)
 	mergedLoadSplitStats := lhsSplitStats.merge(rhsSplitStats)
+	var shouldMergeLoad bool
+	var shouldMergeLoadReason string
 
+	// TODO(kvoli): fix shouldMergeLoadReason string here.
 	if lhsRepl.SplitByLoadEnabled() {
-		// When load is a consideration for splits and, by extension, merges, the
-		// mergeQueue is fairly conservative. In an effort to avoid thrashing and to
-		// avoid overreacting to temporary fluctuations in load, the mergeQueue will
-		// only consider a merge when the combined load across the RHS and LHS
-		// ranges is below half the threshold required to split a range due to load.
-		// Furthermore, to ensure that transient drops in load do not trigger range
-		// merges, the mergeQueue will only consider a merge when it deems the
-		// maximum qps measurement from both sides to be sufficiently stable and
-		// reliable, meaning that it was a maximum measurement over some extended
-		// period of time.
-		if lhsRepl.QPSSplittingEnabled(ctx) {
-			if !lhsSplitStats.QPS.ok {
-				log.VEventf(ctx, 2, "skipping merge: LHS QPS measurement not yet reliable")
-				return false, nil
-			}
-			if !rhsSplitStats.QPS.ok {
-				log.VEventf(ctx, 2, "skipping merge: RHS QPS measurement not yet reliable")
-				return false, nil
-			}
-		} else {
-			if !lhsSplitStats.CPU.ok {
-				log.VEventf(ctx, 2, "skipping merge: LHS CPU measurement not yet reliable")
-				return false, nil
-			}
-			if !rhsSplitStats.CPU.ok {
-				log.VEventf(ctx, 2, "skipping merge: RHS CPU measurement not yet reliable")
-				return false, nil
-			}
-		}
-	}
-
-	// Check if the merged range would need to be split, if so, skip merge.
-	// Use a lower threshold for load based splitting so we don't find ourselves
-	// in a situation where we keep merging ranges that would be split soon after
-	// by a small increase in load.
-	conservativeLoadBasedSplitThreshold := 0.5 * lhsRepl.SplitByLoadThreshold(ctx)
-	var exceedsLoadSplitThreshold bool
-	if lhsRepl.QPSSplittingEnabled(ctx) {
-		exceedsLoadSplitThreshold = mergedLoadSplitStats.QPS.max >= conservativeLoadBasedSplitThreshold
+		shouldMergeLoad, shouldMergeLoadReason = canMergeRangeLoad(
+			ctx, mq.store.ClusterSettings(), lhsSplitStats, rhsSplitStats, mq.store.splitConfig)
 	} else {
-		exceedsLoadSplitThreshold = mergedLoadSplitStats.CPU.max >= conservativeLoadBasedSplitThreshold
+		shouldMergeLoad = true
 	}
 
 	shouldSplit, _ := shouldSplitRange(ctx, mergedDesc, mergedStats,
 		lhsRepl.GetMaxBytes(), lhsRepl.shouldBackpressureWrites(), confReader)
-	if shouldSplit || exceedsLoadSplitThreshold {
+
+	if shouldSplit || !shouldMergeLoad {
 		log.VEventf(ctx, 2,
 			"skipping merge to avoid thrashing: merged range %s may split "+
 				"(estimated size, estimated load: %d, %s)",
@@ -410,24 +378,14 @@ func (mq *mergeQueue) process(
 		}
 	}
 
-	var conservativeThresholdString string
-	if lhsRepl.QPSSplittingEnabled(ctx) {
-		conservativeThresholdString = fmt.Sprintf("qps=%.2f", conservativeLoadBasedSplitThreshold)
-	} else {
-		conservativeThresholdString = fmt.Sprintf("cpu=%s", string(humanizeutil.Duration(time.Duration(conservativeLoadBasedSplitThreshold))))
-	}
-
 	log.VEventf(ctx, 2, "merging to produce range: %s-%s", mergedDesc.StartKey, mergedDesc.EndKey)
 	// TODO(kvoli): handle this print
-	reason := fmt.Sprintf("lhs+rhs has (size=%s+%s=%s %s+%s=%s) below threshold (size=%s, %s)",
+	reason := fmt.Sprintf("lhs+rhs size (%s+%s=%s) below threshold (%s), load %s",
 		humanizeutil.IBytes(lhsStats.Total()),
 		humanizeutil.IBytes(rhsStats.Total()),
 		humanizeutil.IBytes(mergedStats.Total()),
-		lhsSplitStats,
-		rhsSplitStats,
-		mergedLoadSplitStats,
 		humanizeutil.IBytes(minBytes),
-		conservativeThresholdString,
+		shouldMergeLoadReason,
 	)
 	_, pErr := lhsRepl.AdminMerge(ctx, roachpb.AdminMergeRequest{
 		RequestHeader: roachpb.RequestHeader{Key: lhsRepl.Desc().StartKey.AsRawKey()},
@@ -480,4 +438,60 @@ func (mq *mergeQueue) purgatoryChan() <-chan time.Time {
 
 func (mq *mergeQueue) updateChan() <-chan time.Time {
 	return nil
+}
+
+func canMergeRangeLoad(
+	ctx context.Context, st *cluster.Settings, lhs, rhs loadSplitStats, rsc *replicaSplitConfig,
+) (should bool, reason string) {
+	merged := lhs.merge(rhs)
+	qpsSplittingEnabled := rsc.QPSSplittingEnabled()
+
+	// When load is a consideration for splits and, by extension, merges, the
+	// mergeQueue is fairly conservative. In an effort to avoid thrashing and to
+	// avoid overreacting to temporary fluctuations in load, the mergeQueue will
+	// only consider a merge when the combined load across the RHS and LHS
+	// ranges is below half the threshold required to split a range due to load.
+	// Furthermore, to ensure that transient drops in load do not trigger range
+	// merges, the mergeQueue will only consider a merge when it deems the
+	// maximum qps measurement from both sides to be sufficiently stable and
+	// reliable, meaning that it was a maximum measurement over some extended
+	// period of time.
+	if qpsSplittingEnabled {
+		if !lhs.QPS.ok {
+			log.VEventf(ctx, 2, "skipping merge: LHS QPS measurement not yet reliable")
+			return false, ""
+		}
+		if !rhs.QPS.ok {
+			log.VEventf(ctx, 2, "skipping merge: RHS QPS measurement not yet reliable")
+			return false, ""
+		}
+	} else {
+		if !lhs.CPU.ok {
+			log.VEventf(ctx, 2, "skipping merge: LHS CPU measurement not yet reliable")
+			return false, ""
+		}
+		if !rhs.CPU.ok {
+			log.VEventf(ctx, 2, "skipping merge: RHS CPU measurement not yet reliable")
+			return false, ""
+		}
+	}
+
+	// Check if the merged range would need to be split, if so, skip merge.
+	// Use a lower threshold for load based splitting so we don't find ourselves
+	// in a situation where we keep merging ranges that would be split soon after
+	// by a small increase in load.
+	conservativeLoadBasedSplitThreshold := 0.5 * rsc.StatThreshold()
+	var exceedsLoadSplitThreshold bool
+	if qpsSplittingEnabled {
+		if merged.QPS.max < conservativeLoadBasedSplitThreshold {
+			return true, fmt.Sprintf("(%s+%s=%s) below threshold (%.2f)",
+				lhs, rhs, merged, conservativeLoadBasedSplitThreshold)
+		}
+	} else {
+		if merged.CPU.max < conservativeLoadBasedSplitThreshold {
+			return true, fmt.Sprintf("(%s+%s=%s) below threshold (%s)",
+				lhs, rhs, merged, nanosToDurationString(conservativeLoadBasedSplitThreshold))
+		}
+	}
+	return exceedsLoadSplitThreshold, reason
 }

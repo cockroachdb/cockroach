@@ -110,19 +110,9 @@ func newUnloadedReplica(
 	r.mu.conf = store.cfg.DefaultSpanConfig
 	split.Init(
 		&r.loadBasedSplitter,
-		store.cfg.Settings,
-		split.GlobalRandSource(),
-		SplitByLoadThresholdFn(ctx, store.cfg.Settings),
-		func() time.Duration {
-			return kvserverbase.SplitByLoadMergeDelay.Get(&store.cfg.Settings.SV)
-		},
+		store.splitConfig,
 		store.metrics.LoadSplitterMetrics,
-		NewFinderFn(ctx, store.cfg.Settings),
 	)
-
-	LoadBasedRebalancingDimension.SetOnChange(&store.cfg.Settings.SV, func(ctx context.Context) {
-		r.setOnDimensionChange(ctx)
-	})
 
 	r.mu.proposals = map[kvserverbase.CmdIDKey]*ProposalData{}
 	r.mu.checksums = map[uuid.UUID]*replicaChecksum{}

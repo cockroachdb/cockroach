@@ -20,7 +20,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -52,6 +51,17 @@ type LoadBasedSplitter interface {
 	// PopularKeyFrequency returns the percentage that the most popular key
 	// appears in the sampled candidate split keys.
 	PopularKeyFrequency() float64
+}
+
+type LoadSplitConfig interface {
+	// NewLoadBasedSplitter returns a new LoadBasedSplitter that may be used to
+	// find the midpoint based on recorded load.
+	NewLoadBasedSplitter(time.Time) LoadBasedSplitter
+	// StatRetention returns the duration that recorded load is to be retained.
+	StatRetention() time.Duration
+	// StatThreshold returns the threshold for load above which the range
+	// should be considered split.
+	StatThreshold() float64
 }
 
 type RandSource interface {
@@ -121,11 +131,7 @@ type LoadSplitterMetrics struct {
 // incoming requests to find potential split keys and checks if sampled
 // candidate split keys satisfy certain requirements.
 type Decider struct {
-	st                  *cluster.Settings    // supplied to Init
-	randSource          RandSource           // supplied to Init
-	statThreshold       func() float64       // supplied to Init
-	statRetention       func() time.Duration // supplied to Init
-	newFinderFn         func(time.Time, RandSource) LoadBasedSplitter
+	config              LoadSplitConfig      // supplied to Init
 	loadSplitterMetrics *LoadSplitterMetrics // supplied to Init
 
 	mu struct {
@@ -152,21 +158,9 @@ type Decider struct {
 // embedding the Decider into a larger struct outside of the scope of this package
 // without incurring a pointer reference. This is relevant since many Deciders
 // may exist in the system at any given point in time.
-func Init(
-	lbs *Decider,
-	st *cluster.Settings,
-	randSource RandSource,
-	statThreshold func() float64,
-	statRetention func() time.Duration,
-	loadSplitterMetrics *LoadSplitterMetrics,
-	newFinderFn func(time.Time, RandSource) LoadBasedSplitter,
-) {
-	lbs.st = st
-	lbs.randSource = randSource
-	lbs.statThreshold = statThreshold
-	lbs.statRetention = statRetention
+func Init(lbs *Decider, config LoadSplitConfig, loadSplitterMetrics *LoadSplitterMetrics) {
 	lbs.loadSplitterMetrics = loadSplitterMetrics
-	lbs.newFinderFn = newFinderFn
+	lbs.config = config
 }
 
 // Record notifies the Decider that 'n' operations are being carried out which
@@ -201,7 +195,7 @@ func (d *Decider) recordLocked(
 		d.mu.count = 0
 
 		// Record the latest stat sample in the historical tracker.
-		d.mu.maxStat.record(now, d.statRetention(), d.mu.lastStatVal)
+		d.mu.maxStat.record(now, d.config.StatRetention(), d.mu.lastStatVal)
 
 		// If the stat for the range exceeds the threshold, start actively
 		// tracking potential for splitting this range based on load.
@@ -209,9 +203,9 @@ func (d *Decider) recordLocked(
 		// begin to Record requests so it can find a split point. If a
 		// splitFinder already exists, we check if a split point is ready
 		// to be used.
-		if d.mu.lastStatVal >= d.statThreshold() {
+		if d.mu.lastStatVal >= d.config.StatThreshold() {
 			if d.mu.splitFinder == nil {
-				d.mu.splitFinder = d.newFinderFn(now, d.randSource)
+				d.mu.splitFinder = d.config.NewLoadBasedSplitter(now)
 			}
 		} else {
 			d.mu.splitFinder = nil
@@ -256,7 +250,7 @@ func (d *Decider) RecordMax(now time.Time, qps float64) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
-	d.mu.maxStat.record(now, d.statRetention(), qps)
+	d.mu.maxStat.record(now, d.config.StatRetention(), qps)
 }
 
 // LastStat returns the most recent stat measurement.
@@ -276,7 +270,7 @@ func (d *Decider) MaxStat(ctx context.Context, now time.Time) (float64, bool) {
 	defer d.mu.Unlock()
 
 	d.recordLocked(ctx, now, 0, nil) // force stat computation
-	return d.mu.maxStat.max(now, d.statRetention())
+	return d.mu.maxStat.max(now, d.config.StatRetention())
 }
 
 // MaybeSplitKey returns a key to perform a split at. The return value will be
@@ -341,7 +335,7 @@ func (d *Decider) Reset(now time.Time) {
 	d.mu.lastStatRollover = time.Time{}
 	d.mu.lastStatVal = 0
 	d.mu.count = 0
-	d.mu.maxStat.reset(now, d.statRetention())
+	d.mu.maxStat.reset(now, d.config.StatRetention())
 	d.mu.splitFinder = nil
 	d.mu.lastSplitSuggestion = time.Time{}
 	d.mu.lastNoSplitKeyLoggingMetrics = time.Time{}

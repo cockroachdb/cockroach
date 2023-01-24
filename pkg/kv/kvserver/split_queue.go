@@ -225,10 +225,10 @@ func (sq *splitQueue) processAttempt(
 		raftAppliedQPS := loadStats.WriteKeysPerSecond
 		lastSplitStat := r.loadBasedSplitter.LastStat(ctx, now)
 		var loadSplitString string
-		if r.QPSSplittingEnabled(ctx) {
+		if r.store.splitConfig.QPSSplittingEnabled() {
 			loadSplitString = fmt.Sprintf("%.2f reqs/sec", lastSplitStat)
 		} else {
-			loadSplitString = fmt.Sprintf("%s cpu/sec", string(humanizeutil.Duration(time.Duration(lastSplitStat))))
+			loadSplitString = fmt.Sprintf("%s cpu/sec", nanosToDurationString(lastSplitStat))
 		}
 
 		reason := fmt.Sprintf(
