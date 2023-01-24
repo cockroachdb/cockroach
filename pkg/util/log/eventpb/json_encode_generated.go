@@ -2140,6 +2140,14 @@ func (m *CreateChangefeed) AppendJSONFields(printComma bool, b redact.Redactable
 
 	printComma, b = m.CommonChangefeedEventDetails.AppendJSONFields(printComma, b)
 
+	if m.Transformation {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"Transformation\":true"...)
+	}
+
 	return printComma, b
 }
 
