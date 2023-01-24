@@ -225,7 +225,7 @@ func (c *SyncedCluster) GetInternalIP(
 		return c.Host(n), nil
 	}
 
-	sess := c.newSession(l, n, `hostname --all-ip-addresses`, "get-internal-ip")
+	sess := c.newSession(l, n, `hostname --all-ip-addresses`, withDebugName("get-internal-ip"))
 	defer sess.Close()
 
 	var stdout, stderr strings.Builder
@@ -294,17 +294,20 @@ func (c *SyncedCluster) roachprodEnvRegex(node Node) string {
 // cmdDebugName is the suffix of the generated ssh debug file
 // If it is "", a suffix will be generated from the cmd string
 func (c *SyncedCluster) newSession(
-	l *logger.Logger, node Node, cmd string, cmdDebugName string,
+	l *logger.Logger, node Node, cmd string, options ...remoteSessionOption,
 ) session {
 	if c.IsLocal() {
 		return newLocalSession(cmd)
 	}
-	command := remoteCommand{
-		node:      node,
-		user:      c.user(node),
-		host:      c.Host(node),
-		cmd:       cmd,
-		debugName: cmdDebugName,
+	command := &remoteCommand{
+		node: node,
+		user: c.user(node),
+		host: c.Host(node),
+		cmd:  cmd,
+	}
+
+	for _, opt := range options {
+		opt(command)
 	}
 	return newRemoteSession(l, command)
 }
@@ -376,7 +379,7 @@ fi`,
 			waitCmd,                   // [4]
 		)
 
-		sess := c.newSession(l, node, cmd, "node-stop")
+		sess := c.newSession(l, node, cmd, withDebugName("node-stop"))
 		defer sess.Close()
 
 		out, cmdErr := sess.CombinedOutput(ctx)
@@ -415,7 +418,7 @@ sudo rm -fr logs &&
 				cmd += "sudo rm -fr tenant-certs* ;\n"
 			}
 		}
-		sess := c.newSession(l, node, cmd, "node-wipe")
+		sess := c.newSession(l, node, cmd, withDebugName("node-wipe"))
 		defer sess.Close()
 
 		out, cmdErr := sess.CombinedOutput(ctx)
@@ -454,7 +457,7 @@ else
   echo ${out}
 fi
 `
-		sess := c.newSession(l, node, cmd, "node-status")
+		sess := c.newSession(l, node, cmd, withDebugName("node-status"))
 		defer sess.Close()
 
 		out, cmdErr := sess.CombinedOutput(ctx)
@@ -607,7 +610,7 @@ done
 				return
 			}
 
-			sess := c.newSession(l, node, buf.String(), "node-monitor")
+			sess := c.newSession(l, node, buf.String(), withDebugDisabled())
 			defer sess.Close()
 
 			p, err := sess.StdoutPipe()
@@ -720,7 +723,7 @@ func (c *SyncedCluster) runCmdOnSingleNode(
 		nodeCmd = fmt.Sprintf("cd %s; %s", c.localVMDir(node), nodeCmd)
 	}
 
-	sess := c.newSession(l, node, nodeCmd, GenFilenameFromArgs(20, expandedCmd))
+	sess := c.newSession(l, node, nodeCmd, withDebugName(GenFilenameFromArgs(20, expandedCmd)))
 	defer sess.Close()
 
 	var res *RunResultDetails
@@ -878,7 +881,7 @@ func (c *SyncedCluster) Wait(ctx context.Context, l *logger.Logger) error {
 		res := &RunResultDetails{Node: node}
 		cmd := "test -e /mnt/data1/.roachprod-initialized"
 		for j := 0; j < 600; j++ {
-			sess := c.newSession(l, node, cmd, "node-wait")
+			sess := c.newSession(l, node, cmd, withDebugDisabled())
 			defer sess.Close()
 
 			_, err := sess.CombinedOutput(ctx)
@@ -947,7 +950,7 @@ test -f .ssh/id_rsa || \
 tar cf - .ssh/id_rsa .ssh/id_rsa.pub .ssh/authorized_keys
 `
 
-		sess := c.newSession(l, 1, cmd, "ssh-gen-key")
+		sess := c.newSession(l, 1, cmd, withDebugName("ssh-gen-key"))
 		defer sess.Close()
 
 		var stdout bytes.Buffer
@@ -974,7 +977,7 @@ tar cf - .ssh/id_rsa .ssh/id_rsa.pub .ssh/authorized_keys
 		node := nodes[i]
 		cmd := `tar xf -`
 
-		sess := c.newSession(l, node, cmd, "ssh-dist-key")
+		sess := c.newSession(l, node, cmd, withDebugName("ssh-dist-key"))
 		defer sess.Close()
 
 		sess.SetStdin(bytes.NewReader(sshTar))
@@ -1047,7 +1050,7 @@ done
 exit 1
 `
 
-		sess := c.newSession(l, node, cmd, "ssh-scan-hosts")
+		sess := c.newSession(l, node, cmd, withDebugName("ssh-scan-hosts"))
 		defer sess.Close()
 
 		var stdout bytes.Buffer
@@ -1098,7 +1101,7 @@ if [[ "$(whoami)" != "` + config.SharedUser + `" ]]; then
 fi
 `
 
-		sess := c.newSession(l, node, cmd, "ssh-dist-known-hosts")
+		sess := c.newSession(l, node, cmd, withDebugName("ssh-dist-known-hosts"))
 		defer sess.Close()
 
 		sess.SetStdin(bytes.NewReader(knownHostsData))
@@ -1145,7 +1148,7 @@ if [[ "$(whoami)" != "` + config.SharedUser + `" ]]; then
 fi
 `
 
-			sess := c.newSession(l, node, cmd, "ssh-add-extra-keys")
+			sess := c.newSession(l, node, cmd, withDebugName("ssh-add-extra-keys"))
 			defer sess.Close()
 
 			sess.SetStdin(bytes.NewReader(c.AuthorizedKeys))
@@ -1207,7 +1210,7 @@ mkdir -p certs
 tar cvf %[3]s certs
 `, cockroachNodeBinary(c, 1), strings.Join(nodeNames, " "), certsTarName)
 
-		sess := c.newSession(l, 1, cmd, "init-certs")
+		sess := c.newSession(l, 1, cmd, withDebugName("init-certs"))
 		defer sess.Close()
 
 		out, cmdErr := sess.CombinedOutput(ctx)
@@ -1311,7 +1314,7 @@ tar cvf %[5]s $CERT_DIR
 			bundleName,
 		)
 
-		sess := c.newSession(l, node, cmd, "create-tenant-cert-bundle")
+		sess := c.newSession(l, node, cmd, withDebugName("create-tenant-cert-bundle"))
 		defer sess.Close()
 
 		out, cmdErr := sess.CombinedOutput(ctx)
@@ -1336,7 +1339,7 @@ func (c *SyncedCluster) cockroachBinSupportsTenantScope(
 	l *logger.Logger, ctx context.Context, node Node,
 ) bool {
 	cmd := fmt.Sprintf("%s cert create-client --help | grep '\\--tenant-scope'", cockroachNodeBinary(c, node))
-	sess := c.newSession(l, node, cmd, "")
+	sess := c.newSession(l, node, cmd)
 	defer sess.Close()
 
 	return sess.Run(ctx) == nil
@@ -1399,7 +1402,7 @@ func (c *SyncedCluster) fileExistsOnFirstNode(
 	display := fmt.Sprintf("%s: checking %s", c.Name, path)
 	if err := c.Parallel(l, display, 1, 0, func(i int) (*RunResultDetails, error) {
 		node := c.Nodes[i]
-		sess := c.newSession(l, node, `test -e `+path, "")
+		sess := c.newSession(l, node, `test -e `+path)
 		defer sess.Close()
 
 		out, cmdErr := sess.CombinedOutput(ctx)
@@ -1485,7 +1488,7 @@ func (c *SyncedCluster) distributeLocalCertsTar(
 			cmd += "tar xf -"
 		}
 
-		sess := c.newSession(l, node, cmd, "dist-local-certs")
+		sess := c.newSession(l, node, cmd, withDebugName("dist-local-certs"))
 		defer sess.Close()
 
 		sess.SetStdin(bytes.NewReader(certsTar))
