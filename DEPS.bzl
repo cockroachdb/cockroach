@@ -1172,20 +1172,20 @@ def go_deps():
         name = "com_github_charmbracelet_bubbles",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/charmbracelet/bubbles",
-        sha256 = "fcadf25da3546bea9e11b3dbee64e153ef05c10b2d7f3a9423cbcf0a3f8c1554",
-        strip_prefix = "github.com/charmbracelet/bubbles@v0.14.1-0.20221007152719-9a48dca00354",
+        sha256 = "72954af77ec32995cfdf218fd31e9357a0fbef96f252bb1a9e6f0b8f158d3531",
+        strip_prefix = "github.com/charmbracelet/bubbles@v0.15.1-0.20230123181021-a6a12c4a31eb",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/charmbracelet/bubbles/com_github_charmbracelet_bubbles-v0.14.1-0.20221007152719-9a48dca00354.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/charmbracelet/bubbles/com_github_charmbracelet_bubbles-v0.15.1-0.20230123181021-a6a12c4a31eb.zip",
         ],
     )
     go_repository(
         name = "com_github_charmbracelet_bubbletea",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/charmbracelet/bubbletea",
-        sha256 = "13f48dd8bf68e2b315028800f9533dff9b2b07e7911f39b6d7555c93db80b2bf",
-        strip_prefix = "github.com/charmbracelet/bubbletea@v0.23.1",
+        sha256 = "2e8c5572800df207d4effccad52fe42cfae26d9a6d797f2c3b43f1be2f964151",
+        strip_prefix = "github.com/cockroachdb/bubbletea@v0.0.0-20230108112624-1024a1c3e9ae",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/charmbracelet/bubbletea/com_github_charmbracelet_bubbletea-v0.23.1.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/bubbletea/com_github_cockroachdb_bubbletea-v0.0.0-20230108112624-1024a1c3e9ae.zip",
         ],
     )
     go_repository(
@@ -1505,10 +1505,10 @@ def go_deps():
         patches = [
             "@com_github_cockroachdb_cockroach//build/patches:com_github_cockroachdb_pebble.patch",
         ],
-        sha256 = "dcef948c71b6b6f6e83c41a8c6b9f6bc3df953216534ac4bc7a817d54bcd3515",
-        strip_prefix = "github.com/cockroachdb/pebble@v0.0.0-20230112184329-90c810757fe6",
+        sha256 = "19a9251101d097bd23177570649c742aae26d5aec5eb829df0c75f9a8177728b",
+        strip_prefix = "github.com/cockroachdb/pebble@v0.0.0-20230123220951-b418e86f4cd4",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/pebble/com_github_cockroachdb_pebble-v0.0.0-20230112184329-90c810757fe6.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/pebble/com_github_cockroachdb_pebble-v0.0.0-20230123220951-b418e86f4cd4.zip",
         ],
     )
     go_repository(
@@ -5183,10 +5183,10 @@ def go_deps():
         name = "com_github_knz_bubbline",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/knz/bubbline",
-        sha256 = "34c9c0d1075d28a19696350c7e248b4f187426667d6fd68ebd4c9b507e519d88",
-        strip_prefix = "github.com/knz/bubbline@v0.0.0-20221212162141-945aa5519a47",
+        sha256 = "0da0560f0116618e6e8762810ffa3fb3f2373e2478bebac6e977ed9c23f7611e",
+        strip_prefix = "github.com/knz/bubbline@v0.0.0-20230124184034-a0b62576595b",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/knz/bubbline/com_github_knz_bubbline-v0.0.0-20221212162141-945aa5519a47.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/knz/bubbline/com_github_knz_bubbline-v0.0.0-20230124184034-a0b62576595b.zip",
         ],
     )
     go_repository(

@@ -56,27 +56,25 @@ send "quit\r"
 eexpect eof
 
 
-# Pending the bubbletea changes here: https://github.com/charmbracelet/bubbletea/issues/404
+# we force TERM to xterm, otherwise we can't
+# test bracketed paste below.
+set env(TERM) xterm
 
-# # we force TERM to xterm, otherwise we can't
-# # test bracketed paste below.
-# set env(TERM) xterm
-#
-# spawn $argv sql
-# eexpect "defaultdb>"
-#
-# start_test "Test that a multi-line bracketed paste is handled properly."
-# send "\033\[200~"
-# send "\\set display_format csv\r\n"
-# send "values (1,'a'), (2,'b'), (3,'c');\r\n"
-# send "\033\[201~\r\n"
-# eexpect "1,a"
-# eexpect "2,b"
-# eexpect "3,c"
-# eexpect "defaultdb>"
-# end_test
-#
-# send_eof
-# eexpect eof
+spawn $argv sql
+eexpect "defaultdb>"
+
+start_test "Test that a multi-line bracketed paste is handled properly."
+send "\033\[200~"
+send "\\set display_format csv\r\n"
+send "values (1,'a'), (2,'b'), (3,'c');\r\n"
+send "\033\[201~\r\n"
+eexpect "1,a"
+eexpect "2,b"
+eexpect "3,c"
+eexpect "defaultdb>"
+end_test
+
+send_eof
+eexpect eof
 
 stop_server $argv
