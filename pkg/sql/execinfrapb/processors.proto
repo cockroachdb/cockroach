@@ -123,6 +123,7 @@ message ProcessorCoreUnion {
   optional IndexBackfillMergerSpec indexBackfillMerger = 38;
   optional TTLSpec ttl = 39;
   optional HashGroupJoinerSpec hashGroupJoiner = 40;
+  optional GenerativeSplitAndScatterSpec generativeSplitAndScatter = 41;
 
   reserved 6, 12, 14, 17, 18, 19, 20;
 }

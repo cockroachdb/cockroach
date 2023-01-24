@@ -402,9 +402,19 @@ func generateAndValidateNewTargets(
 	}
 
 	prevTargets := AllTargets(prevDetails)
+	noLongerExist := make(map[string]descpb.ID)
 	err = prevTargets.EachTarget(func(targetSpec changefeedbase.Target) error {
 		k := targetKey{TableID: targetSpec.TableID, FamilyName: tree.Name(targetSpec.FamilyName)}
-		desc := descResolver.DescByID[targetSpec.TableID].(catalog.TableDescriptor)
+		var desc catalog.TableDescriptor
+		if d, exists := descResolver.DescByID[targetSpec.TableID]; exists {
+			desc = d.(catalog.TableDescriptor)
+		} else {
+			// Table was dropped; that's okay since the changefeed likely
+			// will handle DROP alter command below; and if not, then we'll resume
+			// the changefeed, which will promptly fail if the table no longer exist.
+			noLongerExist[string(targetSpec.StatementTimeName)] = targetSpec.TableID
+			return nil
+		}
 
 		tbName, err := getQualifiedTableNameObj(ctx, p.ExecCfg(), p.Txn(), desc)
 		if err != nil {
@@ -492,14 +502,13 @@ func generateAndValidateNewTargets(
 				)
 			}
 
-			var existingTargetDescs []catalog.Descriptor
+			var existingTargetIDs []descpb.ID
 			for _, targetDesc := range newTableDescs {
-				existingTargetDescs = append(existingTargetDescs, targetDesc)
+				existingTargetIDs = append(existingTargetIDs, targetDesc.GetID())
 			}
-			existingTargetSpans := fetchSpansForDescs(p, existingTargetDescs)
-			var newTargetDescs []catalog.Descriptor
+			existingTargetSpans := fetchSpansForDescs(p, existingTargetIDs)
+			var newTargetIDs []descpb.ID
 			for _, target := range v.Targets {
-
 				desc, found, err := getTargetDesc(ctx, p, descResolver, target.TableName)
 				if err != nil {
 					return nil, nil, hlc.Timestamp{}, nil, err
@@ -515,10 +524,10 @@ func generateAndValidateNewTargets(
 				k := targetKey{TableID: desc.GetID(), FamilyName: target.FamilyName}
 				newTargets[k] = target
 				newTableDescs[desc.GetID()] = desc
-				newTargetDescs = append(newTargetDescs, desc)
+				newTargetIDs = append(newTargetIDs, k.TableID)
 			}
 
-			addedTargetSpans := fetchSpansForDescs(p, newTargetDescs)
+			addedTargetSpans := fetchSpansForDescs(p, newTargetIDs)
 
 			// By default, we will not perform an initial scan on newly added
 			// targets. Hence, the user must explicitly state that they want an
@@ -541,11 +550,18 @@ func generateAndValidateNewTargets(
 					return nil, nil, hlc.Timestamp{}, nil, err
 				}
 				if !found {
-					return nil, nil, hlc.Timestamp{}, nil, pgerror.Newf(
-						pgcode.InvalidParameterValue,
-						`target %q does not exist`,
-						tree.ErrString(&target),
-					)
+					if id, wasDeleted := noLongerExist[target.TableName.String()]; wasDeleted {
+						// Failed to lookup table because it was deleted.
+						k := targetKey{TableID: id, FamilyName: target.FamilyName}
+						droppedTargets[k] = target
+						continue
+					} else {
+						return nil, nil, hlc.Timestamp{}, nil, pgerror.Newf(
+							pgcode.InvalidParameterValue,
+							`target %q does not exist`,
+							tree.ErrString(&target),
+						)
+					}
 				}
 				k := targetKey{TableID: desc.GetID(), FamilyName: target.FamilyName}
 				droppedTargets[k] = target
@@ -569,21 +585,18 @@ func generateAndValidateNewTargets(
 	// drop one column family from a table and add another at the same time,
 	// and since we watch entire table spans the set of spans won't change.
 	if len(droppedTargets) > 0 {
-		droppedIDs := make(map[descpb.ID]struct{}, len(droppedTargets))
-		for k := range droppedTargets {
-			droppedIDs[k.TableID] = struct{}{}
-		}
+		addedTargets := make(map[descpb.ID]struct{}, len(newTargets))
 		for k := range newTargets {
-			delete(droppedIDs, k.TableID)
+			addedTargets[k.TableID] = struct{}{}
 		}
-		if len(droppedIDs) > 0 {
-			droppedTargetDescs := make([]catalog.Descriptor, 0, len(droppedIDs))
-			for id := range droppedIDs {
-				droppedTargetDescs = append(droppedTargetDescs, descResolver.DescByID[id])
+		droppedIDs := make([]descpb.ID, 0, len(droppedTargets))
+		for k := range droppedTargets {
+			if _, wasAdded := addedTargets[k.TableID]; !wasAdded {
+				droppedIDs = append(droppedIDs, k.TableID)
 			}
-			droppedTargetSpans := fetchSpansForDescs(p, droppedTargetDescs)
-			removeSpansFromProgress(newJobProgress, droppedTargetSpans)
 		}
+		droppedTargetSpans := fetchSpansForDescs(p, droppedIDs)
+		removeSpansFromProgress(newJobProgress, droppedTargetSpans)
 	}
 
 	newTargetList := tree.ChangefeedTargets{}
@@ -777,16 +790,20 @@ func removeSpansFromProgress(prevProgress jobspb.Progress, spansToRemove []roach
 	changefeedProgress.Checkpoint.Spans = spanGroup.Slice()
 }
 
-func fetchSpansForDescs(
-	p sql.PlanHookState, descs []catalog.Descriptor,
-) (primarySpans []roachpb.Span) {
+func fetchSpansForDescs(p sql.PlanHookState, droppedIDs []descpb.ID) (primarySpans []roachpb.Span) {
 	seen := make(map[descpb.ID]struct{})
-	for _, d := range descs {
-		if _, isDup := seen[d.GetID()]; isDup {
+	codec := p.ExtendedEvalContext().Codec
+	for _, id := range droppedIDs {
+		if _, isDup := seen[id]; isDup {
 			continue
 		}
-		seen[d.GetID()] = struct{}{}
-		primarySpans = append(primarySpans, d.(catalog.TableDescriptor).PrimaryIndexSpan(p.ExtendedEvalContext().Codec))
+		seen[id] = struct{}{}
+		tablePrefix := codec.TablePrefix(uint32(id))
+		primarySpan := roachpb.Span{
+			Key:    tablePrefix,
+			EndKey: tablePrefix.PrefixEnd(),
+		}
+		primarySpans = append(primarySpans, primarySpan)
 	}
 	return primarySpans
 }
