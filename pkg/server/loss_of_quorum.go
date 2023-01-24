@@ -32,7 +32,7 @@ func newPlanStore(cfg Config) (loqrecovery.PlanStore, error) {
 	fs := vfs.Default
 	path := spec.Path
 	if spec.InMemory {
-		path = "."
+		path = ""
 		if spec.StickyInMemoryEngineID != "" {
 			if cfg.TestingKnobs.Server == nil {
 				return loqrecovery.PlanStore{}, errors.AssertionFailedf("Could not create a sticky " +

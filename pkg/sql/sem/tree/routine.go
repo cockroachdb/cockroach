@@ -61,6 +61,32 @@ type RoutineExpr struct {
 	// routine will see a snapshot of the data as of the start of the statement
 	// invoking the routine.
 	EnableStepping bool
+
+	// CachedResult stores the datum that the routine evaluates to, if the
+	// routine is nullary (i.e., it has zero arguments) and stepping is
+	// disabled. It is populated during the first execution of the routine.
+	// Subsequent invocations of the routine return Result directly, rather than
+	// being executed.
+	//
+	// The cache is never cleared - it lives for the entire lifetime of the
+	// routine. Therefore, to "invalidate" the cache, a new routine must be
+	// created. For example, consider:
+	//
+	//   CREATE TABLE t (i INT);
+	//   CREATE FUNCTION f() RETURNS INT VOLATILE LANGUAGE SQL AS $$
+	//     SELECT i FROM (VALUES (1), (2)) v(i) WHERE i = (SELECT max(i) FROM t)
+	//   $$;
+	//   SELECT f() FROM (VALUES (3), (4));
+	//
+	// The optimizer query plan for the SELECT contains two expressions that are
+	// built as routines, the UDF and the subquery within it. Each invocation of
+	// the UDF's routine will re-plan the body of the function, creating a new
+	// routine for the subquery. This effectively "invalidates" the cached
+	// result in the subquery routines each time the UDF is invoked. Within a
+	// single invocation of the UDF, however, the subquery will only be executed
+	// once and the cached result will be returned if the subquery is evaluated
+	// multiple times (e.g., for each value of i in v).
+	CachedResult Datum
 }
 
 // NewTypedRoutineExpr returns a new RoutineExpr that is well-typed.

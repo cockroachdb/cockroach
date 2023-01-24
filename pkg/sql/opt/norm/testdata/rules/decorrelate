@@ -4252,6 +4252,121 @@ project
       └── filters
            └── ((0, length(count_rows:12::STRING)) > (0, 1)) OR (i:2 = 1) [outer=(2,12), immutable]
 
+# CREATE TABLE a (k INT PRIMARY KEY, i INT, f FLOAT, s STRING, j JSON)
+# CREATE TABLE xy (x INT PRIMARY KEY, y INT)
+
+# Hoist a leakproof subquery within a COALESCE.
+norm expect=HoistSelectSubquery
+SELECT * FROM a WHERE k = COALESCE(i, (SELECT y FROM xy WHERE x = i))
+----
+project
+ ├── columns: k:1!null i:2 f:3 s:4 j:5
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
+ └── select
+      ├── columns: k:1!null i:2 f:3 s:4 j:5 x:8 y:9
+      ├── key: (1)
+      ├── fd: (1)-->(2-5,8,9), (8)-->(9), (2,9)-->(1)
+      ├── left-join (hash)
+      │    ├── columns: k:1!null i:2 f:3 s:4 j:5 x:8 y:9
+      │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2-5,8,9), (8)-->(9)
+      │    ├── scan a
+      │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5
+      │    │    ├── key: (1)
+      │    │    └── fd: (1)-->(2-5)
+      │    ├── scan xy
+      │    │    ├── columns: x:8!null y:9
+      │    │    ├── key: (8)
+      │    │    └── fd: (8)-->(9)
+      │    └── filters
+      │         └── x:8 = i:2 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
+      └── filters
+           └── k:1 = COALESCE(i:2, y:9) [outer=(1,2,9), constraints=(/1: (/NULL - ]), fd=(2,9)-->(1)]
+
+# Hoist a non-leakproof subquery within a COALESCE if it is the first argument.
+norm expect=HoistSelectSubquery
+SELECT * FROM a WHERE k = COALESCE((SELECT (1/y)::INT FROM xy WHERE x = i), i)
+----
+project
+ ├── columns: k:1!null i:2 f:3 s:4 j:5
+ ├── immutable
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
+ └── select
+      ├── columns: k:1!null i:2 f:3 s:4 j:5 x:8 int8:12
+      ├── immutable
+      ├── key: (1)
+      ├── fd: (1)-->(2-5,8,12), (8)-->(12), (2,12)-->(1)
+      ├── left-join (hash)
+      │    ├── columns: k:1!null i:2 f:3 s:4 j:5 x:8 int8:12
+      │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
+      │    ├── immutable
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2-5,8,12), (8)-->(12)
+      │    ├── scan a
+      │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5
+      │    │    ├── key: (1)
+      │    │    └── fd: (1)-->(2-5)
+      │    ├── project
+      │    │    ├── columns: int8:12 x:8!null
+      │    │    ├── immutable
+      │    │    ├── key: (8)
+      │    │    ├── fd: (8)-->(12)
+      │    │    ├── scan xy
+      │    │    │    ├── columns: x:8!null y:9
+      │    │    │    ├── key: (8)
+      │    │    │    └── fd: (8)-->(9)
+      │    │    └── projections
+      │    │         └── (1 / y:9)::INT8 [as=int8:12, outer=(9), immutable]
+      │    └── filters
+      │         └── x:8 = i:2 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
+      └── filters
+           └── k:1 = COALESCE(int8:12, i:2) [outer=(1,2,12), constraints=(/1: (/NULL - ]), fd=(2,12)-->(1)]
+
+# Do not hoist a non-leakproof subquery within a COALESCE if it is not the first
+# argument.
+norm expect-not=HoistSelectSubquery
+SELECT * FROM a WHERE k = COALESCE(i, (SELECT (1/y)::INT FROM xy WHERE x = i))
+----
+select
+ ├── columns: k:1!null i:2 f:3 s:4 j:5
+ ├── immutable
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
+ ├── scan a
+ │    ├── columns: k:1!null i:2 f:3 s:4 j:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ └── filters
+      └── eq [outer=(1,2), immutable, correlated-subquery, constraints=(/1: (/NULL - ])]
+           ├── k:1
+           └── coalesce
+                ├── i:2
+                └── subquery
+                     └── project
+                          ├── columns: int8:12
+                          ├── outer: (2)
+                          ├── cardinality: [0 - 1]
+                          ├── immutable
+                          ├── key: ()
+                          ├── fd: ()-->(12)
+                          ├── select
+                          │    ├── columns: x:8!null y:9
+                          │    ├── outer: (2)
+                          │    ├── cardinality: [0 - 1]
+                          │    ├── key: ()
+                          │    ├── fd: ()-->(8,9)
+                          │    ├── scan xy
+                          │    │    ├── columns: x:8!null y:9
+                          │    │    ├── key: (8)
+                          │    │    └── fd: (8)-->(9)
+                          │    └── filters
+                          │         └── x:8 = i:2 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
+                          └── projections
+                               └── (1 / y:9)::INT8 [as=int8:12, outer=(9), immutable]
+
 # Exists within a disjunction.
 norm expect=HoistSelectSubquery
 SELECT * FROM a WHERE i=1 OR EXISTS(SELECT * FROM xy WHERE y=i)
@@ -4632,6 +4747,93 @@ scalar-group-by
  └── aggregations
       └── max [as=max:13, outer=(12)]
            └── column12:12
+
+# Hoist a leakproof subquery within a COALESCE.
+norm expect=HoistProjectSubquery
+SELECT COALESCE(i, (SELECT y FROM xy WHERE x = i)) FROM a
+----
+project
+ ├── columns: coalesce:12
+ ├── left-join (hash)
+ │    ├── columns: i:2 x:8 y:9
+ │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
+ │    ├── fd: (8)-->(9)
+ │    ├── scan a
+ │    │    └── columns: i:2
+ │    ├── scan xy
+ │    │    ├── columns: x:8!null y:9
+ │    │    ├── key: (8)
+ │    │    └── fd: (8)-->(9)
+ │    └── filters
+ │         └── x:8 = i:2 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
+ └── projections
+      └── COALESCE(i:2, y:9) [as=coalesce:12, outer=(2,9)]
+
+# Hoist a non-leakproof subquery within a COALESCE if it is the first argument.
+norm expect=HoistProjectSubquery
+SELECT COALESCE((SELECT (1/y)::INT FROM xy WHERE x = i), i) FROM a
+----
+project
+ ├── columns: coalesce:13
+ ├── immutable
+ ├── left-join (hash)
+ │    ├── columns: i:2 x:8 int8:12
+ │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
+ │    ├── immutable
+ │    ├── fd: (8)-->(12)
+ │    ├── scan a
+ │    │    └── columns: i:2
+ │    ├── project
+ │    │    ├── columns: int8:12 x:8!null
+ │    │    ├── immutable
+ │    │    ├── key: (8)
+ │    │    ├── fd: (8)-->(12)
+ │    │    ├── scan xy
+ │    │    │    ├── columns: x:8!null y:9
+ │    │    │    ├── key: (8)
+ │    │    │    └── fd: (8)-->(9)
+ │    │    └── projections
+ │    │         └── (1 / y:9)::INT8 [as=int8:12, outer=(9), immutable]
+ │    └── filters
+ │         └── x:8 = i:2 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
+ └── projections
+      └── COALESCE(int8:12, i:2) [as=coalesce:13, outer=(2,12)]
+
+# Do not hoist a non-leakproof subquery within a COALESCE if it is not the first
+# argument.
+norm expect-not=HoistProjectSubquery
+SELECT COALESCE(i, (SELECT (1/y)::INT FROM xy WHERE x = i)) FROM a
+----
+project
+ ├── columns: coalesce:13
+ ├── immutable
+ ├── scan a
+ │    └── columns: i:2
+ └── projections
+      └── coalesce [as=coalesce:13, outer=(2), immutable, correlated-subquery]
+           ├── i:2
+           └── subquery
+                └── project
+                     ├── columns: int8:12
+                     ├── outer: (2)
+                     ├── cardinality: [0 - 1]
+                     ├── immutable
+                     ├── key: ()
+                     ├── fd: ()-->(12)
+                     ├── select
+                     │    ├── columns: x:8!null y:9
+                     │    ├── outer: (2)
+                     │    ├── cardinality: [0 - 1]
+                     │    ├── key: ()
+                     │    ├── fd: ()-->(8,9)
+                     │    ├── scan xy
+                     │    │    ├── columns: x:8!null y:9
+                     │    │    ├── key: (8)
+                     │    │    └── fd: (8)-->(9)
+                     │    └── filters
+                     │         └── x:8 = i:2 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
+                     └── projections
+                          └── (1 / y:9)::INT8 [as=int8:12, outer=(9), immutable]
 
 # Exists in projection list.
 norm expect=HoistProjectSubquery

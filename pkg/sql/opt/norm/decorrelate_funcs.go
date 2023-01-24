@@ -94,6 +94,17 @@ func (c *CustomFuncs) deriveHasHoistableSubquery(scalar opt.ScalarExpr) bool {
 					hasHoistableSubquery = sharedProps.VolatilitySet.IsLeakproof()
 				}
 
+			case *memo.CoalesceExpr:
+				// The first argument does not need to be leakproof because it
+				// is always evaluated.
+				for j := 1; j < len(t.Args); j++ {
+					memo.BuildSharedProps(t.Args[j], &sharedProps, c.f.evalCtx)
+					hasHoistableSubquery = sharedProps.VolatilitySet.IsLeakproof()
+					if !hasHoistableSubquery {
+						break
+					}
+				}
+
 			case *memo.WhenExpr:
 				if child == t.Value {
 					memo.BuildSharedProps(child, &sharedProps, c.f.evalCtx)
