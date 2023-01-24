@@ -106,9 +106,13 @@ func (g *Counter) ToPrometheusMetric() *io_prometheus_client.Metric {
 	}
 }
 
-// Destroy disconnects this Counter from its parents. Unlike Gauge.Destroy, it
-// does not decrement its value from its parent.
-func (g *Counter) Destroy() {
+// Unlink unlinks this child from the parent, i.e. the parent will no longer
+// track this child (i.e. won't generate labels for it, etc). However, the child
+// will continue to be functional and reference the parent, meaning updates to
+// it will be reflected in the aggregate stored in the parent.
+//
+// See tenantrate.TestUseAfterRelease.
+func (g *Counter) Unlink() {
 	g.parent.remove(g)
 }
 

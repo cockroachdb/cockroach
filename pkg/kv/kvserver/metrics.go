@@ -2172,9 +2172,9 @@ func (sm *TenantsStorageMetrics) releaseTenant(ctx context.Context, ref *tenantM
 		&m.SysCount,
 		&m.AbortSpanBytes,
 	} {
-		// Reset before unlinking, see Destroy.
+		// Reset before unlinking, see Unlink.
 		(*gptr).Update(0)
-		(*gptr).Destroy()
+		(*gptr).Unlink()
 		*gptr = nil
 	}
 	sm.tenants.Delete(int64(ref._tenantID.ToUint64()))
