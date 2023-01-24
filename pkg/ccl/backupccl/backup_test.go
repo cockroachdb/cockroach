@@ -10732,3 +10732,49 @@ $$;
 	require.NoError(t, err)
 
 }
+
+func localityFromStr(t *testing.T, s string) roachpb.Locality {
+	var l roachpb.Locality
+	require.NoError(t, l.Set(s))
+	return l
+}
+
+func TestBackupInLocality(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const numAccounts = 1000
+
+	// Disabled to run within tenant as certain MR features are not available to tenants.
+	args := base.TestClusterArgs{ServerArgsPerNode: map[int]base.TestServerArgs{
+		0: {Locality: localityFromStr(t, "region=east,dc=1,az=1")},
+		1: {Locality: localityFromStr(t, "region=east,dc=2,az=2")},
+		2: {Locality: localityFromStr(t, "region=west,dc=1,az=1")},
+	}}
+
+	cluster, _, _, cleanupFn := backupRestoreTestSetupWithParams(t, 3 /* nodes */, numAccounts, InitManualReplication, args)
+	defer cleanupFn()
+
+	for i, tc := range []struct {
+		node        int
+		filter, err string
+	}{
+		{node: 1, filter: "region=east", err: ""},
+		{node: 1, filter: "region=east,dc=1", err: ""},
+		{node: 1, filter: "region=east,dc=6", err: "no instances found"},
+		{node: 1, filter: "region=central", err: "no instances found"},
+		{node: 1, filter: "region=east,dc=2", err: "relocated"},
+		{node: 1, filter: "region=west,dc=1", err: "relocated"},
+
+		{node: 2, filter: "region=east", err: ""},
+		{node: 2, filter: "region=east,az=2", err: ""},
+		{node: 2, filter: "region=east,dc=1", err: "relocated"},
+		{node: 2, filter: "region=east,az=1", err: "relocated"},
+
+		{node: 3, filter: "region=east", err: "relocated"},
+		{node: 3, filter: "region=central,dc=1", err: "no instances found"},
+	} {
+		db := sqlutils.MakeSQLRunner(cluster.ServerConn(tc.node - 1))
+		db.ExpectErr(t, tc.err, "BACKUP system.users INTO $1 WITH coordinator_locality = $2", fmt.Sprintf("userfile:///tc%d", i), tc.filter)
+	}
+}
