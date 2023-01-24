@@ -376,6 +376,15 @@ func NewProcessor(
 		}
 		return newHashGroupJoiner(ctx, flowCtx, processorID, core.HashGroupJoiner, inputs[0], inputs[1], post, outputs[0])
 	}
+	if core.GenerativeSplitAndScatter != nil {
+		if err := checkNumInOut(inputs, outputs, 0, 1); err != nil {
+			return nil, err
+		}
+		if NewGenerativeSplitAndScatterProcessor == nil {
+			return nil, errors.New("GenerativeSplitAndScatter processor unimplemented")
+		}
+		return NewGenerativeSplitAndScatterProcessor(ctx, flowCtx, processorID, *core.GenerativeSplitAndScatter, post, outputs[0])
+	}
 	return nil, errors.Errorf("unsupported processor core %q", core)
 }
 
@@ -411,3 +420,6 @@ var NewStreamIngestionFrontierProcessor func(context.Context, *execinfra.FlowCtx
 
 // NewTTLProcessor is implemented in the non-free (CCL) codebase and then injected here via runtime initialization.
 var NewTTLProcessor func(context.Context, *execinfra.FlowCtx, int32, execinfrapb.TTLSpec, execinfra.RowReceiver) (execinfra.Processor, error)
+
+// NewGenerativeSplitAndScatterProcessor is implemented in the non-free (CCL) codebase and then injected here via runtime initialization.
+var NewGenerativeSplitAndScatterProcessor func(context.Context, *execinfra.FlowCtx, int32, execinfrapb.GenerativeSplitAndScatterSpec, *execinfrapb.PostProcessSpec, execinfra.RowReceiver) (execinfra.Processor, error)

@@ -16,6 +16,7 @@ go_library(
         "backup_telemetry.go",
         "create_scheduled_backup.go",
         "file_sst_sink.go",
+        "generative_split_and_scatter_processor.go",
         "key_rewriter.go",
         "restoration_data.go",
         "restore_data_processor.go",
