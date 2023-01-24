@@ -1523,6 +1523,9 @@ func (r *Registry) stepThroughStateMachine(
 			jm.ResumeRetryError.Inc(1)
 			return errors.Errorf("job %d: node liveness error: restarting in background", job.ID())
 		}
+		if errors.Is(err, errJobLeaseNotHeld) {
+			return err
+		}
 
 		if errors.Is(err, errPauseSelfSentinel) {
 			if err := r.PauseRequested(ctx, nil, job.ID(), err.Error()); err != nil {
@@ -1818,6 +1821,23 @@ func (r *Registry) CheckPausepoint(name string) error {
 		}
 	}
 	return nil
+}
+
+func (r *Registry) RelocateLease(
+	ctx context.Context,
+	txn isql.Txn,
+	id jobspb.JobID,
+	destID base.SQLInstanceID,
+	destSession sqlliveness.SessionID,
+) (sentinel error, failure error) {
+	if _, err := r.db.Executor().Exec(ctx, "job-relocate-coordinator", txn.KV(),
+		"UPDATE system.jobs SET claim_instance_id = $2, claim_session_id = $3 WHERE id = $1",
+		id, destID, destSession.UnsafeBytes(),
+	); err != nil {
+		return nil, errors.Wrapf(err, "failed to relocate job coordinator to %d", destID)
+	}
+
+	return errors.Mark(errors.Newf("execution of job %d relocated to %d", id, destID), errJobLeaseNotHeld), nil
 }
 
 // TestingIsJobIdle returns true if the job is adopted and currently idle.
