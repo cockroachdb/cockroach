@@ -102,10 +102,15 @@ func Authorize(
 		return err
 	}
 
+	hasViewJob, err := a.HasRoleOption(ctx, roleoption.VIEWJOB)
+	if err != nil {
+		return err
+	}
+
 	jobOwnerUser := payload.UsernameProto.Decode()
 
 	if accessLevel == ViewAccess {
-		if a.User() == jobOwnerUser || hasControlJob {
+		if a.User() == jobOwnerUser || hasControlJob || hasViewJob {
 			return nil
 		}
 	}

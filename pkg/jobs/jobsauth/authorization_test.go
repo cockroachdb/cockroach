@@ -205,6 +205,25 @@ func TestAuthorization(t *testing.T) {
 			payload:     makeChangefeedPayload("user2", []descpb.ID{0, 1, 2}),
 			accessLevel: jobsauth.ControlAccess,
 		},
+		{
+			name:        "viewjob-allows-read-access",
+			user:        username.MakeSQLUsernameFromPreNormalizedString("user1"),
+			roleOptions: map[roleoption.Option]struct{}{roleoption.VIEWJOB: {}},
+			admins:      map[string]struct{}{},
+
+			payload:     makeBackupPayload("user2"),
+			accessLevel: jobsauth.ViewAccess,
+		},
+		{
+			name:        "viewjob-disallows-control-access",
+			user:        username.MakeSQLUsernameFromPreNormalizedString("user1"),
+			roleOptions: map[roleoption.Option]struct{}{roleoption.VIEWJOB: {}},
+			admins:      map[string]struct{}{},
+
+			payload:     makeBackupPayload("user2"),
+			accessLevel: jobsauth.ControlAccess,
+			userErr:     pgerror.New(pgcode.InsufficientPrivilege, "foo"),
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			testAuth := &testAuthAccessor{

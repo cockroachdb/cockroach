@@ -6,7 +6,7 @@ iam.roles.create.*
 ----
 
 feature-usage
-CREATE ROLE testuser CREATEROLE LOGIN VALID UNTIL '2020-01-01' CONTROLJOB CONTROLCHANGEFEED CREATEDB CREATELOGIN VIEWACTIVITY CANCELQUERY MODIFYCLUSTERSETTING
+CREATE ROLE testuser CREATEROLE LOGIN VALID UNTIL '2020-01-01' CONTROLJOB CONTROLCHANGEFEED CREATEDB CREATELOGIN VIEWACTIVITY CANCELQUERY MODIFYCLUSTERSETTING VIEWJOB
 ----
 iam.roles.create.cancelquery
 iam.roles.create.controlchangefeed
@@ -19,9 +19,10 @@ iam.roles.create.modifyclustersetting
 iam.roles.create.role
 iam.roles.create.valid until
 iam.roles.create.viewactivity
+iam.roles.create.viewjob
 
 feature-usage
-ALTER ROLE testuser NOCREATEROLE NOLOGIN NOCONTROLJOB NOCONTROLCHANGEFEED NOCREATEDB NOCREATELOGIN NOVIEWACTIVITY NOCANCELQUERY NOMODIFYCLUSTERSETTING
+ALTER ROLE testuser NOCREATEROLE NOLOGIN NOCONTROLJOB NOCONTROLCHANGEFEED NOCREATEDB NOCREATELOGIN NOVIEWACTIVITY NOCANCELQUERY NOMODIFYCLUSTERSETTING NOVIEWJOB
 ----
 iam.roles.alter.nocancelquery
 iam.roles.alter.nocontrolchangefeed
@@ -32,4 +33,5 @@ iam.roles.alter.nocreaterole
 iam.roles.alter.nologin
 iam.roles.alter.nomodifyclustersetting
 iam.roles.alter.noviewactivity
+iam.roles.create.noviewjob
 iam.roles.alter.role
