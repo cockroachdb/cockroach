@@ -85,6 +85,10 @@ func isSimpleDependent(e scpb.Element) bool {
 	return !isDescriptor(e) && !isSubjectTo2VersionInvariant(e) && !isData(e)
 }
 
+func isDependent(e scpb.Element) bool {
+	return !isDescriptor(e)
+}
+
 func getTypeT(element scpb.Element) (*scpb.TypeT, error) {
 	switch e := element.(type) {
 	case *scpb.ColumnType:

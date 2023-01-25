@@ -1,0 +1,444 @@
+/* setup */
+CREATE TABLE t(
+  a INT PRIMARY KEY,
+  b INT,
+  C INT,
+  INDEX t_idx_b(b),
+  INDEX t_idx_c(c)
+);
+CREATE SEQUENCE sq1;
+CREATE VIEW v AS SELECT a FROM t;
+CREATE TYPE notmyworkday AS ENUM ('Monday', 'Tuesday');
+CREATE TABLE t2(a notmyworkday);
+
+/* test */
+EXPLAIN (ddl, verbose) CREATE FUNCTION f(a notmyworkday) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$
+  SELECT a FROM t;
+  SELECT b FROM t@t_idx_b;
+  SELECT c FROM t@t_idx_c;
+  SELECT a FROM v;
+  SELECT nextval('sq1');
+$$;
+----
+• Schema change plan for CREATE FUNCTION ‹defaultdb›.‹public›.‹f›(IN ‹a› notmyworkday)
+│ 	RETURNS INT8
+│ 	IMMUTABLE
+│ 	LANGUAGE SQL
+│ 	AS $$SELECT a FROM defaultdb.public.t;
+│ SELECT b FROM defaultdb.public.t@t_idx_b;
+│ SELECT c FROM defaultdb.public.t@t_idx_c;
+│ SELECT a FROM defaultdb.public.v;
+│ SELECT nextval('sq1');$$;
+│
+├── • StatementPhase
+│   │
+│   └── • Stage 1 of 1 in StatementPhase
+│       │
+│       ├── • 8 elements transitioning toward PUBLIC
+│       │   │
+│       │   ├── • Function:{DescID: 110}
+│       │   │     ABSENT → DESCRIPTOR_ADDED
+│       │   │
+│       │   ├── • ObjectParent:{DescID: 110, ReferencedDescID: 101}
+│       │   │   │ ABSENT → PUBLIC
+│       │   │   │
+│       │   │   ├── • Precedence dependency from DESCRIPTOR_ADDED Function:{DescID: 110}
+│       │   │   │     rule: "descriptor existence precedes dependents"
+│       │   │   │
+│       │   │   └── • Precedence dependency from PUBLIC FunctionName:{DescID: 110}
+│       │   │         rule: "function name should be set before parent ids"
+│       │   │
+│       │   ├── • FunctionName:{DescID: 110}
+│       │   │   │ ABSENT → PUBLIC
+│       │   │   │
+│       │   │   └── • Precedence dependency from DESCRIPTOR_ADDED Function:{DescID: 110}
+│       │   │         rule: "descriptor existence precedes dependents"
+│       │   │
+│       │   ├── • FunctionVolatility:{DescID: 110}
+│       │   │   │ ABSENT → PUBLIC
+│       │   │   │
+│       │   │   └── • Precedence dependency from DESCRIPTOR_ADDED Function:{DescID: 110}
+│       │   │         rule: "descriptor existence precedes dependents"
+│       │   │
+│       │   ├── • Owner:{DescID: 110}
+│       │   │   │ ABSENT → PUBLIC
+│       │   │   │
+│       │   │   └── • Precedence dependency from DESCRIPTOR_ADDED Function:{DescID: 110}
+│       │   │         rule: "descriptor existence precedes dependents"
+│       │   │
+│       │   ├── • UserPrivileges:{DescID: 110, Name: admin}
+│       │   │   │ ABSENT → PUBLIC
+│       │   │   │
+│       │   │   └── • Precedence dependency from DESCRIPTOR_ADDED Function:{DescID: 110}
+│       │   │         rule: "descriptor existence precedes dependents"
+│       │   │
+│       │   ├── • UserPrivileges:{DescID: 110, Name: root}
+│       │   │   │ ABSENT → PUBLIC
+│       │   │   │
+│       │   │   └── • Precedence dependency from DESCRIPTOR_ADDED Function:{DescID: 110}
+│       │   │         rule: "descriptor existence precedes dependents"
+│       │   │
+│       │   └── • FunctionBody:{DescID: 110}
+│       │       │ ABSENT → PUBLIC
+│       │       │
+│       │       └── • Precedence dependency from DESCRIPTOR_ADDED Function:{DescID: 110}
+│       │             rule: "descriptor existence precedes dependents"
+│       │
+│       └── • 10 Mutation operations
+│           │
+│           ├── • CreateFunctionDescriptor
+│           │     Function:
+│           │       FunctionID: 110
+│           │       Params:
+│           │       - name: a
+│           │         class:
+│           │           class: 1
+│           │         type:
+│           │           type: |
+│           │             family: EnumFamily
+│           │             width: 0
+│           │             precision: 0
+│           │             locale: ""
+│           │             visible_type: 0
+│           │             oid: 100107
+│           │             time_precision_is_set: false
+│           │             udt_metadata: <
+│           │               array_type_oid: 100108
+│           │             >
+│           │           closedtypeids:
+│           │           - 107
+│           │           - 108
+│           │       ReturnType:
+│           │         Type:
+│           │           family: IntFamily
+│           │           oid: 20
+│           │           width: 64
+│           │
+│           ├── • SetFunctionName
+│           │     FunctionID: 110
+│           │     Name: f
+│           │
+│           ├── • SetFunctionVolatility
+│           │     FunctionID: 110
+│           │     Volatility: 2
+│           │
+│           ├── • UpdateOwner
+│           │     Owner:
+│           │       DescriptorID: 110
+│           │       Owner: root
+│           │
+│           ├── • UpdateUserPrivileges
+│           │     Privileges:
+│           │       DescriptorID: 110
+│           │       Privileges: 2
+│           │       UserName: admin
+│           │       WithGrantOption: 2
+│           │
+│           ├── • UpdateUserPrivileges
+│           │     Privileges:
+│           │       DescriptorID: 110
+│           │       Privileges: 2
+│           │       UserName: root
+│           │       WithGrantOption: 2
+│           │
+│           ├── • SetFunctionBody
+│           │     Body:
+│           │       Body: |-
+│           │         SELECT a FROM t;
+│           │         SELECT b FROM t@t_idx_b;
+│           │         SELECT c FROM t@t_idx_c;
+│           │         SELECT a FROM v;
+│           │         SELECT nextval(105:::REGCLASS);
+│           │       FunctionID: 110
+│           │       Lang:
+│           │         Lang: 1
+│           │       UsesSequenceIDs:
+│           │       - 105
+│           │       UsesTables:
+│           │       - tableid: 104
+│           │         columnids:
+│           │         - 1
+│           │         indexid: 0
+│           │       - tableid: 104
+│           │         columnids:
+│           │         - 2
+│           │         indexid: 2
+│           │       - tableid: 104
+│           │         columnids:
+│           │         - 3
+│           │         indexid: 3
+│           │       UsesTypeIDs:
+│           │       - 107
+│           │       - 108
+│           │       UsesViews:
+│           │       - viewid: 106
+│           │         columnids:
+│           │         - 1
+│           │
+│           ├── • UpdateFunctionTypeReferences
+│           │     FunctionID: 110
+│           │     TypeIDs:
+│           │     - 107
+│           │     - 108
+│           │
+│           ├── • UpdateFunctionRelationReferences
+│           │     FunctionID: 110
+│           │     SequenceIDs:
+│           │     - 105
+│           │     TableReferences:
+│           │     - tableid: 104
+│           │       columnids:
+│           │       - 1
+│           │       indexid: 0
+│           │     - tableid: 104
+│           │       columnids:
+│           │       - 2
+│           │       indexid: 2
+│           │     - tableid: 104
+│           │       columnids:
+│           │       - 3
+│           │       indexid: 3
+│           │     ViewReferences:
+│           │     - viewid: 106
+│           │       columnids:
+│           │       - 1
+│           │
+│           └── • SetObjectParentID
+│                 ObjParent:
+│                   ObjectID: 110
+│                   ParentSchemaID: 101
+│
+└── • PreCommitPhase
+    │
+    ├── • Stage 1 of 2 in PreCommitPhase
+    │   │
+    │   ├── • 8 elements transitioning toward PUBLIC
+    │   │   │
+    │   │   ├── • Function:{DescID: 110}
+    │   │   │     DESCRIPTOR_ADDED → ABSENT
+    │   │   │
+    │   │   ├── • ObjectParent:{DescID: 110, ReferencedDescID: 101}
+    │   │   │     PUBLIC → ABSENT
+    │   │   │
+    │   │   ├── • FunctionName:{DescID: 110}
+    │   │   │     PUBLIC → ABSENT
+    │   │   │
+    │   │   ├── • FunctionVolatility:{DescID: 110}
+    │   │   │     PUBLIC → ABSENT
+    │   │   │
+    │   │   ├── • Owner:{DescID: 110}
+    │   │   │     PUBLIC → ABSENT
+    │   │   │
+    │   │   ├── • UserPrivileges:{DescID: 110, Name: admin}
+    │   │   │     PUBLIC → ABSENT
+    │   │   │
+    │   │   ├── • UserPrivileges:{DescID: 110, Name: root}
+    │   │   │     PUBLIC → ABSENT
+    │   │   │
+    │   │   └── • FunctionBody:{DescID: 110}
+    │   │         PUBLIC → ABSENT
+    │   │
+    │   └── • 1 Mutation operation
+    │       │
+    │       └── • UndoAllInTxnImmediateMutationOpSideEffects
+    │             {}
+    │
+    └── • Stage 2 of 2 in PreCommitPhase
+        │
+        ├── • 8 elements transitioning toward PUBLIC
+        │   │
+        │   ├── • Function:{DescID: 110}
+        │   │   │ ABSENT → PUBLIC
+        │   │   │
+        │   │   ├── • Precedence dependency from PUBLIC ObjectParent:{DescID: 110, ReferencedDescID: 101}
+        │   │   │     rule: "dependents exist before descriptor becomes public"
+        │   │   │
+        │   │   ├── • Precedence dependency from PUBLIC FunctionName:{DescID: 110}
+        │   │   │     rule: "dependents exist before descriptor becomes public"
+        │   │   │
+        │   │   ├── • Precedence dependency from PUBLIC FunctionVolatility:{DescID: 110}
+        │   │   │     rule: "dependents exist before descriptor becomes public"
+        │   │   │
+        │   │   ├── • Precedence dependency from PUBLIC Owner:{DescID: 110}
+        │   │   │     rule: "dependents exist before descriptor becomes public"
+        │   │   │
+        │   │   ├── • Precedence dependency from PUBLIC UserPrivileges:{DescID: 110, Name: admin}
+        │   │   │     rule: "dependents exist before descriptor becomes public"
+        │   │   │
+        │   │   ├── • Precedence dependency from PUBLIC UserPrivileges:{DescID: 110, Name: root}
+        │   │   │     rule: "dependents exist before descriptor becomes public"
+        │   │   │
+        │   │   └── • Precedence dependency from PUBLIC FunctionBody:{DescID: 110}
+        │   │         rule: "dependents exist before descriptor becomes public"
+        │   │
+        │   ├── • ObjectParent:{DescID: 110, ReferencedDescID: 101}
+        │   │   │ ABSENT → PUBLIC
+        │   │   │
+        │   │   ├── • Precedence dependency from DESCRIPTOR_ADDED Function:{DescID: 110}
+        │   │   │     rule: "descriptor existence precedes dependents"
+        │   │   │
+        │   │   └── • Precedence dependency from PUBLIC FunctionName:{DescID: 110}
+        │   │         rule: "function name should be set before parent ids"
+        │   │
+        │   ├── • FunctionName:{DescID: 110}
+        │   │   │ ABSENT → PUBLIC
+        │   │   │
+        │   │   └── • Precedence dependency from DESCRIPTOR_ADDED Function:{DescID: 110}
+        │   │         rule: "descriptor existence precedes dependents"
+        │   │
+        │   ├── • FunctionVolatility:{DescID: 110}
+        │   │   │ ABSENT → PUBLIC
+        │   │   │
+        │   │   └── • Precedence dependency from DESCRIPTOR_ADDED Function:{DescID: 110}
+        │   │         rule: "descriptor existence precedes dependents"
+        │   │
+        │   ├── • Owner:{DescID: 110}
+        │   │   │ ABSENT → PUBLIC
+        │   │   │
+        │   │   └── • Precedence dependency from DESCRIPTOR_ADDED Function:{DescID: 110}
+        │   │         rule: "descriptor existence precedes dependents"
+        │   │
+        │   ├── • UserPrivileges:{DescID: 110, Name: admin}
+        │   │   │ ABSENT → PUBLIC
+        │   │   │
+        │   │   └── • Precedence dependency from DESCRIPTOR_ADDED Function:{DescID: 110}
+        │   │         rule: "descriptor existence precedes dependents"
+        │   │
+        │   ├── • UserPrivileges:{DescID: 110, Name: root}
+        │   │   │ ABSENT → PUBLIC
+        │   │   │
+        │   │   └── • Precedence dependency from DESCRIPTOR_ADDED Function:{DescID: 110}
+        │   │         rule: "descriptor existence precedes dependents"
+        │   │
+        │   └── • FunctionBody:{DescID: 110}
+        │       │ ABSENT → PUBLIC
+        │       │
+        │       └── • Precedence dependency from DESCRIPTOR_ADDED Function:{DescID: 110}
+        │             rule: "descriptor existence precedes dependents"
+        │
+        └── • 11 Mutation operations
+            │
+            ├── • CreateFunctionDescriptor
+            │     Function:
+            │       FunctionID: 110
+            │       Params:
+            │       - name: a
+            │         class:
+            │           class: 1
+            │         type:
+            │           type: |
+            │             family: EnumFamily
+            │             width: 0
+            │             precision: 0
+            │             locale: ""
+            │             visible_type: 0
+            │             oid: 100107
+            │             time_precision_is_set: false
+            │             udt_metadata: <
+            │               array_type_oid: 100108
+            │             >
+            │           closedtypeids:
+            │           - 107
+            │           - 108
+            │       ReturnType:
+            │         Type:
+            │           family: IntFamily
+            │           oid: 20
+            │           width: 64
+            │
+            ├── • SetFunctionName
+            │     FunctionID: 110
+            │     Name: f
+            │
+            ├── • SetFunctionVolatility
+            │     FunctionID: 110
+            │     Volatility: 2
+            │
+            ├── • UpdateOwner
+            │     Owner:
+            │       DescriptorID: 110
+            │       Owner: root
+            │
+            ├── • UpdateUserPrivileges
+            │     Privileges:
+            │       DescriptorID: 110
+            │       Privileges: 2
+            │       UserName: admin
+            │       WithGrantOption: 2
+            │
+            ├── • UpdateUserPrivileges
+            │     Privileges:
+            │       DescriptorID: 110
+            │       Privileges: 2
+            │       UserName: root
+            │       WithGrantOption: 2
+            │
+            ├── • SetFunctionBody
+            │     Body:
+            │       Body: |-
+            │         SELECT a FROM t;
+            │         SELECT b FROM t@t_idx_b;
+            │         SELECT c FROM t@t_idx_c;
+            │         SELECT a FROM v;
+            │         SELECT nextval(105:::REGCLASS);
+            │       FunctionID: 110
+            │       Lang:
+            │         Lang: 1
+            │       UsesSequenceIDs:
+            │       - 105
+            │       UsesTables:
+            │       - tableid: 104
+            │         columnids:
+            │         - 1
+            │         indexid: 0
+            │       - tableid: 104
+            │         columnids:
+            │         - 2
+            │         indexid: 2
+            │       - tableid: 104
+            │         columnids:
+            │         - 3
+            │         indexid: 3
+            │       UsesTypeIDs:
+            │       - 107
+            │       - 108
+            │       UsesViews:
+            │       - viewid: 106
+            │         columnids:
+            │         - 1
+            │
+            ├── • UpdateFunctionTypeReferences
+            │     FunctionID: 110
+            │     TypeIDs:
+            │     - 107
+            │     - 108
+            │
+            ├── • UpdateFunctionRelationReferences
+            │     FunctionID: 110
+            │     SequenceIDs:
+            │     - 105
+            │     TableReferences:
+            │     - tableid: 104
+            │       columnids:
+            │       - 1
+            │       indexid: 0
+            │     - tableid: 104
+            │       columnids:
+            │       - 2
+            │       indexid: 2
+            │     - tableid: 104
+            │       columnids:
+            │       - 3
+            │       indexid: 3
+            │     ViewReferences:
+            │     - viewid: 106
+            │       columnids:
+            │       - 1
+            │
+            ├── • SetObjectParentID
+            │     ObjParent:
+            │       ObjectID: 110
+            │       ParentSchemaID: 101
+            │
+            └── • MarkDescriptorAsPublic
+                  DescriptorID: 110

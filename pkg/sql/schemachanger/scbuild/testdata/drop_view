@@ -11,9 +11,9 @@ DROP VIEW defaultdb.v1
 - [[Owner:{DescID: 105}, ABSENT], PUBLIC]
   {descriptorId: 105, owner: root}
 - [[UserPrivileges:{DescID: 105, Name: admin}, ABSENT], PUBLIC]
-  {descriptorId: 105, privileges: "2", userName: admin}
+  {descriptorId: 105, privileges: "2", userName: admin, withGrantOption: "2"}
 - [[UserPrivileges:{DescID: 105, Name: root}, ABSENT], PUBLIC]
-  {descriptorId: 105, privileges: "2", userName: root}
+  {descriptorId: 105, privileges: "2", userName: root, withGrantOption: "2"}
 - [[View:{DescID: 105}, ABSENT], PUBLIC]
   {forwardReferences: [{columnIds: [2], toId: 104}], usesRelationIds: [104], viewId: 105}
 - [[ObjectParent:{DescID: 105, ReferencedDescID: 101}, ABSENT], PUBLIC]
@@ -53,9 +53,9 @@ DROP VIEW defaultdb.v1 CASCADE
 - [[Owner:{DescID: 105}, ABSENT], PUBLIC]
   {descriptorId: 105, owner: root}
 - [[UserPrivileges:{DescID: 105, Name: admin}, ABSENT], PUBLIC]
-  {descriptorId: 105, privileges: "2", userName: admin}
+  {descriptorId: 105, privileges: "2", userName: admin, withGrantOption: "2"}
 - [[UserPrivileges:{DescID: 105, Name: root}, ABSENT], PUBLIC]
-  {descriptorId: 105, privileges: "2", userName: root}
+  {descriptorId: 105, privileges: "2", userName: root, withGrantOption: "2"}
 - [[View:{DescID: 105}, ABSENT], PUBLIC]
   {forwardReferences: [{columnIds: [2], toId: 104}], usesRelationIds: [104], viewId: 105}
 - [[ObjectParent:{DescID: 105, ReferencedDescID: 101}, ABSENT], PUBLIC]
@@ -83,9 +83,9 @@ DROP VIEW defaultdb.v1 CASCADE
 - [[Owner:{DescID: 106}, ABSENT], PUBLIC]
   {descriptorId: 106, owner: root}
 - [[UserPrivileges:{DescID: 106, Name: admin}, ABSENT], PUBLIC]
-  {descriptorId: 106, privileges: "2", userName: admin}
+  {descriptorId: 106, privileges: "2", userName: admin, withGrantOption: "2"}
 - [[UserPrivileges:{DescID: 106, Name: root}, ABSENT], PUBLIC]
-  {descriptorId: 106, privileges: "2", userName: root}
+  {descriptorId: 106, privileges: "2", userName: root, withGrantOption: "2"}
 - [[View:{DescID: 106}, ABSENT], PUBLIC]
   {forwardReferences: [{columnIds: [1], toId: 105}], usesRelationIds: [105], viewId: 106}
 - [[ObjectParent:{DescID: 106, ReferencedDescID: 101}, ABSENT], PUBLIC]
@@ -119,9 +119,9 @@ DROP VIEW defaultdb.v1 CASCADE
 - [[Owner:{DescID: 107}, ABSENT], PUBLIC]
   {descriptorId: 107, owner: root}
 - [[UserPrivileges:{DescID: 107, Name: admin}, ABSENT], PUBLIC]
-  {descriptorId: 107, privileges: "2", userName: admin}
+  {descriptorId: 107, privileges: "2", userName: admin, withGrantOption: "2"}
 - [[UserPrivileges:{DescID: 107, Name: root}, ABSENT], PUBLIC]
-  {descriptorId: 107, privileges: "2", userName: root}
+  {descriptorId: 107, privileges: "2", userName: root, withGrantOption: "2"}
 - [[View:{DescID: 107}, ABSENT], PUBLIC]
   {forwardReferences: [{columnIds: [1], toId: 105}, {columnIds: [1, 2], toId: 106}], usesRelationIds: [105, 106], viewId: 107}
 - [[ObjectParent:{DescID: 107, ReferencedDescID: 101}, ABSENT], PUBLIC]
@@ -155,9 +155,9 @@ DROP VIEW defaultdb.v1 CASCADE
 - [[Owner:{DescID: 108}, ABSENT], PUBLIC]
   {descriptorId: 108, owner: root}
 - [[UserPrivileges:{DescID: 108, Name: admin}, ABSENT], PUBLIC]
-  {descriptorId: 108, privileges: "2", userName: admin}
+  {descriptorId: 108, privileges: "2", userName: admin, withGrantOption: "2"}
 - [[UserPrivileges:{DescID: 108, Name: root}, ABSENT], PUBLIC]
-  {descriptorId: 108, privileges: "2", userName: root}
+  {descriptorId: 108, privileges: "2", userName: root, withGrantOption: "2"}
 - [[View:{DescID: 108}, ABSENT], PUBLIC]
   {forwardReferences: [{columnIds: [1, 2], toId: 106}], usesRelationIds: [106], viewId: 108}
 - [[ObjectParent:{DescID: 108, ReferencedDescID: 101}, ABSENT], PUBLIC]
@@ -191,9 +191,9 @@ DROP VIEW defaultdb.v1 CASCADE
 - [[Owner:{DescID: 111}, ABSENT], PUBLIC]
   {descriptorId: 111, owner: root}
 - [[UserPrivileges:{DescID: 111, Name: admin}, ABSENT], PUBLIC]
-  {descriptorId: 111, privileges: "2", userName: admin}
+  {descriptorId: 111, privileges: "2", userName: admin, withGrantOption: "2"}
 - [[UserPrivileges:{DescID: 111, Name: root}, ABSENT], PUBLIC]
-  {descriptorId: 111, privileges: "2", userName: root}
+  {descriptorId: 111, privileges: "2", userName: root, withGrantOption: "2"}
 - [[View:{DescID: 111}, ABSENT], PUBLIC]
   {forwardReferences: [{columnIds: [1, 2], toId: 108}], usesRelationIds: [108], usesTypeIds: [109, 110], viewId: 111}
 - [[ObjectParent:{DescID: 111, ReferencedDescID: 101}, ABSENT], PUBLIC]

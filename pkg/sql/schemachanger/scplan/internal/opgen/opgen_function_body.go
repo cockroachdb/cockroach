@@ -21,8 +21,24 @@ func init() {
 		toPublic(
 			scpb.Status_ABSENT,
 			to(scpb.Status_PUBLIC,
-				emit(func(this *scpb.FunctionBody) *scop.NotImplemented {
-					return notImplemented(this)
+				emit(func(this *scpb.FunctionBody) *scop.SetFunctionBody {
+					return &scop.SetFunctionBody{
+						Body: *this,
+					}
+				}),
+				emit(func(this *scpb.FunctionBody) *scop.UpdateFunctionTypeReferences {
+					return &scop.UpdateFunctionTypeReferences{
+						FunctionID: this.FunctionID,
+						TypeIDs:    this.UsesTypeIDs,
+					}
+				}),
+				emit(func(this *scpb.FunctionBody) *scop.UpdateFunctionRelationReferences {
+					return &scop.UpdateFunctionRelationReferences{
+						FunctionID:      this.FunctionID,
+						TableReferences: this.UsesTables,
+						ViewReferences:  this.UsesViews,
+						SequenceIDs:     this.UsesSequenceIDs,
+					}
 				}),
 			),
 		),

@@ -52,8 +52,8 @@ upsert descriptor #104
   +    authorization:
   +      userName: root
   +    jobId: "1"
+     defaultPrivileges: {}
      id: 104
-     modificationTime: {}
   ...
        public:
          id: 105
@@ -100,8 +100,8 @@ upsert descriptor #104
   -    authorization:
   -      userName: root
   -    jobId: "1"
+     defaultPrivileges: {}
      id: 104
-     modificationTime: {}
   ...
        public:
          id: 105

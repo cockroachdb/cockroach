@@ -75,6 +75,7 @@ type BuilderState interface {
 	NameResolver
 	PrivilegeChecker
 	TableHelpers
+	FunctionHelpers
 
 	// QueryByID returns all elements sharing the given descriptor ID.
 	QueryByID(descID catid.DescID) ElementResultSet
@@ -92,6 +93,13 @@ type BuilderState interface {
 	// descriptor and mark the new id as being used for new descriptor, so that
 	// the builder knows to avoid loading existing descriptor for decomposition.
 	GenerateUniqueDescID() catid.DescID
+
+	// BuildUserPrivilegesFromDefaultPrivileges generates owner and user
+	// privileges elements from default privileges of the given database
+	// and schemas for the given descriptor and object type.
+	BuildUserPrivilegesFromDefaultPrivileges(
+		db *scpb.Database, sc *scpb.Schema, descID descpb.ID, objType privilege.TargetObjectType,
+	) (*scpb.Owner, []*scpb.UserPrivileges)
 }
 
 // EventLogState encapsulates the state of the metadata to decorate the eventlog
@@ -196,6 +204,9 @@ type PrivilegeChecker interface {
 	// CurrentUserHasAdminOrIsMemberOf returns true iff the current user is (1)
 	// an admin or (2) has membership in the specified role.
 	CurrentUserHasAdminOrIsMemberOf(member username.SQLUsername) bool
+
+	// CurrentUser returns the user of current session.
+	CurrentUser() username.SQLUsername
 }
 
 // TableHelpers has methods useful for creating new table elements.
@@ -246,6 +257,11 @@ type TableHelpers interface {
 
 	// IsTableEmpty returns if the table is empty or not.
 	IsTableEmpty(tbl *scpb.Table) bool
+}
+
+type FunctionHelpers interface {
+	BuildReferenceProvider(stmt tree.Statement) ReferenceProvider
+	WrapFunctionBody(fnID descpb.ID, bodyStr string, lang catpb.Function_Language, provider ReferenceProvider) *scpb.FunctionBody
 }
 
 // ElementResultSet wraps the results of an element query.
@@ -301,6 +317,13 @@ type NameResolver interface {
 
 	// ResolveSchema retrieves a schema by name and returns its elements.
 	ResolveSchema(name tree.ObjectNamePrefix, p ResolveParams) ElementResultSet
+
+	// ResolvePrefix retrieves database and schema given the name prefix. The
+	// requested schema must exist and current user must have the required
+	// privilege.
+	ResolvePrefix(
+		prefix tree.ObjectNamePrefix, requiredSchemaPriv privilege.Kind,
+	) (dbElts ElementResultSet, scElts ElementResultSet)
 
 	// ResolveUserDefinedTypeType retrieves a type by name and returns its elements.
 	ResolveUserDefinedTypeType(name *tree.UnresolvedObjectName, p ResolveParams) ElementResultSet

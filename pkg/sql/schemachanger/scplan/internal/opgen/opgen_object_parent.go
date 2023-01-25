@@ -20,8 +20,8 @@ func init() {
 		toPublic(
 			scpb.Status_ABSENT,
 			to(scpb.Status_PUBLIC,
-				emit(func(this *scpb.ObjectParent) *scop.NotImplemented {
-					return notImplemented(this)
+				emit(func(this *scpb.ObjectParent) *scop.SetObjectParentID {
+					return &scop.SetObjectParentID{ObjParent: *this}
 				}),
 			),
 		),
