@@ -58,6 +58,7 @@ func newEvalCtx(ctx context.Context, d Dependencies) *eval.Context {
 		Regions:              &faketreeeval.DummyRegionOperator{},
 		Settings:             d.ClusterSettings(),
 		Codec:                d.Codec(),
+		DescIDGenerator:      d.DescIDGenerator(),
 	}
 	evalCtx.SetDeprecatedContext(ctx)
 	return evalCtx

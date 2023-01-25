@@ -84,6 +84,12 @@ type Dependencies interface {
 
 	// EventLogger returns an EventLogger.
 	EventLogger() EventLogger
+
+	// DescIDGenerator returns a DescIDGenerator.
+	DescIDGenerator() eval.DescIDGenerator
+
+	// ReferenceProviderFactory returns a ReferenceProviderFactory.
+	ReferenceProviderFactory() ReferenceProviderFactory
 }
 
 // CreatePartitioningCCLCallback is the type of the CCL callback for creating
@@ -219,4 +225,17 @@ type EventLogger interface {
 	LogEvent(
 		ctx context.Context, details eventpb.CommonSQLEventDetails, event logpb.EventPayload,
 	) error
+}
+
+// ReferenceProvider provides all referenced objects with in current DDL
+// statement. For example, CREATE VIEW and CREATE FUNCTION both could reference
+// other objects, and cross-references need to probably tracked.
+type ReferenceProvider interface {
+	scbuildstmt.ReferenceProvider
+}
+
+// ReferenceProviderFactory is used to construct a new ReferenceProvider which
+// provide all dependencies required by the statement.
+type ReferenceProviderFactory interface {
+	NewReferenceProvider(ctx context.Context, stmt tree.Statement) (ReferenceProvider, error)
 }
