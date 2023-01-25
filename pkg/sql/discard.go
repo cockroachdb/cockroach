@@ -86,6 +86,11 @@ func (n *discardNode) startExec(params runParams) error {
 }
 
 func deleteTempTables(ctx context.Context, p *planner) error {
+	// If this session has no temp schemas, then there is nothing to do here.
+	// This is the common case.
+	if len(p.SessionData().DatabaseIDToTempSchemaID) == 0 {
+		return nil
+	}
 	return p.WithInternalExecutor(ctx, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
 		codec := p.execCfg.Codec
 		descCol := p.Descriptors()
