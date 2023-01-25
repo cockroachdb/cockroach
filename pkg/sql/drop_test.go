@@ -1425,6 +1425,7 @@ func TestDropLargeDatabaseWithLegacySchemaChanger(t *testing.T) {
 // we end up dropping.
 func BenchmarkDropLargeDatabase(b *testing.B) {
 	defer leaktest.AfterTest(b)()
+	defer log.Scope(b).Close(b)
 
 	for _, declarative := range []bool{false, true} {
 		for _, tables := range []int{3, 4} {
