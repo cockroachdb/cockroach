@@ -550,6 +550,51 @@ func (p *pebbleBatch) Commit(sync bool) error {
 	}
 	err := p.batch.Commit(opts)
 	if err != nil {
+		// TODO(storage): ensure that these errors are only ever due to invariant
+		// violations and never due to unrecoverable Pebble states. Then switch to
+		// returning the error instead of panicking.
+		//
+		// Once we do that, document on the storage.Batch interface the meaning of
+		// an error returned from this method and the guarantees that callers have
+		// or don't have after they receive and error from this method.
+		panic(err)
+	}
+	return err
+}
+
+// CommitNoSyncWait implements the Batch interface.
+func (p *pebbleBatch) CommitNoSyncWait() error {
+	if p.batch == nil {
+		panic("called with nil batch")
+	}
+	err := p.db.ApplyNoSyncWait(p.batch, pebble.Sync)
+	if err != nil {
+		// TODO(storage): ensure that these errors are only ever due to invariant
+		// violations and never due to unrecoverable Pebble states. Then switch to
+		// returning the error instead of panicking.
+		//
+		// Once we do that, document on the storage.Batch interface the meaning of
+		// an error returned from this method and the guarantees that callers have
+		// or don't have after they receive and error from this method.
+		panic(err)
+	}
+	return err
+}
+
+// SyncWait implements the Batch interface.
+func (p *pebbleBatch) SyncWait() error {
+	if p.batch == nil {
+		panic("called with nil batch")
+	}
+	err := p.batch.SyncWait()
+	if err != nil {
+		// TODO(storage): ensure that these errors are only ever due to invariant
+		// violations and never due to unrecoverable Pebble states. Then switch to
+		// returning the error instead of panicking.
+		//
+		// Once we do that, document on the storage.Batch interface the meaning of
+		// an error returned from this method and the guarantees that callers have
+		// or don't have after they receive and error from this method.
 		panic(err)
 	}
 	return err
