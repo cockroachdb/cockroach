@@ -87,6 +87,8 @@ type IDuration = google.protobuf.IDuration;
 const cx = classNames.bind(styles);
 const sortableTableCx = classNames.bind(sortableTableStyles);
 
+const POLLING_INTERVAL_MILLIS = 300000;
+
 // Most of the props are supposed to be provided as connected props
 // from redux store.
 // StatementsPageDispatchProps, StatementsPageStateProps, and StatementsPageOuterProps interfaces
@@ -123,6 +125,7 @@ export interface StatementsPageDispatchProps {
 
 export interface StatementsPageStateProps {
   statements: AggregateStatistics[];
+  isDataValid: boolean;
   lastUpdated: moment.Moment | null;
   timeScale: TimeScale;
   statementsError: Error | null;
@@ -151,10 +154,10 @@ export type StatementsPageProps = StatementsPageDispatchProps &
   StatementsPageStateProps &
   RouteComponentProps<unknown>;
 
-function statementsRequestFromProps(
-  props: StatementsPageProps,
+function stmtsRequestFromTimeScale(
+  ts: TimeScale,
 ): cockroach.server.serverpb.StatementsRequest {
-  const [start, end] = toRoundedDateRange(props.timeScale);
+  const [start, end] = toRoundedDateRange(ts);
   return new cockroach.server.serverpb.StatementsRequest({
     combined: true,
     start: Long.fromNumber(start.unix()),
@@ -270,7 +273,7 @@ export class StatementsPage extends React.Component<
     if (this.props.onTimeScaleChange) {
       this.props.onTimeScaleChange(ts);
     }
-    this.resetPolling(ts.key);
+    this.refreshStatements(ts);
     this.setState({
       startRequest: new Date(),
     });
@@ -293,25 +296,27 @@ export class StatementsPage extends React.Component<
     }
   }
 
-  resetPolling(key: string): void {
+  resetPolling(ts: TimeScale): void {
     this.clearRefreshDataTimeout();
-    if (key !== "Custom") {
+    if (ts.key !== "Custom") {
       this.refreshDataTimeout = setTimeout(
         this.refreshStatements,
-        300000, // 5 minutes
+        POLLING_INTERVAL_MILLIS, // 5 minutes
+        ts,
       );
     }
   }
 
-  refreshStatements = (): void => {
-    const req = statementsRequestFromProps(this.props);
+  refreshStatements = (ts?: TimeScale): void => {
+    const time = ts ?? this.props.timeScale;
+    const req = stmtsRequestFromTimeScale(time);
     this.props.refreshStatements(req);
 
-    this.resetPolling(this.props.timeScale.key);
+    this.resetPolling(time);
   };
 
   resetSQLStats = (): void => {
-    const req = statementsRequestFromProps(this.props);
+    const req = stmtsRequestFromTimeScale(this.props.timeScale);
     this.props.resetSQLStats(req);
     this.setState({
       startRequest: new Date(),
@@ -323,17 +328,24 @@ export class StatementsPage extends React.Component<
       startRequest: new Date(),
     });
 
-    // For the first data fetch for this page, we refresh if there are:
+    // For the first data fetch for this page, we refresh immediately if:
     // - Last updated is null (no statements fetched previously)
-    // - The time interval is not custom, i.e. we have a moving window
-    // in which case we poll every 5 minutes. For the first fetch we will
-    // calculate the next time to refresh based on when the data was last
-    // updated.
-    if (this.props.timeScale.key !== "Custom" || !this.props.lastUpdated) {
-      const now = moment();
-      const nextRefresh =
-        this.props.lastUpdated?.clone().add(5, "minutes") || now;
-      setTimeout(
+    // - The data is not valid (time scale may have changed on other pages)
+    // - The time range selected is a moving window and the last udpated time
+    // is >= 5 minutes.
+    // Otherwise, we schedule a refresh at 5 mins from the lastUpdated time if
+    // the time range selected is a moving window (i.e. not custom).
+    const now = moment();
+    let nextRefresh = null;
+    if (this.props.lastUpdated == null || !this.props.isDataValid) {
+      nextRefresh = now;
+    } else if (this.props.timeScale.key !== "Custom") {
+      nextRefresh = this.props.lastUpdated
+        .clone()
+        .add(POLLING_INTERVAL_MILLIS, "milliseconds");
+    }
+    if (nextRefresh) {
+      this.refreshDataTimeout = setTimeout(
         this.refreshStatements,
         Math.max(0, nextRefresh.diff(now, "milliseconds")),
       );

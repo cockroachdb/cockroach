@@ -36,6 +36,7 @@ storiesOf("Transactions Page", module)
   ))
   .add("with data", () => (
     <TransactionsPage
+      isDataValid={true}
       {...routeProps}
       columns={columns}
       data={data}
@@ -58,6 +59,7 @@ storiesOf("Transactions Page", module)
     return (
       <TransactionsPage
         {...routeProps}
+        isDataValid={true}
         columns={columns}
         data={getEmptyData()}
         timeScale={timeScale}
@@ -87,6 +89,7 @@ storiesOf("Transactions Page", module)
       <TransactionsPage
         {...routeProps}
         columns={columns}
+        isDataValid={true}
         data={getEmptyData()}
         timeScale={timeScale}
         filters={filters}
@@ -110,6 +113,7 @@ storiesOf("Transactions Page", module)
       <TransactionsPage
         {...routeProps}
         columns={columns}
+        isDataValid={true}
         data={undefined}
         timeScale={timeScale}
         filters={filters}
@@ -132,6 +136,7 @@ storiesOf("Transactions Page", module)
       <TransactionsPage
         {...routeProps}
         columns={columns}
+        isDataValid={true}
         data={undefined}
         timeScale={timeScale}
         error={
