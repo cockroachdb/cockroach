@@ -122,6 +122,36 @@ func (d *buildDeps) MayResolveSchema(
 	return db, schema
 }
 
+func (d *buildDeps) MustResolvePrefix(
+	ctx context.Context, name tree.ObjectNamePrefix,
+) (catalog.DatabaseDescriptor, catalog.SchemaDescriptor) {
+	if !name.ExplicitCatalog {
+		name.CatalogName = tree.Name(d.schemaResolver.CurrentDatabase())
+		name.ExplicitCatalog = true
+	}
+
+	if name.ExplicitSchema {
+		db, sc := d.MayResolveSchema(ctx, name)
+		if sc == nil {
+			panic(errors.AssertionFailedf("prefix %s does not exist", name.String()))
+		}
+		return db, sc
+	}
+
+	path := d.sessionData.SearchPath
+	iter := path.IterWithoutImplicitPGSchemas()
+	for scName, ok := iter.Next(); ok; scName, ok = iter.Next() {
+		name.SchemaName = tree.Name(scName)
+		name.ExplicitSchema = true
+		db, sc := d.MayResolveSchema(ctx, name)
+		if sc != nil {
+			return db, sc
+		}
+	}
+
+	panic(errors.AssertionFailedf("prefix %s does not exist", name.String()))
+}
+
 // MayResolveTable implements the scbuild.CatalogReader interface.
 func (d *buildDeps) MayResolveTable(
 	ctx context.Context, name tree.UnresolvedObjectName,

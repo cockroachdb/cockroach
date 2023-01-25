@@ -14,8 +14,13 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -814,4 +819,137 @@ func ExtractColumnIDsInExpr(
 	})
 
 	return colIDs, err
+}
+
+func createPrivilegesFromDefaultPrivileges(
+	b BuildCtx,
+	dbElts ElementResultSet,
+	scElts ElementResultSet,
+	descID descpb.ID,
+	objType privilege.TargetObjectType,
+) {
+	// If the new descriptor is being created within the system database (which
+	// should only be system tables created by internal user), make sure it has
+	// correct system table privileges.
+	_, _, db := scpb.FindDatabase(dbElts)
+	if db.DatabaseID == keys.SystemDatabaseID {
+		b.Add(&scpb.Owner{
+			DescriptorID: descID,
+			Owner:        username.NodeUserName().Normalized(),
+		})
+		b.Add(&scpb.UserPrivileges{
+			DescriptorID:    descID,
+			UserName:        username.AdminRoleName().Normalized(),
+			Privileges:      catpb.DefaultSuperuserPrivileges.ToBitField(),
+			WithGrantOption: catpb.DefaultSuperuserPrivileges.ToBitField(),
+		})
+		b.Add(&scpb.UserPrivileges{
+			DescriptorID:    descID,
+			UserName:        username.RootUserName().Normalized(),
+			Privileges:      catpb.DefaultSuperuserPrivileges.ToBitField(),
+			WithGrantOption: catpb.DefaultSuperuserPrivileges.ToBitField(),
+		})
+		return
+	}
+
+	b.Add(&scpb.Owner{
+		DescriptorID: descID,
+		Owner:        b.CurrentUser().Normalized(),
+	})
+
+	userPrivileges := make(map[string]*scpb.UserPrivileges)
+
+	userPrivileges[username.AdminRoleName().Normalized()] = &scpb.UserPrivileges{
+		DescriptorID:    descID,
+		UserName:        username.AdminRoleName().Normalized(),
+		Privileges:      catpb.DefaultSuperuserPrivileges.ToBitField(),
+		WithGrantOption: catpb.DefaultSuperuserPrivileges.ToBitField(),
+	}
+
+	userPrivileges[username.RootUserName().Normalized()] = &scpb.UserPrivileges{
+		DescriptorID:    descID,
+		UserName:        username.RootUserName().Normalized(),
+		Privileges:      catpb.DefaultSuperuserPrivileges.ToBitField(),
+		WithGrantOption: catpb.DefaultSuperuserPrivileges.ToBitField(),
+	}
+
+	getOrNewUserPrivileges := func(userName string) *scpb.UserPrivileges {
+		if up, ok := userPrivileges[userName]; ok {
+			return up
+		}
+		up := &scpb.UserPrivileges{
+			DescriptorID: descID,
+			UserName:     userName,
+		}
+		userPrivileges[userName] = up
+		return up
+	}
+
+	applyPrivs := func(userName string, privs uint64, grantOptions uint64) {
+		up := getOrNewUserPrivileges(userName)
+		applyDefaultPrivileges(up, privs, grantOptions, objType.ToObjectType())
+	}
+
+	var explicitRoleFoundInDB bool
+	scpb.ForEachDefaultUserPrivilege(dbElts, func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.DefaultUserPrivilege) {
+		switch t := e.ForRole.(type) {
+		case *scpb.DefaultUserPrivilege_ForExplicitRole:
+			if t.ForExplicitRole.UserProto.Decode() == b.CurrentUser() {
+				explicitRoleFoundInDB = true
+				applyPrivs(e.UserName, e.Privileges, e.WithGrantOption)
+			}
+		case *scpb.DefaultUserPrivilege_ForAllRole:
+			applyPrivs(e.UserName, e.Privileges, e.WithGrantOption)
+		}
+	})
+
+	if !explicitRoleFoundInDB && objType == privilege.Types {
+		userPrivileges[username.PublicRoleName().Normalized()] = &scpb.UserPrivileges{
+			DescriptorID: descID,
+			UserName:     username.PublicRoleName().Normalized(),
+			Privileges:   privilege.USAGE.Mask(),
+		}
+	}
+
+	if scElts != nil {
+		scpb.ForEachDefaultUserPrivilege(scElts, func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.DefaultUserPrivilege) {
+			switch t := e.ForRole.(type) {
+			case *scpb.DefaultUserPrivilege_ForExplicitRole:
+				if t.ForExplicitRole.UserProto.Decode() == b.CurrentUser() {
+					applyPrivs(e.UserName, e.Privileges, e.WithGrantOption)
+				}
+			case *scpb.DefaultUserPrivilege_ForAllRole:
+				applyPrivs(e.UserName, e.Privileges, e.WithGrantOption)
+			}
+		})
+	}
+
+	for _, up := range userPrivileges {
+		b.Add(up)
+	}
+}
+
+func applyDefaultPrivileges(
+	userPriv *scpb.UserPrivileges,
+	defaultPriv uint64,
+	defaultGrantOption uint64,
+	objType privilege.ObjectType,
+) {
+	userPriv.Privileges, userPriv.WithGrantOption = catprivilege.ApplyDefaultPrivileges(
+		userPriv.Privileges,
+		userPriv.WithGrantOption,
+		privilege.ListFromBitField(defaultPriv, objType),
+		privilege.ListFromBitField(defaultGrantOption, objType),
+	)
+}
+
+func maybeFailOnCrossDBTypeReference(b BuildCtx, typeID descpb.ID, parentDBID descpb.ID) {
+	_, _, typeNamespace := scpb.FindNamespace(b.QueryByID(typeID))
+	if typeNamespace.DatabaseID != parentDBID {
+		typeName := tree.MakeTypeNameWithPrefix(b.NamePrefix(typeNamespace), typeNamespace.Name)
+		panic(pgerror.Newf(
+			pgcode.FeatureNotSupported,
+			"cross database type references are not supported: %s",
+			typeName.String()))
+	}
 }

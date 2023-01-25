@@ -126,6 +126,11 @@ type CatalogReader interface {
 	// MayResolveSchema looks up a schema by name.
 	MayResolveSchema(ctx context.Context, name tree.ObjectNamePrefix) (catalog.DatabaseDescriptor, catalog.SchemaDescriptor)
 
+	// MustResolvePrefix looks up a database and schema given the prefix at best
+	// effort, meaning the prefix may not have explicit catalog and schema name.
+	// It fails if the db or schema represented by the prefix does not exist.
+	MustResolvePrefix(ctx context.Context, name tree.ObjectNamePrefix) (catalog.DatabaseDescriptor, catalog.SchemaDescriptor)
+
 	// MayResolveTable looks up a table by name.
 	MayResolveTable(ctx context.Context, name tree.UnresolvedObjectName) (catalog.ResolvedObjectPrefix, catalog.TableDescriptor)
 

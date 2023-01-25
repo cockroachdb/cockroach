@@ -27,7 +27,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD CHEC
  │         └── 8 Mutation operations
  │              ├── MakeAbsentCheckConstraintWriteOnly {"CheckExpr":"(i \u003e nextval(104...","ConstraintID":2,"TableID":107}
  │              ├── UpdateTableBackReferencesInTypes {"BackReferencedTableID":107}
- │              ├── UpdateBackReferencesInSequences {"BackReferencedTableID":107}
+ │              ├── UpdateTableBackReferencesInSequences {"BackReferencedTableID":107}
  │              ├── SetJobStateOnDescriptor {"DescriptorID":104,"Initialize":true}
  │              ├── SetJobStateOnDescriptor {"DescriptorID":105,"Initialize":true}
  │              ├── SetJobStateOnDescriptor {"DescriptorID":106,"Initialize":true}

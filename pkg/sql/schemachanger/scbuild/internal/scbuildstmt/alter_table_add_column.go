@@ -140,18 +140,11 @@ func alterTableAddColumn(
 		IsVirtual:  desc.Virtual,
 	}
 
+	_, _, tableNamespace := scpb.FindNamespace(b.QueryByID(tbl.TableID))
 	spec.colType.TypeT = b.ResolveTypeRef(d.Type)
 	if spec.colType.TypeT.Type.UserDefined() {
 		typeID := typedesc.UserDefinedTypeOIDToID(spec.colType.TypeT.Type.Oid())
-		_, _, tableNamespace := scpb.FindNamespace(b.QueryByID(tbl.TableID))
-		_, _, typeNamespace := scpb.FindNamespace(b.QueryByID(typeID))
-		if typeNamespace.DatabaseID != tableNamespace.DatabaseID {
-			typeName := tree.MakeTypeNameWithPrefix(b.NamePrefix(typeNamespace), typeNamespace.Name)
-			panic(pgerror.Newf(
-				pgcode.FeatureNotSupported,
-				"cross database type references are not supported: %s",
-				typeName.String()))
-		}
+		maybeFailOnCrossDBTypeReference(b, typeID, tableNamespace.DatabaseID)
 	}
 	// Block unique indexes on unsupported types.
 	if d.Unique.IsUnique &&

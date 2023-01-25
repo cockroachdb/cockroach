@@ -16,23 +16,20 @@ import (
 )
 
 func init() {
-	opRegistry.register((*scpb.FunctionVolatility)(nil),
+	opRegistry.register((*scpb.DefaultUserPrivilege)(nil),
 		toPublic(
 			scpb.Status_ABSENT,
 			to(scpb.Status_PUBLIC,
-				emit(func(this *scpb.FunctionVolatility) *scop.SetFunctionVolatility {
-					return &scop.SetFunctionVolatility{
-						FunctionID: this.FunctionID,
-						Volatility: this.Volatility.Volatility,
-					}
+				emit(func(this *scpb.DefaultUserPrivilege) *scop.NotImplemented {
+					return &scop.NotImplemented{}
 				}),
 			),
 		),
 		toAbsent(
 			scpb.Status_PUBLIC,
 			to(scpb.Status_ABSENT,
-				emit(func(this *scpb.FunctionVolatility) *scop.NotImplemented {
-					return notImplemented(this)
+				emit(func(this *scpb.DefaultUserPrivilege) *scop.NotImplemented {
+					return &scop.NotImplemented{}
 				}),
 			),
 		),

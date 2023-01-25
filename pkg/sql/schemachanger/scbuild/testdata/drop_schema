@@ -24,9 +24,9 @@ DROP SCHEMA defaultdb.SC1 CASCADE
 - [[Owner:{DescID: 104}, ABSENT], PUBLIC]
   {descriptorId: 104, owner: root}
 - [[UserPrivileges:{DescID: 104, Name: admin}, ABSENT], PUBLIC]
-  {descriptorId: 104, privileges: "2", userName: admin}
+  {descriptorId: 104, privileges: "2", userName: admin, withGrantOption: "2"}
 - [[UserPrivileges:{DescID: 104, Name: root}, ABSENT], PUBLIC]
-  {descriptorId: 104, privileges: "2", userName: root}
+  {descriptorId: 104, privileges: "2", userName: root, withGrantOption: "2"}
 - [[Schema:{DescID: 104}, ABSENT], PUBLIC]
   {schemaId: 104}
 - [[SchemaParent:{DescID: 104, ReferencedDescID: 100}, ABSENT], PUBLIC]
@@ -38,9 +38,9 @@ DROP SCHEMA defaultdb.SC1 CASCADE
 - [[Owner:{DescID: 106}, ABSENT], PUBLIC]
   {descriptorId: 106, owner: root}
 - [[UserPrivileges:{DescID: 106, Name: admin}, ABSENT], PUBLIC]
-  {descriptorId: 106, privileges: "2", userName: admin}
+  {descriptorId: 106, privileges: "2", userName: admin, withGrantOption: "2"}
 - [[UserPrivileges:{DescID: 106, Name: root}, ABSENT], PUBLIC]
-  {descriptorId: 106, privileges: "2", userName: root}
+  {descriptorId: 106, privileges: "2", userName: root, withGrantOption: "2"}
 - [[Sequence:{DescID: 106}, ABSENT], PUBLIC]
   {sequenceId: 106}
 - [[ObjectParent:{DescID: 106, ReferencedDescID: 104}, ABSENT], PUBLIC]
@@ -52,9 +52,9 @@ DROP SCHEMA defaultdb.SC1 CASCADE
 - [[Owner:{DescID: 107}, ABSENT], PUBLIC]
   {descriptorId: 107, owner: root}
 - [[UserPrivileges:{DescID: 107, Name: admin}, ABSENT], PUBLIC]
-  {descriptorId: 107, privileges: "2", userName: admin}
+  {descriptorId: 107, privileges: "2", userName: admin, withGrantOption: "2"}
 - [[UserPrivileges:{DescID: 107, Name: root}, ABSENT], PUBLIC]
-  {descriptorId: 107, privileges: "2", userName: root}
+  {descriptorId: 107, privileges: "2", userName: root, withGrantOption: "2"}
 - [[Table:{DescID: 107}, ABSENT], PUBLIC]
   {tableId: 107}
 - [[ObjectParent:{DescID: 107, ReferencedDescID: 104}, ABSENT], PUBLIC]
@@ -118,9 +118,9 @@ DROP SCHEMA defaultdb.SC1 CASCADE
 - [[Owner:{DescID: 108}, ABSENT], PUBLIC]
   {descriptorId: 108, owner: root}
 - [[UserPrivileges:{DescID: 108, Name: admin}, ABSENT], PUBLIC]
-  {descriptorId: 108, privileges: "2", userName: admin}
+  {descriptorId: 108, privileges: "2", userName: admin, withGrantOption: "2"}
 - [[UserPrivileges:{DescID: 108, Name: root}, ABSENT], PUBLIC]
-  {descriptorId: 108, privileges: "2", userName: root}
+  {descriptorId: 108, privileges: "2", userName: root, withGrantOption: "2"}
 - [[View:{DescID: 108}, ABSENT], PUBLIC]
   {forwardReferences: [{columnIds: [2], toId: 107}], usesRelationIds: [107], viewId: 108}
 - [[ObjectParent:{DescID: 108, ReferencedDescID: 104}, ABSENT], PUBLIC]
@@ -148,9 +148,9 @@ DROP SCHEMA defaultdb.SC1 CASCADE
 - [[Owner:{DescID: 109}, ABSENT], PUBLIC]
   {descriptorId: 109, owner: root}
 - [[UserPrivileges:{DescID: 109, Name: admin}, ABSENT], PUBLIC]
-  {descriptorId: 109, privileges: "2", userName: admin}
+  {descriptorId: 109, privileges: "2", userName: admin, withGrantOption: "2"}
 - [[UserPrivileges:{DescID: 109, Name: root}, ABSENT], PUBLIC]
-  {descriptorId: 109, privileges: "2", userName: root}
+  {descriptorId: 109, privileges: "2", userName: root, withGrantOption: "2"}
 - [[View:{DescID: 109}, ABSENT], PUBLIC]
   {forwardReferences: [{columnIds: [1], toId: 108}], usesRelationIds: [108], viewId: 109}
 - [[ObjectParent:{DescID: 109, ReferencedDescID: 104}, ABSENT], PUBLIC]
@@ -184,9 +184,9 @@ DROP SCHEMA defaultdb.SC1 CASCADE
 - [[Owner:{DescID: 110}, ABSENT], PUBLIC]
   {descriptorId: 110, owner: root}
 - [[UserPrivileges:{DescID: 110, Name: admin}, ABSENT], PUBLIC]
-  {descriptorId: 110, privileges: "2", userName: admin}
+  {descriptorId: 110, privileges: "2", userName: admin, withGrantOption: "2"}
 - [[UserPrivileges:{DescID: 110, Name: root}, ABSENT], PUBLIC]
-  {descriptorId: 110, privileges: "2", userName: root}
+  {descriptorId: 110, privileges: "2", userName: root, withGrantOption: "2"}
 - [[View:{DescID: 110}, ABSENT], PUBLIC]
   {forwardReferences: [{columnIds: [1], toId: 108}, {columnIds: [1, 2], toId: 109}], usesRelationIds: [108, 109], viewId: 110}
 - [[ObjectParent:{DescID: 110, ReferencedDescID: 104}, ABSENT], PUBLIC]
@@ -220,9 +220,9 @@ DROP SCHEMA defaultdb.SC1 CASCADE
 - [[Owner:{DescID: 111}, ABSENT], PUBLIC]
   {descriptorId: 111, owner: root}
 - [[UserPrivileges:{DescID: 111, Name: admin}, ABSENT], PUBLIC]
-  {descriptorId: 111, privileges: "2", userName: admin}
+  {descriptorId: 111, privileges: "2", userName: admin, withGrantOption: "2"}
 - [[UserPrivileges:{DescID: 111, Name: root}, ABSENT], PUBLIC]
-  {descriptorId: 111, privileges: "2", userName: root}
+  {descriptorId: 111, privileges: "2", userName: root, withGrantOption: "2"}
 - [[View:{DescID: 111}, ABSENT], PUBLIC]
   {forwardReferences: [{columnIds: [1, 2], toId: 109}], usesRelationIds: [109], viewId: 111}
 - [[ObjectParent:{DescID: 111, ReferencedDescID: 104}, ABSENT], PUBLIC]
@@ -256,11 +256,11 @@ DROP SCHEMA defaultdb.SC1 CASCADE
 - [[Owner:{DescID: 112}, ABSENT], PUBLIC]
   {descriptorId: 112, owner: root}
 - [[UserPrivileges:{DescID: 112, Name: admin}, ABSENT], PUBLIC]
-  {descriptorId: 112, privileges: "2", userName: admin}
+  {descriptorId: 112, privileges: "2", userName: admin, withGrantOption: "2"}
 - [[UserPrivileges:{DescID: 112, Name: public}, ABSENT], PUBLIC]
   {descriptorId: 112, privileges: "512", userName: public}
 - [[UserPrivileges:{DescID: 112, Name: root}, ABSENT], PUBLIC]
-  {descriptorId: 112, privileges: "2", userName: root}
+  {descriptorId: 112, privileges: "2", userName: root, withGrantOption: "2"}
 - [[EnumType:{DescID: 112}, ABSENT], PUBLIC]
   {arrayTypeId: 113, typeId: 112}
 - [[EnumTypeValue:{DescID: 112, Name: a}, ABSENT], PUBLIC]
@@ -272,11 +272,11 @@ DROP SCHEMA defaultdb.SC1 CASCADE
 - [[Owner:{DescID: 113}, ABSENT], PUBLIC]
   {descriptorId: 113, owner: root}
 - [[UserPrivileges:{DescID: 113, Name: admin}, ABSENT], PUBLIC]
-  {descriptorId: 113, privileges: "2", userName: admin}
+  {descriptorId: 113, privileges: "2", userName: admin, withGrantOption: "2"}
 - [[UserPrivileges:{DescID: 113, Name: public}, ABSENT], PUBLIC]
   {descriptorId: 113, privileges: "512", userName: public}
 - [[UserPrivileges:{DescID: 113, Name: root}, ABSENT], PUBLIC]
-  {descriptorId: 113, privileges: "2", userName: root}
+  {descriptorId: 113, privileges: "2", userName: root, withGrantOption: "2"}
 - [[AliasType:{DescID: 113, ReferencedTypeIDs: [112 113]}, ABSENT], PUBLIC]
   {closedTypeIds: [112, 113], type: {arrayContents: {family: EnumFamily, oid: 100112, udtMetadata: {arrayTypeOid: 100113}}, arrayElemType: EnumFamily, family: ArrayFamily, oid: 100113}, typeId: 113}
 - [[ObjectParent:{DescID: 113, ReferencedDescID: 104}, ABSENT], PUBLIC]
@@ -286,9 +286,9 @@ DROP SCHEMA defaultdb.SC1 CASCADE
 - [[Owner:{DescID: 114}, ABSENT], PUBLIC]
   {descriptorId: 114, owner: root}
 - [[UserPrivileges:{DescID: 114, Name: admin}, ABSENT], PUBLIC]
-  {descriptorId: 114, privileges: "2", userName: admin}
+  {descriptorId: 114, privileges: "2", userName: admin, withGrantOption: "2"}
 - [[UserPrivileges:{DescID: 114, Name: root}, ABSENT], PUBLIC]
-  {descriptorId: 114, privileges: "2", userName: root}
+  {descriptorId: 114, privileges: "2", userName: root, withGrantOption: "2"}
 - [[View:{DescID: 114}, ABSENT], PUBLIC]
   {forwardReferences: [{columnIds: [1, 2], toId: 111}], usesRelationIds: [111], usesTypeIds: [112, 113], viewId: 114}
 - [[ObjectParent:{DescID: 114, ReferencedDescID: 104}, ABSENT], PUBLIC]
@@ -328,9 +328,9 @@ DROP SCHEMA defaultdb.SC1 CASCADE
 - [[Owner:{DescID: 115}, ABSENT], PUBLIC]
   {descriptorId: 115, owner: root}
 - [[UserPrivileges:{DescID: 115, Name: admin}, ABSENT], PUBLIC]
-  {descriptorId: 115, privileges: "2", userName: admin}
+  {descriptorId: 115, privileges: "2", userName: admin, withGrantOption: "2"}
 - [[UserPrivileges:{DescID: 115, Name: root}, ABSENT], PUBLIC]
-  {descriptorId: 115, privileges: "2", userName: root}
+  {descriptorId: 115, privileges: "2", userName: root, withGrantOption: "2"}
 - [[View:{DescID: 115}, ABSENT], PUBLIC]
   {forwardReferences: [{columnIds: [1, 2], toId: 111}], usesRelationIds: [111], usesTypeIds: [112, 113], viewId: 115}
 - [[ObjectParent:{DescID: 115, ReferencedDescID: 105}, ABSENT], PUBLIC]

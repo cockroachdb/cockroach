@@ -43,6 +43,7 @@ func TestCreateFunction(t *testing.T) {
 	tDB := sqlutils.MakeSQLRunner(sqlDB)
 
 	tDB.Exec(t, `
+SET use_declarative_schema_changer = 'on';
 CREATE TABLE t(
   a INT PRIMARY KEY,
   b INT,
@@ -54,6 +55,10 @@ CREATE SEQUENCE sq1;
 CREATE TABLE t2(a INT PRIMARY KEY);
 CREATE VIEW v AS SELECT a FROM t2;
 CREATE TYPE notmyworkday AS ENUM ('Monday', 'Tuesday');
+`,
+	)
+
+	tDB.Exec(t, `
 CREATE FUNCTION f(a notmyworkday) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$
   SELECT a FROM t;
   SELECT b FROM t@t_idx_b;
@@ -61,9 +66,9 @@ CREATE FUNCTION f(a notmyworkday) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$
   SELECT a FROM v;
   SELECT nextval('sq1');
 $$;
-CREATE SCHEMA test_sc;
-`,
-	)
+`)
+
+	tDB.Exec(t, `CREATE SCHEMA test_sc;`)
 
 	err := sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
 		funcDesc, err := col.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Function(ctx, 110)
@@ -146,7 +151,7 @@ SELECT nextval(105:::REGCLASS);`,
 	require.NoError(t, err)
 }
 
-func TestCreateFunctionGating(t *testing.T) {
+func TestGatingCreateFunction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	t.Run("new_schema_changer_version_enabled", func(t *testing.T) {

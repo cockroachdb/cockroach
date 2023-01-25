@@ -110,7 +110,9 @@ func Build(
 	descSet.ForEach(func(id descpb.ID) {
 		bs.ensureDescriptor(id)
 		desc := bs.descCache[id].desc
-		if desc.HasConcurrentSchemaChanges() {
+		// If a descriptor is being created, we don't need to worry about concurrent
+		// schema changes.
+		if desc != nil && desc.HasConcurrentSchemaChanges() {
 			panic(scerrors.ConcurrentSchemaChangeError(desc))
 		}
 	})

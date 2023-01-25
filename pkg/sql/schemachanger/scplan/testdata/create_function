@@ -1,0 +1,283 @@
+setup
+CREATE TABLE t(
+  a INT PRIMARY KEY,
+  b INT,
+  C INT,
+  INDEX t_idx_b(b),
+  INDEX t_idx_c(c)
+);
+CREATE SEQUENCE sq1;
+CREATE VIEW v AS SELECT a FROM t;
+CREATE TYPE notmyworkday AS ENUM ('Monday', 'Tuesday');
+----
+
+ops
+CREATE FUNCTION f(a notmyworkday) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$
+  SELECT a FROM t;
+  SELECT b FROM t@t_idx_b;
+  SELECT c FROM t@t_idx_c;
+  SELECT a FROM v;
+  SELECT nextval('sq1');
+$$;
+----
+StatementPhase stage 1 of 1 with 10 MutationType ops
+  transitions:
+    [[Function:{DescID: 109}, PUBLIC], ABSENT] -> DESCRIPTOR_ADDING
+    [[ObjectParent:{DescID: 109, ReferencedDescID: 101}, PUBLIC], ABSENT] -> PUBLIC
+    [[FunctionName:{DescID: 109}, PUBLIC], ABSENT] -> PUBLIC
+    [[FunctionVolatility:{DescID: 109}, PUBLIC], ABSENT] -> PUBLIC
+    [[Owner:{DescID: 109}, PUBLIC], ABSENT] -> PUBLIC
+    [[UserPrivileges:{DescID: 109, Name: admin}, PUBLIC], ABSENT] -> PUBLIC
+    [[UserPrivileges:{DescID: 109, Name: root}, PUBLIC], ABSENT] -> PUBLIC
+    [[FunctionBody:{DescID: 109}, PUBLIC], ABSENT] -> PUBLIC
+  ops:
+    *scop.CreateFunctionDescriptor
+      Function:
+        FunctionID: 109
+        Params:
+        - name: a
+          class:
+            class: 1
+          type:
+            type: |
+              family: EnumFamily
+              width: 0
+              precision: 0
+              locale: ""
+              visible_type: 0
+              oid: 100107
+              time_precision_is_set: false
+              udt_metadata: <
+                array_type_oid: 100108
+              >
+            closedtypeids:
+            - 107
+            - 108
+        ReturnType:
+          Type:
+            family: IntFamily
+            oid: 20
+            width: 64
+    *scop.SetFunctionName
+      FunctionID: 109
+      Name: f
+    *scop.SetFunctionVolatility
+      FunctionID: 109
+      Volatility: 2
+    *scop.UpdateOwner
+      Owner:
+        DescriptorID: 109
+        Owner: root
+    *scop.UpdateUserPrivileges
+      Privileges:
+        DescriptorID: 109
+        Privileges: 2
+        UserName: admin
+        WithGrantOption: 2
+    *scop.UpdateUserPrivileges
+      Privileges:
+        DescriptorID: 109
+        Privileges: 2
+        UserName: root
+        WithGrantOption: 2
+    *scop.SetFunctionBody
+      Body:
+        Body: |-
+          SELECT a FROM t;
+          SELECT b FROM t@t_idx_b;
+          SELECT c FROM t@t_idx_c;
+          SELECT a FROM v;
+          SELECT nextval(105:::REGCLASS);
+        FunctionID: 109
+        Lang:
+          Lang: 1
+        UsesSequenceIDs:
+        - 105
+        UsesTables:
+        - tableid: 104
+          columnids:
+          - 1
+          indexid: 0
+        - tableid: 104
+          columnids:
+          - 2
+          indexid: 2
+        - tableid: 104
+          columnids:
+          - 3
+          indexid: 3
+        UsesTypeIDs:
+        - 107
+        - 108
+        UsesViews:
+        - viewid: 106
+          columnids:
+          - 1
+    *scop.UpdateFunctionTypeReferences
+      FunctionID: 109
+      TypeIDs:
+      - 107
+      - 108
+    *scop.UpdateFunctionRelationReferences
+      FunctionID: 109
+      SequenceIDs:
+      - 105
+      TableReferences:
+      - tableid: 104
+        columnids:
+        - 1
+        indexid: 0
+      - tableid: 104
+        columnids:
+        - 2
+        indexid: 2
+      - tableid: 104
+        columnids:
+        - 3
+        indexid: 3
+      ViewReferences:
+      - viewid: 106
+        columnids:
+        - 1
+    *scop.SetObjectParentID
+      ObjParent:
+        ObjectID: 109
+        ParentSchemaID: 101
+PreCommitPhase stage 1 of 2 with 1 MutationType op
+  transitions:
+    [[Function:{DescID: 109}, PUBLIC], DESCRIPTOR_ADDING] -> ABSENT
+    [[ObjectParent:{DescID: 109, ReferencedDescID: 101}, PUBLIC], PUBLIC] -> ABSENT
+    [[FunctionName:{DescID: 109}, PUBLIC], PUBLIC] -> ABSENT
+    [[FunctionVolatility:{DescID: 109}, PUBLIC], PUBLIC] -> ABSENT
+    [[Owner:{DescID: 109}, PUBLIC], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 109, Name: admin}, PUBLIC], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 109, Name: root}, PUBLIC], PUBLIC] -> ABSENT
+    [[FunctionBody:{DescID: 109}, PUBLIC], PUBLIC] -> ABSENT
+  ops:
+    *scop.UndoAllInTxnImmediateMutationOpSideEffects
+      {}
+PreCommitPhase stage 2 of 2 with 11 MutationType ops
+  transitions:
+    [[Function:{DescID: 109}, PUBLIC], ABSENT] -> PUBLIC
+    [[ObjectParent:{DescID: 109, ReferencedDescID: 101}, PUBLIC], ABSENT] -> PUBLIC
+    [[FunctionName:{DescID: 109}, PUBLIC], ABSENT] -> PUBLIC
+    [[FunctionVolatility:{DescID: 109}, PUBLIC], ABSENT] -> PUBLIC
+    [[Owner:{DescID: 109}, PUBLIC], ABSENT] -> PUBLIC
+    [[UserPrivileges:{DescID: 109, Name: admin}, PUBLIC], ABSENT] -> PUBLIC
+    [[UserPrivileges:{DescID: 109, Name: root}, PUBLIC], ABSENT] -> PUBLIC
+    [[FunctionBody:{DescID: 109}, PUBLIC], ABSENT] -> PUBLIC
+  ops:
+    *scop.CreateFunctionDescriptor
+      Function:
+        FunctionID: 109
+        Params:
+        - name: a
+          class:
+            class: 1
+          type:
+            type: |
+              family: EnumFamily
+              width: 0
+              precision: 0
+              locale: ""
+              visible_type: 0
+              oid: 100107
+              time_precision_is_set: false
+              udt_metadata: <
+                array_type_oid: 100108
+              >
+            closedtypeids:
+            - 107
+            - 108
+        ReturnType:
+          Type:
+            family: IntFamily
+            oid: 20
+            width: 64
+    *scop.SetFunctionName
+      FunctionID: 109
+      Name: f
+    *scop.SetFunctionVolatility
+      FunctionID: 109
+      Volatility: 2
+    *scop.UpdateOwner
+      Owner:
+        DescriptorID: 109
+        Owner: root
+    *scop.UpdateUserPrivileges
+      Privileges:
+        DescriptorID: 109
+        Privileges: 2
+        UserName: admin
+        WithGrantOption: 2
+    *scop.UpdateUserPrivileges
+      Privileges:
+        DescriptorID: 109
+        Privileges: 2
+        UserName: root
+        WithGrantOption: 2
+    *scop.SetFunctionBody
+      Body:
+        Body: |-
+          SELECT a FROM t;
+          SELECT b FROM t@t_idx_b;
+          SELECT c FROM t@t_idx_c;
+          SELECT a FROM v;
+          SELECT nextval(105:::REGCLASS);
+        FunctionID: 109
+        Lang:
+          Lang: 1
+        UsesSequenceIDs:
+        - 105
+        UsesTables:
+        - tableid: 104
+          columnids:
+          - 1
+          indexid: 0
+        - tableid: 104
+          columnids:
+          - 2
+          indexid: 2
+        - tableid: 104
+          columnids:
+          - 3
+          indexid: 3
+        UsesTypeIDs:
+        - 107
+        - 108
+        UsesViews:
+        - viewid: 106
+          columnids:
+          - 1
+    *scop.UpdateFunctionTypeReferences
+      FunctionID: 109
+      TypeIDs:
+      - 107
+      - 108
+    *scop.UpdateFunctionRelationReferences
+      FunctionID: 109
+      SequenceIDs:
+      - 105
+      TableReferences:
+      - tableid: 104
+        columnids:
+        - 1
+        indexid: 0
+      - tableid: 104
+        columnids:
+        - 2
+        indexid: 2
+      - tableid: 104
+        columnids:
+        - 3
+        indexid: 3
+      ViewReferences:
+      - viewid: 106
+        columnids:
+        - 1
+    *scop.SetObjectParentID
+      ObjParent:
+        ObjectID: 109
+        ParentSchemaID: 101
+    *scop.MarkDescriptorAsPublic
+      DescriptorID: 109

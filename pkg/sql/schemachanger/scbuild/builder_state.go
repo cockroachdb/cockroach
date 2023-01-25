@@ -214,6 +214,10 @@ func (b *builderState) CurrentUserHasAdminOrIsMemberOf(role username.SQLUsername
 	return ok
 }
 
+func (b *builderState) CurrentUser() username.SQLUsername {
+	return b.evalCtx.SessionData().User()
+}
+
 var _ scbuildstmt.TableHelpers = (*builderState)(nil)
 
 // NextTableColumnID implements the scbuildstmt.TableHelpers interface.
@@ -672,6 +676,24 @@ func (b *builderState) ResolveSchema(
 		}
 		panic(sqlerrors.NewUndefinedSchemaError(name.Schema()))
 	}
+	b.mustBeValidSchema(name, sc, p)
+	return b.descCache[sc.GetID()].ers
+}
+
+// ResolvePrefix implements the scbuildstmt.NameResolver interface.
+func (b *builderState) ResolvePrefix(
+	prefix tree.ObjectNamePrefix, requiredSchemaPriv privilege.Kind,
+) (dbElts scbuildstmt.ElementResultSet, scElts scbuildstmt.ElementResultSet) {
+	db, sc := b.cr.MustResolvePrefix(b.ctx, prefix)
+	b.ensureDescriptor(db.GetID())
+	b.ensureDescriptor(sc.GetID())
+	b.mustBeValidSchema(prefix, sc, scbuildstmt.ResolveParams{RequiredPrivilege: requiredSchemaPriv})
+	return b.descCache[db.GetID()].ers, b.descCache[sc.GetID()].ers
+}
+
+func (b *builderState) mustBeValidSchema(
+	name tree.ObjectNamePrefix, sc catalog.SchemaDescriptor, p scbuildstmt.ResolveParams,
+) {
 	switch sc.SchemaKind() {
 	case catalog.SchemaPublic, catalog.SchemaVirtual, catalog.SchemaTemporary:
 		panic(pgerror.Newf(pgcode.InsufficientPrivilege,
@@ -686,7 +708,6 @@ func (b *builderState) ResolveSchema(
 	default:
 		panic(errors.AssertionFailedf("unknown schema kind %d", sc.SchemaKind()))
 	}
-	return b.descCache[sc.GetID()].ers
 }
 
 // ResolveUserDefinedTypeType implements the scbuildstmt.NameResolver interface.
@@ -1126,6 +1147,206 @@ func (b *builderState) readDescriptor(id catid.DescID) catalog.Descriptor {
 		return tempSchema
 	}
 	return b.cr.MustReadDescriptor(b.ctx, id)
+}
+
+func (b *builderState) GenerateUniqueDescID() catid.DescID {
+	id, err := b.evalCtx.DescIDGenerator.GenerateUniqueDescID(b.ctx)
+	if err != nil {
+		panic(err)
+	}
+	return id
+}
+
+func (b *builderState) BuildReferenceProvider(stmt tree.Statement) scbuildstmt.ReferenceProvider {
+	provider, err := b.referenceProviderFactory.NewReferenceProvider(b.ctx, stmt)
+	if err != nil {
+		panic(err)
+	}
+	return provider
+}
+
+func (b *builderState) WrapFunctionBody(
+	fnID descpb.ID,
+	bodyStr string,
+	lang catpb.Function_Language,
+	refProvider scbuildstmt.ReferenceProvider,
+) *scpb.FunctionBody {
+	bodyStr = b.replaceSeqNamesWithIDs(bodyStr)
+	bodyStr = b.serializeUserDefinedTypes(bodyStr)
+	fnBody := &scpb.FunctionBody{
+		FunctionID: fnID,
+		Body:       bodyStr,
+		Lang:       catpb.FunctionLanguage{Lang: lang},
+	}
+	if err := refProvider.ForEachTableReference(func(tblDesc catalog.TableDescriptor, refs []descpb.TableDescriptor_Reference) error {
+		for _, ref := range refs {
+			if tblDesc.IsView() {
+				fnBody.UsesViews = append(
+					fnBody.UsesViews,
+					scpb.FunctionBody_ViewReference{
+						ViewID:    tblDesc.GetID(),
+						ColumnIDs: ref.ColumnIDs,
+					},
+				)
+			} else if tblDesc.IsSequence() {
+				fnBody.UsesSequenceIDs = append(fnBody.UsesSequenceIDs, tblDesc.GetID())
+			} else {
+				fnBody.UsesTables = append(
+					fnBody.UsesTables,
+					scpb.FunctionBody_TableReference{
+						TableID:   tblDesc.GetID(),
+						ColumnIDs: ref.ColumnIDs,
+						IndexID:   ref.IndexID,
+					},
+				)
+			}
+		}
+		return nil
+	}); err != nil {
+		panic(err)
+	}
+
+	if err := refProvider.ForEachTypeReference(func(typeID descpb.ID) error {
+		if b.isTable(typeID) {
+			fnBody.UsesTables = append(
+				fnBody.UsesTables,
+				scpb.FunctionBody_TableReference{TableID: typeID},
+			)
+		} else {
+			fnBody.UsesTypeIDs = append(fnBody.UsesTypeIDs, typeID)
+		}
+		return nil
+	}); err != nil {
+		panic(err)
+	}
+
+	return fnBody
+}
+
+func (b *builderState) isTable(typeID catid.DescID) bool {
+	elts := b.QueryByID(typeID)
+	_, _, tbl := scpb.FindTable(elts)
+	return tbl != nil
+}
+
+func (b *builderState) replaceSeqNamesWithIDs(queryStr string) string {
+	replaceSeqFunc := func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
+		seqIdentifiers, err := seqexpr.GetUsedSequences(expr)
+		if err != nil {
+			return false, expr, err
+		}
+		seqNameToID := make(map[string]descpb.ID)
+		for _, seqIdentifier := range seqIdentifiers {
+			if seqIdentifier.IsByID() {
+				continue
+			}
+			seq := b.getSequenceFromName(seqIdentifier.SeqName)
+			seqNameToID[seqIdentifier.SeqName] = seq.SequenceID
+		}
+		newExpr, err = seqexpr.ReplaceSequenceNamesWithIDs(expr, seqNameToID)
+		if err != nil {
+			return false, expr, err
+		}
+		return false, newExpr, nil
+	}
+
+	parsedStmts, err := parser.Parse(queryStr)
+	if err != nil {
+		panic(err)
+	}
+
+	stmts := make(tree.Statements, len(parsedStmts))
+	for i, s := range parsedStmts {
+		stmts[i] = s.AST
+	}
+
+	fmtCtx := tree.NewFmtCtx(tree.FmtSimple)
+	for i, stmt := range stmts {
+		newStmt, err := tree.SimpleStmtVisit(stmt, replaceSeqFunc)
+		if err != nil {
+			panic(err)
+		}
+		if i > 0 {
+			fmtCtx.WriteString("\n")
+		}
+		fmtCtx.FormatNode(newStmt)
+		fmtCtx.WriteString(";")
+	}
+
+	return fmtCtx.String()
+
+}
+
+func (b *builderState) getSequenceFromName(seqName string) *scpb.Sequence {
+	parsedName, err := parser.ParseTableName(seqName)
+	if err != nil {
+		panic(err)
+	}
+	elts := b.ResolveSequence(parsedName, scbuildstmt.ResolveParams{RequiredPrivilege: privilege.SELECT})
+	_, _, seq := scpb.FindSequence(elts)
+	return seq
+}
+
+func (b *builderState) serializeUserDefinedTypes(queryStr string) string {
+	replaceFunc := func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
+		var innerExpr tree.Expr
+		var typRef tree.ResolvableTypeReference
+		switch n := expr.(type) {
+		case *tree.CastExpr:
+			innerExpr = n.Expr
+			typRef = n.Type
+		case *tree.AnnotateTypeExpr:
+			innerExpr = n.Expr
+			typRef = n.Type
+		default:
+			return true, expr, nil
+		}
+		// semaCtx may be nil if this is a virtual view being created at
+		// init time.
+		var typ *types.T
+		typ, err = tree.ResolveType(b.ctx, typRef, b.semaCtx.TypeResolver)
+		if err != nil {
+			return false, expr, err
+		}
+		if !typ.UserDefined() {
+			return true, expr, nil
+		}
+		texpr, err := innerExpr.TypeCheck(b.ctx, b.semaCtx, typ)
+		if err != nil {
+			return false, expr, err
+		}
+		s := tree.Serialize(texpr)
+		parsedExpr, err := parser.ParseExpr(s)
+		if err != nil {
+			return false, expr, err
+		}
+		return false, parsedExpr, nil
+	}
+
+	var stmts tree.Statements
+	parsedStmts, err := parser.Parse(queryStr)
+	if err != nil {
+		panic(err)
+	}
+	stmts = make(tree.Statements, len(parsedStmts))
+	for i, stmt := range parsedStmts {
+		stmts[i] = stmt.AST
+	}
+
+	fmtCtx := tree.NewFmtCtx(tree.FmtSimple)
+	for i, stmt := range stmts {
+		newStmt, err := tree.SimpleStmtVisit(stmt, replaceFunc)
+		if err != nil {
+			panic(err)
+		}
+		if i > 0 {
+			fmtCtx.WriteString("\n")
+		}
+		fmtCtx.FormatNode(newStmt)
+		fmtCtx.WriteString(";")
+	}
+	return fmtCtx.CloseAndGetString()
+
 }
 
 type elementResultSet struct {

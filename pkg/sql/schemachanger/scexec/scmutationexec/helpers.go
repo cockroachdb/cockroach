@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/seqexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -104,6 +105,20 @@ func (i *immediateVisitor) checkOutType(
 		return nil, err
 	}
 	mut, ok := desc.(*typedesc.Mutable)
+	if !ok {
+		return nil, catalog.WrapTypeDescRefErr(id, catalog.NewDescriptorTypeError(desc))
+	}
+	return mut, nil
+}
+
+func (i *immediateVisitor) checkOutFunction(
+	ctx context.Context, id descpb.ID,
+) (*funcdesc.Mutable, error) {
+	desc, err := i.checkOutDescriptor(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	mut, ok := desc.(*funcdesc.Mutable)
 	if !ok {
 		return nil, catalog.WrapTypeDescRefErr(id, catalog.NewDescriptorTypeError(desc))
 	}

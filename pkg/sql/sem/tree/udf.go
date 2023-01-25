@@ -118,9 +118,7 @@ func (node *CreateFunction) Format(ctx *FmtCtx) {
 		ctx.FormatNode(option)
 		ctx.WriteString("\n\t")
 	}
-	if len(funcBody) > 0 {
-		ctx.FormatNode(funcBody)
-	}
+
 	if node.RoutineBody != nil {
 		ctx.WriteString("BEGIN ATOMIC ")
 		for _, stmt := range node.RoutineBody.Stmts {
@@ -128,6 +126,8 @@ func (node *CreateFunction) Format(ctx *FmtCtx) {
 			ctx.WriteString("; ")
 		}
 		ctx.WriteString("END")
+	} else {
+		ctx.FormatNode(funcBody)
 	}
 }
 

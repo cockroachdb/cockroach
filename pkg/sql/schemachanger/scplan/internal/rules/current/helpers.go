@@ -227,3 +227,27 @@ func isData(e scpb.Element) bool {
 	}
 	return false
 }
+
+func isFunctionDependent(e scpb.Element) bool {
+	switch e.(type) {
+	case *scpb.FunctionName:
+		return true
+	case *scpb.FunctionVolatility:
+		return true
+	case *scpb.FunctionLeakProof:
+		return true
+	case *scpb.FunctionNullInputBehavior:
+		return true
+	case *scpb.FunctionBody:
+		return true
+	case *scpb.FunctionParamDefaultExpression:
+		return true
+	case *scpb.ObjectParent:
+		return true
+	case *scpb.Owner:
+		return true
+	case *scpb.UserPrivileges:
+		return true
+	}
+	return false
+}

@@ -105,8 +105,8 @@ upsert descriptor #104
   +        statementTag: DROP DATABASE
   +    targetRanks: <redacted>
   +    targets: <redacted>
+     defaultPrivileges: {}
      id: 104
-     modificationTime: {}
   ...
        regionEnumId: 106
        survivalGoal: REGION_FAILURE
