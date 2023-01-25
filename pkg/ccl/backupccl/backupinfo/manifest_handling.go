@@ -15,7 +15,9 @@ import (
 	"encoding/hex"
 	"fmt"
 	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"path"
+	"runtime/debug"
 	"sort"
 	"strconv"
 	"strings"
@@ -156,7 +158,6 @@ func ReadBackupManifestFromStore(
 	ctx, sp := tracing.ChildSpan(ctx, "backupinfo.ReadBackupManifestFromStore")
 	defer sp.Finish()
 
-	fmt.Println("@@@ before err mode", mode)
 	if mode != jobspb.BackupManifestReadMode_ForceManifest {
 		m, memSize, err := ReadBackupMetadataFromStore(ctx, mem, exportStore, encryption, kmsEnv)
 		if err == nil {
@@ -907,76 +908,115 @@ func GetBackupIndexAtTime(backupManifests []BackupMetadata, asOf hlc.Timestamp) 
 
 //// LoadSQLDescsFromBackupsAtTime returns the Descriptors found in the last
 //// (latest) backup with a StartTime >= asOf.
-//func LoadSQLDescsFromBackupsAtTime(
-//	backupManifests []backuppb.BackupManifest, asOf hlc.Timestamp,
-//) ([]catalog.Descriptor, backuppb.BackupManifest, error) {
-//	lastBackupManifest := backupManifests[len(backupManifests)-1]
-//
-//	if asOf.IsEmpty() {
-//		if lastBackupManifest.DescriptorCoverage != tree.AllDescriptors {
-//			descs, err := BackupManifestDescriptors(&lastBackupManifest)
-//			return descs, lastBackupManifest, err
-//		}
-//
-//		// Cluster backups with revision history may have included previous database
-//		// versions of database descriptors in lastBackupManifest.Descriptors. Find
-//		// the correct set of descriptors by going through their revisions. See
-//		// #68541.
-//		asOf = lastBackupManifest.EndTime
-//	}
-//
-//	for _, b := range backupManifests {
-//		if asOf.Less(b.StartTime) {
-//			break
-//		}
-//		lastBackupManifest = b
-//	}
-//	if len(lastBackupManifest.DescriptorChanges) == 0 {
-//		descs, err := BackupManifestDescriptors(&lastBackupManifest)
-//		return descs, lastBackupManifest, err
-//	}
-//
-//	byID := make(map[descpb.ID]catalog.DescriptorBuilder, len(lastBackupManifest.Descriptors))
-//	for _, rev := range lastBackupManifest.DescriptorChanges {
-//		if asOf.Less(rev.Time) {
-//			break
-//		}
-//		if rev.Desc == nil {
-//			delete(byID, rev.ID)
-//		} else {
-//			byID[rev.ID] = newDescriptorBuilder(rev.Desc, rev.Time)
-//		}
-//	}
-//
-//	allDescs := make([]catalog.Descriptor, 0, len(byID))
-//	for _, b := range byID {
-//		if b == nil {
-//			continue
-//		}
-//		// A revision may have been captured before it was in a DB that is
-//		// backed up -- if the DB is missing, filter the object.
-//		if err := b.RunPostDeserializationChanges(); err != nil {
-//			return nil, backuppb.BackupManifest{}, err
-//		}
-//		desc := b.BuildCreatedMutable()
-//		var isObject bool
-//		switch d := desc.(type) {
-//		case catalog.TableDescriptor:
-//			// Filter out revisions in the dropped state.
-//			if d.GetState() == descpb.DescriptorState_DROP {
-//				continue
-//			}
-//			isObject = true
-//		case catalog.TypeDescriptor, catalog.SchemaDescriptor:
-//			isObject = true
-//		}
-//		if isObject && byID[desc.GetParentID()] == nil {
-//			continue
-//		}
-//		allDescs = append(allDescs, desc)
-//	}
-//	return allDescs, lastBackupManifest, nil
-//}
+// TODO: comment
+// TODO(rui): note that materializing all descriptors doesn't scale with
+// cluster size. We temporarily materialize all descriptors here to limit the
+// scope of changes required to use BackupMetadata in restore.
+func LoadSQLDescsFromBackupMetadataAtTime(
+	ctx context.Context, backupManifests []BackupMetadata, asOf hlc.Timestamp,
+) ([]catalog.Descriptor, BackupMetadata, error) {
+	lastBackupManifest := backupManifests[len(backupManifests)-1]
+
+	if asOf.IsEmpty() {
+		if lastBackupManifest.DescriptorCoverage() != tree.AllDescriptors {
+			descs, err := BackupManifestDescriptors(ctx, lastBackupManifest)
+			if err != nil {
+				return nil, nil, err
+			}
+			return descs, lastBackupManifest, nil
+		}
+
+		// Cluster backups with revision history may have included previous database
+		// versions of database descriptors in lastBackupManifest.Descriptors. Find
+		// the correct set of descriptors by going through their revisions. See
+		// #68541.
+		asOf = lastBackupManifest.EndTime()
+	}
+
+	for _, b := range backupManifests {
+		if asOf.Less(b.StartTime()) {
+			break
+		}
+		lastBackupManifest = b
+	}
+	descRevIt := lastBackupManifest.NewDescriptorChangesIter(ctx)
+	defer descRevIt.Close()
+	if ok, err := descRevIt.Valid(); err != nil {
+		return nil, nil, err
+	} else if !ok {
+		descs, err := BackupManifestDescriptors(ctx, lastBackupManifest)
+		if err != nil {
+			return nil, nil, err
+		}
+		return descs, lastBackupManifest, nil
+	}
+
+	// TODO: need to lookup parent id?
+	byID := make(map[descpb.ID]catalog.DescriptorBuilder, 0)
+	prevRevID := descpb.InvalidID
+	fmt.Println("@@@ start =======================", fmt.Sprintf("%T", lastBackupManifest))
+	debug.PrintStack()
+	for ; ; descRevIt.Next() {
+		if ok, err := descRevIt.Valid(); err != nil {
+			return nil, nil, err
+		} else if !ok {
+			break
+		}
+
+		rev := descRevIt.Value()
+		if rev.ID == 106 {
+			fmt.Println("@@@ rev", rev)
+		}
+		if asOf.Less(rev.Time) {
+			continue
+		}
+
+		if rev.ID == 106 {
+			fmt.Println("@@@ picked?")
+		}
+		if rev.ID == prevRevID {
+			continue
+		}
+
+		if rev.ID == 106 {
+			fmt.Println("@@@ actually picked?")
+		}
+		if rev.Desc != nil {
+			byID[rev.ID] = newDescriptorBuilder(rev.Desc, rev.Time)
+		}
+		prevRevID = rev.ID
+	}
+	fmt.Println("@@@ end =======================")
+
+	allDescs := make([]catalog.Descriptor, 0, len(byID))
+	for _, b := range byID {
+		if b == nil {
+			continue
+		}
+		// A revision may have been captured before it was in a DB that is
+		// backed up -- if the DB is missing, filter the object.
+		if err := b.RunPostDeserializationChanges(); err != nil {
+			return nil, nil, err
+		}
+		desc := b.BuildCreatedMutable()
+		var isObject bool
+		switch d := desc.(type) {
+		case catalog.TableDescriptor:
+			// Filter out revisions in the dropped state.
+			if d.GetState() == descpb.DescriptorState_DROP {
+				continue
+			}
+			isObject = true
+		case catalog.TypeDescriptor, catalog.SchemaDescriptor:
+			isObject = true
+		}
+		if isObject && byID[desc.GetParentID()] == nil {
+			continue
+		}
+		allDescs = append(allDescs, desc)
+	}
+	return allDescs, lastBackupManifest, nil
+}
 
 // SanitizeLocalityKV returns a sanitized version of the input string where all
 // characters that are not alphanumeric or -, =, or _ are replaced with _.
