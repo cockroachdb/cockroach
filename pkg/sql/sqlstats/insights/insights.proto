@@ -118,6 +118,8 @@ message Statement {
   repeated cockroach.roachpb.ContentionEvent contention_events = 20 [(gogoproto.nullable) = false];
   Problem problem = 21;
   repeated Cause causes = 22;
+  string last_error_code = 23;
+  string last_error_msg = 24;
 }
 
 

@@ -141,3 +141,7 @@ func (d *latencyThresholdDetector) enabled() bool {
 func (d *latencyThresholdDetector) isSlow(s *Statement) bool {
 	return d.enabled() && s.LatencyInSeconds >= LatencyThreshold.Get(&d.st.SV).Seconds()
 }
+
+func isFailed(s *Statement) bool {
+	return s.Status == Statement_Failed
+}
