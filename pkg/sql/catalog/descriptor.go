@@ -955,12 +955,7 @@ func FilterAddingDescriptor(desc Descriptor) error {
 	if !desc.Adding() {
 		return nil
 	}
-	// For the time being, only table descriptors can be in the adding state.
-	tbl, err := AsTableDescriptor(desc)
-	if err != nil {
-		return errors.HandleAsAssertionFailure(err)
-	}
-	return pgerror.WithCandidateCode(newAddingTableError(tbl), pgcode.ObjectNotInPrerequisiteState)
+	return pgerror.WithCandidateCode(newAddingDescriptorError(desc), pgcode.ObjectNotInPrerequisiteState)
 }
 
 // TableLookupFn is used to resolve a table from an ID, particularly when

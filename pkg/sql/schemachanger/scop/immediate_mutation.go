@@ -662,3 +662,71 @@ type RemoveObjectParent struct {
 	ObjectID       descpb.ID
 	ParentSchemaID descpb.ID
 }
+
+type CreateFunctionDescriptor struct {
+	immediateMutationOp
+	Function scpb.Function
+}
+
+type SetFunctionName struct {
+	immediateMutationOp
+	FunctionID descpb.ID
+	Name       string
+}
+
+type SetFunctionVolatility struct {
+	immediateMutationOp
+	FunctionID descpb.ID
+	Volatility catpb.Function_Volatility
+}
+
+type SetFunctionLeakProof struct {
+	immediateMutationOp
+	FunctionID descpb.ID
+	LeakProof  bool
+}
+
+type SetFunctionNullInputBehavior struct {
+	immediateMutationOp
+	FunctionID        descpb.ID
+	NullInputBehavior catpb.Function_NullInputBehavior
+}
+
+type SetFunctionBody struct {
+	immediateMutationOp
+	Body scpb.FunctionBody
+}
+
+type SetFunctionParamDefaultExpr struct {
+	immediateMutationOp
+	Expr scpb.FunctionParamDefaultExpression
+}
+
+type UpdateFunctionTypeReferences struct {
+	immediateMutationOp
+	FunctionID descpb.ID
+	TypeIDs    []descpb.ID
+}
+
+type UpdateFunctionRelationReferences struct {
+	immediateMutationOp
+	FunctionID      descpb.ID
+	TableReferences []scpb.FunctionBody_TableReference
+	ViewReferences  []scpb.FunctionBody_ViewReference
+	SequenceIDs     []descpb.ID
+}
+
+type SetObjectParentID struct {
+	immediateMutationOp
+	ObjParent scpb.ObjectParent
+}
+
+type UpdateUserPrivileges struct {
+	immediateMutationOp
+	Privileges scpb.UserPrivileges
+}
+
+type UpdateOwner struct {
+	immediateMutationOp
+	Owner scpb.Owner
+}

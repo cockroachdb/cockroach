@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -75,6 +76,7 @@ type BuilderState interface {
 	NameResolver
 	PrivilegeChecker
 	TableHelpers
+	FunctionHelpers
 
 	// QueryByID returns all elements sharing the given descriptor ID.
 	QueryByID(descID catid.DescID) ElementResultSet
@@ -92,6 +94,13 @@ type BuilderState interface {
 	// descriptor and mark the new id as being used for new descriptor, so that
 	// the builder knows to avoid loading existing descriptor for decomposition.
 	GenerateUniqueDescID() catid.DescID
+
+	// BuildUserPrivilegesFromDefaultPrivileges generates owner and user
+	// privileges elements from default privileges of the given database
+	// and schemas for the given descriptor and object type.
+	BuildUserPrivilegesFromDefaultPrivileges(
+		db *scpb.Database, sc *scpb.Schema, descID descpb.ID, objType privilege.TargetObjectType,
+	) (*scpb.Owner, []*scpb.UserPrivileges)
 }
 
 // EventLogState encapsulates the state of the metadata to decorate the eventlog
@@ -196,6 +205,9 @@ type PrivilegeChecker interface {
 	// CurrentUserHasAdminOrIsMemberOf returns true iff the current user is (1)
 	// an admin or (2) has membership in the specified role.
 	CurrentUserHasAdminOrIsMemberOf(member username.SQLUsername) bool
+
+	// CurrentUser returns the user of current session.
+	CurrentUser() username.SQLUsername
 }
 
 // TableHelpers has methods useful for creating new table elements.
@@ -246,6 +258,11 @@ type TableHelpers interface {
 
 	// IsTableEmpty returns if the table is empty or not.
 	IsTableEmpty(tbl *scpb.Table) bool
+}
+
+type FunctionHelpers interface {
+	BuildReferenceProvider(stmt tree.Statement) ReferenceProvider
+	WrapFunctionBody(fnID descpb.ID, bodyStr string, lang catpb.Function_Language, provider ReferenceProvider) *scpb.FunctionBody
 }
 
 // ElementResultSet wraps the results of an element query.
@@ -302,6 +319,13 @@ type NameResolver interface {
 	// ResolveSchema retrieves a schema by name and returns its elements.
 	ResolveSchema(name tree.ObjectNamePrefix, p ResolveParams) ElementResultSet
 
+	// ResolvePrefix retrieves database and schema given the name prefix. The
+	// requested schema must exist and current user must have the required
+	// privilege.
+	ResolvePrefix(
+		prefix tree.ObjectNamePrefix, requiredSchemaPriv privilege.Kind,
+	) (dbElts ElementResultSet, scElts ElementResultSet)
+
 	// ResolveUserDefinedTypeType retrieves a type by name and returns its elements.
 	ResolveUserDefinedTypeType(name *tree.UnresolvedObjectName, p ResolveParams) ElementResultSet
 
@@ -342,8 +366,15 @@ type NameResolver interface {
 type ReferenceProvider interface {
 	// ForEachTableReference iterate through all referenced tables and the
 	// reference details with the given function.
-	ForEachTableReference(func(tblID descpb.ID, refs []descpb.TableDescriptor_Reference) error) error
-	// ForEachTypeReference iterate through all referenced type ids with the given
-	// function.
-	ForEachTypeReference(func(typeID descpb.ID) error) error
+	ForEachTableReference(f func(tblID descpb.ID, idxID descpb.IndexID, colIDs descpb.ColumnIDs) error) error
+	// ForEachViewReference iterate through all referenced views and the reference
+	// details with the given function.
+	ForEachViewReference(f func(viewID descpb.ID, colIDs descpb.ColumnIDs) error) error
+	// ReferencedSequences returns all referenced sequence IDs
+	ReferencedSequences() catalog.DescriptorIDSet
+	// ReferencedTypes returns all referenced type IDs (not including implicit
+	// table types)
+	ReferencedTypes() catalog.DescriptorIDSet
+	// ReferencedRelationIDs Returns all referenced relation IDs.
+	ReferencedRelationIDs() catalog.DescriptorIDSet
 }

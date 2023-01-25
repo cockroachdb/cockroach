@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
 func init() {
@@ -21,8 +22,25 @@ func init() {
 		toPublic(
 			scpb.Status_ABSENT,
 			to(scpb.Status_PUBLIC,
-				emit(func(this *scpb.FunctionBody) *scop.NotImplemented {
-					return notImplemented(this)
+				emit(func(this *scpb.FunctionBody) *scop.SetFunctionBody {
+					f := protoutil.Clone(this).(*scpb.FunctionBody)
+					return &scop.SetFunctionBody{
+						Body: *f,
+					}
+				}),
+				emit(func(this *scpb.FunctionBody) *scop.UpdateFunctionTypeReferences {
+					return &scop.UpdateFunctionTypeReferences{
+						FunctionID: this.FunctionID,
+						TypeIDs:    this.UsesTypeIDs,
+					}
+				}),
+				emit(func(this *scpb.FunctionBody) *scop.UpdateFunctionRelationReferences {
+					return &scop.UpdateFunctionRelationReferences{
+						FunctionID:      this.FunctionID,
+						TableReferences: this.UsesTables,
+						ViewReferences:  this.UsesViews,
+						SequenceIDs:     this.UsesSequenceIDs,
+					}
 				}),
 			),
 		),

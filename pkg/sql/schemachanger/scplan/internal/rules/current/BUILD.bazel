@@ -9,6 +9,8 @@ go_library(
         "dep_add_index.go",
         "dep_add_index_and_column.go",
         "dep_add_index_and_constraint.go",
+        "dep_create.go",
+        "dep_create_function.go",
         "dep_drop_column.go",
         "dep_drop_constraint.go",
         "dep_drop_index.go",

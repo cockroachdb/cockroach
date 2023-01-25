@@ -20,6 +20,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl"
+	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/rel"
@@ -67,6 +70,15 @@ func TestBuildDataDriven(t *testing.T) {
 					// test cluster, here the SQLRunner is only used to populate the mocked
 					// catalog state.
 					descriptorCatalog := sctestdeps.ReadDescriptorsFromDB(ctx, t, tdb).Catalog
+
+					// Set up a reference provider factory for the purpose of proper
+					// dependency resolution.
+					execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
+					refFactory, cleanup := sql.NewReferenceProviderFactoryForTest(
+						"test" /* opName */, kv.NewTxn(context.Background(), s.DB(), s.NodeID()), username.RootUserName(), &execCfg, "defaultdb",
+					)
+					defer cleanup()
+
 					fn(
 						sctestdeps.NewTestDependencies(
 							sctestdeps.WithDescriptors(descriptorCatalog),
@@ -86,6 +98,12 @@ func TestBuildDataDriven(t *testing.T) {
 							),
 							sctestdeps.WithComments(sctestdeps.ReadCommentsFromDB(t, tdb)),
 							sctestdeps.WithZoneConfigs(sctestdeps.ReadZoneConfigsFromDB(t, tdb, descriptorCatalog)),
+							// Though we want to mock up data for this test setting, it's hard
+							// to mimic the ID generator and optimizer (resolve all
+							// dependencies in functions and views). So we need these pieces
+							// to be similar as sql dependencies.
+							sctestdeps.WithIDGenerator(s),
+							sctestdeps.WithReferenceProviderFactory(refFactory),
 						),
 					)
 				},
