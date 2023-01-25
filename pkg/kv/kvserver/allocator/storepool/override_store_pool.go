@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
@@ -186,13 +185,6 @@ func (o *OverrideStorePool) GetStoreDescriptor(
 	storeID roachpb.StoreID,
 ) (roachpb.StoreDescriptor, bool) {
 	return o.sp.GetStoreDescriptor(storeID)
-}
-
-// GossipNodeIDAddress implements the AllocatorStorePool interface.
-func (o *OverrideStorePool) GossipNodeIDAddress(
-	nodeID roachpb.NodeID,
-) (*util.UnresolvedAddr, error) {
-	return o.sp.GossipNodeIDAddress(nodeID)
 }
 
 // UpdateLocalStoreAfterRebalance implements the AllocatorStorePool interface.

@@ -12,7 +12,6 @@ package kvcoord
 
 import (
 	"context"
-	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -167,18 +166,10 @@ func locality(t *testing.T, locStrs []string) roachpb.Locality {
 	return locality
 }
 
-func nodeDesc(t *testing.T, nid roachpb.NodeID, locStrs []string) *roachpb.NodeDescriptor {
-	return &roachpb.NodeDescriptor{
-		NodeID:   nid,
-		Locality: locality(t, locStrs),
-		Address:  util.MakeUnresolvedAddr("tcp", fmt.Sprintf("%d:26257", nid)),
-	}
-}
-
 func info(t *testing.T, nid roachpb.NodeID, sid roachpb.StoreID, locStrs []string) ReplicaInfo {
 	return ReplicaInfo{
 		ReplicaDescriptor: desc(nid, sid),
-		NodeDesc:          nodeDesc(t, nid, locStrs),
+		Tiers:             locality(t, locStrs).Tiers,
 	}
 }
 
@@ -192,7 +183,7 @@ func TestReplicaSliceOptimizeReplicaOrder(t *testing.T) {
 		// locality of the DistSender.
 		locality roachpb.Locality
 		// map from node address (see nodeDesc()) to latency to that node.
-		latencies map[string]time.Duration
+		latencies map[roachpb.NodeID]time.Duration
 		slice     ReplicaSlice
 		// expOrder is the expected order in which the replicas sort. Replicas are
 		// only identified by their node. If multiple replicas are on different
@@ -217,10 +208,10 @@ func TestReplicaSliceOptimizeReplicaOrder(t *testing.T) {
 			name:     "order by latency",
 			nodeID:   1,
 			locality: locality(t, []string{"country=us", "region=west", "city=la"}),
-			latencies: map[string]time.Duration{
-				"2:26257": time.Hour,
-				"3:26257": time.Minute,
-				"4:26257": time.Second,
+			latencies: map[roachpb.NodeID]time.Duration{
+				2: time.Hour,
+				3: time.Minute,
+				4: time.Second,
 			},
 			slice: ReplicaSlice{
 				info(t, 2, 2, []string{"country=us", "region=west", "city=sf"}),
@@ -237,11 +228,11 @@ func TestReplicaSliceOptimizeReplicaOrder(t *testing.T) {
 			name:     "local node comes first",
 			nodeID:   1,
 			locality: locality(t, nil),
-			latencies: map[string]time.Duration{
-				"1:26257": 10 * time.Hour,
-				"2:26257": time.Hour,
-				"3:26257": time.Minute,
-				"4:26257": time.Second,
+			latencies: map[roachpb.NodeID]time.Duration{
+				1: 10 * time.Hour,
+				2: time.Hour,
+				3: time.Minute,
+				4: time.Second,
 			},
 			slice: ReplicaSlice{
 				info(t, 1, 1, nil),
@@ -257,8 +248,8 @@ func TestReplicaSliceOptimizeReplicaOrder(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			var latencyFn LatencyFunc
 			if test.latencies != nil {
-				latencyFn = func(addr string) (time.Duration, bool) {
-					lat, ok := test.latencies[addr]
+				latencyFn = func(id roachpb.NodeID) (time.Duration, bool) {
+					lat, ok := test.latencies[id]
 					return lat, ok
 				}
 			}

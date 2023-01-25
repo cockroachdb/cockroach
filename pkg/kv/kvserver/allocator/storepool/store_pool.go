@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -393,9 +392,6 @@ type AllocatorStorePool interface {
 		candidates []roachpb.ReplicationTarget,
 		filter StoreFilter,
 	) (StoreList, int, ThrottledStoreReasons)
-
-	// GossipNodeIDAddress looks up the RPC address for the given node via gossip.
-	GossipNodeIDAddress(nodeID roachpb.NodeID) (*util.UnresolvedAddr, error)
 
 	// LiveAndDeadReplicas divides the provided repls slice into two slices: the
 	// first for live replicas, and the second for dead replicas.
@@ -1240,11 +1236,6 @@ func (sp *StorePool) GetLocalitiesByNode(
 		}
 	}
 	return localities
-}
-
-// GossipNodeIDAddress looks up the RPC address for the given node via gossip.
-func (sp *StorePool) GossipNodeIDAddress(nodeID roachpb.NodeID) (*util.UnresolvedAddr, error) {
-	return sp.gossip.GetNodeIDAddress(nodeID)
 }
 
 // GetNodeLocalityString returns the locality information for the given node

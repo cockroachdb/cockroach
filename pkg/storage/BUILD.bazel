@@ -56,6 +56,7 @@ go_library(
         "//pkg/roachpb",
         "//pkg/settings",
         "//pkg/settings/cluster",
+        "//pkg/sql/catalog/fetchpb",
         "//pkg/storage/enginepb",
         "//pkg/storage/fs",
         "//pkg/storage/pebbleiter",

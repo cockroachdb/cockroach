@@ -225,6 +225,9 @@ type cFetcher struct {
 	nextKVer storage.NextKVer
 	// fetcher, if set, is the same object as nextKVer.
 	fetcher *row.KVFetcher
+	// stableKVs indicates whether the KVs returned by nextKVer are stable (i.e.
+	// are not invalidated) across NextKV() calls.
+	stableKVs bool
 	// bytesRead and batchRequestsIssued store the total number of bytes read
 	// and of BatchRequests issued, respectively, by this cFetcher throughout
 	// its lifetime in case when the underlying row.KVFetcher has already been
@@ -265,6 +268,8 @@ type cFetcher struct {
 		// keys are compared against this prefix to determine whether they're part
 		// of a new row or not.
 		lastRowPrefix roachpb.Key
+		// firstKeyOfRow, if set, is the first key in the current row.
+		firstKeyOfRow roachpb.Key
 		// prettyValueBuf is a temp buffer used to create strings for tracing.
 		prettyValueBuf *bytes.Buffer
 
@@ -283,9 +288,11 @@ type cFetcher struct {
 		tableoidCol coldata.DatumVec
 	}
 
-	// scratch is a scratch space used when decoding bytes-like and decimal
-	// keys.
-	scratch []byte
+	scratch struct {
+		decoding       []byte
+		nextKVKey      []byte
+		nextKVRawBytes []byte
+	}
 
 	accountingHelper colmem.SetAccountingHelper
 }
@@ -420,12 +427,12 @@ func (cf *cFetcher) Init(
 			indexColOrdinals[i] = -1
 		}
 	}
-	if needToDecodeDecimalKey && cap(cf.scratch) < 64 {
+	if needToDecodeDecimalKey && cap(cf.scratch.decoding) < 64 {
 		// If we need to decode the decimal key encoding, it might use a scratch
 		// byte slice internally, so we'll allocate such a space to be reused
 		// for every decimal.
 		// TODO(yuzefovich): 64 was chosen arbitrarily, tune it.
-		cf.scratch = make([]byte, 64)
+		cf.scratch.decoding = make([]byte, 64)
 	}
 	// Unique secondary indexes contain the extra column IDs as part of
 	// the value component. We process these separately, so we need to know
@@ -475,12 +482,43 @@ func (cf *cFetcher) Init(
 	if kvFetcher, ok := nextKVer.(*row.KVFetcher); ok {
 		cf.fetcher = kvFetcher
 	}
+	cf.stableKVs = nextKVer.Init(cf.getFirstKeyOfRow)
 	cf.accountingHelper.Init(allocator, cf.memoryLimit, cf.table.typs)
 	if cf.cFetcherArgs.collectStats {
 		cf.cpuStopWatch = timeutil.NewCPUStopWatch()
 	}
+	cf.machine.state[0] = stateResetBatch
+	cf.machine.state[1] = stateInitFetch
 
 	return nil
+}
+
+func cFetcherFirstBatchLimit(limitHint rowinfra.RowLimit, maxKeysPerRow uint32) rowinfra.KeyLimit {
+	// If we have a limit hint, we limit the first batch size. Subsequent
+	// batches get larger to avoid making things too slow (e.g. in case we have
+	// a very restrictive filter and actually have to retrieve a lot of rows).
+	firstBatchLimit := rowinfra.KeyLimit(limitHint)
+	if firstBatchLimit != 0 {
+		// The limitHint is a row limit, but each row could be made up of more
+		// than one key. We take the maximum possible keys per row out of all
+		// the table rows we could potentially scan over.
+		//
+		// Note that unlike for the row.Fetcher, we don't need an extra key to
+		// form the last row in the cFetcher because we are eagerly finalizing
+		// each row once we know that all KVs comprising that row have been
+		// fetched. Consider several cases:
+		// - the table has only one column family - then we can finalize each
+		//   row right after the first KV is decoded;
+		// - the table has multiple column families:
+		//   - KVs for all column families are present for all rows - then for
+		//     each row, when its last KV is fetched, the row can be finalized
+		//     (and firstBatchLimit asks exactly for the correct number of KVs);
+		//   - KVs for some column families are omitted for some rows - then we
+		//     will actually fetch more KVs than necessary, but we'll decode
+		//     limitHint number of rows.
+		firstBatchLimit = rowinfra.KeyLimit(int(limitHint) * int(maxKeysPerRow))
+	}
+	return firstBatchLimit
 }
 
 // StartScan initializes and starts the key-value scan. Can only be used
@@ -504,31 +542,7 @@ func (cf *cFetcher) StartScan(
 		return errors.AssertionFailedf("batchBytesLimit set without limitBatches")
 	}
 
-	// If we have a limit hint, we limit the first batch size. Subsequent
-	// batches get larger to avoid making things too slow (e.g. in case we have
-	// a very restrictive filter and actually have to retrieve a lot of rows).
-	firstBatchLimit := rowinfra.KeyLimit(limitHint)
-	if firstBatchLimit != 0 {
-		// The limitHint is a row limit, but each row could be made up of more
-		// than one key. We take the maximum possible keys per row out of all
-		// the table rows we could potentially scan over.
-		//
-		// Note that unlike for the row.Fetcher, we don't need an extra key to
-		// form the last row in the cFetcher because we are eagerly finalizing
-		// each row once we know that all KVs comprising that row have been
-		// fetched. Consider several cases:
-		// - the table has only one column family - then we can finalize each
-		//   row right after the first KV is decoded;
-		// - the table has multiple column families:
-		//   - KVs for all column families are present for all rows - then for
-		//     each row, when its last KV is fetched, the row can be finalized
-		//     (and firstBatchLimit asks exactly for the correct number of KVs);
-		//   - KVs for some column families are omitted for some rows - then we
-		//     will actually fetch more KVs than necessary, but we'll decode
-		//     limitHint number of rows.
-		firstBatchLimit = rowinfra.KeyLimit(int(limitHint) * int(cf.table.spec.MaxKeysPerRow))
-	}
-
+	firstBatchLimit := cFetcherFirstBatchLimit(limitHint, cf.table.spec.MaxKeysPerRow)
 	cf.machine.lastRowPrefix = nil
 	cf.machine.limitHint = int(limitHint)
 	cf.machine.state[0] = stateResetBatch
@@ -609,27 +623,39 @@ func (cf *cFetcher) setEstimatedRowCount(estimatedRowCount uint64) {
 	cf.estimatedRowCount = estimatedRowCount
 }
 
-// setNextKV sets the next KV to process to the input KV. needsCopy, if true,
-// causes the input kv to be deep copied. needsCopy should be set to true if
-// the input KV is pointing to the last KV of a batch, so that the batch can
-// be garbage collected before fetching the next one.
+func (cf *cFetcher) getFirstKeyOfRow() roachpb.Key {
+	return cf.machine.firstKeyOfRow
+}
+
+// setNextKV sets the next KV to process to the input KV. The KV will be
+// deep-copied if necessary, however, the copy is only valid until the next
+// setNextKV call.
 // gcassert:inline
-func (cf *cFetcher) setNextKV(kv roachpb.KeyValue, needsCopy bool) {
-	if !needsCopy {
+func (cf *cFetcher) setNextKV(kv roachpb.KeyValue) {
+	// If the kv is not stable and the table has multiple column families, then
+	// we must perform a deep copy. This is due to the fact that we keep a
+	// shallow reference to the first KV of each row (in
+	// cf.machine.lastRowPrefix and cf.machine.firstKeyOfRow).
+	//
+	// However, even if the kv is not stable, but there is only one column
+	// family, then we will have finalized the row (meaning we'll have deep
+	// copied necessary part of the kv into the batch) by the time NextKV is
+	// called again, so we avoid the copy in those cases.
+	if cf.stableKVs || cf.table.spec.MaxKeysPerRow == 1 {
 		cf.machine.nextKV = kv
 		return
 	}
-
-	// If we've made it to the very last key in the batch, copy out the key
-	// so that the GC can reclaim the large backing slice before we call
-	// NextKV() again.
-	kvCopy := roachpb.KeyValue{}
-	kvCopy.Key = make(roachpb.Key, len(kv.Key))
-	copy(kvCopy.Key, kv.Key)
-	kvCopy.Value.RawBytes = make([]byte, len(kv.Value.RawBytes))
-	copy(kvCopy.Value.RawBytes, kv.Value.RawBytes)
-	kvCopy.Value.Timestamp = kv.Value.Timestamp
-	cf.machine.nextKV = kvCopy
+	// We can reuse the scratch space since we only need to keep at most one KV
+	// at a time.
+	cf.scratch.nextKVKey = append(cf.scratch.nextKVKey[:0], kv.Key...)
+	cf.scratch.nextKVRawBytes = append(cf.scratch.nextKVRawBytes[:0], kv.Value.RawBytes...)
+	cf.machine.nextKV = roachpb.KeyValue{
+		Key: cf.scratch.nextKVKey,
+		Value: roachpb.Value{
+			RawBytes:  cf.scratch.nextKVRawBytes,
+			Timestamp: kv.Value.Timestamp,
+		},
+	}
 }
 
 // NextBatch processes keys until we complete one batch of rows (subject to the
@@ -648,11 +674,15 @@ func (cf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 		case stateInvalid:
 			return nil, errors.New("invalid fetcher state")
 		case stateInitFetch:
+			cf.machine.firstKeyOfRow = nil
 			cf.cpuStopWatch.Start()
-			moreKVs, kv, needsCopy, err := cf.nextKVer.NextKV(ctx, cf.mvccDecodeStrategy)
+			// Here we ignore partialRow return parameter because it can only be
+			// true when moreKVs is false, in which case we have already
+			// finalized the last row and will emit the batch as is.
+			moreKVs, _, kv, err := cf.nextKVer.NextKV(ctx, cf.mvccDecodeStrategy)
 			cf.cpuStopWatch.Stop()
 			if err != nil {
-				return nil, cf.convertFetchError(ctx, err)
+				return nil, convertFetchError(&cf.table.spec, err)
 			}
 			if !moreKVs {
 				cf.machine.state[0] = stateEmitLastBatch
@@ -680,7 +710,7 @@ func (cf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 				}
 			*/
 
-			cf.setNextKV(kv, needsCopy)
+			cf.setNextKV(kv)
 			cf.machine.state[0] = stateDecodeFirstKVOfRow
 
 		case stateResetBatch:
@@ -689,6 +719,7 @@ func (cf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 		case stateDecodeFirstKVOfRow:
 			// Reset MVCC metadata for the table, since this is the first KV of a row.
 			cf.table.rowLastModified = hlc.Timestamp{}
+			cf.machine.firstKeyOfRow = cf.machine.nextKV.Key
 
 			// foundNull is set when decoding a new index key for a row finds a NULL value
 			// in the index key. This is used when decoding unique secondary indexes in order
@@ -707,7 +738,7 @@ func (cf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 				// to determine whether a KV belongs to the same row as the
 				// previous KV or a different row.
 				checkAllColsForNull := cf.table.spec.IsSecondaryIndex && cf.table.spec.IsUniqueIndex && cf.table.spec.MaxKeysPerRow != 1
-				key, foundNull, cf.scratch, err = colencoding.DecodeKeyValsToCols(
+				key, foundNull, cf.scratch.decoding, err = colencoding.DecodeKeyValsToCols(
 					&cf.table.da,
 					&cf.machine.colvecs,
 					cf.machine.rowIdx,
@@ -716,7 +747,7 @@ func (cf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 					cf.table.spec.KeyFullColumns(),
 					nil, /* unseen */
 					cf.machine.nextKV.Key[cf.table.spec.KeyPrefixLength:],
-					cf.scratch,
+					cf.scratch.decoding,
 				)
 				if err != nil {
 					return nil, err
@@ -801,32 +832,45 @@ func (cf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 
 		case stateFetchNextKVWithUnfinishedRow:
 			cf.cpuStopWatch.Start()
-			moreKVs, kv, needsCopy, err := cf.nextKVer.NextKV(ctx, cf.mvccDecodeStrategy)
+			moreKVs, partialRow, kv, err := cf.nextKVer.NextKV(ctx, cf.mvccDecodeStrategy)
 			cf.cpuStopWatch.Stop()
 			if err != nil {
-				return nil, cf.convertFetchError(ctx, err)
+				return nil, convertFetchError(&cf.table.spec, err)
 			}
 			if !moreKVs {
-				// No more data. Finalize the row and exit.
+				// No more data.
+				if partialRow {
+					// The stream of KVs stopped in the middle of the last row,
+					// so we need to remove that last row from the batch. We
+					// achieve this by simply not incrementing rowIdx and not
+					// finalizing this last partial row; instead, we proceed
+					// straight to emitting the last batch.
+					cf.machine.state[0] = stateEmitLastBatch
+					continue
+				}
+				// Finalize the row and exit.
 				cf.machine.state[0] = stateFinalizeRow
 				cf.machine.state[1] = stateEmitLastBatch
 				continue
 			}
-			// TODO(jordan): if nextKV returns newSpan = true, set the new span
-			// prefix and indicate that it needs decoding.
-			cf.setNextKV(kv, needsCopy)
 			if debugState {
-				log.Infof(ctx, "decoding next key %s", cf.machine.nextKV.Key)
+				log.Infof(ctx, "decoding next key %s", kv.Key)
 			}
 
 			// TODO(yuzefovich): optimize this prefix check by skipping logical
 			// longest common span prefix.
 			if !bytes.HasPrefix(kv.Key[cf.table.spec.KeyPrefixLength:], cf.machine.lastRowPrefix[cf.table.spec.KeyPrefixLength:]) {
 				// The kv we just found is from a different row.
+				cf.setNextKV(kv)
 				cf.machine.state[0] = stateFinalizeRow
 				cf.machine.state[1] = stateDecodeFirstKVOfRow
 				continue
 			}
+
+			// No need to copy this kv even if it is unstable since we only use
+			// it before issuing the following NextKV() call (which could
+			// invalidate it).
+			cf.machine.nextKV = kv
 
 			familyID, err := cf.getCurrentColumnFamilyID()
 			if err != nil {
@@ -1047,7 +1091,7 @@ func (cf *cFetcher) processValue(ctx context.Context, familyID descpb.FamilyID) 
 			if table.spec.IsSecondaryIndex && table.spec.IsUniqueIndex {
 				// This is a unique secondary index; decode the extra
 				// column values from the value.
-				valueBytes, _, cf.scratch, err = colencoding.DecodeKeyValsToCols(
+				valueBytes, _, cf.scratch.decoding, err = colencoding.DecodeKeyValsToCols(
 					&table.da,
 					&cf.machine.colvecs,
 					cf.machine.rowIdx,
@@ -1056,7 +1100,7 @@ func (cf *cFetcher) processValue(ctx context.Context, familyID descpb.FamilyID) 
 					table.spec.KeySuffixColumns(),
 					&cf.machine.remainingValueColsByIdx,
 					valueBytes,
-					cf.scratch,
+					cf.scratch.decoding,
 				)
 				if err != nil {
 					return scrub.WrapError(scrub.SecondaryIndexKeyExtraValueDecodingError, err)
@@ -1293,8 +1337,8 @@ func (cf *cFetcher) getCurrentColumnFamilyID() (descpb.FamilyID, error) {
 // storage error that will propagate through the exec subsystem unchanged. The
 // error may also undergo a mapping to make it more user friendly for SQL
 // consumers.
-func (cf *cFetcher) convertFetchError(ctx context.Context, err error) error {
-	err = row.ConvertFetchError(&cf.table.spec, err)
+func convertFetchError(indexFetchSpec *fetchpb.IndexFetchSpec, err error) error {
+	err = row.ConvertFetchError(indexFetchSpec, err)
 	err = colexecerror.NewStorageError(err)
 	return err
 }
@@ -1336,9 +1380,10 @@ func (cf *cFetcher) Release() {
 	}
 	colvecs := cf.machine.colvecs
 	colvecs.Reset()
-	*cf = cFetcher{
-		scratch: cf.scratch[:0],
-	}
+	*cf = cFetcher{scratch: cf.scratch}
+	cf.scratch.decoding = cf.scratch.decoding[:0]
+	cf.scratch.nextKVKey = cf.scratch.nextKVKey[:0]
+	cf.scratch.nextKVRawBytes = cf.scratch.nextKVRawBytes[:0]
 	cf.machine.colvecs = colvecs
 	cFetcherPool.Put(cf)
 }

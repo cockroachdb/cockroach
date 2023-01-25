@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
 
@@ -99,6 +100,9 @@ func (r *Replica) updateTimestampCache(
 		start, end := header.Key, header.EndKey
 
 		if ba.WaitPolicy == lock.WaitPolicy_SkipLocked && roachpb.CanSkipLocked(req) {
+			if ba.IndexFetchSpec != nil {
+				log.Errorf(ctx, "%v", errors.AssertionFailedf("unexpectedly IndexFetchSpec is set with SKIP LOCKED wait policy"))
+			}
 			// If the request is using a SkipLocked wait policy, it behaves as if run
 			// at a lower isolation level for any keys that it skips over. If the read
 			// request did not return a key, it does not make a claim about whether

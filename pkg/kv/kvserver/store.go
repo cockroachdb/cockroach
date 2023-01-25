@@ -1209,7 +1209,7 @@ func NewStore(
 		s.allocator = allocatorimpl.MakeAllocator(
 			cfg.Settings,
 			storePoolIsDeterministic,
-			func(string) (time.Duration, bool) {
+			func(id roachpb.NodeID) (time.Duration, bool) {
 				return 0, false
 			}, cfg.TestingKnobs.AllocatorKnobs,
 		)

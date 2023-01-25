@@ -70,6 +70,7 @@ go_library(
         "//pkg/util",
         "//pkg/util/admission",
         "//pkg/util/admission/admissionpb",
+        "//pkg/util/buildutil",
         "//pkg/util/encoding",
         "//pkg/util/hlc",
         "//pkg/util/intsets",

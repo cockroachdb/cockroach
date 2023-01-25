@@ -118,7 +118,6 @@ func TestMetricsRecorderTenants(t *testing.T) {
 		hlc.NewClock(manual, time.Nanosecond),
 		nil,
 		rpcCtx,
-		nil,
 		st,
 		roachpb.NewTenantNameContainer(catconstants.SystemTenantName),
 	)
@@ -142,7 +141,6 @@ func TestMetricsRecorderTenants(t *testing.T) {
 		hlc.NewClock(manual, time.Nanosecond),
 		nil,
 		rpcCtxTenant,
-		nil,
 		stTenant,
 		appNameContainer,
 	)
@@ -244,7 +242,7 @@ func TestMetricsRecorder(t *testing.T) {
 		},
 	}
 
-	recorder := NewMetricsRecorder(hlc.NewClock(manual, time.Nanosecond), nil, rpcCtx, nil, st, roachpb.NewTenantNameContainer(""))
+	recorder := NewMetricsRecorder(hlc.NewClock(manual, time.Nanosecond), nil, rpcCtx, st, roachpb.NewTenantNameContainer(""))
 	recorder.AddStore(store1)
 	recorder.AddStore(store2)
 	recorder.AddNode(reg1, nodeDesc, 50, "foo:26257", "foo:26258", "foo:5432")

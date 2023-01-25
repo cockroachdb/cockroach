@@ -16,7 +16,7 @@ import "antd/lib/tabs/style";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { InlineAlert, Text } from "@cockroachlabs/ui-components";
 import { ArrowLeft } from "@cockroachlabs/icons";
-import _, { isNil } from "lodash";
+import { isNil } from "lodash";
 import Long from "long";
 import { Helmet } from "react-helmet";
 import { Link, RouteComponentProps } from "react-router-dom";
@@ -68,6 +68,7 @@ import {
   generateExecRetriesTimeseries,
   generateExecuteAndPlanningTimeseries,
   generateRowsProcessedTimeseries,
+  generateCPUTimeseries,
 } from "./timeseriesUtils";
 import { Delayed } from "../delayed";
 import moment from "moment";
@@ -622,6 +623,15 @@ export class StatementDetails extends React.Component<
       width: cardWidth,
     };
 
+    const cpuTimeseries: AlignedData =
+      generateCPUTimeseries(statsPerAggregatedTs);
+    const cpuOps: Partial<Options> = {
+      axes: [{}, { label: "CPU Time" }],
+      series: [{}, { label: "CPU Time" }],
+      legend: { show: false },
+      width: cardWidth,
+    };
+
     return (
       <>
         <PageConfig>
@@ -741,6 +751,15 @@ export class StatementDetails extends React.Component<
                 title={`Contention Time${noSamples}`}
                 alignedData={contentionTimeseries}
                 uPlotOptions={contentionOps}
+                tooltip={unavailableTooltip}
+                yAxisUnits={AxisUnits.Duration}
+              />
+            </Col>
+            <Col className="gutter-row" span={12}>
+              <BarGraphTimeSeries
+                title={`CPU Time${noSamples}`}
+                alignedData={cpuTimeseries}
+                uPlotOptions={cpuOps}
                 tooltip={unavailableTooltip}
                 yAxisUnits={AxisUnits.Duration}
               />

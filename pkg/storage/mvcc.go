@@ -3645,34 +3645,41 @@ func recordIteratorStats(ctx context.Context, iter MVCCIterator) {
 	})
 }
 
-func mvccScanToBytes(
-	ctx context.Context,
+// mvccScanInit performs some preliminary checks on the validity of options for
+// a scan.
+//
+// If ok=true is returned, then the pebbleMVCCScanner must be release()'d when
+// no longer needed. The scanner is initialized with the given results.
+//
+// If ok=false is returned, then the returned result and the error are the
+// result of the scan.
+func mvccScanInit(
 	iter MVCCIterator,
 	key, endKey roachpb.Key,
 	timestamp hlc.Timestamp,
 	opts MVCCScanOptions,
-) (MVCCScanResult, error) {
+	results results,
+) (ok bool, _ *pebbleMVCCScanner, _ MVCCScanResult, _ error) {
 	if len(endKey) == 0 {
-		return MVCCScanResult{}, emptyKeyError()
+		return false, nil, MVCCScanResult{}, emptyKeyError()
 	}
 	if err := opts.validate(); err != nil {
-		return MVCCScanResult{}, err
+		return false, nil, MVCCScanResult{}, err
 	}
 	if opts.MaxKeys < 0 {
-		return MVCCScanResult{
+		return false, nil, MVCCScanResult{
 			ResumeSpan:   &roachpb.Span{Key: key, EndKey: endKey},
 			ResumeReason: roachpb.RESUME_KEY_LIMIT,
 		}, nil
 	}
 	if opts.TargetBytes < 0 {
-		return MVCCScanResult{
+		return false, nil, MVCCScanResult{
 			ResumeSpan:   &roachpb.Span{Key: key, EndKey: endKey},
 			ResumeReason: roachpb.RESUME_BYTE_LIMIT,
 		}, nil
 	}
 
 	mvccScanner := pebbleMVCCScannerPool.Get().(*pebbleMVCCScanner)
-	defer mvccScanner.release()
 
 	*mvccScanner = pebbleMVCCScanner{
 		parent:           iter,
@@ -3694,15 +3701,28 @@ func mvccScanToBytes(
 		keyBuf:           mvccScanner.keyBuf,
 	}
 
+	mvccScanner.init(opts.Txn, opts.Uncertainty, results)
+	return true /* ok */, mvccScanner, MVCCScanResult{}, nil
+}
+
+func mvccScanToBytes(
+	ctx context.Context,
+	iter MVCCIterator,
+	key, endKey roachpb.Key,
+	timestamp hlc.Timestamp,
+	opts MVCCScanOptions,
+) (MVCCScanResult, error) {
 	var results pebbleResults
 	if opts.WholeRowsOfSize > 1 {
 		results.lastOffsetsEnabled = true
 		results.lastOffsets = make([]int, opts.WholeRowsOfSize)
 	}
-	mvccScanner.init(opts.Txn, opts.Uncertainty, &results)
+	ok, mvccScanner, res, err := mvccScanInit(iter, key, endKey, timestamp, opts, &results)
+	if !ok {
+		return res, err
+	}
+	defer mvccScanner.release()
 
-	var res MVCCScanResult
-	var err error
 	res.ResumeSpan, res.ResumeReason, res.ResumeNextBytes, err = mvccScanner.scan(ctx)
 
 	if err != nil {
@@ -3710,20 +3730,33 @@ func mvccScanToBytes(
 	}
 
 	res.KVData = results.finish()
-	res.NumKeys, res.NumBytes, _ = results.sizeInfo(0 /* lenKey */, 0 /* lenValue */)
+	if err = finalizeScanResult(ctx, mvccScanner, &res, opts.errOnIntents()); err != nil {
+		return MVCCScanResult{}, err
+	}
+	return res, nil
+}
+
+// finalizeScanResult updates the MVCCScanResult in-place after the scan was
+// completed successfully. It also performs some additional auxiliary tasks
+// (like recording iterators stats).
+func finalizeScanResult(
+	ctx context.Context, mvccScanner *pebbleMVCCScanner, res *MVCCScanResult, errOnIntents bool,
+) error {
+	res.NumKeys, res.NumBytes, _ = mvccScanner.results.sizeInfo(0 /* lenKey */, 0 /* lenValue */)
 
 	// If we have a trace, emit the scan stats that we produced.
 	recordIteratorStats(ctx, mvccScanner.parent)
 
+	var err error
 	res.Intents, err = buildScanIntents(mvccScanner.intentsRepr())
 	if err != nil {
-		return MVCCScanResult{}, err
+		return err
 	}
 
-	if opts.errOnIntents() && len(res.Intents) > 0 {
-		return MVCCScanResult{}, &roachpb.WriteIntentError{Intents: res.Intents}
+	if errOnIntents && len(res.Intents) > 0 {
+		return &roachpb.WriteIntentError{Intents: res.Intents}
 	}
-	return res, nil
+	return nil
 }
 
 // mvccScanToKvs converts the raw key/value pairs returned by MVCCIterator.MVCCScan
