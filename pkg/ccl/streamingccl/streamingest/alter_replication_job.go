@@ -175,11 +175,11 @@ func alterReplicationJobHook(
 		} else {
 			switch alterTenantStmt.Command {
 			case tree.ResumeJob:
-				if err := jobRegistry.Unpause(ctx, p.InternalSQLTxn(), tenInfo.TenantReplicationJobID); err != nil {
+				if err := resumeStreamIngestion(ctx, jobRegistry, p.InternalSQLTxn(), tenInfo.TenantReplicationJobID); err != nil {
 					return err
 				}
 			case tree.PauseJob:
-				if err := jobRegistry.PauseRequested(ctx, p.InternalSQLTxn(), tenInfo.TenantReplicationJobID,
+				if err := pauseStreamIngestion(ctx, jobRegistry, p.InternalSQLTxn(), tenInfo.TenantReplicationJobID,
 					"ALTER TENANT PAUSE REPLICATION"); err != nil {
 					return err
 				}
@@ -247,10 +247,6 @@ func alterTenantJobCutover(
 		}
 	}
 	if err := completeStreamIngestion(ctx, jobRegistry, txn, tenInfo.TenantReplicationJobID, cutoverTime); err != nil {
-		return err
-	}
-	// Unpause the job if it is paused.
-	if err := jobRegistry.Unpause(ctx, txn, tenInfo.TenantReplicationJobID); err != nil {
 		return err
 	}
 

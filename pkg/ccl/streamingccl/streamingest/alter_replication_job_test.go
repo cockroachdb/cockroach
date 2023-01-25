@@ -163,7 +163,7 @@ func TestTenantStatusWithFutureCutoverTime(t *testing.T) {
 
 	// The resumer cannot start at this point, therefore the tenant will stay in
 	// the init state.
-	require.Equal(c.T, "INITIALIZING REPLICATION", getTenantStatus())
+	require.Equal(c.T, "INITIALIZING_REPLICATION", getTenantStatus())
 	unblockResumerStart()
 
 	jobutils.WaitForJobToRun(t, c.SrcSysSQL, jobspb.JobID(producerJobID))
@@ -175,7 +175,7 @@ func TestTenantStatusWithFutureCutoverTime(t *testing.T) {
 	c.DestSysSQL.Exec(t, `ALTER TENANT $1 PAUSE REPLICATION`, args.DestTenantName)
 	jobutils.WaitForJobToPause(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
 
-	require.Equal(c.T, "REPLICATION PAUSED", getTenantStatus())
+	require.Equal(c.T, "REPLICATION_PAUSED", getTenantStatus())
 
 	// On pause the resumer exits, we should unblock it.
 	unblockResumerExit()
@@ -193,7 +193,7 @@ func TestTenantStatusWithFutureCutoverTime(t *testing.T) {
 	c.DestSysSQL.Exec(c.T, `ALTER TENANT $1 COMPLETE REPLICATION TO SYSTEM TIME $2::string`,
 		args.DestTenantName, cutoverTime)
 
-	require.Equal(c.T, "REPLICATION PENDING CUTOVER", getTenantStatus())
+	require.Equal(c.T, "REPLICATION_PENDING_CUTOVER", getTenantStatus())
 	unblockResumerExit()
 }
 
@@ -247,7 +247,7 @@ func TestTenantStatusWithLatestCutoverTime(t *testing.T) {
 
 	producerJobID, ingestionJobID := c.StartStreamReplication(ctx)
 
-	require.Equal(c.T, "INITIALIZING REPLICATION", getTenantStatus())
+	require.Equal(c.T, "INITIALIZING_REPLICATION", getTenantStatus())
 	unblockResumerStart()
 
 	jobutils.WaitForJobToRun(t, c.SrcSysSQL, jobspb.JobID(producerJobID))
@@ -260,10 +260,10 @@ func TestTenantStatusWithLatestCutoverTime(t *testing.T) {
 
 	testutils.SucceedsSoon(t, func() error {
 		s := getTenantStatus()
-		if s == "REPLICATION PENDING CUTOVER" {
-			return errors.Errorf("tenant status is still REPLICATION PENDING CUTOVER, waiting")
+		if s == "REPLICATION_PENDING_CUTOVER" {
+			return errors.Errorf("tenant status is still REPLICATION_PENDING_CUTOVER, waiting")
 		}
-		require.Equal(c.T, "REPLICATION CUTTING OVER", s)
+		require.Equal(c.T, "REPLICATION_CUTTING_OVER", s)
 		return nil
 	})
 
@@ -271,4 +271,70 @@ func TestTenantStatusWithLatestCutoverTime(t *testing.T) {
 	cutoverCh <- struct{}{}
 	unblockResumerExit()
 	require.Equal(c.T, "ACTIVE", getTenantStatus())
+}
+
+// TestTenantStatusPauseBeforeReplication verifies we see that the replication
+// is paused even before we have job progress info.
+func TestTenantStatusPauseBeforeReplication(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx, ctxCancel := context.WithCancel(context.Background())
+	args := replicationtestutils.DefaultTenantStreamingClustersArgs
+
+	c, cleanup := replicationtestutils.CreateTenantStreamingClusters(ctx, t, args)
+	defer cleanup()
+
+	waitBeforeCh := make(chan struct{})
+	waitAfterCh := make(chan struct{})
+	registry := c.DestSysServer.JobRegistry().(*jobs.Registry)
+	registry.TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
+		jobspb.TypeStreamIngestion: func(raw jobs.Resumer) jobs.Resumer {
+			r := blockingResumer{
+				orig:       raw,
+				waitBefore: waitBeforeCh,
+				waitAfter:  waitAfterCh,
+				ctx:        ctx,
+			}
+			return &r
+		},
+	}
+	defer ctxCancel()
+	unblockResumerStart := func() {
+		waitBeforeCh <- struct{}{}
+	}
+	unblockResumerExit := func() {
+		waitAfterCh <- struct{}{}
+	}
+
+	getTenantStatus := func() string {
+		var status string
+		c.DestSysSQL.QueryRow(c.T, fmt.Sprintf("SELECT status FROM [SHOW TENANT %s]",
+			c.Args.DestTenantName)).Scan(&status)
+		return status
+	}
+
+	_, ingestionJobID := c.StartStreamReplication(ctx)
+
+	// The resumer cannot start at this point, therefore the tenant will stay in
+	// the init state.
+	require.Equal(c.T, "INITIALIZING_REPLICATION", getTenantStatus())
+
+	// Pause before we even have the job progress info.
+	c.DestSysSQL.Exec(t, `ALTER TENANT $1 PAUSE REPLICATION`, args.DestTenantName)
+	jobutils.WaitForJobToPause(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
+
+	require.Equal(c.T, "REPLICATION_PAUSED", getTenantStatus())
+
+	// On pause the resumer exits, we should unblock it.
+	unblockResumerExit()
+	c.DestSysSQL.Exec(t, `ALTER TENANT $1 RESUME REPLICATION`, args.DestTenantName)
+	unblockResumerStart()
+
+	jobutils.WaitForJobToRun(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
+	c.WaitUntilHighWatermark(c.SrcCluster.Server(0).Clock().Now(), jobspb.JobID(ingestionJobID))
+
+	require.Equal(c.T, "REPLICATING", getTenantStatus())
+	c.DestSysSQL.Exec(c.T, fmt.Sprintf("ALTER TENANT %s COMPLETE REPLICATION TO LATEST", args.DestTenantName))
+	unblockResumerExit()
 }

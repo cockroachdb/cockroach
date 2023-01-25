@@ -12,7 +12,6 @@ package sql
 
 import (
 	"context"
-	"fmt"
 	"strconv"
 	"time"
 
@@ -29,21 +28,9 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-type tenantStatus string
-
-const (
-	initReplication   tenantStatus = "INITIALIZING REPLICATION"
-	replicating       tenantStatus = "REPLICATING"
-	replicationPaused tenantStatus = "REPLICATION PAUSED"
-	pendingCutover    tenantStatus = "REPLICATION PENDING CUTOVER"
-	cuttingOver       tenantStatus = "REPLICATION CUTTING OVER"
-	// Users should not see this status normally.
-	replicationUnknownFormat tenantStatus = "REPLICATION UNKNOWN (%s)"
-)
-
 type tenantValues struct {
 	tenantInfo         *descpb.TenantInfo
-	tenantStatus       tenantStatus
+	tenantStatus       string
 	replicationInfo    *streampb.StreamIngestionStats
 	protectedTimestamp hlc.Timestamp
 	capabilities       []showTenantNodeCapability
@@ -158,33 +145,6 @@ func getReplicationStats(
 	return stats, &protectedTimestamp, nil
 }
 
-func getTenantStatus(
-	jobStatus jobs.Status, replicationInfo *streampb.StreamIngestionStats,
-) tenantStatus {
-	switch jobStatus {
-	case jobs.StatusPending, jobs.StatusRunning, jobs.StatusPauseRequested:
-		if replicationInfo == nil || replicationInfo.ReplicationLagInfo == nil {
-			// Still no lag info which means we never recorded progress, and
-			// replication did not complete the initial scan yet.
-			return initReplication
-		} else {
-			progress := replicationInfo.IngestionProgress
-			if progress != nil && !progress.CutoverTime.IsEmpty() {
-				if progress.CutoverStarted {
-					return cuttingOver
-				}
-				return pendingCutover
-			} else {
-				return replicating
-			}
-		}
-	case jobs.StatusPaused:
-		return replicationPaused
-	default:
-		return tenantStatus(fmt.Sprintf(string(replicationUnknownFormat), jobStatus))
-	}
-}
-
 func (n *showTenantNode) getTenantValues(
 	params runParams, tenantInfo *descpb.TenantInfo,
 ) (*tenantValues, error) {
@@ -201,7 +161,7 @@ func (n *showTenantNode) getTenantValues(
 		if n.withReplication {
 			return nil, errors.Newf("tenant %q does not have an active replication job", tenantInfo.Name)
 		}
-		values.tenantStatus = tenantStatus(tenantInfoState.String())
+		values.tenantStatus = tenantInfoState.String()
 	} else {
 		switch tenantInfoState {
 		case descpb.TenantInfo_ADD:
@@ -214,13 +174,13 @@ func (n *showTenantNode) getTenantValues(
 			if err != nil {
 				log.Errorf(ctx, "cannot load job info for replicated tenant %q and job %d: %v",
 					tenantInfo.Name, jobId, err)
-				values.tenantStatus = tenantStatus(fmt.Sprintf(string(replicationUnknownFormat), err))
+				values.tenantStatus = jobspb.StreamIngestionProgress_REPLICATION_ERROR.String()
 			} else {
 				stats, protectedTimestamp, err := getReplicationStats(params, job)
 				if err != nil {
 					log.Errorf(ctx, "cannot load replication stats for replicated tenant %q and job %d: %v",
 						tenantInfo.Name, jobId, err)
-					values.tenantStatus = tenantStatus(fmt.Sprintf(string(replicationUnknownFormat), err))
+					values.tenantStatus = jobspb.StreamIngestionProgress_REPLICATION_ERROR.String()
 				} else {
 					if n.withReplication {
 						values.replicationInfo = stats
@@ -228,11 +188,19 @@ func (n *showTenantNode) getTenantValues(
 							values.protectedTimestamp = *protectedTimestamp
 						}
 					}
-					values.tenantStatus = getTenantStatus(job.Status(), stats)
+					if stats == nil || stats.IngestionProgress == nil {
+						if job.Status() == jobs.StatusPaused {
+							values.tenantStatus = jobspb.StreamIngestionProgress_REPLICATION_PAUSED.String()
+						} else {
+							values.tenantStatus = jobspb.StreamIngestionProgress_INITIALIZING_REPLICATION.String()
+						}
+					} else {
+						values.tenantStatus = stats.IngestionProgress.ReplicationStatus.String()
+					}
 				}
 			}
 		case descpb.TenantInfo_ACTIVE, descpb.TenantInfo_DROP:
-			values.tenantStatus = tenantStatus(tenantInfoState.String())
+			values.tenantStatus = tenantInfoState.String()
 		default:
 			return nil, errors.Newf("tenant %q state is unknown: %s", tenantInfo.Name, tenantInfoState.String())
 		}
@@ -297,7 +265,7 @@ func (n *showTenantNode) Values() tree.Datums {
 	result := tree.Datums{
 		tree.NewDInt(tree.DInt(tenantInfo.ID)),
 		tree.NewDString(string(tenantInfo.Name)),
-		tree.NewDString(string(v.tenantStatus)),
+		tree.NewDString(v.tenantStatus),
 	}
 
 	if n.withReplication {

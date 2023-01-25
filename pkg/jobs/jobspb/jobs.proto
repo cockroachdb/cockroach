@@ -149,9 +149,19 @@ message StreamIngestionProgress {
   // back any additional ingested data, to bring the ingested cluster to a
   // consistent state as of the CutoverTime.
   util.hlc.Timestamp cutover_time = 1 [(gogoproto.nullable) = false];
-  // CutoverStarted is set by the stream ingestion job when the cutover has
-  // started.
-  bool cutover_started = 6;
+
+  enum ReplicationStatus {
+    INITIALIZING_REPLICATION = 0;
+    REPLICATING = 1;
+    REPLICATION_PAUSED = 2;
+    REPLICATION_PENDING_CUTOVER = 3;
+    REPLICATION_CUTTING_OVER = 4;
+    REPLICATION_ERROR = 5;
+  }
+
+  // ReplicationStatus is the status of the tenant that has a replication job.
+  ReplicationStatus replication_status = 6;
+
   // PartitionProgress maps partition addresses to their progress.
   // TODO(pbardea): This could scale O(partitions) = O(nodes).
   map<string, PartitionProgress> partition_progress = 2 [(gogoproto.nullable) = false];

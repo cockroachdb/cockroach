@@ -906,7 +906,7 @@ func TestTenantStreamingShowTenant(t *testing.T) {
 	require.Equal(t, "destination", rowStr[0][1])
 	if rowStr[0][3] == "NULL" {
 		// There is no source yet, therefore the replication is not fully initialized.
-		require.Equal(t, "INITIALIZING REPLICATION", rowStr[0][2])
+		require.Equal(t, "INITIALIZING_REPLICATION", rowStr[0][2])
 	}
 
 	jobutils.WaitForJobToRun(c.T, c.SrcSysSQL, jobspb.JobID(producerJobID))
