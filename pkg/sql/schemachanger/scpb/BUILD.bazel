@@ -15,7 +15,9 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/security/username",  # keep
         "//pkg/sql/catalog/catpb",  # keep
+        "//pkg/sql/privilege",  # keep
         "//pkg/sql/sem/catid",  # keep
         "//pkg/sql/sem/tree",  # keep
         "//pkg/util/protoutil",
