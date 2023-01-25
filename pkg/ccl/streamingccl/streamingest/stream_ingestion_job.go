@@ -488,6 +488,9 @@ func maybeRevertToCutoverTimestamp(
 	if err != nil {
 		return false, errors.Wrap(err, "failed to set job state to cutting over")
 	}
+	if p.ExecCfg().StreamingTestingKnobs != nil && p.ExecCfg().StreamingTestingKnobs.AfterCutoverStarted != nil {
+		p.ExecCfg().StreamingTestingKnobs.AfterCutoverStarted()
+	}
 
 	origNRanges := -1
 	spans := []roachpb.Span{sd.Span}
