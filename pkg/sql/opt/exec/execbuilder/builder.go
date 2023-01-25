@@ -329,6 +329,10 @@ func (b *Builder) decorrelationError() error {
 	return errors.Errorf("could not decorrelate subquery")
 }
 
+func (b *Builder) decorrelationMutationError() error {
+	return errors.Errorf("could not decorrelate subquery with mutation")
+}
+
 // builtWithExpr is metadata regarding a With expression which has already been
 // added to the set of subqueries for the query.
 type builtWithExpr struct {
