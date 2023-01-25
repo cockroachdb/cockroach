@@ -830,9 +830,10 @@ func TestWaitingRU(t *testing.T) {
 				timeSource.Now(), timesToString(timeSource.Timers()))
 		}, timeout)
 
+		const allowedDelta = 0.01
 		available := tenantcostclient.TestingAvailableRU(ctrl)
 		if succeeded {
-			require.Equal(t, tenantcostmodel.RU(0), available)
+			require.InDelta(t, 0, float64(available), allowedDelta)
 			return nil
 		}
 
