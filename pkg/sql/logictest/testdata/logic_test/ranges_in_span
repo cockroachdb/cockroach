@@ -1,0 +1,18 @@
+# LogicTest: local
+
+subtest select_all_ranges_in_span
+
+# SELECT * FROM crdb_internal.ranges_in_span: all ranges within given span.
+# Assert the schema, using 'system.descriptor' table span as parameter.
+query ITT colnames
+SELECT * FROM crdb_internal.ranges_in_span('\x8b', '\x8c') LIMIT 0
+----
+range_id start_key end_key
+
+# SELECT * FROM crdb_internal.ranges_in_span: all ranges within given span.
+# Assert correct values, using 'system.descriptor' table span as parameter.
+query ITT colnames
+SELECT range_id, crdb_internal.pretty_key(start_key, -1) as start_key, crdb_internal.pretty_key(end_key, -1) as end_key FROM crdb_internal.ranges_in_span('\x8b', '\x8c')
+----
+range_id start_key end_key
+7        /Table/3  /Table/4

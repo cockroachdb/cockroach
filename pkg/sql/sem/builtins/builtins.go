@@ -5741,6 +5741,44 @@ DO NOT USE -- USE 'CREATE TENANT' INSTEAD`,
 		},
 	),
 
+	// hehe
+	"crdb_internal.create_multi_range_tables": makeBuiltin(
+		tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo},
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "num", Typ: types.Int}},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				p := evalCtx.Planner
+				num := int(tree.MustBeDInt(args[0]))
+
+				for i := 0; i < num; i++ {
+					tableName := fmt.Sprintf("%s%d", "t", i)
+					_, err := p.QueryRowEx(
+						ctx,
+						"crdb_internal.create_multi_range_table",
+						sessiondata.NoSessionDataOverride,
+						`create table `+tableName+`(x int primary key)`,
+					)
+					if err != nil {
+						return nil, err
+					}
+					_, err = p.QueryIteratorEx(
+						ctx,
+						"crdb_internal.alter_multi_range_table",
+						sessiondata.NoSessionDataOverride,
+						`alter table `+tableName+` split at values (1), (2), (3)`,
+					)
+					if err != nil {
+						return nil, err
+					}
+				}
+				// return number of altered tables
+				return tree.NewDInt(tree.DInt(num)), nil
+			},
+			Volatility: volatility.Stable,
+		},
+	),
+
 	// Returns the zone config based on a given namespace id.
 	// Returns NULL if a zone configuration is not found.
 	// Errors if there is no permission for the current user to view the zone config.

@@ -177,6 +177,10 @@ const (
 	CrdbInternalTenantUsageDetailsViewID
 	CrdbInternalPgCatalogTableIsImplementedTableID
 	CrdbInternalSuperRegions
+	CrdbInternalDatabasesDetailsViewID
+	CrdbInternalDatabasesDetailsTableV2ID
+	CrdbInternalListAllRanges
+	CrdbInternalDatabasesDetailsTableV4ID
 	InformationSchemaID
 	InformationSchemaAdministrableRoleAuthorizationsID
 	InformationSchemaApplicableRolesID

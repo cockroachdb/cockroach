@@ -15,6 +15,7 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"net"
 	"net/url"
 	"sort"
@@ -192,6 +193,10 @@ var crdbInternal = virtualSchema{
 		catconstants.CrdbInternalActiveRangeFeedsTable:              crdbInternalActiveRangeFeedsTable,
 		catconstants.CrdbInternalTenantUsageDetailsViewID:           crdbInternalTenantUsageDetailsView,
 		catconstants.CrdbInternalPgCatalogTableIsImplementedTableID: crdbInternalPgCatalogTableIsImplementedTable,
+		catconstants.CrdbInternalDatabasesDetailsViewID:             crdbInternalDatabaseDetailsView,
+		catconstants.CrdbInternalDatabasesDetailsTableV2ID:          crdbInternalDatabaseDetailsTableV2,
+		catconstants.CrdbInternalListAllRanges:                      crdbInternalListAllRanges,
+		catconstants.CrdbInternalDatabasesDetailsTableV4ID:          crdbInternalDatabaseDetailsTableV4,
 	},
 	validWithNoDatabaseContext: true,
 }
@@ -285,6 +290,343 @@ CREATE TABLE crdb_internal.node_runtime_info (
 			}
 		}
 		return nil
+	},
+}
+
+//var crdbInternalDatabaseDetailsV3 = virtualSchemaTable{
+//	comment: `database details v3 - populates vtable with query and range descs`,
+//	schema: `
+//CREATE TABLE crdb_internal.database_details_v3 (
+//	table_id INT,
+//	table_name STRING,
+//	range_id INT
+//)`,
+//	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+//		query := `SELECT
+//						table_id, name
+//					FROM crdb_internal.tables`
+//
+//		rows, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryBufferedEx(
+//			ctx, "crdb-internal-database-details", nil,
+//			sessiondata.RootUserSessionDataOverride,
+//			query)
+//
+//		if err != nil {
+//			return err
+//		}
+//
+//		execCfg := p.ExecCfg()
+//
+//		for _, tableIDRow := range rows {
+//			tableID := tree.MustBeDInt(tableIDRow[0])
+//			k := execCfg.Codec.TablePrefix(uint32(tableID))
+//			tableSpan := roachpb.Span{Key: k, EndKey: k.PrefixEnd()}
+//			rangeDescIterator, err := execCfg.RangeDescIteratorFactory.NewIterator(ctx, tableSpan)
+//			if err != nil {
+//				return err
+//			}
+//
+//			for rangeDescIterator.Valid() {
+//				rangeDesc := rangeDescIterator.CurRangeDescriptor()
+//				err = addRow(
+//					tree.NewDInt(tableID),
+//					tableIDRow[1],
+//					tree.NewDInt(tree.DInt(rangeDesc.GetRangeID())), // id
+//				)
+//				if err != nil {
+//					return err
+//				}
+//				rangeDescIterator.Next()
+//			}
+//		}
+//
+//		return nil
+//	},
+//}
+
+type rangeDescSpan roachpb.RangeDescriptor
+
+var _ interval.Interface = rangeDescSpan{}
+
+// ID is part of `interval.Interface` but seemed unused by backupccl usage.
+func (rds rangeDescSpan) ID() uintptr { return uintptr(rds.RangeID) }
+
+// Range is part of `interval.Interface`.
+func (rds rangeDescSpan) Range() interval.Range {
+	return interval.Range{Start: []byte(rds.StartKey.AsRawKey()), End: []byte(rds.EndKey.AsRawKey())}
+}
+
+var crdbInternalDatabaseDetailsTableV4 = virtualSchemaTable{
+	comment: `database details v4 - populates vtable with query and range descs`,
+	schema: `
+CREATE TABLE crdb_internal.database_details_v4 (
+	database_name STRING,
+	database_id INT,
+	table_name STRING,
+	table_id INT,
+	range_count INT
+)`,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		execCfg := p.ExecCfg()
+		rangeDescIterator, err := execCfg.RangeDescIteratorFactory.NewIterator(ctx, execCfg.Codec.TenantSpan())
+		if err != nil {
+			return err
+		}
+
+		intervalTree := interval.NewTree(interval.ExclusiveOverlapper)
+
+		for rangeDescIterator.Valid() {
+			rangeDesc := rangeDescIterator.CurRangeDescriptor()
+
+			err = intervalTree.Insert(rangeDescSpan(rangeDesc), false)
+
+			if err != nil {
+				return err
+			}
+
+			rangeDescIterator.Next()
+		}
+
+		query := `SELECT
+						database_name,
+						parent_id as database_id,
+						name,
+						table_id,
+						name
+					FROM crdb_internal.tables
+				`
+		rows, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryBufferedEx(
+			ctx, "crdb-internal-database-details", nil,
+			sessiondata.RootUserSessionDataOverride,
+			query)
+
+		if err != nil {
+			return err
+		}
+
+		for _, row := range rows {
+			tableID := tree.MustBeDInt(row[3])
+			tableStartKey := execCfg.Codec.TablePrefix(uint32(tableID))
+			tableRange := interval.Range{
+				Start: interval.Comparable(tableStartKey),
+				End:   interval.Comparable(tableStartKey.PrefixEnd()),
+			}
+			overlappingRanges := intervalTree.Get(tableRange)
+			err = addRow(
+				row[0], // database_name
+				row[1], // database_id
+				row[2], // table_name
+				row[3], // table_id
+				tree.NewDInt(tree.DInt(len(overlappingRanges))), // range_count
+			)
+
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	},
+}
+
+var crdbInternalListAllRanges = virtualSchemaTable{
+	comment: `list all ranges :)`,
+	schema: `
+CREATE TABLE crdb_internal.list_all_ranges (
+	range_id INT
+)`,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		execCfg := p.ExecCfg()
+		rangeDescIterator, err := execCfg.RangeDescIteratorFactory.NewIterator(ctx, execCfg.Codec.TenantSpan())
+		if err != nil {
+			return err
+		}
+
+		for rangeDescIterator.Valid() {
+			rangeDesc := rangeDescIterator.CurRangeDescriptor()
+			err = addRow(
+				tree.NewDInt(tree.DInt(rangeDesc.GetRangeID())), // id
+			)
+			if err != nil {
+				return err
+			}
+			rangeDescIterator.Next()
+		}
+
+		return nil
+	},
+}
+
+//var crdbInternalDatabaseDetailsV3 = virtualSchemaTable{
+//	comment: `database details v3 - populates vtable with query and range descs`,
+//	schema: `
+//CREATE TABLE crdb_internal.database_details_v3 (
+//	id INT NOT NULL,
+//	name STRING NOT NULL,
+//	table_count INT,
+//	range_count INT
+//)`,
+//	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+//		query := `SELECT
+//				d.id,
+//				d.name,
+//				t.name,
+//				t.table_id,
+//				s.start_key,
+//				s.end_key
+//			FROM crdb_internal.databases as d
+//			 LEFT JOIN crdb_internal.tables as t ON t.parent_id = d.id
+//			 LEFT JOIN "".crdb_internal.table_spans as s ON s.descriptor_id = t.table_id
+//		`
+//		rows, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryBufferedEx(
+//			ctx, "crdb-internal-database-details", nil,
+//			sessiondata.RootUserSessionDataOverride,
+//			query)
+//
+//		if err != nil {
+//			return err
+//		}
+//		execCfg := p.ExecCfg()
+//
+//		type dbDetails struct {
+//			dbId       int
+//			dbName     string
+//			tableCount int
+//			rangeCount int
+//		}
+//
+//		dbDetailsMap := map[int]dbDetails{}
+//
+//		for _, dbDetailsRow := range rows {
+//			dbId := int(tree.MustBeDInt(dbDetailsRow[0]))
+//			if dbDetailsRow[3] == tree.DNull {
+//				_, ok := dbDetailsMap[dbId]
+//				if !ok {
+//					dbDetailsMap[dbId] = dbDetails{
+//						dbId:       dbId,
+//						dbName:     string(tree.MustBeDString(dbDetailsRow[1])),
+//						tableCount: 0,
+//						rangeCount: 0,
+//					}
+//				}
+//				continue
+//			}
+//
+//			tableID := tree.MustBeDInt(dbDetailsRow[3])
+//			k := execCfg.Codec.TablePrefix(uint32(tableID))
+//			tableSpan := roachpb.Span{Key: k, EndKey: k.PrefixEnd()}
+//			rangeDescIterator, err := execCfg.RangeDescIteratorFactory.NewIterator(ctx, tableSpan)
+//			if err != nil {
+//				return err
+//			}
+//
+//			tableRanges := []roachpb.RangeID{}
+//			for rangeDescIterator.Valid() {
+//				rangeDesc := rangeDescIterator.CurRangeDescriptor()
+//				tableRanges = append(tableRanges, rangeDesc.GetRangeID())
+//				rangeDescIterator.Next()
+//			}
+//
+//			val, ok := dbDetailsMap[dbId]
+//			if ok {
+//				val.tableCount++
+//				val.rangeCount += len(tableRanges)
+//				dbDetailsMap[dbId] = val
+//			} else {
+//				dbDetailsMap[dbId] = dbDetails{
+//					dbId:       dbId,
+//					dbName:     string(tree.MustBeDString(dbDetailsRow[1])),
+//					tableCount: 1,
+//					rangeCount: len(tableRanges),
+//				}
+//			}
+//		}
+//
+//		for _, val := range dbDetailsMap {
+//			err = addRow(
+//				tree.NewDInt(tree.DInt(val.dbId)),       // id
+//				tree.NewDString(val.dbName),             // name
+//				tree.NewDInt(tree.DInt(val.tableCount)), // table count
+//				tree.NewDInt(tree.DInt(val.rangeCount)), // range count
+//			)
+//			if err != nil {
+//				return err
+//			}
+//		}
+//
+//		return nil
+//	},
+//}
+
+var crdbInternalDatabaseDetailsTableV2 = virtualSchemaTable{
+	comment: `database details v2 - populates vtable with single query`,
+	schema: `
+CREATE TABLE crdb_internal.database_details_v2 (
+	id INT NOT NULL,
+	name STRING NOT NULL,
+	table_count INT,
+	range_count INT
+)`,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		query := `SELECT
+				d.id,
+				d.name,
+				COUNT(DISTINCT t.table_id) as table_count,
+				COUNT(DISTINCT r.range_id) as range_count
+			FROM crdb_internal.databases as d
+			 LEFT JOIN crdb_internal.tables as t ON t.parent_id = d.id
+			 LEFT JOIN "".crdb_internal.table_spans as s ON s.descriptor_id = t.table_id
+			 LEFT JOIN crdb_internal.ranges_no_leases as r ON s.start_key < r.end_key AND s.end_key > r.start_key
+			GROUP BY d.id, d.name`
+
+		rows, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryBufferedEx(
+			ctx, "crdb-internal-database-details", nil,
+			sessiondata.RootUserSessionDataOverride,
+			query)
+
+		if err != nil {
+			return err
+		}
+
+		for _, dbDetailsRow := range rows {
+			err = addRow(
+				dbDetailsRow[0], // id
+				dbDetailsRow[1], // name
+				dbDetailsRow[2], // table count
+				dbDetailsRow[3], // range count
+			)
+			if err != nil {
+				return err
+			}
+		}
+
+		return nil
+	},
+}
+
+var crdbInternalDatabaseDetailsView = virtualSchemaView{
+	schema: `
+CREATE VIEW crdb_internal.database_details_view (
+	id,
+	name,
+	table_count,
+	range_count
+) AS
+	SELECT
+		d.id,
+		d.name,
+		COUNT(DISTINCT t.table_id) as table_count,
+		COUNT(DISTINCT r.range_id) as range_count
+	FROM crdb_internal.databases as d
+	LEFT JOIN crdb_internal.tables as t ON t.parent_id = d.id
+	LEFT JOIN "".crdb_internal.table_spans as s ON s.descriptor_id = t.table_id
+	LEFT JOIN crdb_internal.ranges_no_leases as r ON s.start_key < r.end_key AND s.end_key > r.start_key
+	GROUP BY d.id, d.name
+`,
+	resultColumns: colinfo.ResultColumns{
+		{Name: "id", Typ: types.Int},
+		{Name: "name", Typ: types.String},
+		{Name: "table_count", Typ: types.Int},
+		{Name: "range_count", Typ: types.Int},
 	},
 }
 

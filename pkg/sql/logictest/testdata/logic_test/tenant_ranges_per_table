@@ -1,0 +1,18 @@
+# LogicTest: local
+
+subtest select_tenant_ranges_per_table
+
+# SELECT * FROM crdb_internal.tenant_ranges_per_table: all tenant's ranges per table.
+# Assert the schema.
+query TITIIT colnames
+SELECT * FROM crdb_internal.tenant_ranges_in_span() LIMIT 0
+----
+database_name database_id table_name table_id range_count range_ids
+
+# SELECT * FROM crdb_internal.tenant_ranges_per_table: all tenant's ranges per table.
+# Assert correct values.
+query TITIIT colnames
+SELECT * FROM crdb_internal.tenant_ranges_in_span() LIMIT 1
+----
+database_name database_id table_name table_id range_count range_ids
+system        1           descriptor 3        1           {7}

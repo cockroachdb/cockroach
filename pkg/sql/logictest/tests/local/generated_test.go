@@ -1486,6 +1486,13 @@ func TestLogic_rand_ident(
 	runLogicTest(t, "rand_ident")
 }
 
+func TestLogic_ranges_in_span(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "ranges_in_span")
+}
+
 func TestLogic_reassign_owned_by(
 	t *testing.T,
 ) {
@@ -2086,6 +2093,13 @@ func TestLogic_tenant_builtins(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "tenant_builtins")
+}
+
+func TestLogic_tenant_ranges_per_table(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "tenant_ranges_per_table")
 }
 
 func TestLogic_time(
