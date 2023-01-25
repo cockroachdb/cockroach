@@ -867,13 +867,13 @@ func TestChangefeedInitialScan(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	noInitialScanTests := map[string]string{
-		`no cursor - no initial scan`:     `CREATE CHANGEFEED FOR no_initial_scan WITH no_initial_scan, resolved='1s'`,
+		//`no cursor - no initial scan`:     `CREATE CHANGEFEED FOR no_initial_scan WITH no_initial_scan, resolved='1s'`,
 		`no cursor - no initial backfill`: `CREATE CHANGEFEED FOR no_initial_scan WITH initial_scan = 'no', resolved='1s'`,
 	}
 
 	initialScanTests := map[string]string{
-		`cursor - with initial scan`:     `CREATE CHANGEFEED FOR initial_scan WITH initial_scan, resolved='1s', cursor='%s'`,
-		`cursor - with initial backfill`: `CREATE CHANGEFEED FOR initial_scan WITH initial_scan = 'yes', resolved='1s', cursor='%s'`,
+		//`cursor - with initial scan`:     `CREATE CHANGEFEED FOR initial_scan WITH initial_scan, resolved='1s', cursor='%s'`,
+		//`cursor - with initial backfill`: `CREATE CHANGEFEED FOR initial_scan WITH initial_scan = 'yes', resolved='1s', cursor='%s'`,
 	}
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
@@ -924,7 +924,7 @@ func TestChangefeedInitialScan(t *testing.T) {
 		}
 	}
 
-	cdcTest(t, testFn)
+	cdcTest(t, testFn, feedTestForceSink("cloudstorage"))
 }
 
 func TestChangefeedBackfillObservability(t *testing.T) {

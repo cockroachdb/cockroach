@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
@@ -89,6 +90,7 @@ func (c *channelRangeFeedEventProducer) Recv() (*roachpb.RangeFeedEvent, error) 
 	case <-c.termErrCh:
 		return nil, c.termErr
 	case e := <-c.eventCh:
+		log.Infof(c.ctx, "ZXCV %s", e.GetValue())
 		return e, nil
 	}
 }
@@ -200,6 +202,8 @@ func (m *rangefeedMuxer) demuxLoop(ctx context.Context) error {
 			producer, found := m.mu.producers[e.StreamID]
 			m.mu.Unlock()
 
+			log.Infof(ctx, "QWER %d %s ", e.StreamID, e.GetValue())
+
 			if !found {
 				return m.shutdownWithError(errors.AssertionFailedf(
 					"expected to find consumer for streamID=%d", e.StreamID),
@@ -222,13 +226,14 @@ func (m *rangefeedMuxer) receiveEventsFromNode(
 ) error {
 	for {
 		event, streamErr := stream.Recv()
-
 		if streamErr != nil {
 			m.propagateStreamTerminationErrorToConsumers(nodeID, streamErr)
+			log.Infof(ctx, "PROPAGATING err %s", streamErr)
 			// Since the stream error is handled above, we return nil to gracefully shut down
 			// this go routine.
 			return nil //nolint:returnerrcheck
 		}
+		log.Infof(ctx, "ASDF %d %s", event.StreamID, event.GetValue())
 
 		select {
 		case <-ctx.Done():
