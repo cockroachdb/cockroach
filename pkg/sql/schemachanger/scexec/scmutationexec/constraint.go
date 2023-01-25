@@ -65,9 +65,7 @@ func (i *immediateVisitor) MakeAbsentCheckConstraintWriteOnly(
 		FromHashShardedColumn: op.FromHashShardedColumn,
 		ConstraintID:          op.ConstraintID,
 	}
-	if err = enqueueAddCheckConstraintMutation(tbl, ck); err != nil {
-		return err
-	}
+	enqueueNonIndexMutation(tbl, tbl.AddCheckMutation, ck, descpb.DescriptorMutation_ADD)
 	// Fast-forward the mutation state to WRITE_ONLY because this constraint
 	// is now considered as enforced.
 	tbl.Mutations[len(tbl.Mutations)-1].State = descpb.DescriptorMutation_WRITE_ONLY
@@ -127,7 +125,8 @@ func (i *immediateVisitor) MakePublicCheckConstraintValidated(
 	for _, ck := range tbl.Checks {
 		if ck.ConstraintID == op.ConstraintID {
 			ck.Validity = descpb.ConstraintValidity_Dropping
-			return enqueueDropCheckConstraintMutation(tbl, ck)
+			enqueueNonIndexMutation(tbl, tbl.AddCheckMutation, ck, descpb.DescriptorMutation_DROP)
+			return nil
 		}
 	}
 
@@ -262,9 +261,7 @@ func (i *immediateVisitor) MakeAbsentForeignKeyConstraintWriteOnly(
 		Match:               op.CompositeKeyMatchMethod,
 		ConstraintID:        op.ConstraintID,
 	}
-	if err = enqueueAddForeignKeyConstraintMutation(out, fk); err != nil {
-		return err
-	}
+	enqueueNonIndexMutation(out, out.AddForeignKeyMutation, fk, descpb.DescriptorMutation_ADD)
 	out.Mutations[len(out.Mutations)-1].State = descpb.DescriptorMutation_WRITE_ONLY
 	return nil
 }
@@ -331,7 +328,8 @@ func (i *immediateVisitor) MakePublicForeignKeyConstraintValidated(
 				tbl.OutboundFKs = nil
 			}
 			fk.Validity = descpb.ConstraintValidity_Dropping
-			return enqueueDropForeignKeyConstraintMutation(tbl, &fk)
+			enqueueNonIndexMutation(tbl, tbl.AddForeignKeyMutation, &fk, descpb.DescriptorMutation_DROP)
+			return nil
 		}
 	}
 
@@ -357,9 +355,7 @@ func (i *immediateVisitor) MakeAbsentUniqueWithoutIndexConstraintWriteOnly(
 		ConstraintID: op.ConstraintID,
 		Predicate:    string(op.PartialExpr),
 	}
-	if err = enqueueAddUniqueWithoutIndexConstraintMutation(tbl, uwi); err != nil {
-		return err
-	}
+	enqueueNonIndexMutation(tbl, tbl.AddUniqueWithoutIndexMutation, uwi, descpb.DescriptorMutation_ADD)
 	// Fast-forward the mutation state to WRITE_ONLY because this constraint
 	// is now considered as enforced.
 	tbl.Mutations[len(tbl.Mutations)-1].State = descpb.DescriptorMutation_WRITE_ONLY
@@ -423,7 +419,8 @@ func (i *immediateVisitor) MakePublicUniqueWithoutIndexConstraintValidated(
 				tbl.UniqueWithoutIndexConstraints = nil
 			}
 			uwi.Validity = descpb.ConstraintValidity_Dropping
-			return enqueueDropUniqueWithoutIndexConstraintMutation(tbl, &uwi)
+			enqueueNonIndexMutation(tbl, tbl.AddUniqueWithoutIndexMutation, &uwi, descpb.DescriptorMutation_DROP)
+			return nil
 		}
 	}
 

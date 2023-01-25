@@ -98,7 +98,7 @@ func addNewIndexMutation(
 	if opIndex.GeoConfig != nil {
 		idx.GeoConfig = *opIndex.GeoConfig
 	}
-	return enqueueAddIndexMutation(tbl, idx, state)
+	return enqueueIndexMutation(tbl, idx, state, descpb.DescriptorMutation_ADD)
 }
 
 func (i *immediateVisitor) SetAddedIndexPartialPredicate(
@@ -241,7 +241,7 @@ func (i *immediateVisitor) MakePublicPrimaryIndexWriteOnly(
 	}
 	desc := tbl.GetPrimaryIndex().IndexDescDeepCopy()
 	tbl.TableDesc().PrimaryIndex = descpb.IndexDescriptor{} // zero-out the current primary index
-	return enqueueDropIndexMutation(tbl, &desc)
+	return enqueueIndexMutation(tbl, &desc, descpb.DescriptorMutation_WRITE_ONLY, descpb.DescriptorMutation_DROP)
 }
 
 func (i *immediateVisitor) MakePublicSecondaryIndexWriteOnly(
@@ -255,7 +255,7 @@ func (i *immediateVisitor) MakePublicSecondaryIndexWriteOnly(
 		if idx.GetID() == op.IndexID {
 			desc := idx.IndexDescDeepCopy()
 			tbl.Indexes = append(tbl.Indexes[:i], tbl.Indexes[i+1:]...)
-			return enqueueDropIndexMutation(tbl, &desc)
+			return enqueueIndexMutation(tbl, &desc, descpb.DescriptorMutation_WRITE_ONLY, descpb.DescriptorMutation_DROP)
 		}
 	}
 	return errors.AssertionFailedf("failed to find secondary index %d in descriptor %v", op.IndexID, tbl)
