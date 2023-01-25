@@ -135,8 +135,8 @@ func TestDetachMemoRace(t *testing.T) {
 
 // TestCoster files can be run separately like this:
 //
-//	make test PKG=./pkg/sql/opt/xform TESTS="TestCoster/sort"
-//	make test PKG=./pkg/sql/opt/xform TESTS="TestCoster/scan"
+//	./dev test pkg/sql/opt/xform -f TestCoster/sort
+//	./dev test pkg/sql/opt/xform -f TestCoster/scan
 //	...
 func TestCoster(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -150,8 +150,8 @@ func TestCoster(t *testing.T) {
 
 // TestPhysicalProps files can be run separately like this:
 //
-//	make test PKG=./pkg/sql/opt/xform TESTS="TestPhysicalPropsFactory/ordering"
-//	make test PKG=./pkg/sql/opt/xform TESTS="TestPhysicalPropsFactory/presentation"
+//	./dev test pkg/sql/opt/xform -f TestPhysicalPropsFactory/ordering
+//	./dev test pkg/sql/opt/xform -f TestPhysicalPropsFactory/presentation
 //	...
 func TestPhysicalProps(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -171,7 +171,7 @@ func TestPhysicalProps(t *testing.T) {
 
 // TestRuleProps files can be run separately like this:
 //
-//	make test PKG=./pkg/sql/opt/xform TESTS="TestRuleProps/orderings"
+//	./dev test pkg/sql/opt/xform -f TestRuleProps/orderings
 //	...
 func TestRuleProps(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -186,8 +186,8 @@ func TestRuleProps(t *testing.T) {
 
 // TestRules files can be run separately like this:
 //
-//	make test PKG=./pkg/sql/opt/xform TESTS="TestRules/scan"
-//	make test PKG=./pkg/sql/opt/xform TESTS="TestRules/select"
+//	./dev test pkg/sql/opt/xform -f TestRules/scan
+//	./dev test pkg/sql/opt/xform -f TestRules/select
 //	...
 func TestRules(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -211,12 +211,13 @@ var externalTestData = flag.String(
 //
 // TestExternal files can be run separately like this:
 //
-//	make test PKG=./pkg/sql/opt/xform TESTS="TestExternal/tpch"
+//	./dev test pkg/sql/opt/xform -f TestExternal/tpch
 //	...
 //
 // Test files from another location can be run using the -d flag:
 //
-//	make test PKG=./pkg/sql/opt/xform TESTS=TestExternal TESTFLAGS='-d /some-dir'
+//	./dev test pkg/sql/opt/xform -f TestExternal --rewrite \
+//	  --test-args="-d=/some-dir" -- --sandbox_writable_path="/some-dir"
 func TestExternal(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
