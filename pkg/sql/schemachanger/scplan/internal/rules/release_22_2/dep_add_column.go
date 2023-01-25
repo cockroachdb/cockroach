@@ -98,6 +98,17 @@ func init() {
 			status := rel.Var("status")
 			return rel.Clauses{
 				from.Type((*scpb.Column)(nil)),
+				// Join first on the target and node to only explore all columns
+				// which are being added as opposed to all columns. If we joined
+				// first on the columns, we'd be filtering the cross product of
+				// table columns. If a relation has a lot of columns, this can hurt.
+				// It's less likely that we have a very large number of columns which
+				// are being added. We'll want to do something else here when we start
+				// creating tables and all the columns are being added.
+				//
+				// The "right" answer is to push ordering predicates into rel; it also
+				// is maintaining sorted data structures.
+				from.JoinTargetNode(),
 				to.Type((*scpb.Column)(nil)),
 				JoinOnDescID(from, to, "table-id"),
 				ToPublicOrTransient(from, to),
