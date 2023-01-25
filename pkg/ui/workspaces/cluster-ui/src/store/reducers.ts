@@ -34,7 +34,7 @@ import {
   reducer as indexStats,
 } from "./indexStats/indexStats.reducer";
 import { JobsState, reducer as jobs } from "./jobs";
-import { JobState, reducer as job } from "./jobDetails";
+import { JobDetailsReducerState, reducer as job } from "./jobDetails";
 import {
   ClusterLocksReqState,
   reducer as clusterLocks,
@@ -68,7 +68,7 @@ export type AdminUiState = {
   sqlDetailsStats: SQLDetailsStatsReducerState;
   indexStats: IndexStatsReducerState;
   jobs: JobsState;
-  job: JobState;
+  job: JobDetailsReducerState;
   clusterLocks: ClusterLocksReqState;
   transactionInsights: TransactionInsightsState;
   transactionInsightDetails: TransactionInsightDetailsCachedState;
