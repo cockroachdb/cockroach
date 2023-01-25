@@ -47,6 +47,12 @@ func (r *streamIngestManagerImpl) GetStreamIngestionStats(
 	return replicationutils.GetStreamIngestionStats(ctx, streamIngestionDetails, jobProgress)
 }
 
+func (r *streamIngestManagerImpl) GetReplicationStatsAndStatus(
+	ctx context.Context, ingestionJobID jobspb.JobID,
+) (*streampb.StreamIngestionStats, string, error) {
+	return getReplicationStatsAndStatus(ctx, r.jobRegistry, r.txn, ingestionJobID)
+}
+
 func newStreamIngestManagerWithPrivilegesCheck(
 	ctx context.Context, evalCtx *eval.Context, txn isql.Txn,
 ) (eval.StreamIngestManager, error) {

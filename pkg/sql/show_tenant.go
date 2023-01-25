@@ -12,13 +12,9 @@ package sql
 
 import (
 	"context"
-	"fmt"
 	"strconv"
-	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/jobs"
-	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -30,21 +26,9 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-type tenantStatus string
-
-const (
-	initReplication   tenantStatus = "initializing replication"
-	replicating       tenantStatus = "replicating"
-	replicationPaused tenantStatus = "replication paused"
-	pendingCutover    tenantStatus = "replication pending cutover"
-	cuttingOver       tenantStatus = "replication cutting over"
-	// Users should not see this status normally.
-	replicationUnknownFormat tenantStatus = "replication unknown (%s)"
-)
-
 type tenantValues struct {
 	tenantInfo         *mtinfopb.TenantInfo
-	tenantStatus       tenantStatus
+	dataState          string
 	replicationInfo    *streampb.StreamIngestionStats
 	protectedTimestamp hlc.Timestamp
 	capabilities       []showTenantNodeCapability
@@ -117,75 +101,6 @@ func (n *showTenantNode) startExec(params runParams) error {
 	return nil
 }
 
-func getReplicationStats(
-	params runParams, job *jobs.Job,
-) (*streampb.StreamIngestionStats, *hlc.Timestamp, error) {
-	mgr, err := params.p.EvalContext().StreamManagerFactory.GetStreamIngestManager(params.ctx)
-	if err != nil {
-		return nil, nil, err
-	}
-	details, ok := job.Details().(jobspb.StreamIngestionDetails)
-	if !ok {
-		return nil, nil, errors.Newf("job with id %d is not a stream ingestion job", job.ID())
-	}
-	stats, err := mgr.GetStreamIngestionStats(params.ctx, details, job.Progress())
-	var protectedTimestamp hlc.Timestamp
-	if err != nil {
-		// An error means we don't have stats but we can still present some info,
-		// therefore we don't fail here.
-		// TODO(lidor): we need a better signal from GetStreamIngestionStats(), instead of
-		// ignoring all errors.
-		log.Infof(params.ctx, "stream ingestion stats unavailable for tenant %q and job %d",
-			details.DestinationTenantName, job.ID())
-	} else {
-		if stats.IngestionDetails.ProtectedTimestampRecordID == nil {
-			// We don't have the protected timestamp record, but we still want to show
-			// the info we do have about tenant replication status, logging an error
-			// and continuing.
-			log.Warningf(params.ctx, "protected timestamp unavailable for tenant %q and job %d",
-				details.DestinationTenantName, job.ID())
-		} else {
-			ptp := params.p.execCfg.ProtectedTimestampProvider.WithTxn(params.p.InternalSQLTxn())
-			record, err := ptp.GetRecord(params.ctx, *stats.IngestionDetails.ProtectedTimestampRecordID)
-			if err != nil {
-				// Protected timestamp might not be set yet, no need to fail.
-				log.Warningf(params.ctx, "protected timestamp unavailable for tenant %q and job %d: %v",
-					details.DestinationTenantName, job.ID(), err)
-				return stats, nil, nil
-			}
-			protectedTimestamp = record.Timestamp
-		}
-	}
-	return stats, &protectedTimestamp, nil
-}
-
-func getTenantStatus(
-	jobStatus jobs.Status, replicationInfo *streampb.StreamIngestionStats,
-) tenantStatus {
-	switch jobStatus {
-	case jobs.StatusPending, jobs.StatusRunning, jobs.StatusPauseRequested:
-		if replicationInfo == nil || replicationInfo.ReplicationLagInfo == nil {
-			// Still no lag info which means we never recorded progress, and
-			// replication did not complete the initial scan yet.
-			return initReplication
-		} else {
-			progress := replicationInfo.IngestionProgress
-			if progress != nil && !progress.CutoverTime.IsEmpty() {
-				if progress.CutoverStarted {
-					return cuttingOver
-				}
-				return pendingCutover
-			} else {
-				return replicating
-			}
-		}
-	case jobs.StatusPaused:
-		return replicationPaused
-	default:
-		return tenantStatus(fmt.Sprintf(string(replicationUnknownFormat), jobStatus))
-	}
-}
-
 func (n *showTenantNode) getTenantValues(
 	params runParams, tenantInfo *mtinfopb.TenantInfo,
 ) (*tenantValues, error) {
@@ -216,41 +131,38 @@ func (n *showTenantNode) getTenantValues(
 		if n.withReplication {
 			return nil, errors.Newf("tenant %q does not have an active replication job", tenantInfo.Name)
 		}
-		dataState := strings.ToLower(values.tenantInfo.DataState.String())
-		values.tenantStatus = tenantStatus(dataState)
-		return &values, nil
-	}
+		values.dataState = values.tenantInfo.DataState.String()
+	} else {
+		switch values.tenantInfo.DataState {
+		case mtinfopb.DataStateAdd:
+			mgr, err := params.p.EvalContext().StreamManagerFactory.GetStreamIngestManager(params.ctx)
+			if err != nil {
+				return nil, err
+			}
+			stats, status, err := mgr.GetReplicationStatsAndStatus(params.ctx, jobId)
+			values.dataState = status
+			if err != nil {
+				log.Warningf(params.ctx, "replication stats unavailable for tenant %q and job %d: %v",
+					tenantInfo.Name, jobId, err)
+			} else if n.withReplication {
+				values.replicationInfo = stats
 
-	switch values.tenantInfo.DataState {
-	case mtinfopb.DataStateAdd:
-		// There is a replication job, we need to get the job info and the
-		// replication stats in order to generate the exact tenant status.
-		registry := params.p.execCfg.JobRegistry
-		job, err := registry.LoadJobWithTxn(params.ctx, jobId, params.p.InternalSQLTxn())
-		if err != nil {
-			log.Errorf(params.ctx, "cannot load job info for replicated tenant %q and job %d: %v",
-				tenantInfo.Name, jobId, err)
-			values.tenantStatus = tenantStatus(fmt.Sprintf(string(replicationUnknownFormat), err))
-			return &values, nil
+				if stats != nil && stats.IngestionDetails != nil && stats.IngestionDetails.ProtectedTimestampRecordID != nil {
+					ptp := params.p.execCfg.ProtectedTimestampProvider.WithTxn(params.p.InternalSQLTxn())
+					record, err := ptp.GetRecord(params.ctx, *stats.IngestionDetails.ProtectedTimestampRecordID)
+					if err != nil {
+						// Protected timestamp might not be set yet, no need to fail.
+						log.Warningf(params.ctx, "protected timestamp unavailable for tenant %q and job %d: %v",
+							tenantInfo.Name, jobId, err)
+					}
+					values.protectedTimestamp = record.Timestamp
+				}
+			}
+		case mtinfopb.DataStateReady, mtinfopb.DataStateDrop:
+			values.dataState = values.tenantInfo.DataState.String()
+		default:
+			return nil, errors.Newf("tenant %q state is unknown: %s", tenantInfo.Name, values.tenantInfo.DataState)
 		}
-		stats, protectedTimestamp, err := getReplicationStats(params, job)
-		if err != nil {
-			log.Errorf(params.ctx, "cannot load replication stats for replicated tenant %q and job %d: %v",
-				tenantInfo.Name, jobId, err)
-			values.tenantStatus = tenantStatus(fmt.Sprintf(string(replicationUnknownFormat), err))
-			return &values, nil
-		}
-		values.replicationInfo = stats
-		if protectedTimestamp != nil {
-			values.protectedTimestamp = *protectedTimestamp
-		}
-
-		values.tenantStatus = getTenantStatus(job.Status(), values.replicationInfo)
-	case mtinfopb.DataStateReady, mtinfopb.DataStateDrop:
-		dataState := values.tenantInfo.DataState.String()
-		values.tenantStatus = tenantStatus(dataState)
-	default:
-		return nil, errors.Newf("tenant %q state is unknown: %s", tenantInfo.Name, values.tenantInfo.DataState)
 	}
 
 	return &values, nil
@@ -298,8 +210,8 @@ func (n *showTenantNode) Values() tree.Datums {
 	result := tree.Datums{
 		tree.NewDInt(tree.DInt(tenantInfo.ID)),
 		tree.NewDString(string(tenantInfo.Name)),
-		tree.NewDString(string(v.tenantStatus)),
-		tree.NewDString(strings.ToLower(tenantInfo.ServiceMode.String())),
+		tree.NewDString(v.dataState),
+		tree.NewDString(tenantInfo.ServiceMode.String()),
 	}
 
 	if n.withReplication {
