@@ -685,12 +685,20 @@ func registerRestore(r registry.Registry) {
 				workload: tpceRestore{customers: 500000}}),
 			timeout: 5 * time.Hour,
 		},
+		{
+			hardware: makeHardwareSpecs(hardwareSpecs{nodes: 15, cpus: 16, volumeSize: 5000}),
+			backup: makeBackupSpecs(backupSpecs{
+				version:  "v22.2.1",
+				aost:     "'2023-01-12 03:00:00'",
+				workload: tpceRestore{customers: 2000000}}),
+			timeout: 24 * time.Hour,
+			tags:    []string{"weekly"},
+		},
 		// TODO(msbutler): add the following tests once roachperf/grafana is hooked up and old tests are
 		// removed:
 		// - restore/tpce/400GB/nodes=10
 		// - restore/tpce/400GB/nodes=30
 		// - restore/tpce/400GB/cpu=16
-		// - restore/tpce/45TB/nodes=15/cpu=16/
 		// - restore/tpce/400GB/encryption
 	} {
 		sp := sp
@@ -707,6 +715,7 @@ func registerRestore(r registry.Registry) {
 			// These tests measure performance. To ensure consistent perf,
 			// disable metamorphic encryption.
 			EncryptionSupport: registry.EncryptionAlwaysDisabled,
+			Tags:              sp.tags,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 				t.L().Printf("Full test specs: %s", sp.computeName(true))
@@ -881,6 +890,8 @@ func (tpce tpceRestore) String() string {
 		builder.WriteString("400GB")
 	case 500000:
 		builder.WriteString("8TB")
+	case 2000000:
+		builder.WriteString("32TB")
 	default:
 		panic("tpce customer count not recognized")
 	}
@@ -891,6 +902,7 @@ type restoreSpecs struct {
 	hardware hardwareSpecs
 	backup   backupSpecs
 	timeout  time.Duration
+	tags     []string
 }
 
 func (sp restoreSpecs) computeName(full bool) string {
