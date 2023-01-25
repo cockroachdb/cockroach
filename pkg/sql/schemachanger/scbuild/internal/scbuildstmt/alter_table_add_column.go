@@ -248,6 +248,7 @@ func alterTableAddColumn(
 		}
 		addSecondaryIndexTargetsForAddColumn(b, tbl, idx, primaryIdx)
 	}
+	b.LogEventForExistingTarget(spec.col)
 	switch spec.colType.Type.Family() {
 	case types.EnumFamily:
 		b.IncrementEnumCounter(sqltelemetry.EnumInTable)

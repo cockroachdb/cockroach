@@ -313,14 +313,6 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(k);
 │   │       │     TableID: 104
 │   │       │
 │   │       ├── • MakeValidatedPrimaryIndexPublic
-│   │       │     EventBase:
-│   │       │       Authorization:
-│   │       │         UserName: root
-│   │       │       Statement: ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COLUMN ‹j› CASCADE
-│   │       │       StatementTag: ALTER TABLE
-│   │       │       TargetMetadata:
-│   │       │         SourceElementID: 1
-│   │       │         SubWorkID: 1
 │   │       │     IndexID: 3
 │   │       │     TableID: 104
 │   │       │
@@ -697,7 +689,7 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(k);
     │   │       └── • Precedence dependency from VALIDATED SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
     │   │             rule: "index no longer public before dependents"
     │   │
-    │   └── • 13 Mutation operations
+    │   └── • 11 Mutation operations
     │       │
     │       ├── • MakeWriteOnlyColumnDeleteOnly
     │       │     ColumnID: 2
@@ -711,31 +703,11 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(k);
     │       │     IndexID: 4
     │       │     TableID: 104
     │       │
-    │       ├── • RefreshStats
-    │       │     TableID: 104
-    │       │
-    │       ├── • LogEvent
-    │       │     Element:
-    │       │       SecondaryIndex:
-    │       │         constraintId: 4
-    │       │         indexId: 5
-    │       │         isUnique: true
-    │       │         sourceIndexId: 3
-    │       │         tableId: 104
-    │       │         temporaryIndexId: 6
-    │       │     EventBase:
-    │       │       Authorization:
-    │       │         UserName: root
-    │       │       Statement: CREATE UNIQUE INDEX ‹idx› ON ‹defaultdb›.‹public›.‹t› (‹k›)
-    │       │       StatementTag: CREATE INDEX
-    │       │       TargetMetadata:
-    │       │         SourceElementID: 1
-    │       │         StatementID: 1
-    │       │         SubWorkID: 1
-    │       │     TargetStatus: 2
-    │       │
     │       ├── • MakeValidatedSecondaryIndexPublic
     │       │     IndexID: 5
+    │       │     TableID: 104
+    │       │
+    │       ├── • RefreshStats
     │       │     TableID: 104
     │       │
     │       ├── • MakeWriteOnlyIndexDeleteOnly
@@ -745,21 +717,6 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(k);
     │       ├── • MakeWriteOnlyIndexDeleteOnly
     │       │     IndexID: 1
     │       │     TableID: 104
-    │       │
-    │       ├── • LogEvent
-    │       │     Element:
-    │       │       SecondaryIndex:
-    │       │         indexId: 2
-    │       │         tableId: 104
-    │       │     EventBase:
-    │       │       Authorization:
-    │       │         UserName: root
-    │       │       Statement: ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COLUMN ‹j› CASCADE
-    │       │       StatementTag: ALTER TABLE
-    │       │       TargetMetadata:
-    │       │         SourceElementID: 1
-    │       │         SubWorkID: 1
-    │       │     TargetStatus: 1
     │       │
     │       ├── • MakeWriteOnlyIndexDeleteOnly
     │       │     IndexID: 2
@@ -940,14 +897,6 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(k);
         └── • 12 Mutation operations
             │
             ├── • MakeIndexAbsent
-            │     EventBase:
-            │       Authorization:
-            │         UserName: root
-            │       Statement: ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COLUMN ‹j› CASCADE
-            │       StatementTag: ALTER TABLE
-            │       TargetMetadata:
-            │         SourceElementID: 1
-            │         SubWorkID: 1
             │     IndexID: 1
             │     TableID: 104
             │
@@ -977,26 +926,10 @@ EXPLAIN (ddl, verbose) CREATE UNIQUE INDEX idx ON t(k);
             │
             ├── • MakeDeleteOnlyColumnAbsent
             │     ColumnID: 2
-            │     EventBase:
-            │       Authorization:
-            │         UserName: root
-            │       Statement: ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COLUMN ‹j› CASCADE
-            │       StatementTag: ALTER TABLE
-            │       TargetMetadata:
-            │         SourceElementID: 1
-            │         SubWorkID: 1
             │     TableID: 104
             │
             ├── • MakeDeleteOnlyColumnAbsent
             │     ColumnID: 4
-            │     EventBase:
-            │       Authorization:
-            │         UserName: root
-            │       Statement: ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COLUMN ‹j› CASCADE
-            │       StatementTag: ALTER TABLE
-            │       TargetMetadata:
-            │         SourceElementID: 1
-            │         SubWorkID: 1
             │     TableID: 104
             │
             ├── • CreateGCJobForIndex

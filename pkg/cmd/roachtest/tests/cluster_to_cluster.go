@@ -208,7 +208,7 @@ func setupC2C(
 	srcNode := srcCluster.RandNode()
 	destNode := dstCluster.RandNode()
 
-	addr, err := c.ExternalPGUrl(ctx, t.L(), srcNode)
+	addr, err := c.ExternalPGUrl(ctx, t.L(), srcNode, "")
 	require.NoError(t, err)
 
 	srcDB := c.Conn(ctx, t.L(), srcNode[0])
@@ -248,8 +248,11 @@ func setupC2C(
 10000000000, now(), 0);`, srcTenantInfo.ID)
 
 	createSystemRole(t, srcTenantInfo.name+" system tenant", srcTenantInfo.sql)
-	createSystemRole(t, destTenantInfo.name+" system tenant", destTenantInfo.sql)
+	createSystemRole(t, srcTenantInfo.name+" system tenant", destTenantInfo.sql)
 
+	srcTenantDB := c.Conn(ctx, t.L(), srcNode[0], option.TenantName(srcTenantName))
+	srcTenantSQL := sqlutils.MakeSQLRunner(srcTenantDB)
+	createSystemRole(t, destTenantInfo.name+" app tenant", srcTenantSQL)
 	return &c2cSetup{
 		src:          srcTenantInfo,
 		dst:          destTenantInfo,

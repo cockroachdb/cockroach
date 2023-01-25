@@ -34,6 +34,7 @@ func CommentOnDatabase(b BuildCtx, n *tree.CommentOnDatabase) {
 			switch e.(type) {
 			case *scpb.DatabaseComment:
 				b.Drop(e)
+				b.LogEventForExistingTarget(e)
 			}
 		})
 	} else {
@@ -47,6 +48,7 @@ func CommentOnDatabase(b BuildCtx, n *tree.CommentOnDatabase) {
 			}
 		})
 		b.Add(dc)
+		b.LogEventForExistingTarget(dc)
 	}
 }
 
@@ -59,6 +61,7 @@ func CommentOnSchema(b BuildCtx, n *tree.CommentOnSchema) {
 			switch e.(type) {
 			case *scpb.SchemaComment:
 				b.Drop(e)
+				b.LogEventForExistingTarget(e)
 			}
 		})
 	} else {
@@ -72,6 +75,7 @@ func CommentOnSchema(b BuildCtx, n *tree.CommentOnSchema) {
 			}
 		})
 		b.Add(sc)
+		b.LogEventForExistingTarget(sc)
 	}
 }
 
@@ -91,6 +95,7 @@ func CommentOnTable(b BuildCtx, n *tree.CommentOnTable) {
 		_, _, tableComment := scpb.FindTableComment(tableElements)
 		if tableComment != nil {
 			b.Drop(tableComment)
+			b.LogEventForExistingTarget(tableComment)
 		}
 	} else {
 		_, _, table := scpb.FindTable(tableElements)
@@ -99,6 +104,7 @@ func CommentOnTable(b BuildCtx, n *tree.CommentOnTable) {
 			TableID: table.TableID,
 		}
 		b.Add(tc)
+		b.LogEventForExistingTarget(tc)
 	}
 }
 
@@ -116,6 +122,7 @@ func CommentOnColumn(b BuildCtx, n *tree.CommentOnColumn) {
 			switch e.(type) {
 			case *scpb.ColumnComment:
 				b.Drop(e)
+				b.LogEventForExistingTarget(e)
 			}
 		})
 	} else {
@@ -131,6 +138,7 @@ func CommentOnColumn(b BuildCtx, n *tree.CommentOnColumn) {
 			}
 		})
 		b.Add(cc)
+		b.LogEventForExistingTarget(cc)
 	}
 }
 
@@ -150,6 +158,7 @@ func CommentOnIndex(b BuildCtx, n *tree.CommentOnIndex) {
 			switch e.(type) {
 			case *scpb.IndexComment:
 				b.Drop(e)
+				b.LogEventForExistingTarget(e)
 			}
 		})
 	} else {
@@ -165,6 +174,7 @@ func CommentOnIndex(b BuildCtx, n *tree.CommentOnIndex) {
 			}
 		})
 		b.Add(ic)
+		b.LogEventForExistingTarget(ic)
 	}
 }
 
@@ -180,6 +190,7 @@ func CommentOnConstraint(b BuildCtx, n *tree.CommentOnConstraint) {
 			switch e.(type) {
 			case *scpb.ConstraintComment:
 				b.Drop(e)
+				b.LogEventForExistingTarget(e)
 			}
 		})
 	} else {
@@ -196,5 +207,6 @@ func CommentOnConstraint(b BuildCtx, n *tree.CommentOnConstraint) {
 			}
 		})
 		b.Add(cc)
+		b.LogEventForExistingTarget(cc)
 	}
 }

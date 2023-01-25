@@ -56,7 +56,7 @@ StatementPhase stage 1 of 1 with 3 MutationType ops
       DescriptorID: 110
     *scop.MarkDescriptorAsSyntheticallyDropped
       DescriptorID: 111
-PreCommitPhase stage 1 of 1 with 47 MutationType ops
+PreCommitPhase stage 1 of 1 with 43 MutationType ops
   transitions:
     [[Namespace:{DescID: 109, Name: shipments, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 109}, ABSENT], PUBLIC] -> ABSENT
@@ -139,20 +139,6 @@ PreCommitPhase stage 1 of 1 with 47 MutationType ops
       DescriptorID: 109
     *scop.RemoveTableComment
       TableID: 109
-    *scop.LogEvent
-      Element:
-        TableComment:
-          comment: shipment is important
-          tableId: 109
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP TABLE ‹defaultdb›.public.‹shipments› CASCADE
-        StatementTag: DROP TABLE
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
-      TargetStatus: 1
     *scop.RemoveColumnDefaultExpression
       ColumnID: 1
       TableID: 109
@@ -160,22 +146,6 @@ PreCommitPhase stage 1 of 1 with 47 MutationType ops
       ColumnID: 1
       PgAttributeNum: 1
       TableID: 109
-    *scop.LogEvent
-      Element:
-        ColumnComment:
-          columnId: 1
-          comment: tracking_number is a must
-          pgAttributeNum: 1
-          tableId: 109
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP TABLE ‹defaultdb›.public.‹shipments› CASCADE
-        StatementTag: DROP TABLE
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
-      TargetStatus: 1
     *scop.RemoveDroppedColumnType
       ColumnID: 3
       TableID: 109
@@ -195,42 +165,12 @@ PreCommitPhase stage 1 of 1 with 47 MutationType ops
     *scop.RemoveIndexComment
       IndexID: 1
       TableID: 109
-    *scop.LogEvent
-      Element:
-        IndexComment:
-          comment: pkey is good
-          indexId: 1
-          tableId: 109
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP TABLE ‹defaultdb›.public.‹shipments› CASCADE
-        StatementTag: DROP TABLE
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
-      TargetStatus: 1
     *scop.RemoveDroppedIndexPartialPredicate
       IndexID: 2
       TableID: 109
     *scop.RemoveConstraintComment
       ConstraintID: 2
       TableID: 109
-    *scop.LogEvent
-      Element:
-        ConstraintComment:
-          comment: customer is not god
-          constraintId: 2
-          tableId: 109
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP TABLE ‹defaultdb›.public.‹shipments› CASCADE
-        StatementTag: DROP TABLE
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
-      TargetStatus: 1
     *scop.MarkDescriptorAsDropped
       DescriptorID: 110
     *scop.MarkDescriptorAsDropped
@@ -253,47 +193,15 @@ PreCommitPhase stage 1 of 1 with 47 MutationType ops
       SequenceID: 110
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 3
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP TABLE ‹defaultdb›.public.‹shipments› CASCADE
-        StatementTag: DROP TABLE
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
       TableID: 109
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 4
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP TABLE ‹defaultdb›.public.‹shipments› CASCADE
-        StatementTag: DROP TABLE
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
       TableID: 109
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 4294967295
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP TABLE ‹defaultdb›.public.‹shipments› CASCADE
-        StatementTag: DROP TABLE
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
       TableID: 109
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 4294967294
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP TABLE ‹defaultdb›.public.‹shipments› CASCADE
-        StatementTag: DROP TABLE
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
       TableID: 109
     *scop.RemoveForeignKeyBackReference
       OriginConstraintID: 2
@@ -323,80 +231,24 @@ PreCommitPhase stage 1 of 1 with 47 MutationType ops
         SchemaID: 101
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 1
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP TABLE ‹defaultdb›.public.‹shipments› CASCADE
-        StatementTag: DROP TABLE
-        TargetMetadata:
-          SourceElementID: 2
-          SubWorkID: 1
       TableID: 111
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 2
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP TABLE ‹defaultdb›.public.‹shipments› CASCADE
-        StatementTag: DROP TABLE
-        TargetMetadata:
-          SourceElementID: 2
-          SubWorkID: 1
       TableID: 111
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 4294967295
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP TABLE ‹defaultdb›.public.‹shipments› CASCADE
-        StatementTag: DROP TABLE
-        TargetMetadata:
-          SourceElementID: 2
-          SubWorkID: 1
       TableID: 111
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 4294967294
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP TABLE ‹defaultdb›.public.‹shipments› CASCADE
-        StatementTag: DROP TABLE
-        TargetMetadata:
-          SourceElementID: 2
-          SubWorkID: 1
       TableID: 111
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 1
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP TABLE ‹defaultdb›.public.‹shipments› CASCADE
-        StatementTag: DROP TABLE
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
       TableID: 109
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 5
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP TABLE ‹defaultdb›.public.‹shipments› CASCADE
-        StatementTag: DROP TABLE
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
       TableID: 109
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 2
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP TABLE ‹defaultdb›.public.‹shipments› CASCADE
-        StatementTag: DROP TABLE
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
       TableID: 109
     *scop.SetJobStateOnDescriptor
       DescriptorID: 104
@@ -436,12 +288,12 @@ PreCommitPhase stage 1 of 1 with 47 MutationType ops
       - 111
       JobID: 1
       NonCancelable: true
-      RunningStatus: PostCommitNonRevertiblePhase stage 1 of 1 with 8 MutationType ops pending
+      RunningStatus: PostCommitNonRevertiblePhase stage 1 of 1 with 5 MutationType ops pending
       Statements:
       - statement: DROP TABLE defaultdb.shipments CASCADE
         redactedstatement: DROP TABLE ‹defaultdb›.public.‹shipments› CASCADE
         statementtag: DROP TABLE
-PostCommitNonRevertiblePhase stage 1 of 1 with 17 MutationType ops
+PostCommitNonRevertiblePhase stage 1 of 1 with 14 MutationType ops
   transitions:
     [[Table:{DescID: 109}, ABSENT], DROPPED] -> ABSENT
     [[IndexData:{DescID: 109, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
@@ -451,62 +303,16 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 17 MutationType ops
     [[TableData:{DescID: 110, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[View:{DescID: 111}, ABSENT], DROPPED] -> ABSENT
   ops:
-    *scop.LogEvent
-      Element:
-        Table:
-          tableId: 109
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP TABLE ‹defaultdb›.public.‹shipments› CASCADE
-        StatementTag: DROP TABLE
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
-      TargetStatus: 1
     *scop.CreateGCJobForTable
       DatabaseID: 100
       StatementForDropJob:
         Statement: DROP TABLE defaultdb.public.shipments CASCADE
       TableID: 109
-    *scop.LogEvent
-      Element:
-        Sequence:
-          sequenceId: 110
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP TABLE ‹defaultdb›.public.‹shipments› CASCADE
-        StatementTag: DROP TABLE
-        TargetMetadata:
-          SourceElementID: 2
-          SubWorkID: 1
-      TargetStatus: 1
     *scop.CreateGCJobForTable
       DatabaseID: 100
       StatementForDropJob:
         Statement: DROP TABLE defaultdb.public.shipments CASCADE
       TableID: 110
-    *scop.LogEvent
-      Element:
-        View:
-          forwardReferences:
-          - columnIds:
-            - 2
-            - 4
-            toId: 109
-          usesRelationIds:
-          - 109
-          viewId: 111
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP TABLE ‹defaultdb›.public.‹shipments› CASCADE
-        StatementTag: DROP TABLE
-        TargetMetadata:
-          SourceElementID: 2
-          SubWorkID: 1
-      TargetStatus: 1
     *scop.DeleteDescriptor
       DescriptorID: 111
     *scop.CreateGCJobForIndex
@@ -1359,36 +1165,12 @@ PreCommitPhase stage 1 of 1 with 20 MutationType ops
         SchemaID: 101
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 2
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP TABLE ‹defaultdb›.public.‹greeter›
-        StatementTag: DROP TABLE
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
       TableID: 114
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 4294967295
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP TABLE ‹defaultdb›.public.‹greeter›
-        StatementTag: DROP TABLE
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
       TableID: 114
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 4294967294
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP TABLE ‹defaultdb›.public.‹greeter›
-        StatementTag: DROP TABLE
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
       TableID: 114
     *scop.RemoveCheckConstraint
       ConstraintID: 2
@@ -1400,25 +1182,9 @@ PreCommitPhase stage 1 of 1 with 20 MutationType ops
       - 113
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 1
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP TABLE ‹defaultdb›.public.‹greeter›
-        StatementTag: DROP TABLE
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
       TableID: 114
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 3
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP TABLE ‹defaultdb›.public.‹greeter›
-        StatementTag: DROP TABLE
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
       TableID: 114
     *scop.SetJobStateOnDescriptor
       DescriptorID: 112
@@ -1438,31 +1204,18 @@ PreCommitPhase stage 1 of 1 with 20 MutationType ops
       - 114
       JobID: 1
       NonCancelable: true
-      RunningStatus: PostCommitNonRevertiblePhase stage 1 of 1 with 4 MutationType ops pending
+      RunningStatus: PostCommitNonRevertiblePhase stage 1 of 1 with 3 MutationType ops pending
       Statements:
       - statement: DROP TABLE defaultdb.greeter
         redactedstatement: DROP TABLE ‹defaultdb›.public.‹greeter›
         statementtag: DROP TABLE
-PostCommitNonRevertiblePhase stage 1 of 1 with 8 MutationType ops
+PostCommitNonRevertiblePhase stage 1 of 1 with 7 MutationType ops
   transitions:
     [[Table:{DescID: 114}, ABSENT], DROPPED] -> ABSENT
     [[IndexData:{DescID: 114, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[IndexData:{DescID: 114, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[TableData:{DescID: 114, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
   ops:
-    *scop.LogEvent
-      Element:
-        Table:
-          tableId: 114
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP TABLE ‹defaultdb›.public.‹greeter›
-        StatementTag: DROP TABLE
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
-      TargetStatus: 1
     *scop.CreateGCJobForTable
       DatabaseID: 100
       StatementForDropJob:

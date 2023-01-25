@@ -91,7 +91,27 @@ func (b *builderState) Ensure(
 			metadata: meta,
 		})
 	}
+}
 
+// LogEventForExistingTarget implements the scbuildstmt.BuilderState interface.
+func (b *builderState) LogEventForExistingTarget(e scpb.Element) {
+	id := screl.GetDescID(e)
+	key := screl.ElementString(e)
+
+	c, ok := b.descCache[id]
+	if !ok {
+		panic(errors.AssertionFailedf(
+			"elements for descriptor ID %d not found in builder state, %s expected", id, key))
+	}
+	i, ok := c.elementIndexMap[key]
+	if !ok {
+		panic(errors.AssertionFailedf("element %s expected in builder state but not found", key))
+	}
+	es := &b.output[i]
+	if es.target == scpb.InvalidTarget {
+		panic(errors.AssertionFailedf("no target set for element %s in builder state", key))
+	}
+	es.withLogEvent = true
 }
 
 // ForEachElementStatus implements the scpb.ElementStatusIterator interface.
