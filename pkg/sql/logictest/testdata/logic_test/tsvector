@@ -235,3 +235,8 @@ SELECT a FROM a@a_a_idx WHERE a @@ 'ba:* & foo'
 # columns.
 statement error index \"a_a_idx\" is inverted and cannot be used for this query
 EXPLAIN SELECT * FROM a@a_a_idx WHERE a @@ b
+
+# Regression test for incorrectly marking TSVector type as composite (#95680).
+statement ok
+CREATE TABLE t95680 (c1 FLOAT NOT NULL, c2 TSVECTOR NOT NULL, INVERTED INDEX (c1 ASC, c2 ASC));
+INSERT INTO t95680 VALUES (1.0::FLOAT, e'\'kCrLZNl\' \'sVDj\' \'yO\' \'z\':54C,440B,519C,794B':::TSVECTOR);
