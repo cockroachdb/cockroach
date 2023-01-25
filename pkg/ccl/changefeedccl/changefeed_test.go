@@ -130,12 +130,15 @@ func TestChangefeedReplanning(t *testing.T) {
 				DistSQL: &execinfra.TestingKnobs{
 					Changefeed: &TestingKnobs{
 						HandleDistChangefeedError: func(err error) error {
-							select {
-							case errChan <- err:
-								return err
-							default:
-								return nil
+							if errors.Is(err, sql.ErrPlanChanged) {
+								select {
+								case errChan <- err:
+									return err
+								default:
+									return nil
+								}
 							}
+							return nil
 						},
 						ShouldReplan: func(ctx context.Context, oldPlan, newPlan *sql.PhysicalPlan) bool {
 							select {
