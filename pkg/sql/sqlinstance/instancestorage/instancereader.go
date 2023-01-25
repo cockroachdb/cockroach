@@ -17,9 +17,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
@@ -121,6 +123,43 @@ func (r *Reader) WaitForStarted(ctx context.Context) error {
 	}
 }
 
+// GetAllInstancesUsingTxn reads all instances using the given transaction and returns
+// live instances only.
+func (r *Reader) GetAllInstancesUsingTxn(
+	ctx context.Context, tenantCodec keys.SQLCodec, tableID catid.DescID, txn *kv.Txn,
+) ([]sqlinstance.InstanceInfo, error) {
+	instancesTablePrefix := tenantCodec.TablePrefix(uint32(tableID))
+	rows, err := txn.Scan(ctx, instancesTablePrefix, instancesTablePrefix.PrefixEnd(), 0 /* maxRows */)
+	if err != nil {
+		return nil, err
+	}
+	rowcodec := makeRowCodec(tenantCodec, tableID)
+	decodedRows := make([]instancerow, 0, len(rows))
+	for _, row := range rows {
+		decodedRow, err := rowcodec.decodeRow(row.Key, row.Value)
+		if err != nil {
+			return nil, err
+		}
+		decodedRows = append(decodedRows, decodedRow)
+	}
+	filteredRows, err := r.getAllUniqueLiveInstances(ctx, decodedRows)
+	if err != nil {
+		return nil, err
+	}
+	instances := make([]sqlinstance.InstanceInfo, 0, len(rows))
+	for _, row := range filteredRows {
+		instanceInfo := sqlinstance.InstanceInfo{
+			InstanceID:      row.instanceID,
+			InstanceRPCAddr: row.rpcAddr,
+			InstanceSQLAddr: row.sqlAddr,
+			SessionID:       row.sessionID,
+			Locality:        row.locality,
+		}
+		instances = append(instances, instanceInfo)
+	}
+	return instances, nil
+}
+
 func (r *Reader) startRangeFeed(ctx context.Context) {
 	updateCacheFn := func(
 		ctx context.Context, keyVal *roachpb.RangeFeedValue,
@@ -208,7 +247,7 @@ func (r *Reader) GetAllInstances(
 	if err := r.initialScanErr(); err != nil {
 		return nil, err
 	}
-	liveInstances, err := r.getAllLiveInstances(ctx)
+	liveInstances, err := r.getAllUniqueLiveInstances(ctx, r.getAllInstanceRows())
 	if err != nil {
 		return nil, err
 	}
@@ -225,12 +264,19 @@ func (r *Reader) GetAllInstances(
 	return sqlInstances, nil
 }
 
-func (r *Reader) getAllLiveInstances(ctx context.Context) ([]instancerow, error) {
-	rows := r.getAllInstanceRows()
-	// Filter inactive instances.
+func (r *Reader) getAllUniqueLiveInstances(
+	ctx context.Context, rows []instancerow,
+) ([]instancerow, error) {
+	instancesSet := make(map[base.SQLInstanceID]struct{}, len(rows))
+	// Deduplicate instances and filter inactive ones.
 	{
 		truncated := rows[:0]
 		for _, row := range rows {
+			// Deduplicate instances that appear in multiple indexes if rows are read using a full table scan.
+			if _, ok := instancesSet[row.instanceID]; ok {
+				continue
+			}
+			instancesSet[row.instanceID] = struct{}{}
 			// Skip instances which are preallocated.
 			if row.isAvailable() {
 				continue

@@ -175,6 +175,15 @@ func TestReader(t *testing.T) {
 			}
 			return nil
 		}
+		getInstancesUsingTxnWrapper := func() ([]sqlinstance.InstanceInfo, error) {
+			txn := s.DB().NewTxn(ctx, "testing GetAllInstancesUsingTxn")
+			instancesUsingTxn, err := reader.GetAllInstancesUsingTxn(ctx, s.Codec(), getTableID(t, tDB, t.Name(), "sql_instances"), txn)
+			if err != nil {
+				return nil, err
+			}
+			sortInstances(instancesUsingTxn)
+			return instancesUsingTxn, nil
+		}
 		{
 			// Set up mock data within instance and session storage.
 			for index, rpcAddr := range rpcAddresses {
@@ -188,14 +197,21 @@ func TestReader(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			// Verify all instances are returned by GetAllInstances.
+			// Verify all instances are returned by GetAllInstances and GetAllInstancesUsingTxn.
 			testutils.SucceedsSoon(t, func() error {
 				instances, err := reader.GetAllInstances(ctx)
 				if err != nil {
 					return err
 				}
 				sortInstances(instances)
-				return testOutputFn(instanceIDs, rpcAddresses, sqlAddresses, sessionIDs, localities, instances)
+				if err := testOutputFn(instanceIDs, rpcAddresses, sqlAddresses, sessionIDs, localities, instances); err != nil {
+					return err
+				}
+				instancesUsingTxn, err := getInstancesUsingTxnWrapper()
+				if err != nil {
+					return err
+				}
+				return testOutputFn(instanceIDs, rpcAddresses, sqlAddresses, sessionIDs, localities, instancesUsingTxn)
 			})
 		}
 
@@ -211,7 +227,14 @@ func TestReader(t *testing.T) {
 					return err
 				}
 				sortInstances(instances)
-				return testOutputFn(instanceIDs[1:], rpcAddresses[1:], sqlAddresses[1:], sessionIDs[1:], localities[1:], instances)
+				if err := testOutputFn(instanceIDs[1:], rpcAddresses[1:], sqlAddresses[1:], sessionIDs[1:], localities[1:], instances); err != nil {
+					return err
+				}
+				instancesUsingTxn, err := getInstancesUsingTxnWrapper()
+				if err != nil {
+					return err
+				}
+				return testOutputFn(instanceIDs[1:], rpcAddresses[1:], sqlAddresses[1:], sessionIDs[1:], localities[1:], instancesUsingTxn)
 			})
 		}
 
@@ -227,7 +250,14 @@ func TestReader(t *testing.T) {
 					return err
 				}
 				sortInstances(instances)
-				return testOutputFn(instanceIDs[2:], rpcAddresses[2:], sqlAddresses[2:], sessionIDs[2:], localities[2:], instances)
+				if err := testOutputFn(instanceIDs[2:], rpcAddresses[2:], sqlAddresses[2:], sessionIDs[2:], localities[2:], instances); err != nil {
+					return err
+				}
+				instancesUsingTxn, err := getInstancesUsingTxnWrapper()
+				if err != nil {
+					return err
+				}
+				return testOutputFn(instanceIDs[2:], rpcAddresses[2:], sqlAddresses[2:], sessionIDs[2:], localities[2:], instancesUsingTxn)
 			})
 		}
 
@@ -252,13 +282,27 @@ func TestReader(t *testing.T) {
 					return err
 				}
 				sortInstances(instances)
-				return testOutputFn(
+				if err := testOutputFn(
 					[]base.SQLInstanceID{instance.InstanceID},
 					[]string{rpcAddresses[2]},
 					[]string{sqlAddresses[2]},
 					[]sqlliveness.SessionID{sessionID},
 					[]roachpb.Locality{locality},
 					instances,
+				); err != nil {
+					return err
+				}
+				instancesUsingTxn, err := getInstancesUsingTxnWrapper()
+				if err != nil {
+					return err
+				}
+				return testOutputFn(
+					[]base.SQLInstanceID{instance.InstanceID},
+					[]string{rpcAddresses[2]},
+					[]string{sqlAddresses[2]},
+					[]sqlliveness.SessionID{sessionID},
+					[]roachpb.Locality{locality},
+					instancesUsingTxn,
 				)
 			})
 		}
