@@ -15,7 +15,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
@@ -328,4 +330,20 @@ type NameResolver interface {
 
 	// ResolveConstraint retrieves a constraint by name and returns its elements.
 	ResolveConstraint(relationID catid.DescID, constraintName tree.Name, p ResolveParams) ElementResultSet
+}
+
+type DescriptorIDGenerator interface {
+	GenerateUniqueDescID() catid.DescID
+}
+
+// ReferenceProvider provides all referenced objects with in current DDL
+// statement. For example, CREATE VIEW and CREATE FUNCTION both could reference
+// other objects, and cross-references need to probably tracked.
+type ReferenceProvider interface {
+	// ForEachTableReference iterate through all referenced tables and the
+	// reference details with the given function.
+	ForEachTableReference(func(tbl catalog.TableDescriptor, refs []descpb.TableDescriptor_Reference) error) error
+	// ForEachTypeReference iterate through all referenced type ids with the given
+	// function.
+	ForEachTypeReference(func(typeID descpb.ID) error) error
 }
