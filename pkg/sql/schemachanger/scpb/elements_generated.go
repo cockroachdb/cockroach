@@ -606,6 +606,37 @@ func FindDatabaseRoleSetting(b ElementStatusIterator) (current Status, target Ta
 	return current, target, element
 }
 
+func (e DefaultUserPrivilege) element() {}
+
+// ForEachDefaultUserPrivilege iterates over elements of type DefaultUserPrivilege.
+func ForEachDefaultUserPrivilege(
+	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *DefaultUserPrivilege),
+) {
+  if b == nil {
+    return
+  }
+	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
+		if elt, ok := e.(*DefaultUserPrivilege); ok {
+			fn(current, target, elt)
+		}
+	})
+}
+
+// FindDefaultUserPrivilege finds the first element of type DefaultUserPrivilege.
+func FindDefaultUserPrivilege(b ElementStatusIterator) (current Status, target TargetStatus, element *DefaultUserPrivilege) {
+  if b == nil {
+    return current, target, element
+  }
+	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
+		if elt, ok := e.(*DefaultUserPrivilege); ok {
+			element = elt
+			current = c
+			target = t
+		}
+	})
+	return current, target, element
+}
+
 func (e EnumType) element() {}
 
 // ForEachEnumType iterates over elements of type EnumType.

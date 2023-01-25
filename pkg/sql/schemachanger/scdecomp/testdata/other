@@ -11,6 +11,18 @@ CREATE VIEW db1.sc1.v1 AS (SELECT id FROM db1.sc1.t1);
 CREATE VIEW db1.sc1.v2 AS (SELECT 'a'::db1.sc1.typ::STRING AS k, id FROM db1.sc1.v1);
 ----
 
+setup
+USE db1;
+CREATE USER u1;
+CREATE USER u2;
+GRANT u1 TO root;
+ALTER DEFAULT PRIVILEGES FOR ALL ROLES IN SCHEMA sc1 GRANT SELECT,UPDATE ON TABLES TO u2;
+ALTER DEFAULT PRIVILEGES FOR ROLE u1 IN SCHEMA sc1 GRANT SELECT,UPDATE ON TABLES TO u2;
+ALTER DEFAULT PRIVILEGES FOR ALL ROLES GRANT DELETE ON TABLES TO u2;
+ALTER DEFAULT PRIVILEGES FOR ROLE u1 GRANT DELETE ON TABLES TO u2;
+USE defaultdb;
+----
+
 decompose
 sc1
 ----
@@ -36,11 +48,39 @@ ElementState:
     descriptorId: 106
     privileges: "2"
     userName: admin
+    withGrantOption: "2"
   Status: PUBLIC
 - UserPrivileges:
     descriptorId: 106
     privileges: "2"
     userName: root
+    withGrantOption: "2"
+  Status: PUBLIC
+- DefaultUserPrivilege:
+    forAllRole:
+      publicHasUsageOnTypes: true
+    objectType: 1
+    userPrivileges:
+      descriptorId: 106
+      privileges: "288"
+      userName: u2
+      withGrantOption: "0"
+  Status: PUBLIC
+- DefaultUserPrivilege:
+    forExplicitRole:
+      publicHasUsageOnTypes: false
+      roleHasAllPrivilegesOnFunctions: false
+      roleHasAllPrivilegesOnSchemas: false
+      roleHasAllPrivilegesOnSequences: false
+      roleHasAllPrivilegesOnTables: false
+      roleHasAllPrivilegesOnTypes: false
+      userProto: u1
+    objectType: 1
+    userPrivileges:
+      descriptorId: 106
+      privileges: "288"
+      userName: u2
+      withGrantOption: "0"
   Status: PUBLIC
 - SchemaParent:
     parentDatabaseId: 104
@@ -76,16 +116,19 @@ ElementState:
     descriptorId: 105
     privileges: "2"
     userName: admin
+    withGrantOption: "2"
   Status: PUBLIC
 - UserPrivileges:
     descriptorId: 105
     privileges: "2"
     userName: root
+    withGrantOption: "2"
   Status: PUBLIC
 - UserPrivileges:
     descriptorId: 105
     privileges: "516"
     userName: public
+    withGrantOption: "0"
   Status: PUBLIC
 - SchemaParent:
     parentDatabaseId: 104
@@ -116,16 +159,45 @@ ElementState:
     descriptorId: 104
     privileges: "2"
     userName: admin
+    withGrantOption: "2"
   Status: PUBLIC
 - UserPrivileges:
     descriptorId: 104
     privileges: "2"
     userName: root
+    withGrantOption: "2"
   Status: PUBLIC
 - UserPrivileges:
     descriptorId: 104
     privileges: "2048"
     userName: public
+    withGrantOption: "0"
+  Status: PUBLIC
+- DefaultUserPrivilege:
+    forAllRole:
+      publicHasUsageOnTypes: true
+    objectType: 1
+    userPrivileges:
+      descriptorId: 104
+      privileges: "128"
+      userName: u2
+      withGrantOption: "0"
+  Status: PUBLIC
+- DefaultUserPrivilege:
+    forExplicitRole:
+      publicHasUsageOnTypes: true
+      roleHasAllPrivilegesOnFunctions: true
+      roleHasAllPrivilegesOnSchemas: true
+      roleHasAllPrivilegesOnSequences: true
+      roleHasAllPrivilegesOnTables: true
+      roleHasAllPrivilegesOnTypes: true
+      userProto: u1
+    objectType: 1
+    userPrivileges:
+      descriptorId: 104
+      privileges: "128"
+      userName: u2
+      withGrantOption: "0"
   Status: PUBLIC
 - DatabaseRoleSetting:
     databaseId: 104
@@ -164,16 +236,19 @@ ElementState:
     descriptorId: 110
     privileges: "2"
     userName: admin
+    withGrantOption: "2"
   Status: PUBLIC
 - UserPrivileges:
     descriptorId: 110
     privileges: "2"
     userName: root
+    withGrantOption: "2"
   Status: PUBLIC
 - UserPrivileges:
     descriptorId: 110
     privileges: "512"
     userName: public
+    withGrantOption: "0"
   Status: PUBLIC
 - ObjectParent:
     objectId: 110
@@ -338,11 +413,13 @@ ElementState:
     descriptorId: 112
     privileges: "2"
     userName: admin
+    withGrantOption: "2"
   Status: PUBLIC
 - UserPrivileges:
     descriptorId: 112
     privileges: "2"
     userName: root
+    withGrantOption: "2"
   Status: PUBLIC
 - ObjectParent:
     objectId: 112
@@ -543,11 +620,13 @@ ElementState:
     descriptorId: 113
     privileges: "2"
     userName: admin
+    withGrantOption: "2"
   Status: PUBLIC
 - UserPrivileges:
     descriptorId: 113
     privileges: "2"
     userName: root
+    withGrantOption: "2"
   Status: PUBLIC
 - ObjectParent:
     objectId: 113

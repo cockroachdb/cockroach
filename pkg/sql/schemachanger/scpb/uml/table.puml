@@ -263,6 +263,13 @@ object UserPrivileges
 UserPrivileges :  DescriptorID
 UserPrivileges :  UserName
 UserPrivileges :  Privileges
+UserPrivileges :  WithGrantOption
+
+object DefaultUserPrivilege
+
+DefaultUserPrivilege :  ObjectType
+DefaultUserPrivilege :  ForRole
+DefaultUserPrivilege :  UserPrivileges
 
 object DatabaseRegionConfig
 
@@ -343,7 +350,6 @@ FunctionBody : []UsesTables
 FunctionBody : []UsesViews
 FunctionBody : []UsesSequenceIDs
 FunctionBody : []UsesTypeIDs
-FunctionBody : []UsesFunctionIDs
 
 object FunctionParamDefaultExpression
 
@@ -426,6 +432,8 @@ Database <|-- UserPrivileges
 Schema <|-- UserPrivileges
 AliasType <|-- UserPrivileges
 EnumType <|-- UserPrivileges
+Database <|-- DefaultUserPrivilege
+Schema <|-- DefaultUserPrivilege
 Database <|-- DatabaseRegionConfig
 Database <|-- DatabaseRoleSetting
 Database <|-- DatabaseComment

@@ -95,9 +95,10 @@ func (w *walkCtx) walkRoot() {
 	})
 	for _, user := range privileges.Users {
 		w.ev(scpb.Status_PUBLIC, &scpb.UserPrivileges{
-			DescriptorID: w.desc.GetID(),
-			UserName:     user.User().Normalized(),
-			Privileges:   user.Privileges,
+			DescriptorID:    w.desc.GetID(),
+			UserName:        user.User().Normalized(),
+			Privileges:      user.Privileges,
+			WithGrantOption: user.WithGrantOption,
 		})
 	}
 	// Dispatch on type.
@@ -142,6 +143,7 @@ func (w *walkCtx) walkDatabase(db catalog.DatabaseDescriptor) {
 		w.backRefs.Add(id)
 		return nil
 	})
+	w.walkDefaultPrivileges(db.GetID(), db.GetDefaultPrivilegeDescriptor())
 }
 
 func (w *walkCtx) walkSchema(sc catalog.SchemaDescriptor) {
@@ -161,6 +163,7 @@ func (w *walkCtx) walkSchema(sc catalog.SchemaDescriptor) {
 			Comment:  comment,
 		})
 	}
+	w.walkDefaultPrivileges(sc.GetID(), sc.GetDefaultPrivilegeDescriptor())
 }
 
 func (w *walkCtx) walkType(typ catalog.TypeDescriptor) {
@@ -721,7 +724,7 @@ func (w *walkCtx) walkFunction(fnDesc catalog.FunctionDescriptor) {
 		Body:        fnDesc.GetFunctionBody(),
 		Lang:        catpb.FunctionLanguage{Lang: fnDesc.GetLanguage()},
 		UsesTypeIDs: fnDesc.GetDependsOnTypes(),
-		// TODO(chengxiong): add UsesFunctionIDs
+		// TODO(chengxiong): add UsesFunctionIDs when UDF usage is allowed.
 	}
 	dedupeColIDs := func(colIDs []catid.ColumnID) []catid.ColumnID {
 		ret := catalog.MakeTableColSet()
@@ -768,4 +771,38 @@ func (w *walkCtx) walkFunction(fnDesc catalog.FunctionDescriptor) {
 		}
 	}
 	w.ev(scpb.Status_PUBLIC, fnBody)
+}
+
+func (w *walkCtx) walkDefaultPrivileges(
+	objID descpb.ID, defaultPrivs catalog.DefaultPrivilegeDescriptor,
+) {
+	if err := defaultPrivs.ForEachDefaultPrivilegeForRole(func(role catpb.DefaultPrivilegesForRole) error {
+		dp := &scpb.DefaultUserPrivilege{}
+		dp.DescriptorID = objID
+
+		switch t := role.Role.(type) {
+		case *catpb.DefaultPrivilegesForRole_ExplicitRole_:
+			dp.ForRole = &scpb.DefaultUserPrivilege_ForExplicitRole{
+				ForExplicitRole: t.ExplicitRole,
+			}
+		case *catpb.DefaultPrivilegesForRole_ForAllRoles:
+			dp.ForRole = &scpb.DefaultUserPrivilege_ForAllRole{
+				ForAllRole: t.ForAllRoles,
+			}
+		}
+
+		for objType, userPrivs := range role.DefaultPrivilegesPerObject {
+			for _, p := range userPrivs.Users {
+				up := *dp
+				up.ObjectType = objType
+				up.UserName = string(p.UserProto)
+				up.Privileges = p.Privileges
+				up.WithGrantOption = p.WithGrantOption
+				w.ev(scpb.Status_PUBLIC, &up)
+			}
+		}
+		return nil
+	}); err != nil {
+		panic(err)
+	}
 }

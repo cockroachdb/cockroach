@@ -16,6 +16,7 @@ import "sql/catalog/catenumpb/index.proto";
 import "sql/catalog/catpb/catalog.proto";
 import "sql/sem/semenumpb/constraint.proto";
 import "sql/catalog/catpb/function.proto";
+import "sql/catalog/catpb/privilege.proto";
 import "sql/types/types.proto";
 import "gogoproto/gogo.proto";
 import "geo/geoindex/config.proto";
@@ -109,6 +110,7 @@ message ElementProto {
   Namespace namespace = 60 [(gogoproto.moretags) = "parent:\"Table, View, Sequence, Database, Schema, AliasType, EnumType\""];
   Owner owner = 61 [(gogoproto.moretags) = "parent:\"Table, View, Sequence, Database, Schema, AliasType, EnumType\""];
   UserPrivileges user_privileges = 62 [(gogoproto.moretags) = "parent:\"Table, View, Sequence, Database, Schema, AliasType, EnumType\""];
+  DefaultUserPrivilege default_privileges = 63 [(gogoproto.moretags) = "parent:\"Database, Schema\""];
 
   // Database elements.
   DatabaseRegionConfig database_region_config = 80 [(gogoproto.moretags) = "parent:\"Database\""];
@@ -414,6 +416,7 @@ message UserPrivileges {
   uint32 descriptor_id = 1 [(gogoproto.customname) = "DescriptorID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
   string user_name = 2;
   uint64 privileges = 3;
+  uint64 with_grant_option = 4;
 }
 
 message TableLocalityGlobal {
@@ -632,7 +635,6 @@ message FunctionBody {
   repeated ViewReference uses_views = 5 [(gogoproto.nullable) = false];
   repeated uint32 uses_sequence_ids = 6 [(gogoproto.customname) = "UsesSequenceIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
   repeated uint32 uses_type_ids = 7 [(gogoproto.customname) = "UsesTypeIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
-  repeated uint32 uses_function_ids = 8 [(gogoproto.customname) = "UsesFunctionIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
 }
 
 message FunctionParamDefaultExpression {
@@ -642,4 +644,13 @@ message FunctionParamDefaultExpression {
   // belongs to.
   uint32 ordinal = 2;
   Expression embedded_expr = 3 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
+message DefaultUserPrivilege {
+  uint32 object_type = 1 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/privilege.TargetObjectType"];
+  oneof for_role {
+    cockroach.sql.sqlbase.DefaultPrivilegesForRole.ExplicitRole for_explicit_role = 2;
+    cockroach.sql.sqlbase.DefaultPrivilegesForRole.ForAllRolesPseudoRole for_all_role = 3;
+  }
+  UserPrivileges user_privileges = 4 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }

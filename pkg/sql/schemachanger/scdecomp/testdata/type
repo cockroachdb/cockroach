@@ -37,16 +37,19 @@ ElementState:
     descriptorId: 104
     privileges: "2"
     userName: admin
+    withGrantOption: "2"
   Status: PUBLIC
 - UserPrivileges:
     descriptorId: 104
     privileges: "2"
     userName: root
+    withGrantOption: "2"
   Status: PUBLIC
 - UserPrivileges:
     descriptorId: 104
     privileges: "512"
     userName: public
+    withGrantOption: "0"
   Status: PUBLIC
 - ObjectParent:
     objectId: 104
@@ -546,11 +549,13 @@ ElementState:
     descriptorId: 108
     privileges: "2"
     userName: admin
+    withGrantOption: "2"
   Status: PUBLIC
 - UserPrivileges:
     descriptorId: 108
     privileges: "2"
     userName: root
+    withGrantOption: "2"
   Status: PUBLIC
 - ObjectParent:
     objectId: 108
@@ -595,16 +600,19 @@ ElementState:
     descriptorId: 109
     privileges: "2"
     userName: admin
+    withGrantOption: "2"
   Status: PUBLIC
 - UserPrivileges:
     descriptorId: 109
     privileges: "2"
     userName: root
+    withGrantOption: "2"
   Status: PUBLIC
 - UserPrivileges:
     descriptorId: 109
     privileges: "512"
     userName: public
+    withGrantOption: "0"
   Status: PUBLIC
 - ObjectParent:
     objectId: 109
@@ -1359,11 +1367,13 @@ ElementState:
     descriptorId: 111
     privileges: "2"
     userName: admin
+    withGrantOption: "2"
   Status: PUBLIC
 - UserPrivileges:
     descriptorId: 111
     privileges: "2"
     userName: root
+    withGrantOption: "2"
   Status: PUBLIC
 - ObjectParent:
     objectId: 111
