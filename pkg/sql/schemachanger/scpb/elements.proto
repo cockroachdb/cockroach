@@ -425,6 +425,7 @@ message UserPrivileges {
   uint32 descriptor_id = 1 [(gogoproto.customname) = "DescriptorID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
   string user_name = 2;
   uint64 privileges = 3;
+  uint64 with_grant_option = 4;
 }
 
 message TableLocalityGlobal {
@@ -651,7 +652,6 @@ message FunctionBody {
   repeated ViewReference uses_views = 5 [(gogoproto.nullable) = false];
   repeated uint32 uses_sequence_ids = 6 [(gogoproto.customname) = "UsesSequenceIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
   repeated uint32 uses_type_ids = 7 [(gogoproto.customname) = "UsesTypeIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
-  repeated uint32 uses_function_ids = 8 [(gogoproto.customname) = "UsesFunctionIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
 }
 
 message FunctionParamDefaultExpression {
