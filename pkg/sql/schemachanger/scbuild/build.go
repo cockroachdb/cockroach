@@ -170,8 +170,9 @@ type builderState struct {
 	// output contains the schema change targets that have been planned so far.
 	output []elementState
 
-	descCache   map[catid.DescID]*cachedDesc
-	tempSchemas map[catid.DescID]catalog.SchemaDescriptor
+	descCache      map[catid.DescID]*cachedDesc
+	tempSchemas    map[catid.DescID]catalog.SchemaDescriptor
+	newDescriptors catalog.DescriptorIDSet
 }
 
 type cachedDesc struct {
