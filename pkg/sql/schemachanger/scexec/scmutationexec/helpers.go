@@ -205,82 +205,28 @@ func MakeMutationIDMutationSelector(mutationID descpb.MutationID) MutationSelect
 	}
 }
 
-func enqueueAddColumnMutation(tbl *tabledesc.Mutable, col *descpb.ColumnDescriptor) error {
-	tbl.AddColumnMutation(col, descpb.DescriptorMutation_ADD)
+// enqueueNonIndexMutation enqueues a non-index mutation `m` (of generic type M)
+// with direction `dir` without increasing the next mutation ID.
+// The mutation state will be DELETE_ONLY if `dir=ADD` and WRITE_ONLY if `dir=DROP`.
+func enqueueNonIndexMutation[M any](
+	tbl *tabledesc.Mutable,
+	enqueueFunc func(M, descpb.DescriptorMutation_Direction),
+	m M,
+	dir descpb.DescriptorMutation_Direction,
+) {
+	enqueueFunc(m, dir)
 	tbl.NextMutationID--
-	return nil
 }
 
-func enqueueDropColumnMutation(tbl *tabledesc.Mutable, col *descpb.ColumnDescriptor) error {
-	tbl.AddColumnMutation(col, descpb.DescriptorMutation_DROP)
-	tbl.NextMutationID--
-	return nil
-}
-
-func enqueueAddCheckConstraintMutation(
-	tbl *tabledesc.Mutable, ck *descpb.TableDescriptor_CheckConstraint,
+// enqueueIndexMutation is like enqueueNonIndexMutation but allows caller to
+// specify the mutation's initial state.
+func enqueueIndexMutation(
+	tbl *tabledesc.Mutable,
+	idx *descpb.IndexDescriptor,
+	state descpb.DescriptorMutation_State,
+	dir descpb.DescriptorMutation_Direction,
 ) error {
-	tbl.AddCheckMutation(ck, descpb.DescriptorMutation_ADD)
-	tbl.NextMutationID--
-	return nil
-}
-
-func enqueueAddUniqueWithoutIndexConstraintMutation(
-	tbl *tabledesc.Mutable, uwi *descpb.UniqueWithoutIndexConstraint,
-) error {
-	tbl.AddUniqueWithoutIndexMutation(uwi, descpb.DescriptorMutation_ADD)
-	tbl.NextMutationID--
-	return nil
-}
-
-func enqueueDropCheckConstraintMutation(
-	tbl *tabledesc.Mutable, ck *descpb.TableDescriptor_CheckConstraint,
-) error {
-	tbl.AddCheckMutation(ck, descpb.DescriptorMutation_DROP)
-	tbl.NextMutationID--
-	return nil
-}
-
-func enqueueDropUniqueWithoutIndexConstraintMutation(
-	tbl *tabledesc.Mutable, uwi *descpb.UniqueWithoutIndexConstraint,
-) error {
-	tbl.AddUniqueWithoutIndexMutation(uwi, descpb.DescriptorMutation_DROP)
-	tbl.NextMutationID--
-	return nil
-}
-
-func enqueueAddForeignKeyConstraintMutation(
-	tbl *tabledesc.Mutable, fk *descpb.ForeignKeyConstraint,
-) error {
-	tbl.AddForeignKeyMutation(fk, descpb.DescriptorMutation_ADD)
-	tbl.NextMutationID--
-	return nil
-}
-
-func enqueueDropForeignKeyConstraintMutation(
-	tbl *tabledesc.Mutable, fk *descpb.ForeignKeyConstraint,
-) error {
-	tbl.AddForeignKeyMutation(fk, descpb.DescriptorMutation_DROP)
-	tbl.NextMutationID--
-	return nil
-}
-
-func enqueueAddIndexMutation(
-	tbl *tabledesc.Mutable, idx *descpb.IndexDescriptor, state descpb.DescriptorMutation_State,
-) error {
-	if err := tbl.AddIndexMutation(
-		idx, descpb.DescriptorMutation_ADD, state,
-	); err != nil {
-		return err
-	}
-	tbl.NextMutationID--
-	return nil
-}
-
-func enqueueDropIndexMutation(tbl *tabledesc.Mutable, idx *descpb.IndexDescriptor) error {
-	if err := tbl.AddIndexMutation(
-		idx, descpb.DescriptorMutation_DROP, descpb.DescriptorMutation_WRITE_ONLY,
-	); err != nil {
+	if err := tbl.AddIndexMutation(idx, dir, state); err != nil {
 		return err
 	}
 	tbl.NextMutationID--
