@@ -26,9 +26,6 @@ func init() {
 						Comment:    this.Comment,
 					}
 				}),
-				emit(func(this *scpb.DatabaseComment, md *opGenContext) *scop.LogEvent {
-					return newLogEventOp(this, md)
-				}),
 			),
 		),
 		toAbsent(
@@ -38,9 +35,6 @@ func init() {
 					return &scop.RemoveDatabaseComment{
 						DatabaseID: this.DatabaseID,
 					}
-				}),
-				emit(func(this *scpb.DatabaseComment, md *opGenContext) *scop.LogEvent {
-					return newLogEventOp(this, md)
 				}),
 			),
 		),

@@ -81,6 +81,11 @@ type BuilderState interface {
 	// Ensure ensures the presence of the given element in the BuilderState with
 	// the given statuses and metadata.
 	Ensure(current scpb.Status, target scpb.TargetStatus, elem scpb.Element, meta scpb.TargetMetadata)
+
+	// LogEventForExistingTarget tells the builder to write an entry in the event
+	// log for the existing target corresponding to the provided element.
+	// An error is thrown if no such target exists.
+	LogEventForExistingTarget(element scpb.Element)
 }
 
 // EventLogState encapsulates the state of the metadata to decorate the eventlog

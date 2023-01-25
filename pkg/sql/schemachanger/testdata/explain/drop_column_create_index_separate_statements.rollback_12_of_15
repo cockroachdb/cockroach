@@ -32,11 +32,10 @@ Schema change plan for rolling back CREATE UNIQUE INDEX ‹idx› ON ‹defaultd
       │    │    ├── WRITE_ONLY  → DELETE_ONLY TemporaryIndex:{DescID: 104, IndexID: 6, ConstraintID: 5, SourceIndexID: 3}
       │    │    ├── PUBLIC      → ABSENT      IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 6}
       │    │    └── PUBLIC      → ABSENT      IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 6}
-      │    └── 19 Mutation operations
+      │    └── 18 Mutation operations
       │         ├── SetIndexName {"IndexID":1,"Name":"t_pkey","TableID":104}
-      │         ├── RefreshStats {"TableID":104}
-      │         ├── LogEvent {"TargetStatus":2}
       │         ├── MakeValidatedSecondaryIndexPublic {"IndexID":2,"TableID":104}
+      │         ├── RefreshStats {"TableID":104}
       │         ├── SetColumnName {"ColumnID":2,"Name":"j","TableID":104}
       │         ├── SetColumnName {"ColumnID":4,"Name":"crdb_internal_id...","TableID":104}
       │         ├── MakePublicPrimaryIndexWriteOnly {"IndexID":3,"TableID":104}

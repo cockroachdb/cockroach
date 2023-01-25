@@ -48,6 +48,15 @@ begin transaction #1
 # begin StatementPhase
 checking for feature: CREATE INDEX
 increment telemetry for sql.schema.partial_index
+write *eventpb.CreateIndex to event log:
+  indexName: idx1
+  mutationId: 1
+  sql:
+    descriptorId: 106
+    statement: CREATE INDEX ‹idx1› ON ‹defaultdb›.‹public›.‹t› (‹v›) WHERE (‹v› = ‹'a'›)
+    tag: CREATE INDEX
+    user: root
+  tableName: defaultdb.public.t
 ## StatementPhase stage 1 of 1 with 9 MutationType ops
 upsert descriptor #106
   ...
@@ -233,7 +242,7 @@ begin transaction #9
 validate forward indexes [2] in table #106
 commit transaction #9
 begin transaction #10
-## PostCommitNonRevertiblePhase stage 1 of 2 with 7 MutationType ops
+## PostCommitNonRevertiblePhase stage 1 of 2 with 6 MutationType ops
 upsert descriptor #106
   ...
            statement: CREATE INDEX idx1 ON t (v) WHERE (v = 'a')
@@ -314,7 +323,6 @@ upsert descriptor #106
      unexposedParentSchemaId: 101
   -  version: "6"
   +  version: "7"
-write *eventpb.CreateIndex to event log: CREATE INDEX ‹idx1› ON ‹defaultdb›.‹public›.‹t› (‹v›) WHERE (‹v› = ‹'a'›)
 adding table for stats refresh: 106
 update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 2 with 2 MutationType ops pending"
 set schema change job #1 to non-cancellable
@@ -376,12 +384,14 @@ upsert descriptor #106
      unexposedParentSchemaId: 101
   -  version: "7"
   +  version: "8"
-write *eventpb.FinishSchemaChange to event log
 create job #2 (non-cancelable: true): "GC for CREATE INDEX idx1 ON defaultdb.public.t (v) WHERE (v = 'a')"
   descriptor IDs: [106]
 update progress of schema change job #1: "all stages completed"
 set schema change job #1 to non-cancellable
 updated schema change job #1 descriptor IDs to []
+write *eventpb.FinishSchemaChange to event log:
+  sc:
+    descriptorId: 106
 commit transaction #11
 notified job registry to adopt jobs: [2]
 # end PostCommitPhase

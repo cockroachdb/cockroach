@@ -235,9 +235,7 @@ func (n nodeEntries) Swap(i, j int) { n[i], n[j] = n[j], n[i] }
 var _ sort.Interface = nodeEntries{}
 
 func formatElementForDisplay(t *testing.T, e scpb.Element) []byte {
-	marshaled, err := sctestutils.ProtoToYAML(
-		e, false /* emitDefaults */, nil, /* rewrites */
-	)
+	marshaled, err := sctestutils.ProtoToYAML(e, false /* emitDefaults */)
 	require.NoError(t, err)
 	dec := yaml.NewDecoder(strings.NewReader(marshaled))
 	dec.KnownFields(true)

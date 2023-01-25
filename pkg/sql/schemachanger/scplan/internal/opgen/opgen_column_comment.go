@@ -28,9 +28,6 @@ func init() {
 						PGAttributeNum: this.PgAttributeNum,
 					}
 				}),
-				emit(func(this *scpb.ColumnComment, md *opGenContext) *scop.LogEvent {
-					return newLogEventOp(this, md)
-				}),
 			),
 		),
 		toAbsent(
@@ -42,9 +39,6 @@ func init() {
 						ColumnID:       this.ColumnID,
 						PgAttributeNum: this.PgAttributeNum,
 					}
-				}),
-				emit(func(this *scpb.ColumnComment, md *opGenContext) *scop.LogEvent {
-					return newLogEventOp(this, md)
 				}),
 			),
 		),

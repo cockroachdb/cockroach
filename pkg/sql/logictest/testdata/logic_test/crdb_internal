@@ -1157,9 +1157,14 @@ statement ok
 SELECT crdb_internal.probe_ranges(INTERVAL '1000ms', 'write')
 
 # Regression test for not handling NULL values correctly by an internal builtin
-# (#82056).
+# (#82056 and #95671).
 query I
 SELECT crdb_internal.num_inverted_index_entries(NULL::STRING, 0)
+----
+0
+
+query I
+SELECT crdb_internal.num_inverted_index_entries(NULL::TSVECTOR, NULL::INT8)
 ----
 0
 

@@ -51,6 +51,7 @@ func NewBuilderDependencies(
 	settings *cluster.Settings,
 	statements []string,
 	clientNoticeSender eval.ClientNoticeSender,
+	eventLogger scbuild.EventLogger,
 ) scbuild.Dependencies {
 	return &buildDeps{
 		clusterID:       clusterID,
@@ -67,6 +68,7 @@ func NewBuilderDependencies(
 			txn.Descriptors(), sessiondata.NewStack(sessionData), txn.KV(), authAccessor,
 		),
 		clientNoticeSender: clientNoticeSender,
+		eventLogger:        eventLogger,
 	}
 }
 
@@ -83,6 +85,7 @@ type buildDeps struct {
 	astFormatter       scbuild.AstFormatter
 	featureChecker     scbuild.FeatureChecker
 	clientNoticeSender eval.ClientNoticeSender
+	eventLogger        scbuild.EventLogger
 }
 
 var _ scbuild.CatalogReader = (*buildDeps)(nil)
@@ -388,6 +391,11 @@ func (d *buildDeps) ZoneConfigGetter() scbuild.ZoneConfigGetter {
 // ClientNoticeSender implements the scbuild.Dependencies interface.
 func (d *buildDeps) ClientNoticeSender() eval.ClientNoticeSender {
 	return d.clientNoticeSender
+}
+
+// EventLogger implements the scbuild.Dependencies interface.
+func (d *buildDeps) EventLogger() scbuild.EventLogger {
+	return d.eventLogger
 }
 
 type zoneConfigGetter struct {

@@ -67,6 +67,7 @@ func DropTable(b BuildCtx, n *tree.DropTable) {
 				droppedOwnedSequences[tbl.TableID] = ownedIDs
 			}
 		}
+		b.LogEventForExistingTarget(tbl)
 		b.IncrementSubWorkID()
 		b.IncrementSchemaChangeDropCounter("table")
 	}

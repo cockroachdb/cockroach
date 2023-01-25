@@ -628,38 +628,14 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
 │           │
 │           ├── • MakeDeleteOnlyColumnAbsent
 │           │     ColumnID: 1
-│           │     EventBase:
-│           │       Authorization:
-│           │         UserName: root
-│           │       Statement: DROP DATABASE ‹multi_region_test_db› CASCADE
-│           │       StatementTag: DROP DATABASE
-│           │       TargetMetadata:
-│           │         SourceElementID: 3
-│           │         SubWorkID: 1
 │           │     TableID: 108
 │           │
 │           ├── • MakeDeleteOnlyColumnAbsent
 │           │     ColumnID: 4294967295
-│           │     EventBase:
-│           │       Authorization:
-│           │         UserName: root
-│           │       Statement: DROP DATABASE ‹multi_region_test_db› CASCADE
-│           │       StatementTag: DROP DATABASE
-│           │       TargetMetadata:
-│           │         SourceElementID: 3
-│           │         SubWorkID: 1
 │           │     TableID: 108
 │           │
 │           ├── • MakeDeleteOnlyColumnAbsent
 │           │     ColumnID: 4294967294
-│           │     EventBase:
-│           │       Authorization:
-│           │         UserName: root
-│           │       Statement: DROP DATABASE ‹multi_region_test_db› CASCADE
-│           │       StatementTag: DROP DATABASE
-│           │       TargetMetadata:
-│           │         SourceElementID: 3
-│           │         SubWorkID: 1
 │           │     TableID: 108
 │           │
 │           ├── • SetJobStateOnDescriptor
@@ -693,8 +669,7 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
 │                 - 108
 │                 JobID: 1
 │                 NonCancelable: true
-│                 RunningStatus: PostCommitNonRevertiblePhase stage 1 of 1 with 12 MutationType ops
-│                   pending
+│                 RunningStatus: PostCommitNonRevertiblePhase stage 1 of 1 with 7 MutationType ops pending
 │                 Statements:
 │                 - statement: DROP DATABASE multi_region_test_db CASCADE
 │                   redactedstatement: DROP DATABASE ‹multi_region_test_db› CASCADE
@@ -757,21 +732,7 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
         │       └── • SameStagePrecedence dependency from ABSENT Table:{DescID: 108}
         │             rule: "table removed right before garbage collection"
         │
-        └── • 18 Mutation operations
-            │
-            ├── • LogEvent
-            │     Element:
-            │       Database:
-            │         databaseId: 104
-            │     EventBase:
-            │       Authorization:
-            │         UserName: root
-            │       Statement: DROP DATABASE ‹multi_region_test_db› CASCADE
-            │       StatementTag: DROP DATABASE
-            │       TargetMetadata:
-            │         SourceElementID: 1
-            │         SubWorkID: 1
-            │     TargetStatus: 1
+        └── • 13 Mutation operations
             │
             ├── • DeleteDescriptor
             │     DescriptorID: 104
@@ -781,85 +742,14 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
             │     StatementForDropJob:
             │       Statement: DROP DATABASE multi_region_test_db CASCADE
             │
-            ├── • LogEvent
-            │     Element:
-            │       Schema:
-            │         isPublic: true
-            │         schemaId: 105
-            │     EventBase:
-            │       Authorization:
-            │         UserName: root
-            │       Statement: DROP DATABASE ‹multi_region_test_db› CASCADE
-            │       StatementTag: DROP DATABASE
-            │       TargetMetadata:
-            │         SourceElementID: 2
-            │         SubWorkID: 1
-            │     TargetStatus: 1
-            │
             ├── • DeleteDescriptor
             │     DescriptorID: 105
-            │
-            ├── • LogEvent
-            │     Element:
-            │       EnumType:
-            │         arrayTypeId: 107
-            │         isMultiRegion: true
-            │         typeId: 106
-            │     EventBase:
-            │       Authorization:
-            │         UserName: root
-            │       Statement: DROP DATABASE ‹multi_region_test_db› CASCADE
-            │       StatementTag: DROP DATABASE
-            │       TargetMetadata:
-            │         SourceElementID: 3
-            │         SubWorkID: 1
-            │     TargetStatus: 1
             │
             ├── • DeleteDescriptor
             │     DescriptorID: 106
             │
-            ├── • LogEvent
-            │     Element:
-            │       AliasType:
-            │         closedTypeIds:
-            │         - 106
-            │         - 107
-            │         type:
-            │           arrayContents:
-            │             family: EnumFamily
-            │             oid: 100106
-            │             udtMetadata:
-            │               arrayTypeOid: 100107
-            │           arrayElemType: EnumFamily
-            │           family: ArrayFamily
-            │           oid: 100107
-            │         typeId: 107
-            │     EventBase:
-            │       Authorization:
-            │         UserName: root
-            │       Statement: DROP DATABASE ‹multi_region_test_db› CASCADE
-            │       StatementTag: DROP DATABASE
-            │       TargetMetadata:
-            │         SourceElementID: 4
-            │         SubWorkID: 1
-            │     TargetStatus: 1
-            │
             ├── • DeleteDescriptor
             │     DescriptorID: 107
-            │
-            ├── • LogEvent
-            │     Element:
-            │       Table:
-            │         tableId: 108
-            │     EventBase:
-            │       Authorization:
-            │         UserName: root
-            │       Statement: DROP DATABASE ‹multi_region_test_db› CASCADE
-            │       StatementTag: DROP DATABASE
-            │       TargetMetadata:
-            │         SourceElementID: 3
-            │         SubWorkID: 1
-            │     TargetStatus: 1
             │
             ├── • CreateGCJobForTable
             │     DatabaseID: 104

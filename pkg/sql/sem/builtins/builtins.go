@@ -5952,6 +5952,9 @@ value if you rely on the HLC for accuracy.`,
 			},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				if args[0] == tree.DNull {
+					return tree.DZero, nil
+				}
 				val := args[0].(*tree.DTSVector)
 				return tree.NewDInt(tree.DInt(len(val.TSVector))), nil
 			},

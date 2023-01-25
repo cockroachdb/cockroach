@@ -12,7 +12,6 @@ package scexec
 
 import (
 	"context"
-	"sort"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -66,9 +65,6 @@ func executeDescriptorMutationOps(ctx context.Context, deps Dependencies, ops []
 		mvs.commentsToUpdate,
 		deps.Catalog(),
 	); err != nil {
-		return err
-	}
-	if err := logEvents(ctx, mvs, deps.EventLogger()); err != nil {
 		return err
 	}
 	if err := updateDescriptorMetadata(
@@ -152,120 +148,6 @@ func performBatchedCatalogWrites(
 	}
 
 	return b.ValidateAndRun(ctx)
-}
-
-func logEvents(ctx context.Context, mvs *mutationVisitorState, el EventLogger) error {
-	statementIDs := make([]uint32, 0, len(mvs.eventsByStatement))
-	for statementID := range mvs.eventsByStatement {
-		statementIDs = append(statementIDs, statementID)
-	}
-	sort.Slice(statementIDs, func(i, j int) bool {
-		return statementIDs[i] < statementIDs[j]
-	})
-	for _, statementID := range statementIDs {
-		entries := eventLogEntriesForStatement(mvs.eventsByStatement[statementID])
-		for _, e := range entries {
-			// TODO(postamar): batch these
-			switch e.event.(type) {
-			case eventpb.EventWithCommonSQLPayload:
-				details := e.details
-				details.DescriptorID = uint32(e.id)
-				if err := el.LogEvent(ctx, details, e.event); err != nil {
-					return err
-				}
-			case eventpb.EventWithCommonSchemaChangePayload:
-				if err := el.LogEventForSchemaChange(ctx, e.event); err != nil {
-					return err
-				}
-			}
-
-		}
-	}
-	return nil
-}
-
-func eventLogEntriesForStatement(statementEvents []eventPayload) (logEntries []eventPayload) {
-	// A dependent event is one which is generated because of a
-	// dependency getting modified from the source object. An example
-	// of this is a DROP TABLE will be the source event, which will track
-	// any dependent views dropped.
-	var dependentEvents = make(map[uint32][]eventPayload)
-	var sourceEvents = make(map[uint32]eventPayload)
-	// First separate out events, where the first event generated will always
-	// be the source and everything else before will be dependencies if they have
-	// the same subtask ID.
-	for _, event := range statementEvents {
-		dependentEvents[event.SubWorkID] = append(dependentEvents[event.SubWorkID], event)
-	}
-	// Split of the source events.
-	orderedSubWorkID := make([]uint32, 0, len(dependentEvents))
-	for subWorkID := range dependentEvents {
-		elems := dependentEvents[subWorkID]
-		sort.SliceStable(elems, func(i, j int) bool {
-			return elems[i].SourceElementID < elems[j].SourceElementID
-		})
-		sourceEvents[subWorkID] = elems[0]
-		dependentEvents[subWorkID] = elems[1:]
-		orderedSubWorkID = append(orderedSubWorkID, subWorkID)
-	}
-	// Store an ordered list of sub-work IDs for deterministic
-	// event order.
-	sort.SliceStable(orderedSubWorkID, func(i, j int) bool {
-		return orderedSubWorkID[i] < orderedSubWorkID[j]
-	})
-	// Collect the dependent objects for each
-	// source event, and generate an event log entry.
-	for _, subWorkID := range orderedSubWorkID {
-		// Determine which objects we should collect.
-		collectDependentViewNames := false
-		collectDependentTables := false
-		collectDependentSequences := false
-		sourceEvent := sourceEvents[subWorkID]
-		switch sourceEvent.event.(type) {
-		case *eventpb.DropDatabase:
-			// Log each of the objects that are dropped.
-			collectDependentViewNames = true
-			collectDependentTables = true
-			collectDependentSequences = true
-		case *eventpb.DropView, *eventpb.DropTable, *eventpb.DropIndex:
-			// Drop view and drop tables only cares about
-			// dependent views
-			collectDependentViewNames = true
-		}
-		var dependentObjects []string
-		for _, dependentEvent := range dependentEvents[subWorkID] {
-			switch ev := dependentEvent.event.(type) {
-			case *eventpb.DropSequence:
-				if collectDependentSequences {
-					dependentObjects = append(dependentObjects, ev.SequenceName)
-				}
-			case *eventpb.DropTable:
-				if collectDependentTables {
-					dependentObjects = append(dependentObjects, ev.TableName)
-				}
-			case *eventpb.DropView:
-				if collectDependentViewNames {
-					dependentObjects = append(dependentObjects, ev.ViewName)
-				}
-			}
-		}
-		// Add anything that we determined based
-		// on the dependencies.
-		switch ev := sourceEvent.event.(type) {
-		case *eventpb.DropTable:
-			ev.CascadeDroppedViews = dependentObjects
-		case *eventpb.DropView:
-			ev.CascadeDroppedViews = dependentObjects
-		case *eventpb.DropDatabase:
-			ev.DroppedSchemaObjects = dependentObjects
-		case *eventpb.DropIndex:
-			ev.CascadeDroppedViews = dependentObjects
-		}
-		// Generate event log entries for the source event only. The dependent
-		// events will be ignored.
-		logEntries = append(logEntries, sourceEvent)
-	}
-	return logEntries
 }
 
 // updateDescriptorMetadata performs the portions of the side effects of the
