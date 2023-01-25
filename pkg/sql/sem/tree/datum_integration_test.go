@@ -433,7 +433,7 @@ func TestParseDDate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	ctx := tree.NewParseTimeContext(
+	ctx := tree.NewParseContext(
 		time.Date(2001, time.February, 3, 4, 5, 6, 1000, time.FixedZone("foo", -18000)),
 	)
 
@@ -556,7 +556,7 @@ func TestParseDTime(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	ctx := tree.NewParseTimeContext(
+	ctx := tree.NewParseContext(
 		time.Date(2001, time.February, 3, 4, 5, 6, 1000, time.FixedZone("foo", -18000)),
 	)
 	// Since ParseDTime shares most of the underlying parsing logic to
@@ -629,7 +629,7 @@ func TestParseDTimeError(t *testing.T) {
 
 func TestParseDTimeTZ(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	ctx := tree.NewParseTimeContext(
+	ctx := tree.NewParseContext(
 		time.Date(2001, time.February, 3, 4, 5, 6, 1000, time.FixedZone("foo", 18000)),
 	)
 
@@ -707,7 +707,7 @@ func TestParseDTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	ctx := tree.NewParseTimeContext(
+	ctx := tree.NewParseContext(
 		time.Date(2001, time.February, 3, 4, 5, 6, 1000, time.FixedZone("foo", -18000)),
 	)
 
@@ -791,7 +791,7 @@ func TestParseDTimestampTZ(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	local := time.FixedZone("foo", -18000)
-	ctx := tree.NewParseTimeContext(time.Date(2001, time.February, 3, 4, 5, 6, 1000, local))
+	ctx := tree.NewParseContext(time.Date(2001, time.February, 3, 4, 5, 6, 1000, local))
 
 	testData := []struct {
 		str              string
