@@ -150,8 +150,16 @@ func (b *builderState) getExistingElementState(e scpb.Element) *elementState {
 		panic(errors.AssertionFailedf("cannot define target for nil element"))
 	}
 	id := screl.GetDescID(e)
-	b.ensureDescriptor(id)
+	if b.newDescriptors.Contains(id) {
+		if _, ok := b.descCache[id]; !ok {
+			b.descCache[id] = b.newCachedDescForNewDesc()
+		}
+	} else {
+		b.ensureDescriptor(id)
+	}
+
 	c := b.descCache[id]
+
 	key := screl.ElementString(e)
 	i, ok := c.elementIndexMap[key]
 	if !ok {
@@ -1071,17 +1079,30 @@ func (b *builderState) ResolveUDF(
 	return b.descCache[fnID].ers
 }
 
-func (b *builderState) ensureDescriptor(id catid.DescID) {
-	if _, found := b.descCache[id]; found {
-		return
-	}
-	c := &cachedDesc{
+func (b *builderState) newCachedDesc(id descpb.ID) *cachedDesc {
+	return &cachedDesc{
 		desc:            b.readDescriptor(id),
 		privileges:      make(map[privilege.Kind]error),
 		hasOwnership:    b.hasAdmin,
 		ers:             &elementResultSet{b: b},
 		elementIndexMap: map[string]int{},
 	}
+}
+
+func (b *builderState) newCachedDescForNewDesc() *cachedDesc {
+	return &cachedDesc{
+		privileges:      make(map[privilege.Kind]error),
+		hasOwnership:    true,
+		ers:             &elementResultSet{b: b},
+		elementIndexMap: map[string]int{},
+	}
+}
+
+func (b *builderState) ensureDescriptor(id catid.DescID) {
+	if _, found := b.descCache[id]; found {
+		return
+	}
+	c := b.newCachedDesc(id)
 	// Collect privileges
 	if !c.hasOwnership {
 		var err error
@@ -1168,6 +1189,15 @@ func (b *builderState) readDescriptor(id catid.DescID) catalog.Descriptor {
 		return tempSchema
 	}
 	return b.cr.MustReadDescriptor(b.ctx, id)
+}
+
+func (b *builderState) GenerateUniqueDescID() catid.DescID {
+	id, err := b.evalCtx.DescIDGenerator.GenerateUniqueDescID(b.ctx)
+	if err != nil {
+		panic(err)
+	}
+	b.newDescriptors.Add(id)
+	return id
 }
 
 type elementResultSet struct {
