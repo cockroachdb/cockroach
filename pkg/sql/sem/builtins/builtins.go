@@ -9860,6 +9860,13 @@ func arrayToString(
 	evalCtx *eval.Context, arr *tree.DArray, delim string, nullStr *string,
 ) (tree.Datum, error) {
 	f := evalCtx.FmtCtx(tree.FmtArrayToString)
+	arrayToStringHelper(evalCtx, arr, delim, nullStr, f)
+	return tree.NewDString(f.CloseAndGetString()), nil
+}
+
+func arrayToStringHelper(
+	evalCtx *eval.Context, arr *tree.DArray, delim string, nullStr *string, f *tree.FmtCtx,
+) {
 
 	for i := range arr.Array {
 		if arr.Array[i] == tree.DNull {
@@ -9868,13 +9875,17 @@ func arrayToString(
 			}
 			f.WriteString(*nullStr)
 		} else {
-			f.FormatNode(arr.Array[i])
+			if nestedArray, ok := arr.Array[i].(*tree.DArray); ok {
+				// "Unpack" nested arrays to be consistent with postgres.
+				arrayToStringHelper(evalCtx, nestedArray, delim, nullStr, f)
+			} else {
+				f.FormatNode(arr.Array[i])
+			}
 		}
 		if i < len(arr.Array)-1 {
 			f.WriteString(delim)
 		}
 	}
-	return tree.NewDString(f.CloseAndGetString()), nil
 }
 
 // encodeEscape implements the encode(..., 'escape') Postgres builtin. It's
