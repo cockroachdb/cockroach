@@ -99,7 +99,7 @@ type Logger struct {
 // If path is empty, logs will go to stdout/Stderr.
 func (cfg *Config) NewLogger(path string) (*Logger, error) {
 	if path == "" {
-		// Log to os.Stdout/Stderr is no other options are passed in.
+		// Log to os.Stdout/Stderr if no other options are passed in.
 		stdout := cfg.Stdout
 		if stdout == nil {
 			stdout = os.Stdout
