@@ -223,7 +223,12 @@ func (s *Server) DecommissionPreCheck(
 	overrideNodeLivenessFn := storepool.OverrideNodeLivenessFunc(
 		decommissionCheckNodeIDs, existingStorePool.NodeLivenessFn,
 	)
-	overrideStorePool := storepool.NewOverrideStorePool(existingStorePool, overrideNodeLivenessFn)
+	overrideNodeCount := storepool.OverrideNodeCountFunc(
+		decommissionCheckNodeIDs, evalStore.GetStoreConfig().NodeLiveness,
+	)
+	overrideStorePool := storepool.NewOverrideStorePool(
+		existingStorePool, overrideNodeLivenessFn, overrideNodeCount,
+	)
 
 	// Define our replica filter to only look at the replicas on the checked nodes.
 	predHasDecommissioningReplica := func(rDesc roachpb.ReplicaDescriptor) bool {
