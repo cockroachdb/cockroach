@@ -551,12 +551,12 @@ func (ds *DistSender) singleRangeFeed(
 
 	// Indicate catchup scan is starting;  Before potentially blocking on a semaphore, take
 	// opportunity to update semaphore limit.
+	ds.metrics.RangefeedCatchupRanges.Inc(1)
 	catchupSem.SetLimit(maxConcurrentCatchupScans(&ds.st.SV))
 	catchupRes, err := catchupSem.Begin(ctx)
 	if err != nil {
 		return hlc.Timestamp{}, err
 	}
-	ds.metrics.RangefeedCatchupRanges.Inc(1)
 	finishCatchupScan := func() {
 		if catchupRes != nil {
 			catchupRes.Release()
