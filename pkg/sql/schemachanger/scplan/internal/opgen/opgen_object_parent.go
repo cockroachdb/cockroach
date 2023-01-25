@@ -13,6 +13,7 @@ package opgen
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
 func init() {
@@ -20,8 +21,9 @@ func init() {
 		toPublic(
 			scpb.Status_ABSENT,
 			to(scpb.Status_PUBLIC,
-				emit(func(this *scpb.ObjectParent) *scop.NotImplemented {
-					return notImplemented(this)
+				emit(func(this *scpb.ObjectParent) *scop.SetObjectParentID {
+					op := protoutil.Clone(this).(*scpb.ObjectParent)
+					return &scop.SetObjectParentID{ObjParent: *op}
 				}),
 			),
 		),

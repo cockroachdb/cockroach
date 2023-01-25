@@ -20,8 +20,10 @@ func init() {
 		toPublic(
 			scpb.Status_ABSENT,
 			to(scpb.Status_PUBLIC,
-				emit(func(this *scpb.Owner) *scop.NotImplemented {
-					return notImplemented(this)
+				emit(func(this *scpb.Owner) *scop.UpdateOwner {
+					return &scop.UpdateOwner{
+						Owner: *this,
+					}
 				}),
 			),
 		),

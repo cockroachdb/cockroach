@@ -109,9 +109,11 @@ func Build(
 	descSet := screl.AllTargetDescIDs(ts)
 	descSet.ForEach(func(id descpb.ID) {
 		bs.ensureDescriptor(id)
-		desc := bs.descCache[id].desc
-		if desc.HasConcurrentSchemaChanges() {
-			panic(scerrors.ConcurrentSchemaChangeError(desc))
+		cached := bs.descCache[id]
+		// If a descriptor is being created, we don't need to worry about concurrent
+		// schema changes.
+		if !cached.isBeingCreated() && cached.desc.HasConcurrentSchemaChanges() {
+			panic(scerrors.ConcurrentSchemaChangeError(cached.desc))
 		}
 	})
 	// Write to event log and return.
@@ -192,6 +194,10 @@ type cachedDesc struct {
 	// This map ends up being very important to make sure that Ensure does
 	// not become O(N) where N is the number of elements in the descriptor.
 	elementIndexMap map[string]int
+}
+
+func (c *cachedDesc) isBeingCreated() bool {
+	return c.desc == nil
 }
 
 // newBuilderState constructs a builderState.

@@ -27,7 +27,7 @@ Schema change plan for ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN �
  │              ├── SetColumnName {"ColumnID":2,"Name":"l","TableID":106}
  │              ├── SetAddedColumnType {"ColumnType":{"ColumnID":2,"TableID":106}}
  │              ├── AddColumnDefaultExpression {"Default":{"ColumnID":2,"TableID":106}}
- │              ├── UpdateBackReferencesInSequences {"BackReferencedColumnID":2,"BackReferencedTableID":106}
+ │              ├── UpdateTableBackReferencesInSequences {"BackReferencedColumnID":2,"BackReferencedTableID":106}
  │              ├── MakeAbsentIndexBackfilling {"Index":{"ConstraintID":2,"IndexID":2,"IsUnique":true,"SourceIndexID":1,"TableID":106,"TemporaryIndexID":3}}
  │              ├── AddColumnToIndex {"ColumnID":1,"IndexID":2,"TableID":106}
  │              ├── AddColumnToIndex {"ColumnID":2,"IndexID":2,"Kind":2,"TableID":106}

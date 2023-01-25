@@ -1874,6 +1874,14 @@ func (ef *execFactory) ConstructCreateFunction(
 		return nil, err
 	}
 
+	plan, err := ef.planner.SchemaChange(ef.ctx, cf)
+	if err != nil {
+		return nil, err
+	}
+	if plan != nil {
+		return plan, nil
+	}
+
 	planDeps, typeDepSet, err := toPlanDependencies(deps, typeDeps)
 	if err != nil {
 		return nil, err

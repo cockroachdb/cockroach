@@ -40,7 +40,7 @@ func DecomposeToElements(t *testing.T, dir string, newCluster NewClusterFunc) {
 	ctx := context.Background()
 	datadriven.Walk(t, dir, func(t *testing.T, path string) {
 		// Create a test cluster.
-		db, cleanup := newCluster(t, nil /* knobs */)
+		_, db, cleanup := newCluster(t, nil /* knobs */)
 		tdb := sqlutils.MakeSQLRunner(db)
 		defer cleanup()
 		// We need to disable the declarative schema changer so that we don't end

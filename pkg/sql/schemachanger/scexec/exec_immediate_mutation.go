@@ -25,6 +25,7 @@ type immediateState struct {
 	drainedNames        map[descpb.ID][]descpb.NameInfo
 	descriptorsToDelete catalog.DescriptorIDSet
 	commentsToUpdate    []commentToUpdate
+	newDescriptors      map[descpb.ID]catalog.MutableDescriptor
 	withReset           bool
 }
 
@@ -43,6 +44,9 @@ func (s *immediateState) AddToCheckedOutDescriptors(mut catalog.MutableDescripto
 }
 
 func (s *immediateState) MaybeGetCheckedOutDescriptor(id descpb.ID) catalog.MutableDescriptor {
+	if newDesc, ok := s.newDescriptors[id]; ok {
+		return newDesc.(catalog.MutableDescriptor)
+	}
 	entry := s.modifiedDescriptors.Get(id)
 	if entry == nil {
 		return nil
@@ -84,6 +88,13 @@ func (s *immediateState) DeleteName(id descpb.ID, nameInfo descpb.NameInfo) {
 	s.drainedNames[id] = append(s.drainedNames[id], nameInfo)
 }
 
+func (s *immediateState) CreateDescriptor(desc catalog.MutableDescriptor) {
+	if s.newDescriptors == nil {
+		s.newDescriptors = make(map[descpb.ID]catalog.MutableDescriptor)
+	}
+	s.newDescriptors[desc.GetID()] = desc
+}
+
 func (s *immediateState) Reset() {
 	s.withReset = true
 }
@@ -97,6 +108,11 @@ func (s *immediateState) exec(ctx context.Context, c Catalog) error {
 	s.descriptorsToDelete.ForEach(func(id descpb.ID) {
 		s.modifiedDescriptors.Remove(id)
 	})
+	for _, desc := range s.newDescriptors {
+		if err := c.CreateOrUpdateDescriptor(ctx, desc); err != nil {
+			return err
+		}
+	}
 	err := s.modifiedDescriptors.Iterate(func(entry catalog.NameEntry) error {
 		return c.CreateOrUpdateDescriptor(ctx, entry.(catalog.MutableDescriptor))
 	})
