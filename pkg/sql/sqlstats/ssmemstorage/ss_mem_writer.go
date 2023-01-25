@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insights"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -185,6 +186,16 @@ func (s *Container) RecordStatement(
 		contentionEvents = value.ExecStats.ContentionEvents
 	}
 
+	var errorCode string
+	if value.StatementError != nil {
+		errorCode = pgerror.GetPGCode(value.StatementError).String()
+	}
+
+	var errorMsg string
+	if value.StatementError != nil {
+		errorMsg = value.StatementError.Error()
+	}
+
 	s.insights.ObserveStatement(value.SessionID, &insights.Statement{
 		ID:                   value.StatementID,
 		FingerprintID:        stmtFingerprintID,
@@ -204,6 +215,8 @@ func (s *Container) RecordStatement(
 		ContentionEvents:     contentionEvents,
 		IndexRecommendations: value.IndexRecommendations,
 		Database:             value.Database,
+		ErrorCode:            errorCode,
+		ErrorMsg:             errorMsg,
 	})
 
 	return stats.ID, nil
