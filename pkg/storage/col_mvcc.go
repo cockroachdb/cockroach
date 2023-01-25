@@ -319,8 +319,8 @@ func mvccScanToCols(
 		return MVCCScanResult{}, err
 	}
 
-	//res.NumKeys = mvccScanner.results.count
-	//res.NumBytes = mvccScanner.results.bytes
+	res.NumKeys = mvccScanner.results.getCount()
+	res.NumBytes = mvccScanner.results.getBytes()
 
 	// If we have a trace, emit the scan stats that we produced.
 	recordIteratorStats(ctx, mvccScanner.parent)
