@@ -407,7 +407,7 @@ message GenerativeSplitAndScatterSpec {
   repeated roachpb.Span spans = 10 [(gogoproto.nullable) = false];
   repeated jobs.jobspb.RestoreDetails.BackupLocalityInfo backup_locality_info = 11 [(gogoproto.nullable) = false];
   // HighWater is the high watermark of the previous run of restore.
-  optional bytes high_water = 12 [(gogoproto.nullable) = false];
+  optional bytes high_water = 12;
   // User who initiated the restore.
   optional string user_proto = 13 [(gogoproto.nullable) = false, (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/security/username.SQLUsernameProto"];
   // ChunkSize is the number of import spans per chunk.
