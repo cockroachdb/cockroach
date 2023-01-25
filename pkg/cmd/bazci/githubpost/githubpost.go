@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/internal/issues"
 	"github.com/cockroachdb/cockroach/pkg/internal/codeowners"
 	"github.com/cockroachdb/cockroach/pkg/internal/team"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/errors"
 )
 
@@ -95,7 +96,11 @@ func getIssueFilerForFormatter(formatterName string) func(ctx context.Context, f
 
 	return func(ctx context.Context, f failure) error {
 		fmter, req := reqFromFailure(ctx, f)
-		return issues.Post(ctx, fmter, req)
+		l, err := logger.RootLogger("", false)
+		if err != nil {
+			return err
+		}
+		return issues.Post(ctx, l, fmter, req)
 	}
 }
 

@@ -75,6 +75,7 @@ go_test(
     args = ["-test.timeout=55s"],
     embed = [":roachtest_lib"],
     deps = [
+        "//pkg/cmd/internal/issues",
         "//pkg/cmd/roachtest/cluster",
         "//pkg/cmd/roachtest/option",
         "//pkg/cmd/roachtest/registry",
