@@ -31,6 +31,9 @@ exp,benchmark
 15,CreateRole/create_role_with_2_options
 18,CreateRole/create_role_with_3_options
 13,CreateRole/create_role_with_no_options
+18,"Discard/DISCARD_ALL,_1_tables_in_1_db"
+21,"Discard/DISCARD_ALL,_2_tables_in_2_dbs"
+9,"Discard/DISCARD_ALL,_no_tables"
 10,DropDatabase/drop_database_0_tables
 11,DropDatabase/drop_database_1_table
 11,DropDatabase/drop_database_2_tables
@@ -47,11 +50,11 @@ exp,benchmark
 12,DropView/drop_1_view
 13,DropView/drop_2_views
 13,DropView/drop_3_views
-5,GenerateObjects/generate_50000_tables
 5,GenerateObjects/generate_1000_tables_-_this_test_should_use_the_same_number_of_RTTs_as_for_10_tables
-5,GenerateObjects/generate_10_tables
 12,GenerateObjects/generate_100_tables_from_template
+5,GenerateObjects/generate_10_tables
 16,GenerateObjects/generate_10x10_schemas_and_tables_in_existing_db
+5,GenerateObjects/generate_50000_tables
 9,Grant/grant_all_on_1_table
 9,Grant/grant_all_on_2_tables
 9,Grant/grant_all_on_3_tables
