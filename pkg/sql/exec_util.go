@@ -1678,6 +1678,9 @@ type StreamingTestingKnobs struct {
 	// OverrideRevertRangeBatchSize allows overriding the `MaxSpanRequestKeys`
 	// used when sending a RevertRange request.
 	OverrideRevertRangeBatchSize int64
+
+	// AfterCutoverStarted allows blocking after the cutover has started.
+	AfterCutoverStarted func()
 }
 
 var _ base.ModuleTestingKnobs = &StreamingTestingKnobs{}
