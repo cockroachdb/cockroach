@@ -743,6 +743,8 @@ func showUpgradedForeignKeysTest(exportDir string) func(t *testing.T) {
 		err := os.Symlink(exportDir, filepath.Join(dir, "foo"))
 		require.NoError(t, err)
 
+		sqlDB.Exec(t, `SET CLUSTER SETTING restore.manifest_read.mode = 'forceManifest'`)
+
 		type testCase struct {
 			table                     string
 			expectedForeignKeyPattern string

@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -1077,7 +1078,7 @@ func planSchedulePTSChaining(
 func getReintroducedSpans(
 	ctx context.Context,
 	execCfg *sql.ExecutorConfig,
-	prevBackups []backuppb.BackupManifest,
+	prevBackups []backupinfo.BackupManifest,
 	tables []catalog.TableDescriptor,
 	revs []backuppb.BackupManifest_DescriptorRevision,
 	endTime hlc.Timestamp,
@@ -1105,10 +1106,19 @@ func getReintroducedSpans(
 	offlineInLastBackup := make(map[descpb.ID]struct{})
 	lastBackup := prevBackups[len(prevBackups)-1]
 
-	for _, desc := range lastBackup.Descriptors {
+	descIt := lastBackup.NewDescIter(ctx)
+	defer descIt.Close()
+
+	for ; ; descIt.Next() {
+		if ok, err := descIt.Valid(); err != nil {
+			return nil, err
+		} else if !ok {
+			break
+		}
+
 		// TODO(pbardea): Also check that lastWriteTime is set once those are
 		// populated on the table descriptor.
-		if table, _, _, _, _ := descpb.GetDescriptors(&desc); table != nil && table.Offline() {
+		if table, _, _, _, _ := descpb.GetDescriptors(descIt.Value()); table != nil && table.Offline() {
 			offlineInLastBackup[table.GetID()] = struct{}{}
 		}
 	}
@@ -1118,8 +1128,16 @@ func getReintroducedSpans(
 	// change in the previous backup interval put the table offline, then that
 	// backup was offline at the endTime of the last backup.
 	latestTableDescChangeInLastBackup := make(map[descpb.ID]*descpb.TableDescriptor)
-	for _, rev := range lastBackup.DescriptorChanges {
-		if table, _, _, _, _ := descpb.GetDescriptors(rev.Desc); table != nil {
+	descRevIt := lastBackup.NewDescriptorChangesIter(ctx)
+	defer descRevIt.Close()
+	for ; ; descRevIt.Next() {
+		if ok, err := descRevIt.Valid(); err != nil {
+			return nil, err
+		} else if !ok {
+			break
+		}
+
+		if table, _, _, _, _ := descpb.GetDescriptors(descRevIt.Value().Desc); table != nil {
 			if trackedRev, ok := latestTableDescChangeInLastBackup[table.GetID()]; !ok {
 				latestTableDescChangeInLastBackup[table.GetID()] = table
 			} else if trackedRev.Version < table.Version {
@@ -1367,8 +1385,10 @@ func createBackupManifest(
 	execCfg *sql.ExecutorConfig,
 	txn isql.Txn,
 	jobDetails jobspb.BackupDetails,
-	prevBackups []backuppb.BackupManifest,
-) (backuppb.BackupManifest, error) {
+	prevBackups []backupinfo.BackupManifest,
+	user username.SQLUsername,
+	kmsEnv cloud.KMSEnv,
+) (*backupinfo.BackupManifestAdapter, error) {
 	mvccFilter := backuppb.MVCCFilter_Latest
 	if jobDetails.RevisionHistory {
 		mvccFilter = backuppb.MVCCFilter_All
@@ -1380,7 +1400,7 @@ func createBackupManifest(
 	if jobDetails.FullCluster {
 		targetDescs, _, err = fullClusterTargetsBackup(ctx, execCfg, endTime)
 		if err != nil {
-			return backuppb.BackupManifest{}, err
+			return nil, err
 		}
 		descriptorProtos = make([]descpb.Descriptor, len(targetDescs))
 		for i, desc := range targetDescs {
@@ -1417,7 +1437,7 @@ func createBackupManifest(
 		revs, err = getRelevantDescChanges(ctx, execCfg, startTime, endTime, targetDescs,
 			jobDetails.ResolvedCompleteDbs, priorIDs, jobDetails.FullCluster)
 		if err != nil {
-			return backuppb.BackupManifest{}, err
+			return nil, err
 		}
 	}
 
@@ -1427,46 +1447,61 @@ func createBackupManifest(
 		ctx, execCfg.Codec, txn, jobDetails,
 	)
 	if err != nil {
-		return backuppb.BackupManifest{}, err
+		return nil, err
 	}
 	spans = append(spans, tenantSpans...)
 	tenants = append(tenants, tenantInfos...)
 
 	tableSpans, err := spansForAllTableIndexes(execCfg, tables, revs)
 	if err != nil {
-		return backuppb.BackupManifest{}, err
+		return nil, err
 	}
 	spans = append(spans, tableSpans...)
 
 	if len(prevBackups) > 0 {
 		tablesInPrev := make(map[descpb.ID]struct{})
 		dbsInPrev := make(map[descpb.ID]struct{})
-		rawDescs := prevBackups[len(prevBackups)-1].Descriptors
-		for i := range rawDescs {
-			if t, _, _, _, _ := descpb.GetDescriptors(&rawDescs[i]); t != nil {
+
+		descIt := prevBackups[len(prevBackups)-1].NewDescIter(ctx)
+		defer descIt.Close()
+		for ; ; descIt.Next() {
+			if ok, err := descIt.Valid(); err != nil {
+				return nil, err
+			} else if !ok {
+				break
+			}
+
+			if t, _, _, _, _ := descpb.GetDescriptors(descIt.Value()); t != nil {
 				tablesInPrev[t.ID] = struct{}{}
 			}
 		}
-		for _, d := range prevBackups[len(prevBackups)-1].CompleteDbs {
+		for _, d := range prevBackups[len(prevBackups)-1].CompleteDBs() {
 			dbsInPrev[d] = struct{}{}
 		}
 
 		if !jobDetails.FullCluster {
 			if err := checkForNewTables(ctx, execCfg.Codec, execCfg.DB, targetDescs, tablesInPrev, dbsInPrev, priorIDs, startTime, endTime); err != nil {
-				return backuppb.BackupManifest{}, err
+				return nil, err
 			}
 			// Let's check that we're not widening the scope of this backup to an
 			// entire database, even if no tables were created in the meantime.
 			if err := checkForNewCompleteDatabases(targetDescs, jobDetails.ResolvedCompleteDbs, dbsInPrev); err != nil {
-				return backuppb.BackupManifest{}, err
+				return nil, err
 			}
 		}
 
-		newSpans = filterSpans(spans, prevBackups[len(prevBackups)-1].Spans)
+		spanIt := prevBackups[len(prevBackups)-1].NewSpanIter(ctx)
+		defer spanIt.Close()
+
+		if prevSpans, err := backupinfo.CollectToSlice(spanIt); err != nil {
+			return nil, err
+		} else {
+			newSpans = filterSpans(spans, prevSpans)
+		}
 
 		reintroducedSpans, err = getReintroducedSpans(ctx, execCfg, prevBackups, tables, revs, endTime)
 		if err != nil {
-			return backuppb.BackupManifest{}, err
+			return nil, err
 		}
 		newSpans = append(newSpans, reintroducedSpans...)
 	}
@@ -1500,10 +1535,16 @@ func createBackupManifest(
 		StatisticsFilenames: statsFiles,
 		DescriptorCoverage:  coverage,
 	}
-	if err := checkCoverage(ctx, backupManifest.Spans, append(prevBackups, backupManifest)); err != nil {
-		return backuppb.BackupManifest{}, errors.Wrap(err, "new backup would not cover expected time")
+	store, err := execCfg.DistSQLSrv.ExternalStorageFromURI(ctx, jobDetails.URI, user)
+	if err != nil {
+		return nil, err
 	}
-	return backupManifest, nil
+
+	adapter := backupinfo.NewBackupManifestAdapter(&backupManifest, store, jobDetails.EncryptionOptions, kmsEnv, execCfg.DistSQLSrv.ExternalStorage)
+	if err := checkCoverage(ctx, backupManifest.Spans, append(prevBackups, adapter)); err != nil {
+		return nil, errors.Wrap(err, "new backup would not cover expected time")
+	}
+	return adapter, nil
 }
 
 func updateBackupDetails(
@@ -1513,14 +1554,14 @@ func updateBackupDetails(
 	defaultURI string,
 	resolvedSubdir string,
 	urisByLocalityKV map[string]string,
-	prevBackups []backuppb.BackupManifest,
+	prevBackups []backupinfo.BackupManifest,
 	encryptionOptions *jobspb.BackupEncryptionOptions,
 	kmsEnv *backupencryption.BackupKMSEnv,
 ) (jobspb.BackupDetails, error) {
 	var err error
 	var startTime hlc.Timestamp
 	if len(prevBackups) > 0 {
-		startTime = prevBackups[len(prevBackups)-1].EndTime
+		startTime = prevBackups[len(prevBackups)-1].EndTime()
 	}
 
 	// If we didn't load any prior backups from which get encryption info, we

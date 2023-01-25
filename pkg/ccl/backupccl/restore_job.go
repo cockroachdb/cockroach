@@ -139,7 +139,7 @@ func restoreWithRetry(
 	restoreCtx context.Context,
 	execCtx sql.JobExecContext,
 	numNodes int,
-	backupManifests []backuppb.BackupManifest,
+	backupManifests []backupinfo.BackupManifest,
 	backupLocalityInfo []jobspb.RestoreDetails_BackupLocalityInfo,
 	endTime hlc.Timestamp,
 	dataToRestore restorationData,
@@ -238,7 +238,7 @@ func restore(
 	restoreCtx context.Context,
 	execCtx sql.JobExecContext,
 	numNodes int,
-	backupManifests []backuppb.BackupManifest,
+	backupManifests []backupinfo.BackupManifest,
 	backupLocalityInfo []jobspb.RestoreDetails_BackupLocalityInfo,
 	endTime hlc.Timestamp,
 	dataToRestore restorationData,
@@ -270,7 +270,7 @@ func restore(
 		return emptyRowCount, errors.Wrap(err, "resolving locality locations")
 	}
 
-	introducedSpanFrontier, err := createIntroducedSpanFrontier(backupManifests, endTime)
+	introducedSpanFrontier, err := createIntroducedSpanFrontier(restoreCtx, backupManifests, endTime)
 	if err != nil {
 		return emptyRowCount, err
 	}
@@ -282,12 +282,6 @@ func restore(
 	// Pivot the backups, which are grouped by time, into requests for import,
 	// which are grouped by keyrange.
 	highWaterMark := job.Progress().Details.(*jobspb.Progress_Restore).Restore.HighWater
-
-	layerToBackupManifestFileIterFactory, err := getBackupManifestFileIters(restoreCtx, execCtx.ExecCfg(),
-		backupManifests, encryption, kmsEnv)
-	if err != nil {
-		return emptyRowCount, err
-	}
 
 	simpleImportSpans := useSimpleImportSpans.Get(&execCtx.ExecCfg().Settings.SV)
 
@@ -320,7 +314,6 @@ func restore(
 			restoreCtx,
 			dataToRestore.getSpans(),
 			backupManifests,
-			layerToBackupManifestFileIterFactory,
 			backupLocalityMap,
 			introducedSpanFrontier,
 			highWaterMark,
@@ -479,16 +472,17 @@ func loadBackupSQLDescs(
 	details jobspb.RestoreDetails,
 	encryption *jobspb.BackupEncryptionOptions,
 	kmsEnv cloud.KMSEnv,
-) ([]backuppb.BackupManifest, backuppb.BackupManifest, []catalog.Descriptor, int64, error) {
-	backupManifests, sz, err := backupinfo.LoadBackupManifestsAtTime(ctx, mem, details.URIs,
-		p.User(), p.ExecCfg().DistSQLSrv.ExternalStorageFromURI, encryption, kmsEnv, details.EndTime)
+	mode jobspb.BackupManifestReadMode,
+) ([]backupinfo.BackupManifest, backupinfo.BackupManifest, []catalog.Descriptor, int64, error) {
+	backupMetadata, sz, err := backupinfo.LoadBackupManifestsAtTime(ctx, mem, details.URIs,
+		p.User(), p.ExecCfg().DistSQLSrv.ExternalStorageFromURI, p.ExecCfg().DistSQLSrv.ExternalStorage, encryption, kmsEnv, details.EndTime, mode)
 	if err != nil {
-		return nil, backuppb.BackupManifest{}, nil, 0, err
+		return nil, nil, nil, 0, err
 	}
 
-	allDescs, latestBackupManifest, err := backupinfo.LoadSQLDescsFromBackupsAtTime(backupManifests, details.EndTime)
+	allDescs, latestBackupManifest, err := backupinfo.LoadSQLDescsFromBackupsAtTime(ctx, backupMetadata, details.EndTime)
 	if err != nil {
-		return nil, backuppb.BackupManifest{}, nil, 0, err
+		return nil, nil, nil, 0, err
 	}
 
 	for _, m := range details.DatabaseModifiers {
@@ -513,10 +507,10 @@ func loadBackupSQLDescs(
 
 	if err := maybeUpgradeDescriptors(sqlDescs, true /* skipFKsWithNoMatchingTable */); err != nil {
 		mem.Shrink(ctx, sz)
-		return nil, backuppb.BackupManifest{}, nil, 0, err
+		return nil, nil, nil, 0, err
 	}
 
-	return backupManifests, latestBackupManifest, sqlDescs, sz, nil
+	return backupMetadata, latestBackupManifest, sqlDescs, sz, nil
 }
 
 // restoreResumer should only store a reference to the job it's running. State
@@ -569,14 +563,28 @@ func (r *restoreResumer) ForceRealSpan() bool {
 // Any statistics forecasts are ignored.
 func remapAndFilterRelevantStatistics(
 	ctx context.Context,
-	tableStatistics []*stats.TableStatisticProto,
+	manifest backupinfo.BackupManifest,
 	descriptorRewrites jobspb.DescRewriteMap,
 	tableDescs []*descpb.TableDescriptor,
 ) []*stats.TableStatisticProto {
-	relevantTableStatistics := make([]*stats.TableStatisticProto, 0, len(tableStatistics))
+	relevantTableStatistics := make([]*stats.TableStatisticProto, 0)
+	statsIt := manifest.NewStatsIter(ctx)
+	defer statsIt.Close()
 
 	tableHasStatsInBackup := make(map[descpb.ID]struct{})
-	for _, stat := range tableStatistics {
+	for ; ; statsIt.Next() {
+		if ok, err := statsIt.Valid(); !ok {
+			if err != nil {
+				// We don't want to fail the restore if we are unable to resolve
+				// statistics from the backup, since they can be recomputed after the
+				// restore has completed.
+				log.Warningf(ctx, "failed to resolve table statistics from backup during restore: %+v",
+					err.Error())
+			}
+			break
+		}
+
+		stat := statsIt.Value()
 		if statShouldBeIncludedInBackupRestore(stat) {
 			tableHasStatsInBackup[stat.TableID] = struct{}{}
 			if tableRewrite, ok := descriptorRewrites[stat.TableID]; ok {
@@ -1559,7 +1567,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		p.User(),
 	)
 	backupManifests, latestBackupManifest, sqlDescs, memSize, err := loadBackupSQLDescs(
-		ctx, &mem, p, details, details.Encryption, &kmsEnv,
+		ctx, &mem, p, details, details.Encryption, &kmsEnv, details.ManifestReadMode,
 	)
 	if err != nil {
 		return err
@@ -1567,19 +1575,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 	defer func() {
 		mem.Shrink(ctx, memSize)
 	}()
-	backupCodec, err := backupinfo.MakeBackupCodec(latestBackupManifest)
-	if err != nil {
-		return err
-	}
-	lastBackupIndex, err := backupinfo.GetBackupIndexAtTime(backupManifests, details.EndTime)
-	if err != nil {
-		return err
-	}
-	defaultConf, err := cloud.ExternalStorageConfFromURI(details.URIs[lastBackupIndex], p.User())
-	if err != nil {
-		return errors.Wrapf(err, "creating external store configuration")
-	}
-	defaultStore, err := p.ExecCfg().DistSQLSrv.ExternalStorage(ctx, defaultConf)
+	backupCodec, err := backupinfo.MakeBackupCodec(ctx, latestBackupManifest)
 	if err != nil {
 		return err
 	}
@@ -1597,19 +1593,9 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 			return err
 		}
 	}
-	var remappedStats []*stats.TableStatisticProto
-	backupStats, err := backupinfo.GetStatisticsFromBackup(ctx, defaultStore, details.Encryption,
-		&kmsEnv, latestBackupManifest)
-	if err == nil {
-		remappedStats = remapAndFilterRelevantStatistics(ctx, backupStats, details.DescriptorRewrites,
-			details.TableDescs)
-	} else {
-		// We don't want to fail the restore if we are unable to resolve statistics
-		// from the backup, since they can be recomputed after the restore has
-		// completed.
-		log.Warningf(ctx, "failed to resolve table statistics from backup during restore: %+v",
-			err.Error())
-	}
+
+	remappedStats := remapAndFilterRelevantStatistics(ctx, latestBackupManifest, details.DescriptorRewrites,
+		details.TableDescs)
 
 	if len(details.TableDescs) == 0 && len(details.Tenants) == 0 && len(details.TypeDescs) == 0 {
 		// We have no tables to restore (we are restoring an empty DB).

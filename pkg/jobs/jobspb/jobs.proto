@@ -207,6 +207,14 @@ message SchedulePTSChainingRecord {
   PTSAction action = 2;
 }
 
+// We set the default mode to force using backup manifests for mixed version
+// compatibility as ManifestReadMode is passed inside job detail protos.
+enum BackupManifestReadMode {
+  ForceManifest = 0;
+  ForceMetadataSST = 1;
+  PreferMetadataSST = 2;
+}
+
 message BackupDetails {
   // Destination describes the specification of where to backup to, either the
   // path or collection and subdir of that collection. This may not be the same
@@ -444,12 +452,10 @@ message RestoreDetails {
     (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"
   ];
 
-  // NEXT ID: 29.
+  BackupManifestReadMode manifest_read_mode = 29;
+
+  // NEXT ID: 30.
 }
-
-
-
-
 
 message RestoreProgress {
   bytes high_water = 1;

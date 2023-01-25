@@ -14,7 +14,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupencryption"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupinfo"
-	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -192,26 +191,18 @@ func (gssp *generativeSplitAndScatterProcessor) close() {
 
 func makeBackupMetadata(
 	ctx context.Context, flowCtx *execinfra.FlowCtx, spec *execinfrapb.GenerativeSplitAndScatterSpec,
-) ([]backuppb.BackupManifest, layerToBackupManifestFileIterFactory, error) {
-
+) ([]backupinfo.BackupManifest, error) {
 	execCfg := flowCtx.Cfg.ExecutorConfig.(*sql.ExecutorConfig)
-
 	kmsEnv := backupencryption.MakeBackupKMSEnv(execCfg.Settings, &execCfg.ExternalIODirConfig,
 		execCfg.InternalDB, spec.User())
 
 	backupManifests, _, err := backupinfo.LoadBackupManifestsAtTime(ctx, nil, spec.URIs,
-		spec.User(), execCfg.DistSQLSrv.ExternalStorageFromURI, spec.Encryption, &kmsEnv, spec.EndTime)
+		spec.User(), execCfg.DistSQLSrv.ExternalStorageFromURI, execCfg.DistSQLSrv.ExternalStorage, spec.Encryption, &kmsEnv, spec.EndTime, spec.ManifestReadMode)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
-	layerToBackupManifestFileIterFactory, err := getBackupManifestFileIters(ctx, execCfg,
-		backupManifests, spec.Encryption, &kmsEnv)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	return backupManifests, layerToBackupManifestFileIterFactory, nil
+	return backupManifests, nil
 }
 
 type restoreEntryChunk struct {
@@ -235,13 +226,13 @@ func runGenerativeSplitAndScatter(
 	g.GoCtx(func(ctx context.Context) error {
 		defer close(restoreSpanEntriesCh)
 
-		backups, layerToFileIterFactory, err := makeBackupMetadata(ctx,
+		backups, err := makeBackupMetadata(ctx,
 			flowCtx, spec)
 		if err != nil {
 			return err
 		}
 
-		introducedSpanFrontier, err := createIntroducedSpanFrontier(backups, spec.EndTime)
+		introducedSpanFrontier, err := createIntroducedSpanFrontier(ctx, backups, spec.EndTime)
 		if err != nil {
 			return err
 		}
@@ -255,7 +246,6 @@ func runGenerativeSplitAndScatter(
 			ctx,
 			spec.Spans,
 			backups,
-			layerToFileIterFactory,
 			backupLocalityMap,
 			introducedSpanFrontier,
 			spec.HighWater,

@@ -36,6 +36,9 @@ exec-sql
 SET CLUSTER SETTING kv.bulkio.write_metadata_sst.enabled = false;
 ----
 
+exec-sql
+SET CLUSTER SETTING restore.manifest_read.mode = 'forceManifest';
+----
 
 exec-sql
 SET CLUSTER SETTING storage.mvcc.range_tombstones.enabled = false;

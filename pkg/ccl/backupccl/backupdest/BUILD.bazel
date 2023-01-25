@@ -12,7 +12,6 @@ go_library(
     deps = [
         "//pkg/ccl/backupccl/backupbase",
         "//pkg/ccl/backupccl/backupinfo",
-        "//pkg/ccl/backupccl/backuppb",
         "//pkg/ccl/backupccl/backuputils",
         "//pkg/cloud",
         "//pkg/cloud/cloudpb",

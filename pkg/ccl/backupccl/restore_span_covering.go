@@ -11,22 +11,15 @@ package backupccl
 import (
 	"container/heap"
 	"context"
-	"sort"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupencryption"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupinfo"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
-	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
-	"github.com/cockroachdb/cockroach/pkg/cloud"
-	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	spanUtils "github.com/cockroachdb/cockroach/pkg/util/span"
-	"github.com/cockroachdb/errors"
 )
 
 type intervalSpan roachpb.Span
@@ -69,78 +62,6 @@ type backupManifestFileIterator interface {
 	err() error
 	close()
 	reset()
-}
-
-// inMemoryFileIterator iterates over the `BackupManifest_Files` field stored
-// in-memory in the manifest.
-type inMemoryFileIterator struct {
-	manifest *backuppb.BackupManifest
-	curIdx   int
-}
-
-func (i *inMemoryFileIterator) next() (backuppb.BackupManifest_File, bool) {
-	f, hasNext := i.peek()
-	i.curIdx++
-	return f, hasNext
-}
-
-func (i *inMemoryFileIterator) peek() (backuppb.BackupManifest_File, bool) {
-	if i.curIdx >= len(i.manifest.Files) {
-		return backuppb.BackupManifest_File{}, false
-	}
-	f := i.manifest.Files[i.curIdx]
-	return f, true
-}
-
-func (i *inMemoryFileIterator) err() error {
-	return nil
-}
-
-func (i *inMemoryFileIterator) close() {}
-
-func (i *inMemoryFileIterator) reset() {
-	i.curIdx = 0
-}
-
-var _ backupManifestFileIterator = &inMemoryFileIterator{}
-
-// makeBackupManifestFileIterator returns a backupManifestFileIterator that can
-// be used to iterate over the `BackupManifest_Files` of the manifest.
-func makeBackupManifestFileIterator(
-	ctx context.Context,
-	storeFactory cloud.ExternalStorageFactory,
-	m backuppb.BackupManifest,
-	encryption *jobspb.BackupEncryptionOptions,
-	kmsEnv cloud.KMSEnv,
-) (backupManifestFileIterator, error) {
-	if m.HasExternalFilesList {
-		es, err := storeFactory(ctx, m.Dir)
-		if err != nil {
-			return nil, err
-		}
-		storeFile := storageccl.StoreFile{
-			Store:    es,
-			FilePath: backupinfo.BackupMetadataFilesListPath,
-		}
-		var encOpts *roachpb.FileEncryptionOptions
-		if encryption != nil {
-			key, err := backupencryption.GetEncryptionKey(ctx, encryption, kmsEnv)
-			if err != nil {
-				return nil, err
-			}
-			encOpts = &roachpb.FileEncryptionOptions{Key: key}
-		}
-		it, err := backupinfo.NewFileSSTIter(ctx, storeFile, encOpts)
-		if err != nil {
-			return nil, errors.Wrap(err, "failed to create new FileSST iterator")
-		}
-		return &sstFileIterator{fi: it}, nil
-	}
-
-	return &inMemoryFileIterator{
-		manifest: &m,
-		curIdx:   0,
-	}, nil
 }
 
 // sstFileIterator uses an underlying `backupinfo.FileIterator` to read the
@@ -210,9 +131,9 @@ var _ backupManifestFileIterator = &sstFileIterator{}
 // if its current data size plus that of the new span is less than the target
 // size.
 func makeSimpleImportSpans(
+	ctx context.Context,
 	requiredSpans roachpb.Spans,
-	backups []backuppb.BackupManifest,
-	layerToBackupManifestFileIterFactory layerToBackupManifestFileIterFactory,
+	backups []backupinfo.BackupManifest,
 	backupLocalityMap map[int]storeByLocalityKV,
 	introducedSpanFrontier *spanUtils.Frontier,
 	lowWaterMark roachpb.Key,
@@ -222,8 +143,8 @@ func makeSimpleImportSpans(
 		return nil, nil
 	}
 
-	for i := range backups {
-		sort.Sort(backupinfo.BackupFileDescriptors(backups[i].Files))
+	for _, b := range backups {
+		b.SortFiles()
 	}
 	var cover []execinfrapb.RestoreSpanEntry
 
@@ -241,7 +162,7 @@ func makeSimpleImportSpans(
 			var coveredLater bool
 			introducedSpanFrontier.SpanEntries(span, func(s roachpb.Span,
 				ts hlc.Timestamp) (done spanUtils.OpResult) {
-				if backups[layer].EndTime.Less(ts) {
+				if backups[layer].EndTime().Less(ts) {
 					coveredLater = true
 				}
 				return spanUtils.StopMatch
@@ -266,21 +187,26 @@ func makeSimpleImportSpans(
 			// If the manifest for this backup layer is a `BACKUP_METADATA` then
 			// we reach out to ExternalStorage to read the accompanying SST that
 			// contains the BackupManifest_Files.
-			iterFactory := layerToBackupManifestFileIterFactory[layer]
-			it, err := iterFactory()
+			it, err := backups[layer].NewFileIter(ctx)
 			if err != nil {
 				return nil, err
 			}
-			defer it.close()
+			defer it.Close()
 
 			covPos := spanCoverStart
 
 			// lastCovSpanSize is the size of files added to the right-most span of
 			// the cover so far.
 			var lastCovSpanSize int64
-			for f, hasNext := it.next(); hasNext; f, hasNext = it.next() {
+			for ; ; it.Next() {
+				if ok, err := it.Valid(); err != nil {
+					return nil, err
+				} else if !ok {
+					break
+				}
+				f := it.Value()
 				if sp := span.Intersect(f.Span); sp.Valid() {
-					fileSpec := execinfrapb.RestoreFileSpec{Path: f.Path, Dir: backups[layer].Dir}
+					fileSpec := execinfrapb.RestoreFileSpec{Path: f.Path, Dir: backups[layer].Dir()}
 					if dir, ok := backupLocalityMap[layer][f.LocalityKV]; ok {
 						fileSpec = execinfrapb.RestoreFileSpec{Path: f.Path, Dir: dir}
 					}
@@ -343,9 +269,6 @@ func makeSimpleImportSpans(
 					break
 				}
 			}
-			if err := it.err(); err != nil {
-				return nil, err
-			}
 		}
 	}
 
@@ -357,7 +280,7 @@ func makeSimpleImportSpans(
 // See ReintroducedSpans( ) for more information. Note: this function assumes
 // that manifests are sorted in increasing EndTime.
 func createIntroducedSpanFrontier(
-	manifests []backuppb.BackupManifest, asOf hlc.Timestamp,
+	ctx context.Context, manifests []backupinfo.BackupManifest, asOf hlc.Timestamp,
 ) (*spanUtils.Frontier, error) {
 	introducedSpanFrontier, err := spanUtils.MakeFrontier(roachpb.Span{})
 	if err != nil {
@@ -367,11 +290,23 @@ func createIntroducedSpanFrontier(
 		if i == 0 {
 			continue
 		}
-		if !asOf.IsEmpty() && asOf.Less(m.StartTime) {
+		if !asOf.IsEmpty() && asOf.Less(m.StartTime()) {
 			break
 		}
-		if err := introducedSpanFrontier.AddSpansAt(m.EndTime, m.IntroducedSpans...); err != nil {
-			return nil, err
+
+		introducedSpansIt := m.NewIntroducedSpanIter(ctx)
+		defer introducedSpansIt.Close()
+
+		for ; ; introducedSpansIt.Next() {
+			if ok, err := introducedSpansIt.Valid(); err != nil {
+				return nil, err
+			} else if !ok {
+				break
+			}
+
+			if err := introducedSpanFrontier.AddSpansAt(m.EndTime(), introducedSpansIt.Value()); err != nil {
+				return nil, err
+			}
 		}
 	}
 	return introducedSpanFrontier, nil
@@ -382,32 +317,6 @@ func makeEntry(start, end roachpb.Key, f execinfrapb.RestoreFileSpec) execinfrap
 		Span:  roachpb.Span{Key: start, EndKey: end},
 		Files: []execinfrapb.RestoreFileSpec{f},
 	}
-}
-
-type layerToBackupManifestFileIterFactory map[int]func() (backupManifestFileIterator, error)
-
-// getBackupManifestFileIters constructs a mapping from the idx of the backup
-// layer to a factory method to construct a backupManifestFileIterator. This
-// iterator can be used to iterate over the `BackupManifest_Files` in a
-// `BackupManifest`. It is the callers responsibility to close the returned
-// iterators.
-func getBackupManifestFileIters(
-	ctx context.Context,
-	execCfg *sql.ExecutorConfig,
-	backupManifests []backuppb.BackupManifest,
-	encryption *jobspb.BackupEncryptionOptions,
-	kmsEnv cloud.KMSEnv,
-) (map[int]func() (backupManifestFileIterator, error), error) {
-	layerToFileIterFactory := make(map[int]func() (backupManifestFileIterator, error))
-	for layer := range backupManifests {
-		layer := layer
-		layerToFileIterFactory[layer] = func() (backupManifestFileIterator, error) {
-			manifest := backupManifests[layer]
-			return makeBackupManifestFileIterator(ctx, execCfg.DistSQLSrv.ExternalStorage, manifest, encryption, kmsEnv)
-		}
-	}
-
-	return layerToFileIterFactory, nil
 }
 
 // generateAndSendImportSpans partitions the spans of requiredSpans into a
@@ -454,8 +363,7 @@ func getBackupManifestFileIters(
 func generateAndSendImportSpans(
 	ctx context.Context,
 	requiredSpans roachpb.Spans,
-	backups []backuppb.BackupManifest,
-	layerToBackupManifestFileIterFactory layerToBackupManifestFileIterFactory,
+	backups []backupinfo.BackupManifest,
 	backupLocalityMap map[int]storeByLocalityKV,
 	introducedSpanFrontier *spanUtils.Frontier,
 	lowWaterMark roachpb.Key,
@@ -464,7 +372,7 @@ func generateAndSendImportSpans(
 	useSimpleImportSpans bool,
 ) error {
 	if useSimpleImportSpans {
-		importSpans, err := makeSimpleImportSpans(requiredSpans, backups, layerToBackupManifestFileIterFactory, backupLocalityMap, introducedSpanFrontier, lowWaterMark, targetSize)
+		importSpans, err := makeSimpleImportSpans(ctx, requiredSpans, backups, backupLocalityMap, introducedSpanFrontier, lowWaterMark, targetSize)
 		if err != nil {
 			return err
 		}
@@ -475,14 +383,14 @@ func generateAndSendImportSpans(
 		return nil
 	}
 
-	startEndKeyIt, err := newFileSpanStartAndEndKeyIterator(backups, layerToBackupManifestFileIterFactory)
+	startEndKeyIt, err := newFileSpanStartAndEndKeyIterator(ctx, backups)
 	if err != nil {
 		return err
 	}
 
-	fileIterByLayer := make([]backupManifestFileIterator, 0, len(backups))
+	fileIterByLayer := make([]backupinfo.Iterator[*backuppb.BackupManifest_File], 0, len(backups))
 	for layer := range backups {
-		iter, err := layerToBackupManifestFileIterFactory[layer]()
+		iter, err := backups[layer].NewFileIter(ctx)
 		if err != nil {
 			return err
 		}
@@ -494,7 +402,7 @@ func generateAndSendImportSpans(
 	// the cover so far.
 	var lastCovSpanSize int64
 	var lastCovSpan roachpb.Span
-	var covFilesByLayer [][]backuppb.BackupManifest_File
+	var covFilesByLayer [][]*backuppb.BackupManifest_File
 	var firstInSpan bool
 
 	flush := func() {
@@ -504,7 +412,7 @@ func generateAndSendImportSpans(
 
 		for layer := range covFilesByLayer {
 			for _, f := range covFilesByLayer[layer] {
-				fileSpec := execinfrapb.RestoreFileSpec{Path: f.Path, Dir: backups[layer].Dir}
+				fileSpec := execinfrapb.RestoreFileSpec{Path: f.Path, Dir: backups[layer].Dir()}
 				if dir, ok := backupLocalityMap[layer][f.LocalityKV]; ok {
 					fileSpec = execinfrapb.RestoreFileSpec{Path: f.Path, Dir: dir}
 				}
@@ -531,7 +439,7 @@ func generateAndSendImportSpans(
 			var coveredLater bool
 			introducedSpanFrontier.SpanEntries(span, func(s roachpb.Span,
 				ts hlc.Timestamp) (done spanUtils.OpResult) {
-				if backups[layer].EndTime.Less(ts) {
+				if backups[layer].EndTime().Less(ts) {
 					coveredLater = true
 				}
 				return spanUtils.StopMatch
@@ -586,7 +494,7 @@ func generateAndSendImportSpans(
 				return err
 			}
 
-			var filesByLayer [][]backuppb.BackupManifest_File
+			var filesByLayer [][]*backuppb.BackupManifest_File
 			var covSize int64
 			var newCovFilesSize int64
 
@@ -688,16 +596,16 @@ func generateAndSendImportSpans(
 // [a, b, c, e, f, g]
 type fileSpanStartAndEndKeyIterator struct {
 	heap     *fileHeap
-	allIters []backupManifestFileIterator
+	allIters []backupinfo.Iterator[*backuppb.BackupManifest_File]
 	err      error
 }
 
 func newFileSpanStartAndEndKeyIterator(
-	backups []backuppb.BackupManifest, layerToIterFactory layerToBackupManifestFileIterFactory,
+	ctx context.Context, backups []backupinfo.BackupManifest,
 ) (*fileSpanStartAndEndKeyIterator, error) {
 	it := &fileSpanStartAndEndKeyIterator{}
 	for layer := range backups {
-		iter, err := layerToIterFactory[layer]()
+		iter, err := backups[layer].NewFileIter(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -724,14 +632,13 @@ func (i *fileSpanStartAndEndKeyIterator) next() {
 		}
 
 		if minItem.cmpEndKey {
-			file, ok := minItem.fileIter.next()
-			if err := minItem.fileIter.err(); err != nil {
+			minItem.fileIter.Next()
+			if ok, err := minItem.fileIter.Valid(); err != nil {
 				i.err = err
 				return
-			}
-			if ok {
+			} else if ok {
 				minItem.cmpEndKey = false
-				minItem.file = file
+				minItem.file = minItem.fileIter.Value()
 				heap.Push(i.heap, minItem)
 			}
 		} else {
@@ -760,27 +667,25 @@ func (i *fileSpanStartAndEndKeyIterator) reset() {
 	i.err = nil
 
 	for _, iter := range i.allIters {
-		iter.reset()
-
-		file, ok := iter.next()
-		if err := iter.err(); err != nil {
+		if ok, err := iter.Valid(); err != nil {
 			i.err = err
 			return
+		} else if !ok {
+			continue
 		}
-		if ok {
-			i.heap.fileHeapItems = append(i.heap.fileHeapItems, fileHeapItem{
-				fileIter:  iter,
-				file:      file,
-				cmpEndKey: false,
-			})
-		}
+
+		i.heap.fileHeapItems = append(i.heap.fileHeapItems, fileHeapItem{
+			fileIter:  iter,
+			file:      iter.Value(),
+			cmpEndKey: false,
+		})
 	}
 	heap.Init(i.heap)
 }
 
 type fileHeapItem struct {
-	fileIter  backupManifestFileIterator
-	file      backuppb.BackupManifest_File
+	fileIter  backupinfo.Iterator[*backuppb.BackupManifest_File]
+	file      *backuppb.BackupManifest_File
 	cmpEndKey bool
 }
 
@@ -825,19 +730,23 @@ func (f *fileHeap) Pop() any {
 }
 
 func getNewIntersectingFilesByLayer(
-	span roachpb.Span, layersCoveredLater map[int]bool, fileIters []backupManifestFileIterator,
-) ([][]backuppb.BackupManifest_File, error) {
-	var files [][]backuppb.BackupManifest_File
+	span roachpb.Span,
+	layersCoveredLater map[int]bool,
+	fileIters []backupinfo.Iterator[*backuppb.BackupManifest_File],
+) ([][]*backuppb.BackupManifest_File, error) {
+	var files [][]*backuppb.BackupManifest_File
 
 	for l, iter := range fileIters {
-		var layerFiles []backuppb.BackupManifest_File
+		var layerFiles []*backuppb.BackupManifest_File
 		if !layersCoveredLater[l] {
-			for ; ; iter.next() {
-				f, ok := iter.peek()
-				if !ok {
+			for ; ; iter.Next() {
+				if ok, err := iter.Valid(); err != nil {
+					return nil, err
+				} else if !ok {
 					break
 				}
 
+				f := iter.Value()
 				if span.Overlaps(f.Span) {
 					layerFiles = append(layerFiles, f)
 				}
@@ -845,9 +754,6 @@ func getNewIntersectingFilesByLayer(
 				if span.EndKey.Compare(f.Span.Key) <= 0 {
 					break
 				}
-			}
-			if iter.err() != nil {
-				return nil, iter.err()
 			}
 		}
 		files = append(files, layerFiles)

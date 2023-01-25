@@ -19,7 +19,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupinfo"
-	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuputils"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
@@ -120,6 +119,9 @@ func ResolveDest(
 	execCfg *sql.ExecutorConfig,
 ) (ResolvedDestination, error) {
 	makeCloudStorage := execCfg.DistSQLSrv.ExternalStorageFromURI
+	// TODO(rui): this will be behind a cluster setting when backup can use the
+	// metadata SST.
+	manifestReadMode := jobspb.BackupManifestReadMode_ForceManifest
 
 	defaultURI, _, err := GetURIsByLocalityKV(dest.To, "")
 	if err != nil {
@@ -217,7 +219,8 @@ func ResolveDest(
 		execCfg,
 		dest.IncrementalStorage,
 		dest.To,
-		chosenSuffix)
+		chosenSuffix,
+		manifestReadMode)
 	if err != nil {
 		return ResolvedDestination{}, err
 	}
@@ -232,7 +235,7 @@ func ResolveDest(
 	}
 	defer incrementalStore.Close()
 
-	priors, err := FindPriorBackups(ctx, incrementalStore, OmitManifest)
+	priors, err := FindPriorBackups(ctx, incrementalStore, OmitManifest, manifestReadMode)
 	if err != nil {
 		return ResolvedDestination{}, errors.Wrap(err, "adjusting backup destination to append new layer to existing backup")
 	}
@@ -506,17 +509,19 @@ func ResolveBackupManifests(
 	mem *mon.BoundAccount,
 	baseStores []cloud.ExternalStorage,
 	incStores []cloud.ExternalStorage,
-	mkStore cloud.ExternalStorageFromURIFactory,
+	uriStoreFactory cloud.ExternalStorageFromURIFactory,
+	storeFactory cloud.ExternalStorageFactory,
 	fullyResolvedBaseDirectory []string,
 	fullyResolvedIncrementalsDirectory []string,
 	endTime hlc.Timestamp,
 	encryption *jobspb.BackupEncryptionOptions,
 	kmsEnv cloud.KMSEnv,
 	user username.SQLUsername,
+	mode jobspb.BackupManifestReadMode,
 ) (
 	defaultURIs []string,
 	// mainBackupManifests contains the manifest located at each defaultURI in the backup chain.
-	mainBackupManifests []backuppb.BackupManifest,
+	mainBackupManifests []backupinfo.BackupManifest,
 	localityInfo []jobspb.RestoreDetails_BackupLocalityInfo,
 	reservedMemSize int64,
 	_ error,
@@ -531,7 +536,7 @@ func ResolveBackupManifests(
 		}
 	}()
 	baseManifest, memSize, err := backupinfo.ReadBackupManifestFromStore(ctx, mem, baseStores[0],
-		encryption, kmsEnv)
+		encryption, kmsEnv, storeFactory, mode)
 	if err != nil {
 		return nil, nil, nil, 0, err
 	}
@@ -539,7 +544,7 @@ func ResolveBackupManifests(
 
 	var incrementalBackups []string
 	if len(incStores) > 0 {
-		incrementalBackups, err = FindPriorBackups(ctx, incStores[0], includeManifest)
+		incrementalBackups, err = FindPriorBackups(ctx, incStores[0], includeManifest, mode)
 		if err != nil {
 			return nil, nil, nil, 0, err
 		}
@@ -547,7 +552,7 @@ func ResolveBackupManifests(
 	numLayers := len(incrementalBackups) + 1
 
 	defaultURIs = make([]string, numLayers)
-	mainBackupManifests = make([]backuppb.BackupManifest, numLayers)
+	mainBackupManifests = make([]backupinfo.BackupManifest, numLayers)
 	localityInfo = make([]jobspb.RestoreDetails_BackupLocalityInfo, numLayers)
 
 	// Setup the full backup layer explicitly.
@@ -589,7 +594,7 @@ func ResolveBackupManifests(
 		// Load the default backup manifests for each backup layer, this is done
 		// concurrently.
 		defaultManifestsForEachLayer, memSize, err := backupinfo.GetBackupManifests(ctx, mem, user,
-			mkStore, defaultURIs, encryption, kmsEnv)
+			uriStoreFactory, storeFactory, defaultURIs, encryption, kmsEnv, mode)
 		if err != nil {
 			return nil, nil, nil, 0, err
 		}
@@ -639,16 +644,18 @@ func ResolveBackupManifests(
 func DeprecatedResolveBackupManifestsExplicitIncrementals(
 	ctx context.Context,
 	mem *mon.BoundAccount,
-	mkStore cloud.ExternalStorageFromURIFactory,
+	uriStoreFactory cloud.ExternalStorageFromURIFactory,
+	storeFactory cloud.ExternalStorageFactory,
 	from [][]string,
 	endTime hlc.Timestamp,
 	encryption *jobspb.BackupEncryptionOptions,
 	kmsEnv cloud.KMSEnv,
 	user username.SQLUsername,
+	mode jobspb.BackupManifestReadMode,
 ) (
 	defaultURIs []string,
 	// mainBackupManifests contains the manifest located at each defaultURI in the backup chain.
-	mainBackupManifests []backuppb.BackupManifest,
+	mainBackupManifests []backupinfo.BackupManifest,
 	localityInfo []jobspb.RestoreDetails_BackupLocalityInfo,
 	reservedMemSize int64,
 	_ error,
@@ -664,7 +671,7 @@ func DeprecatedResolveBackupManifestsExplicitIncrementals(
 
 	defaultURIs = make([]string, len(from))
 	localityInfo = make([]jobspb.RestoreDetails_BackupLocalityInfo, len(from))
-	mainBackupManifests = make([]backuppb.BackupManifest, len(from))
+	mainBackupManifests = make([]backupinfo.BackupManifest, len(from))
 
 	var err error
 	for i, uris := range from {
@@ -673,7 +680,7 @@ func DeprecatedResolveBackupManifestsExplicitIncrementals(
 
 		stores := make([]cloud.ExternalStorage, len(uris))
 		for j := range uris {
-			stores[j], err = mkStore(ctx, uris[j], user)
+			stores[j], err = uriStoreFactory(ctx, uris[j], user)
 			if err != nil {
 				return nil, nil, nil, 0, errors.Wrapf(err, "export configuration")
 			}
@@ -682,7 +689,7 @@ func DeprecatedResolveBackupManifestsExplicitIncrementals(
 
 		var memSize int64
 		mainBackupManifests[i], memSize, err = backupinfo.ReadBackupManifestFromStore(ctx, mem,
-			stores[0], encryption, kmsEnv)
+			stores[0], encryption, kmsEnv, storeFactory, mode)
 		if err != nil {
 			return nil, nil, nil, 0, err
 		}

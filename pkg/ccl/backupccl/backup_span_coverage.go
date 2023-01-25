@@ -11,7 +11,7 @@ package backupccl
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupinfo"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/errors"
@@ -19,7 +19,7 @@ import (
 
 // checkCoverage verifies that spans are covered by a given chain of backups.
 func checkCoverage(
-	ctx context.Context, spans []roachpb.Span, backups []backuppb.BackupManifest,
+	ctx context.Context, spans []roachpb.Span, backups []backupinfo.BackupManifest,
 ) error {
 	if len(spans) == 0 {
 		return nil
@@ -35,8 +35,17 @@ func checkCoverage(
 	// would hold back the whole frontier at 0 until it is reached, so run through
 	// all layers first to unconditionally advance the introduced spans.
 	for i := range backups {
-		for _, sp := range backups[i].IntroducedSpans {
-			if _, err := frontier.Forward(sp, backups[i].StartTime); err != nil {
+		introducedSpansIt := backups[i].NewIntroducedSpanIter(ctx)
+		defer introducedSpansIt.Close()
+
+		for ; ; introducedSpansIt.Next() {
+			if ok, err := introducedSpansIt.Valid(); err != nil {
+				return err
+			} else if !ok {
+				break
+			}
+
+			if _, err := frontier.Forward(introducedSpansIt.Value(), backups[i].StartTime()); err != nil {
 				return err
 			}
 		}
@@ -49,7 +58,7 @@ func checkCoverage(
 		// time, so before actually advance those spans in the frontier to that end
 		// time, assert that it is starting at the start time, i.e. that this
 		// backup does indeed pick up where the prior backup left off.
-		if start, required := frontier.Frontier(), backups[i].StartTime; start.Less(required) {
+		if start, required := frontier.Frontier(), backups[i].StartTime(); start.Less(required) {
 			s := frontier.PeekFrontierSpan()
 			return errors.Errorf(
 				"no backup covers time [%s,%s) for range [%s,%s) (or backups listed out of order)",
@@ -58,14 +67,23 @@ func checkCoverage(
 		}
 
 		// Advance every span the backup covers to its end time.
-		for _, s := range backups[i].Spans {
-			if _, err := frontier.Forward(s, backups[i].EndTime); err != nil {
+		spanIt := backups[i].NewSpanIter(ctx)
+		defer spanIt.Close()
+
+		for ; ; spanIt.Next() {
+			if ok, err := spanIt.Valid(); err != nil {
+				return err
+			} else if !ok {
+				break
+			}
+
+			if _, err := frontier.Forward(spanIt.Value(), backups[i].EndTime()); err != nil {
 				return err
 			}
 		}
 
 		// Check that the backup actually covered all the required spans.
-		if end, required := frontier.Frontier(), backups[i].EndTime; end.Less(required) {
+		if end, required := frontier.Frontier(), backups[i].EndTime(); end.Less(required) {
 			return errors.Errorf("expected previous backups to cover until time %v, got %v (e.g. span %v)",
 				required, end, frontier.PeekFrontierSpan())
 		}

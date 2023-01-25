@@ -22,7 +22,7 @@ BACKUP INTO 'nodelocal://1/full3' WITH kms='testkms:///cmk?AUTH=implicit';
 ----
 
 # No passphrase results in an error.
-exec-sql expect-error-regex=(file appears encrypted)
+exec-sql expect-error-regex=(invalid table \(bad magic number\)|file appears encrypted)
 SELECT object_name, object_type, backup_type FROM [SHOW BACKUP FROM LATEST IN 'nodelocal://1/full']
 ----
 regex matches error
@@ -39,7 +39,7 @@ public schema full
 public schema full
 public schema full
 
-exec-sql expect-error-regex=(file appears encrypted)
+exec-sql expect-error-regex=(invalid table \(bad magic number\)|file appears encrypted)
 SELECT object_name, object_type, backup_type FROM [SHOW BACKUP FROM LATEST IN 'nodelocal://1/full2'
 WITH incremental_location='nodelocal://1/inc'] WHERE database_name <> 'system' ORDER BY (backup_type, object_name);
 ----
