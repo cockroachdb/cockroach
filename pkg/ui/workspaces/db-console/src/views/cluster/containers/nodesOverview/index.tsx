@@ -268,6 +268,12 @@ export class NodeList extends React.Component<LiveNodeListProps> {
     {
       key: "uptime",
       dataIndex: "uptime",
+      render: (_text: string, record: NodeStatusRow) =>
+        _text +
+        (record.status === AggregatedNodeStatus.DEAD ||
+        record.status === LivenessStatus.NODE_STATUS_DEAD
+          ? " (stale)"
+          : ""),
       title: <UptimeTooltip>Uptime</UptimeTooltip>,
       sorter: true,
       className: "column--align-right",
@@ -277,6 +283,12 @@ export class NodeList extends React.Component<LiveNodeListProps> {
     {
       key: "replicas",
       dataIndex: "replicas",
+      render: (_text: string, record: NodeStatusRow) =>
+        _text +
+        (record.status === AggregatedNodeStatus.DEAD ||
+        record.status === LivenessStatus.NODE_STATUS_DEAD
+          ? " (stale)"
+          : ""),
       title: <ReplicasTooltip>Replicas</ReplicasTooltip>,
       sorter: true,
       className: "column--align-right",
@@ -290,7 +302,11 @@ export class NodeList extends React.Component<LiveNodeListProps> {
         </NodelistCapacityUsageTooltip>
       ),
       render: (_text: string, record: NodeStatusRow) =>
-        util.Percentage(record.usedCapacity, record.availableCapacity),
+        util.Percentage(record.usedCapacity, record.availableCapacity) +
+        (record.status === AggregatedNodeStatus.DEAD ||
+        record.status === LivenessStatus.NODE_STATUS_DEAD
+          ? " (stale)"
+          : ""),
       sorter: (a: NodeStatusRow, b: NodeStatusRow) =>
         a.usedCapacity / a.availableCapacity -
         b.usedCapacity / b.availableCapacity,
@@ -301,7 +317,11 @@ export class NodeList extends React.Component<LiveNodeListProps> {
       key: "memoryUse",
       title: <MemoryUseTooltip>Memory Use</MemoryUseTooltip>,
       render: (_text: string, record: NodeStatusRow) =>
-        util.Percentage(record.usedMemory, record.availableMemory),
+        util.Percentage(record.usedMemory, record.availableMemory) +
+        (record.status === AggregatedNodeStatus.DEAD ||
+        record.status === LivenessStatus.NODE_STATUS_DEAD
+          ? " (stale)"
+          : ""),
       sorter: (a: NodeStatusRow, b: NodeStatusRow) =>
         a.usedMemory / a.availableMemory - b.usedMemory / b.availableMemory,
       className: "column--align-right",
