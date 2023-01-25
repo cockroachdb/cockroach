@@ -1091,7 +1091,8 @@ DROP VIEW v1ev CASCADE;
 
 query IT
 SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID'
-FROM system.eventlog;
+FROM system.eventlog
+ORDER BY "timestamp", info DESC
 ----
 1  {"CascadeDroppedViews": ["test.public.v4ev"], "EventType": "drop_view", "Statement": "DROP VIEW test.public.v1ev CASCADE", "Tag": "DROP VIEW", "User": "root", "ViewName": "test.public.v1ev"}
 1  {"EventType": "finish_schema_change", "InstanceID": 1}
