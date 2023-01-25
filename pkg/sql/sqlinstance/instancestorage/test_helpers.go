@@ -138,25 +138,15 @@ func (s *Storage) GetInstanceDataForTest(
 // testing purposes.
 func (s *Storage) GetAllInstancesDataForTest(
 	ctx context.Context,
-) (instances []sqlinstance.InstanceInfo, err error) {
+) ([]sqlinstance.InstanceInfo, error) {
 	var rows []instancerow
 	ctx = multitenant.WithTenantCostControlExemption(ctx)
-	err = s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+	if err := s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		var err error
 		rows, err = s.getInstanceRows(ctx, nil /*global*/, txn, lock.WaitPolicy_Block)
 		return err
-	})
-	if err != nil {
+	}); err != nil {
 		return nil, err
 	}
-	for _, instance := range rows {
-		instanceInfo := sqlinstance.InstanceInfo{
-			InstanceID:      instance.instanceID,
-			InstanceRPCAddr: instance.rpcAddr,
-			InstanceSQLAddr: instance.sqlAddr,
-			SessionID:       instance.sessionID,
-			Locality:        instance.locality,
-		}
-		instances = append(instances, instanceInfo)
-	}
-	return instances, nil
+	return makeInstanceInfos(rows), nil
 }
