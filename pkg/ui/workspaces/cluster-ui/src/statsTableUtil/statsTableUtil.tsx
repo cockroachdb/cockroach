@@ -46,6 +46,7 @@ export const statisticsColumnLabels = {
   applicationName: "Application Name",
   bytesRead: "Bytes Read",
   contention: "Contention Time",
+  cpu: "CPU Time",
   database: "Database",
   diagnostics: "Diagnostics",
   executionCount: "Execution Count",
@@ -629,6 +630,25 @@ export const statisticsTableTitles: StatisticTableTitleType = {
         }
       >
         {getLabel("contention")}
+      </Tooltip>
+    );
+  },
+  cpu: (_: StatisticType) => {
+    return (
+      <Tooltip
+        placement="bottom"
+        style="tableTitle"
+        content={
+          <>
+            <p>
+              Average CPU time spent executing within the specified time
+              interval. The gray bar indicates mean CPU time. The blue bar
+              indicates one standard deviation from the mean.
+            </p>
+          </>
+        }
+      >
+        {getLabel("cpu")}
       </Tooltip>
     );
   },

@@ -27,6 +27,7 @@ import {
   bytesReadBarChart,
   latencyBarChart,
   contentionBarChart,
+  cpuBarChart,
   maxMemUsageBarChart,
   networkBytesBarChart,
   retryBarChart,
@@ -135,6 +136,7 @@ export function makeStatementsColumns(
     statements,
     sampledExecStatsBarChartOptions,
   );
+  const cpuBar = cpuBarChart(statements, sampledExecStatsBarChartOptions);
   const maxMemUsageBar = maxMemUsageBarChart(
     statements,
     sampledExecStatsBarChartOptions,
@@ -216,6 +218,13 @@ export function makeStatementsColumns(
       cell: contentionBar,
       sort: (stmt: AggregateStatistics) =>
         FixLong(Number(stmt.stats.exec_stats.contention_time.mean)),
+    },
+    {
+      name: "cpu",
+      title: statisticsTableTitles.cpu(statType),
+      cell: cpuBar,
+      sort: (stmt: AggregateStatistics) =>
+        FixLong(Number(stmt.stats.exec_stats.cpu_nanos.mean)),
     },
     {
       name: "maxMemUsage",
