@@ -79,11 +79,13 @@ ElementState:
     descriptorId: 110
     privileges: "2"
     userName: admin
+    withGrantOption: "2"
   Status: PUBLIC
 - UserPrivileges:
     descriptorId: 110
     privileges: "2"
     userName: root
+    withGrantOption: "2"
   Status: PUBLIC
 - ObjectParent:
     objectId: 110
@@ -117,7 +119,6 @@ ElementState:
     functionId: 110
     lang:
       lang: SQL
-    usesFunctionIds: []
     usesSequenceIds:
     - 105
     usesTables:
