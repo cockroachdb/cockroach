@@ -73,8 +73,6 @@ func TestCanHaveCompositeKeyEncoding(t *testing.T) {
 		{types.VarChar, false},
 		{types.MakeTuple([]*types.T{types.Int, types.Date}), false},
 		{types.MakeTuple([]*types.T{types.Float, types.Date}), true},
-		// Test that a made up type with a bogus family will return true.
-		{&types.T{InternalType: types.InternalType{Family: 1 << 29}}, true},
 	} {
 		// Note that sprint is used here because the bogus type family will
 		// panic when formatting to a string and sprint will catch that.
@@ -82,4 +80,9 @@ func TestCanHaveCompositeKeyEncoding(t *testing.T) {
 			require.Equal(t, tc.exp, CanHaveCompositeKeyEncoding(tc.typ))
 		})
 	}
+	// Test that a made up type with a bogus family will panic.
+	t.Run("bogus", func(t *testing.T) {
+		bogusType := &types.T{InternalType: types.InternalType{Family: 1 << 29}}
+		require.Panics(t, func() { CanHaveCompositeKeyEncoding(bogusType) })
+	})
 }
