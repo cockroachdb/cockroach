@@ -326,3 +326,61 @@ func TestNodeLivenessDecommissionedCallback(t *testing.T) {
 
 	}
 }
+
+// TestNodeLivenessNodeCount tests GetNodeCount() and GetNodeCountWithOverrides,
+// which are critical for computing the number of needed voters for a range.
+func TestNodeLivenessNodeCount(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	numNodes := 5
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, numNodes, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
+
+	// At this point StartTestCluster has waited for all nodes to become live.
+	nl1 := tc.Servers[0].NodeLiveness().(*liveness.NodeLiveness)
+	require.Equal(t, numNodes, nl1.GetNodeCount())
+
+	// Mark n5 as decommissioning, which should reduce node count.
+	chg, err := nl1.SetMembershipStatus(ctx, 5, livenesspb.MembershipStatus_DECOMMISSIONING)
+	require.NoError(t, err)
+	require.True(t, chg)
+	testutils.SucceedsSoon(t, func() error {
+		l, ok := nl1.GetLiveness(5)
+		if !ok || !l.Membership.Decommissioning() {
+			return errors.Errorf("expected n5 to be decommissioning")
+		}
+		numNodes -= 1
+		return nil
+	})
+	require.Equal(t, numNodes, nl1.GetNodeCount())
+
+	// Mark n5 as decommissioning -> decommissioned, which should not change node count.
+	chg, err = nl1.SetMembershipStatus(ctx, 5, livenesspb.MembershipStatus_DECOMMISSIONED)
+	require.NoError(t, err)
+	require.True(t, chg)
+	testutils.SucceedsSoon(t, func() error {
+		l, ok := nl1.GetLiveness(5)
+		if !ok || !l.Membership.Decommissioned() {
+			return errors.Errorf("expected n5 to be decommissioned")
+		}
+		return nil
+	})
+	require.Equal(t, numNodes, nl1.GetNodeCount())
+
+	// Override n5 as decommissioning, which should not change node count.
+	overrides := map[roachpb.NodeID]livenesspb.NodeLivenessStatus{
+		5: livenesspb.NodeLivenessStatus_DECOMMISSIONING,
+	}
+	require.Equal(t, numNodes, nl1.GetNodeCountWithOverrides(nil))
+	require.Equal(t, numNodes, nl1.GetNodeCountWithOverrides(overrides))
+
+	// Override n4 as dead, which should not change node count.
+	overrides[4] = livenesspb.NodeLivenessStatus_DEAD
+	require.Equal(t, numNodes, nl1.GetNodeCountWithOverrides(overrides))
+
+	// Override n3 as decommissioning, which should reduce node count.
+	overrides[3] = livenesspb.NodeLivenessStatus_DECOMMISSIONING
+	require.Equal(t, numNodes-1, nl1.GetNodeCountWithOverrides(overrides))
+}
