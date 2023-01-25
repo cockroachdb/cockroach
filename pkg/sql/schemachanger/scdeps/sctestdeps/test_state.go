@@ -81,7 +81,9 @@ type TestState struct {
 	// descriptors.
 	approximateTimestamp time.Time
 
-	catalogChanges catalogChanges
+	catalogChanges     catalogChanges
+	idGenerator        eval.DescIDGenerator
+	refProviderFactory scbuild.ReferenceProviderFactory
 }
 
 type catalogChanges struct {
@@ -225,6 +227,14 @@ func (s *TestState) DescriptorCommentGetter() scbuild.CommentGetter {
 // ClientNoticeSender implements scbuild.Dependencies.
 func (s *TestState) ClientNoticeSender() eval.ClientNoticeSender {
 	return &faketreeeval.DummyClientNoticeSender{}
+}
+
+func (s *TestState) DescIDGenerator() eval.DescIDGenerator {
+	return s.idGenerator
+}
+
+func (s *TestState) ReferenceProviderFactory() scbuild.ReferenceProviderFactory {
+	return s.refProviderFactory
 }
 
 func (s *TestState) descriptorDiff(desc catalog.Descriptor) string {

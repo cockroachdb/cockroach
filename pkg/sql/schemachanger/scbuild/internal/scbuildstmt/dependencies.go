@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
@@ -86,6 +87,11 @@ type BuilderState interface {
 	// log for the existing target corresponding to the provided element.
 	// An error is thrown if no such target exists.
 	LogEventForExistingTarget(element scpb.Element)
+
+	// GenerateUniqueDescID returns the next available descriptor id for a new
+	// descriptor and mark the new id as being used for new descriptor, so that
+	// the builder knows to avoid loading existing descriptor for decomposition.
+	GenerateUniqueDescID() catid.DescID
 }
 
 // EventLogState encapsulates the state of the metadata to decorate the eventlog
@@ -328,4 +334,16 @@ type NameResolver interface {
 
 	// ResolveConstraint retrieves a constraint by name and returns its elements.
 	ResolveConstraint(relationID catid.DescID, constraintName tree.Name, p ResolveParams) ElementResultSet
+}
+
+// ReferenceProvider provides all referenced objects with in current DDL
+// statement. For example, CREATE VIEW and CREATE FUNCTION both could reference
+// other objects, and cross-references need to probably tracked.
+type ReferenceProvider interface {
+	// ForEachTableReference iterate through all referenced tables and the
+	// reference details with the given function.
+	ForEachTableReference(func(tblID descpb.ID, refs []descpb.TableDescriptor_Reference) error) error
+	// ForEachTypeReference iterate through all referenced type ids with the given
+	// function.
+	ForEachTypeReference(func(typeID descpb.ID) error) error
 }

@@ -52,6 +52,8 @@ func NewBuilderDependencies(
 	statements []string,
 	clientNoticeSender eval.ClientNoticeSender,
 	eventLogger scbuild.EventLogger,
+	referenceProviderFactory scbuild.ReferenceProviderFactory,
+	descIDGenerator eval.DescIDGenerator,
 ) scbuild.Dependencies {
 	return &buildDeps{
 		clusterID:       clusterID,
@@ -67,25 +69,29 @@ func NewBuilderDependencies(
 		schemaResolver: schemaResolverFactory(
 			txn.Descriptors(), sessiondata.NewStack(sessionData), txn.KV(), authAccessor,
 		),
-		clientNoticeSender: clientNoticeSender,
-		eventLogger:        eventLogger,
+		clientNoticeSender:       clientNoticeSender,
+		eventLogger:              eventLogger,
+		descIDGenerator:          descIDGenerator,
+		referenceProviderFactory: referenceProviderFactory,
 	}
 }
 
 type buildDeps struct {
-	clusterID          uuid.UUID
-	codec              keys.SQLCodec
-	txn                *kv.Txn
-	descsCollection    *descs.Collection
-	schemaResolver     resolver.SchemaResolver
-	authAccessor       scbuild.AuthorizationAccessor
-	sessionData        *sessiondata.SessionData
-	settings           *cluster.Settings
-	statements         []string
-	astFormatter       scbuild.AstFormatter
-	featureChecker     scbuild.FeatureChecker
-	clientNoticeSender eval.ClientNoticeSender
-	eventLogger        scbuild.EventLogger
+	clusterID                uuid.UUID
+	codec                    keys.SQLCodec
+	txn                      *kv.Txn
+	descsCollection          *descs.Collection
+	schemaResolver           resolver.SchemaResolver
+	authAccessor             scbuild.AuthorizationAccessor
+	sessionData              *sessiondata.SessionData
+	settings                 *cluster.Settings
+	statements               []string
+	astFormatter             scbuild.AstFormatter
+	featureChecker           scbuild.FeatureChecker
+	clientNoticeSender       eval.ClientNoticeSender
+	eventLogger              scbuild.EventLogger
+	referenceProviderFactory scbuild.ReferenceProviderFactory
+	descIDGenerator          eval.DescIDGenerator
 }
 
 var _ scbuild.CatalogReader = (*buildDeps)(nil)
@@ -407,4 +413,12 @@ func (zc *zoneConfigGetter) GetZoneConfig(
 	ctx context.Context, id descpb.ID,
 ) (catalog.ZoneConfig, error) {
 	return zc.descriptors.GetZoneConfig(ctx, zc.txn, id)
+}
+
+func (d *buildDeps) DescIDGenerator() eval.DescIDGenerator {
+	return d.descIDGenerator
+}
+
+func (d *buildDeps) ReferenceProviderFactory() scbuild.ReferenceProviderFactory {
+	return d.referenceProviderFactory
 }

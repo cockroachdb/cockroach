@@ -100,6 +100,8 @@ func (p *planner) newSchemaChangeBuilderDependencies(statements []string) scbuil
 		statements,
 		p,
 		NewSchemaChangerBuildEventLogger(p.InternalSQLTxn(), p.ExecCfg()),
+		NewReferenceProviderFactory(p),
+		p.EvalContext().DescIDGenerator,
 	)
 }
 
