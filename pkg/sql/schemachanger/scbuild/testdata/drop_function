@@ -24,9 +24,9 @@ DROP FUNCTION f;
 - [[Owner:{DescID: 109}, ABSENT], PUBLIC]
   {descriptorId: 109, owner: root}
 - [[UserPrivileges:{DescID: 109, Name: admin}, ABSENT], PUBLIC]
-  {descriptorId: 109, privileges: "2", userName: admin}
+  {descriptorId: 109, privileges: "2", userName: admin, withGrantOption: "2"}
 - [[UserPrivileges:{DescID: 109, Name: root}, ABSENT], PUBLIC]
-  {descriptorId: 109, privileges: "2", userName: root}
+  {descriptorId: 109, privileges: "2", userName: root, withGrantOption: "2"}
 - [[Function:{DescID: 109}, ABSENT], PUBLIC]
   {functionId: 109, params: [{class: {class: IN}, name: a, type: {closedTypeIds: [107, 108], type: {family: EnumFamily, oid: 100107, udtMetadata: {arrayTypeOid: 100108}}}}], returnType: {type: {family: IntFamily, oid: 20, width: 64}}}
 - [[ObjectParent:{DescID: 109, ReferencedDescID: 101}, ABSENT], PUBLIC]

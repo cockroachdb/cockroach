@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -826,4 +827,15 @@ func isColNotNull(b BuildCtx, tableID catid.DescID, columnID catid.ColumnID) (re
 		}
 	})
 	return ret
+}
+
+func maybeFailOnCrossDBTypeReference(b BuildCtx, typeID descpb.ID, parentDBID descpb.ID) {
+	_, _, typeNamespace := scpb.FindNamespace(b.QueryByID(typeID))
+	if typeNamespace.DatabaseID != parentDBID {
+		typeName := tree.MakeTypeNameWithPrefix(b.NamePrefix(typeNamespace), typeNamespace.Name)
+		panic(pgerror.Newf(
+			pgcode.FeatureNotSupported,
+			"cross database type references are not supported: %s",
+			typeName.String()))
+	}
 }

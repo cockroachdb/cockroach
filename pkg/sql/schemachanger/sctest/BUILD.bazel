@@ -16,6 +16,8 @@ go_library(
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
         "//pkg/keys",
+        "//pkg/kv",
+        "//pkg/security/username",
         "//pkg/sql",
         "//pkg/sql/catalog",
         "//pkg/sql/parser",

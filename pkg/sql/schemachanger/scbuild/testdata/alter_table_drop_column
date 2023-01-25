@@ -157,9 +157,9 @@ ALTER TABLE defaultdb.t DROP COLUMN k, DROP COLUMN l
 - [[Owner:{DescID: 105}, ABSENT], PUBLIC]
   {descriptorId: 105, owner: root}
 - [[UserPrivileges:{DescID: 105, Name: admin}, ABSENT], PUBLIC]
-  {descriptorId: 105, privileges: "2", userName: admin}
+  {descriptorId: 105, privileges: "2", userName: admin, withGrantOption: "2"}
 - [[UserPrivileges:{DescID: 105, Name: root}, ABSENT], PUBLIC]
-  {descriptorId: 105, privileges: "2", userName: root}
+  {descriptorId: 105, privileges: "2", userName: root, withGrantOption: "2"}
 - [[Sequence:{DescID: 105}, ABSENT], PUBLIC]
   {sequenceId: 105}
 - [[ObjectParent:{DescID: 105, ReferencedDescID: 101}, ABSENT], PUBLIC]

@@ -77,3 +77,8 @@ func (d *DescriptorIDSet) Remove(id descpb.ID) {
 func (d DescriptorIDSet) Difference(o DescriptorIDSet) DescriptorIDSet {
 	return DescriptorIDSet{set: d.set.Difference(o.set)}
 }
+
+// Union returns the union of d and o as a new set.
+func (d DescriptorIDSet) Union(o DescriptorIDSet) DescriptorIDSet {
+	return DescriptorIDSet{set: d.set.Union(o.set)}
+}

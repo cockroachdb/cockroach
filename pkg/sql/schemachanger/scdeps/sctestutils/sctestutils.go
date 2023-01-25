@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descidgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/faketreeeval"
@@ -68,6 +69,11 @@ func WithBuilderDependenciesFromTestServer(
 		scbuild.FeatureChecker
 	})
 
+	refProviderFactory, refCleanup := sql.NewReferenceProviderFactoryForTest(
+		"test", planner.InternalSQLTxn().KV(), username.RootUserName(), &execCfg, "defaultdb",
+	)
+	defer refCleanup()
+
 	// Use "defaultdb" as current database.
 	planner.SessionData().Database = "defaultdb"
 	// For setting up a builder inside tests we will ensure that the new schema
@@ -86,6 +92,8 @@ func WithBuilderDependenciesFromTestServer(
 		nil, /* statements */
 		&faketreeeval.DummyClientNoticeSender{},
 		sql.NewSchemaChangerBuildEventLogger(planner.InternalSQLTxn(), &execCfg),
+		refProviderFactory,
+		descidgen.NewGenerator(s.ClusterSettings(), s.Codec(), s.DB()),
 	))
 }
 

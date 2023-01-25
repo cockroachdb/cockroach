@@ -102,6 +102,18 @@ type ImmediateMutationVisitor interface {
 	AddColumnToIndex(context.Context, AddColumnToIndex) error
 	RemoveColumnFromIndex(context.Context, RemoveColumnFromIndex) error
 	RemoveObjectParent(context.Context, RemoveObjectParent) error
+	CreateFunctionDescriptor(context.Context, CreateFunctionDescriptor) error
+	SetFunctionName(context.Context, SetFunctionName) error
+	SetFunctionVolatility(context.Context, SetFunctionVolatility) error
+	SetFunctionLeakProof(context.Context, SetFunctionLeakProof) error
+	SetFunctionNullInputBehavior(context.Context, SetFunctionNullInputBehavior) error
+	SetFunctionBody(context.Context, SetFunctionBody) error
+	SetFunctionParamDefaultExpr(context.Context, SetFunctionParamDefaultExpr) error
+	UpdateFunctionTypeReferences(context.Context, UpdateFunctionTypeReferences) error
+	UpdateFunctionRelationReferences(context.Context, UpdateFunctionRelationReferences) error
+	SetObjectParentID(context.Context, SetObjectParentID) error
+	UpdateUserPrivileges(context.Context, UpdateUserPrivileges) error
+	UpdateOwner(context.Context, UpdateOwner) error
 }
 
 // Visit is part of the ImmediateMutationOp interface.
@@ -502,4 +514,64 @@ func (op RemoveColumnFromIndex) Visit(ctx context.Context, v ImmediateMutationVi
 // Visit is part of the ImmediateMutationOp interface.
 func (op RemoveObjectParent) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
 	return v.RemoveObjectParent(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
+func (op CreateFunctionDescriptor) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.CreateFunctionDescriptor(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
+func (op SetFunctionName) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.SetFunctionName(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
+func (op SetFunctionVolatility) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.SetFunctionVolatility(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
+func (op SetFunctionLeakProof) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.SetFunctionLeakProof(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
+func (op SetFunctionNullInputBehavior) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.SetFunctionNullInputBehavior(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
+func (op SetFunctionBody) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.SetFunctionBody(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
+func (op SetFunctionParamDefaultExpr) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.SetFunctionParamDefaultExpr(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
+func (op UpdateFunctionTypeReferences) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.UpdateFunctionTypeReferences(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
+func (op UpdateFunctionRelationReferences) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.UpdateFunctionRelationReferences(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
+func (op SetObjectParentID) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.SetObjectParentID(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
+func (op UpdateUserPrivileges) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.UpdateUserPrivileges(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
+func (op UpdateOwner) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.UpdateOwner(ctx, op)
 }

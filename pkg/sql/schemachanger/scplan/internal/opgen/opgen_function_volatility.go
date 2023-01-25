@@ -20,8 +20,11 @@ func init() {
 		toPublic(
 			scpb.Status_ABSENT,
 			to(scpb.Status_PUBLIC,
-				emit(func(this *scpb.FunctionVolatility) *scop.NotImplemented {
-					return notImplemented(this)
+				emit(func(this *scpb.FunctionVolatility) *scop.SetFunctionVolatility {
+					return &scop.SetFunctionVolatility{
+						FunctionID: this.FunctionID,
+						Volatility: this.Volatility.Volatility,
+					}
 				}),
 			),
 		),

@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
@@ -276,6 +277,10 @@ func (b *builderState) CurrentUserHasAdminOrIsMemberOf(role username.SQLUsername
 	}
 	_, ok := memberships[b.evalCtx.SessionData().User()]
 	return ok
+}
+
+func (b *builderState) CurrentUser() username.SQLUsername {
+	return b.evalCtx.SessionData().User()
 }
 
 var _ scbuildstmt.TableHelpers = (*builderState)(nil)
@@ -736,6 +741,24 @@ func (b *builderState) ResolveSchema(
 		}
 		panic(sqlerrors.NewUndefinedSchemaError(name.Schema()))
 	}
+	b.mustBeValidSchema(name, sc, p)
+	return b.descCache[sc.GetID()].ers
+}
+
+// ResolvePrefix implements the scbuildstmt.NameResolver interface.
+func (b *builderState) ResolvePrefix(
+	prefix tree.ObjectNamePrefix, requiredSchemaPriv privilege.Kind,
+) (dbElts scbuildstmt.ElementResultSet, scElts scbuildstmt.ElementResultSet) {
+	db, sc := b.cr.MustResolvePrefix(b.ctx, prefix)
+	b.ensureDescriptor(db.GetID())
+	b.ensureDescriptor(sc.GetID())
+	b.mustBeValidSchema(prefix, sc, scbuildstmt.ResolveParams{RequiredPrivilege: requiredSchemaPriv})
+	return b.descCache[db.GetID()].ers, b.descCache[sc.GetID()].ers
+}
+
+func (b *builderState) mustBeValidSchema(
+	name tree.ObjectNamePrefix, sc catalog.SchemaDescriptor, p scbuildstmt.ResolveParams,
+) {
 	switch sc.SchemaKind() {
 	case catalog.SchemaPublic, catalog.SchemaVirtual, catalog.SchemaTemporary:
 		panic(pgerror.Newf(pgcode.InsufficientPrivilege,
@@ -750,7 +773,6 @@ func (b *builderState) ResolveSchema(
 	default:
 		panic(errors.AssertionFailedf("unknown schema kind %d", sc.SchemaKind()))
 	}
-	return b.descCache[sc.GetID()].ers
 }
 
 // ResolveUserDefinedTypeType implements the scbuildstmt.NameResolver interface.
@@ -1198,6 +1220,220 @@ func (b *builderState) GenerateUniqueDescID() catid.DescID {
 	}
 	b.newDescriptors.Add(id)
 	return id
+}
+
+func (b *builderState) BuildReferenceProvider(stmt tree.Statement) scbuildstmt.ReferenceProvider {
+	provider, err := b.referenceProviderFactory.NewReferenceProvider(b.ctx, stmt)
+	if err != nil {
+		panic(err)
+	}
+	return provider
+}
+
+func (b *builderState) BuildUserPrivilegesFromDefaultPrivileges(
+	db *scpb.Database, sc *scpb.Schema, descID descpb.ID, objType privilege.TargetObjectType,
+) (*scpb.Owner, []*scpb.UserPrivileges) {
+	b.ensureDescriptor(db.DatabaseID)
+	b.ensureDescriptor(sc.SchemaID)
+	dbDesc, err := catalog.AsDatabaseDescriptor(b.descCache[db.DatabaseID].desc)
+	if err != nil {
+		panic(err)
+	}
+	scDesc, err := catalog.AsSchemaDescriptor(b.descCache[sc.SchemaID].desc)
+	if err != nil {
+		panic(err)
+	}
+	pd := catprivilege.CreatePrivilegesFromDefaultPrivileges(
+		dbDesc.GetDefaultPrivilegeDescriptor(),
+		scDesc.GetDefaultPrivilegeDescriptor(),
+		db.DatabaseID,
+		b.CurrentUser(),
+		objType,
+	)
+
+	owner := &scpb.Owner{
+		DescriptorID: descID,
+		Owner:        pd.Owner().Normalized(),
+	}
+
+	ups := make([]*scpb.UserPrivileges, 0, len(pd.Users))
+	for _, up := range pd.Users {
+		ups = append(ups, &scpb.UserPrivileges{
+			DescriptorID:    descID,
+			UserName:        up.User().Normalized(),
+			Privileges:      up.Privileges,
+			WithGrantOption: up.WithGrantOption,
+		})
+	}
+	sort.Slice(ups, func(i, j int) bool {
+		return ups[i].UserName < ups[j].UserName
+	})
+	return owner, ups
+}
+
+func (b *builderState) WrapFunctionBody(
+	fnID descpb.ID,
+	bodyStr string,
+	lang catpb.Function_Language,
+	refProvider scbuildstmt.ReferenceProvider,
+) *scpb.FunctionBody {
+	bodyStr = b.replaceSeqNamesWithIDs(bodyStr)
+	bodyStr = b.serializeUserDefinedTypes(bodyStr)
+	fnBody := &scpb.FunctionBody{
+		FunctionID: fnID,
+		Body:       bodyStr,
+		Lang:       catpb.FunctionLanguage{Lang: lang},
+	}
+	if err := refProvider.ForEachTableReference(func(tblID descpb.ID, idxID descpb.IndexID, colIDs descpb.ColumnIDs) error {
+		fnBody.UsesTables = append(
+			fnBody.UsesTables,
+			scpb.FunctionBody_TableReference{
+				TableID:   tblID,
+				ColumnIDs: colIDs,
+				IndexID:   idxID,
+			},
+		)
+		return nil
+	}); err != nil {
+		panic(err)
+	}
+
+	if err := refProvider.ForEachViewReference(func(viewID descpb.ID, colIDs descpb.ColumnIDs) error {
+		fnBody.UsesViews = append(
+			fnBody.UsesViews,
+			scpb.FunctionBody_ViewReference{
+				ViewID:    viewID,
+				ColumnIDs: colIDs,
+			},
+		)
+		return nil
+	}); err != nil {
+		panic(err)
+	}
+
+	fnBody.UsesSequenceIDs = refProvider.ReferencedSequences().Ordered()
+	fnBody.UsesTypeIDs = refProvider.ReferencedTypes().Ordered()
+	return fnBody
+}
+
+func (b *builderState) replaceSeqNamesWithIDs(queryStr string) string {
+	replaceSeqFunc := func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
+		seqIdentifiers, err := seqexpr.GetUsedSequences(expr)
+		if err != nil {
+			return false, expr, err
+		}
+		seqNameToID := make(map[string]descpb.ID)
+		for _, seqIdentifier := range seqIdentifiers {
+			if seqIdentifier.IsByID() {
+				continue
+			}
+			seq := b.getSequenceFromName(seqIdentifier.SeqName)
+			seqNameToID[seqIdentifier.SeqName] = seq.SequenceID
+		}
+		newExpr, err = seqexpr.ReplaceSequenceNamesWithIDs(expr, seqNameToID)
+		if err != nil {
+			return false, expr, err
+		}
+		return false, newExpr, nil
+	}
+
+	parsedStmts, err := parser.Parse(queryStr)
+	if err != nil {
+		panic(err)
+	}
+
+	stmts := make(tree.Statements, len(parsedStmts))
+	for i, s := range parsedStmts {
+		stmts[i] = s.AST
+	}
+
+	fmtCtx := tree.NewFmtCtx(tree.FmtSimple)
+	for i, stmt := range stmts {
+		newStmt, err := tree.SimpleStmtVisit(stmt, replaceSeqFunc)
+		if err != nil {
+			panic(err)
+		}
+		if i > 0 {
+			fmtCtx.WriteString("\n")
+		}
+		fmtCtx.FormatNode(newStmt)
+		fmtCtx.WriteString(";")
+	}
+
+	return fmtCtx.String()
+
+}
+
+func (b *builderState) getSequenceFromName(seqName string) *scpb.Sequence {
+	parsedName, err := parser.ParseTableName(seqName)
+	if err != nil {
+		panic(err)
+	}
+	elts := b.ResolveSequence(parsedName, scbuildstmt.ResolveParams{RequiredPrivilege: privilege.SELECT})
+	_, _, seq := scpb.FindSequence(elts)
+	return seq
+}
+
+func (b *builderState) serializeUserDefinedTypes(queryStr string) string {
+	replaceFunc := func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
+		var innerExpr tree.Expr
+		var typRef tree.ResolvableTypeReference
+		switch n := expr.(type) {
+		case *tree.CastExpr:
+			innerExpr = n.Expr
+			typRef = n.Type
+		case *tree.AnnotateTypeExpr:
+			innerExpr = n.Expr
+			typRef = n.Type
+		default:
+			return true, expr, nil
+		}
+		// semaCtx may be nil if this is a virtual view being created at
+		// init time.
+		var typ *types.T
+		typ, err = tree.ResolveType(b.ctx, typRef, b.semaCtx.TypeResolver)
+		if err != nil {
+			return false, expr, err
+		}
+		if !typ.UserDefined() {
+			return true, expr, nil
+		}
+		texpr, err := innerExpr.TypeCheck(b.ctx, b.semaCtx, typ)
+		if err != nil {
+			return false, expr, err
+		}
+		s := tree.Serialize(texpr)
+		parsedExpr, err := parser.ParseExpr(s)
+		if err != nil {
+			return false, expr, err
+		}
+		return false, parsedExpr, nil
+	}
+
+	var stmts tree.Statements
+	parsedStmts, err := parser.Parse(queryStr)
+	if err != nil {
+		panic(err)
+	}
+	stmts = make(tree.Statements, len(parsedStmts))
+	for i, stmt := range parsedStmts {
+		stmts[i] = stmt.AST
+	}
+
+	fmtCtx := tree.NewFmtCtx(tree.FmtSimple)
+	for i, stmt := range stmts {
+		newStmt, err := tree.SimpleStmtVisit(stmt, replaceFunc)
+		if err != nil {
+			panic(err)
+		}
+		if i > 0 {
+			fmtCtx.WriteString("\n")
+		}
+		fmtCtx.FormatNode(newStmt)
+		fmtCtx.WriteString(";")
+	}
+	return fmtCtx.CloseAndGetString()
+
 }
 
 type elementResultSet struct {

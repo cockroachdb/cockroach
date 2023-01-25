@@ -19,15 +19,15 @@ build
 DROP OWNED BY r
 ----
 - [[UserPrivileges:{DescID: 100, Name: r}, ABSENT], PUBLIC]
-  {descriptorId: 100, privileges: "4", userName: r}
+  {descriptorId: 100, privileges: "4", userName: r, withGrantOption: "4"}
 - [[Namespace:{DescID: 105, Name: s, ReferencedDescID: 100}, ABSENT], PUBLIC]
   {databaseId: 100, descriptorId: 105, name: s}
 - [[Owner:{DescID: 105}, ABSENT], PUBLIC]
   {descriptorId: 105, owner: r}
 - [[UserPrivileges:{DescID: 105, Name: admin}, ABSENT], PUBLIC]
-  {descriptorId: 105, privileges: "2", userName: admin}
+  {descriptorId: 105, privileges: "2", userName: admin, withGrantOption: "2"}
 - [[UserPrivileges:{DescID: 105, Name: root}, ABSENT], PUBLIC]
-  {descriptorId: 105, privileges: "2", userName: root}
+  {descriptorId: 105, privileges: "2", userName: root, withGrantOption: "2"}
 - [[Schema:{DescID: 105}, ABSENT], PUBLIC]
   {schemaId: 105}
 - [[SchemaParent:{DescID: 105, ReferencedDescID: 100}, ABSENT], PUBLIC]
@@ -39,9 +39,9 @@ DROP OWNED BY r
 - [[Owner:{DescID: 106}, ABSENT], PUBLIC]
   {descriptorId: 106, owner: r}
 - [[UserPrivileges:{DescID: 106, Name: admin}, ABSENT], PUBLIC]
-  {descriptorId: 106, privileges: "2", userName: admin}
+  {descriptorId: 106, privileges: "2", userName: admin, withGrantOption: "2"}
 - [[UserPrivileges:{DescID: 106, Name: root}, ABSENT], PUBLIC]
-  {descriptorId: 106, privileges: "2", userName: root}
+  {descriptorId: 106, privileges: "2", userName: root, withGrantOption: "2"}
 - [[Sequence:{DescID: 106}, ABSENT], PUBLIC]
   {sequenceId: 106}
 - [[ObjectParent:{DescID: 106, ReferencedDescID: 101}, ABSENT], PUBLIC]
@@ -53,9 +53,9 @@ DROP OWNED BY r
 - [[Owner:{DescID: 109}, ABSENT], PUBLIC]
   {descriptorId: 109, owner: r}
 - [[UserPrivileges:{DescID: 109, Name: admin}, ABSENT], PUBLIC]
-  {descriptorId: 109, privileges: "2", userName: admin}
+  {descriptorId: 109, privileges: "2", userName: admin, withGrantOption: "2"}
 - [[UserPrivileges:{DescID: 109, Name: root}, ABSENT], PUBLIC]
-  {descriptorId: 109, privileges: "2", userName: root}
+  {descriptorId: 109, privileges: "2", userName: root, withGrantOption: "2"}
 - [[Table:{DescID: 109}, ABSENT], PUBLIC]
   {tableId: 109}
 - [[ObjectParent:{DescID: 109, ReferencedDescID: 101}, ABSENT], PUBLIC]
@@ -115,9 +115,9 @@ DROP OWNED BY r
 - [[Owner:{DescID: 107}, ABSENT], PUBLIC]
   {descriptorId: 107, owner: r}
 - [[UserPrivileges:{DescID: 107, Name: admin}, ABSENT], PUBLIC]
-  {descriptorId: 107, privileges: "2", userName: admin}
+  {descriptorId: 107, privileges: "2", userName: admin, withGrantOption: "2"}
 - [[UserPrivileges:{DescID: 107, Name: root}, ABSENT], PUBLIC]
-  {descriptorId: 107, privileges: "2", userName: root}
+  {descriptorId: 107, privileges: "2", userName: root, withGrantOption: "2"}
 - [[Sequence:{DescID: 107}, ABSENT], PUBLIC]
   {sequenceId: 107}
 - [[ObjectParent:{DescID: 107, ReferencedDescID: 105}, ABSENT], PUBLIC]
@@ -129,9 +129,9 @@ DROP OWNED BY r
 - [[Owner:{DescID: 108}, ABSENT], PUBLIC]
   {descriptorId: 108, owner: r}
 - [[UserPrivileges:{DescID: 108, Name: admin}, ABSENT], PUBLIC]
-  {descriptorId: 108, privileges: "2", userName: admin}
+  {descriptorId: 108, privileges: "2", userName: admin, withGrantOption: "2"}
 - [[UserPrivileges:{DescID: 108, Name: root}, ABSENT], PUBLIC]
-  {descriptorId: 108, privileges: "2", userName: root}
+  {descriptorId: 108, privileges: "2", userName: root, withGrantOption: "2"}
 - [[Table:{DescID: 108}, ABSENT], PUBLIC]
   {tableId: 108}
 - [[ObjectParent:{DescID: 108, ReferencedDescID: 105}, ABSENT], PUBLIC]
@@ -191,9 +191,9 @@ DROP OWNED BY r
 - [[Owner:{DescID: 110}, ABSENT], PUBLIC]
   {descriptorId: 110, owner: r}
 - [[UserPrivileges:{DescID: 110, Name: admin}, ABSENT], PUBLIC]
-  {descriptorId: 110, privileges: "2", userName: admin}
+  {descriptorId: 110, privileges: "2", userName: admin, withGrantOption: "2"}
 - [[UserPrivileges:{DescID: 110, Name: root}, ABSENT], PUBLIC]
-  {descriptorId: 110, privileges: "2", userName: root}
+  {descriptorId: 110, privileges: "2", userName: root, withGrantOption: "2"}
 - [[View:{DescID: 110}, ABSENT], PUBLIC]
   {forwardReferences: [{columnIds: [2], toId: 108}], usesRelationIds: [108], viewId: 110}
 - [[ObjectParent:{DescID: 110, ReferencedDescID: 105}, ABSENT], PUBLIC]
@@ -221,11 +221,11 @@ DROP OWNED BY r
 - [[Owner:{DescID: 111}, ABSENT], PUBLIC]
   {descriptorId: 111, owner: r}
 - [[UserPrivileges:{DescID: 111, Name: admin}, ABSENT], PUBLIC]
-  {descriptorId: 111, privileges: "2", userName: admin}
+  {descriptorId: 111, privileges: "2", userName: admin, withGrantOption: "2"}
 - [[UserPrivileges:{DescID: 111, Name: public}, ABSENT], PUBLIC]
   {descriptorId: 111, privileges: "512", userName: public}
 - [[UserPrivileges:{DescID: 111, Name: root}, ABSENT], PUBLIC]
-  {descriptorId: 111, privileges: "2", userName: root}
+  {descriptorId: 111, privileges: "2", userName: root, withGrantOption: "2"}
 - [[EnumType:{DescID: 111}, ABSENT], PUBLIC]
   {arrayTypeId: 112, typeId: 111}
 - [[EnumTypeValue:{DescID: 111, Name: a}, ABSENT], PUBLIC]
@@ -237,11 +237,11 @@ DROP OWNED BY r
 - [[Owner:{DescID: 112}, ABSENT], PUBLIC]
   {descriptorId: 112, owner: r}
 - [[UserPrivileges:{DescID: 112, Name: admin}, ABSENT], PUBLIC]
-  {descriptorId: 112, privileges: "2", userName: admin}
+  {descriptorId: 112, privileges: "2", userName: admin, withGrantOption: "2"}
 - [[UserPrivileges:{DescID: 112, Name: public}, ABSENT], PUBLIC]
   {descriptorId: 112, privileges: "512", userName: public}
 - [[UserPrivileges:{DescID: 112, Name: root}, ABSENT], PUBLIC]
-  {descriptorId: 112, privileges: "2", userName: root}
+  {descriptorId: 112, privileges: "2", userName: root, withGrantOption: "2"}
 - [[AliasType:{DescID: 112, ReferencedTypeIDs: [111 112]}, ABSENT], PUBLIC]
   {closedTypeIds: [111, 112], type: {arrayContents: {family: EnumFamily, oid: 100111, udtMetadata: {arrayTypeOid: 100112}}, arrayElemType: EnumFamily, family: ArrayFamily, oid: 100112}, typeId: 112}
 - [[ObjectParent:{DescID: 112, ReferencedDescID: 105}, ABSENT], PUBLIC]
@@ -251,9 +251,9 @@ DROP OWNED BY r
 - [[Owner:{DescID: 113}, ABSENT], PUBLIC]
   {descriptorId: 113, owner: r}
 - [[UserPrivileges:{DescID: 113, Name: admin}, ABSENT], PUBLIC]
-  {descriptorId: 113, privileges: "2", userName: admin}
+  {descriptorId: 113, privileges: "2", userName: admin, withGrantOption: "2"}
 - [[UserPrivileges:{DescID: 113, Name: root}, ABSENT], PUBLIC]
-  {descriptorId: 113, privileges: "2", userName: root}
+  {descriptorId: 113, privileges: "2", userName: root, withGrantOption: "2"}
 - [[View:{DescID: 113}, ABSENT], PUBLIC]
   {forwardReferences: [{columnIds: [1], toId: 110}], usesRelationIds: [110], usesTypeIds: [111, 112], viewId: 113}
 - [[ObjectParent:{DescID: 113, ReferencedDescID: 105}, ABSENT], PUBLIC]

@@ -1,4 +1,4 @@
-// Copyright 2022 The Cockroach Authors.
+// Copyright 2023 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -12,7 +12,6 @@ package sql
 
 import (
 	"context"
-	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -26,42 +25,72 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 )
 
+type tableDescReferences []descpb.TableDescriptor_Reference
+
 type referenceProvider struct {
-	tableReferences planDependencies
-	typeReferences  typeDependencies
+	tableReferences     map[descpb.ID]tableDescReferences
+	viewReferences      map[descpb.ID]tableDescReferences
+	referencedSequences catalog.DescriptorIDSet
+	referencedTypes     catalog.DescriptorIDSet
+	allRelationIDs      catalog.DescriptorIDSet
 }
 
+func newReferenceProvider() *referenceProvider {
+	return &referenceProvider{
+		tableReferences: make(map[descpb.ID]tableDescReferences),
+		viewReferences:  make(map[descpb.ID]tableDescReferences),
+	}
+}
+
+// ReferencedRelationIDs implements scbuildstmt.ReferenceProvider
+func (r *referenceProvider) ReferencedRelationIDs() catalog.DescriptorIDSet {
+	return r.allRelationIDs
+}
+
+// ForEachTableReference implements scbuildstmt.ReferenceProvider
 func (r *referenceProvider) ForEachTableReference(
-	f func(tblID descpb.ID, refs []descpb.TableDescriptor_Reference) error,
+	f func(tblID descpb.ID, idxID descpb.IndexID, colIDs descpb.ColumnIDs) error,
 ) error {
-	allRefs := make([]planDependencyInfo, len(r.tableReferences))
-	cnt := 0
-	for _, info := range r.tableReferences {
-		allRefs[cnt] = info
-		cnt++
+	var tblIDs catalog.DescriptorIDSet
+	for id := range r.tableReferences {
+		tblIDs.Add(id)
 	}
-	sort.Slice(allRefs, func(i, j int) bool {
-		return allRefs[i].desc.GetID() < allRefs[j].desc.GetID()
-	})
-	for _, info := range allRefs {
-		if err := f(info.desc.GetID(), info.deps); err != nil {
-			return err
+	for _, id := range tblIDs.Ordered() {
+		for _, ref := range r.tableReferences[id] {
+			if err := f(id, ref.IndexID, ref.ColumnIDs); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
 }
 
-func (r *referenceProvider) ForEachTypeReference(f func(typeID descpb.ID) error) error {
-	var allRefs catalog.DescriptorIDSet
-	for id := range r.typeReferences {
-		allRefs.Add(id)
+// ForEachViewReference implements scbuildstmt.ReferenceProvider
+func (r *referenceProvider) ForEachViewReference(
+	f func(viewID descpb.ID, colIDs descpb.ColumnIDs) error,
+) error {
+	var viewIDs catalog.DescriptorIDSet
+	for id := range r.viewReferences {
+		viewIDs.Add(id)
 	}
-	for _, typeID := range allRefs.Ordered() {
-		if err := f(typeID); err != nil {
-			return err
+	for _, id := range viewIDs.Ordered() {
+		for _, ref := range r.viewReferences[id] {
+			if err := f(id, ref.ColumnIDs); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
+}
+
+// ReferencedSequences implements scbuildstmt.ReferenceProvider
+func (r *referenceProvider) ReferencedSequences() catalog.DescriptorIDSet {
+	return r.referencedSequences
+}
+
+// ReferencedTypes implements scbuildstmt.ReferenceProvider
+func (r *referenceProvider) ReferencedTypes() catalog.DescriptorIDSet {
+	return r.referencedTypes
 }
 
 type referenceProviderFactory struct {
@@ -79,15 +108,41 @@ func (f *referenceProviderFactory) NewReferenceProvider(
 	if err := optBld.Build(); err != nil {
 		return nil, err
 	}
+	// For the time being this is only used for CREATE FUNCTION. We need to handle
+	// CREATE VIEW when it's needed.
 	createFnExpr := optFactory.Memo().RootExpr().(*memo.CreateFunctionExpr)
 	tableReferences, typeReferences, err := toPlanDependencies(createFnExpr.Deps, createFnExpr.TypeDeps)
 	if err != nil {
 		return nil, err
 	}
-	return &referenceProvider{
-		tableReferences: tableReferences,
-		typeReferences:  typeReferences,
-	}, nil
+
+	ret := newReferenceProvider()
+
+	for descID, refs := range tableReferences {
+		ret.allRelationIDs.Add(descID)
+		if refs.desc.IsView() {
+			ret.viewReferences[descID] = append(ret.viewReferences[descID], refs.deps...)
+		} else if refs.desc.IsSequence() {
+			ret.referencedSequences.Add(descID)
+		} else {
+			ret.tableReferences[descID] = append(ret.tableReferences[descID], refs.deps...)
+		}
+	}
+
+	for typeID := range typeReferences {
+		desc, err := f.p.descCollection.ByID(f.p.txn).WithoutNonPublic().Get().Desc(ctx, typeID)
+		if err != nil {
+			return nil, err
+		}
+		if desc.DescriptorType() == catalog.Table {
+			ret.allRelationIDs.Add(typeID)
+			ret.tableReferences[desc.GetID()] = append(ret.tableReferences[desc.GetID()], descpb.TableDescriptor_Reference{})
+		} else {
+			ret.referencedTypes.Add(typeID)
+		}
+	}
+
+	return ret, nil
 }
 
 // NewReferenceProviderFactory returns a new ReferenceProviderFactory.

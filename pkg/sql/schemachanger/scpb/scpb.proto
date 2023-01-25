@@ -67,6 +67,10 @@ enum Status {
   TRANSIENT_VALIDATED = 20;
   TRANSIENT_PUBLIC = 21;
   TRANSIENT_DROPPED = 22;
+
+  // When a basic descriptor (the object element) is first created before all
+  // the other dependent elements become public.
+  DESCRIPTOR_ADDED = 23;
 }
 
 // TargetMetadata refers to the metadata for individual elements, where

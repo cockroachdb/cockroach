@@ -229,10 +229,12 @@ func (s *TestState) ClientNoticeSender() eval.ClientNoticeSender {
 	return &faketreeeval.DummyClientNoticeSender{}
 }
 
+// DescIDGenerator implements scbuild.Dependencies.
 func (s *TestState) DescIDGenerator() eval.DescIDGenerator {
 	return s.idGenerator
 }
 
+// ReferenceProviderFactory implements scbuild.Dependencies.
 func (s *TestState) ReferenceProviderFactory() scbuild.ReferenceProviderFactory {
 	return s.refProviderFactory
 }

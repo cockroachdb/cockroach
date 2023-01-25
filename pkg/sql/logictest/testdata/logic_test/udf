@@ -7,7 +7,7 @@ CREATE TABLE ab (
 statement error pq: unimplemented: user-defined functions with SETOF return types are not supported
 CREATE FUNCTION f(a int) RETURNS SETOF INT LANGUAGE SQL AS 'SELECT 1'
 
-statement error pq: cannot set leakproof on function with non-immutable volatility: STABLE
+statement error .*cannot set leakproof on function with non-immutable volatility: STABLE.*
 CREATE FUNCTION f(a int) RETURNS INT LEAKPROOF STABLE LANGUAGE SQL AS 'SELECT 1'
 
 statement error pq: return type mismatch in function declared to return int\nDETAIL: Actual return type is string
@@ -1788,6 +1788,9 @@ DELETE FROM system.eventlog;
 statement ok
 CREATE FUNCTION f_test_log() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
 
+# TODO(chengxiong): remove this test condition when event logging is moved build
+# time in declarative schema changer.
+onlyif config local-legacy-schema-changer
 query TTTT retry
 WITH tmp AS (
   SELECT "eventType" AS etype, info::JSONB AS info_json
@@ -1801,6 +1804,7 @@ create_function  203  "test.public.f_test_log"  "CREATE FUNCTION test.public.f_t
 statement ok
 CREATE OR REPLACE FUNCTION f_test_log() RETURNS INT LANGUAGE SQL AS $$ SELECT 2 $$;
 
+onlyif config local-legacy-schema-changer
 query TTTT retry
 WITH tmp AS (
   SELECT "eventType" AS etype, info::JSONB AS info_json
@@ -1815,6 +1819,7 @@ create_function  203  "test.public.f_test_log"  "CREATE OR REPLACE FUNCTION test
 statement ok
 ALTER FUNCTION f_test_log RENAME TO f_test_log_new;
 
+onlyif config local-legacy-schema-changer
 query TTTTT retry
 WITH tmp AS (
   SELECT "eventType" AS etype, info::JSONB AS info_json
@@ -1831,6 +1836,7 @@ ALTER FUNCTION f_test_log_new RENAME TO f_test_log;
 statement ok
 ALTER FUNCTION f_test_log OWNER TO u_test_event;
 
+onlyif config local-legacy-schema-changer
 query TTTTT retry
 WITH tmp AS (
   SELECT "eventType" AS etype, info::JSONB AS info_json
@@ -1844,6 +1850,7 @@ alter_function_owner  203  "test.public.f_test_log"  "u_test_event"  "ALTER FUNC
 statement ok
 ALTER FUNCTION f_test_log SET SCHEMA sc_test_event;
 
+onlyif config local-legacy-schema-changer
 query TTTTT retry
 WITH tmp AS (
   SELECT "eventType" AS etype, info::JSONB AS info_json
@@ -1859,6 +1866,7 @@ ALTER FUNCTION sc_test_event.f_test_log SET SCHEMA public;
 ALTER FUNCTION f_test_log IMMUTABLE;
 DROP FUNCTION f_test_log;
 
+onlyif config local-legacy-schema-changer
 query TTTT retry
 WITH tmp AS (
   SELECT "eventType" AS etype, info::JSONB AS info_json
@@ -1869,6 +1877,7 @@ SELECT etype, info_json->'DescriptorID', info_json->'FunctionName', info_json->'
 ----
 alter_function_options  203  "test.public.f_test_log"  "ALTER FUNCTION \"\".\"\".f_test_log IMMUTABLE"
 
+onlyif config local-legacy-schema-changer
 query TTTT retry
 WITH tmp AS (
   SELECT "eventType" AS etype, info::JSONB AS info_json
