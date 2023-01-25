@@ -35,11 +35,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/arith"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
+	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/randident"
 	"github.com/cockroachdb/cockroach/pkg/util/randident/randidentcfg"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/rangedesc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
@@ -590,6 +592,27 @@ The last argument is a JSONB object containing the following optional fields:
 - "seed": the seed to use for the pseudo-random generator (default: random).`+
 				randidentcfg.ConfigDoc,
 			volatility.Volatile,
+		),
+	),
+	"crdb_internal.ranges_in_span": makeBuiltin(genProps(),
+		makeGeneratorOverload(
+			tree.ParamTypes{
+				{Name: "start_key", Typ: types.Bytes},
+				{Name: "end_key", Typ: types.Bytes},
+			},
+			rangesInSpanGeneratorType,
+			makeRangesInSpanGenerator,
+			"Returns ranges (id, start key, end key) within the provided span.",
+			volatility.Stable,
+		),
+	),
+	"crdb_internal.tenant_ranges_per_table": makeBuiltin(genProps(),
+		makeGeneratorOverload(
+			tree.ParamTypes{},
+			tenantRangesPerTableGeneratorType,
+			makeTenantRangesPerTableGenerator,
+			"Returns range ids for each of the tenant's tables.",
+			volatility.Stable,
 		),
 	),
 }
@@ -2901,4 +2924,199 @@ func makeIdentGenerator(
 		acc:   evalCtx.Planner.Mon().MakeBoundAccount(),
 		count: count,
 	}, nil
+}
+
+type rangeDescSpan roachpb.RangeDescriptor
+
+var _ interval.Interface = rangeDescSpan{}
+
+// ID is part of `interval.Interface`.
+func (rds rangeDescSpan) ID() uintptr { return uintptr(rds.RangeID) }
+
+// Range is part of `interval.Interface`.
+func (rds rangeDescSpan) Range() interval.Range {
+	return interval.Range{Start: []byte(rds.StartKey.AsRawKey()), End: []byte(rds.EndKey.AsRawKey())}
+}
+
+func getRangeIteratorWithinSpan(
+	ctx context.Context, db rangedesc.DB, span roachpb.Span,
+) (rangedesc.Iterator, error) {
+	rangeDescIterator, err := rangedesc.NewIteratorFactory(db).NewIterator(ctx, span)
+	if err != nil {
+		return nil, err
+	}
+	return rangeDescIterator, nil
+}
+
+// rangeSpanIterator is a ValueGenerator that iterates over all
+// ranges of a target span.
+type rangeSpanIterator struct {
+	// The span to iterate
+	span roachpb.Span
+
+	currRangeDesc roachpb.RangeDescriptor
+	rangeDescs    []roachpb.RangeDescriptor
+	rangeIter     rangedesc.Iterator
+
+	// A buffer to avoid allocating an array on every call to Values().
+	buf [3]tree.Datum
+}
+
+func newRangeSpanIterator(_ *eval.Context, span roachpb.Span) *rangeSpanIterator {
+	return &rangeSpanIterator{span: span}
+}
+
+// Start implements the tree.ValueGenerator interface.
+func (rs *rangeSpanIterator) Start(ctx context.Context, txn *kv.Txn) error {
+	var err error
+	rs.rangeIter, err = getRangeIteratorWithinSpan(ctx, txn.DB(), rs.span)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// Next implements the tree.ValueGenerator interface.
+func (rs *rangeSpanIterator) Next(_ context.Context) (bool, error) {
+	exists := rs.rangeIter.Valid()
+	if exists {
+		rs.currRangeDesc = rs.rangeIter.CurRangeDescriptor()
+		rs.rangeIter.Next()
+	}
+	return exists, nil
+}
+
+// Values implements the tree.ValueGenerator interface.
+func (rs *rangeSpanIterator) Values() (tree.Datums, error) {
+	rs.buf[0] = tree.NewDInt(tree.DInt(rs.currRangeDesc.RangeID))
+	rs.buf[1] = tree.NewDBytes(tree.DBytes(rs.currRangeDesc.StartKey))
+	rs.buf[2] = tree.NewDBytes(tree.DBytes(rs.currRangeDesc.EndKey))
+	return rs.buf[:], nil
+}
+
+// Close implements the tree.ValueGenerator interface.
+func (rs *rangeSpanIterator) Close(_ context.Context) {}
+
+// ResolvedType implements the tree.ValueGenerator interface.
+func (rs *rangeSpanIterator) ResolvedType() *types.T {
+	return rangesInSpanGeneratorType
+}
+
+var rangesInSpanGeneratorType = types.MakeLabeledTuple(
+	[]*types.T{types.Int, types.Bytes, types.Bytes},
+	[]string{"range_id", "start_key", "end_key"},
+)
+
+func makeRangesInSpanGenerator(
+	_ context.Context, evalCtx *eval.Context, args tree.Datums,
+) (eval.ValueGenerator, error) {
+	startKey := []byte(tree.MustBeDBytes(args[0]))
+	endKey := []byte(tree.MustBeDBytes(args[1]))
+	return newRangeSpanIterator(evalCtx, roachpb.Span{
+		Key:    startKey,
+		EndKey: endKey,
+	}), nil
+}
+
+type tenantRangesPerTableIterator struct {
+	codec             keys.SQLCodec
+	planner           eval.Planner
+	it                eval.InternalRows
+	span              roachpb.Span
+	rangeIntervalTree interval.Tree
+	// A buffer to avoid allocating an array on every call to Values().
+	buf [6]tree.Datum
+}
+
+// Start implements the tree.ValueGenerator interface.
+func (trpti *tenantRangesPerTableIterator) Start(ctx context.Context, txn *kv.Txn) error {
+	rangeIter, err := getRangeIteratorWithinSpan(ctx, txn.DB(), trpti.span)
+	if err != nil {
+		return err
+	}
+	trpti.rangeIntervalTree = interval.NewTree(interval.ExclusiveOverlapper)
+	for rangeIter.Valid() {
+		rangeDesc := rangeIter.CurRangeDescriptor()
+		err := trpti.rangeIntervalTree.Insert(rangeDescSpan(rangeDesc), false)
+		if err != nil {
+			return err
+		}
+		rangeIter.Next()
+	}
+	const query = `SELECT
+						database_name,
+						parent_id as database_id,
+						name,
+						table_id,
+						name
+					FROM crdb_internal.tables`
+
+	it, err := trpti.planner.QueryIteratorEx(
+		ctx,
+		"crdb_internal.tenant_ranges_per_table",
+		sessiondata.NoSessionDataOverride,
+		query,
+	)
+	if err != nil {
+		return err
+	}
+	trpti.it = it
+	return nil
+}
+
+// Next implements the tree.ValueGenerator interface.
+func (trpti *tenantRangesPerTableIterator) Next(ctx context.Context) (bool, error) {
+	if trpti.it == nil {
+		return false, errors.AssertionFailedf("Start must be called before Next")
+	}
+	return trpti.it.Next(ctx)
+}
+
+// Values implements the tree.ValueGenerator interface.
+func (trpti *tenantRangesPerTableIterator) Values() (tree.Datums, error) {
+	rangeIds := tree.NewDArray(types.Int)
+	row := trpti.it.Cur()
+	tableID := tree.MustBeDInt(row[3])
+
+	tableStartKey := trpti.codec.TablePrefix(uint32(tableID))
+	tableRange := interval.Range{
+		Start: interval.Comparable(tableStartKey),
+		End:   interval.Comparable(tableStartKey.PrefixEnd()),
+	}
+	tableOverlappingRanges := trpti.rangeIntervalTree.Get(tableRange)
+	for _, oRange := range tableOverlappingRanges {
+		err := rangeIds.Append(tree.NewDInt(tree.DInt(oRange.ID())))
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	trpti.buf[0] = row[0]                                               // database_name
+	trpti.buf[1] = row[1]                                               // database_id
+	trpti.buf[2] = row[2]                                               // table_name
+	trpti.buf[3] = row[3]                                               // table_id
+	trpti.buf[4] = tree.NewDInt(tree.DInt(len(tableOverlappingRanges))) // range_count
+	trpti.buf[5] = rangeIds                                             // range_ids
+
+	return trpti.buf[:], nil
+}
+
+// ResolvedType implements the tree.ValueGenerator interface.
+func (trpti *tenantRangesPerTableIterator) ResolvedType() *types.T {
+	return tenantRangesPerTableGeneratorType
+}
+
+// Close implements the tree.ValueGenerator interface.
+func (trpti *tenantRangesPerTableIterator) Close(_ context.Context) {}
+
+var tenantRangesPerTableGeneratorType = types.MakeLabeledTuple(
+	[]*types.T{types.String, types.Int, types.String, types.Int, types.Int, types.IntArray},
+	[]string{"database_name", "database_id", "table_name", "table_id", "range_count", "range_ids"},
+)
+
+func makeTenantRangesPerTableGenerator(
+	_ context.Context, evalCtx *eval.Context, _ tree.Datums,
+) (eval.ValueGenerator, error) {
+	orsi := &tenantRangesPerTableIterator{span: evalCtx.Codec.TenantSpan(), planner: evalCtx.Planner, codec: evalCtx.Codec}
+	return orsi, nil
 }
