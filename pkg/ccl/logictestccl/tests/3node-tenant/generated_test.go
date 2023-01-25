@@ -1368,6 +1368,13 @@ func TestTenantLogic_propagate_input_ordering(
 	runLogicTest(t, "propagate_input_ordering")
 }
 
+func TestTenantLogic_ranges_in_span(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "ranges_in_span")
+}
+
 func TestTenantLogic_reassign_owned_by(
 	t *testing.T,
 ) {
@@ -1905,6 +1912,13 @@ func TestTenantLogic_tenant_from_tenant(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "tenant_from_tenant")
+}
+
+func TestTenantLogic_tenant_ranges_per_table(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "tenant_ranges_per_table")
 }
 
 func TestTenantLogic_tenant_slow_repro(

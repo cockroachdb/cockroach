@@ -13,6 +13,7 @@ package faketreeeval
 
 import (
 	"context"
+	"github.com/cockroachdb/cockroach/pkg/util/rangedesc"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -458,6 +459,13 @@ func (ep *DummyEvalPlanner) IsANSIDML() bool {
 func (ep *DummyEvalPlanner) GetRangeDescByID(
 	context.Context, roachpb.RangeID,
 ) (rangeDesc roachpb.RangeDescriptor, err error) {
+	return
+}
+
+// GetRangeIteratorWithinSpan is part of the eval.Planner interface.
+func (ep *DummyEvalPlanner) GetRangeIteratorWithinSpan(
+	ctx context.Context, span roachpb.Span,
+) (it rangedesc.Iterator, err error) {
 	return
 }
 

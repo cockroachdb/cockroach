@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/rangedesc"
 	"github.com/lib/pq/oid"
 )
 
@@ -360,6 +361,9 @@ type Planner interface {
 
 	// GetRangeDescByID gets the RangeDescriptor by the specified RangeID.
 	GetRangeDescByID(context.Context, roachpb.RangeID) (roachpb.RangeDescriptor, error)
+
+	// GetRangeIteratorWithinSpan provides a range Iterator for the ranges of the provided span.
+	GetRangeIteratorWithinSpan(ctx context.Context, span roachpb.Span) (rangedesc.Iterator, error)
 }
 
 // InternalRows is an iterator interface that's exposed by the internal

@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/util/rangedesc"
 	"sort"
 	"strings"
 
@@ -2415,6 +2416,17 @@ func (p *planner) GetRangeDescByID(
 		return rangeDesc, errors.Newf("range with ID %d not found", rangeID)
 	}
 	return rangeDesc, nil
+}
+
+// GetRangeIteratorWithinSpan is part of the eval.Planner interface.
+func (p *planner) GetRangeIteratorWithinSpan(
+	ctx context.Context, span roachpb.Span,
+) (rangedesc.Iterator, error) {
+	rangeDescIterator, err := p.execCfg.RangeDescIteratorFactory.NewIterator(ctx, span)
+	if err != nil {
+		return nil, err
+	}
+	return rangeDescIterator, nil
 }
 
 // OptimizeSystemDatabase is part of the eval.RegionOperator interface.

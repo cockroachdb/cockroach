@@ -2044,6 +2044,9 @@ var builtinOidsArray = []string{
 	2068: `crdb_internal.gen_rand_ident(name_pattern: string, count: int, parameters: jsonb) -> string`,
 	2069: `crdb_internal.create_tenant(parameters: jsonb) -> int`,
 	2070: `crdb_internal.num_inverted_index_entries(val: tsvector, version: int) -> int`,
+	2071: `crdb_internal.ranges_in_span(start_key: bytes, end_key: bytes) -> tuple{int AS range_id, bytes AS start_key, bytes AS end_key}`,
+	2072: `crdb_internal.tenant_ranges_per_table() -> tuple{string AS database_name, int AS database_id, string AS table_name, int AS table_id, int AS range_count, int[] AS range_ids}`,
+	2073: `crdb_internal.tenant_ranges_per_table(database_id: int) -> tuple{string AS database_name, int AS database_id, string AS table_name, int AS table_id, int AS range_count, int[] AS range_ids}`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid
