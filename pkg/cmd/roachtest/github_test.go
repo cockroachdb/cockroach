@@ -15,6 +15,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/internal/issues"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
@@ -60,24 +61,26 @@ func TestShouldPost(t *testing.T) {
 		nodeCount         int
 		envGithubAPIToken string
 		envTcBuildBranch  string
-		expected          bool
+		expectedPost      bool
+		expectedReason    string
 	}{
 		/* Cases 1 - 4 verify that issues are not posted if any of the relevant criteria checks fail */
 		// disable
-		{true, 1, "token", "master", false},
+		{true, 1, "token", "master", false, "issue posting was disabled via command line flag"},
 		// nodeCount
-		{false, 0, "token", "master", false},
+		{false, 0, "token", "master", false, "Cluster.NodeCount is zero"},
 		// apiToken
-		{false, 1, "", "master", false},
+		{false, 1, "", "master", false, "GitHub API token not set"},
 		// branch
-		{false, 1, "token", "", false},
-		{false, 1, "token", "master", true},
+		{false, 1, "token", "", false, `not a release branch: "branch-not-found-in-env"`},
+		{false, 1, "token", "master", true, ""},
 	}
 
 	reg, _ := makeTestRegistry(spec.GCE, "", "", false)
 	for _, c := range testCases {
 		t.Setenv("GITHUB_API_TOKEN", c.envGithubAPIToken)
 		t.Setenv("TC_BUILD_BRANCH", c.envTcBuildBranch)
+		defaultOpts = issues.DefaultOptionsFromEnv() // recompute options from env
 
 		clusterSpec := reg.MakeClusterSpec(c.nodeCount)
 		testSpec := &registry.TestSpec{
@@ -97,7 +100,9 @@ func TestShouldPost(t *testing.T) {
 			disable: c.disableIssues,
 		}
 
-		require.Equal(t, c.expected, github.shouldPost(ti))
+		doPost, skipReason := github.shouldPost(ti)
+		require.Equal(t, c.expectedPost, doPost)
+		require.Equal(t, c.expectedReason, skipReason)
 	}
 }
 
