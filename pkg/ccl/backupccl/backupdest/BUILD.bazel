@@ -10,9 +10,9 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupdest",
     visibility = ["//visibility:public"],
     deps = [
+      "//pkg/sql/protoreflect:protoreflect",
         "//pkg/ccl/backupccl/backupbase",
         "//pkg/ccl/backupccl/backupinfo",
-        "//pkg/ccl/backupccl/backuppb",
         "//pkg/ccl/backupccl/backuputils",
         "//pkg/cloud",
         "//pkg/cloud/cloudpb",

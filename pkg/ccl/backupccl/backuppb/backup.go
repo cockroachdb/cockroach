@@ -11,7 +11,6 @@ package backuppb
 import (
 	"encoding/json"
 	"fmt"
-
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"

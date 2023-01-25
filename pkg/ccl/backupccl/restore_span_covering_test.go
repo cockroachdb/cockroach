@@ -11,6 +11,7 @@ package backupccl
 import (
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"math/rand"
 	"testing"
 	"time"
@@ -30,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	spanUtils "github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -48,7 +48,7 @@ func MockBackupChain(
 	r *rand.Rand,
 	hasExternalFilesList bool,
 	execCfg sql.ExecutorConfig,
-) ([]backuppb.BackupManifest, error) {
+) ([]backupinfo.BackupMetadata, error) {
 	backups := make([]backuppb.BackupManifest, length)
 	ts := hlc.Timestamp{WallTime: time.Second.Nanoseconds()}
 
@@ -129,7 +129,13 @@ func MockBackupChain(
 		// A non-nil Dir more accurately models the footprint of produced coverings.
 		backups[i].Dir = config
 	}
-	return backups, nil
+
+	adapters := make([]backupinfo.BackupMetadata, len(backups))
+	for i := range backups {
+		storeFactory := execCfg.DistSQLSrv.ExternalStorage
+		adapters[i] = backupinfo.NewBackupManifestAdapter(&backups[i], nil, nil, nil, storeFactory)
+	}
+	return adapters, nil
 }
 
 // checkRestoreCovering verifies that a covering actually uses every span of
@@ -147,7 +153,7 @@ func MockBackupChain(
 // check back in when I figure out what the expected partition count should be.
 func checkRestoreCovering(
 	ctx context.Context,
-	backups []backuppb.BackupManifest,
+	backups []backupinfo.BackupMetadata,
 	spans roachpb.Spans,
 	cov []execinfrapb.RestoreSpanEntry,
 	merged bool,
@@ -155,7 +161,7 @@ func checkRestoreCovering(
 ) error {
 	required := make(map[string]*roachpb.SpanGroup)
 
-	introducedSpanFrontier, err := createIntroducedSpanFrontier(backups, hlc.Timestamp{})
+	introducedSpanFrontier, err := createIntroducedSpanFrontier(ctx, backups, hlc.Timestamp{})
 	if err != nil {
 		return err
 	}
@@ -167,7 +173,7 @@ func checkRestoreCovering(
 			introducedSpanFrontier.Entries(func(s roachpb.Span,
 				ts hlc.Timestamp) (done spanUtils.OpResult) {
 				if span.Overlaps(s) {
-					if b.EndTime.Less(ts) {
+					if b.EndTime().Less(ts) {
 						coveredLater = true
 					}
 					return spanUtils.StopMatch
@@ -179,13 +185,18 @@ func checkRestoreCovering(
 				// for explanation.
 				continue
 			}
-			it, err := makeBackupManifestFileIterator(ctx, storageFactory, b,
-				nil, nil)
+			it, err := b.NewFileIter(ctx)
 			if err != nil {
 				return err
 			}
-			defer it.close()
-			for f, hasNext := it.next(); hasNext; f, hasNext = it.next() {
+			defer it.Close()
+			for ;; it.Next() {
+				if ok, err := it.Valid(); err != nil {
+					return err
+				} else if !ok {
+					break
+				}
+				f := it.Value()
 				if sp := span.Intersect(f.Span); sp.Valid() {
 					if required[f.Path] == nil {
 						required[f.Path] = &roachpb.SpanGroup{}
@@ -195,9 +206,6 @@ func checkRestoreCovering(
 						last = sp.EndKey
 					}
 				}
-			}
-			if it.err() != nil {
-				return it.err()
 			}
 		}
 	}
@@ -230,8 +238,7 @@ const noSpanTargetSize = 0
 func makeImportSpans(
 	ctx context.Context,
 	spans []roachpb.Span,
-	backups []backuppb.BackupManifest,
-	layerToBackupManifestFileIterFactory layerToBackupManifestFileIterFactory,
+	backups []backupinfo.BackupMetadata,
 	targetSize int64,
 	introducedSpanFrontier *spanUtils.Frontier,
 	useSimpleImportSpans bool,
@@ -246,7 +253,7 @@ func makeImportSpans(
 		return nil
 	})
 
-	err := generateAndSendImportSpans(ctx, spans, backups, layerToBackupManifestFileIterFactory, nil, introducedSpanFrontier, nil, targetSize, spanCh, useSimpleImportSpans)
+	err := generateAndSendImportSpans(ctx, spans, backups, nil, introducedSpanFrontier, nil, targetSize, spanCh, useSimpleImportSpans)
 	close(spanCh)
 
 	if err != nil {
@@ -264,7 +271,7 @@ func TestRestoreEntryCoverExample(t *testing.T) {
 	const numAccounts = 1
 	ctx := context.Background()
 
-	tc, _, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts,
+	_, _, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts,
 		InitManualReplication)
 	defer cleanupFn()
 
@@ -284,31 +291,32 @@ func TestRestoreEntryCoverExample(t *testing.T) {
 
 	// Setup and test the example in the comment of makeSimpleImportSpans.
 	spans := []roachpb.Span{sp("a", "f"), sp("f", "i"), sp("l", "m")}
-	backups := []backuppb.BackupManifest{
-		{Files: []backuppb.BackupManifest_File{f("a", "c", "1"), f("c", "e", "2"), f("h", "i", "3")}},
-		{Files: []backuppb.BackupManifest_File{f("b", "d", "4"), f("g", "i", "5")}},
-		{Files: []backuppb.BackupManifest_File{f("a", "h", "6"), f("j", "k", "7")}},
-		{Files: []backuppb.BackupManifest_File{f("h", "i", "8"), f("l", "m", "9")}},
+	adapters := []*backupinfo.BackupManifestAdapter{
+		{BackupManifest: &backuppb.BackupManifest{Files: []backuppb.BackupManifest_File{f("a", "c", "1"), f("c", "e", "2"), f("h", "i", "3")}}},
+		{BackupManifest: &backuppb.BackupManifest{Files: []backuppb.BackupManifest_File{f("b", "d", "4"), f("g", "i", "5")}}},
+			{BackupManifest: &backuppb.BackupManifest{Files: []backuppb.BackupManifest_File{f("a", "h", "6"), f("j", "k", "7")}}},
+				{BackupManifest: &backuppb.BackupManifest{Files: []backuppb.BackupManifest_File{f("h", "i", "8"), f("l", "m", "9")}}},
 	}
 
-	for i := range backups {
-		backups[i].StartTime = hlc.Timestamp{WallTime: int64(i)}
-		backups[i].EndTime = hlc.Timestamp{WallTime: int64(i + 1)}
+	for i := range adapters {
+		adapters[i].BackupManifest.StartTime = hlc.Timestamp{WallTime: int64(i)}
+		adapters[i].BackupManifest.EndTime = hlc.Timestamp{WallTime: int64(i + 1)}
 
-		for j := range backups[i].Files {
+		for j := range adapters[i].Files {
 			// Pretend every span has 1MB.
-			backups[i].Files[j].EntryCounts.DataSize = 1 << 20
+			adapters[i].Files[j].EntryCounts.DataSize = 1 << 20
 		}
+	}
+
+	backups := make([]backupinfo.BackupMetadata, len(adapters))
+	for i := range adapters {
+		backups[i] = adapters[i]
 	}
 
 	emptySpanFrontier, err := spanUtils.MakeFrontier(roachpb.Span{})
 	require.NoError(t, err)
 
-	execCfg := tc.Server(0).ExecutorConfig().(sql.ExecutorConfig)
-	layerToBackupManifestFileIterFactory, err := getBackupManifestFileIters(ctx, &execCfg,
-		backups, nil, nil)
-	require.NoError(t, err)
-	cover, err := makeImportSpans(ctx, spans, backups, layerToBackupManifestFileIterFactory, noSpanTargetSize, emptySpanFrontier, false)
+	cover, err := makeImportSpans(ctx, spans, backups, noSpanTargetSize, emptySpanFrontier, false)
 	require.NoError(t, err)
 	require.Equal(t, []execinfrapb.RestoreSpanEntry{
 		{Span: sp("a", "b"), Files: paths("1", "6")},
@@ -320,7 +328,7 @@ func TestRestoreEntryCoverExample(t *testing.T) {
 		{Span: sp("l", "m"), Files: paths("9")},
 	}, cover)
 
-	coverSized, err := makeImportSpans(ctx, spans, backups, layerToBackupManifestFileIterFactory, 2<<20, emptySpanFrontier, false)
+	coverSized, err := makeImportSpans(ctx, spans, backups, 2<<20, emptySpanFrontier, false)
 	require.NoError(t, err)
 	require.Equal(t, []execinfrapb.RestoreSpanEntry{
 		{Span: sp("a", "b"), Files: paths("1", "6")},
@@ -332,11 +340,11 @@ func TestRestoreEntryCoverExample(t *testing.T) {
 	}, coverSized)
 
 	// check that introduced spans are properly elided
-	backups[2].IntroducedSpans = []roachpb.Span{sp("a", "f")}
-	introducedSpanFrontier, err := createIntroducedSpanFrontier(backups, hlc.Timestamp{})
+	adapters[2].IntroducedSpans = []roachpb.Span{sp("a", "f")}
+	introducedSpanFrontier, err := createIntroducedSpanFrontier(ctx, backups, hlc.Timestamp{})
 	require.NoError(t, err)
 
-	coverIntroduced, err := makeImportSpans(ctx, spans, backups, layerToBackupManifestFileIterFactory, noSpanTargetSize, introducedSpanFrontier, false)
+	coverIntroduced, err := makeImportSpans(ctx, spans, backups, noSpanTargetSize, introducedSpanFrontier, false)
 	require.NoError(t, err)
 	require.Equal(t, []execinfrapb.RestoreSpanEntry{
 		{Span: sp("a", "f"), Files: paths("6")},
@@ -387,7 +395,7 @@ func createMockManifest(
 	info mockBackupInfo,
 	endTime hlc.Timestamp,
 	path string,
-) backuppb.BackupManifest {
+) *backupinfo.BackupManifestAdapter {
 	tables, _ := createMockTables(info)
 
 	spans, err := spansForAllTableIndexes(execCfg, tables,
@@ -400,8 +408,10 @@ func createMockManifest(
 		files = append(files, backuppb.BackupManifest_File{Span: sp, Path: path})
 	}
 
-	return backuppb.BackupManifest{Spans: spans,
+	manifest := backuppb.BackupManifest{Spans: spans,
 		EndTime: endTime, Files: files}
+
+	return backupinfo.NewBackupManifestAdapter(&manifest, nil, nil, nil, nil)
 }
 
 // TestRestoreEntryCoverReIntroducedSpans checks that all reintroduced spans are
@@ -527,30 +537,30 @@ func TestRestoreEntryCoverReIntroducedSpans(t *testing.T) {
 	incBackupPath := "inc"
 	for _, test := range testCases {
 		t.Run(test.name, func(t *testing.T) {
-			backups := []backuppb.BackupManifest{
+			adapters := []*backupinfo.BackupManifestAdapter{
 				createMockManifest(t, &execCfg, test.full, hlc.Timestamp{WallTime: int64(1)}, fullBackupPath),
 				createMockManifest(t, &execCfg, test.inc, hlc.Timestamp{WallTime: int64(2)}, incBackupPath),
+			}
+			backups := make([]backupinfo.BackupMetadata, len(adapters))
+			for i := range adapters {
+				backups[i] = adapters[i]
 			}
 
 			// Create the IntroducedSpans field for incremental backup.
 			incTables, reIntroducedTables := createMockTables(test.inc)
 
-			newSpans := filterSpans(backups[1].Spans, backups[0].Spans)
+			newSpans := filterSpans(adapters[1].Spans, adapters[0].Spans)
 			reIntroducedSpans, err := spansForAllTableIndexes(&execCfg, reIntroducedTables, nil)
 			require.NoError(t, err)
-			backups[1].IntroducedSpans = append(newSpans, reIntroducedSpans...)
+			adapters[1].IntroducedSpans = append(newSpans, reIntroducedSpans...)
 
 			restoreSpans := spansForAllRestoreTableIndexes(execCfg.Codec, incTables, nil, false)
 			require.Equal(t, test.expectedRestoreSpanCount, len(restoreSpans))
 
-			introducedSpanFrontier, err := createIntroducedSpanFrontier(backups, hlc.Timestamp{})
+			introducedSpanFrontier, err := createIntroducedSpanFrontier(ctx, backups, hlc.Timestamp{})
 			require.NoError(t, err)
 
-			layerToBackupManifestFileIterFactory, err := getBackupManifestFileIters(ctx,
-				&execCfg, backups, nil, nil)
-			require.NoError(t, err)
-			cover, err := makeImportSpans(ctx, restoreSpans, backups, layerToBackupManifestFileIterFactory,
-				0, introducedSpanFrontier, false)
+			cover, err := makeImportSpans(ctx, restoreSpans, backups, 0, introducedSpanFrontier, false)
 			require.NoError(t, err)
 
 			for _, reIntroTable := range reIntroducedTables {
@@ -590,19 +600,21 @@ func TestRestoreEntryCover(t *testing.T) {
 						backups, err := MockBackupChain(ctx, numBackups, spans, files, r, hasExternalFilesList, execCfg)
 						require.NoError(t, err)
 
+						spanIt := backups[numBackups-1].NewSpanIter(ctx)
+						defer spanIt.Close()
+
+						requiredSpans, err := backupinfo.CollectToSlice(spanIt)
+						require.NoError(t, err)
+
 						for _, target := range []int64{0, 1, 4, 100, 1000} {
 							t.Run(fmt.Sprintf("numBackups=%d, numSpans=%d, numFiles=%d, merge=%d, slim=%t, simple=%t",
 								numBackups, spans, files, target, hasExternalFilesList, simpleImportSpans), func(t *testing.T) {
-								introducedSpanFrontier, err := createIntroducedSpanFrontier(backups, hlc.Timestamp{})
+								introducedSpanFrontier, err := createIntroducedSpanFrontier(ctx, backups, hlc.Timestamp{})
 								require.NoError(t, err)
 
-								layerToBackupManifestFileIterFactory, err := getBackupManifestFileIters(ctx,
-									&execCfg, backups, nil, nil)
+								cover, err := makeImportSpans(ctx, requiredSpans, backups, target<<20, introducedSpanFrontier, simpleImportSpans)
 								require.NoError(t, err)
-								cover, err := makeImportSpans(ctx, backups[numBackups-1].Spans, backups,
-									layerToBackupManifestFileIterFactory, target<<20, introducedSpanFrontier, simpleImportSpans)
-								require.NoError(t, err)
-								require.NoError(t, checkRestoreCovering(ctx, backups, backups[numBackups-1].Spans,
+								require.NoError(t, checkRestoreCovering(ctx, backups, requiredSpans,
 									cover, target != noSpanTargetSize, execCfg.DistSQLSrv.ExternalStorage))
 							})
 						}

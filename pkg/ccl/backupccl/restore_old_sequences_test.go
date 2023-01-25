@@ -72,6 +72,7 @@ func restoreOldSequencesTest(exportDir string, isSchemaOnly bool) func(t *testin
 		defer cleanup()
 		err := os.Symlink(exportDir, filepath.Join(dir, "foo"))
 		require.NoError(t, err)
+		sqlDB.Exec(t, `SET CLUSTER SETTING backup.manifest_read.mode = 'forceManifest'`)
 		sqlDB.Exec(t, `CREATE DATABASE test`)
 		var unused string
 		var importedRows int

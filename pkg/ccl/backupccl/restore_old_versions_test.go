@@ -183,8 +183,10 @@ func TestRestoreOldVersions(t *testing.T) {
 			err = os.Symlink(exportDir, filepath.Join(externalDir, "foo"))
 			require.NoError(t, err)
 
+			sqlDB.Exec(t, `SET CLUSTER SETTING backup.manifest_read.mode = 'forceManifest'`)
 			sqlDB.Exec(t, `RESTORE FROM $1`, localFoo)
 			sqlDB.Exec(t, `DROP DATABASE db1;`)
+			sqlDB.Exec(t, `SET CLUSTER SETTING backup.manifest_read.mode = 'forceManifest'`)
 			sqlDB.Exec(t, `RESTORE DATABASE db1 FROM $1`, localFoo)
 			sqlDB.CheckQueryResults(t,
 				`SELECT count(*) FROM [SHOW DATABASES] WHERE database_name = 'db1'`,
@@ -228,6 +230,8 @@ func TestRestoreOldVersions(t *testing.T) {
 			}()
 			err = os.Symlink(exportDir, filepath.Join(externalDir, "foo"))
 			require.NoError(t, err)
+
+			sqlDB.Exec(t, `SET CLUSTER SETTING backup.manifest_read.mode = 'forceManifest'`)
 
 			// Expect this restore to fail.
 			sqlDB.ExpectErr(t, `type "t" has unknown ParentID 50`, `RESTORE DATABASE otherdb FROM $1`, localFoo)
@@ -323,6 +327,7 @@ func restoreOldVersionTestWithInterleave(exportDir string) func(t *testing.T) {
 		defer cleanup()
 		err := os.Symlink(exportDir, filepath.Join(dir, "foo"))
 		require.NoError(t, err)
+		sqlDB.Exec(t, `SET CLUSTER SETTING backup.manifest_read.mode = 'forceManifest'`)
 		sqlDB.Exec(t, `CREATE DATABASE test`)
 		// Restore should now fail.
 		sqlDB.ExpectErr(t,
@@ -369,6 +374,8 @@ func runOldVersionMultiRegionTest(exportDir string) func(t *testing.T) {
 		require.NoError(t, os.Symlink(exportDir, filepath.Join(dir, "external_backup_dir")))
 
 		sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
+
+		sqlDB.Exec(t, `SET CLUSTER SETTING backup.manifest_read.mode = 'forceManifest'`)
 
 		var unused string
 		var importedRows int
@@ -423,6 +430,7 @@ func restoreOldVersionTest(exportDir string) func(t *testing.T) {
 		defer cleanup()
 		err := os.Symlink(exportDir, filepath.Join(dir, "foo"))
 		require.NoError(t, err)
+		sqlDB.Exec(t, `SET CLUSTER SETTING backup.manifest_read.mode = 'forceManifest'`)
 		sqlDB.Exec(t, `CREATE DATABASE test`)
 		var unused string
 		var importedRows int
@@ -464,6 +472,7 @@ func restoreV201ZoneconfigPrivilegeTest(exportDir string) func(t *testing.T) {
 		defer cleanup()
 		err := os.Symlink(exportDir, filepath.Join(tmpDir, "foo"))
 		require.NoError(t, err)
+		sqlDB.Exec(t, `SET CLUSTER SETTING backup.manifest_read.mode = 'forceManifest'`)
 		sqlDB.Exec(t, `RESTORE FROM $1`, localFoo)
 		testDBGrants := [][]string{
 			{"test", "admin", "ALL", "true"},
@@ -497,6 +506,7 @@ func restoreOldVersionFKRevTest(exportDir string) func(t *testing.T) {
 		defer cleanup()
 		err := os.Symlink(exportDir, filepath.Join(dir, "foo"))
 		require.NoError(t, err)
+		sqlDB.Exec(t, `SET CLUSTER SETTING backup.manifest_read.mode = 'forceManifest'`)
 		sqlDB.Exec(t, `CREATE DATABASE ts`)
 		sqlDB.Exec(t, `RESTORE test.rev_times FROM $1 WITH into_db = 'ts'`, localFoo)
 		for _, ts := range sqlDB.QueryStr(t, `SELECT logical_time FROM ts.rev_times`) {
@@ -544,6 +554,8 @@ func deprecatedRestoreOldVersionClusterTest(exportDir string) func(t *testing.T)
 		}()
 		err := os.Symlink(exportDir, filepath.Join(externalDir, "foo"))
 		require.NoError(t, err)
+
+		sqlDB.Exec(t, `SET CLUSTER SETTING backup.manifest_read.mode = 'forceManifest'`)
 
 		// Ensure that the restore succeeds.
 		sqlDB.Exec(t, `RESTORE FROM $1`, localFoo)
@@ -595,6 +607,8 @@ func restoreOldVersionClusterTest(exportDir string) func(t *testing.T) {
 		}()
 		err := os.Symlink(exportDir, filepath.Join(externalDir, "foo"))
 		require.NoError(t, err)
+
+		sqlDB.Exec(t, `SET CLUSTER SETTING backup.manifest_read.mode = 'forceManifest'`)
 
 		// Ensure that the restore succeeds.
 		sqlDB.Exec(t, `RESTORE FROM $1`, localFoo)
@@ -819,6 +833,9 @@ func TestRestoreOldBackupMissingOfflineIndexes(t *testing.T) {
 			restoreTC := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{ServerArgs: args})
 			defer restoreTC.Stopper().Stop(context.Background())
 			sqlDBRestore := sqlutils.MakeSQLRunner(restoreTC.Conns[0])
+
+			sqlDBRestore.Exec(t, `SET CLUSTER SETTING backup.manifest_read.mode = 'forceManifest'`)
+
 			from := strings.Join(backupDirs[:i], `,`)
 			sqlDBRestore.Exec(t, fmt.Sprintf(`RESTORE FROM %s`, from))
 
@@ -897,6 +914,8 @@ func TestRestoreWithDroppedSchemaCorruption(t *testing.T) {
 	tdb := sqlutils.MakeSQLRunner(sqlDB)
 	defer s.Stopper().Stop(ctx)
 
+	tdb.Exec(t, `SET CLUSTER SETTING backup.manifest_read.mode = 'forceManifest'`)
+
 	tdb.Exec(t, fmt.Sprintf("RESTORE DATABASE %s FROM '%s'", dbName, fromDir))
 	query := fmt.Sprintf("SELECT database_name FROM [SHOW DATABASES] WHERE database_name = '%s'", dbName)
 	tdb.CheckQueryResults(t, query, [][]string{{dbName}})
@@ -945,6 +964,7 @@ func restorePublicSchemaRemap(exportDir string) func(t *testing.T) {
 		err := os.Symlink(exportDir, filepath.Join(tmpDir, "foo"))
 		require.NoError(t, err)
 
+		sqlDB.Exec(t, `SET CLUSTER SETTING backup.manifest_read.mode = 'forceManifest'`)
 		sqlDB.Exec(t, fmt.Sprintf("RESTORE DATABASE d FROM '%s'", localFoo))
 
 		var restoredDBID, publicSchemaID int
@@ -1005,6 +1025,8 @@ func restoreSyntheticPublicSchemaNamespaceEntryCleanupOnFail(exportDir string) f
 		err := os.Symlink(exportDir, filepath.Join(tmpDir, "foo"))
 		require.NoError(t, err)
 
+		sqlDB.Exec(t, `SET CLUSTER SETTING backup.manifest_read.mode = 'forceManifest'`)
+
 		for _, server := range tc.Servers {
 			registry := server.JobRegistry().(*jobs.Registry)
 			registry.TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
@@ -1048,6 +1070,7 @@ func fullClusterRestoreUsersWithoutIDs(exportDir string) func(t *testing.T) {
 		err := os.Symlink(exportDir, filepath.Join(tmpDir, "foo"))
 		require.NoError(t, err)
 
+		sqlDB.Exec(t, `SET CLUSTER SETTING backup.manifest_read.mode = 'forceManifest'`)
 		sqlDB.Exec(t, fmt.Sprintf("RESTORE FROM '%s'", localFoo))
 
 		sqlDB.CheckQueryResults(t, `SELECT username, "hashedPassword", "isRole", user_id >= 100 FROM system.users`, [][]string{
@@ -1110,6 +1133,7 @@ func restoreSystemUsersWithoutIDs(exportDir string) func(t *testing.T) {
 		err := os.Symlink(exportDir, filepath.Join(tmpDir, "foo"))
 		require.NoError(t, err)
 
+		sqlDB.Exec(t, `SET CLUSTER SETTING backup.manifest_read.mode = 'forceManifest'`)
 		sqlDB.Exec(t, fmt.Sprintf("RESTORE SYSTEM USERS FROM '%s'", localFoo))
 
 		sqlDB.CheckQueryResults(t, `SELECT username, "hashedPassword", "isRole", user_id FROM system.users`, [][]string{

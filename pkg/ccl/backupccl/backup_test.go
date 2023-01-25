@@ -15,6 +15,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"hash/crc32"
 	"io"
 	"math"
@@ -3678,6 +3679,7 @@ func TestRestoreAsOfSystemTime(t *testing.T) {
 			// Restore the bank table from the full DB MVCC backup to time x, into a
 			// separate DB so that we can later compare it to the original table via
 			// time-travel.
+			fmt.Println("@@@ before ts", name)
 			sqlDB.Exec(t,
 				fmt.Sprintf(
 					`RESTORE data.* FROM $1, $2, $3 AS OF SYSTEM TIME %s WITH into_db='%s'`,
@@ -3687,6 +3689,7 @@ func TestRestoreAsOfSystemTime(t *testing.T) {
 			)
 			// Similarly restore the since-table backup -- since full DB and single table
 			// backups sometimes behave differently.
+			fmt.Println("@@@ before restore")
 			sqlDB.Exec(t,
 				fmt.Sprintf(
 					`RESTORE data.bank FROM $1, $2 AS OF SYSTEM TIME %s WITH into_db='%stbl'`,
@@ -3694,6 +3697,7 @@ func TestRestoreAsOfSystemTime(t *testing.T) {
 				),
 				fullTableBackup, incTableBackup,
 			)
+			fmt.Println("@@@ after restore")
 
 			// Use time-travel on the existing bank table to determine what RESTORE
 			// with AS OF should have produced.
@@ -3706,6 +3710,9 @@ func TestRestoreAsOfSystemTime(t *testing.T) {
 
 			// `sometable` moved in to data between after ts 3 and removed before 5.
 			if i == 4 || i == 5 {
+				sqlDB.QueryStr(t, fmt.Sprintf(`use %s`, name))
+				fmt.Println("@@@ test q for ", name, sqlDB.QueryStr(t, fmt.Sprintf(`show tables from %s;`, name)))
+
 				sqlDB.CheckQueryResults(t,
 					fmt.Sprintf(`SELECT * FROM %s.sometable ORDER BY id`, name),
 					sqlDB.QueryStr(t, fmt.Sprintf(`SELECT * FROM data.sometable AS OF SYSTEM TIME %s ORDER BY id`, timestamp)),
@@ -3739,6 +3746,7 @@ func TestRestoreAsOfSystemTime(t *testing.T) {
 			if i == ts[2] {
 				// latestBackup is _at_ ts2 so that is the time, and the only time, at
 				// which restoring it is allowed.
+				fmt.Println("@@@ testing ts2=", ts[2])
 				sqlDB.Exec(
 					t, fmt.Sprintf(`RESTORE data.* FROM $1 AS OF SYSTEM TIME %s WITH into_db='err'`, i),
 					latestBackup,
@@ -4269,7 +4277,7 @@ func TestEncryptedBackup(t *testing.T) {
 			sqlDB.ExpectErr(t, expectedShowError,
 				fmt.Sprintf(`SHOW BACKUP $1 WITH %s`, incorrectEncryptionOption), backupLoc1)
 			sqlDB.ExpectErr(t,
-				`file appears encrypted -- try specifying one of "encryption_passphrase" or "kms"`,
+				`(file appears encrypted -- try specifying one of "encryption_passphrase" or "kms"|invalid table \(bad magic number\))`,
 				`SHOW BACKUP $1`, backupLoc1)
 			sqlDB.ExpectErr(t, `could not find or read encryption information`,
 				fmt.Sprintf(`SHOW BACKUP $1 WITH %s`, encryptionOption), plainBackupLoc1)
@@ -8279,6 +8287,7 @@ func TestManifestTooNew(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	_, sqlDB, rawDir, cleanupFn := backupRestoreTestSetup(t, singleNode, 1, InitManualReplication)
 	defer cleanupFn()
+	sqlDB.Exec(t, `SET CLUSTER SETTING backup.manifest_read.mode = 'forceManifest'`)
 	sqlDB.Exec(t, `CREATE DATABASE r1`)
 	sqlDB.Exec(t, `BACKUP DATABASE r1 TO 'nodelocal://0/too_new'`)
 	sqlDB.Exec(t, `DROP DATABASE r1`)
@@ -8331,6 +8340,120 @@ func TestManifestTooNew(t *testing.T) {
 	checksum, err = backupinfo.GetChecksum(manifestData)
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(manifestPath+backupinfo.BackupManifestChecksumSuffix, checksum, 0644 /* perm */))
+	// Prove we can restore again.
+	sqlDB.Exec(t, `RESTORE DATABASE r1 FROM 'nodelocal://0/too_new'`)
+	sqlDB.Exec(t, `DROP DATABASE r1`)
+}
+
+func TestMetadataTooNew(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	tc, sqlDB, rawDir, cleanupFn := backupRestoreTestSetup(t, singleNode, 1, InitManualReplication)
+	defer cleanupFn()
+
+	sqlDB.Exec(t, `SET CLUSTER SETTING backup.manifest_read.mode = 'forceMetadataSST'`)
+	sqlDB.Exec(t, `CREATE DATABASE r1`)
+	sqlDB.Exec(t, `BACKUP DATABASE r1 TO 'nodelocal://0/too_new'`)
+	sqlDB.Exec(t, `DROP DATABASE r1`)
+	// Prove we can restore.
+	sqlDB.Exec(t, `RESTORE DATABASE r1 FROM 'nodelocal://0/too_new'`)
+	sqlDB.Exec(t, `DROP DATABASE r1`)
+
+	clusterSettings := tc.Server(0).ClusterSettings()
+	ctx := context.Background()
+
+	store, err := cloud.ExternalStorageFromURI(
+		ctx,
+		"nodelocal://0/too_new",
+		base.ExternalIODirConfig{},
+		clusterSettings,
+		blobs.NewLocalOnlyBlobClientFactory(rawDir),
+		username.RootUserName(),
+		tc.Servers[0].InternalDB().(isql.DB),
+		nil, /* limiters */
+		cloud.NilMetrics,
+	)
+
+	require.NoError(t, err)
+
+	var iterOpts = storage.IterOptions{
+		KeyTypes:   storage.IterKeyTypePointsAndRanges,
+		LowerBound: keys.LocalMax,
+		UpperBound: keys.MaxKey,
+	}
+	iter, err := storageccl.ExternalSSTReader(ctx, []storageccl.StoreFile{{store, backupinfo.MetadataSSTName}}, nil, iterOpts)
+	require.NoError(t, err)
+
+	var keys []storage.MVCCKey
+	var values [][]byte
+
+	for iter.SeekGE(storage.MVCCKey{});; iter.Next() {
+		if ok, err:= iter.Valid(); err != nil{
+			t.Fatal(err)
+		} else if !ok {
+			break
+		}
+
+		keys = append(keys, iter.UnsafeKey().Clone())
+		value, err  := iter.UnsafeValue()
+		require.NoError(t, err)
+		values = append(values, value)
+	}
+
+	modifyManifest := func(mutation func( *backuppb.BackupManifest)) {
+		require.NoError(t, store.Delete(ctx, backupinfo.MetadataSSTName))
+
+		writer, err  := store.Writer(ctx, backupinfo.MetadataSSTName)
+		require.NoError(t, err)
+		defer writer.Close()
+
+		sstWriter := storage.MakeBackupSSTWriter(ctx, clusterSettings, writer)
+		defer sstWriter.Close()
+
+		for i := range keys {
+			if keys[i].Key.Equal([]byte(backupinfo.SSTBackupKey)) {
+				var sstManifest backuppb.BackupManifest
+				value := values[i]
+				require.NoError(t, protoutil.Unmarshal(value, &sstManifest))
+				mutation(&sstManifest)
+				manifestData, err := protoutil.Marshal(&sstManifest)
+				require.NoError(t, err)
+
+				require.NoError(t, sstWriter.PutUnversioned([]byte(backupinfo.SSTBackupKey), manifestData))
+			} else {
+				value := values[i]
+				if keys[i].Timestamp.IsEmpty() {
+					require.NoError(t, sstWriter.PutUnversioned(keys[i].Key, value))
+				} else {
+					require.NoError(t, sstWriter.PutRawMVCC(keys[i], value))
+				}
+			}
+
+		}
+	}
+
+	// Bump the version and write it back out to make it look newer.
+	modifyManifest(func(manifest *backuppb.BackupManifest) {
+		manifest.ClusterVersion = roachpb.Version{Major: math.MaxInt32, Minor: 1}
+	})
+
+	// Verify we reject it.
+	sqlDB.ExpectErr(t, "backup from version 2147483647.1 is newer than current version", `RESTORE DATABASE r1 FROM 'nodelocal://0/too_new'`)
+
+	// Bump the version down and write it back out to make it look older.
+	modifyManifest(func(manifest *backuppb.BackupManifest) {
+		manifest.ClusterVersion = roachpb.Version{Major: 20, Minor: 2, Internal: 2}
+	})
+
+	// Prove we can restore again.
+	sqlDB.Exec(t, `RESTORE DATABASE r1 FROM 'nodelocal://0/too_new'`)
+	sqlDB.Exec(t, `DROP DATABASE r1`)
+
+	// Nil out the version to match an old backup that lacked it.
+	modifyManifest(func(manifest *backuppb.BackupManifest) {
+		manifest.ClusterVersion =  roachpb.Version{}
+	})
+
 	// Prove we can restore again.
 	sqlDB.Exec(t, `RESTORE DATABASE r1 FROM 'nodelocal://0/too_new'`)
 	sqlDB.Exec(t, `DROP DATABASE r1`)

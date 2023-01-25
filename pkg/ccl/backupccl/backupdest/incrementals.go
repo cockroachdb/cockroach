@@ -10,12 +10,14 @@ package backupdest
 
 import (
 	"context"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"path"
 	"regexp"
 	"sort"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupbase"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupinfo"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuputils"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -54,34 +56,60 @@ func CollectionAndSubdir(path string, subdir string) (string, string) {
 // If includeManifest is true the returned paths are to the manifests for the
 // prior backup, otherwise it is just to the backup path.
 func FindPriorBackups(
-	ctx context.Context, store cloud.ExternalStorage, includeManifest bool,
+	ctx context.Context, store cloud.ExternalStorage, includeManifest bool, mode jobspb.BackupManifestReadMode,
 ) ([]string, error) {
 	ctx, sp := tracing.ChildSpan(ctx, "backupdest.FindPriorBackups")
 	defer sp.Finish()
 
-	var prev []string
+	prevDirsAndManifest := make(map[string]string)
 	if err := store.List(ctx, "", backupbase.ListingDelimDataSlash, func(p string) error {
-		if ok, err := path.Match(incBackupSubdirGlob+backupbase.BackupManifestName, p); err != nil {
-			return err
-		} else if ok {
-			if !includeManifest {
-				p = strings.TrimSuffix(p, "/"+backupbase.BackupManifestName)
+		if mode != jobspb.BackupManifestReadMode_ForceManifest {
+			if ok, err := path.Match(incBackupSubdirGlob+backupinfo.MetadataSSTName, p); err != nil {
+				return err
+			} else if ok {
+
+				dir := strings.TrimSuffix(p, "/"+backupinfo.MetadataSSTName)
+				// We always will prefer using the metadata SST if we are not forced
+				// into using the manifest.
+				prevDirsAndManifest[dir] = p
+
+				return nil
 			}
-			prev = append(prev, p)
-			return nil
 		}
-		if ok, err := path.Match(incBackupSubdirGlob+backupbase.BackupOldManifestName, p); err != nil {
-			return err
-		} else if ok {
-			if !includeManifest {
-				p = strings.TrimSuffix(p, "/"+backupbase.BackupOldManifestName)
+
+		if mode != jobspb.BackupManifestReadMode_ForceMetadataSST {
+			if ok, err := path.Match(incBackupSubdirGlob+backupbase.BackupManifestName, p); err != nil {
+				return err
+			} else if ok {
+				dir := strings.TrimSuffix(p, "/"+backupbase.BackupManifestName)
+				if _, exist := prevDirsAndManifest[dir]; !exist || mode == jobspb.BackupManifestReadMode_ForceManifest {
+					prevDirsAndManifest[dir] = p
+				}
+				return nil
 			}
-			prev = append(prev, p)
+			if ok, err := path.Match(incBackupSubdirGlob+backupbase.BackupOldManifestName, p); err != nil {
+				return err
+			} else if ok {
+				dir := strings.TrimSuffix(p, "/"+backupbase.BackupOldManifestName)
+				if _, exist := prevDirsAndManifest[dir]; !exist || mode == jobspb.BackupManifestReadMode_ForceManifest {
+					prevDirsAndManifest[dir] = p
+				}
+			}
 		}
 		return nil
 	}); err != nil {
 		return nil, errors.Wrap(err, "reading previous backup layers")
 	}
+
+	var prev []string
+	for dir, p := range prevDirsAndManifest {
+		if includeManifest {
+			prev = append(prev, p)
+		} else {
+			prev = append(prev, dir)
+		}
+	}
+
 	sort.Strings(prev)
 	return prev, nil
 }
@@ -89,7 +117,7 @@ func FindPriorBackups(
 // backupsFromLocation is a small helper function to retrieve all prior
 // backups from the specified location.
 func backupsFromLocation(
-	ctx context.Context, user username.SQLUsername, execCfg *sql.ExecutorConfig, loc string,
+	ctx context.Context, user username.SQLUsername, execCfg *sql.ExecutorConfig, loc string, mode jobspb.BackupManifestReadMode,
 ) ([]string, error) {
 	ctx, sp := tracing.ChildSpan(ctx, "backupdest.backupsFromLocation")
 	defer sp.Finish()
@@ -100,7 +128,7 @@ func backupsFromLocation(
 		return nil, errors.Wrapf(err, "failed to open backup storage location")
 	}
 	defer store.Close()
-	prev, err := FindPriorBackups(ctx, store, false)
+	prev, err := FindPriorBackups(ctx, store, false, mode)
 	return prev, err
 }
 
@@ -144,6 +172,7 @@ func ResolveIncrementalsBackupLocation(
 	explicitIncrementalCollections []string,
 	fullBackupCollections []string,
 	subdir string,
+	mode jobspb.BackupManifestReadMode,
 ) ([]string, error) {
 	ctx, sp := tracing.ChildSpan(ctx, "backupdest.ResolveIncrementalsBackupLocation")
 	defer sp.Finish()
@@ -159,7 +188,7 @@ func ResolveIncrementalsBackupLocation(
 		// knows this isn't a usable incrementals store.
 		// Some callers will abort, e.g. BACKUP. Others will proceed with a
 		// warning, e.g. SHOW and RESTORE.
-		_, err = backupsFromLocation(ctx, user, execCfg, incPaths[0])
+		_, err = backupsFromLocation(ctx, user, execCfg, incPaths[0], mode)
 		if err != nil {
 			return nil, err
 		}
@@ -175,7 +204,7 @@ func ResolveIncrementalsBackupLocation(
 	// incremental layer iff all of them do. So it suffices to check only the
 	// first.
 	// Check we can read from this location, though we don't need the backups here.
-	prevOld, err := backupsFromLocation(ctx, user, execCfg, resolvedIncrementalsBackupLocationOld[0])
+	prevOld, err := backupsFromLocation(ctx, user, execCfg, resolvedIncrementalsBackupLocationOld[0], mode)
 	if err != nil {
 		return nil, err
 	}
@@ -185,7 +214,7 @@ func ResolveIncrementalsBackupLocation(
 		return nil, err
 	}
 
-	prev, err := backupsFromLocation(ctx, user, execCfg, resolvedIncrementalsBackupLocation[0])
+	prev, err := backupsFromLocation(ctx, user, execCfg, resolvedIncrementalsBackupLocation[0], mode)
 	if err != nil {
 		return nil, err
 	}

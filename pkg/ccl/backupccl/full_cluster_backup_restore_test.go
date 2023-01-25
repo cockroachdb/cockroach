@@ -614,6 +614,7 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 	// the test all together, setting the cluster setting to false which triggers
 	// the failure.
 	sqlDB.Exec(t, "SET CLUSTER SETTING kv.bulkio.write_metadata_sst.enabled=false")
+	sqlDB.Exec(t, `SET CLUSTER SETTING backup.manifest_read.mode = 'forceManifest'`)
 
 	// Setup the system systemTablesToVerify to ensure that they are copied to the new cluster.
 	// Populate system.users.
@@ -648,6 +649,7 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 	t.Run("during restoration of data", func(t *testing.T) {
 		_, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitManualReplication, base.TestClusterArgs{})
 		defer cleanupEmptyCluster()
+		sqlDBRestore.Exec(t, `SET CLUSTER SETTING backup.manifest_read.mode = 'forceManifest'`)
 		sqlDBRestore.ExpectErr(t, "sst: no such file", `RESTORE FROM 'nodelocal://1/missing-ssts'`)
 		// Verify the failed RESTORE added some DROP tables.
 		// Note that the system tables here correspond to the temporary tables
@@ -692,6 +694,8 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 				}}
 				tcRestore, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitManualReplication, args)
 				defer cleanupEmptyCluster()
+
+				sqlDBRestore.Exec(t, `SET CLUSTER SETTING backup.manifest_read.mode = 'forceManifest'`)
 
 				// Inject a retry error, that returns once.
 				alreadyErrored := false
@@ -741,6 +745,7 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 			}
 		}
 
+		sqlDBRestore.Exec(t, `SET CLUSTER SETTING backup.manifest_read.mode = 'forceManifest'`)
 		sqlDBRestore.ExpectErr(t, "injected error", `RESTORE FROM $1`, localFoo)
 		// Verify the failed RESTORE added some DROP tables.
 		// Note that the system tables here correspond to the temporary tables
@@ -785,6 +790,7 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 			}
 		}
 
+		sqlDBRestore.Exec(t, `SET CLUSTER SETTING backup.manifest_read.mode = 'forceManifest'`)
 		sqlDBRestore.ExpectErr(t, "injected error", `RESTORE FROM $1`, localFoo)
 	})
 }

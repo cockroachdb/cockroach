@@ -287,7 +287,6 @@ go_test(
         "//pkg/util/protoutil",
         "//pkg/util/randutil",
         "//pkg/util/retry",
-        "//pkg/util/span",
         "//pkg/util/stop",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",

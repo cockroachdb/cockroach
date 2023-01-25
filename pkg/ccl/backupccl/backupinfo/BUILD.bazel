@@ -11,6 +11,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupinfo",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/build",
         "//pkg/ccl/backupccl/backupbase",
         "//pkg/ccl/backupccl/backupencryption",
         "//pkg/ccl/backupccl/backuppb",
@@ -49,6 +50,7 @@ go_library(
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "//pkg/util/tracing",
+        "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_klauspost_compress//gzip",
     ],

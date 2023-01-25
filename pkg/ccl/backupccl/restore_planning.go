@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupdest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupencryption"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupinfo"
-	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuputils"
 	"github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
@@ -797,15 +796,26 @@ func maybeUpgradeDescriptors(descs []catalog.Descriptor, skipFKsWithNoMatchingTa
 // "other" table is missing from the set provided are omitted during the
 // upgrade, instead of causing an error to be returned.
 func maybeUpgradeDescriptorsInBackupManifests(
-	backupManifests []backuppb.BackupManifest, skipFKsWithNoMatchingTable bool,
+	ctx context.Context, backups []backupinfo.BackupMetadata, skipFKsWithNoMatchingTable bool,
 ) error {
-	if len(backupManifests) == 0 {
+	if len(backups) == 0 {
 		return nil
 	}
 
-	descriptors := make([]catalog.Descriptor, 0, len(backupManifests[0].Descriptors))
-	for i := range backupManifests {
-		descs, err := backupinfo.BackupManifestDescriptors(&backupManifests[i])
+	// Only upgrade descriptors in the manifest if we have an adapted manifest, as
+	// backup metadata is not old enough to need upgrades.
+	adapters :=make([]*backupinfo.BackupManifestAdapter, len(backups))
+	for i := range backups {
+		if adapter, ok := backups[i].(*backupinfo.BackupManifestAdapter) ; ok {
+			adapters[i] = adapter
+		} else {
+			return nil
+		}
+	}
+
+ 	descriptors := make([]catalog.Descriptor, 0, len(adapters[0].Descriptors))
+	for i := range adapters {
+		descs, err := backupinfo.BackupManifestDescriptors(ctx, adapters[i])
 		if err != nil {
 			return err
 		}
@@ -818,8 +828,8 @@ func maybeUpgradeDescriptorsInBackupManifests(
 	}
 
 	k := 0
-	for i := range backupManifests {
-		manifest := &backupManifests[i]
+	for i := range adapters {
+		manifest := adapters[i]
 		for j := range manifest.Descriptors {
 			manifest.Descriptors[j] = *descriptors[k].DescriptorProto()
 			k++
@@ -1411,6 +1421,8 @@ func doRestorePlan(
 		fullyResolvedSubdir = subdir
 	}
 
+	manifestReadMode := jobspb.BackupManifestReadMode(backupinfo.BackupManifestReadMode.Get(&p.ExecCfg().Settings.SV))
+
 	fullyResolvedBaseDirectory, err := backuputils.AppendPaths(from[0][:], fullyResolvedSubdir)
 	if err != nil {
 		return err
@@ -1423,6 +1435,7 @@ func doRestorePlan(
 		incFrom,
 		from[0],
 		fullyResolvedSubdir,
+		manifestReadMode,
 	)
 	if err != nil {
 		if errors.Is(err, cloud.ErrListingUnsupported) {
@@ -1439,6 +1452,7 @@ func doRestorePlan(
 	//
 	// Note that incremental _backup_ requests to this location will fail loudly instead.
 	mkStore := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI
+	storeFactory := p.ExecCfg().DistSQLSrv.ExternalStorage
 	baseStores, cleanupFn, err := backupdest.MakeBackupDestinationStores(ctx, p.User(), mkStore,
 		fullyResolvedBaseDirectory)
 	if err != nil {
@@ -1512,22 +1526,23 @@ func doRestorePlan(
 	// directories, return the URIs and manifests of all backup layers in all
 	// localities.
 	var defaultURIs []string
-	var mainBackupManifests []backuppb.BackupManifest
+	var mainBackupManifests []backupinfo.BackupMetadata
 	var localityInfo []jobspb.RestoreDetails_BackupLocalityInfo
 	var memReserved int64
+	fmt.Println("@@@ string", restoreStmt.String())
 	if len(from) <= 1 {
 		// Incremental layers are not specified explicitly. They will be searched for automatically.
 		// This could be either INTO-syntax, OR TO-syntax.
 		defaultURIs, mainBackupManifests, localityInfo, memReserved, err = backupdest.ResolveBackupManifests(
-			ctx, &mem, baseStores, incStores, mkStore, fullyResolvedBaseDirectory,
-			fullyResolvedIncrementalsDirectory, endTime, encryption, &kmsEnv, p.User(),
+			ctx, &mem, baseStores, incStores, mkStore, storeFactory, fullyResolvedBaseDirectory,
+			fullyResolvedIncrementalsDirectory, endTime, encryption, &kmsEnv, p.User(), manifestReadMode,
 		)
 	} else {
 		// Incremental layers are specified explicitly.
 		// This implies the old, deprecated TO-syntax.
 		defaultURIs, mainBackupManifests, localityInfo, memReserved, err =
-			backupdest.DeprecatedResolveBackupManifestsExplicitIncrementals(ctx, &mem, mkStore, from,
-				endTime, encryption, &kmsEnv, p.User())
+			backupdest.DeprecatedResolveBackupManifestsExplicitIncrementals(ctx, &mem, mkStore, storeFactory, from,
+				endTime, encryption, &kmsEnv, p.User(), manifestReadMode)
 	}
 
 	if err != nil {
@@ -1539,7 +1554,7 @@ func doRestorePlan(
 
 	currentVersion := p.ExecCfg().Settings.Version.ActiveVersion(ctx)
 	for i := range mainBackupManifests {
-		if v := mainBackupManifests[i].ClusterVersion; v.Major != 0 {
+		if v := mainBackupManifests[i].ClusterVersion(); v.Major != 0 {
 			// This is the "cluster" version that does not change between patches but
 			// rather just tracks migrations run. If the backup is more migrated than
 			// this cluster, then this cluster isn't ready to restore this backup.
@@ -1551,7 +1566,7 @@ func doRestorePlan(
 
 	if restoreStmt.DescriptorCoverage == tree.AllDescriptors {
 		// Validate that the backup is a full cluster backup if a full cluster restore was requested.
-		if mainBackupManifests[0].DescriptorCoverage == tree.RequestedDescriptors {
+		if mainBackupManifests[0].DescriptorCoverage() == tree.RequestedDescriptors {
 			return errors.Errorf("full cluster RESTORE can only be used on full cluster BACKUP files")
 		}
 
@@ -1565,7 +1580,7 @@ func doRestorePlan(
 		}
 	}
 
-	backupCodec, err := backupinfo.MakeBackupCodec(mainBackupManifests[0])
+	backupCodec, err := backupinfo.MakeBackupCodec(ctx, mainBackupManifests[0])
 	if err != nil {
 		return err
 	}
@@ -1578,9 +1593,24 @@ func doRestorePlan(
 	wasOffline := make(map[tableAndIndex]hlc.Timestamp)
 
 	for _, m := range mainBackupManifests {
-		spans := roachpb.Spans(m.Spans)
-		for i := range m.Descriptors {
-			table, _, _, _, _ := descpb.GetDescriptors(&m.Descriptors[i])
+		var spans  roachpb.Spans
+		spanIt := m.NewSpanIter(ctx)
+		defer spanIt.Close()
+		if spans, err = backupinfo.CollectToSlice(spanIt); err != nil {
+			return err
+		}
+
+		descIt := m.NewDescIter(ctx)
+		defer descIt.Close()
+
+		for ;; descIt.Next() {
+			if ok, err := descIt.Valid(); err != nil {
+				return err
+			} else if !ok {
+				break
+			}
+
+			table, _, _, _, _ := descpb.GetDescriptors(descIt.Value())
 			if table == nil {
 				continue
 			}
@@ -1594,7 +1624,7 @@ func doRestorePlan(
 					if index.Adding() && spans.ContainsKey(backupCodec.IndexPrefix(uint32(table.ID), uint32(index.GetID()))) {
 						k := tableAndIndex{tableID: table.ID, indexID: index.GetID()}
 						if _, ok := wasOffline[k]; !ok {
-							wasOffline[k] = m.EndTime
+							wasOffline[k] = m.EndTime()
 						}
 					}
 					return nil
@@ -1613,7 +1643,7 @@ func doRestorePlan(
 				"use SHOW BACKUP to find correct targets")
 	}
 
-	if err := checkMissingIntroducedSpans(sqlDescs, mainBackupManifests, endTime, backupCodec); err != nil {
+	if err := checkMissingIntroducedSpans(ctx, sqlDescs, mainBackupManifests, endTime, backupCodec); err != nil {
 		return err
 	}
 
@@ -1873,6 +1903,7 @@ func doRestorePlan(
 		PreRewriteTenantId: oldTenantID,
 		SchemaOnly:         restoreStmt.Options.SchemaOnly,
 		VerifyData:         restoreStmt.Options.VerifyData,
+		ManifestReadMode:   manifestReadMode,
 	}
 
 	jr := jobs.Record{

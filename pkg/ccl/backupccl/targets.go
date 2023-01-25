@@ -11,6 +11,7 @@ package backupccl
 import (
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
 	"sort"
 	"strings"
 
@@ -281,7 +282,7 @@ func fullClusterTargets(
 }
 
 func fullClusterTargetsRestore(
-	ctx context.Context, allDescs []catalog.Descriptor, lastBackupManifest backuppb.BackupManifest,
+	ctx context.Context, allDescs []catalog.Descriptor, lastBackupManifest backupinfo.BackupMetadata,
 ) (
 	[]catalog.Descriptor,
 	[]catalog.DatabaseDescriptor,
@@ -309,7 +310,16 @@ func fullClusterTargetsRestore(
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
-	return filteredDescs, filteredDBs, nil, lastBackupManifest.GetTenants(), nil
+
+	tenantIt := lastBackupManifest.NewTenantIter(ctx)
+	defer tenantIt.Close()
+
+	tenants, err := backupinfo.CollectToSlice(tenantIt)
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
+
+	return filteredDescs, filteredDBs, nil, tenants, nil
 }
 
 // fullClusterTargetsBackup returns the same descriptors referenced in
@@ -349,11 +359,23 @@ func fullClusterTargetsBackup(
 // mainBackupManifests are sorted by Endtime and this check only applies to
 // backups with a start time that is less than the restore AOST.
 func checkMissingIntroducedSpans(
+	ctx context.Context,
 	restoringDescs []catalog.Descriptor,
-	mainBackupManifests []backuppb.BackupManifest,
+	mainBackupManifests []backupinfo.BackupMetadata,
 	endTime hlc.Timestamp,
 	codec keys.SQLCodec,
 ) error {
+	for i, m := range mainBackupManifests {
+		js, _ := protoreflect.MessageToJSON(m.Manifest(), protoreflect.FmtFlags{})
+		fmt.Println("@@@ main", i, "js=", js)
+
+		d, _ := backupinfo.CollectToSlice(m.NewDescIter(ctx))
+		fmt.Println("@@@ descs=",d )
+
+		r, _ := backupinfo.CollectToSlice(m.NewDescriptorChangesIter(ctx))
+		fmt.Println("@@@ descrevs=",r)
+	}
+
 	// Gather the tables we'd like to restore.
 	requiredTables := make(map[descpb.ID]struct{})
 	for _, restoringDesc := range restoringDescs {
@@ -363,7 +385,7 @@ func checkMissingIntroducedSpans(
 	}
 
 	for i, b := range mainBackupManifests {
-		if !endTime.IsEmpty() && endTime.Less(b.StartTime) {
+		if !endTime.IsEmpty() && endTime.Less(b.StartTime()) {
 			// No need to check a backup that began after the restore AOST.
 			return nil
 		}
@@ -375,17 +397,49 @@ func checkMissingIntroducedSpans(
 
 		// Gather the _online_ tables included in the previous backup.
 		prevOnlineTables := make(map[descpb.ID]struct{})
-		for _, desc := range mainBackupManifests[i-1].Descriptors {
-			if table, _, _, _, _ := descpb.GetDescriptors(&desc); table != nil && table.Public() {
+		prevDescIt := mainBackupManifests[i-1].NewDescIter(ctx)
+		defer prevDescIt.Close()
+		fmt.Println("@@@ descriptors in manifest")
+		for ; ; prevDescIt.Next() {
+			if ok, err := prevDescIt.Valid(); err != nil {
+				return err
+			} else if !ok {
+				break
+			}
+
+			// TODO: i think something is up with the timestamps and descriptors and having descriptors vs desc revs...
+			// need to think about this.
+			if table, _, _, _, _ := descpb.GetDescriptors(prevDescIt.Value()); table != nil && table.Public() {
+				fmt.Println("@@@ descriptors in manifest", *prevDescIt.Value())
 				prevOnlineTables[table.GetID()] = struct{}{}
 			}
 		}
 
+		prevDescRevIt := mainBackupManifests[i-1].NewDescriptorChangesIter(ctx)
+		defer prevDescRevIt.Close()
+		for ;; prevDescRevIt.Next() {
+			if ok, err := prevDescRevIt.Valid(); err != nil {
+				return err
+			} else if !ok {
+				break
+			}
+
+		}
+
+
 		// Gather the tables that were reintroduced in the current backup (i.e.
 		// backed up from ts=0).
 		tablesIntroduced := make(map[descpb.ID]struct{})
-		for _, span := range mainBackupManifests[i].IntroducedSpans {
-			_, tableID, err := codec.DecodeTablePrefix(span.Key)
+		introducedSpansIt := mainBackupManifests[i].NewIntroducedSpanIter(ctx)
+		defer introducedSpansIt.Close()
+
+		for ; ; introducedSpansIt.Next() {
+			if ok, err := introducedSpansIt.Valid(); err != nil {
+				return err
+			} else if !ok {
+				break
+			}
+			_, tableID, err := codec.DecodeTablePrefix(introducedSpansIt.Value().Key)
 			if err != nil {
 				return err
 			}
@@ -423,7 +477,7 @@ func checkMissingIntroducedSpans(
 				" 2) restore with a newer backup chain (a full backup [+ incrementals])"+
 				" taken after the current backup target;"+
 				" 3) or remove table %v from the restore targets.",
-				table.Name, mainBackupManifests[i].StartTime.GoTime().String(), table.Name)
+				table.Name, mainBackupManifests[i].StartTime().GoTime().String(), table.Name)
 			return errors.WithIssueLink(tableError, errors.IssueLink{
 				IssueURL: "https://www.cockroachlabs.com/docs/advisories/a88042",
 				Detail: `An incremental database backup with revision history can incorrectly backup data for a table
@@ -431,11 +485,23 @@ that was running an IMPORT at the time of the previous incremental in this chain
 			})
 		}
 
-		for _, desc := range mainBackupManifests[i].Descriptors {
+		descIt := mainBackupManifests[i].NewDescIter(ctx)
+		defer descIt.Close()
+
+		for ; ; descIt.Next() {
+			if ok, err := descIt.Valid(); err != nil {
+				return err
+			} else if !ok {
+				break
+			}
+
 			// Check that all online tables at backup time were either introduced or
 			// in the previous backup.
-			if table, _, _, _, _ := descpb.GetDescriptors(&desc); table != nil && table.Public() {
+			if table, _, _, _, _ := descpb.GetDescriptors(descIt.Value()); table != nil && table.Public() {
 				if err := requiredIntroduction(table); err != nil {
+					fmt.Println("@@@ descs err")
+					fmt.Println("@@@ introduced",tablesIntroduced)
+					fmt.Println("@@@ inprev",prevOnlineTables)
 					return err
 				}
 			}
@@ -445,9 +511,21 @@ that was running an IMPORT at the time of the previous incremental in this chain
 		// where a descriptor may appear in manifest.DescriptorChanges but not
 		// manifest.Descriptors. If a descriptor switched from offline to online at
 		// any moment during the backup interval, it needs to be reintroduced.
-		for _, desc := range mainBackupManifests[i].DescriptorChanges {
-			if table, _, _, _, _ := descpb.GetDescriptors(desc.Desc); table != nil && table.Public() {
+		descRevIt := mainBackupManifests[i].NewDescriptorChangesIter(ctx)
+		defer descRevIt.Close()
+
+		for ; ; descRevIt.Next() {
+			if ok, err := descRevIt.Valid(); err != nil {
+				return err
+			} else if !ok {
+				break
+			}
+
+			if table, _, _, _, _ := descpb.GetDescriptors(descRevIt.Value().Desc); table != nil && table.Public() {
 				if err := requiredIntroduction(table); err != nil {
+					fmt.Println("@@@ descs changes err")
+					fmt.Println("@@@ introduced",tablesIntroduced)
+					fmt.Println("@@@ inprev",prevOnlineTables)
 					return err
 				}
 			}
@@ -470,7 +548,7 @@ that was running an IMPORT at the time of the previous incremental in this chain
 func selectTargets(
 	ctx context.Context,
 	p sql.PlanHookState,
-	backupManifests []backuppb.BackupManifest,
+	backupManifests []backupinfo.BackupMetadata,
 	targets tree.BackupTargetList,
 	descriptorCoverage tree.DescriptorCoverage,
 	asOf hlc.Timestamp,
@@ -483,7 +561,7 @@ func selectTargets(
 ) {
 	ctx, span := tracing.ChildSpan(ctx, "backupccl.selectTargets")
 	defer span.Finish()
-	allDescs, lastBackupManifest, err := backupinfo.LoadSQLDescsFromBackupsAtTime(backupManifests, asOf)
+	allDescs, lastBackupManifest, err := backupinfo.LoadSQLDescsFromBackupMetadataAtTime(ctx, backupManifests, asOf)
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
@@ -515,7 +593,17 @@ func selectTargets(
 	}
 
 	if targets.TenantID.IsSet() {
-		for _, tenant := range lastBackupManifest.GetTenants() {
+		tenantIt := lastBackupManifest.NewTenantIter(ctx)
+		defer tenantIt.Close()
+
+		for ;; tenantIt.Next() {
+			if ok, err := tenantIt.Valid(); err != nil {
+				return nil, nil, nil, nil, err
+			} else if !ok {
+				break
+			}
+
+			tenant := tenantIt.Value()
 			// TODO(dt): for now it is zero-or-one but when that changes, we should
 			// either keep it sorted or build a set here.
 			if tenant.ID == targets.TenantID.ID {
@@ -531,12 +619,18 @@ func selectTargets(
 		return nil, nil, nil, nil, err
 	}
 
+	for _, desc := range matched.Descs {
+		fmt.Println("@@@ matched desc=", desc.GetID(), desc.GetName())
+	}
+	for p, desc := range matched.DescsByTablePattern {
+		fmt.Println("@@@ matched pattern desc=", p, desc.GetName())
+	}
 	if len(matched.Descs) == 0 {
 		return nil, nil, nil, nil, errors.Errorf("no tables or databases matched the given targets: %s", tree.ErrString(&targets))
 	}
 
-	if lastBackupManifest.FormatVersion >= backupinfo.BackupFormatDescriptorTrackingVersion {
-		if err := matched.CheckExpansions(lastBackupManifest.CompleteDbs); err != nil {
+	if lastBackupManifest.FormatVersion() >= backupinfo.BackupFormatDescriptorTrackingVersion {
+		if err := matched.CheckExpansions(lastBackupManifest.CompleteDbs()); err != nil {
 			return nil, nil, nil, nil, err
 		}
 	}

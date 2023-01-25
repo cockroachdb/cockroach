@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupdest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupencryption"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupinfo"
-	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuputils"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
@@ -106,7 +105,7 @@ func (m manifestInfoReader) showBackup(
 	// FKs for which we can't resolve the cross-table references. We can't
 	// display them anyway, because we don't have the referenced table names,
 	// etc.
-	err := maybeUpgradeDescriptorsInBackupManifests(info.manifests,
+	err := maybeUpgradeDescriptorsInBackupManifests(ctx, info.manifests,
 		true /* skipFKsWithNoMatchingTable */)
 	if err != nil {
 		return err
@@ -378,6 +377,8 @@ you must pass the 'encryption_info_dir' parameter that points to the directory o
 			}
 		}
 
+		manifestReadMode := jobspb.BackupManifestReadMode(backupinfo.BackupManifestReadMode.Get(&p.ExecCfg().Settings.SV))
+
 		collection, computedSubdir := backupdest.CollectionAndSubdir(dest[0], subdir)
 		fullyResolvedIncrementalsDirectory, err := backupdest.ResolveIncrementalsBackupLocation(
 			ctx,
@@ -386,6 +387,7 @@ you must pass the 'encryption_info_dir' parameter that points to the directory o
 			explicitIncPaths,
 			[]string{collection},
 			computedSubdir,
+			manifestReadMode,
 		)
 		if err != nil {
 			if errors.Is(err, cloud.ErrListingUnsupported) {
@@ -410,6 +412,7 @@ you must pass the 'encryption_info_dir' parameter that points to the directory o
 		info.enc = encryption
 
 		mkStore := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI
+		storeFactory := p.ExecCfg().DistSQLSrv.ExternalStorage
 		incStores, cleanupFn, err := backupdest.MakeBackupDestinationStores(ctx, p.User(), mkStore,
 			fullyResolvedIncrementalsDirectory)
 		if err != nil {
@@ -423,11 +426,13 @@ you must pass the 'encryption_info_dir' parameter that points to the directory o
 
 		info.defaultURIs, info.manifests, info.localityInfo, memReserved,
 			err = backupdest.ResolveBackupManifests(
-			ctx, &mem, baseStores, incStores, mkStore, fullyResolvedDest,
-			fullyResolvedIncrementalsDirectory, hlc.Timestamp{}, encryption, &kmsEnv, p.User())
+			ctx, &mem, baseStores, incStores, mkStore, storeFactory, fullyResolvedDest,
+			fullyResolvedIncrementalsDirectory, hlc.Timestamp{}, encryption, &kmsEnv, p.User(), manifestReadMode)
 		defer func() {
 			mem.Shrink(ctx, memReserved)
 		}()
+
+		fmt.Printf("rh_debug: info=%v\n", info)
 		if err != nil {
 			if errors.Is(err, backupinfo.ErrLocalityDescriptor) && subdir == "" {
 				p.BufferClientNotice(ctx,
@@ -561,10 +566,12 @@ func checkBackupFiles(
 			}
 		}
 		// Check stat files.
-		for _, statFile := range info.manifests[layer].StatisticsFilenames {
-			if _, err := defaultStore.Size(ctx, statFile); err != nil {
-				return nil, errors.Wrapf(err, "Error checking metadata file %s/%s",
-					info.defaultURIs[layer], statFile)
+		if manifestAdapter, ok := info.manifests[layer].(*backupinfo.BackupManifestAdapter); ok {
+			for _, statFile := range manifestAdapter.StatisticsFilenames {
+				if _, err := defaultStore.Size(ctx, statFile); err != nil {
+					return nil, errors.Wrapf(err, "Error checking metadata file %s/%s",
+						info.defaultURIs[layer], statFile)
+				}
 			}
 		}
 
@@ -578,13 +585,19 @@ func checkBackupFiles(
 
 		// Check all backup SSTs.
 		fileSizes := make([]int64, 0)
-		it, err := makeBackupManifestFileIterator(ctx, execCfg.DistSQLSrv.ExternalStorage,
-			info.manifests[layer], encryption, kmsEnv)
+		it, err := info.manifests[layer].NewFileIter(ctx)
 		if err != nil {
 			return nil, err
 		}
-		defer it.close()
-		for f, hasNext := it.next(); hasNext; f, hasNext = it.next() {
+		defer it.Close()
+		for ; ; it.Next() {
+			if ok, err := it.Valid(); err != nil {
+				return nil, err
+			} else if !ok {
+				break
+			}
+
+			f := it.Value()
 			store := defaultStore
 			uri := info.defaultURIs[layer]
 			if _, ok := localityStores[f.LocalityKV]; ok {
@@ -604,9 +617,6 @@ func checkBackupFiles(
 				continue
 			}
 			fileSizes = append(fileSizes, sz)
-		}
-		if it.err() != nil {
-			return nil, it.err()
 		}
 
 		return fileSizes, nil
@@ -641,7 +651,7 @@ func checkBackupFiles(
 type backupInfo struct {
 	collectionURI string
 	defaultURIs   []string
-	manifests     []backuppb.BackupManifest
+	manifests     []backupinfo.BackupMetadata
 	subdir        string
 	localityInfo  []jobspb.RestoreDetails_BackupLocalityInfo
 	enc           *jobspb.BackupEncryptionOptions
@@ -711,7 +721,7 @@ func backupShowerDefault(p sql.PlanHookState, showSchemas bool, opts tree.KVOpti
 
 			var rows []tree.Datums
 			for layer, manifest := range info.manifests {
-				descriptors, err := backupinfo.BackupManifestDescriptors(&manifest)
+				descriptors, err := backupinfo.BackupManifestDescriptors(ctx, manifest)
 				if err != nil {
 					return nil, err
 				}
@@ -771,16 +781,16 @@ func backupShowerDefault(p sql.PlanHookState, showSchemas bool, opts tree.KVOpti
 					return nil, err
 				}
 				backupType := tree.NewDString("full")
-				if manifest.IsIncremental() {
+				if backupinfo.IsIncremental(manifest) {
 					backupType = tree.NewDString("incremental")
 				}
 				start := tree.DNull
-				end, err := tree.MakeDTimestamp(timeutil.Unix(0, manifest.EndTime.WallTime), time.Nanosecond)
+				end, err := tree.MakeDTimestamp(timeutil.Unix(0, manifest.EndTime().WallTime), time.Nanosecond)
 				if err != nil {
 					return nil, err
 				}
-				if manifest.StartTime.WallTime != 0 {
-					start, err = tree.MakeDTimestamp(timeutil.Unix(0, manifest.StartTime.WallTime), time.Nanosecond)
+				if manifest.StartTime().WallTime != 0 {
+					start, err = tree.MakeDTimestamp(timeutil.Unix(0, manifest.StartTime().WallTime), time.Nanosecond)
 					if err != nil {
 						return nil, err
 					}
@@ -865,7 +875,7 @@ func backupShowerDefault(p sql.PlanHookState, showSchemas bool, opts tree.KVOpti
 						end,
 						dataSizeDatum,
 						rowCountDatum,
-						tree.MakeDBool(manifest.DescriptorCoverage == tree.AllDescriptors),
+						tree.MakeDBool(manifest.DescriptorCoverage() == tree.AllDescriptors),
 						regionsDatum,
 					}
 					if showSchemas {
@@ -895,7 +905,16 @@ func backupShowerDefault(p sql.PlanHookState, showSchemas bool, opts tree.KVOpti
 					}
 					rows = append(rows, row)
 				}
-				for _, t := range manifest.GetTenants() {
+
+				tenantIt := manifest.NewTenantIter(ctx)
+				defer tenantIt.Close()
+				for ; ; tenantIt.Next() {
+					if ok, err := tenantIt.Valid(); err != nil {
+						return nil, err
+					} else if !ok {
+						break
+					}
+					t := tenantIt.Value()
 					row := tree.Datums{
 						tree.DNull, // Database
 						tree.DNull, // Schema
@@ -950,25 +969,26 @@ type descriptorSize struct {
 // spans stored in an SST.
 func getLogicalSSTSize(
 	ctx context.Context,
-	storeFactory cloud.ExternalStorageFactory,
-	manifest backuppb.BackupManifest,
-	enc *jobspb.BackupEncryptionOptions,
-	kmsEnv cloud.KMSEnv,
+	manifest backupinfo.BackupMetadata,
 ) (map[string]int64, error) {
 	ctx, span := tracing.ChildSpan(ctx, "backupccl.getLogicalSSTSize")
 	defer span.Finish()
 
 	sstDataSize := make(map[string]int64)
-	it, err := makeBackupManifestFileIterator(ctx, storeFactory, manifest, enc, kmsEnv)
+	it, err := manifest.NewFileIter(ctx)
 	if err != nil {
 		return nil, err
 	}
-	defer it.close()
-	for f, hasNext := it.next(); hasNext; f, hasNext = it.next() {
+	defer it.Close()
+	for ; ; it.Next() {
+		if ok, err := it.Valid(); err != nil {
+			return nil, err
+		} else if !ok {
+			break
+		}
+
+		f := it.Value()
 		sstDataSize[f.Path] += f.EntryCounts.DataSize
-	}
-	if it.err() != nil {
-		return nil, it.err()
 	}
 	return sstDataSize, nil
 }
@@ -985,27 +1005,34 @@ func getTableSizes(
 	ctx context.Context,
 	storeFactory cloud.ExternalStorageFactory,
 	info backupInfo,
-	manifest backuppb.BackupManifest,
+	manifest backupinfo.BackupMetadata,
 	fileSizes []int64,
 ) (map[descpb.ID]descriptorSize, error) {
 	ctx, span := tracing.ChildSpan(ctx, "backupccl.getTableSizes")
 	defer span.Finish()
 
-	logicalSSTSize, err := getLogicalSSTSize(ctx, storeFactory, manifest, info.enc, info.kmsEnv)
+	logicalSSTSize, err := getLogicalSSTSize(ctx, manifest)
 	if err != nil {
 		return nil, err
 	}
 
-	it, err := makeBackupManifestFileIterator(ctx, storeFactory, manifest, info.enc, info.kmsEnv)
+	it, err := manifest.NewFileIter(ctx)
 	if err != nil {
 		return nil, err
 	}
-	defer it.close()
+	defer it.Close()
 	tableSizes := make(map[descpb.ID]descriptorSize)
 	var tenantID roachpb.TenantID
 	var showCodec keys.SQLCodec
 	var idx int
-	for f, hasNext := it.next(); hasNext; f, hasNext = it.next() {
+	for ; ; it.Next() {
+		if ok, err := it.Valid(); err != nil {
+			return nil, err
+		} else if !ok {
+			break
+		}
+
+		f := it.Value()
 		if !tenantID.IsSet() {
 			var err error
 			_, tenantID, err = keys.DecodeTenantPrefix(f.Span.Key)
@@ -1036,9 +1063,6 @@ func getTableSizes(
 		}
 		tableSizes[descpb.ID(tableID)] = s
 		idx++
-	}
-	if it.err() != nil {
-		return nil, it.err()
 	}
 
 	return tableSizes, nil
@@ -1159,7 +1183,16 @@ var backupShowerRanges = backupShower{
 
 	fn: func(ctx context.Context, info backupInfo) (rows []tree.Datums, err error) {
 		for _, manifest := range info.manifests {
-			for _, span := range manifest.Spans {
+			spanIt := manifest.NewSpanIter(ctx)
+			defer spanIt.Close()
+
+			for ; ; spanIt.Next() {
+				if ok, err := spanIt.Valid(); err != nil {
+					return nil, err
+				} else if !ok {
+					break
+				}
+				span := spanIt.Value()
 				rows = append(rows, tree.Datums{
 					tree.NewDString(span.Key.String()),
 					tree.NewDString(span.EndKey.String()),
@@ -1182,7 +1215,7 @@ var backupShowerDoctor = backupShower{
 		var namespaceTable doctor.NamespaceTable
 		// Extract all the descriptors from the given manifest and generate the
 		// namespace and descriptor tables needed by doctor.
-		descriptors, _, err := backupinfo.LoadSQLDescsFromBackupsAtTime(info.manifests, hlc.Timestamp{})
+		descriptors, _, err := backupinfo.LoadSQLDescsFromBackupMetadataAtTime(ctx, info.manifests, hlc.Timestamp{})
 		if err != nil {
 			return nil, err
 		}
@@ -1212,7 +1245,7 @@ var backupShowerDoctor = backupShower{
 		// these will be synthesized by the restore process.
 		cv := clusterversion.DoctorBinaryVersion
 		if len(info.manifests) > 0 {
-			cv = info.manifests[len(info.manifests)-1].ClusterVersion
+			cv = info.manifests[len(info.manifests)-1].ClusterVersion()
 		}
 		ok, err := doctor.Examine(ctx,
 			clusterversion.ClusterVersion{Version: cv},
@@ -1268,24 +1301,28 @@ func backupShowerFileSetup(
 			}
 			for i, manifest := range info.manifests {
 				backupType := "full"
-				if manifest.IsIncremental() {
+				if backupinfo.IsIncremental(manifest) {
 					backupType = "incremental"
 				}
 
-				logicalSSTSize, err := getLogicalSSTSize(ctx, p.ExecCfg().DistSQLSrv.ExternalStorage, manifest,
-					info.enc, info.kmsEnv)
+				logicalSSTSize, err := getLogicalSSTSize(ctx, manifest)
 				if err != nil {
 					return nil, err
 				}
 
-				it, err := makeBackupManifestFileIterator(ctx, p.ExecCfg().DistSQLSrv.ExternalStorage,
-					manifest, info.enc, info.kmsEnv)
+				it, err := manifest.NewFileIter(ctx)
 				if err != nil {
 					return nil, err
 				}
-				defer it.close()
+				defer it.Close()
 				var idx int
-				for file, hasNext := it.next(); hasNext; file, hasNext = it.next() {
+				for ;; it.Next() {
+					if ok, err := it.Valid(); err != nil {
+						return nil, err
+					} else if !ok {
+						break
+					}
+					file := it.Value()
 					filePath := file.Path
 					if inCol != nil {
 						filePath = path.Join(manifestDirs[i], filePath)
@@ -1315,9 +1352,6 @@ func backupShowerFileSetup(
 						tree.NewDInt(tree.DInt(sz)),
 					})
 					idx++
-				}
-				if it.err() != nil {
-					return nil, it.err()
 				}
 			}
 			return rows, nil
@@ -1406,7 +1440,7 @@ var jsonShower = backupShower{
 		rows := make([]tree.Datums, len(info.manifests))
 		for i, manifest := range info.manifests {
 			j, err := protoreflect.MessageToJSON(
-				&manifest, protoreflect.FmtFlags{EmitDefaults: true, EmitRedacted: true})
+				manifest.Manifest(), protoreflect.FmtFlags{EmitDefaults: true, EmitRedacted: true})
 			if err != nil {
 				return nil, err
 			}

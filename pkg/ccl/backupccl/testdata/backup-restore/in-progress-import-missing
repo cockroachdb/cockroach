@@ -25,6 +25,10 @@
 new-cluster name=s1 allow-implicit-access disable-tenant
 ----
 
+exec-sql
+SET CLUSTER SETTING backup.manifest_read.mode = 'forceManifest'
+----
+
 # Link 4 backup chains:
 # 1. A corrupt database backup chain with revision history
 link-backup cluster=s1 src-path=restore_importing_tables,database dest-path=database
@@ -213,6 +217,10 @@ SELECT count(*) FROM d.goodfoo;
 
 # Check the cluster level restore
 new-cluster name=s2 share-io-dir=s1 allow-implicit-access disable-tenant
+----
+
+exec-sql
+SET CLUSTER SETTING backup.manifest_read.mode = 'forceManifest'
 ----
 
 exec-sql

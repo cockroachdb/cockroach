@@ -11,6 +11,7 @@ package backupccl
 import (
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupinfo"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -39,10 +40,17 @@ func BenchmarkCoverageChecks(b *testing.B) {
 								b.Run(fmt.Sprintf("slim=%t", hasExternalFilesList), func(b *testing.B) {
 									backups, err := MockBackupChain(ctx, numBackups, numSpans, baseFiles, r, hasExternalFilesList, execCfg)
 									require.NoError(b, err)
+
+									spanIt := backups[numBackups-1].NewSpanIter(ctx)
+									defer spanIt.Close()
+
+									requiredSpans, err := backupinfo.CollectToSlice(spanIt)
+									require.NoError(b, err)
+
 									b.ResetTimer()
 
 									for i := 0; i < b.N; i++ {
-										if err := checkCoverage(ctx, backups[numBackups-1].Spans, backups); err != nil {
+										if err := checkCoverage(ctx, requiredSpans, backups); err != nil {
 											b.Fatal(err)
 										}
 									}
@@ -75,16 +83,19 @@ func BenchmarkRestoreEntryCover(b *testing.B) {
 									func(b *testing.B) {
 										backups, err := MockBackupChain(ctx, numBackups, numSpans, baseFiles, r, hasExternalFilesList, execCfg)
 										require.NoError(b, err)
+
+										spanIt := backups[numBackups-1].NewSpanIter(ctx)
+										defer spanIt.Close()
+
+										requiredSpans, err := backupinfo.CollectToSlice(spanIt)
+										require.NoError(b, err)
+
 										b.ResetTimer()
 										for i := 0; i < b.N; i++ {
-											if err := checkCoverage(ctx, backups[numBackups-1].Spans, backups); err != nil {
+											if err := checkCoverage(ctx, requiredSpans, backups); err != nil {
 												b.Fatal(err)
 											}
-											introducedSpanFrontier, err := createIntroducedSpanFrontier(backups, hlc.Timestamp{})
-											require.NoError(b, err)
-
-											layerToBackupManifestFileIterFactory, err := getBackupManifestFileIters(ctx, &execCfg,
-												backups, nil, nil)
+											introducedSpanFrontier, err := createIntroducedSpanFrontier(ctx, backups, hlc.Timestamp{})
 											require.NoError(b, err)
 
 											spanCh := make(chan execinfrapb.RestoreSpanEntry, 1000)
@@ -92,8 +103,8 @@ func BenchmarkRestoreEntryCover(b *testing.B) {
 											g := ctxgroup.WithContext(ctx)
 											g.GoCtx(func(ctx context.Context) error {
 												defer close(spanCh)
-												return generateAndSendImportSpans(ctx, backups[numBackups-1].Spans, backups,
-													layerToBackupManifestFileIterFactory, nil, introducedSpanFrontier, nil, 0, spanCh, false)
+												return generateAndSendImportSpans(ctx, requiredSpans, backups,
+													nil, introducedSpanFrontier, nil, 0, spanCh, false)
 											})
 
 											var cov []execinfrapb.RestoreSpanEntry

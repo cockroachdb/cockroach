@@ -131,7 +131,7 @@ func backup(
 	defaultStore cloud.ExternalStorage,
 	storageByLocalityKV map[string]*cloudpb.ExternalStorage,
 	job *jobs.Job,
-	backupManifest *backuppb.BackupManifest,
+	backupManifest *backupinfo.BackupManifestAdapter,
 	makeExternalStorage cloud.ExternalStorageFactory,
 	encryption *jobspb.BackupEncryptionOptions,
 	statsCache *stats.TableStatisticsCache,
@@ -149,21 +149,31 @@ func backup(
 	// TODO(benesch): verify these files, rather than accepting them as truth
 	// blindly.
 	// No concurrency yet, so these assignments are safe.
-	it, err := makeBackupManifestFileIterator(ctx, execCtx.ExecCfg().DistSQLSrv.ExternalStorage,
-		*backupManifest, encryption, &kmsEnv)
+	{
+		it, _ := backupManifest.NewFileIter(ctx)
+		fmt.Printf("@@@ it = %v\n", it)
+		files, _ := backupinfo.CollectToSlice(it)
+		fmt.Printf("@@@ files=%v\n", files)
+	}
+
+	it, err := backupManifest.NewFileIter(ctx)
 	if err != nil {
 		return roachpb.RowCount{}, err
 	}
-	defer it.close()
-	for f, hasNext := it.next(); hasNext; f, hasNext = it.next() {
+	defer it.Close()
+	for ;; it.Next() {
+		if ok, err := it.Valid(); err != nil {
+			return roachpb.RowCount{}, err
+		} else if !ok {
+			break
+		}
+
+		f := it.Value()
 		if f.StartTime.IsEmpty() && !f.EndTime.IsEmpty() {
 			completedIntroducedSpans = append(completedIntroducedSpans, f.Span)
 		} else {
 			completedSpans = append(completedSpans, f.Span)
 		}
-	}
-	if it.err() != nil {
-		return roachpb.RowCount{}, it.err()
 	}
 
 	// Subtract out any completed spans.
@@ -200,9 +210,9 @@ func backup(
 		urisByLocalityKV,
 		encryption,
 		&kmsEnv,
-		roachpb.MVCCFilter(backupManifest.MVCCFilter),
-		backupManifest.StartTime,
-		backupManifest.EndTime,
+		roachpb.MVCCFilter(backupManifest.MVCCFilter()),
+		backupManifest.StartTime(),
+		backupManifest.EndTime(),
 	)
 	if err != nil {
 		return roachpb.RowCount{}, err
@@ -237,12 +247,12 @@ func backup(
 			if err := types.UnmarshalAny(&progress.ProgressDetails, &progDetails); err != nil {
 				log.Errorf(ctx, "unable to unmarshal backup progress details: %+v", err)
 			}
-			if backupManifest.RevisionStartTime.Less(progDetails.RevStartTime) {
-				backupManifest.RevisionStartTime = progDetails.RevStartTime
+			if backupManifest.RevisionStartTime().Less(progDetails.RevStartTime) {
+				backupManifest.BackupManifest.RevisionStartTime = progDetails.RevStartTime
 			}
 			for _, file := range progDetails.Files {
 				backupManifest.Files = append(backupManifest.Files, file)
-				backupManifest.EntryCounts.Add(file.EntryCounts)
+				backupManifest.BackupManifest.EntryCounts.Add(file.EntryCounts)
 				numBackedUpFiles++
 			}
 
@@ -255,12 +265,12 @@ func backup(
 			if timeutil.Since(lastCheckpoint) > interval {
 				resumerSpan.RecordStructured(&backuppb.BackupProgressTraceEvent{
 					TotalNumFiles:     numBackedUpFiles,
-					TotalEntryCounts:  backupManifest.EntryCounts,
-					RevisionStartTime: backupManifest.RevisionStartTime,
+					TotalEntryCounts:  backupManifest.EntryCounts(),
+					RevisionStartTime: backupManifest.RevisionStartTime(),
 				})
 
 				err := backupinfo.WriteBackupManifestCheckpoint(
-					ctx, defaultURI, encryption, &kmsEnv, backupManifest, execCtx.ExecCfg(), execCtx.User(),
+					ctx, defaultURI, encryption, &kmsEnv, backupManifest.BackupManifest, execCtx.ExecCfg(), execCtx.User(),
 				)
 				if err != nil {
 					log.Errorf(ctx, "unable to checkpoint backup descriptor: %+v", err)
@@ -291,7 +301,7 @@ func backup(
 	}
 
 	backupID := uuid.MakeV4()
-	backupManifest.ID = backupID
+	backupManifest.BackupManifest.ID = backupID
 	// Write additional partial descriptors to each node for partitioned backups.
 	if len(storageByLocalityKV) > 0 {
 		resumerSpan.RecordStructured(&types.StringValue{Value: "writing partition descriptors for partitioned backup"})
@@ -302,14 +312,14 @@ func backup(
 
 		nextPartitionedDescFilenameID := 1
 		for kv, conf := range storageByLocalityKV {
-			backupManifest.LocalityKVs = append(backupManifest.LocalityKVs, kv)
+			backupManifest.BackupManifest.LocalityKVs = append(backupManifest.BackupManifest.LocalityKVs, kv)
 			// Set a unique filename for each partition backup descriptor. The ID
 			// ensures uniqueness, and the kv string appended to the end is for
 			// readability.
 			filename := fmt.Sprintf("%s_%d_%s", backupPartitionDescriptorPrefix,
 				nextPartitionedDescFilenameID, backupinfo.SanitizeLocalityKV(kv))
 			nextPartitionedDescFilenameID++
-			backupManifest.PartitionDescriptorFilenames = append(backupManifest.PartitionDescriptorFilenames, filename)
+			backupManifest.BackupManifest.PartitionDescriptorFilenames = append(backupManifest.BackupManifest.PartitionDescriptorFilenames, filename)
 			desc := backuppb.BackupPartitionDescriptor{
 				LocalityKV: kv,
 				Files:      filesByLocalityKV[kv],
@@ -337,7 +347,7 @@ func backup(
 	// because a mixed-version cluster with 23.1 nodes will read the
 	// `BACKUP_METADATA` instead.
 	if err := backupinfo.WriteBackupManifest(ctx, defaultStore, backupbase.BackupManifestName,
-		encryption, &kmsEnv, backupManifest); err != nil {
+		encryption, &kmsEnv, backupManifest.BackupManifest); err != nil {
 		return roachpb.RowCount{}, err
 	}
 
@@ -348,7 +358,7 @@ func backup(
 	// reading backup manifests to `metadata.sst` we can stop writing the slim
 	// manifest.
 	if err := backupinfo.WriteFilesListMetadataWithSSTs(ctx, defaultStore, encryption,
-		&kmsEnv, backupManifest); err != nil {
+		&kmsEnv, backupManifest.BackupManifest); err != nil {
 		return roachpb.RowCount{}, err
 	}
 
@@ -358,7 +368,7 @@ func backup(
 	}
 
 	if backupinfo.WriteMetadataSST.Get(&settings.SV) {
-		if err := backupinfo.WriteBackupMetadataSST(ctx, defaultStore, encryption, &kmsEnv, backupManifest,
+		if err := backupinfo.WriteBackupMetadataSST(ctx, defaultStore, encryption, &kmsEnv, backupManifest.BackupManifest,
 			statsTable.Statistics); err != nil {
 			err = errors.Wrap(err, "writing forward-compat metadata sst")
 			if !build.IsRelease() {
@@ -368,7 +378,7 @@ func backup(
 		}
 	}
 
-	return backupManifest.EntryCounts, nil
+	return backupManifest.EntryCounts(), nil
 }
 
 func releaseProtectedTimestamp(
@@ -509,7 +519,7 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		}
 	}
 
-	var backupManifest *backuppb.BackupManifest
+	var backupManifest *backupinfo.BackupManifestAdapter
 
 	// Populate the BackupDetails with the resolved backup
 	// destination, and construct the BackupManifest to be written
@@ -529,7 +539,7 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 				return err
 			}
 			details = backupDetails
-			backupManifest = &m
+			backupManifest = m
 			return nil
 		}); err != nil {
 			return err
@@ -551,7 +561,7 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 				) error {
 					ptp := p.ExecCfg().ProtectedTimestampProvider.WithTxn(txn)
 					return protectTimestampForBackup(
-						ctx, b.job.ID(), ptp, backupManifest, details,
+						ctx, b.job.ID(), ptp, backupManifest.BackupManifest, details,
 					)
 				}); err != nil {
 					return err
@@ -564,7 +574,7 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		}
 
 		if err := backupinfo.WriteBackupManifestCheckpoint(
-			ctx, details.URI, details.EncryptionOptions, &kmsEnv, backupManifest, p.ExecCfg(), p.User(),
+			ctx, details.URI, details.EncryptionOptions, &kmsEnv, backupManifest.BackupManifest, p.ExecCfg(), p.User(),
 		); err != nil {
 			return err
 		}
@@ -617,7 +627,7 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		lic := utilccl.CheckEnterpriseEnabled(
 			p.ExecCfg().Settings, p.ExecCfg().NodeInfo.LogicalClusterID(), "",
 		) != nil
-		collectTelemetry(ctx, backupManifest, initialDetails, details, lic, b.job.ID())
+		collectTelemetry(ctx, backupManifest.BackupManifest, initialDetails, details, lic, b.job.ID())
 	}
 
 	// For all backups, partitioned or not, the main BACKUP manifest is stored at
@@ -662,11 +672,14 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	}()
 
 	if backupManifest == nil || forceReadBackupManifest {
-		backupManifest, memSize, err = b.readManifestOnResume(ctx, &mem, p.ExecCfg(), defaultStore,
+		var m *backuppb.BackupManifest
+		m, memSize, err = b.readManifestOnResume(ctx, &mem, p.ExecCfg(), defaultStore,
 			details, p.User(), &kmsEnv)
 		if err != nil {
 			return err
 		}
+
+		backupManifest = backupinfo.NewBackupManifestAdapter(m,defaultStore,details.EncryptionOptions, &kmsEnv, p.ExecCfg().DistSQLSrv.ExternalStorage)
 	}
 
 	statsCache := p.ExecCfg().TableStatsCache
@@ -713,13 +726,15 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		// Reload the backup manifest to pick up any spans we may have completed on
 		// previous attempts.
 		var reloadBackupErr error
+		var m *backuppb.BackupManifest
 		mem.Shrink(ctx, memSize)
 		memSize = 0
-		backupManifest, memSize, reloadBackupErr = b.readManifestOnResume(ctx, &mem, p.ExecCfg(),
+		m, memSize, reloadBackupErr = b.readManifestOnResume(ctx, &mem, p.ExecCfg(),
 			defaultStore, details, p.User(), &kmsEnv)
 		if reloadBackupErr != nil {
 			return errors.Wrap(reloadBackupErr, "could not reload backup manifest when retrying")
 		}
+		backupManifest = backupinfo.NewBackupManifestAdapter(m,defaultStore,details.EncryptionOptions, &kmsEnv, p.ExecCfg().DistSQLSrv.ExternalStorage)
 	}
 
 	// We have exhausted retries, but we have not seen a "PermanentBulkJobError" so
@@ -762,7 +777,7 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	// listing of the directory it is in -- it exists only to save us a
 	// potentially expensive listing of a giant backup collection to find the most
 	// recent completed entry.
-	if backupManifest.StartTime.IsEmpty() && details.CollectionURI != "" {
+	if backupManifest.StartTime().IsEmpty() && details.CollectionURI != "" {
 		backupURI, err := url.Parse(details.URI)
 		if err != nil {
 			return err
@@ -849,8 +864,9 @@ func getBackupDetailAndManifest(
 	initialDetails jobspb.BackupDetails,
 	user username.SQLUsername,
 	backupDestination backupdest.ResolvedDestination,
-) (jobspb.BackupDetails, backuppb.BackupManifest, error) {
+) (jobspb.BackupDetails, *backupinfo.BackupManifestAdapter, error) {
 	makeCloudStorage := execCfg.DistSQLSrv.ExternalStorageFromURI
+	storeFactory := execCfg.DistSQLSrv.ExternalStorage
 
 	kmsEnv := backupencryption.MakeBackupKMSEnv(
 		execCfg.Settings,
@@ -862,39 +878,39 @@ func getBackupDetailAndManifest(
 	mem := execCfg.RootMemoryMonitor.MakeBoundAccount()
 	defer mem.Close(ctx)
 
-	var prevBackups []backuppb.BackupManifest
+	var prevBackups []backupinfo.BackupMetadata
 	var baseEncryptionOptions *jobspb.BackupEncryptionOptions
 	if len(backupDestination.PrevBackupURIs) != 0 {
 		var err error
 		baseEncryptionOptions, err = backupencryption.GetEncryptionFromBase(ctx, user, makeCloudStorage,
 			backupDestination.PrevBackupURIs[0], *initialDetails.EncryptionOptions, &kmsEnv)
 		if err != nil {
-			return jobspb.BackupDetails{}, backuppb.BackupManifest{}, err
+			return jobspb.BackupDetails{}, nil, err
 		}
 
 		var memSize int64
 		prevBackups, memSize, err = backupinfo.GetBackupManifests(ctx, &mem, user,
-			makeCloudStorage, backupDestination.PrevBackupURIs, baseEncryptionOptions, &kmsEnv)
+			makeCloudStorage, storeFactory, backupDestination.PrevBackupURIs, baseEncryptionOptions, &kmsEnv, jobspb.BackupManifestReadMode_ForceManifest)
 
 		if err != nil {
-			return jobspb.BackupDetails{}, backuppb.BackupManifest{}, err
+			return jobspb.BackupDetails{}, nil, err
 		}
 		defer mem.Shrink(ctx, memSize)
 	}
 
 	if len(prevBackups) > 0 {
 		baseManifest := prevBackups[0]
-		if baseManifest.DescriptorCoverage == tree.AllDescriptors &&
+		if baseManifest.DescriptorCoverage() == tree.AllDescriptors &&
 			!initialDetails.FullCluster {
-			return jobspb.BackupDetails{}, backuppb.BackupManifest{}, errors.Errorf("cannot append a backup of specific tables or databases to a cluster backup")
+			return jobspb.BackupDetails{}, nil, errors.Errorf("cannot append a backup of specific tables or databases to a cluster backup")
 		}
 
 		if err := requireEnterprise(execCfg, "incremental"); err != nil {
-			return jobspb.BackupDetails{}, backuppb.BackupManifest{}, err
+			return jobspb.BackupDetails{}, nil, err
 		}
-		lastEndTime := prevBackups[len(prevBackups)-1].EndTime
+		lastEndTime := prevBackups[len(prevBackups)-1].EndTime()
 		if lastEndTime.Compare(initialDetails.EndTime) > 0 {
-			return jobspb.BackupDetails{}, backuppb.BackupManifest{},
+			return jobspb.BackupDetails{}, nil,
 				errors.Newf("`AS OF SYSTEM TIME` %s must be greater than "+
 					"the previous backup's end time of %s.",
 					initialDetails.EndTime.GoTime(), lastEndTime.GoTime())
@@ -913,11 +929,11 @@ func getBackupDetailAndManifest(
 		// IDs are how we identify tables, and those are only meaningful in the
 		// context of their own cluster, so we need to ensure we only allow
 		// incremental previous backups that we created.
-		if fromCluster := prevBackup.ClusterID; !fromCluster.Equal(execCfg.NodeInfo.LogicalClusterID()) {
-			return jobspb.BackupDetails{}, backuppb.BackupManifest{}, errors.Newf("previous BACKUP belongs to cluster %s", fromCluster.String())
+		if fromCluster := prevBackup.ClusterID(); !fromCluster.Equal(execCfg.NodeInfo.LogicalClusterID()) {
+			return jobspb.BackupDetails{}, nil, errors.Newf("previous BACKUP belongs to cluster %s", fromCluster.String())
 		}
 
-		prevLocalityKVs := prevBackup.LocalityKVs
+		prevLocalityKVs := prevBackup.LocalityKVs()
 
 		// Checks that each layer in the backup uses the same localities
 		// Does NOT check that each locality/layer combination is actually at the
@@ -933,7 +949,7 @@ func getBackupDetailAndManifest(
 			// necessary, because the default locality defines the backup manifest
 			// location. If that URI isn't right, the backup chain will fail to
 			// load.
-			return jobspb.BackupDetails{}, backuppb.BackupManifest{}, errors.Newf(
+			return jobspb.BackupDetails{}, nil, errors.Newf(
 				"Requested backup has localities %s, but a previous backup layer in this collection has localities %s. "+
 					"Mismatched backup layers are not supported. Please take a new full backup with the new localities, or an "+
 					"incremental backup with matching localities.",
@@ -956,7 +972,7 @@ func getBackupDetailAndManifest(
 		baseEncryptionOptions,
 		&kmsEnv)
 	if err != nil {
-		return jobspb.BackupDetails{}, backuppb.BackupManifest{}, err
+		return jobspb.BackupDetails{}, nil, err
 	}
 
 	backupManifest, err := createBackupManifest(
@@ -964,9 +980,12 @@ func getBackupDetailAndManifest(
 		execCfg,
 		txn,
 		updatedDetails,
-		prevBackups)
+		prevBackups,
+		user,
+		&kmsEnv,
+		)
 	if err != nil {
-		return jobspb.BackupDetails{}, backuppb.BackupManifest{}, err
+		return jobspb.BackupDetails{}, nil, err
 	}
 
 	return updatedDetails, backupManifest, nil

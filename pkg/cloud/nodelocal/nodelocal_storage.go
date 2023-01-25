@@ -16,6 +16,7 @@ import (
 	"io"
 	"net/url"
 	"path"
+	"runtime/debug"
 	"sort"
 	"strconv"
 	"strings"
@@ -174,6 +175,8 @@ func (l *localFileStorage) ReadFileAt(
 		// store returns a gRPC native NotFound error.
 		if oserror.IsNotExist(err) || status.Code(err) == codes.NotFound {
 			// nolint:errwrap
+			fmt.Println("@@@ here")
+			debug.PrintStack()
 			return nil, 0, errors.WithMessagef(
 				errors.Wrap(cloud.ErrFileDoesNotExist, "nodelocal storage file does not exist"),
 				"%s",
