@@ -382,20 +382,38 @@ type tlsCerts struct {
 	rootCertPool *x509.CertPool
 }
 
+const (
+	// sslInlineURLParam is a non-standard connection URL
+	// parameter. When true, we assume that sslcert, sslkey, and
+	// sslrootcert contain URL-encoded data rather than paths.
+	sslInlineURLParam = "sslinline"
+
+	sslModeURLParam     = "sslmode"
+	sslCertURLParam     = "sslcert"
+	sslKeyURLParam      = "sslkey"
+	sslRootCertURLParam = "sslrootcert"
+)
+
+var RedactableURLParameters = []string{
+	sslCertURLParam,
+	sslKeyURLParam,
+	sslRootCertURLParam,
+}
+
 // uriWithInlineTLSCertsRemoved handles the non-standard sslinline
 // option. The returned URL can be passed to pgx. The returned
 // tlsCerts struct can be used to apply the certificate data to the
 // tls.Config produced by pgx.
 func uriWithInlineTLSCertsRemoved(remote *url.URL) (*url.URL, *tlsCerts, error) {
-	if remote.Query().Get("sslinline") != "true" {
+	if remote.Query().Get(sslInlineURLParam) != "true" {
 		return remote, nil, nil
 	}
 
 	retURL := *remote
 	v := retURL.Query()
-	cert := v.Get("sslcert")
-	key := v.Get("sslkey")
-	rootcert := v.Get("sslrootcert")
+	cert := v.Get(sslCertURLParam)
+	key := v.Get(sslKeyURLParam)
+	rootcert := v.Get(sslRootCertURLParam)
 
 	if (cert != "" && key == "") || (cert == "" && key != "") {
 		return nil, nil, errors.New(`both "sslcert" and "sslkey" are required`)
@@ -430,14 +448,14 @@ func uriWithInlineTLSCertsRemoved(remote *url.URL) (*url.URL, *tlsCerts, error) 
 	// TODO(ssd): This may be a sign that we should implement the
 	// entire configTLS function from pgx and remove all tls
 	// options.
-	if v.Get("sslmode") == "require" && rootcert != "" {
-		v.Set("sslmode", "verify-ca")
+	if v.Get(sslModeURLParam) == "require" && rootcert != "" {
+		v.Set(sslModeURLParam, "verify-ca")
 	}
 
-	v.Del("sslcert")
-	v.Del("sslkey")
-	v.Del("sslrootcert")
-	v.Del("sslinline")
+	v.Del(sslCertURLParam)
+	v.Del(sslKeyURLParam)
+	v.Del(sslRootCertURLParam)
+	v.Del(sslInlineURLParam)
 	retURL.RawQuery = v.Encode()
 	return &retURL, tlsInfo, nil
 }
