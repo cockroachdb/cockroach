@@ -37,7 +37,7 @@ SET CLUSTER SETTING kv.bulkio.write_metadata_sst.enabled = false;
 ----
 
 exec-sql
-SET CLUSTER SETTING backup.manifest_read.mode = 'forceManifest';
+SET CLUSTER SETTING restore.manifest_read.mode = 'forceManifest';
 ----
 
 exec-sql

@@ -265,7 +265,7 @@ func restoreMidSchemaChange(
 			restoreQuery = restoreQuery + "with schema_only"
 		}
 
-		sqlDB.Exec(t, `SET CLUSTER SETTING backup.manifest_read.mode = 'forceManifest'`)
+		sqlDB.Exec(t, `SET CLUSTER SETTING restore.manifest_read.mode = 'forceManifest'`)
 
 		log.Infof(context.Background(), "%+v", sqlDB.QueryStr(t, "SHOW BACKUP $1", localFoo))
 		sqlDB.Exec(t, restoreQuery, localFoo)

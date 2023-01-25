@@ -10,7 +10,6 @@ package backupccl
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupinfo"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -20,7 +19,7 @@ import (
 
 // checkCoverage verifies that spans are covered by a given chain of backups.
 func checkCoverage(
-	ctx context.Context, spans []roachpb.Span, backups []backupinfo.BackupMetadata,
+	ctx context.Context, spans []roachpb.Span, backups []backupinfo.BackupManifest,
 ) error {
 	if len(spans) == 0 {
 		return nil
@@ -46,7 +45,6 @@ func checkCoverage(
 				break
 			}
 
-			fmt.Print("@@@ introduced span = ", introducedSpansIt.Value())
 			if _, err := frontier.Forward(introducedSpansIt.Value(), backups[i].StartTime()); err != nil {
 				return err
 			}

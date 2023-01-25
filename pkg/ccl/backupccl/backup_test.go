@@ -15,7 +15,6 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"hash/crc32"
 	"io"
 	"math"
@@ -87,6 +86,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -3679,7 +3679,6 @@ func TestRestoreAsOfSystemTime(t *testing.T) {
 			// Restore the bank table from the full DB MVCC backup to time x, into a
 			// separate DB so that we can later compare it to the original table via
 			// time-travel.
-			fmt.Println("@@@ before ts", name)
 			sqlDB.Exec(t,
 				fmt.Sprintf(
 					`RESTORE data.* FROM $1, $2, $3 AS OF SYSTEM TIME %s WITH into_db='%s'`,
@@ -3689,7 +3688,6 @@ func TestRestoreAsOfSystemTime(t *testing.T) {
 			)
 			// Similarly restore the since-table backup -- since full DB and single table
 			// backups sometimes behave differently.
-			fmt.Println("@@@ before restore")
 			sqlDB.Exec(t,
 				fmt.Sprintf(
 					`RESTORE data.bank FROM $1, $2 AS OF SYSTEM TIME %s WITH into_db='%stbl'`,
@@ -3697,7 +3695,6 @@ func TestRestoreAsOfSystemTime(t *testing.T) {
 				),
 				fullTableBackup, incTableBackup,
 			)
-			fmt.Println("@@@ after restore")
 
 			// Use time-travel on the existing bank table to determine what RESTORE
 			// with AS OF should have produced.
@@ -3710,9 +3707,6 @@ func TestRestoreAsOfSystemTime(t *testing.T) {
 
 			// `sometable` moved in to data between after ts 3 and removed before 5.
 			if i == 4 || i == 5 {
-				sqlDB.QueryStr(t, fmt.Sprintf(`use %s`, name))
-				fmt.Println("@@@ test q for ", name, sqlDB.QueryStr(t, fmt.Sprintf(`show tables from %s;`, name)))
-
 				sqlDB.CheckQueryResults(t,
 					fmt.Sprintf(`SELECT * FROM %s.sometable ORDER BY id`, name),
 					sqlDB.QueryStr(t, fmt.Sprintf(`SELECT * FROM data.sometable AS OF SYSTEM TIME %s ORDER BY id`, timestamp)),
@@ -3746,7 +3740,6 @@ func TestRestoreAsOfSystemTime(t *testing.T) {
 			if i == ts[2] {
 				// latestBackup is _at_ ts2 so that is the time, and the only time, at
 				// which restoring it is allowed.
-				fmt.Println("@@@ testing ts2=", ts[2])
 				sqlDB.Exec(
 					t, fmt.Sprintf(`RESTORE data.* FROM $1 AS OF SYSTEM TIME %s WITH into_db='err'`, i),
 					latestBackup,
@@ -8287,7 +8280,7 @@ func TestManifestTooNew(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	_, sqlDB, rawDir, cleanupFn := backupRestoreTestSetup(t, singleNode, 1, InitManualReplication)
 	defer cleanupFn()
-	sqlDB.Exec(t, `SET CLUSTER SETTING backup.manifest_read.mode = 'forceManifest'`)
+	sqlDB.Exec(t, `SET CLUSTER SETTING restore.manifest_read.mode = 'forceManifest'`)
 	sqlDB.Exec(t, `CREATE DATABASE r1`)
 	sqlDB.Exec(t, `BACKUP DATABASE r1 TO 'nodelocal://0/too_new'`)
 	sqlDB.Exec(t, `DROP DATABASE r1`)
@@ -8387,23 +8380,23 @@ func TestMetadataTooNew(t *testing.T) {
 	var keys []storage.MVCCKey
 	var values [][]byte
 
-	for iter.SeekGE(storage.MVCCKey{});; iter.Next() {
-		if ok, err:= iter.Valid(); err != nil{
+	for iter.SeekGE(storage.MVCCKey{}); ; iter.Next() {
+		if ok, err := iter.Valid(); err != nil {
 			t.Fatal(err)
 		} else if !ok {
 			break
 		}
 
 		keys = append(keys, iter.UnsafeKey().Clone())
-		value, err  := iter.UnsafeValue()
+		value, err := iter.UnsafeValue()
 		require.NoError(t, err)
 		values = append(values, value)
 	}
 
-	modifyManifest := func(mutation func( *backuppb.BackupManifest)) {
+	modifyManifest := func(mutation func(*backuppb.BackupManifest)) {
 		require.NoError(t, store.Delete(ctx, backupinfo.MetadataSSTName))
 
-		writer, err  := store.Writer(ctx, backupinfo.MetadataSSTName)
+		writer, err := store.Writer(ctx, backupinfo.MetadataSSTName)
 		require.NoError(t, err)
 		defer writer.Close()
 
@@ -8451,7 +8444,7 @@ func TestMetadataTooNew(t *testing.T) {
 
 	// Nil out the version to match an old backup that lacked it.
 	modifyManifest(func(manifest *backuppb.BackupManifest) {
-		manifest.ClusterVersion =  roachpb.Version{}
+		manifest.ClusterVersion = roachpb.Version{}
 	})
 
 	// Prove we can restore again.
@@ -8975,7 +8968,7 @@ func TestRestorePauseOnError(t *testing.T) {
 		}
 
 		jobRegistry.(*jobs.Registry).TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.
-			Resumer{
+		Resumer{
 			jobspb.TypeRestore: func(raw jobs.Resumer) jobs.Resumer {
 				r := raw.(*restoreResumer)
 				r.testingKnobs.beforePublishingDescriptors = func() error {

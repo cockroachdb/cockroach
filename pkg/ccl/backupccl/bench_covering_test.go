@@ -11,9 +11,9 @@ package backupccl
 import (
 	"context"
 	"fmt"
-	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupinfo"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"

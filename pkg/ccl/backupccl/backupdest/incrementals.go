@@ -10,7 +10,6 @@ package backupdest
 
 import (
 	"context"
-	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"path"
 	"regexp"
 	"sort"
@@ -20,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupinfo"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuputils"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -56,7 +56,10 @@ func CollectionAndSubdir(path string, subdir string) (string, string) {
 // If includeManifest is true the returned paths are to the manifests for the
 // prior backup, otherwise it is just to the backup path.
 func FindPriorBackups(
-	ctx context.Context, store cloud.ExternalStorage, includeManifest bool, mode jobspb.BackupManifestReadMode,
+	ctx context.Context,
+	store cloud.ExternalStorage,
+	includeManifest bool,
+	mode jobspb.BackupManifestReadMode,
 ) ([]string, error) {
 	ctx, sp := tracing.ChildSpan(ctx, "backupdest.FindPriorBackups")
 	defer sp.Finish()
@@ -117,7 +120,11 @@ func FindPriorBackups(
 // backupsFromLocation is a small helper function to retrieve all prior
 // backups from the specified location.
 func backupsFromLocation(
-	ctx context.Context, user username.SQLUsername, execCfg *sql.ExecutorConfig, loc string, mode jobspb.BackupManifestReadMode,
+	ctx context.Context,
+	user username.SQLUsername,
+	execCfg *sql.ExecutorConfig,
+	loc string,
+	mode jobspb.BackupManifestReadMode,
 ) ([]string, error) {
 	ctx, sp := tracing.ChildSpan(ctx, "backupdest.backupsFromLocation")
 	defer sp.Finish()

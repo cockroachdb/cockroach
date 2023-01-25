@@ -10,7 +10,6 @@ package backupccl_test
 
 import (
 	"context"
-	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -127,7 +126,7 @@ func checkMetadata(
 	checkStats(ctx, t, store, m, bm, &kmsEnv)
 }
 
-func checkManifest(t *testing.T, m *backuppb.BackupManifest, bm backupinfo.BackupMetadata) {
+func checkManifest(t *testing.T, m *backuppb.BackupManifest, bm backupinfo.BackupManifest) {
 	expectedManifest := *m
 	expectedManifest.Descriptors = nil
 	expectedManifest.DescriptorChanges = nil
@@ -141,31 +140,27 @@ func checkManifest(t *testing.T, m *backuppb.BackupManifest, bm backupinfo.Backu
 }
 
 func checkDescriptors(
-	ctx context.Context, t *testing.T, m *backuppb.BackupManifest, bm backupinfo.BackupMetadata,
+	ctx context.Context, t *testing.T, m *backuppb.BackupManifest, bm backupinfo.BackupManifest,
 ) {
 	var metaDescs []descpb.Descriptor
 
 	it := bm.NewDescIter(ctx)
 	defer it.Close()
 	for ; ; it.Next() {
-		fmt.Println("@@@ it next")
 		if ok, err := it.Valid(); err != nil {
 			t.Fatal(err)
 		} else if !ok {
 			break
 		}
 
-		fmt.Println("@@@ it next val", it.Value().String())
 		metaDescs = append(metaDescs, *it.Value())
 	}
-
-	fmt.Println("@@@ final len=", len(metaDescs))
 
 	require.Equal(t, m.Descriptors, metaDescs)
 }
 
 func checkDescriptorChanges(
-	ctx context.Context, t *testing.T, m *backuppb.BackupManifest, bm backupinfo.BackupMetadata,
+	ctx context.Context, t *testing.T, m *backuppb.BackupManifest, bm backupinfo.BackupManifest,
 ) {
 	var metaRevs []backuppb.BackupManifest_DescriptorRevision
 	it := bm.NewDescriptorChangesIter(ctx)
@@ -184,7 +179,7 @@ func checkDescriptorChanges(
 }
 
 func checkFiles(
-	ctx context.Context, t *testing.T, m *backuppb.BackupManifest, bm backupinfo.BackupMetadata,
+	ctx context.Context, t *testing.T, m *backuppb.BackupManifest, bm backupinfo.BackupManifest,
 ) {
 	var metaFiles []backuppb.BackupManifest_File
 	it, err := bm.NewFileIter(ctx)
@@ -209,7 +204,7 @@ func checkFiles(
 }
 
 func checkSpans(
-	ctx context.Context, t *testing.T, m *backuppb.BackupManifest, bm backupinfo.BackupMetadata,
+	ctx context.Context, t *testing.T, m *backuppb.BackupManifest, bm backupinfo.BackupManifest,
 ) {
 	var metaSpans []roachpb.Span
 	it := bm.NewSpanIter(ctx)
@@ -229,7 +224,7 @@ func checkSpans(
 }
 
 func checkIntroducedSpans(
-	ctx context.Context, t *testing.T, m *backuppb.BackupManifest, bm backupinfo.BackupMetadata,
+	ctx context.Context, t *testing.T, m *backuppb.BackupManifest, bm backupinfo.BackupManifest,
 ) {
 	var metaSpans []roachpb.Span
 	it := bm.NewIntroducedSpanIter(ctx)
@@ -248,7 +243,7 @@ func checkIntroducedSpans(
 }
 
 func checkTenants(
-	ctx context.Context, t *testing.T, m *backuppb.BackupManifest, bm backupinfo.BackupMetadata,
+	ctx context.Context, t *testing.T, m *backuppb.BackupManifest, bm backupinfo.BackupManifest,
 ) {
 	var metaTenants []descpb.TenantInfoWithUsage
 	it := bm.NewTenantIter(ctx)
@@ -272,7 +267,7 @@ func checkStats(
 	t *testing.T,
 	store cloud.ExternalStorage,
 	m *backuppb.BackupManifest,
-	bm backupinfo.BackupMetadata,
+	bm backupinfo.BackupManifest,
 	kmsEnv cloud.KMSEnv,
 ) {
 	manifestAdapter := backupinfo.NewBackupManifestAdapter(m, store, nil, kmsEnv, nil)

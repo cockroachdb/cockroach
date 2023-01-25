@@ -149,19 +149,12 @@ func backup(
 	// TODO(benesch): verify these files, rather than accepting them as truth
 	// blindly.
 	// No concurrency yet, so these assignments are safe.
-	{
-		it, _ := backupManifest.NewFileIter(ctx)
-		fmt.Printf("@@@ it = %v\n", it)
-		files, _ := backupinfo.CollectToSlice(it)
-		fmt.Printf("@@@ files=%v\n", files)
-	}
-
 	it, err := backupManifest.NewFileIter(ctx)
 	if err != nil {
 		return roachpb.RowCount{}, err
 	}
 	defer it.Close()
-	for ;; it.Next() {
+	for ; ; it.Next() {
 		if ok, err := it.Valid(); err != nil {
 			return roachpb.RowCount{}, err
 		} else if !ok {
@@ -679,7 +672,7 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 			return err
 		}
 
-		backupManifest = backupinfo.NewBackupManifestAdapter(m,defaultStore,details.EncryptionOptions, &kmsEnv, p.ExecCfg().DistSQLSrv.ExternalStorage)
+		backupManifest = backupinfo.NewBackupManifestAdapter(m, defaultStore, details.EncryptionOptions, &kmsEnv, p.ExecCfg().DistSQLSrv.ExternalStorage)
 	}
 
 	statsCache := p.ExecCfg().TableStatsCache
@@ -734,7 +727,7 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		if reloadBackupErr != nil {
 			return errors.Wrap(reloadBackupErr, "could not reload backup manifest when retrying")
 		}
-		backupManifest = backupinfo.NewBackupManifestAdapter(m,defaultStore,details.EncryptionOptions, &kmsEnv, p.ExecCfg().DistSQLSrv.ExternalStorage)
+		backupManifest = backupinfo.NewBackupManifestAdapter(m, defaultStore, details.EncryptionOptions, &kmsEnv, p.ExecCfg().DistSQLSrv.ExternalStorage)
 	}
 
 	// We have exhausted retries, but we have not seen a "PermanentBulkJobError" so
@@ -878,7 +871,7 @@ func getBackupDetailAndManifest(
 	mem := execCfg.RootMemoryMonitor.MakeBoundAccount()
 	defer mem.Close(ctx)
 
-	var prevBackups []backupinfo.BackupMetadata
+	var prevBackups []backupinfo.BackupManifest
 	var baseEncryptionOptions *jobspb.BackupEncryptionOptions
 	if len(backupDestination.PrevBackupURIs) != 0 {
 		var err error
@@ -983,7 +976,7 @@ func getBackupDetailAndManifest(
 		prevBackups,
 		user,
 		&kmsEnv,
-		)
+	)
 	if err != nil {
 		return jobspb.BackupDetails{}, nil, err
 	}

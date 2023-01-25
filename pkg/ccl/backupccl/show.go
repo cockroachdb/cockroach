@@ -377,7 +377,7 @@ you must pass the 'encryption_info_dir' parameter that points to the directory o
 			}
 		}
 
-		manifestReadMode := jobspb.BackupManifestReadMode(backupinfo.BackupManifestReadMode.Get(&p.ExecCfg().Settings.SV))
+		manifestReadMode := jobspb.BackupManifestReadMode(backupinfo.RestoreManifestReadMode.Get(&p.ExecCfg().Settings.SV))
 
 		collection, computedSubdir := backupdest.CollectionAndSubdir(dest[0], subdir)
 		fullyResolvedIncrementalsDirectory, err := backupdest.ResolveIncrementalsBackupLocation(
@@ -431,8 +431,6 @@ you must pass the 'encryption_info_dir' parameter that points to the directory o
 		defer func() {
 			mem.Shrink(ctx, memReserved)
 		}()
-
-		fmt.Printf("rh_debug: info=%v\n", info)
 		if err != nil {
 			if errors.Is(err, backupinfo.ErrLocalityDescriptor) && subdir == "" {
 				p.BufferClientNotice(ctx,
@@ -651,7 +649,7 @@ func checkBackupFiles(
 type backupInfo struct {
 	collectionURI string
 	defaultURIs   []string
-	manifests     []backupinfo.BackupMetadata
+	manifests     []backupinfo.BackupManifest
 	subdir        string
 	localityInfo  []jobspb.RestoreDetails_BackupLocalityInfo
 	enc           *jobspb.BackupEncryptionOptions
@@ -968,8 +966,7 @@ type descriptorSize struct {
 // BackupManifest_File identifies a span in an SST and there can be multiple
 // spans stored in an SST.
 func getLogicalSSTSize(
-	ctx context.Context,
-	manifest backupinfo.BackupMetadata,
+	ctx context.Context, manifest backupinfo.BackupManifest,
 ) (map[string]int64, error) {
 	ctx, span := tracing.ChildSpan(ctx, "backupccl.getLogicalSSTSize")
 	defer span.Finish()
@@ -1005,7 +1002,7 @@ func getTableSizes(
 	ctx context.Context,
 	storeFactory cloud.ExternalStorageFactory,
 	info backupInfo,
-	manifest backupinfo.BackupMetadata,
+	manifest backupinfo.BackupManifest,
 	fileSizes []int64,
 ) (map[descpb.ID]descriptorSize, error) {
 	ctx, span := tracing.ChildSpan(ctx, "backupccl.getTableSizes")
@@ -1215,7 +1212,7 @@ var backupShowerDoctor = backupShower{
 		var namespaceTable doctor.NamespaceTable
 		// Extract all the descriptors from the given manifest and generate the
 		// namespace and descriptor tables needed by doctor.
-		descriptors, _, err := backupinfo.LoadSQLDescsFromBackupMetadataAtTime(ctx, info.manifests, hlc.Timestamp{})
+		descriptors, _, err := backupinfo.LoadSQLDescsFromBackupsAtTime(ctx, info.manifests, hlc.Timestamp{})
 		if err != nil {
 			return nil, err
 		}
@@ -1316,7 +1313,7 @@ func backupShowerFileSetup(
 				}
 				defer it.Close()
 				var idx int
-				for ;; it.Next() {
+				for ; ; it.Next() {
 					if ok, err := it.Valid(); err != nil {
 						return nil, err
 					} else if !ok {

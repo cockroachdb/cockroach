@@ -139,7 +139,7 @@ func restoreWithRetry(
 	restoreCtx context.Context,
 	execCtx sql.JobExecContext,
 	numNodes int,
-	backupManifests []backupinfo.BackupMetadata,
+	backupManifests []backupinfo.BackupManifest,
 	backupLocalityInfo []jobspb.RestoreDetails_BackupLocalityInfo,
 	endTime hlc.Timestamp,
 	dataToRestore restorationData,
@@ -238,7 +238,7 @@ func restore(
 	restoreCtx context.Context,
 	execCtx sql.JobExecContext,
 	numNodes int,
-	backupManifests []backupinfo.BackupMetadata,
+	backupManifests []backupinfo.BackupManifest,
 	backupLocalityInfo []jobspb.RestoreDetails_BackupLocalityInfo,
 	endTime hlc.Timestamp,
 	dataToRestore restorationData,
@@ -473,14 +473,14 @@ func loadBackupSQLDescs(
 	encryption *jobspb.BackupEncryptionOptions,
 	kmsEnv cloud.KMSEnv,
 	mode jobspb.BackupManifestReadMode,
-) ([]backupinfo.BackupMetadata, backupinfo.BackupMetadata, []catalog.Descriptor, int64, error) {
+) ([]backupinfo.BackupManifest, backupinfo.BackupManifest, []catalog.Descriptor, int64, error) {
 	backupMetadata, sz, err := backupinfo.LoadBackupManifestsAtTime(ctx, mem, details.URIs,
 		p.User(), p.ExecCfg().DistSQLSrv.ExternalStorageFromURI, p.ExecCfg().DistSQLSrv.ExternalStorage, encryption, kmsEnv, details.EndTime, mode)
 	if err != nil {
 		return nil, nil, nil, 0, err
 	}
 
-	allDescs, latestBackupManifest, err := backupinfo.LoadSQLDescsFromBackupMetadataAtTime(ctx, backupMetadata, details.EndTime)
+	allDescs, latestBackupManifest, err := backupinfo.LoadSQLDescsFromBackupsAtTime(ctx, backupMetadata, details.EndTime)
 	if err != nil {
 		return nil, nil, nil, 0, err
 	}
@@ -563,7 +563,7 @@ func (r *restoreResumer) ForceRealSpan() bool {
 // Any statistics forecasts are ignored.
 func remapAndFilterRelevantStatistics(
 	ctx context.Context,
-	manifest backupinfo.BackupMetadata,
+	manifest backupinfo.BackupManifest,
 	descriptorRewrites jobspb.DescRewriteMap,
 	tableDescs []*descpb.TableDescriptor,
 ) []*stats.TableStatisticProto {
@@ -2952,7 +2952,6 @@ func (r *restoreResumer) restoreSystemTables(
 	ctx context.Context, db isql.DB, tables []catalog.TableDescriptor,
 ) error {
 	details := r.job.Details().(jobspb.RestoreDetails)
-	fmt.Println("@@@ system restore details", details)
 	if details.SystemTablesMigrated == nil {
 		details.SystemTablesMigrated = make(map[string]bool)
 	}
@@ -3029,9 +3028,7 @@ func (r *restoreResumer) restoreSystemTables(
 		}
 
 		if fn := r.testingKnobs.duringSystemTableRestoration; fn != nil {
-			fmt.Println("@@@ calling knobs")
 			if err := fn(systemTable.systemTableName); err != nil {
-				fmt.Println("@@@ calling knobs err", err)
 				return err
 			}
 		}

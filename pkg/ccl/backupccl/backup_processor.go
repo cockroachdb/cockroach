@@ -11,7 +11,6 @@ package backupccl
 import (
 	"context"
 	"fmt"
-	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupinfo"
 	"io"
 	"time"
 
@@ -333,7 +332,6 @@ func runBackupProcessor(
 		return err
 	}
 	log.Infof(ctx, "starting %d backup export workers", numSenders)
-	fmt.Println("@@@ mode=", backupinfo.BackupManifestReadMode.Get(&clusterSettings.SV))
 	defer release()
 
 	return ctxgroup.GroupWorkers(ctx, numSenders, func(ctx context.Context, _ int) error {

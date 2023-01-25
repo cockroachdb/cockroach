@@ -12,21 +12,20 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"github.com/cockroachdb/cockroach/pkg/build"
-	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
-	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"io"
 	"sort"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupencryption"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -38,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
 
@@ -50,9 +50,11 @@ const (
 	BackupMetadataFilesListPath = "filelist.sst"
 	// FileInfoPath is the name of the SST file containing the
 	// BackupManifest_Files of the backup.
-	FileInfoPath   = "fileinfo.sst"
-	SSTBackupKey   = "backup"
-	sstDescsPrefix = "desc/"
+	FileInfoPath = "fileinfo.sst"
+	// SSTBackupKey is the key in the metadata SST corresponding to the backup
+	// manifest.
+	SSTBackupKey     = "backup"
+	sstDescsPrefix   = "desc/"
 	sstFilesPrefix   = "file/"
 	sstNamesPrefix   = "name/"
 	sstSpansPrefix   = "span/"
@@ -60,10 +62,15 @@ const (
 	sstTenantsPrefix = "tenant/"
 )
 
-var BackupManifestReadMode = settings.RegisterEnumSetting(
+// RestoreManifestReadMode controls how the manifest is read from backups during
+// restore. forceMetadata and forceManifest forces restore to read only the
+// metadata SST and the backup manifest file respectively. While
+// preferMetadataSST allows restore to read from both, but the metadata SST
+// first.
+var RestoreManifestReadMode = settings.RegisterEnumSetting(
 	settings.TenantWritable,
-	"backup.manifest_read.mode",
-	"mode to read the backup manifest",
+	"restore.manifest_read.mode",
+	"mode to read the backup manifest during restore",
 	"forceMetadataSST",
 	map[int64]string{
 		int64(jobspb.BackupManifestReadMode_PreferMetadataSST): "preferMetadataSST",
@@ -108,7 +115,6 @@ func WriteBackupMetadataSST(
 	defer func() {
 		cancel() // cancel before Close() to abort write on err returns.
 		if w != nil {
-			fmt.Println("@@@ writing metadata SST!")
 			w.Close()
 		}
 	}()
@@ -220,7 +226,10 @@ func writeManifestToMetadata(
 	return sst.PutUnversioned(roachpb.Key(SSTBackupKey), b)
 }
 
-func descChangesLess(left *backuppb.BackupManifest_DescriptorRevision, right *backuppb.BackupManifest_DescriptorRevision) bool {
+func descChangesLess(
+	left *backuppb.BackupManifest_DescriptorRevision,
+	right *backuppb.BackupManifest_DescriptorRevision,
+) bool {
 	if left.ID == right.ID {
 		return !left.Time.Less(right.Time)
 	}
@@ -248,10 +257,7 @@ func writeDescsToMetadata(
 					b = bytes
 				}
 			}
-			// @@@ remove
-			clonedTime := i.Time.Clone()
-			fmt.Println("@@@ writing desc change key=", storage.MVCCKey{Key: k, Timestamp: *clonedTime}, "val=", i)
-			if err := sst.PutRawMVCC(storage.MVCCKey{Key: k, Timestamp: *clonedTime}, b); err != nil {
+			if err := sst.PutRawMVCC(storage.MVCCKey{Key: k, Timestamp: i.Time}, b); err != nil {
 				return err
 			}
 
@@ -287,6 +293,7 @@ func writeDescsToMetadata(
 	return nil
 }
 
+// FileCmp gives an ordering to two backuppb.BackupManifest_File.
 func FileCmp(left backuppb.BackupManifest_File, right backuppb.BackupManifest_File) int {
 	if cmp := left.Span.Key.Compare(right.Span.Key); cmp != 0 {
 		return cmp
@@ -924,13 +931,27 @@ func DebugDumpMetadataSST(
 	return nil
 }
 
+// Iterator is an interface to iterate a collection of objects of type T.
 type Iterator[T any] interface {
+	// Valid must be called after any call to Next(). It returns (true, nil) if
+	// the iterator points to a valid value, and (false, nil) if the iterator has
+	// moved past the last value. It returns (false, err) if there is an error in
+	// the iterator.
 	Valid() (bool, error)
+
+	// Value returns the current value. The returned value is only valid until the
+	// next call to Next(). is only valid until the
 	Value() T
+
+	// Next advances the iterator to the next value.
 	Next()
+
+	// Close closes the iterator.
 	Close()
 }
 
+// CollectToSlice iterates over all objects in iterator and collects them into a
+// slice.
 func CollectToSlice[T any](iterator Iterator[T]) ([]T, error) {
 	var values []T
 	for ; ; iterator.Next() {
@@ -945,30 +966,37 @@ func CollectToSlice[T any](iterator Iterator[T]) ([]T, error) {
 	return values, nil
 }
 
-// TODO: fix all these comments
-type BackupMetadata interface {
+// BackupManifest is the metadata for a backup.
+type BackupManifest interface {
+	// StartTime returns the start time of the data included in this backup.
 	StartTime() hlc.Timestamp
+	// EndTime returns the end time of the data included in this backup.
 	EndTime() hlc.Timestamp
-	MVCCFilter() backuppb.MVCCFilter
-	// Even if StartTime is zero, we only get revisions since gc threshold, so
-	// do not allow AS OF SYSTEM TIME before revision_start_time.
-	RevisionStartTime() hlc.Timestamp
-	// Spans contains the spans requested for backup. The keyranges covered by
-	// `files` may be a subset of this if there were ranges with no changes since
-	// the last backup. For all tables in the backup descriptor, these spans must
-	// completely cover each table's span. For example, if a table with ID 51 were
-	// being backed up, then the span `/Table/5{1-2}` must be completely covered.
 
+	MVCCFilter() backuppb.MVCCFilter
+
+	// RevisionStartTime denotes the start time of revisions.
+	// Even if StartTime is zero, we only get revisions since gc threshold, so
+	// do not allow AS OF SYSTEM TIME before RevisionStartTime.
+	RevisionStartTime() hlc.Timestamp
+
+	// NewSpanIter returns an iterator for the spans requested for backup. The
+	// keyranges covered by `files` may be a subset of this if there were ranges
+	// with no changes since the last backup. For all tables in the backup
+	// descriptor, these spans must completely cover each table's span. For
+	// example, if a table with ID 51 were being backed up, then the span
+	// `/Table/5{1-2}` must be completely covered.
 	NewSpanIter(ctx context.Context) Iterator[roachpb.Span]
-	// IntroducedSpans are a subset of spans, set only when creating incremental
-	// backups that cover spans not included in a previous backup. Spans contained
-	// here are covered in the interval (0, startTime], which, in conjunction with
-	// the coverage from (startTime, endTime] implied for all spans in Spans,
-	// results in coverage from [0, endTime] for these spans.
-	//
-	// The first set of spans in this field are new spans that did not
-	// exist in the previous backup (a new index, for example), while the remaining
-	// spans are re-introduced spans, which need to be backed up again from (0,
+
+	// NewIntroducedSpanIter returns an iterator for introduced spans, which are a
+	// subset of spans, set only when creating incremental backups that cover
+	// spans not included in a previous backup. Spans contained here are covered
+	// in the interval (0, startTime], which, in conjunction with the coverage
+	// from (startTime, endTime] implied for all spans in Spans, results in
+	// coverage from [0, endTime] for these spans.
+	// The first set of spans in this field are new spans that did not exist in
+	// the previous backup (a new index, for example), while the remaining spans
+	// are re-introduced spans, which need to be backed up again from (0,
 	// startTime] because a non-mvcc operation may have occurred on this span. See
 	// the getReintroducedSpans() for more information.
 	NewIntroducedSpanIter(ctx context.Context) Iterator[roachpb.Span]
@@ -978,30 +1006,38 @@ type BackupMetadata interface {
 	NewTenantIter(ctx context.Context) Iterator[descpb.TenantInfoWithUsage]
 	NewStatsIter(ctx context.Context) Iterator[*stats.TableStatisticProto]
 
-	// This field is deprecated; it is only retained to allow restoring older
-	// backups.
+	// TenantsDeprecated is deprecated; it is only retained to allow restoring
+	// older backups.
 	TenantsDeprecated() []descpb.TenantInfo
-	// databases in descriptors that have all tables also in descriptors.
-	CompleteDbs() []descpb.ID
+
+	// CompleteDBs are databases in descriptors that have all tables also in
+	// descriptors.
+	CompleteDBs() []descpb.ID
 	EntryCounts() roachpb.RowCount
 	Dir() cloudpb.ExternalStorage
 	SetDir(cloudpb.ExternalStorage)
 	FormatVersion() uint32
 	ClusterID() uuid.UUID
-	// node_id and build_info of the gateway node (which writes the descriptor).
+
+	// NodeID is the node ID of the gateway node (which writes the descriptor).
 	NodeID() roachpb.NodeID
+	// BuildInfo is the build info of the gateway node (which writes the descriptor).
 	BuildInfo() build.Info
 	ClusterVersion() roachpb.Version
 	ID() uuid.UUID
 	PartitionDescriptorFilenames() []string
 	LocalityKVs() []string
-	// This field is used by backups in 19.2 and 20.1 where a backup manifest stores all the table
-	// statistics in the field, the later versions all write the statistics to a separate file
-	// indicated in the table_statistic_files field.
+
+	// DeprecatedStatistics is used by backups in 19.2 and 20.1 where a backup
+	// manifest stores all the table statistics in the field. Stats for later
+	// versions can be accessed by iterators created by NewStatsIter.
 	DeprecatedStatistics() []*stats.TableStatisticProto
 	DescriptorCoverage() tree.DescriptorCoverage
 
 	Manifest() *backuppb.BackupManifest
+
+	// SortFiles sorts the files in the BackupManifest. It may be a no-op if the
+	// files are already sorted.
 	SortFiles()
 }
 
@@ -1009,8 +1045,6 @@ type BackupMetadata interface {
 // fields such as descriptors or spans. backupMetadata provides iterator methods
 // so that the excluded fields can be accessed in a streaming manner.
 type backupMetadata struct {
-	// TODO: this manifest is "fatter" than the eventual end state of this
-	// manifest. It will still contain spans, names, stats, and tenants for now.
 	backuppb.BackupManifest
 	store    cloud.ExternalStorage
 	enc      *jobspb.BackupEncryptionOptions
@@ -1018,16 +1052,16 @@ type backupMetadata struct {
 	kmsEnv   cloud.KMSEnv
 }
 
-var _ BackupMetadata = &backupMetadata{}
+var _ BackupManifest = &backupMetadata{}
 
-// NewBackupMetadata returns a new BackupMetadata instance.
+// NewBackupMetadata returns a new backupMetadata instance.
 func NewBackupMetadata(
 	ctx context.Context,
 	exportStore cloud.ExternalStorage,
 	sstFileName string,
 	encryption *jobspb.BackupEncryptionOptions,
 	kmsEnv cloud.KMSEnv,
-) (*backupMetadata, error) {
+) (BackupManifest, error) {
 	var encOpts *roachpb.FileEncryptionOptions
 	if encryption != nil {
 		key, err := backupencryption.GetEncryptionKey(ctx, encryption, kmsEnv)
@@ -1065,9 +1099,9 @@ func NewBackupMetadata(
 		enc: encryption, filename: sstFileName, kmsEnv: kmsEnv}, nil
 }
 
-// IsIncremental returns if the BackupMetadata corresponds to an incremental
+// IsIncremental returns if the BackupManifest corresponds to an incremental
 // backup.
-func IsIncremental(b BackupMetadata) bool {
+func IsIncremental(b BackupManifest) bool {
 	return !b.StartTime().IsEmpty()
 }
 
@@ -1087,7 +1121,7 @@ func (b *backupMetadata) RevisionStartTime() hlc.Timestamp {
 	return b.BackupManifest.RevisionStartTime
 }
 
-func (b *backupMetadata) CompleteDbs() []descpb.ID {
+func (b *backupMetadata) CompleteDBs() []descpb.ID {
 	return b.BackupManifest.CompleteDbs
 }
 
@@ -1155,7 +1189,7 @@ func (b *backupMetadata) SortFiles() {
 	// No-op, files in backup metadata are already sorted.
 }
 
-func (b *backupMetadata) Manifest() *backuppb.BackupManifest{
+func (b *backupMetadata) Manifest() *backuppb.BackupManifest {
 	return &b.BackupManifest
 }
 
@@ -1205,6 +1239,7 @@ func (si *SpanIterator) Valid() (bool, error) {
 	return si.value != nil, si.err
 }
 
+// Value implements the Iterator interface.
 func (si *SpanIterator) Value() roachpb.Span {
 	if si.value == nil {
 		return roachpb.Span{}
@@ -1212,6 +1247,7 @@ func (si *SpanIterator) Value() roachpb.Span {
 	return *si.value
 }
 
+// Next implements the Iterator interface.
 func (si *SpanIterator) Next() {
 	wrapper := resultWrapper{}
 	var nextSpan *roachpb.Span
@@ -1240,7 +1276,9 @@ type FileIterator struct {
 }
 
 // NewFileIter creates a new FileIterator for the backup metadata.
-func (b *backupMetadata) NewFileIter(ctx context.Context) (Iterator[*backuppb.BackupManifest_File], error) {
+func (b *backupMetadata) NewFileIter(
+	ctx context.Context,
+) (Iterator[*backuppb.BackupManifest_File], error) {
 	fileInfoIter := makeBytesIter(ctx, b.store, b.filename, []byte(sstFilesPrefix), b.enc,
 		false, b.kmsEnv)
 	defer fileInfoIter.close()
@@ -1323,12 +1361,12 @@ func (fi *FileIterator) Valid() (bool, error) {
 	return true, nil
 }
 
-// Value returns the current value of the iterator, if valid.
+// Value implements the Iterator interface.
 func (fi *FileIterator) Value() *backuppb.BackupManifest_File {
 	return fi.file
 }
 
-// Next advances the iterator to the next value.
+// Next implements the Iterator interface.
 func (fi *FileIterator) Next() {
 	fi.mergedIterator.Next()
 	fi.file = nil
@@ -1350,14 +1388,7 @@ type DescIterator struct {
 
 // NewDescIter creates a new DescIterator for the backup metadata.
 func (b *backupMetadata) NewDescIter(ctx context.Context) Iterator[*descpb.Descriptor] {
-	var backing bytesIter
-
-	//if b.MVCCFilter() == backuppb.MVCCFilter_Latest {
-		backing = makeBytesIter(ctx, b.store, b.filename, []byte(sstDescsPrefix), b.enc,
-			true, b.kmsEnv)
-	//} else {
-	//	backing = makeNoOpBytesIter()
-	//}
+	backing := makeBytesIter(ctx, b.store, b.filename, []byte(sstDescsPrefix), b.enc, true, b.kmsEnv)
 	it := DescIterator{
 		backing: backing,
 	}
@@ -1370,6 +1401,7 @@ func (di *DescIterator) Close() {
 	di.backing.close()
 }
 
+// Valid implements the Iterator interface.
 func (di *DescIterator) Valid() (bool, error) {
 	if di.err != nil {
 		return false, di.err
@@ -1377,10 +1409,12 @@ func (di *DescIterator) Valid() (bool, error) {
 	return di.value != nil, nil
 }
 
+// Value implements the Iterator interface.
 func (di *DescIterator) Value() *descpb.Descriptor {
 	return di.value
 }
 
+// Next implements the Iterator interface.
 func (di *DescIterator) Next() {
 	if di.err != nil {
 		return
@@ -1429,6 +1463,7 @@ func (ti *TenantIterator) Close() {
 	ti.backing.close()
 }
 
+// Valid implements the Iterator interface.
 func (ti *TenantIterator) Valid() (bool, error) {
 	if ti.err != nil {
 		return false, ti.err
@@ -1436,6 +1471,7 @@ func (ti *TenantIterator) Valid() (bool, error) {
 	return ti.value != nil, nil
 }
 
+// Value implements the Iterator interface.
 func (ti *TenantIterator) Value() descpb.TenantInfoWithUsage {
 	if ti.value == nil {
 		return descpb.TenantInfoWithUsage{}
@@ -1443,6 +1479,7 @@ func (ti *TenantIterator) Value() descpb.TenantInfoWithUsage {
 	return *ti.value
 }
 
+// Next implements the Iterator interface.
 func (ti *TenantIterator) Next() {
 	if ti.err != nil {
 		return
@@ -1477,7 +1514,9 @@ type DescriptorRevisionIterator struct {
 }
 
 // NewDescriptorChangesIter creates a new DescriptorChangesIterator for the backup metadata.
-func (b *backupMetadata) NewDescriptorChangesIter(ctx context.Context) Iterator[*backuppb.BackupManifest_DescriptorRevision] {
+func (b *backupMetadata) NewDescriptorChangesIter(
+	ctx context.Context,
+) Iterator[*backuppb.BackupManifest_DescriptorRevision] {
 	var backing bytesIter
 	if b.MVCCFilter() == backuppb.MVCCFilter_Latest {
 		backing = makeNoOpBytesIter()
@@ -1493,6 +1532,7 @@ func (b *backupMetadata) NewDescriptorChangesIter(ctx context.Context) Iterator[
 	return &dri
 }
 
+// Valid implements the Iterator interface.
 func (dri *DescriptorRevisionIterator) Valid() (bool, error) {
 	if dri.err != nil {
 		return false, dri.err
@@ -1500,6 +1540,7 @@ func (dri *DescriptorRevisionIterator) Valid() (bool, error) {
 	return dri.value != nil, nil
 }
 
+// Value implements the Iterator interface.
 func (dri *DescriptorRevisionIterator) Value() *backuppb.BackupManifest_DescriptorRevision {
 	return dri.value
 }
@@ -1551,9 +1592,6 @@ func unmarshalWrapper(wrapper *resultWrapper) (backuppb.BackupManifest_Descripto
 	}
 
 	id, err := decodeDescSSTKey(wrapper.key.Key)
-	if id == 106 {
-		fmt.Println("@@@ wrapper", wrapper.key)
-	}
 	if err != nil {
 		return backuppb.BackupManifest_DescriptorRevision{}, err
 	}
@@ -1589,6 +1627,7 @@ func (si *StatsIterator) Close() {
 	si.backing.close()
 }
 
+// Valid implements the Iterator interface.
 func (si *StatsIterator) Valid() (bool, error) {
 	if si.err != nil {
 		return false, si.err
@@ -1596,6 +1635,7 @@ func (si *StatsIterator) Valid() (bool, error) {
 	return si.value != nil, nil
 }
 
+// Value implements the Iterator interface.
 func (si *StatsIterator) Value() *stats.TableStatisticProto {
 	return si.value
 }
@@ -1686,7 +1726,6 @@ func (bi *bytesIter) next(resWrapper *resultWrapper) bool {
 	}
 
 	key := bi.Iter.UnsafeKey()
-	fmt.Println("@@@ bytes key=", key)
 	resWrapper.key.Key = key.Key.Clone()
 	resWrapper.key.Timestamp = key.Timestamp
 	resWrapper.value = resWrapper.value[:0]
@@ -1722,6 +1761,8 @@ type resultWrapper struct {
 	value []byte
 }
 
+// ReadBackupMetadataFromStore reads a backup metadata SST from the store and
+// returns it.
 // TODO(rui): Add memory monitor.
 func ReadBackupMetadataFromStore(
 	ctx context.Context,
@@ -1729,11 +1770,10 @@ func ReadBackupMetadataFromStore(
 	exportStore cloud.ExternalStorage,
 	encryption *jobspb.BackupEncryptionOptions,
 	kmsEnv cloud.KMSEnv,
-) (BackupMetadata, int64, error) {
+) (BackupManifest, int64, error) {
 	ctx, sp := tracing.ChildSpan(ctx, "backupinfo.ReadBackupMetadataFromStore")
 	defer sp.Finish()
 
-	fmt.Println("@@@ restore store", exportStore.Conf())
 	metadata, err := NewBackupMetadata(ctx, exportStore, MetadataSSTName, encryption, kmsEnv)
 	if err != nil {
 		return nil, 0, err
@@ -1743,9 +1783,8 @@ func ReadBackupMetadataFromStore(
 	return metadata, 0, nil
 }
 
-// TODO: most of these methods can actually just go away if we put metadata and
-// manifest behind a new common interface.
-
+// BackupManifestAdapter adapts a backuppb.BackupManifest to the BackupManifest
+// interface.
 type BackupManifestAdapter struct {
 	*backuppb.BackupManifest
 	exportStore  cloud.ExternalStorage
@@ -1754,14 +1793,17 @@ type BackupManifestAdapter struct {
 	storeFactory cloud.ExternalStorageFactory
 }
 
-var _ BackupMetadata = &BackupManifestAdapter{}
+var _ BackupManifest = &BackupManifestAdapter{}
 
+// NewBackupManifestAdapter constructs a BackupManifestAdapter from a backup
+// manifest protobuf.
 func NewBackupManifestAdapter(
-	manifest* backuppb.BackupManifest,
+	manifest *backuppb.BackupManifest,
 	exportStore cloud.ExternalStorage,
 	encryption *jobspb.BackupEncryptionOptions,
 	kmsEnv cloud.KMSEnv,
-	storeFactory cloud.ExternalStorageFactory) *BackupManifestAdapter {
+	storeFactory cloud.ExternalStorageFactory,
+) *BackupManifestAdapter {
 	sort.Slice(manifest.DescriptorChanges, func(i, j int) bool {
 		return descChangesLess(&manifest.DescriptorChanges[i], &manifest.DescriptorChanges[j])
 	})
@@ -1782,11 +1824,15 @@ func (b *BackupManifestAdapter) NewIntroducedSpanIter(ctx context.Context) Itera
 	return newSliceIterator(b.IntroducedSpans)
 }
 
-func (b *BackupManifestAdapter) NewDescriptorChangesIter(ctx context.Context) Iterator[*backuppb.BackupManifest_DescriptorRevision] {
+func (b *BackupManifestAdapter) NewDescriptorChangesIter(
+	ctx context.Context,
+) Iterator[*backuppb.BackupManifest_DescriptorRevision] {
 	return newSlicePointerIterator(b.DescriptorChanges)
 }
 
-func (b *BackupManifestAdapter) NewFileIter(ctx context.Context) (Iterator[*backuppb.BackupManifest_File], error) {
+func (b *BackupManifestAdapter) NewFileIter(
+	ctx context.Context,
+) (Iterator[*backuppb.BackupManifest_File], error) {
 	if b.HasExternalFilesList {
 		es, err := b.storeFactory(ctx, b.Dir())
 		if err != nil {
@@ -1814,11 +1860,15 @@ func (b *BackupManifestAdapter) NewDescIter(ctx context.Context) Iterator[*descp
 	return newSlicePointerIterator(b.Descriptors)
 }
 
-func (b *BackupManifestAdapter) NewTenantIter(ctx context.Context) Iterator[descpb.TenantInfoWithUsage] {
+func (b *BackupManifestAdapter) NewTenantIter(
+	ctx context.Context,
+) Iterator[descpb.TenantInfoWithUsage] {
 	return newSliceIterator(b.Tenants)
 }
 
-func (b *BackupManifestAdapter) NewStatsIter(ctx context.Context) Iterator[*stats.TableStatisticProto] {
+func (b *BackupManifestAdapter) NewStatsIter(
+	ctx context.Context,
+) Iterator[*stats.TableStatisticProto] {
 	ctx, sp := tracing.ChildSpan(ctx, "BackupManifestAdapter.NewStatsIter")
 	defer sp.Finish()
 
@@ -1865,7 +1915,7 @@ func (b *BackupManifestAdapter) TenantsDeprecated() []descpb.TenantInfo {
 	return b.BackupManifest.TenantsDeprecated
 }
 
-func (b *BackupManifestAdapter) CompleteDbs() []descpb.ID {
+func (b *BackupManifestAdapter) CompleteDBs() []descpb.ID {
 	return b.BackupManifest.CompleteDbs
 }
 
@@ -1943,6 +1993,7 @@ func newSliceIterator[T any](backing []T) *sliceIterator[T] {
 	}
 }
 
+// Valid implements the Iterator interface.
 func (s *sliceIterator[T]) Valid() (bool, error) {
 	return s.idx < len(s.backingSlice), nil
 }

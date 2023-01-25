@@ -743,7 +743,7 @@ func showUpgradedForeignKeysTest(exportDir string) func(t *testing.T) {
 		err := os.Symlink(exportDir, filepath.Join(dir, "foo"))
 		require.NoError(t, err)
 
-		sqlDB.Exec(t, `SET CLUSTER SETTING backup.manifest_read.mode = 'forceManifest'`)
+		sqlDB.Exec(t, `SET CLUSTER SETTING restore.manifest_read.mode = 'forceManifest'`)
 
 		type testCase struct {
 			table                     string
@@ -927,20 +927,20 @@ func TestShowBackupCheckFiles(t *testing.T) {
 		// breakCheckFiles validates that moving an SST will cause SHOW BACKUP with check_files to
 		// error.
 		breakCheckFiles := func(
-			// rootDir identifies the root of the collection or incremental backup dir
-			// of the target backup file.
+		// rootDir identifies the root of the collection or incremental backup dir
+		// of the target backup file.
 			rootDir string,
 
-			// backupDest contains the collection or incremental URIs.
+		// backupDest contains the collection or incremental URIs.
 			backupDest []string,
 
-			// file contains the path to the target file staring from the rootDir.
+		// file contains the path to the target file staring from the rootDir.
 			file string,
 
-			// fileLocality contains the expected locality of the target file.
+		// fileLocality contains the expected locality of the target file.
 			fileLocality string,
 
-			// checkQuery contains the 'SHOW BACKUP with check_files' query.
+		// checkQuery contains the 'SHOW BACKUP with check_files' query.
 			checkQuery string) {
 
 			// Ensure no errors first

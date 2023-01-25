@@ -26,7 +26,7 @@ new-cluster name=s1 allow-implicit-access disable-tenant
 ----
 
 exec-sql
-SET CLUSTER SETTING backup.manifest_read.mode = 'forceManifest'
+SET CLUSTER SETTING restore.manifest_read.mode = 'forceManifest'
 ----
 
 # Link 4 backup chains:
@@ -220,7 +220,7 @@ new-cluster name=s2 share-io-dir=s1 allow-implicit-access disable-tenant
 ----
 
 exec-sql
-SET CLUSTER SETTING backup.manifest_read.mode = 'forceManifest'
+SET CLUSTER SETTING restore.manifest_read.mode = 'forceManifest'
 ----
 
 exec-sql

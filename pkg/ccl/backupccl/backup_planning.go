@@ -11,7 +11,6 @@ package backupccl
 import (
 	"context"
 	"fmt"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"strconv"
 	"strings"
 	"time"
@@ -35,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -1078,7 +1078,7 @@ func planSchedulePTSChaining(
 func getReintroducedSpans(
 	ctx context.Context,
 	execCfg *sql.ExecutorConfig,
-	prevBackups []backupinfo.BackupMetadata,
+	prevBackups []backupinfo.BackupManifest,
 	tables []catalog.TableDescriptor,
 	revs []backuppb.BackupManifest_DescriptorRevision,
 	endTime hlc.Timestamp,
@@ -1109,7 +1109,7 @@ func getReintroducedSpans(
 	descIt := lastBackup.NewDescIter(ctx)
 	defer descIt.Close()
 
-	for ;; descIt.Next() {
+	for ; ; descIt.Next() {
 		if ok, err := descIt.Valid(); err != nil {
 			return nil, err
 		} else if !ok {
@@ -1130,7 +1130,7 @@ func getReintroducedSpans(
 	latestTableDescChangeInLastBackup := make(map[descpb.ID]*descpb.TableDescriptor)
 	descRevIt := lastBackup.NewDescriptorChangesIter(ctx)
 	defer descRevIt.Close()
-	for ;; descRevIt.Next() {
+	for ; ; descRevIt.Next() {
 		if ok, err := descRevIt.Valid(); err != nil {
 			return nil, err
 		} else if !ok {
@@ -1385,7 +1385,7 @@ func createBackupManifest(
 	execCfg *sql.ExecutorConfig,
 	txn isql.Txn,
 	jobDetails jobspb.BackupDetails,
-	prevBackups []backupinfo.BackupMetadata,
+	prevBackups []backupinfo.BackupManifest,
 	user username.SQLUsername,
 	kmsEnv cloud.KMSEnv,
 ) (*backupinfo.BackupManifestAdapter, error) {
@@ -1462,9 +1462,9 @@ func createBackupManifest(
 		tablesInPrev := make(map[descpb.ID]struct{})
 		dbsInPrev := make(map[descpb.ID]struct{})
 
-		descIt := prevBackups[len(prevBackups) - 1].NewDescIter(ctx)
+		descIt := prevBackups[len(prevBackups)-1].NewDescIter(ctx)
 		defer descIt.Close()
-		for ;; descIt.Next() {
+		for ; ; descIt.Next() {
 			if ok, err := descIt.Valid(); err != nil {
 				return nil, err
 			} else if !ok {
@@ -1475,8 +1475,7 @@ func createBackupManifest(
 				tablesInPrev[t.ID] = struct{}{}
 			}
 		}
-
-		for _, d := range prevBackups[len(prevBackups)-1].CompleteDbs() {
+		for _, d := range prevBackups[len(prevBackups)-1].CompleteDBs() {
 			dbsInPrev[d] = struct{}{}
 		}
 
@@ -1536,7 +1535,6 @@ func createBackupManifest(
 		StatisticsFilenames: statsFiles,
 		DescriptorCoverage:  coverage,
 	}
-
 	store, err := execCfg.DistSQLSrv.ExternalStorageFromURI(ctx, jobDetails.URI, user)
 	if err != nil {
 		return nil, err
@@ -1556,7 +1554,7 @@ func updateBackupDetails(
 	defaultURI string,
 	resolvedSubdir string,
 	urisByLocalityKV map[string]string,
-	prevBackups []backupinfo.BackupMetadata,
+	prevBackups []backupinfo.BackupManifest,
 	encryptionOptions *jobspb.BackupEncryptionOptions,
 	kmsEnv *backupencryption.BackupKMSEnv,
 ) (jobspb.BackupDetails, error) {

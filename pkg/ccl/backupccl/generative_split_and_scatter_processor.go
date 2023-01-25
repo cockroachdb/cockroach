@@ -191,7 +191,7 @@ func (gssp *generativeSplitAndScatterProcessor) close() {
 
 func makeBackupMetadata(
 	ctx context.Context, flowCtx *execinfra.FlowCtx, spec *execinfrapb.GenerativeSplitAndScatterSpec,
-) ([]backupinfo.BackupMetadata, error) {
+) ([]backupinfo.BackupManifest, error) {
 	execCfg := flowCtx.Cfg.ExecutorConfig.(*sql.ExecutorConfig)
 	kmsEnv := backupencryption.MakeBackupKMSEnv(execCfg.Settings, &execCfg.ExternalIODirConfig,
 		execCfg.InternalDB, spec.User())
@@ -226,8 +226,7 @@ func runGenerativeSplitAndScatter(
 	g.GoCtx(func(ctx context.Context) error {
 		defer close(restoreSpanEntriesCh)
 
-		// TODO: the branching for this needs to be passed through the spec
-		backups,  err := makeBackupMetadata(ctx,
+		backups, err := makeBackupMetadata(ctx,
 			flowCtx, spec)
 		if err != nil {
 			return err

@@ -12,7 +12,6 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
-	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
 	"net/url"
 	"path"
 	"regexp"
@@ -522,7 +521,7 @@ func ResolveBackupManifests(
 ) (
 	defaultURIs []string,
 	// mainBackupManifests contains the manifest located at each defaultURI in the backup chain.
-	mainBackupManifests []backupinfo.BackupMetadata,
+	mainBackupManifests []backupinfo.BackupManifest,
 	localityInfo []jobspb.RestoreDetails_BackupLocalityInfo,
 	reservedMemSize int64,
 	_ error,
@@ -536,7 +535,6 @@ func ResolveBackupManifests(
 			mem.Shrink(ctx, ownedMemSize)
 		}
 	}()
-
 	baseManifest, memSize, err := backupinfo.ReadBackupManifestFromStore(ctx, mem, baseStores[0],
 		encryption, kmsEnv, storeFactory, mode)
 	if err != nil {
@@ -554,7 +552,7 @@ func ResolveBackupManifests(
 	numLayers := len(incrementalBackups) + 1
 
 	defaultURIs = make([]string, numLayers)
-	mainBackupManifests = make([]backupinfo.BackupMetadata, numLayers)
+	mainBackupManifests = make([]backupinfo.BackupManifest, numLayers)
 	localityInfo = make([]jobspb.RestoreDetails_BackupLocalityInfo, numLayers)
 
 	// Setup the full backup layer explicitly.
@@ -629,10 +627,6 @@ func ResolveBackupManifests(
 	totalMemSize := ownedMemSize
 	ownedMemSize = 0
 
-	for _, m := range mainBackupManifests {
-		js, _ := protoreflect.MessageToJSON(m.Manifest(), protoreflect.FmtFlags{})
-		fmt.Println("@@@ restore manifest", js)
-	}
 	validatedDefaultURIs, validatedMainBackupManifests, validatedLocalityInfo, err := backupinfo.ValidateEndTimeAndTruncate(
 		defaultURIs, mainBackupManifests, localityInfo, endTime)
 
@@ -661,7 +655,7 @@ func DeprecatedResolveBackupManifestsExplicitIncrementals(
 ) (
 	defaultURIs []string,
 	// mainBackupManifests contains the manifest located at each defaultURI in the backup chain.
-	mainBackupManifests []backupinfo.BackupMetadata,
+	mainBackupManifests []backupinfo.BackupManifest,
 	localityInfo []jobspb.RestoreDetails_BackupLocalityInfo,
 	reservedMemSize int64,
 	_ error,
@@ -677,7 +671,7 @@ func DeprecatedResolveBackupManifestsExplicitIncrementals(
 
 	defaultURIs = make([]string, len(from))
 	localityInfo = make([]jobspb.RestoreDetails_BackupLocalityInfo, len(from))
-	mainBackupManifests = make([]backupinfo.BackupMetadata, len(from))
+	mainBackupManifests = make([]backupinfo.BackupManifest, len(from))
 
 	var err error
 	for i, uris := range from {
@@ -695,7 +689,7 @@ func DeprecatedResolveBackupManifestsExplicitIncrementals(
 
 		var memSize int64
 		mainBackupManifests[i], memSize, err = backupinfo.ReadBackupManifestFromStore(ctx, mem,
-			stores[0], encryption, kmsEnv, storeFactory,  mode)
+			stores[0], encryption, kmsEnv, storeFactory, mode)
 		if err != nil {
 			return nil, nil, nil, 0, err
 		}

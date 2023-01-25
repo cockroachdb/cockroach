@@ -796,7 +796,7 @@ func maybeUpgradeDescriptors(descs []catalog.Descriptor, skipFKsWithNoMatchingTa
 // "other" table is missing from the set provided are omitted during the
 // upgrade, instead of causing an error to be returned.
 func maybeUpgradeDescriptorsInBackupManifests(
-	ctx context.Context, backups []backupinfo.BackupMetadata, skipFKsWithNoMatchingTable bool,
+	ctx context.Context, backups []backupinfo.BackupManifest, skipFKsWithNoMatchingTable bool,
 ) error {
 	if len(backups) == 0 {
 		return nil
@@ -804,16 +804,16 @@ func maybeUpgradeDescriptorsInBackupManifests(
 
 	// Only upgrade descriptors in the manifest if we have an adapted manifest, as
 	// backup metadata is not old enough to need upgrades.
-	adapters :=make([]*backupinfo.BackupManifestAdapter, len(backups))
+	adapters := make([]*backupinfo.BackupManifestAdapter, len(backups))
 	for i := range backups {
-		if adapter, ok := backups[i].(*backupinfo.BackupManifestAdapter) ; ok {
+		if adapter, ok := backups[i].(*backupinfo.BackupManifestAdapter); ok {
 			adapters[i] = adapter
 		} else {
 			return nil
 		}
 	}
 
- 	descriptors := make([]catalog.Descriptor, 0, len(adapters[0].Descriptors))
+	descriptors := make([]catalog.Descriptor, 0, len(adapters[0].Descriptors))
 	for i := range adapters {
 		descs, err := backupinfo.BackupManifestDescriptors(ctx, adapters[i])
 		if err != nil {
@@ -1421,7 +1421,7 @@ func doRestorePlan(
 		fullyResolvedSubdir = subdir
 	}
 
-	manifestReadMode := jobspb.BackupManifestReadMode(backupinfo.BackupManifestReadMode.Get(&p.ExecCfg().Settings.SV))
+	manifestReadMode := jobspb.BackupManifestReadMode(backupinfo.RestoreManifestReadMode.Get(&p.ExecCfg().Settings.SV))
 
 	fullyResolvedBaseDirectory, err := backuputils.AppendPaths(from[0][:], fullyResolvedSubdir)
 	if err != nil {
@@ -1526,10 +1526,9 @@ func doRestorePlan(
 	// directories, return the URIs and manifests of all backup layers in all
 	// localities.
 	var defaultURIs []string
-	var mainBackupManifests []backupinfo.BackupMetadata
+	var mainBackupManifests []backupinfo.BackupManifest
 	var localityInfo []jobspb.RestoreDetails_BackupLocalityInfo
 	var memReserved int64
-	fmt.Println("@@@ string", restoreStmt.String())
 	if len(from) <= 1 {
 		// Incremental layers are not specified explicitly. They will be searched for automatically.
 		// This could be either INTO-syntax, OR TO-syntax.
@@ -1593,7 +1592,7 @@ func doRestorePlan(
 	wasOffline := make(map[tableAndIndex]hlc.Timestamp)
 
 	for _, m := range mainBackupManifests {
-		var spans  roachpb.Spans
+		var spans roachpb.Spans
 		spanIt := m.NewSpanIter(ctx)
 		defer spanIt.Close()
 		if spans, err = backupinfo.CollectToSlice(spanIt); err != nil {
@@ -1603,7 +1602,7 @@ func doRestorePlan(
 		descIt := m.NewDescIter(ctx)
 		defer descIt.Close()
 
-		for ;; descIt.Next() {
+		for ; ; descIt.Next() {
 			if ok, err := descIt.Valid(); err != nil {
 				return err
 			} else if !ok {

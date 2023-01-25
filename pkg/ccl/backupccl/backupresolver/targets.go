@@ -498,7 +498,6 @@ func DescriptorsMatchingTargets(
 			// Then request the table itself.
 			if _, ok := alreadyRequestedTables[tableDesc.GetID()]; !ok {
 				alreadyRequestedTables[tableDesc.GetID()] = struct{}{}
-				fmt.Println("@@@ appending table itself", tableDesc.GetName())
 				ret.Descs = append(ret.Descs, tableDesc)
 			}
 			// Since the table was directly requested, so is the schema. If the table
@@ -580,9 +579,7 @@ func DescriptorsMatchingTargets(
 	addObjectDescsInSchema := func(objectsIDs *catalog.DescriptorIDSet) error {
 		for _, id := range objectsIDs.Ordered() {
 			desc := r.DescByID[id]
-			fmt.Println("desc with id", desc.GetID())
 			if desc == nil || (!desc.Public() && !desc.Offline()) {
-				fmt.Printf("@@@ desc id=%d nil=%t public=%t offline=%t\n", desc.GetID(), desc == nil, desc.Public(), desc.Offline())
 				// Don't include this object in the expansion since it's not in a valid
 				// state. Silently fail since this object was not directly requested,
 				// but was just part of an expansion.
@@ -601,7 +598,6 @@ func DescriptorsMatchingTargets(
 			switch desc := desc.(type) {
 			case catalog.TableDescriptor:
 				if _, ok := alreadyRequestedTables[id]; !ok {
-					fmt.Println("@@@ appending not already appended table", desc.GetName())
 					ret.Descs = append(ret.Descs, desc)
 				}
 				// Get all the types used by this table.

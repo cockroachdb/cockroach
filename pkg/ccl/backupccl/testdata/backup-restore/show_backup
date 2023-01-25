@@ -6,7 +6,7 @@ new-cluster name=s1 allow-implicit-access
 
 # Pre 23.1 backups will only have backup manifest.
 exec-sql
-SET CLUSTER SETTING backup.manifest_read.mode = 'forceManifest';
+SET CLUSTER SETTING restore.manifest_read.mode = 'forceManifest';
 ----
 
 link-backup cluster=s1 src-path=show_backup_validate,invalidDependOnBy_21.1 dest-path=invalidDependOnBy_21.1

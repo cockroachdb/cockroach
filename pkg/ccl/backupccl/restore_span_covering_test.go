@@ -11,7 +11,6 @@ package backupccl
 import (
 	"context"
 	"fmt"
-	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"math/rand"
 	"testing"
 	"time"
@@ -31,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	spanUtils "github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -48,7 +48,7 @@ func MockBackupChain(
 	r *rand.Rand,
 	hasExternalFilesList bool,
 	execCfg sql.ExecutorConfig,
-) ([]backupinfo.BackupMetadata, error) {
+) ([]backupinfo.BackupManifest, error) {
 	backups := make([]backuppb.BackupManifest, length)
 	ts := hlc.Timestamp{WallTime: time.Second.Nanoseconds()}
 
@@ -130,7 +130,7 @@ func MockBackupChain(
 		backups[i].Dir = config
 	}
 
-	adapters := make([]backupinfo.BackupMetadata, len(backups))
+	adapters := make([]backupinfo.BackupManifest, len(backups))
 	for i := range backups {
 		storeFactory := execCfg.DistSQLSrv.ExternalStorage
 		adapters[i] = backupinfo.NewBackupManifestAdapter(&backups[i], nil, nil, nil, storeFactory)
@@ -153,7 +153,7 @@ func MockBackupChain(
 // check back in when I figure out what the expected partition count should be.
 func checkRestoreCovering(
 	ctx context.Context,
-	backups []backupinfo.BackupMetadata,
+	backups []backupinfo.BackupManifest,
 	spans roachpb.Spans,
 	cov []execinfrapb.RestoreSpanEntry,
 	merged bool,
@@ -190,7 +190,7 @@ func checkRestoreCovering(
 				return err
 			}
 			defer it.Close()
-			for ;; it.Next() {
+			for ; ; it.Next() {
 				if ok, err := it.Valid(); err != nil {
 					return err
 				} else if !ok {
@@ -238,7 +238,7 @@ const noSpanTargetSize = 0
 func makeImportSpans(
 	ctx context.Context,
 	spans []roachpb.Span,
-	backups []backupinfo.BackupMetadata,
+	backups []backupinfo.BackupManifest,
 	targetSize int64,
 	introducedSpanFrontier *spanUtils.Frontier,
 	useSimpleImportSpans bool,
@@ -294,8 +294,8 @@ func TestRestoreEntryCoverExample(t *testing.T) {
 	adapters := []*backupinfo.BackupManifestAdapter{
 		{BackupManifest: &backuppb.BackupManifest{Files: []backuppb.BackupManifest_File{f("a", "c", "1"), f("c", "e", "2"), f("h", "i", "3")}}},
 		{BackupManifest: &backuppb.BackupManifest{Files: []backuppb.BackupManifest_File{f("b", "d", "4"), f("g", "i", "5")}}},
-			{BackupManifest: &backuppb.BackupManifest{Files: []backuppb.BackupManifest_File{f("a", "h", "6"), f("j", "k", "7")}}},
-				{BackupManifest: &backuppb.BackupManifest{Files: []backuppb.BackupManifest_File{f("h", "i", "8"), f("l", "m", "9")}}},
+		{BackupManifest: &backuppb.BackupManifest{Files: []backuppb.BackupManifest_File{f("a", "h", "6"), f("j", "k", "7")}}},
+		{BackupManifest: &backuppb.BackupManifest{Files: []backuppb.BackupManifest_File{f("h", "i", "8"), f("l", "m", "9")}}},
 	}
 
 	for i := range adapters {
@@ -308,7 +308,7 @@ func TestRestoreEntryCoverExample(t *testing.T) {
 		}
 	}
 
-	backups := make([]backupinfo.BackupMetadata, len(adapters))
+	backups := make([]backupinfo.BackupManifest, len(adapters))
 	for i := range adapters {
 		backups[i] = adapters[i]
 	}
@@ -541,7 +541,7 @@ func TestRestoreEntryCoverReIntroducedSpans(t *testing.T) {
 				createMockManifest(t, &execCfg, test.full, hlc.Timestamp{WallTime: int64(1)}, fullBackupPath),
 				createMockManifest(t, &execCfg, test.inc, hlc.Timestamp{WallTime: int64(2)}, incBackupPath),
 			}
-			backups := make([]backupinfo.BackupMetadata, len(adapters))
+			backups := make([]backupinfo.BackupManifest, len(adapters))
 			for i := range adapters {
 				backups[i] = adapters[i]
 			}

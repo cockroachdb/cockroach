@@ -14,10 +14,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"path"
-	"runtime/debug"
 	"sort"
 	"strconv"
 	"strings"
@@ -44,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -134,7 +132,7 @@ func ReadBackupManifestFromURI(
 	encryption *jobspb.BackupEncryptionOptions,
 	kmsEnv cloud.KMSEnv,
 	mode jobspb.BackupManifestReadMode,
-) (BackupMetadata, int64, error) {
+) (BackupManifest, int64, error) {
 	exportStore, err := makeExternalStorageFromURI(ctx, uri, user)
 
 	if err != nil {
@@ -144,8 +142,8 @@ func ReadBackupManifestFromURI(
 	return ReadBackupManifestFromStore(ctx, mem, exportStore, encryption, kmsEnv, storeFactory, mode)
 }
 
-// ReadBackupManifestFromStore reads and unmarshalls a BackupManifest from the
-// store and returns it with the size it reserved for it from the boundAccount.
+// ReadBackupManifestFromStore reads a BackupManifest from the store and returns
+// it with the size it reserved for it from the boundAccount.
 func ReadBackupManifestFromStore(
 	ctx context.Context,
 	mem *mon.BoundAccount,
@@ -154,7 +152,7 @@ func ReadBackupManifestFromStore(
 	kmsEnv cloud.KMSEnv,
 	storeFactory cloud.ExternalStorageFactory,
 	mode jobspb.BackupManifestReadMode,
-) (BackupMetadata, int64, error) {
+) (BackupManifest, int64, error) {
 	ctx, sp := tracing.ChildSpan(ctx, "backupinfo.ReadBackupManifestFromStore")
 	defer sp.Finish()
 
@@ -208,7 +206,6 @@ func ReadBackupManifestFromStore(
 		}
 	}
 
-	fmt.Println("@@@ restore store", exportStore.Conf())
 	manifestAdapter := NewBackupManifestAdapter(&manifest, exportStore, encryption, kmsEnv, storeFactory)
 	manifestAdapter.SetDir(exportStore.Conf())
 	return manifestAdapter, memSize, nil
@@ -727,11 +724,11 @@ func LoadBackupManifestsAtTime(
 	kmsEnv cloud.KMSEnv,
 	asOf hlc.Timestamp,
 	mode jobspb.BackupManifestReadMode,
-) ([]BackupMetadata, int64, error) {
+) ([]BackupManifest, int64, error) {
 	ctx, sp := tracing.ChildSpan(ctx, "backupinfo.LoadBackupManifests")
 	defer sp.Finish()
 
-	backupManifests := make([]BackupMetadata, len(uris))
+	backupManifests := make([]BackupManifest, len(uris))
 	var reserved int64
 	defer func() {
 		if reserved != 0 {
@@ -756,10 +753,6 @@ func LoadBackupManifestsAtTime(
 	memSize := reserved
 	reserved = 0
 
-	for _, m := range backupManifests {
-		js, _ := protoreflect.MessageToJSON(m.Manifest(), protoreflect.FmtFlags{})
-		fmt.Println("@@@ restore flags", js)
-	}
 	return backupManifests, memSize, nil
 }
 
@@ -774,7 +767,7 @@ func GetLocalityInfo(
 	ctx context.Context,
 	stores []cloud.ExternalStorage,
 	uris []string,
-	mainBackupManifest BackupMetadata,
+	mainBackupManifest BackupManifest,
 	encryption *jobspb.BackupEncryptionOptions,
 	kmsEnv cloud.KMSEnv,
 	prefix string,
@@ -805,7 +798,7 @@ func GetLocalityInfo(
 				if desc.BackupID != mainBackupManifest.ID() {
 					return info, errors.Errorf(
 						"expected backup part to have backup ID %s, found %s",
-						mainBackupManifest.ID, desc.BackupID,
+						mainBackupManifest.ID(), desc.BackupID,
 					)
 				}
 				origLocalityKV := desc.LocalityKV
@@ -837,10 +830,10 @@ func GetLocalityInfo(
 // the requested time.
 func ValidateEndTimeAndTruncate(
 	defaultURIs []string,
-	mainBackupManifests []BackupMetadata,
+	mainBackupManifests []BackupManifest,
 	localityInfo []jobspb.RestoreDetails_BackupLocalityInfo,
 	endTime hlc.Timestamp,
-) ([]string, []BackupMetadata, []jobspb.RestoreDetails_BackupLocalityInfo, error) {
+) ([]string, []BackupManifest, []jobspb.RestoreDetails_BackupLocalityInfo, error) {
 	if endTime.IsEmpty() {
 		return defaultURIs, mainBackupManifests, localityInfo, nil
 	}
@@ -887,34 +880,16 @@ func ValidateEndTimeAndTruncate(
 	)
 }
 
-// GetBackupIndexAtTime returns the index of the latest backup in
-// `backupManifests` with a StartTime >= asOf.
-func GetBackupIndexAtTime(backupManifests []BackupMetadata, asOf hlc.Timestamp) (int, error) {
-	if len(backupManifests) == 0 {
-		return -1, errors.New("expected a nonempty backup manifest list, got an empty list")
-	}
-	backupManifestIndex := len(backupManifests) - 1
-	if asOf.IsEmpty() {
-		return backupManifestIndex, nil
-	}
-	for ind, b := range backupManifests {
-		if asOf.Less(b.StartTime()) {
-			break
-		}
-		backupManifestIndex = ind
-	}
-	return backupManifestIndex, nil
-}
-
-//// LoadSQLDescsFromBackupsAtTime returns the Descriptors found in the last
-//// (latest) backup with a StartTime >= asOf.
-// TODO: comment
-// TODO(rui): note that materializing all descriptors doesn't scale with
-// cluster size. We temporarily materialize all descriptors here to limit the
-// scope of changes required to use BackupMetadata in restore.
-func LoadSQLDescsFromBackupMetadataAtTime(
-	ctx context.Context, backupManifests []BackupMetadata, asOf hlc.Timestamp,
-) ([]catalog.Descriptor, BackupMetadata, error) {
+// LoadSQLDescsFromBackupsAtTime returns the Descriptors found in the last
+// (latest) backup with a StartTime >= asOf.
+//
+// TODO(rui): note that materializing all descriptors doesn't scale with cluster
+// size. We temporarily materialize all descriptors here to limit the scope of
+// changes required to use BackupManifest with iterating repeated fields in
+// restore.
+func LoadSQLDescsFromBackupsAtTime(
+	ctx context.Context, backupManifests []BackupManifest, asOf hlc.Timestamp,
+) ([]catalog.Descriptor, BackupManifest, error) {
 	lastBackupManifest := backupManifests[len(backupManifests)-1]
 
 	if asOf.IsEmpty() {
@@ -951,11 +926,8 @@ func LoadSQLDescsFromBackupMetadataAtTime(
 		return descs, lastBackupManifest, nil
 	}
 
-	// TODO: need to lookup parent id?
 	byID := make(map[descpb.ID]catalog.DescriptorBuilder, 0)
 	prevRevID := descpb.InvalidID
-	fmt.Println("@@@ start =======================", fmt.Sprintf("%T", lastBackupManifest))
-	debug.PrintStack()
 	for ; ; descRevIt.Next() {
 		if ok, err := descRevIt.Valid(); err != nil {
 			return nil, nil, err
@@ -964,29 +936,19 @@ func LoadSQLDescsFromBackupMetadataAtTime(
 		}
 
 		rev := descRevIt.Value()
-		if rev.ID == 106 {
-			fmt.Println("@@@ rev", rev)
-		}
 		if asOf.Less(rev.Time) {
 			continue
 		}
 
-		if rev.ID == 106 {
-			fmt.Println("@@@ picked?")
-		}
 		if rev.ID == prevRevID {
 			continue
 		}
 
-		if rev.ID == 106 {
-			fmt.Println("@@@ actually picked?")
-		}
 		if rev.Desc != nil {
 			byID[rev.ID] = newDescriptorBuilder(rev.Desc, rev.Time)
 		}
 		prevRevID = rev.ID
 	}
-	fmt.Println("@@@ end =======================")
 
 	allDescs := make([]catalog.Descriptor, 0, len(byID))
 	for _, b := range byID {
@@ -1169,13 +1131,13 @@ func TempCheckpointFileNameForJob(jobID jobspb.JobID) string {
 // BackupManifestDescriptors returns the descriptors encoded in the manifest as
 // a slice of mutable descriptors.
 func BackupManifestDescriptors(
-	ctx context.Context, backupManifest BackupMetadata,
+	ctx context.Context, backupManifest BackupManifest,
 ) ([]catalog.Descriptor, error) {
 	descIt := backupManifest.NewDescIter(ctx)
 	defer descIt.Close()
 
 	ret := make([]catalog.Descriptor, 0)
-	for ;; descIt.Next() {
+	for ; ; descIt.Next() {
 		if ok, err := descIt.Valid(); err != nil {
 			return nil, err
 		} else if !ok {
@@ -1415,11 +1377,11 @@ func GetBackupManifests(
 	encryption *jobspb.BackupEncryptionOptions,
 	kmsEnv cloud.KMSEnv,
 	mode jobspb.BackupManifestReadMode,
-) ([]BackupMetadata, int64, error) {
+) ([]BackupManifest, int64, error) {
 	ctx, sp := tracing.ChildSpan(ctx, "backupinfo.GetBackupManifests")
 	defer sp.Finish()
 
-	manifests := make([]BackupMetadata, len(backupURIs))
+	manifests := make([]BackupManifest, len(backupURIs))
 	if len(backupURIs) == 0 {
 		return manifests, 0, nil
 	}
@@ -1478,7 +1440,7 @@ func GetBackupManifests(
 }
 
 // MakeBackupCodec returns the codec that was used to encode the keys in the backup.
-func MakeBackupCodec(ctx context.Context, bm BackupMetadata) (keys.SQLCodec, error) {
+func MakeBackupCodec(ctx context.Context, bm BackupManifest) (keys.SQLCodec, error) {
 	backupCodec := keys.SystemSQLCodec
 	spanIt := bm.NewSpanIter(ctx)
 	defer spanIt.Close()
