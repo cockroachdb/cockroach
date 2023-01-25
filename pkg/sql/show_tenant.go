@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -44,15 +45,25 @@ type tenantValues struct {
 	tenantStatus       tenantStatus
 	replicationInfo    *streampb.StreamIngestionStats
 	protectedTimestamp hlc.Timestamp
+	capabilities       []showTenantNodeCapability
+}
+
+type showTenantNodeCapability struct {
+	name  string
+	value string
 }
 
 type showTenantNode struct {
-	tenantSpec      tenantSpec
-	withReplication bool
-	columns         colinfo.ResultColumns
-	row             int
-	tenantIds       []roachpb.TenantID
-	values          *tenantValues
+	tenantSpec       tenantSpec
+	withReplication  bool
+	withCapabilities bool
+	columns          colinfo.ResultColumns
+	tenantIDIndex    int
+	tenantIds        []roachpb.TenantID
+	initTenantValues bool
+	values           *tenantValues
+	capabilityIndex  int
+	capability       showTenantNodeCapability
 }
 
 // ShowTenant constructs a showTenantNode.
@@ -70,13 +81,18 @@ func (p *planner) ShowTenant(ctx context.Context, n *tree.ShowTenant) (planNode,
 	}
 
 	node := &showTenantNode{
-		tenantSpec:      tspec,
-		withReplication: n.WithReplication,
+		tenantSpec:       tspec,
+		withReplication:  n.WithReplication,
+		withCapabilities: n.WithCapabilities,
+		initTenantValues: true,
 	}
 
 	node.columns = colinfo.TenantColumns
 	if n.WithReplication {
 		node.columns = append(node.columns, colinfo.TenantColumnsWithReplication...)
+	}
+	if n.WithCapabilities {
+		node.columns = append(node.columns, colinfo.TenantColumnsWithCapabilities...)
 	}
 
 	return node, nil
@@ -168,67 +184,106 @@ func getTenantStatus(
 func (n *showTenantNode) getTenantValues(
 	params runParams, tenantInfo *descpb.TenantInfo,
 ) (*tenantValues, error) {
+
+	// Common fields.
 	var values tenantValues
 	values.tenantInfo = tenantInfo
-	jobId := values.tenantInfo.TenantReplicationJobID
+
+	// Tenant status + replication status fields.
+	jobId := tenantInfo.TenantReplicationJobID
+	tenantInfoState := tenantInfo.State
 	if jobId == 0 {
 		// No replication job, this is a non-replicating tenant.
 		if n.withReplication {
 			return nil, errors.Newf("tenant %q does not have an active replication job", tenantInfo.Name)
 		}
-		values.tenantStatus = tenantStatus(values.tenantInfo.State.String())
-		return &values, nil
+		values.tenantStatus = tenantStatus(tenantInfoState.String())
+	} else {
+		switch tenantInfoState {
+		case descpb.TenantInfo_ADD:
+			// There is a replication job, we need to get the job info and the
+			// replication stats in order to generate the exact tenant status.
+			ctx := params.ctx
+			p := params.p
+			registry := p.execCfg.JobRegistry
+			job, err := registry.LoadJobWithTxn(ctx, jobId, p.InternalSQLTxn())
+			if err != nil {
+				log.Errorf(ctx, "cannot load job info for replicated tenant %q and job %d: %v",
+					tenantInfo.Name, jobId, err)
+				values.tenantStatus = tenantStatus(fmt.Sprintf(string(replicationUnknownFormat), err))
+			} else {
+				stats, protectedTimestamp, err := getReplicationStats(params, job)
+				if err != nil {
+					log.Errorf(ctx, "cannot load replication stats for replicated tenant %q and job %d: %v",
+						tenantInfo.Name, jobId, err)
+					values.tenantStatus = tenantStatus(fmt.Sprintf(string(replicationUnknownFormat), err))
+				} else {
+					if n.withReplication {
+						values.replicationInfo = stats
+						if protectedTimestamp != nil {
+							values.protectedTimestamp = *protectedTimestamp
+						}
+					}
+					values.tenantStatus = getTenantStatus(job.Status(), stats)
+				}
+			}
+		case descpb.TenantInfo_ACTIVE, descpb.TenantInfo_DROP:
+			values.tenantStatus = tenantStatus(tenantInfoState.String())
+		default:
+			return nil, errors.Newf("tenant %q state is unknown: %s", tenantInfo.Name, tenantInfoState.String())
+		}
 	}
 
-	switch values.tenantInfo.State {
-	case descpb.TenantInfo_ADD:
-		// There is a replication job, we need to get the job info and the
-		// replication stats in order to generate the exact tenant status.
-		registry := params.p.execCfg.JobRegistry
-		job, err := registry.LoadJobWithTxn(params.ctx, jobId, params.p.InternalSQLTxn())
-		if err != nil {
-			log.Errorf(params.ctx, "cannot load job info for replicated tenant %q and job %d: %v",
-				tenantInfo.Name, jobId, err)
-			values.tenantStatus = tenantStatus(fmt.Sprintf(string(replicationUnknownFormat), err))
-			return &values, nil
+	if n.withCapabilities {
+		capabilities := tenantInfo.Capabilities
+		values.capabilities = []showTenantNodeCapability{
+			{
+				name:  CanAdminSplitCapabilityName,
+				value: strconv.FormatBool(capabilities.CanAdminSplit),
+			},
+			{
+				name:  CanAdminUnsplitCapabilityName,
+				value: strconv.FormatBool(false),
+			},
 		}
-		stats, protectedTimestamp, err := getReplicationStats(params, job)
-		if err != nil {
-			log.Errorf(params.ctx, "cannot load replication stats for replicated tenant %q and job %d: %v",
-				tenantInfo.Name, jobId, err)
-			values.tenantStatus = tenantStatus(fmt.Sprintf(string(replicationUnknownFormat), err))
-			return &values, nil
-		}
-		values.replicationInfo = stats
-		if protectedTimestamp != nil {
-			values.protectedTimestamp = *protectedTimestamp
-		}
-
-		values.tenantStatus = getTenantStatus(job.Status(), values.replicationInfo)
-	case descpb.TenantInfo_ACTIVE, descpb.TenantInfo_DROP:
-		values.tenantStatus = tenantStatus(values.tenantInfo.State.String())
-	default:
-		return nil, errors.Newf("tenant %q state is unknown: %s", tenantInfo.Name, values.tenantInfo.State.String())
 	}
+
 	return &values, nil
 }
 
 func (n *showTenantNode) Next(params runParams) (bool, error) {
-	if n.row >= len(n.tenantIds) {
+	if n.tenantIDIndex >= len(n.tenantIds) {
 		return false, nil
 	}
 
-	tenantInfo, err := GetTenantRecordByID(params.ctx, params.p.InternalSQLTxn(), n.tenantIds[n.row])
-	if err != nil {
-		return false, err
+	if n.initTenantValues {
+		tenantInfo, err := GetTenantRecordByID(params.ctx, params.p.InternalSQLTxn(), n.tenantIds[n.tenantIDIndex])
+		if err != nil {
+			return false, err
+		}
+		values, err := n.getTenantValues(params, tenantInfo)
+		if err != nil {
+			return false, err
+		}
+		n.values = values
+		n.initTenantValues = false
 	}
 
-	values, err := n.getTenantValues(params, tenantInfo)
-	if err != nil {
-		return false, err
+	if n.withCapabilities {
+		capabilities := n.values.capabilities
+		n.capability = capabilities[n.capabilityIndex]
+		if n.capabilityIndex == len(capabilities)-1 {
+			n.capabilityIndex = 0
+			n.tenantIDIndex++
+			n.initTenantValues = true
+		} else {
+			n.capabilityIndex++
+		}
+	} else {
+		n.tenantIDIndex++
+		n.initTenantValues = true
 	}
-	n.values = values
-	n.row++
+
 	return true, nil
 }
 
@@ -283,6 +338,14 @@ func (n *showTenantNode) Values() tree.Datums {
 			replicatedTimestamp,
 			retainedTimestamp,
 			cutoverTimestamp,
+		)
+	}
+
+	if n.withCapabilities {
+		capability := n.capability
+		result = append(result,
+			tree.NewDString(capability.name),
+			tree.NewDString(capability.value),
 		)
 	}
 

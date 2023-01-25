@@ -10,7 +10,7 @@
 
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
 import { merge } from "lodash";
-import { DOMAIN_NAME } from "../utils";
+import { DOMAIN_NAME, noopReducer } from "../utils";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 export type UserSQLRolesRequest = cockroach.server.serverpb.UserSQLRolesRequest;
 
@@ -57,15 +57,17 @@ const uiConfigSlice = createSlice({
     update: (state, action: PayloadAction<Partial<UIConfigState>>) => {
       merge(state, action.payload);
     },
-    refreshUserSQLRoles: (
-      state,
-      action?: PayloadAction<UserSQLRolesRequest>,
-    ) => {
+    receivedUserSQLRoles: (state, action: PayloadAction<string[]>) => {
       if (action?.payload) {
-        const resp = action.payload.toJSON();
-        state.userSQLRoles = resp["roles"];
+        state.userSQLRoles = action.payload;
       }
     },
+    invalidatedUserSQLRoles: state => {
+      state.userSQLRoles = [];
+    },
+    // Define actions that don't change state
+    refreshUserSQLRoles: noopReducer,
+    requestUserSQLRoles: noopReducer,
   },
 });
 
