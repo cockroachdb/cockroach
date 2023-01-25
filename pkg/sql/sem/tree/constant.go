@@ -637,7 +637,7 @@ func (expr *StrVal) ResolveAsType(
 		return ParseDByte(expr.s)
 
 	default:
-		ptCtx := simpleParseTimeContext{
+		ptCtx := simpleParseContext{
 			// We can return any time, but not the zero value - it causes an error when
 			// parsing "yesterday".
 			RelativeParseTime: time.Date(2000, time.January, 2, 3, 4, 5, 0, time.UTC),

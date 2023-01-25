@@ -1992,11 +1992,11 @@ func NewDDateFromTime(t time.Time) (*DDate, error) {
 	return NewDDate(d), err
 }
 
-// ParseTimeContext provides the information necessary for
-// parsing dates, intervals times, and timestamps.
+// ParseContext provides the information necessary for
+// parsing dates.
 // A nil value is generally acceptable and will result in
 // reasonable defaults being applied.
-type ParseTimeContext interface {
+type ParseContext interface {
 	// GetRelativeParseTime returns the transaction time in the session's
 	// timezone (i.e. now()). This is used to calculate relative dates,
 	// like "tomorrow", and also provides a default time.Location for
@@ -2010,24 +2010,22 @@ type ParseTimeContext interface {
 	GetDateHelper() *pgdate.ParseHelper
 }
 
-var _ ParseTimeContext = &simpleParseTimeContext{}
+var _ ParseContext = &simpleParseContext{}
 
-// NewParseTimeContextOption is an option to NewParseTimeContext.
-type NewParseTimeContextOption func(ret *simpleParseTimeContext)
+// NewParseContextOption is an option to NewParseContext.
+type NewParseContextOption func(ret *simpleParseContext)
 
-// NewParseTimeContextOptionDateStyle sets the DateStyle for the context.
-func NewParseTimeContextOptionDateStyle(dateStyle pgdate.DateStyle) NewParseTimeContextOption {
-	return func(ret *simpleParseTimeContext) {
+// NewParseContextOptionDateStyle sets the DateStyle for the context.
+func NewParseContextOptionDateStyle(dateStyle pgdate.DateStyle) NewParseContextOption {
+	return func(ret *simpleParseContext) {
 		ret.DateStyle = dateStyle
 	}
 }
 
-// NewParseTimeContext constructs a ParseTimeContext that returns
+// NewParseContext constructs a ParseContext that returns
 // the given values.
-func NewParseTimeContext(
-	relativeParseTime time.Time, opts ...NewParseTimeContextOption,
-) ParseTimeContext {
-	ret := &simpleParseTimeContext{
+func NewParseContext(relativeParseTime time.Time, opts ...NewParseContextOption) ParseContext {
+	ret := &simpleParseContext{
 		RelativeParseTime: relativeParseTime,
 	}
 	for _, opt := range opts {
@@ -2036,50 +2034,50 @@ func NewParseTimeContext(
 	return ret
 }
 
-type simpleParseTimeContext struct {
+type simpleParseContext struct {
 	RelativeParseTime time.Time
 	DateStyle         pgdate.DateStyle
 	IntervalStyle     duration.IntervalStyle
 	dateHelper        pgdate.ParseHelper
 }
 
-// GetRelativeParseTime implements ParseTimeContext.
-func (ctx simpleParseTimeContext) GetRelativeParseTime() time.Time {
+// GetRelativeParseTime implements ParseContext.
+func (ctx *simpleParseContext) GetRelativeParseTime() time.Time {
 	return ctx.RelativeParseTime
 }
 
-// GetIntervalStyle implements ParseTimeContext.
-func (ctx simpleParseTimeContext) GetIntervalStyle() duration.IntervalStyle {
+// GetIntervalStyle implements ParseContext.
+func (ctx *simpleParseContext) GetIntervalStyle() duration.IntervalStyle {
 	return ctx.IntervalStyle
 }
 
-// GetDateStyle implements ParseTimeContext.
-func (ctx simpleParseTimeContext) GetDateStyle() pgdate.DateStyle {
+// GetDateStyle implements ParseContext.
+func (ctx *simpleParseContext) GetDateStyle() pgdate.DateStyle {
 	return ctx.DateStyle
 }
 
 // GetDateHelper implements ParseTimeContext.
-func (ctx simpleParseTimeContext) GetDateHelper() *pgdate.ParseHelper {
+func (ctx *simpleParseContext) GetDateHelper() *pgdate.ParseHelper {
 	return &ctx.dateHelper
 }
 
 // relativeParseTime chooses a reasonable "now" value for
 // performing date parsing.
-func relativeParseTime(ctx ParseTimeContext) time.Time {
+func relativeParseTime(ctx ParseContext) time.Time {
 	if ctx == nil {
 		return timeutil.Now()
 	}
 	return ctx.GetRelativeParseTime()
 }
 
-func dateStyle(ctx ParseTimeContext) pgdate.DateStyle {
+func dateStyle(ctx ParseContext) pgdate.DateStyle {
 	if ctx == nil {
 		return pgdate.DefaultDateStyle()
 	}
 	return ctx.GetDateStyle()
 }
 
-func intervalStyle(ctx ParseTimeContext) duration.IntervalStyle {
+func intervalStyle(ctx ParseContext) duration.IntervalStyle {
 	if ctx == nil {
 		return duration.IntervalStyle_POSTGRES
 	}
@@ -2097,8 +2095,8 @@ func dateParseHelper(ctx ParseTimeContext) *pgdate.ParseHelper {
 // string in the provided location, or an error if parsing is unsuccessful.
 //
 // The dependsOnContext return value indicates if we had to consult the
-// ParseTimeContext (either for the time or the local timezone).
-func ParseDDate(ctx ParseTimeContext, s string) (_ *DDate, dependsOnContext bool, _ error) {
+// ParseContext (either for the time or the local timezone).
+func ParseDDate(ctx ParseContext, s string) (_ *DDate, dependsOnContext bool, _ error) {
 	now := relativeParseTime(ctx)
 	t, dependsOnContext, err := pgdate.ParseDate(now, dateStyle(ctx), s, dateParseHelper(ctx))
 	return NewDDate(t), dependsOnContext, err
@@ -2263,9 +2261,9 @@ func MakeDTime(t timeofday.TimeOfDay) *DTime {
 // provided string, or an error if parsing is unsuccessful.
 //
 // The dependsOnContext return value indicates if we had to consult the
-// ParseTimeContext (either for the time or the local timezone).
+// ParseContext (either for the time or the local timezone).
 func ParseDTime(
-	ctx ParseTimeContext, s string, precision time.Duration,
+	ctx ParseContext, s string, precision time.Duration,
 ) (_ *DTime, dependsOnContext bool, _ error) {
 	now := relativeParseTime(ctx)
 
@@ -2411,9 +2409,9 @@ func NewDTimeTZFromLocation(t timeofday.TimeOfDay, loc *time.Location) *DTimeTZ 
 // provided string, or an error if parsing is unsuccessful.
 //
 // The dependsOnContext return value indicates if we had to consult the
-// ParseTimeContext (either for the time or the local timezone).
+// ParseContext (either for the time or the local timezone).
 func ParseDTimeTZ(
-	ctx ParseTimeContext, s string, precision time.Duration,
+	ctx ParseContext, s string, precision time.Duration,
 ) (_ *DTimeTZ, dependsOnContext bool, _ error) {
 	now := relativeParseTime(ctx)
 	d, dependsOnContext, err := timetz.ParseTimeTZ(now, dateStyle(ctx), s, precision)
@@ -2602,9 +2600,9 @@ const (
 // the provided string in UTC, or an error if parsing is unsuccessful.
 //
 // The dependsOnContext return value indicates if we had to consult the
-// ParseTimeContext (either for the time or the local timezone).
+// ParseContext (either for the time or the local timezone).
 func ParseDTimestamp(
-	ctx ParseTimeContext, s string, precision time.Duration,
+	ctx ParseContext, s string, precision time.Duration,
 ) (_ *DTimestamp, dependsOnContext bool, _ error) {
 	now := relativeParseTime(ctx)
 	t, dependsOnContext, err := pgdate.ParseTimestampWithoutTimezone(now, dateStyle(ctx), s)
@@ -2890,9 +2888,9 @@ func MakeDTimestampTZFromDate(loc *time.Location, d *DDate) (*DTimestampTZ, erro
 // the provided string in the provided location, or an error if parsing is unsuccessful.
 //
 // The dependsOnContext return value indicates if we had to consult the
-// ParseTimeContext (either for the time or the local timezone).
+// ParseContext (either for the time or the local timezone).
 func ParseDTimestampTZ(
-	ctx ParseTimeContext, s string, precision time.Duration,
+	ctx ParseContext, s string, precision time.Duration,
 ) (_ *DTimestampTZ, dependsOnContext bool, _ error) {
 	now := relativeParseTime(ctx)
 	t, dependsOnContext, err := pgdate.ParseTimestamp(now, dateStyle(ctx), s)
