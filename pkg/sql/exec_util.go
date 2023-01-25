@@ -3044,6 +3044,10 @@ func (m *sessionDataMutator) SetSynchronousCommit(val bool) {
 	m.data.SynchronousCommit = val
 }
 
+func (m *sessionDataMutator) SetDirectColumnarScansEnabled(b bool) {
+	m.data.DirectColumnarScansEnabled = b
+}
+
 func (m *sessionDataMutator) SetDisablePlanGists(val bool) {
 	m.data.DisablePlanGists = val
 }

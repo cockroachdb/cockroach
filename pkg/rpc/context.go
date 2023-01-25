@@ -2238,15 +2238,11 @@ func (rpcCtx *Context) runHeartbeat(
 
 	// Start heartbeat loop.
 
-	maxOffset := rpcCtx.MaxOffset
-	maxOffsetNanos := maxOffset.Nanoseconds()
-
 	// The request object. Note that we keep the same object from
 	// heartbeat to heartbeat: we compute a new .Offset at the end of
 	// the current heartbeat as input to the next one.
 	request := &PingRequest{
-		OriginAddr:           rpcCtx.Config.Addr,
-		OriginMaxOffsetNanos: maxOffsetNanos,
+		DeprecatedOriginAddr: rpcCtx.Config.Addr,
 		TargetNodeID:         conn.remoteNodeID,
 		ServerVersion:        rpcCtx.Settings.Version.BinaryVersion(),
 	}
@@ -2357,7 +2353,7 @@ func (rpcCtx *Context) runHeartbeat(
 					remoteTimeNow := timeutil.Unix(0, response.ServerTime).Add(pingDuration / 2)
 					request.Offset.Offset = remoteTimeNow.Sub(receiveTime).Nanoseconds()
 				}
-				rpcCtx.RemoteClocks.UpdateOffset(ctx, target, request.Offset, pingDuration)
+				rpcCtx.RemoteClocks.UpdateOffset(ctx, conn.remoteNodeID, request.Offset, pingDuration)
 			}
 
 			if cb := rpcCtx.HeartbeatCB; cb != nil {

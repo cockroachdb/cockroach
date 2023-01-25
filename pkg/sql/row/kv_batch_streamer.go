@@ -57,7 +57,7 @@ func newTxnKVStreamer(
 ) KVBatchFetcher {
 	f := &txnKVStreamer{
 		streamer:   streamer,
-		keyLocking: getKeyLockingStrength(lockStrength),
+		keyLocking: GetKeyLockingStrength(lockStrength),
 		acc:        acc,
 	}
 	f.kvBatchFetcherHelper.init(f.nextBatch, batchRequestsIssued)
@@ -95,7 +95,8 @@ func (f *txnKVStreamer) SetupNextFetch(
 	for i := len(spans); i < len(reqsScratch); i++ {
 		reqsScratch[i] = roachpb.RequestUnion{}
 	}
-	reqs := spansToRequests(spans, false /* reverse */, f.keyLocking, reqsScratch)
+	// TODO(yuzefovich): consider supporting COL_BATCH_RESPONSE scan format.
+	reqs := spansToRequests(spans, roachpb.BATCH_RESPONSE, false /* reverse */, f.keyLocking, reqsScratch)
 	if err := f.streamer.Enqueue(ctx, reqs); err != nil {
 		return err
 	}

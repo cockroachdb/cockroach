@@ -1331,8 +1331,8 @@ func TestOffsetMeasurement(t *testing.T) {
 		clientCtx.RemoteClocks.mu.Lock()
 		defer clientCtx.RemoteClocks.mu.Unlock()
 
-		if o, ok := clientCtx.RemoteClocks.mu.offsets[remoteAddr]; !ok {
-			return errors.Errorf("expected offset of %s to be initialized, but it was not", remoteAddr)
+		if o, ok := clientCtx.RemoteClocks.mu.offsets[serverNodeID]; !ok {
+			return errors.Errorf("expected offset of %d to be initialized, but it was not", serverNodeID)
 		} else if o != expectedOffset {
 			return errors.Errorf("expected:\n%v\nactual:\n%v", expectedOffset, o)
 		}
@@ -1348,7 +1348,7 @@ func TestOffsetMeasurement(t *testing.T) {
 		clientCtx.RemoteClocks.mu.Lock()
 		defer clientCtx.RemoteClocks.mu.Unlock()
 
-		if o, ok := clientCtx.RemoteClocks.mu.offsets[remoteAddr]; ok {
+		if o, ok := clientCtx.RemoteClocks.mu.offsets[serverNodeID]; ok {
 			return errors.Errorf("expected offset to have been cleared, but found %s", o)
 		}
 		return nil
@@ -1404,7 +1404,7 @@ func TestFailedOffsetMeasurement(t *testing.T) {
 		clientCtx.RemoteClocks.mu.Lock()
 		defer clientCtx.RemoteClocks.mu.Unlock()
 
-		if _, ok := clientCtx.RemoteClocks.mu.offsets[remoteAddr]; !ok {
+		if _, ok := clientCtx.RemoteClocks.mu.offsets[serverNodeID]; !ok {
 			return errors.Errorf("expected offset of %s to be initialized, but it was not", remoteAddr)
 		}
 		return nil
@@ -1414,7 +1414,7 @@ func TestFailedOffsetMeasurement(t *testing.T) {
 		serverCtx.RemoteClocks.mu.Lock()
 		defer serverCtx.RemoteClocks.mu.Unlock()
 
-		if o, ok := serverCtx.RemoteClocks.mu.offsets[remoteAddr]; ok {
+		if o, ok := serverCtx.RemoteClocks.mu.offsets[serverNodeID]; ok {
 			return errors.Errorf("expected offset of %s to not be initialized, but it was: %v", remoteAddr, o)
 		}
 		return nil

@@ -14,7 +14,6 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
-	"strings"
 	"testing"
 	"time"
 
@@ -49,8 +48,8 @@ func TestClosest(t *testing.T) {
 			NodeID:    1,
 			Locality:  nd2.Locality, // pretend node 2 is closest.
 		})
-		o.(*closestOracle).latencyFunc = func(s string) (time.Duration, bool) {
-			if strings.HasSuffix(s, "2") {
+		o.(*closestOracle).latencyFunc = func(id roachpb.NodeID) (time.Duration, bool) {
+			if id == 2 {
 				return time.Nanosecond, validLatencyFunc
 			}
 			return time.Millisecond, validLatencyFunc

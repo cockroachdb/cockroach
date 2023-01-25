@@ -16,7 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgrades"
@@ -29,17 +29,19 @@ func TestKeyVisualizerTablesMigration(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 
-	settings := cluster.MakeTestingClusterSettingsWithVersions(
-		clusterversion.TestingBinaryVersion,
-		clusterversion.ByKey(clusterversion.V23_1KeyVisualizerTablesAndJobs-1),
-		false,
-	)
-
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
+	clusterArgs := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			Settings: settings,
+			Knobs: base.TestingKnobs{
+				Server: &server.TestingKnobs{
+					DisableAutomaticVersionUpgrade: make(chan struct{}),
+					BinaryVersionOverride: clusterversion.ByKey(
+						clusterversion.V23_1KeyVisualizerTablesAndJobs - 1),
+				},
+			},
 		},
-	})
+	}
+
+	tc := testcluster.StartTestCluster(t, 1, clusterArgs)
 
 	defer tc.Stopper().Stop(ctx)
 	db := tc.ServerConn(0)
