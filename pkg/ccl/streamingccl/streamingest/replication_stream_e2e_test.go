@@ -590,9 +590,6 @@ func TestTenantStreamingCutoverOnSourceFailure(t *testing.T) {
 	cutoverOutput := replicationtestutils.DecimalTimeToHLC(t, cutoverStr)
 	require.Equal(c.T, cutoverTime, cutoverOutput)
 
-	// Resume ingestion.
-	c.DestSysSQL.Exec(t, fmt.Sprintf("RESUME JOB %d", ingestionJobID))
-
 	// Ingestion job should succeed despite source failure due to the successful cutover
 	jobutils.WaitForJobToSucceed(t, c.DestSysSQL, jobspb.JobID(ingestionJobID))
 }
