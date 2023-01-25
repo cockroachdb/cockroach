@@ -31,9 +31,9 @@ exp,benchmark
 15,CreateRole/create_role_with_2_options
 18,CreateRole/create_role_with_3_options
 13,CreateRole/create_role_with_no_options
-18,"Discard/DISCARD_ALL,_1_tables_in_1_db"
-21,"Discard/DISCARD_ALL,_2_tables_in_2_dbs"
-1,"Discard/DISCARD_ALL,_no_tables"
+12,"Discard/DISCARD_ALL,_1_tables_in_1_db"
+15,"Discard/DISCARD_ALL,_2_tables_in_2_dbs"
+0,"Discard/DISCARD_ALL,_no_tables"
 10,DropDatabase/drop_database_0_tables
 11,DropDatabase/drop_database_1_table
 11,DropDatabase/drop_database_2_tables
