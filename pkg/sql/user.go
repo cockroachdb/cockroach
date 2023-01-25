@@ -546,7 +546,7 @@ func (p *planner) setRole(ctx context.Context, local bool, s username.SQLUsernam
 	sessionUser := p.SessionData().SessionUser()
 	becomeUser := sessionUser
 	// Check the role exists - if so, populate becomeUser.
-	if !s.IsNoneRole() {
+	if !s.IsNoneRole() && s != sessionUser {
 		becomeUser = s
 
 		exists, err := p.RoleExists(ctx, becomeUser)
