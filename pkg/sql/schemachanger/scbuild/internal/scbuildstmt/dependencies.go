@@ -88,6 +88,11 @@ type BuilderState interface {
 	// log for the existing target corresponding to the provided element.
 	// An error is thrown if no such target exists.
 	LogEventForExistingTarget(element scpb.Element)
+
+	// MarkNewDescriptor records the given descriptor id as id for a new
+	// descriptor (being created), so that the build knows to avoid loading the
+	// descriptor for decomposition.
+	MarkNewDescriptor(descID catid.DescID)
 }
 
 // EventLogState encapsulates the state of the metadata to decorate the eventlog

@@ -53,6 +53,11 @@ func (b *builderState) QueryByID(id catid.DescID) scbuildstmt.ElementResultSet {
 	return b.descCache[id].ers
 }
 
+// MarkNewDescriptor implements the scbuildstmt.BuilderState interface.
+func (b *builderState) MarkNewDescriptor(descID descpb.ID) {
+	b.newDescriptors.Add(descID)
+}
+
 // Ensure implements the scbuildstmt.BuilderState interface.
 func (b *builderState) Ensure(e scpb.Element, target scpb.TargetStatus, meta scpb.TargetMetadata) {
 	b.ensure(e, scpb.Status_UNKNOWN, scpb.InvalidTarget, target, meta)
@@ -68,8 +73,16 @@ func (b *builderState) ensure(
 		panic(errors.AssertionFailedf("cannot define target for nil element"))
 	}
 	id := screl.GetDescID(e)
-	b.ensureDescriptor(id)
+	if b.newDescriptors.Contains(id) {
+		if _, ok := b.descCache[id]; !ok {
+			b.descCache[id] = b.newCachedDescForNewDesc()
+		}
+	} else {
+		b.ensureDescriptor(id)
+	}
+
 	c := b.descCache[id]
+
 	key := screl.ElementString(e)
 	if i, ok := c.elementIndexMap[key]; ok {
 		es := &b.output[i]
@@ -1002,17 +1015,30 @@ func (b *builderState) ResolveUDF(
 	return b.descCache[fnID].ers
 }
 
-func (b *builderState) ensureDescriptor(id catid.DescID) {
-	if _, found := b.descCache[id]; found {
-		return
-	}
-	c := &cachedDesc{
+func (b *builderState) newCachedDesc(id descpb.ID) *cachedDesc {
+	return &cachedDesc{
 		desc:            b.readDescriptor(id),
 		privileges:      make(map[privilege.Kind]error),
 		hasOwnership:    b.hasAdmin,
 		ers:             &elementResultSet{b: b},
 		elementIndexMap: map[string]int{},
 	}
+}
+
+func (b *builderState) newCachedDescForNewDesc() *cachedDesc {
+	return &cachedDesc{
+		privileges:      make(map[privilege.Kind]error),
+		hasOwnership:    true,
+		ers:             &elementResultSet{b: b},
+		elementIndexMap: map[string]int{},
+	}
+}
+
+func (b *builderState) ensureDescriptor(id catid.DescID) {
+	if _, found := b.descCache[id]; found {
+		return
+	}
+	c := b.newCachedDesc(id)
 	// Collect privileges
 	if !c.hasOwnership {
 		var err error
