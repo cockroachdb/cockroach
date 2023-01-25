@@ -16,9 +16,7 @@ export type UserSQLRolesRequestMessage =
 export type UserSQLRolesResponseMessage =
   cockroach.server.serverpb.UserSQLRolesResponse;
 
-export function getUserSQLRoles(
-  req: UserSQLRolesRequestMessage,
-): Promise<UserSQLRolesResponseMessage> {
+export function getUserSQLRoles(): Promise<UserSQLRolesResponseMessage> {
   return fetchData(
     cockroach.server.serverpb.UserSQLRolesResponse,
     `/_status/sqlroles`,

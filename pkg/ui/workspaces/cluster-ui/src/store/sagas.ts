@@ -51,6 +51,6 @@ export function* sagas(cacheInvalidationPeriod?: number): SagaIterator {
     fork(indexStatsSaga),
     fork(clusterLocksSaga),
     fork(schemaInsightsSaga),
-    fork(uiConfigSaga),
+    fork(uiConfigSaga, cacheInvalidationPeriod),
   ]);
 }
