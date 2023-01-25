@@ -2480,6 +2480,18 @@ SELECT array_to_string(NULL, ','), array_to_string(NULL, 'foo', 'zerp')
 ----
 NULL  NULL
 
+# Builtin array_to_string should recursively search nested arrays.
+query T
+SELECT array_to_string(ARRAY[ARRAY[ARRAY[5,6], ARRAY[2,3]], ARRAY[ARRAY[7,8], ARRAY[4,44]]], ' ');
+----
+5 6 2 3 7 8 4 44
+
+# Builtin array_to_string should recursively search nested arrays.
+query T
+SELECT array_to_string(ARRAY[(SELECT ARRAY[1,2]::int2vector)],' ');
+----
+1 2
+
 subtest pg_is_in_recovery
 
 query B colnames
