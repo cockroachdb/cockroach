@@ -139,7 +139,7 @@ func runMultiTenantDistSQL(
 				default:
 					// procede to report error
 				}
-				require.NoError(t, err, li, iter)
+				require.NoError(t, err, "instance idx = %d, iter = %d", li, iter)
 				iter++
 			}
 		})
