@@ -640,6 +640,7 @@ func (ds *DistSender) singleRangeFeed(
 				event, err = stream.Recv()
 				return err
 			}); err != nil {
+				log.Infof(ctx, "producer recv error %s", err)
 				if err == io.EOF {
 					return args.Timestamp, nil
 				}

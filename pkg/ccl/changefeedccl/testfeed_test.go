@@ -1432,16 +1432,16 @@ func (c *cloudFeed) Next() (*cdctest.TestFeedMessage, error) {
 				case <-ctx.Done():
 					err := ctx.Err()
 					if err != nil {
-						//f, e := os.OpenFile("/Users/jayants/go/src/github.com/cockroachdb/cockroach/goroutines1.txt", os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0600)
-						//if e != nil {
-						//	panic(e)
-						//}
-						if e := pprof.Lookup("goroutine").WriteTo(os.Stdout, 1); e != nil {
+						f, e := os.OpenFile("/tmp/goroutines1.txt", os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0600)
+						if e != nil {
 							panic(e)
 						}
-						//if e := f.Close(); e != nil {
-						//	panic(e)
-						//}
+						if e := pprof.Lookup("goroutine").WriteTo(f, 1); e != nil {
+							panic(e)
+						}
+						if e := f.Close(); e != nil {
+							panic(e)
+						}
 					}
 					return err
 				case <-c.ss.eventReady():
