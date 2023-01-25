@@ -848,12 +848,19 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 		storeIDPebbleLog: storeIDContainer,
 		closer:           filesystemCloser,
 	}
+
+	// NB: The ordering of the event listeners passed to TeeEventListener is
+	// deliberate. The listener returned by makeMetricEtcEventListener is
+	// responsible for crashing the process if a DiskSlow event indicates the
+	// disk is stalled. While the logging subsystem should also be robust to
+	// stalls and crash the process if unable to write logs, there's less risk
+	// to sequencing the crashing listener first.
 	cfg.Opts.EventListener = pebble.TeeEventListener(
+		p.makeMetricEtcEventListener(ctx),
 		pebble.MakeLoggingEventListener(pebbleLogger{
 			ctx:   logCtx,
 			depth: 2, // skip over the EventListener stack frame
 		}),
-		p.makeMetricEtcEventListener(ctx),
 	)
 	p.eventListener = &cfg.Opts.EventListener
 	p.wrappedIntentWriter = wrapIntentWriter(ctx, p)
