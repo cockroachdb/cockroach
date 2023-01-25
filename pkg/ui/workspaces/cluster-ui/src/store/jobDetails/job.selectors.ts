@@ -9,9 +9,17 @@
 // licenses/APL.txt.
 
 import { createSelector } from "reselect";
-import { adminUISelector } from "../utils/selectors";
+import { adminUISelector } from "src/store/utils/selectors";
+import { selectID } from "src/selectors";
 
 export const selectJobState = createSelector(
   adminUISelector,
-  adminUiState => adminUiState.job,
+  selectID,
+  (state, jobID) => {
+    const jobCache = state?.job?.cachedData;
+    if (!jobCache || !jobID) {
+      return null;
+    }
+    return jobCache[jobID];
+  },
 );

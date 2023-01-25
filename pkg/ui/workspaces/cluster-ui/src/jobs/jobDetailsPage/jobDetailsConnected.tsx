@@ -21,8 +21,11 @@ import {
 import { JobRequest } from "src/api/jobsApi";
 import { actions as jobActions } from "src/store/jobDetails";
 
-const mapStateToProps = (state: AppState): JobDetailsStateProps => {
-  const jobState = selectJobState(state);
+const mapStateToProps = (
+  state: AppState,
+  props: RouteComponentProps,
+): JobDetailsStateProps => {
+  const jobState = selectJobState(state, props);
   const job = jobState ? jobState.data : null;
   const jobLoading = jobState ? jobState.inFlight : false;
   const jobError = jobState ? jobState.lastError : null;

@@ -10,7 +10,6 @@
 
 import { createAction, createReducer } from "@reduxjs/toolkit";
 import { combineReducers, createStore } from "redux";
-import { TxnInsightEvent } from "src/insights";
 import {
   ClusterLocksReqState,
   reducer as clusterLocks,
@@ -35,7 +34,7 @@ import {
   reducer as transactionInsights,
   TransactionInsightsState,
 } from "./insights/transactionInsights";
-import { JobState, reducer as job } from "./jobDetails";
+import { JobDetailsReducerState, reducer as job } from "./jobDetails";
 import { JobsState, reducer as jobs } from "./jobs";
 import { LivenessState, reducer as liveness } from "./liveness";
 import { LocalStorageState, reducer as localStorage } from "./localStorage";
@@ -73,7 +72,7 @@ export type AdminUiState = {
   sqlDetailsStats: SQLDetailsStatsReducerState;
   indexStats: IndexStatsReducerState;
   jobs: JobsState;
-  job: JobState;
+  job: JobDetailsReducerState;
   clusterLocks: ClusterLocksReqState;
   databasesList: DatabasesListState;
   transactionInsights: TransactionInsightsState;
