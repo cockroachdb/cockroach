@@ -43,6 +43,10 @@ func completeStreamIngestion(
 	ingestionJobID jobspb.JobID,
 	cutoverTimestamp hlc.Timestamp,
 ) error {
+	// Unpause the job if it is paused.
+	if err := jobRegistry.Unpause(ctx, txn, ingestionJobID); err != nil {
+		return err
+	}
 	j, err := jobRegistry.LoadJobWithTxn(ctx, ingestionJobID, txn)
 	if err != nil {
 		return err
@@ -58,12 +62,44 @@ func completeStreamIngestion(
 				"job %d is in the process of cutting over", jobCutoverTime.String(), ingestionJobID)
 		}
 
+		progress := md.Progress.GetStreamIngest()
+		progress.ReplicationStatus = jobspb.StreamIngestionProgress_REPLICATION_PENDING_CUTOVER
 		// Update the sentinel being polled by the stream ingestion job to
 		// check if a complete has been signaled.
-		md.Progress.GetStreamIngest().CutoverTime = cutoverTimestamp
+		progress.CutoverTime = cutoverTimestamp
 		ju.UpdateProgress(md.Progress)
 		return nil
 	})
+}
+
+func pauseStreamIngestion(
+	ctx context.Context,
+	jobRegistry *jobs.Registry,
+	txn isql.Txn,
+	ingestionJobID jobspb.JobID,
+	reason string,
+) error {
+	if err := jobRegistry.PauseRequested(ctx, txn, ingestionJobID, reason); err != nil {
+		return err
+	}
+	j, err := jobRegistry.LoadJobWithTxn(ctx, ingestionJobID, txn)
+	if err != nil {
+		return err
+	}
+	return j.WithTxn(txn).Update(ctx, func(
+		txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
+	) error {
+		progress := md.Progress.GetStreamIngest()
+		progress.ReplicationStatus = jobspb.StreamIngestionProgress_REPLICATION_PAUSED
+		ju.UpdateProgress(md.Progress)
+		return nil
+	})
+}
+
+func resumeStreamIngestion(
+	ctx context.Context, jobRegistry *jobs.Registry, txn isql.Txn, ingestionJobID jobspb.JobID,
+) error {
+	return jobRegistry.Unpause(ctx, txn, ingestionJobID)
 }
 
 type streamIngestionResumer struct {
@@ -133,12 +169,25 @@ func waitUntilProducerActive(
 	return nil
 }
 
-func updateRunningStatus(ctx context.Context, ingestionJob *jobs.Job, status string) {
-	if err := ingestionJob.NoTxn().RunningStatus(ctx, func(
-		ctx context.Context, details jobspb.Details,
-	) (jobs.RunningStatus, error) {
-		return jobs.RunningStatus(status), nil
-	}); err != nil {
+func updateRunningStatus(
+	ctx context.Context,
+	execCtx sql.JobExecContext,
+	ingestionJob *jobs.Job,
+	status jobspb.StreamIngestionProgress_ReplicationStatus,
+	runningStatus string,
+) {
+	execCfg := execCtx.ExecCfg()
+	err := execCfg.InternalDB.Txn(ctx, func(
+		ctx context.Context, txn isql.Txn,
+	) error {
+		return ingestionJob.WithTxn(txn).Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+			md.Progress.GetStreamIngest().ReplicationStatus = status
+			md.Progress.RunningStatus = runningStatus
+			ju.UpdateProgress(md.Progress)
+			return nil
+		})
+	})
+	if err != nil {
 		log.Warningf(ctx, "error when updating job running status: %s", err)
 	}
 }
@@ -182,8 +231,8 @@ func ingest(ctx context.Context, execCtx sql.JobExecContext, ingestionJob *jobs.
 	}
 	ingestWithClient := func() error {
 		streamID := streampb.StreamID(details.StreamID)
-		updateRunningStatus(ctx, ingestionJob, fmt.Sprintf("connecting to the producer job %d "+
-			"and creating a stream replication plan", streamID))
+		updateRunningStatus(ctx, execCtx, ingestionJob, jobspb.StreamIngestionProgress_INITIALIZING_REPLICATION,
+			fmt.Sprintf("connecting to the producer job %d and creating a stream replication plan", streamID))
 		if err := waitUntilProducerActive(ctx, client, streamID, heartbeatTimestamp, ingestionJob.ID()); err != nil {
 			return err
 		}
@@ -239,7 +288,8 @@ func ingest(ctx context.Context, execCtx sql.JobExecContext, ingestionJob *jobs.
 		// Plan and run the DistSQL flow.
 		log.Infof(ctx, "starting to run DistSQL flow for stream ingestion job %d",
 			ingestionJob.ID())
-		updateRunningStatus(ctx, ingestionJob, "running the SQL flow for the stream ingestion job")
+		updateRunningStatus(ctx, execCtx, ingestionJob, jobspb.StreamIngestionProgress_REPLICATING,
+			"running the SQL flow for the stream ingestion job")
 		if err = distStreamIngest(ctx, execCtx, sqlInstanceIDs, planCtx, dsp,
 			streamIngestionSpecs, streamIngestionFrontierSpec); err != nil {
 			return err
@@ -263,7 +313,8 @@ func ingest(ctx context.Context, execCtx sql.JobExecContext, ingestionJob *jobs.
 		}
 
 		log.Infof(ctx, "starting to complete the producer job %d", streamID)
-		updateRunningStatus(ctx, ingestionJob, "completing the producer job in the source cluster")
+		updateRunningStatus(ctx, execCtx, ingestionJob, jobspb.StreamIngestionProgress_REPLICATION_CUTTING_OVER,
+			"completing the producer job in the source cluster")
 		// Completes the producer job in the source cluster on best effort.
 		if err = client.Complete(ctx, streamID, true /* successfulIngestion */); err != nil {
 			log.Warningf(ctx, "encountered error when completing the source cluster producer job %d", streamID)
@@ -315,14 +366,17 @@ func ingestWithRetries(
 		}
 		const msgFmt = "stream ingestion waits for retrying after error %s"
 		log.Warningf(ctx, msgFmt, err)
-		updateRunningStatus(ctx, ingestionJob, fmt.Sprintf(msgFmt, err))
+		updateRunningStatus(ctx, execCtx, ingestionJob, jobspb.StreamIngestionProgress_REPLICATION_ERROR,
+			fmt.Sprintf(msgFmt, err))
 		retryCount++
 	}
-	status := "stream ingestion finished successfully"
 	if err != nil {
-		status = fmt.Sprintf("stream ingestion encountered error and is to be paused: %s", err)
+		updateRunningStatus(ctx, execCtx, ingestionJob, jobspb.StreamIngestionProgress_REPLICATION_ERROR,
+			fmt.Sprintf("stream ingestion encountered error and is to be paused: %s", err))
+	} else {
+		updateRunningStatus(ctx, execCtx, ingestionJob, jobspb.StreamIngestionProgress_REPLICATION_CUTTING_OVER,
+			"stream ingestion finished successfully")
 	}
-	updateRunningStatus(ctx, ingestionJob, status)
 	return err
 }
 
@@ -478,16 +532,9 @@ func maybeRevertToCutoverTimestamp(
 		return false, nil
 	}
 
-	updateRunningStatus(ctx, j, fmt.Sprintf("starting to cut over to the given timestamp %s", cutoverTime))
+	updateRunningStatus(ctx, p, j, jobspb.StreamIngestionProgress_REPLICATION_CUTTING_OVER,
+		fmt.Sprintf("starting to cut over to the given timestamp %s", cutoverTime))
 
-	err = j.NoTxn().Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
-		md.Progress.GetStreamIngest().CutoverStarted = true
-		ju.UpdateProgress(md.Progress)
-		return nil
-	})
-	if err != nil {
-		return false, errors.Wrap(err, "failed to set job state to cutting over")
-	}
 	if p.ExecCfg().StreamingTestingKnobs != nil && p.ExecCfg().StreamingTestingKnobs.AfterCutoverStarted != nil {
 		p.ExecCfg().StreamingTestingKnobs.AfterCutoverStarted()
 	}

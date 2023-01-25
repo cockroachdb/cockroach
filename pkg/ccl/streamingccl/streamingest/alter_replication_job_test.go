@@ -155,7 +155,7 @@ func TestTenantStatusWithFutureCutoverTime(t *testing.T) {
 
 	// The resumer cannot start at this point, therefore the tenant will stay in
 	// the init state.
-	require.Equal(c.T, "INITIALIZING REPLICATION", getTenantStatus())
+	require.Equal(c.T, "INITIALIZING_REPLICATION", getTenantStatus())
 	unblockResumerStart()
 
 	jobutils.WaitForJobToRun(t, c.SrcSysSQL, jobspb.JobID(producerJobID))
@@ -167,7 +167,7 @@ func TestTenantStatusWithFutureCutoverTime(t *testing.T) {
 	c.DestSysSQL.Exec(t, `ALTER TENANT $1 PAUSE REPLICATION`, args.DestTenantName)
 	jobutils.WaitForJobToPause(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
 
-	require.Equal(c.T, "REPLICATION PAUSED", getTenantStatus())
+	require.Equal(c.T, "REPLICATION_PAUSED", getTenantStatus())
 
 	// On pause the resumer exits, we should unblock it.
 	unblockResumerExit()
@@ -185,7 +185,7 @@ func TestTenantStatusWithFutureCutoverTime(t *testing.T) {
 	c.DestSysSQL.Exec(c.T, `ALTER TENANT $1 COMPLETE REPLICATION TO SYSTEM TIME $2::string`,
 		args.DestTenantName, cutoverTime)
 
-	require.Equal(c.T, "REPLICATION PENDING CUTOVER", getTenantStatus())
+	require.Equal(c.T, "REPLICATION_PENDING_CUTOVER", getTenantStatus())
 	unblockResumerExit()
 }
 
@@ -238,7 +238,7 @@ func TestTenantStatusWithLatestCutoverTime(t *testing.T) {
 
 	producerJobID, ingestionJobID := c.StartStreamReplication(ctx)
 
-	require.Equal(c.T, "INITIALIZING REPLICATION", getTenantStatus())
+	require.Equal(c.T, "INITIALIZING_REPLICATION", getTenantStatus())
 	unblockResumerStart()
 
 	jobutils.WaitForJobToRun(t, c.SrcSysSQL, jobspb.JobID(producerJobID))
@@ -251,10 +251,10 @@ func TestTenantStatusWithLatestCutoverTime(t *testing.T) {
 
 	testutils.SucceedsSoon(t, func() error {
 		s := getTenantStatus()
-		if s == "REPLICATION PENDING CUTOVER" {
-			return errors.Errorf("tenant status is still REPLICATION PENDING CUTOVER, waiting")
+		if s == "REPLICATION_PENDING_CUTOVER" {
+			return errors.Errorf("tenant status is still REPLICATION_PENDING_CUTOVER, waiting")
 		}
-		require.Equal(c.T, "REPLICATION CUTTING OVER", s)
+		require.Equal(c.T, "REPLICATION_CUTTING_OVER", s)
 		return nil
 	})
 
