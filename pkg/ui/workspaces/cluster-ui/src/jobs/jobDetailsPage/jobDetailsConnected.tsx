@@ -12,7 +12,11 @@ import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 
 import { AppState } from "src/store";
-import { selectJobState } from "../../store/jobDetails/job.selectors";
+import {
+  selectJob,
+  selectJobLoading,
+  selectJobError,
+} from "../../store/jobDetails/job.selectors";
 import {
   JobDetailsStateProps,
   JobDetailsDispatchProps,
@@ -21,11 +25,13 @@ import {
 import { JobRequest } from "src/api/jobsApi";
 import { actions as jobActions } from "src/store/jobDetails";
 
-const mapStateToProps = (state: AppState): JobDetailsStateProps => {
-  const jobState = selectJobState(state);
-  const job = jobState ? jobState.data : null;
-  const jobLoading = jobState ? jobState.inFlight : false;
-  const jobError = jobState ? jobState.lastError : null;
+const mapStateToProps = (
+  state: AppState,
+  props: RouteComponentProps,
+): JobDetailsStateProps => {
+  const job = selectJob(state, props);
+  const jobLoading = selectJobLoading(state, props);
+  const jobError = selectJobError(state, props);
   return {
     job,
     jobLoading,
