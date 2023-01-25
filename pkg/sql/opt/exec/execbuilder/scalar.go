@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinsregistry"
@@ -583,11 +584,97 @@ func (b *Builder) buildExistsSubquery(
 	ctx *buildScalarCtx, scalar opt.ScalarExpr,
 ) (tree.TypedExpr, error) {
 	exists := scalar.(*memo.ExistsExpr)
-	// We cannot execute correlated subqueries.
-	// TODO(mgartner): Plan correlated EXISTS subqueries using tree.RoutineExpr.
-	// See buildSubquery.
-	if !exists.Input.Relational().OuterCols.Empty() {
-		return nil, b.decorrelationError()
+	input := exists.Input
+
+	// Build correlated EXISTS subqueries as lazily-evaluated routines.
+	//
+	// Routines do not have a special mode for existential subqueries, like the
+	// legacy, eager-evaluation subquery machinery does, so we must transform
+	// the Exists expression. The transformation is modelled after the
+	// ConvertUncorrelatedExistsToCoalesceSubquery normalization rule. The
+	// transformation is effectively:
+	//
+	//   EXISTS (<input>)
+	//   =>
+	//   COALESCE((SELECT true FROM (<input>) LIMIT 1), false)
+	//
+	// We don't implement this as a normalization rule for correlated subqueries
+	// because the transformation would prevent decorrelation rules from turning
+	// the Exists expression into a join, if it is possible. Marking the rule as
+	// LowPriority would not be sufficient because the rule would operate on the
+	// Exists scalar expression, while the decorrelation rules operate on
+	// relational expressions that contain Exists expresions. The Exists would
+	// always be converted to a Coalesce before the decorrelation rules can
+	// match.
+	if outerCols := input.Relational().OuterCols; !outerCols.Empty() {
+		// Routines do not yet support mutations.
+		// TODO(mgartner): Lift this restriction once routines support
+		// mutations.
+		if input.Relational().CanMutate {
+			return nil, b.decorrelationError()
+		}
+
+		// The outer columns of the subquery become the parameters of the
+		// routine.
+		params := outerCols.ToList()
+
+		// The outer columns of the subquery, as indexed columns, are the
+		// arguments of the routine.
+		args := make(tree.TypedExprs, len(params))
+		for i := range args {
+			args[i] = b.indexedVar(ctx, b.mem.Metadata(), params[i])
+		}
+
+		// Create a new column for the boolean result.
+		existsCol := b.mem.Metadata().AddColumn("exists", types.Bool)
+
+		// Create a single-element RelListExpr representing the subquery.
+		aliasedCol := opt.AliasedColumn{
+			Alias: b.mem.Metadata().ColumnMeta(existsCol).Alias,
+			ID:    existsCol,
+		}
+		stmts := memo.RelListExpr{memo.RelRequiredPropsExpr{
+			RelExpr: input,
+			PhysProps: &physical.Required{
+				Presentation: physical.Presentation{aliasedCol},
+			},
+		}}
+
+		// Create an onReplaceExprFn that wraps input in a Limit and a Project.
+		onReplaceExpr := func(f *norm.Factory, e opt.Expr, replaceFn norm.ReplaceFunc) (_ opt.Expr, ok bool) {
+			if e == input {
+				return f.ConstructProject(
+					f.ConstructLimit(
+						f.CopyAndReplaceDefault(e, replaceFn).(memo.RelExpr),
+						f.ConstructConst(tree.NewDInt(tree.DInt(1)), types.Int),
+						props.OrderingChoice{},
+					),
+					memo.ProjectionsExpr{f.ConstructProjectionsItem(memo.TrueSingleton, existsCol)},
+					opt.ColSet{}, /* passthrough */
+				), true
+			}
+			return nil, false
+		}
+
+		// Create a tree.RoutinePlanFn that can plan the single statement
+		// representing the subquery, and wrap the routine in a COALESCE.
+		planFn := b.buildRoutinePlanFn(
+			params,
+			stmts,
+			true, /* allowOuterWithRefs */
+			onReplaceExpr,
+		)
+		return tree.NewTypedCoalesceExpr(tree.TypedExprs{
+			tree.NewTypedRoutineExpr(
+				"exists",
+				args,
+				planFn,
+				1, /* numStmts */
+				types.Bool,
+				false, /* enableStepping */
+			),
+			tree.DBoolFalse,
+		}, types.Bool), nil
 	}
 
 	// Build the execution plan for the subquery. Note that the subquery could
@@ -657,7 +744,12 @@ func (b *Builder) buildSubquery(
 
 		// Create a tree.RoutinePlanFn that can plan the single statement
 		// representing the subquery.
-		planFn := b.buildRoutinePlanFn(params, stmts, true /* allowOuterWithRefs */)
+		planFn := b.buildRoutinePlanFn(
+			params,
+			stmts,
+			true, /* allowOuterWithRefs */
+			nil,  /* onReplaceExpr */
+		)
 		return tree.NewTypedRoutineExpr(
 			"subquery",
 			args,
@@ -776,7 +868,12 @@ func (b *Builder) buildUDF(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Typ
 
 	// Create a tree.RoutinePlanFn that can plan the statements in the UDF body.
 	// TODO(mgartner): Add support for WITH expressions inside UDF bodies.
-	planFn := b.buildRoutinePlanFn(udf.Params, udf.Body, false /* allowOuterWithRefs */)
+	planFn := b.buildRoutinePlanFn(
+		udf.Params,
+		udf.Body,
+		false, /* allowOuterWithRefs */
+		nil,   /* onReplaceExpr */
+	)
 
 	// Enable stepping for volatile functions so that statements within the UDF
 	// see mutations made by the invoking statement and by previous executed
@@ -793,10 +890,23 @@ func (b *Builder) buildUDF(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Typ
 	), nil
 }
 
+type onReplaceExprFn func(f *norm.Factory, e opt.Expr, replaceFn norm.ReplaceFunc) (_ opt.Expr, ok bool)
+
 // buildRoutinePlanFn returns a tree.RoutinePlanFn that can plan the statements
 // in a routine that has one or more arguments.
+//
+// The returned tree.RoutinePlanFn copies one of the statements into a new memo
+// for re-optimization each time it is called. By default, parameter references
+// are replaced with constant argument values when the plan function is called.
+// If allowOuterWithRefs is true, then With binding are copied to the new memo
+// so that WithScans within a statement can be planned and executed.
+// onReplaceExpr allows for arbitrary replacement of expressions within each
+// statement.
 func (b *Builder) buildRoutinePlanFn(
-	params opt.ColList, stmts memo.RelListExpr, allowOuterWithRefs bool,
+	params opt.ColList,
+	stmts memo.RelListExpr,
+	allowOuterWithRefs bool,
+	onReplaceExpr onReplaceExprFn,
 ) tree.RoutinePlanFn {
 	// argOrd returns the ordinal of the argument within the arguments list that
 	// can be substituted for each reference to the given function parameter
@@ -839,6 +949,11 @@ func (b *Builder) buildRoutinePlanFn(
 		addedWithBindings := false
 		var replaceFn norm.ReplaceFunc
 		replaceFn = func(e opt.Expr) opt.Expr {
+			if onReplaceExpr != nil {
+				if e, ok := onReplaceExpr(f, e, replaceFn); ok {
+					return e
+				}
+			}
 			switch t := e.(type) {
 			case *memo.VariableExpr:
 				if ord, ok := argOrd(t.Col); ok {
