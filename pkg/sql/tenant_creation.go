@@ -353,6 +353,12 @@ func CreateTenantRecord(
 	// This adds a split at the end of the tenant keyspace. This split would
 	// eventually be created when the next tenant is created, but until then
 	// this tenant's EndKey will be /Max which is outside of it's keyspace.
+	//
+	// BUG: This is the next tenant ID's prefix start. We're writing span config
+	// records over a keyspace that "belongs" to another tenant. That tenant, if
+	// it has started its span config reconciliation job, is assuming an
+	// invariant that its the only entity writing span config records that
+	// overlap with its keyspan. Which we're violating here.
 	tenantPrefixEnd := tenantPrefix.PrefixEnd()
 	endRecord, err := spanconfig.MakeRecord(spanconfig.MakeTargetFromSpan(roachpb.Span{
 		Key:    tenantPrefixEnd,
