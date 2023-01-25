@@ -184,6 +184,36 @@ RESUME JOB (SELECT $job_id)
 
 user root
 
+statement ok
+ALTER ROLE testuser VIEWJOB
+
+user testuser
+
+# testuser should be able to see all jobs
+query TTT
+SELECT job_type, description, user_name FROM crdb_internal.jobs WHERE job_type = 'SCHEMA CHANGE GC' ORDER BY 1, 2, 3
+----
+SCHEMA CHANGE GC  GC for DROP TABLE test.public.t1                   testuser2
+SCHEMA CHANGE GC  GC for DROP TABLE test.public.t2                   root
+SCHEMA CHANGE GC  GC for temporary index used during index backfill  root
+SCHEMA CHANGE GC  GC for temporary index used during index backfill  testuser
+SCHEMA CHANGE GC  GC for temporary index used during index backfill  testuser2
+
+user root
+
+statement ok
+ALTER ROLE testuser NOVIEWJOB
+
+user testuser
+
+# testuser can only see their own job
+query TTT
+SELECT job_type, description, user_name FROM crdb_internal.jobs WHERE job_type = 'SCHEMA CHANGE GC' ORDER BY 1, 2, 3
+----
+SCHEMA CHANGE GC  GC for temporary index used during index backfill  testuser
+
+user root
+
 # Validate that the schema_change_successful metric
 query T
 SELECT feature_name FROM crdb_internal.feature_usage
