@@ -38,6 +38,7 @@ go_test(
         "alter_table_bench_test.go",
         "bench_test.go",
         "create_alter_role_bench_test.go",
+        "discard_bench_test.go",
         "drop_bench_test.go",
         "grant_revoke_bench_test.go",
         "grant_revoke_role_bench_test.go",
