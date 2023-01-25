@@ -216,11 +216,11 @@ type Streamer struct {
 	distSender *kvcoord.DistSender
 	stopper    *stop.Stopper
 
-	mode          OperationMode
-	hints         Hints
-	maxKeysPerRow int32
-	budget        *budget
-	keyLocking    lock.Strength
+	mode           OperationMode
+	hints          Hints
+	maxKeysPerRow  int32
+	budget         *budget
+	keyLockingMode lock.LockMode
 
 	streamerStatistics
 
@@ -360,16 +360,16 @@ func NewStreamer(
 	limitBytes int64,
 	acc *mon.BoundAccount,
 	batchRequestsIssued *int64,
-	keyLocking lock.Strength,
+	keyLockingMode lock.LockMode,
 ) *Streamer {
 	if txn.Type() != kv.LeafTxn {
 		panic(errors.AssertionFailedf("RootTxn is given to the Streamer"))
 	}
 	s := &Streamer{
-		distSender: distSender,
-		stopper:    stopper,
-		budget:     newBudget(acc, limitBytes),
-		keyLocking: keyLocking,
+		distSender:     distSender,
+		stopper:        stopper,
+		budget:         newBudget(acc, limitBytes),
+		keyLockingMode: keyLockingMode,
 	}
 	if batchRequestsIssued == nil {
 		batchRequestsIssued = new(int64)
@@ -1593,7 +1593,7 @@ func buildResumeSingleRangeBatch(
 			newGet := gets[0]
 			gets = gets[1:]
 			newGet.req.SetSpan(*get.ResumeSpan)
-			newGet.req.KeyLocking = s.keyLocking
+			newGet.req.KeyLocking = s.keyLockingMode
 			newGet.union.Get = &newGet.req
 			resumeReq.reqs[resumeReqIdx].Value = &newGet.union
 			resumeReq.positions = append(resumeReq.positions, position)
@@ -1616,7 +1616,7 @@ func buildResumeSingleRangeBatch(
 			scans = scans[1:]
 			newScan.req.SetSpan(*scan.ResumeSpan)
 			newScan.req.ScanFormat = roachpb.BATCH_RESPONSE
-			newScan.req.KeyLocking = s.keyLocking
+			newScan.req.KeyLocking = s.keyLockingMode
 			newScan.union.Scan = &newScan.req
 			resumeReq.reqs[resumeReqIdx].Value = &newScan.union
 			resumeReq.positions = append(resumeReq.positions, position)

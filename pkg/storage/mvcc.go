@@ -869,13 +869,13 @@ func MVCCBlindPutProto(
 type LockTableView interface {
 	// IsKeyLockedByConflictingTxn returns whether the specified key is locked or
 	// reserved (see lockTable "reservations") by a conflicting transaction, given
-	// the caller's own desired locking strength. If so, true is returned. If the
+	// the caller's own desired locking mode. If so, true is returned. If the
 	// key is locked, the lock holder is also returned. Otherwise, if the key is
 	// reserved, nil is also returned. A transaction's own lock or reservation
 	// does not appear to be locked to itself (false is returned). The method is
 	// used by requests in conjunction with the SkipLocked wait policy to
 	// determine which keys they should skip over during evaluation.
-	IsKeyLockedByConflictingTxn(roachpb.Key, lock.Strength) (bool, *enginepb.TxnMeta)
+	IsKeyLockedByConflictingTxn(roachpb.Key, lock.LockMode) (bool, *enginepb.TxnMeta)
 }
 
 // MVCCGetOptions bundles options for the MVCCGet family of functions.

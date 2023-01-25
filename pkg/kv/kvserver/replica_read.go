@@ -555,7 +555,7 @@ func (r *Replica) collectSpansRead(
 					union roachpb.RequestUnion_Get
 				})
 				getAlloc.get.Key = key
-				getAlloc.get.KeyLocking = req.(roachpb.LockingReadRequest).KeyLockingStrength()
+				getAlloc.get.KeyLocking = req.(roachpb.LockingReadRequest).KeyLockingMode()
 				getAlloc.union.Get = &getAlloc.get
 				ru := roachpb.RequestUnion{Value: &getAlloc.union}
 				baCopy.Requests = append(baCopy.Requests, ru)

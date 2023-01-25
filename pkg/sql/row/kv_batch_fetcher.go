@@ -137,8 +137,8 @@ type txnKVFetcher struct {
 	batchBytesLimit rowinfra.BytesLimit
 
 	reverse bool
-	// lockStrength represents the locking mode to use when fetching KVs.
-	lockStrength lock.Strength
+	// lockMode represents the locking mode to use when fetching KVs.
+	lockMode lock.LockMode
 	// lockWaitPolicy represents the policy to be used for handling conflicting
 	// locks held by other active transactions.
 	lockWaitPolicy lock.WaitPolicy
@@ -263,7 +263,7 @@ func newTxnKVFetcherInternal(args newTxnKVFetcherArgs) *txnKVFetcher {
 	f := &txnKVFetcher{
 		sendFn:                     args.sendFn,
 		reverse:                    args.reverse,
-		lockStrength:               getKeyLockingStrength(args.lockStrength),
+		lockMode:                   getKeyLockingMode(args.lockStrength),
 		lockWaitPolicy:             getWaitPolicy(args.lockWaitPolicy),
 		lockTimeout:                args.lockTimeout,
 		acc:                        args.acc,
@@ -405,7 +405,7 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 	ba.Header.TargetBytes = int64(f.batchBytesLimit)
 	ba.Header.MaxSpanRequestKeys = int64(f.getBatchKeyLimit())
 	ba.AdmissionHeader = f.requestAdmissionHeader
-	ba.Requests = spansToRequests(f.spans.Spans, f.reverse, f.lockStrength, f.reqsScratch)
+	ba.Requests = spansToRequests(f.spans.Spans, f.reverse, f.lockMode, f.reqsScratch)
 
 	if log.ExpensiveLogEnabled(ctx, 2) {
 		log.VEventf(ctx, 2, "Scan %s", f.spans)
@@ -669,7 +669,7 @@ const requestUnionOverhead = int64(unsafe.Sizeof(roachpb.RequestUnion{}))
 // The provided reqsScratch is reused if it has enough capacity for all spans,
 // if not, a new slice is allocated.
 func spansToRequests(
-	spans roachpb.Spans, reverse bool, keyLocking lock.Strength, reqsScratch []roachpb.RequestUnion,
+	spans roachpb.Spans, reverse bool, keyLocking lock.LockMode, reqsScratch []roachpb.RequestUnion,
 ) []roachpb.RequestUnion {
 	var reqs []roachpb.RequestUnion
 	if cap(reqsScratch) >= len(spans) {

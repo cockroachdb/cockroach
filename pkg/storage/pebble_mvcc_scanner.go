@@ -1717,11 +1717,11 @@ func (p *pebbleMVCCScanner) isKeyLockedByConflictingTxn(
 		p.err = err
 		return false, false
 	}
-	strength := lock.None
+	mode := lock.None
 	if p.failOnMoreRecent {
-		strength = lock.Exclusive
+		mode = lock.Exclusive
 	}
-	if ok, txn := p.lockTable.IsKeyLockedByConflictingTxn(key, strength); ok {
+	if ok, txn := p.lockTable.IsKeyLockedByConflictingTxn(key, mode); ok {
 		// The key is locked or reserved, so ignore it.
 		if txn != nil && (p.maxIntents == 0 || int64(p.intents.Count()) < p.maxIntents) {
 			// However, if the key is locked, we return the lock holder separately

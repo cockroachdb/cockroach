@@ -68,7 +68,7 @@ import (
 // handle-txn-push-error      req=<req-name> txn=<txn-name> key=<key>  TODO(nvanbenschoten): implement this
 //
 // check-opt-no-conflicts            req=<req-name>
-// is-key-locked-by-conflicting-txn  req=<req-name> key=<key> strength=<strength>
+// is-key-locked-by-conflicting-txn  req=<req-name> key=<key> lock-mode=<lock-mode>
 //
 // on-lock-acquired  req=<req-name> key=<key> [seq=<seq>] [dur=r|u]
 // on-lock-updated   req=<req-name> txn=<txn-name> key=<key> status=[committed|aborted|pending] [ts=<int>[,<int>]]
@@ -363,7 +363,7 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				}
 				var key string
 				d.ScanArgs(t, "key", &key)
-				strength := scanLockStrength(t, d)
+				strength := concurrency.ScanLockMode(t, d)
 				if ok, txn := g.IsKeyLockedByConflictingTxn(roachpb.Key(key), strength); ok {
 					holder := "<nil>"
 					if txn != nil {

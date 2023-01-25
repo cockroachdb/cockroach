@@ -156,7 +156,7 @@ func NewStreamingKVFetcher(
 		streamerBudgetLimit,
 		streamerBudgetAcc,
 		&batchRequestsIssued,
-		getKeyLockingStrength(lockStrength),
+		getKeyLockingMode(lockStrength),
 	)
 	mode := kvstreamer.OutOfOrder
 	if maintainOrdering {

@@ -14,8 +14,8 @@ option go_package = "lock";
 
 import "gogoproto/gogo.proto";
 
-// Strength represents the different locking modes that determine how key-values
-// can be accessed by concurrent transactions.
+// LockMode represents the different locking modes that determine how key-value
+// scan be accessed by concurrent transactions.
 //
 // Locking modes apply to locks that are held with a per-key granularity. It is
 // up to users of the key-value layer to decide on which keys to acquire locks
@@ -53,7 +53,7 @@ import "gogoproto/gogo.proto";
 // with Exclusive locks if the read's timestamp is equal to or greater than the
 // lock's timestamp. If the read's timestamp is below the Exclusive lock's
 // timestamp then the two are compatible.
-enum Strength {
+enum LockMode {
   option (gogoproto.goproto_enum_prefix) = false;
 
   // None represents the absence of a lock or the intention to acquire locks.

@@ -28,7 +28,9 @@ message Waiter {
   // be actively waiting, for instance in the case of a broken reservation.
   bool active_waiter = 2;
   // The strength at which this waiter is attempting to acquire the lock.
-  Strength strength = 3;
+  // TODO(arul): Switch this back to Strength once we start associating
+  // lock modes with timestamps to define Strength.
+  LockMode strength = 3;
   // The wall clock duration since this operation began waiting on the lock.
   google.protobuf.Duration wait_duration = 4 [(gogoproto.nullable) = false,
     (gogoproto.stdduration) = true];

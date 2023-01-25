@@ -239,27 +239,27 @@ type Request interface {
 // strength of a read-only request.
 type LockingReadRequest interface {
 	Request
-	KeyLockingStrength() lock.Strength
+	KeyLockingMode() lock.LockMode
 }
 
 var _ LockingReadRequest = (*GetRequest)(nil)
 
-// KeyLockingStrength implements the LockingReadRequest interface.
-func (gr *GetRequest) KeyLockingStrength() lock.Strength {
+// KeyLockingMode implements the LockingReadRequest interface.
+func (gr *GetRequest) KeyLockingMode() lock.LockMode {
 	return gr.KeyLocking
 }
 
 var _ LockingReadRequest = (*ScanRequest)(nil)
 
-// KeyLockingStrength implements the LockingReadRequest interface.
-func (sr *ScanRequest) KeyLockingStrength() lock.Strength {
+// KeyLockingMode implements the LockingReadRequest interface.
+func (sr *ScanRequest) KeyLockingMode() lock.LockMode {
 	return sr.KeyLocking
 }
 
 var _ LockingReadRequest = (*ReverseScanRequest)(nil)
 
 // KeyLockingStrength implements the LockingReadRequest interface.
-func (rsr *ReverseScanRequest) KeyLockingStrength() lock.Strength {
+func (rsr *ReverseScanRequest) KeyLockingMode() lock.LockMode {
 	return rsr.KeyLocking
 }
 
@@ -1229,14 +1229,14 @@ func NewReverseScan(key, endKey Key, forUpdate bool) Request {
 	}
 }
 
-func scanLockStrength(forUpdate bool) lock.Strength {
+func scanLockStrength(forUpdate bool) lock.LockMode {
 	if forUpdate {
 		return lock.Exclusive
 	}
 	return lock.None
 }
 
-func flagForLockStrength(l lock.Strength) flag {
+func flagForLockMode(l lock.LockMode) flag {
 	if l != lock.None {
 		return isLocking
 	}
@@ -1244,7 +1244,7 @@ func flagForLockStrength(l lock.Strength) flag {
 }
 
 func (gr *GetRequest) flags() flag {
-	maybeLocking := flagForLockStrength(gr.KeyLocking)
+	maybeLocking := flagForLockMode(gr.KeyLocking)
 	return isRead | isTxn | maybeLocking | updatesTSCache | needsRefresh | canSkipLocked
 }
 
@@ -1334,12 +1334,12 @@ func (*RevertRangeRequest) flags() flag {
 }
 
 func (sr *ScanRequest) flags() flag {
-	maybeLocking := flagForLockStrength(sr.KeyLocking)
+	maybeLocking := flagForLockMode(sr.KeyLocking)
 	return isRead | isRange | isTxn | maybeLocking | updatesTSCache | needsRefresh | canSkipLocked
 }
 
 func (rsr *ReverseScanRequest) flags() flag {
-	maybeLocking := flagForLockStrength(rsr.KeyLocking)
+	maybeLocking := flagForLockMode(rsr.KeyLocking)
 	return isRead | isRange | isReverse | isTxn | maybeLocking | updatesTSCache | needsRefresh | canSkipLocked
 }
 

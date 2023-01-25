@@ -26,7 +26,7 @@ func init() {
 }
 
 // SafeValue implements redact.SafeValue.
-func (Strength) SafeValue() {}
+func (LockMode) SafeValue() {}
 
 // SafeValue implements redact.SafeValue.
 func (Durability) SafeValue() {}

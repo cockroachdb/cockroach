@@ -661,7 +661,8 @@ type lockTable interface {
 	//
 	// For replicated locks, this must be called after the corresponding write
 	// intent has been applied to the replicated state machine.
-	AcquireLock(*enginepb.TxnMeta, roachpb.Key, lock.Strength, lock.Durability) error
+	// TODO(arul): Switch this (back) to lock.Strength once we introduce it.
+	AcquireLock(*enginepb.TxnMeta, roachpb.Key, lock.LockMode, lock.Durability) error
 
 	// UpdateLocks informs the lockTable that an existing lock or range of locks
 	// was either updated or released.
@@ -770,13 +771,13 @@ type lockTableGuard interface {
 	// IsKeyLockedByConflictingTxn returns whether the specified key is locked or
 	// reserved (see lockTable "reservations") by a conflicting transaction in the
 	// lockTableGuard's snapshot of the lock table, given the caller's own desired
-	// locking strength. If so, true is returned. If the key is locked, the lock
+	// locking mode. If so, true is returned. If the key is locked, the lock
 	// holder is also returned. Otherwise, if the key is reserved, nil is also
 	// returned. A transaction's own lock or reservation does not appear to be
 	// locked to itself (false is returned). The method is used by requests in
 	// conjunction with the SkipLocked wait policy to determine which keys they
 	// should skip over during evaluation.
-	IsKeyLockedByConflictingTxn(roachpb.Key, lock.Strength) (bool, *enginepb.TxnMeta)
+	IsKeyLockedByConflictingTxn(roachpb.Key, lock.LockMode) (bool, *enginepb.TxnMeta)
 }
 
 // lockTableWaiter is concerned with waiting in lock wait-queues for locks held

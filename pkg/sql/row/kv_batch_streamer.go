@@ -26,8 +26,8 @@ import (
 // txnKVStreamer handles retrieval of key/values.
 type txnKVStreamer struct {
 	kvBatchFetcherHelper
-	streamer   *kvstreamer.Streamer
-	keyLocking lock.Strength
+	streamer       *kvstreamer.Streamer
+	keyLockingMode lock.LockMode
 
 	spans       roachpb.Spans
 	spanIDs     []int
@@ -56,9 +56,9 @@ func newTxnKVStreamer(
 	batchRequestsIssued *int64,
 ) KVBatchFetcher {
 	f := &txnKVStreamer{
-		streamer:   streamer,
-		keyLocking: getKeyLockingStrength(lockStrength),
-		acc:        acc,
+		streamer:       streamer,
+		keyLockingMode: getKeyLockingMode(lockStrength),
+		acc:            acc,
 	}
 	f.kvBatchFetcherHelper.init(f.nextBatch, batchRequestsIssued)
 	return f
@@ -95,7 +95,7 @@ func (f *txnKVStreamer) SetupNextFetch(
 	for i := len(spans); i < len(reqsScratch); i++ {
 		reqsScratch[i] = roachpb.RequestUnion{}
 	}
-	reqs := spansToRequests(spans, false /* reverse */, f.keyLocking, reqsScratch)
+	reqs := spansToRequests(spans, false /* reverse */, f.keyLockingMode, reqsScratch)
 	if err := f.streamer.Enqueue(ctx, reqs); err != nil {
 		return err
 	}

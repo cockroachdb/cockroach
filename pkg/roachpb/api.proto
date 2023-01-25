@@ -222,9 +222,9 @@ message GetRequest {
   // The desired key-level locking mode used during this get. When set to None
   // (the default), no key-level locking mode is used - meaning that the get
   // does not acquire a lock. When set to any other strength, a lock of that
-  // strength is acquired with the Unreplicated durability (i.e. best-effort)
+  // strength is acquired with the Unreplicated durability (i.e. best-effort) on
   // the key, if it exists.
-  kv.kvserver.concurrency.lock.Strength key_locking = 2;
+  kv.kvserver.concurrency.lock.LockMode key_locking = 2;
 }
 
 // A GetResponse is the return value from the Get() method.
@@ -583,7 +583,7 @@ message ScanRequest {
   // NOTE: the locks acquire with this strength are point locks on each of the
   // keys returned by the request, not a single range lock over the entire span
   // scanned by the request.
-  kv.kvserver.concurrency.lock.Strength key_locking = 5;
+  kv.kvserver.concurrency.lock.LockMode key_locking = 5;
 }
 
 // A ScanResponse is the return value from the Scan() method.
@@ -633,7 +633,7 @@ message ReverseScanRequest {
   // NOTE: the locks acquire with this strength are point locks on each of the
   // keys returned by the request, not a single range lock over the entire span
   // scanned by the request.
-  kv.kvserver.concurrency.lock.Strength key_locking = 5;
+  kv.kvserver.concurrency.lock.LockMode key_locking = 5;
 }
 
 // A ReverseScanResponse is the return value from the ReverseScan() method.

@@ -759,7 +759,7 @@ func (g *Guard) CheckOptimisticNoLatchConflicts() (ok bool) {
 // SkipLocked wait policy to determine which keys they should skip over during
 // evaluation.
 func (g *Guard) IsKeyLockedByConflictingTxn(
-	key roachpb.Key, strength lock.Strength,
+	key roachpb.Key, strength lock.LockMode,
 ) (bool, *enginepb.TxnMeta) {
 	return g.ltg.IsKeyLockedByConflictingTxn(key, strength)
 }

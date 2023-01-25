@@ -175,7 +175,7 @@ func (k EngineKey) ToLockTableKey() (LockTableKey, error) {
 	key := LockTableKey{Key: lockedKey}
 	switch len(k.Version) {
 	case engineKeyVersionLockTableLen:
-		key.Strength = lock.Strength(k.Version[0])
+		key.Strength = lock.LockMode(k.Version[0])
 		if key.Strength < lock.None || key.Strength > lock.Exclusive {
 			return LockTableKey{}, errors.Errorf("unknown strength %d", key.Strength)
 		}
@@ -253,8 +253,9 @@ func (m EngineKeyFormatter) Format(f fmt.State, c rune) {
 
 // LockTableKey is a key representing a lock in the lock table.
 type LockTableKey struct {
-	Key      roachpb.Key
-	Strength lock.Strength
+	Key roachpb.Key
+	// TODO(arul): Switch this back to Strength.
+	Strength lock.LockMode
 	// Slice is of length uuid.Size. We use a slice instead of a byte array, to
 	// avoid copying a slice when decoding.
 	TxnUUID []byte

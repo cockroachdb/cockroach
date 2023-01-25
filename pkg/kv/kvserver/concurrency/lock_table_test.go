@@ -117,7 +117,7 @@ no-conflicts: <bool>
 
  Checks whether the request, which previously called ScanOptimistic, has no lock conflicts.
 
-is-key-locked-by-conflicting-txn r=<name> k=<key> strength=<strength>
+is-key-locked-by-conflicting-txn r=<name> k=<key> lock-mode=<mode>
 ----
 locked: <bool>
 
@@ -497,8 +497,8 @@ func TestLockTableBasic(t *testing.T) {
 				}
 				var key string
 				d.ScanArgs(t, "k", &key)
-				strength := scanLockStrength(t, d)
-				if ok, txn := g.IsKeyLockedByConflictingTxn(roachpb.Key(key), strength); ok {
+				mode := ScanLockMode(t, d)
+				if ok, txn := g.IsKeyLockedByConflictingTxn(roachpb.Key(key), mode); ok {
 					holder := "<nil>"
 					if txn != nil {
 						holder = txn.ID.String()
@@ -714,10 +714,11 @@ func scanSpans(t *testing.T, d *datadriven.TestData, ts hlc.Timestamp) *spanset.
 	return spans
 }
 
-func scanLockStrength(t *testing.T, d *datadriven.TestData) lock.Strength {
-	var strS string
-	d.ScanArgs(t, "strength", &strS)
-	switch strS {
+// ScanLockMode parses data-driven test input of the form "lock-mode=<mode>".
+func ScanLockMode(t *testing.T, d *datadriven.TestData) lock.LockMode {
+	var modeStr string
+	d.ScanArgs(t, "lock-mode", &modeStr)
+	switch modeStr {
 	case "none":
 		return lock.None
 	case "shared":
@@ -727,7 +728,7 @@ func scanLockStrength(t *testing.T, d *datadriven.TestData) lock.Strength {
 	case "exclusive":
 		return lock.Exclusive
 	default:
-		d.Fatalf(t, "unknown lock strength: %s", strS)
+		d.Fatalf(t, "unknown lock mode: %s", modeStr)
 		return 0
 	}
 }

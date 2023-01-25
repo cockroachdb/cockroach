@@ -140,51 +140,51 @@ should-wait r=req4
 ----
 false
 
-is-key-locked-by-conflicting-txn r=req4 k=a strength=none
+is-key-locked-by-conflicting-txn r=req4 k=a lock-mode=none
 ----
 locked: false
 
-is-key-locked-by-conflicting-txn r=req4 k=b strength=none
+is-key-locked-by-conflicting-txn r=req4 k=b lock-mode=none
 ----
 locked: false
 
-is-key-locked-by-conflicting-txn r=req4 k=c strength=none
+is-key-locked-by-conflicting-txn r=req4 k=c lock-mode=none
 ----
 locked: false
 
-is-key-locked-by-conflicting-txn r=req4 k=d strength=none
+is-key-locked-by-conflicting-txn r=req4 k=d lock-mode=none
 ----
 locked: false
 
-is-key-locked-by-conflicting-txn r=req4 k=e strength=none
+is-key-locked-by-conflicting-txn r=req4 k=e lock-mode=none
 ----
 locked: false
 
-is-key-locked-by-conflicting-txn r=req4 k=f strength=none
+is-key-locked-by-conflicting-txn r=req4 k=f lock-mode=none
 ----
 locked: false
 
-is-key-locked-by-conflicting-txn r=req4 k=a strength=exclusive
+is-key-locked-by-conflicting-txn r=req4 k=a lock-mode=exclusive
 ----
 locked: false
 
-is-key-locked-by-conflicting-txn r=req4 k=b strength=exclusive
+is-key-locked-by-conflicting-txn r=req4 k=b lock-mode=exclusive
 ----
 locked: true, holder: 00000000-0000-0000-0000-000000000001
 
-is-key-locked-by-conflicting-txn r=req4 k=c strength=exclusive
+is-key-locked-by-conflicting-txn r=req4 k=c lock-mode=exclusive
 ----
 locked: false
 
-is-key-locked-by-conflicting-txn r=req4 k=d strength=exclusive
+is-key-locked-by-conflicting-txn r=req4 k=d lock-mode=exclusive
 ----
 locked: true, holder: 00000000-0000-0000-0000-000000000001
 
-is-key-locked-by-conflicting-txn r=req4 k=e strength=exclusive
+is-key-locked-by-conflicting-txn r=req4 k=e lock-mode=exclusive
 ----
 locked: false
 
-is-key-locked-by-conflicting-txn r=req4 k=f strength=exclusive
+is-key-locked-by-conflicting-txn r=req4 k=f lock-mode=exclusive
 ----
 locked: true, holder: <nil>
 
@@ -203,7 +203,7 @@ local: num=0
 
 # ---------------------------------------------------------------------------------
 # req5 is the same as req4, except is has a timestamp equal to txn1's to
-# exercise the strength=none cases again.
+# exercise the lock-mode=none cases again.
 # ---------------------------------------------------------------------------------
 
 new-request r=req5 txn=txn2 ts=10,1 spans=r@a,g skip-locked
@@ -217,27 +217,27 @@ should-wait r=req5
 ----
 false
 
-is-key-locked-by-conflicting-txn r=req5 k=a strength=none
+is-key-locked-by-conflicting-txn r=req5 k=a lock-mode=none
 ----
 locked: false
 
-is-key-locked-by-conflicting-txn r=req5 k=b strength=none
+is-key-locked-by-conflicting-txn r=req5 k=b lock-mode=none
 ----
 locked: true, holder: 00000000-0000-0000-0000-000000000001
 
-is-key-locked-by-conflicting-txn r=req5 k=c strength=none
+is-key-locked-by-conflicting-txn r=req5 k=c lock-mode=none
 ----
 locked: false
 
-is-key-locked-by-conflicting-txn r=req5 k=d strength=none
+is-key-locked-by-conflicting-txn r=req5 k=d lock-mode=none
 ----
 locked: true, holder: 00000000-0000-0000-0000-000000000001
 
-is-key-locked-by-conflicting-txn r=req5 k=e strength=none
+is-key-locked-by-conflicting-txn r=req5 k=e lock-mode=none
 ----
 locked: false
 
-is-key-locked-by-conflicting-txn r=req5 k=f strength=none
+is-key-locked-by-conflicting-txn r=req5 k=f lock-mode=none
 ----
 locked: false
 

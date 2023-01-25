@@ -576,7 +576,7 @@ func (g *lockTableGuardImpl) CheckOptimisticNoConflicts(spanSet *spanset.SpanSet
 }
 
 func (g *lockTableGuardImpl) IsKeyLockedByConflictingTxn(
-	key roachpb.Key, strength lock.Strength,
+	key roachpb.Key, strength lock.LockMode,
 ) (bool, *enginepb.TxnMeta) {
 	ss := spanset.SpanGlobal
 	if keys.IsLocal(key) {
@@ -1821,7 +1821,7 @@ func (l *lockState) isNonConflictingLock(g *lockTableGuardImpl, sa spanset.SpanA
 // that is acquiring the lock.
 // Acquires l.mu.
 func (l *lockState) acquireLock(
-	_ lock.Strength,
+	_ lock.LockMode,
 	durability lock.Durability,
 	txn *enginepb.TxnMeta,
 	ts hlc.Timestamp,
@@ -2653,7 +2653,7 @@ func (t *lockTableImpl) AddDiscoveredLock(
 
 // AcquireLock implements the lockTable interface.
 func (t *lockTableImpl) AcquireLock(
-	txn *enginepb.TxnMeta, key roachpb.Key, strength lock.Strength, durability lock.Durability,
+	txn *enginepb.TxnMeta, key roachpb.Key, strength lock.LockMode, durability lock.Durability,
 ) error {
 	t.enabledMu.RLock()
 	defer t.enabledMu.RUnlock()

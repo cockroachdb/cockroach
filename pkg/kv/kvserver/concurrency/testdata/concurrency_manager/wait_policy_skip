@@ -133,43 +133,43 @@ sequence req=reqSkipLocked
 [5] sequence reqSkipLocked: scanning lock table for conflicting locks
 [5] sequence reqSkipLocked: sequencing complete, returned guard
 
-is-key-locked-by-conflicting-txn req=reqSkipLocked key=k strength=none
+is-key-locked-by-conflicting-txn req=reqSkipLocked key=k lock-mode=none
 ----
 locked: false
 
-is-key-locked-by-conflicting-txn req=reqSkipLocked key=k2 strength=none
+is-key-locked-by-conflicting-txn req=reqSkipLocked key=k2 lock-mode=none
 ----
 locked: false
 
-is-key-locked-by-conflicting-txn req=reqSkipLocked key=k3 strength=none
+is-key-locked-by-conflicting-txn req=reqSkipLocked key=k3 lock-mode=none
 ----
 locked: false
 
-is-key-locked-by-conflicting-txn req=reqSkipLocked key=k4 strength=none
+is-key-locked-by-conflicting-txn req=reqSkipLocked key=k4 lock-mode=none
 ----
 locked: false
 
-is-key-locked-by-conflicting-txn req=reqSkipLocked key=k5 strength=none
+is-key-locked-by-conflicting-txn req=reqSkipLocked key=k5 lock-mode=none
 ----
 locked: false
 
-is-key-locked-by-conflicting-txn req=reqSkipLocked key=k strength=exclusive
+is-key-locked-by-conflicting-txn req=reqSkipLocked key=k lock-mode=exclusive
 ----
 locked: true, holder: 00000001-0000-0000-0000-000000000000
 
-is-key-locked-by-conflicting-txn req=reqSkipLocked key=k2 strength=exclusive
+is-key-locked-by-conflicting-txn req=reqSkipLocked key=k2 lock-mode=exclusive
 ----
 locked: true, holder: 00000001-0000-0000-0000-000000000000
 
-is-key-locked-by-conflicting-txn req=reqSkipLocked key=k3 strength=exclusive
+is-key-locked-by-conflicting-txn req=reqSkipLocked key=k3 lock-mode=exclusive
 ----
 locked: false
 
-is-key-locked-by-conflicting-txn req=reqSkipLocked key=k4 strength=exclusive
+is-key-locked-by-conflicting-txn req=reqSkipLocked key=k4 lock-mode=exclusive
 ----
 locked: true, holder: <nil>
 
-is-key-locked-by-conflicting-txn req=reqSkipLocked key=k5 strength=exclusive
+is-key-locked-by-conflicting-txn req=reqSkipLocked key=k5 lock-mode=exclusive
 ----
 locked: false
 
