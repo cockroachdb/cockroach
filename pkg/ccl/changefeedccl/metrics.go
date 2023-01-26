@@ -28,6 +28,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
+const (
+	changefeedCheckpointHistMaxLatency = 30 * time.Second
+	changefeedBatchHistMaxLatency      = 30 * time.Second
+	changefeedFlushHistMaxLatency      = 1 * time.Minute
+	admitLatencyMaxValue               = 1 * time.Minute
+	commitLatencyMaxValue              = 10 * time.Minute
+)
+
 // max length for the scope name.
 const maxSLIScopeNameLen = 128
 
@@ -488,16 +496,46 @@ func newAggregateMetrics(histogramWindow time.Duration) *AggMetrics {
 		ErrorRetries:     b.Counter(metaChangefeedErrorRetries),
 		EmittedMessages:  b.Counter(metaChangefeedEmittedMessages),
 		FilteredMessages: b.Counter(metaChangefeedFilteredMessages),
-		MessageSize:      b.Histogram(metaMessageSize, histogramWindow, metric.DataSize16MBBuckets),
+		MessageSize: b.Histogram(metric.HistogramOptions{
+			Metadata: metaMessageSize,
+			Duration: histogramWindow,
+			MaxVal:   10 << 20, /* 10MB max message size */
+			SigFigs:  1,
+			Buckets:  metric.DataSize16MBBuckets,
+		}),
 		EmittedBytes:     b.Counter(metaChangefeedEmittedBytes),
 		FlushedBytes:     b.Counter(metaChangefeedFlushedBytes),
 		Flushes:          b.Counter(metaChangefeedFlushes),
 		SizeBasedFlushes: b.Counter(metaSizeBasedFlushes),
 
-		BatchHistNanos:            b.Histogram(metaChangefeedBatchHistNanos, histogramWindow, metric.BatchProcessLatencyBuckets),
-		FlushHistNanos:            b.Histogram(metaChangefeedFlushHistNanos, histogramWindow, metric.BatchProcessLatencyBuckets),
-		CommitLatency:             b.Histogram(metaCommitLatency, histogramWindow, metric.BatchProcessLatencyBuckets),
-		AdmitLatency:              b.Histogram(metaAdmitLatency, histogramWindow, metric.BatchProcessLatencyBuckets),
+		BatchHistNanos: b.Histogram(metric.HistogramOptions{
+			Metadata: metaChangefeedBatchHistNanos,
+			Duration: histogramWindow,
+			MaxVal:   changefeedBatchHistMaxLatency.Nanoseconds(),
+			SigFigs:  1,
+			Buckets:  metric.BatchProcessLatencyBuckets,
+		}),
+		FlushHistNanos: b.Histogram(metric.HistogramOptions{
+			Metadata: metaChangefeedFlushHistNanos,
+			Duration: histogramWindow,
+			MaxVal:   changefeedFlushHistMaxLatency.Nanoseconds(),
+			SigFigs:  2,
+			Buckets:  metric.BatchProcessLatencyBuckets,
+		}),
+		CommitLatency: b.Histogram(metric.HistogramOptions{
+			Metadata: metaCommitLatency,
+			Duration: histogramWindow,
+			MaxVal:   commitLatencyMaxValue.Nanoseconds(),
+			SigFigs:  1,
+			Buckets:  metric.BatchProcessLatencyBuckets,
+		}),
+		AdmitLatency: b.Histogram(metric.HistogramOptions{
+			Metadata: metaAdmitLatency,
+			Duration: histogramWindow,
+			MaxVal:   admitLatencyMaxValue.Nanoseconds(),
+			SigFigs:  1,
+			Buckets:  metric.BatchProcessLatencyBuckets,
+		}),
 		BackfillCount:             b.Gauge(metaChangefeedBackfillCount),
 		BackfillPendingRanges:     b.Gauge(metaChangefeedBackfillPendingRanges),
 		RunningCount:              b.Gauge(metaChangefeedRunning),
@@ -572,12 +610,12 @@ type Metrics struct {
 	Failures                       *metric.Counter
 	ResolvedMessages               *metric.Counter
 	QueueTimeNanos                 *metric.Counter
-	CheckpointHistNanos            *metric.Histogram
+	CheckpointHistNanos            metric.IHistogram
 	FrontierUpdates                *metric.Counter
 	ThrottleMetrics                cdcutils.Metrics
 	ReplanCount                    *metric.Counter
-	ParallelConsumerFlushNanos     *metric.Histogram
-	ParallelConsumerConsumeNanos   *metric.Histogram
+	ParallelConsumerFlushNanos     metric.IHistogram
+	ParallelConsumerConsumeNanos   metric.IHistogram
 	ParallelConsumerInFlightEvents *metric.Gauge
 
 	mu struct {
@@ -599,18 +637,36 @@ func (m *Metrics) getSLIMetrics(scope string) (*sliMetrics, error) {
 // MakeMetrics makes the metrics for changefeed monitoring.
 func MakeMetrics(histogramWindow time.Duration) metric.Struct {
 	m := &Metrics{
-		AggMetrics:                     newAggregateMetrics(histogramWindow),
-		KVFeedMetrics:                  kvevent.MakeMetrics(histogramWindow),
-		SchemaFeedMetrics:              schemafeed.MakeMetrics(histogramWindow),
-		ResolvedMessages:               metric.NewCounter(metaChangefeedForwardedResolvedMessages),
-		Failures:                       metric.NewCounter(metaChangefeedFailures),
-		QueueTimeNanos:                 metric.NewCounter(metaEventQueueTime),
-		CheckpointHistNanos:            metric.NewHistogram(metaChangefeedCheckpointHistNanos, histogramWindow, metric.IOLatencyBuckets),
-		FrontierUpdates:                metric.NewCounter(metaChangefeedFrontierUpdates),
-		ThrottleMetrics:                cdcutils.MakeMetrics(histogramWindow),
-		ReplanCount:                    metric.NewCounter(metaChangefeedReplanCount),
-		ParallelConsumerFlushNanos:     metric.NewHistogram(metaChangefeedEventConsumerFlushNanos, histogramWindow, metric.IOLatencyBuckets),
-		ParallelConsumerConsumeNanos:   metric.NewHistogram(metaChangefeedEventConsumerConsumeNanos, histogramWindow, metric.IOLatencyBuckets),
+		AggMetrics:        newAggregateMetrics(histogramWindow),
+		KVFeedMetrics:     kvevent.MakeMetrics(histogramWindow),
+		SchemaFeedMetrics: schemafeed.MakeMetrics(histogramWindow),
+		ResolvedMessages:  metric.NewCounter(metaChangefeedForwardedResolvedMessages),
+		Failures:          metric.NewCounter(metaChangefeedFailures),
+		QueueTimeNanos:    metric.NewCounter(metaEventQueueTime),
+		CheckpointHistNanos: metric.NewHistogram(metric.HistogramOptions{
+			Metadata: metaChangefeedCheckpointHistNanos,
+			Duration: histogramWindow,
+			MaxVal:   changefeedCheckpointHistMaxLatency.Nanoseconds(),
+			SigFigs:  2,
+			Buckets:  metric.IOLatencyBuckets,
+		}),
+		FrontierUpdates: metric.NewCounter(metaChangefeedFrontierUpdates),
+		ThrottleMetrics: cdcutils.MakeMetrics(histogramWindow),
+		ReplanCount:     metric.NewCounter(metaChangefeedReplanCount),
+		// Below two metrics were never implemented using the hdr histogram. Set ForceUsePrometheus
+		// to true.
+		ParallelConsumerFlushNanos: metric.NewHistogram(metric.HistogramOptions{
+			Metadata: metaChangefeedEventConsumerFlushNanos,
+			Duration: histogramWindow,
+			Buckets:  metric.IOLatencyBuckets,
+			Mode:     metric.HistogramModePrometheus,
+		}),
+		ParallelConsumerConsumeNanos: metric.NewHistogram(metric.HistogramOptions{
+			Metadata: metaChangefeedEventConsumerConsumeNanos,
+			Duration: histogramWindow,
+			Buckets:  metric.IOLatencyBuckets,
+			Mode:     metric.HistogramModePrometheus,
+		}),
 		ParallelConsumerInFlightEvents: metric.NewGauge(metaChangefeedEventConsumerInFlightEvents),
 	}
 
