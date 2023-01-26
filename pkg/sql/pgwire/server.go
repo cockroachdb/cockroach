@@ -279,7 +279,7 @@ type ServerMetrics struct {
 	BytesOutCount               *metric.Counter
 	Conns                       *metric.Gauge
 	NewConns                    *metric.Counter
-	ConnLatency                 *metric.Histogram
+	ConnLatency                 metric.IHistogram
 	ConnFailures                *metric.Counter
 	PGWireCancelTotalCount      *metric.Counter
 	PGWireCancelIgnoredCount    *metric.Counter
@@ -296,9 +296,12 @@ func makeServerMetrics(
 		BytesOutCount: metric.NewCounter(MetaBytesOut),
 		Conns:         metric.NewGauge(MetaConns),
 		NewConns:      metric.NewCounter(MetaNewConns),
-		ConnLatency: metric.NewHistogram(
-			MetaConnLatency, histogramWindow, metric.IOLatencyBuckets,
-		),
+		ConnLatency: metric.NewHistogram(metric.HistogramOptions{
+			Mode:     metric.HistogramModePreferHdrLatency,
+			Metadata: MetaConnLatency,
+			Duration: histogramWindow,
+			Buckets:  metric.IOLatencyBuckets,
+		}),
 		ConnFailures:                metric.NewCounter(MetaConnFailures),
 		PGWireCancelTotalCount:      metric.NewCounter(MetaPGWireCancelTotal),
 		PGWireCancelIgnoredCount:    metric.NewCounter(MetaPGWireCancelIgnored),

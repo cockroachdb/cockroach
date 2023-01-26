@@ -45,7 +45,7 @@ type Config struct {
 
 	// Metrics.
 	FlushCounter   *metric.Counter
-	FlushDuration  *metric.Histogram
+	FlushDuration  metric.IHistogram
 	FailureCounter *metric.Counter
 
 	// Testing knobs.

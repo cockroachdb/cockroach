@@ -26,12 +26,12 @@ type DistSQLMetrics struct {
 	FlowsTotal            *metric.Counter
 	FlowsQueued           *metric.Gauge
 	FlowsScheduled        *metric.Counter
-	QueueWaitHist         *metric.Histogram
-	MaxBytesHist          *metric.Histogram
+	QueueWaitHist         metric.IHistogram
+	MaxBytesHist          metric.IHistogram
 	CurBytesCount         *metric.Gauge
 	VecOpenFDs            *metric.Gauge
 	CurDiskBytesCount     *metric.Gauge
-	MaxDiskBytesHist      *metric.Histogram
+	MaxDiskBytesHist      metric.IHistogram
 	QueriesSpilled        *metric.Counter
 	SpilledBytesWritten   *metric.Counter
 	SpilledBytesRead      *metric.Counter
@@ -141,6 +141,10 @@ var (
 	}
 )
 
+// See pkg/sql/mem_metrics.go
+// log10int64times1000 = log10(math.MaxInt64) * 1000, rounded up somewhat
+const log10int64times1000 = 19 * 1000
+
 // MakeDistSQLMetrics instantiates the metrics holder for DistSQL monitoring.
 func MakeDistSQLMetrics(histogramWindow time.Duration) DistSQLMetrics {
 	return DistSQLMetrics{
@@ -151,15 +155,31 @@ func MakeDistSQLMetrics(histogramWindow time.Duration) DistSQLMetrics {
 		FlowsTotal:            metric.NewCounter(metaFlowsTotal),
 		FlowsQueued:           metric.NewGauge(metaFlowsQueued),
 		FlowsScheduled:        metric.NewCounter(metaFlowsScheduled),
-		QueueWaitHist:         metric.NewHistogram(metaQueueWaitHist, histogramWindow, metric.IOLatencyBuckets),
-		MaxBytesHist:          metric.NewHistogram(metaMemMaxBytes, histogramWindow, metric.MemoryUsage64MBBuckets),
-		CurBytesCount:         metric.NewGauge(metaMemCurBytes),
-		VecOpenFDs:            metric.NewGauge(metaVecOpenFDs),
-		CurDiskBytesCount:     metric.NewGauge(metaDiskCurBytes),
-		MaxDiskBytesHist:      metric.NewHistogram(metaDiskMaxBytes, histogramWindow, metric.MemoryUsage64MBBuckets),
-		QueriesSpilled:        metric.NewCounter(metaQueriesSpilled),
-		SpilledBytesWritten:   metric.NewCounter(metaSpilledBytesWritten),
-		SpilledBytesRead:      metric.NewCounter(metaSpilledBytesRead),
+		QueueWaitHist: metric.NewHistogram(metric.HistogramOptions{
+			Metadata: metaQueueWaitHist,
+			Duration: histogramWindow,
+			Buckets:  metric.IOLatencyBuckets,
+			Mode:     metric.HistogramModePreferHdrLatency,
+		}),
+		MaxBytesHist: metric.NewHistogram(metric.HistogramOptions{
+			Metadata: metaMemMaxBytes,
+			Duration: histogramWindow,
+			MaxVal:   log10int64times1000,
+			SigFigs:  3,
+			Buckets:  metric.MemoryUsage64MBBuckets,
+		}),
+		CurBytesCount:     metric.NewGauge(metaMemCurBytes),
+		VecOpenFDs:        metric.NewGauge(metaVecOpenFDs),
+		CurDiskBytesCount: metric.NewGauge(metaDiskCurBytes),
+		MaxDiskBytesHist: metric.NewHistogram(metric.HistogramOptions{
+			Metadata: metaDiskMaxBytes,
+			Duration: histogramWindow,
+			MaxVal:   log10int64times1000,
+			SigFigs:  3,
+			Buckets:  metric.MemoryUsage64MBBuckets}),
+		QueriesSpilled:      metric.NewCounter(metaQueriesSpilled),
+		SpilledBytesWritten: metric.NewCounter(metaSpilledBytesWritten),
+		SpilledBytesRead:    metric.NewCounter(metaSpilledBytesRead),
 	}
 }
 
