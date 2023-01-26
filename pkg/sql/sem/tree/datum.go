@@ -2001,6 +2001,8 @@ type ParseContext interface {
 	// like "tomorrow", and also provides a default time.Location for
 	// parsed times.
 	GetRelativeParseTime() time.Time
+	// GetCollationEnv returns the collation environment.
+	GetCollationEnv() *CollationEnvironment
 	// GetIntervalStyle returns the interval style in the session.
 	GetIntervalStyle() duration.IntervalStyle
 	// GetDateStyle returns the date style in the session.
@@ -2032,14 +2034,20 @@ func NewParseContext(relativeParseTime time.Time, opts ...NewParseContextOption)
 }
 
 type simpleParseContext struct {
-	RelativeParseTime time.Time
-	DateStyle         pgdate.DateStyle
-	IntervalStyle     duration.IntervalStyle
+	RelativeParseTime    time.Time
+	CollationEnvironment CollationEnvironment
+	DateStyle            pgdate.DateStyle
+	IntervalStyle        duration.IntervalStyle
 }
 
 // GetRelativeParseTime implements ParseContext.
 func (ctx *simpleParseContext) GetRelativeParseTime() time.Time {
 	return ctx.RelativeParseTime
+}
+
+// GetCollationEnv implements ParseContext.
+func (ctx *simpleParseContext) GetCollationEnv() *CollationEnvironment {
+	return &ctx.CollationEnvironment
 }
 
 // GetIntervalStyle implements ParseContext.

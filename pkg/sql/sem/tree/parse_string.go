@@ -71,6 +71,8 @@ func ParseAndRequireString(
 		} else {
 			d, err = ParseDOidAsInt(s)
 		}
+	case types.CollatedStringFamily:
+		d, err = NewDCollatedString(s, t.Locale(), ctx.GetCollationEnv())
 	case types.StringFamily:
 		// If the string type specifies a limit we truncate to that limit:
 		//   'hello'::CHAR(2) -> 'he'
