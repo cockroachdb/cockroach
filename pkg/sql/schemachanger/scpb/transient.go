@@ -18,6 +18,17 @@ func GetTransientEquivalent(s Status) (Status, bool) {
 	return equiv, ok
 }
 
+// GetNonTransientEquivalent is the reciprocal of GetTransientEquivalent
+// and therefore take a TRANSIENT_ Status as input.
+func GetNonTransientEquivalent(s Status) (Status, bool) {
+	for k, v := range transientEquivalent {
+		if v == s {
+			return k, true
+		}
+	}
+	return Status_UNKNOWN, false
+}
+
 var transientEquivalent = map[Status]Status{
 	Status_DELETE_ONLY:   Status_TRANSIENT_DELETE_ONLY,
 	Status_WRITE_ONLY:    Status_TRANSIENT_WRITE_ONLY,

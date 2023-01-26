@@ -124,7 +124,7 @@ func New(cs scpb.CurrentState) (*Graph, error) {
 	g.depEdges = makeDepEdges(func(n *screl.Node) targetIdx {
 		return g.targetIdxMap[n.Target]
 	})
-	for i, status := range cs.Current {
+	for i, status := range cs.Initial {
 		t := &cs.Targets[i]
 		if existing, ok := g.targetIdxMap[t]; ok {
 			return nil, errors.Errorf("invalid initial state contains duplicate target: %v and %v", *t, cs.Targets[existing])

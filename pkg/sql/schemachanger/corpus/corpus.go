@@ -138,7 +138,7 @@ func (cc *Collector) GetBeforeStage(
 			corpusName, corpusPrefix := makeCorpusName(parentName, t.Name(), p.Statements, stageIdx)
 			entry := &scpb.CorpusState{
 				Name:        corpusName,
-				Status:      p.Current,
+				Status:      p.Initial,
 				TargetState: &p.TargetState,
 				InRollback:  p.InRollback,
 				Revertible:  p.Revertible,
@@ -297,12 +297,11 @@ func (cr *Reader) GetNumEntries() int {
 // state.
 func (cr *Reader) GetCorpus(idx int) (name string, state *scpb.CurrentState) {
 	corpus := cr.diskState.CorpusArray[idx]
-	name = corpus.Name
-	state = &scpb.CurrentState{
+	return corpus.Name, &scpb.CurrentState{
 		TargetState: *corpus.TargetState,
+		Initial:     corpus.Status,
 		Current:     corpus.Status,
 		InRollback:  corpus.InRollback,
 		Revertible:  corpus.Revertible,
 	}
-	return name, state
 }
