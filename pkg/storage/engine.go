@@ -951,8 +951,9 @@ type Engine interface {
 	fs.FS
 	// CreateCheckpoint creates a checkpoint of the engine in the given directory,
 	// which must not exist. The directory should be on the same file system so
-	// that hard links can be used.
-	CreateCheckpoint(dir string) error
+	// that hard links can be used. If spans is not empty, the checkpoint excludes
+	// SSTs that don't overlap with any of these key spans.
+	CreateCheckpoint(dir string, spans []roachpb.Span) error
 
 	// SetMinVersion is used to signal to the engine the current minimum
 	// version that it must maintain compatibility with.
