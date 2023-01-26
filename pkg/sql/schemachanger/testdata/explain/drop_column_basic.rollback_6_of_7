@@ -7,7 +7,7 @@ COMMENT ON COLUMN t.j IS 'j has a comment';
 ALTER TABLE t DROP COLUMN j;
 EXPLAIN (ddl) rollback at post-commit stage 6 of 7;
 ----
-Schema change plan for rolling back ALTER TABLE ‹defaultdb›.public.‹t› DROP COLUMN ‹j›; 
+Schema change plan for rolling back ALTER TABLE ‹defaultdb›.public.‹t› DROP COLUMN ‹j›;
  └── PostCommitNonRevertiblePhase
       ├── Stage 1 of 2 in PostCommitNonRevertiblePhase
       │    ├── 3 elements transitioning toward PUBLIC
@@ -19,10 +19,9 @@ Schema change plan for rolling back ALTER TABLE ‹defaultdb›.public.‹t› D
       │    │    ├── PUBLIC     → ABSENT      IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}
       │    │    ├── WRITE_ONLY → DELETE_ONLY TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
       │    │    └── PUBLIC     → ABSENT      IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}
-      │    └── 9 Mutation operations
+      │    └── 8 Mutation operations
       │         ├── SetColumnName {"ColumnID":2,"Name":"j","TableID":104}
       │         ├── UpsertColumnComment {"ColumnID":2,"Comment":"j has a comment","PGAttributeNum":2,"TableID":104}
-      │         ├── LogEvent {"TargetStatus":2}
       │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":3,"TableID":104}
       │         ├── MakeWriteOnlyColumnPublic {"ColumnID":2,"TableID":104}
       │         ├── RefreshStats {"TableID":104}

@@ -917,12 +917,9 @@ show_tables_stmt ::=
 	| 'SHOW' 'TABLES' with_comment
 
 show_tenant_stmt ::=
-	'SHOW' 'TENANTS'
-	| 'SHOW' 'TENANT_ALL' 'ALL'
-	| 'SHOW' 'TENANTS' 'WITH' 'REPLICATION' 'STATUS'
-	| 'SHOW' 'TENANT_ALL' 'ALL' 'WITH' 'REPLICATION' 'STATUS'
-	| 'SHOW' 'TENANT' tenant_spec
-	| 'SHOW' 'TENANT' tenant_spec 'WITH' 'REPLICATION' 'STATUS'
+	'SHOW' 'TENANTS' opt_show_tenant_options
+	| 'SHOW' 'TENANT_ALL' 'ALL' opt_show_tenant_options
+	| 'SHOW' 'TENANT' tenant_spec opt_show_tenant_options
 
 show_trace_stmt ::=
 	'SHOW' opt_compact 'TRACE' 'FOR' 'SESSION'
@@ -1031,6 +1028,8 @@ unreserved_keyword ::=
 	| 'CALLED'
 	| 'CANCEL'
 	| 'CANCELQUERY'
+	| 'CAPABILITIES'
+	| 'CAPABILITY'
 	| 'CASCADE'
 	| 'CHANGEFEED'
 	| 'CLOSE'
@@ -1588,6 +1587,8 @@ alter_database_stmt ::=
 	| alter_database_drop_region_stmt
 	| alter_database_survival_goal_stmt
 	| alter_database_primary_region_stmt
+	| alter_database_placement_stmt
+	| alter_database_set_stmt
 	| alter_database_add_super_region
 	| alter_database_alter_super_region
 	| alter_database_drop_super_region
@@ -1669,8 +1670,8 @@ for_schedules_clause ::=
 	| 'FOR' 'SCHEDULE' a_expr
 
 create_database_stmt ::=
-	'CREATE' 'DATABASE' database_name opt_with opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause opt_connection_limit opt_primary_region_clause opt_regions_list opt_survival_goal_clause opt_owner_clause opt_super_region_clause opt_secondary_region_clause
-	| 'CREATE' 'DATABASE' 'IF' 'NOT' 'EXISTS' database_name opt_with opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause opt_connection_limit opt_primary_region_clause opt_regions_list opt_survival_goal_clause opt_super_region_clause opt_secondary_region_clause
+	'CREATE' 'DATABASE' database_name opt_with opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause opt_connection_limit opt_primary_region_clause opt_regions_list opt_survival_goal_clause opt_placement_clause opt_owner_clause opt_super_region_clause opt_secondary_region_clause
+	| 'CREATE' 'DATABASE' 'IF' 'NOT' 'EXISTS' database_name opt_with opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause opt_connection_limit opt_primary_region_clause opt_regions_list opt_survival_goal_clause opt_placement_clause opt_super_region_clause opt_secondary_region_clause
 
 create_index_stmt ::=
 	'CREATE' opt_unique 'INDEX' opt_concurrently opt_index_name 'ON' table_name opt_index_access_method '(' index_params ')' opt_hash_sharded opt_storing opt_partition_by_index opt_with_storage_parameter_list opt_where_clause opt_index_visible
@@ -1936,6 +1937,9 @@ statements_or_queries ::=
 opt_show_ranges_options ::=
 	'WITH' show_ranges_options
 
+opt_show_tenant_options ::=
+	'WITH' show_tenant_options
+
 opt_compact ::=
 	'COMPACT'
 	| 
@@ -2143,6 +2147,12 @@ alter_database_primary_region_stmt ::=
 	'ALTER' 'DATABASE' database_name primary_region_clause
 	| 'ALTER' 'DATABASE' database_name 'SET' primary_region_clause
 
+alter_database_placement_stmt ::=
+	'ALTER' 'DATABASE' database_name placement_clause
+
+alter_database_set_stmt ::=
+	'ALTER' 'DATABASE' database_name set_or_reset_clause
+
 alter_database_add_super_region ::=
 	'ALTER' 'DATABASE' database_name 'ADD' 'SUPER' 'REGION' name 'VALUES' name_list
 
@@ -2307,6 +2317,10 @@ opt_regions_list ::=
 
 opt_survival_goal_clause ::=
 	survival_goal_clause
+	| 
+
+opt_placement_clause ::=
+	placement_clause
 	| 
 
 opt_owner_clause ::=
@@ -2635,6 +2649,9 @@ targets_roles ::=
 show_ranges_options ::=
 	( 'TABLES' | 'INDEXES' | 'DETAILS' | 'KEYS' | 'EXPLAIN' ) ( ( ',' 'TABLES' | ',' 'INDEXES' | ',' 'DETAILS' | ',' 'EXPLAIN' | ',' 'KEYS' ) )*
 
+show_tenant_options ::=
+	( 'REPLICATION' 'STATUS' | 'CAPABILITIES' ) ( ( ',' 'REPLICATION' 'STATUS' | ',' 'CAPABILITIES' ) )*
+
 partition ::=
 	'PARTITION' partition_name
 
@@ -2807,6 +2824,10 @@ survival_goal_clause ::=
 
 primary_region_clause ::=
 	'PRIMARY' 'REGION' opt_equal region_name
+
+placement_clause ::=
+	'PLACEMENT' 'RESTRICTED'
+	| 'PLACEMENT' 'DEFAULT'
 
 secondary_region_clause ::=
 	'SECONDARY' 'REGION' opt_equal region_name

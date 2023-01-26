@@ -5,7 +5,7 @@ CREATE TABLE t (i INT PRIMARY KEY, j INT, INDEX (j));
 ALTER TABLE t DROP COLUMN j;
 EXPLAIN (ddl) rollback at post-commit stage 2 of 7;
 ----
-Schema change plan for rolling back ALTER TABLE ‹defaultdb›.public.‹t› DROP COLUMN ‹j›; 
+Schema change plan for rolling back ALTER TABLE ‹defaultdb›.public.‹t› DROP COLUMN ‹j›;
  └── PostCommitNonRevertiblePhase
       ├── Stage 1 of 2 in PostCommitNonRevertiblePhase
       │    ├── 3 elements transitioning toward PUBLIC
@@ -17,11 +17,10 @@ Schema change plan for rolling back ALTER TABLE ‹defaultdb›.public.‹t› D
       │    │    ├── PUBLIC        → ABSENT      IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}
       │    │    ├── WRITE_ONLY    → DELETE_ONLY TemporaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 3, SourceIndexID: 1}
       │    │    └── PUBLIC        → ABSENT      IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 4}
-      │    └── 10 Mutation operations
+      │    └── 9 Mutation operations
       │         ├── SetColumnName {"ColumnID":2,"Name":"j","TableID":104}
-      │         ├── RefreshStats {"TableID":104}
-      │         ├── LogEvent {"TargetStatus":2}
       │         ├── MakeValidatedSecondaryIndexPublic {"IndexID":2,"TableID":104}
+      │         ├── RefreshStats {"TableID":104}
       │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":4,"TableID":104}
       │         ├── MakeWriteOnlyColumnPublic {"ColumnID":2,"TableID":104}
       │         ├── RefreshStats {"TableID":104}

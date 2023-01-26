@@ -18,13 +18,6 @@ DescriptorIsNotBeingDropped($element):
 ToPublicOrTransient($target1, $target2):
     - $target1[TargetStatus] IN [PUBLIC, TRANSIENT_ABSENT]
     - $target2[TargetStatus] IN [PUBLIC, TRANSIENT_ABSENT]
-fromHasPublicStatusIfFromIsTableAndToIsRowLevelTTL($fromTarget, $fromEl, $toEl):
-    not-join:
-        - $fromEl[Type] = '*scpb.Table'
-        - $toEl[Type] = '*scpb.RowLevelTTL'
-        - $n[Type] = '*screl.Node'
-        - $n[Target] = $fromTarget
-        - nodeHasNoPublicStatus($n)
 joinOnColumnID($a, $b, $desc-id, $col-id):
     - joinOnDescID($a, $b, $desc-id)
     - $a[ColumnID] = $col-id
@@ -51,10 +44,6 @@ joinTargetNode($element, $target, $node):
     - joinTarget($element, $target)
     - $node[Type] = '*screl.Node'
     - $node[Target] = $target
-nodeHasNoPublicStatus($n):
-    not-join:
-        - $public = PUBLIC
-        - $n[CurrentStatus] = $public
 nodeNotExistsWithStatusIn_BACKFILLED_BACKFILL_ONLY($sharedTarget):
     not-join:
         - $n[Type] = '*screl.Node'

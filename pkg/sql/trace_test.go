@@ -244,6 +244,11 @@ func TestTrace(t *testing.T) {
 				if _, err := sqlDB.Exec("SET vectorize = on"); err != nil {
 					t.Fatal(err)
 				}
+				// Disable the direct columnar scans to make the vectorized
+				// planning deterministic.
+				if _, err := sqlDB.Exec(`SET direct_columnar_scans_enabled = false`); err != nil {
+					t.Fatal(err)
+				}
 				if _, err := sqlDB.Exec("SET tracing = on; SELECT * FROM test.foo; SET tracing = off"); err != nil {
 					t.Fatal(err)
 				}

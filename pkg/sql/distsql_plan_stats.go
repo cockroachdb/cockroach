@@ -59,6 +59,7 @@ var maxTimestampAge = settings.RegisterDurationSetting(
 )
 
 func (dsp *DistSQLPlanner) createAndAttachSamplers(
+	ctx context.Context,
 	p *PhysicalPlan,
 	desc catalog.TableDescriptor,
 	tableStats []*stats.TableStatistic,
@@ -149,6 +150,7 @@ func (dsp *DistSQLPlanner) createAndAttachSamplers(
 		node = p.Processors[p.ResultRouters[0]].SQLInstanceID
 	}
 	p.AddSingleGroupStage(
+		ctx,
 		node,
 		execinfrapb.ProcessorCoreUnion{SampleAggregator: agg},
 		execinfrapb.PostProcessSpec{},
@@ -223,19 +225,22 @@ func (dsp *DistSQLPlanner) createPartialStatsPlan(
 	// column that is not partial and not forecasted. The first one we find will
 	// be the latest due to the newest to oldest ordering property of the cache.
 	for _, t := range tableStats {
-		// TODO (faizaanmadhani): Ideally, we don't want to verify that
-		// a statistic is forecasted or merged based on the name because
-		// someone could create a statistic named __forecast__ or __merged__.
-		// Update system.table_statistics to add an enum to indicate which
-		// type of statistic it is.
-		if len(t.ColumnIDs) == 1 && column.GetID() == t.ColumnIDs[0] && t.PartialPredicate == "" &&
-			t.Name != jobspb.ForecastStatsName &&
-			t.Name != jobspb.MergedStatsName {
+		if len(t.ColumnIDs) == 1 && column.GetID() == t.ColumnIDs[0] &&
+			!t.IsPartial() && !t.IsMerged() && !t.IsForecast() {
 			if t.HistogramData == nil || t.HistogramData.ColumnType == nil || len(t.Histogram) == 0 {
-				return nil, pgerror.Newf(pgcode.ObjectNotInPrerequisiteState, "the latest full statistic for column %s has no histogram", column.GetName())
+				return nil, pgerror.Newf(
+					pgcode.ObjectNotInPrerequisiteState,
+					"the latest full statistic for column %s has no histogram",
+					column.GetName(),
+				)
 			}
-			if colinfo.ColumnTypeIsInvertedIndexable(column.GetType()) && t.HistogramData.ColumnType.Family() == types.BytesFamily {
-				return nil, pgerror.Newf(pgcode.ObjectNotInPrerequisiteState, "the latest full statistic histogram for column %s is an inverted index histogram", column.GetName())
+			if colinfo.ColumnTypeIsInvertedIndexable(column.GetType()) &&
+				t.HistogramData.ColumnType.Family() == types.BytesFamily {
+				return nil, pgerror.Newf(
+					pgcode.ObjectNotInPrerequisiteState,
+					"the latest full statistic histogram for column %s is an inverted index histogram",
+					column.GetName(),
+				)
 			}
 			stat = t
 			histogram = t.Histogram
@@ -326,6 +331,7 @@ func (dsp *DistSQLPlanner) createPartialStatsPlan(
 		sketchSpec = append(sketchSpec, spec)
 	}
 	return dsp.createAndAttachSamplers(
+		ctx,
 		p,
 		desc,
 		tableStats,
@@ -447,6 +453,7 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 	}
 
 	return dsp.createAndAttachSamplers(
+		ctx,
 		p,
 		desc,
 		tableStats,
@@ -507,7 +514,7 @@ func (dsp *DistSQLPlanner) planAndRunCreateStats(
 		return err
 	}
 
-	dsp.FinalizePlan(planCtx, physPlan)
+	dsp.FinalizePlan(ctx, planCtx, physPlan)
 
 	recv := MakeDistSQLReceiver(
 		ctx,

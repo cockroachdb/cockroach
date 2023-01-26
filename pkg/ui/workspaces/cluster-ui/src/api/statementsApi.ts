@@ -111,6 +111,7 @@ type ExecStats = {
   maxMemUsage: NumericStat;
   networkBytes: NumericStat;
   networkMsgs: NumericStat;
+  cpuNanos: NumericStat;
 };
 
 type StatementStatistics = {
@@ -155,6 +156,7 @@ export function convertStatementRawFormatToAggregatedStatistics(
         max_mem_usage: s.statistics.execution_statistics.maxMemUsage,
         network_bytes: s.statistics.execution_statistics.networkBytes,
         network_messages: s.statistics.execution_statistics.networkMsgs,
+        cpu_nanos: s.statistics.execution_statistics.cpuNanos,
       },
       bytes_read: s.statistics.statistics.bytesRead,
       count: s.statistics.statistics.cnt,

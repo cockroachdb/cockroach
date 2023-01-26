@@ -190,3 +190,60 @@ ALTER TENANT 'foo' RENAME TO bar
 ALTER TENANT ('foo') RENAME TO (bar) -- fully parenthesized
 ALTER TENANT '_' RENAME TO bar -- literals removed
 ALTER TENANT 'foo' RENAME TO _ -- identifiers removed
+
+# Regression test for #95612
+parse
+ALTER TENANT INTERVAL 'string' MINUTE RESET CLUSTER SETTING ident
+----
+ALTER TENANT ('string'::INTERVAL MINUTE) SET CLUSTER SETTING ident = DEFAULT -- normalized!
+ALTER TENANT ((('string')::INTERVAL MINUTE)) SET CLUSTER SETTING ident = (DEFAULT) -- fully parenthesized
+ALTER TENANT ('_'::INTERVAL MINUTE) SET CLUSTER SETTING ident = DEFAULT -- literals removed
+ALTER TENANT ('string'::INTERVAL MINUTE) SET CLUSTER SETTING ident = DEFAULT -- identifiers removed
+
+parse
+ALTER TENANT 123 GRANT CAPABILITY a = 3
+----
+ALTER TENANT 123 GRANT CAPABILITY a = 3
+ALTER TENANT (123) GRANT CAPABILITY a = (3) -- fully parenthesized
+ALTER TENANT _ GRANT CAPABILITY a = _ -- literals removed
+ALTER TENANT 123 GRANT CAPABILITY a = 3 -- identifiers removed
+
+parse
+ALTER TENANT (1+1) GRANT CAPABILITY a = 3
+----
+ALTER TENANT (1 + 1) GRANT CAPABILITY a = 3 -- normalized!
+ALTER TENANT ((((1) + (1)))) GRANT CAPABILITY a = (3) -- fully parenthesized
+ALTER TENANT (_ + _) GRANT CAPABILITY a = _ -- literals removed
+ALTER TENANT (1 + 1) GRANT CAPABILITY a = 3 -- identifiers removed
+
+parse
+ALTER TENANT $1 GRANT CAPABILITY a = 3
+----
+ALTER TENANT $1 GRANT CAPABILITY a = 3
+ALTER TENANT ($1) GRANT CAPABILITY a = (3) -- fully parenthesized
+ALTER TENANT $1 GRANT CAPABILITY a = _ -- literals removed
+ALTER TENANT $1 GRANT CAPABILITY a = 3 -- identifiers removed
+
+parse
+ALTER TENANT 123 REVOKE CAPABILITY a
+----
+ALTER TENANT 123 REVOKE CAPABILITY a
+ALTER TENANT (123) REVOKE CAPABILITY a -- fully parenthesized
+ALTER TENANT _ REVOKE CAPABILITY a -- literals removed
+ALTER TENANT 123 REVOKE CAPABILITY a -- identifiers removed
+
+parse
+ALTER TENANT (1+1) REVOKE CAPABILITY a
+----
+ALTER TENANT (1 + 1) REVOKE CAPABILITY a -- normalized!
+ALTER TENANT ((((1) + (1)))) REVOKE CAPABILITY a -- fully parenthesized
+ALTER TENANT (_ + _) REVOKE CAPABILITY a -- literals removed
+ALTER TENANT (1 + 1) REVOKE CAPABILITY a -- identifiers removed
+
+parse
+ALTER TENANT $1 REVOKE CAPABILITY a
+----
+ALTER TENANT $1 REVOKE CAPABILITY a
+ALTER TENANT ($1) REVOKE CAPABILITY a -- fully parenthesized
+ALTER TENANT $1 REVOKE CAPABILITY a -- literals removed
+ALTER TENANT $1 REVOKE CAPABILITY a -- identifiers removed

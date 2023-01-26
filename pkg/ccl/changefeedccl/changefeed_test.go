@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/impl" // registers cloud storage providers
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/internal/sqlsmith"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -65,8 +66,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/sqllivenesstestutils"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -855,6 +859,136 @@ func TestChangefeedResolvedFrequency(t *testing.T) {
 	}
 
 	cdcTest(t, testFn)
+}
+
+func TestChangefeedRandomExpressions(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	skip.UnderStress(t)
+	skip.UnderRace(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		rng, _ := randutil.NewTestRand()
+		tblName := "seed"
+		defer s.DB.Close()
+
+		sqlDB.ExecMultiple(t, sqlsmith.Setups[tblName](rng)...)
+
+		// TODO: PopulateTableWithRandData doesn't work with enums
+		sqlDB.Exec(t, "ALTER TABLE seed DROP COLUMN _enum")
+
+		for rows := 0; rows < 100; {
+			var err error
+			var newRows int
+			if newRows, err = randgen.PopulateTableWithRandData(rng, s.DB, tblName, 200); err != nil {
+				t.Fatal(err)
+			}
+			rows += newRows
+		}
+
+		sqlDB.Exec(t, `DELETE FROM seed WHERE rowid NOT IN (SELECT rowid FROM seed LIMIT 100)`)
+
+		// Put the enums back. enum_range('hi'::greeting)[rowid%7] will give nulls when rowid%7=0 or 6.
+		sqlDB.Exec(t, `ALTER TABLE seed ADD COLUMN _enum greeting`)
+		sqlDB.Exec(t, `UPDATE seed SET _enum = enum_range('hi'::greeting)[rowid%7]`)
+
+		queryGen, err := sqlsmith.NewSmither(s.DB, rng,
+			sqlsmith.DisableWith(),
+			sqlsmith.DisableMutations(),
+			sqlsmith.DisableLimits(),
+			sqlsmith.DisableAggregateFuncs(),
+			sqlsmith.DisableWindowFuncs(),
+			sqlsmith.DisableJoins(),
+			sqlsmith.DisableLimits(),
+			sqlsmith.DisableIndexHints(),
+			sqlsmith.SetScalarComplexity(0.5),
+			sqlsmith.SetComplexity(0.5),
+		)
+		require.NoError(t, err)
+		defer queryGen.Close()
+		numNonTrivialTestRuns := 0
+		whereClausesChecked := make(map[string]struct{}, 1000)
+		for i := 0; i < 1000; i++ {
+			query := queryGen.Generate()
+			where, ok := getWhereClause(query)
+			if !ok {
+				continue
+			}
+			if _, alreadyChecked := whereClausesChecked[where]; alreadyChecked {
+				continue
+			}
+			whereClausesChecked[where] = struct{}{}
+			query = "SELECT array_to_string(IFNULL(array_agg(distinct rowid),'{}'),'|') FROM seed WHERE " + where
+			t.Log(query)
+			rows := s.DB.QueryRow(query)
+			var expectedRowIDsStr string
+			if err := rows.Scan(&expectedRowIDsStr); err != nil {
+				t.Logf("Skipping query %s because error %s", query, err)
+				continue
+			}
+			expectedRowIDs := strings.Split(expectedRowIDsStr, "|")
+			if expectedRowIDsStr == "" {
+				t.Logf("Skipping predicate %s because it returned no rows", where)
+				continue
+			}
+			createStmt := `CREATE CHANGEFEED WITH schema_change_policy='stop' AS SELECT rowid FROM seed WHERE ` + where
+			t.Logf("Expecting statement %s to emit %d events", createStmt, len(expectedRowIDs))
+			seedFeed, err := f.Feed(createStmt)
+			if err != nil {
+				t.Logf("Test tolerating create changefeed error: %s", err.Error())
+				closeFeedIgnoreError(t, seedFeed)
+				continue
+			}
+			numNonTrivialTestRuns++
+			assertedPayloads := make([]string, len(expectedRowIDs))
+			for i, id := range expectedRowIDs {
+				assertedPayloads[i] = fmt.Sprintf(`seed: [%s]->{"rowid": %s}`, id, id)
+			}
+			err = assertPayloadsBaseErr(context.Background(), seedFeed, assertedPayloads, false, false)
+			closeFeedIgnoreError(t, seedFeed)
+			if err != nil {
+				t.Error(err)
+			}
+		}
+		require.Greater(t, numNonTrivialTestRuns, 1)
+		t.Logf("%d predicates checked: all had the same result in SELECT and CHANGEFEED", numNonTrivialTestRuns)
+
+	}
+
+	cdcTest(t, testFn, feedTestForceSink(`kafka`))
+}
+
+// getWhereClause extracts the predicate from a randomly generated SQL statement.
+func getWhereClause(query string) (string, bool) {
+	var p parser.Parser
+	stmts, err := p.Parse(query)
+	if err != nil {
+		return "", false
+	}
+	if len(stmts) != 1 {
+		return "", false
+	}
+	selectStmt, ok := stmts[0].AST.(*tree.Select).Select.(*tree.SelectClause)
+	if !ok {
+		return "", false
+	}
+	if selectStmt.Where == nil || len(selectStmt.From.Tables) == 0 {
+		return "", false
+	}
+	// Replace all table references with "seed" because we're not using the FROM clause so we can't reference aliases.
+	replaced, err := tree.SimpleVisit(selectStmt.Where.Expr, func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
+		if ci, ok := expr.(*tree.ColumnItem); ok {
+			newCI := *ci
+			newCI.TableName = &tree.UnresolvedObjectName{NumParts: 1, Parts: [3]string{``, ``, `seed`}}
+			expr = &newCI
+		}
+		if un, ok := expr.(*tree.UnresolvedName); ok && un.NumParts > 1 {
+			un.Parts[un.NumParts-1] = `seed`
+		}
+		return true, expr, nil
+	})
+	return replaced.String(), err == nil
 }
 
 // Test how Changefeeds react to schema changes that do not require a backfill
@@ -7484,10 +7618,10 @@ func TestChangefeedCreateTelemetryLogs(t *testing.T) {
 
 		createLogs := checkCreateChangefeedLogs(t, beforeCreateSinkless.UnixNano())
 		require.Equal(t, 1, len(createLogs))
-		require.Equal(t, createLogs[0].SinkType, "core")
+		require.Equal(t, "core", createLogs[0].SinkType)
 	})
 
-	t.Run(`gcpubsub_sink_type with options`, func(t *testing.T) {
+	t.Run(`gcpubsub_sink_type_with_options`, func(t *testing.T) {
 		pubsubFeedFactory := makePubsubFeedFactory(s.Server, s.DB)
 		beforeCreatePubsub := timeutil.Now()
 		pubsubFeed := feed(t, pubsubFeedFactory, `CREATE CHANGEFEED FOR foo, bar WITH resolved="10s", no_initial_scan`)
@@ -7495,10 +7629,22 @@ func TestChangefeedCreateTelemetryLogs(t *testing.T) {
 
 		createLogs := checkCreateChangefeedLogs(t, beforeCreatePubsub.UnixNano())
 		require.Equal(t, 1, len(createLogs))
-		require.Equal(t, createLogs[0].SinkType, `gcpubsub`)
-		require.Equal(t, createLogs[0].NumTables, int32(2))
-		require.Equal(t, createLogs[0].Resolved, `10s`)
-		require.Equal(t, createLogs[0].InitialScan, `no`)
+		require.Equal(t, `gcpubsub`, createLogs[0].SinkType)
+		require.Equal(t, int32(2), createLogs[0].NumTables)
+		require.Equal(t, `10s`, createLogs[0].Resolved)
+		require.Equal(t, `no`, createLogs[0].InitialScan)
+		require.Equal(t, false, createLogs[0].Transformation)
+	})
+
+	t.Run(`with_transformation`, func(t *testing.T) {
+		pubsubFeedFactory := makePubsubFeedFactory(s.Server, s.DB)
+		beforeCreateWithTransformation := timeutil.Now()
+		pubsubFeed := feed(t, pubsubFeedFactory, `CREATE CHANGEFEED AS SELECT b FROM foo`)
+		defer closeFeed(t, pubsubFeed)
+
+		createLogs := checkCreateChangefeedLogs(t, beforeCreateWithTransformation.UnixNano())
+		require.Equal(t, 1, len(createLogs))
+		require.Equal(t, true, createLogs[0].Transformation)
 	})
 }
 

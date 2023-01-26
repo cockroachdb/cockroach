@@ -2462,6 +2462,33 @@ func TestEndpointTelemetryBasic(t *testing.T) {
 	)))
 }
 
+// TestDecommissionPreCheck tests the basic functionality of the
+// DecommissionPreCheck endpoint.
+func TestDecommissionPreCheck(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	skip.UnderRace(t) // can't handle 7-node clusters
+
+	ctx := context.Background()
+	tc := serverutils.StartNewTestCluster(t, 7, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual, // saves time
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	adminSrv := tc.Server(4)
+	conn, err := adminSrv.RPCContext().GRPCDialNode(
+		adminSrv.RPCAddr(), adminSrv.NodeID(), rpc.DefaultClass).Connect(ctx)
+	require.NoError(t, err)
+	adminClient := serverpb.NewAdminClient(conn)
+
+	resp, err := adminClient.DecommissionPreCheck(ctx, &serverpb.DecommissionPreCheckRequest{
+		NodeIDs: []roachpb.NodeID{tc.Server(5).NodeID()},
+	})
+	require.Error(t, err)
+	require.Equal(t, codes.Unimplemented, status.Code(err))
+	require.Nil(t, resp)
+}
+
 func TestDecommissionSelf(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

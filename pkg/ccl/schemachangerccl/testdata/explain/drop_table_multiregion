@@ -7,7 +7,7 @@ CREATE TABLE multi_region_test_db.public.table_regional_by_row (
 /* test */
 EXPLAIN (ddl) DROP TABLE multi_region_test_db.public.table_regional_by_row;
 ----
-Schema change plan for DROP TABLE ‹multi_region_test_db›.‹public›.‹table_regional_by_row›; 
+Schema change plan for DROP TABLE ‹multi_region_test_db›.‹public›.‹table_regional_by_row›;
  ├── StatementPhase
  │    └── Stage 1 of 1 in StatementPhase
  │         ├── 6 elements transitioning toward ABSENT
@@ -70,8 +70,7 @@ Schema change plan for DROP TABLE ‹multi_region_test_db›.‹public›.‹tab
            │    ├── DROPPED → ABSENT Table:{DescID: 108}
            │    ├── PUBLIC  → ABSENT IndexData:{DescID: 108, IndexID: 1}
            │    └── PUBLIC  → ABSENT TableData:{DescID: 108, ReferencedDescID: 104}
-           └── 7 Mutation operations
-                ├── LogEvent {"TargetStatus":1}
+           └── 6 Mutation operations
                 ├── CreateGCJobForTable {"DatabaseID":104,"TableID":108}
                 ├── CreateGCJobForIndex {"IndexID":1,"TableID":108}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":106}

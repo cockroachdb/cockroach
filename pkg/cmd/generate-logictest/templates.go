@@ -74,6 +74,9 @@ func runExecBuildLogicTest(t *testing.T, file string) {
 	serverArgs := logictest.TestServerArgs{
 		DisableWorkmemRandomization: true,{{ if .ForceProductionValues }}
 		ForceProductionValues:       true,{{end}}
+		// Disable the direct scans in order to keep the output of EXPLAIN (VEC)
+		// deterministic.
+		DisableDirectColumnarScans: true,
 	}
 	logictest.RunLogicTest(t, serverArgs, configIdx, filepath.Join(execBuildLogicTestDir, file))
 }
@@ -90,12 +93,10 @@ func runSqliteLogicTest(t *testing.T, file string) {
 	// SQLLite logic tests can be very memory intensive, so we give them larger
 	// limit than other logic tests get. Also some of the 'delete' files become
 	// extremely slow when MVCC range tombstones are enabled for point deletes,
-	// so we disable that. Similarly, some of the 'view' files are too slow
-	// when small engine blocks are enabled.
+	// so we disable that.
 	serverArgs := logictest.TestServerArgs{
 		MaxSQLMemoryLimit: 512 << 20, // 512 MiB
 		DisableUseMVCCRangeTombstonesForPointDeletes: true,
-		DisableSmallEngineBlocks:                     true,
 		// Some sqlite tests with very low bytes limit value are too slow, so
 		// ensure 3 KiB lower bound.
 		BatchBytesLimitLowerBound: 3 << 10, // 3 KiB

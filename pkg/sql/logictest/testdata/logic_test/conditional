@@ -107,3 +107,15 @@ SELECT
     END
 ----
 one  one  three  four  two
+
+subtest regression_95560
+
+# Regression test for #95560. COALESCE should only evaluate arguments to the
+# right of the first non-NULL argument, and an error (in this case a "division
+# by zero" error) should not occur from a branch that should never be evaluated.
+statement ok
+CREATE TABLE t95560a (a INT);
+INSERT INTO t95560a VALUES (1);
+CREATE TABLE t95560b (b INT);
+INSERT INTO t95560b VALUES (0);
+SELECT coalesce(a, (SELECT (a/b)::INT FROM t95560b)) FROM t95560a;

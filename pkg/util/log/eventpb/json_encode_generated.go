@@ -1427,7 +1427,9 @@ func (m *CommonChangefeedEventDetails) AppendJSONFields(printComma bool, b redac
 		}
 		printComma = true
 		b = append(b, "\"Description\":\""...)
-		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(m.Description)))
+		b = append(b, redact.StartMarker()...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(redact.EscapeMarkers([]byte(m.Description)))))
+		b = append(b, redact.EndMarker()...)
 		b = append(b, '"')
 	}
 
@@ -2139,6 +2141,14 @@ func (m *ConvertToSchema) AppendJSONFields(printComma bool, b redact.RedactableB
 func (m *CreateChangefeed) AppendJSONFields(printComma bool, b redact.RedactableBytes) (bool, redact.RedactableBytes) {
 
 	printComma, b = m.CommonChangefeedEventDetails.AppendJSONFields(printComma, b)
+
+	if m.Transformation {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"Transformation\":true"...)
+	}
 
 	return printComma, b
 }

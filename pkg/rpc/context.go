@@ -1509,7 +1509,7 @@ func (rpcCtx *Context) GRPCDialOptions(
 func (rpcCtx *Context) grpcDialOptionsInternal(
 	ctx context.Context, target string, class ConnectionClass, transport transportType,
 ) ([]grpc.DialOption, error) {
-	dialOpts, err := rpcCtx.dialOptsCommon(class)
+	dialOpts, err := rpcCtx.dialOptsCommon(target, class)
 	if err != nil {
 		return nil, err
 	}
@@ -1678,7 +1678,9 @@ func (rpcCtx *Context) dialOptsNetwork(
 
 // dialOptsCommon computes options used for both in-memory and
 // over-the-network RPC connections.
-func (rpcCtx *Context) dialOptsCommon(class ConnectionClass) ([]grpc.DialOption, error) {
+func (rpcCtx *Context) dialOptsCommon(
+	target string, class ConnectionClass,
+) ([]grpc.DialOption, error) {
 	// The limiting factor for lowering the max message size is the fact
 	// that a single large kv can be sent over the network in one message.
 	// Our maximum kv size is unlimited, so we need this to be very large.
@@ -1703,9 +1705,17 @@ func (rpcCtx *Context) dialOptsCommon(class ConnectionClass) ([]grpc.DialOption,
 	} else {
 		dialOpts = append(dialOpts, grpc.WithInitialWindowSize(initialWindowSize))
 	}
-
-	if len(rpcCtx.clientUnaryInterceptors) > 0 {
-		dialOpts = append(dialOpts, grpc.WithChainUnaryInterceptor(rpcCtx.clientUnaryInterceptors...))
+	unaryInterceptors := rpcCtx.clientUnaryInterceptors
+	unaryInterceptors = unaryInterceptors[:len(unaryInterceptors):len(unaryInterceptors)]
+	if rpcCtx.Knobs.UnaryClientInterceptor != nil {
+		if interceptor := rpcCtx.Knobs.UnaryClientInterceptor(
+			target, class,
+		); interceptor != nil {
+			unaryInterceptors = append(unaryInterceptors, interceptor)
+		}
+	}
+	if len(unaryInterceptors) > 0 {
+		dialOpts = append(dialOpts, grpc.WithChainUnaryInterceptor(unaryInterceptors...))
 	}
 	if len(rpcCtx.clientStreamInterceptors) > 0 {
 		dialOpts = append(dialOpts, grpc.WithChainStreamInterceptor(rpcCtx.clientStreamInterceptors...))
@@ -2228,15 +2238,11 @@ func (rpcCtx *Context) runHeartbeat(
 
 	// Start heartbeat loop.
 
-	maxOffset := rpcCtx.MaxOffset
-	maxOffsetNanos := maxOffset.Nanoseconds()
-
 	// The request object. Note that we keep the same object from
 	// heartbeat to heartbeat: we compute a new .Offset at the end of
 	// the current heartbeat as input to the next one.
 	request := &PingRequest{
-		OriginAddr:           rpcCtx.Config.Addr,
-		OriginMaxOffsetNanos: maxOffsetNanos,
+		DeprecatedOriginAddr: rpcCtx.Config.Addr,
 		TargetNodeID:         conn.remoteNodeID,
 		ServerVersion:        rpcCtx.Settings.Version.BinaryVersion(),
 	}
@@ -2347,7 +2353,7 @@ func (rpcCtx *Context) runHeartbeat(
 					remoteTimeNow := timeutil.Unix(0, response.ServerTime).Add(pingDuration / 2)
 					request.Offset.Offset = remoteTimeNow.Sub(receiveTime).Nanoseconds()
 				}
-				rpcCtx.RemoteClocks.UpdateOffset(ctx, target, request.Offset, pingDuration)
+				rpcCtx.RemoteClocks.UpdateOffset(ctx, conn.remoteNodeID, request.Offset, pingDuration)
 			}
 
 			if cb := rpcCtx.HeartbeatCB; cb != nil {

@@ -8,7 +8,7 @@ ALTER TABLE t.test ADD COLUMN x DECIMAL DEFAULT (DECIMAL '1.4') CHECK (x >= 0);
 ALTER TABLE t.test DROP pi;
 EXPLAIN (ddl, verbose) rollback at post-commit stage 3 of 7;
 ----
-• Schema change plan for rolling back ALTER TABLE ‹t›.public.‹test› DROP COLUMN ‹pi›; 
+• Schema change plan for rolling back ALTER TABLE ‹t›.public.‹test› DROP COLUMN ‹pi›;
 │
 └── • PostCommitNonRevertiblePhase
     │
@@ -112,28 +112,12 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 3 of 7;
     │       │
     │       ├── • MakeWriteOnlyColumnPublic
     │       │     ColumnID: 3
-    │       │     EventBase:
-    │       │       Authorization:
-    │       │         UserName: root
-    │       │       Statement: ALTER TABLE ‹t›.public.‹test› DROP COLUMN ‹pi›
-    │       │       StatementTag: ALTER TABLE
-    │       │       TargetMetadata:
-    │       │         SourceElementID: 1
-    │       │         SubWorkID: 1
     │       │     TableID: 106
     │       │
     │       ├── • RefreshStats
     │       │     TableID: 106
     │       │
     │       ├── • MakeIndexAbsent
-    │       │     EventBase:
-    │       │       Authorization:
-    │       │         UserName: root
-    │       │       Statement: ALTER TABLE ‹t›.public.‹test› DROP COLUMN ‹pi›
-    │       │       StatementTag: ALTER TABLE
-    │       │       TargetMetadata:
-    │       │         SourceElementID: 1
-    │       │         SubWorkID: 1
     │       │     IndexID: 4
     │       │     TableID: 106
     │       │

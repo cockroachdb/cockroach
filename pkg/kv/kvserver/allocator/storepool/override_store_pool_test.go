@@ -32,9 +32,11 @@ func TestOverrideStorePoolStatusString(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
+	const nodeCount = 5
+
 	stopper, g, _, testStorePool, mnl := CreateTestStorePool(ctx, st,
 		TestTimeUntilStoreDead, false, /* deterministic */
-		func() int { return 10 }, /* nodeCount */
+		func() int { return nodeCount }, /* nodeCount */
 		livenesspb.NodeLivenessStatus_DEAD)
 	defer stopper.Stop(ctx)
 	sg := gossiputil.NewStoreGossiper(g)
@@ -46,6 +48,15 @@ func TestOverrideStorePoolStatusString(t *testing.T) {
 		}
 
 		return mnl.NodeLivenessFunc(nid, now, timeUntilStoreDead)
+	}, func() int {
+		excluded := 0
+		for _, overriddenLiveness := range livenessOverrides {
+			if overriddenLiveness == livenesspb.NodeLivenessStatus_DECOMMISSIONING ||
+				overriddenLiveness == livenesspb.NodeLivenessStatus_DECOMMISSIONED {
+				excluded++
+			}
+		}
+		return nodeCount - excluded
 	})
 
 	stores := []*roachpb.StoreDescriptor{
@@ -102,9 +113,11 @@ func TestOverrideStorePoolDecommissioningReplicas(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
+	const nodeCount = 5
+
 	stopper, g, _, testStorePool, mnl := CreateTestStorePool(ctx, st,
 		TestTimeUntilStoreDead, false, /* deterministic */
-		func() int { return 10 }, /* nodeCount */
+		func() int { return nodeCount }, /* nodeCount */
 		livenesspb.NodeLivenessStatus_DEAD)
 	defer stopper.Stop(ctx)
 	sg := gossiputil.NewStoreGossiper(g)
@@ -116,6 +129,15 @@ func TestOverrideStorePoolDecommissioningReplicas(t *testing.T) {
 		}
 
 		return mnl.NodeLivenessFunc(nid, now, timeUntilStoreDead)
+	}, func() int {
+		excluded := 0
+		for _, overriddenLiveness := range livenessOverrides {
+			if overriddenLiveness == livenesspb.NodeLivenessStatus_DECOMMISSIONING ||
+				overriddenLiveness == livenesspb.NodeLivenessStatus_DECOMMISSIONED {
+				excluded++
+			}
+		}
+		return nodeCount - excluded
 	})
 
 	stores := []*roachpb.StoreDescriptor{
@@ -207,10 +229,12 @@ func TestOverrideStorePoolGetStoreList(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
+	const nodeCount = 8
+
 	// We're going to manually mark stores dead in this test.
 	stopper, g, _, testStorePool, mnl := CreateTestStorePool(ctx, st,
 		TestTimeUntilStoreDead, false, /* deterministic */
-		func() int { return 10 }, /* nodeCount */
+		func() int { return nodeCount }, /* nodeCount */
 		livenesspb.NodeLivenessStatus_DEAD)
 	defer stopper.Stop(ctx)
 	sg := gossiputil.NewStoreGossiper(g)
@@ -222,6 +246,15 @@ func TestOverrideStorePoolGetStoreList(t *testing.T) {
 		}
 
 		return mnl.NodeLivenessFunc(nid, now, timeUntilStoreDead)
+	}, func() int {
+		excluded := 0
+		for _, overriddenLiveness := range livenessOverrides {
+			if overriddenLiveness == livenesspb.NodeLivenessStatus_DECOMMISSIONING ||
+				overriddenLiveness == livenesspb.NodeLivenessStatus_DECOMMISSIONED {
+				excluded++
+			}
+		}
+		return nodeCount - excluded
 	})
 
 	constraints := []roachpb.ConstraintsConjunction{

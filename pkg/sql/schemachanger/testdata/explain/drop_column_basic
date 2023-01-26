@@ -6,7 +6,7 @@ COMMENT ON COLUMN t.j IS 'j has a comment';
 /* test */
 EXPLAIN (ddl) ALTER TABLE t DROP COLUMN j;
 ----
-Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COLUMN ‹j›; 
+Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COLUMN ‹j›;
  ├── StatementPhase
  │    └── Stage 1 of 1 in StatementPhase
  │         ├── 3 elements transitioning toward PUBLIC
@@ -20,12 +20,10 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COL
  │         │    ├── PUBLIC → WRITE_ONLY    Column:{DescID: 104, ColumnID: 2}
  │         │    ├── PUBLIC → ABSENT        ColumnName:{DescID: 104, Name: j, ColumnID: 2}
  │         │    └── PUBLIC → ABSENT        ColumnComment:{DescID: 104, ColumnID: 2, Comment: j has a comment}
- │         └── 9 Mutation operations
+ │         └── 7 Mutation operations
  │              ├── MakePublicColumnWriteOnly {"ColumnID":2,"TableID":104}
- │              ├── LogEvent {"TargetStatus":1}
  │              ├── SetColumnName {"ColumnID":2,"Name":"crdb_internal_co...","TableID":104}
  │              ├── RemoveColumnComment {"ColumnID":2,"PgAttributeNum":2,"TableID":104}
- │              ├── LogEvent {"TargetStatus":1}
  │              ├── MakeAbsentIndexBackfilling {"Index":{"ConstraintID":2,"IndexID":2,"IsUnique":true,"SourceIndexID":1,"TableID":104,"TemporaryIndexID":3}}
  │              ├── AddColumnToIndex {"ColumnID":1,"IndexID":2,"TableID":104}
  │              ├── MakeAbsentTempIndexDeleteOnly {"Index":{"ConstraintID":3,"IndexID":3,"IsUnique":true,"SourceIndexID":1,"TableID":104}}

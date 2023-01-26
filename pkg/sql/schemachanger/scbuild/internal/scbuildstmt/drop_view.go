@@ -55,6 +55,7 @@ func DropView(b BuildCtx, n *tree.DropView) {
 		} else if dropRestrictDescriptor(b, view.ViewID) {
 			toCheckBackrefs = append(toCheckBackrefs, view.ViewID)
 		}
+		b.LogEventForExistingTarget(view)
 		b.IncrementSubWorkID()
 		if view.IsMaterialized {
 			b.IncrementSchemaChangeDropCounter("materialized_view")

@@ -15,6 +15,7 @@ SELECT id FROM system.zones
 25
 27
 45
+57
 
 # Note that discarding RANGE_DEFAULT isn't allowed.
 exec-sql
@@ -32,6 +33,7 @@ SELECT id FROM system.zones
 25
 27
 45
+57
 
 
 full-translate
@@ -89,3 +91,7 @@ full-translate
 /Table/5{1-2}                              database system (host)
 /Table/5{2-3}                              database system (host)
 /Table/5{3-4}                              database system (host)
+/Table/5{4-5}                              database system (host)
+/Table/5{5-6}                              database system (host)
+/Table/5{6-7}                              database system (host)
+/Table/5{7-8}                              ttl_seconds=3600 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true

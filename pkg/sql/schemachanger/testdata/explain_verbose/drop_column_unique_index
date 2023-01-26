@@ -7,7 +7,7 @@ ALTER TABLE t.test ADD COLUMN x DECIMAL DEFAULT (DECIMAL '1.4') CHECK (x >= 0);
 /* test */
 EXPLAIN (ddl, verbose) ALTER TABLE t.test DROP pi;
 ----
-• Schema change plan for ALTER TABLE ‹t›.‹public›.‹test› DROP COLUMN ‹pi›; 
+• Schema change plan for ALTER TABLE ‹t›.‹public›.‹test› DROP COLUMN ‹pi›;
 │
 ├── • StatementPhase
 │   │
@@ -85,27 +85,11 @@ EXPLAIN (ddl, verbose) ALTER TABLE t.test DROP pi;
 │       │       └── • Precedence dependency from WRITE_ONLY Column:{DescID: 106, ColumnID: 3}
 │       │             rule: "column no longer public before dependents"
 │       │
-│       └── • 11 Mutation operations
+│       └── • 10 Mutation operations
 │           │
 │           ├── • MakePublicColumnWriteOnly
 │           │     ColumnID: 3
 │           │     TableID: 106
-│           │
-│           ├── • LogEvent
-│           │     Element:
-│           │       Column:
-│           │         columnId: 3
-│           │         pgAttributeNum: 3
-│           │         tableId: 106
-│           │     EventBase:
-│           │       Authorization:
-│           │         UserName: root
-│           │       Statement: ALTER TABLE ‹t›.‹public›.‹test› DROP COLUMN ‹pi›
-│           │       StatementTag: ALTER TABLE
-│           │       TargetMetadata:
-│           │         SourceElementID: 1
-│           │         SubWorkID: 1
-│           │     TargetStatus: 1
 │           │
 │           ├── • SetColumnName
 │           │     ColumnID: 3
@@ -504,14 +488,6 @@ EXPLAIN (ddl, verbose) ALTER TABLE t.test DROP pi;
     │       │     TableID: 106
     │       │
     │       ├── • MakeValidatedPrimaryIndexPublic
-    │       │     EventBase:
-    │       │       Authorization:
-    │       │         UserName: root
-    │       │       Statement: ALTER TABLE ‹t›.‹public›.‹test› DROP COLUMN ‹pi›
-    │       │       StatementTag: ALTER TABLE
-    │       │       TargetMetadata:
-    │       │         SourceElementID: 1
-    │       │         SubWorkID: 1
     │       │     IndexID: 6
     │       │     TableID: 106
     │       │
@@ -654,14 +630,6 @@ EXPLAIN (ddl, verbose) ALTER TABLE t.test DROP pi;
             │     TableID: 106
             │
             ├── • MakeIndexAbsent
-            │     EventBase:
-            │       Authorization:
-            │         UserName: root
-            │       Statement: ALTER TABLE ‹t›.‹public›.‹test› DROP COLUMN ‹pi›
-            │       StatementTag: ALTER TABLE
-            │       TargetMetadata:
-            │         SourceElementID: 1
-            │         SubWorkID: 1
             │     IndexID: 4
             │     TableID: 106
             │
@@ -679,14 +647,6 @@ EXPLAIN (ddl, verbose) ALTER TABLE t.test DROP pi;
             │
             ├── • MakeDeleteOnlyColumnAbsent
             │     ColumnID: 3
-            │     EventBase:
-            │       Authorization:
-            │         UserName: root
-            │       Statement: ALTER TABLE ‹t›.‹public›.‹test› DROP COLUMN ‹pi›
-            │       StatementTag: ALTER TABLE
-            │       TargetMetadata:
-            │         SourceElementID: 1
-            │         SubWorkID: 1
             │     TableID: 106
             │
             ├── • RemoveJobStateFromDescriptor

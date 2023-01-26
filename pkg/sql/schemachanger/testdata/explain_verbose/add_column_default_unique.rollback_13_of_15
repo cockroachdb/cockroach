@@ -6,7 +6,7 @@ CREATE TABLE db.public.tbl (i INT PRIMARY KEY);
 ALTER TABLE db.public.tbl ADD COLUMN j INT UNIQUE DEFAULT CAST(date_part('year', now()) AS INT);
 EXPLAIN (ddl, verbose) rollback at post-commit stage 13 of 15;
 ----
-• Schema change plan for rolling back ALTER TABLE ‹db›.public.‹tbl› ADD COLUMN ‹j› INT8 UNIQUE DEFAULT CAST(date_part(‹'year'›, now()) AS INT8); 
+• Schema change plan for rolling back ALTER TABLE ‹db›.public.‹tbl› ADD COLUMN ‹j› INT8 UNIQUE DEFAULT CAST(date_part(‹'year'›, now()) AS INT8);
 │
 └── • PostCommitNonRevertiblePhase
     │
@@ -149,7 +149,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 13 of 15;
     │   │       └── • PreviousTransactionPrecedence dependency from WRITE_ONLY TemporaryIndex:{DescID: 106, IndexID: 5, ConstraintID: 5, SourceIndexID: 2}
     │   │             rule: "TemporaryIndex transitions to ABSENT uphold 2-version invariant: WRITE_ONLY->DELETE_ONLY"
     │   │
-    │   └── • 13 Mutation operations
+    │   └── • 12 Mutation operations
     │       │
     │       ├── • SetIndexName
     │       │     IndexID: 1
@@ -183,37 +183,8 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 13 of 15;
     │       │     TableID: 106
     │       │
     │       ├── • MakeValidatedPrimaryIndexPublic
-    │       │     EventBase:
-    │       │       Authorization:
-    │       │         UserName: root
-    │       │       Statement: ALTER TABLE ‹db›.public.‹tbl› ADD COLUMN ‹j› INT8 UNIQUE DEFAULT CAST(date_part(‹'year'›,
-    │       │         now()) AS INT8)
-    │       │       StatementTag: ALTER TABLE
-    │       │       TargetMetadata:
-    │       │         SourceElementID: 1
-    │       │         SubWorkID: 1
     │       │     IndexID: 1
     │       │     TableID: 106
-    │       │
-    │       ├── • LogEvent
-    │       │     Element:
-    │       │       SecondaryIndex:
-    │       │         constraintId: 4
-    │       │         indexId: 4
-    │       │         isUnique: true
-    │       │         sourceIndexId: 2
-    │       │         tableId: 106
-    │       │         temporaryIndexId: 5
-    │       │     EventBase:
-    │       │       Authorization:
-    │       │         UserName: root
-    │       │       Statement: ALTER TABLE ‹db›.public.‹tbl› ADD COLUMN ‹j› INT8 UNIQUE DEFAULT CAST(date_part(‹'year'›,
-    │       │         now()) AS INT8)
-    │       │       StatementTag: ALTER TABLE
-    │       │       TargetMetadata:
-    │       │         SourceElementID: 1
-    │       │         SubWorkID: 1
-    │       │     TargetStatus: 1
     │       │
     │       ├── • MakeWriteOnlyIndexDeleteOnly
     │       │     IndexID: 4
@@ -424,15 +395,6 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 13 of 15;
             │     TableID: 106
             │
             ├── • MakeIndexAbsent
-            │     EventBase:
-            │       Authorization:
-            │         UserName: root
-            │       Statement: ALTER TABLE ‹db›.public.‹tbl› ADD COLUMN ‹j› INT8 UNIQUE DEFAULT CAST(date_part(‹'year'›,
-            │         now()) AS INT8)
-            │       StatementTag: ALTER TABLE
-            │       TargetMetadata:
-            │         SourceElementID: 1
-            │         SubWorkID: 1
             │     IndexID: 2
             │     TableID: 106
             │
@@ -470,15 +432,6 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 13 of 15;
             │
             ├── • MakeDeleteOnlyColumnAbsent
             │     ColumnID: 2
-            │     EventBase:
-            │       Authorization:
-            │         UserName: root
-            │       Statement: ALTER TABLE ‹db›.public.‹tbl› ADD COLUMN ‹j› INT8 UNIQUE DEFAULT CAST(date_part(‹'year'›,
-            │         now()) AS INT8)
-            │       StatementTag: ALTER TABLE
-            │       TargetMetadata:
-            │         SourceElementID: 1
-            │         SubWorkID: 1
             │     TableID: 106
             │
             ├── • RemoveJobStateFromDescriptor

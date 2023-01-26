@@ -5,7 +5,7 @@ CREATE SCHEMA db.sc;
 /* test */
 EXPLAIN (ddl) DROP SCHEMA db.sc;
 ----
-Schema change plan for DROP SCHEMA ‹db›.‹sc›; 
+Schema change plan for DROP SCHEMA ‹db›.‹sc›;
  ├── StatementPhase
  │    └── Stage 1 of 1 in StatementPhase
  │         ├── 1 element transitioning toward ABSENT
@@ -32,8 +32,7 @@ Schema change plan for DROP SCHEMA ‹db›.‹sc›;
       └── Stage 1 of 1 in PostCommitNonRevertiblePhase
            ├── 1 element transitioning toward ABSENT
            │    └── DROPPED → ABSENT Schema:{DescID: 106}
-           └── 5 Mutation operations
-                ├── LogEvent {"TargetStatus":1}
+           └── 4 Mutation operations
                 ├── DeleteDescriptor {"DescriptorID":106}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":104}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":106}

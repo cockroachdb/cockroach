@@ -4,7 +4,7 @@ create table t (i INT PRIMARY KEY, j INT, INDEX((j+1)));
 /* test */
 EXPLAIN (ddl) ALTER TABLE t DROP COLUMN j CASCADE;
 ----
-Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COLUMN ‹j› CASCADE; 
+Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COLUMN ‹j› CASCADE;
  ├── StatementPhase
  │    └── Stage 1 of 1 in StatementPhase
  │         ├── 3 elements transitioning toward PUBLIC
@@ -20,9 +20,8 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COL
  │         │    ├── PUBLIC → WRITE_ONLY    Column:{DescID: 104, ColumnID: 3}
  │         │    ├── PUBLIC → ABSENT        ColumnName:{DescID: 104, Name: crdb_internal_idx_expr, ColumnID: 3}
  │         │    └── PUBLIC → VALIDATED     SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
- │         └── 11 Mutation operations
+ │         └── 9 Mutation operations
  │              ├── MakePublicColumnWriteOnly {"ColumnID":2,"TableID":104}
- │              ├── LogEvent {"TargetStatus":1}
  │              ├── SetColumnName {"ColumnID":2,"Name":"crdb_internal_co...","TableID":104}
  │              ├── MakePublicSecondaryIndexWriteOnly {"IndexID":2,"TableID":104}
  │              ├── MakeAbsentIndexBackfilling {"Index":{"ConstraintID":2,"IndexID":3,"IsUnique":true,"SourceIndexID":1,"TableID":104,"TemporaryIndexID":4}}
@@ -30,7 +29,6 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COL
  │              ├── MakeAbsentTempIndexDeleteOnly {"Index":{"ConstraintID":3,"IndexID":4,"IsUnique":true,"SourceIndexID":1,"TableID":104}}
  │              ├── AddColumnToIndex {"ColumnID":1,"IndexID":4,"TableID":104}
  │              ├── MakePublicColumnWriteOnly {"ColumnID":3,"TableID":104}
- │              ├── LogEvent {"TargetStatus":1}
  │              └── SetColumnName {"ColumnID":3,"Name":"crdb_internal_co...","TableID":104}
  ├── PreCommitPhase
  │    └── Stage 1 of 1 in PreCommitPhase
@@ -101,14 +99,13 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COL
       │    │    ├── PUBLIC     → ABSENT                IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}
       │    │    ├── VALIDATED  → DELETE_ONLY           SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
       │    │    └── PUBLIC     → ABSENT                IndexName:{DescID: 104, Name: t_expr_idx, IndexID: 2}
-      │    └── 12 Mutation operations
+      │    └── 11 Mutation operations
       │         ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":2,"TableID":104}
       │         ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":3,"TableID":104}
       │         ├── MakePublicPrimaryIndexWriteOnly {"IndexID":1,"TableID":104}
       │         ├── SetIndexName {"IndexID":1,"Name":"crdb_internal_in...","TableID":104}
       │         ├── SetIndexName {"IndexID":3,"Name":"t_pkey","TableID":104}
       │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":4,"TableID":104}
-      │         ├── LogEvent {"TargetStatus":1}
       │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":2,"TableID":104}
       │         ├── SetIndexName {"IndexID":2,"Name":"crdb_internal_in...","TableID":104}
       │         ├── MakeValidatedPrimaryIndexPublic {"IndexID":3,"TableID":104}

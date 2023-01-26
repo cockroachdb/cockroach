@@ -10,6 +10,8 @@
 
 package tree
 
+import "github.com/cockroachdb/errors"
+
 // ReplicationCutoverTime represent the user-specified cutover time
 type ReplicationCutoverTime struct {
 	Timestamp Expr
@@ -48,6 +50,57 @@ func (n *AlterTenantReplication) Format(ctx *FmtCtx) {
 	}
 }
 
+// TenantCapability is a key-value parameter representing a tenant capability.
+type TenantCapability struct {
+	Name  string
+	Value Expr
+}
+
+func (c *TenantCapability) GetBoolValue(isRevoke bool) (bool, error) {
+	if c.Value == nil {
+		return false, nil
+	}
+	if isRevoke {
+		return false, errors.New("revoke must not specify value")
+	}
+	dBool, ok := AsDBool(c.Value)
+	if !ok {
+		return false, errors.New("value must be bool")
+	}
+	return bool(dBool), nil
+}
+
+// AlterTenantCapability represents an ALTER TENANT CAPABILITY statement.
+type AlterTenantCapability struct {
+	TenantSpec   *TenantSpec
+	Capabilities []TenantCapability
+	IsRevoke     bool
+}
+
+var _ Statement = &AlterTenantCapability{}
+
+// Format implements the NodeFormatter interface.
+func (n *AlterTenantCapability) Format(ctx *FmtCtx) {
+	ctx.WriteString("ALTER TENANT ")
+	ctx.FormatNode(n.TenantSpec)
+	if n.IsRevoke {
+		ctx.WriteString(" REVOKE CAPABILITY ")
+	} else {
+		ctx.WriteString(" GRANT CAPABILITY ")
+	}
+	for i, capability := range n.Capabilities {
+		if i > 0 {
+			ctx.WriteString(", ")
+		}
+		ctx.WriteString(capability.Name)
+		value := capability.Value
+		if value != nil {
+			ctx.WriteString(" = ")
+			ctx.FormatNode(value)
+		}
+	}
+}
+
 // TenantSpec designates a tenant for the ALTER TENANT statements.
 type TenantSpec struct {
 	Expr   Expr
@@ -55,12 +108,67 @@ type TenantSpec struct {
 	All    bool
 }
 
+// alreadyDelimitedAsSyntacticDExpr is an interface that marks
+// Expr types for which there is never an ambiguity when
+// the expression syntax is followed by a non-reserved
+// keyword. When this property is true, that expression
+// can be pretty-printed without enclosing parentheses in
+// a context followed by more non-reserved keywords, and
+// result in syntax that is still unambiguous.
+// That is, given an expression E and an arbitrary following
+// word X, the syntax "E X" is always unambiguously parsed
+// as "(E) X".
+//
+// This property is obviously true of "atomic" expressions such as
+// string and number literals, and also obviously true of
+// well-enclosed expressions "(...)" / "[...]". However, it is not
+// always true of other composite expression types. For example,
+// "A::B" (CastExpr) is not well-delimited because there are
+// identifiers/keywords such that "A::B C" can be parsed as "A::(B
+// C)". Consider "'a'::INTERVAL" and the non-reserved keyword
+// "MINUTE".
+//
+// This property is closely related to the d_expr syntactic rule in
+// the grammar, hence its name. *Approximately* the expression types
+// produced by the d_expr rule tend to exhibit the "well-delimited"
+// property. However, this is not a proper equivalence: certain Expr
+// types are _also_ produced by other parsing rules than d_expr, so
+// inspection of the contents of the Expr object is necessary to
+// determine whether it is well-delimited or not (for example, some
+// FuncExpr objects are well-delimited, and others are not).
+// Therefore, it is not generally correct to assign the property to
+// all the d_expr expression *types*. We can only do so for a few
+// types for which we know that *all possible objects* of that type
+// are well-delimited, such as Subquery, NumVal or Placeholder.
+type alreadyDelimitedAsSyntacticDExpr interface {
+	Expr
+	alreadyDelimitedAsSyntacticDExpr()
+}
+
+func (*UnresolvedName) alreadyDelimitedAsSyntacticDExpr() {}
+func (*ParenExpr) alreadyDelimitedAsSyntacticDExpr()      {}
+func (*Subquery) alreadyDelimitedAsSyntacticDExpr()       {}
+func (*Placeholder) alreadyDelimitedAsSyntacticDExpr()    {}
+func (*NumVal) alreadyDelimitedAsSyntacticDExpr()         {}
+func (*StrVal) alreadyDelimitedAsSyntacticDExpr()         {}
+func (dNull) alreadyDelimitedAsSyntacticDExpr()           {}
+
 // Format implements the NodeFormatter interface.
 func (n *TenantSpec) Format(ctx *FmtCtx) {
 	if n.All {
 		ctx.WriteString("ALL")
 	} else if n.IsName {
+		// Beware to enclose the expression within parentheses if it is
+		// not a simple identifier and is not already enclosed in
+		// parentheses.
+		_, canOmitParentheses := n.Expr.(alreadyDelimitedAsSyntacticDExpr)
+		if !canOmitParentheses {
+			ctx.WriteByte('(')
+		}
 		ctx.FormatNode(n.Expr)
+		if !canOmitParentheses {
+			ctx.WriteByte(')')
+		}
 	} else {
 		ctx.WriteByte('[')
 		ctx.FormatNode(n.Expr)

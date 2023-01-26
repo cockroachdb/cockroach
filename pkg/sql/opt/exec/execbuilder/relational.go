@@ -403,12 +403,12 @@ func (b *Builder) maybeAnnotateWithEstimates(node exec.Node, e memo.RelExpr) {
 		if scan, ok := e.(*memo.ScanExpr); ok {
 			tab := b.mem.Metadata().Table(scan.Table)
 			if tab.StatisticCount() > 0 {
-				// The first stat is the most recent one.
+				// The first stat is the most recent full one.
 				var first int
-				if !b.evalCtx.SessionData().OptimizerUseForecasts {
-					for first < tab.StatisticCount() && tab.Statistic(first).IsForecast() {
-						first++
-					}
+				for first < tab.StatisticCount() &&
+					tab.Statistic(first).IsPartial() ||
+					(tab.Statistic(first).IsForecast() && !b.evalCtx.SessionData().OptimizerUseForecasts) {
+					first++
 				}
 
 				if first < tab.StatisticCount() {
@@ -422,10 +422,10 @@ func (b *Builder) maybeAnnotateWithEstimates(node exec.Node, e memo.RelExpr) {
 					val.Forecast = stat.IsForecast()
 					if val.Forecast {
 						val.ForecastAt = stat.CreatedAt()
-						// Find the first non-forecast stat.
+						// Find the first non-forecast full stat.
 						for i := first + 1; i < tab.StatisticCount(); i++ {
 							nextStat := tab.Statistic(i)
-							if !nextStat.IsForecast() {
+							if !nextStat.IsPartial() && !nextStat.IsForecast() {
 								val.TableStatsCreatedAt = nextStat.CreatedAt()
 								break
 							}
@@ -760,8 +760,11 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (execPlan, error) {
 		b.TotalScanRows += stats.RowCount
 		b.ScanCounts[exec.ScanWithStatsCount]++
 
-		// The first stat is the most recent one. Check if it was a forecast.
+		// The first stat is the most recent full one. Check if it was a forecast.
 		var first int
+		for first < tab.StatisticCount() && tab.Statistic(first).IsPartial() {
+			first++
+		}
 		if first < tab.StatisticCount() && tab.Statistic(first).IsForecast() {
 			if b.evalCtx.SessionData().OptimizerUseForecasts {
 				b.ScanCounts[exec.ScanWithStatsForecastCount]++
@@ -772,8 +775,9 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (execPlan, error) {
 					b.NanosSinceStatsForecasted = nanosSinceStatsForecasted
 				}
 			}
-			// Find the first non-forecast stat.
-			for first < tab.StatisticCount() && tab.Statistic(first).IsForecast() {
+			// Find the first non-forecast full stat.
+			for first < tab.StatisticCount() &&
+				(tab.Statistic(first).IsPartial() || tab.Statistic(first).IsForecast()) {
 				first++
 			}
 		}
@@ -1706,6 +1710,7 @@ func (b *Builder) buildSetOp(set memo.RelExpr) (execPlan, error) {
 	}
 
 	hardLimit := uint64(0)
+	enforceHomeRegion := false
 	if set.Op() == opt.LocalityOptimizedSearchOp {
 		if !b.disableTelemetry {
 			telemetry.Inc(sqltelemetry.LocalityOptimizedSearchUseCounter)
@@ -1720,6 +1725,7 @@ func (b *Builder) buildSetOp(set memo.RelExpr) (execPlan, error) {
 		if set.Relational().Cardinality.Max != math.MaxUint32 {
 			hardLimit = uint64(set.Relational().Cardinality.Max)
 		}
+		enforceHomeRegion = b.IsANSIDML && b.evalCtx.SessionData().EnforceHomeRegion
 	}
 
 	ep := execPlan{}
@@ -1732,7 +1738,7 @@ func (b *Builder) buildSetOp(set memo.RelExpr) (execPlan, error) {
 	reqOrdering := ep.reqOrdering(set)
 
 	if typ == tree.UnionOp && all {
-		ep.root, err = b.factory.ConstructUnionAll(left.root, right.root, reqOrdering, hardLimit)
+		ep.root, err = b.factory.ConstructUnionAll(left.root, right.root, reqOrdering, hardLimit, enforceHomeRegion)
 	} else if len(streamingOrdering) > 0 {
 		if typ != tree.UnionOp {
 			b.recordJoinAlgorithm(exec.MergeJoin)
@@ -2353,6 +2359,7 @@ func (b *Builder) buildLookupJoin(join *memo.LookupJoinExpr) (execPlan, error) {
 		res.reqOrdering(join),
 		locking,
 		join.RequiredPhysical().LimitHintInt64(),
+		join.RemoteOnlyLookups,
 	)
 	if err != nil {
 		return execPlan{}, err

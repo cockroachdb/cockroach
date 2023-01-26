@@ -781,7 +781,7 @@ func (s *state) MakeAllocator(storeID StoreID) allocatorimpl.Allocator {
 	return allocatorimpl.MakeAllocator(
 		s.stores[storeID].settings,
 		s.stores[storeID].storepool.IsDeterministic(),
-		func(addr string) (time.Duration, bool) { return 0, true },
+		func(id roachpb.NodeID) (time.Duration, bool) { return 0, true },
 		&allocator.TestingKnobs{
 			AllowLeaseTransfersToReplicasNeedingSnapshots: true,
 		},

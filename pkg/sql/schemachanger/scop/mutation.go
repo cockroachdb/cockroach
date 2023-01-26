@@ -23,15 +23,6 @@ import (
 
 type mutationOp struct{ baseOp }
 
-// EventBase basic fields needed for anything event log related
-type EventBase struct {
-	TargetMetadata scpb.TargetMetadata
-	Authorization  scpb.Authorization
-	Statement      string
-	StatementTag   string
-	Element        scpb.ElementProto
-}
-
 // Make sure baseOp is used for linter.
 var _ = mutationOp{baseOp: baseOp{}}
 
@@ -114,7 +105,6 @@ type MakeValidatedSecondaryIndexPublic struct {
 // public.
 type MakeValidatedPrimaryIndexPublic struct {
 	mutationOp
-	EventBase
 	TableID descpb.ID
 	IndexID descpb.IndexID
 }
@@ -214,7 +204,6 @@ type RemoveDroppedIndexPartialPredicate struct {
 // table.
 type MakeIndexAbsent struct {
 	mutationOp
-	EventBase
 	TableID descpb.ID
 	IndexID descpb.IndexID
 }
@@ -234,7 +223,6 @@ type SetAddedColumnType struct {
 // MakeWriteOnlyColumnPublic moves a new column from its mutation to public.
 type MakeWriteOnlyColumnPublic struct {
 	mutationOp
-	EventBase
 	TableID  descpb.ID
 	ColumnID descpb.ColumnID
 }
@@ -266,7 +254,6 @@ type RemoveDroppedColumnType struct {
 // table.
 type MakeDeleteOnlyColumnAbsent struct {
 	mutationOp
-	EventBase
 	TableID  descpb.ID
 	ColumnID descpb.ColumnID
 }
@@ -298,10 +285,10 @@ type RemoveCheckConstraint struct {
 // to the table in the WRITE_ONLY state.
 type MakeAbsentCheckConstraintWriteOnly struct {
 	mutationOp
-	TableID      descpb.ID
-	ConstraintID descpb.ConstraintID
-	ColumnIDs    []descpb.ColumnID
-	scpb.Expression
+	TableID               descpb.ID
+	ConstraintID          descpb.ConstraintID
+	ColumnIDs             []descpb.ColumnID
+	CheckExpr             catpb.Expression
 	FromHashShardedColumn bool
 }
 
@@ -375,7 +362,7 @@ type MakeAbsentUniqueWithoutIndexConstraintWriteOnly struct {
 	TableID      descpb.ID
 	ConstraintID descpb.ConstraintID
 	ColumnIDs    []descpb.ColumnID
-	Predicate    *scpb.Expression
+	PartialExpr  catpb.Expression
 }
 
 // MakeValidatedUniqueWithoutIndexConstraintPublic moves a new, validated unique_without_index
@@ -411,14 +398,6 @@ type RemoveSchemaParent struct {
 type AddIndexPartitionInfo struct {
 	mutationOp
 	Partitioning scpb.IndexPartitioning
-}
-
-// LogEvent logs an event for a given descriptor.
-type LogEvent struct {
-	mutationOp
-	EventBase
-	Element      scpb.ElementProto
-	TargetStatus scpb.Status
 }
 
 // AddColumnFamily adds a new column family to the table.

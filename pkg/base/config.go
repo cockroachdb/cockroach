@@ -721,7 +721,7 @@ type StorageConfig struct {
 	// BallastSize is the amount reserved by a ballast file for manual
 	// out-of-disk recovery.
 	BallastSize int64
-	// Settings instance for cluster-wide knobs.
+	// Settings instance for cluster-wide knobs. Must not be nil.
 	Settings *cluster.Settings
 	// UseFileRegistry is true if the file registry is needed (eg: encryption-at-rest).
 	// This may force the store version to versionFileRegistry if currently lower.
@@ -763,7 +763,8 @@ type TempStorageConfig struct {
 	Mon *mon.BytesMonitor
 	// Spec stores the StoreSpec this TempStorageConfig will use.
 	Spec StoreSpec
-	// Settings stores the cluster.Settings this TempStoreConfig will use.
+	// Settings stores the cluster.Settings this TempStoreConfig will use. Must
+	// not be nil.
 	Settings *cluster.Settings
 }
 

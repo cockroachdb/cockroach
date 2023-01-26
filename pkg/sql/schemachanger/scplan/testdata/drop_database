@@ -96,7 +96,7 @@ StatementPhase stage 1 of 1 with 14 MutationType ops
       DescriptorID: 116
     *scop.MarkDescriptorAsSyntheticallyDropped
       DescriptorID: 117
-PreCommitPhase stage 1 of 1 with 91 MutationType ops
+PreCommitPhase stage 1 of 1 with 89 MutationType ops
   transitions:
     [[Namespace:{DescID: 104, Name: db1, ReferencedDescID: 0}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 104}, ABSENT], PUBLIC] -> ABSENT
@@ -301,20 +301,6 @@ PreCommitPhase stage 1 of 1 with 91 MutationType ops
       DatabaseID: 104
     *scop.RemoveDatabaseComment
       DatabaseID: 104
-    *scop.LogEvent
-      Element:
-        DatabaseComment:
-          comment: db1 is good
-          databaseId: 104
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP DATABASE ‹db1› CASCADE
-        StatementTag: DROP DATABASE
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
-      TargetStatus: 1
     *scop.MarkDescriptorAsDropped
       DescriptorID: 105
     *scop.RemoveSchemaParent
@@ -347,20 +333,6 @@ PreCommitPhase stage 1 of 1 with 91 MutationType ops
       DescriptorID: 109
     *scop.RemoveTableComment
       TableID: 109
-    *scop.LogEvent
-      Element:
-        TableComment:
-          comment: t1 is good
-          tableId: 109
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP DATABASE ‹db1› CASCADE
-        StatementTag: DROP DATABASE
-        TargetMetadata:
-          SourceElementID: 6
-          SubWorkID: 1
-      TargetStatus: 1
     *scop.RemoveColumnDefaultExpression
       ColumnID: 3
       TableID: 109
@@ -437,47 +409,15 @@ PreCommitPhase stage 1 of 1 with 91 MutationType ops
         SchemaID: 105
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 1
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP DATABASE ‹db1› CASCADE
-        StatementTag: DROP DATABASE
-        TargetMetadata:
-          SourceElementID: 3
-          SubWorkID: 1
       TableID: 110
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 2
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP DATABASE ‹db1› CASCADE
-        StatementTag: DROP DATABASE
-        TargetMetadata:
-          SourceElementID: 3
-          SubWorkID: 1
       TableID: 110
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 4294967295
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP DATABASE ‹db1› CASCADE
-        StatementTag: DROP DATABASE
-        TargetMetadata:
-          SourceElementID: 3
-          SubWorkID: 1
       TableID: 110
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 4294967294
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP DATABASE ‹db1› CASCADE
-        StatementTag: DROP DATABASE
-        TargetMetadata:
-          SourceElementID: 3
-          SubWorkID: 1
       TableID: 110
     *scop.DrainDescriptorName
       Namespace:
@@ -493,47 +433,15 @@ PreCommitPhase stage 1 of 1 with 91 MutationType ops
         SchemaID: 106
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 1
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP DATABASE ‹db1› CASCADE
-        StatementTag: DROP DATABASE
-        TargetMetadata:
-          SourceElementID: 6
-          SubWorkID: 1
       TableID: 109
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 2
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP DATABASE ‹db1› CASCADE
-        StatementTag: DROP DATABASE
-        TargetMetadata:
-          SourceElementID: 6
-          SubWorkID: 1
       TableID: 109
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 4294967295
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP DATABASE ‹db1› CASCADE
-        StatementTag: DROP DATABASE
-        TargetMetadata:
-          SourceElementID: 6
-          SubWorkID: 1
       TableID: 109
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 4294967294
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP DATABASE ‹db1› CASCADE
-        StatementTag: DROP DATABASE
-        TargetMetadata:
-          SourceElementID: 6
-          SubWorkID: 1
       TableID: 109
     *scop.DrainDescriptorName
       Namespace:
@@ -543,36 +451,12 @@ PreCommitPhase stage 1 of 1 with 91 MutationType ops
         SchemaID: 106
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 1
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP DATABASE ‹db1› CASCADE
-        StatementTag: DROP DATABASE
-        TargetMetadata:
-          SourceElementID: 8
-          SubWorkID: 1
       TableID: 111
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 4294967295
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP DATABASE ‹db1› CASCADE
-        StatementTag: DROP DATABASE
-        TargetMetadata:
-          SourceElementID: 8
-          SubWorkID: 1
       TableID: 111
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 4294967294
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP DATABASE ‹db1› CASCADE
-        StatementTag: DROP DATABASE
-        TargetMetadata:
-          SourceElementID: 8
-          SubWorkID: 1
       TableID: 111
     *scop.DrainDescriptorName
       Namespace:
@@ -582,47 +466,15 @@ PreCommitPhase stage 1 of 1 with 91 MutationType ops
         SchemaID: 106
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 1
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP DATABASE ‹db1› CASCADE
-        StatementTag: DROP DATABASE
-        TargetMetadata:
-          SourceElementID: 9
-          SubWorkID: 1
       TableID: 112
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 2
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP DATABASE ‹db1› CASCADE
-        StatementTag: DROP DATABASE
-        TargetMetadata:
-          SourceElementID: 9
-          SubWorkID: 1
       TableID: 112
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 4294967295
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP DATABASE ‹db1› CASCADE
-        StatementTag: DROP DATABASE
-        TargetMetadata:
-          SourceElementID: 9
-          SubWorkID: 1
       TableID: 112
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 4294967294
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP DATABASE ‹db1› CASCADE
-        StatementTag: DROP DATABASE
-        TargetMetadata:
-          SourceElementID: 9
-          SubWorkID: 1
       TableID: 112
     *scop.DrainDescriptorName
       Namespace:
@@ -632,47 +484,15 @@ PreCommitPhase stage 1 of 1 with 91 MutationType ops
         SchemaID: 106
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 1
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP DATABASE ‹db1› CASCADE
-        StatementTag: DROP DATABASE
-        TargetMetadata:
-          SourceElementID: 10
-          SubWorkID: 1
       TableID: 113
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 2
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP DATABASE ‹db1› CASCADE
-        StatementTag: DROP DATABASE
-        TargetMetadata:
-          SourceElementID: 10
-          SubWorkID: 1
       TableID: 113
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 4294967295
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP DATABASE ‹db1› CASCADE
-        StatementTag: DROP DATABASE
-        TargetMetadata:
-          SourceElementID: 10
-          SubWorkID: 1
       TableID: 113
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 4294967294
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP DATABASE ‹db1› CASCADE
-        StatementTag: DROP DATABASE
-        TargetMetadata:
-          SourceElementID: 10
-          SubWorkID: 1
       TableID: 113
     *scop.DrainDescriptorName
       Namespace:
@@ -682,47 +502,15 @@ PreCommitPhase stage 1 of 1 with 91 MutationType ops
         SchemaID: 106
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 1
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP DATABASE ‹db1› CASCADE
-        StatementTag: DROP DATABASE
-        TargetMetadata:
-          SourceElementID: 10
-          SubWorkID: 1
       TableID: 114
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 2
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP DATABASE ‹db1› CASCADE
-        StatementTag: DROP DATABASE
-        TargetMetadata:
-          SourceElementID: 10
-          SubWorkID: 1
       TableID: 114
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 4294967295
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP DATABASE ‹db1› CASCADE
-        StatementTag: DROP DATABASE
-        TargetMetadata:
-          SourceElementID: 10
-          SubWorkID: 1
       TableID: 114
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 4294967294
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP DATABASE ‹db1› CASCADE
-        StatementTag: DROP DATABASE
-        TargetMetadata:
-          SourceElementID: 10
-          SubWorkID: 1
       TableID: 114
     *scop.DrainDescriptorName
       Namespace:
@@ -744,80 +532,24 @@ PreCommitPhase stage 1 of 1 with 91 MutationType ops
         SchemaID: 106
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 1
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP DATABASE ‹db1› CASCADE
-        StatementTag: DROP DATABASE
-        TargetMetadata:
-          SourceElementID: 12
-          SubWorkID: 1
       TableID: 117
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 2
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP DATABASE ‹db1› CASCADE
-        StatementTag: DROP DATABASE
-        TargetMetadata:
-          SourceElementID: 12
-          SubWorkID: 1
       TableID: 117
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 3
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP DATABASE ‹db1› CASCADE
-        StatementTag: DROP DATABASE
-        TargetMetadata:
-          SourceElementID: 12
-          SubWorkID: 1
       TableID: 117
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 4294967295
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP DATABASE ‹db1› CASCADE
-        StatementTag: DROP DATABASE
-        TargetMetadata:
-          SourceElementID: 12
-          SubWorkID: 1
       TableID: 117
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 4294967294
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP DATABASE ‹db1› CASCADE
-        StatementTag: DROP DATABASE
-        TargetMetadata:
-          SourceElementID: 12
-          SubWorkID: 1
       TableID: 117
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 3
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP DATABASE ‹db1› CASCADE
-        StatementTag: DROP DATABASE
-        TargetMetadata:
-          SourceElementID: 3
-          SubWorkID: 1
       TableID: 110
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 3
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP DATABASE ‹db1› CASCADE
-        StatementTag: DROP DATABASE
-        TargetMetadata:
-          SourceElementID: 6
-          SubWorkID: 1
       TableID: 109
     *scop.SetJobStateOnDescriptor
       DescriptorID: 104
@@ -881,13 +613,13 @@ PreCommitPhase stage 1 of 1 with 91 MutationType ops
       - 117
       JobID: 1
       NonCancelable: true
-      RunningStatus: PostCommitNonRevertiblePhase stage 1 of 1 with 31 MutationType ops
+      RunningStatus: PostCommitNonRevertiblePhase stage 1 of 1 with 17 MutationType ops
         pending
       Statements:
       - statement: DROP DATABASE db1 CASCADE
         redactedstatement: DROP DATABASE ‹db1› CASCADE
         statementtag: DROP DATABASE
-PostCommitNonRevertiblePhase stage 1 of 1 with 46 MutationType ops
+PostCommitNonRevertiblePhase stage 1 of 1 with 32 MutationType ops
   transitions:
     [[Database:{DescID: 104}, ABSENT], DROPPED] -> ABSENT
     [[DatabaseData:{DescID: 104}, ABSENT], PUBLIC] -> ABSENT
@@ -911,284 +643,48 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 46 MutationType ops
     [[AliasType:{DescID: 116, ReferencedTypeIDs: [115 116]}, ABSENT], DROPPED] -> ABSENT
     [[View:{DescID: 117}, ABSENT], DROPPED] -> ABSENT
   ops:
-    *scop.LogEvent
-      Element:
-        Database:
-          databaseId: 104
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP DATABASE ‹db1› CASCADE
-        StatementTag: DROP DATABASE
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
-      TargetStatus: 1
     *scop.DeleteDescriptor
       DescriptorID: 104
     *scop.CreateGCJobForDatabase
       DatabaseID: 104
       StatementForDropJob:
         Statement: DROP DATABASE db1 CASCADE
-    *scop.LogEvent
-      Element:
-        Schema:
-          isPublic: true
-          schemaId: 105
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP DATABASE ‹db1› CASCADE
-        StatementTag: DROP DATABASE
-        TargetMetadata:
-          SourceElementID: 2
-          SubWorkID: 1
-      TargetStatus: 1
     *scop.DeleteDescriptor
       DescriptorID: 105
-    *scop.LogEvent
-      Element:
-        Schema:
-          schemaId: 106
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP DATABASE ‹db1› CASCADE
-        StatementTag: DROP DATABASE
-        TargetMetadata:
-          SourceElementID: 2
-          SubWorkID: 1
-      TargetStatus: 1
     *scop.DeleteDescriptor
       DescriptorID: 106
-    *scop.LogEvent
-      Element:
-        Sequence:
-          sequenceId: 107
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP DATABASE ‹db1› CASCADE
-        StatementTag: DROP DATABASE
-        TargetMetadata:
-          SourceElementID: 3
-          SubWorkID: 1
-      TargetStatus: 1
     *scop.CreateGCJobForTable
       DatabaseID: 104
       StatementForDropJob:
         Statement: DROP DATABASE db1 CASCADE
       TableID: 107
-    *scop.LogEvent
-      Element:
-        Table:
-          tableId: 110
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP DATABASE ‹db1› CASCADE
-        StatementTag: DROP DATABASE
-        TargetMetadata:
-          SourceElementID: 3
-          SubWorkID: 1
-      TargetStatus: 1
     *scop.CreateGCJobForTable
       DatabaseID: 104
       StatementForDropJob:
         Statement: DROP DATABASE db1 CASCADE
       TableID: 110
-    *scop.LogEvent
-      Element:
-        Sequence:
-          sequenceId: 108
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP DATABASE ‹db1› CASCADE
-        StatementTag: DROP DATABASE
-        TargetMetadata:
-          SourceElementID: 6
-          SubWorkID: 1
-      TargetStatus: 1
     *scop.CreateGCJobForTable
       DatabaseID: 104
       StatementForDropJob:
         Statement: DROP DATABASE db1 CASCADE
       TableID: 108
-    *scop.LogEvent
-      Element:
-        Table:
-          tableId: 109
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP DATABASE ‹db1› CASCADE
-        StatementTag: DROP DATABASE
-        TargetMetadata:
-          SourceElementID: 6
-          SubWorkID: 1
-      TargetStatus: 1
     *scop.CreateGCJobForTable
       DatabaseID: 104
       StatementForDropJob:
         Statement: DROP DATABASE db1 CASCADE
       TableID: 109
-    *scop.LogEvent
-      Element:
-        View:
-          forwardReferences:
-          - columnIds:
-            - 2
-            toId: 109
-          usesRelationIds:
-          - 109
-          viewId: 111
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP DATABASE ‹db1› CASCADE
-        StatementTag: DROP DATABASE
-        TargetMetadata:
-          SourceElementID: 8
-          SubWorkID: 1
-      TargetStatus: 1
     *scop.DeleteDescriptor
       DescriptorID: 111
-    *scop.LogEvent
-      Element:
-        View:
-          forwardReferences:
-          - columnIds:
-            - 1
-            toId: 111
-          usesRelationIds:
-          - 111
-          viewId: 112
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP DATABASE ‹db1› CASCADE
-        StatementTag: DROP DATABASE
-        TargetMetadata:
-          SourceElementID: 9
-          SubWorkID: 1
-      TargetStatus: 1
     *scop.DeleteDescriptor
       DescriptorID: 112
-    *scop.LogEvent
-      Element:
-        View:
-          forwardReferences:
-          - columnIds:
-            - 1
-            toId: 111
-          - columnIds:
-            - 1
-            - 2
-            toId: 112
-          usesRelationIds:
-          - 111
-          - 112
-          viewId: 113
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP DATABASE ‹db1› CASCADE
-        StatementTag: DROP DATABASE
-        TargetMetadata:
-          SourceElementID: 10
-          SubWorkID: 1
-      TargetStatus: 1
     *scop.DeleteDescriptor
       DescriptorID: 113
-    *scop.LogEvent
-      Element:
-        View:
-          forwardReferences:
-          - columnIds:
-            - 1
-            - 2
-            toId: 112
-          usesRelationIds:
-          - 112
-          viewId: 114
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP DATABASE ‹db1› CASCADE
-        StatementTag: DROP DATABASE
-        TargetMetadata:
-          SourceElementID: 10
-          SubWorkID: 1
-      TargetStatus: 1
     *scop.DeleteDescriptor
       DescriptorID: 114
-    *scop.LogEvent
-      Element:
-        EnumType:
-          arrayTypeId: 116
-          typeId: 115
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP DATABASE ‹db1› CASCADE
-        StatementTag: DROP DATABASE
-        TargetMetadata:
-          SourceElementID: 6
-          SubWorkID: 1
-      TargetStatus: 1
     *scop.DeleteDescriptor
       DescriptorID: 115
-    *scop.LogEvent
-      Element:
-        AliasType:
-          closedTypeIds:
-          - 115
-          - 116
-          type:
-            arrayContents:
-              family: EnumFamily
-              oid: 100115
-              udtMetadata:
-                arrayTypeOid: 100116
-            arrayElemType: EnumFamily
-            family: ArrayFamily
-            oid: 100116
-          typeId: 116
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP DATABASE ‹db1› CASCADE
-        StatementTag: DROP DATABASE
-        TargetMetadata:
-          SourceElementID: 14
-          SubWorkID: 1
-      TargetStatus: 1
     *scop.DeleteDescriptor
       DescriptorID: 116
-    *scop.LogEvent
-      Element:
-        View:
-          forwardReferences:
-          - columnIds:
-            - 1
-            - 2
-            toId: 114
-          usesRelationIds:
-          - 114
-          usesTypeIds:
-          - 115
-          - 116
-          viewId: 117
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP DATABASE ‹db1› CASCADE
-        StatementTag: DROP DATABASE
-        TargetMetadata:
-          SourceElementID: 12
-          SubWorkID: 1
-      TargetStatus: 1
     *scop.DeleteDescriptor
       DescriptorID: 117
     *scop.CreateGCJobForIndex

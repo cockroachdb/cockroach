@@ -5,7 +5,7 @@ CREATE INDEX idx ON t(j);
 /* test */
 EXPLAIN (ddl) DROP INDEX idx CASCADE;
 ----
-Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹t›@‹idx› CASCADE; 
+Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹t›@‹idx› CASCADE;
  ├── StatementPhase
  │    └── Stage 1 of 1 in StatementPhase
  │         ├── 1 element transitioning toward ABSENT
@@ -25,8 +25,7 @@ Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹t›@‹idx›
       │    ├── 2 elements transitioning toward ABSENT
       │    │    ├── VALIDATED → DELETE_ONLY SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
       │    │    └── PUBLIC    → ABSENT      IndexName:{DescID: 104, Name: idx, IndexID: 2}
-      │    └── 5 Mutation operations
-      │         ├── LogEvent {"TargetStatus":1}
+      │    └── 4 Mutation operations
       │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":2,"TableID":104}
       │         ├── SetIndexName {"IndexID":2,"Name":"crdb_internal_in...","TableID":104}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":104}

@@ -262,7 +262,7 @@ ap-southeast-2  23
 query TT
 SELECT start_key, end_key FROM [SHOW RANGE FROM TABLE regional_by_row_table FOR ROW ('ap-southeast-2', 1)]
 ----
-<before:/Table/53>  <after:/Table/110/5>
+<before:/Table/57>  <after:/Table/110/5>
 
 query TIIII
 SELECT crdb_region, pk, pk2, a, b FROM regional_by_row_table
@@ -405,7 +405,7 @@ query TTTI colnames,rowsort
 SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM INDEX regional_by_row_table@primary WITH DETAILS]
 ----
 start_key           end_key               replicas  lease_holder
-<before:/Table/53>  …/"\x80"/0            {1}       1
+<before:/Table/57>  …/"\x80"/0            {1}       1
 …/"\x80"/0          …/"\xc0"/0            {4}       4
 …/"\xc0"/0          <after:/Table/110/5>  {7}       7
 

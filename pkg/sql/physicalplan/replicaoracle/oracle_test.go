@@ -14,14 +14,12 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -50,8 +48,8 @@ func TestClosest(t *testing.T) {
 			NodeID:    1,
 			Locality:  nd2.Locality, // pretend node 2 is closest.
 		})
-		o.(*closestOracle).latencyFunc = func(s string) (time.Duration, bool) {
-			if strings.HasSuffix(s, "2") {
+		o.(*closestOracle).latencyFunc = func(id roachpb.NodeID) (time.Duration, bool) {
+			if id == 2 {
 				return time.Nanosecond, validLatencyFunc
 			}
 			return time.Millisecond, validLatencyFunc
@@ -85,12 +83,9 @@ func TestClosest(t *testing.T) {
 
 func makeGossip(t *testing.T, stopper *stop.Stopper) (*gossip.Gossip, *hlc.Clock) {
 	clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
-	ctx := context.Background()
-	rpcContext := rpc.NewInsecureTestingContext(ctx, clock, stopper)
-	server := rpc.NewServer(rpcContext)
 
 	const nodeID = 1
-	g := gossip.NewTest(nodeID, rpcContext, server, stopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef())
+	g := gossip.NewTest(nodeID, stopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef())
 	if err := g.SetNodeDescriptor(newNodeDesc(nodeID)); err != nil {
 		t.Fatal(err)
 	}

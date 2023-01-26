@@ -87,6 +87,9 @@ func runExecBuildLogicTest(t *testing.T, file string) {
 	skip.UnderDeadlock(t, "times out and/or hangs")
 	serverArgs := logictest.TestServerArgs{
 		DisableWorkmemRandomization: true,
+		// Disable the direct scans in order to keep the output of EXPLAIN (VEC)
+		// deterministic.
+		DisableDirectColumnarScans: true,
 	}
 	logictest.RunLogicTest(t, serverArgs, configIdx, filepath.Join(execBuildLogicTestDir, file))
 }
@@ -1447,6 +1450,13 @@ func TestTenantLogic_reset(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "reset")
+}
+
+func TestTenantLogic_retry(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "retry")
 }
 
 func TestTenantLogic_returning(

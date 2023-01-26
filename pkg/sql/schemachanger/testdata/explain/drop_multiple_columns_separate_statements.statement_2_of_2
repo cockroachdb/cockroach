@@ -5,15 +5,14 @@ CREATE TABLE t (i INT PRIMARY KEY, j INT, k INT DEFAULT 32 ON UPDATE 42, INDEX((
 ALTER TABLE t DROP COLUMN j CASCADE;
 EXPLAIN (ddl) ALTER TABLE t DROP COLUMN k CASCADE;
 ----
-Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COLUMN ‹j› CASCADE; ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COLUMN ‹k› CASCADE; 
+Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COLUMN ‹k› CASCADE; following ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COLUMN ‹j› CASCADE;
  ├── StatementPhase
  │    └── Stage 1 of 1 in StatementPhase
  │         ├── 2 elements transitioning toward ABSENT
  │         │    ├── PUBLIC → WRITE_ONLY Column:{DescID: 104, ColumnID: 3}
  │         │    └── PUBLIC → ABSENT     ColumnName:{DescID: 104, Name: k, ColumnID: 3}
- │         └── 3 Mutation operations
+ │         └── 2 Mutation operations
  │              ├── MakePublicColumnWriteOnly {"ColumnID":3,"TableID":104}
- │              ├── LogEvent {"TargetStatus":1}
  │              └── SetColumnName {"ColumnID":3,"Name":"crdb_internal_co...","TableID":104}
  ├── PreCommitPhase
  │    └── Stage 1 of 1 in PreCommitPhase
@@ -89,7 +88,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COL
       │    │    ├── PUBLIC     → ABSENT                IndexName:{DescID: 104, Name: t_expr_k_idx, IndexID: 2}
       │    │    ├── PUBLIC     → ABSENT                IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 3}
       │    │    └── PUBLIC     → ABSENT                IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 4}
-      │    └── 14 Mutation operations
+      │    └── 13 Mutation operations
       │         ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":3,"TableID":104}
       │         ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":2,"TableID":104}
       │         ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":4,"TableID":104}
@@ -98,7 +97,6 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COL
       │         ├── RemoveColumnFromIndex {"ColumnID":3,"IndexID":3,"Kind":2,"TableID":104}
       │         ├── SetIndexName {"IndexID":3,"Name":"t_pkey","TableID":104}
       │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":4,"TableID":104}
-      │         ├── LogEvent {"TargetStatus":1}
       │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":2,"TableID":104}
       │         ├── SetIndexName {"IndexID":2,"Name":"crdb_internal_in...","TableID":104}
       │         ├── MakeValidatedPrimaryIndexPublic {"IndexID":3,"TableID":104}

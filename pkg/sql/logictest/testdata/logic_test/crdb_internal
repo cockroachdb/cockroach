@@ -325,15 +325,15 @@ SELECT * FROM crdb_internal.leases WHERE node_id < 0
 ----
 node_id  table_id  name  parent_id  expiration  deleted
 
-query ITTTTTIIITRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRBBTTTTT colnames
+query ITTTTTIIITRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRBBTTTTT colnames
 SELECT * FROM crdb_internal.node_statement_statistics WHERE node_id < 0
 ----
-node_id  application_name  flags  statement_id  key  anonymized  count  first_attempt_count  max_retries  last_error  rows_avg  rows_var  idle_lat_avg  idle_lat_var  parse_lat_avg  parse_lat_var  plan_lat_avg  plan_lat_var  run_lat_avg  run_lat_var  service_lat_avg  service_lat_var  overhead_lat_avg  overhead_lat_var  bytes_read_avg  bytes_read_var  rows_read_avg  rows_read_var  rows_written_avg  rows_written_var  network_bytes_avg  network_bytes_var  network_msgs_avg  network_msgs_var  max_mem_usage_avg  max_mem_usage_var  max_disk_usage_avg  max_disk_usage_var  contention_time_avg  contention_time_var  implicit_txn  full_scan  sample_plan  database_name  exec_node_ids  txn_fingerprint_id index_recommendations
+node_id  application_name  flags  statement_id  key  anonymized  count  first_attempt_count  max_retries  last_error  rows_avg  rows_var  idle_lat_avg  idle_lat_var  parse_lat_avg  parse_lat_var  plan_lat_avg  plan_lat_var  run_lat_avg  run_lat_var  service_lat_avg  service_lat_var  overhead_lat_avg  overhead_lat_var  bytes_read_avg  bytes_read_var  rows_read_avg  rows_read_var  rows_written_avg  rows_written_var  network_bytes_avg  network_bytes_var  network_msgs_avg  network_msgs_var  max_mem_usage_avg  max_mem_usage_var  max_disk_usage_avg  max_disk_usage_var  contention_time_avg  contention_time_var  cpu_nanos_avg  cpu_nanos_var  implicit_txn  full_scan  sample_plan  database_name  exec_node_ids  txn_fingerprint_id  index_recommendations
 
-query ITTTIIRRRRRRRRRRRRRRRRRRRR colnames
+query ITTTIIRRRRRRRRRRRRRRRRRRRRRR colnames
 SELECT * FROM crdb_internal.node_transaction_statistics WHERE node_id < 0
 ----
-node_id  application_name  key  statement_ids  count  max_retries  service_lat_avg  service_lat_var  retry_lat_avg  retry_lat_var  commit_lat_avg  commit_lat_var  idle_lat_avg  idle_lat_var  rows_read_avg  rows_read_var  network_bytes_avg  network_bytes_var  network_msgs_avg  network_msgs_var  max_mem_usage_avg  max_mem_usage_var  max_disk_usage_avg  max_disk_usage_var  contention_time_avg  contention_time_var
+node_id  application_name  key  statement_ids  count  max_retries  service_lat_avg  service_lat_var  retry_lat_avg  retry_lat_var  commit_lat_avg  commit_lat_var  idle_lat_avg  idle_lat_var  rows_read_avg  rows_read_var  network_bytes_avg  network_bytes_var  network_msgs_avg  network_msgs_var  max_mem_usage_avg  max_mem_usage_var  max_disk_usage_avg  max_disk_usage_var  contention_time_avg  contention_time_var  cpu_nanos_avg  cpu_nanos_var
 
 query IITTTTTTT colnames
 SELECT * FROM crdb_internal.session_trace WHERE span_idx < 0
@@ -497,6 +497,7 @@ SELECT zone_id, target FROM crdb_internal.zones ORDER BY 1
 25   TABLE system.public.replication_constraint_stats
 27   TABLE system.public.replication_stats
 45   TABLE system.public.tenant_usage
+57   TABLE system.public.span_stats_tenant_boundaries
 106  DATABASE testdb
 108  TABLE testdb.public.foo
 111  TABLE test.schema.bar
@@ -1156,9 +1157,14 @@ statement ok
 SELECT crdb_internal.probe_ranges(INTERVAL '1000ms', 'write')
 
 # Regression test for not handling NULL values correctly by an internal builtin
-# (#82056).
+# (#82056 and #95671).
 query I
 SELECT crdb_internal.num_inverted_index_entries(NULL::STRING, 0)
+----
+0
+
+query I
+SELECT crdb_internal.num_inverted_index_entries(NULL::TSVECTOR, NULL::INT8)
 ----
 0
 

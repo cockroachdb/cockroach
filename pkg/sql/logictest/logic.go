@@ -324,6 +324,7 @@ import (
 //            Cannot be combined with noticetrace.
 //      - noticetrace: runs the query and compares only the notices that
 //						appear. Cannot be combined with kvtrace.
+//      - nodeidx=N: runs the query on node N of the cluster.
 //
 //    The label is optional. If specified, the test runner stores a hash
 //    of the results of the query under the given label. If the label is
@@ -564,10 +565,6 @@ var (
 	// writes not holding appropriate latches for range key stats update.
 	useMVCCRangeTombstonesForPointDeletes = util.ConstantWithMetamorphicTestBool(
 		"logictest-use-mvcc-range-tombstones-for-point-deletes", false)
-
-	// smallEngineBlocks configures Pebble with a block size of 1 byte, to provoke
-	// bugs in time-bound iterators.
-	smallEngineBlocks = util.ConstantWithMetamorphicTestBool("logictest-small-engine-blocks", false)
 
 	// BackupRestoreProbability is the environment variable for `3node-backup` config.
 	backupRestoreProbability = envutil.EnvOrDefaultFloat64("COCKROACH_LOGIC_TEST_BACKUP_RESTORE_PROBABILITY", 0.0)
@@ -1091,7 +1088,7 @@ func (t *logicTest) substituteVars(line string) string {
 		if replace, ok := t.varMap[varName]; ok {
 			return replace
 		}
-		return line
+		return varName
 	})
 }
 
@@ -1328,7 +1325,6 @@ func (t *logicTest) newCluster(
 	shouldUseMVCCRangeTombstonesForPointDeletes := useMVCCRangeTombstonesForPointDeletes && !serverArgs.DisableUseMVCCRangeTombstonesForPointDeletes
 	ignoreMVCCRangeTombstoneErrors := supportsMVCCRangeTombstones &&
 		(globalMVCCRangeTombstone || shouldUseMVCCRangeTombstonesForPointDeletes)
-	useSmallEngineBlocks := smallEngineBlocks && !serverArgs.DisableSmallEngineBlocks
 
 	params := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
@@ -1347,7 +1343,6 @@ func (t *logicTest) newCluster(
 						UseRangeTombstonesForPointDeletes: supportsMVCCRangeTombstones &&
 							shouldUseMVCCRangeTombstonesForPointDeletes,
 					},
-					SmallEngineBlocks: useSmallEngineBlocks,
 				},
 				SQLEvalContext: &eval.TestingKnobs{
 					AssertBinaryExprReturnTypes:     true,
@@ -1691,6 +1686,14 @@ func (t *logicTest) newCluster(
 				t.Fatal(err)
 			}
 			t.outf("setting distsql_workmem='%dB';", randomWorkmem)
+		}
+
+		if serverArgs.DisableDirectColumnarScans {
+			if _, err := conn.Exec(
+				"SET CLUSTER SETTING sql.distsql.direct_columnar_scans.enabled = false",
+			); err != nil {
+				t.Fatal(err)
+			}
 		}
 	}
 
@@ -3123,12 +3126,7 @@ func (t *logicTest) verifyError(
 ) (bool, error) {
 	if expectErr == "" && expectErrCode == "" && err != nil {
 		t.maybeSkipOnRetry(err)
-		cont := t.unexpectedError(sql, pos, err)
-		if cont {
-			// unexpectedError() already reported via t.Errorf. no need for more.
-			err = nil
-		}
-		return cont, err
+		return t.unexpectedError(sql, pos, err)
 	}
 	if expectNotice != "" {
 		foundNotice := strings.Join(t.noticeBuffer, "\n")
@@ -3215,7 +3213,7 @@ func formatErr(err error) string {
 // when -allow-prepare-fail is specified. The argument "sql" is "" to indicate the
 // work is done on behalf of a statement, which always fail upon an
 // unexpected error.
-func (t *logicTest) unexpectedError(sql string, pos string, err error) bool {
+func (t *logicTest) unexpectedError(sql string, pos string, err error) (bool, error) {
 	if *allowPrepareFail && sql != "" {
 		// This is a query and -allow-prepare-fail is set.  Try to prepare
 		// the query. If prepare fails, this means we (probably) do not
@@ -3227,14 +3225,17 @@ func (t *logicTest) unexpectedError(sql string, pos string, err error) bool {
 				t.outf("\t-- fails prepare: %s", formatErr(err))
 			}
 			t.signalIgnoredError(err, pos, sql)
-			return true
+			return true, nil
 		}
 		if err := stmt.Close(); err != nil {
 			t.Errorf("%s: %s\nerror when closing prepared statement: %s", sql, pos, formatErr(err))
 		}
 	}
-	t.Errorf("%s: %s\nexpected success, but found\n%s", pos, sql, formatErr(err))
-	return false
+	// N.B. We return an error instead of calling t.Errorf because this query
+	// could be asking for a retry. We still use t.Errorf above because
+	// stmt.Close error is probably a sign of bigger issues and not
+	// something retryable.
+	return false, fmt.Errorf("%s: %s\nexpected success, but found\n%s", pos, sql, formatErr(err))
 }
 
 func (t *logicTest) execStatement(stmt logicStatement) (bool, error) {
@@ -4056,12 +4057,11 @@ type TestServerArgs struct {
 	// If set, then we will disable the metamorphic randomization of
 	// useMVCCRangeTombstonesForPointDeletes variable.
 	DisableUseMVCCRangeTombstonesForPointDeletes bool
-	// If set, then we will disable the metamorphic randomization of
-	// smallEngineBlocks variable.
-	DisableSmallEngineBlocks bool
 	// If positive, it provides a lower bound for the default-batch-bytes-limit
 	// metamorphic constant.
 	BatchBytesLimitLowerBound int64
+	// If set, sql.distsql.direct_columnar_scans.enabled is set to false.
+	DisableDirectColumnarScans bool
 }
 
 // RunLogicTests runs logic tests for all files matching the given glob.

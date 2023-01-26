@@ -1209,7 +1209,7 @@ func NewStore(
 		s.allocator = allocatorimpl.MakeAllocator(
 			cfg.Settings,
 			storePoolIsDeterministic,
-			func(string) (time.Duration, bool) {
+			func(id roachpb.NodeID) (time.Duration, bool) {
 				return 0, false
 			}, cfg.TestingKnobs.AllocatorKnobs,
 		)
@@ -2791,7 +2791,7 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 		averageReadsPerSecond += loadStats.ReadKeysPerSecond
 		averageReadBytesPerSecond += loadStats.ReadBytesPerSecond
 		averageWriteBytesPerSecond += loadStats.WriteBytesPerSecond
-		averageCPUNanosPerSecond += loadStats.CPUNanosPerSecond
+		averageCPUNanosPerSecond += loadStats.RaftCPUNanosPerSecond + loadStats.RequestCPUNanosPerSecond
 
 		locks += metrics.LockTableMetrics.Locks
 		totalLockHoldDurationNanos += metrics.LockTableMetrics.TotalLockHoldDurationNanos
@@ -3136,12 +3136,14 @@ func (s *Store) ReplicateQueueDryRun(
 func (s *Store) AllocatorCheckRange(
 	ctx context.Context,
 	desc *roachpb.RangeDescriptor,
+	collectTraces bool,
 	overrideStorePool storepool.AllocatorStorePool,
 ) (allocatorimpl.AllocatorAction, roachpb.ReplicationTarget, tracingpb.Recording, error) {
-	ctx, collectAndFinish := tracing.ContextWithRecordingSpan(ctx,
-		s.cfg.AmbientCtx.Tracer, "allocator check range",
-	)
-	defer collectAndFinish()
+	var spanOptions []tracing.SpanOption
+	if collectTraces {
+		spanOptions = append(spanOptions, tracing.WithRecording(tracingpb.RecordingStructured))
+	}
+	ctx, sp := tracing.EnsureChildSpan(ctx, s.cfg.AmbientCtx.Tracer, "allocator check range", spanOptions...)
 
 	confReader, err := s.GetConfReader(ctx)
 	if err == nil {
@@ -3149,13 +3151,13 @@ func (s *Store) AllocatorCheckRange(
 	}
 	if err != nil {
 		log.Eventf(ctx, "span configs unavailable: %s", err)
-		return allocatorimpl.AllocatorNoop, roachpb.ReplicationTarget{}, collectAndFinish(), err
+		return allocatorimpl.AllocatorNoop, roachpb.ReplicationTarget{}, sp.FinishAndGetConfiguredRecording(), err
 	}
 
 	conf, err := confReader.GetSpanConfigForKey(ctx, desc.StartKey)
 	if err != nil {
 		log.Eventf(ctx, "error retrieving span config for range %s: %s", desc, err)
-		return allocatorimpl.AllocatorNoop, roachpb.ReplicationTarget{}, collectAndFinish(), err
+		return allocatorimpl.AllocatorNoop, roachpb.ReplicationTarget{}, sp.FinishAndGetConfiguredRecording(), err
 	}
 
 	// If a store pool was provided, use that, otherwise use the store's
@@ -3171,14 +3173,14 @@ func (s *Store) AllocatorCheckRange(
 
 	// In the case that the action does not require a target, return immediately.
 	if !(action.Add() || action.Replace()) {
-		return action, roachpb.ReplicationTarget{}, collectAndFinish(), err
+		return action, roachpb.ReplicationTarget{}, sp.FinishAndGetConfiguredRecording(), err
 	}
 
 	liveVoters, liveNonVoters, isReplacement, nothingToDo, err :=
 		allocatorimpl.FilterReplicasForAction(storePool, desc, action)
 
 	if nothingToDo || err != nil {
-		return action, roachpb.ReplicationTarget{}, collectAndFinish(), err
+		return action, roachpb.ReplicationTarget{}, sp.FinishAndGetConfiguredRecording(), err
 	}
 
 	target, _, err := s.allocator.AllocateTarget(ctx, storePool, conf,
@@ -3206,7 +3208,7 @@ func (s *Store) AllocatorCheckRange(
 		}
 	}
 
-	return action, target, collectAndFinish(), err
+	return action, target, sp.FinishAndGetConfiguredRecording(), err
 }
 
 // Enqueue runs the given replica through the requested queue. If `async` is

@@ -2629,6 +2629,14 @@ func (s *adminServer) getStatementBundle(ctx context.Context, id int64, w http.R
 	_, _ = io.Copy(w, &bundle)
 }
 
+// DecommissionPreCheck runs checks and returns the DecommissionPreCheckResponse
+// for the given nodes.
+func (s *systemAdminServer) DecommissionPreCheck(
+	ctx context.Context, req *serverpb.DecommissionPreCheckRequest,
+) (*serverpb.DecommissionPreCheckResponse, error) {
+	return nil, grpcstatus.Errorf(codes.Unimplemented, "method DecommissionPreCheck not implemented")
+}
+
 // DecommissionStatus returns the DecommissionStatus for all or the given nodes.
 func (s *systemAdminServer) DecommissionStatus(
 	ctx context.Context, req *serverpb.DecommissionStatusRequest,
@@ -3251,19 +3259,38 @@ func (s *systemAdminServer) RecoveryCollectLocalReplicaInfo(
 func (s *systemAdminServer) RecoveryStagePlan(
 	ctx context.Context, request *serverpb.RecoveryStagePlanRequest,
 ) (*serverpb.RecoveryStagePlanResponse, error) {
-	return nil, errors.AssertionFailedf("To be implemented by #93044")
+	ctx = s.server.AnnotateCtx(ctx)
+	_, err := s.requireAdminUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	log.Ops.Info(ctx, "staging recovery plan")
+	return s.server.recoveryServer.StagePlan(ctx, request)
 }
 
 func (s *systemAdminServer) RecoveryNodeStatus(
 	ctx context.Context, request *serverpb.RecoveryNodeStatusRequest,
 ) (*serverpb.RecoveryNodeStatusResponse, error) {
-	return nil, errors.AssertionFailedf("To be implemented by #93043")
+	ctx = s.server.AnnotateCtx(ctx)
+	_, err := s.requireAdminUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return s.server.recoveryServer.NodeStatus(ctx, request)
 }
 
 func (s *systemAdminServer) RecoveryVerify(
 	ctx context.Context, request *serverpb.RecoveryVerifyRequest,
 ) (*serverpb.RecoveryVerifyResponse, error) {
-	return nil, errors.AssertionFailedf("To be implemented by #93043")
+	ctx = s.server.AnnotateCtx(ctx)
+	_, err := s.requireAdminUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return s.server.recoveryServer.Verify(ctx, request)
 }
 
 // sqlQuery allows you to incrementally build a SQL query that uses

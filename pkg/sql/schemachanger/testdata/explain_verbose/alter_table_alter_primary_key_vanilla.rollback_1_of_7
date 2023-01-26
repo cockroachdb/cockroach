@@ -5,7 +5,7 @@ CREATE TABLE t (i INT PRIMARY KEY, j INT NOT NULL);
 ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j);
 EXPLAIN (ddl, verbose) rollback at post-commit stage 1 of 7;
 ----
-• Schema change plan for rolling back ALTER TABLE ‹defaultdb›.public.‹t› ALTER PRIMARY KEY USING COLUMNS (‹j›); 
+• Schema change plan for rolling back ALTER TABLE ‹defaultdb›.public.‹t› ALTER PRIMARY KEY USING COLUMNS (‹j›);
 │
 └── • PostCommitNonRevertiblePhase
     │
@@ -144,14 +144,6 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 1 of 7;
             │     TableID: 104
             │
             ├── • MakeIndexAbsent
-            │     EventBase:
-            │       Authorization:
-            │         UserName: root
-            │       Statement: ALTER TABLE ‹defaultdb›.public.‹t› ALTER PRIMARY KEY USING COLUMNS (‹j›)
-            │       StatementTag: ALTER TABLE
-            │       TargetMetadata:
-            │         SourceElementID: 1
-            │         SubWorkID: 1
             │     IndexID: 2
             │     TableID: 104
             │

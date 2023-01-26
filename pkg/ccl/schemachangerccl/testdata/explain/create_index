@@ -7,7 +7,7 @@ EXPLAIN (ddl) CREATE INDEX id1
   STORING (money)
   PARTITION BY LIST (id) (PARTITION p1 VALUES IN (1));
 ----
-Schema change plan for CREATE INDEX ‹id1› ON ‹defaultdb›.‹public›.‹t1› (‹id›, ‹name›) STORING (‹money›) PARTITION BY LIST (‹id›) (PARTITION ‹p1› VALUES IN (‹1›)); 
+Schema change plan for CREATE INDEX ‹id1› ON ‹defaultdb›.‹public›.‹t1› (‹id›, ‹name›) STORING (‹money›) PARTITION BY LIST (‹id›) (PARTITION ‹p1› VALUES IN (‹1›));
  ├── StatementPhase
  │    └── Stage 1 of 1 in StatementPhase
  │         ├── 7 elements transitioning toward PUBLIC
@@ -95,10 +95,9 @@ Schema change plan for CREATE INDEX ‹id1› ON ‹defaultdb›.‹public›.�
       │    │    ├── PUBLIC     → TRANSIENT_ABSENT      IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}
       │    │    ├── PUBLIC     → TRANSIENT_ABSENT      IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}
       │    │    └── PUBLIC     → TRANSIENT_ABSENT      IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 3}
-      │    └── 6 Mutation operations
-      │         ├── RefreshStats {"TableID":104}
-      │         ├── LogEvent {"TargetStatus":2}
+      │    └── 5 Mutation operations
       │         ├── MakeValidatedSecondaryIndexPublic {"IndexID":2,"TableID":104}
+      │         ├── RefreshStats {"TableID":104}
       │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":3,"TableID":104}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
       │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}

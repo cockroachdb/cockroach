@@ -5,7 +5,7 @@ CREATE TABLE t (a INT NOT NULL);
 ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (a);
 EXPLAIN (ddl, verbose) rollback at post-commit stage 10 of 15;
 ----
-• Schema change plan for rolling back ALTER TABLE ‹defaultdb›.public.‹t› ALTER PRIMARY KEY USING COLUMNS (‹a›); 
+• Schema change plan for rolling back ALTER TABLE ‹defaultdb›.public.‹t› ALTER PRIMARY KEY USING COLUMNS (‹a›);
 │
 └── • PostCommitNonRevertiblePhase
     │
@@ -167,40 +167,16 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 10 of 15;
     │       │
     │       ├── • MakeWriteOnlyColumnPublic
     │       │     ColumnID: 2
-    │       │     EventBase:
-    │       │       Authorization:
-    │       │         UserName: root
-    │       │       Statement: ALTER TABLE ‹defaultdb›.public.‹t› ALTER PRIMARY KEY USING COLUMNS (‹a›)
-    │       │       StatementTag: ALTER TABLE
-    │       │       TargetMetadata:
-    │       │         SourceElementID: 1
-    │       │         SubWorkID: 1
     │       │     TableID: 104
     │       │
     │       ├── • RefreshStats
     │       │     TableID: 104
     │       │
     │       ├── • MakeValidatedPrimaryIndexPublic
-    │       │     EventBase:
-    │       │       Authorization:
-    │       │         UserName: root
-    │       │       Statement: ALTER TABLE ‹defaultdb›.public.‹t› ALTER PRIMARY KEY USING COLUMNS (‹a›)
-    │       │       StatementTag: ALTER TABLE
-    │       │       TargetMetadata:
-    │       │         SourceElementID: 1
-    │       │         SubWorkID: 1
     │       │     IndexID: 1
     │       │     TableID: 104
     │       │
     │       ├── • MakeIndexAbsent
-    │       │     EventBase:
-    │       │       Authorization:
-    │       │         UserName: root
-    │       │       Statement: ALTER TABLE ‹defaultdb›.public.‹t› ALTER PRIMARY KEY USING COLUMNS (‹a›)
-    │       │       StatementTag: ALTER TABLE
-    │       │       TargetMetadata:
-    │       │         SourceElementID: 1
-    │       │         SubWorkID: 1
     │       │     IndexID: 4
     │       │     TableID: 104
     │       │
@@ -329,14 +305,6 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 10 of 15;
         └── • 7 Mutation operations
             │
             ├── • MakeIndexAbsent
-            │     EventBase:
-            │       Authorization:
-            │         UserName: root
-            │       Statement: ALTER TABLE ‹defaultdb›.public.‹t› ALTER PRIMARY KEY USING COLUMNS (‹a›)
-            │       StatementTag: ALTER TABLE
-            │       TargetMetadata:
-            │         SourceElementID: 1
-            │         SubWorkID: 1
             │     IndexID: 2
             │     TableID: 104
             │

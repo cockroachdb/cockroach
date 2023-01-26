@@ -281,6 +281,7 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 	cfg.Stores = base.StoreSpecList{Specs: params.StoreSpecs}
 	if params.TempStorageConfig.InMemory || params.TempStorageConfig.Path != "" {
 		cfg.TempStorageConfig = params.TempStorageConfig
+		cfg.TempStorageConfig.Settings = st
 	}
 
 	cfg.DisableDefaultTestTenant = params.DisableDefaultTestTenant

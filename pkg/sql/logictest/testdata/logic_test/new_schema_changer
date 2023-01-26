@@ -1091,9 +1091,11 @@ DROP VIEW v1ev CASCADE;
 
 query IT
 SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID'
-FROM system.eventlog;
+FROM system.eventlog
+ORDER BY "timestamp", info DESC
 ----
 1  {"CascadeDroppedViews": ["test.public.v4ev"], "EventType": "drop_view", "Statement": "DROP VIEW test.public.v1ev CASCADE", "Tag": "DROP VIEW", "User": "root", "ViewName": "test.public.v1ev"}
+1  {"EventType": "finish_schema_change", "InstanceID": 1}
 
 statement ok
 CREATE VIEW v1ev AS (SELECT name FROM T1EV);
@@ -1114,6 +1116,8 @@ ORDER BY timestamp, info DESC;
 ----
 1  {"CascadeDroppedViews": ["test.public.v2ev", "test.public.v3ev"], "EventType": "drop_table", "Statement": "DROP TABLE test.public.t1ev, test.public.t2ev CASCADE", "TableName": "test.public.t2ev", "Tag": "DROP TABLE", "User": "root"}
 1  {"CascadeDroppedViews": ["test.public.v1ev", "test.public.v4ev"], "EventType": "drop_table", "Statement": "DROP TABLE test.public.t1ev, test.public.t2ev CASCADE", "TableName": "test.public.t1ev", "Tag": "DROP TABLE", "User": "root"}
+1  {"EventType": "finish_schema_change", "InstanceID": 1}
+1  {"EventType": "finish_schema_change", "InstanceID": 1}
 
 statement ok
 CREATE TABLE fooev (i INT PRIMARY KEY);
@@ -1130,7 +1134,7 @@ FROM system.eventlog
 ORDER BY timestamp, info DESC;
 ----
 1  {"EventType": "alter_table", "MutationID": 1, "Statement": "ALTER TABLE test.public.fooev ADD COLUMN j INT8", "TableName": "test.public.fooev", "Tag": "ALTER TABLE", "User": "root"}
-1  {"EventType": "finish_schema_change", "InstanceID": 1, "MutationID": 1}
+1  {"EventType": "finish_schema_change", "InstanceID": 1}
 
 subtest names-with-escaped-chars
 
@@ -1178,7 +1182,9 @@ FROM system.eventlog
 ORDER BY timestamp, info DESC;
 ----
 1  {"DatabaseName": "'db1-a'", "DroppedSchemaObjects": ["\"'db1-a'\".public.\"'t1-esc'\""], "EventType": "drop_database", "Statement": "DROP DATABASE \"'db1-a'\" CASCADE", "Tag": "DROP DATABASE", "User": "root"}
+1  {"EventType": "finish_schema_change", "InstanceID": 1}
 1  {"DatabaseName": "db2", "EventType": "drop_database", "Statement": "DROP DATABASE db2 CASCADE", "Tag": "DROP DATABASE", "User": "root"}
+1  {"EventType": "finish_schema_change", "InstanceID": 1}
 
 # Sanity: Dropping multiple objects in the builder or resolving any dependencies
 # should function fine.

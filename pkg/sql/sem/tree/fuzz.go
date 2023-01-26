@@ -16,7 +16,7 @@ package tree
 import "github.com/cockroachdb/cockroach/pkg/util/timeutil"
 
 var (
-	timeCtx = NewParseTimeContext(timeutil.Now())
+	timeCtx = NewParseContext(timeutil.Now())
 )
 
 func FuzzParseDDecimal(data []byte) int {

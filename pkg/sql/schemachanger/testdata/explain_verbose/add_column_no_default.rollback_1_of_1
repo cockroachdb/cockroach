@@ -6,7 +6,7 @@ CREATE TABLE db.public.tbl (i INT PRIMARY KEY);
 ALTER TABLE db.public.tbl ADD COLUMN j INT;
 EXPLAIN (ddl, verbose) rollback at post-commit stage 1 of 1;
 ----
-• Schema change plan for rolling back ALTER TABLE ‹db›.public.‹tbl› ADD COLUMN ‹j› INT8; 
+• Schema change plan for rolling back ALTER TABLE ‹db›.public.‹tbl› ADD COLUMN ‹j› INT8;
 │
 └── • PostCommitNonRevertiblePhase
     │
@@ -54,14 +54,6 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 1 of 1;
             │
             ├── • MakeDeleteOnlyColumnAbsent
             │     ColumnID: 2
-            │     EventBase:
-            │       Authorization:
-            │         UserName: root
-            │       Statement: ALTER TABLE ‹db›.public.‹tbl› ADD COLUMN ‹j› INT8
-            │       StatementTag: ALTER TABLE
-            │       TargetMetadata:
-            │         SourceElementID: 1
-            │         SubWorkID: 1
             │     TableID: 106
             │
             ├── • RemoveJobStateFromDescriptor

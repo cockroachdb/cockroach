@@ -5,7 +5,7 @@ CREATE TABLE t (i INT PRIMARY KEY, j INT NOT NULL);
 ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j);
 EXPLAIN (ddl, verbose) rollback at post-commit stage 5 of 7;
 ----
-• Schema change plan for rolling back ALTER TABLE ‹defaultdb›.public.‹t› ALTER PRIMARY KEY USING COLUMNS (‹j›); 
+• Schema change plan for rolling back ALTER TABLE ‹defaultdb›.public.‹t› ALTER PRIMARY KEY USING COLUMNS (‹j›);
 │
 └── • PostCommitNonRevertiblePhase
     │
@@ -91,7 +91,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 5 of 7;
     │   │       └── • Precedence dependency from DELETE_ONLY SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 1}
     │   │             rule: "index no longer public before index name"
     │   │
-    │   └── • 8 Mutation operations
+    │   └── • 7 Mutation operations
     │       │
     │       ├── • MakeWriteOnlyIndexDeleteOnly
     │       │     IndexID: 3
@@ -104,25 +104,6 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 5 of 7;
     │       ├── • MakeWriteOnlyIndexDeleteOnly
     │       │     IndexID: 2
     │       │     TableID: 104
-    │       │
-    │       ├── • LogEvent
-    │       │     Element:
-    │       │       SecondaryIndex:
-    │       │         constraintId: 4
-    │       │         indexId: 4
-    │       │         isUnique: true
-    │       │         sourceIndexId: 1
-    │       │         tableId: 104
-    │       │         temporaryIndexId: 5
-    │       │     EventBase:
-    │       │       Authorization:
-    │       │         UserName: root
-    │       │       Statement: ALTER TABLE ‹defaultdb›.public.‹t› ALTER PRIMARY KEY USING COLUMNS (‹j›)
-    │       │       StatementTag: ALTER TABLE
-    │       │       TargetMetadata:
-    │       │         SourceElementID: 1
-    │       │         SubWorkID: 1
-    │       │     TargetStatus: 1
     │       │
     │       ├── • MakeWriteOnlyIndexDeleteOnly
     │       │     IndexID: 4
@@ -244,14 +225,6 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 5 of 7;
         └── • 10 Mutation operations
             │
             ├── • MakeIndexAbsent
-            │     EventBase:
-            │       Authorization:
-            │         UserName: root
-            │       Statement: ALTER TABLE ‹defaultdb›.public.‹t› ALTER PRIMARY KEY USING COLUMNS (‹j›)
-            │       StatementTag: ALTER TABLE
-            │       TargetMetadata:
-            │         SourceElementID: 1
-            │         SubWorkID: 1
             │     IndexID: 2
             │     TableID: 104
             │

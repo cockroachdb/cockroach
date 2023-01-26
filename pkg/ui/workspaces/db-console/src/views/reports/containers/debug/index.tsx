@@ -346,6 +346,7 @@ export default function Debug() {
           />
           <DebugTableLink name="Raft Messages" url="#/raft/messages/all" />
           <DebugTableLink name="Raft for all ranges" url="#/raft/ranges" />
+          <DebugTableLink name="Key Visualizer" url="#/keyvisualizer" />
         </DebugTableRow>
         <DebugTableRow title="Closed timestamps">
           <DebugTableLink

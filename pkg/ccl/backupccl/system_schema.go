@@ -611,6 +611,18 @@ var systemTableBackupConfiguration = map[string]systemBackupConfiguration{
 	systemschema.SystemJobInfoTable.GetName(): {
 		shouldIncludeInClusterBackup: optOutOfClusterBackup,
 	},
+	systemschema.SpanStatsUniqueKeysTable.GetName(): {
+		shouldIncludeInClusterBackup: optOutOfClusterBackup,
+	},
+	systemschema.SpanStatsBucketsTable.GetName(): {
+		shouldIncludeInClusterBackup: optOutOfClusterBackup,
+	},
+	systemschema.SpanStatsSamplesTable.GetName(): {
+		shouldIncludeInClusterBackup: optOutOfClusterBackup,
+	},
+	systemschema.SpanStatsTenantBoundariesTable.GetName(): {
+		shouldIncludeInClusterBackup: optOutOfClusterBackup,
+	},
 }
 
 func rekeySystemTable(

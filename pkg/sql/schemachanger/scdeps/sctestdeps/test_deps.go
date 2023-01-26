@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -33,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps/sctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/scmutationexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
@@ -46,6 +48,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
@@ -1005,7 +1008,7 @@ var _ scrun.JobRunDependencies = (*TestState)(nil)
 
 // WithTxnInJob implements the scrun.JobRunDependencies interface.
 func (s *TestState) WithTxnInJob(ctx context.Context, fn scrun.JobTxnFunc) (err error) {
-	s.WithTxn(func(s *TestState) { err = fn(ctx, s) })
+	s.WithTxn(func(s *TestState) { err = fn(ctx, s, s) })
 	return err
 }
 
@@ -1071,23 +1074,52 @@ func (s *TestState) ValidateForeignKeyConstraint(
 	return nil
 }
 
-// LogEvent implements scexec.EventLogger.
+// EventLogger implements scbuild.Dependencies.
+func (s *TestState) EventLogger() scbuild.EventLogger {
+	return s
+}
+
+var _ scbuild.EventLogger = (*TestState)(nil)
+
+// LogEvent implements scbuild.EventLogger.
 func (s *TestState) LogEvent(
 	_ context.Context, details eventpb.CommonSQLEventDetails, event logpb.EventPayload,
 ) error {
-	s.LogSideEffectf("write %T to event log: %s", event, details.Statement)
-	return nil
+	sqlCommon, ok := event.(eventpb.EventWithCommonSQLPayload)
+	if !ok {
+		return errors.AssertionFailedf("invalid event type, missing SQL payload: %T", event)
+	}
+	*sqlCommon.CommonSQLDetails() = details
+	return s.logEvent(event)
 }
 
-// LogEventForSchemaChange implements scexec.EventLogger
-func (s *TestState) LogEventForSchemaChange(ctx context.Context, event logpb.EventPayload) error {
-	s.LogSideEffectf("write %T to event log", event)
-	return nil
+// LogEventForSchemaChange implements scrun.EventLogger
+func (s *TestState) LogEventForSchemaChange(_ context.Context, event logpb.EventPayload) error {
+	_, ok := event.(eventpb.EventWithCommonSchemaChangePayload)
+	if !ok {
+		return errors.AssertionFailedf("invalid event type, missing schema change payload: %T", event)
+	}
+	return s.logEvent(event)
 }
 
-// EventLogger implements scexec.Dependencies.
-func (s *TestState) EventLogger() scexec.EventLogger {
-	return s
+func (s *TestState) logEvent(event logpb.EventPayload) error {
+	pb, ok := event.(protoutil.Message)
+	if !ok {
+		return errors.AssertionFailedf("invalid type, not a protobuf message: %T", event)
+	}
+	const emitDefaults = false
+	yaml, err := sctestutils.ProtoToYAML(pb, emitDefaults, func(in interface{}) {
+		// Remove common details from text output, they're never decorated.
+		if inM, ok := in.(map[string]interface{}); ok {
+			delete(inM, "common")
+		}
+	})
+	if err != nil {
+		return err
+	}
+	indented := strings.TrimSpace(strings.ReplaceAll(yaml, "\n", "\n  "))
+	s.LogSideEffectf("write %T to event log:\n  %s", event, indented)
+	return err
 }
 
 // DeleteDatabaseRoleSettings implements scexec.DescriptorMetadataUpdater.
@@ -1098,7 +1130,7 @@ func (s *TestState) DeleteDatabaseRoleSettings(_ context.Context, dbID descpb.ID
 
 // DeleteSchedule implements scexec.DescriptorMetadataUpdater
 func (s *TestState) DeleteSchedule(ctx context.Context, id int64) error {
-	s.LogSideEffectf("delete scheduleId: %d", id)
+	s.LogSideEffectf("delete job schedule #%d", id)
 	return nil
 }
 

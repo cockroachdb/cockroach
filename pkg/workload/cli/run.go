@@ -303,6 +303,7 @@ func runInit(gen workload.Generator, urls []string, dbName string) error {
 	}
 
 	startPProfEndPoint(ctx)
+	maybeLogRandomSeed(ctx, gen)
 	return runInitImpl(ctx, gen, initDB, dbName)
 }
 
@@ -404,6 +405,7 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 		limiter = rate.NewLimiter(rate.Limit(*maxRate), 1)
 	}
 
+	maybeLogRandomSeed(ctx, gen)
 	o, ok := gen.(workload.Opser)
 	if !ok {
 		return errors.Errorf(`no operations defined for %s`, gen.Meta().Name)
@@ -610,5 +612,13 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 
 			return nil
 		}
+	}
+}
+
+// maybeLogRandomSeed will log the random seed used by the generator,
+// if a seed is being used.
+func maybeLogRandomSeed(ctx context.Context, gen workload.Generator) {
+	if randomSeed := gen.Meta().RandomSeed; randomSeed != nil {
+		log.Infof(ctx, "%s", randomSeed.LogMessage())
 	}
 }

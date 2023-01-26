@@ -5,7 +5,7 @@ CREATE TABLE t (i INT PRIMARY KEY, j INT, k INT DEFAULT 32 ON UPDATE 42, INDEX((
 ALTER TABLE t DROP COLUMN j CASCADE;
 EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN k CASCADE;
 ----
-• Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COLUMN ‹j› CASCADE; ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COLUMN ‹k› CASCADE; 
+• Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COLUMN ‹k› CASCADE; following ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COLUMN ‹j› CASCADE;
 │
 ├── • StatementPhase
 │   │
@@ -28,28 +28,11 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN k CASCADE;
 │       │       └── • Precedence dependency from WRITE_ONLY Column:{DescID: 104, ColumnID: 3}
 │       │             rule: "column no longer public before dependents"
 │       │
-│       └── • 3 Mutation operations
+│       └── • 2 Mutation operations
 │           │
 │           ├── • MakePublicColumnWriteOnly
 │           │     ColumnID: 3
 │           │     TableID: 104
-│           │
-│           ├── • LogEvent
-│           │     Element:
-│           │       Column:
-│           │         columnId: 3
-│           │         pgAttributeNum: 3
-│           │         tableId: 104
-│           │     EventBase:
-│           │       Authorization:
-│           │         UserName: root
-│           │       Statement: ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COLUMN ‹k› CASCADE
-│           │       StatementTag: ALTER TABLE
-│           │       TargetMetadata:
-│           │         SourceElementID: 1
-│           │         StatementID: 1
-│           │         SubWorkID: 1
-│           │     TargetStatus: 1
 │           │
 │           └── • SetColumnName
 │                 ColumnID: 3
@@ -410,7 +393,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN k CASCADE;
     │   │       └── • skip PUBLIC → ABSENT operations
     │   │             rule: "skip index-column removal ops on index removal"
     │   │
-    │   └── • 14 Mutation operations
+    │   └── • 13 Mutation operations
     │       │
     │       ├── • MakeWriteOnlyColumnDeleteOnly
     │       │     ColumnID: 3
@@ -448,21 +431,6 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN k CASCADE;
     │       │     IndexID: 4
     │       │     TableID: 104
     │       │
-    │       ├── • LogEvent
-    │       │     Element:
-    │       │       SecondaryIndex:
-    │       │         indexId: 2
-    │       │         tableId: 104
-    │       │     EventBase:
-    │       │       Authorization:
-    │       │         UserName: root
-    │       │       Statement: ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COLUMN ‹j› CASCADE
-    │       │       StatementTag: ALTER TABLE
-    │       │       TargetMetadata:
-    │       │         SourceElementID: 1
-    │       │         SubWorkID: 1
-    │       │     TargetStatus: 1
-    │       │
     │       ├── • MakeWriteOnlyIndexDeleteOnly
     │       │     IndexID: 2
     │       │     TableID: 104
@@ -473,14 +441,6 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN k CASCADE;
     │       │     TableID: 104
     │       │
     │       ├── • MakeValidatedPrimaryIndexPublic
-    │       │     EventBase:
-    │       │       Authorization:
-    │       │         UserName: root
-    │       │       Statement: ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COLUMN ‹j› CASCADE
-    │       │       StatementTag: ALTER TABLE
-    │       │       TargetMetadata:
-    │       │         SourceElementID: 1
-    │       │         SubWorkID: 1
     │       │     IndexID: 3
     │       │     TableID: 104
     │       │
@@ -571,14 +531,6 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN k CASCADE;
     │       │
     │       ├── • MakeDeleteOnlyColumnAbsent
     │       │     ColumnID: 4
-    │       │     EventBase:
-    │       │       Authorization:
-    │       │         UserName: root
-    │       │       Statement: ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COLUMN ‹j› CASCADE
-    │       │       StatementTag: ALTER TABLE
-    │       │       TargetMetadata:
-    │       │         SourceElementID: 1
-    │       │         SubWorkID: 1
     │       │     TableID: 104
     │       │
     │       ├── • MakeWriteOnlyIndexDeleteOnly
@@ -741,14 +693,6 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN k CASCADE;
             │     TableID: 104
             │
             ├── • MakeIndexAbsent
-            │     EventBase:
-            │       Authorization:
-            │         UserName: root
-            │       Statement: ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COLUMN ‹j› CASCADE
-            │       StatementTag: ALTER TABLE
-            │       TargetMetadata:
-            │         SourceElementID: 1
-            │         SubWorkID: 1
             │     IndexID: 1
             │     TableID: 104
             │
@@ -772,27 +716,10 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN k CASCADE;
             │
             ├── • MakeDeleteOnlyColumnAbsent
             │     ColumnID: 2
-            │     EventBase:
-            │       Authorization:
-            │         UserName: root
-            │       Statement: ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COLUMN ‹j› CASCADE
-            │       StatementTag: ALTER TABLE
-            │       TargetMetadata:
-            │         SourceElementID: 1
-            │         SubWorkID: 1
             │     TableID: 104
             │
             ├── • MakeDeleteOnlyColumnAbsent
             │     ColumnID: 3
-            │     EventBase:
-            │       Authorization:
-            │         UserName: root
-            │       Statement: ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COLUMN ‹k› CASCADE
-            │       StatementTag: ALTER TABLE
-            │       TargetMetadata:
-            │         SourceElementID: 1
-            │         StatementID: 1
-            │         SubWorkID: 1
             │     TableID: 104
             │
             ├── • RemoveJobStateFromDescriptor

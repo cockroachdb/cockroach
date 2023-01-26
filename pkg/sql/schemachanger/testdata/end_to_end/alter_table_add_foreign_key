@@ -14,6 +14,15 @@ begin transaction #1
 checking for feature: ALTER TABLE
 increment telemetry for sql.schema.alter_table
 increment telemetry for sql.schema.alter_table.add_constraint
+write *eventpb.AlterTable to event log:
+  mutationId: 1
+  sql:
+    descriptorId: 104
+    statement: ALTER TABLE ‹defaultdb›.‹public›.‹t1› ADD CONSTRAINT ‹t1_i_fkey› FOREIGN
+      KEY (‹i›) REFERENCES ‹defaultdb›.‹public›.‹t2› (‹i›)
+    tag: ALTER TABLE
+    user: root
+  tableName: defaultdb.public.t1
 ## StatementPhase stage 1 of 1 with 1 MutationType op
 upsert descriptor #104
   ...
@@ -204,5 +213,8 @@ upsert descriptor #105
 update progress of schema change job #1: "all stages completed"
 set schema change job #1 to non-cancellable
 updated schema change job #1 descriptor IDs to []
+write *eventpb.FinishSchemaChange to event log:
+  sc:
+    descriptorId: 104
 commit transaction #4
 # end PostCommitPhase

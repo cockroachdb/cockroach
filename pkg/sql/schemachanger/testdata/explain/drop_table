@@ -8,7 +8,7 @@ CREATE TYPE db.sc.e AS ENUM('a', 'b', 'c');
 /* test */
 EXPLAIN (ddl) DROP TABLE db.sc.t;
 ----
-Schema change plan for DROP TABLE ‹db›.‹sc›.‹t›; 
+Schema change plan for DROP TABLE ‹db›.‹sc›.‹t›;
  ├── StatementPhase
  │    └── Stage 1 of 1 in StatementPhase
  │         ├── 7 elements transitioning toward ABSENT
@@ -53,10 +53,9 @@ Schema change plan for DROP TABLE ‹db›.‹sc›.‹t›;
  │         │    ├── PUBLIC      → ABSENT  IndexColumn:{DescID: 107, ColumnID: 2, IndexID: 1}
  │         │    ├── VALIDATED   → ABSENT  PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 1}
  │         │    └── PUBLIC      → ABSENT  IndexName:{DescID: 107, Name: t_pkey, IndexID: 1}
- │         └── 12 Mutation operations
+ │         └── 11 Mutation operations
  │              ├── MarkDescriptorAsDropped {"DescriptorID":107}
  │              ├── RemoveTableComment {"TableID":107}
- │              ├── LogEvent {"TargetStatus":1}
  │              ├── RemoveColumnDefaultExpression {"ColumnID":3,"TableID":107}
  │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":107,"Name":"t","SchemaID":106}}
  │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":1,"TableID":107}
@@ -72,8 +71,7 @@ Schema change plan for DROP TABLE ‹db›.‹sc›.‹t›;
            │    ├── DROPPED → ABSENT Table:{DescID: 107}
            │    ├── PUBLIC  → ABSENT IndexData:{DescID: 107, IndexID: 1}
            │    └── PUBLIC  → ABSENT TableData:{DescID: 107, ReferencedDescID: 104}
-           └── 5 Mutation operations
-                ├── LogEvent {"TargetStatus":1}
+           └── 4 Mutation operations
                 ├── CreateGCJobForTable {"DatabaseID":104,"TableID":107}
                 ├── CreateGCJobForIndex {"IndexID":1,"TableID":107}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":107}

@@ -825,6 +825,7 @@ func (sip *streamIngestionProcessor) flush() (*jobspb.ResolvedSpans, error) {
 			sip.metrics.CommitLatency.RecordValue(timeutil.Since(minBatchMVCCTimestamp.GoTime()).Nanoseconds())
 			sip.metrics.Flushes.Inc(1)
 			sip.metrics.IngestedBytes.Inc(int64(totalSize))
+			sip.metrics.SSTBytes.Inc(sip.batcher.GetSummary().SSTDataSize)
 			sip.metrics.IngestedEvents.Inc(int64(len(sip.curKVBatch)))
 			sip.metrics.IngestedEvents.Inc(int64(sip.rangeBatcher.size()))
 		}()

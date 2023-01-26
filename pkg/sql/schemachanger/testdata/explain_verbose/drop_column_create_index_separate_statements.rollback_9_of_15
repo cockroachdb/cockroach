@@ -6,7 +6,7 @@ ALTER TABLE t DROP COLUMN j CASCADE;
 CREATE UNIQUE INDEX idx ON t(k);
 EXPLAIN (ddl, verbose) rollback at post-commit stage 9 of 15;
 ----
-• Schema change plan for rolling back ALTER TABLE ‹defaultdb›.public.‹t› DROP COLUMN ‹j› CASCADE; CREATE UNIQUE INDEX ‹idx› ON ‹defaultdb›.public.‹t› (‹k›); 
+• Schema change plan for rolling back CREATE UNIQUE INDEX ‹idx› ON ‹defaultdb›.public.‹t› (‹k›); following ALTER TABLE ‹defaultdb›.public.‹t› DROP COLUMN ‹j› CASCADE;
 │
 └── • PostCommitNonRevertiblePhase
     │
@@ -203,33 +203,18 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 9 of 15;
     │   │       └── • skip PUBLIC → ABSENT operations
     │   │             rule: "skip index-column removal ops on index removal"
     │   │
-    │   └── • 19 Mutation operations
+    │   └── • 18 Mutation operations
     │       │
     │       ├── • SetIndexName
     │       │     IndexID: 1
     │       │     Name: t_pkey
     │       │     TableID: 104
     │       │
-    │       ├── • RefreshStats
-    │       │     TableID: 104
-    │       │
-    │       ├── • LogEvent
-    │       │     Element:
-    │       │       SecondaryIndex:
-    │       │         indexId: 2
-    │       │         tableId: 104
-    │       │     EventBase:
-    │       │       Authorization:
-    │       │         UserName: root
-    │       │       Statement: ALTER TABLE ‹defaultdb›.public.‹t› DROP COLUMN ‹j› CASCADE
-    │       │       StatementTag: ALTER TABLE
-    │       │       TargetMetadata:
-    │       │         SourceElementID: 1
-    │       │         SubWorkID: 1
-    │       │     TargetStatus: 2
-    │       │
     │       ├── • MakeValidatedSecondaryIndexPublic
     │       │     IndexID: 2
+    │       │     TableID: 104
+    │       │
+    │       ├── • RefreshStats
     │       │     TableID: 104
     │       │
     │       ├── • SetColumnName
@@ -262,14 +247,6 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 9 of 15;
     │       │
     │       ├── • MakeWriteOnlyColumnPublic
     │       │     ColumnID: 2
-    │       │     EventBase:
-    │       │       Authorization:
-    │       │         UserName: root
-    │       │       Statement: ALTER TABLE ‹defaultdb›.public.‹t› DROP COLUMN ‹j› CASCADE
-    │       │       StatementTag: ALTER TABLE
-    │       │       TargetMetadata:
-    │       │         SourceElementID: 1
-    │       │         SubWorkID: 1
     │       │     TableID: 104
     │       │
     │       ├── • RefreshStats
@@ -277,28 +254,12 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 9 of 15;
     │       │
     │       ├── • MakeWriteOnlyColumnPublic
     │       │     ColumnID: 4
-    │       │     EventBase:
-    │       │       Authorization:
-    │       │         UserName: root
-    │       │       Statement: ALTER TABLE ‹defaultdb›.public.‹t› DROP COLUMN ‹j› CASCADE
-    │       │       StatementTag: ALTER TABLE
-    │       │       TargetMetadata:
-    │       │         SourceElementID: 1
-    │       │         SubWorkID: 1
     │       │     TableID: 104
     │       │
     │       ├── • RefreshStats
     │       │     TableID: 104
     │       │
     │       ├── • MakeValidatedPrimaryIndexPublic
-    │       │     EventBase:
-    │       │       Authorization:
-    │       │         UserName: root
-    │       │       Statement: ALTER TABLE ‹defaultdb›.public.‹t› DROP COLUMN ‹j› CASCADE
-    │       │       StatementTag: ALTER TABLE
-    │       │       TargetMetadata:
-    │       │         SourceElementID: 1
-    │       │         SubWorkID: 1
     │       │     IndexID: 1
     │       │     TableID: 104
     │       │
@@ -407,14 +368,6 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 9 of 15;
         └── • 6 Mutation operations
             │
             ├── • MakeIndexAbsent
-            │     EventBase:
-            │       Authorization:
-            │         UserName: root
-            │       Statement: ALTER TABLE ‹defaultdb›.public.‹t› DROP COLUMN ‹j› CASCADE
-            │       StatementTag: ALTER TABLE
-            │       TargetMetadata:
-            │         SourceElementID: 1
-            │         SubWorkID: 1
             │     IndexID: 3
             │     TableID: 104
             │

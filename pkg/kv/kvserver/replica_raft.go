@@ -684,7 +684,7 @@ func (r *Replica) handleRaftReady(
 // non-sensitive cue as to what happened.
 func (r *Replica) handleRaftReadyRaftMuLocked(
 	ctx context.Context, inSnap IncomingSnapshot,
-) (handleRaftReadyStats, error) {
+) (stats handleRaftReadyStats, _ error) {
 	// handleRaftReadyRaftMuLocked is not prepared to handle context cancellation,
 	// so assert that it's given a non-cancellable context.
 	if ctx.Done() != nil {
@@ -692,12 +692,13 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			"handleRaftReadyRaftMuLocked cannot be called with a cancellable context")
 	}
 
-	stats := handleRaftReadyStats{
+	// NB: we need to reference the named return parameter here. If `stats` were
+	// just a local, we'd be modifying the local but not the return value in the
+	// defer below.
+	stats = handleRaftReadyStats{
 		tBegin: timeutil.Now(),
 	}
 	defer func() {
-		// NB: we need to reference the named return parameter here. If `stats` were
-		// just a local, we'd be modifying the local but not the return value.
 		stats.tEnd = timeutil.Now()
 	}()
 
@@ -1360,7 +1361,9 @@ func (r *Replica) poisonInflightLatches(err error) {
 	defer r.mu.Unlock()
 	for _, p := range r.mu.proposals {
 		p.ec.poison()
-		if p.ec.g.Req.PoisonPolicy == poison.Policy_Error {
+		// TODO(tbg): find out how `p.ec.done()` can have been called at this point,
+		// See: https://github.com/cockroachdb/cockroach/issues/86547
+		if p.ec.g != nil && p.ec.g.Req.PoisonPolicy == poison.Policy_Error {
 			aErr := roachpb.NewAmbiguousResultError(err)
 			// NB: this does not release the request's latches. It's important that
 			// the latches stay in place, since the command could still apply.

@@ -36,7 +36,7 @@ func NewJobRunDependencies(
 	backfiller scexec.Backfiller,
 	merger scexec.Merger,
 	rangeCounter backfiller.RangeCounter,
-	eventLoggerFactory EventLoggerFactory,
+	eventLoggerFactory func(isql.Txn) scrun.EventLogger,
 	jobRegistry *jobs.Registry,
 	job *jobs.Job,
 	codec keys.SQLCodec,
@@ -73,12 +73,12 @@ func NewJobRunDependencies(
 type jobExecutionDeps struct {
 	collectionFactory     *descs.CollectionFactory
 	db                    descs.DB
-	eventLoggerFactory    func(txn isql.Txn) scexec.EventLogger
 	statsRefresher        scexec.StatsRefresher
 	backfiller            scexec.Backfiller
 	merger                scexec.Merger
 	commentUpdaterFactory MetadataUpdaterFactory
 	rangeCounter          backfiller.RangeCounter
+	eventLoggerFactory    func(isql.Txn) scrun.EventLogger
 	jobRegistry           *jobs.Registry
 	job                   *jobs.Job
 	kvTrace               bool
@@ -114,7 +114,6 @@ func (d *jobExecutionDeps) WithTxnInJob(ctx context.Context, fn scrun.JobTxnFunc
 				descsCollection:    txn.Descriptors(),
 				jobRegistry:        d.jobRegistry,
 				validator:          d.indexValidator,
-				eventLogger:        d.eventLoggerFactory(txn),
 				statsRefresher:     d.statsRefresher,
 				schemaChangerJobID: d.job.ID(),
 				schemaChangerJob:   d.job,
@@ -138,7 +137,7 @@ func (d *jobExecutionDeps) WithTxnInJob(ctx context.Context, fn scrun.JobTxnFunc
 			sessionData:             d.sessionData,
 			testingKnobs:            d.testingKnobs,
 		}
-		if err := fn(ctx, ed); err != nil {
+		if err := fn(ctx, ed, d.eventLoggerFactory(txn)); err != nil {
 			return err
 		}
 		createdJobs = ed.CreatedJobs()

@@ -8,7 +8,7 @@ CREATE TYPE db.sc.e AS ENUM('a', 'b', 'c');
 /* test */
 EXPLAIN (ddl, verbose) DROP TABLE db.sc.t;
 ----
-• Schema change plan for DROP TABLE ‹db›.‹sc›.‹t›; 
+• Schema change plan for DROP TABLE ‹db›.‹sc›.‹t›;
 │
 ├── • StatementPhase
 │   │
@@ -399,28 +399,13 @@ EXPLAIN (ddl, verbose) DROP TABLE db.sc.t;
 │       │       └── • skip PUBLIC → ABSENT operations
 │       │             rule: "skip index dependents removal ops on relation drop"
 │       │
-│       └── • 12 Mutation operations
+│       └── • 11 Mutation operations
 │           │
 │           ├── • MarkDescriptorAsDropped
 │           │     DescriptorID: 107
 │           │
 │           ├── • RemoveTableComment
 │           │     TableID: 107
-│           │
-│           ├── • LogEvent
-│           │     Element:
-│           │       TableComment:
-│           │         comment: t has a comment
-│           │         tableId: 107
-│           │     EventBase:
-│           │       Authorization:
-│           │         UserName: root
-│           │       Statement: DROP TABLE ‹db›.‹sc›.‹t›
-│           │       StatementTag: DROP TABLE
-│           │       TargetMetadata:
-│           │         SourceElementID: 1
-│           │         SubWorkID: 1
-│           │     TargetStatus: 1
 │           │
 │           ├── • RemoveColumnDefaultExpression
 │           │     ColumnID: 3
@@ -435,62 +420,22 @@ EXPLAIN (ddl, verbose) DROP TABLE db.sc.t;
 │           │
 │           ├── • MakeDeleteOnlyColumnAbsent
 │           │     ColumnID: 1
-│           │     EventBase:
-│           │       Authorization:
-│           │         UserName: root
-│           │       Statement: DROP TABLE ‹db›.‹sc›.‹t›
-│           │       StatementTag: DROP TABLE
-│           │       TargetMetadata:
-│           │         SourceElementID: 1
-│           │         SubWorkID: 1
 │           │     TableID: 107
 │           │
 │           ├── • MakeDeleteOnlyColumnAbsent
 │           │     ColumnID: 2
-│           │     EventBase:
-│           │       Authorization:
-│           │         UserName: root
-│           │       Statement: DROP TABLE ‹db›.‹sc›.‹t›
-│           │       StatementTag: DROP TABLE
-│           │       TargetMetadata:
-│           │         SourceElementID: 1
-│           │         SubWorkID: 1
 │           │     TableID: 107
 │           │
 │           ├── • MakeDeleteOnlyColumnAbsent
 │           │     ColumnID: 4294967295
-│           │     EventBase:
-│           │       Authorization:
-│           │         UserName: root
-│           │       Statement: DROP TABLE ‹db›.‹sc›.‹t›
-│           │       StatementTag: DROP TABLE
-│           │       TargetMetadata:
-│           │         SourceElementID: 1
-│           │         SubWorkID: 1
 │           │     TableID: 107
 │           │
 │           ├── • MakeDeleteOnlyColumnAbsent
 │           │     ColumnID: 4294967294
-│           │     EventBase:
-│           │       Authorization:
-│           │         UserName: root
-│           │       Statement: DROP TABLE ‹db›.‹sc›.‹t›
-│           │       StatementTag: DROP TABLE
-│           │       TargetMetadata:
-│           │         SourceElementID: 1
-│           │         SubWorkID: 1
 │           │     TableID: 107
 │           │
 │           ├── • MakeDeleteOnlyColumnAbsent
 │           │     ColumnID: 3
-│           │     EventBase:
-│           │       Authorization:
-│           │         UserName: root
-│           │       Statement: DROP TABLE ‹db›.‹sc›.‹t›
-│           │       StatementTag: DROP TABLE
-│           │       TargetMetadata:
-│           │         SourceElementID: 1
-│           │         SubWorkID: 1
 │           │     TableID: 107
 │           │
 │           ├── • SetJobStateOnDescriptor
@@ -504,7 +449,7 @@ EXPLAIN (ddl, verbose) DROP TABLE db.sc.t;
 │                 - 107
 │                 JobID: 1
 │                 NonCancelable: true
-│                 RunningStatus: PostCommitNonRevertiblePhase stage 1 of 1 with 3 MutationType ops pending
+│                 RunningStatus: PostCommitNonRevertiblePhase stage 1 of 1 with 2 MutationType ops pending
 │                 Statements:
 │                 - statement: DROP TABLE db.sc.t
 │                   redactedstatement: DROP TABLE ‹db›.‹sc›.‹t›
@@ -537,21 +482,7 @@ EXPLAIN (ddl, verbose) DROP TABLE db.sc.t;
         │       └── • SameStagePrecedence dependency from ABSENT Table:{DescID: 107}
         │             rule: "table removed right before garbage collection"
         │
-        └── • 5 Mutation operations
-            │
-            ├── • LogEvent
-            │     Element:
-            │       Table:
-            │         tableId: 107
-            │     EventBase:
-            │       Authorization:
-            │         UserName: root
-            │       Statement: DROP TABLE ‹db›.‹sc›.‹t›
-            │       StatementTag: DROP TABLE
-            │       TargetMetadata:
-            │         SourceElementID: 1
-            │         SubWorkID: 1
-            │     TargetStatus: 1
+        └── • 4 Mutation operations
             │
             ├── • CreateGCJobForTable
             │     DatabaseID: 104

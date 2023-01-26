@@ -65,7 +65,6 @@ func NewExecutorDependencies(
 	validator scexec.Validator,
 	clock scmutationexec.Clock,
 	metadataUpdater scexec.DescriptorMetadataUpdater,
-	eventLogger scexec.EventLogger,
 	statsRefresher scexec.StatsRefresher,
 	testingKnobs *scexec.TestingKnobs,
 	kvTrace bool,
@@ -79,7 +78,6 @@ func NewExecutorDependencies(
 			descsCollection:    descsCollection,
 			jobRegistry:        jobRegistry,
 			validator:          validator,
-			eventLogger:        eventLogger,
 			statsRefresher:     statsRefresher,
 			schemaChangerJobID: schemaChangerJobID,
 			schemaChangerJob:   nil,
@@ -108,7 +106,6 @@ type txnDeps struct {
 	validator           scexec.Validator
 	statsRefresher      scexec.StatsRefresher
 	tableStatsToRefresh []descpb.ID
-	eventLogger         scexec.EventLogger
 	schemaChangerJobID  jobspb.JobID
 	schemaChangerJob    *jobs.Job
 	kvTrace             bool
@@ -402,16 +399,8 @@ func (d *execDeps) DescriptorMetadataUpdater(ctx context.Context) scexec.Descrip
 	return d.metadataUpdater
 }
 
-// EventLoggerFactory constructs a new event logger with a txn.
-type EventLoggerFactory = func(isql.Txn) scexec.EventLogger
-
 // MetadataUpdaterFactory constructs a new metadata updater with a txn.
 type MetadataUpdaterFactory = func(ctx context.Context, descriptors *descs.Collection, txn isql.Txn) scexec.DescriptorMetadataUpdater
-
-// EventLogger implements scexec.Dependencies
-func (d *execDeps) EventLogger() scexec.EventLogger {
-	return d.eventLogger
-}
 
 // GetTestingKnobs implements scexec.Dependencies
 func (d *execDeps) GetTestingKnobs() *scexec.TestingKnobs {

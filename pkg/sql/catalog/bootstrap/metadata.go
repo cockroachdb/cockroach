@@ -13,8 +13,12 @@
 package bootstrap
 
 import (
+	"bytes"
 	"context"
+	"encoding/hex"
+	"encoding/json"
 	"sort"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -251,6 +255,93 @@ func (ms MetadataSchema) GetInitialValues() ([]roachpb.KeyValue, []roachpb.RKey)
 	return ret, splits
 }
 
+type initialValueStrings struct {
+	Key   string `json:"key"`
+	Value string `json:"value,omitempty"`
+}
+
+// InitialValuesToString returns a string representation of the return values
+// of MetadataSchema.GetInitialValues. The tenant prefix is stripped.
+func InitialValuesToString(ms MetadataSchema) string {
+	kvs, splits := ms.GetInitialValues()
+	// Collect the records.
+	type record struct {
+		k, v []byte
+	}
+	records := make([]record, 0, len(kvs)+len(splits))
+	for _, kv := range kvs {
+		records = append(records, record{k: kv.Key, v: kv.Value.TagAndDataBytes()})
+	}
+	for _, s := range splits {
+		records = append(records, record{k: s})
+	}
+	// Strip the tenant prefix if there is one.
+	p := []byte(ms.codec.TenantPrefix())
+	for i, r := range records {
+		if !bytes.Equal(p, r.k[:len(p)]) {
+			panic("unexpected prefix")
+		}
+		records[i].k = r.k[len(p):]
+	}
+	// Build the string representation.
+	s := make([]initialValueStrings, len(records))
+	for i, r := range records {
+		s[i].Key = hex.EncodeToString(r.k)
+		s[i].Value = hex.EncodeToString(r.v)
+	}
+	// Sort the records by key.
+	sort.Slice(s, func(i, j int) bool {
+		return s[i].Key < s[j].Key
+	})
+	// Build the string representation.
+	var sb strings.Builder
+	sb.WriteRune('[')
+	for i, r := range s {
+		if i > 0 {
+			sb.WriteRune(',')
+		}
+		b, err := json.Marshal(r)
+		if err != nil {
+			panic(err)
+		}
+		sb.Write(b)
+		sb.WriteRune('\n')
+	}
+	sb.WriteRune(']')
+	return sb.String()
+}
+
+// InitialValuesFromString is the reciprocal to InitialValuesToString and
+// appends the tenant prefix from the given codec.
+func InitialValuesFromString(
+	codec keys.SQLCodec, str string,
+) (kvs []roachpb.KeyValue, splits []roachpb.RKey, _ error) {
+	p := codec.TenantPrefix()
+	var s []initialValueStrings
+	if err := json.Unmarshal([]byte(str), &s); err != nil {
+		return nil, nil, err
+	}
+	for i, r := range s {
+		k, err := hex.DecodeString(r.Key)
+		if err != nil {
+			return nil, nil, errors.Errorf("failed to decode hex key %s for record #%d", r.Key, i+1)
+		}
+		v, err := hex.DecodeString(r.Value)
+		if err != nil {
+			return nil, nil, errors.Errorf("failed to decode hex value %s fo record #%d", r.Value, i+1)
+		}
+		k = append(p[:len(p):len(p)], k...)
+		if len(v) == 0 {
+			splits = append(splits, k)
+		} else {
+			kv := roachpb.KeyValue{Key: k}
+			kv.Value.SetTagAndData(v)
+			kvs = append(kvs, kv)
+		}
+	}
+	return kvs, splits, nil
+}
+
 // DescriptorIDs returns the descriptor IDs present in the metadata schema in
 // sorted order.
 func (ms MetadataSchema) DescriptorIDs() descpb.IDs {
@@ -359,6 +450,10 @@ func addSystemDescriptorsToSchema(target *MetadataSchema) {
 
 	// Tables introduced in 23.1.
 	target.AddDescriptor(systemschema.SystemJobInfoTable)
+	target.AddDescriptor(systemschema.SpanStatsUniqueKeysTable)
+	target.AddDescriptor(systemschema.SpanStatsBucketsTable)
+	target.AddDescriptor(systemschema.SpanStatsSamplesTable)
+	target.AddDescriptor(systemschema.SpanStatsTenantBoundariesTable)
 
 	// Adding a new system table? It should be added here to the metadata schema,
 	// and also created as a migration for older clusters.
@@ -370,7 +465,7 @@ func addSystemDescriptorsToSchema(target *MetadataSchema) {
 // NumSystemTablesForSystemTenant is the number of system tables defined on
 // the system tenant. This constant is only defined to avoid having to manually
 // update auto stats tests every time a new system table is added.
-const NumSystemTablesForSystemTenant = 42
+const NumSystemTablesForSystemTenant = 46
 
 // addSplitIDs adds a split point for each of the PseudoTableIDs to the supplied
 // MetadataSchema.

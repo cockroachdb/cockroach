@@ -401,6 +401,13 @@ const (
 	// chagnefeeds created prior to this version.
 	V23_1_ChangefeedExpressionProductionReady
 
+	// V23_1KeyVisualizerTablesAndJobs adds the system tables that support the key visualizer.
+	V23_1KeyVisualizerTablesAndJobs
+
+	// V23_1_KVDirectColumnarScans introduces the support of the "direct"
+	// columnar scans in the KV layer.
+	V23_1_KVDirectColumnarScans
+
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -686,6 +693,14 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     V23_1_ChangefeedExpressionProductionReady,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 30},
+	},
+	{
+		Key:     V23_1KeyVisualizerTablesAndJobs,
+		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 32},
+	},
+	{
+		Key:     V23_1_KVDirectColumnarScans,
+		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 34},
 	},
 
 	// *************************************************

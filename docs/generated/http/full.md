@@ -3587,6 +3587,92 @@ HotRange message describes a single hot range, ie its QPS, node ID it belongs to
 
 
 
+## KeyVisSamples
+
+`POST /_status/keyvissamples`
+
+
+
+Support status: [reserved](#support-status)
+
+#### Request Parameters
+
+
+
+
+
+
+
+
+
+
+
+
+
+#### Response Parameters
+
+
+
+
+KeyVisSamplesResponse returns a space-efficient representation of
+key visualizer samples. Spans are deduplicated, and are referenced by uuid.
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| pretty_key_for_uuid | [KeyVisSamplesResponse.PrettyKeyForUuidEntry](#cockroach.server.serverpb.KeyVisSamplesResponse-cockroach.server.serverpb.KeyVisSamplesResponse.PrettyKeyForUuidEntry) | repeated | pretty_key_for_uuid is a mapping of hex-encoded UUIDs to pretty keys. | [reserved](#support-status) |
+| sorted_pretty_keys | [string](#cockroach.server.serverpb.KeyVisSamplesResponse-string) | repeated |  | [reserved](#support-status) |
+| samples | [KeyVisSamplesResponse.KeyVisSample](#cockroach.server.serverpb.KeyVisSamplesResponse-cockroach.server.serverpb.KeyVisSamplesResponse.KeyVisSample) | repeated |  | [reserved](#support-status) |
+
+
+
+
+
+
+<a name="cockroach.server.serverpb.KeyVisSamplesResponse-cockroach.server.serverpb.KeyVisSamplesResponse.PrettyKeyForUuidEntry"></a>
+#### KeyVisSamplesResponse.PrettyKeyForUuidEntry
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| key | [string](#cockroach.server.serverpb.KeyVisSamplesResponse-string) |  |  |  |
+| value | [string](#cockroach.server.serverpb.KeyVisSamplesResponse-string) |  |  |  |
+
+
+
+
+
+<a name="cockroach.server.serverpb.KeyVisSamplesResponse-cockroach.server.serverpb.KeyVisSamplesResponse.KeyVisSample"></a>
+#### KeyVisSamplesResponse.KeyVisSample
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| timestamp | [google.protobuf.Timestamp](#cockroach.server.serverpb.KeyVisSamplesResponse-google.protobuf.Timestamp) |  |  | [reserved](#support-status) |
+| buckets | [KeyVisSamplesResponse.Bucket](#cockroach.server.serverpb.KeyVisSamplesResponse-cockroach.server.serverpb.KeyVisSamplesResponse.Bucket) | repeated |  | [reserved](#support-status) |
+
+
+
+
+
+<a name="cockroach.server.serverpb.KeyVisSamplesResponse-cockroach.server.serverpb.KeyVisSamplesResponse.Bucket"></a>
+#### KeyVisSamplesResponse.Bucket
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| start_key_id | [bytes](#cockroach.server.serverpb.KeyVisSamplesResponse-bytes) |  |  | [reserved](#support-status) |
+| end_key_id | [bytes](#cockroach.server.serverpb.KeyVisSamplesResponse-bytes) |  |  | [reserved](#support-status) |
+| requests | [uint64](#cockroach.server.serverpb.KeyVisSamplesResponse-uint64) |  |  | [reserved](#support-status) |
+
+
+
+
+
+
 ## Range
 
 `GET /_status/range/{range_id}`
@@ -6280,6 +6366,104 @@ DrainResponse is the response to a successful DrainRequest.
 
 
 
+## DecommissionPreCheck
+
+
+
+DecommissionPreCheck requests that the server execute preliminary checks
+to evaluate the possibility of successfully decommissioning a given node.
+
+Support status: [reserved](#support-status)
+
+#### Request Parameters
+
+
+
+
+DecommissionPreCheckRequest requests that preliminary checks be run to
+ensure that the specified node(s) can be decommissioned successfully.
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| node_ids | [int32](#cockroach.server.serverpb.DecommissionPreCheckRequest-int32) | repeated |  | [reserved](#support-status) |
+| num_replica_report | [int32](#cockroach.server.serverpb.DecommissionPreCheckRequest-int32) |  | The maximum number of ranges for which to report errors. | [reserved](#support-status) |
+| strict_readiness | [bool](#cockroach.server.serverpb.DecommissionPreCheckRequest-bool) |  | If true, all ranges on the checked nodes must only need replacement or removal for decommissioning. | [reserved](#support-status) |
+| collect_traces | [bool](#cockroach.server.serverpb.DecommissionPreCheckRequest-bool) |  | If true, collect traces for each range checked. Requires num_replica_report > 0. | [reserved](#support-status) |
+
+
+
+
+
+
+
+#### Response Parameters
+
+
+
+
+DecommissionPreCheckResponse returns the number of replicas that encountered
+errors when running preliminary decommissioning checks, as well as the
+associated error messages and traces, for each node.
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| checked_nodes | [DecommissionPreCheckResponse.NodeCheckResult](#cockroach.server.serverpb.DecommissionPreCheckResponse-cockroach.server.serverpb.DecommissionPreCheckResponse.NodeCheckResult) | repeated | Status of the preliminary decommission checks across nodes. | [reserved](#support-status) |
+
+
+
+
+
+
+<a name="cockroach.server.serverpb.DecommissionPreCheckResponse-cockroach.server.serverpb.DecommissionPreCheckResponse.NodeCheckResult"></a>
+#### DecommissionPreCheckResponse.NodeCheckResult
+
+The result of checking a single node's readiness for decommission.
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| node_id | [int32](#cockroach.server.serverpb.DecommissionPreCheckResponse-int32) |  |  | [reserved](#support-status) |
+| decommission_readiness | [DecommissionPreCheckResponse.NodeReadiness](#cockroach.server.serverpb.DecommissionPreCheckResponse-cockroach.server.serverpb.DecommissionPreCheckResponse.NodeReadiness) |  | The node's decommission readiness status. | [reserved](#support-status) |
+| liveness_status | [cockroach.kv.kvserver.liveness.livenesspb.NodeLivenessStatus](#cockroach.server.serverpb.DecommissionPreCheckResponse-cockroach.kv.kvserver.liveness.livenesspb.NodeLivenessStatus) |  | The liveness status of the given node. | [reserved](#support-status) |
+| replica_count | [int64](#cockroach.server.serverpb.DecommissionPreCheckResponse-int64) |  | The number of total replicas on the node, computed by scanning range descriptors. | [reserved](#support-status) |
+| checked_ranges | [DecommissionPreCheckResponse.RangeCheckResult](#cockroach.server.serverpb.DecommissionPreCheckResponse-cockroach.server.serverpb.DecommissionPreCheckResponse.RangeCheckResult) | repeated | The details and recorded traces from preprocessing each range with a replica on the checked nodes that resulted in error, up to the maximum specified in the request. | [reserved](#support-status) |
+
+
+
+
+
+<a name="cockroach.server.serverpb.DecommissionPreCheckResponse-cockroach.server.serverpb.DecommissionPreCheckResponse.RangeCheckResult"></a>
+#### DecommissionPreCheckResponse.RangeCheckResult
+
+The result of checking a range's readiness for the decommission.
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| range_id | [int32](#cockroach.server.serverpb.DecommissionPreCheckResponse-int32) |  |  | [reserved](#support-status) |
+| action | [string](#cockroach.server.serverpb.DecommissionPreCheckResponse-string) |  | The action determined by the allocator that is needed for the range. | [reserved](#support-status) |
+| events | [TraceEvent](#cockroach.server.serverpb.DecommissionPreCheckResponse-cockroach.server.serverpb.TraceEvent) | repeated | All trace events collected while checking the range. | [reserved](#support-status) |
+| error | [string](#cockroach.server.serverpb.DecommissionPreCheckResponse-string) |  | The error message from the allocator's processing, if any. | [reserved](#support-status) |
+
+
+
+
+
+<a name="cockroach.server.serverpb.DecommissionPreCheckResponse-cockroach.server.serverpb.TraceEvent"></a>
+#### TraceEvent
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| time | [google.protobuf.Timestamp](#cockroach.server.serverpb.DecommissionPreCheckResponse-google.protobuf.Timestamp) |  |  | [reserved](#support-status) |
+| message | [string](#cockroach.server.serverpb.DecommissionPreCheckResponse-string) |  |  | [reserved](#support-status) |
+
+
+
+
+
+
 ## Decommission
 
 
@@ -7437,7 +7621,7 @@ Support status: [reserved](#support-status)
 | Field | Type | Label | Description | Support status |
 | ----- | ---- | ----- | ----------- | -------------- |
 | statuses | [cockroach.kv.kvserver.loqrecovery.loqrecoverypb.NodeRecoveryStatus](#cockroach.server.serverpb.RecoveryVerifyResponse-cockroach.kv.kvserver.loqrecovery.loqrecoverypb.NodeRecoveryStatus) | repeated | Statuses contain a list of recovery statuses of nodes updated during recovery. It also contains nodes that were expected to be live (not decommissioned by recovery) but failed to return status response. | [reserved](#support-status) |
-| unavailable_ranges | [cockroach.roachpb.RangeDescriptor](#cockroach.server.serverpb.RecoveryVerifyResponse-cockroach.roachpb.RangeDescriptor) | repeated | Unavailable ranges contains descriptors of ranges that failed health checks. | [reserved](#support-status) |
+| unavailable_ranges | [cockroach.roachpb.RangeDescriptor](#cockroach.server.serverpb.RecoveryVerifyResponse-cockroach.roachpb.RangeDescriptor) | repeated | UnavailableRanges contains descriptors of ranges that failed health checks. | [reserved](#support-status) |
 | decommissioned_node_ids | [int32](#cockroach.server.serverpb.RecoveryVerifyResponse-int32) | repeated | DecommissionedNodeIDs contains list of decommissioned node id's. Only nodes that were decommissioned by the plan would be listed here, not all historically decommissioned ones. | [reserved](#support-status) |
 
 

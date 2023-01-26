@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -30,7 +31,7 @@ import (
 func runDecommissionMixedVersions(
 	ctx context.Context, t test.Test, c cluster.Cluster, buildVersion version.Version,
 ) {
-	predecessorVersion, err := PredecessorVersion(buildVersion)
+	predecessorVersion, err := clusterupgrade.PredecessorVersion(buildVersion)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -42,15 +43,12 @@ func runDecommissionMixedVersions(
 	pinnedUpgrade := h.getRandNode()
 	t.L().Printf("pinned n%d for upgrade", pinnedUpgrade)
 
-	// An empty string means that the cockroach binary specified by flag
-	// `cockroach` will be used.
-	const mainVersion = ""
 	allNodes := c.All()
 	u := newVersionUpgradeTest(c,
 		// We upload both binaries to each node, to be able to vary the binary
 		// used when issuing `cockroach node` subcommands.
 		uploadVersionStep(allNodes, predecessorVersion),
-		uploadVersionStep(allNodes, mainVersion),
+		uploadVersionStep(allNodes, clusterupgrade.MainVersion),
 
 		startVersion(allNodes, predecessorVersion),
 		waitForUpgradeStep(allNodes),
@@ -59,8 +57,8 @@ func runDecommissionMixedVersions(
 		preloadDataStep(pinnedUpgrade),
 
 		// We upgrade a pinnedUpgrade and one other random node of the cluster to v20.2.
-		binaryUpgradeStep(c.Node(pinnedUpgrade), mainVersion),
-		binaryUpgradeStep(c.Node(h.getRandNodeOtherThan(pinnedUpgrade)), mainVersion),
+		binaryUpgradeStep(c.Node(pinnedUpgrade), clusterupgrade.MainVersion),
+		binaryUpgradeStep(c.Node(h.getRandNodeOtherThan(pinnedUpgrade)), clusterupgrade.MainVersion),
 		checkAllMembership(pinnedUpgrade, "active"),
 
 		// Partially decommission a random node from another random node. We
@@ -80,7 +78,7 @@ func runDecommissionMixedVersions(
 		binaryUpgradeStep(allNodes, predecessorVersion),
 
 		// Roll all nodes forward, and finalize upgrade.
-		binaryUpgradeStep(allNodes, mainVersion),
+		binaryUpgradeStep(allNodes, clusterupgrade.MainVersion),
 		allowAutoUpgradeStep(1),
 		waitForUpgradeStep(allNodes),
 

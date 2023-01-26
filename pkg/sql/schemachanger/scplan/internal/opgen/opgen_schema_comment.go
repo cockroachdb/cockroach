@@ -26,9 +26,6 @@ func init() {
 						Comment:  this.Comment,
 					}
 				}),
-				emit(func(this *scpb.SchemaComment, md *opGenContext) *scop.LogEvent {
-					return newLogEventOp(this, md)
-				}),
 			),
 		),
 		toAbsent(

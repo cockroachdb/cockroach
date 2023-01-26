@@ -28,6 +28,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/keyvisualizer/keyvispb"
+	"github.com/cockroachdb/cockroach/pkg/keyvisualizer/keyvissubscriber"
+	"github.com/cockroachdb/cockroach/pkg/keyvisualizer/spanstatskvaccessor"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
@@ -145,6 +148,10 @@ type Server struct {
 	migrationServer *migrationServer
 	tsDB            *ts.DB
 	tsServer        *ts.Server
+
+	// spanStatsServer implements `keyvispb.KeyVisualizerServer`
+	spanStatsServer *SpanStatsServer
+
 	// The Observability Server, used by the Observability Service to subscribe to
 	// CRDB data.
 	eventsServer   *obs.EventsServer
@@ -160,6 +167,7 @@ type Server struct {
 	protectedtsProvider protectedts.Provider
 
 	spanConfigSubscriber spanconfig.KVSubscriber
+	spanConfigReporter   spanconfig.Reporter
 
 	// pgL is the SQL listener.
 	pgL net.Listener
@@ -245,11 +253,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		admissionOptions.Override(opts)
 	}
 	gcoords := admission.NewGrantCoordinators(cfg.AmbientCtx, st, admissionOptions, registry)
-	ssg, err := admission.MakeSoftSlotGranter(gcoords.Regular)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to soft slot granter")
-	}
-	cfg.SoftSlotGranter = ssg
 
 	engines, err := cfg.CreateEngines(ctx)
 	if err != nil {
@@ -258,6 +261,16 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	stopper.AddCloser(&engines)
 
 	nodeTombStorage, checkPingFor := getPingCheckDecommissionFn(engines)
+
+	g := gossip.New(
+		cfg.AmbientCtx,
+		cfg.ClusterIDContainer,
+		nodeIDContainer,
+		stopper,
+		registry,
+		cfg.Locality,
+		&cfg.DefaultZoneConfig,
+	)
 
 	rpcCtxOpts := rpc.ContextOptions{
 		TenantID:         roachpb.SystemTenantID,
@@ -328,18 +341,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	rpcContext.CheckCertificateAddrs(ctx)
 
 	grpcServer := newGRPCServer(rpcContext)
-
-	g := gossip.New(
-		cfg.AmbientCtx,
-		rpcContext.StorageClusterID,
-		nodeIDContainer,
-		rpcContext,
-		grpcServer.Server,
-		stopper,
-		registry,
-		cfg.Locality,
-		&cfg.DefaultZoneConfig,
-	)
+	gossip.RegisterGossipServer(grpcServer.Server, g)
 
 	var dialerKnobs nodedialer.DialerTestingKnobs
 	if dk := cfg.TestingKnobs.DialerKnobs; dk != nil {
@@ -727,7 +729,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		clock,
 		nodeLiveness,
 		rpcContext,
-		g,
 		st,
 		systemTenantNameContainer,
 	)
@@ -856,6 +857,15 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		clock,
 	)
 
+	spanStatsServer := &SpanStatsServer{
+		ie:         internalExecutor,
+		settings:   st,
+		nodeDialer: nodeDialer,
+		status:     sStatus,
+		node:       node,
+	}
+	spanStatsAccessor := spanstatskvaccessor.New(spanStatsServer)
+
 	// Instantiate the KV prober.
 	kvProber := kvprober.NewProber(kvprober.Opts{
 		Tracer:                  cfg.AmbientCtx.Tracer,
@@ -925,6 +935,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		nodeDescs:                g,
 		systemConfigWatcher:      systemConfigWatcher,
 		spanConfigAccessor:       spanConfig.kvAccessor,
+		spanStatsAccessor:        spanStatsAccessor,
 		nodeDialer:               nodeDialer,
 		distSender:               distSender,
 		db:                       db,
@@ -1030,7 +1041,25 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		},
 	)
 
-	recoveryServer := loqrecovery.NewServer(stores, g, cfg.Locality, rpcContext, cfg.TestingKnobs.LOQRecovery)
+	// TODO(oleg): plan store creation needs to move to the start of this method
+	// right after stores are created. We need it to retrieve pending plan and
+	// patch replicas before any initialization occurs.
+	planStore, err := newPlanStore(cfg)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to create loss of quorum recovery server")
+	}
+	recoveryServer := loqrecovery.NewServer(
+		nodeIDContainer,
+		stores,
+		planStore,
+		g,
+		cfg.Locality,
+		rpcContext,
+		cfg.TestingKnobs.LOQRecovery,
+		func(ctx context.Context, id roachpb.NodeID) error {
+			return nodeTombStorage.SetDecommissioned(ctx, id, timeutil.Now())
+		},
+	)
 
 	*lateBoundServer = Server{
 		nodeIDContainer:        nodeIDContainer,
@@ -1074,12 +1103,14 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		replicationReporter:    replicationReporter,
 		protectedtsProvider:    protectedtsProvider,
 		spanConfigSubscriber:   spanConfig.subscriber,
+		spanConfigReporter:     spanConfig.reporter,
 		pgPreServer:            &pgPreServer,
 		sqlServer:              sqlServer,
 		serverController:       sc,
 		externalStorageBuilder: externalStorageBuilder,
 		storeGrantCoords:       gcoords.Stores,
 		kvMemoryMonitor:        kvMemoryMonitor,
+		spanStatsServer:        spanStatsServer,
 	}
 
 	return lateBoundServer, err
@@ -1311,6 +1342,9 @@ func (s *Server) PreStart(ctx context.Context) error {
 	// subscribe to CRDB data. Note that the server will reject RPCs until
 	// SetResourceInfo is called later.
 	obspb.RegisterObsServer(s.grpc.Server, s.eventsServer)
+
+	// Register the KeyVisualizer Server
+	keyvispb.RegisterKeyVisualizerServer(s.grpc.Server, s.spanStatsServer)
 
 	// Start the RPC server. This opens the RPC/SQL listen socket,
 	// and dispatches the server worker for the RPC.
@@ -1574,7 +1608,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 	advAddrU := util.NewUnresolvedAddr("tcp", s.cfg.AdvertiseAddr)
 
 	// We're going to need to start gossip before we spin up Node below.
-	s.gossip.Start(advAddrU, filtered)
+	s.gossip.Start(advAddrU, filtered, s.rpcContext)
 	log.Event(ctx, "started gossip")
 
 	// Now that we have a monotonic HLC wrt previous incarnations of the process,
@@ -1829,6 +1863,21 @@ func (s *Server) PreStart(ctx context.Context) error {
 		return errors.Wrap(err, "cannot start upgrade task")
 	}
 
+	// Initialize the key visualizer boundary subscriber rangefeed,
+	// and start the rangefeed to broadcast updates to the collector.
+	if err := keyvissubscriber.Start(
+		ctx,
+		s.stopper,
+		s.db,
+		s.ClusterSettings(),
+		s.sqlServer.execCfg.SystemTableIDResolver,
+		s.clock.Now(),
+		func(update *keyvispb.UpdateBoundariesRequest) {
+			s.node.spanStatsCollector.SaveBoundaries(update.Boundaries, update.Time)
+		}); err != nil {
+		return err
+	}
+
 	if err := s.node.tenantSettingsWatcher.Start(workersCtx, s.sqlServer.execCfg.SystemTableIDResolver); err != nil {
 		return errors.Wrap(err, "failed to initialize the tenant settings watcher")
 	}
@@ -1907,6 +1956,11 @@ func (s *Server) TempDir() string {
 // PGServer exports the pgwire server. Used by tests.
 func (s *Server) PGServer() *pgwire.Server {
 	return s.sqlServer.pgServer
+}
+
+// SpanConfigReporter returns the spanconfig.Reporter. Used by tests.
+func (s *Server) SpanConfigReporter() spanconfig.Reporter {
+	return s.spanConfigReporter
 }
 
 // LogicalClusterID implements cli.serverStartupInterface. This

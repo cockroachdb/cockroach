@@ -7,7 +7,7 @@ CREATE MATERIALIZED VIEW v3 AS SELECT j FROM v2@idx;
 /* test */
 EXPLAIN (ddl) DROP INDEX idx CASCADE;
 ----
-Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹v2›@‹idx› CASCADE; 
+Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹v2›@‹idx› CASCADE;
  ├── StatementPhase
  │    └── Stage 1 of 1 in StatementPhase
  │         ├── 6 elements transitioning toward ABSENT
@@ -70,10 +70,8 @@ Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹v2›@‹idx�
       │    │    ├── DROPPED   → ABSENT      View:{DescID: 106}
       │    │    ├── PUBLIC    → ABSENT      IndexData:{DescID: 106, IndexID: 1}
       │    │    └── PUBLIC    → ABSENT      TableData:{DescID: 106, ReferencedDescID: 100}
-      │    └── 8 Mutation operations
-      │         ├── LogEvent {"TargetStatus":1}
+      │    └── 6 Mutation operations
       │         ├── CreateGCJobForTable {"DatabaseID":100,"TableID":106}
-      │         ├── LogEvent {"TargetStatus":1}
       │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":2,"TableID":105}
       │         ├── SetIndexName {"IndexID":2,"Name":"crdb_internal_in...","TableID":105}
       │         ├── CreateGCJobForIndex {"IndexID":1,"TableID":106}

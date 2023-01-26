@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
@@ -162,4 +163,25 @@ func (js *JSONStatistic) GetHistogram(
 		}
 	}
 	return h, nil
+}
+
+// IsPartial returns true if this statistic was collected with a where clause.
+func (js *JSONStatistic) IsPartial() bool {
+	return js.PartialPredicate != ""
+}
+
+// IsMerged returns true if this statistic was created by merging a partial and
+// a full statistic.
+func (js *JSONStatistic) IsMerged() bool {
+	return js.Name == jobspb.MergedStatsName
+}
+
+// IsForecast returns true if this statistic was created by forecasting.
+func (js *JSONStatistic) IsForecast() bool {
+	return js.Name == jobspb.ForecastStatsName
+}
+
+// IsAuto returns true if this statistic was collected automatically.
+func (js *JSONStatistic) IsAuto() bool {
+	return js.Name == jobspb.AutoStatsName
 }

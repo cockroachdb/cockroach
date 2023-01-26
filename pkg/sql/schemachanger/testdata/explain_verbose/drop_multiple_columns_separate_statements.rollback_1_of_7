@@ -6,7 +6,7 @@ ALTER TABLE t DROP COLUMN j CASCADE;
 ALTER TABLE t DROP COLUMN k CASCADE;
 EXPLAIN (ddl, verbose) rollback at post-commit stage 1 of 7;
 ----
-• Schema change plan for rolling back ALTER TABLE ‹defaultdb›.public.‹t› DROP COLUMN ‹j› CASCADE; ALTER TABLE ‹defaultdb›.public.‹t› DROP COLUMN ‹k› CASCADE; 
+• Schema change plan for rolling back ALTER TABLE ‹defaultdb›.public.‹t› DROP COLUMN ‹k› CASCADE; following ALTER TABLE ‹defaultdb›.public.‹t› DROP COLUMN ‹j› CASCADE;
 │
 └── • PostCommitNonRevertiblePhase
     │
@@ -151,33 +151,18 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 1 of 7;
         │       └── • PreviousTransactionPrecedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 3, SourceIndexID: 1}
         │             rule: "TemporaryIndex transitions to ABSENT uphold 2-version invariant: DELETE_ONLY->ABSENT"
         │
-        └── • 17 Mutation operations
+        └── • 16 Mutation operations
             │
             ├── • SetColumnName
             │     ColumnID: 3
             │     Name: k
             │     TableID: 104
             │
-            ├── • RefreshStats
-            │     TableID: 104
-            │
-            ├── • LogEvent
-            │     Element:
-            │       SecondaryIndex:
-            │         indexId: 2
-            │         tableId: 104
-            │     EventBase:
-            │       Authorization:
-            │         UserName: root
-            │       Statement: ALTER TABLE ‹defaultdb›.public.‹t› DROP COLUMN ‹j› CASCADE
-            │       StatementTag: ALTER TABLE
-            │       TargetMetadata:
-            │         SourceElementID: 1
-            │         SubWorkID: 1
-            │     TargetStatus: 2
-            │
             ├── • MakeValidatedSecondaryIndexPublic
             │     IndexID: 2
+            │     TableID: 104
+            │
+            ├── • RefreshStats
             │     TableID: 104
             │
             ├── • SetColumnName
@@ -196,42 +181,17 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 1 of 7;
             │
             ├── • MakeWriteOnlyColumnPublic
             │     ColumnID: 2
-            │     EventBase:
-            │       Authorization:
-            │         UserName: root
-            │       Statement: ALTER TABLE ‹defaultdb›.public.‹t› DROP COLUMN ‹j› CASCADE
-            │       StatementTag: ALTER TABLE
-            │       TargetMetadata:
-            │         SourceElementID: 1
-            │         SubWorkID: 1
             │     TableID: 104
             │
             ├── • RefreshStats
             │     TableID: 104
             │
             ├── • MakeIndexAbsent
-            │     EventBase:
-            │       Authorization:
-            │         UserName: root
-            │       Statement: ALTER TABLE ‹defaultdb›.public.‹t› DROP COLUMN ‹j› CASCADE
-            │       StatementTag: ALTER TABLE
-            │       TargetMetadata:
-            │         SourceElementID: 1
-            │         SubWorkID: 1
             │     IndexID: 3
             │     TableID: 104
             │
             ├── • MakeWriteOnlyColumnPublic
             │     ColumnID: 3
-            │     EventBase:
-            │       Authorization:
-            │         UserName: root
-            │       Statement: ALTER TABLE ‹defaultdb›.public.‹t› DROP COLUMN ‹k› CASCADE
-            │       StatementTag: ALTER TABLE
-            │       TargetMetadata:
-            │         SourceElementID: 1
-            │         StatementID: 1
-            │         SubWorkID: 1
             │     TableID: 104
             │
             ├── • RefreshStats
@@ -239,14 +199,6 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 1 of 7;
             │
             ├── • MakeWriteOnlyColumnPublic
             │     ColumnID: 4
-            │     EventBase:
-            │       Authorization:
-            │         UserName: root
-            │       Statement: ALTER TABLE ‹defaultdb›.public.‹t› DROP COLUMN ‹j› CASCADE
-            │       StatementTag: ALTER TABLE
-            │       TargetMetadata:
-            │         SourceElementID: 1
-            │         SubWorkID: 1
             │     TableID: 104
             │
             ├── • RefreshStats

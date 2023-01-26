@@ -965,7 +965,11 @@ func (s *vectorizedFlowCreator) setupInput(
 			}
 			s.closers = append(s.closers, os)
 		} else if input.Type == execinfrapb.InputSyncSpec_SERIAL_UNORDERED || opt == flowinfra.FuseAggressively {
-			sync := colexec.NewSerialUnorderedSynchronizer(inputStreamOps)
+			var err error
+			if input.EnforceHomeRegionError != nil {
+				err = input.EnforceHomeRegionError.ErrorDetail(ctx)
+			}
+			sync := colexec.NewSerialUnorderedSynchronizer(inputStreamOps, input.EnforceHomeRegionStreamExclusiveUpperBound, err)
 			opWithMetaInfo = colexecargs.OpWithMetaInfo{
 				Root:            sync,
 				MetadataSources: colexecop.MetadataSources{sync},

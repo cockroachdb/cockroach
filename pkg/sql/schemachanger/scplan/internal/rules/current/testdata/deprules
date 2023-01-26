@@ -18,13 +18,6 @@ DescriptorIsNotBeingDropped($element):
 ToPublicOrTransient($target1, $target2):
     - $target1[TargetStatus] IN [PUBLIC, TRANSIENT_ABSENT]
     - $target2[TargetStatus] IN [PUBLIC, TRANSIENT_ABSENT]
-fromHasPublicStatusIfFromIsTableAndToIsRowLevelTTL($fromTarget, $fromEl, $toEl):
-    not-join:
-        - $fromEl[Type] = '*scpb.Table'
-        - $toEl[Type] = '*scpb.RowLevelTTL'
-        - $n[Type] = '*screl.Node'
-        - $n[Target] = $fromTarget
-        - nodeHasNoPublicStatus($n)
 joinOnColumnID($a, $b, $desc-id, $col-id):
     - joinOnDescID($a, $b, $desc-id)
     - $a[ColumnID] = $col-id
@@ -51,10 +44,6 @@ joinTargetNode($element, $target, $node):
     - joinTarget($element, $target)
     - $node[Type] = '*screl.Node'
     - $node[Target] = $target
-nodeHasNoPublicStatus($n):
-    not-join:
-        - $public = PUBLIC
-        - $n[CurrentStatus] = $public
 nodeNotExistsWithStatusIn_BACKFILLED_BACKFILL_ONLY($sharedTarget):
     not-join:
         - $n[Type] = '*screl.Node'
@@ -2079,7 +2068,6 @@ deprules
     - toAbsent($descriptor-Target, $dependent-Target)
     - $descriptor-Node[CurrentStatus] = DROPPED
     - $dependent-Node[CurrentStatus] = ABSENT
-    - fromHasPublicStatusIfFromIsTableAndToIsRowLevelTTL($descriptor-Target, $descriptor, $dependent)
     - joinTargetNode($descriptor, $descriptor-Target, $descriptor-Node)
     - joinTargetNode($dependent, $dependent-Target, $dependent-Node)
 - name: descriptor drop right before removing dependent with attr ref
@@ -2142,6 +2130,7 @@ deprules
   to: earlier-column-Node
   query:
     - $later-column[Type] = '*scpb.Column'
+    - joinTargetNode($later-column, $later-column-Target, $later-column-Node)
     - $earlier-column[Type] = '*scpb.Column'
     - joinOnDescID($later-column, $earlier-column, $table-id)
     - ToPublicOrTransient($later-column-Target, $earlier-column-Target)

@@ -204,6 +204,12 @@ export type HotRangesRequestMessage =
   protos.cockroach.server.serverpb.HotRangesRequest;
 export type HotRangesV2ResponseMessage =
   protos.cockroach.server.serverpb.HotRangesResponseV2;
+
+export type KeyVisualizerSamplesRequestMessage =
+  protos.cockroach.server.serverpb.KeyVisSamplesRequest;
+export type KeyVisualizerSamplesResponseMessage =
+  protos.cockroach.server.serverpb.KeyVisSamplesResponse;
+
 export type ListTracingSnapshotsRequestMessage =
   protos.cockroach.server.serverpb.ListTracingSnapshotsRequest;
 export type ListTracingSnapshotsResponseMessage =
@@ -855,6 +861,18 @@ export function getHotRanges(
   return timeoutFetch(
     serverpb.HotRangesResponseV2,
     `${STATUS_PREFIX}/v2/hotranges`,
+    req as any,
+    timeout,
+  );
+}
+
+export function getKeyVisualizerSamples(
+  req: KeyVisualizerSamplesRequestMessage,
+  timeout?: moment.Duration,
+): Promise<KeyVisualizerSamplesResponseMessage> {
+  return timeoutFetch(
+    serverpb.KeyVisSamplesResponse,
+    `${STATUS_PREFIX}/keyvissamples`,
     req as any,
     timeout,
   );
