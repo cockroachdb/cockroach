@@ -36,36 +36,40 @@ func EncodingOf(ent raftpb.Entry) (EntryEncoding, error) {
 	}
 
 	switch ent.Type {
-	case raftpb.EntryNormal:
 	case raftpb.EntryConfChange:
 		return EntryEncodingRaftConfChange, nil
 	case raftpb.EntryConfChangeV2:
 		return EntryEncodingRaftConfChangeV2, nil
+	case raftpb.EntryNormal:
 	default:
 		return 0, errors.AssertionFailedf("unknown EntryType %d", ent.Type)
 	}
 
 	switch ent.Data[0] {
-	case EntryEncodingStandardPrefixByte:
-		return EntryEncodingStandard, nil
-	case EntryEncodingSideloadedPrefixByte:
-		return EntryEncodingSideloaded, nil
+	case entryEncodingStandardWithACPrefixByte:
+		return EntryEncodingStandardWithAC, nil
+	case entryEncodingSideloadedWithACPrefixByte:
+		return EntryEncodingSideloadedWithAC, nil
+	case entryEncodingStandardWithoutACPrefixByte:
+		return EntryEncodingStandardWithoutAC, nil
+	case entryEncodingSideloadedWithoutACPrefixByte:
+		return EntryEncodingSideloadedWithoutAC, nil
 	default:
 		return 0, errors.AssertionFailedf("unknown command encoding version %d", ent.Data[0])
 	}
 }
 
-// DecomposeRaftVersionStandardOrSideloaded extracts the CmdIDKey and the
-// marshaled kvserverpb.RaftCommand from a slice which is known to have come
-// from a raftpb.Entry of type raftlog.EntryEncodingStandard or
-// raftlog.EntryEncodingSideloaded (which, mod the prefix byte, share an
-// encoding).
-func DecomposeRaftVersionStandardOrSideloaded(data []byte) (kvserverbase.CmdIDKey, []byte) {
+// DecomposeRaftEncodingStandardOrSideloaded extracts the CmdIDKey and the
+// marshaled kvserverpb.RaftCommand from a raftpb.Entry slice known to have
+// Entry with type EntryEncoding{Standard,Sideloaded}With{,out}AC.
+// All these variants, mod the prefix byte, share an encoding.
+func DecomposeRaftEncodingStandardOrSideloaded(data []byte) (kvserverbase.CmdIDKey, []byte) {
 	return kvserverbase.CmdIDKey(data[1 : 1+RaftCommandIDLen]), data[1+RaftCommandIDLen:]
 }
 
 // Entry contains data related to a raft log entry. This is the raftpb.Entry
-// itself but also all encapsulated data relevant for command application.
+// itself but also all encapsulated data relevant for command application and
+// admission control.
 type Entry struct {
 	raftpb.Entry
 	ID                kvserverbase.CmdIDKey // may be empty for zero Entry
@@ -73,6 +77,10 @@ type Entry struct {
 	ConfChangeV1      *raftpb.ConfChange            // only set for config change
 	ConfChangeV2      *raftpb.ConfChangeV2          // only set for config change
 	ConfChangeContext *kvserverpb.ConfChangeContext // only set for config change
+	// ApplyAdmissionControl determines whether this entry is subject to
+	// replication admission control. Only applies for entries with encoding
+	// EntryEncoding{Standard,Sideloaded}WithAC.
+	ApplyAdmissionControl bool
 }
 
 var entryPool = sync.Pool{
@@ -145,8 +153,11 @@ func (e *Entry) load() error {
 		AsV2() raftpb.ConfChangeV2
 	}
 	switch typ {
-	case EntryEncodingStandard, EntryEncodingSideloaded:
-		e.ID, raftCmdBytes = DecomposeRaftVersionStandardOrSideloaded(e.Entry.Data)
+	case EntryEncodingStandardWithAC, EntryEncodingSideloadedWithAC:
+		e.ID, raftCmdBytes = DecomposeRaftEncodingStandardOrSideloaded(e.Entry.Data)
+		e.ApplyAdmissionControl = true
+	case EntryEncodingStandardWithoutAC, EntryEncodingSideloadedWithoutAC:
+		e.ID, raftCmdBytes = DecomposeRaftEncodingStandardOrSideloaded(e.Entry.Data)
 	case EntryEncodingEmpty:
 		// Nothing to load, the empty raftpb.Entry is represented by a trivial
 		// Entry.

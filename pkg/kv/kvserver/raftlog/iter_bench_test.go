@@ -59,10 +59,9 @@ func (m *mockReader) NewMVCCIterator(
 	return m.iter
 }
 
-func mkBenchEnt(b *testing.B) (_ raftpb.Entry, metaB []byte) {
+func mkRaftCommand(keySize, valSize, writeBatchSize int) *kvserverpb.RaftCommand {
 	r := rand.New(rand.NewSource(123))
-	// A realistic-ish raft command for a ~1kb write.
-	cmd := &kvserverpb.RaftCommand{
+	return &kvserverpb.RaftCommand{
 		ProposerLeaseSequence: 1,
 		MaxLeaseIndex:         1159192591,
 		ClosedTimestamp:       &hlc.Timestamp{WallTime: 12512591925, Logical: 1},
@@ -79,20 +78,25 @@ func mkBenchEnt(b *testing.B) (_ raftpb.Entry, metaB []byte) {
 			},
 			RaftLogDelta: 1300,
 		},
-		WriteBatch: &kvserverpb.WriteBatch{Data: randutil.RandBytes(r, 2000)},
+		WriteBatch: &kvserverpb.WriteBatch{Data: randutil.RandBytes(r, writeBatchSize)},
 		LogicalOpLog: &kvserverpb.LogicalOpLog{Ops: []enginepb.MVCCLogicalOp{
 			{
 				WriteValue: &enginepb.MVCCWriteValueOp{
-					Key:       roachpb.Key(randutil.RandBytes(r, 100)),
+					Key:       roachpb.Key(randutil.RandBytes(r, keySize)),
 					Timestamp: hlc.Timestamp{WallTime: 1284581285},
-					Value:     roachpb.Key(randutil.RandBytes(r, 1800)),
+					Value:     roachpb.Key(randutil.RandBytes(r, valSize)),
 				},
 			},
 		}},
 	}
+}
+
+func mkBenchEnt(b *testing.B) (_ raftpb.Entry, metaB []byte) {
+	// A realistic-ish raft command for a ~1kb write.
+	cmd := mkRaftCommand(100, 1800, 2000)
 	cmdB, err := protoutil.Marshal(cmd)
 	require.NoError(b, err)
-	data := EncodeRaftCommand(EntryEncodingStandardPrefixByte, "cmd12345", cmdB)
+	data := EncodeRaftCommand(EntryEncodingStandardWithoutAC, "cmd12345", cmdB)
 
 	ent := raftpb.Entry{
 		Term:  1,
