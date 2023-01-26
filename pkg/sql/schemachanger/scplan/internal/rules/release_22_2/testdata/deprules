@@ -2036,6 +2036,7 @@ deprules
   to: earlier-column-Node
   query:
     - $later-column[Type] = '*scpb.Column'
+    - joinTargetNode($later-column, $later-column-Target, $later-column-Node)
     - $earlier-column[Type] = '*scpb.Column'
     - joinOnDescID($later-column, $earlier-column, $table-id)
     - ToPublicOrTransient($later-column-Target, $earlier-column-Target)

@@ -174,6 +174,9 @@ var joinTypes = []string{
 }
 
 func makeJoinExpr(s *Smither, refs colRefs, forJoin bool) (tree.TableExpr, colRefs, bool) {
+	if s.disableJoins {
+		return nil, nil, false
+	}
 	left, leftRefs, ok := makeTableExpr(s, refs, true)
 	if !ok {
 		return nil, nil, false
@@ -280,7 +283,8 @@ func makeAndedJoinCond(
 		v := available[0]
 		available = available[1:]
 		var expr *tree.ComparisonExpr
-		useEQ := cond == nil || onlyEqualityPreds || s.coin()
+		_, expressionsAreComparable := tree.CmpOps[treecmp.LT].LookupImpl(v[0].ResolvedType(), v[1].ResolvedType())
+		useEQ := cond == nil || onlyEqualityPreds || !expressionsAreComparable || s.coin()
 		if useEQ {
 			expr = tree.NewTypedComparisonExpr(treecmp.MakeComparisonOperator(treecmp.EQ), v[0], v[1])
 		} else {
@@ -645,7 +649,11 @@ func (s *Smither) makeSelectClause(
 		}
 		clause.From.Tables = append(clause.From.Tables, from)
 		// Restrict so that we don't have a crazy amount of rows due to many joins.
-		if len(clause.From.Tables) >= 4 {
+		tableLimit := 4
+		if s.disableJoins {
+			tableLimit = 1
+		}
+		if len(clause.From.Tables) >= tableLimit {
 			break
 		}
 	}

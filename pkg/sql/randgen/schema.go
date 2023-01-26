@@ -331,7 +331,10 @@ func PopulateTableWithRandData(
 				// them to the list of columns to insert data into.
 				continue
 			}
-			colTypes = append(colTypes, tree.MustBeStaticallyKnownType(col.Type.(*types.T)))
+			if _, ok := col.Type.(*types.T); !ok {
+				return 0, errors.Newf("No type for %v", col)
+			}
+			colTypes = append(colTypes, tree.MustBeStaticallyKnownType(col.Type))
 			nullable = append(nullable, col.Nullable.Nullability == tree.Null)
 
 			colNameBuilder.WriteString(comma)
