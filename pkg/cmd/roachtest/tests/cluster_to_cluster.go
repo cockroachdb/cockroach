@@ -247,27 +247,17 @@ func setupC2C(
 	srcTenantInfo.sql.Exec(t, `SELECT crdb_internal.update_tenant_resource_limits($1, 10000000000, 0,
 10000000000, now(), 0);`, srcTenantInfo.ID)
 
-	createSystemRole(t, srcTenantInfo.name+" system tenant", srcTenantInfo.sql)
-	createSystemRole(t, srcTenantInfo.name+" system tenant", destTenantInfo.sql)
+	createTenantAdminRole(t, "src-system", srcTenantInfo.sql)
+	createTenantAdminRole(t, "dst-system", destTenantInfo.sql)
 
 	srcTenantDB := c.Conn(ctx, t.L(), srcNode[0], option.TenantName(srcTenantName))
 	srcTenantSQL := sqlutils.MakeSQLRunner(srcTenantDB)
-	createSystemRole(t, destTenantInfo.name+" app tenant", srcTenantSQL)
+	createTenantAdminRole(t, srcTenantInfo.name, srcTenantSQL)
 	return &c2cSetup{
 		src:          srcTenantInfo,
 		dst:          destTenantInfo,
 		workloadNode: workloadNode,
 		metrics:      c2cMetrics{}}
-}
-
-// createSystemRole creates a role that can be used to log into the cluster's db console
-func createSystemRole(t test.Test, name string, sql *sqlutils.SQLRunner) {
-	username := "secure"
-	password := "roach"
-	sql.Exec(t, fmt.Sprintf(`CREATE ROLE %s WITH LOGIN PASSWORD '%s'`, username, password))
-	sql.Exec(t, fmt.Sprintf(`GRANT ADMIN TO %s`, username))
-	t.L().Printf(`Log into the %s db console with username "%s" and password "%s"`,
-		name, username, password)
 }
 
 type streamingWorkload interface {
