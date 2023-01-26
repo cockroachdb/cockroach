@@ -19,7 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
@@ -57,7 +58,7 @@ func NewTestingReader(
 	slReader sqlliveness.Reader,
 	f *rangefeed.Factory,
 	codec keys.SQLCodec,
-	tableID descpb.ID,
+	table catalog.TableDescriptor,
 	clock *hlc.Clock,
 	stopper *stop.Stopper,
 ) *Reader {
@@ -67,7 +68,7 @@ func NewTestingReader(
 		f:               f,
 		codec:           codec,
 		clock:           clock,
-		rowcodec:        makeRowCodec(codec, tableID),
+		rowcodec:        makeRowCodec(codec, table),
 		initialScanDone: make(chan struct{}),
 		stopper:         stopper,
 	}
@@ -84,7 +85,7 @@ func NewReader(
 	clock *hlc.Clock,
 	stopper *stop.Stopper,
 ) *Reader {
-	return NewTestingReader(storage, slReader, f, codec, keys.SQLInstancesTableID, clock, stopper)
+	return NewTestingReader(storage, slReader, f, codec, systemschema.SQLInstancesTable(), clock, stopper)
 }
 
 // Start initializes the rangefeed for the Reader. The rangefeed will run until
