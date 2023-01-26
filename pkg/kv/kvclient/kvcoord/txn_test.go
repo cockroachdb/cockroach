@@ -649,7 +649,7 @@ func TestTxnCommitTimestampAdvancedByRefresh(t *testing.T) {
 				pErr := roachpb.NewReadWithinUncertaintyIntervalError(
 					txn.ReadTimestamp,
 					refreshTS,
-					hlc.Timestamp{},
+					hlc.ClockTimestamp{},
 					txn)
 				return roachpb.NewErrorWithTxn(pErr, txn)
 			}

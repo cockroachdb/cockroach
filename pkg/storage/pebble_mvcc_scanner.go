@@ -738,7 +738,7 @@ func (p *pebbleMVCCScanner) maybeFailOnMoreRecent() {
 // Returns an uncertainty error with the specified timestamp and p.txn.
 func (p *pebbleMVCCScanner) uncertaintyError(ts hlc.Timestamp) (ok bool) {
 	p.err = roachpb.NewReadWithinUncertaintyIntervalError(
-		p.ts, ts, p.uncertainty.LocalLimit.ToTimestamp(), p.txn)
+		p.ts, ts, p.uncertainty.LocalLimit, p.txn)
 	p.results.clear()
 	p.intents.Reset()
 	return false
