@@ -42,12 +42,20 @@ func registerMultiTenantSharedProcess(r registry.Registry) {
 			t.Status(`set up Unified Architecture Cluster`)
 			c.Put(ctx, t.Cockroach(), "./cockroach", crdbNodes)
 			c.Put(ctx, t.DeprecatedWorkload(), "./workload", workloadNode)
-			c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), crdbNodes)
+
+			// In order to observe the app tenant's db console,
+			//create a secure cluster and add Admin roles to the system and app tenant.
+			clusterSettings := install.MakeClusterSettings(install.SecureOption(true))
+			c.Start(ctx, t.L(), option.DefaultStartOpts(), clusterSettings, crdbNodes)
 
 			sysConn := c.Conn(ctx, t.L(), crdbNodes.RandNode()[0])
 			sysSQL := sqlutils.MakeSQLRunner(sysConn)
 
+			createTenantAdminRole(t, "system", sysSQL)
 			sysSQL.Exec(t, fmt.Sprintf(`CREATE TENANT %s`, appTenantName))
+
+			tenantConn := c.Conn(ctx, t.L(), crdbNodes.RandNode()[0], option.TenantName(appTenantName))
+			createTenantAdminRole(t, appTenantName, sqlutils.MakeSQLRunner(tenantConn))
 
 			// Currently, a tenant has by default a 10m RU burst limit, which can be
 			// reached during this test. To prevent RU limit throttling, add 10B RUs to

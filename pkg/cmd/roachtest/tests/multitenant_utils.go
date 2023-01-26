@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/stretchr/testify/require"
 )
 
@@ -320,4 +321,14 @@ func newTenantInstance(
 	}
 	c.Run(ctx, c.Node(node), "chmod", "0600", filepath.Join("certs", key))
 	return &inst, nil
+}
+
+// createTenantAdminRole creates a role that can be used to log into a secure cluster's db console.
+func createTenantAdminRole(t test.Test, tenantName string, tenantSQL *sqlutils.SQLRunner) {
+	username := "secure"
+	password := "roach"
+	tenantSQL.Exec(t, fmt.Sprintf(`CREATE ROLE %s WITH LOGIN PASSWORD '%s'`, username, password))
+	tenantSQL.Exec(t, fmt.Sprintf(`GRANT ADMIN TO %s`, username))
+	t.L().Printf(`Log into %s db console with username "%s" and password "%s"`,
+		tenantName, username, password)
 }
