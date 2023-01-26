@@ -17,11 +17,13 @@ import (
 	"runtime"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
@@ -107,7 +109,8 @@ func runMultiTenantUpgrade(ctx context.Context, t test.Test, c cluster.Cluster, 
 
 	verifySQL(t, tenant11.pgURL,
 		mkStmt("SHOW CLUSTER SETTING version").
-			withResults([][]string{{initialVersion}}),
+			withResults([][]string{{initialVersion}}).
+			withCustomResultsEqualFn(requireEqualVersionsIgnoreDevOffset),
 	)
 
 	t.Status("preserving downgrade option on system tenant")
@@ -149,7 +152,8 @@ func runMultiTenantUpgrade(ctx context.Context, t test.Test, c cluster.Cluster, 
 		mkStmt(`SELECT * FROM foo LIMIT 1`).
 			withResults([][]string{{"1", "bar"}}),
 		mkStmt("SHOW CLUSTER SETTING version").
-			withResults([][]string{{initialVersion}}),
+			withResults([][]string{{initialVersion}}).
+			withCustomResultsEqualFn(requireEqualVersionsIgnoreDevOffset),
 	)
 
 	t.Status("creating a new tenant 13")
@@ -171,7 +175,8 @@ func runMultiTenantUpgrade(ctx context.Context, t test.Test, c cluster.Cluster, 
 		mkStmt(`SELECT * FROM foo LIMIT 1`).
 			withResults([][]string{{"1", "bar"}}),
 		mkStmt("SHOW CLUSTER SETTING version").
-			withResults([][]string{{initialVersion}}),
+			withResults([][]string{{initialVersion}}).
+			withCustomResultsEqualFn(requireEqualVersionsIgnoreDevOffset),
 	)
 
 	t.Status("stopping the tenant 11 server ahead of upgrading")
@@ -186,7 +191,9 @@ func runMultiTenantUpgrade(ctx context.Context, t test.Test, c cluster.Cluster, 
 			mkStmt(`SELECT * FROM foo LIMIT 1`).
 				withResults([][]string{{"1", "bar"}}),
 			mkStmt("SHOW CLUSTER SETTING version").
-				withResults([][]string{{initialVersion}}))
+				withResults([][]string{{initialVersion}}).
+				withCustomResultsEqualFn(requireEqualVersionsIgnoreDevOffset),
+		)
 	}
 
 	t.Status("attempting to upgrade tenant 11 before storage cluster is finalized and expecting a failure")
@@ -206,7 +213,8 @@ func runMultiTenantUpgrade(ctx context.Context, t test.Test, c cluster.Cluster, 
 		mkStmt(`SELECT * FROM foo LIMIT 1`).
 			withResults([][]string{{"1", "bar"}}),
 		mkStmt("SHOW CLUSTER SETTING version").
-			withResults([][]string{{initialVersion}}),
+			withResults([][]string{{initialVersion}}).
+			withCustomResultsEqualFn(requireEqualVersionsIgnoreDevOffset),
 		mkStmt("SET CLUSTER SETTING version = crdb_internal.node_executable_version()"),
 		mkStmt("SELECT version = crdb_internal.node_executable_version() FROM [SHOW CLUSTER SETTING version]").
 			withResults([][]string{{"true"}}),
@@ -223,7 +231,9 @@ func runMultiTenantUpgrade(ctx context.Context, t test.Test, c cluster.Cluster, 
 		mkStmt(`SELECT * FROM foo LIMIT 1`).
 			withResults([][]string{{"1", "bar"}}),
 		mkStmt("SHOW CLUSTER SETTING version").
-			withResults([][]string{{initialVersion}}))
+			withResults([][]string{{initialVersion}}).
+			withCustomResultsEqualFn(requireEqualVersionsIgnoreDevOffset),
+	)
 
 	// Upgrade the tenant created in the mixed version state to the final version.
 	t.Status("migrating tenant 12 to the current version")
@@ -295,10 +305,31 @@ func runMultiTenantUpgrade(ctx context.Context, t test.Test, c cluster.Cluster, 
 			withResults([][]string{{"true"}}))
 }
 
+// EqualFn is implemented by both `require.Equal` and `requireEqualVersionsIgnoreDevOffset`.
+type EqualFn = func(t require.TestingT, expected interface{}, actual interface{}, msgAndArgs ...interface{})
+
+// TODO: replace this with require.Equal once #92608 is closed because
+// asserting on specific cluster versions makes for a stronger
+// test (and having or not having the version offset is part of that).
+func requireEqualVersionsIgnoreDevOffset(
+	t require.TestingT, expected interface{}, actual interface{}, msgAndArgs ...interface{},
+) {
+	normalizeVersion := func(v roachpb.Version) roachpb.Version {
+		if v.Major > clusterversion.DevOffset {
+			v.Major -= clusterversion.DevOffset
+		}
+		return v
+	}
+	normalizedExpectedVersion := normalizeVersion(roachpb.MustParseVersion(expected.([][]string)[0][0]))
+	normalizedActualVersion := normalizeVersion(roachpb.MustParseVersion(actual.([][]string)[0][0]))
+	require.Equal(t, normalizedExpectedVersion, normalizedActualVersion, msgAndArgs...)
+}
+
 type sqlVerificationStmt struct {
-	stmt            string
-	args            []interface{}
-	optionalResults [][]string
+	stmt                   string
+	args                   []interface{}
+	optionalResults        [][]string
+	optionalResultsEqualFn EqualFn
 }
 
 func (s sqlVerificationStmt) withResults(res [][]string) sqlVerificationStmt {
@@ -306,8 +337,13 @@ func (s sqlVerificationStmt) withResults(res [][]string) sqlVerificationStmt {
 	return s
 }
 
+func (s sqlVerificationStmt) withCustomResultsEqualFn(fn EqualFn) sqlVerificationStmt {
+	s.optionalResultsEqualFn = fn
+	return s
+}
+
 func mkStmt(stmt string, args ...interface{}) sqlVerificationStmt {
-	return sqlVerificationStmt{stmt: stmt, args: args}
+	return sqlVerificationStmt{stmt: stmt, args: args, optionalResultsEqualFn: require.Equal}
 }
 
 func openDBAndMakeSQLRunner(t test.Test, url string) (*sqlutils.SQLRunner, func()) {
@@ -328,7 +364,7 @@ func verifySQL(t test.Test, url string, stmts ...sqlVerificationStmt) {
 			tdb.Exec(t, stmt.stmt, stmt.args...)
 		} else {
 			res := tdb.QueryStr(t, stmt.stmt, stmt.args...)
-			require.Equal(t, stmt.optionalResults, res)
+			stmt.optionalResultsEqualFn(t, stmt.optionalResults, res)
 		}
 	}
 }
