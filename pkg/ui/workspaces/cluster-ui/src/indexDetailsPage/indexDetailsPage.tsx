@@ -395,47 +395,49 @@ export class IndexDetailsPage extends React.Component<
                 </SummaryCard>
               </Col>
             </Row>
-            <Row gutter={24} className={cx("row-spaced", "bottom-space")}>
-              <Col className="gutter-row" span={24}>
-                <SummaryCard className={cx("summary-card--row")}>
-                  <Heading type="h5">Index Usage</Heading>
-                  <TableStatistics
-                    pagination={stmtPagination}
-                    totalCount={statements.length}
-                    arrayItemName={"statement fingerprints using this index"}
-                    activeFilters={0}
-                  />
-                  <SortedTable
-                    data={statements}
-                    columns={makeStatementsColumns(
-                      statements,
-                      [],
-                      calculateTotalWorkload(statements),
-                      "statement",
-                      isTenant,
-                      hasViewActivityRedactedRole,
-                    ).filter(c => !(isTenant && c.hideIfTenant))}
-                    className={stmtCx("statements-table")}
-                    tableWrapperClassName={cx("table-scroll")}
-                    sortSetting={stmtSortSetting}
-                    onChangeSortSetting={this.onChangeSortSetting}
-                    pagination={stmtPagination}
-                    renderNoResult={
-                      <EmptyStatementsPlaceholder
-                        isEmptySearchResults={isEmptySearchResults}
-                        statementView={StatementViewType.USING_INDEX}
-                      />
-                    }
-                  />
-                  <Pagination
-                    pageSize={stmtPagination.pageSize}
-                    current={stmtPagination.current}
-                    total={statements.length}
-                    onChange={this.onChangePage}
-                  />
-                </SummaryCard>
-              </Col>
-            </Row>
+            {hasAdminRole && (
+              <Row gutter={24} className={cx("row-spaced", "bottom-space")}>
+                <Col className="gutter-row" span={24}>
+                  <SummaryCard className={cx("summary-card--row")}>
+                    <Heading type="h5">Index Usage</Heading>
+                    <TableStatistics
+                      pagination={stmtPagination}
+                      totalCount={statements.length}
+                      arrayItemName={"statement fingerprints using this index"}
+                      activeFilters={0}
+                    />
+                    <SortedTable
+                      data={statements}
+                      columns={makeStatementsColumns(
+                        statements,
+                        [],
+                        calculateTotalWorkload(statements),
+                        "statement",
+                        isTenant,
+                        hasViewActivityRedactedRole,
+                      ).filter(c => !(isTenant && c.hideIfTenant))}
+                      className={stmtCx("statements-table")}
+                      tableWrapperClassName={cx("table-scroll")}
+                      sortSetting={stmtSortSetting}
+                      onChangeSortSetting={this.onChangeSortSetting}
+                      pagination={stmtPagination}
+                      renderNoResult={
+                        <EmptyStatementsPlaceholder
+                          isEmptySearchResults={isEmptySearchResults}
+                          statementView={StatementViewType.USING_INDEX}
+                        />
+                      }
+                    />
+                    <Pagination
+                      pageSize={stmtPagination.pageSize}
+                      current={stmtPagination.current}
+                      total={statements.length}
+                      onChange={this.onChangePage}
+                    />
+                  </SummaryCard>
+                </Col>
+              </Row>
+            )}
           </section>
         </div>
       </div>
