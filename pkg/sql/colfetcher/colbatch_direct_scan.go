@@ -36,7 +36,7 @@ type ColBatchDirectScan struct {
 	fetcher row.KVBatchFetcher
 
 	allocator   *colmem.Allocator
-	spec        *fetchpb.IndexFetchSpec
+	spec        fetchpb.IndexFetchSpec
 	resultTypes []*types.T
 
 	data      []array.Data
@@ -82,7 +82,7 @@ func (s *ColBatchDirectScan) Next() (ret coldata.Batch) {
 	for {
 		res, err = s.fetcher.NextBatch(s.Ctx)
 		if err != nil {
-			colexecerror.InternalError(convertFetchError(s.spec, err))
+			colexecerror.InternalError(convertFetchError(&s.spec, err))
 		}
 		if !res.MoreKVs {
 			return coldata.ZeroBatch
@@ -174,10 +174,29 @@ func NewColBatchDirectScan(
 	if err != nil {
 		return nil, nil, err
 	}
-	fetcher := row.NewDirectKVBatchFetcher(
+	// Create the ColBatchDirectScan first in order to make a copy of the
+	// fetchpb.IndexFetchSpec and use the reference to that copy when creating
+	// the fetcher below.
+	//
+	// This is needed to avoid a "data race" on the TableReaderSpec being put
+	// back into the pool (which resets the fetch spec) - which is done when
+	// cleaning up the flow - and the fetch spec being marshaled as part of the
+	// BatchRequest. The "data race" is in quotes because it's a false positive
+	// from kvcoord.GRPCTransportFactory from transport_race.go. In particular,
+	// at the moment, we're not allowed to modify the BatchRequest after it was
+	// issued and even after it was responded to. In theory, we (the client)
+	// should be able to modify the BatchRequest, but alas.
+	directScan := &ColBatchDirectScan{
+		colBatchScanBase: base,
+		allocator:        allocator,
+		spec:             spec.FetchSpec,
+		resultTypes:      tableArgs.typs,
+		data:             make([]array.Data, len(tableArgs.typs)),
+	}
+	directScan.fetcher = row.NewDirectKVBatchFetcher(
 		flowCtx.Txn,
 		bsHeader,
-		&spec.FetchSpec,
+		&directScan.spec,
 		spec.Reverse,
 		spec.LockingStrength,
 		spec.LockingWaitPolicy,
@@ -185,13 +204,5 @@ func NewColBatchDirectScan(
 		kvFetcherMemAcc,
 		flowCtx.EvalCtx.TestingKnobs.ForceProductionValues,
 	)
-
-	return &ColBatchDirectScan{
-		colBatchScanBase: base,
-		allocator:        allocator,
-		fetcher:          fetcher,
-		spec:             &spec.FetchSpec,
-		resultTypes:      tableArgs.typs,
-		data:             make([]array.Data, len(tableArgs.typs)),
-	}, tableArgs.typs, nil
+	return directScan, tableArgs.typs, nil
 }
