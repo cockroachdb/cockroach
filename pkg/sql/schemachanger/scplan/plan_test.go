@@ -139,10 +139,7 @@ func validatePlan(t *testing.T, plan *scplan.Plan) {
 			expected[j] = s
 		}
 		e := marshalOps(t, plan.TargetState, expected)
-		cs := scpb.CurrentState{
-			TargetState: plan.TargetState,
-			Current:     stage.Before,
-		}
+		cs := plan.CurrentState.WithCurrentStatuses(stage.Before)
 		truncatedPlan := sctestutils.MakePlan(t, cs, stage.Phase)
 		sctestutils.TruncateJobOps(&truncatedPlan)
 		a := marshalOps(t, plan.TargetState, truncatedPlan.Stages)

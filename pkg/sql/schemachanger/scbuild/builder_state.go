@@ -55,15 +55,97 @@ func (b *builderState) QueryByID(id catid.DescID) scbuildstmt.ElementResultSet {
 
 // Ensure implements the scbuildstmt.BuilderState interface.
 func (b *builderState) Ensure(e scpb.Element, target scpb.TargetStatus, meta scpb.TargetMetadata) {
-	b.ensure(e, scpb.Status_UNKNOWN, scpb.InvalidTarget, target, meta)
+	dst := b.getExistingElementState(e)
+	switch target {
+	case scpb.ToAbsent, scpb.ToPublic, scpb.Transient:
+		// Sanity check.
+	default:
+		panic(errors.AssertionFailedf("unsupported target %s", target.Status()))
+	}
+	if dst == nil {
+		// We're adding both a new element and a target for it.
+		if target == scpb.ToAbsent {
+			// Ignore targets to remove something that doesn't exist yet.
+			return
+		}
+		b.addNewElementState(elementState{
+			element:  e,
+			initial:  scpb.Status_ABSENT,
+			current:  scpb.Status_ABSENT,
+			target:   target,
+			metadata: meta,
+		})
+		return
+	}
+	// At this point, we're setting a new target to an existing element.
+	if dst.target == target {
+		// Ignore no-op changes.
+		return
+	}
+	// Henceforth all possibilities lead to the target and metadata being
+	// overwritten. See below for explanations as to why this is legal.
+	oldTarget := dst.target
+	dst.target = target
+	dst.metadata = meta
+	if dst.metadata.Size() == 0 {
+		// The element has never had a target set before.
+		// We can freely overwrite it.
+		return
+	}
+	if dst.metadata.StatementID == meta.StatementID {
+		// The element has had a target set before, but it was in the same build.
+		// We can freely overwrite it or unset it.
+		if target.Status() == dst.initial {
+			// We're undoing the earlier target, as if it were never set
+			// in the first place.
+			dst.metadata.Reset()
+		}
+		return
+	}
+	// At this point, the element has had a target set in a previous build.
+	// The element may since have transitioned towards the target which we now
+	// want to overwrite as a result of executing at least one statement stage.
+	// As a result, we may no longer unset the target, even if it is a no-op
+	// one we reach the pre-commit phase.
+	switch oldTarget {
+	case scpb.ToPublic:
+		// Here the new target is either to-absent, which effectively undoes the
+		// incumbent target, or it's transient, which to-public targets can
+		// straightforwardly be promoted to (the public opgen path is a subset
+		// of the transient one when both exist, which must be the case here).
+		return
+	case scpb.ToAbsent:
+		// Here the new target is either to-public, which effectively undoes the
+		// incumbent target, or it's transient. The to-absent path is a subset of
+		// the transient path so it can be done but we must take care to migrate
+		// the current status to its transient equivalent if need be in order to
+		// avoid the possibility of a future transition to PUBLIC.
+		if target == scpb.Transient {
+			var ok bool
+			dst.current, ok = scpb.GetTransientEquivalent(dst.current)
+			if !ok {
+				panic(errors.AssertionFailedf(
+					"cannot promote to-absent target for %s to transient, "+
+						"current status %s has no transient equivalent",
+					screl.ElementString(e), dst.current))
+			}
+		}
+		return
+	case scpb.Transient:
+		// Here the new target is either to-absent, which effectively undoes the
+		// incumbent target, or it's to-public. In both cases if the current
+		// status is TRANSIENT_ we need to migrate it to its non-transient
+		// equivalent because TRANSIENT_ statuses aren't featured on either the
+		// to-absent or the to-public opgen path.
+		if nonTransient, ok := scpb.GetNonTransientEquivalent(dst.current); ok {
+			dst.current = nonTransient
+		}
+		return
+	}
+	panic(errors.AssertionFailedf("unsupported incumbent target %s", oldTarget.Status()))
 }
 
-// ensure is a helper function that ensures the presence of a target.
-// The target may be newly defined via Ensure or may be re-used from
-// a previous state and imported via newBuilderState.
-func (b *builderState) ensure(
-	e scpb.Element, current scpb.Status, previous, target scpb.TargetStatus, meta scpb.TargetMetadata,
-) {
+func (b *builderState) getExistingElementState(e scpb.Element) *elementState {
 	if e == nil {
 		panic(errors.AssertionFailedf("cannot define target for nil element"))
 	}
@@ -71,38 +153,25 @@ func (b *builderState) ensure(
 	b.ensureDescriptor(id)
 	c := b.descCache[id]
 	key := screl.ElementString(e)
-	if i, ok := c.elementIndexMap[key]; ok {
-		es := &b.output[i]
-		if !screl.EqualElementKeys(es.element, e) {
-			panic(errors.AssertionFailedf("element key %v does not match element: %s",
-				key, screl.ElementString(es.element)))
-		}
-		if current != scpb.Status_UNKNOWN {
-			es.current = current
-		}
-		if previous != scpb.InvalidTarget {
-			es.previous = previous
-		}
-		es.target = target
-		es.element = e
-		es.metadata = meta
-	} else {
-		if current == scpb.Status_UNKNOWN {
-			if target == scpb.ToAbsent {
-				panic(errors.AssertionFailedf("element not found: %s", screl.ElementString(e)))
-			}
-			current = scpb.Status_ABSENT
-		}
-		c.ers.indexes = append(c.ers.indexes, len(b.output))
-		c.elementIndexMap[key] = len(b.output)
-		b.output = append(b.output, elementState{
-			element:  e,
-			previous: previous,
-			target:   target,
-			current:  current,
-			metadata: meta,
-		})
+	i, ok := c.elementIndexMap[key]
+	if !ok {
+		return nil
 	}
+	es := &b.output[i]
+	if !screl.EqualElementKeys(es.element, e) {
+		panic(errors.AssertionFailedf("actual element key %v does not match expected %s",
+			key, screl.ElementString(es.element)))
+	}
+	return es
+}
+
+func (b *builderState) addNewElementState(es elementState) {
+	id := screl.GetDescID(es.element)
+	key := screl.ElementString(es.element)
+	c := b.descCache[id]
+	c.ers.indexes = append(c.ers.indexes, len(b.output))
+	c.elementIndexMap[key] = len(b.output)
+	b.output = append(b.output, es)
 }
 
 // LogEventForExistingTarget implements the scbuildstmt.BuilderState interface.
@@ -1023,13 +1092,11 @@ func (b *builderState) ensureDescriptor(id catid.DescID) {
 		return b.readDescriptor(id)
 	}
 	visitorFn := func(status scpb.Status, e scpb.Element) {
-		c.ers.indexes = append(c.ers.indexes, len(b.output))
-		key := screl.ElementString(e)
-		c.elementIndexMap[key] = len(b.output)
-		b.output = append(b.output, elementState{
+		b.addNewElementState(elementState{
 			element: e,
-			target:  scpb.AsTargetStatus(status),
+			initial: status,
 			current: status,
+			target:  scpb.AsTargetStatus(status),
 		})
 	}
 
