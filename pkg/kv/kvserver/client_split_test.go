@@ -2062,7 +2062,7 @@ func TestStoreRangeSplitRaceUninitializedRHS(t *testing.T) {
 			}
 			return roachpb.NewError(
 				roachpb.NewReadWithinUncertaintyIntervalError(
-					args.Hdr.Timestamp, args.Hdr.Timestamp, hlc.Timestamp{}, nil,
+					args.Hdr.Timestamp, hlc.ClockTimestamp{}, nil, args.Hdr.Timestamp, hlc.ClockTimestamp{},
 				))
 		}
 		return nil

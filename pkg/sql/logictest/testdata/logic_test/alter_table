@@ -520,7 +520,7 @@ a            INT8       false        NULL            ·                      {tt
 q            DECIMAL    false        NULL            ·                      {tt_pkey}                    false
 r            DECIMAL    true         NULL            ·                      {tt_pkey}                    false
 s            DECIMAL    false        NULL            ·                      {tt_pkey,tt_s_key}           false
-t            DECIMAL    true         4.0:::DECIMAL   ·                      {tt_pkey,tt_t_key}           false
+t            DECIMAL    true         4.0             ·                      {tt_pkey,tt_t_key}           false
 
 # Default values can be added and changed after table creation.
 statement ok

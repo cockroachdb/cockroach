@@ -30,11 +30,11 @@ CREATE TABLE t (
 query TTBTTTB colnames
 SHOW COLUMNS FROM t
 ----
-column_name  data_type  is_nullable  column_default     generation_expression  indices   is_hidden
-a            INT8       false        42:::INT8          ·                      {t_pkey}  false
-b            TIMESTAMP  true         now():::TIMESTAMP  ·                      {t_pkey}  false
-c            FLOAT8     true         random()           ·                      {t_pkey}  false
-d            DATE       true         now():::DATE       ·                      {t_pkey}  false
+column_name  data_type  is_nullable  column_default  generation_expression  indices   is_hidden
+a            INT8       false        42              ·                      {t_pkey}  false
+b            TIMESTAMP  true         now()           ·                      {t_pkey}  false
+c            FLOAT8     true         random()        ·                      {t_pkey}  false
+d            DATE       true         now()           ·                      {t_pkey}  false
 
 statement ok
 COMMENT ON COLUMN t.a IS 'a'
@@ -42,11 +42,11 @@ COMMENT ON COLUMN t.a IS 'a'
 query TTBTTTBT colnames
 SHOW COLUMNS FROM t WITH COMMENT
 ----
-column_name  data_type  is_nullable  column_default     generation_expression  indices   is_hidden  comment
-a            INT8       false        42:::INT8          ·                      {t_pkey}  false      a
-b            TIMESTAMP  true         now():::TIMESTAMP  ·                      {t_pkey}  false      NULL
-c            FLOAT8     true         random()           ·                      {t_pkey}  false      NULL
-d            DATE       true         now():::DATE       ·                      {t_pkey}  false      NULL
+column_name  data_type  is_nullable  column_default  generation_expression  indices   is_hidden  comment
+a            INT8       false        42              ·                      {t_pkey}  false      a
+b            TIMESTAMP  true         now()           ·                      {t_pkey}  false      NULL
+c            FLOAT8     true         random()        ·                      {t_pkey}  false      NULL
+d            DATE       true         now()           ·                      {t_pkey}  false      NULL
 
 statement ok
 INSERT INTO t VALUES (DEFAULT, DEFAULT, DEFAULT, DEFAULT)

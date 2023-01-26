@@ -757,10 +757,11 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 			pErrGen: func(txn *roachpb.Transaction) *roachpb.Error {
 				pErr := roachpb.NewErrorWithTxn(
 					roachpb.NewReadWithinUncertaintyIntervalError(
-						origTS,          // readTS
-						plus10,          // existingTS
-						hlc.Timestamp{}, // localUncertaintyLimit
-						txn,
+						origTS,               // readTS
+						hlc.ClockTimestamp{}, // localUncertaintyLimit
+						txn,                  // txn
+						plus10,               // valueTS
+						hlc.ClockTimestamp{}, // localTS
 					),
 					txn)
 				return pErr
@@ -777,10 +778,11 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 			pErrGen: func(txn *roachpb.Transaction) *roachpb.Error {
 				pErr := roachpb.NewErrorWithTxn(
 					roachpb.NewReadWithinUncertaintyIntervalError(
-						origTS, // readTS
-						plus10, // existingTS
-						plus20, // localUncertaintyLimit
-						txn,
+						origTS,                     // readTS
+						hlc.ClockTimestamp(plus20), // localUncertaintyLimit
+						txn,                        // txn
+						plus10,                     // valueTS
+						hlc.ClockTimestamp{},       // localTS
 					),
 					txn)
 				return pErr
@@ -1579,7 +1581,7 @@ func TestAbortTransactionOnCommitErrors(t *testing.T) {
 				txn.UpdateObservedTimestamp(nodeID, makeTS(123, 0).UnsafeToClockTimestamp())
 				return roachpb.NewErrorWithTxn(
 					roachpb.NewReadWithinUncertaintyIntervalError(
-						hlc.Timestamp{}, hlc.Timestamp{}, hlc.Timestamp{}, nil),
+						hlc.Timestamp{}, hlc.ClockTimestamp{}, nil, hlc.Timestamp{}, hlc.ClockTimestamp{}),
 					&txn)
 			},
 			asyncAbort: false},

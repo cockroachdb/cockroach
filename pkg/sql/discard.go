@@ -84,14 +84,26 @@ func (n *discardNode) startExec(params runParams) error {
 }
 
 func deleteTempTables(ctx context.Context, p *planner) error {
+	// If this session has no temp schemas, then there is nothing to do here.
+	// This is the common case.
+	if len(p.SessionData().DatabaseIDToTempSchemaID) == 0 {
+		return nil
+	}
 	codec := p.execCfg.Codec
 	descCol := p.Descriptors()
+	// Note: grabbing all the databases here is somewhat suspect. It appears
+	// that the logic related to maintaining the set of database temp schemas
+	// is somewhat incomplete, so there can be temp schemas in the sessiondata
+	// map which don't exist any longer.
 	allDbDescs, err := descCol.GetAllDatabaseDescriptors(ctx, p.Txn())
 	if err != nil {
 		return err
 	}
 	g := p.byNameGetterBuilder().MaybeGet()
 	for _, db := range allDbDescs {
+		if _, ok := p.SessionData().DatabaseIDToTempSchemaID[uint32(db.GetID())]; !ok {
+			continue
+		}
 		sc, err := g.Schema(ctx, db, p.TemporarySchemaName())
 		if err != nil {
 			return err
