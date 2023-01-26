@@ -921,18 +921,26 @@ var _ transactionRestartError = &WriteTooOldError{}
 // used for formatting the error message.
 // TODO(nvanbenschoten): add localTs and include in error string.
 func NewReadWithinUncertaintyIntervalError(
-	readTS, valueTS hlc.Timestamp, localUncertaintyLimit hlc.ClockTimestamp, txn *Transaction,
+	readTS hlc.Timestamp,
+	localUncertaintyLimit hlc.ClockTimestamp,
+	txn *Transaction,
+	valueTS hlc.Timestamp,
 ) *ReadWithinUncertaintyIntervalError {
-	rwue := &ReadWithinUncertaintyIntervalError{
-		ReadTimestamp:         readTS,
-		ValueTimestamp:        valueTS,
-		LocalUncertaintyLimit: localUncertaintyLimit,
-	}
+	var globalUncertaintyLimit hlc.Timestamp
+	var observedTSs []ObservedTimestamp
 	if txn != nil {
-		rwue.GlobalUncertaintyLimit = txn.GlobalUncertaintyLimit
-		rwue.ObservedTimestamps = txn.ObservedTimestamps
+		globalUncertaintyLimit = txn.GlobalUncertaintyLimit
+		observedTSs = txn.ObservedTimestamps
 	}
-	return rwue
+	return &ReadWithinUncertaintyIntervalError{
+		// Information about the reader.
+		ReadTimestamp:          readTS,
+		LocalUncertaintyLimit:  localUncertaintyLimit,
+		GlobalUncertaintyLimit: globalUncertaintyLimit,
+		ObservedTimestamps:     observedTSs,
+		// Information about the uncertain value.
+		ValueTimestamp: valueTS,
+	}
 }
 
 // SafeFormat implements redact.SafeFormatter.

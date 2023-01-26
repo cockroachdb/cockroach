@@ -483,10 +483,10 @@ func TestDrainingProcessorSwallowsUncertaintyError(t *testing.T) {
 									blockedRead.Unlock()
 									return roachpb.NewError(
 										roachpb.NewReadWithinUncertaintyIntervalError(
-											ba.Timestamp,           /* readTs */
-											ba.Timestamp.Add(1, 0), /* valueTS */
-											hlc.ClockTimestamp{},   /* localUncertaintyLimit */
-											ba.Txn))
+											ba.Timestamp,         /* readTs */
+											hlc.ClockTimestamp{}, /* localUncertaintyLimit */
+											ba.Txn,               /* txn */
+											ba.Timestamp.Add(1, 0) /* valueTS */))
 								}
 								return nil
 							},
@@ -661,9 +661,9 @@ func TestUncertaintyErrorIsReturned(t *testing.T) {
 							return roachpb.NewError(
 								roachpb.NewReadWithinUncertaintyIntervalError(
 									ba.Timestamp,
-									ba.Timestamp.Add(1, 0),
 									hlc.ClockTimestamp{},
 									ba.Txn,
+									ba.Timestamp.Add(1, 0),
 								),
 							)
 						},
