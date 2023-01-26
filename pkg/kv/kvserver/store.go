@@ -86,6 +86,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
+	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/redact"
 	prometheusgo "github.com/prometheus/client_model/go"
 	"go.etcd.io/raft/v3"
@@ -2870,15 +2871,44 @@ func (s *Store) checkpointsDir() string {
 	return filepath.Join(s.engine.GetAuxiliaryDir(), "checkpoints")
 }
 
-// checkpoint creates a RocksDB checkpoint in the auxiliary directory with the
-// provided tag used in the filepath. The filepath for the checkpoint directory
-// is returned.
-func (s *Store) checkpoint(ctx context.Context, tag string) (string, error) {
+// checkpoint creates a Pebble checkpoint in the auxiliary directory with the
+// provided tag used in the filepath. Returns the path to the created checkpoint
+// directory.
+//
+// Creates the checkpoint of the entire storage if the provided range descriptor
+// is nil. Otherwise, creates a "narrow" checkpoint that includes the provided
+// range, and possibly a few neighbouring ranges.
+func (s *Store) checkpoint(tag string, desc *roachpb.RangeDescriptor) (string, error) {
 	checkpointBase := s.checkpointsDir()
 	_ = s.engine.MkdirAll(checkpointBase)
-
 	checkpointDir := filepath.Join(checkpointBase, tag)
-	if err := s.engine.CreateCheckpoint(checkpointDir); err != nil {
+
+	var spans []pebble.CheckpointSpan
+	if desc != nil {
+		// Find left and right neighbour of the range.
+		s.mu.RLock()
+		left := s.mu.replicasByKey.LookupPrecedingReplica(context.Background(), desc.StartKey).Desc()
+		var right *roachpb.RangeDescriptor
+		err := s.mu.replicasByKey.VisitKeyRange(context.Background(), desc.EndKey, roachpb.RKeyMax,
+			AscendingKeyOrder, func(_ context.Context, rp replicaOrPlaceholder) error {
+				right = rp.Desc()
+				return iterutil.StopIteration()
+			})
+		s.mu.RUnlock()
+		if err != nil {
+			return "", err
+		}
+
+		span := pebble.CheckpointSpan{Start: desc.StartKey, End: desc.EndKey}
+		if left != nil {
+			span.Start = left.StartKey
+		}
+		if right != nil {
+			span.End = right.EndKey
+		}
+		spans = append(spans, span)
+	}
+	if err := s.engine.CreateCheckpoint(checkpointDir, spans); err != nil {
 		return "", err
 	}
 

@@ -650,6 +650,14 @@ func (r *Replica) computeChecksumPostApply(
 		return errors.Errorf("incompatible versions (requested: %d, have: %d)", req, have)
 	}
 
+	var shouldFatal bool
+	for _, rDesc := range cc.Terminate {
+		if rDesc.StoreID == r.store.StoreID() && rDesc.ReplicaID == r.replicaID {
+			shouldFatal = true
+			break
+		}
+	}
+
 	// Capture the current range descriptor, as it may change by the time the
 	// async task below runs.
 	desc := *r.Desc()
@@ -665,7 +673,14 @@ func (r *Replica) computeChecksumPostApply(
 		}
 		// NB: the names here will match on all nodes, which is nice for debugging.
 		tag := fmt.Sprintf("r%d_at_%d", r.RangeID, as.RaftAppliedIndex)
-		if dir, err := r.store.checkpoint(ctx, tag); err != nil {
+		// If the node is about to be killed, create a full checkpoint, otherwise
+		// create a smaller partial checkpoint including this Replica and maybe a
+		// few neighbouring replicas.
+		desc := &desc
+		if shouldFatal {
+			desc = nil
+		}
+		if dir, err := r.store.checkpoint(tag, desc); err != nil {
 			log.Warningf(ctx, "unable to create checkpoint %s: %+v", dir, err)
 		} else {
 			log.Warningf(ctx, "created checkpoint %s", dir)
@@ -722,13 +737,6 @@ func (r *Replica) computeChecksumPostApply(
 			r.computeChecksumDone(c, result)
 		}
 
-		var shouldFatal bool
-		for _, rDesc := range cc.Terminate {
-			if rDesc.StoreID == r.store.StoreID() && rDesc.ReplicaID == r.replicaID {
-				shouldFatal = true
-				break
-			}
-		}
 		if !shouldFatal {
 			return
 		}
@@ -759,11 +767,16 @@ Checkpoints are created on each node/store hosting this range, to help
 investigate the cause. Only nodes that are more likely to have incorrect data
 are terminated, and usually a majority of replicas continue running.
 
-The storage checkpoint directory MUST be deleted or moved away timely, on the
-nodes that continue operating. Over time the storage engine gets updated and
-compacted, which leads to checkpoints becoming a full copy of a past state. Even
-with no writes to the database, on these stores disk consumption may double in a
-matter of hours/days, depending on compaction schedule.
+Checkpoints on the terminated nodes are created for the entire storage engine.
+On the surviving nodes, checkpoints are partial, i.e. contain only the data
+specific to the inconsistent range, and possibly its neighbouring ranges.
+
+The storage checkpoint directories MUST be deleted or moved away eventually, on
+the nodes that continue operating. Over time the storage engine gets updated and
+compacted, which leads to checkpoints becoming a full copy of a past state. This
+is not time critical because the checkpoints are localized to a single / few
+range(s), and over time may grow to consume only O(GB) disk space. There is no
+automatic garbage collection of checkpoints, for the reason below.
 
 Checkpoints are very helpful in debugging this issue, so before deleting them,
 please consider alternative actions:
@@ -773,7 +786,7 @@ please consider alternative actions:
 - Consider backing up the checkpoints before removing them, e.g. by snapshotting
   the disk.
 - If the stores are nearly full, but the cluster has enough capacity, consider
-  gradually decomissioning the affected nodes, to retain the checkpoints.
+  gradually decommissioning the affected nodes, to retain the checkpoints.
 
 To inspect the checkpoints, one can use the cockroach debug range-data tool, and
 command line tools like diff. For example:
