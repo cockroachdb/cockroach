@@ -1008,12 +1008,12 @@ func TestCreateCheckpoint(t *testing.T) {
 	dir = filepath.Join(dir, "checkpoint")
 
 	assert.NoError(t, err)
-	assert.NoError(t, db.CreateCheckpoint(dir))
+	assert.NoError(t, db.CreateCheckpoint(dir, nil))
 	assert.DirExists(t, dir)
 	m, err := filepath.Glob(dir + "/*")
 	assert.NoError(t, err)
 	assert.True(t, len(m) > 0)
-	if err := db.CreateCheckpoint(dir); !testutils.IsError(err, "exists") {
+	if err := db.CreateCheckpoint(dir, nil); !testutils.IsError(err, "exists") {
 		t.Fatal(err)
 	}
 }

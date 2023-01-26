@@ -49,6 +49,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/multiqueue"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftentry"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/tenantrate"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/tscache"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnrecovery"
@@ -2870,18 +2871,82 @@ func (s *Store) checkpointsDir() string {
 	return filepath.Join(s.engine.GetAuxiliaryDir(), "checkpoints")
 }
 
-// checkpoint creates a RocksDB checkpoint in the auxiliary directory with the
-// provided tag used in the filepath. The filepath for the checkpoint directory
-// is returned.
-func (s *Store) checkpoint(ctx context.Context, tag string) (string, error) {
-	checkpointBase := s.checkpointsDir()
-	_ = s.engine.MkdirAll(checkpointBase)
-
-	checkpointDir := filepath.Join(checkpointBase, tag)
-	if err := s.engine.CreateCheckpoint(checkpointDir); err != nil {
-		return "", err
+// checkpointSpans returns key spans containing the given range. The spans may
+// be wider, and contain a few extra ranges that surround the given range. The
+// extension of the spans gives more information for debugging consistency or
+// storage issues, e.g. in situations when a recent reconfiguration like split
+// or merge occurred.
+func (s *Store) checkpointSpans(desc *roachpb.RangeDescriptor) []roachpb.Span {
+	// Find immediate left and right neighbours by range ID.
+	var prevID, nextID roachpb.RangeID
+	s.mu.replicasByRangeID.Range(func(r *Replica) {
+		if id, our := r.RangeID, desc.RangeID; id < our && id > prevID {
+			prevID = id
+		} else if id > our && (nextID == 0 || id < nextID) {
+			nextID = id
+		}
+	})
+	if prevID == 0 {
+		prevID = desc.RangeID
+	}
+	if nextID == 0 {
+		nextID = desc.RangeID
 	}
 
+	// Find immediate left and right neighbours by user key.
+	s.mu.RLock()
+	left := s.mu.replicasByKey.LookupPrecedingReplica(context.Background(), desc.StartKey)
+	right := s.mu.replicasByKey.LookupNextReplica(context.Background(), desc.EndKey)
+	s.mu.RUnlock()
+
+	// Cover all range IDs (prevID, desc.RangeID, nextID) using continuous spans,
+	// one for replicated and one for unreplicated keyspace.
+	// TODO(tbg): make an rditer.Select-like helper for this.
+	spans := []roachpb.Span{{
+		Key:    keys.MakeRangeIDReplicatedPrefix(prevID),
+		EndKey: keys.MakeRangeIDReplicatedPrefix(nextID).PrefixEnd(),
+	}, {
+		Key:    keys.MakeRangeIDUnreplicatedPrefix(prevID),
+		EndKey: keys.MakeRangeIDUnreplicatedPrefix(nextID).PrefixEnd(),
+	}}
+	// NB: don't include replicated user keyspace for prevID and nextID. For
+	// replicated space we only include the immediate neighbours *by key*.
+
+	// Include the data comprising ranges left, desc, and right.
+	byRangeID := rditer.SelectOpts{
+		ReplicatedByRangeID:   true,
+		UnreplicatedByRangeID: true,
+	}
+	userKeys := desc.RSpan()
+	if left != nil {
+		userKeys.Key = left.Desc().StartKey
+		if id := left.RangeID; id < prevID || id > nextID {
+			spans = append(spans, rditer.Select(left.RangeID, byRangeID)...)
+		}
+	}
+	if right != nil {
+		userKeys.EndKey = right.Desc().EndKey
+		if id := right.RangeID; id < prevID || id > nextID {
+			spans = append(spans, rditer.Select(right.RangeID, byRangeID)...)
+		}
+	}
+	// TODO(tbg): rangeID is ignored here, make a rangeID-agnostic helper.
+	spans = append(spans, rditer.Select(0, rditer.SelectOpts{ReplicatedBySpan: userKeys})...)
+
+	return spans
+}
+
+// checkpoint creates a Pebble checkpoint in the auxiliary directory with the
+// provided tag used in the filepath. Returns the path to the created checkpoint
+// directory. The checkpoint includes only files that intersect with either of
+// the provided key spans. If spans is empty, it includes the entire store.
+func (s *Store) checkpoint(tag string, spans []roachpb.Span) (string, error) {
+	checkpointBase := s.checkpointsDir()
+	_ = s.engine.MkdirAll(checkpointBase)
+	checkpointDir := filepath.Join(checkpointBase, tag)
+	if err := s.engine.CreateCheckpoint(checkpointDir, spans); err != nil {
+		return "", err
+	}
 	return checkpointDir, nil
 }
 
