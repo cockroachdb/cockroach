@@ -33,6 +33,6 @@ export function* sagas(cacheInvalidationPeriod?: number): SagaIterator {
     fork(notifificationsSaga),
     fork(sqlStatsSaga),
     fork(sqlDetailsStatsSaga),
-    fork(uiConfigSaga),
+    fork(uiConfigSaga, cacheInvalidationPeriod),
   ]);
 }
