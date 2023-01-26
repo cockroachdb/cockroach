@@ -1823,8 +1823,15 @@ func (p *Pebble) Stat(name string) (os.FileInfo, error) {
 }
 
 // CreateCheckpoint implements the Engine interface.
-func (p *Pebble) CreateCheckpoint(dir string) error {
-	return p.db.Checkpoint(dir, pebble.WithFlushedWAL())
+func (p *Pebble) CreateCheckpoint(dir string, spans []roachpb.Span) error {
+	var s []pebble.CheckpointSpan
+	if l := len(spans); l > 0 {
+		s = make([]pebble.CheckpointSpan, 0, l)
+	}
+	for _, span := range spans {
+		s = append(s, pebble.CheckpointSpan{Start: span.Key, End: span.EndKey})
+	}
+	return p.db.Checkpoint(dir, pebble.WithFlushedWAL(), pebble.WithRestrictToSpans(s))
 }
 
 // SetMinVersion implements the Engine interface.

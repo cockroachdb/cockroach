@@ -636,6 +636,39 @@ func CalcReplicaDigest(
 	return &result, nil
 }
 
+func (r *Replica) checkpointSpans() []roachpb.Span {
+	desc := r.Desc()
+	s := r.store
+
+	// Find left and right neighbour of the range.
+	s.mu.RLock()
+	left := s.mu.replicasByKey.LookupPrecedingReplica(context.Background(), desc.StartKey)
+	right := s.mu.replicasByKey.LookupNextReplica(context.Background(), desc.EndKey)
+	s.mu.RUnlock()
+
+	var spans []roachpb.Span
+	span := desc.RSpan()
+	if left != nil {
+		span.Key = left.Desc().StartKey
+		spans = append(spans, rditer.Select(left.RangeID, rditer.SelectOpts{
+			ReplicatedByRangeID:   true,
+			UnreplicatedByRangeID: true,
+		})...)
+	}
+	if right != nil {
+		span.EndKey = right.Desc().EndKey
+		spans = append(spans, rditer.Select(right.RangeID, rditer.SelectOpts{
+			ReplicatedByRangeID:   true,
+			UnreplicatedByRangeID: true,
+		})...)
+	}
+	return append(spans, rditer.Select(desc.RangeID, rditer.SelectOpts{
+		ReplicatedBySpan:      span,
+		ReplicatedByRangeID:   true,
+		UnreplicatedByRangeID: true,
+	})...)
+}
+
 func (r *Replica) computeChecksumPostApply(
 	ctx context.Context, cc kvserverpb.ComputeChecksum,
 ) (err error) {
@@ -665,7 +698,7 @@ func (r *Replica) computeChecksumPostApply(
 		}
 		// NB: the names here will match on all nodes, which is nice for debugging.
 		tag := fmt.Sprintf("r%d_at_%d", r.RangeID, as.RaftAppliedIndex)
-		if dir, err := r.store.checkpoint(ctx, tag); err != nil {
+		if dir, err := r.store.checkpoint(tag, r.checkpointSpans()); err != nil {
 			log.Warningf(ctx, "unable to create checkpoint %s: %+v", dir, err)
 		} else {
 			log.Warningf(ctx, "created checkpoint %s", dir)
@@ -721,7 +754,6 @@ func (r *Replica) computeChecksumPostApply(
 			}
 			r.computeChecksumDone(c, result)
 		}
-
 		var shouldFatal bool
 		for _, rDesc := range cc.Terminate {
 			if rDesc.StoreID == r.store.StoreID() && rDesc.ReplicaID == r.replicaID {
@@ -729,6 +761,7 @@ func (r *Replica) computeChecksumPostApply(
 				break
 			}
 		}
+
 		if !shouldFatal {
 			return
 		}
@@ -757,23 +790,19 @@ A file preventing this node from restarting was placed at:
 
 Checkpoints are created on each node/store hosting this range, to help
 investigate the cause. Only nodes that are more likely to have incorrect data
-are terminated, and usually a majority of replicas continue running.
+are terminated, and usually a majority of replicas continue running. Checkpoints
+are partial, i.e. contain only the data from to the inconsistent range, and
+possibly its neighbouring ranges.
 
-The storage checkpoint directory MUST be deleted or moved away timely, on the
-nodes that continue operating. Over time the storage engine gets updated and
-compacted, which leads to checkpoints becoming a full copy of a past state. Even
-with no writes to the database, on these stores disk consumption may double in a
-matter of hours/days, depending on compaction schedule.
+The storage checkpoint directories can/should be deleted when no longer needed.
+They are very helpful in debugging this issue, so before deleting them, please
+consider alternative actions:
 
-Checkpoints are very helpful in debugging this issue, so before deleting them,
-please consider alternative actions:
-
-- If the store has enough capacity, hold off deleting the checkpoint until CRDB
-  staff has diagnosed the issue.
-- Consider backing up the checkpoints before removing them, e.g. by snapshotting
-  the disk.
+- If the store has enough capacity, hold off the deletion until CRDB staff has
+  diagnosed the issue.
+- Back up the checkpoints for later investigation.
 - If the stores are nearly full, but the cluster has enough capacity, consider
-  gradually decomissioning the affected nodes, to retain the checkpoints.
+  gradually decommissioning the affected nodes, to retain the checkpoints.
 
 To inspect the checkpoints, one can use the cockroach debug range-data tool, and
 command line tools like diff. For example:
