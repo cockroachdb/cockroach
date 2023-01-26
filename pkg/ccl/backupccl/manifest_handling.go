@@ -120,7 +120,7 @@ var writeMetadataSST = settings.RegisterBoolSetting(
 	settings.TenantWritable,
 	"kv.bulkio.write_metadata_sst.enabled",
 	"write experimental new format BACKUP metadata file",
-	true,
+	false,
 )
 var errEncryptionInfoRead = errors.New(`ENCRYPTION-INFO not found`)
 
