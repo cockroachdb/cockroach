@@ -107,6 +107,17 @@ func IsClosedConnection(err error) bool {
 	return netutil.IsClosedConnection(err)
 }
 
+// IsDecommissionedError returns true if err's Cause is an error produced by gRPC
+// due to remote node has been decommissioned.
+func IsDecommissionedError(err error) bool {
+	if s, ok := status.FromError(errors.UnwrapAll(err)); ok {
+		if s.Code() == codes.FailedPrecondition && strings.Contains(err.Error(), "was permanently removed from the cluster") {
+			return true
+		}
+	}
+	return false
+}
+
 // IsConnectionRejected returns true if err's cause is an error produced by
 // gRPC due to remote node being unavailable and retrying immediately would
 // not fix the problem. It happens when either remote node is decommissioned
