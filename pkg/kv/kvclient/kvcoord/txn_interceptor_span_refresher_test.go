@@ -159,7 +159,7 @@ func TestTxnSpanRefresherRefreshesTransactions(t *testing.T) {
 			pErr: func() *roachpb.Error {
 				return roachpb.NewError(
 					&roachpb.ReadWithinUncertaintyIntervalError{
-						ExistingTimestamp: txn.WriteTimestamp.Add(25, 0),
+						ValueTimestamp: txn.WriteTimestamp.Add(25, 0),
 					})
 			},
 			expRefresh:   true,
@@ -169,7 +169,7 @@ func TestTxnSpanRefresherRefreshesTransactions(t *testing.T) {
 			pErr: func() *roachpb.Error {
 				return roachpb.NewError(
 					&roachpb.ReadWithinUncertaintyIntervalError{
-						ExistingTimestamp:     txn.WriteTimestamp.Add(25, 0),
+						ValueTimestamp:        txn.WriteTimestamp.Add(25, 0),
 						LocalUncertaintyLimit: txn.WriteTimestamp.Add(30, 0),
 					})
 			},

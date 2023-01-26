@@ -758,7 +758,7 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 				pErr := roachpb.NewErrorWithTxn(
 					roachpb.NewReadWithinUncertaintyIntervalError(
 						origTS,          // readTS
-						plus10,          // existingTS
+						plus10,          // valueTS
 						hlc.Timestamp{}, // localUncertaintyLimit
 						txn,
 					),
@@ -778,7 +778,7 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 				pErr := roachpb.NewErrorWithTxn(
 					roachpb.NewReadWithinUncertaintyIntervalError(
 						origTS, // readTS
-						plus10, // existingTS
+						plus10, // valueTS
 						plus20, // localUncertaintyLimit
 						txn,
 					),
