@@ -9,15 +9,15 @@ ColumnInIndex($index-column, $index, $table-id, $column-id, $index-id):
 ColumnInSwappedInPrimaryIndex($index-column, $index, $table-id, $column-id, $index-id):
     - ColumnInIndex($index-column, $index, $table-id, $column-id, $index-id)
     - sourceIndexIsSet($index)
-DescriptorIsNotBeingDropped($element):
+ToPublicOrTransient($target1, $target2):
+    - $target1[TargetStatus] IN [PUBLIC, TRANSIENT_ABSENT]
+    - $target2[TargetStatus] IN [PUBLIC, TRANSIENT_ABSENT]
+descriptorIsNotBeingDropped-23.1($element):
     not-join:
         - $descriptor[Type] IN ['*scpb.Database', '*scpb.Schema', '*scpb.View', '*scpb.Sequence', '*scpb.Table', '*scpb.EnumType', '*scpb.AliasType', '*scpb.CompositeType']
         - joinTarget($descriptor, $descriptor-Target)
         - joinOnDescID($descriptor, $element, $id)
         - $descriptor-Target[TargetStatus] = ABSENT
-ToPublicOrTransient($target1, $target2):
-    - $target1[TargetStatus] IN [PUBLIC, TRANSIENT_ABSENT]
-    - $target2[TargetStatus] IN [PUBLIC, TRANSIENT_ABSENT]
 joinOnColumnID($a, $b, $desc-id, $col-id):
     - joinOnDescID($a, $b, $desc-id)
     - $a[ColumnID] = $col-id

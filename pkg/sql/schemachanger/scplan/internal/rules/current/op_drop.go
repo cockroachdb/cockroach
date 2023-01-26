@@ -130,7 +130,7 @@ func init() {
 				(*scpb.Table)(nil),
 				(*scpb.View)(nil),
 			),
-			index.TypeFilter(IsIndex),
+			index.TypeFilter(rulesVersionKey, isIndex),
 			dep.Type(
 				(*scpb.IndexName)(nil),
 				(*scpb.IndexPartitioning)(nil),
@@ -234,7 +234,7 @@ func init() {
 		"skip element removal ops on descriptor drop",
 		dep.Node,
 		screl.MustQuery(
-			desc.TypeFilter(IsDescriptor),
+			desc.TypeFilter(rulesVersionKey, isDescriptor),
 			dep.Type(
 				(*scpb.ColumnFamily)(nil),
 				(*scpb.Owner)(nil),

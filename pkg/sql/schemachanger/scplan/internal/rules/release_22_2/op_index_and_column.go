@@ -29,7 +29,7 @@ func init() {
 		ic.Node,
 		screl.MustQuery(
 			ic.Type((*scpb.IndexColumn)(nil)),
-			index.TypeFilter(IsIndex),
+			index.TypeFilter(rulesVersionKey, IsIndex),
 			JoinOnIndexID(ic, index, relationID, indexID),
 			ic.JoinTargetNode(),
 			ic.TargetStatus(scpb.ToAbsent, scpb.Transient),

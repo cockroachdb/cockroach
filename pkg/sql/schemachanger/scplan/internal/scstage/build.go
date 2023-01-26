@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/rules"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/rules/current"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scgraph"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
@@ -876,7 +876,7 @@ func (bc buildContext) makeDescriptorStates(cur, next *Stage) map[descpb.ID]*scp
 	// if we haven't reached the non-revertible post-commit phase yet.
 	if cur.Phase == scop.PostCommitNonRevertiblePhase {
 		for i, t := range bc.targetState.Targets {
-			if !rules.IsDescriptor(t.Element()) || t.TargetStatus != scpb.Status_ABSENT {
+			if !current.IsDescriptor(t.Element()) || t.TargetStatus != scpb.Status_ABSENT {
 				continue
 			}
 			descID := screl.GetDescID(t.Element())

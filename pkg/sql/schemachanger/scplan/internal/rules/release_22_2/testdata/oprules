@@ -9,15 +9,15 @@ ColumnInIndex($index-column, $index, $table-id, $column-id, $index-id):
 ColumnInSwappedInPrimaryIndex($index-column, $index, $table-id, $column-id, $index-id):
     - ColumnInIndex($index-column, $index, $table-id, $column-id, $index-id)
     - sourceIndexIsSet($index)
-DescriptorIsNotBeingDropped($element):
-    not-join:
-        - $descriptor[Type] IN ['*scpb.Database', '*scpb.Schema', '*scpb.View', '*scpb.Sequence', '*scpb.Table', '*scpb.EnumType', '*scpb.AliasType', '*scpb.CompositeType']
-        - joinTarget($descriptor, $descriptor-Target)
-        - joinOnDescID($descriptor, $element, $id)
-        - $descriptor-Target[TargetStatus] = ABSENT
 ToPublicOrTransient($target1, $target2):
     - $target1[TargetStatus] IN [PUBLIC, TRANSIENT_ABSENT]
     - $target2[TargetStatus] IN [PUBLIC, TRANSIENT_ABSENT]
+descriptorIsNotBeingDropped-22.2($element):
+    not-join:
+        - $descriptor[Type] IN ['*scpb.Database', '*scpb.Schema', '*scpb.View', '*scpb.Sequence', '*scpb.Table', '*scpb.EnumType', '*scpb.AliasType']
+        - joinTarget($descriptor, $descriptor-Target)
+        - joinOnDescID($descriptor, $element, $id)
+        - $descriptor-Target[TargetStatus] = ABSENT
 fromHasPublicStatusIfFromIsTableAndToIsRowLevelTTL($fromTarget, $fromEl, $toEl):
     not-join:
         - $fromEl[Type] = '*scpb.Table'
@@ -95,11 +95,6 @@ nodeNotExistsWithStatusIn_VALIDATED_TRANSIENT_WRITE_ONLY_MERGE_ONLY_TRANSIENT_ME
         - $n[Type] = '*screl.Node'
         - $n[Target] = $sharedTarget
         - $n[CurrentStatus] IN [VALIDATED, TRANSIENT_WRITE_ONLY, MERGE_ONLY, TRANSIENT_MERGE_ONLY, MERGED, TRANSIENT_MERGED]
-nodeNotExistsWithStatusIn_WRITE_ONLY($sharedTarget):
-    not-join:
-        - $n[Type] = '*screl.Node'
-        - $n[Target] = $sharedTarget
-        - $n[CurrentStatus] IN [WRITE_ONLY]
 sourceIndexIsSet($index):
     - $index[SourceIndexID] != 0
 toAbsent($target1, $target2):
@@ -163,7 +158,7 @@ oprules
 - name: skip element removal ops on descriptor drop
   from: dep-Node
   query:
-    - $desc[Type] IN ['*scpb.Database', '*scpb.Schema', '*scpb.View', '*scpb.Sequence', '*scpb.Table', '*scpb.EnumType', '*scpb.AliasType', '*scpb.CompositeType']
+    - $desc[Type] IN ['*scpb.Database', '*scpb.Schema', '*scpb.View', '*scpb.Sequence', '*scpb.Table', '*scpb.EnumType', '*scpb.AliasType']
     - $dep[Type] IN ['*scpb.ColumnFamily', '*scpb.Owner', '*scpb.UserPrivileges', '*scpb.EnumTypeValue']
     - joinOnDescID($desc, $dep, $desc-id)
     - joinTarget($desc, $desc-Target)

@@ -36,7 +36,7 @@ func init() {
 				to.Type((*scpb.Column)(nil)),
 				ColumnInIndex(ic, from, relationID, columnID, "index-id"),
 				JoinOnColumnID(ic, to, relationID, columnID),
-				ic.DescriptorIsNotBeingDropped(),
+				descriptorIsNotBeingDropped(ic.El),
 			}
 		})
 
@@ -52,7 +52,7 @@ func init() {
 				ColumnInIndex(ic, from, relationID, columnID, "index-id"),
 				JoinOnColumnID(ic, to, relationID, columnID),
 				StatusesToAbsent(from, scpb.Status_VALIDATED, to, scpb.Status_WRITE_ONLY),
-				ic.DescriptorIsNotBeingDropped(),
+				descriptorIsNotBeingDropped(ic.El),
 				rel.Filter("isIndexKeyColumnKey", ic.El)(
 					func(ic *scpb.IndexColumn) bool {
 						return ic.Kind == scpb.IndexColumn_KEY
