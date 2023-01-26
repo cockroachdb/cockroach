@@ -13,46 +13,21 @@ package cockroach.kv.kvserver.concurrency.lock;
 option go_package = "lock";
 
 import "gogoproto/gogo.proto";
+import "util/hlc/timestamp.proto";
 
-// Strength represents the different locking modes that determine how key-values
-// can be accessed by concurrent transactions.
+// Strength represents the different locking strength that determines how
+// key-values can be accessed by concurrent transactions.
 //
-// Locking modes apply to locks that are held with a per-key granularity. It is
-// up to users of the key-value layer to decide on which keys to acquire locks
-// for when imposing structure that can span multiple keys, such as SQL rows
-// (see column families and secondary indexes).
+// Strength applies to locks that are held with a per-key granularity. It is
+// up to the users of the key-value layer to decide on which keys to acquire
+// locks for when imposing structure that can span multiple keys, such as SQL
+// rows (see column families and secondary indexes).
 //
-// Locking modes have differing levels of strength, growing from "weakest" to
-// "strongest" in the order that the variants are presented in the enumeration.
-// The "stronger" a locking mode, the more protection it provides for the lock
-// holder but the more restrictive it is to concurrent transactions attempting
-// to access the same keys.
-//
-// Compatibility Matrix
-//
-// The following matrix presents the compatibility of locking strengths with one
-// another. A cell with an X means that the two strengths are incompatible with
-// each other and that they can not both be held on a given key by different
-// transactions, concurrently. A cell without an X means that the two strengths
-// are compatible with each other and that they can be held on a given key by
-// different transactions, concurrently.
-//
-//  +-----------+-----------+-----------+-----------+-----------+
-//  |           |   None    |  Shared   |  Upgrade  | Exclusive |
-//  +-----------+-----------+-----------+-----------+-----------+
-//  | None      |           |           |           |     X^†   |
-//  +-----------+-----------+-----------+-----------+-----------+
-//  | Shared    |           |           |     X     |     X     |
-//  +-----------+-----------+-----------+-----------+-----------+
-//  | Upgrade   |           |     X     |     X     |     X     |
-//  +-----------+-----------+-----------+-----------+-----------+
-//  | Exclusive |     X^†   |     X     |     X     |     X     |
-//  +-----------+-----------+-----------+-----------+-----------+
-//
-// [†] reads under optimistic concurrency control in CockroachDB only conflict
-// with Exclusive locks if the read's timestamp is equal to or greater than the
-// lock's timestamp. If the read's timestamp is below the Exclusive lock's
-// timestamp then the two are compatible.
+// Lock strengths grow from "weakest" to "strongest" in the order that the
+// variants are presented in the enumeration. The "stronger" a lock's strength,
+// the more restrictive it is to concurrent transactions attempting to access
+// the same keys. The strength compatibility detailing these interactions is
+// illustrated below.
 enum Strength {
   option (gogoproto.goproto_enum_prefix) = false;
 
@@ -100,41 +75,118 @@ enum Strength {
   // be aborted.
   //
   // To avoid this potential deadlock problem, an Upgrade lock can be used in
-  // place of a Shared lock. Upgrade locks are not compatible with any other
-  // form of locking. As with Shared locks, the lock holder of an Upgrade lock
-  // on a key is only allowed to read from the key while the lock is held.
-  // This resolves the deadlock scenario presented above because only one of
-  // the transactions would have been able to acquire an Upgrade lock at a
-  // time while reading the initial state of the KVs. This means that the
-  // Shared-to-Exclusive lock upgrade would never need to wait on another
-  // transaction to release its locks.
+  // place of a Shared lock. Upgrade locks are only compatible with other Shared
+  // locks. This means that unlike Shared locks, there may only be a single
+  // Upgrade lock holder for a given key. As with Shared locks, the lock holder
+  // of an Upgrade lock on a key is only allowed to read from the key while the
+  // lock is held. These two requirements help resolve the deadlock scenario
+  // presented above because only one of the transactions would be able to
+  // acquire an Upgrade lock at a time while reading the initial state of the
+  // KVs. This means only one transaction is allowed to upgrade its lock to
+  // Exclusive. It may have to wait for concurrent transactions to release their
+  // Shared locks, however, there is no deadlock hazard here as the Shared lock
+  // holders are not waiting on the Upgrade lock in any way.
   //
   // Under pure pessimistic concurrency control, an Upgrade lock is equivalent
-  // to an Exclusive lock. However, unlike with Exclusive locks, reads under
-  // optimistic concurrency control do not conflict with Upgrade locks. This
-  // is because a transaction can only hold an Upgrade lock on keys that it
-  // has not yet modified. This improves concurrency between read and write
-  // transactions compared to if the writing transaction had immediately
-  // acquired an Exclusive lock.
+  // to an Intent. However, unlike with Intents, reads under optimistic
+  // concurrency control do not conflict with Upgrade locks. This is because
+  // a transaction can only hold an Upgrade lock on keys that it has not yet
+  // modified. This improves concurrency between read and write transactions
+  // compared to if the writing transaction had immediately laid down an intent.
   //
   // The trade-off here is twofold. First, if the Upgrade lock holder does
-  // convert its lock on a key to an Exclusive lock after an optimistic read
-  // has observed the state of the key, the transaction that performed the
-  // optimistic read may be unable to perform a successful read refresh if it
-  // attempts to refresh to a timestamp at or past the timestamp of the lock
-  // conversion. Second, the optimistic reads permitted while the Upgrade lock
-  // is held will bump the timestamp cache. This may result in the Upgrade
-  // lock holder being forced to increase its write timestamp when converting
-  // to an Exclusive lock, which in turn may force it to restart if its read
-  // refresh fails.
+  // lay down an intent on a key after an optimistic read has observed the state
+  // of the key, the transaction that performed the optimistic read may be
+  // unable to perform a successful read refresh if it attempts to refresh to
+  // a timestamp at or past the timestamp of the intent. Second, the optimistic
+  // reads permitted while the Upgrade lock is held will bump the timestamp
+  // cache. This may result in the Upgrade lock holder being forced to increase
+  // its write timestamp when converting to an Exclusive lock or laying down
+  // an Intent, which in turn may force it to restart if its read refresh
+  // fails.
+  // TODO(XXX): How should we frame the wording around "being forced to increase
+  // write timestamp when converting to an Exclusive lock" -- is this something
+  // that will (can?) happen? Or will this only happen when laying down intents.
+  // Maybe the "may result" phrasing is ambiguous enough for whatever we do
+  // here?
   Upgrade = 2;
 
-  // Exclusive (X) locks are used by read-write and read-only operations and
-  // provide a transaction with exclusive access to a key. When an Exclusive
-  // lock is held by a transaction on a given key, no other transaction can
-  // read from or write to that key. The lock holder is free to read from and
-  // write to the key as frequently as it would like.
+  // Exclusive (X) locks are used by read-write and read-only operations to
+  // provide transactions with (potential) exclusive write access to a key. When
+  // an Exclusive lock is held by a transaction on a given key, no other
+  // transaction can write to that key.
+  //
+  // Exclusive locks may provide the lock holder exclusive read access to the
+  // key as well. This is a vestige of a time when there was no distinction
+  // between exclusive locks and intents; this behavior is configurable, using
+  // a cluster setting, and detailed under the compatibility matrix below.
   Exclusive = 3;
+
+  // Intent (I) locks are are used by read-write operations to provide
+  // transactions sole access to a key. When an Intent lock is held by a
+  // transaction on a given key, no other transaction can read from or write to
+  // that key. The lock holder is free to read from and write to the key as
+  // frequently as it would like.
+  Intent = 4;
+}
+
+// Mode determines the level of protection a lock provides to the lock holder.
+// All locks that are held with a per-key granularity have an associated Mode.
+//
+// The protection a lock offers is primarily determined by the Strength it is
+// held with. However, lock Modes also contain auxiliary information (eg. the
+// timestamp at which the lock was acquired), which may be used in conjunction
+// with a lock's Strength to resolve conflicts between a lock holder and a
+// concurrent lock acquirer. This allows us to codify conflict rules as a pure
+// function of 2 lock Modes.
+//
+// Users of the key-value layer are expected to indicate locking intentions
+// using lock Strengths; lock Mode is an internal concept for the concurrency
+// package for conflict resolution.
+//
+// Compatibility Matrix
+//
+// The following matrix presents the compatibility of lock Modes with one
+// another. A cell with an X means that the two strengths are incompatible with
+// each other and that they can not both be held on a given key by different
+// transactions, concurrently. A cell without an X means that the two lock Modes
+// are compatible with each other and that they can be held on a given key by
+// different transactions, concurrently.
+//
+//  +------------+---------+-----------+-----------+-------------+----------+
+//  |            |   None  |  Shared   |  Upgrade  |  Exclusive  |  Intent  |
+//  +------------+---------+-----------+-----------+-------------+----------+
+//  | None       |         |           |           |      X^*    |    X^†   |
+//  +------------+---------+-----------+-----------+-------------+----------+
+//  | Shared     |         |           |           |      X      |    X     |
+//  +------------+---------+-----------+-----------+-------------+----------+
+//  | Upgrade    |         |           |     X     |      X      |    X     |
+//  +------------+---------+-----------+-----------+-------------+----------+
+//  | Exclusive  |   X^*   |     X     |     X     |      X      |    X     |
+//  +------------+---------+-----------+-----------+-------------+----------+
+//  | Intent     |   X^†   |     X     |     X     |      X      |    X     |
+//  +------------+---------+-----------+-----------+-------------+----------+
+//
+// [†] reads under optimistic concurrency control in CockroachDB only conflict
+// with Intent locks if the read's timestamp is equal to or greater than the
+// lock's timestamp. If the read's timestamp is below the Intent lock's
+// timestamp then the two are compatible.
+//
+// [*] historically, CockroachDB did not make a strength distinction between
+// Exclusive locks and Intents. As such, reads under optimistic concurrency
+// control would conflict with Exclusive locks if the read's timestamp was at or
+// above the Exclusive lock's timestamp. Now that there is a distinction between
+// Exclusive locks and Intents, non-locking reads do not block on Exclusive
+// locks, regardless of their timestamp. However, there is a desire to let users
+// opt into the old behavior using the ExclusiveLocksBlockNonLockingReads
+// cluster setting.
+message Mode {
+  // Strength in which the lock is held.
+  Strength strength = 1;
+
+  // Timestamp at which the lock was/is being acquired. This field must be set
+  // for None, Exclusive, and Intent locking strengths.
+  util.hlc.Timestamp timestamp = 2 [(gogoproto.nullable)=false];
 }
 
 // Durability represents the different durability properties of a lock acquired
