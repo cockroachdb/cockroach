@@ -156,6 +156,7 @@ func TestCopyRandom(t *testing.T) {
 		CREATE TABLE IF NOT EXISTS d.t (
 			id INT PRIMARY KEY,
 			n INTERVAL,
+			cs TEXT COLLATE en_us_u_ks_level2,
 			o BOOL,
 			i INT,
 			f FLOAT,
@@ -182,7 +183,7 @@ func TestCopyRandom(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	stmt, err := txn.Prepare(pq.CopyInSchema("d", "t", "id", "n", "o", "i", "f", "e", "t", "ttz", "ts", "s", "b", "u", "ip", "tz", "geography", "geometry", "box2d"))
+	stmt, err := txn.Prepare(pq.CopyInSchema("d", "t", "id", "n", "cs", "o", "i", "f", "e", "t", "ttz", "ts", "s", "b", "u", "ip", "tz", "geography", "geometry", "box2d"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -191,6 +192,7 @@ func TestCopyRandom(t *testing.T) {
 	typs := []*types.T{
 		types.Int,
 		types.Interval,
+		types.MakeCollatedString(types.String, "en_us_u_ks_level2"),
 		types.Bool,
 		types.Int,
 		types.Float,
