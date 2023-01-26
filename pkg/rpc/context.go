@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	circuitbreaker "github.com/cockroachdb/cockroach/pkg/util/circuit"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/growstack"
@@ -103,13 +104,15 @@ var (
 	// for RangeFeed RPC
 	rangefeedInitialWindowSize = getWindowSize(
 		"COCKROACH_RANGEFEED_RPC_INITIAL_WINDOW_SIZE", RangefeedClass, 2*defaultWindowSize /* 128K */)
+
+	errMarkDecommissioned = errors.New("peer decommissioned")
 )
 
-// errDialRejected is returned from client interceptors when the server's
+// errQuiescing is returned from client interceptors when the server's
 // stopper is quiescing. The error is constructed to return true in
 // `grpcutil.IsConnectionRejected` which prevents infinite retry loops during
 // cluster shutdown, especially in unit testing.
-var errDialRejected = grpcstatus.Error(codes.PermissionDenied, "refusing to dial; node is quiescing")
+var errQuiescing = grpcstatus.Error(codes.PermissionDenied, "refusing to dial; node is quiescing")
 
 // sourceAddr is the environment-provided local address for outgoing
 // connections.
@@ -311,14 +314,20 @@ type Connection struct {
 	// non-zero to check with remote node. Never mutated.
 	remoteNodeID roachpb.NodeID
 	class        ConnectionClass // never mutated
+	// initialHeartbeatDone is closed once grpcConn is populated
+	// and a heartbeat is successfully returned (or an error
+	// occurs establishing the connection). This means that access to that field
+	// must read this channel first.
+	//
+	// This channel must only be closed from the circuit breaker probe.
+	initialHeartbeatDone chan struct{} // closed after first heartbeat
+	// grpcConn is present even when the connection is known unhealthy, as we
+	// still want to have one that we can return. It is nil if this Connection
+	// never managed to reach the peer (but the `err` field is set in that case).
+	grpcConn *grpc.ClientConn // present when initialHeartbeatDone is closed; must read that channel first
 	// err is nil initially; eventually set to the dial or heartbeat error that
 	// tore down the connection.
 	err atomic.Value
-	// initialHeartbeatDone is closed in `runHeartbeat` once grpcConn is populated
-	// and a heartbeat is successfully returned. This means that access to that
-	// field must read this channel first.
-	initialHeartbeatDone chan struct{}    // closed after first heartbeat
-	grpcConn             *grpc.ClientConn // present when initialHeartbeatDone is closed; must read that channel first
 }
 
 func newConnectionToNodeID(remoteNodeID roachpb.NodeID, class ConnectionClass) *Connection {
@@ -381,7 +390,7 @@ type Context struct {
 
 	breakerClock breakerClock
 	RemoteClocks *RemoteClockMonitor
-	MasterCtx    context.Context
+	MasterCtx    context.Context // cancel on stopper quiesce
 
 	heartbeatInterval time.Duration
 	heartbeatTimeout  time.Duration
@@ -493,9 +502,9 @@ type ContextOptions struct {
 	// preliminary checks but before recording clock offset information.
 	// It can inject an error or modify the response.
 	OnIncomingPing func(context.Context, *PingRequest, *PingResponse) error
-	// OnOutgoingPing intercepts outgoing PingRequests. It may inject an
-	// error.
-	OnOutgoingPing func(context.Context, *PingRequest) error
+	// OnOutgoingPing intercepts outgoing PingRequests. It returns true
+	// if target node is decommissioned and may inject an error.
+	OnOutgoingPing func(context.Context, *PingRequest) (bool, error)
 	Knobs          ContextTestingKnobs
 
 	// NodeID is the node ID / SQL instance ID container shared
@@ -1620,7 +1629,7 @@ func (rpcCtx *Context) ConnHealth(
 	if rpcCtx.GetLocalInternalClientForAddr(nodeID) != nil {
 		return nil
 	}
-	if conn, ok := rpcCtx.m.Get(connKey{target, nodeID, class}); ok {
+	if conn, ok := rpcCtx.m.Conn(connKey{target, nodeID, class}); ok {
 		return conn.Health()
 	}
 	return ErrNoConnection
@@ -2135,7 +2144,7 @@ func (rpcCtx *Context) makeDialCtx(
 	dialCtx := rpcCtx.MasterCtx
 	var rnodeID interface{} = remoteNodeID
 	if remoteNodeID == 0 {
-		rnodeID = '?'
+		rnodeID = "?"
 	}
 	dialCtx = logtags.AddTag(dialCtx, "rnode", rnodeID)
 	dialCtx = logtags.AddTag(dialCtx, "raddr", target)
@@ -2204,45 +2213,109 @@ func (rpcCtx *Context) GRPCDialPod(
 	return rpcCtx.GRPCDialNode(target, roachpb.NodeID(remoteInstanceID), class)
 }
 
+// A peer is a remote node that we are trying to maintain a healthy RPC
+// connection (for a given connection class not known to the peer itself)
+// to. If no healthy connection exists, the peer tracks the time of
+// disconnect and maintains a circuit breaker that resets once the connection
+// can be re-established.
+type peer struct {
+	// b maintains connection health. This breaker's async probe is always
+	// active - it is the heartbeat loop.
+	//
+	// NB: at the time of writing, we don't use the breaking capabilities,
+	// i.e. we don't check the circuit breaker in `Connect`. We will do that
+	// once the circuit breaker is mature, and then retire the breakers
+	// returned by Context.getBreaker.
+	//
+	// Currently what will happen when a peer is down is that `c` will be
+	// recreated (blocking new callers to `Connect()`), a connection attempt
+	// will be made, and callers will see the failure to this attempt.
+	//
+	// With the breaker, callers would be turned away eagerly until there
+	// is a known-healthy connection.
+	b *circuitbreaker.Breaker
+	c *Connection // never nil
+	// disconnected is zero initially, reset on successful heartbeat, set on
+	// heartbeat teardown if zero. In other words, does not move forward across
+	// subsequent connection failures - it tracks the first disconnect since
+	// having been healthy.
+	//
+	// NB: this field has no bearing on whether connections are returned to
+	// callers.
+	disconnected time.Time
+	// INVARIANT: decommissioned never transitions from true to false.
+	decommissioned bool
+}
+
 type connMap struct {
 	mu struct {
 		syncutil.RWMutex
-		m map[connKey]*Connection
+		m map[connKey]*peer
 	}
 }
 
-func (m *connMap) Get(k connKey) (*Connection, bool) {
+// Conn returns the current Connection for the peer (if the peer exists).
+// This does not attempt to create a peer and it does not check connection
+// health.
+func (m *connMap) Conn(k connKey) (*Connection, bool) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	c, ok := m.mu.m[k]
-	return c, ok
+	return m.connRLocked(k)
 }
 
-func (m *connMap) Remove(k connKey, conn *Connection) error {
+func (m *connMap) connRLocked(k connKey) (*Connection, bool) {
+	p, ok := m.mu.m[k]
+	if !ok {
+		return nil, false
+	}
+	// We don't check the circuit breakers here until they've proven mature, but
+	// we do check the error since that's what ensures the probe (= heartbeat loop
+	// is running).
+	// The probe usually runs continuously, but there are exceptions (decommissioned
+	// peers).
+	_ = p.b.Signal().Err()
+	return p.c, p.c != nil
+}
+
+func (m *connMap) withPeer(k connKey, mutate func(k connKey, p *peer)) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	mConn, found := m.mu.m[k]
-	if !found {
-		return errors.AssertionFailedf("no conn found for %+v", k)
-	}
-	if mConn != conn {
-		return errors.AssertionFailedf("conn for %+v not identical to those for which removal was requested", k)
-	}
-
-	delete(m.mu.m, k)
-	return nil
+	m.withPeerLocked(k, mutate)
 }
 
-func (m *connMap) TryInsert(k connKey) (_ *Connection, inserted bool) {
+// withPeerLocked locks `m` and allows a closure to mutate `m.mu[k]`. All
+// mutations should use this method. If the peer doesn't exist under the
+// connKey, it will *not* be created. The closure will see a nil peer.
+func (m *connMap) withPeerLocked(k connKey, mutate func(k connKey, p *peer)) {
+	mutate(k, m.mu.m[k])
+}
+
+func (m *connMap) inspectPeerE(k connKey, f func(k connKey, p *peer) error) error {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return f(k, m.mu.m[k])
+}
+
+func (m *connMap) inspectPeer(k connKey, f func(k connKey, p *peer)) {
+	_ = m.inspectPeerE(k, func(k connKey, p *peer) error {
+		f(k, p)
+		return nil
+	})
+}
+
+// TryInsert atomically either returns the existing peer's Connection or creates
+// a new peer with a Connection. The heartbeat loop (breaker probe) will be
+// started in the latter case.
+func (m *connMap) TryInsert(k connKey, b *circuitbreaker.Breaker) (_ *Connection, inserted bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	if m.mu.m == nil {
-		m.mu.m = map[connKey]*Connection{}
+		m.mu.m = map[connKey]*peer{}
 	}
 
-	if c, lostRace := m.mu.m[k]; lostRace {
-		return c, false
+	if _, lostRace := m.mu.m[k]; lostRace {
+		return m.connRLocked(k)
 	}
 
 	newConn := newConnectionToNodeID(k.nodeID, k.class)
@@ -2254,15 +2327,13 @@ func (m *connMap) TryInsert(k connKey) (_ *Connection, inserted bool) {
 	//
 	// [^1]: https://github.com/cockroachdb/cockroach/issues/37200
 	// [^2]: https://github.com/cockroachdb/cockroach/pull/89539
-	m.mu.m[k] = newConn
-	return newConn, true
-}
-
-func maybeFatal(ctx context.Context, err error) {
-	if err == nil || !buildutil.CrdbTestBuild {
-		return
+	if m.mu.m[k] == nil {
+		m.mu.m[k] = &peer{}
 	}
-	log.FatalfDepth(ctx, 1, "%s", err)
+	m.mu.m[k].c = newConn
+	m.mu.m[k].b = b
+	b.Report(ErrNotHeartbeated) // this also starts the probe (= heartbeat loop)
+	return newConn, true
 }
 
 // grpcDialNodeInternal connects to the remote node and sets up the async heartbeater.
@@ -2271,56 +2342,14 @@ func (rpcCtx *Context) grpcDialNodeInternal(
 	target string, remoteNodeID roachpb.NodeID, class ConnectionClass,
 ) *Connection {
 	k := connKey{target, remoteNodeID, class}
-	if conn, ok := rpcCtx.m.Get(k); ok {
-		// There's a cached connection.
+	if conn, ok := rpcCtx.m.Conn(k); ok {
+		// There's a cached connection, use it.
 		return conn
 	}
 
-	ctx := rpcCtx.makeDialCtx(target, remoteNodeID, class)
-
-	conn, inserted := rpcCtx.m.TryInsert(k)
-	if !inserted {
-		// Someone else won the race.
-		return conn
-	}
-
-	// We made a connection and registered it. Others might already be accessing
-	// it now, but it's our job to kick off the async goroutine that will do the
-	// dialing and health checking of this connection (including eventually
-	// removing this connection should it become unhealthy). Until that reports
-	// back, any other callers will block on `c.initialHeartbeatDone` in
-	// Connect().
-	if err := rpcCtx.Stopper.RunAsyncTask(
-		ctx,
-		"rpc.Context: heartbeat", func(ctx context.Context) {
-			rpcCtx.metrics.HeartbeatLoopsStarted.Inc(1)
-
-			// Run the heartbeat; this will block until the connection breaks for
-			// whatever reason. We don't actually have to do anything with the error,
-			// so we ignore it.
-			err := rpcCtx.runHeartbeat(ctx, conn, target)
-			log.Infof(ctx, "connection heartbeat loop ended with err: %v", err)
-			maybeFatal(ctx, rpcCtx.m.Remove(k, conn))
-
-			// Context gets canceled on server shutdown, and if that's likely why
-			// the connection ended don't increment the metric as a result. We don't
-			// want activity on the metric every time a node gracefully shuts down.
-			//
-			// NB: the ordering here is such that the metric is decremented *after*
-			// the connection is removed from the pool. No strong reason but feels
-			// nicer that way and makes for fewer test flakes.
-			if ctx.Err() == nil {
-				rpcCtx.metrics.HeartbeatLoopsExited.Inc(1)
-			}
-		}); err != nil {
-		// If node is draining (`err` will always equal stop.ErrUnavailable
-		// here), return special error (see its comments).
-		_ = err // ignore this error
-		conn.err.Store(errDialRejected)
-		close(conn.initialHeartbeatDone)
-		maybeFatal(ctx, rpcCtx.m.Remove(k, conn))
-	}
-
+	// Slow path. Race to create a peer.
+	b := rpcCtx.newPeerBreaker(k) // NB: thrown away if we lose the race
+	conn, _ := rpcCtx.m.TryInsert(k, b)
 	return conn
 }
 
@@ -2354,8 +2383,10 @@ var useDialback = settings.RegisterBoolSetting(
 // connection. The ctx passed as argument must be derived from rpcCtx.masterCtx,
 // so that it respects the same cancellation policy.
 func (rpcCtx *Context) runHeartbeat(
-	ctx context.Context, conn *Connection, target string,
+	ctx context.Context, conn *Connection, k connKey, healthy func(),
 ) (retErr error) {
+	nm := rpcCtx.metrics.loadNodeMetrics(k.nodeID)
+
 	defer func() {
 		var initialHeartbeatDone bool
 		select {
@@ -2368,35 +2399,22 @@ func (rpcCtx *Context) runHeartbeat(
 		}
 
 		if retErr != nil {
-			conn.err.Store(retErr)
-			if ctx.Err() == nil {
-				// If the remote peer is down, we'll get fail-fast errors and since we
-				// don't have circuit breakers at the rpcCtx level, we need to avoid a
-				// busy loop of corresponding logging. We ask the EveryN only if we're
-				// looking at an InitialHeartbeatFailedError; if we did manage to
-				// heartbeat at least once we're not in the busy loop case and want to
-				// log unconditionally.
-				if neverHealthy := errors.HasType(
-					retErr, (*netutil.InitialHeartbeatFailedError)(nil),
-				); !neverHealthy || rpcCtx.logClosingConnEvery.ShouldLog() {
-					var buf redact.StringBuilder
-					if neverHealthy {
-						buf.Printf("unable to connect (is the peer up and reachable?): %v", retErr)
-					} else {
-						buf.Printf("closing connection after: %s", retErr)
-					}
-					log.Health.Errorf(ctx, "%s", buf)
-				}
+			if errors.Is(retErr, context.Canceled) || grpcutil.IsContextCanceled(retErr) || errors.Is(retErr, stop.ErrUnavailable) {
+				// Give some nicer errors during shutdown.
+				conn.err.Store(errQuiescing)
+			} else {
+				conn.err.Store(retErr)
 			}
 		}
 		if grpcConn := conn.grpcConn; grpcConn != nil {
 			_ = grpcConn.Close() // nolint:grpcconnclose
 		}
 		if initialHeartbeatDone {
-			rpcCtx.metrics.HeartbeatsNominal.Dec(1)
+			nm.HeartbeatsNominal.Dec(1)
 		} else {
 			close(conn.initialHeartbeatDone) // unblock any waiters
 		}
+		nm.HeartbeatConnectionFailures.Inc(1)
 		if rpcCtx.RemoteClocks != nil {
 			rpcCtx.RemoteClocks.OnDisconnect(ctx, conn.remoteNodeID)
 		}
@@ -2404,7 +2422,7 @@ func (rpcCtx *Context) runHeartbeat(
 
 	{
 		var err error
-		conn.grpcConn, err = rpcCtx.grpcDialRaw(ctx, target, conn.class, rpcCtx.testingDialOpts...)
+		conn.grpcConn, err = rpcCtx.grpcDialRaw(ctx, k.targetAddr, conn.class, rpcCtx.testingDialOpts...)
 		if err != nil {
 			// Note that grpcConn will actually connect in the background, so it's
 			// unusual to hit this case.
@@ -2442,11 +2460,12 @@ func (rpcCtx *Context) runHeartbeat(
 	// This simple model should work well in practice and it avoids serious
 	// problems that could arise from keeping unhealthy connections in the pool.
 	connFailedCh := make(chan connectivity.State, 1)
+
 	first := true
 	for {
 		select {
 		case <-ctx.Done():
-			return nil // server shutting down
+			return ctx.Err() // likely server shutdown
 		case <-heartbeatTimer.C:
 			heartbeatTimer.Read = true
 		case <-connFailedCh:
@@ -2463,7 +2482,7 @@ func (rpcCtx *Context) runHeartbeat(
 			request.ClusterID = &clusterID
 			request.OriginNodeID = rpcCtx.NodeID.Get()
 
-			interceptor := func(context.Context, *PingRequest) error { return nil }
+			interceptor := func(context.Context, *PingRequest) (bool, error) { return false, nil }
 			if fn := rpcCtx.OnOutgoingPing; fn != nil {
 				interceptor = fn
 			}
@@ -2471,10 +2490,14 @@ func (rpcCtx *Context) runHeartbeat(
 			var response *PingResponse
 			sendTime := rpcCtx.Clock.Now()
 			ping := func(ctx context.Context) error {
-				if err := interceptor(ctx, request); err != nil {
+				var err error
+				isDecommissioned, err := interceptor(ctx, request)
+				if err != nil {
+					if isDecommissioned {
+						err = errors.Mark(err, errMarkDecommissioned)
+					}
 					return err
 				}
-				var err error
 				// Check the setting lazily to allow toggling on/off without a restart.
 				if rpcCtx.NeedsDialback && useDialback.Get(&rpcCtx.Settings.SV) {
 					if first {
@@ -2521,6 +2544,17 @@ func (rpcCtx *Context) runHeartbeat(
 				return err
 			}
 
+			// Successful heartbeat.
+			healthy()
+
+			receiveTime := rpcCtx.Clock.Now()
+			pingDuration := receiveTime.Sub(sendTime)
+
+			nm.HeartbeatRoundTripLatency.Lock()
+			nm.HeartbeatRoundTripLatency.ma.Add(float64(pingDuration.Nanoseconds()))
+			nm.HeartbeatRoundTripLatency.RecordValue(int64(nm.HeartbeatRoundTripLatency.ma.Value()))
+			nm.HeartbeatRoundTripLatency.Unlock()
+
 			// Only a server connecting to another server needs to check clock
 			// offsets. A CLI command does not need to update its local HLC, nor does
 			// it care that strictly about client-server latency, nor does it need to
@@ -2532,7 +2566,6 @@ func (rpcCtx *Context) runHeartbeat(
 
 				// Only update the clock offset measurement if we actually got a
 				// successful response from the server.
-				pingDuration := receiveTime.Sub(sendTime)
 				if pingDuration > maximumPingDurationMult*rpcCtx.ToleratedOffset {
 					request.Offset.Reset()
 				} else {
@@ -2560,7 +2593,7 @@ func (rpcCtx *Context) runHeartbeat(
 
 		if first {
 			// First heartbeat succeeded.
-			rpcCtx.metrics.HeartbeatsNominal.Inc(1)
+			nm.HeartbeatsNominal.Inc(1)
 			close(conn.initialHeartbeatDone)
 			log.Health.Infof(ctx, "connection is now ready")
 			// The connection should be `Ready` now since we just used it for a
