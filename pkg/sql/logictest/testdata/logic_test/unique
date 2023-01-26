@@ -832,7 +832,7 @@ statement error pgcode 23505 pq: duplicate key value violates unique constraint 
 UPSERT INTO uniq_computed_pk (i, s, d) VALUES (1, 'b', 1.0)
 
 statement error pgcode 23505 pq: duplicate key value violates unique constraint "unique_d"\nDETAIL: Key \(d\)=\(2\.00\) already exists\.
-UPSERT INTO uniq_computed_pk (i, s, d) VALUES (1, 'a', 2.00)
+UPSERT INTO uniq_computed_pk (i, s, d) VALUES (1, 'c', 2.00)
 
 query ITFTTFT colnames,rowsort
 SELECT * FROM uniq_computed_pk
