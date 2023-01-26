@@ -26,7 +26,6 @@ import (
 
 type githubIssues struct {
 	disable      bool
-	l            *logger.Logger
 	cluster      *clusterImpl
 	vmCreateOpts *vm.CreateOpts
 	issuePoster  func(context.Context, *logger.Logger, issues.IssueFormatter, issues.PostRequest) error
@@ -41,15 +40,11 @@ const (
 	sshErr
 )
 
-func newGithubIssues(
-	disable bool, c *clusterImpl, vmCreateOpts *vm.CreateOpts, l *logger.Logger,
-) *githubIssues {
-
+func newGithubIssues(disable bool, c *clusterImpl, vmCreateOpts *vm.CreateOpts) *githubIssues {
 	return &githubIssues{
 		disable:      disable,
 		vmCreateOpts: vmCreateOpts,
 		cluster:      c,
-		l:            l,
 		issuePoster:  issues.Post,
 		teamLoader:   team.DefaultLoadTeams,
 	}
@@ -201,10 +196,10 @@ func (g *githubIssues) createPostRequest(
 	}
 }
 
-func (g *githubIssues) MaybePost(t *testImpl, message string) error {
+func (g *githubIssues) MaybePost(t *testImpl, l *logger.Logger, message string) error {
 	doPost, skipReason := g.shouldPost(t)
 	if !doPost {
-		g.l.Printf("skipping GitHub issue posting (%s)", skipReason)
+		l.Printf("skipping GitHub issue posting (%s)", skipReason)
 		return nil
 	}
 
@@ -220,7 +215,7 @@ func (g *githubIssues) MaybePost(t *testImpl, message string) error {
 
 	return g.issuePoster(
 		context.Background(),
-		g.l,
+		l,
 		issues.UnitTestFormatter,
 		g.createPostRequest(t, cat, message),
 	)
