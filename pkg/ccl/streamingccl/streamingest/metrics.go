@@ -15,6 +15,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 )
 
+const (
+	streamingFlushHistMaxLatency   = 1 * time.Minute
+	streamingAdmitLatencyMaxValue  = 3 * time.Minute
+	streamingCommitLatencyMaxValue = 10 * time.Minute
+)
+
 var (
 	metaStreamingEventsIngested = metric.Metadata{
 		Name:        "streaming.events_ingested",
@@ -107,9 +113,9 @@ type Metrics struct {
 	Flushes                     *metric.Counter
 	JobProgressUpdates          *metric.Counter
 	ResolvedEvents              *metric.Counter
-	FlushHistNanos              *metric.Histogram
-	CommitLatency               *metric.Histogram
-	AdmitLatency                *metric.Histogram
+	FlushHistNanos              metric.IHistogram
+	CommitLatency               metric.IHistogram
+	AdmitLatency                metric.IHistogram
 	RunningCount                *metric.Gauge
 	EarliestDataCheckpointSpan  *metric.Gauge
 	LatestDataCheckpointSpan    *metric.Gauge
@@ -128,12 +134,27 @@ func MakeMetrics(histogramWindow time.Duration) metric.Struct {
 		Flushes:            metric.NewCounter(metaStreamingFlushes),
 		ResolvedEvents:     metric.NewCounter(metaStreamingResolvedEventsIngested),
 		JobProgressUpdates: metric.NewCounter(metaJobProgressUpdates),
-		FlushHistNanos: metric.NewHistogram(metaStreamingFlushHistNanos,
-			histogramWindow, metric.BatchProcessLatencyBuckets),
-		CommitLatency: metric.NewHistogram(metaStreamingCommitLatency,
-			histogramWindow, metric.BatchProcessLatencyBuckets),
-		AdmitLatency: metric.NewHistogram(metaStreamingAdmitLatency,
-			histogramWindow, metric.BatchProcessLatencyBuckets),
+		FlushHistNanos: metric.NewHistogram(metric.HistogramOptions{
+			Metadata: metaStreamingFlushHistNanos,
+			Duration: histogramWindow,
+			Buckets:  metric.BatchProcessLatencyBuckets,
+			MaxVal:   streamingFlushHistMaxLatency.Nanoseconds(),
+			SigFigs:  1,
+		}),
+		CommitLatency: metric.NewHistogram(metric.HistogramOptions{
+			Metadata: metaStreamingCommitLatency,
+			Duration: histogramWindow,
+			Buckets:  metric.BatchProcessLatencyBuckets,
+			MaxVal:   streamingCommitLatencyMaxValue.Nanoseconds(),
+			SigFigs:  1,
+		}),
+		AdmitLatency: metric.NewHistogram(metric.HistogramOptions{
+			Metadata: metaStreamingAdmitLatency,
+			Duration: histogramWindow,
+			Buckets:  metric.BatchProcessLatencyBuckets,
+			MaxVal:   streamingAdmitLatencyMaxValue.Nanoseconds(),
+			SigFigs:  1,
+		}),
 		RunningCount:                metric.NewGauge(metaStreamsRunning),
 		EarliestDataCheckpointSpan:  metric.NewGauge(metaEarliestDataCheckpointSpan),
 		LatestDataCheckpointSpan:    metric.NewGauge(metaLatestDataCheckpointSpan),

@@ -379,9 +379,12 @@ func TestConnector_dialTenantCluster(t *testing.T) {
 
 		c := &connector{
 			TenantID: roachpb.MakeTenantID(42),
-			DialTenantLatency: metric.NewHistogram(
-				metaDialTenantLatency, time.Millisecond, metric.NetworkLatencyBuckets,
-			),
+			DialTenantLatency: metric.NewHistogram(metric.HistogramOptions{
+				Mode:     metric.HistogramModePrometheus,
+				Metadata: metaDialTenantLatency,
+				Duration: time.Millisecond,
+				Buckets:  metric.NetworkLatencyBuckets,
+			}),
 			DialTenantRetries: metric.NewCounter(metaDialTenantRetries),
 		}
 		dc := &testTenantDirectoryCache{}
@@ -459,9 +462,12 @@ func TestConnector_dialTenantCluster(t *testing.T) {
 		defer cancel()
 
 		c := &connector{
-			DialTenantLatency: metric.NewHistogram(
-				metaDialTenantLatency, time.Millisecond, metric.NetworkLatencyBuckets,
-			),
+			DialTenantLatency: metric.NewHistogram(metric.HistogramOptions{
+				Mode:     metric.HistogramModePreferHdrLatency,
+				Metadata: metaDialTenantLatency,
+				Duration: time.Millisecond,
+				Buckets:  metric.NetworkLatencyBuckets,
+			}),
 			DialTenantRetries: metric.NewCounter(metaDialTenantRetries),
 		}
 		c.testingKnobs.lookupAddr = func(ctx context.Context) (string, error) {
@@ -490,9 +496,12 @@ func TestConnector_dialTenantCluster(t *testing.T) {
 		var reportFailureFnCount int
 		c := &connector{
 			TenantID: roachpb.MakeTenantID(42),
-			DialTenantLatency: metric.NewHistogram(
-				metaDialTenantLatency, time.Millisecond, metric.NetworkLatencyBuckets,
-			),
+			DialTenantLatency: metric.NewHistogram(metric.HistogramOptions{
+				Mode:     metric.HistogramModePreferHdrLatency,
+				Metadata: metaDialTenantLatency,
+				Duration: time.Millisecond,
+				Buckets:  metric.NetworkLatencyBuckets,
+			}),
 			DialTenantRetries: metric.NewCounter(metaDialTenantRetries),
 		}
 		c.DirectoryCache = &testTenantDirectoryCache{

@@ -28,7 +28,7 @@ import (
 type RemoteClockMetrics struct {
 	ClockOffsetMeanNanos   *metric.Gauge
 	ClockOffsetStdDevNanos *metric.Gauge
-	LatencyHistogramNanos  *metric.Histogram
+	LatencyHistogramNanos  metric.IHistogram
 }
 
 // avgLatencyMeasurementAge determines how to exponentially weight the
@@ -122,9 +122,12 @@ func newRemoteClockMonitor(
 	r.metrics = RemoteClockMetrics{
 		ClockOffsetMeanNanos:   metric.NewGauge(metaClockOffsetMeanNanos),
 		ClockOffsetStdDevNanos: metric.NewGauge(metaClockOffsetStdDevNanos),
-		LatencyHistogramNanos: metric.NewHistogram(
-			metaLatencyHistogramNanos, histogramWindowInterval, metric.IOLatencyBuckets,
-		),
+		LatencyHistogramNanos: metric.NewHistogram(metric.HistogramOptions{
+			Mode:     metric.HistogramModePreferHdrLatency,
+			Metadata: metaLatencyHistogramNanos,
+			Duration: histogramWindowInterval,
+			Buckets:  metric.IOLatencyBuckets,
+		}),
 	}
 	return &r
 }

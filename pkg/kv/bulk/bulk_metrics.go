@@ -20,7 +20,7 @@ import (
 // Metrics contains pointers to the metrics for
 // monitoring bulk operations.
 type Metrics struct {
-	MaxBytesHist  *metric.Histogram
+	MaxBytesHist  metric.IHistogram
 	CurBytesCount *metric.Gauge
 }
 
@@ -44,10 +44,20 @@ var (
 	}
 )
 
+// See pkg/sql/mem_metrics.go
+// log10int64times1000 = log10(math.MaxInt64) * 1000, rounded up somewhat
+const log10int64times1000 = 19 * 1000
+
 // MakeBulkMetrics instantiates the metrics holder for bulk operation monitoring.
 func MakeBulkMetrics(histogramWindow time.Duration) Metrics {
 	return Metrics{
-		MaxBytesHist:  metric.NewHistogram(metaMemMaxBytes, histogramWindow, metric.MemoryUsage64MBBuckets),
+		MaxBytesHist: metric.NewHistogram(metric.HistogramOptions{
+			Metadata: metaMemMaxBytes,
+			Duration: histogramWindow,
+			MaxVal:   log10int64times1000,
+			SigFigs:  3,
+			Buckets:  metric.MemoryUsage64MBBuckets,
+		}),
 		CurBytesCount: metric.NewGauge(metaMemCurBytes),
 	}
 }
