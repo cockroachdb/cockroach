@@ -268,12 +268,16 @@ func TestPebbleMetricEventListener(t *testing.T) {
 	require.Equal(t, int64(0), p.diskStallCount)
 	p.eventListener.DiskSlow(pebble.DiskSlowInfo{Duration: 1 * time.Second})
 	require.Equal(t, int64(1), p.writeStallCount)
-	require.Equal(t, int64(1), p.diskSlowCount)
+	require.Eventually(t, func() bool {
+		return p.diskSlowCount == 1
+	}, 1*time.Second, 100*time.Millisecond)
 	require.Equal(t, int64(0), p.diskStallCount)
 	p.eventListener.DiskSlow(pebble.DiskSlowInfo{Duration: 70 * time.Second})
 	require.Equal(t, int64(1), p.writeStallCount)
 	require.Equal(t, int64(1), p.diskSlowCount)
-	require.Equal(t, int64(1), p.diskStallCount)
+	require.Eventually(t, func() bool {
+		return p.diskStallCount == 1
+	}, 1*time.Second, 100*time.Millisecond)
 }
 
 func TestPebbleIterConsistency(t *testing.T) {

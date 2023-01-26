@@ -987,12 +987,29 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 	// disk is stalled. While the logging subsystem should also be robust to
 	// stalls and crash the process if unable to write logs, there's less risk
 	// to sequencing the crashing listener first.
+	//
+	// For the same reason, make the logging call asynchronous for DiskSlow events.
+	// This prevents slow logging calls during a disk slow/stall event from holding
+	// up Pebble's internal disk health checking, and better obeys the
+	// EventListener contract for not having any functions block or take a while to
+	// run. Creating goroutines is acceptable given their low cost, and the low
+	// write concurrency to Pebble's FS (Pebble compactions + flushes + SQL
+	// spilling to disk). If the maximum concurrency of DiskSlow events increases
+	// significantly in the future, we can improve the logic here by queueing up
+	// most of the logging work (except for the Fatalf call), and have it be done
+	// by a single goroutine.
+	lel := pebble.MakeLoggingEventListener(pebbleLogger{
+		ctx:   logCtx,
+		depth: 2, // skip over the EventListener stack frame
+	})
+	oldDiskSlow := lel.DiskSlow
+	lel.DiskSlow = func(info pebble.DiskSlowInfo) {
+		// Run oldDiskSlow asynchronously.
+		go oldDiskSlow(info)
+	}
 	el := pebble.TeeEventListener(
 		p.makeMetricEtcEventListener(ctx),
-		pebble.MakeLoggingEventListener(pebbleLogger{
-			ctx:   logCtx,
-			depth: 2, // skip over the EventListener stack frame
-		}),
+		lel,
 	)
 
 	p.eventListener = &el
@@ -1065,20 +1082,27 @@ func (p *Pebble) makeMetricEtcEventListener(ctx context.Context) pebble.EventLis
 			atomic.AddInt64((*int64)(&p.writeStallDuration), stallDuration)
 		},
 		DiskSlow: func(info pebble.DiskSlowInfo) {
-			maxSyncDuration := MaxSyncDuration.Get(&p.settings.SV)
-			fatalOnExceeded := MaxSyncDurationFatalOnExceeded.Get(&p.settings.SV)
-			if info.Duration.Seconds() >= maxSyncDuration.Seconds() {
-				atomic.AddInt64(&p.diskStallCount, 1)
-				// Note that the below log messages go to the main cockroach log, not
-				// the pebble-specific log.
-				if fatalOnExceeded {
-					log.Fatalf(ctx, "file write stall detected: %s", info)
-				} else {
-					log.Errorf(ctx, "file write stall detected: %s", info)
+			// Run this method in a separate goroutine as the log.* calls could
+			// block if the logging device is also slow/stalling, preventing pebble's
+			// disk health checking from functioning correctly. See the comment in
+			// pebble.EventListener on why it's important for this method to return
+			// quickly.
+			go func() {
+				maxSyncDuration := MaxSyncDuration.Get(&p.settings.SV)
+				fatalOnExceeded := MaxSyncDurationFatalOnExceeded.Get(&p.settings.SV)
+				if info.Duration.Seconds() >= maxSyncDuration.Seconds() {
+					atomic.AddInt64(&p.diskStallCount, 1)
+					// Note that the below log messages go to the main cockroach log, not
+					// the pebble-specific log.
+					if fatalOnExceeded {
+						log.Fatalf(ctx, "file write stall detected: %s", info)
+					} else {
+						log.Errorf(ctx, "file write stall detected: %s", info)
+					}
+					return
 				}
-				return
-			}
-			atomic.AddInt64(&p.diskSlowCount, 1)
+				atomic.AddInt64(&p.diskSlowCount, 1)
+			}()
 		},
 		FlushEnd: func(info pebble.FlushInfo) {
 			if info.Err != nil {
