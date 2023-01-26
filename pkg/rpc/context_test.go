@@ -166,6 +166,74 @@ func TestHeartbeatCB(t *testing.T) {
 	})
 }
 
+func TestPeersReconnect(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	//testutils.RunTrueAndFalse(t, "compression", func(t *testing.T, compression bool) {
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.Background())
+
+	// Shared cluster ID by all RPC peers (this ensures that the peers
+	// don't talk to servers from unrelated tests by accident).
+	clusterID := uuid.MakeV4()
+
+	clock := timeutil.NewManualTime(timeutil.Unix(0, 20))
+	maxOffset := time.Duration(250)
+	serverCtx := newTestContext(clusterID, clock, maxOffset, stopper)
+	//serverCtx.rpcCompression = compression
+	const serverNodeID = 1
+	serverCtx.NodeID.Set(context.Background(), serverNodeID)
+	s := newTestServer(t, serverCtx)
+	RegisterHeartbeatServer(s, &HeartbeatService{
+		clock:              clock,
+		remoteClockMonitor: serverCtx.RemoteClocks,
+		clusterID:          serverCtx.StorageClusterID,
+		nodeID:             serverCtx.NodeID,
+		settings:           serverCtx.Settings,
+	})
+
+	ln, err := netutil.ListenAndServeGRPC(serverCtx.Stopper, s, util.TestAddr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	remoteAddr := ln.Addr().String()
+
+	// Clocks don't matter in this test.
+	clientCtx := newTestContext(clusterID, clock, maxOffset, stopper)
+
+	conn, err := clientCtx.GRPCDialNode(remoteAddr, serverNodeID, DefaultClass).Connect(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	clock.Advance(time.Second)
+	conn.Close()
+	clock.Advance(time.Second)
+	testutils.SucceedsSoon(t, func() error {
+		k := connKey{
+			targetAddr: remoteAddr,
+			nodeID:     serverNodeID,
+			class:      DefaultClass,
+		}
+		c, ok := clientCtx.m.Get(k)
+		if !ok {
+			return fmt.Errorf("cannot find connection")
+		}
+		if c.grpcConn == conn {
+			return fmt.Errorf("hmmm")
+		}
+		return nil
+	})
+
+	cc := clientCtx.GRPCDialNode(remoteAddr, serverNodeID, DefaultClass)
+
+	testutils.SucceedsSoon(t, func() error {
+		if err = cc.Health(); err != nil {
+			return err
+		}
+		return nil
+	})
+}
+
 // TestPingInterceptors checks that OnOutgoingPing and OnIncomingPing can inject errors.
 func TestPingInterceptors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -2108,9 +2176,9 @@ func TestClusterNameMismatch(t *testing.T) {
 	}{
 		{"", false, "", false, ``},
 		// The name check is enabled if both the client and server want it.
-		{"a", false, "", false, `peer node expects cluster name "a", use --cluster-name to configure`},
-		{"", false, "a", false, `peer node does not have a cluster name configured, cannot use --cluster-name`},
-		{"a", false, "b", false, `local cluster name "b" does not match peer cluster name "a"`},
+		{"a", false, "", false, `Peer node expects cluster name "a", use --cluster-name to configure`},
+		{"", false, "a", false, `Peer node does not have a cluster name configured, cannot use --cluster-name`},
+		{"a", false, "b", false, `local cluster name "b" does not match Peer cluster name "a"`},
 		// It's disabled if either doesn't want it.
 		// However in any case if the name is not empty it has to match.
 		{"a", true, "", false, ``},
