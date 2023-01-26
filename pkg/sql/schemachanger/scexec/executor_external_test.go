@@ -294,23 +294,23 @@ func TestSchemaChanger(t *testing.T) {
 					metadata,
 				),
 			}
-			current := []scpb.Status{
+			initial := []scpb.Status{
 				scpb.Status_ABSENT,
 				scpb.Status_ABSENT,
 				scpb.Status_ABSENT,
 				scpb.Status_ABSENT,
 			}
-			initial := scpb.CurrentState{
+			cs = scpb.CurrentState{
 				TargetState: scpb.TargetState{Statements: stmts, Targets: targets},
-				Current:     current,
+				Initial:     initial,
+				Current:     append([]scpb.Status{}, initial...),
 			}
-
-			sc := sctestutils.MakePlan(t, initial, scop.PreCommitPhase)
+			sc := sctestutils.MakePlan(t, cs, scop.PreCommitPhase)
 			stages := sc.StagesForCurrentPhase()
 			for _, s := range stages {
 				exDeps := ti.newExecDeps(txn)
 				require.NoError(t, sc.DecorateErrorWithPlanDetails(scexec.ExecuteStage(ctx, exDeps, scop.PostCommitPhase, s.Ops())))
-				cs = scpb.CurrentState{TargetState: initial.TargetState, Current: s.After}
+				cs = cs.WithCurrentStatuses(s.After)
 			}
 			return nil
 		}))
@@ -320,7 +320,7 @@ func TestSchemaChanger(t *testing.T) {
 			for _, s := range sc.Stages {
 				exDeps := ti.newExecDeps(txn)
 				require.NoError(t, sc.DecorateErrorWithPlanDetails(scexec.ExecuteStage(ctx, exDeps, scop.PostCommitPhase, s.Ops())))
-				after = scpb.CurrentState{TargetState: cs.TargetState, Current: s.After}
+				after = cs.WithCurrentStatuses(s.After)
 			}
 			return nil
 		}))
@@ -344,15 +344,15 @@ func TestSchemaChanger(t *testing.T) {
 				parsed, err := parser.Parse("ALTER TABLE db.foo ADD COLUMN j INT")
 				require.NoError(t, err)
 				require.Len(t, parsed, 1)
-				initial, err := scbuild.Build(ctx, buildDeps, scpb.CurrentState{}, parsed[0].AST.(*tree.AlterTable))
+				cs, err = scbuild.Build(ctx, buildDeps, scpb.CurrentState{}, parsed[0].AST.(*tree.AlterTable))
 				require.NoError(t, err)
 
 				{
-					sc := sctestutils.MakePlan(t, initial, scop.PreCommitPhase)
+					sc := sctestutils.MakePlan(t, cs, scop.PreCommitPhase)
 					for _, s := range sc.StagesForCurrentPhase() {
 						exDeps := ti.newExecDeps(txn)
 						require.NoError(t, sc.DecorateErrorWithPlanDetails(scexec.ExecuteStage(ctx, exDeps, scop.PostCommitPhase, s.Ops())))
-						cs = scpb.CurrentState{TargetState: initial.TargetState, Current: s.After}
+						cs = cs.WithCurrentStatuses(s.After)
 					}
 				}
 			})
