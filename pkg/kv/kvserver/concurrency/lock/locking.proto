@@ -13,9 +13,10 @@ package cockroach.kv.kvserver.concurrency.lock;
 option go_package = "lock";
 
 import "gogoproto/gogo.proto";
+import "util/hlc/timestamp.proto";
 
-// LockMode represents the different locking modes that determine how key-value
-// scan be accessed by concurrent transactions.
+// LockMode represents the different locking modes that determine how key-values
+// can be accessed by concurrent transactions.
 //
 // Locking modes apply to locks that are held with a per-key granularity. It is
 // up to users of the key-value layer to decide on which keys to acquire locks
@@ -26,33 +27,8 @@ import "gogoproto/gogo.proto";
 // "strongest" in the order that the variants are presented in the enumeration.
 // The "stronger" a locking mode, the more protection it provides for the lock
 // holder but the more restrictive it is to concurrent transactions attempting
-// to access the same keys.
-//
-// Compatibility Matrix
-//
-// The following matrix presents the compatibility of locking strengths with one
-// another. A cell with an X means that the two strengths are incompatible with
-// each other and that they can not both be held on a given key by different
-// transactions, concurrently. A cell without an X means that the two strengths
-// are compatible with each other and that they can be held on a given key by
-// different transactions, concurrently.
-//
-//  +-----------+-----------+-----------+-----------+-----------+
-//  |           |   None    |  Shared   |  Upgrade  | Exclusive |
-//  +-----------+-----------+-----------+-----------+-----------+
-//  | None      |           |           |           |     X^†   |
-//  +-----------+-----------+-----------+-----------+-----------+
-//  | Shared    |           |           |     X     |     X     |
-//  +-----------+-----------+-----------+-----------+-----------+
-//  | Upgrade   |           |     X     |     X     |     X     |
-//  +-----------+-----------+-----------+-----------+-----------+
-//  | Exclusive |     X^†   |     X     |     X     |     X     |
-//  +-----------+-----------+-----------+-----------+-----------+
-//
-// [†] reads under optimistic concurrency control in CockroachDB only conflict
-// with Exclusive locks if the read's timestamp is equal to or greater than the
-// lock's timestamp. If the read's timestamp is below the Exclusive lock's
-// timestamp then the two are compatible.
+// to access the same keys. The strength compatibility detailing these
+// interactions is described below.
 enum LockMode {
   option (gogoproto.goproto_enum_prefix) = false;
 
@@ -127,14 +103,89 @@ enum LockMode {
   // lock holder being forced to increase its write timestamp when converting
   // to an Exclusive lock, which in turn may force it to restart if its read
   // refresh fails.
+  // TODO(XXX): Upgrade locks under OCC look very similar to Exclusive locks
+  // once the Intent locking strength is introduced; do we need both?
+  // TODO(arul): Update this comment to talk about Intents once ^ is resolved.
   Upgrade = 2;
 
-  // Exclusive (X) locks are used by read-write and read-only operations and
-  // provide a transaction with exclusive access to a key. When an Exclusive
-  // lock is held by a transaction on a given key, no other transaction can
-  // read from or write to that key. The lock holder is free to read from and
-  // write to the key as frequently as it would like.
+  // Exclusive (X) locks are used by read-write and read-only operations to
+  // provide transactions with (potential) exclusive write access to a key. When
+  // an Exclusive lock is held by a transaction on a given key, no other
+  // transaction can write to that key.
+  //
+  // Exclusive locks may provide the lock holder exclusive read access to the
+  // key as well. This is a vestige of a time when there was no distinction
+  // between exclusive locks and intents; this behavior is configurable, using
+  // a cluster setting, and detailed under the compatibility matrix below.
   Exclusive = 3;
+
+  // Intent (I) locks are are used by read-write operations to provide
+  // transactions sole access to a key. When an Intent lock is held by a
+  // transaction on a given key, no other transaction can read from or write to
+  // that key. The lock holder is free to read from and write to the key as
+  // frequently as it would like.
+  Intent = 4;
+}
+
+// Strength determines the level of protection a lock provides to the lock
+// holder. The strength of a lock is primarily determined by the locking mode
+// it is held in. However, it also includes auxiliary information
+// (eg. timestamp at which the lock was acquired for certain locking modes)
+// that is required to perform conflict resolution between different lock
+// strengths. Put another way, lock conflict rules are a pure function of the
+// strength a lock is acquired at and the strength of a concurrent operation
+// trying to acquire the same lock.
+//
+// Users of the key-value layer are expected to indicate locking intentions
+// using lock modes; lock strength is an internal concept for the concurrency
+// package for conflict resolution.
+//
+// Compatibility Matrix
+//
+// The following matrix presents the compatibility of locking strengths with one
+// another. A cell with an X means that the two strengths are incompatible with
+// each other and that they can not both be held on a given key by different
+// transactions, concurrently. A cell without an X means that the two strengths
+// are compatible with each other and that they can be held on a given key by
+// different transactions, concurrently.
+//
+//  +------------+---------+-----------+-----------+-------------+----------+
+//  |            |   None  |  Shared   |  Upgrade  |  Exclusive  |  Intent  |
+//  +------------+---------+-----------+-----------+-------------+----------+
+//  | None       |         |           |           |      X^*    |    X^†   |
+//  +------------+---------+-----------+-----------+-------------+----------+
+//  | Shared     |         |           |     X     |      X      |    X     |
+//  +------------+---------+-----------+-----------+-------------+----------+
+//  | Upgrade    |         |     X     |     X     |      X      |    X     |
+//  +------------+---------+-----------+-----------+-------------+----------+
+//  | Exclusive  |   X^*   |     X     |     X     |      X      |    X     |
+//  +------------+---------+-----------+-----------+-------------+----------+
+//  | Intent     |   X^†   |     X     |     X     |      X      |    X     |
+//  +------------+---------+-----------+-----------+-------------+----------+
+//
+// [†] reads under optimistic concurrency control in CockroachDB only conflict
+// with Intent locks if the read's timestamp is equal to or greater than the
+// lock's timestamp. If the read's timestamp is below the Intent lock's
+// timestamp then the two are compatible.
+//
+// [*] historically, CockroachDB did not make a strength distinction between
+// Exclusive locks and Intents. As such, reads under optimistic concurrency
+// control would conflict with Exclusive locks if the read's timestamp was at or
+// above the Exclusive lock's timestamp. Now that there is a distinction between
+// Exclusive locks and Intents, non-locking reads do not block on Exclusive
+// locks, regardless of their timestamp. However, there is a desire to let users
+// opt into the old behavior using a cluster setting.
+// TODO(arul): Add a reference to the cluster setting here.
+//
+// TODO(XXX): Do we need this to be a proto? Or are we happy with a regular go
+// struct?
+message Strength {
+  // Mode in which the lock is held.
+  LockMode mode = 1;
+
+  // Timestamp at which the lock was/is being acquired. This field must be set
+  // for None, Exclusive, and Intent locking modes.
+  util.hlc.Timestamp timestamp = 2 [(gogoproto.nullable)=false];
 }
 
 // Durability represents the different durability properties of a lock acquired

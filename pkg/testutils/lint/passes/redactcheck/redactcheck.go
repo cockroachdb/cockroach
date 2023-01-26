@@ -80,6 +80,7 @@ func runAnalyzer(pass *analysis.Pass) (interface{}, error) {
 					"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock": {
 						"Durability": {},
 						"LockMode":   {},
+						"Strength":   {},
 						"WaitPolicy": {},
 					},
 					"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb": {
