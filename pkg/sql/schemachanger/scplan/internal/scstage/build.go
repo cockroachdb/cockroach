@@ -54,7 +54,8 @@ func BuildStages(
 			}
 		}(),
 		targetState:      init.TargetState,
-		startingStatuses: init.Current,
+		initial:          init.Initial,
+		current:          init.Current,
 		startingPhase:    phase,
 		descIDs:          screl.AllTargetDescIDs(init.TargetState),
 		withSanityChecks: withSanityChecks,
@@ -95,7 +96,8 @@ type buildContext struct {
 	g                *scgraph.Graph
 	scJobID          func() jobspb.JobID
 	targetState      scpb.TargetState
-	startingStatuses []scpb.Status
+	initial          []scpb.Status
+	current          []scpb.Status
 	startingPhase    scop.Phase
 	descIDs          catalog.DescriptorIDSet
 	withSanityChecks bool
@@ -109,7 +111,7 @@ func buildStages(bc buildContext) (stages []Stage) {
 		if n := len(stages); n > 0 {
 			return stages[n-1].After
 		}
-		return bc.startingStatuses
+		return bc.current
 	}
 	currentPhase := bc.startingPhase
 	switch currentPhase {
@@ -153,16 +155,18 @@ func buildStages(bc buildContext) (stages []Stage) {
 		// as a prelude to the pre-commit phase's main stage.
 		{
 			resetStage := Stage{
-				Before: make([]scpb.Status, len(currentStatuses())),
-				After:  make([]scpb.Status, len(currentStatuses())),
+				Before: make([]scpb.Status, len(bc.initial)),
+				After:  make([]scpb.Status, len(bc.initial)),
 				Phase:  scop.PreCommitPhase,
 			}
 			copy(resetStage.Before, currentStatuses())
+			copy(resetStage.After, bc.initial)
 			isNoOp := true
-			for i, t := range bc.targetState.Targets {
-				s := scpb.AsTargetStatus(t.TargetStatus).InitialStatus()
-				resetStage.After[i] = s
-				isNoOp = isNoOp && (s == resetStage.Before[i])
+			for i, s := range resetStage.After {
+				if s != resetStage.Before[i] {
+					isNoOp = false
+					break
+				}
 			}
 			if !isNoOp {
 				stages = append(stages, resetStage)
@@ -245,7 +249,7 @@ type buildState struct {
 // initBuildState initializes a build state for this buildContext.
 func initBuildState(bc buildContext, phase scop.Phase, current []scpb.Status) buildState {
 	bs := buildState{
-		incumbent:    make([]scpb.Status, len(bc.startingStatuses)),
+		incumbent:    make([]scpb.Status, len(bc.current)),
 		fulfilled:    make(map[*screl.Node]struct{}, bc.g.Order()),
 		currentPhase: phase,
 	}

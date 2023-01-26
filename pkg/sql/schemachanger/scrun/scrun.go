@@ -103,7 +103,7 @@ func runTransactionPhase(
 		}
 		after = stages[i].After
 	}
-	return scpb.CurrentState{TargetState: state.TargetState, Current: after}, sc.JobID, nil
+	return state.WithCurrentStatuses(after), sc.JobID, nil
 }
 
 // RunSchemaChangesInJob contains the business logic for the Resume method of a
