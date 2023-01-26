@@ -90,7 +90,7 @@ type AppendStats struct {
 
 // Metrics contains metrics specific to the log storage.
 type Metrics struct {
-	RaftLogCommitLatency *metric.Histogram
+	RaftLogCommitLatency metric.IHistogram
 }
 
 // LogStore is a stub of a separated Raft log storage.

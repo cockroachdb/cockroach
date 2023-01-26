@@ -112,17 +112,18 @@ func TestHistogram(t *testing.T) {
 		return &n
 	}
 
-	h := NewHistogram(
-		Metadata{},
-		time.Hour,
-		[]float64{
+	h := NewHistogram(HistogramOptions{
+		ForceUsePrometheus: true,
+		Metadata:           Metadata{},
+		Duration:           time.Hour,
+		Buckets: []float64{
 			1.0,
 			5.0,
 			10.0,
 			25.0,
 			100.0,
 		},
-	)
+	})
 
 	// should return 0 if no observations are made
 	require.Equal(t, 0.0, h.ValueAtQuantileWindowed(0))
@@ -236,23 +237,24 @@ func TestNewHistogramRotate(t *testing.T) {
 	defer TestingSetNow(nil)()
 	setNow(0)
 
-	h := NewHistogram(emptyMetadata, 10*time.Second, nil)
+	h := NewHistogram(HistogramOptions{
+		ForceUsePrometheus: true,
+		Metadata:           emptyMetadata,
+		Duration:           10 * time.Second,
+		Buckets:            nil,
+	})
 	for i := 0; i < 4; i++ {
 		// Windowed histogram is initially empty.
 		h.Inspect(func(interface{}) {}) // triggers ticking
-		var m prometheusgo.Metric
-		require.NoError(t, h.Windowed().Write(&m))
-		require.Zero(t, *m.Histogram.SampleSum)
+		require.Zero(t, h.TotalSumWindowed())
 		// But cumulative histogram has history (if i > 0).
-		require.EqualValues(t, i, *h.ToPrometheusMetric().Histogram.SampleCount)
+		require.EqualValues(t, i, h.TotalCount())
 
 		// Add a measurement and verify it's there.
 		{
 			h.RecordValue(12345)
 			f := float64(12345)
-			var m prometheusgo.Metric
-			require.NoError(t, h.Windowed().Write(&m))
-			require.Equal(t, *m.Histogram.SampleSum, f)
+			require.Equal(t, h.TotalSumWindowed(), f)
 		}
 		// Tick. This rotates the histogram.
 		setNow(time.Duration(i+1) * 10 * time.Second)

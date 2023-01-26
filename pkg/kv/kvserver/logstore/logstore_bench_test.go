@@ -60,7 +60,12 @@ func runBenchmarkLogStore_StoreEntries(b *testing.B, bytes int64) {
 		EntryCache:  ec,
 		Settings:    cluster.MakeTestingClusterSettings(),
 		Metrics: Metrics{
-			RaftLogCommitLatency: metric.NewHistogram(metric.Metadata{}, 10*time.Second, metric.IOLatencyBuckets),
+			RaftLogCommitLatency: metric.NewHistogram(metric.HistogramOptions{
+				ForceUsePrometheus: true,
+				Metadata:           metric.Metadata{},
+				Duration:           10 * time.Second,
+				Buckets:            metric.IOLatencyBuckets,
+			}),
 		},
 	}
 
