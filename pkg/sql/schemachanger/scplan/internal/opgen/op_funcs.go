@@ -115,10 +115,11 @@ func makeOpsFunc(el scpb.Element, fns []interface{}) (opsFunc, scop.Type, error)
 }
 
 var (
-	opInterfaceType           = reflect.TypeOf((*scop.Op)(nil)).Elem()
-	mutationOpInterfaceType   = reflect.TypeOf((*scop.MutationOp)(nil)).Elem()
-	validationOpInterfaceType = reflect.TypeOf((*scop.ValidationOp)(nil)).Elem()
-	backfillOpInterfaceType   = reflect.TypeOf((*scop.BackfillOp)(nil)).Elem()
+	opInterfaceType                  = reflect.TypeOf((*scop.Op)(nil)).Elem()
+	immediateMutationOpInterfaceType = reflect.TypeOf((*scop.ImmediateMutationOp)(nil)).Elem()
+	deferredMutationOpInterfaceType  = reflect.TypeOf((*scop.DeferredMutationOp)(nil)).Elem()
+	validationOpInterfaceType        = reflect.TypeOf((*scop.ValidationOp)(nil)).Elem()
+	backfillOpInterfaceType          = reflect.TypeOf((*scop.BackfillOp)(nil)).Elem()
 )
 
 func checkOpFunc(el scpb.Element, fn interface{}) (opType scop.Type, _ error) {
@@ -151,7 +152,7 @@ func checkOpFunc(el scpb.Element, fn interface{}) (opType scop.Type, _ error) {
 		return 0, returnTypeError()
 	}
 	switch {
-	case out.Implements(mutationOpInterfaceType):
+	case out.Implements(immediateMutationOpInterfaceType), out.Implements(deferredMutationOpInterfaceType):
 		opType = scop.MutationType
 	case out.Implements(validationOpInterfaceType):
 		opType = scop.ValidationType

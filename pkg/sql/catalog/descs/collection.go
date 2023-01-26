@@ -193,14 +193,8 @@ func (tc *Collection) ReleaseLeases(ctx context.Context) {
 // ReleaseAll calls ReleaseLeases.
 func (tc *Collection) ReleaseAll(ctx context.Context) {
 	tc.ReleaseLeases(ctx)
-	tc.uncommitted.reset(ctx)
-	tc.uncommittedComments.reset()
-	tc.uncommittedZoneConfigs.reset()
+	tc.ResetUncommitted(ctx)
 	tc.cr.Reset(ctx)
-	tc.shadowedNames = nil
-	tc.validationLevels = nil
-	tc.ResetSyntheticDescriptors()
-	tc.deletedDescs = catalog.DescriptorIDSet{}
 	tc.skipValidationOnWrite = false
 }
 
@@ -1120,6 +1114,17 @@ func (tc *Collection) SetSyntheticDescriptors(descs []catalog.Descriptor) {
 // Collection.
 func (tc *Collection) ResetSyntheticDescriptors() {
 	tc.synthetic.reset()
+}
+
+// ResetUncommitted resets all uncommitted state in the Collection.
+func (tc *Collection) ResetUncommitted(ctx context.Context) {
+	tc.uncommitted.reset(ctx)
+	tc.uncommittedComments.reset()
+	tc.uncommittedZoneConfigs.reset()
+	tc.shadowedNames = nil
+	tc.validationLevels = nil
+	tc.ResetSyntheticDescriptors()
+	tc.deletedDescs = catalog.DescriptorIDSet{}
 }
 
 // AddSyntheticDescriptor injects a synthetic descriptor into the Collection.

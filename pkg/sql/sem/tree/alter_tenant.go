@@ -10,8 +10,6 @@
 
 package tree
 
-import "github.com/cockroachdb/errors"
-
 // ReplicationCutoverTime represent the user-specified cutover time
 type ReplicationCutoverTime struct {
 	Timestamp Expr
@@ -54,20 +52,6 @@ func (n *AlterTenantReplication) Format(ctx *FmtCtx) {
 type TenantCapability struct {
 	Name  string
 	Value Expr
-}
-
-func (c *TenantCapability) GetBoolValue(isRevoke bool) (bool, error) {
-	if c.Value == nil {
-		return false, nil
-	}
-	if isRevoke {
-		return false, errors.New("revoke must not specify value")
-	}
-	dBool, ok := AsDBool(c.Value)
-	if !ok {
-		return false, errors.New("value must be bool")
-	}
-	return bool(dBool), nil
 }
 
 // AlterTenantCapability represents an ALTER TENANT CAPABILITY statement.
@@ -190,4 +174,38 @@ func (n *AlterTenantRename) Format(ctx *FmtCtx) {
 	ctx.FormatNode(n.TenantSpec)
 	ctx.WriteString(" RENAME TO ")
 	ctx.FormatNode(n.NewName)
+}
+
+// AlterTenantService represents an ALTER TENANT START/STOP SERVICE statement.
+type AlterTenantService struct {
+	TenantSpec *TenantSpec
+	Command    TenantServiceCmd
+}
+
+// TenantServiceCmd represents a parameter to ALTER TENANT.
+type TenantServiceCmd int8
+
+const (
+	// TenantStartServiceExternal encodes START SERVICE EXTERNAL.
+	TenantStartServiceExternal TenantServiceCmd = 0
+	// TenantStartServiceExternal encodes START SERVICE SHARED.
+	TenantStartServiceShared TenantServiceCmd = 1
+	// TenantStartServiceExternal encodes STOP SERVICE.
+	TenantStopService TenantServiceCmd = 2
+)
+
+var _ Statement = &AlterTenantService{}
+
+// Format implements the NodeFormatter interface.
+func (n *AlterTenantService) Format(ctx *FmtCtx) {
+	ctx.WriteString("ALTER TENANT ")
+	ctx.FormatNode(n.TenantSpec)
+	switch n.Command {
+	case TenantStartServiceExternal:
+		ctx.WriteString(" START SERVICE EXTERNAL")
+	case TenantStartServiceShared:
+		ctx.WriteString(" START SERVICE SHARED")
+	case TenantStopService:
+		ctx.WriteString(" STOP SERVICE")
+	}
 }
