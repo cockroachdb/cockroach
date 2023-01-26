@@ -422,6 +422,9 @@ func (k Key) String() string {
 // previously referenced a < 22.1 version until that check/gate can be removed.
 const TODOPreV22_1 = V22_1
 
+// Offset every version +1M major versions into the future if this is a dev branch.
+const DevOffset = 1000000
+
 // rawVersionsSingleton lists all historical versions here in chronological
 // order, with comments describing what backwards-incompatible features were
 // introduced.
@@ -750,7 +753,6 @@ var versionsSingleton = func() keyedVersions {
 		// which conceptually is actually back down to 2 -- then back to to 1000003,
 		// then on to 1000004, etc.
 		skipFirst := allowUpgradeToDev
-		const devOffset = 1000000
 		first := true
 		for i := range rawVersionsSingleton {
 			// VPrimordial versions are not offset; they don't matter for the logic
@@ -763,7 +765,7 @@ var versionsSingleton = func() keyedVersions {
 				first = false
 				continue
 			}
-			rawVersionsSingleton[i].Major += devOffset
+			rawVersionsSingleton[i].Major += DevOffset
 		}
 	}
 	return rawVersionsSingleton
