@@ -177,13 +177,10 @@ func usersRestoreFunc(
 	}
 
 	executor := execCfg.InternalExecutor
-	hasIDColumnQuery := fmt.Sprintf(
-		`SELECT EXISTS (SELECT 1 FROM [SHOW COLUMNS FROM %s] WHERE column_name = 'user_id')`, tempTableName)
-	row, err := executor.QueryRow(ctx, "has-id-column", txn, hasIDColumnQuery)
+	hasIDColumn, err := tableHasColumnName(ctx, txn, executor, tempTableName, "user_id")
 	if err != nil {
 		return err
 	}
-	hasIDColumn := tree.MustBeDBool(row[0])
 	if hasIDColumn {
 		return defaultSystemTableRestoreFunc(
 			ctx, execCfg, txn, systemTableName, tempTableName,
@@ -255,13 +252,10 @@ func roleOptionsRestoreFunc(
 	}
 
 	executor := execCfg.InternalExecutor
-	hasIDColumnQuery := fmt.Sprintf(
-		`SELECT EXISTS (SELECT 1 FROM [SHOW COLUMNS FROM %s] WHERE column_name = 'user_id')`, tempTableName)
-	row, err := executor.QueryRow(ctx, "has-id-column", txn, hasIDColumnQuery)
+	hasIDColumn, err := tableHasColumnName(ctx, txn, executor, tempTableName, "user_id")
 	if err != nil {
 		return err
 	}
-	hasIDColumn := tree.MustBeDBool(row[0])
 	if hasIDColumn {
 		return defaultSystemTableRestoreFunc(
 			ctx, execCfg, txn, systemTableName, tempTableName,
@@ -320,6 +314,22 @@ func roleOptionsRestoreFunc(
 		}
 	}
 	return nil
+}
+
+func tableHasColumnName(
+	ctx context.Context,
+	txn *kv.Txn,
+	executor *sql.InternalExecutor,
+	tableName string,
+	columnName string,
+) (bool, error) {
+	hasColumnQuery := fmt.Sprintf(`SELECT EXISTS (SELECT 1 FROM [SHOW COLUMNS FROM %s] WHERE column_name = '%s')`, tableName, columnName)
+	row, err := executor.QueryRow(ctx, "has-column", txn, hasColumnQuery)
+	if err != nil {
+		return false, err
+	}
+	hasColumn := tree.MustBeDBool(row[0])
+	return bool(hasColumn), nil
 }
 
 // When restoring the settings table, we want to make sure to not override the
