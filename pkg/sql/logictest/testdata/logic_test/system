@@ -250,10 +250,10 @@ descriptor  BYTES  true   NULL  ·  {primary}  false
 query TTBTTTB
 SHOW COLUMNS FROM system.users
 ----
-username        STRING  false  NULL   ·  {primary,users_user_id_idx}  false
-hashedPassword  BYTES   true   NULL   ·  {primary}                    false
-isRole          BOOL    false  false  ·  {primary}                    false
-user_id         OID     false  NULL   ·  {primary,users_user_id_idx}  false
+username        STRING  false  NULL  ·  {primary,users_user_id_idx}  false
+hashedPassword  BYTES   true   NULL  ·  {primary}                    false
+isRole          BOOL    false  f     ·  {primary}                    false
+user_id         OID     false  NULL  ·  {primary,users_user_id_idx}  false
 
 query TTBTTTB
 SHOW COLUMNS FROM system.zones
@@ -300,27 +300,27 @@ lastUpdated  TIMESTAMP  false  NULL  ·  {primary}  false
 query TTBTTTB
 SHOW COLUMNS FROM system.jobs
 ----
-id                 INT8       false  unique_rowid()     ·  {jobs_created_by_type_created_by_id_idx,jobs_job_type_idx,jobs_run_stats_idx,jobs_status_created_idx,primary}  false
-status             STRING     false  NULL               ·  {jobs_created_by_type_created_by_id_idx,jobs_run_stats_idx,jobs_status_created_idx,primary}                    false
-created            TIMESTAMP  false  now():::TIMESTAMP  ·  {jobs_run_stats_idx,jobs_status_created_idx,primary}                                                           false
-payload            BYTES      false  NULL               ·  {primary}                                                                                                      false
-progress           BYTES      true   NULL               ·  {primary}                                                                                                      false
-created_by_type    STRING     true   NULL               ·  {jobs_created_by_type_created_by_id_idx,primary}                                                               false
-created_by_id      INT8       true   NULL               ·  {jobs_created_by_type_created_by_id_idx,primary}                                                               false
-claim_session_id   BYTES      true   NULL               ·  {jobs_run_stats_idx,primary}                                                                                   false
-claim_instance_id  INT8       true   NULL               ·  {jobs_run_stats_idx,primary}                                                                                   false
-num_runs           INT8       true   NULL               ·  {jobs_run_stats_idx,primary}                                                                                   false
-last_run           TIMESTAMP  true   NULL               ·  {jobs_run_stats_idx,primary}                                                                                   false
-job_type           STRING     true   NULL               ·  {jobs_job_type_idx,primary}                                                                                    false
+id                 INT8       false  unique_rowid()  ·  {jobs_created_by_type_created_by_id_idx,jobs_job_type_idx,jobs_run_stats_idx,jobs_status_created_idx,primary}  false
+status             STRING     false  NULL            ·  {jobs_created_by_type_created_by_id_idx,jobs_run_stats_idx,jobs_status_created_idx,primary}                    false
+created            TIMESTAMP  false  now()           ·  {jobs_run_stats_idx,jobs_status_created_idx,primary}                                                           false
+payload            BYTES      false  NULL            ·  {primary}                                                                                                      false
+progress           BYTES      true   NULL            ·  {primary}                                                                                                      false
+created_by_type    STRING     true   NULL            ·  {jobs_created_by_type_created_by_id_idx,primary}                                                               false
+created_by_id      INT8       true   NULL            ·  {jobs_created_by_type_created_by_id_idx,primary}                                                               false
+claim_session_id   BYTES      true   NULL            ·  {jobs_run_stats_idx,primary}                                                                                   false
+claim_instance_id  INT8       true   NULL            ·  {jobs_run_stats_idx,primary}                                                                                   false
+num_runs           INT8       true   NULL            ·  {jobs_run_stats_idx,primary}                                                                                   false
+last_run           TIMESTAMP  true   NULL            ·  {jobs_run_stats_idx,primary}                                                                                   false
+job_type           STRING     true   NULL            ·  {jobs_job_type_idx,primary}                                                                                    false
 
 
 query TTBTTTB
 SHOW COLUMNS FROM system.settings
 ----
-name         STRING     false  NULL               ·  {primary}  false
-value        STRING     false  NULL               ·  {primary}  false
-lastUpdated  TIMESTAMP  false  now():::TIMESTAMP  ·  {primary}  false
-valueType    STRING     true   NULL               ·  {primary}  false
+name         STRING     false  NULL   ·  {primary}  false
+value        STRING     false  NULL   ·  {primary}  false
+lastUpdated  TIMESTAMP  false  now()  ·  {primary}  false
+valueType    STRING     true   NULL   ·  {primary}  false
 
 query TTBTTTB
 SHOW COLUMNS FROM system.role_members

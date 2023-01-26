@@ -421,7 +421,8 @@ func shouldReplicaQuiesce(
 func (r *Replica) quiesceAndNotifyRaftMuLockedReplicaMuLocked(
 	ctx context.Context, status *raftSparseStatus, lagging laggingReplicaSet,
 ) bool {
-	fromReplica, fromErr := r.getReplicaDescriptorByIDRLocked(r.replicaID, r.raftMu.lastToReplica)
+	lastToReplica, lastFromReplica := r.getLastReplicaDescriptors()
+	fromReplica, fromErr := r.getReplicaDescriptorByIDRLocked(r.replicaID, lastToReplica)
 	if fromErr != nil {
 		if log.V(4) {
 			log.Infof(ctx, "not quiescing: cannot find from replica (%d)", r.replicaID)
@@ -436,7 +437,7 @@ func (r *Replica) quiesceAndNotifyRaftMuLockedReplicaMuLocked(
 			continue
 		}
 		toReplica, toErr := r.getReplicaDescriptorByIDRLocked(
-			roachpb.ReplicaID(id), r.raftMu.lastFromReplica)
+			roachpb.ReplicaID(id), lastFromReplica)
 		if toErr != nil {
 			if log.V(4) {
 				log.Infof(ctx, "failed to quiesce: cannot find to replica (%d)", id)
