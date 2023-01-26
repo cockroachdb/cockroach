@@ -419,7 +419,7 @@ func RunWithDetails(
 	return c.RunWithDetails(ctx, l, c.Nodes, title, cmd)
 }
 
-// SQL runs `cockroach sql` on a remote cluster.
+// SQL runs `cockroach sql` on a remote cluster if no cmd is provided.
 func SQL(
 	ctx context.Context,
 	l *logger.Logger,
@@ -435,7 +435,10 @@ func SQL(
 	if err != nil {
 		return err
 	}
-	return c.SQL(ctx, l, tenantName, cmdArray)
+	if len(cmdArray) == 0 {
+		return c.OpenSQLShell(ctx, l, tenantName)
+	}
+	return c.RunSQL(ctx, l, cmdArray)
 }
 
 // IP gets the ip addresses of the nodes in a cluster.
