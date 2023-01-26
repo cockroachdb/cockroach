@@ -278,9 +278,7 @@ func TestSQLAccess(t *testing.T) {
 	tDB := sqlutils.MakeSQLRunner(sqlDB)
 	dbName := t.Name()
 	tDB.Exec(t, `CREATE DATABASE "`+dbName+`"`)
-	schema := strings.Replace(systemschema.SQLInstancesTableSchema,
-		`CREATE TABLE system.sql_instances`,
-		`CREATE TABLE "`+dbName+`".sql_instances`, 1)
+	schema := getTableSQLForDatabase(dbName)
 	tDB.Exec(t, schema)
 	tableID := getTableID(t, tDB, dbName, "sql_instances")
 	stopper := stop.NewStopper()
@@ -337,6 +335,17 @@ func TestSQLAccess(t *testing.T) {
 		i++
 	}
 	require.NoError(t, rows.Err())
+}
+
+func getTableSQLForDatabase(dbName string) string {
+	schema := systemschema.SQLInstancesTableSchema
+	if systemschema.TestSupportMultiRegion() {
+		schema = systemschema.MrSQLInstancesTableSchema
+	}
+	schema = strings.Replace(schema,
+		`CREATE TABLE system.sql_instances`,
+		`CREATE TABLE "`+dbName+`".sql_instances`, 1)
+	return schema
 }
 
 func TestRefreshSession(t *testing.T) {
