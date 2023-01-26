@@ -115,7 +115,7 @@ func TestFlatten(t *testing.T) {
 		{
 			errors.Wrap(
 				roachpb.NewTransactionRetryWithProtoRefreshError(
-					redact.Sprint(roachpb.NewReadWithinUncertaintyIntervalError(hlc.Timestamp{}, hlc.Timestamp{}, hlc.ClockTimestamp{}, nil)),
+					redact.Sprint(roachpb.NewReadWithinUncertaintyIntervalError(hlc.Timestamp{}, hlc.ClockTimestamp{}, nil, hlc.Timestamp{})),
 					uuid.MakeV4(),
 					roachpb.Transaction{},
 				),
