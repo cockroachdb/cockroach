@@ -49,6 +49,7 @@ func TestColdStartLatency(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	skip.UnderRace(t, "too slow")
 	skip.UnderStress(t, "too slow")
+	skip.WithIssue(t, 95644)
 	defer envutil.TestSetEnv(t, "COCKROACH_MR_SYSTEM_DATABASE", "1")()
 
 	// We'll need to make some per-node args to assign the different
