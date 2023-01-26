@@ -1287,6 +1287,140 @@ func TestRequestsOnLaggingReplica(t *testing.T) {
 	require.Equal(t, leaderReplicaID, nlhe.Lease.Replica.ReplicaID)
 }
 
+// TestRequestsOnFollowerWithNonLiveLeaseholder tests the availability of a
+// range that has an expired epoch-based lease and a live Raft leader that is
+// unable to heartbeat its liveness record. Such a range should recover once
+// Raft leadership moves off the partitioned Raft leader to one of the followers
+// that can reach node liveness.
+//
+// This test relies on follower replicas campaigning for Raft leadership in
+// certain cases when refusing to forward lease acquisition requests to the
+// leader. In these cases where they determine that the leader is non-live
+// according to node liveness, they will attempt to steal Raft leadership and,
+// if successful, will be able to perform future lease acquisition attempts.
+func TestRequestsOnFollowerWithNonLiveLeaseholder(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	var installPartition int32
+	partitionFilter := func(_ context.Context, ba roachpb.BatchRequest) *roachpb.Error {
+		if atomic.LoadInt32(&installPartition) == 0 {
+			return nil
+		}
+		if ba.GatewayNodeID == 1 && ba.Replica.NodeID == 4 {
+			return roachpb.NewError(context.Canceled)
+		}
+		return nil
+	}
+
+	clusterArgs := base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+		ServerArgs: base.TestServerArgs{
+			// Reduce the election timeout some to speed up the test.
+			RaftConfig: base.RaftConfig{RaftElectionTimeoutTicks: 10},
+			Knobs: base.TestingKnobs{
+				NodeLiveness: kvserver.NodeLivenessTestingKnobs{
+					// This test waits for an epoch-based lease to expire, so we're
+					// setting the liveness duration as low as possible while still
+					// keeping the test stable.
+					LivenessDuration: 3000 * time.Millisecond,
+					RenewalDuration:  1500 * time.Millisecond,
+				},
+				Store: &kvserver.StoreTestingKnobs{
+					// We eliminate clock offsets in order to eliminate the stasis period
+					// of leases, in order to speed up the test.
+					MaxOffset:            time.Nanosecond,
+					TestingRequestFilter: partitionFilter,
+				},
+			},
+		},
+	}
+
+	tc := testcluster.StartTestCluster(t, 4, clusterArgs)
+	defer tc.Stopper().Stop(ctx)
+
+	{
+		// Move the liveness range to node 4.
+		desc := tc.LookupRangeOrFatal(t, keys.NodeLivenessPrefix)
+		tc.RebalanceVoterOrFatal(ctx, t, desc.StartKey.AsRawKey(), tc.Target(0), tc.Target(3))
+	}
+
+	// Create a new range.
+	_, rngDesc, err := tc.Servers[0].ScratchRangeEx()
+	require.NoError(t, err)
+	key := rngDesc.StartKey.AsRawKey()
+	// Add replicas on all the stores.
+	tc.AddVotersOrFatal(t, rngDesc.StartKey.AsRawKey(), tc.Target(1), tc.Target(2))
+
+	// Store 0 holds the lease.
+	store0 := tc.GetFirstStoreFromServer(t, 0)
+	store0Repl, err := store0.GetReplica(rngDesc.RangeID)
+	require.NoError(t, err)
+	leaseStatus := store0Repl.CurrentLeaseStatus(ctx)
+	require.True(t, leaseStatus.OwnedBy(store0.StoreID()))
+
+	{
+		// Write a value so that the respective key is present in all stores and we
+		// can increment it again later.
+		_, err := tc.Server(0).DB().Inc(ctx, key, 1)
+		require.NoError(t, err)
+		log.Infof(ctx, "test: waiting for initial values...")
+		tc.WaitForValues(t, key, []int64{1, 1, 1, 0})
+		log.Infof(ctx, "test: waiting for initial values... done")
+	}
+
+	// Begin dropping all node liveness heartbeats from the original raft leader
+	// while allowing the leader to maintain Raft leadership and otherwise behave
+	// normally. This mimics cases where the raft leader is partitioned away from
+	// the liveness range but can otherwise reach its followers. In these cases,
+	// it is still possible that the followers can reach the liveness range and
+	// see that the leader becomes non-live. For example, the configuration could
+	// look like:
+	//
+	//          [0]       raft leader
+	//           ^
+	//          / \
+	//         /   \
+	//        v     v
+	//      [1]<--->[2]   raft followers
+	//        ^     ^
+	//         \   /
+	//          \ /
+	//           v
+	//          [3]       liveness range
+	//
+	log.Infof(ctx, "test: partitioning node")
+	atomic.StoreInt32(&installPartition, 1)
+
+	// Wait until the lease expires.
+	log.Infof(ctx, "test: waiting for lease expiration")
+	testutils.SucceedsSoon(t, func() error {
+		leaseStatus = store0Repl.CurrentLeaseStatus(ctx)
+		if leaseStatus.IsValid() {
+			return errors.New("lease still valid")
+		}
+		return nil
+	})
+	log.Infof(ctx, "test: lease expired")
+
+	{
+		// Increment the initial value again, which requires range availability. To
+		// get there, the request will need to trigger a lease request on a follower
+		// replica, which will call a Raft election, acquire Raft leadership, then
+		// acquire the range lease.
+		_, err := tc.Server(0).DB().Inc(ctx, key, 1)
+		require.NoError(t, err)
+		log.Infof(ctx, "test: waiting for new lease...")
+		tc.WaitForValues(t, key, []int64{2, 2, 2, 0})
+		log.Infof(ctx, "test: waiting for new lease... done")
+	}
+
+	// Store 0 no longer holds the lease.
+	leaseStatus = store0Repl.CurrentLeaseStatus(ctx)
+	require.False(t, leaseStatus.OwnedBy(store0.StoreID()))
+}
+
 type fakeSnapshotStream struct {
 	nextReq *kvserverpb.SnapshotRequest
 	nextErr error

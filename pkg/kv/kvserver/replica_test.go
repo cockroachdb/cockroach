@@ -11668,6 +11668,117 @@ func TestReplicaShouldCampaignOnWake(t *testing.T) {
 	}
 }
 
+func TestReplicaShouldCampaignOnLeaseRequestRedirect(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	desc := roachpb.RangeDescriptor{
+		RangeID:  1,
+		StartKey: roachpb.RKeyMin,
+		EndKey:   roachpb.RKeyMax,
+		InternalReplicas: []roachpb.ReplicaDescriptor{
+			{
+				ReplicaID: 1,
+				NodeID:    1,
+				StoreID:   1,
+			},
+			{
+				ReplicaID: 2,
+				NodeID:    2,
+				StoreID:   2,
+			},
+			{
+				ReplicaID: 3,
+				NodeID:    3,
+				StoreID:   3,
+			},
+		},
+		NextReplicaID: 4,
+	}
+
+	now := hlc.Timestamp{WallTime: 100}
+	livenessMap := liveness.IsLiveMap{
+		1: liveness.IsLiveMapEntry{
+			IsLive:   true,
+			Liveness: livenesspb.Liveness{Expiration: now.Add(1, 0).ToLegacyTimestamp()},
+		},
+		2: liveness.IsLiveMapEntry{
+			// NOTE: we purposefully set IsLive to true in disagreement with the
+			// Liveness expiration to ensure that we're only looking at node liveness
+			// in shouldCampaignOnLeaseRequestRedirect and not at whether this node is
+			// reachable from the local node.
+			IsLive:   true,
+			Liveness: livenesspb.Liveness{Expiration: now.Add(-1, 0).ToLegacyTimestamp()},
+		},
+	}
+
+	followerWithoutLeader := raft.BasicStatus{
+		SoftState: raft.SoftState{
+			RaftState: raft.StateFollower,
+			Lead:      0,
+		},
+	}
+	followerWithLeader := raft.BasicStatus{
+		SoftState: raft.SoftState{
+			RaftState: raft.StateFollower,
+			Lead:      1,
+		},
+	}
+	candidate := raft.BasicStatus{
+		SoftState: raft.SoftState{
+			RaftState: raft.StateCandidate,
+			Lead:      0,
+		},
+	}
+	leader := raft.BasicStatus{
+		SoftState: raft.SoftState{
+			RaftState: raft.StateLeader,
+			Lead:      1,
+		},
+	}
+	followerDeadLeader := raft.BasicStatus{
+		SoftState: raft.SoftState{
+			RaftState: raft.StateFollower,
+			Lead:      2,
+		},
+	}
+	followerMissingLiveness := raft.BasicStatus{
+		SoftState: raft.SoftState{
+			RaftState: raft.StateFollower,
+			Lead:      3,
+		},
+	}
+	followerMissingDesc := raft.BasicStatus{
+		SoftState: raft.SoftState{
+			RaftState: raft.StateFollower,
+			Lead:      4,
+		},
+	}
+
+	tests := []struct {
+		name                  string
+		raftStatus            raft.BasicStatus
+		requiresExpiringLease bool
+		exp                   bool
+	}{
+		{"candidate", candidate, false, false},
+		{"leader", leader, false, false},
+		{"follower without leader", followerWithoutLeader, false, true},
+		{"follower unknown leader", followerMissingDesc, false, false},
+		{"follower expiration-based lease", followerDeadLeader, true, false},
+		{"follower unknown liveness leader", followerMissingLiveness, false, false},
+		{"follower live leader", followerWithLeader, false, false},
+		{"follower dead leader", followerDeadLeader, false, true},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			v := shouldCampaignOnLeaseRequestRedirect(tc.raftStatus, livenessMap, &desc, tc.requiresExpiringLease, now)
+			require.Equal(t, tc.exp, v)
+		})
+	}
+}
+
 func TestRangeStatsRequest(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
