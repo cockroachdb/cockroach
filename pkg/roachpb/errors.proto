@@ -135,6 +135,8 @@ message ReadWithinUncertaintyIntervalError {
 
   // Information about the uncertain value.
   optional util.hlc.Timestamp value_timestamp = 2 [(gogoproto.nullable) = false];
+  optional util.hlc.Timestamp local_timestamp = 6 [(gogoproto.nullable) = false,
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/util/hlc.ClockTimestamp"];
 }
 
 // TransactionAbortedReason specifies what caused a TransactionAbortedError.

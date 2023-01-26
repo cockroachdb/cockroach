@@ -109,25 +109,26 @@ func TestReadWithinUncertaintyIntervalError(t *testing.T) {
 				GlobalUncertaintyLimit: hlc.Timestamp{WallTime: 3},
 				ObservedTimestamps:     []ObservedTimestamp{{NodeID: 12, Timestamp: hlc.ClockTimestamp{WallTime: 4}}},
 			},
-			hlc.Timestamp{WallTime: 2})
+			hlc.Timestamp{WallTime: 2},
+			hlc.ClockTimestamp{WallTime: 1, Logical: 2})
 		expNew := "ReadWithinUncertaintyIntervalError: read at time 0.000000001,0 encountered " +
-			"previous write with future timestamp 0.000000002,0 within uncertainty interval " +
+			"previous write with future timestamp 0.000000002,0 (local=0.000000001,2) within uncertainty interval " +
 			"`t <= (local=0.000000002,2, global=0.000000003,0)`; observed timestamps: [{12 0.000000004,0}]"
-		if a := rwueNew.Error(); a != expNew {
-			t.Fatalf("expected: %s\ngot: %s", a, expNew)
-		}
+		require.Equal(t, expNew, rwueNew.Error())
 	}
 
 	{
 		rwueOld := NewReadWithinUncertaintyIntervalError(
-			hlc.Timestamp{WallTime: 1}, hlc.ClockTimestamp{}, nil, hlc.Timestamp{WallTime: 2})
+			hlc.Timestamp{WallTime: 1},
+			hlc.ClockTimestamp{},
+			nil,
+			hlc.Timestamp{WallTime: 2},
+			hlc.ClockTimestamp{WallTime: 1, Logical: 2})
 
 		expOld := "ReadWithinUncertaintyIntervalError: read at time 0.000000001,0 encountered " +
-			"previous write with future timestamp 0.000000002,0 within uncertainty interval " +
+			"previous write with future timestamp 0.000000002,0 (local=0.000000001,2) within uncertainty interval " +
 			"`t <= (local=0,0, global=0,0)`; observed timestamps: []"
-		if a := rwueOld.Error(); a != expOld {
-			t.Fatalf("expected: %s\ngot: %s", a, expOld)
-		}
+		require.Equal(t, expOld, rwueOld.Error())
 	}
 }
 
@@ -168,6 +169,7 @@ func TestErrorRedaction(t *testing.T) {
 				ObservedTimestamps:     []ObservedTimestamp{{NodeID: 12, Timestamp: hlc.ClockTimestamp{WallTime: 4}}},
 			},
 			hlc.Timestamp{WallTime: 2},
+			hlc.ClockTimestamp{WallTime: 1, Logical: 2},
 		))
 		txn := MakeTransaction("foo", Key("bar"), 1, hlc.Timestamp{WallTime: 1}, 1, 99)
 		txn.ID = uuid.Nil
@@ -179,7 +181,7 @@ func TestErrorRedaction(t *testing.T) {
 		var s redact.StringBuilder
 		s.Print(r)
 		act := s.RedactableString().Redact()
-		const exp = "ReadWithinUncertaintyIntervalError: read at time 0.000000001,0 encountered previous write with future timestamp 0.000000002,0 within uncertainty interval `t <= (local=0.000000002,2, global=0.000000003,0)`; observed timestamps: [{12 0.000000004,0}]: \"foo\" meta={id=00000000 key=‹×› pri=0.00005746 epo=0 ts=0.000000001,0 min=0.000000001,0 seq=0} lock=true stat=PENDING rts=0.000000001,0 wto=false gul=0.000000002,0"
+		const exp = "ReadWithinUncertaintyIntervalError: read at time 0.000000001,0 encountered previous write with future timestamp 0.000000002,0 (local=0.000000001,2) within uncertainty interval `t <= (local=0.000000002,2, global=0.000000003,0)`; observed timestamps: [{12 0.000000004,0}]: \"foo\" meta={id=00000000 key=‹×› pri=0.00005746 epo=0 ts=0.000000001,0 min=0.000000001,0 seq=0} lock=true stat=PENDING rts=0.000000001,0 wto=false gul=0.000000002,0"
 		require.Equal(t, exp, string(act))
 	})
 

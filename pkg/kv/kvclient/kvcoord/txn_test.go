@@ -650,7 +650,8 @@ func TestTxnCommitTimestampAdvancedByRefresh(t *testing.T) {
 					txn.ReadTimestamp,
 					hlc.ClockTimestamp{},
 					txn,
-					refreshTS)
+					refreshTS,
+					hlc.ClockTimestamp{})
 				return roachpb.NewErrorWithTxn(pErr, txn)
 			}
 			return nil
