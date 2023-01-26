@@ -80,6 +80,10 @@ type testRunner struct {
 		skipClusterWipeOnAttach bool
 		// disableIssue disables posting GitHub issues for test failures.
 		disableIssue bool
+		// overrideShutdownPromScrapeInterval overrides the default time a test runner waits to
+		// shut down, normally used to ensure a remote prometheus server has scraped the roachtest
+		// endpoint.
+		overrideShutdownPromScrapeInterval time.Duration
 	}
 
 	status struct {
@@ -131,6 +135,15 @@ func newTestRunner(
 	r.config.skipClusterWipeOnAttach = !clusterWipe
 	r.config.disableIssue = disableIssue
 	r.workersMu.workers = make(map[string]*workerStatus)
+	return r
+}
+
+func newUnitTestRunner(
+	cr *clusterRegistry, stopper *stop.Stopper, buildVersion version.Version,
+) *testRunner {
+	r := newTestRunner(cr, stopper, buildVersion)
+	// To speed up unit tests, reduce test runner shutdown time.
+	r.config.overrideShutdownPromScrapeInterval = time.Millisecond
 	return r
 }
 
@@ -347,7 +360,11 @@ func (r *testRunner) Run(
 	}
 	// To ensure all prometheus metrics have been scraped, ensure shutdown takes
 	// at least one scrapeInterval, unless the roachtest fails or gets cancelled.
-	if shutdownSleep := prometheusScrapeInterval - timeutil.Since(shutdownStart); shutdownSleep > 0 {
+	requiredShutDownTime := prometheusScrapeInterval
+	if r.config.overrideShutdownPromScrapeInterval > 0 {
+		requiredShutDownTime = r.config.overrideShutdownPromScrapeInterval
+	}
+	if shutdownSleep := requiredShutDownTime - timeutil.Since(shutdownStart); shutdownSleep > 0 {
 		select {
 		case <-r.stopper.ShouldQuiesce():
 		case <-time.After(shutdownSleep):
