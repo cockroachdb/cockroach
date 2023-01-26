@@ -100,6 +100,10 @@ const (
 	// not allow the transition to occur unless the current phase is at least
 	// PostCommitPhase, because StatementPhase and PreCommitPhase are special
 	// in that they take place in the same transaction.
+	//
+	// This edge kind is only maintained for compatibility with the 22.2
+	// release via the release_22_2 ruleset and should not be used elsewhere.
+	// Deprecated.
 	PreviousTransactionPrecedence
 )
 

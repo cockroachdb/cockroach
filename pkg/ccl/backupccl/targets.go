@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
@@ -286,7 +287,7 @@ func fullClusterTargetsRestore(
 	[]catalog.Descriptor,
 	[]catalog.DatabaseDescriptor,
 	map[tree.TablePattern]catalog.Descriptor,
-	[]descpb.TenantInfoWithUsage,
+	[]mtinfopb.TenantInfoWithUsage,
 	error,
 ) {
 	ctx, span := tracing.ChildSpan(ctx, "backupccl.fullClusterTargetsRestore")
@@ -478,7 +479,7 @@ func selectTargets(
 	[]catalog.Descriptor,
 	[]catalog.DatabaseDescriptor,
 	map[tree.TablePattern]catalog.Descriptor,
-	[]descpb.TenantInfoWithUsage,
+	[]mtinfopb.TenantInfoWithUsage,
 	error,
 ) {
 	ctx, span := tracing.ChildSpan(ctx, "backupccl.selectTargets")
@@ -519,7 +520,7 @@ func selectTargets(
 			// TODO(dt): for now it is zero-or-one but when that changes, we should
 			// either keep it sorted or build a set here.
 			if tenant.ID == targets.TenantID.ID {
-				return nil, nil, nil, []descpb.TenantInfoWithUsage{tenant}, nil
+				return nil, nil, nil, []mtinfopb.TenantInfoWithUsage{tenant}, nil
 			}
 		}
 		return nil, nil, nil, nil, errors.Errorf("tenant %d not in backup", targets.TenantID.ID)

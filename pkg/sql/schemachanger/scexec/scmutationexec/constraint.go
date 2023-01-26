@@ -20,8 +20,8 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-func (m *visitor) SetConstraintName(ctx context.Context, op scop.SetConstraintName) error {
-	tbl, err := m.checkOutTable(ctx, op.TableID)
+func (i *immediateVisitor) SetConstraintName(ctx context.Context, op scop.SetConstraintName) error {
+	tbl, err := i.checkOutTable(ctx, op.TableID)
 	if err != nil {
 		return err
 	}
@@ -43,10 +43,10 @@ func (m *visitor) SetConstraintName(ctx context.Context, op scop.SetConstraintNa
 	return nil
 }
 
-func (m *visitor) MakeAbsentCheckConstraintWriteOnly(
+func (i *immediateVisitor) MakeAbsentCheckConstraintWriteOnly(
 	ctx context.Context, op scop.MakeAbsentCheckConstraintWriteOnly,
 ) error {
-	tbl, err := m.checkOutTable(ctx, op.TableID)
+	tbl, err := i.checkOutTable(ctx, op.TableID)
 	if err != nil || tbl.Dropped() {
 		return err
 	}
@@ -74,10 +74,10 @@ func (m *visitor) MakeAbsentCheckConstraintWriteOnly(
 	return nil
 }
 
-func (m *visitor) MakeValidatedCheckConstraintPublic(
+func (i *immediateVisitor) MakeValidatedCheckConstraintPublic(
 	ctx context.Context, op scop.MakeValidatedCheckConstraintPublic,
 ) error {
-	tbl, err := m.checkOutTable(ctx, op.TableID)
+	tbl, err := i.checkOutTable(ctx, op.TableID)
 	if err != nil || tbl.Dropped() {
 		return err
 	}
@@ -117,10 +117,10 @@ func (m *visitor) MakeValidatedCheckConstraintPublic(
 	return nil
 }
 
-func (m *visitor) MakePublicCheckConstraintValidated(
+func (i *immediateVisitor) MakePublicCheckConstraintValidated(
 	ctx context.Context, op scop.MakePublicCheckConstraintValidated,
 ) error {
-	tbl, err := m.checkOutTable(ctx, op.TableID)
+	tbl, err := i.checkOutTable(ctx, op.TableID)
 	if err != nil {
 		return err
 	}
@@ -134,8 +134,10 @@ func (m *visitor) MakePublicCheckConstraintValidated(
 	return errors.AssertionFailedf("failed to find check constraint %d in descriptor %v", op.ConstraintID, tbl)
 }
 
-func (m *visitor) RemoveCheckConstraint(ctx context.Context, op scop.RemoveCheckConstraint) error {
-	tbl, err := m.checkOutTable(ctx, op.TableID)
+func (i *immediateVisitor) RemoveCheckConstraint(
+	ctx context.Context, op scop.RemoveCheckConstraint,
+) error {
+	tbl, err := i.checkOutTable(ctx, op.TableID)
 	if err != nil || tbl.Dropped() {
 		return err
 	}
@@ -163,10 +165,10 @@ func (m *visitor) RemoveCheckConstraint(ctx context.Context, op scop.RemoveCheck
 	return nil
 }
 
-func (m *visitor) RemoveForeignKeyConstraint(
+func (i *immediateVisitor) RemoveForeignKeyConstraint(
 	ctx context.Context, op scop.RemoveForeignKeyConstraint,
 ) error {
-	out, err := m.checkOutTable(ctx, op.TableID)
+	out, err := i.checkOutTable(ctx, op.TableID)
 	if err != nil || out.Dropped() {
 		return err
 	}
@@ -200,10 +202,10 @@ func (m *visitor) RemoveForeignKeyConstraint(
 	return nil
 }
 
-func (m *visitor) RemoveUniqueWithoutIndexConstraint(
+func (i *immediateVisitor) RemoveUniqueWithoutIndexConstraint(
 	ctx context.Context, op scop.RemoveUniqueWithoutIndexConstraint,
 ) error {
-	tbl, err := m.checkOutTable(ctx, op.TableID)
+	tbl, err := i.checkOutTable(ctx, op.TableID)
 	if err != nil || tbl.Dropped() {
 		return err
 	}
@@ -237,10 +239,10 @@ func (m *visitor) RemoveUniqueWithoutIndexConstraint(
 	return nil
 }
 
-func (m *visitor) MakeAbsentForeignKeyConstraintWriteOnly(
+func (i *immediateVisitor) MakeAbsentForeignKeyConstraintWriteOnly(
 	ctx context.Context, op scop.MakeAbsentForeignKeyConstraintWriteOnly,
 ) error {
-	out, err := m.checkOutTable(ctx, op.TableID)
+	out, err := i.checkOutTable(ctx, op.TableID)
 	if err != nil || out.Dropped() {
 		return err
 	}
@@ -267,14 +269,14 @@ func (m *visitor) MakeAbsentForeignKeyConstraintWriteOnly(
 	return nil
 }
 
-func (m *visitor) MakeValidatedForeignKeyConstraintPublic(
+func (i *immediateVisitor) MakeValidatedForeignKeyConstraintPublic(
 	ctx context.Context, op scop.MakeValidatedForeignKeyConstraintPublic,
 ) error {
-	out, err := m.checkOutTable(ctx, op.TableID)
+	out, err := i.checkOutTable(ctx, op.TableID)
 	if err != nil || out.Dropped() {
 		return err
 	}
-	in, err := m.checkOutTable(ctx, op.ReferencedTableID)
+	in, err := i.checkOutTable(ctx, op.ReferencedTableID)
 	if err != nil || in.Dropped() {
 		return err
 	}
@@ -315,10 +317,10 @@ func (m *visitor) MakeValidatedForeignKeyConstraintPublic(
 	return nil
 }
 
-func (m *visitor) MakePublicForeignKeyConstraintValidated(
+func (i *immediateVisitor) MakePublicForeignKeyConstraintValidated(
 	ctx context.Context, op scop.MakePublicForeignKeyConstraintValidated,
 ) error {
-	tbl, err := m.checkOutTable(ctx, op.TableID)
+	tbl, err := i.checkOutTable(ctx, op.TableID)
 	if err != nil {
 		return err
 	}
@@ -336,10 +338,10 @@ func (m *visitor) MakePublicForeignKeyConstraintValidated(
 	return errors.AssertionFailedf("failed to find FK constraint %d in descriptor %v", op.ConstraintID, tbl)
 }
 
-func (m *visitor) MakeAbsentUniqueWithoutIndexConstraintWriteOnly(
+func (i *immediateVisitor) MakeAbsentUniqueWithoutIndexConstraintWriteOnly(
 	ctx context.Context, op scop.MakeAbsentUniqueWithoutIndexConstraintWriteOnly,
 ) error {
-	tbl, err := m.checkOutTable(ctx, op.TableID)
+	tbl, err := i.checkOutTable(ctx, op.TableID)
 	if err != nil || tbl.Dropped() {
 		return err
 	}
@@ -364,10 +366,10 @@ func (m *visitor) MakeAbsentUniqueWithoutIndexConstraintWriteOnly(
 	return nil
 }
 
-func (m *visitor) MakeValidatedUniqueWithoutIndexConstraintPublic(
+func (i *immediateVisitor) MakeValidatedUniqueWithoutIndexConstraintPublic(
 	ctx context.Context, op scop.MakeValidatedUniqueWithoutIndexConstraintPublic,
 ) error {
-	tbl, err := m.checkOutTable(ctx, op.TableID)
+	tbl, err := i.checkOutTable(ctx, op.TableID)
 	if err != nil || tbl.Dropped() {
 		return err
 	}
@@ -407,10 +409,10 @@ func (m *visitor) MakeValidatedUniqueWithoutIndexConstraintPublic(
 	return nil
 }
 
-func (m *visitor) MakePublicUniqueWithoutIndexConstraintValidated(
+func (i *immediateVisitor) MakePublicUniqueWithoutIndexConstraintValidated(
 	ctx context.Context, op scop.MakePublicUniqueWithoutIndexConstraintValidated,
 ) error {
-	tbl, err := m.checkOutTable(ctx, op.TableID)
+	tbl, err := i.checkOutTable(ctx, op.TableID)
 	if err != nil {
 		return err
 	}

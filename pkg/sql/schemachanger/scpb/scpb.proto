@@ -39,8 +39,10 @@ enum Status {
   TRANSIENT_ABSENT = 3;
 
   // Intermediate states on the descriptor dropping path.
-  TXN_DROPPED = 4;
   DROPPED = 5;
+  // TXN_DROPPED only exists to service the 22.2 rule set.
+  // Deprecated.
+  TXN_DROPPED = 4 [deprecated = true];
 
   // Intermediate states on the column and index dropping and adding paths.
   // WRITE_ONLY is also used on constraint adding and dropping paths.

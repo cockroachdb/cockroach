@@ -19,36 +19,18 @@ import (
 )
 
 // These rules ensure that:
-//   - a descriptor reaches the TXN_DROPPED state in the statement phase, and
-//     it does not reach DROPPED until the pre-commit phase.
 //   - a descriptor reaches ABSENT in a different transaction than it reaches
 //     DROPPED (i.e. it cannot be removed until PostCommit).
 //   - a descriptor element reaches the DROPPED state in the txn before
-//     its dependent elements (namespace entry, comments, column names, etc) reach
-//     the ABSENT state;
-//   - for those dependent elements which have to wait post-commit to reach the
-//     ABSENT state, we tie them to the same stage as when the descriptor element
-//     reaches the ABSENT state, but afterwards in the stage, so as to not
-//     interfere with the event logging op which is tied to the descriptor element
-//     removal.
+//     its dependent elements (namespace entry, comments, column names, etc)
+//     reach the ABSENT state;
+//   - or the WRITE_ONLY state for those dependent elements subject to the
+//     2-version invariant.
 func init() {
 
 	registerDepRule(
-		"descriptor TXN_DROPPED before DROPPED",
+		"descriptor dropped in transaction before removal",
 		scgraph.PreviousStagePrecedence,
-		"txn_dropped", "dropped",
-		func(from, to NodeVars) rel.Clauses {
-			return rel.Clauses{
-				from.TypeFilter(IsDescriptor),
-				from.El.AttrEqVar(screl.DescID, "_"),
-				from.El.AttrEqVar(rel.Self, to.El),
-				StatusesToAbsent(from, scpb.Status_TXN_DROPPED, to, scpb.Status_DROPPED),
-			}
-		})
-
-	registerDepRule(
-		"descriptor DROPPED in transaction before removal",
-		scgraph.PreviousTransactionPrecedence,
 		"dropped", "absent",
 		func(from, to NodeVars) rel.Clauses {
 			return rel.Clauses{
@@ -60,7 +42,7 @@ func init() {
 		})
 
 	registerDepRule(
-		"descriptor drop right before dependent element removal",
+		"descriptor dropped before dependent element removal",
 		scgraph.Precedence,
 		"descriptor", "dependent",
 		func(from, to NodeVars) rel.Clauses {
@@ -70,8 +52,49 @@ func init() {
 				JoinOnDescID(from, to, "desc-id"),
 				StatusesToAbsent(from, scpb.Status_DROPPED, to, scpb.Status_ABSENT),
 			}
+		})
+
+	registerDepRule(
+		"relation dropped before dependent column",
+		scgraph.Precedence,
+		"descriptor", "column",
+		func(from, to NodeVars) rel.Clauses {
+			return rel.Clauses{
+				from.Type((*scpb.Table)(nil), (*scpb.View)(nil), (*scpb.Sequence)(nil)),
+				to.TypeFilter(IsColumn),
+				JoinOnDescID(from, to, "desc-id"),
+				StatusesToAbsent(from, scpb.Status_DROPPED, to, scpb.Status_WRITE_ONLY),
+			}
+		})
+
+	registerDepRule(
+		"relation dropped before dependent index",
+		scgraph.Precedence,
+		"descriptor", "index",
+		func(from, to NodeVars) rel.Clauses {
+			return rel.Clauses{
+				from.Type((*scpb.Table)(nil), (*scpb.View)(nil)),
+				to.TypeFilter(IsIndex),
+				JoinOnDescID(from, to, "desc-id"),
+				StatusesToAbsent(from, scpb.Status_DROPPED, to, scpb.Status_VALIDATED),
+			}
 		},
 	)
+
+	registerDepRule(
+		"relation dropped before dependent constraint",
+		scgraph.Precedence,
+		"descriptor", "constraint",
+		func(from, to NodeVars) rel.Clauses {
+			return rel.Clauses{
+				from.Type((*scpb.Table)(nil)),
+				to.TypeFilter(IsSupportedNonIndexBackedConstraint),
+				JoinOnDescID(from, to, "desc-id"),
+				StatusesToAbsent(from, scpb.Status_DROPPED, to, scpb.Status_WRITE_ONLY),
+			}
+		},
+	)
+
 }
 
 // These rules ensure that cross-referencing simple dependent elements reach

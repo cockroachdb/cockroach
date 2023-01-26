@@ -51,7 +51,7 @@ func (n *dropTenantNode) startExec(params runParams) error {
 		}
 		return err
 	}
-	return params.p.DropTenantByID(params.ctx, tenInfo.ID, n.immediate)
+	return params.p.DropTenantByID(params.ctx, tenInfo.ID, n.immediate, false /* ignoreServiceMode */)
 }
 
 func (n *dropTenantNode) Next(_ runParams) (bool, error) { return false, nil }

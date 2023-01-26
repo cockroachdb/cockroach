@@ -18,7 +18,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 1 of 2;
         │   └── • CheckConstraint:{DescID: 107, ReferencedTypeIDs: [105 106], IndexID: 0, ConstraintID: 2, ReferencedSequenceIDs: [104]}
         │       │ WRITE_ONLY → ABSENT
         │       │
-        │       ├── • PreviousTransactionPrecedence dependency from WRITE_ONLY CheckConstraint:{DescID: 107, ReferencedTypeIDs: [105 106], IndexID: 0, ConstraintID: 2, ReferencedSequenceIDs: [104]}
+        │       ├── • PreviousStagePrecedence dependency from WRITE_ONLY CheckConstraint:{DescID: 107, ReferencedTypeIDs: [105 106], IndexID: 0, ConstraintID: 2, ReferencedSequenceIDs: [104]}
         │       │     rule: "CheckConstraint transitions to ABSENT uphold 2-version invariant: WRITE_ONLY->VALIDATED"
         │       │
         │       └── • Precedence dependency from ABSENT ConstraintWithoutIndexName:{DescID: 107, Name: check_i_j, ConstraintID: 2}

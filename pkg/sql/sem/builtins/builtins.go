@@ -4931,16 +4931,20 @@ value if you rely on the HLC for accuracy.`,
 				`Must be run by the system tenant.`,
 			Volatility: volatility.Volatile,
 		},
+		// This overload is provided for compatibility with CC Serverless
+		// v22.2 and previous versions.
 		tree.Overload{
 			Types: tree.ParamTypes{
 				{Name: "id", Typ: types.Int},
 			},
 			ReturnType: tree.FixedReturnType(types.Int),
 			IsUDF:      true,
-			Body:       `SELECT crdb_internal.create_tenant(json_build_object('id', $1))`,
-			Info:       `create_tenant(id) is an alias for create_tenant('{"id": id}'::jsonb)`,
+			Body: `SELECT crdb_internal.create_tenant(json_build_object('id', $1, 'service_mode',
+ 'external'))`,
+			Info:       `create_tenant(id) is an alias for create_tenant('{"id": id, "service_mode": "external"}'::jsonb)`,
 			Volatility: volatility.Volatile,
 		},
+		// This overload is provided for use in tests.
 		tree.Overload{
 			Types: tree.ParamTypes{
 				{Name: "id", Typ: types.Int},
@@ -4952,6 +4956,7 @@ value if you rely on the HLC for accuracy.`,
 			Info:       `create_tenant(id, name) is an alias for create_tenant('{"id": id, "name": name}'::jsonb)`,
 			Volatility: volatility.Volatile,
 		},
+		// This overload is deprecated. Use CREATE TENANT instead.
 		tree.Overload{
 			Types: tree.ParamTypes{
 				{Name: "name", Typ: types.String},
@@ -4959,7 +4964,8 @@ value if you rely on the HLC for accuracy.`,
 			ReturnType: tree.FixedReturnType(types.Int),
 			IsUDF:      true,
 			Body:       `SELECT crdb_internal.create_tenant(json_build_object('name', $1))`,
-			Info:       `create_tenant(name) is an alias for create_tenant('{"name": name}'::jsonb)`,
+			Info: `create_tenant(name) is an alias for create_tenant('{"name": name}'::jsonb).
+DO NOT USE -- USE 'CREATE TENANT' INSTEAD`,
 			Volatility: volatility.Volatile,
 		},
 	),
@@ -5026,8 +5032,11 @@ value if you rely on the HLC for accuracy.`,
 					return nil, err
 				}
 				synchronous := tree.MustBeDBool(args[1])
+
+				// Note: we pass true to ignoreServiceMode for compatibility
+				// with CC Serverless pre-v23.1.
 				if err := evalCtx.Tenant.DropTenantByID(
-					ctx, uint64(sTenID), bool(synchronous),
+					ctx, uint64(sTenID), bool(synchronous), true, /* ignoreServiceMode */
 				); err != nil {
 					return nil, err
 				}

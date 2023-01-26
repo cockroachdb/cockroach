@@ -14,6 +14,7 @@ go_library(
         "//pkg/config/zonepb",
         "//pkg/keys",
         "//pkg/kv",
+        "//pkg/multitenant/mtinfopb",
         "//pkg/roachpb",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/catalogkeys",

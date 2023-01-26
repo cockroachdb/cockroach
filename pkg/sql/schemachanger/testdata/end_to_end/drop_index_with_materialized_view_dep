@@ -44,26 +44,90 @@ write *eventpb.DropIndex to event log:
     tag: DROP INDEX
     user: root
   tableName: defaultdb.public.v2
-## StatementPhase stage 1 of 1 with 1 MutationType op
-add synthetic descriptor #106:
+## StatementPhase stage 1 of 1 with 5 MutationType ops
+delete object namespace entry {100 101 v3} -> 106
+upsert descriptor #105
   ...
-     id: 106
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  -  dependedOnBy:
+  -  - columnIds:
+  -    - 2
+  -    id: 106
+  -    indexId: 2
+     dependsOn:
+     - 104
+  ...
+     formatVersion: 3
+     id: 105
+  -  indexes:
+  -  - createdAtNanos: "1640995200000000000"
+  -    createdExplicitly: true
+  -    foreignKey: {}
+  -    geoConfig: {}
+  -    id: 2
+  -    interleave: {}
+  -    keyColumnDirections:
+  -    - ASC
+  -    keyColumnIds:
+  -    - 2
+  -    keyColumnNames:
+  -    - j
+  -    keySuffixColumnIds:
+  -    - 3
+  -    name: idx
+  -    partitioning: {}
+  -    sharded: {}
+  -    version: 4
+  +  indexes: []
      isMaterializedView: true
-  -  modificationTime: {}
-  +  modificationTime:
-  +    wallTime: "1640995200000000001"
-     name: v3
-     nextColumnId: 3
+     modificationTime: {}
+  +  mutations:
+  +  - direction: DROP
+  +    index:
+  +      createdAtNanos: "1640995200000000000"
+  +      createdExplicitly: true
+  +      foreignKey: {}
+  +      geoConfig: {}
+  +      id: 2
+  +      interleave: {}
+  +      keyColumnDirections:
+  +      - ASC
+  +      keyColumnIds:
+  +      - 2
+  +      keyColumnNames:
+  +      - j
+  +      keySuffixColumnIds:
+  +      - 3
+  +      name: idx
+  +      partitioning: {}
+  +      sharded: {}
+  +      version: 4
+  +    mutationId: 1
+  +    state: WRITE_ONLY
+     name: v2
+     nextColumnId: 4
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "10"
+  +  version: "11"
+     viewQuery: SELECT i, j FROM defaultdb.public.t1
+upsert descriptor #106
   ...
      replacementOf:
        time: {}
   +  state: DROP
      unexposedParentSchemaId: 101
-     version: "2"
-  ...
+  -  version: "2"
+  +  version: "3"
+     viewQuery: SELECT j FROM defaultdb.public.v2@idx
 # end StatementPhase
 # begin PreCommitPhase
-## PreCommitPhase stage 1 of 1 with 12 MutationType ops
+## PreCommitPhase stage 1 of 2 with 1 MutationType op
+undo all catalog changes within txn #1
+persist all catalog changes to storage
+## PreCommitPhase stage 2 of 2 with 12 MutationType ops
 delete object namespace entry {100 101 v3} -> 106
 upsert descriptor #105
   ...
@@ -170,6 +234,7 @@ upsert descriptor #106
   -  version: "2"
   +  version: "3"
      viewQuery: SELECT j FROM defaultdb.public.v2@idx
+persist all catalog changes to storage
 create job #1 (non-cancelable: true): "DROP INDEX defaultdb.public.v2@idx CASCADE"
   descriptor IDs: [105 106]
 # end PreCommitPhase
@@ -200,6 +265,7 @@ upsert descriptor #105
   -  version: "11"
   +  version: "12"
      viewQuery: SELECT i, j FROM defaultdb.public.t1
+persist all catalog changes to storage
 create job #2 (non-cancelable: true): "GC for DROP INDEX defaultdb.public.v2@idx CASCADE"
   descriptor IDs: [106]
 update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 2 with 2 MutationType ops pending"
@@ -262,6 +328,7 @@ upsert descriptor #105
   -  version: "12"
   +  version: "13"
      viewQuery: SELECT i, j FROM defaultdb.public.t1
+persist all catalog changes to storage
 create job #3 (non-cancelable: true): "GC for DROP INDEX defaultdb.public.v2@idx CASCADE"
   descriptor IDs: [105]
 update progress of schema change job #1: "all stages completed"

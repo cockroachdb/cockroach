@@ -79,8 +79,8 @@ type BuilderState interface {
 	QueryByID(descID catid.DescID) ElementResultSet
 
 	// Ensure ensures the presence of the given element in the BuilderState with
-	// the given statuses and metadata.
-	Ensure(current scpb.Status, target scpb.TargetStatus, elem scpb.Element, meta scpb.TargetMetadata)
+	// the given target status and metadata.
+	Ensure(elem scpb.Element, target scpb.TargetStatus, meta scpb.TargetMetadata)
 
 	// LogEventForExistingTarget tells the builder to write an entry in the event
 	// log for the existing target corresponding to the provided element.

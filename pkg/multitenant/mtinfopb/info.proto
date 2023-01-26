@@ -1,0 +1,119 @@
+// Copyright 2020 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+syntax = "proto2";
+package cockroach.multitenant;
+option go_package = "mtinfopb";
+
+import "gogoproto/gogo.proto";
+import "roachpb/api.proto";
+import "multitenant/tenantcapabilities/tenantcapabilitiespb/capabilities.proto";
+
+// ProtoInfo represents the metadata for a tenant as
+// stored in the "info" column of the "system.tenants" table.
+message ProtoInfo {
+  option (gogoproto.equal) = true;
+
+  // The state of the tenant's logical keyspace (DEPRECATED).
+  // This enum is only used when the data_state column is NULL.
+  enum DeprecatedDataState {
+    // Tenant data is ready and SQL servers can access it.
+    // DEPRECATED. Use DataStateReady.
+    READY = 0;
+    // Tenant data is being added. Not available for SQL sessions.
+    // DEPRECATED. Use DataStateAdd.
+    ADD = 1;
+    // Tenant data is being dropped. Not available for SQL sessions.
+    // DEPRECATED. Use DataStateDrop.
+    DROP = 2;
+  }
+
+  // ID is the internal numeric identifier of the tenant (DEPRECATED).
+  // This field is redundant with the id column in system.tenants.
+  optional uint64 deprecated_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "DeprecatedID"];
+
+  // DeprecatedDataState is the state of the tenant's keyspace (DEPRECATED).
+  optional DeprecatedDataState deprecated_data_state = 2 [(gogoproto.nullable) = false];
+
+  // DroppedName is the name the tenant had before DROP TENANT was
+  // run on the tenant. It should be empty for active or adding
+  // tenants.
+  optional string dropped_name = 3 [
+    (gogoproto.nullable) = false,
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.TenantName"];
+
+  // TenantReplicationJobID is set if this tenant is the target tenant
+  // of a running tenant replication job.
+  optional int64 tenant_replication_job_id = 4 [
+     (gogoproto.nullable) = false,
+     (gogoproto.customname) = "TenantReplicationJobID",
+     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.JobID"];
+
+  // Capabilities encapsulate a set of capabilities that a specific tenant
+  // possesses.
+  optional cockroach.multitenant.tenantcapabilitiespb.TenantCapabilities capabilities = 5 [
+    (gogoproto.nullable) = false
+  ];
+
+  // Next ID: 7
+}
+
+// SQLInfo contain the additional tenant metadata from the other
+// columns in system.tenants not otherwise encoded in ProtoInfo.
+message SQLInfo {
+  option (gogoproto.equal) = true;
+
+  optional uint64 id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "ID"];
+
+  // Copy of the name column in system.tenants.
+  optional string name = 2 [
+        (gogoproto.nullable) = false,
+        (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.TenantName"];
+
+  // Copy of the data_state column in system.tenants.
+  optional uint32 data_state = 3 [
+        (gogoproto.nullable) = false,
+        (gogoproto.casttype) = "TenantDataState"];
+
+  // Copy of the service_mode column in system.tenants.
+  optional uint32 service_mode = 4 [
+        (gogoproto.nullable) = false,
+        (gogoproto.casttype) = "TenantServiceMode"];
+
+  // Next ID: 5
+}
+
+// UsageInfo contains metadata related to cost control and consumption. In a
+// running cluster, this data is stored in the system.tenant_usage table.
+// Each field corresponds has a corresponding column in that table.
+message UsageInfo {
+  option (gogoproto.equal) = true;
+
+  optional double ru_burst_limit = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "RUBurstLimit"];
+  optional double ru_refill_rate = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "RURefillRate"];
+  optional double ru_current = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "RUCurrent"];
+
+  // All-time consumption for this tenant. Each field has a corresponding column
+  // in system.tenant_usage.
+  optional roachpb.TenantConsumption consumption = 4 [(gogoproto.nullable) = false];
+}
+
+// TenantInfoWithUsage contains the information for a tenant in a multi-tenant
+// cluster plus metadata related to cost control and consumption.
+message TenantInfoWithUsage {
+  option (gogoproto.equal) = true;
+
+  optional ProtoInfo info = 1 [(gogoproto.embed) = true, (gogoproto.nullable) = false];
+  optional UsageInfo usage = 2;
+
+  optional SQLInfo extra_columns = 3 [(gogoproto.embed) = true, (gogoproto.nullable) = false];
+
+  // Next ID: 4
+}

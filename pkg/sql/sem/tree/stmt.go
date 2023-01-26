@@ -479,6 +479,15 @@ func (*AlterTenantRename) StatementType() StatementType { return TypeDCL }
 func (*AlterTenantRename) StatementTag() string { return "ALTER TENANT RENAME" }
 
 // StatementReturnType implements the Statement interface.
+func (*AlterTenantService) StatementReturnType() StatementReturnType { return Ack }
+
+// StatementType implements the Statement interface.
+func (*AlterTenantService) StatementType() StatementType { return TypeDCL }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*AlterTenantService) StatementTag() string { return "ALTER TENANT SERVICE" }
+
+// StatementReturnType implements the Statement interface.
 func (*AlterType) StatementReturnType() StatementReturnType { return DDL }
 
 // StatementType implements the Statement interface.
@@ -2124,6 +2133,7 @@ func (n *AlterTenantCapability) String() string               { return AsString(
 func (n *AlterTenantSetClusterSetting) String() string        { return AsString(n) }
 func (n *AlterTenantRename) String() string                   { return AsString(n) }
 func (n *AlterTenantReplication) String() string              { return AsString(n) }
+func (n *AlterTenantService) String() string                  { return AsString(n) }
 func (n *AlterType) String() string                           { return AsString(n) }
 func (n *AlterRole) String() string                           { return AsString(n) }
 func (n *AlterRoleSet) String() string                        { return AsString(n) }

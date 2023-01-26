@@ -17,9 +17,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/exprutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -201,7 +201,7 @@ func alterTenantJobCutover(
 	jobRegistry *jobs.Registry,
 	ptp protectedts.Storage,
 	alterTenantStmt *tree.AlterTenantReplication,
-	tenInfo *descpb.TenantInfo,
+	tenInfo *mtinfopb.TenantInfo,
 	cutoverTime hlc.Timestamp,
 ) error {
 	if alterTenantStmt == nil || alterTenantStmt.Cutover == nil {
@@ -262,7 +262,7 @@ func alterTenantOptions(
 	txn isql.Txn,
 	jobRegistry *jobs.Registry,
 	options *resolvedTenantReplicationOptions,
-	tenInfo *descpb.TenantInfo,
+	tenInfo *mtinfopb.TenantInfo,
 ) error {
 	return jobRegistry.UpdateJobWithTxn(ctx, tenInfo.TenantReplicationJobID, txn, false, /* useReadLock */
 		func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {

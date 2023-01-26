@@ -49,9 +49,9 @@ type Params struct {
 	// job if one should exist.
 	SchemaChangerJobIDSupplier func() jobspb.JobID
 
-	// enforcePlannerSanityCheck, if true, strictly enforces sanity checks in the
+	// SkipPlannerSanityChecks, if false, strictly enforces sanity checks in the
 	// declarative schema changer planner.
-	EnforcePlannerSanityCheck bool
+	SkipPlannerSanityChecks bool
 }
 
 // Exported internal types
@@ -108,14 +108,48 @@ func MakePlan(ctx context.Context, initial scpb.CurrentState, params Params) (p 
 func makePlan(ctx context.Context, p *Plan) (err error) {
 	{
 		start := timeutil.Now()
+		// Generate the graph used to build the stages.
+		//
+		// For each element in the target set, the graph needs to cover all the
+		// statuses which may be visited by the remainder of the schema change.
+		// Most of the time, these transitions follow the directions of the
+		// op-edges in the graph (i.e. from top to bottom in the corresponding
+		// definition in the opgen package) with the notable exception of the first
+		// stage of the pre-commit phase, denoted as the "reset stage". In this
+		// stage, the element's status transitions in the opposite direction all
+		// the way back to the initial status. For this reason, any plan which
+		// might include this stage needs the full graph, not just the subset which
+		// covers the statuses from current to target.
+		oldCurrent := p.CurrentState.Current
+		if p.Params.ExecutionPhase <= scop.PreCommitPhase {
+			// We need the full graph at this point because the plan may transition
+			// back to the initial statuses at pre-commit time.
+			//
+			// Generate the full graph using the existing scpb.TargetState.
+			// This is necessary because scgraph.Graph queries rely on pointer
+			// equality. Instead, temporarily swap out the current statuses.
+			p.CurrentState.Current = make([]scpb.Status, len(p.CurrentState.Current))
+			for i, t := range p.Targets {
+				p.CurrentState.Current[i] = scpb.AsTargetStatus(t.TargetStatus).InitialStatus()
+			}
+		}
 		p.Graph = buildGraph(ctx, p.Params.ActiveVersion, p.CurrentState)
+		// Undo any swapping out of the current statuses.
+		p.CurrentState.Current = oldCurrent
 		if log.ExpensiveLogEnabled(ctx, 2) {
 			log.Infof(ctx, "graph generation took %v", timeutil.Since(start))
 		}
 	}
 	{
 		start := timeutil.Now()
-		p.Stages = scstage.BuildStages(ctx, p.CurrentState, p.Params.ExecutionPhase, p.Graph, p.Params.SchemaChangerJobIDSupplier, p.Params.EnforcePlannerSanityCheck)
+		p.Stages = scstage.BuildStages(
+			ctx,
+			p.CurrentState,
+			p.Params.ExecutionPhase,
+			p.Graph,
+			p.Params.SchemaChangerJobIDSupplier,
+			!p.Params.SkipPlannerSanityChecks,
+		)
 		if log.ExpensiveLogEnabled(ctx, 2) {
 			log.Infof(ctx, "stage generation took %v", timeutil.Since(start))
 		}

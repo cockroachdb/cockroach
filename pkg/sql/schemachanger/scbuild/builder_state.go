@@ -53,8 +53,15 @@ func (b *builderState) QueryByID(id catid.DescID) scbuildstmt.ElementResultSet {
 }
 
 // Ensure implements the scbuildstmt.BuilderState interface.
-func (b *builderState) Ensure(
-	current scpb.Status, target scpb.TargetStatus, e scpb.Element, meta scpb.TargetMetadata,
+func (b *builderState) Ensure(e scpb.Element, target scpb.TargetStatus, meta scpb.TargetMetadata) {
+	b.ensure(e, scpb.Status_UNKNOWN, scpb.InvalidTarget, target, meta)
+}
+
+// ensure is a helper function that ensures the presence of a target.
+// The target may be newly defined via Ensure or may be re-used from
+// a previous state and imported via newBuilderState.
+func (b *builderState) ensure(
+	e scpb.Element, current scpb.Status, previous, target scpb.TargetStatus, meta scpb.TargetMetadata,
 ) {
 	if e == nil {
 		panic(errors.AssertionFailedf("cannot define target for nil element"))
@@ -72,6 +79,9 @@ func (b *builderState) Ensure(
 		if current != scpb.Status_UNKNOWN {
 			es.current = current
 		}
+		if previous != scpb.InvalidTarget {
+			es.previous = previous
+		}
 		es.target = target
 		es.element = e
 		es.metadata = meta
@@ -86,6 +96,7 @@ func (b *builderState) Ensure(
 		c.elementIndexMap[key] = len(b.output)
 		b.output = append(b.output, elementState{
 			element:  e,
+			previous: previous,
 			target:   target,
 			current:  current,
 			metadata: meta,

@@ -19,10 +19,17 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-func (m *visitor) CreateSchemaChangerJob(
+func (i *immediateVisitor) UndoAllInTxnImmediateMutationOpSideEffects(
+	ctx context.Context, _ scop.UndoAllInTxnImmediateMutationOpSideEffects,
+) error {
+	i.Reset()
+	return nil
+}
+
+func (d *deferredVisitor) CreateSchemaChangerJob(
 	ctx context.Context, job scop.CreateSchemaChangerJob,
 ) error {
-	return m.s.AddNewSchemaChangerJob(
+	return d.AddNewSchemaChangerJob(
 		job.JobID,
 		job.Statements,
 		job.NonCancelable,
@@ -32,10 +39,10 @@ func (m *visitor) CreateSchemaChangerJob(
 	)
 }
 
-func (m *visitor) UpdateSchemaChangerJob(
+func (d *deferredVisitor) UpdateSchemaChangerJob(
 	ctx context.Context, op scop.UpdateSchemaChangerJob,
 ) error {
-	return m.s.UpdateSchemaChangerJob(
+	return d.DeferredMutationStateUpdater.UpdateSchemaChangerJob(
 		op.JobID,
 		op.IsNonCancelable,
 		op.RunningStatus,
@@ -43,10 +50,10 @@ func (m *visitor) UpdateSchemaChangerJob(
 	)
 }
 
-func (m *visitor) SetJobStateOnDescriptor(
+func (i *immediateVisitor) SetJobStateOnDescriptor(
 	ctx context.Context, op scop.SetJobStateOnDescriptor,
 ) error {
-	mut, err := m.s.CheckOutDescriptor(ctx, op.DescriptorID)
+	mut, err := i.checkOutDescriptor(ctx, op.DescriptorID)
 	if err != nil {
 		return err
 	}
@@ -72,10 +79,10 @@ func (m *visitor) SetJobStateOnDescriptor(
 	return nil
 }
 
-func (m *visitor) RemoveJobStateFromDescriptor(
+func (i *immediateVisitor) RemoveJobStateFromDescriptor(
 	ctx context.Context, op scop.RemoveJobStateFromDescriptor,
 ) error {
-	mut, err := m.s.CheckOutDescriptor(ctx, op.DescriptorID)
+	mut, err := i.checkOutDescriptor(ctx, op.DescriptorID)
 	if err != nil {
 		return err
 	}
