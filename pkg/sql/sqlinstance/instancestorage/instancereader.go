@@ -20,8 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
@@ -59,7 +59,7 @@ func NewTestingReader(
 	slReader sqlliveness.Reader,
 	f *rangefeed.Factory,
 	codec keys.SQLCodec,
-	tableID descpb.ID,
+	table catalog.TableDescriptor,
 	clock *hlc.Clock,
 	stopper *stop.Stopper,
 ) *Reader {
@@ -69,7 +69,7 @@ func NewTestingReader(
 		f:               f,
 		codec:           codec,
 		clock:           clock,
-		rowcodec:        makeRowCodec(codec, tableID),
+		rowcodec:        makeRowCodec(codec, table),
 		initialScanDone: make(chan struct{}),
 		stopper:         stopper,
 	}
@@ -86,7 +86,7 @@ func NewReader(
 	clock *hlc.Clock,
 	stopper *stop.Stopper,
 ) *Reader {
-	return NewTestingReader(storage, slReader, f, codec, keys.SQLInstancesTableID, clock, stopper)
+	return NewTestingReader(storage, slReader, f, codec, systemschema.SQLInstancesTable(), clock, stopper)
 }
 
 // Start initializes the rangefeed for the Reader. The rangefeed will run until
@@ -144,17 +144,16 @@ func makeInstanceInfos(rows []instancerow) []sqlinstance.InstanceInfo {
 // GetAllInstancesUsingTxn reads all instances using the given transaction and returns
 // live instances only.
 func (r *Reader) GetAllInstancesUsingTxn(
-	ctx context.Context, codec keys.SQLCodec, tableID catid.DescID, txn *kv.Txn,
+	ctx context.Context, txn *kv.Txn,
 ) ([]sqlinstance.InstanceInfo, error) {
-	instancesTablePrefix := codec.TablePrefix(uint32(tableID))
+	instancesTablePrefix := r.rowcodec.codec.TablePrefix(uint32(r.rowcodec.tableID))
 	rows, err := txn.Scan(ctx, instancesTablePrefix, instancesTablePrefix.PrefixEnd(), 0 /* maxRows */)
 	if err != nil {
 		return nil, err
 	}
-	rowcodec := makeRowCodec(codec, tableID)
 	decodedRows := make([]instancerow, 0, len(rows))
 	for _, row := range rows {
-		decodedRow, err := rowcodec.decodeRow(row.Key, row.Value)
+		decodedRow, err := r.rowcodec.decodeRow(row.Key, row.Value)
 		if err != nil {
 			return nil, err
 		}

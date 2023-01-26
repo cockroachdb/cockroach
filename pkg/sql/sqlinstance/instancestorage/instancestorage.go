@@ -27,8 +27,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/enum"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
@@ -115,13 +116,13 @@ func (r *instancerow) isAvailable() bool {
 func NewTestingStorage(
 	db *kv.DB,
 	codec keys.SQLCodec,
-	sqlInstancesTableID descpb.ID,
+	table catalog.TableDescriptor,
 	slReader sqlliveness.Reader,
 	settings *cluster.Settings,
 ) *Storage {
 	s := &Storage{
 		db:       db,
-		rowcodec: makeRowCodec(codec, sqlInstancesTableID),
+		rowcodec: makeRowCodec(codec, table),
 		slReader: slReader,
 		settings: settings,
 	}
@@ -132,7 +133,7 @@ func NewTestingStorage(
 func NewStorage(
 	db *kv.DB, codec keys.SQLCodec, slReader sqlliveness.Reader, settings *cluster.Settings,
 ) *Storage {
-	return NewTestingStorage(db, codec, keys.SQLInstancesTableID, slReader, settings)
+	return NewTestingStorage(db, codec, systemschema.SQLInstancesTable(), slReader, settings)
 }
 
 // CreateNodeInstance claims a unique instance identifier for the SQL pod, and

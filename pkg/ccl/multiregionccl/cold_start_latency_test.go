@@ -49,7 +49,6 @@ func TestColdStartLatency(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	skip.UnderRace(t, "too slow")
 	skip.UnderStress(t, "too slow")
-	skip.WithIssue(t, 95644)
 	defer envutil.TestSetEnv(t, "COCKROACH_MR_SYSTEM_DATABASE", "1")()
 
 	// We'll need to make some per-node args to assign the different
@@ -160,9 +159,6 @@ func TestColdStartLatency(t *testing.T) {
 		if !isTenant {
 			stmts = append(stmts,
 				"ALTER TENANT ALL SET CLUSTER SETTING sql.zone_configs.allow_for_secondary_tenant.enabled = true",
-				// Disable automatic stats because it gets upset about the way we change the column
-				// structure.
-				"ALTER TENANT ALL SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false",
 				"ALTER TENANT ALL SET CLUSTER SETTING sql.multi_region.allow_abstractions_for_secondary_tenants.enabled = true",
 				`alter range meta configure zone using constraints = '{"+region=us-east1": 1, "+region=us-west1": 1, "+region=europe-west1": 1}';`)
 		} else {
