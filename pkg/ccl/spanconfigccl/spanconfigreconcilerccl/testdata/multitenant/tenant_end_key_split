@@ -1,5 +1,5 @@
-# BUG: Show how creation of a tenant can end up overwriting span config state
-# for another tenant, and that the other tenant is not equipped to deal with it.
+# Test that tenant creation does not overwrite span config state for another
+# tenant.
 
 reconcile
 ----
@@ -7,13 +7,14 @@ reconcile
 mutations discard
 ----
 
-# Initialize tenant=11. To try and split at the end of the tenant boundary,
-# notice how we end up writing a record for a key that logically belongs to the
-# next tenant, tenant=12? That's weird.
+# Initialize a new tenant, tenant=11, that DOES NOT have a pre-existing tenant,
+# tenant=12, next to it.
 initialize tenant=11
 ----
 
-state offset=57 limit=2
+# A record IS written for a key that logically belongs to the next tenant,
+# tenant=12, because tenant=12 DOES NOT exist.
+state offset=57 limit=3
 ----
 ...
 /Tenant/11{-\x00}                          database system (tenant)
@@ -30,20 +31,18 @@ reconcile tenant=11
 # Peek near the start of the span_configurations table where tenant=11's records
 # are stored. The first one is from the start of its keyspace to start of
 # table with ID=4: /Tenant/11{-/Table/4}.
-state offset=56 limit=5
+state offset=56 limit=3
 ----
 ...
 /Table/5{7-8}                              ttl_seconds=3600 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
 /Tenant/11{-/Table/4}                      database system (tenant)
 /Tenant/11/Table/{4-5}                     database system (tenant)
-/Tenant/11/Table/{5-6}                     database system (tenant)
-/Tenant/11/Table/{6-7}                     database system (tenant)
 ...
 
 # Peek near the end of the span_configurations table where tenant=11's records
 # are stored. The last one is for its last system table:
 # /Tenant/11/Table/5{7-8}. Right now the split is at /Tenant/12. Which is fine.
-state offset=99 limit=2
+state offset=99 limit=3
 ----
 ...
 /Tenant/11/Table/5{7-8}                    database system (tenant)
@@ -53,7 +52,7 @@ state offset=99 limit=2
 # the original, single-key /Tenant/11{-\x00} record, and replaced it with
 # /Tenant/11{-/Table/4}, just like the comment above said. The remaining upserts
 # are for its SQL state.
-mutations tenant=11
+mutations tenant=11 limit=2
 ----
 delete /Tenant/11{-\x00}
 upsert /Tenant/11{-/Table/4}               database system (tenant)
@@ -100,26 +99,19 @@ upsert /Tenant/11/Table/5{5-6}             database system (tenant)
 upsert /Tenant/11/Table/5{6-7}             database system (tenant)
 upsert /Tenant/11/Table/5{7-8}             database system (tenant)
 
-# Now for the bug. We'll create tenant=10, but see that it actually ends up
-# overwriting span config state for the already-reconciling tenant=11. That
-# tenant's reconciler is not expecting this! It operates with the invariant that
-# it's the only writer of span configs for its keyspan, which we're simply
-# breaking.
+# Initialize a new tenant, tenant=10, that DOES have a pre-existing tenant,
+# tenant=11, next to it.
 initialize tenant=10
 ----
 
-# We re-inserted a record at /Tenant/11{-\x00}, and split up tenant=11's own
-# span config records in the process. Previously tenant=11's first record was
-# /Tenant/11{-/Table/4}. Now it's /Tenant/11{-\x00}. If tenant=11 had set some
-# span config for that keyspan, tenant=10's creation just nuked it.
-state offset=57 limit=5
+# A record IS NOT written for a key that logically belongs to the next tenant,
+# tenant=11, because tenant=11 DOES exist.
+state offset=57 limit=3
 ----
 ...
 /Tenant/10{-\x00}                          database system (tenant)
-/Tenant/11{-\x00}                          database system (tenant)
+/Tenant/11{-/Table/4}                      database system (tenant)
 /Tenant/11/Table/{4-5}                     database system (tenant)
-/Tenant/11/Table/{5-6}                     database system (tenant)
-/Tenant/11/Table/{6-7}                     database system (tenant)
 ...
 
 # And tenant=11, since it assumes its the only writer, simply does not observe

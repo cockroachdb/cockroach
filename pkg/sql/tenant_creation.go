@@ -382,27 +382,51 @@ func CreateTenantRecord(
 
 	// This adds a split at the start of the tenant keyspace.
 	tenantPrefix := keys.MakeTenantPrefix(tenantID)
-	startRecord, err := spanconfig.MakeRecord(spanconfig.MakeTargetFromSpan(roachpb.Span{
+	startRecordTarget := spanconfig.MakeTargetFromSpan(roachpb.Span{
 		Key:    tenantPrefix,
 		EndKey: tenantPrefix.Next(),
-	}), tenantSpanConfig)
+	})
+	startRecord, err := spanconfig.MakeRecord(startRecordTarget, tenantSpanConfig)
 	if err != nil {
 		return roachpb.TenantID{}, err
 	}
+	toUpsert := []spanconfig.Record{startRecord}
 
-	// This adds a split at the end of the tenant keyspace. This split would
-	// eventually be created when the next tenant is created, but until then
-	// this tenant's EndKey will be /Max which is outside of it's keyspace.
+	// Ensure we have a split at the current tenant's endKey in one of two ways:
+	// 1) The next tenant (tenant whose startKey equals this tenants endKey)
+	//    already exists and created this split at its own startKey when it was
+	//    created.
+	// 2) The next tenant does not exist so split now at the endKey.
+	//
+	// If this endKey split is not created via (1) or (2), the current tenant's
+	// last range will have an endKey of /Max which is outside of it's keyspace.
+	// See: https://github.com/cockroachdb/cockroach/issues/92072
 	tenantPrefixEnd := tenantPrefix.PrefixEnd()
-	endRecord, err := spanconfig.MakeRecord(spanconfig.MakeTargetFromSpan(roachpb.Span{
+	endRecordTarget := spanconfig.MakeTargetFromSpan(roachpb.Span{
 		Key:    tenantPrefixEnd,
 		EndKey: tenantPrefixEnd.Next(),
-	}), tenantSpanConfig)
+	})
+
+	// Check if a record exists for the next tenant's startKey from when the next
+	// tenant was created. The current tenant's endRecordTarget is the same as
+	// the next tenant's startRecordTarget.
+	records, err := spanConfigs.GetSpanConfigRecords(ctx, []spanconfig.Target{endRecordTarget})
 	if err != nil {
 		return roachpb.TenantID{}, err
 	}
 
-	toUpsert := []spanconfig.Record{startRecord, endRecord}
+	// If the next tenant's startKey record exists then do not split at the
+	// current tenant's endKey. Doing will incorrectly overwrite the next
+	// tenant's first span config.
+	// See: https://github.com/cockroachdb/cockroach/issues/95882
+	if len(records) == 0 {
+		endRecord, err := spanconfig.MakeRecord(endRecordTarget, tenantSpanConfig)
+		if err != nil {
+			return roachpb.TenantID{}, err
+		}
+		toUpsert = append(toUpsert, endRecord)
+	}
+
 	return tenantID, spanConfigs.UpdateSpanConfigRecords(
 		ctx, nil, toUpsert, hlc.MinTimestamp, hlc.MaxTimestamp,
 	)
