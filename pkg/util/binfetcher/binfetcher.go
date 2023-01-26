@@ -86,7 +86,11 @@ func (opts *Options) init() error {
 
 			goos := opts.GOOS
 			if opts.GOOS == "darwin" {
-				goos += "-10.9"
+				if opts.GOARCH == "arm64" {
+					goos += "-11.0"
+				} else {
+					goos += "-10.9"
+				}
 			} else if opts.GOOS == "windows" {
 				goos += "-6.2"
 			}
