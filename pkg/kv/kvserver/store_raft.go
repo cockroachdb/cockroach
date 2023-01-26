@@ -382,12 +382,28 @@ func (s *Store) processRaftRequestWithReplica(
 	}
 
 	drop := maybeDropMsgApp(ctx, (*replicaMsgAppDropper)(r), &req.Message, req.RangeStartKey)
+	// Prevent uninitialized replicas from voting. Note that they are also
+	// quiesced (not Tick-ing), and thus won't participate in elections too.
+	if !drop && maybeDropVote(ctx, r, &req.Message) {
+		drop = true
+	}
+
 	if !drop {
 		if err := r.stepRaftGroup(req); err != nil {
 			return roachpb.NewError(err)
 		}
 	}
 	return nil
+}
+
+func maybeDropVote(ctx context.Context, r *Replica, msg *raftpb.Message) bool {
+	if t := msg.Type; !r.IsInitialized() && t == raftpb.MsgPreVote || t == raftpb.MsgVote {
+		if verboseRaftLoggingEnabled() {
+			log.Infof(ctx, "dropping %s for uninitialized replica: %+v", t, msg)
+		}
+		return true
+	}
+	return false
 }
 
 // processRaftSnapshotRequest processes the incoming snapshot Raft request on
