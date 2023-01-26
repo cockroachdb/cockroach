@@ -116,7 +116,7 @@ state offset=57 limit=5
 ----
 ...
 /Tenant/10{-\x00}                          database system (tenant)
-/Tenant/11{-\x00}                          database system (tenant)
+/Tenant/11{-/Table/4}                      database system (tenant)
 /Tenant/11/Table/{4-5}                     database system (tenant)
 /Tenant/11/Table/{5-6}                     database system (tenant)
 /Tenant/11/Table/{6-7}                     database system (tenant)
