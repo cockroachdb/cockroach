@@ -12,71 +12,131 @@ package sql
 
 import (
 	"context"
+	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
 )
 
-const CanAdminSplitCapabilityName = "can_admin_split"
-const CanAdminUnsplitCapabilityName = "can_admin_unsplit"
+const canAdminSplitCapabilityName = "can_admin_split"
+const canAdminUnsplitCapabilityName = "can_admin_unsplit"
+
+var capabilityTypes = map[string]*types.T{
+	canAdminSplitCapabilityName:   types.Bool,
+	canAdminUnsplitCapabilityName: types.Bool,
+}
+
+const alterTenantCapabilityOp = "ALTER TENANT CAPABILITY"
 
 type alterTenantCapabilityNode struct {
-	*tree.AlterTenantCapability
+	n          *tree.AlterTenantCapability
+	tenantSpec tenantSpec
+
+	// typedExprs contains the planned expressions for each capability
+	// (the positions in the slice correspond 1-to-1 to the positions in
+	// n.Capabilities).
+	typedExprs []tree.TypedExpr
 }
 
 func (p *planner) AlterTenantCapability(
-	_ context.Context, n *tree.AlterTenantCapability,
+	ctx context.Context, n *tree.AlterTenantCapability,
 ) (planNode, error) {
+	if err := rejectIfCantCoordinateMultiTenancy(p.execCfg.Codec, "grant/revoke capabilities to"); err != nil {
+		return nil, err
+	}
+
+	tSpec, err := p.planTenantSpec(ctx, n.TenantSpec, alterTenantCapabilityOp)
+	if err != nil {
+		return nil, err
+	}
+
+	exprs := make([]tree.TypedExpr, len(n.Capabilities))
+	for i, cap := range n.Capabilities {
+		desiredType, ok := capabilityTypes[cap.Name]
+		if !ok {
+			return nil, pgerror.Newf(pgcode.Syntax, "unknown capability: %q", cap.Name)
+		}
+
+		// In REVOKE, we do not support a value assignment.
+		if n.IsRevoke {
+			if cap.Value != nil {
+				return nil, pgerror.Newf(pgcode.Syntax, "no value allowed in revoke: %q", cap.Name)
+			}
+			continue
+		}
+
+		// Type check the expression on the right-hand side of the
+		// assignment.
+		var dummyHelper tree.IndexedVarHelper
+		typedValue, err := p.analyzeExpr(
+			ctx, cap.Value, nil, dummyHelper, desiredType, true /* requireType */, fmt.Sprintf("%s %s", alterTenantCapabilityOp, cap.Name))
+		if err != nil {
+			return nil, err
+		}
+		exprs[i] = typedValue
+	}
+
 	return &alterTenantCapabilityNode{
-		AlterTenantCapability: n,
+		n:          n,
+		tenantSpec: tSpec,
+		typedExprs: exprs,
 	}, nil
 }
 
 func (n *alterTenantCapabilityNode) startExec(params runParams) error {
-	const op = "ALTER TENANT CAPABILITY"
-	execCfg := params.ExecCfg()
-	if err := rejectIfCantCoordinateMultiTenancy(execCfg.Codec, op); err != nil {
-		return err
-	}
-	planner := params.p
+	p := params.p
 	ctx := params.ctx
-	tSpec, err := planner.planTenantSpec(ctx, n.TenantSpec, op)
+
+	// Privilege check.
+	if err := p.RequireAdminRole(ctx, "update tenant capabilities"); err != nil {
+		return err
+	}
+
+	// Refuse to work in read-only transactions.
+	if p.EvalContext().TxnReadOnly {
+		return readOnlyError(alterTenantCapabilityOp)
+	}
+
+	// Look up the enant.
+	tenantInfo, err := n.tenantSpec.getTenantInfo(ctx, p)
 	if err != nil {
 		return err
 	}
-	tenantInfo, err := tSpec.getTenantInfo(ctx, planner)
-	if err != nil {
+
+	// Refuse to modify the system tenant.
+	if err := rejectIfSystemTenant(tenantInfo.ID, alterTenantCapabilityOp); err != nil {
 		return err
 	}
-	if err := rejectIfSystemTenant(tenantInfo.ID, op); err != nil {
-		return err
-	}
-	isRevoke := n.IsRevoke
-	capabilities := &tenantInfo.Capabilities
-	for _, capability := range n.Capabilities {
-		capabilityName := capability.Name
-		switch capabilityName {
-		case CanAdminSplitCapabilityName:
-			capabilities.CanAdminSplit, err = capability.GetBoolValue(isRevoke)
+
+	dst := &tenantInfo.Capabilities
+	for i, cap := range n.n.Capabilities {
+		switch cap.Name {
+		case canAdminSplitCapabilityName:
+			if n.n.IsRevoke {
+				dst.CanAdminSplit = false
+			} else {
+				b, err := paramparse.DatumAsBool(ctx, p.EvalContext(), cap.Name, n.typedExprs[i])
+				if err != nil {
+					return err
+				}
+				dst.CanAdminSplit = b
+			}
+
+		case canAdminUnsplitCapabilityName:
+			// TODO(sql-sessions): handle this capability.
+			return unimplemented.Newf("cap-unsplit", "update capability %q", cap.Name)
+
 		default:
-			err = errors.Newf("invalid capability")
-		}
-		if err != nil {
-			return pgerror.Wrapf(
-				err,
-				pgcode.InvalidParameterValue,
-				"error parsing capability %q",
-				capabilityName,
-			)
+			return errors.AssertionFailedf("unhandled: %q", cap.Name)
 		}
 	}
 
-	if err := UpdateTenantRecord(params.ctx, execCfg.Settings, planner.InternalSQLTxn(), tenantInfo); err != nil {
-		return err
-	}
-	return nil
+	return UpdateTenantRecord(ctx, p.ExecCfg().Settings, p.InternalSQLTxn(), tenantInfo)
 }
 
 func (n *alterTenantCapabilityNode) Next(runParams) (bool, error) { return false, nil }

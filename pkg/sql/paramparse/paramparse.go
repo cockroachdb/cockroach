@@ -135,6 +135,25 @@ func DatumAsString(
 	return string(s), nil
 }
 
+// DatumAsBool transforms a tree.TypedExpr containing a Datum into a bool.
+func DatumAsBool(
+	ctx context.Context, evalCtx *eval.Context, name string, value tree.TypedExpr,
+) (bool, error) {
+	val, err := eval.Expr(ctx, evalCtx, value)
+	if err != nil {
+		return false, err
+	}
+	b, ok := tree.AsDBool(val)
+	if !ok {
+		err = pgerror.Newf(pgcode.InvalidParameterValue,
+			"parameter %q requires a Boolean value", name)
+		err = errors.WithDetailf(err,
+			"%s is a %s", value, errors.Safe(val.ResolvedType()))
+		return false, err
+	}
+	return bool(b), nil
+}
+
 // GetSingleBool returns the boolean if the input Datum is a DBool,
 // and returns a detailed error message if not.
 func GetSingleBool(name string, val tree.Datum) (*tree.DBool, error) {

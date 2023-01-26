@@ -238,11 +238,12 @@ func (n *showTenantNode) getTenantValues(
 		capabilities := tenantInfo.Capabilities
 		values.capabilities = []showTenantNodeCapability{
 			{
-				name:  CanAdminSplitCapabilityName,
+				name:  canAdminSplitCapabilityName,
 				value: strconv.FormatBool(capabilities.CanAdminSplit),
 			},
 			{
-				name:  CanAdminUnsplitCapabilityName,
+				name: canAdminUnsplitCapabilityName,
+				// TODO(sql-sessions): handle this capability.
 				value: strconv.FormatBool(false),
 			},
 		}
