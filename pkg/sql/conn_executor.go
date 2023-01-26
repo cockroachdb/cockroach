@@ -452,21 +452,36 @@ func makeMetrics(internal bool) Metrics {
 			SQLOptPlanCacheHits:   metric.NewCounter(getMetricMeta(MetaSQLOptPlanCacheHits, internal)),
 			SQLOptPlanCacheMisses: metric.NewCounter(getMetricMeta(MetaSQLOptPlanCacheMisses, internal)),
 			// TODO(mrtracy): See HistogramWindowInterval in server/config.go for the 6x factor.
-			DistSQLExecLatency: metric.NewHistogram(
-				getMetricMeta(MetaDistSQLExecLatency, internal), 6*metricsSampleInterval, metric.IOLatencyBuckets,
-			),
-			SQLExecLatency: metric.NewHistogram(
-				getMetricMeta(MetaSQLExecLatency, internal), 6*metricsSampleInterval, metric.IOLatencyBuckets,
-			),
-			DistSQLServiceLatency: metric.NewHistogram(
-				getMetricMeta(MetaDistSQLServiceLatency, internal), 6*metricsSampleInterval, metric.IOLatencyBuckets,
-			),
-			SQLServiceLatency: metric.NewHistogram(
-				getMetricMeta(MetaSQLServiceLatency, internal), 6*metricsSampleInterval, metric.IOLatencyBuckets,
-			),
-			SQLTxnLatency: metric.NewHistogram(
-				getMetricMeta(MetaSQLTxnLatency, internal), 6*metricsSampleInterval, metric.IOLatencyBuckets,
-			),
+			DistSQLExecLatency: metric.NewHistogram(metric.HistogramOptions{
+				UseHdrLatency: true,
+				Metadata:      getMetricMeta(MetaDistSQLExecLatency, internal),
+				Duration:      6 * metricsSampleInterval,
+				Buckets:       metric.IOLatencyBuckets,
+			}),
+			SQLExecLatency: metric.NewHistogram(metric.HistogramOptions{
+				UseHdrLatency: true,
+				Metadata:      getMetricMeta(MetaSQLExecLatency, internal),
+				Duration:      6 * metricsSampleInterval,
+				Buckets:       metric.IOLatencyBuckets,
+			}),
+			DistSQLServiceLatency: metric.NewHistogram(metric.HistogramOptions{
+				UseHdrLatency: true,
+				Metadata:      getMetricMeta(MetaDistSQLServiceLatency, internal),
+				Duration:      6 * metricsSampleInterval,
+				Buckets:       metric.IOLatencyBuckets,
+			}),
+			SQLServiceLatency: metric.NewHistogram(metric.HistogramOptions{
+				UseHdrLatency: true,
+				Metadata:      getMetricMeta(MetaSQLServiceLatency, internal),
+				Duration:      6 * metricsSampleInterval,
+				Buckets:       metric.IOLatencyBuckets,
+			}),
+			SQLTxnLatency: metric.NewHistogram(metric.HistogramOptions{
+				UseHdrLatency: true,
+				Metadata:      getMetricMeta(MetaSQLTxnLatency, internal),
+				Duration:      6 * metricsSampleInterval,
+				Buckets:       metric.IOLatencyBuckets,
+			}),
 			SQLTxnsOpen:         metric.NewGauge(getMetricMeta(MetaSQLTxnsOpen, internal)),
 			SQLActiveStatements: metric.NewGauge(getMetricMeta(MetaSQLActiveQueries, internal)),
 			SQLContendedTxns:    metric.NewCounter(getMetricMeta(MetaSQLTxnContended, internal)),
@@ -490,28 +505,38 @@ func makeMetrics(internal bool) Metrics {
 func makeServerMetrics(cfg *ExecutorConfig) ServerMetrics {
 	return ServerMetrics{
 		StatsMetrics: StatsMetrics{
-			SQLStatsMemoryMaxBytesHist: metric.NewHistogram(
-				MetaSQLStatsMemMaxBytes,
-				cfg.HistogramWindowInterval,
-				metric.MemoryUsage64MBBuckets,
-			),
+			SQLStatsMemoryMaxBytesHist: metric.NewHistogram(metric.HistogramOptions{
+				Metadata: MetaSQLStatsMemMaxBytes,
+				Duration: cfg.HistogramWindowInterval,
+				MaxVal:   log10int64times1000,
+				SigFigs:  3,
+				Buckets:  metric.MemoryUsage64MBBuckets,
+			}),
 			SQLStatsMemoryCurBytesCount: metric.NewGauge(MetaSQLStatsMemCurBytes),
-			ReportedSQLStatsMemoryMaxBytesHist: metric.NewHistogram(
-				MetaReportedSQLStatsMemMaxBytes,
-				cfg.HistogramWindowInterval,
-				metric.MemoryUsage64MBBuckets,
-			),
+			ReportedSQLStatsMemoryMaxBytesHist: metric.NewHistogram(metric.HistogramOptions{
+				Metadata: MetaReportedSQLStatsMemMaxBytes,
+				Duration: cfg.HistogramWindowInterval,
+				MaxVal:   log10int64times1000,
+				SigFigs:  3,
+				Buckets:  metric.MemoryUsage64MBBuckets,
+			}),
 			ReportedSQLStatsMemoryCurBytesCount: metric.NewGauge(MetaReportedSQLStatsMemCurBytes),
 			DiscardedStatsCount:                 metric.NewCounter(MetaDiscardedSQLStats),
 			SQLStatsFlushStarted:                metric.NewCounter(MetaSQLStatsFlushStarted),
 			SQLStatsFlushFailure:                metric.NewCounter(MetaSQLStatsFlushFailure),
-			SQLStatsFlushDuration: metric.NewHistogram(
-				MetaSQLStatsFlushDuration, 6*metricsSampleInterval, metric.IOLatencyBuckets,
-			),
+			SQLStatsFlushDuration: metric.NewHistogram(metric.HistogramOptions{
+				UseHdrLatency: true,
+				Metadata:      MetaSQLStatsFlushDuration,
+				Duration:      6 * metricsSampleInterval,
+				Buckets:       metric.IOLatencyBuckets,
+			}),
 			SQLStatsRemovedRows: metric.NewCounter(MetaSQLStatsRemovedRows),
-			SQLTxnStatsCollectionOverhead: metric.NewHistogram(
-				MetaSQLTxnStatsCollectionOverhead, 6*metricsSampleInterval, metric.IOLatencyBuckets,
-			),
+			SQLTxnStatsCollectionOverhead: metric.NewHistogram(metric.HistogramOptions{
+				UseHdrLatency: true,
+				Metadata:      MetaSQLTxnStatsCollectionOverhead,
+				Duration:      6 * metricsSampleInterval,
+				Buckets:       metric.IOLatencyBuckets,
+			}),
 		},
 		ContentionSubsystemMetrics: txnidcache.NewMetrics(),
 		InsightsMetrics:            insights.NewMetrics(),

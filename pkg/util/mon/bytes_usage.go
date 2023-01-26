@@ -195,7 +195,7 @@ type BytesMonitor struct {
 
 		// maxBytesHist is the metric object used to track the high watermark of bytes
 		// allocated by the monitor during its lifetime.
-		maxBytesHist *metric.Histogram
+		maxBytesHist metric.IHistogram
 	}
 
 	// name identifies this monitor in logging messages.
@@ -273,7 +273,7 @@ func NewMonitor(
 	name redact.RedactableString,
 	res Resource,
 	curCount *metric.Gauge,
-	maxHist *metric.Histogram,
+	maxHist metric.IHistogram,
 	increment int64,
 	noteworthy int64,
 	settings *cluster.Settings,
@@ -289,7 +289,7 @@ func NewMonitorWithLimit(
 	res Resource,
 	limit int64,
 	curCount *metric.Gauge,
-	maxHist *metric.Histogram,
+	maxHist metric.IHistogram,
 	increment int64,
 	noteworthy int64,
 	settings *cluster.Settings,
@@ -386,7 +386,7 @@ func NewUnlimitedMonitor(
 	name redact.RedactableString,
 	res Resource,
 	curCount *metric.Gauge,
-	maxHist *metric.Histogram,
+	maxHist metric.IHistogram,
 	noteworthy int64,
 	settings *cluster.Settings,
 ) *BytesMonitor {
@@ -485,7 +485,7 @@ func (mm *BytesMonitor) AllocBytes() int64 {
 }
 
 // SetMetrics sets the metric objects for the monitor.
-func (mm *BytesMonitor) SetMetrics(curCount *metric.Gauge, maxHist *metric.Histogram) {
+func (mm *BytesMonitor) SetMetrics(curCount *metric.Gauge, maxHist metric.IHistogram) {
 	mm.mu.Lock()
 	defer mm.mu.Unlock()
 	mm.mu.curBytesCount = curCount

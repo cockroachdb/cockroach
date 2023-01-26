@@ -1850,15 +1850,15 @@ type StoreMetrics struct {
 
 	// Raft processing metrics.
 	RaftTicks                 *metric.Counter
-	RaftQuotaPoolPercentUsed  *metric.Histogram
+	RaftQuotaPoolPercentUsed  metric.IHistogram
 	RaftWorkingDurationNanos  *metric.Counter
 	RaftTickingDurationNanos  *metric.Counter
 	RaftCommandsApplied       *metric.Counter
-	RaftLogCommitLatency      *metric.Histogram
-	RaftCommandCommitLatency  *metric.Histogram
-	RaftHandleReadyLatency    *metric.Histogram
-	RaftApplyCommittedLatency *metric.Histogram
-	RaftSchedulerLatency      *metric.Histogram
+	RaftLogCommitLatency      metric.IHistogram
+	RaftCommandCommitLatency  metric.IHistogram
+	RaftHandleReadyLatency    metric.IHistogram
+	RaftApplyCommittedLatency metric.IHistogram
+	RaftSchedulerLatency      metric.IHistogram
 	RaftTimeoutCampaign       *metric.Counter
 
 	// Raft message metrics.
@@ -1990,8 +1990,8 @@ type StoreMetrics struct {
 	ReplicaCircuitBreakerCumTripped *metric.Counter
 
 	// Replica batch evaluation metrics.
-	ReplicaReadBatchEvaluationLatency  *metric.Histogram
-	ReplicaWriteBatchEvaluationLatency *metric.Histogram
+	ReplicaReadBatchEvaluationLatency  metric.IHistogram
+	ReplicaWriteBatchEvaluationLatency metric.IHistogram
 
 	ReplicaReadBatchDroppedLatchesBeforeEval *metric.Counter
 	ReplicaReadBatchWithoutInterleavingIter  *metric.Counter
@@ -2377,27 +2377,46 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 
 		// Raft processing metrics.
 		RaftTicks: metric.NewCounter(metaRaftTicks),
-		RaftQuotaPoolPercentUsed: metric.NewHistogram(
-			metaRaftQuotaPoolPercentUsed, histogramWindow, metric.Percent100Buckets,
-		),
+		RaftQuotaPoolPercentUsed: metric.NewHistogram(metric.HistogramOptions{
+			Metadata: metaRaftQuotaPoolPercentUsed,
+			Duration: histogramWindow,
+			MaxVal:   100,
+			SigFigs:  1,
+			Buckets:  metric.Percent100Buckets,
+		}),
 		RaftWorkingDurationNanos: metric.NewCounter(metaRaftWorkingDurationNanos),
 		RaftTickingDurationNanos: metric.NewCounter(metaRaftTickingDurationNanos),
 		RaftCommandsApplied:      metric.NewCounter(metaRaftCommandsApplied),
-		RaftLogCommitLatency: metric.NewHistogram(
-			metaRaftLogCommitLatency, histogramWindow, metric.IOLatencyBuckets,
-		),
-		RaftCommandCommitLatency: metric.NewHistogram(
-			metaRaftCommandCommitLatency, histogramWindow, metric.IOLatencyBuckets,
-		),
-		RaftHandleReadyLatency: metric.NewHistogram(
-			metaRaftHandleReadyLatency, histogramWindow, metric.IOLatencyBuckets,
-		),
-		RaftApplyCommittedLatency: metric.NewHistogram(
-			metaRaftApplyCommittedLatency, histogramWindow, metric.IOLatencyBuckets,
-		),
-		RaftSchedulerLatency: metric.NewHistogram(
-			metaRaftSchedulerLatency, histogramWindow, metric.IOLatencyBuckets,
-		),
+		RaftLogCommitLatency: metric.NewHistogram(metric.HistogramOptions{
+			UseHdrLatency: true,
+			Metadata:      metaRaftLogCommitLatency,
+			Duration:      histogramWindow,
+			Buckets:       metric.IOLatencyBuckets,
+		}),
+		RaftCommandCommitLatency: metric.NewHistogram(metric.HistogramOptions{
+			UseHdrLatency: true,
+			Metadata:      metaRaftCommandCommitLatency,
+			Duration:      histogramWindow,
+			Buckets:       metric.IOLatencyBuckets,
+		}),
+		RaftHandleReadyLatency: metric.NewHistogram(metric.HistogramOptions{
+			UseHdrLatency: true,
+			Metadata:      metaRaftHandleReadyLatency,
+			Duration:      histogramWindow,
+			Buckets:       metric.IOLatencyBuckets,
+		}),
+		RaftApplyCommittedLatency: metric.NewHistogram(metric.HistogramOptions{
+			UseHdrLatency: true,
+			Metadata:      metaRaftApplyCommittedLatency,
+			Duration:      histogramWindow,
+			Buckets:       metric.IOLatencyBuckets,
+		}),
+		RaftSchedulerLatency: metric.NewHistogram(metric.HistogramOptions{
+			UseHdrLatency: true,
+			Metadata:      metaRaftSchedulerLatency,
+			Duration:      histogramWindow,
+			Buckets:       metric.IOLatencyBuckets,
+		}),
 		RaftTimeoutCampaign: metric.NewCounter(metaRaftTimeoutCampaign),
 
 		// Raft message metrics.
@@ -2538,12 +2557,18 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		ReplicaCircuitBreakerCumTripped: metric.NewCounter(metaReplicaCircuitBreakerCumTripped),
 
 		// Replica batch evaluation.
-		ReplicaReadBatchEvaluationLatency: metric.NewHistogram(
-			metaReplicaReadBatchEvaluationLatency, histogramWindow, metric.IOLatencyBuckets,
-		),
-		ReplicaWriteBatchEvaluationLatency: metric.NewHistogram(
-			metaReplicaWriteBatchEvaluationLatency, histogramWindow, metric.IOLatencyBuckets,
-		),
+		ReplicaReadBatchEvaluationLatency: metric.NewHistogram(metric.HistogramOptions{
+			UseHdrLatency: true,
+			Metadata:      metaReplicaReadBatchEvaluationLatency,
+			Duration:      histogramWindow,
+			Buckets:       metric.IOLatencyBuckets,
+		}),
+		ReplicaWriteBatchEvaluationLatency: metric.NewHistogram(metric.HistogramOptions{
+			UseHdrLatency: true,
+			Metadata:      metaReplicaWriteBatchEvaluationLatency,
+			Duration:      histogramWindow,
+			Buckets:       metric.IOLatencyBuckets,
+		}),
 		FlushUtilization: metric.NewGaugeFloat64(metaStorageFlushUtilization),
 		FsyncLatency:     metric.NewManualWindowHistogram(metaStorageFsyncLatency, pebble.FsyncLatencyBuckets),
 

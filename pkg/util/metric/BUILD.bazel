@@ -22,10 +22,12 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/util/metric",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/util/envutil",
         "//pkg/util/log",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_codahale_hdrhistogram//:hdrhistogram",
         "@com_github_gogo_protobuf//proto",
         "@com_github_prometheus_client_golang//prometheus",
         "@com_github_prometheus_client_golang//prometheus/graphite",

@@ -63,10 +63,13 @@ func TestAggMetric(t *testing.T) {
 		Name: "baz_gauge",
 	}, "tenant_id")
 	r.AddMetric(f)
-
-	h := aggmetric.NewHistogram(metric.Metadata{
-		Name: "histo_gram",
-	}, base.DefaultHistogramWindowInterval(), metric.Count1KBuckets, "tenant_id")
+	h := aggmetric.NewHistogram(metric.HistogramOptions{
+		Metadata: metric.Metadata{
+			Name: "histo_gram",
+		},
+		Duration: base.DefaultHistogramWindowInterval(),
+		Buckets:  metric.Count1KBuckets,
+	}, "tenant_id")
 	r.AddMetric(h)
 
 	tenant2 := roachpb.MustMakeTenantID(2)
@@ -135,8 +138,11 @@ func TestAggMetricBuilder(t *testing.T) {
 	c := b.Counter(metric.Metadata{Name: "foo_counter"})
 	g := b.Gauge(metric.Metadata{Name: "bar_gauge"})
 	f := b.GaugeFloat64(metric.Metadata{Name: "baz_gauge"})
-	h := b.Histogram(metric.Metadata{Name: "histo_gram"},
-		base.DefaultHistogramWindowInterval(), metric.Count1KBuckets)
+	h := b.Histogram(metric.HistogramOptions{
+		Metadata: metric.Metadata{Name: "histo_gram"},
+		Duration: base.DefaultHistogramWindowInterval(),
+		Buckets:  metric.Count1KBuckets,
+	})
 
 	for i := 5; i < 10; i++ {
 		tenantLabel := roachpb.MustMakeTenantID(uint64(i)).String()

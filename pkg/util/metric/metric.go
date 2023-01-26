@@ -17,8 +17,10 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/codahale/hdrhistogram"
 	"github.com/gogo/protobuf/proto"
 	"github.com/prometheus/client_golang/prometheus"
 	prometheusgo "github.com/prometheus/client_model/go"
@@ -26,9 +28,16 @@ import (
 )
 
 const (
+	// MaxLatency is the maximum value tracked in latency histograms. Higher
+	// values will be recorded as this value instead.
+	MaxLatency = 10 * time.Second
+
 	// TestSampleInterval is passed to histograms during tests which don't
 	// want to concern themselves with supplying a "correct" interval.
 	TestSampleInterval = time.Duration(math.MaxInt64)
+
+	// The number of histograms to keep in rolling window.
+	histWrapNum = 2 // TestSampleInterval is passed to histograms during tests which don't
 )
 
 // Iterable provides a method for synchronized access to interior objects.
@@ -176,10 +185,250 @@ func maybeTick(m periodic) {
 	}
 }
 
+// A HdrHistogram collects observed values by keeping bucketed counts. For
+// convenience, internally two sets of buckets are kept: A cumulative set (i.e.
+// data is never evicted) and a windowed set (which keeps only recently
+// collected samples).
+//
+// Top-level methods generally apply to the cumulative buckets; the windowed
+// variant is exposed through the Windowed method.
+type HdrHistogram struct {
+	Metadata
+	maxVal int64
+	mu     struct {
+		syncutil.Mutex
+		cumulative *hdrhistogram.Histogram
+		*tickHelper
+		sliding *hdrhistogram.WindowedHistogram
+	}
+}
+
+func (h *HdrHistogram) ValueAtQuantileWindowed(q float64) float64 {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	return ValueAtQuantileWindowed(h.ToPrometheusMetricWindowed().Histogram, q)
+}
+
+func (h *HdrHistogram) Mean() float64 {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	return h.mu.cumulative.Mean()
+}
+
+func (h *HdrHistogram) TotalSum() float64 {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	return h.ToPrometheusMetric().GetSummary().GetSampleSum()
+}
+
+// useHdrHistogramsEnvVar can be used to switch all histograms to use the
+// legacy HDR histograms (except for those that explicitly force the use
+// of the newer Prometheus via HistogramOptions.ForceUsePrometheus).
+// HDR Histograms dynamically generate bucket boundaries, which can lead
+// to hundreds of buckets. This can cause performance issues with timeseries
+// databases like Prometheus.
+const useHdrHistogramsEnvVar = "COCKROACH_ENABLE_HDR_HISTOGRAMS"
+
+var hdrEnabled = envutil.EnvOrDefaultBool(useHdrHistogramsEnvVar, false)
+
+type HistogramOptions struct {
+	Metadata           Metadata
+	Duration           time.Duration
+	MaxVal             int64
+	SigFigs            int
+	Buckets            []float64
+	ForceUsePrometheus bool
+	UseHdrLatency      bool
+}
+
+func NewHistogram(opt HistogramOptions) IHistogram {
+	if hdrEnabled && !opt.ForceUsePrometheus {
+		if opt.UseHdrLatency {
+			return NewHdrLatency(opt.Metadata, opt.Duration)
+		} else {
+			return NewHdrHistogram(opt.Metadata, opt.Duration, opt.MaxVal, opt.SigFigs)
+		}
+	} else {
+		return newHistogram(opt.Metadata, opt.Duration, opt.Buckets)
+	}
+}
+
+// NewHdrHistogram initializes a given Histogram. The contained windowed histogram
+// rotates every 'duration'; both the windowed and the cumulative histogram
+// track nonnegative values up to 'maxVal' with 'sigFigs' decimal points of
+// precision.
+func NewHdrHistogram(
+	metadata Metadata, duration time.Duration, maxVal int64, sigFigs int,
+) *HdrHistogram {
+	h := &HdrHistogram{
+		Metadata: metadata,
+		maxVal:   maxVal,
+	}
+	wHist := hdrhistogram.NewWindowed(histWrapNum, 0, maxVal, sigFigs)
+	h.mu.cumulative = hdrhistogram.New(0, maxVal, sigFigs)
+	h.mu.sliding = wHist
+	h.mu.tickHelper = &tickHelper{
+		nextT:        now(),
+		tickInterval: duration / histWrapNum,
+		onTick: func() {
+			wHist.Rotate()
+		},
+	}
+	return h
+}
+
+// NewHdrLatency is a convenience function which returns a histogram with
+// suitable defaults for latency tracking. Values are expressed in ns,
+// are truncated into the interval [0, MaxLatency] and are recorded
+// with one digit of precision (i.e. errors of <10ms at 100ms, <6s at 60s).
+//
+// The windowed portion of the Histogram retains values for approximately
+// histogramWindow.
+func NewHdrLatency(metadata Metadata, histogramWindow time.Duration) *HdrHistogram {
+	return NewHdrHistogram(
+		metadata, histogramWindow, MaxLatency.Nanoseconds(), 1,
+	)
+}
+
+// RecordValue adds the given value to the histogram. Recording a value in
+// excess of the configured maximum value for that histogram results in
+// recording the maximum value instead.
+func (h *HdrHistogram) RecordValue(v int64) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	if h.mu.sliding.Current.RecordValue(v) != nil {
+		_ = h.mu.sliding.Current.RecordValue(h.maxVal)
+	}
+	if h.mu.cumulative.RecordValue(v) != nil {
+		_ = h.mu.cumulative.RecordValue(h.maxVal)
+	}
+}
+
+// TotalCount returns the (cumulative) number of samples.
+func (h *HdrHistogram) TotalCount() int64 {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.mu.cumulative.TotalCount()
+}
+
+// Min returns the minimum.
+func (h *HdrHistogram) Min() int64 {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.mu.cumulative.Min()
+}
+
+// Inspect calls the closure with the empty string and the receiver.
+func (h *HdrHistogram) Inspect(f func(interface{})) {
+	h.mu.Lock()
+	maybeTick(h.mu.tickHelper)
+	h.mu.Unlock()
+	f(h)
+}
+
+// GetType returns the prometheus type enum for this metric.
+func (h *HdrHistogram) GetType() *prometheusgo.MetricType {
+	return prometheusgo.MetricType_HISTOGRAM.Enum()
+}
+
+// ToPrometheusMetric returns a filled-in prometheus metric of the right type.
+func (h *HdrHistogram) ToPrometheusMetric() *prometheusgo.Metric {
+	hist := &prometheusgo.Histogram{}
+
+	h.mu.Lock()
+	maybeTick(h.mu.tickHelper)
+	bars := h.mu.cumulative.Distribution()
+	hist.Bucket = make([]*prometheusgo.Bucket, 0, len(bars))
+
+	var cumCount uint64
+	var sum float64
+	for _, bar := range bars {
+		if bar.Count == 0 {
+			// No need to expose trivial buckets.
+			continue
+		}
+		upperBound := float64(bar.To)
+		sum += upperBound * float64(bar.Count)
+
+		cumCount += uint64(bar.Count)
+		curCumCount := cumCount // need a new alloc thanks to bad proto code
+
+		hist.Bucket = append(hist.Bucket, &prometheusgo.Bucket{
+			CumulativeCount: &curCumCount,
+			UpperBound:      &upperBound,
+		})
+	}
+	hist.SampleCount = &cumCount
+	hist.SampleSum = &sum // can do better here; we approximate in the loop
+	h.mu.Unlock()
+
+	return &prometheusgo.Metric{
+		Histogram: hist,
+	}
+}
+
+// TotalCountWindowed implements the WindowedHistogram interface.
+func (h *HdrHistogram) TotalCountWindowed() int64 {
+	return int64(h.ToPrometheusMetricWindowed().Histogram.GetSampleCount())
+}
+
+// TotalSumWindowed implements the WindowedHistogram interface.
+func (h *HdrHistogram) TotalSumWindowed() float64 {
+	return h.ToPrometheusMetricWindowed().Histogram.GetSampleSum()
+}
+
+// ToPrometheusMetricWindowed returns a filled-in prometheus metric of the right type.
+func (h *HdrHistogram) ToPrometheusMetricWindowed() *prometheusgo.Metric {
+	hist := &prometheusgo.Histogram{}
+
+	h.mu.Lock()
+	maybeTick(h.mu.tickHelper)
+	bars := h.mu.sliding.Current.Distribution()
+	hist.Bucket = make([]*prometheusgo.Bucket, 0, len(bars))
+
+	var cumCount uint64
+	var sum float64
+	for _, bar := range bars {
+		if bar.Count == 0 {
+			// No need to expose trivial buckets.
+			continue
+		}
+		upperBound := float64(bar.To)
+		sum += upperBound * float64(bar.Count)
+
+		cumCount += uint64(bar.Count)
+		curCumCount := cumCount // need a new alloc thanks to bad proto code
+
+		hist.Bucket = append(hist.Bucket, &prometheusgo.Bucket{
+			CumulativeCount: &curCumCount,
+			UpperBound:      &upperBound,
+		})
+	}
+	hist.SampleCount = &cumCount
+	hist.SampleSum = &sum // can do better here; we approximate in the loop
+	h.mu.Unlock()
+
+	return &prometheusgo.Metric{
+		Histogram: hist,
+	}
+}
+
+// GetMetadata returns the metric's metadata including the Prometheus
+// MetricType.
+func (h *HdrHistogram) GetMetadata() Metadata {
+	baseMetadata := h.Metadata
+	baseMetadata.MetricType = prometheusgo.MetricType_HISTOGRAM
+	return baseMetadata
+}
+
 // NewHistogram is a prometheus-backed histogram. Depending on the value of
 // opts.Buckets, this is suitable for recording any kind of quantity. Common
 // sensible choices are {IO,Network}LatencyBuckets.
-func NewHistogram(meta Metadata, windowDuration time.Duration, buckets []float64) *Histogram {
+func newHistogram(meta Metadata, windowDuration time.Duration, buckets []float64) *Histogram {
 	// TODO(obs-inf): prometheus supports labeled histograms but they require more
 	// plumbing and don't fit into the PrometheusObservable interface any more.
 	opts := prometheus.HistogramOpts{
@@ -235,6 +484,22 @@ type Histogram struct {
 		prev, cur prometheus.Histogram
 	}
 }
+
+type IHistogram interface {
+	Iterable
+	PrometheusExportable
+	WindowedHistogram
+
+	RecordValue(n int64)
+	TotalCount() int64
+	TotalSum() float64
+	TotalCountWindowed() int64
+	TotalSumWindowed() float64
+	Mean() float64
+}
+
+var _ IHistogram = &Histogram{}
+var _ IHistogram = &HdrHistogram{}
 
 func (h *Histogram) nextTick() time.Time {
 	h.windowed.RLock()
@@ -326,7 +591,8 @@ func (h *Histogram) TotalSumWindowed() float64 {
 
 // Mean returns the (cumulative) mean of samples.
 func (h *Histogram) Mean() float64 {
-	return h.TotalSum() / float64(h.TotalCount())
+	pm := h.ToPrometheusMetric()
+	return pm.Histogram.GetSampleSum() / float64(pm.Histogram.GetSampleCount())
 }
 
 // ValueAtQuantileWindowed implements the WindowedHistogram interface.
@@ -344,7 +610,9 @@ func (h *Histogram) ValueAtQuantileWindowed(q float64) float64 {
 }
 
 var _ PrometheusExportable = (*ManualWindowHistogram)(nil)
+var _ PrometheusExportable = &HdrHistogram{}
 var _ Iterable = (*ManualWindowHistogram)(nil)
+var _ Iterable = &HdrHistogram{}
 var _ WindowedHistogram = (*ManualWindowHistogram)(nil)
 
 // NewManualWindowHistogram is a prometheus-backed histogram. Depending on the
