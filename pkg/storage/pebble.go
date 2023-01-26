@@ -1886,9 +1886,36 @@ func (p *Pebble) Stat(name string) (os.FileInfo, error) {
 	return p.fs.Stat(name)
 }
 
+func checkpointSpansNote(spans []roachpb.Span) []byte {
+	note := "CRDB spans:\n"
+	for _, span := range spans {
+		note += span.String() + "\n"
+	}
+	return []byte(note)
+}
+
 // CreateCheckpoint implements the Engine interface.
-func (p *Pebble) CreateCheckpoint(dir string) error {
-	return p.db.Checkpoint(dir, pebble.WithFlushedWAL())
+func (p *Pebble) CreateCheckpoint(dir string, spans []roachpb.Span) error {
+	opts := []pebble.CheckpointOption{
+		pebble.WithFlushedWAL(),
+	}
+	if l := len(spans); l > 0 {
+		s := make([]pebble.CheckpointSpan, 0, l)
+		for _, span := range spans {
+			s = append(s, pebble.CheckpointSpan{Start: span.Key, End: span.EndKey})
+		}
+		opts = append(opts, pebble.WithRestrictToSpans(s))
+	}
+	if err := p.db.Checkpoint(dir, opts...); err != nil {
+		return err
+	}
+
+	// TODO(#90543, cockroachdb/pebble#2285): move spans info to Pebble manifest.
+	if len(spans) > 0 {
+		return fs.SafeWriteToFile(p.fs, dir, p.fs.PathJoin(dir, "checkpoint.txt"),
+			checkpointSpansNote(spans))
+	}
+	return nil
 }
 
 // SetMinVersion implements the Engine interface.
