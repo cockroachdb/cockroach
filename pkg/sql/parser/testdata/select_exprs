@@ -443,6 +443,26 @@ SELECT '_' -- literals removed
 SELECT e'\n\\' -- identifiers removed
 
 parse
+SELECT 'a'
+'b'
+----
+SELECT 'ab' -- normalized!
+SELECT ('ab') -- fully parenthesized
+SELECT '_' -- literals removed
+SELECT 'ab' -- identifiers removed
+
+parse
+SELECT 'a'
+
+
+'b'
+----
+SELECT 'ab' -- normalized!
+SELECT ('ab') -- fully parenthesized
+SELECT '_' -- literals removed
+SELECT 'ab' -- identifiers removed
+
+parse
 SELECT x'61'
 ----
 SELECT b'a' -- normalized!
@@ -1247,6 +1267,41 @@ SELECT 'a' AS "12345"
 SELECT ('a') AS "12345" -- fully parenthesized
 SELECT '_' AS "12345" -- literals removed
 SELECT 'a' AS _ -- identifiers removed
+
+parse
+SELECT 'a' AS "a""b"
+----
+SELECT 'a' AS "a""b"
+SELECT ('a') AS "a""b" -- fully parenthesized
+SELECT '_' AS "a""b" -- literals removed
+SELECT 'a' AS _ -- identifiers removed
+
+error
+SELECT 'a' AS "a"
+"b"
+----
+at or near "b": syntax error
+DETAIL: source SQL:
+SELECT 'a' AS "a"
+"b"
+^
+
+error
+SELECT 'a' AS "a"
+
+
+"b"
+----
+----
+at or near "b": syntax error
+DETAIL: source SQL:
+SELECT 'a' AS "a"
+
+
+"b"
+^
+----
+----
 
 parse
 SELECT 'a' AS clnm
