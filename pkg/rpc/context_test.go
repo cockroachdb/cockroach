@@ -1467,6 +1467,11 @@ func TestLatencyInfoCleanupOnClosedConnection(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	anotherConn, err := clientCtx.GRPCDialNode(remoteAddr, serverNodeID, SystemClass).Connect(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	clientClock.setAdvancementInterval(
 		maximumPingDurationMult*clientMaxOffset + 1*time.Nanosecond)
 
@@ -1474,21 +1479,34 @@ func TestLatencyInfoCleanupOnClosedConnection(t *testing.T) {
 		clientCtx.RemoteClocks.mu.Lock()
 		defer clientCtx.RemoteClocks.mu.Unlock()
 
-		if li, ok := clientCtx.RemoteClocks.mu.latencyInfos[remoteAddr]; !ok {
-			return errors.Errorf("expected to have latencyInfos %s, but it was not", li)
+		if li, ok := clientCtx.RemoteClocks.mu.latencyInfos[serverNodeID]; !ok {
+			return errors.Errorf("expected to have latencyInfos %v, but it was not", li)
 		}
 		return nil
 	})
 
-	// Close connection to simulate network disruption.
+	// Close first connection. It cannot be considered as network disruption yet, since anotherConn still open.
 	err = conn.Close()
 	require.NoError(t, err)
 
 	testutils.SucceedsSoon(t, func() error {
 		clientCtx.RemoteClocks.mu.Lock()
 		defer clientCtx.RemoteClocks.mu.Unlock()
+		if _, ok := clientCtx.RemoteClocks.mu.latencyInfos[serverNodeID]; !ok {
+			return errors.Errorf("expected to have latencyInfos, but nothing found")
+		}
+		return nil
+	})
 
-		if li, ok := clientCtx.RemoteClocks.mu.latencyInfos[remoteAddr]; ok {
+	// Close last anotherConn to simulate network disruption.
+	err = anotherConn.Close()
+	require.NoError(t, err)
+
+	testutils.SucceedsSoon(t, func() error {
+		clientCtx.RemoteClocks.mu.Lock()
+		defer clientCtx.RemoteClocks.mu.Unlock()
+
+		if li, ok := clientCtx.RemoteClocks.mu.latencyInfos[serverNodeID]; ok {
 			return errors.Errorf("expected to have removed latencyInfos, but found: %s", li)
 		}
 		return nil
