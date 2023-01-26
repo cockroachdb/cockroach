@@ -119,17 +119,15 @@ func (p *planner) createTenantInternal(
 	tid = roachpb.MustMakeTenantID(tenantID)
 
 	// Initialize the tenant's keyspace.
-	var tenantVersion clusterversion.ClusterVersion
+	tenantActiveVersion := p.EvalContext().Settings.Version.ActiveVersion(ctx)
 	codec := keys.MakeSQLCodec(roachpb.MustMakeTenantID(tenantID))
 	var kvs []roachpb.KeyValue
 	var splits []roachpb.RKey
-	const minVersion = clusterversion.V22_2
 	curVersion := clusterversion.V23_1
 	if p.EvalContext().Settings.Version.IsActive(ctx, curVersion) {
 		// The cluster is running the latest version.
 		// Use this version to create the tenant and bootstrap it using the host
 		// cluster's bootstrapping logic.
-		tenantVersion.Version = clusterversion.ByKey(curVersion)
 		schema := bootstrap.MakeMetadataSchema(
 			codec,
 			initialTenantZoneConfig, /* defaultZoneConfig */
@@ -141,7 +139,6 @@ func (p *planner) createTenantInternal(
 		// Use the previous major version to create the tenant and bootstrap it
 		// just like the previous major version binary would, using hardcoded
 		// initial values.
-		tenantVersion.Version = clusterversion.ByKey(minVersion)
 		kvs, splits, err = bootstrap.InitialValuesForTenantV222(
 			codec,
 			initialTenantZoneConfig, /* defaultZoneConfig */
@@ -160,7 +157,7 @@ func (p *planner) createTenantInternal(
 		// using code which may be too new. The expectation is that the tenant
 		// clusters will be updated to a version only after the system tenant has
 		// been upgraded.
-		tenantSettingKV, err := generateTenantClusterSettingKV(codec, tenantVersion)
+		tenantSettingKV, err := generateTenantClusterSettingKV(codec, tenantActiveVersion)
 		if err != nil {
 			return tid, err
 		}
