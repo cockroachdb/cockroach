@@ -25,7 +25,12 @@ func TestHistogramPrometheus(t *testing.T) {
 	// Regression test against https://github.com/cockroachdb/cockroach/pull/88331.
 	// The output includes buckets for which the upper bound equals the previous
 	// bucket's upper bound.
-	h := metric.NewHistogram(metric.Metadata{}, time.Second, []float64{1, 2, 3, 4, 5, 6, 10, 20, 30})
+	h := metric.NewHistogram(metric.HistogramOptions{
+		Mode:     metric.HistogramModePrometheus,
+		Metadata: metric.Metadata{},
+		Duration: time.Second,
+		Buckets:  []float64{1, 2, 3, 4, 5, 6, 10, 20, 30},
+	})
 	h.RecordValue(1)
 	h.RecordValue(5)
 	h.RecordValue(5)

@@ -170,7 +170,12 @@ func TestComputeSchedulerPercentileAgainstPrometheus(t *testing.T) {
 		}
 
 		// Compare values against metric.Histogram (prometheus-based implementation)
-		promhist := metric.NewHistogram(metric.Metadata{}, time.Hour, hist.Buckets)
+		promhist := metric.NewHistogram(metric.HistogramOptions{
+			Mode:     metric.HistogramModePrometheus,
+			Metadata: metric.Metadata{},
+			Duration: time.Hour,
+			Buckets:  hist.Buckets,
+		})
 		for i := 0; i < len(hist.Counts); i++ {
 			for j := 0; j < int(hist.Counts[i]); j++ {
 				// Since the scheduler buckets are non-inclusive of Upper Bound and prometheus

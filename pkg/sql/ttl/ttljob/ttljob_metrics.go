@@ -96,41 +96,48 @@ func (m *RowLevelTTLAggMetrics) loadMetrics(labelMetrics bool, relation string) 
 }
 
 func makeRowLevelTTLAggMetrics(histogramWindowInterval time.Duration) metric.Struct {
+	sigFigs := 2
 	b := aggmetric.MakeBuilder("relation")
 	ret := &RowLevelTTLAggMetrics{
-		SpanTotalDuration: b.Histogram(
-			metric.Metadata{
+		SpanTotalDuration: b.Histogram(metric.HistogramOptions{
+			Metadata: metric.Metadata{
 				Name:        "jobs.row_level_ttl.span_total_duration",
 				Help:        "Duration for processing a span during row level TTL.",
 				Measurement: "nanoseconds",
 				Unit:        metric.Unit_NANOSECONDS,
 				MetricType:  io_prometheus_client.MetricType_HISTOGRAM,
 			},
-			histogramWindowInterval,
-			metric.LongRunning60mLatencyBuckets,
-		),
-		SelectDuration: b.Histogram(
-			metric.Metadata{
+			MaxVal:   time.Hour.Nanoseconds(),
+			SigFigs:  sigFigs,
+			Duration: histogramWindowInterval,
+			Buckets:  metric.LongRunning60mLatencyBuckets,
+		}),
+		SelectDuration: b.Histogram(metric.HistogramOptions{
+			Metadata: metric.Metadata{
 				Name:        "jobs.row_level_ttl.select_duration",
 				Help:        "Duration for select requests during row level TTL.",
 				Measurement: "nanoseconds",
 				Unit:        metric.Unit_NANOSECONDS,
 				MetricType:  io_prometheus_client.MetricType_HISTOGRAM,
 			},
-			histogramWindowInterval,
-			metric.BatchProcessLatencyBuckets,
-		),
-		DeleteDuration: b.Histogram(
-			metric.Metadata{
+			MaxVal:   time.Minute.Nanoseconds(),
+			SigFigs:  sigFigs,
+			Duration: histogramWindowInterval,
+			Buckets:  metric.BatchProcessLatencyBuckets,
+		}),
+		DeleteDuration: b.Histogram(metric.HistogramOptions{
+			Metadata: metric.Metadata{
 				Name:        "jobs.row_level_ttl.delete_duration",
 				Help:        "Duration for delete requests during row level TTL.",
 				Measurement: "nanoseconds",
 				Unit:        metric.Unit_NANOSECONDS,
 				MetricType:  io_prometheus_client.MetricType_HISTOGRAM,
 			},
-			histogramWindowInterval,
-			metric.BatchProcessLatencyBuckets,
-		),
+			MaxVal:   time.Minute.Nanoseconds(),
+			SigFigs:  sigFigs,
+			Duration: histogramWindowInterval,
+			Buckets:  metric.BatchProcessLatencyBuckets,
+		}),
 		RowSelections: b.Counter(
 			metric.Metadata{
 				Name:        "jobs.row_level_ttl.rows_selected",

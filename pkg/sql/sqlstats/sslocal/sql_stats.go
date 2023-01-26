@@ -75,7 +75,7 @@ func newSQLStats(
 	uniqueStmtFingerprintLimit *settings.IntSetting,
 	uniqueTxnFingerprintLimit *settings.IntSetting,
 	curMemBytesCount *metric.Gauge,
-	maxMemBytesHist *metric.Histogram,
+	maxMemBytesHist metric.IHistogram,
 	insightsWriter insights.WriterProvider,
 	parentMon *mon.BytesMonitor,
 	flushTarget Sink,

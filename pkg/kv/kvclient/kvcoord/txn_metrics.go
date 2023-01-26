@@ -31,14 +31,14 @@ type TxnMetrics struct {
 	RefreshMemoryLimitExceeded    *metric.Counter
 	RefreshAutoRetries            *metric.Counter
 
-	Durations *metric.Histogram
+	Durations metric.IHistogram
 
 	TxnsWithCondensedIntents      *metric.Counter
 	TxnsWithCondensedIntentsGauge *metric.Gauge
 	TxnsRejectedByLockSpanBudget  *metric.Counter
 
 	// Restarts is the number of times we had to restart the transaction.
-	Restarts *metric.Histogram
+	Restarts metric.IHistogram
 
 	// Counts of restart types.
 	RestartsWriteTooOld            telemetry.CounterWithMetric
@@ -264,21 +264,32 @@ var (
 // windowed portions retain data for approximately histogramWindow.
 func MakeTxnMetrics(histogramWindow time.Duration) TxnMetrics {
 	return TxnMetrics{
-		Aborts:                         metric.NewCounter(metaAbortsRates),
-		Commits:                        metric.NewCounter(metaCommitsRates),
-		Commits1PC:                     metric.NewCounter(metaCommits1PCRates),
-		ParallelCommits:                metric.NewCounter(metaParallelCommitsRates),
-		CommitWaits:                    metric.NewCounter(metaCommitWaitCount),
-		RefreshSuccess:                 metric.NewCounter(metaRefreshSuccess),
-		RefreshFail:                    metric.NewCounter(metaRefreshFail),
-		RefreshFailWithCondensedSpans:  metric.NewCounter(metaRefreshFailWithCondensedSpans),
-		RefreshMemoryLimitExceeded:     metric.NewCounter(metaRefreshMemoryLimitExceeded),
-		RefreshAutoRetries:             metric.NewCounter(metaRefreshAutoRetries),
-		Durations:                      metric.NewHistogram(metaDurationsHistograms, histogramWindow, metric.IOLatencyBuckets),
-		TxnsWithCondensedIntents:       metric.NewCounter(metaTxnsWithCondensedIntentSpans),
-		TxnsWithCondensedIntentsGauge:  metric.NewGauge(metaTxnsWithCondensedIntentSpansGauge),
-		TxnsRejectedByLockSpanBudget:   metric.NewCounter(metaTxnsRejectedByLockSpanBudget),
-		Restarts:                       metric.NewHistogram(metaRestartsHistogram, histogramWindow, metric.Count1KBuckets),
+		Aborts:                        metric.NewCounter(metaAbortsRates),
+		Commits:                       metric.NewCounter(metaCommitsRates),
+		Commits1PC:                    metric.NewCounter(metaCommits1PCRates),
+		ParallelCommits:               metric.NewCounter(metaParallelCommitsRates),
+		CommitWaits:                   metric.NewCounter(metaCommitWaitCount),
+		RefreshSuccess:                metric.NewCounter(metaRefreshSuccess),
+		RefreshFail:                   metric.NewCounter(metaRefreshFail),
+		RefreshFailWithCondensedSpans: metric.NewCounter(metaRefreshFailWithCondensedSpans),
+		RefreshMemoryLimitExceeded:    metric.NewCounter(metaRefreshMemoryLimitExceeded),
+		RefreshAutoRetries:            metric.NewCounter(metaRefreshAutoRetries),
+		Durations: metric.NewHistogram(metric.HistogramOptions{
+			Mode:     metric.HistogramModePreferHdrLatency,
+			Metadata: metaDurationsHistograms,
+			Duration: histogramWindow,
+			Buckets:  metric.IOLatencyBuckets,
+		}),
+		TxnsWithCondensedIntents:      metric.NewCounter(metaTxnsWithCondensedIntentSpans),
+		TxnsWithCondensedIntentsGauge: metric.NewGauge(metaTxnsWithCondensedIntentSpansGauge),
+		TxnsRejectedByLockSpanBudget:  metric.NewCounter(metaTxnsRejectedByLockSpanBudget),
+		Restarts: metric.NewHistogram(metric.HistogramOptions{
+			Metadata: metaRestartsHistogram,
+			Duration: histogramWindow,
+			MaxVal:   100,
+			SigFigs:  3,
+			Buckets:  metric.Count1KBuckets,
+		}),
 		RestartsWriteTooOld:            telemetry.NewCounterWithMetric(metaRestartsWriteTooOld),
 		RestartsWriteTooOldMulti:       telemetry.NewCounterWithMetric(metaRestartsWriteTooOldMulti),
 		RestartsSerializable:           telemetry.NewCounterWithMetric(metaRestartsSerializable),

@@ -15,7 +15,6 @@ package aggmetric
 
 import (
 	"strings"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -50,10 +49,8 @@ func (b Builder) Counter(metadata metric.Metadata) *AggCounter {
 }
 
 // Histogram constructs a new AggHistogram with the Builder's labels.
-func (b Builder) Histogram(
-	metadata metric.Metadata, duration time.Duration, buckets []float64,
-) *AggHistogram {
-	return NewHistogram(metadata, duration, buckets, b.labels...)
+func (b Builder) Histogram(opts metric.HistogramOptions) *AggHistogram {
+	return NewHistogram(opts, b.labels...)
 }
 
 type childSet struct {

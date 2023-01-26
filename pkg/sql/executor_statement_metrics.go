@@ -37,11 +37,11 @@ type EngineMetrics struct {
 	SQLOptPlanCacheHits   *metric.Counter
 	SQLOptPlanCacheMisses *metric.Counter
 
-	DistSQLExecLatency    *metric.Histogram
-	SQLExecLatency        *metric.Histogram
-	DistSQLServiceLatency *metric.Histogram
-	SQLServiceLatency     *metric.Histogram
-	SQLTxnLatency         *metric.Histogram
+	DistSQLExecLatency    metric.IHistogram
+	SQLExecLatency        metric.IHistogram
+	DistSQLServiceLatency metric.IHistogram
+	SQLServiceLatency     metric.IHistogram
+	SQLTxnLatency         metric.IHistogram
 	SQLTxnsOpen           *metric.Gauge
 	SQLActiveStatements   *metric.Gauge
 	SQLContendedTxns      *metric.Counter
@@ -70,20 +70,20 @@ func (EngineMetrics) MetricStruct() {}
 
 // StatsMetrics groups metrics related to SQL Stats collection.
 type StatsMetrics struct {
-	SQLStatsMemoryMaxBytesHist  *metric.Histogram
+	SQLStatsMemoryMaxBytesHist  metric.IHistogram
 	SQLStatsMemoryCurBytesCount *metric.Gauge
 
-	ReportedSQLStatsMemoryMaxBytesHist  *metric.Histogram
+	ReportedSQLStatsMemoryMaxBytesHist  metric.IHistogram
 	ReportedSQLStatsMemoryCurBytesCount *metric.Gauge
 
 	DiscardedStatsCount *metric.Counter
 
 	SQLStatsFlushStarted  *metric.Counter
 	SQLStatsFlushFailure  *metric.Counter
-	SQLStatsFlushDuration *metric.Histogram
+	SQLStatsFlushDuration metric.IHistogram
 	SQLStatsRemovedRows   *metric.Counter
 
-	SQLTxnStatsCollectionOverhead *metric.Histogram
+	SQLTxnStatsCollectionOverhead metric.IHistogram
 }
 
 // StatsMetrics is part of the metric.Struct interface.
