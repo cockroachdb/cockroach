@@ -1,6 +1,7 @@
 name: Publish Cluster UI Release
 on:
   workflow_dispatch:
+  pull_request:
   push:
     branches:
       - 'release-*'
@@ -32,10 +33,12 @@ jobs:
       uses: actions/setup-node@v3
       with:
         node-version: 16
+        registry-url: 'https://registry.npmjs.org'
+        always-auth: true
         cache: 'yarn'
         cache-dependency-path: pkg/ui/yarn.lock
       env:
-        NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
     - name: Check if version is published
       id: version-check
@@ -68,13 +71,14 @@ jobs:
         cp ../../../../_bazel/bin/pkg/ui/workspaces/db-console/src/js/protos.* ../db-console/src/js/
         yarn build
 
-    - name: Create version tag and push
-      if: steps.version-check.outputs.published == 'no'
-      run: |
-        TAGNAME="@cockroachlabs/cluster-ui@$(cat ./package.json | jq -r '.version')"
-        git tag $TAGNAME
-        git push origin $TAGNAME
+    # - name: Create version tag and push
+    #   if: steps.version-check.outputs.published == 'no'
+    #   run: |
+    #     TAGNAME="@cockroachlabs/cluster-ui@$(cat ./package.json | jq -r '.version')"
+    #     git tag $TAGNAME
+    #     git push origin $TAGNAME
 
     - name: Publish patch version
       if: steps.version-check.outputs.published == 'no'
-      run: yarn publish --access public --tag ${{ steps.branch-name.outputs.branch }}
+      # run: yarn publish --access public --tag ${{ steps.branch-name.outputs.branch }}
+      run: npm publish --access public --ignore-scripts --tag testing
