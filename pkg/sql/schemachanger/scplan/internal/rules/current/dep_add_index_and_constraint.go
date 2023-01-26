@@ -28,7 +28,7 @@ func init() {
 		func(from, to NodeVars) rel.Clauses {
 			return rel.Clauses{
 				from.Type((*scpb.PrimaryIndex)(nil)),
-				to.TypeFilter(IsSupportedNonIndexBackedConstraint),
+				to.TypeFilter(rulesVersionKey, isSupportedNonIndexBackedConstraint),
 				JoinOnDescID(from, to, "table-id"),
 				JoinOn(
 					from, screl.IndexID,

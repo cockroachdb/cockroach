@@ -26,8 +26,8 @@ func init() {
 		"dependent", "constraint",
 		func(from, to NodeVars) rel.Clauses {
 			return rel.Clauses{
-				from.TypeFilter(IsConstraintDependent),
-				to.TypeFilter(IsConstraint),
+				from.TypeFilter(rulesVersionKey, isConstraintDependent),
+				to.TypeFilter(rulesVersionKey, isConstraint),
 				JoinOnConstraintID(from, to, "table-id", "constraint-id"),
 				StatusesToPublicOrTransient(from, scpb.Status_PUBLIC, to, scpb.Status_PUBLIC),
 			}
