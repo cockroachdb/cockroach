@@ -657,6 +657,11 @@ func (ec *Context) GetIntervalStyle() duration.IntervalStyle {
 	return ec.SessionData().GetIntervalStyle()
 }
 
+// GetCollationEnv returns the collation env.
+func (ec *Context) GetCollationEnv() *tree.CollationEnvironment {
+	return &ec.CollationEnv
+}
+
 // GetDateStyle returns the session date style.
 func (ec *Context) GetDateStyle() pgdate.DateStyle {
 	if ec.SessionData() == nil {
