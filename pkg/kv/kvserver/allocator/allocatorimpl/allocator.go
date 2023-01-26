@@ -934,6 +934,7 @@ func (a *Allocator) computeAction(
 	// actions.
 	haveVoters := len(voterReplicas)
 	decommissioningVoters := storePool.DecommissioningReplicas(voterReplicas)
+	postDecommissionVoters := haveVoters - len(decommissioningVoters)
 	// Node count including dead nodes but excluding
 	// decommissioning/decommissioned nodes.
 	clusterNodes := storePool.ClusterNodeCount()
@@ -975,9 +976,9 @@ func (a *Allocator) computeAction(
 		return action, action.Priority()
 	}
 
-	if haveVoters == neededVoters && len(deadVoters) > 0 {
+	if postDecommissionVoters <= neededVoters && len(deadVoters) > 0 {
 		// Range has dead voter(s). We should up-replicate to add another before
-		// before removing the dead one. This can avoid permanent data loss in cases
+		// removing the dead one. This can avoid permanent data loss in cases
 		// where the node is only temporarily dead, but we remove it from the range
 		// and lose a second node before we can up-replicate (#25392).
 		action = AllocatorReplaceDeadVoter
@@ -986,7 +987,7 @@ func (a *Allocator) computeAction(
 		return action, action.Priority()
 	}
 
-	if haveVoters == neededVoters && len(decommissioningVoters) > 0 {
+	if postDecommissionVoters < neededVoters {
 		// Range has decommissioning voter(s), which should be replaced.
 		action = AllocatorReplaceDecommissioningVoter
 		log.KvDistribution.VEventf(ctx, 3, "%s - replacement for %d decommissioning voters priority=%.2f",
@@ -1041,10 +1042,13 @@ func (a *Allocator) computeAction(
 		return action, action.Priority()
 	}
 
+	decommissioningNonVoters := storePool.DecommissioningReplicas(nonVoterReplicas)
+	postDecommissionNonVoters := haveNonVoters - len(decommissioningNonVoters)
 	liveNonVoters, deadNonVoters := storePool.LiveAndDeadReplicas(
 		nonVoterReplicas, includeSuspectAndDrainingStores,
 	)
-	if haveNonVoters == neededNonVoters && len(deadNonVoters) > 0 {
+
+	if postDecommissionNonVoters <= neededNonVoters && len(deadNonVoters) > 0 {
 		// The range has non-voter(s) on a dead node that we should replace.
 		action = AllocatorReplaceDeadNonVoter
 		log.KvDistribution.VEventf(ctx, 3, "%s - replacement for %d dead non-voters priority=%.2f",
@@ -1052,8 +1056,7 @@ func (a *Allocator) computeAction(
 		return action, action.Priority()
 	}
 
-	decommissioningNonVoters := storePool.DecommissioningReplicas(nonVoterReplicas)
-	if haveNonVoters == neededNonVoters && len(decommissioningNonVoters) > 0 {
+	if postDecommissionNonVoters < neededNonVoters {
 		// The range has non-voter(s) on a decommissioning node that we should
 		// replace.
 		action = AllocatorReplaceDecommissioningNonVoter

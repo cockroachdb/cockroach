@@ -6810,7 +6810,7 @@ func TestAllocatorComputeActionDecommission(t *testing.T) {
 					},
 				},
 			},
-			expectedAction:  AllocatorRemoveDeadVoter,
+			expectedAction:  AllocatorReplaceDeadVoter,
 			live:            []roachpb.StoreID{1, 4},
 			dead:            []roachpb.StoreID{2},
 			decommissioning: []roachpb.StoreID{3},
@@ -6843,7 +6843,7 @@ func TestAllocatorComputeActionDecommission(t *testing.T) {
 					},
 				},
 			},
-			expectedAction:  AllocatorRemoveDeadVoter,
+			expectedAction:  AllocatorReplaceDeadVoter,
 			live:            []roachpb.StoreID{1, 4},
 			dead:            nil,
 			decommissioning: []roachpb.StoreID{3},
@@ -6903,7 +6903,7 @@ func TestAllocatorComputeActionDecommission(t *testing.T) {
 					},
 				},
 			},
-			expectedAction:  AllocatorRemoveDecommissioningVoter,
+			expectedAction:  AllocatorReplaceDecommissioningVoter,
 			live:            []roachpb.StoreID{4},
 			dead:            nil,
 			decommissioning: []roachpb.StoreID{1, 2, 3},
@@ -7090,7 +7090,7 @@ func TestAllocatorComputeActionWithStorePoolDecommission(t *testing.T) {
 					},
 				},
 			},
-			expectedAction:  AllocatorRemoveDeadVoter,
+			expectedAction:  AllocatorReplaceDeadVoter,
 			live:            []roachpb.StoreID{1, 4},
 			dead:            []roachpb.StoreID{2},
 			decommissioning: []roachpb.StoreID{3},
@@ -7123,7 +7123,7 @@ func TestAllocatorComputeActionWithStorePoolDecommission(t *testing.T) {
 					},
 				},
 			},
-			expectedAction:  AllocatorRemoveDeadVoter,
+			expectedAction:  AllocatorReplaceDeadVoter,
 			live:            []roachpb.StoreID{1, 4},
 			dead:            nil,
 			decommissioning: []roachpb.StoreID{3},
@@ -7183,7 +7183,7 @@ func TestAllocatorComputeActionWithStorePoolDecommission(t *testing.T) {
 					},
 				},
 			},
-			expectedAction:  AllocatorRemoveDecommissioningVoter,
+			expectedAction:  AllocatorReplaceDecommissioningVoter,
 			live:            []roachpb.StoreID{4},
 			dead:            nil,
 			decommissioning: []roachpb.StoreID{1, 2, 3},
@@ -7330,6 +7330,7 @@ func TestAllocatorComputeActionDynamicNumReplicas(t *testing.T) {
 	// set. We are checking that the effective replication factor is rounded down
 	// to the number of stores which are not decommissioned or decommissioning.
 	testCases := []struct {
+		name                string
 		storeList           []roachpb.StoreID
 		expectedNumReplicas int
 		expectedAction      AllocatorAction
@@ -7342,9 +7343,10 @@ func TestAllocatorComputeActionDynamicNumReplicas(t *testing.T) {
 			// Four known stores, three of them are decommissioning, so effective
 			// replication factor would be 1 if we hadn't decided that we'll never
 			// drop past 3, so 3 it is.
+			name:                "four replicas with three decommissioning",
 			storeList:           []roachpb.StoreID{1, 2, 3, 4},
 			expectedNumReplicas: 3,
-			expectedAction:      AllocatorRemoveDecommissioningVoter,
+			expectedAction:      AllocatorReplaceDecommissioningVoter,
 			live:                []roachpb.StoreID{4},
 			unavailable:         nil,
 			dead:                nil,
@@ -7352,6 +7354,7 @@ func TestAllocatorComputeActionDynamicNumReplicas(t *testing.T) {
 		},
 		{
 			// Ditto.
+			name:                "three replicas with three decommissioning",
 			storeList:           []roachpb.StoreID{1, 2, 3},
 			expectedNumReplicas: 3,
 			expectedAction:      AllocatorReplaceDecommissioningVoter,
@@ -7365,6 +7368,7 @@ func TestAllocatorComputeActionDynamicNumReplicas(t *testing.T) {
 			// factor would be even (four), in which case we drop down one more
 			// to three. Then the right thing becomes removing the dead replica
 			// from the range at hand, rather than trying to replace it.
+			name:                "four replicas with one dead",
 			storeList:           []roachpb.StoreID{1, 2, 3, 4},
 			expectedNumReplicas: 3,
 			expectedAction:      AllocatorRemoveDeadVoter,
@@ -7378,6 +7382,7 @@ func TestAllocatorComputeActionDynamicNumReplicas(t *testing.T) {
 			// in the system which amounts to an effective replication factor
 			// of three (avoiding the even number). Adding a replica is more
 			// important than replacing the dead one.
+			name:                "two replicas with one dead",
 			storeList:           []roachpb.StoreID{1, 4},
 			expectedNumReplicas: 3,
 			expectedAction:      AllocatorAddVoter,
@@ -7388,6 +7393,7 @@ func TestAllocatorComputeActionDynamicNumReplicas(t *testing.T) {
 		},
 		{
 			// Similar to above, but nothing to do.
+			name:                "three replicas with nothing to do",
 			storeList:           []roachpb.StoreID{1, 2, 3},
 			expectedNumReplicas: 3,
 			expectedAction:      AllocatorConsiderRebalance,
@@ -7400,6 +7406,7 @@ func TestAllocatorComputeActionDynamicNumReplicas(t *testing.T) {
 			// Effective replication factor can't dip below three (unless the
 			// span config explicitly asks for that, which it does not), so three
 			// it is and we are under-replicaed.
+			name:                "RF stays above three",
 			storeList:           []roachpb.StoreID{1, 2},
 			expectedNumReplicas: 3,
 			expectedAction:      AllocatorAddVoter,
@@ -7410,6 +7417,7 @@ func TestAllocatorComputeActionDynamicNumReplicas(t *testing.T) {
 		},
 		{
 			// Three and happy.
+			name:                "three and happy",
 			storeList:           []roachpb.StoreID{1, 2, 3},
 			expectedNumReplicas: 3,
 			expectedAction:      AllocatorConsiderRebalance,
@@ -7420,6 +7428,7 @@ func TestAllocatorComputeActionDynamicNumReplicas(t *testing.T) {
 		},
 		{
 			// Three again, on account of avoiding the even four.
+			name:                "avoid even replicas",
 			storeList:           []roachpb.StoreID{1, 2, 3, 4},
 			expectedNumReplicas: 3,
 			expectedAction:      AllocatorRemoveVoter,
@@ -7431,6 +7440,7 @@ func TestAllocatorComputeActionDynamicNumReplicas(t *testing.T) {
 		{
 			// The usual case in which there are enough nodes to accommodate the
 			// span config.
+			name:                "five and happy",
 			storeList:           []roachpb.StoreID{1, 2, 3, 4, 5},
 			expectedNumReplicas: 5,
 			expectedAction:      AllocatorConsiderRebalance,
@@ -7442,6 +7452,7 @@ func TestAllocatorComputeActionDynamicNumReplicas(t *testing.T) {
 		{
 			// No dead or decommissioning node and enough nodes around, so
 			// sticking with the span config.
+			name:                "five and happy with one unavailable",
 			storeList:           []roachpb.StoreID{1, 2, 3, 4, 5},
 			expectedNumReplicas: 5,
 			expectedAction:      AllocatorConsiderRebalance,
@@ -7452,6 +7463,7 @@ func TestAllocatorComputeActionDynamicNumReplicas(t *testing.T) {
 		},
 		{
 			// Ditto.
+			name:                "five and happy with two unavailable",
 			storeList:           []roachpb.StoreID{1, 2, 3, 4, 5},
 			expectedNumReplicas: 5,
 			expectedAction:      AllocatorConsiderRebalance,
@@ -7462,6 +7474,7 @@ func TestAllocatorComputeActionDynamicNumReplicas(t *testing.T) {
 		},
 		{
 			// Ditto, but we've lost quorum.
+			name:                "five with lost quorum",
 			storeList:           []roachpb.StoreID{1, 2, 3, 4, 5},
 			expectedNumReplicas: 5,
 			expectedAction:      AllocatorRangeUnavailable,
@@ -7474,6 +7487,7 @@ func TestAllocatorComputeActionDynamicNumReplicas(t *testing.T) {
 			// Ditto (dead nodes don't reduce NumReplicas, only decommissioning
 			// or decommissioned do, and both correspond to the 'decommissioning'
 			// slice in these tests).
+			name:                "five with lost quorum on one dead and one unavailable",
 			storeList:           []roachpb.StoreID{1, 2, 3, 4, 5},
 			expectedNumReplicas: 5,
 			expectedAction:      AllocatorReplaceDeadVoter,
@@ -7485,6 +7499,7 @@ func TestAllocatorComputeActionDynamicNumReplicas(t *testing.T) {
 		{
 			// Avoiding four, so getting three, and since there is no dead store
 			// the most important thing is removing a decommissioning replica.
+			name:                "five with one decommissioning and one unavailable",
 			storeList:           []roachpb.StoreID{1, 2, 3, 4, 5},
 			expectedNumReplicas: 3,
 			expectedAction:      AllocatorRemoveDecommissioningVoter,
@@ -7514,7 +7529,7 @@ func TestAllocatorComputeActionDynamicNumReplicas(t *testing.T) {
 		roachpb.RKey(keys.SystemPrefix),
 	} {
 		for _, c := range testCases {
-			t.Run(prefixKey.String(), func(t *testing.T) {
+			t.Run(fmt.Sprintf("%s%s", c.name, prefixKey), func(t *testing.T) {
 				numNodes = len(c.storeList) - len(c.decommissioning)
 				mockStorePool(sp, c.live, c.unavailable, c.dead,
 					c.decommissioning, nil, nil)
