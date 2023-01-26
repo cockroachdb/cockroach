@@ -1183,7 +1183,7 @@ func TestReacquireLeaseOnRestart(t *testing.T) {
 						txn.ResetObservedTimestamps()
 						now := s.Clock().NowAsClockTimestamp()
 						txn.UpdateObservedTimestamp(s.(*server.TestServer).Gossip().NodeID.Get(), now)
-						return roachpb.NewErrorWithTxn(roachpb.NewReadWithinUncertaintyIntervalError(now.ToTimestamp(), now, txn, now.ToTimestamp()), txn)
+						return roachpb.NewErrorWithTxn(roachpb.NewReadWithinUncertaintyIntervalError(now.ToTimestamp(), now, txn, now.ToTimestamp(), now), txn)
 					}
 				}
 			}
@@ -1267,7 +1267,7 @@ func TestFlushUncommitedDescriptorCacheOnRestart(t *testing.T) {
 					txn.ResetObservedTimestamps()
 					now := s.Clock().NowAsClockTimestamp()
 					txn.UpdateObservedTimestamp(s.(*server.TestServer).Gossip().NodeID.Get(), now)
-					return roachpb.NewErrorWithTxn(roachpb.NewReadWithinUncertaintyIntervalError(now.ToTimestamp(), now, txn, now.ToTimestamp()), txn)
+					return roachpb.NewErrorWithTxn(roachpb.NewReadWithinUncertaintyIntervalError(now.ToTimestamp(), now, txn, now.ToTimestamp(), now), txn)
 				}
 			}
 			return nil
@@ -1354,7 +1354,8 @@ func TestDistSQLRetryableError(t *testing.T) {
 										fArgs.Hdr.Timestamp, /* readTS */
 										hlc.ClockTimestamp{},
 										nil,
-										hlc.Timestamp{})
+										hlc.Timestamp{},
+										hlc.ClockTimestamp{})
 									errTxn := fArgs.Hdr.Txn.Clone()
 									errTxn.UpdateObservedTimestamp(roachpb.NodeID(2), hlc.ClockTimestamp{})
 									pErr := roachpb.NewErrorWithTxn(err, errTxn)
