@@ -739,7 +739,7 @@ func testTxnReadWithinUncertaintyIntervalAfterIntentResolution(
 		require.Equal(t, readerTxn.ReadTimestamp, rwuiErr.ReadTimestamp)
 		require.Equal(t, readerTxn.GlobalUncertaintyLimit, rwuiErr.GlobalUncertaintyLimit)
 		require.Equal(t, readerTxn.ObservedTimestamps, rwuiErr.ObservedTimestamps)
-		require.Equal(t, writerTxn.WriteTimestamp, rwuiErr.ExistingTimestamp)
+		require.Equal(t, writerTxn.WriteTimestamp, rwuiErr.ValueTimestamp)
 	}
 }
 

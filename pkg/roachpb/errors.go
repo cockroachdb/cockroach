@@ -917,17 +917,16 @@ var _ ErrorDetailInterface = &WriteTooOldError{}
 var _ transactionRestartError = &WriteTooOldError{}
 
 // NewReadWithinUncertaintyIntervalError creates a new uncertainty retry error.
-// The read and existing timestamps as well as the txn are purely informational
-// and used for formatting the error message.
+// The read and value timestamps as well as the txn are purely informational and
+// used for formatting the error message.
 // TODO(nvanbenschoten): change localUncertaintyLimit to hlc.ClockTimestamp.
-// TODO(nvanbenschoten): change existingTS to versionTs.
 // TODO(nvanbenschoten): add localTs and include in error string.
 func NewReadWithinUncertaintyIntervalError(
-	readTS, existingTS, localUncertaintyLimit hlc.Timestamp, txn *Transaction,
+	readTS, valueTS, localUncertaintyLimit hlc.Timestamp, txn *Transaction,
 ) *ReadWithinUncertaintyIntervalError {
 	rwue := &ReadWithinUncertaintyIntervalError{
 		ReadTimestamp:         readTS,
-		ExistingTimestamp:     existingTS,
+		ValueTimestamp:        valueTS,
 		LocalUncertaintyLimit: localUncertaintyLimit,
 	}
 	if txn != nil {
@@ -947,7 +946,7 @@ func (e *ReadWithinUncertaintyIntervalError) printError(p Printer) {
 		"previous write with future timestamp %s within uncertainty interval `t <= "+
 		"(local=%v, global=%v)`; "+
 		"observed timestamps: ",
-		e.ReadTimestamp, e.ExistingTimestamp, e.LocalUncertaintyLimit, e.GlobalUncertaintyLimit)
+		e.ReadTimestamp, e.ValueTimestamp, e.LocalUncertaintyLimit, e.GlobalUncertaintyLimit)
 
 	p.Printf("[")
 	for i, ot := range observedTimestampSlice(e.ObservedTimestamps) {
@@ -987,7 +986,7 @@ func (e *ReadWithinUncertaintyIntervalError) RetryTimestamp() hlc.Timestamp {
 	// If the reader encountered a newer write within the uncertainty interval,
 	// we advance the txn's timestamp just past the uncertain value's timestamp.
 	// This ensures that we read above the uncertain value on a retry.
-	ts := e.ExistingTimestamp.Next()
+	ts := e.ValueTimestamp.Next()
 	// In addition to advancing past the uncertainty value's timestamp, we also
 	// advance the txn's timestamp up to the local uncertainty limit on the node
 	// which hit the error. This ensures that no future read after the retry on
