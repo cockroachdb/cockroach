@@ -85,7 +85,7 @@ func (h *HTTPHandler) HandleRequest(w http.ResponseWriter, req *http.Request) {
 				}
 				if !wc.IsRunning() {
 					wc.Start(captureFS, actionJSON.CaptureDirectory)
-					err = s.Engine().CreateCheckpoint(captureFS.PathJoin(actionJSON.CaptureDirectory, "checkpoint"))
+					err = s.Engine().CreateCheckpoint(captureFS.PathJoin(actionJSON.CaptureDirectory, "checkpoint"), nil)
 				}
 				if err != nil {
 					return err

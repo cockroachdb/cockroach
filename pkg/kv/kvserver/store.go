@@ -2870,18 +2870,20 @@ func (s *Store) checkpointsDir() string {
 	return filepath.Join(s.engine.GetAuxiliaryDir(), "checkpoints")
 }
 
-// checkpoint creates a RocksDB checkpoint in the auxiliary directory with the
-// provided tag used in the filepath. The filepath for the checkpoint directory
-// is returned.
-func (s *Store) checkpoint(ctx context.Context, tag string) (string, error) {
+// checkpoint creates a Pebble checkpoint in the auxiliary directory with the
+// provided tag used in the filepath. Returns the path to the created checkpoint
+// directory.
+//
+// Creates the checkpoint of the entire storage if the provided range descriptor
+// is nil. Otherwise, creates a "narrow" checkpoint that includes the provided
+// range, and possibly a few neighbouring ranges.
+func (s *Store) checkpoint(tag string, spans []roachpb.Span) (string, error) {
 	checkpointBase := s.checkpointsDir()
 	_ = s.engine.MkdirAll(checkpointBase)
-
 	checkpointDir := filepath.Join(checkpointBase, tag)
-	if err := s.engine.CreateCheckpoint(checkpointDir); err != nil {
+	if err := s.engine.CreateCheckpoint(checkpointDir, spans); err != nil {
 		return "", err
 	}
-
 	return checkpointDir, nil
 }
 
