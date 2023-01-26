@@ -324,6 +324,7 @@ import (
 //            Cannot be combined with noticetrace.
 //      - noticetrace: runs the query and compares only the notices that
 //						appear. Cannot be combined with kvtrace.
+//      - nodeidx=N: runs the query on node N of the cluster.
 //
 //    The label is optional. If specified, the test runner stores a hash
 //    of the results of the query under the given label. If the label is
