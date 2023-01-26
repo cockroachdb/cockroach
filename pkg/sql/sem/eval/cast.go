@@ -149,10 +149,12 @@ func performCastWithoutPrecisionTruncation(
 			}
 			ba = &tree.DBitArray{BitArray: res}
 		}
-		if truncateWidth {
-			ba = tree.FormatBitArrayToType(ba, t)
+		if ba != nil {
+			if truncateWidth {
+				ba = tree.FormatBitArrayToType(ba, t)
+			}
+			return ba, nil
 		}
-		return ba, nil
 
 	case types.BoolFamily:
 		switch v := d.(type) {
