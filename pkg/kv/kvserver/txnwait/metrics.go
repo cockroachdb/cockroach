@@ -22,8 +22,8 @@ type Metrics struct {
 	PusherWaiting  *metric.Gauge
 	QueryWaiting   *metric.Gauge
 	PusherSlow     *metric.Gauge
-	PusherWaitTime *metric.Histogram
-	QueryWaitTime  *metric.Histogram
+	PusherWaitTime metric.IHistogram
+	QueryWaitTime  metric.IHistogram
 	DeadlocksTotal *metric.Counter
 }
 
@@ -66,27 +66,31 @@ func NewMetrics(histogramWindowInterval time.Duration) *Metrics {
 			},
 		),
 
-		PusherWaitTime: metric.NewHistogram(
-			metric.Metadata{
+		PusherWaitTime: metric.NewHistogram(metric.HistogramOptions{
+			Metadata: metric.Metadata{
 				Name:        "txnwaitqueue.pusher.wait_time",
 				Help:        "Histogram of durations spent in queue by pushers",
 				Measurement: "Pusher wait time",
 				Unit:        metric.Unit_NANOSECONDS,
 			},
-			histogramWindowInterval,
-			metric.LongRunning60mLatencyBuckets,
-		),
+			MaxVal:   time.Hour.Nanoseconds(),
+			SigFigs:  1,
+			Duration: histogramWindowInterval,
+			Buckets:  metric.LongRunning60mLatencyBuckets,
+		}),
 
-		QueryWaitTime: metric.NewHistogram(
-			metric.Metadata{
+		QueryWaitTime: metric.NewHistogram(metric.HistogramOptions{
+			Metadata: metric.Metadata{
 				Name:        "txnwaitqueue.query.wait_time",
 				Help:        "Histogram of durations spent in queue by queries",
 				Measurement: "Query wait time",
 				Unit:        metric.Unit_NANOSECONDS,
 			},
-			histogramWindowInterval,
-			metric.LongRunning60mLatencyBuckets,
-		),
+			MaxVal:   time.Hour.Nanoseconds(),
+			SigFigs:  1,
+			Duration: histogramWindowInterval,
+			Buckets:  metric.LongRunning60mLatencyBuckets,
+		}),
 
 		DeadlocksTotal: metric.NewCounter(
 			metric.Metadata{
