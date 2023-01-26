@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/stretchr/testify/require"
 )
 
@@ -320,4 +321,45 @@ func newTenantInstance(
 	}
 	c.Run(ctx, c.Node(node), "chmod", "0600", filepath.Join("certs", key))
 	return &inst, nil
+}
+
+// createTenantAdminRole creates a role that can be used to log into a secure cluster's db console.
+func createTenantAdminRole(t test.Test, tenantName string, tenantSQL *sqlutils.SQLRunner) {
+	username := "secure"
+	password := "roach"
+	tenantSQL.Exec(t, fmt.Sprintf(`CREATE ROLE %s WITH LOGIN PASSWORD '%s'`, username, password))
+	tenantSQL.Exec(t, fmt.Sprintf(`GRANT ADMIN TO %s`, username))
+	t.L().Printf(`Log into %s db console with username "%s" and password "%s"`,
+		tenantName, username, password)
+}
+
+// createInMemoryTenant runs through the necessary steps to create an in-memory tenant without
+// resource limits.
+func createInMemoryTenant(
+	ctx context.Context,
+	t test.Test,
+	c cluster.Cluster,
+	tenantName string,
+	nodes option.NodeListOption,
+	secure bool,
+) {
+	sysSQL := sqlutils.MakeSQLRunner(c.Conn(ctx, t.L(), nodes.RandNode()[0]))
+	sysSQL.Exec(t, "CREATE TENANT $1", tenantName)
+	sysSQL.Exec(t, "ALTER TENANT $1 START SERVICE SHARED", tenantName)
+
+	// Ensure the tenant server is ready to accept queries.
+	tenantConn := c.Conn(ctx, t.L(), nodes.RandNode()[0], option.TenantName(tenantName))
+	tenantSQL := sqlutils.MakeSQLRunner(tenantConn)
+	tenantSQL.ExecSucceedsSoon(t, `SELECT 1`)
+
+	// Currently, a tenant has by default a 10m RU burst limit, which can be
+	// reached during these tests. To prevent RU limit throttling, add 10B RUs to
+	// the tenant.
+	var tenantID int
+	sysSQL.QueryRow(t, `SELECT id FROM [SHOW TENANT $1]`, tenantName).Scan(&tenantID)
+	sysSQL.Exec(t, `SELECT crdb_internal.update_tenant_resource_limits($1, 10000000000, 0,
+10000000000, now(), 0);`, tenantID)
+	if secure {
+		createTenantAdminRole(t, tenantName, tenantSQL)
+	}
 }
