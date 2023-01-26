@@ -86,6 +86,7 @@ func RegisterTests(r registry.Registry) {
 	registerMultiTenantDistSQL(r)
 	registerMultiTenantTPCH(r)
 	registerMultiTenantUpgrade(r)
+	registerMultiTenantSharedProcess(r)
 	registerNetwork(r)
 	registerNodeJSPostgres(r)
 	registerPebbleWriteThroughput(r)
