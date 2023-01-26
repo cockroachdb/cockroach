@@ -72,6 +72,13 @@ func TestLogic_tmp(t *testing.T) {
 	logictest.RunLogicTests(t, logictest.TestServerArgs{}, configIdx, glob)
 }
 
+func TestLogic_testserver_22_2_23_1_role_members_user_ids_upgrade(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "testserver_22.2_23.1_role_members_user_ids_upgrade")
+}
+
 func TestLogic_testserver_upgrade_node(
 	t *testing.T,
 ) {
