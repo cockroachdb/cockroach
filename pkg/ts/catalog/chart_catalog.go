@@ -496,10 +496,16 @@ var charts = []sectionDescription{
 			{
 				Title: "Loops",
 				Metrics: []string{
-					"rpc.heartbeats.loops.exited",
-					"rpc.heartbeats.loops.started",
+					"rpc.heartbeats.connection_failures",
 				},
 				AxisLabel: "Heartbeat Loops",
+			},
+			{
+				Title: "Latency",
+				Metrics: []string{
+					"rpc.heartbeats.round-trip.latency",
+				},
+				AxisLabel: "Heartbeat Latency",
 			},
 		},
 	},

@@ -12,12 +12,18 @@ package rpc
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/cenkalti/backoff"
 	circuit "github.com/cockroachdb/circuitbreaker"
+	circuitbreaker "github.com/cockroachdb/cockroach/pkg/util/circuit"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	"github.com/facebookgo/clock"
 )
 
@@ -116,4 +122,123 @@ func (r breakerLogger) Debugf(format string, v ...interface{}) {
 
 func (r breakerLogger) Infof(format string, v ...interface{}) {
 	log.Ops.InfofDepth(r.ctx, 1, format, v...)
+}
+
+// newPeerBreaker returns circuit breaker that trips when connection (associated
+// with provided connKey) is failed. The breaker's probe *is* the heartbeat loop
+// and is thus running at all times. The exception is a decommissioned node, for
+// which the probe simply exits (any future connection attempts to the same peer
+// will trigger the probe but the probe will exit again).
+func (rpcCtx *Context) newPeerBreaker(k connKey) *circuitbreaker.Breaker {
+	ctx := rpcCtx.makeDialCtx(k.targetAddr, k.nodeID, k.class)
+	breaker := circuitbreaker.NewBreaker(circuitbreaker.Options{
+		Name: "breaker", // log tags already represent `k`
+		AsyncProbe: func(report func(error), done func()) {
+			if err := rpcCtx.Stopper.RunAsyncTask(ctx, fmt.Sprintf("conn to n%d@%s/%s", k.nodeID, k.targetAddr, k.class), func(ctx context.Context) {
+				var t timeutil.Timer
+				defer t.Stop()
+				defer done()
+				// Immediately run probe after breaker circuit is tripped, optimizing for the
+				// case in which we can immediately reconnect.
+				t.Reset(0)
+				for {
+					// INVARIANT: we have a peer here and we're the only one heartbeating
+					// the peer (guaranteed by the breaker, since we're its probe).
+
+					var decommissioned bool
+					var conn *Connection
+					rpcCtx.m.inspectPeer(k, func(k connKey, p *peer) {
+						conn = p.c
+						decommissioned = p.decommissioned
+					})
+
+					if decommissioned {
+						// For decommissioned node, don't attempt to maintain
+						// connection or change error, simply remain in the
+						// same state.
+						return
+					}
+
+					select {
+					case <-rpcCtx.Stopper.ShouldQuiesce():
+						select {
+						case <-conn.initialHeartbeatDone:
+						default:
+							conn.err.Store(errQuiescing)
+							close(conn.initialHeartbeatDone)
+						}
+						return
+					case <-t.C:
+						t.Read = true
+						t.Reset(rpcCtx.heartbeatInterval)
+					}
+
+					err := rpcCtx.runHeartbeat(ctx, conn, k, func() {
+						rpcCtx.m.withPeer(k, func(k connKey, p *peer) {
+							p.disconnected = time.Time{}
+						})
+						report(nil) // successful heartbeat
+					})
+
+					// TODO(tbg): the string matching is a bad hack, we're getting a gRPC error if *we* are the decommissioned
+					// node and need to react to that.
+					if errors.Is(err, errMarkDecommissioned) || (err != nil && strings.Contains(err.Error(), "permanently removed")) {
+						rpcCtx.m.withPeer(k, func(k connKey, p *peer) {
+							p.decommissioned = true
+						})
+						// Leave the torn down connection in place and exit the probe.
+						// The early return above will do the same for all future attempts
+						// to connect, so we don't enter `runHeartbeat` on the next probe
+						// attempt.
+						return
+					}
+
+					// Heartbeat loop ended. Report the error and reset connection for next
+					// attempt.
+					if ctx.Err() != nil {
+						// Heartbeat loop likely ended due to shutdown, so don't report a
+						// spurious error and just exit.
+						return
+					}
+					report(err)
+					// Make a new connection and loop around for next attempt. While we wait
+					// to reconnect, callers will receive this new connection and block on
+					// it, meaning we avoid busy loops.
+					rpcCtx.m.withPeer(k, func(k connKey, p *peer) {
+						p.c = newConnectionToNodeID(k.nodeID, k.class)
+						if p.disconnected.IsZero() {
+							p.disconnected = timeutil.Now()
+						}
+					})
+					// Either way, loop around.
+				}
+			}); err != nil {
+				// Stopper draining. We need to terminate the connection.
+				report(err)
+				// NB: can't acquire *write* mu here, as callers might be holding the
+				// RLock. But luckily we're good with just the RLock here too.
+				// https://cockroachlabs.slack.com/archives/C04G3B34PEZ/p1679436231468329
+				//
+				// NB2: it turns out we even hold the write lock (there's a breaker access
+				// in .TryInsert).
+				go func() {
+					rpcCtx.m.inspectPeer(k, func(k connKey, p *peer) {
+						select {
+						case <-p.c.initialHeartbeatDone:
+						default:
+							p.c.err.Store(errQuiescing)
+							close(p.c.initialHeartbeatDone)
+						}
+					})
+					done()
+				}()
+			}
+		},
+		EventHandler: &circuitbreaker.EventLogger{
+			Log: func(buf redact.StringBuilder) {
+				log.Health.Infof(ctx, "%s", buf)
+			},
+		},
+	})
+	return breaker
 }
