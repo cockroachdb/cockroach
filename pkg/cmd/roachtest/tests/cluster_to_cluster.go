@@ -219,10 +219,14 @@ func setupC2C(
 	srcClusterSettings(t, srcSQL)
 	destClusterSettings(t, destSQL)
 
+	createTenantAdminRole(t, "src-system", srcSQL)
+	createTenantAdminRole(t, "dst-system", destSQL)
+
 	srcTenantID, destTenantID := 2, 2
 	srcTenantName := "src-tenant"
 	destTenantName := "destination-tenant"
-	srcSQL.Exec(t, fmt.Sprintf(`CREATE TENANT %q`, srcTenantName))
+
+	createInMemoryTenant(ctx, t, c, srcTenantName, srcCluster, true)
 
 	pgURL, err := copyPGCertsAndMakeURL(ctx, t, c, srcNode, srcClusterSetting.PGUrlCertsDir, addr[0])
 	require.NoError(t, err)
@@ -241,33 +245,11 @@ func setupC2C(
 		db:    destDB,
 		nodes: dstCluster}
 
-	// Currently, a tenant has by default a 10m RU burst limit, which can be
-	// reached during these tests. To prevent RU limit throttling, add 10B RUs to
-	// the tenant.
-	srcTenantInfo.sql.Exec(t, `SELECT crdb_internal.update_tenant_resource_limits($1, 10000000000, 0,
-10000000000, now(), 0);`, srcTenantInfo.ID)
-
-	createSystemRole(t, srcTenantInfo.name+" system tenant", srcTenantInfo.sql)
-	createSystemRole(t, srcTenantInfo.name+" system tenant", destTenantInfo.sql)
-
-	srcTenantDB := c.Conn(ctx, t.L(), srcNode[0], option.TenantName(srcTenantName))
-	srcTenantSQL := sqlutils.MakeSQLRunner(srcTenantDB)
-	createSystemRole(t, destTenantInfo.name+" app tenant", srcTenantSQL)
 	return &c2cSetup{
 		src:          srcTenantInfo,
 		dst:          destTenantInfo,
 		workloadNode: workloadNode,
 		metrics:      c2cMetrics{}}
-}
-
-// createSystemRole creates a role that can be used to log into the cluster's db console
-func createSystemRole(t test.Test, name string, sql *sqlutils.SQLRunner) {
-	username := "secure"
-	password := "roach"
-	sql.Exec(t, fmt.Sprintf(`CREATE ROLE %s WITH LOGIN PASSWORD '%s'`, username, password))
-	sql.Exec(t, fmt.Sprintf(`GRANT ADMIN TO %s`, username))
-	t.L().Printf(`Log into the %s db console with username "%s" and password "%s"`,
-		name, username, password)
 }
 
 type streamingWorkload interface {
