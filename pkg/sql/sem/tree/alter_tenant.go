@@ -10,8 +10,6 @@
 
 package tree
 
-import "github.com/cockroachdb/errors"
-
 // ReplicationCutoverTime represent the user-specified cutover time
 type ReplicationCutoverTime struct {
 	Timestamp Expr
@@ -54,20 +52,6 @@ func (n *AlterTenantReplication) Format(ctx *FmtCtx) {
 type TenantCapability struct {
 	Name  string
 	Value Expr
-}
-
-func (c *TenantCapability) GetBoolValue(isRevoke bool) (bool, error) {
-	if c.Value == nil {
-		return false, nil
-	}
-	if isRevoke {
-		return false, errors.New("revoke must not specify value")
-	}
-	dBool, ok := AsDBool(c.Value)
-	if !ok {
-		return false, errors.New("value must be bool")
-	}
-	return bool(dBool), nil
 }
 
 // AlterTenantCapability represents an ALTER TENANT CAPABILITY statement.

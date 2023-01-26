@@ -3,16 +3,19 @@
 statement ok
 SELECT crdb_internal.create_tenant(5, 'five')
 
-statement error error parsing capability "not_a_capability": invalid capability
+statement error unknown capability: "not_a_capability"
 ALTER TENANT [5] GRANT CAPABILITY not_a_capability=true
 
-statement error error parsing capability "can_admin_split": value must be bool
+statement error argument of ALTER TENANT CAPABILITY can_admin_split must be type bool, not type int
 ALTER TENANT [5] GRANT CAPABILITY can_admin_split=1
 
-statement error error parsing capability "not_a_capability": invalid capability
+statement error parameter "can_admin_split" requires a Boolean value
+ALTER TENANT [5] GRANT CAPABILITY can_admin_split=NULL
+
+statement error unknown capability: "not_a_capability"
 ALTER TENANT [5] REVOKE CAPABILITY not_a_capability
 
-statement error error parsing capability "can_admin_split": revoke must not specify value
+statement error no value allowed in revoke: "can_admin_split"
 ALTER TENANT [5] REVOKE CAPABILITY can_admin_split=false
 
 query ITTTT colnames
@@ -24,6 +27,10 @@ id  name  status  capability_name    capability_value
 
 statement ok
 ALTER TENANT [5] GRANT CAPABILITY can_admin_split=true
+
+# Check that composite expressions are evaluated properly.
+statement ok
+ALTER TENANT [5] GRANT CAPABILITY can_admin_split=(2=1+1)
 
 query ITTTT colnames
 SHOW TENANT 'five' WITH CAPABILITIES
