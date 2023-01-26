@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/errors"
 )
 
 // CheckDatumTypeFitsColumnType verifies that a given scalar value
@@ -80,12 +81,16 @@ func CanHaveCompositeKeyEncoding(typ *types.T) bool {
 		types.GeometryFamily,
 		types.GeographyFamily,
 		types.EnumFamily,
-		types.Box2DFamily:
+		types.Box2DFamily,
+		types.VoidFamily,
+		types.EncodedKeyFamily,
+		types.TSQueryFamily,
+		types.TSVectorFamily:
 		return false
 	case types.UnknownFamily,
 		types.AnyFamily:
-		fallthrough
-	default:
 		return true
+	default:
+		panic(errors.AssertionFailedf("unsupported column family for type %s", typ.SQLString()))
 	}
 }

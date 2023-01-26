@@ -638,7 +638,7 @@ func (r *testRunner) runWorker(
 		// Now run the test.
 		l.PrintfCtx(ctx, "starting test: %s:%d", testToRun.spec.Name, testToRun.runNum)
 
-		github := newGithubIssues(r.config.disableIssue, c, vmCreateOpts, l)
+		github := newGithubIssues(r.config.disableIssue, c, vmCreateOpts)
 
 		if clusterCreateErr != nil {
 			// N.B. cluster creation must have failed...
@@ -648,7 +648,7 @@ func (r *testRunner) runWorker(
 			// Generate failure reason and mark the test failed to preclude fetching (cluster) artifacts.
 			t.Error(clusterCreateErr)
 			// N.B. issue title is of the form "roachtest: ${t.spec.Name} failed" (see UnitTestFormatter).
-			if err := github.MaybePost(t, t.failureMsg()); err != nil {
+			if err := github.MaybePost(t, l, t.failureMsg()); err != nil {
 				shout(ctx, l, stdout, "failed to post issue: %s", err)
 			}
 		} else {
@@ -841,7 +841,7 @@ func (r *testRunner) runTest(
 
 			shout(ctx, l, stdout, "--- FAIL: %s (%s)\n%s", runID, durationStr, output)
 
-			if err := github.MaybePost(t, output); err != nil {
+			if err := github.MaybePost(t, l, output); err != nil {
 				shout(ctx, l, stdout, "failed to post issue: %s", err)
 			}
 		} else {

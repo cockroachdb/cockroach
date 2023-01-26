@@ -327,9 +327,11 @@ func checkDMSNoPKTableError(ctx context.Context, t test.Test, dmsCli *dms.Client
 					}
 				}
 				for _, task := range dmsTasks.ReplicationTasks {
-					if task.ReplicationTaskStats.TablesErrored == 1 {
-						t.L().Printf("table error was found")
-						return nil
+					if task.ReplicationTaskStats != nil {
+						if task.ReplicationTaskStats.TablesErrored == 1 {
+							t.L().Printf("table error was found")
+							return nil
+						}
 					}
 				}
 				return errors.New("no table error found yet")
