@@ -1156,7 +1156,7 @@ WHERE
 			if put.Key.Equal(catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, descpb.ID(tableID))) {
 				filterState.txnID = uuid.UUID{}
 				return roachpb.NewError(roachpb.NewReadWithinUncertaintyIntervalError(
-					request.Txn.ReadTimestamp, hlc.ClockTimestamp{}, request.Txn, afterInsert))
+					request.Txn.ReadTimestamp, hlc.ClockTimestamp{}, request.Txn, afterInsert, hlc.ClockTimestamp{}))
 			}
 		}
 		return nil

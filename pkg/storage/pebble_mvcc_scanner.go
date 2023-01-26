@@ -735,10 +735,13 @@ func (p *pebbleMVCCScanner) maybeFailOnMoreRecent() {
 	p.intents.Reset()
 }
 
-// Returns an uncertainty error with the specified timestamp and p.txn.
-func (p *pebbleMVCCScanner) uncertaintyError(ts hlc.Timestamp) (ok bool) {
+// Returns an uncertainty error with the specified value and local timestamps,
+// along with context about the reader.
+func (p *pebbleMVCCScanner) uncertaintyError(
+	valueTs hlc.Timestamp, localTs hlc.ClockTimestamp,
+) (ok bool) {
 	p.err = roachpb.NewReadWithinUncertaintyIntervalError(
-		p.ts, p.uncertainty.LocalLimit, p.txn, ts)
+		p.ts, p.uncertainty.LocalLimit, p.txn, valueTs, localTs)
 	p.results.clear()
 	p.intents.Reset()
 	return false
@@ -853,7 +856,7 @@ func (p *pebbleMVCCScanner) getOne(ctx context.Context) (ok, added bool) {
 			// errors.
 			localTS := p.curUnsafeValue.GetLocalTimestamp(p.curUnsafeKey.Timestamp)
 			if p.uncertainty.IsUncertain(p.curUnsafeKey.Timestamp, localTS) {
-				return p.uncertaintyError(p.curUnsafeKey.Timestamp), false
+				return p.uncertaintyError(p.curUnsafeKey.Timestamp, localTS), false
 			}
 
 			// This value is not within the reader's uncertainty window, but
@@ -1356,7 +1359,7 @@ func (p *pebbleMVCCScanner) seekVersion(
 			// is uncertain.
 			localTS := p.curUnsafeValue.GetLocalTimestamp(p.curUnsafeKey.Timestamp)
 			if p.uncertainty.IsUncertain(p.curUnsafeKey.Timestamp, localTS) {
-				return p.uncertaintyError(p.curUnsafeKey.Timestamp), false
+				return p.uncertaintyError(p.curUnsafeKey.Timestamp, localTS), false
 			}
 		}
 	}
@@ -1393,7 +1396,7 @@ func (p *pebbleMVCCScanner) seekVersion(
 		// error.
 		localTS := p.curUnsafeValue.GetLocalTimestamp(p.curUnsafeKey.Timestamp)
 		if p.uncertainty.IsUncertain(p.curUnsafeKey.Timestamp, localTS) {
-			return p.uncertaintyError(p.curUnsafeKey.Timestamp), false
+			return p.uncertaintyError(p.curUnsafeKey.Timestamp, localTS), false
 		}
 		if !p.iterNext() {
 			p.setAdvanceKeyAtEnd()
@@ -1503,7 +1506,7 @@ func (p *pebbleMVCCScanner) processRangeKeys(seeked bool, reverse bool) bool {
 					}
 					localTS := value.GetLocalTimestamp(version.Timestamp)
 					if p.uncertainty.IsUncertain(version.Timestamp, localTS) {
-						return p.uncertaintyError(version.Timestamp)
+						return p.uncertaintyError(version.Timestamp, localTS)
 					}
 				}
 			}
