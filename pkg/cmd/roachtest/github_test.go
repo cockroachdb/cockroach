@@ -91,14 +91,8 @@ func TestShouldPost(t *testing.T) {
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {},
 		}
 
-		ti := &testImpl{
-			spec: testSpec,
-			l:    nilLogger(),
-		}
-
-		github := &githubIssues{
-			disable: c.disableIssues,
-		}
+		ti := &testImpl{spec: testSpec}
+		github := &githubIssues{disable: c.disableIssues}
 
 		doPost, skipReason := github.shouldPost(ti)
 		require.Equal(t, c.expectedPost, doPost)
@@ -188,7 +182,6 @@ func TestCreatePostRequest(t *testing.T) {
 		github := &githubIssues{
 			vmCreateOpts: vmOpts,
 			cluster:      testClusterImpl,
-			l:            nilLogger(),
 			teamLoader:   teamLoadFn,
 		}
 
