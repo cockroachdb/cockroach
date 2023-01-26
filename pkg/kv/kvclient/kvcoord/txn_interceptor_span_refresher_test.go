@@ -170,7 +170,7 @@ func TestTxnSpanRefresherRefreshesTransactions(t *testing.T) {
 				return roachpb.NewError(
 					&roachpb.ReadWithinUncertaintyIntervalError{
 						ValueTimestamp:        txn.WriteTimestamp.Add(25, 0),
-						LocalUncertaintyLimit: txn.WriteTimestamp.Add(30, 0),
+						LocalUncertaintyLimit: hlc.ClockTimestamp(txn.WriteTimestamp.Add(30, 0)),
 					})
 			},
 			expRefresh:   true,

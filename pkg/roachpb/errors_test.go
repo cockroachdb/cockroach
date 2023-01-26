@@ -103,7 +103,7 @@ func TestErrorTxn(t *testing.T) {
 func TestReadWithinUncertaintyIntervalError(t *testing.T) {
 	{
 		rwueNew := NewReadWithinUncertaintyIntervalError(
-			hlc.Timestamp{WallTime: 1}, hlc.Timestamp{WallTime: 2}, hlc.Timestamp{WallTime: 2, Logical: 2},
+			hlc.Timestamp{WallTime: 1}, hlc.Timestamp{WallTime: 2}, hlc.ClockTimestamp{WallTime: 2, Logical: 2},
 			&Transaction{
 				GlobalUncertaintyLimit: hlc.Timestamp{WallTime: 3},
 				ObservedTimestamps:     []ObservedTimestamp{{NodeID: 12, Timestamp: hlc.ClockTimestamp{WallTime: 4}}},
@@ -118,7 +118,7 @@ func TestReadWithinUncertaintyIntervalError(t *testing.T) {
 
 	{
 		rwueOld := NewReadWithinUncertaintyIntervalError(
-			hlc.Timestamp{WallTime: 1}, hlc.Timestamp{WallTime: 2}, hlc.Timestamp{}, nil)
+			hlc.Timestamp{WallTime: 1}, hlc.Timestamp{WallTime: 2}, hlc.ClockTimestamp{}, nil)
 
 		expOld := "ReadWithinUncertaintyIntervalError: read at time 0.000000001,0 encountered " +
 			"previous write with future timestamp 0.000000002,0 within uncertainty interval " +
@@ -159,7 +159,7 @@ func TestErrorRedaction(t *testing.T) {
 	t.Run("uncertainty-restart", func(t *testing.T) {
 		// NB: most other errors don't redact properly. More elbow grease is needed.
 		wrappedPErr := NewError(NewReadWithinUncertaintyIntervalError(
-			hlc.Timestamp{WallTime: 1}, hlc.Timestamp{WallTime: 2}, hlc.Timestamp{WallTime: 2, Logical: 2},
+			hlc.Timestamp{WallTime: 1}, hlc.Timestamp{WallTime: 2}, hlc.ClockTimestamp{WallTime: 2, Logical: 2},
 			&Transaction{
 				GlobalUncertaintyLimit: hlc.Timestamp{WallTime: 3},
 				ObservedTimestamps:     []ObservedTimestamp{{NodeID: 12, Timestamp: hlc.ClockTimestamp{WallTime: 4}}},

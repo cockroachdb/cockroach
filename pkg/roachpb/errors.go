@@ -919,10 +919,9 @@ var _ transactionRestartError = &WriteTooOldError{}
 // NewReadWithinUncertaintyIntervalError creates a new uncertainty retry error.
 // The read and value timestamps as well as the txn are purely informational and
 // used for formatting the error message.
-// TODO(nvanbenschoten): change localUncertaintyLimit to hlc.ClockTimestamp.
 // TODO(nvanbenschoten): add localTs and include in error string.
 func NewReadWithinUncertaintyIntervalError(
-	readTS, valueTS, localUncertaintyLimit hlc.Timestamp, txn *Transaction,
+	readTS, valueTS hlc.Timestamp, localUncertaintyLimit hlc.ClockTimestamp, txn *Transaction,
 ) *ReadWithinUncertaintyIntervalError {
 	rwue := &ReadWithinUncertaintyIntervalError{
 		ReadTimestamp:         readTS,
@@ -1009,7 +1008,7 @@ func (e *ReadWithinUncertaintyIntervalError) RetryTimestamp() hlc.Timestamp {
 	// global uncertainty limit to determine uncertainty (see IsUncertain). In
 	// such cases, we're ok advancing just past the value's timestamp. Either
 	// way, we won't see the same value in our uncertainty interval on a retry.
-	ts.Forward(e.LocalUncertaintyLimit)
+	ts.Forward(e.LocalUncertaintyLimit.ToTimestamp())
 	return ts
 }
 

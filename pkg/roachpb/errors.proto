@@ -117,7 +117,7 @@ message RangeKeyMismatchError {
 // A ReadWithinUncertaintyIntervalError indicates that a read at timestamp
 // encountered a write within the uncertainty interval of the reader.
 // The read should be retried at a higher timestamp; the timestamps contained
-// within are purely informational, though typically existing_timestamp is a
+// within are purely informational, though typically value_timestamp is a
 // lower bound for a new timestamp at which at least the read producing
 // this error would succeed on retry.
 message ReadWithinUncertaintyIntervalError {
@@ -127,7 +127,8 @@ message ReadWithinUncertaintyIntervalError {
   // error message.
   optional util.hlc.Timestamp read_timestamp = 1 [(gogoproto.nullable) = false];
   optional util.hlc.Timestamp value_timestamp = 2 [(gogoproto.nullable) = false];
-  optional util.hlc.Timestamp local_uncertainty_limit = 5 [(gogoproto.nullable) = false];
+  optional util.hlc.Timestamp local_uncertainty_limit = 5 [(gogoproto.nullable) = false,
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/util/hlc.ClockTimestamp"];
   optional util.hlc.Timestamp global_uncertainty_limit = 3 [(gogoproto.nullable) = false];
   repeated roachpb.ObservedTimestamp observed_timestamps = 4 [(gogoproto.nullable) = false];
 }
