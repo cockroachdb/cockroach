@@ -286,37 +286,26 @@ func (c *SyncedCluster) NodeUIPort(node Node) int {
 	return c.VMs[node-1].AdminUIPort
 }
 
-// SQL runs `cockroach sql`, which starts a SQL shell or runs a SQL command.
-//
-// In interactive mode, there must be exactly one node target (as per
-// TargetNodes).
-//
-// In non-interactive mode, a command specified via the `-e` flag is run against
-// all nodes.
-func (c *SyncedCluster) SQL(
+// ExecOrInteractiveSQL ssh's onto a single node and executes ./cockroach sql,
+// opening an interactive session, if no `-e` flag was passed.
+func (c *SyncedCluster) ExecOrInteractiveSQL(
 	ctx context.Context, l *logger.Logger, tenantName string, args []string,
 ) error {
-	if len(args) == 0 || len(c.Nodes) == 1 {
-		// If no arguments, we're going to get an interactive SQL shell. Require
-		// exactly one target and ask SSH to provide a pseudoterminal.
-		if len(args) == 0 && len(c.Nodes) != 1 {
-			return fmt.Errorf("invalid number of nodes for interactive sql: %d", len(c.Nodes))
-		}
-		url := c.NodeURL("localhost", c.NodePort(c.Nodes[0]), tenantName)
-		binary := cockroachNodeBinary(c, c.Nodes[0])
-		allArgs := []string{binary, "sql", "--url", url}
-		allArgs = append(allArgs, ssh.Escape(args))
-		return c.SSH(ctx, l, []string{"-t"}, allArgs)
+	if len(c.Nodes) != 1 {
+		return fmt.Errorf("invalid number of nodes for interactive sql: %d", len(c.Nodes))
 	}
-
-	// Otherwise, assume the user provided the "-e" flag, so we can reasonably
-	// execute the query on all specified nodes.
-	return c.RunSQL(ctx, l, args)
+	url := c.NodeURL("localhost", c.NodePort(c.Nodes[0]), tenantName)
+	binary := cockroachNodeBinary(c, c.Nodes[0])
+	allArgs := []string{binary, "sql", "--url", url}
+	allArgs = append(allArgs, ssh.Escape(args))
+	return c.SSH(ctx, l, []string{"-t"}, allArgs)
 }
 
-// RunSQL runs a `cockroach sql` command.
+// ExecSQL runs a `cockroach sql` .
 // It is assumed that the args include the -e flag.
-func (c *SyncedCluster) RunSQL(ctx context.Context, l *logger.Logger, args []string) error {
+func (c *SyncedCluster) ExecSQL(
+	ctx context.Context, l *logger.Logger, tenantName string, args []string,
+) error {
 	type result struct {
 		node   Node
 		output string
@@ -332,7 +321,7 @@ func (c *SyncedCluster) RunSQL(ctx context.Context, l *logger.Logger, args []str
 			cmd = fmt.Sprintf(`cd %s ; `, c.localVMDir(node))
 		}
 		cmd += cockroachNodeBinary(c, node) + " sql --url " +
-			c.NodeURL("localhost", c.NodePort(node), "" /* tenantName */) + " " +
+			c.NodeURL("localhost", c.NodePort(node), tenantName /* tenantName */) + " " +
 			ssh.Escape(args)
 
 		sess := c.newSession(l, node, cmd, withDebugName("run-sql"))
@@ -802,7 +791,7 @@ WITH SCHEDULE OPTIONS first_run = 'now'`
 	createScheduleCmd := fmt.Sprintf(`-e
 CREATE SCHEDULE IF NOT EXISTS test_only_backup FOR BACKUP INTO '%s' %s`,
 		collectionPath, scheduleArgs)
-	return c.SQL(ctx, l, "" /* tenantName */, []string{createScheduleCmd})
+	return c.ExecSQL(ctx, l, "", []string{createScheduleCmd})
 }
 
 // getEnvVars returns all COCKROACH_* environment variables, in the form
