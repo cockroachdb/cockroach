@@ -13,14 +13,15 @@ go_library(
     deps = [
         "//pkg/cmd/roachtest/cluster",
         "//pkg/cmd/roachtest/option",
+        "//pkg/cmd/roachtest/roachtestutil",
         "//pkg/cmd/roachtest/roachtestutil/clusterupgrade",
         "//pkg/cmd/roachtest/test",
         "//pkg/roachpb",
         "//pkg/roachprod/logger",
+        "//pkg/util/ctxgroup",
         "//pkg/util/randutil",
         "//pkg/util/timeutil",
         "//pkg/util/version",
-        "@org_golang_x_sync//errgroup",
     ],
 )
 
@@ -30,7 +31,9 @@ go_test(
     args = ["-test.timeout=295s"],
     embed = [":mixedversion"],
     deps = [
+        "//pkg/cmd/roachtest/cluster",
         "//pkg/cmd/roachtest/option",
+        "//pkg/cmd/roachtest/roachtestutil",
         "//pkg/cmd/roachtest/roachtestutil/clusterupgrade",
         "//pkg/roachprod/logger",
         "//pkg/util/version",
