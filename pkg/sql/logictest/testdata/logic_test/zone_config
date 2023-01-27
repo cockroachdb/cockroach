@@ -1,6 +1,6 @@
 # As these tests are run for both the system tenant and secondary tenants, we
 # turn on the setting that gates setting zone configs for system tenants.
-# tenant-cluster-setting-override-opt: allow-zone-configs-for-secondary-tenants
+# tenant-cluster-setting-override-opt: sql.zone_configs.allow_for_secondary_tenant.enabled=true
 
 # Check that we can alter the default zone config.
 statement ok
