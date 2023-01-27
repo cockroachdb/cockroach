@@ -3,15 +3,15 @@
 set -xeuo pipefail
 
 # When updating to a new Go version, update all of these variables.
-GOVERS=1.19.1
+GOVERS=1.19.4
 GOLINK=https://go.dev/dl/go$GOVERS.src.tar.gz
-SRCSHASUM=27871baa490f3401414ad793fba49086f6c855b1c584385ed7771e1204c7e179
+SRCSHASUM=eda74db4ac494800a3e66ee784e495bfbb9b8e535df924a8b01b1a8028b7f368
 # We mirror the upstream freebsd because we don't have a cross-compiler targeting it.
 GOFREEBSDLINK=https://go.dev/dl/go$GOVERS.freebsd-amd64.tar.gz
-FREEBSDSHASUM=db5b8f232e12c655cc6cde6af1adf4d27d842541807802d747c86161e89efa0a
+FREEBSDSHASUM=84489ebb63f1757b79574d7345c647bd40bc6414cecb868c93e24476c2d2b9b6
 # We mirror the upstream darwin/arm64 binary because we don't have code-signing yet.
 GODARWINARMLINK=https://go.dev/dl/go$GOVERS.darwin-arm64.tar.gz
-DARWINARMSHASUM=e46aecce83a9289be16ce4ba9b8478a5b89b8aa0230171d5c6adbc0c66640548
+DARWINARMSHASUM=bb3bc5d7655b9637cfe2b5e90055dee93b0ead50e2ffd091df320d1af1ca853f
 
 apt-get update
 DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
