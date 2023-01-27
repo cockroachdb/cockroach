@@ -10,7 +10,7 @@ EXPLAIN (ddl) DROP INDEX idx CASCADE;
 Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹v2›@‹idx› CASCADE;
  ├── StatementPhase
  │    └── Stage 1 of 1 in StatementPhase
- │         ├── 27 elements transitioning toward ABSENT
+ │         ├── 28 elements transitioning toward ABSENT
  │         │    ├── PUBLIC → ABSENT     IndexColumn:{DescID: 105, ColumnID: 2, IndexID: 2}
  │         │    ├── PUBLIC → ABSENT     IndexColumn:{DescID: 105, ColumnID: 3, IndexID: 2}
  │         │    ├── PUBLIC → VALIDATED  SecondaryIndex:{DescID: 105, IndexID: 2, ConstraintID: 0}
@@ -27,6 +27,7 @@ Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹v2›@‹idx�
  │         │    ├── PUBLIC → WRITE_ONLY Column:{DescID: 106, ColumnID: 2}
  │         │    ├── PUBLIC → ABSENT     ColumnName:{DescID: 106, Name: rowid, ColumnID: 2}
  │         │    ├── PUBLIC → ABSENT     ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 2}
+ │         │    ├── PUBLIC → VALIDATED  ColumnNotNull:{DescID: 106, ColumnID: 2, IndexID: 0}
  │         │    ├── PUBLIC → ABSENT     ColumnDefaultExpression:{DescID: 106, ColumnID: 2}
  │         │    ├── PUBLIC → WRITE_ONLY Column:{DescID: 106, ColumnID: 4294967295}
  │         │    ├── PUBLIC → ABSENT     ColumnName:{DescID: 106, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}
@@ -47,7 +48,7 @@ Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹v2›@‹idx�
  │              └── DrainDescriptorName {"Namespace":{"DatabaseID":100,"DescriptorID":106,"Name":"v3","SchemaID":101}}
  ├── PreCommitPhase
  │    ├── Stage 1 of 2 in PreCommitPhase
- │    │    ├── 27 elements transitioning toward ABSENT
+ │    │    ├── 28 elements transitioning toward ABSENT
  │    │    │    ├── ABSENT     → PUBLIC IndexColumn:{DescID: 105, ColumnID: 2, IndexID: 2}
  │    │    │    ├── ABSENT     → PUBLIC IndexColumn:{DescID: 105, ColumnID: 3, IndexID: 2}
  │    │    │    ├── VALIDATED  → PUBLIC SecondaryIndex:{DescID: 105, IndexID: 2, ConstraintID: 0}
@@ -64,6 +65,7 @@ Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹v2›@‹idx�
  │    │    │    ├── WRITE_ONLY → PUBLIC Column:{DescID: 106, ColumnID: 2}
  │    │    │    ├── ABSENT     → PUBLIC ColumnName:{DescID: 106, Name: rowid, ColumnID: 2}
  │    │    │    ├── ABSENT     → PUBLIC ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 2}
+ │    │    │    ├── VALIDATED  → PUBLIC ColumnNotNull:{DescID: 106, ColumnID: 2, IndexID: 0}
  │    │    │    ├── ABSENT     → PUBLIC ColumnDefaultExpression:{DescID: 106, ColumnID: 2}
  │    │    │    ├── WRITE_ONLY → PUBLIC Column:{DescID: 106, ColumnID: 4294967295}
  │    │    │    ├── ABSENT     → PUBLIC ColumnName:{DescID: 106, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}
@@ -78,7 +80,7 @@ Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹v2›@‹idx�
  │    │    └── 1 Mutation operation
  │    │         └── UndoAllInTxnImmediateMutationOpSideEffects
  │    └── Stage 2 of 2 in PreCommitPhase
- │         ├── 27 elements transitioning toward ABSENT
+ │         ├── 28 elements transitioning toward ABSENT
  │         │    ├── PUBLIC → ABSENT    IndexColumn:{DescID: 105, ColumnID: 2, IndexID: 2}
  │         │    ├── PUBLIC → ABSENT    IndexColumn:{DescID: 105, ColumnID: 3, IndexID: 2}
  │         │    ├── PUBLIC → VALIDATED SecondaryIndex:{DescID: 105, IndexID: 2, ConstraintID: 0}
@@ -95,6 +97,7 @@ Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹v2›@‹idx�
  │         │    ├── PUBLIC → ABSENT    Column:{DescID: 106, ColumnID: 2}
  │         │    ├── PUBLIC → ABSENT    ColumnName:{DescID: 106, Name: rowid, ColumnID: 2}
  │         │    ├── PUBLIC → ABSENT    ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 2}
+ │         │    ├── PUBLIC → ABSENT    ColumnNotNull:{DescID: 106, ColumnID: 2, IndexID: 0}
  │         │    ├── PUBLIC → ABSENT    ColumnDefaultExpression:{DescID: 106, ColumnID: 2}
  │         │    ├── PUBLIC → ABSENT    Column:{DescID: 106, ColumnID: 4294967295}
  │         │    ├── PUBLIC → ABSENT    ColumnName:{DescID: 106, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}
@@ -106,17 +109,18 @@ Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹v2›@‹idx�
  │         │    ├── PUBLIC → ABSENT    IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 1}
  │         │    ├── PUBLIC → ABSENT    PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}
  │         │    └── PUBLIC → ABSENT    IndexName:{DescID: 106, Name: v3_pkey, IndexID: 1}
- │         └── 13 Mutation operations
+ │         └── 14 Mutation operations
  │              ├── MarkDescriptorAsDropped {"DescriptorID":106}
  │              ├── RemoveBackReferencesInRelations {"BackReferencedID":106}
  │              ├── RemoveObjectParent {"ObjectID":106,"ParentSchemaID":101}
  │              ├── RemoveColumnDefaultExpression {"ColumnID":2,"TableID":106}
  │              ├── MakePublicSecondaryIndexWriteOnly {"IndexID":2,"TableID":105}
  │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":100,"DescriptorID":106,"Name":"v3","SchemaID":101}}
+ │              ├── RemoveColumnNotNull {"ColumnID":2,"TableID":106}
  │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":1,"TableID":106}
- │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":2,"TableID":106}
  │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":4294967295,"TableID":106}
  │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":4294967294,"TableID":106}
+ │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":2,"TableID":106}
  │              ├── SetJobStateOnDescriptor {"DescriptorID":105,"Initialize":true}
  │              ├── SetJobStateOnDescriptor {"DescriptorID":106,"Initialize":true}
  │              └── CreateSchemaChangerJob {"NonCancelable":true,"RunningStatus":"PostCommitNonRev..."}

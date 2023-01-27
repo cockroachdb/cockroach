@@ -10,7 +10,7 @@ EXPLAIN (ddl) DROP TABLE multi_region_test_db.public.table_regional_by_table CAS
 Schema change plan for DROP TABLE ‹multi_region_test_db›.‹public›.‹table_regional_by_table› CASCADE;
  ├── StatementPhase
  │    └── Stage 1 of 1 in StatementPhase
- │         ├── 20 elements transitioning toward ABSENT
+ │         ├── 21 elements transitioning toward ABSENT
  │         │    ├── PUBLIC → ABSENT     Namespace:{DescID: 108, Name: table_regional_by_table, ReferencedDescID: 104}
  │         │    ├── PUBLIC → ABSENT     Owner:{DescID: 108}
  │         │    ├── PUBLIC → ABSENT     UserPrivileges:{DescID: 108, Name: admin}
@@ -22,6 +22,7 @@ Schema change plan for DROP TABLE ‹multi_region_test_db›.‹public›.‹tab
  │         │    ├── PUBLIC → WRITE_ONLY Column:{DescID: 108, ColumnID: 1}
  │         │    ├── PUBLIC → ABSENT     ColumnName:{DescID: 108, Name: a, ColumnID: 1}
  │         │    ├── PUBLIC → ABSENT     ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 1}
+ │         │    ├── PUBLIC → VALIDATED  ColumnNotNull:{DescID: 108, ColumnID: 1, IndexID: 0}
  │         │    ├── PUBLIC → WRITE_ONLY Column:{DescID: 108, ColumnID: 4294967295}
  │         │    ├── PUBLIC → ABSENT     ColumnName:{DescID: 108, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}
  │         │    ├── PUBLIC → ABSENT     ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967295}
@@ -38,7 +39,7 @@ Schema change plan for DROP TABLE ‹multi_region_test_db›.‹public›.‹tab
  │              └── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":108,"Name":"table_regional_b...","SchemaID":105}}
  ├── PreCommitPhase
  │    ├── Stage 1 of 2 in PreCommitPhase
- │    │    ├── 20 elements transitioning toward ABSENT
+ │    │    ├── 21 elements transitioning toward ABSENT
  │    │    │    ├── ABSENT     → PUBLIC Namespace:{DescID: 108, Name: table_regional_by_table, ReferencedDescID: 104}
  │    │    │    ├── ABSENT     → PUBLIC Owner:{DescID: 108}
  │    │    │    ├── ABSENT     → PUBLIC UserPrivileges:{DescID: 108, Name: admin}
@@ -50,6 +51,7 @@ Schema change plan for DROP TABLE ‹multi_region_test_db›.‹public›.‹tab
  │    │    │    ├── WRITE_ONLY → PUBLIC Column:{DescID: 108, ColumnID: 1}
  │    │    │    ├── ABSENT     → PUBLIC ColumnName:{DescID: 108, Name: a, ColumnID: 1}
  │    │    │    ├── ABSENT     → PUBLIC ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 1}
+ │    │    │    ├── VALIDATED  → PUBLIC ColumnNotNull:{DescID: 108, ColumnID: 1, IndexID: 0}
  │    │    │    ├── WRITE_ONLY → PUBLIC Column:{DescID: 108, ColumnID: 4294967295}
  │    │    │    ├── ABSENT     → PUBLIC ColumnName:{DescID: 108, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}
  │    │    │    ├── ABSENT     → PUBLIC ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967295}
@@ -62,7 +64,7 @@ Schema change plan for DROP TABLE ‹multi_region_test_db›.‹public›.‹tab
  │    │    └── 1 Mutation operation
  │    │         └── UndoAllInTxnImmediateMutationOpSideEffects
  │    └── Stage 2 of 2 in PreCommitPhase
- │         ├── 20 elements transitioning toward ABSENT
+ │         ├── 21 elements transitioning toward ABSENT
  │         │    ├── PUBLIC → ABSENT  Namespace:{DescID: 108, Name: table_regional_by_table, ReferencedDescID: 104}
  │         │    ├── PUBLIC → ABSENT  Owner:{DescID: 108}
  │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 108, Name: admin}
@@ -74,6 +76,7 @@ Schema change plan for DROP TABLE ‹multi_region_test_db›.‹public›.‹tab
  │         │    ├── PUBLIC → ABSENT  Column:{DescID: 108, ColumnID: 1}
  │         │    ├── PUBLIC → ABSENT  ColumnName:{DescID: 108, Name: a, ColumnID: 1}
  │         │    ├── PUBLIC → ABSENT  ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 1}
+ │         │    ├── PUBLIC → ABSENT  ColumnNotNull:{DescID: 108, ColumnID: 1, IndexID: 0}
  │         │    ├── PUBLIC → ABSENT  Column:{DescID: 108, ColumnID: 4294967295}
  │         │    ├── PUBLIC → ABSENT  ColumnName:{DescID: 108, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}
  │         │    ├── PUBLIC → ABSENT  ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967295}
@@ -83,14 +86,15 @@ Schema change plan for DROP TABLE ‹multi_region_test_db›.‹public›.‹tab
  │         │    ├── PUBLIC → ABSENT  IndexColumn:{DescID: 108, ColumnID: 1, IndexID: 1}
  │         │    ├── PUBLIC → ABSENT  PrimaryIndex:{DescID: 108, IndexID: 1, ConstraintID: 1}
  │         │    └── PUBLIC → ABSENT  IndexName:{DescID: 108, Name: table_regional_by_table_pkey, IndexID: 1}
- │         └── 10 Mutation operations
+ │         └── 11 Mutation operations
  │              ├── MarkDescriptorAsDropped {"DescriptorID":108}
  │              ├── RemoveObjectParent {"ObjectID":108,"ParentSchemaID":105}
  │              ├── RemoveBackReferenceInTypes {"BackReferencedDescriptorID":108}
  │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":108,"Name":"table_regional_b...","SchemaID":105}}
- │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":1,"TableID":108}
+ │              ├── RemoveColumnNotNull {"ColumnID":1,"TableID":108}
  │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":4294967295,"TableID":108}
  │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":4294967294,"TableID":108}
+ │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":1,"TableID":108}
  │              ├── SetJobStateOnDescriptor {"DescriptorID":106,"Initialize":true}
  │              ├── SetJobStateOnDescriptor {"DescriptorID":108,"Initialize":true}
  │              └── CreateSchemaChangerJob {"NonCancelable":true,"RunningStatus":"PostCommitNonRev..."}

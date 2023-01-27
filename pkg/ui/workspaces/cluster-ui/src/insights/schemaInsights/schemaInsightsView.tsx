@@ -236,7 +236,6 @@ export const SchemaInsightsView: React.FC<SchemaInsightsViewProps> = ({
                 columns={makeInsightsColumns(
                   isCockroachCloud,
                   hasAdminRole,
-                  true,
                   false,
                 )}
                 data={filteredSchemaInsights}

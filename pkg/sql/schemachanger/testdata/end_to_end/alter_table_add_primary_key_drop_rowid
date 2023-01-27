@@ -45,8 +45,18 @@ write *eventpb.AlterTable to event log:
     tag: ALTER TABLE
     user: root
   tableName: defaultdb.public.t
-## StatementPhase stage 1 of 1 with 10 MutationType ops
+## StatementPhase stage 1 of 1 with 11 MutationType ops
 upsert descriptor #104
+   table:
+  +  checks:
+  +  - columnIds:
+  +    - 2
+  +    expr: crdb_internal_column_2_name_placeholder IS NOT NULL
+  +    isNonNullConstraint: true
+  +    name: crdb_internal_column_2_name_placeholder_auto_not_null
+  +    validity: Dropping
+     columns:
+     - id: 1
   ...
          oid: 20
          width: 64
@@ -76,10 +86,27 @@ upsert descriptor #104
   +      hidden: true
   +      id: 2
   +      name: crdb_internal_column_2_name_placeholder
+  +      nullable: true
   +      type:
   +        family: IntFamily
   +        oid: 20
   +        width: 64
+  +    direction: DROP
+  +    mutationId: 1
+  +    state: WRITE_ONLY
+  +  - constraint:
+  +      check:
+  +        columnIds:
+  +        - 2
+  +        expr: crdb_internal_column_2_name_placeholder IS NOT NULL
+  +        isNonNullConstraint: true
+  +        name: crdb_internal_column_2_name_placeholder_auto_not_null
+  +        validity: Dropping
+  +      constraintType: NOT_NULL
+  +      foreignKey: {}
+  +      name: crdb_internal_column_2_name_placeholder_auto_not_null
+  +      notNullColumn: 2
+  +      uniqueWithoutIndexConstraint: {}
   +    direction: DROP
   +    mutationId: 1
   +    state: WRITE_ONLY
@@ -185,8 +212,18 @@ upsert descriptor #104
 ## PreCommitPhase stage 1 of 2 with 1 MutationType op
 undo all catalog changes within txn #1
 persist all catalog changes to storage
-## PreCommitPhase stage 2 of 2 with 15 MutationType ops
+## PreCommitPhase stage 2 of 2 with 16 MutationType ops
 upsert descriptor #104
+   table:
+  +  checks:
+  +  - columnIds:
+  +    - 2
+  +    expr: crdb_internal_column_2_name_placeholder IS NOT NULL
+  +    isNonNullConstraint: true
+  +    name: crdb_internal_column_2_name_placeholder_auto_not_null
+  +    validity: Dropping
+     columns:
+     - id: 1
   ...
          oid: 20
          width: 64
@@ -231,10 +268,27 @@ upsert descriptor #104
   +      hidden: true
   +      id: 2
   +      name: crdb_internal_column_2_name_placeholder
+  +      nullable: true
   +      type:
   +        family: IntFamily
   +        oid: 20
   +        width: 64
+  +    direction: DROP
+  +    mutationId: 1
+  +    state: WRITE_ONLY
+  +  - constraint:
+  +      check:
+  +        columnIds:
+  +        - 2
+  +        expr: crdb_internal_column_2_name_placeholder IS NOT NULL
+  +        isNonNullConstraint: true
+  +        name: crdb_internal_column_2_name_placeholder_auto_not_null
+  +        validity: Dropping
+  +      constraintType: NOT_NULL
+  +      foreignKey: {}
+  +      name: crdb_internal_column_2_name_placeholder_auto_not_null
+  +      notNullColumn: 2
+  +      uniqueWithoutIndexConstraint: {}
   +    direction: DROP
   +    mutationId: 1
   +    state: WRITE_ONLY
@@ -669,8 +723,19 @@ begin transaction #17
 validate forward indexes [4] in table #104
 commit transaction #17
 begin transaction #18
-## PostCommitNonRevertiblePhase stage 1 of 4 with 6 MutationType ops
+## PostCommitNonRevertiblePhase stage 1 of 4 with 7 MutationType ops
 upsert descriptor #104
+   table:
+  -  checks:
+  -  - columnIds:
+  -    - 2
+  -    expr: crdb_internal_column_2_name_placeholder IS NOT NULL
+  -    isNonNullConstraint: true
+  -    name: crdb_internal_column_2_name_placeholder_auto_not_null
+  -    validity: Dropping
+  +  checks: []
+     columns:
+     - id: 1
   ...
            statement: ALTER TABLE t ADD PRIMARY KEY (a)
            statementTag: ALTER TABLE
@@ -680,6 +745,22 @@ upsert descriptor #104
   ...
        direction: DROP
        mutationId: 1
+  -    state: WRITE_ONLY
+  -  - constraint:
+  -      check:
+  -        columnIds:
+  -        - 2
+  -        expr: crdb_internal_column_2_name_placeholder IS NOT NULL
+  -        isNonNullConstraint: true
+  -        name: crdb_internal_column_2_name_placeholder_auto_not_null
+  -        validity: Dropping
+  -      constraintType: NOT_NULL
+  -      foreignKey: {}
+  -      name: crdb_internal_column_2_name_placeholder_auto_not_null
+  -      notNullColumn: 2
+  -      uniqueWithoutIndexConstraint: {}
+  -    direction: DROP
+  -    mutationId: 1
   -    state: WRITE_ONLY
   -  - direction: ADD
   +    state: DELETE_ONLY
@@ -908,6 +989,7 @@ upsert descriptor #104
   -      hidden: true
   -      id: 2
   -      name: crdb_internal_column_2_name_placeholder
+  -      nullable: true
   -      type:
   -        family: IntFamily
   -        oid: 20

@@ -97,4 +97,29 @@ func init() {
 		},
 	)
 
+	// Column constraint disappears in the same stage as the column
+	// becomes non-writable.
+	//
+	// Column constraint cannot disappear while the column is still writable
+	// because we then allow incorrect writes that would violate the constraint.
+	//
+	// Column constraint cannot still be enforced when the column becomes
+	// non-writable because an enforced constraint means writes will see and
+	// attempt to uphold it but the column is no longer visible to them.
+	//
+	// N.B. This rule supersedes the above "dependents removed before column" rule.
+	// N.B. SameStage is enough; which transition happens first won't matter.
+	registerDepRuleForDrop(
+		"column constraint removed right before column reaches delete only",
+		scgraph.SameStagePrecedence,
+		"column-constraint", "column",
+		scpb.Status_ABSENT, scpb.Status_DELETE_ONLY,
+		func(from, to NodeVars) rel.Clauses {
+			return rel.Clauses{
+				from.Type((*scpb.ColumnNotNull)(nil)),
+				to.Type((*scpb.Column)(nil)),
+				JoinOnColumnID(from, to, "table-id", "col-id"),
+			}
+		},
+	)
 }

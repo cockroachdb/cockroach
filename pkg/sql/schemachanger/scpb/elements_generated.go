@@ -234,6 +234,37 @@ func FindColumnName(b ElementStatusIterator) (current Status, target TargetStatu
 	return current, target, element
 }
 
+func (e ColumnNotNull) element() {}
+
+// ForEachColumnNotNull iterates over elements of type ColumnNotNull.
+func ForEachColumnNotNull(
+	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *ColumnNotNull),
+) {
+  if b == nil {
+    return
+  }
+	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
+		if elt, ok := e.(*ColumnNotNull); ok {
+			fn(current, target, elt)
+		}
+	})
+}
+
+// FindColumnNotNull finds the first element of type ColumnNotNull.
+func FindColumnNotNull(b ElementStatusIterator) (current Status, target TargetStatus, element *ColumnNotNull) {
+  if b == nil {
+    return current, target, element
+  }
+	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
+		if elt, ok := e.(*ColumnNotNull); ok {
+			element = elt
+			current = c
+			target = t
+		}
+	})
+	return current, target, element
+}
+
 func (e ColumnOnUpdateExpression) element() {}
 
 // ForEachColumnOnUpdateExpression iterates over elements of type ColumnOnUpdateExpression.

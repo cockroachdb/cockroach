@@ -124,6 +124,8 @@ func MinVersion(el scpb.Element) clusterversion.Key {
 		*scpb.Function, *scpb.FunctionName, *scpb.FunctionVolatility, *scpb.FunctionLeakProof,
 		*scpb.FunctionNullInputBehavior, *scpb.FunctionBody, *scpb.FunctionParamDefaultExpression:
 		return clusterversion.V23_1
+	case *scpb.ColumnNotNull:
+		return clusterversion.V23_1
 	default:
 		panic(errors.AssertionFailedf("unknown element %T", el))
 	}

@@ -15,7 +15,7 @@ import {
 import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 import {
-  refreshTransactionInsightDetails,
+  refreshTxnInsightDetails,
   refreshUserSQLRoles,
 } from "src/redux/apiReducers";
 import { AdminUIState } from "src/redux/state";
@@ -40,7 +40,7 @@ const mapStateToProps = (
 };
 
 const mapDispatchToProps: TransactionInsightDetailsDispatchProps = {
-  refreshTransactionInsightDetails: refreshTransactionInsightDetails,
+  refreshTransactionInsightDetails: refreshTxnInsightDetails,
   setTimeScale: setGlobalTimeScaleAction,
   refreshUserSQLRoles: refreshUserSQLRoles,
 };

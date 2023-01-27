@@ -55,6 +55,8 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT;
 │           ├── • SetAddedColumnType
 │           │     ColumnType:
 │           │       ColumnID: 2
+│           │       ElementCreationMetadata:
+│           │         in231OrLater: true
 │           │       IsNullable: true
 │           │       TableID: 106
 │           │       TypeT:
@@ -138,6 +140,8 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN j INT;
 │           ├── • SetAddedColumnType
 │           │     ColumnType:
 │           │       ColumnID: 2
+│           │       ElementCreationMetadata:
+│           │         in231OrLater: true
 │           │       IsNullable: true
 │           │       TableID: 106
 │           │       TypeT:

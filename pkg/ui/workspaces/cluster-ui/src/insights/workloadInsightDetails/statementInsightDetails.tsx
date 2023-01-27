@@ -19,19 +19,17 @@ import { Button } from "src/button";
 import { Loading } from "src/loading";
 import { SqlBox, SqlBoxSize } from "src/sql";
 import { getMatchParamByName, idAttr } from "src/util";
-import { FlattenedStmtInsightEvent } from "../types";
-import { InsightsError } from "../insightsErrorComponent";
+import { StmtInsightEvent } from "../types";
 import { getExplainPlanFromGist } from "src/api/decodePlanGistApi";
 import { StatementInsightDetailsOverviewTab } from "./statementInsightDetailsOverviewTab";
-import { ExecutionInsightsRequest } from "../../api";
-import { executionInsightsRequestFromTimeScale } from "../utils";
-import { TimeScale } from "../../timeScaleDropdown";
+import { TimeScale, toDateRange } from "../../timeScaleDropdown";
+import { getStmtInsightsApi } from "src/api";
+import { InsightsError } from "../insightsErrorComponent";
 
 // Styles
 import classNames from "classnames/bind";
 import { commonStyles } from "src/common";
 import insightsDetailsStyles from "src/insights/workloadInsightDetails/insightsDetails.module.scss";
-import LoadingError from "../../sqlActivity/errorComponent";
 
 const cx = classNames.bind(insightsDetailsStyles);
 
@@ -40,7 +38,7 @@ enum TabKeysEnum {
   EXPLAIN = "explain",
 }
 export interface StatementInsightDetailsStateProps {
-  insightEventDetails: FlattenedStmtInsightEvent;
+  insightEventDetails: StmtInsightEvent;
   insightError: Error | null;
   isTenant?: boolean;
   timeScale?: TimeScale;
@@ -48,7 +46,6 @@ export interface StatementInsightDetailsStateProps {
 }
 
 export interface StatementInsightDetailsDispatchProps {
-  refreshStatementInsights: (req: ExecutionInsightsRequest) => void;
   setTimeScale: (ts: TimeScale) => void;
   refreshUserSQLRoles: () => void;
 }
@@ -60,7 +57,13 @@ export type StatementInsightDetailsProps = StatementInsightDetailsStateProps &
 type ExplainPlanState = {
   explainPlan: string;
   loaded: boolean;
-  error: Error;
+  error?: Error;
+};
+
+type StmtInsightsState = {
+  details: StmtInsightEvent;
+  loaded: boolean;
+  error?: Error;
 };
 
 export const StatementInsightDetails: React.FC<
@@ -74,7 +77,6 @@ export const StatementInsightDetails: React.FC<
   timeScale,
   hasAdminRole,
   setTimeScale,
-  refreshStatementInsights,
   refreshUserSQLRoles,
 }) => {
   const [explainPlanState, setExplainPlanState] = useState<ExplainPlanState>({
@@ -82,6 +84,14 @@ export const StatementInsightDetails: React.FC<
     loaded: false,
     error: null,
   });
+  const [insightDetails, setInsightDetails] =
+    useState<StmtInsightsState | null>({
+      details: insightEventDetails,
+      loaded: insightEventDetails != null,
+      error: insightError,
+    });
+
+  const details = insightDetails.details;
 
   const prevPage = (): void => history.goBack();
 
@@ -89,19 +99,17 @@ export const StatementInsightDetails: React.FC<
     if (
       !isTenant &&
       key === TabKeysEnum.EXPLAIN &&
-      insightEventDetails?.planGist &&
+      details?.planGist &&
       !explainPlanState.loaded
     ) {
       // Get the explain plan.
-      getExplainPlanFromGist({ planGist: insightEventDetails.planGist }).then(
-        res => {
-          setExplainPlanState({
-            explainPlan: res.explainPlan,
-            loaded: true,
-            error: res.error,
-          });
-        },
-      );
+      getExplainPlanFromGist({ planGist: details.planGist }).then(res => {
+        setExplainPlanState({
+          explainPlan: res.explainPlan,
+          loaded: true,
+          error: res.error,
+        });
+      });
     }
   };
 
@@ -109,16 +117,21 @@ export const StatementInsightDetails: React.FC<
 
   useEffect(() => {
     refreshUserSQLRoles();
-    if (!insightEventDetails || insightEventDetails === null) {
-      const req = executionInsightsRequestFromTimeScale(timeScale);
-      refreshStatementInsights(req);
+    if (details != null) {
+      return;
     }
-  }, [
-    insightEventDetails,
-    timeScale,
-    refreshStatementInsights,
-    refreshUserSQLRoles,
-  ]);
+    const [start, end] = toDateRange(timeScale);
+    getStmtInsightsApi({ stmtExecutionID: executionID, start, end })
+      .then(res => {
+        setInsightDetails({
+          details: res?.length ? res[0] : null,
+          loaded: true,
+        });
+      })
+      .catch(e => {
+        setInsightDetails({ details: null, error: e, loaded: true });
+      });
+  }, [details, executionID, timeScale, refreshUserSQLRoles]);
 
   return (
     <div>
@@ -138,18 +151,15 @@ export const StatementInsightDetails: React.FC<
       </h3>
       <div>
         <Loading
-          loading={insightEventDetails === null}
-          page={"Statement Insight details"}
-          error={insightError}
-          renderError={() => InsightsError()}
+          loading={!insightDetails.loaded}
+          page="Statement Insight details"
+          error={insightDetails.error}
+          renderError={() => InsightsError(insightDetails.error?.message)}
         >
           <section className={cx("section")}>
             <Row>
               <Col span={24}>
-                <SqlBox
-                  size={SqlBoxSize.custom}
-                  value={insightEventDetails?.query}
-                />
+                <SqlBox size={SqlBoxSize.custom} value={details?.query} />
               </Col>
             </Row>
           </section>
@@ -160,7 +170,7 @@ export const StatementInsightDetails: React.FC<
           >
             <Tabs.TabPane tab="Overview" key={TabKeysEnum.OVERVIEW}>
               <StatementInsightDetailsOverviewTab
-                insightEventDetails={insightEventDetails}
+                insightEventDetails={details}
                 setTimeScale={setTimeScale}
                 hasAdminRole={hasAdminRole}
               />
@@ -173,17 +183,12 @@ export const StatementInsightDetails: React.FC<
                       <Loading
                         loading={
                           !explainPlanState.loaded &&
-                          insightEventDetails?.planGist?.length > 0
+                          details?.planGist?.length > 0
                         }
                         page={"stmt_insight_details"}
                         error={explainPlanState.error}
                         renderError={() =>
-                          LoadingError({
-                            statsType: "explain plan",
-                            timeout: explainPlanState.error?.name
-                              ?.toLowerCase()
-                              .includes("timeout"),
-                          })
+                          InsightsError(explainPlanState.error?.message)
                         }
                       >
                         <SqlBox

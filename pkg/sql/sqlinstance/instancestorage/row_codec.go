@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/enum"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -48,10 +47,34 @@ type keyCodec interface {
 // rowCodec encodes/decodes rows from the sql_instances table.
 type rowCodec struct {
 	keyCodec
-	codec   keys.SQLCodec
-	columns []catalog.Column
-	decoder valueside.Decoder
-	tableID descpb.ID
+	codec               keys.SQLCodec
+	columns             []catalog.Column
+	decoder             valueside.Decoder
+	tableID             descpb.ID
+	valueColumnIDs      [numValueColumns]descpb.ColumnID
+	valueColumnOrdinals [numValueColumns]int
+}
+
+type valueColumnIdx int
+
+const numValueColumns = 4
+
+const (
+	addrColumnIdx valueColumnIdx = iota
+	sessionIDColumnIdx
+	localityColumnIdx
+	sqlAddrColumnIdx
+
+	// Ensure we have the right number of value columns.
+	_ uint = iota - numValueColumns
+	_ uint = numValueColumns - (iota - 1)
+)
+
+var valueColumnNames = [numValueColumns]string{
+	addrColumnIdx:      "addr",
+	sessionIDColumnIdx: "session_id",
+	localityColumnIdx:  "locality",
+	sqlAddrColumnIdx:   "sql_addr",
 }
 
 // rbrKeyCodec is used by the regional by row compatible sql_instances index format.
@@ -127,27 +150,31 @@ func (c *rbtKeyCodec) decodeKey(key roachpb.Key) (region []byte, id base.SQLInst
 }
 
 // MakeRowCodec makes a new rowCodec for the sql_instances table.
-func makeRowCodec(codec keys.SQLCodec, tableID descpb.ID) rowCodec {
-	columns := systemschema.SQLInstancesTable().PublicColumns()
-
+func makeRowCodec(codec keys.SQLCodec, table catalog.TableDescriptor) rowCodec {
+	columns := table.PublicColumns()
 	var key keyCodec
-	if systemschema.TestSupportMultiRegion() {
+	if catalog.FindColumnByName(table, "crdb_region") != nil {
 		key = &rbrKeyCodec{
-			indexPrefix: codec.IndexPrefix(uint32(tableID), 2),
+			indexPrefix: codec.IndexPrefix(uint32(table.GetID()), uint32(table.GetPrimaryIndexID())),
 		}
 	} else {
 		key = &rbtKeyCodec{
-			indexPrefix: codec.IndexPrefix(uint32(tableID), 1),
+			indexPrefix: codec.IndexPrefix(uint32(table.GetID()), uint32(table.GetPrimaryIndexID())),
 		}
 	}
-
-	return rowCodec{
+	rc := rowCodec{
 		keyCodec: key,
 		codec:    codec,
 		columns:  columns,
 		decoder:  valueside.MakeDecoder(columns),
-		tableID:  tableID,
+		tableID:  table.GetID(),
 	}
+	for i := 0; i < numValueColumns; i++ {
+		col := catalog.FindColumnByName(table, valueColumnNames[i])
+		rc.valueColumnIDs[i] = col.GetID()
+		rc.valueColumnOrdinals[i] = col.Ordinal()
+	}
+	return rc
 }
 
 // decodeRow converts the key and value into an instancerow. value may be nil
@@ -180,51 +207,44 @@ func (d *rowCodec) encodeValue(
 	rpcAddr string, sqlAddr string, sessionID sqlliveness.SessionID, locality roachpb.Locality,
 ) (*roachpb.Value, error) {
 	var valueBuf []byte
-
-	rpcAddrDatum := tree.DNull
-	if rpcAddr != "" {
-		rpcAddrDatum = tree.NewDString(rpcAddr)
+	columnsToEncode := [numValueColumns]func() tree.Datum{
+		addrColumnIdx: func() tree.Datum {
+			if rpcAddr == "" {
+				return tree.DNull
+			}
+			return tree.NewDString(rpcAddr)
+		},
+		sessionIDColumnIdx: func() tree.Datum {
+			if len(sessionID) == 0 {
+				return tree.DNull
+			}
+			return tree.NewDBytes(tree.DBytes(sessionID.UnsafeBytes()))
+		},
+		localityColumnIdx: func() tree.Datum {
+			if len(locality.Tiers) == 0 {
+				return tree.DNull
+			}
+			builder := json.NewObjectBuilder(1)
+			builder.Add("Tiers", json.FromString(locality.String()))
+			return tree.NewDJSON(builder.Build())
+		},
+		sqlAddrColumnIdx: func() tree.Datum {
+			if sqlAddr == "" {
+				return tree.DNull
+			}
+			return tree.NewDString(sqlAddr)
+		},
 	}
-	sqlAddrDatum := tree.DNull
-	if sqlAddr != "" {
-		sqlAddrDatum = tree.NewDString(sqlAddr)
-	}
-
-	// Ordering of the values below needs to remain stable for backwards
-	// compatibility. New values should be appended to the end.
-	valueBuf, err := valueside.Encode(
-		[]byte(nil), valueside.MakeColumnIDDelta(0, d.columns[1].GetID()), rpcAddrDatum, []byte(nil))
-	if err != nil {
-		return nil, err
-	}
-
-	sessionDatum := tree.DNull
-	if len(sessionID) > 0 {
-		sessionDatum = tree.NewDBytes(tree.DBytes(sessionID.UnsafeBytes()))
-	}
-	sessionColDiff := valueside.MakeColumnIDDelta(d.columns[1].GetID(), d.columns[2].GetID())
-	valueBuf, err = valueside.Encode(valueBuf, sessionColDiff, sessionDatum, []byte(nil))
-	if err != nil {
-		return nil, err
-	}
-
-	// Preserve the ordering of locality.Tiers, even though we convert it to json.
-	localityDatum := tree.DNull
-	if len(locality.Tiers) > 0 {
-		builder := json.NewObjectBuilder(1)
-		builder.Add("Tiers", json.FromString(locality.String()))
-		localityDatum = tree.NewDJSON(builder.Build())
-	}
-	localityColDiff := valueside.MakeColumnIDDelta(d.columns[2].GetID(), d.columns[3].GetID())
-	valueBuf, err = valueside.Encode(valueBuf, localityColDiff, localityDatum, []byte(nil))
-	if err != nil {
-		return nil, err
-	}
-
-	valueBuf, err = valueside.Encode(valueBuf,
-		valueside.MakeColumnIDDelta(d.columns[3].GetID(), d.columns[4].GetID()), sqlAddrDatum, []byte(nil))
-	if err != nil {
-		return nil, err
+	for i, f := range columnsToEncode {
+		var err error
+		var prev descpb.ColumnID
+		if i > 0 {
+			prev = d.valueColumnIDs[i-1]
+		}
+		delta := valueside.MakeColumnIDDelta(prev, d.valueColumnIDs[i])
+		if valueBuf, err = valueside.Encode(valueBuf, delta, f(), nil); err != nil {
+			return nil, err
+		}
 	}
 
 	v := &roachpb.Value{}
@@ -251,52 +271,68 @@ func (d *rowCodec) decodeValue(
 	timestamp hlc.Timestamp,
 	_ error,
 ) {
-	// The rest of the columns are stored as a family.
+	// The rest of the columns are stored as a single family.
 	bytes, err := value.GetTuple()
 	if err != nil {
 		return "", "", "", roachpb.Locality{}, hlc.Timestamp{}, err
 	}
-
 	datums, err := d.decoder.Decode(&tree.DatumAlloc{}, bytes)
 	if err != nil {
 		return "", "", "", roachpb.Locality{}, hlc.Timestamp{}, err
 	}
-
-	if addrVal := datums[1]; addrVal != tree.DNull {
-		rpcAddr = string(tree.MustBeDString(addrVal))
-	}
-	if len(datums) == 5 {
-		if sqlAddrVal := datums[4]; sqlAddrVal != tree.DNull {
-			sqlAddr = string(tree.MustBeDString(sqlAddrVal))
-		} else {
-			// Backwards compatible with single-address version.
-			sqlAddr = rpcAddr
-		}
-	} else {
-		// Backwards compatible with single-address version.
-		sqlAddr = rpcAddr
-	}
-	if sessionIDVal := datums[2]; sessionIDVal != tree.DNull {
-		sessionID = sqlliveness.SessionID(tree.MustBeDBytes(sessionIDVal))
-	}
-	if localityVal := datums[3]; localityVal != tree.DNull {
-		localityJ := tree.MustBeDJSON(localityVal)
-		v, err := localityJ.FetchValKey("Tiers")
-		if err != nil {
-			return "", "", "", roachpb.Locality{}, hlc.Timestamp{}, errors.Wrap(err, "failed to find Tiers attribute in locality")
-		}
-		if v != nil {
-			vStr, err := v.AsText()
-			if err != nil {
-				return "", "", "", roachpb.Locality{}, hlc.Timestamp{}, err
+	for i, f := range [numValueColumns]func(datum tree.Datum) error{
+		addrColumnIdx: func(datum tree.Datum) error {
+			if datum != tree.DNull {
+				rpcAddr = string(tree.MustBeDString(datum))
 			}
-			if len(*vStr) > 0 {
-				if err := locality.Set(*vStr); err != nil {
-					return "", "", "", roachpb.Locality{}, hlc.Timestamp{}, err
+			return nil
+		},
+		sessionIDColumnIdx: func(datum tree.Datum) error {
+			if datum != tree.DNull {
+				sessionID = sqlliveness.SessionID(tree.MustBeDBytes(datum))
+			}
+			return nil
+		},
+		localityColumnIdx: func(datum tree.Datum) error {
+			if datum == tree.DNull {
+				return nil
+			}
+			localityJ := tree.MustBeDJSON(datum)
+			v, err := localityJ.FetchValKey("Tiers")
+			if err != nil {
+				return errors.Wrap(err, "failed to find Tiers attribute in locality")
+			}
+			if v != nil {
+				vStr, err := v.AsText()
+				if err != nil {
+					return err
+				}
+				if len(*vStr) > 0 {
+					if err := locality.Set(*vStr); err != nil {
+						return err
+					}
 				}
 			}
+			return nil
+		},
+		sqlAddrColumnIdx: func(datum tree.Datum) error {
+			if datum != tree.DNull {
+				sqlAddr = string(tree.MustBeDString(datum))
+			} else {
+				sqlAddr = rpcAddr
+			}
+			return nil
+		},
+	} {
+		ord := d.valueColumnOrdinals[i]
+		// Deal with the fact that new columns may not yet have been added.
+		datum := tree.DNull
+		if ord < len(datums) {
+			datum = datums[ord]
+		}
+		if err := f(datum); err != nil {
+			return "", "", "", roachpb.Locality{}, hlc.Timestamp{}, err
 		}
 	}
-
 	return rpcAddr, sqlAddr, sessionID, locality, value.Timestamp, nil
 }

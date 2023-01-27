@@ -86,6 +86,30 @@ func init() {
 			}
 		},
 	)
+
+	// Column becomes writable in the same stage as column constraint is enforced.
+	//
+	// This rule exists to prevent the case that the constraint becomes enforced
+	// (which means writes need to honor it) when the column itself is still
+	// in DELETE_ONLY and thus not visible to writes.
+	//
+	// N.B. It's essentially the same rule as "column constraint removed right
+	// before column reaches delete only" but on the adding path.
+	// N.B. SameStage is enough; which transition happens first won't matter.
+	registerDepRule(
+		"column writable right before column constraint is enforced.",
+		scgraph.SameStagePrecedence,
+		"column", "column-constraint",
+		func(from, to NodeVars) rel.Clauses {
+			return rel.Clauses{
+				from.Type((*scpb.Column)(nil)),
+				to.Type((*scpb.ColumnNotNull)(nil)),
+				JoinOnColumnID(from, to, "table-id", "col-id"),
+				StatusesToPublicOrTransient(from, scpb.Status_WRITE_ONLY, to, scpb.Status_WRITE_ONLY),
+			}
+		},
+	)
+
 }
 
 // This rule ensures that columns depend on each other in increasing order.

@@ -58,6 +58,17 @@ upsert descriptor #106
   +  - 107
   +  version: "2"
 upsert descriptor #107
+   table:
+  +  checks:
+  +  - columnIds:
+  +    - 1
+  +    - 2
+  +    constraintId: 2
+  +    expr: (i > nextval(104:::REGCLASS)) OR (j::@100105 = b'@':::@100105)
+  +    name: crdb_internal_constraint_2_name_placeholder
+  +    validity: Validating
+     columns:
+     - id: 1
   ...
      id: 107
      modificationTime: {}
@@ -149,6 +160,17 @@ upsert descriptor #106
   +  - 107
   +  version: "2"
 upsert descriptor #107
+   table:
+  +  checks:
+  +  - columnIds:
+  +    - 1
+  +    - 2
+  +    constraintId: 2
+  +    expr: (i > nextval(104:::REGCLASS)) OR (j::@100105 = b'@':::@100105)
+  +    name: crdb_internal_constraint_2_name_placeholder
+  +    validity: Validating
+     columns:
+     - id: 1
   ...
      createAsOfTime:
        wallTime: "1640995200000000000"
@@ -261,13 +283,11 @@ upsert descriptor #106
   -  version: "2"
   +  version: "3"
 upsert descriptor #107
-   table:
-  +  checks:
-  +  - columnIds:
-  +    - 1
-  +    - 2
-  +    constraintId: 2
-  +    expr: (i > nextval(104:::REGCLASS)) OR (j::@100105 = b'@':::@100105)
+  ...
+       constraintId: 2
+       expr: (i > nextval(104:::REGCLASS)) OR (j::@100105 = b'@':::@100105)
+  -    name: crdb_internal_constraint_2_name_placeholder
+  -    validity: Validating
   +    name: check_i_j
      columns:
      - id: 1

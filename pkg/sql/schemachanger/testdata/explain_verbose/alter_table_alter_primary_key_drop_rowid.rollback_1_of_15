@@ -11,7 +11,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 1 of 15;
     │
     └── • Stage 1 of 1 in PostCommitNonRevertiblePhase
         │
-        ├── • 2 elements transitioning toward PUBLIC
+        ├── • 3 elements transitioning toward PUBLIC
         │   │
         │   ├── • Column:{DescID: 104, ColumnID: 2}
         │   │   │ WRITE_ONLY → PUBLIC
@@ -25,14 +25,23 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 1 of 15;
         │   │   ├── • Precedence dependency from PUBLIC ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 2}
         │   │   │     rule: "column dependents exist before column becomes public"
         │   │   │
+        │   │   ├── • Precedence dependency from PUBLIC ColumnNotNull:{DescID: 104, ColumnID: 2, IndexID: 0}
+        │   │   │     rule: "column dependents exist before column becomes public"
+        │   │   │
         │   │   ├── • Precedence dependency from PUBLIC ColumnDefaultExpression:{DescID: 104, ColumnID: 2}
         │   │   │     rule: "column dependents exist before column becomes public"
         │   │   │
         │   │   └── • Precedence dependency from PUBLIC IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 1}
         │   │         rule: "column dependents exist before column becomes public"
         │   │
-        │   └── • ColumnName:{DescID: 104, Name: rowid, ColumnID: 2}
-        │         ABSENT → PUBLIC
+        │   ├── • ColumnName:{DescID: 104, Name: rowid, ColumnID: 2}
+        │   │     ABSENT → PUBLIC
+        │   │
+        │   └── • ColumnNotNull:{DescID: 104, ColumnID: 2, IndexID: 0}
+        │       │ VALIDATED → PUBLIC
+        │       │
+        │       └── • PreviousStagePrecedence dependency from VALIDATED ColumnNotNull:{DescID: 104, ColumnID: 2, IndexID: 0}
+        │             rule: "ColumnNotNull transitions to PUBLIC uphold 2-version invariant: VALIDATED->PUBLIC"
         │
         ├── • 10 elements transitioning toward ABSENT
         │   │
@@ -120,11 +129,15 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 1 of 15;
         │       └── • Precedence dependency from ABSENT PrimaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2}
         │             rule: "index removed before garbage collection"
         │
-        └── • 10 Mutation operations
+        └── • 11 Mutation operations
             │
             ├── • SetColumnName
             │     ColumnID: 2
             │     Name: rowid
+            │     TableID: 104
+            │
+            ├── • MakeValidatedColumnNotNullPublic
+            │     ColumnID: 2
             │     TableID: 104
             │
             ├── • MakeWriteOnlyColumnPublic

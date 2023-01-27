@@ -63,6 +63,11 @@ func TestBackup_base_alter_table_add_unique_without_index(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	sctest.Backup(t, "pkg/sql/schemachanger/testdata/end_to_end/alter_table_add_unique_without_index", newCluster)
 }
+func TestBackup_base_alter_table_alter_column_set_not_null(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	sctest.Backup(t, "pkg/sql/schemachanger/testdata/end_to_end/alter_table_alter_column_set_not_null", newCluster)
+}
 func TestBackup_base_alter_table_alter_primary_key_drop_rowid(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

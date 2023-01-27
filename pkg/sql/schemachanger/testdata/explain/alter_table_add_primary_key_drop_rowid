@@ -19,12 +19,14 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD PRIM
  │         │    ├── ABSENT → DELETE_ONLY      TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
  │         │    ├── ABSENT → TRANSIENT_ABSENT IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}
  │         │    └── ABSENT → TRANSIENT_ABSENT IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}
- │         ├── 2 elements transitioning toward ABSENT
+ │         ├── 3 elements transitioning toward ABSENT
  │         │    ├── PUBLIC → WRITE_ONLY       Column:{DescID: 104, ColumnID: 2}
- │         │    └── PUBLIC → ABSENT           ColumnName:{DescID: 104, Name: rowid, ColumnID: 2}
- │         └── 10 Mutation operations
+ │         │    ├── PUBLIC → ABSENT           ColumnName:{DescID: 104, Name: rowid, ColumnID: 2}
+ │         │    └── PUBLIC → VALIDATED        ColumnNotNull:{DescID: 104, ColumnID: 2, IndexID: 0}
+ │         └── 11 Mutation operations
  │              ├── MakePublicColumnWriteOnly {"ColumnID":2,"TableID":104}
  │              ├── SetColumnName {"ColumnID":2,"Name":"crdb_internal_co...","TableID":104}
+ │              ├── MakePublicColumnNotNullValidated {"ColumnID":2,"TableID":104}
  │              ├── MakeAbsentIndexBackfilling {"Index":{"ConstraintID":2,"IndexID":2,"IsUnique":true,"SourceIndexID":1,"TableID":104,"TemporaryIndexID":3}}
  │              ├── AddColumnToIndex {"ColumnID":1,"IndexID":2,"TableID":104}
  │              ├── AddColumnToIndex {"ColumnID":2,"IndexID":2,"Kind":2,"TableID":104}
@@ -47,9 +49,10 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD PRIM
  │    │    │    ├── DELETE_ONLY      → ABSENT TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
  │    │    │    ├── TRANSIENT_ABSENT → ABSENT IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}
  │    │    │    └── TRANSIENT_ABSENT → ABSENT IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}
- │    │    ├── 2 elements transitioning toward ABSENT
+ │    │    ├── 3 elements transitioning toward ABSENT
  │    │    │    ├── WRITE_ONLY       → PUBLIC Column:{DescID: 104, ColumnID: 2}
- │    │    │    └── ABSENT           → PUBLIC ColumnName:{DescID: 104, Name: rowid, ColumnID: 2}
+ │    │    │    ├── ABSENT           → PUBLIC ColumnName:{DescID: 104, Name: rowid, ColumnID: 2}
+ │    │    │    └── VALIDATED        → PUBLIC ColumnNotNull:{DescID: 104, ColumnID: 2, IndexID: 0}
  │    │    └── 1 Mutation operation
  │    │         └── UndoAllInTxnImmediateMutationOpSideEffects
  │    └── Stage 2 of 2 in PreCommitPhase
@@ -65,12 +68,14 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD PRIM
  │         │    ├── ABSENT → DELETE_ONLY   TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}
  │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}
  │         │    └── ABSENT → PUBLIC        IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}
- │         ├── 2 elements transitioning toward ABSENT
+ │         ├── 3 elements transitioning toward ABSENT
  │         │    ├── PUBLIC → WRITE_ONLY    Column:{DescID: 104, ColumnID: 2}
- │         │    └── PUBLIC → ABSENT        ColumnName:{DescID: 104, Name: rowid, ColumnID: 2}
- │         └── 15 Mutation operations
+ │         │    ├── PUBLIC → ABSENT        ColumnName:{DescID: 104, Name: rowid, ColumnID: 2}
+ │         │    └── PUBLIC → VALIDATED     ColumnNotNull:{DescID: 104, ColumnID: 2, IndexID: 0}
+ │         └── 16 Mutation operations
  │              ├── MakePublicColumnWriteOnly {"ColumnID":2,"TableID":104}
  │              ├── SetColumnName {"ColumnID":2,"Name":"crdb_internal_co...","TableID":104}
+ │              ├── MakePublicColumnNotNullValidated {"ColumnID":2,"TableID":104}
  │              ├── MakeAbsentIndexBackfilling {"Index":{"ConstraintID":2,"IndexID":2,"IsUnique":true,"SourceIndexID":1,"TableID":104,"TemporaryIndexID":3}}
  │              ├── MaybeAddSplitForIndex {"IndexID":2,"TableID":104}
  │              ├── AddColumnToIndex {"ColumnID":1,"IndexID":2,"TableID":104}
@@ -200,15 +205,17 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD PRIM
       │    │    ├── PUBLIC     → TRANSIENT_ABSENT      IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}
       │    │    ├── WRITE_ONLY → TRANSIENT_DELETE_ONLY TemporaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 5, SourceIndexID: 2}
       │    │    └── PUBLIC     → TRANSIENT_ABSENT      IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 5}
-      │    ├── 4 elements transitioning toward ABSENT
+      │    ├── 5 elements transitioning toward ABSENT
       │    │    ├── WRITE_ONLY → DELETE_ONLY           Column:{DescID: 104, ColumnID: 2}
+      │    │    ├── VALIDATED  → ABSENT                ColumnNotNull:{DescID: 104, ColumnID: 2, IndexID: 0}
       │    │    ├── PUBLIC     → ABSENT                IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 1}
       │    │    ├── PUBLIC     → ABSENT                IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 1}
       │    │    └── VALIDATED  → DELETE_ONLY           PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}
-      │    └── 6 Mutation operations
-      │         ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":2,"TableID":104}
+      │    └── 7 Mutation operations
+      │         ├── RemoveColumnNotNull {"ColumnID":2,"TableID":104}
       │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":3,"TableID":104}
       │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":5,"TableID":104}
+      │         ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":2,"TableID":104}
       │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":1,"TableID":104}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
       │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}

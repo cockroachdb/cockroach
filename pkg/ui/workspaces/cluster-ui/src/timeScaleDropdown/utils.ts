@@ -93,7 +93,7 @@ export const defaultTimeScaleSelected: TimeScale = {
 // Since this value is used on componentDidUpdate, we don't want a refresh
 // to happen every millisecond, so we set the millisecond value to 0.
 export const toDateRange = (ts: TimeScale): [moment.Moment, moment.Moment] => {
-  const end = ts.fixedWindowEnd
+  const end = ts?.fixedWindowEnd
     ? moment.utc(ts.fixedWindowEnd)
     : moment().utc();
   const endRounded = end.set({ millisecond: 0 });
@@ -191,3 +191,15 @@ export const createTimeScaleFromDateRange = (
 
   return timeScale;
 };
+
+export function timeScaleRangeToObj(ts: TimeScale): {
+  start?: moment.Moment;
+  end?: moment.Moment;
+} {
+  if (ts === null) return {};
+  const [startTime, endTime] = toDateRange(ts);
+  return {
+    start: startTime,
+    end: endTime,
+  };
+}

@@ -13,6 +13,7 @@ package scdecomp
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
@@ -35,6 +36,7 @@ type walkCtx struct {
 	backRefs             catalog.DescriptorIDSet
 	commentReader        CommentGetter
 	zoneConfigReader     ZoneConfigGetter
+	clusterVersion       clusterversion.ClusterVersion
 }
 
 // WalkDescriptor walks through the elements which are implicitly defined in
@@ -63,6 +65,7 @@ func WalkDescriptor(
 	ev ElementVisitor,
 	commentReader CommentGetter,
 	zoneConfigReader ZoneConfigGetter,
+	clusterVersion clusterversion.ClusterVersion,
 ) (backRefs catalog.DescriptorIDSet) {
 	w := walkCtx{
 		ctx:                  ctx,
@@ -72,6 +75,7 @@ func WalkDescriptor(
 		cachedTypeIDClosures: make(map[catid.DescID]catalog.DescriptorIDSet),
 		commentReader:        commentReader,
 		zoneConfigReader:     zoneConfigReader,
+		clusterVersion:       clusterVersion,
 	}
 	w.walkRoot()
 	w.backRefs.Remove(catid.InvalidDescID)
@@ -416,10 +420,11 @@ func (w *walkCtx) walkColumn(tbl catalog.TableDescriptor, col catalog.Column) {
 	})
 	{
 		columnType := &scpb.ColumnType{
-			TableID:    tbl.GetID(),
-			ColumnID:   col.GetID(),
-			IsNullable: col.IsNullable(),
-			IsVirtual:  col.IsVirtual(),
+			TableID:                 tbl.GetID(),
+			ColumnID:                col.GetID(),
+			IsNullable:              col.IsNullable(),
+			IsVirtual:               col.IsVirtual(),
+			ElementCreationMetadata: NewElementCreationMetadata(w.clusterVersion),
 		}
 		_ = tbl.ForeachFamily(func(family *descpb.ColumnFamilyDescriptor) error {
 			if catalog.MakeTableColSet(family.ColumnIDs...).Contains(col.GetID()) {
@@ -437,6 +442,12 @@ func (w *walkCtx) walkColumn(tbl catalog.TableDescriptor, col catalog.Column) {
 			columnType.ComputeExpr = expr
 		}
 		w.ev(scpb.Status_PUBLIC, columnType)
+	}
+	if !col.IsNullable() {
+		w.ev(scpb.Status_PUBLIC, &scpb.ColumnNotNull{
+			TableID:  tbl.GetID(),
+			ColumnID: col.GetID(),
+		})
 	}
 	if col.HasDefault() {
 		expr, err := w.newExpression(col.GetDefaultExpr())

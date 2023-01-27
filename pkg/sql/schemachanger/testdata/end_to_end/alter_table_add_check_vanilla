@@ -23,6 +23,16 @@ write *eventpb.AlterTable to event log:
   tableName: defaultdb.public.t
 ## StatementPhase stage 1 of 1 with 1 MutationType op
 upsert descriptor #104
+   table:
+  +  checks:
+  +  - columnIds:
+  +    - 1
+  +    constraintId: 2
+  +    expr: i > 0:::INT8
+  +    name: crdb_internal_constraint_2_name_placeholder
+  +    validity: Validating
+     columns:
+     - id: 1
   ...
      id: 104
      modificationTime: {}
@@ -59,6 +69,16 @@ undo all catalog changes within txn #1
 persist all catalog changes to storage
 ## PreCommitPhase stage 2 of 2 with 3 MutationType ops
 upsert descriptor #104
+   table:
+  +  checks:
+  +  - columnIds:
+  +    - 1
+  +    constraintId: 2
+  +    expr: i > 0:::INT8
+  +    name: crdb_internal_constraint_2_name_placeholder
+  +    validity: Validating
+     columns:
+     - id: 1
   ...
      createAsOfTime:
        wallTime: "1640995200000000000"
@@ -122,12 +142,11 @@ commit transaction #3
 begin transaction #4
 ## PostCommitPhase stage 2 of 2 with 4 MutationType ops
 upsert descriptor #104
-   table:
-  +  checks:
-  +  - columnIds:
-  +    - 1
-  +    constraintId: 2
-  +    expr: i > 0:::INT8
+  ...
+       constraintId: 2
+       expr: i > 0:::INT8
+  -    name: crdb_internal_constraint_2_name_placeholder
+  -    validity: Validating
   +    name: check_i
      columns:
      - id: 1

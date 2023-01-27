@@ -14,7 +14,7 @@ EXPLAIN (ddl, verbose) DROP TABLE db.sc.t;
 │   │
 │   └── • Stage 1 of 1 in StatementPhase
 │       │
-│       ├── • 29 elements transitioning toward ABSENT
+│       ├── • 30 elements transitioning toward ABSENT
 │       │   │
 │       │   ├── • Namespace:{DescID: 107, Name: t, ReferencedDescID: 104}
 │       │   │   │ PUBLIC → ABSENT
@@ -165,6 +165,12 @@ EXPLAIN (ddl, verbose) DROP TABLE db.sc.t;
 │       │   │   │
 │       │   │   └── • SameStagePrecedence dependency from ABSENT ColumnDefaultExpression:{DescID: 107, ColumnID: 3}
 │       │   │         rule: "column type dependents removed right before column type"
+│       │   │
+│       │   ├── • ColumnNotNull:{DescID: 107, ColumnID: 3, IndexID: 0}
+│       │   │   │ PUBLIC → VALIDATED
+│       │   │   │
+│       │   │   └── • skip PUBLIC → VALIDATED operations
+│       │   │         rule: "skip constraint removal ops on relation drop"
 │       │   │
 │       │   ├── • ColumnDefaultExpression:{DescID: 107, ColumnID: 3}
 │       │   │   │ PUBLIC → ABSENT
@@ -331,7 +337,7 @@ EXPLAIN (ddl, verbose) DROP TABLE db.sc.t;
 │   │
 │   ├── • Stage 1 of 2 in PreCommitPhase
 │   │   │
-│   │   ├── • 29 elements transitioning toward ABSENT
+│   │   ├── • 30 elements transitioning toward ABSENT
 │   │   │   │
 │   │   │   ├── • Namespace:{DescID: 107, Name: t, ReferencedDescID: 104}
 │   │   │   │     ABSENT → PUBLIC
@@ -384,6 +390,9 @@ EXPLAIN (ddl, verbose) DROP TABLE db.sc.t;
 │   │   │   ├── • ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 3}
 │   │   │   │     ABSENT → PUBLIC
 │   │   │   │
+│   │   │   ├── • ColumnNotNull:{DescID: 107, ColumnID: 3, IndexID: 0}
+│   │   │   │     VALIDATED → PUBLIC
+│   │   │   │
 │   │   │   ├── • ColumnDefaultExpression:{DescID: 107, ColumnID: 3}
 │   │   │   │     ABSENT → PUBLIC
 │   │   │   │
@@ -427,7 +436,7 @@ EXPLAIN (ddl, verbose) DROP TABLE db.sc.t;
 │   │
 │   └── • Stage 2 of 2 in PreCommitPhase
 │       │
-│       ├── • 29 elements transitioning toward ABSENT
+│       ├── • 30 elements transitioning toward ABSENT
 │       │   │
 │       │   ├── • Namespace:{DescID: 107, Name: t, ReferencedDescID: 104}
 │       │   │   │ PUBLIC → ABSENT
@@ -576,10 +585,16 @@ EXPLAIN (ddl, verbose) DROP TABLE db.sc.t;
 │       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 107}
 │       │   │   │     rule: "relation dropped before dependent column"
 │       │   │   │
+│       │   │   ├── • SameStagePrecedence dependency from ABSENT ColumnNotNull:{DescID: 107, ColumnID: 3, IndexID: 0}
+│       │   │   │     rule: "column constraint removed right before column reaches delete only"
+│       │   │   │
 │       │   │   ├── • Precedence dependency from ABSENT ColumnName:{DescID: 107, Name: rowid, ColumnID: 3}
 │       │   │   │     rule: "dependents removed before column"
 │       │   │   │
 │       │   │   ├── • Precedence dependency from ABSENT ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 3}
+│       │   │   │     rule: "dependents removed before column"
+│       │   │   │
+│       │   │   ├── • Precedence dependency from ABSENT ColumnNotNull:{DescID: 107, ColumnID: 3, IndexID: 0}
 │       │   │   │     rule: "dependents removed before column"
 │       │   │   │
 │       │   │   ├── • Precedence dependency from ABSENT ColumnDefaultExpression:{DescID: 107, ColumnID: 3}
@@ -617,6 +632,15 @@ EXPLAIN (ddl, verbose) DROP TABLE db.sc.t;
 │       │   │   │
 │       │   │   └── • SameStagePrecedence dependency from ABSENT ColumnDefaultExpression:{DescID: 107, ColumnID: 3}
 │       │   │         rule: "column type dependents removed right before column type"
+│       │   │
+│       │   ├── • ColumnNotNull:{DescID: 107, ColumnID: 3, IndexID: 0}
+│       │   │   │ PUBLIC → ABSENT
+│       │   │   │
+│       │   │   ├── • Precedence dependency from WRITE_ONLY Column:{DescID: 107, ColumnID: 3}
+│       │   │   │     rule: "column no longer public before dependents"
+│       │   │   │
+│       │   │   └── • skip PUBLIC → VALIDATED operations
+│       │   │         rule: "skip constraint removal ops on relation drop"
 │       │   │
 │       │   ├── • ColumnDefaultExpression:{DescID: 107, ColumnID: 3}
 │       │   │   │ PUBLIC → ABSENT
@@ -795,7 +819,7 @@ EXPLAIN (ddl, verbose) DROP TABLE db.sc.t;
 │       │       └── • skip PUBLIC → ABSENT operations
 │       │             rule: "skip index dependents removal ops on relation drop"
 │       │
-│       └── • 12 Mutation operations
+│       └── • 13 Mutation operations
 │           │
 │           ├── • MarkDescriptorAsDropped
 │           │     DescriptorID: 107
@@ -818,6 +842,10 @@ EXPLAIN (ddl, verbose) DROP TABLE db.sc.t;
 │           │       Name: t
 │           │       SchemaID: 106
 │           │
+│           ├── • RemoveColumnNotNull
+│           │     ColumnID: 3
+│           │     TableID: 107
+│           │
 │           ├── • MakeDeleteOnlyColumnAbsent
 │           │     ColumnID: 1
 │           │     TableID: 107
@@ -827,15 +855,15 @@ EXPLAIN (ddl, verbose) DROP TABLE db.sc.t;
 │           │     TableID: 107
 │           │
 │           ├── • MakeDeleteOnlyColumnAbsent
-│           │     ColumnID: 3
-│           │     TableID: 107
-│           │
-│           ├── • MakeDeleteOnlyColumnAbsent
 │           │     ColumnID: 4294967295
 │           │     TableID: 107
 │           │
 │           ├── • MakeDeleteOnlyColumnAbsent
 │           │     ColumnID: 4294967294
+│           │     TableID: 107
+│           │
+│           ├── • MakeDeleteOnlyColumnAbsent
+│           │     ColumnID: 3
 │           │     TableID: 107
 │           │
 │           ├── • SetJobStateOnDescriptor

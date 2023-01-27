@@ -12,7 +12,6 @@ package instancestorage_test
 
 import (
 	"context"
-	"strings"
 	"testing"
 	"time"
 
@@ -21,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/enum"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance/instancestorage"
@@ -54,14 +53,12 @@ func TestReader(t *testing.T) {
 	) {
 		dbName := t.Name()
 		tDB.Exec(t, `CREATE DATABASE "`+dbName+`"`)
-		schema := strings.Replace(systemschema.SQLInstancesTableSchema,
-			`CREATE TABLE system.sql_instances`,
-			`CREATE TABLE "`+dbName+`".sql_instances`, 1)
+		schema := instancestorage.GetTableSQLForDatabase(dbName)
 		tDB.Exec(t, schema)
-		tableID := getTableID(t, tDB, dbName, "sql_instances")
+		table := desctestutils.TestingGetPublicTableDescriptor(s.DB(), s.Codec(), dbName, "sql_instances")
 		slStorage := slstorage.NewFakeStorage()
-		storage := instancestorage.NewTestingStorage(s.DB(), keys.SystemSQLCodec, tableID, slStorage, s.ClusterSettings())
-		reader := instancestorage.NewTestingReader(storage, slStorage, s.RangeFeedFactory().(*rangefeed.Factory), keys.SystemSQLCodec, tableID, s.Clock(), s.Stopper())
+		storage := instancestorage.NewTestingStorage(s.DB(), keys.SystemSQLCodec, table, slStorage, s.ClusterSettings())
+		reader := instancestorage.NewTestingReader(storage, slStorage, s.RangeFeedFactory().(*rangefeed.Factory), keys.SystemSQLCodec, table, s.Clock(), s.Stopper())
 		return storage, slStorage, s.Clock(), reader
 	}
 
@@ -123,7 +120,7 @@ func TestReader(t *testing.T) {
 					return errors.Newf("expected instance address %s != actual instance address %s", rpcAddr, instanceInfo.InstanceRPCAddr)
 				}
 				if sqlAddr != instanceInfo.InstanceSQLAddr {
-					return errors.Newf("expected instance address %s != actual instance address %s", sqlAddr, instanceInfo.InstanceSQLAddr)
+					return errors.Newf("expected instance sql address %s != actual sql instance address %s", sqlAddr, instanceInfo.InstanceSQLAddr)
 				}
 				if !locality.Equals(instanceInfo.Locality) {
 					return errors.Newf("expected instance locality %s != actual instance locality %s", locality, instanceInfo.Locality)
@@ -189,7 +186,7 @@ func TestReader(t *testing.T) {
 			var instancesUsingTxn []sqlinstance.InstanceInfo
 			if err := s.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 				var err error
-				instancesUsingTxn, err = reader.GetAllInstancesUsingTxn(ctx, s.Codec(), getTableID(t, tDB, t.Name(), "sql_instances"), txn)
+				instancesUsingTxn, err = reader.GetAllInstancesUsingTxn(ctx, txn)
 				return err
 			}); err != nil {
 				return nil, err

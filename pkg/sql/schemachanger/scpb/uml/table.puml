@@ -168,6 +168,7 @@ ColumnType :  TypeT
 ColumnType :  IsNullable
 ColumnType :  ComputeExpr
 ColumnType :  IsVirtual
+ColumnType :  ElementCreationMetadata
 
 object ColumnDefaultExpression
 
@@ -193,6 +194,12 @@ ColumnComment :  TableID
 ColumnComment :  ColumnID
 ColumnComment :  Comment
 ColumnComment :  PgAttributeNum
+
+object ColumnNotNull
+
+ColumnNotNull :  TableID
+ColumnNotNull :  ColumnID
+ColumnNotNull :  IndexIDForValidation
 
 object IndexName
 
@@ -383,6 +390,7 @@ Column <|-- ColumnDefaultExpression
 Column <|-- ColumnOnUpdateExpression
 Column <|-- SequenceOwner
 Column <|-- ColumnComment
+Column <|-- ColumnNotNull
 PrimaryIndex <|-- IndexName
 SecondaryIndex <|-- IndexName
 PrimaryIndex <|-- IndexPartitioning

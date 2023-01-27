@@ -13,7 +13,7 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
 │   │
 │   └── • Stage 1 of 1 in StatementPhase
 │       │
-│       ├── • 52 elements transitioning toward ABSENT
+│       ├── • 53 elements transitioning toward ABSENT
 │       │   │
 │       │   ├── • Namespace:{DescID: 104, Name: multi_region_test_db, ReferencedDescID: 0}
 │       │   │   │ PUBLIC → ABSENT
@@ -368,6 +368,12 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
 │       │   │   │
 │       │   │   └── • Precedence dependency from WRITE_ONLY Column:{DescID: 108, ColumnID: 1}
 │       │   │         rule: "column no longer public before dependents"
+│       │   │
+│       │   ├── • ColumnNotNull:{DescID: 108, ColumnID: 1, IndexID: 0}
+│       │   │   │ PUBLIC → VALIDATED
+│       │   │   │
+│       │   │   └── • skip PUBLIC → VALIDATED operations
+│       │   │         rule: "skip constraint removal ops on relation drop"
 │       │   │
 │       │   ├── • Column:{DescID: 108, ColumnID: 4294967295}
 │       │   │   │ PUBLIC → WRITE_ONLY
@@ -541,7 +547,7 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
 │   │
 │   ├── • Stage 1 of 2 in PreCommitPhase
 │   │   │
-│   │   ├── • 52 elements transitioning toward ABSENT
+│   │   ├── • 53 elements transitioning toward ABSENT
 │   │   │   │
 │   │   │   ├── • Namespace:{DescID: 104, Name: multi_region_test_db, ReferencedDescID: 0}
 │   │   │   │     ABSENT → PUBLIC
@@ -672,6 +678,9 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
 │   │   │   ├── • ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 1}
 │   │   │   │     ABSENT → PUBLIC
 │   │   │   │
+│   │   │   ├── • ColumnNotNull:{DescID: 108, ColumnID: 1, IndexID: 0}
+│   │   │   │     VALIDATED → PUBLIC
+│   │   │   │
 │   │   │   ├── • Column:{DescID: 108, ColumnID: 4294967295}
 │   │   │   │     WRITE_ONLY → PUBLIC
 │   │   │   │
@@ -706,7 +715,7 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
 │   │
 │   └── • Stage 2 of 2 in PreCommitPhase
 │       │
-│       ├── • 52 elements transitioning toward ABSENT
+│       ├── • 53 elements transitioning toward ABSENT
 │       │   │
 │       │   ├── • Namespace:{DescID: 104, Name: multi_region_test_db, ReferencedDescID: 0}
 │       │   │   │ PUBLIC → ABSENT
@@ -1038,10 +1047,16 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
 │       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 108}
 │       │   │   │     rule: "relation dropped before dependent column"
 │       │   │   │
+│       │   │   ├── • SameStagePrecedence dependency from ABSENT ColumnNotNull:{DescID: 108, ColumnID: 1, IndexID: 0}
+│       │   │   │     rule: "column constraint removed right before column reaches delete only"
+│       │   │   │
 │       │   │   ├── • Precedence dependency from ABSENT ColumnName:{DescID: 108, Name: a, ColumnID: 1}
 │       │   │   │     rule: "dependents removed before column"
 │       │   │   │
 │       │   │   ├── • Precedence dependency from ABSENT ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 1}
+│       │   │   │     rule: "dependents removed before column"
+│       │   │   │
+│       │   │   ├── • Precedence dependency from ABSENT ColumnNotNull:{DescID: 108, ColumnID: 1, IndexID: 0}
 │       │   │   │     rule: "dependents removed before column"
 │       │   │   │
 │       │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 108, ColumnID: 1, IndexID: 1}
@@ -1073,6 +1088,15 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
 │       │   │   │
 │       │   │   └── • Precedence dependency from WRITE_ONLY Column:{DescID: 108, ColumnID: 1}
 │       │   │         rule: "column no longer public before dependents"
+│       │   │
+│       │   ├── • ColumnNotNull:{DescID: 108, ColumnID: 1, IndexID: 0}
+│       │   │   │ PUBLIC → ABSENT
+│       │   │   │
+│       │   │   ├── • Precedence dependency from WRITE_ONLY Column:{DescID: 108, ColumnID: 1}
+│       │   │   │     rule: "column no longer public before dependents"
+│       │   │   │
+│       │   │   └── • skip PUBLIC → VALIDATED operations
+│       │   │         rule: "skip constraint removal ops on relation drop"
 │       │   │
 │       │   ├── • Column:{DescID: 108, ColumnID: 4294967295}
 │       │   │   │ PUBLIC → ABSENT
@@ -1204,7 +1228,7 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
 │       │       └── • skip PUBLIC → ABSENT operations
 │       │             rule: "skip index dependents removal ops on relation drop"
 │       │
-│       └── • 25 Mutation operations
+│       └── • 26 Mutation operations
 │           │
 │           ├── • MarkDescriptorAsDropped
 │           │     DescriptorID: 104
@@ -1278,7 +1302,7 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
 │           │       Name: table_regional_by_table
 │           │       SchemaID: 105
 │           │
-│           ├── • MakeDeleteOnlyColumnAbsent
+│           ├── • RemoveColumnNotNull
 │           │     ColumnID: 1
 │           │     TableID: 108
 │           │
@@ -1288,6 +1312,10 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
 │           │
 │           ├── • MakeDeleteOnlyColumnAbsent
 │           │     ColumnID: 4294967294
+│           │     TableID: 108
+│           │
+│           ├── • MakeDeleteOnlyColumnAbsent
+│           │     ColumnID: 1
 │           │     TableID: 108
 │           │
 │           ├── • SetJobStateOnDescriptor
