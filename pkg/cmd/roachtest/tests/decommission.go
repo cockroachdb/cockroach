@@ -343,7 +343,11 @@ func runDecommission(
 				return err
 			}
 			startOpts := option.DefaultStartOpts()
-			startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs, fmt.Sprintf("--join %s --attrs=node%d", internalAddrs[0], node))
+			extraArgs := []string{
+				fmt.Sprintf("--join %s", internalAddrs[0]),
+				fmt.Sprintf("--attrs=node%d", node),
+			}
+			startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs, extraArgs...)
 			if err := c.StartE(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.Node(node)); err != nil {
 				return err
 			}
@@ -842,7 +846,10 @@ func runDecommissionRandomized(ctx context.Context, t test.Test, c cluster.Clust
 			}
 			joinAddr := internalAddrs[0]
 			startOpts := option.DefaultStartOpts()
-			startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs, fmt.Sprintf("--join %s", joinAddr))
+			startOpts.RoachprodOpts.ExtraArgs = append(
+				startOpts.RoachprodOpts.ExtraArgs,
+				[]string{"--join", joinAddr}...,
+			)
 			c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.Node(targetNode))
 		}
 

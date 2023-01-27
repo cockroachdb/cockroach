@@ -86,7 +86,11 @@ func argExists(args []string, target string) int {
 type StartOpts struct {
 	Target     StartTarget
 	Sequential bool
-	ExtraArgs  []string
+	// ExtraArgs are extra arguments used when starting the node. Multiple
+	// arguments should be passed as separate items in the slice. For example:
+	//   Instead of: []string{"--flag foo bar"}
+	//   Use:        []string{"--flag", "foo", "bar"}
+	ExtraArgs []string
 
 	// ScheduleBackups starts a backup schedule once the cluster starts
 	ScheduleBackups    bool
@@ -557,7 +561,7 @@ func (c *SyncedCluster) generateStartArgs(
 		if err != nil {
 			return nil, err
 		}
-		args = append(args, strings.Split(expandedArg, " ")...)
+		args = append(args, expandedArg)
 	}
 
 	return args, nil
