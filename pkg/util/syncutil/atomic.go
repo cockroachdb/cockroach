@@ -31,6 +31,32 @@ func LoadFloat64(addr *AtomicFloat64) (val float64) {
 	return math.Float64frombits(atomic.LoadUint64((*uint64)(addr)))
 }
 
+func AddFloat64(addr *AtomicFloat64, add float64) (val float64) {
+	for {
+		oldFloat := LoadFloat64(addr)
+		oldInt := math.Float64bits(oldFloat)
+		newFloat := oldFloat + add
+		newInt := math.Float64bits(newFloat)
+		if atomic.CompareAndSwapUint64((*uint64)(addr), oldInt, newInt) {
+			return
+		}
+	}
+}
+
+func StoreFloat64IfHigher(addr *AtomicFloat64, new float64) (val float64) {
+	for {
+		oldFloat := LoadFloat64(addr)
+		if oldFloat > new {
+			return
+		}
+		oldInt := math.Float64bits(oldFloat)
+		newInt := math.Float64bits(new)
+		if atomic.CompareAndSwapUint64((*uint64)(addr), oldInt, newInt) {
+			return
+		}
+	}
+}
+
 // AtomicBool mimics an atomic boolean.
 type AtomicBool uint32
 

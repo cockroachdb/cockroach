@@ -49,6 +49,11 @@ func (b Builder) Counter(metadata metric.Metadata) *AggCounter {
 	return NewCounter(metadata, b.labels...)
 }
 
+// CounterFloat64 constructs a new AggCounter with the Builder's labels.
+func (b Builder) CounterFloat64(metadata metric.Metadata) *AggCounterFloat64 {
+	return NewCounterFloat64(metadata, b.labels...)
+}
+
 // Histogram constructs a new AggHistogram with the Builder's labels.
 func (b Builder) Histogram(
 	metadata metric.Metadata, duration time.Duration, buckets []float64,

@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/metric/aggmetric"
+	io_prometheus_client "github.com/prometheus/client_model/go"
 	prometheusgo "github.com/prometheus/client_model/go"
 	"github.com/stretchr/testify/require"
 )
@@ -54,6 +55,11 @@ func TestAggMetric(t *testing.T) {
 	}, "tenant_id")
 	r.AddMetric(c)
 
+	d := aggmetric.NewCounterFloat64(metric.Metadata{
+		Name: "fob_counter",
+	}, "tenant_id")
+	r.AddMetric(d)
+
 	g := aggmetric.NewGauge(metric.Metadata{
 		Name: "bar_gauge",
 	}, "tenant_id")
@@ -73,6 +79,8 @@ func TestAggMetric(t *testing.T) {
 	tenant3 := roachpb.MustMakeTenantID(3)
 	c2 := c.AddChild(tenant2.String())
 	c3 := c.AddChild(tenant3.String())
+	d2 := d.AddChild(tenant2.String())
+	d3 := d.AddChild(tenant3.String())
 	g2 := g.AddChild(tenant2.String())
 	g3 := g.AddChild(tenant3.String())
 	f2 := f.AddChild(tenant2.String())
@@ -83,6 +91,8 @@ func TestAggMetric(t *testing.T) {
 	t.Run("basic", func(t *testing.T) {
 		c2.Inc(2)
 		c3.Inc(4)
+		d2.Inc(123456.5)
+		d3.Inc(789089.5)
 		g2.Inc(2)
 		g3.Inc(3)
 		g3.Dec(1)
@@ -96,6 +106,7 @@ func TestAggMetric(t *testing.T) {
 	t.Run("destroy", func(t *testing.T) {
 		g3.Unlink()
 		c2.Unlink()
+		d3.Unlink()
 		f3.Unlink()
 		h3.Unlink()
 		echotest.Require(t, writePrometheusMetrics(t), datapathutils.TestDataPath(t, "destroy.txt"))
@@ -105,6 +116,9 @@ func TestAggMetric(t *testing.T) {
 		// These are the tenants which still exist.
 		require.Panics(t, func() {
 			c.AddChild(tenant3.String())
+		})
+		require.Panics(t, func() {
+			d.AddChild(tenant2.String())
 		})
 		require.Panics(t, func() {
 			g.AddChild(tenant2.String())
@@ -117,6 +131,7 @@ func TestAggMetric(t *testing.T) {
 	t.Run("add after destroy", func(t *testing.T) {
 		g3 = g.AddChild(tenant3.String())
 		c2 = c.AddChild(tenant2.String())
+		d3 = d.AddChild(tenant3.String())
 		f3 = f.AddChild(tenant3.String())
 		h3 = h.AddChild(tenant3.String())
 		echotest.Require(t, writePrometheusMetrics(t), datapathutils.TestDataPath(t, "add_after_destroy.txt"))
@@ -124,8 +139,15 @@ func TestAggMetric(t *testing.T) {
 
 	t.Run("panic on label length mismatch", func(t *testing.T) {
 		require.Panics(t, func() { c.AddChild() })
+		require.Panics(t, func() { d.AddChild() })
 		require.Panics(t, func() { g.AddChild("", "") })
 	})
+}
+
+type Eacher interface {
+	Each(
+		labels []*io_prometheus_client.LabelPair, f func(metric *io_prometheus_client.Metric),
+	)
 }
 
 func TestAggMetricBuilder(t *testing.T) {
@@ -133,6 +155,7 @@ func TestAggMetricBuilder(t *testing.T) {
 
 	b := aggmetric.MakeBuilder("tenant_id")
 	c := b.Counter(metric.Metadata{Name: "foo_counter"})
+	d := b.CounterFloat64(metric.Metadata{Name: "fob_counter"})
 	g := b.Gauge(metric.Metadata{Name: "bar_gauge"})
 	f := b.GaugeFloat64(metric.Metadata{Name: "baz_gauge"})
 	h := b.Histogram(metric.Metadata{Name: "histo_gram"},
@@ -141,12 +164,20 @@ func TestAggMetricBuilder(t *testing.T) {
 	for i := 5; i < 10; i++ {
 		tenantLabel := roachpb.MustMakeTenantID(uint64(i)).String()
 		c.AddChild(tenantLabel)
+		d.AddChild(tenantLabel)
 		g.AddChild(tenantLabel)
 		f.AddChild(tenantLabel)
 		h.AddChild(tenantLabel)
 	}
 
-	c.Each(nil, func(pm *prometheusgo.Metric) {
-		require.Equal(t, 1, len(pm.GetLabel()))
-	})
+	for _, m := range [5]Eacher{
+		c, d, g, f, h,
+	} {
+		numChildren := 0
+		m.Each(nil, func(pm *prometheusgo.Metric) {
+			require.Equal(t, 1, len(pm.GetLabel()))
+			numChildren += 1
+		})
+		require.Equal(t, 5, numChildren)
+	}
 }
