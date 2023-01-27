@@ -86,6 +86,10 @@ import StatementInsightDetailsPage from "./views/insights/statementInsightDetail
 import { CockroachCloudContext } from "@cockroachlabs/cluster-ui";
 import { SnapshotRouter } from "src/views/tracez_v2/snapshotRoutes";
 import KeyVisualizerPage from "src/views/keyVisualizer";
+import {getSpanStatsSamples} from "src/util/api";
+import { cockroach } from "src/js/protos";
+import SpanStatsRequest = cockroach.server.serverpb.SpanStatsRequest;
+import SpanStatsResponse = cockroach.server.serverpb.SpanStatsResponse;
 
 // NOTE: If you are adding a new path to the router, and that path contains any
 // components that are personally identifying information, you MUST update the
@@ -96,6 +100,30 @@ import KeyVisualizerPage from "src/views/keyVisualizer";
 //
 // Serial numeric values, such as NodeIDs or Descriptor IDs, are not PII and do
 // not need to be redacted.
+
+const fromHexString = (hexString) =>
+  Uint8Array.from(hexString.match(/.{1,2}/g).map((byte) => parseInt(byte, 16)));
+
+
+class SpanStatsPage extends React.Component<any, any> {
+
+  componentDidMount() {
+    getSpanStatsSamples(SpanStatsRequest.create({
+      node_id:"1",
+      start_key:fromHexString("f289127061726973000112cccccccccccc4000ff8000ff00ff00ff00ff00ff00ff280001"),
+      end_key:fromHexString("f2891273616e206672616e636973636f0001128000ff00ff00ff00ff00ff4000ff8000ff00ff00ff00ff00ff00ff190001")
+    })).then(res => {
+
+      console.log(res.toJSON())
+      console.log(res.approximate_disk_bytes)
+    })
+  }
+
+  render () {
+    return <div>span stats</div>
+  }
+}
+
 
 export interface AppProps {
   history: History;
@@ -115,6 +143,7 @@ export const App: React.FC<AppProps> = (props: AppProps) => {
             {createLogoutRoute(store)}
             <Route path="/">
               <Layout>
+                <SpanStatsPage/>
                 <Switch>
                   <Redirect exact from="/" to="/overview" />
                   {/* overview page */}

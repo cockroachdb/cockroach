@@ -18,6 +18,9 @@ import (
 	"crypto/x509/pkix"
 	"encoding/json"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangestats"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"io"
 	"net/http"
 	"os"
@@ -496,6 +499,7 @@ type systemStatusServer struct {
 	stores             *kvserver.Stores
 	nodeLiveness       *liveness.NodeLiveness
 	spanConfigReporter spanconfig.Reporter
+	distSender         *kvcoord.DistSender
 }
 
 // StmtDiagnosticsRequester is the interface into *stmtdiagnostics.Registry
@@ -603,6 +607,7 @@ func newSystemStatusServer(
 	serverIterator ServerIterator,
 	spanConfigReporter spanconfig.Reporter,
 	clock *hlc.Clock,
+	distSender *kvcoord.DistSender,
 ) *systemStatusServer {
 	server := newStatusServer(
 		ambient,
@@ -628,6 +633,7 @@ func newSystemStatusServer(
 		stores:             stores,
 		nodeLiveness:       nodeLiveness,
 		spanConfigReporter: spanConfigReporter,
+		distSender:         distSender,
 	}
 }
 
@@ -3406,18 +3412,80 @@ func (s *systemStatusServer) SpanStats(
 		}
 		return status.SpanStats(ctx, req)
 	}
+	fetcher := rangestats.NewFetcher(s.db)
+
+	sp := roachpb.RSpan{
+		Key:    req.StartKey,
+		EndKey: req.EndKey,
+	}
+	ri := kvcoord.MakeRangeIterator(s.distSender)
+	ri.Seek(ctx, sp.Key, kvcoord.Ascending)
+	var descriptors []*roachpb.RangeDescriptor
+
+	for {
+		if !ri.Valid() {
+			return nil, serverError(ctx, ri.Error())
+		}
+		descriptors = append(descriptors, ri.Desc())
+		if !ri.NeedAnother(sp) {
+			break
+		}
+		ri.Next(ctx)
+	}
 
 	output := &serverpb.SpanStatsResponse{}
+
+	for _, desc := range descriptors {
+		// Is the descriptor fully contained by the request span?
+		startContained := sp.Key.Less(desc.StartKey) || sp.Key.Equal(desc.StartKey)
+		endContained := !sp.EndKey.Less(desc.EndKey)
+		contained := startContained && endContained
+
+		if contained {
+			// If so, obtain stats for this range via RangeStats.
+			rangeStats, err := fetcher.RangeStats(ctx, desc.StartKey.AsRawKey())
+			if err != nil {
+				return nil, serverError(ctx, err)
+			}
+			for _, resp := range rangeStats {
+				output.TotalStats.Add(resp.MVCCStats)
+			}
+
+		} else {
+			// Otherwise, do an MVCC scan.
+			err := s.stores.VisitStores(func(s *kvserver.Store) error {
+				stats, err := storage.ComputeStats(
+					s.Engine(),
+					req.StartKey.AsRawKey(),
+					req.EndKey.AsRawKey(),
+					timeutil.Now().UnixNano(),
+				)
+
+				if err != nil {
+					return err
+				}
+
+				output.TotalStats.Add(stats)
+				return nil
+			})
+
+			if err != nil {
+				return nil, serverError(ctx, err)
+			}
+		}
+	}
+
+	// Finally, get the approximate disk bytes from each store.
 	err = s.stores.VisitStores(func(store *kvserver.Store) error {
-		result, err := store.ComputeStatsForKeySpan(req.StartKey.Next(), req.EndKey)
+		approxDiskBytes, err := store.Engine().ApproximateDiskBytes(
+			roachpb.Key(req.StartKey), roachpb.Key(req.EndKey))
 		if err != nil {
 			return err
 		}
-		output.TotalStats.Add(result.MVCC)
-		output.RangeCount += int32(result.ReplicaCount)
-		output.ApproximateDiskBytes += result.ApproximateDiskBytes
+		output.ApproximateDiskBytes += approxDiskBytes
 		return nil
 	})
+
 	if err != nil {
 		return nil, serverError(ctx, err)
 	}
