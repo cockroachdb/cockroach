@@ -1364,8 +1364,8 @@ func TestSpanStatsResponse(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	var response serverpb.SpanStatsResponse
-	request := serverpb.SpanStatsRequest{
+	var response roachpb.SpanStatsResponse
+	request := roachpb.SpanStatsRequest{
 		NodeID:   "1",
 		StartKey: []byte(roachpb.RKeyMin),
 		EndKey:   []byte(roachpb.RKeyMax),
@@ -1394,7 +1394,7 @@ func TestSpanStatsGRPCResponse(t *testing.T) {
 	rpcStopper := stop.NewStopper()
 	defer rpcStopper.Stop(ctx)
 	rpcContext := newRPCTestContext(ctx, ts, ts.RPCContext().Config)
-	request := serverpb.SpanStatsRequest{
+	request := roachpb.SpanStatsRequest{
 		NodeID:   "1",
 		StartKey: []byte(roachpb.RKeyMin),
 		EndKey:   []byte(roachpb.RKeyMax),

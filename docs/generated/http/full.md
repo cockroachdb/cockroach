@@ -2930,39 +2930,7 @@ Support status: [reserved](#support-status)
 
 
 
-
-
-
-
-| Field | Type | Label | Description | Support status |
-| ----- | ---- | ----- | ----------- | -------------- |
-| node_id | [string](#cockroach.server.serverpb.SpanStatsRequest-string) |  |  | [reserved](#support-status) |
-| start_key | [bytes](#cockroach.server.serverpb.SpanStatsRequest-bytes) |  |  | [reserved](#support-status) |
-| end_key | [bytes](#cockroach.server.serverpb.SpanStatsRequest-bytes) |  |  | [reserved](#support-status) |
-
-
-
-
-
-
-
 #### Response Parameters
-
-
-
-
-
-
-
-| Field | Type | Label | Description | Support status |
-| ----- | ---- | ----- | ----------- | -------------- |
-| range_count | [int32](#cockroach.server.serverpb.SpanStatsResponse-int32) |  |  | [reserved](#support-status) |
-| approximate_disk_bytes | [uint64](#cockroach.server.serverpb.SpanStatsResponse-uint64) |  |  | [reserved](#support-status) |
-| total_stats | [cockroach.storage.enginepb.MVCCStats](#cockroach.server.serverpb.SpanStatsResponse-cockroach.storage.enginepb.MVCCStats) |  |  | [reserved](#support-status) |
-
-
-
-
 
 
 
