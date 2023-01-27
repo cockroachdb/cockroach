@@ -276,7 +276,7 @@ type sqlServerArgs struct {
 	spanConfigAccessor spanconfig.KVAccessor
 
 	// Used by the Key Visualizer job.
-	spanStatsAccessor *spanstatskvaccessor.SpanStatsKVAccessor
+	keyVisServerAccessor *spanstatskvaccessor.SpanStatsKVAccessor
 
 	// Used by DistSQLPlanner to dial KV nodes.
 	nodeDialer *nodedialer.Dialer
@@ -892,7 +892,6 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	contentionRegistry.Start(ctx, cfg.stopper)
 
 	storageEngineClient := kvserver.NewStorageEngineClient(cfg.nodeDialer)
-
 	*execCfg = sql.ExecutorConfig{
 		Settings:                  cfg.Settings,
 		NodeInfo:                  nodeInfo,
@@ -1238,7 +1237,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	if codec.ForSystemTenant() {
 		ri := kvcoord.MakeRangeIterator(cfg.distSender)
 		spanStatsConsumer := spanstatsconsumer.New(
-			cfg.spanStatsAccessor,
+			cfg.keyVisServerAccessor,
 			&ri,
 			cfg.Settings,
 			cfg.circularInternalExecutor,
