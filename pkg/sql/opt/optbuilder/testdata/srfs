@@ -1089,3 +1089,51 @@ project
  │         └── filters (true)
  └── projections
       └── a:6 || 'foo' [as="?column?":8]
+
+exec-ddl
+CREATE TABLE t95615 (c1 INET PRIMARY KEY);
+----
+
+# Only a single hostmask function should be added as a zip expression.
+build
+SELECT * FROM t95615, LATERAL ROWS FROM (hostmask(c1), hostmask(c1)) WITH ORDINALITY;
+----
+project
+ ├── columns: c1:1!null hostmask:4 hostmask:4 ordinality:5!null
+ └── inner-join-apply
+      ├── columns: c1:1!null crdb_internal_mvcc_timestamp:2 tableoid:3 hostmask:4 ordinality:5!null
+      ├── scan t95615
+      │    └── columns: c1:1!null crdb_internal_mvcc_timestamp:2 tableoid:3
+      ├── ordinality
+      │    ├── columns: hostmask:4 ordinality:5!null
+      │    └── project-set
+      │         ├── columns: hostmask:4
+      │         ├── values
+      │         │    └── ()
+      │         └── zip
+      │              └── hostmask(c1:1)
+      └── filters (true)
+
+exec-ddl
+CREATE FUNCTION f95615() RETURNS FLOAT IMMUTABLE LEAKPROOF LANGUAGE SQL AS 'SELECT 1.1'
+----
+
+# A redundant UDF call should not be added as a zip expression.
+build
+SELECT * FROM t95615, LATERAL ROWS FROM (f95615(), f95615()) WITH ORDINALITY
+----
+project
+ ├── columns: c1:1!null f95615:6 f95615:6 ordinality:9!null
+ └── inner-join-apply
+      ├── columns: c1:1!null crdb_internal_mvcc_timestamp:2 tableoid:3 f95615:6 ordinality:9!null
+      ├── scan t95615
+      │    └── columns: c1:1!null crdb_internal_mvcc_timestamp:2 tableoid:3
+      ├── ordinality
+      │    ├── columns: f95615:6 ordinality:9!null
+      │    └── project-set
+      │         ├── columns: f95615:6
+      │         ├── values
+      │         │    └── ()
+      │         └── zip
+      │              └── f95615()
+      └── filters (true)

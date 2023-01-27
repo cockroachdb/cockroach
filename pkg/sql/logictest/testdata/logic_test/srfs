@@ -1270,3 +1270,34 @@ SELECT (x).* FROM (SELECT unnest(ARRAY[t58438.*]) FROM t58438) v(x);
 1  2
 3  4
 5  6
+
+subtest redundant_zip_expression
+
+statement ok
+SET testing_optimizer_disable_rule_probability = 1.0;
+
+statement ok
+CREATE TABLE t95615 (c1 INET PRIMARY KEY)
+
+statement ok
+INSERT INTO t95615 VALUES ('192.168.0.1'::INET)
+
+# Test that a redundant function call in a ProjectSet doesn't crash due to
+# being built into more than one zip expression.
+query TTTI
+SELECT * FROM t95615, LATERAL ROWS FROM (hostmask(c1), hostmask(c1)) WITH ORDINALITY
+----
+192.168.0.1  0.0.0.0  0.0.0.0  1
+
+statement ok
+CREATE FUNCTION f95615() RETURNS FLOAT IMMUTABLE LEAKPROOF LANGUAGE SQL AS 'SELECT 1.1'
+
+# A redundant UDF call should be added only once in a zip expression and not
+# error out.
+query TFFI
+SELECT * FROM t95615, LATERAL ROWS FROM (f95615(), f95615()) WITH ORDINALITY
+----
+192.168.0.1  1.1  1.1  1
+
+statement ok
+RESET testing_optimizer_disable_rule_probability
