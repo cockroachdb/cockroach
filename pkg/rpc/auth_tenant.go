@@ -120,6 +120,9 @@ func (a tenantAuthorizer) authorize(
 	case "/cockroach.server.serverpb.Status/TransactionContentionEvents":
 		return a.authTenant(tenID)
 
+	case "/cockroach.server.serverpb.Status/SpanStats":
+		return a.authSpanStats(tenID, req.(*roachpb.SpanStatsRequest))
+
 	case "/cockroach.roachpb.Internal/GetSpanConfigs":
 		return a.authGetSpanConfigs(tenID, req.(*roachpb.GetSpanConfigsRequest))
 
@@ -222,6 +225,15 @@ func (a tenantAuthorizer) authGetRangeDescriptors(
 	tenID roachpb.TenantID, args *roachpb.GetRangeDescriptorsRequest,
 ) error {
 	return validateSpan(tenID, args.Span)
+}
+
+func (a tenantAuthorizer) authSpanStats(
+	tenID roachpb.TenantID, args *roachpb.SpanStatsRequest,
+) error {
+	return validateSpan(tenID, roachpb.Span{
+		Key:    args.StartKey.AsRawKey(),
+		EndKey: args.EndKey.AsRawKey(),
+	})
 }
 
 // authRangeLookup authorizes the provided tenant to invoke the RangeLookup RPC
