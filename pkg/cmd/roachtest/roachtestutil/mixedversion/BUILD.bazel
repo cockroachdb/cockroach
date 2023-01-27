@@ -13,6 +13,7 @@ go_library(
     deps = [
         "//pkg/cmd/roachtest/cluster",
         "//pkg/cmd/roachtest/option",
+        "//pkg/cmd/roachtest/roachtestutil",
         "//pkg/cmd/roachtest/roachtestutil/clusterupgrade",
         "//pkg/cmd/roachtest/test",
         "//pkg/roachpb",
@@ -30,7 +31,9 @@ go_test(
     args = ["-test.timeout=295s"],
     embed = [":mixedversion"],
     deps = [
+        "//pkg/cmd/roachtest/cluster",
         "//pkg/cmd/roachtest/option",
+        "//pkg/cmd/roachtest/roachtestutil",
         "//pkg/cmd/roachtest/roachtestutil/clusterupgrade",
         "//pkg/roachprod/logger",
         "//pkg/util/version",
