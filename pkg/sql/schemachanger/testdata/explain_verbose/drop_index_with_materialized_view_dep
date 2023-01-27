@@ -13,7 +13,7 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
 │   │
 │   └── • Stage 1 of 1 in StatementPhase
 │       │
-│       ├── • 27 elements transitioning toward ABSENT
+│       ├── • 28 elements transitioning toward ABSENT
 │       │   │
 │       │   ├── • IndexColumn:{DescID: 105, ColumnID: 2, IndexID: 2}
 │       │   │   │ PUBLIC → ABSENT
@@ -155,6 +155,12 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
 │       │   │   │
 │       │   │   └── • SameStagePrecedence dependency from ABSENT ColumnDefaultExpression:{DescID: 106, ColumnID: 2}
 │       │   │         rule: "column type dependents removed right before column type"
+│       │   │
+│       │   ├── • ColumnNotNull:{DescID: 106, ColumnID: 2, IndexID: 0}
+│       │   │   │ PUBLIC → VALIDATED
+│       │   │   │
+│       │   │   └── • skip PUBLIC → VALIDATED operations
+│       │   │         rule: "skip constraint removal ops on relation drop"
 │       │   │
 │       │   ├── • ColumnDefaultExpression:{DescID: 106, ColumnID: 2}
 │       │   │   │ PUBLIC → ABSENT
@@ -311,7 +317,7 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
 │   │
 │   ├── • Stage 1 of 2 in PreCommitPhase
 │   │   │
-│   │   ├── • 27 elements transitioning toward ABSENT
+│   │   ├── • 28 elements transitioning toward ABSENT
 │   │   │   │
 │   │   │   ├── • IndexColumn:{DescID: 105, ColumnID: 2, IndexID: 2}
 │   │   │   │     ABSENT → PUBLIC
@@ -361,6 +367,9 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
 │   │   │   ├── • ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 2}
 │   │   │   │     ABSENT → PUBLIC
 │   │   │   │
+│   │   │   ├── • ColumnNotNull:{DescID: 106, ColumnID: 2, IndexID: 0}
+│   │   │   │     VALIDATED → PUBLIC
+│   │   │   │
 │   │   │   ├── • ColumnDefaultExpression:{DescID: 106, ColumnID: 2}
 │   │   │   │     ABSENT → PUBLIC
 │   │   │   │
@@ -401,7 +410,7 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
 │   │
 │   └── • Stage 2 of 2 in PreCommitPhase
 │       │
-│       ├── • 27 elements transitioning toward ABSENT
+│       ├── • 28 elements transitioning toward ABSENT
 │       │   │
 │       │   ├── • IndexColumn:{DescID: 105, ColumnID: 2, IndexID: 2}
 │       │   │   │ PUBLIC → ABSENT
@@ -529,10 +538,16 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
 │       │   │   ├── • Precedence dependency from DROPPED View:{DescID: 106}
 │       │   │   │     rule: "relation dropped before dependent column"
 │       │   │   │
+│       │   │   ├── • SameStagePrecedence dependency from ABSENT ColumnNotNull:{DescID: 106, ColumnID: 2, IndexID: 0}
+│       │   │   │     rule: "column constraint removed right before column reaches delete only"
+│       │   │   │
 │       │   │   ├── • Precedence dependency from ABSENT ColumnName:{DescID: 106, Name: rowid, ColumnID: 2}
 │       │   │   │     rule: "dependents removed before column"
 │       │   │   │
 │       │   │   ├── • Precedence dependency from ABSENT ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 2}
+│       │   │   │     rule: "dependents removed before column"
+│       │   │   │
+│       │   │   ├── • Precedence dependency from ABSENT ColumnNotNull:{DescID: 106, ColumnID: 2, IndexID: 0}
 │       │   │   │     rule: "dependents removed before column"
 │       │   │   │
 │       │   │   ├── • Precedence dependency from ABSENT ColumnDefaultExpression:{DescID: 106, ColumnID: 2}
@@ -570,6 +585,15 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
 │       │   │   │
 │       │   │   └── • SameStagePrecedence dependency from ABSENT ColumnDefaultExpression:{DescID: 106, ColumnID: 2}
 │       │   │         rule: "column type dependents removed right before column type"
+│       │   │
+│       │   ├── • ColumnNotNull:{DescID: 106, ColumnID: 2, IndexID: 0}
+│       │   │   │ PUBLIC → ABSENT
+│       │   │   │
+│       │   │   ├── • Precedence dependency from WRITE_ONLY Column:{DescID: 106, ColumnID: 2}
+│       │   │   │     rule: "column no longer public before dependents"
+│       │   │   │
+│       │   │   └── • skip PUBLIC → VALIDATED operations
+│       │   │         rule: "skip constraint removal ops on relation drop"
 │       │   │
 │       │   ├── • ColumnDefaultExpression:{DescID: 106, ColumnID: 2}
 │       │   │   │ PUBLIC → ABSENT
@@ -729,7 +753,7 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
 │       │       └── • skip PUBLIC → ABSENT operations
 │       │             rule: "skip index dependents removal ops on relation drop"
 │       │
-│       └── • 13 Mutation operations
+│       └── • 14 Mutation operations
 │           │
 │           ├── • MarkDescriptorAsDropped
 │           │     DescriptorID: 106
@@ -758,12 +782,12 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
 │           │       Name: v3
 │           │       SchemaID: 101
 │           │
-│           ├── • MakeDeleteOnlyColumnAbsent
-│           │     ColumnID: 1
+│           ├── • RemoveColumnNotNull
+│           │     ColumnID: 2
 │           │     TableID: 106
 │           │
 │           ├── • MakeDeleteOnlyColumnAbsent
-│           │     ColumnID: 2
+│           │     ColumnID: 1
 │           │     TableID: 106
 │           │
 │           ├── • MakeDeleteOnlyColumnAbsent
@@ -772,6 +796,10 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
 │           │
 │           ├── • MakeDeleteOnlyColumnAbsent
 │           │     ColumnID: 4294967294
+│           │     TableID: 106
+│           │
+│           ├── • MakeDeleteOnlyColumnAbsent
+│           │     ColumnID: 2
 │           │     TableID: 106
 │           │
 │           ├── • SetJobStateOnDescriptor

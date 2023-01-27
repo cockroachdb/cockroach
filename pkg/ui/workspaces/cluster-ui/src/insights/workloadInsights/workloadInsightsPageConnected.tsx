@@ -12,6 +12,7 @@ import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 import { AppState } from "src/store";
 import { actions as localStorageActions } from "src/store/localStorage";
+import { actions as sqlActions } from "src/store/sqlStats";
 import {
   TransactionInsightsViewDispatchProps,
   TransactionInsightsViewStateProps,
@@ -29,13 +30,13 @@ import { SortSetting } from "src/sortedtable";
 import {
   actions as statementInsights,
   selectColumns,
-  selectExecutionInsights,
-  selectExecutionInsightsError,
-  selectExecutionInsightsLoading,
   selectInsightTypes,
+  selectStmtInsights,
+  selectStmtInsightsError,
+  selectStmtInsightsLoading,
 } from "src/store/insights/statementInsights";
 import {
-  actions as transactionInsights,
+  actions as txnInsights,
   selectTransactionInsights,
   selectTransactionInsightsError,
   selectFilters,
@@ -44,13 +45,15 @@ import {
 } from "src/store/insights/transactionInsights";
 import { Dispatch } from "redux";
 import { TimeScale } from "../../timeScaleDropdown";
-import { ExecutionInsightsRequest } from "../../api";
+import { StmtInsightsReq, TxnInsightsRequest } from "src/api";
 import { selectTimeScale } from "../../store/utils/selectors";
 
 const transactionMapStateToProps = (
   state: AppState,
   _props: RouteComponentProps,
 ): TransactionInsightsViewStateProps => ({
+  isDataValid: state.adminUI.txnInsights?.valid,
+  lastUpdated: state.adminUI.txnInsights.lastUpdated,
   transactions: selectTransactionInsights(state),
   transactionsError: selectTransactionInsightsError(state),
   insightTypes: selectInsightTypes(),
@@ -64,14 +67,16 @@ const statementMapStateToProps = (
   state: AppState,
   _props: RouteComponentProps,
 ): StatementInsightsViewStateProps => ({
-  statements: selectExecutionInsights(state),
-  statementsError: selectExecutionInsightsError(state),
+  isDataValid: state.adminUI.stmtInsights?.valid,
+  lastUpdated: state.adminUI.stmtInsights.lastUpdated,
+  statements: selectStmtInsights(state),
+  statementsError: selectStmtInsightsError(state),
   insightTypes: selectInsightTypes(),
   filters: selectFilters(state),
   sortSetting: selectSortSetting(state),
   selectedColumnNames: selectColumns(state),
   timeScale: selectTimeScale(state),
-  isLoading: selectExecutionInsightsLoading(state),
+  isLoading: selectStmtInsightsLoading(state),
 });
 
 const TransactionDispatchProps = (
@@ -93,13 +98,13 @@ const TransactionDispatchProps = (
     ),
   setTimeScale: (ts: TimeScale) => {
     dispatch(
-      transactionInsights.updateTimeScale({
+      sqlActions.updateTimeScale({
         ts: ts,
       }),
     );
   },
-  refreshTransactionInsights: (req: ExecutionInsightsRequest) => {
-    dispatch(transactionInsights.refresh(req));
+  refreshTransactionInsights: (req: TxnInsightsRequest) => {
+    dispatch(txnInsights.refresh(req));
   },
 });
 
@@ -133,12 +138,12 @@ const StatementDispatchProps = (
     ),
   setTimeScale: (ts: TimeScale) => {
     dispatch(
-      statementInsights.updateTimeScale({
+      sqlActions.updateTimeScale({
         ts: ts,
       }),
     );
   },
-  refreshStatementInsights: (req: ExecutionInsightsRequest) => {
+  refreshStatementInsights: (req: StmtInsightsReq) => {
     dispatch(statementInsights.refresh(req));
   },
 });

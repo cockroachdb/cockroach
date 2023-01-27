@@ -45,7 +45,8 @@ func (i *immediateVisitor) MakeAbsentColumnDeleteOnly(
 	if col.ID >= tbl.NextColumnID {
 		tbl.NextColumnID = col.ID + 1
 	}
-	return enqueueAddColumnMutation(tbl, col)
+	enqueueNonIndexMutation(tbl, tbl.AddColumnMutation, col, descpb.DescriptorMutation_ADD)
+	return nil
 }
 
 func (i *immediateVisitor) SetAddedColumnType(
@@ -61,7 +62,11 @@ func (i *immediateVisitor) SetAddedColumnType(
 	}
 	col := mut.AsColumn().ColumnDesc()
 	col.Type = op.ColumnType.Type
-	col.Nullable = op.ColumnType.IsNullable
+	if op.ColumnType.ElementCreationMetadata.In_23_1OrLater {
+		col.Nullable = true
+	} else {
+		col.Nullable = op.ColumnType.IsNullable
+	}
 	col.Virtual = op.ColumnType.IsVirtual
 	if ce := op.ColumnType.ComputeExpr; ce != nil {
 		expr := string(ce.Expr)
@@ -145,7 +150,8 @@ func (i *immediateVisitor) MakePublicColumnWriteOnly(
 		if col.GetID() == op.ColumnID {
 			desc := col.ColumnDescDeepCopy()
 			tbl.Columns = append(tbl.Columns[:i], tbl.Columns[i+1:]...)
-			return enqueueDropColumnMutation(tbl, &desc)
+			enqueueNonIndexMutation(tbl, tbl.AddColumnMutation, &desc, descpb.DescriptorMutation_DROP)
+			return nil
 		}
 	}
 	return errors.AssertionFailedf("failed to find column %d in table %q (%d)",

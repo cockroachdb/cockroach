@@ -17,22 +17,20 @@ import {
 } from "./statementInsightDetails";
 import { AppState, uiConfigActions } from "src/store";
 import {
-  actions as statementInsights,
-  selectStatementInsightDetails,
-  selectExecutionInsightsError,
+  selectStmtInsightDetails,
+  selectStmtInsightsError,
 } from "src/store/insights/statementInsights";
 import { selectHasAdminRole, selectIsTenant } from "src/store/uiConfig";
 import { TimeScale } from "../../timeScaleDropdown";
 import { actions as sqlStatsActions } from "../../store/sqlStats";
 import { selectTimeScale } from "../../store/utils/selectors";
-import { ExecutionInsightsRequest } from "../../api";
 
 const mapStateToProps = (
   state: AppState,
   props: RouteComponentProps,
 ): StatementInsightDetailsStateProps => {
-  const insightStatements = selectStatementInsightDetails(state, props);
-  const insightError = selectExecutionInsightsError(state);
+  const insightStatements = selectStmtInsightDetails(state, props);
+  const insightError = selectStmtInsightsError(state);
   return {
     insightEventDetails: insightStatements,
     insightError: insightError,
@@ -45,9 +43,6 @@ const mapStateToProps = (
 const mapDispatchToProps = (
   dispatch: Dispatch,
 ): StatementInsightDetailsDispatchProps => ({
-  refreshStatementInsights: (req: ExecutionInsightsRequest) => {
-    dispatch(statementInsights.refresh(req));
-  },
   setTimeScale: (ts: TimeScale) => {
     dispatch(
       sqlStatsActions.updateTimeScale({

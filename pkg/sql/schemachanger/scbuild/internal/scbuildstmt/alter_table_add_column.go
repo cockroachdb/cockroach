@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdecomp"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -123,7 +124,8 @@ func alterTableAddColumn(
 			GeneratedAsIdentityType: desc.GeneratedAsIdentityType,
 			PgAttributeNum:          desc.GetPGAttributeNum(),
 		},
-		unique: d.Unique.IsUnique,
+		unique:  d.Unique.IsUnique,
+		notNull: !desc.Nullable,
 	}
 	if ptr := desc.GeneratedAsIdentitySequenceOption; ptr != nil {
 		spec.col.GeneratedAsIdentitySequenceOption = *ptr
@@ -134,10 +136,11 @@ func alterTableAddColumn(
 		Name:     string(d.Name),
 	}
 	spec.colType = &scpb.ColumnType{
-		TableID:    tbl.TableID,
-		ColumnID:   spec.col.ColumnID,
-		IsNullable: desc.Nullable,
-		IsVirtual:  desc.Virtual,
+		TableID:                 tbl.TableID,
+		ColumnID:                spec.col.ColumnID,
+		IsNullable:              desc.Nullable,
+		IsVirtual:               desc.Virtual,
+		ElementCreationMetadata: scdecomp.NewElementCreationMetadata(b.EvalCtx().Settings.Version.ActiveVersion(b)),
 	}
 
 	spec.colType.TypeT = b.ResolveTypeRef(d.Type)
@@ -278,98 +281,121 @@ type addColumnSpec struct {
 	onUpdate *scpb.ColumnOnUpdateExpression
 	comment  *scpb.ColumnComment
 	unique   bool
+	notNull  bool
 }
 
-// addColumn is a helper function which adds column element targets and ensures
-// that the new column is backed by a primary index, which it returns.
+// addColumn adds a column as specified in the `spec`. It delegates most of the work
+// to addColumnIgnoringNotNull and handles NOT NULL constraint itself.
+// It contains version gates to help ensure compatibility in mixed version state.
+// Read comments in `ColumnType` message in `elements.proto` for details.
 func addColumn(b BuildCtx, spec addColumnSpec, n tree.NodeFormatter) (backing *scpb.PrimaryIndex) {
-	b.Add(spec.col)
-	if spec.fam != nil {
-		b.Add(spec.fam)
-	}
-	b.Add(spec.name)
-	b.Add(spec.colType)
-	if spec.def != nil {
-		b.Add(spec.def)
-	}
-	if spec.onUpdate != nil {
-		b.Add(spec.onUpdate)
-	}
-	if spec.comment != nil {
-		b.Add(spec.comment)
-	}
-	// Add or update primary index for non-virtual columns.
-	if spec.colType.IsVirtual {
-		return nil
-	}
-	// Check whether a target to add a new primary index already exists. If so,
-	// simply add the new column to its storing columns.
-	tableID := spec.tbl.TableID
-	existing, freshlyAdded := getPrimaryIndexes(b, tableID)
-	if freshlyAdded != nil {
-		handleAddColumnFreshlyAddedPrimaryIndex(b, spec, freshlyAdded, n)
-		return freshlyAdded
-	}
-
-	// As a special case, if we have a new column which has no computed
-	// expression and no default value, then we can just add it to the
-	// current primary index; there's no need to build a new index as
-	// it would have exactly the same data as the current index.
-	//
-	// Note that it's not totally obvious that this is safe. In particular,
-	// if we were to fail the schema change, we'd need to roll back. Rolling
-	// back the addition of this new column to the primary index is only safe
-	// if no value was ever written to the column. Fortunately, we know that
-	// the only case that this column ever gets data written to it is if it
-	// becomes public and the only way the column becomes public is if the
-	// schema change makes it to the non-revertible phase (this is true because
-	// making a new column public is not revertible).
-	//
-	// If ever we were to change how we encoded NULLs, perhaps so that we could
-	// interpret a missing value as an arbitrary default expression, we'd need
-	// to revisit this optimization.
-	//
-	// TODO(ajwerner): The above comment is incorrect in that we don't mark
-	// the marking of a column public as non-revertible. In cases with more
-	// than a single statement or more complex schema changes in a transaction
-	// this is buggy. We need to change that but it causes other tests, namely
-	// in cdc, to fail because it leads to the new primary index being published
-	// to public before the column is published as public. We'll need to figure
-	// out how to make sure that that happens atomically. Leaving that for a
-	// follow-up change in order to get this in.
-	allTargets := b.QueryByID(spec.tbl.TableID)
-	if spec.def == nil && spec.colType.ComputeExpr == nil {
-		if !spec.colType.IsNullable && spec.unique {
-			panic(scerrors.NotImplementedErrorf(n,
-				"`ADD COLUMN NOT NULL UNIQUE` is problematic with "+
-					"concurrent insert. See issue #90174"))
+	// addColumnIgnoringNotNull is a helper function which adds column element
+	// targets and ensures that the new column is backed by a primary index, which
+	// it returns.
+	addColumnIgnoringNotNull := func(
+		b BuildCtx, spec addColumnSpec, n tree.NodeFormatter,
+	) (backing *scpb.PrimaryIndex) {
+		b.Add(spec.col)
+		if spec.fam != nil {
+			b.Add(spec.fam)
 		}
-		b.Add(&scpb.IndexColumn{
-			TableID:       spec.tbl.TableID,
-			IndexID:       existing.IndexID,
-			ColumnID:      spec.col.ColumnID,
-			OrdinalInKind: getNextStoredIndexColumnOrdinal(allTargets, existing),
-			Kind:          scpb.IndexColumn_STORED,
-		})
-		return existing
+		b.Add(spec.name)
+		b.Add(spec.colType)
+		if spec.def != nil {
+			b.Add(spec.def)
+		}
+		if spec.onUpdate != nil {
+			b.Add(spec.onUpdate)
+		}
+		if spec.comment != nil {
+			b.Add(spec.comment)
+		}
+		// Add or update primary index for non-virtual columns.
+		if spec.colType.IsVirtual {
+			return nil
+		}
+		// Check whether a target to add a new primary index already exists. If so,
+		// simply add the new column to its storing columns.
+		tableID := spec.tbl.TableID
+		existing, freshlyAdded := getPrimaryIndexes(b, tableID)
+		if freshlyAdded != nil {
+			handleAddColumnFreshlyAddedPrimaryIndex(b, spec, freshlyAdded, n)
+			return freshlyAdded
+		}
+
+		// As a special case, if we have a new column which has no computed
+		// expression and no default value, then we can just add it to the
+		// current primary index; there's no need to build a new index as
+		// it would have exactly the same data as the current index.
+		//
+		// Note that it's not totally obvious that this is safe. In particular,
+		// if we were to fail the schema change, we'd need to roll back. Rolling
+		// back the addition of this new column to the primary index is only safe
+		// if no value was ever written to the column. Fortunately, we know that
+		// the only case that this column ever gets data written to it is if it
+		// becomes public and the only way the column becomes public is if the
+		// schema change makes it to the non-revertible phase (this is true because
+		// making a new column public is not revertible).
+		//
+		// If ever we were to change how we encoded NULLs, perhaps so that we could
+		// interpret a missing value as an arbitrary default expression, we'd need
+		// to revisit this optimization.
+		//
+		// TODO(ajwerner): The above comment is incorrect in that we don't mark
+		// the marking of a column public as non-revertible. In cases with more
+		// than a single statement or more complex schema changes in a transaction
+		// this is buggy. We need to change that but it causes other tests, namely
+		// in cdc, to fail because it leads to the new primary index being published
+		// to public before the column is published as public. We'll need to figure
+		// out how to make sure that that happens atomically. Leaving that for a
+		// follow-up change in order to get this in.
+		allTargets := b.QueryByID(spec.tbl.TableID)
+		if spec.def == nil && spec.colType.ComputeExpr == nil {
+			if spec.notNull && spec.unique {
+				panic(scerrors.NotImplementedErrorf(n,
+					"`ADD COLUMN NOT NULL UNIQUE` is problematic with "+
+						"concurrent insert. See issue #90174"))
+			}
+			b.Add(&scpb.IndexColumn{
+				TableID:       spec.tbl.TableID,
+				IndexID:       existing.IndexID,
+				ColumnID:      spec.col.ColumnID,
+				OrdinalInKind: getNextStoredIndexColumnOrdinal(allTargets, existing),
+				Kind:          scpb.IndexColumn_STORED,
+			})
+			return existing
+		}
+
+		// Otherwise, create a new primary index target and swap it with the existing
+		// primary index.
+		out := makeIndexSpec(b, existing.TableID, existing.IndexID)
+		inColumns := make([]indexColumnSpec, len(out.columns)+1)
+		for i, ic := range out.columns {
+			inColumns[i] = makeIndexColumnSpec(ic)
+		}
+		inColumns[len(out.columns)] = indexColumnSpec{
+			columnID: spec.col.ColumnID,
+			kind:     scpb.IndexColumn_STORED,
+		}
+		out.apply(b.Drop)
+		in, temp := makeSwapIndexSpec(b, out, out.primary.IndexID, inColumns)
+		in.apply(b.Add)
+		temp.apply(b.AddTransient)
+		return in.primary
 	}
 
-	// Otherwise, create a new primary index target and swap it with the existing
-	// primary index.
-	out := makeIndexSpec(b, existing.TableID, existing.IndexID)
-	inColumns := make([]indexColumnSpec, len(out.columns)+1)
-	for i, ic := range out.columns {
-		inColumns[i] = makeIndexColumnSpec(ic)
+	backing = addColumnIgnoringNotNull(b, spec, n)
+	if spec.notNull {
+		cnne := scpb.ColumnNotNull{
+			TableID:  spec.tbl.TableID,
+			ColumnID: spec.col.ColumnID,
+		}
+		if backing != nil {
+			cnne.IndexIDForValidation = backing.IndexID
+		}
+		b.Add(&cnne)
 	}
-	inColumns[len(out.columns)] = indexColumnSpec{
-		columnID: spec.col.ColumnID,
-		kind:     scpb.IndexColumn_STORED,
-	}
-	out.apply(b.Drop)
-	in, temp := makeSwapIndexSpec(b, out, out.primary.IndexID, inColumns)
-	in.apply(b.Add)
-	temp.apply(b.AddTransient)
-	return in.primary
+	return backing
 }
 
 // handleAddColumnFreshlyAddedPrimaryIndex is used when adding a column to a

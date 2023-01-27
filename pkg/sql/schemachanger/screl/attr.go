@@ -237,6 +237,11 @@ var elementSchemaOptions = []rel.SchemaOption{
 		rel.EntityAttr(ReferencedSequenceIDs, "UsesSequenceIDs"),
 		rel.EntityAttr(ReferencedTypeIDs, "UsesTypeIDs"),
 	),
+	rel.EntityMapping(t((*scpb.ColumnNotNull)(nil)),
+		rel.EntityAttr(DescID, "TableID"),
+		rel.EntityAttr(ColumnID, "ColumnID"),
+		rel.EntityAttr(IndexID, "IndexIDForValidation"),
+	),
 	// Index elements.
 	rel.EntityMapping(t((*scpb.IndexName)(nil)),
 		rel.EntityAttr(DescID, "TableID"),

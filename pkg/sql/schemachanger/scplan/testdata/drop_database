@@ -59,6 +59,7 @@ StatementPhase stage 1 of 1 with 54 MutationType ops
     [[Column:{DescID: 110, ColumnID: 1}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[ColumnName:{DescID: 110, Name: id, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 110, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnNotNull:{DescID: 110, ColumnID: 1, IndexID: 0}, ABSENT], PUBLIC] -> VALIDATED
     [[Column:{DescID: 110, ColumnID: 2}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[ColumnName:{DescID: 110, Name: name, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 110, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
@@ -94,6 +95,7 @@ StatementPhase stage 1 of 1 with 54 MutationType ops
     [[Column:{DescID: 109, ColumnID: 1}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[ColumnName:{DescID: 109, Name: id, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnNotNull:{DescID: 109, ColumnID: 1, IndexID: 0}, ABSENT], PUBLIC] -> VALIDATED
     [[Column:{DescID: 109, ColumnID: 2}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[ColumnName:{DescID: 109, Name: name, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
@@ -455,6 +457,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
     [[Column:{DescID: 110, ColumnID: 1}, ABSENT], WRITE_ONLY] -> PUBLIC
     [[ColumnName:{DescID: 110, Name: id, ColumnID: 1}, ABSENT], ABSENT] -> PUBLIC
     [[ColumnType:{DescID: 110, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnNotNull:{DescID: 110, ColumnID: 1, IndexID: 0}, ABSENT], VALIDATED] -> PUBLIC
     [[Column:{DescID: 110, ColumnID: 2}, ABSENT], WRITE_ONLY] -> PUBLIC
     [[ColumnName:{DescID: 110, Name: name, ColumnID: 2}, ABSENT], ABSENT] -> PUBLIC
     [[ColumnType:{DescID: 110, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], ABSENT] -> PUBLIC
@@ -490,6 +493,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
     [[Column:{DescID: 109, ColumnID: 1}, ABSENT], WRITE_ONLY] -> PUBLIC
     [[ColumnName:{DescID: 109, Name: id, ColumnID: 1}, ABSENT], ABSENT] -> PUBLIC
     [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnNotNull:{DescID: 109, ColumnID: 1, IndexID: 0}, ABSENT], VALIDATED] -> PUBLIC
     [[Column:{DescID: 109, ColumnID: 2}, ABSENT], WRITE_ONLY] -> PUBLIC
     [[ColumnName:{DescID: 109, Name: name, ColumnID: 2}, ABSENT], ABSENT] -> PUBLIC
     [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], ABSENT] -> PUBLIC
@@ -616,7 +620,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
   ops:
     *scop.UndoAllInTxnImmediateMutationOpSideEffects
       {}
-PreCommitPhase stage 2 of 2 with 100 MutationType ops
+PreCommitPhase stage 2 of 2 with 102 MutationType ops
   transitions:
     [[Namespace:{DescID: 104, Name: db1, ReferencedDescID: 0}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 104}, ABSENT], PUBLIC] -> ABSENT
@@ -656,6 +660,7 @@ PreCommitPhase stage 2 of 2 with 100 MutationType ops
     [[Column:{DescID: 110, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnName:{DescID: 110, Name: id, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 110, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnNotNull:{DescID: 110, ColumnID: 1, IndexID: 0}, ABSENT], PUBLIC] -> ABSENT
     [[Column:{DescID: 110, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnName:{DescID: 110, Name: name, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 110, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
@@ -691,6 +696,7 @@ PreCommitPhase stage 2 of 2 with 100 MutationType ops
     [[Column:{DescID: 109, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnName:{DescID: 109, Name: id, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnNotNull:{DescID: 109, ColumnID: 1, IndexID: 0}, ABSENT], PUBLIC] -> ABSENT
     [[Column:{DescID: 109, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnName:{DescID: 109, Name: name, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
@@ -960,6 +966,9 @@ PreCommitPhase stage 2 of 2 with 100 MutationType ops
         DescriptorID: 110
         Name: t1
         SchemaID: 105
+    *scop.RemoveColumnNotNull
+      ColumnID: 1
+      TableID: 110
     *scop.DrainDescriptorName
       Namespace:
         DatabaseID: 104
@@ -972,6 +981,9 @@ PreCommitPhase stage 2 of 2 with 100 MutationType ops
         DescriptorID: 109
         Name: t1
         SchemaID: 106
+    *scop.RemoveColumnNotNull
+      ColumnID: 1
+      TableID: 109
     *scop.DrainDescriptorName
       Namespace:
         DatabaseID: 104
@@ -1015,9 +1027,6 @@ PreCommitPhase stage 2 of 2 with 100 MutationType ops
         Name: v5
         SchemaID: 106
     *scop.MakeDeleteOnlyColumnAbsent
-      ColumnID: 1
-      TableID: 110
-    *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 2
       TableID: 110
     *scop.MakeDeleteOnlyColumnAbsent
@@ -1029,9 +1038,6 @@ PreCommitPhase stage 2 of 2 with 100 MutationType ops
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 4294967294
       TableID: 110
-    *scop.MakeDeleteOnlyColumnAbsent
-      ColumnID: 1
-      TableID: 109
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 2
       TableID: 109
@@ -1104,6 +1110,12 @@ PreCommitPhase stage 2 of 2 with 100 MutationType ops
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 4294967294
       TableID: 117
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 1
+      TableID: 110
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 1
+      TableID: 109
     *scop.SetJobStateOnDescriptor
       DescriptorID: 104
       Initialize: true
@@ -1347,6 +1359,10 @@ DROP DATABASE db1 CASCADE
   kind: Precedence
   rule: column no longer public before dependents
 - from: [Column:{DescID: 109, ColumnID: 1}, WRITE_ONLY]
+  to:   [ColumnNotNull:{DescID: 109, ColumnID: 1, IndexID: 0}, ABSENT]
+  kind: Precedence
+  rule: column no longer public before dependents
+- from: [Column:{DescID: 109, ColumnID: 1}, WRITE_ONLY]
   to:   [ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
   kind: Precedence
   rule: column no longer public before dependents
@@ -1400,6 +1416,10 @@ DROP DATABASE db1 CASCADE
   rule: column no longer public before dependents
 - from: [Column:{DescID: 110, ColumnID: 1}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 110, Name: id, ColumnID: 1}, ABSENT]
+  kind: Precedence
+  rule: column no longer public before dependents
+- from: [Column:{DescID: 110, ColumnID: 1}, WRITE_ONLY]
+  to:   [ColumnNotNull:{DescID: 110, ColumnID: 1, IndexID: 0}, ABSENT]
   kind: Precedence
   rule: column no longer public before dependents
 - from: [Column:{DescID: 110, ColumnID: 1}, WRITE_ONLY]
@@ -1750,6 +1770,22 @@ DROP DATABASE db1 CASCADE
   to:   [Column:{DescID: 117, ColumnID: 4294967294}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
+- from: [ColumnNotNull:{DescID: 109, ColumnID: 1, IndexID: 0}, ABSENT]
+  to:   [Column:{DescID: 109, ColumnID: 1}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before column
+- from: [ColumnNotNull:{DescID: 109, ColumnID: 1, IndexID: 0}, ABSENT]
+  to:   [Column:{DescID: 109, ColumnID: 1}, DELETE_ONLY]
+  kind: SameStagePrecedence
+  rule: column constraint removed right before column reaches delete only
+- from: [ColumnNotNull:{DescID: 110, ColumnID: 1, IndexID: 0}, ABSENT]
+  to:   [Column:{DescID: 110, ColumnID: 1}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before column
+- from: [ColumnNotNull:{DescID: 110, ColumnID: 1, IndexID: 0}, ABSENT]
+  to:   [Column:{DescID: 110, ColumnID: 1}, DELETE_ONLY]
+  kind: SameStagePrecedence
+  rule: column constraint removed right before column reaches delete only
 - from: [ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
   to:   [Column:{DescID: 109, ColumnID: 1}, ABSENT]
   kind: Precedence
