@@ -394,10 +394,10 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 	if stats, ok := n.annotations[exec.ExecutionStatsID]; ok && !omitStats(n) {
 		s := stats.(*exec.ExecutionStats)
 		if len(s.Nodes) > 0 {
-			e.ob.AddRedactableField(RedactNodes, "nodes", strings.Join(s.Nodes, ", "))
+			e.ob.AddFlakyField(DeflakeNodes, "nodes", strings.Join(s.Nodes, ", "))
 		}
 		if len(s.Regions) > 0 {
-			e.ob.AddRedactableField(RedactNodes, "regions", strings.Join(s.Regions, ", "))
+			e.ob.AddFlakyField(DeflakeNodes, "regions", strings.Join(s.Regions, ", "))
 		}
 		if s.RowCount.HasValue() {
 			actualRowCount = s.RowCount.Value()
@@ -497,7 +497,7 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 					}
 
 					var duration string
-					if e.ob.flags.Redact.Has(RedactVolatile) {
+					if e.ob.flags.Deflake.Has(DeflakeVolatile) {
 						duration = "<hidden>"
 					} else {
 						timeSinceStats := timeutil.Since(s.TableStatsCreatedAt)
@@ -509,7 +509,7 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 
 					var forecastStr string
 					if s.Forecast {
-						if e.ob.flags.Redact.Has(RedactVolatile) {
+						if e.ob.flags.Deflake.Has(DeflakeVolatile) {
 							forecastStr = "; using stats forecast"
 						} else {
 							timeSinceStats := timeutil.Since(s.ForecastAt)
