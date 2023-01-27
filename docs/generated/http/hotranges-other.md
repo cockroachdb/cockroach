@@ -68,5 +68,6 @@ Support status: [alpha](#support-status)
 | reads_per_second | [double](#double) |  | Reads per second is the recent number of keys read per second on this range. | [reserved](#support-status) |
 | write_bytes_per_second | [double](#double) |  | Write bytes per second is the recent number of bytes written per second on this range. | [reserved](#support-status) |
 | read_bytes_per_second | [double](#double) |  | Read bytes per second is the recent number of bytes read per second on this range. | [reserved](#support-status) |
+| cpu_time_per_second | [double](#double) |  | CPU time per second is the recent cpu usage in nanoseconds of this range. | [reserved](#support-status) |
 
 
