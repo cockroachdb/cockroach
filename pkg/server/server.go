@@ -34,6 +34,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangestats"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/spanstats/spanstatsaccessor"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvprober"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
@@ -149,8 +151,8 @@ type Server struct {
 	tsDB            *ts.DB
 	tsServer        *ts.Server
 
-	// spanStatsServer implements `keyvispb.KeyVisualizerServer`
-	spanStatsServer *SpanStatsServer
+	// keyVisualizerServer implements `keyvispb.KeyVisualizerServer`
+	keyVisualizerServer *KeyVisualizerServer
 
 	// The Observability Server, used by the Observability Service to subscribe to
 	// CRDB data.
@@ -168,6 +170,9 @@ type Server struct {
 
 	spanConfigSubscriber spanconfig.KVSubscriber
 	spanConfigReporter   spanconfig.Reporter
+
+	// spanStatsServer services internal requests for span stats.
+	spanStatsServer *spanStatsServer
 
 	// pgL is the SQL listener.
 	pgL net.Listener
@@ -837,6 +842,16 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		ambientCtx:   cfg.AmbientCtx,
 	}
 
+	// Instantiate the span stats server. There is a circular dependency
+	// between server.spanStatsServer and server.systemStatusServer.
+	spanStats := &spanStatsServer{
+		fetcher:      rangestats.NewFetcher(db),
+		distSender:   distSender,
+		statusServer: nil, // Circular dependency. Set below.
+		node:         node,
+	}
+	spanStatsLocalAccessor := spanstatsaccessor.New(spanStats)
+
 	// Instantiate the status API server.
 	sStatus := newSystemStatusServer(
 		cfg.AmbientCtx,
@@ -858,18 +873,23 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		serverIterator,
 		spanConfig.reporter,
 		clock,
+		distSender,
+		spanStatsLocalAccessor,
 	)
 
-	spanStatsServer := &SpanStatsServer{
+	// The spanStatsServer needs a reference to the status server.
+	spanStats.statusServer = sStatus
+
+	keyVisualizerServer := &KeyVisualizerServer{
 		ie:         internalExecutor,
 		settings:   st,
 		nodeDialer: nodeDialer,
 		status:     sStatus,
 		node:       node,
 	}
-	spanStatsAccessor := spanstatskvaccessor.New(spanStatsServer)
+	keyVisServerAccessor := spanstatskvaccessor.New(keyVisualizerServer)
 
-	// Instantiate the KV prober.
+	// Instantiate the KV prober
 	kvProber := kvprober.NewProber(kvprober.Opts{
 		Tracer:                  cfg.AmbientCtx.Tracer,
 		DB:                      db,
@@ -938,7 +958,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		nodeDescs:                g,
 		systemConfigWatcher:      systemConfigWatcher,
 		spanConfigAccessor:       spanConfig.kvAccessor,
-		spanStatsAccessor:        spanStatsAccessor,
+		keyVisServerAccessor:     keyVisServerAccessor,
+		spanStatsAccessor:        spanStatsLocalAccessor,
 		nodeDialer:               nodeDialer,
 		distSender:               distSender,
 		db:                       db,
@@ -1115,7 +1136,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		externalStorageBuilder: externalStorageBuilder,
 		storeGrantCoords:       gcoords.Stores,
 		kvMemoryMonitor:        kvMemoryMonitor,
-		spanStatsServer:        spanStatsServer,
+		keyVisualizerServer:    keyVisualizerServer,
+		spanStatsServer:        spanStats,
 	}
 
 	return lateBoundServer, err
@@ -1361,7 +1383,10 @@ func (s *Server) PreStart(ctx context.Context) error {
 	obspb.RegisterObsServer(s.grpc.Server, s.eventsServer)
 
 	// Register the KeyVisualizer Server
-	keyvispb.RegisterKeyVisualizerServer(s.grpc.Server, s.spanStatsServer)
+	keyvispb.RegisterKeyVisualizerServer(s.grpc.Server, s.keyVisualizerServer)
+
+	// Register the SpanStats Server
+	serverpb.RegisterSpanStatsServer(s.grpc.Server, s.spanStatsServer)
 
 	// Start the RPC server. This opens the RPC/SQL listen socket,
 	// and dispatches the server worker for the RPC.

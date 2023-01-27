@@ -1,0 +1,43 @@
+// Copyright 2023 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+
+syntax = "proto3";
+package cockroach.server.serverpb;
+option go_package = "serverpb";
+
+import "roachpb/data.proto";
+import "storage/enginepb/mvcc.proto";
+import "gogoproto/gogo.proto";
+import "google/api/annotations.proto";
+
+// InternalSpanStatsRequest
+message InternalSpanStatsRequest {
+  roachpb.Span span = 1 [(gogoproto.nullable) = false];
+
+  // A node_id of `0` indicates the server should issue a fan-out to all nodes.
+  int32 node_id = 2 [
+    (gogoproto.customname) = "NodeID",
+    (gogoproto.casttype) =
+        "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
+  ];
+}
+
+
+message InternalSpanStatsResponse {
+  int32 range_count = 2;
+  uint64 approximate_disk_bytes = 3;
+  cockroach.storage.enginepb.MVCCStats total_stats = 1
+      [ (gogoproto.nullable) = false ];
+}
+
+service SpanStats {
+  rpc GetSpanStats(InternalSpanStatsRequest) returns (InternalSpanStatsResponse) {}
+}

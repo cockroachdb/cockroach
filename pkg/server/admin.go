@@ -1360,7 +1360,7 @@ func (s *adminServer) statsForSpan(
 							req := serverpb.SpanStatsRequest{
 								StartKey: rSpan.Key,
 								EndKey:   rSpan.EndKey,
-								NodeID:   nodeID.String(),
+								NodeID:   nodeID,
 							}
 							spanResponse, err = client.SpanStats(ctx, &req)
 						}

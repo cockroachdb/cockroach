@@ -76,17 +76,19 @@ func TestComputeStatsForKeySpan(t *testing.T) {
 		{"b", "e", 2, 5},
 		{"e", "i", 2, 1},
 	} {
-		start, end := tcase.startKey, tcase.endKey
-		result, err := store.ComputeStatsForKeySpan(
-			roachpb.RKey(start), roachpb.RKey(end))
-		if err != nil {
-			t.Fatal(err)
-		}
-		if a, e := result.ReplicaCount, tcase.expectedRanges; a != e {
-			t.Errorf("Expected %d ranges in span [%s - %s], found %d", e, start, end, a)
-		}
-		if a, e := result.MVCC.LiveCount, tcase.expectedKeys; a != e {
-			t.Errorf("Expected %d keys in span [%s - %s], found %d", e, start, end, a)
-		}
+		_ = tcase
+		t.Errorf("implement me")
+		//start, end := tcase.startKey, tcase.endKey
+		//result, err := store.ComputeStatsForKeySpan(
+		//	roachpb.RKey(start), roachpb.RKey(end))
+		//if err != nil {
+		//	t.Fatal(err)
+		//}
+		//if a, e := result.ReplicaCount, tcase.expectedRanges; a != e {
+		//	t.Errorf("Expected %d ranges in span [%s - %s], found %d", e, start, end, a)
+		//}
+		//if a, e := result.MVCC.LiveCount, tcase.expectedKeys; a != e {
+		//	t.Errorf("Expected %d keys in span [%s - %s], found %d", e, start, end, a)
+		//}
 	}
 }
