@@ -181,7 +181,7 @@ func createTestStoreWithoutStart(
 			TenantID:  roachpb.SystemTenantID,
 			Config:    &base.Config{Insecure: true},
 			Clock:     cfg.Clock.WallClock(),
-			MaxOffset: cfg.Clock.MaxOffset(),
+			MaxOffset: cfg.Clock.ToleratedOffset(),
 			Stopper:   stopper,
 			Settings:  cfg.Settings,
 		})

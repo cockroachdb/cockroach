@@ -97,7 +97,7 @@ func NewInsecureTestingContextWithKnobs(
 			TenantID:  roachpb.SystemTenantID,
 			Config:    &base.Config{Insecure: true},
 			Clock:     clock.WallClock(),
-			MaxOffset: clock.MaxOffset(),
+			MaxOffset: clock.ToleratedOffset(),
 			Stopper:   stopper,
 			Settings:  cluster.MakeTestingClusterSettings(),
 			Knobs:     knobs,
