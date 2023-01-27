@@ -27,6 +27,12 @@ func init() {
 						Index: *protoutil.Clone(&this.Index).(*scpb.Index),
 					}
 				}),
+				emit(func(this *scpb.PrimaryIndex) *scop.MaybeAddSplitForIndex {
+					return &scop.MaybeAddSplitForIndex{
+						TableID: this.TableID,
+						IndexID: this.IndexID,
+					}
+				}),
 			),
 			to(scpb.Status_BACKFILLED,
 				emit(func(this *scpb.PrimaryIndex) *scop.BackfillIndex {

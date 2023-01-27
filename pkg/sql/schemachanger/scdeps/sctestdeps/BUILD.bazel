@@ -7,6 +7,7 @@ go_library(
         "backfill.go",
         "config.go",
         "database_state.go",
+        "index_split_and_scatter.go",
         "test_deps.go",
         "test_state.go",
     ],

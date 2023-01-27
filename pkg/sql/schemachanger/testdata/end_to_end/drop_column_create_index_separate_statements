@@ -247,7 +247,7 @@ write *eventpb.CreateIndex to event log:
 ## PreCommitPhase stage 1 of 2 with 1 MutationType op
 undo all catalog changes within txn #1
 persist all catalog changes to storage
-## PreCommitPhase stage 2 of 2 with 13 MutationType ops
+## PreCommitPhase stage 2 of 2 with 15 MutationType ops
 upsert descriptor #104
   ...
          oid: 20
@@ -546,7 +546,7 @@ begin transaction #9
 validate forward indexes [3] in table #104
 commit transaction #9
 begin transaction #10
-## PostCommitPhase stage 8 of 15 with 13 MutationType ops
+## PostCommitPhase stage 8 of 15 with 15 MutationType ops
 upsert descriptor #104
   ...
      - direction: ADD

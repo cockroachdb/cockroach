@@ -28,6 +28,12 @@ func init() {
 						IsSecondaryIndex: this.IsUsingSecondaryEncoding,
 					}
 				}),
+				emit(func(this *scpb.TemporaryIndex) *scop.MaybeAddSplitForIndex {
+					return &scop.MaybeAddSplitForIndex{
+						TableID: this.TableID,
+						IndexID: this.IndexID,
+					}
+				}),
 			),
 			to(scpb.Status_WRITE_ONLY,
 				emit(func(this *scpb.TemporaryIndex) *scop.MakeDeleteOnlyIndexWriteOnly {

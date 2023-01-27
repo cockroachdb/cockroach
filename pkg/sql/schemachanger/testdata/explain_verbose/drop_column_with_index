@@ -237,7 +237,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN j;
 │       │       └── • PreviousStagePrecedence dependency from PUBLIC SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
 │       │             rule: "SecondaryIndex transitions to ABSENT uphold 2-version invariant: PUBLIC->VALIDATED"
 │       │
-│       └── • 9 Mutation operations
+│       └── • 11 Mutation operations
 │           │
 │           ├── • MakePublicSecondaryIndexWriteOnly
 │           │     IndexID: 2
@@ -252,6 +252,10 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN j;
 │           │       TableID: 104
 │           │       TemporaryIndexID: 4
 │           │
+│           ├── • MaybeAddSplitForIndex
+│           │     IndexID: 3
+│           │     TableID: 104
+│           │
 │           ├── • AddColumnToIndex
 │           │     ColumnID: 1
 │           │     IndexID: 3
@@ -264,6 +268,10 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN j;
 │           │       IsUnique: true
 │           │       SourceIndexID: 1
 │           │       TableID: 104
+│           │
+│           ├── • MaybeAddSplitForIndex
+│           │     IndexID: 4
+│           │     TableID: 104
 │           │
 │           ├── • AddColumnToIndex
 │           │     ColumnID: 1

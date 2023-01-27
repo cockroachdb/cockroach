@@ -28,6 +28,12 @@ func init() {
 						IsSecondaryIndex: true,
 					}
 				}),
+				emit(func(this *scpb.SecondaryIndex) *scop.MaybeAddSplitForIndex {
+					return &scop.MaybeAddSplitForIndex{
+						TableID: this.TableID,
+						IndexID: this.IndexID,
+					}
+				}),
 			),
 			to(scpb.Status_BACKFILLED,
 				emit(func(this *scpb.SecondaryIndex) *scop.BackfillIndex {

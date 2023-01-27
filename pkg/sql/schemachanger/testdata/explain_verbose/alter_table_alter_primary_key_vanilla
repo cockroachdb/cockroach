@@ -351,7 +351,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j);
 │       │       └── • PreviousStagePrecedence dependency from ABSENT TemporaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 5, SourceIndexID: 1}
 │       │             rule: "TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: ABSENT->DELETE_ONLY"
 │       │
-│       └── • 15 Mutation operations
+│       └── • 19 Mutation operations
 │           │
 │           ├── • MakeAbsentIndexBackfilling
 │           │     Index:
@@ -361,6 +361,10 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j);
 │           │       SourceIndexID: 1
 │           │       TableID: 104
 │           │       TemporaryIndexID: 3
+│           │
+│           ├── • MaybeAddSplitForIndex
+│           │     IndexID: 2
+│           │     TableID: 104
 │           │
 │           ├── • AddColumnToIndex
 │           │     ColumnID: 2
@@ -380,6 +384,10 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j);
 │           │       IsUnique: true
 │           │       SourceIndexID: 1
 │           │       TableID: 104
+│           │
+│           ├── • MaybeAddSplitForIndex
+│           │     IndexID: 3
+│           │     TableID: 104
 │           │
 │           ├── • AddColumnToIndex
 │           │     ColumnID: 2
@@ -402,6 +410,10 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j);
 │           │       TemporaryIndexID: 5
 │           │     IsSecondaryIndex: true
 │           │
+│           ├── • MaybeAddSplitForIndex
+│           │     IndexID: 4
+│           │     TableID: 104
+│           │
 │           ├── • MakeAbsentTempIndexDeleteOnly
 │           │     Index:
 │           │       ConstraintID: 5
@@ -410,6 +422,10 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j);
 │           │       SourceIndexID: 1
 │           │       TableID: 104
 │           │     IsSecondaryIndex: true
+│           │
+│           ├── • MaybeAddSplitForIndex
+│           │     IndexID: 5
+│           │     TableID: 104
 │           │
 │           ├── • AddColumnToIndex
 │           │     ColumnID: 1
