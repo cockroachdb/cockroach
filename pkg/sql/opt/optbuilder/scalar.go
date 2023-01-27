@@ -619,6 +619,7 @@ func (b *Builder) buildUDF(
 	colRefs *opt.ColSet,
 ) (out opt.ScalarExpr) {
 	o := f.ResolvedOverload()
+	b.factory.Metadata().AddUserDefinedFunc(o)
 
 	// Build the argument expressions.
 	var args memo.ScalarListExpr

@@ -16,6 +16,7 @@ import (
 	"math/bits"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -100,6 +101,10 @@ type Metadata struct {
 	//  this map when adding a table via metadata.AddTable.
 	userDefinedTypes      map[oid.Oid]struct{}
 	userDefinedTypesSlice []*types.T
+
+	// userDefinedFunctions contains all user defined functions present in the
+	// query.
+	userDefinedFunctions map[*tree.Overload]struct{}
 
 	// deps stores information about all data source objects depended on by the
 	// query, as well as the privileges required to access them. The objects are
@@ -292,17 +297,17 @@ func (md *Metadata) AddDependency(name MDDepName, ds cat.DataSource, priv privil
 // perform KV operations on behalf of the transaction associated with the
 // provided catalog, and those errors are required to be propagated.
 func (md *Metadata) CheckDependencies(
-	ctx context.Context, catalog cat.Catalog,
+	ctx context.Context, optCatalog cat.Catalog,
 ) (upToDate bool, err error) {
 	for i := range md.deps {
 		name := &md.deps[i].name
 		var toCheck cat.DataSource
 		var err error
 		if name.byID != 0 {
-			toCheck, _, err = catalog.ResolveDataSourceByID(ctx, cat.Flags{}, name.byID)
+			toCheck, _, err = optCatalog.ResolveDataSourceByID(ctx, cat.Flags{}, name.byID)
 		} else {
 			// Resolve data source object.
-			toCheck, _, err = catalog.ResolveDataSource(ctx, cat.Flags{}, &name.byName)
+			toCheck, _, err = optCatalog.ResolveDataSource(ctx, cat.Flags{}, &name.byName)
 		}
 		if err != nil {
 			return false, err
@@ -321,7 +326,7 @@ func (md *Metadata) CheckDependencies(
 			// privileges do not need to be checked). Ignore the "zero privilege".
 			priv := privilege.Kind(bits.TrailingZeros32(uint32(privs)))
 			if priv != 0 {
-				if err := catalog.CheckPrivilege(ctx, toCheck, priv); err != nil {
+				if err := optCatalog.CheckPrivilege(ctx, toCheck, priv); err != nil {
 					return false, err
 				}
 			}
@@ -332,7 +337,7 @@ func (md *Metadata) CheckDependencies(
 	}
 	// Check that all of the user defined types present have not changed.
 	for _, typ := range md.AllUserDefinedTypes() {
-		toCheck, err := catalog.ResolveTypeByOID(ctx, typ.Oid())
+		toCheck, err := optCatalog.ResolveTypeByOID(ctx, typ.Oid())
 		if err != nil {
 			// Handle when the type no longer exists.
 			if pgerror.GetPGCode(err) == pgcode.UndefinedObject {
@@ -341,6 +346,21 @@ func (md *Metadata) CheckDependencies(
 			return false, err
 		}
 		if typ.TypeMeta.Version != toCheck.TypeMeta.Version {
+			return false, nil
+		}
+	}
+	// Check that all of the user defined functions have not changed.
+	for fun := range md.userDefinedFunctions {
+		_, toCheck, err := optCatalog.ResolveFunctionByOID(ctx, fun.Oid)
+		if err != nil {
+			// Handle when the function no longer exists.
+			if pgerror.GetPGCode(err) == pgcode.UndefinedObject ||
+				errors.Is(err, catalog.ErrDescriptorDropped) {
+				return false, nil
+			}
+			return false, err
+		}
+		if fun.Version != toCheck.Version {
 			return false, nil
 		}
 	}
@@ -376,6 +396,18 @@ func (md *Metadata) AddUserDefinedType(typ *types.T) {
 // AllUserDefinedTypes returns all user defined types contained in this query.
 func (md *Metadata) AllUserDefinedTypes() []*types.T {
 	return md.userDefinedTypesSlice
+}
+
+// AddUserDefinedFunc adds a user defined function overload to the metadata for
+// this query.
+func (md *Metadata) AddUserDefinedFunc(fun *tree.Overload) {
+	if !fun.IsUDF {
+		return
+	}
+	if md.userDefinedFunctions == nil {
+		md.userDefinedFunctions = make(map[*tree.Overload]struct{})
+	}
+	md.userDefinedFunctions[fun] = struct{}{}
 }
 
 // AddTable indexes a new reference to a table within the query. Separate

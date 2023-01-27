@@ -2892,3 +2892,35 @@ SELECT f95240(a) FROM t95240
 ----
 33
 NULL
+
+# Regression test for #93082 - don't reuse a cached query with a UDF if the UDF
+# has been altered or dropped.
+subtest regression_93082
+
+statement ok
+CREATE FUNCTION fn(a INT) RETURNS INT LANGUAGE SQL AS 'SELECT a';
+
+query I
+SELECT fn(1);
+----
+1
+
+statement ok
+DROP FUNCTION fn;
+
+statement error pq: unknown function: fn\(\): function undefined
+SELECT fn(1);
+
+statement ok
+CREATE FUNCTION fn(a INT) RETURNS INT LANGUAGE SQL AS 'SELECT a';
+
+query I
+SELECT fn(1);
+----
+1
+
+statement ok
+ALTER FUNCTION fn RENAME TO fn2;
+
+statement error pq: unknown function: fn\(\): function undefined
+SELECT fn(1);
