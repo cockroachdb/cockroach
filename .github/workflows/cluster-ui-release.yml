@@ -53,6 +53,8 @@ jobs:
           echo "to npm. Publishing step should be skipped. 🛑"
         else
           echo "published=no" >> $GITHUB_OUTPUT
+          echo
+          echo "✅ Cluster UI package version $PACKAGE_VERSION should be published. ✅"
         fi
 
     - name: Get Branch name
@@ -71,14 +73,16 @@ jobs:
         cp ../../../../_bazel/bin/pkg/ui/workspaces/db-console/src/js/protos.* ../db-console/src/js/
         yarn build
 
-    # - name: Create version tag and push
-    #   if: steps.version-check.outputs.published == 'no'
-    #   run: |
-    #     TAGNAME="@cockroachlabs/cluster-ui@$(cat ./package.json | jq -r '.version')"
-    #     git tag $TAGNAME
-    #     git push origin $TAGNAME
+    - name: Create version tag and push
+      if: steps.version-check.outputs.published == 'no'
+      run: |
+        TAGNAME="@cockroachlabs/cluster-ui@$(jq -r '.version' ./package.json)"
+        if ! [ $(git tag -l "$TAGNAME") ]; then
+          git tag $TAGNAME
+          git push origin $TAGNAME
+        fi
 
     - name: Publish patch version
       if: steps.version-check.outputs.published == 'no'
-      # run: yarn publish --access public --tag ${{ steps.branch-name.outputs.branch }}
+      # run: npm publish --access public --tag ${{ steps.branch-name.outputs.branch }} --ignore-scripts
       run: npm publish --access public --ignore-scripts --tag testing
