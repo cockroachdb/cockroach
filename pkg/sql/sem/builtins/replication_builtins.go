@@ -195,7 +195,6 @@ var replicationBuiltins = map[string]builtinDefinition{
 		tree.FunctionProperties{
 			Category:           builtinconstants.CategoryStreamIngestion,
 			DistsqlBlocklist:   false,
-			Class:              tree.GeneratorClass,
 			VectorizeStreaming: true,
 		},
 		makeGeneratorOverload(
