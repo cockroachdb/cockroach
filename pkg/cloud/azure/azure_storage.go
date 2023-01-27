@@ -19,6 +19,7 @@ import (
 	"strings"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
@@ -54,6 +55,13 @@ const (
 	// AzureEnvironmentKeyParam is the query parameter for the environment name in an azure URI.
 	AzureEnvironmentKeyParam = "AZURE_ENVIRONMENT"
 
+	// AzureClientIDParam is the query parameter for client_id in an azure URI.
+	AzureClientIDParam = "AZURE_CLIENT_ID"
+	// AzureClientSecretParam is the query parameter for client_secret in an azure URI.
+	AzureClientSecretParam = "AZURE_CLIENT_SECRET"
+	// AzureTenantIDParam is the query parameter for tenant_id in an azure URI.
+	AzureTenantIDParam = "AZURE_TENANT_ID"
+
 	scheme = "azure-blob"
 
 	deprecatedScheme                   = "azure"
@@ -67,11 +75,14 @@ func parseAzureURL(
 	conf := cloudpb.ExternalStorage{}
 	conf.Provider = cloudpb.ExternalStorageProvider_azure
 	conf.AzureConfig = &cloudpb.ExternalStorage_Azure{
-		Container:   uri.Host,
-		Prefix:      uri.Path,
-		AccountName: azureURL.ConsumeParam(AzureAccountNameParam),
-		AccountKey:  azureURL.ConsumeParam(AzureAccountKeyParam),
-		Environment: azureURL.ConsumeParam(AzureEnvironmentKeyParam),
+		Container:    uri.Host,
+		Prefix:       uri.Path,
+		AccountName:  azureURL.ConsumeParam(AzureAccountNameParam),
+		AccountKey:   azureURL.ConsumeParam(AzureAccountKeyParam),
+		Environment:  azureURL.ConsumeParam(AzureEnvironmentKeyParam),
+		ClientID:     azureURL.ConsumeParam(AzureClientIDParam),
+		ClientSecret: azureURL.ConsumeParam(AzureClientSecretParam),
+		TenantID:     azureURL.ConsumeParam(AzureTenantIDParam),
 	}
 
 	// Validate that all the passed in parameters are supported.
@@ -83,9 +94,16 @@ func parseAzureURL(
 	if conf.AzureConfig.AccountName == "" {
 		return conf, errors.Errorf("azure uri missing %q parameter", AzureAccountNameParam)
 	}
-	if conf.AzureConfig.AccountKey == "" {
-		return conf, errors.Errorf("azure uri missing %q parameter", AzureAccountKeyParam)
+
+	hasKeyCreds := conf.AzureConfig.AccountKey != ""
+
+	hasRoleCreds := conf.AzureConfig.TenantID != "" && conf.AzureConfig.ClientID != "" && conf.AzureConfig.ClientSecret != ""
+	noRoleCreds := conf.AzureConfig.TenantID == "" && conf.AzureConfig.ClientID == "" && conf.AzureConfig.ClientSecret == ""
+
+	if hasRoleCreds == hasKeyCreds || hasRoleCreds == noRoleCreds {
+		return conf, errors.Errorf("azure uri requires exactly one authentication method: %q OR all three of %q, %q, and %q", AzureAccountKeyParam, AzureTenantIDParam, AzureClientIDParam, AzureClientSecretParam)
 	}
+
 	if conf.AzureConfig.Environment == "" {
 		// Default to AzurePublicCloud if not specified for backwards compatibility
 		conf.AzureConfig.Environment = azure.PublicCloud.Name
@@ -112,10 +130,6 @@ func makeAzureStorage(
 	if conf == nil {
 		return nil, errors.Errorf("azure upload requested but info missing")
 	}
-	credential, err := azblob.NewSharedKeyCredential(conf.AccountName, conf.AccountKey)
-	if err != nil {
-		return nil, errors.Wrap(err, "azure credential")
-	}
 	env, err := azure.EnvironmentFromName(conf.Environment)
 	if err != nil {
 		return nil, errors.Wrap(err, "azure environment")
@@ -125,9 +139,27 @@ func makeAzureStorage(
 		return nil, errors.Wrap(err, "azure: account name is not valid")
 	}
 
-	azClient, err := service.NewClientWithSharedKeyCredential(u.String(), credential, nil)
-	if err != nil {
-		return nil, err
+	//TODO(benbardin): Implicit auth.
+	var azClient *service.Client
+	if conf.ClientID != "" {
+		credential, err := azidentity.NewClientSecretCredential(conf.TenantID, conf.ClientID, conf.ClientSecret, nil)
+		if err != nil {
+			return nil, errors.Wrap(err, "azure client secret credential")
+		}
+
+		azClient, err = service.NewClient(u.String(), credential, nil)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		credential, err := azblob.NewSharedKeyCredential(conf.AccountName, conf.AccountKey)
+		if err != nil {
+			return nil, errors.Wrap(err, "azure shared key credential")
+		}
+		azClient, err = service.NewClientWithSharedKeyCredential(u.String(), credential, nil)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return &azureStorage{

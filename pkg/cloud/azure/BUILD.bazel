@@ -5,6 +5,7 @@ go_library(
     name = "azure",
     srcs = [
         "azure_connection.go",
+        "azure_kms.go",
         "azure_storage.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/cloud/azure",
@@ -24,6 +25,8 @@ go_library(
         "//pkg/util/ioctx",
         "//pkg/util/tracing",
         "@com_github_azure_azure_sdk_for_go_sdk_azcore//:azcore",
+        "@com_github_azure_azure_sdk_for_go_sdk_azidentity//:azidentity",
+        "@com_github_azure_azure_sdk_for_go_sdk_keyvault_azkeys//:azkeys",
         "@com_github_azure_azure_sdk_for_go_sdk_storage_azblob//:azblob",
         "@com_github_azure_azure_sdk_for_go_sdk_storage_azblob//blob",
         "@com_github_azure_azure_sdk_for_go_sdk_storage_azblob//blockblob",
@@ -37,7 +40,10 @@ go_library(
 
 go_test(
     name = "azure_test",
-    srcs = ["azure_storage_test.go"],
+    srcs = [
+        "azure_kms_test.go",
+        "azure_storage_test.go",
+    ],
     args = ["-test.timeout=295s"],
     embed = [":azure"],
     deps = [

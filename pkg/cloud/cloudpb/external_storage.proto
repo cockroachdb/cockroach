@@ -126,6 +126,10 @@ message ExternalStorage {
     string account_name = 3;
     string account_key = 4;
     string environment = 5;
+
+    string client_id = 6 [(gogoproto.customname) = "ClientID"];
+    string client_secret = 7;
+    string tenant_id = 8 [(gogoproto.customname) = "TenantID"];
   }
   message FileTable {
     // User interacting with the external storage. This is used to check access

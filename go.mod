@@ -79,6 +79,8 @@ require (
 
 require (
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.3.0
+	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.1.0
+	github.com/Azure/azure-sdk-for-go/sdk/keyvault/azkeys v0.9.0
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v0.6.1
 	github.com/BurntSushi/toml v0.4.1
 	github.com/Masterminds/semver/v3 v3.1.1
@@ -176,7 +178,7 @@ require (
 	github.com/mibk/dupl v1.0.0
 	github.com/mitchellh/reflectwalk v1.0.0
 	github.com/mmatczuk/go_generics v0.0.0-20181212143635-0aaa050f9bab
-	github.com/montanaflynn/stats v0.6.3
+	github.com/montanaflynn/stats v0.6.6
 	github.com/mozillazg/go-slugify v0.2.0
 	github.com/nightlyone/lockfile v1.0.0
 	github.com/olekukonko/tablewriter v0.0.5-0.20200416053754-163badb3bac6
@@ -228,6 +230,7 @@ require (
 	cloud.google.com/go/compute v1.6.1 // indirect
 	cloud.google.com/go/iam v0.3.0 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/internal v1.1.1 // indirect
+	github.com/Azure/azure-sdk-for-go/sdk/keyvault/internal v0.7.0 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20210617225240-d185dfc1b5a1 // indirect
 	github.com/Azure/go-autorest v14.2.0+incompatible // indirect
 	github.com/Azure/go-autorest/autorest/adal v0.9.15 // indirect
@@ -235,6 +238,7 @@ require (
 	github.com/Azure/go-autorest/autorest/validation v0.3.1 // indirect
 	github.com/Azure/go-autorest/logger v0.2.1 // indirect
 	github.com/Azure/go-autorest/tracing v0.6.0 // indirect
+	github.com/AzureAD/microsoft-authentication-library-for-go v0.5.1 // indirect
 	github.com/Masterminds/goutils v1.1.0 // indirect
 	github.com/Masterminds/semver v1.5.0 // indirect
 	github.com/Masterminds/sprig v2.22.0+incompatible // indirect
@@ -282,7 +286,7 @@ require (
 	github.com/gofrs/flock v0.8.1 // indirect
 	github.com/gofrs/uuid v4.0.0+incompatible // indirect
 	github.com/golang-jwt/jwt v3.2.2+incompatible // indirect
-	github.com/golang-jwt/jwt/v4 v4.0.0 // indirect
+	github.com/golang-jwt/jwt/v4 v4.2.0 // indirect
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
 	github.com/google/go-querystring v1.1.0 // indirect
 	github.com/googleapis/gax-go/v2 v2.4.0 // indirect
