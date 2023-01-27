@@ -16,6 +16,7 @@ import (
 	"math/bits"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -101,6 +102,11 @@ type Metadata struct {
 	userDefinedTypes      map[oid.Oid]struct{}
 	userDefinedTypesSlice []*types.T
 
+	// userDefinedFunctions contains all user defined functions present in the
+	// query. TODO: there could be multiple calls with different qualified names
+	// to the same overload.
+	userDefinedFunctions []funcMDDep
+
 	// deps stores information about all data source objects depended on by the
 	// query, as well as the privileges required to access them. The objects are
 	// deduplicated: any name/object pair shows up at most once.
@@ -148,6 +154,13 @@ type MDDepName struct {
 
 func (n *MDDepName) equals(other *MDDepName) bool {
 	return n.byID == other.byID && n.byName.Equals(&other.byName)
+}
+
+// funcMDDep tracks the information needed to resolve a UDF, as well as the
+// previously resolved overload.
+type funcMDDep struct {
+	name     *tree.UnresolvedName
+	overload *tree.Overload
 }
 
 // Init prepares the metadata for use (or reuse).
@@ -206,7 +219,8 @@ func (md *Metadata) Init() {
 func (md *Metadata) CopyFrom(from *Metadata, copyScalarFn func(Expr) Expr) {
 	if len(md.schemas) != 0 || len(md.cols) != 0 || len(md.tables) != 0 ||
 		len(md.sequences) != 0 || len(md.deps) != 0 || len(md.views) != 0 ||
-		len(md.userDefinedTypes) != 0 || len(md.userDefinedTypesSlice) != 0 {
+		len(md.userDefinedTypes) != 0 || len(md.userDefinedTypesSlice) != 0 ||
+		len(md.userDefinedFunctions) != 0 {
 		panic(errors.AssertionFailedf("CopyFrom requires empty destination"))
 	}
 	md.schemas = append(md.schemas, from.schemas...)
@@ -220,6 +234,12 @@ func (md *Metadata) CopyFrom(from *Metadata, copyScalarFn func(Expr) Expr) {
 			typ := from.userDefinedTypesSlice[i]
 			md.userDefinedTypes[typ.Oid()] = struct{}{}
 			md.userDefinedTypesSlice = append(md.userDefinedTypesSlice, typ)
+		}
+	}
+
+	if len(from.userDefinedFunctions) > 0 {
+		for i := range from.userDefinedFunctions {
+			md.userDefinedFunctions = append(md.userDefinedFunctions, from.userDefinedFunctions[i])
 		}
 	}
 
@@ -288,21 +308,23 @@ func (md *Metadata) AddDependency(name MDDepName, ds cat.DataSource, priv privil
 // objects. If the dependencies are no longer up-to-date, then CheckDependencies
 // returns false.
 //
-// This function cannot swallow errors and return only a boolean, as it may
-// perform KV operations on behalf of the transaction associated with the
-// provided catalog, and those errors are required to be propagated.
+// This function cannot swallow arbitrary errors and return only a boolean, as
+// it may perform KV operations on behalf of the transaction associated with the
+// provided catalog, and those errors are required to be propagated. Note that
+// it is ok to swallow "undefined" or "dropped" object errors, since these are
+// expected when dependencies are not up-to-date.
 func (md *Metadata) CheckDependencies(
-	ctx context.Context, catalog cat.Catalog,
+	ctx context.Context, evalCtx *eval.Context, optCatalog cat.Catalog,
 ) (upToDate bool, err error) {
 	for i := range md.deps {
 		name := &md.deps[i].name
 		var toCheck cat.DataSource
 		var err error
 		if name.byID != 0 {
-			toCheck, _, err = catalog.ResolveDataSourceByID(ctx, cat.Flags{}, name.byID)
+			toCheck, _, err = optCatalog.ResolveDataSourceByID(ctx, cat.Flags{}, name.byID)
 		} else {
 			// Resolve data source object.
-			toCheck, _, err = catalog.ResolveDataSource(ctx, cat.Flags{}, &name.byName)
+			toCheck, _, err = optCatalog.ResolveDataSource(ctx, cat.Flags{}, &name.byName)
 		}
 		if err != nil {
 			return false, err
@@ -321,7 +343,7 @@ func (md *Metadata) CheckDependencies(
 			// privileges do not need to be checked). Ignore the "zero privilege".
 			priv := privilege.Kind(bits.TrailingZeros32(uint32(privs)))
 			if priv != 0 {
-				if err := catalog.CheckPrivilege(ctx, toCheck, priv); err != nil {
+				if err := optCatalog.CheckPrivilege(ctx, toCheck, priv); err != nil {
 					return false, err
 				}
 			}
@@ -330,17 +352,41 @@ func (md *Metadata) CheckDependencies(
 			privs &= ^(1 << priv)
 		}
 	}
+	// handleUndefined swallows "undefined" and "dropped object errors, since
+	// these are expected when an object no longer exists.
+	handleUndefined := func(err error) error {
+		if pgerror.GetPGCode(err) == pgcode.UndefinedObject ||
+			errors.Is(err, catalog.ErrDescriptorDropped) {
+			return nil
+		}
+		return nil
+	}
 	// Check that all of the user defined types present have not changed.
 	for _, typ := range md.AllUserDefinedTypes() {
-		toCheck, err := catalog.ResolveTypeByOID(ctx, typ.Oid())
+		toCheck, err := optCatalog.ResolveTypeByOID(ctx, typ.Oid())
 		if err != nil {
-			// Handle when the type no longer exists.
-			if pgerror.GetPGCode(err) == pgcode.UndefinedObject {
-				return false, nil
-			}
-			return false, err
+			return false, handleUndefined(err)
 		}
 		if typ.TypeMeta.Version != toCheck.TypeMeta.Version {
+			return false, nil
+		}
+	}
+	// Check that all of the user defined functions have not changed.
+	for i := range md.userDefinedFunctions {
+		dep := &md.userDefinedFunctions[i]
+		toCheck, err := optCatalog.ResolveFunction(ctx, dep.name, &evalCtx.SessionData().SearchPath)
+		if err != nil {
+			return false, handleUndefined(err)
+		}
+		overload, err := toCheck.MatchOverload(
+			dep.overload.Types.Types(), "", &evalCtx.SessionData().SearchPath,
+		)
+		if err != nil {
+			return false, handleUndefined(err)
+		}
+		if dep.overload.Oid != overload.Oid || dep.overload.Version != overload.Version {
+			// The function call resolved to either a different overload or a
+			// different version of the same overload.
 			return false, nil
 		}
 	}
@@ -376,6 +422,24 @@ func (md *Metadata) AddUserDefinedType(typ *types.T) {
 // AllUserDefinedTypes returns all user defined types contained in this query.
 func (md *Metadata) AllUserDefinedTypes() []*types.T {
 	return md.userDefinedTypesSlice
+}
+
+// AddUserDefinedFunc adds a user defined function overload to the metadata for
+// this query.
+func (md *Metadata) AddUserDefinedFunc(fun *tree.Overload, name *tree.UnresolvedName) {
+	if !fun.IsUDF {
+		return
+	}
+	if name == nil {
+		panic(errors.AssertionFailedf("attempted to add UDF with nil name"))
+	}
+	for i := range md.userDefinedFunctions {
+		if md.userDefinedFunctions[i].overload == fun && md.userDefinedFunctions[i].name == name {
+			// This is a duplicate.
+			break
+		}
+	}
+	md.userDefinedFunctions = append(md.userDefinedFunctions, funcMDDep{name: name, overload: fun})
 }
 
 // AddTable indexes a new reference to a table within the query. Separate
