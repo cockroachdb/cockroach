@@ -29,6 +29,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const maxSyncDur = 10 * time.Second
+
 // registerDiskStalledDetection registers the disk stall test.
 func registerDiskStalledDetection(r registry.Registry) {
 	stallers := map[string]func(test.Test, cluster.Cluster) diskStaller{
@@ -48,10 +50,10 @@ func registerDiskStalledDetection(r registry.Registry) {
 		r.Add(registry.TestSpec{
 			Name:    fmt.Sprintf("disk-stalled/%s", name),
 			Owner:   registry.OwnerStorage,
-			Cluster: r.MakeClusterSpec(4),
+			Cluster: r.MakeClusterSpec(4, spec.ReuseNone()),
 			Timeout: 20 * time.Minute,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-				runDiskStalledDetection(ctx, t, c, makeStaller(t, c))
+				runDiskStalledDetection(ctx, t, c, makeStaller(t, c), true /* doStall */)
 			},
 			// Encryption is implemented within the virtual filesystem layer,
 			// just like disk-health monitoring. It's important to exercise
@@ -69,21 +71,19 @@ func registerDiskStalledDetection(r registry.Registry) {
 			stallLogDir := stallLogDir
 			stallDataDir := stallDataDir
 			r.Add(registry.TestSpec{
-				Skip:        "#95886",
-				SkipDetails: "The test current only induces a 50us disk-stall, which cannot be reliably detected.",
 				Name: fmt.Sprintf(
 					"disk-stalled/fuse/log=%t,data=%t",
 					stallLogDir, stallDataDir,
 				),
 				Owner:   registry.OwnerStorage,
-				Cluster: r.MakeClusterSpec(4),
+				Cluster: r.MakeClusterSpec(4, spec.ReuseNone()),
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					runDiskStalledDetection(ctx, t, c, &fuseDiskStaller{
 						t:         t,
 						c:         c,
 						stallLogs: stallLogDir,
 						stallData: stallDataDir,
-					})
+					}, stallLogDir || stallDataDir /* doStall */)
 				},
 				EncryptionSupport: registry.EncryptionMetamorphic,
 			})
@@ -91,9 +91,14 @@ func registerDiskStalledDetection(r registry.Registry) {
 	}
 }
 
-func runDiskStalledDetection(ctx context.Context, t test.Test, c cluster.Cluster, s diskStaller) {
-	const maxSyncDur = 10 * time.Second
+func runDiskStalledDetection(
+	ctx context.Context, t test.Test, c cluster.Cluster, s diskStaller, doStall bool,
+) {
 	startOpts := option.DefaultStartOpts()
+	startOpts.RoachprodOpts.ExtraArgs = []string{
+		"--store", s.DataDir(),
+		"--log", fmt.Sprintf(`{sinks: {stderr: {filter: INFO}}, file-defaults: {dir: "%s"}}`, s.LogDir()),
+	}
 	startSettings := install.MakeClusterSettings()
 	startSettings.Env = append(startSettings.Env,
 		"COCKROACH_AUTO_BALLAST=false",
@@ -109,11 +114,13 @@ func runDiskStalledDetection(ctx context.Context, t test.Test, c cluster.Cluster
 	c.Start(ctx, t.L(), startOpts, startSettings, c.Range(1, 3))
 
 	// Assert the process monotonic times are as expected.
-	start, ok := getProcessStartMonotonic(ctx, t, c, 1)
+	var ok bool
+	var start, exit time.Duration
+	start, ok = getProcessStartMonotonic(ctx, t, c, 1)
 	if !ok {
 		t.Fatal("unable to retrieve process start time; did Cockroach not start?")
 	}
-	if exit, exitOk := getProcessExitMonotonic(ctx, t, c, 1); exitOk {
+	if exit, ok = getProcessExitMonotonic(ctx, t, c, 1); ok && exit > 0 {
 		t.Fatalf("process has an exit monotonic time of %d; did Cockroach already exit?", exit)
 	}
 
@@ -165,7 +172,9 @@ func runDiskStalledDetection(ctx context.Context, t test.Test, c cluster.Cluster
 	t.L().PrintfCtx(ctx, "%.2f transactions completed before stall", totalTxnsPreStall)
 
 	t.Status("inducing write stall")
-	m.ExpectDeath()
+	if doStall {
+		m.ExpectDeath()
+	}
 	s.Stall(ctx, c.Node(1))
 	defer s.Unstall(ctx, c.Node(1))
 
@@ -181,8 +190,10 @@ func runDiskStalledDetection(ctx context.Context, t test.Test, c cluster.Cluster
 		t.Status("pinging SQL connection to n1")
 		err := n1Conn.PingContext(ctx)
 		t.L().PrintfCtx(ctx, "pinging n1's connection: %s", err)
-		if err == nil {
+		if doStall && err == nil {
 			t.Fatal("connection to n1 is still alive")
+		} else if !doStall && err != nil {
+			t.Fatalf("connection to n1 is dead: %s", err)
 		}
 	}
 
@@ -223,22 +234,29 @@ func runDiskStalledDetection(ctx context.Context, t test.Test, c cluster.Cluster
 	// Unstall the stalled node. It should be able to be reaped.
 	s.Unstall(ctx, c.Node(1))
 	time.Sleep(1 * time.Second)
-	exit, ok := getProcessExitMonotonic(ctx, t, c, 1)
-	if !ok {
-		t.Fatalf("unable to retrieve process exit time; stall went undetected")
+	exit, ok = getProcessExitMonotonic(ctx, t, c, 1)
+	if doStall {
+		if !ok {
+			t.Fatalf("unable to retrieve process exit time; stall went undetected")
+		}
+		t.L().PrintfCtx(ctx, "node exited at %s after test start\n", exit-start)
+	} else if ok && exit > 0 {
+		t.Fatal("no stall induced, but process exited")
 	}
-	t.L().PrintfCtx(ctx, "node exited at %s after test start\n", exit-start)
+
+	// Shut down the nodes, allowing any devices to be unmounted during cleanup.
+	c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.Range(1, 3))
 }
 
 func getProcessStartMonotonic(
 	ctx context.Context, t test.Test, c cluster.Cluster, nodeID int,
-) (time.Duration, bool) {
+) (since time.Duration, ok bool) {
 	return getProcessMonotonicTimestamp(ctx, t, c, nodeID, "ActiveEnterTimestampMonotonic")
 }
 
 func getProcessExitMonotonic(
 	ctx context.Context, t test.Test, c cluster.Cluster, nodeID int,
-) (time.Duration, bool) {
+) (since time.Duration, ok bool) {
 	return getProcessMonotonicTimestamp(ctx, t, c, nodeID, "ActiveExitTimestampMonotonic")
 }
 
@@ -262,7 +280,7 @@ func getProcessMonotonicTimestamp(
 		t.Fatalf("unable to parse monotonic timestamp %q: %s", parts[1], err)
 	}
 	if u == 0 {
-		return 0, false
+		return 0, true
 	}
 	return time.Duration(u) * time.Microsecond, true
 }
@@ -287,7 +305,7 @@ func (s *dmsetupDiskStaller) device() string { return getDevice(s.t, s.c.Spec())
 
 func (s *dmsetupDiskStaller) Setup(ctx context.Context) {
 	dev := s.device()
-	s.c.Run(ctx, s.c.All(), `sudo umount /mnt/data1`)
+	s.c.Run(ctx, s.c.All(), `sudo umount -f /mnt/data1 || true`)
 	s.c.Run(ctx, s.c.All(), `sudo dmsetup remove_all`)
 	s.c.Run(ctx, s.c.All(), `echo "0 $(sudo blockdev --getsz `+dev+`) linear `+dev+` 0" | `+
 		`sudo dmsetup create data1`)
@@ -377,7 +395,7 @@ func (s *cgroupDiskStaller) setThroughput(
 	))
 }
 
-// fuseDiskStaller uses a FUSE filesystem (charybdefs) to insert an artifical
+// fuseDiskStaller uses a FUSE filesystem (charybdefs) to insert an artificial
 // delay on all I/O.
 type fuseDiskStaller struct {
 	t         test.Test
@@ -417,11 +435,14 @@ func (s *fuseDiskStaller) Setup(ctx context.Context) {
 }
 
 func (s *fuseDiskStaller) Cleanup(ctx context.Context) {
-	s.c.Run(ctx, s.c.All(), "sudo umount {store-dir}/faulty")
+	s.c.Run(ctx, s.c.All(), "sudo umount -f {store-dir}/faulty || true")
 }
 
 func (s *fuseDiskStaller) Stall(ctx context.Context, nodes option.NodeListOption) {
-	s.c.Run(ctx, nodes, "charybdefs-nemesis --delay")
+	// Stall for 2x the max sync duration. The tool expects an integer
+	// representing the delay time, in microseconds.
+	stallMicros := (2 * maxSyncDur).Microseconds()
+	s.c.Run(ctx, nodes, "charybdefs-nemesis", "--delay", strconv.FormatInt(stallMicros, 10))
 }
 
 func (s *fuseDiskStaller) Unstall(ctx context.Context, nodes option.NodeListOption) {
