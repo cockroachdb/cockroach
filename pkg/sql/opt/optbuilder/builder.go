@@ -218,8 +218,8 @@ func (b *Builder) Build() (err error) {
 		evalCtx:    b.evalCtx,
 	}
 	typeTracker := &optTrackingTypeResolver{
-		res:                       b.semaCtx.TypeResolver,
-		optTrackingResolverHelper: &b.resolverHelper,
+		res:    b.semaCtx.TypeResolver,
+		helper: &b.resolverHelper,
 	}
 	b.semaCtx.TypeResolver = typeTracker
 
@@ -533,11 +533,11 @@ func (o *optTrackingResolverHelper) trackObjectPath(
 // optTrackingTypeResolver is a wrapper around a TypeReferenceResolver that
 // remembers all of the resolved types in the provided Metadata.
 type optTrackingTypeResolver struct {
-	res tree.TypeReferenceResolver
-	*optTrackingResolverHelper
+	res    tree.TypeReferenceResolver
+	helper *optTrackingResolverHelper
 }
 
-// ResolveType implements the TypeReferenceResolver interface.
+// ResolveType implements the tree.TypeReferenceResolver interface.
 func (o *optTrackingTypeResolver) ResolveType(
 	ctx context.Context, name *tree.UnresolvedObjectName,
 ) (*types.T, error) {
@@ -545,14 +545,14 @@ func (o *optTrackingTypeResolver) ResolveType(
 	if err != nil {
 		return nil, err
 	}
-	o.metadata.AddUserDefinedType(typ)
-	if err = o.trackObjectPath(ctx, name); err != nil {
+	o.helper.metadata.AddUserDefinedType(typ)
+	if err = o.helper.trackObjectPath(ctx, name); err != nil {
 		return nil, err
 	}
 	return typ, nil
 }
 
-// ResolveTypeByOID implements the tree.TypeResolver interface.
+// ResolveTypeByOID implements the tree.TypeReferenceResolver interface.
 func (o *optTrackingTypeResolver) ResolveTypeByOID(
 	ctx context.Context, oid oid.Oid,
 ) (*types.T, error) {
@@ -560,6 +560,6 @@ func (o *optTrackingTypeResolver) ResolveTypeByOID(
 	if err != nil {
 		return nil, err
 	}
-	o.metadata.AddUserDefinedType(typ)
+	o.helper.metadata.AddUserDefinedType(typ)
 	return typ, nil
 }
