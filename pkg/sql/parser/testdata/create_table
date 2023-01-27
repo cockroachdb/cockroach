@@ -455,6 +455,24 @@ CREATE TABLE a (b "char") -- literals removed
 CREATE TABLE _ (_ "char") -- identifiers removed
 
 parse
+CREATE TABLE a (b
+"char")
+----
+CREATE TABLE a (b "char") -- normalized!
+CREATE TABLE a (b "char") -- fully parenthesized
+CREATE TABLE a (b "char") -- literals removed
+CREATE TABLE _ (_ "char") -- identifiers removed
+
+parse
+CREATE TABLE a ("b"
+"char")
+----
+CREATE TABLE a (b "char") -- normalized!
+CREATE TABLE a (b "char") -- fully parenthesized
+CREATE TABLE a (b "char") -- literals removed
+CREATE TABLE _ (_ "char") -- identifiers removed
+
+parse
 CREATE TABLE a (b INT8 NULL)
 ----
 CREATE TABLE a (b INT8 NULL)
