@@ -6,7 +6,7 @@ CREATE VIEW defaultdb.v1 AS (SELECT name FROM defaultdb.t1);
 ops
 DROP VIEW defaultdb.v1
 ----
-StatementPhase stage 1 of 1 with 3 MutationType ops
+StatementPhase stage 1 of 1 with 4 MutationType ops
   transitions:
     [[Namespace:{DescID: 105, Name: v1, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 105}, ABSENT], PUBLIC] -> ABSENT
@@ -26,10 +26,13 @@ StatementPhase stage 1 of 1 with 3 MutationType ops
   ops:
     *scop.MarkDescriptorAsDropped
       DescriptorID: 105
-    *scop.RemoveViewBackReferencesInRelations
-      BackReferencedViewID: 105
+    *scop.RemoveBackReferencesInRelations
+      BackReferencedID: 105
       RelationIDs:
       - 104
+    *scop.RemoveObjectParent
+      ObjectID: 105
+      ParentSchemaID: 101
     *scop.DrainDescriptorName
       Namespace:
         DatabaseID: 100
@@ -56,7 +59,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
   ops:
     *scop.UndoAllInTxnImmediateMutationOpSideEffects
       {}
-PreCommitPhase stage 2 of 2 with 9 MutationType ops
+PreCommitPhase stage 2 of 2 with 10 MutationType ops
   transitions:
     [[Namespace:{DescID: 105, Name: v1, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 105}, ABSENT], PUBLIC] -> ABSENT
@@ -76,10 +79,13 @@ PreCommitPhase stage 2 of 2 with 9 MutationType ops
   ops:
     *scop.MarkDescriptorAsDropped
       DescriptorID: 105
-    *scop.RemoveViewBackReferencesInRelations
-      BackReferencedViewID: 105
+    *scop.RemoveBackReferencesInRelations
+      BackReferencedID: 105
       RelationIDs:
       - 104
+    *scop.RemoveObjectParent
+      ObjectID: 105
+      ParentSchemaID: 101
     *scop.DrainDescriptorName
       Namespace:
         DatabaseID: 100
@@ -256,7 +262,7 @@ CREATE VIEW v5 AS (SELECT 'a'::defaultdb.typ::string AS k, n2, n1 from defaultdb
 ops
 DROP VIEW defaultdb.v1 CASCADE
 ----
-StatementPhase stage 1 of 1 with 16 MutationType ops
+StatementPhase stage 1 of 1 with 21 MutationType ops
   transitions:
     [[Namespace:{DescID: 105, Name: v1, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 105}, ABSENT], PUBLIC] -> ABSENT
@@ -351,29 +357,41 @@ StatementPhase stage 1 of 1 with 16 MutationType ops
   ops:
     *scop.MarkDescriptorAsDropped
       DescriptorID: 105
-    *scop.RemoveViewBackReferencesInRelations
-      BackReferencedViewID: 105
+    *scop.RemoveBackReferencesInRelations
+      BackReferencedID: 105
       RelationIDs:
       - 104
+    *scop.RemoveObjectParent
+      ObjectID: 105
+      ParentSchemaID: 101
     *scop.MarkDescriptorAsDropped
       DescriptorID: 106
-    *scop.RemoveViewBackReferencesInRelations
-      BackReferencedViewID: 106
+    *scop.RemoveBackReferencesInRelations
+      BackReferencedID: 106
       RelationIDs:
       - 105
+    *scop.RemoveObjectParent
+      ObjectID: 106
+      ParentSchemaID: 101
     *scop.MarkDescriptorAsDropped
       DescriptorID: 107
-    *scop.RemoveViewBackReferencesInRelations
-      BackReferencedViewID: 107
+    *scop.RemoveBackReferencesInRelations
+      BackReferencedID: 107
       RelationIDs:
       - 105
       - 106
+    *scop.RemoveObjectParent
+      ObjectID: 107
+      ParentSchemaID: 101
     *scop.MarkDescriptorAsDropped
       DescriptorID: 108
-    *scop.RemoveViewBackReferencesInRelations
-      BackReferencedViewID: 108
+    *scop.RemoveBackReferencesInRelations
+      BackReferencedID: 108
       RelationIDs:
       - 106
+    *scop.RemoveObjectParent
+      ObjectID: 108
+      ParentSchemaID: 101
     *scop.MarkDescriptorAsDropped
       DescriptorID: 111
     *scop.RemoveBackReferenceInTypes
@@ -381,10 +399,13 @@ StatementPhase stage 1 of 1 with 16 MutationType ops
       TypeIDs:
       - 109
       - 110
-    *scop.RemoveViewBackReferencesInRelations
-      BackReferencedViewID: 111
+    *scop.RemoveBackReferencesInRelations
+      BackReferencedID: 111
       RelationIDs:
       - 108
+    *scop.RemoveObjectParent
+      ObjectID: 111
+      ParentSchemaID: 101
     *scop.DrainDescriptorName
       Namespace:
         DatabaseID: 100
@@ -510,7 +531,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
   ops:
     *scop.UndoAllInTxnImmediateMutationOpSideEffects
       {}
-PreCommitPhase stage 2 of 2 with 45 MutationType ops
+PreCommitPhase stage 2 of 2 with 50 MutationType ops
   transitions:
     [[Namespace:{DescID: 105, Name: v1, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 105}, ABSENT], PUBLIC] -> ABSENT
@@ -605,29 +626,41 @@ PreCommitPhase stage 2 of 2 with 45 MutationType ops
   ops:
     *scop.MarkDescriptorAsDropped
       DescriptorID: 105
-    *scop.RemoveViewBackReferencesInRelations
-      BackReferencedViewID: 105
+    *scop.RemoveBackReferencesInRelations
+      BackReferencedID: 105
       RelationIDs:
       - 104
+    *scop.RemoveObjectParent
+      ObjectID: 105
+      ParentSchemaID: 101
     *scop.MarkDescriptorAsDropped
       DescriptorID: 106
-    *scop.RemoveViewBackReferencesInRelations
-      BackReferencedViewID: 106
+    *scop.RemoveBackReferencesInRelations
+      BackReferencedID: 106
       RelationIDs:
       - 105
+    *scop.RemoveObjectParent
+      ObjectID: 106
+      ParentSchemaID: 101
     *scop.MarkDescriptorAsDropped
       DescriptorID: 107
-    *scop.RemoveViewBackReferencesInRelations
-      BackReferencedViewID: 107
+    *scop.RemoveBackReferencesInRelations
+      BackReferencedID: 107
       RelationIDs:
       - 105
       - 106
+    *scop.RemoveObjectParent
+      ObjectID: 107
+      ParentSchemaID: 101
     *scop.MarkDescriptorAsDropped
       DescriptorID: 108
-    *scop.RemoveViewBackReferencesInRelations
-      BackReferencedViewID: 108
+    *scop.RemoveBackReferencesInRelations
+      BackReferencedID: 108
       RelationIDs:
       - 106
+    *scop.RemoveObjectParent
+      ObjectID: 108
+      ParentSchemaID: 101
     *scop.MarkDescriptorAsDropped
       DescriptorID: 111
     *scop.RemoveBackReferenceInTypes
@@ -635,10 +668,13 @@ PreCommitPhase stage 2 of 2 with 45 MutationType ops
       TypeIDs:
       - 109
       - 110
-    *scop.RemoveViewBackReferencesInRelations
-      BackReferencedViewID: 111
+    *scop.RemoveBackReferencesInRelations
+      BackReferencedID: 111
       RelationIDs:
       - 108
+    *scop.RemoveObjectParent
+      ObjectID: 111
+      ParentSchemaID: 101
     *scop.DrainDescriptorName
       Namespace:
         DatabaseID: 100

@@ -30,6 +30,12 @@ func init() {
 			to(scpb.Status_ABSENT,
 				// TODO(postamar): remove revertibility constraint when possible
 				revertible(false),
+				emit(func(this *scpb.ObjectParent) *scop.RemoveObjectParent {
+					return &scop.RemoveObjectParent{
+						ObjectID:       this.ObjectID,
+						ParentSchemaID: this.ParentSchemaID,
+					}
+				}),
 			),
 		),
 	)

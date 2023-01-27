@@ -75,7 +75,7 @@ type ImmediateMutationVisitor interface {
 	UpdateTypeBackReferencesInTypes(context.Context, UpdateTypeBackReferencesInTypes) error
 	RemoveBackReferenceInTypes(context.Context, RemoveBackReferenceInTypes) error
 	UpdateBackReferencesInSequences(context.Context, UpdateBackReferencesInSequences) error
-	RemoveViewBackReferencesInRelations(context.Context, RemoveViewBackReferencesInRelations) error
+	RemoveBackReferencesInRelations(context.Context, RemoveBackReferencesInRelations) error
 	SetColumnName(context.Context, SetColumnName) error
 	SetIndexName(context.Context, SetIndexName) error
 	SetConstraintName(context.Context, SetConstraintName) error
@@ -97,6 +97,7 @@ type ImmediateMutationVisitor interface {
 	RemoveConstraintComment(context.Context, RemoveConstraintComment) error
 	AddColumnToIndex(context.Context, AddColumnToIndex) error
 	RemoveColumnFromIndex(context.Context, RemoveColumnFromIndex) error
+	RemoveObjectParent(context.Context, RemoveObjectParent) error
 }
 
 // Visit is part of the ImmediateMutationOp interface.
@@ -365,8 +366,8 @@ func (op UpdateBackReferencesInSequences) Visit(ctx context.Context, v Immediate
 }
 
 // Visit is part of the ImmediateMutationOp interface.
-func (op RemoveViewBackReferencesInRelations) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
-	return v.RemoveViewBackReferencesInRelations(ctx, op)
+func (op RemoveBackReferencesInRelations) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.RemoveBackReferencesInRelations(ctx, op)
 }
 
 // Visit is part of the ImmediateMutationOp interface.
@@ -472,4 +473,9 @@ func (op AddColumnToIndex) Visit(ctx context.Context, v ImmediateMutationVisitor
 // Visit is part of the ImmediateMutationOp interface.
 func (op RemoveColumnFromIndex) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
 	return v.RemoveColumnFromIndex(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
+func (op RemoveObjectParent) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.RemoveObjectParent(ctx, op)
 }

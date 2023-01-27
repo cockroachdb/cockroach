@@ -310,6 +310,9 @@ type NameResolver interface {
 	// ResolveIndex retrieves an index by name and returns its elements.
 	ResolveIndex(relationID catid.DescID, indexName tree.Name, p ResolveParams) ElementResultSet
 
+	// ResolveUDF retrieves a user defined function and returns its elements.
+	ResolveUDF(fnObj *tree.FuncObj, p ResolveParams) ElementResultSet
+
 	// ResolveIndexByName retrieves a table which contains the target
 	// index and returns its elements. Name of database, schema or table may be
 	// missing.

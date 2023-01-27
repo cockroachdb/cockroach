@@ -41,8 +41,9 @@ Schema change plan for DROP TABLE ‹db›.‹sc›.‹t›;
  │         │    ├── PUBLIC → ABSENT     IndexColumn:{DescID: 107, ColumnID: 2, IndexID: 1}
  │         │    ├── PUBLIC → VALIDATED  PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 1}
  │         │    └── PUBLIC → ABSENT     IndexName:{DescID: 107, Name: t_pkey, IndexID: 1}
- │         └── 4 Mutation operations
+ │         └── 5 Mutation operations
  │              ├── MarkDescriptorAsDropped {"DescriptorID":107}
+ │              ├── RemoveObjectParent {"ObjectID":107,"ParentSchemaID":106}
  │              ├── RemoveTableComment {"TableID":107}
  │              ├── RemoveColumnDefaultExpression {"ColumnID":3,"TableID":107}
  │              └── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":107,"Name":"t","SchemaID":106}}
@@ -111,8 +112,9 @@ Schema change plan for DROP TABLE ‹db›.‹sc›.‹t›;
  │         │    ├── PUBLIC → ABSENT  IndexColumn:{DescID: 107, ColumnID: 2, IndexID: 1}
  │         │    ├── PUBLIC → ABSENT  PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 1}
  │         │    └── PUBLIC → ABSENT  IndexName:{DescID: 107, Name: t_pkey, IndexID: 1}
- │         └── 11 Mutation operations
+ │         └── 12 Mutation operations
  │              ├── MarkDescriptorAsDropped {"DescriptorID":107}
+ │              ├── RemoveObjectParent {"ObjectID":107,"ParentSchemaID":106}
  │              ├── RemoveTableComment {"TableID":107}
  │              ├── RemoveColumnDefaultExpression {"ColumnID":3,"TableID":107}
  │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":107,"Name":"t","SchemaID":106}}

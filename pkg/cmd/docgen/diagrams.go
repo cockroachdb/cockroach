@@ -407,9 +407,6 @@ var specs = []stmtSpec{
 		unlink:  []string{"database_new_name", "region_name_list", "variable", "value"},
 	},
 	{
-		name: "alter_database_stmt",
-	},
-	{
 		name:   "alter_database_primary_region",
 		stmt:   "alter_database_primary_region_stmt",
 		inline: []string{"primary_region_clause", "opt_equal"},
@@ -432,9 +429,6 @@ var specs = []stmtSpec{
 		unlink:  []string{"index_new_name", "variable", "value"},
 	},
 	{
-		name: "alter_index_stmt",
-	},
-	{
 		name:   "alter_range",
 		stmt:   "alter_range_stmt",
 		inline: []string{"alter_zone_range_stmt", "alter_range_relocate_stmt", "var_set_list", "set_zone_config", "relocate_kw", "relocate_subject_nonlease"},
@@ -444,9 +438,6 @@ var specs = []stmtSpec{
 		},
 		replace: map[string]string{"'RANGE' a_expr": "'RANGE' range_id"},
 		unlink:  []string{"range_id"},
-	},
-	{
-		name: "alter_range_stmt",
 	},
 	{
 		name:   "alter_table_reset_storage_param",
@@ -556,9 +547,6 @@ var specs = []stmtSpec{
 		exclude: []*regexp.Regexp{regexp.MustCompile("alter_scatter_stmt")},
 		replace: map[string]string{"relation_expr": "table_name", "'RENAME' 'TO' table_name": "'RENAME' 'TO' table_new_name", "var_name": "variable", "var_value": "value"},
 		unlink:  []string{"table_name", "table_new_name", "variable", "value"},
-	},
-	{
-		name: "alter_table_stmt",
 	},
 	{
 		name:    "alter_table_cmds",

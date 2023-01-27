@@ -294,11 +294,11 @@ func updateBackReferencesInSequences(
 	return nil
 }
 
-func (i *immediateVisitor) RemoveViewBackReferencesInRelations(
-	ctx context.Context, op scop.RemoveViewBackReferencesInRelations,
+func (i *immediateVisitor) RemoveBackReferencesInRelations(
+	ctx context.Context, op scop.RemoveBackReferencesInRelations,
 ) error {
 	for _, relationID := range op.RelationIDs {
-		if err := removeViewBackReferencesInRelation(ctx, i, relationID, op.BackReferencedViewID); err != nil {
+		if err := removeViewBackReferencesInRelation(ctx, i, relationID, op.BackReferencedID); err != nil {
 			return err
 		}
 	}
@@ -306,7 +306,7 @@ func (i *immediateVisitor) RemoveViewBackReferencesInRelations(
 }
 
 func removeViewBackReferencesInRelation(
-	ctx context.Context, m *immediateVisitor, relationID, viewID descpb.ID,
+	ctx context.Context, m *immediateVisitor, relationID, backReferencedID descpb.ID,
 ) error {
 	tbl, err := m.checkOutTable(ctx, relationID)
 	if err != nil || tbl.Dropped() {
@@ -315,10 +315,28 @@ func removeViewBackReferencesInRelation(
 	}
 	var newBackRefs []descpb.TableDescriptor_Reference
 	for _, by := range tbl.DependedOnBy {
-		if by.ID != viewID {
+		if by.ID != backReferencedID {
 			newBackRefs = append(newBackRefs, by)
 		}
 	}
 	tbl.DependedOnBy = newBackRefs
+	return nil
+}
+
+func (i *immediateVisitor) RemoveObjectParent(
+	ctx context.Context, op scop.RemoveObjectParent,
+) error {
+	obj, err := i.checkOutDescriptor(ctx, op.ObjectID)
+	if err != nil {
+		return err
+	}
+	switch obj.DescriptorType() {
+	case catalog.Function:
+		sc, err := i.checkOutSchema(ctx, op.ParentSchemaID)
+		if err != nil {
+			return err
+		}
+		sc.RemoveFunction(obj.GetName(), obj.GetID())
+	}
 	return nil
 }
