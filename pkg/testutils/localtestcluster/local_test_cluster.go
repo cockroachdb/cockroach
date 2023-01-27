@@ -138,7 +138,7 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 		TenantID:  roachpb.SystemTenantID,
 		Config:    baseCtx,
 		Clock:     ltc.Clock.WallClock(),
-		MaxOffset: ltc.Clock.MaxOffset(),
+		MaxOffset: ltc.Clock.ToleratedOffset(),
 		Stopper:   ltc.stopper,
 		Settings:  cfg.Settings,
 		NodeID:    nc,
