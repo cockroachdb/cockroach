@@ -493,7 +493,7 @@ func TestErrorsPopulatedOnRetry(t *testing.T) {
 		errorIdx    = executionErrorRE.SubexpIndex("error")
 	)
 	parseTimestamp := func(t *testing.T, s string) time.Time {
-		ptc := tree.NewParseTimeContext(timeutil.Now())
+		ptc := tree.NewParseContext(timeutil.Now())
 		ts, _, err := tree.ParseDTimestamp(ptc, s, time.Microsecond)
 		require.NoError(t, err)
 		return ts.Time

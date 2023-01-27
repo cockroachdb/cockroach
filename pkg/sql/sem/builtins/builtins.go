@@ -3272,7 +3272,7 @@ value if you rely on the HLC for accuracy.`,
 		stringOverload1(
 			func(ctx *eval.Context, s string) (tree.Datum, error) {
 				ts, dependsOnContext, err := tree.ParseDTimestamp(
-					tree.NewParseTimeContext(ctx.GetTxnTimestamp(time.Microsecond).Time),
+					tree.NewParseContext(ctx.GetTxnTimestamp(time.Microsecond).Time),
 					s,
 					time.Microsecond,
 				)
@@ -3327,7 +3327,7 @@ value if you rely on the HLC for accuracy.`,
 		stringOverload1(
 			func(ctx *eval.Context, s string) (tree.Datum, error) {
 				ts, dependsOnContext, err := tree.ParseDDate(
-					tree.NewParseTimeContext(ctx.GetTxnTimestamp(time.Microsecond).Time),
+					tree.NewParseContext(ctx.GetTxnTimestamp(time.Microsecond).Time),
 					s,
 				)
 				if err != nil {
@@ -3377,7 +3377,7 @@ value if you rely on the HLC for accuracy.`,
 		stringOverload1(
 			func(ctx *eval.Context, s string) (tree.Datum, error) {
 				t, dependsOnContext, err := tree.ParseDTime(
-					tree.NewParseTimeContext(ctx.GetTxnTimestamp(time.Microsecond).Time),
+					tree.NewParseContext(ctx.GetTxnTimestamp(time.Microsecond).Time),
 					s,
 					time.Microsecond,
 				)
@@ -3459,7 +3459,7 @@ value if you rely on the HLC for accuracy.`,
 		stringOverload1(
 			func(ctx *eval.Context, s string) (tree.Datum, error) {
 				t, dependsOnContext, err := tree.ParseDTimeTZ(
-					tree.NewParseTimeContext(ctx.GetTxnTimestamp(time.Microsecond).Time),
+					tree.NewParseContext(ctx.GetTxnTimestamp(time.Microsecond).Time),
 					s,
 					time.Microsecond,
 				)
@@ -10011,9 +10011,7 @@ func arrayNumInvertedIndexEntries(ctx *eval.Context, val, version tree.Datum) (t
 	return tree.NewDInt(tree.DInt(len(keys))), nil
 }
 
-func parseContextFromDateStyle(
-	ctx *eval.Context, dateStyleStr string,
-) (tree.ParseTimeContext, error) {
+func parseContextFromDateStyle(ctx *eval.Context, dateStyleStr string) (tree.ParseContext, error) {
 	ds, err := pgdate.ParseDateStyle(dateStyleStr, pgdate.DefaultDateStyle())
 	if err != nil {
 		return nil, err
@@ -10021,9 +10019,9 @@ func parseContextFromDateStyle(
 	if ds.Style != pgdate.Style_ISO {
 		return nil, unimplemented.NewWithIssue(41773, "only ISO style is supported")
 	}
-	return tree.NewParseTimeContext(
+	return tree.NewParseContext(
 		ctx.GetTxnTimestamp(time.Microsecond).Time,
-		tree.NewParseTimeContextOptionDateStyle(ds),
+		tree.NewParseContextOptionDateStyle(ds),
 	), nil
 }
 
