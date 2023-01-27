@@ -102,6 +102,10 @@ type Metadata struct {
 	userDefinedTypes      map[oid.Oid]struct{}
 	userDefinedTypesSlice []*types.T
 
+	// userDefinedFunctions contains all user defined functions present in the
+	// query.
+	userDefinedFunctions []*tree.Overload
+
 	// deps stores information about all data source objects depended on by the
 	// query, as well as the privileges required to access them.
 	deps []mdDep
@@ -194,7 +198,8 @@ func (md *Metadata) Init() {
 func (md *Metadata) CopyFrom(from *Metadata, copyScalarFn func(Expr) Expr) {
 	if len(md.schemas) != 0 || len(md.cols) != 0 || len(md.tables) != 0 ||
 		len(md.sequences) != 0 || len(md.deps) != 0 || len(md.views) != 0 ||
-		len(md.userDefinedTypes) != 0 || len(md.userDefinedTypesSlice) != 0 {
+		len(md.userDefinedTypes) != 0 || len(md.userDefinedTypesSlice) != 0 ||
+		len(md.userDefinedFunctions) != 0 {
 		panic(errors.AssertionFailedf("CopyFrom requires empty destination"))
 	}
 	md.schemas = append(md.schemas, from.schemas...)
@@ -209,6 +214,13 @@ func (md *Metadata) CopyFrom(from *Metadata, copyScalarFn func(Expr) Expr) {
 			md.userDefinedTypes[typ.Oid()] = struct{}{}
 			md.userDefinedTypesSlice = append(md.userDefinedTypesSlice, typ)
 		}
+	}
+
+	if len(from.userDefinedFunctions) > 0 {
+		if cap(md.userDefinedFunctions) < len(from.userDefinedFunctions) {
+			md.userDefinedFunctions = make([]*tree.Overload, len(from.userDefinedFunctions))
+		}
+		md.userDefinedFunctions = append(md.userDefinedFunctions, from.userDefinedFunctions...)
 	}
 
 	if cap(md.tables) >= len(from.tables) {
@@ -342,6 +354,16 @@ func (md *Metadata) CheckDependencies(
 			return false, nil
 		}
 	}
+	// Check that all of the user defined functions have not changed.
+	for _, overload := range md.userDefinedFunctions {
+		_, toCheck, err := optCatalog.ResolveFunctionByOID(ctx, overload.Oid)
+		if err != nil {
+			return false, handleDescError(err)
+		}
+		if overload.Version != toCheck.Version {
+			return false, nil
+		}
+	}
 	return true, nil
 }
 
@@ -392,6 +414,24 @@ func (md *Metadata) AddUserDefinedType(typ *types.T) {
 // AllUserDefinedTypes returns all user defined types contained in this query.
 func (md *Metadata) AllUserDefinedTypes() []*types.T {
 	return md.userDefinedTypesSlice
+}
+
+// AddUserDefinedFunc adds a user defined function call to the metadata for this
+// query.
+func (md *Metadata) AddUserDefinedFunc(overload *tree.Overload) {
+	if !overload.IsUDF {
+		// We check IsUDF here instead of HasSQLBody() because we only care about
+		// user-defined functions, which can be altered or dropped, unlike builtin
+		// functions defined using a SQL string.
+		return
+	}
+	for i := range md.userDefinedFunctions {
+		if md.userDefinedFunctions[i] == overload {
+			// This is a duplicate.
+			return
+		}
+	}
+	md.userDefinedFunctions = append(md.userDefinedFunctions, overload)
 }
 
 // AddTable indexes a new reference to a table within the query. Separate
