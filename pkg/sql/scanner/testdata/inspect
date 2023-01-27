@@ -43,6 +43,26 @@ input: "\"hello \"\" world\nand universe\" select"
 30  36     SELECT  IDENT  "select"                        selec…
 36  36     EOF     EOF    "EOF"                           🛇
 
+# Quoted identifer separated by a newline.
+inspect
+"hello"
+"world"
+----
+input: "\"hello\"\n\"world\""
+0   8   q  IDENT  IDENT  "hello"  "hell…
+8   15  q  IDENT  IDENT  "world"  "worl…
+15  15     EOF    EOF    "EOF"    🛇
+
+
+# Single-quoted string separated by a newline.
+inspect
+'hello'
+'world'
+----
+input: "'hello'\n'world'"
+0   15     SCONST  SCONST  "helloworld"  'hell…
+15  15     EOF     EOF     "EOF"         🛇
+
 
 # Incomplete identifier.
 inspect
