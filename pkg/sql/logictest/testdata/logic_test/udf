@@ -2631,6 +2631,37 @@ statement error pgcode 22001 value too long for type CHAR
 SELECT stoc('abc')
 
 
+subtest tagged_dollar_quotes
+
+statement ok
+CREATE FUNCTION single_quote(s STRING) RETURNS STRING LANGUAGE SQL AS $func$
+  SELECT $prefix$'$prefix$ || s || $suffix$'$suffix$
+$func$
+
+query T
+SELECT create_statement FROM [SHOW CREATE FUNCTION single_quote]
+----
+CREATE FUNCTION public.single_quote(IN s STRING)
+  RETURNS STRING
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  AS $$
+  SELECT (e'\'' || s) || e'\'';
+$$
+
+query T
+SELECT single_quote('hello')
+----
+'hello'
+
+statement error unterminated string
+CREATE FUNCTION err() RETURNS STRING LANGUAGE SQL AS $outer$
+  SELECT $inner$hello$outer$
+$inner$
+
+
 subtest ddl
 
 # DDL is not currently supported in UDF bodies.
@@ -2875,10 +2906,10 @@ SELECT oid, proname, pronamespace, proowner, prolang, proleakproof, proisstrict,
 FROM pg_catalog.pg_proc WHERE proname IN ('f_93314', 'f_93314_alias', 'f_93314_comp', 'f_93314_comp_t')
 ORDER BY oid;
 ----
-100263  f_93314         105  1546506610  14  false  false  false  v  0  100262  ·  {}  NULL  SELECT i, e FROM test.public.t_93314 ORDER BY i LIMIT 1;
-100265  f_93314_alias   105  1546506610  14  false  false  false  v  0  100264  ·  {}  NULL  SELECT i, e FROM test.public.t_93314_alias ORDER BY i LIMIT 1;
-100269  f_93314_comp    105  1546506610  14  false  false  false  v  0  100266  ·  {}  NULL  SELECT (1, 2);
-100270  f_93314_comp_t  105  1546506610  14  false  false  false  v  0  100268  ·  {}  NULL  SELECT a, c FROM test.public.t_93314_comp LIMIT 1;
+100264  f_93314         105  1546506610  14  false  false  false  v  0  100263  ·  {}  NULL  SELECT i, e FROM test.public.t_93314 ORDER BY i LIMIT 1;
+100266  f_93314_alias   105  1546506610  14  false  false  false  v  0  100265  ·  {}  NULL  SELECT i, e FROM test.public.t_93314_alias ORDER BY i LIMIT 1;
+100270  f_93314_comp    105  1546506610  14  false  false  false  v  0  100267  ·  {}  NULL  SELECT (1, 2);
+100271  f_93314_comp_t  105  1546506610  14  false  false  false  v  0  100269  ·  {}  NULL  SELECT a, c FROM test.public.t_93314_comp LIMIT 1;
 
 # Regression test for #95240. Strict UDFs that are inlined should result in NULL
 # when presented with NULL arguments.
