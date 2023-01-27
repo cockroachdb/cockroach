@@ -17,7 +17,9 @@ import (
 	"math/rand"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
@@ -68,10 +70,17 @@ func TestTestPlanner(t *testing.T) {
 	mvt := newTest(t)
 	mvt.InMixedVersion("mixed-version 1", dummyHook)
 	mvt.InMixedVersion("mixed-version 2", dummyHook)
+	initBank := roachtestutil.NewCommand("./cockroach workload bank init")
+	runBank := roachtestutil.NewCommand("./cockroach workload run bank").Flag("max-ops", 100)
+	mvt.Workload("bank", nodes, initBank, runBank)
+	runRand := roachtestutil.NewCommand("./cockroach run rand").Flag("seed", 321)
+	mvt.Workload("rand", nodes, nil /* initCmd */, runRand)
+	csvServer := roachtestutil.NewCommand("./cockroach workload csv-server").Flag("port", 9999)
+	mvt.BackgroundCommand("csv server", nodes, csvServer)
 
 	plan, err := mvt.plan()
 	require.NoError(t, err)
-	require.Len(t, plan.steps, 9)
+	require.Len(t, plan.steps, 12)
 
 	// Assert on the pretty-printed version of the test plan as that
 	// asserts the ordering of the steps we want to take, and as a bonus
@@ -79,33 +88,42 @@ func TestTestPlanner(t *testing.T) {
 	expectedPrettyPlan := fmt.Sprintf(`
 mixed-version test plan for upgrading from %[1]s to <current>:
 ├── starting cluster from fixtures for version "%[1]s" (1)
-├── wait for nodes :1-4 to all have the same cluster version (same as binary version of node 1) (2)
-├── preventing auto-upgrades by setting `+"`preserve_downgrade_option`"+` (3)
+├── upload current binary to all cockroach nodes (:1-4) (2)
+├── wait for nodes :1-4 to all have the same cluster version (same as binary version of node 1) (3)
+├── preventing auto-upgrades by setting `+"`preserve_downgrade_option`"+` (4)
+├── run "initialize bank workload" (5)
+├── start background hooks concurrently
+│   ├── run "bank workload", after 50ms delay (6)
+│   ├── run "rand workload", after 50ms delay (7)
+│   └── run "csv server", after 200ms delay (8)
 ├── upgrade nodes :1-4 from "%[1]s" to "<current>"
-│   ├── restart node 2 with binary version <current> (4)
-│   ├── restart node 1 with binary version <current> (5)
-│   ├── run "mixed-version 1" (6)
-│   ├── restart node 4 with binary version <current> (7)
-│   ├── restart node 3 with binary version <current> (8)
-│   └── run "mixed-version 2" (9)
-├── downgrade nodes :1-4 from "<current>" to "%[1]s"
-│   ├── restart node 3 with binary version %[1]s (10)
-│   ├── restart node 4 with binary version %[1]s (11)
+│   ├── restart node 4 with binary version <current> (9)
 │   ├── run mixed-version hooks concurrently
-│   │   ├── run "mixed-version 1", after 200ms delay (12)
-│   │   └── run "mixed-version 2", after 200ms delay (13)
-│   ├── restart node 2 with binary version %[1]s (14)
-│   └── restart node 1 with binary version %[1]s (15)
+│   │   ├── run "mixed-version 1", after 100ms delay (10)
+│   │   └── run "mixed-version 2", after 100ms delay (11)
+│   ├── restart node 3 with binary version <current> (12)
+│   ├── restart node 2 with binary version <current> (13)
+│   └── restart node 1 with binary version <current> (14)
+├── downgrade nodes :1-4 from "<current>" to "%[1]s"
+│   ├── restart node 2 with binary version %[1]s (15)
+│   ├── run "mixed-version 1" (16)
+│   ├── restart node 1 with binary version %[1]s (17)
+│   ├── run "mixed-version 2" (18)
+│   ├── restart node 3 with binary version %[1]s (19)
+│   └── restart node 4 with binary version %[1]s (20)
 ├── upgrade nodes :1-4 from "%[1]s" to "<current>"
-│   ├── restart node 3 with binary version <current> (16)
-│   ├── run "mixed-version 1" (17)
-│   ├── restart node 4 with binary version <current> (18)
-│   ├── restart node 1 with binary version <current> (19)
-│   ├── restart node 2 with binary version <current> (20)
-│   └── run "mixed-version 2" (21)
-├── finalize upgrade by resetting `+"`preserve_downgrade_option`"+` (22)
-├── run "mixed-version 2" (23)
-└── wait for nodes :1-4 to all have the same cluster version (same as binary version of node 1) (24)
+│   ├── restart node 4 with binary version <current> (21)
+│   ├── restart node 3 with binary version <current> (22)
+│   ├── restart node 1 with binary version <current> (23)
+│   ├── run mixed-version hooks concurrently
+│   │   ├── run "mixed-version 1", after 0s delay (24)
+│   │   └── run "mixed-version 2", after 0s delay (25)
+│   └── restart node 2 with binary version <current> (26)
+├── finalize upgrade by resetting `+"`preserve_downgrade_option`"+` (27)
+├── run mixed-version hooks concurrently
+│   ├── run "mixed-version 1", after 100ms delay (28)
+│   └── run "mixed-version 2", after 0s delay (29)
+└── wait for nodes :1-4 to all have the same cluster version (same as binary version of node 1) (30)
 `, previousVersion,
 	)
 
@@ -120,7 +138,7 @@ mixed-version test plan for upgrading from %[1]s to <current>:
 	mvt.OnStartup("startup 2", dummyHook)
 	plan, err = mvt.plan()
 	require.NoError(t, err)
-	requireConcurrentHooks(t, plan.steps[3], "startup 1", "startup 2")
+	requireConcurrentHooks(t, plan.steps[4], "startup 1", "startup 2")
 
 	// Assert that AfterUpgradeFinalized hooks are scheduled to run in
 	// the last step of the test.
@@ -130,8 +148,8 @@ mixed-version test plan for upgrading from %[1]s to <current>:
 	mvt.AfterUpgradeFinalized("finalizer 3", dummyHook)
 	plan, err = mvt.plan()
 	require.NoError(t, err)
-	require.Len(t, plan.steps, 9)
-	requireConcurrentHooks(t, plan.steps[8], "finalizer 1", "finalizer 2", "finalizer 3")
+	require.Len(t, plan.steps, 10)
+	requireConcurrentHooks(t, plan.steps[9], "finalizer 1", "finalizer 2", "finalizer 3")
 }
 
 // TestDeterministicTestPlan tests that generating a test plan with
@@ -151,6 +169,84 @@ func TestDeterministicTestPlan(t *testing.T) {
 	const numRuns = 50
 	for j := 0; j < numRuns; j++ {
 		require.Equal(t, expectedPlan.PrettyPrint(), makePlan().PrettyPrint(), "j = %d", j)
+	}
+}
+
+var unused float64
+
+// TestDeterministicHookSeeds ensures that user functions passed to
+// `InMixedVersion` always see the same sequence of values even if the
+// PRNG passed to the `Test` struct is perturbed during runs. In other
+// words, this ensures that user functions have at their disposal a
+// random number generator that is unique to them and concurrency with
+// other functions should not change the sequence of values they see
+// as long as the RNG is used deterministically in the user function
+// itself.
+func TestDeterministicHookSeeds(t *testing.T) {
+	generateData := func(generateMoreRandomNumbers bool) [][]int {
+		var generatedData [][]int
+		mvt := newTest(t)
+		mvt.InMixedVersion("do something", func(_ context.Context, _ *logger.Logger, rng *rand.Rand, _ *Helper) error {
+			var data []int
+			for j := 0; j < 5; j++ {
+				data = append(data, rng.Intn(100))
+			}
+
+			generatedData = append(generatedData, data)
+
+			// Ensure that changing the top-level random number generator
+			// has no impact on the rng passed to the user function.
+			if generateMoreRandomNumbers {
+				for j := 0; j < 10; j++ {
+					unused = mvt.prng.Float64()
+				}
+			}
+			return nil
+		})
+
+		var (
+			// these variables are not used by the hook so they can be nil
+			ctx         = context.Background()
+			nilCluster  cluster.Cluster
+			emptyHelper = &Helper{}
+		)
+
+		plan, err := mvt.plan()
+		require.NoError(t, err)
+
+		// We can hardcode these paths since we are using a fixed seed in
+		// these tests.
+		firstRun := plan.steps[4].(sequentialRunStep).steps[2].(runHookStep)
+		require.Equal(t, "do something", firstRun.hook.name)
+		require.NoError(t, firstRun.Run(ctx, nilLogger, nilCluster, emptyHelper))
+
+		secondRun := plan.steps[5].(sequentialRunStep).steps[3].(runHookStep)
+		require.Equal(t, "do something", secondRun.hook.name)
+		require.NoError(t, secondRun.Run(ctx, nilLogger, nilCluster, emptyHelper))
+
+		thirdRun := plan.steps[6].(sequentialRunStep).steps[1].(runHookStep)
+		require.Equal(t, "do something", thirdRun.hook.name)
+		require.NoError(t, thirdRun.Run(ctx, nilLogger, nilCluster, emptyHelper))
+
+		fourthRun := plan.steps[8].(runHookStep)
+		require.Equal(t, "do something", fourthRun.hook.name)
+		require.NoError(t, fourthRun.Run(ctx, nilLogger, nilCluster, emptyHelper))
+
+		require.Len(t, generatedData, 4)
+		return generatedData
+	}
+
+	expectedData := [][]int{
+		{82, 1, 17, 3, 87},
+		{73, 17, 6, 37, 43},
+		{82, 35, 57, 54, 8},
+		{7, 95, 26, 31, 65},
+	}
+	const numRums = 50
+	for j := 0; j < numRums; j++ {
+		for _, b := range []bool{true, false} {
+			require.Equal(t, expectedData, generateData(b), "j = %d | b = %t", j, b)
+		}
 	}
 }
 
@@ -183,6 +279,6 @@ func requireConcurrentHooks(t *testing.T, step testStep, names ...string) {
 	}
 }
 
-func dummyHook(*logger.Logger, *rand.Rand, *Helper) error {
+func dummyHook(context.Context, *logger.Logger, *rand.Rand, *Helper) error {
 	return nil
 }
