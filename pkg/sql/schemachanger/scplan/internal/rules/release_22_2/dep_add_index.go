@@ -32,7 +32,7 @@ func init() {
 					(*scpb.PrimaryIndex)(nil),
 					(*scpb.SecondaryIndex)(nil),
 				),
-				to.TypeFilter(IsIndexDependent),
+				to.TypeFilter(rulesVersionKey, isIndexDependent),
 				JoinOnIndexID(from, to, "table-id", "index-id"),
 				StatusesToPublicOrTransient(from, scpb.Status_BACKFILL_ONLY, to, scpb.Status_PUBLIC),
 			}
@@ -46,7 +46,7 @@ func init() {
 		func(from, to NodeVars) rel.Clauses {
 			return rel.Clauses{
 				from.Type((*scpb.TemporaryIndex)(nil)),
-				to.TypeFilter(IsIndexDependent),
+				to.TypeFilter(rulesVersionKey, isIndexDependent),
 				JoinOnIndexID(from, to, "table-id", "index-id"),
 				StatusesToPublicOrTransient(from, scpb.Status_DELETE_ONLY, to, scpb.Status_PUBLIC),
 			}
@@ -59,8 +59,8 @@ func init() {
 		"dependent", "index",
 		func(from, to NodeVars) rel.Clauses {
 			return rel.Clauses{
-				from.TypeFilter(IsIndexDependent),
-				to.TypeFilter(IsIndex),
+				from.TypeFilter(rulesVersionKey, isIndexDependent),
+				to.TypeFilter(rulesVersionKey, IsIndex),
 				JoinOnIndexID(from, to, "table-id", "index-id"),
 				StatusesToPublicOrTransient(from, scpb.Status_PUBLIC, to, scpb.Status_PUBLIC),
 			}

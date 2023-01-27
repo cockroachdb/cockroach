@@ -29,7 +29,7 @@ func init() {
 		func(from, to NodeVars) rel.Clauses {
 			return rel.Clauses{
 				from.Type((*scpb.Column)(nil)),
-				to.TypeFilter(IsColumnDependent),
+				to.TypeFilter(rulesVersionKey, isColumnDependent),
 				JoinOnColumnID(from, to, "table-id", "col-id"),
 			}
 		},
@@ -42,7 +42,7 @@ func init() {
 		scpb.Status_ABSENT, scpb.Status_ABSENT,
 		func(from, to NodeVars) rel.Clauses {
 			return rel.Clauses{
-				from.TypeFilter(IsColumnDependent),
+				from.TypeFilter(rulesVersionKey, isColumnDependent),
 				to.Type((*scpb.Column)(nil)),
 				JoinOnColumnID(from, to, "table-id", "col-id"),
 			}
@@ -59,7 +59,7 @@ func init() {
 		"dependent", "column-type",
 		func(from, to NodeVars) rel.Clauses {
 			return rel.Clauses{
-				from.TypeFilter(IsColumnTypeDependent),
+				from.TypeFilter(rulesVersionKey, isColumnTypeDependent),
 				to.Type((*scpb.ColumnType)(nil)),
 				JoinOnColumnID(from, to, "table-id", "col-id"),
 				StatusesToAbsent(from, scpb.Status_ABSENT, to, scpb.Status_ABSENT),
@@ -89,7 +89,7 @@ func init() {
 		func(from, to NodeVars) rel.Clauses {
 			return rel.Clauses{
 				from.Type((*scpb.ColumnType)(nil)),
-				from.DescriptorIsNotBeingDropped(),
+				descriptorIsNotBeingDropped(from.El),
 				to.Type((*scpb.Column)(nil)),
 				JoinOnColumnID(from, to, "table-id", "col-id"),
 				StatusesToAbsent(from, scpb.Status_ABSENT, to, scpb.Status_ABSENT),

@@ -31,7 +31,7 @@ func init() {
 		"table", "data",
 		func(from, to NodeVars) rel.Clauses {
 			return rel.Clauses{
-				from.TypeFilter(IsDescriptor),
+				from.TypeFilter(rulesVersionKey, isDescriptor),
 				to.Type((*scpb.TableData)(nil)),
 				JoinOnDescID(from, to, "table-id"),
 				StatusesToAbsent(from, scpb.Status_ABSENT, to, scpb.Status_DROPPED),
@@ -45,7 +45,7 @@ func init() {
 		"database", "data",
 		func(from, to NodeVars) rel.Clauses {
 			return rel.Clauses{
-				from.TypeFilter(IsDescriptor),
+				from.TypeFilter(rulesVersionKey, isDescriptor),
 				to.Type((*scpb.DatabaseData)(nil)),
 				JoinOnDescID(from, to, "db-id"),
 				StatusesToAbsent(from, scpb.Status_ABSENT, to, scpb.Status_DROPPED),
@@ -60,7 +60,7 @@ func init() {
 		scpb.Status_ABSENT, scpb.Status_DROPPED,
 		func(from, to NodeVars) rel.Clauses {
 			return rel.Clauses{
-				from.TypeFilter(IsIndex),
+				from.TypeFilter(rulesVersionKey, isIndex),
 				to.Type((*scpb.IndexData)(nil)),
 				JoinOnIndexID(from, to, "table-id", "index-id"),
 			}
@@ -87,8 +87,8 @@ func init() {
 		scpb.Status_DROPPED, scpb.Status_DROPPED,
 		func(from, to NodeVars) rel.Clauses {
 			return rel.Clauses{
-				from.TypeFilter(IsData),
-				to.TypeFilter(IsData),
+				from.TypeFilter(rulesVersionKey, isData),
+				to.TypeFilter(rulesVersionKey, isData),
 				JoinOnDescID(from, to, "desc-id"),
 				FilterElements("SmallerIDsFirst", from, to, func(a, b scpb.Element) bool {
 					aDescID, aIdxID := dataIDs(a)

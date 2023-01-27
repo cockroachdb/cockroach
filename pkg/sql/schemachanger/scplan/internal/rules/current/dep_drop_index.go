@@ -28,8 +28,8 @@ func init() {
 		scpb.Status_VALIDATED, scpb.Status_ABSENT,
 		func(from, to NodeVars) rel.Clauses {
 			return rel.Clauses{
-				from.TypeFilter(IsIndex),
-				to.TypeFilter(IsIndexDependent),
+				from.TypeFilter(rulesVersionKey, isIndex),
+				to.TypeFilter(rulesVersionKey, isIndexDependent),
 				JoinOnIndexID(from, to, "table-id", "index-id"),
 			}
 		},
@@ -41,8 +41,8 @@ func init() {
 		scpb.Status_ABSENT, scpb.Status_ABSENT,
 		func(from, to NodeVars) rel.Clauses {
 			return rel.Clauses{
-				from.TypeFilter(IsIndexDependent),
-				to.TypeFilter(IsIndex),
+				from.TypeFilter(rulesVersionKey, isIndexDependent),
+				to.TypeFilter(rulesVersionKey, isIndex),
 				JoinOnIndexID(from, to, "table-id", "index-id"),
 			}
 		},
@@ -87,7 +87,7 @@ func init() {
 		func(from, to NodeVars) rel.Clauses {
 			return rel.Clauses{
 				from.Type((*scpb.IndexColumn)(nil)),
-				to.TypeFilter(IsIndex),
+				to.TypeFilter(rulesVersionKey, isIndex),
 				JoinOnIndexID(from, to, "table-id", "index-id"),
 			}
 		},
@@ -113,7 +113,7 @@ func init() {
 		func(from, to NodeVars) rel.Clauses {
 			return rel.Clauses{
 				from.Type((*scpb.SecondaryIndexPartial)(nil)),
-				from.DescriptorIsNotBeingDropped(),
+				descriptorIsNotBeingDropped(from.El),
 				to.Type((*scpb.SecondaryIndex)(nil)),
 				JoinOnIndexID(from, to, "table-id", "index-id"),
 			}

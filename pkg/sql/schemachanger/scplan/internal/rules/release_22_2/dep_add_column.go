@@ -29,7 +29,7 @@ func init() {
 		func(from, to NodeVars) rel.Clauses {
 			return rel.Clauses{
 				from.Type((*scpb.Column)(nil)),
-				to.TypeFilter(IsColumnDependent),
+				to.TypeFilter(rulesVersionKey, isColumnDependent),
 				JoinOnColumnID(from, to, "table-id", "col-id"),
 				StatusesToPublicOrTransient(from, scpb.Status_DELETE_ONLY, to, scpb.Status_PUBLIC),
 			}
@@ -42,7 +42,7 @@ func init() {
 		"dependent", "column",
 		func(from, to NodeVars) rel.Clauses {
 			return rel.Clauses{
-				from.TypeFilter(IsColumnDependent),
+				from.TypeFilter(rulesVersionKey, isColumnDependent),
 				to.Type((*scpb.Column)(nil)),
 				JoinOnColumnID(from, to, "table-id", "col-id"),
 				StatusesToPublicOrTransient(from, scpb.Status_PUBLIC, to, scpb.Status_PUBLIC),
