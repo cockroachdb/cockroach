@@ -30,9 +30,9 @@ import (
 const addTenantColumns = `
 ALTER TABLE system.public.tenants
   ALTER COLUMN active SET NOT VISIBLE,
-  ADD COLUMN name STRING,
-  ADD COLUMN data_state INT,
-  ADD COLUMN service_mode INT`
+  ADD COLUMN name STRING FAMILY "primary",
+  ADD COLUMN data_state INT FAMILY "primary",
+  ADD COLUMN service_mode INT FAMILY "primary"`
 
 const addTenantIndex1 = `CREATE UNIQUE INDEX tenants_name_idx ON system.public.tenants (name ASC)`
 const addTenantIndex2 = `CREATE INDEX tenants_service_mode_idx ON system.public.tenants (service_mode ASC)`
