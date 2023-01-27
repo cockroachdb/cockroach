@@ -30,6 +30,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
+const maxSyncDur = 10 * time.Second
+
 // registerDiskStalledDetection registers the disk stall test.
 func registerDiskStalledDetection(r registry.Registry) {
 	stallers := map[string]func(test.Test, cluster.Cluster) diskStaller{
@@ -44,7 +46,7 @@ func registerDiskStalledDetection(r registry.Registry) {
 			Cluster: r.MakeClusterSpec(1),
 			Timeout: 10 * time.Minute,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-				runDiskStalledDetection(ctx, t, c, makeStaller(t, c))
+				runDiskStalledDetection(ctx, t, c, makeStaller(t, c), true /* doStall */)
 			},
 		})
 	}
@@ -56,8 +58,6 @@ func registerDiskStalledDetection(r registry.Registry) {
 			stallLogDir := stallLogDir
 			stallDataDir := stallDataDir
 			r.Add(registry.TestSpec{
-				Skip:        "#95886",
-				SkipDetails: "The test current only induces a 50us disk-stall, which cannot be reliably detected.",
 				Name: fmt.Sprintf(
 					"disk-stalled/fuse/log=%t,data=%t",
 					stallLogDir, stallDataDir,
@@ -70,18 +70,21 @@ func registerDiskStalledDetection(r registry.Registry) {
 						c:         c,
 						stallLogs: stallLogDir,
 						stallData: stallDataDir,
-					})
+					}, stallLogDir || stallDataDir /* doStall */)
 				},
 			})
 		}
 	}
 }
 
-func runDiskStalledDetection(ctx context.Context, t test.Test, c cluster.Cluster, s diskStaller) {
-	const maxSyncDur = 10 * time.Second
+func runDiskStalledDetection(
+	ctx context.Context, t test.Test, c cluster.Cluster, s diskStaller, doStall bool,
+) {
 	startOpts := option.DefaultStartOpts()
-	// TODO(jackson): Configure --store to s.DataDir() and logging dir to
-	// s.LogDir()
+	startOpts.RoachprodOpts.ExtraArgs = []string{
+		"--store", s.DataDir(),
+		"--log", fmt.Sprintf(`{sinks: {stderr: {filter: INFO}}, file-defaults: {dir: "%s"}}`, s.LogDir()),
+	}
 	startSettings := install.MakeClusterSettings()
 	startSettings.Env = append(startSettings.Env,
 		"COCKROACH_AUTO_BALLAST=false",
@@ -131,8 +134,10 @@ func runDiskStalledDetection(ctx context.Context, t test.Test, c cluster.Cluster
 	}
 	uptime, err = getUptime(ctx, adminUIAddrs[0])
 	t.L().PrintfCtx(ctx, "node uptime is %s\n", uptime)
-	if err == nil && timeutil.Now().Add(-uptime).Before(stalledAt) {
+	if doStall && err == nil && timeutil.Now().Add(-uptime).Before(stalledAt) {
 		t.Fatalf("node's uptime of %s indicates it's been up since before the stall at %s", uptime, stalledAt)
+	} else if !doStall && err != nil {
+		t.Fatalf("no stall induced; no err expected; got: %s", err)
 	}
 }
 
@@ -252,7 +257,7 @@ func (s *cgroupDiskStaller) setThroughput(
 	))
 }
 
-// fuseDiskStaller uses a FUSE filesystem (charybdefs) to insert an artifical
+// fuseDiskStaller uses a FUSE filesystem (charybdefs) to insert an artificial
 // delay on all I/O.
 type fuseDiskStaller struct {
 	t         test.Test
@@ -298,7 +303,10 @@ func (s *fuseDiskStaller) Cleanup(ctx context.Context) {
 }
 
 func (s *fuseDiskStaller) Stall(ctx context.Context, nodes option.NodeListOption) {
-	s.c.Run(ctx, nodes, "charybdefs-nemesis --delay")
+	// Stall for 2x the max sync duration. The tool expects an integer
+	// representing the delay time, in microseconds.
+	stallMicros := (2 * maxSyncDur).Microseconds()
+	s.c.Run(ctx, nodes, "charybdefs-nemesis", "--delay", strconv.FormatInt(stallMicros, 10))
 }
 
 func (s *fuseDiskStaller) Unstall(ctx context.Context, nodes option.NodeListOption) {

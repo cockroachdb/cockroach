@@ -54,8 +54,7 @@ sudo service cassandra stop;
     sudo rm -rf "${charybde_dir}" "${nemesis_path}" /usr/local/bin/charybdefs{,-nemesis}
     sudo mkdir -p "${charybde_dir}"
     sudo chmod 777 "${charybde_dir}"
-    # TODO(bilal): Change URL back to scylladb/charybdefs once https://github.com/scylladb/charybdefs/pull/28 is merged.
-    git clone --depth 1 "https://github.com/itsbilal/charybdefs.git" "${charybde_dir}"
+    git clone --depth 1 --branch crl "https://github.com/cockroachdb/charybdefs.git" "${charybde_dir}"
 
     cd "${charybde_dir}"
     thrift -r --gen cpp server.thrift
