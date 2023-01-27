@@ -69,14 +69,16 @@ const (
 //     this is happening.
 //   - run after-test hooks.
 //
-// TODO(renato): further opportunities for random exploration: going
-// back multiple releases instead of just one; picking a patch release
-// randomly instead of just the latest release.
+// TODO(renato): further opportunities for random exploration:
+// - going back multiple releases instead of just one
+// - picking a patch release randomly instead of just the latest release
+// - inserting arbitrary delays (`sleep` calls) during the test.
 func (p *testPlanner) Plan() *TestPlan {
 	var steps []testStep
 	addSteps := func(ss []testStep) { steps = append(steps, ss...) }
 
 	addSteps(p.initSteps())
+	addSteps(p.hooks.BackgroundSteps(p.nextID, p.initialContext()))
 
 	// previous -> current
 	addSteps(p.upgradeSteps(p.initialVersion, clusterupgrade.MainVersion))
@@ -119,6 +121,7 @@ func (p *testPlanner) finalContext(finalizing bool) Context {
 func (p *testPlanner) initSteps() []testStep {
 	return append([]testStep{
 		startFromCheckpointStep{id: p.nextID(), version: p.initialVersion, rt: p.rt, crdbNodes: p.crdbNodes},
+		uploadCurrentVersionStep{id: p.nextID(), rt: p.rt, crdbNodes: p.crdbNodes, dest: CurrentCockroachPath},
 		waitForStableClusterVersionStep{id: p.nextID(), nodes: p.crdbNodes},
 		preserveDowngradeOptionStep{id: p.nextID(), prng: p.newRNG(), crdbNodes: p.crdbNodes},
 	}, p.hooks.StartupSteps(p.nextID, p.initialContext())...)
@@ -244,7 +247,10 @@ func (plan *TestPlan) prettyPrintStep(out *strings.Builder, step testStep, prefi
 	case concurrentRunStep:
 		writeNested(s.Description(), s.delayedSteps)
 	case delayedStep:
-		delayStr := fmt.Sprintf("after %s delay", s.delay)
+		var delayStr string
+		if s.delay.Milliseconds() > 0 {
+			delayStr = fmt.Sprintf("after %s delay", s.delay)
+		}
 		writeSingle(s.step.(singleStep), delayStr)
 	default:
 		writeSingle(s.(singleStep))
