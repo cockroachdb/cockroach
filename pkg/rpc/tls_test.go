@@ -67,12 +67,12 @@ func TestClientSSLSettings(t *testing.T) {
 			stopper := stop.NewStopper()
 			defer stopper.Stop(ctx)
 			rpcContext := NewContext(ctx, ContextOptions{
-				TenantID:  roachpb.SystemTenantID,
-				Clock:     &timeutil.DefaultTimeSource{},
-				MaxOffset: time.Nanosecond,
-				Stopper:   stopper,
-				Settings:  cluster.MakeTestingClusterSettings(),
-				Config:    cfg,
+				TenantID:        roachpb.SystemTenantID,
+				Clock:           &timeutil.DefaultTimeSource{},
+				ToleratedOffset: time.Nanosecond,
+				Stopper:         stopper,
+				Settings:        cluster.MakeTestingClusterSettings(),
+				Config:          cfg,
 			})
 
 			if cfg.HTTPRequestScheme() != tc.requestScheme {
@@ -126,12 +126,12 @@ func TestServerSSLSettings(t *testing.T) {
 			stopper := stop.NewStopper()
 			defer stopper.Stop(ctx)
 			rpcContext := NewContext(ctx, ContextOptions{
-				TenantID:  roachpb.SystemTenantID,
-				Clock:     &timeutil.DefaultTimeSource{},
-				MaxOffset: time.Nanosecond,
-				Stopper:   stopper,
-				Settings:  cluster.MakeTestingClusterSettings(),
-				Config:    cfg,
+				TenantID:        roachpb.SystemTenantID,
+				Clock:           &timeutil.DefaultTimeSource{},
+				ToleratedOffset: time.Nanosecond,
+				Stopper:         stopper,
+				Settings:        cluster.MakeTestingClusterSettings(),
+				Config:          cfg,
 			})
 			if cfg.HTTPRequestScheme() != tc.requestScheme {
 				t.Fatalf("#%d: expected HTTPRequestScheme=%s, got: %s", tcNum, tc.requestScheme, cfg.HTTPRequestScheme())
