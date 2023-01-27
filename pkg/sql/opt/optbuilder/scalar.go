@@ -619,6 +619,13 @@ func (b *Builder) buildUDF(
 	colRefs *opt.ColSet,
 ) (out opt.ScalarExpr) {
 	o := f.ResolvedOverload()
+	b.factory.Metadata().AddUserDefinedFunc(o)
+	if f.Func.ReferenceByName != nil {
+		// Track the schema that was used to resolve the function.
+		if err := b.resolverHelper.trackObjectPath(b.ctx, f.Func.ReferenceByName); err != nil {
+			panic(err)
+		}
+	}
 
 	// Validate that the return types match the original return types defined in
 	// the function. Return types like user defined return types may change since
