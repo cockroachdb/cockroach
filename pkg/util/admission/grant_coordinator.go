@@ -156,13 +156,13 @@ func (sgc *StoreGrantCoordinators) initGrantCoordinator(storeID int32) *GrantCoo
 	// This is IO work, so override the usesTokens value.
 	opts.usesTokens = true
 	// TODO(sumeer): add per-store WorkQueue state for debug.zip and db console.
-	granters := [numWorkClasses]granterWithStoreWriteDone{
+	granters := [admissionpb.NumWorkClasses]granterWithStoreWriteDone{
 		&kvStoreTokenChildGranter{
-			workClass: regularWorkClass,
+			workClass: admissionpb.RegularWorkClass,
 			parent:    kvg,
 		},
 		&kvStoreTokenChildGranter{
-			workClass: elasticWorkClass,
+			workClass: admissionpb.ElasticWorkClass,
 			parent:    kvg,
 		},
 	}
@@ -170,8 +170,8 @@ func (sgc *StoreGrantCoordinators) initGrantCoordinator(storeID int32) *GrantCoo
 	storeReq := sgc.makeStoreRequesterFunc(sgc.ambientCtx, granters, sgc.settings, sgc.workQueueMetrics, opts)
 	coord.queues[KVWork] = storeReq
 	requesters := storeReq.getRequesters()
-	kvg.regularRequester = requesters[regularWorkClass]
-	kvg.elasticRequester = requesters[elasticWorkClass]
+	kvg.regularRequester = requesters[admissionpb.RegularWorkClass]
+	kvg.elasticRequester = requesters[admissionpb.ElasticWorkClass]
 	coord.granters[KVWork] = kvg
 	coord.ioLoadListener = &ioLoadListener{
 		storeID:               storeID,
@@ -330,7 +330,7 @@ type makeRequesterFunc func(
 	metrics *WorkQueueMetrics, opts workQueueOptions) requester
 
 type makeStoreRequesterFunc func(
-	_ log.AmbientContext, granters [numWorkClasses]granterWithStoreWriteDone,
+	_ log.AmbientContext, granters [admissionpb.NumWorkClasses]granterWithStoreWriteDone,
 	settings *cluster.Settings, metrics *WorkQueueMetrics, opts workQueueOptions) storeRequester
 
 // NewGrantCoordinators constructs GrantCoordinators and WorkQueues for a
