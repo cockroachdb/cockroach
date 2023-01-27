@@ -403,7 +403,7 @@ func (ex *connExecutor) execStmtInOpenState(
 			flags.Verbose = true
 			flags.ShowTypes = true
 			if ex.server.cfg.TestingKnobs.DeterministicExplain {
-				flags.Redact = explain.RedactAll
+				flags.Deflake = explain.DeflakeAll
 			}
 			ih.SetOutputMode(explainAnalyzeDebugOutput, flags)
 
@@ -411,7 +411,7 @@ func (ex *connExecutor) execStmtInOpenState(
 			telemetry.Inc(sqltelemetry.ExplainAnalyzeUseCounter)
 			flags := explain.MakeFlags(&e.ExplainOptions)
 			if ex.server.cfg.TestingKnobs.DeterministicExplain {
-				flags.Redact = explain.RedactAll
+				flags.Deflake = explain.DeflakeAll
 			}
 			ih.SetOutputMode(explainAnalyzePlanOutput, flags)
 
@@ -419,7 +419,7 @@ func (ex *connExecutor) execStmtInOpenState(
 			telemetry.Inc(sqltelemetry.ExplainAnalyzeDistSQLUseCounter)
 			flags := explain.MakeFlags(&e.ExplainOptions)
 			if ex.server.cfg.TestingKnobs.DeterministicExplain {
-				flags.Redact = explain.RedactAll
+				flags.Deflake = explain.DeflakeAll
 			}
 			ih.SetOutputMode(explainAnalyzeDistSQLOutput, flags)
 
