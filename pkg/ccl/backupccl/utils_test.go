@@ -378,7 +378,7 @@ func getKVCount(
 
 // uriFmtStringAndArgs returns format strings like "$1" or "($1, $2, $3)" and
 // an []interface{} of URIs for the BACKUP/RESTORE queries.
-func uriFmtStringAndArgs(uris []string) (string, []interface{}) {
+func uriFmtStringAndArgs(uris []string, startIndex int) (string, []interface{}) {
 	urisForFormat := make([]interface{}, len(uris))
 	var fmtString strings.Builder
 	if len(uris) > 1 {
@@ -388,7 +388,7 @@ func uriFmtStringAndArgs(uris []string) (string, []interface{}) {
 		if i > 0 {
 			fmtString.WriteString(", ")
 		}
-		fmtString.WriteString(fmt.Sprintf("$%d", i+1))
+		fmtString.WriteString(fmt.Sprintf("$%d", startIndex+i+1))
 		urisForFormat[i] = uri
 	}
 	if len(uris) > 1 {
