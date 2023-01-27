@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	_ "github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil" // see RequestHeader
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -362,6 +363,39 @@ func (rh *ResponseHeader) combine(otherRH ResponseHeader) error {
 	return nil
 }
 
+// A ScanResponse is the return value from the Scan() method.
+type ScanResponse struct {
+	ResponseHeader `protobuf:"bytes,1,opt,name=header,proto3,embedded=header" json:"header"`
+	// Empty if no rows were scanned.
+	Rows []KeyValue `protobuf:"bytes,2,rep,name=rows,proto3" json:"rows"`
+	// The intent rows seen when performing a scan at the READ_UNCOMMITTED
+	// consistency level. These rows do not count against the MaxSpanRequestKeys
+	// count.
+	//
+	// NOTE: this field is not currently populated with intents for deletion
+	// tombstones. It probably should be because the rows field may contain
+	// key-values that are being deleted by corresponding intents. We should
+	// revisit this decision if this ever becomes a problem.
+	IntentRows []KeyValue `protobuf:"bytes,3,rep,name=intent_rows,json=intentRows,proto3" json:"intent_rows"`
+	// If set, then depending on the ScanFormat, each item in this repeated bytes
+	// field contains part of the results in batch format:
+	// - for BATCH_RESPONSE - the key/value pairs are a buffer of varint-prefixed
+	// slices, alternating from key to value. Each entry in this field is complete
+	// (i.e. there are no key/value pairs that are split across more than one
+	// entry). There are num_keys total pairs across all entries, as defined by
+	// the ResponseHeader.
+	// - for COL_BATCH_RESPONSE - each []byte is a single serialized (in the
+	// Apache Arrow format) coldata.Batch. Each SQL row in that coldata.Batch is
+	// complete. num_keys total key-value pairs were used to populate all of the
+	// coldata.Batch'es in this field.
+	//
+	// If set, rows will not be set and vice versa.
+	BatchResponses [][]byte `protobuf:"bytes,4,rep,name=batch_responses,json=batchResponses,proto3" json:"batch_responses,omitempty"`
+
+	// TODO: comment.
+	ColBatches []coldata.Batch
+}
+
 // combine implements the combinable interface.
 func (sr *ScanResponse) combine(c combinable) error {
 	otherSR := c.(*ScanResponse)
@@ -377,6 +411,39 @@ func (sr *ScanResponse) combine(c combinable) error {
 }
 
 var _ combinable = &ScanResponse{}
+
+// A ReverseScanResponse is the return value from the ReverseScan() method.
+type ReverseScanResponse struct {
+	ResponseHeader `protobuf:"bytes,1,opt,name=header,proto3,embedded=header" json:"header"`
+	// Empty if no rows were scanned.
+	Rows []KeyValue `protobuf:"bytes,2,rep,name=rows,proto3" json:"rows"`
+	// The intent rows seen when performing a scan at the READ_UNCOMMITTED
+	// consistency level. These rows do not count against the MaxSpanRequestKeys
+	// count.
+	//
+	// NOTE: this field is not currently populated with intents for deletion
+	// tombstones. It probably should be because the rows field may contain
+	// key-values that are being deleted by corresponding intents. We should
+	// revisit this decision if this ever becomes a problem.
+	IntentRows []KeyValue `protobuf:"bytes,3,rep,name=intent_rows,json=intentRows,proto3" json:"intent_rows"`
+	// If set, then depending on the ScanFormat, each item in this repeated bytes
+	// field contains part of the results in batch format:
+	// - for BATCH_RESPONSE - the key/value pairs are a buffer of varint-prefixed
+	// slices, alternating from key to value. Each entry in this field is complete
+	// (i.e. there are no key/value pairs that are split across more than one
+	// entry). There are num_keys total pairs across all entries, as defined by
+	// the ResponseHeader.
+	// - for COL_BATCH_RESPONSE - each []byte is a single serialized (in the
+	// Apache Arrow format) coldata.Batch. Each SQL row in that coldata.Batch is
+	// complete. num_keys total key-value pairs were used to populate all of the
+	// coldata.Batch'es in this field.
+	//
+	// If set, rows will not be set and vice versa.
+	BatchResponses [][]byte `protobuf:"bytes,4,rep,name=batch_responses,json=batchResponses,proto3" json:"batch_responses,omitempty"`
+
+	// TODO: comment.
+	ColBatches []coldata.Batch
+}
 
 // combine implements the combinable interface.
 func (sr *ReverseScanResponse) combine(c combinable) error {

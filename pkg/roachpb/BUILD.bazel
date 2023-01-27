@@ -36,6 +36,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/base/serverident",
+        "//pkg/col/coldata",
         "//pkg/geo/geopb",
         "//pkg/keysbase",
         "//pkg/kv/kvnemesis/kvnemesisutil",
