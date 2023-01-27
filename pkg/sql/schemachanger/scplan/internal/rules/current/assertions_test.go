@@ -62,7 +62,7 @@ func nonNilElement(element scpb.Element) scpb.Element {
 // One exception is foreign key constraint, which is not simple dependent nor data
 // element but it has a screl.ReferencedDescID attribute.
 func checkSimpleDependentsReferenceDescID(e scpb.Element) error {
-	if IsSimpleDependent(e) || IsData(e) {
+	if isSimpleDependent(e) || isData(e) {
 		return nil
 	}
 	if _, ok := e.(*scpb.ForeignKeyConstraint); ok {
@@ -85,15 +85,15 @@ func checkToAbsentCategories(e scpb.Element) error {
 	s1 := opgen.NextStatus(e, scpb.Status_ABSENT, s0)
 	switch s1 {
 	case scpb.Status_DROPPED:
-		if IsDescriptor(e) || IsData(e) {
+		if isDescriptor(e) || isData(e) {
 			return nil
 		}
 	case scpb.Status_VALIDATED, scpb.Status_WRITE_ONLY, scpb.Status_DELETE_ONLY:
-		if IsSubjectTo2VersionInvariant(e) {
+		if isSubjectTo2VersionInvariant(e) {
 			return nil
 		}
 	case scpb.Status_ABSENT:
-		if IsSimpleDependent(e) {
+		if isSimpleDependent(e) {
 			return nil
 		}
 	}
@@ -103,7 +103,7 @@ func checkToAbsentCategories(e scpb.Element) error {
 // Assert that isWithTypeT covers all elements with embedded TypeTs.
 func checkIsWithTypeT(e scpb.Element) error {
 	return screl.WalkTypes(e, func(t *types.T) error {
-		if IsWithTypeT(e) {
+		if isWithTypeT(e) {
 			return nil
 		}
 		return errors.New("should verify isWithTypeT but doesn't")
@@ -120,7 +120,7 @@ func checkIsWithExpression(e scpb.Element) error {
 		case *scpb.RowLevelTTL:
 			return nil
 		}
-		if IsWithExpression(e) {
+		if isWithExpression(e) {
 			return nil
 		}
 		return errors.New("should verify isWithExpression but doesn't")
@@ -131,12 +131,12 @@ func checkIsWithExpression(e scpb.Element) error {
 // element.
 func checkIsColumnDependent(e scpb.Element) error {
 	// Exclude columns themselves.
-	if IsColumn(e) {
+	if isColumn(e) {
 		return nil
 	}
 	// A column dependent should have a ColumnID attribute.
 	_, err := screl.Schema.GetAttribute(screl.ColumnID, e)
-	if IsColumnDependent(e) {
+	if isColumnDependent(e) {
 		if err != nil {
 			return errors.New("verifies isColumnDependent but doesn't have ColumnID attr")
 		}
@@ -150,12 +150,12 @@ func checkIsColumnDependent(e scpb.Element) error {
 // element.
 func checkIsIndexDependent(e scpb.Element) error {
 	// Exclude indexes themselves and their data.
-	if IsIndex(e) || IsData(e) || IsSupportedNonIndexBackedConstraint(e) {
+	if isIndex(e) || isData(e) || isSupportedNonIndexBackedConstraint(e) {
 		return nil
 	}
 	// An index dependent should have an IndexID attribute.
 	_, err := screl.Schema.GetAttribute(screl.IndexID, e)
-	if IsIndexDependent(e) {
+	if isIndexDependent(e) {
 		if err != nil {
 			return errors.New("verifies isIndexDependent but doesn't have IndexID attr")
 		}
@@ -169,12 +169,12 @@ func checkIsIndexDependent(e scpb.Element) error {
 // element.
 func checkIsConstraintDependent(e scpb.Element) error {
 	// Exclude constraints themselves.
-	if IsConstraint(e) {
+	if isConstraint(e) {
 		return nil
 	}
 	// A constraint dependent should have a ConstraintID attribute.
 	_, err := screl.Schema.GetAttribute(screl.ConstraintID, e)
-	if IsConstraintDependent(e) {
+	if isConstraintDependent(e) {
 		if err != nil {
 			return errors.New("verifies isConstraintDependent but doesn't have ConstraintID attr")
 		}

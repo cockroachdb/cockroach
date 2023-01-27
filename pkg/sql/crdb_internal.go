@@ -1111,14 +1111,17 @@ func makeJobsTableRows(
 	}
 	defer cleanup(ctx)
 
-	sessionJobs := make([]*jobs.Record, 0, len(p.extendedEvalCtx.SchemaChangeJobRecords))
+	sessionJobs := make([]*jobs.Record, 0, p.extendedEvalCtx.jobs.numToCreate())
 	uniqueJobs := make(map[*jobs.Record]struct{})
-	for _, job := range p.extendedEvalCtx.SchemaChangeJobRecords {
+	if err := p.extendedEvalCtx.jobs.forEachToCreate(func(job *jobs.Record) error {
 		if _, ok := uniqueJobs[job]; ok {
-			continue
+			return nil
 		}
 		sessionJobs = append(sessionJobs, job)
 		uniqueJobs[job] = struct{}{}
+		return nil
+	}); err != nil {
+		return matched, err
 	}
 
 	// Loop while we need to skip a row.
@@ -5300,10 +5303,10 @@ func collectMarshaledJobMetadataMap(
 	if err := it.Close(); err != nil {
 		return nil, err
 	}
-	for _, record := range p.ExtendedEvalContext().SchemaChangeJobRecords {
+	if err := p.ExtendedEvalContext().jobs.forEachToCreate(func(record *jobs.Record) error {
 		progressBytes, payloadBytes, err := getPayloadAndProgressFromJobsRecord(p, record)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		mj := marshaledJobMetadata{
 			status:        tree.NewDString(string(record.RunningStatus)),
@@ -5311,6 +5314,9 @@ func collectMarshaledJobMetadataMap(
 			progressBytes: progressBytes,
 		}
 		m[record.JobID] = mj
+		return nil
+	}); err != nil {
+		return nil, err
 	}
 	return m, nil
 }

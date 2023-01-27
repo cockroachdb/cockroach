@@ -15,6 +15,7 @@ go_library(
         "dep_drop_object.go",
         "dep_swap_index.go",
         "dep_two_version.go",
+        "helpers.go",
         "op_drop.go",
         "op_index_and_column.go",
         "registry.go",
@@ -23,12 +24,14 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/rules/release_22_2",
     visibility = ["//pkg/sql/schemachanger/scplan:__subpackages__"],
     deps = [
+        "//pkg/clusterversion",
         "//pkg/sql/schemachanger/rel",
         "//pkg/sql/schemachanger/scpb",
         "//pkg/sql/schemachanger/scplan/internal/opgen",
         "//pkg/sql/schemachanger/scplan/internal/rules",
         "//pkg/sql/schemachanger/scplan/internal/scgraph",
         "//pkg/sql/schemachanger/screl",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 

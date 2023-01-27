@@ -28,6 +28,7 @@ go_library(
         "//pkg/sql/catalog/systemschema",
         "//pkg/sql/enum",
         "//pkg/sql/rowenc/valueside",
+        "//pkg/sql/sem/catid",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sqlinstance",
         "//pkg/sql/sqlliveness",

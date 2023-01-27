@@ -18,6 +18,7 @@ import (
 	"context"
 	"sort"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/rel"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scgraph"
@@ -225,12 +226,15 @@ func (v NodeVars) Type(valuesForTypeOf ...interface{}) rel.Clause {
 
 // TypeFilter returns a Type clause which binds the element var to elements of
 // a specific type, filtered by the conjunction of all provided predicates.
-func (v NodeVars) TypeFilter(predicatesForTypeOf ...func(element scpb.Element) bool) rel.Clause {
+func (v NodeVars) TypeFilter(
+	version clusterversion.Key, predicatesForTypeOf ...func(element scpb.Element) bool,
+) rel.Clause {
 	if len(predicatesForTypeOf) == 0 {
 		panic(errors.AssertionFailedf("empty type predicate for %q", v.El))
 	}
+	cv := clusterversion.ClusterVersion{Version: clusterversion.ByKey(version)}
 	var valuesForTypeOf []interface{}
-	_ = ForEachElement(func(e scpb.Element) error {
+	_ = ForEachElementInActiveVersion(cv, func(e scpb.Element) error {
 		for _, p := range predicatesForTypeOf {
 			if !p(e) {
 				return nil
@@ -259,12 +263,6 @@ func (v NodeVars) ReferencedTypeDescIDsContain(containedIDVar rel.Var) rel.Claus
 // sequence IDs.
 func (v NodeVars) ReferencedSequenceIDsContains(containedIDVar rel.Var) rel.Clause {
 	return v.El.AttrContainsVar(screl.ReferencedSequenceIDs, containedIDVar)
-}
-
-// DescriptorIsNotBeingDropped is a type-safe shorthand to invoke the
-// rule of the same name on the element.
-func (v NodeVars) DescriptorIsNotBeingDropped() rel.Clause {
-	return descriptorIsNotBeingDropped(v.El)
 }
 
 func MkNodeVars(elStr string) NodeVars {

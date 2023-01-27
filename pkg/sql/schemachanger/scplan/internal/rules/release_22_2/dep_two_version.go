@@ -69,7 +69,7 @@ func init() {
 			from.Target.AttrEq(screl.TargetStatus, targetStatus.Status()),
 			from.Node.AttrEq(screl.CurrentStatus, t.From()),
 			to.Node.AttrEq(screl.CurrentStatus, t.To()),
-			from.DescriptorIsNotBeingDropped(),
+			descriptorIsNotBeingDropped(from.El),
 		}
 		if len(prePrevStatuses) > 0 {
 			clauses = append(clauses,
@@ -104,7 +104,7 @@ func init() {
 		}
 	}
 	_ = ForEachElement(func(el scpb.Element) error {
-		if !IsSubjectTo2VersionInvariant(el) {
+		if !isSubjectTo2VersionInvariant(el) {
 			return nil
 		}
 		if opgen.HasPublic(el) {

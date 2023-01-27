@@ -39,7 +39,7 @@ func init() {
 		"txn_dropped", "dropped",
 		func(from, to NodeVars) rel.Clauses {
 			return rel.Clauses{
-				from.TypeFilter(IsDescriptor),
+				from.TypeFilter(rulesVersionKey, isDescriptor),
 				from.El.AttrEqVar(screl.DescID, "_"),
 				from.El.AttrEqVar(rel.Self, to.El),
 				StatusesToAbsent(from, scpb.Status_TXN_DROPPED, to, scpb.Status_DROPPED),
@@ -51,7 +51,7 @@ func init() {
 		"dropped", "absent",
 		func(from, to NodeVars) rel.Clauses {
 			return rel.Clauses{
-				from.TypeFilter(IsDescriptor),
+				from.TypeFilter(rulesVersionKey, isDescriptor),
 				from.El.AttrEqVar(screl.DescID, "_"),
 				from.El.AttrEqVar(rel.Self, to.El),
 				StatusesToAbsent(from, scpb.Status_DROPPED, to, scpb.Status_ABSENT),
@@ -64,8 +64,8 @@ func init() {
 		"descriptor", "dependent",
 		func(from, to NodeVars) rel.Clauses {
 			return rel.Clauses{
-				from.TypeFilter(IsDescriptor),
-				to.TypeFilter(IsSimpleDependent),
+				from.TypeFilter(rulesVersionKey, isDescriptor),
+				to.TypeFilter(rulesVersionKey, isSimpleDependent),
 				JoinOnDescID(from, to, "desc-id"),
 				StatusesToAbsent(from, scpb.Status_DROPPED, to, scpb.Status_ABSENT),
 				FromHasPublicStatusIfFromIsTableAndToIsRowLevelTTL(from.Target, from.El, to.El),
@@ -78,8 +78,8 @@ func init() {
 		"descriptor", "idx-or-col",
 		func(from, to NodeVars) rel.Clauses {
 			return rel.Clauses{
-				from.TypeFilter(IsDescriptor),
-				to.TypeFilter(IsSubjectTo2VersionInvariant),
+				from.TypeFilter(rulesVersionKey, isDescriptor),
+				to.TypeFilter(rulesVersionKey, isSubjectTo2VersionInvariant),
 				JoinOnDescID(from, to, "desc-id"),
 				StatusesToAbsent(from, scpb.Status_ABSENT, to, scpb.Status_ABSENT),
 			}
@@ -104,8 +104,8 @@ func init() {
 		"referenced-descriptor", "referencing-via-attr",
 		func(from, to NodeVars) rel.Clauses {
 			return rel.Clauses{
-				from.TypeFilter(IsDescriptor),
-				to.TypeFilter(IsSimpleDependent),
+				from.TypeFilter(rulesVersionKey, isDescriptor),
+				to.TypeFilter(rulesVersionKey, isSimpleDependent),
 				JoinReferencedDescID(to, from, "desc-id"),
 				StatusesToAbsent(from, scpb.Status_DROPPED, to, scpb.Status_ABSENT),
 			}
@@ -119,11 +119,11 @@ func init() {
 		func(from, to NodeVars) rel.Clauses {
 			fromDescID := rel.Var("fromDescID")
 			return rel.Clauses{
-				from.TypeFilter(IsTypeDescriptor),
+				from.TypeFilter(rulesVersionKey, isTypeDescriptor),
 				from.JoinTargetNode(),
 				from.DescIDEq(fromDescID),
 				to.ReferencedTypeDescIDsContain(fromDescID),
-				to.TypeFilter(IsSimpleDependent, Or(IsWithTypeT, IsWithExpression)),
+				to.TypeFilter(rulesVersionKey, isSimpleDependent, Or(isWithTypeT, isWithExpression)),
 				StatusesToAbsent(from, scpb.Status_DROPPED, to, scpb.Status_ABSENT),
 			}
 		},
@@ -140,7 +140,7 @@ func init() {
 				from.JoinTargetNode(),
 				from.DescIDEq(seqID),
 				to.ReferencedSequenceIDsContains(seqID),
-				to.TypeFilter(IsSimpleDependent, IsWithExpression),
+				to.TypeFilter(rulesVersionKey, isSimpleDependent, isWithExpression),
 				StatusesToAbsent(from, scpb.Status_DROPPED, to, scpb.Status_ABSENT),
 			}
 		},

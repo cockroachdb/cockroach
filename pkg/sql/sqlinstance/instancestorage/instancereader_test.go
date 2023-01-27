@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
@@ -151,30 +152,80 @@ func TestReader(t *testing.T) {
 			{Tiers: []roachpb.Tier{{Key: "region", Value: "region3"}}},
 		}
 
-		testOutputFn := func(expectedIDs []base.SQLInstanceID, expectedRPCAddresses, expectedSQLAddresses []string, expectedSessionIDs []sqlliveness.SessionID, expectedLocalities []roachpb.Locality, actualInstances []sqlinstance.InstanceInfo) error {
-			if len(expectedIDs) != len(actualInstances) {
-				return errors.Newf("expected %d instances, got %d instances", len(expectedIDs), len(actualInstances))
+		type expectations struct {
+			instanceIDs  []base.SQLInstanceID
+			rpcAddresses []string
+			sqlAddresses []string
+			sessionIDs   []sqlliveness.SessionID
+			localities   []roachpb.Locality
+		}
+
+		testOutputFn := func(exp expectations, actualInstances []sqlinstance.InstanceInfo) error {
+			if len(exp.instanceIDs) != len(actualInstances) {
+				return errors.Newf("expected %d instances, got %d instances", len(exp.instanceIDs), len(actualInstances))
 			}
 			for index, instance := range actualInstances {
-				if expectedIDs[index] != instance.InstanceID {
-					return errors.Newf("expected instance ID %d != actual instance ID %d", expectedIDs[index], instance.InstanceID)
+				if exp.instanceIDs[index] != instance.InstanceID {
+					return errors.Newf("expected instance ID %d != actual instance ID %d", exp.instanceIDs[index], instance.InstanceID)
 				}
-				if expectedRPCAddresses[index] != instance.InstanceRPCAddr {
-					return errors.Newf("expected instance address %s != actual instance address %s", expectedRPCAddresses[index], instance.InstanceRPCAddr)
+				if exp.rpcAddresses[index] != instance.InstanceRPCAddr {
+					return errors.Newf("expected instance address %s != actual instance address %s", exp.rpcAddresses[index], instance.InstanceRPCAddr)
 				}
-				if expectedSQLAddresses[index] != instance.InstanceSQLAddr {
-					return errors.Newf("expected instance address %s != actual instance address %s", expectedSQLAddresses[index], instance.InstanceSQLAddr)
+				if exp.sqlAddresses[index] != instance.InstanceSQLAddr {
+					return errors.Newf("expected instance address %s != actual instance address %s", exp.sqlAddresses[index], instance.InstanceSQLAddr)
 				}
 
-				if expectedSessionIDs[index] != instance.SessionID {
-					return errors.Newf("expected session ID %s != actual session ID %s", expectedSessionIDs[index], instance.SessionID)
+				if exp.sessionIDs[index] != instance.SessionID {
+					return errors.Newf("expected session ID %s != actual session ID %s", exp.sessionIDs[index], instance.SessionID)
 				}
-				if !expectedLocalities[index].Equals(instance.Locality) {
-					return errors.Newf("expected instance locality %s != actual instance locality %s", expectedLocalities[index], instance.Locality)
+				if !exp.localities[index].Equals(instance.Locality) {
+					return errors.Newf("expected instance locality %s != actual instance locality %s", exp.localities[index], instance.Locality)
 				}
 			}
 			return nil
 		}
+
+		getInstancesUsingTxn := func(t *testing.T) ([]sqlinstance.InstanceInfo, error) {
+			var instancesUsingTxn []sqlinstance.InstanceInfo
+			if err := s.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+				var err error
+				instancesUsingTxn, err = reader.GetAllInstancesUsingTxn(ctx, s.Codec(), getTableID(t, tDB, t.Name(), "sql_instances"), txn)
+				return err
+			}); err != nil {
+				return nil, err
+			}
+			return instancesUsingTxn, nil
+		}
+
+		verifyInstancesWithGetter := func(t *testing.T, name string, exp expectations, getInstances func() ([]sqlinstance.InstanceInfo, error)) error {
+			instances, err := getInstances()
+			if err != nil {
+				return errors.Wrapf(err, "%s", name)
+			}
+			sortInstances(instances)
+			return errors.Wrapf(testOutputFn(exp, instances), "%s", name)
+		}
+		verifyInstances := func(t *testing.T, exp expectations) error {
+			if err := verifyInstancesWithGetter(t, "reader", exp, func() ([]sqlinstance.InstanceInfo, error) {
+				return reader.GetAllInstances(ctx)
+			}); err != nil {
+				return err
+			}
+			return verifyInstancesWithGetter(t, "txn", exp, func() ([]sqlinstance.InstanceInfo, error) {
+				return getInstancesUsingTxn(t)
+			})
+		}
+
+		expectationsFromOffset := func(offset int) expectations {
+			return expectations{
+				instanceIDs:  instanceIDs[offset:],
+				rpcAddresses: rpcAddresses[offset:],
+				sqlAddresses: sqlAddresses[offset:],
+				sessionIDs:   sessionIDs[offset:],
+				localities:   localities[offset:],
+			}
+		}
+
 		{
 			// Set up mock data within instance and session storage.
 			for index, rpcAddr := range rpcAddresses {
@@ -190,12 +241,7 @@ func TestReader(t *testing.T) {
 			}
 			// Verify all instances are returned by GetAllInstances.
 			testutils.SucceedsSoon(t, func() error {
-				instances, err := reader.GetAllInstances(ctx)
-				if err != nil {
-					return err
-				}
-				sortInstances(instances)
-				return testOutputFn(instanceIDs, rpcAddresses, sqlAddresses, sessionIDs, localities, instances)
+				return verifyInstances(t, expectationsFromOffset(0))
 			})
 		}
 
@@ -206,12 +252,7 @@ func TestReader(t *testing.T) {
 				t.Fatal(err)
 			}
 			testutils.SucceedsSoon(t, func() error {
-				instances, err := reader.GetAllInstances(ctx)
-				if err != nil {
-					return err
-				}
-				sortInstances(instances)
-				return testOutputFn(instanceIDs[1:], rpcAddresses[1:], sqlAddresses[1:], sessionIDs[1:], localities[1:], instances)
+				return verifyInstances(t, expectationsFromOffset(1))
 			})
 		}
 
@@ -222,12 +263,7 @@ func TestReader(t *testing.T) {
 				t.Fatal(err)
 			}
 			testutils.SucceedsSoon(t, func() error {
-				instances, err := reader.GetAllInstances(ctx)
-				if err != nil {
-					return err
-				}
-				sortInstances(instances)
-				return testOutputFn(instanceIDs[2:], rpcAddresses[2:], sqlAddresses[2:], sessionIDs[2:], localities[2:], instances)
+				return verifyInstances(t, expectationsFromOffset(2))
 			})
 		}
 
@@ -247,19 +283,13 @@ func TestReader(t *testing.T) {
 				t.Fatal(err)
 			}
 			testutils.SucceedsSoon(t, func() error {
-				instances, err := reader.GetAllInstances(ctx)
-				if err != nil {
-					return err
-				}
-				sortInstances(instances)
-				return testOutputFn(
-					[]base.SQLInstanceID{instance.InstanceID},
-					[]string{rpcAddresses[2]},
-					[]string{sqlAddresses[2]},
-					[]sqlliveness.SessionID{sessionID},
-					[]roachpb.Locality{locality},
-					instances,
-				)
+				return verifyInstances(t, expectations{
+					[]base.SQLInstanceID{instance.InstanceID}, /* instanceIDs */
+					[]string{rpcAddresses[2]},                 /* rpcAddresses */
+					[]string{sqlAddresses[2]},                 /* sqlAddresses */
+					[]sqlliveness.SessionID{sessionID},        /* sessionIDs */
+					[]roachpb.Locality{locality},              /* localities */
+				})
 			})
 		}
 	})
