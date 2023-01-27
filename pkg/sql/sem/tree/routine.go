@@ -16,11 +16,20 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
-// RoutinePlanFn creates a plan for the execution of one statement within a
-// routine.
-type RoutinePlanFn func(
-	_ context.Context, _ RoutineExecFactory, stmtIdx int, args Datums,
-) (RoutinePlan, error)
+// RoutinePlanGenerator generates a plan for the execution of each statement
+// within a routine. The given RoutinePlanGeneratedFunc is called for each plan
+// generated.
+//
+// A RoutinePlanGenerator must return an error if the RoutinePlanGeneratedFunc
+// returns an error.
+type RoutinePlanGenerator func(
+	_ context.Context, _ RoutineExecFactory, args Datums, fn RoutinePlanGeneratedFunc,
+) error
+
+// RoutinePlanGeneratedFunc is the function type that is called for each plan
+// enumerated by a RoutinePlanGenerator. isFinalPlan is true if no more plans
+// will be generated after the current plan.
+type RoutinePlanGeneratedFunc func(plan RoutinePlan, isFinalPlan bool) error
 
 // RoutinePlan represents a plan for a statement in a routine. It currently maps
 // to exec.Plan. We use the empty interface here rather then exec.Plan to avoid
@@ -45,11 +54,8 @@ type RoutineExpr struct {
 	// Args contains the argument expressions to the routine.
 	Args TypedExprs
 
-	// PlanFn returns an exec plan for a given statement in the routine.
-	PlanFn RoutinePlanFn
-
-	// NumStmts is the number of statements in the routine.
-	NumStmts int
+	// ForEachPlan generates a plan for each statement in the routine.
+	ForEachPlan RoutinePlanGenerator
 
 	// Typ is the type of the routine's result.
 	Typ *types.T
@@ -91,17 +97,11 @@ type RoutineExpr struct {
 
 // NewTypedRoutineExpr returns a new RoutineExpr that is well-typed.
 func NewTypedRoutineExpr(
-	name string,
-	args TypedExprs,
-	planFn RoutinePlanFn,
-	numStmts int,
-	typ *types.T,
-	enableStepping bool,
+	name string, args TypedExprs, gen RoutinePlanGenerator, typ *types.T, enableStepping bool,
 ) *RoutineExpr {
 	return &RoutineExpr{
 		Args:           args,
-		PlanFn:         planFn,
-		NumStmts:       numStmts,
+		ForEachPlan:    gen,
 		Typ:            typ,
 		EnableStepping: enableStepping,
 		Name:           name,

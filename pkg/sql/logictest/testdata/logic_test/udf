@@ -2157,15 +2157,15 @@ SELECT trace_fn(a) FROM trace_tab
 statement ok
 SET tracing = off
 
-query T
+query T rowsort
 SELECT message FROM [SHOW TRACE FOR SESSION] WHERE message ~ 'udf'
 ----
-=== SPAN START: udf-stmt-trace_fn-0 ===
 === SPAN START: udf-stmt-trace_fn-1 ===
-=== SPAN START: udf-stmt-trace_fn-0 ===
+=== SPAN START: udf-stmt-trace_fn-2 ===
 === SPAN START: udf-stmt-trace_fn-1 ===
-=== SPAN START: udf-stmt-trace_fn-0 ===
+=== SPAN START: udf-stmt-trace_fn-2 ===
 === SPAN START: udf-stmt-trace_fn-1 ===
+=== SPAN START: udf-stmt-trace_fn-2 ===
 
 
 subtest args
