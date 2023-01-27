@@ -55,9 +55,15 @@ func init() {
 	tree.ResolvedBuiltinFuncDefs = make(map[string]*tree.ResolvedFunctionDefinition)
 
 	builtinsregistry.AddSubscription(func(name string, props *tree.FunctionProperties, overloads []tree.Overload) {
+		allBuiltinNames.add(name)
 		for i, fn := range overloads {
 			signature := name + fn.Signature(true)
 			overloads[i].Oid = signatureMustHaveHardcodedOID(signature)
+			if fn.Class == tree.AggregateClass {
+				allAggregateBuiltinNames.add(name)
+			} else if fn.Class == tree.WindowClass {
+				allWindowBuiltinNames.add(name)
+			}
 		}
 		fDef := tree.NewFunctionDefinition(name, props, overloads)
 		addResolvedFuncDef(tree.ResolvedBuiltinFuncDefs, fDef)
@@ -65,12 +71,6 @@ func init() {
 		if !fDef.ShouldDocument() {
 			// Avoid listing help for undocumented functions.
 			return
-		}
-		allBuiltinNames.add(name)
-		if props.Class == tree.AggregateClass {
-			allAggregateBuiltinNames.add(name)
-		} else if props.Class == tree.WindowClass {
-			allWindowBuiltinNames.add(name)
 		}
 	})
 }

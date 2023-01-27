@@ -6262,7 +6262,6 @@ The parent_only boolean is always ignored.`,
 
 	"addgeometrycolumn": makeBuiltin(
 		tree.FunctionProperties{
-			Class:    tree.SQLClass,
 			Category: builtinconstants.CategorySpatial,
 		},
 		tree.Overload{
@@ -6301,6 +6300,7 @@ The parent_only boolean is always ignored.`,
 					bool(tree.MustBeDBool(args[5])),
 				)
 			},
+			Class: tree.SQLClass,
 			Info: infoBuilder{
 				info: `Adds a new geometry column to an existing table and returns metadata about the column created.`,
 			}.String(),
