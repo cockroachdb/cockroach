@@ -1,4 +1,4 @@
-// Copyright 2016 The Cockroach Authors.
+// Copyright 2023 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package kvserver_test
+package server
 
 import (
 	"context"
@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -26,7 +25,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestComputeStatsForKeySpan(t *testing.T) {
+func TestLocalSpanStats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -36,7 +35,7 @@ func TestComputeStatsForKeySpan(t *testing.T) {
 			Store: &kvserver.StoreTestingKnobs{DisableCanAckBeforeApplication: true},
 		},
 	})
-	s := serv.(*server.TestServer)
+	s := serv.(*TestServer)
 	defer s.Stopper().Stop(ctx)
 	store, err := s.Stores().GetStore(s.GetFirstStoreID())
 	require.NoError(t, err)
@@ -68,24 +67,34 @@ func TestComputeStatsForKeySpan(t *testing.T) {
 	for _, tcase := range []struct {
 		startKey       string
 		endKey         string
-		expectedRanges int
+		expectedRanges int32
 		expectedKeys   int64
 	}{
 		{"a", "i", 4, 6},
 		{"a", "c", 1, 3},
 		{"b", "e", 2, 5},
 		{"e", "i", 2, 1},
+		{"b", "d", 2, 3},
+		{"b", "bbb", 1, 2},
 	} {
 		start, end := tcase.startKey, tcase.endKey
-		result, err := store.ComputeStatsForKeySpan(
-			roachpb.RKey(start), roachpb.RKey(end))
+		result, err := s.spanStatsServer.getLocalStats(ctx,
+			&roachpb.InternalSpanStatsRequest{
+				Span: roachpb.Span{
+					Key:    roachpb.Key(start),
+					EndKey: roachpb.Key(end),
+				},
+				NodeID: 0,
+			},
+		)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if a, e := result.ReplicaCount, tcase.expectedRanges; a != e {
+
+		if a, e := result.RangeCount, tcase.expectedRanges; a != e {
 			t.Errorf("Expected %d ranges in span [%s - %s], found %d", e, start, end, a)
 		}
-		if a, e := result.MVCC.LiveCount, tcase.expectedKeys; a != e {
+		if a, e := result.TotalStats.LiveCount, tcase.expectedKeys; a != e {
 			t.Errorf("Expected %d keys in span [%s - %s], found %d", e, start, end, a)
 		}
 	}

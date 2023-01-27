@@ -2936,7 +2936,7 @@ Support status: [reserved](#support-status)
 
 | Field | Type | Label | Description | Support status |
 | ----- | ---- | ----- | ----------- | -------------- |
-| node_id | [string](#cockroach.server.serverpb.SpanStatsRequest-string) |  |  | [reserved](#support-status) |
+| node_id | [int32](#cockroach.server.serverpb.SpanStatsRequest-int32) |  |  | [reserved](#support-status) |
 | start_key | [bytes](#cockroach.server.serverpb.SpanStatsRequest-bytes) |  |  | [reserved](#support-status) |
 | end_key | [bytes](#cockroach.server.serverpb.SpanStatsRequest-bytes) |  |  | [reserved](#support-status) |
 

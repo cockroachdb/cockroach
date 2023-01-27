@@ -248,7 +248,6 @@ go_test(
         "client_spanconfigs_test.go",
         "client_split_burst_test.go",
         "client_split_test.go",
-        "client_status_test.go",
         "client_store_test.go",
         "client_tenant_test.go",
         "client_test.go",

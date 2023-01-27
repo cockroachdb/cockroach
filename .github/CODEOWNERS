@@ -391,6 +391,7 @@
 /pkg/keyvisualizer/          @cockroachdb/kv-obs-prs
 /pkg/multitenant/            @cockroachdb/multi-tenant
 /pkg/release/                @cockroachdb/dev-inf
+/pkg/roachpb/                @cockroachdb/kv-prs
 /pkg/roachpb/.gitattributes  @cockroachdb/dev-inf
 /pkg/roachpb/ambiguous_*     @cockroachdb/kv-prs
 /pkg/roachpb/api*            @cockroachdb/kv-prs

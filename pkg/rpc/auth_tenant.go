@@ -115,6 +115,9 @@ func (a tenantAuthorizer) authorize(
 	case "/cockroach.server.serverpb.Status/TransactionContentionEvents":
 		return a.authTenant(tenID)
 
+	case "/cockroach.server.serverpb.Status/SpanStats":
+		return a.authSpanStats(tenID, req.(*roachpb.InternalSpanStatsRequest))
+
 	case "/cockroach.roachpb.Internal/GetSpanConfigs":
 		return a.authGetSpanConfigs(tenID, req.(*roachpb.GetSpanConfigsRequest))
 
@@ -207,6 +210,12 @@ func (a tenantAuthorizer) authBatch(tenID roachpb.TenantID, args *roachpb.BatchR
 
 func (a tenantAuthorizer) authGetRangeDescriptors(
 	tenID roachpb.TenantID, args *roachpb.GetRangeDescriptorsRequest,
+) error {
+	return validateSpan(tenID, args.Span)
+}
+
+func (a tenantAuthorizer) authSpanStats(
+	tenID roachpb.TenantID, args *roachpb.InternalSpanStatsRequest,
 ) error {
 	return validateSpan(tenID, args.Span)
 }

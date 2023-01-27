@@ -648,6 +648,27 @@ func (c *Connector) SpanConfigConformance(
 	return report, nil
 }
 
+// SpanStats implements the spanstats.Accessor Interface.
+func (c *Connector) SpanStats(
+	ctx context.Context, startKey,
+	endKey roachpb.Key, nodeID roachpb.NodeID,
+) (*roachpb.InternalSpanStatsResponse, error) {
+	var response *roachpb.InternalSpanStatsResponse
+	err := c.withClient(ctx, func(ctx context.Context, c *client) error {
+		stats, err := c.SpanStats(ctx, &serverpb.SpanStatsRequest{
+			NodeID:   nodeID,
+			StartKey: roachpb.RKey(startKey),
+			EndKey:   roachpb.RKey(endKey),
+		})
+		if err != nil {
+			return err
+		}
+		response = (*roachpb.InternalSpanStatsResponse)(stats)
+		return nil
+	})
+	return response, err
+}
+
 // GetAllSystemSpanConfigsThatApply implements the spanconfig.KVAccessor
 // interface.
 func (c *Connector) GetAllSystemSpanConfigsThatApply(
