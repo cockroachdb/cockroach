@@ -30,6 +30,7 @@ type DeferredMutationVisitor interface {
 	RemoveDatabaseRoleSettings(context.Context, RemoveDatabaseRoleSettings) error
 	DeleteSchedule(context.Context, DeleteSchedule) error
 	RefreshStats(context.Context, RefreshStats) error
+	MaybeAddSplitForIndex(context.Context, MaybeAddSplitForIndex) error
 }
 
 // Visit is part of the DeferredMutationOp interface.
@@ -70,4 +71,9 @@ func (op DeleteSchedule) Visit(ctx context.Context, v DeferredMutationVisitor) e
 // Visit is part of the DeferredMutationOp interface.
 func (op RefreshStats) Visit(ctx context.Context, v DeferredMutationVisitor) error {
 	return v.RefreshStats(ctx, op)
+}
+
+// Visit is part of the DeferredMutationOp interface.
+func (op MaybeAddSplitForIndex) Visit(ctx context.Context, v DeferredMutationVisitor) error {
+	return v.MaybeAddSplitForIndex(ctx, op)
 }

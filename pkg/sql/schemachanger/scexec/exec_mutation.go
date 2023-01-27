@@ -57,5 +57,6 @@ func executeMutationOps(
 		deps.TransactionalJobRegistry(),
 		deps.DescriptorMetadataUpdater(ctx),
 		deps.StatsRefresher(),
+		deps.IndexSpanSplitter(),
 	)
 }
