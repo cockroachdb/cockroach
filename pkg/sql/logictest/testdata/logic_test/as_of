@@ -142,3 +142,8 @@ SET TRANSACTION AS OF system time '-1s'
 
 statement ok
 ROLLBACK
+
+# Verify that an expression that requires normalization does not result in an
+# internal error.
+statement error pq: AS OF SYSTEM TIME: expected timestamp, decimal, or interval, got bool
+SELECT NULL FROM ROWS FROM (sum(*)) AS OF SYSTEM TIME ('' BETWEEN '' AND '')
