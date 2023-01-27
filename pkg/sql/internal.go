@@ -811,11 +811,17 @@ func (ie *InternalExecutor) execInternal(
 		sd.ApplicationName = catconstants.InternalAppNamePrefix + "-" + opName
 	}
 	// If the caller has injected a mapping to temp schemas, install it, and
-	// leave it installed for the rest of the transaction.
+	// leave it installed until the statement concludes.
+	resetTemporarySchemaProvider := func() {}
 	if ie.extraTxnState != nil && sd.DatabaseIDToTempSchemaID != nil {
 		ie.extraTxnState.descCollection.SetTemporaryDescriptors(
 			descs.NewTemporarySchemaProvider(sessiondata.NewStack(sd)),
 		)
+		resetTemporarySchemaProvider = func() {
+			ie.extraTxnState.descCollection.SetTemporaryDescriptors(
+				descs.NewTemporarySchemaProvider(ie.sessionDataStack),
+			)
+		}
 	}
 
 	// The returned span is finished by this function in all error paths, but if
@@ -834,6 +840,7 @@ func (ie *InternalExecutor) execInternal(
 		// TODO(knz): track the callers and check whether opName could be turned
 		// into a type safe for reporting.
 		if retErr != nil || r == nil {
+			resetTemporarySchemaProvider()
 			// Both retErr and r can be nil in case of panic.
 			if retErr != nil && !errIsRetriable(retErr) {
 				retErr = errors.Wrapf(retErr, "%s", opName)
@@ -843,6 +850,7 @@ func (ie *InternalExecutor) execInternal(
 			sp.Finish()
 		} else {
 			r.errCallback = func(err error) error {
+				resetTemporarySchemaProvider()
 				if err != nil && !errIsRetriable(err) {
 					err = errors.Wrapf(err, "%s", opName)
 				}
