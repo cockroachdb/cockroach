@@ -539,6 +539,7 @@ func (desc *immutable) ToOverload() (ret *tree.Overload, err error) {
 		ReturnSet:  desc.ReturnType.ReturnSet,
 		Body:       desc.FunctionBody,
 		IsUDF:      true,
+		Version:    uint64(desc.Version),
 	}
 
 	argTypes := make(tree.ParamTypes, 0, len(desc.Params))

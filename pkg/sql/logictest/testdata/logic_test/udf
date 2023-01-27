@@ -1624,6 +1624,7 @@ DROP FUNCTION sc2.f_tbl()
 
 statement ok
 ALTER DATABASE rename_db1 RENAME TO rename_db2;
+USE rename_db2;
 
 # Make sure that db renaming does not affect types and sequences in UDF.
 query T
@@ -1676,7 +1677,7 @@ Mon
 query I
 SELECT sc1.f_seq()
 ----
-5
+1
 
 query T
 SELECT sc2.f_type()
@@ -1686,7 +1687,7 @@ Mon
 query I
 SELECT sc2.f_seq()
 ----
-6
+2
 
 statement error pq: cannot rename schema because relation "rename_sc1.sc1.f_tbl" depends on relation "rename_sc1.sc1.tbl"
 ALTER SCHEMA sc1 RENAME TO sc1_new
@@ -1703,16 +1704,23 @@ DROP FUNCTION sc2.f_tbl()
 statement ok
 ALTER SCHEMA sc1 RENAME TO sc1_new
 
-# Make sure that db renaming does not affect types and sequences in UDF.
-query T
+# Cannot refer to the old schema name.
+statement error schema "sc1" does not exist
 SELECT sc1.f_type()
+
+statement error schema "sc1" does not exist
+SELECT sc1.f_seq()
+
+# Make sure that schema renaming does not affect types and sequences in UDF.
+query T
+SELECT sc1_new.f_type()
 ----
 Mon
 
 query I
-SELECT sc1.f_seq()
+SELECT sc1_new.f_seq()
 ----
-7
+3
 
 query T
 SELECT sc2.f_type()
@@ -1722,7 +1730,7 @@ Mon
 query I
 SELECT sc2.f_seq()
 ----
-8
+4
 
 statement ok
 SET DATABASE = test
@@ -3061,3 +3069,113 @@ query I
 SELECT count(descriptor) FROM system.descriptor WHERE id = $dropped_fn_id;
 ----
 0
+
+# Regression test for #93082 and #93321 - don't reuse a cached query with a UDF
+# if the UDF has been altered or dropped, or if the database has been switched.
+subtest regression_93082
+
+# It shouldn't be possible to call the function after it is dropped.
+statement ok
+CREATE FUNCTION fn(a INT) RETURNS INT LANGUAGE SQL AS 'SELECT a';
+
+query II
+SELECT fn(1), fn(1);
+----
+1  1
+
+statement ok
+DROP FUNCTION fn;
+
+statement error pq: unknown function: fn\(\): function undefined
+SELECT fn(1), fn(1);
+
+# It shouldn't be possible to call the function by its old name after it is
+# renamed.
+statement ok
+CREATE FUNCTION fn(a INT) RETURNS INT LANGUAGE SQL AS 'SELECT a';
+
+query II
+SELECT fn(1), fn(1);
+----
+1  1
+
+statement ok
+ALTER FUNCTION fn RENAME TO fn2;
+
+statement error pq: unknown function: fn\(\): function undefined
+SELECT fn(1);
+
+# It shouldn't be possible to call the function after switching database.
+statement ok
+CREATE DATABASE d;
+USE d;
+
+statement error pq: unknown function: fn\(\): function undefined
+SELECT fn(1);
+
+statement ok
+CREATE FUNCTION fn(a INT) RETURNS INT LANGUAGE SQL AS 'SELECT a';
+
+query I
+SELECT fn(1);
+----
+1
+
+statement ok
+USE defaultdb;
+
+statement error pq: unknown function: fn\(\): function undefined
+SELECT fn(1);
+
+# A function call should fail after schema changes prevent resolution.
+statement ok
+CREATE FUNCTION fn(a INT) RETURNS INT LANGUAGE SQL AS 'SELECT 1';
+
+query I
+SELECT fn(1);
+----
+1
+
+statement ok
+CREATE SCHEMA sc;
+ALTER FUNCTION fn(INT) SET SCHEMA sc;
+
+statement error pq: unknown function: fn\(\): function undefined
+SELECT fn(1);
+
+query I
+SELECT sc.fn(1);
+----
+1
+
+# Changing the database name should cause a fully qualified function call to
+# error, but not an unqualified one.
+statement ok
+USE d;
+
+query I
+SELECT fn(1);
+----
+1
+
+query I
+SELECT d.public.fn(1);
+----
+1
+
+statement ok
+ALTER DATABASE d RENAME TO e;
+USE e;
+
+query I
+SELECT fn(1)
+----
+1
+
+statement error pq: cross-database function references not allowed
+SELECT d.public.fn(1);
+
+query I
+SELECT e.public.fn(1)
+----
+1

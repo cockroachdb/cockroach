@@ -63,6 +63,9 @@ type FunctionReferenceResolver interface {
 // ResolvableFunctionReference implements the editable reference call of a
 // FuncExpr.
 type ResolvableFunctionReference struct {
+	// reference is the original UnresolvedName that was used to resolve this
+	// function call. It may be unset if the function has not yet been resolved.
+	reference *UnresolvedName
 	FunctionReference
 }
 
@@ -112,10 +115,22 @@ func (ref *ResolvableFunctionReference) Resolve(
 			return nil, err
 		}
 		ref.FunctionReference = fd
+		ref.reference = t
 		return fd, nil
 	default:
 		return nil, errors.AssertionFailedf("unknown resolvable function reference type %s", t)
 	}
+}
+
+// GetFunctionReference returns the UnresolvedName that was used to resolve this
+// function call, if any.
+// TODO(drewk): when we support referencing UDFs by OID, we will need to be able
+// to support using it instead of the name.
+func (ref *ResolvableFunctionReference) GetFunctionReference() *UnresolvedName {
+	if name, ok := ref.FunctionReference.(*UnresolvedName); ok {
+		return name
+	}
+	return ref.reference
 }
 
 // WrapFunction creates a new ResolvableFunctionReference holding a pre-resolved
@@ -129,7 +144,7 @@ func WrapFunction(n string) ResolvableFunctionReference {
 	if !ok {
 		panic(errors.AssertionFailedf("function %s() not defined", redact.Safe(n)))
 	}
-	return ResolvableFunctionReference{fd}
+	return ResolvableFunctionReference{FunctionReference: fd}
 }
 
 // FunctionReference is the common interface to UnresolvedName and QualifiedFunctionName.
