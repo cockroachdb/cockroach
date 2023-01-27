@@ -13,6 +13,7 @@ package serverpb
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 )
 
@@ -84,6 +85,9 @@ type TenantStatusServer interface {
 
 	// NodesUI is used by DB Console.
 	NodesUI(context.Context, *NodesRequest) (*NodesResponseExternal, error)
+
+	// SpanStats is used to access MVCC stats from KV
+	SpanStats(context.Context, *roachpb.SpanStatsRequest) (*roachpb.SpanStatsResponse, error)
 }
 
 // OptionalNodesStatusServer returns the wrapped NodesStatusServer, if it is

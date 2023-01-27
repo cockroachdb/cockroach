@@ -1074,7 +1074,6 @@ func makeTenantSQLServerArgs(
 
 	// TODO(irfansharif): hook up NewGrantCoordinatorSQL.
 	var noopElasticCPUGrantCoord *admission.ElasticCPUGrantCoordinator = nil
-
 	return sqlServerArgs{
 		sqlServerOptionalKVArgs: sqlServerOptionalKVArgs{
 			nodesStatusServer: serverpb.MakeOptionalNodesStatusServer(nil),

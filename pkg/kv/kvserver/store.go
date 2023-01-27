@@ -63,7 +63,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigstore"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
@@ -3173,33 +3172,6 @@ func mapToHotReplicasInfo(repls []CandidateReplica) []HotReplicaInfo {
 		hotRepls[i].CPUTimePerSecond = loadStats.RaftCPUNanosPerSecond + loadStats.RequestCPUNanosPerSecond
 	}
 	return hotRepls
-}
-
-// StoreKeySpanStats carries the result of a stats computation over a key range.
-type StoreKeySpanStats struct {
-	ReplicaCount         int
-	MVCC                 enginepb.MVCCStats
-	ApproximateDiskBytes uint64
-}
-
-// ComputeStatsForKeySpan computes the aggregated MVCCStats for all replicas on
-// this store which contain any keys in the supplied range.
-func (s *Store) ComputeStatsForKeySpan(startKey, endKey roachpb.RKey) (StoreKeySpanStats, error) {
-	var result StoreKeySpanStats
-
-	newStoreReplicaVisitor(s).UndefinedOrder().Visit(func(repl *Replica) bool {
-		desc := repl.Desc()
-		if bytes.Compare(startKey, desc.EndKey) >= 0 || bytes.Compare(desc.StartKey, endKey) >= 0 {
-			return true // continue
-		}
-		result.MVCC.Add(repl.GetMVCCStats())
-		result.ReplicaCount++
-		return true
-	})
-
-	var err error
-	result.ApproximateDiskBytes, err = s.engine.ApproximateDiskBytes(startKey.AsRawKey(), endKey.AsRawKey())
-	return result, err
 }
 
 // ReplicateQueueDryRun runs the given replica through the replicate queue

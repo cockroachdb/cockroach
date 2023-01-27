@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangestats"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvprober"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
@@ -154,8 +155,8 @@ type Server struct {
 	tsDB            *ts.DB
 	tsServer        *ts.Server
 
-	// spanStatsServer implements `keyvispb.KeyVisualizerServer`
-	spanStatsServer *SpanStatsServer
+	// keyVisualizerServer implements `keyvispb.KeyVisualizerServer`
+	keyVisualizerServer *KeyVisualizerServer
 
 	// The Observability Server, used by the Observability Service to subscribe to
 	// CRDB data.
@@ -894,16 +895,18 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		serverIterator,
 		spanConfig.reporter,
 		clock,
+		distSender,
+		rangestats.NewFetcher(db),
 	)
 
-	spanStatsServer := &SpanStatsServer{
+	keyVisualizerServer := &KeyVisualizerServer{
 		ie:         internalExecutor,
 		settings:   st,
 		nodeDialer: nodeDialer,
 		status:     sStatus,
 		node:       node,
 	}
-	spanStatsAccessor := spanstatskvaccessor.New(spanStatsServer)
+	keyVisServerAccessor := spanstatskvaccessor.New(keyVisualizerServer)
 
 	// Instantiate the KV prober.
 	kvProber := kvprober.NewProber(kvprober.Opts{
@@ -982,7 +985,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		nodeDescs:                g,
 		systemConfigWatcher:      systemConfigWatcher,
 		spanConfigAccessor:       spanConfig.kvAccessor,
-		spanStatsAccessor:        spanStatsAccessor,
+		keyVisServerAccessor:     keyVisServerAccessor,
 		nodeDialer:               nodeDialer,
 		distSender:               distSender,
 		db:                       db,
@@ -1157,7 +1160,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		externalStorageBuilder:    externalStorageBuilder,
 		storeGrantCoords:          gcoords.Stores,
 		kvMemoryMonitor:           kvMemoryMonitor,
-		spanStatsServer:           spanStatsServer,
+		keyVisualizerServer:       keyVisualizerServer,
 	}
 
 	return lateBoundServer, err
@@ -1400,7 +1403,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 	s.migrationServer = migrationServer // only for testing via TestServer
 
 	// Register the KeyVisualizer Server
-	keyvispb.RegisterKeyVisualizerServer(s.grpc.Server, s.spanStatsServer)
+	keyvispb.RegisterKeyVisualizerServer(s.grpc.Server, s.keyVisualizerServer)
 
 	// Start the RPC server. This opens the RPC/SQL listen socket,
 	// and dispatches the server worker for the RPC.
