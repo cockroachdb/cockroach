@@ -2067,8 +2067,8 @@ type SessionArgs struct {
 type SessionRegistry struct {
 	mu struct {
 		syncutil.RWMutex
-		sessionsByID        map[clusterunique.ID]registrySession
-		sessionsByCancelKey map[pgwirecancel.BackendKeyData]registrySession
+		sessionsByID        map[clusterunique.ID]RegistrySession
+		sessionsByCancelKey map[pgwirecancel.BackendKeyData]RegistrySession
 	}
 }
 
@@ -2076,31 +2076,40 @@ type SessionRegistry struct {
 // of sessions.
 func NewSessionRegistry() *SessionRegistry {
 	r := SessionRegistry{}
-	r.mu.sessionsByID = make(map[clusterunique.ID]registrySession)
-	r.mu.sessionsByCancelKey = make(map[pgwirecancel.BackendKeyData]registrySession)
+	r.mu.sessionsByID = make(map[clusterunique.ID]RegistrySession)
+	r.mu.sessionsByCancelKey = make(map[pgwirecancel.BackendKeyData]RegistrySession)
 	return &r
 }
 
-func (r *SessionRegistry) getSessionByID(id clusterunique.ID) (registrySession, bool) {
+func (r *SessionRegistry) GetSessionByID(sessionID clusterunique.ID) (RegistrySession, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	session, ok := r.mu.sessionsByID[id]
+	session, ok := r.mu.sessionsByID[sessionID]
 	return session, ok
 }
 
-func (r *SessionRegistry) getSessionByCancelKey(
+func (r *SessionRegistry) GetSessionByQueryID(queryID clusterunique.ID) (RegistrySession, bool) {
+	for _, session := range r.getSessions() {
+		if session.hasQuery(queryID) {
+			return session, true
+		}
+	}
+	return nil, false
+}
+
+func (r *SessionRegistry) GetSessionByCancelKey(
 	cancelKey pgwirecancel.BackendKeyData,
-) (registrySession, bool) {
+) (RegistrySession, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	session, ok := r.mu.sessionsByCancelKey[cancelKey]
 	return session, ok
 }
 
-func (r *SessionRegistry) getSessions() []registrySession {
+func (r *SessionRegistry) getSessions() []RegistrySession {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	sessions := make([]registrySession, 0, len(r.mu.sessionsByID))
+	sessions := make([]RegistrySession, 0, len(r.mu.sessionsByID))
 	for _, session := range r.mu.sessionsByID {
 		sessions = append(sessions, session)
 	}
@@ -2108,7 +2117,7 @@ func (r *SessionRegistry) getSessions() []registrySession {
 }
 
 func (r *SessionRegistry) register(
-	id clusterunique.ID, queryCancelKey pgwirecancel.BackendKeyData, s registrySession,
+	id clusterunique.ID, queryCancelKey pgwirecancel.BackendKeyData, s RegistrySession,
 ) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -2125,63 +2134,20 @@ func (r *SessionRegistry) deregister(
 	delete(r.mu.sessionsByCancelKey, queryCancelKey)
 }
 
-type registrySession interface {
+type RegistrySession interface {
 	user() username.SQLUsername
-	cancelQuery(queryID clusterunique.ID) bool
-	cancelCurrentQueries() bool
-	cancelSession()
+	// BaseSessionUser returns the base session's username.
+	BaseSessionUser() username.SQLUsername
+	hasQuery(queryID clusterunique.ID) bool
+	// CancelQuery cancels the query specified by queryID if it exists.
+	CancelQuery(queryID clusterunique.ID) bool
+	// CancelActiveQueries cancels all currently active queries.
+	CancelActiveQueries() bool
+	// CancelSession cancels the session.
+	CancelSession()
 	// serialize serializes a Session into a serverpb.Session
 	// that can be served over RPC.
 	serialize() serverpb.Session
-}
-
-// CancelQuery looks up the associated query in the session registry and cancels
-// it. The caller is responsible for all permission checks.
-func (r *SessionRegistry) CancelQuery(queryIDStr string) (bool, error) {
-	queryID, err := clusterunique.IDFromString(queryIDStr)
-	if err != nil {
-		return false, errors.Wrapf(err, "query ID %s malformed", queryID)
-	}
-
-	for _, session := range r.getSessions() {
-		if session.cancelQuery(queryID) {
-			return true, nil
-		}
-	}
-
-	return false, fmt.Errorf("query ID %s not found", queryID)
-}
-
-// CancelQueryByKey looks up the associated query in the session registry and
-// cancels it.
-func (r *SessionRegistry) CancelQueryByKey(
-	queryCancelKey pgwirecancel.BackendKeyData,
-) (canceled bool, err error) {
-	session, ok := r.getSessionByCancelKey(queryCancelKey)
-	if !ok {
-		return false, fmt.Errorf("session for cancel key %d not found", queryCancelKey)
-	}
-	return session.cancelCurrentQueries(), nil
-}
-
-// CancelSession looks up the specified session in the session registry and
-// cancels it. The caller is responsible for all permission checks.
-func (r *SessionRegistry) CancelSession(
-	sessionIDBytes []byte,
-) (*serverpb.CancelSessionResponse, error) {
-	if len(sessionIDBytes) != 16 {
-		return nil, errors.Errorf("invalid non-16-byte UUID %v", sessionIDBytes)
-	}
-	sessionID := clusterunique.IDFromBytes(sessionIDBytes)
-
-	session, ok := r.getSessionByID(sessionID)
-	if !ok {
-		return &serverpb.CancelSessionResponse{
-			Error: fmt.Sprintf("session ID %s not found", sessionID),
-		}, nil
-	}
-	session.cancelSession()
-	return &serverpb.CancelSessionResponse{Canceled: true}, nil
 }
 
 // SerializeAll returns a slice of all sessions in the registry converted to

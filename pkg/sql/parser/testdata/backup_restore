@@ -103,12 +103,30 @@ SHOW BACKUP '_' -- literals removed
 SHOW BACKUP 'bar' -- identifiers removed
 
 parse
-SHOW BACKUP 'bar' WITH foo = 'bar'
+SHOW BACKUP 'bar' WITH ENCRYPTION_PASSPHRASE = 'secret', CHECK_FILES
 ----
-SHOW BACKUP 'bar' WITH foo = 'bar'
-SHOW BACKUP ('bar') WITH foo = ('bar') -- fully parenthesized
-SHOW BACKUP '_' WITH foo = '_' -- literals removed
-SHOW BACKUP 'bar' WITH _ = 'bar' -- identifiers removed
+SHOW BACKUP 'bar' WITH check_files, encryption_passphrase = '*****' -- normalized!
+SHOW BACKUP ('bar') WITH check_files, encryption_passphrase = '*****' -- fully parenthesized
+SHOW BACKUP '_' WITH check_files, encryption_passphrase = '*****' -- literals removed
+SHOW BACKUP 'bar' WITH check_files, encryption_passphrase = '*****' -- identifiers removed
+SHOW BACKUP 'bar' WITH check_files, encryption_passphrase = 'secret' -- passwords exposed
+
+parse
+SHOW BACKUP FROM LATEST IN 'bar' WITH incremental_location = 'baz'
+----
+SHOW BACKUP FROM 'latest' IN 'bar' WITH incremental_location = 'baz' -- normalized!
+SHOW BACKUP FROM ('latest') IN ('bar') WITH incremental_location = ('baz') -- fully parenthesized
+SHOW BACKUP FROM '_' IN '_' WITH incremental_location = '_' -- literals removed
+SHOW BACKUP FROM 'latest' IN 'bar' WITH incremental_location = 'baz' -- identifiers removed
+
+parse
+SHOW BACKUP FROM LATEST IN ('bar','bar1') WITH KMS = ('foo', 'bar'), incremental_location=('hi','hello')
+----
+SHOW BACKUP FROM 'latest' IN ('bar', 'bar1') WITH incremental_location = ('hi', 'hello'), kms = ('foo', 'bar') -- normalized!
+SHOW BACKUP FROM ('latest') IN (('bar'), ('bar1')) WITH incremental_location = (('hi'), ('hello')), kms = (('foo'), ('bar')) -- fully parenthesized
+SHOW BACKUP FROM '_' IN ('_', '_') WITH incremental_location = ('_', '_'), kms = ('_', '_') -- literals removed
+SHOW BACKUP FROM 'latest' IN ('bar', 'bar1') WITH incremental_location = ('hi', 'hello'), kms = ('foo', 'bar') -- identifiers removed
+
 
 parse
 EXPLAIN SHOW BACKUP 'bar'
@@ -135,14 +153,6 @@ SHOW BACKUP FILES '_' -- literals removed
 SHOW BACKUP FILES 'bar' -- identifiers removed
 
 parse
-SHOW BACKUP FILES 'bar' WITH foo = 'bar'
-----
-SHOW BACKUP FILES 'bar' WITH foo = 'bar'
-SHOW BACKUP FILES ('bar') WITH foo = ('bar') -- fully parenthesized
-SHOW BACKUP FILES '_' WITH foo = '_' -- literals removed
-SHOW BACKUP FILES 'bar' WITH _ = 'bar' -- identifiers removed
-
-parse
 SHOW BACKUPS IN 'bar'
 ----
 SHOW BACKUPS IN 'bar'
@@ -167,12 +177,12 @@ SHOW BACKUP '_' IN '_' -- literals removed
 SHOW BACKUP 'foo' IN 'bar' -- identifiers removed
 
 parse
-SHOW BACKUP FROM $1 IN $2 WITH foo = 'bar'
+SHOW BACKUP FROM $1 IN $2 WITH privileges
 ----
-SHOW BACKUP FROM $1 IN $2 WITH foo = 'bar'
-SHOW BACKUP FROM ($1) IN ($2) WITH foo = ('bar') -- fully parenthesized
-SHOW BACKUP FROM $1 IN $1 WITH foo = '_' -- literals removed
-SHOW BACKUP FROM $1 IN $2 WITH _ = 'bar' -- identifiers removed
+SHOW BACKUP FROM $1 IN $2 WITH privileges
+SHOW BACKUP FROM ($1) IN ($2) WITH privileges -- fully parenthesized
+SHOW BACKUP FROM $1 IN $1 WITH privileges -- literals removed
+SHOW BACKUP FROM $1 IN $2 WITH privileges -- identifiers removed
 
 parse
 SHOW BACKUP FILES FROM 'foo' IN 'bar'
@@ -199,12 +209,13 @@ SHOW BACKUP SCHEMAS FROM '_' IN '_' -- literals removed
 SHOW BACKUP SCHEMAS FROM 'foo' IN 'bar' -- identifiers removed
 
 parse
-SHOW BACKUP $1 IN $2 WITH foo = 'bar'
+SHOW BACKUP $1 IN $2 WITH ENCRYPTION_PASSPHRASE = 'secret', ENCRYPTION_INFO_DIR = 'long_live_backupper'
 ----
-SHOW BACKUP $1 IN $2 WITH foo = 'bar'
-SHOW BACKUP ($1) IN ($2) WITH foo = ('bar') -- fully parenthesized
-SHOW BACKUP $1 IN $1 WITH foo = '_' -- literals removed
-SHOW BACKUP $1 IN $2 WITH _ = 'bar' -- identifiers removed
+SHOW BACKUP $1 IN $2 WITH encryption_passphrase = '*****', encryption_info_dir = 'long_live_backupper' -- normalized!
+SHOW BACKUP ($1) IN ($2) WITH encryption_passphrase = '*****', encryption_info_dir = ('long_live_backupper') -- fully parenthesized
+SHOW BACKUP $1 IN $1 WITH encryption_passphrase = '*****', encryption_info_dir = '_' -- literals removed
+SHOW BACKUP $1 IN $2 WITH encryption_passphrase = '*****', encryption_info_dir = 'long_live_backupper' -- identifiers removed
+SHOW BACKUP $1 IN $2 WITH encryption_passphrase = 'secret', encryption_info_dir = 'long_live_backupper' -- passwords exposed
 
 parse
 BACKUP TABLE foo TO 'bar' AS OF SYSTEM TIME '1' INCREMENTAL FROM 'baz'
@@ -692,20 +703,21 @@ parse
 RESTORE foo FROM 'bar' WITH OPTIONS (encryption_passphrase='secret', into_db='baz', debug_pause_on='error',
 skip_missing_foreign_keys, skip_missing_sequences, skip_missing_sequence_owners, skip_missing_views, detached, skip_localities_check)
 ----
-RESTORE TABLE foo FROM 'bar' WITH encryption_passphrase = 'secret', into_db = 'baz', debug_pause_on = 'error', skip_missing_foreign_keys, skip_missing_sequence_owners, skip_missing_sequences, skip_missing_views, detached, skip_localities_check -- normalized!
-RESTORE TABLE (foo) FROM ('bar') WITH encryption_passphrase = ('secret'), into_db = ('baz'), debug_pause_on = ('error'), skip_missing_foreign_keys, skip_missing_sequence_owners, skip_missing_sequences, skip_missing_views, detached, skip_localities_check -- fully parenthesized
-RESTORE TABLE foo FROM '_' WITH encryption_passphrase = '_', into_db = '_', debug_pause_on = '_', skip_missing_foreign_keys, skip_missing_sequence_owners, skip_missing_sequences, skip_missing_views, detached, skip_localities_check -- literals removed
-RESTORE TABLE _ FROM 'bar' WITH encryption_passphrase = 'secret', into_db = 'baz', debug_pause_on = 'error', skip_missing_foreign_keys, skip_missing_sequence_owners, skip_missing_sequences, skip_missing_views, detached, skip_localities_check -- identifiers removed
+RESTORE TABLE foo FROM 'bar' WITH encryption_passphrase = '*****', into_db = 'baz', debug_pause_on = 'error', skip_missing_foreign_keys, skip_missing_sequence_owners, skip_missing_sequences, skip_missing_views, detached, skip_localities_check -- normalized!
+RESTORE TABLE (foo) FROM ('bar') WITH encryption_passphrase = '*****', into_db = ('baz'), debug_pause_on = ('error'), skip_missing_foreign_keys, skip_missing_sequence_owners, skip_missing_sequences, skip_missing_views, detached, skip_localities_check -- fully parenthesized
+RESTORE TABLE foo FROM '_' WITH encryption_passphrase = '*****', into_db = '_', debug_pause_on = '_', skip_missing_foreign_keys, skip_missing_sequence_owners, skip_missing_sequences, skip_missing_views, detached, skip_localities_check -- literals removed
+RESTORE TABLE _ FROM 'bar' WITH encryption_passphrase = '*****', into_db = 'baz', debug_pause_on = 'error', skip_missing_foreign_keys, skip_missing_sequence_owners, skip_missing_sequences, skip_missing_views, detached, skip_localities_check -- identifiers removed
+RESTORE TABLE foo FROM 'bar' WITH encryption_passphrase = 'secret', into_db = 'baz', debug_pause_on = 'error', skip_missing_foreign_keys, skip_missing_sequence_owners, skip_missing_sequences, skip_missing_views, detached, skip_localities_check -- passwords exposed
 
 parse
 RESTORE foo FROM 'bar' WITH ENCRYPTION_PASSPHRASE = 'secret', INTO_DB=baz, DEBUG_PAUSE_ON='error',
 SKIP_MISSING_FOREIGN_KEYS, SKIP_MISSING_SEQUENCES, SKIP_MISSING_SEQUENCE_OWNERS, SKIP_MISSING_VIEWS, SKIP_LOCALITIES_CHECK
 ----
-RESTORE TABLE foo FROM 'bar' WITH encryption_passphrase = 'secret', into_db = 'baz', debug_pause_on = 'error', skip_missing_foreign_keys, skip_missing_sequence_owners, skip_missing_sequences, skip_missing_views, skip_localities_check -- normalized!
-RESTORE TABLE (foo) FROM ('bar') WITH encryption_passphrase = ('secret'), into_db = ('baz'), debug_pause_on = ('error'), skip_missing_foreign_keys, skip_missing_sequence_owners, skip_missing_sequences, skip_missing_views, skip_localities_check -- fully parenthesized
-RESTORE TABLE foo FROM '_' WITH encryption_passphrase = '_', into_db = '_', debug_pause_on = '_', skip_missing_foreign_keys, skip_missing_sequence_owners, skip_missing_sequences, skip_missing_views, skip_localities_check -- literals removed
-RESTORE TABLE _ FROM 'bar' WITH encryption_passphrase = 'secret', into_db = 'baz', debug_pause_on = 'error', skip_missing_foreign_keys, skip_missing_sequence_owners, skip_missing_sequences, skip_missing_views, skip_localities_check -- identifiers removed
-
+RESTORE TABLE foo FROM 'bar' WITH encryption_passphrase = '*****', into_db = 'baz', debug_pause_on = 'error', skip_missing_foreign_keys, skip_missing_sequence_owners, skip_missing_sequences, skip_missing_views, skip_localities_check -- normalized!
+RESTORE TABLE (foo) FROM ('bar') WITH encryption_passphrase = '*****', into_db = ('baz'), debug_pause_on = ('error'), skip_missing_foreign_keys, skip_missing_sequence_owners, skip_missing_sequences, skip_missing_views, skip_localities_check -- fully parenthesized
+RESTORE TABLE foo FROM '_' WITH encryption_passphrase = '*****', into_db = '_', debug_pause_on = '_', skip_missing_foreign_keys, skip_missing_sequence_owners, skip_missing_sequences, skip_missing_views, skip_localities_check -- literals removed
+RESTORE TABLE _ FROM 'bar' WITH encryption_passphrase = '*****', into_db = 'baz', debug_pause_on = 'error', skip_missing_foreign_keys, skip_missing_sequence_owners, skip_missing_sequences, skip_missing_views, skip_localities_check -- identifiers removed
+RESTORE TABLE foo FROM 'bar' WITH encryption_passphrase = 'secret', into_db = 'baz', debug_pause_on = 'error', skip_missing_foreign_keys, skip_missing_sequence_owners, skip_missing_sequences, skip_missing_views, skip_localities_check -- passwords exposed
 
 parse
 RESTORE TENANT 36 FROM ($1, $2) AS OF SYSTEM TIME '1'
