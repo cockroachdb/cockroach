@@ -222,7 +222,9 @@ func (c *SyncedCluster) Start(ctx context.Context, l *logger.Logger, startOpts S
 	}, DefaultSSHRetryOpts); err != nil {
 		return err
 	}
-	if startOpts.ScheduleBackups {
+
+	// Only after a successful cluster initialization should we attempt to schedule backups.
+	if startOpts.ScheduleBackups && !startOpts.SkipInit {
 		return c.createFixedBackupSchedule(ctx, l, startOpts.ScheduleBackupArgs)
 	}
 	return nil
@@ -770,6 +772,7 @@ func (c *SyncedCluster) shouldAdvertisePublicIP() bool {
 // `roachprod create`, the user can provide a different recurrence using the
 // 'schedule-backup-args' flag. If roachprod is local, the backups get stored in
 // nodelocal, and otherwise in 'gs://cockroachdb-backup-testing'.
+// This cmd also ensures that only one schedule will be created for the cluster.
 func (c *SyncedCluster) createFixedBackupSchedule(
 	ctx context.Context, l *logger.Logger, scheduledBackupArgs string,
 ) error {
