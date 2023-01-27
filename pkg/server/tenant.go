@@ -863,7 +863,7 @@ func makeTenantSQLServerArgs(
 		StorageClusterID: baseCfg.ClusterIDContainer,
 		Config:           baseCfg.Config,
 		Clock:            clock.WallClock(),
-		MaxOffset:        clock.ToleratedOffset(),
+		ToleratedOffset:  clock.ToleratedOffset(),
 		Stopper:          stopper,
 		Settings:         st,
 		Knobs:            rpcTestingKnobs,
