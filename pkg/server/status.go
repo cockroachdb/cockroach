@@ -2096,6 +2096,7 @@ func (s *systemStatusServer) rangesHelper(
 				ReadsPerSecond:      loadStats.ReadKeysPerSecond,
 				WriteBytesPerSecond: loadStats.WriteKeysPerSecond,
 				ReadBytesPerSecond:  loadStats.ReadBytesPerSecond,
+				CPUTimePerSecond:    loadStats.RaftCPUNanosPerSecond + loadStats.RequestCPUNanosPerSecond,
 			},
 			Problems: serverpb.RangeProblems{
 				Unavailable:            metrics.Unavailable,
@@ -2538,16 +2539,21 @@ func (s *systemStatusServer) HotRangesV2(
 					}
 
 					ranges = append(ranges, &serverpb.HotRangesResponseV2_HotRange{
-						RangeID:           r.Desc.RangeID,
-						NodeID:            requestedNodeID,
-						QPS:               r.QueriesPerSecond,
-						TableName:         tableName,
-						SchemaName:        schemaName,
-						DatabaseName:      dbName,
-						IndexName:         indexName,
-						ReplicaNodeIds:    replicaNodeIDs,
-						LeaseholderNodeID: r.LeaseholderNodeID,
-						StoreID:           store.StoreID,
+						RangeID:             r.Desc.RangeID,
+						NodeID:              requestedNodeID,
+						QPS:                 r.QueriesPerSecond,
+						WritesPerSecond:     r.WritesPerSecond,
+						ReadsPerSecond:      r.ReadsPerSecond,
+						WriteBytesPerSecond: r.WriteBytesPerSecond,
+						ReadBytesPerSecond:  r.ReadBytesPerSecond,
+						CPUTimePerSecond:    r.CPUTimePerSecond,
+						TableName:           tableName,
+						SchemaName:          schemaName,
+						DatabaseName:        dbName,
+						IndexName:           indexName,
+						ReplicaNodeIds:      replicaNodeIDs,
+						LeaseholderNodeID:   r.LeaseholderNodeID,
+						StoreID:             store.StoreID,
 					})
 				}
 			}
@@ -2641,6 +2647,7 @@ func (s *systemStatusServer) localHotRanges(
 			storeResp.HotRanges[i].ReadsPerSecond = r.ReadKeysPerSecond
 			storeResp.HotRanges[i].WriteBytesPerSecond = r.WriteBytesPerSecond
 			storeResp.HotRanges[i].ReadBytesPerSecond = r.ReadBytesPerSecond
+			storeResp.HotRanges[i].CPUTimePerSecond = r.CPUTimePerSecond
 		}
 		resp.Stores = append(resp.Stores, storeResp)
 		return nil
