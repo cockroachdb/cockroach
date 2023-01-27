@@ -364,14 +364,14 @@ func newRPCTestContext(ctx context.Context, ts *TestServer, cfg *base.Config) *r
 	var c base.NodeIDContainer
 	ctx = logtags.AddTag(ctx, "n", &c)
 	rpcContext := rpc.NewContext(ctx, rpc.ContextOptions{
-		TenantID:  roachpb.SystemTenantID,
-		NodeID:    &c,
-		Config:    cfg,
-		Clock:     ts.Clock().WallClock(),
-		MaxOffset: ts.Clock().ToleratedOffset(),
-		Stopper:   ts.Stopper(),
-		Settings:  ts.ClusterSettings(),
-		Knobs:     rpc.ContextTestingKnobs{NoLoopbackDialer: true},
+		TenantID:        roachpb.SystemTenantID,
+		NodeID:          &c,
+		Config:          cfg,
+		Clock:           ts.Clock().WallClock(),
+		ToleratedOffset: ts.Clock().ToleratedOffset(),
+		Stopper:         ts.Stopper(),
+		Settings:        ts.ClusterSettings(),
+		Knobs:           rpc.ContextTestingKnobs{NoLoopbackDialer: true},
 	})
 	// Ensure that the RPC client context validates the server cluster ID.
 	// This ensures that a test where the server is restarted will not let

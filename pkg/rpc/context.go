@@ -68,8 +68,8 @@ func init() {
 }
 
 const (
-	// The coefficient by which the maximum offset is multiplied to determine the
-	// maximum acceptable measurement latency.
+	// The coefficient by which the tolerated offset is multiplied to determine
+	// the maximum acceptable measurement latency.
 	maximumPingDurationMult = 2
 )
 
@@ -462,12 +462,12 @@ func (c connKey) SafeFormat(p redact.SafePrinter, _ rune) {
 // ContextOptions are passed to NewContext to set up a new *Context.
 // All pointer fields and TenantID are required.
 type ContextOptions struct {
-	TenantID  roachpb.TenantID
-	Config    *base.Config
-	Clock     hlc.WallClock
-	MaxOffset time.Duration
-	Stopper   *stop.Stopper
-	Settings  *cluster.Settings
+	TenantID        roachpb.TenantID
+	Config          *base.Config
+	Clock           hlc.WallClock
+	ToleratedOffset time.Duration
+	Stopper         *stop.Stopper
+	Settings        *cluster.Settings
 	// OnIncomingPing is called when handling a PingRequest, after
 	// preliminary checks but before recording clock offset information.
 	//
@@ -664,7 +664,7 @@ func NewContext(ctx context.Context, opts ContextOptions) *Context {
 	// CLI commands are exempted.
 	if !opts.ClientOnly {
 		rpcCtx.RemoteClocks = newRemoteClockMonitor(
-			opts.Clock, opts.MaxOffset, 10*opts.Config.RPCHeartbeatTimeout, opts.Config.HistogramWindowInterval())
+			opts.Clock, opts.ToleratedOffset, 10*opts.Config.RPCHeartbeatTimeout, opts.Config.HistogramWindowInterval())
 	}
 
 	if id := opts.Knobs.StorageClusterID; id != nil {
@@ -2441,7 +2441,7 @@ func (rpcCtx *Context) runHeartbeat(
 				// Only update the clock offset measurement if we actually got a
 				// successful response from the server.
 				pingDuration := receiveTime.Sub(sendTime)
-				if pingDuration > maximumPingDurationMult*rpcCtx.MaxOffset {
+				if pingDuration > maximumPingDurationMult*rpcCtx.ToleratedOffset {
 					request.Offset.Reset()
 				} else {
 					// Offset and error are measured using the remote clock reading

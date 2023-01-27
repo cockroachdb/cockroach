@@ -95,13 +95,13 @@ func newTestContextWithKnobs(
 	clock hlc.WallClock, maxOffset time.Duration, stopper *stop.Stopper, knobs ContextTestingKnobs,
 ) *Context {
 	return NewContext(context.Background(), ContextOptions{
-		TenantID:  roachpb.SystemTenantID,
-		Config:    testutils.NewNodeTestBaseContext(),
-		Clock:     clock,
-		MaxOffset: maxOffset,
-		Stopper:   stopper,
-		Settings:  cluster.MakeTestingClusterSettings(),
-		Knobs:     knobs,
+		TenantID:        roachpb.SystemTenantID,
+		Config:          testutils.NewNodeTestBaseContext(),
+		Clock:           clock,
+		ToleratedOffset: maxOffset,
+		Stopper:         stopper,
+		Settings:        cluster.MakeTestingClusterSettings(),
+		Knobs:           knobs,
 	})
 }
 
@@ -181,12 +181,12 @@ func TestPingInterceptors(t *testing.T) {
 	recvMsg := "boom due to onHandlePing"
 	errBoomRecv := status.Error(codes.FailedPrecondition, recvMsg)
 	opts := ContextOptions{
-		TenantID:  roachpb.SystemTenantID,
-		Config:    testutils.NewNodeTestBaseContext(),
-		Clock:     &timeutil.DefaultTimeSource{},
-		MaxOffset: 500 * time.Millisecond,
-		Stopper:   stop.NewStopper(),
-		Settings:  cluster.MakeTestingClusterSettings(),
+		TenantID:        roachpb.SystemTenantID,
+		Config:          testutils.NewNodeTestBaseContext(),
+		Clock:           &timeutil.DefaultTimeSource{},
+		ToleratedOffset: 500 * time.Millisecond,
+		Stopper:         stop.NewStopper(),
+		Settings:        cluster.MakeTestingClusterSettings(),
 		OnOutgoingPing: func(ctx context.Context, req *PingRequest) error {
 			if req.TargetNodeID == blockedTargetNodeID {
 				return errBoomSend
@@ -253,12 +253,12 @@ func testClockOffsetInPingRequestInternal(t *testing.T, clientOnly bool) {
 
 	// Build a minimal server.
 	opts := ContextOptions{
-		TenantID:  roachpb.SystemTenantID,
-		Config:    testutils.NewNodeTestBaseContext(),
-		Clock:     &timeutil.DefaultTimeSource{},
-		MaxOffset: 500 * time.Millisecond,
-		Stopper:   stopper,
-		Settings:  cluster.MakeTestingClusterSettings(),
+		TenantID:        roachpb.SystemTenantID,
+		Config:          testutils.NewNodeTestBaseContext(),
+		Clock:           &timeutil.DefaultTimeSource{},
+		ToleratedOffset: 500 * time.Millisecond,
+		Stopper:         stopper,
+		Settings:        cluster.MakeTestingClusterSettings(),
 	}
 	rpcCtxServer := NewContext(ctx, opts)
 

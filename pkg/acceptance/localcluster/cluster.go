@@ -270,12 +270,12 @@ func (c *Cluster) makeNode(ctx context.Context, nodeIdx int, cfg NodeConfig) (*N
 		Insecure: true,
 	}
 	rpcCtx := rpc.NewContext(ctx, rpc.ContextOptions{
-		TenantID:  roachpb.SystemTenantID,
-		Config:    baseCtx,
-		Clock:     &timeutil.DefaultTimeSource{},
-		MaxOffset: 0,
-		Stopper:   c.stopper,
-		Settings:  cluster.MakeTestingClusterSettings(),
+		TenantID:        roachpb.SystemTenantID,
+		Config:          baseCtx,
+		Clock:           &timeutil.DefaultTimeSource{},
+		ToleratedOffset: 0,
+		Stopper:         c.stopper,
+		Settings:        cluster.MakeTestingClusterSettings(),
 
 		ClientOnly: true,
 	})
