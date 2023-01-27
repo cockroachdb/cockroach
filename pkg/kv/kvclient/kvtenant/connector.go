@@ -14,6 +14,7 @@ package kvtenant
 
 import (
 	"context"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/spanstats"
 	"net"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
@@ -90,6 +91,9 @@ type Connector interface {
 	// KVAccessor provides access to the subset of the cluster's span configs
 	// applicable to secondary tenants.
 	spanconfig.KVAccessor
+
+	// Accessor provides access to span stats.
+	spanstats.Accessor
 
 	// Reporter provides access to conformance reports, i.e. whether ranges
 	// backing queried keyspans conform the span configs that apply to them.

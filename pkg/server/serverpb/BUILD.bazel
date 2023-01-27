@@ -13,6 +13,7 @@ proto_library(
         "index_recommendations.proto",
         "init.proto",
         "migration.proto",
+        "span_stats.proto",
         "status.proto",
     ],
     strip_import_prefix = "/pkg",

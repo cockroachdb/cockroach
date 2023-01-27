@@ -1184,7 +1184,11 @@ message ListDistSQLFlowsResponse {
 }
 
 message SpanStatsRequest {
-  string node_id = 1 [ (gogoproto.customname) = "NodeID" ];
+  int32 node_id = 1 [
+    (gogoproto.customname) = "NodeID",
+    (gogoproto.casttype) =
+        "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
+  ];
   bytes start_key = 2
       [ (gogoproto.casttype) =
             "github.com/cockroachdb/cockroach/pkg/roachpb.RKey" ];

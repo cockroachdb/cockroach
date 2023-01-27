@@ -12,6 +12,7 @@ go_library(
         "//pkg/keys",
         "//pkg/kv/kvclient/kvcoord",
         "//pkg/kv/kvclient/rangecache",
+        "//pkg/kv/kvclient/spanstats",
         "//pkg/roachpb",
         "//pkg/rpc",
         "//pkg/rpc/nodedialer",
