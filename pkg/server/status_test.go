@@ -365,7 +365,7 @@ func newRPCTestContext(ctx context.Context, ts *TestServer, cfg *base.Config) *r
 		NodeID:    &c,
 		Config:    cfg,
 		Clock:     ts.Clock().WallClock(),
-		MaxOffset: ts.Clock().MaxOffset(),
+		MaxOffset: ts.Clock().ToleratedOffset(),
 		Stopper:   ts.Stopper(),
 		Settings:  ts.ClusterSettings(),
 		Knobs:     rpc.ContextTestingKnobs{NoLoopbackDialer: true},
