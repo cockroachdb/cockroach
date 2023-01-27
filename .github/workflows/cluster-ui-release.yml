@@ -1,7 +1,6 @@
 name: Publish Cluster UI Release
 on:
   workflow_dispatch:
-  pull_request:
   push:
     branches:
       - 'release-*'
@@ -84,5 +83,4 @@ jobs:
 
     - name: Publish patch version
       if: steps.version-check.outputs.published == 'no'
-      # run: npm publish --access public --tag ${{ steps.branch-name.outputs.branch }} --ignore-scripts
-      run: npm publish --access public --ignore-scripts --tag testing
+      run: npm publish --access public --tag ${{ steps.branch-name.outputs.branch }} --ignore-scripts
