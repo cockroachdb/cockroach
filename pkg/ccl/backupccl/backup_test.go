@@ -171,7 +171,7 @@ func TestBackupRestoreSingleUserfile(t *testing.T) {
 	tc, _, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
 	defer cleanupFn()
 
-	backupAndRestore(ctx, t, tc, []string{"userfile:///a"}, []string{"userfile:///a"}, numAccounts)
+	backupAndRestore(ctx, t, tc, []string{"userfile:///a"}, []string{"userfile:///a"}, numAccounts, nil)
 }
 
 func TestBackupRestoreSingleNodeLocal(t *testing.T) {
@@ -183,7 +183,7 @@ func TestBackupRestoreSingleNodeLocal(t *testing.T) {
 	tc, _, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
 	defer cleanupFn()
 
-	backupAndRestore(ctx, t, tc, []string{localFoo}, []string{localFoo}, numAccounts)
+	backupAndRestore(ctx, t, tc, []string{localFoo}, []string{localFoo}, numAccounts, nil)
 }
 
 func TestBackupRestoreMultiNodeLocal(t *testing.T) {
@@ -195,7 +195,7 @@ func TestBackupRestoreMultiNodeLocal(t *testing.T) {
 	tc, _, _, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts, InitManualReplication)
 	defer cleanupFn()
 
-	backupAndRestore(ctx, t, tc, []string{localFoo}, []string{localFoo}, numAccounts)
+	backupAndRestore(ctx, t, tc, []string{localFoo}, []string{localFoo}, numAccounts, nil)
 }
 
 func TestBackupRestoreMultiNodeRemote(t *testing.T) {
@@ -209,7 +209,7 @@ func TestBackupRestoreMultiNodeRemote(t *testing.T) {
 	// Backing up to node2's local file system
 	remoteFoo := "nodelocal://2/foo"
 
-	backupAndRestore(ctx, t, tc, []string{remoteFoo}, []string{localFoo}, numAccounts)
+	backupAndRestore(ctx, t, tc, []string{remoteFoo}, []string{localFoo}, numAccounts, nil)
 }
 
 // TestBackupRestoreJobTagAndLabel runs a backup and restore and verifies that
@@ -271,7 +271,7 @@ func TestBackupRestoreJobTagAndLabel(t *testing.T) {
 	)
 	defer cleanupFn()
 
-	backupAndRestore(ctx, t, tc, []string{localFoo}, []string{localFoo}, numAccounts)
+	backupAndRestore(ctx, t, tc, []string{localFoo}, []string{localFoo}, numAccounts, nil)
 
 	require.True(t, found)
 }
@@ -382,7 +382,7 @@ func TestBackupRestorePartitioned(t *testing.T) {
 	}
 
 	runBackupRestore := func(t *testing.T, sqlDB *sqlutils.SQLRunner, backupURIs []string) {
-		locationFmtString, locationURIArgs := uriFmtStringAndArgs(backupURIs)
+		locationFmtString, locationURIArgs := uriFmtStringAndArgs(backupURIs, 0)
 		backupQuery := fmt.Sprintf("BACKUP DATABASE data TO %s", locationFmtString)
 		sqlDB.Exec(t, backupQuery, locationURIArgs...)
 
@@ -476,7 +476,7 @@ func TestBackupRestorePartitioned(t *testing.T) {
 		}
 
 		// Specifying multiple tiers is not supported.
-		locationFmtString, locationURIArgs := uriFmtStringAndArgs(backupURIs)
+		locationFmtString, locationURIArgs := uriFmtStringAndArgs(backupURIs, 0)
 		backupQuery := fmt.Sprintf("BACKUP DATABASE data TO %s", locationFmtString)
 		sqlDB.ExpectErr(t, `tier must be in the form "key=value" not "region=east,az=az1"`, backupQuery, locationURIArgs...)
 	})
@@ -838,7 +838,7 @@ func TestBackupRestorePartitionedMergeDirectories(t *testing.T) {
 	restoreURIs := []string{
 		localFoo1,
 	}
-	backupAndRestore(ctx, t, tc, backupURIs, restoreURIs, numAccounts)
+	backupAndRestore(ctx, t, tc, backupURIs, restoreURIs, numAccounts, nil)
 }
 
 func TestBackupRestoreEmpty(t *testing.T) {
@@ -850,7 +850,7 @@ func TestBackupRestoreEmpty(t *testing.T) {
 	tc, _, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
 	defer cleanupFn()
 
-	backupAndRestore(ctx, t, tc, []string{localFoo}, []string{localFoo}, numAccounts)
+	backupAndRestore(ctx, t, tc, []string{localFoo}, []string{localFoo}, numAccounts, nil)
 }
 
 // Regression test for #16008. In short, the way RESTORE constructed split keys
@@ -875,7 +875,7 @@ func TestBackupRestoreNegativePrimaryKey(t *testing.T) {
 		-numAccounts/2, numAccounts/backupRestoreDefaultRanges/2,
 	)
 
-	backupAndRestore(ctx, t, tc, []string{localFoo}, []string{localFoo}, numAccounts)
+	backupAndRestore(ctx, t, tc, []string{localFoo}, []string{localFoo}, numAccounts, nil)
 
 	sqlDB.Exec(t, `CREATE UNIQUE INDEX id2 ON data.bank (id)`)
 
@@ -900,6 +900,7 @@ func backupAndRestore(
 	backupURIs []string,
 	restoreURIs []string,
 	numAccounts int,
+	kmsURIs []string,
 ) {
 	conn := tc.Conns[0]
 	sqlDB := sqlutils.MakeSQLRunner(conn)
@@ -922,9 +923,16 @@ func backupAndRestore(
 			rows, idx, bytes int64
 		}
 
-		backupURIFmtString, backupURIArgs := uriFmtStringAndArgs(backupURIs)
+		backupURIFmtString, backupURIArgs := uriFmtStringAndArgs(backupURIs, 0)
 		backupQuery := fmt.Sprintf("BACKUP DATABASE data INTO %s", backupURIFmtString)
-		sqlDB.QueryRow(t, backupQuery, backupURIArgs...).Scan(
+		kmsURIArgs := make([]interface{}, 0)
+		var kmsURIFmtString string
+		if len(kmsURIs) > 0 {
+			kmsURIFmtString, kmsURIArgs = uriFmtStringAndArgs(kmsURIs, len(backupURIs))
+			backupQuery = fmt.Sprintf("%s WITH kms = %s", backupQuery, kmsURIFmtString)
+		}
+		queryArgs := append(backupURIArgs, kmsURIArgs...)
+		sqlDB.QueryRow(t, backupQuery, queryArgs...).Scan(
 			&unused, &unused, &unused, &exported.rows, &exported.idx, &exported.bytes,
 		)
 		// When numAccounts == 0, our approxBytes formula breaks down because
@@ -979,8 +987,13 @@ func backupAndRestore(
 		// Create an incremental backup to exercise incremental destination code that captures a new
 		// table
 		sqlDB.Exec(t, `CREATE TABLE data.empty (a INT PRIMARY KEY)`)
-		sqlDB.Exec(t, fmt.Sprintf(`BACKUP DATABASE data INTO LATEST IN %s`, backupURIFmtString),
-			backupURIArgs...)
+
+		incBackupQuery := fmt.Sprintf(`BACKUP DATABASE data INTO LATEST IN %s`, backupURIFmtString)
+		if len(kmsURIs) > 0 {
+			incBackupQuery = fmt.Sprintf("%s WITH kms = %s", incBackupQuery, kmsURIFmtString)
+		}
+
+		sqlDB.Exec(t, incBackupQuery, queryArgs...)
 	}
 
 	sqlDB.Exec(t, `DROP DATABASE data CASCADE`)
@@ -993,9 +1006,16 @@ func backupAndRestore(
 	// Force the ID of the restored bank table to be different.
 	sqlDB.Exec(t, `CREATE TABLE other.empty (a INT PRIMARY KEY)`)
 
-	restoreURIFmtString, restoreURIArgs := uriFmtStringAndArgs(restoreURIs)
+	restoreURIFmtString, restoreURIArgs := uriFmtStringAndArgs(restoreURIs, 0)
 	restoreQuery := fmt.Sprintf("RESTORE DATABASE DATA FROM LATEST IN %s", restoreURIFmtString)
-	verifyRestoreData(t, sqlDB, storageSQLDB, restoreQuery, restoreURIArgs, numAccounts)
+	kmsURIArgs := make([]interface{}, 0)
+	if len(kmsURIs) > 0 {
+		var kmsURIFmtString string
+		kmsURIFmtString, kmsURIArgs = uriFmtStringAndArgs(kmsURIs, len(backupURIs))
+		restoreQuery = fmt.Sprintf("%s WITH kms = %s", restoreQuery, kmsURIFmtString)
+	}
+	queryArgs := append(restoreURIArgs, kmsURIArgs...)
+	verifyRestoreData(t, sqlDB, storageSQLDB, restoreQuery, queryArgs, numAccounts)
 }
 
 func verifyRestoreData(

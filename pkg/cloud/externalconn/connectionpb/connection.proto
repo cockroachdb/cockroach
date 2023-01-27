@@ -27,6 +27,7 @@ enum ConnectionProvider {
   // KMS providers.
   gcp_kms = 2;
   aws_kms = 8;
+  azure_kms = 15;
 
   // Sink providers.
   kafka = 3;

@@ -30,14 +30,14 @@ import (
 )
 
 type azureConfig struct {
-	account, key, bucket, environment string
+	account, key, bucket, environment, clientID, clientSecret, tenantID string
 }
 
-func (a azureConfig) filePath(f string) string {
+func (a *azureConfig) filePath(f string) string {
 	return a.filePathWithScheme("azure", f)
 }
 
-func (a azureConfig) filePathWithScheme(scheme string, f string) string {
+func (a *azureConfig) filePathWithScheme(scheme string, f string) string {
 	uri := url.URL{Scheme: scheme, Host: a.bucket, Path: f}
 	values := uri.Query()
 	values.Add(AzureAccountNameParam, a.account)
@@ -47,16 +47,36 @@ func (a azureConfig) filePathWithScheme(scheme string, f string) string {
 	return uri.String()
 }
 
+func (a *azureConfig) filePathClientAuth(f string) string {
+	return a.filePathWithSchemeClientAuth("azure", f)
+}
+
+func (a *azureConfig) filePathWithSchemeClientAuth(scheme string, f string) string {
+	uri := url.URL{Scheme: scheme, Host: a.bucket, Path: f}
+	values := uri.Query()
+	values.Add(AzureAccountNameParam, a.account)
+	values.Add(AzureClientIDParam, a.clientID)
+	values.Add(AzureClientSecretParam, a.clientSecret)
+	values.Add(AzureTenantIDParam, a.tenantID)
+	values.Add(AzureEnvironmentKeyParam, a.environment)
+	uri.RawQuery = values.Encode()
+	return uri.String()
+}
+
 func getAzureConfig() (azureConfig, error) {
 	// NB: the Azure Account key must not be url encoded.
 	cfg := azureConfig{
-		account:     os.Getenv("AZURE_ACCOUNT_NAME"),
-		key:         os.Getenv("AZURE_ACCOUNT_KEY"),
-		bucket:      os.Getenv("AZURE_CONTAINER"),
-		environment: azure.PublicCloud.Name,
+		account:      os.Getenv("AZURE_ACCOUNT_NAME"),
+		key:          os.Getenv("AZURE_ACCOUNT_KEY"),
+		bucket:       os.Getenv("AZURE_CONTAINER"),
+		clientID:     os.Getenv("AZURE_CLIENT_ID"),
+		clientSecret: os.Getenv("AZURE_CLIENT_SECRET"),
+		tenantID:     os.Getenv("AZURE_TENANT_ID"),
+		environment:  azure.PublicCloud.Name,
 	}
-	if cfg.account == "" || cfg.key == "" || cfg.bucket == "" {
-		return azureConfig{}, errors.New("AZURE_ACCOUNT_NAME, AZURE_ACCOUNT_KEY, AZURE_CONTAINER must all be set")
+	if cfg.account == "" || cfg.key == "" || cfg.bucket == "" || cfg.clientID == "" || cfg.clientSecret == "" || cfg.tenantID == "" {
+		return azureConfig{}, errors.New(
+			"AZURE_ACCOUNT_NAME, AZURE_ACCOUNT_KEY, AZURE_CONTAINER, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET, AZURE_TENANT_ID must all be set")
 	}
 	if v, ok := os.LookupEnv(AzureEnvironmentKeyParam); ok {
 		cfg.environment = v
@@ -82,6 +102,16 @@ func TestAzure(t *testing.T) {
 		nil, /* db */
 		testSettings,
 	)
+	cloudtestutils.CheckExportStore(t, cfg.filePathClientAuth("backup-test"),
+		false, username.RootUserName(),
+		nil, /* db */
+		testSettings,
+	)
+	cloudtestutils.CheckListFiles(t, cfg.filePathClientAuth("listing-test"),
+		username.RootUserName(),
+		nil, /* db */
+		testSettings,
+	)
 }
 
 func TestAzureSchemes(t *testing.T) {
@@ -94,6 +124,10 @@ func TestAzureSchemes(t *testing.T) {
 	for _, scheme := range []string{"azure", "azure-storage", "azure-blob"} {
 		uri := cfg.filePathWithScheme(scheme, "not-used")
 		_, err := cloud.ExternalStorageConfFromURI(uri, username.RootUserName())
+		require.NoError(t, err)
+
+		uriClientAuth := cfg.filePathWithSchemeClientAuth(scheme, "not-used")
+		_, err = cloud.ExternalStorageConfFromURI(uriClientAuth, username.RootUserName())
 		require.NoError(t, err)
 	}
 }
@@ -113,6 +147,12 @@ func TestAntagonisticAzureRead(t *testing.T) {
 	require.NoError(t, err)
 
 	cloudtestutils.CheckAntagonisticRead(t, conf, testSettings)
+
+	clientAuthConf, err := cloud.ExternalStorageConfFromURI(
+		cfg.filePathClientAuth("antagonistic-read"), username.RootUserName())
+	require.NoError(t, err)
+
+	cloudtestutils.CheckAntagonisticRead(t, clientAuthConf, testSettings)
 }
 
 func TestParseAzureURL(t *testing.T) {
@@ -124,6 +164,23 @@ func TestParseAzureURL(t *testing.T) {
 		require.NoError(t, err)
 
 		require.Equal(t, azure.PublicCloud.Name, sut.AzureConfig.Environment)
+	})
+
+	t.Run("Parses client-secret auth params", func(t *testing.T) {
+		u, err := url.Parse("azure://container/path?AZURE_ACCOUNT_NAME=account&AZURE_CLIENT_ID=client&AZURE_CLIENT_SECRET=secret&AZURE_TENANT_ID=tenant")
+		require.NoError(t, err)
+
+		_, err = parseAzureURL(cloud.ExternalStorageURIContext{}, u)
+		require.NoError(t, err)
+	})
+
+	t.Run("Rejects combined client-secret auth params and ACCOUNT_KEY", func(t *testing.T) {
+		u, err := url.Parse("azure://container/path?AZURE_ACCOUNT_NAME=account&AZURE_ACCOUNT_KEY=key&AZURE_CLIENT_ID=client&AZURE_CLIENT_SECRET=secret&AZURE_TENANT_ID=tenant")
+		require.NoError(t, err)
+
+		_, err = parseAzureURL(cloud.ExternalStorageURIContext{}, u)
+		require.Error(t, err)
+
 	})
 
 	t.Run("Can Override AZURE_ENVIRONMENT", func(t *testing.T) {
