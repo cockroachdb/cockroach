@@ -19,6 +19,7 @@ import (
 	"strings"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
@@ -46,6 +47,30 @@ var maxConcurrentUploadBuffers = settings.RegisterIntSetting(
 	1,
 ).WithPublic()
 
+// A note on Azure authentication:
+//
+// The standardized way to authenticate a third-party identity to the Azure
+// Cloud is via an "App Registration." This is the equivalent of an ID/Secret
+// pair on other providers.
+//
+// Azure Storage supports this authentication mechanism, and also provides its
+// own. Specifically, the Azure Storage top-level object is not any kind of
+// "container," but rather an "account." This "account" is totally distinct
+// from ordinary IAM models. An Azure user can create many storage accounts,
+// and each account can have many containers.
+//
+// An account's containers can be accessed in one of three ways:
+// 1. Implicit authentication with a managed identity (not yet implemented
+// here, coming soon to a PR near you).
+// 2. Via an "App Registration" that has been granted the Storage Blob User
+// role on the Storage Account.
+// 3. Via a direct "Key" attached to the storage account. This key has
+// full admin access to the storage account and all containers.
+//
+// Were we building from scratch, we probably would not support #3 above.
+// It's not a standard feature available across Azure Cloud, and indeed
+// has no equivalent on KeyVault (which we use for KMS). For backwards
+// compatibility, however, we retain support for these keys on Storage.
 const (
 	// AzureAccountNameParam is the query parameter for account_name in an azure URI.
 	AzureAccountNameParam = "AZURE_ACCOUNT_NAME"
@@ -53,6 +78,15 @@ const (
 	AzureAccountKeyParam = "AZURE_ACCOUNT_KEY"
 	// AzureEnvironmentKeyParam is the query parameter for the environment name in an azure URI.
 	AzureEnvironmentKeyParam = "AZURE_ENVIRONMENT"
+
+	// App Registration identifiers:
+
+	// AzureClientIDParam is the query parameter for client_id in an azure URI.
+	AzureClientIDParam = "AZURE_CLIENT_ID"
+	// AzureClientSecretParam is the query parameter for client_secret in an azure URI.
+	AzureClientSecretParam = "AZURE_CLIENT_SECRET"
+	// AzureTenantIDParam is the query parameter for tenant_id in an azure URI.
+	AzureTenantIDParam = "AZURE_TENANT_ID"
 
 	scheme = "azure-blob"
 
@@ -67,11 +101,14 @@ func parseAzureURL(
 	conf := cloudpb.ExternalStorage{}
 	conf.Provider = cloudpb.ExternalStorageProvider_azure
 	conf.AzureConfig = &cloudpb.ExternalStorage_Azure{
-		Container:   uri.Host,
-		Prefix:      uri.Path,
-		AccountName: azureURL.ConsumeParam(AzureAccountNameParam),
-		AccountKey:  azureURL.ConsumeParam(AzureAccountKeyParam),
-		Environment: azureURL.ConsumeParam(AzureEnvironmentKeyParam),
+		Container:    uri.Host,
+		Prefix:       uri.Path,
+		AccountName:  azureURL.ConsumeParam(AzureAccountNameParam),
+		AccountKey:   azureURL.ConsumeParam(AzureAccountKeyParam),
+		Environment:  azureURL.ConsumeParam(AzureEnvironmentKeyParam),
+		ClientID:     azureURL.ConsumeParam(AzureClientIDParam),
+		ClientSecret: azureURL.ConsumeParam(AzureClientSecretParam),
+		TenantID:     azureURL.ConsumeParam(AzureTenantIDParam),
 	}
 
 	// Validate that all the passed in parameters are supported.
@@ -83,9 +120,16 @@ func parseAzureURL(
 	if conf.AzureConfig.AccountName == "" {
 		return conf, errors.Errorf("azure uri missing %q parameter", AzureAccountNameParam)
 	}
-	if conf.AzureConfig.AccountKey == "" {
-		return conf, errors.Errorf("azure uri missing %q parameter", AzureAccountKeyParam)
+
+	hasKeyCreds := conf.AzureConfig.AccountKey != ""
+
+	hasRoleCreds := conf.AzureConfig.TenantID != "" && conf.AzureConfig.ClientID != "" && conf.AzureConfig.ClientSecret != ""
+	noRoleCreds := conf.AzureConfig.TenantID == "" && conf.AzureConfig.ClientID == "" && conf.AzureConfig.ClientSecret == ""
+
+	if hasRoleCreds == hasKeyCreds || hasRoleCreds == noRoleCreds {
+		return conf, errors.Errorf("azure uri requires exactly one authentication method: %q OR all three of %q, %q, and %q", AzureAccountKeyParam, AzureTenantIDParam, AzureClientIDParam, AzureClientSecretParam)
 	}
+
 	if conf.AzureConfig.Environment == "" {
 		// Default to AzurePublicCloud if not specified for backwards compatibility
 		conf.AzureConfig.Environment = azure.PublicCloud.Name
@@ -112,10 +156,6 @@ func makeAzureStorage(
 	if conf == nil {
 		return nil, errors.Errorf("azure upload requested but info missing")
 	}
-	credential, err := azblob.NewSharedKeyCredential(conf.AccountName, conf.AccountKey)
-	if err != nil {
-		return nil, errors.Wrap(err, "azure credential")
-	}
 	env, err := azure.EnvironmentFromName(conf.Environment)
 	if err != nil {
 		return nil, errors.Wrap(err, "azure environment")
@@ -125,9 +165,27 @@ func makeAzureStorage(
 		return nil, errors.Wrap(err, "azure: account name is not valid")
 	}
 
-	azClient, err := service.NewClientWithSharedKeyCredential(u.String(), credential, nil)
-	if err != nil {
-		return nil, err
+	//TODO(benbardin): Implicit auth.
+	var azClient *service.Client
+	if conf.ClientID != "" {
+		credential, err := azidentity.NewClientSecretCredential(conf.TenantID, conf.ClientID, conf.ClientSecret, nil)
+		if err != nil {
+			return nil, errors.Wrap(err, "azure client secret credential")
+		}
+
+		azClient, err = service.NewClient(u.String(), credential, nil)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		credential, err := azblob.NewSharedKeyCredential(conf.AccountName, conf.AccountKey)
+		if err != nil {
+			return nil, errors.Wrap(err, "azure shared key credential")
+		}
+		azClient, err = service.NewClientWithSharedKeyCredential(u.String(), credential, nil)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return &azureStorage{
