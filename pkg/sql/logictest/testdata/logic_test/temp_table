@@ -347,4 +347,44 @@ to_drop.pg_temp.testuser_tmp
 to_drop.pg_temp.tempuser_view
 to_drop.pg_temp.root_temp
 
+subtest create_after_discard_and_drop_database
+
+statement ok
+ALTER ROLE testuser WITH CREATEDB;
+
 user testuser
+
+statement ok
+CREATE DATABASE to_drop
+
+statement ok
+USE to_drop
+
+statement ok
+CREATE TEMPORARY TABLE t (i INT PRIMARY KEY);
+
+statement ok
+SELECT * FROM pg_temp.t
+
+statement ok
+DISCARD TEMP
+
+statement error pgcode 42P01 relation "pg_temp.t" does not exist
+SELECT * FROM pg_temp.t
+
+statement ok
+USE defaultdb;
+DROP DATABASE to_drop CASCADE;
+
+statement ok
+CREATE DATABASE to_drop
+
+statement ok
+CREATE TEMPORARY TABLE t (i INT PRIMARY KEY);
+
+statement ok
+SELECT * FROM pg_temp.t
+
+statement ok
+USE defaultdb;
+DROP DATABASE to_drop CASCADE;
