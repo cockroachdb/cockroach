@@ -621,7 +621,7 @@ func (c *CustomFuncs) FoldColumnAccess(
 // See FoldFunctionWithNullArg for more details.
 func (c *CustomFuncs) CanFoldFunctionWithNullArg(private *memo.FunctionPrivate) bool {
 	return !private.Overload.CalledOnNullInput &&
-		private.Properties.Class == tree.NormalClass
+		private.Overload.Class == tree.NormalClass
 }
 
 // HasNullArg returns true if one of args is Null.
@@ -647,7 +647,7 @@ func (c *CustomFuncs) FoldFunction(
 ) (_ opt.ScalarExpr, ok bool) {
 	// Non-normal function classes (aggregate, window, generator) cannot be
 	// folded into a single constant.
-	if private.Properties.Class != tree.NormalClass {
+	if private.Overload.Class != tree.NormalClass {
 		return nil, false
 	}
 

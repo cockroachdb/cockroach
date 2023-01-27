@@ -16,7 +16,6 @@ import (
 // RegisterCCLBuiltin adds a builtin defined in CCL code to the global builtins registry.
 func RegisterCCLBuiltin(name string, description string, overload tree.Overload) {
 	props := tree.FunctionProperties{
-		Class:    tree.NormalClass,
 		Category: `CCL-only internal function`,
 	}
 

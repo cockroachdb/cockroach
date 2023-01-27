@@ -1296,7 +1296,7 @@ func (node *FuncExpr) ResolvedOverload() *Overload {
 // IsGeneratorClass returns true if the resolved overload metadata is of
 // the GeneratorClass.
 func (node *FuncExpr) IsGeneratorClass() bool {
-	return node.fnProps != nil && node.fnProps.Class == GeneratorClass
+	return node.ResolvedOverload() != nil && node.ResolvedOverload().Class == GeneratorClass
 }
 
 // IsWindowFunctionApplication returns true iff the function is being applied as a window function.

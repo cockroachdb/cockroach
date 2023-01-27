@@ -426,7 +426,8 @@ func init() {
 			}
 			return tree.NewDBytes(tree.DBytes(o)), nil
 		},
-		Info: "Strings can be of the form 'resolved' or 'resolved=1s'.",
+		Class: tree.NormalClass,
+		Info:  "Strings can be of the form 'resolved' or 'resolved=1s'.",
 		// Probably actually stable, but since this is tightly coupled to changefeed logic by design,
 		// best to be defensive.
 		Volatility: volatility.Volatile,

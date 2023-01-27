@@ -440,11 +440,11 @@ func makeFunc(s *Smither, ctx Context, typ *types.T, refs colRefs) (tree.TypedEx
 		args = append(args, castType(arg, argTyp))
 	}
 
-	if fn.def.Class == tree.WindowClass && s.disableWindowFuncs {
+	if fn.overload.Class == tree.WindowClass && s.disableWindowFuncs {
 		return nil, false
 	}
 
-	if fn.def.Class == tree.AggregateClass && s.disableAggregateFuncs {
+	if fn.overload.Class == tree.AggregateClass && s.disableAggregateFuncs {
 		return nil, false
 	}
 
@@ -452,7 +452,8 @@ func makeFunc(s *Smither, ctx Context, typ *types.T, refs colRefs) (tree.TypedEx
 	// Use a window function if:
 	// - we chose an aggregate function, then 1/6 chance, but not if we're in a HAVING (noWindow == true)
 	// - we explicitly chose a window function
-	if fn.def.Class == tree.WindowClass || (!s.disableWindowFuncs && !ctx.noWindow && s.d6() == 1 && fn.def.Class == tree.AggregateClass) {
+	if fn.overload.Class == tree.WindowClass ||
+		(!s.disableWindowFuncs && !ctx.noWindow && s.d6() == 1 && fn.overload.Class == tree.AggregateClass) {
 		var parts tree.Exprs
 		s.sample(len(refs), 2, func(i int) {
 			parts = append(parts, refs[i].item)
