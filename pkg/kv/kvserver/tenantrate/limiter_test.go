@@ -13,6 +13,7 @@ package tenantrate_test
 import (
 	"context"
 	"fmt"
+	"math"
 	"regexp"
 	"runtime"
 	"sort"
@@ -29,10 +30,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/metrictestutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
 	"github.com/dustin/go-humanize"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v2"
 )
@@ -61,6 +64,68 @@ func TestCloser(t *testing.T) {
 	})
 	close(closer)
 	require.Regexp(t, "closer", <-errCh)
+}
+
+func TestUseAfterRelease(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	cs := cluster.MakeTestingClusterSettings()
+
+	factory := tenantrate.NewLimiterFactory(&cs.SV, nil)
+	s := stop.NewStopper()
+	defer s.Stop(ctx)
+	ctx, cancel2 := s.WithCancelOnQuiesce(ctx)
+	defer cancel2()
+
+	lim := factory.GetTenant(ctx, roachpb.MinTenantID, s.ShouldQuiesce())
+
+	// Pick a large acquisition size which will cause the quota acquisition to
+	// block ~forever. We scale it a bit to stay away from overflow.
+	const n = math.MaxInt64 / 50
+
+	rq := tenantcostmodel.TestingRequestInfo(
+		2 /* writeReplicas */, n /* writeCount */, n /* writeBytes */)
+	rs := tenantcostmodel.TestingResponseInfo(
+		true /* isRead */, n /* readCount */, n /* readBytes */)
+
+	// Acquire once to exhaust the burst. The bucket is now deeply in the red.
+	require.NoError(t, lim.Wait(ctx, rq))
+
+	waitErr := make(chan error, 1)
+	_ = s.RunAsyncTask(ctx, "wait", func(ctx context.Context) {
+		waitErr <- lim.Wait(ctx, rq)
+	})
+
+	_ = s.RunAsyncTask(ctx, "release", func(ctx context.Context) {
+		require.Eventually(t, func() bool {
+			return factory.Metrics().CurrentBlocked.Value() == 1
+		}, 10*time.Second, time.Nanosecond)
+		factory.Release(lim)
+	})
+
+	select {
+	case <-time.After(10 * time.Second):
+		t.Errorf("releasing limiter did not unblock acquisition")
+	case err := <-waitErr:
+		t.Logf("waiting returned: %s", err)
+		assert.Error(t, err)
+	}
+
+	lim.RecordRead(ctx, rs)
+
+	// The read bytes are still recorded to the parent, even though the limiter
+	// was already released at that point. This isn't required behavior, what's
+	// more important is that we don't crash.
+	require.Equal(t, rs.ReadBytes(), factory.Metrics().ReadBytesAdmitted.Count())
+	// Write bytes got admitted only once because second attempt got aborted
+	// during Wait().
+	require.Equal(t, rq.WriteBytes(), factory.Metrics().WriteBytesAdmitted.Count())
+	// This is a Gauge and we want to make sure that we don't leak an increment to
+	// it, i.e. the Wait call both added and removed despite interleaving with the
+	// gauge being unlinked from the aggregating parent.
+	require.Zero(t, factory.Metrics().CurrentBlocked.Value())
+	require.NoError(t, ctx.Err()) // didn't time out
 }
 
 func TestDataDriven(t *testing.T) {

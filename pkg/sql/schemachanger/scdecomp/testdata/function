@@ -1,0 +1,143 @@
+setup
+CREATE TABLE t(
+  a INT PRIMARY KEY,
+  b INT,
+  C INT,
+  INDEX t_idx_b(b),
+  INDEX t_idx_c(c)
+);
+CREATE SEQUENCE sq1;
+CREATE TABLE t2(a INT PRIMARY KEY);
+CREATE VIEW v AS SELECT a FROM t2;
+CREATE TYPE notmyworkday AS ENUM ('Monday', 'Tuesday');
+CREATE FUNCTION f(a notmyworkday) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$
+  SELECT a FROM t;
+  SELECT b FROM t@t_idx_b;
+  SELECT c FROM t@t_idx_c;
+  SELECT a FROM v;
+  SELECT nextval('sq1');
+$$;
+----
+
+decompose
+f
+----
+BackReferencedIDs:
+ElementState:
+- Function:
+    functionId: 110
+    params:
+    - class:
+        class: IN
+      name: a
+      type:
+        closedTypeIds:
+        - 108
+        - 109
+        type:
+          arrayContents: null
+          arrayDimensions: []
+          arrayElemType: null
+          family: EnumFamily
+          geoMetadata: null
+          intervalDurationField: null
+          locale: null
+          oid: 100108
+          precision: 0
+          timePrecisionIsSet: false
+          tupleContents: []
+          tupleLabels: []
+          udtMetadata:
+            arrayTypeOid: 100109
+          visibleType: 0
+          width: 0
+    returnSet: false
+    returnType:
+      closedTypeIds: []
+      type:
+        arrayContents: null
+        arrayDimensions: []
+        arrayElemType: null
+        family: IntFamily
+        geoMetadata: null
+        intervalDurationField: null
+        locale: null
+        oid: 20
+        precision: 0
+        timePrecisionIsSet: false
+        tupleContents: []
+        tupleLabels: []
+        udtMetadata: null
+        visibleType: 0
+        width: 64
+  Status: PUBLIC
+- Owner:
+    descriptorId: 110
+    owner: root
+  Status: PUBLIC
+- UserPrivileges:
+    descriptorId: 110
+    privileges: "2"
+    userName: admin
+  Status: PUBLIC
+- UserPrivileges:
+    descriptorId: 110
+    privileges: "2"
+    userName: root
+  Status: PUBLIC
+- ObjectParent:
+    objectId: 110
+    parentSchemaId: 101
+  Status: PUBLIC
+- FunctionName:
+    functionId: 110
+    name: f
+  Status: PUBLIC
+- FunctionVolatility:
+    functionId: 110
+    volatility:
+      volatility: IMMUTABLE
+  Status: PUBLIC
+- FunctionLeakProof:
+    functionId: 110
+    leakProof: false
+  Status: PUBLIC
+- FunctionNullInputBehavior:
+    functionId: 110
+    nullInputBehavior:
+      nullInputBehavior: CALLED_ON_NULL_INPUT
+  Status: PUBLIC
+- FunctionBody:
+    body: |-
+      SELECT a FROM defaultdb.public.t;
+      SELECT b FROM defaultdb.public.t@t_idx_b;
+      SELECT c FROM defaultdb.public.t@t_idx_c;
+      SELECT a FROM defaultdb.public.v;
+      SELECT nextval(105:::REGCLASS);
+    functionId: 110
+    lang:
+      lang: SQL
+    usesFunctionIds: []
+    usesSequenceIds:
+    - 105
+    usesTables:
+    - columnIds:
+      - 1
+      indexId: 0
+      tableId: 104
+    - columnIds:
+      - 2
+      indexId: 2
+      tableId: 104
+    - columnIds:
+      - 3
+      indexId: 3
+      tableId: 104
+    usesTypeIds:
+    - 108
+    - 109
+    usesViews:
+    - columnIds:
+      - 1
+      viewId: 107
+  Status: PUBLIC

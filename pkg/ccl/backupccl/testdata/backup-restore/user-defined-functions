@@ -123,8 +123,7 @@ pq: cannot drop sequence sq1 because other objects depend on it
 exec-sql
 DROP TABLE sc1.tbl1
 ----
-pq: cannot drop relation "tbl1" because function "f1" depends on it
-HINT: you can drop f1 instead.
+pq: cannot drop table tbl1 because other objects depend on it
 
 exec-sql
 ALTER TABLE sc1.tbl1 RENAME TO tbl1_new
@@ -274,8 +273,7 @@ pq: cannot drop sequence sq1 because other objects depend on it
 exec-sql
 DROP TABLE sc1.tbl1
 ----
-pq: cannot drop relation "tbl1" because function "f1" depends on it
-HINT: you can drop f1 instead.
+pq: cannot drop table tbl1 because other objects depend on it
 
 exec-sql
 ALTER TABLE sc1.tbl1 RENAME TO tbl1_new

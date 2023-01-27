@@ -29,7 +29,7 @@ COMMENT ON CONSTRAINT fk_customers ON defaultdb.shipments IS 'customer is not go
 ops
 DROP TABLE defaultdb.shipments CASCADE;
 ----
-StatementPhase stage 1 of 1 with 19 MutationType ops
+StatementPhase stage 1 of 1 with 22 MutationType ops
   transitions:
     [[Namespace:{DescID: 109, Name: shipments, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 109}, ABSENT], PUBLIC] -> ABSENT
@@ -109,6 +109,9 @@ StatementPhase stage 1 of 1 with 19 MutationType ops
   ops:
     *scop.MarkDescriptorAsDropped
       DescriptorID: 109
+    *scop.RemoveObjectParent
+      ObjectID: 109
+      ParentSchemaID: 101
     *scop.RemoveTableComment
       TableID: 109
     *scop.RemoveColumnDefaultExpression
@@ -142,12 +145,18 @@ StatementPhase stage 1 of 1 with 19 MutationType ops
       TableID: 109
     *scop.MarkDescriptorAsDropped
       DescriptorID: 110
+    *scop.RemoveObjectParent
+      ObjectID: 110
+      ParentSchemaID: 101
     *scop.MarkDescriptorAsDropped
       DescriptorID: 111
-    *scop.RemoveViewBackReferencesInRelations
-      BackReferencedViewID: 111
+    *scop.RemoveBackReferencesInRelations
+      BackReferencedID: 111
       RelationIDs:
       - 109
+    *scop.RemoveObjectParent
+      ObjectID: 111
+      ParentSchemaID: 101
     *scop.DrainDescriptorName
       Namespace:
         DatabaseID: 100
@@ -255,7 +264,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
   ops:
     *scop.UndoAllInTxnImmediateMutationOpSideEffects
       {}
-PreCommitPhase stage 2 of 2 with 43 MutationType ops
+PreCommitPhase stage 2 of 2 with 46 MutationType ops
   transitions:
     [[Namespace:{DescID: 109, Name: shipments, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 109}, ABSENT], PUBLIC] -> ABSENT
@@ -336,6 +345,9 @@ PreCommitPhase stage 2 of 2 with 43 MutationType ops
   ops:
     *scop.MarkDescriptorAsDropped
       DescriptorID: 109
+    *scop.RemoveObjectParent
+      ObjectID: 109
+      ParentSchemaID: 101
     *scop.RemoveTableComment
       TableID: 109
     *scop.RemoveColumnDefaultExpression
@@ -369,12 +381,18 @@ PreCommitPhase stage 2 of 2 with 43 MutationType ops
       TableID: 109
     *scop.MarkDescriptorAsDropped
       DescriptorID: 110
+    *scop.RemoveObjectParent
+      ObjectID: 110
+      ParentSchemaID: 101
     *scop.MarkDescriptorAsDropped
       DescriptorID: 111
-    *scop.RemoveViewBackReferencesInRelations
-      BackReferencedViewID: 111
+    *scop.RemoveBackReferencesInRelations
+      BackReferencedID: 111
       RelationIDs:
       - 109
+    *scop.RemoveObjectParent
+      ObjectID: 111
+      ParentSchemaID: 101
     *scop.DrainDescriptorName
       Namespace:
         DatabaseID: 100
@@ -1314,7 +1332,7 @@ CREATE TABLE defaultdb.greeter (
 ops
 DROP TABLE defaultdb.greeter
 ----
-StatementPhase stage 1 of 1 with 9 MutationType ops
+StatementPhase stage 1 of 1 with 10 MutationType ops
   transitions:
     [[Namespace:{DescID: 114, Name: greeter, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 114}, ABSENT], PUBLIC] -> ABSENT
@@ -1354,6 +1372,9 @@ StatementPhase stage 1 of 1 with 9 MutationType ops
   ops:
     *scop.MarkDescriptorAsDropped
       DescriptorID: 114
+    *scop.RemoveObjectParent
+      ObjectID: 114
+      ParentSchemaID: 101
     *scop.RemoveColumnDefaultExpression
       ColumnID: 1
       TableID: 114
@@ -1427,7 +1448,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
   ops:
     *scop.UndoAllInTxnImmediateMutationOpSideEffects
       {}
-PreCommitPhase stage 2 of 2 with 20 MutationType ops
+PreCommitPhase stage 2 of 2 with 21 MutationType ops
   transitions:
     [[Namespace:{DescID: 114, Name: greeter, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 114}, ABSENT], PUBLIC] -> ABSENT
@@ -1468,6 +1489,9 @@ PreCommitPhase stage 2 of 2 with 20 MutationType ops
   ops:
     *scop.MarkDescriptorAsDropped
       DescriptorID: 114
+    *scop.RemoveObjectParent
+      ObjectID: 114
+      ParentSchemaID: 101
     *scop.RemoveColumnDefaultExpression
       ColumnID: 1
       TableID: 114

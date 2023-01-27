@@ -94,10 +94,10 @@ func TestAggMetric(t *testing.T) {
 	})
 
 	t.Run("destroy", func(t *testing.T) {
-		g3.Destroy()
-		c2.Destroy()
-		f3.Destroy()
-		h3.Destroy()
+		g3.Unlink()
+		c2.Unlink()
+		f3.Unlink()
+		h3.Unlink()
 		echotest.Require(t, writePrometheusMetrics(t), datapathutils.TestDataPath(t, "destroy.txt"))
 	})
 

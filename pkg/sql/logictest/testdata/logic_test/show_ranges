@@ -446,3 +446,11 @@ start_key                 end_key                  range_id  lease_holder  split
 <before:/Table/106/1/10>  …/20                     59        1             2262-04-11 23:47:16.854776 +0000 +0000
 …/20                      …/30                     60        1             2262-04-11 23:47:16.854776 +0000 +0000
 …/30                      <after:/Table/107/1/42>  61        1             2262-04-11 23:47:16.854776 +0000 +0000
+
+subtest cast_error
+
+statement ok
+CREATE TABLE v0 (c1 BIT PRIMARY KEY );
+
+statement error pgcode 42846 pq: crdb_internal.encode_key\(\): invalid cast: bytes -> bit
+SHOW RANGE FROM TABLE v0 FOR ROW ( b'\x68')

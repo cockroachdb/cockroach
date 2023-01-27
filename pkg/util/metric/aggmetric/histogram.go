@@ -129,9 +129,13 @@ func (g *Histogram) ToPrometheusMetric() *io_prometheus_client.Metric {
 	return g.h.ToPrometheusMetric()
 }
 
-// Destroy disconnects this Histogram from its parents. Unlike Gauge.Destroy, it
-// does not decrement its value from its parent.
-func (g *Histogram) Destroy() {
+// Unlink unlinks this child from the parent, i.e. the parent will no longer
+// track this child (i.e. won't generate labels for it, etc). However, the child
+// will continue to be functional and reference the parent, meaning updates to
+// it will be reflected in the aggregate stored in the parent.
+//
+// See tenantrate.TestUseAfterRelease.
+func (g *Histogram) Unlink() {
 	g.parent.remove(g)
 }
 

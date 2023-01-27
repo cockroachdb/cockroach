@@ -13,6 +13,7 @@ go_library(
         "create_index.go",
         "dependencies.go",
         "drop_database.go",
+        "drop_function.go",
         "drop_index.go",
         "drop_owned_by.go",
         "drop_schema.go",

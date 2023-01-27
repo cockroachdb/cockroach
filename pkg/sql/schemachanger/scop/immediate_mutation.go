@@ -447,12 +447,12 @@ type UpdateBackReferencesInSequences struct {
 	SequenceIDs            []descpb.ID
 }
 
-// RemoveViewBackReferencesInRelations removes back references to a view in
+// RemoveBackReferencesInRelations removes back references to a view in
 // the specified tables, views or sequences.
-type RemoveViewBackReferencesInRelations struct {
+type RemoveBackReferencesInRelations struct {
 	immediateMutationOp
-	BackReferencedViewID descpb.ID
-	RelationIDs          []descpb.ID
+	BackReferencedID descpb.ID
+	RelationIDs      []descpb.ID
 }
 
 // SetColumnName renames a column.
@@ -624,4 +624,10 @@ type RemoveColumnFromIndex struct {
 	Kind         scpb.IndexColumn_Kind
 	Ordinal      uint32
 	InvertedKind catpb.InvertedIndexColumnKind
+}
+
+type RemoveObjectParent struct {
+	immediateMutationOp
+	ObjectID       descpb.ID
+	ParentSchemaID descpb.ID
 }

@@ -5,7 +5,7 @@ CREATE SEQUENCE defaultdb.SQ1
 ops
 DROP SEQUENCE defaultdb.SQ1
 ----
-StatementPhase stage 1 of 1 with 2 MutationType ops
+StatementPhase stage 1 of 1 with 3 MutationType ops
   transitions:
     [[Namespace:{DescID: 104, Name: sq1, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 104}, ABSENT], PUBLIC] -> ABSENT
@@ -16,6 +16,9 @@ StatementPhase stage 1 of 1 with 2 MutationType ops
   ops:
     *scop.MarkDescriptorAsDropped
       DescriptorID: 104
+    *scop.RemoveObjectParent
+      ObjectID: 104
+      ParentSchemaID: 101
     *scop.DrainDescriptorName
       Namespace:
         DatabaseID: 100
@@ -33,7 +36,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
   ops:
     *scop.UndoAllInTxnImmediateMutationOpSideEffects
       {}
-PreCommitPhase stage 2 of 2 with 4 MutationType ops
+PreCommitPhase stage 2 of 2 with 5 MutationType ops
   transitions:
     [[Namespace:{DescID: 104, Name: sq1, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 104}, ABSENT], PUBLIC] -> ABSENT
@@ -44,6 +47,9 @@ PreCommitPhase stage 2 of 2 with 4 MutationType ops
   ops:
     *scop.MarkDescriptorAsDropped
       DescriptorID: 104
+    *scop.RemoveObjectParent
+      ObjectID: 104
+      ParentSchemaID: 101
     *scop.DrainDescriptorName
       Namespace:
         DatabaseID: 100
@@ -92,7 +98,7 @@ CREATE TABLE defaultdb.blog_posts2 (id INT8 PRIMARY KEY, val INT8 DEFAULT nextva
 ops
 DROP SEQUENCE defaultdb.SQ1 CASCADE
 ----
-StatementPhase stage 1 of 1 with 6 MutationType ops
+StatementPhase stage 1 of 1 with 7 MutationType ops
   transitions:
     [[Namespace:{DescID: 104, Name: sq1, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 104}, ABSENT], PUBLIC] -> ABSENT
@@ -105,6 +111,9 @@ StatementPhase stage 1 of 1 with 6 MutationType ops
   ops:
     *scop.MarkDescriptorAsDropped
       DescriptorID: 104
+    *scop.RemoveObjectParent
+      ObjectID: 104
+      ParentSchemaID: 101
     *scop.RemoveColumnDefaultExpression
       ColumnID: 2
       TableID: 105
@@ -140,7 +149,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
   ops:
     *scop.UndoAllInTxnImmediateMutationOpSideEffects
       {}
-PreCommitPhase stage 2 of 2 with 10 MutationType ops
+PreCommitPhase stage 2 of 2 with 11 MutationType ops
   transitions:
     [[Namespace:{DescID: 104, Name: sq1, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 104}, ABSENT], PUBLIC] -> ABSENT
@@ -153,6 +162,9 @@ PreCommitPhase stage 2 of 2 with 10 MutationType ops
   ops:
     *scop.MarkDescriptorAsDropped
       DescriptorID: 104
+    *scop.RemoveObjectParent
+      ObjectID: 104
+      ParentSchemaID: 101
     *scop.RemoveColumnDefaultExpression
       ColumnID: 2
       TableID: 105
