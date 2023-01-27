@@ -47,7 +47,7 @@ func runNetworkAuthentication(ctx context.Context, t test.Test, c cluster.Cluste
 	// we don't want. Starting all nodes at once ensures
 	// that they use coherent certs.
 	settings := install.MakeClusterSettings(install.SecureOption(true))
-	c.Start(ctx, t.L(), option.DefaultStartOpts(), settings, serverNodes)
+	c.Start(ctx, t.L(), option.DefaultStartOptsNoBackups(), settings, serverNodes)
 	require.NoError(t, c.StopE(ctx, t.L(), option.DefaultStopOpts(), serverNodes))
 
 	t.L().Printf("restarting nodes...")
@@ -60,6 +60,9 @@ func runNetworkAuthentication(ctx context.Context, t test.Test, c cluster.Cluste
 	// "--env=COCKROACH_SCAN_MAX_IDLE_TIME=20ms",
 	startOpts := option.DefaultStartOpts()
 	startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs, "--locality=node=1", "--accept-sql-without-tls")
+
+	// Scheduled backups at cluster start fail with all these settings.
+	startOpts.RoachprodOpts.ScheduleBackups = false
 	c.Start(ctx, t.L(), startOpts, settings, c.Node(1))
 
 	// See comment above about env vars.
@@ -67,6 +70,7 @@ func runNetworkAuthentication(ctx context.Context, t test.Test, c cluster.Cluste
 	// "--env=COCKROACH_SCAN_MAX_IDLE_TIME=20ms",
 	startOpts = option.DefaultStartOpts()
 	startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs, "--locality=node=other", "--accept-sql-without-tls")
+	startOpts.RoachprodOpts.ScheduleBackups = false
 	c.Start(ctx, t.L(), startOpts, settings, c.Range(2, n-1))
 
 	t.L().Printf("retrieving server addresses...")
