@@ -90,9 +90,9 @@ type latencyInfo struct {
 // RemoteClockMonitor keeps track of the most recent measurements of remote
 // offsets and round-trip latency from this node to connected nodes.
 type RemoteClockMonitor struct {
-	clock     hlc.WallClock
-	maxOffset time.Duration
-	offsetTTL time.Duration
+	clock           hlc.WallClock
+	toleratedOffset time.Duration
+	offsetTTL       time.Duration
 
 	mu struct {
 		syncutil.RWMutex
@@ -117,14 +117,14 @@ func (r *RemoteClockMonitor) TestingResetLatencyInfos() {
 // newRemoteClockMonitor returns a monitor with the given server clock.
 func newRemoteClockMonitor(
 	clock hlc.WallClock,
-	maxOffset time.Duration,
+	toleratedOffset time.Duration,
 	offsetTTL time.Duration,
 	histogramWindowInterval time.Duration,
 ) *RemoteClockMonitor {
 	r := RemoteClockMonitor{
-		clock:     clock,
-		maxOffset: maxOffset,
-		offsetTTL: offsetTTL,
+		clock:           clock,
+		toleratedOffset: toleratedOffset,
+		offsetTTL:       offsetTTL,
 	}
 	r.mu.offsets = make(map[roachpb.NodeID]RemoteOffset)
 	r.mu.latencyInfos = make(map[roachpb.NodeID]*latencyInfo)
@@ -252,13 +252,13 @@ func (r *RemoteClockMonitor) UpdateOffset(
 // return indicates that this node's clock is unreliable, and that the node
 // should terminate.
 func (r *RemoteClockMonitor) VerifyClockOffset(ctx context.Context) error {
-	// By the contract of the hlc, if the value is 0, then safety checking of
-	// the max offset is disabled. However we may still want to propagate the
+	// By the contract of the hlc, if the value is 0, then safety checking of the
+	// tolerated offset is disabled. However we may still want to propagate the
 	// information to a status node.
 	//
-	// TODO(tschottdorf): disallow maxOffset == 0 but probably lots of tests to
-	// fix.
-	if r.maxOffset != 0 {
+	// TODO(tschottdorf): disallow toleratedOffset == 0 but probably lots of tests
+	// to fix.
+	if r.toleratedOffset != 0 {
 		now := r.clock.Now()
 
 		healthyOffsetCount := 0
@@ -273,7 +273,7 @@ func (r *RemoteClockMonitor) VerifyClockOffset(ctx context.Context) error {
 			}
 			offsets = append(offsets, float64(offset.Offset+offset.Uncertainty))
 			offsets = append(offsets, float64(offset.Offset-offset.Uncertainty))
-			if offset.isHealthy(ctx, r.maxOffset) {
+			if offset.isHealthy(ctx, r.toleratedOffset) {
 				healthyOffsetCount++
 			}
 		}
@@ -294,38 +294,38 @@ func (r *RemoteClockMonitor) VerifyClockOffset(ctx context.Context) error {
 		if numClocks > 0 && healthyOffsetCount <= numClocks/2 {
 			return errors.Errorf(
 				"clock synchronization error: this node is more than %s away from at least half of the known nodes (%d of %d are within the offset)",
-				r.maxOffset, healthyOffsetCount, numClocks)
+				r.toleratedOffset, healthyOffsetCount, numClocks)
 		}
 		if log.V(1) {
-			log.Dev.Infof(ctx, "%d of %d nodes are within the maximum clock offset of %s", healthyOffsetCount, numClocks, r.maxOffset)
+			log.Dev.Infof(ctx, "%d of %d nodes are within the tolerated clock offset of %s", healthyOffsetCount, numClocks, r.toleratedOffset)
 		}
 	}
 
 	return nil
 }
 
-func (r RemoteOffset) isHealthy(ctx context.Context, maxOffset time.Duration) bool {
+func (r RemoteOffset) isHealthy(ctx context.Context, toleratedOffset time.Duration) bool {
 	// Offset may be negative, but Uncertainty is always positive.
 	absOffset := r.Offset
 	if absOffset < 0 {
 		absOffset = -absOffset
 	}
 	switch {
-	case time.Duration(absOffset-r.Uncertainty)*time.Nanosecond > maxOffset:
-		// The minimum possible true offset exceeds the maximum offset; definitely
+	case time.Duration(absOffset-r.Uncertainty)*time.Nanosecond > toleratedOffset:
+		// The minimum possible true offset exceeds the tolerated offset; definitely
 		// unhealthy.
 		return false
 
-	case time.Duration(absOffset+r.Uncertainty)*time.Nanosecond < maxOffset:
-		// The maximum possible true offset does not exceed the maximum offset;
+	case time.Duration(absOffset+r.Uncertainty)*time.Nanosecond < toleratedOffset:
+		// The maximum possible true offset does not exceed the tolerated offset;
 		// definitely healthy.
 		return true
 
 	default:
-		// The maximum offset is in the uncertainty window of the measured offset;
+		// The tolerated offset is in the uncertainty window of the measured offset;
 		// health is ambiguous. For now, we err on the side of not spuriously
 		// killing nodes.
-		log.Health.Warningf(ctx, "uncertain remote offset %s for maximum tolerated offset %s, treating as healthy", r, maxOffset)
+		log.Health.Warningf(ctx, "uncertain remote offset %s for maximum tolerated offset %s, treating as healthy", r, toleratedOffset)
 		return true
 	}
 }

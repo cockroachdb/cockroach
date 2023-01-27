@@ -124,12 +124,12 @@ func newRaftTransportTestContext(t testing.TB) *raftTransportTestContext {
 		transports: map[roachpb.NodeID]*kvserver.RaftTransport{},
 	}
 	rttc.nodeRPCContext = rpc.NewContext(ctx, rpc.ContextOptions{
-		TenantID:  roachpb.SystemTenantID,
-		Config:    testutils.NewNodeTestBaseContext(),
-		Clock:     &timeutil.DefaultTimeSource{},
-		MaxOffset: time.Nanosecond,
-		Stopper:   rttc.stopper,
-		Settings:  cluster.MakeTestingClusterSettings(),
+		TenantID:        roachpb.SystemTenantID,
+		Config:          testutils.NewNodeTestBaseContext(),
+		Clock:           &timeutil.DefaultTimeSource{},
+		ToleratedOffset: time.Nanosecond,
+		Stopper:         rttc.stopper,
+		Settings:        cluster.MakeTestingClusterSettings(),
 	})
 	// Ensure that tests using this test context and restart/shut down
 	// their servers do not inadvertently start talking to servers from

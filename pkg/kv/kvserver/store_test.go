@@ -178,12 +178,12 @@ func createTestStoreWithoutStart(
 
 	rpcContext := rpc.NewContext(ctx,
 		rpc.ContextOptions{
-			TenantID:  roachpb.SystemTenantID,
-			Config:    &base.Config{Insecure: true},
-			Clock:     cfg.Clock.WallClock(),
-			MaxOffset: cfg.Clock.ToleratedOffset(),
-			Stopper:   stopper,
-			Settings:  cfg.Settings,
+			TenantID:        roachpb.SystemTenantID,
+			Config:          &base.Config{Insecure: true},
+			Clock:           cfg.Clock.WallClock(),
+			ToleratedOffset: cfg.Clock.ToleratedOffset(),
+			Stopper:         stopper,
+			Settings:        cfg.Settings,
 		})
 	stopper.SetTracer(cfg.AmbientCtx.Tracer)
 	server := rpc.NewServer(rpcContext) // never started
