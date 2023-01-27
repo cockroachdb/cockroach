@@ -12,8 +12,7 @@ cl-table-container {
   height: 32px;
 }
 
-.cl-count-title,
-.last-cleared-title {
+@mixin statistics-label {
   font-family: $font-family--base;
   font-size: 14px;
   padding: 0px;
@@ -25,6 +24,17 @@ cl-table-container {
   .label {
     font-family: $font-family--bold;
     color: $colors--neutral-7;
+  }
+}
+
+.cl-count-title,
+.last-cleared-title {
+  @include statistics-label;
+}
+
+.cl-table-statistic {
+  .cl-count-title {
+    @include statistics-label;
   }
 }
 
