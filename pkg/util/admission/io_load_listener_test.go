@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/pebble"
@@ -151,11 +152,11 @@ func TestIOLoadListener(t *testing.T) {
 				if d.HasArg("disk-bw-tokens-used") {
 					var regularTokensUsed, elasticTokensUsed int
 					d.ScanArgs(t, "disk-bw-tokens-used", &regularTokensUsed, &elasticTokensUsed)
-					kvGranter.diskBandwidthTokensUsed[regularWorkClass] = int64(regularTokensUsed)
-					kvGranter.diskBandwidthTokensUsed[elasticWorkClass] = int64(elasticTokensUsed)
+					kvGranter.diskBandwidthTokensUsed[admissionpb.RegularWorkClass] = int64(regularTokensUsed)
+					kvGranter.diskBandwidthTokensUsed[admissionpb.ElasticWorkClass] = int64(elasticTokensUsed)
 				} else {
-					kvGranter.diskBandwidthTokensUsed[regularWorkClass] = 0
-					kvGranter.diskBandwidthTokensUsed[elasticWorkClass] = 0
+					kvGranter.diskBandwidthTokensUsed[admissionpb.RegularWorkClass] = 0
+					kvGranter.diskBandwidthTokensUsed[admissionpb.ElasticWorkClass] = 0
 				}
 				var printOnlyFirstTick bool
 				if d.HasArg("print-only-first-tick") {
@@ -337,7 +338,7 @@ var _ storeRequester = &testRequesterForIOLL{}
 
 func (r *testRequesterForIOLL) close() {}
 
-func (r *testRequesterForIOLL) getRequesters() [numWorkClasses]requester {
+func (r *testRequesterForIOLL) getRequesters() [admissionpb.NumWorkClasses]requester {
 	panic("unimplemented")
 }
 
@@ -352,7 +353,7 @@ func (r *testRequesterForIOLL) setStoreRequestEstimates(estimates storeRequestEs
 type testGranterWithIOTokens struct {
 	buf                     strings.Builder
 	allTokensUsed           bool
-	diskBandwidthTokensUsed [numWorkClasses]int64
+	diskBandwidthTokensUsed [admissionpb.NumWorkClasses]int64
 }
 
 var _ granterWithIOTokens = &testGranterWithIOTokens{}
@@ -370,7 +371,7 @@ func (g *testGranterWithIOTokens) setAvailableElasticDiskBandwidthTokensLocked(t
 		tokensForTokenTickDurationToString(tokens))
 }
 
-func (g *testGranterWithIOTokens) getDiskTokensUsedAndResetLocked() [numWorkClasses]int64 {
+func (g *testGranterWithIOTokens) getDiskTokensUsedAndResetLocked() [admissionpb.NumWorkClasses]int64 {
 	return g.diskBandwidthTokensUsed
 }
 
@@ -410,8 +411,8 @@ func (g *testGranterNonNegativeTokens) setAvailableElasticDiskBandwidthTokensLoc
 	require.LessOrEqual(g.t, int64(0), tokens)
 }
 
-func (g *testGranterNonNegativeTokens) getDiskTokensUsedAndResetLocked() [numWorkClasses]int64 {
-	return [numWorkClasses]int64{}
+func (g *testGranterNonNegativeTokens) getDiskTokensUsedAndResetLocked() [admissionpb.NumWorkClasses]int64 {
+	return [admissionpb.NumWorkClasses]int64{}
 }
 
 func (g *testGranterNonNegativeTokens) setAdmittedDoneModelsLocked(

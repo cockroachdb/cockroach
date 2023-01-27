@@ -14,6 +14,7 @@ go_library(
     deps = [
         "//pkg/keys",
         "//pkg/kv/kvserver/apply",
+        "//pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb",
         "//pkg/kv/kvserver/kvserverbase",
         "//pkg/kv/kvserver/kvserverpb",
         "//pkg/roachpb",
@@ -29,6 +30,7 @@ go_library(
 go_test(
     name = "raftlog_test",
     srcs = [
+        "encoding_test.go",
         "entry_bench_test.go",
         "entry_test.go",
         "iter_bench_test.go",
@@ -38,12 +40,15 @@ go_test(
     embed = [":raftlog"],
     deps = [
         "//pkg/keys",
+        "//pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb",
         "//pkg/kv/kvserver/kvserverbase",
         "//pkg/kv/kvserver/kvserverpb",
         "//pkg/roachpb",
         "//pkg/storage",
         "//pkg/storage/enginepb",
+        "//pkg/util/admission/admissionpb",
         "//pkg/util/hlc",
+        "//pkg/util/humanizeutil",
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/protoutil",
