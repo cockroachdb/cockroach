@@ -211,7 +211,7 @@ func TestStopServer(t *testing.T) {
 		TenantID:  roachpb.SystemTenantID,
 		Config:    server1.RPCContext().Config,
 		Clock:     server1.Clock().WallClock(),
-		MaxOffset: server1.Clock().MaxOffset(),
+		MaxOffset: server1.Clock().ToleratedOffset(),
 		Stopper:   tc.Stopper(),
 		Settings:  server1.ClusterSettings(),
 

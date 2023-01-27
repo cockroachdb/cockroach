@@ -52,8 +52,27 @@ type Clock struct {
 	// RPC heartbeats compare detected clock skews against this value to protect
 	// data consistency.
 	//
-	// TODO(tamird): make this dynamic in the distant future.
+	// TODO(tamird): make this dynamic in the distant future. See also:
+	// https://github.com/cockroachdb/cockroach/issues/75564
 	maxOffset time.Duration
+
+	// toleratedOffset specifies the tolerated clock offset with other nodes in
+	// the cluster, as measured via RPC heartbeats. If more than half of peers
+	// have an offset greater than ToleratedOffset, the node will self-terminate
+	// to protect data consistency.
+	//
+	// maxOffset still applies for linearizability guarantees (i.e. the real clock
+	// offset must be below it to avoid stale reads), but toleratedOffset can be
+	// used to tweak sensitivity to estimated clock skew. For example:
+	//
+	// * toleratedOffset < maxOffset: aggressively kill the node as the estimated
+	//   clock skew approaches the maxOffset.
+	//
+	// * toleratedOffset > maxOffset: the underlying clock infrastructure is
+	//   very reliable, so maxOffset is set very low (e.g. 10 ms), but
+	//   toleratedOffset is set much higher to avoid spurious termination
+	//   due to RPC latency spikes.
+	toleratedOffset time.Duration
 
 	// lastPhysicalTime reports the last measured physical time. This
 	// is used to detect clock jumps. The field is accessed atomically.
@@ -186,9 +205,6 @@ func (m *HybridManualClock) Resume() {
 
 // NewClockWithSystemTimeSource creates a Clock that reads the system time. This
 // is equivalent to NewClock(timeutil.SystemTimeSource, maxOffset).
-//
-// A value of 0 for maxOffset means that clock skew checking, if performed on
-// this clock by RemoteClockMonitor, is disabled.
 func NewClockWithSystemTimeSource(maxOffset time.Duration) *Clock {
 	return NewClock(timeutil.DefaultTimeSource{}, maxOffset)
 }
@@ -200,8 +216,9 @@ func NewClockWithSystemTimeSource(maxOffset time.Duration) *Clock {
 // this clock by RemoteClockMonitor, is disabled.
 func NewClock(wallClock WallClock, maxOffset time.Duration) *Clock {
 	return &Clock{
-		wallClock: wallClock,
-		maxOffset: maxOffset,
+		wallClock:       wallClock,
+		maxOffset:       maxOffset,
+		toleratedOffset: maxOffset * 4 / 5, // tolerate 80% clock skew before terminating
 	}
 }
 
@@ -292,10 +309,17 @@ func (c *Clock) StartMonitoringForwardClockJumps(
 }
 
 // MaxOffset returns the maximal clock offset to any node in the cluster.
-//
-// A value of 0 means offset checking is disabled.
 func (c *Clock) MaxOffset() time.Duration {
 	return c.maxOffset
+}
+
+// ToleratedOffset returns the tolerated clock offset with other nodes in the
+// cluster, as measured via RPC heartbeats. It can be less than, equal to, or
+// greater than MaxOffset depending on the desired behavior, see
+// Clock.toleratedOffset for details. A value of 0 means offset checking is
+// disabled.
+func (c *Clock) ToleratedOffset() time.Duration {
+	return c.toleratedOffset
 }
 
 // getPhysicalClockAndCheck reads the physical time as nanos since epoch. It
