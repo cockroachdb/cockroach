@@ -85,8 +85,9 @@ func (b *Builder) buildZip(exprs tree.Exprs, inScope *scope) (outScope *scope) {
 	inScope.context = exprKindFrom
 
 	// Build each of the provided expressions.
-	zip := make(memo.ZipExpr, len(exprs))
-	for i, expr := range exprs {
+	zip := make(memo.ZipExpr, 0, len(exprs))
+	var outCols opt.ColSet
+	for _, expr := range exprs {
 		// Output column names should exactly match the original expression, so we
 		// have to determine the output column name before we perform type
 		// checking. However, the alias may be overridden later below if the expression
@@ -121,11 +122,29 @@ func (b *Builder) buildZip(exprs tree.Exprs, inScope *scope) (outScope *scope) {
 		}
 
 		scalar := b.buildScalar(texpr, inScope, outScope, outCol, nil)
-		cols := make(opt.ColList, len(outScope.cols)-startCols)
+		numExpectedOutputCols := len(outScope.cols) - startCols
+		cols := make(opt.ColList, 0, numExpectedOutputCols)
 		for j := startCols; j < len(outScope.cols); j++ {
-			cols[j-startCols] = outScope.cols[j].id
+			// If a newly-added outScope column has already been added in a zip
+			// expression, don't add it again.
+			if outCols.Contains(outScope.cols[j].id) {
+				continue
+			}
+			cols = append(cols, outScope.cols[j].id)
+
+			// Record that this output column has been added.
+			outCols.Add(outScope.cols[j].id)
 		}
-		zip[i] = b.factory.ConstructZipItem(scalar, cols)
+		// Only add the zip expression if it has output columns which haven't
+		// already been built.
+		if len(cols) != 0 {
+			if len(cols) != numExpectedOutputCols {
+				// Building more columns than were just added to outScope could cause
+				// problems for the execution engine. Catch this case.
+				panic(errors.AssertionFailedf("zip expression builds more columns than added to outScope"))
+			}
+			zip = append(zip, b.factory.ConstructZipItem(scalar, cols))
+		}
 	}
 
 	// Construct the zip as a ProjectSet with empty input.
