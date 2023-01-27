@@ -120,7 +120,7 @@ func newProjectSetProcessor(
 		if err != nil {
 			return nil, err
 		}
-		if tFunc, ok := helper.Expr.(*tree.FuncExpr); ok && tFunc.IsGeneratorApplication() {
+		if tFunc, ok := helper.Expr.(*tree.FuncExpr); ok && tFunc.IsGeneratorClass() {
 			// Expr is a set-generating function.
 			ps.funcs[i] = tFunc
 			ps.mustBeStreaming = ps.mustBeStreaming || tFunc.IsVectorizeStreaming()
