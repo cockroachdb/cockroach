@@ -101,8 +101,21 @@ func (p *scanRequestScanner) Scan(ctx context.Context, sink kvevent.Writer, cfg 
 			return errors.CombineErrors(err, g.Wait())
 		}
 
+		var spanAlloc kvevent.Alloc
+		if allocator, ok := sink.(kvevent.MemAllocator); ok {
+			// Sink implements memory allocator interface, so acquire
+			// memory needed to hold scan reply.
+			spanAlloc, err = allocator.AcquireMemory(ctx, changefeedbase.ScanRequestSize.Get(&p.settings.SV))
+			if err != nil {
+				cancel()
+				return errors.CombineErrors(err, g.Wait())
+			}
+		}
+
 		g.GoCtx(func(ctx context.Context) error {
 			defer limAlloc.Release()
+			defer spanAlloc.Release(ctx)
+
 			err := p.exportSpan(ctx, span, cfg.Timestamp, cfg.WithDiff, sink, cfg.Knobs)
 			finished := atomic.AddInt64(&atomicFinished, 1)
 			if backfillDec != nil {
