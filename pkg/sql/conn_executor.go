@@ -3134,8 +3134,16 @@ func (ex *connExecutor) initStatementResult(
 	return nil
 }
 
-// cancelQuery is part of the registrySession interface.
-func (ex *connExecutor) cancelQuery(queryID clusterunique.ID) bool {
+// hasQuery is part of the RegistrySession interface.
+func (ex *connExecutor) hasQuery(queryID clusterunique.ID) bool {
+	ex.mu.RLock()
+	defer ex.mu.RUnlock()
+	_, exists := ex.mu.ActiveQueries[queryID]
+	return exists
+}
+
+// CancelQuery is part of the RegistrySession interface.
+func (ex *connExecutor) CancelQuery(queryID clusterunique.ID) bool {
 	ex.mu.Lock()
 	defer ex.mu.Unlock()
 	if queryMeta, exists := ex.mu.ActiveQueries[queryID]; exists {
@@ -3145,8 +3153,8 @@ func (ex *connExecutor) cancelQuery(queryID clusterunique.ID) bool {
 	return false
 }
 
-// cancelCurrentQueries is part of the registrySession interface.
-func (ex *connExecutor) cancelCurrentQueries() bool {
+// CancelActiveQueries is part of the RegistrySession interface.
+func (ex *connExecutor) CancelActiveQueries() bool {
 	ex.mu.Lock()
 	defer ex.mu.Unlock()
 	canceled := false
@@ -3157,8 +3165,8 @@ func (ex *connExecutor) cancelCurrentQueries() bool {
 	return canceled
 }
 
-// cancelSession is part of the registrySession interface.
-func (ex *connExecutor) cancelSession() {
+// CancelSession is part of the RegistrySession interface.
+func (ex *connExecutor) CancelSession() {
 	if ex.onCancelSession == nil {
 		return
 	}
@@ -3166,12 +3174,17 @@ func (ex *connExecutor) cancelSession() {
 	ex.onCancelSession()
 }
 
-// user is part of the registrySession interface.
+// user is part of the RegistrySession interface.
 func (ex *connExecutor) user() username.SQLUsername {
 	return ex.sessionData().User()
 }
 
-// serialize is part of the registrySession interface.
+// BaseSessionUser is part of the RegistrySession interface.
+func (ex *connExecutor) BaseSessionUser() username.SQLUsername {
+	return ex.sessionDataStack.Base().SessionUser()
+}
+
+// serialize is part of the RegistrySession interface.
 func (ex *connExecutor) serialize() serverpb.Session {
 	ex.mu.RLock()
 	defer ex.mu.RUnlock()

@@ -1,23 +1,9 @@
 show_backup_stmt ::=
 	'SHOW' 'BACKUPS' 'IN' location_opt_list
-	| 'SHOW' 'BACKUP' show_backup_details 'FROM' string_or_placeholder 'IN' string_or_placeholder_opt_list 'WITH' kv_option_list
-	| 'SHOW' 'BACKUP' show_backup_details 'FROM' string_or_placeholder 'IN' string_or_placeholder_opt_list 'WITH' 'OPTIONS' '(' kv_option_list ')'
-	| 'SHOW' 'BACKUP' show_backup_details 'FROM' string_or_placeholder 'IN' string_or_placeholder_opt_list 
-	| 'SHOW' 'BACKUP' subdirectory 'IN' location_opt_list 'WITH' kv_option_list
-	| 'SHOW' 'BACKUP' subdirectory 'IN' location_opt_list 'WITH' 'OPTIONS' '(' kv_option_list ')'
-	| 'SHOW' 'BACKUP' subdirectory 'IN' location_opt_list 
-	| 'SHOW' 'BACKUP' string_or_placeholder 'WITH' kv_option_list
-	| 'SHOW' 'BACKUP' string_or_placeholder 'WITH' 'OPTIONS' '(' kv_option_list ')'
-	| 'SHOW' 'BACKUP' string_or_placeholder 
-	| 'SHOW' 'BACKUP' 'SCHEMAS' location 'WITH' kv_option_list
-	| 'SHOW' 'BACKUP' 'SCHEMAS' location 'WITH' 'OPTIONS' '(' kv_option_list ')'
-	| 'SHOW' 'BACKUP' 'SCHEMAS' location 
-	| 'SHOW' 'BACKUP' 'FILES' string_or_placeholder 'WITH' kv_option_list
-	| 'SHOW' 'BACKUP' 'FILES' string_or_placeholder 'WITH' 'OPTIONS' '(' kv_option_list ')'
-	| 'SHOW' 'BACKUP' 'FILES' string_or_placeholder 
-	| 'SHOW' 'BACKUP' 'RANGES' string_or_placeholder 'WITH' kv_option_list
-	| 'SHOW' 'BACKUP' 'RANGES' string_or_placeholder 'WITH' 'OPTIONS' '(' kv_option_list ')'
-	| 'SHOW' 'BACKUP' 'RANGES' string_or_placeholder 
-	| 'SHOW' 'BACKUP' 'VALIDATE' string_or_placeholder 'WITH' kv_option_list
-	| 'SHOW' 'BACKUP' 'VALIDATE' string_or_placeholder 'WITH' 'OPTIONS' '(' kv_option_list ')'
-	| 'SHOW' 'BACKUP' 'VALIDATE' string_or_placeholder 
+	| 'SHOW' 'BACKUP' show_backup_details 'FROM' string_or_placeholder 'IN' string_or_placeholder_opt_list opt_with_show_backup_options
+	| 'SHOW' 'BACKUP' subdirectory 'IN' location_opt_list opt_with_show_backup_options
+	| 'SHOW' 'BACKUP' string_or_placeholder opt_with_show_backup_options
+	| 'SHOW' 'BACKUP' 'SCHEMAS' location opt_with_show_backup_options
+	| 'SHOW' 'BACKUP' 'FILES' string_or_placeholder opt_with_show_backup_options
+	| 'SHOW' 'BACKUP' 'RANGES' string_or_placeholder opt_with_show_backup_options
+	| 'SHOW' 'BACKUP' 'VALIDATE' string_or_placeholder opt_with_show_backup_options
