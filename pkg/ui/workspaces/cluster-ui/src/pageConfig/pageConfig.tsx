@@ -16,12 +16,13 @@ import { CockroachCloudContext } from "../contexts";
 export interface PageConfigProps {
   layout?: "list" | "spread";
   children?: React.ReactNode;
+  whiteBkg?: boolean;
 }
 
 const cx = classnames.bind(styles);
 
 export function PageConfig(props: PageConfigProps): React.ReactElement {
-  const isCockroachCloud = useContext(CockroachCloudContext);
+  const whiteBkg = useContext(CockroachCloudContext) || props.whiteBkg;
 
   const classes = cx({
     "page-config__list": props.layout !== "spread",
@@ -31,7 +32,7 @@ export function PageConfig(props: PageConfigProps): React.ReactElement {
   return (
     <div
       className={cx("page-config", {
-        "page-config__white-background": isCockroachCloud,
+        "page-config__white-background": whiteBkg,
       })}
     >
       <ul className={classes}>{props.children}</ul>
