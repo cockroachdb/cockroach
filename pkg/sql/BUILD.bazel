@@ -310,6 +310,7 @@ go_library(
         "//pkg/kv/kvclient/kvtenant",
         "//pkg/kv/kvclient/rangecache",
         "//pkg/kv/kvclient/rangefeed",
+        "//pkg/kv/kvclient/spanstats",
         "//pkg/kv/kvserver/concurrency/lock",
         "//pkg/kv/kvserver/kvserverbase",
         "//pkg/kv/kvserver/liveness/livenesspb",

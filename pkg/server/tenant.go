@@ -237,6 +237,7 @@ func NewTenantServer(
 		args.circularInternalExecutor,
 		serverIterator,
 		args.clock,
+		args.spanStatsAccessor,
 	)
 	args.sqlStatusServer = sStatus
 
@@ -1032,7 +1033,6 @@ func makeTenantSQLServerArgs(
 
 	// TODO(irfansharif): hook up NewGrantCoordinatorSQL.
 	var noopElasticCPUGrantCoord *admission.ElasticCPUGrantCoordinator = nil
-
 	return sqlServerArgs{
 		sqlServerOptionalKVArgs: sqlServerOptionalKVArgs{
 			nodesStatusServer: serverpb.MakeOptionalNodesStatusServer(nil),
@@ -1064,6 +1064,7 @@ func makeTenantSQLServerArgs(
 		nodeDescs:                tenantConnect,
 		systemConfigWatcher:      systemConfigWatcher,
 		spanConfigAccessor:       tenantConnect,
+		spanStatsAccessor:        tenantConnect,
 		nodeDialer:               nodeDialer,
 		distSender:               ds,
 		db:                       db,

@@ -39,6 +39,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keyvisualizer/keyvisstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/spanstats"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
@@ -463,6 +465,7 @@ type statusServer struct {
 	si                       systemInfoOnce
 	stmtDiagnosticsRequester StmtDiagnosticsRequester
 	internalExecutor         *sql.InternalExecutor
+	spanStatsAccessor        spanstats.Accessor
 
 	// cancelSemaphore is a semaphore that limits the number of
 	// concurrent calls to the pgwire query cancellation endpoint. This
@@ -554,6 +557,7 @@ func newStatusServer(
 	internalExecutor *sql.InternalExecutor,
 	serverIterator ServerIterator,
 	clock *hlc.Clock,
+	spanStatsAccessor spanstats.Accessor,
 ) *statusServer {
 	ambient.AddLogTag("status", nil)
 	if !rpcCtx.TenantID.IsSystem() {
@@ -573,10 +577,11 @@ func newStatusServer(
 			serverIterator:     serverIterator,
 			clock:              clock,
 		},
-		cfg:              cfg,
-		db:               db,
-		metricSource:     metricSource,
-		internalExecutor: internalExecutor,
+		cfg:               cfg,
+		db:                db,
+		metricSource:      metricSource,
+		internalExecutor:  internalExecutor,
+		spanStatsAccessor: spanStatsAccessor,
 
 		// See the docstring on cancelSemaphore for details about this initialization.
 		cancelSemaphore: quotapool.NewIntPool("pgwire-cancel", 256),
@@ -606,6 +611,8 @@ func newSystemStatusServer(
 	serverIterator ServerIterator,
 	spanConfigReporter spanconfig.Reporter,
 	clock *hlc.Clock,
+	distSender *kvcoord.DistSender,
+	spanStatsAccessor spanstats.Accessor,
 ) *systemStatusServer {
 	server := newStatusServer(
 		ambient,
@@ -622,6 +629,7 @@ func newSystemStatusServer(
 		internalExecutor,
 		serverIterator,
 		clock,
+		spanStatsAccessor,
 	)
 
 	return &systemStatusServer{
@@ -3385,7 +3393,7 @@ func (s *statusServer) ListExecutionInsights(
 
 // SpanStats requests the total statistics stored on a node for a given key
 // span, which may include multiple ranges.
-func (s *systemStatusServer) SpanStats(
+func (s *statusServer) SpanStats(
 	ctx context.Context, req *serverpb.SpanStatsRequest,
 ) (*serverpb.SpanStatsResponse, error) {
 	ctx = forwardSQLIdentityThroughRPCCalls(ctx)
@@ -3397,35 +3405,14 @@ func (s *systemStatusServer) SpanStats(
 		return nil, err
 	}
 
-	nodeID, local, err := s.parseNodeID(req.NodeID)
-	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, err.Error())
-	}
+	res, err := s.spanStatsAccessor.SpanStats(
+		ctx,
+		roachpb.Key(req.StartKey),
+		roachpb.Key(req.EndKey),
+		req.NodeID,
+	)
 
-	if !local {
-		status, err := s.dialNode(ctx, nodeID)
-		if err != nil {
-			return nil, serverError(ctx, err)
-		}
-		return status.SpanStats(ctx, req)
-	}
-
-	output := &serverpb.SpanStatsResponse{}
-	err = s.stores.VisitStores(func(store *kvserver.Store) error {
-		result, err := store.ComputeStatsForKeySpan(req.StartKey.Next(), req.EndKey)
-		if err != nil {
-			return err
-		}
-		output.TotalStats.Add(result.MVCC)
-		output.RangeCount += int32(result.ReplicaCount)
-		output.ApproximateDiskBytes += result.ApproximateDiskBytes
-		return nil
-	})
-	if err != nil {
-		return nil, serverError(ctx, err)
-	}
-
-	return output, nil
+	return (*serverpb.SpanStatsResponse)(res), err
 }
 
 // Diagnostics returns an anonymized diagnostics report.

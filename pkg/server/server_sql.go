@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvtenant"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangestats"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/spanstats"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
@@ -278,7 +279,10 @@ type sqlServerArgs struct {
 	spanConfigAccessor spanconfig.KVAccessor
 
 	// Used by the Key Visualizer job.
-	spanStatsAccessor *spanstatskvaccessor.SpanStatsKVAccessor
+	keyVisServerAccessor *spanstatskvaccessor.SpanStatsKVAccessor
+
+	// spanStatsAccessor provides access to span stats from KV.
+	spanStatsAccessor spanstats.Accessor
 
 	// Used by DistSQLPlanner to dial KV nodes.
 	nodeDialer *nodedialer.Dialer
@@ -975,6 +979,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		RangeStatsFetcher:          rangeStatsFetcher,
 		EventsExporter:             cfg.eventsServer,
 		NodeDescs:                  cfg.nodeDescs,
+		SpanStatsAccessor:          cfg.spanStatsAccessor,
 	}
 
 	if sqlSchemaChangerTestingKnobs := cfg.TestingKnobs.SQLSchemaChanger; sqlSchemaChangerTestingKnobs != nil {
@@ -1237,7 +1242,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	if codec.ForSystemTenant() {
 		ri := kvcoord.MakeRangeIterator(cfg.distSender)
 		spanStatsConsumer := spanstatsconsumer.New(
-			cfg.spanStatsAccessor,
+			cfg.keyVisServerAccessor,
 			&ri,
 			cfg.Settings,
 			cfg.circularInternalExecutor,

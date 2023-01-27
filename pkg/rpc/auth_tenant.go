@@ -115,6 +115,9 @@ func (a tenantAuthorizer) authorize(
 	case "/cockroach.server.serverpb.Status/TransactionContentionEvents":
 		return a.authTenant(tenID)
 
+	case "/cockroach.server.serverpb.Status/SpanStats":
+		return a.authTenant(tenID)
+
 	case "/cockroach.roachpb.Internal/GetSpanConfigs":
 		return a.authGetSpanConfigs(tenID, req.(*roachpb.GetSpanConfigsRequest))
 
