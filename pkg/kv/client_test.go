@@ -770,7 +770,7 @@ func TestReadConsistencyTypes(t *testing.T) {
 					return ba.CreateReply(), nil
 				})
 
-			clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
+			clock := hlc.NewClockForTesting(nil)
 			db := kv.NewDB(log.MakeTestingAmbientCtxWithNewTracer(), factory, clock, stopper)
 
 			prepWithRC := func() *kv.Batch {
@@ -913,7 +913,7 @@ func TestNodeIDAndObservedTimestamps(t *testing.T) {
 		})
 
 	setup := func(nodeID roachpb.NodeID) *kv.DB {
-		clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
+		clock := hlc.NewClockForTesting(nil)
 		dbCtx := kv.DefaultDBContext(stopper)
 		var c base.NodeIDContainer
 		if nodeID != 0 {
