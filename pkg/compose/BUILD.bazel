@@ -19,7 +19,10 @@ go_test(
     embed = [":compose"],
     gotags = ["compose"],
     tags = ["integration"],
-    deps = ["//pkg/build/bazel"],
+    deps = [
+        "//pkg/build/bazel",
+        "//pkg/util/envutil",
+    ],
 )
 
 get_x_data(name = "get_x_data")

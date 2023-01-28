@@ -17,6 +17,8 @@ services:
       - "${COCKROACH_PATH}:/cockroach/cockroach"
   test:
     image: ubuntu:xenial-20170214
+    environment:
+      - COCKROACH_DEV_LICENSE=$COCKROACH_DEV_LICENSE
     # compare.test is a binary built by the pkg/compose/prepare.sh in non-bazel builds
     command: /compare/compare.test -each ${EACH} -test.run ${TESTS} -artifacts ${ARTIFACTS}
     depends_on:

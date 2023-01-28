@@ -21,8 +21,10 @@ go_test(
         "//pkg/internal/sqlsmith",
         "//pkg/sql/randgen",
         "//pkg/testutils",
+        "//pkg/util/envutil",
         "//pkg/util/randutil",
         "@com_github_jackc_pgx_v4//:pgx",
+        "@com_github_stretchr_testify//require",
     ],
 )
 
