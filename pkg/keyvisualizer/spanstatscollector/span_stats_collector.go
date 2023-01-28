@@ -88,8 +88,8 @@ func (s *SpanStatsCollector) Start(ctx context.Context, stopper *stop.Stopper) {
 		func(ctx context.Context) {
 			s.reset()
 			t := timeutil.NewTimer()
-			samplePeriod := keyvissettings.SampleInterval.Get(&s.settings.SV)
 			for {
+				samplePeriod := keyvissettings.SampleInterval.Get(&s.settings.SV)
 				now := timeutil.Now()
 
 				// The current time is truncated to synchronize the sample
