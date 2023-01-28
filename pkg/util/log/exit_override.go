@@ -12,12 +12,39 @@ package log
 
 import (
 	"context"
+	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 )
+
+var emergencyStopFunc struct {
+	sync.Mutex
+	fn func()
+}
+
+// EmergencyStop invokes the emergency stop function set through
+// SetEmergencyStopFunc, if any. EmergencyStop is a hack to close network
+// connections in the event of a disk stall that may prevent the process from
+// exiting.
+func EmergencyStop() {
+	emergencyStopFunc.Lock()
+	fn := emergencyStopFunc.fn
+	emergencyStopFunc.Unlock()
+	if fn != nil {
+		fn()
+	}
+}
+
+// SetEmergencyStopFunc sets a function that will be called when EmergencyStop
+// is called.
+func SetEmergencyStopFunc(fn func()) {
+	emergencyStopFunc.Lock()
+	emergencyStopFunc.fn = fn
+	emergencyStopFunc.Unlock()
+}
 
 // SetExitFunc allows setting a function that will be called to exit
 // the process when a Fatal message is generated. The supplied bool,

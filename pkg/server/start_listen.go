@@ -118,6 +118,12 @@ func startListenRPCAndSQL(
 			netutil.FatalIfUnexpected(m.Serve())
 		})
 	}))
+
+	// Set an emergency stop function that will stop the GRPC server—closing the
+	// listeners and all open connections. This guards against a persistent disk
+	// stall that prevents the process from exiting or making progress.
+	log.SetEmergencyStopFunc(grpc.Stop)
+
 	if err := stopper.RunAsyncTask(
 		workersCtx, "grpc-quiesce", waitForQuiesce,
 	); err != nil {
