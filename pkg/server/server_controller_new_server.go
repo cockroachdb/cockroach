@@ -145,7 +145,7 @@ func (s *Server) startTenantServerInternal(
 	log.Infof(startCtx, "starting tenant server")
 
 	// Now start the tenant proper.
-	tenantServer, err := NewTenantServer(startCtx, stopper, baseCfg, sqlCfg, s.recorder, tenantNameContainer)
+	tenantServer, err := NewTenantServer(startCtx, stopper, baseCfg, sqlCfg, s.recorder, tenantNameContainer, mtinfopb.ServiceModeShared)
 	if err != nil {
 		return nil, err
 	}

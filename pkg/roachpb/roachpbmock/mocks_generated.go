@@ -257,6 +257,26 @@ func (mr *MockInternalClientMockRecorder) SpanConfigConformance(arg0, arg1 inter
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SpanConfigConformance", reflect.TypeOf((*MockInternalClient)(nil).SpanConfigConformance), varargs...)
 }
 
+// TenantCheckService mocks base method.
+func (m *MockInternalClient) TenantCheckService(arg0 context.Context, arg1 *roachpb.TenantCheckServiceRequest, arg2 ...grpc.CallOption) (*roachpb.TenantCheckServiceResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{arg0, arg1}
+	for _, a := range arg2 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "TenantCheckService", varargs...)
+	ret0, _ := ret[0].(*roachpb.TenantCheckServiceResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// TenantCheckService indicates an expected call of TenantCheckService.
+func (mr *MockInternalClientMockRecorder) TenantCheckService(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{arg0, arg1}, arg2...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TenantCheckService", reflect.TypeOf((*MockInternalClient)(nil).TenantCheckService), varargs...)
+}
+
 // TenantSettings mocks base method.
 func (m *MockInternalClient) TenantSettings(arg0 context.Context, arg1 *roachpb.TenantSettingsRequest, arg2 ...grpc.CallOption) (roachpb.Internal_TenantSettingsClient, error) {
 	m.ctrl.T.Helper()

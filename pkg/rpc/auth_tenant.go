@@ -64,6 +64,9 @@ func (a tenantAuthorizer) authorize(
 	case "/cockroach.roachpb.Internal/TenantSettings":
 		return a.authTenantSettings(tenID, req.(*roachpb.TenantSettingsRequest))
 
+	case "/cockroach.roachpb.Internal/TenantCheckService":
+		return a.authTenantCheckService(tenID, req.(*roachpb.TenantCheckServiceRequest))
+
 	case "/cockroach.rpc.Heartbeat/Ping":
 		return nil // no restriction to usage of this endpoint by tenants
 
@@ -316,6 +319,20 @@ func (a tenantAuthorizer) authTenantSettings(
 	}
 	if args.TenantID != tenID {
 		return authErrorf("tenant settings request for tenant %s not permitted", args.TenantID)
+	}
+	return nil
+}
+
+// authTenantCheckService authorizes the provided tenant to invoke the
+// TenantCheckService RPC with the provided args.
+func (a tenantAuthorizer) authTenantCheckService(
+	tenID roachpb.TenantID, args *roachpb.TenantCheckServiceRequest,
+) error {
+	if !args.TenantID.IsSet() {
+		return authErrorf("tenant check service request with unspecified tenant not permitted")
+	}
+	if args.TenantID != tenID {
+		return authErrorf("tenant check service request for tenant %s not permitted", args.TenantID)
 	}
 	return nil
 }

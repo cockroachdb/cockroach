@@ -3135,6 +3135,21 @@ message JoinNodeResponse {
   roachpb.Version active_version = 4;
 }
 
+// TenantCheckServiceRequest is used by a SQL server to determine
+// whether it (as a tenant) has access to the given service mode.
+message TenantCheckServiceRequest {
+  TenantID tenant_id = 1 [(gogoproto.customname) = "TenantID", (gogoproto.nullable) = false];
+  // service_mode refers to mtinfopb.ServiceMode.
+  int32 service_mode = 2;
+}
+
+// TenantCheckServiceResponse is returned in response to
+// a TenantCheckServiceRequest.
+message TenantCheckServiceResponse {
+  bool success = 1;
+  string reason = 2 [(gogoproto.nullable) = false, (gogoproto.customtype) = "github.com/cockroachdb/redact.RedactableString"];
+}
+
 // Batch and RangeFeed service implemented by nodes for KV API requests.
 service Internal {
   rpc Batch              (BatchRequest)              returns (BatchResponse)                  {}
@@ -3174,6 +3189,9 @@ service Internal {
   // setting overrides.
   rpc TenantSettings (TenantSettingsRequest) returns (stream TenantSettingsEvent) { }
 
+  // TenantCheckService verifies the tenant's data state and
+  // service mode.
+  rpc TenantCheckService(TenantCheckServiceRequest) returns (TenantCheckServiceResponse) {}
 
   // GetRangeDescriptors is used by tenants to get range descriptors for their
   // own ranges.

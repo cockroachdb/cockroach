@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
@@ -46,6 +47,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
@@ -1726,6 +1729,42 @@ func (n *Node) GossipSubscription(
 			return stop.ErrUnavailable
 		}
 	}
+}
+
+func (n *Node) TenantCheckService(
+	ctx context.Context, req *roachpb.TenantCheckServiceRequest,
+) (resp *roachpb.TenantCheckServiceResponse, err error) {
+	ctx = n.AnnotateCtx(ctx)
+
+	tenID := req.TenantID
+	resp = &roachpb.TenantCheckServiceResponse{}
+
+	// Load the tenant record.
+	var rec *mtinfopb.TenantInfo
+	if err := n.execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		var err error
+		rec, err = sql.GetTenantRecordByID(ctx, txn, tenID, n.execCfg.Settings)
+		return err
+	}); err != nil {
+		if pgerror.GetPGCode(err) == pgcode.UndefinedObject {
+			resp.Reason = redact.Sprint(err)
+			return resp, nil
+		}
+		return nil, err
+	}
+
+	// Check the data state and service mode.
+	if rec.DataState != mtinfopb.DataStateReady {
+		resp.Reason = redact.Sprintf("tenant data state is not ready (%v)", redact.Safe(rec.DataState))
+		return resp, nil
+	}
+	expected := mtinfopb.TenantServiceMode(req.ServiceMode)
+	if rec.ServiceMode != expected {
+		resp.Reason = redact.Sprintf("tenant service mode is not %v (%v)", redact.Safe(expected), rec.ServiceMode)
+		return resp, nil
+	}
+	resp.Success = true
+	return resp, nil
 }
 
 // TenantSettings implements the roachpb.InternalServer interface.
