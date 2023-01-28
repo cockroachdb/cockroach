@@ -912,6 +912,14 @@ func (p *Pebble) makeMetricEtcEventListener(ctx context.Context) pebble.EventLis
 				// Note that the below log messages go to the main cockroach log, not
 				// the pebble-specific log.
 				if fatalOnExceeded {
+					// The write stall may prevent the process from exiting. If
+					// the process won't exit, we can at least terminate all our
+					// RPC connections first.
+					//
+					// See pkg/cli.runStart for where this function is hooked
+					// up.
+					log.MakeProcessUnavailable()
+
 					log.Fatalf(ctx, "disk stall detected: pebble unable to write to %s in %.2f seconds",
 						info.Path, redact.Safe(info.Duration.Seconds()))
 				} else {
