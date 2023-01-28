@@ -88,8 +88,8 @@ func (s *SpanStatsCollector) Start(ctx context.Context, stopper *stop.Stopper) {
 		func(ctx context.Context) {
 			s.reset()
 			t := timeutil.NewTimer()
-			samplePeriod := keyvissettings.SampleInterval.Get(&s.settings.SV)
 			for {
+				samplePeriod := keyvissettings.SampleInterval.Get(&s.settings.SV)
 				now := timeutil.Now()
 
 				// The current time is truncated to synchronize the sample
@@ -191,6 +191,7 @@ func discardStaleUpdates(currentTime time.Time, updates []boundaryUpdate) []boun
 			// The boundary update at index 0 will never be applied,
 			// so it can be discarded.
 			updates[0] = boundaryUpdate{}
+			updates = updates[1:]
 		} else {
 			// The update at boundary index 0 should be applied,
 			// so no more discarding is needed.

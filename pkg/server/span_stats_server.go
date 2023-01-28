@@ -18,7 +18,6 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/keyvisualizer/keyvispb"
-	"github.com/cockroachdb/cockroach/pkg/keyvisualizer/keyvissettings"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -74,8 +73,6 @@ func (s *SpanStatsServer) getSamplesFromFanOut(
 	ctx context.Context, timestamp time.Time,
 ) (*keyvispb.GetSamplesResponse, error) {
 
-	samplePeriod := keyvissettings.SampleInterval.Get(&s.settings.SV)
-
 	dialFn := func(ctx context.Context, nodeID roachpb.NodeID) (interface{}, error) {
 		conn, err := s.nodeDialer.Dial(ctx, nodeID, rpc.DefaultClass)
 		return keyvispb.NewKeyVisualizerClient(conn), err
@@ -99,10 +96,11 @@ func (s *SpanStatsServer) getSamplesFromFanOut(
 		nodeResponse := resp.(*keyvispb.GetSamplesResponse)
 
 		// Collection is spread across each node, so samples that belong to the
-		// same sample period should be aggregated together.
+		// same sample period should be aggregated together. The collectors
+		// guarantee that corresponding sample fragments have the same sample time.
 		for _, sampleFragment := range nodeResponse.Samples {
-			tNanos := sampleFragment.SampleTime.Truncate(samplePeriod).UnixNano()
-			globalSamples[tNanos] = append(globalSamples[tNanos], sampleFragment)
+			sampleTime := sampleFragment.SampleTime.UnixNano()
+			globalSamples[sampleTime] = append(globalSamples[sampleTime], sampleFragment)
 		}
 	}
 
