@@ -288,7 +288,7 @@ func createTestStore(
 	ctx context.Context, t testing.TB, opts testStoreOpts, stopper *stop.Stopper,
 ) (*Store, *timeutil.ManualTime) {
 	manual := timeutil.NewManualTime(timeutil.Unix(0, 123))
-	cfg := TestStoreConfig(hlc.NewClock(manual, time.Nanosecond) /* maxOffset */)
+	cfg := TestStoreConfig(hlc.NewClockForTesting(manual))
 	store := createTestStoreWithConfig(ctx, t, stopper, opts, &cfg)
 	return store, manual
 }
@@ -959,7 +959,7 @@ func TestStoreObservedTimestamp(t *testing.T) {
 	for _, test := range testCases {
 		func() {
 			manual := timeutil.NewManualTime(timeutil.Unix(0, 123))
-			cfg := TestStoreConfig(hlc.NewClock(manual, time.Nanosecond) /* maxOffset */)
+			cfg := TestStoreConfig(hlc.NewClockForTesting(manual))
 			cfg.TestingKnobs.EvalKnobs.TestingEvalFilter =
 				func(filterArgs kvserverbase.FilterArgs) *roachpb.Error {
 					if bytes.Equal(filterArgs.Req.Header().Key, badKey) {
@@ -1170,7 +1170,9 @@ func TestStoreSendWithClockOffset(t *testing.T) {
 	ctx := context.Background()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	store, _ := createTestStore(ctx, t, testStoreOpts{createSystemRanges: true}, stopper)
+	cfg := TestStoreConfig(hlc.NewClock(timeutil.NewManualTime(timeutil.Unix(0, 123)),
+		time.Millisecond /* maxOffset */))
+	store := createTestStoreWithConfig(ctx, t, stopper, testStoreOpts{createSystemRanges: true}, &cfg)
 	args := getArgs([]byte("a"))
 	// Set args timestamp to exceed max offset.
 	now := hlc.ClockTimestamp(store.cfg.Clock.Now().Add(store.cfg.Clock.MaxOffset().Nanoseconds()+1, 0))
@@ -1936,7 +1938,7 @@ func TestStoreScanResumeTSCache(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 	manualClock := timeutil.NewManualTime(timeutil.Unix(0, 123))
-	cfg := TestStoreConfig(hlc.NewClock(manualClock, time.Nanosecond))
+	cfg := TestStoreConfig(hlc.NewClockForTesting(manualClock))
 	cfg.Settings = cluster.MakeTestingClusterSettings()
 	allowDroppingLatchesBeforeEval.Override(ctx, &cfg.Settings.SV, false)
 	store := createTestStoreWithConfig(ctx, t, stopper, testStoreOpts{createSystemRanges: true}, &cfg)
@@ -2461,7 +2463,7 @@ func TestStoreScanMultipleIntents(t *testing.T) {
 
 	var resolveCount int32
 	manual := timeutil.NewManualTime(timeutil.Unix(0, 123))
-	cfg := TestStoreConfig(hlc.NewClock(manual, time.Nanosecond) /* maxOffset */)
+	cfg := TestStoreConfig(hlc.NewClockForTesting(manual))
 	cfg.TestingKnobs.EvalKnobs.TestingEvalFilter =
 		func(filterArgs kvserverbase.FilterArgs) *roachpb.Error {
 			if _, ok := filterArgs.Req.(*roachpb.ResolveIntentRequest); ok {
@@ -3415,7 +3417,7 @@ func TestAllocatorCheckRangeUnconfigured(t *testing.T) {
 
 		tc := testContext{}
 		tc.manualClock = timeutil.NewManualTime(timeutil.Unix(0, 123))
-		cfg := TestStoreConfig(hlc.NewClock(tc.manualClock, time.Nanosecond) /* maxOffset */)
+		cfg := TestStoreConfig(hlc.NewClockForTesting(tc.manualClock))
 		if !confAvailable {
 			cfg.TestingKnobs.MakeSystemConfigSpanUnavailableToQueues = true
 		}
@@ -3652,7 +3654,7 @@ func TestAllocatorCheckRange(t *testing.T) {
 			defer stopper.Stop(context.Background())
 			gossiputil.NewStoreGossiper(g).GossipStores(tc.stores, t)
 
-			clock := hlc.NewClock(manual, time.Nanosecond)
+			clock := hlc.NewClockForTesting(manual)
 			cfg := TestStoreConfig(clock)
 			cfg.Gossip = g
 			cfg.StorePool = sp

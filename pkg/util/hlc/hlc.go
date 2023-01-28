@@ -190,6 +190,15 @@ func NewClockWithSystemTimeSource(maxOffset time.Duration) *Clock {
 	return NewClock(timeutil.DefaultTimeSource{}, maxOffset)
 }
 
+// NewClockForTesting creates a new Clock for tests that don't care about clock
+// offsets, disabling offset checks. A nil wallClock uses the system clock source.
+func NewClockForTesting(wallClock WallClock) *Clock {
+	if wallClock == nil {
+		wallClock = timeutil.DefaultTimeSource{}
+	}
+	return NewClock(wallClock, 0 /* maxOffset */)
+}
+
 // NewClock returns a Clock configured to use a specified time source. Use
 // NewClockWithSystemTimeSource to use the system clock.
 //

@@ -135,7 +135,7 @@ func TestOutboxInbox(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
-	clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClockForTesting(nil)
 	_, mockServer, addr, err := execinfrapb.StartMockDistSQLServer(ctx, clock, stopper, execinfra.StaticSQLInstanceID)
 	require.NoError(t, err)
 
@@ -488,7 +488,7 @@ func TestInboxHostCtxCancellation(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
-	clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClockForTesting(nil)
 	_, mockServer, addr, err := execinfrapb.StartMockDistSQLServer(ctx, clock, stopper, execinfra.StaticSQLInstanceID)
 	require.NoError(t, err)
 
@@ -576,7 +576,7 @@ func TestOutboxInboxMetadataPropagation(t *testing.T) {
 	defer stopper.Stop(ctx)
 
 	_, mockServer, addr, err := execinfrapb.StartMockDistSQLServer(ctx,
-		hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */), stopper, execinfra.StaticSQLInstanceID,
+		hlc.NewClockForTesting(nil), stopper, execinfra.StaticSQLInstanceID,
 	)
 	require.NoError(t, err)
 
@@ -769,7 +769,7 @@ func BenchmarkOutboxInbox(b *testing.B) {
 	defer stopper.Stop(ctx)
 
 	_, mockServer, addr, err := execinfrapb.StartMockDistSQLServer(ctx,
-		hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */), stopper, execinfra.StaticSQLInstanceID,
+		hlc.NewClockForTesting(nil), stopper, execinfra.StaticSQLInstanceID,
 	)
 	require.NoError(b, err)
 
@@ -842,7 +842,7 @@ func TestOutboxStreamIDPropagation(t *testing.T) {
 	defer stopper.Stop(ctx)
 
 	_, mockServer, addr, err := execinfrapb.StartMockDistSQLServer(ctx,
-		hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */), stopper, execinfra.StaticSQLInstanceID,
+		hlc.NewClockForTesting(nil), stopper, execinfra.StaticSQLInstanceID,
 	)
 	require.NoError(t, err)
 	dialer := &execinfrapb.MockDialer{Addr: addr}

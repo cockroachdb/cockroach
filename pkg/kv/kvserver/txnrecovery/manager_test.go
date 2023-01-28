@@ -13,7 +13,6 @@ package txnrecovery
 import (
 	"context"
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -27,7 +26,7 @@ import (
 
 func makeManager(s *kv.Sender) (Manager, *hlc.Clock, *stop.Stopper) {
 	ac := log.MakeTestingAmbientCtxWithNewTracer()
-	clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClockForTesting(nil)
 	stopper := stop.NewStopper()
 	db := kv.NewDB(ac, kv.NonTransactionalFactoryFunc(func(
 		ctx context.Context, ba *roachpb.BatchRequest,

@@ -12,7 +12,6 @@ package kvserver
 
 import (
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary/rspb"
@@ -37,7 +36,7 @@ func TestReadSummaryApplyForR1(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	baseTS := hlc.Timestamp{WallTime: 123}
-	clock := hlc.NewClock(timeutil.NewManualTime(baseTS.GoTime()), time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClockForTesting(timeutil.NewManualTime(baseTS.GoTime()))
 	tc := tscache.New(clock)
 
 	r1desc := roachpb.RangeDescriptor{
@@ -75,7 +74,7 @@ func TestReadSummaryCollectForR1(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	baseTS := hlc.Timestamp{WallTime: 123}
-	clock := hlc.NewClock(timeutil.NewManualTime(baseTS.GoTime()), time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClockForTesting(timeutil.NewManualTime(baseTS.GoTime()))
 	tc := tscache.New(clock)
 
 	r1desc := roachpb.RangeDescriptor{

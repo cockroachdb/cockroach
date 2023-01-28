@@ -250,7 +250,7 @@ func makeConfig(s kv.SenderFunc, stopper *stop.Stopper) Config {
 	cfg.RangeDesc = &roachpb.RangeDescriptor{
 		StartKey: roachpb.RKeyMin, EndKey: roachpb.RKeyMax,
 	}
-	cfg.Clock = hlc.NewClock(timeutil.NewManualTime(timeutil.Unix(0, 123)), time.Nanosecond /* maxOffset */)
+	cfg.Clock = hlc.NewClockForTesting(timeutil.NewManualTime(timeutil.Unix(0, 123)))
 	cfg.Stopper = stopper
 	cfg.Metrics = NewMetrics(time.Minute)
 	if s != nil {

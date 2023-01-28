@@ -77,7 +77,7 @@ func CreateTestStorePool(
 ) (*stop.Stopper, *gossip.Gossip, *timeutil.ManualTime, *StorePool, *MockNodeLiveness) {
 	stopper := stop.NewStopper()
 	mc := timeutil.NewManualTime(timeutil.Unix(0, 123))
-	clock := hlc.NewClock(mc, time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClockForTesting(mc)
 	ambientCtx := log.MakeTestingAmbientContext(stopper.Tracer())
 	g := gossip.NewTest(1, stopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef())
 	mnl := NewMockNodeLiveness(defaultNodeStatus)

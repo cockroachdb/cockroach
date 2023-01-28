@@ -704,7 +704,7 @@ func TestGossipJoinTwoClusters(t *testing.T) {
 			clusterID = clusterIDs[0]
 		}
 		clusterIDs = append(clusterIDs, clusterID)
-		clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
+		clock := hlc.NewClockForTesting(nil)
 		rpcContext := rpc.NewInsecureTestingContextWithClusterID(ctx, clock, stopper, clusterID)
 
 		server, err := rpc.NewServer(rpcContext)

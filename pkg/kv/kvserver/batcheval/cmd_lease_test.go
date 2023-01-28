@@ -132,7 +132,7 @@ func TestLeaseCommandLearnerReplica(t *testing.T) {
 	}
 	desc := roachpb.RangeDescriptor{}
 	desc.SetReplicas(roachpb.MakeReplicaSet(replicas))
-	clock := hlc.NewClock(timeutil.NewManualTime(timeutil.Unix(0, 123)), time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClockForTesting(timeutil.NewManualTime(timeutil.Unix(0, 123)))
 	cArgs := CommandArgs{
 		EvalCtx: (&MockEvalCtx{
 			ClusterSettings: cluster.MakeTestingClusterSettings(),
@@ -194,7 +194,7 @@ func TestLeaseTransferForwardsStartTime(t *testing.T) {
 			desc := roachpb.RangeDescriptor{}
 			desc.SetReplicas(roachpb.MakeReplicaSet(replicas))
 			manual := timeutil.NewManualTime(timeutil.Unix(0, 123))
-			clock := hlc.NewClock(manual, time.Nanosecond /* maxOffset */)
+			clock := hlc.NewClockForTesting(manual)
 
 			prevLease := roachpb.Lease{
 				Replica:  replicas[0],

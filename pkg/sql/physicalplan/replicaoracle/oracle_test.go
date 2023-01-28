@@ -82,7 +82,7 @@ func TestClosest(t *testing.T) {
 }
 
 func makeGossip(t *testing.T, stopper *stop.Stopper, nodeIDs []int) (*gossip.Gossip, *hlc.Clock) {
-	clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClockForTesting(nil)
 
 	const nodeID = 1
 	g := gossip.NewTest(nodeID, stopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef())

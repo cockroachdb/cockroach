@@ -323,7 +323,7 @@ func TestProposalBuffer(t *testing.T) {
 	}
 	var b propBuf
 	var pc proposalCreator
-	clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClockForTesting(nil)
 	b.Init(&p, tracker.NewLockfreeTracker(), clock, cluster.MakeTestingClusterSettings())
 
 	// Insert propBufArrayMinSize proposals. The buffer should not be flushed.
@@ -392,7 +392,7 @@ func TestProposalBufferConcurrentWithDestroy(t *testing.T) {
 	}
 	var b propBuf
 	var pc proposalCreator
-	clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClockForTesting(nil)
 	b.Init(&p, tracker.NewLockfreeTracker(), clock, cluster.MakeTestingClusterSettings())
 
 	dsErr := errors.New("destroyed")
@@ -460,7 +460,7 @@ func TestProposalBufferRegistersAllOnProposalError(t *testing.T) {
 	p.raftGroup = raft
 	var b propBuf
 	var pc proposalCreator
-	clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClockForTesting(nil)
 	b.Init(&p, tracker.NewLockfreeTracker(), clock, cluster.MakeTestingClusterSettings())
 
 	num := propBufArrayMinSize
@@ -620,7 +620,7 @@ func TestProposalBufferRejectLeaseAcqOnFollower(t *testing.T) {
 			p.leaderNotLive = tc.leaderNotLive
 
 			var b propBuf
-			clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
+			clock := hlc.NewClockForTesting(nil)
 			tracker := tracker.NewLockfreeTracker()
 			b.Init(&p, tracker, clock, cluster.MakeTestingClusterSettings())
 
@@ -761,7 +761,7 @@ func TestProposalBufferRejectUnsafeLeaseTransfer(t *testing.T) {
 			p.fi = proposerFirstIndex
 
 			var b propBuf
-			clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
+			clock := hlc.NewClockForTesting(nil)
 			tracker := tracker.NewLockfreeTracker()
 			b.Init(&p, tracker, clock, cluster.MakeTestingClusterSettings())
 
