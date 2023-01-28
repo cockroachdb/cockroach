@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/obs"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -196,6 +197,9 @@ type SQLServer struct {
 	// upgradeManager deals with cluster version upgrades on bootstrap and on
 	// `set cluster setting version = <v>`.
 	upgradeManager *upgrademanager.Manager
+
+	// serviceMode is the service mode this server was started with.
+	serviceMode mtinfopb.TenantServiceMode
 }
 
 // sqlServerOptionalKVArgs are the arguments supplied to newSQLServer which are
@@ -239,6 +243,7 @@ type sqlServerOptionalKVArgs struct {
 // are only available if the SQL server runs as part of a standalone SQL node.
 type sqlServerOptionalTenantArgs struct {
 	tenantConnect    kvtenant.Connector
+	serviceMode      mtinfopb.TenantServiceMode
 	promRuleExporter *metric.PrometheusRuleExporter
 }
 
@@ -1341,6 +1346,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		cfg:                            cfg.BaseConfig,
 		internalDBMemMonitor:           internalDBMonitor,
 		upgradeManager:                 upgradeMgr,
+		serviceMode:                    cfg.serviceMode,
 	}, nil
 }
 
@@ -1369,11 +1375,12 @@ func (s *SQLServer) preStart(
 		if err := s.tenantConnect.Start(ctx); err != nil {
 			return err
 		}
+		if err := s.startCheckService(ctx, stopper); err != nil {
+			return err
+		}
 	}
 
 	// Load the multi-region enum by reading the system database's descriptor.
-	// This also serves as a simple check to see if a tenant exist (i.e. by
-	// checking whether the system db has been bootstrapped).
 	regionPhysicalRep, err := sql.GetLocalityRegionEnumPhysicalRepresentation(
 		ctx, s.internalDB, keys.SystemDatabaseID, s.distSQLServer.Locality,
 	)
@@ -1554,6 +1561,56 @@ func (s *SQLServer) preStart(
 		s.execCfg.CaptureIndexUsageStatsKnobs,
 	)
 	s.execCfg.SyntheticPrivilegeCache.Start(ctx)
+	return nil
+}
+
+// startCheckService verifies that the tenant has the right
+// service mode initially, then starts an async checker
+// to stop the server if the service mode changes.
+func (s *SQLServer) startCheckService(ctx context.Context, stopper *stop.Stopper) error {
+	// Do a synchronous check, to prevent starting the SQL service
+	// outright if the service mode is initially incorrect.
+	if err := s.checkService(ctx, true /* sync */); err != nil {
+		return err
+	}
+	return stopper.RunAsyncTask(ctx, "check-tenant-service", func(ctx context.Context) {
+		const checkInterval = 5 * time.Second
+		for {
+			select {
+			case <-stopper.ShouldQuiesce():
+				return
+			case <-ctx.Done():
+				return
+			case <-time.After(checkInterval):
+			}
+
+			if err := s.checkService(ctx, false /* sync */); err != nil {
+				log.Warningf(ctx, "unable to check tenant service: %v", err)
+			}
+		}
+	})
+}
+
+func (s *SQLServer) checkService(ctx context.Context, sync bool) error {
+	if s.tenantConnect == nil {
+		return errors.AssertionFailedf("programming error: can only check service with a tenant connector")
+	}
+	req := roachpb.TenantCheckServiceRequest{
+		TenantID:    s.execCfg.RPCContext.TenantID,
+		ServiceMode: int32(s.serviceMode),
+	}
+	resp, err := s.tenantConnect.TenantCheckService(ctx, &req)
+	if err != nil {
+		return err
+	}
+	if !resp.Success {
+		err = errors.Newf("tenant service check failed: %v", resp.Reason)
+		if sync {
+			return err
+		}
+		s.stopTrigger.signalStop(ctx,
+			MakeShutdownRequest(ShutdownReasonFatalError, err))
+	}
 	return nil
 }
 

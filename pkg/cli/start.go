@@ -832,6 +832,7 @@ func waitForShutdown(
 		returnErr = shutdownRequest.ShutdownCause()
 		// There's no point in draining if the server didn't even fully start.
 		drain := shutdownRequest.Reason != server.ShutdownReasonServerStartupError
+		fmt.Fprintf(os.Stderr, "WOO %+v\n", returnErr)
 		startShutdownAsync(serverStatusMu, stopWithoutDrain, drain)
 
 	case sig := <-signalCh:
@@ -953,6 +954,7 @@ func waitForShutdown(
 		break
 	}
 
+	fmt.Fprintf(os.Stderr, "%+v", returnErr)
 	return returnErr
 }
 

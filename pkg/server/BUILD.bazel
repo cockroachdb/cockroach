@@ -210,6 +210,7 @@ go_library(
         "//pkg/sql/optionalnodeliveness",
         "//pkg/sql/parser",
         "//pkg/sql/pgwire",
+        "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/pgwire/pgwirecancel",
         "//pkg/sql/physicalplan",

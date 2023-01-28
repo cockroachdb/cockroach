@@ -12,9 +12,12 @@ package cli
 
 import (
 	"context"
+	"fmt"
+	"os"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/redact"
@@ -55,8 +58,14 @@ well unless it can be verified using a trusted root certificate store. That is,
 	RunE: clierrorplus.MaybeDecorateError(runStartSQL),
 }
 
-func runStartSQL(cmd *cobra.Command, args []string) error {
+func runStartSQL(cmd *cobra.Command, args []string) (resErr error) {
 	const serverType redact.SafeString = "SQL server"
+
+	defer func() {
+		if resErr != nil {
+			fmt.Fprintf(os.Stderr, "WAA %+v\n", resErr)
+		}
+	}()
 
 	initConfig := func(ctx context.Context) error {
 		if err := serverCfg.InitSQLServer(ctx); err != nil {
@@ -94,6 +103,7 @@ func runStartSQL(cmd *cobra.Command, args []string) error {
 			serverCfg.SQLConfig,
 			nil, /* parentRecorder */
 			nil, /* tenantNameContainer */
+			mtinfopb.ServiceModeExternal,
 		)
 		if err != nil {
 			return nil, err

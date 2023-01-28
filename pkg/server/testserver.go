@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security/certnames"
@@ -1106,6 +1107,7 @@ func (ts *TestServer) StartTenant(
 		sqlCfg,
 		ts.recorder,
 		roachpb.NewTenantNameContainer(params.TenantName),
+		mtinfopb.ServiceModeExternal,
 	)
 	if err != nil {
 		return nil, err
