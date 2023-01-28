@@ -802,7 +802,8 @@ func makeTenantSQLServerArgs(
 	instanceIDContainer := baseCfg.IDContainer.SwitchToSQLIDContainer()
 	startupCtx = baseCfg.AmbientCtx.AnnotateCtx(startupCtx)
 
-	clock := hlc.NewClockWithSystemTimeSource(time.Duration(baseCfg.MaxOffset))
+	clock := hlc.NewClockWithSystemTimeSource(
+		time.Duration(baseCfg.MaxOffset), baseCfg.ComputeToleratedOffset())
 
 	registry := metric.NewRegistry()
 	ruleRegistry := metric.NewRuleRegistry()

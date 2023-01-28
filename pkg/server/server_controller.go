@@ -921,6 +921,7 @@ func makeInMemoryTenantServerConfig(
 	baseCfg.Config.DisableClusterNameVerification = kvServerCfg.Config.DisableClusterNameVerification
 
 	baseCfg.MaxOffset = kvServerCfg.BaseConfig.MaxOffset
+	baseCfg.ToleratedOffset = kvServerCfg.BaseConfig.ToleratedOffset
 	baseCfg.StorageEngine = kvServerCfg.BaseConfig.StorageEngine
 	baseCfg.TestingInsecureWebAccess = kvServerCfg.BaseConfig.TestingInsecureWebAccess
 	baseCfg.Locality = kvServerCfg.BaseConfig.Locality

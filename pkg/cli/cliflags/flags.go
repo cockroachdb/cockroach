@@ -894,17 +894,46 @@ only tested and supported on Linux.
 	MaxOffset = FlagInfo{
 		Name: "max-offset",
 		Description: `
-Maximum allowed clock offset for the cluster. If observed clock offsets exceed
-this limit, servers will crash to minimize the likelihood of reading
-inconsistent data. Increasing this value will increase the time to recovery of
-failures as well as the frequency of uncertainty-based read restarts.
+Maximum clock offset for the cluster. If real clock skew exceeds this value,
+consistency guarantees can no longer be upheld, possibly resulting in stale
+reads and other anomalies. This value affects the frequency of uncertainty-based
+read restarts and write latencies for global tables.
+<PRE>
+
+</PRE>
+If a node detects that its clock offset from other nodes is too large, it will
+self-terminate to protect consistency guarantees. This threshold can be
+configured via --tolerated-offset.
 <PRE>
 
 </PRE>
 This value should be the same on all nodes in the cluster. It is allowed for it
 to differ, such that the max-offset value can be changed via a rolling restart
-of the cluster, in which case the real clock offset between nodes must be below
+of the cluster, in which case the real clock skew between nodes must be below
 the smallest max-offset value of any node.
+`,
+	}
+
+	ToleratedOffset = FlagInfo{
+		Name: "tolerated-offset",
+		Description: `
+The tolerated clock offset with other cluster nodes, as measured via RPC
+heartbeats. If the node's clock offset exceeds tolerated-offset for a majority
+of other cluster nodes, the node will self-terminate to protect read
+consistency.
+<PRE>
+
+</PRE>
+This can be set lower than --max-offset to terminate the node before it is at
+risk of read inconsistencies, or higher than --max-offset when running on
+reliable, high-precision clock infrastructure to avoid spurious crashes due to
+network latencies (e.g. with a max-offset on the order of 10ms). In the latter
+case, the operator must guarantee that real clock skew never exceeds max-offset,
+to avoid read inconsistencies and other anomalies.
+<PRE>
+
+</PRE>
+When 0, this defaults to 80%% of --max-offset.
 `,
 	}
 

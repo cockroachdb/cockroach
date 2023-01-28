@@ -165,7 +165,7 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 	}
 	if knobs := params.Knobs.Store; knobs != nil {
 		if mo := knobs.(*kvserver.StoreTestingKnobs).MaxOffset; mo != 0 {
-			cfg.MaxOffset = MaxOffsetType(mo)
+			cfg.MaxOffset = OffsetType(mo)
 		}
 	}
 	if params.Knobs.Server != nil {

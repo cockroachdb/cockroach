@@ -801,7 +801,7 @@ func TestProposalBufferClosedTimestamp(t *testing.T) {
 
 	const maxOffset = 500 * time.Millisecond
 	mc := timeutil.NewManualTime(timeutil.Unix(1613588135, 0))
-	clock := hlc.NewClock(mc, maxOffset /* maxOffset */)
+	clock := hlc.NewClock(mc, maxOffset, maxOffset)
 	st := cluster.MakeTestingClusterSettings()
 	closedts.TargetDuration.Override(ctx, &st.SV, time.Second)
 	closedts.SideTransportCloseInterval.Override(ctx, &st.SV, 200*time.Millisecond)
