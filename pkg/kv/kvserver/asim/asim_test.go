@@ -14,7 +14,6 @@ import (
 	"context"
 	"fmt"
 	"math"
-	"math/rand"
 	"os"
 	"testing"
 	"time"
@@ -32,38 +31,15 @@ import (
 func TestRunAllocatorSimulator(t *testing.T) {
 	ctx := context.Background()
 	settings := config.DefaultSimulationSettings()
-	start := state.TestingStartTime()
-	end := start.Add(1000 * time.Second)
+	duration := 1000 * time.Second
 	interval := 10 * time.Second
 	rwg := make([]workload.Generator, 1)
-	rwg[0] = testCreateWorkloadGenerator(start, 1, 10)
+	rwg[0] = workload.TestCreateWorkloadGenerator(settings.Seed, settings.StartTime, 1, 10)
 	m := asim.NewMetricsTracker(os.Stdout)
-	changer := state.NewReplicaChanger()
 	s := state.LoadConfig(state.ComplexConfig)
 
-	sim := asim.NewSimulator(start, end, interval, interval, rwg, s, changer, settings, m)
+	sim := asim.NewSimulator(duration, interval, interval, rwg, s, settings, m)
 	sim.RunSim(ctx)
-}
-
-// testCreateWorkloadGenerator creates a simple uniform workload generator that
-// will generate load events at a rate of 500 per store. The read ratio is
-// fixed to 0.95.
-func testCreateWorkloadGenerator(start time.Time, stores int, keySpan int64) workload.Generator {
-	readRatio := 0.95
-	minWriteSize := 128
-	maxWriteSize := 256
-	workloadRate := float64(stores * 500)
-	r := rand.New(rand.NewSource(state.TestingWorkloadSeed()))
-
-	return workload.NewRandomGenerator(
-		start,
-		state.TestingWorkloadSeed(),
-		workload.NewUniformKeyGen(keySpan, r),
-		workloadRate,
-		readRatio,
-		maxWriteSize,
-		minWriteSize,
-	)
 }
 
 // TestAllocatorSimulatorSpeed tests that the simulation runs at a rate of at
@@ -78,11 +54,10 @@ func TestAllocatorSimulatorSpeed(t *testing.T) {
 	skip.UnderStressRace(t, skipString)
 	skip.UnderRace(t, skipString)
 
-	start := state.TestingStartTime()
 	settings := config.DefaultSimulationSettings()
 
 	// Run each simulation for 5 minutes.
-	end := start.Add(5 * time.Minute)
+	duration := 5 * time.Minute
 	bgInterval := 10 * time.Second
 	interval := 2 * time.Second
 
@@ -99,8 +74,7 @@ func TestAllocatorSimulatorSpeed(t *testing.T) {
 
 	sample := func() int64 {
 		rwg := make([]workload.Generator, 1)
-		rwg[0] = testCreateWorkloadGenerator(start, stores, int64(keyspace))
-		changer := state.NewReplicaChanger()
+		rwg[0] = workload.TestCreateWorkloadGenerator(settings.Seed, settings.StartTime, stores, int64(keyspace))
 		m := asim.NewMetricsTracker() // no output
 		replicaDistribution := make([]float64, stores)
 
@@ -116,7 +90,7 @@ func TestAllocatorSimulatorSpeed(t *testing.T) {
 		}
 
 		s := state.NewTestStateReplDistribution(replicaDistribution, ranges, replsPerRange, keyspace)
-		sim := asim.NewSimulator(start, end, interval, bgInterval, rwg, s, changer, settings, m)
+		sim := asim.NewSimulator(duration, interval, bgInterval, rwg, s, settings, m)
 
 		startTime := timeutil.Now()
 		sim.RunSim(ctx)
@@ -148,11 +122,10 @@ func TestAllocatorSimulatorSpeed(t *testing.T) {
 
 func TestAllocatorSimulatorDeterministic(t *testing.T) {
 
-	start := state.TestingStartTime()
 	settings := config.DefaultSimulationSettings()
 
 	runs := 3
-	end := start.Add(15 * time.Minute)
+	duration := 15 * time.Minute
 	bgInterval := 10 * time.Second
 	interval := 2 * time.Second
 
@@ -171,8 +144,7 @@ func TestAllocatorSimulatorDeterministic(t *testing.T) {
 
 	for run := 0; run < runs; run++ {
 		rwg := make([]workload.Generator, 1)
-		rwg[0] = testCreateWorkloadGenerator(start, stores, int64(keyspace))
-		changer := state.NewReplicaChanger()
+		rwg[0] = workload.TestCreateWorkloadGenerator(settings.Seed, settings.StartTime, stores, int64(keyspace))
 		m := asim.NewMetricsTracker() // no output
 		replicaDistribution := make([]float64, stores)
 
@@ -188,7 +160,7 @@ func TestAllocatorSimulatorDeterministic(t *testing.T) {
 		}
 
 		s := state.NewTestStateReplDistribution(replicaDistribution, ranges, replsPerRange, keyspace)
-		sim := asim.NewSimulator(start, end, interval, bgInterval, rwg, s, changer, settings, m)
+		sim := asim.NewSimulator(duration, interval, bgInterval, rwg, s, settings, m)
 
 		ctx := context.Background()
 		sim.RunSim(ctx)

@@ -24,7 +24,7 @@ import (
 func TestGossip(t *testing.T) {
 	settings := config.DefaultSimulationSettings()
 
-	tick := state.TestingStartTime()
+	tick := settings.StartTime
 	s := state.NewTestStateEvenDistribution(3, 100, 3, 1000)
 	details := map[state.StoreID]*map[roachpb.StoreID]*storepool.StoreDetail{}
 

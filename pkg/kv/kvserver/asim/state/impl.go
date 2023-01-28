@@ -61,7 +61,7 @@ func newState(settings *config.SimulationSettings) *state {
 		nodes:      make(map[NodeID]*node),
 		stores:     make(map[StoreID]*store),
 		loadsplits: make(map[StoreID]LoadSplitter),
-		clock:      &ManualSimClock{nanos: 0},
+		clock:      &ManualSimClock{nanos: settings.StartTime.UnixNano()},
 		ranges:     newRMap(),
 		usageInfo:  newClusterUsageInfo(),
 		settings:   config.DefaultSimulationSettings(),
@@ -713,10 +713,20 @@ func (s *state) ReplicaLoad(rangeID RangeID, storeID StoreID) ReplicaLoad {
 	// currently on the store given. Otherwise, return an empty, zero counter
 	// value.
 	store, ok := s.LeaseholderStore(rangeID)
-	if ok && store.StoreID() == storeID {
-		return s.load[rangeID]
+	if !ok {
+		panic(fmt.Sprintf("no leaseholder store found for range %d", storeID))
 	}
-	return &ReplicaLoadCounter{}
+
+	// TODO(kvoli): The requested storeID is not the leaseholder. Non
+	// leaseholder load tracking is not currently supported but is checked by
+	// other components such as hot ranges. In this case, ignore it but we
+	// should also track non leaseholder load. See load.go for more. Return an
+	// empty initialized load counter here.
+	if store.StoreID() != storeID {
+		return NewReplicaLoadCounter(s.clock)
+	}
+
+	return s.load[rangeID]
 }
 
 // ClusterUsageInfo returns the usage information for the Range with ID
