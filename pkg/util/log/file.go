@@ -255,6 +255,13 @@ func (l *fileSink) flushAndMaybeSyncLocked(doSync bool) {
 		// recursive back-and-forth between the copy of FATAL events to
 		// OPS and disk slowness detection here. (See the implementation
 		// of logfDepth for details.)
+
+		// The write stall may prevent the process from exiting. If the process
+		// won't exit, we can at least terminate all our RPC connections first.
+		//
+		// See pkg/cli.runStart for where this function is hooked up.
+		MakeProcessUnavailable()
+
 		Ops.Shoutf(context.Background(), severity.FATAL,
 			"disk stall detected: unable to sync log files within %s", maxSyncDuration,
 		)
