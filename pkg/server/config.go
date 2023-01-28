@@ -73,7 +73,7 @@ const (
 	TempDirsRecordFilename = "temp-dirs-record.txt"
 	defaultEventLogEnabled = true
 
-	maximumMaxClockOffset = 5 * time.Second
+	maximumClockOffset = 5 * time.Second
 
 	minimumNetworkFileDescriptors     = 256
 	recommendedNetworkFileDescriptors = 5000
@@ -89,30 +89,30 @@ var productionSettingsWebpage = fmt.Sprintf(
 	docs.URL("recommended-production-settings.html"),
 )
 
-// MaxOffsetType stores the configured MaxOffset.
-type MaxOffsetType time.Duration
+// OffsetType stores a clock offset.
+type OffsetType time.Duration
 
 // Type implements the pflag.Value interface.
-func (mo *MaxOffsetType) Type() string {
-	return "MaxOffset"
+func (o *OffsetType) Type() string {
+	return "offset"
 }
 
 // Set implements the pflag.Value interface.
-func (mo *MaxOffsetType) Set(v string) error {
+func (o *OffsetType) Set(v string) error {
 	nanos, err := time.ParseDuration(v)
 	if err != nil {
 		return err
 	}
-	if nanos > maximumMaxClockOffset {
-		return errors.Errorf("%s is not a valid max offset, must be less than %v.", v, maximumMaxClockOffset)
+	if nanos > maximumClockOffset {
+		return errors.Errorf("%s is not a valid offset, must be less than %v.", v, maximumClockOffset)
 	}
-	*mo = MaxOffsetType(nanos)
+	*o = OffsetType(nanos)
 	return nil
 }
 
 // String implements the pflag.Value interface.
-func (mo *MaxOffsetType) String() string {
-	return time.Duration(*mo).String()
+func (o *OffsetType) String() string {
+	return time.Duration(*o).String()
 }
 
 // BaseConfig holds parameters that are needed to setup either a KV or a SQL
@@ -137,13 +137,25 @@ type BaseConfig struct {
 	// AmbientCtx is used to annotate contexts used inside the server.
 	AmbientCtx log.AmbientContext
 
-	// Maximum allowed clock offset for the cluster. If observed clock
-	// offsets exceed this limit, inconsistency may result, and servers
-	// will panic to minimize the likelihood of inconsistent data.
-	// Increasing this value will increase time to recovery after
-	// failures, and increase the frequency and impact of
-	// ReadWithinUncertaintyIntervalError.
-	MaxOffset MaxOffsetType
+	// MaxOffset is the maximum clock offset for the cluster. If real clock skew
+	// exceeds this limit, it may result in linearizability violations. Increasing
+	// this will increase the frequency of ReadWithinUncertaintyIntervalError and
+	// the write latency of global tables.
+	//
+	// Nodes will self-terminate if they detect that their clock skew with other
+	// nodes is too large, see ToleratedOffset.
+	MaxOffset OffsetType
+
+	// Maximum tolerated clock offset with the cluster. If the clock offset with a
+	// majority of other nodes exceeds ToleratedOffset, as measured by RPC
+	// heartbeats, the node will self-terminate to protect linearizability
+	// guarantees. Can be set both lower than and higher than MaxOffset (the
+	// latter is useful with high-precision clocks and a very low MaxOffset, where
+	// network latency could otherwise cause spurious restarts).
+	//
+	// If not set, defaults to 80% of MaxOffset. Must be read via
+	// ComputeToleratedOffset().
+	ToleratedOffset OffsetType
 
 	// GoroutineDumpDirName is the directory name for goroutine dumps using
 	// goroutinedumper.
@@ -255,7 +267,8 @@ func (cfg *BaseConfig) SetDefaults(
 	cfg.IDContainer = idsProvider.serverID
 	cfg.ClusterIDContainer = idsProvider.clusterID
 	cfg.AmbientCtx = log.MakeServerAmbientContext(tr, idsProvider)
-	cfg.MaxOffset = MaxOffsetType(base.DefaultMaxClockOffset)
+	cfg.MaxOffset = OffsetType(base.DefaultMaxClockOffset)
+	cfg.ToleratedOffset = OffsetType(0) // derived from Maxoffset, see ComputeToleratedOffset
 	cfg.DefaultZoneConfig = zonepb.DefaultZoneConfig()
 	cfg.StorageEngine = storage.DefaultStorageEngine
 	cfg.TestingInsecureWebAccess = disableWebLogin
@@ -304,6 +317,16 @@ func (cfg *BaseConfig) InitTestingKnobs() {
 		storeKnobs.EvalKnobs.UseRangeTombstonesForPointDeletes = true
 		cfg.TestingKnobs.RangeFeed.(*rangefeed.TestingKnobs).IgnoreOnDeleteRangeError = true
 	}
+}
+
+// ComputeToleratedOffset returns the tolerated offset, specified as
+// 80% of the MaxOffset is not explicitly set.
+func (cfg *BaseConfig) ComputeToleratedOffset() time.Duration {
+	offset := cfg.ToleratedOffset
+	if offset == 0 {
+		offset = cfg.MaxOffset * 4 / 5
+	}
+	return time.Duration(offset)
 }
 
 // Config holds the parameters needed to set up a combined KV and SQL server.

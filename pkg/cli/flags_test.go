@@ -202,23 +202,26 @@ func TestClockOffsetFlagValue(t *testing.T) {
 	defer initCLIDefaults()
 
 	f := startCmd.Flags()
-	testData := []struct {
-		args     []string
-		expected time.Duration
+	testCases := []struct {
+		args            []string
+		expectMax       time.Duration
+		expectTolerated time.Duration
 	}{
-		{nil, base.DefaultMaxClockOffset},
-		{[]string{"--max-offset", "200ms"}, 200 * time.Millisecond},
+		{nil, base.DefaultMaxClockOffset, 0},
+		{[]string{"--max-offset", "200ms"}, 200 * time.Millisecond, 0},
+		{[]string{"--tolerated-offset", "200ms"}, base.DefaultMaxClockOffset, 200 * time.Millisecond},
+		{[]string{"--tolerated-offset", "3s"}, base.DefaultMaxClockOffset, 3 * time.Second},
+		{[]string{"--max-offset", "10ms", "--tolerated-offset", "1s"}, 10 * time.Millisecond, time.Second},
 	}
 
-	for i, td := range testData {
-		initCLIDefaults()
+	for _, tc := range testCases {
+		t.Run(strings.Join(tc.args, " "), func(t *testing.T) {
+			initCLIDefaults()
 
-		if err := f.Parse(td.args); err != nil {
-			t.Fatal(err)
-		}
-		if td.expected != time.Duration(serverCfg.MaxOffset) {
-			t.Errorf("%d. MaxOffset expected %v, but got %v", i, td.expected, serverCfg.MaxOffset)
-		}
+			require.NoError(t, f.Parse(tc.args))
+			require.Equal(t, tc.expectMax, time.Duration(serverCfg.MaxOffset))
+			require.Equal(t, tc.expectTolerated, time.Duration(serverCfg.ToleratedOffset))
+		})
 	}
 }
 
