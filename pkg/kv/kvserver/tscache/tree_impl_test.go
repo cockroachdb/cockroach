@@ -12,7 +12,6 @@ package tscache
 
 import (
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -25,7 +24,7 @@ import (
 func TestTreeImplEviction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	manual := timeutil.NewManualTime(timeutil.Unix(0, 123))
-	clock := hlc.NewClock(manual, time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClockForTesting(manual)
 	tc := newTreeImpl(clock)
 	defer tc.clear(clock.Now())
 
@@ -52,7 +51,7 @@ func TestTreeImplEviction(t *testing.T) {
 func TestTreeImplNoEviction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	manual := timeutil.NewManualTime(timeutil.Unix(0, 123))
-	clock := hlc.NewClock(manual, time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClockForTesting(manual)
 	tc := newTreeImpl(clock)
 	defer tc.clear(clock.Now())
 

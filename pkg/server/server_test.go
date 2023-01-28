@@ -615,7 +615,7 @@ func TestPersistHLCUpperBound(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			a := assert.New(t)
 			m := timeutil.NewManualTime(timeutil.Unix(0, 1))
-			c := hlc.NewClock(m, time.Nanosecond /* maxOffset */)
+			c := hlc.NewClockForTesting(m)
 
 			var persistErr error
 			var persistedUpperBound int64

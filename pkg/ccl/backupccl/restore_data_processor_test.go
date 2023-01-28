@@ -18,7 +18,6 @@ import (
 	"strconv"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs"
@@ -193,7 +192,7 @@ func runTestIngest(t *testing.T, init func(*cluster.Settings)) {
 		sstFile := &storage.MemFile{}
 		sst := storage.MakeBackupSSTWriter(ctx, cs, sstFile)
 		defer sst.Close()
-		ts := hlc.NewClockWithSystemTimeSource(time.Nanosecond).Now( /* maxOffset */ )
+		ts := hlc.NewClockForTesting(nil).Now()
 		value := roachpb.MakeValueFromString("bar")
 		for _, idx := range offsets {
 			key := keySlice[idx]
