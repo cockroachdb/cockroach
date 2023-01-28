@@ -12,12 +12,43 @@ package log
 
 import (
 	"context"
+	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
+
+var emergencyStopFunc struct {
+	syncutil.Mutex
+	fn func()
+}
+
+// EmergencyStop invokes the emergency stop function set through
+// SetEmergencyStopFunc, if any. EmergencyStop is a hack to close network
+// connections in the event of a disk stall that may prevent the process from
+// exiting.
+func EmergencyStop() {
+	emergencyStopFunc.Lock()
+	fn := emergencyStopFunc.fn
+	emergencyStopFunc.Unlock()
+	if fn != nil {
+		fn()
+	}
+}
+
+// SetEmergencyStopFunc sets a function that will be called when EmergencyStop
+// is called.
+func SetEmergencyStopFunc(fn func()) {
+	emergencyStopFunc.Lock()
+	emergencyStopFunc.fn = fn
+	emergencyStopFunc.Unlock()
+}
 
 // SetExitFunc allows setting a function that will be called to exit
 // the process when a Fatal message is generated. The supplied bool,
@@ -102,4 +133,70 @@ func (l *loggerT) reportErrorEverywhereLocked(ctx context.Context, err error) {
 			putBuffer(buf)
 		}
 	}
+}
+
+// MustCloseAllSockets is used in the event of a disk stall, in which we want to
+// terminate the process but may not be able to. A process stalled in disk I/O
+// cannot be terminated. If we can't terminate the process, the next best thing
+// is to quarantine it by closing all sockets so that it appears dead to other
+// nodes.
+//
+// See SetEmergencyStopFunc.
+func MustCloseAllSockets() {
+	// Close all sockets twice. A LISTEN socket may open a new socket after we
+	// list all FDs. If that's the case, it'll be closed by the second call.
+	err1 := closeAllSockets()
+	err2 := closeAllSockets()
+
+	// It's unclear what to do with errors. We try to close all sockets in an
+	// emergency where we can't exit the process but want to quarantine it by
+	// removing all communication with the outside world. If we fail to close
+	// all sockets, panicking is unlikely to be able to terminate the process.
+	if err1 != nil {
+		panic(err1)
+	} else if err2 != nil {
+		panic(err2)
+	}
+}
+
+func closeAllSockets() error {
+	fds, err := findOpenSocketFDs()
+	if err != nil {
+		return err
+	}
+	for _, fd := range fds {
+		// Ignore errors so that if we can't close all sockets, we close as many
+		// as we can. When finished, return the first error observed.
+		if fdErr := forceCloseFD(fd); err == nil {
+			err = fdErr
+		}
+	}
+	return err
+}
+
+func findOpenSocketFDs() ([]int, error) {
+	f, err := os.Open("/proc/self/fd")
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	dirnames, err := f.Readdirnames(-1)
+	if err != nil {
+		return nil, err
+	}
+	var fds []int
+	for _, name := range dirnames {
+		dst, err := os.Readlink(filepath.Join("/proc/self/fd", name))
+		if err != nil {
+			return nil, err
+		}
+		if strings.HasPrefix(dst, "socket:") {
+			fd, err := strconv.Atoi(name)
+			if err != nil {
+				return nil, err
+			}
+			fds = append(fds, fd)
+		}
+	}
+	return fds, nil
 }
