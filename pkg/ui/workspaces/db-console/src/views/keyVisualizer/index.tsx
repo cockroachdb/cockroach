@@ -158,6 +158,10 @@ class KeyVisualizerContainer extends React.Component<
     const { samples, yOffsetsForKey, hottestBucket, keys } =
       buildKeyVisualizerProps(this.state, this.props.timeScale);
 
+    if (samples.length === 0 || Object.keys(keys).length === 0) {
+      return <div>Waiting for samples...</div>;
+    }
+
     return (
       <div style={{ position: "relative" }}>
         <KeyVisualizerTimeWindow />
@@ -194,7 +198,7 @@ const KeyVisualizerPage: React.FunctionComponent<
     return (
       <div>
         <p>To enable the key visualizer, run the following SQL statement:</p>
-        <pre>SET CLUSTER SETTING keyvisualizer.job.enabled = true;</pre>
+        <pre>SET CLUSTER SETTING {EnabledSetting} = true;</pre>
       </div>
     );
   }
