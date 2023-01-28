@@ -19,7 +19,6 @@ import (
 	"runtime"
 	"sync"
 	"testing"
-	"time"
 	"unsafe"
 
 	"github.com/andy-kimball/arenaskl"
@@ -860,7 +859,7 @@ func TestIntervalSklFill2(t *testing.T) {
 // by the floor timestamp.
 func TestIntervalSklMinRetentionWindow(t *testing.T) {
 	manual := timeutil.NewManualTime(timeutil.Unix(0, 200))
-	clock := hlc.NewClock(manual, time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClockForTesting(manual)
 
 	const minRet = 500
 	s := newIntervalSkl(clock, minRet, makeSklMetrics())
@@ -914,7 +913,7 @@ func TestIntervalSklMinRetentionWindow(t *testing.T) {
 // to carry the synthtic flag, if necessary.
 func TestIntervalSklRotateWithSyntheticTimestamps(t *testing.T) {
 	manual := timeutil.NewManualTime(timeutil.Unix(0, 200))
-	clock := hlc.NewClock(manual, time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClockForTesting(manual)
 
 	const minRet = 500
 	s := newIntervalSkl(clock, minRet, makeSklMetrics())
@@ -974,7 +973,7 @@ func TestIntervalSklConcurrency(t *testing.T) {
 			// good for simulating real conditions while the latter is good for
 			// testing timestamp collisions.
 			testutils.RunTrueAndFalse(t, "useClock", func(t *testing.T, useClock bool) {
-				clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
+				clock := hlc.NewClockForTesting(nil)
 				s := newIntervalSkl(clock, 0 /* minRet */, makeSklMetrics())
 				s.setFixedPageSize(tc.pageSize)
 				if tc.minPages != 0 {
@@ -1075,7 +1074,7 @@ func TestIntervalSklConcurrentVsSequential(t *testing.T) {
 	// collisions.
 	testutils.RunTrueAndFalse(t, "useClock", func(t *testing.T, useClock bool) {
 		rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
-		clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
+		clock := hlc.NewClockForTesting(nil)
 
 		const smallPageSize = 32 * 1024 // 32 KB
 		const retainForever = math.MaxInt64
@@ -1212,7 +1211,7 @@ func assertRatchet(t *testing.T, before, after cacheValue) {
 // rotation loop for ranges that are too large to fit in a single page. Instead,
 // we detect this scenario early and panic.
 func TestIntervalSklMaxEncodedSize(t *testing.T) {
-	clock := hlc.NewClock(timeutil.NewManualTime(timeutil.Unix(0, 200)), time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClockForTesting(timeutil.NewManualTime(timeutil.Unix(0, 200)))
 
 	ts := clock.Now()
 	val := makeVal(ts, "1")
@@ -1327,7 +1326,7 @@ func BenchmarkIntervalSklAdd(b *testing.B) {
 	const max = 500000000 // max size of range
 	const txnID = "123"
 
-	clock := hlc.NewClockWithSystemTimeSource(time.Millisecond /* maxOffset */)
+	clock := hlc.NewClockForTesting(nil)
 	s := newIntervalSkl(clock, MinRetentionWindow, makeSklMetrics())
 	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
 
@@ -1363,7 +1362,7 @@ func BenchmarkIntervalSklAddAndLookup(b *testing.B) {
 	const data = 500000    // number of ranges
 	const txnID = "123"
 
-	clock := hlc.NewClockWithSystemTimeSource(time.Millisecond /* maxOffset */)
+	clock := hlc.NewClockForTesting(nil)
 	s := newIntervalSkl(clock, MinRetentionWindow, makeSklMetrics())
 	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
 

@@ -8219,7 +8219,7 @@ func TestAllocatorFullDisks(t *testing.T) {
 
 	st := cluster.MakeTestingClusterSettings()
 	tr := tracing.NewTracer()
-	clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClockForTesting(nil)
 
 	g := gossip.NewTest(1, stopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef())
 
@@ -8662,7 +8662,7 @@ func exampleRebalancing(
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	ambientCtx := log.MakeTestingAmbientContext(stopper.Tracer())
-	clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClockForTesting(nil)
 
 	// Model a set of stores in a cluster,
 	// adding / rebalancing ranges of random sizes.

@@ -34,7 +34,7 @@ func TestCanServeFollowerRead(t *testing.T) {
 	// The clock needs to be higher than the closed-timestamp lag. Otherwise,
 	// trying to close timestamps below zero results in not closing anything.
 	manual := timeutil.NewManualTime(timeutil.Unix(0, 5))
-	clock := hlc.NewClock(manual, 1 /* maxOffset */)
+	clock := hlc.NewClockForTesting(manual)
 	tsc := TestStoreConfig(clock)
 	const closedTimestampLag = time.Second
 	closedts.TargetDuration.Override(ctx, &tsc.Settings.SV, closedTimestampLag)
@@ -108,7 +108,7 @@ func TestCheckExecutionCanProceedAllowsFollowerReadWithInvalidLease(t *testing.T
 	// The clock needs to be higher than the closed-timestamp lag. Otherwise,
 	// trying to close timestamps below zero results in not closing anything.
 	manual := timeutil.NewManualTime(timeutil.Unix(5, 0))
-	clock := hlc.NewClock(manual, 1 /* maxOffset */)
+	clock := hlc.NewClockForTesting(manual)
 	tsc := TestStoreConfig(clock)
 	tsc.TestingKnobs.DisableCanAckBeforeApplication = true
 	// Permit only one lease attempt. The test is flaky if we allow the lease to

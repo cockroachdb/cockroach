@@ -54,7 +54,7 @@ func startGossipAtAddr(
 	registry *metric.Registry,
 ) (*Gossip, *rpc.Context) {
 	ctx := context.Background()
-	clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClockForTesting(nil)
 	rpcContext := rpc.NewInsecureTestingContextWithClusterID(ctx, clock, stopper, clusterID)
 	rpcContext.NodeID.Set(ctx, nodeID)
 
@@ -118,7 +118,7 @@ func startFakeServerGossips(
 	t *testing.T, clusterID uuid.UUID, localNodeID roachpb.NodeID, stopper *stop.Stopper,
 ) (*Gossip, *fakeGossipServer) {
 	ctx := context.Background()
-	clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClockForTesting(nil)
 	lRPCContext := rpc.NewInsecureTestingContextWithClusterID(ctx, clock, stopper, clusterID)
 
 	lserver := rpc.NewServer(lRPCContext)
@@ -152,7 +152,7 @@ func gossipSucceedsSoon(
 	f func() error,
 ) {
 	ctx := context.Background()
-	clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClockForTesting(nil)
 	// Use an insecure context since we don't need a valid cert.
 	rpcContext := rpc.NewInsecureTestingContextWithClusterID(ctx, clock, stopper, clusterID)
 
@@ -295,7 +295,7 @@ func TestClientNodeID(t *testing.T) {
 	localNodeID := roachpb.NodeID(1)
 	local, remote := startFakeServerGossips(t, clusterID, localNodeID, stopper)
 
-	clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClockForTesting(nil)
 	// Use an insecure context. We're talking to tcp socket which are not in the certs.
 	rpcContext := rpc.NewInsecureTestingContextWithClusterID(ctx, clock, stopper, clusterID)
 
@@ -467,7 +467,7 @@ func TestClientRegisterWithInitNodeID(t *testing.T) {
 	ctx := context.Background()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
+	clock := hlc.NewClockForTesting(nil)
 
 	// Shared cluster ID by all gossipers (this ensures that the gossipers
 	// don't talk to servers from unrelated tests by accident).

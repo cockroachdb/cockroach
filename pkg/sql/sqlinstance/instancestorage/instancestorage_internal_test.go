@@ -35,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/stretchr/testify/require"
 )
@@ -466,7 +465,7 @@ func setup(
 		`CREATE TABLE "`+dbName+`".sql_instances`, 1)
 	tDB.Exec(t, schema)
 	tableID := getTableID(t, tDB, dbName, "sql_instances")
-	clock := hlc.NewClock(timeutil.NewTestTimeSource(), base.DefaultMaxClockOffset)
+	clock := hlc.NewClockForTesting(nil)
 	stopper := stop.NewStopper()
 	slStorage := slstorage.NewFakeStorage()
 	storage := NewTestingStorage(kvDB, keys.SystemSQLCodec, tableID, slStorage, settings)

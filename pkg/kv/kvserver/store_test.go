@@ -287,7 +287,7 @@ func createTestStore(
 	ctx context.Context, t testing.TB, opts testStoreOpts, stopper *stop.Stopper,
 ) (*Store, *timeutil.ManualTime) {
 	manual := timeutil.NewManualTime(timeutil.Unix(0, 123))
-	cfg := TestStoreConfig(hlc.NewClock(manual, time.Nanosecond) /* maxOffset */)
+	cfg := TestStoreConfig(hlc.NewClockForTesting(manual))
 	store := createTestStoreWithConfig(ctx, t, stopper, opts, &cfg)
 	return store, manual
 }
@@ -962,7 +962,7 @@ func TestStoreObservedTimestamp(t *testing.T) {
 	for _, test := range testCases {
 		func() {
 			manual := timeutil.NewManualTime(timeutil.Unix(0, 123))
-			cfg := TestStoreConfig(hlc.NewClock(manual, time.Nanosecond) /* maxOffset */)
+			cfg := TestStoreConfig(hlc.NewClockForTesting(manual))
 			cfg.TestingKnobs.EvalKnobs.TestingEvalFilter =
 				func(filterArgs kvserverbase.FilterArgs) *roachpb.Error {
 					if bytes.Equal(filterArgs.Req.Header().Key, badKey) {
@@ -1321,7 +1321,7 @@ func TestStoreResolveWriteIntent(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	manual := timeutil.NewManualTime(timeutil.Unix(0, 123))
-	cfg := TestStoreConfig(hlc.NewClock(manual, 1000*time.Nanosecond /* maxOffset */))
+	cfg := TestStoreConfig(hlc.NewClockForTesting(manual))
 	cfg.TestingKnobs.EvalKnobs.TestingEvalFilter =
 		func(filterArgs kvserverbase.FilterArgs) *roachpb.Error {
 			pr, ok := filterArgs.Req.(*roachpb.PushTxnRequest)
@@ -1939,7 +1939,7 @@ func TestStoreScanResumeTSCache(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 	manualClock := timeutil.NewManualTime(timeutil.Unix(0, 123))
-	cfg := TestStoreConfig(hlc.NewClock(manualClock, time.Nanosecond))
+	cfg := TestStoreConfig(hlc.NewClockForTesting(manualClock))
 	cfg.Settings = cluster.MakeTestingClusterSettings()
 	allowDroppingLatchesBeforeEval.Override(ctx, &cfg.Settings.SV, false)
 	store := createTestStoreWithConfig(ctx, t, stopper, testStoreOpts{createSystemRanges: true}, &cfg)
@@ -2464,7 +2464,7 @@ func TestStoreScanMultipleIntents(t *testing.T) {
 
 	var resolveCount int32
 	manual := timeutil.NewManualTime(timeutil.Unix(0, 123))
-	cfg := TestStoreConfig(hlc.NewClock(manual, time.Nanosecond) /* maxOffset */)
+	cfg := TestStoreConfig(hlc.NewClockForTesting(manual))
 	cfg.TestingKnobs.EvalKnobs.TestingEvalFilter =
 		func(filterArgs kvserverbase.FilterArgs) *roachpb.Error {
 			if _, ok := filterArgs.Req.(*roachpb.ResolveIntentRequest); ok {
@@ -3396,7 +3396,7 @@ func TestAllocatorCheckRangeUnconfigured(t *testing.T) {
 
 		tc := testContext{}
 		tc.manualClock = timeutil.NewManualTime(timeutil.Unix(0, 123))
-		cfg := TestStoreConfig(hlc.NewClock(tc.manualClock, time.Nanosecond) /* maxOffset */)
+		cfg := TestStoreConfig(hlc.NewClockForTesting(tc.manualClock))
 		if !confAvailable {
 			cfg.TestingKnobs.MakeSystemConfigSpanUnavailableToQueues = true
 		}
@@ -3556,7 +3556,7 @@ func TestAllocatorCheckRange(t *testing.T) {
 			defer stopper.Stop(context.Background())
 			gossiputil.NewStoreGossiper(g).GossipStores(tc.stores, t)
 
-			clock := hlc.NewClock(manual, time.Nanosecond)
+			clock := hlc.NewClockForTesting(manual)
 			cfg := TestStoreConfig(clock)
 			cfg.Gossip = g
 			cfg.StorePool = sp
