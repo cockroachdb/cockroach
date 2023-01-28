@@ -18,6 +18,8 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
@@ -163,4 +165,72 @@ func disableOtherPermissionBits() {
 	mask := unix.Umask(0000)
 	mask |= 00007
 	_ = unix.Umask(mask)
+}
+
+// closeAllSockets is used in the event of a disk stall, in which case we want
+// to terminate the process but may not be able to. A process stalled in disk
+// I/O is in uninterruptible sleep within the kernel and cannot be terminated.
+// If we can't terminate the process, the next best thing is to quarantine it by
+// closing all sockets so that it appears dead to other nodes.
+//
+// See log.SetEmergencyStopFunc.
+func closeAllSockets() {
+	// Close all sockets twice. A LISTEN socket may open a new socket after we
+	// list all FDs. If that's the case, be closed by the second call.
+	_ = closeAllSocketsOnce()
+	_ = closeAllSocketsOnce()
+
+	// It's unclear what to do with errors. We try to close all sockets in an
+	// emergency where we can't exit the process but want to quarantine it by
+	// removing all communication with the outside world. If we fail to close
+	// all sockets, panicking is unlikely to be able to terminate the process.
+	// We do nothing so that if the log sink is NOT stalled, we'll write the
+	// disk stall log entry.
+}
+
+func closeAllSocketsOnce() error {
+	fds, err := findOpenSocketFDs()
+	// NB: Intentionally ignore `err`. findOpenSocketFDs may return a non-empty
+	// slice of FDs with a non-nil error. We want to close the descriptors we
+	// were able to identify regardless of any error.
+	for _, fd := range fds {
+		// Ignore errors so that if we can't close all sockets, we close as many
+		// as we can. When finished, return the first error observed.
+		if fdErr := unix.Shutdown(fd, unix.SHUT_RDWR); err == nil {
+			err = fdErr
+		}
+	}
+	return err
+}
+
+func findOpenSocketFDs() ([]int, error) {
+	f, err := os.Open("/dev/fd")
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	dirnames, err := f.Readdirnames(-1)
+	if err != nil {
+		return nil, err
+	}
+	var fds []int
+	for _, name := range dirnames {
+		dst, readLinkErr := os.Readlink(filepath.Join("/dev/fd", name))
+		if readLinkErr != nil {
+			// Stumble forward.
+			err = readLinkErr
+			continue
+		}
+		if !strings.HasPrefix(dst, "socket:") {
+			continue
+		}
+		fd, atoiErr := strconv.Atoi(name)
+		if atoiErr != nil {
+			// Stumble forward.
+			err = errors.Wrapf(atoiErr, "fd %q; dst %q", name, dst)
+			continue
+		}
+		fds = append(fds, fd)
+	}
+	return fds, err
 }
