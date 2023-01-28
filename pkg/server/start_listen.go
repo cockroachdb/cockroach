@@ -118,6 +118,7 @@ func startListenRPCAndSQL(
 			netutil.FatalIfUnexpected(m.Serve())
 		})
 	}))
+
 	if err := stopper.RunAsyncTask(
 		workersCtx, "grpc-quiesce", waitForQuiesce,
 	); err != nil {

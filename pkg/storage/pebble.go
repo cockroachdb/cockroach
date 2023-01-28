@@ -1031,6 +1031,14 @@ func (p *Pebble) makeMetricEtcEventListener(ctx context.Context) pebble.EventLis
 				// pebble.EventListener on why it's important for this method to return
 				// quickly.
 				if fatalOnExceeded {
+					// The write stall may prevent the process from exiting. If
+					// the process won't exit, we can at least terminate all our
+					// RPC connections first.
+					//
+					// See pkg/server.startListenRPCAndSQL for where this
+					// function is hooked up.
+					log.EmergencyStop()
+
 					log.Fatalf(ctx, "disk stall detected: pebble unable to write to %s in %.2f seconds",
 						info.Path, redact.Safe(info.Duration.Seconds()))
 				} else {
