@@ -107,7 +107,7 @@ func TestUsingSimulation(t *testing.T) {
 					controller = New(
 						registry,
 						cluster.MakeTestingClusterSettings(),
-						hlc.NewClock(mtime, time.Nanosecond /* maxOffset */),
+						hlc.NewClockForTesting(mtime),
 					)
 					tsdb.Register(controller.metrics)
 					simulator = newSimulator(t, controller, tsdb, mtime)

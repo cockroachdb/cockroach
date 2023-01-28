@@ -479,7 +479,7 @@ func TestRetriesWithExponentialBackoff(t *testing.T) {
 		// We initialize the clock with Now() because the job-creation timestamp,
 		// 'created' column in system.jobs, of a new job is set from txn's time.
 		bti.clock = timeutil.NewManualTime(timeutil.Now())
-		timeSource := hlc.NewClock(bti.clock, base.DefaultMaxClockOffset)
+		timeSource := hlc.NewClockForTesting(bti.clock)
 		// Set up the test cluster.
 		// Set a small adopt and cancel intervals to reduce test time.
 		knobs := NewTestingKnobsWithIntervals(unitTime, unitTime, initialDelay, maxDelay)

@@ -420,7 +420,7 @@ func TestNewTruncateDecisionMaxSize(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 
-	cfg := TestStoreConfig(hlc.NewClock(timeutil.NewManualTime(timeutil.Unix(0, 123)), time.Nanosecond) /* maxOffset */)
+	cfg := TestStoreConfig(hlc.NewClockForTesting(timeutil.NewManualTime(timeutil.Unix(0, 123))))
 	const exp = 1881
 	cfg.RaftLogTruncationThreshold = exp
 	ctx := context.Background()

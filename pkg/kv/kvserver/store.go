@@ -235,7 +235,7 @@ func TestStoreConfig(clock *hlc.Clock) StoreConfig {
 
 func testStoreConfig(clock *hlc.Clock, version roachpb.Version) StoreConfig {
 	if clock == nil {
-		clock = hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
+		clock = hlc.NewClockForTesting(nil)
 	}
 	st := cluster.MakeTestingClusterSettingsWithVersions(version, version, true)
 	tracer := tracing.NewTracerWithOpt(context.TODO(), tracing.WithClusterSettings(&st.SV))
