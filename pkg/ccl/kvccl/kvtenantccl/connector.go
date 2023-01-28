@@ -475,6 +475,17 @@ func (c *Connector) NodesUI(
 	return
 }
 
+// NodesUI implements the ServiceChecker interface.
+func (c *Connector) TenantCheckService(
+	ctx context.Context, req *roachpb.TenantCheckServiceRequest,
+) (resp *roachpb.TenantCheckServiceResponse, retErr error) {
+	retErr = c.withClient(ctx, func(ctx context.Context, client *client) (err error) {
+		resp, err = client.TenantCheckService(ctx, req)
+		return
+	})
+	return
+}
+
 // Regions implements the serverpb.TenantStatusServer interface
 func (c *Connector) Regions(
 	ctx context.Context, req *serverpb.RegionsRequest,

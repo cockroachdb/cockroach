@@ -87,6 +87,10 @@ type Connector interface {
 	// bucket.
 	TokenBucketProvider
 
+	// ServiceChecker provides access to the service mode and data
+	// state check function.
+	ServiceChecker
+
 	// KVAccessor provides access to the subset of the cluster's span configs
 	// applicable to secondary tenants.
 	spanconfig.KVAccessor
@@ -112,6 +116,14 @@ type TokenBucketProvider interface {
 	TokenBucket(
 		ctx context.Context, in *roachpb.TokenBucketRequest,
 	) (*roachpb.TokenBucketResponse, error)
+}
+
+// ServiceChecker validates whether the tenant has access to
+// a given service mode.
+type ServiceChecker interface {
+	TenantCheckService(
+		ctx context.Context, req *roachpb.TenantCheckServiceRequest,
+	) (*roachpb.TenantCheckServiceResponse, error)
 }
 
 // ConnectorConfig encompasses the configuration required to create a Connector.

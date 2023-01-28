@@ -107,6 +107,12 @@ func (*mockServer) TokenBucket(
 	panic("unimplemented")
 }
 
+func (*mockServer) TenantCheckService(
+	ctx context.Context, in *roachpb.TenantCheckServiceRequest,
+) (*roachpb.TenantCheckServiceResponse, error) {
+	panic("unimplemented")
+}
+
 func (m *mockServer) GetSpanConfigs(
 	context.Context, *roachpb.GetSpanConfigsRequest,
 ) (*roachpb.GetSpanConfigsResponse, error) {

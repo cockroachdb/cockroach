@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security/certnames"
@@ -949,6 +950,14 @@ func (ts *TestServer) StartTenant(
 				return nil, err
 			}
 		}
+		// Mark it for external execution. This is needed before we can spawn a server.
+		if _, err := ts.InternalExecutor().(*sql.InternalExecutor).Exec(
+			ctx, "testserver-set-tenant-service-mode", nil, /* txn */
+			"ALTER TENANT [$1] START SERVICE EXTERNAL",
+			params.TenantID.ToUint64(),
+		); err != nil {
+			return nil, err
+		}
 	} else if !params.SkipTenantCheck {
 		requestedID := uint64(0)
 		if params.TenantID.IsSet() {
@@ -1106,6 +1115,7 @@ func (ts *TestServer) StartTenant(
 		sqlCfg,
 		ts.recorder,
 		roachpb.NewTenantNameContainer(params.TenantName),
+		mtinfopb.ServiceModeExternal,
 	)
 	if err != nil {
 		return nil, err

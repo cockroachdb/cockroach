@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptprovider"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptreconcile"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/multitenantcpu"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcostmodel"
 	"github.com/cockroachdb/cockroach/pkg/obs"
@@ -157,6 +158,7 @@ func NewTenantServer(
 	sqlCfg SQLConfig,
 	parentRecorder *status.MetricsRecorder,
 	tenantNameContainer *roachpb.TenantNameContainer,
+	serviceMode mtinfopb.TenantServiceMode,
 ) (*SQLServerWrapper, error) {
 	// TODO(knz): Make the license application a per-server thing
 	// instead of a global thing.
@@ -169,7 +171,7 @@ func NewTenantServer(
 	// for a tenant server.
 	baseCfg.idProvider.SetTenant(sqlCfg.TenantID)
 
-	args, err := makeTenantSQLServerArgs(ctx, stopper, baseCfg, sqlCfg, parentRecorder, tenantNameContainer)
+	args, err := makeTenantSQLServerArgs(ctx, stopper, baseCfg, sqlCfg, parentRecorder, tenantNameContainer, serviceMode)
 	if err != nil {
 		return nil, err
 	}
@@ -796,6 +798,7 @@ func makeTenantSQLServerArgs(
 	sqlCfg SQLConfig,
 	parentRecorder *status.MetricsRecorder,
 	tenantNameContainer *roachpb.TenantNameContainer,
+	serviceMode mtinfopb.TenantServiceMode,
 ) (sqlServerArgs, error) {
 	st := baseCfg.Settings
 
@@ -1016,6 +1019,7 @@ func makeTenantSQLServerArgs(
 		},
 		sqlServerOptionalTenantArgs: sqlServerOptionalTenantArgs{
 			tenantConnect:    tenantConnect,
+			serviceMode:      serviceMode,
 			promRuleExporter: promRuleExporter,
 		},
 		SQLConfig:                &sqlCfg,

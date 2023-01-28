@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/redact"
@@ -94,6 +95,7 @@ func runStartSQL(cmd *cobra.Command, args []string) error {
 			serverCfg.SQLConfig,
 			nil, /* parentRecorder */
 			nil, /* tenantNameContainer */
+			mtinfopb.ServiceModeExternal,
 		)
 		if err != nil {
 			return nil, err
