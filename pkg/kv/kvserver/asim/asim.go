@@ -64,11 +64,10 @@ type Simulator struct {
 
 // NewSimulator constructs a valid Simulator.
 func NewSimulator(
-	start, end time.Time,
+	duration time.Duration,
 	interval, bgInterval time.Duration,
 	wgs []workload.Generator,
 	initialState state.State,
-	changer state.Changer,
 	settings *config.SimulationSettings,
 	metrics *MetricsTracker,
 ) *Simulator {
@@ -76,6 +75,7 @@ func NewSimulator(
 	rqs := make(map[state.StoreID]queue.RangeQueue)
 	sqs := make(map[state.StoreID]queue.RangeQueue)
 	srs := make(map[state.StoreID]storerebalancer.StoreRebalancer)
+	changer := state.NewReplicaChanger()
 	controllers := make(map[state.StoreID]op.Controller)
 	for _, store := range initialState.Stores() {
 		storeID := store.StoreID()
@@ -91,14 +91,14 @@ func NewSimulator(
 			settings.ReplicaChangeDelayFn(),
 			allocator,
 			storePool,
-			start,
+			settings.StartTime,
 		)
 		sqs[storeID] = queue.NewSplitQueue(
 			storeID,
 			changer,
 			settings.RangeSplitDelayFn(),
 			settings.RangeSizeSplitThreshold,
-			start,
+			settings.StartTime,
 		)
 		pacers[storeID] = NewScannerReplicaPacer(
 			initialState.NextReplicasFn(storeID),
@@ -114,7 +114,7 @@ func NewSimulator(
 			settings,
 		)
 		srs[storeID] = storerebalancer.NewStoreRebalancer(
-			start,
+			settings.StartTime,
 			storeID,
 			controllers[storeID],
 			allocator,
@@ -125,8 +125,8 @@ func NewSimulator(
 	}
 
 	return &Simulator{
-		curr:        start,
-		end:         end,
+		curr:        settings.StartTime,
+		end:         settings.StartTime.Add(duration),
 		interval:    interval,
 		bgInterval:  bgInterval,
 		generators:  wgs,
@@ -210,15 +210,13 @@ func (s *Simulator) RunSim(ctx context.Context) {
 
 // tickWorkload gets the next workload events and applies them to state.
 func (s *Simulator) tickWorkload(ctx context.Context, tick time.Time) {
-	if !s.bgLastTick.Add(s.bgInterval).After(tick) {
-		s.shuffler(
-			len(s.generators),
-			func(i, j int) { s.generators[i], s.generators[j] = s.generators[j], s.generators[i] },
-		)
-		for _, generator := range s.generators {
-			event := generator.Tick(tick)
-			s.state.ApplyLoad(event)
-		}
+	s.shuffler(
+		len(s.generators),
+		func(i, j int) { s.generators[i], s.generators[j] = s.generators[j], s.generators[i] },
+	)
+	for _, generator := range s.generators {
+		event := generator.Tick(tick)
+		s.state.ApplyLoad(event)
 	}
 }
 
