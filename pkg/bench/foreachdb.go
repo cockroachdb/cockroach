@@ -65,15 +65,12 @@ func benchmarkSharedProcessTenantCockroach(b *testing.B, f BenchmarkFn) {
 
 	// Create our own test tenant with a known name.
 	tenantName := "benchtenant"
-	_, _, err := s.(*server.TestServer).StartSharedProcessTenant(ctx,
+	_, tenantDB, err := s.(*server.TestServer).StartSharedProcessTenant(ctx,
 		base.TestSharedProcessTenantArgs{
-			TenantName: roachpb.TenantName(tenantName),
+			TenantName:  roachpb.TenantName(tenantName),
+			UseDatabase: "bench",
 		})
 	require.NoError(b, err)
-
-	// Get a SQL connection to the test tenant.
-	sqlAddr := s.(*server.TestServer).SQLAddr()
-	tenantDB := serverutils.OpenDBConn(b, sqlAddr, "cluster:"+tenantName+"/bench", false, s.Stopper())
 
 	// The benchmarks sometime hit the default span limit, so we increase it.
 	// NOTE(andrei): Benchmarks drop the tables they're creating, so I'm not sure
