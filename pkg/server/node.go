@@ -1075,6 +1075,10 @@ func (n *Node) recordJoinEvent(ctx context.Context) {
 	nodeDetails.StartedAt = n.startedAt
 	nodeDetails.NodeID = int32(n.Descriptor.NodeID)
 
+	n.logStructuredEvent(ctx, event)
+}
+
+func (n *Node) logStructuredEvent(ctx context.Context, event logpb.EventPayload) {
 	// Ensure that the event goes to log files even if LogRangeAndNodeEvents is
 	// disabled (which means skip the system.eventlog _table_).
 	log.StructuredEvent(ctx, event)

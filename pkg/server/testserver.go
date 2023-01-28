@@ -827,6 +827,10 @@ func (ts *TestServer) StartSharedProcessTenant(
 	if err := args.TenantName.IsValid(); err != nil {
 		return nil, nil, err
 	}
+
+	// Save the args for use if the server needs to be created.
+	ts.Server.serverController.testArgs[args.TenantName] = args
+
 	tenantRow, err := ts.InternalExecutor().(*sql.InternalExecutor).QueryRow(
 		ctx, "testserver-check-tenant-active", nil, /* txn */
 		"SELECT id FROM system.tenants WHERE name=$1 AND active=true",
@@ -838,8 +842,8 @@ func (ts *TestServer) StartSharedProcessTenant(
 	tenantExists := tenantRow != nil
 
 	if tenantExists {
-		// A tenant with the given name already exists; let's check that it matches
-		// the ID that this call wants (if any).
+		// A tenant with the given name already exists; let's check that
+		// it matches the ID that this call wants (if any).
 		id := uint64(*tenantRow[0].(*tree.DInt))
 		if args.TenantID.IsSet() && args.TenantID.ToUint64() != id {
 			return nil, nil, errors.Newf("a tenant with name %q exists, but its ID is %d instead of %d",
@@ -874,10 +878,22 @@ func (ts *TestServer) StartSharedProcessTenant(
 				return nil, nil, err
 			}
 		}
+		// Also mark it for shared-process execution.
+		_, err := ts.InternalExecutor().(*sql.InternalExecutor).ExecEx(
+			ctx,
+			"start-tenant-shared-service",
+			nil, /* txn */
+			sessiondata.NodeUserSessionDataOverride,
+			"ALTER TENANT $1 START SERVICE SHARED",
+			args.TenantName,
+		)
+		if err != nil {
+			return nil, nil, err
+		}
 	}
 
 	// Instantiate the tenant server.
-	s, err := ts.Server.serverController.createServer(ctx, args.TenantName, args)
+	s, err := ts.Server.serverController.startAndWaitForRunningServer(ctx, args.TenantName)
 	if err != nil {
 		return nil, nil, err
 	}
