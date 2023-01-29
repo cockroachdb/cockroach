@@ -135,6 +135,28 @@ type metricMarshaler interface {
 
 func propagateGatewayMetadata(ctx context.Context) context.Context {
 	if md, ok := metadata.FromIncomingContext(ctx); ok {
+		// Here we erase the tenant ID information from the RPC client.
+		//
+		// To understand why this works and is important, we need to
+		// consider two cases:
+		// - SQL performs RPC to KV, KV performs RPC to another KV node.
+		//   (a.k.a. "node-to-node RPCs")
+		// - external client performs RPC to SQL, SQL performs RPC to
+		//   another SQL server. (a.k.a. "pod-to-pod RPCs").
+		//
+		// In the first case, it is very necessary to clear the tenant ID.
+		// When SQL for tenant 10 performs a RPC to KV n1, and KV n1
+		// performs a gateway forward to KV n2, we don't want n1 to
+		// authenticate itself as "tenant 10" to n2. At this point, we are
+		// doing work "on behalf of KV" and the tenant information must
+		// not be used any more.
+		//
+		// In the second case, it is not strictly necessary to clear the
+		// tenant ID here -- the next SQL server could use it -- however
+		// it does not hurt: the RPC dial function will re-add it anyway
+		// via the PerRPCCredentials. So we delete it anyway to
+		// keep the code simple.
+		delete(md, rpc.ClientTIDMetadataHeaderKey)
 		return metadata.NewOutgoingContext(ctx, md)
 	}
 	return ctx
