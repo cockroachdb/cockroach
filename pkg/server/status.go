@@ -135,6 +135,11 @@ type metricMarshaler interface {
 
 func propagateGatewayMetadata(ctx context.Context) context.Context {
 	if md, ok := metadata.FromIncomingContext(ctx); ok {
+		// When SQL for tenant 10 performs a RPC to n1, and n1 performs a
+		// gateway forward to n2, we don't want n1 to authenticate itself
+		// as "tenant 10" to n2. At this point, the tenant information
+		// should not be used any more.
+		delete(md, rpc.ClientTIDMetadataHeaderKey)
 		return metadata.NewOutgoingContext(ctx, md)
 	}
 	return ctx

@@ -22,6 +22,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/peer"
 	"google.golang.org/grpc/status"
 )
@@ -128,41 +129,83 @@ func (a kvAuth) authenticate(ctx context.Context) (roachpb.TenantID, error) {
 	}
 
 	clientCert := tlsInfo.State.PeerCertificates[0]
-	if a.tenant.tenantID == roachpb.SystemTenantID {
-		// This node is a KV node.
-		//
-		// Is this a connection from a SQL tenant server?
-		if security.IsTenantCertificate(clientCert) {
-			// Incoming connection originating from a tenant SQL server,
-			// into a KV node.
-			// We extract the tenant ID to perform authorization
-			// of the RPC for this particular tenant.
-			return tenantFromCommonName(clientCert.Subject.CommonName)
-		}
-	} else {
-		// This node is a SQL tenant server.
-		//
-		// Is this a connection from another SQL tenant server?
-		if security.IsTenantCertificate(clientCert) {
-			// Incoming connection originating from a tenant SQL server.
-			tid, err := tenantFromCommonName(clientCert.Subject.CommonName)
-			if err != nil {
-				return roachpb.TenantID{}, err
-			}
-			// Verify that our peer is a service for the same tenant
-			// as ourselves (we don't want to allow tenant 123 to
-			// serve requests for a client coming from tenant 456).
-			if tid != a.tenant.tenantID {
-				return roachpb.TenantID{}, authErrorf("this tenant (%v) cannot serve requests from a server for tenant %v", a.tenant.tenantID, tid)
-			}
 
-			// We return an unset tenant ID, to bypass authorization checks:
-			// the other server is able to use any of this server's RPCs.
-			return roachpb.TenantID{}, nil
+	// Do we have a wanted tenant ID from the request metadata?
+	var wantedTenantID roachpb.TenantID
+	if val := metadata.ValueFromIncomingContext(ctx, ClientTIDMetadataHeaderKey); len(val) > 0 {
+		var err error
+		wantedTenantID, err = tenantIDFromString(val[0], "gRPC metadata")
+		if err != nil {
+			return roachpb.TenantID{}, authErrorf("client provided invalid tenant ID: %v", err)
 		}
 	}
 
-	// Here we handle the following cases:
+	if security.IsTenantCertificate(clientCert) {
+		// If the peer is using a client tenant cert, in any case we
+		// validate the tenant ID stored in the CN for correctness.
+		tlsID, err := tenantIDFromString(clientCert.Subject.CommonName, "Common Name (CN)")
+		if err != nil {
+			return roachpb.TenantID{}, err
+		}
+		// If the peer is using a client tenant cert, either:
+		// - there was a wanted tenant ID in the metadata,
+		//   in which case we verify the metadata ID is the
+		//   same as the ID in the cert; or
+		// - there was no wanted ID in the metadata,
+		//   in which case we use the tenant ID in the cert.
+		if wantedTenantID.IsSet() {
+			// Verify conformance.
+			if tlsID != wantedTenantID {
+				return roachpb.TenantID{}, authErrorf(
+					"client wants to authenticate as tenant %v, but is using TLS cert for tenant %v",
+					wantedTenantID, tlsID)
+			}
+		} else {
+			// Use the ID in the cert as wanted tenant ID.
+			wantedTenantID = tlsID
+		}
+	} else {
+		// The peer is not using a client tenant cert.
+		// In that case, we only allow RPCs if the principal
+		// is 'node' or 'root' and the tenant scope
+		// in the cert matches this server (either the cert has
+		// scope "global" or its scope tenant ID matches our own).
+		//
+		// TODO(benesch): the vast majority of RPCs should be limited to just
+		// NodeUser. This is not a security concern, as RootUser has access to
+		// read and write all data, merely good hygiene. For example, there is
+		// no reason to permit the root user to send raw Raft RPCs.
+		certUserScope, err := security.GetCertificateUserScope(clientCert)
+		if err != nil {
+			return roachpb.TenantID{}, err
+		}
+		if err := checkRootOrNodeInScope(certUserScope, a.tenant.tenantID); err != nil {
+			return roachpb.TenantID{}, err
+		}
+	}
+
+	// After this point, authentication has succeeded. We now need
+	// to determine how to _authorize_ the operation.
+
+	if a.tenant.tenantID == roachpb.SystemTenantID {
+		// This node is a KV node.
+		//
+		// If the client wants to authenticate as a tenant server,
+		// continue with authorization using the tenant ID it wants.
+		return wantedTenantID, nil
+	}
+
+	// If the peer wants to authenticate as another tenant server,
+	// verify that the peer is a service for the same tenant
+	// as ourselves (we don't want to allow tenant 123 to
+	// serve requests for a client coming from tenant 456).
+	if wantedTenantID.IsSet() {
+		if wantedTenantID != a.tenant.tenantID {
+			return roachpb.TenantID{}, authErrorf("this tenant (%v) cannot serve requests from a server for tenant %v", a.tenant.tenantID, wantedTenantID)
+		}
+	}
+
+	// Here are the remaining cases:
 	//
 	// - incoming connection from a RPC admin client into either a KV
 	//   node or a SQL server, using a valid root or node client cert.
@@ -171,25 +214,7 @@ func (a kvAuth) authenticate(ctx context.Context) (roachpb.TenantID, error) {
 	// - calls coming through the gRPC gateway, from an HTTP client. The gRPC
 	//   gateway uses a connection dialed as the node user.
 	//
-	// In both cases, we must check that the client cert is either root
-	// or node. We also need to check that the tenant scope for the cert
-	// is either the system tenant ID or matches the tenant ID of the server.
-
-	// TODO(benesch): the vast majority of RPCs should be limited to just
-	// NodeUser. This is not a security concern, as RootUser has access to
-	// read and write all data, merely good hygiene. For example, there is
-	// no reason to permit the root user to send raw Raft RPCs.
-	certUserScope, err := security.GetCertificateUserScope(clientCert)
-	if err != nil {
-		return roachpb.TenantID{}, err
-	}
-
-	// Confirm that the user scope is node/root. Otherwise, return an authentication error.
-	if err := checkRootOrNodeInScope(certUserScope, a.tenant.tenantID); err != nil {
-		return roachpb.TenantID{}, err
-	}
-
-	// User is node/root user authorized for this tenant, return success.
+	// In all these cases, the RPC request is authorized.
 	return roachpb.TenantID{}, nil
 }
 

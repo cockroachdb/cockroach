@@ -97,12 +97,13 @@ func TestAuthenticateTenant(t *testing.T) {
 	stid := roachpb.SystemTenantID
 	tenTen := roachpb.MustMakeTenantID(10)
 	for _, tc := range []struct {
-		systemID    roachpb.TenantID
-		ous         []string
-		commonName  string
-		expTenID    roachpb.TenantID
-		expErr      string
-		tenantScope uint64
+		systemID         roachpb.TenantID
+		ous              []string
+		commonName       string
+		expTenID         roachpb.TenantID
+		expErr           string
+		tenantScope      uint64
+		clientTenantInMD string
 	}{
 		{systemID: stid, ous: correctOU, commonName: "10", expTenID: tenTen},
 		{systemID: stid, ous: correctOU, commonName: roachpb.MinTenantID.String(), expTenID: roachpb.MinTenantID},
@@ -128,8 +129,42 @@ func TestAuthenticateTenant(t *testing.T) {
 		{systemID: tenTen, ous: nil, commonName: "root"},
 		{systemID: tenTen, ous: nil, commonName: "node"},
 
+		// Passing a client ID in metadata instead of relying only on the TLS cert.
+		{clientTenantInMD: "invalid", expErr: `could not parse tenant ID from gRPC metadata`},
+		{clientTenantInMD: "1", expErr: `invalid tenant ID 1 in gRPC metadata`},
+		{clientTenantInMD: "-1", expErr: `could not parse tenant ID from gRPC metadata`},
+
+		// tenant ID in MD matches that in client cert.
+		// Server is KV node: expect tenant authorization.
+		{clientTenantInMD: "10",
+			systemID: stid, ous: correctOU, commonName: "10", expTenID: tenTen},
+		// tenant ID in MD doesn't match that in client cert.
+		{clientTenantInMD: "10",
+			systemID: stid, ous: correctOU, commonName: "123", expErr: `client wants to authenticate as tenant 10, but is using TLS cert for tenant 123`},
+		// tenant ID present in MD, but not in client cert. However,
+		// client cert is valid. Use MD tenant ID.
+		// Server is KV node: expect tenant authorization.
+		{clientTenantInMD: "10",
+			systemID: stid, ous: nil, commonName: "root", expTenID: tenTen},
+		// tenant ID present in MD, but not in client cert. However,
+		// client cert is valid. Use MD tenant ID.
+		// Server is KV node: expect tenant authorization.
+		{clientTenantInMD: "10",
+			systemID: stid, ous: nil, commonName: "node", expTenID: tenTen},
+		// tenant ID present in MD, but not in client cert. However,
+		// client cert is valid. Use MD tenant ID.
+		// Server is secondary tenant: do not do additional tenant authorization.
+		{clientTenantInMD: "10",
+			systemID: tenTen, ous: nil, commonName: "root", expTenID: roachpb.TenantID{}},
+		{clientTenantInMD: "10",
+			systemID: tenTen, ous: nil, commonName: "node", expTenID: roachpb.TenantID{}},
+		// tenant ID present in MD, but not in client cert. Use MD tenant ID.
+		// Server tenant ID does not match client tenant ID.
+		{clientTenantInMD: "123",
+			systemID: tenTen, ous: nil, commonName: "root",
+			expErr: `this tenant \(10\) cannot serve requests from a server for tenant 123`},
 	} {
-		t.Run(fmt.Sprintf("from %v to %v", tc.commonName, tc.systemID), func(t *testing.T) {
+		t.Run(fmt.Sprintf("from %v to %v (md %q)", tc.commonName, tc.systemID, tc.clientTenantInMD), func(t *testing.T) {
 			cert := &x509.Certificate{
 				Subject: pkix.Name{
 					CommonName:         tc.commonName,
@@ -150,6 +185,11 @@ func TestAuthenticateTenant(t *testing.T) {
 			}
 			p := peer.Peer{AuthInfo: tlsInfo}
 			ctx := peer.NewContext(context.Background(), &p)
+
+			if tc.clientTenantInMD != "" {
+				md := metadata.MD{rpc.ClientTIDMetadataHeaderKey: []string{tc.clientTenantInMD}}
+				ctx = metadata.NewIncomingContext(ctx, md)
+			}
 
 			tenID, err := rpc.TestingAuthenticateTenant(ctx, tc.systemID)
 
