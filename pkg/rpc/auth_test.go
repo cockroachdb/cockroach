@@ -113,14 +113,20 @@ func TestAuthenticateTenant(t *testing.T) {
 		{systemID: stid, ous: correctOU, commonName: "1", expErr: `invalid tenant ID 1 in Common Name \(CN\)`},
 		{systemID: stid, ous: correctOU, commonName: "root", expErr: `could not parse tenant ID from Common Name \(CN\)`},
 		{systemID: stid, ous: correctOU, commonName: "other", expErr: `could not parse tenant ID from Common Name \(CN\)`},
-		{systemID: stid, ous: []string{"foo"}, commonName: "other", expErr: `client certificate CN=other,OU=foo cannot be used to perform RPC on tenant {1}`},
-		{systemID: stid, ous: nil, commonName: "other", expErr: `client certificate CN=other cannot be used to perform RPC on tenant {1}`},
+		{systemID: stid, ous: []string{"foo"}, commonName: "other",
+			expErr: `need root or node client cert to perform RPCs on this server \(this is tenant system; cert is valid for "other" on all tenants\)`},
+		{systemID: stid, ous: nil, commonName: "other",
+			expErr: `need root or node client cert to perform RPCs on this server \(this is tenant system; cert is valid for "other" on all tenants\)`},
 		{systemID: stid, ous: append([]string{"foo"}, correctOU...), commonName: "other", expErr: `could not parse tenant ID from Common Name`},
 		{systemID: stid, ous: nil, commonName: "root"},
-		{systemID: stid, ous: nil, commonName: "root", tenantScope: 10, expErr: "client certificate CN=root cannot be used to perform RPC on tenant {1}"},
+		{systemID: stid, ous: nil, commonName: "node"},
+		{systemID: stid, ous: nil, commonName: "root", tenantScope: 10,
+			expErr: `need root or node client cert to perform RPCs on this server \(this is tenant system; cert is valid for "root" on tenant 10\)`},
 		{systemID: tenTen, ous: correctOU, commonName: "10", expTenID: roachpb.TenantID{}},
 		{systemID: tenTen, ous: correctOU, commonName: "123", expErr: `this tenant \(10\) cannot serve requests from a server for tenant 123`},
 		{systemID: tenTen, ous: correctOU, commonName: "1", expErr: `invalid tenant ID 1 in Common Name \(CN\)`},
+		{systemID: tenTen, ous: nil, commonName: "root"},
+		{systemID: tenTen, ous: nil, commonName: "node"},
 	} {
 		t.Run(fmt.Sprintf("from %v to %v", tc.commonName, tc.systemID), func(t *testing.T) {
 			cert := &x509.Certificate{
