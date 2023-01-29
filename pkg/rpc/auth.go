@@ -12,12 +12,13 @@ package rpc
 
 import (
 	"context"
+	"fmt"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
-	"github.com/cockroachdb/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
@@ -184,42 +185,49 @@ func (a kvAuth) authenticate(ctx context.Context) (roachpb.TenantID, error) {
 	}
 
 	// Confirm that the user scope is node/root. Otherwise, return an authentication error.
-	_, err = getActiveNodeOrUserScope(certUserScope, username.RootUser, a.tenant.tenantID)
-	if err != nil {
-		return roachpb.TenantID{}, authErrorf("client certificate %s cannot be used to perform RPC on tenant %d", clientCert.Subject, a.tenant.tenantID)
+	if err := checkRootOrNodeInScope(certUserScope, a.tenant.tenantID); err != nil {
+		return roachpb.TenantID{}, err
 	}
 
 	// User is node/root user authorized for this tenant, return success.
 	return roachpb.TenantID{}, nil
 }
 
-// getActiveNodeOrUserScope returns a node user scope if one is present in the set of certificate user scopes. If node
-// user scope is not present, it returns the user scope corresponding to the username parameter. The node user scope
-// will always override the user scope for authentication.
-func getActiveNodeOrUserScope(
-	certUserScope []security.CertificateUserScope, user string, serverTenantID roachpb.TenantID,
-) (security.CertificateUserScope, error) {
-	var userScope security.CertificateUserScope
+// checkRootOrNodeInScope checks that the root or node principals are
+// present in the cert user scopes.
+func checkRootOrNodeInScope(
+	certUserScope []security.CertificateUserScope, serverTenantID roachpb.TenantID,
+) (err error) {
 	for _, scope := range certUserScope {
+		// Only consider global scopes or scopes that match this server.
+		if !(scope.Global || scope.TenantID == serverTenantID) {
+			continue
+		}
+
 		// If we get a scope that matches the Node user, immediately return.
-		if scope.Username == username.NodeUser {
-			if scope.Global {
-				return scope, nil
-			}
-			// Confirm that the certificate scope and serverTenantID are the system tenant.
-			if scope.TenantID == roachpb.SystemTenantID && serverTenantID == roachpb.SystemTenantID {
-				return scope, nil
-			}
+		if scope.Username == username.NodeUser || scope.Username == username.RootUser {
+			return nil
 		}
-		if scope.Username == user && (scope.TenantID == serverTenantID || scope.Global) {
-			userScope = scope
-		}
-	}
-	// Double check we're not returning an empty scope
-	if userScope.Username == "" {
-		return userScope, errors.New("could not find active user scope for client certificate")
 	}
 
-	// Only return userScope if we haven't found a NodeUser.
-	return userScope, nil
+	return authErrorf(
+		"need root or node client cert to perform RPCs on tenant %v (cert valid for %s)",
+		serverTenantID, formatScopesForError(certUserScope))
+}
+
+func formatScopesForError(certUserScope []security.CertificateUserScope) string {
+	var buf strings.Builder
+
+	comma := ""
+	for _, scope := range certUserScope {
+		fmt.Fprintf(&buf, "%s%q on ", comma, scope.Username)
+		if scope.Global {
+			buf.WriteString("all tenants")
+		} else {
+			fmt.Fprintf(&buf, "tenant %v", scope.TenantID)
+		}
+		comma = ", "
+	}
+
+	return buf.String()
 }
