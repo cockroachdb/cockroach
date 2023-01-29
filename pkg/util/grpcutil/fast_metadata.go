@@ -33,6 +33,16 @@ func FastFromIncomingContext(ctx context.Context) (metadata.MD, bool) {
 	return md, ok
 }
 
+// ClearIncomingContext "removes" the gRPC incoming metadata
+// if there's any already. No-op if there was no metadata
+// to start with.
+func ClearIncomingContext(ctx context.Context) context.Context {
+	if ctx.Value(grpcIncomingKeyObj) != nil {
+		return metadata.NewIncomingContext(ctx, nil)
+	}
+	return ctx
+}
+
 // FastFirstValueFromIncomingContext is a specialization of
 // metadata.ValueFromIncomingContext() which extracts the first string
 // from the given metadata key, if it exists. No extra objects are
@@ -66,6 +76,57 @@ func FastFirstValueFromIncomingContext(ctx context.Context, key string) (string,
 		}
 	}
 	return "", false
+}
+
+// FastGetAndDeleteValueFromIncomingContext extracts the first string
+// from the given metadata key, if it exists. If it does, the metadata
+// key is removed from the context.
+func FastGetAndDeleteValueFromIncomingContext(
+	ctx context.Context, key string,
+) (found bool, val string, newCtx context.Context) {
+	md, ok := ctx.Value(grpcIncomingKeyObj).(metadata.MD)
+	if !ok {
+		return false, "", ctx
+	}
+	if v, ok := md[key]; ok {
+		if len(v) > 0 {
+			found = true
+			val = v[0]
+		}
+		newMd := make(metadata.MD, len(md)-1)
+		for k, v := range md {
+			if k == key {
+				continue
+			}
+			newMd[k] = v
+		}
+		return found, val, metadata.NewIncomingContext(ctx, newMd)
+	}
+	for k, v := range md {
+		// The letter caseing may not have been set properly when MD was attached to
+		// the context.
+		// See the comment in FastValueFromIncomingContext above relating
+		// to the length comparison.
+		if len(k) != len(key) {
+			continue
+		}
+		lowK := strings.ToLower(k)
+		if lowK == key {
+			if len(v) > 0 {
+				found = true
+				val = v[0]
+			}
+			newMd := make(metadata.MD, len(md)-1)
+			for otherK, otherV := range md {
+				if otherK == lowK {
+					continue
+				}
+				newMd[otherK] = otherV
+			}
+			return found, val, metadata.NewIncomingContext(ctx, newMd)
+		}
+	}
+	return false, "", ctx
 }
 
 // grpcIncomingKeyObj is a copy of a value with the Go type
