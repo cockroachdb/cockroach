@@ -399,6 +399,12 @@ import (
 //    that occur after this command until the end of file or the next subtest
 //    command.
 //
+//  - retry
+//    Specifies that the next occurrence of a statement or query directive
+//    (including those which expect errors), will be retried for a fixed
+//    duration until the test passes, or the alloted time has elapsed.
+//    This is similar to the retry option of the query directive.
+//
 // The overall architecture of TestLogic is as follows:
 //
 // - TestLogic() selects the input files and instantiates
@@ -856,9 +862,6 @@ type logicQuery struct {
 	colTypes string
 	// colNames controls the inclusion of column names in the query result.
 	colNames bool
-	// retry indicates if the query should be retried in case of failure with
-	// exponential backoff up to some maximum duration.
-	retry bool
 	// some tests require the output to match modulo sorting.
 	sorter logicSorter
 	// expectedErr and expectedErrCode are as in logicStatement.
@@ -1045,6 +1048,12 @@ type logicTest struct {
 	// backup and restore before running the next SQL statement. This can be set
 	// to true using the `force-backup-restore` directive.
 	forceBackupAndRestore bool
+
+	// retry indicates if the statement or query should be retried in case of
+	// failure with exponential backoff up to some maximum duration. It is reset
+	// to false after every successful statement or query test point, including
+	// those which are supposed to error out.
+	retry bool
 }
 
 func (t *logicTest) t() *testing.T {
@@ -2454,6 +2463,7 @@ func (t *logicTest) processSubtest(
 	t.lastProgress = timeutil.Now()
 
 	repeat := 1
+
 	for s.Scan() {
 		t.curPath, t.curLineNo = path, s.Line+subtest.lineLineIndexIntoFile
 		if *maxErrs > 0 && t.failures >= *maxErrs {
@@ -2539,6 +2549,11 @@ func (t *logicTest) processSubtest(
 
 			t.success(path)
 
+		case "retry":
+			// retry is a standalone command that may precede a "statement" or "query"
+			// command. It has the same retry effect as the retry option of the query
+			// command.
+			t.retry = true
 		case "statement":
 			stmt := logicStatement{
 				pos:         fmt.Sprintf("\n%s:%d", path, s.Line+subtest.lineLineIndexIntoFile),
@@ -2569,7 +2584,19 @@ func (t *logicTest) processSubtest(
 			}
 			if !s.Skip {
 				for i := 0; i < repeat; i++ {
-					if cont, err := t.execStatement(stmt); err != nil {
+					var cont bool
+					var err error
+					if t.retry {
+						err = testutils.SucceedsSoonError(func() error {
+							t.purgeZoneConfig()
+							var tempErr error
+							cont, tempErr = t.execStatement(stmt)
+							return tempErr
+						})
+					} else {
+						cont, err = t.execStatement(stmt)
+					}
+					if err != nil {
 						if !cont {
 							return err
 						}
@@ -2710,7 +2737,7 @@ func (t *logicTest) processSubtest(
 							query.colNames = true
 
 						case "retry":
-							query.retry = true
+							t.retry = true
 
 						case "kvtrace":
 							// kvtrace without any arguments doesn't perform any additional
@@ -2893,7 +2920,7 @@ func (t *logicTest) processSubtest(
 				}
 
 				for i := 0; i < repeat; i++ {
-					if query.retry && !*rewriteResultsInTestfiles {
+					if t.retry && !*rewriteResultsInTestfiles {
 						if err := testutils.SucceedsSoonError(func() error {
 							t.purgeZoneConfig()
 							return t.execQuery(query)
@@ -2901,7 +2928,7 @@ func (t *logicTest) processSubtest(
 							t.Error(err)
 						}
 					} else {
-						if query.retry && *rewriteResultsInTestfiles {
+						if t.retry && *rewriteResultsInTestfiles {
 							t.purgeZoneConfig()
 							// The presence of the retry flag indicates that we expect this
 							// query may need some time to succeed. If we are rewriting, wait
@@ -3849,6 +3876,7 @@ func (t *logicTest) formatValues(vals []string, valsPerLine int) []string {
 }
 
 func (t *logicTest) success(file string) {
+	t.retry = false
 	t.progress++
 	now := timeutil.Now()
 	if now.Sub(t.lastProgress) >= 2*time.Second {
