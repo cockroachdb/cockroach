@@ -33,6 +33,16 @@ func FastFromIncomingContext(ctx context.Context) (metadata.MD, bool) {
 	return md, ok
 }
 
+// ClearIncomingContext "removes" the gRPC incoming metadata
+// if there's any already. No-op if there was no metadata
+// to start with.
+func ClearIncomingContext(ctx context.Context) context.Context {
+	if ctx.Value(grpcIncomingKeyObj) != nil {
+		return metadata.NewIncomingContext(ctx, nil)
+	}
+	return ctx
+}
+
 // FastFirstValueFromIncomingContext is a specialization of
 // metadata.ValueFromIncomingContext() which extracts the first string
 // from the given metadata key, if it exists. No extra objects are
