@@ -19,10 +19,12 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -126,6 +128,8 @@ func (p *planner) ShowClusterSetting(
 		return nil, err
 	}
 
+	p.noticeSqlDefaultsAccess(ctx, n)
+
 	setting, ok := val.(settings.NonMaskedSetting)
 	if !ok {
 		return nil, errors.AssertionFailedf("setting is masked: %v", name)
@@ -144,6 +148,21 @@ func (p *planner) ShowClusterSetting(
 			}
 			return true, setting.Encoded(&p.ExecCfg().Settings.SV), nil
 		},
+	)
+}
+
+func (p *planner) noticeSqlDefaultsAccess(ctx context.Context, n *tree.ShowClusterSetting) {
+	if !strings.HasPrefix(n.Name, "sql.defaults") {
+		return
+	}
+
+	p.BufferClientNotice(
+		ctx,
+		errors.WithHintf(
+			pgnotice.Newf("using global default %s is not recommended", n.Name),
+			"use the `ALTER ROLE ... SET` syntax to control session variable defaults at a finer-grained level. See: %s",
+			docs.URL("alter-role.html#set-default-session-variable-values-for-a-role"),
+		),
 	)
 }
 

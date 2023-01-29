@@ -1703,6 +1703,13 @@ func TestLogic_show_indexes(
 	runLogicTest(t, "show_indexes")
 }
 
+func TestLogic_show_setting_defaults_notice(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "show_setting_defaults_notice")
+}
+
 func TestLogic_show_transfer_state(
 	t *testing.T,
 ) {

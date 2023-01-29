@@ -1,0 +1,9 @@
+query T noticetrace
+SHOW CLUSTER SETTING sql.defaults.distsql;
+----
+NOTICE: using global default sql.defaults.distsql is not recommended
+HINT: use the `ALTER ROLE ... SET` syntax to control session variable defaults at a finer-grained level. See: https://www.cockroachlabs.com/docs/v23.1/alter-role.html#set-default-session-variable-values-for-a-role
+
+query T noticetrace
+SHOW CLUSTER SETTING sql.notices.enabled
+----
