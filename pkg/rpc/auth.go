@@ -194,6 +194,13 @@ func (a kvAuth) authenticate(ctx context.Context) (authnResult, error) {
 	if clientTenantID, localRequest := grpcutil.IsLocalRequestContext(ctx); localRequest {
 		if !clientTenantID.IsSystem() {
 			wantedTenantID = clientTenantID
+
+			// Sanity check: verify that we do not also have gRPC network credentials
+			// in the context. This would indicate that metadata was improperly propagated.
+			maybeTid, err := getTenantIDFromNetworkCredentials(ctx)
+			if err != nil || maybeTid.IsSet() {
+				return nil, authErrorf("programming error: network credentials in internal adapter request (%v, %v)", maybeTid, err)
+			}
 		}
 	} else {
 		// TLS case. We will need to look at the TLS cert in any case, so
@@ -201,6 +208,14 @@ func (a kvAuth) authenticate(ctx context.Context) (authnResult, error) {
 		clientCert, err := getClientCert(ctx)
 		if err != nil {
 			return nil, err
+		}
+
+		// Did the client peer pass a tenant ID via the gRPC metadata?
+		maybeTid, err := getTenantIDFromNetworkCredentials(ctx)
+		if err != nil {
+			return nil, authErrorf("client provided invalid tenant ID: %v", err)
+		} else if maybeTid.IsSet() {
+			wantedTenantID = maybeTid
 		}
 
 		// Did the client peer use a tenant client cert?
@@ -211,8 +226,24 @@ func (a kvAuth) authenticate(ctx context.Context) (authnResult, error) {
 			if err != nil {
 				return nil, err
 			}
-			// Use the ID in the cert as wanted tenant ID.
-			wantedTenantID = tlsID
+
+			// If the peer is using a client tenant cert, either:
+			// - there was a wanted tenant ID in the metadata, in which case
+			//   we verify the metadata ID is the same as the ID in the cert;
+			//   or
+			// - there was no wanted ID in the metadata, in which case we use
+			//   the tenant ID in the cert.
+			if wantedTenantID.IsSet() {
+				// Verify conformance.
+				if tlsID != wantedTenantID {
+					return nil, authErrorf(
+						"client wants to authenticate as tenant %v, but is using TLS cert for tenant %v",
+						wantedTenantID, tlsID)
+				}
+			} else {
+				// Use the ID in the cert as wanted tenant ID.
+				wantedTenantID = tlsID
+			}
 		} else {
 			// We are using TLS, but the peer is not using a client tenant
 			// cert. In that case, we only allow RPCs if the principal is

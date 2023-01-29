@@ -419,6 +419,9 @@ type Context struct {
 	// The loopbackDialFn fits under that common case by transporting
 	// the gRPC protocol over an in-memory pipe.
 	loopbackDialFn func(context.Context) (net.Conn, error)
+
+	// clientCreds is used to pass additional headers to called RPCs.
+	clientCreds credentials.PerRPCCredentials
 }
 
 // SetLoopbackDialer configures the loopback dialer function.
@@ -613,6 +616,10 @@ func NewContext(ctx context.Context, opts ContextOptions) *Context {
 		logClosingConnEvery: log.Every(time.Second),
 	}
 
+	if !opts.TenantID.IsSystem() {
+		rpcCtx.clientCreds = newTenantClientCreds(opts.TenantID)
+	}
+
 	if opts.Knobs.NoLoopbackDialer {
 		// The test has decided it doesn't need/want a loopback dialer.
 		// Ensure we still have a working dial function in that case.
@@ -665,6 +672,51 @@ func NewContext(ctx context.Context, opts ContextOptions) *Context {
 
 	return rpcCtx
 }
+
+// tenantClientCred is responsible for passing the tenant ID as
+// medatada header to called RPCs. This makes it possible to pass the
+// tenant ID even when using a different TLS cert than the "tenant
+// client cert".
+type tenantClientCred struct {
+	md map[string]string
+}
+
+// ClientTIDMetadataHeaderKey is the gRPC metadata key that indicates
+// which tenant ID the client is intending to connect as (originating
+// tenant identity).
+//
+// This is used instead of the cert CN field when connecting with a
+// TLS client cert that is not marked as special "tenant client cert"
+// via the "Tenants" string in the OU field.
+const ClientTIDMetadataHeaderKey = "client-tid"
+
+func newTenantClientCreds(tid roachpb.TenantID) credentials.PerRPCCredentials {
+	return &tenantClientCred{
+		md: map[string]string{
+			ClientTIDMetadataHeaderKey: fmt.Sprint(tid),
+		},
+	}
+}
+
+func getTenantIDFromNetworkCredentials(ctx context.Context) (roachpb.TenantID, error) {
+	val := metadata.ValueFromIncomingContext(ctx, ClientTIDMetadataHeaderKey)
+	if len(val) == 0 {
+		return roachpb.TenantID{}, nil
+	}
+	return tenantIDFromString(val[0], "gRPC metadata")
+}
+
+// GetRequestMetadata implements the (grpc)
+// credentials.PerRPCCredentials interface.
+func (tcc *tenantClientCred) GetRequestMetadata(
+	ctx context.Context, uri ...string,
+) (map[string]string, error) {
+	return tcc.md, nil
+}
+
+// RequireTransportSecurity implements the (grpc)
+// credentials.PerRPCCredentials interface.
+func (tcc *tenantClientCred) RequireTransportSecurity() bool { return false }
 
 // ClusterName retrieves the configured cluster name.
 func (rpcCtx *Context) ClusterName() string {
@@ -1690,6 +1742,10 @@ func (rpcCtx *Context) dialOptsCommon(
 		grpc.MaxCallRecvMsgSize(math.MaxInt32),
 		grpc.MaxCallSendMsgSize(math.MaxInt32),
 	)}
+
+	if rpcCtx.clientCreds != nil {
+		dialOpts = append(dialOpts, grpc.WithPerRPCCredentials(rpcCtx.clientCreds))
+	}
 
 	// We throw this one in for good measure, but it only disables the retries
 	// for RPCs that were already pending (which are opt in anyway, and we don't
