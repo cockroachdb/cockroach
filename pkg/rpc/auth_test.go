@@ -15,6 +15,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"fmt"
 	"io"
 	"testing"
 
@@ -90,32 +91,38 @@ func TestWrappedServerStream(t *testing.T) {
 	require.Equal(t, 3, recv)
 }
 
-func TestTenantFromCert(t *testing.T) {
+func TestAuthenticateTenant(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	correctOU := []string{security.TenantsOU}
+	stid := roachpb.SystemTenantID
+	tenTen := roachpb.MustMakeTenantID(10)
 	for _, tc := range []struct {
+		systemID    roachpb.TenantID
 		ous         []string
 		commonName  string
 		expTenID    roachpb.TenantID
 		expErr      string
 		tenantScope uint64
 	}{
-		{ous: correctOU, commonName: "10", expTenID: roachpb.MustMakeTenantID(10)},
-		{ous: correctOU, commonName: roachpb.MinTenantID.String(), expTenID: roachpb.MinTenantID},
-		{ous: correctOU, commonName: roachpb.MaxTenantID.String(), expTenID: roachpb.MaxTenantID},
-		{ous: correctOU, commonName: roachpb.SystemTenantID.String() /* "system" */, expErr: `could not parse tenant ID from Common Name \(CN\)`},
-		{ous: correctOU, commonName: "-1", expErr: `could not parse tenant ID from Common Name \(CN\)`},
-		{ous: correctOU, commonName: "0", expErr: `invalid tenant ID 0 in Common Name \(CN\)`},
-		{ous: correctOU, commonName: "1", expErr: `invalid tenant ID 1 in Common Name \(CN\)`},
-		{ous: correctOU, commonName: "root", expErr: `could not parse tenant ID from Common Name \(CN\)`},
-		{ous: correctOU, commonName: "other", expErr: `could not parse tenant ID from Common Name \(CN\)`},
-		{ous: []string{"foo"}, commonName: "other", expErr: `client certificate CN=other,OU=foo cannot be used to perform RPC on tenant {1}`},
-		{ous: nil, commonName: "other", expErr: `client certificate CN=other cannot be used to perform RPC on tenant {1}`},
-		{ous: append([]string{"foo"}, correctOU...), commonName: "other", expErr: `could not parse tenant ID from Common Name`},
-		{ous: nil, commonName: "root"},
-		{ous: nil, commonName: "root", tenantScope: 10, expErr: "client certificate CN=root cannot be used to perform RPC on tenant {1}"},
+		{systemID: stid, ous: correctOU, commonName: "10", expTenID: tenTen},
+		{systemID: stid, ous: correctOU, commonName: roachpb.MinTenantID.String(), expTenID: roachpb.MinTenantID},
+		{systemID: stid, ous: correctOU, commonName: roachpb.MaxTenantID.String(), expTenID: roachpb.MaxTenantID},
+		{systemID: stid, ous: correctOU, commonName: roachpb.SystemTenantID.String() /* "system" */, expErr: `could not parse tenant ID from Common Name \(CN\)`},
+		{systemID: stid, ous: correctOU, commonName: "-1", expErr: `could not parse tenant ID from Common Name \(CN\)`},
+		{systemID: stid, ous: correctOU, commonName: "0", expErr: `invalid tenant ID 0 in Common Name \(CN\)`},
+		{systemID: stid, ous: correctOU, commonName: "1", expErr: `invalid tenant ID 1 in Common Name \(CN\)`},
+		{systemID: stid, ous: correctOU, commonName: "root", expErr: `could not parse tenant ID from Common Name \(CN\)`},
+		{systemID: stid, ous: correctOU, commonName: "other", expErr: `could not parse tenant ID from Common Name \(CN\)`},
+		{systemID: stid, ous: []string{"foo"}, commonName: "other", expErr: `client certificate CN=other,OU=foo cannot be used to perform RPC on tenant {1}`},
+		{systemID: stid, ous: nil, commonName: "other", expErr: `client certificate CN=other cannot be used to perform RPC on tenant {1}`},
+		{systemID: stid, ous: append([]string{"foo"}, correctOU...), commonName: "other", expErr: `could not parse tenant ID from Common Name`},
+		{systemID: stid, ous: nil, commonName: "root"},
+		{systemID: stid, ous: nil, commonName: "root", tenantScope: 10, expErr: "client certificate CN=root cannot be used to perform RPC on tenant {1}"},
+		{systemID: tenTen, ous: correctOU, commonName: "10", expTenID: roachpb.TenantID{}},
+		{systemID: tenTen, ous: correctOU, commonName: "123", expErr: `this tenant \(10\) cannot serve requests from a server for tenant 123`},
+		{systemID: tenTen, ous: correctOU, commonName: "1", expErr: `invalid tenant ID 1 in Common Name \(CN\)`},
 	} {
-		t.Run(tc.commonName, func(t *testing.T) {
+		t.Run(fmt.Sprintf("from %v to %v", tc.commonName, tc.systemID), func(t *testing.T) {
 			cert := &x509.Certificate{
 				Subject: pkix.Name{
 					CommonName:         tc.commonName,
@@ -123,7 +130,9 @@ func TestTenantFromCert(t *testing.T) {
 				},
 			}
 			if tc.tenantScope > 0 {
-				tenantSANs, err := security.MakeTenantURISANs(username.MakeSQLUsernameFromPreNormalizedString(tc.commonName), []roachpb.TenantID{roachpb.MustMakeTenantID(tc.tenantScope)})
+				tenantSANs, err := security.MakeTenantURISANs(
+					username.MakeSQLUsernameFromPreNormalizedString(tc.commonName),
+					[]roachpb.TenantID{roachpb.MustMakeTenantID(tc.tenantScope)})
 				require.NoError(t, err)
 				cert.URIs = append(cert.URIs, tenantSANs...)
 			}
@@ -135,7 +144,7 @@ func TestTenantFromCert(t *testing.T) {
 			p := peer.Peer{AuthInfo: tlsInfo}
 			ctx := peer.NewContext(context.Background(), &p)
 
-			tenID, err := rpc.TestingAuthenticateTenant(ctx)
+			tenID, err := rpc.TestingAuthenticateTenant(ctx, tc.systemID)
 
 			if tc.expErr == "" {
 				require.Equal(t, tc.expTenID, tenID)
