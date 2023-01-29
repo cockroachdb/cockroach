@@ -33,3 +33,18 @@ func TestFastFromIncomingContext(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, v, "world")
 }
+
+func BenchmarkFromIncomingContext(b *testing.B) {
+	md := metadata.MD{"hello": []string{"world", "universe"}}
+	ctx := metadata.NewIncomingContext(context.Background(), md)
+	b.Run("stdlib", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			_, _ = metadata.FromIncomingContext(ctx)
+		}
+	})
+	b.Run("fast", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			_, _ = FastFromIncomingContext(ctx)
+		}
+	})
+}

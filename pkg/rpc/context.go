@@ -244,6 +244,7 @@ func NewServerEx(
 
 	if !rpcCtx.Config.Insecure {
 		a := kvAuth{
+			sv: &rpcCtx.Settings.SV,
 			tenant: tenantAuthorizer{
 				tenantID: rpcCtx.tenID,
 			},
@@ -421,6 +422,9 @@ type Context struct {
 	// The loopbackDialFn fits under that common case by transporting
 	// the gRPC protocol over an in-memory pipe.
 	loopbackDialFn func(context.Context) (net.Conn, error)
+
+	// clientCreds is used to pass additional headers to called RPCs.
+	clientCreds credentials.PerRPCCredentials
 }
 
 // SetLoopbackDialer configures the loopback dialer function.
@@ -615,6 +619,10 @@ func NewContext(ctx context.Context, opts ContextOptions) *Context {
 		logClosingConnEvery: log.Every(time.Second),
 	}
 
+	if !opts.TenantID.IsSystem() {
+		rpcCtx.clientCreds = newTenantClientCreds(opts.TenantID)
+	}
+
 	if opts.Knobs.NoLoopbackDialer {
 		// The test has decided it doesn't need/want a loopback dialer.
 		// Ensure we still have a working dial function in that case.
@@ -800,6 +808,18 @@ func makeInternalClientAdapter(
 			// carry the identity of the system tenant, not the one of the client of
 			// the outer RPC.
 			ctx = grpcutil.NewLocalRequestContext(ctx, tenantIDFromContext(ctx))
+
+			// Clear any leftover gRPC incoming metadata, if this call
+			// is originating from a RPC handler function called as
+			// a result of a tenant call. This is this case:
+			//
+			//    tenant -(rpc)-> tenant -(rpc)-> KV
+			//                            ^ YOU ARE HERE
+			//
+			// at this point, the left side RPC has left some incoming
+			// metadata in the context, but we need to get rid of it
+			// before we let the call go through KV.
+			ctx = grpcutil.ClearIncomingContext(ctx)
 
 			// If this is a tenant calling to the local KV server, we make things look
 			// closer to a remote call from the tracing point of view.
@@ -1692,6 +1712,10 @@ func (rpcCtx *Context) dialOptsCommon(
 		grpc.MaxCallRecvMsgSize(math.MaxInt32),
 		grpc.MaxCallSendMsgSize(math.MaxInt32),
 	)}
+
+	if rpcCtx.clientCreds != nil {
+		dialOpts = append(dialOpts, grpc.WithPerRPCCredentials(rpcCtx.clientCreds))
+	}
 
 	// We throw this one in for good measure, but it only disables the retries
 	// for RPCs that were already pending (which are opt in anyway, and we don't
