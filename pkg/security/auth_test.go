@@ -15,6 +15,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"fmt"
 	"net/url"
 	"strings"
 	"testing"
@@ -272,40 +273,50 @@ func TestAuthenticationHook(t *testing.T) {
 		publicHookSuccess  bool
 		privateHookSuccess bool
 		tenantID           roachpb.TenantID
+		expectedErr        string
 	}{
 		// Insecure mode, empty username.
-		{true, "", username.SQLUsername{}, "", true, false, false, roachpb.SystemTenantID},
+		{true, "", username.SQLUsername{}, "", true, false, false, roachpb.SystemTenantID, `user is missing`},
 		// Insecure mode, non-empty username.
-		{true, "", fooUser, "", true, true, false, roachpb.SystemTenantID},
+		{true, "", fooUser, "", true, true, false, roachpb.SystemTenantID, `user "foo" is not allowed`},
 		// Secure mode, no TLS state.
-		{false, "", username.SQLUsername{}, "", false, false, false, roachpb.SystemTenantID},
+		{false, "", username.SQLUsername{}, "", false, false, false, roachpb.SystemTenantID, `no client certificates in request`},
 		// Secure mode, bad user.
-		{false, "foo", username.NodeUserName(), "", true, false, false, roachpb.SystemTenantID},
+		{false, "foo", username.NodeUserName(), "", true, false, false, roachpb.SystemTenantID,
+			`certificate authentication failed for user "node"`},
 		// Secure mode, node user.
-		{false, username.NodeUser, username.NodeUserName(), "", true, true, true, roachpb.SystemTenantID},
+		{false, username.NodeUser, username.NodeUserName(), "", true, true, true, roachpb.SystemTenantID, ``},
 		// Secure mode, node cert and unrelated user.
-		{false, username.NodeUser, fooUser, "", true, false, false, roachpb.SystemTenantID},
+		{false, username.NodeUser, fooUser, "", true, false, false, roachpb.SystemTenantID,
+			`certificate authentication failed for user "foo"`},
 		// Secure mode, root user.
-		{false, username.RootUser, username.NodeUserName(), "", true, false, false, roachpb.SystemTenantID},
+		{false, username.RootUser, username.NodeUserName(), "", true, false, false, roachpb.SystemTenantID,
+			`certificate authentication failed for user "node"`},
 		// Secure mode, tenant cert, foo user.
-		{false, "(Tenants)foo", fooUser, "", true, false, false, roachpb.SystemTenantID},
+		{false, "(Tenants)foo", fooUser, "", true, false, false, roachpb.SystemTenantID,
+			`using tenant client certificate as user certificate is not allowed`},
 		// Secure mode, multiple cert principals.
-		{false, "foo,dns:bar", fooUser, "", true, true, false, roachpb.SystemTenantID},
-		{false, "foo,dns:bar", barUser, "", true, true, false, roachpb.SystemTenantID},
+		{false, "foo,dns:bar", fooUser, "", true, true, false, roachpb.SystemTenantID, `user "foo" is not allowed`},
+		{false, "foo,dns:bar", barUser, "", true, true, false, roachpb.SystemTenantID, `user "bar" is not allowed`},
 		// Secure mode, principal map.
-		{false, "foo,dns:bar", blahUser, "foo:blah", true, true, false, roachpb.SystemTenantID},
-		{false, "foo,dns:bar", blahUser, "bar:blah", true, true, false, roachpb.SystemTenantID},
-		{false, "foo,uri:crdb://tenant/123/user/foo", fooUser, "", true, true, false, roachpb.MustMakeTenantID(123)},
-		{false, "foo,uri:crdb://tenant/123/user/foo", fooUser, "", true, false, false, roachpb.SystemTenantID},
-		{false, "foo", fooUser, "", true, true, false, roachpb.MustMakeTenantID(123)},
-		{false, "foo,uri:crdb://tenant/1/user/foo", fooUser, "", true, false, false, roachpb.MustMakeTenantID(123)},
-		{false, "foo,uri:crdb://tenant/123/user/foo", blahUser, "", true, false, false, roachpb.MustMakeTenantID(123)},
+		{false, "foo,dns:bar", blahUser, "foo:blah", true, true, false, roachpb.SystemTenantID, `user "blah" is not allowed`},
+		{false, "foo,dns:bar", blahUser, "bar:blah", true, true, false, roachpb.SystemTenantID, `user "blah" is not allowed`},
+		{false, "foo,uri:crdb://tenant/123/user/foo", fooUser, "", true, true, false, roachpb.MustMakeTenantID(123),
+			`user "foo" is not allowed`},
+		{false, "foo,uri:crdb://tenant/123/user/foo", fooUser, "", true, false, false, roachpb.SystemTenantID,
+			`certificate authentication failed for user "foo"`},
+		{false, "foo", fooUser, "", true, true, false, roachpb.MustMakeTenantID(123),
+			`user "foo" is not allowed`},
+		{false, "foo,uri:crdb://tenant/1/user/foo", fooUser, "", true, false, false, roachpb.MustMakeTenantID(123),
+			`certificate authentication failed for user "foo"`},
+		{false, "foo,uri:crdb://tenant/123/user/foo", blahUser, "", true, false, false, roachpb.MustMakeTenantID(123),
+			`certificate authentication failed for user "blah"`},
 	}
 
 	ctx := context.Background()
 
-	for _, tc := range testCases {
-		t.Run("", func(t *testing.T) {
+	for i, tc := range testCases {
+		t.Run(fmt.Sprintf("%d: tls:%s user:%v tenant:%v", i, tc.tlsSpec, tc.username, tc.tenantID), func(t *testing.T) {
 			err := security.SetCertPrincipalMap(strings.Split(tc.principalMap, ","))
 			if err != nil {
 				t.Fatal(err)
@@ -315,15 +326,24 @@ func TestAuthenticationHook(t *testing.T) {
 				t.Fatalf("expected success=%t, got err=%v", tc.buildHookSuccess, err)
 			}
 			if err != nil {
+				require.Regexp(t, tc.expectedErr, err.Error())
 				return
 			}
 			err = hook(ctx, tc.username, true /* clientConnection */)
 			if (err == nil) != tc.publicHookSuccess {
 				t.Fatalf("expected success=%t, got err=%v", tc.publicHookSuccess, err)
 			}
+			if err != nil {
+				require.Regexp(t, tc.expectedErr, err.Error())
+				return
+			}
 			err = hook(ctx, tc.username, false /* clientConnection */)
 			if (err == nil) != tc.privateHookSuccess {
 				t.Fatalf("expected success=%t, got err=%v", tc.privateHookSuccess, err)
+			}
+			if err != nil {
+				require.Regexp(t, tc.expectedErr, err.Error())
+				return
 			}
 		})
 	}
