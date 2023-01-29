@@ -178,7 +178,7 @@ func (a kvAuth) authenticate(ctx context.Context) (roachpb.TenantID, error) {
 	// NodeUser. This is not a security concern, as RootUser has access to
 	// read and write all data, merely good hygiene. For example, there is
 	// no reason to permit the root user to send raw Raft RPCs.
-	certUserScope, err := security.GetCertificateUserScope(&tlsInfo.State)
+	certUserScope, err := security.GetCertificateUserScope(clientCert)
 	if err != nil {
 		return roachpb.TenantID{}, err
 	}
