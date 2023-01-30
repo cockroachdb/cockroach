@@ -6319,6 +6319,33 @@ DO NOT USE -- USE 'CREATE TENANT' INSTEAD`,
 			Volatility: volatility.Volatile,
 		},
 	),
+	"crdb_internal.upsert_dropped_relation_gc_ttl": makeBuiltin(
+		tree.FunctionProperties{
+			Category:         builtinconstants.CategorySystemRepair,
+			DistsqlBlocklist: true,
+			Undocumented:     true,
+		},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "desc_id", Typ: types.Int},
+				{Name: "gc_ttl", Typ: types.Interval},
+			},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				if err := evalCtx.Planner.UpsertDroppedRelationGCTTL(
+					ctx,
+					int64(*args[0].(*tree.DInt)),          // desc_id
+					(*args[1].(*tree.DInterval)).Duration, // gc_ttl
+				); err != nil {
+					return nil, err
+				}
+				return tree.DBoolTrue, nil
+			},
+			Info: "Administrators can use this to effectively perform " +
+				"ALTER TABLE ... CONFIGURE ZONE USING gc.ttlseconds = ...; on dropped tables",
+			Volatility: volatility.Volatile,
+		},
+	),
 
 	// Generate some objects.
 	"crdb_internal.generate_test_objects": makeBuiltin(
