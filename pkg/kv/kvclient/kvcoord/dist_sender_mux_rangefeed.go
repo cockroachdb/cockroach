@@ -34,7 +34,7 @@ type rangefeedMuxer struct {
 	// Context group controlling execution of MuxRangeFeed calls.
 	g ctxgroup.Group
 
-	mux struct {
+	mu struct {
 		// lock used to coordinate establishment and tear down of client connections.
 		syncutil.Mutex
 
@@ -73,7 +73,7 @@ func newRangefeedMuxer(g ctxgroup.Group) *rangefeedMuxer {
 		g:       g,
 	}
 
-	m.mux.clients = make(map[roachpb.NodeID]*muxClientState)
+	m.mu.clients = make(map[roachpb.NodeID]*muxClientState)
 	m.g.GoCtx(m.demuxLoop)
 
 	return m
@@ -130,12 +130,12 @@ func (m *rangefeedMuxer) startMuxRangeFeed(
 	cleanup := func() {
 		m.producers.Delete(req.StreamID)
 
-		m.mux.Lock()
-		defer m.mux.Unlock()
+		m.mu.Lock()
+		defer m.mu.Unlock()
 
 		ms.numStreams--
 		if ms.numStreams == 0 {
-			delete(m.mux.clients, req.Replica.NodeID)
+			delete(m.mu.clients, req.Replica.NodeID)
 			if log.V(1) {
 				log.InfofDepth(streamCtx, 1, "shut down inactive mux for node %d", req.Replica.NodeID)
 			}
@@ -157,22 +157,22 @@ func (m *rangefeedMuxer) establishMuxConnection(
 	client rpc.RestrictedInternalClient, nodeID roachpb.NodeID,
 ) (streamID int64, _ *muxClientState, err error) {
 	// Grab a lock for the duration of connection setup.
-	m.mux.Lock()
-	defer m.mux.Unlock()
+	m.mu.Lock()
+	defer m.mu.Unlock()
 
-	ms, found := m.mux.clients[nodeID]
+	ms, found := m.mu.clients[nodeID]
 	if !found {
 		// Establish new MuxRangefeed for this node.
 		ms, err = m.startNodeMuxRangeFeed(client, nodeID)
 		if err != nil {
 			return 0, nil, err
 		}
-		m.mux.clients[nodeID] = ms
+		m.mu.clients[nodeID] = ms
 	}
 
 	ms.numStreams++
-	m.mux.nextStreamID++
-	return m.mux.nextStreamID, ms, nil
+	m.mu.nextStreamID++
+	return m.mu.nextStreamID, ms, nil
 }
 
 // startNodeMuxRangeFeed establishes MuxRangeFeed RPC with the node.
@@ -180,8 +180,8 @@ func (m *rangefeedMuxer) establishMuxConnection(
 func (m *rangefeedMuxer) startNodeMuxRangeFeed(
 	client rpc.RestrictedInternalClient, nodeID roachpb.NodeID,
 ) (*muxClientState, error) {
-	if m.mux.connectDone == nil {
-		m.mux.connectDone = make(chan error, 1)
+	if m.mu.connectDone == nil {
+		m.mu.connectDone = make(chan error, 1)
 	}
 
 	ms := &muxClientState{done: make(chan struct{})}
@@ -209,14 +209,14 @@ func (m *rangefeedMuxer) startNodeMuxRangeFeed(
 		defer ms.cancel()
 
 		ms.client, err = client.MuxRangeFeed(ctx)
-		m.mux.connectDone <- err
+		m.mu.connectDone <- err
 		if err != nil {
 			return err
 		}
 		return ms.receiveEvents(ctx, m.eventCh)
 	})
 
-	return ms, <-m.mux.connectDone
+	return ms, <-m.mu.connectDone
 }
 
 // demuxLoop de-multiplexes events and sends them to appropriate rangefeed event
