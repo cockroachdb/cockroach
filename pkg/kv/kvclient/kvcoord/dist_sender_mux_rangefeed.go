@@ -12,13 +12,16 @@ package kvcoord
 
 import (
 	"context"
+	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
-	"github.com/cockroachdb/cockroach/pkg/util/intsets"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/pprofutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/logtags"
 )
 
 // rangefeedMuxer is responsible for coordination and management of mux
@@ -31,32 +34,37 @@ type rangefeedMuxer struct {
 	// Context group controlling execution of MuxRangeFeed calls.
 	g ctxgroup.Group
 
-	// State pertaining to actively executing MuxRangeFeeds.
-	mu struct {
+	mux struct {
+		// lock used to coordinate establishment and tear down of client connections.
 		syncutil.Mutex
-
-		// terminalErr set when a terminal error occurs.
-		// Subsequent calls to startMuxRangeFeed will return this error.
-		terminalErr error
 
 		// Each call to start new range feed gets a unique ID which is echoed back
 		// by MuxRangeFeed rpc.  This is done as a safety mechanism to make sure
 		// that we always send the event to the correct consumer -- even if the
 		// range feed is terminated and re-established rapidly.
 		nextStreamID int64
+		connectDone  chan error // Channel to communicate connect attempt completion.
 
-		// muxClient contains a nodeID->MuxRangeFeedClient.
-		muxClients map[roachpb.NodeID]*muxClientState
-		// producers maps streamID to the event producer -- data sent back to the
-		// consumer of range feed events.
-		producers map[int64]*channelRangeFeedEventProducer
+		// map of active MuxRangeFeed clients.
+		clients map[roachpb.NodeID]*muxClientState
 	}
+
+	// producers is a map of all rangefeeds running across all nodes.
+	// streamID -> *channelRangeFeedEventProducer.
+	producers syncutil.IntMap
 }
 
+// muxClientState is the state maintained for each MuxRangeFeed rpc.
 type muxClientState struct {
-	client  roachpb.Internal_MuxRangeFeedClient
-	streams intsets.Fast
-	cancel  context.CancelFunc
+	// RPC state.
+	client roachpb.Internal_MuxRangeFeedClient
+	cancel context.CancelFunc
+
+	done    chan struct{} // Signaled to indicate MuxRangeFeed shutdown.
+	recvErr error         // Set when shutdown.
+
+	// Number of consumers (ranges) running on this node; accessed under rangefeedMuxer lock.
+	numStreams int
 }
 
 func newRangefeedMuxer(g ctxgroup.Group) *rangefeedMuxer {
@@ -64,9 +72,8 @@ func newRangefeedMuxer(g ctxgroup.Group) *rangefeedMuxer {
 		eventCh: make(chan *roachpb.MuxRangeFeedEvent),
 		g:       g,
 	}
-	m.mu.muxClients = make(map[roachpb.NodeID]*muxClientState)
-	m.mu.producers = make(map[int64]*channelRangeFeedEventProducer)
 
+	m.mux.clients = make(map[roachpb.NodeID]*muxClientState)
 	m.g.GoCtx(m.demuxLoop)
 
 	return m
@@ -75,214 +82,218 @@ func newRangefeedMuxer(g ctxgroup.Group) *rangefeedMuxer {
 // channelRangeFeedEventProducer is a rangeFeedEventProducer which receives
 // events on input channel, and returns events when Recv is called.
 type channelRangeFeedEventProducer struct {
-	ctx       context.Context
-	termErrCh chan struct{} // Signalled to propagate terminal error the consumer.
-	termErr   error         // Set when terminal error occurs.
-	eventCh   chan *roachpb.RangeFeedEvent
+	ctx      context.Context
+	termCtx  terminationContext           // node mux rangefeed termination context.
+	streamID int64                        // stream ID for this producer.
+	eventCh  chan *roachpb.RangeFeedEvent // consumer event channel.
 }
+
+var _ roachpb.RangeFeedEventProducer = (*channelRangeFeedEventProducer)(nil)
 
 // Recv implements rangeFeedEventProducer interface.
 func (c *channelRangeFeedEventProducer) Recv() (*roachpb.RangeFeedEvent, error) {
 	select {
 	case <-c.ctx.Done():
 		return nil, c.ctx.Err()
-	case <-c.termErrCh:
-		return nil, c.termErr
+	case <-c.termCtx.Done():
+		return nil, c.termCtx.Err()
 	case e := <-c.eventCh:
 		return e, nil
 	}
 }
-
-var _ roachpb.RangeFeedEventProducer = (*channelRangeFeedEventProducer)(nil)
 
 // startMuxRangeFeed begins the execution of rangefeed for the specified
 // RangeFeedRequest.
 // The passed in client is only needed to establish MuxRangeFeed RPC.
 func (m *rangefeedMuxer) startMuxRangeFeed(
 	ctx context.Context, client rpc.RestrictedInternalClient, req *roachpb.RangeFeedRequest,
-) (_ roachpb.RangeFeedEventProducer, cleanup func(), _ error) {
-	producer, rpcClient, streamID, cleanup, err := m.connect(ctx, client, req.Replica.NodeID)
+) (_ roachpb.RangeFeedEventProducer, _ func(), err error) {
+	streamID, ms, err := m.establishMuxConnection(client, req.Replica.NodeID)
 	if err != nil {
-		return nil, cleanup, err
+		return nil, nil, err
 	}
+
 	req.StreamID = streamID
-	if err := rpcClient.Send(req); err != nil {
-		return nil, cleanup, err
+	streamCtx := logtags.AddTag(ctx, "stream", req.StreamID)
+	producer := &channelRangeFeedEventProducer{
+		ctx:      streamCtx,
+		termCtx:  ms,
+		streamID: req.StreamID,
+		eventCh:  make(chan *roachpb.RangeFeedEvent),
+	}
+	m.producers.Store(req.StreamID, unsafe.Pointer(producer))
+
+	if log.V(1) {
+		log.Info(streamCtx, "starting rangefeed")
+	}
+
+	cleanup := func() {
+		m.producers.Delete(req.StreamID)
+
+		m.mux.Lock()
+		defer m.mux.Unlock()
+
+		ms.numStreams--
+		if ms.numStreams == 0 {
+			delete(m.mux.clients, req.Replica.NodeID)
+			if log.V(1) {
+				log.InfofDepth(streamCtx, 1, "shut down inactive mux for node %d", req.Replica.NodeID)
+			}
+			ms.cancel()
+		}
+	}
+
+	if err := ms.client.Send(req); err != nil {
+		cleanup()
+		return nil, nil, err
 	}
 	return producer, cleanup, nil
 }
 
-// connect establishes MuxRangeFeed connection for the specified node, re-using
-// the existing one if one exists. Returns event producer, RPC client to send
-// requests on, the streamID which should be used when sending request, and a
-// cleanup function. Cleanup function never nil, and must always be invoked,
-// even if error is returned.
-func (m *rangefeedMuxer) connect(
-	ctx context.Context, client rpc.RestrictedInternalClient, nodeID roachpb.NodeID,
-) (
-	_ roachpb.RangeFeedEventProducer,
-	_ roachpb.Internal_MuxRangeFeedClient,
-	streamID int64,
-	cleanup func(),
-	_ error,
-) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
+// establishMuxConnection establishes MuxRangeFeed RPC with the node, and
+// returns muxClientState, along with a streamID that can be used to send
+// range feed request on the RPC.
+func (m *rangefeedMuxer) establishMuxConnection(
+	client rpc.RestrictedInternalClient, nodeID roachpb.NodeID,
+) (streamID int64, _ *muxClientState, err error) {
+	// Grab a lock for the duration of connection setup.
+	m.mux.Lock()
+	defer m.mux.Unlock()
 
-	streamID = m.mu.nextStreamID
-	m.mu.nextStreamID++
-
-	cleanup = func() {
-		m.mu.Lock()
-		defer m.mu.Unlock()
-
-		delete(m.mu.producers, streamID)
-		// Cleanup mux state if it exists; it may be nil if this function exits
-		// early (for example if MuxRangeFeed call fails, before muxState
-		// initialized).
-		muxState := m.mu.muxClients[nodeID]
-		if muxState != nil {
-			muxState.streams.Remove(int(streamID))
-			if muxState.streams.Len() == 0 {
-				// This node no longer has any active streams.
-				// Delete node from the muxClient list, and gracefully
-				// shutdown consumer go routine.
-				delete(m.mu.muxClients, nodeID)
-				muxState.cancel()
-			}
-		}
-	}
-
-	if m.mu.terminalErr != nil {
-		return nil, nil, streamID, cleanup, m.mu.terminalErr
-	}
-
-	var found bool
-	ms, found := m.mu.muxClients[nodeID]
-
+	ms, found := m.mux.clients[nodeID]
 	if !found {
-		ctx, cancel := context.WithCancel(ctx)
-		stream, err := client.MuxRangeFeed(ctx)
+		// Establish new MuxRangefeed for this node.
+		ms, err = m.startNodeMuxRangeFeed(client, nodeID)
 		if err != nil {
-			cancel()
-			return nil, nil, streamID, cleanup, err
+			return 0, nil, err
+		}
+		m.mux.clients[nodeID] = ms
+	}
+
+	ms.numStreams++
+	m.mux.nextStreamID++
+	return m.mux.nextStreamID, ms, nil
+}
+
+// startNodeMuxRangeFeed establishes MuxRangeFeed RPC with the node.
+// Runs under mux lock.
+func (m *rangefeedMuxer) startNodeMuxRangeFeed(
+	client rpc.RestrictedInternalClient, nodeID roachpb.NodeID,
+) (*muxClientState, error) {
+	if m.mux.connectDone == nil {
+		m.mux.connectDone = make(chan error, 1)
+	}
+
+	ms := &muxClientState{done: make(chan struct{})}
+
+	// It is important that we start MuxRangeFeed RPC using long-lived
+	// context available in the main context group used for this muxer.
+	m.g.GoCtx(func(ctx context.Context) (err error) {
+		ctx = logtags.AddTag(ctx, "mux_n", nodeID)
+		// Add "generation" number to the context so that log messages and stacks can
+		// differentiate between multiple instances of mux rangefeed Go routine
+		// (this can happen when one was shutdown, then re-established).
+		ctx = logtags.AddTag(ctx, "gen", ms)
+		ctx, restore := pprofutil.SetProfilerLabelsFromCtxTags(ctx)
+		defer restore()
+
+		if log.V(1) {
+			log.Info(ctx, "Establishing MuxRangeFeed")
+			start := timeutil.Now()
+			defer func() {
+				log.Infof(ctx, "MuxRangeFeed terminating with recvErr=%v after %s", err, timeutil.Since(start))
+			}()
 		}
 
-		ms = &muxClientState{client: stream, cancel: cancel}
-		m.mu.muxClients[nodeID] = ms
-		m.g.GoCtx(func(ctx context.Context) error {
-			defer cancel()
-			return m.receiveEventsFromNode(ctx, nodeID, stream)
-		})
-	}
+		ctx, ms.cancel = context.WithCancel(ctx)
+		defer ms.cancel()
 
-	// Start RangeFeed for this request.
-	ms.streams.Add(int(streamID))
+		ms.client, err = client.MuxRangeFeed(ctx)
+		m.mux.connectDone <- err
+		if err != nil {
+			return err
+		}
+		return ms.receiveEvents(ctx, m.eventCh)
+	})
 
-	producer := &channelRangeFeedEventProducer{
-		ctx:       ctx,
-		termErrCh: make(chan struct{}),
-		eventCh:   make(chan *roachpb.RangeFeedEvent),
-	}
-	m.mu.producers[streamID] = producer
-	return producer, ms.client, streamID, cleanup, nil
+	return ms, <-m.mux.connectDone
 }
 
 // demuxLoop de-multiplexes events and sends them to appropriate rangefeed event
 // consumer.
-func (m *rangefeedMuxer) demuxLoop(ctx context.Context) error {
+func (m *rangefeedMuxer) demuxLoop(ctx context.Context) (retErr error) {
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		case e := <-m.eventCh:
-			m.mu.Lock()
-			producer, found := m.mu.producers[e.StreamID]
-			m.mu.Unlock()
+			var producer *channelRangeFeedEventProducer
+			if v, found := m.producers.Load(e.StreamID); found {
+				producer = (*channelRangeFeedEventProducer)(v)
+			}
 
-			if !found {
-				return m.shutdownWithError(errors.AssertionFailedf(
-					"expected to find consumer for streamID=%d", e.StreamID),
-				)
+			// The stream may already have terminated (either producer is nil, or
+			// producer.termCtx.Done()). That's fine -- we may have encountered range
+			// split or similar rangefeed error, causing the caller to exit (and
+			// terminate this stream), but the server side stream termination is async
+			// and probabilistic (rangefeed registration output loop may have a
+			// checkpoint event available, *and* it may have context cancellation, but
+			// which one executes is a coin flip) and so it is possible that we may
+			// see additional event(s) arriving for a stream that is no longer active.
+			if producer == nil {
+				if log.V(1) {
+					log.Infof(ctx, "received stray event stream %d: %v", e.StreamID, e)
+				}
+				continue
 			}
 
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
 			case producer.eventCh <- &e.RangeFeedEvent:
+			case <-producer.termCtx.Done():
+				if log.V(1) {
+					log.Infof(ctx, "received stray event stream %d: %v", e.StreamID, e)
+				}
 			}
 		}
 	}
 }
 
-// receiveEventsFromNode receives mux rangefeed events, and forwards them to the
-// consumer channel.
-func (m *rangefeedMuxer) receiveEventsFromNode(
-	ctx context.Context, nodeID roachpb.NodeID, stream roachpb.Internal_MuxRangeFeedClient,
+// terminationContext (inspired by context.Context) describes
+// termination information.
+type terminationContext interface {
+	Done() <-chan struct{}
+	Err() error
+}
+
+// receiveEvents receives mux rangefeed events, and forwards them to the consumer channel.
+func (s *muxClientState) receiveEvents(
+	ctx context.Context, eventCh chan<- *roachpb.MuxRangeFeedEvent,
 ) error {
 	for {
-		event, streamErr := stream.Recv()
+		event, streamErr := s.client.Recv()
 
 		if streamErr != nil {
-			m.propagateStreamTerminationErrorToConsumers(nodeID, streamErr)
-			// Since the stream error is handled above, we return nil to gracefully shut down
-			// this go routine.
+			s.recvErr = streamErr
+			close(s.done)
+			// Since the stream error is handled above, we return nil to gracefully
+			// shut down this go routine.
 			return nil //nolint:returnerrcheck
 		}
 
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case m.eventCh <- event:
+		case eventCh <- event:
 		}
 	}
 }
 
-// propagateStreamTerminationErrorToConsumers called when mux stream running on
-// a node encountered an error.  All consumers will receive the stream
-// termination error and will handle it appropriately.
-func (m *rangefeedMuxer) propagateStreamTerminationErrorToConsumers(
-	nodeID roachpb.NodeID, streamErr error,
-) {
-	// Grab muxStream associated with the node, and clear it out.
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	ms, streamFound := m.mu.muxClients[nodeID]
-	delete(m.mu.muxClients, nodeID)
-	// Note: it's okay if the stream is not found; this can happen if the
-	// nodeID was already removed from muxClients because we're trying to gracefully
-	// shutdown receiveEventsFromNode go routine.
-	if streamFound {
-		ms.streams.ForEach(func(streamID int) {
-			p := m.mu.producers[int64(streamID)]
-			delete(m.mu.producers, int64(streamID))
-			if p != nil {
-				p.termErr = streamErr
-				close(p.termErrCh)
-			}
-		})
-	}
-
+func (s *muxClientState) Done() <-chan struct{} {
+	return s.done
 }
 
-// shutdownWithError terminates this rangefeedMuxer with a terminal error
-// (usually an assertion failure).  It's a bit unwieldy way to propagate this
-// error to the caller, but as soon as  one of consumers notices this terminal
-// error, the context should be cancelled.
-// Returns the terminal error passed in.
-func (m *rangefeedMuxer) shutdownWithError(terminalErr error) error {
-	// Okay to run this under the lock since as soon as a consumer sees this terminal
-	// error, the whole rangefeed should terminate.
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	m.mu.terminalErr = terminalErr
-	for id, p := range m.mu.producers {
-		p.termErr = terminalErr
-		close(p.termErrCh)
-		delete(m.mu.producers, id)
-	}
-
-	return terminalErr
+func (s *muxClientState) Err() error {
+	return s.recvErr
 }
