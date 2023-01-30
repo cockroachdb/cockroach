@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/semenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -863,19 +864,7 @@ func checkMutationInput(
 		if res, err := tree.GetBool(checkVals[colIdx]); err != nil {
 			return err
 		} else if !res && checkVals[colIdx] != tree.DNull {
-			// Failed to satisfy CHECK constraint, so unwrap the serialized
-			// check expression to display to the user.
-			expr, err := schemaexpr.FormatExprForDisplay(
-				ctx, tabDesc, checks[i].GetExpr(), semaCtx, sessionData, tree.FmtParsable,
-			)
-			if err != nil {
-				// If we ran into an error trying to read the check constraint, wrap it
-				// and return.
-				return pgerror.WithConstraintName(errors.Wrapf(err, "failed to satisfy CHECK constraint (%s)", checks[i].GetExpr()), checks[i].GetName())
-			}
-			return pgerror.WithConstraintName(pgerror.Newf(
-				pgcode.CheckViolation, "failed to satisfy CHECK constraint (%s)", expr,
-			), checks[i].GetName())
+			return row.CheckFailed(ctx, semaCtx, sessionData, tabDesc, checks[i])
 		}
 		colIdx++
 	}
