@@ -368,10 +368,10 @@ def go_deps():
         name = "com_github_aws_aws_sdk_go_v2",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/aws/aws-sdk-go-v2",
-        sha256 = "a2dd07909b2bc4595984a5fb9c4d69afe69ef0ecc034926ec17819655120cd29",
-        strip_prefix = "github.com/aws/aws-sdk-go-v2@v1.16.2",
+        sha256 = "db9f1deea94002f8a40a665ab86b58d9c713fda9358997c75b4859668d66802a",
+        strip_prefix = "github.com/aws/aws-sdk-go-v2@v1.17.3",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/aws/aws-sdk-go-v2/com_github_aws_aws_sdk_go_v2-v1.16.2.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/aws/aws-sdk-go-v2/com_github_aws_aws_sdk_go_v2-v1.17.3.zip",
         ],
     )
     go_repository(
@@ -408,20 +408,20 @@ def go_deps():
         name = "com_github_aws_aws_sdk_go_v2_internal_configsources",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/aws/aws-sdk-go-v2/internal/configsources",
-        sha256 = "948f7cdd0e4adc5fc3743a688ebc2a685053086a27c402868f013eceea6a866e",
-        strip_prefix = "github.com/aws/aws-sdk-go-v2/internal/configsources@v1.1.9",
+        sha256 = "e7f6ed262a89b7de55994c3534734660cae21f07e138ca1ed48796048708f896",
+        strip_prefix = "github.com/aws/aws-sdk-go-v2/internal/configsources@v1.1.27",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/aws/aws-sdk-go-v2/internal/configsources/com_github_aws_aws_sdk_go_v2_internal_configsources-v1.1.9.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/aws/aws-sdk-go-v2/internal/configsources/com_github_aws_aws_sdk_go_v2_internal_configsources-v1.1.27.zip",
         ],
     )
     go_repository(
         name = "com_github_aws_aws_sdk_go_v2_internal_endpoints_v2",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/aws/aws-sdk-go-v2/internal/endpoints/v2",
-        sha256 = "6dec0e8afc8efe4ef43c3bec089318ae48afbea583461a2e583a3864f2d2d1dc",
-        strip_prefix = "github.com/aws/aws-sdk-go-v2/internal/endpoints/v2@v2.4.3",
+        sha256 = "4c1baeacdb316aa7d37e16045c343e53157a1a8b5209d9cbf0bcb9b0b94781bc",
+        strip_prefix = "github.com/aws/aws-sdk-go-v2/internal/endpoints/v2@v2.4.21",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/aws/aws-sdk-go-v2/internal/endpoints/v2/com_github_aws_aws_sdk_go_v2_internal_endpoints_v2-v2.4.3.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/aws/aws-sdk-go-v2/internal/endpoints/v2/com_github_aws_aws_sdk_go_v2_internal_endpoints_v2-v2.4.21.zip",
         ],
     )
     go_repository(
@@ -485,6 +485,16 @@ def go_deps():
         ],
     )
     go_repository(
+        name = "com_github_aws_aws_sdk_go_v2_service_secretsmanager",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/aws/aws-sdk-go-v2/service/secretsmanager",
+        sha256 = "44dcf0add18d221042e6a709eed9beae974e5eebfe18dd37003944b7abefb271",
+        strip_prefix = "github.com/aws/aws-sdk-go-v2/service/secretsmanager@v1.18.2",
+        urls = [
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/aws/aws-sdk-go-v2/service/secretsmanager/com_github_aws_aws_sdk_go_v2_service_secretsmanager-v1.18.2.zip",
+        ],
+    )
+    go_repository(
         name = "com_github_aws_aws_sdk_go_v2_service_sso",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/aws/aws-sdk-go-v2/service/sso",
@@ -508,10 +518,10 @@ def go_deps():
         name = "com_github_aws_smithy_go",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/aws/smithy-go",
-        sha256 = "62b6645d90fd3a5e55646ae1c361923491b95e7c008a6c1ff1e347232b0e55f6",
-        strip_prefix = "github.com/aws/smithy-go@v1.11.2",
+        sha256 = "864667edd8459bff1f750d65f40922263b995a06dcb85240536539e239e911e4",
+        strip_prefix = "github.com/aws/smithy-go@v1.13.5",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/aws/smithy-go/com_github_aws_smithy_go-v1.11.2.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/aws/smithy-go/com_github_aws_smithy_go-v1.13.5.zip",
         ],
     )
     go_repository(
