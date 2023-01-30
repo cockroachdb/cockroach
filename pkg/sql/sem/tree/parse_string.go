@@ -13,15 +13,24 @@ package tree
 import (
 	"strconv"
 	"strings"
+	"time"
 
+	"github.com/cockroachdb/apd/v3"
+	"github.com/cockroachdb/cockroach/pkg/sql/lex"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
 
-// ParseAndRequireString parses s as type t for simple types. Collated
-// strings are not handled.
+// ParseAndRequireString parses s as type t for simple types.
 //
 // The dependsOnContext return value indicates if we had to consult the
 // ParseContext (either for the time or the local timezone).
@@ -74,12 +83,7 @@ func ParseAndRequireString(
 	case types.CollatedStringFamily:
 		d, err = NewDCollatedString(s, t.Locale(), ctx.GetCollationEnv())
 	case types.StringFamily:
-		// If the string type specifies a limit we truncate to that limit:
-		//   'hello'::CHAR(2) -> 'he'
-		// This is true of all the string type variants.
-		if t.Width() > 0 {
-			s = util.TruncateString(s, int(t.Width()))
-		}
+		s = truncateString(s, t)
 		return NewDString(s), false, nil
 	case types.TimeFamily:
 		d, dependsOnContext, err = ParseDTime(ctx, s, TimeFamilyPrecisionToRoundDuration(t.Precision()))
@@ -115,6 +119,16 @@ func ParseAndRequireString(
 	return d, dependsOnContext, err
 }
 
+func truncateString(s string, t *types.T) string {
+	// If the string type specifies a limit we truncate to that limit:
+	//   'hello'::CHAR(2) -> 'he'
+	// This is true of all the string type variants.
+	if t.Width() > 0 {
+		s = util.TruncateString(s, int(t.Width()))
+	}
+	return s
+}
+
 // ParseDOidAsInt parses the input and returns it as an OID. If the input
 // is not formatted as an int, an error is returned.
 func ParseDOidAsInt(s string) (*DOid, error) {
@@ -142,4 +156,122 @@ func FormatBitArrayToType(d *DBitArray, t *types.T) *DBitArray {
 		a = a.ToWidth(uint(t.Width()))
 	}
 	return &DBitArray{a}
+}
+
+// ValueHandler is an interface to allow raw types to extracted from strings.
+type ValueHandler interface {
+	Len() int
+	Null()
+	Date(d pgdate.Date)
+	Datum(d Datum)
+	Bool(b bool)
+	Bytes(b []byte)
+	Decimal() *apd.Decimal
+	Float(f float64)
+	Int(i int64)
+	Duration(d duration.Duration)
+	JSON(j json.JSON)
+	String(s string)
+	TimestampTZ(t time.Time)
+	Reset()
+}
+
+// ParseAndRequireStringEx parses a string and passes values supported by the
+// vector engine directly to a ValueHandler. Other types are handled by
+// ParseAndRequireString.
+func ParseAndRequireStringEx(
+	t *types.T, s string, ctx ParseContext, vh ValueHandler, ph *pgdate.ParseHelper,
+) (err error) {
+	switch t.Family() {
+	case types.BoolFamily:
+		var b bool
+		if b, err = ParseBool(strings.TrimSpace(s)); err == nil {
+			vh.Bool(b)
+		}
+	case types.BytesFamily:
+		var res []byte
+		if res, err = lex.DecodeRawBytesToByteArrayAuto(encoding.UnsafeConvertStringToBytes(s)); err == nil {
+			vh.Bytes(res)
+		} else {
+			err = MakeParseError(s, types.Bytes, err)
+		}
+	case types.DateFamily:
+		now := relativeParseTime(ctx)
+		var t pgdate.Date
+		if t, _, err = pgdate.ParseDate(now, dateStyle(ctx), s, ph); err == nil {
+			vh.Date(t)
+		}
+	case types.DecimalFamily:
+		dec := vh.Decimal()
+		if err = setDecimalString(s, dec); err != nil {
+			// Erase any invalid results.
+			*dec = apd.Decimal{}
+		}
+	case types.FloatFamily:
+		var f float64
+		if f, err = strconv.ParseFloat(s, 64); err == nil {
+			vh.Float(f)
+		} else {
+			err = MakeParseError(s, types.Float, err)
+		}
+	case types.IntFamily:
+		var i int64
+		if i, err = strconv.ParseInt(s, 0, 64); err == nil {
+			vh.Int(i)
+		} else {
+			err = MakeParseError(s, types.Int, err)
+		}
+	case types.JsonFamily:
+		var j json.JSON
+		if j, err = json.ParseJSON(s); err == nil {
+			vh.JSON(j)
+		} else {
+			err = pgerror.Wrapf(err, pgcode.Syntax, "could not parse JSON")
+		}
+	case types.StringFamily:
+		s = truncateString(s, t)
+		vh.String(s)
+	case types.TimestampTZFamily:
+		now := relativeParseTime(ctx)
+		var ts time.Time
+		if ts, _, err = pgdate.ParseTimestamp(now, dateStyle(ctx), s); err == nil {
+			// Always normalize time to the current location.
+			if ts, err = checkTimeBounds(ts, TimeFamilyPrecisionToRoundDuration(t.Precision())); err == nil {
+				vh.TimestampTZ(ts)
+			}
+		}
+	case types.TimestampFamily:
+		now := relativeParseTime(ctx)
+		var ts time.Time
+		if ts, _, err = pgdate.ParseTimestampWithoutTimezone(now, dateStyle(ctx), s); err == nil {
+			// Always normalize time to the current location.
+			if ts, err = checkTimeBounds(ts, TimeFamilyPrecisionToRoundDuration(t.Precision())); err == nil {
+				vh.TimestampTZ(ts)
+			}
+		}
+	case types.IntervalFamily:
+		var itm types.IntervalTypeMetadata
+		itm, err = t.IntervalTypeMetadata()
+		if err == nil {
+			var d duration.Duration
+			d, err = ParseIntervalWithTypeMetadata(intervalStyle(ctx), s, itm)
+			if err == nil {
+				vh.Duration(d)
+			}
+		}
+	case types.UuidFamily:
+		var uv uuid.UUID
+		uv, err = uuid.FromString(s)
+		if err == nil {
+			vh.Bytes(uv.GetBytes())
+		} else {
+			err = MakeParseError(s, types.Uuid, err)
+		}
+	default:
+		var d Datum
+		if d, _, err = ParseAndRequireString(t, s, ctx); err == nil {
+			vh.Datum(d)
+		}
+	}
+	return err
 }
