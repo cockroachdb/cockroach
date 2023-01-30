@@ -271,6 +271,49 @@ func columnExistsAndIsNotNull(
 	return !storedCol.IsNullable(), nil
 }
 
+func checkConstraintExists(
+	storedTable, expectedTable catalog.TableDescriptor, name string,
+) (bool, error) {
+	findCheckWithName := func(table catalog.TableDescriptor) (*descpb.TableDescriptor_CheckConstraint, bool) {
+		for _, c := range table.AllActiveAndInactiveChecks() {
+			if c.Name == name {
+				return c, true
+			}
+		}
+		return nil, false
+	}
+	expectedCheck, expectedCheckExists := findCheckWithName(expectedTable)
+	if !expectedCheckExists {
+		return false, errors.AssertionFailedf(
+			"failed to find expected constraint %s in %s",
+			redact.SafeString(name), redact.SafeString(expectedTable.GetName()))
+	}
+	storedCheck, storedCheckExists := findCheckWithName(storedTable)
+	if !storedCheckExists {
+		return false, nil
+	}
+	if storedCheck.Validity != expectedCheck.Validity {
+		return false, nil
+	}
+	expectedCopy := checkConstraintForComparison(expectedCheck)
+	storedCopy := checkConstraintForComparison(storedCheck)
+	if err := ensureProtoMessagesAreEqual(expectedCopy, storedCopy); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func checkConstraintForComparison(
+	c *descpb.TableDescriptor_CheckConstraint,
+) *descpb.TableDescriptor_CheckConstraint {
+	cp := protoutil.Clone(c).(*descpb.TableDescriptor_CheckConstraint)
+	cp.ConstraintID = 0
+	for i := range cp.ColumnIDs {
+		cp.ColumnIDs[i] = 0
+	}
+	return cp
+}
+
 // hasIndex returns true if storedTable already has the given index, comparing
 // with expectedTable.
 // storedTable descriptor must be read from system storage as compared to reading
