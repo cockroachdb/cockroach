@@ -1049,10 +1049,14 @@ func ParseDDecimal(s string) (*DDecimal, error) {
 // SetString sets d to s. Any non-standard NaN values are converted to a
 // normal NaN. Any negative zero is converted to positive.
 func (d *DDecimal) SetString(s string) error {
+	return setDecimalString(s, &d.Decimal)
+}
+
+func setDecimalString(s string, d *apd.Decimal) error {
 	// ExactCtx should be able to handle any decimal, but if there is any rounding
 	// or other inexact conversion, it will result in an error.
 	// _, res, err := HighPrecisionCtx.SetString(&d.Decimal, s)
-	_, res, err := ExactCtx.SetString(&d.Decimal, s)
+	_, res, err := ExactCtx.SetString(d, s)
 	if res != 0 || err != nil {
 		return MakeParseError(s, types.Decimal, err)
 	}
@@ -2606,6 +2610,9 @@ var DZeroTimestamp = &DTimestamp{}
 //
 // The dependsOnContext return value indicates if we had to consult the
 // ParseContext (either for the time or the local timezone).
+//
+// Parts of this function are inlined into ParseAndRequireStringHandler, if this
+// changes materially the timestamp case arms there may need to change too.
 func ParseDTimestamp(
 	ctx ParseContext, s string, precision time.Duration,
 ) (_ *DTimestamp, dependsOnContext bool, _ error) {
@@ -2854,13 +2861,20 @@ type DTimestampTZ struct {
 	time.Time
 }
 
-// MakeDTimestampTZ creates a DTimestampTZ with specified precision.
-func MakeDTimestampTZ(t time.Time, precision time.Duration) (*DTimestampTZ, error) {
+func checkTimeBounds(t time.Time, precision time.Duration) (time.Time, error) {
 	ret := t.Round(precision)
 	if ret.After(MaxSupportedTime) || ret.Before(MinSupportedTime) {
-		return nil, NewTimestampExceedsBoundsError(ret)
+		return time.Time{}, NewTimestampExceedsBoundsError(ret)
 	}
-	return &DTimestampTZ{Time: ret}, nil
+	return ret, nil
+}
+
+// MakeDTimestampTZ creates a DTimestampTZ with specified precision.
+func MakeDTimestampTZ(t time.Time, precision time.Duration) (_ *DTimestampTZ, err error) {
+	if t, err = checkTimeBounds(t, precision); err != nil {
+		return nil, err
+	}
+	return &DTimestampTZ{Time: t}, nil
 }
 
 // MustMakeDTimestampTZ wraps MakeDTimestampTZ but panics if there is an error.
@@ -2891,6 +2905,9 @@ func MakeDTimestampTZFromDate(loc *time.Location, d *DDate) (*DTimestampTZ, erro
 //
 // The dependsOnContext return value indicates if we had to consult the
 // ParseContext (either for the time or the local timezone).
+//
+// Parts of this function are inlined into ParseAndRequireStringHandler, if this
+// changes materially the timestamp case arms there may need to change too.
 func ParseDTimestampTZ(
 	ctx ParseContext, s string, precision time.Duration,
 ) (_ *DTimestampTZ, dependsOnContext bool, _ error) {
