@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/opgen"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/rules"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/rules/current"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scgraph"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scstage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -124,12 +124,22 @@ func makePlan(ctx context.Context, p *Plan) (err error) {
 	return nil
 }
 
+func applyOpRules(ctx context.Context, g *scgraph.Graph) (*scgraph.Graph, error) {
+	registry := current.GetRegistry()
+	return registry.ApplyOpRules(ctx, g)
+}
+
+func applyDepRules(ctx context.Context, g *scgraph.Graph) error {
+	registry := current.GetRegistry()
+	return registry.ApplyDepRules(ctx, g)
+}
+
 func buildGraph(ctx context.Context, cs scpb.CurrentState) *scgraph.Graph {
 	g, err := opgen.BuildGraph(ctx, cs)
 	if err != nil {
 		panic(errors.Wrapf(err, "build graph op edges"))
 	}
-	err = rules.ApplyDepRules(ctx, g)
+	err = applyDepRules(ctx, g)
 	if err != nil {
 		panic(errors.Wrapf(err, "build graph dep edges"))
 	}
@@ -137,7 +147,7 @@ func buildGraph(ctx context.Context, cs scpb.CurrentState) *scgraph.Graph {
 	if err != nil {
 		panic(errors.Wrapf(err, "validate graph"))
 	}
-	g, err = rules.ApplyOpRules(ctx, g)
+	g, err = applyOpRules(ctx, g)
 	if err != nil {
 		panic(errors.Wrapf(err, "mark op edges as no-op"))
 	}

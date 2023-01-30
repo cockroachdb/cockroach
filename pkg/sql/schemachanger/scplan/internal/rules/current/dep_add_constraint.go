@@ -8,11 +8,12 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package rules
+package current
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/rel"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	. "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/rules"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scgraph"
 )
 
@@ -24,12 +25,12 @@ func init() {
 		"constraint dependent public right before constraint",
 		scgraph.SameStagePrecedence,
 		"constraint", "dependent",
-		func(from, to nodeVars) rel.Clauses {
+		func(from, to NodeVars) rel.Clauses {
 			return rel.Clauses{
-				from.typeFilter(isConstraint),
-				to.typeFilter(isConstraintDependent),
-				joinOnConstraintID(from, to, "table-id", "constraint-id"),
-				statusesToPublicOrTransient(from, scpb.Status_PUBLIC, to, scpb.Status_PUBLIC),
+				from.TypeFilter(rulesVersionKey, isConstraint),
+				to.TypeFilter(rulesVersionKey, isConstraintDependent),
+				JoinOnConstraintID(from, to, "table-id", "constraint-id"),
+				StatusesToPublicOrTransient(from, scpb.Status_PUBLIC, to, scpb.Status_PUBLIC),
 			}
 		},
 	)
