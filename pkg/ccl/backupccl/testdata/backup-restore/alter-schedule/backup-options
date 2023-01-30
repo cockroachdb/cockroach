@@ -14,8 +14,8 @@ with schedules as (show schedules) select id from schedules where label='datates
 query-sql
 with schedules as (show schedules) select id, command->'backup_statement' from schedules where label='datatest' order by command->>'backup_type' asc;
 ----
-$fullID "BACKUP INTO 'nodelocal://1/example-schedule' WITH detached"
-$incID "BACKUP INTO LATEST IN 'nodelocal://1/example-schedule' WITH detached"
+835701674603675649 "BACKUP INTO 'nodelocal://1/example-schedule' WITH detached"
+835701674568024065 "BACKUP INTO LATEST IN 'nodelocal://1/example-schedule' WITH detached"
 
 # Can't use the same command twice.
 
@@ -38,8 +38,8 @@ alter backup schedule $incID set with revision_history = false;
 query-sql
 with schedules as (show schedules) select id, command->'backup_statement' from schedules where label='datatest' order by command->>'backup_type' asc;
 ----
-$fullID "BACKUP INTO 'nodelocal://1/example-schedule' WITH revision_history = false, detached"
-$incID "BACKUP INTO LATEST IN 'nodelocal://1/example-schedule' WITH revision_history = false, detached"
+835701674603675649 "BACKUP INTO 'nodelocal://1/example-schedule' WITH revision_history = false, detached"
+835701674568024065 "BACKUP INTO LATEST IN 'nodelocal://1/example-schedule' WITH revision_history = false, detached"
 
 # Change an option and set another.
 
@@ -50,8 +50,8 @@ alter backup schedule $incID set with revision_history = true, set with encrypti
 query-sql
 with schedules as (show schedules) select id, command->'backup_statement' from schedules where label='datatest' order by command->>'backup_type' asc;
 ----
-$fullID "BACKUP INTO 'nodelocal://1/example-schedule' WITH revision_history = true, encryption_passphrase = '*****', detached"
-$incID "BACKUP INTO LATEST IN 'nodelocal://1/example-schedule' WITH revision_history = true, encryption_passphrase = '*****', detached"
+835701674603675649 "BACKUP INTO 'nodelocal://1/example-schedule' WITH revision_history = true, encryption_passphrase = '*****', detached"
+835701674568024065 "BACKUP INTO LATEST IN 'nodelocal://1/example-schedule' WITH revision_history = true, encryption_passphrase = '*****', detached"
 
 # Add an incompatible option
 
@@ -70,8 +70,8 @@ alter backup schedule $incID set with kms = ('aws:///key1?region=r1', 'aws:///ke
 query-sql
 with schedules as (show schedules) select id, command->'backup_statement' from schedules where label='datatest' order by command->>'backup_type' asc;
 ----
-$fullID "BACKUP INTO 'nodelocal://1/example-schedule' WITH revision_history = true, detached, kms = ('aws:///redacted?region=r1', 'aws:///redacted?region=r2'), incremental_location = 'inc'"
-$incID "BACKUP INTO LATEST IN 'nodelocal://1/example-schedule' WITH revision_history = true, detached, kms = ('aws:///redacted?region=r1', 'aws:///redacted?region=r2'), incremental_location = 'inc'"
+835701674603675649 "BACKUP INTO 'nodelocal://1/example-schedule' WITH revision_history = true, detached, kms = ('aws:///redacted?region=r1', 'aws:///redacted?region=r2'), incremental_location = 'inc'"
+835701674568024065 "BACKUP INTO LATEST IN 'nodelocal://1/example-schedule' WITH revision_history = true, detached, kms = ('aws:///redacted?region=r1', 'aws:///redacted?region=r2'), incremental_location = 'inc'"
 
 # Set options to empty (unset).
 
@@ -82,8 +82,8 @@ alter backup schedule $incID set with kms = '', set with incremental_location = 
 query-sql
 with schedules as (show schedules) select id, command->'backup_statement' from schedules where label='datatest' order by command->>'backup_type' asc;
 ----
-$fullID "BACKUP INTO 'nodelocal://1/example-schedule' WITH revision_history = true, detached"
-$incID "BACKUP INTO LATEST IN 'nodelocal://1/example-schedule' WITH revision_history = true, detached"
+835701674603675649 "BACKUP INTO 'nodelocal://1/example-schedule' WITH revision_history = true, detached"
+835701674568024065 "BACKUP INTO LATEST IN 'nodelocal://1/example-schedule' WITH revision_history = true, detached"
 
 # Setting DETACHED throws an error.
 
@@ -100,5 +100,5 @@ regex matches error
 query-sql
 with schedules as (show schedules) select id, command->'backup_statement' from schedules where label='datatest' order by command->>'backup_type' asc;
 ----
-$fullID "BACKUP INTO 'nodelocal://1/example-schedule' WITH revision_history = true, detached"
-$incID "BACKUP INTO LATEST IN 'nodelocal://1/example-schedule' WITH revision_history = true, detached"
+835701674603675649 "BACKUP INTO 'nodelocal://1/example-schedule' WITH revision_history = true, detached"
+835701674568024065 "BACKUP INTO LATEST IN 'nodelocal://1/example-schedule' WITH revision_history = true, detached"

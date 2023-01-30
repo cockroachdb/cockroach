@@ -14,8 +14,8 @@ with schedules as (show schedules) select id from schedules where label='datates
 query-sql
 with schedules as (show schedules) select id, state, recurrence, owner, command from schedules where label='datatest' order by command->>'backup_type' asc;
 ----
-$fullID <nil> @weekly root {"backup_statement": "BACKUP INTO 'nodelocal://1/example-schedule' WITH detached", "chain_protected_timestamp_records": true, "dependent_schedule_id": $incID, "unpause_on_success": $incID}
-$incID Waiting for initial backup to complete @daily root {"backup_statement": "BACKUP INTO LATEST IN 'nodelocal://1/example-schedule' WITH detached", "backup_type": 1, "chain_protected_timestamp_records": true, "dependent_schedule_id": $fullID}
+835701678254227457 <nil> @weekly root {"backup_statement": "BACKUP INTO 'nodelocal://1/example-schedule' WITH detached", "chain_protected_timestamp_records": true, "dependent_schedule_id": 835701678248722433, "unpause_on_success": 835701678248722433}
+835701678248722433 Waiting for initial backup to complete @daily root {"backup_statement": "BACKUP INTO LATEST IN 'nodelocal://1/example-schedule' WITH detached", "backup_type": 1, "chain_protected_timestamp_records": true, "dependent_schedule_id": 835701678254227457}
 
 exec-sql
 drop schedule $fullID
@@ -34,8 +34,8 @@ with schedules as (show schedules) select id from schedules where label='datates
 query-sql
 with schedules as (show schedules) select id, state, recurrence, owner, command from schedules where label='datatest' order by command->>'backup_type' asc;
 ----
-$fullID <nil> @weekly root {"backup_statement": "BACKUP INTO 'nodelocal://1/example-schedule' WITH detached", "chain_protected_timestamp_records": true, "dependent_schedule_id": $incID, "unpause_on_success": $incID}
-$incID Waiting for initial backup to complete @daily root {"backup_statement": "BACKUP INTO LATEST IN 'nodelocal://1/example-schedule' WITH detached", "backup_type": 1, "chain_protected_timestamp_records": true, "dependent_schedule_id": $fullID}
+835701678339129345 <nil> @weekly root {"backup_statement": "BACKUP INTO 'nodelocal://1/example-schedule' WITH detached", "chain_protected_timestamp_records": true, "dependent_schedule_id": 835701678337654785, "unpause_on_success": 835701678337654785}
+835701678337654785 Waiting for initial backup to complete @daily root {"backup_statement": "BACKUP INTO LATEST IN 'nodelocal://1/example-schedule' WITH detached", "backup_type": 1, "chain_protected_timestamp_records": true, "dependent_schedule_id": 835701678339129345}
 
 exec-sql
 drop schedule $incID
@@ -46,7 +46,7 @@ drop schedule $incID
 query-sql
 with schedules as (show schedules) select id, state, recurrence, owner, command from schedules where label='datatest' order by command->>'backup_type' asc;
 ----
-$fullID <nil> @weekly root {"backup_statement": "BACKUP INTO 'nodelocal://1/example-schedule' WITH detached", "chain_protected_timestamp_records": true}
+835701678339129345 <nil> @weekly root {"backup_statement": "BACKUP INTO 'nodelocal://1/example-schedule' WITH detached", "chain_protected_timestamp_records": true}
 
 exec-sql
 alter backup schedule $fullID set recurring '@daily';
@@ -55,4 +55,4 @@ alter backup schedule $fullID set recurring '@daily';
 query-sql
 with schedules as (show schedules) select id, state, recurrence, owner, command from schedules where label='datatest' order by command->>'backup_type' asc;
 ----
-$fullID <nil> @daily root {"backup_statement": "BACKUP INTO 'nodelocal://1/example-schedule' WITH detached", "chain_protected_timestamp_records": true}
+835701678339129345 <nil> @daily root {"backup_statement": "BACKUP INTO 'nodelocal://1/example-schedule' WITH detached", "chain_protected_timestamp_records": true}

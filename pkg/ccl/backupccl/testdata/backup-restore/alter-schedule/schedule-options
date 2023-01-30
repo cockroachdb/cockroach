@@ -14,8 +14,8 @@ with schedules as (show schedules) select id from schedules where label='datates
 query-sql
 with schedules as (show schedules) select id, label from schedules where id in ($fullID, $incID) order by command->>'backup_type' asc;
 ----
-$fullID datatest
-$incID datatest
+835701682487525377 datatest
+835701682485166081 datatest
 
 exec-sql
 alter backup schedule $fullID set label 'datatest2'
@@ -24,8 +24,8 @@ alter backup schedule $fullID set label 'datatest2'
 query-sql
 with schedules as (show schedules) select id, label from schedules where id in ($fullID, $incID) order by command->>'backup_type' asc;
 ----
-$fullID datatest2
-$incID datatest2
+835701682487525377 datatest2
+835701682485166081 datatest2
 
 exec-sql
 alter backup schedule $fullID set into 'nodelocal://1/example-schedule-2'
@@ -34,8 +34,8 @@ alter backup schedule $fullID set into 'nodelocal://1/example-schedule-2'
 query-sql
 with schedules as (show schedules) select id, command->'backup_statement' from schedules where id in ($fullID, $incID) order by command->>'backup_type' asc;
 ----
-$fullID "BACKUP INTO 'nodelocal://1/example-schedule-2' WITH detached"
-$incID "BACKUP INTO LATEST IN 'nodelocal://1/example-schedule-2' WITH detached"
+835701682487525377 "BACKUP INTO 'nodelocal://1/example-schedule-2' WITH detached"
+835701682485166081 "BACKUP INTO LATEST IN 'nodelocal://1/example-schedule-2' WITH detached"
 
 # Hard to validate these, so settle for checking they execute without errors.
 
