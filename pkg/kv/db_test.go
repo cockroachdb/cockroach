@@ -858,3 +858,124 @@ func TestPreservingSteppingOnSenderReplacement(t *testing.T) {
 		require.Equal(t, expectedStepping, txn.ConfigureStepping(ctx, expectedStepping))
 	})
 }
+
+type byteSliceBulkSource[T kv.GValue] struct {
+	keys   []roachpb.Key
+	values []T
+}
+
+var _ kv.BulkSource[[]byte] = &byteSliceBulkSource[[]byte]{}
+
+func (s *byteSliceBulkSource[T]) Len() int {
+	return len(s.keys)
+}
+
+func (s *byteSliceBulkSource[T]) Iter() kv.BulkSourceIterator[T] {
+	return &byteSliceBulkSourceIterator[T]{s: s, cursor: 0}
+}
+
+type byteSliceBulkSourceIterator[T kv.GValue] struct {
+	s      *byteSliceBulkSource[T]
+	cursor int
+}
+
+func (s *byteSliceBulkSourceIterator[T]) Next() (roachpb.Key, T) {
+	k, v := s.s.keys[s.cursor], s.s.values[s.cursor]
+	s.cursor++
+	return k, v
+}
+
+func TestBulkBatchAPI(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	s, db := setup(t)
+	defer s.Stopper().Stop(context.Background())
+	ctx := context.Background()
+
+	kys := []roachpb.Key{[]byte("a"), []byte("b"), []byte("c")}
+	vals := [][]byte{[]byte("you"), []byte("know"), []byte("me")}
+
+	type putter func(*kv.Batch)
+
+	clearKeys := func() {
+		txn := db.NewTxn(ctx, "bulk-test")
+		b := txn.NewBatch()
+		b.Del("a", "b", "c")
+		err := txn.CommitInBatch(ctx, b)
+		require.NoError(t, err)
+	}
+
+	verify := func() {
+		for i, k := range kys {
+			v, err := db.Get(ctx, k)
+			require.NoError(t, err)
+			raw := vals[i]
+			if tv, err := v.Value.GetTuple(); err == nil {
+				raw = tv
+			}
+			err = v.Value.Verify(k)
+			require.NoError(t, err)
+			require.Equal(t, raw, vals[i])
+		}
+	}
+
+	testF := func(p putter) {
+		txn := db.NewTxn(ctx, "bulk-test")
+		b := txn.NewBatch()
+		p(b)
+		err := txn.CommitInBatch(ctx, b)
+		require.NoError(t, err)
+		verify()
+		require.Greater(t, len(b.Results), 1)
+		r := b.Results[0]
+		require.Equal(t, len(r.Rows), len(kys))
+		require.NoError(t, r.Err)
+		clearKeys()
+	}
+
+	testF(func(b *kv.Batch) { b.PutBytes(&byteSliceBulkSource[[]byte]{kys, vals}) })
+	testF(func(b *kv.Batch) { b.PutTuples(&byteSliceBulkSource[[]byte]{kys, vals}) })
+	testF(func(b *kv.Batch) { b.InitPutBytes(&byteSliceBulkSource[[]byte]{kys, vals}) })
+	testF(func(b *kv.Batch) { b.InitPutTuples(&byteSliceBulkSource[[]byte]{kys, vals}) })
+	testF(func(b *kv.Batch) { b.CPutTuples(&byteSliceBulkSource[[]byte]{kys, vals}) })
+
+	values := make([]roachpb.Value, len(kys))
+	for i, v := range vals {
+		if kys[i] != nil {
+			values[i].InitChecksum(kys[i])
+			values[i].SetTuple(v)
+		}
+	}
+	testF(func(b *kv.Batch) { b.CPutValues(&byteSliceBulkSource[roachpb.Value]{kys, values}) })
+}
+
+func TestGetResults(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	s, db := setup(t)
+	defer s.Stopper().Stop(context.Background())
+	ctx := context.Background()
+
+	kys1 := []roachpb.Key{[]byte("a"), []byte("b"), []byte("c")}
+	kys2 := []roachpb.Key{[]byte("d"), []byte("e"), []byte("f")}
+	vals := [][]byte{[]byte("you"), []byte("know"), []byte("me")}
+	txn := db.NewTxn(ctx, "bulk-test")
+	b := txn.NewBatch()
+	b.PutBytes(&byteSliceBulkSource[[]byte]{kys1, vals})
+	b.PutBytes(&byteSliceBulkSource[[]byte]{kys2, vals})
+	err := txn.CommitInBatch(ctx, b)
+	require.NoError(t, err)
+	for i := 0; i < len(kys1)+len(kys2); i++ {
+		res, row, err := b.GetResult(i)
+		require.Equal(t, res, &b.Results[i/3])
+		require.Equal(t, row, b.Results[i/3].Rows[i%3])
+		require.NoError(t, err)
+	}
+	// test EndTxn result
+	_, _, err = b.GetResult(len(kys1) + len(kys2))
+	require.NoError(t, err)
+
+	// test out of bounds
+	_, _, err = b.GetResult(len(kys1) + len(kys2) + 1)
+	require.Error(t, err)
+}
