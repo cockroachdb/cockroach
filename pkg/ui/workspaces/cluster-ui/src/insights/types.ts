@@ -28,23 +28,24 @@ export enum InsightExecEnum {
 
 // Common fields for both txn and stmt insights.
 export type InsightEventBase = {
-  transactionExecutionID: string;
-  transactionFingerprintID: string;
+  application: string;
+  contentionTime?: moment.Duration;
+  cpuSQLNanos: number;
+  elapsedTimeMillis: number;
+  endTime: Moment;
   implicitTxn: boolean;
-  sessionID: string;
-  username: string;
+  insights: Insight[];
   lastRetryReason?: string;
   priority: string;
+  query: string;
   retries: number;
-  application: string;
   rowsRead: number;
   rowsWritten: number;
+  sessionID: string;
   startTime: Moment;
-  endTime: Moment;
-  elapsedTimeMillis: number;
-  query: string;
-  contentionTime?: moment.Duration;
-  insights: Insight[];
+  transactionExecutionID: string;
+  transactionFingerprintID: string;
+  username: string;
 };
 
 export type TxnInsightEvent = InsightEventBase & {
