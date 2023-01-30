@@ -359,13 +359,17 @@ func (mr *MetricsRecorder) GetMetricsMetadata() map[string]metric.Metadata {
 	// Get a random storeID.
 	var sID roachpb.StoreID
 
+	storeFound := false
 	for storeID := range mr.mu.storeRegistries {
 		sID = storeID
+		storeFound = true
 		break
 	}
 
 	// Get metric metadata from that store because all stores have the same metadata.
-	mr.mu.storeRegistries[sID].WriteMetricsMetadata(metrics)
+	if storeFound {
+		mr.mu.storeRegistries[sID].WriteMetricsMetadata(metrics)
+	}
 
 	return metrics
 }
