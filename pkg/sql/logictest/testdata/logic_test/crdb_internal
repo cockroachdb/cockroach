@@ -55,6 +55,7 @@ crdb_internal  kv_catalog_comments              table  admin  NULL  NULL
 crdb_internal  kv_catalog_descriptor            table  admin  NULL  NULL
 crdb_internal  kv_catalog_namespace             table  admin  NULL  NULL
 crdb_internal  kv_catalog_zones                 table  admin  NULL  NULL
+crdb_internal  kv_dropped_relations             view   admin  NULL  NULL
 crdb_internal  kv_node_liveness                 table  admin  NULL  NULL
 crdb_internal  kv_node_status                   table  admin  NULL  NULL
 crdb_internal  kv_store_status                  table  admin  NULL  NULL

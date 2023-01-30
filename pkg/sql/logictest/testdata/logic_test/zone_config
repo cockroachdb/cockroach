@@ -334,3 +334,25 @@ alternative_schema.same_table_name  CREATE TABLE alternative_schema.same_table_n
                                     );
                                     ALTER TABLE test.alternative_schema.same_table_name CONFIGURE ZONE USING
                                       gc.ttlseconds = 600
+
+statement ok
+DROP TABLE zc CASCADE
+
+statement ok
+CREATE DATABASE foo
+
+statement ok
+ALTER DATABASE foo CONFIGURE ZONE USING gc.ttlseconds = 12345
+
+statement ok
+CREATE TABLE foo.public.bar (x INT PRIMARY KEY)
+
+statement ok
+DROP DATABASE foo CASCADE
+
+query TT
+SELECT name, ttl FROM crdb_internal.kv_dropped_relations ORDER BY name;
+----
+bar  03:25:45
+vm   27:46:40
+zc   27:46:40
