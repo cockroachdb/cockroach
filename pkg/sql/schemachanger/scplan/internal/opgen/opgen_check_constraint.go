@@ -11,6 +11,7 @@
 package opgen
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 )
@@ -20,13 +21,14 @@ func init() {
 		toPublic(
 			scpb.Status_ABSENT,
 			to(scpb.Status_WRITE_ONLY,
-				emit(func(this *scpb.CheckConstraint) *scop.MakeAbsentCheckConstraintWriteOnly {
-					return &scop.MakeAbsentCheckConstraintWriteOnly{
+				emit(func(this *scpb.CheckConstraint) *scop.AddCheckConstraint {
+					return &scop.AddCheckConstraint{
 						TableID:               this.TableID,
 						ConstraintID:          this.ConstraintID,
 						ColumnIDs:             this.ColumnIDs,
 						CheckExpr:             this.Expr,
 						FromHashShardedColumn: this.FromHashShardedColumn,
+						Validity:              descpb.ConstraintValidity_Validating,
 					}
 				}),
 				emit(func(this *scpb.CheckConstraint) *scop.UpdateTableBackReferencesInTypes {

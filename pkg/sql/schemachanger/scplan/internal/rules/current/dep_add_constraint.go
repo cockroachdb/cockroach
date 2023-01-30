@@ -21,13 +21,27 @@ import (
 // name, etc. appear once the constraint reaches a suitable state.
 func init() {
 	registerDepRule(
-		"constraint dependent public right before constraint",
+		"constraint dependent public right before complex constraint",
 		scgraph.SameStagePrecedence,
-		"dependent", "constraint",
+		"dependent", "complex-constraint",
 		func(from, to NodeVars) rel.Clauses {
 			return rel.Clauses{
 				from.TypeFilter(rulesVersionKey, isConstraintDependent),
-				to.TypeFilter(rulesVersionKey, isConstraint),
+				to.TypeFilter(rulesVersionKey, isNonIndexBackedConstraint, isSubjectTo2VersionInvariant),
+				JoinOnConstraintID(from, to, "table-id", "constraint-id"),
+				StatusesToPublicOrTransient(from, scpb.Status_PUBLIC, to, scpb.Status_PUBLIC),
+			}
+		},
+	)
+
+	registerDepRule(
+		"simple constraint public right before its dependents",
+		scgraph.SameStagePrecedence,
+		"simple-constraint", "dependent",
+		func(from, to NodeVars) rel.Clauses {
+			return rel.Clauses{
+				from.TypeFilter(rulesVersionKey, isNonIndexBackedConstraint, Not(isNonIndexBackedCrossDescriptorConstraint)),
+				to.TypeFilter(rulesVersionKey, isConstraintDependent),
 				JoinOnConstraintID(from, to, "table-id", "constraint-id"),
 				StatusesToPublicOrTransient(from, scpb.Status_PUBLIC, to, scpb.Status_PUBLIC),
 			}

@@ -114,3 +114,14 @@ COMMIT;
 
 statement error pgcode 42P01 relation "to_drop" does not exist
 DROP TABLE to_drop;
+
+subtest drop_table_with_not_valid_constraints
+
+statement ok
+CREATE TABLE t_with_not_valid_constraints_1 (i INT PRIMARY KEY);
+
+statement ok
+ALTER TABLE t_with_not_valid_constraints_1 ADD CHECK (i > 0) NOT VALID;
+
+statement ok
+DROP TABLE t_with_not_valid_constraints_1;
