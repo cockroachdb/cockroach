@@ -12,6 +12,7 @@ import (
 	"context"
 	"math"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/replicationutils"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -109,6 +110,19 @@ func alterReplicationJobHook(
 	alterTenantStmt, ok := stmt.(*tree.AlterTenantReplication)
 	if !ok {
 		return nil, nil, nil, false, nil
+	}
+
+	if !streamingccl.CrossClusterReplicationEnabled.Get(&p.ExecCfg().Settings.SV) {
+		return nil, nil, nil, false, errors.WithTelemetry(
+			pgerror.WithCandidateCode(
+				errors.WithHint(
+					errors.Newf("cross cluster replication is disabled"),
+					"You can enable cross cluster replication by running `SET CLUSTER SETTING cross_cluster_replication.enabled = true`.",
+				),
+				pgcode.ExperimentalFeature,
+			),
+			"cross_cluster_replication.enabled",
+		)
 	}
 
 	if err := p.RequireAdminRole(ctx, "ALTER TENANT REPLICATION"); err != nil {

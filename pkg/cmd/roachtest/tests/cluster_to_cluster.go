@@ -629,7 +629,7 @@ func srcClusterSettings(t test.Test, db *sqlutils.SQLRunner) {
 }
 
 func destClusterSettings(t test.Test, db *sqlutils.SQLRunner) {
-	db.ExecMultiple(t, `SET enable_experimental_stream_replication = true;`)
+	db.ExecMultiple(t, `SET CLUSTER SETTING cross_cluster_replication.enabled = true;`)
 }
 
 func copyPGCertsAndMakeURL(

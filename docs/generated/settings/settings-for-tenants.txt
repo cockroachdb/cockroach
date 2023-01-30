@@ -134,9 +134,6 @@ This session variable default should now be configured using ALTER ROLE... SET: 
 sql.defaults.experimental_implicit_column_partitioning.enabled	boolean	false	"default value for experimental_enable_temp_tables; allows for the use of implicit column partitioning
 This cluster setting is being kept to preserve backwards-compatibility.
 This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"
-sql.defaults.experimental_stream_replication.enabled	boolean	false	"default value for experimental_stream_replication session setting;enables the ability to setup a replication stream
-This cluster setting is being kept to preserve backwards-compatibility.
-This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"
 sql.defaults.experimental_temporary_tables.enabled	boolean	false	"default value for experimental_enable_temp_tables; allows for use of temporary tables by default
 This cluster setting is being kept to preserve backwards-compatibility.
 This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"

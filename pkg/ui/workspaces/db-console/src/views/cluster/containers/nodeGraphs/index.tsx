@@ -64,7 +64,7 @@ import hardwareDashboard from "./dashboards/hardware";
 import changefeedsDashboard from "./dashboards/changefeeds";
 import overloadDashboard from "./dashboards/overload";
 import ttlDashboard from "./dashboards/ttl";
-import crossClusterReplication from "./dashboards/crossClusterReplication";
+import crossClusterReplicationDashboard from "./dashboards/crossClusterReplication";
 import { getMatchParamByName } from "src/util/query";
 import { PayloadAction } from "src/interfaces/action";
 import {
@@ -85,7 +85,9 @@ import moment from "moment";
 import {
   selectResolution10sStorageTTL,
   selectResolution30mStorageTTL,
+  selectCrossClusterReplicationEnabled,
 } from "src/redux/clusterSettings";
+
 interface GraphDashboard {
   label: string;
   component: (props: GraphDashboardProps) => React.ReactElement<any>[];
@@ -106,7 +108,7 @@ const dashboards: { [key: string]: GraphDashboard } = {
   ttl: { label: "TTL", component: ttlDashboard },
   crossClusterReplication: {
     label: "Cross-Cluster Replication",
-    component: crossClusterReplication,
+    component: crossClusterReplicationDashboard,
   },
 };
 
@@ -132,6 +134,7 @@ type MapStateToProps = {
   nodeDisplayNameByID: ReturnType<
     typeof nodeDisplayNameByIDSelector.resultFunc
   >;
+  crossClusterReplicationEnabled: boolean;
 };
 
 type MapDispatchToProps = {
@@ -322,6 +325,12 @@ export class NodeGraphs extends React.Component<
     const paddingBottom =
       nodeIDs.length > 8 ? 90 + Math.ceil(nodeIDs.length / 3) * 10 : 50;
 
+    const filteredDropdownOptions = this.props.crossClusterReplicationEnabled
+      ? dashboardDropdownOptions // Already in the list, no need to filter
+      : dashboardDropdownOptions.filter(
+          option => option.label !== "Cross-Cluster Replication",
+        );
+
     return (
       <div style={{ paddingBottom }}>
         <Helmet title={"Metrics"} />
@@ -338,7 +347,7 @@ export class NodeGraphs extends React.Component<
           <PageConfigItem>
             <Dropdown
               title="Dashboard"
-              options={dashboardDropdownOptions}
+              options={filteredDropdownOptions}
               selected={dashboard}
               onChange={this.dashChange}
               className="full-size"
@@ -445,6 +454,7 @@ const mapStateToProps = (state: AdminUIState): MapStateToProps => ({
   storeIDsByNodeID: selectStoreIDsByNodeID(state),
   nodeDropdownOptions: nodeDropdownOptionsSelector(state),
   nodeDisplayNameByID: nodeDisplayNameByIDSelector(state),
+  crossClusterReplicationEnabled: selectCrossClusterReplicationEnabled(state),
 });
 
 const mapDispatchToProps: MapDispatchToProps = {
