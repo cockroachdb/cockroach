@@ -1,0 +1,184 @@
+setup
+SET experimental_enable_unique_without_index_constraints = true;
+CREATE TABLE t (i INT PRIMARY KEY, j INT);
+ALTER TABLE t ADD UNIQUE WITHOUT INDEX (j);
+----
+...
++object {100 101 t} -> 104
+
+# Constraint is still enforced in this stage, so the second
+# insert will fail.
+stage-exec phase=PostCommitNonRevertiblePhase stage=1
+INSERT INTO t VALUES ($stageKey, $stageKey);
+INSERT INTO t VALUES ($stageKey+1, $stageKey);
+----
+pq: duplicate key value violates unique constraint "crdb_internal_constraint_2_name_placeholder"
+
+stage-query phase=PostCommitNonRevertiblePhase stage=1
+SELECT count(*) FROM t;
+----
+1
+
+
+test
+ALTER TABLE t DROP CONSTRAINT unique_j;
+----
+begin transaction #1
+# begin StatementPhase
+checking for feature: ALTER TABLE
+increment telemetry for sql.schema.alter_table
+increment telemetry for sql.schema.alter_table.drop_constraint
+## StatementPhase stage 1 of 1 with 2 MutationType ops
+upsert descriptor #104
+  ...
+     id: 104
+     modificationTime: {}
+  +  mutations:
+  +  - constraint:
+  +      check: {}
+  +      constraintType: UNIQUE_WITHOUT_INDEX
+  +      foreignKey: {}
+  +      name: unique_j
+  +      uniqueWithoutIndexConstraint:
+  +        columnIds:
+  +        - 2
+  +        constraintId: 2
+  +        name: crdb_internal_constraint_2_name_placeholder
+  +        tableId: 104
+  +        validity: Dropping
+  +    direction: DROP
+  +    mutationId: 1
+  +    state: WRITE_ONLY
+     name: t
+     nextColumnId: 3
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  uniqueWithoutIndexConstraints:
+  -  - columnIds:
+  -    - 2
+  -    constraintId: 2
+  -    name: unique_j
+  -    tableId: 104
+  -  version: "3"
+  +  version: "4"
+# end StatementPhase
+# begin PreCommitPhase
+## PreCommitPhase stage 1 of 2 with 1 MutationType op
+undo all catalog changes within txn #1
+persist all catalog changes to storage
+## PreCommitPhase stage 2 of 2 with 4 MutationType ops
+upsert descriptor #104
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  +  declarativeSchemaChangerState:
+  +    authorization:
+  +      userName: root
+  +    currentStatuses: <redacted>
+  +    jobId: "1"
+  +    relevantStatements:
+  +    - statement:
+  +        redactedStatement: ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP CONSTRAINT ‹unique_j›
+  +        statement: ALTER TABLE t DROP CONSTRAINT unique_j
+  +        statementTag: ALTER TABLE
+  +    targetRanks: <redacted>
+  +    targets: <redacted>
+     families:
+     - columnIds:
+  ...
+     id: 104
+     modificationTime: {}
+  +  mutations:
+  +  - constraint:
+  +      check: {}
+  +      constraintType: UNIQUE_WITHOUT_INDEX
+  +      foreignKey: {}
+  +      name: unique_j
+  +      uniqueWithoutIndexConstraint:
+  +        columnIds:
+  +        - 2
+  +        constraintId: 2
+  +        name: crdb_internal_constraint_2_name_placeholder
+  +        tableId: 104
+  +        validity: Dropping
+  +    direction: DROP
+  +    mutationId: 1
+  +    state: WRITE_ONLY
+     name: t
+     nextColumnId: 3
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  uniqueWithoutIndexConstraints:
+  -  - columnIds:
+  -    - 2
+  -    constraintId: 2
+  -    name: unique_j
+  -    tableId: 104
+  -  version: "3"
+  +  version: "4"
+persist all catalog changes to storage
+create job #1 (non-cancelable: true): "ALTER TABLE defaultdb.public.t DROP CONSTRAINT unique_j"
+  descriptor IDs: [104]
+# end PreCommitPhase
+commit transaction #1
+notified job registry to adopt jobs: [1]
+# begin PostCommitPhase
+begin transaction #2
+commit transaction #2
+begin transaction #3
+## PostCommitNonRevertiblePhase stage 1 of 1 with 3 MutationType ops
+upsert descriptor #104
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  -  declarativeSchemaChangerState:
+  -    authorization:
+  -      userName: root
+  -    currentStatuses: <redacted>
+  -    jobId: "1"
+  -    relevantStatements:
+  -    - statement:
+  -        redactedStatement: ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP CONSTRAINT ‹unique_j›
+  -        statement: ALTER TABLE t DROP CONSTRAINT unique_j
+  -        statementTag: ALTER TABLE
+  -    targetRanks: <redacted>
+  -    targets: <redacted>
+     families:
+     - columnIds:
+  ...
+     id: 104
+     modificationTime: {}
+  -  mutations:
+  -  - constraint:
+  -      check: {}
+  -      constraintType: UNIQUE_WITHOUT_INDEX
+  -      foreignKey: {}
+  -      name: unique_j
+  -      uniqueWithoutIndexConstraint:
+  -        columnIds:
+  -        - 2
+  -        constraintId: 2
+  -        name: crdb_internal_constraint_2_name_placeholder
+  -        tableId: 104
+  -        validity: Dropping
+  -    direction: DROP
+  -    mutationId: 1
+  -    state: WRITE_ONLY
+     name: t
+     nextColumnId: 3
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "4"
+  +  version: "5"
+persist all catalog changes to storage
+update progress of schema change job #1: "all stages completed"
+set schema change job #1 to non-cancellable
+updated schema change job #1 descriptor IDs to []
+write *eventpb.FinishSchemaChange to event log:
+  sc:
+    descriptorId: 104
+commit transaction #3
+# end PostCommitPhase

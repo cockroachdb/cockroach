@@ -78,6 +78,21 @@ func TestBackup_base_alter_table_alter_primary_key_vanilla(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	sctest.Backup(t, "pkg/sql/schemachanger/testdata/end_to_end/alter_table_alter_primary_key_vanilla", newCluster)
 }
+func TestBackup_base_alter_table_drop_constraint_check(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	sctest.Backup(t, "pkg/sql/schemachanger/testdata/end_to_end/alter_table_drop_constraint_check", newCluster)
+}
+func TestBackup_base_alter_table_drop_constraint_fk(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	sctest.Backup(t, "pkg/sql/schemachanger/testdata/end_to_end/alter_table_drop_constraint_fk", newCluster)
+}
+func TestBackup_base_alter_table_drop_constraint_uwi(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	sctest.Backup(t, "pkg/sql/schemachanger/testdata/end_to_end/alter_table_drop_constraint_uwi", newCluster)
+}
 func TestBackup_base_create_function(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

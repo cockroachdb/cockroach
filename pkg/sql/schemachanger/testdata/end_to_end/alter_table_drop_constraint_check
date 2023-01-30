@@ -1,0 +1,192 @@
+setup
+CREATE TABLE t (i INT PRIMARY KEY CHECK (i > 0));
+----
+...
++object {100 101 t} -> 104
+
+# Constraint is still enforced in this stage.
+stage-exec phase=PostCommitNonRevertiblePhase stage=1
+INSERT INTO t VALUES (0);
+----
+pq: failed to satisfy CHECK constraint \(i > 0:::INT8\)
+
+stage-query phase=PostCommitNonRevertiblePhase stage=1
+SELECT count(*) FROM t;
+----
+0
+
+test
+ALTER TABLE t DROP CONSTRAINT check_i;
+----
+begin transaction #1
+# begin StatementPhase
+checking for feature: ALTER TABLE
+increment telemetry for sql.schema.alter_table
+increment telemetry for sql.schema.alter_table.drop_constraint
+## StatementPhase stage 1 of 1 with 2 MutationType ops
+upsert descriptor #104
+  ...
+       constraintId: 2
+       expr: i > 0:::INT8
+  -    name: check_i
+  +    name: crdb_internal_constraint_2_name_placeholder
+  +    validity: Dropping
+     columns:
+     - id: 1
+  ...
+     id: 104
+     modificationTime: {}
+  +  mutations:
+  +  - constraint:
+  +      check:
+  +        columnIds:
+  +        - 1
+  +        constraintId: 2
+  +        expr: i > 0:::INT8
+  +        name: check_i
+  +        validity: Dropping
+  +      foreignKey: {}
+  +      name: check_i
+  +      uniqueWithoutIndexConstraint: {}
+  +    direction: DROP
+  +    mutationId: 1
+  +    state: WRITE_ONLY
+     name: t
+     nextColumnId: 2
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "1"
+  +  version: "2"
+# end StatementPhase
+# begin PreCommitPhase
+## PreCommitPhase stage 1 of 2 with 1 MutationType op
+undo all catalog changes within txn #1
+persist all catalog changes to storage
+## PreCommitPhase stage 2 of 2 with 4 MutationType ops
+upsert descriptor #104
+  ...
+       constraintId: 2
+       expr: i > 0:::INT8
+  -    name: check_i
+  +    name: crdb_internal_constraint_2_name_placeholder
+  +    validity: Dropping
+     columns:
+     - id: 1
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  +  declarativeSchemaChangerState:
+  +    authorization:
+  +      userName: root
+  +    currentStatuses: <redacted>
+  +    jobId: "1"
+  +    relevantStatements:
+  +    - statement:
+  +        redactedStatement: ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP CONSTRAINT ‹check_i›
+  +        statement: ALTER TABLE t DROP CONSTRAINT check_i
+  +        statementTag: ALTER TABLE
+  +    targetRanks: <redacted>
+  +    targets: <redacted>
+     families:
+     - columnIds:
+  ...
+     id: 104
+     modificationTime: {}
+  +  mutations:
+  +  - constraint:
+  +      check:
+  +        columnIds:
+  +        - 1
+  +        constraintId: 2
+  +        expr: i > 0:::INT8
+  +        name: check_i
+  +        validity: Dropping
+  +      foreignKey: {}
+  +      name: check_i
+  +      uniqueWithoutIndexConstraint: {}
+  +    direction: DROP
+  +    mutationId: 1
+  +    state: WRITE_ONLY
+     name: t
+     nextColumnId: 2
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "1"
+  +  version: "2"
+persist all catalog changes to storage
+create job #1 (non-cancelable: true): "ALTER TABLE defaultdb.public.t DROP CONSTRAINT check_i"
+  descriptor IDs: [104]
+# end PreCommitPhase
+commit transaction #1
+notified job registry to adopt jobs: [1]
+# begin PostCommitPhase
+begin transaction #2
+commit transaction #2
+begin transaction #3
+## PostCommitNonRevertiblePhase stage 1 of 1 with 3 MutationType ops
+upsert descriptor #104
+   table:
+  -  checks:
+  -  - columnIds:
+  -    - 1
+  -    constraintId: 2
+  -    expr: i > 0:::INT8
+  -    name: crdb_internal_constraint_2_name_placeholder
+  -    validity: Dropping
+  +  checks: []
+     columns:
+     - id: 1
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  -  declarativeSchemaChangerState:
+  -    authorization:
+  -      userName: root
+  -    currentStatuses: <redacted>
+  -    jobId: "1"
+  -    relevantStatements:
+  -    - statement:
+  -        redactedStatement: ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP CONSTRAINT ‹check_i›
+  -        statement: ALTER TABLE t DROP CONSTRAINT check_i
+  -        statementTag: ALTER TABLE
+  -    targetRanks: <redacted>
+  -    targets: <redacted>
+     families:
+     - columnIds:
+  ...
+     id: 104
+     modificationTime: {}
+  -  mutations:
+  -  - constraint:
+  -      check:
+  -        columnIds:
+  -        - 1
+  -        constraintId: 2
+  -        expr: i > 0:::INT8
+  -        name: check_i
+  -        validity: Dropping
+  -      foreignKey: {}
+  -      name: check_i
+  -      uniqueWithoutIndexConstraint: {}
+  -    direction: DROP
+  -    mutationId: 1
+  -    state: WRITE_ONLY
+  +  mutations: []
+     name: t
+     nextColumnId: 2
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "2"
+  +  version: "3"
+persist all catalog changes to storage
+update progress of schema change job #1: "all stages completed"
+set schema change job #1 to non-cancellable
+updated schema change job #1 descriptor IDs to []
+write *eventpb.FinishSchemaChange to event log:
+  sc:
+    descriptorId: 104
+commit transaction #3
+# end PostCommitPhase

@@ -168,7 +168,7 @@ func init() {
 				(*scpb.Table)(nil),
 				(*scpb.View)(nil),
 			),
-			constraint.TypeFilter(rulesVersionKey, isSupportedNonIndexBackedConstraint),
+			constraint.TypeFilter(rulesVersionKey, isNonIndexBackedConstraint),
 
 			JoinOnDescID(relation, constraint, relationID),
 

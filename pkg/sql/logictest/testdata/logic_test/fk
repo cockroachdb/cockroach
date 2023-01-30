@@ -4119,7 +4119,7 @@ ALTER TABLE drop_fk_during_addition
 	ADD CONSTRAINT fk FOREIGN KEY (name) REFERENCES drop_fk_during_addition_ref (name);
 DROP TABLE drop_fk_during_addition_ref;
 
-statement error pgcode XXA00 pq: transaction committed but schema change aborted with error: \(42P01\): referenced relation \"drop_fk_during_addition_ref\" does not exist
+statement error pgcode XXA00 pq: transaction committed but schema change aborted with error: .* referenced table "drop_fk_during_addition_ref" \(271\) is dropped.*
 COMMIT;
 
 # Regression test for #80828. Do not attempt a fast path cascading delete when

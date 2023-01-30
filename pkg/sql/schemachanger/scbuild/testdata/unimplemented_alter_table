@@ -49,10 +49,6 @@ ALTER TABLE defaultdb.foo ADD COLUMN p INT NOT NULL UNIQUE
 ----
 
 unimplemented
-ALTER TABLE defaultdb.foo DROP CONSTRAINT foobar
-----
-
-unimplemented
 ALTER TABLE defaultdb.foo ALTER COLUMN i DROP NOT NULL
 ----
 

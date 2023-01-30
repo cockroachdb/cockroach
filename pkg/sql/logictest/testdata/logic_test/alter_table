@@ -2781,3 +2781,125 @@ query IT
 SELECT c1, c3 FROM t_93398;
 ----
 0  f
+
+# The following subtest tests the case when there is a check constraint
+# that references other descriptors (such as sequences and types):
+# - drop referenced sequence cascade
+# - drop the check itself
+# - drop the referencing table
+# Note that legacy schema changer won't support those cases correctly
+# so we will skip them.
+subtest cross_descriptor_checks_96115
+
+statement ok
+CREATE SEQUENCE seq_96115;
+
+statement ok
+CREATE TYPE typ_96115 AS ENUM ('a', 'b');
+
+statement ok
+CREATE TABLE t_96115 (i INT PRIMARY KEY, j STRING);
+
+statement ok
+ALTER TABLE t_96115 ADD CHECK (i > nextval('seq_96115') AND j::typ_96115 = 'a'::typ_96115);
+
+skipif config local-legacy-schema-changer
+skipif config local-mixed-22.2-23.1
+query TTTB colnames
+SELECT table_name, constraint_name, constraint_type, validated
+FROM [SHOW CONSTRAINTS FROM t_96115]
+ORDER BY constraint_type;
+----
+table_name  constraint_name  constraint_type  validated
+t_96115     check_i_j        CHECK            true
+t_96115     t_96115_pkey     PRIMARY KEY      true
+
+statement ok
+ALTER TABLE t_96115 DROP CONSTRAINT check_i_j;
+
+skipif config local-legacy-schema-changer
+skipif config local-mixed-22.2-23.1
+query TTTB colnames
+SELECT table_name, constraint_name, constraint_type, validated
+FROM [SHOW CONSTRAINTS FROM t_96115]
+ORDER BY constraint_type;
+----
+table_name  constraint_name  constraint_type  validated
+t_96115     t_96115_pkey     PRIMARY KEY      true
+
+statement ok
+ALTER TABLE t_96115 ADD CHECK (i > nextval('seq_96115') AND j::typ_96115 = 'a'::typ_96115);
+
+skipif config local-legacy-schema-changer
+skipif config local-mixed-22.2-23.1
+query TTTB colnames
+SELECT table_name, constraint_name, constraint_type, validated
+FROM [SHOW CONSTRAINTS FROM t_96115]
+ORDER BY constraint_type;
+----
+table_name  constraint_name  constraint_type  validated
+t_96115     check_i_j        CHECK            true
+t_96115     t_96115_pkey     PRIMARY KEY      true
+
+statement ok
+DROP SEQUENCE seq_96115 CASCADE;
+
+skipif config local-legacy-schema-changer
+skipif config local-mixed-22.2-23.1
+query TTTB colnames
+SELECT table_name, constraint_name, constraint_type, validated
+FROM [SHOW CONSTRAINTS FROM t_96115]
+ORDER BY constraint_type;
+----
+table_name  constraint_name  constraint_type  validated
+t_96115     t_96115_pkey     PRIMARY KEY      true
+
+statement ok
+CREATE SEQUENCE seq_96115;
+
+statement ok
+ALTER TABLE t_96115 ADD CHECK (i > nextval('seq_96115') AND j::typ_96115 = 'a'::typ_96115);
+
+statement ok
+DROP TABLE t_96115;
+
+statement ok
+DROP TYPE typ_96115;
+
+statement ok
+DROP SEQUENCE seq_96115
+
+# This subtest ensures we can drop partial unique without index.
+subtest drop_partial_unique_without_index_constraint_96115
+
+statement ok
+CREATE TABLE t_96115 (i INT PRIMARY KEY, j INT);
+
+statement ok
+set experimental_enable_unique_without_index_constraints = true;
+
+statement ok
+ALTER TABLE t_96115 ADD UNIQUE WITHOUT INDEX (j) WHERE j > 0;
+
+query TTTB colnames
+SELECT table_name, constraint_name, constraint_type, validated
+FROM [SHOW CONSTRAINTS FROM t_96115]
+ORDER BY constraint_type;
+----
+table_name  constraint_name  constraint_type  validated
+t_96115     t_96115_pkey     PRIMARY KEY      true
+t_96115     unique_j         UNIQUE           true
+
+statement ok
+ALTER TABLE t_96115 DROP CONSTRAINT unique_j;
+
+query TTTB colnames
+SELECT table_name, constraint_name, constraint_type, validated
+FROM [SHOW CONSTRAINTS FROM t_96115]
+ORDER BY constraint_type;
+----
+table_name  constraint_name  constraint_type  validated
+t_96115     t_96115_pkey     PRIMARY KEY      true
+
+statement ok
+DROP TABLE t_96115;
