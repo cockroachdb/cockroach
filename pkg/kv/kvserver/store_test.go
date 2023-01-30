@@ -186,7 +186,8 @@ func createTestStoreWithoutStart(
 			Settings:  cfg.Settings,
 		})
 	stopper.SetTracer(cfg.AmbientCtx.Tracer)
-	server := rpc.NewServer(rpcContext) // never started
+	server, err := rpc.NewServer(rpcContext) // never started
+	require.NoError(t, err)
 
 	// Some tests inject their own Gossip and StorePool, via
 	// createTestAllocatorWithKnobs, at the time of writing
