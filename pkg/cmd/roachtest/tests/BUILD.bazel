@@ -239,6 +239,7 @@ go_library(
         "@com_github_aws_aws_sdk_go_v2_service_databasemigrationservice//types",
         "@com_github_aws_aws_sdk_go_v2_service_rds//:rds",
         "@com_github_aws_aws_sdk_go_v2_service_rds//types",
+        "@com_github_aws_aws_sdk_go_v2_service_secretsmanager//:secretsmanager",
         "@com_github_cockroachdb_cockroach_go_v2//crdb",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_ttycolor//:ttycolor",
