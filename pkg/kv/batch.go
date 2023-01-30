@@ -428,6 +428,48 @@ func (b *Batch) Put(key, value interface{}) {
 	b.put(key, value, false)
 }
 
+// PutBytes allows multiple []byte value to be added to the batch. Empty keys are
+// allowed and will be ignored.
+func (b *Batch) PutBytes(keys []roachpb.Key, values [][]byte) {
+	if len(keys) != len(values) {
+		panic(errors.Errorf("bulk API request with mis-matched key and value lengths"))
+	}
+	numKeys := countNonEmptyKeys(keys)
+	if numKeys == 0 {
+		return
+	}
+	reqs := make([]kvpb.PutRequest, numKeys)
+	b.bulkRequest(keys, numKeys, func(keyIdx, reqIdx int) (kvpb.Request, int) {
+		pr := &reqs[reqIdx]
+		k := keys[keyIdx]
+		pr.Key = k
+		pr.Value.SetBytes(values[keyIdx])
+		pr.Value.InitChecksum(k)
+		return pr, len(pr.Value.RawBytes)
+	})
+}
+
+// PutTuples allows multiple tuple value type puts to be added to the batch.
+// Empty keys are allowed and will be ignored.
+func (b *Batch) PutTuples(keys []roachpb.Key, values [][]byte) {
+	if len(keys) != len(values) {
+		panic(errors.Errorf("bulk API request with mis-matched key and value lengths"))
+	}
+	numKeys := countNonEmptyKeys(keys)
+	if numKeys == 0 {
+		return
+	}
+	reqs := make([]kvpb.PutRequest, numKeys)
+	b.bulkRequest(keys, numKeys, func(keyIdx, reqIdx int) (kvpb.Request, int) {
+		pr := &reqs[reqIdx]
+		k := keys[keyIdx]
+		pr.Key = k
+		pr.Value.SetTuple(values[keyIdx])
+		pr.Value.InitChecksum(k)
+		return pr, len(pr.Value.RawBytes)
+	})
+}
+
 // PutInline sets the value for a key, but does not maintain
 // multi-version values. The most recent value is always overwritten.
 // Inline values cannot be mutated transactionally and should be used
@@ -511,6 +553,48 @@ func (b *Batch) cputInternal(
 	b.initResult(1, 1, notRaw, nil)
 }
 
+// CPutTuples allows multiple CPut tuple requests to be added to the batch as
+// tuples. Empty keys are allowed and will be ignored.
+func (b *Batch) CPutTuples(keys []roachpb.Key, values [][]byte) {
+	if len(keys) != len(values) {
+		panic(errors.Errorf("bulk API request with mis-matched key and value lengths"))
+	}
+	numKeys := countNonEmptyKeys(keys)
+	if numKeys == 0 {
+		return
+	}
+	reqs := make([]kvpb.ConditionalPutRequest, numKeys)
+	b.bulkRequest(keys, numKeys, func(keyIdx, reqIdx int) (kvpb.Request, int) {
+		pr := &reqs[reqIdx]
+		k := keys[keyIdx]
+		pr.Key = k
+		pr.Value.SetTuple(values[keyIdx])
+		pr.Value.InitChecksum(k)
+		return pr, len(pr.Value.RawBytes)
+	})
+}
+
+// CPutValues allows multiple ConditionalPutRequests to be added to the batch.
+// Empty keys are allowed and will be ignored.
+func (b *Batch) CPutValues(keys []roachpb.Key, values []roachpb.Value) {
+	if len(keys) != len(values) {
+		panic(errors.Errorf("bulk API request with mis-matched key and value lengths"))
+	}
+	numKeys := countNonEmptyKeys(keys)
+	if numKeys == 0 {
+		return
+	}
+	reqs := make([]kvpb.ConditionalPutRequest, numKeys)
+	b.bulkRequest(keys, numKeys, func(keyIdx, reqIdx int) (kvpb.Request, int) {
+		pr := &reqs[reqIdx]
+		k := keys[keyIdx]
+		pr.Key = k
+		pr.Value = values[keyIdx]
+		pr.Value.InitChecksum(k)
+		return pr, len(pr.Value.RawBytes)
+	})
+}
+
 // InitPut sets the first value for a key to value. An ConditionFailedError is
 // reported if a value already exists for the key and it's not equal to the
 // value passed in. If failOnTombstones is set to true, tombstones will return
@@ -533,6 +617,48 @@ func (b *Batch) InitPut(key, value interface{}, failOnTombstones bool) {
 	b.appendReqs(kvpb.NewInitPut(k, v, failOnTombstones))
 	b.approxMutationReqBytes += len(k) + len(v.RawBytes)
 	b.initResult(1, 1, notRaw, nil)
+}
+
+// InitPutBytes allows multiple []byte value type InitPut requests to be added to
+// the batch. Empty keys are allowed and will be ignored.
+func (b *Batch) InitPutBytes(keys []roachpb.Key, values [][]byte) {
+	if len(keys) != len(values) {
+		panic(errors.Errorf("bulk API request with mis-matched key and value lengths"))
+	}
+	numKeys := countNonEmptyKeys(keys)
+	if numKeys == 0 {
+		return
+	}
+	reqs := make([]kvpb.InitPutRequest, numKeys)
+	b.bulkRequest(keys, numKeys, func(keyIdx, reqIdx int) (kvpb.Request, int) {
+		pr := &reqs[reqIdx]
+		k := keys[keyIdx]
+		pr.Key = k
+		pr.Value.SetBytes(values[keyIdx])
+		pr.Value.InitChecksum(k)
+		return pr, len(pr.Value.RawBytes)
+	})
+}
+
+// InitPutTuples allows multiple tuple value type InitPut to be added to the
+// batch. Empty keys are allowed and will be ignored.
+func (b *Batch) InitPutTuples(keys []roachpb.Key, values [][]byte) {
+	if len(keys) != len(values) {
+		panic(errors.Errorf("bulk API request with mis-matched key and value lengths"))
+	}
+	numKeys := countNonEmptyKeys(keys)
+	if numKeys == 0 {
+		return
+	}
+	reqs := make([]kvpb.InitPutRequest, numKeys)
+	b.bulkRequest(keys, numKeys, func(keyIdx, reqIdx int) (kvpb.Request, int) {
+		pr := &reqs[reqIdx]
+		k := keys[keyIdx]
+		pr.Key = k
+		pr.Value.SetTuple(values[keyIdx])
+		pr.Value.InitChecksum(k)
+		return pr, len(pr.Value.RawBytes)
+	})
 }
 
 // Inc increments the integer value at key. If the key does not exist it will
@@ -908,4 +1034,57 @@ func (b *Batch) barrier(s, e interface{}) {
 	}
 	b.appendReqs(req)
 	b.initResult(1, 0, notRaw, nil)
+}
+
+func (b *Batch) bulkRequest(
+	keys []roachpb.Key,
+	numKeys int,
+	requestFactory func(keyIdx, reqIdx int) (req kvpb.Request, valueSize int),
+) {
+	n := len(b.reqs)
+	b.growReqs(numKeys)
+	newReqs := b.reqs[n:]
+	if numKeys > cap(b.Results)-len(b.Results) {
+		newResults := make([]Result, len(b.Results), numKeys+len(b.Results))
+		copy(newResults, b.Results)
+		b.Results = newResults
+	}
+	count := 0
+	for idx, key := range keys {
+		keyLen := len(key)
+		if keyLen == 0 {
+			continue
+		}
+		req, numBytes := requestFactory(idx, count)
+		b.approxMutationReqBytes += keyLen + numBytes
+		newReqs[count].MustSetInner(req)
+		count++
+	}
+	b.initResult(numKeys, numKeys, notRaw, nil)
+}
+
+// GetResult retrieves the Result and Result row KeyValue for a particular index.
+func (b *Batch) GetResult(idx int) (*Result, KeyValue, error) {
+	origIdx := idx
+	for _, r := range b.Results {
+		if idx < r.calls {
+			if idx < len(r.Rows) {
+				return &r, r.Rows[idx], nil
+			} else {
+				return &r, KeyValue{}, nil
+			}
+		}
+		idx -= r.calls
+	}
+	return nil, KeyValue{}, errors.AssertionFailedf("index %d outside of results: %+v", origIdx, b.Results)
+}
+
+func countNonEmptyKeys(keys []roachpb.Key) int {
+	numKeys := 0
+	for _, key := range keys {
+		if len(key) > 0 {
+			numKeys++
+		}
+	}
+	return numKeys
 }
