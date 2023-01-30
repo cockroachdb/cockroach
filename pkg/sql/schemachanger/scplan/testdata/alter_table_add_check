@@ -9,12 +9,13 @@ StatementPhase stage 1 of 1 with 1 MutationType op
   transitions:
     [[CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}, PUBLIC], ABSENT] -> WRITE_ONLY
   ops:
-    *scop.MakeAbsentCheckConstraintWriteOnly
+    *scop.AddCheckConstraint
       CheckExpr: i > 0:::INT8
       ColumnIDs:
       - 1
       ConstraintID: 2
       TableID: 104
+      Validity: 2
 PreCommitPhase stage 1 of 2 with 1 MutationType op
   transitions:
     [[CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}, PUBLIC], WRITE_ONLY] -> ABSENT
@@ -25,12 +26,13 @@ PreCommitPhase stage 2 of 2 with 3 MutationType ops
   transitions:
     [[CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}, PUBLIC], ABSENT] -> WRITE_ONLY
   ops:
-    *scop.MakeAbsentCheckConstraintWriteOnly
+    *scop.AddCheckConstraint
       CheckExpr: i > 0:::INT8
       ColumnIDs:
       - 1
       ConstraintID: 2
       TableID: 104
+      Validity: 2
     *scop.SetJobStateOnDescriptor
       DescriptorID: 104
       Initialize: true
@@ -91,4 +93,4 @@ ALTER TABLE t ADD CHECK (i > 0)
 - from: [ConstraintWithoutIndexName:{DescID: 104, Name: check_i, ConstraintID: 2}, PUBLIC]
   to:   [CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}, PUBLIC]
   kind: SameStagePrecedence
-  rule: constraint dependent public right before constraint
+  rule: constraint dependent public right before complex constraint

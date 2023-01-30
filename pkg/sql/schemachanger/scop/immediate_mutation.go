@@ -266,15 +266,16 @@ type RemoveColumnNotNull struct {
 	ColumnID descpb.ColumnID
 }
 
-// MakeAbsentCheckConstraintWriteOnly adds a non-existent check constraint
-// to the table in the WRITE_ONLY state.
-type MakeAbsentCheckConstraintWriteOnly struct {
+// AddCheckConstraint adds a non-existent check constraint
+// to the table.
+type AddCheckConstraint struct {
 	immediateMutationOp
 	TableID               descpb.ID
 	ConstraintID          descpb.ConstraintID
 	ColumnIDs             []descpb.ColumnID
 	CheckExpr             catpb.Expression
 	FromHashShardedColumn bool
+	Validity              descpb.ConstraintValidity
 }
 
 // MakeAbsentColumnNotNullWriteOnly adds a non-existent NOT NULL constraint,

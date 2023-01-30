@@ -79,6 +79,37 @@ func FindCheckConstraint(b ElementStatusIterator) (current Status, target Target
 	return current, target, element
 }
 
+func (e CheckConstraintUnvalidated) element() {}
+
+// ForEachCheckConstraintUnvalidated iterates over elements of type CheckConstraintUnvalidated.
+func ForEachCheckConstraintUnvalidated(
+	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *CheckConstraintUnvalidated),
+) {
+  if b == nil {
+    return
+  }
+	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
+		if elt, ok := e.(*CheckConstraintUnvalidated); ok {
+			fn(current, target, elt)
+		}
+	})
+}
+
+// FindCheckConstraintUnvalidated finds the first element of type CheckConstraintUnvalidated.
+func FindCheckConstraintUnvalidated(b ElementStatusIterator) (current Status, target TargetStatus, element *CheckConstraintUnvalidated) {
+  if b == nil {
+    return current, target, element
+  }
+	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
+		if elt, ok := e.(*CheckConstraintUnvalidated); ok {
+			element = elt
+			current = c
+			target = t
+		}
+	})
+	return current, target, element
+}
+
 func (e Column) element() {}
 
 // ForEachColumn iterates over elements of type Column.

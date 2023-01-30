@@ -53,7 +53,7 @@ type ImmediateMutationVisitor interface {
 	RemoveSequenceOwner(context.Context, RemoveSequenceOwner) error
 	RemoveCheckConstraint(context.Context, RemoveCheckConstraint) error
 	RemoveColumnNotNull(context.Context, RemoveColumnNotNull) error
-	MakeAbsentCheckConstraintWriteOnly(context.Context, MakeAbsentCheckConstraintWriteOnly) error
+	AddCheckConstraint(context.Context, AddCheckConstraint) error
 	MakeAbsentColumnNotNullWriteOnly(context.Context, MakeAbsentColumnNotNullWriteOnly) error
 	MakePublicCheckConstraintValidated(context.Context, MakePublicCheckConstraintValidated) error
 	MakePublicColumnNotNullValidated(context.Context, MakePublicColumnNotNullValidated) error
@@ -272,8 +272,8 @@ func (op RemoveColumnNotNull) Visit(ctx context.Context, v ImmediateMutationVisi
 }
 
 // Visit is part of the ImmediateMutationOp interface.
-func (op MakeAbsentCheckConstraintWriteOnly) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
-	return v.MakeAbsentCheckConstraintWriteOnly(ctx, op)
+func (op AddCheckConstraint) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.AddCheckConstraint(ctx, op)
 }
 
 // Visit is part of the ImmediateMutationOp interface.

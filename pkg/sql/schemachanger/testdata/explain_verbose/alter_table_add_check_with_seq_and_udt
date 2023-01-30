@@ -22,13 +22,14 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ADD CHECK (i > nextval('s') OR j::typ = 'a'
 │       │
 │       └── • 3 Mutation operations
 │           │
-│           ├── • MakeAbsentCheckConstraintWriteOnly
+│           ├── • AddCheckConstraint
 │           │     CheckExpr: (i > nextval(104:::REGCLASS)) OR (j::@100105 = b'@':::@100105)
 │           │     ColumnIDs:
 │           │     - 1
 │           │     - 2
 │           │     ConstraintID: 2
 │           │     TableID: 107
+│           │     Validity: 2
 │           │
 │           ├── • UpdateTableBackReferencesInTypes
 │           │     BackReferencedTableID: 107
@@ -67,13 +68,14 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ADD CHECK (i > nextval('s') OR j::typ = 'a'
 │       │
 │       └── • 8 Mutation operations
 │           │
-│           ├── • MakeAbsentCheckConstraintWriteOnly
+│           ├── • AddCheckConstraint
 │           │     CheckExpr: (i > nextval(104:::REGCLASS)) OR (j::@100105 = b'@':::@100105)
 │           │     ColumnIDs:
 │           │     - 1
 │           │     - 2
 │           │     ConstraintID: 2
 │           │     TableID: 107
+│           │     Validity: 2
 │           │
 │           ├── • UpdateTableBackReferencesInTypes
 │           │     BackReferencedTableID: 107
@@ -147,7 +149,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ADD CHECK (i > nextval('s') OR j::typ = 'a'
         │   │   │     rule: "CheckConstraint transitions to PUBLIC uphold 2-version invariant: VALIDATED->PUBLIC"
         │   │   │
         │   │   └── • SameStagePrecedence dependency from PUBLIC ConstraintWithoutIndexName:{DescID: 107, Name: check_i_j, ConstraintID: 2}
-        │   │         rule: "constraint dependent public right before constraint"
+        │   │         rule: "constraint dependent public right before complex constraint"
         │   │
         │   └── • ConstraintWithoutIndexName:{DescID: 107, Name: check_i_j, ConstraintID: 2}
         │         ABSENT → PUBLIC

@@ -12,7 +12,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD CHEC
  │         ├── 1 element transitioning toward PUBLIC
  │         │    └── ABSENT → WRITE_ONLY CheckConstraint:{DescID: 107, ReferencedTypeIDs: [105 106], IndexID: 0, ConstraintID: 2, ReferencedSequenceIDs: [104]}
  │         └── 3 Mutation operations
- │              ├── MakeAbsentCheckConstraintWriteOnly {"CheckExpr":"(i \u003e nextval(104...","ConstraintID":2,"TableID":107}
+ │              ├── AddCheckConstraint {"CheckExpr":"(i \u003e nextval(104...","ConstraintID":2,"TableID":107,"Validity":2}
  │              ├── UpdateTableBackReferencesInTypes {"BackReferencedTableID":107}
  │              └── UpdateTableBackReferencesInSequences {"BackReferencedTableID":107}
  ├── PreCommitPhase
@@ -25,7 +25,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD CHEC
  │         ├── 1 element transitioning toward PUBLIC
  │         │    └── ABSENT → WRITE_ONLY CheckConstraint:{DescID: 107, ReferencedTypeIDs: [105 106], IndexID: 0, ConstraintID: 2, ReferencedSequenceIDs: [104]}
  │         └── 8 Mutation operations
- │              ├── MakeAbsentCheckConstraintWriteOnly {"CheckExpr":"(i \u003e nextval(104...","ConstraintID":2,"TableID":107}
+ │              ├── AddCheckConstraint {"CheckExpr":"(i \u003e nextval(104...","ConstraintID":2,"TableID":107,"Validity":2}
  │              ├── UpdateTableBackReferencesInTypes {"BackReferencedTableID":107}
  │              ├── UpdateTableBackReferencesInSequences {"BackReferencedTableID":107}
  │              ├── SetJobStateOnDescriptor {"DescriptorID":104,"Initialize":true}
