@@ -67,6 +67,7 @@ export type StmtInsightsResponseRow = {
   problem: string;
   index_recommendations: string[];
   plan_gist: string;
+  cpu_sql_nanos: number;
 };
 
 const stmtColumns = `
@@ -94,7 +95,8 @@ last_retry_reason,
 causes,
 problem,
 index_recommendations,
-plan_gist
+plan_gist,
+cpu_sql_nanos
 `;
 
 const stmtInsightsOverviewQuery = (filters?: StmtInsightsReq): string => {
@@ -206,6 +208,7 @@ export function formatStmtInsights(
         InsightExecEnum.STATEMENT,
       ),
       planGist: row.plan_gist,
+      cpuNanos: row.cpu_sql_nanos,
     } as StmtInsightEvent;
   });
 }

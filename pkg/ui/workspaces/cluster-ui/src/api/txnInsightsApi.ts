@@ -410,6 +410,7 @@ type TxnInsightsResponseRow = {
   problems: string[];
   causes: string[];
   stmt_execution_ids: string[];
+  cpu_sql_nanos: number;
 };
 
 type TxnQueryFilters = {
@@ -441,7 +442,8 @@ contention,
 last_retry_reason,
 problems,
 causes,
-stmt_execution_ids`;
+stmt_execution_ids,
+cpu_sql_nanos`;
 
   if (filters?.execID) {
     return `
@@ -503,6 +505,7 @@ function formatTxnInsightsRow(row: TxnInsightsResponseRow): TxnInsightEvent {
     contentionTime: moment.duration(row.contention ?? 0),
     insights,
     stmtExecutionIDs: row.stmt_execution_ids,
+    cpuNanos: row.cpu_sql_nanos,
   };
 }
 

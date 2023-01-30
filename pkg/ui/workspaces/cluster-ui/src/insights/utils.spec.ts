@@ -71,6 +71,7 @@ const statementInsightMock: StmtInsightEvent = {
   insights: [failedExecutionInsight(InsightExecEnum.STATEMENT)],
   indexRecommendations: [],
   planGist: "gist",
+  cpuNanos: 50,
 };
 
 function mockStmtInsightEvent(
@@ -110,6 +111,7 @@ const txnInsightEventMock: TxnInsightEvent = {
   endTime: moment(),
   elapsedTimeMillis: 1,
   stmtExecutionIDs: [statementInsightMock.statementExecutionID],
+  cpuNanos: 50,
 };
 
 function mockTxnInsightEvent(

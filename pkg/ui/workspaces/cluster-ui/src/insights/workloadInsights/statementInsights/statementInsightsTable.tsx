@@ -148,6 +148,13 @@ export function makeStatementInsightsColumns(
       showByDefault: false,
     },
     {
+      name: "cpu",
+      title: insightsTableTitles.cpu(execType),
+      cell: (item: StmtInsightEvent) => Duration(item.cpuNanos),
+      sort: (item: StmtInsightEvent) => item.cpuNanos,
+      showByDefault: false,
+    },
+    {
       name: "isFullScan",
       title: insightsTableTitles.isFullScan(execType),
       cell: (item: StmtInsightEvent) => String(item.isFullScan),
