@@ -23,9 +23,9 @@ import (
 // strings are not handled.
 //
 // The dependsOnContext return value indicates if we had to consult the
-// ParseTimeContext (either for the time or the local timezone).
+// ParseContext (either for the time or the local timezone).
 func ParseAndRequireString(
-	t *types.T, s string, ctx ParseTimeContext,
+	t *types.T, s string, ctx ParseContext,
 ) (d Datum, dependsOnContext bool, err error) {
 	switch t.Family() {
 	case types.ArrayFamily:
@@ -74,6 +74,8 @@ func ParseAndRequireString(
 			}
 			d = NewDOid(*i)
 		}
+	case types.CollatedStringFamily:
+		d, err = NewDCollatedString(s, t.Locale(), ctx.GetCollationEnv())
 	case types.StringFamily:
 		// If the string type specifies a limit we truncate to that limit:
 		//   'hello'::CHAR(2) -> 'he'

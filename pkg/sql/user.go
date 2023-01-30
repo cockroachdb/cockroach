@@ -313,7 +313,7 @@ func retrieveAuthInfo(
 				// This is okay because the VALID UNTIL is stored as a string
 				// representation of a TimestampTZ which has the same underlying
 				// representation in the table as a Timestamp (UTC time).
-				timeCtx := tree.NewParseTimeContext(timeutil.Now())
+				timeCtx := tree.NewParseContext(timeutil.Now())
 				aInfo.ValidUntil, _, err = tree.ParseDTimestamp(timeCtx, ts, time.Microsecond)
 				if err != nil {
 					return aInfo, errors.Wrap(err,
