@@ -857,3 +857,67 @@ func TestPreservingSteppingOnSenderReplacement(t *testing.T) {
 		require.Equal(t, expectedStepping, txn.ConfigureStepping(ctx, expectedStepping))
 	})
 }
+
+func TestBulkBatchAPI(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	s, db := setup(t)
+	defer s.Stopper().Stop(context.Background())
+	ctx := context.Background()
+
+	kys := []roachpb.Key{[]byte("a"), []byte("b"), []byte("c")}
+	vals := [][]byte{[]byte("you"), []byte("know"), []byte("me")}
+
+	type putter func(*kv.Batch)
+
+	clearKeys := func() {
+		txn := db.NewTxn(ctx, "bulk-test")
+		b := txn.NewBatch()
+		b.Del("a", "b", "c")
+		err := txn.CommitInBatch(ctx, b)
+		require.NoError(t, err)
+	}
+
+	verify := func() {
+		for i, k := range kys {
+			v, err := db.Get(ctx, k)
+			require.NoError(t, err)
+			raw := vals[i]
+			if tv, err := v.Value.GetTuple(); err == nil {
+				raw = tv
+			}
+			err = v.Value.Verify(k)
+			require.NoError(t, err)
+			require.Equal(t, raw, vals[i])
+		}
+	}
+
+	testF := func(p putter) {
+		txn := db.NewTxn(ctx, "bulk-test")
+		b := txn.NewBatch()
+		p(b)
+		err := txn.CommitInBatch(ctx, b)
+		require.NoError(t, err)
+		verify()
+		require.Greater(t, len(b.Results), 1)
+		r := b.Results[0]
+		require.Equal(t, len(r.Rows), len(kys))
+		require.NoError(t, r.Err)
+		clearKeys()
+	}
+
+	testF(func(b *kv.Batch) { b.PutBytes(kys, vals) })
+	testF(func(b *kv.Batch) { b.PutTuples(kys, vals) })
+	testF(func(b *kv.Batch) { b.InitPutBytes(kys, vals) })
+	testF(func(b *kv.Batch) { b.InitPutTuples(kys, vals) })
+	testF(func(b *kv.Batch) { b.CPutTuples(kys, vals) })
+
+	values := make([]roachpb.Value, len(kys))
+	for i, v := range vals {
+		if kys[i] != nil {
+			values[i].InitChecksum(kys[i])
+			values[i].SetTuple(v)
+		}
+	}
+	testF(func(b *kv.Batch) { b.CPutValues(kys, values) })
+}
