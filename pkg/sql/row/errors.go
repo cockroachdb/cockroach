@@ -21,10 +21,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -46,15 +48,11 @@ func ConvertBatchError(ctx context.Context, tableDesc catalog.TableDescriptor, b
 			break
 		}
 		j := origPErr.Index.Index
-		if j >= int32(len(b.Results)) {
-			return errors.AssertionFailedf("index %d outside of results: %+v", j, b.Results)
+		_, kv, err := b.GetResult(int(j))
+		if err != nil {
+			return err
 		}
-		result := b.Results[j]
-		if len(result.Rows) == 0 {
-			break
-		}
-		key := result.Rows[0].Key
-		return NewUniquenessConstraintViolationError(ctx, tableDesc, key, v.ActualValue)
+		return NewUniquenessConstraintViolationError(ctx, tableDesc, kv.Key, v.ActualValue)
 
 	case *roachpb.WriteIntentError:
 		key := v.Intents[0].Key
@@ -296,4 +294,27 @@ func DecodeRowInfo(
 		values[i] = datums[i].String()
 	}
 	return index, names, values, nil
+}
+
+// CheckFailed returns error message when a check constraint is violated.
+func CheckFailed(
+	ctx context.Context,
+	semaCtx *tree.SemaContext,
+	sessionData *sessiondata.SessionData,
+	tabDesc catalog.TableDescriptor,
+	check catalog.CheckConstraint,
+) error {
+	// Failed to satisfy CHECK constraint, so unwrap the serialized
+	// check expression to display to the user.
+	expr, err := schemaexpr.FormatExprForDisplay(
+		ctx, tabDesc, check.GetExpr(), semaCtx, sessionData, tree.FmtParsable,
+	)
+	if err != nil {
+		// If we ran into an error trying to read the check constraint, wrap it
+		// and return.
+		return pgerror.WithConstraintName(errors.Wrapf(err, "failed to satisfy CHECK constraint (%s)", check.GetExpr()), check.GetName())
+	}
+	return pgerror.WithConstraintName(pgerror.Newf(
+		pgcode.CheckViolation, "failed to satisfy CHECK constraint (%s)", expr,
+	), check.GetName())
 }
