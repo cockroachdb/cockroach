@@ -149,21 +149,25 @@ func backup(
 	// TODO(benesch): verify these files, rather than accepting them as truth
 	// blindly.
 	// No concurrency yet, so these assignments are safe.
-	it, err := makeBackupManifestFileIterator(ctx, execCtx.ExecCfg().DistSQLSrv.ExternalStorage,
-		*backupManifest, encryption, &kmsEnv)
+	iterFactory := backupinfo.NewIterFactory(backupManifest, defaultStore, encryption, &kmsEnv)
+	it, err := iterFactory.NewFileIter(ctx)
 	if err != nil {
 		return roachpb.RowCount{}, err
 	}
-	defer it.close()
-	for f, hasNext := it.next(); hasNext; f, hasNext = it.next() {
+	defer it.Close()
+	for ; ; it.Next() {
+		if ok, err := it.Valid(); err != nil {
+			return roachpb.RowCount{}, err
+		} else if !ok {
+			break
+		}
+
+		f := it.Value()
 		if f.StartTime.IsEmpty() && !f.EndTime.IsEmpty() {
 			completedIntroducedSpans = append(completedIntroducedSpans, f.Span)
 		} else {
 			completedSpans = append(completedSpans, f.Span)
 		}
-	}
-	if it.err() != nil {
-		return roachpb.RowCount{}, it.err()
 	}
 
 	// Subtract out any completed spans.
@@ -347,7 +351,7 @@ func backup(
 	// TODO(adityamaru,rhu713): Once backup/restore switches from writing and
 	// reading backup manifests to `metadata.sst` we can stop writing the slim
 	// manifest.
-	if err := backupinfo.WriteFilesListMetadataWithSSTs(ctx, defaultStore, encryption,
+	if err := backupinfo.WriteMetadataWithExternalSSTs(ctx, defaultStore, encryption,
 		&kmsEnv, backupManifest); err != nil {
 		return roachpb.RowCount{}, err
 	}
@@ -959,12 +963,19 @@ func getBackupDetailAndManifest(
 		return jobspb.BackupDetails{}, backuppb.BackupManifest{}, err
 	}
 
+	layerToIterFactory, err := backupinfo.GetBackupManifestIterFactories(ctx, execCfg.DistSQLSrv.ExternalStorage, prevBackups, baseEncryptionOptions, &kmsEnv)
+	if err != nil {
+		return jobspb.BackupDetails{}, backuppb.BackupManifest{}, err
+	}
+
 	backupManifest, err := createBackupManifest(
 		ctx,
 		execCfg,
 		txn,
 		updatedDetails,
-		prevBackups)
+		prevBackups,
+		layerToIterFactory,
+	)
 	if err != nil {
 		return jobspb.BackupDetails{}, backuppb.BackupManifest{}, err
 	}

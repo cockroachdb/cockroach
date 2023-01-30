@@ -39,6 +39,7 @@ go_library(
         "//pkg/sql/stats",
         "//pkg/storage",
         "//pkg/util",
+        "//pkg/util/bulk",
         "//pkg/util/ctxgroup",
         "//pkg/util/encoding",
         "//pkg/util/hlc",
@@ -57,16 +58,32 @@ go_library(
 
 go_test(
     name = "backupinfo_test",
-    srcs = ["main_test.go"],
+    srcs = [
+        "main_test.go",
+        "manifest_handling_test.go",
+    ],
     args = ["-test.timeout=295s"],
+    embed = [":backupinfo"],
     deps = [
+        "//pkg/base",
+        "//pkg/blobs",
         "//pkg/ccl",
+        "//pkg/ccl/backupccl/backuppb",
+        "//pkg/cloud",
+        "//pkg/roachpb",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
+        "//pkg/security/username",
         "//pkg/server",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/isql",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/testcluster",
+        "//pkg/util/bulk",
+        "//pkg/util/hlc",
+        "//pkg/util/leaktest",
         "//pkg/util/randutil",
+        "@com_github_stretchr_testify//require",
     ],
 )
 

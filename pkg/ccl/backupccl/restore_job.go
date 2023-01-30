@@ -284,10 +284,9 @@ func restore(
 	// which are grouped by keyrange.
 	highWaterMark := job.Progress().Details.(*jobspb.Progress_Restore).Restore.HighWater
 
-	layerToBackupManifestFileIterFactory, err := getBackupManifestFileIters(restoreCtx, execCtx.ExecCfg(),
-		backupManifests, encryption, kmsEnv)
+	layerToIterFactory, err := backupinfo.GetBackupManifestIterFactories(restoreCtx, execCtx.ExecCfg().DistSQLSrv.ExternalStorage, backupManifests, encryption, kmsEnv)
 	if err != nil {
-		return emptyRowCount, err
+		return roachpb.RowCount{}, err
 	}
 
 	simpleImportSpans := useSimpleImportSpans.Get(&execCtx.ExecCfg().Settings.SV)
@@ -321,7 +320,7 @@ func restore(
 			restoreCtx,
 			dataToRestore.getSpans(),
 			backupManifests,
-			layerToBackupManifestFileIterFactory,
+			layerToIterFactory,
 			backupLocalityMap,
 			introducedSpanFrontier,
 			highWaterMark,
@@ -487,7 +486,13 @@ func loadBackupSQLDescs(
 		return nil, backuppb.BackupManifest{}, nil, 0, err
 	}
 
-	allDescs, latestBackupManifest, err := backupinfo.LoadSQLDescsFromBackupsAtTime(backupManifests, details.EndTime)
+	layerToBackupManifestFileIterFactory, err := backupinfo.GetBackupManifestIterFactories(ctx, p.ExecCfg().DistSQLSrv.ExternalStorage,
+		backupManifests, encryption, kmsEnv)
+	if err != nil {
+		return nil, backuppb.BackupManifest{}, nil, 0, err
+	}
+
+	allDescs, latestBackupManifest, err := backupinfo.LoadSQLDescsFromBackupsAtTime(ctx, backupManifests, layerToBackupManifestFileIterFactory, details.EndTime)
 	if err != nil {
 		return nil, backuppb.BackupManifest{}, nil, 0, err
 	}
