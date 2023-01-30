@@ -904,6 +904,10 @@ func (c *tableFeed) Partitions() []string {
 	return []string{`0`, `1`, `2`}
 }
 
+func timeoutOp(op string, id jobspb.JobID) string {
+	return fmt.Sprintf("%s-%d", op, id)
+}
+
 // Next implements the TestFeed interface.
 func (c *tableFeed) Next() (*cdctest.TestFeedMessage, error) {
 	// sinkSink writes all changes to a table with primary key of topic,
@@ -921,7 +925,7 @@ func (c *tableFeed) Next() (*cdctest.TestFeedMessage, error) {
 		}
 
 		if err := contextutil.RunWithTimeout(
-			context.Background(), "tableFeed.Next", timeout(),
+			context.Background(), timeoutOp("tableFeed.Next", c.jobID), timeout(),
 			func(ctx context.Context) error {
 				select {
 				case <-ctx.Done():
@@ -1425,7 +1429,7 @@ func (c *cloudFeed) Next() (*cdctest.TestFeedMessage, error) {
 		}
 
 		if err := contextutil.RunWithTimeout(
-			context.Background(), "cloudFeed.Next", timeout(),
+			context.Background(), timeoutOp("cloudfeed.Next", c.jobID), timeout(),
 			func(ctx context.Context) error {
 				select {
 				case <-ctx.Done():
@@ -1861,7 +1865,7 @@ func (k *kafkaFeed) Next() (*cdctest.TestFeedMessage, error) {
 	for {
 		var msg *sarama.ProducerMessage
 		if err := contextutil.RunWithTimeout(
-			context.Background(), "kafka.Next", timeout(),
+			context.Background(), timeoutOp("kafka.Next", k.jobID), timeout(),
 			func(ctx context.Context) error {
 				select {
 				case <-ctx.Done():
@@ -2147,7 +2151,7 @@ func (f *webhookFeed) Next() (*cdctest.TestFeedMessage, error) {
 		}
 
 		if err := contextutil.RunWithTimeout(
-			context.Background(), "webhook.Next", timeout(),
+			context.Background(), timeoutOp("webhook.Next", f.jobID), timeout(),
 			func(ctx context.Context) error {
 				select {
 				case <-ctx.Done():
@@ -2399,7 +2403,7 @@ func (p *pubsubFeed) Next() (*cdctest.TestFeedMessage, error) {
 		}
 
 		if err := contextutil.RunWithTimeout(
-			context.Background(), "pubsub.Next", timeout(),
+			context.Background(), timeoutOp("pubsub.Next", p.jobID), timeout(),
 			func(ctx context.Context) error {
 				select {
 				case <-ctx.Done():
@@ -2448,7 +2452,7 @@ func stopFeedWhenDone(ctx context.Context, f cdctest.TestFeed) func() {
 		})
 	case jobFailedMarker:
 		go whenDone(func() {
-			t.jobFailed(context.Canceled)
+			t.jobFailed(errors.New("stopping job due to TestFeed timeout"))
 		})
 	}
 
