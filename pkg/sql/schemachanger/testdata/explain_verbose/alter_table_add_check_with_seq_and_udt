@@ -147,7 +147,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ADD CHECK (i > nextval('s') OR j::typ = 'a'
         │   │   │     rule: "CheckConstraint transitions to PUBLIC uphold 2-version invariant: VALIDATED->PUBLIC"
         │   │   │
         │   │   └── • SameStagePrecedence dependency from PUBLIC ConstraintWithoutIndexName:{DescID: 107, Name: check_i_j, ConstraintID: 2}
-        │   │         rule: "constraint dependent public right before constraint"
+        │   │         rule: "constraint dependent public right before complex constraint"
         │   │
         │   └── • ConstraintWithoutIndexName:{DescID: 107, Name: check_i_j, ConstraintID: 2}
         │         ABSENT → PUBLIC

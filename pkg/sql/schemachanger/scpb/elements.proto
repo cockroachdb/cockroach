@@ -75,6 +75,7 @@ message ElementProto {
   ForeignKeyConstraint foreign_key_constraint = 27 [(gogoproto.moretags) = "parent:\"Table\""];
   TableComment table_comment = 28 [(gogoproto.moretags) = "parent:\"Table, View, Sequence\""];
   RowLevelTTL row_level_ttl = 29 [(gogoproto.customname) = "RowLevelTTL", (gogoproto.moretags) = "parent:\"Table\""];
+  CheckConstraintNotValid check_constraint_not_valid = 170 [(gogoproto.moretags) = "parent:\"Table\""];
   TableZoneConfig table_zone_config = 121 [(gogoproto.moretags) = "parent:\"Table, View\""];
   TableData table_data = 131 [(gogoproto.customname) = "TableData", (gogoproto.moretags) = "parent:\"Table, View, Sequence\""];
   TablePartitioning table_partitioning = 132 [(gogoproto.customname) = "TablePartitioning", (gogoproto.moretags) = "parent:\"Table\""];
@@ -139,7 +140,7 @@ message ElementProto {
   FunctionBody function_body = 164 [(gogoproto.moretags) = "parent:\"Function\""];
   FunctionParamDefaultExpression function_param_default = 165 [(gogoproto.moretags) = "parent:\"Function\""];
 
-  // Next element group start id: 170
+  // Next element group start id: 180
 }
 
 // TypeT is a wrapper for a types.T which contains its user-defined type ID
@@ -365,6 +366,13 @@ message CheckConstraint {
   // IndexIDForValidation is the index id to hint to the check constraint validation SQL query about which index
   // to check against. It is used exclusively by sql.validateCheckExpr.
   uint32 index_id_for_validation = 6 [(gogoproto.customname) = "IndexIDForValidation", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.IndexID"];
+}
+
+message CheckConstraintNotValid {
+  uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  uint32 constraint_id = 2 [(gogoproto.customname) = "ConstraintID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ConstraintID"];
+  repeated uint32 column_ids = 3 [(gogoproto.customname) = "ColumnIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ColumnID"];
+  Expression embedded_expr = 4 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
 message ForeignKeyConstraint {

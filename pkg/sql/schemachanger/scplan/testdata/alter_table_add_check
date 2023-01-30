@@ -91,4 +91,4 @@ ALTER TABLE t ADD CHECK (i > 0)
 - from: [ConstraintWithoutIndexName:{DescID: 104, Name: check_i, ConstraintID: 2}, PUBLIC]
   to:   [CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}, PUBLIC]
   kind: SameStagePrecedence
-  rule: constraint dependent public right before constraint
+  rule: constraint dependent public right before complex constraint

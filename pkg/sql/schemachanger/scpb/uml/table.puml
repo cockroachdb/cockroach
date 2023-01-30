@@ -121,6 +121,13 @@ object RowLevelTTL
 RowLevelTTL :  TableID
 RowLevelTTL :  RowLevelTTL
 
+object CheckConstraintNotValid
+
+CheckConstraintNotValid :  TableID
+CheckConstraintNotValid :  ConstraintID
+CheckConstraintNotValid : []ColumnIDs
+CheckConstraintNotValid :  Expression
+
 object TableZoneConfig
 
 TableZoneConfig :  TableID
@@ -374,6 +381,7 @@ Table <|-- TableComment
 View <|-- TableComment
 Sequence <|-- TableComment
 Table <|-- RowLevelTTL
+Table <|-- CheckConstraintNotValid
 Table <|-- TableZoneConfig
 View <|-- TableZoneConfig
 Table <|-- TableData

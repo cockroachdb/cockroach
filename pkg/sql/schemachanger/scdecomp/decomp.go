@@ -628,14 +628,22 @@ func (w *walkCtx) walkCheckConstraint(tbl catalog.TableDescriptor, c catalog.Che
 		panic(errors.NewAssertionErrorWithWrappedErrf(err, "check constraint %q in table %q (%d)",
 			c.GetName(), tbl.GetName(), tbl.GetID()))
 	}
-	// TODO(postamar): proper handling of constraint status
-	w.ev(scpb.Status_PUBLIC, &scpb.CheckConstraint{
-		TableID:               tbl.GetID(),
-		ConstraintID:          c.GetConstraintID(),
-		ColumnIDs:             c.CollectReferencedColumnIDs().Ordered(),
-		Expression:            *expr,
-		FromHashShardedColumn: c.IsHashShardingConstraint(),
-	})
+	if c.IsConstraintUnvalidated() && w.clusterVersion.IsActive(clusterversion.V23_1) {
+		w.ev(scpb.Status_PUBLIC, &scpb.CheckConstraintNotValid{
+			TableID:      tbl.GetID(),
+			ConstraintID: c.GetConstraintID(),
+			ColumnIDs:    c.CollectReferencedColumnIDs().Ordered(),
+			Expression:   *expr,
+		})
+	} else {
+		w.ev(scpb.Status_PUBLIC, &scpb.CheckConstraint{
+			TableID:               tbl.GetID(),
+			ConstraintID:          c.GetConstraintID(),
+			ColumnIDs:             c.CollectReferencedColumnIDs().Ordered(),
+			Expression:            *expr,
+			FromHashShardedColumn: c.IsHashShardingConstraint(),
+		})
+	}
 	w.ev(scpb.Status_PUBLIC, &scpb.ConstraintWithoutIndexName{
 		TableID:      tbl.GetID(),
 		ConstraintID: c.GetConstraintID(),
