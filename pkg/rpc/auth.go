@@ -143,8 +143,20 @@ func (a kvAuth) authenticate(ctx context.Context) (roachpb.TenantID, error) {
 		//
 		// Is this a connection from another SQL tenant server?
 		if security.IsTenantCertificate(clientCert) {
-			// Incoming connection originating from a tenant SQL server. Let through.
-			// The other server is able to use any of this server's RPCs.
+			// Incoming connection originating from a tenant SQL server.
+			tid, err := tenantFromCommonName(clientCert.Subject.CommonName)
+			if err != nil {
+				return roachpb.TenantID{}, err
+			}
+			// Verify that our peer is a service for the same tenant
+			// as ourselves (we don't want to allow tenant 123 to
+			// serve requests for a client coming from tenant 456).
+			if tid != a.tenant.tenantID {
+				return roachpb.TenantID{}, authErrorf("this tenant (%v) cannot serve requests from a server for tenant %v", a.tenant.tenantID, tid)
+			}
+
+			// We return an unset tenant ID, to bypass authorization checks:
+			// the other server is able to use any of this server's RPCs.
 			return roachpb.TenantID{}, nil
 		}
 	}
