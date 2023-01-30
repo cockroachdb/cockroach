@@ -612,14 +612,6 @@ func (j *jsonOrArrayFilterPlanner) extractJSONFetchValContainsCondition(
 		return inverted.NonInvertedColExpression{}
 	}
 
-	// Not using inverted indices, yet, for filters of the form
-	// j->0 @> '{"b": "c"}' or j->0 <@ '{"b": "c"}'
-	for i := range keys {
-		if _, ok := keys[i].(*tree.DString); !ok {
-			return inverted.NonInvertedColExpression{}
-		}
-	}
-
 	// Build a new JSON object with the collected keys and val.
 	obj := buildObject(keys, val.JSON)
 
