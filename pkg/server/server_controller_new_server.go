@@ -234,7 +234,7 @@ func makeSharedProcessTenantServerConfig(
 	storeSpec := candidateSpec
 	if !storeSpec.InMemory {
 		storeDir := filepath.Join(storeSpec.Path, "tenant-"+tenantID.String())
-		if err := os.MkdirAll(storeDir, 0700); err != nil {
+		if err := os.MkdirAll(storeDir, 0755); err != nil {
 			return baseCfg, sqlCfg, err
 		}
 		stopper.AddCloser(stop.CloserFn(func() {
