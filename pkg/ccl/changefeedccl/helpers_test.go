@@ -47,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -92,6 +93,10 @@ func readNextMessages(
 	for len(actual) < numMessages {
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
+		}
+		if log.V(1) {
+			log.Infof(context.Background(), "About to read a message (%d out of %d) from %v (%T)",
+				len(actual), numMessages, f, f)
 		}
 		m, err := f.Next()
 		if log.V(1) {
@@ -247,10 +252,17 @@ func assertPayloadsTimeout() time.Duration {
 func withTimeout(
 	f cdctest.TestFeed, timeout time.Duration, fn func(ctx context.Context) error,
 ) error {
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
-	defer stopFeedWhenDone(ctx, f)()
-	return fn(ctx)
+	var jobID jobspb.JobID
+	if jobFeed, ok := f.(cdctest.EnterpriseTestFeed); ok {
+		jobID = jobFeed.JobID()
+	}
+	return contextutil.RunWithTimeout(context.Background(),
+		fmt.Sprintf("withTimeout-%d", jobID), timeout,
+		func(ctx context.Context) error {
+			defer stopFeedWhenDone(ctx, f)()
+			return fn(ctx)
+		},
+	)
 }
 
 func assertPayloads(t testing.TB, f cdctest.TestFeed, expected []string) {

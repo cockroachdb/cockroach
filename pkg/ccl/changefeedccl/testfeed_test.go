@@ -774,6 +774,10 @@ func (c *tableFeed) Partitions() []string {
 	return []string{`0`, `1`, `2`}
 }
 
+func timeoutOp(op string, id jobspb.JobID) string {
+	return fmt.Sprintf("%s-%d", op, id)
+}
+
 // Next implements the TestFeed interface.
 func (c *tableFeed) Next() (*cdctest.TestFeedMessage, error) {
 	// sinkSink writes all changes to a table with primary key of topic,
@@ -790,12 +794,20 @@ func (c *tableFeed) Next() (*cdctest.TestFeedMessage, error) {
 			return toSend, nil
 		}
 
-		select {
-		case <-time.After(timeout()):
-			return nil, &contextutil.TimeoutError{}
-		case <-c.ss.eventReady():
-		case <-c.shutdown:
-			return nil, c.terminalJobError()
+		if err := contextutil.RunWithTimeout(
+			context.Background(), timeoutOp("tableFeed.Next", c.jobID), timeout(),
+			func(ctx context.Context) error {
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case <-c.ss.eventReady():
+					return nil
+				case <-c.shutdown:
+					return c.terminalJobError()
+				}
+			},
+		); err != nil {
+			return nil, err
 		}
 
 		var toSend []*cdctest.TestFeedMessage
@@ -1092,12 +1104,20 @@ func (c *cloudFeed) Next() (*cdctest.TestFeedMessage, error) {
 			return m, nil
 		}
 
-		select {
-		case <-time.After(timeout()):
-			return nil, &contextutil.TimeoutError{}
-		case <-c.ss.eventReady():
-		case <-c.shutdown:
-			return nil, c.terminalJobError()
+		if err := contextutil.RunWithTimeout(
+			context.Background(), timeoutOp("cloudfeed.Next", c.jobID), timeout(),
+			func(ctx context.Context) error {
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case <-c.ss.eventReady():
+					return nil
+				case <-c.shutdown:
+					return c.terminalJobError()
+				}
+			},
+		); err != nil {
+			return nil, err
 		}
 
 		if err := filepath.Walk(c.dir, c.walkDir); err != nil {
@@ -1485,12 +1505,20 @@ func (k *kafkaFeed) Partitions() []string {
 func (k *kafkaFeed) Next() (*cdctest.TestFeedMessage, error) {
 	for {
 		var msg *sarama.ProducerMessage
-		select {
-		case <-time.After(timeout()):
-			return nil, &contextutil.TimeoutError{}
-		case <-k.shutdown:
-			return nil, k.terminalJobError()
-		case msg = <-k.source:
+		if err := contextutil.RunWithTimeout(
+			context.Background(), timeoutOp("kafka.Next", k.jobID), timeout(),
+			func(ctx context.Context) error {
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case <-k.shutdown:
+					return k.terminalJobError()
+				case msg = <-k.source:
+					return nil
+				}
+			},
+		); err != nil {
+			return nil, err
 		}
 
 		fm := &cdctest.TestFeedMessage{
@@ -1762,13 +1790,22 @@ func (f *webhookFeed) Next() (*cdctest.TestFeedMessage, error) {
 			return m, nil
 		}
 
-		select {
-		case <-time.After(timeout()):
-			return nil, &contextutil.TimeoutError{}
-		case <-f.ss.eventReady():
-		case <-f.mockSink.NotifyMessage():
-		case <-f.shutdown:
-			return nil, f.terminalJobError()
+		if err := contextutil.RunWithTimeout(
+			context.Background(), timeoutOp("webhook.Next", f.jobID), timeout(),
+			func(ctx context.Context) error {
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case <-f.ss.eventReady():
+					return nil
+				case <-f.mockSink.NotifyMessage():
+					return nil
+				case <-f.shutdown:
+					return f.terminalJobError()
+				}
+			},
+		); err != nil {
+			return nil, err
 		}
 	}
 }
@@ -2008,12 +2045,21 @@ func (p *pubsubFeed) Next() (*cdctest.TestFeedMessage, error) {
 
 			return m, nil
 		}
-		select {
-		case <-time.After(timeout()):
-			return nil, &contextutil.TimeoutError{}
-		case <-p.ss.eventReady():
-		case <-p.shutdown:
-			return nil, p.terminalJobError()
+
+		if err := contextutil.RunWithTimeout(
+			context.Background(), timeoutOp("pubsub.Next", p.jobID), timeout(),
+			func(ctx context.Context) error {
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case <-p.ss.eventReady():
+					return nil
+				case <-p.shutdown:
+					return p.terminalJobError()
+				}
+			},
+		); err != nil {
+			return nil, err
 		}
 	}
 }
@@ -2050,7 +2096,7 @@ func stopFeedWhenDone(ctx context.Context, f cdctest.TestFeed) func() {
 		})
 	case jobFailedMarker:
 		go whenDone(func() {
-			t.jobFailed(context.Canceled)
+			t.jobFailed(errors.New("stopping job due to TestFeed timeout"))
 		})
 	}
 

@@ -130,12 +130,15 @@ func TestChangefeedReplanning(t *testing.T) {
 				DistSQL: &execinfra.TestingKnobs{
 					Changefeed: &TestingKnobs{
 						HandleDistChangefeedError: func(err error) error {
-							select {
-							case errChan <- err:
-								return err
-							default:
-								return nil
+							if errors.Is(err, sql.ErrPlanChanged) {
+								select {
+								case errChan <- err:
+									return err
+								default:
+									return nil
+								}
 							}
+							return nil
 						},
 						ShouldReplan: func(ctx context.Context, oldPlan, newPlan *sql.PhysicalPlan) bool {
 							select {
@@ -823,13 +826,11 @@ func TestChangefeedInitialScan(t *testing.T) {
 		for testName, changefeedStmt := range noInitialScanTests {
 			t.Run(testName, func(t *testing.T) {
 				sqlDB.Exec(t, `CREATE TABLE no_initial_scan (a INT PRIMARY KEY)`)
+				defer sqlDB.Exec(t, `DROP TABLE no_initial_scan`)
 				sqlDB.Exec(t, `INSERT INTO no_initial_scan VALUES (1)`)
 
 				noInitialScan := feed(t, f, changefeedStmt)
-				defer func() {
-					closeFeed(t, noInitialScan)
-					sqlDB.Exec(t, `DROP TABLE no_initial_scan`)
-				}()
+				defer closeFeed(t, noInitialScan)
 
 				expectResolvedTimestamp(t, noInitialScan)
 
@@ -843,15 +844,14 @@ func TestChangefeedInitialScan(t *testing.T) {
 		for testName, changefeedStmtFormat := range initialScanTests {
 			t.Run(testName, func(t *testing.T) {
 				sqlDB.Exec(t, `CREATE TABLE initial_scan (a INT PRIMARY KEY)`)
+				defer sqlDB.Exec(t, `DROP TABLE initial_scan`)
 				sqlDB.Exec(t, `INSERT INTO initial_scan VALUES (1), (2), (3)`)
 				var tsStr string
 				var i int
 				sqlDB.QueryRow(t, `SELECT count(*), cluster_logical_timestamp() from initial_scan`).Scan(&i, &tsStr)
 				initialScan := feed(t, f, fmt.Sprintf(changefeedStmtFormat, tsStr))
-				defer func() {
-					closeFeed(t, initialScan)
-					sqlDB.Exec(t, `DROP TABLE initial_scan`)
-				}()
+				defer closeFeed(t, initialScan)
+
 				assertPayloads(t, initialScan, []string{
 					`initial_scan: [1]->{"after": {"a": 1}}`,
 					`initial_scan: [2]->{"after": {"a": 2}}`,
