@@ -118,6 +118,10 @@ export const StatementInsightDetailsOverviewTab: React.FC<
               value={Duration(insightDetails.elapsedTimeMillis * 1e6)}
             />
             <SummaryCardItem
+              label={"CPU Time"}
+              value={Duration(insightDetails.cpuNanos)}
+            />
+            <SummaryCardItem
               label="Rows Read"
               value={Count(insightDetails.rowsRead)}
             />
