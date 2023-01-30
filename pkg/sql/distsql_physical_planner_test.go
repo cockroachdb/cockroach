@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -1388,5 +1389,49 @@ func TestCheckScanParallelizationIfLocal(t *testing.T) {
 		prohibitParallelization, hasScanNodeToParallize := checkScanParallelizationIfLocal(context.Background(), &tc.plan)
 		require.Equal(t, tc.prohibitParallelization, prohibitParallelization)
 		require.Equal(t, tc.hasScanNodeToParallelize, hasScanNodeToParallize)
+	}
+}
+
+func TestClosestInstances(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	type instances map[int]string
+	type picked []int
+
+	for _, tc := range []struct {
+		instances instances
+		loc       string
+		expected  []int
+	}{
+		{instances{1: "a=x", 2: "a=y", 3: "a=z"}, "z=z", picked{}},
+		{instances{1: "a=x", 2: "a=y", 3: "a=z"}, "", picked{}},
+
+		{instances{1: "a=x", 2: "a=y", 3: "a=z"}, "a=x", picked{1}},
+		{instances{1: "a=x", 2: "a=y", 3: "a=z"}, "a=z", picked{3}},
+		{instances{1: "a=x", 2: "a=x", 3: "a=z", 4: "a=z"}, "a=x", picked{1, 2}},
+		{instances{1: "a=x", 2: "a=x", 3: "a=z", 4: "a=z"}, "a=z", picked{3, 4}},
+
+		{instances{1: "a=x,b=1", 2: "a=x,b=2", 3: "a=x,b=3", 4: "a=y,b=1", 5: "a=z,b=1"}, "a=x", picked{1, 2, 3}},
+		{instances{1: "a=x,b=1", 2: "a=x,b=2", 3: "a=x,b=3", 4: "a=y,b=1", 5: "a=z,b=1"}, "a=x,b=2", picked{2}},
+		{instances{1: "a=x,b=1", 2: "a=x,b=2", 3: "a=x,b=3", 4: "a=y,b=1", 5: "a=z,b=1"}, "a=z", picked{5}},
+	} {
+		t.Run("", func(t *testing.T) {
+			var l roachpb.Locality
+			if tc.loc != "" {
+				require.NoError(t, l.Set(tc.loc))
+			}
+			var infos []sqlinstance.InstanceInfo
+			for id, l := range tc.instances {
+				info := sqlinstance.InstanceInfo{InstanceID: base.SQLInstanceID(id)}
+				if l != "" {
+					require.NoError(t, info.Locality.Set(l))
+				}
+				infos = append(infos, info)
+			}
+			var got picked
+			for _, i := range closestInstances(infos, l) {
+				got = append(got, int(i))
+			}
+			require.ElementsMatch(t, tc.expected, got)
+		})
 	}
 }
