@@ -230,6 +230,7 @@ go_library(
         "@com_github_kr_pretty//:pretty",
         "@com_github_lib_pq//:pq",
         "@com_github_montanaflynn_stats//:stats",
+        "@com_github_pmezard_go_difflib//difflib",
         "@com_github_prometheus_client_golang//api",
         "@com_github_prometheus_client_golang//api/prometheus/v1:prometheus",
         "@com_github_prometheus_common//model",
