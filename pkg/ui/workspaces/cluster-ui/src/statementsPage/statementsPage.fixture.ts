@@ -45,7 +45,7 @@ const execStats: Required<IExecStats> = {
     mean: 80,
     squared_diffs: 0.01,
   },
-  cpu_nanos: {
+  cpu_sql_nanos: {
     mean: 80,
     squared_diffs: 0.01,
   },

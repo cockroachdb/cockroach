@@ -1365,8 +1365,8 @@ CREATE TABLE crdb_internal.node_statement_statistics (
   max_disk_usage_var  FLOAT,
   contention_time_avg FLOAT,
   contention_time_var FLOAT,
-  cpu_nanos_avg       FLOAT,
-  cpu_nanos_var       FLOAT,
+  cpu_sql_nanos_avg       FLOAT,
+  cpu_sql_nanos_var       FLOAT,
   implicit_txn        BOOL NOT NULL,
   full_scan           BOOL NOT NULL,
   sample_plan         JSONB,
@@ -1474,8 +1474,8 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 				execStatVar(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.MaxDiskUsage),        // max_disk_usage_var
 				execStatAvg(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.ContentionTime),      // contention_time_avg
 				execStatVar(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.ContentionTime),      // contention_time_var
-				execStatAvg(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.CPUNanos),            // cpu_nanos_avg
-				execStatVar(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.CPUNanos),            // cpu_nanos_var
+				execStatAvg(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.CPUSQLNanos),         // cpu_sql_nanos_avg
+				execStatVar(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.CPUSQLNanos),         // cpu_sql_nanos_var
 				tree.MakeDBool(tree.DBool(stats.Key.ImplicitTxn)),                                   // implicit_txn
 				tree.MakeDBool(tree.DBool(stats.Key.FullScan)),                                      // full_scan
 				tree.NewDJSON(samplePlan),           // sample_plan
@@ -1533,8 +1533,8 @@ CREATE TABLE crdb_internal.node_transaction_statistics (
   max_disk_usage_var  FLOAT,
   contention_time_avg FLOAT,
   contention_time_var FLOAT,
-  cpu_nanos_avg       FLOAT,
-  cpu_nanos_var       FLOAT
+  cpu_sql_nanos_avg       FLOAT,
+  cpu_sql_nanos_var       FLOAT
 )
 `,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
@@ -1589,8 +1589,8 @@ CREATE TABLE crdb_internal.node_transaction_statistics (
 				execStatVar(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.MaxDiskUsage),       // max_disk_usage_var
 				execStatAvg(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.ContentionTime),     // contention_time_avg
 				execStatVar(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.ContentionTime),     // contention_time_var
-				execStatAvg(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.CPUNanos),           // cpu_nanos_avg
-				execStatVar(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.CPUNanos),           // cpu_nanos_var
+				execStatAvg(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.CPUSQLNanos),        // cpu_sql_nanos_avg
+				execStatVar(stats.Stats.ExecStats.Count, stats.Stats.ExecStats.CPUSQLNanos),        // cpu_sql_nanos_var
 			)
 
 			if err != nil {

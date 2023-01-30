@@ -121,9 +121,9 @@ export function addExecStats(a: ExecStats, b: ExecStats): Required<ExecStats> {
       countA,
       countB,
     ),
-    cpu_nanos: addMaybeUnsetNumericStat(
-      a.cpu_nanos,
-      b.cpu_nanos,
+    cpu_sql_nanos: addMaybeUnsetNumericStat(
+      a.cpu_sql_nanos,
+      b.cpu_sql_nanos,
       countA,
       countB,
     ),
