@@ -210,6 +210,6 @@ sort
                                │         ├── type:81 = 2 [outer=(81), constraints=(/81: [/2 - /2]; tight), fd=()-->(81)]
                                │         ├── object_id:82 = attrelid:1::INT8 [outer=(1,82), immutable, constraints=(/82: (/NULL - ]), fd=(1)-->(82)]
                                │         ├── sub_id:83 = attnum:6 [outer=(6,83), constraints=(/6: (/NULL - ]; /83: (/NULL - ]), fd=(6)==(83), (83)==(6)]
-                               │         ├── attrelid:1 < 4294966994 [outer=(1), constraints=(/1: (/NULL - /4294966993]; tight)]
+                               │         ├── attrelid:1 < 4294966993 [outer=(1), constraints=(/1: (/NULL - /4294966992]; tight)]
                                │         └── attnum:6 != 0 [outer=(6), constraints=(/6: (/NULL - /-1] [/1 - ]; tight)]
                                └── 1

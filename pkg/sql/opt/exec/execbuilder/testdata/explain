@@ -440,7 +440,7 @@ vectorized: true
         │       │                   │ order: +objoid
         │       │                   │
         │       │                   └── • filter
-        │       │                       │ filter: (objsubid = 0) AND (classoid = 4294967115)
+        │       │                       │ filter: (objsubid = 0) AND (classoid = 4294967114)
         │       │                       │
         │       │                       └── • virtual table
         │       │                             table: pg_description@primary

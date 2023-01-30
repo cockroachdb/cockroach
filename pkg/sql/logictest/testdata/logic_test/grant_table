@@ -68,6 +68,7 @@ test           crdb_internal       kv_catalog_comments                    public
 test           crdb_internal       kv_catalog_descriptor                  public   SELECT          false
 test           crdb_internal       kv_catalog_namespace                   public   SELECT          false
 test           crdb_internal       kv_catalog_zones                       public   SELECT          false
+test           crdb_internal       kv_dropped_relations                   public   SELECT          false
 test           crdb_internal       kv_node_liveness                       public   SELECT          false
 test           crdb_internal       kv_node_status                         public   SELECT          false
 test           crdb_internal       kv_store_status                        public   SELECT          false
