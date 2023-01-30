@@ -277,13 +277,10 @@ func makeSharedProcessTenantServerConfig(
 	// The parent server will route SQL connections to us.
 	baseCfg.DisableSQLListener = true
 	baseCfg.SplitListenSQL = true
-	// Nevertheless, we like to know our own HTTP address.
+	// Nevertheless, we like to know our own addresses.
+	baseCfg.SocketFile = kvServerCfg.Config.SocketFile
 	baseCfg.SQLAddr = kvServerCfg.Config.SQLAddr
 	baseCfg.SQLAdvertiseAddr = kvServerCfg.Config.SQLAdvertiseAddr
-
-	// Define the unix socket intelligently.
-	// See: https://github.com/cockroachdb/cockroach/issues/84585
-	baseCfg.SocketFile = ""
 
 	// TODO(knz): Make the TLS config separate per tenant.
 	// See https://cockroachlabs.atlassian.net/browse/CRDB-14539.
