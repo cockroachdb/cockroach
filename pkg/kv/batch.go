@@ -427,6 +427,51 @@ func (b *Batch) Put(key, value interface{}) {
 	b.put(key, value, false)
 }
 
+// PutBytes allows multiple Bytes value type puts to be added to the batch.
+func (b *Batch) PutBytes(keys []roachpb.Key, values [][]byte) {
+	reqs := make([]roachpb.PutRequest, len(keys))
+	b.bulkRequest(keys, values, func(i int, k roachpb.Key, v []byte) (roachpb.Request, int) {
+		pr := &reqs[i]
+		pr.RequestHeader.Key = k
+		pr.Value.SetBytes(v)
+		return pr, len(pr.Value.RawBytes)
+	})
+}
+
+// InitPutBytes allows multiple Bytes value type puts to be added to the batch.
+func (b *Batch) InitPutBytes(keys []roachpb.Key, values [][]byte) {
+	reqs := make([]roachpb.InitPutRequest, len(keys))
+	b.bulkRequest(keys, values, func(i int, k roachpb.Key, v []byte) (roachpb.Request, int) {
+		pr := &reqs[i]
+		pr.RequestHeader.Key = k
+		pr.Value.SetBytes(v)
+		return pr, len(pr.Value.RawBytes)
+	})
+}
+
+// PutTuples allows multiple tuple value type puts to be added to the batch.
+func (b *Batch) PutTuples(keys []roachpb.Key, values [][]byte) {
+	reqs := make([]roachpb.PutRequest, len(keys))
+	b.bulkRequest(keys, values, func(i int, k roachpb.Key, v []byte) (roachpb.Request, int) {
+		pr := &reqs[i]
+		pr.RequestHeader.Key = k
+		pr.Value.SetTuple(v)
+		return pr, len(pr.Value.RawBytes)
+	})
+}
+
+// InitPutTuples allows multiple tuple value type init puts to be added to the
+// batch.
+func (b *Batch) InitPutTuples(keys []roachpb.Key, values [][]byte) {
+	reqs := make([]roachpb.InitPutRequest, len(keys))
+	b.bulkRequest(keys, values, func(i int, k roachpb.Key, v []byte) (roachpb.Request, int) {
+		pr := &reqs[i]
+		pr.RequestHeader.Key = k
+		pr.Value.SetTuple(v)
+		return pr, len(pr.Value.RawBytes)
+	})
+}
+
 // PutInline sets the value for a key, but does not maintain
 // multi-version values. The most recent value is always overwritten.
 // Inline values cannot be mutated transactionally and should be used
@@ -508,6 +553,45 @@ func (b *Batch) cputInternal(
 	}
 	b.approxMutationReqBytes += len(k) + len(v.RawBytes)
 	b.initResult(1, 1, notRaw, nil)
+}
+
+// CPutTuples allows multiple ConditionalPutRequests to be added to the batch
+// as tuples.
+func (b *Batch) CPutTuples(keys []roachpb.Key, values [][]byte) {
+	reqs := make([]roachpb.ConditionalPutRequest, len(keys))
+	b.bulkRequest(keys, values, func(i int, k roachpb.Key, v []byte) (roachpb.Request, int) {
+		pr := &reqs[i]
+		pr.RequestHeader.Key = k
+		pr.Value.SetTuple(v)
+		return pr, len(pr.Value.RawBytes)
+	})
+}
+
+// CPutValues allows multiple ConditionalPutRequests to be added to the batch.
+func (b *Batch) CPutValues(keys []roachpb.Key, values []roachpb.Value) {
+	cputs := make([]roachpb.ConditionalPutRequest, len(keys))
+	reqs := make([]roachpb.Request, len(keys))
+	if b.Results == nil && len(keys) > len(b.resultsBuf) {
+		b.Results = make([]Result, 0, len(keys))
+	}
+	count := 0
+	for i, key := range keys {
+		// Ignore nil keys
+		if key == nil {
+			continue
+		}
+		cput := &cputs[count]
+		cput.RequestHeader.Key = key
+		cput.Value.RawBytes = values[i].RawBytes
+		reqs[count] = cput
+		b.approxMutationReqBytes += len(key) + len(cput.Value.RawBytes)
+		b.initResult(1, 1, notRaw, nil)
+		count++
+	}
+	if count > 0 {
+		reqs = reqs[:count]
+		b.appendReqs(reqs...)
+	}
 }
 
 // InitPut sets the first value for a key to value. An ConditionFailedError is
@@ -907,4 +991,31 @@ func (b *Batch) barrier(s, e interface{}) {
 	}
 	b.appendReqs(req)
 	b.initResult(1, 0, notRaw, nil)
+}
+
+func (b *Batch) bulkRequest(
+	keys []roachpb.Key,
+	values [][]byte,
+	valFactory func(int, roachpb.Key, []byte) (roachpb.Request, int),
+) {
+	reqs := make([]roachpb.Request, len(keys))
+	if b.Results == nil && len(keys) > len(b.resultsBuf) {
+		b.Results = make([]Result, 0, len(keys))
+	}
+	count := 0
+	for i, key := range keys {
+		// Ignore nil keys
+		if key == nil {
+			continue
+		}
+		var numBytes int
+		reqs[count], numBytes = valFactory(count, key, values[i])
+		b.approxMutationReqBytes += len(key) + numBytes
+		b.initResult(1, 1, notRaw, nil)
+		count++
+	}
+	if count > 0 {
+		reqs = reqs[:count]
+		b.appendReqs(reqs...)
+	}
 }
