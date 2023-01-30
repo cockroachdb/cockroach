@@ -33,6 +33,7 @@ go_library(
         "//pkg/sql/sem/tree/treewindow",
         "//pkg/sql/sem/volatility",
         "//pkg/sql/types",
+        "//pkg/util",
         "//pkg/util/randident",
         "//pkg/util/randident/randidentcfg",
         "//pkg/util/syncutil",
