@@ -106,7 +106,7 @@ func (m manifestInfoReader) showBackup(
 	// FKs for which we can't resolve the cross-table references. We can't
 	// display them anyway, because we don't have the referenced table names,
 	// etc.
-	err := maybeUpgradeDescriptorsInBackupManifests(info.manifests,
+	err := maybeUpgradeDescriptorsInBackupManifests(ctx, info.manifests, info.layerToIterFactory,
 		true /* skipFKsWithNoMatchingTable */)
 	if err != nil {
 		return err
@@ -447,6 +447,12 @@ you must pass the 'encryption_info_dir' parameter that points to the directory o
 				return err
 			}
 		}
+
+		info.layerToIterFactory, err = backupinfo.GetBackupManifestIterFactories(ctx, p.ExecCfg().DistSQLSrv.ExternalStorage, info.manifests, info.enc, info.kmsEnv)
+		if err != nil {
+			return err
+		}
+
 		// If backup is locality aware, check that user passed at least some localities.
 
 		// TODO (msbutler): this is an extremely crude check that the user is
@@ -575,13 +581,19 @@ func checkBackupFiles(
 
 		// Check all backup SSTs.
 		fileSizes := make([]int64, 0)
-		it, err := makeBackupManifestFileIterator(ctx, execCfg.DistSQLSrv.ExternalStorage,
-			info.manifests[layer], encryption, kmsEnv)
+		it, err := info.layerToIterFactory[layer].NewFileIter(ctx)
 		if err != nil {
 			return nil, err
 		}
-		defer it.close()
-		for f, hasNext := it.next(); hasNext; f, hasNext = it.next() {
+		defer it.Close()
+		for ; ; it.Next() {
+			if ok, err := it.Valid(); err != nil {
+				return nil, err
+			} else if !ok {
+				break
+			}
+
+			f := it.Value()
 			store := defaultStore
 			uri := info.defaultURIs[layer]
 			if _, ok := localityStores[f.LocalityKV]; ok {
@@ -601,9 +613,6 @@ func checkBackupFiles(
 				continue
 			}
 			fileSizes = append(fileSizes, sz)
-		}
-		if it.err() != nil {
-			return nil, it.err()
 		}
 
 		return fileSizes, nil
@@ -636,14 +645,15 @@ func checkBackupFiles(
 }
 
 type backupInfo struct {
-	collectionURI string
-	defaultURIs   []string
-	manifests     []backuppb.BackupManifest
-	subdir        string
-	localityInfo  []jobspb.RestoreDetails_BackupLocalityInfo
-	enc           *jobspb.BackupEncryptionOptions
-	kmsEnv        cloud.KMSEnv
-	fileSizes     [][]int64
+	collectionURI      string
+	defaultURIs        []string
+	manifests          []backuppb.BackupManifest
+	layerToIterFactory backupinfo.LayerToBackupManifestFileIterFactory
+	subdir             string
+	localityInfo       []jobspb.RestoreDetails_BackupLocalityInfo
+	enc                *jobspb.BackupEncryptionOptions
+	kmsEnv             cloud.KMSEnv
+	fileSizes          [][]int64
 }
 
 type backupShower struct {
@@ -707,7 +717,7 @@ func backupShowerDefault(
 
 			var rows []tree.Datums
 			for layer, manifest := range info.manifests {
-				descriptors, err := backupinfo.BackupManifestDescriptors(&manifest)
+				descriptors, err := backupinfo.BackupManifestDescriptors(ctx, &manifest, info.layerToIterFactory[layer])
 				if err != nil {
 					return nil, err
 				}
@@ -762,7 +772,7 @@ func backupShowerDefault(
 					fileSizes = info.fileSizes[layer]
 				}
 
-				tableSizes, err := getTableSizes(ctx, p.ExecCfg().DistSQLSrv.ExternalStorage, info, manifest, fileSizes)
+				tableSizes, err := getTableSizes(ctx, info.layerToIterFactory[layer], fileSizes)
 				if err != nil {
 					return nil, err
 				}
@@ -945,26 +955,26 @@ type descriptorSize struct {
 // BackupManifest_File identifies a span in an SST and there can be multiple
 // spans stored in an SST.
 func getLogicalSSTSize(
-	ctx context.Context,
-	storeFactory cloud.ExternalStorageFactory,
-	manifest backuppb.BackupManifest,
-	enc *jobspb.BackupEncryptionOptions,
-	kmsEnv cloud.KMSEnv,
+	ctx context.Context, iterFactory *backupinfo.IterFactory,
 ) (map[string]int64, error) {
 	ctx, span := tracing.ChildSpan(ctx, "backupccl.getLogicalSSTSize")
 	defer span.Finish()
 
 	sstDataSize := make(map[string]int64)
-	it, err := makeBackupManifestFileIterator(ctx, storeFactory, manifest, enc, kmsEnv)
+	it, err := iterFactory.NewFileIter(ctx)
 	if err != nil {
 		return nil, err
 	}
-	defer it.close()
-	for f, hasNext := it.next(); hasNext; f, hasNext = it.next() {
+	defer it.Close()
+	for ; ; it.Next() {
+		if ok, err := it.Valid(); err != nil {
+			return nil, err
+		} else if !ok {
+			break
+		}
+
+		f := it.Value()
 		sstDataSize[f.Path] += f.EntryCounts.DataSize
-	}
-	if it.err() != nil {
-		return nil, it.err()
 	}
 	return sstDataSize, nil
 }
@@ -978,30 +988,33 @@ func approximateSpanPhysicalSize(
 
 // getTableSizes gathers row and size count for each table in the manifest
 func getTableSizes(
-	ctx context.Context,
-	storeFactory cloud.ExternalStorageFactory,
-	info backupInfo,
-	manifest backuppb.BackupManifest,
-	fileSizes []int64,
+	ctx context.Context, iterFactory *backupinfo.IterFactory, fileSizes []int64,
 ) (map[descpb.ID]descriptorSize, error) {
 	ctx, span := tracing.ChildSpan(ctx, "backupccl.getTableSizes")
 	defer span.Finish()
 
-	logicalSSTSize, err := getLogicalSSTSize(ctx, storeFactory, manifest, info.enc, info.kmsEnv)
+	logicalSSTSize, err := getLogicalSSTSize(ctx, iterFactory)
 	if err != nil {
 		return nil, err
 	}
 
-	it, err := makeBackupManifestFileIterator(ctx, storeFactory, manifest, info.enc, info.kmsEnv)
+	it, err := iterFactory.NewFileIter(ctx)
 	if err != nil {
 		return nil, err
 	}
-	defer it.close()
+	defer it.Close()
 	tableSizes := make(map[descpb.ID]descriptorSize)
 	var tenantID roachpb.TenantID
 	var showCodec keys.SQLCodec
 	var idx int
-	for f, hasNext := it.next(); hasNext; f, hasNext = it.next() {
+	for ; ; it.Next() {
+		if ok, err := it.Valid(); err != nil {
+			return nil, err
+		} else if !ok {
+			break
+		}
+
+		f := it.Value()
 		if !tenantID.IsSet() {
 			var err error
 			_, tenantID, err = keys.DecodeTenantPrefix(f.Span.Key)
@@ -1032,9 +1045,6 @@ func getTableSizes(
 		}
 		tableSizes[descpb.ID(tableID)] = s
 		idx++
-	}
-	if it.err() != nil {
-		return nil, it.err()
 	}
 
 	return tableSizes, nil
@@ -1178,7 +1188,7 @@ var backupShowerDoctor = backupShower{
 		var namespaceTable doctor.NamespaceTable
 		// Extract all the descriptors from the given manifest and generate the
 		// namespace and descriptor tables needed by doctor.
-		descriptors, _, err := backupinfo.LoadSQLDescsFromBackupsAtTime(info.manifests, hlc.Timestamp{})
+		descriptors, _, err := backupinfo.LoadSQLDescsFromBackupsAtTime(ctx, info.manifests, info.layerToIterFactory, hlc.Timestamp{})
 		if err != nil {
 			return nil, err
 		}
@@ -1268,20 +1278,24 @@ func backupShowerFileSetup(
 					backupType = "incremental"
 				}
 
-				logicalSSTSize, err := getLogicalSSTSize(ctx, p.ExecCfg().DistSQLSrv.ExternalStorage, manifest,
-					info.enc, info.kmsEnv)
+				logicalSSTSize, err := getLogicalSSTSize(ctx, info.layerToIterFactory[i])
 				if err != nil {
 					return nil, err
 				}
 
-				it, err := makeBackupManifestFileIterator(ctx, p.ExecCfg().DistSQLSrv.ExternalStorage,
-					manifest, info.enc, info.kmsEnv)
+				it, err := info.layerToIterFactory[i].NewFileIter(ctx)
 				if err != nil {
 					return nil, err
 				}
-				defer it.close()
+				defer it.Close()
 				var idx int
-				for file, hasNext := it.next(); hasNext; file, hasNext = it.next() {
+				for ; ; it.Next() {
+					if ok, err := it.Valid(); err != nil {
+						return nil, err
+					} else if !ok {
+						break
+					}
+					file := it.Value()
 					filePath := file.Path
 					if inCol != nil {
 						filePath = path.Join(manifestDirs[i], filePath)
@@ -1311,9 +1325,6 @@ func backupShowerFileSetup(
 						tree.NewDInt(tree.DInt(sz)),
 					})
 					idx++
-				}
-				if it.err() != nil {
-					return nil, it.err()
 				}
 			}
 			return rows, nil
