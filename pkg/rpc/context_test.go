@@ -1421,6 +1421,98 @@ func TestFailedOffsetMeasurement(t *testing.T) {
 	})
 }
 
+// TestLatencyInfoCleanup tests that latencyInfo is cleaned up for closed connection
+// to avoid reporting stale information.
+func TestLatencyInfoCleanupOnClosedConnection(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.Background())
+
+	// Shared cluster ID by all RPC peers (this ensures that the peers
+	// don't talk to servers from unrelated tests by accident).
+	clusterID := uuid.MakeV4()
+	ctx := context.Background()
+
+	serverClock := timeutil.NewManualTime(timeutil.Unix(0, 20))
+	maxOffset := time.Duration(0)
+	serverCtx := newTestContext(clusterID, serverClock, maxOffset, stopper)
+	const serverNodeID = 1
+	serverCtx.NodeID.Set(ctx, serverNodeID)
+	s := newTestServer(t, serverCtx)
+	RegisterHeartbeatServer(s, &HeartbeatService{
+		clock:              serverClock,
+		remoteClockMonitor: serverCtx.RemoteClocks,
+		clusterID:          serverCtx.StorageClusterID,
+		nodeID:             serverCtx.NodeID,
+		settings:           serverCtx.Settings,
+	})
+
+	ln, err := netutil.ListenAndServeGRPC(serverCtx.Stopper, s, util.TestAddr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	remoteAddr := ln.Addr().String()
+
+	// Create a client clock that is behind the server clock.
+	clientClock := &AdvancingClock{time: timeutil.Unix(0, 10)}
+	clientMaxOffset := time.Duration(0)
+	clientCtx := newTestContext(clusterID, clientClock, clientMaxOffset, stopper)
+	// Make the interval shorter to speed up the test.
+	clientCtx.Config.RPCHeartbeatInterval = 1 * time.Millisecond
+	clientCtx.Config.RPCHeartbeatTimeout = 1 * time.Millisecond
+
+	conn, err := clientCtx.GRPCDialNode(remoteAddr, serverNodeID, DefaultClass).Connect(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	anotherConn, err := clientCtx.GRPCDialNode(remoteAddr, serverNodeID, SystemClass).Connect(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	clientClock.setAdvancementInterval(
+		maximumPingDurationMult*clientMaxOffset + 1*time.Nanosecond)
+
+	testutils.SucceedsSoon(t, func() error {
+		clientCtx.RemoteClocks.mu.Lock()
+		defer clientCtx.RemoteClocks.mu.Unlock()
+
+		if li, ok := clientCtx.RemoteClocks.mu.latencyInfos[serverNodeID]; !ok {
+			return errors.Errorf("expected to have latencyInfos %v, but it was not", li)
+		}
+		return nil
+	})
+
+	// Close first connection. It cannot be considered as network disruption yet, since anotherConn still open.
+	err = conn.Close() // nolint:grpcconnclose
+	require.NoError(t, err)
+
+	testutils.SucceedsSoon(t, func() error {
+		clientCtx.RemoteClocks.mu.Lock()
+		defer clientCtx.RemoteClocks.mu.Unlock()
+		if _, ok := clientCtx.RemoteClocks.mu.latencyInfos[serverNodeID]; !ok {
+			return errors.Errorf("expected to have latencyInfos, but nothing found")
+		}
+		return nil
+	})
+
+	// Close last anotherConn to simulate network disruption.
+	err = anotherConn.Close() // nolint:grpcconnclose
+	require.NoError(t, err)
+
+	testutils.SucceedsSoon(t, func() error {
+		clientCtx.RemoteClocks.mu.Lock()
+		defer clientCtx.RemoteClocks.mu.Unlock()
+
+		if li, ok := clientCtx.RemoteClocks.mu.latencyInfos[serverNodeID]; ok {
+			return errors.Errorf("expected to have removed latencyInfos, but found: %v", li)
+		}
+		return nil
+	})
+}
+
 type AdvancingClock struct {
 	syncutil.Mutex
 	time                time.Time

@@ -2224,6 +2224,9 @@ func (rpcCtx *Context) runHeartbeat(
 		} else {
 			close(conn.initialHeartbeatDone) // unblock any waiters
 		}
+		if rpcCtx.RemoteClocks != nil {
+			rpcCtx.RemoteClocks.OnDisconnect(ctx, conn.remoteNodeID)
+		}
 	}()
 
 	{
@@ -2233,6 +2236,9 @@ func (rpcCtx *Context) runHeartbeat(
 			// Note that grpcConn will actually connect in the background, so it's
 			// unusual to hit this case.
 			return err
+		}
+		if rpcCtx.RemoteClocks != nil {
+			rpcCtx.RemoteClocks.OnConnect(ctx, conn.remoteNodeID)
 		}
 	}
 
