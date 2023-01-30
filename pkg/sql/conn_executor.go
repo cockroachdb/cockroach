@@ -3144,10 +3144,10 @@ func (ex *connExecutor) hasQuery(queryID clusterunique.ID) bool {
 
 // CancelQuery is part of the RegistrySession interface.
 func (ex *connExecutor) CancelQuery(queryID clusterunique.ID) bool {
-	ex.mu.Lock()
-	defer ex.mu.Unlock()
+	ex.mu.RLock()
+	defer ex.mu.RUnlock()
 	if queryMeta, exists := ex.mu.ActiveQueries[queryID]; exists {
-		queryMeta.cancel()
+		queryMeta.cancelQuery()
 		return true
 	}
 	return false
@@ -3155,11 +3155,11 @@ func (ex *connExecutor) CancelQuery(queryID clusterunique.ID) bool {
 
 // CancelActiveQueries is part of the RegistrySession interface.
 func (ex *connExecutor) CancelActiveQueries() bool {
-	ex.mu.Lock()
-	defer ex.mu.Unlock()
+	ex.mu.RLock()
+	defer ex.mu.RUnlock()
 	canceled := false
 	for _, queryMeta := range ex.mu.ActiveQueries {
-		queryMeta.cancel()
+		queryMeta.cancelQuery()
 		canceled = true
 	}
 	return canceled
@@ -3172,11 +3172,6 @@ func (ex *connExecutor) CancelSession() {
 	}
 	// TODO(abhimadan): figure out how to send a nice error message to the client.
 	ex.onCancelSession()
-}
-
-// user is part of the RegistrySession interface.
-func (ex *connExecutor) user() username.SQLUsername {
-	return ex.sessionData().User()
 }
 
 // BaseSessionUser is part of the RegistrySession interface.

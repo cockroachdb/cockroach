@@ -2034,12 +2034,6 @@ type queryMeta struct {
 	database string
 }
 
-// cancel cancels the query associated with this queryMeta, by closing the
-// associated stmt context.
-func (q *queryMeta) cancel() {
-	q.cancelQuery()
-}
-
 // SessionDefaults mirrors fields in Session, for restoring default
 // configuration values in SET ... TO DEFAULT (or RESET ...) statements.
 type SessionDefaults map[string]string
@@ -2138,7 +2132,6 @@ func (r *SessionRegistry) deregister(
 }
 
 type RegistrySession interface {
-	user() username.SQLUsername
 	// BaseSessionUser returns the base session's username.
 	BaseSessionUser() username.SQLUsername
 	hasQuery(queryID clusterunique.ID) bool
