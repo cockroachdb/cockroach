@@ -21,6 +21,7 @@ go_library(
         "//pkg/sql/isql",
         "//pkg/sql/sqlliveness",
         "//pkg/util/hlc",
+        "//pkg/util/iterutil",
         "//pkg/util/log",
         "//pkg/util/retry",
         "//pkg/util/syncutil",
