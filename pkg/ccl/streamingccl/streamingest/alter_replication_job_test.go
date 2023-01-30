@@ -85,6 +85,7 @@ func TestAlterTenantPauseResume(t *testing.T) {
 	})
 
 	t.Run("pause-resume-as-non-system-tenant", func(t *testing.T) {
+		c.DestTenantSQL.Exec(t, `SET CLUSTER SETTING cross_cluster_replication.enabled = true`)
 		c.DestTenantSQL.ExpectErr(t, "only the system tenant can alter tenant", `ALTER TENANT $1 PAUSE REPLICATION`, "foo")
 		c.DestTenantSQL.ExpectErr(t, "only the system tenant can alter tenant", `ALTER TENANT $1 RESUME REPLICATION`, "foo")
 	})
