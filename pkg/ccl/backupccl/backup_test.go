@@ -10524,8 +10524,8 @@ $$;
 		require.Equal(t, []descpb.ID{108, 109}, fnDesc.GetDependsOnTypes())
 
 		fnDef, _ := scDesc.GetFunction("f1")
-		require.Equal(t, 111, int(fnDef.Overloads[0].ID))
-		require.Equal(t, 100108, int(fnDef.Overloads[0].ArgTypes[0].Oid()))
+		require.Equal(t, 111, int(fnDef.Signatures[0].ID))
+		require.Equal(t, 100108, int(fnDef.Signatures[0].ArgTypes[0].Oid()))
 		return nil
 	})
 	require.NoError(t, err)
@@ -10577,8 +10577,8 @@ $$;
 		require.Equal(t, []descpb.ID{116, 117}, fnDesc.GetDependsOnTypes())
 
 		fnDef, _ := scDesc.GetFunction("f1")
-		require.Equal(t, 119, int(fnDef.Overloads[0].ID))
-		require.Equal(t, 100116, int(fnDef.Overloads[0].ArgTypes[0].Oid()))
+		require.Equal(t, 119, int(fnDef.Signatures[0].ID))
+		require.Equal(t, 100116, int(fnDef.Signatures[0].ArgTypes[0].Oid()))
 		return nil
 	})
 
@@ -10663,8 +10663,8 @@ $$;
 		require.Equal(t, []descpb.ID{108, 109}, fnDesc.GetDependsOnTypes())
 
 		fnDef, _ := scDesc.GetFunction("f1")
-		require.Equal(t, 111, int(fnDef.Overloads[0].ID))
-		require.Equal(t, 100108, int(fnDef.Overloads[0].ArgTypes[0].Oid()))
+		require.Equal(t, 111, int(fnDef.Signatures[0].ID))
+		require.Equal(t, 100108, int(fnDef.Signatures[0].ArgTypes[0].Oid()))
 		return nil
 	})
 	require.NoError(t, err)
@@ -10718,8 +10718,8 @@ $$;
 		require.Equal(t, []descpb.ID{127, 128}, fnDesc.GetDependsOnTypes())
 
 		fnDef, _ := scDesc.GetFunction("f1")
-		require.Equal(t, 130, int(fnDef.Overloads[0].ID))
-		require.Equal(t, 100127, int(fnDef.Overloads[0].ArgTypes[0].Oid()))
+		require.Equal(t, 130, int(fnDef.Signatures[0].ID))
+		require.Equal(t, 100127, int(fnDef.Signatures[0].ArgTypes[0].Oid()))
 		return nil
 	})
 	require.NoError(t, err)

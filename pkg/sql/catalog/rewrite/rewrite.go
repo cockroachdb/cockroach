@@ -537,15 +537,15 @@ func SchemaDescs(schemas []*schemadesc.Mutable, descriptorRewrites jobspb.DescRe
 
 		// Rewrite function ID and types ID in function signatures.
 		for _, fn := range sc.GetFunctions() {
-			for i := range fn.Overloads {
-				overload := &fn.Overloads[i]
-				overload.ID = descriptorRewrites[overload.ID].ID
-				for _, typ := range overload.ArgTypes {
+			for i := range fn.Signatures {
+				sig := &fn.Signatures[i]
+				sig.ID = descriptorRewrites[sig.ID].ID
+				for _, typ := range sig.ArgTypes {
 					if err := rewriteIDsInTypesT(typ, descriptorRewrites); err != nil {
 						return err
 					}
 				}
-				if err := rewriteIDsInTypesT(overload.ReturnType, descriptorRewrites); err != nil {
+				if err := rewriteIDsInTypesT(sig.ReturnType, descriptorRewrites); err != nil {
 					return err
 				}
 			}

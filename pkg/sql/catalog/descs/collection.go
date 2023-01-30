@@ -901,8 +901,8 @@ func (tc *Collection) aggregateAllLayers(
 			// This is needed at least for the temp system db during restores.
 			descIDs.Add(sc.GetID())
 		}
-		_ = sc.ForEachFunctionOverload(func(overload descpb.SchemaDescriptor_FunctionOverload) error {
-			descIDs.Add(overload.ID)
+		_ = sc.ForEachFunctionSignature(func(sig descpb.SchemaDescriptor_FunctionSignature) error {
+			descIDs.Add(sig.ID)
 			return nil
 		})
 	}
@@ -910,8 +910,8 @@ func (tc *Collection) aggregateAllLayers(
 	_ = stored.ForEachDescriptor(func(desc catalog.Descriptor) error {
 		descIDs.Add(desc.GetID())
 		if sc, ok := desc.(catalog.SchemaDescriptor); ok {
-			_ = sc.ForEachFunctionOverload(func(overload descpb.SchemaDescriptor_FunctionOverload) error {
-				descIDs.Add(overload.ID)
+			_ = sc.ForEachFunctionSignature(func(sig descpb.SchemaDescriptor_FunctionSignature) error {
+				descIDs.Add(sig.ID)
 				return nil
 			})
 		}
@@ -956,8 +956,8 @@ func (tc *Collection) aggregateAllLayers(
 		_ = iterator(func(desc catalog.Descriptor) error {
 			descIDs.Add(desc.GetID())
 			if sc, ok := desc.(catalog.SchemaDescriptor); ok {
-				_ = sc.ForEachFunctionOverload(func(overload descpb.SchemaDescriptor_FunctionOverload) error {
-					descIDs.Add(overload.ID)
+				_ = sc.ForEachFunctionSignature(func(sig descpb.SchemaDescriptor_FunctionSignature) error {
+					descIDs.Add(sig.ID)
 					return nil
 				})
 			}
