@@ -18,7 +18,7 @@ import (
 	"testing"
 	"unsafe"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
@@ -523,7 +523,7 @@ func TestArrowConversion(t *testing.T) {
 		if rng.Float64() < nullChance {
 			continue
 		}
-		element := []byte(randgen.RandString(rng, 1+rng.Intn(maxStringLength), letters))
+		element := []byte(util.RandString(rng, 1+rng.Intn(maxStringLength), letters))
 		b.Set(i, element)
 	}
 
