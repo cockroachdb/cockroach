@@ -83,6 +83,7 @@ message Transaction {
   repeated Cause causes = 15;
   repeated bytes stmt_execution_ids = 16 [ (gogoproto.customname) = "StmtExecutionIDs",
     (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/sql/clusterunique.ID"];
+  int64 cpu_sql_nanos = 17 [(gogoproto.customname) = "CPUSQLNanos"];
 }
 
 message Statement {
@@ -118,6 +119,7 @@ message Statement {
   repeated cockroach.roachpb.ContentionEvent contention_events = 20 [(gogoproto.nullable) = false];
   Problem problem = 21;
   repeated Cause causes = 22;
+  int64 cpu_sql_nanos = 23 [(gogoproto.customname) = "CPUSQLNanos"];
 }
 
 
