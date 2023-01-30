@@ -46,7 +46,7 @@ func BenchmarkGenerateObjects(b *testing.B) {
 
 	// Disable auto stats and range splits, which introduce noise.
 	db.Exec(b, `SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false`)
-	db.Exec(b, `SET CLUSTER SETTING spanconfig.host_coalesce_adjacent.enabled = true`)
+	db.Exec(b, `SET CLUSTER SETTING spanconfig.storage_coalesce_adjacent.enabled = true`)
 
 	for _, bench := range benches {
 		b.Run(bench.name, func(b *testing.B) {

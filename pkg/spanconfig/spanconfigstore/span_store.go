@@ -39,7 +39,7 @@ var tenantCoalesceAdjacentSetting = settings.RegisterBoolSetting(
 // the same span config.
 var hostCoalesceAdjacentSetting = settings.RegisterBoolSetting(
 	settings.SystemOnly,
-	"spanconfig.host_coalesce_adjacent.enabled",
+	"spanconfig.storage_coalesce_adjacent.enabled",
 	`collapse adjacent ranges with the same span configs`,
 	false,
 )
