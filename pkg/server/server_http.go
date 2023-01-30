@@ -17,8 +17,10 @@ import (
 
 	"github.com/NYTimes/gziphandler"
 	"github.com/cockroachdb/cmux"
+	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/debug"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/ts"
@@ -116,6 +118,12 @@ func (s *httpServer) setupRoutes(
 			}
 			return nil
 		},
+		Flags: serverpb.FeatureFlags{
+			CrossClusterReplicationEnabled: func() bool {
+				return streamingccl.CrossClusterReplicationEnabled.Get(&s.cfg.Settings.SV)
+			}(),
+		},
+		Settings: s.cfg.Settings,
 	})
 
 	// The authentication mux used here is created in "allow anonymous" mode so that the UI

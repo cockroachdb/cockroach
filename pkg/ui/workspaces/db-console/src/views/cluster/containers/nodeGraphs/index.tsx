@@ -86,6 +86,8 @@ import {
   selectResolution10sStorageTTL,
   selectResolution30mStorageTTL,
 } from "src/redux/clusterSettings";
+import { getDataFromServer } from "src/util/dataFromServer";
+
 interface GraphDashboard {
   label: string;
   component: (props: GraphDashboardProps) => React.ReactElement<any>[];
@@ -151,6 +153,7 @@ type NodeGraphsProps = RouteComponentProps &
 type NodeGraphsState = {
   showLowResolutionAlert: boolean;
   showDeletedDataAlert: boolean;
+  filteredDropdownOptions: { value: string; label: string }[];
 };
 
 /**
@@ -162,9 +165,16 @@ export class NodeGraphs extends React.Component<
 > {
   constructor(props: NodeGraphsProps) {
     super(props);
+    const crossClusterReplicationEnabled =
+      getDataFromServer().FeatureFlags.cross_cluster_replication_enabled;
     this.state = {
       showDeletedDataAlert: false,
       showLowResolutionAlert: false,
+      filteredDropdownOptions: crossClusterReplicationEnabled
+        ? dashboardDropdownOptions // Already in the list, no need to filter
+        : dashboardDropdownOptions.filter(
+            option => option.label !== "Cross-Cluster Replication",
+          ),
     };
   }
 
@@ -338,7 +348,7 @@ export class NodeGraphs extends React.Component<
           <PageConfigItem>
             <Dropdown
               title="Dashboard"
-              options={dashboardDropdownOptions}
+              options={this.state.filteredDropdownOptions}
               selected={dashboard}
               onChange={this.dashChange}
               className="full-size"

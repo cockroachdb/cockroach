@@ -240,7 +240,7 @@ func TestStreamIngestionJobWithRandomClient(t *testing.T) {
 	_, err = conn.Exec(query)
 	require.True(t, testutils.IsError(err, "stream replication is only supported experimentally"))
 
-	_, err = conn.Exec(`SET enable_experimental_stream_replication = true`)
+	_, err = conn.Exec(`SET CLUSTER SETTING cross_cluster_replication.enabled = true;`)
 	require.NoError(t, err)
 
 	_, err = conn.Exec(query)

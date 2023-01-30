@@ -1444,4 +1444,9 @@ message SetTraceRecordingTypeResponse{}
 message FeatureFlags {
   // Whether the server is an instance of the Observability Service
   bool is_observability_service = 1;
+
+  // CrossClusterReplicationEnabled gets its value from the cluster setting
+  // `cross_cluster_replication.enabled`. It controls whether or not we should
+  // show the Cross-Cluster Replication metrics page on the DB console.
+  bool cross_cluster_replication_enabled = 2;
 }

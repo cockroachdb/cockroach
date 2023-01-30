@@ -11,7 +11,9 @@ go_library(
     deps = [
         "//pkg/base",
         "//pkg/build",
+        "//pkg/ccl/streamingccl",
         "//pkg/server/serverpb",
+        "//pkg/settings/cluster",
         "//pkg/util/httputil",
         "//pkg/util/log",
     ],

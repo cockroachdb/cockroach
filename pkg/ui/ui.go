@@ -27,7 +27,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -104,6 +106,16 @@ type Config struct {
 	GetUser  func(ctx context.Context) *string
 	OIDC     OIDCUI
 	Flags    serverpb.FeatureFlags
+	Settings *cluster.Settings
+}
+
+// GetFeatureFlags loads the feature flags for the Config. Some flags may be
+// dynamically loaded to capture their most up-to-date values.
+func (cfg Config) GetFeatureFlags() serverpb.FeatureFlags {
+	return serverpb.FeatureFlags{
+		CrossClusterReplicationEnabled: streamingccl.CrossClusterReplicationEnabled.Get(&cfg.Settings.SV),
+		IsObservabilityService:         cfg.Flags.IsObservabilityService,
+	}
 }
 
 var uiConfigPath = regexp.MustCompile("^/uiconfig$")
@@ -142,7 +154,7 @@ func Handler(cfg Config) http.Handler {
 			OIDCAutoLogin:    oidcConf.AutoLogin,
 			OIDCLoginEnabled: oidcConf.Enabled,
 			OIDCButtonText:   oidcConf.ButtonText,
-			FeatureFlags:     cfg.Flags,
+			FeatureFlags:     cfg.GetFeatureFlags(),
 		}
 		if cfg.NodeID != nil {
 			args.NodeID = cfg.NodeID.String()
