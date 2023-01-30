@@ -54,6 +54,7 @@ type ImmediateMutationVisitor interface {
 	RemoveCheckConstraint(context.Context, RemoveCheckConstraint) error
 	RemoveColumnNotNull(context.Context, RemoveColumnNotNull) error
 	MakeAbsentCheckConstraintWriteOnly(context.Context, MakeAbsentCheckConstraintWriteOnly) error
+	MakeAbsentCheckConstraintNotValidPublic(context.Context, MakeAbsentCheckConstraintNotValidPublic) error
 	MakeAbsentColumnNotNullWriteOnly(context.Context, MakeAbsentColumnNotNullWriteOnly) error
 	MakePublicCheckConstraintValidated(context.Context, MakePublicCheckConstraintValidated) error
 	MakePublicColumnNotNullValidated(context.Context, MakePublicColumnNotNullValidated) error
@@ -274,6 +275,11 @@ func (op RemoveColumnNotNull) Visit(ctx context.Context, v ImmediateMutationVisi
 // Visit is part of the ImmediateMutationOp interface.
 func (op MakeAbsentCheckConstraintWriteOnly) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
 	return v.MakeAbsentCheckConstraintWriteOnly(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
+func (op MakeAbsentCheckConstraintNotValidPublic) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.MakeAbsentCheckConstraintNotValidPublic(ctx, op)
 }
 
 // Visit is part of the ImmediateMutationOp interface.

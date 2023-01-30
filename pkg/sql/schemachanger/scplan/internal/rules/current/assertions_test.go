@@ -151,7 +151,7 @@ func checkIsColumnDependent(e scpb.Element) error {
 // element.
 func checkIsIndexDependent(e scpb.Element) error {
 	// Exclude indexes themselves and their data.
-	if isIndex(e) || isData(e) || isNonIndexBackedConstraint(e) {
+	if isIndex(e) || isData(e) || isNonIndexBackedComplexConstraint(e) {
 		return nil
 	}
 	// An index dependent should have an IndexID attribute.
@@ -185,40 +185,63 @@ func checkIsConstraintDependent(e scpb.Element) error {
 	return nil
 }
 
-// Assert that any element with a "ConstraintID" attr is either a constraint
-// or a constraintDependent.
-// If it's a constraint, then
-//   - it's either a NonIndexBackedConstraint or isIndex
-//   - it's either a CrossDescriptorConstraint or it does not a referencedDescID|ReferencedSequenceIDs|ReferencedTypeIDs attr
+// Assert a constraint has the following structural hierarchy:
+//
+// (first level) If `e` is an element with a "ConstraintID" attr, then
+// it verifies either isConstraint or isConstraintDependent
+//
+// (second level) If `e` verifies isConstraint, then
+// it verifies either isNonIndexBackedConstraint or isIndex
+//
+// (third level) If `e` verifies isNonIndexBackedConstraint, then
+// it verifies either isNonIndexBackedComplexConstraint or isNonIndexBackedSimpleConstraint
+//
+// (fourth level) If `e` verifies isNonIndexBackedComplexConstraint, then
+// it verifies either isNonIndexBackedComplexCrossDescriptorConstraint or
+// it does not a referencedDescID|ReferencedSequenceIDs|ReferencedTypeIDs attr
 func checkConstraintPartitions(e scpb.Element) error {
 	_, err := screl.Schema.GetAttribute(screl.ConstraintID, e)
 	if err != nil {
 		return nil //nolint:returnerrcheck
 	}
+	// Check first level partition
 	if !isConstraint(e) && !isConstraintDependent(e) {
 		return errors.New("has ConstraintID attr but is not a constraint nor a constraint dependent")
 	}
+	// Only allow constraints to proceed.
 	if isConstraintDependent(e) {
-		// The checks below only apply to constraints, so skip constraint dependents.
 		return nil
 	}
-	if isNonIndexBackedConstraint(e) == isIndex(e) {
-		if isIndex(e) {
-			return errors.New("verifies both isIndex and isNonIndexBackedConstraint")
-		} else {
-			return errors.New("doesn't verify isIndex nor isNonIndexBackedConstraint")
-		}
+	// Check second level partition inside constraints.
+	if !isNonIndexBackedConstraint(e) && !isIndex(e) {
+		return errors.New("verifies isConstraint but does not verify isNonIndexBackedConstraint nor isIndex")
 	}
+	// Only allow non-index-backed constraints to proceed.
+	if isIndex(e) {
+		return nil
+	}
+	// Check third level partition inside non-index-backed constraints.
+	if !isNonIndexBackedComplexConstraint(e) && !isNonIndexBackedSimpleConstraint(e) {
+		return errors.New("verifies isNonIndexBackedConstraint but does not verify " +
+			"isNonIndexBackedComplexConstraint nor isNonIndexBackedSimpleConstraint")
+	}
+	// Only allow complex, non-index-backed constraints to proceed.
+	if isNonIndexBackedSimpleConstraint(e) {
+		return nil
+	}
+	// Check the fourth level partition inside complex, non-index-backed constraints.
 	_, err1 := screl.Schema.GetAttribute(screl.ReferencedDescID, e)
 	_, err2 := screl.Schema.GetAttribute(screl.ReferencedSequenceIDs, e)
 	_, err3 := screl.Schema.GetAttribute(screl.ReferencedTypeIDs, e)
-	if isCrossDescriptorConstraint(e) {
-		if err1 != nil && err2 != nil && err3 != nil {
-			return errors.New("verifies isCrossDescriptorConstraint but does not have a Referenced.*ID attr")
+	if !isNonIndexBackedComplexCrossDescriptorConstraint(e) {
+		if err1 == nil || err2 == nil || err3 == nil {
+			return errors.New("doesn't verify isNonIndexBackedComplexCrossDescriptorConstraint but" +
+				" has a Referenced.*ID attr")
 		}
 	} else {
-		if err1 == nil || err2 == nil || err3 == nil {
-			return errors.New("doesn't verify isCrossDescriptorConstraint but has a Referenced.*ID attr")
+		if err1 != nil && err2 != nil && err3 != nil {
+			return errors.New("verifies isNonIndexBackedComplexCrossDescriptorConstraint but" +
+				" does not have a Referenced.*ID attr")
 		}
 	}
 	return nil

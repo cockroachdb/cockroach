@@ -65,7 +65,7 @@ func isSubjectTo2VersionInvariant(e scpb.Element) bool {
 	// TODO(ajwerner): This should include constraints and enum values but it
 	// currently does not because we do not support dropping them unless we're
 	// dropping the descriptor and we do not support adding them.
-	return isIndex(e) || isColumn(e) || isNonIndexBackedConstraint(e)
+	return isIndex(e) || isColumn(e) || isNonIndexBackedComplexConstraint(e)
 }
 
 func isIndex(e scpb.Element) bool {
@@ -133,6 +133,11 @@ func getExpression(element scpb.Element) (*scpb.Expression, error) {
 			return nil, nil
 		}
 		return &e.Expression, nil
+	case *scpb.CheckConstraintNotValid:
+		if e == nil {
+			return nil, nil
+		}
+		return &e.Expression, nil
 	case *scpb.FunctionParamDefaultExpression:
 		if e == nil {
 			return nil, nil
@@ -184,34 +189,55 @@ func isIndexDependent(e scpb.Element) bool {
 	return false
 }
 
-// isNonIndexBackedConstraint a non-index-backed constraint.
+// isNonIndexBackedConstraint returns true if `e` is a non-index-backed constraint.
 func isNonIndexBackedConstraint(e scpb.Element) bool {
+	return isNonIndexBackedSimpleConstraint(e) || isNonIndexBackedComplexConstraint(e)
+}
+
+// isNonIndexBackedComplexConstraint returns true if `e` is a non-index-backed
+// constraint that needs to transition through an intermediate state on its
+// adding/dropping path.
+// This includes all "normal" constraint that requires a validation (on existing
+// rows) step.
+//
+// The "Complex" in the name is given in contrast to the
+// "SimpleNonIndexBackedConstraint" below.
+func isNonIndexBackedComplexConstraint(e scpb.Element) bool {
+	if isNonIndexBackedComplexCrossDescriptorConstraint(e) {
+		return true
+	}
 	switch e.(type) {
-	case *scpb.CheckConstraint, *scpb.ForeignKeyConstraint, *scpb.UniqueWithoutIndexConstraint,
-		*scpb.ColumnNotNull:
+	case *scpb.UniqueWithoutIndexConstraint, *scpb.ColumnNotNull:
 		return true
 	}
 	return false
 }
 
 func isConstraint(e scpb.Element) bool {
+	return isIndex(e) || isNonIndexBackedConstraint(e)
+}
+
+// isNonIndexBackedSimpleConstraint returns true if `e` is a non-index-backed
+// constraint that does not need to transition through an intermediate state
+// on its adding/dropping path. In other words, like other simple dependent,
+// it can transition between PUBLIC and ABSENT directly.
+// It includes all the "NOT VALID" version of constraint.
+func isNonIndexBackedSimpleConstraint(e scpb.Element) bool {
 	switch e.(type) {
-	case *scpb.PrimaryIndex, *scpb.SecondaryIndex, *scpb.TemporaryIndex:
-		return true
-	case *scpb.CheckConstraint, *scpb.UniqueWithoutIndexConstraint, *scpb.ForeignKeyConstraint:
+	case *scpb.CheckConstraintNotValid:
 		return true
 	}
 	return false
 }
 
-// isCrossDescriptorConstraint are constraints that might reference
+// isNonIndexBackedComplexCrossDescriptorConstraint are constraints that might reference
 // other descriptors:
 //   - FKs can reference other table
 //   - Checks can reference other sequences/types
 //
 // Those constraints need to be dropped first when we are dropping either
 // the referencing or reference descriptor.
-func isCrossDescriptorConstraint(e scpb.Element) bool {
+func isNonIndexBackedComplexCrossDescriptorConstraint(e scpb.Element) bool {
 	switch e.(type) {
 	case *scpb.ForeignKeyConstraint, *scpb.CheckConstraint:
 		return true

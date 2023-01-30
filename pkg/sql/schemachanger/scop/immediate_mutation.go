@@ -277,6 +277,16 @@ type MakeAbsentCheckConstraintWriteOnly struct {
 	FromHashShardedColumn bool
 }
 
+// MakeAbsentCheckConstraintNotValidPublic adds a non-existent check constraint
+// (not valid) to the table in the WRITE_ONLY state.
+type MakeAbsentCheckConstraintNotValidPublic struct {
+	immediateMutationOp
+	TableID      descpb.ID
+	ConstraintID descpb.ConstraintID
+	ColumnIDs    []descpb.ColumnID
+	CheckExpr    catpb.Expression
+}
+
 // MakeAbsentColumnNotNullWriteOnly adds a non-existent NOT NULL constraint,
 // disguised as a CHECK constraint, to the table in the WRITE_ONLY state.
 type MakeAbsentColumnNotNullWriteOnly struct {

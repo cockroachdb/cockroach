@@ -1,0 +1,81 @@
+/* setup */
+CREATE TABLE t (i INT PRIMARY KEY);
+INSERT INTO t VALUES (0);
+
+/* test */
+EXPLAIN (ddl, verbose) ALTER TABLE t ADD CHECK (i > 0) NOT VALID;
+----
+• Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD CHECK (‹i› > ‹0›) NOT VALID;
+│
+├── • StatementPhase
+│   │
+│   └── • Stage 1 of 1 in StatementPhase
+│       │
+│       ├── • 2 elements transitioning toward PUBLIC
+│       │   │
+│       │   ├── • CheckConstraintNotValid:{DescID: 104, ConstraintID: 2}
+│       │   │     ABSENT → PUBLIC
+│       │   │
+│       │   └── • ConstraintWithoutIndexName:{DescID: 104, Name: check_i, ConstraintID: 2}
+│       │       │ ABSENT → PUBLIC
+│       │       │
+│       │       └── • SameStagePrecedence dependency from PUBLIC CheckConstraintNotValid:{DescID: 104, ConstraintID: 2}
+│       │             rule: "simple constraint public right before its dependents"
+│       │
+│       └── • 2 Mutation operations
+│           │
+│           ├── • MakeAbsentCheckConstraintNotValidPublic
+│           │     CheckExpr: i > 0:::INT8
+│           │     ColumnIDs:
+│           │     - 1
+│           │     ConstraintID: 2
+│           │     TableID: 104
+│           │
+│           └── • SetConstraintName
+│                 ConstraintID: 2
+│                 Name: check_i
+│                 TableID: 104
+│
+└── • PreCommitPhase
+    │
+    ├── • Stage 1 of 2 in PreCommitPhase
+    │   │
+    │   ├── • 2 elements transitioning toward PUBLIC
+    │   │   │
+    │   │   ├── • CheckConstraintNotValid:{DescID: 104, ConstraintID: 2}
+    │   │   │     PUBLIC → ABSENT
+    │   │   │
+    │   │   └── • ConstraintWithoutIndexName:{DescID: 104, Name: check_i, ConstraintID: 2}
+    │   │         PUBLIC → ABSENT
+    │   │
+    │   └── • 1 Mutation operation
+    │       │
+    │       └── • UndoAllInTxnImmediateMutationOpSideEffects
+    │             {}
+    │
+    └── • Stage 2 of 2 in PreCommitPhase
+        │
+        ├── • 2 elements transitioning toward PUBLIC
+        │   │
+        │   ├── • CheckConstraintNotValid:{DescID: 104, ConstraintID: 2}
+        │   │     ABSENT → PUBLIC
+        │   │
+        │   └── • ConstraintWithoutIndexName:{DescID: 104, Name: check_i, ConstraintID: 2}
+        │       │ ABSENT → PUBLIC
+        │       │
+        │       └── • SameStagePrecedence dependency from PUBLIC CheckConstraintNotValid:{DescID: 104, ConstraintID: 2}
+        │             rule: "simple constraint public right before its dependents"
+        │
+        └── • 2 Mutation operations
+            │
+            ├── • MakeAbsentCheckConstraintNotValidPublic
+            │     CheckExpr: i > 0:::INT8
+            │     ColumnIDs:
+            │     - 1
+            │     ConstraintID: 2
+            │     TableID: 104
+            │
+            └── • SetConstraintName
+                  ConstraintID: 2
+                  Name: check_i
+                  TableID: 104

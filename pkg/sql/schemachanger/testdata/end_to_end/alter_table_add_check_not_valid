@@ -1,0 +1,80 @@
+setup
+CREATE TABLE t (i INT PRIMARY KEY);
+INSERT INTO t VALUES (0);
+----
+...
++object {100 101 t} -> 104
+
+
+test
+ALTER TABLE t ADD CHECK (i > 0) NOT VALID;
+----
+begin transaction #1
+# begin StatementPhase
+checking for feature: ALTER TABLE
+increment telemetry for sql.schema.alter_table
+increment telemetry for sql.schema.alter_table.add_constraint
+write *eventpb.AlterTable to event log:
+  mutationId: 1
+  sql:
+    descriptorId: 104
+    statement: ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD CHECK (‹i› > ‹0›) NOT VALID
+    tag: ALTER TABLE
+    user: root
+  tableName: defaultdb.public.t
+## StatementPhase stage 1 of 1 with 2 MutationType ops
+upsert descriptor #104
+   table:
+  +  checks:
+  +  - columnIds:
+  +    - 1
+  +    constraintId: 2
+  +    expr: i > 0:::INT8
+  +    name: check_i
+  +    validity: Unvalidated
+     columns:
+     - id: 1
+  ...
+     name: t
+     nextColumnId: 2
+  -  nextConstraintId: 2
+  +  nextConstraintId: 3
+     nextFamilyId: 1
+     nextIndexId: 2
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "1"
+  +  version: "2"
+# end StatementPhase
+# begin PreCommitPhase
+## PreCommitPhase stage 1 of 2 with 1 MutationType op
+undo all catalog changes within txn #1
+persist all catalog changes to storage
+## PreCommitPhase stage 2 of 2 with 2 MutationType ops
+upsert descriptor #104
+   table:
+  +  checks:
+  +  - columnIds:
+  +    - 1
+  +    constraintId: 2
+  +    expr: i > 0:::INT8
+  +    name: check_i
+  +    validity: Unvalidated
+     columns:
+     - id: 1
+  ...
+     name: t
+     nextColumnId: 2
+  -  nextConstraintId: 2
+  +  nextConstraintId: 3
+     nextFamilyId: 1
+     nextIndexId: 2
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "1"
+  +  version: "2"
+persist all catalog changes to storage
+# end PreCommitPhase
+commit transaction #1

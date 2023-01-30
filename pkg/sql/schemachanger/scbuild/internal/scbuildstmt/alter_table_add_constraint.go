@@ -45,9 +45,7 @@ func alterTableAddConstraint(
 			alterTableAddUniqueWithoutIndex(b, tn, tbl, t)
 		}
 	case *tree.CheckConstraintTableDef:
-		if t.ValidationBehavior == tree.ValidationDefault {
-			alterTableAddCheck(b, tn, tbl, t)
-		}
+		alterTableAddCheck(b, tn, tbl, t)
 	case *tree.ForeignKeyConstraintTableDef:
 		if t.ValidationBehavior == tree.ValidationDefault {
 			alterTableAddForeignKey(b, tn, tbl, t)
@@ -80,7 +78,7 @@ func alterTableAddPrimaryKey(
 }
 
 // alterTableAddCheck contains logic for building
-// `ALTER TABLE ... ADD CONSTRAINT ... CHECK`.
+// `ALTER TABLE ... ADD CHECK ... [NOT VALID]`.
 // It assumes `t` is such a command.
 func alterTableAddCheck(
 	b BuildCtx, tn *tree.TableName, tbl *scpb.Table, t *tree.AlterTableAddConstraint,
@@ -113,18 +111,31 @@ func alterTableAddCheck(
 		panic(err)
 	}
 
-	// 3. Add relevant check constraint element: CheckConstraint and ConstraintName.
+	// 3. Add relevant check constraint element:
+	// - CheckConstraint or CheckConstraintNotValid
+	// - ConstraintName
 	constraintID := b.NextTableConstraintID(tbl.TableID)
-	ck := &scpb.CheckConstraint{
-		TableID:               tbl.TableID,
-		ConstraintID:          constraintID,
-		ColumnIDs:             colIDs.Ordered(),
-		Expression:            *b.WrapExpression(tbl.TableID, typedCkExpr),
-		FromHashShardedColumn: ckDef.FromHashShardedColumn,
-		IndexIDForValidation:  getIndexIDForValidationForConstraint(b, tbl.TableID),
+	if t.ValidationBehavior == tree.ValidationDefault {
+		ck := &scpb.CheckConstraint{
+			TableID:               tbl.TableID,
+			ConstraintID:          constraintID,
+			ColumnIDs:             colIDs.Ordered(),
+			Expression:            *b.WrapExpression(tbl.TableID, typedCkExpr),
+			FromHashShardedColumn: ckDef.FromHashShardedColumn,
+			IndexIDForValidation:  getIndexIDForValidationForConstraint(b, tbl.TableID),
+		}
+		b.Add(ck)
+		b.LogEventForExistingTarget(ck)
+	} else {
+		ck := &scpb.CheckConstraintNotValid{
+			TableID:      tbl.TableID,
+			ConstraintID: constraintID,
+			ColumnIDs:    colIDs.Ordered(),
+			Expression:   *b.WrapExpression(tbl.TableID, typedCkExpr),
+		}
+		b.Add(ck)
+		b.LogEventForExistingTarget(ck)
 	}
-	b.Add(ck)
-	b.LogEventForExistingTarget(ck)
 
 	constraintName := string(ckDef.Name)
 	if constraintName == "" {

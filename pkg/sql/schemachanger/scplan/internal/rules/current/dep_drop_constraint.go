@@ -19,9 +19,6 @@ import (
 
 // These rules ensure that constraint-dependent elements, like an constraint's
 // name, etc. disappear once the constraint reaches a suitable state.
-// TODO (xiang): The dep rules here are not complete, as they are aimed specifically
-// for check constraints only. Complete them when we properly support the
-// other constraints: UniqueWithoutIndex, ForeignKey, Unique, and Not Null.
 func init() {
 
 	registerDepRuleForDrop(
@@ -31,7 +28,7 @@ func init() {
 		scpb.Status_VALIDATED, scpb.Status_ABSENT,
 		func(from, to NodeVars) rel.Clauses {
 			return rel.Clauses{
-				from.TypeFilter(rulesVersionKey, isNonIndexBackedConstraint),
+				from.TypeFilter(rulesVersionKey, isNonIndexBackedComplexConstraint),
 				to.TypeFilter(rulesVersionKey, isConstraintDependent),
 				JoinOnConstraintID(from, to, "table-id", "constraint-id"),
 			}
@@ -46,7 +43,26 @@ func init() {
 		func(from, to NodeVars) rel.Clauses {
 			return rel.Clauses{
 				from.TypeFilter(rulesVersionKey, isConstraintDependent),
-				to.TypeFilter(rulesVersionKey, isNonIndexBackedConstraint),
+				to.TypeFilter(rulesVersionKey, isNonIndexBackedComplexConstraint),
+				JoinOnConstraintID(from, to, "table-id", "constraint-id"),
+			}
+		},
+	)
+}
+
+// These rules apply to simple constraints and ensure that their dependents, like
+// their names, comments, etc., disappear right before the simple constraint.
+func init() {
+
+	registerDepRuleForDrop(
+		"dependents removed right before simple constraint",
+		scgraph.SameStagePrecedence,
+		"dependents", "constraint",
+		scpb.Status_ABSENT, scpb.Status_ABSENT,
+		func(from, to NodeVars) rel.Clauses {
+			return rel.Clauses{
+				from.TypeFilter(rulesVersionKey, isConstraintDependent),
+				to.TypeFilter(rulesVersionKey, isNonIndexBackedSimpleConstraint),
 				JoinOnConstraintID(from, to, "table-id", "constraint-id"),
 			}
 		},

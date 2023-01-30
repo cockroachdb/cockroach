@@ -79,6 +79,37 @@ func FindCheckConstraint(b ElementStatusIterator) (current Status, target Target
 	return current, target, element
 }
 
+func (e CheckConstraintNotValid) element() {}
+
+// ForEachCheckConstraintNotValid iterates over elements of type CheckConstraintNotValid.
+func ForEachCheckConstraintNotValid(
+	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *CheckConstraintNotValid),
+) {
+  if b == nil {
+    return
+  }
+	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
+		if elt, ok := e.(*CheckConstraintNotValid); ok {
+			fn(current, target, elt)
+		}
+	})
+}
+
+// FindCheckConstraintNotValid finds the first element of type CheckConstraintNotValid.
+func FindCheckConstraintNotValid(b ElementStatusIterator) (current Status, target TargetStatus, element *CheckConstraintNotValid) {
+  if b == nil {
+    return current, target, element
+  }
+	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
+		if elt, ok := e.(*CheckConstraintNotValid); ok {
+			element = elt
+			current = c
+			target = t
+		}
+	})
+	return current, target, element
+}
+
 func (e Column) element() {}
 
 // ForEachColumn iterates over elements of type Column.

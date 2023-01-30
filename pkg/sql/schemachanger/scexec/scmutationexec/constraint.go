@@ -86,6 +86,31 @@ func (i *immediateVisitor) MakeAbsentCheckConstraintWriteOnly(
 	return nil
 }
 
+func (i *immediateVisitor) MakeAbsentCheckConstraintNotValidPublic(
+	ctx context.Context, op scop.MakeAbsentCheckConstraintNotValidPublic,
+) error {
+	tbl, err := i.checkOutTable(ctx, op.TableID)
+	if err != nil || tbl.Dropped() {
+		return err
+	}
+	if op.ConstraintID >= tbl.NextConstraintID {
+		tbl.NextConstraintID = op.ConstraintID + 1
+	}
+
+	// We can directly add a not-valid check constraint to the public
+	// "Checks" slice without enqueuing it to the mutation because it
+	// does not need to transition through an intermediate state.
+	ck := &descpb.TableDescriptor_CheckConstraint{
+		Expr:         string(op.CheckExpr),
+		Name:         tabledesc.ConstraintNamePlaceholder(op.ConstraintID),
+		Validity:     descpb.ConstraintValidity_Unvalidated,
+		ColumnIDs:    op.ColumnIDs,
+		ConstraintID: op.ConstraintID,
+	}
+	tbl.Checks = append(tbl.Checks, ck)
+	return nil
+}
+
 func (m *immediateVisitor) MakeAbsentColumnNotNullWriteOnly(
 	ctx context.Context, op scop.MakeAbsentColumnNotNullWriteOnly,
 ) error {
