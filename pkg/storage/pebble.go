@@ -79,12 +79,12 @@ var MaxSyncDurationFatalOnExceeded = settings.RegisterBoolSetting(
 	true,
 )
 
-// valueBlocksEnabled controls whether older versions of MVCC keys in the same
+// ValueBlocksEnabled controls whether older versions of MVCC keys in the same
 // sstable will have their values written to value blocks. This only affects
 // sstables that will be written in the future, as part of flushes or
 // compactions, and does not eagerly change the encoding of existing sstables.
 // Reads can correctly read both kinds of sstables.
-var valueBlocksEnabled = settings.RegisterBoolSetting(
+var ValueBlocksEnabled = settings.RegisterBoolSetting(
 	settings.SystemOnly,
 	"storage.value_blocks.enabled",
 	"set to true to enable writing of value blocks in sstables",
@@ -894,7 +894,7 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 		version := cfg.Settings.Version.ActiveVersionOrEmpty(logCtx)
 		return !version.Less(clusterversion.ByKey(
 			clusterversion.V23_1EnablePebbleFormatSSTableValueBlocks)) &&
-			valueBlocksEnabled.Get(&cfg.Settings.SV)
+			ValueBlocksEnabled.Get(&cfg.Settings.SV)
 	}
 
 	auxDir := cfg.Opts.FS.PathJoin(cfg.Dir, base.AuxiliaryDir)
