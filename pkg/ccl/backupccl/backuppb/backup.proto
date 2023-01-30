@@ -131,12 +131,13 @@ message BackupManifest {
   int32 descriptor_coverage = 22 [
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/tree.DescriptorCoverage"];
 
-  // HasExternalFilesList is set to true if the backup manifest has its `Files`
-  // field nil'ed out and written as a supporting SST file instead.
+  // HasExternalManifestSSTs is set to true if the backup manifest has its
+  // `Files`, `Descriptors`, and DescriptorChanges fields nil'ed out and written
+  // as a supporting SST file instead.
   //
   // TODO(adityamaru): Delete when backwards compatibility with 22.2 is dropped
   // since all backups in 23.1+ will write slim manifests.
-  bool has_external_files_list = 27;
+  bool has_external_manifest_ssts = 27 [(gogoproto.customname) = "HasExternalManifestSSTs"];
 
   // NEXT ID: 28
 }

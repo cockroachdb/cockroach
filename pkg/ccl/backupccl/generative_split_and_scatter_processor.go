@@ -10,11 +10,13 @@ package backupccl
 
 import (
 	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupencryption"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupinfo"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -227,7 +229,7 @@ func (gssp *generativeSplitAndScatterProcessor) close() {
 
 func makeBackupMetadata(
 	ctx context.Context, flowCtx *execinfra.FlowCtx, spec *execinfrapb.GenerativeSplitAndScatterSpec,
-) ([]backuppb.BackupManifest, layerToBackupManifestFileIterFactory, error) {
+) ([]backuppb.BackupManifest, backupinfo.LayerToBackupManifestFileIterFactory, error) {
 
 	kmsEnv := backupencryption.MakeBackupKMSEnv(flowCtx.Cfg.Settings, &flowCtx.Cfg.ExternalIODirConfig,
 		flowCtx.Cfg.DB, spec.User(), flowCtx.Cfg.Executor)
@@ -238,7 +240,7 @@ func makeBackupMetadata(
 		return nil, nil, err
 	}
 
-	layerToBackupManifestFileIterFactory, err := getBackupManifestFileIters(ctx, flowCtx.Cfg.ExternalStorage,
+	layerToBackupManifestFileIterFactory, err := backupinfo.GetBackupManifestIterFactories(ctx, flowCtx.Cfg.ExternalStorage,
 		backupManifests, spec.Encryption, &kmsEnv)
 	if err != nil {
 		return nil, nil, err

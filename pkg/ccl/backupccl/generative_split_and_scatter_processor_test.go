@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -54,13 +53,12 @@ func TestRunGenerativeSplitAndScatterContextCancel(t *testing.T) {
 	// has been processed by the generative split and scatterer.
 	s0 := tc.Server(0)
 	registry := tc.Server(0).JobRegistry().(*jobs.Registry)
-	execCfg := s0.ExecutorConfig().(sql.ExecutorConfig)
+	execCfg := tc.Server(0).ExecutorConfig().(sql.ExecutorConfig)
 	flowCtx := execinfra.FlowCtx{
 		Cfg: &execinfra.ServerConfig{
-			Settings:       st,
-			DB:             s0.InternalDB().(descs.DB),
-			JobRegistry:    registry,
-			ExecutorConfig: &execCfg,
+			Settings:    st,
+			DB:          s0.DB(),
+			JobRegistry: registry,
 			TestingKnobs: execinfra.TestingKnobs{
 				BackupRestoreTestingKnobs: &sql.BackupRestoreTestingKnobs{
 					RunAfterSplitAndScatteringEntry: func(ctx context.Context) {
@@ -68,9 +66,10 @@ func TestRunGenerativeSplitAndScatterContextCancel(t *testing.T) {
 					},
 				},
 			},
+			ExternalStorageFromURI: execCfg.DistSQLSrv.ExternalStorageFromURI,
+			ExternalStorage:        execCfg.DistSQLSrv.ExternalStorage,
 		},
 		EvalCtx:     &evalCtx,
-		Mon:         evalCtx.TestingMon,
 		DiskMonitor: testDiskMonitor,
 		NodeID:      evalCtx.NodeID,
 	}
@@ -108,8 +107,8 @@ func TestRunGenerativeSplitAndScatterContextCancel(t *testing.T) {
 	kr, err := MakeKeyRewriterFromRekeys(keys.SystemSQLCodec, tableRekeys, nil, false)
 	require.NoError(t, err)
 
-	chunkSplitScatterers := []splitAndScatterer{makeSplitAndScatterer(flowCtx.Cfg.DB.KV(), kr)}
-	chunkEntrySpliterScatterers := []splitAndScatterer{makeSplitAndScatterer(flowCtx.Cfg.DB.KV(), kr)}
+	chunkSplitScatterers := []splitAndScatterer{makeSplitAndScatterer(flowCtx.Cfg.DB, kr)}
+	chunkEntrySpliterScatterers := []splitAndScatterer{makeSplitAndScatterer(flowCtx.Cfg.DB, kr)}
 
 	// Large enough so doneScatterCh never blocks.
 	doneScatterCh := make(chan entryNode, 1000)
