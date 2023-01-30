@@ -1512,7 +1512,7 @@ message SchemaDescriptor {
 
     optional sql.sem.types.T return_type = 3;
 
-    optional bool return_set = 4 [(gogoproto.nullable) = false];
+    reserved 4; // return_set
   }
 
   // Function contains a group of UDFs with the same name.
