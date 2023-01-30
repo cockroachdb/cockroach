@@ -15,6 +15,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -29,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
+	"github.com/jackc/pgx/v4"
 	"github.com/lib/pq"
 	"github.com/stretchr/testify/require"
 )
@@ -139,4 +141,14 @@ func ArrayStringToSlice(t *testing.T, array string, message ...string) []string 
 		return []string{}
 	}
 	return strings.Split(array[1:length-1], ",")
+}
+
+// PgxConn is a helper to create a pgx.Conn from a url.
+func PgxConn(t *testing.T, connURL url.URL) (*pgx.Conn, error) {
+	t.Helper()
+	pgxConfig, err := pgx.ParseConfig(connURL.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return pgx.ConnectConfig(context.Background(), pgxConfig)
 }
