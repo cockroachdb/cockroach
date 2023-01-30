@@ -33,7 +33,6 @@ func registerMultiTenantSharedProcess(r registry.Registry) {
 		Timeout: 1 * time.Hour,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			var (
-				appTenantID    = 2
 				appTenantName  = "app"
 				tpccWarehouses = 500
 				crdbNodes      = c.Range(1, crdbNodeCount)
@@ -52,16 +51,8 @@ func registerMultiTenantSharedProcess(r registry.Registry) {
 			sysSQL := sqlutils.MakeSQLRunner(sysConn)
 
 			createTenantAdminRole(t, "system", sysSQL)
-			sysSQL.Exec(t, fmt.Sprintf(`CREATE TENANT %s`, appTenantName))
 
-			tenantConn := c.Conn(ctx, t.L(), crdbNodes.RandNode()[0], option.TenantName(appTenantName))
-			createTenantAdminRole(t, appTenantName, sqlutils.MakeSQLRunner(tenantConn))
-
-			// Currently, a tenant has by default a 10m RU burst limit, which can be
-			// reached during this test. To prevent RU limit throttling, add 10B RUs to
-			// the tenant.
-			sysSQL.Exec(t, `SELECT crdb_internal.update_tenant_resource_limits($1, 10000000000, 0,
-		10000000000, now(), 0);`, appTenantID)
+			createInMemoryTenant(ctx, t, c, appTenantName, crdbNodes, true)
 
 			t.Status(`initialize tpcc workload`)
 			initCmd := fmt.Sprintf(`./workload init tpcc --data-loader import --warehouses %d {pgurl%s:%s}`,

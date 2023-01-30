@@ -219,10 +219,14 @@ func setupC2C(
 	srcClusterSettings(t, srcSQL)
 	destClusterSettings(t, destSQL)
 
+	createTenantAdminRole(t, "src-system", srcSQL)
+	createTenantAdminRole(t, "dst-system", destSQL)
+
 	srcTenantID, destTenantID := 2, 2
 	srcTenantName := "src-tenant"
 	destTenantName := "destination-tenant"
-	srcSQL.Exec(t, fmt.Sprintf(`CREATE TENANT %q`, srcTenantName))
+
+	createInMemoryTenant(ctx, t, c, srcTenantName, srcCluster, true)
 
 	pgURL, err := copyPGCertsAndMakeURL(ctx, t, c, srcNode, srcClusterSetting.PGUrlCertsDir, addr[0])
 	require.NoError(t, err)
@@ -241,18 +245,6 @@ func setupC2C(
 		db:    destDB,
 		nodes: dstCluster}
 
-	// Currently, a tenant has by default a 10m RU burst limit, which can be
-	// reached during these tests. To prevent RU limit throttling, add 10B RUs to
-	// the tenant.
-	srcTenantInfo.sql.Exec(t, `SELECT crdb_internal.update_tenant_resource_limits($1, 10000000000, 0,
-10000000000, now(), 0);`, srcTenantInfo.ID)
-
-	createTenantAdminRole(t, "src-system", srcTenantInfo.sql)
-	createTenantAdminRole(t, "dst-system", destTenantInfo.sql)
-
-	srcTenantDB := c.Conn(ctx, t.L(), srcNode[0], option.TenantName(srcTenantName))
-	srcTenantSQL := sqlutils.MakeSQLRunner(srcTenantDB)
-	createTenantAdminRole(t, srcTenantInfo.name, srcTenantSQL)
 	return &c2cSetup{
 		src:          srcTenantInfo,
 		dst:          destTenantInfo,

@@ -6429,6 +6429,8 @@ Parameters:` + randgencfg.ConfigDoc,
 	),
 
 	// Used to configure the tenant token bucket. See UpdateTenantResourceLimits.
+	//
+	// TODO(multitenantTeam): use tenantName instead of tenantID
 	"crdb_internal.update_tenant_resource_limits": makeBuiltin(
 		tree.FunctionProperties{
 			Category:     builtinconstants.CategoryMultiTenancy,
