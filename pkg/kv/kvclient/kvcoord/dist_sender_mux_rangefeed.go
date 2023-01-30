@@ -193,7 +193,7 @@ func (m *rangefeedMuxer) startNodeMuxRangeFeed(
 		// Add "generation" number to the context so that log messages and stacks can
 		// differentiate between multiple instances of mux rangefeed Go routine
 		// (this can happen when one was shutdown, then re-established).
-		ctx = logtags.AddTag(ctx, "gen", ms)
+		ctx = logtags.AddTag(ctx, "gen", uintptr(unsafe.Pointer(ms)))
 		ctx, restore := pprofutil.SetProfilerLabelsFromCtxTags(ctx)
 		defer restore()
 
