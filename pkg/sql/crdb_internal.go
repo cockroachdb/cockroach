@@ -3697,6 +3697,7 @@ CREATE VIEW crdb_internal.ranges AS SELECT ` +
 		colinfo.RangesExtraRenders +
 		`FROM crdb_internal.ranges_no_leases`,
 	resultColumns: colinfo.Ranges,
+	comment:       "ranges is a view which queries ranges_no_leases for system ranges",
 }
 
 // descriptorsByType is a utility function that iterates through a slice of
