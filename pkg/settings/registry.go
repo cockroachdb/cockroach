@@ -159,6 +159,8 @@ var retiredSettings = map[string]struct{}{
 	"sql.distsql.drain.cancel_after_wait.enabled":    {},
 	"changefeed.active_protected_timestamps.enabled": {},
 	"jobs.scheduler.single_node_scheduler.enabled":   {},
+	// renamed.
+	"spanconfig.host_coalesce_adjacent.enabled": {},
 }
 
 // sqlDefaultSettings is the list of "grandfathered" existing sql.defaults
