@@ -52,8 +52,9 @@ EXPLAIN (ddl, verbose) DROP SCHEMA db.sc;
 │       │   └── • SchemaParent:{DescID: 106, ReferencedDescID: 104}
 │       │       │ PUBLIC → ABSENT
 │       │       │
-│       │       └── • Precedence dependency from DROPPED Schema:{DescID: 106}
+│       │       └── • SameStagePrecedence dependency from DROPPED Schema:{DescID: 106}
 │       │             rule: "descriptor dropped before dependent element removal"
+│       │             rule: "descriptor dropped right before removing back-reference in its parent descriptor"
 │       │
 │       └── • 3 Mutation operations
 │           │
@@ -143,8 +144,9 @@ EXPLAIN (ddl, verbose) DROP SCHEMA db.sc;
 │       │   └── • SchemaParent:{DescID: 106, ReferencedDescID: 104}
 │       │       │ PUBLIC → ABSENT
 │       │       │
-│       │       └── • Precedence dependency from DROPPED Schema:{DescID: 106}
+│       │       └── • SameStagePrecedence dependency from DROPPED Schema:{DescID: 106}
 │       │             rule: "descriptor dropped before dependent element removal"
+│       │             rule: "descriptor dropped right before removing back-reference in its parent descriptor"
 │       │
 │       └── • 6 Mutation operations
 │           │

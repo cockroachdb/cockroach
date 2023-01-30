@@ -981,8 +981,8 @@ ALTER TABLE defaultdb.foo DROP COLUMN v1 CASCADE;
   rule: descriptor dropped before dependent element removal
 - from: [View:{DescID: 108}, DROPPED]
   to:   [ObjectParent:{DescID: 108, ReferencedDescID: 101}, ABSENT]
-  kind: Precedence
-  rule: descriptor dropped before dependent element removal
+  kind: SameStagePrecedence
+  rules: [descriptor dropped before dependent element removal; descriptor dropped right before removing back-reference in its parent descriptor]
 - from: [View:{DescID: 108}, DROPPED]
   to:   [Owner:{DescID: 108}, ABSENT]
   kind: Precedence
@@ -2040,8 +2040,8 @@ ALTER TABLE defaultdb.foo DROP COLUMN v2 CASCADE;
   rule: descriptor dropped before dependent element removal
 - from: [View:{DescID: 108}, DROPPED]
   to:   [ObjectParent:{DescID: 108, ReferencedDescID: 101}, ABSENT]
-  kind: Precedence
-  rule: descriptor dropped before dependent element removal
+  kind: SameStagePrecedence
+  rules: [descriptor dropped before dependent element removal; descriptor dropped right before removing back-reference in its parent descriptor]
 - from: [View:{DescID: 108}, DROPPED]
   to:   [Owner:{DescID: 108}, ABSENT]
   kind: Precedence

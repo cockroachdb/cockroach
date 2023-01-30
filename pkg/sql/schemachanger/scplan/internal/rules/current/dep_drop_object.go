@@ -48,7 +48,20 @@ func init() {
 		func(from, to NodeVars) rel.Clauses {
 			return rel.Clauses{
 				from.TypeFilter(rulesVersionKey, isDescriptor),
-				to.TypeFilter(rulesVersionKey, isSimpleDependent),
+				to.TypeFilter(rulesVersionKey, isSimpleDependent, Not(isConstraintDependent)),
+				JoinOnDescID(from, to, "desc-id"),
+				StatusesToAbsent(from, scpb.Status_DROPPED, to, scpb.Status_ABSENT),
+			}
+		})
+
+	registerDepRule(
+		"descriptor dropped right before removing back-reference in its parent descriptor",
+		scgraph.SameStagePrecedence,
+		"descriptor", "dependent",
+		func(from, to NodeVars) rel.Clauses {
+			return rel.Clauses{
+				from.TypeFilter(rulesVersionKey, isDescriptor),
+				to.TypeFilter(rulesVersionKey, isDescriptorBackReference),
 				JoinOnDescID(from, to, "desc-id"),
 				StatusesToAbsent(from, scpb.Status_DROPPED, to, scpb.Status_ABSENT),
 			}
@@ -88,9 +101,9 @@ func init() {
 		func(from, to NodeVars) rel.Clauses {
 			return rel.Clauses{
 				from.Type((*scpb.Table)(nil)),
-				to.TypeFilter(rulesVersionKey, isSupportedNonIndexBackedConstraint),
+				to.TypeFilter(rulesVersionKey, isSupportedNonIndexBackedConstraint, Not(isCrossDescriptorConstraint)),
 				JoinOnDescID(from, to, "desc-id"),
-				StatusesToAbsent(from, scpb.Status_DROPPED, to, scpb.Status_WRITE_ONLY),
+				StatusesToAbsent(from, scpb.Status_DROPPED, to, scpb.Status_VALIDATED),
 			}
 		},
 	)
@@ -115,9 +128,23 @@ func init() {
 		func(from, to NodeVars) rel.Clauses {
 			return rel.Clauses{
 				from.TypeFilter(rulesVersionKey, isDescriptor),
-				to.TypeFilter(rulesVersionKey, isSimpleDependent),
+				to.TypeFilter(rulesVersionKey, isSimpleDependent, Not(isDescriptorBackReference)),
 				JoinReferencedDescID(to, from, "desc-id"),
 				StatusesToAbsent(from, scpb.Status_DROPPED, to, scpb.Status_ABSENT),
+			}
+		},
+	)
+
+	registerDepRule(
+		"back-reference in descriptor is removed before the descriptor is dropped",
+		scgraph.Precedence,
+		"back-reference-in-descriptor", "descriptor",
+		func(from, to NodeVars) rel.Clauses {
+			return rel.Clauses{
+				from.TypeFilter(rulesVersionKey, isDescriptorBackReference),
+				to.TypeFilter(rulesVersionKey, isDescriptor),
+				JoinReferencedDescID(from, to, "desc-id"),
+				StatusesToAbsent(from, scpb.Status_ABSENT, to, scpb.Status_DROPPED),
 			}
 		},
 	)
@@ -150,6 +177,60 @@ func init() {
 				to.ReferencedSequenceIDsContains(seqID),
 				to.TypeFilter(rulesVersionKey, isSimpleDependent, isWithExpression),
 				StatusesToAbsent(from, scpb.Status_DROPPED, to, scpb.Status_ABSENT),
+			}
+		},
+	)
+}
+
+// These rules ensures we drop cross-descriptor constraints before dropping
+// descriptors, both the referencing and referenced. Namely,
+//  1. cross-descriptor constraints are absent before referenced descriptor
+//  2. cross-descriptor constraints are absent before referencing descriptor
+//
+// A canonical example is FKs:
+// To illustrate why rule 1 is necessary, consider we have tables `t1` and `t2`,
+// and `t1` has a FK to `t2` (call this schema `S1`). The statement is
+// `DROP TABLE t2 CASCADE`. We will have to first transition the FK (dropped as
+// a result of CASCADE) to an intermediate state and then (in a separate
+// transaction) transition the table to the dropped state. Otherwise, if the FK
+// transition to absent in the same transaction as the table becomes dropped
+// (call this schema `S2`), it becomes unsafe for `S1` and `S2` to exist in the
+// cluster at the same time, because allowed inserts under `S2` will violate `S1`.
+//
+// To illustrate why rule 2 is necessary, consider we have tables `t1`, `t2`, `t3`,
+// and `t1` FKs to `t2` (call it `FK1`) and `t3` FKs to `t2` (call it `FK2`).
+// The statement is `DROP TABLE t1, t2 CASCADE`. Without rule 2, rule 1 alone will
+// ensure that `FK2` moves to an intermediate state first, and at the same stage,
+// `t1` will be dropped together with `FK1`. Validation will then fail because
+// `t2` will have an enforced FK constraint whose origin table (`t1`) is dropped.
+// It's worth noting that relaxing validation in this case is safe but we choose
+// not to do so because it requires other related changes and makes reasoning
+// harder.
+func init() {
+	registerDepRule(
+		"cross-descriptor constraint is absent before referenced descriptor is dropped",
+		scgraph.Precedence,
+		"cross-desc-constraint", "referenced-descriptor",
+		func(from, to NodeVars) rel.Clauses {
+			return rel.Clauses{
+				from.TypeFilter(rulesVersionKey, isCrossDescriptorConstraint),
+				to.TypeFilter(rulesVersionKey, isDescriptor),
+				JoinReferencedDescID(from, to, "desc-id"),
+				StatusesToAbsent(from, scpb.Status_ABSENT, to, scpb.Status_DROPPED),
+			}
+		},
+	)
+
+	registerDepRule(
+		"cross-descriptor constraint is absent before referencing descriptor is dropped",
+		scgraph.Precedence,
+		"cross-desc-constraint", "referencing-descriptor",
+		func(from, to NodeVars) rel.Clauses {
+			return rel.Clauses{
+				from.TypeFilter(rulesVersionKey, isCrossDescriptorConstraint),
+				to.TypeFilter(rulesVersionKey, isDescriptor),
+				JoinOnDescID(from, to, "desc-id"),
+				StatusesToAbsent(from, scpb.Status_ABSENT, to, scpb.Status_DROPPED),
 			}
 		},
 	)

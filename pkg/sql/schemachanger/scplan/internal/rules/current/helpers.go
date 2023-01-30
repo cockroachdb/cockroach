@@ -207,6 +207,14 @@ func isConstraint(e scpb.Element) bool {
 	return false
 }
 
+func isCrossDescriptorConstraint(e scpb.Element) bool {
+	switch e.(type) {
+	case *scpb.ForeignKeyConstraint:
+		return true
+	}
+	return false
+}
+
 func isConstraintDependent(e scpb.Element) bool {
 	switch e.(type) {
 	case *scpb.ConstraintWithoutIndexName:
@@ -224,6 +232,14 @@ func isData(e scpb.Element) bool {
 	case *scpb.TableData:
 		return true
 	case *scpb.IndexData:
+		return true
+	}
+	return false
+}
+
+func isDescriptorBackReference(e scpb.Element) bool {
+	switch e.(type) {
+	case *scpb.ObjectParent, *scpb.SchemaParent:
 		return true
 	}
 	return false
