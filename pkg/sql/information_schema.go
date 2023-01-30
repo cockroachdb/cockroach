@@ -1676,8 +1676,8 @@ var informationSchemaRoleRoutineGrantsTable = virtualSchemaTable{
 				if err != nil {
 					return err
 				}
-				return sc.ForEachFunctionOverload(func(overload descpb.SchemaDescriptor_FunctionOverload) error {
-					fn, err := p.Descriptors().MutableByID(p.txn).Function(ctx, overload.ID)
+				return sc.ForEachFunctionSignature(func(sig descpb.SchemaDescriptor_FunctionSignature) error {
+					fn, err := p.Descriptors().MutableByID(p.txn).Function(ctx, sig.ID)
 					if err != nil {
 						return err
 					}

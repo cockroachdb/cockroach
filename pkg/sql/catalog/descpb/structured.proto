@@ -1500,8 +1500,8 @@ message SchemaDescriptor {
   // descriptor being changed as part of a declarative schema change.
   optional cockroach.sql.schemachanger.scpb.DescriptorState declarative_schema_changer_state = 11;
 
-  // FunctionOverload represent a UDF signature and its descriptor ID.
-  message FunctionOverload {
+  // FunctionSignature represent a UDF signature and its descriptor ID.
+  message FunctionSignature {
     option (gogoproto.equal) = true;
 
     optional uint32 id = 1 [(gogoproto.nullable) = false,
@@ -1519,7 +1519,7 @@ message SchemaDescriptor {
   message Function {
     option (gogoproto.equal) = true;
     optional string name = 1 [(gogoproto.nullable) = false];
-    repeated FunctionOverload overloads = 2 [(gogoproto.nullable) = false];
+    repeated FunctionSignature signatures = 2 [(gogoproto.nullable) = false];
   }
 
   // functions contains all UDFs created in this schema.

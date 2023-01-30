@@ -71,8 +71,8 @@ func (d *dropCascadeState) collectObjectsInSchema(
 	// have namespace records. So function names are not included in
 	// objectNamesToDelete. Instead, we need to go through each schema descriptor
 	// to collect function descriptors by function ids.
-	err = schema.ForEachFunctionOverload(func(overload descpb.SchemaDescriptor_FunctionOverload) error {
-		fnDesc, err := p.Descriptors().MutableByID(p.txn).Function(ctx, overload.ID)
+	err = schema.ForEachFunctionSignature(func(sig descpb.SchemaDescriptor_FunctionSignature) error {
+		fnDesc, err := p.Descriptors().MutableByID(p.txn).Function(ctx, sig.ID)
 		if err != nil {
 			return err
 		}

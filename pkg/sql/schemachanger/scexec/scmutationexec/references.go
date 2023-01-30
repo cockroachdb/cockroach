@@ -454,7 +454,7 @@ func (i *immediateVisitor) SetObjectParentID(ctx context.Context, op scop.SetObj
 		t.ParentID = sc.GetParentID()
 		t.ParentSchemaID = sc.GetID()
 
-		ol := descpb.SchemaDescriptor_FunctionOverload{
+		ol := descpb.SchemaDescriptor_FunctionSignature{
 			ID:         obj.GetID(),
 			ArgTypes:   make([]*types.T, len(t.GetParams())),
 			ReturnType: t.GetReturnType().Type,
