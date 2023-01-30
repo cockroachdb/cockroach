@@ -14,7 +14,6 @@ import (
 	"context"
 	"net"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -45,7 +44,7 @@ func getClientGRPCConn(
 	stopper := stop.NewStopper(stop.WithTracer(tracer))
 	rpcContext := rpc.NewContext(ctx,
 		rpc.ContextOptions{
-			TenantID: roachpb.SystemTenantID,
+			TenantID: cfg.TenantID,
 			Config:   cfg.Config,
 			Clock:    clock,
 			Stopper:  stopper,

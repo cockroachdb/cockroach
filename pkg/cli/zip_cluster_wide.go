@@ -19,27 +19,25 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/errors"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 )
 
 const (
 	debugBase         = "debug"
-	eventsName        = debugBase + "/events"
-	livenessName      = debugBase + "/liveness"
-	nodesPrefix       = debugBase + "/nodes"
-	rangelogName      = debugBase + "/rangelog"
-	reportsPrefix     = debugBase + "/reports"
-	schemaPrefix      = debugBase + "/schema"
-	settingsName      = debugBase + "/settings"
+	eventsName        = "/events"
+	livenessName      = "/liveness"
+	nodesPrefix       = "/nodes"
+	rangelogName      = "/rangelog"
+	reportsPrefix     = "/reports"
+	schemaPrefix      = "/schema"
+	settingsName      = "/settings"
 	problemRangesName = reportsPrefix + "/problemranges"
-	tenantRangesName  = debugBase + "/tenant_ranges"
+	tenantRangesName  = "/tenant_ranges"
 )
 
 // makeClusterWideZipRequests defines the zipRequests that are to be
 // performed just once for the entire cluster.
 func makeClusterWideZipRequests(
-	admin serverpb.AdminClient, status serverpb.StatusClient,
+	admin serverpb.AdminClient, status serverpb.StatusClient, prefix string,
 ) []zipRequest {
 	return []zipRequest{
 		// NB: we intentionally omit liveness since it's already pulled manually (we
@@ -48,25 +46,25 @@ func makeClusterWideZipRequests(
 			fn: func(ctx context.Context) (interface{}, error) {
 				return admin.Events(ctx, &serverpb.EventsRequest{})
 			},
-			pathName: eventsName,
+			pathName: prefix + eventsName,
 		},
 		{
 			fn: func(ctx context.Context) (interface{}, error) {
 				return admin.RangeLog(ctx, &serverpb.RangeLogRequest{})
 			},
-			pathName: rangelogName,
+			pathName: prefix + rangelogName,
 		},
 		{
 			fn: func(ctx context.Context) (interface{}, error) {
 				return admin.Settings(ctx, &serverpb.SettingsRequest{})
 			},
-			pathName: settingsName,
+			pathName: prefix + settingsName,
 		},
 		{
 			fn: func(ctx context.Context) (interface{}, error) {
 				return status.ProblemRanges(ctx, &serverpb.ProblemRangesRequest{})
 			},
-			pathName: problemRangesName,
+			pathName: prefix + problemRangesName,
 		},
 	}
 }
@@ -76,16 +74,15 @@ func makeClusterWideZipRequests(
 // Storage servers will return both nodesListResponse and nodesStatusResponse
 // for all storage nodes.
 type nodesInfo struct {
-	nodesStatusResponse *serverpb.NodesResponse
-	nodesListResponse   *serverpb.NodesListResponse
+	nodesListResponse *serverpb.NodesListResponse
 }
 
 // collectClusterData runs the data collection that only needs to
 // occur once for the entire cluster.
 func (zc *debugZipContext) collectClusterData(
-	ctx context.Context, firstNodeDetails *serverpb.DetailsResponse,
+	ctx context.Context,
 ) (ni nodesInfo, livenessByNodeID nodeLivenesses, err error) {
-	clusterWideZipRequests := makeClusterWideZipRequests(zc.admin, zc.status)
+	clusterWideZipRequests := makeClusterWideZipRequests(zc.admin, zc.status, zc.prefix)
 
 	for _, r := range clusterWideZipRequests {
 		if err := zc.runZipRequest(ctx, zc.clusterPrinter, r); err != nil {
@@ -99,7 +96,7 @@ func (zc *debugZipContext) collectClusterData(
 			if err != nil {
 				return err
 			}
-			if err := zc.dumpTableDataForZip(zc.clusterPrinter, zc.firstNodeSQLConn, debugBase, table, query); err != nil {
+			if err := zc.dumpTableDataForZip(zc.clusterPrinter, zc.firstNodeSQLConn, zc.prefix, table, query); err != nil {
 				return errors.Wrapf(err, "fetching %s", table)
 			}
 		}
@@ -118,21 +115,20 @@ func (zc *debugZipContext) collectClusterData(
 			ni, err = zc.nodesInfo(ctx)
 			return err
 		})
-		if ni.nodesStatusResponse != nil {
-			if cErr := zc.z.createJSONOrError(s, debugBase+"/nodes.json", ni.nodesStatusResponse, err); cErr != nil {
-				return nodesInfo{}, nil, cErr
-			}
-		} else {
-			if cErr := zc.z.createJSONOrError(s, debugBase+"/nodes.json", ni.nodesListResponse, err); cErr != nil {
-				return nodesInfo{}, nil, cErr
-			}
+		if cErr := zc.z.createJSONOrError(s, zc.prefix+"/nodes.json", ni.nodesListResponse, err); cErr != nil {
+			return nodesInfo{}, nil, cErr
 		}
 
 		if ni.nodesListResponse == nil {
 			// In case nodes came up back empty (the Nodes()/NodesList() RPC failed), we
 			// still want to inspect the per-node endpoints on the head
-			// node. As per the above, we were able to connect at least to
-			// that.
+			// node.
+			s = zc.clusterPrinter.start("retrieving the node status")
+			firstNodeDetails, err := zc.status.Details(ctx, &serverpb.DetailsRequest{NodeId: "local"})
+			if err != nil {
+				return nodesInfo{}, nil, err
+			}
+			s.done()
 			ni.nodesListResponse = &serverpb.NodesListResponse{
 				Nodes: []serverpb.NodeDetails{{
 					NodeID:     int32(firstNodeDetails.NodeID),
@@ -149,7 +145,7 @@ func (zc *debugZipContext) collectClusterData(
 			lresponse, err = zc.admin.Liveness(ctx, &serverpb.LivenessRequest{})
 			return err
 		})
-		if cErr := zc.z.createJSONOrError(s, livenessName+".json", nodes, err); cErr != nil {
+		if cErr := zc.z.createJSONOrError(s, zc.prefix+livenessName+".json", nodes, err); cErr != nil {
 			return nodesInfo{}, nil, cErr
 		}
 		livenessByNodeID = map[roachpb.NodeID]livenesspb.NodeLivenessStatus{}
@@ -166,7 +162,7 @@ func (zc *debugZipContext) collectClusterData(
 			tenantRanges, err = zc.status.TenantRanges(ctx, &serverpb.TenantRangesRequest{})
 			return err
 		}); requestErr != nil {
-			if err := zc.z.createError(s, tenantRangesName, requestErr); err != nil {
+			if err := zc.z.createError(s, zc.prefix+tenantRangesName, requestErr); err != nil {
 				return nodesInfo{}, nil, errors.Wrap(err, "fetching tenant ranges")
 			}
 		} else {
@@ -178,7 +174,7 @@ func (zc *debugZipContext) collectClusterData(
 					return rangeList.Ranges[i].RangeID > rangeList.Ranges[j].RangeID
 				})
 				sLocality := zc.clusterPrinter.start("writing tenant ranges for locality: %s", locality)
-				prefix := fmt.Sprintf("%s/%s", tenantRangesName, locality)
+				prefix := fmt.Sprintf("%s/%s/%s", zc.prefix, tenantRangesName, locality)
 				for _, r := range rangeList.Ranges {
 					sRange := zc.clusterPrinter.start("writing tenant range %d", r.RangeID)
 					name := fmt.Sprintf("%s/%d", prefix, r.RangeID)
@@ -200,31 +196,10 @@ func (zc *debugZipContext) collectClusterData(
 // For regular storage servers, the more detailed NodesResponse is
 // returned along with the nodesListResponse.
 func (zc *debugZipContext) nodesInfo(ctx context.Context) (ni nodesInfo, _ error) {
-	nodesResponse, err := zc.status.Nodes(ctx, &serverpb.NodesRequest{})
-	nodesList := &serverpb.NodesListResponse{}
-	if code := status.Code(errors.Cause(err)); code == codes.Unimplemented {
-		// Likely a SQL only server; try the NodesList endpoint.
-		nodesList, err = zc.status.NodesList(ctx, &serverpb.NodesListRequest{})
-	}
+	nodesList, err := zc.status.NodesList(ctx, &serverpb.NodesListRequest{})
 	if err != nil {
 		return nodesInfo{}, err
 	}
-	if nodesResponse != nil {
-		// Build a nodesListResponse from the nodes data. nodesListResponse is needed
-		// further downstream to perform other debug zip related functionality such as
-		// collecting per node debug data. This will only be executed for storage
-		// servers.
-		for _, node := range nodesResponse.Nodes {
-			nodeDetails := serverpb.NodeDetails{
-				NodeID:     int32(node.Desc.NodeID),
-				Address:    node.Desc.Address,
-				SQLAddress: node.Desc.SQLAddress,
-			}
-			nodesList.Nodes = append(nodesList.Nodes, nodeDetails)
-		}
-	}
 	ni.nodesListResponse = nodesList
-	ni.nodesStatusResponse = nodesResponse
-
 	return ni, nil
 }
