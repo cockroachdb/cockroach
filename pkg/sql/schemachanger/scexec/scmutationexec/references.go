@@ -262,7 +262,7 @@ func updateBackReferencesInSequences(
 			updated.Add(colID)
 		}
 	} else {
-		if !current.Contains(colID) {
+		if !current.Contains(colID) && colID != 0 {
 			return nil
 		}
 		current.ForEach(func(id descpb.ColumnID) {

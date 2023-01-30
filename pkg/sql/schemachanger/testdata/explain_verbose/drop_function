@@ -62,8 +62,9 @@ EXPLAIN (ddl, verbose) DROP FUNCTION f;
 │       │   ├── • ObjectParent:{DescID: 109, ReferencedDescID: 101}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   └── • Precedence dependency from DROPPED Function:{DescID: 109}
+│       │   │   └── • SameStagePrecedence dependency from DROPPED Function:{DescID: 109}
 │       │   │         rule: "descriptor dropped before dependent element removal"
+│       │   │         rule: "descriptor dropped right before removing back-reference in its parent descriptor"
 │       │   │
 │       │   ├── • FunctionName:{DescID: 109}
 │       │   │   │ PUBLIC → ABSENT
@@ -209,8 +210,9 @@ EXPLAIN (ddl, verbose) DROP FUNCTION f;
 │       │   ├── • ObjectParent:{DescID: 109, ReferencedDescID: 101}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   └── • Precedence dependency from DROPPED Function:{DescID: 109}
+│       │   │   └── • SameStagePrecedence dependency from DROPPED Function:{DescID: 109}
 │       │   │         rule: "descriptor dropped before dependent element removal"
+│       │   │         rule: "descriptor dropped right before removing back-reference in its parent descriptor"
 │       │   │
 │       │   ├── • FunctionName:{DescID: 109}
 │       │   │   │ PUBLIC → ABSENT

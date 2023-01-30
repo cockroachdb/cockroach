@@ -36,6 +36,7 @@ func TestRuleAssertions(t *testing.T) {
 		checkIsColumnDependent,
 		checkIsIndexDependent,
 		checkIsConstraintDependent,
+		checkConstraintPartitions,
 	} {
 		var fni interface{} = fn
 		fullName := runtime.FuncForPC(reflect.ValueOf(fni).Pointer()).Name()
@@ -150,7 +151,7 @@ func checkIsColumnDependent(e scpb.Element) error {
 // element.
 func checkIsIndexDependent(e scpb.Element) error {
 	// Exclude indexes themselves and their data.
-	if isIndex(e) || isData(e) || isSupportedNonIndexBackedConstraint(e) {
+	if isIndex(e) || isData(e) || isNonIndexBackedConstraint(e) {
 		return nil
 	}
 	// An index dependent should have an IndexID attribute.
@@ -180,6 +181,45 @@ func checkIsConstraintDependent(e scpb.Element) error {
 		}
 	} else if err == nil {
 		return errors.New("has ConstraintID attr but doesn't verify isConstraintDependent")
+	}
+	return nil
+}
+
+// Assert that any element with a "ConstraintID" attr is either a constraint
+// or a constraintDependent.
+// If it's a constraint, then
+//   - it's either a NonIndexBackedConstraint or isIndex
+//   - it's either a CrossDescriptorConstraint or it does not a referencedDescID|ReferencedSequenceIDs|ReferencedTypeIDs attr
+func checkConstraintPartitions(e scpb.Element) error {
+	_, err := screl.Schema.GetAttribute(screl.ConstraintID, e)
+	if err != nil {
+		return nil //nolint:returnerrcheck
+	}
+	if !isConstraint(e) && !isConstraintDependent(e) {
+		return errors.New("has ConstraintID attr but is not a constraint nor a constraint dependent")
+	}
+	if isConstraintDependent(e) {
+		// The checks below only apply to constraints, so skip constraint dependents.
+		return nil
+	}
+	if isNonIndexBackedConstraint(e) == isIndex(e) {
+		if isIndex(e) {
+			return errors.New("verifies both isIndex and isNonIndexBackedConstraint")
+		} else {
+			return errors.New("doesn't verify isIndex nor isNonIndexBackedConstraint")
+		}
+	}
+	_, err1 := screl.Schema.GetAttribute(screl.ReferencedDescID, e)
+	_, err2 := screl.Schema.GetAttribute(screl.ReferencedSequenceIDs, e)
+	_, err3 := screl.Schema.GetAttribute(screl.ReferencedTypeIDs, e)
+	if isCrossDescriptorConstraint(e) {
+		if err1 != nil && err2 != nil && err3 != nil {
+			return errors.New("verifies isCrossDescriptorConstraint but does not have a Referenced.*ID attr")
+		}
+	} else {
+		if err1 == nil || err2 == nil || err3 == nil {
+			return errors.New("doesn't verify isCrossDescriptorConstraint but has a Referenced.*ID attr")
+		}
 	}
 	return nil
 }

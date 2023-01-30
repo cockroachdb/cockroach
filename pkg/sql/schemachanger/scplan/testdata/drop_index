@@ -971,8 +971,8 @@ DROP INDEX idx4 CASCADE
   rule: descriptor dropped before dependent element removal
 - from: [View:{DescID: 105}, DROPPED]
   to:   [ObjectParent:{DescID: 105, ReferencedDescID: 101}, ABSENT]
-  kind: Precedence
-  rule: descriptor dropped before dependent element removal
+  kind: SameStagePrecedence
+  rules: [descriptor dropped before dependent element removal; descriptor dropped right before removing back-reference in its parent descriptor]
 - from: [View:{DescID: 105}, DROPPED]
   to:   [Owner:{DescID: 105}, ABSENT]
   kind: Precedence
