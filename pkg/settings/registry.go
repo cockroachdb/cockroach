@@ -160,7 +160,8 @@ var retiredSettings = map[string]struct{}{
 	"changefeed.active_protected_timestamps.enabled": {},
 	"jobs.scheduler.single_node_scheduler.enabled":   {},
 	// renamed.
-	"spanconfig.host_coalesce_adjacent.enabled": {},
+	"spanconfig.host_coalesce_adjacent.enabled":            {},
+	"sql.defaults.experimental_stream_replication.enabled": {},
 }
 
 // sqlDefaultSettings is the list of "grandfathered" existing sql.defaults
@@ -182,7 +183,6 @@ var sqlDefaultSettings = map[string]struct{}{
 	"sql.defaults.experimental_distsql_planning":                                {},
 	"sql.defaults.experimental_enable_unique_without_index_constraints.enabled": {},
 	"sql.defaults.experimental_implicit_column_partitioning.enabled":            {},
-	"sql.defaults.experimental_stream_replication.enabled":                      {},
 	"sql.defaults.experimental_temporary_tables.enabled":                        {},
 	"sql.defaults.foreign_key_cascades_limit":                                   {},
 	"sql.defaults.idle_in_session_timeout":                                      {},

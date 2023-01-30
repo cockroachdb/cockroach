@@ -68,17 +68,16 @@ func ingestionPlanHook(
 		return nil, nil, nil, false, nil
 	}
 
-	// Check if the experimental feature is enabled.
-	if !p.SessionData().EnableStreamReplication {
+	if !streamingccl.CrossClusterReplicationEnabled.Get(&p.ExecCfg().Settings.SV) {
 		return nil, nil, nil, false, errors.WithTelemetry(
 			pgerror.WithCandidateCode(
 				errors.WithHint(
-					errors.Newf("stream replication is only supported experimentally"),
-					"You can enable stream replication by running `SET enable_experimental_stream_replication = true`.",
+					errors.Newf("cross cluster replication is disabled"),
+					"You can enable cross cluster replication by running `SET CLUSTER SETTING cross_cluster_replication.enabled = true`.",
 				),
 				pgcode.ExperimentalFeature,
 			),
-			"replication.ingest.disabled",
+			"cross_cluster_replication.enabled",
 		)
 	}
 
