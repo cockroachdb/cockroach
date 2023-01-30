@@ -1815,6 +1815,13 @@ func TestLogic_show_indexes(
 	runLogicTest(t, "show_indexes")
 }
 
+func TestLogic_show_ranges(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "show_ranges")
+}
+
 func TestLogic_show_source(
 	t *testing.T,
 ) {
