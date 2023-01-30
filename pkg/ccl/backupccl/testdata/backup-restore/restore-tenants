@@ -1,5 +1,6 @@
 # disabled to probabilistically run within a tenant because the test always runs from the host
 # tenant
+skip issue-num=96149
 
 new-cluster name=s1 disable-tenant
 ----
