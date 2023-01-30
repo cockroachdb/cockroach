@@ -8,6 +8,10 @@
   },
   "main": "dist/js/main.js",
   "types": "dist/types/index.d.ts",
+  "files": [
+    "dist/",
+    "AUTHORS"
+  ],
   "scripts": {
     "build": "npm-run-all -p build:typescript build:bundle",
     "build:bundle": "NODE_ENV=production webpack --display-error-details --mode=production",
