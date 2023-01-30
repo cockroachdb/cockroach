@@ -8,43 +8,37 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { all, call, delay, put, takeLatest } from "redux-saga/effects";
+import { all, call, put, takeLatest } from "redux-saga/effects";
 
 import { actions } from "./job.reducer";
-import { getJob, JobRequest } from "src/api/jobsApi";
-import { CACHE_INVALIDATION_PERIOD, throttleWithReset } from "../utils";
-import { rootActions } from "../reducers";
+import { getJob, JobRequest, JobResponseWithKey } from "src/api/jobsApi";
 import { PayloadAction } from "@reduxjs/toolkit";
+import { ErrorWithKey } from "../../api";
 
 export function* refreshJobSaga(action: PayloadAction<JobRequest>) {
   yield put(actions.request(action.payload));
 }
 
 export function* requestJobSaga(action: PayloadAction<JobRequest>): any {
+  const key = action.payload.job_id.toString();
   try {
     const result = yield call(getJob, action.payload);
-    yield put(actions.received(result));
+    const resultWithKey: JobResponseWithKey = {
+      key: key,
+      jobResponse: result,
+    };
+    yield put(actions.received(resultWithKey));
   } catch (e) {
-    yield put(actions.failed(e));
+    const err: ErrorWithKey = {
+      err: e,
+      key,
+    };
+    yield put(actions.failed(err));
   }
 }
-
-export function* receivedJobSaga(delayMs: number) {
-  yield delay(delayMs);
-  yield put(actions.invalidated());
-}
-
-export function* jobSaga(
-  cacheInvalidationPeriod: number = CACHE_INVALIDATION_PERIOD,
-) {
+export function* jobSaga() {
   yield all([
-    throttleWithReset(
-      cacheInvalidationPeriod,
-      actions.refresh,
-      [actions.invalidated, rootActions.resetState],
-      refreshJobSaga,
-    ),
+    takeLatest(actions.refresh, refreshJobSaga),
     takeLatest(actions.request, requestJobSaga),
-    takeLatest(actions.received, receivedJobSaga, cacheInvalidationPeriod),
   ]);
 }

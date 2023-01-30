@@ -34,7 +34,7 @@ import {
   TxnInsightsState,
   reducer as txnInsights,
 } from "./insights/transactionInsights";
-import { JobState, reducer as job } from "./jobDetails";
+import { JobDetailsReducerState, reducer as job } from "./jobDetails";
 import { JobsState, reducer as jobs } from "./jobs";
 import { LivenessState, reducer as liveness } from "./liveness";
 import { LocalStorageState, reducer as localStorage } from "./localStorage";
@@ -72,7 +72,7 @@ export type AdminUiState = {
   sqlDetailsStats: SQLDetailsStatsReducerState;
   indexStats: IndexStatsReducerState;
   jobs: JobsState;
-  job: JobState;
+  job: JobDetailsReducerState;
   clusterLocks: ClusterLocksReqState;
   databasesList: DatabasesListState;
   stmtInsights: StmtInsightsState;
