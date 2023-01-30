@@ -63,6 +63,11 @@ type Writer interface {
 	CloseWithReason(ctx context.Context, reason error) error
 }
 
+// MemAllocator is an interface for acquiring memory.
+type MemAllocator interface {
+	AcquireMemory(ctx context.Context, n int64) (Alloc, error)
+}
+
 // Type indicates the type of the event.
 // Different types indicate which methods will be meaningful.
 // Events are implemented this way rather than as an interface to remove the
