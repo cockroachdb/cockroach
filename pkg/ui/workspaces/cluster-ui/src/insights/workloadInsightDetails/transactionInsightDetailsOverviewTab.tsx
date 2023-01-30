@@ -140,6 +140,10 @@ export const TransactionInsightDetailsOverviewTab: React.FC<Props> = ({
                       value={Duration(txnDetails.elapsedTimeMillis * 1e6)}
                     />
                     <SummaryCardItem
+                      label="CPU Time"
+                      value={Duration(txnDetails.cpuSQLNanos)}
+                    />
+                    <SummaryCardItem
                       label="Rows Read"
                       value={Count(txnDetails.rowsRead)}
                     />
