@@ -296,13 +296,18 @@ func makeSharedProcessTenantServerConfig(
 	baseCfg.SSLCertsDir = kvServerCfg.BaseConfig.SSLCertsDir
 	baseCfg.SSLCAKey = kvServerCfg.BaseConfig.SSLCAKey
 
-	// TODO(knz): startSampleEnvironment() should not be part of startTenantInternal. For now,
-	// disable the mechanism manually.
-	// See: https://github.com/cockroachdb/cockroach/issues/84589
+	// Don't let this SQL server take its own background heap/goroutine/CPU profile dumps.
+	// The system tenant's SQL server is doing this job.
+	baseCfg.DisableRuntimeStatsMonitor = true
 	baseCfg.GoroutineDumpDirName = ""
 	baseCfg.HeapProfileDirName = ""
 	baseCfg.CPUProfileDirName = ""
 	baseCfg.InflightTraceDirName = ""
+
+	// Expose the process-wide runtime metrics to the tenant's metric
+	// collector. Since they are process-wide, all tenants can see them.
+	baseCfg.RuntimeStatSampler = kvServerCfg.BaseConfig.RuntimeStatSampler
+
 
 	// TODO(knz): Define a meaningful storage config for each tenant,
 	// see: https://github.com/cockroachdb/cockroach/issues/84588.
