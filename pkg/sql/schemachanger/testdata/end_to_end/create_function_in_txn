@@ -46,7 +46,7 @@ upsert descriptor #101
    schema:
   +  functions:
   +    t:
-  +      overloads:
+  +      signatures:
   +      - argTypes: []
   +        id: 105
   +        returnType:
@@ -195,7 +195,7 @@ upsert descriptor #101
    schema:
   +  functions:
   +    t:
-  +      overloads:
+  +      signatures:
   +      - argTypes: []
   +        id: 105
   +        returnType:
