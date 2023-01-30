@@ -258,9 +258,9 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 	stickyEngineRegistry := server.NewStickyInMemEnginesRegistry()
 	defer stickyEngineRegistry.CloseAllStickyInMemEngines()
 
-	// The cluster has 3 node, with 1 store per node. The test writes a few KVs to
-	// a range, which gets replicated to all 3 stores. Then it manually replaces
-	// an entry in s2. The consistency check must detect this and terminate n2/s2.
+	// The cluster has 3 nodes, one store per node. The test writes a few KVs to a
+	// range, which gets replicated to all 3 stores. Then it manually replaces an
+	// entry in s2. The consistency check must detect this and terminate n2/s2.
 	const numStores = 3
 	testKnobs := kvserver.StoreTestingKnobs{DisableConsistencyQueue: true}
 	var tc *testcluster.TestCluster
