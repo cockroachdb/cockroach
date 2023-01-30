@@ -12,6 +12,7 @@ package batcheval
 
 import (
 	"context"
+	"fmt"
 	"regexp"
 	"testing"
 	"time"
@@ -1290,6 +1291,211 @@ func TestComputeSplitRangeKeyStatsDelta(t *testing.T) {
 			require.NoError(t, err)
 			msDelta.AgeTo(nowNanos)
 			require.Equal(t, tc.expect, msDelta)
+		})
+	}
+}
+
+// TestResolveLocalLocks tests resolveLocalLocks for point and ranged intents
+// as well as under a max key or max byte limit, ensuring the returned
+// resolvedLocks, externalLocks, and numBytes are as expected.
+func TestResolveLocalLocks(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	intToKey := func(i int) roachpb.Key {
+		return roachpb.Key(fmt.Sprintf("%01000d", i))
+	}
+	ceil := func(i int, j int) int {
+		return (i + j - 1) / j
+	}
+
+	const (
+		numKeys             = 20
+		keysPerRangedLock   = 4
+		maxKeys             = 11 // not divisible by keysPerRangedLock
+		targetBytes         = 11900
+		keysFromTargetBytes = 12 // divisible by keysPerRangedLock
+	)
+
+	pointLocks := make([]roachpb.Span, numKeys)
+	for i := range pointLocks {
+		pointLocks[i].Key = intToKey(i)
+	}
+	rangedLocks := make([]roachpb.Span, numKeys/keysPerRangedLock)
+	for i := range rangedLocks {
+		rangedLocks[i].Key = intToKey(i * keysPerRangedLock)
+		rangedLocks[i].EndKey = intToKey((i + 1) * keysPerRangedLock)
+	}
+
+	expectedResolvedLocksPointMaxKeys := make([]roachpb.Span, maxKeys)
+	for i := range expectedResolvedLocksPointMaxKeys {
+		expectedResolvedLocksPointMaxKeys[i].Key = intToKey(i)
+	}
+	expectedExternalLocksPointMaxKeys := make([]roachpb.Span, numKeys-maxKeys)
+	for i := range expectedExternalLocksPointMaxKeys {
+		expectedExternalLocksPointMaxKeys[i].Key = intToKey(i + maxKeys)
+	}
+
+	expectedResolvedLocksRangedMaxKeys := make([]roachpb.Span, ceil(maxKeys, keysPerRangedLock))
+	for i := range expectedResolvedLocksRangedMaxKeys {
+		expectedResolvedLocksRangedMaxKeys[i].Key = intToKey(i * keysPerRangedLock)
+		if i == len(expectedResolvedLocksRangedMaxKeys)-1 {
+			expectedResolvedLocksRangedMaxKeys[i].EndKey = intToKey(maxKeys - 1).Next()
+		} else {
+			expectedResolvedLocksRangedMaxKeys[i].EndKey = intToKey((i + 1) * keysPerRangedLock)
+		}
+	}
+	expectedExternalLocksRangedMaxKeys := make([]roachpb.Span, ceil(numKeys, keysPerRangedLock)-ceil(maxKeys, keysPerRangedLock)+1)
+	for i := range expectedExternalLocksRangedMaxKeys {
+		offset := maxKeys / keysPerRangedLock
+		if i == 0 {
+			expectedExternalLocksRangedMaxKeys[i].Key = intToKey(maxKeys - 1).Next()
+		} else {
+			expectedExternalLocksRangedMaxKeys[i].Key = intToKey((i + offset) * keysPerRangedLock)
+		}
+		expectedExternalLocksRangedMaxKeys[i].EndKey = intToKey((i + offset + 1) * keysPerRangedLock)
+	}
+
+	expectedResolvedLocksPointTargetBytes := make([]roachpb.Span, keysFromTargetBytes)
+	for i := range expectedResolvedLocksPointTargetBytes {
+		expectedResolvedLocksPointTargetBytes[i].Key = intToKey(i)
+	}
+	expectedExternalLocksPointTargetBytes := make([]roachpb.Span, numKeys-keysFromTargetBytes)
+	for i := range expectedExternalLocksPointTargetBytes {
+		expectedExternalLocksPointTargetBytes[i].Key = intToKey(i + keysFromTargetBytes)
+	}
+
+	expectedResolvedLocksRangedTargetBytes := make([]roachpb.Span, keysFromTargetBytes/keysPerRangedLock)
+	for i := range expectedResolvedLocksRangedTargetBytes {
+		expectedResolvedLocksRangedTargetBytes[i].Key = intToKey(i * keysPerRangedLock)
+		expectedResolvedLocksRangedTargetBytes[i].EndKey = intToKey((i + 1) * keysPerRangedLock)
+	}
+	expectedExternalLocksRangedTargetBytes := make([]roachpb.Span, ceil(numKeys, keysPerRangedLock)-keysFromTargetBytes/keysPerRangedLock)
+	for i := range expectedExternalLocksRangedTargetBytes {
+		offset := keysFromTargetBytes / keysPerRangedLock
+		expectedExternalLocksRangedTargetBytes[i].Key = intToKey((i + offset) * keysPerRangedLock)
+		expectedExternalLocksRangedTargetBytes[i].EndKey = intToKey((i + offset + 1) * keysPerRangedLock)
+	}
+
+	expectedResolvedLocksNoLimit := make([]roachpb.Span, numKeys)
+	for i := range expectedResolvedLocksNoLimit {
+		expectedResolvedLocksNoLimit[i].Key = intToKey(i)
+	}
+	expectedExternalLocksNoLimit := make([]roachpb.Span, 0)
+
+	testCases := []struct {
+		desc                  string
+		lockSpans             []roachpb.Span
+		resolveAllowance      int64
+		targetBytes           int64
+		expectedResolvedLocks []roachpb.Span
+		expectedExternalLocks []roachpb.Span
+	}{
+		// Point intent resolution with a max keys limit. 20 point intents, 11
+		// become resolved locks and 9 become external locks.
+		{
+			desc:                  "Point locks with max keys",
+			lockSpans:             pointLocks,
+			resolveAllowance:      maxKeys,
+			targetBytes:           0,
+			expectedResolvedLocks: expectedResolvedLocksPointMaxKeys,
+			expectedExternalLocks: expectedExternalLocksPointMaxKeys,
+		},
+		// Ranged intent resolution with a max keys limit. 5 ranged locks (each
+		// containing 4 keys), 3 become resolved locks (containing the first 2
+		// locks and part of the 3rd lock) and 3 become external locks (containing
+		// the remaining part of the 3rd lock and the last 2 locks). Note that the
+		// max key limit splits in between the 3rd lock, so the resolved locks will
+		// contain the first part of the 3rd lock span and the external locks will
+		// contain the remaining part of the 3rd lock span.
+		{
+			desc:                  "Ranged locks with max keys",
+			lockSpans:             rangedLocks,
+			resolveAllowance:      maxKeys,
+			targetBytes:           0,
+			expectedResolvedLocks: expectedResolvedLocksRangedMaxKeys,
+			expectedExternalLocks: expectedExternalLocksRangedMaxKeys,
+		},
+		// Point intent resolution with a target bytes limit. 20 point intents, 12
+		// become resolved locks and 8 become external locks.
+		{
+			desc:                  "Point span with target bytes",
+			lockSpans:             pointLocks,
+			resolveAllowance:      0,
+			targetBytes:           targetBytes,
+			expectedResolvedLocks: expectedResolvedLocksPointTargetBytes,
+			expectedExternalLocks: expectedExternalLocksPointTargetBytes,
+		},
+		// Ranged intent resolution with a target bytes limit. 5 ranged locks (each
+		// containing 4 keys), 3 become resolved locks (containing the first 3
+		// locks) and 2 become external locks (containing the last 2 locks). Note
+		// that the target byte limit does not split in between any locks, so the
+		// resolved and external locks do not contain part of a lock span for any
+		// lock.
+		{
+			desc:                  "Ranged span with target bytes",
+			lockSpans:             rangedLocks,
+			resolveAllowance:      0,
+			targetBytes:           targetBytes,
+			expectedResolvedLocks: expectedResolvedLocksRangedTargetBytes,
+			expectedExternalLocks: expectedExternalLocksRangedTargetBytes,
+		},
+		// Point intent resolution without any limit. 20 point intents, 20 become
+		// resolved locks and 0 become external locks.
+		{
+			desc:                  "No key or byte limit",
+			lockSpans:             pointLocks,
+			resolveAllowance:      0,
+			targetBytes:           0,
+			expectedResolvedLocks: expectedResolvedLocksNoLimit,
+			expectedExternalLocks: expectedExternalLocksNoLimit,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.desc, func(t *testing.T) {
+			db := storage.NewDefaultInMemForTesting()
+			defer db.Close()
+			batch := db.NewBatch()
+			defer batch.Close()
+
+			ts := hlc.Timestamp{WallTime: 1}
+			txn := roachpb.MakeTransaction("test", roachpb.Key("a"), 0, ts, 0, 1)
+			txn.Status = roachpb.COMMITTED
+
+			for i := 0; i < numKeys; i++ {
+				err := storage.MVCCPut(ctx, batch, nil, intToKey(i), ts, hlc.ClockTimestamp{}, roachpb.MakeValueFromString("a"), &txn)
+				require.NoError(t, err)
+			}
+			resolvedLocks, externalLocks, err := resolveLocalLocksWithPagination(
+				ctx,
+				&roachpb.RangeDescriptor{
+					StartKey: roachpb.RKeyMin,
+					EndKey:   roachpb.RKeyMax,
+				},
+				batch,
+				nil,
+				&roachpb.EndTxnRequest{
+					LockSpans:             tc.lockSpans,
+					InternalCommitTrigger: &roachpb.InternalCommitTrigger{},
+				},
+				&txn,
+				(&MockEvalCtx{}).EvalContext(),
+				tc.resolveAllowance,
+				tc.targetBytes,
+			)
+			require.NoError(t, err)
+			require.Equal(t, len(tc.expectedResolvedLocks), len(resolvedLocks))
+			for i, lock := range resolvedLocks {
+				require.Equal(t, tc.expectedResolvedLocks[i].Key, lock.Key)
+				require.Equal(t, tc.expectedResolvedLocks[i].EndKey, lock.EndKey)
+			}
+			require.Equal(t, len(tc.expectedExternalLocks), len(externalLocks))
+			for i, lock := range externalLocks {
+				require.Equal(t, tc.expectedExternalLocks[i].Key, lock.Key)
+				require.Equal(t, tc.expectedExternalLocks[i].EndKey, lock.EndKey)
+			}
 		})
 	}
 }
