@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -296,6 +297,26 @@ func (f *fullReconciler) reconcile(
 			return nil, hlc.Timestamp{}, err
 		}
 		storeWithLatestSpanConfigs.Apply(ctx, false /* dryrun */, del)
+	}
+
+	if !f.codec.ForSystemTenant() {
+		tenantPrefixKey := f.codec.TenantPrefix()
+		// For secondary tenants, we assume that the SQLTranslator's first emitted
+		// record, once spanconfig.Reconciler kicks in, starts at
+		// keys.MakeTenantPrefix(tenantID), so it can be queried in
+		// sql.CreateTenantRecord.
+		if err := storeWithLatestSpanConfigs.Iterate(func(record spanconfig.Record) error {
+			spanConfigStartKey := record.GetTarget().GetSpan().Key
+			if tenantPrefixKey.Compare(spanConfigStartKey) != 0 {
+				return errors.AssertionFailedf(
+					"tenant prefix key %q does not match first span config start key %q",
+					tenantPrefixKey, spanConfigStartKey,
+				)
+			}
+			return iterutil.StopIteration()
+		}); err != nil {
+			return nil, hlc.Timestamp{}, err
+		}
 	}
 
 	return storeWithLatestSpanConfigs, readTimestamp, nil
