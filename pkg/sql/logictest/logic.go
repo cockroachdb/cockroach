@@ -177,6 +177,24 @@ import (
 // The directives line looks like:
 // # tenant-cluster-setting-override-opt: setting_name1=setting_value1 setting_name2=setting_value2
 //
+//
+// ###########################################################
+//           TENANT CAPABILITY OVERRIDE OPTION DIRECTIVES
+// ###########################################################
+//
+// Test files can also contain tenant capability override directives around
+// the beginning of the file. These directives can be used to configure tenant
+// capability overrides during setup. This can be useful for altering
+// tenant capabilities for configurations that run their tests as
+// secondary tenants (eg. 3node-tenant). While these directives apply to all
+// configurations under which the test will be run, it's only really meaningful
+// when the test runs as a secondary tenant; the configuration has no effect if
+// the test is run as the system tenant.
+//
+// The directives line looks like:
+// # tenant-capability-override-opt: capability_name1=capability_value1 capability_name2=capability_value2
+//
+//
 // ###########################################
 //           CLUSTER OPTION DIRECTIVES
 // ###########################################
@@ -1859,6 +1877,7 @@ CREATE DATABASE test; USE test;
 // tenant overrides (eg. cluster settings, capabilities) during setup.
 type tenantOverrideArgs struct {
 	clusterSettings map[string]string
+	capabilities    map[string]string
 }
 
 // clusterOpt is implemented by options for configuring the test cluster under
@@ -1941,8 +1960,10 @@ func (c knobOptDisableCorpusGeneration) apply(args *base.TestingKnobs) {
 // invoked with each option.
 func parseDirectiveOptions(t *testing.T, path string, directiveName string, f func(opt string)) {
 	switch directiveName {
-	case "knob-opt", "cluster-opt", "tenant-cluster-setting-override-opt":
-		// Fallthrough.
+	case knobDirective,
+		clusterDirective,
+		tenantClusterSettingOverrideDirective,
+		tenantCapabilityOverrideDirective:
 	default:
 		t.Fatalf("cannot parse unknown directive %s", directiveName)
 	}
@@ -1991,9 +2012,15 @@ func parseDirectiveOptions(t *testing.T, path string, directiveName string, f fu
 	}
 }
 
+const (
+	tenantClusterSettingOverrideDirective = "tenant-cluster-setting-override-opt"
+	tenantCapabilityOverrideDirective     = "tenant-capability-override-opt"
+)
+
 // readTenantOverrideArgs looks around the beginning of the file
 // for a line looking like:
 // # tenant-cluster-setting-override-opt: opt1 opt2 ...
+// # tenant-capability-override-opt: opt1 opt2
 // and parses that line into a set of tenantOverrideArgs that need
 // to be overriden by the host cluster before the test begins.
 func readTenantOverrideArgs(t *testing.T, path string) tenantOverrideArgs {
@@ -2001,23 +2028,31 @@ func readTenantOverrideArgs(t *testing.T, path string) tenantOverrideArgs {
 	require.NoError(t, err)
 	defer file.Close()
 
-	res := tenantOverrideArgs{
-		clusterSettings: make(map[string]string),
+	getConfigMap := func(directiveName string, configType string) map[string]string {
+		configMap := make(map[string]string)
+		parseDirectiveOptions(t, path, directiveName, func(opt string) {
+			parts := strings.Split(opt, "=")
+			if len(parts) != 2 {
+				t.Fatalf("%s %q must be in format name=value", configType, opt)
+			}
+			name := parts[0]
+			value := parts[1]
+			_, ok := configMap[name]
+			if ok {
+				t.Fatalf("cannot set %s %q more than once", configType, name)
+			}
+			configMap[name] = value
+		})
+		return configMap
 	}
-	parseDirectiveOptions(t, path, "tenant-cluster-setting-override-opt", func(opt string) {
-		parts := strings.Split(opt, "=")
-		if len(parts) != 2 {
-			t.Fatalf("error parsing cluster setting %q must be in format name=value", opt)
-		}
-		name := parts[0]
-		_, ok := res.clusterSettings[name]
-		if ok {
-			t.Fatalf("cannot set cluster setting %q more than once", name)
-		}
-		res.clusterSettings[name] = parts[1]
-	})
-	return res
+
+	return tenantOverrideArgs{
+		clusterSettings: getConfigMap(tenantClusterSettingOverrideDirective, "cluster setting"),
+		capabilities:    getConfigMap(tenantCapabilityOverrideDirective, "capability"),
+	}
 }
+
+const knobDirective = "knob-opt"
 
 // readKnobOptions looks around the beginning of the file for a line looking like:
 // # knob-opt: opt1 opt2 ...
@@ -2025,7 +2060,7 @@ func readTenantOverrideArgs(t *testing.T, path string) tenantOverrideArgs {
 // TestServerArgs.Knobs before the cluster is started for the respective test file.
 func readKnobOptions(t *testing.T, path string) []knobOpt {
 	var res []knobOpt
-	parseDirectiveOptions(t, path, "knob-opt", func(opt string) {
+	parseDirectiveOptions(t, path, knobDirective, func(opt string) {
 		switch opt {
 		case "disable-corpus-generation":
 			res = append(res, knobOptDisableCorpusGeneration{})
@@ -2038,13 +2073,15 @@ func readKnobOptions(t *testing.T, path string) []knobOpt {
 	return res
 }
 
+const clusterDirective = "cluster-opt"
+
 // readClusterOptions looks around the beginning of the file for a line looking like:
 // # cluster-opt: opt1 opt2 ...
 // and parses that line into a set of clusterOpts that need to be applied to the
 // TestServerArgs before the cluster is started for the respective test file.
 func readClusterOptions(t *testing.T, path string) []clusterOpt {
 	var res []clusterOpt
-	parseDirectiveOptions(t, path, "cluster-opt", func(opt string) {
+	parseDirectiveOptions(t, path, clusterDirective, func(opt string) {
 		switch opt {
 		case "disable-span-configs":
 			res = append(res, clusterOptDisableSpanConfigs{})
