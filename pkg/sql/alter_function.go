@@ -380,8 +380,8 @@ func (p *planner) mustGetMutableFunctionForAlter(
 	return mut, nil
 }
 
-func toSchemaOverloadSignature(fnDesc *funcdesc.Mutable) descpb.SchemaDescriptor_FunctionOverload {
-	ret := descpb.SchemaDescriptor_FunctionOverload{
+func toSchemaOverloadSignature(fnDesc *funcdesc.Mutable) descpb.SchemaDescriptor_FunctionSignature {
+	ret := descpb.SchemaDescriptor_FunctionSignature{
 		ID:         fnDesc.GetID(),
 		ArgTypes:   make([]*types.T, len(fnDesc.GetParams())),
 		ReturnType: fnDesc.ReturnType.Type,
