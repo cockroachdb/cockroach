@@ -55,8 +55,9 @@ EXPLAIN (ddl, verbose) DROP TABLE db.sc.t;
 │       │   ├── • ObjectParent:{DescID: 107, ReferencedDescID: 106}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   └── • Precedence dependency from DROPPED Table:{DescID: 107}
+│       │   │   └── • SameStagePrecedence dependency from DROPPED Table:{DescID: 107}
 │       │   │         rule: "descriptor dropped before dependent element removal"
+│       │   │         rule: "descriptor dropped right before removing back-reference in its parent descriptor"
 │       │   │
 │       │   ├── • TableComment:{DescID: 107, Comment: t has a comment}
 │       │   │   │ PUBLIC → ABSENT
@@ -168,6 +169,9 @@ EXPLAIN (ddl, verbose) DROP TABLE db.sc.t;
 │       │   │
 │       │   ├── • ColumnNotNull:{DescID: 107, ColumnID: 3, IndexID: 0}
 │       │   │   │ PUBLIC → VALIDATED
+│       │   │   │
+│       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 107}
+│       │   │   │     rule: "relation dropped before dependent constraint"
 │       │   │   │
 │       │   │   └── • skip PUBLIC → VALIDATED operations
 │       │   │         rule: "skip constraint removal ops on relation drop"
@@ -477,8 +481,9 @@ EXPLAIN (ddl, verbose) DROP TABLE db.sc.t;
 │       │   ├── • ObjectParent:{DescID: 107, ReferencedDescID: 106}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   └── • Precedence dependency from DROPPED Table:{DescID: 107}
+│       │   │   └── • SameStagePrecedence dependency from DROPPED Table:{DescID: 107}
 │       │   │         rule: "descriptor dropped before dependent element removal"
+│       │   │         rule: "descriptor dropped right before removing back-reference in its parent descriptor"
 │       │   │
 │       │   ├── • TableComment:{DescID: 107, Comment: t has a comment}
 │       │   │   │ PUBLIC → ABSENT
@@ -635,6 +640,9 @@ EXPLAIN (ddl, verbose) DROP TABLE db.sc.t;
 │       │   │
 │       │   ├── • ColumnNotNull:{DescID: 107, ColumnID: 3, IndexID: 0}
 │       │   │   │ PUBLIC → ABSENT
+│       │   │   │
+│       │   │   ├── • Precedence dependency from DROPPED Table:{DescID: 107}
+│       │   │   │     rule: "relation dropped before dependent constraint"
 │       │   │   │
 │       │   │   ├── • Precedence dependency from WRITE_ONLY Column:{DescID: 107, ColumnID: 3}
 │       │   │   │     rule: "column no longer public before dependents"

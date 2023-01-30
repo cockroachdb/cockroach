@@ -81,8 +81,9 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
 │       │   ├── • ObjectParent:{DescID: 106, ReferencedDescID: 101}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   └── • Precedence dependency from DROPPED View:{DescID: 106}
+│       │   │   └── • SameStagePrecedence dependency from DROPPED View:{DescID: 106}
 │       │   │         rule: "descriptor dropped before dependent element removal"
+│       │   │         rule: "descriptor dropped right before removing back-reference in its parent descriptor"
 │       │   │
 │       │   ├── • ColumnFamily:{DescID: 106, Name: primary, ColumnFamilyID: 0}
 │       │   │   │ PUBLIC → ABSENT
@@ -478,8 +479,9 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
 │       │   ├── • ObjectParent:{DescID: 106, ReferencedDescID: 101}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
-│       │   │   └── • Precedence dependency from DROPPED View:{DescID: 106}
+│       │   │   └── • SameStagePrecedence dependency from DROPPED View:{DescID: 106}
 │       │   │         rule: "descriptor dropped before dependent element removal"
+│       │   │         rule: "descriptor dropped right before removing back-reference in its parent descriptor"
 │       │   │
 │       │   ├── • ColumnFamily:{DescID: 106, Name: primary, ColumnFamilyID: 0}
 │       │   │   │ PUBLIC → ABSENT

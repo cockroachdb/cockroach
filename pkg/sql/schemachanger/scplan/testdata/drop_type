@@ -160,8 +160,8 @@ DROP TYPE defaultdb.typ
   rule: descriptor dropped before dependent element removal
 - from: [AliasType:{DescID: 105, ReferencedTypeIDs: [104 105]}, DROPPED]
   to:   [ObjectParent:{DescID: 105, ReferencedDescID: 101}, ABSENT]
-  kind: Precedence
-  rule: descriptor dropped before dependent element removal
+  kind: SameStagePrecedence
+  rules: [descriptor dropped before dependent element removal; descriptor dropped right before removing back-reference in its parent descriptor]
 - from: [AliasType:{DescID: 105, ReferencedTypeIDs: [104 105]}, DROPPED]
   to:   [Owner:{DescID: 105}, ABSENT]
   kind: Precedence
@@ -192,8 +192,8 @@ DROP TYPE defaultdb.typ
   rule: descriptor dropped before dependent element removal
 - from: [EnumType:{DescID: 104}, DROPPED]
   to:   [ObjectParent:{DescID: 104, ReferencedDescID: 101}, ABSENT]
-  kind: Precedence
-  rule: descriptor dropped before dependent element removal
+  kind: SameStagePrecedence
+  rules: [descriptor dropped before dependent element removal; descriptor dropped right before removing back-reference in its parent descriptor]
 - from: [EnumType:{DescID: 104}, DROPPED]
   to:   [Owner:{DescID: 104}, ABSENT]
   kind: Precedence
@@ -382,8 +382,8 @@ DROP TYPE defaultdb.ctyp
   rule: descriptor dropped before dependent element removal
 - from: [AliasType:{DescID: 107, ReferencedTypeIDs: [106 107]}, DROPPED]
   to:   [ObjectParent:{DescID: 107, ReferencedDescID: 101}, ABSENT]
-  kind: Precedence
-  rule: descriptor dropped before dependent element removal
+  kind: SameStagePrecedence
+  rules: [descriptor dropped before dependent element removal; descriptor dropped right before removing back-reference in its parent descriptor]
 - from: [AliasType:{DescID: 107, ReferencedTypeIDs: [106 107]}, DROPPED]
   to:   [Owner:{DescID: 107}, ABSENT]
   kind: Precedence
@@ -422,8 +422,8 @@ DROP TYPE defaultdb.ctyp
   rule: descriptor dropped before dependent element removal
 - from: [CompositeType:{DescID: 106}, DROPPED]
   to:   [ObjectParent:{DescID: 106, ReferencedDescID: 101}, ABSENT]
-  kind: Precedence
-  rule: descriptor dropped before dependent element removal
+  kind: SameStagePrecedence
+  rules: [descriptor dropped before dependent element removal; descriptor dropped right before removing back-reference in its parent descriptor]
 - from: [CompositeType:{DescID: 106}, DROPPED]
   to:   [Owner:{DescID: 106}, ABSENT]
   kind: Precedence

@@ -207,6 +207,21 @@ func isConstraint(e scpb.Element) bool {
 	return false
 }
 
+// isCrossDescriptorConstraint are constraints that might reference
+// other descriptors:
+//   - FKs can reference other table
+//   - Checks can reference other sequences/types
+//
+// Those constraints need to be dropped first when we are dropping either
+// the referencing or reference descriptor.
+func isCrossDescriptorConstraint(e scpb.Element) bool {
+	switch e.(type) {
+	case *scpb.ForeignKeyConstraint, *scpb.CheckConstraint:
+		return true
+	}
+	return false
+}
+
 func isConstraintDependent(e scpb.Element) bool {
 	switch e.(type) {
 	case *scpb.ConstraintWithoutIndexName:
@@ -224,6 +239,14 @@ func isData(e scpb.Element) bool {
 	case *scpb.TableData:
 		return true
 	case *scpb.IndexData:
+		return true
+	}
+	return false
+}
+
+func isParentDescriptorBackReference(e scpb.Element) bool {
+	switch e.(type) {
+	case *scpb.ObjectParent, *scpb.SchemaParent:
 		return true
 	}
 	return false

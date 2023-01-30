@@ -1,0 +1,129 @@
+/* setup */
+CREATE TABLE t (i INT PRIMARY KEY CHECK (i > 0));
+
+/* test */
+EXPLAIN (ddl, verbose) ALTER TABLE t DROP CONSTRAINT check_i;
+----
+• Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP CONSTRAINT ‹check_i›;
+│
+├── • StatementPhase
+│   │
+│   └── • Stage 1 of 1 in StatementPhase
+│       │
+│       ├── • 2 elements transitioning toward ABSENT
+│       │   │
+│       │   ├── • CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
+│       │   │   │ PUBLIC → VALIDATED
+│       │   │   │
+│       │   │   └── • PreviousStagePrecedence dependency from PUBLIC CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
+│       │   │         rule: "CheckConstraint transitions to ABSENT uphold 2-version invariant: PUBLIC->VALIDATED"
+│       │   │
+│       │   └── • ConstraintWithoutIndexName:{DescID: 104, Name: check_i, ConstraintID: 2}
+│       │       │ PUBLIC → ABSENT
+│       │       │
+│       │       └── • Precedence dependency from VALIDATED CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
+│       │             rule: "constraint no longer public before dependents"
+│       │
+│       └── • 2 Mutation operations
+│           │
+│           ├── • MakePublicCheckConstraintValidated
+│           │     ConstraintID: 2
+│           │     TableID: 104
+│           │
+│           └── • SetConstraintName
+│                 ConstraintID: 2
+│                 Name: crdb_internal_constraint_2_name_placeholder
+│                 TableID: 104
+│
+├── • PreCommitPhase
+│   │
+│   ├── • Stage 1 of 2 in PreCommitPhase
+│   │   │
+│   │   ├── • 2 elements transitioning toward ABSENT
+│   │   │   │
+│   │   │   ├── • CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
+│   │   │   │     VALIDATED → PUBLIC
+│   │   │   │
+│   │   │   └── • ConstraintWithoutIndexName:{DescID: 104, Name: check_i, ConstraintID: 2}
+│   │   │         ABSENT → PUBLIC
+│   │   │
+│   │   └── • 1 Mutation operation
+│   │       │
+│   │       └── • UndoAllInTxnImmediateMutationOpSideEffects
+│   │             {}
+│   │
+│   └── • Stage 2 of 2 in PreCommitPhase
+│       │
+│       ├── • 2 elements transitioning toward ABSENT
+│       │   │
+│       │   ├── • CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
+│       │   │   │ PUBLIC → VALIDATED
+│       │   │   │
+│       │   │   └── • PreviousStagePrecedence dependency from PUBLIC CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
+│       │   │         rule: "CheckConstraint transitions to ABSENT uphold 2-version invariant: PUBLIC->VALIDATED"
+│       │   │
+│       │   └── • ConstraintWithoutIndexName:{DescID: 104, Name: check_i, ConstraintID: 2}
+│       │       │ PUBLIC → ABSENT
+│       │       │
+│       │       └── • Precedence dependency from VALIDATED CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
+│       │             rule: "constraint no longer public before dependents"
+│       │
+│       └── • 4 Mutation operations
+│           │
+│           ├── • MakePublicCheckConstraintValidated
+│           │     ConstraintID: 2
+│           │     TableID: 104
+│           │
+│           ├── • SetConstraintName
+│           │     ConstraintID: 2
+│           │     Name: crdb_internal_constraint_2_name_placeholder
+│           │     TableID: 104
+│           │
+│           ├── • SetJobStateOnDescriptor
+│           │     DescriptorID: 104
+│           │     Initialize: true
+│           │
+│           └── • CreateSchemaChangerJob
+│                 Authorization:
+│                   UserName: root
+│                 DescriptorIDs:
+│                 - 104
+│                 JobID: 1
+│                 NonCancelable: true
+│                 RunningStatus: PostCommitNonRevertiblePhase stage 1 of 1 with 1 MutationType op pending
+│                 Statements:
+│                 - statement: ALTER TABLE t DROP CONSTRAINT check_i
+│                   redactedstatement: ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP CONSTRAINT ‹check_i›
+│                   statementtag: ALTER TABLE
+│
+└── • PostCommitNonRevertiblePhase
+    │
+    └── • Stage 1 of 1 in PostCommitNonRevertiblePhase
+        │
+        ├── • 1 element transitioning toward ABSENT
+        │   │
+        │   └── • CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
+        │       │ VALIDATED → ABSENT
+        │       │
+        │       ├── • PreviousStagePrecedence dependency from VALIDATED CheckConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2}
+        │       │     rule: "CheckConstraint transitions to ABSENT uphold 2-version invariant: VALIDATED->ABSENT"
+        │       │
+        │       └── • Precedence dependency from ABSENT ConstraintWithoutIndexName:{DescID: 104, Name: check_i, ConstraintID: 2}
+        │             rule: "dependents removed before constraint"
+        │
+        └── • 3 Mutation operations
+            │
+            ├── • RemoveCheckConstraint
+            │     ConstraintID: 2
+            │     TableID: 104
+            │
+            ├── • RemoveJobStateFromDescriptor
+            │     DescriptorID: 104
+            │     JobID: 1
+            │
+            └── • UpdateSchemaChangerJob
+                  DescriptorIDsToRemove:
+                  - 104
+                  IsNonCancelable: true
+                  JobID: 1
+                  RunningStatus: all stages completed
