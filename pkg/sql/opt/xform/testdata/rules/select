@@ -2924,30 +2924,24 @@ project
       └── filters
            └── (j:4->0) = '[1, 2]' [outer=(4), immutable]
 
-# Do not generate an inverted scan when the index of the fetch val operator
-# is not a string and there is a containment operator.
-opt expect-not=GenerateInvertedIndexScans
+# Generate an inverted scan when the index of the fetch val operator
+# is an integer and there is a containment operator with a JSON object
+opt expect=GenerateInvertedIndexScans
 SELECT k FROM b WHERE j->0 @> '{"b": "c"}'
 ----
 project
  ├── columns: k:1!null
  ├── immutable
  ├── key: (1)
- └── select
-      ├── columns: k:1!null j:4
-      ├── immutable
-      ├── key: (1)
-      ├── fd: (1)-->(4)
-      ├── scan b
-      │    ├── columns: k:1!null j:4
-      │    ├── key: (1)
-      │    └── fd: (1)-->(4)
-      └── filters
-           └── (j:4->0) @> '{"b": "c"}' [outer=(4), immutable]
+ └── scan b@j_inv_idx
+      ├── columns: k:1!null
+      ├── inverted constraint: /7/1
+      │    └── spans: ["7\x00\x03b\x00\x01\x12c\x00\x01", "7\x00\x03b\x00\x01\x12c\x00\x01"]
+      └── key: (1)
 
-# Do not generate an inverted scan when the index of the fetch val operator
-# is not a string and there is a containment operator.
-opt expect-not=GenerateInvertedIndexScans
+# Generate an inverted scan when the index of the fetch val operator
+# is an integer and there is a containment operator with a JSON object
+opt expect=GenerateInvertedIndexScans
 SELECT k FROM b WHERE j->0 <@ '{"b": "c"}'
 ----
 project
@@ -2959,17 +2953,35 @@ project
       ├── immutable
       ├── key: (1)
       ├── fd: (1)-->(4)
-      ├── scan b
+      ├── index-join b
       │    ├── columns: k:1!null j:4
       │    ├── key: (1)
-      │    └── fd: (1)-->(4)
+      │    ├── fd: (1)-->(4)
+      │    └── inverted-filter
+      │         ├── columns: k:1!null
+      │         ├── inverted expression: /7
+      │         │    ├── tight: false, unique: false
+      │         │    └── union spans
+      │         │         ├── ["7\x00\x018", "7\x00\x018"]
+      │         │         ├── ["7\x00\x03\x00\x019", "7\x00\x03\x00\x019"]
+      │         │         └── ["7\x00\x03b\x00\x01\x12c\x00\x01", "7\x00\x03b\x00\x01\x12c\x00\x01"]
+      │         ├── key: (1)
+      │         └── scan b@j_inv_idx
+      │              ├── columns: k:1!null j_inverted_key:7!null
+      │              ├── inverted constraint: /7/1
+      │              │    └── spans
+      │              │         ├── ["7\x00\x018", "7\x00\x018"]
+      │              │         ├── ["7\x00\x03\x00\x019", "7\x00\x03\x00\x019"]
+      │              │         └── ["7\x00\x03b\x00\x01\x12c\x00\x01", "7\x00\x03b\x00\x01\x12c\x00\x01"]
+      │              ├── key: (1)
+      │              └── fd: (1)-->(7)
       └── filters
            └── (j:4->0) <@ '{"b": "c"}' [outer=(4), immutable]
 
-
-# Generate an inverted scan when right side of the equality is an array.
+# Generate an inverted scan when the index of the fetch val operator
+# is an integer and there is a containment operator with a JSON array
 opt expect=GenerateInvertedIndexScans
-SELECT k FROM b WHERE j->'a' = '["b"]'
+SELECT k FROM b WHERE j->0 <@ '[1, 2]'
 ----
 project
  ├── columns: k:1!null
@@ -2984,17 +2996,93 @@ project
       │    ├── columns: k:1!null j:4
       │    ├── key: (1)
       │    ├── fd: (1)-->(4)
-      │    └── scan b@j_inv_idx
+      │    └── inverted-filter
       │         ├── columns: k:1!null
-      │         ├── inverted constraint: /7/1
-      │         │    └── spans: ["7a\x00\x02\x00\x03\x00\x01\x12b\x00\x01", "7a\x00\x02\x00\x03\x00\x01\x12b\x00\x01"]
-      │         └── key: (1)
+      │         ├── inverted expression: /7
+      │         │    ├── tight: false, unique: false
+      │         │    └── union spans
+      │         │         ├── ["7\x00\x01*\x02\x00", "7\x00\x01*\x02\x00"]
+      │         │         ├── ["7\x00\x01*\x04\x00", "7\x00\x01*\x04\x00"]
+      │         │         ├── ["7\x00\x018", "7\x00\x018"]
+      │         │         ├── ["7\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x01*\x02\x00"]
+      │         │         ├── ["7\x00\x03\x00\x01*\x04\x00", "7\x00\x03\x00\x01*\x04\x00"]
+      │         │         ├── ["7\x00\x03\x00\x018", "7\x00\x03\x00\x018"]
+      │         │         ├── ["7\x00\x03\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x03\x00\x01*\x02\x00"]
+      │         │         └── ["7\x00\x03\x00\x03\x00\x01*\x04\x00", "7\x00\x03\x00\x03\x00\x01*\x04\x00"]
+      │         ├── key: (1)
+      │         └── scan b@j_inv_idx
+      │              ├── columns: k:1!null j_inverted_key:7!null
+      │              ├── inverted constraint: /7/1
+      │              │    └── spans
+      │              │         ├── ["7\x00\x01*\x02\x00", "7\x00\x01*\x02\x00"]
+      │              │         ├── ["7\x00\x01*\x04\x00", "7\x00\x01*\x04\x00"]
+      │              │         ├── ["7\x00\x018", "7\x00\x018"]
+      │              │         ├── ["7\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x01*\x02\x00"]
+      │              │         ├── ["7\x00\x03\x00\x01*\x04\x00", "7\x00\x03\x00\x01*\x04\x00"]
+      │              │         ├── ["7\x00\x03\x00\x018", "7\x00\x03\x00\x018"]
+      │              │         ├── ["7\x00\x03\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x03\x00\x01*\x02\x00"]
+      │              │         └── ["7\x00\x03\x00\x03\x00\x01*\x04\x00", "7\x00\x03\x00\x03\x00\x01*\x04\x00"]
+      │              ├── key: (1)
+      │              └── fd: (1)-->(7)
       └── filters
-           └── (j:4->'a') = '["b"]' [outer=(4), immutable]
+           └── (j:4->0) <@ '[1, 2]' [outer=(4), immutable]
 
-# Generate an inverted scan when right side of the equality is an object.
+# Generate an inverted scan when the index of the fetch val operator
+# is an integer and there is a containment operator with a JSON array
 opt expect=GenerateInvertedIndexScans
-SELECT k FROM b WHERE j->'a' = '{"b": "c"}'
+SELECT k FROM b WHERE j->0 @> '[1, 2]'
+----
+project
+ ├── columns: k:1!null
+ ├── immutable
+ ├── key: (1)
+ └── inner-join (lookup b)
+      ├── columns: k:1!null j:4
+      ├── key columns: [1] = [1]
+      ├── lookup columns are key
+      ├── immutable
+      ├── key: (1)
+      ├── fd: (1)-->(4)
+      ├── inner-join (zigzag b@j_inv_idx b@j_inv_idx)
+      │    ├── columns: k:1!null
+      │    ├── eq columns: [1] = [1]
+      │    ├── left fixed columns: [7] = ['\x370003000300012a0200']
+      │    ├── right fixed columns: [7] = ['\x370003000300012a0400']
+      │    └── filters (true)
+      └── filters
+           └── (j:4->0) @> '[1, 2]' [outer=(4), immutable]
+
+
+# Generate an inverted scan when the index of the fetch val operator
+# is an integer and there is a containment operator with a JSON string
+opt expect=GenerateInvertedIndexScans
+SELECT k FROM b WHERE j->0 @> '"a"'
+----
+project
+ ├── columns: k:1!null
+ ├── immutable
+ ├── key: (1)
+ └── inverted-filter
+      ├── columns: k:1!null
+      ├── inverted expression: /7
+      │    ├── tight: true, unique: false
+      │    └── union spans
+      │         ├── ["7\x00\x03\x00\x01\x12a\x00\x01", "7\x00\x03\x00\x01\x12a\x00\x01"]
+      │         └── ["7\x00\x03\x00\x03\x00\x01\x12a\x00\x01", "7\x00\x03\x00\x03\x00\x01\x12a\x00\x01"]
+      ├── key: (1)
+      └── scan b@j_inv_idx
+           ├── columns: k:1!null j_inverted_key:7!null
+           ├── inverted constraint: /7/1
+           │    └── spans
+           │         ├── ["7\x00\x03\x00\x01\x12a\x00\x01", "7\x00\x03\x00\x01\x12a\x00\x01"]
+           │         └── ["7\x00\x03\x00\x03\x00\x01\x12a\x00\x01", "7\x00\x03\x00\x03\x00\x01\x12a\x00\x01"]
+           ├── key: (1)
+           └── fd: (1)-->(7)
+
+# Generate an inverted scan when the index of the fetch val operator
+# is an integer and there is a containment operator with a JSON string
+opt expect=GenerateInvertedIndexScans
+SELECT k FROM b WHERE j->0 <@ '"a"'
 ----
 project
  ├── columns: k:1!null
@@ -3009,13 +3097,91 @@ project
       │    ├── columns: k:1!null j:4
       │    ├── key: (1)
       │    ├── fd: (1)-->(4)
-      │    └── scan b@j_inv_idx
+      │    └── inverted-filter
       │         ├── columns: k:1!null
-      │         ├── inverted constraint: /7/1
-      │         │    └── spans: ["7a\x00\x02b\x00\x01\x12c\x00\x01", "7a\x00\x02b\x00\x01\x12c\x00\x01"]
-      │         └── key: (1)
+      │         ├── inverted expression: /7
+      │         │    ├── tight: false, unique: false
+      │         │    └── union spans
+      │         │         ├── ["7\x00\x01\x12a\x00\x01", "7\x00\x01\x12a\x00\x01"]
+      │         │         ├── ["7\x00\x018", "7\x00\x018"]
+      │         │         └── ["7\x00\x03\x00\x01\x12a\x00\x01", "7\x00\x03\x00\x01\x12a\x00\x01"]
+      │         ├── key: (1)
+      │         └── scan b@j_inv_idx
+      │              ├── columns: k:1!null j_inverted_key:7!null
+      │              ├── inverted constraint: /7/1
+      │              │    └── spans
+      │              │         ├── ["7\x00\x01\x12a\x00\x01", "7\x00\x01\x12a\x00\x01"]
+      │              │         ├── ["7\x00\x018", "7\x00\x018"]
+      │              │         └── ["7\x00\x03\x00\x01\x12a\x00\x01", "7\x00\x03\x00\x01\x12a\x00\x01"]
+      │              ├── key: (1)
+      │              └── fd: (1)-->(7)
       └── filters
-           └── (j:4->'a') = '{"b": "c"}' [outer=(4), immutable]
+           └── (j:4->0) <@ '"a"' [outer=(4), immutable]
+
+# Generate an inverted scan when the index of the fetch val operator
+# is an integer and there is a containment operator with a JSON integer
+opt expect=GenerateInvertedIndexScans
+SELECT k FROM b WHERE j->0 @> '1'
+----
+project
+ ├── columns: k:1!null
+ ├── immutable
+ ├── key: (1)
+ └── inverted-filter
+      ├── columns: k:1!null
+      ├── inverted expression: /7
+      │    ├── tight: true, unique: false
+      │    └── union spans
+      │         ├── ["7\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x01*\x02\x00"]
+      │         └── ["7\x00\x03\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x03\x00\x01*\x02\x00"]
+      ├── key: (1)
+      └── scan b@j_inv_idx
+           ├── columns: k:1!null j_inverted_key:7!null
+           ├── inverted constraint: /7/1
+           │    └── spans
+           │         ├── ["7\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x01*\x02\x00"]
+           │         └── ["7\x00\x03\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x03\x00\x01*\x02\x00"]
+           ├── key: (1)
+           └── fd: (1)-->(7)
+
+# Generate an inverted scan when the index of the fetch val operator
+# is an integer and there is a containment operator with a JSON integer
+opt expect=GenerateInvertedIndexScans
+SELECT k FROM b WHERE j->0 <@ '1'
+----
+project
+ ├── columns: k:1!null
+ ├── immutable
+ ├── key: (1)
+ └── select
+      ├── columns: k:1!null j:4
+      ├── immutable
+      ├── key: (1)
+      ├── fd: (1)-->(4)
+      ├── index-join b
+      │    ├── columns: k:1!null j:4
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(4)
+      │    └── inverted-filter
+      │         ├── columns: k:1!null
+      │         ├── inverted expression: /7
+      │         │    ├── tight: false, unique: false
+      │         │    └── union spans
+      │         │         ├── ["7\x00\x01*\x02\x00", "7\x00\x01*\x02\x00"]
+      │         │         ├── ["7\x00\x018", "7\x00\x018"]
+      │         │         └── ["7\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x01*\x02\x00"]
+      │         ├── key: (1)
+      │         └── scan b@j_inv_idx
+      │              ├── columns: k:1!null j_inverted_key:7!null
+      │              ├── inverted constraint: /7/1
+      │              │    └── spans
+      │              │         ├── ["7\x00\x01*\x02\x00", "7\x00\x01*\x02\x00"]
+      │              │         ├── ["7\x00\x018", "7\x00\x018"]
+      │              │         └── ["7\x00\x03\x00\x01*\x02\x00", "7\x00\x03\x00\x01*\x02\x00"]
+      │              ├── key: (1)
+      │              └── fd: (1)-->(7)
+      └── filters
+           └── (j:4->0) <@ '1' [outer=(4), immutable]
 
 # Query using the fetch val and equality operators in a conjunction.
 opt expect=GenerateInvertedIndexScans disable=GenerateInvertedIndexZigzagJoins
