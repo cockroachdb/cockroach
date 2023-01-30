@@ -73,6 +73,35 @@ send "\\q\r"
 eexpect eof
 end_test
 
+start_test "Check that clients can use the unix socket to connect to the app tenant."
+system "$argv sql -u root -e \"alter user root with password 'abc'\""
+set ssldir $env(HOME)/.cockroach-demo
+spawn $argv sql --no-line-editor --url "postgresql://root:abc@/defaultdb?host=$ssldir&port=26257"
+eexpect "Welcome"
+eexpect root@
+eexpect "defaultdb>"
+send "table system.tenants;\r"
+eexpect "ERROR"
+eexpect "does not exist"
+eexpect "defaultdb>"
+send "\\q\r"
+eexpect eof
+end_test
+
+start_test "Check that clients can use the unix socket to connect to the system tenant."
+system "$argv sql -d cluster:system/demo -u root -e \"alter user root with password 'abc'\""
+set ssldir $env(HOME)/.cockroach-demo
+spawn $argv sql --no-line-editor --url "postgresql://root:abc@/defaultdb?host=$ssldir&options=-ccluster%3Dsystem&port=26257"
+eexpect "Welcome"
+eexpect root@
+eexpect "defaultdb>"
+send "table system.tenants;\r"
+eexpect "2 rows"
+eexpect "defaultdb>"
+send "\\q\r"
+eexpect eof
+end_test
+
 spawn /bin/bash
 set shell_spawn_id $spawn_id
 send "PS1=':''/# '\r"
@@ -80,7 +109,6 @@ eexpect ":/# "
 
 start_test "Check that an auth cookie can be extracted for a demo session"
 # From the system tenant.
-set ssldir $env(HOME)/.cockroach-demo
 set sqlurl "postgresql://root@127.0.0.1:26257/?options=-ccluster%3Dsystem&sslmode=require&sslrootcert=$ssldir/ca.crt&sslcert=$ssldir/client.root.crt&sslkey=$ssldir/client.root.key"
 send "$argv auth-session login root --url \"$sqlurl\" --only-cookie >cookie_system.txt\r"
 eexpect ":/# "
