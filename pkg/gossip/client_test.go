@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 )
 
@@ -58,20 +59,17 @@ func startGossipAtAddr(
 	rpcContext := rpc.NewInsecureTestingContextWithClusterID(ctx, clock, stopper, clusterID)
 	rpcContext.NodeID.Set(ctx, nodeID)
 
-	server := rpc.NewServer(rpcContext)
+	server, err := rpc.NewServer(rpcContext)
+	require.NoError(t, err)
 	g := NewTest(nodeID, stopper, registry, zonepb.DefaultZoneConfigRef())
 	RegisterGossipServer(server, g)
 	ln, err := netutil.ListenAndServeGRPC(stopper, server, addr)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	addr = ln.Addr()
-	if err := g.SetNodeDescriptor(&roachpb.NodeDescriptor{
+	require.NoError(t, g.SetNodeDescriptor(&roachpb.NodeDescriptor{
 		NodeID:  nodeID,
 		Address: util.MakeUnresolvedAddr(addr.Network(), addr.String()),
-	}); err != nil {
-		t.Fatal(err)
-	}
+	}))
 	g.start(addr)
 	time.Sleep(time.Millisecond)
 	return g, rpcContext
@@ -121,22 +119,20 @@ func startFakeServerGossips(
 	clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
 	lRPCContext := rpc.NewInsecureTestingContextWithClusterID(ctx, clock, stopper, clusterID)
 
-	lserver := rpc.NewServer(lRPCContext)
+	lserver, err := rpc.NewServer(lRPCContext)
+	require.NoError(t, err)
 	local := NewTest(localNodeID, stopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef())
 	RegisterGossipServer(lserver, local)
 	lln, err := netutil.ListenAndServeGRPC(stopper, lserver, util.IsolatedTestAddr)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	local.start(lln.Addr())
 
 	rRPCContext := rpc.NewInsecureTestingContextWithClusterID(ctx, clock, stopper, clusterID)
-	rserver := rpc.NewServer(rRPCContext)
+	rserver, err := rpc.NewServer(rRPCContext)
+	require.NoError(t, err)
 	remote := newFakeGossipServer(rserver, stopper)
 	rln, err := netutil.ListenAndServeGRPC(stopper, rserver, util.IsolatedTestAddr)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	addr := rln.Addr()
 	remote.nodeAddr = util.MakeUnresolvedAddr(addr.Network(), addr.String())
 
@@ -480,16 +476,15 @@ func TestClientRegisterWithInitNodeID(t *testing.T) {
 		nodeID := roachpb.NodeID(i + 1)
 
 		rpcContext := rpc.NewInsecureTestingContextWithClusterID(ctx, clock, stopper, clusterID)
-		server := rpc.NewServer(rpcContext)
+		server, err := rpc.NewServer(rpcContext)
+		require.NoError(t, err)
 		// node ID must be non-zero
 		gnode := NewTest(nodeID, stopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef())
 		RegisterGossipServer(server, gnode)
 		g = append(g, gnode)
 
 		ln, err := netutil.ListenAndServeGRPC(stopper, server, util.IsolatedTestAddr)
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 
 		// Connect to the first gossip node.
 		if gossipAddr == "" {

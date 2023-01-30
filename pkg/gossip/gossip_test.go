@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
 )
 
 // TestGossipInfoStore verifies operation of gossip instance infostore.
@@ -706,7 +707,8 @@ func TestGossipJoinTwoClusters(t *testing.T) {
 		clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
 		rpcContext := rpc.NewInsecureTestingContextWithClusterID(ctx, clock, stopper, clusterID)
 
-		server := rpc.NewServer(rpcContext)
+		server, err := rpc.NewServer(rpcContext)
+		require.NoError(t, err)
 
 		// node ID must be non-zero
 		gnode := NewTest(roachpb.NodeID(i+1), stopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef())
@@ -717,9 +719,7 @@ func TestGossipJoinTwoClusters(t *testing.T) {
 		gnode.clusterID.Set(context.Background(), clusterIDs[i])
 
 		ln, err := netutil.ListenAndServeGRPC(stopper, server, util.IsolatedTestAddr)
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 		addrs = append(addrs, ln.Addr())
 
 		// Only the third node has addresses.

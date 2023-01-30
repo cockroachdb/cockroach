@@ -336,7 +336,10 @@ func newMockSideTransportGRPCServerWithOpts(
 	}
 
 	clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
-	grpcServer := rpc.NewServer(rpc.NewInsecureTestingContext(ctx, clock, stopper))
+	grpcServer, err := rpc.NewServer(rpc.NewInsecureTestingContext(ctx, clock, stopper))
+	if err != nil {
+		return nil, err
+	}
 	ctpb.RegisterSideTransportServer(grpcServer, receiver)
 	go func() {
 		_ /* err */ = grpcServer.Serve(lis)

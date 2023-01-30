@@ -491,7 +491,8 @@ func TestInternalClientAdapterRunsInterceptors(t *testing.T) {
 	serverCtx.Config.AdvertiseAddr = "127.0.0.1:8888"
 	serverCtx.NodeID.Set(context.Background(), 1)
 
-	_ /* server */, serverInterceptors := NewServerEx(serverCtx)
+	_ /* server */, serverInterceptors, err := NewServerEx(serverCtx)
+	require.NoError(t, err)
 
 	// Pile on one more interceptor to make sure it's called.
 	var serverUnaryInterceptor1Called, serverUnaryInterceptor2Called bool
@@ -592,7 +593,9 @@ func TestInternalClientAdapterWithClientStreamInterceptors(t *testing.T) {
 	serverCtx.Config.AdvertiseAddr = "127.0.0.1:8888"
 	serverCtx.NodeID.Set(context.Background(), 1)
 
-	_ /* server */, serverInterceptors := NewServerEx(serverCtx)
+	_ /* server */, serverInterceptors, err := NewServerEx(serverCtx)
+	require.NoError(t, err)
+
 	testutils.RunTrueAndFalse(t, "use_mux_rangefeed", func(t *testing.T, useMux bool) {
 		var clientInterceptors ClientInterceptorInfo
 		var s *testClientStream
@@ -667,7 +670,9 @@ func TestInternalClientAdapterWithServerStreamInterceptors(t *testing.T) {
 	serverCtx.Config.AdvertiseAddr = "127.0.0.1:8888"
 	serverCtx.NodeID.Set(context.Background(), 1)
 
-	_ /* server */, serverInterceptors := NewServerEx(serverCtx)
+	_ /* server */, serverInterceptors, err := NewServerEx(serverCtx)
+	require.NoError(t, err)
+
 	testutils.RunTrueAndFalse(t, "use_mux_rangefeed", func(t *testing.T, useMux bool) {
 		const int1Name = "interceptor 1"
 		serverInterceptors.StreamInterceptors = append(serverInterceptors.StreamInterceptors,
@@ -821,7 +826,9 @@ func BenchmarkInternalClientAdapter(b *testing.B) {
 	serverCtx.Config.AdvertiseAddr = "127.0.0.1:8888"
 	serverCtx.NodeID.Set(context.Background(), 1)
 
-	_, interceptors := NewServerEx(serverCtx)
+	_, interceptors, err := NewServerEx(serverCtx)
+	require.NoError(b, err)
+
 	internal := &internalServer{}
 	serverCtx.SetLocalInternalServer(
 		internal,
@@ -832,7 +839,7 @@ func BenchmarkInternalClientAdapter(b *testing.B) {
 	require.True(b, ok)
 	require.Equal(b, internal, lic.server)
 	ba := &roachpb.BatchRequest{}
-	_, err := lic.Batch(ctx, ba)
+	_, err = lic.Batch(ctx, ba)
 	require.NoError(b, err)
 
 	b.ReportAllocs()
@@ -2489,7 +2496,8 @@ func TestRejectDialOnQuiesce(t *testing.T) {
 		defer srvStopper.Stop(ctx)
 		serverCtx := newTestContext(clusID, clock, maxOffset, srvStopper)
 		serverCtx.NodeID.Set(ctx, serverNodeID)
-		s := NewServer(serverCtx)
+		s, err := NewServer(serverCtx)
+		require.NoError(t, err)
 		ln, err := netutil.ListenAndServeGRPC(srvStopper, s, util.TestAddr)
 		require.NoError(t, err)
 		addr = ln.Addr().String()

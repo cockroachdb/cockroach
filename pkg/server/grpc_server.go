@@ -30,16 +30,19 @@ type grpcServer struct {
 	mode                   serveMode
 }
 
-func newGRPCServer(rpcCtx *rpc.Context) *grpcServer {
+func newGRPCServer(rpcCtx *rpc.Context) (*grpcServer, error) {
 	s := &grpcServer{}
 	s.mode.set(modeInitializing)
-	srv, interceptorInfo := rpc.NewServerEx(
+	srv, interceptorInfo, err := rpc.NewServerEx(
 		rpcCtx, rpc.WithInterceptor(func(path string) error {
 			return s.intercept(path)
 		}))
+	if err != nil {
+		return nil, err
+	}
 	s.Server = srv
 	s.serverInterceptorsInfo = interceptorInfo
-	return s
+	return s, nil
 }
 
 type serveMode int32

@@ -154,9 +154,9 @@ func WithInterceptor(f func(fullMethod string) error) ServerOption {
 // NewServer sets up an RPC server. Depending on the ServerOptions, the Server
 // either expects incoming connections from KV nodes, or from tenant SQL
 // servers.
-func NewServer(rpcCtx *Context, opts ...ServerOption) *grpc.Server {
-	srv, _ /* interceptors */ := NewServerEx(rpcCtx, opts...)
-	return srv
+func NewServer(rpcCtx *Context, opts ...ServerOption) (*grpc.Server, error) {
+	srv, _ /* interceptors */, err := NewServerEx(rpcCtx, opts...)
+	return srv, err
 }
 
 // ServerInterceptorInfo contains the server-side interceptors that a server
@@ -181,7 +181,9 @@ type ClientInterceptorInfo struct {
 // been registered with gRPC for the server. These interceptors can be used
 // manually when bypassing gRPC to call into the server (like the
 // internalClientAdapter does).
-func NewServerEx(rpcCtx *Context, opts ...ServerOption) (*grpc.Server, ServerInterceptorInfo) {
+func NewServerEx(
+	rpcCtx *Context, opts ...ServerOption,
+) (s *grpc.Server, sii ServerInterceptorInfo, err error) {
 	var o serverOpts
 	for _, f := range opts {
 		f(&o)
@@ -210,7 +212,7 @@ func NewServerEx(rpcCtx *Context, opts ...ServerOption) (*grpc.Server, ServerInt
 	if !rpcCtx.Config.Insecure {
 		tlsConfig, err := rpcCtx.GetServerTLSConfig()
 		if err != nil {
-			panic(err)
+			return nil, sii, err
 		}
 		grpcOpts = append(grpcOpts, grpc.Creds(credentials.NewTLS(tlsConfig)))
 	}
@@ -279,12 +281,12 @@ func NewServerEx(rpcCtx *Context, opts ...ServerOption) (*grpc.Server, ServerInt
 	grpcOpts = append(grpcOpts, grpc.ChainUnaryInterceptor(unaryInterceptor...))
 	grpcOpts = append(grpcOpts, grpc.ChainStreamInterceptor(streamInterceptor...))
 
-	s := grpc.NewServer(grpcOpts...)
+	s = grpc.NewServer(grpcOpts...)
 	RegisterHeartbeatServer(s, rpcCtx.NewHeartbeatService())
 	return s, ServerInterceptorInfo{
 		UnaryInterceptors:  unaryInterceptor,
 		StreamInterceptors: streamInterceptor,
-	}
+	}, nil
 }
 
 // Connection is a wrapper around grpc.ClientConn. It prevents the underlying
