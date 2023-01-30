@@ -99,6 +99,13 @@ CheckConstraint :  Expression
 CheckConstraint :  FromHashShardedColumn
 CheckConstraint :  IndexIDForValidation
 
+object CheckConstraintUnvalidated
+
+CheckConstraintUnvalidated :  TableID
+CheckConstraintUnvalidated :  ConstraintID
+CheckConstraintUnvalidated : []ColumnIDs
+CheckConstraintUnvalidated :  Expression
+
 object ForeignKeyConstraint
 
 ForeignKeyConstraint :  TableID
@@ -369,6 +376,7 @@ Table <|-- TemporaryIndex
 View <|-- TemporaryIndex
 Table <|-- UniqueWithoutIndexConstraint
 Table <|-- CheckConstraint
+Table <|-- CheckConstraintUnvalidated
 Table <|-- ForeignKeyConstraint
 Table <|-- TableComment
 View <|-- TableComment

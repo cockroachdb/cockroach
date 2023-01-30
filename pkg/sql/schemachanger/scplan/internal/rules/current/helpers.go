@@ -65,7 +65,15 @@ func isSubjectTo2VersionInvariant(e scpb.Element) bool {
 	// TODO(ajwerner): This should include constraints and enum values but it
 	// currently does not because we do not support dropping them unless we're
 	// dropping the descriptor and we do not support adding them.
-	return isIndex(e) || isColumn(e) || isNonIndexBackedConstraint(e)
+	if isIndex(e) || isColumn(e) {
+		return true
+	}
+	switch e.(type) {
+	case *scpb.CheckConstraint, *scpb.UniqueWithoutIndexConstraint, *scpb.ForeignKeyConstraint,
+		*scpb.ColumnNotNull:
+		return true
+	}
+	return false
 }
 
 func isIndex(e scpb.Element) bool {
@@ -133,6 +141,11 @@ func getExpression(element scpb.Element) (*scpb.Expression, error) {
 			return nil, nil
 		}
 		return &e.Expression, nil
+	case *scpb.CheckConstraintUnvalidated:
+		if e == nil {
+			return nil, nil
+		}
+		return &e.Expression, nil
 	case *scpb.FunctionParamDefaultExpression:
 		if e == nil {
 			return nil, nil
@@ -184,36 +197,42 @@ func isIndexDependent(e scpb.Element) bool {
 	return false
 }
 
-// isNonIndexBackedConstraint a non-index-backed constraint.
+// CRDB supports five constraints of two categories:
+// - PK, Unique (index-backed)
+// - Check, UniqueWithoutIndex, FK (non-index-backed)
+func isConstraint(e scpb.Element) bool {
+	return isIndex(e) || isNonIndexBackedConstraint(e)
+}
+
+// isNonIndexBackedConstraint returns true if `e` is a non-index-backed constraint.
 func isNonIndexBackedConstraint(e scpb.Element) bool {
 	switch e.(type) {
-	case *scpb.CheckConstraint, *scpb.ForeignKeyConstraint, *scpb.UniqueWithoutIndexConstraint,
+	case *scpb.CheckConstraint, *scpb.UniqueWithoutIndexConstraint, *scpb.ForeignKeyConstraint,
 		*scpb.ColumnNotNull:
 		return true
-	}
-	return false
-}
-
-func isConstraint(e scpb.Element) bool {
-	switch e.(type) {
-	case *scpb.PrimaryIndex, *scpb.SecondaryIndex, *scpb.TemporaryIndex:
-		return true
-	case *scpb.CheckConstraint, *scpb.UniqueWithoutIndexConstraint, *scpb.ForeignKeyConstraint:
+	case *scpb.CheckConstraintUnvalidated:
 		return true
 	}
 	return false
 }
 
-// isCrossDescriptorConstraint are constraints that might reference
-// other descriptors:
-//   - FKs can reference other table
-//   - Checks can reference other sequences/types
+// isNonIndexBackedCrossDescriptorConstraint returns true if `e` is a
+// non-index-backed constraint and it can potentially reference another
+// descriptor.
 //
-// Those constraints need to be dropped first when we are dropping either
-// the referencing or reference descriptor.
-func isCrossDescriptorConstraint(e scpb.Element) bool {
+// This filter exists because in general we need to drop the constraint first
+// before dropping referencing/referenced descriptor. Read rules that use
+// this filter for more details.
+//
+// TODO (xiang): UniqueWithoutIndex and UniqueWithoutIndexNotValid should
+// also be treated as cross-descriptor constraint because its partial predicate
+// can references other descriptors.
+func isNonIndexBackedCrossDescriptorConstraint(e scpb.Element) bool {
 	switch e.(type) {
-	case *scpb.ForeignKeyConstraint, *scpb.CheckConstraint:
+	case *scpb.CheckConstraint, *scpb.UniqueWithoutIndexConstraint,
+		*scpb.ForeignKeyConstraint:
+		return true
+	case *scpb.CheckConstraintUnvalidated:
 		return true
 	}
 	return false

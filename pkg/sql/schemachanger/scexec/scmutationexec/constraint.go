@@ -56,8 +56,8 @@ func (i *immediateVisitor) SetConstraintName(ctx context.Context, op scop.SetCon
 	return nil
 }
 
-func (i *immediateVisitor) MakeAbsentCheckConstraintWriteOnly(
-	ctx context.Context, op scop.MakeAbsentCheckConstraintWriteOnly,
+func (i *immediateVisitor) AddCheckConstraint(
+	ctx context.Context, op scop.AddCheckConstraint,
 ) error {
 	tbl, err := i.checkOutTable(ctx, op.TableID)
 	if err != nil || tbl.Dropped() {
@@ -67,21 +67,20 @@ func (i *immediateVisitor) MakeAbsentCheckConstraintWriteOnly(
 		tbl.NextConstraintID = op.ConstraintID + 1
 	}
 
-	// We should have already validated that the check constraint
-	// is syntactically valid in the builder, so we just need to
-	// enqueue it to the descriptor's mutation slice.
 	ck := &descpb.TableDescriptor_CheckConstraint{
 		Expr:                  string(op.CheckExpr),
 		Name:                  tabledesc.ConstraintNamePlaceholder(op.ConstraintID),
-		Validity:              descpb.ConstraintValidity_Validating,
+		Validity:              op.Validity,
 		ColumnIDs:             op.ColumnIDs,
 		FromHashShardedColumn: op.FromHashShardedColumn,
 		ConstraintID:          op.ConstraintID,
 	}
-	enqueueNonIndexMutation(tbl, tbl.AddCheckMutation, ck, descpb.DescriptorMutation_ADD)
-	// Fast-forward the mutation state to WRITE_ONLY because this constraint
-	// is now considered as enforced.
-	tbl.Mutations[len(tbl.Mutations)-1].State = descpb.DescriptorMutation_WRITE_ONLY
+	if op.Validity == descpb.ConstraintValidity_Validating {
+		// A validating constraint needs to transition through an intermediate state
+		// so we enqueue a mutation for it and fast-forward it to WRITE_ONLY state.
+		enqueueNonIndexMutation(tbl, tbl.AddCheckMutation, ck, descpb.DescriptorMutation_ADD)
+		tbl.Mutations[len(tbl.Mutations)-1].State = descpb.DescriptorMutation_WRITE_ONLY
+	}
 	tbl.Checks = append(tbl.Checks, ck)
 	return nil
 }

@@ -59,8 +59,8 @@ var supportedAlterTableStatements = map[reflect.Type]supportedAlterTableCommand{
 			return true
 		}
 
-		// Support ALTER TABLE ... ADD CONSTRAINT CHECK
-		if _, ok := t.ConstraintDef.(*tree.CheckConstraintTableDef); ok && t.ValidationBehavior == tree.ValidationDefault {
+		// Support ALTER TABLE ... ADD CONSTRAINT CHECK [NOT VALID]
+		if _, ok := t.ConstraintDef.(*tree.CheckConstraintTableDef); ok {
 			return true
 		}
 
@@ -83,6 +83,7 @@ var alterTableAddConstraintMinSupportedClusterVersion = map[string]clusterversio
 	"ADD_CHECK_DEFAULT":                clusterversion.V23_1Start,
 	"ADD_FOREIGN_KEY_DEFAULT":          clusterversion.V23_1Start,
 	"ADD_UNIQUE_WITHOUT_INDEX_DEFAULT": clusterversion.V23_1Start,
+	"ADD_CHECK_SKIP":                   clusterversion.V23_1,
 }
 
 func init() {

@@ -21,12 +21,13 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ADD CHECK (i > 0)
 │       │
 │       └── • 1 Mutation operation
 │           │
-│           └── • MakeAbsentCheckConstraintWriteOnly
+│           └── • AddCheckConstraint
 │                 CheckExpr: i > 0:::INT8
 │                 ColumnIDs:
 │                 - 1
 │                 ConstraintID: 2
 │                 TableID: 104
+│                 Validity: 2
 │
 ├── • PreCommitPhase
 │   │
@@ -54,12 +55,13 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ADD CHECK (i > 0)
 │       │
 │       └── • 3 Mutation operations
 │           │
-│           ├── • MakeAbsentCheckConstraintWriteOnly
+│           ├── • AddCheckConstraint
 │           │     CheckExpr: i > 0:::INT8
 │           │     ColumnIDs:
 │           │     - 1
 │           │     ConstraintID: 2
 │           │     TableID: 104
+│           │     Validity: 2
 │           │
 │           ├── • SetJobStateOnDescriptor
 │           │     DescriptorID: 104
@@ -106,7 +108,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ADD CHECK (i > 0)
         │   │   │     rule: "CheckConstraint transitions to PUBLIC uphold 2-version invariant: VALIDATED->PUBLIC"
         │   │   │
         │   │   └── • SameStagePrecedence dependency from PUBLIC ConstraintWithoutIndexName:{DescID: 104, Name: check_i, ConstraintID: 2}
-        │   │         rule: "constraint dependent public right before constraint"
+        │   │         rule: "constraint dependent public right before complex constraint"
         │   │
         │   └── • ConstraintWithoutIndexName:{DescID: 104, Name: check_i, ConstraintID: 2}
         │         ABSENT → PUBLIC

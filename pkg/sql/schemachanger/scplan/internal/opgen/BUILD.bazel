@@ -8,6 +8,7 @@ go_library(
         "op_gen.go",
         "opgen_alias_type.go",
         "opgen_check_constraint.go",
+        "opgen_check_constraint_unvalidated.go",
         "opgen_column.go",
         "opgen_column_comment.go",
         "opgen_column_default_expression.go",
