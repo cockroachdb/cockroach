@@ -44,34 +44,13 @@ type Clock struct {
 	// wallClock is used to read the current clock.
 	wallClock WallClock
 
-	// The maximal offset of the HLC's wall time from the underlying physical
-	// clock. A well-chosen value is large enough to ignore a reasonable amount
-	// of clock skew but will prevent ill-configured nodes from dramatically
-	// skewing the wall time of the clock into the future.
+	// The maximal clock skew between any two nodes in the cluster, as promised by
+	// the operator. See MaxOffset().
 	//
-	// RPC heartbeats compare detected clock skews against this value to protect
-	// data consistency.
-	//
-	// TODO(tamird): make this dynamic in the distant future. See also:
+	// NB: we track making this dynamic:
 	// https://github.com/cockroachdb/cockroach/issues/75564
 	maxOffset time.Duration
-
-	// toleratedOffset specifies the tolerated clock offset with other nodes in
-	// the cluster, as measured via RPC heartbeats. If more than half of peers
-	// have an offset greater than ToleratedOffset, the node will self-terminate
-	// to protect data consistency.
-	//
-	// maxOffset still applies for linearizability guarantees (i.e. the real clock
-	// offset must be below it to avoid stale reads), but toleratedOffset can be
-	// used to tweak sensitivity to estimated clock skew. For example:
-	//
-	// * toleratedOffset < maxOffset: aggressively kill the node as the estimated
-	//   clock skew approaches the maxOffset.
-	//
-	// * toleratedOffset > maxOffset: the underlying clock infrastructure is
-	//   very reliable, so maxOffset is set very low (e.g. 10 ms), but
-	//   toleratedOffset is set much higher to avoid spurious termination
-	//   due to RPC latency spikes.
+	// See ToleratedOffset().
 	toleratedOffset time.Duration
 
 	// lastPhysicalTime reports the last measured physical time. This
@@ -225,7 +204,7 @@ func NewClockForTesting(wallClock WallClock) *Clock {
 // linearizability and lease guarantees. toleratedOffset specifies the tolerated
 // clock offset between cluster nodes as measured by RPC heartbeats, terminating
 // the node via RemoteClockMonitor if violated. A value of 0 will disable the
-// corresponding check. See Clock.maxOffset and Clock.toleratedOffset for
+// corresponding check. See Clock.MaxOffset() and Clock.ToleratedOffset() for
 // details.
 func NewClock(wallClock WallClock, maxOffset, toleratedOffset time.Duration) *Clock {
 	return &Clock{
@@ -321,16 +300,33 @@ func (c *Clock) StartMonitoringForwardClockJumps(
 	return nil
 }
 
-// MaxOffset returns the maximal clock offset to any node in the cluster.
+// MaxOffset returns the maximal clock offset to any node in the cluster as
+// specified by the operator. This is used by the cluster to safely hand off
+// leases and enforce read-what-you-wrote.
+//
+// A known consequence of clocks drifting apart by more than MaxOffset is the
+// possibility of stale reads. At an architectural level CockroachDB *should*
+// still be serializable in this case, but this has not been conclusively
+// verified and should be taken as conjecture.
 func (c *Clock) MaxOffset() time.Duration {
 	return c.maxOffset
 }
 
-// ToleratedOffset returns the tolerated clock offset with other nodes in the
-// cluster, as measured via RPC heartbeats. It can be less than, equal to, or
-// greater than MaxOffset depending on the desired behavior, see
-// Clock.toleratedOffset for details. A value of 0 means offset checking is
-// disabled.
+// ToleratedOffset returns the clock offset with other nodes in the
+// cluster, as measured via RPC heartbeats, that will be tolerated
+// (i.e. won't lead to the node exiting with a fatal error).
+//
+// A ToleratedOffset of zero disables this mechanism, i.e. behaves like
+// an infinite tolerated offset.
+//
+// Typically, ToleratedOffset is a slightly smaller than MaxOffset (to avoid
+// correctness issues should the actual offset regress further) but it can be
+// configured to be more lenient, instead taking the risk of a correctness
+// issues over a period of unavailability. The latter is appealing in particular
+// when clocks are very tightly synchronized and thus the MaxOffset is
+// configured to a very small value for performance. In this case, a transient
+// MaxOffset violation is less likely to cause any issues (such as stale reads)
+// since the window for such events is very small.
 func (c *Clock) ToleratedOffset() time.Duration {
 	return c.toleratedOffset
 }
