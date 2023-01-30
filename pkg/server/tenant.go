@@ -387,6 +387,16 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 	// Start a context for the asynchronous network workers.
 	workersCtx := s.AnnotateCtx(context.Background())
 
+	if !s.sqlServer.cfg.Insecure {
+		cm, err := s.rpcContext.GetCertificateManager()
+		if err != nil {
+			return err
+		}
+		// Ensure that SIGHUP will make this cert manager reload its certs
+		// from disk.
+		cm.RegisterSignalHandler(workersCtx, s.stopper)
+	}
+
 	// If DisableHTTPListener is set, we are relying on the HTTP request
 	// routing performed by the serverController.
 	if !s.sqlServer.cfg.DisableHTTPListener {
@@ -823,6 +833,29 @@ func makeTenantSQLServerArgs(
 		Settings:         st,
 		Knobs:            rpcTestingKnobs,
 	})
+
+	if !baseCfg.Insecure {
+		// This check mirrors that done in NewServer().
+		// Needed for receiving RPC connections until
+		// this issue is fixed:
+		// https://github.com/cockroachdb/cockroach/issues/92524
+		if _, err := rpcContext.GetServerTLSConfig(); err != nil {
+			return sqlServerArgs{}, err
+		}
+		// Needed for outgoing connections, until this issue
+		// is fixed:
+		// https://github.com/cockroachdb/cockroach/issues/96215
+		if _, err := rpcContext.GetTenantTLSConfig(); err != nil {
+			return sqlServerArgs{}, err
+		}
+		cm, err := rpcContext.GetCertificateManager()
+		if err != nil {
+			return sqlServerArgs{}, err
+		}
+		// Expose cert expirations in metrics.
+		registry.AddMetricStruct(cm.Metrics())
+	}
+
 	registry.AddMetricStruct(rpcContext.Metrics())
 	registry.AddMetricStruct(rpcContext.RemoteClocks.Metrics())
 
