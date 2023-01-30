@@ -427,6 +427,34 @@ func (b *Batch) Put(key, value interface{}) {
 	b.put(key, value, false)
 }
 
+// PutBytes allows multiple []byte value to be added to the batch. nil keys are
+// allowed and will be skipped.
+func (b *Batch) PutBytes(keys []roachpb.Key, values [][]byte) {
+	reqs := make([]roachpb.PutRequest, len(keys))
+	b.bulkRequest(keys, func(reqIdx, keyIdx int) (roachpb.Request, int) {
+		pr := &reqs[reqIdx]
+		k := keys[keyIdx]
+		pr.Key = k
+		pr.Value.InitChecksum(k)
+		pr.Value.SetBytes(values[keyIdx])
+		return pr, len(pr.Value.RawBytes)
+	})
+}
+
+// PutTuples allows multiple tuple value type puts to be added to the batch. nil
+// keys are allowed and will be skipped.
+func (b *Batch) PutTuples(keys []roachpb.Key, values [][]byte) {
+	reqs := make([]roachpb.PutRequest, len(keys))
+	b.bulkRequest(keys, func(reqIdx, keyIdx int) (roachpb.Request, int) {
+		pr := &reqs[reqIdx]
+		k := keys[keyIdx]
+		pr.Key = k
+		pr.Value.InitChecksum(k)
+		pr.Value.SetTuple(values[keyIdx])
+		return pr, len(pr.Value.RawBytes)
+	})
+}
+
 // PutInline sets the value for a key, but does not maintain
 // multi-version values. The most recent value is always overwritten.
 // Inline values cannot be mutated transactionally and should be used
@@ -510,6 +538,34 @@ func (b *Batch) cputInternal(
 	b.initResult(1, 1, notRaw, nil)
 }
 
+// CPutTuples allows multiple CPut tuple requests to be added to the batch as
+// tuples. nil keys are allowed and will be skipped.
+func (b *Batch) CPutTuples(keys []roachpb.Key, values [][]byte) {
+	reqs := make([]roachpb.ConditionalPutRequest, len(keys))
+	b.bulkRequest(keys, func(reqIdx, keyIdx int) (roachpb.Request, int) {
+		pr := &reqs[reqIdx]
+		k := keys[keyIdx]
+		pr.Key = k
+		pr.Value.InitChecksum(k)
+		pr.Value.SetTuple(values[keyIdx])
+		return pr, len(pr.Value.RawBytes)
+	})
+}
+
+// CPutValues allows multiple ConditionalPutRequests to be added to the batch.
+// nil keys are allowed and will be skipped.
+func (b *Batch) CPutValues(keys []roachpb.Key, values []roachpb.Value) {
+	reqs := make([]roachpb.ConditionalPutRequest, len(keys))
+	b.bulkRequest(keys, func(reqIdx, keyIdx int) (roachpb.Request, int) {
+		pr := &reqs[reqIdx]
+		k := keys[keyIdx]
+		pr.Key = k
+		pr.Value.InitChecksum(k)
+		pr.Value.RawBytes = values[keyIdx].RawBytes
+		return pr, len(pr.Value.RawBytes)
+	})
+}
+
 // InitPut sets the first value for a key to value. An ConditionFailedError is
 // reported if a value already exists for the key and it's not equal to the
 // value passed in. If failOnTombstones is set to true, tombstones will return
@@ -532,6 +588,34 @@ func (b *Batch) InitPut(key, value interface{}, failOnTombstones bool) {
 	b.appendReqs(roachpb.NewInitPut(k, v, failOnTombstones))
 	b.approxMutationReqBytes += len(k) + len(v.RawBytes)
 	b.initResult(1, 1, notRaw, nil)
+}
+
+// InitPutBytes allows multiple []byte value type InitPut requests to be added to
+// the batch. nil keys are allowed and will be skipped.
+func (b *Batch) InitPutBytes(keys []roachpb.Key, values [][]byte) {
+	reqs := make([]roachpb.InitPutRequest, len(keys))
+	b.bulkRequest(keys, func(reqIdx, keyIdx int) (roachpb.Request, int) {
+		pr := &reqs[reqIdx]
+		k := keys[keyIdx]
+		pr.Key = k
+		pr.Value.InitChecksum(k)
+		pr.Value.SetBytes(values[keyIdx])
+		return pr, len(pr.Value.RawBytes)
+	})
+}
+
+// InitPutTuples allows multiple tuple value type InitPut to be added to the
+// batch. nil keys are allowed and will be skipped.
+func (b *Batch) InitPutTuples(keys []roachpb.Key, values [][]byte) {
+	reqs := make([]roachpb.InitPutRequest, len(keys))
+	b.bulkRequest(keys, func(reqIdx, keyIdx int) (roachpb.Request, int) {
+		pr := &reqs[reqIdx]
+		k := keys[keyIdx]
+		pr.Key = k
+		pr.Value.InitChecksum(k)
+		pr.Value.SetTuple(values[keyIdx])
+		return pr, len(pr.Value.RawBytes)
+	})
 }
 
 // Inc increments the integer value at key. If the key does not exist it will
@@ -907,4 +991,30 @@ func (b *Batch) barrier(s, e interface{}) {
 	}
 	b.appendReqs(req)
 	b.initResult(1, 0, notRaw, nil)
+}
+
+func (b *Batch) bulkRequest(
+	keys []roachpb.Key,
+	requestFactory func(reqIdx, keyIdx int) (req roachpb.Request, valueSize int),
+) {
+	reqs := make([]roachpb.Request, len(keys))
+	if b.Results == nil && len(keys) > len(b.resultsBuf) {
+		b.Results = make([]Result, 0, len(keys))
+	}
+	reqIdx := 0
+	for i, key := range keys {
+		// Ignore nil keys
+		if key == nil {
+			continue
+		}
+		var numBytes int
+		reqs[reqIdx], numBytes = requestFactory(reqIdx, i)
+		b.approxMutationReqBytes += len(key) + numBytes
+		b.initResult(1, 1, notRaw, nil)
+		reqIdx++
+	}
+	if reqIdx > 0 {
+		reqs = reqs[:reqIdx]
+		b.appendReqs(reqs...)
+	}
 }
