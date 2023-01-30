@@ -806,7 +806,96 @@ INSERT INTO f VALUES
   (36, '[[]]'),
   (37, '[{"a": [0, "b"]}, null, 1]'),
   (38, '[[0, 1, 2], {"b": "c"}]'),
-  (39, '[[0, [1, 2]]]')
+  (39, '[[0, [1, 2]]]'),
+  (40, '[[0, 1, 2]]'),
+  (41, '[[{"a": {"b": []}}]]')
+
+query T
+SELECT j FROM f@i WHERE j->0 @> '[0, 1, 2, 3]'
+----
+
+query T
+SELECT j FROM f@i WHERE j->0 @> '[0]'
+----
+[[0, 1, 2], {"b": "c"}]
+[[0, [1, 2]]]
+[[0, 1, 2]]
+
+query T
+SELECT j FROM f@i WHERE j->0->1 @> '[1, 2, 3]'
+----
+
+query T
+SELECT j FROM f@i WHERE j->0->1 @> '[1, 2]'
+----
+[[0, [1, 2]]]
+
+query T
+SELECT j FROM f@i WHERE j->0 @> '{"a": {}}'
+----
+[{"a": {"b": "c"}}, "d", "e"]
+
+query T
+SELECT j FROM f@i WHERE j->0 @> '{"a": {"b": "c"}}'
+----
+[{"a": {"b": "c"}}, "d", "e"]
+
+query T
+SELECT j FROM f@i WHERE j->0->1 @> '{"a": {"b": []}}'
+----
+[[{"a": {"b": []}}]]
+
+query T
+SELECT j FROM f@i WHERE j->'a'->0 @> '1'
+----
+{"a": [1, 2]}
+{"a": [1, 2, null]}
+
+query T
+SELECT j FROM f@i WHERE j->0->'a' @> '{"b": "c"}'
+----
+[{"a": {"b": "c"}}, "d", "e"]
+
+query T
+SELECT j FROM f@i WHERE j->0 <@ '[1, 2, 3]'
+----
+[1, 2, {"b": "c"}]
+[[]]
+
+query T
+SELECT j FROM f@i WHERE j->1 <@ '[1, 2, 3]'
+----
+[1, 2, {"b": "c"}]
+
+query T
+SELECT j FROM f@i WHERE j->0->0 <@ '[1, 2, 3]'
+----
+
+query T
+SELECT j FROM f@i WHERE j->2 <@ '["d", "e"]'
+----
+[{"a": {"b": "c"}}, "d", "e"]
+
+query T
+SELECT j FROM f@i WHERE j->0 <@ '{"a": {"b": "c"}}'
+----
+[{"a": {"b": "c"}}, "d", "e"]
+
+query T
+SELECT j FROM f@i WHERE j->0 <@ '["a", "b"]'
+----
+["a"]
+[[]]
+
+query T
+SELECT j FROM f@i WHERE j->0 <@ '"a"'
+----
+["a"]
+
+query T
+SELECT j FROM f@i WHERE j->0 <@ '1'
+----
+[1, 2, {"b": "c"}]
 
 query T
 SELECT j FROM f@i WHERE j->0 = '[]' ORDER BY k
@@ -873,6 +962,7 @@ SELECT j FROM f@i WHERE j->0->0 = '0' ORDER BY k
 ----
 [[0, 1, 2], {"b": "c"}]
 [[0, [1, 2]]]
+[[0, 1, 2]]
 
 query T
 SELECT j FROM f@i WHERE j->0->1 = '[1, 2]' ORDER BY k
