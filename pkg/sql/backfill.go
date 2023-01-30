@@ -2488,10 +2488,6 @@ func validateFkInTxn(
 	descsCol *descs.Collection,
 	fkName string,
 ) error {
-	var syntheticTable catalog.TableDescriptor
-	if srcTable.Version > srcTable.ClusterVersion().Version {
-		syntheticTable = srcTable
-	}
 	var fk *descpb.ForeignKeyConstraint
 	for i := range srcTable.OutboundFKs {
 		def := &srcTable.OutboundFKs[i]
@@ -2507,13 +2503,24 @@ func validateFkInTxn(
 	if err != nil {
 		return err
 	}
-	var syntheticDescs []catalog.Descriptor
-	if syntheticTable != nil {
-		syntheticDescs = append(syntheticDescs, syntheticTable)
-		if targetTable.GetID() == syntheticTable.GetID() {
-			targetTable = syntheticTable
-		}
+
+	// Unconditionally inject both the src and target tables into the internal
+	// executor to avoid the possibility that either end up leased during the
+	// validation query. This is required because if either were modified during
+	// this transaction and there was an attempt to lease them, we'd see restarts
+	// or deadlocks. It does not hurt to inject these tables even if they are
+	// unmodified.
+	//
+	// Note that later versions (22.2+) have more sophisticated descriptor
+	// management and interactions between transaction descriptors and the
+	// internal executor and thus they do not need this logic.
+	syntheticDescs := []catalog.Descriptor{srcTable}
+	if targetTable.GetID() == srcTable.GetID() {
+		targetTable = srcTable
+	} else {
+		syntheticDescs = append(syntheticDescs, targetTable)
 	}
+
 	ie := ief(ctx, sd)
 	return ie.WithSyntheticDescriptors(syntheticDescs, func() error {
 		return validateForeignKey(ctx, srcTable, targetTable, fk, ie, txn)
