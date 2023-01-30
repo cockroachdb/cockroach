@@ -21,10 +21,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -296,4 +298,27 @@ func DecodeRowInfo(
 		values[i] = datums[i].String()
 	}
 	return index, names, values, nil
+}
+
+// CheckFailed returns error message when a check constraint is violated.
+func CheckFailed(
+	ctx context.Context,
+	semaCtx *tree.SemaContext,
+	sessionData *sessiondata.SessionData,
+	tabDesc catalog.TableDescriptor,
+	check catalog.CheckConstraint,
+) error {
+	// Failed to satisfy CHECK constraint, so unwrap the serialized
+	// check expression to display to the user.
+	expr, err := schemaexpr.FormatExprForDisplay(
+		ctx, tabDesc, check.GetExpr(), semaCtx, sessionData, tree.FmtParsable,
+	)
+	if err != nil {
+		// If we ran into an error trying to read the check constraint, wrap it
+		// and return.
+		return pgerror.WithConstraintName(errors.Wrapf(err, "failed to satisfy CHECK constraint (%s)", check.GetExpr()), check.GetName())
+	}
+	return pgerror.WithConstraintName(pgerror.Newf(
+		pgcode.CheckViolation, "failed to satisfy CHECK constraint (%s)", expr,
+	), check.GetName())
 }

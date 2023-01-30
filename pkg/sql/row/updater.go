@@ -31,8 +31,8 @@ import (
 
 // Updater abstracts the key/value operations for updating table rows.
 type Updater struct {
-	Helper       rowHelper
-	DeleteHelper *rowHelper
+	Helper       RowHelper
+	DeleteHelper *RowHelper
 	FetchCols    []catalog.Column
 	// FetchColIDtoRowIndex must be kept in sync with FetchCols.
 	FetchColIDtoRowIndex  catalog.TableColMap
@@ -159,14 +159,14 @@ func MakeUpdater(
 		}
 	}
 
-	var deleteOnlyHelper *rowHelper
+	var deleteOnlyHelper *RowHelper
 	if len(deleteOnlyIndexes) > 0 {
-		rh := newRowHelper(codec, tableDesc, deleteOnlyIndexes, sv, internal, metrics)
+		rh := NewRowHelper(codec, tableDesc, deleteOnlyIndexes, sv, internal, metrics)
 		deleteOnlyHelper = &rh
 	}
 
 	ru := Updater{
-		Helper:                newRowHelper(codec, tableDesc, includeIndexes, sv, internal, metrics),
+		Helper:                NewRowHelper(codec, tableDesc, includeIndexes, sv, internal, metrics),
 		DeleteHelper:          deleteOnlyHelper,
 		FetchCols:             requestedCols,
 		FetchColIDtoRowIndex:  ColIDtoRowIndexFromCols(requestedCols),

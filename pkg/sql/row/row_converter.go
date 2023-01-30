@@ -74,6 +74,13 @@ func (i KVInserter) InitPut(key, value interface{}, failOnTombstones bool) {
 	})
 }
 
+func (c KVInserter) CPutTuples(kys []roachpb.Key, values [][]byte)        {}
+func (c KVInserter) CPutValues(kys []roachpb.Key, values []roachpb.Value) {}
+func (c KVInserter) PutBytes(kys []roachpb.Key, values [][]byte)          {}
+func (c KVInserter) InitPutBytes(kys []roachpb.Key, values [][]byte)      {}
+func (c KVInserter) PutTuples(kys []roachpb.Key, values [][]byte)         {}
+func (c KVInserter) InitPutTuples(kys []roachpb.Key, values [][]byte)     {}
+
 // GenerateInsertRow prepares a row tuple for insertion. It fills in default
 // expressions, verifies non-nullable columns, and checks column widths.
 //
