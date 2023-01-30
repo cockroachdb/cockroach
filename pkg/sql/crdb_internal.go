@@ -6953,7 +6953,8 @@ CREATE TABLE crdb_internal.%s (
   contention                 INTERVAL,
   problems                   STRING[] NOT NULL,
   causes                     STRING[] NOT NULL,
-  stmt_execution_ids         STRING[] NOT NULL
+  stmt_execution_ids         STRING[] NOT NULL,
+  cpu_nanos                  INT8
 )`
 
 var crdbInternalClusterTxnExecutionInsightsTable = virtualSchemaTable{
@@ -7081,6 +7082,7 @@ func populateTxnExecutionInsights(
 			problems,
 			causes,
 			stmtIDs,
+			tree.NewDInt(tree.DInt(insight.Transaction.CPUNanos)),
 		))
 
 		if err != nil {
@@ -7119,7 +7121,8 @@ CREATE TABLE crdb_internal.%s (
 	contention                 INTERVAL,
 	contention_events          JSONB,
 	index_recommendations      STRING[] NOT NULL,
-	implicit_txn               BOOL NOT NULL
+	implicit_txn               BOOL NOT NULL,
+	cpu_nanos                  INT8
 )`
 
 var crdbInternalClusterExecutionInsightsTable = virtualSchemaTable{
@@ -7249,6 +7252,7 @@ func populateStmtInsights(
 				contentionEvents,
 				indexRecommendations,
 				tree.MakeDBool(tree.DBool(insight.Transaction.ImplicitTxn)),
+				tree.NewDInt(tree.DInt(s.CPUNanos)),
 			))
 		}
 	}

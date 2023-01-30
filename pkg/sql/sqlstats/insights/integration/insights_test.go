@@ -99,7 +99,8 @@ func TestInsightsIntegration(t *testing.T) {
 			"start_time, "+
 			"end_time, "+
 			"full_scan, "+
-			"implicit_txn "+
+			"implicit_txn, "+
+			"cpu_nanos "+
 			"FROM crdb_internal.node_execution_insights where "+
 			"query = $1 and app_name = $2 ", "SELECT pg_sleep($1)", appName)
 
@@ -107,7 +108,8 @@ func TestInsightsIntegration(t *testing.T) {
 		var startInsights, endInsights time.Time
 		var fullScan bool
 		var implicitTxn bool
-		err = row.Scan(&query, &status, &startInsights, &endInsights, &fullScan, &implicitTxn)
+		var cpuNanos int64
+		err = row.Scan(&query, &status, &startInsights, &endInsights, &fullScan, &implicitTxn, &cpuNanos)
 
 		if err != nil {
 			return err
@@ -133,14 +135,16 @@ func TestInsightsIntegration(t *testing.T) {
 			"query, "+
 			"start_time, "+
 			"end_time, "+
-			"implicit_txn "+
+			"implicit_txn, "+
+			"cpu_nanos "+
 			"FROM crdb_internal.cluster_txn_execution_insights WHERE "+
 			"query = $1 and app_name = $2 ", "SELECT pg_sleep($1)", appName)
 
 		var query string
 		var startInsights, endInsights time.Time
 		var implicitTxn bool
-		err = row.Scan(&query, &startInsights, &endInsights, &implicitTxn)
+		var cpuNanos int64
+		err = row.Scan(&query, &startInsights, &endInsights, &implicitTxn, &cpuNanos)
 
 		if err != nil {
 			return err
