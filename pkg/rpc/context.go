@@ -2330,7 +2330,7 @@ func (rpcCtx *Context) runHeartbeat(
 			}
 
 			if err := errors.Wrap(
-				checkVersion(ctx, rpcCtx.Settings, response.ServerVersion),
+				checkVersion(ctx, rpcCtx.Settings.Version, response.ServerVersion),
 				"version compatibility check failed on ping response"); err != nil {
 				return err
 			}
@@ -2411,7 +2411,7 @@ func (rpcCtx *Context) NewHeartbeatService() *HeartbeatService {
 		disableClusterNameVerification:        rpcCtx.Config.DisableClusterNameVerification,
 		clusterID:                             rpcCtx.StorageClusterID,
 		nodeID:                                rpcCtx.NodeID,
-		settings:                              rpcCtx.Settings,
+		version:                               rpcCtx.Settings.Version,
 		onHandlePing:                          rpcCtx.OnIncomingPing,
 		testingAllowNamedRPCToAnonymousServer: rpcCtx.TestingAllowNamedRPCToAnonymousServer,
 	}
