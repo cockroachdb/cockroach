@@ -35,6 +35,11 @@ CREATE INDEX completed_idx ON system.statement_diagnostics_requests (completed, 
   STORING (statement_fingerprint, min_execution_latency, expires_at, sampling_probability)`
 
 	dropCompletedIdxV2 = `DROP INDEX IF EXISTS system.statement_diagnostics_requests@completed_idx_v2`
+
+	createCheckConstraint = `
+   ALTER TABLE system.statement_diagnostics_requests
+ADD CONSTRAINT check_sampling_probability
+         CHECK (sampling_probability BETWEEN 0.0 AND 1.0)`
 )
 
 // sampledStmtDiagReqsMigration changes the schema of the
@@ -82,6 +87,12 @@ func sampledStmtDiagReqsMigration(
 			schemaExistsFn: func(catalog.TableDescriptor, catalog.TableDescriptor, string) (bool, error) {
 				return false, nil
 			},
+		},
+		{
+			name:           "add-check-constraint",
+			schemaList:     []string{"check_sampling_probability"},
+			query:          createCheckConstraint,
+			schemaExistsFn: checkConstraintExists,
 		},
 	} {
 		if err := migrateTable(ctx, cs, d, op, keys.StatementDiagnosticsRequestsTableID,
