@@ -51,7 +51,14 @@ type generativeSplitAndScatterProcessor struct {
 	spec    execinfrapb.GenerativeSplitAndScatterSpec
 	output  execinfra.RowReceiver
 
-	scatterer splitAndScatterer
+	// scatterers contain the splitAndScatterers for the first group of split and
+	// scatter workers. Each worker needs its own scatterer as one cannot be used
+	// concurrently.
+	scatterers []splitAndScatterer
+	// secondSplitScatterers contain the splitAndScatterers for the second group
+	// of split workers.
+	secondSplitScatterers []splitAndScatterer
+
 	// cancelScatterAndWaitForWorker cancels the scatter goroutine and waits for
 	// it to finish.
 	cancelScatterAndWaitForWorker func()
@@ -72,24 +79,33 @@ func newGenerativeSplitAndScatterProcessor(
 	post *execinfrapb.PostProcessSpec,
 	output execinfra.RowReceiver,
 ) (execinfra.Processor, error) {
-
 	db := flowCtx.Cfg.DB
-	kr, err := MakeKeyRewriterFromRekeys(flowCtx.Codec(), spec.TableRekeys, spec.TenantRekeys,
-		false /* restoreTenantFromStream */)
-	if err != nil {
-		return nil, err
-	}
+	numSplitWorkers := int(spec.NumNodes)
+	numSecondSplitWorkers := 2 * numSplitWorkers
 
-	scatterer := makeSplitAndScatterer(db.KV(), kr)
-	if spec.ValidateOnly {
-		nodeID, _ := flowCtx.NodeID.OptionalNodeID()
-		scatterer = noopSplitAndScatterer{nodeID}
+	var scatterers []splitAndScatterer
+	for i := 0; i < numSplitWorkers+numSecondSplitWorkers; i++ {
+		var scatterer splitAndScatterer
+		if spec.ValidateOnly {
+			nodeID, _ := flowCtx.NodeID.OptionalNodeID()
+			scatterer = noopSplitAndScatterer{nodeID}
+		} else {
+			kr, err := MakeKeyRewriterFromRekeys(flowCtx.Codec(), spec.TableRekeys, spec.TenantRekeys,
+				false /* restoreTenantFromStream */)
+			if err != nil {
+				return nil, err
+			}
+			scatterer = makeSplitAndScatterer(db.KV(), kr)
+		}
+
+		scatterers = append(scatterers, scatterer)
 	}
 	ssp := &generativeSplitAndScatterProcessor{
-		flowCtx:   flowCtx,
-		spec:      spec,
-		output:    output,
-		scatterer: scatterer,
+		flowCtx:               flowCtx,
+		spec:                  spec,
+		output:                output,
+		scatterers:            scatterers[:numSplitWorkers],
+		secondSplitScatterers: scatterers[numSplitWorkers:],
 		// Large enough so that it never blocks.
 		doneScatterCh:     make(chan entryNode, spec.NumEntries),
 		routingDatumCache: make(map[roachpb.NodeID]rowenc.EncDatum),
@@ -124,7 +140,7 @@ func (gssp *generativeSplitAndScatterProcessor) Start(ctx context.Context) {
 		TaskName: "generativeSplitAndScatter-worker",
 		SpanOpt:  stop.ChildSpan,
 	}, func(ctx context.Context) {
-		gssp.scatterErr = runGenerativeSplitAndScatter(scatterCtx, gssp.flowCtx, &gssp.spec, gssp.scatterer, gssp.doneScatterCh)
+		gssp.scatterErr = runGenerativeSplitAndScatter(scatterCtx, gssp.flowCtx, &gssp.spec, gssp.scatterers, gssp.secondSplitScatterers, gssp.doneScatterCh)
 		cancel()
 		close(gssp.doneScatterCh)
 		close(workerDone)
@@ -223,14 +239,15 @@ func runGenerativeSplitAndScatter(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
 	spec *execinfrapb.GenerativeSplitAndScatterSpec,
-	scatterer splitAndScatterer,
+	scatterers []splitAndScatterer,
+	secondSplitScatterers []splitAndScatterer,
 	doneScatterCh chan<- entryNode,
 ) error {
 	log.Infof(ctx, "Running generative split and scatter with %d total spans, %d chunk size, %d nodes",
 		spec.NumEntries, spec.ChunkSize, spec.NumNodes)
 	g := ctxgroup.WithContext(ctx)
 
-	splitWorkers := int(spec.NumNodes)
+	splitWorkers := len(scatterers)
 	restoreSpanEntriesCh := make(chan execinfrapb.RestoreSpanEntry, splitWorkers*int(spec.ChunkSize))
 	g.GoCtx(func(ctx context.Context) error {
 		defer close(restoreSpanEntriesCh)
@@ -291,6 +308,7 @@ func runGenerativeSplitAndScatter(
 	importSpanChunksCh := make(chan scatteredChunk, splitWorkers*2)
 	g2 := ctxgroup.WithContext(ctx)
 	for worker := 0; worker < splitWorkers; worker++ {
+		worker := worker
 		g2.GoCtx(func(ctx context.Context) error {
 			// Chunks' leaseholders should be randomly placed throughout the
 			// cluster.
@@ -299,11 +317,11 @@ func runGenerativeSplitAndScatter(
 				if !importSpanChunk.splitKey.Equal(roachpb.Key{}) {
 					// Split at the start of the next chunk, to partition off a
 					// prefix of the space to scatter.
-					if err := scatterer.split(ctx, flowCtx.Codec(), importSpanChunk.splitKey); err != nil {
+					if err := scatterers[worker].split(ctx, flowCtx.Codec(), importSpanChunk.splitKey); err != nil {
 						return err
 					}
 				}
-				chunkDestination, err := scatterer.scatter(ctx, flowCtx.Codec(), scatterKey)
+				chunkDestination, err := scatterers[worker].scatter(ctx, flowCtx.Codec(), scatterKey)
 				if err != nil {
 					return err
 				}
@@ -342,8 +360,8 @@ func runGenerativeSplitAndScatter(
 
 	// TODO(pbardea): This tries to cover for a bad scatter by having 2 * the
 	// number of nodes in the cluster. Is it necessary?
-	splitScatterWorkers := 2 * splitWorkers
-	for worker := 0; worker < splitScatterWorkers; worker++ {
+	for worker := 0; worker < len(secondSplitScatterers); worker++ {
+		worker := worker
 		g.GoCtx(func(ctx context.Context) error {
 			for importSpanChunk := range importSpanChunksCh {
 				chunkDestination := importSpanChunk.destination
@@ -355,7 +373,7 @@ func runGenerativeSplitAndScatter(
 					if nextChunkIdx < len(importSpanChunk.entries) {
 						// Split at the next entry.
 						splitKey = importSpanChunk.entries[nextChunkIdx].Span.Key
-						if err := scatterer.split(ctx, flowCtx.Codec(), splitKey); err != nil {
+						if err := secondSplitScatterers[worker].split(ctx, flowCtx.Codec(), splitKey); err != nil {
 							return err
 						}
 					}
