@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/ui"
+	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -307,7 +308,7 @@ func (s *authenticationServer) createSessionFor(
 func (s *authenticationServer) UserLogout(
 	ctx context.Context, req *serverpb.UserLogoutRequest,
 ) (*serverpb.UserLogoutResponse, error) {
-	md, ok := metadata.FromIncomingContext(ctx)
+	md, ok := grpcutil.FastFromIncomingContext(ctx)
 	if !ok {
 		return nil, apiInternalError(ctx, fmt.Errorf("couldn't get incoming context"))
 	}
