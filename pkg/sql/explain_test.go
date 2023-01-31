@@ -21,6 +21,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/internal/sqlsmith"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -28,8 +30,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 )
 
 func TestStatementReuses(t *testing.T) {
@@ -467,5 +473,137 @@ func TestExplainAnalyzeWarnings(t *testing.T) {
 			}
 		}
 		assert.Equal(t, tc.expectWarning, warningFound, fmt.Sprintf("failed for estimated row count %d", tc.estimatedRowCount))
+	}
+}
+
+// TestExplainRedact tests that variants of EXPLAIN (REDACT) do not leak PII.
+func TestExplainRedact(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	rng, seed := randutil.NewTestRand()
+	t.Log("seed:", seed)
+
+	params, _ := tests.CreateTestServerParams()
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+	defer sqlDB.Close()
+
+	// To check for PII leaks, we inject a single unlikely string into some of the
+	// query constants produced by SQLSmith, and then search the EXPLAIN output
+	// for this string.
+	pii := "pterodactyl"
+	containsPII := func(explain, contents string) error {
+		lowerContents := strings.ToLower(contents)
+		if strings.Contains(lowerContents, pii) {
+			return errors.Newf("EXPLAIN output contained PII (%q):\n%s\noutput:\n%s\n", pii, explain, contents)
+		}
+		return nil
+	}
+
+	setup := sqlsmith.Setups["seed"](rng)
+	setup = append(setup, "SET CLUSTER SETTING sql.stats.automatic_collection.enabled = off;")
+	setup = append(setup, "ANALYZE seed;")
+	setup = append(setup, "SET statement_timeout = '5s';")
+	t.Log(strings.Join(setup, "\n"))
+	db := sqlutils.MakeSQLRunner(sqlDB)
+	db.ExecMultiple(t, setup...)
+
+	smith, err := sqlsmith.NewSmither(sqlDB, rng,
+		sqlsmith.EnableAlters(),
+		sqlsmith.PrefixStringConsts(pii),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer smith.Close()
+
+	// Generate a few random statements.
+	var statements [5]string
+	for i := range statements {
+		statements[i] = smith.Generate()
+	}
+
+	// Gather EXPLAIN variants to test.
+	commands := []string{"EXPLAIN", "EXPLAIN ANALYZE"}
+
+	modes := []string{"NO MODE"}
+	for modeStr, mode := range tree.ExplainModes() {
+		switch mode {
+		case tree.ExplainDebug:
+			// EXPLAIN ANALYZE (DEBUG, REDACT) is checked by TestExplainAnalyzeDebug/redact.
+			continue
+		}
+		modes = append(modes, modeStr)
+	}
+
+	flags := []string{"NO FLAG"}
+	for flagStr, flag := range tree.ExplainFlags() {
+		switch flag {
+		case tree.ExplainFlagRedact:
+			// We add REDACT to each EXPLAIN below.
+			continue
+		}
+		flags = append(flags, flagStr)
+	}
+
+	testName := func(s string) string {
+		return strings.ReplaceAll(cases.Title(language.English).String(s), " ", "")
+	}
+
+	// Execute each EXPLAIN variant on each random statement, and look for PII.
+	for _, cmd := range commands {
+		t.Run(testName(cmd), func(t *testing.T) {
+			for _, mode := range modes {
+				t.Run(testName(mode), func(t *testing.T) {
+					if mode == "NO MODE" {
+						mode = ""
+					} else {
+						mode += ", "
+					}
+					for _, flag := range flags {
+						t.Run(testName(flag), func(t *testing.T) {
+							if flag == "NO FLAG" {
+								flag = ""
+							} else {
+								flag += ", "
+							}
+							for _, stmt := range statements {
+								explain := cmd + " (" + mode + flag + "REDACT) " + stmt
+								rows, err := sqlDB.QueryContext(ctx, explain)
+								if err != nil {
+									// There are many legitimate errors that could be returned
+									// that don't indicate a PII leak or a test failure. For
+									// example, EXPLAIN (OPT, JSON) is always a syntax error, or
+									// EXPLAIN ANALYZE of a random query might timeout. To avoid
+									// these false positives, we only fail on internal errors.
+									msg := err.Error()
+									if strings.Contains(msg, "internal error") {
+										t.Error(err)
+									}
+									continue
+								}
+								var output strings.Builder
+								for rows.Next() {
+									var out string
+									if err := rows.Scan(&out); err != nil {
+										t.Fatal(err)
+									}
+									output.WriteString(out)
+									output.WriteRune('\n')
+								}
+								if err := containsPII(explain, output.String()); err != nil {
+									t.Error(err)
+									continue
+								}
+								// TODO(michae2): When it is supported, also check HTML returned by
+								// EXPLAIN (DISTSQL, REDACT).
+							}
+						})
+					}
+				})
+			}
+		})
 	}
 }
