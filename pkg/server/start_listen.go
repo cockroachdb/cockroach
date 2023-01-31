@@ -124,7 +124,20 @@ func startListenRPCAndSQL(
 		// TODO(bdarnell): Do we need to also close the other listeners?
 		netutil.FatalIfUnexpected(anyL.Close())
 		netutil.FatalIfUnexpected(loopbackL.Close())
+		netutil.FatalIfUnexpected(ln.Close())
 	}
+
+	// cmux auto-retries Accept() by default. Tell it
+	// to stop doing work if we see a request to shut down.
+	m.HandleError(func(err error) bool {
+		select {
+		case <-stopper.ShouldQuiesce():
+			log.Infof(ctx, "server shutting down: instructing cmux to stop accepting")
+			return false
+		default:
+			return true
+		}
+	})
 	stopper.AddCloser(stop.CloserFn(func() {
 		grpc.Stop()
 		serveOnMux.Do(func() {
