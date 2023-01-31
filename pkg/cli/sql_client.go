@@ -41,7 +41,13 @@ const (
 	useDefaultDb
 )
 
-// makeSQLClient connects to the database using the connection
+// makeSQLClient calls makeTenantSQLClient but with System Tenant as the
+// default.
+func makeSQLClient(appName string, defaultMode defaultSQLDb) (clisqlclient.Conn, error) {
+	return makeTenantSQLClient(appName, defaultMode, catconstants.SystemTenantName)
+}
+
+// makeTenantSQLClient connects to the database using the connection
 // settings set by the command-line flags.
 // If a password is needed, it also prompts for the password.
 //
@@ -52,8 +58,15 @@ const (
 // The appName given as argument is added to the URL even if --url is
 // specified, but only if the URL didn't already specify
 // application_name. It is prefixed with '$ ' to mark it as internal.
-func makeSQLClient(appName string, defaultMode defaultSQLDb) (clisqlclient.Conn, error) {
+func makeTenantSQLClient(
+	appName string, defaultMode defaultSQLDb, tenantName string,
+) (clisqlclient.Conn, error) {
 	baseURL, err := cliCtx.makeClientConnURL()
+	if err != nil {
+		return nil, err
+	}
+
+	err = baseURL.SetOption("options", "-ccluster="+tenantName)
 	if err != nil {
 		return nil, err
 	}
