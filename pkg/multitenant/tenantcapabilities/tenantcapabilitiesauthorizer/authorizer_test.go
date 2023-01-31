@@ -31,18 +31,36 @@ import (
 // "update-state": updates the underlying global tenant capability state.
 // Example:
 //
-//	update-state
-//	upsert {ten=10}:{CanAdminSplit=true}
-//	delete {ten=15}
-//	----
+// upsert ten=10 can_admin_split=true
+// ----
+// ok
+//
+// delete ten=15
+// ----
+// ok
 //
 // "has-capability-for-batch": performs a capability check, given a tenant and
 // batch request declaration. Example:
 //
-//	has-capability-for-batch
-//	{ten=10}
-//	split
-//	----
+// has-capability-for-batch ten=10 cmds=(split)
+// ----
+// ok
+//
+// "has-node-status-capability": performas a capability check to be able to
+// retrieve node status metadata. Example:
+//
+// has-node-status-capability ten=11
+// ----
+// ok
+//
+//
+// "has-tsdb-query-capability": performas a capability check to be able to
+// make TSDB queries. Example:
+//
+// has-tsdb-query-capability ten=11
+// ----
+// ok
+
 func TestDataDriven(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -52,19 +70,36 @@ func TestDataDriven(t *testing.T) {
 		authorizer.BindReader(mockReader)
 
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
+			tenID := tenantcapabilitiestestutils.GetTenantID(t, d)
 			switch d.Cmd {
-			case "update-state":
-				updates := tenantcapabilitiestestutils.ParseTenantCapabilityUpdateStateArguments(t, d.Input)
-				mockReader.updateState(updates)
-
+			case "upsert":
+				update, err := tenantcapabilitiestestutils.ParseTenantCapabilityUpsert(t, d)
+				if err != nil {
+					return err.Error()
+				}
+				mockReader.updateState([]*tenantcapabilities.Update{update})
+			case "delete":
+				update := tenantcapabilitiestestutils.ParseTenantCapabilityDelete(t, d)
+				mockReader.updateState([]*tenantcapabilities.Update{update})
 			case "has-capability-for-batch":
-				tenID, ba := tenantcapabilitiestestutils.ParseBatchRequestString(t, d.Input)
+				ba := tenantcapabilitiestestutils.ParseBatchRequests(t, d)
 				err := authorizer.HasCapabilityForBatch(context.Background(), tenID, &ba)
 				if err == nil {
 					return "ok"
 				}
 				return err.Error()
-
+			case "has-node-status-capability":
+				err := authorizer.HasNodeStatusCapability(context.Background(), tenID)
+				if err == nil {
+					return "ok"
+				}
+				return err.Error()
+			case "has-tsdb-query-capability":
+				err := authorizer.HasTSDBQueryCapability(context.Background(), tenID)
+				if err == nil {
+					return "ok"
+				}
+				return err.Error()
 			default:
 				return fmt.Sprintf("unknown command %s", d.Cmd)
 			}
@@ -75,7 +110,7 @@ func TestDataDriven(t *testing.T) {
 
 type mockReader map[roachpb.TenantID]tenantcapabilitiespb.TenantCapabilities
 
-func (m mockReader) updateState(updates []tenantcapabilities.Update) {
+func (m mockReader) updateState(updates []*tenantcapabilities.Update) {
 	for _, update := range updates {
 		if update.Deleted {
 			delete(m, update.TenantID)

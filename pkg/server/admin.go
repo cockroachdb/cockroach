@@ -2185,6 +2185,11 @@ func getLivenessResponse(
 	}, nil
 }
 
+// Liveness is implemented on the tenant-facing admin server
+// as a request through the tenant connector. Since at the
+// time of writing, the request contains no additional SQL
+// permission checks, the tenant capability gate is all
+// that is required. This is handled by the connector.
 func (s *adminServer) Liveness(
 	ctx context.Context, req *serverpb.LivenessRequest,
 ) (*serverpb.LivenessResponse, error) {
