@@ -808,13 +808,19 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	// entries and acknowledge as many as we can trivially prove will not be
 	// rejected beneath raft.
 	//
-	// Note that the CommittedEntries slice may contain entries that are also in
-	// the Entries slice (to be appended in this ready pass). This can happen when
-	// a follower is being caught up on committed commands. We could acknowledge
-	// these commands early even though they aren't durably in the local raft log
-	// yet (since they're committed via a quorum elsewhere), but we chose to be
-	// conservative and avoid it by passing the last Ready cycle's `lastIndex` for
-	// the maxIndex argument to AckCommittedEntriesBeforeApplication.
+	// Note that the Entries slice in the MsgStorageApply cannot refer to entries
+	// that are also in the Entries slice in the MsgStorageAppend. Raft will not
+	// allow unstable entries to be applied when AsyncStorageWrites is enabled.
+	//
+	// If we disable AsyncStorageWrites in the future, this property will no
+	// longer be true, and the two slices could overlap. For example, this can
+	// happen when a follower is being caught up on committed commands. We could
+	// acknowledge these commands early even though they aren't durably in the
+	// local raft log yet (since they're committed via a quorum elsewhere), but
+	// we'd likely want to revert to an earlier version of this code that chose to
+	// be conservative and avoid this behavior by passing the last Ready cycle's
+	// `lastIndex` for a maxIndex argument to
+	// AckCommittedEntriesBeforeApplication.
 	//
 	// TODO(nvanbenschoten): this is less important with async storage writes.
 	// Consider getting rid of it.
@@ -829,7 +835,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			return stats, err
 		}
 		if knobs := r.store.TestingKnobs(); knobs == nil || !knobs.DisableCanAckBeforeApplication {
-			if err := appTask.AckCommittedEntriesBeforeApplication(ctx, state.LastIndex); err != nil {
+			if err := appTask.AckCommittedEntriesBeforeApplication(ctx); err != nil {
 				return stats, err
 			}
 		}
