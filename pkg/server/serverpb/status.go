@@ -46,6 +46,7 @@ type SQLStatusServer interface {
 	LogFilesList(context.Context, *LogFilesListRequest) (*LogFilesListResponse, error)
 	LogFile(context.Context, *LogFileRequest) (*LogEntriesResponse, error)
 	Logs(context.Context, *LogsRequest) (*LogEntriesResponse, error)
+	NodesUI(context.Context, *NodesRequest) (*NodesResponseExternal, error)
 }
 
 // OptionalNodesStatusServer is a StatusServer that is only optionally present
@@ -83,11 +84,9 @@ type TenantStatusServer interface {
 	Regions(context.Context, *RegionsRequest) (*RegionsResponse, error)
 	HotRangesV2(context.Context, *HotRangesRequest) (*HotRangesResponseV2, error)
 
-	// NodesUI is used by DB Console.
-	NodesUI(context.Context, *NodesRequest) (*NodesResponseExternal, error)
-
 	// SpanStats is used to access MVCC stats from KV
 	SpanStats(context.Context, *roachpb.SpanStatsRequest) (*roachpb.SpanStatsResponse, error)
+	Nodes(context.Context, *NodesRequest) (*NodesResponse, error)
 }
 
 // OptionalNodesStatusServer returns the wrapped NodesStatusServer, if it is

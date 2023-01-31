@@ -21,9 +21,9 @@ ALTER TENANT [5] STOP SERVICE; DROP TENANT [5]
 query-sql
 SELECT id,name,data_state,service_mode,active,crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info, true) FROM system.tenants;
 ----
-1 system 1 2 true {"capabilities": {"canAdminSplit": false}, "deprecatedDataState": "READY", "deprecatedId": "1", "droppedName": "", "tenantReplicationJobId": "0"}
-5 <nil> 2 0 false {"capabilities": {"canAdminSplit": false}, "deprecatedDataState": "DROP", "deprecatedId": "5", "droppedName": "tenant-5", "tenantReplicationJobId": "0"}
-6 tenant-6 1 1 true {"capabilities": {"canAdminSplit": false}, "deprecatedDataState": "READY", "deprecatedId": "6", "droppedName": "", "tenantReplicationJobId": "0"}
+1 system 1 2 true {"capabilities": {"canAdminSplit": false, "canViewNodeInfo": false, "canViewTsdbMetrics": false}, "deprecatedDataState": "READY", "deprecatedId": "1", "droppedName": "", "tenantReplicationJobId": "0"}
+5 <nil> 2 0 false {"capabilities": {"canAdminSplit": false, "canViewNodeInfo": false, "canViewTsdbMetrics": false}, "deprecatedDataState": "DROP", "deprecatedId": "5", "droppedName": "tenant-5", "tenantReplicationJobId": "0"}
+6 tenant-6 1 1 true {"capabilities": {"canAdminSplit": false, "canViewNodeInfo": false, "canViewTsdbMetrics": false}, "deprecatedDataState": "READY", "deprecatedId": "6", "droppedName": "", "tenantReplicationJobId": "0"}
 
 exec-sql
 BACKUP INTO 'nodelocal://1/cluster'
@@ -59,8 +59,8 @@ job paused at pausepoint
 query-sql
 SELECT id,active,crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info, true) FROM system.tenants;
 ----
-1 true {"capabilities": {"canAdminSplit": false}, "deprecatedDataState": "READY", "deprecatedId": "1", "droppedName": "", "tenantReplicationJobId": "0"}
-6 false {"capabilities": {"canAdminSplit": false}, "deprecatedDataState": "ADD", "deprecatedId": "6", "droppedName": "", "tenantReplicationJobId": "0"}
+1 true {"capabilities": {"canAdminSplit": false, "canViewNodeInfo": false, "canViewTsdbMetrics": false}, "deprecatedDataState": "READY", "deprecatedId": "1", "droppedName": "", "tenantReplicationJobId": "0"}
+6 false {"capabilities": {"canAdminSplit": false, "canViewNodeInfo": false, "canViewTsdbMetrics": false}, "deprecatedDataState": "ADD", "deprecatedId": "6", "droppedName": "", "tenantReplicationJobId": "0"}
 
 exec-sql
 SET CLUSTER SETTING jobs.debug.pausepoints = ''
@@ -80,8 +80,8 @@ USE defaultdb;
 query-sql
 SELECT id,name,data_state,service_mode,active,crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info, true) FROM system.tenants;
 ----
-1 system 1 2 true {"capabilities": {"canAdminSplit": false}, "deprecatedDataState": "READY", "deprecatedId": "1", "droppedName": "", "tenantReplicationJobId": "0"}
-6 tenant-6 1 1 true {"capabilities": {"canAdminSplit": false}, "deprecatedDataState": "READY", "deprecatedId": "6", "droppedName": "", "tenantReplicationJobId": "0"}
+1 system 1 2 true {"capabilities": {"canAdminSplit": false, "canViewNodeInfo": false, "canViewTsdbMetrics": false}, "deprecatedDataState": "READY", "deprecatedId": "1", "droppedName": "", "tenantReplicationJobId": "0"}
+6 tenant-6 1 1 true {"capabilities": {"canAdminSplit": false, "canViewNodeInfo": false, "canViewTsdbMetrics": false}, "deprecatedDataState": "READY", "deprecatedId": "6", "droppedName": "", "tenantReplicationJobId": "0"}
 
 exec-sql expect-error-regex=(tenant 6 already exists)
 RESTORE TENANT 6 FROM LATEST IN 'nodelocal://1/tenant6';
@@ -105,9 +105,9 @@ RESTORE TENANT 6 FROM LATEST IN 'nodelocal://1/tenant6' WITH tenant_name = 'newn
 query-sql
 SELECT id,name,data_state,service_mode,active,crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info, true) FROM system.tenants;
 ----
-1 system 1 2 true {"capabilities": {"canAdminSplit": false}, "deprecatedDataState": "READY", "deprecatedId": "1", "droppedName": "", "tenantReplicationJobId": "0"}
-2 newname 1 1 true {"capabilities": {"canAdminSplit": false}, "deprecatedDataState": "READY", "deprecatedId": "2", "droppedName": "", "tenantReplicationJobId": "0"}
-6 tenant-6 1 1 true {"capabilities": {"canAdminSplit": false}, "deprecatedDataState": "READY", "deprecatedId": "6", "droppedName": "", "tenantReplicationJobId": "0"}
+1 system 1 2 true {"capabilities": {"canAdminSplit": false, "canViewNodeInfo": false, "canViewTsdbMetrics": false}, "deprecatedDataState": "READY", "deprecatedId": "1", "droppedName": "", "tenantReplicationJobId": "0"}
+2 newname 1 1 true {"capabilities": {"canAdminSplit": false, "canViewNodeInfo": false, "canViewTsdbMetrics": false}, "deprecatedDataState": "READY", "deprecatedId": "2", "droppedName": "", "tenantReplicationJobId": "0"}
+6 tenant-6 1 1 true {"capabilities": {"canAdminSplit": false, "canViewNodeInfo": false, "canViewTsdbMetrics": false}, "deprecatedDataState": "READY", "deprecatedId": "6", "droppedName": "", "tenantReplicationJobId": "0"}
 
 # Check that another service mode is also preserved.
 exec-sql

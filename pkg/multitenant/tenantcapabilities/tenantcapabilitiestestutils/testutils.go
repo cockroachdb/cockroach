@@ -11,157 +11,102 @@
 package tenantcapabilitiestestutils
 
 import (
-	"fmt"
-	"regexp"
 	"strconv"
-	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/datadriven"
 	"github.com/stretchr/testify/require"
 )
-
-var tenIDRe = regexp.MustCompile(`^{ten=((\d*)|(system))}$`)
-var capabilityRe = regexp.MustCompile(`^{(CanAdminSplit=(true|false))}$`)
 
 // ParseBatchRequestString is a helper function to parse datadriven input that
 // declares (empty) batch requests of supported types, for a particular tenant.
 // Both the constructed batch request and the requesting tenant ID are returned.
-// The input is of the following form:
+// The cmds are of the following form:
 //
-// {ten=10}
-// split
-// scan
-// cput
+// ten=10 cmds=(split, scan, cput)
 func ParseBatchRequestString(
-	t *testing.T, input string,
+	t *testing.T, d *datadriven.TestData,
 ) (tenID roachpb.TenantID, ba roachpb.BatchRequest) {
-	for i, line := range strings.Split(input, "\n") {
-		if i == 0 { // first line describes the tenant ID.
-			tenID = ParseTenantID(t, line)
-			continue
-		}
-		switch line {
-		case "split":
-			ba.Add(&roachpb.AdminSplitRequest{})
-		case "scan":
-			ba.Add(&roachpb.ScanRequest{})
-		case "cput":
-			ba.Add(&roachpb.ConditionalPutRequest{})
-		default:
-			t.Fatalf("unsupported request type: %s", line)
+	tenID = GetTenantID(t, d)
+	for _, cmd := range d.CmdArgs {
+		if cmd.Key == "cmds" {
+			for _, z := range cmd.Vals {
+				switch z {
+				case "split":
+					ba.Add(&roachpb.AdminSplitRequest{})
+				case "scan":
+					ba.Add(&roachpb.ScanRequest{})
+				case "cput":
+					ba.Add(&roachpb.ConditionalPutRequest{})
+				default:
+					t.Fatalf("unsupported request type: %s", z)
+				}
+			}
 		}
 	}
 	return tenID, ba
 }
 
-// ParseTenantCapabilityUpdateStateArguments is a helper function to parse
-// datadriven input to update global tenant capability state. The input is of
-// the following form:
-//
-// upsert {ten=10}:{CanAdminSplit=true}
-// delete {ten=20}
-func ParseTenantCapabilityUpdateStateArguments(
-	t *testing.T, input string,
-) (updates []tenantcapabilities.Update) {
-	for _, line := range strings.Split(input, "\n") {
-		const upsertPrefix, deletePrefix = "upsert ", "delete "
-		switch {
-		case strings.HasPrefix(line, deletePrefix):
-			line = strings.TrimPrefix(line, line[:len(deletePrefix)])
-			updates = append(updates, tenantcapabilities.Update{
-				Entry: tenantcapabilities.Entry{
-					TenantID: ParseTenantID(t, line),
-				},
-				Deleted: true,
-			})
-		case strings.HasPrefix(line, upsertPrefix):
-			line = strings.TrimPrefix(line, line[:len(upsertPrefix)])
-			updates = append(updates, tenantcapabilities.Update{
-				Entry:   parseTenantCapabilityEntry(t, line),
-				Deleted: false,
-			})
-		default:
-			t.Fatalf("malformed line %q, expected to find prefix %q or %q",
-				line, upsertPrefix, deletePrefix)
+func ParseTenantCapabilityUpsert(
+	t *testing.T, d *datadriven.TestData,
+) (*tenantcapabilities.Update, error) {
+	tID := GetTenantID(t, d)
+	cap := tenantcapabilitiespb.TenantCapabilities{}
+	for _, arg := range d.CmdArgs {
+		if arg.Key == "can_admin_split" {
+			b, err := strconv.ParseBool(arg.Vals[0])
+			if err != nil {
+				return nil, err
+			}
+			cap.CanAdminSplit = b
+		}
+		if arg.Key == "can_view_node_info" {
+			b, err := strconv.ParseBool(arg.Vals[0])
+			if err != nil {
+				return nil, err
+			}
+			cap.CanViewNodeInfo = b
+		}
+		if arg.Key == "can_view_tsdb_metrics" {
+			b, err := strconv.ParseBool(arg.Vals[0])
+			if err != nil {
+				return nil, err
+			}
+			cap.CanViewTsdbMetrics = b
 		}
 	}
-	return updates
+	update := tenantcapabilities.Update{
+		Entry: tenantcapabilities.Entry{
+			TenantID:           tID,
+			TenantCapabilities: cap,
+		},
+	}
+	return &update, nil
 }
 
-// PrintTenantCapabilityUpdate is a helper function that prints out a
-// tenantcapabilities.Update, allowing data-driven tests to assert on the
-// output.
-func PrintTenantCapabilityUpdate(update tenantcapabilities.Update) string {
-	if update.Deleted {
-		return fmt.Sprintf("deleted %s", printTenantID(update.TenantID))
+func ParseTenantCapabilityDelete(t *testing.T, d *datadriven.TestData) *tenantcapabilities.Update {
+	tID := GetTenantID(t, d)
+	update := tenantcapabilities.Update{
+		Entry: tenantcapabilities.Entry{
+			TenantID: tID,
+		},
+		Deleted: true,
 	}
-
-	return fmt.Sprintf("updated %s", PrintTenantCapabilityEntry(update.Entry))
+	return &update
 }
 
-// PrintTenantCapabilityEntry is a helper function that prints out a
-// tenantcapabilities.Entry, allowing data-driven tests to assert on the
-// output.
-func PrintTenantCapabilityEntry(entry tenantcapabilities.Entry) string {
-	return fmt.Sprintf(
-		"%s:%s",
-		printTenantID(entry.TenantID),
-		PrintTenantCapability(entry.TenantCapabilities),
-	)
-}
-
-func parseTenantCapabilityEntry(t *testing.T, input string) tenantcapabilities.Entry {
-	parts := strings.Split(input, ":")
-	require.Equal(t, 2, len(parts))
-	return tenantcapabilities.Entry{
-		TenantID:           ParseTenantID(t, parts[0]),
-		TenantCapabilities: parseTenantCapability(t, parts[1]),
+func GetTenantID(t *testing.T, d *datadriven.TestData) roachpb.TenantID {
+	var tenantID string
+	if d.HasArg("ten") {
+		d.ScanArgs(t, "ten", &tenantID)
 	}
-}
-
-func parseTenantCapability(t *testing.T, input string) tenantcapabilitiespb.TenantCapabilities {
-	if !capabilityRe.MatchString(input) {
-		t.Fatalf("expected %s to match capability ID regex", input)
-	}
-	matches := capabilityRe.FindStringSubmatch(input)
-	var capabilities tenantcapabilitiespb.TenantCapabilities
-	if matches[2] == "true" {
-		capabilities.CanAdminSplit = true
-	}
-	return capabilities
-}
-
-func ParseTenantID(t *testing.T, input string) roachpb.TenantID {
-	if !tenIDRe.MatchString(input) {
-		t.Fatalf("expected %s to match tenant ID regex", input)
-	}
-	matches := tenIDRe.FindStringSubmatch(input)
-
-	if matches[3] == "system" {
+	if roachpb.IsSystemTenantName(roachpb.TenantName(tenantID)) {
 		return roachpb.SystemTenantID
 	}
-
-	tenID, err := strconv.Atoi(matches[2])
+	tID, err := roachpb.TenantIDFromString(tenantID)
 	require.NoError(t, err)
-	return roachpb.MustMakeTenantID(uint64(tenID))
-}
-
-func printTenantID(id roachpb.TenantID) string {
-	return fmt.Sprintf("{ten=%s}", id)
-}
-
-func PrintTenantCapability(cap tenantcapabilitiespb.TenantCapabilities) string {
-	var s strings.Builder
-	s.WriteString("{")
-	s.WriteString("CanAdminSplit=")
-	if cap.CanAdminSplit {
-		s.WriteString("true")
-	} else {
-		s.WriteString("false")
-	}
-	s.WriteString("}")
-	return s.String()
+	return tID
 }

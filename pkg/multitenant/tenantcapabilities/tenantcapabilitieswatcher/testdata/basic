@@ -7,57 +7,53 @@ ok
 updates
 ----
 
-update-state
-upsert {ten=10}:{CanAdminSplit=true}
-upsert {ten=11}:{CanAdminSplit=false}
+upsert ten=10 can_admin_split=true
+----
+ok
+
+upsert ten=11 can_admin_split=false
 ----
 ok
 
 updates
 ----
 Incremental Update
-updated {ten=10}:{CanAdminSplit=true}
-updated {ten=11}:{CanAdminSplit=false}
+{Entry:{TenantID:10 TenantCapabilities:{CanAdminSplit:true CanViewNodeInfo:false CanViewTsdbMetrics:false}} Deleted:false}
+{Entry:{TenantID:11 TenantCapabilities:{CanAdminSplit:false CanViewNodeInfo:false CanViewTsdbMetrics:false}} Deleted:false}
 
 flush-state
 ----
-{ten=10}:{CanAdminSplit=true}
-{ten=11}:{CanAdminSplit=false}
+{TenantID:10 TenantCapabilities:{CanAdminSplit:true CanViewNodeInfo:false CanViewTsdbMetrics:false}}
+{TenantID:11 TenantCapabilities:{CanAdminSplit:false CanViewNodeInfo:false CanViewTsdbMetrics:false}}
 
-# Perform incremental updates.
-update-state
-upsert {ten=11}:{CanAdminSplit=true}
+upsert ten=11 can_admin_split=true
 ----
 ok
 
 updates
 ----
 Incremental Update
-updated {ten=11}:{CanAdminSplit=true}
+{Entry:{TenantID:11 TenantCapabilities:{CanAdminSplit:true CanViewNodeInfo:false CanViewTsdbMetrics:false}} Deleted:false}
 
-get-capabilities
-{ten=11}
+get-capabilities ten=11
 ----
-{CanAdminSplit=true}
+{CanAdminSplit:true CanViewNodeInfo:false CanViewTsdbMetrics:false}
 
-update-state
-delete {ten=10}
+delete ten=10
 ----
 ok
 
 updates
 ----
 Incremental Update
-deleted {ten=10}
+{Entry:{TenantID:10 TenantCapabilities:{CanAdminSplit:true CanViewNodeInfo:false CanViewTsdbMetrics:false}} Deleted:true}
 
-get-capabilities
-{ten=10}
+get-capabilities ten=10
 ----
 not-found
 
 # No-op update.
-update-state
-delete {ten=15}
+delete ten=15
 ----
 ok
 
@@ -68,59 +64,66 @@ updates
 # what we'd expect.
 flush-state
 ----
-{ten=11}:{CanAdminSplit=true}
+{TenantID:11 TenantCapabilities:{CanAdminSplit:true CanViewNodeInfo:false CanViewTsdbMetrics:false}}
 
-update-state
-upsert {ten=15}:{CanAdminSplit=true}
+upsert ten=15 can_admin_split=true
 ----
 ok
 
 updates
 ----
 Incremental Update
-updated {ten=15}:{CanAdminSplit=true}
+{Entry:{TenantID:15 TenantCapabilities:{CanAdminSplit:true CanViewNodeInfo:false CanViewTsdbMetrics:false}} Deleted:false}
 
 # Ensure only the last update is applied, even when there are multiple updates
 # to a single key.
-update-state
-upsert {ten=11}:{CanAdminSplit=false}
-upsert {ten=11}:{CanAdminSplit=true}
-delete {ten=11}
+upsert ten=11 can_admin_split=false
+----
+ok
+
+upsert ten=11 can_admin_split=true
+----
+ok
+
+delete ten=11
 ----
 ok
 
 updates
 ----
 Incremental Update
-deleted {ten=11}
+{Entry:{TenantID:11 TenantCapabilities:{CanAdminSplit:true CanViewNodeInfo:false CanViewTsdbMetrics:false}} Deleted:true}
 
-get-capabilities
-{ten=11}
+get-capabilities ten=11
 ----
 not-found
 
 flush-state
 ----
-{ten=15}:{CanAdminSplit=true}
+{TenantID:15 TenantCapabilities:{CanAdminSplit:true CanViewNodeInfo:false CanViewTsdbMetrics:false}}
 
 # Same thing, but this time instead of deleting the key, leave it behind.
-update-state
-delete {ten=15}
-upsert {ten=15}:{CanAdminSplit=true}
-upsert {ten=15}:{CanAdminSplit=false}
+delete ten=15
+----
+ok
+
+upsert ten=15 can_admin_split=true
+----
+ok
+
+upsert ten=15 can_admin_split=false
 ----
 ok
 
 updates
 ----
 Incremental Update
-updated {ten=15}:{CanAdminSplit=false}
+{Entry:{TenantID:15 TenantCapabilities:{CanAdminSplit:false CanViewNodeInfo:false CanViewTsdbMetrics:false}} Deleted:false}
 
 flush-state
 ----
-{ten=15}:{CanAdminSplit=false}
+{TenantID:15 TenantCapabilities:{CanAdminSplit:false CanViewNodeInfo:false CanViewTsdbMetrics:false}}
 
-get-capabilities
-{ten=15}
+get-capabilities ten=15
 ----
-{CanAdminSplit=false}
+{CanAdminSplit:false CanViewNodeInfo:false CanViewTsdbMetrics:false}
