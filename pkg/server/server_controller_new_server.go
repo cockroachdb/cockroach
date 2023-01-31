@@ -53,7 +53,10 @@ type tenantServerCreator interface {
 	// can be checked with errors.Is.
 	//
 	// testArgs is used by tests to tweak the tenant server.
-	newTenantServer(ctx context.Context, tenantNameContainer *roachpb.TenantNameContainer, index int,
+	newTenantServer(ctx context.Context,
+		tenantNameContainer *roachpb.TenantNameContainer,
+		tenantStopper *stop.Stopper,
+		index int,
 		testArgs base.TestSharedProcessTenantArgs,
 	) (onDemandServer, error)
 }
@@ -64,6 +67,7 @@ var _ tenantServerCreator = &Server{}
 func (s *Server) newTenantServer(
 	ctx context.Context,
 	tenantNameContainer *roachpb.TenantNameContainer,
+	tenantStopper *stop.Stopper,
 	index int,
 	testArgs base.TestSharedProcessTenantArgs,
 ) (onDemandServer, error) {
@@ -71,7 +75,7 @@ func (s *Server) newTenantServer(
 	if err != nil {
 		return nil, err
 	}
-	tenantStopper, baseCfg, sqlCfg, err := s.makeSharedProcessTenantConfig(ctx, tenantID, index)
+	baseCfg, sqlCfg, err := s.makeSharedProcessTenantConfig(ctx, tenantID, index, tenantStopper)
 	if err != nil {
 		return nil, err
 	}
@@ -81,8 +85,6 @@ func (s *Server) newTenantServer(
 
 	tenantServer, err := s.startTenantServerInternal(ctx, baseCfg, sqlCfg, tenantStopper, tenantNameContainer)
 	if err != nil {
-		// Abandon any work done so far.
-		tenantStopper.Stop(ctx)
 		return nil, err
 	}
 
@@ -164,15 +166,8 @@ func (s *Server) startTenantServerInternal(
 }
 
 func (s *Server) makeSharedProcessTenantConfig(
-	ctx context.Context, tenantID roachpb.TenantID, index int,
-) (*stop.Stopper, BaseConfig, SQLConfig, error) {
-	stopper := stop.NewStopper()
-	defer func() {
-		if stopper != nil {
-			stopper.Stop(ctx)
-		}
-	}()
-
+	ctx context.Context, tenantID roachpb.TenantID, index int, stopper *stop.Stopper,
+) (BaseConfig, SQLConfig, error) {
 	// Create a configuration for the new tenant.
 	// TODO(knz): Maybe enforce the SQL Instance ID to be equal to the KV node ID?
 	// See: https://github.com/cockroachdb/cockroach/issues/84602
@@ -183,11 +178,10 @@ func (s *Server) makeSharedProcessTenantConfig(
 	}
 	baseCfg, sqlCfg, err := makeSharedProcessTenantServerConfig(ctx, tenantID, index, parentCfg, localServerInfo, stopper)
 	if err != nil {
-		return nil, BaseConfig{}, SQLConfig{}, err
+		return BaseConfig{}, SQLConfig{}, err
 	}
-	st := stopper
-	stopper = nil // inhibit the deferred Stop()
-	return st, baseCfg, sqlCfg, nil
+
+	return baseCfg, sqlCfg, nil
 }
 
 func makeSharedProcessTenantServerConfig(
