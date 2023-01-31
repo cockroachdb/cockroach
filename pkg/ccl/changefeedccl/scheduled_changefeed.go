@@ -562,7 +562,7 @@ func doCreateChangefeedSchedule(
 
 			if exists {
 				p.BufferClientNotice(ctx,
-					pgnotice.Newf("schedule %q already exists, skipping", spec.scheduleLabel),
+					pgnotice.Newf("schedule %q already exists, skipping", *spec.scheduleLabel),
 				)
 				return nil
 			}
