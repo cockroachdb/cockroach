@@ -149,7 +149,7 @@ oprules
   from: constraint-Node
   query:
     - $relation[Type] IN ['*scpb.Table', '*scpb.View']
-    - $constraint[Type] IN ['*scpb.CheckConstraint', '*scpb.ForeignKeyConstraint', '*scpb.UniqueWithoutIndexConstraint']
+    - $constraint[Type] = '*scpb.UniqueWithoutIndexConstraint'
     - joinOnDescID($relation, $constraint, $relation-id)
     - joinTarget($relation, $relation-Target)
     - $relation-Target[TargetStatus] = ABSENT
