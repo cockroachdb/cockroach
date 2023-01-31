@@ -3044,3 +3044,50 @@ query I
 SELECT count(descriptor) FROM system.descriptor WHERE id = $dropped_fn_id;
 ----
 0
+
+subtest udt_alter
+
+statement ok
+CREATE TABLE t_alter (
+  a INT PRIMARY KEY,
+  b INT
+)
+
+statement ok
+CREATE FUNCTION f_rtbl() RETURNS t_alter LANGUAGE SQL AS 'SELECT 1, 2;'
+
+query T
+SELECT f_rtbl();
+----
+(1,2)
+
+statement ok
+ALTER TABLE t_alter DROP COLUMN b;
+
+statement error pq: return type mismatch in function declared to return t_alter
+SELECT f_rtbl();
+
+statement ok
+ALTER TABLE t_alter ADD COLUMN b INT;
+
+query T
+SELECT f_rtbl();
+----
+(1,2)
+
+statement ok
+SET enable_experimental_alter_column_type_general=true
+
+statement ok
+ALTER TABLE t_alter ALTER b TYPE FLOAT;
+
+statement error pq: return type mismatch in function declared to return t_alter
+SELECT f_rtbl();
+
+statement ok
+ALTER TABLE t_alter ALTER b TYPE INT;
+
+query T
+SELECT f_rtbl();
+----
+(1,2)

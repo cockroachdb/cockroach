@@ -688,6 +688,22 @@ func (b *Builder) buildUDF(
 			// ConvertUDFToSubquery.
 			physProps.Ordering = props.OrderingChoice{}
 
+			// Validate that user defined return types match the original return types
+			// defined in the function.
+			rtyp := f.ResolvedType()
+			if rtyp.UserDefined() {
+				funcReturnType, err := tree.ResolveType(b.ctx,
+					&tree.OIDTypeReference{OID: rtyp.Oid()}, b.semaCtx.TypeResolver)
+				if err != nil {
+					panic(err)
+				}
+				if !funcReturnType.Equivalent(rtyp) {
+					panic(pgerror.Newf(
+						pgcode.InvalidFunctionDefinition,
+						"return type mismatch in function declared to return %s", rtyp.Name()))
+				}
+			}
+
 			// If there are multiple output columns, we must combine them into a
 			// tuple - only a single column can be returned from a UDF.
 			if cols := physProps.Presentation; len(cols) > 1 {
