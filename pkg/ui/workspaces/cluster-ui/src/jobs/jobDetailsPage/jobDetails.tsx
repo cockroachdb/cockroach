@@ -76,7 +76,9 @@ export class JobDetails extends React.Component<JobDetailsProps> {
   }
 
   componentDidMount(): void {
-    this.refresh();
+    if (!this.props.job) {
+      this.refresh();
+    }
     // Refresh every 10s.
     this.refreshDataInterval = setInterval(() => this.refresh(), 10 * 1000);
   }
@@ -154,7 +156,7 @@ export class JobDetails extends React.Component<JobDetailsProps> {
 
   render(): React.ReactElement {
     const isLoading = !this.props.job || this.props.jobLoading;
-    const error = this.props.job && this.props.jobError;
+    const error = this.props.jobError;
     return (
       <div className={jobCx("job-details")}>
         <Helmet title={"Details | Job"} />
