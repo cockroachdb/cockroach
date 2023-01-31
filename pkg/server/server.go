@@ -353,6 +353,9 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	runtimeSampler := status.NewRuntimeStatSampler(ctx, clock)
 	registry.AddMetricStruct(runtimeSampler)
+	// Save a reference to this sampler for use by additional servers
+	// started via the server controller.
+	cfg.RuntimeStatSampler = runtimeSampler
 
 	registry.AddMetric(base.LicenseTTL)
 

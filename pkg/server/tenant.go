@@ -569,16 +569,18 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 		s.sqlServer.cfg.SQLAdvertiseAddr,
 	)
 
-	// Begin recording runtime statistics.
-	if err := startSampleEnvironment(workersCtx,
-		s.ClusterSettings(),
-		s.stopper,
-		s.sqlServer.cfg.GoroutineDumpDirName,
-		s.sqlServer.cfg.HeapProfileDirName,
-		s.runtime,
-		s.tenantStatus.sessionRegistry,
-	); err != nil {
-		return err
+	if !s.sqlServer.cfg.DisableRuntimeStatsMonitor {
+		// Begin recording runtime statistics.
+		if err := startSampleEnvironment(workersCtx,
+			s.ClusterSettings(),
+			s.stopper,
+			s.sqlServer.cfg.GoroutineDumpDirName,
+			s.sqlServer.cfg.HeapProfileDirName,
+			s.runtime,
+			s.tenantStatus.sessionRegistry,
+		); err != nil {
+			return err
+		}
 	}
 
 	// Export statistics to graphite, if enabled by configuration.
@@ -952,7 +954,12 @@ func makeTenantSQLServerArgs(
 		parentRecorder.AddTenantRecorder(recorder)
 	}
 
-	runtime := status.NewRuntimeStatSampler(startupCtx, clock)
+	var runtime *status.RuntimeStatSampler
+	if baseCfg.RuntimeStatSampler != nil {
+		runtime = baseCfg.RuntimeStatSampler
+	} else {
+		runtime = status.NewRuntimeStatSampler(startupCtx, clock)
+	}
 	registry.AddMetricStruct(runtime)
 
 	// NB: The init method will be called in (*SQLServerWrapper).PreStart().
