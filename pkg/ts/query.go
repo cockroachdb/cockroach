@@ -552,8 +552,9 @@ func (db *DB) queryChunk(
 	var data []kv.KeyValue
 	var err error
 	if len(query.Sources) == 0 {
-		data, err = db.readAllSourcesFromDatabase(ctx, query.Name, diskResolution, diskTimespan)
+		data, err = db.readAllSourcesFromDatabase(ctx, query.Name, diskResolution, diskTimespan /*, prefix */)
 	} else {
+		// attach tenantlist prefixes to query.sources  (1 element for app tenants)
 		data, err = db.readFromDatabase(ctx, query.Name, diskResolution, diskTimespan, query.Sources)
 	}
 
@@ -860,17 +861,20 @@ func (db *DB) readFromDatabase(
 // optional limit is used when memory usage is being limited by the number of
 // keys, rather than by timespan.
 func (db *DB) readAllSourcesFromDatabase(
-	ctx context.Context, seriesName string, diskResolution Resolution, timespan QueryTimespan,
+	ctx context.Context,
+	seriesName string,
+	diskResolution Resolution,
+	timespan QueryTimespan, // prefix,
 ) ([]kv.KeyValue, error) {
 	// Based on the supplied timestamps and resolution, construct start and
 	// end keys for a scan that will return every key with data relevant to
 	// the query. Query slightly before and after the actual queried range
 	// to allow interpolation of points at the start and end of the range.
 	startKey := MakeDataKey(
-		seriesName, "" /* source */, diskResolution, timespan.StartNanos,
+		seriesName, "" /* prefix + source */, diskResolution, timespan.StartNanos,
 	)
 	endKey := MakeDataKey(
-		seriesName, "" /* source */, diskResolution, timespan.EndNanos,
+		seriesName, "" /* prefix + source */, diskResolution, timespan.EndNanos,
 	).PrefixEnd()
 	b := &kv.Batch{}
 	b.Scan(startKey, endKey)

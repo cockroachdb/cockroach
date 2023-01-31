@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvtenant"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/ts/catalog"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -97,6 +98,8 @@ type Server struct {
 	workerMemMonitor *mon.BytesMonitor
 	resultMemMonitor *mon.BytesMonitor
 	workerSem        *quotapool.IntPool
+
+	AdminServer serverpb.AdminServer
 }
 
 var _ tspb.TimeSeriesServer = &Server{}
@@ -218,11 +221,22 @@ func (s *Server) Query(
 	}
 	// TODO(aaditya): figure out how to get tenant ID here
 	// 	For System tenant, need list of all teneants
-	prefix := ""
 
 	for _, query := range request.Queries {
-		for i := range query.Sources {
-			query.Sources[i] = fmt.Sprintf("%s-%s", prefix, query.Sources[i])
+		var tenantSources []string
+		if len(query.Sources) > 0 {
+			tenants, err := s.AdminServer.ListTenants(ctx, &serverpb.ListTenantsRequest{})
+			if err != nil {
+				return nil, err
+			}
+			for _, tenant := range tenants.Tenants {
+				for i := range query.Sources {
+					tenantSources = append(tenantSources, fmt.Sprintf("%s-%s", tenant.TenantName, query.Sources[i]))
+				}
+			}
+		}
+		if len(tenantSources) > 0 {
+			query.Sources = tenantSources
 		}
 	}
 

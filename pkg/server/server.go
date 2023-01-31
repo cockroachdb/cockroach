@@ -578,16 +578,16 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		kvMemoryMonitor.Stop(ctx)
 	}))
 
-	//tsDB := ts.NewDB(db, cfg.Settings)
-	//registry.AddMetricStruct(tsDB.Metrics())
-	//nodeCountFn := func() int64 {
-	//	return nodeLiveness.Metrics().LiveNodes.Value()
-	//}
-	//
-	//sTS := ts.MakeServer(
-	//	cfg.AmbientCtx, tsDB, nodeCountFn, cfg.TimeSeriesServerConfig,
-	//	sqlMonitorAndMetrics.rootSQLMemoryMonitor, stopper,
-	//)
+	tsDB := ts.NewDB(db, cfg.Settings)
+	registry.AddMetricStruct(tsDB.Metrics())
+	nodeCountFn := func() int64 {
+		return nodeLiveness.Metrics().LiveNodes.Value()
+	}
+
+	sTS := ts.MakeServer(
+		cfg.AmbientCtx, tsDB, nodeCountFn, cfg.TimeSeriesServerConfig,
+		sqlMonitorAndMetrics.rootSQLMemoryMonitor, stopper,
+	)
 
 	systemConfigWatcher := systemconfigwatcher.New(
 		keys.SystemSQLCodec, clock, rangeFeedFactory, &cfg.DefaultZoneConfig,
@@ -1006,6 +1006,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		drain,
 		lateBoundServer,
 	)
+
+	sTS.AdminServer = sAdmin
 
 	// Connect the various servers to RPC.
 	for i, gw := range []grpcGatewayServer{sAdmin, sStatus, sAuth, &sTS} {
