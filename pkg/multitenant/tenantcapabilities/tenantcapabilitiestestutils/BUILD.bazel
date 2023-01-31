@@ -10,6 +10,7 @@ go_library(
         "//pkg/multitenant/tenantcapabilities",
         "//pkg/multitenant/tenantcapabilities/tenantcapabilitiespb",
         "//pkg/roachpb",
+        "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_stretchr_testify//require",
     ],
 )
