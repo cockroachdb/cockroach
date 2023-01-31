@@ -30,13 +30,13 @@ type tenantAuthorizer struct {
 	tenantID roachpb.TenantID
 }
 
-func tenantFromCommonName(commonName string) (roachpb.TenantID, error) {
+func tenantIDFromString(commonName, field string) (roachpb.TenantID, error) {
 	tenID, err := strconv.ParseUint(commonName, 10, 64)
 	if err != nil {
-		return roachpb.TenantID{}, authErrorf("could not parse tenant ID from Common Name (CN): %s", err)
+		return roachpb.TenantID{}, authErrorf("could not parse tenant ID from %s: %s", field, err)
 	}
 	if tenID < roachpb.MinTenantID.ToUint64() || tenID > roachpb.MaxTenantID.ToUint64() {
-		return roachpb.TenantID{}, authErrorf("invalid tenant ID %d in Common Name (CN)", tenID)
+		return roachpb.TenantID{}, authErrorf("invalid tenant ID %d in %s", tenID, field)
 	}
 	return roachpb.MustMakeTenantID(tenID), nil
 }
