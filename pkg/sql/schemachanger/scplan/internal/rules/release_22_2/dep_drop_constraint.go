@@ -23,7 +23,7 @@ func init() {
 
 	registerDepRuleForDrop(
 		"constraint dependent absent right before constraint",
-		scgraph.Precedence,
+		scgraph.SameStagePrecedence,
 		"dependent", "constraint",
 		scpb.Status_ABSENT, scpb.Status_ABSENT,
 		func(from, to NodeVars) rel.Clauses {

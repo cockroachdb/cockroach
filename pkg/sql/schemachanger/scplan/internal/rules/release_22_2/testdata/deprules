@@ -1395,7 +1395,7 @@ deprules
     - $column-type-Node[CurrentStatus] = ABSENT
     - joinTargetNode($dependent, $dependent-Target, $dependent-Node)
     - joinTargetNode($column-type, $column-type-Target, $column-type-Node)
-- name: column type removed right before column when rules.Not dropping relation
+- name: column type removed right before column when not dropping relation
   from: column-type-Node
   kind: SameStagePrecedence
   to: column-Node
@@ -1411,7 +1411,7 @@ deprules
     - joinTargetNode($column, $column-Target, $column-Node)
 - name: constraint dependent absent right before constraint
   from: dependent-Node
-  kind: Precedence
+  kind: SameStagePrecedence
   to: constraint-Node
   query:
     - $dependent[Type] IN ['*scpb.ConstraintWithoutIndexName', '*scpb.ConstraintComment']
@@ -1424,7 +1424,7 @@ deprules
     - joinTargetNode($constraint, $constraint-Target, $constraint-Node)
 - name: constraint dependent absent right before constraint
   from: dependent-Node
-  kind: Precedence
+  kind: SameStagePrecedence
   to: constraint-Node
   query:
     - $dependent[Type] IN ['*scpb.ConstraintWithoutIndexName', '*scpb.ConstraintComment']
@@ -1437,7 +1437,7 @@ deprules
     - joinTargetNode($constraint, $constraint-Target, $constraint-Node)
 - name: constraint dependent absent right before constraint
   from: dependent-Node
-  kind: Precedence
+  kind: SameStagePrecedence
   to: constraint-Node
   query:
     - $dependent[Type] IN ['*scpb.ConstraintWithoutIndexName', '*scpb.ConstraintComment']
@@ -1451,7 +1451,7 @@ deprules
     - joinTargetNode($constraint, $constraint-Target, $constraint-Node)
 - name: constraint dependent absent right before constraint
   from: dependent-Node
-  kind: Precedence
+  kind: SameStagePrecedence
   to: constraint-Node
   query:
     - $dependent[Type] IN ['*scpb.ConstraintWithoutIndexName', '*scpb.ConstraintComment']
@@ -1740,7 +1740,6 @@ deprules
   to: earlier-column-Node
   query:
     - $later-column[Type] = '*scpb.Column'
-    - joinTargetNode($later-column, $later-column-Target, $later-column-Node)
     - $earlier-column[Type] = '*scpb.Column'
     - joinOnDescID($later-column, $earlier-column, $table-id)
     - ToPublicOrTransient($later-column-Target, $earlier-column-Target)
@@ -1951,7 +1950,7 @@ deprules
     - $new-primary-index-Node[CurrentStatus] = PUBLIC
     - joinTargetNode($old-primary-index, $old-primary-index-Target, $old-primary-index-Node)
     - joinTargetNode($new-primary-index, $new-primary-index-Target, $new-primary-index-Node)
-- name: partial predicate removed right before secondary index when rules.Not dropping relation
+- name: partial predicate removed right before secondary index when not dropping relation
   from: partial-predicate-Node
   kind: SameStagePrecedence
   to: index-Node
@@ -1965,7 +1964,7 @@ deprules
     - $index-Node[CurrentStatus] = ABSENT
     - joinTargetNode($partial-predicate, $partial-predicate-Target, $partial-predicate-Node)
     - joinTargetNode($index, $index-Target, $index-Node)
-- name: partial predicate removed right before secondary index when rules.Not dropping relation
+- name: partial predicate removed right before secondary index when not dropping relation
   from: partial-predicate-Node
   kind: SameStagePrecedence
   to: index-Node
@@ -1979,7 +1978,7 @@ deprules
     - $index-Node[CurrentStatus] = TRANSIENT_ABSENT
     - joinTargetNode($partial-predicate, $partial-predicate-Target, $partial-predicate-Node)
     - joinTargetNode($index, $index-Target, $index-Node)
-- name: partial predicate removed right before secondary index when rules.Not dropping relation
+- name: partial predicate removed right before secondary index when not dropping relation
   from: partial-predicate-Node
   kind: SameStagePrecedence
   to: index-Node
@@ -1994,7 +1993,7 @@ deprules
     - $index-Node[CurrentStatus] = ABSENT
     - joinTargetNode($partial-predicate, $partial-predicate-Target, $partial-predicate-Node)
     - joinTargetNode($index, $index-Target, $index-Node)
-- name: partial predicate removed right before secondary index when rules.Not dropping relation
+- name: partial predicate removed right before secondary index when not dropping relation
   from: partial-predicate-Node
   kind: SameStagePrecedence
   to: index-Node

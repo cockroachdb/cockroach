@@ -83,7 +83,7 @@ func init() {
 	// which also hold references to other descriptors. The rule prior to this one
 	// ensures that they transition to ABSENT before scpb.ColumnType does.
 	registerDepRule(
-		"column type removed right before column when rules.Not dropping relation",
+		"column type removed right before column when not dropping relation",
 		scgraph.SameStagePrecedence,
 		"column-type", "column",
 		func(from, to NodeVars) rel.Clauses {
