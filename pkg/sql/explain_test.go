@@ -21,6 +21,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/internal/sqlsmith"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -28,7 +30,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -467,5 +471,104 @@ func TestExplainAnalyzeWarnings(t *testing.T) {
 			}
 		}
 		assert.Equal(t, tc.expectWarning, warningFound, fmt.Sprintf("failed for estimated row count %d", tc.estimatedRowCount))
+	}
+}
+
+// TestExplainRedact tests that variants of EXPLAIN (REDACT) do not leak PII.
+func TestExplainRedact(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	rng, seed := randutil.NewTestRand()
+	t.Log("seed:", seed)
+
+	params, _ := tests.CreateTestServerParams()
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+	defer sqlDB.Close()
+
+	// To check for PII leaks, we inject a single unlikely string into some of the
+	// query constants produced by SQLSmith, and then search the EXPLAIN output
+	// for this string.
+	pii := "pterodactyl"
+	containsPII := func(explain, contents string) error {
+		lowerContents := strings.ToLower(contents)
+		if strings.Contains(lowerContents, pii) {
+			return errors.Newf("EXPLAIN output contained PII (%q):\n%s\noutput:\n%s\n", pii, explain, contents)
+		}
+		return nil
+	}
+
+	setup := sqlsmith.Setups["seed"](rng)
+	t.Log(strings.Join(setup, "\n"))
+	db := sqlutils.MakeSQLRunner(sqlDB)
+	db.ExecMultiple(t, setup...)
+
+	smith, err := sqlsmith.NewSmither(sqlDB, rng,
+		sqlsmith.EnableAlters(),
+		sqlsmith.PrefixStringConsts(pii),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer smith.Close()
+
+	// Generate random statements.
+	var statements [5]string
+	for i := range statements {
+		statements[i] = smith.Generate()
+	}
+
+	// Gather EXPLAIN variants to test.
+	commands := []string{"EXPLAIN", "EXPLAIN ANALYZE"}
+	var modes []string
+	for modeStr, mode := range tree.ExplainModes() {
+		switch mode {
+		case tree.ExplainDebug:
+			// EXPLAIN ANALYZE (DEBUG, REDACT) is checked by TestExplainAnalyzeDebug/redact.
+			continue
+		}
+		modes = append(modes, modeStr+", ")
+	}
+	flags := []string{""}
+	for flagStr, flag := range tree.ExplainFlags() {
+		switch flag {
+		case tree.ExplainFlagRedact:
+			// We add REDACT to each EXPLAIN below.
+			continue
+		}
+		flags = append(flags, flagStr+", ")
+	}
+
+	// Execute each EXPLAIN variant on each random statement, and look for PII.
+	for _, cmd := range commands {
+		for _, mode := range modes {
+			for _, flag := range flags {
+				for _, stmt := range statements {
+					explain := cmd + " (" + mode + flag + "REDACT) " + stmt
+					rows, err := sqlDB.QueryContext(ctx, explain)
+					if err != nil {
+						// Errors are fine. (E.g. EXPLAIN (OPT, JSON) is always an error.)
+						continue
+					}
+					var output strings.Builder
+					for rows.Next() {
+						var out string
+						if err := rows.Scan(&out); err != nil {
+							t.Fatal(err)
+						}
+						output.WriteString(out)
+						output.WriteRune('\n')
+					}
+					if err := containsPII(explain, output.String()); err != nil {
+						t.Error(err)
+						continue
+					}
+					// TODO(michae2): When it is supported, also check HTML returned by
+					// EXPLAIN (DISTSQL, REDACT).
+				}
+			}
+		}
 	}
 }

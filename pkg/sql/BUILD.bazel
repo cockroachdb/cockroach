@@ -694,6 +694,7 @@ go_test(
         "//pkg/config",
         "//pkg/config/zonepb",
         "//pkg/gossip",
+        "//pkg/internal/sqlsmith",
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
         "//pkg/jobs/jobstest",
