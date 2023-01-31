@@ -453,7 +453,7 @@ func (c *CustomFuncs) generateLookupJoinsImpl(
 		lookupJoin.DerivedEquivCols = lookupConstraint.DerivedEquivCols
 		lookupJoin.LookupExpr = lookupConstraint.LookupExpr
 		lookupJoin.On = lookupConstraint.RemainingFilters
-		lookupJoin.ConstFilters = lookupConstraint.ConstFilters
+		lookupJoin.AllLookupFilters = lookupConstraint.AllLookupFilters
 
 		// Wrap the input in a Project if any projections are required. The
 		// lookup join will project away these synthesized columns.
@@ -769,8 +769,8 @@ func (c *CustomFuncs) mapLookupJoin(
 		lookupJoin.RemoteLookupExpr = *remoteLookupExpr
 	})
 	lookupJoin.Cols = lookupJoin.Cols.CopyAndMaybeRemap(srcColsToDstCols)
-	constFilters := c.e.f.RemapCols(&lookupJoin.ConstFilters, srcColsToDstCols).(*memo.FiltersExpr)
-	lookupJoin.ConstFilters = *constFilters
+	allLookupFilters := c.e.f.RemapCols(&lookupJoin.AllLookupFilters, srcColsToDstCols).(*memo.FiltersExpr)
+	lookupJoin.AllLookupFilters = *allLookupFilters
 	on := c.e.f.RemapCols(&lookupJoin.On, srcColsToDstCols).(*memo.FiltersExpr)
 	lookupJoin.On = *on
 	lookupJoin.DerivedEquivCols = lookupJoin.DerivedEquivCols.CopyAndMaybeRemap(srcColsToDstCols)
@@ -1190,7 +1190,7 @@ func (c *CustomFuncs) ConvertIndexToLookupJoinPrivate(
 		KeyCols:               lookupCols,
 		Cols:                  outCols,
 		LookupColsAreTableKey: true,
-		ConstFilters:          nil,
+		AllLookupFilters:      nil,
 		Locking:               indexPrivate.Locking,
 		JoinPrivate:           memo.JoinPrivate{},
 	}
@@ -1308,6 +1308,15 @@ func (c *CustomFuncs) CreateLocalityOptimizedLookupJoinPrivate(
 	newPrivate.LookupExpr = lookupExpr
 	newPrivate.RemoteLookupExpr = remoteLookupExpr
 	newPrivate.LocalityOptimized = true
+	switch private.JoinType {
+	case opt.AntiJoinOp:
+		// Add the filters from the LookupExpr, because we need to account for the
+		// regions selected in our statistics estimation. This is only needed for
+		// anti join because it is the only locality optimized join that is split
+		// into two separate operators. Note that only lookupExpr is used for anti
+		// joins, not remoteLookupExpr.
+		newPrivate.AllLookupFilters = append(newPrivate.AllLookupFilters, lookupExpr...)
+	}
 	return &newPrivate
 }
 
@@ -2157,8 +2166,8 @@ func (c *CustomFuncs) mapInputSideOfLookupJoin(
 	mappedLookupJoinExpr.ContinuationCol = lookupJoinExpr.ContinuationCol
 	mappedLookupJoinExpr.LocalityOptimized = lookupJoinExpr.LocalityOptimized
 	mappedLookupJoinExpr.ChildOfLocalityOptimizedSearch = lookupJoinExpr.ChildOfLocalityOptimizedSearch
-	constFilters := c.e.f.RemapCols(&lookupJoinExpr.ConstFilters, colMap).(*memo.FiltersExpr)
-	mappedLookupJoinExpr.ConstFilters = *constFilters
+	allLookupFilters := c.e.f.RemapCols(&lookupJoinExpr.AllLookupFilters, colMap).(*memo.FiltersExpr)
+	mappedLookupJoinExpr.AllLookupFilters = *allLookupFilters
 	mappedLookupJoinExpr.Locking = lookupJoinExpr.Locking
 	mappedLookupJoinExpr.RemoteOnlyLookups = lookupJoinExpr.RemoteOnlyLookups
 	return mappedLookupJoinExpr
