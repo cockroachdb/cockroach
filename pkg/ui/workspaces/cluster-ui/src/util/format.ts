@@ -290,3 +290,40 @@ export function capitalize(str: string): string {
   if (!str) return str;
   return str[0].toUpperCase() + str.substring(1);
 }
+
+export function EncodeUriName(name: string) {
+  return encodeURIComponent(name);
+}
+
+export function EncodeDatabasesUri(db: string) {
+  return `/databases/${EncodeUriName(db)}`;
+}
+
+export function EncodeDatabasesToIndexUri(
+  db: string,
+  schema: string,
+  table: string,
+  indexName: string,
+) {
+  return `${EncodeDatabasesUri(db)}/${EncodeUriName(schema)}/${EncodeUriName(
+    table,
+  )}/${EncodeUriName(indexName)}`;
+}
+
+export function EncodeDatabaseTableUri(db: string, table: string) {
+  return `${EncodeDatabaseUri(db)}/table/${EncodeUriName(table)}`;
+}
+
+export function EncodeDatabaseTableIndexUri(
+  db: string,
+  table: string,
+  indexName: string,
+) {
+  return `${EncodeDatabaseTableUri(db, table)}/index/${EncodeUriName(
+    indexName,
+  )}`;
+}
+
+export function EncodeDatabaseUri(db: string) {
+  return `/database/${EncodeUriName(db)}`;
+}

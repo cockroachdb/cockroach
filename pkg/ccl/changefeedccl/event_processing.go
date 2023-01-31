@@ -290,7 +290,7 @@ func newEvaluator(
 		sd = *spec.Feed.SessionData
 	}
 
-	return cdceval.NewEvaluator(sc, cfg, spec.User(), sd)
+	return cdceval.NewEvaluator(sc, cfg, spec.User(), sd, spec.Feed.StatementTime), nil
 }
 
 func (c *kvEventToRowConsumer) topicForEvent(eventMeta cdcevent.Metadata) (TopicDescriptor, error) {
