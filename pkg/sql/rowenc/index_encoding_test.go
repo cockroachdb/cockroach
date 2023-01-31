@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/trigram"
@@ -1022,9 +1023,9 @@ func TestEncodeTrigramInvertedIndexSpans(t *testing.T) {
 
 		// Generate two random strings and evaluate left % right, left LIKE right,
 		// and left = right both via eval and via the span comparisons.
-		left := randgen.RandString(rng, 15, alphabet)
+		left := util.RandString(rng, 15, alphabet)
 		length := 3 + rng.Intn(5)
-		right := randgen.RandString(rng, length, alphabet+"%")
+		right := util.RandString(rng, length, alphabet+"%")
 
 		for _, searchType := range []trigramSearchType{like, eq, similar} {
 			expr := makeTrigramBinOp(t, left, right, searchType)

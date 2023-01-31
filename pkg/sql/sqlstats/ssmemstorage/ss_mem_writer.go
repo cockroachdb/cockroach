@@ -180,9 +180,11 @@ func (s *Container) RecordStatement(
 
 	var contention *time.Duration
 	var contentionEvents []roachpb.ContentionEvent
+	var cpuSQLNanos int64
 	if value.ExecStats != nil {
 		contention = &value.ExecStats.ContentionTime
 		contentionEvents = value.ExecStats.ContentionEvents
+		cpuSQLNanos = value.ExecStats.CPUTime.Nanoseconds()
 	}
 
 	s.insights.ObserveStatement(value.SessionID, &insights.Statement{
@@ -204,6 +206,7 @@ func (s *Container) RecordStatement(
 		ContentionEvents:     contentionEvents,
 		IndexRecommendations: value.IndexRecommendations,
 		Database:             value.Database,
+		CPUSQLNanos:          cpuSQLNanos,
 	})
 
 	return stats.ID, nil
@@ -322,6 +325,11 @@ func (s *Container) RecordTransaction(
 		retryReason = value.AutoRetryReason.Error()
 	}
 
+	var cpuSQLNanos int64
+	if value.ExecStats.CPUTime.Nanoseconds() >= 0 {
+		cpuSQLNanos = value.ExecStats.CPUTime.Nanoseconds()
+	}
+
 	s.insights.ObserveTransaction(value.SessionID, &insights.Transaction{
 		ID:              value.TransactionID,
 		FingerprintID:   key,
@@ -336,6 +344,7 @@ func (s *Container) RecordTransaction(
 		RowsWritten:     value.RowsWritten,
 		RetryCount:      value.RetryCount,
 		AutoRetryReason: retryReason,
+		CPUSQLNanos:     cpuSQLNanos,
 	})
 	return nil
 }

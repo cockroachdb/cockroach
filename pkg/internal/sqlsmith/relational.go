@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
 func (s *Smither) makeStmt() (stmt tree.Statement, ok bool) {
@@ -1001,7 +1002,7 @@ func makeBegin(s *Smither) (tree.Statement, bool) {
 const letters = "abcdefghijklmnopqrstuvwxyz"
 
 func makeSavepoint(s *Smither) (tree.Statement, bool) {
-	savepointName := randgen.RandString(s.rnd, s.d9(), letters)
+	savepointName := util.RandString(s.rnd, s.d9(), letters)
 	s.activeSavepoints = append(s.activeSavepoints, savepointName)
 	return &tree.Savepoint{Name: tree.Name(savepointName)}, true
 }
