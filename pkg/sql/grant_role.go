@@ -174,7 +174,10 @@ func (n *GrantRoleNode) startExec(params runParams) error {
 	// If admin option is false, we do not remove it from existing memberships.
 	memberStmt := `INSERT INTO system.role_members ("role", "member", "isAdmin") VALUES ($1, $2, $3) ON CONFLICT ("role", "member")`
 	if roleMembersHasIDs {
-		memberStmt = `INSERT INTO system.role_members ("role", "member", "isAdmin", "role_id", "member_id") VALUES ($1, $2, $3, $4, $5) ON CONFLICT ("role", "member")`
+		memberStmt = `
+INSERT INTO system.role_members ("role", "member", "isAdmin", role_id, member_id)
+VALUES ($1, $2, $3, (SELECT user_id FROM system.users WHERE username = $1), (SELECT user_id FROM system.users WHERE username = $2))
+ON CONFLICT ("role", "member")`
 	}
 	if n.adminOption {
 		// admin option: true, set "isAdmin" even if the membership exists.
@@ -184,49 +187,15 @@ func (n *GrantRoleNode) startExec(params runParams) error {
 		memberStmt += ` DO NOTHING`
 	}
 
-	// Get user IDs for both role and member if ID columns have been added.
-	var qargs []interface{}
-	if roleMembersHasIDs {
-		qargs = make([]interface{}, 5)
-	} else {
-		qargs = make([]interface{}, 3)
-	}
-
-	qargs[2] = n.adminOption
 	for _, r := range n.roles {
-		qargs[0] = r.Normalized()
-
-		if roleMembersHasIDs {
-			idRow, err := params.p.InternalSQLTxn().QueryRowEx(
-				params.ctx, "get-user-id", params.p.Txn(),
-				sessiondata.NodeUserSessionDataOverride,
-				`SELECT user_id FROM system.users WHERE username = $1`, r.Normalized(),
-			)
-			if err != nil {
-				return err
-			}
-			qargs[3] = tree.MustBeDOid(idRow[0])
-		}
-
 		for _, m := range n.members {
-			qargs[1] = m.Normalized()
-
-			if roleMembersHasIDs {
-				idRow, err := params.p.InternalSQLTxn().QueryRowEx(
-					params.ctx, "get-user-id", params.p.Txn(),
-					sessiondata.NodeUserSessionDataOverride,
-					`SELECT user_id FROM system.users WHERE username = $1`, m.Normalized(),
-				)
-				if err != nil {
-					return err
-				}
-				qargs[4] = tree.MustBeDOid(idRow[0])
-			}
-
 			memberStmtRowsAffected, err := params.p.InternalSQLTxn().ExecEx(
 				params.ctx, "grant-role", params.p.Txn(),
 				sessiondata.RootUserSessionDataOverride,
-				memberStmt, qargs...,
+				memberStmt,
+				r.Normalized(),
+				m.Normalized(),
+				n.adminOption,
 			)
 			if err != nil {
 				return err

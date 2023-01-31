@@ -823,6 +823,9 @@ func makeTenantSQLServerArgs(
 		Settings:         st,
 		Knobs:            rpcTestingKnobs,
 	})
+	registry.AddMetricStruct(rpcContext.Metrics())
+	registry.AddMetricStruct(rpcContext.RemoteClocks.Metrics())
+
 	// If there is a local KV server, hook this SQLServer to it so that the
 	// SQLServer can perform some RPCs directly, without going through gRPC.
 	if lsi := sqlCfg.LocalKVServerInfo; lsi != nil {
