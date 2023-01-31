@@ -57,6 +57,11 @@ var (
 
 	// reference error used when cluster creation fails for a test
 	errClusterProvisioningFailed = fmt.Errorf("cluster could not be created")
+
+	prometheusNameSpace = "roachtest"
+	// prometheusScrapeInterval should be consistent with the scrape interval defined in
+	// https://grafana.testeng.crdb.io/prometheus/config
+	prometheusScrapeInterval = time.Second * 15
 )
 
 // testRunner runs tests.
@@ -75,6 +80,10 @@ type testRunner struct {
 		skipClusterWipeOnAttach bool
 		// disableIssue disables posting GitHub issues for test failures.
 		disableIssue bool
+		// overrideShutdownPromScrapeInterval overrides the default time a test runner waits to
+		// shut down, normally used to ensure a remote prometheus server has scraped the roachtest
+		// endpoint.
+		overrideShutdownPromScrapeInterval time.Duration
 	}
 
 	status struct {
@@ -126,6 +135,15 @@ func newTestRunner(
 	r.config.skipClusterWipeOnAttach = !clusterWipe
 	r.config.disableIssue = disableIssue
 	r.workersMu.workers = make(map[string]*workerStatus)
+	return r
+}
+
+func newUnitTestRunner(
+	cr *clusterRegistry, stopper *stop.Stopper, buildVersion version.Version,
+) *testRunner {
+	r := newTestRunner(cr, stopper, buildVersion)
+	// To speed up unit tests, reduce test runner shutdown time.
+	r.config.overrideShutdownPromScrapeInterval = time.Millisecond
 	return r
 }
 
@@ -322,6 +340,7 @@ func (r *testRunner) Run(
 
 	// Wait for all the workers to finish.
 	wg.Wait()
+	shutdownStart := timeutil.Now()
 	r.cr.destroyAllClusters(ctx, l)
 
 	if errs.Err() != nil {
@@ -338,6 +357,18 @@ func (r *testRunner) Run(
 
 	if len(r.status.fail) > 0 {
 		return errTestsFailed
+	}
+	// To ensure all prometheus metrics have been scraped, ensure shutdown takes
+	// at least one scrapeInterval, unless the roachtest fails or gets cancelled.
+	requiredShutDownTime := prometheusScrapeInterval
+	if r.config.overrideShutdownPromScrapeInterval > 0 {
+		requiredShutDownTime = r.config.overrideShutdownPromScrapeInterval
+	}
+	if shutdownSleep := requiredShutDownTime - timeutil.Since(shutdownStart); shutdownSleep > 0 {
+		select {
+		case <-r.stopper.ShouldQuiesce():
+		case <-time.After(shutdownSleep):
+		}
 	}
 	return nil
 }
