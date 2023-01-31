@@ -317,7 +317,7 @@ func TestAckCommittedEntriesBeforeApplication(t *testing.T) {
 	appT := apply.MakeTask(sm, dec)
 	defer appT.Close()
 	require.NoError(t, appT.Decode(ctx, ents))
-	require.NoError(t, appT.AckCommittedEntriesBeforeApplication(ctx, 10 /* maxIndex */))
+	require.NoError(t, appT.AckCommittedEntriesBeforeApplication(ctx))
 
 	// Assert that the state machine was not updated.
 	require.Equal(t, testStateMachine{}, *sm)
@@ -334,40 +334,6 @@ func TestAckCommittedEntriesBeforeApplication(t *testing.T) {
 			exp = false // local and rejected
 		default:
 			exp = false // after first non-trivial cmd
-		}
-		require.Equal(t, exp, cmd.acked)
-		require.False(t, cmd.finished)
-	}
-
-	// Try again with a lower maximum log index.
-	appT.Close()
-	ents = makeEntries(5)
-
-	dec = newTestDecoder()
-	dec.nonLocal[2] = true
-	dec.shouldReject[3] = true
-
-	appT = apply.MakeTask(sm, dec)
-	require.NoError(t, appT.Decode(ctx, ents))
-	require.NoError(t, appT.AckCommittedEntriesBeforeApplication(ctx, 4 /* maxIndex */))
-
-	// Assert that the state machine was not updated.
-	require.Equal(t, testStateMachine{}, *sm)
-
-	// Assert that some commands were acknowledged early and that none were finished.
-	for _, cmd := range dec.cmds {
-		var exp bool
-		switch cmd.index {
-		case 1, 4:
-			exp = true // local and successful
-		case 2:
-			exp = false // remote
-		case 3:
-			exp = false // local and rejected
-		case 5:
-			exp = false // index too high
-		default:
-			t.Fatalf("unexpected index %d", cmd.index)
 		}
 		require.Equal(t, exp, cmd.acked)
 		require.False(t, cmd.finished)
