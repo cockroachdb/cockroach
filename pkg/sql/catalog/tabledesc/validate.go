@@ -68,11 +68,11 @@ func (desc *wrapper) GetReferencedDescIDs() (catalog.DescriptorIDSet, error) {
 		ids.Add(desc.GetParentSchemaID())
 	}
 	// Collect referenced table IDs in foreign keys.
-	for _, fk := range desc.OutboundFKs {
-		ids.Add(fk.ReferencedTableID)
+	for _, fk := range desc.OutboundForeignKeys() {
+		ids.Add(fk.GetReferencedTableID())
 	}
-	for _, fk := range desc.InboundFKs {
-		ids.Add(fk.OriginTableID)
+	for _, fk := range desc.InboundForeignKeys() {
+		ids.Add(fk.GetOriginTableID())
 	}
 	// Collect user defined type Oids and sequence references in columns.
 	for _, col := range desc.DeletableColumns() {
@@ -205,9 +205,9 @@ func (desc *wrapper) ValidateForwardReferences(
 		}
 	}
 
-	// Check foreign keys.
-	for i := range desc.OutboundFKs {
-		vea.Report(desc.validateOutboundFK(&desc.OutboundFKs[i], vdg))
+	// Check enforced outbound foreign keys.
+	for _, fk := range desc.EnforcedOutboundForeignKeys() {
+		vea.Report(desc.validateOutboundFK(fk.ForeignKeyDesc(), vdg))
 	}
 
 	// Check partitioning is correctly set.

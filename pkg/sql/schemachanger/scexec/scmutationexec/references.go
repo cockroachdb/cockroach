@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
-	"github.com/cockroachdb/errors"
 )
 
 func (i *immediateVisitor) RemoveSchemaParent(
@@ -74,29 +73,6 @@ func (i *immediateVisitor) RemoveForeignKeyBackReference(
 		// Exit early if the foreign key back-reference holder is getting dropped.
 		return err
 	}
-	// Retrieve foreign key name in origin table to identify it in the referenced
-	// table.
-	var name string
-	{
-		out, err := i.getDescriptor(ctx, op.OriginTableID)
-		if err != nil {
-			return err
-		}
-		tbl, err := catalog.AsTableDescriptor(out)
-		if err != nil {
-			return err
-		}
-		for _, fk := range tbl.OutboundForeignKeys() {
-			if fk.GetConstraintID() == op.OriginConstraintID {
-				name = fk.GetName()
-				break
-			}
-		}
-		if name == "" {
-			return errors.AssertionFailedf("foreign key with ID %d not found in origin table %q (%d)",
-				op.OriginConstraintID, out.GetName(), out.GetID())
-		}
-	}
 	// Attempt to remove back reference.
 	// Note how we
 	//  1. only check to remove from `in.InboundFKs` but not from `in.Mutations`:
@@ -106,9 +82,9 @@ func (i *immediateVisitor) RemoveForeignKeyBackReference(
 	//  2. only attempt to remove (i.e. we do not panic when it's not found):
 	//  this is because if we roll back before the adding FK is published in `out`,
 	//  such a back-reference won't exist in `in` yet.
-	for i, fk := range in.InboundFKs {
-		if fk.OriginTableID == op.OriginTableID && fk.Name == name {
-			in.InboundFKs = append(in.InboundFKs[:i], in.InboundFKs[i+1:]...)
+	for idx, fk := range in.InboundFKs {
+		if fk.OriginTableID == op.OriginTableID && fk.ConstraintID == op.OriginConstraintID {
+			in.InboundFKs = append(in.InboundFKs[:idx], in.InboundFKs[idx+1:]...)
 			if len(in.InboundFKs) == 0 {
 				in.InboundFKs = nil
 			}
