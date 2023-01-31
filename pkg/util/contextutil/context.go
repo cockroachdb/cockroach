@@ -91,6 +91,11 @@ func (ctx *ctxWithStacktrace) Err() error {
 	return errors.WithStack(ctx.Context.Err())
 }
 
+// UnwrapContext implements the ContextWrapper interface.
+func (ctx *ctxWithStacktrace) UnwrapContext() context.Context {
+	return ctx.Context
+}
+
 // RunWithTimeout runs a function with a timeout, the same way you'd do with
 // context.WithTimeout. It improves the opaque error messages returned by
 // WithTimeout by augmenting them with the op string that is passed in.
