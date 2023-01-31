@@ -31,7 +31,12 @@ import {
   SummaryCardItemBoolSetting,
 } from "src/summaryCard";
 import * as format from "src/util/format";
-import { DATE_FORMAT, DATE_FORMAT_24_UTC } from "src/util/format";
+import {
+  DATE_FORMAT,
+  DATE_FORMAT_24_UTC,
+  EncodeDatabaseTableUri,
+  EncodeDatabaseUri,
+} from "src/util/format";
 import {
   ascendingAttr,
   columnTitleAttr,
@@ -504,9 +509,15 @@ export class DatabaseTablePage extends React.Component<
           <Breadcrumbs
             items={[
               { link: "/databases", name: "Databases" },
-              { link: `/database/${this.props.databaseName}`, name: "Tables" },
               {
-                link: `/database/${this.props.databaseName}/table/${this.props.name}`,
+                link: EncodeDatabaseUri(this.props.databaseName),
+                name: "Tables",
+              },
+              {
+                link: EncodeDatabaseTableUri(
+                  this.props.databaseName,
+                  this.props.name,
+                ),
                 name: `Table: ${this.props.name}`,
               },
             ]}

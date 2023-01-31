@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -35,6 +36,7 @@ import (
 type Evaluator struct {
 	sc *tree.SelectClause
 
+	statementTS hlc.Timestamp
 	// Execution context.
 	execCfg     *sql.ExecutorConfig
 	user        username.SQLUsername
@@ -79,14 +81,16 @@ func NewEvaluator(
 	execCfg *sql.ExecutorConfig,
 	user username.SQLUsername,
 	sd sessiondatapb.SessionData,
-) (*Evaluator, error) {
+	statementTS hlc.Timestamp,
+) *Evaluator {
 	return &Evaluator{
 		sc:          sc,
 		execCfg:     execCfg,
 		user:        user,
 		sessionData: sd,
+		statementTS: statementTS,
 		familyEval:  make(map[descpb.FamilyID]*familyEvaluator, 1), // usually, just 1 family.
-	}, nil
+	}
 }
 
 // NewEvaluator constructs new familyEvaluator for changefeed expression.
@@ -96,6 +100,7 @@ func newFamilyEvaluator(
 	execCfg *sql.ExecutorConfig,
 	user username.SQLUsername,
 	sd sessiondatapb.SessionData,
+	statementTS hlc.Timestamp,
 ) *familyEvaluator {
 	e := familyEvaluator{
 		targetFamilyID: targetFamilyID,
@@ -107,7 +112,7 @@ func newFamilyEvaluator(
 		},
 		rowCh: make(chan tree.Datums, 1),
 	}
-
+	e.rowEvalCtx.startTime = statementTS
 	// Arrange to be notified when event does not match predicate.
 	predicateAsProjection(e.norm)
 
@@ -138,7 +143,7 @@ func (e *Evaluator) Eval(
 
 	fe, ok := e.familyEval[updatedRow.FamilyID]
 	if !ok {
-		fe = newFamilyEvaluator(e.sc, updatedRow.FamilyID, e.execCfg, e.user, e.sessionData)
+		fe = newFamilyEvaluator(e.sc, updatedRow.FamilyID, e.execCfg, e.user, e.sessionData, e.statementTS)
 		e.familyEval[updatedRow.FamilyID] = fe
 	}
 
@@ -472,6 +477,7 @@ func (e *familyEvaluator) closeErr() error {
 // rowEvalContext represents the context needed to evaluate row expressions.
 type rowEvalContext struct {
 	ctx        context.Context
+	startTime  hlc.Timestamp
 	updatedRow cdcevent.Row
 }
 
