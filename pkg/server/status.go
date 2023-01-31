@@ -134,7 +134,7 @@ type metricMarshaler interface {
 }
 
 func propagateGatewayMetadata(ctx context.Context) context.Context {
-	if md, ok := metadata.FromIncomingContext(ctx); ok {
+	if md, ok := grpcutil.FastFromIncomingContext(ctx); ok {
 		return metadata.NewOutgoingContext(ctx, md)
 	}
 	return ctx
@@ -3549,7 +3549,7 @@ func marshalJSONResponse(value interface{}) (*serverpb.JSONResponse, error) {
 }
 
 func userFromContext(ctx context.Context) (res username.SQLUsername, err error) {
-	md, ok := metadata.FromIncomingContext(ctx)
+	md, ok := grpcutil.FastFromIncomingContext(ctx)
 	if !ok {
 		return username.RootUserName(), nil
 	}
