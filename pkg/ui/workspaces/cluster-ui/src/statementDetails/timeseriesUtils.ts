@@ -103,7 +103,7 @@ export function generateCPUTimeseries(
   stats.forEach(function (stat: statementStatisticsPerAggregatedTs) {
     if (stat.stats.exec_stats.cpu_nanos) {
       ts.push(TimestampToNumber(stat.aggregated_ts) * 1e3);
-      count.push(stat.stats.exec_stats.cpu_nanos.mean * 1e9);
+      count.push(stat.stats.exec_stats.cpu_nanos.mean);
     }
   });
 

@@ -120,7 +120,7 @@ export const contentionBarChart = barChartFactory(
 export const cpuBarChart = barChartFactory(
   "grey",
   cpuBars,
-  v => Duration(v * 1e9),
+  v => Duration(v),
   cpuStdDev,
 );
 export const maxMemUsageBarChart = barChartFactory(

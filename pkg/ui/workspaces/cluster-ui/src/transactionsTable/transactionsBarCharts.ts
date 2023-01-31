@@ -116,7 +116,7 @@ export const transactionsContentionBarChart = barChartFactory(
 export const transactionsCPUBarChart = barChartFactory(
   "grey",
   cpuBar,
-  v => Duration(v * 1e9),
+  v => Duration(v),
   cpuStdDev,
 );
 export const transactionsMaxMemUsageBarChart = barChartFactory(
