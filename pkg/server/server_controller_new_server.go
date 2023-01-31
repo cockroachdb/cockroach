@@ -234,7 +234,7 @@ func makeSharedProcessTenantServerConfig(
 	storeSpec := candidateSpec
 	if !storeSpec.InMemory {
 		storeDir := filepath.Join(storeSpec.Path, "tenant-"+tenantID.String())
-		if err := os.MkdirAll(storeDir, 0700); err != nil {
+		if err := os.MkdirAll(storeDir, 0755); err != nil {
 			return baseCfg, sqlCfg, err
 		}
 		stopper.AddCloser(stop.CloserFn(func() {
@@ -296,13 +296,29 @@ func makeSharedProcessTenantServerConfig(
 	baseCfg.SSLCertsDir = kvServerCfg.BaseConfig.SSLCertsDir
 	baseCfg.SSLCAKey = kvServerCfg.BaseConfig.SSLCAKey
 
-	// TODO(knz): startSampleEnvironment() should not be part of startTenantInternal. For now,
-	// disable the mechanism manually.
-	// See: https://github.com/cockroachdb/cockroach/issues/84589
+	// Don't let this SQL server take its own background heap/goroutine/CPU profile dumps.
+	// The system tenant's SQL server is doing this job.
+	baseCfg.DisableRuntimeStatsMonitor = true
 	baseCfg.GoroutineDumpDirName = ""
 	baseCfg.HeapProfileDirName = ""
 	baseCfg.CPUProfileDirName = ""
-	baseCfg.InflightTraceDirName = ""
+
+	// Expose the process-wide runtime metrics to the tenant's metric
+	// collector. Since they are process-wide, all tenants can see them.
+	baseCfg.RuntimeStatSampler = kvServerCfg.BaseConfig.RuntimeStatSampler
+
+	// If job trace dumps were enabled for the top-level server, enable
+	// them for us too. However, in contrast to temporary files, we
+	// don't want them to be deleted when the tenant server shuts down.
+	// So we store them into a directory relative to the main trace dump
+	// directory.
+	if kvServerCfg.BaseConfig.InflightTraceDirName != "" {
+		traceDir := filepath.Join(kvServerCfg.BaseConfig.InflightTraceDirName, "tenant-"+tenantID.String())
+		if err := os.MkdirAll(traceDir, 0755); err != nil {
+			return baseCfg, sqlCfg, err
+		}
+		baseCfg.InflightTraceDirName = traceDir
+	}
 
 	// TODO(knz): Define a meaningful storage config for each tenant,
 	// see: https://github.com/cockroachdb/cockroach/issues/84588.
