@@ -134,6 +134,22 @@ func runInconsistency(ctx context.Context, t test.Test, c cluster.Cluster) {
 	const expr = "This.node.is.terminating.because.a.replica.inconsistency.was.detected"
 	c.Run(ctx, c.Node(1), "grep "+expr+" {log-dir}/cockroach.log")
 
+	// Make sure that every node creates a checkpoint.
+	for n := 1; n <= 3; n++ {
+		// Notes it in the log.
+		const expr = "creating.checkpoint.*with.spans"
+		c.Run(ctx, c.Node(n), "grep "+expr+" {log-dir}/cockroach.log")
+		// Creates at least one checkpoint directory (in rare cases it can be
+		// multiple if multiple consistency checks fail in close succession), and
+		// puts spans information into the checkpoint.txt file in it.
+		c.Run(ctx, c.Node(n), "find {store-dir}/auxiliary/checkpoints -name checkpoint.txt")
+		// The checkpoint can be inspected by the tooling.
+		c.Run(ctx, c.Node(n), "./cockroach debug range-descriptors "+
+			"$(find {store-dir}/auxiliary/checkpoints/* -type d -depth 0 | head -n1)")
+		c.Run(ctx, c.Node(n), "./cockroach debug range-data --limit 10 "+
+			"$(find {store-dir}/auxiliary/checkpoints/* -type d -depth 0 | head -n1) 1")
+	}
+
 	// NB: we can't easily verify the error because there's a lot of output which
 	// isn't fully included in the error returned from StartE.
 	require.Error(t, c.StartE(
