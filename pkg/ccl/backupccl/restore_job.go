@@ -318,7 +318,7 @@ func restore(
 	genSpan := func(ctx context.Context) error {
 		defer close(importSpanCh)
 		return generateAndSendImportSpans(
-			restoreCtx,
+			ctx,
 			dataToRestore.getSpans(),
 			backupManifests,
 			layerToBackupManifestFileIterFactory,
@@ -334,7 +334,6 @@ func restore(
 	// Count number of import spans.
 	var numImportSpans int
 	var countTasks []func(ctx context.Context) error
-	log.Infof(restoreCtx, "rh_debug: starting count task")
 	spanCountTask := func(ctx context.Context) error {
 		for range importSpanCh {
 			numImportSpans++
@@ -382,50 +381,61 @@ func restore(
 
 	generativeCheckpointLoop := func(ctx context.Context) error {
 		defer close(requestFinishedCh)
-		for progress := range progCh {
-			mu.Lock()
-			var progDetails backuppb.RestoreProgress
-			if err := pbtypes.UnmarshalAny(&progress.ProgressDetails, &progDetails); err != nil {
-				log.Errorf(ctx, "unable to unmarshal restore progress details: %+v", err)
+		for {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case progress, ok := <-progCh:
+				if !ok {
+					return nil
+				}
+				mu.Lock()
+				var progDetails backuppb.RestoreProgress
+				if err := pbtypes.UnmarshalAny(&progress.ProgressDetails, &progDetails); err != nil {
+					log.Errorf(ctx, "unable to unmarshal restore progress details: %+v", err)
+				}
+
+				mu.res.Add(progDetails.Summary)
+				idx := progDetails.ProgressIdx
+
+				if idx >= mu.ceiling {
+					for i := mu.ceiling; i <= idx; i++ {
+						importSpan, ok := <-importSpanCh
+						if !ok {
+							// Our channel was closed, nothing left to do.
+							return nil
+						}
+						mu.inFlightImportSpans[i] = importSpan.Span
+					}
+					mu.ceiling = idx + 1
+				}
+
+				if sp, ok := mu.inFlightImportSpans[idx]; ok {
+					// Assert that we're actually marking the correct span done. See #23977.
+					if !sp.Key.Equal(progDetails.DataSpan.Key) {
+						mu.Unlock()
+						return errors.Newf("request %d for span %v does not match import span for same idx: %v",
+							idx, progDetails.DataSpan, sp,
+						)
+					}
+					mu.requestsCompleted[idx] = true
+					prevHighWater := mu.highWaterMark
+					for j := mu.highWaterMark + 1; j < mu.ceiling && mu.requestsCompleted[j]; j++ {
+						mu.highWaterMark = j
+					}
+
+					for j := prevHighWater; j < mu.highWaterMark; j++ {
+						delete(mu.requestsCompleted, j)
+						delete(mu.inFlightImportSpans, j)
+					}
+				}
+				mu.Unlock()
+
+				// Signal that the processor has finished importing a span, to update job
+				// progress.
+				requestFinishedCh <- struct{}{}
 			}
-
-			mu.res.Add(progDetails.Summary)
-			idx := progDetails.ProgressIdx
-
-			if idx >= mu.ceiling {
-				for i := mu.ceiling; i <= idx; i++ {
-					importSpan := <-importSpanCh
-					mu.inFlightImportSpans[i] = importSpan.Span
-				}
-				mu.ceiling = idx + 1
-			}
-
-			if sp, ok := mu.inFlightImportSpans[idx]; ok {
-				// Assert that we're actually marking the correct span done. See #23977.
-				if !sp.Key.Equal(progDetails.DataSpan.Key) {
-					mu.Unlock()
-					return errors.Newf("request %d for span %v does not match import span for same idx: %v",
-						idx, progDetails.DataSpan, sp,
-					)
-				}
-				mu.requestsCompleted[idx] = true
-				prevHighWater := mu.highWaterMark
-				for j := mu.highWaterMark + 1; j < mu.ceiling && mu.requestsCompleted[j]; j++ {
-					mu.highWaterMark = j
-				}
-
-				for j := prevHighWater; j < mu.highWaterMark; j++ {
-					delete(mu.requestsCompleted, j)
-					delete(mu.inFlightImportSpans, j)
-				}
-			}
-			mu.Unlock()
-
-			// Signal that the processor has finished importing a span, to update job
-			// progress.
-			requestFinishedCh <- struct{}{}
 		}
-		return nil
 	}
 	tasks = append(tasks, generativeCheckpointLoop, genSpan)
 
@@ -1708,6 +1718,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 				return err
 			}
 		}
+		log.Infof(ctx, "finished restoring the pre-data bundle")
 	}
 
 	if !preValidateData.isEmpty() {
@@ -1728,6 +1739,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		}
 
 		resTotal.Add(res)
+		log.Infof(ctx, "finished restoring the validate data bundle")
 	}
 	{
 		// Restore the main data bundle. We notably only restore the system tables
@@ -1749,6 +1761,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		}
 
 		resTotal.Add(res)
+		log.Infof(ctx, "finished restoring the main data bundle")
 	}
 
 	if err := insertStats(ctx, r.job, p.ExecCfg(), remappedStats); err != nil {
