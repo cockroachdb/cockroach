@@ -1160,8 +1160,9 @@ func (t *logicTest) setUser(user string, nodeIdx int) func() {
 	var cleanupFunc func()
 	pgUser = strings.TrimPrefix(user, "host-cluster-")
 	if t.cfg.UseCockroachGoTestserver {
-		pgURL = *t.testserverCluster.PGURL()
+		pgURL = *t.testserverCluster.PGURLForNode(nodeIdx)
 		pgURL.User = url.User(pgUser)
+		pgURL.Path = "test"
 		cleanupFunc = func() {}
 	} else {
 		addr = t.cluster.Server(nodeIdx).ServingSQLAddr()
