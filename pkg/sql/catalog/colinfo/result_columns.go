@@ -11,8 +11,6 @@
 package colinfo
 
 import (
-	"fmt"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -313,46 +311,21 @@ var RangesNoLeases = ResultColumns{
 
 // Ranges is the schema for crdb_internal.ranges.
 var Ranges = ResultColumns{
-	// All the first columns from Ranges are really those from
-	// RangesNoLeases. So we would really like to include RangesNoLeases
-	// as a prefix here with a simple Go append().
-	//
-	// Unfortunately, the result type of crdb_internal.ranges for the
-	// arrays is INT2VECTOR, which gives them zero-indexing. This is
-	// weird! crdb_internal.ranges_no_leases use regular INT[]. So the
-	// indexing behavior between crdb_internal.ranges and
-	// crdb_internal.ranges_no_leases is inconsistent. See:
-	// https://github.com/cockroachdb/cockroach/issues/93788
-	//
-	// Until that bug is fixed, we need to list the columns explicitly,
-	// with a run-time check below (in the init function) that they are
-	// consistent.
 	{Name: "range_id", Typ: types.Int},
 	{Name: "start_key", Typ: types.Bytes},
 	{Name: "start_pretty", Typ: types.String},
 	{Name: "end_key", Typ: types.Bytes},
 	{Name: "end_pretty", Typ: types.String},
-	{Name: "replicas", Typ: types.Int2Vector},
+	{Name: "replicas", Typ: types.IntArray},
 	{Name: "replica_localities", Typ: types.StringArray},
-	{Name: "voting_replicas", Typ: types.Int2Vector},
-	{Name: "non_voting_replicas", Typ: types.Int2Vector},
-	{Name: "learner_replicas", Typ: types.Int2Vector},
+	{Name: "voting_replicas", Typ: types.IntArray},
+	{Name: "non_voting_replicas", Typ: types.IntArray},
+	{Name: "learner_replicas", Typ: types.IntArray},
 	{Name: "split_enforced_until", Typ: types.Timestamp},
 
 	// The following columns are computed by RangesExtraRenders below.
 	{Name: "lease_holder", Typ: types.Int},
 	{Name: "range_size", Typ: types.Int},
-}
-
-func init() {
-	// This check can be removed once Ranges can be constructed
-	// using append(RangesNoLeases, ...).
-	for i, c := range RangesNoLeases {
-		if c.Name != Ranges[i].Name ||
-			c.Hidden != Ranges[i].Hidden {
-			panic(fmt.Sprintf("inconsistent definitions: %#v vs %#v", c, Ranges[i]))
-		}
-	}
 }
 
 // RangesExtraRenders describes the extra projections in
