@@ -136,7 +136,7 @@ func TestHeartbeatCB(t *testing.T) {
 			remoteClockMonitor: serverCtx.RemoteClocks,
 			clusterID:          serverCtx.StorageClusterID,
 			nodeID:             serverCtx.NodeID,
-			settings:           serverCtx.Settings,
+			version:            serverCtx.Settings.Version,
 		})
 
 		ln, err := netutil.ListenAndServeGRPC(serverCtx.Stopper, s, util.TestAddr)
@@ -873,7 +873,7 @@ func TestHeartbeatHealth(t *testing.T) {
 		clock:              clock,
 		maxOffset:          maxOffset,
 		remoteClockMonitor: serverCtx.RemoteClocks,
-		settings:           serverCtx.Settings,
+		version:            serverCtx.Settings.Version,
 		nodeID:             serverCtx.NodeID,
 	}
 	RegisterHeartbeatServer(s, heartbeat)
@@ -1122,7 +1122,7 @@ func TestHeartbeatHealthTransport(t *testing.T) {
 		remoteClockMonitor: serverCtx.RemoteClocks,
 		clusterID:          serverCtx.StorageClusterID,
 		nodeID:             serverCtx.NodeID,
-		settings:           serverCtx.Settings,
+		version:            serverCtx.Settings.Version,
 	})
 
 	mu := struct {
@@ -1305,7 +1305,7 @@ func TestOffsetMeasurement(t *testing.T) {
 		remoteClockMonitor: serverCtx.RemoteClocks,
 		clusterID:          serverCtx.StorageClusterID,
 		nodeID:             serverCtx.NodeID,
-		settings:           serverCtx.Settings,
+		version:            serverCtx.Settings.Version,
 	})
 
 	ln, err := netutil.ListenAndServeGRPC(serverCtx.Stopper, s, util.TestAddr)
@@ -1379,7 +1379,7 @@ func TestFailedOffsetMeasurement(t *testing.T) {
 		remoteClockMonitor: serverCtx.RemoteClocks,
 		ready:              make(chan error),
 		stopper:            stopper,
-		settings:           serverCtx.Settings,
+		version:            serverCtx.Settings.Version,
 		nodeID:             serverCtx.NodeID,
 	}
 	RegisterHeartbeatServer(s, heartbeat)
@@ -1445,7 +1445,7 @@ func TestLatencyInfoCleanupOnClosedConnection(t *testing.T) {
 		remoteClockMonitor: serverCtx.RemoteClocks,
 		clusterID:          serverCtx.StorageClusterID,
 		nodeID:             serverCtx.NodeID,
-		settings:           serverCtx.Settings,
+		version:            serverCtx.Settings.Version,
 	})
 
 	ln, err := netutil.ListenAndServeGRPC(serverCtx.Stopper, s, util.TestAddr)
@@ -1584,7 +1584,7 @@ func TestRemoteOffsetUnhealthy(t *testing.T) {
 			remoteClockMonitor: nodeCtxs[i].ctx.RemoteClocks,
 			clusterID:          nodeCtxs[i].ctx.StorageClusterID,
 			nodeID:             nodeCtxs[i].ctx.NodeID,
-			settings:           nodeCtxs[i].ctx.Settings,
+			version:            nodeCtxs[i].ctx.Settings.Version,
 		})
 		ln, err := netutil.ListenAndServeGRPC(nodeCtxs[i].ctx.Stopper, s, util.TestAddr)
 		if err != nil {
@@ -1775,7 +1775,7 @@ func grpcRunKeepaliveTestCase(testCtx context.Context, c grpcKeepaliveTestCase) 
 			remoteClockMonitor: serverCtx.RemoteClocks,
 			clusterID:          serverCtx.StorageClusterID,
 			nodeID:             serverCtx.NodeID,
-			settings:           serverCtx.Settings,
+			version:            serverCtx.Settings.Version,
 		},
 		interval: msgInterval,
 	}
@@ -2058,7 +2058,7 @@ func TestClusterIDMismatch(t *testing.T) {
 		remoteClockMonitor: serverCtx.RemoteClocks,
 		clusterID:          serverCtx.StorageClusterID,
 		nodeID:             serverCtx.NodeID,
-		settings:           serverCtx.Settings,
+		version:            serverCtx.Settings.Version,
 	})
 
 	ln, err := netutil.ListenAndServeGRPC(serverCtx.Stopper, s, util.TestAddr)
@@ -2132,7 +2132,7 @@ func TestClusterNameMismatch(t *testing.T) {
 				remoteClockMonitor:             serverCtx.RemoteClocks,
 				clusterID:                      serverCtx.StorageClusterID,
 				nodeID:                         serverCtx.NodeID,
-				settings:                       serverCtx.Settings,
+				version:                        serverCtx.Settings.Version,
 				clusterName:                    serverCtx.Config.ClusterName,
 				disableClusterNameVerification: serverCtx.Config.DisableClusterNameVerification,
 			})
@@ -2184,7 +2184,7 @@ func TestNodeIDMismatch(t *testing.T) {
 		remoteClockMonitor: serverCtx.RemoteClocks,
 		clusterID:          serverCtx.StorageClusterID,
 		nodeID:             serverCtx.NodeID,
-		settings:           serverCtx.Settings,
+		version:            serverCtx.Settings.Version,
 	})
 
 	ln, err := netutil.ListenAndServeGRPC(serverCtx.Stopper, s, util.TestAddr)
@@ -2259,7 +2259,7 @@ func TestVersionCheckBidirectional(t *testing.T) {
 				remoteClockMonitor: serverCtx.RemoteClocks,
 				clusterID:          serverCtx.StorageClusterID,
 				nodeID:             serverCtx.NodeID,
-				settings:           serverCtx.Settings,
+				version:            serverCtx.Settings.Version,
 			})
 
 			ln, err := netutil.ListenAndServeGRPC(serverCtx.Stopper, s, util.TestAddr)
@@ -2307,7 +2307,7 @@ func TestGRPCDialClass(t *testing.T) {
 		remoteClockMonitor: serverCtx.RemoteClocks,
 		clusterID:          serverCtx.StorageClusterID,
 		nodeID:             serverCtx.NodeID,
-		settings:           serverCtx.Settings,
+		version:            serverCtx.Settings.Version,
 	})
 
 	ln, err := netutil.ListenAndServeGRPC(serverCtx.Stopper, s, util.TestAddr)
@@ -2367,7 +2367,7 @@ func TestTestingKnobs(t *testing.T) {
 		remoteClockMonitor: serverCtx.RemoteClocks,
 		clusterID:          serverCtx.StorageClusterID,
 		nodeID:             serverCtx.NodeID,
-		settings:           serverCtx.Settings,
+		version:            serverCtx.Settings.Version,
 	})
 
 	// The test will inject interceptors for both stream and unary calls and then

@@ -51,7 +51,7 @@ func TestHeartbeatReply(t *testing.T) {
 		clock:              clock,
 		remoteClockMonitor: newRemoteClockMonitor(clock, maxOffset, time.Hour, 0),
 		clusterID:          &base.ClusterIDContainer{},
-		settings:           st,
+		version:            st.Version,
 	}
 
 	request := &PingRequest{
@@ -77,7 +77,7 @@ type ManualHeartbeatService struct {
 	clock              hlc.WallClock
 	maxOffset          time.Duration
 	remoteClockMonitor *RemoteClockMonitor
-	settings           *cluster.Settings
+	version            clusterversion.Handle
 	nodeID             *base.NodeIDContainer
 	// Heartbeats are processed when a value is sent here.
 	ready   chan error
@@ -102,7 +102,7 @@ func (mhs *ManualHeartbeatService) Ping(
 		clock:              mhs.clock,
 		remoteClockMonitor: mhs.remoteClockMonitor,
 		clusterID:          &base.ClusterIDContainer{},
-		settings:           mhs.settings,
+		version:            mhs.version,
 		nodeID:             mhs.nodeID,
 	}
 	return hs.Ping(ctx, args)
@@ -118,13 +118,13 @@ func TestManualHeartbeat(t *testing.T) {
 		maxOffset:          maxOffset,
 		remoteClockMonitor: newRemoteClockMonitor(clock, maxOffset, time.Hour, 0),
 		ready:              make(chan error, 1),
-		settings:           st,
+		version:            st.Version,
 	}
 	regularHeartbeat := &HeartbeatService{
 		clock:              clock,
 		remoteClockMonitor: newRemoteClockMonitor(clock, maxOffset, time.Hour, 0),
 		clusterID:          &base.ClusterIDContainer{},
-		settings:           st,
+		version:            st.Version,
 	}
 
 	request := &PingRequest{
@@ -176,7 +176,7 @@ func TestClusterIDCompare(t *testing.T) {
 		clock:              clock,
 		remoteClockMonitor: newRemoteClockMonitor(clock, maxOffset, time.Hour, 0),
 		clusterID:          &base.ClusterIDContainer{},
-		settings:           st,
+		version:            st.Version,
 	}
 
 	for _, td := range testData {
@@ -221,7 +221,7 @@ func TestNodeIDCompare(t *testing.T) {
 		remoteClockMonitor: newRemoteClockMonitor(clock, maxOffset, time.Hour, 0),
 		clusterID:          &base.ClusterIDContainer{},
 		nodeID:             &base.NodeIDContainer{},
-		settings:           st,
+		version:            st.Version,
 	}
 
 	for _, td := range testData {
@@ -258,7 +258,7 @@ func TestTenantVersionCheck(t *testing.T) {
 		clock:              clock,
 		remoteClockMonitor: newRemoteClockMonitor(clock, maxOffset, time.Hour, 0),
 		clusterID:          &base.ClusterIDContainer{},
-		settings:           st,
+		version:            st.Version,
 	}
 
 	request := &PingRequest{
