@@ -464,12 +464,12 @@ func (c *Connector) RangeLookup(
 	return nil, nil, errors.Wrap(ctx.Err(), "range lookup")
 }
 
-// NodesUI implements the serverpb.TenantStatusServer interface
-func (c *Connector) NodesUI(
+// Nodes implements the serverpb.TenantStatusServer interface
+func (c *Connector) Nodes(
 	ctx context.Context, req *serverpb.NodesRequest,
-) (resp *serverpb.NodesResponseExternal, retErr error) {
+) (resp *serverpb.NodesResponse, retErr error) {
 	retErr = c.withClient(ctx, func(ctx context.Context, client *client) (err error) {
-		resp, err = client.NodesUI(ctx, req)
+		resp, err = client.Nodes(ctx, req)
 		return
 	})
 	return

@@ -1566,13 +1566,40 @@ func (s *systemStatusServer) Nodes(
 	return resp, nil
 }
 
+// NodesUI on the tenant, delegates to the storage layer's endpoint after
+// checking local SQL permissions. The tenant connector will require
+// additional tenant capabilities in order to let the request through,
+// but the `NodesTenant` endpoint will do no additional permissioning on
+// the system-tenant side.
 func (s *statusServer) NodesUI(
 	ctx context.Context, req *serverpb.NodesRequest,
 ) (*serverpb.NodesResponseExternal, error) {
-	ctx = forwardSQLIdentityThroughRPCCalls(ctx)
 	ctx = s.AnnotateCtx(ctx)
 
-	return s.sqlServer.tenantConnect.NodesUI(ctx, req)
+	hasViewClusterMetadata := false
+	err := s.privilegeChecker.requireViewClusterMetadataPermission(ctx)
+	if err != nil {
+		if !grpcutil.IsAuthError(err) {
+			return nil, err
+		}
+	} else {
+		hasViewClusterMetadata = true
+	}
+
+	internalResp, err := s.sqlServer.tenantConnect.Nodes(ctx, req)
+	if err != nil {
+		return nil, serverError(ctx, err)
+	}
+
+	resp := &serverpb.NodesResponseExternal{
+		Nodes:            make([]serverpb.NodeResponse, len(internalResp.Nodes)),
+		LivenessByNodeID: internalResp.LivenessByNodeID,
+	}
+	for i, nodeStatus := range internalResp.Nodes {
+		resp.Nodes[i] = nodeStatusToResp(&nodeStatus, hasViewClusterMetadata)
+	}
+
+	return resp, nil
 }
 
 func (s *systemStatusServer) NodesUI(

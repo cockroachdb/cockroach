@@ -1,47 +1,30 @@
 # Ensure if no capability exists for a tenant (or if an entry existed, but is
 # deleted), split requests can't be issued.
 
-has-capability-for-batch
-{ten=10}
-split
-scan
-cput
+has-capability cap=can_admin_split ten=10 cmds=(split, scan, cput)
 ----
 tenant 10 does not have admin split capability
 
 # However, if there was no split in the batch, the batch should be allowed to
 # go through.
-has-capability-for-batch
-{ten=10}
-scan
-cput
+has-capability cap=can_admin_split ten=10 cmds=(scan, cput)
 ----
 ok
 
 # Update the capability state to give tenant 10 the capability to run splits.
-update-state
-upsert {ten=10}:{CanAdminSplit=true}
+upsert ten=10 can_admin_split=true
 ----
 ok
 
-has-capability-for-batch
-{ten=10}
-split
-scan
-cput
+has-capability cap=can_admin_split ten=10 cmds=(split, scan, cput)
 ----
 ok
 
 # Remove the capability.
-update-state
-delete {ten=10}
+delete ten=10
 ----
 ok
 
-has-capability-for-batch
-{ten=10}
-split
-scan
-cput
+has-capability cap=can_admin_split ten=10 cmds=(split, scan, cput)
 ----
 tenant 10 does not have admin split capability

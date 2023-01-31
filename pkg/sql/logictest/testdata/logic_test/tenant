@@ -38,10 +38,10 @@ FROM system.tenants
 ORDER BY id
 ----
 id  active  name        crdb_internal.pb_to_json
-1   true    system      {"capabilities": {"canAdminSplit": false}, "deprecatedDataState": "READY", "deprecatedId": "1", "droppedName": "", "tenantReplicationJobId": "0"}
-2   true    tenant-one  {"capabilities": {"canAdminSplit": false}, "deprecatedDataState": "READY", "deprecatedId": "2", "droppedName": "", "tenantReplicationJobId": "0"}
-3   true    two         {"capabilities": {"canAdminSplit": false}, "deprecatedDataState": "READY", "deprecatedId": "3", "droppedName": "", "tenantReplicationJobId": "0"}
-4   true    three       {"capabilities": {"canAdminSplit": false}, "deprecatedDataState": "READY", "deprecatedId": "4", "droppedName": "", "tenantReplicationJobId": "0"}
+1   true    system      {"capabilities": {"canAdminSplit": false, "canViewNodeInfo": false, "canViewTsdbMetrics": false}, "deprecatedDataState": "READY", "deprecatedId": "1", "droppedName": "", "tenantReplicationJobId": "0"}
+2   true    tenant-one  {"capabilities": {"canAdminSplit": false, "canViewNodeInfo": false, "canViewTsdbMetrics": false}, "deprecatedDataState": "READY", "deprecatedId": "2", "droppedName": "", "tenantReplicationJobId": "0"}
+3   true    two         {"capabilities": {"canAdminSplit": false, "canViewNodeInfo": false, "canViewTsdbMetrics": false}, "deprecatedDataState": "READY", "deprecatedId": "3", "droppedName": "", "tenantReplicationJobId": "0"}
+4   true    three       {"capabilities": {"canAdminSplit": false, "canViewNodeInfo": false, "canViewTsdbMetrics": false}, "deprecatedDataState": "READY", "deprecatedId": "4", "droppedName": "", "tenantReplicationJobId": "0"}
 
 query ITTT colnames
 SHOW TENANT system
@@ -158,7 +158,7 @@ FROM system.tenants WHERE name = 'four'
 ORDER BY id
 ----
 id  active  name  crdb_internal.pb_to_json
-5   true    four  {"capabilities": {"canAdminSplit": false}, "deprecatedDataState": "READY", "deprecatedId": "5", "droppedName": "", "tenantReplicationJobId": "0"}
+5   true    four  {"capabilities": {"canAdminSplit": false, "canViewNodeInfo": false, "canViewTsdbMetrics": false}, "deprecatedDataState": "READY", "deprecatedId": "5", "droppedName": "", "tenantReplicationJobId": "0"}
 
 statement ok
 DROP TENANT four
@@ -232,14 +232,14 @@ FROM system.tenants
 ORDER BY id
 ----
 id  active  name             crdb_internal.pb_to_json
-1   true    system           {"capabilities": {"canAdminSplit": false}, "deprecatedDataState": "READY", "deprecatedId": "1", "droppedName": "", "tenantReplicationJobId": "0"}
-2   true    tenant-one       {"capabilities": {"canAdminSplit": false}, "deprecatedDataState": "READY", "deprecatedId": "2", "droppedName": "", "tenantReplicationJobId": "0"}
-3   true    two              {"capabilities": {"canAdminSplit": false}, "deprecatedDataState": "READY", "deprecatedId": "3", "droppedName": "", "tenantReplicationJobId": "0"}
-4   true    three            {"capabilities": {"canAdminSplit": false}, "deprecatedDataState": "READY", "deprecatedId": "4", "droppedName": "", "tenantReplicationJobId": "0"}
-5   false   NULL             {"capabilities": {"canAdminSplit": false}, "deprecatedDataState": "DROP", "deprecatedId": "5", "droppedName": "four", "tenantReplicationJobId": "0"}
-6   false   NULL             {"capabilities": {"canAdminSplit": false}, "deprecatedDataState": "DROP", "deprecatedId": "6", "droppedName": "five-requiring-quotes", "tenantReplicationJobId": "0"}
-7   false   NULL             {"capabilities": {"canAdminSplit": false}, "deprecatedDataState": "DROP", "deprecatedId": "7", "droppedName": "to-be-reclaimed", "tenantReplicationJobId": "0"}
-8   true    to-be-reclaimed  {"capabilities": {"canAdminSplit": false}, "deprecatedDataState": "READY", "deprecatedId": "8", "droppedName": "", "tenantReplicationJobId": "0"}
+1   true    system           {"capabilities": {"canAdminSplit": false, "canViewNodeInfo": false, "canViewTsdbMetrics": false}, "deprecatedDataState": "READY", "deprecatedId": "1", "droppedName": "", "tenantReplicationJobId": "0"}
+2   true    tenant-one       {"capabilities": {"canAdminSplit": false, "canViewNodeInfo": false, "canViewTsdbMetrics": false}, "deprecatedDataState": "READY", "deprecatedId": "2", "droppedName": "", "tenantReplicationJobId": "0"}
+3   true    two              {"capabilities": {"canAdminSplit": false, "canViewNodeInfo": false, "canViewTsdbMetrics": false}, "deprecatedDataState": "READY", "deprecatedId": "3", "droppedName": "", "tenantReplicationJobId": "0"}
+4   true    three            {"capabilities": {"canAdminSplit": false, "canViewNodeInfo": false, "canViewTsdbMetrics": false}, "deprecatedDataState": "READY", "deprecatedId": "4", "droppedName": "", "tenantReplicationJobId": "0"}
+5   false   NULL             {"capabilities": {"canAdminSplit": false, "canViewNodeInfo": false, "canViewTsdbMetrics": false}, "deprecatedDataState": "DROP", "deprecatedId": "5", "droppedName": "four", "tenantReplicationJobId": "0"}
+6   false   NULL             {"capabilities": {"canAdminSplit": false, "canViewNodeInfo": false, "canViewTsdbMetrics": false}, "deprecatedDataState": "DROP", "deprecatedId": "6", "droppedName": "five-requiring-quotes", "tenantReplicationJobId": "0"}
+7   false   NULL             {"capabilities": {"canAdminSplit": false, "canViewNodeInfo": false, "canViewTsdbMetrics": false}, "deprecatedDataState": "DROP", "deprecatedId": "7", "droppedName": "to-be-reclaimed", "tenantReplicationJobId": "0"}
+8   true    to-be-reclaimed  {"capabilities": {"canAdminSplit": false, "canViewNodeInfo": false, "canViewTsdbMetrics": false}, "deprecatedDataState": "READY", "deprecatedId": "8", "droppedName": "", "tenantReplicationJobId": "0"}
 
 # More valid tenant names.
 statement ok

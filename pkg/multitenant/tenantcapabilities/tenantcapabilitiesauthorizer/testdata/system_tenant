@@ -1,28 +1,18 @@
 # Ensure the system tenant can issue any request, regardless of capabilities.
 
-has-capability-for-batch
-{ten=system}
-split
-scan
-cput
+has-capability cap=can_admin_split ten=system cmds=(split, scan, cput)
 ----
 ok
 
-has-capability-for-batch
-{ten=system}
-scan
-cput
+has-capability cap=can_admin_split ten=system cmds=(scan, cput)
 ----
 ok
 
-has-capability-for-batch
-{ten=system}
-split
+has-capability cap=can_admin_split ten=system cmds=(split)
 ----
 ok
 
-update-state
-upsert {ten=system}:{CanAdminSplit=false}
+upsert ten=system can_admin_split=false
 ----
 ok
 
@@ -31,8 +21,6 @@ ok
 # things properly. For now, we test this case explicitly to ensure nothing
 # breaks.
 
-has-capability-for-batch
-{ten=system}
-split
+has-capability cap=can_admin_split ten=system cmds=(split)
 ----
 ok

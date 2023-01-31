@@ -1,72 +1,66 @@
-update-state
-upsert {ten=10}:{CanAdminSplit=true}
-upsert {ten=11}:{CanAdminSplit=false}
+upsert ten=10 can_admin_split=true can_view_node_info=true can_view_tsdb_metrics=true
+----
+ok
+
+upsert ten=11 can_admin_split=false can_view_node_info=false can_view_tsdb_metrics=false
 ----
 ok
 
 # Tenant 10 should be able to issue splits, given it has the capability to do
 # so.
-has-capability-for-batch
-{ten=10}
-split
-scan
-cput
+has-capability cap=can_admin_split ten=10 cmds=(split, scan, cput)
 ----
 ok
 
 # Tenant 11 shouldn't be able to issue splits.
-has-capability-for-batch
-{ten=11}
-split
-scan
-cput
+has-capability cap=can_admin_split  ten=11 cmds=(split, scan, cput)
 ----
 tenant 11 does not have admin split capability
 
 # Test that the order of the split request doesn't have any effect.
-has-capability-for-batch
-{ten=11}
-scan
-cput
+has-capability cap=can_admin_split ten=11 cmds=(scan, cput)
 ----
 ok
 
 # However, a batch request which doesn't include a split (by tenant 11) should
 # work as you'd expect.
-has-capability-for-batch
-{ten=11}
-scan
-cput
+has-capability cap=can_admin_split  ten=11 cmds=(scan, cput)
 ----
 ok
 
 # Ditto for tenant 10.
-has-capability-for-batch
-{ten=10}
-scan
-cput
+has-capability cap=can_admin_split  ten=10 cmds=(scan, cput)
 ----
 ok
 
 # Lastly, flip tenant 10's capability for splits; ensure it can no longer issue
 # splits as a result.
-update-state
-upsert {ten=10}:{CanAdminSplit=false}
+upsert ten=10 can_admin_split=false can_view_node_info=true can_view_tsdb_metrics=true
 ----
 ok
 
-has-capability-for-batch
-{ten=10}
-split
-scan
-cput
+has-capability cap=can_admin_split  ten=10 cmds=(split, scan, cput)
 ----
 tenant 10 does not have admin split capability
 
 # However, this has no effect on batch requests that don't contain splits.
-has-capability-for-batch
-{ten=10}
-scan
-cput
+has-capability cap=can_admin_split ten=10 cmds=(scan, cput)
 ----
 ok
+
+has-capability cap=can_view_node_info ten=10
+----
+ok
+
+has-capability cap=can_view_node_info ten=11
+----
+tenant 11 does not have capability to query cluster node metadata
+
+
+has-capability cap=can_view_tsdb_metrics ten=10
+----
+ok
+
+has-capability cap=can_view_tsdb_metrics ten=11
+----
+tenant 11 does not have capability to query timeseries data

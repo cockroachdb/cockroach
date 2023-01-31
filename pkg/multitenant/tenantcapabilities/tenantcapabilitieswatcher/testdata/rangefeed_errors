@@ -10,19 +10,24 @@ ok
 updates
 ----
 
-update-state
-upsert {ten=10}:{CanAdminSplit=true}
-upsert {ten=11}:{CanAdminSplit=false}
-upsert {ten=12}:{CanAdminSplit=false}
+upsert ten=10 can_admin_split=true
+----
+ok
+
+upsert ten=11 can_admin_split=false
+----
+ok
+
+upsert ten=12 can_admin_split=false
 ----
 ok
 
 updates
 ----
 Incremental Update
-updated {ten=10}:{CanAdminSplit=true}
-updated {ten=11}:{CanAdminSplit=false}
-updated {ten=12}:{CanAdminSplit=false}
+{Entry:{TenantID:10 TenantCapabilities:{CanAdminSplit:true CanViewNodeInfo:false CanViewTsdbMetrics:false}} Deleted:false}
+{Entry:{TenantID:11 TenantCapabilities:{CanAdminSplit:false CanViewNodeInfo:false CanViewTsdbMetrics:false}} Deleted:false}
+{Entry:{TenantID:12 TenantCapabilities:{CanAdminSplit:false CanViewNodeInfo:false CanViewTsdbMetrics:false}} Deleted:false}
 
 inject-error
 ----
@@ -31,10 +36,15 @@ big-yikes
 # Update some more state. However, because of the injected error, we shouldn't
 # observe any updates.
 
-update-state
-upsert {ten=12}:{CanAdminSplit=true}
-delete {ten=10}
-upsert {ten=50}:{CanAdminSplit=false}
+upsert ten=12 can_admin_split=true
+----
+ok
+
+delete ten=10
+----
+ok
+
+upsert ten=50 can_admin_split=false
 ----
 ok
 
@@ -46,24 +56,21 @@ updates
 
 flush-state
 ----
-{ten=10}:{CanAdminSplit=true}
-{ten=11}:{CanAdminSplit=false}
-{ten=12}:{CanAdminSplit=false}
+{TenantID:10 TenantCapabilities:{CanAdminSplit:true CanViewNodeInfo:false CanViewTsdbMetrics:false}}
+{TenantID:11 TenantCapabilities:{CanAdminSplit:false CanViewNodeInfo:false CanViewTsdbMetrics:false}}
+{TenantID:12 TenantCapabilities:{CanAdminSplit:false CanViewNodeInfo:false CanViewTsdbMetrics:false}}
 
-get-capabilities
-{ten=50}
+get-capabilities ten=50
 ----
 not-found
 
-get-capabilities
-{ten=12}
+get-capabilities ten=12
 ----
-{CanAdminSplit=false}
+{CanAdminSplit:false CanViewNodeInfo:false CanViewTsdbMetrics:false}
 
-get-capabilities
-{ten=10}
+get-capabilities ten=10
 ----
-{CanAdminSplit=true}
+{CanAdminSplit:true CanViewNodeInfo:false CanViewTsdbMetrics:false}
 
 # Let the Watcher attempt to restart.
 restart-after-injected-error
@@ -75,27 +82,24 @@ ok
 updates
 ----
 Complete Update
-updated {ten=11}:{CanAdminSplit=false}
-updated {ten=12}:{CanAdminSplit=true}
-updated {ten=50}:{CanAdminSplit=false}
+{Entry:{TenantID:11 TenantCapabilities:{CanAdminSplit:false CanViewNodeInfo:false CanViewTsdbMetrics:false}} Deleted:false}
+{Entry:{TenantID:12 TenantCapabilities:{CanAdminSplit:true CanViewNodeInfo:false CanViewTsdbMetrics:false}} Deleted:false}
+{Entry:{TenantID:50 TenantCapabilities:{CanAdminSplit:false CanViewNodeInfo:false CanViewTsdbMetrics:false}} Deleted:false}
 
 flush-state
 ----
-{ten=11}:{CanAdminSplit=false}
-{ten=12}:{CanAdminSplit=true}
-{ten=50}:{CanAdminSplit=false}
+{TenantID:11 TenantCapabilities:{CanAdminSplit:false CanViewNodeInfo:false CanViewTsdbMetrics:false}}
+{TenantID:12 TenantCapabilities:{CanAdminSplit:true CanViewNodeInfo:false CanViewTsdbMetrics:false}}
+{TenantID:50 TenantCapabilities:{CanAdminSplit:false CanViewNodeInfo:false CanViewTsdbMetrics:false}}
 
-get-capabilities
-{ten=50}
+get-capabilities ten=50
 ----
-{CanAdminSplit=false}
+{CanAdminSplit:false CanViewNodeInfo:false CanViewTsdbMetrics:false}
 
-get-capabilities
-{ten=12}
+get-capabilities ten=12
 ----
-{CanAdminSplit=true}
+{CanAdminSplit:true CanViewNodeInfo:false CanViewTsdbMetrics:false}
 
-get-capabilities
-{ten=10}
+get-capabilities ten=10
 ----
 not-found

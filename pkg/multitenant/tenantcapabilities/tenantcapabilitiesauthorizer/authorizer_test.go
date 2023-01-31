@@ -53,18 +53,44 @@ func TestDataDriven(t *testing.T) {
 
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
-			case "update-state":
-				updates := tenantcapabilitiestestutils.ParseTenantCapabilityUpdateStateArguments(t, d.Input)
-				mockReader.updateState(updates)
-
-			case "has-capability-for-batch":
-				tenID, ba := tenantcapabilitiestestutils.ParseBatchRequestString(t, d.Input)
-				err := authorizer.HasCapabilityForBatch(context.Background(), tenID, &ba)
-				if err == nil {
-					return "ok"
+			case "upsert":
+				update, err := tenantcapabilitiestestutils.ParseTenantCapabilityUpsert(t, d)
+				if err != nil {
+					return err.Error()
 				}
-				return err.Error()
+				mockReader.updateState([]*tenantcapabilities.Update{update})
+			case "delete":
+				update := tenantcapabilitiestestutils.ParseTenantCapabilityDelete(t, d)
+				mockReader.updateState([]*tenantcapabilities.Update{update})
+			case "has-capability":
+				tenID, ba := tenantcapabilitiestestutils.ParseBatchRequestString(t, d)
+				var cap string
+				d.ScanArgs(t, "cap", &cap)
+				switch cap {
+				case "can_admin_split":
+					err := authorizer.HasCapabilityForBatch(context.Background(), tenID, &ba)
+					if err == nil {
+						return "ok"
+					}
+					return err.Error()
 
+				case "can_view_node_info":
+					err := authorizer.HasNodeStatusCapability(context.Background(), tenID)
+					if err == nil {
+						return "ok"
+					}
+					return err.Error()
+
+				case "can_view_tsdb_metrics":
+					err := authorizer.HasTSDBQueryCapability(context.Background(), tenID)
+					if err == nil {
+						return "ok"
+					}
+					return err.Error()
+
+				default:
+					return "unknown capability"
+				}
 			default:
 				return fmt.Sprintf("unknown command %s", d.Cmd)
 			}
@@ -75,7 +101,7 @@ func TestDataDriven(t *testing.T) {
 
 type mockReader map[roachpb.TenantID]tenantcapabilitiespb.TenantCapabilities
 
-func (m mockReader) updateState(updates []tenantcapabilities.Update) {
+func (m mockReader) updateState(updates []*tenantcapabilities.Update) {
 	for _, update := range updates {
 		if update.Deleted {
 			delete(m, update.TenantID)

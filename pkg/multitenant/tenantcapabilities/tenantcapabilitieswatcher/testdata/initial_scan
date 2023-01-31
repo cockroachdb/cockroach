@@ -2,27 +2,32 @@
 # We also ensure that initial scans see the most recent state when they're
 # started.
 
-update-state
-upsert {ten=10}:{CanAdminSplit=true}
-upsert {ten=11}:{CanAdminSplit=false}
-upsert {ten=15}:{CanAdminSplit=false}
+upsert ten=10 can_admin_split=true
 ----
 ok
 
-update-state
-delete {ten=10}
-upsert {ten=15}:{CanAdminSplit=true}
+upsert ten=11 can_admin_split=false
+----
+ok
+
+upsert ten=15 can_admin_split=false
+----
+ok
+
+delete ten=10
+----
+ok
+
+upsert ten=15 can_admin_split=true
 ----
 ok
 
 # Try reading capabilities before the Watcher is started.
-get-capabilities
-{ten=15}
+get-capabilities ten=15
 ----
 not-found
 
-get-capabilities
-{ten=10}
+get-capabilities ten=10
 ----
 not-found
 
@@ -33,20 +38,18 @@ ok
 updates
 ----
 Complete Update
-updated {ten=11}:{CanAdminSplit=false}
-updated {ten=15}:{CanAdminSplit=true}
+{Entry:{TenantID:11 TenantCapabilities:{CanAdminSplit:false CanViewNodeInfo:false CanViewTsdbMetrics:false}} Deleted:false}
+{Entry:{TenantID:15 TenantCapabilities:{CanAdminSplit:true CanViewNodeInfo:false CanViewTsdbMetrics:false}} Deleted:false}
 
 flush-state
 ----
-{ten=11}:{CanAdminSplit=false}
-{ten=15}:{CanAdminSplit=true}
+{TenantID:11 TenantCapabilities:{CanAdminSplit:false CanViewNodeInfo:false CanViewTsdbMetrics:false}}
+{TenantID:15 TenantCapabilities:{CanAdminSplit:true CanViewNodeInfo:false CanViewTsdbMetrics:false}}
 
-get-capabilities
-{ten=10}
+get-capabilities ten=10
 ----
 not-found
 
-get-capabilities
-{ten=15}
+get-capabilities ten=15
 ----
-{CanAdminSplit=true}
+{CanAdminSplit:true CanViewNodeInfo:false CanViewTsdbMetrics:false}
