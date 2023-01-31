@@ -29,21 +29,26 @@ import (
 	"github.com/cockroachdb/redact"
 )
 
-// Build constructs a new state from an initial state and a statement.
+// Build constructs a new state from an incumbent state and a statement.
 //
 // The function takes an AST for a DDL statement and constructs targets
-// which represent schema changes to be performed.
+// which represent schema changes to be performed. The incumbent state
+// is the schema changer state for the statement transaction, which reached
+// its present value from preceding calls to Build which were followed by the
+// execution of their corresponding statement phase stages. In other words,
+// the incumbent state encodes the schema change such as it has been defined
+// prior to this call, along with any in-transaction side effects.
 func Build(
-	ctx context.Context, dependencies Dependencies, initial scpb.CurrentState, n tree.Statement,
+	ctx context.Context, dependencies Dependencies, incumbent scpb.CurrentState, n tree.Statement,
 ) (_ scpb.CurrentState, err error) {
 	defer scerrors.StartEventf(
 		ctx,
 		"building declarative schema change targets for %s",
 		redact.Safe(n.StatementTag()),
 	).HandlePanicAndLogError(ctx, &err)
-	initial = initial.DeepCopy()
-	bs := newBuilderState(ctx, dependencies, initial)
-	els := newEventLogState(dependencies, initial, n)
+	incumbent = incumbent.DeepCopy()
+	bs := newBuilderState(ctx, dependencies, incumbent)
+	els := newEventLogState(dependencies, incumbent, n)
 	// TODO(fqazi): The optimizer can end up already modifying the statement above
 	// to fully resolve names. We need to take this into account for CTAS/CREATE
 	// VIEW statements.
@@ -61,13 +66,15 @@ func Build(
 	}
 	scbuildstmt.Process(b, an.GetStatement())
 	an.ValidateAnnotations()
-	els.statements[len(els.statements)-1].RedactedStatement = string(
+	currentStatementID := uint32(len(els.statements) - 1)
+	els.statements[currentStatementID].RedactedStatement = string(
 		dependencies.AstFormatter().FormatAstAsRedactableString(an.GetStatement(), &an.annotation))
 	ts := scpb.TargetState{
 		Targets:       make([]scpb.Target, 0, len(bs.output)),
 		Statements:    els.statements,
 		Authorization: els.authorization,
 	}
+	initial := make([]scpb.Status, 0, len(bs.output))
 	current := make([]scpb.Status, 0, len(bs.output))
 	version := dependencies.ClusterSettings().Version.ActiveVersion(ctx)
 	withLogEvent := make([]scpb.Target, 0, len(bs.output))
@@ -82,24 +89,9 @@ func Build(
 			// cluster version.
 			continue
 		}
-		if e.previous == scpb.InvalidTarget {
-			// The target was newly-defined by this build.
-			if e.target.Status() == e.current {
-				// Discard it if it's already fulfilled.
-				continue
-			}
-		} else if e.previous.InitialStatus() == scpb.Status_ABSENT && e.target == scpb.ToAbsent {
-			// The target was defined as an adding target by a previous build.
-			// This build redefines it as a dropping target.
-			// As far as the schema change is concerned, this is a no-op, so we
-			// discard this target.
-			// TODO(postamar): this might be too crude, the target's absence might
-			//   cause necessary statement-phase ops to be omitted, leading to
-			//   incorrect in-txn behaviour.
-			continue
-		}
 		t := scpb.MakeTarget(e.target, e.element, &e.metadata)
 		ts.Targets = append(ts.Targets, t)
+		initial = append(initial, e.initial)
 		current = append(current, e.current)
 		if e.withLogEvent {
 			withLogEvent = append(withLogEvent, t)
@@ -116,7 +108,11 @@ func Build(
 	})
 	// Write to event log and return.
 	logEvents(b, ts, withLogEvent)
-	return scpb.CurrentState{TargetState: ts, Current: current}, nil
+	return scpb.CurrentState{
+		TargetState: ts,
+		Initial:     initial,
+		Current:     current,
+	}, nil
 }
 
 // CheckIfSupported returns if a statement is fully supported by the declarative
@@ -137,12 +133,11 @@ type (
 type elementState struct {
 	// element is the element which identifies this structure.
 	element scpb.Element
-	// current is the current status of the element.
-	current scpb.Status
-	// target is the target to be fulfilled by the element status, if applicable,
-	// while previous is the target for this element as defined by an earlier call
-	// to scbuild.Build in the same transaction, if applicable.
-	previous, target scpb.TargetStatus
+	// current is the current status of the element;
+	// initial is the status of the element at the beginning of the transaction.
+	initial, current scpb.Status
+	// target indicates the status to be fulfilled by the element.
+	target scpb.TargetStatus
 	// metadata contains the target metadata to store in the resulting
 	// scpb.TargetState produced by the current call to scbuild.Build.
 	metadata scpb.TargetMetadata
@@ -193,7 +188,9 @@ type cachedDesc struct {
 }
 
 // newBuilderState constructs a builderState.
-func newBuilderState(ctx context.Context, d Dependencies, initial scpb.CurrentState) *builderState {
+func newBuilderState(
+	ctx context.Context, d Dependencies, incumbent scpb.CurrentState,
+) *builderState {
 	bs := builderState{
 		ctx:              ctx,
 		clusterSettings:  d.ClusterSettings(),
@@ -203,7 +200,7 @@ func newBuilderState(ctx context.Context, d Dependencies, initial scpb.CurrentSt
 		tr:               d.TableReader(),
 		auth:             d.AuthorizationAccessor(),
 		createPartCCL:    d.IndexPartitioningCCLCallback(),
-		output:           make([]elementState, 0, len(initial.Current)),
+		output:           make([]elementState, 0, len(incumbent.Current)),
 		descCache:        make(map[catid.DescID]*cachedDesc),
 		tempSchemas:      make(map[catid.DescID]catalog.SchemaDescriptor),
 		commentGetter:    d.DescriptorCommentGetter(),
@@ -214,12 +211,22 @@ func newBuilderState(ctx context.Context, d Dependencies, initial scpb.CurrentSt
 	if err != nil {
 		panic(err)
 	}
-	for _, t := range initial.TargetState.Targets {
+	for _, t := range incumbent.TargetState.Targets {
 		bs.ensureDescriptor(screl.GetDescID(t.Element()))
 	}
-	for i, t := range initial.TargetState.Targets {
-		ts := scpb.AsTargetStatus(t.TargetStatus)
-		bs.ensure(t.Element(), initial.Current[i], ts, ts, t.Metadata)
+	for i, t := range incumbent.TargetState.Targets {
+		src := elementState{
+			element:  t.Element(),
+			initial:  incumbent.Initial[i],
+			current:  incumbent.Current[i],
+			target:   scpb.AsTargetStatus(t.TargetStatus),
+			metadata: t.Metadata,
+		}
+		if dst := bs.getExistingElementState(src.element); dst != nil {
+			*dst = src
+		} else {
+			bs.addNewElementState(src)
+		}
 	}
 	return &bs
 }
@@ -244,8 +251,10 @@ type eventLogState struct {
 }
 
 // newEventLogState constructs an eventLogState.
-func newEventLogState(d Dependencies, initial scpb.CurrentState, n tree.Statement) *eventLogState {
-	stmts := initial.Statements
+func newEventLogState(
+	d Dependencies, incumbent scpb.CurrentState, n tree.Statement,
+) *eventLogState {
+	stmts := incumbent.Statements
 	els := eventLogState{
 		statements: append(stmts, scpb.Statement{
 			Statement:    n.String(),

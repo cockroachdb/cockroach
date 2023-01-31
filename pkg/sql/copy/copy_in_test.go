@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package sql_test
+package copy
 
 import (
 	"context"
@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -778,7 +779,7 @@ func TestCopyInReleasesLeases(t *testing.T) {
 		s.ServingSQLAddr(), t.Name(), url.UserPassword("foo", "testabc"),
 		false /* withClientCerts */)
 	defer cleanupFn()
-	conn, err := pgxConn(t, userURL)
+	conn, err := sqltestutils.PGXConn(t, userURL)
 	require.NoError(t, err)
 
 	rowsAffected, err := conn.CopyFrom(
