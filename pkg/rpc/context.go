@@ -55,6 +55,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/encoding"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/stats"
 	grpcstatus "google.golang.org/grpc/status"
 )
 
@@ -1581,6 +1582,45 @@ func (rpcCtx *Context) dialOptsNetworkCredentials() ([]grpc.DialOption, error) {
 	return dialOpts, nil
 }
 
+type shouldStatsKey struct{}
+
+type statsHandler struct{}
+
+var _ stats.Handler = (*statsHandler)(nil)
+
+func (s *statsHandler) handle(ctx context.Context, i interface{}) {
+	if ctx.Value(&shouldStatsKey{}) == nil {
+		return
+	}
+	switch t := i.(type) {
+	case *stats.RPCTagInfo:
+		_ = t
+	default:
+		log.Infof(ctx, "XXX %T", t)
+	}
+}
+
+func (s *statsHandler) TagRPC(ctx context.Context, info *stats.RPCTagInfo) context.Context {
+	if info.FullMethodName == "/cockroach.rpc.Heartbeat/Ping" {
+		ctx = context.WithValue(ctx, &shouldStatsKey{}, shouldStatsKey{})
+	}
+	s.handle(ctx, info)
+	return ctx
+}
+
+func (s *statsHandler) HandleRPC(ctx context.Context, stats stats.RPCStats) {
+	s.handle(ctx, stats)
+}
+
+func (s *statsHandler) TagConn(ctx context.Context, info *stats.ConnTagInfo) context.Context {
+	s.handle(ctx, info)
+	return ctx
+}
+
+func (s *statsHandler) HandleConn(ctx context.Context, stats stats.ConnStats) {
+	s.handle(ctx, stats)
+}
+
 // dialOptsNetwork compute options used only for over-the-network RPC
 // connections.
 func (rpcCtx *Context) dialOptsNetwork(
@@ -1606,6 +1646,8 @@ func (rpcCtx *Context) dialOptsNetwork(
 	if rpcCtx.rpcCompression {
 		dialOpts = append(dialOpts, grpc.WithDefaultCallOptions(grpc.UseCompressor((snappyCompressor{}).Name())))
 	}
+
+	dialOpts = append(dialOpts, grpc.WithStatsHandler(&statsHandler{}))
 
 	// GRPC uses the HTTPS_PROXY environment variable by default[1]. This is
 	// surprising, and likely undesirable for CRDB because it turns the proxy

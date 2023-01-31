@@ -42,7 +42,7 @@ type logStream interface {
 func writeLogStream(
 	s logStream,
 	out io.Writer,
-	filter *regexp.Regexp,
+	filter filter,
 	keepRedactable bool,
 	cp ttycolor.Profile,
 	tenantIDsFilter []string,
@@ -114,8 +114,19 @@ func writeLogStream(
 				if err := render(ei, pending); err != nil {
 					return err
 				}
-				if filter != nil {
+				if filter.Regexp != nil {
 					matches := filter.FindSubmatch(pending.Bytes()[startLen:])
+
+					if filter.not {
+						// Negating the result means - emit the line if it didn't match.
+						// If it matched, pretend it didn't.
+						if matches == nil {
+							matches = [][]byte{pending.Bytes()[startLen:]}
+						} else {
+							matches = nil
+						}
+					}
+
 					if matches == nil {
 						// Did not match.
 						pending.Truncate(startLen)

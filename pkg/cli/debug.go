@@ -1126,12 +1126,17 @@ matching via flags. If the filter regexp contains captures, such as
 // due to significant test breakage when adding the fpath named capture group.
 const logFilePattern = "^(?:(?P<fpath>.*)/)?" + log.FileNamePattern + "$"
 
+type filter struct {
+	not bool
+	*regexp.Regexp
+}
+
 // TODO(knz): this struct belongs elsewhere.
 // See: https://github.com/cockroachdb/cockroach/issues/49509
 var debugMergeLogsOpts = struct {
 	from            time.Time
 	to              time.Time
-	filter          *regexp.Regexp
+	filter          filter
 	program         *regexp.Regexp
 	file            *regexp.Regexp
 	keepRedactable  bool
@@ -1453,8 +1458,9 @@ func init() {
 	// TODO(knz): the "to" should be named "until" - it's a time boundary, not a space boundary.
 	f.Var(flagutil.Time(&debugMergeLogsOpts.to), "to",
 		"time after which messages should be filtered")
-	f.Var(flagutil.Regexp(&debugMergeLogsOpts.filter), "filter",
+	f.Var(flagutil.Regexp(&debugMergeLogsOpts.filter.Regexp), "filter",
 		"re which filters log messages")
+	f.BoolVar(&debugMergeLogsOpts.filter.not, "filter-not", false, "negate --filter")
 	f.Var(flagutil.Regexp(&debugMergeLogsOpts.file), "file-pattern",
 		"re which filters log files based on path, also used with prefix and program-filter")
 	f.Var(flagutil.Regexp(&debugMergeLogsOpts.program), "program-filter",
