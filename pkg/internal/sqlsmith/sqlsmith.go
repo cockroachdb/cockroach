@@ -96,6 +96,7 @@ type Smither struct {
 	unlikelyConstantPredicate  bool
 	favorCommonData            bool
 	unlikelyRandomNulls        bool
+	stringConstPrefix          string
 	disableJoins               bool
 	disableCrossJoins          bool
 	disableIndexHints          bool
@@ -434,6 +435,17 @@ var FavorCommonData = simpleOption("favor common data", func(s *Smither) {
 var UnlikelyRandomNulls = simpleOption("unlikely random nulls", func(s *Smither) {
 	s.unlikelyRandomNulls = true
 })
+
+// PrefixStringConsts causes the Smither to add a prefix to all generated
+// string constants.
+func PrefixStringConsts(prefix string) SmitherOption {
+	return option{
+		name: fmt.Sprintf("prefix string constants with: %q", prefix),
+		apply: func(s *Smither) {
+			s.stringConstPrefix = prefix
+		},
+	}
+}
 
 // DisableJoins causes the Smither to disable joins.
 var DisableJoins = simpleOption("disable joins", func(s *Smither) {
