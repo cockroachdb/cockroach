@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -1597,6 +1598,15 @@ func (r *Replica) deliverLocalRaftMsgsRaftMuLockedReplicaMuLocked(
 		r.localMsgs.recycled = nil
 	}
 	r.localMsgs.Unlock()
+
+	// If we are in a test build, shuffle the local messages before delivering
+	// them. These are not required to be in order, so ensure that re-ordering is
+	// handled properly.
+	if buildutil.CrdbTestBuild {
+		rand.Shuffle(len(localMsgs), func(i, j int) {
+			localMsgs[i], localMsgs[j] = localMsgs[j], localMsgs[i]
+		})
+	}
 
 	for i, m := range localMsgs {
 		if err := raftGroup.Step(m); err != nil {
