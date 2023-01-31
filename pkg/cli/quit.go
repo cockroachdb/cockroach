@@ -112,6 +112,9 @@ func drainAndShutdown(ctx context.Context, c serverpb.AdminClient, targetNode st
 	return errors.Wrap(err, "hard shutdown failed")
 }
 
+const drainTimeoutMessage = "drain timeout, consider adjusting --drain-wait, especially under " +
+	"custom server.shutdown.{drain,query,connection,lease_transfer}_wait cluster settings"
+
 // doDrain calls a graceful drain.
 //
 // If the function returns hardError true, then the caller should not
@@ -132,8 +135,7 @@ func doDrain(
 	})
 	if errors.HasType(err, (*contextutil.TimeoutError)(nil)) || grpcutil.IsTimeout(err) {
 		log.Infof(ctx, "drain timed out: %v", err)
-		err = errors.New("drain timeout, consider adjusting --drain-wait, especially under " +
-			"custom server.shutdown.{drain,query,connection,lease_transfer}_wait cluster settings")
+		err = errors.New(drainTimeoutMessage)
 	}
 	return
 }

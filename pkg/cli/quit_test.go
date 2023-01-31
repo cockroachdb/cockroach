@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/stretchr/testify/require"
 )
 
 func TestQuit(t *testing.T) {
@@ -26,6 +27,21 @@ func TestQuit(t *testing.T) {
 	defer c.Cleanup()
 
 	c.Run("quit")
+	// Wait until this async command cleanups the server.
+	<-c.Stopper().IsStopped()
+}
+
+func TestQuitTimeout(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	skip.UnderShort(t)
+
+	c := NewCLITest(TestCLIParams{T: t})
+	defer c.Cleanup()
+
+	out, err := c.RunWithCapture("quit --drain-wait=1ns")
+	require.NoError(t, err)
+	require.NotContains(t, out, drainTimeoutMessage)
 	// Wait until this async command cleanups the server.
 	<-c.Stopper().IsStopped()
 }
