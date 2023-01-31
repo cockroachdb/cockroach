@@ -37,6 +37,19 @@ func (i *immediateVisitor) SetConstraintName(ctx context.Context, op scop.SetCon
 		constraint.AsCheck().CheckDesc().Name = op.Name
 	} else if constraint.AsForeignKey() != nil {
 		constraint.AsForeignKey().ForeignKeyDesc().Name = op.Name
+		// Also attempt to set the FK constraint name in the referenced table.
+		// This is needed on the dropping path (i.e. when dropping an existing
+		// FK constraint).
+		referencedTable, err := i.checkOutTable(ctx, constraint.AsForeignKey().GetReferencedTableID())
+		if err != nil || referencedTable.Dropped() {
+			return err
+		}
+		for _, inboundFK := range referencedTable.InboundForeignKeys() {
+			if inboundFK.GetOriginTableID() == op.TableID && inboundFK.GetConstraintID() == op.ConstraintID {
+				inboundFK.ForeignKeyDesc().Name = op.Name
+				break
+			}
+		}
 	} else {
 		return errors.AssertionFailedf("unknown constraint type")
 	}
@@ -366,6 +379,7 @@ func (i *immediateVisitor) MakeAbsentForeignKeyConstraintWriteOnly(
 		out.NextConstraintID = op.ConstraintID + 1
 	}
 
+	// Enqueue a mutation in `out` to signal this mutation is now enforced.
 	fk := &descpb.ForeignKeyConstraint{
 		OriginTableID:       op.TableID,
 		OriginColumnIDs:     op.ColumnIDs,
@@ -380,6 +394,12 @@ func (i *immediateVisitor) MakeAbsentForeignKeyConstraintWriteOnly(
 	}
 	enqueueNonIndexMutation(out, out.AddForeignKeyMutation, fk, descpb.DescriptorMutation_ADD)
 	out.Mutations[len(out.Mutations)-1].State = descpb.DescriptorMutation_WRITE_ONLY
+	// Add an entry in "InboundFKs" in the referenced table as company.
+	in, err := i.checkOutTable(ctx, op.ReferencedTableID)
+	if err != nil {
+		return err
+	}
+	in.InboundFKs = append(in.InboundFKs, *fk)
 	return nil
 }
 
@@ -400,19 +420,19 @@ func (i *immediateVisitor) MakeValidatedForeignKeyConstraintPublic(
 		if c := mutation.GetConstraint(); c != nil &&
 			c.ConstraintType == descpb.ConstraintToUpdate_FOREIGN_KEY &&
 			c.ForeignKey.ConstraintID == op.ConstraintID {
+			// Complete this mutation by marking the validity as validated,
+			// removing it from the mutations slice, and publishing it into
+			// OutboundFKs slice.
+			c.ForeignKey.Validity = descpb.ConstraintValidity_Validated
 			out.OutboundFKs = append(out.OutboundFKs, c.ForeignKey)
-			in.InboundFKs = append(in.InboundFKs, c.ForeignKey)
-
-			// Remove the mutation from the mutation slice. The `MakeMutationComplete`
-			// call will also mark the above added check as VALIDATED.
-			// If this is a rollback of a drop, we are trying to add the foreign key constraint
-			// back, so swap the direction before making it complete.
-			mutation.Direction = descpb.DescriptorMutation_ADD
-			err = out.MakeMutationComplete(mutation)
-			if err != nil {
-				return err
-			}
 			out.Mutations = append(out.Mutations[:idx], out.Mutations[idx+1:]...)
+
+			// Update the back-reference in the referenced table.
+			for i, inboundFK := range in.InboundFKs {
+				if inboundFK.OriginTableID == out.GetID() && inboundFK.ConstraintID == op.ConstraintID {
+					in.InboundFKs[i].Validity = descpb.ConstraintValidity_Validated
+				}
+			}
 
 			found = true
 			break
@@ -434,23 +454,41 @@ func (i *immediateVisitor) MakeValidatedForeignKeyConstraintPublic(
 func (i *immediateVisitor) MakePublicForeignKeyConstraintValidated(
 	ctx context.Context, op scop.MakePublicForeignKeyConstraintValidated,
 ) error {
-	tbl, err := i.checkOutTable(ctx, op.TableID)
+	out, err := i.checkOutTable(ctx, op.TableID)
 	if err != nil {
 		return err
 	}
-	for i, fk := range tbl.OutboundFKs {
+	for idx, fk := range out.OutboundFKs {
 		if fk.ConstraintID == op.ConstraintID {
-			tbl.OutboundFKs = append(tbl.OutboundFKs[:i], tbl.OutboundFKs[i+1:]...)
-			if len(tbl.OutboundFKs) == 0 {
-				tbl.OutboundFKs = nil
+			out.OutboundFKs = append(out.OutboundFKs[:idx], out.OutboundFKs[idx+1:]...)
+			if len(out.OutboundFKs) == 0 {
+				out.OutboundFKs = nil
 			}
 			fk.Validity = descpb.ConstraintValidity_Dropping
-			enqueueNonIndexMutation(tbl, tbl.AddForeignKeyMutation, &fk, descpb.DescriptorMutation_DROP)
+			enqueueNonIndexMutation(out, out.AddForeignKeyMutation, &fk, descpb.DescriptorMutation_DROP)
+
+			// Update the inbound FK in referenced table.
+			foundInReferencedTable := false
+			in, err := i.checkOutTable(ctx, fk.ReferencedTableID)
+			if err != nil {
+				return err
+			}
+			for idx, inboundFk := range in.InboundFKs {
+				if inboundFk.OriginTableID == op.TableID && inboundFk.ConstraintID == op.ConstraintID {
+					in.InboundFKs[idx].Validity = descpb.ConstraintValidity_Dropping
+					foundInReferencedTable = true
+					break
+				}
+			}
+			if !foundInReferencedTable {
+				return errors.AssertionFailedf("failed to find accompanying inbound FK %v in"+
+					" referenced table %v (%v)", fk.Name, in.Name, in.ID)
+			}
 			return nil
 		}
 	}
 
-	return errors.AssertionFailedf("failed to find FK constraint %d in descriptor %v", op.ConstraintID, tbl)
+	return errors.AssertionFailedf("failed to find FK constraint %d in descriptor %v", op.ConstraintID, out)
 }
 
 func (i *immediateVisitor) MakeAbsentUniqueWithoutIndexConstraintWriteOnly(

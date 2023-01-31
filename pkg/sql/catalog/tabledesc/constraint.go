@@ -430,6 +430,10 @@ func newConstraintCache(
 			} else {
 				c.all = append(c.all, fk)
 				c.fks = append(c.fks, fk)
+				if m.WriteAndDeleteOnly() {
+					c.allEnforced = append(c.allEnforced, fk)
+					c.fksEnforced = append(c.fksEnforced, fk)
+				}
 			}
 		}
 	}
@@ -457,6 +461,10 @@ func newConstraintCache(
 			} else {
 				c.all = append(c.all, uwoi)
 				c.uwois = append(c.uwois, uwoi)
+				if m.WriteAndDeleteOnly() {
+					c.allEnforced = append(c.allEnforced, uwoi)
+					c.uwoisEnforced = append(c.uwoisEnforced, uwoi)
+				}
 			}
 		}
 	}
