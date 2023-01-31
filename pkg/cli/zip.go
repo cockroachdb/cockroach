@@ -278,7 +278,7 @@ find . -name cpu.pprof -print0 | xargs -0 go tool pprof -tags
 	{
 		s := zc.clusterPrinter.start("hot range summary script")
 		if err := z.createRaw(s, debugBase+"/hot-ranges.sh", []byte(`#!/bin/sh
-for stat in "queries" "writes" "reads" "write_bytes" "read_bytes"; do
+for stat in "queries" "writes" "reads" "write_bytes" "read_bytes" "cpu_time"; do
 	echo "$stat"
 	find . -path './nodes/*/ranges/*.json' -print0 | xargs -0 grep "$stat"_per_second | sort -rhk3 | head -n 10
 done
@@ -291,7 +291,7 @@ done
 	{
 		s := zc.clusterPrinter.start("tenant hot range summary script")
 		if err := z.createRaw(s, debugBase+"/hot-ranges-tenant.sh", []byte(`#!/bin/sh
-for stat in "queries" "writes" "reads" "write_bytes" "read_bytes"; do
+for stat in "queries" "writes" "reads" "write_bytes" "read_bytes" "cpu_time"; do
     echo "$stat"_per_second
     find . -path './tenant_ranges/*/*.json' -print0 | xargs -0 grep "$stat"_per_second | sort -rhk3 | head -n 10
 done
