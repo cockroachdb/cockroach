@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treewindow"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
 var (
@@ -198,7 +199,13 @@ func makeConstDatum(s *Smither, typ *types.T) tree.Datum {
 	if f := datum.ResolvedType().Family(); f != types.UnknownFamily && s.simpleDatums {
 		datum = randgen.RandDatumSimple(s.rnd, typ)
 	}
-
+	if v, ok := tree.AsDString(datum); ok && s.stringConstPrefix != "" {
+		sv := s.stringConstPrefix + string(v)
+		if typ.Width() > 0 {
+			sv = util.TruncateString(sv, int(typ.Width()))
+		}
+		datum = tree.NewDString(sv)
+	}
 	return datum
 }
 

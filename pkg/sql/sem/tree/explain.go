@@ -103,6 +103,11 @@ func (m ExplainMode) String() string {
 	return explainModeStrings[m]
 }
 
+// ExplainModes returns a map from EXPLAIN mode strings to ExplainMode.
+func ExplainModes() map[string]ExplainMode {
+	return explainModeStringMap
+}
+
 // ExplainFlag is a modifier in an EXPLAIN statement (like VERBOSE).
 type ExplainFlag uint8
 
@@ -145,6 +150,11 @@ func (f ExplainFlag) String() string {
 		panic(errors.AssertionFailedf("invalid ExplainFlag %d", f))
 	}
 	return explainFlagStrings[f]
+}
+
+// ExplainFlags returns a map from EXPLAIN flag strings to ExplainFlag.
+func ExplainFlags() map[string]ExplainFlag {
+	return explainFlagStringMap
 }
 
 // Format implements the NodeFormatter interface.
