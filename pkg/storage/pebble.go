@@ -636,9 +636,10 @@ func wrapFilesystemMiddleware(opts *pebble.Options) io.Closer {
 	// operations.
 	var closer io.Closer
 	opts.FS, closer = vfs.WithDiskHealthChecks(opts.FS, diskHealthCheckInterval,
-		func(name string, duration time.Duration) {
+		func(name string, opType vfs.OpType, duration time.Duration) {
 			opts.EventListener.DiskSlow(pebble.DiskSlowInfo{
 				Path:     name,
+				OpType:   opType,
 				Duration: duration,
 			})
 		})
