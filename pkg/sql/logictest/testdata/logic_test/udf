@@ -2670,3 +2670,12 @@ ORDER BY oid;
 ----
 100250  f_93314        105  1546506610  14  false  false  false  v  0  100249  ·  {}  NULL  SELECT i, e FROM test.public.t_93314 ORDER BY i LIMIT 1;
 100252  f_93314_alias  105  1546506610  14  false  false  false  v  0  100251  ·  {}  NULL  SELECT i, e FROM test.public.t_93314_alias ORDER BY i LIMIT 1;
+
+onlyif config local
+query T
+EXPLAIN CREATE FUNCTION f() RETURNS INT LANGUAGE SQL AS 'SELECT 1'
+----
+distribution: local
+vectorized: true
+·
+• create function
