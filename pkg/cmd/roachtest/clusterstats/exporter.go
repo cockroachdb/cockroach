@@ -61,16 +61,19 @@ type StatExporter interface {
 	// decomissioning we may export the time taken to decomission a node as
 	// well as the cost in terms of snapshot bytes sent. benchmarkFns has no
 	// requirement to make use of the StatSummary values given, rather they are
-	// provided for conveiencen to derive a benchmark pair, if suited.
+	// provided for conveiencen to derive a benchmark pair, if suited. When
+	// dryRun is true, the report is not exported, instead the summary is
+	// returned.
 	Export(
 		ctx context.Context,
 		c cluster.Cluster,
 		t test.Test,
+		dryRun bool,
 		from time.Time,
 		to time.Time,
 		queries []AggQuery,
 		benchmarkFns ...func(map[string]StatSummary) (string, float64),
-	) error
+	) (*ClusterStatRun, error)
 }
 
 // StatSummary holds the timeseries of some cluster aggregate statistic. The
@@ -86,6 +89,40 @@ type StatSummary struct {
 	Tag    string
 }
 
+// ClusterStatsRun holds the summary value for a test run as well as per
+// stat information collected during the run. This struct is mirrored in
+// cockroachdb/roachperf for deserialization.
+type ClusterStatRun struct {
+	Total map[string]float64     `json:"total"`
+	Stats map[string]StatSummary `json:"stats"`
+}
+
+// serializeReport serializes the passed in statistics into a roachperf
+// parseable performance artifact format.
+func (r *ClusterStatRun) SerializeOutRun(
+	ctx context.Context, t test.Test, c cluster.Cluster,
+) error {
+	report, err := serializeReport(*r)
+	if err != nil {
+		return errors.Wrap(err, "failed to serialize perf artifacts")
+	}
+	return writeOutRoachPerf(ctx, t, c, report)
+}
+
+// createReport returns a ClusterStatRun struct that encompases the results of
+// the run.
+func createReport(
+	summaries map[string]StatSummary, summaryStats map[string]float64,
+) *ClusterStatRun {
+	testRun := ClusterStatRun{Stats: make(map[string]StatSummary)}
+
+	for tag, summary := range summaries {
+		testRun.Stats[tag] = summary
+	}
+	testRun.Total = summaryStats
+	return &testRun
+}
+
 // Export collects, serializes and saves a roachperf file, with statistics
 // collect from - to time, for the AggQuery(s) given. The format is described
 // in the doc.go and the AggQuery definition. In addition to the AggQuery(s),
@@ -97,16 +134,17 @@ func (cs *clusterStatCollector) Export(
 	ctx context.Context,
 	c cluster.Cluster,
 	t test.Test,
+	dryRun bool,
 	from time.Time,
 	to time.Time,
 	queries []AggQuery,
 	benchmarkFns ...func(summaries map[string]StatSummary) (string, float64),
-) error {
+) (*ClusterStatRun, error) {
 	l := t.L()
 	summaries, err := cs.collectSummaries(ctx, l, Interval{From: from, To: to}, queries)
 	if err != nil {
 		l.ErrorfCtx(ctx, "unable to collect cluster stat summaries: %+v", err)
-		return err
+		return nil, err
 	}
 
 	summaryValues := make(map[string]float64)
@@ -115,12 +153,11 @@ func (cs *clusterStatCollector) Export(
 		summaryValues[t] = result
 	}
 
-	perfBuf, err := serializeReport(summaries, summaryValues)
-	if err != nil {
-		return errors.Wrap(err, "failed to serialize perf artifacts")
+	testRun := createReport(summaries, summaryValues)
+	if !dryRun {
+		err = testRun.SerializeOutRun(ctx, t, c)
 	}
-
-	return writeOutRoachPerf(ctx, t, c, perfBuf)
+	return testRun, err
 }
 
 // writeOutRoachPerf is a utility function that writes out a buffer to the
@@ -143,24 +180,7 @@ func writeOutRoachPerf(
 
 // serializeReport serializes the passed in statistics into a roachperf
 // parseable performance artifact format.
-func serializeReport(
-	summaries map[string]StatSummary, summaryStats map[string]float64,
-) (*bytes.Buffer, error) {
-	// ClusterStatsRun holds the summary value for a test run as well as per
-	// stat information collected during the run. This struct is mirrored in
-	// cockroachdb/roachperf for deserialization.
-	type ClusterStatRun struct {
-		Total map[string]float64     `json:"total"`
-		Stats map[string]StatSummary `json:"stats"`
-	}
-
-	testRun := ClusterStatRun{Stats: make(map[string]StatSummary)}
-
-	for tag, summary := range summaries {
-		testRun.Stats[tag] = summary
-	}
-	testRun.Total = summaryStats
-
+func serializeReport(testRun ClusterStatRun) (*bytes.Buffer, error) {
 	bytesBuf := bytes.NewBuffer([]byte{})
 	jsonEnc := json.NewEncoder(bytesBuf)
 	err := jsonEnc.Encode(testRun)
@@ -251,13 +271,17 @@ func (cs *clusterStatCollector) getStatSummary(
 	for labelName, series := range labelNameSeries {
 		streamSize := n
 		ret.Tagged[labelName] = make([]float64, streamSize)
-		if streamSize != len(series) {
+		if streamSize > len(series) {
 			return ret, errors.Newf(
 				"Differing lengths on stream size on query %s, expected %d, actual %d",
 				summaryQuery.Stat.Query,
 				streamSize,
 				len(series),
 			)
+		} else if streamSize < len(series) {
+			// When the new series is longer than the expected, we are able to
+			// trim it to the expected length by discarding values at the end.
+			series = series[:streamSize]
 		}
 
 		for i, val := range series {

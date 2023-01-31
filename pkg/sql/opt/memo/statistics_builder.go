@@ -3084,14 +3084,12 @@ func (sb *statisticsBuilder) filterRelExpr(
 func (sb *statisticsBuilder) applyFilters(
 	filters FiltersExpr, e RelExpr, relProps *props.Relational, skipOrTermAccounting bool,
 ) (numUnappliedConjuncts float64, constrainedCols, histCols opt.ColSet) {
-	// Special hack for lookup and inverted joins. Add constant filters from the
-	// equality conditions.
+	// Special hack for inverted joins. Add constant filters from the equality
+	// conditions.
 	// TODO(rytaft): the correct way to do this is probably to fully implement
 	// histograms in Project and Join expressions, and use them in
 	// selectivityFromEquivalencies. See Issue #38082.
 	switch t := e.(type) {
-	case *LookupJoinExpr:
-		filters = append(filters, t.ConstFilters...)
 	case *InvertedJoinExpr:
 		filters = append(filters, t.ConstFilters...)
 	}
