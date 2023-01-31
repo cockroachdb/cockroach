@@ -16,6 +16,7 @@ import (
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -210,6 +211,8 @@ func ClientInterceptor(
 ) grpc.UnaryClientInterceptor {
 	if init == nil {
 		init = func(*tracing.Span) {}
+		// TODO: clean up.
+		_ = init
 	}
 	return func(
 		ctx context.Context,
@@ -225,31 +228,31 @@ func ClientInterceptor(
 		if localRequest {
 			return invoker(ctx, method, req, resp, cc, opts...)
 		}
+
+		// NB: we don't create a wrapping span here. See the discussion in:
+		// https://github.com/cockroachdb/cockroach/issues/96173
 		parent := tracing.SpanFromContext(ctx)
 		if !tracing.SpanInclusionFuncForClient(parent) {
 			return invoker(ctx, method, req, resp, cc, opts...)
 		}
 
-		clientSpan := tracer.StartSpan(
-			method,
-			tracing.WithParent(parent),
-			tracing.WithClientSpanKind,
-		)
-		init(clientSpan)
-		defer clientSpan.Finish()
+		log.Event(ctx, "gRPC ClientInterceptor begin")
+		defer log.Event(ctx, "gRPC ClientInterceptor end")
 
 		// For most RPCs we pass along tracing info as gRPC metadata. Some select
 		// RPCs carry the tracing in the request protos, which is more efficient.
 		if !methodExcludedFromTracing(method) {
-			ctx = injectSpanMeta(ctx, tracer, clientSpan)
+			ctx = injectSpanMeta(ctx, tracer, parent)
 		}
 		var err error
 		if invoker != nil {
 			err = invoker(ctx, method, req, resp, cc, opts...)
 		}
 		if err != nil {
-			setGRPCErrorTag(clientSpan, err)
-			clientSpan.Recordf("error: %s", err)
+			// TODO(obs-inf): now that we're using the parent span we might clobber
+			// this tag if the parent sends multiple rpcs.
+			setGRPCErrorTag(parent, err)
+			parent.Recordf("error: %s", err)
 		}
 		return err
 	}
