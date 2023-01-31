@@ -213,6 +213,9 @@ func (c *Connector) Start(ctx context.Context) error {
 			settingsStartupCh = nil
 		case <-ctx.Done():
 			return ctx.Err()
+		case <-c.rpcContext.Stopper.ShouldQuiesce():
+			log.Infof(ctx, "kv connector asked to shut down before full start")
+			return errors.New("request to shut down early")
 		}
 	}
 	return nil
