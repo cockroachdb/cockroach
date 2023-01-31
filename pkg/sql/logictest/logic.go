@@ -1154,24 +1154,7 @@ func (t *logicTest) setUser(user string, nodeIdx int) func() {
 		return func() {}
 	}
 
-	var addr string
-	var pgURL url.URL
-	var pgUser string
-	var cleanupFunc func()
-	pgUser = strings.TrimPrefix(user, "host-cluster-")
-	if t.cfg.UseCockroachGoTestserver {
-		pgURL = *t.testserverCluster.PGURL()
-		pgURL.User = url.User(pgUser)
-		cleanupFunc = func() {}
-	} else {
-		addr = t.cluster.Server(nodeIdx).ServingSQLAddr()
-		if len(t.tenantAddrs) > 0 && !strings.HasPrefix(user, "host-cluster-") {
-			addr = t.tenantAddrs[nodeIdx]
-		}
-		pgURL, cleanupFunc = sqlutils.PGUrl(t.rootT, addr, "TestLogic", url.User(pgUser))
-		pgURL.Path = "test"
-	}
-
+	pgUser, pgURL, cleanupFunc := t.pgURLForUser(user, nodeIdx)
 	db := t.openDB(pgURL)
 
 	// The default value for extra_float_digits assumed by tests is
@@ -1199,6 +1182,25 @@ func (t *logicTest) setUser(user string, nodeIdx int) func() {
 	t.nodeIdx = nodeIdx
 
 	return cleanupFunc
+}
+
+func (t *logicTest) pgURLForUser(
+	user string, nodeIdx int,
+) (pgUser string, pgURL url.URL, cleanupFunc func()) {
+	pgUser = strings.TrimPrefix(user, "host-cluster-")
+	if t.cfg.UseCockroachGoTestserver {
+		pgURL = *t.testserverCluster.PGURLForNode(nodeIdx)
+		pgURL.User = url.User(pgUser)
+		cleanupFunc = func() {}
+	} else {
+		addr := t.cluster.Server(nodeIdx).ServingSQLAddr()
+		if len(t.tenantAddrs) > 0 && !strings.HasPrefix(user, "host-cluster-") {
+			addr = t.tenantAddrs[nodeIdx]
+		}
+		pgURL, cleanupFunc = sqlutils.PGUrl(t.rootT, addr, "TestLogic", url.User(pgUser))
+	}
+	pgURL.Path = "test"
+	return pgUser, pgURL, cleanupFunc
 }
 
 func (t *logicTest) openDB(pgURL url.URL) *gosql.DB {
@@ -3340,21 +3342,8 @@ func (t *logicTest) execQuery(query logicQuery) error {
 	db := t.db
 	var closeDB func()
 	if query.nodeIdx != t.nodeIdx {
-		var pgURL url.URL
-		if t.testserverCluster != nil {
-			pgURL = *t.testserverCluster.PGURLForNode(query.nodeIdx)
-			pgURL.User = url.User(t.user)
-			pgURL.Path = "test"
-		} else {
-			addr := t.cluster.Server(query.nodeIdx).ServingSQLAddr()
-			if len(t.tenantAddrs) > 0 {
-				addr = t.tenantAddrs[query.nodeIdx]
-			}
-			var cleanupFunc func()
-			pgURL, cleanupFunc = sqlutils.PGUrl(t.rootT, addr, "TestLogic", url.User(t.user))
-			defer cleanupFunc()
-			pgURL.Path = "test"
-		}
+		_, pgURL, cleanupFunc := t.pgURLForUser(t.user, query.nodeIdx)
+		defer cleanupFunc()
 
 		db = t.openDB(pgURL)
 		closeDB = func() {
