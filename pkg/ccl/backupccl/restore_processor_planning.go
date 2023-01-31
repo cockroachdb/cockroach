@@ -188,6 +188,7 @@ func distRestore(
 			NumEntries:           int64(numImportSpans),
 			NumNodes:             int64(numNodes),
 			UseSimpleImportSpans: useSimpleImportSpans,
+			JobID:                jobID,
 		}
 
 		proc := physicalplan.Processor{
