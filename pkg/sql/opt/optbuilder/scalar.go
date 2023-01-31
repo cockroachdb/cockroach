@@ -620,6 +620,23 @@ func (b *Builder) buildUDF(
 ) (out opt.ScalarExpr) {
 	o := f.ResolvedOverload()
 
+	// Validate that the return types match the original return types defined in
+	// the function. Return types like user defined return types may change since
+	// the function was first created.
+	rtyp := f.ResolvedType()
+	if rtyp.UserDefined() {
+		funcReturnType, err := tree.ResolveType(b.ctx,
+			&tree.OIDTypeReference{OID: rtyp.Oid()}, b.semaCtx.TypeResolver)
+		if err != nil {
+			panic(err)
+		}
+		if !funcReturnType.Equivalent(rtyp) {
+			panic(pgerror.Newf(
+				pgcode.InvalidFunctionDefinition,
+				"return type mismatch in function declared to return %s", rtyp.Name()))
+		}
+	}
+
 	// Build the argument expressions.
 	var args memo.ScalarListExpr
 	if len(f.Exprs) > 0 {
