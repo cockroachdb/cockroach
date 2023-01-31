@@ -17,6 +17,8 @@ import { connect } from "react-redux";
 import { actions as indexStatsActions } from "src/store/indexStats/indexStats.reducer";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { actions as nodesActions } from "../store/nodes";
+import { TimeScale } from "../timeScaleDropdown";
+import { actions as sqlStatsActions } from "../store/sqlStats";
 
 const mapStateToProps = (state: AppState, props: RouteComponentProps) => {
   return selectIndexDetails(state, props);
@@ -43,6 +45,13 @@ const mapDispatchToProps = (dispatch: Dispatch): IndexDetailPageActions => ({
   },
   refreshNodes: () => dispatch(nodesActions.refresh()),
   refreshUserSQLRoles: () => dispatch(uiConfigActions.refreshUserSQLRoles()),
+  onTimeScaleChange: (ts: TimeScale) => {
+    dispatch(
+      sqlStatsActions.updateTimeScale({
+        ts: ts,
+      }),
+    );
+  },
 });
 
 export const ConnectedIndexDetailsPage = withRouter<any, any>(

@@ -166,7 +166,7 @@ func doCreateBackupSchedules(
 
 		if exists {
 			p.BufferClientNotice(ctx,
-				pgnotice.Newf("schedule %q already exists, skipping", eval.scheduleLabel),
+				pgnotice.Newf("schedule %q already exists, skipping", *eval.scheduleLabel),
 			)
 			return nil
 		}

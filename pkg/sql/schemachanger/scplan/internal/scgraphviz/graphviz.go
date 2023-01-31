@@ -117,14 +117,14 @@ func drawStages(
 		targetNodes[idx] = tn
 	}
 
-	// Want to draw an edge to the initial target statuses with some dots
-	// or something.
-	curNodes := make([]dot.Node, len(cs.Current))
-	cur := cs.Current
+	// Want to draw an edge to the initial target statuses
+	// with some dots or something.
+	curNodes := make([]dot.Node, len(cs.Initial))
+	cur := cs.Initial
 	curDummy := targetsSubgraph.Node("dummy")
 	curDummy.Attr("shape", "point")
 	curDummy.Attr("style", "invis")
-	for i, status := range cs.Current {
+	for i, status := range cs.Initial {
 		label := targetStatusID(i, status)
 		tsn := stagesSubgraph.Node(fmt.Sprintf("initial %d", i))
 		tsn.Attr("label", label)
@@ -181,7 +181,7 @@ func drawDeps(cs scpb.CurrentState, g *scgraph.Graph) (*dot.Graph, error) {
 	depsSubgraph := dg.Subgraph("deps", dot.ClusterOption{})
 	targetsSubgraph := depsSubgraph.Subgraph("targets", dot.ClusterOption{})
 	statementsSubgraph := depsSubgraph.Subgraph("statements", dot.ClusterOption{})
-	targetNodes := make([]dot.Node, len(cs.Current))
+	targetNodes := make([]dot.Node, len(cs.Initial))
 	targetIdxMap := make(map[*scpb.Target]int)
 	// Add all the statements in their own section.
 	// Note: Explains can only have one statement, so we aren't
@@ -192,10 +192,10 @@ func drawDeps(cs scpb.CurrentState, g *scgraph.Graph) (*dot.Graph, error) {
 		stmtNode.Attr("fontsize", "9")
 		stmtNode.Attr("shape", "none")
 	}
-	targetStatusNodes := make([]map[scpb.Status]dot.Node, len(cs.Current))
-	for idx, status := range cs.Current {
+	targetStatusNodes := make([]map[scpb.Status]dot.Node, len(cs.Initial))
+	for idx, status := range cs.Initial {
 		t := &cs.TargetState.Targets[idx]
-		tn := targetsSubgraph.Node(itoa(idx, len(cs.Current)))
+		tn := targetsSubgraph.Node(itoa(idx, len(cs.Initial)))
 		tn.Attr("label", htmlLabel(t.Element()))
 		tn.Attr("fontsize", "9")
 		tn.Attr("shape", "none")
@@ -208,7 +208,7 @@ func drawDeps(cs scpb.CurrentState, g *scgraph.Graph) (*dot.Graph, error) {
 		targetStatusNodes[targetIdxMap[n.Target]][n.CurrentStatus] = tn
 		return nil
 	})
-	for idx, status := range cs.Current {
+	for idx, status := range cs.Initial {
 		nn := targetStatusNodes[idx][status]
 		tn := targetNodes[idx]
 		e := tn.Edge(nn)

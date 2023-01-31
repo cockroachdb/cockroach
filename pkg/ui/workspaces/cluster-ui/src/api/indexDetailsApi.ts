@@ -13,6 +13,8 @@ import {
   convertStatementRawFormatToAggregatedStatistics,
   executeInternalSql,
   fetchData,
+  LARGE_RESULT_SIZE,
+  sqlApiErrorMessage,
   SqlExecutionRequest,
   sqlResultsAreEmpty,
   StatementRawFormat,
@@ -81,7 +83,7 @@ export function StatementsListRequestFromDetails(
   return { table, index, database, start, end };
 }
 
-export function getStatementsUsingIndex({
+export async function getStatementsUsingIndex({
   table,
   index,
   database,
@@ -89,24 +91,21 @@ export function getStatementsUsingIndex({
   end,
 }: StatementsUsingIndexRequest): Promise<AggregateStatistics[]> {
   const args: any = [`"${table}@${index}"`];
-  let placeholder = 2;
   let whereClause = "";
   if (start) {
-    args.push(start);
-    whereClause = `${whereClause} AND aggregated_ts >= $${placeholder}`;
-    placeholder++;
+    whereClause = `${whereClause} AND aggregated_ts >= '${start.toISOString()}'`;
   }
   if (end) {
-    args.push(end);
-    whereClause = `${whereClause} AND aggregated_ts <= $${placeholder}`;
-    placeholder++;
+    whereClause = `${whereClause} AND aggregated_ts <= '${end.toISOString()}'`;
   }
 
   const selectStatements = {
     sql: `SELECT * FROM system.statement_statistics 
             WHERE $1::jsonb <@ indexes_usage
                 AND app_name NOT LIKE '${INTERNAL_APP_NAME_PREFIX}%' 
-                ${whereClause};`,
+                ${whereClause}
+            ORDER BY (statistics -> 'statistics' ->> 'cnt')::INT DESC
+            LIMIT 20;`,
     arguments: args,
   };
 
@@ -114,17 +113,22 @@ export function getStatementsUsingIndex({
     execute: true,
     statements: [selectStatements],
     database: database,
+    max_result_size: LARGE_RESULT_SIZE,
   };
 
-  return executeInternalSql<StatementRawFormat>(req).then(res => {
-    if (res.error || sqlResultsAreEmpty(res)) {
-      return [];
-    }
+  const result = await executeInternalSql<StatementRawFormat>(req);
+  if (result.error) {
+    throw new Error(
+      `Error while retrieving list of statements: ${sqlApiErrorMessage(
+        result.error.message,
+      )}`,
+    );
+  }
+  if (sqlResultsAreEmpty(result)) {
+    return [];
+  }
 
-    const statements: AggregateStatistics[] = [];
-    res.execution.txn_results[0].rows.forEach(s => {
-      statements.push(convertStatementRawFormatToAggregatedStatistics(s));
-    });
-    return statements;
-  });
+  return result.execution.txn_results[0].rows.map(s =>
+    convertStatementRawFormatToAggregatedStatistics(s),
+  );
 }

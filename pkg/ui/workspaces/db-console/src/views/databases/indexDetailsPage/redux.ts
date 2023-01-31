@@ -37,6 +37,8 @@ import {
   selectHasAdminRole,
 } from "src/redux/user";
 import { nodeRegionsByIDSelector } from "src/redux/nodes";
+import { setGlobalTimeScaleAction } from "src/redux/statements";
+import { selectTimeScale } from "src/redux/timeScale";
 const { RecommendationType } = cockroach.sql.IndexRecommendation;
 
 export const mapStateToProps = createSelector(
@@ -50,6 +52,7 @@ export const mapStateToProps = createSelector(
   state => selectHasViewActivityRedactedRole(state),
   state => nodeRegionsByIDSelector(state),
   state => selectHasAdminRole(state),
+  state => selectTimeScale(state),
   (
     database,
     table,
@@ -58,6 +61,7 @@ export const mapStateToProps = createSelector(
     hasViewActivityRedactedRole,
     nodeRegions,
     hasAdminRole,
+    timeScale,
   ): IndexDetailsPageData => {
     const stats = indexStats[generateTableID(database, table)];
     const details = stats?.data?.statistics.filter(
@@ -88,6 +92,7 @@ export const mapStateToProps = createSelector(
       hasViewActivityRedactedRole: hasViewActivityRedactedRole,
       hasAdminRole: hasAdminRole,
       nodeRegions: nodeRegions,
+      timeScale: timeScale,
       details: {
         loading: !!stats?.inFlight,
         loaded: !!stats?.valid,
@@ -112,4 +117,5 @@ export const mapDispatchToProps = {
   resetIndexUsageStats: resetIndexUsageStatsAction,
   refreshNodes,
   refreshUserSQLRoles,
+  onTimeScaleChange: setGlobalTimeScaleAction,
 };
