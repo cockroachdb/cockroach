@@ -22,7 +22,7 @@ split
 ok
 
 update-state
-upsert {ten=system}:{CanAdminSplit=false}
+upsert {ten=system};{"can_admin_split": false}
 ----
 ok
 

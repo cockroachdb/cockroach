@@ -1,6 +1,6 @@
 update-state
-upsert {ten=10}:{CanAdminSplit=true}
-upsert {ten=11}:{CanAdminSplit=false}
+upsert {ten=10};{"can_admin_split": true, "can_view_node_info": true, "can_view_tsdb_metrics": true}
+upsert {ten=11};{"can_admin_split": false, "can_view_node_info": false, "can_view_tsdb_metrics": false}
 ----
 ok
 
@@ -51,7 +51,7 @@ ok
 # Lastly, flip tenant 10's capability for splits; ensure it can no longer issue
 # splits as a result.
 update-state
-upsert {ten=10}:{CanAdminSplit=false}
+upsert {ten=10};{"can_admin_split": false, "can_view_node_info": true, "can_view_tsdb_metrics": true}
 ----
 ok
 
@@ -70,3 +70,24 @@ scan
 cput
 ----
 ok
+
+has-capability-for-node-info
+{ten=10}
+----
+ok
+
+has-capability-for-node-info
+{ten=11}
+----
+tenant 11 does not have capability to query cluster node metadata
+
+
+has-capability-for-tsdb-metrics
+{ten=10}
+----
+ok
+
+has-capability-for-tsdb-metrics
+{ten=11}
+----
+tenant 11 does not have capability to query timseries data

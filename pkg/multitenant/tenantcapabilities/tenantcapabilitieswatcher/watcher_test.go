@@ -107,33 +107,35 @@ func TestDataDriven(t *testing.T) {
 			ts.Stopper(),
 			1<<20, /* 1 MB */
 			&tenantcapabilities.TestingKnobs{
-				WatcherTestingKnobs: &tenantcapabilitieswatcher.TestingKnobs{
-					WatcherRangeFeedKnobs: &rangefeedcache.TestingKnobs{
-						PostRangeFeedStart: func() {
-							mu.Lock()
-							defer mu.Unlock()
+				WatcherTestingKnobs: &tenantcapabilities.TestingKnobs{
+					WatcherTestingKnobs: &tenantcapabilitieswatcher.TestingKnobs{
+						WatcherRangeFeedKnobs: &rangefeedcache.TestingKnobs{
+							PostRangeFeedStart: func() {
+								mu.Lock()
+								defer mu.Unlock()
 
-							mu.rangeFeedRunning = true
+								mu.rangeFeedRunning = true
+							},
+							OnTimestampAdvance: func(ts hlc.Timestamp) {
+								mu.Lock()
+								defer mu.Unlock()
+								mu.lastFrontierTS = ts
+							},
+							ErrorInjectionCh: errorInjectionCh,
+							PreExit: func() {
+								mu.Lock()
+								mu.rangeFeedRunning = false
+								mu.Unlock()
+								// Block until the test directives indicate otherwise.
+								<-restartAfterErrCh
+							},
 						},
-						OnTimestampAdvance: func(ts hlc.Timestamp) {
+						WatcherUpdatesInterceptor: func(UpdateType rangefeedcache.UpdateType, updates []tenantcapabilities.Update) {
 							mu.Lock()
 							defer mu.Unlock()
-							mu.lastFrontierTS = ts
+							mu.receivedUpdates = append(mu.receivedUpdates, updates...)
+							mu.receivedUpdateType = UpdateType
 						},
-						ErrorInjectionCh: errorInjectionCh,
-						PreExit: func() {
-							mu.Lock()
-							mu.rangeFeedRunning = false
-							mu.Unlock()
-							// Block until the test directives indicate otherwise.
-							<-restartAfterErrCh
-						},
-					},
-					WatcherUpdatesInterceptor: func(UpdateType rangefeedcache.UpdateType, updates []tenantcapabilities.Update) {
-						mu.Lock()
-						defer mu.Unlock()
-						mu.receivedUpdates = append(mu.receivedUpdates, updates...)
-						mu.receivedUpdateType = UpdateType
 					},
 				},
 			})

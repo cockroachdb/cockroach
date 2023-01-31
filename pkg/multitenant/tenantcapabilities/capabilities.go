@@ -60,6 +60,14 @@ type Authorizer interface {
 	// implementation. Binding the Reader late allows us to break this dependency
 	// cycle.
 	BindReader(ctx context.Context, reader Reader)
+
+	// HasNodeStatusCapability returns an error if a tenant, referenced by its ID,
+	// is not allowed to access cluster-level node metadata and liveness.
+	HasNodeStatusCapability(ctx context.Context, tenID roachpb.TenantID) error
+
+	// HasTSDBQueryCapability returns an error if a tenant, referenced by its ID,
+	// is not allowed to query the TSDB for metrics.
+	HasTSDBQueryCapability(ctx context.Context, tenID roachpb.TenantID) error
 }
 
 // Entry ties together a tenantID with its capabilities.

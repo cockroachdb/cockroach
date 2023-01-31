@@ -64,6 +64,21 @@ func TestDataDriven(t *testing.T) {
 				}
 				return err.Error()
 
+			case "has-capability-for-node-info":
+				tenID, _ := tenantcapabilitiestestutils.ParseBatchRequestString(t, d.Input)
+				err := authorizer.HasNodeStatusCapability(context.Background(), tenID)
+				if err == nil {
+					return "ok"
+				}
+				return err.Error()
+			case "has-capability-for-tsdb-metrics":
+				tenID, _ := tenantcapabilitiestestutils.ParseBatchRequestString(t, d.Input)
+				err := authorizer.HasTSDBQueryCapability(context.Background(), tenID)
+				if err == nil {
+					return "ok"
+				}
+				return err.Error()
+
 			default:
 				return fmt.Sprintf("unknown command %s", d.Cmd)
 			}

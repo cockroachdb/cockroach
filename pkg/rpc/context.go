@@ -423,6 +423,8 @@ type Context struct {
 	// The loopbackDialFn fits under that common case by transporting
 	// the gRPC protocol over an in-memory pipe.
 	loopbackDialFn func(context.Context) (net.Conn, error)
+
+	TenantCapabilitiesAuthorizer tenantcapabilities.Authorizer
 }
 
 // SetLoopbackDialer configures the loopback dialer function.

@@ -25,7 +25,15 @@ import "gogoproto/gogo.proto";
 message TenantCapabilities {
   option (gogoproto.equal) = true;
 
-  // CanAdminSplit, if set to true, grants grants the tenant the ability to
+  // CanAdminSplit, if set to true, grants the tenant the ability to
   // successfully perform `AdminSplit` requests.
   bool can_admin_split = 1;
+
+  // CanViewNodeObservability, if set to true, grants the tenant the ability
+  // retrieve node-level observability data at endpoints such as `_status/nodes`
+  // and in the DB Console overview page.
+  bool can_view_node_info = 2;
+
+  // CanViewTSDBMetrics, if set to true,
+  bool can_view_tsdb_metrics = 3;
 };

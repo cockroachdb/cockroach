@@ -11,6 +11,7 @@
 package tenantcapabilitiestestutils
 
 import (
+	"encoding/json"
 	"fmt"
 	"regexp"
 	"strconv"
@@ -24,7 +25,6 @@ import (
 )
 
 var tenIDRe = regexp.MustCompile(`^{ten=((\d*)|(system))}$`)
-var capabilityRe = regexp.MustCompile(`^{(CanAdminSplit=(true|false))}$`)
 
 // ParseBatchRequestString is a helper function to parse datadriven input that
 // declares (empty) batch requests of supported types, for a particular tenant.
@@ -114,7 +114,7 @@ func PrintTenantCapabilityEntry(entry tenantcapabilities.Entry) string {
 }
 
 func parseTenantCapabilityEntry(t *testing.T, input string) tenantcapabilities.Entry {
-	parts := strings.Split(input, ":")
+	parts := strings.Split(input, ";")
 	require.Equal(t, 2, len(parts))
 	return tenantcapabilities.Entry{
 		TenantID:           ParseTenantID(t, parts[0]),
@@ -123,15 +123,10 @@ func parseTenantCapabilityEntry(t *testing.T, input string) tenantcapabilities.E
 }
 
 func parseTenantCapability(t *testing.T, input string) tenantcapabilitiespb.TenantCapabilities {
-	if !capabilityRe.MatchString(input) {
-		t.Fatalf("expected %s to match capability ID regex", input)
-	}
-	matches := capabilityRe.FindStringSubmatch(input)
-	var capabilities tenantcapabilitiespb.TenantCapabilities
-	if matches[2] == "true" {
-		capabilities.CanAdminSplit = true
-	}
-	return capabilities
+	var cap = tenantcapabilitiespb.TenantCapabilities{}
+	err := json.Unmarshal([]byte(input), &cap)
+	require.NoError(t, err)
+	return cap
 }
 
 func ParseTenantID(t *testing.T, input string) roachpb.TenantID {
@@ -154,14 +149,9 @@ func printTenantID(id roachpb.TenantID) string {
 }
 
 func PrintTenantCapability(cap tenantcapabilitiespb.TenantCapabilities) string {
-	var s strings.Builder
-	s.WriteString("{")
-	s.WriteString("CanAdminSplit=")
-	if cap.CanAdminSplit {
-		s.WriteString("true")
-	} else {
-		s.WriteString("false")
+	bytes, err := json.Marshal(cap)
+	if err != nil {
+		panic(err)
 	}
-	s.WriteString("}")
-	return s.String()
+	return string(bytes)
 }

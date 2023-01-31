@@ -465,11 +465,11 @@ func (c *Connector) RangeLookup(
 }
 
 // NodesUI implements the serverpb.TenantStatusServer interface
-func (c *Connector) NodesUI(
+func (c *Connector) NodesTenant(
 	ctx context.Context, req *serverpb.NodesRequest,
-) (resp *serverpb.NodesResponseExternal, retErr error) {
+) (resp *serverpb.NodesResponse, retErr error) {
 	retErr = c.withClient(ctx, func(ctx context.Context, client *client) (err error) {
-		resp, err = client.NodesUI(ctx, req)
+		resp, err = client.NodesTenant(ctx, req)
 		return
 	})
 	return

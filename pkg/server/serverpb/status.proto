@@ -1981,6 +1981,9 @@ service Status {
     };
   }
 
+  rpc NodesTenant(NodesRequest) returns (NodesResponse) {}
+
+
   // Node retrieves details about a single node.
   // API: PUBLIC ALPHA
   rpc Node(NodeRequest) returns (server.status.statuspb.NodeStatus) {

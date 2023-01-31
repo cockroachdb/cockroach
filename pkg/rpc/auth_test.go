@@ -890,8 +890,26 @@ func TestTenantAuthCapabilityChecks(t *testing.T) {
 }
 
 type mockAuthorizer struct {
-	hasCapabilityForBatch bool
+	hasCapabilityForBatch   bool
+	hasNodestatusCapability bool
+	hasTSDBQueryCapability  bool
 }
+
+func (m mockAuthorizer) HasNodeStatusCapability(ctx context.Context, tenID roachpb.TenantID) error {
+	if m.hasNodestatusCapability {
+		return nil
+	}
+	return errors.New("tenant does not have capability")
+}
+
+func (m mockAuthorizer) HasTSDBQueryCapability(ctx context.Context, tenID roachpb.TenantID) error {
+	if m.hasTSDBQueryCapability {
+		return nil
+	}
+	return errors.New("tenant does not have capability")
+}
+
+var _ tenantcapabilities.Authorizer = &mockAuthorizer{}
 
 // HasCapabilityForBatch implements the tenantcapabilities.Authorizer interface.
 func (m mockAuthorizer) HasCapabilityForBatch(

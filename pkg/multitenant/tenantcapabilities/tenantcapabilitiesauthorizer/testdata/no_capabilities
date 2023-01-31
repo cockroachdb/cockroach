@@ -20,7 +20,7 @@ ok
 
 # Update the capability state to give tenant 10 the capability to run splits.
 update-state
-upsert {ten=10}:{CanAdminSplit=true}
+upsert {ten=10};{"can_admin_split": true}
 ----
 ok
 

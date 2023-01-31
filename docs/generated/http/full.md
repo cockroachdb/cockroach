@@ -444,6 +444,169 @@ StoreStatus records the most recent values of metrics for a store.
 
 
 
+## NodesTenant
+
+
+
+
+
+Support status: [reserved](#support-status)
+
+#### Request Parameters
+
+
+
+
+NodesRequest requests a copy of the node information as known to gossip
+and the KV layer.
+
+
+
+
+
+
+
+
+#### Response Parameters
+
+
+
+
+NodesResponse describe the nodes in the cluster.
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| nodes | [cockroach.server.status.statuspb.NodeStatus](#cockroach.server.serverpb.NodesResponse-cockroach.server.status.statuspb.NodeStatus) | repeated | nodes carries the status payloads for all nodes in the cluster. | [alpha](#support-status) |
+| liveness_by_node_id | [NodesResponse.LivenessByNodeIdEntry](#cockroach.server.serverpb.NodesResponse-cockroach.server.serverpb.NodesResponse.LivenessByNodeIdEntry) | repeated | liveness_by_node_id maps each node ID to a liveness status. | [reserved](#support-status) |
+
+
+
+
+
+
+<a name="cockroach.server.serverpb.NodesResponse-cockroach.server.status.statuspb.NodeStatus"></a>
+#### NodeStatus
+
+NodeStatus records the most recent values of metrics for a node.
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| desc | [cockroach.roachpb.NodeDescriptor](#cockroach.server.serverpb.NodesResponse-cockroach.roachpb.NodeDescriptor) |  | desc is the node descriptor. | [reserved](#support-status) |
+| build_info | [cockroach.build.Info](#cockroach.server.serverpb.NodesResponse-cockroach.build.Info) |  | build_info describes the `cockroach` executable file. | [alpha](#support-status) |
+| started_at | [int64](#cockroach.server.serverpb.NodesResponse-int64) |  | started_at is the unix timestamp at which the node process was last started. | [alpha](#support-status) |
+| updated_at | [int64](#cockroach.server.serverpb.NodesResponse-int64) |  | updated_at is the unix timestamp at which the node status record was last updated. | [alpha](#support-status) |
+| metrics | [NodeStatus.MetricsEntry](#cockroach.server.serverpb.NodesResponse-cockroach.server.status.statuspb.NodeStatus.MetricsEntry) | repeated | metrics contains the last sampled values for the node metrics. | [reserved](#support-status) |
+| store_statuses | [StoreStatus](#cockroach.server.serverpb.NodesResponse-cockroach.server.status.statuspb.StoreStatus) | repeated | store_statuses provides the store status payloads for all the stores on that node. | [reserved](#support-status) |
+| args | [string](#cockroach.server.serverpb.NodesResponse-string) | repeated | args is the list of command-line arguments used to last start the node. | [reserved](#support-status) |
+| env | [string](#cockroach.server.serverpb.NodesResponse-string) | repeated | env is the list of environment variables that influenced the node's configuration. | [reserved](#support-status) |
+| latencies | [NodeStatus.LatenciesEntry](#cockroach.server.serverpb.NodesResponse-cockroach.server.status.statuspb.NodeStatus.LatenciesEntry) | repeated | latencies is a map of nodeIDs to nanoseconds which is the latency between this node and the other node.<br><br>NOTE: this is deprecated and is only set if the min supported       cluster version is >= VersionRPCNetworkStats. | [reserved](#support-status) |
+| activity | [NodeStatus.ActivityEntry](#cockroach.server.serverpb.NodesResponse-cockroach.server.status.statuspb.NodeStatus.ActivityEntry) | repeated | activity is a map of nodeIDs to network statistics from this node to other nodes. | [reserved](#support-status) |
+| total_system_memory | [int64](#cockroach.server.serverpb.NodesResponse-int64) |  | total_system_memory is the total RAM available to the system (or, if detected, the memory available to the cgroup this process is in) in bytes. | [alpha](#support-status) |
+| num_cpus | [int32](#cockroach.server.serverpb.NodesResponse-int32) |  | num_cpus is the number of logical CPUs as reported by the operating system on the host where the `cockroach` process is running. Note that this does not report the number of CPUs actually used by `cockroach`; this parameter is controlled separately. | [alpha](#support-status) |
+
+
+
+
+
+<a name="cockroach.server.serverpb.NodesResponse-cockroach.server.status.statuspb.NodeStatus.MetricsEntry"></a>
+#### NodeStatus.MetricsEntry
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| key | [string](#cockroach.server.serverpb.NodesResponse-string) |  |  |  |
+| value | [double](#cockroach.server.serverpb.NodesResponse-double) |  |  |  |
+
+
+
+
+
+<a name="cockroach.server.serverpb.NodesResponse-cockroach.server.status.statuspb.StoreStatus"></a>
+#### StoreStatus
+
+StoreStatus records the most recent values of metrics for a store.
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| desc | [cockroach.roachpb.StoreDescriptor](#cockroach.server.serverpb.NodesResponse-cockroach.roachpb.StoreDescriptor) |  | desc is the store descriptor. | [reserved](#support-status) |
+| metrics | [StoreStatus.MetricsEntry](#cockroach.server.serverpb.NodesResponse-cockroach.server.status.statuspb.StoreStatus.MetricsEntry) | repeated | metrics contains the last sampled values for the node metrics. | [reserved](#support-status) |
+
+
+
+
+
+<a name="cockroach.server.serverpb.NodesResponse-cockroach.server.status.statuspb.StoreStatus.MetricsEntry"></a>
+#### StoreStatus.MetricsEntry
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| key | [string](#cockroach.server.serverpb.NodesResponse-string) |  |  |  |
+| value | [double](#cockroach.server.serverpb.NodesResponse-double) |  |  |  |
+
+
+
+
+
+<a name="cockroach.server.serverpb.NodesResponse-cockroach.server.status.statuspb.NodeStatus.LatenciesEntry"></a>
+#### NodeStatus.LatenciesEntry
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| key | [int32](#cockroach.server.serverpb.NodesResponse-int32) |  |  |  |
+| value | [int64](#cockroach.server.serverpb.NodesResponse-int64) |  |  |  |
+
+
+
+
+
+<a name="cockroach.server.serverpb.NodesResponse-cockroach.server.status.statuspb.NodeStatus.ActivityEntry"></a>
+#### NodeStatus.ActivityEntry
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| key | [int32](#cockroach.server.serverpb.NodesResponse-int32) |  |  |  |
+| value | [NodeStatus.NetworkActivity](#cockroach.server.serverpb.NodesResponse-cockroach.server.status.statuspb.NodeStatus.NetworkActivity) |  |  |  |
+
+
+
+
+
+<a name="cockroach.server.serverpb.NodesResponse-cockroach.server.status.statuspb.NodeStatus.NetworkActivity"></a>
+#### NodeStatus.NetworkActivity
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| latency | [int64](#cockroach.server.serverpb.NodesResponse-int64) |  | in nanoseconds | [reserved](#support-status) |
+
+
+
+
+
+<a name="cockroach.server.serverpb.NodesResponse-cockroach.server.serverpb.NodesResponse.LivenessByNodeIdEntry"></a>
+#### NodesResponse.LivenessByNodeIdEntry
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| key | [int32](#cockroach.server.serverpb.NodesResponse-int32) |  |  |  |
+| value | [cockroach.kv.kvserver.liveness.livenesspb.NodeLivenessStatus](#cockroach.server.serverpb.NodesResponse-cockroach.kv.kvserver.liveness.livenesspb.NodeLivenessStatus) |  |  |  |
+
+
+
+
+
+
 ## Node
 
 `GET /_status/nodes/{node_id}`

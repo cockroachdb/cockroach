@@ -20,6 +20,8 @@ import (
 // NoopAuthorizer is a tenantcapabilities.Authorizer that simply no-ops.
 type NoopAuthorizer struct{}
 
+var _ tenantcapabilities.Authorizer = &NoopAuthorizer{}
+
 // NewNoopAuthorizer constructs and returns a NoopAuthorizer.
 func NewNoopAuthorizer() *NoopAuthorizer {
 	return &NoopAuthorizer{}
@@ -35,4 +37,14 @@ func (n *NoopAuthorizer) HasCapabilityForBatch(
 // BindReader implements the tenantcapabilities.Authorizer interface.
 func (n *NoopAuthorizer) BindReader(context.Context, tenantcapabilities.Reader) {
 	panic("disallowed")
+}
+
+func (n *NoopAuthorizer) HasNodeStatusCapability(
+	ctx context.Context, tenID roachpb.TenantID,
+) error {
+	return nil
+}
+
+func (n *NoopAuthorizer) HasTSDBQueryCapability(ctx context.Context, tenID roachpb.TenantID) error {
+	return nil
 }
