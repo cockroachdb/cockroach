@@ -347,9 +347,20 @@ func createInMemoryTenant(
 	sysSQL.Exec(t, "CREATE TENANT $1", tenantName)
 	sysSQL.Exec(t, "ALTER TENANT $1 START SERVICE SHARED", tenantName)
 
-	// Ensure the tenant server is ready to accept queries.
-	tenantConn := c.Conn(ctx, t.L(), nodes.RandNode()[0], option.TenantName(tenantName))
-	tenantSQL := sqlutils.MakeSQLRunner(tenantConn)
+	// Opening a SQL session to a newly created in-process tenant may require a
+	// few retires. Unfortunately, the c.ConnE and MakeSQLRunner APIs do not make
+	// it clear if they eagerly open a session with the tenant or wait until the
+	// first query. Therefore, wrap connection opening _and_ a select query in
+	// separate retry loops.
+	var tenantSQL *sqlutils.SQLRunner
+	testutils.SucceedsSoon(t, func() error {
+		tenantConn, err := c.ConnE(ctx, t.L(), nodes.RandNode()[0])
+		if err != nil {
+			return err
+		}
+		sysSQL = sqlutils.MakeSQLRunner(tenantConn)
+		return nil
+	})
 	tenantSQL.ExecSucceedsSoon(t, `SELECT 1`)
 
 	// Currently, a tenant has by default a 10m RU burst limit, which can be
