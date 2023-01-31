@@ -351,10 +351,33 @@ func (r *Replica) leasePostApplyLocked(
 	requiresExpirationBasedLease := r.requiresExpiringLeaseRLocked()
 	hasExpirationBasedLease := newLease.Type() == roachpb.LeaseExpiration
 
+	now := r.store.Clock().NowAsClockTimestamp()
+
+	// If we hold the lease now and the lease was proposed "earlier", there
+	// must have been replication lag, and possibly reads and/or writes were
+	// delayed.
+	//
+	// We see this most commonly with lease transfers targeting a behind replica,
+	// or, in the worst case, a snapshot. We are constantly improving our
+	// heuristics for avoiding that[^1] but if it does happen it's good to know
+	// from the logs.
+	//
+	// In the case of a lease transfer, the two timestamps compared below are from
+	// different clocks, so there could be skew. We just pretend this is not the
+	// case, which is good enough here.
+	//
+	// [^1]: https://github.com/cockroachdb/cockroach/pull/82758
+	const slowLeaseWarnThreshold = 500 * time.Millisecond
+	if delta := time.Duration(now.WallTime - newLease.ProposedTS.WallTime); iAmTheLeaseHolder && leaseChangingHands && delta > slowLeaseWarnThreshold {
+		log.Warningf(ctx,
+			"lease %v active after replication lag of ~%.2fs; foreground traffic may have been impacted [prev=%v]",
+			newLease, delta.Seconds(), prevLease,
+		)
+	}
+
 	// Gossip the first range whenever its lease is acquired. We check to make
 	// sure the lease is active so that a trailing replica won't process an old
 	// lease request and attempt to gossip the first range.
-	now := r.store.Clock().NowAsClockTimestamp()
 	if leaseChangingHands && iAmTheLeaseHolder && r.IsFirstRange() && r.ownsValidLeaseRLocked(ctx, now) {
 		r.gossipFirstRangeLocked(ctx)
 	}
