@@ -14,6 +14,7 @@ package logstore
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"sync"
 	"time"
 
@@ -25,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
@@ -224,14 +226,20 @@ func (s *LogStore) storeEntriesAndCommitBatch(
 	stats.PebbleBytes = int64(batch.Len())
 	wantsSync := len(m.Responses) > 0
 	willSync := wantsSync && !disableSyncRaftLog.Get(&s.Settings.SV)
-	// Use the non-blocking log sync path if we are performing a log sync, the
-	// cluster setting to do so is enabled, and we are not overwriting any
-	// previous log entries. If we are overwriting, we may need to purge the
-	// sideloaded SSTables associated with overwritten entries. This must be
-	// performed after the corresponding entries are durably replaced and it's
-	// easier to do ensure proper ordering using a blocking log sync. This is a
-	// rare case, so it's not worth optimizing for.
-	nonBlockingSync := willSync && enableNonBlockingRaftLogSync.Get(&s.Settings.SV) && !overwriting
+	// Use the non-blocking log sync path if we are performing a log sync ...
+	nonBlockingSync := willSync &&
+		// and the cluster setting is enabled ...
+		enableNonBlockingRaftLogSync.Get(&s.Settings.SV) &&
+		// and we are not overwriting any previous log entries. If we are
+		// overwriting, we may need to purge the sideloaded SSTables associated with
+		// overwritten entries. This must be performed after the corresponding
+		// entries are durably replaced and it's easier to do ensure proper ordering
+		// using a blocking log sync. This is a rare case, so it's not worth
+		// optimizing for.
+		!overwriting &&
+		// Also, randomly disable non-blocking sync in test builds to exercise the
+		// interleaved blocking and non-blocking syncs.
+		!(buildutil.CrdbTestBuild && rand.Intn(2) == 0)
 	if nonBlockingSync {
 		// If non-blocking synchronization is enabled, apply the batched updates to
 		// the engine and initiate a synchronous disk write, but don't wait for the
