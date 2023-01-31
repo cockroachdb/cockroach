@@ -232,9 +232,10 @@ func (cm *CertificateManager) Metrics() CertificateMetrics {
 
 // RegisterSignalHandler registers a signal handler for SIGHUP, triggering a
 // refresh of the certificates directory on notification.
-func (cm *CertificateManager) RegisterSignalHandler(stopper *stop.Stopper) {
-	ctx := context.Background()
-	go func() {
+func (cm *CertificateManager) RegisterSignalHandler(
+	ctx context.Context, stopper *stop.Stopper,
+) error {
+	return stopper.RunAsyncTask(ctx, "refresh-certs", func(ctx context.Context) {
 		ch := sysutil.RefreshSignaledChan()
 		for {
 			select {
@@ -250,7 +251,7 @@ func (cm *CertificateManager) RegisterSignalHandler(stopper *stop.Stopper) {
 				}
 			}
 		}
-	}()
+	})
 }
 
 // CACert returns the CA cert. May be nil.

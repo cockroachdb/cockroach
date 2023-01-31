@@ -285,8 +285,17 @@ func makeSharedProcessTenantServerConfig(
 	// See: https://github.com/cockroachdb/cockroach/issues/84585
 	baseCfg.SocketFile = ""
 
-	// TODO(knz): Make the TLS config separate per tenant.
-	// See https://cockroachlabs.atlassian.net/browse/CRDB-14539.
+	// Secondary tenant servers need access to the certs
+	// directory for two purposes:
+	// - to authenticate incoming RPC connections, until
+	//   this issue is resolved: https://github.com/cockroachdb/cockroach/issues/92524
+	// - to load client certs to present to the remote peer
+	//   on outgoing node-node connections.
+	//
+	// Regarding the second point, we currently still need a client
+	// tenant cert to be manually created. Error out if it's not ready.
+	// This check can go away when the following issue is resolved:
+	// https://github.com/cockroachdb/cockroach/issues/96215
 	baseCfg.SSLCertsDir = kvServerCfg.BaseConfig.SSLCertsDir
 	baseCfg.SSLCAKey = kvServerCfg.BaseConfig.SSLCAKey
 

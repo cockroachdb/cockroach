@@ -84,6 +84,7 @@ go_test(
         "//pkg/sql/types",
         "//pkg/testutils/datapathutils",
         "//pkg/testutils/serverutils",
+        "//pkg/util",
         "//pkg/util/encoding",
         "//pkg/util/json",
         "//pkg/util/leaktest",
