@@ -97,7 +97,7 @@ const PRIVILEGES = logpb.Channel_PRIVILEGES
 // data access to sensitive data:
 //
 //   - Data access audit events (when table audit is enabled via
-//     [EXPERIMENTAL_AUDIT](experimental-audit.html))
+//     [ALTER TABLE ... EXPERIMENTAL_AUDIT](alter-table.html#experimental_audit))
 //   - SQL statements executed by users with the admin role
 //   - Operations that write to system tables
 //
