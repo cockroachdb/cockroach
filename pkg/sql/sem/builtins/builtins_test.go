@@ -680,3 +680,83 @@ func TestTruncateTimestamp(t *testing.T) {
 		})
 	}
 }
+
+func TestPGBuiltinsCalledOnNull(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	params := base.TestServerArgs{}
+	s, db, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+
+	tdb := sqlutils.MakeSQLRunner(db)
+
+	testCases := []struct {
+		sql string
+	}{
+		{ // Case 1
+			sql: "SELECT pg_get_functiondef(NULL);",
+		},
+		{ // Case 2
+			sql: "SELECT pg_get_function_arguments(NULL);",
+		},
+		{ // Case 3
+			sql: "SELECT pg_get_function_result(NULL);",
+		},
+		{ // Case 4
+			sql: "SELECT pg_get_function_identity_arguments(NULL);",
+		},
+		{ // Case 5
+			sql: "SELECT pg_get_indexdef(NULL);",
+		},
+		{ // Case 6
+			sql: "SELECT pg_get_userbyid(NULL);",
+		},
+		{ // Case 7
+			sql: "SELECT pg_sequence_parameters(NULL);",
+		},
+		{ // Case 8
+			sql: "SELECT col_description(NULL, NULL);",
+		},
+		{ // Case 9
+			sql: "SELECT col_description(NULL, 0);",
+		},
+		{ // Case 10
+			sql: "SELECT col_description(0, NULL);",
+		},
+		{ // Case 11
+			sql: "SELECT obj_description(NULL);",
+		},
+		{ // Case 12
+			sql: "SELECT obj_description(NULL, NULL);",
+		},
+		{ // Case 13
+			sql: "SELECT obj_description(NULL, 'foo');",
+		},
+		{ // Case 14
+			sql: "SELECT obj_description(0, NULL);",
+		},
+		{ // Case 15
+			sql: "SELECT shobj_description(NULL, NULL);",
+		},
+		{ // Case 16
+			sql: "SELECT shobj_description(NULL, 'foo');",
+		},
+		{ // Case 17
+			sql: "SELECT shobj_description(0, NULL);",
+		},
+		{ // Case 18
+			sql: "SELECT pg_function_is_visible(NULL);",
+		},
+		{ // Case 19
+			sql: "SELECT pg_table_is_visible(NULL);",
+		},
+		{ // Case 20
+			sql: "SELECT pg_type_is_visible(NULL);",
+		},
+	}
+	for i, tc := range testCases {
+		res := tdb.QueryStr(t, tc.sql)
+		require.Equalf(t, [][]string{{"NULL"}}, res, "failed test case %d", i+1)
+	}
+}
