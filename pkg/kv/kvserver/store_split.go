@@ -261,8 +261,13 @@ func prepareRightReplicaForSplit(
 	}
 
 	// Finish initialization of the RHS.
-	err := rightRepl.loadRaftMuLockedReplicaMuLocked(&split.RightDesc)
-	if err != nil {
+	if state, err := loadReplicaState(
+		ctx, r.store.engine, &split.RightDesc, rightRepl.replicaID,
+	); err != nil {
+		log.Fatalf(ctx, "%v", err)
+	} else if err := state.check(r.store.StoreID()); err != nil {
+		log.Fatalf(ctx, "%v", err)
+	} else if err := rightRepl.initRaftMuLockedReplicaMuLocked(state); err != nil {
 		log.Fatalf(ctx, "%v", err)
 	}
 
@@ -291,10 +296,9 @@ func prepareRightReplicaForSplit(
 	// until it receives a Raft message addressed to the right-hand range. But
 	// since new replicas start out quiesced, unless we explicitly awaken the
 	// Raft group, there might not be any Raft traffic for quite a while.
-	err = rightRepl.withRaftGroupLocked(true, func(r *raft.RawNode) (unquiesceAndWakeLeader bool, _ error) {
+	if err := rightRepl.withRaftGroupLocked(true, func(r *raft.RawNode) (unquiesceAndWakeLeader bool, _ error) {
 		return true, nil
-	})
-	if err != nil {
+	}); err != nil {
 		log.Fatalf(ctx, "unable to create raft group for right-hand range in split: %+v", err)
 	}
 

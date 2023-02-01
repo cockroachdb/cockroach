@@ -222,16 +222,6 @@ func (s *Store) tryGetOrCreateReplica(
 		return nil, false, &roachpb.RaftGroupDeletedError{}
 	}
 
-	// An uninitialized replica must have an empty HardState.Commit at all times.
-	// Failure to maintain this invariant indicates corruption. And yet, we have
-	// observed this in the wild. See #40213.
-	sl := stateloader.Make(rangeID)
-	if hs, err := sl.LoadHardState(ctx, s.Engine()); err != nil {
-		return nil, false, err
-	} else if hs.Commit != 0 {
-		log.Fatalf(ctx, "found non-zero HardState.Commit on uninitialized replica r%d/%d. HS=%+v",
-			rangeID, replicaID, hs)
-	}
 	// Write the RaftReplicaID for this replica. This is the only place in the
 	// CockroachDB code that we are creating a new *uninitialized* replica.
 	// Note that it is possible that we have already created the HardState for
@@ -281,20 +271,18 @@ func (s *Store) tryGetOrCreateReplica(
 	//   power-cycled, losing the snapshot) the fire-and-forget way in which
 	//   raft votes are requested (in the same raft cycle) makes it extremely
 	//   unlikely that the restarted node would then receive it.
+	sl := stateloader.Make(rangeID)
 	if err := sl.SetRaftReplicaID(ctx, s.Engine(), replicaID); err != nil {
 		return nil, false, err
 	}
 
 	// Create a new uninitialized replica and lock it for raft processing.
-	repl := newUnloadedReplica(ctx, rangeID, s, replicaID)
+	uninitDesc := roachpb.RangeDescriptor{RangeID: rangeID}
+	repl, err := loadReplica(ctx, s, &uninitDesc, replicaID)
+	if err != nil {
+		return nil, false, err
+	}
 	repl.raftMu.Lock() // not unlocked
-	repl.mu.Lock()
-	// TODO(pavelkalinnikov): there is little benefit in this check, since loading
-	// ReplicaID is a no-op after the above write, and the ReplicaState load is
-	// only for making sure it's empty. Distill the useful IO and make its result
-	// the direct input into Replica creation, then this check won't be needed.
-	repl.assertStateRaftMuLockedReplicaMuRLocked(ctx, s.Engine())
-	repl.mu.Unlock()
 
 	// Install the replica in the store's replica map.
 	s.mu.Lock()

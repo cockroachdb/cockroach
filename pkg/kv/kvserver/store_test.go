@@ -545,7 +545,7 @@ func createReplica(s *Store, rangeID roachpb.RangeID, start, end roachpb.RKey) *
 	); err != nil {
 		panic(err)
 	}
-	r, err := newReplica(ctx, desc, s, replicaID)
+	r, err := loadReplica(ctx, s, desc, replicaID)
 	if err != nil {
 		panic(err)
 	}
@@ -834,17 +834,13 @@ func TestMaybeMarkReplicaInitialized(t *testing.T) {
 	}
 
 	newRangeID := roachpb.RangeID(3)
-	desc := &roachpb.RangeDescriptor{
-		RangeID: newRangeID,
-	}
-
 	const replicaID = 1
 	require.NoError(t,
-		logstore.NewStateLoader(desc.RangeID).SetRaftReplicaID(ctx, store.engine, replicaID))
-	r, err := newReplica(ctx, desc, store, replicaID)
-	if err != nil {
-		t.Fatal(err)
-	}
+		logstore.NewStateLoader(newRangeID).SetRaftReplicaID(ctx, store.engine, replicaID))
+
+	state := stateloader.UninitializedReplicaState(newRangeID)
+	desc := state.Desc
+	r := newReplica(ctx, store, loadedReplicaState{replicaID: replicaID, replState: state})
 
 	store.mu.Lock()
 	defer store.mu.Unlock()

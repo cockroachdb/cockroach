@@ -1852,7 +1852,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		return err
 	}
 	for fullID, desc := range engRepls.Initialized {
-		rep, err := newReplica(ctx, desc, s, fullID.ReplicaID)
+		rep, err := loadReplica(ctx, s, desc, fullID.ReplicaID)
 		if err != nil {
 			return err
 		}
