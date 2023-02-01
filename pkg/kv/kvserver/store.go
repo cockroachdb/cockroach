@@ -1861,7 +1861,10 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 			// Uninitialized Replicas are not currently instantiated at store start.
 			continue
 		}
-		rep, err := newReplica(ctx, repl.Desc, s, repl.ReplicaID)
+		// TODO(sep-raft-log): construct the loaded Replica state directly in
+		// LoadAndReconcileReplicas, which loads and checks most of it already, then
+		// feed it to Replica creation, to avoid double-loading.
+		rep, err := loadInitializedReplica(ctx, s, repl.Desc, repl.ReplicaID)
 		if err != nil {
 			return err
 		}

@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/tracker"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/load"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/split"
@@ -27,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -34,6 +36,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"go.etcd.io/raft/v3"
+	"go.etcd.io/raft/v3/raftpb"
 )
 
 const (
@@ -41,45 +44,112 @@ const (
 	mergeQueueThrottleDuration = 5 * time.Second
 )
 
-// newReplica constructs a new Replica. If the desc is initialized, the store
-// must be present in it and the corresponding replica descriptor must have
-// replicaID as its ReplicaID.
-func newReplica(
-	ctx context.Context, desc *roachpb.RangeDescriptor, store *Store, replicaID roachpb.ReplicaID,
-) (*Replica, error) {
-	repl := newUnloadedReplica(ctx, desc.RangeID, store, replicaID)
-	repl.raftMu.Lock()
-	defer repl.raftMu.Unlock()
-	repl.mu.Lock()
-	defer repl.mu.Unlock()
-
-	// TODO(pavelkalinnikov): this path is taken only in tests. Remove it and
-	// assert desc.IsInitialized().
-	if !desc.IsInitialized() {
-		repl.assertStateRaftMuLockedReplicaMuRLocked(ctx, store.Engine())
-		return repl, nil
-	}
-
-	if err := repl.loadRaftMuLockedReplicaMuLocked(desc); err != nil {
-		return nil, err
-	}
-	return repl, nil
+// loadedReplicaState represents the state of a Replica loaded from storage, and
+// is used to initialize the in-memory Replica instance.
+// TODO(pavelkalinnikov): move to kvstorage, integrate with kvstorage.Replica.
+type loadedReplicaState struct {
+	replicaID roachpb.ReplicaID
+	hardState raftpb.HardState
+	lastIndex uint64
+	replState kvserverpb.ReplicaState
 }
 
-// newUnloadedReplica partially constructs a Replica. The returned replica is
-// assumed to be uninitialized, until Replica.loadRaftMuLockedReplicaMuLocked()
-// is called with the correct descriptor. The primary reason this function
-// exists separately from Replica.loadRaftMuLockedReplicaMuLocked() is to avoid
-// attempting to fully construct a Replica and load it from storage prior to
-// proving that it can exist during the delicate synchronization dance in
-// Store.tryGetOrCreateReplica(). A Replica returned from this function must not
-// be used in any way until the load method has been called.
-func newUnloadedReplica(
-	ctx context.Context, rangeID roachpb.RangeID, store *Store, replicaID roachpb.ReplicaID,
-) *Replica {
-	if replicaID == 0 {
-		log.Fatalf(ctx, "cannot construct a replica for range %d with a 0 replica ID", rangeID)
+// loadReplicaState loads the state necessary to create a Replica with the
+// specified range descriptor, which can be either initialized or uninitialized.
+// TODO(pavelkalinnikov): integrate with stateloader.
+func loadReplicaState(
+	ctx context.Context,
+	eng storage.Reader,
+	desc *roachpb.RangeDescriptor,
+	replicaID roachpb.ReplicaID,
+) (loadedReplicaState, error) {
+	sl := stateloader.Make(desc.RangeID)
+	id, found, err := sl.LoadRaftReplicaID(ctx, eng)
+	if err != nil {
+		return loadedReplicaState{}, err
+	} else if !found {
+		return loadedReplicaState{}, errors.AssertionFailedf(
+			"r%d: RaftReplicaID not found", desc.RangeID)
+	} else if loaded := id.ReplicaID; loaded != replicaID {
+		return loadedReplicaState{}, errors.AssertionFailedf(
+			"r%d: loaded RaftReplicaID %d does not match %d", desc.RangeID, loaded, replicaID)
 	}
+
+	ls := loadedReplicaState{replicaID: replicaID}
+	if ls.hardState, err = sl.LoadHardState(ctx, eng); err != nil {
+		return loadedReplicaState{}, err
+	}
+	if ls.lastIndex, err = sl.LoadLastIndex(ctx, eng); err != nil {
+		return loadedReplicaState{}, err
+	}
+	if ls.replState, err = sl.Load(ctx, eng, desc); err != nil {
+		return loadedReplicaState{}, err
+	}
+	return ls, nil
+}
+
+// check makes sure that the replica invariants hold for the loaded state.
+func (r loadedReplicaState) check(storeID roachpb.StoreID) error {
+	desc := r.replState.Desc
+	if r.replicaID == 0 {
+		return errors.AssertionFailedf("r%d: replicaID is 0", desc.RangeID)
+	}
+
+	if !desc.IsInitialized() {
+		// An uninitialized replica must have an empty HardState.Commit at all
+		// times. Failure to maintain this invariant indicates corruption. And yet,
+		// we have observed this in the wild. See #40213.
+		if hs := r.hardState; hs.Commit != 0 {
+			return errors.AssertionFailedf(
+				"r%d/%d: non-zero HardState.Commit on uninitialized replica: %+v", desc.RangeID, r.replicaID, hs)
+		}
+		// TODO(pavelkalinnikov): assert r.lastIndex == 0?
+		return nil
+	}
+	// desc.IsInitialized() == true
+
+	// INVARIANT: a replica's RangeDescriptor always contains the local Store.
+	if replDesc, ok := desc.GetReplicaDescriptor(storeID); !ok {
+		return errors.AssertionFailedf("%+v does not contain local store s%d", desc, storeID)
+	} else if replDesc.ReplicaID != r.replicaID {
+		return errors.AssertionFailedf(
+			"%+v does not contain replicaID %d for local store s%d", desc, r.replicaID, storeID)
+	}
+	return nil
+}
+
+// loadInitializedReplica loads and constructs an initialized Replica, after
+// checking its invariants.
+func loadInitializedReplica(
+	ctx context.Context, store *Store, desc *roachpb.RangeDescriptor, replicaID roachpb.ReplicaID,
+) (*Replica, error) {
+	if !desc.IsInitialized() {
+		return nil, errors.AssertionFailedf("can not load with uninitialized descriptor: %s", desc)
+	}
+	state, err := loadReplicaState(ctx, store.engine, desc, replicaID)
+	if err != nil {
+		return nil, err
+	}
+	r := newUninitializedReplica(store, desc.RangeID, replicaID)
+	r.raftMu.Lock()
+	defer r.raftMu.Unlock()
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if err := r.initRaftMuLockedReplicaMuLocked(state); err != nil {
+		return nil, err
+	}
+	return r, nil
+}
+
+// newUninitializedReplica constructs an uninitialized Replica with the given
+// range/replica ID. The returned replica remains uninitialized until
+// Replica.loadRaftMuLockedReplicaMuLocked() is called.
+//
+// TODO(#94912): we actually have another initialization path which should be
+// refactored: Store.maybeMarkReplicaInitializedLockedReplLocked().
+func newUninitializedReplica(
+	store *Store, rangeID roachpb.RangeID, replicaID roachpb.ReplicaID,
+) *Replica {
 	uninitState := stateloader.UninitializedReplicaState(rangeID)
 	r := &Replica{
 		AmbientContext: store.cfg.AmbientCtx,
@@ -177,26 +247,29 @@ func (r *Replica) setStartKeyLocked(startKey roachpb.RKey) {
 	r.startKey = startKey
 }
 
-// loadRaftMuLockedReplicaMuLocked loads the state of the initialized replica
-// from storage. After this method returns, Replica is initialized, and can not
-// be loaded again.
+// initRaftMuLockedReplicaMuLocked initializes the Replica using the state
+// loaded from storage. Must not be called more than once on a Replica.
 //
-// This method is called in two places:
-//
-//  1. newReplica - used when the store is initializing and during testing
-//  2. splitPostApply - this call initializes a previously uninitialized Replica.
-func (r *Replica) loadRaftMuLockedReplicaMuLocked(desc *roachpb.RangeDescriptor) error {
-	ctx := r.AnnotateCtx(context.TODO())
+// This method is called in:
+// - loadInitializedReplica, to finalize creating an initialized replica;
+// - splitPostApply, to initialize a previously uninitialized replica.
+func (r *Replica) initRaftMuLockedReplicaMuLocked(s loadedReplicaState) error {
+	if err := s.check(r.StoreID()); err != nil {
+		return err
+	}
+	desc := s.replState.Desc
+	// Ensure that the loaded state corresponds to the same replica.
+	if desc.RangeID != r.RangeID || s.replicaID != r.replicaID {
+		return errors.AssertionFailedf(
+			"%s: trying to init with other replica's state r%d/%d", r, desc.RangeID, s.replicaID)
+	}
+	// Ensure that we transition to initialized replica, and do it only once.
 	if !desc.IsInitialized() {
-		return errors.AssertionFailedf("r%d: cannot load an uninitialized replica", desc.RangeID)
+		return errors.AssertionFailedf("%s: cannot init replica with uninitialized descriptor", r)
+	} else if r.IsInitialized() {
+		return errors.AssertionFailedf("%s: cannot reinitialize an initialized replica", r)
 	}
-	if r.IsInitialized() {
-		return errors.AssertionFailedf("r%d: cannot reinitialize an initialized replica", desc.RangeID)
-	} else if r.replicaID == 0 {
-		// NB: This is just a defensive check as r.mu.replicaID should never be 0.
-		return errors.AssertionFailedf("r%d: cannot initialize replica without a replicaID",
-			desc.RangeID)
-	}
+
 	r.setStartKeyLocked(desc.StartKey)
 
 	// Clear the internal raft group in case we're being reset. Since we're
@@ -204,31 +277,11 @@ func (r *Replica) loadRaftMuLockedReplicaMuLocked(desc *roachpb.RangeDescriptor)
 	// group.
 	r.mu.internalRaftGroup = nil
 
-	var err error
-	if r.mu.state, err = r.mu.stateLoader.Load(ctx, r.Engine(), desc); err != nil {
-		return err
-	}
-	r.mu.lastIndexNotDurable, err = r.mu.stateLoader.LoadLastIndex(ctx, r.Engine())
-	if err != nil {
-		return err
-	}
+	r.mu.state = s.replState
+	r.mu.lastIndexNotDurable = s.lastIndex
 	r.mu.lastTermNotDurable = invalidLastTerm
 
-	// Ensure that we're not trying to load a replica with a different ID than
-	// was used to construct this Replica.
-	var replicaID roachpb.ReplicaID
-	if replicaDesc, found := r.mu.state.Desc.GetReplicaDescriptor(r.StoreID()); found {
-		replicaID = replicaDesc.ReplicaID
-	} else {
-		return errors.AssertionFailedf("r%d: cannot initialize replica which is not in descriptor %v",
-			desc.RangeID, desc)
-	}
-	if r.replicaID != replicaID {
-		return errors.AssertionFailedf("attempting to initialize a replica which has ID %d with ID %d",
-			r.replicaID, replicaID)
-	}
-
-	r.setDescLockedRaftMuLocked(ctx, desc)
+	r.setDescLockedRaftMuLocked(r.AnnotateCtx(context.TODO()), desc)
 
 	// Only do this if there was a previous lease. This shouldn't be important
 	// to do but consider that the first lease which is obtained is back-dated
@@ -241,8 +294,6 @@ func (r *Replica) loadRaftMuLockedReplicaMuLocked(desc *roachpb.RangeDescriptor)
 	if r.mu.state.Lease.Sequence > 0 {
 		r.mu.minLeaseProposedTS = r.Clock().NowAsClockTimestamp()
 	}
-
-	r.assertStateRaftMuLockedReplicaMuRLocked(ctx, r.store.Engine())
 
 	return nil
 }
