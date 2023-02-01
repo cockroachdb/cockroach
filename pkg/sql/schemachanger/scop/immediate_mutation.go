@@ -365,14 +365,15 @@ type RemoveForeignKeyBackReference struct {
 	OriginConstraintID descpb.ConstraintID
 }
 
-// MakeAbsentUniqueWithoutIndexConstraintWriteOnly adds a non-existent
-// unique_without_index constraint to the table in the WRITE_ONLY state.
-type MakeAbsentUniqueWithoutIndexConstraintWriteOnly struct {
+// AddUniqueWithoutIndexConstraint adds a non-existent
+// unique_without_index constraint to the table.
+type AddUniqueWithoutIndexConstraint struct {
 	immediateMutationOp
 	TableID      descpb.ID
 	ConstraintID descpb.ConstraintID
 	ColumnIDs    []descpb.ColumnID
 	PartialExpr  catpb.Expression
+	Validity     descpb.ConstraintValidity
 }
 
 // MakeValidatedUniqueWithoutIndexConstraintPublic moves a new, validated unique_without_index
