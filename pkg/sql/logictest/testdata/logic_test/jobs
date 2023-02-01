@@ -135,14 +135,12 @@ DROP TABLE t1
 
 user testuser
 
-# testuser should be able to see jobs created by non-admin users.
+# testuser should be able to see all jobs
 query TTT
-SELECT job_type, description, user_name FROM crdb_internal.jobs ORDER BY 1, 2, 3
+SELECT job_type, description, user_name FROM crdb_internal.jobs WHERE job_type = 'SCHEMA CHANGE GC' ORDER BY 1, 2, 3
 ----
-SCHEMA CHANGE     CREATE INDEX ON test.public.t1 (x)                 testuser2
-SCHEMA CHANGE     CREATE INDEX ON test.public.u (x)                  testuser
-SCHEMA CHANGE     DROP TABLE test.public.t1                          testuser2
 SCHEMA CHANGE GC  GC for DROP TABLE test.public.t1                   testuser2
+SCHEMA CHANGE GC  GC for temporary index used during index backfill  root
 SCHEMA CHANGE GC  GC for temporary index used during index backfill  testuser
 SCHEMA CHANGE GC  GC for temporary index used during index backfill  testuser2
 
