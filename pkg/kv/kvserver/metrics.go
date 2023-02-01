@@ -679,49 +679,49 @@ var (
 		Name:        "range.snapshots.rcvd-bytes",
 		Help:        "Number of snapshot bytes received",
 		Measurement: "Bytes",
-		Unit:        metric.Unit_COUNT,
+		Unit:        metric.Unit_BYTES,
 	}
 	metaRangeSnapshotSentBytes = metric.Metadata{
 		Name:        "range.snapshots.sent-bytes",
 		Help:        "Number of snapshot bytes sent",
 		Measurement: "Bytes",
-		Unit:        metric.Unit_COUNT,
+		Unit:        metric.Unit_BYTES,
 	}
 	metaRangeSnapshotUnknownRcvdBytes = metric.Metadata{
 		Name:        "range.snapshots.unknown.rcvd-bytes",
 		Help:        "Number of unknown snapshot bytes received",
 		Measurement: "Bytes",
-		Unit:        metric.Unit_COUNT,
+		Unit:        metric.Unit_BYTES,
 	}
 	metaRangeSnapshotUnknownSentBytes = metric.Metadata{
 		Name:        "range.snapshots.unknown.sent-bytes",
 		Help:        "Number of unknown snapshot bytes sent",
 		Measurement: "Bytes",
-		Unit:        metric.Unit_COUNT,
+		Unit:        metric.Unit_BYTES,
 	}
 	metaRangeSnapshotRebalancingRcvdBytes = metric.Metadata{
 		Name:        "range.snapshots.rebalancing.rcvd-bytes",
 		Help:        "Number of rebalancing snapshot bytes received",
 		Measurement: "Bytes",
-		Unit:        metric.Unit_COUNT,
+		Unit:        metric.Unit_BYTES,
 	}
 	metaRangeSnapshotRebalancingSentBytes = metric.Metadata{
 		Name:        "range.snapshots.rebalancing.sent-bytes",
 		Help:        "Number of rebalancing snapshot bytes sent",
 		Measurement: "Bytes",
-		Unit:        metric.Unit_COUNT,
+		Unit:        metric.Unit_BYTES,
 	}
 	metaRangeSnapshotRecoveryRcvdBytes = metric.Metadata{
 		Name:        "range.snapshots.recovery.rcvd-bytes",
 		Help:        "Number of recovery snapshot bytes received",
 		Measurement: "Bytes",
-		Unit:        metric.Unit_COUNT,
+		Unit:        metric.Unit_BYTES,
 	}
 	metaRangeSnapshotRecoverySentBytes = metric.Metadata{
 		Name:        "range.snapshots.recovery.sent-bytes",
 		Help:        "Number of recovery snapshot bytes sent",
 		Measurement: "Bytes",
-		Unit:        metric.Unit_COUNT,
+		Unit:        metric.Unit_BYTES,
 	}
 	metaRangeSnapshotSendQueueLength = metric.Metadata{
 		Name:        "range.snapshots.send-queue",
@@ -759,6 +759,7 @@ var (
 		Measurement: "Snapshots",
 		Unit:        metric.Unit_COUNT,
 	}
+
 	metaRangeRaftLeaderTransfers = metric.Metadata{
 		Name:        "range.raftleadertransfers",
 		Help:        "Number of raft leader transfers",
@@ -773,6 +774,52 @@ This count increments for every range recovered in offline loss of quorum
 recovery operation. Metric is updated when node on which survivor replica
 is located starts following the recovery.`,
 		Measurement: "Quorum Recoveries",
+		Unit:        metric.Unit_COUNT,
+	}
+
+	metaRangeSnapshotSendLatency = metric.Metadata{
+		Name: "range.snapshot.send.latency",
+		Help: `Latency histogram for sending a snapshot from the coordinators perspective.
+
+This metric measures the time between deciding a snapshot needs to be sent until
+it is fully processed and accepted by the end recipient. It includes any
+queueing and retries along the way.  Note that this snapshot is intentionally
+not normalized by snapshot size since frequently the majority of the time spent waiting
+is on queues and they are independent of size.
+`,
+		Measurement: "Latency",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+
+	metaDelegateSnapshotSendBytes = metric.Metadata{
+		Name: "range.snapshots.delegate.sent-bytes",
+		Help: `Bytes sent using a delegate.
+
+The number of bytes sent as a result of a delegate snapshot request
+that was originated from a different node. This metric is useful in
+evaluating the network savings of not sending cross region traffic.
+`,
+		Measurement: "Bytes",
+		Unit:        metric.Unit_BYTES,
+	}
+
+	metaDelegateSnapshotSuccesses = metric.Metadata{
+		Name: "range.snapshot.delegate.successes",
+		Help: `Number of snapshots that were delegated to a different node and
+resulted in success on that delegate. This does not count self delegated snapshots.
+`,
+		Measurement: "Snapshots",
+		Unit:        metric.Unit_COUNT,
+	}
+
+	metaDelegateSnapshotFailures = metric.Metadata{
+		Name: "range.snapshot.delegate.failures",
+		Help: `Number of snapshots that were delegated to a different node and
+resulted in failure on that delegate. There are numerous reasons a failure can
+occur on a delegate such as timeout, the delegate Raft log being too far behind
+or the delegate being too busy to send.
+`,
+		Measurement: "Snapshots",
 		Unit:        metric.Unit_COUNT,
 	}
 
@@ -1839,6 +1886,7 @@ type StoreMetrics struct {
 	RangeSnapshotRecoverySentBytes               *metric.Counter
 	RangeSnapshotRebalancingRcvdBytes            *metric.Counter
 	RangeSnapshotRebalancingSentBytes            *metric.Counter
+	RangeSnapshotSendLatency                     metric.IHistogram
 
 	// Range snapshot queue metrics.
 	RangeSnapshotSendQueueLength     *metric.Gauge
@@ -1847,6 +1895,11 @@ type StoreMetrics struct {
 	RangeSnapshotRecvInProgress      *metric.Gauge
 	RangeSnapshotSendTotalInProgress *metric.Gauge
 	RangeSnapshotRecvTotalInProgress *metric.Gauge
+
+	// Delegate snapshot metrics. These don't count self-delegated snapshots.
+	DelegateSnapshotSendBytes *metric.Counter
+	DelegateSnapshotSuccesses *metric.Counter
+	DelegateSnapshotFailures  *metric.Counter
 
 	// Raft processing metrics.
 	RaftTicks                 *metric.Counter
@@ -2374,6 +2427,16 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		RangeSnapshotRecvTotalInProgress:             metric.NewGauge(metaRangeSnapshotRecvTotalInProgress),
 		RangeRaftLeaderTransfers:                     metric.NewCounter(metaRangeRaftLeaderTransfers),
 		RangeLossOfQuorumRecoveries:                  metric.NewCounter(metaRangeLossOfQuorumRecoveries),
+		RangeSnapshotSendLatency: metric.NewHistogram(metric.HistogramOptions{
+			Mode:     metric.HistogramModePreferHdrLatency,
+			Metadata: metaRangeSnapshotSendLatency,
+			Duration: histogramWindow,
+			Buckets:  metric.LongRunning60mLatencyBuckets,
+		}),
+
+		DelegateSnapshotSendBytes: metric.NewCounter(metaDelegateSnapshotSendBytes),
+		DelegateSnapshotSuccesses: metric.NewCounter(metaDelegateSnapshotSuccesses),
+		DelegateSnapshotFailures:  metric.NewCounter(metaDelegateSnapshotFailures),
 
 		// Raft processing metrics.
 		RaftTicks: metric.NewCounter(metaRaftTicks),

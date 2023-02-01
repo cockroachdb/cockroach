@@ -2758,6 +2758,9 @@ func (r *Replica) sendSnapshotUsingDelegate(
 	senderQueueName kvserverpb.SnapshotRequest_QueueName,
 	senderQueuePriority float64,
 ) (retErr error) {
+
+	startTime := timeutil.Now()
+
 	defer func() {
 		// Report the snapshot status to Raft, which expects us to do this once we
 		// finish sending the snapshot.
@@ -2847,8 +2850,10 @@ func (r *Replica) sendSnapshotUsingDelegate(
 			ctx, 2, "delegating snapshot transmission attempt %v for %v to %v", n+1, recipient, sender,
 		)
 
+		selfDelegate := n == len(senders)-1
+
 		// On the last attempt, always queue on the delegate to time out naturally.
-		if n == len(senders)-1 {
+		if selfDelegate {
 			delegateRequest.QueueOnDelegateLen = -1
 		}
 
@@ -2860,8 +2865,15 @@ func (r *Replica) sendSnapshotUsingDelegate(
 		)
 		// Return once we have success.
 		if retErr == nil {
+			r.store.Metrics().RangeSnapshotSendLatency.RecordValue(timeutil.Since(startTime).Nanoseconds())
+			if !selfDelegate {
+				r.store.Metrics().DelegateSnapshotSuccesses.Inc(1)
+			}
 			return
 		} else {
+			if !selfDelegate {
+				r.store.Metrics().DelegateSnapshotFailures.Inc(1)
+			}
 			log.Warningf(ctx, "attempt %d: delegate snapshot %+v request failed %v", n+1, delegateRequest, retErr)
 		}
 	}
@@ -3119,6 +3131,10 @@ func (r *Replica) followerSendSnapshot(
 	}
 
 	recordBytesSent := func(inc int64) {
+		// Only counts for delegated bytes if we are not self-delegating.
+		if r.NodeID() != req.CoordinatorReplica.NodeID {
+			r.store.metrics.DelegateSnapshotSendBytes.Inc(inc)
+		}
 		r.store.metrics.RangeSnapshotSentBytes.Inc(inc)
 
 		switch header.Priority {

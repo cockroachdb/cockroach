@@ -616,6 +616,8 @@ var charts = []sectionDescription{
 					"range.snapshots.applied-voter",
 					"range.snapshots.applied-initial",
 					"range.snapshots.applied-non-voter",
+					"range.snapshot.delegate.successes",
+					"range.snapshot.delegate.failures",
 				},
 			},
 			{
@@ -640,6 +642,13 @@ var charts = []sectionDescription{
 					"range.snapshots.rebalancing.sent-bytes",
 					"range.snapshots.unknown.rcvd-bytes",
 					"range.snapshots.unknown.sent-bytes",
+					"range.snapshots.delegate.sent-bytes",
+				},
+			},
+			{
+				Title: "Snapshot Latency",
+				Metrics: []string{
+					"range.snapshot.send.latency",
 				},
 			},
 		},
