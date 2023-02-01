@@ -318,9 +318,9 @@ type MakeValidatedColumnNotNullPublic struct {
 	ColumnID descpb.ColumnID
 }
 
-// MakeAbsentForeignKeyConstraintWriteOnly adds a non-existent foreign key
-// constraint to the table in the WRITE_ONLY state.
-type MakeAbsentForeignKeyConstraintWriteOnly struct {
+// AddForeignKeyConstraint adds a non-existent foreign key
+// constraint to the table.
+type AddForeignKeyConstraint struct {
 	immediateMutationOp
 	TableID                 descpb.ID
 	ConstraintID            descpb.ConstraintID
@@ -330,6 +330,7 @@ type MakeAbsentForeignKeyConstraintWriteOnly struct {
 	OnUpdateAction          semenumpb.ForeignKeyAction
 	OnDeleteAction          semenumpb.ForeignKeyAction
 	CompositeKeyMatchMethod semenumpb.Match
+	Validity                descpb.ConstraintValidity
 }
 
 // MakeValidatedForeignKeyConstraintPublic moves a new, validated foreign key

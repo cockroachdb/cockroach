@@ -59,7 +59,7 @@ type ImmediateMutationVisitor interface {
 	MakePublicColumnNotNullValidated(context.Context, MakePublicColumnNotNullValidated) error
 	MakeValidatedCheckConstraintPublic(context.Context, MakeValidatedCheckConstraintPublic) error
 	MakeValidatedColumnNotNullPublic(context.Context, MakeValidatedColumnNotNullPublic) error
-	MakeAbsentForeignKeyConstraintWriteOnly(context.Context, MakeAbsentForeignKeyConstraintWriteOnly) error
+	AddForeignKeyConstraint(context.Context, AddForeignKeyConstraint) error
 	MakeValidatedForeignKeyConstraintPublic(context.Context, MakeValidatedForeignKeyConstraintPublic) error
 	MakePublicForeignKeyConstraintValidated(context.Context, MakePublicForeignKeyConstraintValidated) error
 	RemoveForeignKeyConstraint(context.Context, RemoveForeignKeyConstraint) error
@@ -302,8 +302,8 @@ func (op MakeValidatedColumnNotNullPublic) Visit(ctx context.Context, v Immediat
 }
 
 // Visit is part of the ImmediateMutationOp interface.
-func (op MakeAbsentForeignKeyConstraintWriteOnly) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
-	return v.MakeAbsentForeignKeyConstraintWriteOnly(ctx, op)
+func (op AddForeignKeyConstraint) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.AddForeignKeyConstraint(ctx, op)
 }
 
 // Visit is part of the ImmediateMutationOp interface.

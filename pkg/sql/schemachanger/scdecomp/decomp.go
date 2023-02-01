@@ -680,17 +680,29 @@ func (w *walkCtx) walkCheckConstraint(tbl catalog.TableDescriptor, c catalog.Che
 func (w *walkCtx) walkForeignKeyConstraint(
 	tbl catalog.TableDescriptor, c catalog.ForeignKeyConstraint,
 ) {
-	// TODO(postamar): proper handling of constraint status
-	w.ev(scpb.Status_PUBLIC, &scpb.ForeignKeyConstraint{
-		TableID:                 tbl.GetID(),
-		ConstraintID:            c.GetConstraintID(),
-		ColumnIDs:               c.ForeignKeyDesc().OriginColumnIDs,
-		ReferencedTableID:       c.GetReferencedTableID(),
-		ReferencedColumnIDs:     c.ForeignKeyDesc().ReferencedColumnIDs,
-		OnUpdateAction:          c.OnUpdate(),
-		OnDeleteAction:          c.OnDelete(),
-		CompositeKeyMatchMethod: c.Match(),
-	})
+	if c.IsConstraintUnvalidated() && w.clusterVersion.IsActive(clusterversion.V23_1) {
+		w.ev(scpb.Status_PUBLIC, &scpb.ForeignKeyConstraintUnvalidated{
+			TableID:                 tbl.GetID(),
+			ConstraintID:            c.GetConstraintID(),
+			ColumnIDs:               c.ForeignKeyDesc().OriginColumnIDs,
+			ReferencedTableID:       c.GetReferencedTableID(),
+			ReferencedColumnIDs:     c.ForeignKeyDesc().ReferencedColumnIDs,
+			OnUpdateAction:          c.OnUpdate(),
+			OnDeleteAction:          c.OnDelete(),
+			CompositeKeyMatchMethod: c.Match(),
+		})
+	} else {
+		w.ev(scpb.Status_PUBLIC, &scpb.ForeignKeyConstraint{
+			TableID:                 tbl.GetID(),
+			ConstraintID:            c.GetConstraintID(),
+			ColumnIDs:               c.ForeignKeyDesc().OriginColumnIDs,
+			ReferencedTableID:       c.GetReferencedTableID(),
+			ReferencedColumnIDs:     c.ForeignKeyDesc().ReferencedColumnIDs,
+			OnUpdateAction:          c.OnUpdate(),
+			OnDeleteAction:          c.OnDelete(),
+			CompositeKeyMatchMethod: c.Match(),
+		})
+	}
 	w.ev(scpb.Status_PUBLIC, &scpb.ConstraintWithoutIndexName{
 		TableID:      tbl.GetID(),
 		ConstraintID: c.GetConstraintID(),

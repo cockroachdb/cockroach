@@ -18,6 +18,7 @@ COMMENT ON CONSTRAINT tbl_pkey ON tbl IS 'primary key';
 ALTER TABLE tbl ADD CONSTRAINT mycheck2 CHECK (id < 10) NOT VALID;
 ALTER TABLE tbl ADD CONSTRAINT myuwi1 UNIQUE WITHOUT INDEX (price);
 ALTER TABLE tbl ADD CONSTRAINT myuwi2 UNIQUE WITHOUT INDEX (price) NOT VALID;
+ALTER TABLE tbl ADD CONSTRAINT myfk2 FOREIGN KEY (id) REFERENCES parent (id) NOT VALID;
 ----
 
 decompose
@@ -374,6 +375,18 @@ ElementState:
     referencedTableId: 104
     tableId: 105
   Status: PUBLIC
+- ForeignKeyConstraintUnvalidated:
+    columnIds:
+    - 1
+    compositeKeyMatchMethod: SIMPLE
+    constraintId: 7
+    onDeleteAction: NO_ACTION
+    onUpdateAction: NO_ACTION
+    referencedColumnIds:
+    - 1
+    referencedTableId: 104
+    tableId: 105
+  Status: PUBLIC
 - TableComment:
     comment: tbl is good table
     tableId: 105
@@ -676,6 +689,11 @@ ElementState:
 - ConstraintWithoutIndexName:
     constraintId: 6
     name: myuwi2
+    tableId: 105
+  Status: PUBLIC
+- ConstraintWithoutIndexName:
+    constraintId: 7
+    name: myfk2
     tableId: 105
   Status: PUBLIC
 - ConstraintComment:

@@ -761,6 +761,37 @@ func FindForeignKeyConstraint(b ElementStatusIterator) (current Status, target T
 	return current, target, element
 }
 
+func (e ForeignKeyConstraintUnvalidated) element() {}
+
+// ForEachForeignKeyConstraintUnvalidated iterates over elements of type ForeignKeyConstraintUnvalidated.
+func ForEachForeignKeyConstraintUnvalidated(
+	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *ForeignKeyConstraintUnvalidated),
+) {
+  if b == nil {
+    return
+  }
+	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
+		if elt, ok := e.(*ForeignKeyConstraintUnvalidated); ok {
+			fn(current, target, elt)
+		}
+	})
+}
+
+// FindForeignKeyConstraintUnvalidated finds the first element of type ForeignKeyConstraintUnvalidated.
+func FindForeignKeyConstraintUnvalidated(b ElementStatusIterator) (current Status, target TargetStatus, element *ForeignKeyConstraintUnvalidated) {
+  if b == nil {
+    return current, target, element
+  }
+	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
+		if elt, ok := e.(*ForeignKeyConstraintUnvalidated); ok {
+			element = elt
+			current = c
+			target = t
+		}
+	})
+	return current, target, element
+}
+
 func (e Function) element() {}
 
 // ForEachFunction iterates over elements of type Function.
