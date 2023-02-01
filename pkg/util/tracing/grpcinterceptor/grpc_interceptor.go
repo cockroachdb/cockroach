@@ -11,12 +11,17 @@
 package grpcinterceptor
 
 import (
+	"bufio"
 	"context"
+	"fmt"
 	"io"
+	"os"
+	"runtime"
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/petermattis/goid"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"google.golang.org/grpc"
@@ -237,6 +242,48 @@ func ClientInterceptor(
 		)
 		init(clientSpan)
 		defer clientSpan.Finish()
+
+		{
+			goroutineID := goid.Get()
+			if err := runtime.StartTrace(); err != nil {
+				clientSpan.Recordf("unable to start runtime trace: %s", err)
+			} else {
+				result := make(chan string, 1) // path to completed trace, or error
+				go func() {
+					f, err := os.CreateTemp("", fmt.Sprintf("runtimetrace-goroutine-%d.pb.gz", goroutineID))
+					if err != nil {
+						result <- err.Error()
+						return
+					}
+					w := bufio.NewWriter(f)
+					for {
+						data := runtime.ReadTrace()
+						if data == nil {
+							// Trace done.
+							break
+						}
+						if _, err := w.Write(data); err != nil {
+							result <- err.Error()
+							return
+						}
+					}
+					if err := w.Flush(); err != nil {
+						result <- err.Error()
+						return
+					}
+					if err := f.Close(); err != nil {
+						result <- err.Error()
+						return
+					}
+					result <- f.Name() // chan is buffered
+				}()
+				clientSpan.Recordf("runtime trace started")
+				defer func() {
+					runtime.StopTrace()
+					clientSpan.Recordf("runtime trace stopped: %s", <-result)
+				}()
+			}
+		}
 
 		// For most RPCs we pass along tracing info as gRPC metadata. Some select
 		// RPCs carry the tracing in the request protos, which is more efficient.
