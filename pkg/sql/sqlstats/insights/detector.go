@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/util/quantile"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
 type detector interface {
@@ -50,13 +51,17 @@ func (d *compositeDetector) isSlow(statement *Statement) bool {
 	return result
 }
 
-var desiredQuantiles = map[float64]float64{0.5: 0.05, 0.99: 0.001}
+var desiredQuantiles = map[float64]float64{0.5: 0.05, 0.9: 0.01, 0.99: 0.001}
 
 type anomalyDetector struct {
 	settings *cluster.Settings
 	metrics  Metrics
 	store    *list.List
-	index    map[appstatspb.StmtFingerprintID]*list.Element
+	mu       struct {
+		syncutil.RWMutex
+
+		index map[appstatspb.StmtFingerprintID]*list.Element
+	}
 }
 
 type latencySummaryEntry struct {
@@ -85,12 +90,29 @@ func (d *anomalyDetector) isSlow(stmt *Statement) (decision bool) {
 	return
 }
 
+func (d *anomalyDetector) GetPercentileValues(id appstatspb.StmtFingerprintID) PercentileValues {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+	latencies := PercentileValues{}
+	if entry, ok := d.mu.index[id]; ok {
+		latencySummary := entry.Value.(latencySummaryEntry).value
+		// If more percentiles are added, update the value of `desiredQuantiles` above
+		// to include the new keys.
+		latencies.P50 = latencySummary.Query(0.5)
+		latencies.P90 = latencySummary.Query(0.9)
+		latencies.P99 = latencySummary.Query(0.99)
+	}
+	return latencies
+}
+
 func (d *anomalyDetector) withFingerprintLatencySummary(
 	stmt *Statement, consumer func(latencySummary *quantile.Stream),
 ) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
 	var latencySummary *quantile.Stream
 
-	if element, ok := d.index[stmt.FingerprintID]; ok {
+	if element, ok := d.mu.index[stmt.FingerprintID]; ok {
 		// We are already tracking latencies for this fingerprint.
 		latencySummary = element.Value.(latencySummaryEntry).value
 		d.store.MoveToFront(element) // Mark this latency summary as recently used.
@@ -98,7 +120,7 @@ func (d *anomalyDetector) withFingerprintLatencySummary(
 		// We want to start tracking latencies for this fingerprint.
 		latencySummary = quantile.NewTargeted(desiredQuantiles)
 		entry := latencySummaryEntry{key: stmt.FingerprintID, value: latencySummary}
-		d.index[stmt.FingerprintID] = d.store.PushFront(entry)
+		d.mu.index[stmt.FingerprintID] = d.store.PushFront(entry)
 		d.metrics.Fingerprints.Inc(1)
 		d.metrics.Memory.Inc(latencySummary.ByteSize())
 	} else {
@@ -114,7 +136,7 @@ func (d *anomalyDetector) withFingerprintLatencySummary(
 	if d.metrics.Memory.Value() > AnomalyDetectionMemoryLimit.Get(&d.settings.SV) {
 		element := d.store.Back()
 		entry := d.store.Remove(element).(latencySummaryEntry)
-		delete(d.index, entry.key)
+		delete(d.mu.index, entry.key)
 		d.metrics.Evictions.Inc(1)
 		d.metrics.Fingerprints.Dec(1)
 		d.metrics.Memory.Dec(entry.value.ByteSize())
@@ -122,12 +144,14 @@ func (d *anomalyDetector) withFingerprintLatencySummary(
 }
 
 func newAnomalyDetector(settings *cluster.Settings, metrics Metrics) *anomalyDetector {
-	return &anomalyDetector{
+	anomaly := &anomalyDetector{
 		settings: settings,
 		metrics:  metrics,
 		store:    list.New(),
-		index:    make(map[appstatspb.StmtFingerprintID]*list.Element),
 	}
+	anomaly.mu.index = make(map[appstatspb.StmtFingerprintID]*list.Element)
+
+	return anomaly
 }
 
 type latencyThresholdDetector struct {

@@ -102,7 +102,14 @@ func TestSQLStatsJsonEncoding(t *testing.T) {
          },
          "nodes": [{{joinInts .IntArray}}],
          "planGists": [{{joinStrings .StringArray}}],
-         "indexes": [{{joinStrings .StringArray}}]
+         "indexes": [{{joinStrings .StringArray}}],
+         "latencyInfo": {
+           "min": {{.Float}},
+           "max": {{.Float}},
+           "p50": {{.Float}},
+           "p90": {{.Float}},
+           "p99": {{.Float}}
+         }
        },
        "execution_statistics": {
          "cnt": {{.Int64}},
@@ -224,8 +231,15 @@ func TestSQLStatsJsonEncoding(t *testing.T) {
            "mean": {{.Float}},
            "sqDiff": {{.Float}}
          },
-         "nodes": [{{joinInts .IntArray}}]
-         "planGists": [{{joinStrings .StringArray}}]
+         "nodes": [{{joinInts .IntArray}}],
+         "planGists": [{{joinStrings .StringArray}}],
+         "latencyInfo": {
+           "min": {{.Float}},
+           "max": {{.Float}},
+           "p50": {{.Float}},
+           "p90": {{.Float}},
+           "p99": {{.Float}},
+         }
        },
        "execution_statistics": {
          "cnt": {{.Int64}},

@@ -50,6 +50,7 @@ var (
 	_ jsonMarshaler = (*jsonInt)(nil)
 	_ jsonMarshaler = (*stmtFingerprintID)(nil)
 	_ jsonMarshaler = (*int64Array)(nil)
+	_ jsonMarshaler = &latencyInfo{}
 )
 
 type txnStats appstatspb.TransactionStatistics
@@ -339,6 +340,7 @@ func (s *innerStmtStats) jsonFields() jsonFields {
 		{"nodes", (*int64Array)(&s.Nodes)},
 		{"planGists", (*stringArray)(&s.PlanGists)},
 		{"indexes", (*stringArray)(&s.Indexes)},
+		{"latencyInfo", (*latencyInfo)(&s.LatencyInfo)},
 	}
 }
 
@@ -387,6 +389,26 @@ func (n *numericStats) decodeJSON(js json.JSON) error {
 
 func (n *numericStats) encodeJSON() (json.JSON, error) {
 	return n.jsonFields().encodeJSON()
+}
+
+type latencyInfo appstatspb.LatencyInfo
+
+func (l *latencyInfo) jsonFields() jsonFields {
+	return jsonFields{
+		{"min", (*jsonFloat)(&l.Min)},
+		{"max", (*jsonFloat)(&l.Max)},
+		{"p50", (*jsonFloat)(&l.P50)},
+		{"p90", (*jsonFloat)(&l.P90)},
+		{"p99", (*jsonFloat)(&l.P99)},
+	}
+}
+
+func (l *latencyInfo) decodeJSON(js json.JSON) error {
+	return l.jsonFields().decodeJSON(js)
+}
+
+func (l *latencyInfo) encodeJSON() (json.JSON, error) {
+	return l.jsonFields().encodeJSON()
 }
 
 type jsonFields []jsonField

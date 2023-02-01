@@ -17,6 +17,8 @@ import { noop } from "lodash";
 import * as protos from "@cockroachlabs/crdb-protobuf-client";
 import { RequestError } from "src/util";
 import { StatementDiagnosticsReport } from "../api";
+import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+import ILatencyInfo = cockroach.sql.ILatencyInfo;
 
 type IStatementStatistics = protos.cockroach.sql.IStatementStatistics;
 type IExecStats = protos.cockroach.sql.IExecStats;
@@ -50,6 +52,14 @@ const execStats: Required<IExecStats> = {
     squared_diffs: 0.01,
   },
 };
+
+const latencyInfo: Required<ILatencyInfo> = {
+  min: 0.00008,
+  max: 0.00028,
+  p50: 0.00015,
+  p90: 0.00016,
+  p99: 0.00018,
+}
 
 const statementStats: Required<IStatementStatistics> = {
   count: Long.fromNumber(180000),
@@ -103,6 +113,7 @@ const statementStats: Required<IStatementStatistics> = {
   index_recommendations: [""],
   indexes: ["123@456"],
   exec_stats: execStats,
+  latency_info: latencyInfo,
   last_exec_timestamp: {
     seconds: Long.fromInt(1599670292),
     nanos: 111613000,
