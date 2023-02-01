@@ -341,6 +341,20 @@ type MakeAbsentForeignKeyConstraintWriteOnly struct {
 	CompositeKeyMatchMethod semenumpb.Match
 }
 
+// MakeAbsentForeignKeyConstraintNotValidPublic adds a non-existent, not-valid
+// foreign key constraint to the table.
+type MakeAbsentForeignKeyConstraintNotValidPublic struct {
+	immediateMutationOp
+	TableID                 descpb.ID
+	ConstraintID            descpb.ConstraintID
+	ColumnIDs               []descpb.ColumnID
+	ReferencedTableID       descpb.ID
+	ReferencedColumnIDs     []descpb.ColumnID
+	OnUpdateAction          semenumpb.ForeignKeyAction
+	OnDeleteAction          semenumpb.ForeignKeyAction
+	CompositeKeyMatchMethod semenumpb.Match
+}
+
 // MakeValidatedForeignKeyConstraintPublic moves a new, validated foreign key
 // constraint from mutation to public.
 type MakeValidatedForeignKeyConstraintPublic struct {

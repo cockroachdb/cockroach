@@ -121,6 +121,9 @@ statement ok
 CREATE TABLE t_with_not_valid_constraints_1 (i INT PRIMARY KEY, j INT);
 
 statement ok
+CREATE TABLE t_with_not_valid_constraints_2 (i INT PRIMARY KEY, j INT);
+
+statement ok
 ALTER TABLE t_with_not_valid_constraints_1 ADD CHECK (i > 0) NOT VALID;
 
 statement ok
@@ -128,4 +131,10 @@ SET experimental_enable_unique_without_index_constraints = true;
 ALTER TABLE t_with_not_valid_constraints_1 ADD UNIQUE WITHOUT INDEX (j) NOT VALID;
 
 statement ok
+ALTER TABLE t_with_not_valid_constraints_1 ADD FOREIGN KEY (i) REFERENCES t_with_not_valid_constraints_2 (i) NOT VALID;
+
+statement ok
 DROP TABLE t_with_not_valid_constraints_1;
+
+statement ok
+DROP TABLE t_with_not_valid_constraints_2;

@@ -428,6 +428,40 @@ func (i *immediateVisitor) MakeAbsentForeignKeyConstraintWriteOnly(
 	return nil
 }
 
+func (i *immediateVisitor) MakeAbsentForeignKeyConstraintNotValidPublic(
+	ctx context.Context, op scop.MakeAbsentForeignKeyConstraintNotValidPublic,
+) error {
+	out, err := i.checkOutTable(ctx, op.TableID)
+	if err != nil || out.Dropped() {
+		return err
+	}
+	if op.ConstraintID >= out.NextConstraintID {
+		out.NextConstraintID = op.ConstraintID + 1
+	}
+
+	// Enqueue a mutation in `out` to signal this mutation is now enforced.
+	fk := descpb.ForeignKeyConstraint{
+		OriginTableID:       op.TableID,
+		OriginColumnIDs:     op.ColumnIDs,
+		ReferencedColumnIDs: op.ReferencedColumnIDs,
+		ReferencedTableID:   op.ReferencedTableID,
+		Name:                tabledesc.ConstraintNamePlaceholder(op.ConstraintID),
+		Validity:            descpb.ConstraintValidity_Unvalidated,
+		OnDelete:            op.OnDeleteAction,
+		OnUpdate:            op.OnUpdateAction,
+		Match:               op.CompositeKeyMatchMethod,
+		ConstraintID:        op.ConstraintID,
+	}
+	out.OutboundFKs = append(out.OutboundFKs, fk)
+	// Add an entry in "InboundFKs" in the referenced table as company.
+	in, err := i.checkOutTable(ctx, op.ReferencedTableID)
+	if err != nil {
+		return err
+	}
+	in.InboundFKs = append(in.InboundFKs, fk)
+	return nil
+}
+
 func (i *immediateVisitor) MakeValidatedForeignKeyConstraintPublic(
 	ctx context.Context, op scop.MakeValidatedForeignKeyConstraintPublic,
 ) error {

@@ -220,6 +220,31 @@ func TestRollback_alter_table_add_foreign_key(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	sctest.Rollback(t, "pkg/sql/schemachanger/testdata/end_to_end/alter_table_add_foreign_key", sctest.SingleNodeCluster)
 }
+func TestEndToEndSideEffects_alter_table_add_foreign_key_not_valid(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	sctest.EndToEndSideEffects(t, "pkg/sql/schemachanger/testdata/end_to_end/alter_table_add_foreign_key_not_valid", sctest.SingleNodeCluster)
+}
+func TestExecuteWithDMLInjection_alter_table_add_foreign_key_not_valid(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	sctest.ExecuteWithDMLInjection(t, "pkg/sql/schemachanger/testdata/end_to_end/alter_table_add_foreign_key_not_valid", sctest.SingleNodeCluster)
+}
+func TestGenerateSchemaChangeCorpus_alter_table_add_foreign_key_not_valid(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	sctest.GenerateSchemaChangeCorpus(t, "pkg/sql/schemachanger/testdata/end_to_end/alter_table_add_foreign_key_not_valid", sctest.SingleNodeCluster)
+}
+func TestPause_alter_table_add_foreign_key_not_valid(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	sctest.Pause(t, "pkg/sql/schemachanger/testdata/end_to_end/alter_table_add_foreign_key_not_valid", sctest.SingleNodeCluster)
+}
+func TestRollback_alter_table_add_foreign_key_not_valid(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	sctest.Rollback(t, "pkg/sql/schemachanger/testdata/end_to_end/alter_table_add_foreign_key_not_valid", sctest.SingleNodeCluster)
+}
 func TestEndToEndSideEffects_alter_table_add_primary_key_drop_rowid(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

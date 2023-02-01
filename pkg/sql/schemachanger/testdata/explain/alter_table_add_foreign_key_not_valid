@@ -1,0 +1,31 @@
+/* setup */
+CREATE TABLE t1 (i INT PRIMARY KEY);
+CREATE TABLE t2 (i INT PRIMARY KEY);
+INSERT INTO t1 VALUES (0);
+
+/* test */
+EXPLAIN (ddl) ALTER TABLE t1 ADD FOREIGN KEY (i) REFERENCES t2(i) NOT VALID;
+----
+Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t1› ADD CONSTRAINT ‹t1_i_fkey› FOREIGN KEY (‹i›) REFERENCES ‹defaultdb›.‹public›.‹t2› (‹i›) NOT VALID;
+ ├── StatementPhase
+ │    └── Stage 1 of 1 in StatementPhase
+ │         ├── 2 elements transitioning toward PUBLIC
+ │         │    ├── ABSENT → PUBLIC ForeignKeyConstraintNotValid:{DescID: 104, ConstraintID: 2, ReferencedDescID: 105}
+ │         │    └── ABSENT → PUBLIC ConstraintWithoutIndexName:{DescID: 104, Name: t1_i_fkey, ConstraintID: 2}
+ │         └── 2 Mutation operations
+ │              ├── MakeAbsentForeignKeyConstraintNotValidPublic {"ConstraintID":2,"ReferencedTableID":105,"TableID":104}
+ │              └── SetConstraintName {"ConstraintID":2,"Name":"t1_i_fkey","TableID":104}
+ └── PreCommitPhase
+      ├── Stage 1 of 2 in PreCommitPhase
+      │    ├── 2 elements transitioning toward PUBLIC
+      │    │    ├── PUBLIC → ABSENT ForeignKeyConstraintNotValid:{DescID: 104, ConstraintID: 2, ReferencedDescID: 105}
+      │    │    └── PUBLIC → ABSENT ConstraintWithoutIndexName:{DescID: 104, Name: t1_i_fkey, ConstraintID: 2}
+      │    └── 1 Mutation operation
+      │         └── UndoAllInTxnImmediateMutationOpSideEffects
+      └── Stage 2 of 2 in PreCommitPhase
+           ├── 2 elements transitioning toward PUBLIC
+           │    ├── ABSENT → PUBLIC ForeignKeyConstraintNotValid:{DescID: 104, ConstraintID: 2, ReferencedDescID: 105}
+           │    └── ABSENT → PUBLIC ConstraintWithoutIndexName:{DescID: 104, Name: t1_i_fkey, ConstraintID: 2}
+           └── 2 Mutation operations
+                ├── MakeAbsentForeignKeyConstraintNotValidPublic {"ConstraintID":2,"ReferencedTableID":105,"TableID":104}
+                └── SetConstraintName {"ConstraintID":2,"Name":"t1_i_fkey","TableID":104}

@@ -761,6 +761,37 @@ func FindForeignKeyConstraint(b ElementStatusIterator) (current Status, target T
 	return current, target, element
 }
 
+func (e ForeignKeyConstraintNotValid) element() {}
+
+// ForEachForeignKeyConstraintNotValid iterates over elements of type ForeignKeyConstraintNotValid.
+func ForEachForeignKeyConstraintNotValid(
+	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *ForeignKeyConstraintNotValid),
+) {
+  if b == nil {
+    return
+  }
+	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
+		if elt, ok := e.(*ForeignKeyConstraintNotValid); ok {
+			fn(current, target, elt)
+		}
+	})
+}
+
+// FindForeignKeyConstraintNotValid finds the first element of type ForeignKeyConstraintNotValid.
+func FindForeignKeyConstraintNotValid(b ElementStatusIterator) (current Status, target TargetStatus, element *ForeignKeyConstraintNotValid) {
+  if b == nil {
+    return current, target, element
+  }
+	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
+		if elt, ok := e.(*ForeignKeyConstraintNotValid); ok {
+			element = elt
+			current = c
+			target = t
+		}
+	})
+	return current, target, element
+}
+
 func (e Function) element() {}
 
 // ForEachFunction iterates over elements of type Function.
