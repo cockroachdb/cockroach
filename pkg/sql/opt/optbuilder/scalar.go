@@ -548,7 +548,7 @@ func (b *Builder) buildFunction(
 	}
 
 	overload := f.ResolvedOverload()
-	if overload.IsUDF {
+	if overload.HasSQLBody() {
 		return b.buildUDF(f, def, inScope, outScope, outCol, colRefs)
 	}
 

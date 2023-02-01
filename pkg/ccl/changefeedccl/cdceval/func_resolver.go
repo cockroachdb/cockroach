@@ -73,10 +73,9 @@ func (rs *cdcFunctionResolver) ResolveFunction(
 		return nil, err
 	}
 
-	// Since we may be dealing with UDFs, ensure it is something
-	// that's supported.
+	// Ensure that any overloads defined using a SQL string are supported.
 	for _, overload := range funcDef.Overloads {
-		if overload.IsUDF {
+		if overload.HasSQLBody() {
 			if err := checkOverloadSupported(fnName, overload.Overload); err != nil {
 				return nil, err
 			}

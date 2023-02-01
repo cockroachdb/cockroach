@@ -208,15 +208,16 @@ type Overload struct {
 	// FunctionProperties are the properties of this overload.
 	FunctionProperties
 
-	// IsUDF is set to true when this is a user-defined function overload.
-	// Note: Body can be empty string even IsUDF is true.
+	// IsUDF is set to true when this is a user-defined function overload built
+	// using CREATE FUNCTION. Note: Body can be empty even if IsUDF is true.
 	IsUDF bool
+	// Body is the SQL string body of a function. It can be set even if IsUDF is
+	// false if a builtin function is defined using a SQL string.
+	Body string
 	// UDFContainsOnlySignature is only set to true for Overload signatures cached
 	// in a Schema descriptor, which means that the full UDF descriptor need to be
 	// fetched to get more info, e.g. function Body.
 	UDFContainsOnlySignature bool
-	// Body is the SQL string body of a user-defined function.
-	Body string
 	// ReturnSet is set to true when a user-defined function is defined to return
 	// a set of values.
 	ReturnSet bool
@@ -268,6 +269,12 @@ func (b Overload) InferReturnTypeFromInputArgTypes(inputTypes []*types.T) *types
 // IsGenerator returns true if the function is a set returning function (SRF).
 func (b Overload) IsGenerator() bool {
 	return b.Generator != nil || b.GeneratorWithExprs != nil
+}
+
+// HasSQLBody returns true if the function was defined using a SQL string body.
+// This is the case for user-defined functions and some builtins.
+func (b Overload) HasSQLBody() bool {
+	return b.IsUDF || b.Body != ""
 }
 
 // Signature returns a human-readable signature.
