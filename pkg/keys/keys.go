@@ -159,6 +159,21 @@ func NodeLivenessKey(nodeID roachpb.NodeID) roachpb.Key {
 	return key
 }
 
+// DecodeNodeLivenessKey returns the NodeID for the liveness key
+func DecodeNodeLivenessKey(key roachpb.Key) (roachpb.NodeID, bool) {
+	if !bytes.HasPrefix(key, NodeLivenessPrefix) {
+		return 0, false
+	}
+
+	// Cut the prefix.
+	suffix := key[len(NodeLivenessPrefix):]
+	suffix, nodeID, err := encoding.DecodeUvarintAscending(suffix)
+	if err != nil || len(suffix) != 0 {
+		return 0, false
+	}
+	return roachpb.NodeID(nodeID), true
+}
+
 // NodeStatusKey returns the key for accessing the node status for the
 // specified node ID.
 func NodeStatusKey(nodeID roachpb.NodeID) roachpb.Key {

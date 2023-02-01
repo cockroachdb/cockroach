@@ -12,7 +12,6 @@ package spanconfigstore
 
 import (
 	"context"
-
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -119,7 +118,33 @@ func (s *Store) GetSpanConfigForKey(
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	return s.getSpanConfigForKeyRLocked(ctx, key)
+	spanConfig, err := s.getSpanConfigForKeyRLocked(ctx, key)
+	if err == nil {
+		spanConfig = s.wrapSpanConfig(ctx, spanConfig, key)
+	}
+	return spanConfig, err
+}
+
+// TODO: This is duplicated from wrappingLivenessStoreReader, refactor
+func (s *Store) wrapSpanConfig(ctx context.Context, spanConfig roachpb.SpanConfig, key roachpb.RKey) roachpb.SpanConfig {
+	nodeID, valid := keys.DecodeNodeLivenessKey(key.AsRawKey())
+	if valid {
+		constraint := roachpb.Constraint{
+			Type: roachpb.Constraint_REQUIRED,
+			// TODO(baptist): Pull this into a function.
+			Value: "crdb_internal.node_id." + nodeID.String(),
+		}
+
+		// Both a voter and the leaseholder should be on this node.
+		spanConfig.LeasePreferences = append(spanConfig.LeasePreferences, roachpb.LeasePreference{
+			Constraints: []roachpb.Constraint{constraint},
+		})
+		spanConfig.VoterConstraints = append(spanConfig.VoterConstraints, roachpb.ConstraintsConjunction{
+			NumReplicas: 5,
+			Constraints: []roachpb.Constraint{constraint},
+		})
+	}
+	return spanConfig
 }
 
 // getSpanConfigForKeyRLocked is like GetSpanConfigForKey but requires the
