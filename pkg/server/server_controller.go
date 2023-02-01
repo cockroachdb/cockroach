@@ -98,6 +98,10 @@ type serverController struct {
 	// testArgs is used when creating new tenant servers.
 	testArgs map[roachpb.TenantName]base.TestSharedProcessTenantArgs
 
+	// sendSQLRoutingError is a callback to use to report
+	// a tenant routing error to the incoming client.
+	sendSQLRoutingError func(ctx context.Context, conn net.Conn, tenantName roachpb.TenantName)
+
 	mu struct {
 		syncutil.Mutex
 
@@ -122,6 +126,7 @@ func newServerController(
 	tenantServerCreator tenantServerCreator,
 	systemServer onDemandServer,
 	systemTenantNameContainer *roachpb.TenantNameContainer,
+	sendSQLRoutingError func(ctx context.Context, conn net.Conn, tenantName roachpb.TenantName),
 ) *serverController {
 	c := &serverController{
 		nodeID:              parentNodeID,
@@ -130,6 +135,7 @@ func newServerController(
 		testArgs:            make(map[roachpb.TenantName]base.TestSharedProcessTenantArgs),
 		stopper:             parentStopper,
 		tenantServerCreator: tenantServerCreator,
+		sendSQLRoutingError: sendSQLRoutingError,
 	}
 
 	// We make the serverState for the system mock the regular
