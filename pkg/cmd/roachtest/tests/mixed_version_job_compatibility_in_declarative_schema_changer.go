@@ -30,8 +30,8 @@ func testSetupResetStep(c cluster.Cluster) versionStep {
 	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
 		db := c.Conn(ctx, t.L(), 1)
 		setUpQuery := `
-CREATE DATABASE testdb; 
-CREATE SCHEMA testdb.testsc; 
+CREATE DATABASE testdb;
+CREATE SCHEMA testdb.testsc;
 CREATE TABLE testdb.testsc.t (i INT PRIMARY KEY);
 CREATE TYPE testdb.testsc.typ AS ENUM ('a', 'b');
 CREATE SEQUENCE testdb.testsc.s;
@@ -71,6 +71,20 @@ func planAndRunSchemaChange(
 		t.Status("Running: ", schemaChangeStmt)
 		_, err := gatewayDB.ExecContext(ctx, schemaChangeStmt)
 		require.NoError(t, err)
+	}
+}
+
+func setShortJobIntervalsStep(node int) versionStep {
+	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
+		db := u.conn(ctx, t, node)
+		runQuery := func(query string, args ...interface{}) error {
+			_, err := db.ExecContext(ctx, query, args...)
+			return err
+		}
+
+		if err := setShortJobIntervalsCommon(runQuery); err != nil {
+			t.Fatal(err)
+		}
 	}
 }
 
