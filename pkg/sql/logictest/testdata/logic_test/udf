@@ -2968,3 +2968,13 @@ distribution: local
 vectorized: true
 ·
 • create function
+
+# Regression test for #96326. Strict UDFs with no arguments should not error
+# while being called.
+statement ok
+CREATE FUNCTION f96326() RETURNS INT LANGUAGE SQL IMMUTABLE STRICT AS 'SELECT 1';
+
+query I
+SELECT f96326();
+----
+1

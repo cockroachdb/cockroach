@@ -744,7 +744,7 @@ func (b *Builder) buildUDF(
 	//
 	//   CASE WHEN arg1 IS NULL OR arg2 IS NULL OR ... THEN NULL ELSE udf() END
 	//
-	if !o.CalledOnNullInput {
+	if !o.CalledOnNullInput && len(args) > 0 {
 		var anyArgIsNull opt.ScalarExpr
 		for i := range args {
 			// Note: We do NOT use a TupleIsNullExpr here if the argument is a
