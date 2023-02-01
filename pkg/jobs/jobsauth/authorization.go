@@ -32,12 +32,6 @@ const (
 	ViewAccess AccessLevel = iota
 
 	// ControlAccess is used to perform authorization for modifying jobs (ex. PAUSE|CANCEL|RESUME JOB).
-	// This access level performs stricter checks than ViewAccess.
-	//
-	// The set of jobs visible via ControlAccess is a subset of jobs visible via
-	// ViewAccess. In other words: if a user with a given set of privileges is
-	// authorized to modify a job using ControlAccess, they will be authorized to
-	// view it using ViewAccess.
 	ControlAccess
 )
 
@@ -79,6 +73,15 @@ type AuthorizationAccessor interface {
 // Authorize returns nil if the user is authorized to access the job.
 // If the user is not authorized, then a pgcode.InsufficientPrivilege
 // error will be returned.
+//
+// TODO(#96432): sort out internal job owners and rules for accessing them
+// Authorize checks these rules in order:
+//  1. If the user is an admin, grant access.
+//  2. If the AccessLevel is ViewAccess, grant access if the user has CONTROLJOB
+//     or if the user owns the job.
+//  3. If the AccessLevel is ControlAccess, grant access if the user has CONTROLJOB
+//     and the job owner is not an admin.
+//  4. If there is an authorization check for this job type that passes, grant the user access.
 func Authorize(
 	ctx context.Context,
 	a AuthorizationAccessor,
@@ -94,23 +97,28 @@ func Authorize(
 		return nil
 	}
 
-	userHasControlJob, err := a.HasRoleOption(ctx, roleoption.CONTROLJOB)
+	hasControlJob, err := a.HasRoleOption(ctx, roleoption.CONTROLJOB)
 	if err != nil {
 		return err
 	}
 
 	jobOwnerUser := payload.UsernameProto.Decode()
-	jobOwnerIsAdmin, err := a.UserHasAdminRole(ctx, jobOwnerUser)
+
+	if accessLevel == ViewAccess {
+		if a.User() == jobOwnerUser || hasControlJob {
+			return nil
+		}
+	}
+
+	ownedByRootOrNode, err := a.UserHasAdminRole(ctx, jobOwnerUser)
 	if err != nil {
 		return err
 	}
-
-	if jobOwnerIsAdmin {
+	if ownedByRootOrNode {
 		return pgerror.Newf(pgcode.InsufficientPrivilege,
 			"only admins can control jobs owned by other admins")
 	}
-
-	if (userHasControlJob) || (accessLevel == ViewAccess && a.User() == jobOwnerUser) {
+	if hasControlJob {
 		return nil
 	}
 
