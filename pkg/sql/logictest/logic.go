@@ -1785,6 +1785,7 @@ func (t *logicTest) setup(
 	t.testCleanupFuncs = append(t.testCleanupFuncs, tempExternalIODirCleanup)
 
 	if cfg.UseCockroachGoTestserver {
+		skip.WithIssue(t.t(), 96387, "flakes with panic over connection string")
 		skip.UnderStress(t.t(), "test takes a long time and downloads release artifacts")
 		if runtime.GOARCH == "arm64" && strings.HasPrefix(cfg.CockroachGoBootstrapVersion, "v22.1") {
 			skip.IgnoreLint(t.t(), "Skip under ARM64. There are no ARM release artifacts for v22.1.")
