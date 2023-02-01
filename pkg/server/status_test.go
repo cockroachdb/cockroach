@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -3733,6 +3734,9 @@ func TestTransactionContentionEvents(t *testing.T) {
 				}
 
 				for _, event := range resp.Events {
+					require.NotEqual(t, event.WaitingStmtFingerprintID, 0)
+					require.NotEqual(t, event.WaitingStmtID.String(), clusterunique.ID{}.String())
+
 					require.Equal(t, tc.canViewContendingKey, len(event.BlockingEvent.Key) > 0,
 						"expected to %s, but the contending key has length of %d",
 						expectationStr,
