@@ -702,6 +702,9 @@ select * from crdb_internal.gossip_alerts
 query error pq: only users with the admin role are allowed to read crdb_internal.node_inflight_trace_spans
 select * from crdb_internal.node_inflight_trace_spans
 
+query error pq: crdb_internal.check_consistency requires admin privileges
+SELECT * FROM crdb_internal.check_consistency(true, b'\x02', b'\x04')
+
 # Anyone can see the executable version.
 query T
 select regexp_replace(crdb_internal.node_executable_version()::string, '(-\d+)?$', '');
