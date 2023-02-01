@@ -74,6 +74,7 @@ go_test(
     embed = [":security"],
     deps = [
         "//pkg/base",
+        "//pkg/multitenant/tenantcapabilities/tenantcapabilitiesauthorizer",
         "//pkg/roachpb",
         "//pkg/rpc",
         "//pkg/security/certnames",

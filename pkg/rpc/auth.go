@@ -79,7 +79,7 @@ func (a kvAuth) unaryInterceptor(
 	// Handle authorization according to the selected authz method.
 	switch ar := authz.(type) {
 	case authzTenantServerToKVServer:
-		if err := a.tenant.authorize(roachpb.TenantID(ar), info.FullMethod, req); err != nil {
+		if err := a.tenant.authorize(ctx, roachpb.TenantID(ar), info.FullMethod, req); err != nil {
 			return nil, err
 		}
 	case authzTenantServerToTenantServer:
@@ -123,7 +123,7 @@ func (a kvAuth) streamInterceptor(
 					return err
 				}
 				// 'm' is now populated and contains the request from the client.
-				return a.tenant.authorize(roachpb.TenantID(ar), info.FullMethod, m)
+				return a.tenant.authorize(ctx, roachpb.TenantID(ar), info.FullMethod, m)
 			},
 		}
 	case authzTenantServerToTenantServer:

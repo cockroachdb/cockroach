@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
@@ -683,6 +684,9 @@ func TestTenantStreamingMultipleNodes(t *testing.T) {
 			defer addressesMu.Unlock()
 			clientAddresses[addr] = struct{}{}
 		},
+	}
+	args.TenantCapabilitiesTestingKnobs = &tenantcapabilities.TestingKnobs{
+		AuthorizerSkipAdminSplitCapabilityChecks: true,
 	}
 
 	c, cleanup := replicationtestutils.CreateTenantStreamingClusters(ctx, t, args)

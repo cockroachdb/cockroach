@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptreconcile"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/multitenantcpu"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiesauthorizer"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcostmodel"
 	"github.com/cockroachdb/cockroach/pkg/obs"
 	"github.com/cockroachdb/cockroach/pkg/obsservice/obspb"
@@ -826,16 +827,19 @@ func makeTenantSQLServerArgs(
 	if p, ok := baseCfg.TestingKnobs.Server.(*TestingKnobs); ok {
 		rpcTestingKnobs = p.ContextTestingKnobs
 	}
+
+	authorizer := tenantcapabilitiesauthorizer.NewNoopAuthorizer()
 	rpcContext := rpc.NewContext(startupCtx, rpc.ContextOptions{
-		TenantID:         sqlCfg.TenantID,
-		NodeID:           baseCfg.IDContainer,
-		StorageClusterID: baseCfg.ClusterIDContainer,
-		Config:           baseCfg.Config,
-		Clock:            clock.WallClock(),
-		MaxOffset:        clock.MaxOffset(),
-		Stopper:          stopper,
-		Settings:         st,
-		Knobs:            rpcTestingKnobs,
+		TenantID:            sqlCfg.TenantID,
+		TenantRPCAuthorizer: authorizer,
+		NodeID:              baseCfg.IDContainer,
+		StorageClusterID:    baseCfg.ClusterIDContainer,
+		Config:              baseCfg.Config,
+		Clock:               clock.WallClock(),
+		MaxOffset:           clock.MaxOffset(),
+		Stopper:             stopper,
+		Settings:            st,
+		Knobs:               rpcTestingKnobs,
 	})
 
 	if !baseCfg.Insecure {

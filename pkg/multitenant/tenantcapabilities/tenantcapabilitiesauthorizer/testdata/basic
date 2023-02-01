@@ -12,7 +12,7 @@ split
 scan
 cput
 ----
-true
+ok
 
 # Tenant 11 shouldn't be able to issue splits.
 has-capability-for-batch
@@ -21,7 +21,7 @@ split
 scan
 cput
 ----
-false
+tenant 11 does not have admin split capability
 
 # Test that the order of the split request doesn't have any effect.
 has-capability-for-batch
@@ -29,7 +29,7 @@ has-capability-for-batch
 scan
 cput
 ----
-true
+ok
 
 # However, a batch request which doesn't include a split (by tenant 11) should
 # work as you'd expect.
@@ -38,7 +38,7 @@ has-capability-for-batch
 scan
 cput
 ----
-true
+ok
 
 # Ditto for tenant 10.
 has-capability-for-batch
@@ -46,7 +46,7 @@ has-capability-for-batch
 scan
 cput
 ----
-true
+ok
 
 # Lastly, flip tenant 10's capability for splits; ensure it can no longer issue
 # splits as a result.
@@ -61,7 +61,7 @@ split
 scan
 cput
 ----
-false
+tenant 10 does not have admin split capability
 
 # However, this has no effect on batch requests that don't contain splits.
 has-capability-for-batch
@@ -69,4 +69,4 @@ has-capability-for-batch
 scan
 cput
 ----
-true
+ok

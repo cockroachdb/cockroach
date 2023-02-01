@@ -26,6 +26,7 @@ import (
 	circuit "github.com/cockroachdb/circuitbreaker"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/base/serverident"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -245,7 +246,8 @@ func NewServerEx(
 	if !rpcCtx.Config.Insecure {
 		a := kvAuth{
 			tenant: tenantAuthorizer{
-				tenantID: rpcCtx.tenID,
+				tenantID:               rpcCtx.tenID,
+				capabilitiesAuthorizer: rpcCtx.capabilitiesAuthorizer,
 			},
 		}
 
@@ -496,6 +498,11 @@ type ContextOptions struct {
 	// utility, not a server, and thus misses server configuration, a
 	// cluster version, a node ID, etc.
 	ClientOnly bool
+
+	// TenantRPCAuthorizer provides a handle into the tenantcapabilities
+	// subsystem. It allows KV nodes to perform capability checks for incoming
+	// tenant requests.
+	TenantRPCAuthorizer tenantcapabilities.Authorizer
 }
 
 func (c ContextOptions) validate() error {
@@ -602,8 +609,13 @@ func NewContext(ctx context.Context, opts ContextOptions) *Context {
 	masterCtx, _ := opts.Stopper.WithCancelOnQuiesce(ctx)
 
 	rpcCtx := &Context{
-		ContextOptions:  opts,
-		SecurityContext: MakeSecurityContext(opts.Config, security.ClusterTLSSettings(opts.Settings), opts.TenantID),
+		ContextOptions: opts,
+		SecurityContext: MakeSecurityContext(
+			opts.Config,
+			security.ClusterTLSSettings(opts.Settings),
+			opts.TenantID,
+			opts.TenantRPCAuthorizer,
+		),
 		breakerClock: breakerClock{
 			clock: opts.Clock,
 		},
