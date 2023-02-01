@@ -6,20 +6,20 @@ split
 scan
 cput
 ----
-true
+ok
 
 has-capability-for-batch
 {ten=system}
 scan
 cput
 ----
-true
+ok
 
 has-capability-for-batch
 {ten=system}
 split
 ----
-true
+ok
 
 update-state
 upsert {ten=system}:{CanAdminSplit=false}
@@ -35,4 +35,4 @@ has-capability-for-batch
 {ten=system}
 split
 ----
-true
+ok

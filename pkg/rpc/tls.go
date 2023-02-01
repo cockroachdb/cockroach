@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/certnames"
@@ -58,9 +59,10 @@ func wrapError(err error) error {
 type SecurityContext struct {
 	certnames.Locator
 	security.TLSSettings
-	config *base.Config
-	tenID  roachpb.TenantID
-	lazy   struct {
+	config                 *base.Config
+	tenID                  roachpb.TenantID
+	capabilitiesAuthorizer tenantcapabilities.Authorizer
+	lazy                   struct {
 		// The certificate manager. Must be accessed through GetCertificateManager.
 		certificateManager lazyCertificateManager
 		// httpClient uses the client TLS config. It is initialized lazily.
@@ -73,16 +75,20 @@ type SecurityContext struct {
 //
 // TODO(tbg): don't take a whole Config. This can be trimmed down significantly.
 func NewSecurityContext(
-	cfg *base.Config, tlsSettings security.TLSSettings, tenID roachpb.TenantID,
+	cfg *base.Config,
+	tlsSettings security.TLSSettings,
+	tenID roachpb.TenantID,
+	capabilitiesAuthorizer tenantcapabilities.Authorizer,
 ) *SecurityContext {
 	if tenID.ToUint64() == 0 {
 		panic(errors.AssertionFailedf("programming error: tenant ID not defined"))
 	}
 	return &SecurityContext{
-		Locator:     certnames.MakeLocator(cfg.SSLCertsDir),
-		TLSSettings: tlsSettings,
-		config:      cfg,
-		tenID:       tenID,
+		Locator:                certnames.MakeLocator(cfg.SSLCertsDir),
+		TLSSettings:            tlsSettings,
+		config:                 cfg,
+		tenID:                  tenID,
+		capabilitiesAuthorizer: capabilitiesAuthorizer,
 	}
 }
 
