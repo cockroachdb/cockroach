@@ -1277,3 +1277,23 @@ func TestShortAttributeExtractor(t *testing.T) {
 		})
 	}
 }
+
+func TestIncompatibleVersion(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	loc := Location{
+		dir: "",
+		fs:  vfs.NewMem(),
+	}
+	oldVer := roachpb.Version{Major: 21, Minor: 1}
+	stOld := cluster.MakeTestingClusterSettingsWithVersions(oldVer, oldVer, true /* initializeVersion */)
+	p, err := Open(ctx, loc, stOld)
+	require.NoError(t, err)
+	p.Close()
+
+	stNew := cluster.MakeTestingClusterSettings()
+	_, err = Open(ctx, loc, stNew)
+	require.ErrorContains(t, err, "is too old for running version")
+}
