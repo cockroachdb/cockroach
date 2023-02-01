@@ -175,15 +175,7 @@ import (
 // the test is run as the system tenant.
 //
 // The directives line looks like:
-// # tenant-cluster-setting-override-opt: opt1 opt2
-//
-// The options are:
-// - allow-zone-configs-for-secondary-tenants: If specified, secondary tenants
-// are allowed to alter their zone configurations.
-// - allow-multi-region-abstractions-for-secondary-tenants: If specified,
-// secondary tenants are allowed to make use of multi-region abstractions.
-// - allow-split-at-for-secondary-tenants: If specified,
-// secondary tenants are allowed to run ALTER TABLE ... SPLIT AT.
+// # tenant-cluster-setting-override-opt: setting_name1=setting_value1 setting_name2=setting_value2
 //
 // ###########################################
 //           CLUSTER OPTION DIRECTIVES
@@ -953,11 +945,10 @@ type logicTest struct {
 	clusterOpts []clusterOpt
 	// knobOpts are the options used to create testing knobs.
 	knobOpts []knobOpt
-	// tenantClusterSettingOverrideOpts are the options used by the host cluster
-	// to configure tenant setting overrides  during setup. They're persisted here
-	// because a cluster can be recreated throughout the lifetime of a test, and
-	// we should override tenant settings each time this happens.
-	tenantClusterSettingOverrideOpts []tenantClusterSettingOverrideOpt
+	// toa contains tenant overrides that are persisted here because a cluster
+	// can be recreated throughout the lifetime of a test, and we should use
+	// tenant overrides each time this happens.
+	toa tenantOverrideArgs
 	// cluster is the test cluster against which we are testing. This cluster
 	// may be reset during the lifetime of the test.
 	cluster serverutils.TestClusterInterface
@@ -1295,10 +1286,7 @@ func (t *logicTest) newTestServerCluster(bootstrapBinaryPath string, upgradeBina
 // initial cluster to be used in a test, or when creating additional test
 // clusters, after logicTest.setup() has been called.
 func (t *logicTest) newCluster(
-	serverArgs TestServerArgs,
-	clusterOpts []clusterOpt,
-	knobOpts []knobOpt,
-	tenantClusterSettingOverrideOpts []tenantClusterSettingOverrideOpt,
+	serverArgs TestServerArgs, clusterOpts []clusterOpt, knobOpts []knobOpt, toa tenantOverrideArgs,
 ) {
 	var corpusCollectionCallback func(p scplan.Plan, stageIdx int) error
 	if serverArgs.DeclarativeCorpusCollection && t.declarativeCorpusCollector != nil {
@@ -1535,14 +1523,12 @@ func (t *logicTest) newCluster(
 	// If we've created a tenant (either explicitly, or probabilistically and
 	// implicitly) set any necessary cluster settings to override blocked
 	// behavior.
-	clusterSettingOverrideArgs := &tenantClusterSettingOverrideArgs{}
 	if cfg.UseTenant || t.cluster.StartedDefaultTestTenant() {
-		for _, opt := range tenantClusterSettingOverrideOpts {
-			opt.apply(clusterSettingOverrideArgs)
-		}
 
 		conn := t.cluster.StorageClusterConn()
-		if clusterSettingOverrideArgs.overrideMultiTenantZoneConfigsAllowed {
+		clusterSettings := toa.clusterSettings
+		_, ok := clusterSettings[sql.SecondaryTenantZoneConfigsEnabled.Key()]
+		if ok {
 			// We reduce the closed timestamp duration on the host tenant so that the
 			// setting override can propagate to the tenant faster.
 			if _, err := conn.Exec(
@@ -1555,41 +1541,12 @@ func (t *logicTest) newCluster(
 			); err != nil {
 				t.Fatal(err)
 			}
-
-			// Allow secondary tenants to set zone configurations if the configuration
-			// indicates as such. As this is a tenant read-only cluster setting, only
-			// the operator is allowed to set it.
-			if _, err := conn.Exec(
-				"ALTER TENANT [$1] SET CLUSTER SETTING sql.zone_configs.allow_for_secondary_tenant.enabled = true",
-				serverutils.TestTenantID().ToUint64(),
-			); err != nil {
-				t.Fatal(err)
-			}
 		}
 
-		if clusterSettingOverrideArgs.overrideMultiTenantMultiRegionAbstractionsAllowed {
-			// Allow secondary tenants to make use of multi-region abstractions if the
-			// configuration indicates as such. As this is a tenant read-only cluster
-			// setting, only the operator is allowed to set it.
-			if _, err := conn.Exec(
-				fmt.Sprintf(
-					"ALTER TENANT [$1] SET CLUSTER SETTING %s = true",
-					sql.SecondaryTenantsMultiRegionAbstractionsEnabledSettingName,
-				),
-				serverutils.TestTenantID().ToUint64(),
-			); err != nil {
-				t.Fatal(err)
-			}
-		}
-
-		if clusterSettingOverrideArgs.overrideMultiTenantSplitAtAllowed {
-			if _, err := conn.Exec(
-				fmt.Sprintf(
-					"ALTER TENANT [$1] SET CLUSTER SETTING %s = true",
-					sql.SecondaryTenantSplitAtEnabled.Key(),
-				),
-				serverutils.TestTenantID().ToUint64(),
-			); err != nil {
+		tenantID := serverutils.TestTenantID().ToUint64()
+		for name, value := range clusterSettings {
+			query := fmt.Sprintf("ALTER TENANT [$1] SET CLUSTER SETTING %s = %s", name, value)
+			if _, err := conn.Exec(query, tenantID); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -1722,16 +1679,9 @@ func (t *logicTest) newCluster(
 		})
 	}
 
-	if clusterSettingOverrideArgs.overrideMultiTenantZoneConfigsAllowed {
+	for name, value := range toa.clusterSettings {
 		t.waitForTenantReadOnlyClusterSettingToTakeEffectOrFatal(
-			"sql.zone_configs.allow_for_secondary_tenant.enabled", "true", params.ServerArgs.Insecure,
-		)
-	}
-	if clusterSettingOverrideArgs.overrideMultiTenantMultiRegionAbstractionsAllowed {
-		t.waitForTenantReadOnlyClusterSettingToTakeEffectOrFatal(
-			sql.SecondaryTenantsMultiRegionAbstractionsEnabledSettingName,
-			"true",
-			params.ServerArgs.Insecure,
+			name, value, params.ServerArgs.Insecure,
 		)
 	}
 
@@ -1808,7 +1758,7 @@ func (t *logicTest) resetCluster() {
 		t.Fatal("resetting the cluster before server args were set")
 	}
 	serverArgs := *t.serverArgs
-	t.newCluster(serverArgs, t.clusterOpts, t.knobOpts, t.tenantClusterSettingOverrideOpts)
+	t.newCluster(serverArgs, t.clusterOpts, t.knobOpts, t.toa)
 }
 
 // setup creates the initial cluster for the logic test and populates the
@@ -1820,14 +1770,14 @@ func (t *logicTest) setup(
 	serverArgs TestServerArgs,
 	clusterOpts []clusterOpt,
 	knobOpts []knobOpt,
-	tenantClusterSettingOverrideOpts []tenantClusterSettingOverrideOpt,
+	toa tenantOverrideArgs,
 ) {
 	t.cfg = cfg
 	t.serverArgs = &serverArgs
 	t.serverArgs.DeclarativeCorpusCollection = cfg.DeclarativeCorpusCollection
 	t.clusterOpts = clusterOpts[:]
 	t.knobOpts = knobOpts[:]
-	t.tenantClusterSettingOverrideOpts = tenantClusterSettingOverrideOpts[:]
+	t.toa = toa
 	// TODO(pmattis): Add a flag to make it easy to run the tests against a local
 	// MySQL or Postgres instance.
 	tempExternalIODir, tempExternalIODirCleanup := testutils.TempDir(t.rootT)
@@ -1880,7 +1830,7 @@ func (t *logicTest) setup(
 		}
 		t.newTestServerCluster(bootstrapBinaryPath, upgradeBinaryPath)
 	} else {
-		t.newCluster(serverArgs, t.clusterOpts, t.knobOpts, t.tenantClusterSettingOverrideOpts)
+		t.newCluster(serverArgs, t.clusterOpts, t.knobOpts, t.toa)
 	}
 
 	// Only create the test database on the initial cluster, since cluster restore
@@ -1905,64 +1855,10 @@ CREATE DATABASE test; USE test;
 	t.unsupported = 0
 }
 
-type tenantClusterSettingOverrideArgs struct {
-	// If set, the sql.zone_configs.allow_for_secondary_tenant.enabled default
-	// is set to true by the host. This allows logic tests that run on
-	// secondary tenants to use zone configurations.
-	overrideMultiTenantZoneConfigsAllowed bool
-	// If set, the
-	// sql.multi_region.allow_abstractions_for_secondary_tenants.enabled default
-	// is set to true by the host. This allows logic tests that run on secondary
-	// tenants to make use of multi-region abstractions.
-	overrideMultiTenantMultiRegionAbstractionsAllowed bool
-	// If set, the sql.split_at.allow_for_secondary_tenant.enabled default
-	// is set to true by the host. This allows logic tests that run on
-	// secondary tenants to run ALTER TABLE ... SPLIT AT.
-	overrideMultiTenantSplitAtAllowed bool
-}
-
-// tenantClusterSettingOverrideOpt is implemented by options for configuring
-// tenant setting overrides during setup. For tests that run on the system
-// tenant, these options have no effect.
-type tenantClusterSettingOverrideOpt interface {
-	apply(*tenantClusterSettingOverrideArgs)
-}
-
-// tenantClusterSettingOverrideMultiTenantMultiRegionAbstractionsAllowed
-// corresponds to the allow-multi-region-abstractions-for-secondary-tenants
-// directive.
-type tenantClusterSettingOverrideMultiTenantMultiRegionAbstractionsAllowed struct{}
-
-var _ tenantClusterSettingOverrideOpt = &tenantClusterSettingOverrideMultiTenantMultiRegionAbstractionsAllowed{}
-
-func (t tenantClusterSettingOverrideMultiTenantMultiRegionAbstractionsAllowed) apply(
-	args *tenantClusterSettingOverrideArgs,
-) {
-	args.overrideMultiTenantMultiRegionAbstractionsAllowed = true
-}
-
-// tenantClusterSettingOverrideMultiTenantZoneConfigsAllowed corresponds to
-// the allow-zone-configs-for-secondary-tenants directive.
-type tenantClusterSettingOverrideMultiTenantZoneConfigsAllowed struct{}
-
-var _ tenantClusterSettingOverrideOpt = tenantClusterSettingOverrideMultiTenantZoneConfigsAllowed{}
-
-func (t tenantClusterSettingOverrideMultiTenantZoneConfigsAllowed) apply(
-	args *tenantClusterSettingOverrideArgs,
-) {
-	args.overrideMultiTenantZoneConfigsAllowed = true
-}
-
-// tenantClusterSettingOverrideMultiTenantSplitAtAllowed corresponds to
-// the allow-split-at-for-secondary-tenants directive.
-type tenantClusterSettingOverrideMultiTenantSplitAtAllowed struct{}
-
-var _ tenantClusterSettingOverrideOpt = tenantClusterSettingOverrideMultiTenantSplitAtAllowed{}
-
-func (t tenantClusterSettingOverrideMultiTenantSplitAtAllowed) apply(
-	args *tenantClusterSettingOverrideArgs,
-) {
-	args.overrideMultiTenantSplitAtAllowed = true
+// tenantOverrideArgs are the arguments used by the host cluster to configure
+// tenant overrides (eg. cluster settings, capabilities) during setup.
+type tenantOverrideArgs struct {
+	clusterSettings map[string]string
 }
 
 // clusterOpt is implemented by options for configuring the test cluster under
@@ -2095,30 +1991,30 @@ func parseDirectiveOptions(t *testing.T, path string, directiveName string, f fu
 	}
 }
 
-// readTenantClusterSettingOverrideArgs looks around the beginning of the file
+// readTenantOverrideArgs looks around the beginning of the file
 // for a line looking like:
 // # tenant-cluster-setting-override-opt: opt1 opt2 ...
-// and parses that line into a set of tenantClusterSettingOverrideArgs that need
+// and parses that line into a set of tenantOverrideArgs that need
 // to be overriden by the host cluster before the test begins.
-func readTenantClusterSettingOverrideArgs(
-	t *testing.T, path string,
-) []tenantClusterSettingOverrideOpt {
+func readTenantOverrideArgs(t *testing.T, path string) tenantOverrideArgs {
 	file, err := os.Open(path)
 	require.NoError(t, err)
 	defer file.Close()
 
-	var res []tenantClusterSettingOverrideOpt
+	res := tenantOverrideArgs{
+		clusterSettings: make(map[string]string),
+	}
 	parseDirectiveOptions(t, path, "tenant-cluster-setting-override-opt", func(opt string) {
-		switch opt {
-		case "allow-zone-configs-for-secondary-tenants":
-			res = append(res, tenantClusterSettingOverrideMultiTenantZoneConfigsAllowed{})
-		case "allow-multi-region-abstractions-for-secondary-tenants":
-			res = append(res, tenantClusterSettingOverrideMultiTenantMultiRegionAbstractionsAllowed{})
-		case "allow-split-at-for-secondary-tenants":
-			res = append(res, tenantClusterSettingOverrideMultiTenantSplitAtAllowed{})
-		default:
-			t.Fatalf("unrecognized cluster option: %s", opt)
+		parts := strings.Split(opt, "=")
+		if len(parts) != 2 {
+			t.Fatalf("error parsing cluster setting %q must be in format name=value", opt)
 		}
+		name := parts[0]
+		_, ok := res.clusterSettings[name]
+		if ok {
+			t.Fatalf("cannot set cluster setting %q more than once", name)
+		}
+		res.clusterSettings[name] = parts[1]
 	})
 	return res
 }
@@ -4174,7 +4070,7 @@ func RunLogicTest(
 	}
 
 	lt.setup(
-		config, serverArgsCopy, readClusterOptions(t, path), readKnobOptions(t, path), readTenantClusterSettingOverrideArgs(t, path),
+		config, serverArgsCopy, readClusterOptions(t, path), readKnobOptions(t, path), readTenantOverrideArgs(t, path),
 	)
 
 	lt.runFile(path, config)
