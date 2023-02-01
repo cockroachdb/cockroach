@@ -146,6 +146,8 @@ type tableWriterBase struct {
 	forceProductionBatchSizes bool
 	// sv settings values for cluster settings
 	sv *settings.Values
+	// Adapter to make expose a kv.Batch as a Putter
+	putter row.KVBatchAdapter
 }
 
 var maxBatchBytes = settings.RegisterByteSizeSetting(
@@ -260,6 +262,7 @@ func (tb *tableWriterBase) enableAutoCommit() {
 
 func (tb *tableWriterBase) initNewBatch() {
 	tb.b = tb.txn.NewBatch()
+	tb.putter.Batch = tb.b
 	tb.b.Header.LockTimeout = tb.lockTimeout
 }
 

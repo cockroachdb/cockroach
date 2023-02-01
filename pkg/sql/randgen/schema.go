@@ -120,7 +120,23 @@ func RandCreateTableWithColumnIndexNumberGenerator(
 	generateColumnIndexNumber func() int64,
 ) *tree.CreateTable {
 	g := randident.NewNameGenerator(&nameGenCfg, rng, prefix)
-	tableName := g.GenerateOne(tableIdx)
+	name := g.GenerateOne(tableIdx)
+	return RandCreateTableWithColumnIndexNumberGeneratorAndName(rng, name, tableIdx, isMultiRegion, generateColumnIndexNumber)
+}
+
+func RandCreateTableWithName(
+	rng *rand.Rand, tableName string, tableIdx int, isMultiRegion bool,
+) *tree.CreateTable {
+	return RandCreateTableWithColumnIndexNumberGeneratorAndName(rng, tableName, tableIdx, isMultiRegion, nil)
+}
+
+func RandCreateTableWithColumnIndexNumberGeneratorAndName(
+	rng *rand.Rand,
+	tableName string,
+	tableIdx int,
+	isMultiRegion bool,
+	generateColumnIndexNumber func() int64,
+) *tree.CreateTable {
 	// columnDefs contains the list of Columns we'll add to our table.
 	nColumns := randutil.RandIntInRange(rng, 1, 20)
 	columnDefs := make([]*tree.ColumnTableDef, 0, nColumns)
