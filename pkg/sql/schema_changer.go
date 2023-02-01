@@ -634,6 +634,17 @@ func (sc *SchemaChanger) exec(ctx context.Context) error {
 	// Pull out the requested descriptor.
 	desc, err := sc.getTargetDescriptor(ctx)
 	if err != nil {
+		// We had a bug where function descriptors are not deleted after DROP
+		// FUNCTION in legacy schema changer (see #95364). We then add logic to
+		// handle the deletion in jobs and added upgrades to delete all dropped
+		// functions. It's possible that such job is resumed after the cluster is
+		// upgraded (all dropped descriptors are deleted), and we would fail to find
+		// the descriptor here. In this case, we can simply assume the job is done
+		// since we only handle descriptor deletes for functions and `droppedFnIDs`
+		// is not empty only when dropping functions.
+		if sc.droppedFnIDs.Len() > 0 && errors.Is(err, catalog.ErrDescriptorNotFound) {
+			return nil
+		}
 		return err
 	}
 
