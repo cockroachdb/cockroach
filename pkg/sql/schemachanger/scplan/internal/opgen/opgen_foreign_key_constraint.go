@@ -11,6 +11,7 @@
 package opgen
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 )
@@ -20,8 +21,8 @@ func init() {
 		toPublic(
 			scpb.Status_ABSENT,
 			to(scpb.Status_WRITE_ONLY,
-				emit(func(this *scpb.ForeignKeyConstraint) *scop.MakeAbsentForeignKeyConstraintWriteOnly {
-					return &scop.MakeAbsentForeignKeyConstraintWriteOnly{
+				emit(func(this *scpb.ForeignKeyConstraint) *scop.AddForeignKeyConstraint {
+					return &scop.AddForeignKeyConstraint{
 						TableID:                 this.TableID,
 						ConstraintID:            this.ConstraintID,
 						ColumnIDs:               this.ColumnIDs,
@@ -30,6 +31,7 @@ func init() {
 						OnUpdateAction:          this.OnUpdateAction,
 						OnDeleteAction:          this.OnDeleteAction,
 						CompositeKeyMatchMethod: this.CompositeKeyMatchMethod,
+						Validity:                descpb.ConstraintValidity_Validating,
 					}
 				}),
 			),

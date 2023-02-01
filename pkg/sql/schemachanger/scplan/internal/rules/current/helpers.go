@@ -210,7 +210,8 @@ func isNonIndexBackedConstraint(e scpb.Element) bool {
 	case *scpb.CheckConstraint, *scpb.UniqueWithoutIndexConstraint, *scpb.ForeignKeyConstraint,
 		*scpb.ColumnNotNull:
 		return true
-	case *scpb.CheckConstraintUnvalidated, *scpb.UniqueWithoutIndexConstraintUnvalidated:
+	case *scpb.CheckConstraintUnvalidated, *scpb.UniqueWithoutIndexConstraintUnvalidated,
+		*scpb.ForeignKeyConstraintUnvalidated:
 		return true
 	}
 	return false
@@ -232,7 +233,8 @@ func isNonIndexBackedCrossDescriptorConstraint(e scpb.Element) bool {
 	case *scpb.CheckConstraint, *scpb.UniqueWithoutIndexConstraint,
 		*scpb.ForeignKeyConstraint:
 		return true
-	case *scpb.CheckConstraintUnvalidated, *scpb.UniqueWithoutIndexConstraintUnvalidated:
+	case *scpb.CheckConstraintUnvalidated, *scpb.UniqueWithoutIndexConstraintUnvalidated,
+		*scpb.ForeignKeyConstraintUnvalidated:
 		return true
 	}
 	return false

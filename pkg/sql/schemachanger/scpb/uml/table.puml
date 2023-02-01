@@ -125,6 +125,17 @@ ForeignKeyConstraint :  OnDeleteAction
 ForeignKeyConstraint :  CompositeKeyMatchMethod
 ForeignKeyConstraint :  IndexIDForValidation
 
+object ForeignKeyConstraintUnvalidated
+
+ForeignKeyConstraintUnvalidated :  TableID
+ForeignKeyConstraintUnvalidated :  ConstraintID
+ForeignKeyConstraintUnvalidated : []ColumnIDs
+ForeignKeyConstraintUnvalidated :  ReferencedTableID
+ForeignKeyConstraintUnvalidated : []ReferencedColumnIDs
+ForeignKeyConstraintUnvalidated :  OnUpdateAction
+ForeignKeyConstraintUnvalidated :  OnDeleteAction
+ForeignKeyConstraintUnvalidated :  CompositeKeyMatchMethod
+
 object TableComment
 
 TableComment :  TableID
@@ -386,6 +397,7 @@ Table <|-- UniqueWithoutIndexConstraintUnvalidated
 Table <|-- CheckConstraint
 Table <|-- CheckConstraintUnvalidated
 Table <|-- ForeignKeyConstraint
+Table <|-- ForeignKeyConstraintUnvalidated
 Table <|-- TableComment
 View <|-- TableComment
 Sequence <|-- TableComment
