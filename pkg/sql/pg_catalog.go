@@ -2354,9 +2354,7 @@ https://www.postgresql.org/docs/9.6/view-pg-prepared-statements.html`,
 }
 
 func addPgProcBuiltinRow(name string, addRow func(...tree.Datum) error) error {
-	props, overloads := builtinsregistry.GetBuiltinProperties(name)
-	isAggregate := props.Class == tree.AggregateClass
-	isWindow := props.Class == tree.WindowClass
+	_, overloads := builtinsregistry.GetBuiltinProperties(name)
 	nspOid := tree.NewDOid(catconstants.PgCatalogID)
 	const crdbInternal = catconstants.CRDBInternalSchemaName + "."
 	if strings.HasPrefix(name, crdbInternal) {
@@ -2364,19 +2362,21 @@ func addPgProcBuiltinRow(name string, addRow func(...tree.Datum) error) error {
 		name = name[len(crdbInternal):]
 	}
 
-	var kind tree.Datum
-	switch {
-	case isAggregate:
-		kind = tree.NewDString("a")
-	case isWindow:
-		kind = tree.NewDString("w")
-	default:
-		kind = tree.NewDString("f")
-	}
-
 	for _, builtin := range overloads {
 		dName := tree.NewDName(name)
 		dSrc := tree.NewDString(name)
+
+		isAggregate := builtin.Class == tree.AggregateClass
+		isWindow := builtin.Class == tree.WindowClass
+		var kind tree.Datum
+		switch {
+		case isAggregate:
+			kind = tree.NewDString("a")
+		case isWindow:
+			kind = tree.NewDString("w")
+		default:
+			kind = tree.NewDString("f")
+		}
 
 		var retType tree.Datum
 		isRetSet := false

@@ -22,32 +22,29 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-var allBuiltinNames orderedStrings
+var allBuiltinNames stringSet
 
 // AllBuiltinNames returns a slice containing all the built-in function
 // names, sorted in alphabetical order. This can be used for a
 // deterministic walk through the Builtins map.
 func AllBuiltinNames() []string {
-	allBuiltinNames.sort()
-	return allBuiltinNames.strings
+	return allBuiltinNames.Ordered()
 }
 
-var allAggregateBuiltinNames orderedStrings
+var allAggregateBuiltinNames stringSet
 
 // AllAggregateBuiltinNames returns a slice containing the subset of
 // AllBuiltinNames that corresponds to aggregate functions.
 func AllAggregateBuiltinNames() []string {
-	allAggregateBuiltinNames.sort()
-	return allAggregateBuiltinNames.strings
+	return allAggregateBuiltinNames.Ordered()
 }
 
-var allWindowBuiltinNames orderedStrings
+var allWindowBuiltinNames stringSet
 
 // AllWindowBuiltinNames returns a slice containing the subset of
 // AllBuiltinNames that corresponds to window functions.
 func AllWindowBuiltinNames() []string {
-	allWindowBuiltinNames.sort()
-	return allWindowBuiltinNames.strings
+	return allWindowBuiltinNames.Ordered()
 }
 
 func init() {
@@ -66,11 +63,13 @@ func init() {
 			// Avoid listing help for undocumented functions.
 			return
 		}
-		allBuiltinNames.add(name)
-		if props.Class == tree.AggregateClass {
-			allAggregateBuiltinNames.add(name)
-		} else if props.Class == tree.WindowClass {
-			allWindowBuiltinNames.add(name)
+		allBuiltinNames.Add(name)
+		for _, fn := range overloads {
+			if fn.Class == tree.AggregateClass {
+				allAggregateBuiltinNames.Add(name)
+			} else if fn.Class == tree.WindowClass {
+				allWindowBuiltinNames.Add(name)
+			}
 		}
 	})
 }
@@ -160,35 +159,29 @@ func collectOverloads(
 	return makeBuiltin(props, r...)
 }
 
-// orderedStrings sorts a slice of strings lazily
-// for better performance.
-type orderedStrings struct {
-	strings []string
-	sorted  bool
+// stringSet is a set of strings that can be ordered.
+type stringSet struct {
+	set     map[string]struct{}
+	ordered []string
 }
 
-// add a string without changing whether or not
-// the strings are sorted yet.
-func (o *orderedStrings) add(s string) {
-	if o.sorted {
-		o.insert(s)
-	} else {
-		o.strings = append(o.strings, s)
+// Add adds a string to the set.
+func (s *stringSet) Add(str string) {
+	if s.set == nil {
+		s.set = make(map[string]struct{})
 	}
+	s.set[str] = struct{}{}
+	s.ordered = nil
 }
 
-func (o *orderedStrings) sort() {
-	if !o.sorted {
-		sort.Strings(o.strings)
+// Ordered returns an ordered slice of the strings in the set.
+func (s stringSet) Ordered() []string {
+	if s.ordered == nil {
+		s.ordered = make([]string, 0, len(s.set))
+		for str := range s.set {
+			s.ordered = append(s.ordered, str)
+		}
+		sort.Strings(s.ordered)
 	}
-	o.sorted = true
-}
-
-// insert assumes the strings are already sorted
-// and inserts s in the right place.
-func (o *orderedStrings) insert(s string) {
-	i := sort.SearchStrings(o.strings, s)
-	o.strings = append(o.strings, "")
-	copy(o.strings[i+1:], o.strings[i:])
-	o.strings[i] = s
+	return s.ordered
 }

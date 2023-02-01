@@ -124,6 +124,19 @@ func DecodeStoreCachedSettingsKey(key roachpb.Key) (settingKey roachpb.Key, err 
 	return
 }
 
+// StoreLossOfQuorumRecoveryStatusKey is a key used for storing results of loss
+// of quorum recovery plan application.
+func StoreLossOfQuorumRecoveryStatusKey() roachpb.Key {
+	return MakeStoreKey(localStoreLossOfQuorumRecoveryStatusSuffix, nil)
+}
+
+// StoreLossOfQuorumRecoveryCleanupActionsKey is a key used for storing data for
+// post recovery cleanup actions node would perform after restart if plan was
+// applied.
+func StoreLossOfQuorumRecoveryCleanupActionsKey() roachpb.Key {
+	return MakeStoreKey(localStoreLossOfQuorumRecoveryCleanupActionsSuffix, nil)
+}
+
 // StoreUnsafeReplicaRecoveryKey creates a key for loss of quorum replica
 // recovery entry. Those keys are written by `debug recover apply-plan` command
 // on the store while node is stopped. Once node boots up, entries are

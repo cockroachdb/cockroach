@@ -120,24 +120,34 @@ type tenantKey struct{}
 
 // ContextWithClientTenant creates a new context with information about the
 // tenant that's the client of an RPC. The tenant ID can be retrieved later with
-// ClientTenantFromContext.
+// ClientTenantFromContext. Use ContextWithoutClientTenant to clear the
+// tenant client information from the context.
 //
 // An empty tenID clears the respective key from the context.
 func ContextWithClientTenant(ctx context.Context, tenID TenantID) context.Context {
-	var val any
-	if tenID.IsSet() {
-		val = tenID
-	} else {
-		val = nil
+	if !tenID.IsSet() {
+		panic("programming error: missing tenant ID")
 	}
 
 	ctxTenantID, _ := ClientTenantFromContext(ctx)
 	if tenID == ctxTenantID {
-		// The context already has the right tenant, or no tenant at all.
+		// The context already has the right tenant.
 		return ctx
 	}
 
-	return context.WithValue(ctx, tenantKey{}, val)
+	return context.WithValue(ctx, tenantKey{}, tenID)
+}
+
+// ContextWithoutClientTenant removes the tenant information
+// from the context.
+func ContextWithoutClientTenant(ctx context.Context) context.Context {
+	_, ok := ClientTenantFromContext(ctx)
+	if !ok {
+		// The context already has no tenant.
+		return ctx
+	}
+
+	return context.WithValue(ctx, tenantKey{}, nil)
 }
 
 // ClientTenantFromContext returns the ID of the tenant that's the client of the

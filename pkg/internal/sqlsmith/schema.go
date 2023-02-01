@@ -519,9 +519,6 @@ var functions = func() map[tree.FunctionClass]map[oid.Oid][]function {
 		if skip {
 			continue
 		}
-		if _, ok := m[def.Class]; !ok {
-			m[def.Class] = map[oid.Oid][]function{}
-		}
 		// Ignore pg compat functions since many are unimplemented.
 		if def.Category == "Compatibility" {
 			continue
@@ -530,6 +527,9 @@ var functions = func() map[tree.FunctionClass]map[oid.Oid][]function {
 			continue
 		}
 		for _, ov := range def.Definition {
+			if m[ov.Class] == nil {
+				m[ov.Class] = map[oid.Oid][]function{}
+			}
 			// Ignore documented unusable functions.
 			if strings.Contains(ov.Info, "Not usable") {
 				continue
@@ -544,7 +544,7 @@ var functions = func() map[tree.FunctionClass]map[oid.Oid][]function {
 			if !found {
 				continue
 			}
-			m[def.Class][typ.Oid()] = append(m[def.Class][typ.Oid()], function{
+			m[ov.Class][typ.Oid()] = append(m[ov.Class][typ.Oid()], function{
 				def:      def,
 				overload: ov,
 			})
