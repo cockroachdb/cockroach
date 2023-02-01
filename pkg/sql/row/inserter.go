@@ -61,14 +61,21 @@ func MakeInserter(
 		InsertColIDtoRowIndex: ColIDtoRowIndexFromCols(insertCols),
 	}
 
-	for i := 0; i < tableDesc.GetPrimaryIndex().NumKeyColumns(); i++ {
-		colID := tableDesc.GetPrimaryIndex().GetKeyColumnID(i)
-		if _, ok := ri.InsertColIDtoRowIndex.Get(colID); !ok {
-			return Inserter{}, fmt.Errorf("missing %q primary key column", tableDesc.GetPrimaryIndex().GetKeyColumnName(i))
-		}
+	if err := CheckPrimaryKeyColumns(tableDesc, ri.InsertColIDtoRowIndex); err != nil {
+		return Inserter{}, err
 	}
 
 	return ri, nil
+}
+
+func CheckPrimaryKeyColumns(tableDesc catalog.TableDescriptor, colMap catalog.TableColMap) error {
+	for i := 0; i < tableDesc.GetPrimaryIndex().NumKeyColumns(); i++ {
+		colID := tableDesc.GetPrimaryIndex().GetKeyColumnID(i)
+		if _, ok := colMap.Get(colID); !ok {
+			return fmt.Errorf("missing %q primary key column", tableDesc.GetPrimaryIndex().GetKeyColumnName(i))
+		}
+	}
+	return nil
 }
 
 // insertCPutFn is used by insertRow when conflicts (i.e. the key already exists)
@@ -110,20 +117,6 @@ func insertInvertedPutFn(
 		log.VEventfDepth(ctx, 1, 2, "InitPut %s -> %s", *key, value.PrettyPrint())
 	}
 	b.InitPut(key, value, false)
-}
-
-type Putter interface {
-	CPut(key, value interface{}, expValue []byte)
-	Put(key, value interface{})
-	InitPut(key, value interface{}, failOnTombstones bool)
-	Del(key ...interface{})
-
-	CPutValues(kys []roachpb.Key, values []roachpb.Value)
-	CPutTuples(kys []roachpb.Key, values [][]byte)
-	PutBytes(kys []roachpb.Key, values [][]byte)
-	InitPutBytes(kys []roachpb.Key, values [][]byte)
-	PutTuples(kys []roachpb.Key, values [][]byte)
-	InitPutTuples(kys []roachpb.Key, values [][]byte)
 }
 
 // InsertRow adds to the batch the kv operations necessary to insert a table row
