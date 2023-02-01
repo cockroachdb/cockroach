@@ -270,6 +270,7 @@ object UserPrivileges
 UserPrivileges :  DescriptorID
 UserPrivileges :  UserName
 UserPrivileges :  Privileges
+UserPrivileges :  WithGrantOption
 
 object DatabaseRegionConfig
 
@@ -350,7 +351,6 @@ FunctionBody : []UsesTables
 FunctionBody : []UsesViews
 FunctionBody : []UsesSequenceIDs
 FunctionBody : []UsesTypeIDs
-FunctionBody : []UsesFunctionIDs
 
 object FunctionParamDefaultExpression
 

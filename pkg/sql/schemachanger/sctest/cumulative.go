@@ -627,7 +627,7 @@ func Rollback(t *testing.T, relPath string, newCluster NewClusterFunc) {
 			return nil
 		}
 
-		db, cleanup := newCluster(t, &scexec.TestingKnobs{
+		_, db, cleanup := newCluster(t, &scexec.TestingKnobs{
 			BeforeStage: beforeStage,
 			OnPostCommitPlanError: func(err error) error {
 				panic(fmt.Sprintf("%+v", err))
@@ -732,7 +732,7 @@ func Pause(t *testing.T, relPath string, newCluster NewClusterFunc) {
 		// remaining stages before the pause and then after. It's not totally
 		// trivial, as we don't checkpoint during non-mutation stages, so we'd
 		// need to look back and find the last mutation phase.
-		db, cleanup := newCluster(t, &scexec.TestingKnobs{
+		_, db, cleanup := newCluster(t, &scexec.TestingKnobs{
 			BeforeStage: func(p scplan.Plan, stageIdx int) error {
 				if atomic.LoadUint32(&numInjectedFailures) > 0 {
 					return nil
@@ -810,7 +810,7 @@ func ExecuteWithDMLInjection(t *testing.T, relPath string, newCluster NewCluster
 		usedStages := make(map[int]struct{})
 		successfulStages := 0
 		var tdb *sqlutils.SQLRunner
-		db, cleanup := newCluster(t, &scexec.TestingKnobs{
+		_, db, cleanup := newCluster(t, &scexec.TestingKnobs{
 			BeforeStage: func(p scplan.Plan, stageIdx int) error {
 				// FIXME: Support rollback detection
 				s := p.Stages[stageIdx]
@@ -907,7 +907,7 @@ func GenerateSchemaChangeCorpus(t *testing.T, path string, newCluster NewCluster
 				return
 			}
 		}
-		db, cleanup := newCluster(t, &scexec.TestingKnobs{
+		_, db, cleanup := newCluster(t, &scexec.TestingKnobs{
 			BeforeStage: cc.GetBeforeStage("EndToEndCorpus", t),
 		})
 
@@ -983,8 +983,14 @@ func Backup(t *testing.T, path string, newCluster NewClusterFunc) {
 
 		stageChan := make(chan stage)
 		ctx, cancel := context.WithCancel(context.Background())
-		db, cleanup := newCluster(t, &scexec.TestingKnobs{
+		_, db, cleanup := newCluster(t, &scexec.TestingKnobs{
 			BeforeStage: func(p scplan.Plan, stageIdx int) error {
+				if p.Stages[len(p.Stages)-1].Phase < scop.PostCommitPhase {
+					if stageChan != nil {
+						close(stageChan)
+					}
+					return nil
+				}
 				if p.Stages[stageIdx].Phase < scop.PostCommitPhase {
 					return nil
 				}
@@ -1057,6 +1063,12 @@ func Backup(t *testing.T, path string, newCluster NewClusterFunc) {
 			// stage and confirm that restoring them and letting the jobs run
 			// leaves the database in the right state.
 			s := <-stageChan
+			// If there is no post-commit stages. Just consider it as done.
+			if s.p.Stages == nil {
+				done = true
+				stageChan = nil
+				break
+			}
 			// Move the index backwards if we see the same stage repeat due to a txn
 			// retry error for example.
 			stage := stageKey{
@@ -1279,7 +1291,7 @@ func processPlanInPhase(
 	after func(db *gosql.DB),
 ) {
 	var processOnce sync.Once
-	db, cleanup := newCluster(t, &scexec.TestingKnobs{
+	_, db, cleanup := newCluster(t, &scexec.TestingKnobs{
 		BeforeStage: func(p scplan.Plan, _ int) error {
 			if p.Params.ExecutionPhase == phaseToProcess {
 				processOnce.Do(func() { processFunc(p) })

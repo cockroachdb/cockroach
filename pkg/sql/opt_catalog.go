@@ -311,7 +311,7 @@ func (oc *optCatalog) ResolveDataSourceByID(
 	tableLookup, err := oc.planner.LookupTableByID(ctx, descpb.ID(dataSourceID))
 
 	if err != nil {
-		isAdding := catalog.HasAddingTableError(err)
+		isAdding := catalog.HasAddingDescriptorError(err)
 		if errors.Is(err, catalog.ErrDescriptorNotFound) || isAdding {
 			return nil, isAdding, sqlerrors.NewUndefinedRelationError(&tree.TableRef{TableID: int64(dataSourceID)})
 		}

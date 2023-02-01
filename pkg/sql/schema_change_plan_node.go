@@ -100,6 +100,8 @@ func (p *planner) newSchemaChangeBuilderDependencies(statements []string) scbuil
 		statements,
 		p,
 		NewSchemaChangerBuildEventLogger(p.InternalSQLTxn(), p.ExecCfg()),
+		NewReferenceProviderFactory(p),
+		p.EvalContext().DescIDGenerator,
 	)
 }
 
@@ -256,6 +258,9 @@ func (s *schemaChangePlanNode) startExec(params runParams) error {
 		s.plannedState = state
 	}
 
+	// Disable KV tracing for statement phase execution.
+	// Operation side effects are in-memory only.
+	const kvTrace = false
 	runDeps := newSchemaChangerTxnRunDependencies(
 		params.ctx,
 		p.SessionData(),
@@ -264,7 +269,7 @@ func (s *schemaChangePlanNode) startExec(params runParams) error {
 		p.InternalSQLTxn(),
 		p.Descriptors(),
 		p.EvalContext(),
-		p.ExtendedEvalContext().Tracing.KVTracingEnabled(),
+		kvTrace,
 		scs.jobID,
 		scs.stmts,
 	)

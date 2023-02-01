@@ -279,6 +279,16 @@ func (s *TestState) MayResolveSchema(
 	return db, sc
 }
 
+func (s *TestState) MustResolvePrefix(
+	ctx context.Context, name tree.ObjectNamePrefix,
+) (catalog.DatabaseDescriptor, catalog.SchemaDescriptor) {
+	db, sc := s.mayResolvePrefix(name)
+	if sc == nil {
+		panic(errors.AssertionFailedf("prefix %s does not exist", name.String()))
+	}
+	return db.(catalog.DatabaseDescriptor), sc.(catalog.SchemaDescriptor)
+}
+
 // MayResolveTable implements the scbuild.CatalogReader interface.
 func (s *TestState) MayResolveTable(
 	ctx context.Context, name tree.UnresolvedObjectName,
@@ -1200,7 +1210,7 @@ func (s *TestState) ResolveFunction(
 	}
 	fd, found := scDesc.GetResolvedFuncDefinition(fnName.Object())
 	if !found {
-		return nil, errors.Newf("function %s not found", fnName.String())
+		return nil, tree.ErrFunctionUndefined
 	}
 	return fd, nil
 }

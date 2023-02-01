@@ -113,7 +113,7 @@ func (desc *immutable) Public() bool {
 
 // Adding implements the catalog.Descriptor interface.
 func (desc *immutable) Adding() bool {
-	return false
+	return desc.State == descpb.DescriptorState_ADD
 }
 
 // Dropped implements the catalog.Descriptor interface.

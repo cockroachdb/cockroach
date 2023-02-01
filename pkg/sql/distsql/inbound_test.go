@@ -76,14 +76,13 @@ func TestOutboxInboundStreamIntegration(t *testing.T) {
 	// We're going to serve multiple node IDs with that one context. Disable node ID checks.
 	rpcContext.TestingAllowNamedRPCToAnonymousServer = true
 
-	rpcSrv := rpc.NewServer(rpcContext)
+	rpcSrv, err := rpc.NewServer(rpcContext)
+	require.NoError(t, err)
 	defer rpcSrv.Stop()
 
 	execinfrapb.RegisterDistSQLServer(rpcSrv, srv)
 	ln, err := netutil.ListenAndServeGRPC(stopper, rpcSrv, util.IsolatedTestAddr)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	// The outbox uses this stopper to run a goroutine.
 	outboxStopper := stop.NewStopper()

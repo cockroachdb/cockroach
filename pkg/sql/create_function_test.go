@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
@@ -43,6 +44,7 @@ func TestCreateFunction(t *testing.T) {
 	tDB := sqlutils.MakeSQLRunner(sqlDB)
 
 	tDB.Exec(t, `
+SET use_declarative_schema_changer = 'on';
 CREATE TABLE t(
   a INT PRIMARY KEY,
   b INT,
@@ -54,6 +56,10 @@ CREATE SEQUENCE sq1;
 CREATE TABLE t2(a INT PRIMARY KEY);
 CREATE VIEW v AS SELECT a FROM t2;
 CREATE TYPE notmyworkday AS ENUM ('Monday', 'Tuesday');
+`,
+	)
+
+	tDB.Exec(t, `
 CREATE FUNCTION f(a notmyworkday) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$
   SELECT a FROM t;
   SELECT b FROM t@t_idx_b;
@@ -61,9 +67,9 @@ CREATE FUNCTION f(a notmyworkday) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$
   SELECT a FROM v;
   SELECT nextval('sq1');
 $$;
-CREATE SCHEMA test_sc;
-`,
-	)
+`)
+
+	tDB.Exec(t, `CREATE SCHEMA test_sc;`)
 
 	err := sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
 		funcDesc, err := col.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Function(ctx, 110)
@@ -146,7 +152,7 @@ SELECT nextval(105:::REGCLASS);`,
 	require.NoError(t, err)
 }
 
-func TestCreateFunctionGating(t *testing.T) {
+func TestGatingCreateFunction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	t.Run("new_schema_changer_version_enabled", func(t *testing.T) {
@@ -325,4 +331,56 @@ SELECT nextval(107:::REGCLASS);`,
 		return nil
 	})
 	require.NoError(t, err)
+}
+
+func TestCreateFunctionVisibilityInExplicitTransaction(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testingKnob := &scexec.TestingKnobs{}
+	ctx := context.Background()
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			SQLDeclarativeSchemaChanger: testingKnob,
+		},
+	})
+	defer s.Stopper().Stop(ctx)
+	tDB := sqlutils.MakeSQLRunner(sqlDB)
+
+	tDB.Exec(t, `SET use_declarative_schema_changer = 'unsafe_always'`)
+	tDB.Exec(t, `CREATE TABLE t (a INT PRIMARY KEY, b INT NOT NULL)`)
+	tDB.Exec(t, `INSERT INTO t VALUES (1,1), (2,1)`)
+
+	// Make sure that everything is rolled back if post commit job fails.
+	_, err := sqlDB.Exec(`
+BEGIN;
+CREATE FUNCTION f() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
+CREATE UNIQUE INDEX idx ON t(b);
+COMMIT;
+`)
+	require.Error(t, err, "")
+	require.Contains(t, err.Error(), "transaction committed but schema change aborted")
+	_, err = sqlDB.Exec(`SELECT f()`)
+	require.Error(t, err, "")
+	require.Contains(t, err.Error(), "unknown function: f(): function undefined")
+
+	// Make data valid for the unique index so that the job won't fail.
+	tDB.Exec(t, `DELETE FROM t WHERE a = 2`)
+
+	// Make sure function cannot be used before job completes.
+	testingKnob.RunBeforeBackfill = func() error {
+		_, err = sqlDB.Exec(`SELECT f()`)
+		require.Error(t, err, "")
+		require.Contains(t, err.Error(), `function "f" is being added`)
+		return nil
+	}
+
+	//tDB.Exec(t, `SET CLUSTER SETTING jobs.debug.pausepoints='newschemachanger.before.exec'`)
+	_, err = sqlDB.Exec(`
+BEGIN;
+CREATE FUNCTION f() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
+CREATE UNIQUE INDEX idx ON t(b);
+COMMIT;
+`)
+	tDB.Exec(t, `SELECT f()`)
 }

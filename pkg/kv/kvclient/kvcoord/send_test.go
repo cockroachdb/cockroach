@@ -136,20 +136,17 @@ func TestSendToOneClient(t *testing.T) {
 	// checks to avoid log.Fatal.
 	rpcContext.TestingAllowNamedRPCToAnonymousServer = true
 
-	s := rpc.NewServer(rpcContext)
+	s, err := rpc.NewServer(rpcContext)
+	require.NoError(t, err)
 	roachpb.RegisterInternalServer(s, Node(0))
 	ln, err := netutil.ListenAndServeGRPC(rpcContext.Stopper, s, util.TestAddr)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	nodeDialer := nodedialer.New(rpcContext, func(roachpb.NodeID) (net.Addr, error) {
 		return ln.Addr(), nil
 	})
 
 	reply, err := sendBatch(ctx, t, nil, []net.Addr{ln.Addr()}, rpcContext, nodeDialer)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	if reply == nil {
 		t.Errorf("expected reply")
 	}

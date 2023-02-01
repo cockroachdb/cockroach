@@ -82,9 +82,9 @@ DROP INDEX idx3 CASCADE
 - [[Owner:{DescID: 105}, ABSENT], PUBLIC]
   {descriptorId: 105, owner: root}
 - [[UserPrivileges:{DescID: 105, Name: admin}, ABSENT], PUBLIC]
-  {descriptorId: 105, privileges: "2", userName: admin}
+  {descriptorId: 105, privileges: "2", userName: admin, withGrantOption: "2"}
 - [[UserPrivileges:{DescID: 105, Name: root}, ABSENT], PUBLIC]
-  {descriptorId: 105, privileges: "2", userName: root}
+  {descriptorId: 105, privileges: "2", userName: root, withGrantOption: "2"}
 - [[View:{DescID: 105}, ABSENT], PUBLIC]
   {forwardReferences: [{columnIds: [2], indexId: 6, toId: 104}], usesRelationIds: [104], viewId: 105}
 - [[ObjectParent:{DescID: 105, ReferencedDescID: 101}, ABSENT], PUBLIC]
@@ -126,9 +126,9 @@ DROP INDEX v2@idx CASCADE
 - [[Owner:{DescID: 107}, ABSENT], PUBLIC]
   {descriptorId: 107, owner: root}
 - [[UserPrivileges:{DescID: 107, Name: admin}, ABSENT], PUBLIC]
-  {descriptorId: 107, privileges: "2", userName: admin}
+  {descriptorId: 107, privileges: "2", userName: admin, withGrantOption: "2"}
 - [[UserPrivileges:{DescID: 107, Name: root}, ABSENT], PUBLIC]
-  {descriptorId: 107, privileges: "2", userName: root}
+  {descriptorId: 107, privileges: "2", userName: root, withGrantOption: "2"}
 - [[View:{DescID: 107}, ABSENT], PUBLIC]
   {forwardReferences: [{columnIds: [2], indexId: 2, toId: 106}], isMaterialized: true, usesRelationIds: [106], viewId: 107}
 - [[ObjectParent:{DescID: 107, ReferencedDescID: 101}, ABSENT], PUBLIC]

@@ -1,0 +1,39 @@
+setup
+CREATE TABLE t(
+  a INT PRIMARY KEY,
+  b INT,
+  C INT,
+  INDEX t_idx_b(b),
+  INDEX t_idx_c(c)
+);
+CREATE SEQUENCE sq1;
+CREATE TABLE t2(a INT PRIMARY KEY);
+CREATE VIEW v AS SELECT a FROM t2;
+CREATE TYPE notmyworkday AS ENUM ('Monday', 'Tuesday');
+----
+
+build
+CREATE FUNCTION f(a notmyworkday) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$
+  SELECT a FROM t;
+  SELECT b FROM t@t_idx_b;
+  SELECT c FROM t@t_idx_c;
+  SELECT a FROM v;
+  SELECT nextval('sq1');
+$$;
+----
+- [[Function:{DescID: 110}, PUBLIC], ABSENT]
+  {functionId: 110, params: [{class: {class: IN}, name: a, type: {closedTypeIds: [108, 109], type: {family: EnumFamily, oid: 100108, udtMetadata: {arrayTypeOid: 100109}}}}], returnType: {type: {family: IntFamily, oid: 20, width: 64}}}
+- [[ObjectParent:{DescID: 110, ReferencedDescID: 101}, PUBLIC], ABSENT]
+  {objectId: 110, parentSchemaId: 101}
+- [[FunctionName:{DescID: 110}, PUBLIC], ABSENT]
+  {functionId: 110, name: f}
+- [[FunctionVolatility:{DescID: 110}, PUBLIC], ABSENT]
+  {functionId: 110, volatility: {volatility: IMMUTABLE}}
+- [[Owner:{DescID: 110}, PUBLIC], ABSENT]
+  {descriptorId: 110, owner: root}
+- [[UserPrivileges:{DescID: 110, Name: admin}, PUBLIC], ABSENT]
+  {descriptorId: 110, privileges: "2", userName: admin, withGrantOption: "2"}
+- [[UserPrivileges:{DescID: 110, Name: root}, PUBLIC], ABSENT]
+  {descriptorId: 110, privileges: "2", userName: root, withGrantOption: "2"}
+- [[FunctionBody:{DescID: 110}, PUBLIC], ABSENT]
+  {body: "SELECT a FROM t;\nSELECT b FROM t@t_idx_b;\nSELECT c FROM t@t_idx_c;\nSELECT a FROM v;\nSELECT nextval(105:::REGCLASS);", functionId: 110, lang: {lang: SQL}, usesSequenceIds: [105], usesTables: [{columnIds: [1], tableId: 104}, {columnIds: [2], indexId: 2, tableId: 104}, {columnIds: [3], indexId: 3, tableId: 104}], usesTypeIds: [108, 109], usesViews: [{columnIds: [1], viewId: 107}]}

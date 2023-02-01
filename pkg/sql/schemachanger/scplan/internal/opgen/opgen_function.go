@@ -13,6 +13,7 @@ package opgen
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
 func init() {
@@ -20,14 +21,25 @@ func init() {
 		toPublic(
 			scpb.Status_ABSENT,
 			equiv(scpb.Status_DROPPED),
+			to(scpb.Status_DESCRIPTOR_ADDED,
+				emit(func(this *scpb.Function) *scop.CreateFunctionDescriptor {
+					return &scop.CreateFunctionDescriptor{
+						Function: *protoutil.Clone(this).(*scpb.Function),
+					}
+				}),
+			),
 			to(scpb.Status_PUBLIC,
-				emit(func(this *scpb.Function) *scop.NotImplemented {
-					return notImplemented(this)
+				revertible(false),
+				emit(func(this *scpb.Function) *scop.MarkDescriptorAsPublic {
+					return &scop.MarkDescriptorAsPublic{
+						DescriptorID: this.FunctionID,
+					}
 				}),
 			),
 		),
 		toAbsent(
 			scpb.Status_PUBLIC,
+			equiv(scpb.Status_DESCRIPTOR_ADDED),
 			to(scpb.Status_DROPPED,
 				revertible(false),
 				emit(func(this *scpb.Function) *scop.MarkDescriptorAsDropped {
