@@ -62,3 +62,24 @@ func TestServerController(t *testing.T) {
 	require.Error(t, err, "tenant connector requires a CCL binary")
 	// TODO(knz): test something about d
 }
+
+func TestSQLErrorUponInvalidTenant(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DisableDefaultTestTenant: true,
+	})
+	defer s.Stopper().Stop(ctx)
+
+	sqlAddr := s.ServingSQLAddr()
+	db, err := serverutils.OpenDBConnE(sqlAddr, "cluster:nonexistent", false, s.Stopper())
+	// Expect no error yet: the connection is opened lazily; an
+	// error here means the parameters were incorrect.
+	require.NoError(t, err)
+
+	err = db.Ping()
+	require.Regexp(t, `service unavailable for target tenant \(nonexistent\)`, err.Error())
+}
