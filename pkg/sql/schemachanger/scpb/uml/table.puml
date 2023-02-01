@@ -128,6 +128,13 @@ CheckConstraintNotValid :  ConstraintID
 CheckConstraintNotValid : []ColumnIDs
 CheckConstraintNotValid :  Expression
 
+object UniqueWithoutIndexConstraintNotValid
+
+UniqueWithoutIndexConstraintNotValid :  TableID
+UniqueWithoutIndexConstraintNotValid :  ConstraintID
+UniqueWithoutIndexConstraintNotValid : []ColumnIDs
+UniqueWithoutIndexConstraintNotValid :  Predicate
+
 object TableZoneConfig
 
 TableZoneConfig :  TableID
@@ -382,6 +389,7 @@ View <|-- TableComment
 Sequence <|-- TableComment
 Table <|-- RowLevelTTL
 Table <|-- CheckConstraintNotValid
+Table <|-- UniqueWithoutIndexConstraintNotValid
 Table <|-- TableZoneConfig
 View <|-- TableZoneConfig
 Table <|-- TableData

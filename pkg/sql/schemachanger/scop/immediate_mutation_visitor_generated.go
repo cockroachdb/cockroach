@@ -66,6 +66,7 @@ type ImmediateMutationVisitor interface {
 	RemoveForeignKeyConstraint(context.Context, RemoveForeignKeyConstraint) error
 	RemoveForeignKeyBackReference(context.Context, RemoveForeignKeyBackReference) error
 	MakeAbsentUniqueWithoutIndexConstraintWriteOnly(context.Context, MakeAbsentUniqueWithoutIndexConstraintWriteOnly) error
+	MakeAbsentUniqueWithoutIndexConstraintNotValidPublic(context.Context, MakeAbsentUniqueWithoutIndexConstraintNotValidPublic) error
 	MakeValidatedUniqueWithoutIndexConstraintPublic(context.Context, MakeValidatedUniqueWithoutIndexConstraintPublic) error
 	MakePublicUniqueWithoutIndexConstraintValidated(context.Context, MakePublicUniqueWithoutIndexConstraintValidated) error
 	RemoveUniqueWithoutIndexConstraint(context.Context, RemoveUniqueWithoutIndexConstraint) error
@@ -335,6 +336,11 @@ func (op RemoveForeignKeyBackReference) Visit(ctx context.Context, v ImmediateMu
 // Visit is part of the ImmediateMutationOp interface.
 func (op MakeAbsentUniqueWithoutIndexConstraintWriteOnly) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
 	return v.MakeAbsentUniqueWithoutIndexConstraintWriteOnly(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
+func (op MakeAbsentUniqueWithoutIndexConstraintNotValidPublic) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.MakeAbsentUniqueWithoutIndexConstraintNotValidPublic(ctx, op)
 }
 
 // Visit is part of the ImmediateMutationOp interface.

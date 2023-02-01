@@ -384,6 +384,16 @@ type MakeAbsentUniqueWithoutIndexConstraintWriteOnly struct {
 	PartialExpr  catpb.Expression
 }
 
+// MakeAbsentUniqueWithoutIndexConstraintNotValidPublic adds a non-existent,
+// not valid, unique_without_index constraint to the table.
+type MakeAbsentUniqueWithoutIndexConstraintNotValidPublic struct {
+	immediateMutationOp
+	TableID      descpb.ID
+	ConstraintID descpb.ConstraintID
+	ColumnIDs    []descpb.ColumnID
+	PartialExpr  catpb.Expression
+}
+
 // MakeValidatedUniqueWithoutIndexConstraintPublic moves a new, validated unique_without_index
 // constraint from mutation to public.
 type MakeValidatedUniqueWithoutIndexConstraintPublic struct {

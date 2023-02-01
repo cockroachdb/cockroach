@@ -1,4 +1,5 @@
 setup
+SET experimental_enable_unique_without_index_constraints = true;
 CREATE TABLE parent (id INT PRIMARY KEY);
 CREATE TABLE tbl (
   id INT PRIMARY KEY,
@@ -15,6 +16,8 @@ COMMENT ON CONSTRAINT myfk ON tbl IS 'must have a parent';
 ALTER TABLE tbl CONFIGURE ZONE USING gc.ttlseconds=10;
 COMMENT ON CONSTRAINT tbl_pkey ON tbl IS 'primary key';
 ALTER TABLE tbl ADD CONSTRAINT mycheck2 CHECK (id < 10) NOT VALID;
+ALTER TABLE tbl ADD CONSTRAINT myuwi1 UNIQUE WITHOUT INDEX (price);
+ALTER TABLE tbl ADD CONSTRAINT myuwi2 UNIQUE WITHOUT INDEX (price) NOT VALID;
 ----
 
 decompose
@@ -319,6 +322,14 @@ ElementState:
     tableId: 105
     temporaryIndexId: 0
   Status: PUBLIC
+- UniqueWithoutIndexConstraint:
+    columnIds:
+    - 3
+    constraintId: 5
+    indexIdForValidation: 0
+    predicate: null
+    tableId: 105
+  Status: PUBLIC
 - CheckConstraint:
     columnIds:
     - 1
@@ -359,6 +370,13 @@ ElementState:
     tableId: 105
     usesSequenceIds: []
     usesTypeIds: []
+  Status: PUBLIC
+- UniqueWithoutIndexConstraintNotValid:
+    columnIds:
+    - 3
+    constraintId: 6
+    predicate: null
+    tableId: 105
   Status: PUBLIC
 - TableZoneConfig:
     tableId: 105
@@ -648,6 +666,16 @@ ElementState:
 - ConstraintWithoutIndexName:
     constraintId: 4
     name: mycheck2
+    tableId: 105
+  Status: PUBLIC
+- ConstraintWithoutIndexName:
+    constraintId: 5
+    name: myuwi1
+    tableId: 105
+  Status: PUBLIC
+- ConstraintWithoutIndexName:
+    constraintId: 6
+    name: myuwi2
     tableId: 105
   Status: PUBLIC
 - ConstraintComment:

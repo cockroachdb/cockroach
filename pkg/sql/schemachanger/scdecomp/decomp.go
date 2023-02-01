@@ -601,13 +601,19 @@ func (w *walkCtx) walkIndex(tbl catalog.TableDescriptor, idx catalog.Index) {
 func (w *walkCtx) walkUniqueWithoutIndexConstraint(
 	tbl catalog.TableDescriptor, c catalog.UniqueWithoutIndexConstraint,
 ) {
-	// TODO(postamar): proper handling of constraint status
-
-	w.ev(scpb.Status_PUBLIC, &scpb.UniqueWithoutIndexConstraint{
-		TableID:      tbl.GetID(),
-		ConstraintID: c.GetConstraintID(),
-		ColumnIDs:    c.CollectKeyColumnIDs().Ordered(),
-	})
+	if c.IsConstraintUnvalidated() {
+		w.ev(scpb.Status_PUBLIC, &scpb.UniqueWithoutIndexConstraintNotValid{
+			TableID:      tbl.GetID(),
+			ConstraintID: c.GetConstraintID(),
+			ColumnIDs:    c.CollectKeyColumnIDs().Ordered(),
+		})
+	} else {
+		w.ev(scpb.Status_PUBLIC, &scpb.UniqueWithoutIndexConstraint{
+			TableID:      tbl.GetID(),
+			ConstraintID: c.GetConstraintID(),
+			ColumnIDs:    c.CollectKeyColumnIDs().Ordered(),
+		})
+	}
 	w.ev(scpb.Status_PUBLIC, &scpb.ConstraintWithoutIndexName{
 		TableID:      tbl.GetID(),
 		ConstraintID: c.GetConstraintID(),
