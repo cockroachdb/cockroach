@@ -67,7 +67,8 @@ type SQLStats struct {
 
 	knobs *sqlstats.TestingKnobs
 
-	insights insights.WriterProvider
+	insights           insights.WriterProvider
+	latencyInformation insights.LatencyInformation
 }
 
 func newSQLStats(
@@ -80,6 +81,7 @@ func newSQLStats(
 	parentMon *mon.BytesMonitor,
 	flushTarget Sink,
 	knobs *sqlstats.TestingKnobs,
+	latencyInformation insights.LatencyInformation,
 ) *SQLStats {
 	monitor := mon.NewMonitor(
 		"SQLStats",
@@ -97,6 +99,7 @@ func newSQLStats(
 		flushTarget:                flushTarget,
 		knobs:                      knobs,
 		insights:                   insightsWriter,
+		latencyInformation:         latencyInformation,
 	}
 	s.mu.apps = make(map[string]*ssmemstorage.Container)
 	s.mu.mon = monitor
@@ -135,6 +138,7 @@ func (s *SQLStats) getStatsForApplication(appName string) *ssmemstorage.Containe
 		appName,
 		s.knobs,
 		s.insights(false /* internal */),
+		s.latencyInformation,
 	)
 	s.mu.apps[appName] = a
 	return a

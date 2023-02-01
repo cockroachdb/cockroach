@@ -108,17 +108,20 @@ message StatementStatistics {
   // Nodes is the ordered list of nodes ids on which the statement was executed.
   repeated int64 nodes = 24;
 
-  // plan_gists is the list of a compressed version of plan that can be converted (lossily)
+  // PlanGists is the list of a compressed version of plan that can be converted (lossily)
   // back into a logical plan.
   // Each statement contain only one plan gist, but the same statement fingerprint id
   // can contain more than one value.
   repeated string plan_gists = 26;
 
-  // index_recommendations is the list of index recommendations generated for the statement fingerprint.
+  // IndexRecommendations is the list of index recommendations generated for the statement fingerprint.
   repeated string index_recommendations = 27;
 
-  // indexes is the list of indexes used by the particular plan when executing the statement.
+  // Indexes is the list of indexes used by the particular plan when executing the statement.
   repeated string indexes = 30;
+
+  // LatencyInfo is the information about latency, such min, max, p50, p90 and p99.
+  optional LatencyInfo latency_info = 31 [(gogoproto.nullable) = false];
 
   // Note: be sure to update `sql/app_stats.go` when adding/removing fields here!
 
@@ -337,4 +340,22 @@ message ExecStats {
 
   // Note: be sure to update `sql/app_stats.go` when adding/removing fields
   // here!
+}
+
+// LatencyInfo contains more details about the latency.
+message LatencyInfo {
+  // Min is the minimum time in seconds spent executing the fingerprint.
+  optional double min = 1 [(gogoproto.nullable) = false];
+
+  // Max is the maximum time in seconds spent executing the fingerprint.
+  optional double max = 2 [(gogoproto.nullable) = false];
+
+  // P50 is the 50 Percentile in seconds for the fingerprint.
+  optional double p50 = 3 [(gogoproto.nullable) = false];
+
+  // P90 is the 90 Percentile in seconds for the fingerprint.
+  optional double p90 = 4 [(gogoproto.nullable) = false];
+
+  // P99 is the 99 Percentile in seconds for the fingerprint.
+  optional double p99 = 5 [(gogoproto.nullable) = false];
 }
