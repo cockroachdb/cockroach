@@ -1094,6 +1094,8 @@ func (b *builderState) ResolveUDF(
 		panic(err)
 	}
 
+	// ResolveUDF is not concerned with builtin functions that are defined using
+	// a SQL string, so we don't check ol.HasSQLBody() here.
 	if !ol.IsUDF {
 		panic(
 			errors.Errorf(
