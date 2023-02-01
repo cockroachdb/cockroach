@@ -39,7 +39,7 @@ AND function_name = %[2]s
 
 	var udfSchema string
 	for _, o := range fn.Overloads {
-		if o.IsUDF {
+		if o.HasSQLBody() {
 			udfSchema = o.Schema
 		}
 	}

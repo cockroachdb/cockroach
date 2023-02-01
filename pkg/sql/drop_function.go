@@ -125,6 +125,8 @@ func (p *planner) matchUDF(
 		}
 		return nil, err
 	}
+	// Note that we don't check ol.HasSQLBody() here, because builtin functions
+	// can't be dropped even if they are defined using a SQL string.
 	if !ol.IsUDF {
 		return nil, errors.Errorf(
 			"cannot drop function %s%s because it is required by the database system",

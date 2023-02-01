@@ -495,7 +495,7 @@ type UDFDisallowanceVisitor struct {
 
 // VisitPre implements the Visitor interface.
 func (v *UDFDisallowanceVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
-	if funcExpr, ok := expr.(*FuncExpr); ok && funcExpr.ResolvedOverload().IsUDF {
+	if funcExpr, ok := expr.(*FuncExpr); ok && funcExpr.ResolvedOverload().HasSQLBody() {
 		v.FoundUDF = true
 		return false, expr
 	}
