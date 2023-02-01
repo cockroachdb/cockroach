@@ -65,6 +65,7 @@ go_library(
         "opgen_table_zone_config.go",
         "opgen_temporary_index.go",
         "opgen_unique_without_index_constraint.go",
+        "opgen_unique_without_index_constraint_unvalidated.go",
         "opgen_user_privileges.go",
         "opgen_view.go",
         "register.go",

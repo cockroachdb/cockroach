@@ -41,7 +41,7 @@ func alterTableAddConstraint(
 	case *tree.UniqueConstraintTableDef:
 		if d.PrimaryKey && t.ValidationBehavior == tree.ValidationDefault {
 			alterTableAddPrimaryKey(b, tn, tbl, t)
-		} else if d.WithoutIndex && t.ValidationBehavior == tree.ValidationDefault {
+		} else if d.WithoutIndex {
 			alterTableAddUniqueWithoutIndex(b, tn, tbl, t)
 		}
 	case *tree.CheckConstraintTableDef:
@@ -389,7 +389,8 @@ func alterTableAddForeignKey(
 	})
 }
 
-// alterTableAddUniqueWithoutIndex contains logic for building ALTER TABLE ... ADD CONSTRAINT ... UNIQUE WITHOUT INDEX.
+// alterTableAddUniqueWithoutIndex contains logic for building
+// `ALTER TABLE ... ADD UNIQUE WITHOUT INDEX ... [NOT VALID]`.
 // It assumes `t` is such a command.
 func alterTableAddUniqueWithoutIndex(
 	b BuildCtx, tn *tree.TableName, tbl *scpb.Table, t *tree.AlterTableAddConstraint,
@@ -473,17 +474,30 @@ func alterTableAddUniqueWithoutIndex(
 
 	// 5. (Finally!) Add a UniqueWithoutIndex, ConstraintName element to builder state.
 	constraintID := b.NextTableConstraintID(tbl.TableID)
-	uwi := &scpb.UniqueWithoutIndexConstraint{
-		TableID:              tbl.TableID,
-		ConstraintID:         constraintID,
-		ColumnIDs:            colIDs,
-		IndexIDForValidation: getIndexIDForValidationForConstraint(b, tbl.TableID),
+	if t.ValidationBehavior == tree.ValidationDefault {
+		uwi := &scpb.UniqueWithoutIndexConstraint{
+			TableID:              tbl.TableID,
+			ConstraintID:         constraintID,
+			ColumnIDs:            colIDs,
+			IndexIDForValidation: getIndexIDForValidationForConstraint(b, tbl.TableID),
+		}
+		if d.Predicate != nil {
+			uwi.Predicate = b.WrapExpression(tbl.TableID, d.Predicate)
+		}
+		b.Add(uwi)
+		b.LogEventForExistingTarget(uwi)
+	} else {
+		uwi := &scpb.UniqueWithoutIndexConstraintUnvalidated{
+			TableID:      tbl.TableID,
+			ConstraintID: constraintID,
+			ColumnIDs:    colIDs,
+		}
+		if d.Predicate != nil {
+			uwi.Predicate = b.WrapExpression(tbl.TableID, d.Predicate)
+		}
+		b.Add(uwi)
+		b.LogEventForExistingTarget(uwi)
 	}
-	if d.Predicate != nil {
-		uwi.Predicate = b.WrapExpression(tbl.TableID, d.Predicate)
-	}
-	b.Add(uwi)
-	b.LogEventForExistingTarget(uwi)
 	b.Add(&scpb.ConstraintWithoutIndexName{
 		TableID:      tbl.TableID,
 		ConstraintID: constraintID,

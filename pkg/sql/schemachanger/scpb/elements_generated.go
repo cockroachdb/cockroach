@@ -1846,6 +1846,37 @@ func FindUniqueWithoutIndexConstraint(b ElementStatusIterator) (current Status, 
 	return current, target, element
 }
 
+func (e UniqueWithoutIndexConstraintUnvalidated) element() {}
+
+// ForEachUniqueWithoutIndexConstraintUnvalidated iterates over elements of type UniqueWithoutIndexConstraintUnvalidated.
+func ForEachUniqueWithoutIndexConstraintUnvalidated(
+	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *UniqueWithoutIndexConstraintUnvalidated),
+) {
+  if b == nil {
+    return
+  }
+	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
+		if elt, ok := e.(*UniqueWithoutIndexConstraintUnvalidated); ok {
+			fn(current, target, elt)
+		}
+	})
+}
+
+// FindUniqueWithoutIndexConstraintUnvalidated finds the first element of type UniqueWithoutIndexConstraintUnvalidated.
+func FindUniqueWithoutIndexConstraintUnvalidated(b ElementStatusIterator) (current Status, target TargetStatus, element *UniqueWithoutIndexConstraintUnvalidated) {
+  if b == nil {
+    return current, target, element
+  }
+	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
+		if elt, ok := e.(*UniqueWithoutIndexConstraintUnvalidated); ok {
+			element = elt
+			current = c
+			target = t
+		}
+	})
+	return current, target, element
+}
+
 func (e UserPrivileges) element() {}
 
 // ForEachUserPrivileges iterates over elements of type UserPrivileges.
