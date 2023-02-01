@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
@@ -243,6 +244,8 @@ type Node struct {
 
 	tenantSettingsWatcher *tenantsettingswatcher.Watcher
 
+	tenantCapabilitiesWatcher tenantcapabilities.Watcher // powers the tenant capabilities subsystem.
+
 	spanConfigAccessor spanconfig.KVAccessor // powers the span configuration RPCs
 
 	spanConfigReporter spanconfig.Reporter // powers the span configuration RPCs
@@ -378,24 +381,26 @@ func NewNode(
 	storeGrantCoords *admission.StoreGrantCoordinators,
 	tenantUsage multitenant.TenantUsageServer,
 	tenantSettingsWatcher *tenantsettingswatcher.Watcher,
+	tenantCapabilitiesWatcher tenantcapabilities.Watcher,
 	spanConfigAccessor spanconfig.KVAccessor,
 	spanConfigReporter spanconfig.Reporter,
 ) *Node {
 	n := &Node{
-		storeCfg:              cfg,
-		stopper:               stopper,
-		recorder:              recorder,
-		metrics:               makeNodeMetrics(reg, cfg.HistogramWindowInterval),
-		stores:                stores,
-		txnMetrics:            txnMetrics,
-		execCfg:               nil, // filled in later by InitLogger()
-		clusterID:             clusterID,
-		tenantUsage:           tenantUsage,
-		tenantSettingsWatcher: tenantSettingsWatcher,
-		spanConfigAccessor:    spanConfigAccessor,
-		spanConfigReporter:    spanConfigReporter,
-		testingErrorEvent:     cfg.TestingKnobs.TestingResponseErrorEvent,
-		spanStatsCollector:    spanstatscollector.New(cfg.Settings),
+		storeCfg:                  cfg,
+		stopper:                   stopper,
+		recorder:                  recorder,
+		metrics:                   makeNodeMetrics(reg, cfg.HistogramWindowInterval),
+		stores:                    stores,
+		txnMetrics:                txnMetrics,
+		execCfg:                   nil, // filled in later by InitLogger()
+		clusterID:                 clusterID,
+		tenantUsage:               tenantUsage,
+		tenantSettingsWatcher:     tenantSettingsWatcher,
+		tenantCapabilitiesWatcher: tenantCapabilitiesWatcher,
+		spanConfigAccessor:        spanConfigAccessor,
+		spanConfigReporter:        spanConfigReporter,
+		testingErrorEvent:         cfg.TestingKnobs.TestingResponseErrorEvent,
+		spanStatsCollector:        spanstatscollector.New(cfg.Settings),
 	}
 	n.storeCfg.KVAdmissionController = kvadmission.MakeController(
 		kvAdmissionQ, elasticCPUGrantCoord, storeGrantCoords, cfg.Settings,

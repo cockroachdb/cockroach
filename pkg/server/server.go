@@ -49,6 +49,9 @@ import (
 	serverrangefeed "github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangelog"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/reports"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiesauthorizer"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitieswatcher"
 	"github.com/cockroachdb/cockroach/pkg/obs"
 	"github.com/cockroachdb/cockroach/pkg/obsservice/obspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -283,6 +286,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		&cfg.DefaultZoneConfig,
 	)
 
+	authorizer := tenantcapabilitiesauthorizer.New()
 	rpcCtxOpts := rpc.ContextOptions{
 		TenantID:         roachpb.SystemTenantID,
 		NodeID:           cfg.IDContainer,
@@ -309,6 +313,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 			// operations should fail immediately.
 			return checkPingFor(ctx, req.OriginNodeID, codes.PermissionDenied)
 		},
+		Authorizer: authorizer,
 	}
 	if knobs := cfg.TestingKnobs.Server; knobs != nil {
 		serverKnobs := knobs.(*TestingKnobs)
@@ -773,6 +778,16 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		clock, rangeFeedFactory, stopper, st,
 	)
 
+	tenantCapabilitiesTestingKnobs, _ := cfg.TestingKnobs.TenantCapabilitiesTestingKnobs.(*tenantcapabilities.TestingKnobs)
+	tenantCapabilitiesWatcher := tenantcapabilitieswatcher.New(
+		clock,
+		rangeFeedFactory,
+		keys.TenantsTableID,
+		stopper,
+		1<<20, /* 1 MB */
+		tenantCapabilitiesTestingKnobs,
+	)
+
 	node := NewNode(
 		storeCfg,
 		recorder,
@@ -786,6 +801,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		gcoords.Stores,
 		tenantUsage,
 		tenantSettingsWatcher,
+		tenantCapabilitiesWatcher,
 		spanConfig.kvAccessor,
 		spanConfig.reporter,
 	)
@@ -942,38 +958,39 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 			spanConfigKVAccessor:     spanConfig.kvAccessorForTenantRecords,
 			kvStoresIterator:         kvserver.MakeStoresIterator(node.stores),
 		},
-		SQLConfig:                &cfg.SQLConfig,
-		BaseConfig:               &cfg.BaseConfig,
-		stopper:                  stopper,
-		stopTrigger:              stopTrigger,
-		clock:                    clock,
-		runtime:                  runtimeSampler,
-		rpcContext:               rpcContext,
-		nodeDescs:                g,
-		systemConfigWatcher:      systemConfigWatcher,
-		spanConfigAccessor:       spanConfig.kvAccessor,
-		spanStatsAccessor:        spanStatsAccessor,
-		nodeDialer:               nodeDialer,
-		distSender:               distSender,
-		db:                       db,
-		registry:                 registry,
-		recorder:                 recorder,
-		sessionRegistry:          sessionRegistry,
-		closedSessionCache:       closedSessionCache,
-		remoteFlowRunner:         remoteFlowRunner,
-		circularInternalExecutor: internalExecutor,
-		internalDB:               insqlDB,
-		circularJobRegistry:      jobRegistry,
-		protectedtsProvider:      protectedtsProvider,
-		rangeFeedFactory:         rangeFeedFactory,
-		sqlStatusServer:          sStatus,
-		tenantStatusServer:       sStatus,
-		tenantUsageServer:        tenantUsage,
-		monitorAndMetrics:        sqlMonitorAndMetrics,
-		settingsStorage:          settingsWriter,
-		eventsServer:             eventsServer,
-		admissionPacerFactory:    gcoords.Elastic,
-		rangeDescIteratorFactory: rangedesc.NewIteratorFactory(db),
+		SQLConfig:                 &cfg.SQLConfig,
+		BaseConfig:                &cfg.BaseConfig,
+		stopper:                   stopper,
+		stopTrigger:               stopTrigger,
+		clock:                     clock,
+		runtime:                   runtimeSampler,
+		rpcContext:                rpcContext,
+		nodeDescs:                 g,
+		systemConfigWatcher:       systemConfigWatcher,
+		spanConfigAccessor:        spanConfig.kvAccessor,
+		spanStatsAccessor:         spanStatsAccessor,
+		nodeDialer:                nodeDialer,
+		distSender:                distSender,
+		db:                        db,
+		registry:                  registry,
+		recorder:                  recorder,
+		sessionRegistry:           sessionRegistry,
+		closedSessionCache:        closedSessionCache,
+		remoteFlowRunner:          remoteFlowRunner,
+		circularInternalExecutor:  internalExecutor,
+		internalDB:                insqlDB,
+		circularJobRegistry:       jobRegistry,
+		protectedtsProvider:       protectedtsProvider,
+		rangeFeedFactory:          rangeFeedFactory,
+		tenantCapabilitiesWatcher: tenantCapabilitiesWatcher,
+		sqlStatusServer:           sStatus,
+		tenantStatusServer:        sStatus,
+		tenantUsageServer:         tenantUsage,
+		monitorAndMetrics:         sqlMonitorAndMetrics,
+		settingsStorage:           settingsWriter,
+		eventsServer:              eventsServer,
+		admissionPacerFactory:     gcoords.Elastic,
+		rangeDescIteratorFactory:  rangedesc.NewIteratorFactory(db),
 	})
 	if err != nil {
 		return nil, err
@@ -1905,6 +1922,13 @@ func (s *Server) PreStart(ctx context.Context) error {
 	if err := s.node.tenantSettingsWatcher.Start(workersCtx, s.sqlServer.execCfg.SystemTableIDResolver); err != nil {
 		return errors.Wrap(err, "failed to initialize the tenant settings watcher")
 	}
+	if err := s.node.tenantCapabilitiesWatcher.Start(ctx); err != nil {
+		return errors.Wrap(err, "initializing tenant capabilities")
+	}
+	// Now that we've got the tenant capabilities subsystem all started, we bind
+	// the Reader to the Authorizer, so that it has a handle into the global
+	// tenant capabilities state.
+	s.rpcContext.Authorizer.BindReader(ctx, s.node.tenantCapabilitiesWatcher)
 
 	if err := s.kvProber.Start(workersCtx, s.stopper); err != nil {
 		return errors.Wrapf(err, "failed to start KV prober")

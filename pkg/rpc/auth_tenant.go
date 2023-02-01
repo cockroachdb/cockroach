@@ -15,6 +15,7 @@ import (
 	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
@@ -28,6 +29,10 @@ type tenantAuthorizer struct {
 	// tenantID is the tenant ID for the current node.
 	// Equals SystemTenantID when running a KV node.
 	tenantID roachpb.TenantID
+	// capabilitiesAuthorizer is used to perform capability checks for incoming
+	// tenant requests. Capability checks are only performed when running on a KV
+	// node; the Authorizer no-ops on secondary tenants.
+	capabilitiesAuthorizer tenantcapabilities.Authorizer
 }
 
 func tenantIDFromString(commonName, field string) (roachpb.TenantID, error) {
@@ -44,11 +49,11 @@ func tenantIDFromString(commonName, field string) (roachpb.TenantID, error) {
 // authorize enforces a security boundary around endpoints that tenants
 // request from the host KV node or other tenant SQL pod.
 func (a tenantAuthorizer) authorize(
-	tenID roachpb.TenantID, fullMethod string, req interface{},
+	ctx context.Context, tenID roachpb.TenantID, fullMethod string, req interface{},
 ) error {
 	switch fullMethod {
 	case "/cockroach.roachpb.Internal/Batch":
-		return a.authBatch(tenID, req.(*roachpb.BatchRequest))
+		return a.authBatch(ctx, tenID, req.(*roachpb.BatchRequest))
 
 	case "/cockroach.roachpb.Internal/RangeLookup":
 		return a.authRangeLookup(tenID, req.(*roachpb.RangeLookupRequest))
@@ -156,9 +161,17 @@ func checkSpanBounds(rSpan, tenSpan roachpb.RSpan) error {
 
 // authBatch authorizes the provided tenant to invoke the Batch RPC with the
 // provided args.
-func (a tenantAuthorizer) authBatch(tenID roachpb.TenantID, args *roachpb.BatchRequest) error {
-	// Consult reqAllowed to determine whether each request in the batch
-	// is permitted. If not, reject the entire batch.
+func (a tenantAuthorizer) authBatch(
+	ctx context.Context, tenID roachpb.TenantID, args *roachpb.BatchRequest,
+) error {
+	if err := a.capabilitiesAuthorizer.HasCapabilityForBatch(ctx, tenID, args); err != nil {
+		return authError(err.Error())
+	}
+
+	// TODO(ecwall): This list isn't exhaustive. For any request that isn't
+	// contained in here, there should be a corresponding capability. Once that's
+	// done, we can get rid of this loop entirely and perform all checks inside
+	// the capabilities Authorizer above.
 	for _, ru := range args.Requests {
 		switch ru.GetInner().(type) {
 		case

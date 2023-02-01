@@ -41,10 +41,25 @@ type Reader interface {
 // signals other than just the tenant capability state. For example, request
 // usage pattern over a timespan.
 type Authorizer interface {
-	// HasCapabilityForBatch returns whether a tenant, referenced by its ID, is
-	// allowed to execute the supplied batch request given the capabilities it
-	// possesses.
-	HasCapabilityForBatch(context.Context, roachpb.TenantID, *roachpb.BatchRequest) bool
+	// HasCapabilityForBatch returns an error if a tenant, referenced by its ID,
+	// is not allowed to execute the supplied batch request given the capabilities
+	// it possesses.
+	HasCapabilityForBatch(context.Context, roachpb.TenantID, *roachpb.BatchRequest) error
+
+	// BindReader is a mechanism by which the caller can bind a Reader[1] to the
+	// Authorizer post-creation. The Authorizer uses the Reader to consult the
+	// global tenant capability state to authorize incoming requests. This
+	// function cannot be used to update the Reader; it may be called at-most
+	// once.
+	//
+	//
+	// [1] The canonical implementation of the Authorizer lives on GRPC
+	// interceptors, and as such, must be instantiated before the GRPC Server is
+	// created. However, the GRPC server is created very early on during Server
+	// startup and serves as a dependency for the canonical Reader's
+	// implementation. Binding the Reader late allows us to break this dependency
+	// cycle.
+	BindReader(ctx context.Context, reader Reader)
 }
 
 // Entry ties together a tenantID with its capabilities.

@@ -37,7 +37,7 @@ type Watcher struct {
 	bufferMemLimit   int64
 
 	tenantsTableID uint32 // overriden for tests
-	knobs          tenantcapabilities.TestingKnobs
+	knobs          TestingKnobs
 
 	mu struct {
 		syncutil.RWMutex
@@ -57,8 +57,9 @@ func New(
 	bufferMemLimit int64,
 	knobs *tenantcapabilities.TestingKnobs,
 ) *Watcher {
-	if knobs == nil {
-		knobs = &tenantcapabilities.TestingKnobs{}
+	watcherKnobs := TestingKnobs{}
+	if knobs != nil {
+		watcherKnobs = *knobs.WatcherTestingKnobs.(*TestingKnobs)
 	}
 	w := &Watcher{
 		clock:            clock,
@@ -67,7 +68,7 @@ func New(
 		decoder:          newDecoder(),
 		tenantsTableID:   tenantsTableID,
 		bufferMemLimit:   bufferMemLimit,
-		knobs:            *knobs,
+		knobs:            watcherKnobs,
 	}
 	w.mu.store = make(map[roachpb.TenantID]tenantcapabilitiespb.TenantCapabilities)
 	return w
@@ -102,6 +103,10 @@ func (w *Watcher) Start(ctx context.Context) error {
 		EndKey: tenantsTableStart.PrefixEnd(),
 	}
 
+	var rfcTestingKnobs *rangefeedcache.TestingKnobs
+	if w.knobs.WatcherRangeFeedKnobs != nil {
+		rfcTestingKnobs = w.knobs.WatcherRangeFeedKnobs.(*rangefeedcache.TestingKnobs)
+	}
 	rfc := rangefeedcache.NewWatcher(
 		"tenant-capability-watcher",
 		w.clock,
@@ -111,7 +116,7 @@ func (w *Watcher) Start(ctx context.Context) error {
 		true, /* withPrevValue */
 		w.decoder.translateEvent,
 		w.handleUpdate,
-		w.knobs.WatcherRangeFeedKnobs.(*rangefeedcache.TestingKnobs),
+		rfcTestingKnobs,
 	)
 	return rangefeedcache.Start(ctx, w.stopper, rfc, nil /* onError */)
 }
@@ -167,9 +172,9 @@ func (w *Watcher) handleIncrementalUpdate(updates []tenantcapabilities.Update) {
 	}
 }
 
-// testFlushCapabilitiesState flushes the underlying global tenant capability
+// TestingFlushCapabilitiesState flushes the underlying global tenant capability
 // state for testing purposes. The returned entries are sorted by tenant ID.
-func (w *Watcher) testingFlushCapabilitiesState() (entries []tenantcapabilities.Entry) {
+func (w *Watcher) TestingFlushCapabilitiesState() (entries []tenantcapabilities.Entry) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 

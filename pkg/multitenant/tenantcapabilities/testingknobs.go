@@ -10,19 +10,16 @@
 
 package tenantcapabilities
 
-import (
-	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed/rangefeedcache"
-)
+import "github.com/cockroachdb/cockroach/pkg/base"
 
 // TestingKnobs contain testing helpers which are used by various components
 // that enable tenant capabilities.
 type TestingKnobs struct {
-	// WatcherRangeFeedKnobs control the lifecycle events for the underlying
-	// rangefeed of the tenant capabilities Watcher.
-	WatcherRangeFeedKnobs base.ModuleTestingKnobs
-
-	// WatcherUpdatesInterceptor, if set, is called each time the Watcher
-	// receives a set of updates.
-	WatcherUpdatesInterceptor func(updateType rangefeedcache.UpdateType, updates []Update)
+	// WatcherTestingKnobs can be used to test the tenant capabilities Watcher.
+	WatcherTestingKnobs base.ModuleTestingKnobs
 }
+
+// ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
+func (t *TestingKnobs) ModuleTestingKnobs() {}
+
+var _ base.ModuleTestingKnobs = (*TestingKnobs)(nil)

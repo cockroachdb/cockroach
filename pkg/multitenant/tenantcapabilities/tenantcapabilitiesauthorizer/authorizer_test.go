@@ -47,7 +47,8 @@ func TestDataDriven(t *testing.T) {
 
 	datadriven.Walk(t, datapathutils.TestDataPath(t), func(t *testing.T, path string) {
 		mockReader := mockReader(make(map[roachpb.TenantID]tenantcapabilitiespb.TenantCapabilities))
-		authorizer := New(mockReader)
+		authorizer := New()
+		authorizer.BindReader(context.Background(), mockReader)
 
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
@@ -57,8 +58,11 @@ func TestDataDriven(t *testing.T) {
 
 			case "has-capability-for-batch":
 				tenID, ba := tenantcapabilitiestestutils.ParseBatchRequestString(t, d.Input)
-				hasCapability := authorizer.HasCapabilityForBatch(context.Background(), tenID, &ba)
-				return fmt.Sprintf("%t", hasCapability)
+				err := authorizer.HasCapabilityForBatch(context.Background(), tenID, &ba)
+				if err == nil {
+					return "ok"
+				}
+				return err.Error()
 
 			default:
 				return fmt.Sprintf("unknown command %s", d.Cmd)

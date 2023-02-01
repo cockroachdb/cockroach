@@ -1,0 +1,35 @@
+query-sql-system
+SHOW TENANT [10] WITH CAPABILITIES
+----
+10 tenant-10 ready none can_admin_split false
+10 tenant-10 ready none can_admin_unsplit false
+
+exec-sql-tenant
+CREATE TABLE t(a INT)
+----
+ok
+
+exec-privileged-op-tenant
+ALTER TABLE t SPLIT AT VALUES (0)
+----
+pq: rpc error: code = Unauthenticated desc = tenant 10 does not have admin split capability
+
+update-capabilities
+ALTER TENANT [10] GRANT CAPABILITY can_admin_split=true
+----
+ok
+
+exec-privileged-op-tenant
+SELECT pretty FROM [ALTER TABLE t SPLIT AT VALUES (0)]
+----
+pq: at or near "alter": syntax error
+
+update-capabilities
+ALTER TENANT [10] REVOKE CAPABILITY can_admin_split
+----
+ok
+
+exec-privileged-op-tenant
+ALTER TABLE t SPLIT AT VALUES (0)
+----
+pq: rpc error: code = Unauthenticated desc = tenant 10 does not have admin split capability

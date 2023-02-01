@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/obs"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -344,8 +345,11 @@ type sqlServerArgs struct {
 	// the node/cluster and cancel sessions/queries.
 	sqlStatusServer serverpb.SQLStatusServer
 
-	// Used to watch settings and descriptor changes.
+	// Used to construct rangefeeds.
 	rangeFeedFactory *rangefeed.Factory
+
+	// Used to watch for and maintain tenant capability state.
+	tenantCapabilitiesWatcher tenantcapabilities.Watcher
 
 	// Used to query status information useful for debugging on the server.
 	tenantStatusServer serverpb.TenantStatusServer

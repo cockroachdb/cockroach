@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 )
 
 // Authorizer is a concrete implementation of the tenantcapabilities.Authorizer
@@ -27,9 +28,9 @@ type Authorizer struct {
 var _ tenantcapabilities.Authorizer = &Authorizer{}
 
 // New constructs a new tenantcapabilities.Authorizer.
-func New(reader tenantcapabilities.Reader) *Authorizer {
+func New() *Authorizer {
 	a := &Authorizer{
-		capabilitiesReader: reader,
+		// capabilitiesReader is set post construction, using BindReader.
 	}
 	return a
 }
@@ -37,14 +38,18 @@ func New(reader tenantcapabilities.Reader) *Authorizer {
 // HasCapabilityForBatch implements the tenantcapabilities.Authorizer interface.
 func (a *Authorizer) HasCapabilityForBatch(
 	ctx context.Context, tenID roachpb.TenantID, ba *roachpb.BatchRequest,
-) bool {
+) error {
 	if tenID.IsSystem() {
-		return true // the system tenant is allowed to do as it pleases
+		return nil // the system tenant is allowed to do as it pleases
+	}
+	if a.capabilitiesReader == nil {
+		log.Fatal(ctx, "trying to perform capability check when no Reader exists")
 	}
 	cp, found := a.capabilitiesReader.GetCapabilities(tenID)
 	if !found {
-		log.Infof(
+		log.VInfof(
 			ctx,
+			3,
 			"no capability information for tenant %s; requests that require capabilities may be denied",
 			tenID,
 		)
@@ -54,11 +59,19 @@ func (a *Authorizer) HasCapabilityForBatch(
 		switch ru.GetInner().(type) {
 		case *roachpb.AdminSplitRequest:
 			if !cp.CanAdminSplit {
-				return false
+				return errors.Newf("tenant %s does not have admin split capability", tenID)
 			}
 		default:
 			// No capability checks for other types of requests.
 		}
 	}
-	return true
+	return nil
+}
+
+// BindReader implements the tenantcapabilities.Authorizer interface.
+func (a *Authorizer) BindReader(ctx context.Context, reader tenantcapabilities.Reader) {
+	if a.capabilitiesReader != nil {
+		log.Fatal(ctx, "cannot bind a tenant capabilities reader more than once")
+	}
+	a.capabilitiesReader = reader
 }
