@@ -7,7 +7,7 @@ split
 scan
 cput
 ----
-false
+tenant 10 does not have admin split capability
 
 # However, if there was no split in the batch, the batch should be allowed to
 # go through.
@@ -16,7 +16,7 @@ has-capability-for-batch
 scan
 cput
 ----
-true
+ok
 
 # Update the capability state to give tenant 10 the capability to run splits.
 update-state
@@ -30,7 +30,7 @@ split
 scan
 cput
 ----
-true
+ok
 
 # Remove the capability.
 update-state
@@ -44,4 +44,4 @@ split
 scan
 cput
 ----
-false
+tenant 10 does not have admin split capability
