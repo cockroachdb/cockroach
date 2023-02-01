@@ -36,13 +36,14 @@ func TestMinVersion(t *testing.T) {
 	dir := "/foo"
 	require.NoError(t, mem.MkdirAll(dir, os.ModeDir))
 
-	// Expect zero value version when min version file doesn't exist.
-	v, err := getMinVersion(mem, dir)
+	// Expect !ok min version file doesn't exist.
+	v, ok, err := getMinVersion(mem, dir)
 	require.NoError(t, err)
 	require.Equal(t, roachpb.Version{}, v)
+	require.False(t, ok)
 
 	// Expect min version to not be at least any target version.
-	ok, err := MinVersionIsAtLeastTargetVersion(mem, dir, version1)
+	ok, err = MinVersionIsAtLeastTargetVersion(mem, dir, version1)
 	require.NoError(t, err)
 	require.False(t, ok)
 	ok, err = MinVersionIsAtLeastTargetVersion(mem, dir, version2)
@@ -53,8 +54,9 @@ func TestMinVersion(t *testing.T) {
 	require.NoError(t, writeMinVersionFile(mem, dir, version1))
 
 	// Expect min version to be version1.
-	v, err = getMinVersion(mem, dir)
+	v, ok, err = getMinVersion(mem, dir)
 	require.NoError(t, err)
+	require.True(t, ok)
 	require.True(t, version1.Equal(v))
 
 	// Expect min version to be at least version1 but not version2.
@@ -77,14 +79,16 @@ func TestMinVersion(t *testing.T) {
 	require.True(t, ok)
 
 	// Expect min version to be version2.
-	v, err = getMinVersion(mem, dir)
+	v, ok, err = getMinVersion(mem, dir)
 	require.NoError(t, err)
+	require.True(t, ok)
 	require.True(t, version2.Equal(v))
 
 	// Expect no-op when trying to update min version to a lower version.
 	require.NoError(t, writeMinVersionFile(mem, dir, version1))
-	v, err = getMinVersion(mem, dir)
+	v, ok, err = getMinVersion(mem, dir)
 	require.NoError(t, err)
+	require.True(t, ok)
 	require.True(t, version2.Equal(v))
 }
 
@@ -140,8 +144,9 @@ func TestMinVersion_IsNotEncrypted(t *testing.T) {
 
 	// Reading the file directly through the unencrypted MemFS should
 	// succeed and yield the correct version.
-	v, err := getMinVersion(fs, "")
+	v, ok, err := getMinVersion(fs, "")
 	require.NoError(t, err)
+	require.True(t, ok)
 	require.Equal(t, v2, v)
 }
 

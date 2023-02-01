@@ -393,17 +393,9 @@ func SynthesizeClusterVersionFromEngines(
 	}
 	log.Eventf(ctx, "read clusterVersion %+v", cv)
 
-	// Avoid running a binary too new for this store. This is what you'd catch
-	// if, say, you restarted directly from 1.0 into 1.2 (bumping the min
-	// version) without going through 1.1 first. It would also be what you catch if
-	// you are starting 1.1 for the first time (after 1.0), but it crashes
-	// half-way through the startup sequence (so now some stores have 1.1, but
-	// some 1.0), in which case you are expected to run 1.1 again (hopefully
-	// without the crash this time) which would then rewrite all the stores.
-	//
-	// We only verify this now because as we iterate through the stores, we
-	// may not yet have picked up the final versions we're actually planning
-	// to use.
+	// We now check for old versions up front when we open the database. We leave
+	// this older check for the case where a store is so old that it doesn't have
+	// a min version file.
 	if minStoreVersion.Version.Less(binaryMinSupportedVersion) {
 		return clusterversion.ClusterVersion{}, errors.Errorf("store %s, last used with cockroach version v%s, "+
 			"is too old for running version v%s (which requires data from v%s or later)",
