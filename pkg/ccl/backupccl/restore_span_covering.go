@@ -746,6 +746,13 @@ func (i *fileSpanStartAndEndKeyIterator) next() {
 			heap.Push(i.heap, minItem)
 		}
 	}
+	if ok, _ := i.valid(); !ok {
+		return
+	}
+	if prevKey.Compare(i.value()) >= 0 {
+		i.err = errors.New("out of order backup keys")
+		return
+	}
 }
 
 func (i *fileSpanStartAndEndKeyIterator) valid() (bool, error) {
