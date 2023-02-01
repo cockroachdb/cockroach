@@ -21,11 +21,12 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ADD UNIQUE WITHOUT INDEX (j);
 │       │
 │       └── • 1 Mutation operation
 │           │
-│           └── • MakeAbsentUniqueWithoutIndexConstraintWriteOnly
+│           └── • AddUniqueWithoutIndexConstraint
 │                 ColumnIDs:
 │                 - 2
 │                 ConstraintID: 2
 │                 TableID: 104
+│                 Validity: 2
 │
 ├── • PreCommitPhase
 │   │
@@ -53,11 +54,12 @@ EXPLAIN (ddl, verbose) ALTER TABLE t ADD UNIQUE WITHOUT INDEX (j);
 │       │
 │       └── • 3 Mutation operations
 │           │
-│           ├── • MakeAbsentUniqueWithoutIndexConstraintWriteOnly
+│           ├── • AddUniqueWithoutIndexConstraint
 │           │     ColumnIDs:
 │           │     - 2
 │           │     ConstraintID: 2
 │           │     TableID: 104
+│           │     Validity: 2
 │           │
 │           ├── • SetJobStateOnDescriptor
 │           │     DescriptorID: 104

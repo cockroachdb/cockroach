@@ -11,7 +11,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t1› ADD CON
  │         ├── 1 element transitioning toward PUBLIC
  │         │    └── ABSENT → WRITE_ONLY ForeignKeyConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2, ReferencedDescID: 105}
  │         └── 1 Mutation operation
- │              └── MakeAbsentForeignKeyConstraintWriteOnly {"ConstraintID":2,"ReferencedTableID":105,"TableID":104}
+ │              └── AddForeignKeyConstraint {"ConstraintID":2,"ReferencedTableID":105,"TableID":104,"Validity":2}
  ├── PreCommitPhase
  │    ├── Stage 1 of 2 in PreCommitPhase
  │    │    ├── 1 element transitioning toward PUBLIC
@@ -22,7 +22,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t1› ADD CON
  │         ├── 1 element transitioning toward PUBLIC
  │         │    └── ABSENT → WRITE_ONLY ForeignKeyConstraint:{DescID: 104, IndexID: 0, ConstraintID: 2, ReferencedDescID: 105}
  │         └── 4 Mutation operations
- │              ├── MakeAbsentForeignKeyConstraintWriteOnly {"ConstraintID":2,"ReferencedTableID":105,"TableID":104}
+ │              ├── AddForeignKeyConstraint {"ConstraintID":2,"ReferencedTableID":105,"TableID":104,"Validity":2}
  │              ├── SetJobStateOnDescriptor {"DescriptorID":104,"Initialize":true}
  │              ├── SetJobStateOnDescriptor {"DescriptorID":105,"Initialize":true}
  │              └── CreateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
