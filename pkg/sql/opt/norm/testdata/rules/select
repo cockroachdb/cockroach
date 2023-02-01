@@ -1955,18 +1955,26 @@ select
  │              └── filters
  │                   └── random() < 0.5 [volatile]
  └── filters
-      └── exists [subquery]
-           └── select
-                ├── columns: a.k:32!null a.i:33 a.f:34 a.s:35 a.j:36
-                ├── cardinality: [0 - 1]
-                ├── key: ()
-                ├── fd: ()-->(32-36)
-                ├── scan a
-                │    ├── columns: a.k:32!null a.i:33 a.f:34 a.s:35 a.j:36
-                │    ├── key: (32)
-                │    └── fd: (32)-->(33-36)
-                └── filters
-                     └── a.k:32 = 1 [outer=(32), constraints=(/32: [/1 - /1]; tight), fd=()-->(32)]
+      └── coalesce [subquery]
+           ├── subquery
+           │    └── project
+           │         ├── columns: column39:39!null
+           │         ├── cardinality: [0 - 1]
+           │         ├── key: ()
+           │         ├── fd: ()-->(39)
+           │         ├── select
+           │         │    ├── columns: a.k:32!null
+           │         │    ├── cardinality: [0 - 1]
+           │         │    ├── key: ()
+           │         │    ├── fd: ()-->(32)
+           │         │    ├── scan a
+           │         │    │    ├── columns: a.k:32!null
+           │         │    │    └── key: (32)
+           │         │    └── filters
+           │         │         └── a.k:32 = 1 [outer=(32), constraints=(/32: [/1 - /1]; tight), fd=()-->(32)]
+           │         └── projections
+           │              └── true [as=column39:39]
+           └── false
 
 # No-op case because the filter references outer columns.
 norm expect-not=PushFilterIntoSetOp

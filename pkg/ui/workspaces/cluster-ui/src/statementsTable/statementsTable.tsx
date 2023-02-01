@@ -224,7 +224,7 @@ export function makeStatementsColumns(
       title: statisticsTableTitles.cpu(statType),
       cell: cpuBar,
       sort: (stmt: AggregateStatistics) =>
-        FixLong(Number(stmt.stats.exec_stats.cpu_nanos?.mean)),
+        FixLong(Number(stmt.stats.exec_stats.cpu_sql_nanos?.mean)),
     },
     {
       name: "maxMemUsage",

@@ -360,7 +360,7 @@ func (e *execStats) jsonFields() jsonFields {
 		{"contentionTime", (*numericStats)(&e.ContentionTime)},
 		{"networkMsgs", (*numericStats)(&e.NetworkMessages)},
 		{"maxDiskUsage", (*numericStats)(&e.MaxDiskUsage)},
-		{"cpuNanos", (*numericStats)(&e.CPUNanos)},
+		{"cpuSQLNanos", (*numericStats)(&e.CPUSQLNanos)},
 	}
 }
 

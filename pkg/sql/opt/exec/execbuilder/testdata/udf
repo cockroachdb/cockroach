@@ -181,6 +181,60 @@ Scan /Table/113/1/30/0
 Scan /Table/112/{1-2}
 Scan /Table/113/1/30/0
 
+statement ok
+CREATE FUNCTION sub_fn3() RETURNS INT LANGUAGE SQL AS 'SELECT a FROM sub1 WHERE EXISTS (SELECT a FROM sub2 WHERE a = 30)'
+
+# A query with an uncorrelated EXISTS within a UDF.
+query T
+EXPLAIN (VERBOSE) SELECT * FROM sub3 WHERE sub_fn3() = 3
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ columns: (a)
+│ estimated row count: 333 (missing stats)
+│ filter: sub_fn3() = 3
+│
+└── • scan
+      columns: (a)
+      estimated row count: 1,000 (missing stats)
+      table: sub3@sub3_pkey
+      spans: FULL SCAN
+
+statement ok
+CREATE FUNCTION sub_fn4() RETURNS INT LANGUAGE SQL AS $$
+  SELECT a FROM sub1 WHERE CASE
+    WHEN a > 0 THEN EXISTS (SELECT 1 FROM sub2 WHERE a/10 = sub1.a)
+    ELSE false
+  END
+$$
+
+# A query with a correlated EXISTS within a UDF.
+query T
+EXPLAIN (VERBOSE) SELECT * FROM sub3 WHERE sub_fn4() = 3
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ columns: (a)
+│ estimated row count: 333 (missing stats)
+│ filter: sub_fn4() = 3
+│
+└── • scan
+      columns: (a)
+      estimated row count: 1,000 (missing stats)
+      table: sub3@sub3_pkey
+      spans: FULL SCAN
+
+query I
+SELECT sub_fn4() FROM generate_series(1, 3)
+----
+1
+1
+1
+
 
 subtest regressions
 
