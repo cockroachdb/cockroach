@@ -48,6 +48,19 @@ func TestTenantAdminAPI(t *testing.T) {
 	t.Run("tenant_unimplemented", func(t *testing.T) {
 		testUnimplementedRPCs(ctx, t, testHelper)
 	})
+
+	t.Run("tenant_metricmetadata", func(t *testing.T) {
+		testMetricMetadataRPC(ctx, t, testHelper)
+	})
+}
+
+func testMetricMetadataRPC(ctx context.Context, t *testing.T, helper serverccl.TenantTestHelper) {
+	http := helper.TestCluster().TenantAdminHTTPClient(t, 1)
+	defer http.Close()
+
+	metricMetadataResp := serverpb.MetricMetadataResponse{}
+	http.GetJSON("/_admin/v1/metricmetadata", &metricMetadataResp)
+	require.NotEmpty(t, metricMetadataResp.Metadata)
 }
 
 func testUnimplementedRPCs(ctx context.Context, t *testing.T, helper serverccl.TenantTestHelper) {
