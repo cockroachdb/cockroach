@@ -1326,9 +1326,9 @@ func TestInternalSystemJobsAccess(t *testing.T) {
 	_, err = registry.CreateJobWithTxn(ctx, rec, 3, nil /* txn */)
 	assert.NoError(t, err)
 
-	// user1 can see all jobs not owned by admins because they have the CONTROLJOB role option.
+	// user1 can see all jobs because they have the CONTROLJOB role option.
 	asUser("user1", func(userDB *sqlutils.SQLRunner) {
-		userDB.CheckQueryResults(t, "SELECT id FROM crdb_internal.system_jobs WHERE id IN (1,2,3) ORDER BY id", [][]string{{"1"}, {"2"}})
+		userDB.CheckQueryResults(t, "SELECT id FROM crdb_internal.system_jobs WHERE id IN (1,2,3) ORDER BY id", [][]string{{"1"}, {"2"}, {"3"}})
 	})
 
 	// user2 can only see their own job
