@@ -244,6 +244,8 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 		ca.cancel()
 		return
 	}
+
+	recorder := metricsRecorder(ca.sliMetrics)
 	if !ca.isSinkless() {
 		job, err := ca.flowCtx.Cfg.JobRegistry.LoadJob(ctx, ca.spec.JobID)
 		if err != nil {
@@ -252,15 +254,22 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 			return
 		}
 
-		if err = ca.sliMetrics.initTelemetryLogging(ca.Ctx(), job, ca.flowCtx.Cfg.Settings); err != nil {
+		recorderWithTelemetry, err := wrapMetricsRecorderWithTelemetry(ctx, job, ca.flowCtx.Cfg.Settings, recorder)
+		if err != nil {
 			ca.MoveToDraining(err)
 			ca.cancel()
 			return
 		}
+		recorder = recorderWithTelemetry
+		cancel := ca.cancel
+		ca.cancel = func() {
+			recorderWithTelemetry.close()
+			cancel()
+		}
 	}
 
 	ca.sink, err = getEventSink(ctx, ca.flowCtx.Cfg, ca.spec.Feed, timestampOracle,
-		ca.spec.User(), ca.spec.JobID, ca.sliMetrics)
+		ca.spec.User(), ca.spec.JobID, recorder)
 
 	if err != nil {
 		err = changefeedbase.MarkRetryableError(err)
@@ -452,9 +461,6 @@ func (ca *changeAggregator) setupSpansAndFrontier() (spans []roachpb.Span, err e
 func (ca *changeAggregator) close() {
 	if ca.Closed {
 		return
-	}
-	if !ca.isSinkless() {
-		ca.sliMetrics.flushTelemetryLogs()
 	}
 	ca.cancel()
 	// Wait for the poller to finish shutting down.

@@ -1062,28 +1062,15 @@ func checkContinuousChangefeedLogs(t *testing.T, startTime int64) []eventpb.Chan
 		if err := gojson.Unmarshal(jsonPayload, &event); err != nil {
 			t.Errorf("unmarshalling %q: %v", m, err)
 		}
-		// Place entries in chronological order, assuming we get them in reverse chronological order.
-		matchingEntries[len(matchingEntries)-i-1] = event
-	}
-
-	// Assert entries are sorted. If this assertion fails, logs are being read out
-	// of order and we must implement a sort here.
-	if len(matchingEntries) > 0 {
-		startTS := matchingEntries[0].Timestamp
-		for _, entry := range matchingEntries {
-			if entry.Timestamp < startTS {
-				t.Fatal("telemetry logs received out of order")
-			}
-			startTS = entry.Timestamp
-		}
+		matchingEntries[i] = event
 	}
 
 	return matchingEntries
 }
 
 // verifyLogsWithEmittedBytes fetches changefeed_emitted_bytes telemetry logs produced
-// after startTime and asserts that at least one message has positive emitted bytes.
-// This function also asserts the LoggingInterval, Id, and Closing fields of
+// after startTime for a particular job and asserts that at least one message has positive emitted bytes.
+// This function also asserts the LoggingInterval and Closing fields of
 // each message.
 func verifyLogsWithEmittedBytes(
 	t *testing.T, jobID jobspb.JobID, startTime int64, interval int64, closing bool,
@@ -1095,10 +1082,13 @@ func verifyLogsWithEmittedBytes(
 		}
 		emittedBytes := false
 		for _, msg := range emittedBytesLogs {
+			if msg.JobId != int64(jobID) {
+				continue
+			}
+
 			if msg.EmittedBytes > 0 {
 				emittedBytes = true
 			}
-			require.Equal(t, int64(jobID), msg.JobId)
 			require.Equal(t, interval, msg.LoggingInterval)
 			if closing {
 				require.Equal(t, true, msg.Closing)

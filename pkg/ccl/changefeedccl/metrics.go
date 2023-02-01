@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/schemafeed"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -83,8 +82,6 @@ type metricsRecorder interface {
 	getBackfillCallback() func() func()
 	getBackfillRangeCallback() func(int64) (func(), func())
 	recordSizeBasedFlush()
-
-	initTelemetryLogging(ctx context.Context, job *jobs.Job, s *cluster.Settings) error
 }
 
 var _ metricsRecorder = (*sliMetrics)(nil)
@@ -112,8 +109,6 @@ type sliMetrics struct {
 	RunningCount              *aggmetric.Gauge
 	BatchReductionCount       *aggmetric.Gauge
 	InternalRetryMessageCount *aggmetric.Gauge
-
-	telemetryLogger telemetryLogger
 }
 
 // sinkDoesNotCompress is a sentinel value indicating the sink
@@ -168,12 +163,6 @@ func (m *sliMetrics) recordEmittedBatch(
 	m.BatchHistNanos.RecordValue(emitNanos)
 	if m.BackfillCount.Value() == 0 {
 		m.CommitLatency.RecordValue(timeutil.Since(mvcc.GoTime()).Nanoseconds())
-	}
-
-	// initTelemetryLogging may not have been called
-	if m.telemetryLogger != nil {
-		m.telemetryLogger.recordEmittedBytes(bytes)
-		m.telemetryLogger.maybeFlushLogs()
 	}
 }
 
@@ -241,23 +230,6 @@ func (m *sliMetrics) recordSizeBasedFlush() {
 	}
 
 	m.SizeBasedFlushes.Inc(1)
-}
-
-func (w *sliMetrics) initTelemetryLogging(
-	ctx context.Context, job *jobs.Job, s *cluster.Settings,
-) error {
-	tLog, err := makePeriodicTelemetryLogger(ctx, job, s)
-	if err != nil {
-		return err
-	}
-	w.telemetryLogger = tLog
-	return nil
-}
-
-func (w *sliMetrics) flushTelemetryLogs() {
-	if w.telemetryLogger != nil {
-		w.telemetryLogger.close()
-	}
 }
 
 type wrappingCostController struct {
@@ -328,12 +300,6 @@ func (w *wrappingCostController) getBackfillRangeCallback() func(int64) (func(),
 // Record size-based flush.
 func (w *wrappingCostController) recordSizeBasedFlush() {
 	w.inner.recordSizeBasedFlush()
-}
-
-func (w *wrappingCostController) initTelemetryLogging(
-	ctx context.Context, job *jobs.Job, s *cluster.Settings,
-) error {
-	return w.inner.initTelemetryLogging(ctx, job, s)
 }
 
 var (

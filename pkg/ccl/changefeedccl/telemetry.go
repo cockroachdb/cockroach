@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -116,7 +117,72 @@ func (ptl *periodicTelemetryLogger) close() {
 		Closing:                      true,
 	}
 	log.StructuredEvent(ptl.ctx, continuousTelemetryEvent)
+}
 
+func wrapMetricsRecorderWithTelemetry(
+	ctx context.Context, job *jobs.Job, s *cluster.Settings, mb metricsRecorder,
+) (*telemetryMetricsRecorder, error) {
+	logger, err := makePeriodicTelemetryLogger(ctx, job, s)
+	if err != nil {
+		return &telemetryMetricsRecorder{}, err
+	}
+	return &telemetryMetricsRecorder{
+		telemetryLogger: logger,
+		inner:           mb,
+	}, nil
+}
+
+type telemetryMetricsRecorder struct {
+	telemetryLogger *periodicTelemetryLogger
+	inner           metricsRecorder
+}
+
+func (r *telemetryMetricsRecorder) close() {
+	r.telemetryLogger.close()
+}
+
+func (r *telemetryMetricsRecorder) recordMessageSize(sz int64) {
+	r.inner.recordMessageSize(sz)
+}
+
+func (r *telemetryMetricsRecorder) recordInternalRetry(numMessages int64, reducedBatchSize bool) {
+	r.inner.recordInternalRetry(numMessages, reducedBatchSize)
+}
+
+func (r *telemetryMetricsRecorder) recordOneMessage() recordOneMessageCallback {
+	return func(mvcc hlc.Timestamp, bytes int, compressedBytes int) {
+		r.inner.recordOneMessage()(mvcc, bytes, compressedBytes)
+		r.telemetryLogger.recordEmittedBytes(bytes)
+		r.telemetryLogger.maybeFlushLogs()
+	}
+}
+
+func (r *telemetryMetricsRecorder) recordEmittedBatch(
+	startTime time.Time, numMessages int, mvcc hlc.Timestamp, bytes int, compressedBytes int,
+) {
+	r.inner.recordEmittedBatch(startTime, numMessages, mvcc, bytes, compressedBytes)
+	r.telemetryLogger.recordEmittedBytes(bytes)
+	r.telemetryLogger.maybeFlushLogs()
+}
+
+func (r *telemetryMetricsRecorder) recordResolvedCallback() func() {
+	return r.inner.recordResolvedCallback()
+}
+
+func (r *telemetryMetricsRecorder) recordFlushRequestCallback() func() {
+	return r.inner.recordFlushRequestCallback()
+}
+
+func (r *telemetryMetricsRecorder) getBackfillCallback() func() func() {
+	return r.inner.getBackfillCallback()
+}
+
+func (r *telemetryMetricsRecorder) getBackfillRangeCallback() func(int64) (func(), func()) {
+	return r.inner.getBackfillRangeCallback()
+}
+
+func (r *telemetryMetricsRecorder) recordSizeBasedFlush() {
+	r.inner.recordSizeBasedFlush()
 }
 
 // ContinuousTelemetryInterval determines the interval at which each node emits telemetry events

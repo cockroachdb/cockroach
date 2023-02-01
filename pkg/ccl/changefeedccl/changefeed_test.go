@@ -5684,6 +5684,40 @@ func TestChangefeedContinuousTelemetryOnTermination(t *testing.T) {
 	cdcTest(t, testFn, feedTestOmitSinks("sinkless", "pubsub"))
 }
 
+func TestChangefeedContinuousTelemetryDifferentJobs(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		// Hack: since setting a zero value disabled, set a negative value to ensure we always log.
+		interval := -100 * time.Millisecond
+		ContinuousTelemetryInterval.Override(context.Background(), &s.Server.ClusterSettings().SV, interval)
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE TABLE foo (id INT PRIMARY KEY)`)
+		sqlDB.Exec(t, `CREATE TABLE foo2 (id INT PRIMARY KEY)`)
+
+		foo := feed(t, f, `CREATE CHANGEFEED FOR foo`)
+		foo2 := feed(t, f, `CREATE CHANGEFEED FOR foo2`)
+		job1 := foo.(cdctest.EnterpriseTestFeed).JobID()
+		job2 := foo2.(cdctest.EnterpriseTestFeed).JobID()
+
+		beforeInsert := timeutil.Now()
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (1)`)
+		sqlDB.Exec(t, `INSERT INTO foo2 VALUES (1)`)
+		verifyLogsWithEmittedBytes(t, job1, beforeInsert.UnixNano(), interval.Nanoseconds(), false)
+		verifyLogsWithEmittedBytes(t, job2, beforeInsert.UnixNano(), interval.Nanoseconds(), false)
+		require.NoError(t, foo.Close())
+
+		beforeInsert = timeutil.Now()
+		sqlDB.Exec(t, `INSERT INTO foo2 VALUES (2)`)
+		verifyLogsWithEmittedBytes(t, job2, beforeInsert.UnixNano(), interval.Nanoseconds(), false)
+		require.NoError(t, foo2.Close())
+	}
+
+	// TODO(#89421): include pubsub once it supports metrics
+	cdcTest(t, testFn, feedTestOmitSinks("sinkless", "pubsub"))
+}
+
 // Regression test for #41694.
 func TestChangefeedRestartDuringBackfill(t *testing.T) {
 	defer leaktest.AfterTest(t)()
