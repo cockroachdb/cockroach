@@ -152,6 +152,9 @@ func (c *githubClientImpl) issueEvents(issueNum int) ([]githubEvent, error) {
 			return nil, fmt.Errorf("error calling Issues.ListIssueTimeline: %w", err)
 		}
 		for _, event := range events {
+			if event == nil {
+				continue
+			}
 			detail := githubEvent{
 				Event: *event.Event,
 			}
