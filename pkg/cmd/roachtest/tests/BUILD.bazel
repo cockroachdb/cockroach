@@ -96,6 +96,7 @@ go_library(
         "mixed_version_schemachange.go",
         "multitenant.go",
         "multitenant_distsql.go",
+        "multitenant_shared_process.go",
         "multitenant_tpch.go",
         "multitenant_upgrade.go",
         "multitenant_utils.go",
