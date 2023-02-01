@@ -417,7 +417,7 @@ func (ds *DistSender) partialRangeFeed(
 
 		// Establish a RangeFeed for a single Range.
 		if log.V(1) {
-			log.Infof(ctx, "RangeFeed starting for range %d@%s (%s)", token.Desc().RangeID, startAfter, span)
+			log.Infof(ctx, "RangeFeed starting for r%d@%s (%s)", token.Desc().RangeID, startAfter, span)
 		}
 
 		maxTS, err := ds.singleRangeFeed(

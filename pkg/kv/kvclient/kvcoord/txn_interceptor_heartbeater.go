@@ -103,7 +103,7 @@ type txnHeartbeater struct {
 		// for the transaction or not. It remains true once the loop terminates.
 		loopStarted bool
 
-		// loopCancel is a function to cancel the context of the heartbeat loop.
+		// loopCancel is a function to cancelClient the context of the heartbeat loop.
 		// Non-nil if the heartbeat loop is currently running.
 		loopCancel func()
 
@@ -343,7 +343,7 @@ func (h *txnHeartbeater) startHeartbeatLoopLocked(ctx context.Context) {
 }
 
 func (h *txnHeartbeater) cancelHeartbeatLoopLocked() {
-	// If the heartbeat loop has already started, cancel it.
+	// If the heartbeat loop has already started, cancelClient it.
 	if h.heartbeatLoopRunningLocked() {
 		h.mu.loopCancel()
 		h.mu.loopCancel = nil

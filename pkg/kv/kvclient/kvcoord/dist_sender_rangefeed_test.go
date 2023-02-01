@@ -543,7 +543,7 @@ func TestRestartsStuckRangeFeedsSecondImplementation(t *testing.T) {
 			origCancel := cancel
 			cancel = func() {
 				t.Helper()
-				t.Log("cancel invoked")
+				t.Log("cancelClient invoked")
 				origCancel()
 			}
 		}

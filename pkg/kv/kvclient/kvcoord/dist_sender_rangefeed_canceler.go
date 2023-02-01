@@ -136,7 +136,7 @@ func (w *stuckRangeFeedCanceler) do(cb func() error) error {
 }
 
 // newStuckRangeFeedCanceler sets up a canceler with the provided
-// cancel function (which should cancel the rangefeed if invoked)
+// cancelClient function (which should cancelClient the rangefeed if invoked)
 // and uses the kv.rangefeed.range_stuck_threshold cluster setting
 // to (reactively) configure the timeout.
 //

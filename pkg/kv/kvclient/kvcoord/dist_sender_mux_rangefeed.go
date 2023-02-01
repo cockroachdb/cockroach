@@ -31,11 +31,13 @@ type rangefeedMuxer struct {
 	// eventCh receives events from all active muxStreams.
 	eventCh chan *roachpb.MuxRangeFeedEvent
 
-	// Context group controlling execution of MuxRangeFeed calls.
+	// Context group controlling execution of MuxRangeFeed calls. When this group
+	// cancels, the entire muxer shuts down. The goroutines started in `g` will
+	// always return `nil` errors except when they detect that the mux is shutting
+	// down.
 	g ctxgroup.Group
 
 	mu struct {
-		// lock used to coordinate establishment and tear down of client connections.
 		syncutil.Mutex
 
 		// Each call to start new range feed gets a unique ID which is echoed back
@@ -43,7 +45,7 @@ type rangefeedMuxer struct {
 		// that we always send the event to the correct consumer -- even if the
 		// range feed is terminated and re-established rapidly.
 		nextStreamID int64
-		connectDone  chan error // Channel to communicate connect attempt completion.
+		connectDone  chan error // channel to communicate connect attempt completion
 
 		// map of active MuxRangeFeed clients.
 		clients map[roachpb.NodeID]*muxClientState
@@ -57,15 +59,17 @@ type rangefeedMuxer struct {
 // muxClientState is the state maintained for each MuxRangeFeed rpc.
 type muxClientState struct {
 	// RPC state.
-	client roachpb.Internal_MuxRangeFeedClient
-	cancel context.CancelFunc
+	client       roachpb.Internal_MuxRangeFeedClient
+	cancelClient context.CancelFunc // cancels `client` (and nothing else)
 
-	done    chan struct{} // Signaled to indicate MuxRangeFeed shutdown.
-	recvErr error         // Set when shutdown.
+	done    chan struct{} // closed when recvErr is set
+	recvErr error         // set when client shuts down as result of event received (split, etc)
 
 	// Number of consumers (ranges) running on this node; accessed under rangefeedMuxer lock.
 	numStreams int
 }
+
+var _ terminationContext = (*muxClientState)(nil)
 
 func newRangefeedMuxer(g ctxgroup.Group) *rangefeedMuxer {
 	m := &rangefeedMuxer{
@@ -139,7 +143,7 @@ func (m *rangefeedMuxer) startMuxRangeFeed(
 			if log.V(1) {
 				log.InfofDepth(streamCtx, 1, "shut down inactive mux for node %d", req.Replica.NodeID)
 			}
-			ms.cancel()
+			ms.cancelClient()
 		}
 	}
 
@@ -198,20 +202,20 @@ func (m *rangefeedMuxer) startNodeMuxRangeFeed(
 		defer restore()
 
 		if log.V(1) {
-			log.Info(ctx, "Establishing MuxRangeFeed")
+			log.Info(ctx, "establishing MuxRangeFeed")
 			start := timeutil.Now()
 			defer func() {
 				log.Infof(ctx, "MuxRangeFeed terminating with recvErr=%v after %s", err, timeutil.Since(start))
 			}()
 		}
 
-		ctx, ms.cancel = context.WithCancel(ctx)
-		defer ms.cancel()
+		ctx, ms.cancelClient = context.WithCancel(ctx)
+		defer ms.cancelClient()
 
 		ms.client, err = client.MuxRangeFeed(ctx)
 		m.mu.connectDone <- err
 		if err != nil {
-			return err
+			return err // TODO(during review): this will tear down the entire mux, is that what we want?
 		}
 		return ms.receiveEvents(ctx, m.eventCh)
 	})
@@ -290,10 +294,12 @@ func (s *muxClientState) receiveEvents(
 	}
 }
 
+// Done implements terminationContext.
 func (s *muxClientState) Done() <-chan struct{} {
 	return s.done
 }
 
+// Err implements terminationContext.
 func (s *muxClientState) Err() error {
 	return s.recvErr
 }
