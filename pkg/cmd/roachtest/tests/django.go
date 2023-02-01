@@ -179,6 +179,7 @@ func registerDjango(r registry.Registry) {
 
 		if err := repeatRunE(
 			ctx, t, c, node, "install django-cockroachdb", `
+					source venv/bin/activate &&
 					cd /mnt/data1/django/tests/django-cockroachdb/ &&
 					pip3 install .`,
 		); err != nil {
