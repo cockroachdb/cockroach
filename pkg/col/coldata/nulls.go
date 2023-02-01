@@ -181,6 +181,15 @@ func (n *Nulls) NullAt(i int) bool {
 	return n.nulls[i>>3]&bitMask[i&7] == 0
 }
 
+// NullAtChecked returns true if the ith value of the column is null and allows
+// an uninitialized Nulls to represent "no nulls".
+func (n *Nulls) NullAtChecked(i int) bool {
+	if n.nulls != nil {
+		return n.NullAt(i)
+	}
+	return false
+}
+
 // SetNull sets the ith value of the column to null.
 func (n *Nulls) SetNull(i int) {
 	n.maybeHasNulls = true

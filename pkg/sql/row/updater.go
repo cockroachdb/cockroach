@@ -349,12 +349,13 @@ func (ru *Updater) UpdateRow(
 		}
 	}
 
+	putter := &KVBatchAdapter{Batch: batch}
 	if rowPrimaryKeyChanged {
 		if err := ru.rd.DeleteRow(ctx, batch, oldValues, pm, traceKV); err != nil {
 			return nil, err
 		}
 		if err := ru.ri.InsertRow(
-			ctx, batch, ru.newValues, pm, false /* ignoreConflicts */, traceKV,
+			ctx, putter, ru.newValues, pm, false /* ignoreConflicts */, traceKV,
 		); err != nil {
 			return nil, err
 		}
@@ -363,7 +364,7 @@ func (ru *Updater) UpdateRow(
 	}
 
 	// Add the new values.
-	ru.valueBuf, err = prepareInsertOrUpdateBatch(ctx, batch,
+	ru.valueBuf, err = prepareInsertOrUpdateBatch(ctx, putter,
 		&ru.Helper, primaryIndexKey, ru.FetchCols,
 		ru.newValues, ru.FetchColIDtoRowIndex,
 		ru.UpdateColIDtoRowIndex,
@@ -420,7 +421,7 @@ func (ru *Updater) UpdateRow(
 
 					if index.ForcePut() {
 						// See the comment on (catalog.Index).ForcePut() for more details.
-						insertPutFn(ctx, batch, &newEntry.Key, &newEntry.Value, traceKV)
+						insertPutFn(ctx, putter, &newEntry.Key, &newEntry.Value, traceKV)
 					} else {
 						if traceKV {
 							k := keys.PrettyPrint(ru.Helper.secIndexValDirs[i], newEntry.Key)
@@ -456,7 +457,7 @@ func (ru *Updater) UpdateRow(
 
 					if index.ForcePut() {
 						// See the comment on (catalog.Index).ForcePut() for more details.
-						insertPutFn(ctx, batch, &newEntry.Key, &newEntry.Value, traceKV)
+						insertPutFn(ctx, putter, &newEntry.Key, &newEntry.Value, traceKV)
 					} else {
 						// In this case, the index now has a k/v that did not exist in the
 						// old row, so we should expect to not see a value for the new key,
@@ -492,7 +493,7 @@ func (ru *Updater) UpdateRow(
 				newEntry := &newEntries[newIdx]
 				if index.ForcePut() {
 					// See the comment on (catalog.Index).ForcePut() for more details.
-					insertPutFn(ctx, batch, &newEntry.Key, &newEntry.Value, traceKV)
+					insertPutFn(ctx, putter, &newEntry.Key, &newEntry.Value, traceKV)
 				} else {
 					if traceKV {
 						k := keys.PrettyPrint(ru.Helper.secIndexValDirs[i], newEntry.Key)
@@ -514,9 +515,9 @@ func (ru *Updater) UpdateRow(
 			for j := range ru.newIndexEntries[i] {
 				if index.ForcePut() {
 					// See the comment on (catalog.Index).ForcePut() for more details.
-					insertPutFn(ctx, batch, &ru.newIndexEntries[i][j].Key, &ru.newIndexEntries[i][j].Value, traceKV)
+					insertPutFn(ctx, putter, &ru.newIndexEntries[i][j].Key, &ru.newIndexEntries[i][j].Value, traceKV)
 				} else {
-					insertInvertedPutFn(ctx, batch, &ru.newIndexEntries[i][j].Key, &ru.newIndexEntries[i][j].Value, traceKV)
+					insertInvertedPutFn(ctx, putter, &ru.newIndexEntries[i][j].Key, &ru.newIndexEntries[i][j].Value, traceKV)
 				}
 			}
 		}
