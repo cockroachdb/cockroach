@@ -1375,7 +1375,12 @@ CREATE TABLE crdb_internal.node_statement_statistics (
   database_name       STRING NOT NULL,
   exec_node_ids       INT[] NOT NULL,
   txn_fingerprint_id  STRING,
-  index_recommendations STRING[] NOT NULL
+  index_recommendations STRING[] NOT NULL,
+  latency_min FLOAT,
+	latency_max FLOAT,
+	latency_p50 FLOAT,
+	latency_p90 FLOAT,
+	latency_p99 FLOAT
 )`,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		hasViewActivityOrViewActivityRedacted, err := p.HasViewActivityOrViewActivityRedactedRole(ctx)
@@ -1485,6 +1490,11 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 				execNodeIDs,                         // exec_node_ids
 				txnFingerprintID,                    // txn_fingerprint_id
 				indexRecommendations,                // index_recommendations
+				tree.NewDFloat(tree.DFloat(stats.Stats.LatencyInfo.Min)), // latency_min
+				tree.NewDFloat(tree.DFloat(stats.Stats.LatencyInfo.Max)), // latency_max
+				tree.NewDFloat(tree.DFloat(stats.Stats.LatencyInfo.P50)), // latency_p50
+				tree.NewDFloat(tree.DFloat(stats.Stats.LatencyInfo.P90)), // latency_p90
+				tree.NewDFloat(tree.DFloat(stats.Stats.LatencyInfo.P99)), // latency_p99
 			)
 			if err != nil {
 				return err
