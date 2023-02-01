@@ -76,6 +76,8 @@ build:crosslinux '--workspace_status_command=./build/bazelutil/stamp.sh x86_64-p
 build:crosslinux --config=crosslinuxbase
 build:crosslinuxbase --platforms=//build/toolchains:cross_linux
 build:crosslinuxbase --config=cross
+# TODO: this is temp hack to test things
+build:crosslinuxbase --@io_bazel_rules_go//go/toolchain:sdk_repo=@go_sdk_fips
 build:crosslinuxfips '--workspace_status_command=./build/bazelutil/stamp.sh x86_64-pc-linux-gnu'
 build:crosslinuxfips --config=crosslinuxfipsbase
 build:crosslinuxfipsbase --platforms=//build/toolchains:cross_linux
