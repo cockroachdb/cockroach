@@ -40,10 +40,20 @@ func New(
 	pool *mon.BytesMonitor,
 	reportingSink Sink,
 	knobs *sqlstats.TestingKnobs,
+	latencyInformation insights.LatencyInformation,
 ) *SQLStats {
-	return newSQLStats(settings, maxStmtFingerprints, maxTxnFingerprints,
-		curMemoryBytesCount, maxMemoryBytesHist, insightsWriter, pool,
-		reportingSink, knobs)
+	return newSQLStats(
+		settings,
+		maxStmtFingerprints,
+		maxTxnFingerprints,
+		curMemoryBytesCount,
+		maxMemoryBytesHist,
+		insightsWriter,
+		pool,
+		reportingSink,
+		knobs,
+		latencyInformation,
+	)
 }
 
 var _ sqlstats.Provider = &SQLStats{}
@@ -105,6 +115,7 @@ func (s *SQLStats) GetApplicationStats(appName string, internal bool) sqlstats.A
 		appName,
 		s.knobs,
 		s.insights(internal),
+		s.latencyInformation,
 	)
 	s.mu.apps[appName] = a
 	return a

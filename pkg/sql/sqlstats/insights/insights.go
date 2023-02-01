@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -153,6 +154,16 @@ type Reader interface {
 	IterateInsights(context.Context, func(context.Context, *Insight))
 }
 
+type LatencyInformation interface {
+	GetPercentileValues(fingerprintID appstatspb.StmtFingerprintID) PercentileValues
+}
+
+type PercentileValues struct {
+	P50 float64
+	P90 float64
+	P99 float64
+}
+
 // Provider offers access to the insights subsystem.
 type Provider interface {
 	// Start launches the background tasks necessary for processing insights.
@@ -164,21 +175,27 @@ type Provider interface {
 
 	// Reader returns an object that offers read access to any detected insights.
 	Reader() Reader
+
+	// LatencyInformation returns an object that offers read access to latency information,
+	// such as percentiles.
+	LatencyInformation() LatencyInformation
 }
 
 // New builds a new Provider.
 func New(st *cluster.Settings, metrics Metrics) Provider {
 	store := newStore(st)
+	anomalyDetector := newAnomalyDetector(st, metrics)
 
 	return &defaultProvider{
 		store: store,
 		ingester: newConcurrentBufferIngester(
 			newRegistry(st, &compositeDetector{detectors: []detector{
 				&latencyThresholdDetector{st: st},
-				newAnomalyDetector(st, metrics),
+				anomalyDetector,
 			}}, &compositeSink{sinks: []sink{
 				store,
 			}}),
 		),
+		anomalyDetector: anomalyDetector,
 	}
 }

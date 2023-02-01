@@ -277,6 +277,13 @@ function randomStats(
     plan_gists: ["Ais="],
     index_recommendations: [""],
     indexes: ["123@456"],
+    latency_info: {
+      min: 0.01,
+      max: 1.2,
+      p50: 0.4,
+      p90: 0.7,
+      p99: 1.1,
+    },
   };
 }
 
