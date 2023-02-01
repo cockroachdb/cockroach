@@ -260,6 +260,7 @@ func TestTransientClusterMultitenant(t *testing.T) {
 
 	// This test is too slow to complete under the race detector, sometimes.
 	skip.UnderRace(t)
+	skip.WithIssue(t, 96162)
 
 	defer TestingForceRandomizeDemoPorts()()
 
