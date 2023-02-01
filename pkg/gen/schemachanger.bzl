@@ -19,4 +19,5 @@ SCHEMACHANGER_SRCS = [
     "//pkg/sql/schemachanger/scplan/internal/scgraph:depedgekind_string.go",
     "//pkg/sql/schemachanger/screl:attr_string.go",
     "//pkg/sql/schemachanger:sctest_generated_test.go",
+    "//pkg/sql/schemachanger:sctest_mixed_generated_test.go",
 ]
