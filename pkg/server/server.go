@@ -50,6 +50,9 @@ import (
 	serverrangefeed "github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangelog"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/reports"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiesauthorizer"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitieswatcher"
 	"github.com/cockroachdb/cockroach/pkg/obs"
 	"github.com/cockroachdb/cockroach/pkg/obsservice/obspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -170,6 +173,8 @@ type Server struct {
 	spanConfigSubscriber spanconfig.KVSubscriber
 	spanConfigReporter   spanconfig.Reporter
 
+	tenantCapabilitiesWatcher tenantcapabilities.Watcher
+
 	// pgL is the SQL listener.
 	pgL net.Listener
 
@@ -284,6 +289,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		&cfg.DefaultZoneConfig,
 	)
 
+	tenantCapabilitiesTestingKnobs, _ := cfg.TestingKnobs.TenantCapabilitiesTestingKnobs.(*tenantcapabilities.TestingKnobs)
+	authorizer := tenantcapabilitiesauthorizer.New(cfg.Settings, tenantCapabilitiesTestingKnobs)
 	rpcCtxOpts := rpc.ContextOptions{
 		TenantID:         roachpb.SystemTenantID,
 		NodeID:           cfg.IDContainer,
@@ -310,6 +317,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 			// operations should fail immediately.
 			return checkPingFor(ctx, req.OriginNodeID, codes.PermissionDenied)
 		},
+		TenantRPCAuthorizer: authorizer,
 	}
 	if knobs := cfg.TestingKnobs.Server; knobs != nil {
 		serverKnobs := knobs.(*TestingKnobs)
@@ -774,6 +782,15 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		clock, rangeFeedFactory, stopper, st,
 	)
 
+	tenantCapabilitiesWatcher := tenantcapabilitieswatcher.New(
+		clock,
+		rangeFeedFactory,
+		keys.TenantsTableID,
+		stopper,
+		1<<20, /* 1 MB */
+		tenantCapabilitiesTestingKnobs,
+	)
+
 	node := NewNode(
 		storeCfg,
 		recorder,
@@ -1079,55 +1096,56 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	)
 
 	*lateBoundServer = Server{
-		nodeIDContainer:        nodeIDContainer,
-		cfg:                    cfg,
-		st:                     st,
-		clock:                  clock,
-		rpcContext:             rpcContext,
-		engines:                engines,
-		grpc:                   grpcServer,
-		gossip:                 g,
-		nodeDialer:             nodeDialer,
-		nodeLiveness:           nodeLiveness,
-		storePool:              storePool,
-		tcsFactory:             tcsFactory,
-		distSender:             distSender,
-		db:                     db,
-		node:                   node,
-		registry:               registry,
-		recorder:               recorder,
-		ruleRegistry:           ruleRegistry,
-		promRuleExporter:       promRuleExporter,
-		updates:                updates,
-		ctSender:               ctSender,
-		runtime:                runtimeSampler,
-		http:                   sHTTP,
-		adminAuthzCheck:        adminAuthzCheck,
-		admin:                  sAdmin,
-		status:                 sStatus,
-		drain:                  drain,
-		decomNodeMap:           decomNodeMap,
-		authentication:         sAuth,
-		tsDB:                   tsDB,
-		tsServer:               &sTS,
-		eventsServer:           eventsServer,
-		recoveryServer:         recoveryServer,
-		raftTransport:          raftTransport,
-		stopper:                stopper,
-		stopTrigger:            stopTrigger,
-		debug:                  debugServer,
-		kvProber:               kvProber,
-		replicationReporter:    replicationReporter,
-		protectedtsProvider:    protectedtsProvider,
-		spanConfigSubscriber:   spanConfig.subscriber,
-		spanConfigReporter:     spanConfig.reporter,
-		pgPreServer:            pgPreServer,
-		sqlServer:              sqlServer,
-		serverController:       sc,
-		externalStorageBuilder: externalStorageBuilder,
-		storeGrantCoords:       gcoords.Stores,
-		kvMemoryMonitor:        kvMemoryMonitor,
-		spanStatsServer:        spanStatsServer,
+		nodeIDContainer:           nodeIDContainer,
+		cfg:                       cfg,
+		st:                        st,
+		clock:                     clock,
+		rpcContext:                rpcContext,
+		engines:                   engines,
+		grpc:                      grpcServer,
+		gossip:                    g,
+		nodeDialer:                nodeDialer,
+		nodeLiveness:              nodeLiveness,
+		storePool:                 storePool,
+		tcsFactory:                tcsFactory,
+		distSender:                distSender,
+		db:                        db,
+		node:                      node,
+		registry:                  registry,
+		recorder:                  recorder,
+		ruleRegistry:              ruleRegistry,
+		promRuleExporter:          promRuleExporter,
+		updates:                   updates,
+		ctSender:                  ctSender,
+		runtime:                   runtimeSampler,
+		http:                      sHTTP,
+		adminAuthzCheck:           adminAuthzCheck,
+		admin:                     sAdmin,
+		status:                    sStatus,
+		drain:                     drain,
+		decomNodeMap:              decomNodeMap,
+		authentication:            sAuth,
+		tsDB:                      tsDB,
+		tsServer:                  &sTS,
+		eventsServer:              eventsServer,
+		recoveryServer:            recoveryServer,
+		raftTransport:             raftTransport,
+		stopper:                   stopper,
+		stopTrigger:               stopTrigger,
+		debug:                     debugServer,
+		kvProber:                  kvProber,
+		replicationReporter:       replicationReporter,
+		protectedtsProvider:       protectedtsProvider,
+		spanConfigSubscriber:      spanConfig.subscriber,
+		spanConfigReporter:        spanConfig.reporter,
+		tenantCapabilitiesWatcher: tenantCapabilitiesWatcher,
+		pgPreServer:               pgPreServer,
+		sqlServer:                 sqlServer,
+		serverController:          sc,
+		externalStorageBuilder:    externalStorageBuilder,
+		storeGrantCoords:          gcoords.Stores,
+		kvMemoryMonitor:           kvMemoryMonitor,
+		spanStatsServer:           spanStatsServer,
 	}
 
 	return lateBoundServer, err
@@ -1909,6 +1927,13 @@ func (s *Server) PreStart(ctx context.Context) error {
 	if err := s.node.tenantSettingsWatcher.Start(workersCtx, s.sqlServer.execCfg.SystemTableIDResolver); err != nil {
 		return errors.Wrap(err, "failed to initialize the tenant settings watcher")
 	}
+	if err := s.tenantCapabilitiesWatcher.Start(ctx); err != nil {
+		return errors.Wrap(err, "initializing tenant capabilities")
+	}
+	// Now that we've got the tenant capabilities subsystem all started, we bind
+	// the Reader to the TenantRPCAuthorizer, so that it has a handle into the
+	// global tenant capabilities state.
+	s.rpcContext.TenantRPCAuthorizer.BindReader(s.tenantCapabilitiesWatcher)
 
 	if err := s.kvProber.Start(workersCtx, s.stopper); err != nil {
 		return errors.Wrapf(err, "failed to start KV prober")

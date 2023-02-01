@@ -1,5 +1,6 @@
 # LogicTest: local 3node-tenant
 # tenant-cluster-setting-override-opt: sql.split_at.allow_for_secondary_tenant.enabled=true
+# cluster-opt: can-admin-split
 
 # This test depends on table ID's being stable, so add new tests at the bottom
 # of the file.
