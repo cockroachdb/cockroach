@@ -450,6 +450,7 @@ func (n *Node) start(
 ) error {
 	n.initialStart = initialStart
 	n.startedAt = n.storeCfg.Clock.Now().WallTime
+	attrs.Attrs = append(attrs.Attrs, "crdb_internal.node_id."+state.nodeID.String())
 	n.Descriptor = roachpb.NodeDescriptor{
 		NodeID:          state.nodeID,
 		Address:         util.MakeUnresolvedAddr(addr.Network(), addr.String()),

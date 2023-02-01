@@ -2012,7 +2012,41 @@ func (s *Store) GetConfReader(ctx context.Context) (spanconfig.StoreReader, erro
 		return sysCfg, nil
 	}
 
-	return s.cfg.SpanConfigSubscriber, nil
+	return wrappingLivenessStoreReader{internal: s.cfg.SpanConfigSubscriber, liveness: s.cfg.NodeLiveness}, nil
+}
+
+type wrappingLivenessStoreReader struct {
+	internal spanconfig.StoreReader
+	liveness *liveness.NodeLiveness
+}
+
+func (wlsr wrappingLivenessStoreReader) NeedsSplit(ctx context.Context, start, end roachpb.RKey) bool {
+	return len(wlsr.ComputeSplitKey(ctx, start, end)) > 0
+}
+func (wlsr wrappingLivenessStoreReader) ComputeSplitKey(ctx context.Context, start, end roachpb.RKey) roachpb.RKey {
+	// TODO(baptist: Is this the best way to check? We don't have to aggressively
+	// split nodes that are not live. This would be faster if the map was sorted
+	// and we did a binary search.
+	checkSpan := roachpb.Span{Key: start.AsRawKey(), EndKey: end.AsRawKey()}
+
+	if keys.NodeLivenessSpan.Contains(checkSpan) {
+		for _, node := range wlsr.liveness.GetIsLiveMap() {
+			if node.IsLive {
+				splitKey := keys.NodeLivenessKey(node.NodeID)
+				if checkSpan.ContainsKey(splitKey) && !start.Equal(splitKey) && !end.Equal(splitKey) {
+					return keys.MustAddr(splitKey)
+				}
+			}
+		}
+	}
+	return wlsr.internal.ComputeSplitKey(ctx, start, end)
+}
+func (wlsr wrappingLivenessStoreReader) GetSpanConfigForKey(ctx context.Context, key roachpb.RKey) (roachpb.SpanConfig, error) {
+	spanConfig, err := wlsr.internal.GetSpanConfigForKey(ctx, key)
+	if err != nil {
+		return spanConfig, err
+	}
+	return spanconfigstore.WrapLivenessSpanConfig(spanConfig, key), nil
 }
 
 // startLeaseRenewer runs an infinite loop in a goroutine which regularly

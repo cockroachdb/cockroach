@@ -84,13 +84,13 @@ func (s *Store) startGossip() {
 		return pErr.GoError()
 	}
 	gossipFns := []struct {
-		key         roachpb.Key
+		span        roachpb.Span
 		fn          func(context.Context, *Replica) error
 		description redact.SafeString
 		interval    time.Duration
 	}{
 		{
-			key: roachpb.KeyMin,
+			span: keys.Meta1Span,
 			fn: func(ctx context.Context, repl *Replica) error {
 				// The first range is gossiped by all replicas, not just the lease
 				// holder, so wakeReplica is not used here.
@@ -100,7 +100,7 @@ func (s *Store) startGossip() {
 			interval:    s.cfg.SentinelGossipTTL() / 2,
 		},
 		{
-			key:         keys.NodeLivenessSpan.Key,
+			span:        keys.NodeLivenessSpan,
 			fn:          wakeReplica,
 			description: "node liveness",
 			interval:    systemDataGossipInterval,
@@ -127,7 +127,22 @@ func (s *Store) startGossip() {
 				retryOptions := base.DefaultRetryOptions()
 				retryOptions.Closer = s.stopper.ShouldQuiesce()
 				for r := retry.Start(retryOptions); r.Next(); {
-					if repl := s.LookupReplica(roachpb.RKey(gossipFn.key)); repl != nil {
+					var repls []*Replica
+					s.mu.RLock()
+					err := s.mu.replicasByKey.VisitKeyRange(
+						ctx, roachpb.RKey(gossipFn.span.Key), roachpb.RKey(gossipFn.span.EndKey), AscendingKeyOrder,
+						func(ctx context.Context, r replicaOrPlaceholder) error {
+							if r.repl != nil {
+								repls = append(repls, r.repl)
+							}
+							return nil
+						})
+					s.mu.RUnlock()
+					if err != nil {
+						log.Infof(ctx, "%s", err)
+						continue
+					}
+					for _, repl := range repls {
 						annotatedCtx := repl.AnnotateCtx(ctx)
 						if err := gossipFn.fn(annotatedCtx, repl); err != nil {
 							if cannotGossipEvery.ShouldLog() {

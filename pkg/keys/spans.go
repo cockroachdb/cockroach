@@ -52,5 +52,5 @@ var (
 	// Meta1Span: needed to find other ranges.
 	// Meta2MaxSpan: between meta and system ranges.
 	// NodeLivenessSpan: liveness information on nodes in the cluster.
-	NoSplitSpans = []roachpb.Span{Meta1Span, Meta2MaxSpan, NodeLivenessSpan}
+	NoSplitSpans = []roachpb.Span{Meta1Span, Meta2MaxSpan}
 )
