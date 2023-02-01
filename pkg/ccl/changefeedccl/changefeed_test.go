@@ -2838,10 +2838,10 @@ func TestChangefeedJobControl(t *testing.T) {
 			waitForJobStatus(userDB, t, currentFeed.JobID(), "paused")
 		})
 		asUser(t, f, `userWithAllGrants`, func(userDB *sqlutils.SQLRunner) {
-			userDB.ExpectErr(t, "pq: only admins can control jobs owned by other admins", "PAUSE job $1", currentFeed.JobID())
+			userDB.ExpectErr(t, "pq: only admins can control jobs owned by node or root", "PAUSE job $1", currentFeed.JobID())
 		})
 		asUser(t, f, `jobController`, func(userDB *sqlutils.SQLRunner) {
-			userDB.ExpectErr(t, "pq: only admins can control jobs owned by other admins", "PAUSE job $1", currentFeed.JobID())
+			userDB.ExpectErr(t, "pq: only admins can control jobs owned by node or root", "PAUSE job $1", currentFeed.JobID())
 		})
 		closeCf()
 	}

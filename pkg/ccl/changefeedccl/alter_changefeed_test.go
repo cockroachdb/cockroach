@@ -1671,10 +1671,10 @@ func TestAlterChangefeedAccessControl(t *testing.T) {
 			}))
 		})
 		asUser(t, f, `userWithAllGrants`, func(userDB *sqlutils.SQLRunner) {
-			userDB.ExpectErr(t, "pq: only admins can control jobs owned by other admins", fmt.Sprintf(`ALTER CHANGEFEED %d ADD table_b`, currentFeed.JobID()))
+			userDB.ExpectErr(t, "pq: only admins can control jobs owned by node or root", fmt.Sprintf(`ALTER CHANGEFEED %d ADD table_b`, currentFeed.JobID()))
 		})
 		asUser(t, f, `jobController`, func(userDB *sqlutils.SQLRunner) {
-			userDB.ExpectErr(t, "pq: only admins can control jobs owned by other admins", fmt.Sprintf(`ALTER CHANGEFEED %d ADD table_b`, currentFeed.JobID()))
+			userDB.ExpectErr(t, "pq: only admins can control jobs owned by node or root", fmt.Sprintf(`ALTER CHANGEFEED %d ADD table_b`, currentFeed.JobID()))
 		})
 		closeCf()
 	}

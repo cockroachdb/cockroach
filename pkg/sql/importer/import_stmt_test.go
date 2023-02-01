@@ -5263,7 +5263,7 @@ func TestImportControlJobRBAC(t *testing.T) {
 
 			// Test testuser CANNOT control root job.
 			_, err = testuser.Exec(tc.controlQuery, rootJob2.ID())
-			require.True(t, testutils.IsError(err, "only admins can control jobs owned by other admins"))
+			require.True(t, testutils.IsError(err, "only admins can control jobs owned by node or root"))
 		})
 	}
 }

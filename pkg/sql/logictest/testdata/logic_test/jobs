@@ -135,14 +135,12 @@ DROP TABLE t1
 
 user testuser
 
-# testuser should be able to see jobs created by non-admin users.
+# testuser should be able to see all jobs
 query TTT
-SELECT job_type, description, user_name FROM crdb_internal.jobs ORDER BY 1, 2, 3
+SELECT job_type, description, user_name FROM crdb_internal.jobs WHERE job_type = 'SCHEMA CHANGE GC' ORDER BY 1, 2, 3
 ----
-SCHEMA CHANGE     CREATE INDEX ON test.public.t1 (x)                 testuser2
-SCHEMA CHANGE     CREATE INDEX ON test.public.u (x)                  testuser
-SCHEMA CHANGE     DROP TABLE test.public.t1                          testuser2
 SCHEMA CHANGE GC  GC for DROP TABLE test.public.t1                   testuser2
+SCHEMA CHANGE GC  GC for temporary index used during index backfill  root
 SCHEMA CHANGE GC  GC for temporary index used during index backfill  testuser
 SCHEMA CHANGE GC  GC for temporary index used during index backfill  testuser2
 
@@ -160,7 +158,21 @@ SELECT job_id FROM [SHOW JOBS] WHERE user_name = 'root' AND job_type = 'SCHEMA C
 
 user testuser
 
-statement error pq: only admins can control jobs owned by other admins
+statement error pq: only admins can control jobs owned by node or root
+PAUSE JOB (SELECT $job_id)
+
+user root
+
+# Test that testuesr control a job owned by an admin that is not "node" or "root"
+statement ok
+GRANT ADMIN TO testuser2
+
+user testuser
+
+let $job_id
+SELECT job_id FROM [SHOW JOBS] WHERE user_name = 'testuser2' AND job_type = 'SCHEMA CHANGE GC' AND description LIKE 'GC for DROP%'
+
+statement ok
 PAUSE JOB (SELECT $job_id)
 
 user root
