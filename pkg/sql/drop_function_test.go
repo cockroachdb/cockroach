@@ -398,7 +398,7 @@ $$;
 			err = sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
 				_, err := col.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Function(ctx, 113)
 				require.Error(t, err)
-				require.Regexp(t, "descriptor is being dropped", err.Error())
+				require.Regexp(t, "function undefined", err.Error())
 				return nil
 			})
 			require.NoError(t, err)
