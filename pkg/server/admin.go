@@ -1647,7 +1647,7 @@ func (s *adminServer) RangeLog(
 	ctx = s.AnnotateCtx(ctx)
 
 	// Range keys, even when pretty-printed, contain PII.
-	user, _, err := s.getUserAndRole(ctx)
+	user, err := userFromContext(ctx)
 	if err != nil {
 		return nil, err
 	}
