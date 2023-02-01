@@ -303,7 +303,7 @@ func TestTransientClusterMultitenant(t *testing.T) {
 
 	testutils.RunTrueAndFalse(t, "forSecondaryTenant", func(t *testing.T, forSecondaryTenant bool) {
 		url, err := c.getNetworkURLForServer(ctx, 0,
-			true /* includeAppName */, forSecondaryTenant)
+			true /* includeAppName */, serverSelection(forSecondaryTenant))
 		require.NoError(t, err)
 		sqlConnCtx := clisqlclient.Context{}
 		conn := sqlConnCtx.MakeSQLConn(io.Discard, io.Discard, url.ToPQ().String())
