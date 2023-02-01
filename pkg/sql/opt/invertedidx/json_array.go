@@ -612,14 +612,6 @@ func (j *jsonOrArrayFilterPlanner) extractJSONFetchValContainsCondition(
 		return inverted.NonInvertedColExpression{}
 	}
 
-	// Not using inverted indices, yet, for filters of the form
-	// j->0 @> '{"b": "c"}' or j->0 <@ '{"b": "c"}'
-	for i := range keys {
-		if _, ok := keys[i].(*tree.DString); !ok {
-			return inverted.NonInvertedColExpression{}
-		}
-	}
-
 	// Build a new JSON object with the collected keys and val.
 	obj := buildObject(keys, val.JSON)
 
@@ -647,6 +639,29 @@ func (j *jsonOrArrayFilterPlanner) extractJSONFetchValContainsCondition(
 			invertedExpr = inverted.Or(invertedExpr, expr)
 		}
 	}
+
+	// If a key is of the type DInt, the InvertedExpression generated is
+	// not tight. This is because key encodings for JSON arrays don't
+	// contain the respective index positions for each of their elements.
+	// A JSON array of the form ["a", 31] will have the following encoding
+	// into an index key:
+	//
+	// 1/2/arr/a/pk1
+	// 1/2/arr/31/pk1
+	//
+	// where arr is an ARRAY type tag used to indicate that the next key is
+	// part of an array, 1 is the table id, 2 is the inverted index id and
+	// pk is a primary key of a row in the table. Since the array
+	// elements do not have their respective indices stored in
+	// the encoding, the original filter needs to be applied after the initial
+	// scan.
+	for i := range keys {
+		if _, ok := keys[i].(*tree.DInt); ok {
+			invertedExpr.SetNotTight()
+			break
+		}
+	}
+
 	return invertedExpr
 }
 
