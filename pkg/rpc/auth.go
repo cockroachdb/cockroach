@@ -190,65 +190,89 @@ func (authnSuccessPeerIsPrivileged) authnResult()   {}
 // authenticate verifies the credentials of the client and performs
 // some consistency check with the information provided.
 func (a kvAuth) authenticate(ctx context.Context) (authnResult, error) {
-	// Do we have a wanted tenant ID from the request metadata?
-	var wantedTenantID roachpb.TenantID
-
-	// Deal with local requests done through the internalClientAdapter. There's no
-	// TLS for these calls, so the regular authentication code path doesn't apply.
+	var ar authnResult
 	if clientTenantID, localRequest := grpcutil.IsLocalRequestContext(ctx); localRequest {
-		if !clientTenantID.IsSystem() {
-			wantedTenantID = clientTenantID
+		var err error
+		ar, err = a.authenticateLocalRequest(ctx, clientTenantID)
+		if err != nil {
+			return nil, err
 		}
 	} else {
-		// TLS case. We will need to look at the TLS cert in any case, so
-		// extract it first.
-		clientCert, err := getClientCert(ctx)
+		var err error
+		ar, err = a.authenticateNetworkRequest(ctx)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	switch res := ar.(type) {
+	case authnSuccessPeerIsTenantServer:
+		if wantedTenantID := roachpb.TenantID(res); !a.tenant.tenantID.IsSystem() && wantedTenantID != a.tenant.tenantID {
+			log.Ops.Infof(ctx, "rejected incoming request from tenant %d (misconfiguration?)", wantedTenantID)
+			return nil, authErrorf("client tenant identity (%v) does not match server", wantedTenantID)
+		}
+	case authnSuccessPeerIsPrivileged:
+	default:
+		return nil, errors.AssertionFailedf("programming error: unhandled case %T", ar)
+	}
+
+	return ar, nil
+}
+
+// Deal with local requests done through the
+// internalClientAdapter. There's no TLS for these calls, so the
+// regular authentication code path doesn't apply. The clientTenantID
+// should be the result of a call to grpcutil.IsLocalRequestContext.
+func (a kvAuth) authenticateLocalRequest(
+	ctx context.Context, clientTenantID roachpb.TenantID,
+) (authnResult, error) {
+	if !clientTenantID.IsSet() || clientTenantID.IsSystem() {
+		return authnSuccessPeerIsPrivileged{}, nil
+	}
+
+	return authnSuccessPeerIsTenantServer(clientTenantID), nil
+}
+
+// authenticateNetworkRequest authenticates requests made over a TLS connection.
+func (a kvAuth) authenticateNetworkRequest(ctx context.Context) (authnResult, error) {
+	// We will need to look at the TLS cert in any case, so extract it
+	// first.
+	clientCert, err := getClientCert(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	// Did the client peer use a tenant client cert?
+	if security.IsTenantCertificate(clientCert) {
+		// If the peer is using a client tenant cert, in any case we
+		// validate the tenant ID stored in the CN for correctness.
+		tlsID, err := tenantIDFromString(clientCert.Subject.CommonName, "Common Name (CN)")
 		if err != nil {
 			return nil, err
 		}
 
-		// Did the client peer use a tenant client cert?
-		if security.IsTenantCertificate(clientCert) {
-			// If the peer is using a client tenant cert, in any case we
-			// validate the tenant ID stored in the CN for correctness.
-			tlsID, err := tenantIDFromString(clientCert.Subject.CommonName, "Common Name (CN)")
-			if err != nil {
-				return nil, err
-			}
-			// Use the ID in the cert as wanted tenant ID.
-			wantedTenantID = tlsID
-		} else {
-			// We are using TLS, but the peer is not using a client tenant
-			// cert. In that case, we only allow RPCs if the principal is
-			// 'node' or 'root' and the tenant scope in the cert matches
-			// this server (either the cert has scope "global" or its scope
-			// tenant ID matches our own).
-			//
-			// TODO(benesch): the vast majority of RPCs should be limited to just
-			// NodeUser. This is not a security concern, as RootUser has access to
-			// read and write all data, merely good hygiene. For example, there is
-			// no reason to permit the root user to send raw Raft RPCs.
-			certUserScope, err := security.GetCertificateUserScope(clientCert)
-			if err != nil {
-				return nil, err
-			}
-			if err := checkRootOrNodeInScope(certUserScope, a.tenant.tenantID); err != nil {
-				return nil, err
-			}
-		}
+		return authnSuccessPeerIsTenantServer(tlsID), nil
 	}
 
-	if wantedTenantID.IsSet() {
-		// Consistency check: the peer wants to authenticate as another
-		// tenant server, verify that the peer is a service for the same
-		// tenant as ourselves (we don't want to allow tenant 123 to serve
-		// requests for a client coming from tenant 456) or we are the system tenant.
-		if !a.tenant.tenantID.IsSystem() && wantedTenantID != a.tenant.tenantID {
-			log.Ops.Infof(ctx, "rejected incoming request from tenant %d (misconfiguration?)", wantedTenantID)
-			return nil, authErrorf("client tenant identity (%v) does not match server", wantedTenantID)
-		}
-		return authnSuccessPeerIsTenantServer(wantedTenantID), nil
+	// We are using TLS, but the peer is not using a client tenant cert.
+	// In that case, we only allow RPCs if the principal is 'node' or
+	// 'root' and the tenant scope in the cert matches this server
+	// (either the cert has scope "global" or its scope tenant ID
+	// matches our own).
+	//
+	// TODO(benesch): the vast majority of RPCs should be limited to
+	// just NodeUser. This is not a security concern, as RootUser has
+	// access to read and write all data, merely good hygiene. For
+	// example, there is no reason to permit the root user to send raw
+	// Raft RPCs.
+	certUserScope, err := security.GetCertificateUserScope(clientCert)
+	if err != nil {
+		return nil, err
 	}
+	if err := checkRootOrNodeInScope(certUserScope, a.tenant.tenantID); err != nil {
+		return nil, err
+	}
+
 	return authnSuccessPeerIsPrivileged{}, nil
 }
 
