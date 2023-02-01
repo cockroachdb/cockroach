@@ -90,6 +90,13 @@ UniqueWithoutIndexConstraint : []ColumnIDs
 UniqueWithoutIndexConstraint :  Predicate
 UniqueWithoutIndexConstraint :  IndexIDForValidation
 
+object UniqueWithoutIndexConstraintUnvalidated
+
+UniqueWithoutIndexConstraintUnvalidated :  TableID
+UniqueWithoutIndexConstraintUnvalidated :  ConstraintID
+UniqueWithoutIndexConstraintUnvalidated : []ColumnIDs
+UniqueWithoutIndexConstraintUnvalidated :  Predicate
+
 object CheckConstraint
 
 CheckConstraint :  TableID
@@ -375,6 +382,7 @@ View <|-- SecondaryIndex
 Table <|-- TemporaryIndex
 View <|-- TemporaryIndex
 Table <|-- UniqueWithoutIndexConstraint
+Table <|-- UniqueWithoutIndexConstraintUnvalidated
 Table <|-- CheckConstraint
 Table <|-- CheckConstraintUnvalidated
 Table <|-- ForeignKeyConstraint

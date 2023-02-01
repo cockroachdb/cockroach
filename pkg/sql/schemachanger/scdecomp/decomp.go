@@ -601,20 +601,32 @@ func (w *walkCtx) walkIndex(tbl catalog.TableDescriptor, idx catalog.Index) {
 func (w *walkCtx) walkUniqueWithoutIndexConstraint(
 	tbl catalog.TableDescriptor, c catalog.UniqueWithoutIndexConstraint,
 ) {
-	uwi := &scpb.UniqueWithoutIndexConstraint{
-		TableID:      tbl.GetID(),
-		ConstraintID: c.GetConstraintID(),
-		ColumnIDs:    c.CollectKeyColumnIDs().Ordered(),
-	}
+	var expr *scpb.Expression
+	var err error
 	if c.IsPartial() {
-		expr, err := w.newExpression(c.GetPredicate())
+		expr, err = w.newExpression(c.GetPredicate())
 		if err != nil {
 			panic(errors.NewAssertionErrorWithWrappedErrf(err, "unique without index constraint %q in table %q (%d)",
 				c.GetName(), tbl.GetName(), tbl.GetID()))
 		}
-		uwi.Predicate = expr
 	}
-	w.ev(scpb.Status_PUBLIC, uwi)
+	if c.IsConstraintUnvalidated() && w.clusterVersion.IsActive(clusterversion.V23_1) {
+		uwi := &scpb.UniqueWithoutIndexConstraintUnvalidated{
+			TableID:      tbl.GetID(),
+			ConstraintID: c.GetConstraintID(),
+			ColumnIDs:    c.CollectKeyColumnIDs().Ordered(),
+			Predicate:    expr,
+		}
+		w.ev(scpb.Status_PUBLIC, uwi)
+	} else {
+		uwi := &scpb.UniqueWithoutIndexConstraint{
+			TableID:      tbl.GetID(),
+			ConstraintID: c.GetConstraintID(),
+			ColumnIDs:    c.CollectKeyColumnIDs().Ordered(),
+			Predicate:    expr,
+		}
+		w.ev(scpb.Status_PUBLIC, uwi)
+	}
 	w.ev(scpb.Status_PUBLIC, &scpb.ConstraintWithoutIndexName{
 		TableID:      tbl.GetID(),
 		ConstraintID: c.GetConstraintID(),

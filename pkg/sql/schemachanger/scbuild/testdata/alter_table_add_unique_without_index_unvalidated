@@ -1,0 +1,11 @@
+setup
+CREATE TABLE t (i INT PRIMARY KEY, j INT);
+----
+
+build
+ALTER TABLE t ADD UNIQUE WITHOUT INDEX (j) NOT VALID;
+----
+- [[UniqueWithoutIndexConstraintUnvalidated:{DescID: 104, ConstraintID: 2}, PUBLIC], ABSENT]
+  {columnIds: [2], constraintId: 2, tableId: 104}
+- [[ConstraintWithoutIndexName:{DescID: 104, Name: unique_j, ConstraintID: 2}, PUBLIC], ABSENT]
+  {constraintId: 2, name: unique_j, tableId: 104}

@@ -93,6 +93,7 @@ func TestBuildDataDriven(t *testing.T) {
 										// changer will allow non-fully implemented operations.
 										sd.NewSchemaChangerMode = sessiondatapb.UseNewSchemaChangerUnsafe
 										sd.ApplicationName = ""
+										sd.EnableUniqueWithoutIndexConstraints = true
 									},
 								),
 							),

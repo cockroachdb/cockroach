@@ -79,6 +79,7 @@ func WithBuilderDependenciesFromTestServer(
 	// For setting up a builder inside tests we will ensure that the new schema
 	// changer will allow non-fully implemented operations.
 	planner.SessionData().NewSchemaChangerMode = sessiondatapb.UseNewSchemaChangerUnsafe
+	planner.SessionData().EnableUniqueWithoutIndexConstraints = true
 	fn(scdeps.NewBuilderDependencies(
 		execCfg.NodeInfo.LogicalClusterID(),
 		execCfg.Codec,

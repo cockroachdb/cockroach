@@ -493,8 +493,8 @@ func (i *immediateVisitor) MakePublicForeignKeyConstraintValidated(
 	return errors.AssertionFailedf("failed to find FK constraint %d in descriptor %v", op.ConstraintID, out)
 }
 
-func (i *immediateVisitor) MakeAbsentUniqueWithoutIndexConstraintWriteOnly(
-	ctx context.Context, op scop.MakeAbsentUniqueWithoutIndexConstraintWriteOnly,
+func (i *immediateVisitor) AddUniqueWithoutIndexConstraint(
+	ctx context.Context, op scop.AddUniqueWithoutIndexConstraint,
 ) error {
 	tbl, err := i.checkOutTable(ctx, op.TableID)
 	if err != nil || tbl.Dropped() {
@@ -508,13 +508,17 @@ func (i *immediateVisitor) MakeAbsentUniqueWithoutIndexConstraintWriteOnly(
 		TableID:      op.TableID,
 		ColumnIDs:    op.ColumnIDs,
 		Name:         tabledesc.ConstraintNamePlaceholder(op.ConstraintID),
-		Validity:     descpb.ConstraintValidity_Validating,
+		Validity:     op.Validity,
 		ConstraintID: op.ConstraintID,
 		Predicate:    string(op.PartialExpr),
 	}
+	if op.Validity == descpb.ConstraintValidity_Unvalidated {
+		// Unvalidated constraint doesn't need to transition through an intermediate
+		// state, so we don't enqueue a mutation for it.
+		tbl.UniqueWithoutIndexConstraints = append(tbl.UniqueWithoutIndexConstraints, *uwi)
+		return nil
+	}
 	enqueueNonIndexMutation(tbl, tbl.AddUniqueWithoutIndexMutation, uwi, descpb.DescriptorMutation_ADD)
-	// Fast-forward the mutation state to WRITE_ONLY because this constraint
-	// is now considered as enforced.
 	tbl.Mutations[len(tbl.Mutations)-1].State = descpb.DescriptorMutation_WRITE_ONLY
 	return nil
 }
