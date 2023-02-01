@@ -84,4 +84,20 @@ sctest_gen(
     ],
 )
 
+sctest_gen(
+    name = "test_mixed_gen",
+    out = "sctest_mixed_generated_test.go",
+    ccl = False,
+    new_cluster_func = "sctest.SingleNodeMixedCluster",
+    package = "schemachanger",
+    test_data = glob(["testdata/end_to_end/**"]),
+    tests = [
+        "ValidateMixedVersionElements",
+    ],
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
+    ],
+)
+
 get_x_data(name = "get_x_data")

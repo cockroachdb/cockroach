@@ -148,15 +148,17 @@ func alterTableIsSupported(n *tree.AlterTable, mode sessiondatapb.NewSchemaChang
 
 // alterTableAllCmdsSupportedInCurrentClusterVersion determines if all commands
 // in this `ALTER TABLE` statement are supported under the current cluster version.
-func alterTableAllCmdsSupportedInCurrentClusterVersion(b BuildCtx, n *tree.AlterTable) bool {
+func alterTableAllCmdsSupportedInCurrentClusterVersion(
+	activeVersion clusterversion.ClusterVersion, n *tree.AlterTable,
+) bool {
 	for _, cmd := range n.Cmds {
 		if addConstraint, isAddConstraint := cmd.(*tree.AlterTableAddConstraint); isAddConstraint {
-			if !alterTableAddConstraintSupportedInCurrentClusterVersion(b, addConstraint) {
+			if !alterTableAddConstraintSupportedInCurrentClusterVersion(activeVersion, addConstraint) {
 				return false
 			}
 		} else {
 			minSupportedClusterVersion := supportedAlterTableStatements[reflect.TypeOf(cmd)].minSupportedClusterVersion
-			if !b.EvalCtx().Settings.Version.IsActive(b, minSupportedClusterVersion) {
+			if !activeVersion.IsActive(minSupportedClusterVersion) {
 				return false
 			}
 		}
@@ -167,7 +169,7 @@ func alterTableAllCmdsSupportedInCurrentClusterVersion(b BuildCtx, n *tree.Alter
 // alterTableAddConstraintSupportedInCurrentClusterVersion determines if a particular
 // AlterTableAddConstraint command is supported under the current cluster version.
 func alterTableAddConstraintSupportedInCurrentClusterVersion(
-	b BuildCtx, constraint *tree.AlterTableAddConstraint,
+	activeVersion clusterversion.ClusterVersion, constraint *tree.AlterTableAddConstraint,
 ) bool {
 	var cmdKey string
 	// Figure out alter table add constraint command type: PRIMARY_KEY, CHECK, FOREIGN_KEY, or UNIQUE
@@ -194,7 +196,7 @@ func alterTableAddConstraintSupportedInCurrentClusterVersion(
 	if !ok {
 		return false
 	}
-	return b.EvalCtx().Settings.Version.IsActive(b, minSupportedClusterVersion)
+	return activeVersion.IsActive(minSupportedClusterVersion)
 }
 
 // AlterTable implements ALTER TABLE.

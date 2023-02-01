@@ -26,7 +26,10 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach-go/v2/crdb"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/corpus"
@@ -37,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -903,7 +907,7 @@ func GenerateSchemaChangeCorpus(t *testing.T, path string, newCluster NewCluster
 		// If any of the statements are not supported, then skip over this
 		// file for the corpus.
 		for _, stmt := range stmts {
-			if !scbuild.CheckIfSupported(stmt.AST) {
+			if !scbuild.CheckIfSupported(clusterversion.TestingClusterVersion, stmt.AST) {
 				return
 			}
 		}
@@ -1398,4 +1402,122 @@ func executeSchemaChangeTxn(
 	// Ensure we're really done here.
 	waitForSchemaChangesToFinish(t, tdb)
 	return nil
+}
+
+// ValidateMixedVersionElements executes each phase within a mixed version
+// state for the cluster.
+func ValidateMixedVersionElements(t *testing.T, path string, newCluster NewMixedClusterFunc) {
+	var testValidateMixedVersionElements func(
+		t *testing.T, setup, stmts []parser.Statement,
+	)
+	downlevelClusterFunc := func(t *testing.T, knobs *scexec.TestingKnobs,
+	) (_ serverutils.TestServerInterface, _ *gosql.DB, cleanup func()) {
+		return newCluster(t, knobs, true)
+	}
+	countRevertiblePostCommitStages := func(
+		t *testing.T, setup, stmts []parser.Statement,
+	) (postCommitCount int, postCommitNonRevertibleCount int) {
+		processPlanInPhase(
+			t, downlevelClusterFunc, setup, stmts, scop.PostCommitPhase,
+			func(p scplan.Plan) {
+				for _, s := range p.Stages {
+					if s.Phase == scop.PostCommitPhase {
+						postCommitCount += 1
+					} else if s.Phase == scop.PostCommitNonRevertiblePhase {
+						postCommitNonRevertibleCount += 1
+					}
+				}
+			},
+			func(db *gosql.DB) {},
+		)
+		return postCommitCount, postCommitNonRevertibleCount
+	}
+	testFunc := func(t *testing.T, path string, rewrite bool, setup, stmts []parser.Statement, _ *stageExecStmtMap) {
+		if !t.Run("Starting",
+			func(t *testing.T) { testValidateMixedVersionElements(t, setup, stmts) },
+		) {
+			return
+		}
+	}
+	testValidateMixedVersionElements = func(t *testing.T, setup, stmts []parser.Statement) {
+		// If any of the statements are not supported, then skip over this
+		// file for the corpus.
+		for _, stmt := range stmts {
+			if !scbuild.CheckIfSupported(clusterversion.ClusterVersion{Version: clusterversion.ByKey(clusterversion.V22_2)}, stmt.AST) {
+				return
+			}
+		}
+		postCommitCount, postCommitNonRevertibleCount := countRevertiblePostCommitStages(t, setup, stmts)
+		stageCounts := []int{postCommitCount, postCommitNonRevertibleCount}
+		stageTypes := []scop.Phase{scop.PostCommitPhase, scop.PostCommitNonRevertiblePhase}
+
+		jobPauseResumeChannel := make(chan jobspb.JobID)
+		waitForPause := make(chan struct{})
+		for stageTypIdx := range stageCounts {
+			stageType := stageTypes[stageTypIdx]
+			for stageOrdinal := 1; stageOrdinal < stageCounts[stageTypIdx]+1; stageOrdinal++ {
+				t.Run(fmt.Sprintf("%s_%d_of_%d", stageType, stageType, stageCounts[stageTypIdx]+1), func(t *testing.T) {
+					pauseComplete := false
+					var db *gosql.DB
+					var cleanup func()
+					_, db, cleanup = newCluster(t, &scexec.TestingKnobs{
+						BeforeStage: func(p scplan.Plan, stageIdx int) error {
+							if stageOrdinal == p.Stages[stageIdx].Ordinal &&
+								p.Stages[stageIdx].Phase == stageType && !pauseComplete {
+								jobPauseResumeChannel <- p.JobID
+								<-waitForPause
+								pauseComplete = true
+								return roachpb.NewTransactionRetryError(roachpb.RETRY_REASON_UNKNOWN, "test")
+							}
+							return nil
+						},
+					}, true /*down level*/)
+
+					go func() {
+						jobID := <-jobPauseResumeChannel
+						_, err := db.Exec("PAUSE JOB $1", jobID)
+						require.NoError(t, err)
+						waitForPause <- struct{}{}
+						_, err = db.Exec("SET CLUSTER SETTING VERSION=$1", clusterversion.TestingBinaryVersion.String())
+						require.NoError(t, err)
+						testutils.SucceedsSoon(t, func() error {
+							_, err = db.Exec("RESUME JOB $1", jobID)
+							return err
+						})
+					}()
+
+					defer cleanup()
+					require.NoError(t, executeSchemaChangeTxn(
+						context.Background(), t, setup, stmts, db, nil, nil, func(err error) error {
+							return nil // FIXME: Check for pause
+						},
+					))
+
+					// All schema change jobs should succeed after migration.
+					detectJobsComplete := fmt.Sprintf(`
+SELECT
+    count(*)
+FROM
+    [SHOW JOBS]
+WHERE
+    job_type = 'NEW SCHEMA CHANGE'
+    AND status NOT IN ('%s')
+`,
+						string(jobs.StatusSucceeded))
+					testutils.SucceedsSoon(t, func() error {
+						var count int64
+						row := db.QueryRow(detectJobsComplete)
+						if err := row.Scan(&count); err != nil {
+							return err
+						}
+						if count > 0 {
+							return errors.AssertionFailedf("unexpected count of %d", count)
+						}
+						return nil
+					})
+				})
+			}
+		}
+	}
+	cumulativeTest(t, path, testFunc)
 }
