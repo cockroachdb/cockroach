@@ -20,8 +20,6 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"runtime"
-	"strconv"
 	"strings"
 	"time"
 
@@ -31,7 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -104,20 +102,76 @@ func importBankDataSplit(
 	return dest
 }
 
-func runImportBankDataSplit(ctx context.Context, rows, ranges int, t test.Test, c cluster.Cluster) {
-	c.Run(ctx, c.All(), `./workload csv-server --port=8081 &> logs/workload-csv-server.log < /dev/null &`)
-	time.Sleep(time.Second) // wait for csv server to open listener
-	importArgs := []string{
-		"./workload", "fixtures", "import", "bank",
-		"--db=bank",
-		"--payload-bytes=10240",
-		"--csv-server", "http://localhost:8081",
-		"--seed=1",
-		fmt.Sprintf("--ranges=%d", ranges),
-		fmt.Sprintf("--rows=%d", rows),
-		"{pgurl:1}",
+// setShortJobIntervalsCommon exists because this functionality is
+// shared across the `backup/mixed-version` and
+// `declarative_schema_changer/job-compatibility-mixed-version`.
+// TODO(renato): Delete this duplicated code once both tests have been
+// migrated to the new mixed-version testing framework.
+func setShortJobIntervalsCommon(runQuery func(query string, args ...interface{}) error) error {
+	settings := map[string]string{
+		"jobs.registry.interval.cancel": "1s",
+		"jobs.registry.interval.adopt":  "1s",
 	}
-	c.Run(ctx, c.Node(1), importArgs...)
+
+	for name, val := range settings {
+		query := fmt.Sprintf("SET CLUSTER SETTING %s = $1", name)
+		if err := runQuery(query, val); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// importBankCSVServerCommand returns the command to start a csv
+// server on the specified port, using the given cockroach binary.
+func importBankCSVServerCommand(cockroach string, port int) string {
+	return roachtestutil.
+		NewCommand("%s workload csv-server", cockroach).
+		Flag("port", port).
+		String()
+}
+
+// importBankCommand returns the command to import `bank` fixtures
+// according to the parameters passed.
+func importBankCommand(cockroach string, rows, ranges, csvPort, node int) string {
+	return roachtestutil.
+		NewCommand("%s workload fixtures import bank", cockroach).
+		Arg("{pgurl:%d}", node).
+		Flag("db", "bank").
+		Flag("payload-bytes", 10240).
+		Flag("csv-server", fmt.Sprintf("http://localhost:%d", csvPort)).
+		Flag("seed", 1).
+		Flag("ranges", ranges).
+		Flag("rows", rows).
+		String()
+}
+
+// waitForPort waits until the given `port` is ready to receive
+// connections on all `nodes` given.
+func waitForPort(
+	ctx context.Context, nodes option.NodeListOption, port int, c cluster.Cluster,
+) error {
+	if err := retry.WithMaxAttempts(ctx, retry.Options{
+		MaxBackoff: 500 * time.Millisecond,
+	}, 10, func() error {
+		return c.RunE(ctx, nodes, fmt.Sprintf("sudo lsof -i:%d | grep -q LISTEN", port))
+	}); err != nil {
+		return fmt.Errorf("timed out waiting for port %d: %w", port, err)
+	}
+
+	return nil
+}
+
+func runImportBankDataSplit(ctx context.Context, rows, ranges int, t test.Test, c cluster.Cluster) {
+	csvPort := 8081
+	csvCmd := importBankCSVServerCommand("./cockroach", csvPort)
+	c.Run(ctx, c.All(), csvCmd+` &> logs/workload-csv-server.log < /dev/null &`)
+	if err := waitForPort(ctx, c.All(), csvPort, c); err != nil {
+		t.Fatal(err)
+	}
+	importNode := 1
+	c.Run(ctx, c.Node(importNode), importBankCommand("./cockroach", rows, ranges, csvPort, importNode))
 }
 
 func importBankData(ctx context.Context, rows int, t test.Test, c cluster.Cluster) string {
@@ -184,76 +238,6 @@ func registerBackupNodeShutdown(r registry.Registry) {
 
 }
 
-// removeJobClaimsForNodes nullifies the `claim_session_id` for the job
-// corresponding to jobID, if it has been incorrectly claimed by one of the
-// `nodes`.
-func removeJobClaimsForNodes(
-	ctx context.Context, t test.Test, db *gosql.DB, nodes option.NodeListOption, jobID jobspb.JobID,
-) {
-	if len(nodes) == 0 {
-		return
-	}
-
-	n := make([]string, 0)
-	for _, node := range nodes {
-		n = append(n, strconv.Itoa(node))
-	}
-	nodesStr := strings.Join(n, ",")
-
-	removeClaimQuery := `
-UPDATE system.jobs
-   SET claim_session_id = NULL
-WHERE claim_instance_id IN (%s)
-AND id = $1
-`
-	_, err := db.ExecContext(ctx, fmt.Sprintf(removeClaimQuery, nodesStr), jobID)
-	require.NoError(t, err)
-}
-
-// waitForJobToHaveStatus waits for the job with jobID to reach the
-// expectedStatus.
-func waitForJobToHaveStatus(
-	ctx context.Context,
-	t test.Test,
-	db *gosql.DB,
-	jobID jobspb.JobID,
-	expectedStatus jobs.Status,
-	nodesWithAdoptionDisabled option.NodeListOption,
-) {
-	if err := retry.ForDuration(time.Minute*2, func() error {
-		// TODO(adityamaru): This is unfortunate and can be deleted once
-		// https://github.com/cockroachdb/cockroach/pull/79666 is backported to
-		// 21.2 and the mixed version map for roachtests is bumped to the 21.2
-		// patch release with the backport.
-		//
-		// The bug above means that nodes for which we have disabled adoption may
-		// still lay claim on the job, and then not clear their claim on realizing
-		// that adoption is disabled. To prevent the job from getting wedged, we
-		// manually clear the claim session on the job for instances where job
-		// adoption is disabled. This will allow other node's in the cluster to
-		// adopt the job and run it.
-		removeJobClaimsForNodes(ctx, t, db, nodesWithAdoptionDisabled, jobID)
-
-		var status string
-		var payloadBytes []byte
-		err := db.QueryRow(`SELECT status, payload FROM system.jobs WHERE id = $1`, jobID).Scan(&status, &payloadBytes)
-		require.NoError(t, err)
-		if jobs.Status(status) == jobs.StatusFailed {
-			payload := &jobspb.Payload{}
-			if err := protoutil.Unmarshal(payloadBytes, payload); err == nil {
-				t.Fatalf("job failed: %s", payload.Error)
-			}
-			t.Fatalf("job failed")
-		}
-		if e, a := expectedStatus, jobs.Status(status); e != a {
-			return errors.Errorf("expected job status %s, but got %s", e, a)
-		}
-		return nil
-	}); err != nil {
-		t.Fatal(err)
-	}
-}
-
 // fingerprint returns a fingerprint of `db.table`.
 func fingerprint(ctx context.Context, conn *gosql.DB, db, table string) (string, error) {
 	var b strings.Builder
@@ -275,26 +259,12 @@ func fingerprint(ctx context.Context, conn *gosql.DB, db, table string) (string,
 	return b.String(), rows.Err()
 }
 
-// setShortJobIntervalsStep increases the frequency of the adopt and cancel
-// loops in the job registry. This enables changes to job state to be observed
-// faster, and the test to run quicker.
-func setShortJobIntervalsStep(node int) versionStep {
-	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
-		db := u.conn(ctx, t, node)
-		_, err := db.ExecContext(ctx, `SET CLUSTER SETTING jobs.registry.interval.cancel = '1s'`)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		_, err = db.ExecContext(ctx, `SET CLUSTER SETTING jobs.registry.interval.adopt = '1s'`)
-		if err != nil {
-			t.Fatal(err)
-		}
-	}
-}
-
 // disableJobAdoptionStep writes the sentinel file to prevent a node's
 // registry from adopting a job.
+//
+// TODO(renato): remove this duplicated function once
+// `declarative_schema_changer/job-compatibility-mixed-version` is
+// migrated to the new mixed-version testing framework.
 func disableJobAdoptionStep(c cluster.Cluster, nodeIDs option.NodeListOption) versionStep {
 	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
 		for _, nodeID := range nodeIDs {
@@ -338,6 +308,10 @@ func disableJobAdoptionStep(c cluster.Cluster, nodeIDs option.NodeListOption) ve
 
 // enableJobAdoptionStep clears the sentinel file that prevents a node's
 // registry from adopting a job.
+//
+// TODO(renato): remove this duplicated function once
+// `declarative_schema_changer/job-compatibility-mixed-version` is
+// migrated to the new mixed-version testing framework.
 func enableJobAdoptionStep(c cluster.Cluster, nodeIDs option.NodeListOption) versionStep {
 	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
 		for _, nodeID := range nodeIDs {
@@ -356,234 +330,6 @@ func enableJobAdoptionStep(c cluster.Cluster, nodeIDs option.NodeListOption) ver
 		_, err := c.RunWithDetails(ctx, t.L(), nodeIDs, "export COCKROACH_JOB_ADOPTIONS_PER_PERIOD=10")
 		require.NoError(t, err)
 	}
-}
-
-func registerBackupMixedVersion(r registry.Registry) {
-	loadBackupDataStep := func(c cluster.Cluster) versionStep {
-		return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
-			rows := rows3GiB
-			if c.IsLocal() {
-				rows = 100
-			}
-			runImportBankDataSplit(ctx, rows, 0 /* ranges */, t, u.c)
-		}
-	}
-
-	planAndRunBackup := func(t test.Test, c cluster.Cluster, nodeToPlanBackup option.NodeListOption,
-		nodesWithAdoptionDisabled option.NodeListOption, backupStmt string) versionStep {
-		return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
-			gatewayDB := c.Conn(ctx, t.L(), nodeToPlanBackup[0])
-			defer gatewayDB.Close()
-			t.Status("Running: ", backupStmt)
-			var jobID jobspb.JobID
-			err := gatewayDB.QueryRow(backupStmt).Scan(&jobID)
-			require.NoError(t, err)
-			waitForJobToHaveStatus(ctx, t, gatewayDB, jobID, jobs.StatusSucceeded, nodesWithAdoptionDisabled)
-		}
-	}
-
-	writeToBankStep := func(node int) versionStep {
-		return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
-			db := u.conn(ctx, t, node)
-			_, err := db.ExecContext(ctx, `UPSERT INTO bank.bank (id,balance) SELECT generate_series(1,100), random()*100;`)
-			if err != nil {
-				t.Fatal(err)
-			}
-		}
-	}
-
-	// saveFingerprintStep computes the fingerprint of the `bank.bank` and adds it
-	// to `fingerprints` slice that is passed in. The fingerprints slice should be
-	// pre-allocated because of the structure of the versionUpgradeTest.
-	saveFingerprintStep := func(node int, fingerprints map[string]string, key string) versionStep {
-		return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
-			db := u.conn(ctx, t, node)
-			f, err := fingerprint(ctx, db, "bank", "bank")
-			if err != nil {
-				t.Fatal(err)
-			}
-			fingerprints[key] = f
-		}
-	}
-
-	// verifyBackupStep compares the backed up and restored table fingerprints and
-	// ensures they're the same.
-	verifyBackupStep := func(
-		node option.NodeListOption,
-		backupLoc string,
-		dbName, tableName, intoDB string,
-		fingerprints map[string]string,
-	) versionStep {
-		return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
-			db := u.conn(ctx, t, node[0])
-
-			// Restore the backup.
-			_, err := db.ExecContext(ctx, fmt.Sprintf(`CREATE DATABASE %s`, intoDB))
-			require.NoError(t, err)
-			_, err = db.ExecContext(ctx, fmt.Sprintf(`RESTORE TABLE %s.%s FROM LATEST IN '%s' WITH into_db = '%s'`,
-				dbName, tableName, backupLoc, intoDB))
-			require.NoError(t, err)
-
-			restoredFingerPrint, err := fingerprint(ctx, db, intoDB, tableName)
-			require.NoError(t, err)
-			if fingerprints[backupLoc] != restoredFingerPrint {
-				log.Infof(ctx, "original %s \n\n restored %s", fingerprints[backupLoc],
-					restoredFingerPrint)
-				t.Fatal("expected backup and restore fingerprints to match")
-			}
-		}
-	}
-
-	// backup/mixed-version-basic tests different states of backup in a mixed
-	// version cluster.
-	//
-	// This test can serve as a template for more targeted testing of features
-	// that require careful consideration of mixed version states.
-	r.Add(registry.TestSpec{
-		Name:              "backup/mixed-version-basic",
-		Owner:             registry.OwnerDisasterRecovery,
-		Cluster:           r.MakeClusterSpec(4),
-		EncryptionSupport: registry.EncryptionMetamorphic,
-		RequiresLicense:   true,
-		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			if c.IsLocal() && runtime.GOARCH == "arm64" {
-				t.Skip("Skip under ARM64. See https://github.com/cockroachdb/cockroach/issues/89268")
-			}
-			roachNodes := c.All()
-			upgradedNodes := c.Nodes(1, 2)
-			oldNodes := c.Nodes(3, 4)
-			predV, err := clusterupgrade.PredecessorVersion(*t.BuildVersion())
-			require.NoError(t, err)
-			c.Put(ctx, t.DeprecatedWorkload(), "./workload")
-
-			// fingerprints stores the fingerprint of the `bank.bank` table at
-			// different points of this test to compare against the restored table at
-			// the end of the test.
-			fingerprints := make(map[string]string)
-			u := newVersionUpgradeTest(c,
-				uploadAndStartFromCheckpointFixture(roachNodes, predV),
-				waitForUpgradeStep(roachNodes),
-				preventAutoUpgradeStep(1),
-				setShortJobIntervalsStep(1),
-				loadBackupDataStep(c),
-				// Upgrade some nodes.
-				binaryUpgradeStep(upgradedNodes, clusterupgrade.MainVersion),
-
-				// Let us first test planning and executing a backup on different node
-				// versions.
-				//
-				// NB: All backups in this test are writing to node 1's ExternalIODir
-				// for simplicity.
-
-				// Case 1: plan backup    -> old node
-				//         execute backup -> upgraded node
-				//
-				// Halt job execution on older nodes.
-				disableJobAdoptionStep(c, oldNodes),
-
-				// Run a backup from an old node so that it is planned on the old node
-				// but the job is adopted on a new node.
-				planAndRunBackup(t, c, oldNodes.RandNode(), oldNodes,
-					`BACKUP TABLE bank.bank INTO 'nodelocal://1/plan-old-resume-new' WITH detached`),
-
-				// Write some data between backups.
-				writeToBankStep(1),
-
-				// Run an incremental backup from an old node so that it is planned on
-				// the old node but the job is adopted on a new node.
-				planAndRunBackup(t, c, oldNodes.RandNode(), oldNodes,
-					`BACKUP TABLE bank.bank INTO LATEST IN 'nodelocal://1/plan-old-resume-new' WITH detached`),
-
-				// Save fingerprint to compare against restore below.
-				saveFingerprintStep(1, fingerprints, "nodelocal://1/plan-old-resume-new"),
-
-				enableJobAdoptionStep(c, oldNodes),
-
-				// Case 2: plan backup    -> upgraded node
-				//         execute backup -> old node
-				//
-				// Halt job execution on upgraded nodes.
-				disableJobAdoptionStep(c, upgradedNodes),
-
-				// Run a backup from a new node so that it is planned on the new node
-				// but the job is adopted on an old node.
-				planAndRunBackup(t, c, upgradedNodes.RandNode(), upgradedNodes,
-					`BACKUP TABLE bank.bank INTO 'nodelocal://1/plan-new-resume-old' WITH detached`),
-
-				writeToBankStep(1),
-
-				// Run an incremental backup from a new node so that it is planned on
-				// the new node but the job is adopted on an old node.
-				planAndRunBackup(t, c, upgradedNodes.RandNode(), upgradedNodes,
-					`BACKUP TABLE bank.bank INTO LATEST IN 'nodelocal://1/plan-new-resume-old' WITH detached`),
-
-				// Save fingerprint to compare against restore below.
-				saveFingerprintStep(1, fingerprints, "nodelocal://1/plan-new-resume-old"),
-
-				enableJobAdoptionStep(c, upgradedNodes),
-
-				// Now let us test building an incremental chain on top of a full backup
-				// created by a node of a different version.
-				//
-				// Case 1: full backup -> new nodes
-				//         inc backup  -> old nodes
-				disableJobAdoptionStep(c, oldNodes),
-				// Plan and run a full backup on the new nodes.
-				planAndRunBackup(t, c, upgradedNodes.RandNode(), oldNodes,
-					`BACKUP TABLE bank.bank INTO 'nodelocal://1/new-node-full-backup' WITH detached`),
-
-				writeToBankStep(1),
-
-				// Set up the cluster so that only the old nodes plan and run the
-				// incremental backup.
-				enableJobAdoptionStep(c, oldNodes),
-				disableJobAdoptionStep(c, upgradedNodes),
-
-				// Run an incremental (on old nodes) on top of a full backup taken by
-				// nodes on the upgraded version.
-				planAndRunBackup(t, c, oldNodes.RandNode(), upgradedNodes,
-					`BACKUP TABLE bank.bank INTO LATEST IN 'nodelocal://1/new-node-full-backup' WITH detached`),
-
-				// Save fingerprint to compare against restore below.
-				saveFingerprintStep(1, fingerprints, "nodelocal://1/new-node-full-backup"),
-
-				// Case 2: full backup -> old nodes
-				//         inc backup  -> new nodes
-
-				// Plan and run a full backup on the old nodes.
-				planAndRunBackup(t, c, oldNodes.RandNode(), upgradedNodes,
-					`BACKUP TABLE bank.bank INTO 'nodelocal://1/old-node-full-backup' WITH detached`),
-
-				writeToBankStep(1),
-
-				enableJobAdoptionStep(c, upgradedNodes),
-
-				// Allow all the nodes to now finalize their cluster version.
-				binaryUpgradeStep(oldNodes, clusterupgrade.MainVersion),
-				allowAutoUpgradeStep(1),
-				waitForUpgradeStep(roachNodes),
-
-				// Run an incremental on top of a full backup taken by nodes on the
-				// old version.
-				planAndRunBackup(t, c, roachNodes.RandNode(), nil,
-					`BACKUP TABLE bank.bank INTO LATEST IN 'nodelocal://1/old-node-full-backup' WITH detached`),
-
-				// Save fingerprint to compare against restore below.
-				saveFingerprintStep(1, fingerprints, "nodelocal://1/old-node-full-backup"),
-
-				// Verify all the backups are actually restoreable.
-				verifyBackupStep(roachNodes.RandNode(), "nodelocal://1/plan-old-resume-new",
-					"bank", "bank", "bank1", fingerprints),
-				verifyBackupStep(roachNodes.RandNode(), "nodelocal://1/plan-new-resume-old",
-					"bank", "bank", "bank2", fingerprints),
-				verifyBackupStep(roachNodes.RandNode(), "nodelocal://1/new-node-full-backup",
-					"bank", "bank", "bank3", fingerprints),
-				verifyBackupStep(roachNodes.RandNode(), "nodelocal://1/old-node-full-backup",
-					"bank", "bank", "bank4", fingerprints),
-			)
-			u.run(ctx, t)
-		},
-	})
 }
 
 // initBulkJobPerfArtifacts registers a histogram, creates a performance
