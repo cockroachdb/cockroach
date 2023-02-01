@@ -106,6 +106,7 @@ go_test(
         "//pkg/keys",
         "//pkg/kv/kvserver",
         "//pkg/kv/kvserver/protectedts",
+        "//pkg/multitenant/tenantcapabilities",
         "//pkg/repstream/streampb",
         "//pkg/roachpb",
         "//pkg/security/securityassets",

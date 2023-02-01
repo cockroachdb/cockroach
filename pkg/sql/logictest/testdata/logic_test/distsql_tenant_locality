@@ -1,3 +1,4 @@
+# cluster-opt: can-admin-split
 # LogicTest: 3node-tenant-multiregion
 # tenant-cluster-setting-override-opt: sql.split_at.allow_for_secondary_tenant.enabled=true sql.zone_configs.allow_for_secondary_tenant.enabled=true sql.multi_region.allow_abstractions_for_secondary_tenants.enabled=true
 

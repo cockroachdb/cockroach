@@ -47,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -214,6 +215,16 @@ import (
 // - tracing-off: If specified, tracing defaults to being turned off. This is
 //   used to override the environment, which may ask for tracing to be on by
 //   default.
+// TODO(ecwall): We already have a tenant-capability-override-opt directive,
+// and ideally, this option would be better suited in that category. However,
+// that thing doesn't actually work. In particular, tenant capabilities are
+// checked against an eventually consistent, in-memory state. However, that
+// directive makes no attempt to ensure the in-memory state is sufficiently
+// caught up. We should probably get rid of this cluster option once that
+// directive is fixed.
+// - can-admin-split: If specified, allows secondary tenants to perform
+//   AdminSplit operations regardless of the underlying tenant capabilities
+//   state.
 //
 //
 // ###########################################
@@ -1924,6 +1935,22 @@ func (c clusterOptTracingOff) apply(args *base.TestServerArgs) {
 	args.TracingDefault = tracing.TracingModeOnDemand
 }
 
+// clusterOptAllowAdminSplitsForSecondaryTenants overrides can_admin_split capability
+// checks using the AuthorizerOverrideCapabilities testing knob.
+type clusterOptAllowAdminSplitsForSecondaryTenants struct{}
+
+// apply implements the knobOpt interface.
+func (a clusterOptAllowAdminSplitsForSecondaryTenants) apply(args *base.TestServerArgs) {
+	_, ok := args.Knobs.TenantCapabilitiesTestingKnobs.(*tenantcapabilities.TestingKnobs)
+	if !ok {
+		args.Knobs.TenantCapabilitiesTestingKnobs = &tenantcapabilities.TestingKnobs{}
+	}
+	args.Knobs.TenantCapabilitiesTestingKnobs.(*tenantcapabilities.TestingKnobs).
+		AuthorizerSkipAdminSplitCapabilityChecks = true
+}
+
+var _ clusterOpt = clusterOptAllowAdminSplitsForSecondaryTenants{}
+
 // knobOpt is implemented by options for configuring the testing knobs
 // for the cluster under which a test will run.
 type knobOpt interface {
@@ -2106,6 +2133,8 @@ func readClusterOptions(t *testing.T, path string) []clusterOpt {
 			res = append(res, clusterOptTracingOff{})
 		case "ignore-tenant-strict-gc-enforcement":
 			res = append(res, clusterOptIgnoreStrictGCForTenants{})
+		case "can-admin-split":
+			res = append(res, clusterOptAllowAdminSplitsForSecondaryTenants{})
 		default:
 			t.Fatalf("unrecognized cluster option: %s", opt)
 		}

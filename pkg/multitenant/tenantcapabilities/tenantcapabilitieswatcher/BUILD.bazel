@@ -5,11 +5,13 @@ go_library(
     name = "tenantcapabilitieswatcher",
     srcs = [
         "decoder.go",
+        "testingknobs.go",
         "watcher.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitieswatcher",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/base",
         "//pkg/keys",
         "//pkg/kv/kvclient/rangefeed",
         "//pkg/kv/kvclient/rangefeed/rangefeedbuffer",
@@ -42,8 +44,8 @@ go_test(
     ],
     args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
-    embed = [":tenantcapabilitieswatcher"],
     deps = [
+        ":tenantcapabilitieswatcher",
         "//pkg/base",
         "//pkg/keys",
         "//pkg/kv/kvclient/rangefeed",

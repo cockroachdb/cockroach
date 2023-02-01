@@ -34,6 +34,7 @@ go_library(
         "//pkg/kv/kvclient/rangefeed",
         "//pkg/kv/kvserver",
         "//pkg/kv/kvserver/kvserverbase",
+        "//pkg/multitenant/tenantcapabilities",
         "//pkg/roachpb",
         "//pkg/security/username",
         "//pkg/server",

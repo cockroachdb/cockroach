@@ -1,3 +1,5 @@
+# cluster-opt: can-admin-split
+
 # Tests for creating a hash sharded primary key
 statement ok
 CREATE TABLE sharded_primary (a INT PRIMARY KEY USING HASH WITH (bucket_count=10))

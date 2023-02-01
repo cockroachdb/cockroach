@@ -13,6 +13,7 @@ package rpc
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"google.golang.org/grpc"
 )
@@ -54,7 +55,14 @@ func TestingAuthenticateTenant(
 // TestingAuthorizeTenantRequest performs authorization of a tenant request
 // for testing.
 func TestingAuthorizeTenantRequest(
-	tenID roachpb.TenantID, method string, request interface{},
+	ctx context.Context,
+	tenID roachpb.TenantID,
+	method string,
+	request interface{},
+	authorizer tenantcapabilities.Authorizer,
 ) error {
-	return tenantAuthorizer{}.authorize(tenID, method, request)
+	return tenantAuthorizer{
+		tenantID:               tenID,
+		capabilitiesAuthorizer: authorizer,
+	}.authorize(ctx, tenID, method, request)
 }
