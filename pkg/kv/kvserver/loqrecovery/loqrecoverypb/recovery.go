@@ -140,3 +140,7 @@ func (m *ClusterReplicaInfo) ReplicaCount() (size int) {
 	}
 	return size
 }
+
+func (a DeferredRecoveryActions) Empty() bool {
+	return len(a.DecommissionedNodeIDs) == 0
+}

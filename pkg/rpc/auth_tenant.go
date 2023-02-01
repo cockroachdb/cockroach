@@ -30,13 +30,13 @@ type tenantAuthorizer struct {
 	tenantID roachpb.TenantID
 }
 
-func tenantFromCommonName(commonName string) (roachpb.TenantID, error) {
+func tenantIDFromString(commonName, field string) (roachpb.TenantID, error) {
 	tenID, err := strconv.ParseUint(commonName, 10, 64)
 	if err != nil {
-		return roachpb.TenantID{}, authErrorf("could not parse tenant ID from Common Name (CN): %s", err)
+		return roachpb.TenantID{}, authErrorf("could not parse tenant ID from %s: %s", field, err)
 	}
 	if tenID < roachpb.MinTenantID.ToUint64() || tenID > roachpb.MaxTenantID.ToUint64() {
-		return roachpb.TenantID{}, authErrorf("invalid tenant ID %d in Common Name (CN)", tenID)
+		return roachpb.TenantID{}, authErrorf("invalid tenant ID %d in %s", tenID, field)
 	}
 	return roachpb.MustMakeTenantID(tenID), nil
 }
@@ -444,6 +444,8 @@ func validateSpan(tenID roachpb.TenantID, sp roachpb.Span) error {
 	return checkSpanBounds(rSpan, tenSpan)
 }
 
+const tenantLoggingTag = "tenant"
+
 // contextWithClientTenant inserts a tenant identifier in the context,
 // identifying the tenant that's the client for an RPC. The identifier can be
 // retrieved later through roachpb.ClientTenantFromContext(ctx). The tenant
@@ -451,12 +453,14 @@ func validateSpan(tenID roachpb.TenantID, sp roachpb.Span) error {
 // limiting tenant calls.
 func contextWithClientTenant(ctx context.Context, tenID roachpb.TenantID) context.Context {
 	ctx = roachpb.ContextWithClientTenant(ctx, tenID)
-	const key = "tenant"
-	if !tenID.IsSet() {
-		return logtags.RemoveTag(ctx, key)
-	}
-	ctx = logtags.AddTag(ctx, key, tenID.String())
+	ctx = logtags.AddTag(ctx, tenantLoggingTag, tenID.String())
 	return ctx
+}
+
+// contextWithoutClientTenant removes a tenant identifier in the context.
+func contextWithoutClientTenant(ctx context.Context) context.Context {
+	ctx = roachpb.ContextWithoutClientTenant(ctx)
+	return logtags.RemoveTag(ctx, tenantLoggingTag)
 }
 
 func tenantPrefix(tenID roachpb.TenantID) roachpb.RSpan {

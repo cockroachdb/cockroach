@@ -1,0 +1,61 @@
+# Test verifying that if node fails to apply plan on restart
+# it records an error into the status.
+# To do that we swap replication data from under the recovery
+# after creating plan so that replica in the store doesn't
+# match initial one.
+
+replication-data
+- StoreID: 1
+  RangeID: 1
+  StartKey: /Min
+  EndKey: /Max
+  Replicas:
+  - { NodeID: 1, StoreID: 1, ReplicaID: 1}  # Designated replica in this store
+  - { NodeID: 4, StoreID: 4, ReplicaID: 4}
+  - { NodeID: 5, StoreID: 5, ReplicaID: 5}
+  RangeAppliedIndex: 11
+  RaftCommittedIndex: 13
+----
+ok
+
+collect-replica-info stores=(1)
+----
+ok
+
+make-plan
+----
+Replica updates:
+- RangeID: 1
+  StartKey: /Min
+  OldReplicaID: 1
+  NewReplica:
+    NodeID: 1
+    StoreID: 1
+    ReplicaID: 16
+  NextReplicaID: 17
+Decommissioned nodes:
+[n4, n5]
+
+# We now replace a replica with a different one to confuse plan application.
+replication-data
+- StoreID: 1
+  RangeID: 1
+  StartKey: /Min
+  EndKey: /Max
+  Replicas:
+  - { NodeID: 1, StoreID: 1, ReplicaID: 6}  # New designated replica in this store
+  - { NodeID: 4, StoreID: 4, ReplicaID: 4}
+  - { NodeID: 5, StoreID: 5, ReplicaID: 5}
+  RangeAppliedIndex: 18
+  RaftCommittedIndex: 18
+----
+ok
+
+apply-plan stores=(1) restart=true
+----
+ok
+
+dump-events stores=(1) status=true
+----
+Statuses:
+node n1 applied plan 00000001-0000-4000-8000-000000000000 at 2022-02-24 01:40:00 +0000 UTC:failed to prepare update replica for range r1 on store s1: can not find replica with ID 1 for range r1

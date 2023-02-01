@@ -12,6 +12,7 @@ package loqrecovery
 
 import (
 	"context"
+	"encoding/binary"
 	"fmt"
 	"sort"
 	"strconv"
@@ -37,9 +38,65 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/pebble/vfs"
 	"go.etcd.io/raft/v3/raftpb"
 	"gopkg.in/yaml.v2"
 )
+
+/*
+quorumRecoveryEnv provides an environment to run data driven tests for loss of
+quorum recovery. Provided commands cover replica info collection, change
+planning, plan application and checking or generated recovery reports.
+It doesn't cover plan and replica info serialization and actual cli commands and
+interaction with user.
+
+Supported commands:
+replication-data
+
+  Loads following data into stores. All previously existing data is wiped. Only
+  range local information about replicas in populated together with optional
+  raft log entries. Data is created using proxy structs to avoid the need to
+  populate unnecessary fields.
+
+descriptor-data
+
+  Initializes optional "meta range" info with provided descriptor data.
+
+collect-replica-info [stores=(1,2,3)]
+
+  Collects replica info and saves into env. stores argument provides ids of
+  stores test wants to analyze. This allows test not to collect all replicas if
+  needed. If omitted, then all stores are collected.
+
+make-plan [stores=(1,2,3)|nodes=(1,2,3)] [force=<bool>]
+
+  Creates a recovery plan based on replica info saved to env by
+  collect-replica-info command and optional descriptors. Stores or nodes args
+  provide optional list of dead nodes or dead stores which reflect cli command
+  line flags. force flag forces plan creation in presence of range
+  inconsistencies.
+  Resulting plan is saved into the environment.
+
+dump-store [stores=(1,2,3)]
+
+  Prints content of the replica states in the store. If no stores are provided,
+  uses all populated stores.
+
+apply-plan [stores=(1,2,3)] [restart=<bool>]
+
+  Applies recovery plan on specified stores. If no stores are provided, uses all
+  populated stores. If restart = false, simulates cli version of command where
+  application could fail and roll back with an error. If restart = true,
+  simulates half online approach where unattended operation succeeds but writes
+  potential error into store.
+
+dump-events [remove=<bool>] [status=<bool>]
+
+  Dumps events about replica recovery found in stores.
+  If remove=true then corresponding method is told to remove events after
+  dumping in a way range log population does when consuming those events.
+  If status=true, half-online approach recovery report is dumped for each store.
+*/
 
 // Range info used for test data to avoid providing unnecessary fields that are
 // not used in replica removal.
@@ -136,6 +193,42 @@ type testDescriptorData struct {
 	Generation roachpb.RangeGeneration `yaml:"Generation,omitempty"`
 }
 
+type seqUUIDGen struct {
+	seq uint32
+}
+
+func NewSeqGen(val uint32) uuid.Generator {
+	return &seqUUIDGen{seq: val}
+}
+
+func (g *seqUUIDGen) NewV1() (uuid.UUID, error) {
+	nextV1 := g.next()
+	nextV1.SetVersion(uuid.V1)
+	return nextV1, nil
+}
+
+func (*seqUUIDGen) NewV3(uuid.UUID, string) uuid.UUID {
+	panic("not implemented")
+}
+
+func (g *seqUUIDGen) NewV4() (uuid.UUID, error) {
+	nextV4 := g.next()
+	nextV4.SetVersion(uuid.V4)
+	return nextV4, nil
+}
+
+func (*seqUUIDGen) NewV5(uuid.UUID, string) uuid.UUID {
+	panic("not implemented")
+}
+
+func (g *seqUUIDGen) next() uuid.UUID {
+	next := uuid.UUID{}
+	binary.BigEndian.PutUint32(next[:], g.seq)
+	next.SetVariant(uuid.VariantRFC4122)
+	g.seq++
+	return next
+}
+
 // Store with its owning NodeID for easier grouping by owning nodes.
 type wrappedStore struct {
 	engine storage.Engine
@@ -143,17 +236,21 @@ type wrappedStore struct {
 }
 
 type quorumRecoveryEnv struct {
-	// Stores with data
+	// Stores with data.
 	clusterID uuid.UUID
 	stores    map[roachpb.StoreID]wrappedStore
-	// Optional mata ranges content
+	// Optional mata ranges content.
 	meta []roachpb.RangeDescriptor
 
-	// Collected info from nodes
+	// Collected info from nodes.
 	replicas loqrecoverypb.ClusterReplicaInfo
 
-	// plan to update replicas
+	// plan to update replicas.
 	plan loqrecoverypb.ReplicaUpdatePlan
+
+	// Helper resources to make time and identifiers predictable.
+	uuidGen uuid.Generator
+	clock   timeutil.TimeSource
 }
 
 func (e *quorumRecoveryEnv) Handle(t *testing.T, d datadriven.TestData) string {
@@ -459,7 +556,7 @@ func (e *quorumRecoveryEnv) handleMakePlan(t *testing.T, d datadriven.TestData) 
 	plan, report, err := PlanReplicas(context.Background(), loqrecoverypb.ClusterReplicaInfo{
 		Descriptors: e.replicas.Descriptors,
 		LocalInfo:   e.replicas.LocalInfo,
-	}, stores, nodes)
+	}, stores, nodes, e.uuidGen)
 	if err != nil {
 		return "", err
 	}
@@ -575,7 +672,7 @@ func iterateSelectedStores(
 	for _, id := range storeIDs {
 		wrappedStore, ok := stores[id]
 		if !ok {
-			t.Fatalf("replica info requested from store that was not populated: %d", id)
+			t.Fatalf("attempt to get store that was not populated: %d", id)
 		}
 		f(wrappedStore.engine, wrappedStore.nodeID, id)
 	}
@@ -680,24 +777,50 @@ func (e *quorumRecoveryEnv) handleDumpStore(t *testing.T, d datadriven.TestData)
 func (e *quorumRecoveryEnv) handleApplyPlan(t *testing.T, d datadriven.TestData) (string, error) {
 	ctx := context.Background()
 	stores := e.parseStoresArg(t, d, true /* defaultToAll */)
-	nodes := e.groupStoresByNodeStore(t, stores)
-	defer func() {
-		for _, storeBatches := range nodes {
-			for _, b := range storeBatches {
-				b.Close()
+	var restart bool
+	if d.HasArg("restart") {
+		d.ScanArgs(t, "restart", &restart)
+	}
+
+	if !restart {
+		nodes := e.groupStoresByNodeStore(t, stores)
+		defer func() {
+			for _, storeBatches := range nodes {
+				for _, b := range storeBatches {
+					b.Close()
+				}
+			}
+		}()
+		updateTime := timeutil.Now()
+		for nodeID, stores := range nodes {
+			_, err := PrepareUpdateReplicas(ctx, e.plan, e.uuidGen, updateTime, nodeID,
+				stores)
+			if err != nil {
+				return "", err
+			}
+			if _, err = CommitReplicaChanges(stores); err != nil {
+				return "", err
 			}
 		}
-	}()
-	updateTime := timeutil.Now()
-	for nodeID, stores := range nodes {
-		_, err := PrepareUpdateReplicas(ctx, e.plan, uuid.DefaultGenerator, updateTime, nodeID, stores)
+		return "ok", nil
+	}
+
+	nodes := e.groupStoresByNode(t, stores)
+	for _, stores := range nodes {
+		ps := PlanStore{
+			path: "",
+			fs:   vfs.NewMem(),
+		}
+		if err := ps.SavePlan(e.plan); err != nil {
+			t.Fatal("failed to save plan to plan store", err)
+		}
+
+		err := MaybeApplyPendingRecoveryPlan(ctx, ps, stores, e.clock)
 		if err != nil {
 			return "", err
 		}
-		if _, err := CommitReplicaChanges(stores); err != nil {
-			return "", err
-		}
 	}
+
 	return "ok", nil
 }
 
@@ -717,22 +840,51 @@ func (e *quorumRecoveryEnv) dumpRecoveryEvents(
 	if d.HasArg("remove") {
 		d.ScanArgs(t, "remove", &removeEvents)
 	}
+	dumpStatus := false
+	if d.HasArg("status") {
+		d.ScanArgs(t, "status", &dumpStatus)
+	}
 
 	var events []string
 	logEvents := func(ctx context.Context, record loqrecoverypb.ReplicaRecoveryRecord) (bool, error) {
 		event := record.AsStructuredLog()
-		events = append(events, fmt.Sprintf("Updated range r%d, Key:%s, Store:s%d ReplicaID:%d",
+		events = append(events, fmt.Sprintf("updated range r%d, Key:%s, Store:s%d ReplicaID:%d",
 			event.RangeID, event.StartKey, event.StoreID, event.UpdatedReplicaID))
 		return removeEvents, nil
 	}
 
+	var statuses []string
 	stores := e.parseStoresArg(t, d, true /* defaultToAll */)
-	for _, store := range stores {
-		if _, err := RegisterOfflineRecoveryEvents(ctx, e.stores[store].engine, logEvents); err != nil {
+	for _, storeID := range stores {
+		store, ok := e.stores[storeID]
+		if !ok {
+			t.Fatalf("store s%d doesn't exist, but event dump is requested for it", store)
+		}
+		if _, err := RegisterOfflineRecoveryEvents(ctx, store.engine, logEvents); err != nil {
 			return "", err
 		}
+		status, ok, err := readNodeRecoveryStatusInfo(ctx, store.engine)
+		if err != nil {
+			return "", err
+		}
+		if ok {
+			statuses = append(statuses,
+				fmt.Sprintf("node n%d applied plan %s at %s:%s", store.nodeID, status.AppliedPlanID, status.ApplyTimestamp,
+					status.Error))
+		}
 	}
-	return strings.Join(events, "\n"), nil
+
+	var sb strings.Builder
+	if len(events) > 0 {
+		sb.WriteString(fmt.Sprintf("Events:\n%s\n", strings.Join(events, "\n")))
+	}
+	if dumpStatus && len(statuses) > 0 {
+		sb.WriteString(fmt.Sprintf("Statuses:\n%s", strings.Join(statuses, "\n")))
+	}
+	if sb.Len() > 0 {
+		return sb.String(), nil
+	}
+	return "ok", nil
 }
 
 func descriptorView(desc roachpb.RangeDescriptor) storeDescriptorView {
