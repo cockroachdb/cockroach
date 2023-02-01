@@ -1906,6 +1906,13 @@ func (s *Server) PreStart(ctx context.Context) error {
 		return errors.Wrap(err, "failed to start the server controller")
 	}
 
+	// Split the liveness range at this node's key.
+	err = s.db.AdminSplit(ctx, keys.NodeLivenessKey(s.node.Descriptor.NodeID), hlc.MaxTimestamp)
+	if err != nil {
+		return err
+	}
+	log.Infof(ctx, "split liveness range at %s", keys.NodeLivenessKey(s.node.Descriptor.NodeID))
+
 	log.Event(ctx, "server initialized")
 
 	// Begin recording time series data collected by the status monitor.
