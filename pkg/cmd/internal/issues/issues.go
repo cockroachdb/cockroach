@@ -310,7 +310,7 @@ func (p *poster) post(origCtx context.Context, formatter IssueFormatter, req Pos
 
 	rExisting, _, err := p.searchIssues(ctx, qExisting, &github.SearchOptions{
 		ListOptions: github.ListOptions{
-			PerPage: 1,
+			PerPage: 10,
 		},
 	})
 	if err != nil {
@@ -331,17 +331,18 @@ func (p *poster) post(origCtx context.Context, formatter IssueFormatter, req Pos
 		rRelated = &github.IssuesSearchResult{}
 	}
 
+	existingIssues := filterByExactTitleMatch(rExisting, title)
 	var foundIssue *int
-	if len(rExisting.Issues) > 0 {
+	if len(existingIssues) > 0 {
 		// We found an existing issue to post a comment into.
-		foundIssue = rExisting.Issues[0].Number
+		foundIssue = existingIssues[0].Number
 		p.l.Printf("found existing GitHub issue: #%d", *foundIssue)
 		// We are not going to create an issue, so don't show
 		// MentionOnCreate to the formatter.Body call below.
 		data.MentionOnCreate = nil
 	}
 
-	data.RelatedIssues = rRelated.Issues
+	data.RelatedIssues = filterByExactTitleMatch(rRelated, title)
 	data.InternalLog = ctx.Builder.String()
 	r := &Renderer{}
 	if err := formatter.Body(r, data); err != nil {
@@ -489,4 +490,23 @@ func HelpCommandAsLink(title, href string) func(r *Renderer) {
 		r.A(title, href)
 		r.Escaped("\n\n")
 	}
+}
+
+// filterByExactTitleMatch filters the search result passed and
+// removes any issues where the title does not match the expected
+// title exactly. This is done because the GitHub API does not support
+// searching by exact title; as a consequence, without this function,
+// there is a chance we would group together test failures for two
+// similarly named tests. That is confusing and undesirable behavior.
+func filterByExactTitleMatch(
+	result *github.IssuesSearchResult, expectedTitle string,
+) []github.Issue {
+	var issues []github.Issue
+	for _, issue := range result.Issues {
+		if title := issue.Title; title != nil && *title == expectedTitle {
+			issues = append(issues, issue)
+		}
+	}
+
+	return issues
 }

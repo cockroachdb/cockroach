@@ -170,8 +170,34 @@ test logs left over in: /go/src/github.com/cockroachdb/cockroach/artifacts/logTe
 		foundOnlyRelatedIssue        = "related-issue"
 	)
 
+	type issueFactory func(string, string) github.Issue
+
+	// issuesWithSuffix generates copies of the base issue passed, but
+	// changing the title based on the list of suffixes passed.
+	issuesWithSuffix := func(base github.Issue, suffixes ...string) []issueFactory {
+		factories := make([]issueFactory, 0, len(suffixes))
+		for k, suffix := range suffixes {
+			suffix := suffix // capture range variable
+			factories = append(factories,
+				func(packageName, testName string) github.Issue {
+					issueNum := *base.Number + k + 1
+					if suffix == "" {
+						issueNum = *base.Number
+					}
+					return github.Issue{
+						Title:  github.String(fmt.Sprintf("%s: %s%s failed", packageName, testName, suffix)),
+						Number: &issueNum,
+						Labels: base.Labels,
+					}
+				})
+		}
+
+		return factories
+	}
+
 	matchingIssue := github.Issue{
-		Title:  github.String("boom"),
+		// Title is generated during the test using the test case's
+		// package and test names
 		Number: github.Int(issueNumber),
 		Labels: []github.Label{{
 			Name: github.String("C-test-failure"),
@@ -185,7 +211,8 @@ test logs left over in: /go/src/github.com/cockroachdb/cockroach/artifacts/logTe
 		}},
 	}
 	relatedIssue := github.Issue{
-		Title:  github.String("boom related"),
+		// Title is generated during the test using the test case's
+		// package and test names
 		Number: github.Int(issueNumber + 1),
 		Labels: []github.Label{{
 			Name: github.String("C-test-failure"),
@@ -202,11 +229,26 @@ test logs left over in: /go/src/github.com/cockroachdb/cockroach/artifacts/logTe
 	// This test determines from the file name what logic to run. The first
 	// subgroup determines the test case (from the above slice). The second
 	// determines whether matching/related issues exist.
-	foundIssueScenarios := map[string][][]github.Issue{
-		foundNoIssue:                 {{}, {}},
-		foundOnlyMatchingIssue:       {{matchingIssue}, {}},
-		foundMatchingAndRelatedIssue: {{matchingIssue}, {relatedIssue}},
-		foundOnlyRelatedIssue:        {{}, {relatedIssue}},
+	foundIssueScenarios := map[string][][]issueFactory{
+		foundNoIssue: {{}, {}},
+		foundOnlyMatchingIssue: {
+			// only first matching issue is reported as there's an exact
+			// title match
+			issuesWithSuffix(matchingIssue, "", "-similar"),
+			{},
+		},
+		foundMatchingAndRelatedIssue: {
+			// only second matching issue is reported as there's an exact
+			// title match
+			issuesWithSuffix(matchingIssue, "-similar", ""),
+			issuesWithSuffix(relatedIssue, ""),
+		},
+		foundOnlyRelatedIssue: {
+			{},
+			// only second related issue is reported as there's an exact
+			// title match
+			issuesWithSuffix(relatedIssue, "-similar", ""),
+		},
 	}
 	var sKeys []string
 	for k := range foundIssueScenarios {
@@ -258,7 +300,14 @@ test logs left over in: /go/src/github.com/cockroachdb/cockroach/artifacts/logTe
 				result := &github.IssuesSearchResult{}
 
 				require.NotEmpty(t, results)
-				result.Issues, results = results[0], results[1:]
+
+				// create issues by calling issueFactory functions, generating
+				// titles based on package and test names
+				packageNameShort := strings.TrimPrefix(c.packageName, CockroachPkgPrefix)
+				for _, newIssue := range results[0] {
+					result.Issues = append(result.Issues, newIssue(packageNameShort, c.testName))
+				}
+				results = results[1:]
 
 				result.Total = github.Int(len(result.Issues))
 				_, _ = fmt.Fprintf(&buf, "searchIssue %s: %s\n", query, github.Stringify(&result.Issues))
