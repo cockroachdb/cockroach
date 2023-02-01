@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keyvisualizer"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -145,7 +146,17 @@ func backupRestoreTestSetup(
 ) (tc *testcluster.TestCluster, sqlDB *sqlutils.SQLRunner, tempDir string, cleanup func()) {
 	// TODO (msbutler): DisableDefaultTestTenant should be disabled by the caller of this function
 	return backupRestoreTestSetupWithParams(t, clusterSize, numAccounts, init,
-		base.TestClusterArgs{ServerArgs: base.TestServerArgs{DisableDefaultTestTenant: true}})
+		base.TestClusterArgs{
+			ServerArgs: base.TestServerArgs{
+				DisableDefaultTestTenant: true,
+				Knobs: base.TestingKnobs{
+					TenantCapabilitiesTestingKnobs: &tenantcapabilities.TestingKnobs{
+						// TODO(arul): This can be removed once
+						// https://github.com/cockroachdb/cockroach/issues/96736  is fixed.
+						AuthorizerSkipAdminSplitCapabilityChecks: true,
+					},
+				},
+			}})
 }
 
 func backupRestoreTestSetupEmpty(

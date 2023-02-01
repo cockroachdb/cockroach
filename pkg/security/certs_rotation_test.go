@@ -27,6 +27,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiesauthorizer"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -105,7 +106,12 @@ func TestRotateCerts(t *testing.T) {
 	// Test client with the same certs.
 	clientContext := testutils.NewNodeTestBaseContext()
 	clientContext.SSLCertsDir = certsDir
-	firstSCtx := rpc.NewSecurityContext(clientContext, security.CommandTLSSettings{}, roachpb.SystemTenantID)
+	firstSCtx := rpc.NewSecurityContext(
+		clientContext,
+		security.CommandTLSSettings{},
+		roachpb.SystemTenantID,
+		tenantcapabilitiesauthorizer.NewNoopAuthorizer(),
+	)
 	firstClient, err := firstSCtx.GetHTTPClient()
 	if err != nil {
 		t.Fatalf("could not create http client: %v", err)
@@ -137,7 +143,12 @@ func TestRotateCerts(t *testing.T) {
 	clientContext = testutils.NewNodeTestBaseContext()
 	clientContext.SSLCertsDir = certsDir
 
-	secondSCtx := rpc.NewSecurityContext(clientContext, security.CommandTLSSettings{}, roachpb.SystemTenantID)
+	secondSCtx := rpc.NewSecurityContext(
+		clientContext,
+		security.CommandTLSSettings{},
+		roachpb.SystemTenantID,
+		tenantcapabilitiesauthorizer.NewNoopAuthorizer(),
+	)
 	secondClient, err := secondSCtx.GetHTTPClient()
 	if err != nil {
 		t.Fatalf("could not create http client: %v", err)
@@ -246,7 +257,12 @@ func TestRotateCerts(t *testing.T) {
 	// This is HTTP and succeeds because we do not ask for or verify client certificates.
 	clientContext = testutils.NewNodeTestBaseContext()
 	clientContext.SSLCertsDir = certsDir
-	thirdSCtx := rpc.NewSecurityContext(clientContext, security.CommandTLSSettings{}, roachpb.SystemTenantID)
+	thirdSCtx := rpc.NewSecurityContext(
+		clientContext,
+		security.CommandTLSSettings{},
+		roachpb.SystemTenantID,
+		tenantcapabilitiesauthorizer.NewNoopAuthorizer(),
+	)
 	thirdClient, err := thirdSCtx.GetHTTPClient()
 	if err != nil {
 		t.Fatalf("could not create http client: %v", err)
