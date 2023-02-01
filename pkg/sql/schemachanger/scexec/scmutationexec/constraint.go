@@ -545,6 +545,29 @@ func (i *immediateVisitor) MakeAbsentUniqueWithoutIndexConstraintWriteOnly(
 	return nil
 }
 
+func (i *immediateVisitor) MakeAbsentUniqueWithoutIndexConstraintNotValidPublic(
+	ctx context.Context, op scop.MakeAbsentUniqueWithoutIndexConstraintNotValidPublic,
+) error {
+	tbl, err := i.checkOutTable(ctx, op.TableID)
+	if err != nil || tbl.Dropped() {
+		return err
+	}
+	if op.ConstraintID >= tbl.NextConstraintID {
+		tbl.NextConstraintID = op.ConstraintID + 1
+	}
+
+	uwi := descpb.UniqueWithoutIndexConstraint{
+		TableID:      op.TableID,
+		ColumnIDs:    op.ColumnIDs,
+		Name:         tabledesc.ConstraintNamePlaceholder(op.ConstraintID),
+		Validity:     descpb.ConstraintValidity_Unvalidated,
+		ConstraintID: op.ConstraintID,
+		Predicate:    string(op.PartialExpr),
+	}
+	tbl.UniqueWithoutIndexConstraints = append(tbl.UniqueWithoutIndexConstraints, uwi)
+	return nil
+}
+
 func (i *immediateVisitor) MakeValidatedUniqueWithoutIndexConstraintPublic(
 	ctx context.Context, op scop.MakeValidatedUniqueWithoutIndexConstraintPublic,
 ) error {

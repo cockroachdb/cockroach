@@ -52,10 +52,11 @@ var supportedAlterTableStatements = map[reflect.Type]supportedAlterTableCommand{
 	reflect.TypeOf((*tree.AlterTableAddConstraint)(nil)): {fn: alterTableAddConstraint, on: true, extraChecks: func(
 		t *tree.AlterTableAddConstraint,
 	) bool {
-		// Support ALTER TABLE ... ADD PRIMARY KEY
 		if d, ok := t.ConstraintDef.(*tree.UniqueConstraintTableDef); ok && d.PrimaryKey && t.ValidationBehavior == tree.ValidationDefault {
+			// Support ALTER TABLE ... ADD PRIMARY KEY
 			return true
-		} else if ok && d.WithoutIndex && t.ValidationBehavior == tree.ValidationDefault {
+		} else if ok && d.WithoutIndex {
+			// Support ALTER TABLE ... ADD UNIQUE WITHOUT INDEX [NOT VALID]
 			return true
 		}
 
@@ -84,6 +85,7 @@ var alterTableAddConstraintMinSupportedClusterVersion = map[string]clusterversio
 	"ADD_FOREIGN_KEY_DEFAULT":          clusterversion.V23_1Start,
 	"ADD_UNIQUE_WITHOUT_INDEX_DEFAULT": clusterversion.V23_1Start,
 	"ADD_CHECK_SKIP":                   clusterversion.V23_1,
+	"ADD_UNIQUE_WITHOUT_INDEX_SKIP":    clusterversion.V23_1,
 }
 
 func init() {
@@ -187,7 +189,10 @@ func alterTableAddConstraintSupportedInCurrentClusterVersion(
 		cmdKey += "_SKIP"
 	}
 
-	minSupportedClusterVersion := alterTableAddConstraintMinSupportedClusterVersion[cmdKey]
+	minSupportedClusterVersion, ok := alterTableAddConstraintMinSupportedClusterVersion[cmdKey]
+	if !ok {
+		return false
+	}
 	return b.EvalCtx().Settings.Version.IsActive(b, minSupportedClusterVersion)
 }
 
