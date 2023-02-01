@@ -17,6 +17,7 @@ go_library(
         "kv_fetcher.go",
         "locking.go",
         "partial_index.go",
+        "putter.go",
         "row_converter.go",
         "truncate.go",
         "updater.go",
