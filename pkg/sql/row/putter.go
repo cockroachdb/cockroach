@@ -80,7 +80,7 @@ func (t *TracePutter) CPutTuplesEmpty(kys []roachpb.Key, values [][]byte) {
 		}
 		var v roachpb.Value
 		v.SetTuple(values[i])
-		log.VEventfDepth(t.Ctx, 1, 2, "CPut %s -> %v", k, v.PrettyPrint())
+		log.VEventfDepth(t.Ctx, 1, 2, "CPut %s -> %s", k, v.PrettyPrint())
 	}
 	t.Putter.CPutTuplesEmpty(kys, values)
 }
@@ -92,7 +92,7 @@ func (t *TracePutter) PutBytes(kys []roachpb.Key, values [][]byte) {
 		}
 		var v roachpb.Value
 		v.SetBytes(values[i])
-		log.VEventfDepth(t.Ctx, 1, 2, "Put %s -> %v", k, v.PrettyPrint())
+		log.VEventfDepth(t.Ctx, 1, 2, "Put %s -> %s", k, v.PrettyPrint())
 	}
 	t.Putter.PutBytes(kys, values)
 }
@@ -104,7 +104,7 @@ func (t *TracePutter) InitPutBytes(kys []roachpb.Key, values [][]byte) {
 		}
 		var v roachpb.Value
 		v.SetBytes(values[i])
-		log.VEventfDepth(t.Ctx, 1, 2, "InitPut %s -> %v", k, v.PrettyPrint())
+		log.VEventfDepth(t.Ctx, 1, 2, "InitPut %s -> %s", k, v.PrettyPrint())
 	}
 	t.Putter.InitPutBytes(kys, values)
 }
@@ -115,8 +115,8 @@ func (t *TracePutter) PutTuples(kys []roachpb.Key, values [][]byte) {
 			continue
 		}
 		var v roachpb.Value
-		v.SetBytes(values[i])
-		log.VEventfDepth(t.Ctx, 1, 2, "Put %s -> %v", k, v.PrettyPrint())
+		v.SetTuple(values[i])
+		log.VEventfDepth(t.Ctx, 1, 2, "Put %s -> %s", k, v.PrettyPrint())
 	}
 	t.Putter.PutTuples(kys, values)
 }
@@ -127,8 +127,8 @@ func (t *TracePutter) InitPutTuples(kys []roachpb.Key, values [][]byte) {
 			continue
 		}
 		var v roachpb.Value
-		v.SetBytes(values[i])
-		log.VEventfDepth(t.Ctx, 1, 2, "InitPut %s -> %v", k, v.PrettyPrint())
+		v.SetTuple(values[i])
+		log.VEventfDepth(t.Ctx, 1, 2, "InitPut %s -> %s", k, v.PrettyPrint())
 	}
 	t.Putter.InitPutTuples(kys, values)
 }
@@ -258,7 +258,7 @@ func (s *sliceIterator[T]) Next() (roachpb.Key, T) {
 	return k, v
 }
 
-// KVBatchAdapter implements putter interface and adapts it to kv.Batch API.
+// KVBatchAdapter implements Putter interface and adapts it to kv.Batch API.
 type KVBatchAdapter struct {
 	Batch *kv.Batch
 }
