@@ -425,13 +425,17 @@ func makeRegularGrantCoordinator(
 	}
 
 	kvSlotAdjuster := &kvSlotAdjuster{
-		settings:                 st,
-		minCPUSlots:              opts.MinCPUSlots,
-		maxCPUSlots:              opts.MaxCPUSlots,
-		totalSlotsMetric:         metrics.KVTotalSlots,
-		totalModerateSlotsMetric: metrics.KVTotalModerateSlots,
-		moderateSlotsClamp:       opts.MaxCPUSlots,
-		runnableAlphaOverride:    opts.RunnableAlphaOverride,
+		settings:                         st,
+		minCPUSlots:                      opts.MinCPUSlots,
+		maxCPUSlots:                      opts.MaxCPUSlots,
+		moderateSlotsClamp:               opts.MaxCPUSlots,
+		runnableAlphaOverride:            opts.RunnableAlphaOverride,
+		totalSlotsMetric:                 metrics.KVTotalSlots,
+		totalModerateSlotsMetric:         metrics.KVTotalModerateSlots,
+		cpuLoadShortPeriodDurationMetric: metrics.KVCPULoadShortPeriodDuration,
+		cpuLoadLongPeriodDurationMetric:  metrics.KVCPULoadLongPeriodDuration,
+		slotAdjusterIncrementsMetric:     metrics.KVSlotAdjusterIncrements,
+		slotAdjusterDecrementsMetric:     metrics.KVSlotAdjusterDecrements,
 	}
 	coord := &GrantCoordinator{
 		ambientCtx:                    ambientCtx,
@@ -445,12 +449,13 @@ func makeRegularGrantCoordinator(
 	}
 
 	kvg := &slotGranter{
-		coord:                  coord,
-		workKind:               KVWork,
-		totalHighLoadSlots:     opts.MinCPUSlots,
-		totalModerateLoadSlots: opts.MinCPUSlots,
-		usedSlotsMetric:        metrics.KVUsedSlots,
-		usedSoftSlotsMetric:    metrics.KVUsedSoftSlots,
+		coord:                        coord,
+		workKind:                     KVWork,
+		totalHighLoadSlots:           opts.MinCPUSlots,
+		totalModerateLoadSlots:       opts.MinCPUSlots,
+		usedSlotsMetric:              metrics.KVUsedSlots,
+		usedSoftSlotsMetric:          metrics.KVUsedSoftSlots,
+		slotsExhaustedDurationMetric: metrics.KVSlotsExhaustedDuration,
 	}
 
 	kvSlotAdjuster.granter = kvg
@@ -941,13 +946,18 @@ func (coord *GrantCoordinator) SafeFormat(s redact.SafePrinter, verb rune) {
 
 // GrantCoordinatorMetrics are metrics associated with a GrantCoordinator.
 type GrantCoordinatorMetrics struct {
-	KVTotalSlots                *metric.Gauge
-	KVUsedSlots                 *metric.Gauge
-	KVTotalModerateSlots        *metric.Gauge
-	KVUsedSoftSlots             *metric.Gauge
-	KVIOTokensExhaustedDuration *metric.Counter
-	SQLLeafStartUsedSlots       *metric.Gauge
-	SQLRootStartUsedSlots       *metric.Gauge
+	KVTotalSlots                 *metric.Gauge
+	KVUsedSlots                  *metric.Gauge
+	KVTotalModerateSlots         *metric.Gauge
+	KVUsedSoftSlots              *metric.Gauge
+	KVSlotsExhaustedDuration     *metric.Counter
+	KVCPULoadShortPeriodDuration *metric.Counter
+	KVCPULoadLongPeriodDuration  *metric.Counter
+	KVSlotAdjusterIncrements     *metric.Counter
+	KVSlotAdjusterDecrements     *metric.Counter
+	KVIOTokensExhaustedDuration  *metric.Counter
+	SQLLeafStartUsedSlots        *metric.Gauge
+	SQLRootStartUsedSlots        *metric.Gauge
 }
 
 // MetricStruct implements the metric.Struct interface.
@@ -955,15 +965,20 @@ func (GrantCoordinatorMetrics) MetricStruct() {}
 
 func makeGrantCoordinatorMetrics() GrantCoordinatorMetrics {
 	m := GrantCoordinatorMetrics{
-		KVTotalSlots:                metric.NewGauge(totalSlots),
-		KVUsedSlots:                 metric.NewGauge(addName(string(workKindString(KVWork)), usedSlots)),
-		KVTotalModerateSlots:        metric.NewGauge(totalModerateSlots),
-		KVUsedSoftSlots:             metric.NewGauge(usedSoftSlots),
-		KVIOTokensExhaustedDuration: metric.NewCounter(kvIOTokensExhaustedDuration),
-		SQLLeafStartUsedSlots: metric.NewGauge(
-			addName(string(workKindString(SQLStatementLeafStartWork)), usedSlots)),
-		SQLRootStartUsedSlots: metric.NewGauge(
-			addName(string(workKindString(SQLStatementRootStartWork)), usedSlots)),
+		KVTotalSlots: metric.NewGauge(totalSlots),
+		KVUsedSlots:  metric.NewGauge(addName(string(workKindString(KVWork)), usedSlots)),
+		// TODO(sumeer): remove moderate load slots and soft slots code and
+		// metrics #88032.
+		KVTotalModerateSlots:         metric.NewGauge(totalModerateSlots),
+		KVUsedSoftSlots:              metric.NewGauge(usedSoftSlots),
+		KVSlotsExhaustedDuration:     metric.NewCounter(kvSlotsExhaustedDuration),
+		KVCPULoadShortPeriodDuration: metric.NewCounter(kvCPULoadShortPeriodDuration),
+		KVCPULoadLongPeriodDuration:  metric.NewCounter(kvCPULoadLongPeriodDuration),
+		KVSlotAdjusterIncrements:     metric.NewCounter(kvSlotAdjusterIncrements),
+		KVSlotAdjusterDecrements:     metric.NewCounter(kvSlotAdjusterDecrements),
+		KVIOTokensExhaustedDuration:  metric.NewCounter(kvIOTokensExhaustedDuration),
+		SQLLeafStartUsedSlots:        metric.NewGauge(addName(string(workKindString(SQLStatementLeafStartWork)), usedSlots)),
+		SQLRootStartUsedSlots:        metric.NewGauge(addName(string(workKindString(SQLStatementRootStartWork)), usedSlots)),
 	}
 	return m
 }

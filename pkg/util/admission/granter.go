@@ -102,6 +102,9 @@ type slotGranter struct {
 
 	usedSlotsMetric     *metric.Gauge
 	usedSoftSlotsMetric *metric.Gauge
+	// Non-nil for KV slots.
+	slotsExhaustedDurationMetric *metric.Counter
+	exhaustedStart               time.Time
 }
 
 var _ granterWithLockedCalls = &slotGranter{}
@@ -127,6 +130,9 @@ func (sg *slotGranter) tryGetLocked(count int64, _ int8) grantResult {
 	}
 	if sg.usedSlots < sg.totalHighLoadSlots || sg.skipSlotEnforcement {
 		sg.usedSlots++
+		if sg.usedSlots == sg.totalHighLoadSlots && sg.slotsExhaustedDurationMetric != nil {
+			sg.exhaustedStart = timeutil.Now()
+		}
 		sg.usedSlotsMetric.Update(int64(sg.usedSlots))
 		return grantSuccess
 	}
@@ -172,6 +178,11 @@ func (sg *slotGranter) returnGrantLocked(count int64, _ int8) {
 	if count != 1 {
 		panic(errors.AssertionFailedf("unexpected count: %d", count))
 	}
+	if sg.usedSlots == sg.totalHighLoadSlots && sg.slotsExhaustedDurationMetric != nil {
+		now := timeutil.Now()
+		exhaustedMicros := now.Sub(sg.exhaustedStart).Microseconds()
+		sg.slotsExhaustedDurationMetric.Inc(exhaustedMicros)
+	}
 	sg.usedSlots--
 	if sg.usedSlots < 0 {
 		panic(errors.AssertionFailedf("used slots is negative %d", sg.usedSlots))
@@ -190,6 +201,9 @@ func (sg *slotGranter) tookWithoutPermissionLocked(count int64, _ int8) {
 		panic(errors.AssertionFailedf("unexpected count: %d", count))
 	}
 	sg.usedSlots++
+	if sg.usedSlots == sg.totalHighLoadSlots && sg.slotsExhaustedDurationMetric != nil {
+		sg.exhaustedStart = timeutil.Now()
+	}
 	sg.usedSlotsMetric.Update(int64(sg.usedSlots))
 }
 
@@ -217,6 +231,32 @@ func (sg *slotGranter) tryGrantLocked(grantChainID grantChainID) grantResult {
 		}
 	}
 	return res
+}
+
+//gcassert:inline
+func (sg *slotGranter) setTotalHighLoadSlotsLocked(totalHighLoadSlots int) {
+	// Mid-stack inlining.
+	if totalHighLoadSlots == sg.totalHighLoadSlots {
+		return
+	}
+	sg.setTotalHighLoadSlotsLockedInternal(totalHighLoadSlots)
+}
+
+func (sg *slotGranter) setTotalHighLoadSlotsLockedInternal(totalHighLoadSlots int) {
+	if sg.slotsExhaustedDurationMetric != nil {
+		if totalHighLoadSlots > sg.totalHighLoadSlots {
+			if sg.totalHighLoadSlots <= sg.usedSlots && totalHighLoadSlots > sg.usedSlots {
+				now := timeutil.Now()
+				exhaustedMicros := now.Sub(sg.exhaustedStart).Microseconds()
+				sg.slotsExhaustedDurationMetric.Inc(exhaustedMicros)
+			}
+		} else if totalHighLoadSlots < sg.totalHighLoadSlots {
+			if sg.totalHighLoadSlots > sg.usedSlots && totalHighLoadSlots <= sg.usedSlots {
+				sg.exhaustedStart = timeutil.Now()
+			}
+		}
+	}
+	sg.totalHighLoadSlots = totalHighLoadSlots
 }
 
 // tokenGranter implements granterWithLockedCalls.
@@ -689,6 +729,42 @@ var (
 	usedSoftSlots = metric.Metadata{
 		Name:        "admission.granter.used_soft_slots.kv",
 		Help:        "Used soft slots",
+		Measurement: "Slots",
+		Unit:        metric.Unit_COUNT,
+	}
+	// NB: this metric is independent of whether slots enforcement is happening
+	// or not.
+	kvSlotsExhaustedDuration = metric.Metadata{
+		Name:        "admission.granter.slots_exhausted_duration.kv",
+		Help:        "Total duration when KV slots were exhausted, in micros",
+		Measurement: "Microseconds",
+		Unit:        metric.Unit_COUNT,
+	}
+	// We have a metric for both short and long period. These metrics use the
+	// period provided in CPULoad and not wall time. So if the sum of the rate
+	// of these two is < 1sec/sec, the CPULoad ticks are not happening at the
+	// expected frequency (this could happen due to CPU overload).
+	kvCPULoadShortPeriodDuration = metric.Metadata{
+		Name:        "admission.granter.cpu_load_short_period_duration.kv",
+		Help:        "Total duration when CPULoad was being called with a short period, in micros",
+		Measurement: "Microseconds",
+		Unit:        metric.Unit_COUNT,
+	}
+	kvCPULoadLongPeriodDuration = metric.Metadata{
+		Name:        "admission.granter.cpu_load_long_period_duration.kv",
+		Help:        "Total duration when CPULoad was being called with a long period, in micros",
+		Measurement: "Microseconds",
+		Unit:        metric.Unit_COUNT,
+	}
+	kvSlotAdjusterIncrements = metric.Metadata{
+		Name:        "admission.granter.slot_adjuster_increments.kv",
+		Help:        "Number of increments of the total KV slots",
+		Measurement: "Slots",
+		Unit:        metric.Unit_COUNT,
+	}
+	kvSlotAdjusterDecrements = metric.Metadata{
+		Name:        "admission.granter.slot_adjuster_decrements.kv",
+		Help:        "Number of decrements of the total KV slots",
 		Measurement: "Slots",
 		Unit:        metric.Unit_COUNT,
 	}
