@@ -26,6 +26,66 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestAlterTenantCompleteToTime(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	args := replicationtestutils.DefaultTenantStreamingClustersArgs
+
+	c, cleanup := replicationtestutils.CreateTenantStreamingClusters(ctx, t, args)
+	defer cleanup()
+	producerJobID, ingestionJobID := c.StartStreamReplication(ctx)
+
+	jobutils.WaitForJobToRun(t, c.SrcSysSQL, jobspb.JobID(producerJobID))
+	jobutils.WaitForJobToRun(t, c.DestSysSQL, jobspb.JobID(ingestionJobID))
+
+	c.WaitUntilHighWatermark(c.SrcCluster.Server(0).Clock().Now(), jobspb.JobID(ingestionJobID))
+
+	var cutoverTime time.Time
+	c.DestSysSQL.QueryRow(t, "SELECT clock_timestamp()").Scan(&cutoverTime)
+
+	var cutoverStr string
+	c.DestSysSQL.QueryRow(c.T, `ALTER TENANT $1 COMPLETE REPLICATION TO SYSTEM TIME $2::string`,
+		args.DestTenantName, cutoverTime).Scan(&cutoverStr)
+	cutoverOutput := replicationtestutils.DecimalTimeToHLC(t, cutoverStr)
+	require.Equal(t, cutoverTime, cutoverOutput.GoTime())
+	jobutils.WaitForJobToSucceed(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
+}
+
+func TestAlterTenantCompleteToLatest(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	args := replicationtestutils.DefaultTenantStreamingClustersArgs
+
+	c, cleanup := replicationtestutils.CreateTenantStreamingClusters(ctx, t, args)
+	defer cleanup()
+	producerJobID, ingestionJobID := c.StartStreamReplication(ctx)
+
+	jobutils.WaitForJobToRun(t, c.SrcSysSQL, jobspb.JobID(producerJobID))
+	jobutils.WaitForJobToRun(t, c.DestSysSQL, jobspb.JobID(ingestionJobID))
+
+	highWater := c.SrcCluster.Server(0).Clock().Now()
+	c.WaitUntilHighWatermark(highWater, jobspb.JobID(ingestionJobID))
+
+	var cutoverStr string
+	testutils.SucceedsSoon(t, func() error {
+		err := c.DestSysSQL.DB.QueryRowContext(ctx, `ALTER TENANT $1 COMPLETE REPLICATION TO LATEST`,
+			args.DestTenantName).Scan(&cutoverStr)
+		if err == nil {
+			return nil
+		}
+		require.ErrorContains(t, err, "is before earliest safe cutover time")
+		return err
+	})
+	cutoverOutput := replicationtestutils.DecimalTimeToHLC(t, cutoverStr)
+	require.GreaterOrEqual(t, cutoverOutput.GoTime(), highWater.GoTime())
+	require.LessOrEqual(t, cutoverOutput.GoTime(), c.SrcCluster.Server(0).Clock().Now().GoTime())
+	jobutils.WaitForJobToSucceed(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
+}
+
 func TestAlterTenantPauseResume(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
