@@ -120,22 +120,6 @@ func alterReplicationJobHook(
 			"only the system tenant can alter tenant")
 	}
 
-	var cutoverTime hlc.Timestamp
-	if alterTenantStmt.Cutover != nil {
-		if !alterTenantStmt.Cutover.Latest {
-			if alterTenantStmt.Cutover.Timestamp == nil {
-				return nil, nil, nil, false, errors.AssertionFailedf("unexpected nil cutover expression")
-			}
-
-			evalCtx := &p.ExtendedEvalContext().Context
-			ct, err := evalCutoverTime(ctx, evalCtx, p.SemaCtx(), alterTenantStmt.Cutover.Timestamp)
-			if err != nil {
-				return nil, nil, nil, false, err
-			}
-			cutoverTime = ct
-		}
-	}
-
 	exprEval := p.ExprEvaluator(alterReplicationJobOp)
 	options, err := evalTenantReplicationOptions(ctx, alterTenantStmt.Options, exprEval)
 	if err != nil {
@@ -161,10 +145,8 @@ func alterReplicationJobHook(
 		jobRegistry := p.ExecCfg().JobRegistry
 		if alterTenantStmt.Cutover != nil {
 			pts := p.ExecCfg().ProtectedTimestampProvider.WithTxn(p.InternalSQLTxn())
-			if err := alterTenantJobCutover(
-				ctx, p.InternalSQLTxn(), jobRegistry, pts,
-				alterTenantStmt, tenInfo, cutoverTime,
-			); err != nil {
+			cutoverTime, err := alterTenantJobCutover(ctx, p, pts, alterTenantStmt, tenInfo)
+			if err != nil {
 				return err
 			}
 			resultsCh <- tree.Datums{eval.TimestampToDecimalDatum(cutoverTime)}
@@ -197,33 +179,44 @@ func alterReplicationJobHook(
 
 func alterTenantJobCutover(
 	ctx context.Context,
-	txn isql.Txn,
-	jobRegistry *jobs.Registry,
+	p sql.PlanHookState,
 	ptp protectedts.Storage,
 	alterTenantStmt *tree.AlterTenantReplication,
 	tenInfo *mtinfopb.TenantInfo,
-	cutoverTime hlc.Timestamp,
-) error {
+) (cutoverTime hlc.Timestamp, err error) {
 	if alterTenantStmt == nil || alterTenantStmt.Cutover == nil {
-		return errors.AssertionFailedf("unexpected nil ALTER TENANT cutover expression")
+		return hlc.Timestamp{}, errors.AssertionFailedf("unexpected nil ALTER TENANT cutover expression")
 	}
 
+	jobRegistry := p.ExecCfg().JobRegistry
 	tenantName := tenInfo.Name
-	job, err := jobRegistry.LoadJobWithTxn(ctx, tenInfo.TenantReplicationJobID, txn)
+	job, err := jobRegistry.LoadJobWithTxn(ctx, tenInfo.TenantReplicationJobID, p.InternalSQLTxn())
 	if err != nil {
-		return err
+		return hlc.Timestamp{}, err
 	}
 	details, ok := job.Details().(jobspb.StreamIngestionDetails)
 	if !ok {
-		return errors.Newf("job with id %d is not a stream ingestion job", job.ID())
+		return hlc.Timestamp{}, errors.Newf("job with id %d is not a stream ingestion job", job.ID())
 	}
 	progress := job.Progress()
 	if alterTenantStmt.Cutover.Latest {
 		ts := progress.GetHighWater()
 		if ts == nil || ts.IsEmpty() {
-			return errors.Newf("replicated tenant %q has not yet recorded a safe replication time", tenantName)
+			return hlc.Timestamp{},
+				errors.Newf("replicated tenant %q has not yet recorded a safe replication time", tenantName)
 		}
 		cutoverTime = *ts
+	} else {
+		if alterTenantStmt.Cutover.Timestamp == nil {
+			return hlc.Timestamp{}, errors.AssertionFailedf("unexpected nil cutover expression")
+		}
+
+		evalCtx := &p.ExtendedEvalContext().Context
+		ct, err := evalCutoverTime(ctx, evalCtx, p.SemaCtx(), alterTenantStmt.Cutover.Timestamp)
+		if err != nil {
+			return hlc.Timestamp{}, err
+		}
+		cutoverTime = ct
 	}
 
 	// TODO(ssd): We could use the replication manager here, but
@@ -232,25 +225,27 @@ func alterTenantJobCutover(
 	// Check that the timestamp is above our retained timestamp.
 	stats, err := replicationutils.GetStreamIngestionStatsNoHeartbeat(ctx, details, progress)
 	if err != nil {
-		return err
+		return hlc.Timestamp{}, err
 	}
 	if stats.IngestionDetails.ProtectedTimestampRecordID == nil {
-		return errors.Newf("replicated tenant %q (%d) has not yet recorded a retained timestamp",
+		return hlc.Timestamp{}, errors.Newf("replicated tenant %q (%d) has not yet recorded a retained timestamp",
 			tenantName, tenInfo.ID)
 	} else {
 		record, err := ptp.GetRecord(ctx, *stats.IngestionDetails.ProtectedTimestampRecordID)
 		if err != nil {
-			return err
+			return hlc.Timestamp{}, err
 		}
 		if cutoverTime.Less(record.Timestamp) {
-			return errors.Newf("cutover time %s is before earliest safe cutover time %s", cutoverTime, record.Timestamp)
+			return hlc.Timestamp{}, errors.Newf("cutover time %s is before earliest safe cutover time %s",
+				cutoverTime, record.Timestamp)
 		}
 	}
-	if err := completeStreamIngestion(ctx, jobRegistry, txn, tenInfo.TenantReplicationJobID, cutoverTime); err != nil {
-		return err
+	if err := completeStreamIngestion(
+		ctx, jobRegistry, p.InternalSQLTxn(), tenInfo.TenantReplicationJobID, cutoverTime); err != nil {
+		return hlc.Timestamp{}, err
 	}
 
-	return nil
+	return cutoverTime, nil
 }
 
 func alterTenantOptions(
