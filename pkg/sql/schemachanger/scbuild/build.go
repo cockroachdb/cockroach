@@ -13,6 +13,7 @@ package scbuild
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -125,8 +126,8 @@ func Build(
 
 // CheckIfSupported returns if a statement is fully supported by the declarative
 // schema changer.
-func CheckIfSupported(statement tree.Statement) bool {
-	return scbuildstmt.CheckIfStmtIsSupported(statement, sessiondatapb.UseNewSchemaChangerOn)
+func CheckIfSupported(version clusterversion.ClusterVersion, statement tree.Statement) bool {
+	return scbuildstmt.CheckIfStmtIsSupported(version, statement, sessiondatapb.UseNewSchemaChangerOn)
 }
 
 // Export dependency interfaces.

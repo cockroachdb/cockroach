@@ -142,7 +142,11 @@ func init() {
 
 // CheckIfStmtIsSupported determines if the statement is supported by the declarative
 // schema changer.
-func CheckIfStmtIsSupported(n tree.Statement, mode sessiondatapb.NewSchemaChangerMode) bool {
+func CheckIfStmtIsSupported(
+	activeVersion clusterversion.ClusterVersion,
+	n tree.Statement,
+	mode sessiondatapb.NewSchemaChangerMode,
+) bool {
 	// Check if an entry exists for the statement type, in which
 	// case it is either fully or partially supported.
 	info, ok := supportedStatements[reflect.TypeOf(n)]
@@ -152,7 +156,16 @@ func CheckIfStmtIsSupported(n tree.Statement, mode sessiondatapb.NewSchemaChange
 	// Check if partially supported operations are allowed next. If an
 	// operation is not fully supported will not allow it to be run in
 	// the declarative schema changer until its fully supported.
-	return isFullySupported(n, info.on, info.extraChecks, mode)
+	if !isFullySupported(n, info.on, info.extraChecks, mode) {
+		return false
+	}
+	// If a version handle is included, then this check can go further
+	// and confirm if the active version supports this statement.
+	if !stmtSupportedInCurrentClusterVersion(activeVersion, n) {
+		return false
+	}
+
+	return true
 }
 
 // Process dispatches on the statement type to populate the BuilderState
@@ -174,7 +187,7 @@ func Process(b BuildCtx, n tree.Statement) {
 	}
 
 	// Check if the statement is supported in the current cluster version.
-	if !stmtSupportedInCurrentClusterVersion(b, n) {
+	if !stmtSupportedInCurrentClusterVersion(b.EvalCtx().Settings.Version.ActiveVersion(b), n) {
 		panic(scerrors.NotImplementedError(n))
 	}
 
@@ -191,10 +204,12 @@ func Process(b BuildCtx, n tree.Statement) {
 
 // stmtSupportedInCurrentClusterVersion checks whether the statement is supported
 // in current cluster version.
-func stmtSupportedInCurrentClusterVersion(b BuildCtx, n tree.Statement) bool {
+func stmtSupportedInCurrentClusterVersion(
+	activeVersion clusterversion.ClusterVersion, n tree.Statement,
+) bool {
 	if alterTableStmt, isAlterTable := n.(*tree.AlterTable); isAlterTable {
-		return alterTableAllCmdsSupportedInCurrentClusterVersion(b, alterTableStmt)
+		return alterTableAllCmdsSupportedInCurrentClusterVersion(activeVersion, alterTableStmt)
 	}
 	minSupportedClusterVersion := supportedStatements[reflect.TypeOf(n)].minSupportedClusterVersion
-	return b.EvalCtx().Settings.Version.IsActive(b, minSupportedClusterVersion)
+	return activeVersion.IsActive(minSupportedClusterVersion)
 }
