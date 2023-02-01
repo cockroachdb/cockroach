@@ -551,8 +551,8 @@ func (p *pebbleMVCCScanner) incrementItersBeforeSeek() {
 // Decrements itersBeforeSeek while ensuring it stays positive.
 func (p *pebbleMVCCScanner) decrementItersBeforeSeek() {
 	p.itersBeforeSeek--
-	if p.itersBeforeSeek < 0 {
-		p.itersBeforeSeek = 0
+	if p.itersBeforeSeek < 1 {
+		p.itersBeforeSeek = 1
 	}
 }
 
