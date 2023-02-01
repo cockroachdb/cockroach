@@ -209,7 +209,6 @@ func makePGGetViewDef(paramTypes tree.ParamTypes) tree.Overload {
 	return tree.Overload{
 		Types:      paramTypes,
 		ReturnType: tree.FixedReturnType(types.String),
-		IsUDF:      true,
 		Body: `SELECT definition
 		FROM pg_catalog.pg_views v
 		JOIN pg_catalog.pg_class c ON c.relname=v.viewname
@@ -229,7 +228,6 @@ func makePGGetConstraintDef(paramTypes tree.ParamTypes) tree.Overload {
 	return tree.Overload{
 		Types:      paramTypes,
 		ReturnType: tree.FixedReturnType(types.String),
-		IsUDF:      true,
 		Body:       `SELECT condef FROM pg_catalog.pg_constraint WHERE oid=$1 LIMIT 1`,
 		Info:       notUsableInfo,
 		Volatility: volatility.Stable,
@@ -597,7 +595,6 @@ var pgBuiltins = map[string]builtinDefinition{
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "func_oid", Typ: types.Oid}},
 			ReturnType: tree.FixedReturnType(types.String),
-			IsUDF:      true,
 			Body: fmt.Sprintf(
 				`SELECT COALESCE(create_statement, prosrc)
              FROM pg_catalog.pg_proc
@@ -617,7 +614,6 @@ var pgBuiltins = map[string]builtinDefinition{
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "func_oid", Typ: types.Oid}},
 			ReturnType: tree.FixedReturnType(types.String),
-			IsUDF:      true,
 			Body:       getFunctionArgStringQuery,
 			Info: "Returns the argument list (with defaults) necessary to identify a function, " +
 				"in the form it would need to appear in within CREATE FUNCTION.",
@@ -634,7 +630,6 @@ var pgBuiltins = map[string]builtinDefinition{
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "func_oid", Typ: types.Oid}},
 			ReturnType: tree.FixedReturnType(types.String),
-			IsUDF:      true,
 			Body: `SELECT t.typname
              FROM pg_catalog.pg_proc p
              JOIN pg_catalog.pg_type t
@@ -654,7 +649,6 @@ var pgBuiltins = map[string]builtinDefinition{
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "func_oid", Typ: types.Oid}},
 			ReturnType: tree.FixedReturnType(types.String),
-			IsUDF:      true,
 			Body:       getFunctionArgStringQuery,
 			Info: "Returns the argument list (without defaults) necessary to identify a function, " +
 				"in the form it would need to appear in within ALTER FUNCTION, for instance.",
@@ -667,7 +661,6 @@ var pgBuiltins = map[string]builtinDefinition{
 	"pg_get_indexdef": makeBuiltin(
 		tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo, DistsqlBlocklist: true},
 		tree.Overload{
-			IsUDF:      true,
 			Types:      tree.ParamTypes{{Name: "index_oid", Typ: types.Oid}},
 			ReturnType: tree.FixedReturnType(types.String),
 			Body:       `SELECT indexdef FROM pg_catalog.pg_indexes WHERE crdb_oid = $1`,
@@ -675,7 +668,6 @@ var pgBuiltins = map[string]builtinDefinition{
 			Volatility: volatility.Stable,
 		},
 		tree.Overload{
-			IsUDF:      true,
 			Types:      tree.ParamTypes{{Name: "index_oid", Typ: types.Oid}, {Name: "column_no", Typ: types.Int}, {Name: "pretty_bool", Typ: types.Bool}},
 			ReturnType: tree.FixedReturnType(types.String),
 			Body: `SELECT CASE
@@ -847,7 +839,6 @@ var pgBuiltins = map[string]builtinDefinition{
 				{Name: "role_oid", Typ: types.Oid},
 			},
 			ReturnType: tree.FixedReturnType(types.String),
-			IsUDF:      true,
 			Body:       `SELECT COALESCE((SELECT rolname FROM pg_catalog.pg_roles WHERE oid=$1 LIMIT 1), 'unknown (OID=' || $1 || ')')`,
 			Info:       notUsableInfo,
 			Volatility: volatility.Stable,
@@ -866,7 +857,6 @@ var pgBuiltins = map[string]builtinDefinition{
 				[]*types.T{types.Int, types.Int, types.Int, types.Int, types.Bool, types.Int, types.Oid},
 				[]string{"start_value", "minimum_value", "maxmimum_value", "increment", "cycle_option", "cache_size", "data_type"},
 			)),
-			IsUDF: true,
 			Body: `SELECT COALESCE ((SELECT (seqstart, seqmin, seqmax, seqincrement, seqcycle, seqcache, seqtypid)
              FROM pg_catalog.pg_sequence WHERE seqrelid=$1 LIMIT 1),
              CASE WHEN crdb_internal.force_error('42P01', 'relation with OID ' || $1 || ' does not exist') > 0 THEN NULL ELSE NULL END)`,
@@ -924,7 +914,6 @@ var pgBuiltins = map[string]builtinDefinition{
 
 	"col_description": makeBuiltin(defProps(),
 		tree.Overload{
-			IsUDF:      true,
 			Types:      tree.ParamTypes{{Name: "table_oid", Typ: types.Oid}, {Name: "column_number", Typ: types.Int}},
 			ReturnType: tree.FixedReturnType(types.String),
 			// Note: the following is equivalent to:
@@ -954,7 +943,6 @@ var pgBuiltins = map[string]builtinDefinition{
 
 	"obj_description": makeBuiltin(defProps(),
 		tree.Overload{
-			IsUDF:      true,
 			Types:      tree.ParamTypes{{Name: "object_oid", Typ: types.Oid}},
 			ReturnType: tree.FixedReturnType(types.String),
 			Body: `SELECT description
@@ -968,7 +956,6 @@ var pgBuiltins = map[string]builtinDefinition{
 			Volatility: volatility.Stable,
 		},
 		tree.Overload{
-			IsUDF:      true,
 			Types:      tree.ParamTypes{{Name: "object_oid", Typ: types.Oid}, {Name: "catalog_name", Typ: types.String}},
 			ReturnType: tree.FixedReturnType(types.String),
 			Body: `SELECT d.description
@@ -1002,7 +989,6 @@ var pgBuiltins = map[string]builtinDefinition{
 
 	"shobj_description": makeBuiltin(defProps(),
 		tree.Overload{
-			IsUDF:      true,
 			Types:      tree.ParamTypes{{Name: "object_oid", Typ: types.Oid}, {Name: "catalog_name", Typ: types.String}},
 			ReturnType: tree.FixedReturnType(types.String),
 			Body: `SELECT d.description
@@ -1064,7 +1050,6 @@ var pgBuiltins = map[string]builtinDefinition{
 	// https://www.postgresql.org/docs/9.6/static/functions-info.html
 	"pg_function_is_visible": makeBuiltin(defProps(),
 		tree.Overload{
-			IsUDF:      true,
 			Types:      tree.ParamTypes{{Name: "oid", Typ: types.Oid}},
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Body: `SELECT n.nspname = any current_schemas(true)
@@ -1081,7 +1066,6 @@ var pgBuiltins = map[string]builtinDefinition{
 	// https://www.postgresql.org/docs/9.6/static/functions-info.html
 	"pg_table_is_visible": makeBuiltin(defProps(),
 		tree.Overload{
-			IsUDF:      true,
 			Types:      tree.ParamTypes{{Name: "oid", Typ: types.Oid}},
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Body: `SELECT n.nspname = any current_schemas(true)
@@ -1102,7 +1086,6 @@ var pgBuiltins = map[string]builtinDefinition{
 	// https://www.postgresql.org/docs/9.6/static/functions-info.html
 	"pg_type_is_visible": makeBuiltin(defProps(),
 		tree.Overload{
-			IsUDF:      true,
 			Types:      tree.ParamTypes{{Name: "oid", Typ: types.Oid}},
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Body: `SELECT n.nspname = any current_schemas(true)
@@ -1898,7 +1881,6 @@ var pgBuiltins = map[string]builtinDefinition{
 	// https://github.com/postgres/postgres/blob/master/src/backend/catalog/information_schema.sql
 	"information_schema._pg_index_position": makeBuiltin(defProps(),
 		tree.Overload{
-			IsUDF: true,
 			Types: tree.ParamTypes{
 				{Name: "oid", Typ: types.Oid},
 				{Name: "col", Typ: types.Int2},
