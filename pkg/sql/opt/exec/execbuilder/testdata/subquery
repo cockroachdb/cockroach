@@ -101,14 +101,16 @@ vectorized: true
 │
 └── • subquery
     │ id: @S1
-    │ original sql: EXISTS (SELECT a FROM abc)
-    │ exec mode: exists
+    │ original sql: (SELECT a FROM abc)
+    │ exec mode: one row
     │
-    └── • scan
-          missing stats
-          table: abc@abc_pkey
-          spans: LIMITED SCAN
-          limit: 1
+    └── • render
+        │
+        └── • scan
+              missing stats
+              table: abc@abc_pkey
+              spans: LIMITED SCAN
+              limit: 1
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM abc WHERE a = (SELECT max(a) FROM abc WHERE EXISTS(SELECT * FROM abc WHERE c=a+3))
@@ -132,23 +134,27 @@ vectorized: true
 │
 ├── • subquery
 │   │ id: @S1
-│   │ original sql: EXISTS (SELECT * FROM abc WHERE c = (a + 3))
-│   │ exec mode: exists
+│   │ original sql: (SELECT * FROM abc WHERE c = (a + 3))
+│   │ exec mode: one row
 │   │
-│   └── • limit
-│       │ columns: (a, b, c)
-│       │ count: 1
+│   └── • render
+│       │ columns: (column16)
+│       │ render column16: true
 │       │
-│       └── • filter
-│           │ columns: (a, b, c)
-│           │ estimated row count: 330 (missing stats)
-│           │ filter: c = (a + 3)
+│       └── • limit
+│           │ columns: (a, c)
+│           │ count: 1
 │           │
-│           └── • scan
-│                 columns: (a, b, c)
-│                 estimated row count: 1,000 (missing stats)
-│                 table: abc@abc_pkey
-│                 spans: FULL SCAN (SOFT LIMIT)
+│           └── • filter
+│               │ columns: (a, c)
+│               │ estimated row count: 330 (missing stats)
+│               │ filter: c = (a + 3)
+│               │
+│               └── • scan
+│                     columns: (a, c)
+│                     estimated row count: 1,000 (missing stats)
+│                     table: abc@abc_pkey
+│                     spans: FULL SCAN (SOFT LIMIT)
 │
 └── • subquery
     │ id: @S2
@@ -168,7 +174,7 @@ vectorized: true
                 │ columns: (a)
                 │ ordering: -a
                 │ estimated row count: 333 (missing stats)
-                │ filter: @S1
+                │ filter: COALESCE(@S1, false)
                 │
                 └── • revscan
                       columns: (a)
@@ -512,3 +518,47 @@ Scan /Table/110/1/1/0
 Scan /Table/110/1/2/0
 Scan /Table/110/1/3/0
 Scan /Table/110/1/4/0
+
+# Case where the EXISTS subquery in a filter cannot be hoisted into an
+# apply-join.
+query T
+EXPLAIN (VERBOSE)
+SELECT * FROM corr
+WHERE CASE WHEN k < 5 THEN EXISTS (SELECT i FROM corr tmp WHERE i = corr.k*10) END
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ columns: (k, i)
+│ estimated row count: 333 (missing stats)
+│ filter: CASE WHEN k < 5 THEN COALESCE(exists(k), false) ELSE CAST(NULL AS BOOL) END
+│
+└── • scan
+      columns: (k, i)
+      estimated row count: 1,000 (missing stats)
+      table: corr@corr_pkey
+      spans: FULL SCAN
+
+# Case where the EXISTS subquery in a projection cannot be hoisted into an
+# apply-join.
+query T
+EXPLAIN (VERBOSE)
+SELECT *,
+  CASE WHEN k < 5 THEN EXISTS (SELECT i FROM corr tmp WHERE i = corr.k*10) END
+FROM corr
+----
+distribution: local
+vectorized: true
+·
+• render
+│ columns: (k, i, "case")
+│ render case: CASE WHEN k < 5 THEN COALESCE(exists(k), false) ELSE CAST(NULL AS BOOL) END
+│ render k: k
+│ render i: i
+│
+└── • scan
+      columns: (k, i)
+      estimated row count: 1,000 (missing stats)
+      table: corr@corr_pkey
+      spans: FULL SCAN

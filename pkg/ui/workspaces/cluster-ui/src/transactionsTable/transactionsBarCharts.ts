@@ -54,11 +54,14 @@ const contentionStdDev = bar(cx("contention-dev"), (d: Transaction) =>
   ),
 );
 const cpuBar = [
-  bar("cpu", (d: Transaction) => d.stats_data.stats.exec_stats.cpu_nanos?.mean),
+  bar(
+    "cpu",
+    (d: Transaction) => d.stats_data.stats.exec_stats.cpu_sql_nanos?.mean,
+  ),
 ];
 const cpuStdDev = bar(cx("cpu-dev"), (d: Transaction) =>
   stdDevLong(
-    d.stats_data.stats.exec_stats.cpu_nanos,
+    d.stats_data.stats.exec_stats.cpu_sql_nanos,
     d.stats_data.stats.exec_stats.count,
   ),
 );

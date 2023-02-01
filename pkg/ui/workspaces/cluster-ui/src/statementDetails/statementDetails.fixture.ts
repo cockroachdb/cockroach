@@ -60,7 +60,7 @@ const statementDetailsNoData: StatementDetailsResponse = {
         contention_time: { mean: 0, squared_diffs: 0 },
         network_messages: { mean: 0, squared_diffs: 0 },
         max_disk_usage: { mean: 0, squared_diffs: 0 },
-        cpu_nanos: { mean: 0, squared_diffs: 0 },
+        cpu_sql_nanos: { mean: 0, squared_diffs: 0 },
       },
       sql_type: "",
       last_exec_timestamp: { seconds: new Long(-62135596800) },
@@ -175,7 +175,7 @@ const statementDetailsData: StatementDetailsResponse = {
           mean: 0,
           squared_diffs: 0,
         },
-        cpu_nanos: {
+        cpu_sql_nanos: {
           mean: 0,
           squared_diffs: 0,
         },
@@ -276,7 +276,7 @@ const statementDetailsData: StatementDetailsResponse = {
             mean: 0,
             squared_diffs: 0,
           },
-          cpu_nanos: {
+          cpu_sql_nanos: {
             mean: 0,
             squared_diffs: 0,
           },
@@ -380,7 +380,7 @@ const statementDetailsData: StatementDetailsResponse = {
             mean: 0,
             squared_diffs: 0,
           },
-          cpu_nanos: {
+          cpu_sql_nanos: {
             mean: 0,
             squared_diffs: 0,
           },
@@ -484,7 +484,7 @@ const statementDetailsData: StatementDetailsResponse = {
             mean: 0,
             squared_diffs: 0,
           },
-          cpu_nanos: {
+          cpu_sql_nanos: {
             mean: 0,
             squared_diffs: 0,
           },
@@ -588,7 +588,7 @@ const statementDetailsData: StatementDetailsResponse = {
             mean: 0,
             squared_diffs: 0,
           },
-          cpu_nanos: {
+          cpu_sql_nanos: {
             mean: 0,
             squared_diffs: 0,
           },
@@ -694,7 +694,7 @@ const statementDetailsData: StatementDetailsResponse = {
             mean: 0,
             squared_diffs: 0,
           },
-          cpu_nanos: {
+          cpu_sql_nanos: {
             mean: 0,
             squared_diffs: 0,
           },
@@ -796,7 +796,7 @@ const statementDetailsData: StatementDetailsResponse = {
             mean: 0,
             squared_diffs: 0,
           },
-          cpu_nanos: {
+          cpu_sql_nanos: {
             mean: 0,
             squared_diffs: 0,
           },

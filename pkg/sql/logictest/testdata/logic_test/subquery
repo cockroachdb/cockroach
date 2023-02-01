@@ -524,10 +524,24 @@ k  i   prev_i
 4  40  33
 5  50  40
 
-# TODO(mgartner): Execute correlated EXISTS subqueries.
-statement error could not decorrelate subquery
+query II
 SELECT * FROM corr
 WHERE CASE WHEN k < 5 THEN EXISTS (SELECT i FROM corr tmp WHERE i = corr.k*10) END
+----
+1  10
+3  30
+4  40
+
+query IIB
+SELECT *,
+  CASE WHEN k < 5 THEN EXISTS (SELECT i FROM corr tmp WHERE i = corr.k*10) END
+FROM corr
+----
+1  10  true
+2  22  false
+3  30  true
+4  40  true
+5  50  NULL
 
 # TODO(mgartner): Execute correlated <op> ANY subqueries.
 statement error could not decorrelate subquery
@@ -603,6 +617,32 @@ WHERE CASE WHEN k < 5 THEN k+1 = (SELECT i FROM tmp WHERE i = corr.k) END
 # The statement above should perform the INSERT only once.
 query I
 SELECT count(*) FROM corr2
+----
+1
+
+# Uncorrelated EXISTS subqueries within correlated subqueries can be executed.
+query I
+SELECT i FROM (VALUES (1), (2)) v(i)
+WHERE CASE
+  WHEN i < 3 THEN (SELECT 1/i = 1 FROM (VALUES (1)) WHERE EXISTS (SELECT * FROM corr))
+  ELSE false
+END
+----
+1
+
+# Correlated EXISTS subqueries within correlated subqueries can be executed.
+query I
+SELECT i FROM (VALUES (1), (10)) v(i)
+WHERE CASE
+  WHEN i > 0 THEN (
+    SELECT i/1 = j FROM (VALUES (1), (10)) w(j)
+    WHERE CASE
+      WHEN j > 0 THEN EXISTS (SELECT * FROM corr WHERE k/1 = j)
+      ELSE false
+    END
+  )
+  ELSE false
+END
 ----
 1
 

@@ -541,7 +541,7 @@ function makeExecStats(): Required<ExecStats> {
     contention_time: makeStat(),
     network_messages: makeStat(),
     max_disk_usage: makeStat(),
-    cpu_nanos: makeStat(),
+    cpu_sql_nanos: makeStat(),
   };
 }
 

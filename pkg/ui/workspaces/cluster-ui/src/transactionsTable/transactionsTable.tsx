@@ -217,7 +217,7 @@ export function makeTransactionsColumns(
       cell: cpuBar,
       className: cx("statements-table__col-cpu"),
       sort: (item: TransactionInfo) =>
-        FixLong(Number(item.stats_data.stats.exec_stats.cpu_nanos?.mean)),
+        FixLong(Number(item.stats_data.stats.exec_stats.cpu_sql_nanos?.mean)),
     },
     {
       name: "maxMemUsage",

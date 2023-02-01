@@ -126,7 +126,7 @@ func TestSQLStatsJsonEncoding(t *testing.T) {
            "mean": {{.Float}},
            "sqDiff": {{.Float}}
          },
-         "cpuNanos": {
+         "cpuSQLNanos": {
            "mean": {{.Float}},
            "sqDiff": {{.Float}}
          }
@@ -249,7 +249,7 @@ func TestSQLStatsJsonEncoding(t *testing.T) {
            "mean": {{.Float}},
            "sqDiff": {{.Float}}
          },
-         "cpuNanos": {
+         "cpuSQLNanos": {
            "mean": {{.Float}},
            "sqDiff": {{.Float}}
          }
@@ -365,7 +365,7 @@ func TestSQLStatsJsonEncoding(t *testing.T) {
       "mean": {{.Float}},
       "sqDiff": {{.Float}}
     },
-    "cpuNanos": {
+    "cpuSQLNanos": {
       "mean": {{.Float}},
       "sqDiff": {{.Float}}
     }
