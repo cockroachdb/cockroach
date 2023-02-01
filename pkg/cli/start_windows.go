@@ -45,3 +45,8 @@ func maybeRerunBackground() (bool, error) {
 func disableOtherPermissionBits() {
 	// No-op on windows, which does not support umask.
 }
+
+func closeAllSockets() {
+	// No-op on windows.
+	// TODO(jackson): Is there something else we can do on Windows?
+}

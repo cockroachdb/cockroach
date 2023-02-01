@@ -1096,6 +1096,14 @@ func (p *Pebble) makeMetricEtcEventListener(ctx context.Context) pebble.EventLis
 				// pebble.EventListener on why it's important for this method to return
 				// quickly.
 				if fatalOnExceeded {
+					// The write stall may prevent the process from exiting. If
+					// the process won't exit, we can at least terminate all our
+					// RPC connections first.
+					//
+					// See pkg/cli.runStart for where this function is hooked
+					// up.
+					log.MakeProcessUnavailable()
+
 					log.Fatalf(ctx, "file write stall detected: %s", info)
 				} else {
 					go log.Errorf(ctx, "file write stall detected: %s", info)

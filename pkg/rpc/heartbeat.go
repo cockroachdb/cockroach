@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
@@ -48,7 +47,7 @@ type HeartbeatService struct {
 
 	clusterID *base.ClusterIDContainer
 	nodeID    *base.NodeIDContainer
-	settings  *cluster.Settings
+	version   clusterversion.Handle
 
 	clusterName                    string
 	disableClusterNameVerification bool
@@ -80,8 +79,10 @@ func checkClusterName(clusterName string, peerName string) error {
 	return nil
 }
 
-func checkVersion(ctx context.Context, st *cluster.Settings, peerVersion roachpb.Version) error {
-	activeVersion := st.Version.ActiveVersionOrEmpty(ctx)
+func checkVersion(
+	ctx context.Context, version clusterversion.Handle, peerVersion roachpb.Version,
+) error {
+	activeVersion := version.ActiveVersionOrEmpty(ctx)
 	if activeVersion == (clusterversion.ClusterVersion{}) {
 		// Cluster version has not yet been determined.
 		return nil
@@ -100,7 +101,7 @@ func checkVersion(ctx context.Context, st *cluster.Settings, peerVersion roachpb
 	minVersion := activeVersion.Version
 	if tenantID, isTenant := roachpb.ClientTenantFromContext(ctx); isTenant &&
 		!roachpb.IsSystemTenantID(tenantID.ToUint64()) {
-		minVersion = st.Version.BinaryMinSupportedVersion()
+		minVersion = version.BinaryMinSupportedVersion()
 	}
 	if peerVersion.Less(minVersion) {
 		return errors.Errorf(
@@ -152,7 +153,7 @@ func (hs *HeartbeatService) Ping(ctx context.Context, args *PingRequest) (*PingR
 	}
 
 	// Check version compatibility.
-	if err := checkVersion(ctx, hs.settings, args.ServerVersion); err != nil {
+	if err := checkVersion(ctx, hs.version, args.ServerVersion); err != nil {
 		return nil, errors.Wrap(err, "version compatibility check failed on ping request")
 	}
 
@@ -169,7 +170,7 @@ func (hs *HeartbeatService) Ping(ctx context.Context, args *PingRequest) (*PingR
 	return &PingResponse{
 		Pong:                           args.Ping,
 		ServerTime:                     hs.clock.Now().UnixNano(),
-		ServerVersion:                  hs.settings.Version.BinaryVersion(),
+		ServerVersion:                  hs.version.BinaryVersion(),
 		ClusterName:                    hs.clusterName,
 		DisableClusterNameVerification: hs.disableClusterNameVerification,
 	}, nil
