@@ -130,3 +130,8 @@ func (d *decoder) translateEvent(
 		ts: ev.Value.Timestamp,
 	}
 }
+
+// TestingDecoderFn exports the decoding routine for testing purposes.
+func TestingDecoderFn() func(roachpb.KeyValue) (tenantcapabilities.Entry, error) {
+	return newDecoder().decode
+}
