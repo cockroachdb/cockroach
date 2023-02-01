@@ -2987,3 +2987,77 @@ query I
 SELECT f96326();
 ----
 1
+
+subtest regression_95364
+
+statement ok
+CREATE FUNCTION f_95364() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
+
+let $dropped_fn_id
+SELECT function_id FROM crdb_internal.create_function_statements WHERE function_name = 'f_95364';
+
+query I
+SELECT count(descriptor) FROM system.descriptor WHERE id = $dropped_fn_id;
+----
+1
+
+statement ok
+DROP FUNCTION f_95364;
+
+query I
+SELECT count(descriptor) FROM system.descriptor WHERE id = $dropped_fn_id;
+----
+0
+
+statement ok
+CREATE DATABASE db_95364;
+
+statement ok
+USE db_95364;
+
+statement ok
+CREATE FUNCTION f_95364_2() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
+
+let $dropped_fn_id
+SELECT function_id FROM crdb_internal.create_function_statements WHERE function_name = 'f_95364_2';
+
+query I
+SELECT count(descriptor) FROM system.descriptor WHERE id = $dropped_fn_id;
+----
+1
+
+statement ok
+USE test;
+
+statement ok
+DROP DATABASE db_95364 CASCADE;
+
+query I
+SELECT count(descriptor) FROM system.descriptor WHERE id = $dropped_fn_id;
+----
+0
+
+statement ok
+USE test;
+
+statement ok
+CREATE SCHEMA sc_95364;
+
+statement ok
+CREATE FUNCTION sc_95364.f_95364_3() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
+
+let $dropped_fn_id
+SELECT function_id FROM crdb_internal.create_function_statements WHERE function_name = 'f_95364_3';
+
+query I
+SELECT count(descriptor) FROM system.descriptor WHERE id = $dropped_fn_id;
+----
+1
+
+statement ok
+DROP SCHEMA sc_95364 CASCADE;
+
+query I
+SELECT count(descriptor) FROM system.descriptor WHERE id = $dropped_fn_id;
+----
+0
