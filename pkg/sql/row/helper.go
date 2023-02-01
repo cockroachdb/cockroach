@@ -275,9 +275,9 @@ func (rh *RowHelper) SortedColumnFamily(famID descpb.FamilyID) ([]descpb.ColumnI
 // CheckRowSize compares the size of a primary key column family against the
 // max_row_size limits.
 func (rh *RowHelper) CheckRowSize(
-	ctx context.Context, key *roachpb.Key, value *roachpb.Value, family descpb.FamilyID,
+	ctx context.Context, key *roachpb.Key, valueBytes []byte, family descpb.FamilyID,
 ) error {
-	size := uint32(len(*key)) + uint32(len(value.RawBytes))
+	size := uint32(len(*key)) + uint32(len(valueBytes))
 	shouldLog := rh.maxRowSizeLog != 0 && size > rh.maxRowSizeLog
 	shouldErr := rh.maxRowSizeErr != 0 && size > rh.maxRowSizeErr
 	if !shouldLog && !shouldErr {
