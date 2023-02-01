@@ -2033,6 +2033,19 @@ deprules
     - $index-Node[CurrentStatus] = TRANSIENT_VALIDATED
     - joinTargetNode($view, $view-Target, $view-Node)
     - joinTargetNode($index, $index-Target, $index-Node)
+- name: dependents exist before descriptor becomes public
+  from: dependent-Node
+  kind: Precedence
+  to: relation-Node
+  query:
+    - $dependent[Type] IN ['*scpb.ColumnFamily', '*scpb.Column', '*scpb.PrimaryIndex', '*scpb.SecondaryIndex', '*scpb.TemporaryIndex', '*scpb.UniqueWithoutIndexConstraint', '*scpb.CheckConstraint', '*scpb.ForeignKeyConstraint', '*scpb.TableComment', '*scpb.RowLevelTTL', '*scpb.TableZoneConfig', '*scpb.TableData', '*scpb.TablePartitioning', '*scpb.TableLocalityGlobal', '*scpb.TableLocalityPrimaryRegion', '*scpb.TableLocalitySecondaryRegion', '*scpb.TableLocalityRegionalByRow', '*scpb.ColumnName', '*scpb.ColumnType', '*scpb.ColumnDefaultExpression', '*scpb.ColumnOnUpdateExpression', '*scpb.SequenceOwner', '*scpb.ColumnComment', '*scpb.ColumnNotNull', '*scpb.IndexName', '*scpb.IndexPartitioning', '*scpb.SecondaryIndexPartial', '*scpb.IndexComment', '*scpb.IndexColumn', '*scpb.IndexData', '*scpb.ConstraintWithoutIndexName', '*scpb.ConstraintComment', '*scpb.Namespace', '*scpb.Owner', '*scpb.UserPrivileges', '*scpb.DatabaseRegionConfig', '*scpb.DatabaseRoleSetting', '*scpb.DatabaseComment', '*scpb.DatabaseData', '*scpb.SchemaParent', '*scpb.SchemaComment', '*scpb.ObjectParent', '*scpb.EnumTypeValue', '*scpb.CompositeTypeAttrType', '*scpb.CompositeTypeAttrName', '*scpb.FunctionName', '*scpb.FunctionVolatility', '*scpb.FunctionLeakProof', '*scpb.FunctionNullInputBehavior', '*scpb.FunctionBody', '*scpb.FunctionParamDefaultExpression']
+    - $relation[Type] IN ['*scpb.Database', '*scpb.Schema', '*scpb.View', '*scpb.Sequence', '*scpb.Table', '*scpb.EnumType', '*scpb.AliasType', '*scpb.CompositeType', '*scpb.Function']
+    - joinOnDescID($dependent, $relation, $relation-id)
+    - ToPublicOrTransient($dependent-Target, $relation-Target)
+    - $dependent-Node[CurrentStatus] = PUBLIC
+    - $relation-Node[CurrentStatus] = PUBLIC
+    - joinTargetNode($dependent, $dependent-Target, $dependent-Node)
+    - joinTargetNode($relation, $relation-Target, $relation-Node)
 - name: dependents removed before column
   from: dependent-Node
   kind: Precedence
@@ -2262,6 +2275,19 @@ deprules
     - $absent-Node[CurrentStatus] = ABSENT
     - joinTargetNode($dropped, $dropped-Target, $dropped-Node)
     - joinTargetNode($absent, $absent-Target, $absent-Node)
+- name: descriptor existence precedes dependents
+  from: relation-Node
+  kind: Precedence
+  to: dependent-Node
+  query:
+    - $relation[Type] IN ['*scpb.Database', '*scpb.Schema', '*scpb.View', '*scpb.Sequence', '*scpb.Table', '*scpb.EnumType', '*scpb.AliasType', '*scpb.CompositeType', '*scpb.Function']
+    - $dependent[Type] IN ['*scpb.ColumnFamily', '*scpb.Column', '*scpb.PrimaryIndex', '*scpb.SecondaryIndex', '*scpb.TemporaryIndex', '*scpb.UniqueWithoutIndexConstraint', '*scpb.CheckConstraint', '*scpb.ForeignKeyConstraint', '*scpb.TableComment', '*scpb.RowLevelTTL', '*scpb.TableZoneConfig', '*scpb.TableData', '*scpb.TablePartitioning', '*scpb.TableLocalityGlobal', '*scpb.TableLocalityPrimaryRegion', '*scpb.TableLocalitySecondaryRegion', '*scpb.TableLocalityRegionalByRow', '*scpb.ColumnName', '*scpb.ColumnType', '*scpb.ColumnDefaultExpression', '*scpb.ColumnOnUpdateExpression', '*scpb.SequenceOwner', '*scpb.ColumnComment', '*scpb.ColumnNotNull', '*scpb.IndexName', '*scpb.IndexPartitioning', '*scpb.SecondaryIndexPartial', '*scpb.IndexComment', '*scpb.IndexColumn', '*scpb.IndexData', '*scpb.ConstraintWithoutIndexName', '*scpb.ConstraintComment', '*scpb.Namespace', '*scpb.Owner', '*scpb.UserPrivileges', '*scpb.DatabaseRegionConfig', '*scpb.DatabaseRoleSetting', '*scpb.DatabaseComment', '*scpb.DatabaseData', '*scpb.SchemaParent', '*scpb.SchemaComment', '*scpb.ObjectParent', '*scpb.EnumTypeValue', '*scpb.CompositeTypeAttrType', '*scpb.CompositeTypeAttrName', '*scpb.FunctionName', '*scpb.FunctionVolatility', '*scpb.FunctionLeakProof', '*scpb.FunctionNullInputBehavior', '*scpb.FunctionBody', '*scpb.FunctionParamDefaultExpression']
+    - joinOnDescID($relation, $dependent, $relation-id)
+    - ToPublicOrTransient($relation-Target, $dependent-Target)
+    - $relation-Node[CurrentStatus] = DESCRIPTOR_ADDED
+    - $dependent-Node[CurrentStatus] = PUBLIC
+    - joinTargetNode($relation, $relation-Target, $relation-Node)
+    - joinTargetNode($dependent, $dependent-Target, $dependent-Node)
 - name: descriptor removed right before garbage collection
   from: database-Node
   kind: SameStagePrecedence
@@ -2291,6 +2317,19 @@ deprules
     - SmallerColumnIDFirst(*scpb.Column, *scpb.Column)($later-column, $earlier-column)
     - joinTargetNode($later-column, $later-column-Target, $later-column-Node)
     - joinTargetNode($earlier-column, $earlier-column-Target, $earlier-column-Node)
+- name: function name should be set before parent ids
+  from: function-name-Node
+  kind: Precedence
+  to: function-parent-Node
+  query:
+    - $function-name[Type] = '*scpb.FunctionName'
+    - $function-parent[Type] = '*scpb.ObjectParent'
+    - joinOnDescID($function-name, $function-parent, $function-id)
+    - ToPublicOrTransient($function-name-Target, $function-parent-Target)
+    - $function-name-Node[CurrentStatus] = PUBLIC
+    - $function-parent-Node[CurrentStatus] = PUBLIC
+    - joinTargetNode($function-name, $function-name-Target, $function-name-Node)
+    - joinTargetNode($function-parent, $function-parent-Target, $function-parent-Node)
 - name: index data exists as soon as index accepts backfills
   from: index-name-Node
   kind: SameStagePrecedence

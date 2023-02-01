@@ -35,23 +35,30 @@ type inactiveDescriptorError struct {
 // Only tables (or materialized view) can be in the adding state, and this will
 // be true for the foreseeable future, so the error message remains a
 // table-specific version.
-type addingTableError struct {
+type addingDescriptorError struct {
 	cause error
 }
 
-func newAddingTableError(desc TableDescriptor) error {
-	typStr := "table"
-	if desc.IsView() && desc.IsPhysicalTable() {
-		typStr = "materialized view"
+func newAddingDescriptorError(desc Descriptor) error {
+	var typStr string
+	desc.DescriptorType()
+	switch t := desc.(type) {
+	case TableDescriptor:
+		typStr = "table"
+		if t.IsView() && t.IsPhysicalTable() {
+			typStr = "materialized view"
+		}
+	default:
+		typStr = string(desc.DescriptorType())
 	}
-	return &addingTableError{
+	return &addingDescriptorError{
 		cause: errors.Errorf("%s %q is being added", typStr, desc.GetName()),
 	}
 }
 
-func (a *addingTableError) Error() string { return a.cause.Error() }
+func (a *addingDescriptorError) Error() string { return a.cause.Error() }
 
-func (a *addingTableError) Unwrap() error { return a.cause }
+func (a *addingDescriptorError) Unwrap() error { return a.cause }
 
 // ErrDescriptorDropped is returned when the descriptor is being dropped.
 // TODO (lucy): Make the error message specific to each descriptor type (e.g.,
@@ -62,9 +69,9 @@ func (i *inactiveDescriptorError) Error() string { return i.cause.Error() }
 
 func (i *inactiveDescriptorError) Unwrap() error { return i.cause }
 
-// HasAddingTableError returns true if the error contains errTableAdding.
-func HasAddingTableError(err error) bool {
-	return errors.HasType(err, (*addingTableError)(nil))
+// HasAddingDescriptorError returns true if the error contains errTableAdding.
+func HasAddingDescriptorError(err error) bool {
+	return errors.HasType(err, (*addingDescriptorError)(nil))
 }
 
 // NewInactiveDescriptorError wraps an error in a new inactiveDescriptorError.

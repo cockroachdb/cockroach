@@ -1,0 +1,263 @@
+/* setup */
+CREATE TABLE t (a INT PRIMARY KEY, b INT NOT NULL);
+
+/* test */
+EXPLAIN (ddl, verbose) CREATE FUNCTION t() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
+----
+• Schema change plan for CREATE FUNCTION ‹defaultdb›.‹public›.‹t›()
+│ 	RETURNS INT8
+│ 	LANGUAGE SQL
+│ 	AS $$SELECT 1;$$;
+│
+├── • StatementPhase
+│   │
+│   └── • Stage 1 of 1 in StatementPhase
+│       │
+│       ├── • 7 elements transitioning toward PUBLIC
+│       │   │
+│       │   ├── • Function:{DescID: 105}
+│       │   │     ABSENT → DESCRIPTOR_ADDED
+│       │   │
+│       │   ├── • ObjectParent:{DescID: 105, ReferencedDescID: 101}
+│       │   │   │ ABSENT → PUBLIC
+│       │   │   │
+│       │   │   ├── • Precedence dependency from DESCRIPTOR_ADDED Function:{DescID: 105}
+│       │   │   │     rule: "descriptor existence precedes dependents"
+│       │   │   │
+│       │   │   └── • Precedence dependency from PUBLIC FunctionName:{DescID: 105}
+│       │   │         rule: "function name should be set before parent ids"
+│       │   │
+│       │   ├── • FunctionName:{DescID: 105}
+│       │   │   │ ABSENT → PUBLIC
+│       │   │   │
+│       │   │   └── • Precedence dependency from DESCRIPTOR_ADDED Function:{DescID: 105}
+│       │   │         rule: "descriptor existence precedes dependents"
+│       │   │
+│       │   ├── • Owner:{DescID: 105}
+│       │   │   │ ABSENT → PUBLIC
+│       │   │   │
+│       │   │   └── • Precedence dependency from DESCRIPTOR_ADDED Function:{DescID: 105}
+│       │   │         rule: "descriptor existence precedes dependents"
+│       │   │
+│       │   ├── • UserPrivileges:{DescID: 105, Name: admin}
+│       │   │   │ ABSENT → PUBLIC
+│       │   │   │
+│       │   │   └── • Precedence dependency from DESCRIPTOR_ADDED Function:{DescID: 105}
+│       │   │         rule: "descriptor existence precedes dependents"
+│       │   │
+│       │   ├── • UserPrivileges:{DescID: 105, Name: root}
+│       │   │   │ ABSENT → PUBLIC
+│       │   │   │
+│       │   │   └── • Precedence dependency from DESCRIPTOR_ADDED Function:{DescID: 105}
+│       │   │         rule: "descriptor existence precedes dependents"
+│       │   │
+│       │   └── • FunctionBody:{DescID: 105}
+│       │       │ ABSENT → PUBLIC
+│       │       │
+│       │       └── • Precedence dependency from DESCRIPTOR_ADDED Function:{DescID: 105}
+│       │             rule: "descriptor existence precedes dependents"
+│       │
+│       └── • 9 Mutation operations
+│           │
+│           ├── • CreateFunctionDescriptor
+│           │     Function:
+│           │       FunctionID: 105
+│           │       Params: []
+│           │       ReturnType:
+│           │         Type:
+│           │           family: IntFamily
+│           │           oid: 20
+│           │           width: 64
+│           │
+│           ├── • SetFunctionName
+│           │     FunctionID: 105
+│           │     Name: t
+│           │
+│           ├── • UpdateOwner
+│           │     Owner:
+│           │       DescriptorID: 105
+│           │       Owner: root
+│           │
+│           ├── • UpdateUserPrivileges
+│           │     Privileges:
+│           │       DescriptorID: 105
+│           │       Privileges: 2
+│           │       UserName: admin
+│           │       WithGrantOption: 2
+│           │
+│           ├── • UpdateUserPrivileges
+│           │     Privileges:
+│           │       DescriptorID: 105
+│           │       Privileges: 2
+│           │       UserName: root
+│           │       WithGrantOption: 2
+│           │
+│           ├── • SetFunctionBody
+│           │     Body:
+│           │       Body: SELECT 1;
+│           │       FunctionID: 105
+│           │       Lang:
+│           │         Lang: 1
+│           │
+│           ├── • UpdateFunctionTypeReferences
+│           │     FunctionID: 105
+│           │
+│           ├── • UpdateFunctionRelationReferences
+│           │     FunctionID: 105
+│           │
+│           └── • SetObjectParentID
+│                 ObjParent:
+│                   ObjectID: 105
+│                   ParentSchemaID: 101
+│
+└── • PreCommitPhase
+    │
+    ├── • Stage 1 of 2 in PreCommitPhase
+    │   │
+    │   ├── • 7 elements transitioning toward PUBLIC
+    │   │   │
+    │   │   ├── • Function:{DescID: 105}
+    │   │   │     DESCRIPTOR_ADDED → ABSENT
+    │   │   │
+    │   │   ├── • ObjectParent:{DescID: 105, ReferencedDescID: 101}
+    │   │   │     PUBLIC → ABSENT
+    │   │   │
+    │   │   ├── • FunctionName:{DescID: 105}
+    │   │   │     PUBLIC → ABSENT
+    │   │   │
+    │   │   ├── • Owner:{DescID: 105}
+    │   │   │     PUBLIC → ABSENT
+    │   │   │
+    │   │   ├── • UserPrivileges:{DescID: 105, Name: admin}
+    │   │   │     PUBLIC → ABSENT
+    │   │   │
+    │   │   ├── • UserPrivileges:{DescID: 105, Name: root}
+    │   │   │     PUBLIC → ABSENT
+    │   │   │
+    │   │   └── • FunctionBody:{DescID: 105}
+    │   │         PUBLIC → ABSENT
+    │   │
+    │   └── • 1 Mutation operation
+    │       │
+    │       └── • UndoAllInTxnImmediateMutationOpSideEffects
+    │             {}
+    │
+    └── • Stage 2 of 2 in PreCommitPhase
+        │
+        ├── • 7 elements transitioning toward PUBLIC
+        │   │
+        │   ├── • Function:{DescID: 105}
+        │   │   │ ABSENT → PUBLIC
+        │   │   │
+        │   │   ├── • Precedence dependency from PUBLIC ObjectParent:{DescID: 105, ReferencedDescID: 101}
+        │   │   │     rule: "dependents exist before descriptor becomes public"
+        │   │   │
+        │   │   ├── • Precedence dependency from PUBLIC FunctionName:{DescID: 105}
+        │   │   │     rule: "dependents exist before descriptor becomes public"
+        │   │   │
+        │   │   ├── • Precedence dependency from PUBLIC Owner:{DescID: 105}
+        │   │   │     rule: "dependents exist before descriptor becomes public"
+        │   │   │
+        │   │   ├── • Precedence dependency from PUBLIC UserPrivileges:{DescID: 105, Name: admin}
+        │   │   │     rule: "dependents exist before descriptor becomes public"
+        │   │   │
+        │   │   ├── • Precedence dependency from PUBLIC UserPrivileges:{DescID: 105, Name: root}
+        │   │   │     rule: "dependents exist before descriptor becomes public"
+        │   │   │
+        │   │   └── • Precedence dependency from PUBLIC FunctionBody:{DescID: 105}
+        │   │         rule: "dependents exist before descriptor becomes public"
+        │   │
+        │   ├── • ObjectParent:{DescID: 105, ReferencedDescID: 101}
+        │   │   │ ABSENT → PUBLIC
+        │   │   │
+        │   │   ├── • Precedence dependency from DESCRIPTOR_ADDED Function:{DescID: 105}
+        │   │   │     rule: "descriptor existence precedes dependents"
+        │   │   │
+        │   │   └── • Precedence dependency from PUBLIC FunctionName:{DescID: 105}
+        │   │         rule: "function name should be set before parent ids"
+        │   │
+        │   ├── • FunctionName:{DescID: 105}
+        │   │   │ ABSENT → PUBLIC
+        │   │   │
+        │   │   └── • Precedence dependency from DESCRIPTOR_ADDED Function:{DescID: 105}
+        │   │         rule: "descriptor existence precedes dependents"
+        │   │
+        │   ├── • Owner:{DescID: 105}
+        │   │   │ ABSENT → PUBLIC
+        │   │   │
+        │   │   └── • Precedence dependency from DESCRIPTOR_ADDED Function:{DescID: 105}
+        │   │         rule: "descriptor existence precedes dependents"
+        │   │
+        │   ├── • UserPrivileges:{DescID: 105, Name: admin}
+        │   │   │ ABSENT → PUBLIC
+        │   │   │
+        │   │   └── • Precedence dependency from DESCRIPTOR_ADDED Function:{DescID: 105}
+        │   │         rule: "descriptor existence precedes dependents"
+        │   │
+        │   ├── • UserPrivileges:{DescID: 105, Name: root}
+        │   │   │ ABSENT → PUBLIC
+        │   │   │
+        │   │   └── • Precedence dependency from DESCRIPTOR_ADDED Function:{DescID: 105}
+        │   │         rule: "descriptor existence precedes dependents"
+        │   │
+        │   └── • FunctionBody:{DescID: 105}
+        │       │ ABSENT → PUBLIC
+        │       │
+        │       └── • Precedence dependency from DESCRIPTOR_ADDED Function:{DescID: 105}
+        │             rule: "descriptor existence precedes dependents"
+        │
+        └── • 10 Mutation operations
+            │
+            ├── • CreateFunctionDescriptor
+            │     Function:
+            │       FunctionID: 105
+            │       Params: []
+            │       ReturnType:
+            │         Type:
+            │           family: IntFamily
+            │           oid: 20
+            │           width: 64
+            │
+            ├── • SetFunctionName
+            │     FunctionID: 105
+            │     Name: t
+            │
+            ├── • UpdateOwner
+            │     Owner:
+            │       DescriptorID: 105
+            │       Owner: root
+            │
+            ├── • UpdateUserPrivileges
+            │     Privileges:
+            │       DescriptorID: 105
+            │       Privileges: 2
+            │       UserName: admin
+            │       WithGrantOption: 2
+            │
+            ├── • UpdateUserPrivileges
+            │     Privileges:
+            │       DescriptorID: 105
+            │       Privileges: 2
+            │       UserName: root
+            │       WithGrantOption: 2
+            │
+            ├── • SetFunctionBody
+            │     Body:
+            │       Body: SELECT 1;
+            │       FunctionID: 105
+            │       Lang:
+            │         Lang: 1
+            │
+            ├── • UpdateFunctionTypeReferences
+            │     FunctionID: 105
+            │
+            ├── • UpdateFunctionRelationReferences
+            │     FunctionID: 105
+            │
+            ├── • SetObjectParentID
+            │     ObjParent:
+            │       ObjectID: 105
+            │       ParentSchemaID: 101
+            │
+            └── • MarkDescriptorAsPublic
+                  DescriptorID: 105

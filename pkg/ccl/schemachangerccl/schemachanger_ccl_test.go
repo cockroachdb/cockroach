@@ -19,12 +19,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/sctest"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
-func newCluster(t *testing.T, knobs *scexec.TestingKnobs) (*gosql.DB, func()) {
-	_, sqlDB, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
+func newCluster(
+	t *testing.T, knobs *scexec.TestingKnobs,
+) (serverutils.TestServerInterface, *gosql.DB, func()) {
+	c, sqlDB, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
 		t, 3 /* numServers */, base.TestingKnobs{
 			SQLDeclarativeSchemaChanger: knobs,
 			JobsTestingKnobs:            jobs.NewTestingKnobsWithShortIntervals(),
@@ -34,7 +37,7 @@ func newCluster(t *testing.T, knobs *scexec.TestingKnobs) (*gosql.DB, func()) {
 			},
 		},
 	)
-	return sqlDB, cleanup
+	return c.Server(0), sqlDB, cleanup
 }
 
 func TestDecomposeToElements(t *testing.T) {

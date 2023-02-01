@@ -12,6 +12,7 @@ go_library(
         "//pkg/kv",
         "//pkg/security/username",
         "//pkg/sql",
+        "//pkg/sql/catalog/descidgen",
         "//pkg/sql/catalog/descs",
         "//pkg/sql/catalog/resolver",
         "//pkg/sql/faketreeeval",

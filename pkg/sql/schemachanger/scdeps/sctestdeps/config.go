@@ -15,11 +15,14 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descidgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
@@ -137,6 +140,18 @@ func WithComments(comments map[catalogkeys.CommentKey]string) Option {
 func WithMerger(merger scexec.Merger) Option {
 	return optionFunc(func(state *TestState) {
 		state.merger = merger
+	})
+}
+
+func WithIDGenerator(s serverutils.TestServerInterface) Option {
+	return optionFunc(func(state *TestState) {
+		state.idGenerator = descidgen.NewGenerator(s.ClusterSettings(), s.Codec(), s.DB())
+	})
+}
+
+func WithReferenceProviderFactory(f scbuild.ReferenceProviderFactory) Option {
+	return optionFunc(func(state *TestState) {
+		state.refProviderFactory = f
 	})
 }
 

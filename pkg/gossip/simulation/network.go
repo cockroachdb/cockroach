@@ -110,7 +110,10 @@ func NewNetwork(
 
 // CreateNode creates a simulation node and starts an RPC server for it.
 func (n *Network) CreateNode(defaultZoneConfig *zonepb.ZoneConfig) (*Node, error) {
-	server := rpc.NewServer(n.RPCContext)
+	server, err := rpc.NewServer(n.RPCContext)
+	if err != nil {
+		return nil, err
+	}
 	ln, err := net.Listen(util.IsolatedTestAddr.Network(), util.IsolatedTestAddr.String())
 	if err != nil {
 		return nil, err

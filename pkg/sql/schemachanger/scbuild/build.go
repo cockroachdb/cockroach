@@ -101,9 +101,11 @@ func Build(
 	descSet := screl.AllTargetDescIDs(ts)
 	descSet.ForEach(func(id descpb.ID) {
 		bs.ensureDescriptor(id)
-		desc := bs.descCache[id].desc
-		if desc.HasConcurrentSchemaChanges() {
-			panic(scerrors.ConcurrentSchemaChangeError(desc))
+		cached := bs.descCache[id]
+		// If a descriptor is being created, we don't need to worry about concurrent
+		// schema changes.
+		if !cached.isBeingCreated() && cached.desc.HasConcurrentSchemaChanges() {
+			panic(scerrors.ConcurrentSchemaChangeError(cached.desc))
 		}
 	})
 	// Write to event log and return.
@@ -149,23 +151,25 @@ type elementState struct {
 // builderState is the backing struct for scbuildstmt.BuilderState interface.
 type builderState struct {
 	// Dependencies
-	ctx              context.Context
-	clusterSettings  *cluster.Settings
-	evalCtx          *eval.Context
-	semaCtx          *tree.SemaContext
-	cr               CatalogReader
-	tr               TableReader
-	auth             AuthorizationAccessor
-	commentGetter    scdecomp.CommentGetter
-	zoneConfigReader scdecomp.ZoneConfigGetter
-	createPartCCL    CreatePartitioningCCLCallback
-	hasAdmin         bool
+	ctx                      context.Context
+	clusterSettings          *cluster.Settings
+	evalCtx                  *eval.Context
+	semaCtx                  *tree.SemaContext
+	cr                       CatalogReader
+	tr                       TableReader
+	auth                     AuthorizationAccessor
+	commentGetter            scdecomp.CommentGetter
+	zoneConfigReader         scdecomp.ZoneConfigGetter
+	referenceProviderFactory ReferenceProviderFactory
+	createPartCCL            CreatePartitioningCCLCallback
+	hasAdmin                 bool
 
 	// output contains the schema change targets that have been planned so far.
 	output []elementState
 
-	descCache   map[catid.DescID]*cachedDesc
-	tempSchemas map[catid.DescID]catalog.SchemaDescriptor
+	descCache      map[catid.DescID]*cachedDesc
+	tempSchemas    map[catid.DescID]catalog.SchemaDescriptor
+	newDescriptors catalog.DescriptorIDSet
 }
 
 type cachedDesc struct {
@@ -187,24 +191,29 @@ type cachedDesc struct {
 	elementIndexMap map[string]int
 }
 
+func (c *cachedDesc) isBeingCreated() bool {
+	return c.desc == nil
+}
+
 // newBuilderState constructs a builderState.
 func newBuilderState(
 	ctx context.Context, d Dependencies, incumbent scpb.CurrentState,
 ) *builderState {
 	bs := builderState{
-		ctx:              ctx,
-		clusterSettings:  d.ClusterSettings(),
-		evalCtx:          newEvalCtx(ctx, d),
-		semaCtx:          newSemaCtx(d),
-		cr:               d.CatalogReader(),
-		tr:               d.TableReader(),
-		auth:             d.AuthorizationAccessor(),
-		createPartCCL:    d.IndexPartitioningCCLCallback(),
-		output:           make([]elementState, 0, len(incumbent.Current)),
-		descCache:        make(map[catid.DescID]*cachedDesc),
-		tempSchemas:      make(map[catid.DescID]catalog.SchemaDescriptor),
-		commentGetter:    d.DescriptorCommentGetter(),
-		zoneConfigReader: d.ZoneConfigGetter(),
+		ctx:                      ctx,
+		clusterSettings:          d.ClusterSettings(),
+		evalCtx:                  newEvalCtx(ctx, d),
+		semaCtx:                  newSemaCtx(d),
+		cr:                       d.CatalogReader(),
+		tr:                       d.TableReader(),
+		auth:                     d.AuthorizationAccessor(),
+		createPartCCL:            d.IndexPartitioningCCLCallback(),
+		output:                   make([]elementState, 0, len(incumbent.Current)),
+		descCache:                make(map[catid.DescID]*cachedDesc),
+		tempSchemas:              make(map[catid.DescID]catalog.SchemaDescriptor),
+		commentGetter:            d.DescriptorCommentGetter(),
+		zoneConfigReader:         d.ZoneConfigGetter(),
+		referenceProviderFactory: d.ReferenceProviderFactory(),
 	}
 	var err error
 	bs.hasAdmin, err = bs.auth.HasAdminRole(ctx)

@@ -20,8 +20,11 @@ func init() {
 		toPublic(
 			scpb.Status_ABSENT,
 			to(scpb.Status_PUBLIC,
-				emit(func(this *scpb.FunctionName) *scop.NotImplemented {
-					return notImplemented(this)
+				emit(func(this *scpb.FunctionName) *scop.SetFunctionName {
+					return &scop.SetFunctionName{
+						FunctionID: this.FunctionID,
+						Name:       this.Name,
+					}
 				}),
 			),
 		),

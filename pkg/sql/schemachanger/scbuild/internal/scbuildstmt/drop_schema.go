@@ -15,7 +15,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
@@ -30,7 +29,7 @@ func DropSchema(b BuildCtx, n *tree.DropSchema) {
 	for _, name := range n.Names {
 		elts := b.ResolveSchema(name, ResolveParams{
 			IsExistenceOptional: n.IfExists,
-			RequiredPrivilege:   privilege.DROP,
+			RequireOwnership:    true,
 		})
 		_, _, sc := scpb.FindSchema(elts)
 		if sc == nil {

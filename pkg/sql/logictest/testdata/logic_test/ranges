@@ -585,11 +585,12 @@ subtest show_range_table_for_row_columns
 statement ok
 CREATE TABLE tbl_for_row(i INT PRIMARY KEY);
 
-query TTIITTTTT colnames
-SHOW RANGE FROM TABLE tbl_for_row FOR ROW (0)
-----
-start_key                     end_key  range_id  lease_holder  lease_holder_locality  replicas  replica_localities      voting_replicas  non_voting_replicas
-<before:/Table/130/1/"\x80">  …        94        1             region=test,dc=dc1     {1}       {"region=test,dc=dc1"}  {1}              {}
+# TODO(#96136): Re-enable this test after making it deterministic.
+# query TTIITTTTT colnames
+# SHOW RANGE FROM TABLE tbl_for_row FOR ROW (0)
+# ----
+# start_key                     end_key  range_id  lease_holder  lease_holder_locality  replicas  replica_localities      voting_replicas  non_voting_replicas
+# <before:/Table/130/1/"\x80">  …        94        1             region=test,dc=dc1     {1}       {"region=test,dc=dc1"}  {1}              {}
 
 subtest end
 

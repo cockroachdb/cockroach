@@ -20,10 +20,12 @@ func init() {
 		toPublic(
 			scpb.Status_ABSENT,
 			to(scpb.Status_PUBLIC,
-				emit(func(this *scpb.FunctionNullInputBehavior) *scop.NotImplemented {
-					return notImplemented(this)
-				}),
-			),
+				emit(func(this *scpb.FunctionNullInputBehavior) *scop.SetFunctionNullInputBehavior {
+					return &scop.SetFunctionNullInputBehavior{
+						FunctionID:        this.FunctionID,
+						NullInputBehavior: this.NullInputBehavior.NullInputBehavior,
+					}
+				})),
 		),
 		toAbsent(
 			scpb.Status_PUBLIC,

@@ -136,7 +136,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN l INT NOT NULL DEFAU
 │           │         - 107
 │           │       TableID: 106
 │           │
-│           ├── • UpdateBackReferencesInSequences
+│           ├── • UpdateTableBackReferencesInSequences
 │           │     BackReferencedColumnID: 2
 │           │     BackReferencedTableID: 106
 │           │     SequenceIDs:
@@ -347,7 +347,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE db.public.tbl ADD COLUMN l INT NOT NULL DEFAU
 │           │         - 107
 │           │       TableID: 106
 │           │
-│           ├── • UpdateBackReferencesInSequences
+│           ├── • UpdateTableBackReferencesInSequences
 │           │     BackReferencedColumnID: 2
 │           │     BackReferencedTableID: 106
 │           │     SequenceIDs:
