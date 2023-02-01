@@ -224,7 +224,8 @@ func isConstraint(e scpb.Element) bool {
 // It includes all the "NOT VALID" version of constraint.
 func isNonIndexBackedSimpleConstraint(e scpb.Element) bool {
 	switch e.(type) {
-	case *scpb.CheckConstraintNotValid, *scpb.UniqueWithoutIndexConstraintNotValid:
+	case *scpb.CheckConstraintNotValid, *scpb.UniqueWithoutIndexConstraintNotValid,
+		*scpb.ForeignKeyConstraintNotValid:
 		return true
 	}
 	return false

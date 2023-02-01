@@ -1,0 +1,130 @@
+setup
+CREATE TABLE t1 (i INT PRIMARY KEY);
+CREATE TABLE t2 (i INT PRIMARY KEY);
+INSERT INTO t1 VALUES (0);
+----
+...
++object {100 101 t1} -> 104
++object {100 101 t2} -> 105
+
+test
+ALTER TABLE t1 ADD FOREIGN KEY (i) REFERENCES t2(i) NOT VALID
+----
+begin transaction #1
+# begin StatementPhase
+checking for feature: ALTER TABLE
+increment telemetry for sql.schema.alter_table
+increment telemetry for sql.schema.alter_table.add_constraint
+write *eventpb.AlterTable to event log:
+  mutationId: 1
+  sql:
+    descriptorId: 104
+    statement: ALTER TABLE ‹defaultdb›.‹public›.‹t1› ADD CONSTRAINT ‹t1_i_fkey› FOREIGN
+      KEY (‹i›) REFERENCES ‹defaultdb›.‹public›.‹t2› (‹i›) NOT VALID
+    tag: ALTER TABLE
+    user: root
+  tableName: defaultdb.public.t1
+## StatementPhase stage 1 of 1 with 2 MutationType ops
+upsert descriptor #104
+  ...
+     name: t1
+     nextColumnId: 2
+  -  nextConstraintId: 2
+  +  nextConstraintId: 3
+     nextFamilyId: 1
+     nextIndexId: 2
+     nextMutationId: 1
+  +  outboundFks:
+  +  - constraintId: 2
+  +    name: t1_i_fkey
+  +    originColumnIds:
+  +    - 1
+  +    originTableId: 104
+  +    referencedColumnIds:
+  +    - 1
+  +    referencedTableId: 105
+  +    validity: Unvalidated
+     parentId: 100
+     primaryIndex:
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "1"
+  +  version: "2"
+upsert descriptor #105
+  ...
+     formatVersion: 3
+     id: 105
+  +  inboundFks:
+  +  - constraintId: 2
+  +    name: t1_i_fkey
+  +    originColumnIds:
+  +    - 1
+  +    originTableId: 104
+  +    referencedColumnIds:
+  +    - 1
+  +    referencedTableId: 105
+  +    validity: Unvalidated
+     modificationTime: {}
+     name: t2
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "1"
+  +  version: "2"
+# end StatementPhase
+# begin PreCommitPhase
+## PreCommitPhase stage 1 of 2 with 1 MutationType op
+undo all catalog changes within txn #1
+persist all catalog changes to storage
+## PreCommitPhase stage 2 of 2 with 2 MutationType ops
+upsert descriptor #104
+  ...
+     name: t1
+     nextColumnId: 2
+  -  nextConstraintId: 2
+  +  nextConstraintId: 3
+     nextFamilyId: 1
+     nextIndexId: 2
+     nextMutationId: 1
+  +  outboundFks:
+  +  - constraintId: 2
+  +    name: t1_i_fkey
+  +    originColumnIds:
+  +    - 1
+  +    originTableId: 104
+  +    referencedColumnIds:
+  +    - 1
+  +    referencedTableId: 105
+  +    validity: Unvalidated
+     parentId: 100
+     primaryIndex:
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "1"
+  +  version: "2"
+upsert descriptor #105
+  ...
+     formatVersion: 3
+     id: 105
+  +  inboundFks:
+  +  - constraintId: 2
+  +    name: t1_i_fkey
+  +    originColumnIds:
+  +    - 1
+  +    originTableId: 104
+  +    referencedColumnIds:
+  +    - 1
+  +    referencedTableId: 105
+  +    validity: Unvalidated
+     modificationTime: {}
+     name: t2
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "1"
+  +  version: "2"
+persist all catalog changes to storage
+# end PreCommitPhase
+commit transaction #1

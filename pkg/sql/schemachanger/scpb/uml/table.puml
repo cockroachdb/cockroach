@@ -135,6 +135,17 @@ UniqueWithoutIndexConstraintNotValid :  ConstraintID
 UniqueWithoutIndexConstraintNotValid : []ColumnIDs
 UniqueWithoutIndexConstraintNotValid :  Predicate
 
+object ForeignKeyConstraintNotValid
+
+ForeignKeyConstraintNotValid :  TableID
+ForeignKeyConstraintNotValid :  ConstraintID
+ForeignKeyConstraintNotValid : []ColumnIDs
+ForeignKeyConstraintNotValid :  ReferencedTableID
+ForeignKeyConstraintNotValid : []ReferencedColumnIDs
+ForeignKeyConstraintNotValid :  OnUpdateAction
+ForeignKeyConstraintNotValid :  OnDeleteAction
+ForeignKeyConstraintNotValid :  CompositeKeyMatchMethod
+
 object TableZoneConfig
 
 TableZoneConfig :  TableID
@@ -390,6 +401,7 @@ Sequence <|-- TableComment
 Table <|-- RowLevelTTL
 Table <|-- CheckConstraintNotValid
 Table <|-- UniqueWithoutIndexConstraintNotValid
+Table <|-- ForeignKeyConstraintNotValid
 Table <|-- TableZoneConfig
 View <|-- TableZoneConfig
 Table <|-- TableData

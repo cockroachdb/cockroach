@@ -47,9 +47,7 @@ func alterTableAddConstraint(
 	case *tree.CheckConstraintTableDef:
 		alterTableAddCheck(b, tn, tbl, t)
 	case *tree.ForeignKeyConstraintTableDef:
-		if t.ValidationBehavior == tree.ValidationDefault {
-			alterTableAddForeignKey(b, tn, tbl, t)
-		}
+		alterTableAddForeignKey(b, tn, tbl, t)
 	}
 }
 
@@ -173,7 +171,7 @@ func getIndexIDForValidationForConstraint(b BuildCtx, tableID catid.DescID) (ret
 }
 
 // alterTableAddForeignKey contains logic for building
-// `ALTER TABLE ... ADD CONSTRAINT ... FOREIGN KEY`.
+// `ALTER TABLE ... ADD FOREIGN KEY ... [NOT VALID]`.
 // It assumes `t` is such a command.
 func alterTableAddForeignKey(
 	b BuildCtx, tn *tree.TableName, tbl *scpb.Table, t *tree.AlterTableAddConstraint,
@@ -369,19 +367,34 @@ func alterTableAddForeignKey(
 	// 12. (Finally!) Add a ForeignKey_Constraint, ConstraintName element to
 	// builder state.
 	constraintID := b.NextTableConstraintID(tbl.TableID)
-	fk := &scpb.ForeignKeyConstraint{
-		TableID:                 tbl.TableID,
-		ConstraintID:            constraintID,
-		ColumnIDs:               originColIDs,
-		ReferencedTableID:       referencedTableID,
-		ReferencedColumnIDs:     referencedColIDs,
-		OnUpdateAction:          tree.ForeignKeyReferenceActionValue[fkDef.Actions.Update],
-		OnDeleteAction:          tree.ForeignKeyReferenceActionValue[fkDef.Actions.Delete],
-		CompositeKeyMatchMethod: tree.CompositeKeyMatchMethodValue[fkDef.Match],
-		IndexIDForValidation:    getIndexIDForValidationForConstraint(b, tbl.TableID),
+	if t.ValidationBehavior == tree.ValidationDefault {
+		fk := &scpb.ForeignKeyConstraint{
+			TableID:                 tbl.TableID,
+			ConstraintID:            constraintID,
+			ColumnIDs:               originColIDs,
+			ReferencedTableID:       referencedTableID,
+			ReferencedColumnIDs:     referencedColIDs,
+			OnUpdateAction:          tree.ForeignKeyReferenceActionValue[fkDef.Actions.Update],
+			OnDeleteAction:          tree.ForeignKeyReferenceActionValue[fkDef.Actions.Delete],
+			CompositeKeyMatchMethod: tree.CompositeKeyMatchMethodValue[fkDef.Match],
+			IndexIDForValidation:    getIndexIDForValidationForConstraint(b, tbl.TableID),
+		}
+		b.Add(fk)
+		b.LogEventForExistingTarget(fk)
+	} else {
+		fk := &scpb.ForeignKeyConstraintNotValid{
+			TableID:                 tbl.TableID,
+			ConstraintID:            constraintID,
+			ColumnIDs:               originColIDs,
+			ReferencedTableID:       referencedTableID,
+			ReferencedColumnIDs:     referencedColIDs,
+			OnUpdateAction:          tree.ForeignKeyReferenceActionValue[fkDef.Actions.Update],
+			OnDeleteAction:          tree.ForeignKeyReferenceActionValue[fkDef.Actions.Delete],
+			CompositeKeyMatchMethod: tree.CompositeKeyMatchMethodValue[fkDef.Match],
+		}
+		b.Add(fk)
+		b.LogEventForExistingTarget(fk)
 	}
-	b.Add(fk)
-	b.LogEventForExistingTarget(fk)
 	b.Add(&scpb.ConstraintWithoutIndexName{
 		TableID:      tbl.TableID,
 		ConstraintID: constraintID,

@@ -77,6 +77,7 @@ message ElementProto {
   RowLevelTTL row_level_ttl = 29 [(gogoproto.customname) = "RowLevelTTL", (gogoproto.moretags) = "parent:\"Table\""];
   CheckConstraintNotValid check_constraint_not_valid = 170 [(gogoproto.moretags) = "parent:\"Table\""];
   UniqueWithoutIndexConstraintNotValid unique_without_index_constraint_not_valid = 171 [(gogoproto.moretags) = "parent:\"Table\""];
+  ForeignKeyConstraintNotValid foreign_key_constraint_not_valid = 172 [(gogoproto.moretags) = "parent:\"Table\""];
   TableZoneConfig table_zone_config = 121 [(gogoproto.moretags) = "parent:\"Table, View\""];
   TableData table_data = 131 [(gogoproto.customname) = "TableData", (gogoproto.moretags) = "parent:\"Table, View, Sequence\""];
   TablePartitioning table_partitioning = 132 [(gogoproto.customname) = "TablePartitioning", (gogoproto.moretags) = "parent:\"Table\""];
@@ -396,6 +397,17 @@ message ForeignKeyConstraint {
   // IndexIDForValidation is the index id to hint to the foreign key constraint validation SQL query about which index
   // to validate against. It is used exclusively by sql.validateFKExpr.
   uint32 index_id_for_validation = 9 [(gogoproto.customname) = "IndexIDForValidation", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.IndexID"];
+}
+
+message ForeignKeyConstraintNotValid {
+  uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  uint32 constraint_id = 2 [(gogoproto.customname) = "ConstraintID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ConstraintID"];
+  repeated uint32 column_ids = 3 [(gogoproto.customname) = "ColumnIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ColumnID"];
+  uint32 referenced_table_id = 4 [(gogoproto.customname) = "ReferencedTableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  repeated uint32 referenced_column_ids = 5 [(gogoproto.customname) = "ReferencedColumnIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ColumnID"];
+  cockroach.sql.sem.semenumpb.ForeignKeyAction on_update_action = 6 [(gogoproto.customname) = "OnUpdateAction"];
+  cockroach.sql.sem.semenumpb.ForeignKeyAction on_delete_action = 7 [(gogoproto.customname) = "OnDeleteAction"];
+  cockroach.sql.sem.semenumpb.Match composite_key_match_method = 8 [(gogoproto.customname) = "CompositeKeyMatchMethod"];
 }
 
 message EnumType {

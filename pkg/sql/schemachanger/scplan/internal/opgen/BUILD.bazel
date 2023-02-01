@@ -30,6 +30,7 @@ go_library(
         "opgen_enum_type.go",
         "opgen_enum_type_value.go",
         "opgen_foreign_key_constraint.go",
+        "opgen_foreign_key_constraint_not_valid.go",
         "opgen_function.go",
         "opgen_function_body.go",
         "opgen_function_leakproof.go",
