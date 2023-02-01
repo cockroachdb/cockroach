@@ -123,6 +123,11 @@ type LoggerFn = func(context.Context, string, ...interface{})
 // cluster to report special events to both a log and the terminal.
 type ShoutLoggerFn = func(context.Context, logpb.Severity, string, ...interface{})
 
+type serverSelection bool
+
+const forSystemTenant serverSelection = false
+const forSecondaryTenant serverSelection = true
+
 // NewDemoCluster instantiates a demo cluster. The caller must call
 // the .Close() method to clean up resources even if the
 // NewDemoCluster function returns an error.
@@ -518,7 +523,11 @@ func (c *transientCluster) Start(ctx context.Context) (err error) {
 		}
 
 		// Prepare the URL for use by the SQL shell.
-		purl, err := c.getNetworkURLForServer(ctx, 0, true /* includeAppName */, c.demoCtx.Multitenant)
+		targetServer := forSystemTenant
+		if c.demoCtx.Multitenant {
+			targetServer = forSecondaryTenant
+		}
+		purl, err := c.getNetworkURLForServer(ctx, 0, true /* includeAppName */, targetServer)
 		if err != nil {
 			return err
 		}
@@ -582,8 +591,12 @@ func (c *transientCluster) createAndAddNode(
 		// computing its RPC listen address.
 		joinAddr = c.firstServer.ServingRPCAddr()
 	}
+	socketDetails, err := c.sockForServer(idx, forSystemTenant)
+	if err != nil {
+		return nil, err
+	}
 	args := c.demoCtx.testServerArgsForTransientCluster(
-		c.sockForServer(idx), idx, joinAddr, c.demoDir,
+		socketDetails, idx, joinAddr, c.demoDir,
 		c.stickyEngineRegistry,
 	)
 	if idx == 0 {
@@ -786,7 +799,7 @@ func (c *transientCluster) waitForSQLReadiness(
 	return nil
 }
 
-func (demoCtx *Context) sqlPort(serverIdx int, forSecondaryTenant bool) int {
+func (demoCtx *Context) sqlPort(serverIdx int, target serverSelection) int {
 	if demoCtx.SQLPort == 0 || testingForceRandomizeDemoPorts {
 		return 0
 	}
@@ -794,7 +807,7 @@ func (demoCtx *Context) sqlPort(serverIdx int, forSecondaryTenant bool) int {
 		// No multitenancy: just one port per node.
 		return demoCtx.SQLPort + serverIdx
 	}
-	if forSecondaryTenant {
+	if target == forSecondaryTenant {
 		// The port number of the secondary tenant is always
 		// the "base" port number.
 		return demoCtx.SQLPort + serverIdx
@@ -809,7 +822,7 @@ func (demoCtx *Context) sqlPort(serverIdx int, forSecondaryTenant bool) int {
 	return demoCtx.SQLPort + serverIdx + demoCtx.NumNodes
 }
 
-func (demoCtx *Context) httpPort(serverIdx int, forSecondaryTenant bool) int {
+func (demoCtx *Context) httpPort(serverIdx int, target serverSelection) int {
 	if demoCtx.HTTPPort == 0 || testingForceRandomizeDemoPorts {
 		return 0
 	}
@@ -817,7 +830,7 @@ func (demoCtx *Context) httpPort(serverIdx int, forSecondaryTenant bool) int {
 		// No multitenancy: just one port per node.
 		return demoCtx.HTTPPort + serverIdx
 	}
-	if forSecondaryTenant {
+	if target == forSecondaryTenant {
 		// The port number of the secondary tenant is always
 		// the "base" port number.
 		return demoCtx.HTTPPort + serverIdx
@@ -831,7 +844,7 @@ func (demoCtx *Context) httpPort(serverIdx int, forSecondaryTenant bool) int {
 	return demoCtx.HTTPPort + serverIdx + demoCtx.NumNodes
 }
 
-func (demoCtx *Context) rpcPort(serverIdx int, forSecondaryTenant bool) int {
+func (demoCtx *Context) rpcPort(serverIdx int, target serverSelection) int {
 	if demoCtx.SQLPort == 0 || testingForceRandomizeDemoPorts {
 		return 0
 	}
@@ -841,7 +854,7 @@ func (demoCtx *Context) rpcPort(serverIdx int, forSecondaryTenant bool) int {
 	if !demoCtx.Multitenant {
 		return demoCtx.SQLPort + serverIdx + 100
 	}
-	if forSecondaryTenant {
+	if target == forSecondaryTenant {
 		return demoCtx.SQLPort + serverIdx + 100
 	}
 	// System tenant.
@@ -893,7 +906,7 @@ func (demoCtx *Context) testServerArgsForTransientCluster(
 	// `make stress`. This is bound to not work with fixed ports.
 	// So by default we use :0 to auto-allocate ports.
 	args.Addr = "127.0.0.1:0"
-	if sqlPort := demoCtx.sqlPort(serverIdx, false /* forSecondaryTenant */); sqlPort != 0 {
+	if sqlPort := demoCtx.sqlPort(serverIdx, forSystemTenant); sqlPort != 0 {
 		rpcPort := demoCtx.rpcPort(serverIdx, false)
 		args.Addr = fmt.Sprintf("127.0.0.1:%d", rpcPort)
 		args.SQLAddr = fmt.Sprintf("127.0.0.1:%d", sqlPort)
@@ -906,7 +919,7 @@ func (demoCtx *Context) testServerArgsForTransientCluster(
 			args.SecondaryTenantPortOffset = -(demoCtx.NumNodes + 1)
 		}
 	}
-	if httpPort := demoCtx.httpPort(serverIdx, false /* forSecondaryTenant */); httpPort != 0 {
+	if httpPort := demoCtx.httpPort(serverIdx, forSystemTenant); httpPort != 0 {
 		args.HTTPAddr = fmt.Sprintf("127.0.0.1:%d", httpPort)
 	}
 
@@ -1112,8 +1125,12 @@ func (c *transientCluster) startServerInternal(
 	}
 	// TODO(...): the RPC address of the first server may not be available
 	// if the first server was shut down.
+	socketDetails, err := c.sockForServer(serverIdx, forSystemTenant)
+	if err != nil {
+		return 0, err
+	}
 	args := c.demoCtx.testServerArgsForTransientCluster(
-		c.sockForServer(serverIdx),
+		socketDetails,
 		serverIdx,
 		c.firstServer.ServingRPCAddr(), c.demoDir,
 		c.stickyEngineRegistry)
@@ -1447,7 +1464,7 @@ func (c *transientCluster) generateCerts(ctx context.Context, certsDir string) (
 }
 
 func (c *transientCluster) getNetworkURLForServer(
-	ctx context.Context, serverIdx int, includeAppName bool, forSecondaryTenant bool,
+	ctx context.Context, serverIdx int, includeAppName bool, target serverSelection,
 ) (*pgurl.URL, error) {
 	u := pgurl.New()
 	if includeAppName {
@@ -1457,23 +1474,15 @@ func (c *transientCluster) getNetworkURLForServer(
 	}
 	sqlAddr := c.servers[serverIdx].ServingSQLAddr()
 	database := c.defaultDB
-	if forSecondaryTenant {
+	if target == forSecondaryTenant {
 		sqlAddr = c.tenantServers[serverIdx].SQLAddr()
 	}
-	if !forSecondaryTenant && c.demoCtx.Multitenant {
+	if (target == forSystemTenant) && c.demoCtx.Multitenant {
 		database = catalogkeys.DefaultDatabaseName
 	}
 
-	if c.demoCtx.Multitenant && !c.demoCtx.DisableServerController {
-		if forSecondaryTenant {
-			if err := u.SetOption("options", "-ccluster="+demoTenantName); err != nil {
-				return nil, err
-			}
-		} else {
-			if err := u.SetOption("options", "-ccluster="+catconstants.SystemTenantName); err != nil {
-				return nil, err
-			}
-		}
+	if err := c.extendURLWithTargetCluster(u, target); err != nil {
+		return nil, err
 	}
 	host, port, _ := addr.SplitHostPort(sqlAddr, "")
 	u.
@@ -1498,6 +1507,21 @@ func (c *transientCluster) getNetworkURLForServer(
 	return u, nil
 }
 
+func (c *transientCluster) extendURLWithTargetCluster(u *pgurl.URL, target serverSelection) error {
+	if c.demoCtx.Multitenant && !c.demoCtx.DisableServerController {
+		if target == forSecondaryTenant {
+			if err := u.SetOption("options", "-ccluster="+demoTenantName); err != nil {
+				return err
+			}
+		} else {
+			if err := u.SetOption("options", "-ccluster="+catconstants.SystemTenantName); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
 func (c *transientCluster) GetConnURL() string {
 	return c.connURL
 }
@@ -1514,7 +1538,7 @@ func (c *transientCluster) maybeEnableMultiTenantMultiRegion(ctx context.Context
 		return nil
 	}
 
-	storageURL, err := c.getNetworkURLForServer(ctx, 0, false /* includeAppName */, false /* forSecondaryTenant */)
+	storageURL, err := c.getNetworkURLForServer(ctx, 0, false /* includeAppName */, forSystemTenant)
 	if err != nil {
 		return err
 	}
@@ -1535,7 +1559,7 @@ func (c *transientCluster) maybeEnableMultiTenantMultiRegion(ctx context.Context
 func (c *transientCluster) SetClusterSetting(
 	ctx context.Context, setting string, value interface{},
 ) error {
-	storageURL, err := c.getNetworkURLForServer(ctx, 0, false /* includeAppName */, false /* forSecondaryTenant */)
+	storageURL, err := c.getNetworkURLForServer(ctx, 0, false /* includeAppName */, forSystemTenant)
 	if err != nil {
 		return err
 	}
@@ -1600,9 +1624,13 @@ func (c *transientCluster) SetupWorkload(ctx context.Context) error {
 
 		// Run the workload. This must occur after partitioning the database.
 		if c.demoCtx.RunWorkload {
+			targetServer := forSystemTenant
+			if c.demoCtx.Multitenant {
+				targetServer = forSecondaryTenant
+			}
 			var sqlURLs []string
 			for i := range c.servers {
-				sqlURL, err := c.getNetworkURLForServer(ctx, i, true /* includeAppName */, c.demoCtx.Multitenant)
+				sqlURL, err := c.getNetworkURLForServer(ctx, i, true /* includeAppName */, targetServer)
 				if err != nil {
 					return err
 				}
@@ -1757,9 +1785,11 @@ func (c *transientCluster) EnableEnterprise(ctx context.Context) (func(), error)
 // sockForServer generates the metadata for a unix socket for the given node.
 // For example, node 1 gets socket /tmpdemodir/.s.PGSQL.26267,
 // node 2 gets socket /tmpdemodir/.s.PGSQL.26268, etc.
-func (c *transientCluster) sockForServer(serverIdx int) unixSocketDetails {
+func (c *transientCluster) sockForServer(
+	serverIdx int, target serverSelection,
+) (unixSocketDetails, error) {
 	if !c.useSockets {
-		return unixSocketDetails{}
+		return unixSocketDetails{}, nil
 	}
 	port := strconv.Itoa(c.demoCtx.sqlPort(serverIdx, false))
 	databaseName := c.defaultDB
@@ -1771,15 +1801,19 @@ func (c *transientCluster) sockForServer(serverIdx int) unixSocketDetails {
 		// SQL listener for all tenants.
 		databaseName = catalogkeys.DefaultDatabaseName
 	}
+	u := pgurl.New().
+		WithNet(pgurl.NetUnix(c.demoDir, port)).
+		WithUsername(c.adminUser.Normalized()).
+		WithAuthn(pgurl.AuthnPassword(true, c.adminPassword)).
+		WithDatabase(databaseName)
+	if err := c.extendURLWithTargetCluster(u, target); err != nil {
+		return unixSocketDetails{}, err
+	}
 	return unixSocketDetails{
 		socketDir: c.demoDir,
 		port:      port,
-		u: pgurl.New().
-			WithNet(pgurl.NetUnix(c.demoDir, port)).
-			WithUsername(c.adminUser.Normalized()).
-			WithAuthn(pgurl.AuthnPassword(true, c.adminPassword)).
-			WithDatabase(databaseName),
-	}
+		u:         u,
+	}, nil
 }
 
 type unixSocketDetails struct {
@@ -1859,7 +1893,7 @@ func (c *transientCluster) ListDemoNodes(w, ew io.Writer, justOne, verbose bool)
 				fmt.Fprintln(ew, errors.Wrap(err, "retrieving network URL for tenant server"))
 			} else {
 				tenantSqlURL, err := c.getNetworkURLForServer(context.Background(), i,
-					false /* includeAppName */, true /* forSecondaryTenant */)
+					false /* includeAppName */, forSecondaryTenant)
 				if err != nil {
 					fmt.Fprintln(ew, errors.Wrap(err, "retrieving network URL for tenant server"))
 				} else {
@@ -1867,14 +1901,11 @@ func (c *transientCluster) ListDemoNodes(w, ew io.Writer, justOne, verbose bool)
 					// controller.
 					includeHTTP := !c.demoCtx.Multitenant || c.demoCtx.DisableServerController
 
-					// The unix socket is currently not defined for secondary
-					// tenant servers.
-					//
-					// NB: it will become defined once we use a single SQL
-					// listener for all tenants; after which this code can be
-					// simplified.
-					tenantSocket := unixSocketDetails{}
-					c.printURLs(w, ew, tenantSqlURL, tenantUiURL, tenantSocket, rpcAddr, verbose, includeHTTP)
+					socketDetails, err := c.sockForServer(i, forSecondaryTenant)
+					if err != nil {
+						fmt.Fprintln(ew, errors.Wrap(err, "retrieving socket URL for tenant server"))
+					}
+					c.printURLs(w, ew, tenantSqlURL, tenantUiURL, socketDetails, rpcAddr, verbose, includeHTTP)
 				}
 			}
 			fmt.Fprintln(w)
@@ -1891,14 +1922,18 @@ func (c *transientCluster) ListDemoNodes(w, ew io.Writer, justOne, verbose bool)
 			}
 
 			sqlURL, err := c.getNetworkURLForServer(context.Background(), i,
-				false /* includeAppName */, false /* forSecondaryTenant */)
+				false /* includeAppName */, forSystemTenant)
 			if err != nil {
 				fmt.Fprintln(ew, errors.Wrap(err, "retrieving network URL"))
 			} else {
 				// Only include a separate HTTP URL if there's no server
 				// controller.
 				includeHTTP := !c.demoCtx.Multitenant || c.demoCtx.DisableServerController
-				c.printURLs(w, ew, sqlURL, uiURL, c.sockForServer(i), s.ServingRPCAddr(), verbose, includeHTTP)
+				socketDetails, err := c.sockForServer(i, forSystemTenant)
+				if err != nil {
+					fmt.Fprintln(ew, errors.Wrap(err, "retrieving socket URL for system tenant server"))
+				}
+				c.printURLs(w, ew, sqlURL, uiURL, socketDetails, s.ServingRPCAddr(), verbose, includeHTTP)
 			}
 			fmt.Fprintln(w)
 		}
