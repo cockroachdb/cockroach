@@ -17,7 +17,34 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
+
+var makeProcessUnavailableFunc struct {
+	syncutil.Mutex
+	fn func()
+}
+
+// MakeProcessUnavailable invokes the emergency stop function set through
+// SetMakeProcessUnavailableFunc, if any. MakeProcessUnavailable is a hack to
+// close network connections in the event of a disk stall that may prevent the
+// process from exiting.
+func MakeProcessUnavailable() {
+	makeProcessUnavailableFunc.Lock()
+	fn := makeProcessUnavailableFunc.fn
+	makeProcessUnavailableFunc.Unlock()
+	if fn != nil {
+		fn()
+	}
+}
+
+// SetMakeProcessUnavailableFunc sets a function that will be called when
+// MakeProcessUnavailable is called.
+func SetMakeProcessUnavailableFunc(fn func()) {
+	makeProcessUnavailableFunc.Lock()
+	makeProcessUnavailableFunc.fn = fn
+	makeProcessUnavailableFunc.Unlock()
+}
 
 // SetExitFunc allows setting a function that will be called to exit
 // the process when a Fatal message is generated. The supplied bool,

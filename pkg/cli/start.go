@@ -465,6 +465,11 @@ func runStartInternal(
 		return clierror.NewError(err, exit.FatalError())
 	}
 
+	// Set a MakeProcessUnavailableFunc that will close all sockets. This guards
+	// against a persistent disk stall that prevents the process from exiting or
+	// making progress.
+	log.SetMakeProcessUnavailableFunc(closeAllSockets)
+
 	// Set up a cancellable context for the entire start command.
 	// The context will be canceled at the end.
 	ctx, cancel := context.WithCancel(context.Background())

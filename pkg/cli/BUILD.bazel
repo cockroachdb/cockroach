@@ -328,6 +328,7 @@ go_test(
         "nodelocal_test.go",
         "prefixer_test.go",
         "sqlfmt_test.go",
+        "start_linux_test.go",
         "start_test.go",
         "statement_bundle_test.go",
         "statement_diag_test.go",

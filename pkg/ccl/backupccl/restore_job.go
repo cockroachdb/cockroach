@@ -314,9 +314,9 @@ func restore(
 	}
 
 	targetSize := targetRestoreSpanSize.Get(&execCtx.ExecCfg().Settings.SV)
-	importSpanCh := make(chan execinfrapb.RestoreSpanEntry, 1000)
-	genSpan := func(ctx context.Context) error {
-		defer close(importSpanCh)
+	countSpansCh := make(chan execinfrapb.RestoreSpanEntry, 1000)
+	genSpan := func(ctx context.Context, spanCh chan execinfrapb.RestoreSpanEntry) error {
+		defer close(spanCh)
 		return generateAndSendImportSpans(
 			restoreCtx,
 			dataToRestore.getSpans(),
@@ -326,7 +326,7 @@ func restore(
 			introducedSpanFrontier,
 			highWaterMark,
 			targetSize,
-			importSpanCh,
+			spanCh,
 			simpleImportSpans,
 		)
 	}
@@ -336,17 +336,20 @@ func restore(
 	var countTasks []func(ctx context.Context) error
 	log.Infof(restoreCtx, "rh_debug: starting count task")
 	spanCountTask := func(ctx context.Context) error {
-		for range importSpanCh {
+		for range countSpansCh {
 			numImportSpans++
 		}
 		return nil
 	}
-	countTasks = append(countTasks, genSpan, spanCountTask)
+	countTasks = append(countTasks, spanCountTask)
+	countTasks = append(countTasks, func(ctx context.Context) error {
+		return genSpan(ctx, countSpansCh)
+	})
 	if err := ctxgroup.GoAndWait(restoreCtx, countTasks...); err != nil {
 		return emptyRowCount, errors.Wrapf(err, "counting number of import spans")
 	}
 
-	importSpanCh = make(chan execinfrapb.RestoreSpanEntry, 1000)
+	importSpanCh := make(chan execinfrapb.RestoreSpanEntry, 1000)
 	requestFinishedCh := make(chan struct{}, numImportSpans) // enough buffer to never block
 	// tasks are the concurrent tasks that are run during the restore.
 	var tasks []func(ctx context.Context) error
@@ -427,7 +430,10 @@ func restore(
 		}
 		return nil
 	}
-	tasks = append(tasks, generativeCheckpointLoop, genSpan)
+	tasks = append(tasks, generativeCheckpointLoop)
+	tasks = append(tasks, func(ctx context.Context) error {
+		return genSpan(ctx, importSpanCh)
+	})
 
 	runRestore := func(ctx context.Context) error {
 		return distRestore(

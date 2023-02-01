@@ -13,6 +13,7 @@ package tests
 import (
 	"context"
 	gosql "database/sql"
+	"encoding/json"
 	"fmt"
 	"math/rand"
 	"os"
@@ -24,6 +25,7 @@ import (
 	dmstypes "github.com/aws/aws-sdk-go-v2/service/databasemigrationservice/types"
 	"github.com/aws/aws-sdk-go-v2/service/rds"
 	rdstypes "github.com/aws/aws-sdk-go-v2/service/rds/types"
+	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
@@ -47,10 +49,36 @@ const (
 	awsdmsNumInitialRows = 100000
 )
 
+const (
+	// This RDS instance for this test is always up in our AWS account. It
+	// contains 200M rows so having to generate and import that data each run
+	// would take too long. The secret name stored in aws can only be accessed
+	// by CRL employees who have proper AWS credentials. The password can't be
+	// auto rotated due to constraints with postgres DMS source endpoint restrictions
+	// where the password can't contain %, ;, or +.
+	awsrdsSecretName     = "rds!db-074de488-6274-4b3e-ad27-d008b8ffa750"
+	awsrdsDBIdentifier   = "migrations-dms"
+	awsrdsNumInitialRows = 200000000
+)
+
 type dmsTask struct {
 	tableName           string
 	tableMappings       string
 	replicationSettings *string
+	migrationType       dmstypes.MigrationTypeValue
+	sourceEndpoint      *dmsEndpointState
+	targetEndpoint      *dmsEndpointState
+}
+
+type dmsTaskEndpoints struct {
+	defaultSource *dmsEndpointState
+	defaultTarget *dmsEndpointState
+	largeSource   *dmsEndpointState
+}
+
+type dmsEndpointState struct {
+	id  string
+	arn string
 }
 
 const tableRules = `{
@@ -68,15 +96,11 @@ const tableRules = `{
 	]
 }`
 
-var dmsTasks = []dmsTask{
-	{"test_table", tableRules, nil},
-	{"test_table_no_pk", tableRules, proto.String(`{
-		"FullLoadSettings":{
-		  "TargetTablePrepMode":"TRUNCATE_BEFORE_LOAD"
-		}
-	  }`),
-	},
-}
+const fullLoadTruncate = `{
+	"FullLoadSettings":{
+	  "TargetTablePrepMode":"TRUNCATE_BEFORE_LOAD"
+	}
+  }`
 
 func awsdmsVerString(v *version.Version) string {
 	if ciBranch := os.Getenv("TC_BUILD_BRANCH"); ciBranch != "" {
@@ -106,7 +130,12 @@ func awsdmsRoachtestDMSReplicationInstanceName(v *version.Version) string {
 	return "roachtest-awsdms-replication-instance-" + awsdmsVerString(v)
 }
 
-func awsdmsRoachtestDMSRDSEndpointName(v *version.Version) string {
+// The largeTask flag is used to create a new source endpoint as it is connecting to a different RDS
+// and needs to have a different name from the other tests.
+func awsdmsRoachtestDMSRDSEndpointName(v *version.Version, largeTask bool) string {
+	if largeTask {
+		return "roachtest-awsdms-large-rds-endpoint-" + awsdmsVerString(v)
+	}
 	return "roachtest-awsdms-rds-endpoint-" + awsdmsVerString(v)
 }
 func awsdmsRoachtestDMSCRDBEndpointName(v *version.Version) string {
@@ -183,10 +212,52 @@ func runAWSDMS(ctx context.Context, t test.Test, c cluster.Cluster) {
 	}
 	rdsCli := rds.NewFromConfig(awsCfg)
 	dmsCli := dms.NewFromConfig(awsCfg)
+	smCli := secretsmanager.NewFromConfig(awsCfg)
+
+	// Create the endpoints that we will use but the ARN's are nil
+	// and will be filled in when the endpoints are recreated.
+	// Deletion of old endpoints can be done using id.
+	dmsEndpoints := dmsTaskEndpoints{
+		defaultSource: &dmsEndpointState{
+			id: awsdmsRoachtestDMSRDSEndpointName(t.BuildVersion(), false),
+		},
+		defaultTarget: &dmsEndpointState{
+			id: awsdmsRoachtestDMSCRDBEndpointName(t.BuildVersion()),
+		},
+		largeSource: &dmsEndpointState{
+			id: awsdmsRoachtestDMSRDSEndpointName(t.BuildVersion(), true),
+		},
+	}
+	dmsTasks := []dmsTask{
+		{
+			tableName:           "test_table",
+			tableMappings:       tableRules,
+			replicationSettings: nil,
+			migrationType:       dmstypes.MigrationTypeValueFullLoadAndCdc,
+			sourceEndpoint:      dmsEndpoints.defaultSource,
+			targetEndpoint:      dmsEndpoints.defaultTarget,
+		},
+		{
+			tableName:           "test_table_no_pk",
+			tableMappings:       tableRules,
+			replicationSettings: proto.String(fullLoadTruncate),
+			migrationType:       dmstypes.MigrationTypeValueFullLoadAndCdc,
+			sourceEndpoint:      dmsEndpoints.defaultSource,
+			targetEndpoint:      dmsEndpoints.defaultTarget,
+		},
+		{
+			tableName:           "test_table_large",
+			tableMappings:       tableRules,
+			replicationSettings: proto.String(fullLoadTruncate),
+			migrationType:       dmstypes.MigrationTypeValueFullLoad,
+			sourceEndpoint:      dmsEndpoints.largeSource,
+			targetEndpoint:      dmsEndpoints.defaultTarget,
+		},
+	}
 
 	// Attempt a clean-up of old instances on startup.
 	t.L().Printf("attempting to delete old instances")
-	if err := tearDownAWSDMS(ctx, t, rdsCli, dmsCli); err != nil {
+	if err := tearDownAWSDMS(ctx, t, rdsCli, dmsCli, &dmsTasks); err != nil {
 		t.Fatal(err)
 	}
 
@@ -198,12 +269,12 @@ func runAWSDMS(ctx context.Context, t test.Test, c cluster.Cluster) {
 		}
 		t.L().Printf("attempting to cleanup instances")
 		// Try to delete from a new context, in case the previous one is cancelled.
-		if err := tearDownAWSDMS(context.Background(), t, rdsCli, dmsCli); err != nil {
+		if err := tearDownAWSDMS(context.Background(), t, rdsCli, dmsCli, &dmsTasks); err != nil {
 			t.L().Printf("failed to delete old instances on cleanup: %+v", err)
 		}
 	}()
 
-	sourcePGConn, err := setupAWSDMS(ctx, t, c, rdsCli, dmsCli)
+	sourcePGConn, err := setupAWSDMS(ctx, t, c, rdsCli, dmsCli, smCli, &dmsTasks, &dmsEndpoints)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -211,6 +282,7 @@ func runAWSDMS(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 	checkDMSReplicated(ctx, t, sourcePGConn, targetPGConn)
 	checkDMSNoPKTableError(ctx, t, dmsCli)
+	checkFullLargeDataLoad(ctx, t, dmsCli)
 	t.L().Printf("testing complete")
 }
 
@@ -347,10 +419,86 @@ func checkDMSNoPKTableError(ctx context.Context, t test.Test, dmsCli *dms.Client
 	}
 }
 
+func checkFullLargeDataLoad(ctx context.Context, t test.Test, dmsCli *dms.Client) {
+	closer := make(chan struct{})
+	waitForFullLoad := retry.Options{
+		InitialBackoff: 10 * time.Second,
+		MaxBackoff:     5 * time.Minute,
+		Closer:         closer,
+	}
+	t.L().Printf("testing all rows from test_table_large replicate")
+	var currentPercent, nonUpdate = 0, 0
+	for r := retry.StartWithCtx(ctx, waitForFullLoad); r.Next(); {
+		err := func() error {
+			dmsTasks, err := dmsCli.DescribeReplicationTasks(ctx, dmsDescribeTasksInput(t.BuildVersion(), "test_table_large"))
+			if err != nil {
+				return err
+			}
+			for _, task := range dmsTasks.ReplicationTasks {
+				// If the task is stopped and stop reason is full load finished, we have succeeded.
+				if *task.Status == "stopped" && *task.StopReason == "Stop Reason FULL_LOAD_ONLY_FINISHED" {
+					tableStats, err := dmsCli.DescribeTableStatistics(context.Background(), &dms.DescribeTableStatisticsInput{
+						ReplicationTaskArn: task.ReplicationTaskArn,
+						Filters: []dmstypes.Filter{{
+							Name:   proto.String("table-name"),
+							Values: []string{"test_table_large"},
+						}},
+					})
+					if err != nil {
+						return err
+					}
+					// Check we full loaded the right number of rows
+					if tableStats.TableStatistics[0].FullLoadRows == awsrdsNumInitialRows {
+						t.L().Printf("test_table_large successfully replicated all rows")
+					} else {
+						t.L().Printf("row count mismatch: %d vs %d", tableStats.TableStatistics[0].FullLoadRows, awsrdsNumInitialRows)
+						t.Fatal("not enough rows replicated from test_table_large")
+					}
+					close(closer)
+				} else if *task.Status == "running" {
+					stats := task.ReplicationTaskStats
+					if stats != nil {
+						if stats.FullLoadProgressPercent != 100 {
+							if stats.FullLoadProgressPercent > int32(currentPercent) {
+								nonUpdate = 0
+								currentPercent = int(stats.FullLoadProgressPercent)
+								t.L().Printf("test_table_large still replicating, percentage: %d", stats.FullLoadProgressPercent)
+							} else {
+								nonUpdate++
+								// Arbitrarily picked 5 consecutive non updates to indicate stuck progress
+								if nonUpdate == 5 {
+									t.Fatal(errors.New("replication progress appears to be stuck"))
+									close(closer)
+								}
+							}
+						}
+					}
+				} else {
+					// All other statuses should result in a failure
+					t.L().Printf("unexpeted task status %s", *task.Status)
+					t.Fatal("unexpected task status")
+					close(closer)
+				}
+			}
+			return nil
+		}()
+		if err != nil {
+			t.L().Printf("error while checking for full load, retrying: %+v", err)
+		}
+	}
+}
+
 // setupAWSDMS sets up an RDS instance and a DMS instance which sets up a
 // migration task from the RDS instance to the CockroachDB cluster.
 func setupAWSDMS(
-	ctx context.Context, t test.Test, c cluster.Cluster, rdsCli *rds.Client, dmsCli *dms.Client,
+	ctx context.Context,
+	t test.Test,
+	c cluster.Cluster,
+	rdsCli *rds.Client,
+	dmsCli *dms.Client,
+	smCli *secretsmanager.Client,
+	dmsTasks *[]dmsTask,
+	endpoints *dmsTaskEndpoints,
 ) (*pgx.Conn, error) {
 	var sourcePGConn *pgx.Conn
 	if err := func() error {
@@ -374,8 +522,30 @@ func setupAWSDMS(
 		if err := g.Wait(); err != nil {
 			return err
 		}
-
-		if err := setupDMSEndpointsAndTask(ctx, t, c, dmsCli, rdsCluster, awsdmsPassword, replicationARN); err != nil {
+		smInput := &secretsmanager.GetSecretValueInput{
+			SecretId:     proto.String(awsrdsSecretName),
+			VersionStage: proto.String("AWSCURRENT"),
+		}
+		smo, smErr := smCli.GetSecretValue(ctx, smInput)
+		if smErr != nil {
+			return smErr
+		}
+		secrets := map[string]string{}
+		err := json.Unmarshal([]byte(*smo.SecretString), &secrets)
+		if err != nil {
+			return err
+		}
+		rdsInput := &rds.DescribeDBInstancesInput{
+			DBInstanceIdentifier: proto.String(awsrdsDBIdentifier),
+		}
+		rdso, rdsErr := rdsCli.DescribeDBInstances(ctx, rdsInput)
+		if rdsErr != nil {
+			return rdsErr
+		}
+		if len(rdso.DBInstances) != 1 {
+			return errors.New("RDS instance for large scale replication not found")
+		}
+		if err := setupDMSEndpointsAndTask(ctx, t, c, dmsCli, rdsCluster, awsdmsPassword, replicationARN, secrets["password"], &rdso.DBInstances[0], dmsTasks, endpoints); err != nil {
 			return err
 		}
 		return nil
@@ -395,6 +565,8 @@ func setupCockroachDBCluster(ctx context.Context, t test.Test, c cluster.Cluster
 		for _, stmt := range []string{
 			fmt.Sprintf("CREATE USER %s", awsdmsCRDBUser),
 			fmt.Sprintf("GRANT admin TO %s", awsdmsCRDBUser),
+			fmt.Sprintf("ALTER USER %s SET copy_from_atomic_enabled = false", awsdmsCRDBUser),
+			fmt.Sprintf("ALTER USER %s SET copy_from_retries_enabled = true", awsdmsCRDBUser),
 		} {
 			if _, err := db.Exec(stmt); err != nil {
 				return err
@@ -554,21 +726,23 @@ func setupDMSEndpointsAndTask(
 	rdsCluster *rdstypes.DBCluster,
 	awsdmsPassword string,
 	replicationARN string,
+	rdsPasswordLarge string,
+	rdsClusterLarge *rdstypes.DBInstance,
+	dmsTasks *[]dmsTask,
+	dmsEndpoints *dmsTaskEndpoints,
 ) error {
 	// Setup AWS DMS to replicate to CockroachDB.
 	externalCRDBAddr, err := c.ExternalIP(ctx, t.L(), option.NodeListOption{1})
 	if err != nil {
 		return err
 	}
-
-	var sourceARN, targetARN string
 	for _, ep := range []struct {
-		in  dms.CreateEndpointInput
-		arn *string
+		in       dms.CreateEndpointInput
+		endpoint *dmsEndpointState
 	}{
 		{
 			in: dms.CreateEndpointInput{
-				EndpointIdentifier: proto.String(awsdmsRoachtestDMSRDSEndpointName(t.BuildVersion())),
+				EndpointIdentifier: proto.String(dmsEndpoints.defaultSource.id),
 				EndpointType:       dmstypes.ReplicationEndpointTypeValueSource,
 				EngineName:         proto.String("aurora-postgresql"),
 				DatabaseName:       proto.String(awsdmsDatabase),
@@ -577,11 +751,11 @@ func setupDMSEndpointsAndTask(
 				Port:               rdsCluster.Port,
 				ServerName:         rdsCluster.Endpoint,
 			},
-			arn: &sourceARN,
+			endpoint: dmsEndpoints.defaultSource,
 		},
 		{
 			in: dms.CreateEndpointInput{
-				EndpointIdentifier: proto.String(awsdmsRoachtestDMSCRDBEndpointName(t.BuildVersion())),
+				EndpointIdentifier: proto.String(dmsEndpoints.defaultTarget.id),
 				EndpointType:       dmstypes.ReplicationEndpointTypeValueTarget,
 				EngineName:         proto.String("postgres"),
 				SslMode:            dmstypes.DmsSslModeValueNone,
@@ -595,7 +769,20 @@ func setupDMSEndpointsAndTask(
 					ServerName: proto.String(externalCRDBAddr[0]),
 				},
 			},
-			arn: &targetARN,
+			endpoint: dmsEndpoints.defaultTarget,
+		},
+		{
+			in: dms.CreateEndpointInput{
+				EndpointIdentifier: proto.String(dmsEndpoints.largeSource.id),
+				EndpointType:       dmstypes.ReplicationEndpointTypeValueSource,
+				EngineName:         proto.String("postgres"),
+				DatabaseName:       proto.String(awsdmsDatabase),
+				Username:           rdsClusterLarge.MasterUsername,
+				Password:           proto.String(rdsPasswordLarge),
+				Port:               &rdsClusterLarge.Endpoint.Port,
+				ServerName:         rdsClusterLarge.Endpoint.Address,
+			},
+			endpoint: dmsEndpoints.largeSource,
 		},
 	} {
 		t.L().Printf("creating replication endpoint %s", *ep.in.EndpointIdentifier)
@@ -603,7 +790,7 @@ func setupDMSEndpointsAndTask(
 		if err != nil {
 			return err
 		}
-		*ep.arn = *epOut.Endpoint.EndpointArn
+		ep.endpoint.arn = *epOut.Endpoint.EndpointArn
 
 		// Test the connections to see if they are "successful".
 		// If not, any subsequence DMS task will fail to startup.
@@ -660,16 +847,16 @@ func setupDMSEndpointsAndTask(
 		}
 	}
 
-	for _, task := range dmsTasks {
+	for _, task := range *dmsTasks {
 		t.L().Printf(fmt.Sprintf("creating replication task for %s", task.tableName))
 		replTaskOut, err := dmsCli.CreateReplicationTask(
 			ctx,
 			&dms.CreateReplicationTaskInput{
-				MigrationType:             dmstypes.MigrationTypeValueFullLoadAndCdc,
+				MigrationType:             task.migrationType,
 				ReplicationInstanceArn:    proto.String(replicationARN),
 				ReplicationTaskIdentifier: proto.String(awsdmsRoachtestDMSTaskName(t.BuildVersion(), task.tableName)),
-				SourceEndpointArn:         proto.String(sourceARN),
-				TargetEndpointArn:         proto.String(targetARN),
+				SourceEndpointArn:         proto.String(task.sourceEndpoint.arn),
+				TargetEndpointArn:         proto.String(task.targetEndpoint.arn),
 				// TODO(#migrations): when AWS API supports EnableValidation, add it here.
 				TableMappings:           proto.String(fmt.Sprintf(task.tableMappings, task.tableName)),
 				ReplicationTaskSettings: task.replicationSettings,
@@ -708,14 +895,18 @@ func isDMSResourceNotFound(err error) bool {
 	return errors.HasType(err, &dmstypes.ResourceNotFoundFault{})
 }
 
+func isDMSResourceAlreadyDeleting(err error) bool {
+	return errors.HasType(err, &dmstypes.InvalidResourceStateFault{})
+}
+
 func tearDownAWSDMS(
-	ctx context.Context, t test.Test, rdsCli *rds.Client, dmsCli *dms.Client,
+	ctx context.Context, t test.Test, rdsCli *rds.Client, dmsCli *dms.Client, dmsTasks *[]dmsTask,
 ) error {
 	if err := func() error {
-		if err := tearDownDMSTasks(ctx, t, dmsCli); err != nil {
+		if err := tearDownDMSTasks(ctx, t, dmsCli, dmsTasks); err != nil {
 			return err
 		}
-		if err := tearDownDMSEndpoints(ctx, t, dmsCli); err != nil {
+		if err := tearDownDMSEndpoints(ctx, t, dmsCli, dmsTasks); err != nil {
 			return err
 		}
 
@@ -732,8 +923,10 @@ func tearDownAWSDMS(
 
 // tearDownDMSTasks tears down the DMS task, endpoints and replication instance
 // that may have been created.
-func tearDownDMSTasks(ctx context.Context, t test.Test, dmsCli *dms.Client) error {
-	for _, task := range dmsTasks {
+func tearDownDMSTasks(
+	ctx context.Context, t test.Test, dmsCli *dms.Client, dmsTasks *[]dmsTask,
+) error {
+	for _, task := range *dmsTasks {
 		dmsTasks, err := dmsCli.DescribeReplicationTasks(ctx, dmsDescribeTasksInput(t.BuildVersion(), task.tableName))
 		if err != nil {
 			if !isDMSResourceNotFound(err) {
@@ -771,27 +964,38 @@ func tearDownDMSTasks(ctx context.Context, t test.Test, dmsCli *dms.Client) erro
 	return nil
 }
 
-func tearDownDMSEndpoints(ctx context.Context, t test.Test, dmsCli *dms.Client) error {
-	for _, ep := range []string{awsdmsRoachtestDMSRDSEndpointName(t.BuildVersion()), awsdmsRoachtestDMSCRDBEndpointName(t.BuildVersion())} {
-		dmsEndpoints, err := dmsCli.DescribeEndpoints(ctx, &dms.DescribeEndpointsInput{
-			Filters: []dmstypes.Filter{
-				{
-					Name:   proto.String("endpoint-id"),
-					Values: []string{ep},
+func tearDownDMSEndpoints(
+	ctx context.Context, t test.Test, dmsCli *dms.Client, dmsTasks *[]dmsTask,
+) error {
+	for _, tk := range *dmsTasks {
+		for _, ep := range []string{tk.sourceEndpoint.id, tk.targetEndpoint.id} {
+			dmsEndpoints, err := dmsCli.DescribeEndpoints(ctx, &dms.DescribeEndpointsInput{
+				Filters: []dmstypes.Filter{
+					{
+						Name:   proto.String("endpoint-id"),
+						Values: []string{ep},
+					},
 				},
-			},
-		})
-		if err != nil {
-			if !isDMSResourceNotFound(err) {
-				return err
-			}
-		} else {
-			for _, dmsEndpoint := range dmsEndpoints.Endpoints {
-				t.L().Printf("deleting DMS endpoint %s (arn: %s)", *dmsEndpoint.EndpointIdentifier, *dmsEndpoint.EndpointArn)
-				if _, err := dmsCli.DeleteEndpoint(ctx, &dms.DeleteEndpointInput{EndpointArn: dmsEndpoint.EndpointArn}); err != nil {
+			})
+
+			if err != nil {
+				if !isDMSResourceNotFound(err) {
 					return err
 				}
+			} else {
+				for _, dmsEndpoint := range dmsEndpoints.Endpoints {
+					t.L().Printf("deleting DMS endpoint %s (arn: %s)", *dmsEndpoint.EndpointIdentifier, *dmsEndpoint.EndpointArn)
+					if _, err := dmsCli.DeleteEndpoint(ctx, &dms.DeleteEndpointInput{EndpointArn: dmsEndpoint.EndpointArn}); err != nil {
+						// Because we reuse the same source and target endpoints in some tasks,
+						// we need to check for an InvalidResourceState error meaning that its
+						// already being deleted and should not return the error.
+						if !isDMSResourceAlreadyDeleting(err) {
+							return err
+						}
+					}
+				}
 			}
+
 		}
 	}
 	return nil
