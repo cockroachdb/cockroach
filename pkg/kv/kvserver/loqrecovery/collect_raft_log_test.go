@@ -217,3 +217,51 @@ func requireContainsDescriptor(
 	}
 	t.Fatalf("descriptor change sequence %v doesn't contain %v", seq, value)
 }
+
+// TestCollectLeaseholderStatus verifies that leaseholder status is collected
+// from replicas. It relies on range 1 always being present and fully replicated
+// in ReplicationAuto mode. Assertion is checking number of replicas and only
+// one of them thinking it is a leaseholder.
+func TestCollectLeaseholderStatus(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	tc := testcluster.NewTestCluster(t, 3, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				Store: &kvserver.StoreTestingKnobs{
+					DisableGCQueue: true,
+				},
+			},
+			StoreSpecs: []base.StoreSpec{{InMemory: true}},
+			Insecure:   true,
+		},
+		ReplicationMode: base.ReplicationAuto,
+	})
+	tc.Start(t)
+	defer tc.Stopper().Stop(ctx)
+	require.NoError(t, tc.WaitForFullReplication())
+
+	adm, err := tc.GetAdminClient(ctx, t, 0)
+	require.NoError(t, err, "failed to get admin client")
+
+	replicas, _, err := loqrecovery.CollectRemoteReplicaInfo(ctx, adm)
+	require.NoError(t, err, "failed to collect replica info")
+
+	foundLeaseholders := 0
+	foundReplicas := 0
+	for _, rs := range replicas.LocalInfo {
+		for _, rs := range rs.Replicas {
+			if rs.Desc.RangeID == 1 {
+				foundReplicas++
+				if rs.LocalAssumesLeaseholder {
+					foundLeaseholders++
+				}
+			}
+		}
+	}
+	require.Equal(t, 3, foundReplicas, "expecting meta1 replicas on all nodes")
+	require.Equal(t, 1, foundLeaseholders, "expecting meta1 to have single leaseholder")
+}
