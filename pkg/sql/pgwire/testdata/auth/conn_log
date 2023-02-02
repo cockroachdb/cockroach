@@ -16,6 +16,8 @@ sql
 CREATE USER trusted;
 CREATE USER usernologin WITH NOLOGIN PASSWORD '123';
 CREATE USER usernosqllogin WITH NOSQLLOGIN PASSWORD '123';
+CREATE USER userglobalnosqllogin WITH NOSQLLOGIN PASSWORD '123';
+CREATE USER userinheritsnosqllogin WITH NOSQLLOGIN PASSWORD '123';
 CREATE USER userexpired WITH PASSWORD '123' VALID UNTIL '2000-01-01'
 ----
 ok
@@ -278,6 +280,29 @@ authlog 4
 88 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"unix","RemoteAddress":"XXX","Timestamp":"XXX"}
 89 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"unix","RemoteAddress":"XXX","Timestamp":"XXX"}
 
+connect_unix user=userglobalnosqllogin password=123
+----
+ERROR: userglobalnosqllogin does not have login privilege (SQLSTATE 28000)
+
+authlog 4
+.*client_connection_end
+----
+86 {"EventType":"client_authentication_info","Info":"HBA rule: local all all         password      # built-in CockroachDB default","InstanceID":1,"Method":"password","Network":"unix","RemoteAddress":"XXX","SystemIdentity":"userglobalnosqllogin","Timestamp":"XXX","Transport":"local"}
+87 {"EventType":"client_authentication_failed","InstanceID":1,"Method":"password","Network":"unix","Reason":3,"RemoteAddress":"XXX","SystemIdentity":"userglobalnosqllogin","Timestamp":"XXX","Transport":"local","User":"usernosqllogin"}
+88 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"unix","RemoteAddress":"XXX","Timestamp":"XXX"}
+89 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"unix","RemoteAddress":"XXX","Timestamp":"XXX"}
+
+connect_unix user=userinheritsnosqllogin password=123
+----
+ERROR: userinheritsnosqllogin does not have login privilege (SQLSTATE 28000)
+
+authlog 4
+.*client_connection_end
+----
+86 {"EventType":"client_authentication_info","Info":"HBA rule: local all all         password      # built-in CockroachDB default","InstanceID":1,"Method":"password","Network":"unix","RemoteAddress":"XXX","SystemIdentity":"userinheritsnosqllogin","Timestamp":"XXX","Transport":"local"}
+87 {"EventType":"client_authentication_failed","InstanceID":1,"Method":"password","Network":"unix","Reason":3,"RemoteAddress":"XXX","SystemIdentity":"usernosqllogin","Timestamp":"XXX","Transport":"local","User":"userinheritsnosqllogin"}
+88 {"Duration":"NNN","EventType":"client_session_end","InstanceID":1,"Network":"unix","RemoteAddress":"XXX","Timestamp":"XXX"}
+89 {"Duration":"NNN","EventType":"client_connection_end","InstanceID":1,"Network":"unix","RemoteAddress":"XXX","Timestamp":"XXX"}
 
 connect_unix user=userexpired password=123
 ----

@@ -110,13 +110,10 @@ func (a *Cache) GetAuthInfo(
 		ctx context.Context,
 		db descs.DB,
 		username username.SQLUsername,
-		makePlanner func(opName string) (interface{}, func()),
-		settings *cluster.Settings,
 	) (AuthInfo, error),
-	makePlanner func(opName string) (interface{}, func()),
 ) (aInfo AuthInfo, err error) {
 	if !CacheEnabled.Get(&settings.SV) {
-		return readFromSystemTables(ctx, db, username, makePlanner, settings)
+		return readFromSystemTables(ctx, db, username)
 	}
 
 	var usersTableDesc catalog.TableDescriptor
@@ -153,7 +150,7 @@ func (a *Cache) GetAuthInfo(
 	val, err := a.loadValueOutsideOfCache(
 		ctx, fmt.Sprintf("authinfo-%s-%d-%d", username.Normalized(), usersTableVersion, roleOptionsTableVersion),
 		func(loadCtx context.Context) (interface{}, error) {
-			return readFromSystemTables(loadCtx, db, username, makePlanner, settings)
+			return readFromSystemTables(loadCtx, db, username)
 		})
 	if err != nil {
 		return aInfo, err
