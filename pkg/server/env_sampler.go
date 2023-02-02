@@ -124,7 +124,7 @@ func startSampleEnvironment(
 			if err != nil {
 				log.Warningf(ctx, "failed to start query profiler worker: %v", err)
 			}
-			cpuProfiler, err = heapprofiler.NewCpuProfiler(ctx, cfg.cpuProfileDirName, cfg.st)
+			cpuProfiler, err = heapprofiler.NewCPUProfiler(ctx, cfg.cpuProfileDirName, cfg.st)
 			if err != nil {
 				log.Warningf(ctx, "failed to start cpu profiler worker: %v", err)
 			}
