@@ -14,6 +14,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -81,7 +82,7 @@ type TestingKnobs struct {
 
 	// BeforeWaitForJobsQuery is called once per invocation of the
 	// poll-show-jobs query in WaitForJobs.
-	BeforeWaitForJobsQuery func()
+	BeforeWaitForJobsQuery func(jobs []jobspb.JobID)
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

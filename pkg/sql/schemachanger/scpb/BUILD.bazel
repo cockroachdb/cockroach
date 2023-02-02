@@ -7,6 +7,7 @@ go_library(
     name = "scpb",
     srcs = [
         "constants.go",
+        "migration.go",
         "state.go",
         "transient.go",
         ":gen-elements-interface",  # keep
@@ -15,6 +16,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/clusterversion",
         "//pkg/security/username",  # keep
         "//pkg/sql/catalog/catpb",  # keep
         "//pkg/sql/privilege",  # keep
