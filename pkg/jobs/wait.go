@@ -105,7 +105,7 @@ func (r *Registry) waitForJobsToBeTerminalOrPaused(
 		// WHEN COMPLETE, if one of the jobs is missing from the jobs table for
 		// whatever reason, we'll fail later when we try to load the job.
 		if fn := r.knobs.BeforeWaitForJobsQuery; fn != nil {
-			fn()
+			fn(jobs)
 		}
 		row, err := r.db.Executor().QueryRowEx(
 			ctx,
