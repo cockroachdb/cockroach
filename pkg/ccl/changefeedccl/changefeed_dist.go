@@ -448,7 +448,7 @@ func makePlan(
 		)
 
 		p.PlanToStreamColMap = []int{1, 2, 3}
-		dsp.FinalizePlan(ctx, planCtx, p)
+		sql.FinalizePlan(ctx, planCtx, p)
 
 		return p, planCtx, nil
 	}
