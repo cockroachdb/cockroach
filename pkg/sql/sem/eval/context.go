@@ -780,4 +780,9 @@ type StreamIngestManager interface {
 		streamIngestionDetails jobspb.StreamIngestionDetails,
 		jobProgress jobspb.Progress,
 	) (*streampb.StreamIngestionStats, error)
+
+	GetReplicationStatsAndStatus(
+		ctx context.Context,
+		ingestionJobID jobspb.JobID,
+	) (*streampb.StreamIngestionStats, string, error)
 }

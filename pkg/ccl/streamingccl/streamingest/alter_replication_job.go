@@ -249,10 +249,6 @@ func alterTenantJobCutover(
 	if err := completeStreamIngestion(ctx, jobRegistry, txn, tenInfo.TenantReplicationJobID, cutoverTime); err != nil {
 		return err
 	}
-	// Unpause the job if it is paused.
-	if err := jobRegistry.Unpause(ctx, txn, tenInfo.TenantReplicationJobID); err != nil {
-		return err
-	}
 
 	return nil
 }
