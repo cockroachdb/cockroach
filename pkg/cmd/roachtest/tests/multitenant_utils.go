@@ -354,7 +354,7 @@ func createInMemoryTenant(
 	// server in a retry loop.
 	var tenantSQL *sqlutils.SQLRunner
 	testutils.SucceedsSoon(t, func() error {
-		tenantConn, err := c.ConnE(ctx, t.L(), nodes.RandNode()[0])
+		tenantConn, err := c.ConnE(ctx, t.L(), nodes.RandNode()[0], option.TenantName(tenantName))
 		if err != nil {
 			return err
 		}
