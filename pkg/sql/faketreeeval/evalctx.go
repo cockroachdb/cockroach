@@ -446,8 +446,8 @@ func (ep *DummyEvalPlanner) ResolveFunction(
 // ResolveFunctionByOID implements FunctionReferenceResolver interface.
 func (ep *DummyEvalPlanner) ResolveFunctionByOID(
 	ctx context.Context, oid oid.Oid,
-) (string, *tree.Overload, error) {
-	return "", nil, errors.AssertionFailedf("ResolveFunctionByOID unimplemented")
+) (*tree.FunctionName, *tree.Overload, error) {
+	return nil, nil, errors.AssertionFailedf("ResolveFunctionByOID unimplemented")
 }
 
 // GetMultiregionConfig is part of the eval.Planner interface.
