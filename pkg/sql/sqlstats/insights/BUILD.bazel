@@ -20,9 +20,9 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insights",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/roachpb",
         "//pkg/settings",
         "//pkg/settings/cluster",
+        "//pkg/sql/appstatspb",
         "//pkg/sql/clusterunique",
         "//pkg/sql/contention/contentionutils",
         "//pkg/util/cache",
@@ -50,8 +50,8 @@ go_test(
     args = ["-test.timeout=295s"],
     embed = [":insights"],
     deps = [
-        "//pkg/roachpb",
         "//pkg/settings/cluster",
+        "//pkg/sql/appstatspb",
         "//pkg/sql/clusterunique",
         "//pkg/util/stop",
         "//pkg/util/uint128",

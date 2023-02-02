@@ -16,8 +16,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/stretchr/testify/require"
 )
 
@@ -173,7 +173,7 @@ func TestLatencyQuantileDetector(t *testing.T) {
 				for i := 0; i < test.fingerprints; i++ {
 					d.isSlow(&Statement{
 						LatencyInSeconds: AnomalyDetectionLatencyThreshold.Get(&st.SV).Seconds(),
-						FingerprintID:    roachpb.StmtFingerprintID(i),
+						FingerprintID:    appstatspb.StmtFingerprintID(i),
 					})
 				}
 				test.assertion(t, metrics)

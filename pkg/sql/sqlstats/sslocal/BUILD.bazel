@@ -16,10 +16,10 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/sqlstats/sslocal",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/roachpb",
         "//pkg/server/serverpb",
         "//pkg/settings",
         "//pkg/settings/cluster",
+        "//pkg/sql/appstatspb",
         "//pkg/sql/sessionphase",
         "//pkg/sql/sqlstats",
         "//pkg/sql/sqlstats/insights",
@@ -45,7 +45,6 @@ go_test(
     deps = [
         ":sslocal",
         "//pkg/base",
-        "//pkg/roachpb",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/security/username",
@@ -54,6 +53,7 @@ go_test(
         "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/sql",
+        "//pkg/sql/appstatspb",
         "//pkg/sql/sessiondata",
         "//pkg/sql/sessiondatapb",
         "//pkg/sql/sessionphase",

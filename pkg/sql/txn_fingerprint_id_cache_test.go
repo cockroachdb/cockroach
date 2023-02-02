@@ -18,9 +18,9 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
@@ -75,7 +75,7 @@ func TestTxnFingerprintIDCacheDataDriven(t *testing.T) {
 
 				id, err := strconv.ParseUint(idStr, 10, 64)
 				require.NoError(t, err)
-				txnFingerprintID := roachpb.TransactionFingerprintID(id)
+				txnFingerprintID := appstatspb.TransactionFingerprintID(id)
 
 				err = txnFingerprintIDCache.Add(txnFingerprintID)
 				require.NoError(t, err)
@@ -105,7 +105,7 @@ func TestTxnFingerprintIDCache(t *testing.T) {
 
 	ctx := context.Background()
 
-	txnFingerprintIDsRecorded := make([]roachpb.TransactionFingerprintID, 0)
+	txnFingerprintIDsRecorded := make([]appstatspb.TransactionFingerprintID, 0)
 	appName := "testTxnFingerprintIDCache"
 
 	params, _ := tests.CreateTestServerParams()
@@ -113,7 +113,7 @@ func TestTxnFingerprintIDCache(t *testing.T) {
 		BeforeTxnStatsRecorded: func(
 			sessionData *sessiondata.SessionData,
 			_ uuid.UUID,
-			txnFingerprintID roachpb.TransactionFingerprintID,
+			txnFingerprintID appstatspb.TransactionFingerprintID,
 		) {
 			if !sessionData.Internal {
 				// Record every query we issue through our sql connection.

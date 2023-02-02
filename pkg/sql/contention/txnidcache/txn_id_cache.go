@@ -13,8 +13,8 @@ package txnidcache
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/contentionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -26,7 +26,7 @@ type Reader interface {
 	// Lookup returns the corresponding transaction fingerprint ID for a given txnID,
 	// if the given txnID has no entry in the Cache, the returned "found" boolean
 	// will be false.
-	Lookup(txnID uuid.UUID) (result roachpb.TransactionFingerprintID, found bool)
+	Lookup(txnID uuid.UUID) (result appstatspb.TransactionFingerprintID, found bool)
 }
 
 // Writer is the interface that can be used to write to txnidcache.
@@ -115,7 +115,7 @@ type Cache struct {
 
 var (
 	entrySize = int64(uuid.UUID{}.Size()) +
-		roachpb.TransactionFingerprintID(0).Size()
+		appstatspb.TransactionFingerprintID(0).Size()
 )
 
 var (
@@ -157,13 +157,13 @@ func (t *Cache) Start(ctx context.Context, stopper *stop.Stopper) {
 }
 
 // Lookup implements the Reader interface.
-func (t *Cache) Lookup(txnID uuid.UUID) (result roachpb.TransactionFingerprintID, found bool) {
+func (t *Cache) Lookup(txnID uuid.UUID) (result appstatspb.TransactionFingerprintID, found bool) {
 	t.metrics.CacheReadCounter.Inc(1)
 
 	txnFingerprintID, found := t.store.get(txnID)
 	if !found {
 		t.metrics.CacheMissCounter.Inc(1)
-		return roachpb.InvalidTransactionFingerprintID, found
+		return appstatspb.InvalidTransactionFingerprintID, found
 	}
 
 	return txnFingerprintID, found

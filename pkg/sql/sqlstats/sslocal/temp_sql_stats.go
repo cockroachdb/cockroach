@@ -56,7 +56,7 @@ func (t txnResponseList) Swap(i, j int) {
 }
 
 // NewTempSQLStatsFromExistingStmtStats returns an instance of SQLStats populated
-// from the provided slice of roachpb.CollectedStatementStatistics.
+// from the provided slice of appstatspb.CollectedStatementStatistics.
 //
 // This constructor returns a variant of SQLStats which is used to aggregate
 // RPC-fanout results. This means that, unliked the regular SQLStats, whose

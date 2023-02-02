@@ -13,8 +13,8 @@ package sslocal
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessionphase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -82,21 +82,21 @@ func (s *StatsCollector) StartTransaction() {
 
 // EndTransaction implements sqlstats.StatsCollector interface.
 func (s *StatsCollector) EndTransaction(
-	ctx context.Context, transactionFingerprintID roachpb.TransactionFingerprintID,
+	ctx context.Context, transactionFingerprintID appstatspb.TransactionFingerprintID,
 ) {
 	// We possibly ignore the transactionFingerprintID, for situations where
 	// grouping by it would otherwise result in collecting higher-cardinality
 	// data in the system tables than the cleanup job is able to keep up with.
 	// See #78338.
 	if !AssociateStmtWithTxnFingerprint.Get(&s.st.SV) {
-		transactionFingerprintID = roachpb.InvalidTransactionFingerprintID
+		transactionFingerprintID = appstatspb.InvalidTransactionFingerprintID
 	}
 
 	var discardedStats uint64
 	discardedStats += s.flushTarget.MergeApplicationStatementStats(
 		ctx,
 		s.ApplicationStats,
-		func(statistics *roachpb.CollectedStatementStatistics) {
+		func(statistics *appstatspb.CollectedStatementStatistics) {
 			statistics.Key.TransactionFingerprintID = transactionFingerprintID
 		},
 	)
@@ -135,7 +135,7 @@ func (s *StatsCollector) ShouldSample(
 // UpgradeImplicitTxn implements sqlstats.StatsCollector interface.
 func (s *StatsCollector) UpgradeImplicitTxn(ctx context.Context) error {
 	err := s.ApplicationStats.IterateStatementStats(ctx, &sqlstats.IteratorOptions{},
-		func(_ context.Context, statistics *roachpb.CollectedStatementStatistics) error {
+		func(_ context.Context, statistics *appstatspb.CollectedStatementStatistics) error {
 			statistics.Key.ImplicitTxn = false
 			return nil
 		})

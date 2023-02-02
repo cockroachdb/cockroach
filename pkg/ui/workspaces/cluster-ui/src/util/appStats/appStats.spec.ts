@@ -24,7 +24,7 @@ import IExplainTreePlanNode = protos.cockroach.sql.IExplainTreePlanNode;
 import ISensitiveInfo = protos.cockroach.sql.ISensitiveInfo;
 
 // record is implemented here so we can write the below test as a direct
-// analog of the one in pkg/roachpb/app_stats_test.go.  It's here rather
+// analog of the one in pkg/sql/appstatspb/app_stats_test.go.  It's here rather
 // than in the main source file because we don't actually need it for the
 // application to use.
 function record(l: NumericStat, count: number, val: number) {
