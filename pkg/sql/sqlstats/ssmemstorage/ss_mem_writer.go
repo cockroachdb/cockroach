@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insights"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -110,6 +111,7 @@ func (s *Container) RecordStatement(
 	stats.mu.data.Count++
 	if key.Failed {
 		stats.mu.data.SensitiveInfo.LastErr = value.StatementError.Error()
+		stats.mu.data.ErrorCode = pgerror.GetPGCode(value.StatementError).String()
 	}
 	// Only update MostRecentPlanDescription if we sampled a new PlanDescription.
 	if value.Plan != nil {

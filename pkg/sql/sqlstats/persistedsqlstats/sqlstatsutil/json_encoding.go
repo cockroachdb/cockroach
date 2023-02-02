@@ -114,6 +114,8 @@ func BuildStmtMetadataJSON(statistics *appstatspb.CollectedStatementStatistics) 
 //	        "lastExecAt":        { "type": "string" },
 //	        "nodes":             { "type": "node_ids" },
 //	        "indexes":           { "type": "indexes" },
+//	        "errorCode":         { "type": "string" },
+//	        "errorMsg":          { "type": "string" },
 //	      },
 //	      "required": [
 //	        "firstAttemptCnt",

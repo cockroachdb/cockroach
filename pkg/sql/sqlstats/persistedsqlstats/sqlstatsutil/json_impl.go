@@ -325,6 +325,7 @@ func (s *innerStmtStats) jsonFields() jsonFields {
 		{"cnt", (*jsonInt)(&s.Count)},
 		{"firstAttemptCnt", (*jsonInt)(&s.FirstAttemptCount)},
 		{"maxRetries", (*jsonInt)(&s.MaxRetries)},
+		{"lastError", (*jsonString)(&s.SensitiveInfo.LastErr)},
 		{"lastExecAt", (*jsonTime)(&s.LastExecTimestamp)},
 		{"numRows", (*numericStats)(&s.NumRows)},
 		{"idleLat", (*numericStats)(&s.IdleLat)},
@@ -339,6 +340,7 @@ func (s *innerStmtStats) jsonFields() jsonFields {
 		{"nodes", (*int64Array)(&s.Nodes)},
 		{"planGists", (*stringArray)(&s.PlanGists)},
 		{"indexes", (*stringArray)(&s.Indexes)},
+		{"errorCode", (*jsonString)(&s.ErrorCode)},
 	}
 }
 

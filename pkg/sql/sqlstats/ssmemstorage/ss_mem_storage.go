@@ -281,6 +281,10 @@ func NewTempContainerFromExistingStmtStats(
 			stmtStats.mu.data.SensitiveInfo.LastErr = statistics[i].Stats.SensitiveInfo.LastErr
 		}
 
+		if stmtStats.mu.data.ErrorCode == "" && key.failed {
+			stmtStats.mu.data.ErrorCode = statistics[i].Stats.ErrorCode
+		}
+
 		if stmtStats.mu.data.SensitiveInfo.MostRecentPlanTimestamp.Before(statistics[i].Stats.SensitiveInfo.MostRecentPlanTimestamp) {
 			stmtStats.mu.data.SensitiveInfo.MostRecentPlanDescription = statistics[i].Stats.SensitiveInfo.MostRecentPlanDescription
 			stmtStats.mu.data.SensitiveInfo.MostRecentPlanTimestamp = statistics[i].Stats.SensitiveInfo.MostRecentPlanTimestamp
@@ -463,6 +467,10 @@ func (s *stmtStats) mergeStatsLocked(statistics *appstatspb.CollectedStatementSt
 	// Setting all metadata fields.
 	if s.mu.data.SensitiveInfo.LastErr == "" && statistics.Key.Failed {
 		s.mu.data.SensitiveInfo.LastErr = statistics.Stats.SensitiveInfo.LastErr
+	}
+
+	if s.mu.data.ErrorCode == "" && statistics.Key.Failed {
+		s.mu.data.ErrorCode = statistics.Stats.ErrorCode
 	}
 
 	if s.mu.data.SensitiveInfo.MostRecentPlanTimestamp.Before(statistics.Stats.SensitiveInfo.MostRecentPlanTimestamp) {
