@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
@@ -786,7 +787,7 @@ type PlanningCtx struct {
 
 	// If set, we will record the mapping from planNode to tracing metadata to
 	// later allow associating statistics with the planNode.
-	traceMetadata execNodeTraceMetadata
+	associateNodeWithComponents func(exec.Node, execComponents)
 
 	// If set, statement execution stats should be collected.
 	collectExecStats bool
@@ -797,6 +798,13 @@ type PlanningCtx struct {
 	// plan (which prohibit all concurrency) and whether all parts of the plan
 	// are supported natively by the vectorized engine.
 	parallelizeScansIfLocal bool
+
+	// parallelCheck, if set, indicates that this PlanningCtx is used to handle
+	// one of the checkPlans that are run in parallel. As such, the DistSQL
+	// planner will need to do a few adjustments like using the LeafTxn (even if
+	// it's not needed based on other "regular" factors) and adding
+	// synchronization between certain write operations.
+	parallelCheck bool
 
 	// onFlowCleanup contains non-nil functions that will be called after the
 	// local flow finished running and is being cleaned up. It allows us to
@@ -833,7 +841,7 @@ func (p *PlanningCtx) IsLocal() bool {
 }
 
 // getDefaultSaveFlowsFunc returns the default function used to save physical
-// plans and their diagrams.
+// plans and their diagrams. The returned function is **not** concurrency-safe.
 func (p *PlanningCtx) getDefaultSaveFlowsFunc(
 	ctx context.Context, planner *planner, typ planComponentType,
 ) func(map[base.SQLInstanceID]*execinfrapb.FlowSpec, execopnode.OpChains) error {
@@ -3405,7 +3413,7 @@ func (dsp *DistSQLPlanner) createPhysPlanForPlanNode(
 		return plan, err
 	}
 
-	if planCtx.traceMetadata != nil {
+	if planCtx.associateNodeWithComponents != nil {
 		processors := make(execComponents, len(plan.ResultRouters))
 		for i, resultProcIdx := range plan.ResultRouters {
 			processors[i] = execinfrapb.ProcessorComponentID(
@@ -3414,7 +3422,7 @@ func (dsp *DistSQLPlanner) createPhysPlanForPlanNode(
 				int32(resultProcIdx),
 			)
 		}
-		planCtx.traceMetadata.associateNodeWithComponents(node, processors)
+		planCtx.associateNodeWithComponents(node, processors)
 	}
 
 	return plan, err

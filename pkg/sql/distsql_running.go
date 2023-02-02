@@ -32,8 +32,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
@@ -437,7 +439,10 @@ func (dsp *DistSQLPlanner) setupFlows(
 			}
 		}
 	}
-	if planCtx.planner != nil && isVectorized {
+	if planCtx.planner != nil && isVectorized && !planCtx.parallelCheck {
+		// Don't set the flag if we're running a parallel check for two reasons:
+		// - it prevents a data race
+		// - it is a postquery, and the flags are (mostly) about the main query.
 		planCtx.planner.curPlan.flags.Set(planFlagVectorized)
 	}
 
@@ -680,6 +685,7 @@ func (dsp *DistSQLPlanner) Run(
 	// the line.
 	localState.EvalContext = &evalCtx.Context
 	localState.IsLocal = planCtx.isLocal
+	localState.ParallelCheck = planCtx.parallelCheck
 	localState.Txn = txn
 	localState.LocalProcs = plan.LocalProcessors
 	// If we have access to a planner and are currently being used to plan
@@ -1520,7 +1526,7 @@ func (dsp *DistSQLPlanner) PlanAndRunAll(
 	planCtx *PlanningCtx,
 	planner *planner,
 	recv *DistSQLReceiver,
-	evalCtxFactory func() *extendedEvalContext,
+	evalCtxFactory func(usedConcurrently bool) *extendedEvalContext,
 ) error {
 	defer planner.curPlan.close(ctx)
 	if len(planner.curPlan.subqueryPlans) != 0 {
@@ -1530,7 +1536,12 @@ func (dsp *DistSQLPlanner) PlanAndRunAll(
 		subqueryResultMemAcc := planner.Mon().MakeBoundAccount()
 		defer subqueryResultMemAcc.Close(ctx)
 		if !dsp.PlanAndRunSubqueries(
-			ctx, planner, evalCtxFactory, planner.curPlan.subqueryPlans, recv, &subqueryResultMemAcc,
+			ctx,
+			planner,
+			func() *extendedEvalContext { return evalCtxFactory(false /* usedConcurrently */) },
+			planner.curPlan.subqueryPlans,
+			recv,
+			&subqueryResultMemAcc,
 			// Skip the diagram generation since on this "main" query path we
 			// can get it via the statement bundle.
 			true, /* skipDistSQLDiagramGeneration */
@@ -1636,7 +1647,7 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 	if planner.instrumentation.ShouldSaveFlows() {
 		subqueryPlanCtx.saveFlows = subqueryPlanCtx.getDefaultSaveFlowsFunc(ctx, planner, planComponentTypeSubquery)
 	}
-	subqueryPlanCtx.traceMetadata = planner.instrumentation.traceMetadata
+	subqueryPlanCtx.associateNodeWithComponents = planner.instrumentation.getAssociateNodeWithComponentsFn()
 	subqueryPlanCtx.collectExecStats = planner.instrumentation.ShouldCollectExecStats()
 	subqueryPhysPlan, physPlanCleanup, err := dsp.createPhysPlan(ctx, subqueryPlanCtx, subqueryPlan.plan)
 	defer physPlanCleanup()
@@ -1804,7 +1815,7 @@ func (dsp *DistSQLPlanner) PlanAndRun(
 func (dsp *DistSQLPlanner) PlanAndRunCascadesAndChecks(
 	ctx context.Context,
 	planner *planner,
-	evalCtxFactory func() *extendedEvalContext,
+	evalCtxFactory func(usedConcurrently bool) *extendedEvalContext,
 	plan *planComponents,
 	recv *DistSQLReceiver,
 ) bool {
@@ -1814,6 +1825,10 @@ func (dsp *DistSQLPlanner) PlanAndRunCascadesAndChecks(
 
 	prevSteppingMode := planner.Txn().ConfigureStepping(ctx, kv.SteppingEnabled)
 	defer func() { _ = planner.Txn().ConfigureStepping(ctx, prevSteppingMode) }()
+
+	defaultGetSaveFlowsFunc := func(postqueryPlanCtx *PlanningCtx) func(map[base.SQLInstanceID]*execinfrapb.FlowSpec, execopnode.OpChains) error {
+		return postqueryPlanCtx.getDefaultSaveFlowsFunc(ctx, planner, planComponentTypePostquery)
+	}
 
 	// We treat plan.cascades as a queue.
 	for i := 0; i < len(plan.cascades); i++ {
@@ -1846,7 +1861,7 @@ func (dsp *DistSQLPlanner) PlanAndRunCascadesAndChecks(
 			return false
 		}
 
-		evalCtx := evalCtxFactory()
+		evalCtx := evalCtxFactory(false /* usedConcurrently */)
 		execFactory := newExecFactory(ctx, planner)
 		// The cascading query is allowed to autocommit only if it is the last
 		// cascade and there are no check queries to run.
@@ -1895,6 +1910,10 @@ func (dsp *DistSQLPlanner) PlanAndRunCascadesAndChecks(
 			planner,
 			evalCtx,
 			recv,
+			false, /* parallelCheck */
+			defaultGetSaveFlowsFunc,
+			planner.instrumentation.getAssociateNodeWithComponentsFn(),
+			recv.stats.add,
 		); err != nil {
 			recv.SetError(err)
 			return false
@@ -1916,30 +1935,76 @@ func (dsp *DistSQLPlanner) PlanAndRunCascadesAndChecks(
 		return false
 	}
 
-	for i := range plan.checkPlans {
-		log.VEventf(ctx, 2, "executing check query %d out of %d", i+1, len(plan.checkPlans))
-		if err := dsp.planAndRunPostquery(
-			ctx,
-			plan.checkPlans[i].plan,
-			planner,
-			evalCtxFactory(),
-			recv,
-		); err != nil {
+	// We'll run the checks in parallel if the parallelization is enabled and we
+	// have multiple checks to run.
+	runParallelChecks := parallelizeChecks.Get(&dsp.st.SV) && len(plan.checkPlans) > 1
+	if runParallelChecks {
+		// At the moment, we rely on not using the newer DistSQL spec factory to
+		// enable parallelization.
+		for i := range plan.checkPlans {
+			if plan.checkPlans[i].plan.isPhysicalPlan() {
+				runParallelChecks = false
+				break
+			}
+		}
+	}
+	if runParallelChecks {
+		if err := dsp.planAndRunChecksInParallel(ctx, plan.checkPlans, planner, evalCtxFactory, recv); err != nil {
 			recv.SetError(err)
 			return false
+		}
+	} else {
+		if len(plan.checkPlans) > 1 {
+			log.VEventf(ctx, 2, "executing %d checks serially", len(plan.checkPlans))
+		}
+		for i := range plan.checkPlans {
+			log.VEventf(ctx, 2, "executing check query %d out of %d", i+1, len(plan.checkPlans))
+			if err := dsp.planAndRunPostquery(
+				ctx,
+				plan.checkPlans[i].plan,
+				planner,
+				evalCtxFactory(false /* usedConcurrently */),
+				recv,
+				false, /* parallelCheck */
+				defaultGetSaveFlowsFunc,
+				planner.instrumentation.getAssociateNodeWithComponentsFn(),
+				recv.stats.add,
+			); err != nil {
+				recv.SetError(err)
+				return false
+			}
 		}
 	}
 
 	return true
 }
 
-// planAndRunPostquery runs a cascade or check query.
+var parallelizeChecks = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	"sql.distsql.parallelize_checks.enabled",
+	"determines whether FOREIGN KEY and UNIQUE constraint checks are performed in parallel",
+	true,
+)
+
+// planAndRunPostquery runs a cascade or check query. Can be safe for concurrent
+// use if parallelCheck is true.
+//
+// - parallelCheck indicates whether this is a check query that runs in parallel
+// with other check queries. If parallelCheck is true, then getSaveFlowsFunc,
+// associateNodeWithComponents, and addTopLevelQueryStats must be
+// concurrency-safe (if non-nil).
+// - getSaveFlowsFunc will only be called if
+// planner.instrumentation.ShouldSaveFlows() returns true.
 func (dsp *DistSQLPlanner) planAndRunPostquery(
 	ctx context.Context,
 	postqueryPlan planMaybePhysical,
 	planner *planner,
 	evalCtx *extendedEvalContext,
 	recv *DistSQLReceiver,
+	parallelCheck bool,
+	getSaveFlowsFunc func(postqueryPlanCtx *PlanningCtx) func(map[base.SQLInstanceID]*execinfrapb.FlowSpec, execopnode.OpChains) error,
+	associateNodeWithComponents func(exec.Node, execComponents),
+	addTopLevelQueryStats func(stats *topLevelQueryStats),
 ) error {
 	postqueryMonitor := mon.NewMonitor(
 		"postquery",
@@ -1970,10 +2035,11 @@ func (dsp *DistSQLPlanner) planAndRunPostquery(
 	// diagram generation.
 	postqueryPlanCtx.skipDistSQLDiagramGeneration = true
 	if planner.instrumentation.ShouldSaveFlows() {
-		postqueryPlanCtx.saveFlows = postqueryPlanCtx.getDefaultSaveFlowsFunc(ctx, planner, planComponentTypePostquery)
+		postqueryPlanCtx.saveFlows = getSaveFlowsFunc(postqueryPlanCtx)
 	}
-	postqueryPlanCtx.traceMetadata = planner.instrumentation.traceMetadata
+	postqueryPlanCtx.associateNodeWithComponents = associateNodeWithComponents
 	postqueryPlanCtx.collectExecStats = planner.instrumentation.ShouldCollectExecStats()
+	postqueryPlanCtx.parallelCheck = parallelCheck
 
 	postqueryPhysPlan, physPlanCleanup, err := dsp.createPhysPlan(ctx, postqueryPlanCtx, postqueryPlan)
 	defer physPlanCleanup()
@@ -1984,12 +2050,129 @@ func (dsp *DistSQLPlanner) planAndRunPostquery(
 
 	postqueryRecv := recv.clone()
 	defer postqueryRecv.Release()
-	defer recv.stats.add(&postqueryRecv.stats)
-	// TODO(yuzefovich): at the moment, errOnlyResultWriter is sufficient here,
-	// but it may not be the case when we support cascades through the optimizer.
+	defer addTopLevelQueryStats(&postqueryRecv.stats)
 	postqueryResultWriter := &errOnlyResultWriter{}
 	postqueryRecv.resultWriterMu.row = postqueryResultWriter
 	postqueryRecv.resultWriterMu.batch = postqueryResultWriter
 	dsp.Run(ctx, postqueryPlanCtx, planner.txn, postqueryPhysPlan, postqueryRecv, evalCtx, nil /* finishedSetupFn */)
 	return postqueryRecv.getError()
+}
+
+// planAndRunChecksInParallel executes all checkPlans in parallel. The function
+// blocks until all checks that start executing return (i.e. when this function
+// returns, it is guaranteed that the txn is no longer used by the checks).
+//
+// Note that it is assumed that all check plans use the old planNode
+// representation.
+func (dsp *DistSQLPlanner) planAndRunChecksInParallel(
+	ctx context.Context,
+	checkPlans []checkPlan,
+	planner *planner,
+	evalCtxFactory func(usedConcurrently bool) *extendedEvalContext,
+	recv *DistSQLReceiver,
+) error {
+	ctx, cancelCtx := context.WithCancel(ctx)
+	defer cancelCtx()
+	// We need to synchronize many operations for the parallel checks, and we
+	// use a single mutex for that. This seems acceptable given that these
+	// operations are pretty quick and occur at different points throughout the
+	// checks' execution, so there should be effectively no mutex contention.
+	var mu syncutil.Mutex
+	// For parallel checks we must make all `scanBufferNode`s in the plans
+	// concurrency-safe. (The need to be able to walk the planNode tree is why
+	// we currently disable the usage of the new DistSQL spec factory.)
+	observer := planObserver{
+		enterNode: func(_ context.Context, _ string, plan planNode) (bool, error) {
+			if s, ok := plan.(*scanBufferNode); ok {
+				s.makeConcurrencySafe(&mu)
+			}
+			return true, nil
+		},
+	}
+	for i := range checkPlans {
+		if checkPlans[i].plan.isPhysicalPlan() {
+			return errors.AssertionFailedf("unexpectedly physical plan is used for a parallel CHECK")
+		}
+		// Ignore the error since our observer never returns an error.
+		_ = walkPlan(
+			ctx,
+			checkPlans[i].plan.planNode,
+			observer,
+		)
+	}
+	var getSaveFlowsFunc func(postqueryPlanCtx *PlanningCtx) func(map[base.SQLInstanceID]*execinfrapb.FlowSpec, execopnode.OpChains) error
+	if planner.instrumentation.ShouldSaveFlows() {
+		// getDefaultSaveFlowsFunc returns a concurrency-unsafe function, so we
+		// need to explicitly protect calls to it. Allocate this function only
+		// when necessary.
+		getSaveFlowsFunc = func(postqueryPlanCtx *PlanningCtx) func(map[base.SQLInstanceID]*execinfrapb.FlowSpec, execopnode.OpChains) error {
+			fn := postqueryPlanCtx.getDefaultSaveFlowsFunc(ctx, planner, planComponentTypePostquery)
+			return func(flowSpec map[base.SQLInstanceID]*execinfrapb.FlowSpec, opChains execopnode.OpChains) error {
+				mu.Lock()
+				defer mu.Unlock()
+				return fn(flowSpec, opChains)
+			}
+		}
+	}
+	var associateNodeWithComponents func(exec.Node, execComponents)
+	if fn := planner.instrumentation.getAssociateNodeWithComponentsFn(); fn != nil {
+		// Since fn is not safe for concurrent use, we have to introduce the
+		// synchronization on top of it.
+		associateNodeWithComponents = func(node exec.Node, components execComponents) {
+			mu.Lock()
+			defer mu.Unlock()
+			fn(node, components)
+		}
+	}
+	// addTopLevelQueryStats is always allocated since it runs unconditionally
+	// at the end of the postquery execution.
+	addTopLevelQueryStats := func(other *topLevelQueryStats) {
+		mu.Lock()
+		defer mu.Unlock()
+		recv.stats.add(other)
+	}
+	// Set up a wait group so that the main (current) goroutine blocks until all
+	// the checks return. We cannot short-circuit if one of the checks results
+	// in a quick error in order to let all the planning infra cleanup to be
+	// performed for each check, before we attempt to clean up the whole plan.
+	var wg sync.WaitGroup
+	// We also track errors according to the corresponding check plans. This is
+	// needed in order to return the error for the "earliest" plan (which makes
+	// the tests deterministic when multiple checks fail).
+	errs := make([]error, len(checkPlans))
+	for i := range checkPlans {
+		checkPlanIdx := i
+		wg.Add(1)
+		if err := dsp.stopper.RunAsyncTask(ctx, "parallel-check-runner", func(ctx context.Context) {
+			defer wg.Done()
+			errs[checkPlanIdx] = dsp.planAndRunPostquery(
+				ctx, checkPlans[checkPlanIdx].plan,
+				planner,
+				evalCtxFactory(true /* usedConcurrently */),
+				recv,
+				true, /* parallelCheck */
+				getSaveFlowsFunc,
+				associateNodeWithComponents,
+				addTopLevelQueryStats,
+			)
+		}); err != nil {
+			// The server is quiescing, so we just make sure to wait for all
+			// already started checks to complete after canceling them.
+			cancelCtx()
+			// The task didn't start, so it won't be able to decrement the wait
+			// group.
+			wg.Done()
+			wg.Wait()
+			return err
+		}
+	}
+	// Wait for all checks to complete and return the error from the earliest
+	// check (if there were any errors).
+	wg.Wait()
+	for _, err := range errs {
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
