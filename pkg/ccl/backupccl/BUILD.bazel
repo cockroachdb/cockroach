@@ -187,7 +187,7 @@ go_test(
     args = ["-test.timeout=7195s"],
     data = glob(["testdata/**"]) + ["//c-deps:libgeos"],
     embed = [":backupccl"],
-    shard_count = 16,
+    shard_count = 32,
     deps = [
         "//pkg/base",
         "//pkg/blobs",

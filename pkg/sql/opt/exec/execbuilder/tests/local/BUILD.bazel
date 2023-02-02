@@ -10,7 +10,7 @@ go_test(
         "//c-deps:libgeos",  # keep
         "//pkg/sql/opt/exec/execbuilder:testdata",  # keep
     ],
-    shard_count = 16,
+    shard_count = 32,
     tags = ["cpu:1"],
     deps = [
         "//pkg/build/bazel",
