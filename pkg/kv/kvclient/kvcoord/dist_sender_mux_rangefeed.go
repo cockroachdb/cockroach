@@ -88,16 +88,18 @@ func newRangefeedMuxer(g ctxgroup.Group) *rangefeedMuxer {
 // channelRangeFeedEventProducer is a rangeFeedEventProducer which receives
 // events on input channel, and returns events when Recv is called.
 type channelRangeFeedEventProducer struct {
-	// Event producer utilizes two contexts: streamCtx connected to the caller of
-	// "Recv" method (i.e. singleRangeFeed method), and muxCtx connected to the
-	// node level MuxRangeFeed RPC (receiveEventsFromNode). When the
-	// caller blocks in Recv(), we have to respect cancellations in both contexts.
-	// streamCtx may be canceled by the caller if, for example, range becomes
-	// stuck (or parent context cancels). The muxCtx gets notified when
-	// receiveEvents exits -- this may happen if connection was broken, or perhaps
-	// node is being shut down, etc.
-	streamCtx context.Context
-	muxCtx    terminationContext // NB: actually a *muxClientState
+	// Event producer utilizes two contexts:
+	//
+	// - callerCtx connected to singleRangeFeed, i.e. a context that will cancel
+	//   if an single-range rangefeed fails (range stuck, parent ctx cancels).
+	// - muxClientCtx connected to receiveEventsFromNode, i.e. a streaming RPC to
+	//   a node serving multiple rangefeeds. This cancels if, for example, the
+	//   remote node goes down or there are networking issues.
+	//
+	// When singleRangeFeed blocks in Recv(), we have to respect cancellations in
+	// both contexts. The implementation of Recv() on this type does this.
+	callerCtx    context.Context
+	muxClientCtx terminationContext // NB: actually a *muxClientState
 
 	streamID int64                        // stream ID for this producer.
 	eventCh  chan *roachpb.RangeFeedEvent // consumer event channel.
@@ -108,10 +110,10 @@ var _ roachpb.RangeFeedEventProducer = (*channelRangeFeedEventProducer)(nil)
 // Recv implements rangeFeedEventProducer interface.
 func (c *channelRangeFeedEventProducer) Recv() (*roachpb.RangeFeedEvent, error) {
 	select {
-	case <-c.streamCtx.Done():
-		return nil, c.streamCtx.Err()
-	case <-c.muxCtx.Done():
-		return nil, c.muxCtx.Err()
+	case <-c.callerCtx.Done():
+		return nil, c.callerCtx.Err()
+	case <-c.muxClientCtx.Done():
+		return nil, c.muxClientCtx.Err()
 	case e := <-c.eventCh:
 		return e, nil
 	}
@@ -135,10 +137,10 @@ func (m *rangefeedMuxer) startMuxRangeFeed(
 	req.StreamID = streamID
 	streamCtx := logtags.AddTag(ctx, "stream", req.StreamID)
 	producer := &channelRangeFeedEventProducer{
-		streamCtx: streamCtx,
-		muxCtx:    ms,
-		streamID:  req.StreamID,
-		eventCh:   make(chan *roachpb.RangeFeedEvent),
+		callerCtx:    streamCtx,
+		muxClientCtx: ms,
+		streamID:     req.StreamID,
+		eventCh:      make(chan *roachpb.RangeFeedEvent),
 	}
 	m.producers.Store(req.StreamID, unsafe.Pointer(producer))
 
@@ -259,7 +261,7 @@ func (m *rangefeedMuxer) demuxLoop(ctx context.Context) (retErr error) {
 			}
 
 			// The stream may already have terminated (either producer is nil, or
-			// producer.muxCtx.Done()). That's fine -- we may have encountered range
+			// producer.muxClientCtx.Done()). That's fine -- we may have encountered range
 			// split or similar rangefeed error, causing the caller to exit (and
 			// terminate this stream), but the server side stream termination is async
 			// and probabilistic (rangefeed registration output loop may have a
@@ -277,7 +279,7 @@ func (m *rangefeedMuxer) demuxLoop(ctx context.Context) (retErr error) {
 			case <-ctx.Done():
 				return ctx.Err()
 			case producer.eventCh <- &e.RangeFeedEvent:
-			case <-producer.muxCtx.Done():
+			case <-producer.muxClientCtx.Done():
 				if log.V(1) {
 					log.Infof(ctx, "received stray event stream %d: %v", e.StreamID, e)
 				}
