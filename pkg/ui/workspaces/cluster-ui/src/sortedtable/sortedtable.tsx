@@ -103,6 +103,7 @@ interface SortedTableProps<T> {
   pagination?: ISortedTablePagination;
   loading?: boolean;
   loadingLabel?: string;
+  disableSortForLargeData: number;
   // empty state for table
   empty?: boolean;
   emptyProps?: EmptyPanelProps;
@@ -225,6 +226,14 @@ export class SortedTable<T> extends React.Component<
       if (!sortSetting) {
         return this.paginatedData();
       }
+
+      if (
+        this.props.disableSortForLargeData &&
+        data.length > this.props.disableSortForLargeData
+      ) {
+        return this.paginatedData();
+      }
+
       const sortColumn = columns.find(c => c.name === sortSetting.columnTitle);
       if (!sortColumn || !sortColumn.sort) {
         return this.paginatedData();
@@ -253,13 +262,17 @@ export class SortedTable<T> extends React.Component<
       rollups: React.ReactNode[],
       columns: ColumnDescriptor<T>[],
     ) => {
+      const sort =
+        !this.props.disableSortForLargeData ||
+        this.props.data.length <= this.props.disableSortForLargeData;
+
       return columns.map((cd, ii): SortableColumn => {
         return {
           name: cd.name,
           title: cd.title,
           hideTitleUnderline: cd.hideTitleUnderline,
           cell: index => cd.cell(sorted[index]),
-          columnTitle: cd.sort ? cd.name : undefined,
+          columnTitle: sort && cd.sort ? cd.name : undefined,
           rollup: rollups[ii],
           className: cd.className,
           titleAlign: cd.titleAlign,
