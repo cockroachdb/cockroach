@@ -146,7 +146,7 @@ func (r *testRegistryImpl) prepareSpec(spec *registry.TestSpec) error {
 	if spec.Timeout > maxTimeout {
 		var weekly bool
 		for _, tag := range spec.Tags {
-			if tag == "weekly" {
+			if tag == "weekly" || tag == "aws-weekly" {
 				weekly = true
 			}
 		}
