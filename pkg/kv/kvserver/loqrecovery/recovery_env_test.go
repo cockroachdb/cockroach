@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/keysutil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/strutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/datadriven"
@@ -582,12 +583,18 @@ func (e *quorumRecoveryEnv) handleMakePlan(t *testing.T, d datadriven.TestData) 
 	if err != nil {
 		t.Fatalf("failed to marshal plan into yaml for verification: %v", err)
 	}
-	var ids []string
-	for _, id := range e.plan.DecommissionedNodeIDs {
-		ids = append(ids, fmt.Sprintf("n%d", id))
+	var b strings.Builder
+	b.WriteString("Replica updates:\n")
+	b.WriteString(string(out))
+	if len(e.plan.DecommissionedNodeIDs) > 0 {
+		b.WriteString(fmt.Sprintf("Decommissioned nodes:\n[%s]\n",
+			strutil.JoinIDs("n", e.plan.DecommissionedNodeIDs)))
 	}
-	return fmt.Sprintf("Replica updates:\n%sDecommissioned nodes:\n[%s]\n", out,
-		strings.Join(ids, ", ")), nil
+	if len(e.plan.StaleLeaseholderNodeIDs) > 0 {
+		b.WriteString(fmt.Sprintf("Nodes to restart:\n[%s]\n",
+			strutil.JoinIDs("n", e.plan.StaleLeaseholderNodeIDs)))
+	}
+	return b.String(), nil
 }
 
 func (e *quorumRecoveryEnv) getOrCreateStore(
@@ -712,7 +719,7 @@ func (e *quorumRecoveryEnv) parseStoresArg(
 			stores = []roachpb.StoreID{}
 		}
 	}
-	sort.Slice(stores, func(i, j int) bool { return i < j })
+	sort.Sort(roachpb.StoreIDSlice(stores))
 	return stores
 }
 
@@ -734,7 +741,7 @@ func (e *quorumRecoveryEnv) parseNodesArg(t *testing.T, d datadriven.TestData) [
 		}
 	}
 	if len(nodes) > 0 {
-		sort.Slice(nodes, func(i, j int) bool { return i < j })
+		sort.Sort(roachpb.NodeIDSlice(nodes))
 	}
 	return nodes
 }

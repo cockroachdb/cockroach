@@ -408,14 +408,16 @@ func TestUpdatePlanVsClusterDiff(t *testing.T) {
 	for _, d := range []struct {
 		name    string
 		nodes   []int
+		restart []int
 		status  []loqrecoverypb.NodeRecoveryStatus
 		pending int
 		errors  int
 		report  []string
 	}{
 		{
-			name:  "after staging",
-			nodes: []int{1, 2, 3},
+			name:    "after staging",
+			nodes:   []int{1, 2},
+			restart: []int{3},
 			status: []loqrecoverypb.NodeRecoveryStatus{
 				status(1, planID, empty, ""),
 				status(2, planID, empty, ""),
@@ -473,8 +475,9 @@ func TestUpdatePlanVsClusterDiff(t *testing.T) {
 			},
 		},
 		{
-			name:  "staging lost no plan",
-			nodes: []int{1, 2, 3},
+			name:    "staging lost no plan",
+			nodes:   []int{1, 2},
+			restart: []int{3},
 			status: []loqrecoverypb.NodeRecoveryStatus{
 				status(1, planID, empty, ""),
 				status(2, planID, empty, ""),
@@ -552,6 +555,9 @@ func TestUpdatePlanVsClusterDiff(t *testing.T) {
 					},
 					NextReplicaID: roachpb.ReplicaID(rangeSeq + 18),
 				})
+			}
+			for _, id := range d.restart {
+				plan.StaleLeaseholderNodeIDs = append(plan.StaleLeaseholderNodeIDs, roachpb.NodeID(id))
 			}
 
 			diff := diffPlanWithNodeStatus(plan, d.status)
