@@ -167,6 +167,10 @@ func (s *StatementStatistics) Add(other *StatementStatistics) {
 		s.SensitiveInfo.LastErr = other.SensitiveInfo.LastErr
 	}
 
+	if other.LastErrorCode != "" {
+		s.LastErrorCode = other.LastErrorCode
+	}
+
 	if s.SensitiveInfo.MostRecentPlanTimestamp.Before(other.SensitiveInfo.MostRecentPlanTimestamp) {
 		s.SensitiveInfo = other.SensitiveInfo
 	}
