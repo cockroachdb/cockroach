@@ -135,7 +135,7 @@ func distStreamIngest(
 		execinfrapb.PostProcessSpec{}, streamIngestionResultTypes)
 
 	p.PlanToStreamColMap = []int{0}
-	dsp.FinalizePlan(planCtx, p)
+	sql.FinalizePlan(planCtx, p)
 
 	rw := sql.NewRowResultWriter(nil /* rowContainer */)
 

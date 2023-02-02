@@ -363,9 +363,8 @@ func (sc *SchemaChanger) backfillQueryIntoTable(
 			}
 
 			isLocal := !getPlanDistribution(
-				ctx, localPlanner, localPlanner.execCfg.NodeInfo.NodeID,
-				localPlanner.extendedEvalCtx.SessionData().DistSQLMode,
-				localPlanner.curPlan.main,
+				ctx, localPlanner.Descriptors().HasUncommittedTypes(),
+				localPlanner.extendedEvalCtx.SessionData().DistSQLMode, localPlanner.curPlan.main,
 			).WillDistribute()
 			out := execinfrapb.ProcessorCoreUnion{BulkRowWriter: &execinfrapb.BulkRowWriterSpec{
 				Table: *table.TableDesc(),
