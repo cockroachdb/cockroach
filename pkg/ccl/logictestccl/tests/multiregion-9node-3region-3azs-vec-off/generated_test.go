@@ -86,6 +86,13 @@ func TestCCLLogic_multi_region_import_export(
 	runCCLLogicTest(t, "multi_region_import_export")
 }
 
+func TestCCLLogic_multi_region_remote_access_error(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "multi_region_remote_access_error")
+}
+
 func TestCCLLogic_placement(
 	t *testing.T,
 ) {
