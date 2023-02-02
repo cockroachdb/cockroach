@@ -47,19 +47,22 @@ func NewNonGoAllocProfiler(
 		return nil, errors.AssertionFailedf("need to specify dir for NewHeapProfiler")
 	}
 
+	dumpStore := dumpstore.NewStore(dir, maxCombinedFileSize, st)
+
+	hp := &NonGoAllocProfiler{
+		profiler: makeProfiler(
+			newProfileStore(dumpStore, JemallocFileNamePrefix, JemallocFileNameSuffix, st),
+			zeroFloor,
+			envMemprofInterval,
+		),
+	}
+
 	if jemallocHeapDump != nil {
-		log.Infof(ctx, "writing jemalloc profiles to %s at last every %s", dir, resetHighWaterMarkInterval)
+		log.Infof(ctx, "writing jemalloc profiles to %s at last every %s", dir, hp.highWaterMarkFloor())
 	} else {
 		log.Infof(ctx, `to enable jmalloc profiling: "export MALLOC_CONF=prof:true" or "ln -s prof:true /etc/malloc.conf"`)
 	}
 
-	dumpStore := dumpstore.NewStore(dir, maxCombinedFileSize, st)
-
-	hp := &NonGoAllocProfiler{
-		profiler{
-			store: newProfileStore(dumpStore, JemallocFileNamePrefix, JemallocFileNameSuffix, st),
-		},
-	}
 	return hp, nil
 }
 
