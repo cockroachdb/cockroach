@@ -67,7 +67,7 @@ func NewCPUProfiler(ctx context.Context, dir string, st *cluster.Settings) (*Cpu
 		profiler: profiler{
 			store:              newProfileStore(dumpStore, CpuProfFileNamePrefix, HeapFileNameSuffix, st),
 			highwaterMarkBytes: cpuUsageCombined.Get(&st.SV),
-			customInterval:     cpuProfileInterval.Get(&st.SV),
+			resetInterval:      cpuProfileInterval.Get(&st.SV),
 		},
 		st: st,
 	}
