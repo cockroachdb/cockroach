@@ -30,6 +30,29 @@ SELECT crdb_internal.node_executable_version()
 ----
 22.2
 
+# start of test that user cmd nodeidx opt works when used for a previously used user
+
+user root nodeidx=2
+
+query T
+SELECT crdb_internal.node_executable_version()
+----
+22.2
+
+query B
+SELECT crdb_internal.node_executable_version() SIMILAR TO '1000022.2-%'
+----
+false
+
+user root nodeidx=0
+
+query B
+SELECT crdb_internal.node_executable_version() SIMILAR TO '1000022.2-%'
+----
+true
+
+# end of test that user cmd nodeidx opt works when used for a previously used user
+
 upgrade 2
 
 query B

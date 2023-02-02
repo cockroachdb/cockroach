@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/hba"
@@ -122,9 +123,9 @@ type PreServeConnHandler struct {
 	acceptTenantName bool
 }
 
-// MakePreServeConnHandler creates a PreServeConnHandler.
+// NewPreServeConnHandler creates a PreServeConnHandler.
 // sv refers to the setting values "outside" of the current tenant - i.e. from the storage cluster.
-func MakePreServeConnHandler(
+func NewPreServeConnHandler(
 	ambientCtx log.AmbientContext,
 	cfg *base.Config,
 	st *cluster.Settings,
@@ -132,7 +133,7 @@ func MakePreServeConnHandler(
 	histogramWindow time.Duration,
 	parentMemoryMonitor *mon.BytesMonitor,
 	acceptTenantName bool,
-) PreServeConnHandler {
+) *PreServeConnHandler {
 	ctx := ambientCtx.AnnotateCtx(context.Background())
 	metrics := makeTenantIndependentMetrics(histogramWindow)
 	s := PreServeConnHandler{
@@ -156,7 +157,7 @@ func MakePreServeConnHandler(
 	// TODO(knz,ben): Use a cluster setting for this.
 	s.trustClientProvidedRemoteAddr.Set(trustClientProvidedRemoteAddrOverride)
 
-	return s
+	return &s
 }
 
 // AnnotateCtxForIncomingConn annotates the provided context with a
@@ -201,6 +202,20 @@ func makeTenantIndependentMetrics(histogramWindow time.Duration) tenantIndepende
 // Metrics returns the set of metrics structs.
 func (s *PreServeConnHandler) Metrics() (res []interface{}) {
 	return []interface{}{&s.tenantIndependentMetrics}
+}
+
+// SendRoutingError informs the client that they selected an invalid
+// cluster and closes the connection.
+func (s *PreServeConnHandler) SendRoutingError(
+	ctx context.Context, conn net.Conn, tenantName roachpb.TenantName,
+) {
+	err := errors.WithHint(
+		pgerror.Newf(pgcode.ConnectionException,
+			"service unavailable for target tenant (%v)", tenantName),
+		`Double check your "-ccluster=" connection option or your "cluster:" database name prefix.`)
+
+	_ = s.sendErr(ctx, conn, err)
+	_ = conn.Close()
 }
 
 // sendErr sends errors to the client during the connection startup
