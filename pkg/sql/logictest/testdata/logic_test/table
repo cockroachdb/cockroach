@@ -593,6 +593,7 @@ kv_catalog_comments                    NULL
 kv_catalog_descriptor                  NULL
 kv_catalog_namespace                   NULL
 kv_catalog_zones                       NULL
+kv_dropped_relations                   NULL
 kv_node_liveness                       NULL
 kv_node_status                         NULL
 kv_store_status                        NULL

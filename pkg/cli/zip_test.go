@@ -84,6 +84,7 @@ table_name NOT IN (
 	'kv_catalog_descriptor',
 	'kv_catalog_namespace',
 	'kv_catalog_zones',
+	'kv_dropped_relations',
 	'lost_descriptors_with_data',
 	'table_columns',
 	'table_row_statistics',

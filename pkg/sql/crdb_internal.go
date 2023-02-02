@@ -137,6 +137,7 @@ var crdbInternal = virtualSchema{
 		catconstants.CrdbInternalCreateStmtsTableID:                 crdbInternalCreateStmtsTable,
 		catconstants.CrdbInternalCreateTypeStmtsTableID:             crdbInternalCreateTypeStmtsTable,
 		catconstants.CrdbInternalDatabasesTableID:                   crdbInternalDatabasesTable,
+		catconstants.CrdbInternalDroppedRelationsViewID:             crdbInternalDroppedRelationsView,
 		catconstants.CrdbInternalSuperRegions:                       crdbInternalSuperRegions,
 		catconstants.CrdbInternalFeatureUsageID:                     crdbInternalFeatureUsage,
 		catconstants.CrdbInternalForwardDependenciesTableID:         crdbInternalForwardDependenciesTable,
@@ -3697,6 +3698,7 @@ CREATE VIEW crdb_internal.ranges AS SELECT ` +
 		colinfo.RangesExtraRenders +
 		`FROM crdb_internal.ranges_no_leases`,
 	resultColumns: colinfo.Ranges,
+	comment:       "ranges is a view which queries ranges_no_leases for system ranges",
 }
 
 // descriptorsByType is a utility function that iterates through a slice of
@@ -6338,6 +6340,59 @@ GROUP BY
 		{Name: "statistics", Typ: types.Jsonb},
 		{Name: "aggregation_interval", Typ: types.Interval},
 	},
+}
+
+var crdbInternalDroppedRelationsView = virtualSchemaView{
+	schema: `
+CREATE VIEW crdb_internal.kv_dropped_relations AS
+WITH
+	dropped_relations
+		AS (
+			SELECT
+				id,
+				(descriptor->'table'->>'name') AS name,
+				(descriptor->'table'->'parentId')::INT8 AS parent_id,
+				(descriptor->'table'->'unexposedParentSchemaId')::INT8
+					AS parent_schema_id,
+				to_timestamp(
+					((descriptor->'table'->>'dropTime')::DECIMAL * 0.000000001)::FLOAT8
+				)
+					AS drop_time
+			FROM
+				crdb_internal.kv_catalog_descriptor
+			WHERE
+				descriptor->'table'->>'state' = 'DROP'
+		),
+	gc_ttl
+		AS (
+			SELECT
+				id, (config->'gc'->'ttlSeconds')::INT8 AS ttl
+			FROM
+				crdb_internal.kv_catalog_zones
+		)
+SELECT
+	dr.parent_id,
+	dr.parent_schema_id,
+	dr.name,
+	dr.id,
+	dr.drop_time,
+	COALESCE(gc.ttl, db_gc.ttl, root_gc.ttl) * '1 second'::INTERVAL AS ttl
+FROM
+	dropped_relations AS dr
+	LEFT JOIN gc_ttl AS gc ON gc.id = dr.id
+	LEFT JOIN gc_ttl AS db_gc ON db_gc.id = dr.parent_id
+	LEFT JOIN gc_ttl AS root_gc ON root_gc.id = 0
+ORDER BY
+	parent_id, parent_schema_id, id`,
+	resultColumns: colinfo.ResultColumns{
+		{Name: "parent_id", Typ: types.Int},
+		{Name: "parent_schema_id", Typ: types.Int},
+		{Name: "name", Typ: types.String},
+		{Name: "id", Typ: types.Int},
+		{Name: "drop_time", Typ: types.Timestamp},
+		{Name: "ttl", Typ: types.Interval},
+	},
+	comment: "kv_dropped_relations contains all dropped relations waiting for garbage collection",
 }
 
 // crdbInternalTenantUsageDetailsView, exposes system ranges.

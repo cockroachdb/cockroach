@@ -15,9 +15,11 @@ import (
 	"context"
 	"encoding/hex"
 	"sort"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -31,11 +33,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/zone"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -787,4 +791,49 @@ func (p *planner) ExternalWriteFile(ctx context.Context, uri string, content []b
 		return err
 	}
 	return cloud.WriteFile(ctx, conn, "", bytes.NewReader(content))
+}
+
+// UpsertDroppedRelationGCTTL is part of the Planner interface.
+func (p *planner) UpsertDroppedRelationGCTTL(
+	ctx context.Context, id int64, ttl duration.Duration,
+) error {
+	// Privilege check.
+	const method = "crdb_internal.upsert_dropped_relation_gc_ttl()"
+	err := checkPlannerStateForRepairFunctions(ctx, p, method)
+	if err != nil {
+		return err
+	}
+
+	// Fetch the descriptor and check that it's a dropped table.
+	tbl, err := p.Descriptors().ByID(p.txn).Get().Table(ctx, descpb.ID(id))
+	if err != nil {
+		return err
+	}
+	if !tbl.Dropped() {
+		return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState, "relation %q (%d) is not dropped")
+	}
+
+	// Build the new or updated zone config.
+	zc, err := p.Descriptors().GetZoneConfig(ctx, p.txn, tbl.GetID())
+	if err != nil {
+		return err
+	}
+	if zc == nil {
+		zc = zone.NewZoneConfigWithRawBytes(&zonepb.ZoneConfig{}, nil /* expected raw bytes */)
+	} else {
+		zc = zc.Clone()
+	}
+	if gc := zc.ZoneConfigProto().GC; gc == nil {
+		zc.ZoneConfigProto().GC = &zonepb.GCPolicy{}
+	}
+	zc.ZoneConfigProto().GC.TTLSeconds = int32(ttl.Nanos() / int64(time.Second))
+
+	// Write the new or updated zone config.
+	b := p.txn.NewBatch()
+	if err := p.Descriptors().WriteZoneConfigToBatch(
+		ctx, p.extendedEvalCtx.Tracing.KVTracingEnabled(), b, tbl.GetID(), zc,
+	); err != nil {
+		return err
+	}
+	return p.txn.Run(ctx, b)
 }
