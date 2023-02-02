@@ -149,6 +149,13 @@ message StreamIngestionProgress {
   // back any additional ingested data, to bring the ingested cluster to a
   // consistent state as of the CutoverTime.
   util.hlc.Timestamp cutover_time = 1 [(gogoproto.nullable) = false];
+
+  // ReplicationStatus is the status of the tenant that has a replication
+  // (ingestion) job.
+  uint32 replication_status = 6 [
+    (gogoproto.customtype) = "ReplicationStatus",
+    (gogoproto.nullable) = false];
+
   // PartitionProgress maps partition addresses to their progress.
   // TODO(pbardea): This could scale O(partitions) = O(nodes).
   map<string, PartitionProgress> partition_progress = 2 [(gogoproto.nullable) = false];

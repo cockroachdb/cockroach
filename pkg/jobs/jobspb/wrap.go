@@ -89,6 +89,39 @@ func (p *Payload) CheckType() (Type, error) {
 // by bazel if it were not imported in a non-generated file.
 var _ base.SQLInstanceID
 
+// ReplicationStatus describes the status of the replication stream, and stored
+// on the stream ingestion job
+type ReplicationStatus uint8
+
+const (
+	InitializingReplication   ReplicationStatus = 0
+	Replicating               ReplicationStatus = 1
+	ReplicationPaused         ReplicationStatus = 2
+	ReplicationPendingCutover ReplicationStatus = 3
+	ReplicationCuttingOver    ReplicationStatus = 4
+	ReplicationError          ReplicationStatus = 5
+)
+
+// String implements fmt.Stringer.
+func (rs ReplicationStatus) String() string {
+	switch rs {
+	case InitializingReplication:
+		return "initializing replication"
+	case Replicating:
+		return "replicating"
+	case ReplicationPaused:
+		return "replication paused"
+	case ReplicationPendingCutover:
+		return "replication pending cutover"
+	case ReplicationCuttingOver:
+		return "replication cutting over"
+	case ReplicationError:
+		return "replication error"
+	default:
+		return fmt.Sprintf("unimplemented-%d", int(rs))
+	}
+}
+
 // AutoStatsName is the name to use for statistics created automatically.
 // The name is chosen to be something that users are unlikely to choose when
 // running CREATE STATISTICS manually.
