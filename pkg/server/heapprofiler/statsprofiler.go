@@ -61,7 +61,7 @@ func NewStatsProfiler(
 		),
 	}
 
-	log.Infof(ctx, "writing memory stats to %s at last every %s", log.SafeManaged(dir), hp.highWaterMarkFloor())
+	log.Infof(ctx, "writing memory stats to %s at last every %s", log.SafeManaged(dir), fmt.Sprint(hp.highWaterMarkFloor()))
 
 	return hp, nil
 }
