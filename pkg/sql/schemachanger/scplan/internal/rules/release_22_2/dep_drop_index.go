@@ -91,7 +91,7 @@ func init() {
 	// should be able to express the _absence_ of a target element as a query
 	// clause.
 	registerDepRuleForDrop(
-		"partial predicate removed right before secondary index when rules.Not dropping relation",
+		"partial predicate removed right before secondary index when not dropping relation",
 		scgraph.SameStagePrecedence,
 		"partial-predicate", "index",
 		scpb.Status_ABSENT, scpb.Status_ABSENT,

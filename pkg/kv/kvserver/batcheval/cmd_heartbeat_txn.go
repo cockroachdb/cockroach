@@ -73,6 +73,17 @@ func HeartbeatTxn(
 		}
 	}
 
+	// If the transaction is pending, take the opportunity to determine the
+	// minimum timestamp that it will be allowed to commit at to account for any
+	// transaction pushes. This can help inform the transaction coordinator of
+	// pushes earlier than commit time, but is entirely best-effort.
+	//
+	// NOTE: we cannot do this if the transaction record is STAGING because it may
+	// already be implicitly committed.
+	if txn.Status == roachpb.PENDING {
+		BumpToMinTxnCommitTS(ctx, cArgs.EvalCtx, &txn)
+	}
+
 	if !txn.Status.IsFinalized() {
 		// NOTE: this only updates the LastHeartbeat. It doesn't update any other
 		// field from h.Txn, even if it could. Whether that's a good thing or not

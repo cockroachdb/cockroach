@@ -119,20 +119,29 @@ func UpdateAbortSpan(
 }
 
 // CanCreateTxnRecord determines whether a transaction record can be created for
-// the provided transaction. If not, the function will return an error. If so,
-// the function may modify the provided transaction.
+// the provided transaction. If not, the function will return an error.
 func CanCreateTxnRecord(ctx context.Context, rec EvalContext, txn *roachpb.Transaction) error {
 	// The transaction could not have written a transaction record previously
 	// with a timestamp below txn.MinTimestamp.
-	ok, minCommitTS, reason := rec.CanCreateTxnRecord(ctx, txn.ID, txn.Key, txn.MinTimestamp)
+	ok, reason := rec.CanCreateTxnRecord(ctx, txn.ID, txn.Key, txn.MinTimestamp)
 	if !ok {
 		log.VEventf(ctx, 2, "txn tombstone present; transaction has been aborted")
 		return roachpb.NewTransactionAbortedError(reason)
 	}
+	return nil
+}
+
+// BumpToMinTxnCommitTS increases the provided transaction's write timestamp to
+// the minimum timestamp at which it is allowed to commit. The transaction must
+// be PENDING.
+func BumpToMinTxnCommitTS(ctx context.Context, rec EvalContext, txn *roachpb.Transaction) {
+	if txn.Status != roachpb.PENDING {
+		log.Fatalf(ctx, "non-pending txn passed to BumpToMinTxnCommitTS: %v", txn)
+	}
+	minCommitTS := rec.MinTxnCommitTS(ctx, txn.ID, txn.Key)
 	if bumped := txn.WriteTimestamp.Forward(minCommitTS); bumped {
 		log.VEventf(ctx, 2, "write timestamp bumped by txn tombstone to: %s", txn.WriteTimestamp)
 	}
-	return nil
 }
 
 // SynthesizeTxnFromMeta creates a synthetic transaction object from
@@ -178,10 +187,11 @@ func SynthesizeTxnFromMeta(
 	// Determine whether the record could ever be allowed to be written in the
 	// future. The transaction could not have written a transaction record
 	// previously with a timestamp below txn.MinTimestamp.
-	ok, minCommitTS, _ := rec.CanCreateTxnRecord(ctx, txn.ID, txn.Key, txn.MinTimestamp)
+	ok, _ := rec.CanCreateTxnRecord(ctx, txn.ID, txn.Key, txn.MinTimestamp)
 	if ok {
 		// Forward the provisional commit timestamp by the minimum timestamp that
-		// the transaction would be able to create a transaction record at.
+		// the transaction would be able to commit at.
+		minCommitTS := rec.MinTxnCommitTS(ctx, txn.ID, txn.Key)
 		synth.WriteTimestamp.Forward(minCommitTS)
 	} else {
 		// Mark the transaction as ABORTED because it is uncommittable.

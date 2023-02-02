@@ -338,6 +338,27 @@ func EndTxn(
 
 	// Attempt to commit or abort the transaction per the args.Commit parameter.
 	if args.Commit {
+		// Bump the transaction's provisional commit timestamp to account for any
+		// transaction pushes, if necessary. See the state machine diagram in
+		// Replica.CanCreateTxnRecord for details.
+		switch {
+		case !recordAlreadyExisted, existingTxn.Status == roachpb.PENDING:
+			BumpToMinTxnCommitTS(ctx, cArgs.EvalCtx, reply.Txn)
+		case existingTxn.Status == roachpb.STAGING:
+			// Don't check timestamp cache. The transaction could not have been pushed
+			// while its record was in the STAGING state so checking is unnecessary.
+			// Furthermore, checking the timestamp cache and increasing the commit
+			// timestamp at this point would be incorrect, because the transaction may
+			// have entered the implicit commit state.
+		default:
+			panic("unreachable")
+		}
+
+		// Determine whether the transaction's commit is successful or should
+		// trigger a retry error.
+		// NOTE: if the transaction is in the implicit commit state and this EndTxn
+		// request is marking the commit as explicit, this check must succeed. We
+		// assert this in txnCommitter.makeTxnCommitExplicitAsync.
 		if retry, reason, extraMsg := IsEndTxnTriggeringRetryError(reply.Txn, args); retry {
 			return result.Result{}, roachpb.NewTransactionRetryError(reason, extraMsg)
 		}

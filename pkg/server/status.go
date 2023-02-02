@@ -3056,7 +3056,7 @@ func (s *statusServer) CancelSession(
 		}, nil
 	}
 
-	if err := s.checkCancelPrivilege(ctx, reqUsername, session.BaseSessionUser()); err != nil {
+	if err := s.checkCancelPrivilege(ctx, reqUsername, session.SessionUser()); err != nil {
 		// NB: not using serverError() here since the priv checker
 		// already returns a proper gRPC error status.
 		return nil, err
@@ -3109,7 +3109,7 @@ func (s *statusServer) CancelQuery(
 		}, nil
 	}
 
-	if err := s.checkCancelPrivilege(ctx, reqUsername, session.BaseSessionUser()); err != nil {
+	if err := s.checkCancelPrivilege(ctx, reqUsername, session.SessionUser()); err != nil {
 		// NB: not using serverError() here since the priv checker
 		// already returns a proper gRPC error status.
 		return nil, err

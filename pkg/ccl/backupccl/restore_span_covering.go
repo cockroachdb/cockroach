@@ -497,7 +497,7 @@ func generateAndSendImportSpans(
 	var covFilesByLayer [][]backuppb.BackupManifest_File
 	var firstInSpan bool
 
-	flush := func() {
+	flush := func(ctx context.Context) error {
 		entry := execinfrapb.RestoreSpanEntry{
 			Span: lastCovSpan,
 		}
@@ -513,8 +513,14 @@ func generateAndSendImportSpans(
 		}
 
 		if len(entry.Files) > 0 {
-			spanCh <- entry
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case spanCh <- entry:
+			}
 		}
+
+		return nil
 	}
 
 	for _, span := range requiredSpans {
@@ -630,7 +636,9 @@ func generateAndSendImportSpans(
 					lastCovSpan.EndKey = coverSpan.EndKey
 					lastCovSpanSize = lastCovSpanSize + newCovFilesSize
 				} else {
-					flush()
+					if err := flush(ctx); err != nil {
+						return err
+					}
 					lastCovSpan = coverSpan
 					covFilesByLayer = filesByLayer
 					lastCovSpanSize = covSize
@@ -646,8 +654,7 @@ func generateAndSendImportSpans(
 		}
 	}
 
-	flush()
-	return nil
+	return flush(ctx)
 }
 
 // fileSpanStartAndEndKeyIterator yields (almost) all of the start and end keys

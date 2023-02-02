@@ -146,11 +146,23 @@ func (rec SpanSetReplicaEvalContext) GetLastSplitQPS(ctx context.Context) float6
 // for details about its arguments, return values, and preconditions.
 func (rec SpanSetReplicaEvalContext) CanCreateTxnRecord(
 	ctx context.Context, txnID uuid.UUID, txnKey []byte, txnMinTS hlc.Timestamp,
-) (bool, hlc.Timestamp, roachpb.TransactionAbortedReason) {
+) (bool, roachpb.TransactionAbortedReason) {
 	rec.ss.AssertAllowed(spanset.SpanReadOnly,
 		roachpb.Span{Key: keys.TransactionKey(txnKey, txnID)},
 	)
 	return rec.i.CanCreateTxnRecord(ctx, txnID, txnKey, txnMinTS)
+}
+
+// MinTxnCommitTS determines the minimum timestamp at which a transaction with
+// the provided ID and key can commit. See Replica.MinTxnCommitTS for details
+// about its arguments, return values, and preconditions.
+func (rec SpanSetReplicaEvalContext) MinTxnCommitTS(
+	ctx context.Context, txnID uuid.UUID, txnKey []byte,
+) hlc.Timestamp {
+	rec.ss.AssertAllowed(spanset.SpanReadOnly,
+		roachpb.Span{Key: keys.TransactionKey(txnKey, txnID)},
+	)
+	return rec.i.MinTxnCommitTS(ctx, txnID, txnKey)
 }
 
 // GetGCThreshold returns the GC threshold of the Range, typically updated when

@@ -31,6 +31,8 @@ func join(a, b NodeVars, attr rel.Attr, eqVarName rel.Var) rel.Clause {
 
 var _ = join
 
+// JoinOn joins on two node variable attributes, requiring them to have
+// the same value.
 func JoinOn(a NodeVars, aAttr rel.Attr, b NodeVars, bAttr rel.Attr, eqVarName rel.Var) rel.Clause {
 	return rel.And(
 		a.El.AttrEqVar(aAttr, eqVarName),
@@ -38,14 +40,20 @@ func JoinOn(a NodeVars, aAttr rel.Attr, b NodeVars, bAttr rel.Attr, eqVarName re
 	)
 }
 
+// FilterElements is used to construct a clause which runs an arbitrary predicate
+// // over variables.
 func FilterElements(name string, a, b NodeVars, fn interface{}) rel.Clause {
 	return rel.Filter(name, a.El, b.El)(fn)
 }
 
+// ToPublicOrTransient is used to construct a clause that will require both
+// elements to be targeting a public/transient state.
 func ToPublicOrTransient(from, to NodeVars) rel.Clause {
 	return toPublicOrTransientUntyped(from.Target, to.Target)
 }
 
+// StatusesToPublicOrTransient requires that elements have a target of
+// ToPublicOrTransient and that the current status is fromStatus, toStatus.
 func StatusesToPublicOrTransient(
 	from NodeVars, fromStatus scpb.Status, to NodeVars, toStatus scpb.Status,
 ) rel.Clause {
@@ -60,6 +68,8 @@ func toAbsent(from, to NodeVars) rel.Clause {
 	return toAbsentUntyped(from.Target, to.Target)
 }
 
+// StatusesToAbsent requires that elements have a target of
+// toAbsent and that the current status is fromStatus/toStatus.
 func StatusesToAbsent(
 	from NodeVars, fromStatus scpb.Status, to NodeVars, toStatus scpb.Status,
 ) rel.Clause {
@@ -74,6 +84,8 @@ func transient(from, to NodeVars) rel.Clause {
 	return transientUntyped(from.Target, to.Target)
 }
 
+// StatusesTransient requires that elements have a target of
+// transient and that the current status is fromStatus/toStatus.
 func StatusesTransient(
 	from NodeVars, fromStatus scpb.Status, to NodeVars, toStatus scpb.Status,
 ) rel.Clause {
@@ -84,32 +96,40 @@ func StatusesTransient(
 	)
 }
 
+// JoinOnDescID joins elements on descriptor ID.
 func JoinOnDescID(a, b NodeVars, descriptorIDVar rel.Var) rel.Clause {
 	return JoinOnDescIDUntyped(a.El, b.El, descriptorIDVar)
 }
 
+// JoinReferencedDescID joins elements on referenced descriptor ID.
 func JoinReferencedDescID(a, b NodeVars, descriptorIDVar rel.Var) rel.Clause {
 	return joinReferencedDescIDUntyped(a.El, b.El, descriptorIDVar)
 }
 
+// JoinOnColumnID joins elements on column ID.
 func JoinOnColumnID(a, b NodeVars, relationIDVar, columnIDVar rel.Var) rel.Clause {
 	return joinOnColumnIDUntyped(a.El, b.El, relationIDVar, columnIDVar)
 }
 
+// JoinOnIndexID joins elements on index ID.
 func JoinOnIndexID(a, b NodeVars, relationIDVar, indexIDVar rel.Var) rel.Clause {
 	return joinOnIndexIDUntyped(a.El, b.El, relationIDVar, indexIDVar)
 }
 
+// JoinOnConstraintID joins elements on constraint ID.
 func JoinOnConstraintID(a, b NodeVars, relationIDVar, constraintID rel.Var) rel.Clause {
 	return joinOnConstraintIDUntyped(a.El, b.El, relationIDVar, constraintID)
 }
 
+// ColumnInIndex requires that a column exists within an index.
 func ColumnInIndex(
 	indexColumn, index NodeVars, relationIDVar, columnIDVar, indexIDVar rel.Var,
 ) rel.Clause {
 	return columnInIndexUntyped(indexColumn.El, index.El, relationIDVar, columnIDVar, indexIDVar)
 }
 
+// ColumnInSwappedInPrimaryIndex requires that a column exists within a
+// primary index being swapped.
 func ColumnInSwappedInPrimaryIndex(
 	indexColumn, index NodeVars, relationIDVar, columnIDVar, indexIDVar rel.Var,
 ) rel.Clause {
@@ -156,6 +176,8 @@ var (
 				referenced.AttrEqVar(screl.DescID, id),
 			}
 		})
+	// JoinOnDescIDUntyped joins on descriptor ID, in an unsafe non-type safe
+	// manner.
 	JoinOnDescIDUntyped = screl.Schema.Def3(
 		"joinOnDescID", "a", "b", "id", func(
 			a, b, id rel.Var,
@@ -231,6 +253,7 @@ var (
 		})
 )
 
+// ForEachElement executes a function for each element type.
 func ForEachElement(fn func(element scpb.Element) error) error {
 	var ep scpb.ElementProto
 	vep := reflect.ValueOf(ep)
@@ -243,6 +266,8 @@ func ForEachElement(fn func(element scpb.Element) error) error {
 	return nil
 }
 
+// ForEachElementInActiveVersion executes a function for each element supported within
+// the current active version.
 func ForEachElementInActiveVersion(
 	version clusterversion.ClusterVersion, fn func(element scpb.Element) error,
 ) error {
@@ -261,6 +286,7 @@ func ForEachElementInActiveVersion(
 
 type elementTypePredicate = func(e scpb.Element) bool
 
+// Or or's a series of element type predicates.
 func Or(predicates ...elementTypePredicate) elementTypePredicate {
 	return func(e scpb.Element) bool {
 		for _, p := range predicates {
@@ -272,6 +298,7 @@ func Or(predicates ...elementTypePredicate) elementTypePredicate {
 	}
 }
 
+// Not not's a element type predicate.
 func Not(predicate elementTypePredicate) elementTypePredicate {
 	return func(e scpb.Element) bool {
 		return !predicate(e)

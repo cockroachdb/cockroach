@@ -58,6 +58,27 @@ upsert descriptor #104
      unexposedParentSchemaId: 101
   -  version: "1"
   +  version: "2"
+upsert descriptor #105
+  ...
+     formatVersion: 3
+     id: 105
+  +  inboundFks:
+  +  - constraintId: 2
+  +    name: crdb_internal_constraint_2_name_placeholder
+  +    originColumnIds:
+  +    - 1
+  +    originTableId: 104
+  +    referencedColumnIds:
+  +    - 1
+  +    referencedTableId: 105
+  +    validity: Validating
+     modificationTime: {}
+     name: t2
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "1"
+  +  version: "2"
 # end StatementPhase
 # begin PreCommitPhase
 ## PreCommitPhase stage 1 of 2 with 1 MutationType op
@@ -128,6 +149,21 @@ upsert descriptor #105
   +    revertible: true
      families:
      - columnIds:
+  ...
+     formatVersion: 3
+     id: 105
+  +  inboundFks:
+  +  - constraintId: 2
+  +    name: crdb_internal_constraint_2_name_placeholder
+  +    originColumnIds:
+  +    - 1
+  +    originTableId: 104
+  +    referencedColumnIds:
+  +    - 1
+  +    referencedTableId: 105
+  +    validity: Validating
+     modificationTime: {}
+     name: t2
   ...
        time: {}
      unexposedParentSchemaId: 101
@@ -223,18 +259,16 @@ upsert descriptor #105
      families:
      - columnIds:
   ...
-     formatVersion: 3
-     id: 105
-  +  inboundFks:
-  +  - constraintId: 2
+     inboundFks:
+     - constraintId: 2
+  -    name: crdb_internal_constraint_2_name_placeholder
   +    name: t1_i_fkey
-  +    originColumnIds:
-  +    - 1
-  +    originTableId: 104
-  +    referencedColumnIds:
-  +    - 1
-  +    referencedTableId: 105
-  +    validity: Validating
+       originColumnIds:
+       - 1
+  ...
+       - 1
+       referencedTableId: 105
+  -    validity: Validating
      modificationTime: {}
      name: t2
   ...
