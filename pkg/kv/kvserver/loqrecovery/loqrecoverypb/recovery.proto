@@ -50,6 +50,8 @@ message ReplicaInfo {
   uint64 raft_committed_index = 5;
   repeated DescriptorChangeInfo raft_log_descriptor_changes = 6 [(gogoproto.nullable) = false,
     (gogoproto.jsontag) = "raft_log_descriptor_changes,omitempty"];
+  bool local_assumes_leaseholder = 7 [
+    (gogoproto.jsontag) = "raft_log_descriptor_changes,omitempty"];
 }
 
 // Collection of replica information gathered in a collect-info run.

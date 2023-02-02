@@ -168,6 +168,7 @@ type replicaDescriptorView struct {
 	StoreID     roachpb.StoreID     `yaml:"StoreID"`
 	ReplicaID   roachpb.ReplicaID   `yaml:"ReplicaID"`
 	ReplicaType roachpb.ReplicaType `yaml:"ReplicaType,omitempty"`
+	Leaseholder bool                `yaml:"Leaseholder,omitempty"`
 }
 
 func (r replicaDescriptorView) asReplicaDescriptor() roachpb.ReplicaDescriptor {
@@ -368,13 +369,17 @@ func buildReplicaDescriptorFromTestData(
 	var replicas []roachpb.ReplicaDescriptor
 	var replicaID roachpb.ReplicaID
 	maxReplicaID := replica.Replicas[0].ReplicaID
-	for _, r := range replica.Replicas {
+	var lhIndex int
+	for i, r := range replica.Replicas {
 		if r.ReplicaID > maxReplicaID {
 			maxReplicaID = r.ReplicaID
 		}
 		replicas = append(replicas, r.asReplicaDescriptor())
 		if r.NodeID == replica.NodeID && r.StoreID == replica.StoreID {
 			replicaID = r.ReplicaID
+		}
+		if r.Leaseholder {
+			lhIndex = i
 		}
 	}
 	if replica.Generation == 0 {
@@ -391,7 +396,7 @@ func buildReplicaDescriptorFromTestData(
 	lease := roachpb.Lease{
 		Start:           clock.Now().Add(5*time.Minute.Nanoseconds(), 0).UnsafeToClockTimestamp(),
 		Expiration:      nil,
-		Replica:         desc.InternalReplicas[0],
+		Replica:         desc.InternalReplicas[lhIndex],
 		ProposedTS:      nil,
 		Epoch:           0,
 		Sequence:        0,

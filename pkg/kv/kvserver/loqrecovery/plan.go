@@ -427,6 +427,9 @@ func rankReplicasBySurvivability(replicas []loqrecoverypb.ReplicaInfo) rankedRep
 		if replicas[i].RaftAppliedIndex < replicas[j].RaftAppliedIndex {
 			return false
 		}
+		if replicas[i].LocalAssumesLeaseholder != replicas[j].LocalAssumesLeaseholder {
+			return replicas[i].LocalAssumesLeaseholder
+		}
 		return replicas[i].StoreID > replicas[j].StoreID
 	})
 	return replicas

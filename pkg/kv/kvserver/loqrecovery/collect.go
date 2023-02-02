@@ -160,6 +160,8 @@ func visitStoreReplicas(
 			return err
 		}
 
+		localIsLeaseholder := rstate.Lease != nil && rstate.Lease.Replica.StoreID == storeID
+
 		return send(loqrecoverypb.ReplicaInfo{
 			StoreID:                  storeID,
 			NodeID:                   nodeID,
@@ -167,6 +169,7 @@ func visitStoreReplicas(
 			RaftAppliedIndex:         rstate.RaftAppliedIndex,
 			RaftCommittedIndex:       hstate.Commit,
 			RaftLogDescriptorChanges: rangeUpdates,
+			LocalAssumesLeaseholder:  localIsLeaseholder,
 		})
 	}); err != nil {
 		return err
