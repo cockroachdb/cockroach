@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-var MaxCombinedCPUProfFileSize = settings.RegisterByteSizeSetting(
+var maxCombinedCPUProfFileSize = settings.RegisterByteSizeSetting(
 	settings.TenantWritable,
 	"server.cpu_profile.total_dump_size_limit",
 	"maximum combined disk size of preserved CPU profiles",
@@ -46,29 +46,35 @@ var cpuProfileInterval = settings.RegisterDurationSetting(
 	// account the high water mark seen. Without this, if CPU ever reaches 100%,
 	// we'll never take another profile.
 	"duration after which the high water mark resets and a new cpu profile can be taken",
-	1*time.Minute, settings.PositiveDuration,
+	5*time.Minute, settings.PositiveDuration,
 )
 
-const CpuProfTimeFormat = "2006-01-02T15_04_05.000"
-const CpuProfFileNamePrefix = "cpuprof."
+var cpuProfileDuration = settings.RegisterDurationSetting(
+	settings.TenantWritable,
+	"server.cpu_profile.duration",
+	"the duration for how long a cpu profile is taken",
+	10*time.Second, settings.PositiveDuration,
+)
 
-type CpuProfiler struct {
+const cpuProfFileNamePrefix = "cpuprof."
+
+type CPUProfiler struct {
 	profiler profiler
 	st       *cluster.Settings
 }
 
 // NewCPUProfiler creates a new CPUProfiler. dir indicates the directory which
 // dumps are stored.
-func NewCPUProfiler(ctx context.Context, dir string, st *cluster.Settings) (*CpuProfiler, error) {
+func NewCPUProfiler(ctx context.Context, dir string, st *cluster.Settings) (*CPUProfiler, error) {
 	if dir == "" {
 		return nil, errors.New("directory to store dumps could not be determined")
 	}
 
 	log.Infof(ctx, "writing cpu profile dumps to %s", log.SafeManaged(dir))
-	dumpStore := dumpstore.NewStore(dir, MaxCombinedCPUProfFileSize, st)
-	cp := &CpuProfiler{
+	dumpStore := dumpstore.NewStore(dir, maxCombinedCPUProfFileSize, st)
+	cp := &CPUProfiler{
 		profiler: makeProfiler(
-			newProfileStore(dumpStore, CpuProfFileNamePrefix, HeapFileNameSuffix, st),
+			newProfileStore(dumpStore, cpuProfFileNamePrefix, HeapFileNameSuffix, st),
 			func() int64 { return cpuUsageCombined.Get(&st.SV) },
 			func() time.Duration { return cpuProfileInterval.Get(&st.SV) },
 		),
@@ -78,11 +84,11 @@ func NewCPUProfiler(ctx context.Context, dir string, st *cluster.Settings) (*Cpu
 }
 
 // MaybeTakeProfile takes a cpu profile if cpu usage is high enough.
-func (cp *CpuProfiler) MaybeTakeProfile(ctx context.Context, currentCpuUsage int64) {
-	cp.profiler.maybeTakeProfile(ctx, currentCpuUsage, cp.takeCpuProfile)
+func (cp *CPUProfiler) MaybeTakeProfile(ctx context.Context, currentCpuUsage int64) {
+	cp.profiler.maybeTakeProfile(ctx, currentCpuUsage, cp.takeCPUProfile)
 }
 
-func (cp *CpuProfiler) takeCpuProfile(ctx context.Context, path string) (success bool) {
+func (cp *CPUProfiler) takeCPUProfile(ctx context.Context, path string) (success bool) {
 	// TODO(santamaura): not CPUProfileWithLabels?
 	if err := debug.CPUProfileDo(cp.st, cluster.CPUProfileDefault, func() error {
 		// Try writing a CPU profile.
@@ -96,6 +102,8 @@ func (cp *CpuProfiler) takeCpuProfile(ctx context.Context, path string) (success
 		if err := pprof.StartCPUProfile(f); err != nil {
 			return err
 		}
+		log.Info(ctx, "taking cpu profile")
+		time.Sleep(cpuProfileDuration.Get(&cp.st.SV))
 		defer pprof.StopCPUProfile()
 		return nil
 	}); err != nil {
