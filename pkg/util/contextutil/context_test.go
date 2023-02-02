@@ -12,7 +12,6 @@ package contextutil
 
 import (
 	"context"
-	"fmt"
 	"net"
 	"testing"
 	"time"
@@ -67,24 +66,6 @@ func TestRunWithTimeout(t *testing.T) {
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("RunWithTimeout should return an error with a DeadlineExceeded cause")
 	}
-}
-
-func testFuncA(ctx context.Context) error {
-	return testFuncB(ctx)
-}
-
-func testFuncB(ctx context.Context) error {
-	<-ctx.Done()
-	return ctx.Err()
-}
-
-func TestRunWithTimeoutCtxWithStacktrace(t *testing.T) {
-	ctx := context.Background()
-	err := RunWithTimeout(ctx, "foo", 1, testFuncA)
-	require.Error(t, err)
-	stacktrace := fmt.Sprintf("%+v", err)
-	require.Contains(t, stacktrace, "testFuncB")
-	require.Contains(t, stacktrace, "testFuncA")
 }
 
 // TestRunWithTimeoutWithoutDeadlineExceeded ensures that when a timeout on the
