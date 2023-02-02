@@ -42,7 +42,7 @@ var cpuUsageCombined = settings.RegisterIntSetting(
 var cpuProfileInterval = settings.RegisterDurationSetting(
 	settings.TenantWritable,
 	"server.cpu_profile.interval",
-	"rate at which cpu profiles can be taken if above qps threshold",
+	"rate at which cpu profiles can be taken if above cpu usage threshold",
 	1*time.Minute, settings.PositiveDuration,
 )
 
