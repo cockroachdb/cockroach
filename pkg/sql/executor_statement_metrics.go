@@ -235,6 +235,7 @@ func (ex *connExecutor) recordStatementSummary(
 				WaitingStmtID:            stmt.QueryID,
 			}
 
+			ex.planner.DistSQLPlanner().distSQLSrv.Metrics.ContendedQueriesCount.Inc(1)
 			ex.server.cfg.ContentionRegistry.AddContentionEvent(contentionEvent)
 		}
 
