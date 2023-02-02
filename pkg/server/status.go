@@ -133,9 +133,15 @@ type metricMarshaler interface {
 	ScrapeIntoPrometheus(pm *metric.PrometheusExporter)
 }
 
+// propagateGatewayMetadata forwards the SQL identity of the original
+// request (as populated by forwardAuthenticationMetadata in
+// grpc-gateway) so it remains available to the remote node handling
+// the request.
 func propagateGatewayMetadata(ctx context.Context) context.Context {
 	if md, ok := metadata.FromIncomingContext(ctx); ok {
-		return metadata.NewOutgoingContext(ctx, md)
+		if u, ok := md[webSessionUserKeyStr]; ok {
+			return metadata.NewOutgoingContext(ctx, metadata.MD{webSessionUserKeyStr: u})
+		}
 	}
 	return ctx
 }
