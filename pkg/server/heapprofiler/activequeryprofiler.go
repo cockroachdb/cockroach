@@ -84,9 +84,11 @@ func NewActiveQueryProfiler(
 
 	log.Infof(ctx, "writing go query profiles to %s", log.SafeManaged(dir))
 	qp := &ActiveQueryProfiler{
-		profiler: profiler{
-			store: newProfileStore(dumpStore, QueryFileNamePrefix, QueryFileNameSuffix, st),
-		},
+		profiler: makeProfiler(
+			newProfileStore(dumpStore, QueryFileNamePrefix, QueryFileNameSuffix, st),
+			zeroFloor,
+			envMemprofInterval, // TODO(obs-inf): this seems wrong
+		),
 		cgroupMemLimit: maxMem,
 	}
 	return qp, nil
