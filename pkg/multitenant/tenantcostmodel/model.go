@@ -19,6 +19,11 @@ import "github.com/cockroachdb/cockroach/pkg/roachpb"
 // using one CPU for a second costs 1000 RUs.
 type RU float64
 
+// RUMultiplier is the multiplier for Request Unit(s). For example, a multiplier
+// of 1.5 means that all Request Unit(s) are multiplied by a factor of 1.5 when
+// computing consumed RUs.
+type RUMultiplier float64
+
 // Config contains the cost model parameters. The values are controlled by
 // cluster settings.
 //
@@ -113,8 +118,8 @@ func (c *Config) ExternalIOIngressCost(bytes int64) RU {
 
 // RequestCost returns the cost, in RUs, of the given request. If it is a write,
 // that includes the per-batch, per-request, and per-byte costs, multiplied by
-// the number of write replicas. If it is a read, then the cost is zero, since
-// reads can only be costed by examining the ResponseInfo.
+// the write multiplier. If it is a read, then the cost is zero, since reads can
+// only be costed by examining the ResponseInfo.
 func (c *Config) RequestCost(bri RequestInfo) RU {
 	if !bri.IsWrite() {
 		return 0
@@ -122,13 +127,13 @@ func (c *Config) RequestCost(bri RequestInfo) RU {
 	cost := c.KVWriteBatch
 	cost += RU(bri.writeCount) * c.KVWriteRequest
 	cost += RU(bri.writeBytes) * c.KVWriteByte
-	return cost * RU(bri.writeReplicas)
+	return cost * RU(bri.writeMultiplier)
 }
 
 // ResponseCost returns the cost, in RUs, of the given response. If it is a
-// read, that includes the per-batch, per-request, and per-byte costs. If it is
-// a write, then the cost is zero, since writes can only be costed by examining
-// the RequestInfo.
+// read, that includes the per-batch, per-request, and per-byte costs,
+// multiplied by the read multiplier. If it is a write, then the cost is zero,
+// since writes can only be costed by examining the RequestInfo.
 func (c *Config) ResponseCost(bri ResponseInfo) RU {
 	if !bri.IsRead() {
 		return 0
@@ -136,13 +141,14 @@ func (c *Config) ResponseCost(bri ResponseInfo) RU {
 	cost := c.KVReadBatch
 	cost += RU(bri.readCount) * c.KVReadRequest
 	cost += RU(bri.readBytes) * c.KVReadByte
-	return cost
+	return cost * RU(bri.readMultiplier)
 }
 
 // RequestInfo captures the BatchRequest information that is used (together with
 // the cost model) to determine the portion of the cost that can be calculated
 // up-front. Specifically: how many writes were batched together, their total
-// size, and the number of target replicas (if the request is a write batch).
+// size, the number of target replicas (if the request is a write batch), and
+// the RU multiplier for the request.
 type RequestInfo struct {
 	// writeReplicas is the number of range replicas to which this write was sent
 	// (i.e. the replication factor). This is 0 if it is a read-only batch.
@@ -153,10 +159,17 @@ type RequestInfo struct {
 	// writeBytes is the total size of all batched writes in the request, in
 	// bytes, or 0 if it is a read-only batch.
 	writeBytes int64
+	// writeMultiplier is the RU multiplier for which this write was sent.
+	// This is usually the same as the number of range replicas (unless a
+	// custom multiplier table was specified for inter-region transfers). This
+	// is 0 if it is a read-only batch.
+	writeMultiplier RUMultiplier
 }
 
 // MakeRequestInfo extracts the relevant information from a BatchRequest.
-func MakeRequestInfo(ba *roachpb.BatchRequest, replicas int) RequestInfo {
+func MakeRequestInfo(
+	ba *roachpb.BatchRequest, replicas int, writeMultiplier RUMultiplier,
+) RequestInfo {
 	// The cost of read-only batches is captured by MakeResponseInfo.
 	if !ba.IsWrite() {
 		return RequestInfo{}
@@ -178,7 +191,12 @@ func MakeRequestInfo(ba *roachpb.BatchRequest, replicas int) RequestInfo {
 			}
 		}
 	}
-	return RequestInfo{writeReplicas: int64(replicas), writeCount: writeCount, writeBytes: writeBytes}
+	return RequestInfo{
+		writeReplicas:   int64(replicas),
+		writeCount:      writeCount,
+		writeBytes:      writeBytes,
+		writeMultiplier: writeMultiplier,
+	}
 }
 
 // IsWrite is true if this was a write batch rather than a read-only batch.
@@ -205,14 +223,22 @@ func (bri RequestInfo) WriteBytes() int64 {
 }
 
 // TestingRequestInfo creates a RequestInfo for testing purposes.
-func TestingRequestInfo(writeReplicas, writeCount, writeBytes int64) RequestInfo {
-	return RequestInfo{writeReplicas: writeReplicas, writeCount: writeCount, writeBytes: writeBytes}
+func TestingRequestInfo(
+	writeReplicas, writeCount, writeBytes int64, writeMultiplier RUMultiplier,
+) RequestInfo {
+	return RequestInfo{
+		writeReplicas:   writeReplicas,
+		writeCount:      writeCount,
+		writeBytes:      writeBytes,
+		writeMultiplier: writeMultiplier,
+	}
 }
 
 // ResponseInfo captures the BatchResponse information that is used (together
 // with the cost model) to determine the portion of the cost that can only be
 // calculated after-the-fact. Specifically: how many reads were batched together
-// and their total size (if the request is a read-only batch).
+// their total size (if the request is a read-only batch), and the RU multiplier
+// for the request.
 type ResponseInfo struct {
 	// isRead is true if this batch contained only read requests, or false if it
 	// was a write batch.
@@ -223,10 +249,16 @@ type ResponseInfo struct {
 	// readBytes is the total size of all batched reads in the response, in
 	// bytes, or 0 if it is a write batch.
 	readBytes int64
+	// readMultiplier is the RU multiplier for which this read was sent. This
+	// is usually 1 (unless a custom multiplier table was specified for
+	// inter-region transfers). This is 0 if it is a write batch.
+	readMultiplier RUMultiplier
 }
 
 // MakeResponseInfo extracts the relevant information from a BatchResponse.
-func MakeResponseInfo(br *roachpb.BatchResponse, isReadOnly bool) ResponseInfo {
+func MakeResponseInfo(
+	br *roachpb.BatchResponse, isReadOnly bool, readMultiplier RUMultiplier,
+) ResponseInfo {
 	// The cost of non read-only batches is captured by MakeRequestInfo.
 	if !isReadOnly {
 		return ResponseInfo{}
@@ -245,7 +277,12 @@ func MakeResponseInfo(br *roachpb.BatchResponse, isReadOnly bool) ResponseInfo {
 			readBytes += resp.Header().NumBytes
 		}
 	}
-	return ResponseInfo{isRead: true, readCount: readCount, readBytes: readBytes}
+	return ResponseInfo{
+		isRead:         true,
+		readCount:      readCount,
+		readBytes:      readBytes,
+		readMultiplier: readMultiplier,
+	}
 }
 
 // IsRead is true if this was a read-only batch rather than a write batch.
@@ -266,6 +303,13 @@ func (bri ResponseInfo) ReadBytes() int64 {
 }
 
 // TestingResponseInfo creates a ResponseInfo for testing purposes.
-func TestingResponseInfo(isRead bool, readCount, readBytes int64) ResponseInfo {
-	return ResponseInfo{isRead: isRead, readCount: readCount, readBytes: readBytes}
+func TestingResponseInfo(
+	isRead bool, readCount, readBytes int64, readMultiplier RUMultiplier,
+) ResponseInfo {
+	return ResponseInfo{
+		isRead:         isRead,
+		readCount:      readCount,
+		readBytes:      readBytes,
+		readMultiplier: readMultiplier,
+	}
 }
