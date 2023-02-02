@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -142,6 +143,121 @@ func TestAlterTenantPauseResume(t *testing.T) {
 		c.DestTenantSQL.ExpectErr(t, "only the system tenant can alter tenant", `ALTER TENANT $1 PAUSE REPLICATION`, "foo")
 		c.DestTenantSQL.ExpectErr(t, "only the system tenant can alter tenant", `ALTER TENANT $1 RESUME REPLICATION`, "foo")
 	})
+}
+
+// TestAlterTenantUpdateExistingCutoverTime verifies we can set a new cutover
+// time if the cutover process did not start yet.
+func TestAlterTenantUpdateExistingCutoverTime(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	args := replicationtestutils.DefaultTenantStreamingClustersArgs
+
+	c, cleanup := replicationtestutils.CreateTenantStreamingClusters(ctx, t, args)
+	defer cleanup()
+
+	getTenantStatus := func() string {
+		var status string
+		c.DestSysSQL.QueryRow(c.T, fmt.Sprintf("SELECT data_state FROM [SHOW TENANT %s]",
+			c.Args.DestTenantName)).Scan(&status)
+		return status
+	}
+	getCutoverTime := func() hlc.Timestamp {
+		var cutoverStr string
+		c.DestSysSQL.QueryRow(c.T, fmt.Sprintf("SELECT cutover_time FROM [SHOW TENANT %s WITH REPLICATION STATUS]",
+			c.Args.DestTenantName)).Scan(&cutoverStr)
+		cutoverOutput := replicationtestutils.DecimalTimeToHLC(t, cutoverStr)
+		return cutoverOutput
+	}
+
+	producerJobID, ingestionJobID := c.StartStreamReplication(ctx)
+
+	jobutils.WaitForJobToRun(t, c.SrcSysSQL, jobspb.JobID(producerJobID))
+	jobutils.WaitForJobToRun(t, c.DestSysSQL, jobspb.JobID(ingestionJobID))
+
+	highWater := c.SrcCluster.Server(0).Clock().Now()
+	c.WaitUntilHighWatermark(highWater, jobspb.JobID(ingestionJobID))
+
+	// First cutover to a future time.
+	var cutoverStr string
+	cutoverTime := highWater.Add(time.Hour.Nanoseconds(), 0)
+	c.DestSysSQL.QueryRow(c.T, `ALTER TENANT $1 COMPLETE REPLICATION TO SYSTEM TIME $2::string`,
+		args.DestTenantName, cutoverTime.AsOfSystemTime()).Scan(&cutoverStr)
+	cutoverOutput := replicationtestutils.DecimalTimeToHLC(t, cutoverStr)
+	require.Equal(t, cutoverTime, cutoverOutput)
+	require.Equal(c.T, "replication pending cutover", getTenantStatus())
+	require.Equal(t, cutoverOutput, getCutoverTime())
+
+	// And cutover to an even further time.
+	cutoverTime = highWater.Add((time.Hour * 2).Nanoseconds(), 0)
+	c.DestSysSQL.QueryRow(c.T, `ALTER TENANT $1 COMPLETE REPLICATION TO SYSTEM TIME $2::string`,
+		args.DestTenantName, cutoverTime.AsOfSystemTime()).Scan(&cutoverStr)
+	cutoverOutput = replicationtestutils.DecimalTimeToHLC(t, cutoverStr)
+	require.Equal(t, cutoverTime, cutoverOutput)
+	require.Equal(c.T, "replication pending cutover", getTenantStatus())
+	require.Equal(t, cutoverOutput, getCutoverTime())
+}
+
+// TestAlterTenantFailUpdatingCutoverTime verifies that once a cutover has
+// started the cutover time cannot be updated.
+func TestAlterTenantFailUpdatingCutoverTime(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx, ctxCancel := context.WithCancel(context.Background())
+	args := replicationtestutils.DefaultTenantStreamingClustersArgs
+	cutoverCh := make(chan struct{})
+	cutoverStartedCh := make(chan struct{})
+	// Set a knob to hang after we transition to the cutover state, and before the
+	// job finishes.
+	args.TestingKnobs = &sql.StreamingTestingKnobs{
+		AfterCutoverStarted: func() {
+			close(cutoverStartedCh)
+			select {
+			case <-cutoverCh:
+			case <-ctx.Done():
+			}
+		},
+	}
+	unblockJob := func() {
+		select {
+		case cutoverCh <- struct{}{}:
+		case <-ctx.Done():
+		}
+	}
+
+	c, cleanup := replicationtestutils.CreateTenantStreamingClusters(ctx, t, args)
+	defer cleanup()
+	defer ctxCancel()
+
+	getTenantStatus := func() string {
+		var status string
+		c.DestSysSQL.QueryRow(c.T, fmt.Sprintf("SELECT data_state FROM [SHOW TENANT %s]",
+			c.Args.DestTenantName)).Scan(&status)
+		return status
+	}
+
+	producerJobID, ingestionJobID := c.StartStreamReplication(ctx)
+
+	jobutils.WaitForJobToRun(t, c.SrcSysSQL, jobspb.JobID(producerJobID))
+	jobutils.WaitForJobToRun(t, c.DestSysSQL, jobspb.JobID(ingestionJobID))
+	c.WaitUntilHighWatermark(c.SrcCluster.Server(0).Clock().Now(), jobspb.JobID(ingestionJobID))
+
+	require.Equal(c.T, "replicating", getTenantStatus())
+
+	c.DestSysSQL.Exec(c.T, `ALTER TENANT $1 COMPLETE REPLICATION TO LATEST`, args.DestTenantName)
+
+	// Wait for cutover to start.
+	<-cutoverStartedCh
+
+	// Another cutover should fail, verify the error.
+	c.DestSysSQL.ExpectErr(t, "already started cutting over to timestamp",
+		fmt.Sprintf("ALTER TENANT %s COMPLETE REPLICATION TO LATEST", args.DestTenantName))
+
+	// Done, the tenant is cutting over, unblock the job.
+	unblockJob()
+	jobutils.WaitForJobToSucceed(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
 }
 
 // blockingResumer hangs until signaled, before and after running the real

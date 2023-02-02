@@ -274,14 +274,6 @@ func TestCutoverBuiltin(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, job.ID(), jobspb.JobID(jobID))
 
-	// This should fail since we already have a cutover time set on the job
-	// progress.
-	_, err = db.ExecContext(
-		ctx,
-		`SELECT crdb_internal.complete_stream_ingestion_job($1, $2)`,
-		job.ID(), highWater)
-	require.Error(t, err, "cutover timestamp already set")
-
 	// Check that sentinel is set on the job progress.
 	sj, err := registry.LoadJob(ctx, job.ID())
 	require.NoError(t, err)

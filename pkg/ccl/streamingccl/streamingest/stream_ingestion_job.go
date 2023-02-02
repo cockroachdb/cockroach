@@ -46,15 +46,12 @@ func completeStreamIngestion(
 ) error {
 	if err := jobRegistry.UpdateJobWithTxn(ctx, ingestionJobID, txn, false,
 		func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
-			// TODO(adityamaru): This should change in the future, a user should be
-			// allowed to correct their cutover time if the process of reverting the job
-			// has not started.
-			if jobCutoverTime := md.Progress.GetStreamIngest().CutoverTime; !jobCutoverTime.IsEmpty() {
-				return errors.Newf("cutover timestamp already set to %s, "+
-					"job %d is in the process of cutting over", jobCutoverTime.String(), ingestionJobID)
+			progress := md.Progress.GetStreamIngest()
+			if progress.ReplicationStatus == jobspb.ReplicationCuttingOver {
+				return errors.Newf("job %d already started cutting over to timestamp %s",
+					ingestionJobID, progress.CutoverTime)
 			}
 
-			progress := md.Progress.GetStreamIngest()
 			progress.ReplicationStatus = jobspb.ReplicationPendingCutover
 			// Update the sentinel being polled by the stream ingestion job to
 			// check if a complete has been signaled.
@@ -169,15 +166,21 @@ func updateRunningStatus(
 		ctx context.Context, txn isql.Txn,
 	) error {
 		return ingestionJob.WithTxn(txn).Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
-			md.Progress.GetStreamIngest().ReplicationStatus = status
-			md.Progress.RunningStatus = runningStatus
-			ju.UpdateProgress(md.Progress)
+			updateRunningStatusInternal(md, ju, status, runningStatus)
 			return nil
 		})
 	})
 	if err != nil {
 		log.Warningf(ctx, "error when updating job running status: %s", err)
 	}
+}
+
+func updateRunningStatusInternal(
+	md jobs.JobMetadata, ju *jobs.JobUpdater, status jobspb.ReplicationStatus, runningStatus string,
+) {
+	md.Progress.GetStreamIngest().ReplicationStatus = status
+	md.Progress.RunningStatus = runningStatus
+	ju.UpdateProgress(md.Progress)
 }
 
 func ingest(ctx context.Context, execCtx sql.JobExecContext, ingestionJob *jobs.Job) error {
@@ -498,43 +501,57 @@ func maybeRevertToCutoverTimestamp(
 	p := execCtx.(sql.JobExecContext)
 	db := p.ExecCfg().DB
 	jobRegistry := p.ExecCfg().JobRegistry
-	j, err := jobRegistry.LoadJob(ctx, ingestionJobID)
+	ingestionJob, err := jobRegistry.LoadJob(ctx, ingestionJobID)
 	if err != nil {
 		return false, err
 	}
-	details := j.Details()
-	var sd jobspb.StreamIngestionDetails
-	var ok bool
-	if sd, ok = details.(jobspb.StreamIngestionDetails); !ok {
-		return false, errors.Newf("unknown details type %T in stream ingestion job %d",
-			details, ingestionJobID)
-	}
-	progress := j.Progress()
-	var sp *jobspb.Progress_StreamIngest
-	if sp, ok = progress.GetDetails().(*jobspb.Progress_StreamIngest); !ok {
-		return false, errors.Newf("unknown progress type %T in stream ingestion job %d",
-			j.Progress().Progress, ingestionJobID)
-	}
 
-	cutoverTime := sp.StreamIngest.CutoverTime
-	if cutoverTime.IsEmpty() {
-		log.Infof(ctx, "empty cutover time, no revert required")
+	var isRevertRequired bool
+	if err := p.ExecCfg().InternalDB.Txn(ctx, func(
+		ctx context.Context, txn isql.Txn,
+	) error {
+		return ingestionJob.WithTxn(txn).Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+			payload := md.Payload.GetStreamIngestion()
+			if payload == nil {
+				return errors.Newf("unknown payload type %T in stream ingestion job %d",
+					md.Payload, ingestionJobID)
+			}
+			streamIngest := md.Progress.GetStreamIngest()
+			if streamIngest == nil {
+				return errors.Newf("unknown progress type %T in stream ingestion job %d",
+					md.Progress, ingestionJobID)
+			}
+			cutoverTime := streamIngest.CutoverTime
+			if cutoverTime.IsEmpty() {
+				log.Infof(ctx, "empty cutover time, no revert required")
+				return nil
+			}
+			if md.Progress.GetHighWater() == nil || md.Progress.GetHighWater().Less(cutoverTime) {
+				log.Infof(ctx, "job with highwater %s not yet ready to revert to cutover at %s",
+					md.Progress.GetHighWater(), cutoverTime.String())
+				return nil
+			}
+
+			isRevertRequired = true
+			updateRunningStatusInternal(md, ju, jobspb.ReplicationCuttingOver,
+				fmt.Sprintf("starting to cut over to the given timestamp %s", cutoverTime))
+			return nil
+		})
+	}); err != nil {
+		return false, err
+	}
+	if !isRevertRequired {
 		return false, nil
 	}
-	if progress.GetHighWater() == nil || progress.GetHighWater().Less(cutoverTime) {
-		log.Infof(ctx, "job with highwater %s not yet ready to revert to cutover at %s", progress.GetHighWater(), cutoverTime.String())
-		return false, nil
-	}
-
-	updateRunningStatus(ctx, p, j, jobspb.ReplicationCuttingOver,
-		fmt.Sprintf("starting to cut over to the given timestamp %s", cutoverTime))
 
 	if p.ExecCfg().StreamingTestingKnobs != nil && p.ExecCfg().StreamingTestingKnobs.AfterCutoverStarted != nil {
 		p.ExecCfg().StreamingTestingKnobs.AfterCutoverStarted()
 	}
 
 	origNRanges := -1
-	spans := []roachpb.Span{sd.Span}
+	payload := ingestionJob.Payload()
+	progress := ingestionJob.Progress()
+	spans := []roachpb.Span{payload.GetStreamIngestion().Span}
 	updateJobProgress := func() error {
 		if spans == nil {
 			return nil
@@ -551,7 +568,7 @@ func maybeRevertToCutoverTimestamp(
 		return p.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 			if nRanges < origNRanges {
 				fractionRangesFinished := float32(origNRanges-nRanges) / float32(origNRanges)
-				if err := j.WithTxn(txn).FractionProgressed(
+				if err := ingestionJob.WithTxn(txn).FractionProgressed(
 					ctx, jobs.FractionUpdater(fractionRangesFinished),
 				); err != nil {
 					return jobs.SimplifyInvalidStatusError(err)
@@ -561,6 +578,7 @@ func maybeRevertToCutoverTimestamp(
 		})
 	}
 
+	cutoverTime := progress.GetStreamIngest().CutoverTime
 	for len(spans) != 0 {
 		if err := updateJobProgress(); err != nil {
 			log.Warningf(ctx, "failed to update replication job progress: %+v", err)
@@ -572,7 +590,7 @@ func maybeRevertToCutoverTimestamp(
 					Key:    span.Key,
 					EndKey: span.EndKey,
 				},
-				TargetTime: sp.StreamIngest.CutoverTime,
+				TargetTime: cutoverTime,
 			})
 		}
 		b.Header.MaxSpanRequestKeys = sql.RevertTableDefaultBatchSize
