@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 )
 
@@ -353,13 +352,11 @@ func (a *authenticationV2Mux) ServeHTTP(w http.ResponseWriter, req *http.Request
 	}
 	// Valid session found, or insecure. Set the username in the request context,
 	// so child http.Handlers can access it.
-	ctx := req.Context()
-	ctx = context.WithValue(ctx, webSessionUserKey{}, u)
+	var sessionID int64
 	if cookie != nil {
-		ctx = context.WithValue(ctx, webSessionIDKey{}, cookie.ID)
+		sessionID = cookie.ID
 	}
-	req = req.WithContext(ctx)
-
+	req = req.WithContext(contextWithHTTPAuthInfo(req.Context(), u, sessionID))
 	a.inner.ServeHTTP(w, req)
 }
 
@@ -443,8 +440,7 @@ func (r *roleAuthorizationMux) hasRoleOption(
 func (r *roleAuthorizationMux) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	// The username is set in authenticationV2Mux, and must correspond with a
 	// logged-in user.
-	username := username.MakeSQLUsernameFromPreNormalizedString(
-		req.Context().Value(webSessionUserKey{}).(string))
+	username := userFromHTTPAuthInfoContext(req.Context())
 	if role, err := r.getRoleForUser(req.Context(), username); err != nil || role < r.role {
 		if err != nil {
 			apiV2InternalError(req.Context(), err, w)
@@ -464,10 +460,4 @@ func (r *roleAuthorizationMux) ServeHTTP(w http.ResponseWriter, req *http.Reques
 		}
 	}
 	r.inner.ServeHTTP(w, req)
-}
-
-// apiToOutgoingGatewayCtx converts an HTTP API (v1 or v2) context, to one that
-// can issue outgoing RPC requests under the same logged-in user.
-func apiToOutgoingGatewayCtx(ctx context.Context, r *http.Request) context.Context {
-	return metadata.NewOutgoingContext(ctx, forwardAuthenticationMetadata(ctx, r))
 }

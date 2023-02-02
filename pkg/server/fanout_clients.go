@@ -228,7 +228,7 @@ func (k kvFanoutClient) dialNode(ctx context.Context, serverID serverID) (*grpc.
 }
 
 func (k kvFanoutClient) listNodes(ctx context.Context) (*serverpb.NodesResponse, error) {
-	ctx = propagateGatewayMetadata(ctx)
+	ctx = forwardSQLIdentityThroughRPCCalls(ctx)
 	ctx = k.ambientCtx.AnnotateCtx(ctx)
 
 	statuses, _, err := getNodeStatuses(ctx, k.db, 0, 0)
