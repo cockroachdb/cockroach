@@ -185,11 +185,8 @@ func (dsp *DistSQLPlanner) ExecLocalAll(
 		distributionType)
 	planCtx.stmtType = recv.stmtType
 
-	var evalCtxFactory func() *extendedEvalContext
-	var factoryEvalCtx extendedEvalContext = extendedEvalContext{
-		Tracing: &SessionTracing{},
-	}
-	evalCtxFactory = func() *extendedEvalContext {
+	var factoryEvalCtx = extendedEvalContext{Tracing: &SessionTracing{}}
+	evalCtxFactory := func(bool) *extendedEvalContext {
 		factoryEvalCtx.Placeholders = &p.semaCtx.Placeholders
 		factoryEvalCtx.Annotations = &p.semaCtx.Annotations
 		// Query diagnostics can change the Context; make sure we are using the
