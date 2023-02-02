@@ -286,6 +286,12 @@ var upgrades = []upgradebase.Upgrade{
 		upgrade.NoPrecondition,
 		backfillWebSessionsTableUserIDColumn,
 	),
+	upgrade.NewTenantUpgrade(
+		"add column sql_addr to table system.sql_instances",
+		toCV(clusterversion.V23_1_SchemaChangerDeprecatedIndexPredicates),
+		upgrade.NoPrecondition,
+		waitForSchemaChangerElementMigration,
+	),
 }
 
 func init() {
