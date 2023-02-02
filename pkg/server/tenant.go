@@ -627,6 +627,7 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 		); err != nil {
 			return err
 		}
+	}
 
 	// Export statistics to graphite, if enabled by configuration.
 	var graphiteOnce sync.Once
