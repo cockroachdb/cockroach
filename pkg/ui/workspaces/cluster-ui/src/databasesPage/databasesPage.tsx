@@ -17,7 +17,7 @@ import classnames from "classnames/bind";
 
 import { Anchor } from "src/anchor";
 import { StackIcon } from "src/icon/stackIcon";
-import { Pagination, ResultsPerPageLabel } from "src/pagination";
+import { Pagination } from "src/pagination";
 import { BooleanSetting } from "src/settings/booleanSetting";
 import { PageConfig, PageConfigItem } from "src/pageConfig";
 import {
@@ -31,10 +31,7 @@ import * as format from "src/util/format";
 
 import styles from "./databasesPage.module.scss";
 import sortableTableStyles from "src/sortedtable/sortedtable.module.scss";
-import {
-  baseHeadingClasses,
-  statisticsClasses,
-} from "src/transactionsPage/transactionsPageClasses";
+import { baseHeadingClasses } from "src/transactionsPage/transactionsPageClasses";
 import { syncHistory, tableStatsClusterSetting, unique } from "src/util";
 import booleanSettingStyles from "../settings/booleanSetting.module.scss";
 import { CircleFilled } from "../icon";
@@ -43,9 +40,9 @@ import { Loading } from "../loading";
 import { Search } from "../search";
 import {
   calculateActiveFilters,
+  defaultFilters,
   Filter,
   Filters,
-  defaultFilters,
   handleFiltersFromQueryString,
 } from "../queryFilter";
 import { merge } from "lodash";
@@ -295,22 +292,70 @@ export class DatabasesPage extends React.Component<
     }
 
     let lastDetailsError: Error;
-    this.props.databases.forEach(database => {
+
+    // load everything by default
+    let filteredDbs = this.props.databases;
+
+    // Loading only the first page is only possible if the
+    // sort column is by the database name since all the db
+    // names are already in memory. All other sorts need to
+    // load all the database details which results in a network
+    // call for each db name. This can be slow and result in
+    // failure for a large number of dbs.
+    if (
+      this.props.databases.length > this.state.pagination.pageSize &&
+      (!this.props.sortSetting ||
+        this.props.sortSetting.columnTitle === "Databases" ||
+        this.props.sortSetting.columnTitle === "name")
+    ) {
+      let startIndex = 0;
+      startIndex =
+        this.state.pagination.pageSize * (this.state.pagination.current - 1);
+      // Result maybe filtered so get db names from filtered results
+      if (this.props.search && this.props.search.length > 0) {
+        filteredDbs = this.filteredDatabasesData();
+      }
+
+      if (!filteredDbs || filteredDbs.length === 0) {
+        return;
+      }
+
+      // sort the filtered results to make sure to get the correct list of dbs
+      const asc = this.props.sortSetting?.ascending ?? true;
+      filteredDbs = filteredDbs.sort(function (a, b) {
+        if (asc) {
+          return a.name > b.name ? 1 : -1; // sort in ascending order
+        }
+        return a.name > b.name ? -1 : 1; // sort in descending order
+      });
+
+      // Only load the first page
+      filteredDbs = filteredDbs.slice(
+        startIndex,
+        startIndex + this.state.pagination.pageSize,
+      );
+    }
+
+    filteredDbs.forEach((database, i, arr) => {
       if (database.lastError !== undefined) {
         lastDetailsError = database.lastError;
       }
+
       if (
         lastDetailsError &&
         this.state.lastDetailsError?.name != lastDetailsError?.name
       ) {
         this.setState({ lastDetailsError: lastDetailsError });
       }
+
       if (
         !database.loaded &&
         !database.loading &&
-        database.lastError === undefined
+        (database.lastError === undefined ||
+          database.lastError?.name === "GetDatabaseInfoError")
       ) {
-        return this.props.refreshDatabaseDetails(database.name);
+        this.props.refreshDatabaseDetails(database.name);
+        return;
       }
 
       database.missingTables.forEach(table => {
@@ -480,7 +525,10 @@ export class DatabasesPage extends React.Component<
     database: DatabasesPageDataDatabase,
     cell: React.ReactNode,
   ): React.ReactNode => {
-    if (database.lastError) {
+    if (
+      database.lastError &&
+      database.lastError.name !== "GetDatabaseInfoError"
+    ) {
       return "(unavailable)";
     }
     return cell;
@@ -717,6 +765,7 @@ export class DatabasesPage extends React.Component<
                   timeout: this.state.lastDetailsError?.name
                     ?.toLowerCase()
                     .includes("timeout"),
+                  error: this.state.lastDetailsError,
                 })
               }
             />

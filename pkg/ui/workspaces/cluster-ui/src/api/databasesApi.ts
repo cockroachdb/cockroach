@@ -11,6 +11,7 @@
 import {
   executeInternalSql,
   LARGE_RESULT_SIZE,
+  SqlExecutionErrorMessage,
   SqlExecutionRequest,
   sqlResultsAreEmpty,
 } from "./sqlApi";
@@ -26,12 +27,16 @@ export type DatabasesColumns = {
   survival_goal: string;
 };
 
-export type DatabasesListResponse = { databases: string[] };
+export type DatabasesListResponse = {
+  databases: string[];
+  error: SqlExecutionErrorMessage;
+};
 
 export const databasesRequest: SqlExecutionRequest = {
   statements: [
     {
-      sql: `SHOW DATABASES`,
+      sql: `select database_name
+            from [show databases]`,
     },
   ],
   execute: true,
@@ -50,18 +55,21 @@ export function getDatabasesList(
     timeout,
   ).then(result => {
     // If request succeeded but query failed, throw error (caught by saga/cacheDataReducer).
-    if (result.error) {
+    if (
+      result.error &&
+      !result.error.message.endsWith("max result size exceeded")
+    ) {
       throw result.error;
     }
 
     if (sqlResultsAreEmpty(result)) {
-      return { databases: [] };
+      return { databases: [], error: result.error };
     }
 
     const dbNames: string[] = result.execution.txn_results[0].rows.map(
       row => row.database_name,
     );
 
-    return { databases: dbNames };
+    return { databases: dbNames, error: result.error };
   });
 }
