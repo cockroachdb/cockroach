@@ -64,7 +64,7 @@ func TestCPUProfiler(t *testing.T) {
 					store:              newProfileStore(dumpStore, CpuProfFileNamePrefix, HeapFileNameSuffix, s),
 					lastProfileTime:    c.lastProfileTime,
 					highwaterMarkBytes: cpuUsageCombined.Get(sv),
-					customInterval:     cpuProfileInterval.Get(sv),
+					resetInterval:      cpuProfileInterval.Get(sv),
 					knobs: testingKnobs{
 						dontWriteProfiles: true,
 					},
