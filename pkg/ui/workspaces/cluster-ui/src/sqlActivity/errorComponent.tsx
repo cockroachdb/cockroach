@@ -17,9 +17,17 @@ const cx = classNames.bind(styles);
 interface SQLActivityErrorProps {
   statsType: string;
   timeout?: boolean;
+  error?: Error;
 }
 
 const LoadingError: React.FC<SQLActivityErrorProps> = props => {
+  if (props.error && props.error.name === "GetDatabaseInfoError") {
+    return (
+      <div className={cx("row")}>
+        <span>{props.error.message}</span>
+      </div>
+    );
+  }
   const error = props.timeout ? "a timeout" : "an unexpected error";
   return (
     <div className={cx("row")}>
