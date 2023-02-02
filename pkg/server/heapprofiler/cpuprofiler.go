@@ -42,7 +42,10 @@ var cpuUsageCombined = settings.RegisterIntSetting(
 var cpuProfileInterval = settings.RegisterDurationSetting(
 	settings.TenantWritable,
 	"server.cpu_profile.interval",
-	"rate at which cpu profiles can be taken if above cpu usage threshold",
+	// NB: this is not the entire explanation - it's when we stop taking into
+	// account the high water mark seen. Without this, if CPU ever reaches 100%,
+	// we'll never take another profile.
+	"duration after which the high water mark resets and a new cpu profile can be taken",
 	1*time.Minute, settings.PositiveDuration,
 )
 
