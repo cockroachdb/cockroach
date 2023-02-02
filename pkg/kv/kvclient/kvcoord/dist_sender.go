@@ -2242,9 +2242,13 @@ func (ds *DistSender) sendToReplicas(
 				}
 
 				if ds.kvInterceptor != nil {
+					// Multiply RUs for write requests with the replication factor here.
+					// Read requests always have a multiplier of 1, at least for now.
+					//
+					// TODO(jaylim-crl): Update multipliers to account for cross-region transfers.
 					numReplicas := len(desc.Replicas().Descriptors())
-					reqInfo := tenantcostmodel.MakeRequestInfo(ba, numReplicas)
-					respInfo := tenantcostmodel.MakeResponseInfo(br, !reqInfo.IsWrite())
+					reqInfo := tenantcostmodel.MakeRequestInfo(ba, numReplicas, tenantcostmodel.RUMultiplier(numReplicas))
+					respInfo := tenantcostmodel.MakeResponseInfo(br, !reqInfo.IsWrite(), 1)
 					if err := ds.kvInterceptor.OnResponseWait(ctx, reqInfo, respInfo); err != nil {
 						return nil, err
 					}

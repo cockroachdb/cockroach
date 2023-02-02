@@ -363,3 +363,80 @@ SQL Pods CPU seconds:  3.82
 PGWire egress:  12345 bytes
 ExternalIO egress: 1026000 bytes
 ExternalIO ingress: 1034000 bytes
+
+# Read the same amount of bytes as the first subtest. Increase in RUs should be
+# multiplied by 2 of the ones in the first subtest.
+read bytes=1048576 ruMultiplier=2.0
+----
+
+advance
+40s
+----
+00:08:13.000
+
+wait-for-event
+token-bucket-response
+----
+
+usage
+----
+RU:  2357.64
+KVRU:  72.25
+Reads:  5 requests in 4 batches (2228224 bytes)
+Writes:  5 requests in 4 batches (10240 bytes)
+SQL Pods CPU seconds:  3.82
+PGWire egress:  12345 bytes
+ExternalIO egress: 1026000 bytes
+ExternalIO ingress: 1034000 bytes
+
+# Test write operation consumption with RU multiplier of 3.5 on the RUs
+# increased in the second subtest.
+write bytes=1024 ruMultiplier=3.5
+----
+
+advance
+40s
+----
+00:08:53.000
+
+wait-for-event
+token-bucket-response
+----
+
+usage
+----
+RU:  2368.14
+KVRU:  82.75
+Reads:  5 requests in 4 batches (2228224 bytes)
+Writes:  6 requests in 5 batches (11264 bytes)
+SQL Pods CPU seconds:  3.82
+PGWire egress:  12345 bytes
+ExternalIO egress: 1026000 bytes
+ExternalIO ingress: 1034000 bytes
+
+# Test multiple requests in the same batch with RU multiplier of 1.
+write count=2 bytes=1024 ruMultiplier=1.0
+----
+
+read count=2 bytes=65536 ruMultiplier=1.0
+----
+
+advance
+40s
+----
+00:09:33.000
+
+wait-for-event
+token-bucket-response
+----
+
+usage
+----
+RU:  2373.89
+KVRU:  88.50
+Reads:  7 requests in 5 batches (2293760 bytes)
+Writes:  8 requests in 6 batches (12288 bytes)
+SQL Pods CPU seconds:  3.82
+PGWire egress:  12345 bytes
+ExternalIO egress: 1026000 bytes
+ExternalIO ingress: 1034000 bytes

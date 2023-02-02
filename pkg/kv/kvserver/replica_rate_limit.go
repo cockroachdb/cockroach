@@ -28,7 +28,8 @@ func (r *Replica) maybeRateLimitBatch(ctx context.Context, ba *roachpb.BatchRequ
 	if !ok || tenantID == roachpb.SystemTenantID {
 		return nil
 	}
-	return r.tenantLimiter.Wait(ctx, tenantcostmodel.MakeRequestInfo(ba, 1))
+	// writeMultiplier isn't needed here since it's only used to calculate RUs.
+	return r.tenantLimiter.Wait(ctx, tenantcostmodel.MakeRequestInfo(ba, 1, 1))
 }
 
 // recordImpactOnRateLimiter is used to record a read against the tenant rate
@@ -39,6 +40,6 @@ func (r *Replica) recordImpactOnRateLimiter(
 	if r.tenantLimiter == nil || br == nil || !isReadOnly {
 		return
 	}
-
-	r.tenantLimiter.RecordRead(ctx, tenantcostmodel.MakeResponseInfo(br, isReadOnly))
+	// readMultiplier isn't needed here since it's only used to calculate RUs.
+	r.tenantLimiter.RecordRead(ctx, tenantcostmodel.MakeResponseInfo(br, isReadOnly, 1))
 }
