@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/redact"
 )
 
@@ -71,25 +72,54 @@ func (n *bufferNode) Close(ctx context.Context) {
 // referencing. The bufferNode can be iterated over multiple times
 // simultaneously, however, a new scanBufferNode is needed.
 type scanBufferNode struct {
+	// mu, if non-nil, protects access to iterator and buffer.
+	mu *syncutil.Mutex
+
 	buffer *bufferNode
 
 	iterator   *rowContainerIterator
 	currentRow tree.Datums
+	// scratchCurrentRow is only used if mu is non-nil.
+	scratchCurrentRow tree.Datums
 
 	// label is a string used to describe the node in an EXPLAIN plan.
 	label string
 }
 
+// makeConcurrencySafe can be called to synchronize access to bufferNode across
+// scanBufferNodes that run in parallel.
+func (n *scanBufferNode) makeConcurrencySafe(mu *syncutil.Mutex) {
+	n.mu = mu
+}
+
 func (n *scanBufferNode) startExec(params runParams) error {
+	if n.mu != nil {
+		n.mu.Lock()
+		defer n.mu.Unlock()
+	}
 	n.iterator = newRowContainerIterator(params.ctx, n.buffer.rows, n.buffer.typs)
 	return nil
 }
 
 func (n *scanBufferNode) Next(runParams) (bool, error) {
+	if n.mu != nil {
+		n.mu.Lock()
+		defer n.mu.Unlock()
+	}
 	var err error
 	n.currentRow, err = n.iterator.Next()
 	if n.currentRow == nil || err != nil {
 		return false, err
+	}
+	if n.mu != nil {
+		// If we need concurrency-safety, then `Next` might be called on another
+		// iterator (which references the same buffer.rows container) which
+		// could invalidate the current row, so we must perform a shallow copy.
+		if n.scratchCurrentRow == nil {
+			n.scratchCurrentRow = make(tree.Datums, len(n.currentRow))
+		}
+		copy(n.scratchCurrentRow, n.currentRow)
+		n.currentRow = n.scratchCurrentRow
 	}
 	return true, nil
 }
@@ -99,6 +129,10 @@ func (n *scanBufferNode) Values() tree.Datums {
 }
 
 func (n *scanBufferNode) Close(context.Context) {
+	if n.mu != nil {
+		n.mu.Lock()
+		defer n.mu.Unlock()
+	}
 	if n.iterator != nil {
 		n.iterator.Close()
 		n.iterator = nil
