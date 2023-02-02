@@ -318,7 +318,8 @@ func runPlanInsidePlan(
 	evalCtx := params.p.ExtendedEvalContextCopy()
 	plannerCopy := *params.p
 	distributePlan := getPlanDistribution(
-		ctx, &plannerCopy, plannerCopy.execCfg.NodeInfo.NodeID, plannerCopy.SessionData().DistSQLMode, plan.main,
+		ctx, plannerCopy.Descriptors().HasUncommittedTypes(),
+		plannerCopy.SessionData().DistSQLMode, plan.main,
 	)
 	distributeType := DistributionType(DistributionTypeNone)
 	if distributePlan.WillDistribute() {
