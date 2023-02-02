@@ -326,14 +326,15 @@ func TestDistSQLReceiverReportsContention(t *testing.T) {
 		}()
 		// TODO(yuzefovich): turning the tracing ON won't be necessary once
 		// always-on tracing is enabled.
-		_, err = otherConn.ExecContext(ctx, `
-SET TRACING=on;
-BEGIN;
-SET TRANSACTION PRIORITY HIGH;
-UPDATE test.test SET x = 100 WHERE x = 1;
-COMMIT;
-SET TRACING=off;
-`)
+		_, err = otherConn.ExecContext(ctx, `SET TRACING=on;`)
+		require.NoError(t, err)
+		txn, err := otherConn.BeginTx(ctx, nil)
+		require.NoError(t, err)
+		_, err = txn.ExecContext(ctx, `
+			SET TRANSACTION PRIORITY HIGH;
+			UPDATE test.test SET x = 100 WHERE x = 1;
+		`)
+
 		require.NoError(t, err)
 		if contention {
 			// Soft check to protect against flakiness where an internal query
@@ -346,8 +347,14 @@ SET TRACING=off;
 				"contention metric unexpectedly non-zero when no contention events are produced",
 			)
 		}
+
 		require.Equal(t, contention, strings.Contains(contentionRegistry.String(), contentionEventSubstring))
+		err = txn.Commit()
+		require.NoError(t, err)
+		_, err = otherConn.ExecContext(ctx, `SET TRACING=off;`)
+		require.NoError(t, err)
 	})
+
 }
 
 // TestDistSQLReceiverDrainsOnError is a simple unit test that asserts that the
