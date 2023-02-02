@@ -43,7 +43,7 @@ func (n *explainVecNode) startExec(params runParams) error {
 	n.run.values = make(tree.Datums, 1)
 	distSQLPlanner := params.extendedEvalCtx.DistSQLPlanner
 	distribution := getPlanDistribution(
-		params.ctx, params.p, params.extendedEvalCtx.ExecCfg.NodeInfo.NodeID,
+		params.ctx, params.p.Descriptors().HasUncommittedTypes(),
 		params.extendedEvalCtx.SessionData().DistSQLMode, n.plan.main,
 	)
 	outerSubqueries := params.p.curPlan.subqueryPlans
@@ -60,7 +60,7 @@ func (n *explainVecNode) startExec(params runParams) error {
 		return err
 	}
 
-	distSQLPlanner.finalizePlanWithRowCount(planCtx, physPlan, n.plan.mainRowCount)
+	finalizePlanWithRowCount(planCtx, physPlan, n.plan.mainRowCount)
 	flows := physPlan.GenerateFlowSpecs()
 	flowCtx := newFlowCtxForExplainPurposes(planCtx, params.p)
 

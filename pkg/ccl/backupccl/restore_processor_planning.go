@@ -229,7 +229,7 @@ func distRestore(
 			}
 		}
 
-		dsp.FinalizePlan(planCtx, p)
+		sql.FinalizePlan(planCtx, p)
 		return p, planCtx, nil
 	}
 

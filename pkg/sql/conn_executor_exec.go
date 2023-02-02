@@ -1135,7 +1135,8 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 
 	ex.sessionTracing.TracePlanCheckStart(ctx)
 	distributePlan := getPlanDistribution(
-		ctx, planner, planner.execCfg.NodeInfo.NodeID, ex.sessionData().DistSQLMode, planner.curPlan.main,
+		ctx, planner.Descriptors().HasUncommittedTypes(),
+		ex.sessionData().DistSQLMode, planner.curPlan.main,
 	)
 	ex.sessionTracing.TracePlanCheckEnd(ctx, nil, distributePlan.WillDistribute())
 
@@ -1521,6 +1522,13 @@ type topLevelQueryStats struct {
 	networkEgressEstimate int64
 }
 
+func (s *topLevelQueryStats) add(other *topLevelQueryStats) {
+	s.bytesRead += other.bytesRead
+	s.rowsRead += other.rowsRead
+	s.rowsWritten += other.rowsWritten
+	s.networkEgressEstimate += other.networkEgressEstimate
+}
+
 // execWithDistSQLEngine converts a plan to a distributed SQL physical plan and
 // runs it.
 // If an error is returned, the connection needs to stop processing queries.
@@ -1585,7 +1593,7 @@ func (ex *connExecutor) execWithDistSQLEngine(
 		}
 	}
 	err := ex.server.cfg.DistSQLPlanner.PlanAndRunAll(ctx, evalCtx, planCtx, planner, recv, evalCtxFactory)
-	return *recv.stats, err
+	return recv.stats, err
 }
 
 // beginTransactionTimestampsAndReadMode computes the timestamps and
