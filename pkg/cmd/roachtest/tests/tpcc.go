@@ -272,7 +272,7 @@ func runTPCC(ctx context.Context, t test.Test, c cluster.Cluster, opts tpccOptio
 	// Check no errors from metrics.
 	if ep != nil {
 		if err := ep.err(); err != nil {
-			t.Fatal(err)
+			t.Fatal(errors.Wrap(err, "error detected during DRT"))
 		}
 	}
 }

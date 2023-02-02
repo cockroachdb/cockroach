@@ -15,9 +15,12 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
+	promv1 "github.com/prometheus/client_golang/api/prometheus/v1"
 	"github.com/prometheus/common/model"
 )
 
@@ -153,27 +156,13 @@ func (ep *tpccChaosEventProcessor) checkMetrics(
 			ep.workloadNodeIP,
 			w.prometheusPort,
 		)
-		fromVal, warnings, err := ep.promClient.Query(
-			ctx,
-			q,
-			fromTime,
-		)
+		fromVal, err := ep.queryPrometheus(ctx, l, q, fromTime)
 		if err != nil {
 			return err
 		}
-		if len(warnings) > 0 {
-			return errors.Newf("found warnings querying prometheus: %s", warnings)
-		}
-		toVal, warnings, err := ep.promClient.Query(
-			ctx,
-			q,
-			toTime,
-		)
+		toVal, err := ep.queryPrometheus(ctx, l, q, toTime)
 		if err != nil {
 			return err
-		}
-		if len(warnings) > 0 {
-			return errors.Newf("found warnings querying prometheus: %s", warnings)
 		}
 
 		// Results are a vector with 1 element, so deserialize accordingly.
@@ -209,6 +198,29 @@ func (ep *tpccChaosEventProcessor) checkMetrics(
 		}
 	}
 	return nil
+}
+
+func (ep *tpccChaosEventProcessor) queryPrometheus(
+	ctx context.Context, l *logger.Logger, q string, ts time.Time,
+) (val model.Value, err error) {
+	rOpts := base.DefaultRetryOptions()
+	rOpts.MaxRetries = 5
+	var warnings promv1.Warnings
+	for r := retry.Start(rOpts); r.Next(); {
+		val, warnings, err = ep.promClient.Query(
+			ctx,
+			q,
+			ts,
+		)
+		if err == nil {
+			break
+		}
+		l.Printf("error querying prometheus, retrying: %+v", err)
+	}
+	if len(warnings) > 0 {
+		return nil, errors.Newf("found warnings querying prometheus: %s", warnings)
+	}
+	return val, err
 }
 
 func (ep *tpccChaosEventProcessor) writeErr(ctx context.Context, l *logger.Logger, err error) {
