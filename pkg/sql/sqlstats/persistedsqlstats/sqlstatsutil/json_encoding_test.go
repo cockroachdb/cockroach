@@ -131,7 +131,8 @@ func TestSQLStatsJsonEncoding(t *testing.T) {
            "sqDiff": {{.Float}}
          }
        },
-       "index_recommendations": [{{joinStrings .StringArray}}]
+       "index_recommendations": [{{joinStrings .StringArray}}],
+	   "error_code": "{{.String}}"
      }
 		 `
 

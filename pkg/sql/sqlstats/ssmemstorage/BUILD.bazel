@@ -17,6 +17,7 @@ go_library(
         "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/sql/execstats",
+        "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/sqlstats",
         "//pkg/sql/sqlstats/insights",
         "//pkg/util",
