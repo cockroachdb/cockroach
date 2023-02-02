@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
@@ -118,6 +119,10 @@ type DistSQLPlanner struct {
 	// additional goroutines that can be used to run concurrent TableReaders
 	// for the same stage of the fully local physical plans.
 	parallelLocalScansSem *quotapool.IntPool
+	// parallelChecksSem is a node-wide semaphore on the number of additional
+	// goroutines that can be used to run check postqueries (FK and UNIQUE
+	// constraint checks) in parallel.
+	parallelChecksSem *quotapool.IntPool
 
 	// distSender is used to construct the spanResolver upon SetSQLInstanceInfo.
 	distSender *kvcoord.DistSender
@@ -206,9 +211,15 @@ func NewDistSQLPlanner(
 	localScansConcurrencyLimit.SetOnChange(&st.SV, func(ctx context.Context) {
 		dsp.parallelLocalScansSem.UpdateCapacity(uint64(localScansConcurrencyLimit.Get(&st.SV)))
 	})
+	dsp.parallelChecksSem = quotapool.NewIntPool("parallel checks concurrency",
+		uint64(parallelChecksConcurrencyLimit.Get(&st.SV)))
+	parallelChecksConcurrencyLimit.SetOnChange(&st.SV, func(ctx context.Context) {
+		dsp.parallelChecksSem.UpdateCapacity(uint64(parallelChecksConcurrencyLimit.Get(&st.SV)))
+	})
 	if rpcCtx != nil {
 		// rpcCtx might be nil in some tests.
 		rpcCtx.Stopper.AddCloser(dsp.parallelLocalScansSem.Closer("stopper"))
+		rpcCtx.Stopper.AddCloser(dsp.parallelChecksSem.Closer("stopper"))
 	}
 
 	dsp.runnerCoordinator.init(ctx, stopper, &st.SV)
@@ -786,7 +797,7 @@ type PlanningCtx struct {
 
 	// If set, we will record the mapping from planNode to tracing metadata to
 	// later allow associating statistics with the planNode.
-	traceMetadata execNodeTraceMetadata
+	associateNodeWithComponents func(exec.Node, execComponents)
 
 	// If set, statement execution stats should be collected.
 	collectExecStats bool
@@ -801,6 +812,13 @@ type PlanningCtx struct {
 	// Set if this is either a subquery or a postquery (i.e. not the "main"
 	// query).
 	subOrPostQuery bool
+
+	// parallelCheck, if set, indicates that this PlanningCtx is used to handle
+	// one of the checkPlans that are run in parallel. As such, the DistSQL
+	// planner will need to do a few adjustments like using the LeafTxn (even if
+	// it's not needed based on other "regular" factors) and adding
+	// synchronization between certain write operations.
+	parallelCheck bool
 
 	// onFlowCleanup contains non-nil functions that will be called after the
 	// local flow finished running and is being cleaned up. It allows us to
@@ -837,7 +855,7 @@ func (p *PlanningCtx) IsLocal() bool {
 }
 
 // getDefaultSaveFlowsFunc returns the default function used to save physical
-// plans and their diagrams.
+// plans and their diagrams. The returned function is **not** concurrency-safe.
 func (p *PlanningCtx) getDefaultSaveFlowsFunc(
 	ctx context.Context, planner *planner, typ planComponentType,
 ) func(map[base.SQLInstanceID]*execinfrapb.FlowSpec, execopnode.OpChains, bool) error {
@@ -3409,7 +3427,7 @@ func (dsp *DistSQLPlanner) createPhysPlanForPlanNode(
 		return plan, err
 	}
 
-	if planCtx.traceMetadata != nil {
+	if planCtx.associateNodeWithComponents != nil {
 		processors := make(execComponents, len(plan.ResultRouters))
 		for i, resultProcIdx := range plan.ResultRouters {
 			processors[i] = execinfrapb.ProcessorComponentID(
@@ -3418,7 +3436,7 @@ func (dsp *DistSQLPlanner) createPhysPlanForPlanNode(
 				int32(resultProcIdx),
 			)
 		}
-		planCtx.traceMetadata.associateNodeWithComponents(node, processors)
+		planCtx.associateNodeWithComponents(node, processors)
 	}
 
 	return plan, err

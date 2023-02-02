@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/redact"
 )
 
@@ -71,6 +72,9 @@ func (n *bufferNode) Close(ctx context.Context) {
 // referencing. The bufferNode can be iterated over multiple times
 // simultaneously, however, a new scanBufferNode is needed.
 type scanBufferNode struct {
+	// mu, if non-nil, protects access to iterator and buffer.
+	mu *syncutil.Mutex
+
 	buffer *bufferNode
 
 	iterator   *rowContainerIterator
@@ -80,7 +84,17 @@ type scanBufferNode struct {
 	label string
 }
 
+// makeConcurrencySafe can be called to synchronize access to bufferNode across
+// scanBufferNodes that run in parallel.
+func (n *scanBufferNode) makeConcurrencySafe(mu *syncutil.Mutex) {
+	n.mu = mu
+}
+
 func (n *scanBufferNode) startExec(params runParams) error {
+	if n.mu != nil {
+		n.mu.Lock()
+		defer n.mu.Unlock()
+	}
 	n.iterator = newRowContainerIterator(params.ctx, n.buffer.rows, n.buffer.typs)
 	return nil
 }
@@ -99,6 +113,10 @@ func (n *scanBufferNode) Values() tree.Datums {
 }
 
 func (n *scanBufferNode) Close(context.Context) {
+	if n.mu != nil {
+		n.mu.Lock()
+		defer n.mu.Unlock()
+	}
 	if n.iterator != nil {
 		n.iterator.Close()
 		n.iterator = nil
