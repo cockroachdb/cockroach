@@ -38,6 +38,7 @@ go_proto_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/roachpb",  # keep
+        "//pkg/sql/appstatspb",  # keep
         "//pkg/sql/catalog/descpb",  # keep
         "//pkg/sql/clusterunique",  # keep
         "//pkg/util/uuid",  # keep

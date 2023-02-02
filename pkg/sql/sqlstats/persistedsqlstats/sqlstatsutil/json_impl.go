@@ -15,7 +15,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/apd/v3"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/errors"
@@ -52,7 +52,7 @@ var (
 	_ jsonMarshaler = (*int64Array)(nil)
 )
 
-type txnStats roachpb.TransactionStatistics
+type txnStats appstatspb.TransactionStatistics
 
 func (t *txnStats) jsonFields() jsonFields {
 	return jsonFields{
@@ -69,7 +69,7 @@ func (t *txnStats) encodeJSON() (json.JSON, error) {
 	return t.jsonFields().encodeJSON()
 }
 
-type stmtStats roachpb.StatementStatistics
+type stmtStats appstatspb.StatementStatistics
 
 func (s *stmtStats) jsonFields() jsonFields {
 	return jsonFields{
@@ -87,7 +87,7 @@ func (s *stmtStats) encodeJSON() (json.JSON, error) {
 	return s.jsonFields().encodeJSON()
 }
 
-type stmtStatsMetadata roachpb.CollectedStatementStatistics
+type stmtStatsMetadata appstatspb.CollectedStatementStatistics
 
 func (s *stmtStatsMetadata) jsonFields() jsonFields {
 	return jsonFields{
@@ -103,7 +103,7 @@ func (s *stmtStatsMetadata) jsonFields() jsonFields {
 	}
 }
 
-type aggregatedMetadata roachpb.AggregatedStatementMetadata
+type aggregatedMetadata appstatspb.AggregatedStatementMetadata
 
 func (s *aggregatedMetadata) jsonFields() jsonFields {
 	return jsonFields{
@@ -233,7 +233,7 @@ func (a *stringArray) encodeJSON() (json.JSON, error) {
 	return builder.Build(), nil
 }
 
-type stmtFingerprintIDArray []roachpb.StmtFingerprintID
+type stmtFingerprintIDArray []appstatspb.StmtFingerprintID
 
 func (s *stmtFingerprintIDArray) decodeJSON(js json.JSON) error {
 	arrLen := js.Len()
@@ -246,7 +246,7 @@ func (s *stmtFingerprintIDArray) decodeJSON(js json.JSON) error {
 		if err := fingerprintID.decodeJSON(fingerprintIDJSON); err != nil {
 			return err
 		}
-		*s = append(*s, roachpb.StmtFingerprintID(fingerprintID))
+		*s = append(*s, appstatspb.StmtFingerprintID(fingerprintID))
 	}
 
 	return nil
@@ -266,7 +266,7 @@ func (s *stmtFingerprintIDArray) encodeJSON() (json.JSON, error) {
 	return builder.Build(), nil
 }
 
-type stmtFingerprintID roachpb.StmtFingerprintID
+type stmtFingerprintID appstatspb.StmtFingerprintID
 
 func (s *stmtFingerprintID) decodeJSON(js json.JSON) error {
 	var str jsonString
@@ -290,10 +290,10 @@ func (s *stmtFingerprintID) decodeJSON(js json.JSON) error {
 
 func (s *stmtFingerprintID) encodeJSON() (json.JSON, error) {
 	return json.FromString(
-		encodeStmtFingerprintIDToString((roachpb.StmtFingerprintID)(*s))), nil
+		encodeStmtFingerprintIDToString((appstatspb.StmtFingerprintID)(*s))), nil
 }
 
-type innerTxnStats roachpb.TransactionStatistics
+type innerTxnStats appstatspb.TransactionStatistics
 
 func (t *innerTxnStats) jsonFields() jsonFields {
 	return jsonFields{
@@ -318,7 +318,7 @@ func (t *innerTxnStats) encodeJSON() (json.JSON, error) {
 	return t.jsonFields().encodeJSON()
 }
 
-type innerStmtStats roachpb.StatementStatistics
+type innerStmtStats appstatspb.StatementStatistics
 
 func (s *innerStmtStats) jsonFields() jsonFields {
 	return jsonFields{
@@ -350,7 +350,7 @@ func (s *innerStmtStats) encodeJSON() (json.JSON, error) {
 	return s.jsonFields().encodeJSON()
 }
 
-type execStats roachpb.ExecStats
+type execStats appstatspb.ExecStats
 
 func (e *execStats) jsonFields() jsonFields {
 	return jsonFields{
@@ -372,7 +372,7 @@ func (e *execStats) encodeJSON() (json.JSON, error) {
 	return e.jsonFields().encodeJSON()
 }
 
-type numericStats roachpb.NumericStat
+type numericStats appstatspb.NumericStat
 
 func (n *numericStats) jsonFields() jsonFields {
 	return jsonFields{

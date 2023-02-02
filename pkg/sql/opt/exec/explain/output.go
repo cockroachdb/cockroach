@@ -16,7 +16,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -234,23 +234,23 @@ func (ob *OutputBuilder) BuildString() string {
 }
 
 // BuildProtoTree creates a representation of the plan as a tree of
-// roachpb.ExplainTreePlanNodes.
-func (ob *OutputBuilder) BuildProtoTree() *roachpb.ExplainTreePlanNode {
+// appstatspb.ExplainTreePlanNodes.
+func (ob *OutputBuilder) BuildProtoTree() *appstatspb.ExplainTreePlanNode {
 	// We reconstruct the hierarchy using the levels.
 	// stack keeps track of the current node on each level. We use a sentinel node
 	// for level 0.
-	sentinel := &roachpb.ExplainTreePlanNode{}
-	stack := []*roachpb.ExplainTreePlanNode{sentinel}
+	sentinel := &appstatspb.ExplainTreePlanNode{}
+	stack := []*appstatspb.ExplainTreePlanNode{sentinel}
 
 	for _, entry := range ob.entries {
 		if entry.isNode() {
 			parent := stack[entry.level-1]
-			child := &roachpb.ExplainTreePlanNode{Name: entry.node}
+			child := &appstatspb.ExplainTreePlanNode{Name: entry.node}
 			parent.Children = append(parent.Children, child)
 			stack = append(stack[:entry.level], child)
 		} else {
 			node := stack[len(stack)-1]
-			node.Attrs = append(node.Attrs, &roachpb.ExplainTreePlanNode_Attr{
+			node.Attrs = append(node.Attrs, &appstatspb.ExplainTreePlanNode_Attr{
 				Key:   entry.field,
 				Value: entry.fieldVal,
 			})

@@ -13,8 +13,8 @@ package insights
 import (
 	"container/list"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/util/quantile"
 )
 
@@ -56,11 +56,11 @@ type anomalyDetector struct {
 	settings *cluster.Settings
 	metrics  Metrics
 	store    *list.List
-	index    map[roachpb.StmtFingerprintID]*list.Element
+	index    map[appstatspb.StmtFingerprintID]*list.Element
 }
 
 type latencySummaryEntry struct {
-	key   roachpb.StmtFingerprintID
+	key   appstatspb.StmtFingerprintID
 	value *quantile.Stream
 }
 
@@ -126,7 +126,7 @@ func newAnomalyDetector(settings *cluster.Settings, metrics Metrics) *anomalyDet
 		settings: settings,
 		metrics:  metrics,
 		store:    list.New(),
-		index:    make(map[roachpb.StmtFingerprintID]*list.Element),
+		index:    make(map[appstatspb.StmtFingerprintID]*list.Element),
 	}
 }
 

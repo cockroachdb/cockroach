@@ -66,7 +66,7 @@ message Transaction {
     (gogoproto.nullable) = false];
   uint64 fingerprint_id = 2
   [(gogoproto.customname) = "FingerprintID",
-    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/roachpb.TransactionFingerprintID",
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/sql/appstatspb.TransactionFingerprintID",
     (gogoproto.nullable) = false];
   string user_priority = 3;
   bool implicit_txn = 4;
@@ -96,7 +96,7 @@ message Statement {
     (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/sql/clusterunique.ID",
     (gogoproto.nullable) = false];
   uint64 fingerprint_id = 2 [(gogoproto.customname) = "FingerprintID",
-    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.StmtFingerprintID"];
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/appstatspb.StmtFingerprintID"];
   double latency_in_seconds = 3;
   string query = 4;
   Status status = 5;

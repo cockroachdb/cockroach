@@ -13,7 +13,7 @@ package sqlstatsutil
 import (
 	"encoding/hex"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"golang.org/x/text/cases"
@@ -21,7 +21,7 @@ import (
 )
 
 // ExplainTreePlanNodeToJSON builds a formatted JSON object from the explain tree nodes.
-func ExplainTreePlanNodeToJSON(node *roachpb.ExplainTreePlanNode) json.JSON {
+func ExplainTreePlanNodeToJSON(node *appstatspb.ExplainTreePlanNode) json.JSON {
 
 	// Create a new json.ObjectBuilder with key-value pairs for the node's name (1),
 	// node's attributes (len(node.Attrs)), and the node's children (1).
@@ -43,7 +43,7 @@ func ExplainTreePlanNodeToJSON(node *roachpb.ExplainTreePlanNode) json.JSON {
 }
 
 // BuildStmtMetadataJSON returns a json.JSON object for the metadata section of
-// the roachpb.CollectedStatementStatistics.
+// the appstatspb.CollectedStatementStatistics.
 // JSON Schema for statement metadata:
 //
 //	{
@@ -61,12 +61,12 @@ func ExplainTreePlanNodeToJSON(node *roachpb.ExplainTreePlanNode) json.JSON {
 //	    "fullScan":             { "type": "boolean" },
 //	  }
 //	}
-func BuildStmtMetadataJSON(statistics *roachpb.CollectedStatementStatistics) (json.JSON, error) {
+func BuildStmtMetadataJSON(statistics *appstatspb.CollectedStatementStatistics) (json.JSON, error) {
 	return (*stmtStatsMetadata)(statistics).jsonFields().encodeJSON()
 }
 
 // BuildStmtStatisticsJSON encodes the statistics section a given
-// roachpb.CollectedStatementStatistics into a json.JSON object.
+// appstatspb.CollectedStatementStatistics into a json.JSON object.
 //
 // JSON Schema for stats portion:
 //
@@ -159,12 +159,12 @@ func BuildStmtMetadataJSON(statistics *roachpb.CollectedStatementStatistics) (js
 //	    }
 //	  }
 //	}
-func BuildStmtStatisticsJSON(statistics *roachpb.StatementStatistics) (json.JSON, error) {
+func BuildStmtStatisticsJSON(statistics *appstatspb.StatementStatistics) (json.JSON, error) {
 	return (*stmtStats)(statistics).encodeJSON()
 }
 
 // BuildTxnMetadataJSON encodes the metadata portion a given
-// roachpb.CollectedTransactionStatistics into a json.JSON object.
+// appstatspb.CollectedTransactionStatistics into a json.JSON object.
 //
 // JSON Schema:
 //
@@ -185,14 +185,16 @@ func BuildStmtStatisticsJSON(statistics *roachpb.StatementStatistics) (json.JSON
 //	}
 //
 // TODO(azhng): add `firstExecAt` and `lastExecAt` into the protobuf definition.
-func BuildTxnMetadataJSON(statistics *roachpb.CollectedTransactionStatistics) (json.JSON, error) {
+func BuildTxnMetadataJSON(
+	statistics *appstatspb.CollectedTransactionStatistics,
+) (json.JSON, error) {
 	return jsonFields{
 		{"stmtFingerprintIDs", (*stmtFingerprintIDArray)(&statistics.StatementFingerprintIDs)},
 	}.encodeJSON()
 }
 
 // BuildTxnStatisticsJSON encodes the statistics portion a given
-// roachpb.CollectedTransactionStatistics into a json.JSON.
+// appstatspb.CollectedTransactionStatistics into a json.JSON.
 //
 // JSON Schema
 //
@@ -261,12 +263,14 @@ func BuildTxnMetadataJSON(statistics *roachpb.CollectedTransactionStatistics) (j
 //	    }
 //	  }
 //	}
-func BuildTxnStatisticsJSON(statistics *roachpb.CollectedTransactionStatistics) (json.JSON, error) {
+func BuildTxnStatisticsJSON(
+	statistics *appstatspb.CollectedTransactionStatistics,
+) (json.JSON, error) {
 	return (*txnStats)(&statistics.Stats).encodeJSON()
 }
 
 // BuildStmtDetailsMetadataJSON returns a json.JSON object for the aggregated metadata
-// roachpb.AggregatedStatementMetadata.
+// appstatspb.AggregatedStatementMetadata.
 // JSON Schema for statement aggregated metadata:
 //
 //	{
@@ -301,7 +305,7 @@ func BuildTxnStatisticsJSON(statistics *roachpb.CollectedTransactionStatistics) 
 //	  }
 //	}
 func BuildStmtDetailsMetadataJSON(
-	metadata *roachpb.AggregatedStatementMetadata,
+	metadata *appstatspb.AggregatedStatementMetadata,
 ) (json.JSON, error) {
 	return (*aggregatedMetadata)(metadata).jsonFields().encodeJSON()
 }
@@ -333,6 +337,6 @@ func EncodeUint64ToBytes(id uint64) []byte {
 	return encoding.EncodeUint64Ascending(result, id)
 }
 
-func encodeStmtFingerprintIDToString(id roachpb.StmtFingerprintID) string {
+func encodeStmtFingerprintIDToString(id appstatspb.StmtFingerprintID) string {
 	return hex.EncodeToString(EncodeUint64ToBytes(uint64(id)))
 }

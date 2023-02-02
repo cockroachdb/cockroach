@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
@@ -1291,7 +1292,7 @@ func makeJobsTableRows(
 
 // execStatAvg is a helper for execution stats shown in virtual tables. Returns
 // NULL when the count is 0, or the mean of the given NumericStat.
-func execStatAvg(count int64, n roachpb.NumericStat) tree.Datum {
+func execStatAvg(count int64, n appstatspb.NumericStat) tree.Datum {
 	if count == 0 {
 		return tree.DNull
 	}
@@ -1300,7 +1301,7 @@ func execStatAvg(count int64, n roachpb.NumericStat) tree.Datum {
 
 // execStatVar is a helper for execution stats shown in virtual tables. Returns
 // NULL when the count is 0, or the variance of the given NumericStat.
-func execStatVar(count int64, n roachpb.NumericStat) tree.Datum {
+func execStatVar(count int64, n appstatspb.NumericStat) tree.Datum {
 	if count == 0 {
 		return tree.DNull
 	}
@@ -1392,7 +1393,7 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 
 		nodeID, _ := p.execCfg.NodeInfo.NodeID.OptionalNodeID() // zero if not available
 
-		statementVisitor := func(_ context.Context, stats *roachpb.CollectedStatementStatistics) error {
+		statementVisitor := func(_ context.Context, stats *appstatspb.CollectedStatementStatistics) error {
 			anonymized := tree.DNull
 			anonStr, ok := scrubStmtStatKey(p.getVirtualTabler(), stats.Key.Query)
 			if ok {
@@ -1421,7 +1422,7 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 			}
 
 			txnFingerprintID := tree.DNull
-			if stats.Key.TransactionFingerprintID != roachpb.InvalidTransactionFingerprintID {
+			if stats.Key.TransactionFingerprintID != appstatspb.InvalidTransactionFingerprintID {
 				txnFingerprintID = tree.NewDString(strconv.FormatUint(uint64(stats.Key.TransactionFingerprintID), 10))
 
 			}
@@ -1554,7 +1555,7 @@ CREATE TABLE crdb_internal.node_transaction_statistics (
 
 		nodeID, _ := p.execCfg.NodeInfo.NodeID.OptionalNodeID() // zero if not available
 
-		transactionVisitor := func(_ context.Context, stats *roachpb.CollectedTransactionStatistics) error {
+		transactionVisitor := func(_ context.Context, stats *appstatspb.CollectedTransactionStatistics) error {
 			stmtFingerprintIDsDatum := tree.NewDArray(types.String)
 			for _, stmtFingerprintID := range stats.StatementFingerprintIDs {
 				if err := stmtFingerprintIDsDatum.Append(tree.NewDString(strconv.FormatUint(uint64(stmtFingerprintID), 10))); err != nil {
@@ -1632,7 +1633,7 @@ CREATE TABLE crdb_internal.node_txn_stats (
 
 		nodeID, _ := p.execCfg.NodeInfo.NodeID.OptionalNodeID() // zero if not available
 
-		appTxnStatsVisitor := func(appName string, stats *roachpb.TxnStats) error {
+		appTxnStatsVisitor := func(appName string, stats *appstatspb.TxnStats) error {
 			return addRow(
 				tree.NewDInt(tree.DInt(nodeID)),
 				tree.NewDString(appName),
@@ -6015,7 +6016,7 @@ CREATE TABLE crdb_internal.cluster_statement_statistics (
 			return memSQLStats.IterateStatementStats(ctx, &sqlstats.IteratorOptions{
 				SortedAppNames: true,
 				SortedKey:      true,
-			}, func(ctx context.Context, statistics *roachpb.CollectedStatementStatistics) error {
+			}, func(ctx context.Context, statistics *appstatspb.CollectedStatementStatistics) error {
 
 				aggregatedTs, err := tree.MakeDTimestampTZ(curAggTs, time.Microsecond)
 				if err != nil {
@@ -6250,7 +6251,7 @@ CREATE TABLE crdb_internal.cluster_transaction_statistics (
 				SortedKey:      true,
 			}, func(
 				ctx context.Context,
-				statistics *roachpb.CollectedTransactionStatistics) error {
+				statistics *appstatspb.CollectedTransactionStatistics) error {
 
 				aggregatedTs, err := tree.MakeDTimestampTZ(curAggTs, time.Microsecond)
 				if err != nil {

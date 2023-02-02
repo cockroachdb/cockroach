@@ -22,7 +22,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -452,7 +452,7 @@ func TestTelemetryLogging(t *testing.T) {
 					if !strings.Contains(e.Message, "\"Database\":\""+databaseName+"\"") {
 						t.Errorf("expected to find Database: %s", databaseName)
 					}
-					stmtFingerprintID := roachpb.ConstructStatementFingerprintID(tc.queryNoConstants, tc.expectedErr != "", true, databaseName)
+					stmtFingerprintID := appstatspb.ConstructStatementFingerprintID(tc.queryNoConstants, tc.expectedErr != "", true, databaseName)
 					if !strings.Contains(e.Message, "\"StatementFingerprintID\":"+strconv.FormatUint(uint64(stmtFingerprintID), 10)) {
 						t.Errorf("expected to find StatementFingerprintID: %v", stmtFingerprintID)
 					}

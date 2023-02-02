@@ -17,10 +17,10 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -127,7 +127,7 @@ INSERT INTO t.test VALUES (3);
 	stats, err := ts.GetScrubbedStmtStats(ctx)
 	require.NoError(t, err)
 	require.Truef(t,
-		func(stats []roachpb.CollectedStatementStatistics) bool {
+		func(stats []appstatspb.CollectedStatementStatistics) bool {
 			for _, stat := range stats {
 				if stat.Key.Query == "INSERT INTO _ VALUES (_)" {
 					return true

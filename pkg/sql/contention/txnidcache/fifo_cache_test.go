@@ -17,7 +17,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/datadriven"
@@ -27,7 +27,7 @@ import (
 func TestFIFOCacheDataDriven(t *testing.T) {
 	var cache *fifoCache
 	inputBlocks := make(map[string]*block)
-	expectedMaps := make(map[string]map[uuid.UUID]roachpb.TransactionFingerprintID)
+	expectedMaps := make(map[string]map[uuid.UUID]appstatspb.TransactionFingerprintID)
 	blockToNameMap := make(map[*block]string)
 
 	datadriven.Walk(t, datapathutils.TestDataPath(t), func(t *testing.T, path string) {
@@ -132,18 +132,18 @@ func cloneBlock(b *block) *block {
 
 func generateInputBlock(
 	size int,
-) (input *block, expected map[uuid.UUID]roachpb.TransactionFingerprintID) {
+) (input *block, expected map[uuid.UUID]appstatspb.TransactionFingerprintID) {
 	if size > blockSize {
 		panic(fmt.Sprintf("input block size cannot be greater than %d", blockSize))
 	}
 
 	input = &block{}
-	expected = make(map[uuid.UUID]roachpb.TransactionFingerprintID)
+	expected = make(map[uuid.UUID]appstatspb.TransactionFingerprintID)
 
 	for i := 0; i < size; i++ {
 		input[i].TxnID = uuid.FastMakeV4()
 		input[i].TxnFingerprintID =
-			roachpb.TransactionFingerprintID(rand.Uint64())
+			appstatspb.TransactionFingerprintID(rand.Uint64())
 
 		expected[input[i].TxnID] = input[i].TxnFingerprintID
 	}

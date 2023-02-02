@@ -14,8 +14,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -49,10 +49,10 @@ func TestSQLStatsIteratorWithTelemetryFlush(t *testing.T) {
 
 	// We collect all the statement fingerprint IDs so that we can test the
 	// transaction stats later.
-	fingerprintIDs := make(map[roachpb.StmtFingerprintID]struct{})
+	fingerprintIDs := make(map[appstatspb.StmtFingerprintID]struct{})
 	require.NoError(t,
 		sqlStats.IterateStatementStats(ctx, &sqlstats.IteratorOptions{},
-			func(_ context.Context, statistics *roachpb.CollectedStatementStatistics) error {
+			func(_ context.Context, statistics *appstatspb.CollectedStatementStatistics) error {
 				fingerprintIDs[statistics.ID] = struct{}{}
 				return nil
 			}))
@@ -62,7 +62,7 @@ func TestSQLStatsIteratorWithTelemetryFlush(t *testing.T) {
 			sqlStats.IterateStatementStats(
 				ctx,
 				&sqlstats.IteratorOptions{},
-				func(_ context.Context, statistics *roachpb.CollectedStatementStatistics) error {
+				func(_ context.Context, statistics *appstatspb.CollectedStatementStatistics) error {
 					require.NotNil(t, statistics)
 					// If we are running our test case, we reset the SQL Stats. The iterator
 					// should gracefully handle that.
@@ -83,7 +83,7 @@ func TestSQLStatsIteratorWithTelemetryFlush(t *testing.T) {
 				&sqlstats.IteratorOptions{},
 				func(
 					ctx context.Context,
-					statistics *roachpb.CollectedTransactionStatistics,
+					statistics *appstatspb.CollectedTransactionStatistics,
 				) error {
 					require.NotNil(t, statistics)
 

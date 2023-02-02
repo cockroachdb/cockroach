@@ -13,20 +13,20 @@ package contention
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/contentionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 type fakeStatusServer struct {
-	data          map[uuid.UUID]roachpb.TransactionFingerprintID
+	data          map[uuid.UUID]appstatspb.TransactionFingerprintID
 	injectedError error
 }
 
 func newFakeStatusServer() *fakeStatusServer {
 	return &fakeStatusServer{
-		data:          make(map[uuid.UUID]roachpb.TransactionFingerprintID),
+		data:          make(map[uuid.UUID]appstatspb.TransactionFingerprintID),
 		injectedError: nil,
 	}
 }
@@ -55,7 +55,7 @@ func (f *fakeStatusServer) txnIDResolution(
 }
 
 func (f *fakeStatusServer) setTxnIDEntry(
-	txnID uuid.UUID, txnFingerprintID roachpb.TransactionFingerprintID,
+	txnID uuid.UUID, txnFingerprintID appstatspb.TransactionFingerprintID,
 ) {
 	f.data[txnID] = txnFingerprintID
 }
@@ -82,7 +82,7 @@ func (f fakeStatusServerCluster) txnIDResolution(
 }
 
 func (f fakeStatusServerCluster) setTxnIDEntry(
-	coordinatorNodeID string, txnID uuid.UUID, txnFingerprintID roachpb.TransactionFingerprintID,
+	coordinatorNodeID string, txnID uuid.UUID, txnFingerprintID appstatspb.TransactionFingerprintID,
 ) {
 	f.getStatusServer(coordinatorNodeID).setTxnIDEntry(txnID, txnFingerprintID)
 }
