@@ -8,11 +8,12 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package rules
+package current
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/rel"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	. "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/rules"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scgraph"
 )
 
@@ -25,11 +26,11 @@ func init() {
 		scgraph.Precedence,
 		"index", "dependent",
 		scpb.Status_VALIDATED, scpb.Status_ABSENT,
-		func(from, to nodeVars) rel.Clauses {
+		func(from, to NodeVars) rel.Clauses {
 			return rel.Clauses{
-				from.typeFilter(isIndex),
-				to.typeFilter(isIndexDependent),
-				joinOnIndexID(from, to, "table-id", "index-id"),
+				from.TypeFilter(rulesVersionKey, IsIndex),
+				to.TypeFilter(rulesVersionKey, isIndexDependent),
+				JoinOnIndexID(from, to, "table-id", "index-id"),
 			}
 		},
 	)
@@ -38,11 +39,11 @@ func init() {
 		scgraph.Precedence,
 		"dependent", "index",
 		scpb.Status_ABSENT, scpb.Status_ABSENT,
-		func(from, to nodeVars) rel.Clauses {
+		func(from, to NodeVars) rel.Clauses {
 			return rel.Clauses{
-				from.typeFilter(isIndexDependent),
-				to.typeFilter(isIndex),
-				joinOnIndexID(from, to, "table-id", "index-id"),
+				from.TypeFilter(rulesVersionKey, isIndexDependent),
+				to.TypeFilter(rulesVersionKey, IsIndex),
+				JoinOnIndexID(from, to, "table-id", "index-id"),
 			}
 		},
 	)
@@ -53,7 +54,7 @@ func init() {
 
 	// If we're going to be removing columns from an index, we know that
 	// it'll be because we're dropping the index. If we're dropping the
-	// index and not the descriptor, we need to make sure that we only
+	// index and rules.Not the descriptor, we need to make sure that we only
 	// do it once the index is definitely being dropped. The reason for
 	// this is roundabout: dropping a column from an index which is itself
 	// being dropped is treated as a no-op by the op rules.
@@ -68,11 +69,11 @@ func init() {
 		scgraph.Precedence,
 		"index", "index-column",
 		scpb.Status_DELETE_ONLY, scpb.Status_ABSENT,
-		func(from, to nodeVars) rel.Clauses {
+		func(from, to NodeVars) rel.Clauses {
 			return rel.Clauses{
 				from.Type((*scpb.IndexColumn)(nil)),
-				to.typeFilter(isIndex),
-				joinOnIndexID(from, to, "table-id", "index-id"),
+				to.TypeFilter(rulesVersionKey, IsIndex),
+				JoinOnIndexID(from, to, "table-id", "index-id"),
 			}
 		},
 	)
@@ -94,12 +95,12 @@ func init() {
 		scgraph.SameStagePrecedence,
 		"partial-predicate", "index",
 		scpb.Status_ABSENT, scpb.Status_ABSENT,
-		func(from, to nodeVars) rel.Clauses {
+		func(from, to NodeVars) rel.Clauses {
 			return rel.Clauses{
 				from.Type((*scpb.SecondaryIndexPartial)(nil)),
-				from.descriptorIsNotBeingDropped(),
+				descriptorIsNotBeingDropped(from.El),
 				to.Type((*scpb.SecondaryIndex)(nil)),
-				joinOnIndexID(from, to, "table-id", "index-id"),
+				JoinOnIndexID(from, to, "table-id", "index-id"),
 			}
 		},
 	)

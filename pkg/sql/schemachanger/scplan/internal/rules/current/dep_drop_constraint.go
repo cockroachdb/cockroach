@@ -8,11 +8,12 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package rules
+package current
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/rel"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	. "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/rules"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scgraph"
 )
 
@@ -25,11 +26,11 @@ func init() {
 		scgraph.SameStagePrecedence,
 		"dependent", "constraint",
 		scpb.Status_ABSENT, scpb.Status_ABSENT,
-		func(from, to nodeVars) rel.Clauses {
+		func(from, to NodeVars) rel.Clauses {
 			return rel.Clauses{
-				from.typeFilter(isConstraintDependent),
-				to.typeFilter(isConstraint, not(isIndex)),
-				joinOnConstraintID(from, to, "table-id", "constraint-id"),
+				from.TypeFilter(rulesVersionKey, isConstraintDependent),
+				to.TypeFilter(rulesVersionKey, isConstraint, Not(IsIndex)),
+				JoinOnConstraintID(from, to, "table-id", "constraint-id"),
 			}
 		},
 	)
@@ -39,11 +40,11 @@ func init() {
 		scgraph.SameStagePrecedence,
 		"dependent", "constraint",
 		scpb.Status_VALIDATED, scpb.Status_ABSENT,
-		func(from, to nodeVars) rel.Clauses {
+		func(from, to NodeVars) rel.Clauses {
 			return rel.Clauses{
-				from.typeFilter(isConstraintDependent),
-				to.typeFilter(isConstraint, isIndex),
-				joinOnConstraintID(from, to, "table-id", "constraint-id"),
+				from.TypeFilter(rulesVersionKey, isConstraintDependent),
+				to.TypeFilter(rulesVersionKey, isConstraint, IsIndex),
+				JoinOnConstraintID(from, to, "table-id", "constraint-id"),
 			}
 		},
 	)
