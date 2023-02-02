@@ -258,6 +258,12 @@ var upgrades = []upgradebase.Upgrade{
 		keyVisualizerTablesMigration,
 		"initialize key visualizer tables and jobs",
 	),
+	upgrade.NewTenantUpgrade(
+		"add secondary index to table system.privileges",
+		toCV(clusterversion.V23_1AlterSystemPrivilegesAddIndex),
+		upgrade.NoPrecondition,
+		alterSystemPrivilegesAddSecondaryIndex,
+	),
 }
 
 func init() {

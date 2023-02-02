@@ -2925,6 +2925,16 @@ var (
 				KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC, catenumpb.IndexColumn_ASC},
 				KeyColumnIDs:        []descpb.ColumnID{1, 2},
 			},
+			descpb.IndexDescriptor{
+				Name:                "path_idx",
+				ID:                  2,
+				Unique:              true,
+				KeyColumnNames:      []string{"path", "username"},
+				KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC, catenumpb.IndexColumn_ASC},
+				KeyColumnIDs:        []descpb.ColumnID{2, 1},
+				StoreColumnNames:    []string{"privileges", "grant_options"},
+				StoreColumnIDs:      []descpb.ColumnID{3, 4},
+			},
 		),
 	)
 
