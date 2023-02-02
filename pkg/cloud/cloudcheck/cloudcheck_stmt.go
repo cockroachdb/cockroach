@@ -79,7 +79,7 @@ func ShowCloudStorageTestPlanHook(
 		for i := range plan.PlanToStreamColMap {
 			plan.PlanToStreamColMap[i] = i
 		}
-		dsp.FinalizePlan(planCtx, plan)
+		sql.FinalizePlan(planCtx, plan)
 
 		rateFromDatums := func(bytes tree.Datum, nanos tree.Datum) string {
 			return string(humanizeutil.DataRate(int64(tree.MustBeDInt(bytes)), time.Duration(tree.MustBeDInt(nanos))))
