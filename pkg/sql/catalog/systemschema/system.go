@@ -2921,9 +2921,9 @@ var (
 				Name:                "primary",
 				ID:                  1,
 				Unique:              true,
-				KeyColumnNames:      []string{"username", "path"},
+				KeyColumnNames:      []string{"path", "username"},
 				KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC, catenumpb.IndexColumn_ASC},
-				KeyColumnIDs:        []descpb.ColumnID{1, 2},
+				KeyColumnIDs:        []descpb.ColumnID{2, 1},
 			},
 		),
 	)
