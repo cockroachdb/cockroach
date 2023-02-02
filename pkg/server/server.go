@@ -914,7 +914,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	// Initialize the pgwire pre-server, which initializes connections,
 	// sets up TLS and reads client status parameters.
-	pgPreServer := pgwire.MakePreServeConnHandler(
+	pgPreServer := pgwire.NewPreServeConnHandler(
 		cfg.AmbientCtx,
 		cfg.Config,
 		cfg.Settings,
@@ -1040,7 +1040,11 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	sc := newServerController(ctx,
 		node, cfg.BaseConfig.IDContainer,
 		stopper, st,
-		lateBoundServer, &systemServerWrapper{server: lateBoundServer}, systemTenantNameContainer)
+		lateBoundServer,
+		&systemServerWrapper{server: lateBoundServer},
+		systemTenantNameContainer,
+		pgPreServer.SendRoutingError,
+	)
 
 	// Create the debug API server.
 	debugServer := debug.NewServer(
@@ -1116,7 +1120,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		protectedtsProvider:    protectedtsProvider,
 		spanConfigSubscriber:   spanConfig.subscriber,
 		spanConfigReporter:     spanConfig.reporter,
-		pgPreServer:            &pgPreServer,
+		pgPreServer:            pgPreServer,
 		sqlServer:              sqlServer,
 		serverController:       sc,
 		externalStorageBuilder: externalStorageBuilder,

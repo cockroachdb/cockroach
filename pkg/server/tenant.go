@@ -253,7 +253,7 @@ func NewTenantServer(
 	if !baseCfg.DisableSQLListener {
 		// Initialize the pgwire pre-server, which initializes connections,
 		// sets up TLS and reads client status parameters.
-		ps := pgwire.MakePreServeConnHandler(
+		pgPreServer = pgwire.NewPreServeConnHandler(
 			baseCfg.AmbientCtx,
 			baseCfg.Config,
 			args.Settings,
@@ -262,10 +262,9 @@ func NewTenantServer(
 			args.monitorAndMetrics.rootSQLMemoryMonitor,
 			false, /* acceptTenantName */
 		)
-		for _, m := range ps.Metrics() {
+		for _, m := range pgPreServer.Metrics() {
 			args.registry.AddMetricStruct(m)
 		}
-		pgPreServer = &ps
 	}
 
 	// Instantiate the SQL server proper.

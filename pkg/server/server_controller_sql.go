@@ -76,17 +76,15 @@ func (c *serverController) sqlMux(
 		})
 
 	case pgwire.PreServeReady:
-		tenantName := status.GetTenantName()
+		tenantName := roachpb.TenantName(status.GetTenantName())
 		if tenantName == "" {
-			tenantName = defaultTenantSelect.Get(&c.st.SV)
+			tenantName = roachpb.TenantName(defaultTenantSelect.Get(&c.st.SV))
 		}
 
-		s, err := c.getServer(ctx, roachpb.TenantName(tenantName))
+		s, err := c.getServer(ctx, tenantName)
 		if err != nil {
 			log.Warningf(ctx, "unable to find server for tenant %q: %v", tenantName, err)
-			// TODO(knz): we might want to send a pg error to the client here.
-			// See: https://github.com/cockroachdb/cockroach/issues/92525
-			_ = conn.Close()
+			c.sendSQLRoutingError(ctx, conn, tenantName)
 			return err
 		}
 
