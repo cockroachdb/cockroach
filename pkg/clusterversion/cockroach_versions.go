@@ -426,6 +426,10 @@ const (
 	// user_id column in the system.web_sessions table has been backfilled.
 	V23_1WebSessionsTableUserIDColumnBackfilled
 
+	// V23_1AlterSystemPrivilegesAddIndexOnPathAndUsername adds a covering secondary index to
+	// system.privileges, on the path and username columns.
+	V23_1AlterSystemPrivilegesAddIndexOnPathAndUsername
+
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -734,6 +738,10 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     V23_1WebSessionsTableUserIDColumnBackfilled,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 48},
+	},
+	{
+		Key:     V23_1AlterSystemPrivilegesAddIndexOnPathAndUsername,
+		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 50},
 	},
 
 	// *************************************************
