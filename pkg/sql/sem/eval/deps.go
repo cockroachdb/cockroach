@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/lib/pq/oid"
@@ -232,6 +233,10 @@ type Planner interface {
 	// ForceDeleteTableData cleans up underlying data for a table
 	// descriptor ID. See the comment on the planner implementation.
 	ForceDeleteTableData(ctx context.Context, descID int64) error
+
+	// UpsertDroppedRelationGCTTL is used to upsert the GC TTL in the zone
+	// configuration of a dropped table, sequence or materialized view.
+	UpsertDroppedRelationGCTTL(ctx context.Context, id int64, ttl duration.Duration) error
 
 	// UnsafeUpsertNamespaceEntry is used to repair namespace entries in dire
 	// circumstances. See the comment on the planner implementation.
