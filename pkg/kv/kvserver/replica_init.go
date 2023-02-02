@@ -208,11 +208,11 @@ func (r *Replica) loadRaftMuLockedReplicaMuLocked(desc *roachpb.RangeDescriptor)
 	if r.mu.state, err = r.mu.stateLoader.Load(ctx, r.Engine(), desc); err != nil {
 		return err
 	}
-	r.mu.lastIndex, err = r.mu.stateLoader.LoadLastIndex(ctx, r.Engine())
+	r.mu.lastIndexNotDurable, err = r.mu.stateLoader.LoadLastIndex(ctx, r.Engine())
 	if err != nil {
 		return err
 	}
-	r.mu.lastTerm = invalidLastTerm
+	r.mu.lastTermNotDurable = invalidLastTerm
 
 	// Ensure that we're not trying to load a replica with a different ID than
 	// was used to construct this Replica.
