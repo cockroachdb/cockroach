@@ -18,18 +18,18 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
-// resetHighWaterMarkInterval specifies how often the high-water mark value will
+// envMemprofInterval specifies how often the high-water mark value will
 // be reset. Immediately after it is reset, a new profile will be taken.
 //
 // If the value is 0, the collection of profiles gets disabled.
-var resetHighWaterMarkInterval = func() time.Duration {
+var envMemprofInterval = func() time.Duration {
 	dur := envutil.EnvOrDefaultDuration("COCKROACH_MEMPROF_INTERVAL", time.Hour)
 	if dur <= 0 {
 		// Instruction to disable.
 		return 0
 	}
 	return dur
-}()
+}
 
 // timestampFormat is chosen to mimic that used by the log
 // package. This is not a hard requirement though; the profiles are
@@ -42,22 +42,41 @@ type testingKnobs struct {
 	now                  func() time.Time
 }
 
+func zeroFloor() int64 { return 0 }
+
 type profiler struct {
+	// These fields need to be initialized at profiler creation time.
+
 	store *profileStore
+	// highWaterMarkFloor is the "zero value" for highWaterMark but might be
+	// larger than zero. For example, we may only ever want to take a CPU profile
+	// if CPU usage is high.
+	//
+	// The returned number may change from call to call.
+	highWaterMarkFloor func() int64
+	// resetInterval indicates the duration after which the high watermark resets
+	// to the floor, i.e. after which a new profile may be taken assuming it
+	// clears the floor threshold. This may change from call to call.
+	resetInterval func() time.Duration
+	knobs         testingKnobs
+
+	// Internal state, does not need to be initialized.
 
 	// lastProfileTime marks the time when we took the last profile.
 	lastProfileTime time.Time
-	// highwaterMarkBytes represents the maximum heap size that we've seen since
+	// highWaterMark represents the maximum score that we've seen since
 	// resetting the filed (which happens periodically).
-	highwaterMarkBytes int64
-	// resetInterval indicates the duration after which the high watermark resets,
-	// i.e. after which a new profile may be taken assuming it clears the
-	// threshold.
-	// of resetHighWaterMarkInterval. highwaterMarkBytes is also not set to 0
-	// if resetInterval exists since we want to take a profile if both the
-	// interval has elapsed and highwaterMarkBytes has been exceeded.
-	resetInterval time.Duration
-	knobs         testingKnobs
+	highWaterMark int64
+}
+
+func makeProfiler(
+	store *profileStore, highWaterMarkBytesFloor func() int64, resetInterval func() time.Duration,
+) profiler {
+	return profiler{
+		store:              store,
+		highWaterMarkFloor: highWaterMarkBytesFloor,
+		resetInterval:      resetInterval,
+	}
 }
 
 func (o *profiler) now() time.Time {
@@ -72,23 +91,20 @@ func (o *profiler) maybeTakeProfile(
 	thresholdValue int64,
 	takeProfileFn func(ctx context.Context, path string) bool,
 ) {
-	if resetHighWaterMarkInterval == 0 {
+	if o.resetInterval() == 0 {
 		// Instruction to disable.
 		return
 	}
 
 	now := o.now()
-	// If it's been too long since we took a profile, make sure we'll take one now
-	// unless a resetInterval has been provided.
-	if o.resetInterval != 0 {
-		if now.Sub(o.lastProfileTime) < o.resetInterval {
-			return
-		}
-	} else if now.Sub(o.lastProfileTime) >= resetHighWaterMarkInterval {
-		o.highwaterMarkBytes = 0
+	// Check whether to reset the high watermark to the floor. This is the case if
+	// the floor (which might change) is now below the high water mark, or if
+	// enough time has elapsed to reset the high water mark.
+	if floor := o.highWaterMarkFloor(); o.highWaterMark < floor || now.Sub(o.lastProfileTime) >= o.resetInterval() {
+		o.highWaterMark = floor
 	}
 
-	takeProfile := thresholdValue > o.highwaterMarkBytes
+	takeProfile := thresholdValue > o.highWaterMark
 	if hook := o.knobs.maybeTakeProfileHook; hook != nil {
 		hook(takeProfile)
 	}
@@ -96,7 +112,7 @@ func (o *profiler) maybeTakeProfile(
 		return
 	}
 
-	o.highwaterMarkBytes = thresholdValue
+	o.highWaterMark = thresholdValue
 	o.lastProfileTime = now
 
 	if o.knobs.dontWriteProfiles {
