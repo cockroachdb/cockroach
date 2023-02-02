@@ -17,9 +17,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
@@ -57,7 +59,7 @@ func NewTestingReader(
 	slReader sqlliveness.Reader,
 	f *rangefeed.Factory,
 	codec keys.SQLCodec,
-	tableID descpb.ID,
+	table catalog.TableDescriptor,
 	clock *hlc.Clock,
 	stopper *stop.Stopper,
 ) *Reader {
@@ -67,7 +69,7 @@ func NewTestingReader(
 		f:               f,
 		codec:           codec,
 		clock:           clock,
-		rowcodec:        makeRowCodec(codec, tableID),
+		rowcodec:        makeRowCodec(codec, table),
 		initialScanDone: make(chan struct{}),
 		stopper:         stopper,
 	}
@@ -84,7 +86,7 @@ func NewReader(
 	clock *hlc.Clock,
 	stopper *stop.Stopper,
 ) *Reader {
-	return NewTestingReader(storage, slReader, f, codec, keys.SQLInstancesTableID, clock, stopper)
+	return NewTestingReader(storage, slReader, f, codec, systemschema.SQLInstancesTable(), clock, stopper)
 }
 
 // Start initializes the rangefeed for the Reader. The rangefeed will run until
@@ -119,6 +121,49 @@ func (r *Reader) WaitForStarted(ctx context.Context) error {
 		return errors.Wrap(ctx.Err(),
 			"failed to retrieve initial instance data")
 	}
+}
+
+func makeInstanceInfo(row instancerow) sqlinstance.InstanceInfo {
+	return sqlinstance.InstanceInfo{
+		InstanceID:      row.instanceID,
+		InstanceRPCAddr: row.rpcAddr,
+		InstanceSQLAddr: row.sqlAddr,
+		SessionID:       row.sessionID,
+		Locality:        row.locality,
+	}
+}
+
+func makeInstanceInfos(rows []instancerow) []sqlinstance.InstanceInfo {
+	ret := make([]sqlinstance.InstanceInfo, len(rows))
+	for i := range rows {
+		ret[i] = makeInstanceInfo(rows[i])
+	}
+	return ret
+}
+
+// GetAllInstancesUsingTxn reads all instances using the given transaction and returns
+// live instances only.
+func (r *Reader) GetAllInstancesUsingTxn(
+	ctx context.Context, txn *kv.Txn,
+) ([]sqlinstance.InstanceInfo, error) {
+	instancesTablePrefix := r.rowcodec.codec.TablePrefix(uint32(r.rowcodec.tableID))
+	rows, err := txn.Scan(ctx, instancesTablePrefix, instancesTablePrefix.PrefixEnd(), 0 /* maxRows */)
+	if err != nil {
+		return nil, err
+	}
+	decodedRows := make([]instancerow, 0, len(rows))
+	for _, row := range rows {
+		decodedRow, err := r.rowcodec.decodeRow(row.Key, row.Value)
+		if err != nil {
+			return nil, err
+		}
+		decodedRows = append(decodedRows, decodedRow)
+	}
+	filteredRows, err := selectDistinctLiveRows(ctx, r.slReader, decodedRows)
+	if err != nil {
+		return nil, err
+	}
+	return makeInstanceInfos(filteredRows), nil
 }
 
 func (r *Reader) startRangeFeed(ctx context.Context) {
@@ -202,31 +247,22 @@ func (r *Reader) GetInstance(
 // This method does not block as the underlying sqlliveness.Reader
 // being used (outside of test environment) is a cached reader which
 // does not perform any RPCs in its `isAlive()` calls.
-func (r *Reader) GetAllInstances(
-	ctx context.Context,
-) (sqlInstances []sqlinstance.InstanceInfo, _ error) {
+func (r *Reader) GetAllInstances(ctx context.Context) ([]sqlinstance.InstanceInfo, error) {
 	if err := r.initialScanErr(); err != nil {
 		return nil, err
 	}
-	liveInstances, err := r.getAllLiveInstances(ctx)
+	liveInstances, err := selectDistinctLiveRows(ctx, r.slReader, r.getAllInstanceRows())
 	if err != nil {
 		return nil, err
 	}
-	for _, liveInstance := range liveInstances {
-		instanceInfo := sqlinstance.InstanceInfo{
-			InstanceID:      liveInstance.instanceID,
-			InstanceRPCAddr: liveInstance.rpcAddr,
-			InstanceSQLAddr: liveInstance.sqlAddr,
-			SessionID:       liveInstance.sessionID,
-			Locality:        liveInstance.locality,
-		}
-		sqlInstances = append(sqlInstances, instanceInfo)
-	}
-	return sqlInstances, nil
+	return makeInstanceInfos(liveInstances), nil
 }
 
-func (r *Reader) getAllLiveInstances(ctx context.Context) ([]instancerow, error) {
-	rows := r.getAllInstanceRows()
+// selectDistinctLiveRows modifies the given slice in-place and returns
+// the selected rows.
+func selectDistinctLiveRows(
+	ctx context.Context, slReader sqlliveness.Reader, rows []instancerow,
+) ([]instancerow, error) {
 	// Filter inactive instances.
 	{
 		truncated := rows[:0]
@@ -235,7 +271,7 @@ func (r *Reader) getAllLiveInstances(ctx context.Context) ([]instancerow, error)
 			if row.isAvailable() {
 				continue
 			}
-			isAlive, err := r.slReader.IsAlive(ctx, row.sessionID)
+			isAlive, err := slReader.IsAlive(ctx, row.sessionID)
 			if err != nil {
 				return nil, err
 			}

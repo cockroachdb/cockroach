@@ -11,6 +11,8 @@ import (
 	username "github.com/cockroachdb/cockroach/pkg/security/username"
 	cluster "github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	catalog "github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	catalogkeys "github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
+	descpb "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	scexec "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	scmutationexec "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/scmutationexec"
 	catid "github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
@@ -40,16 +42,74 @@ func (m *MockCatalog) EXPECT() *MockCatalogMockRecorder {
 	return m.recorder
 }
 
-// AddSyntheticDescriptor mocks base method.
-func (m *MockCatalog) AddSyntheticDescriptor(arg0 catalog.Descriptor) {
+// CreateOrUpdateDescriptor mocks base method.
+func (m *MockCatalog) CreateOrUpdateDescriptor(arg0 context.Context, arg1 catalog.MutableDescriptor) error {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "AddSyntheticDescriptor", arg0)
+	ret := m.ctrl.Call(m, "CreateOrUpdateDescriptor", arg0, arg1)
+	ret0, _ := ret[0].(error)
+	return ret0
 }
 
-// AddSyntheticDescriptor indicates an expected call of AddSyntheticDescriptor.
-func (mr *MockCatalogMockRecorder) AddSyntheticDescriptor(arg0 interface{}) *gomock.Call {
+// CreateOrUpdateDescriptor indicates an expected call of CreateOrUpdateDescriptor.
+func (mr *MockCatalogMockRecorder) CreateOrUpdateDescriptor(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddSyntheticDescriptor", reflect.TypeOf((*MockCatalog)(nil).AddSyntheticDescriptor), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateOrUpdateDescriptor", reflect.TypeOf((*MockCatalog)(nil).CreateOrUpdateDescriptor), arg0, arg1)
+}
+
+// DeleteComment mocks base method.
+func (m *MockCatalog) DeleteComment(arg0 context.Context, arg1 catalogkeys.CommentKey) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteComment", arg0, arg1)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeleteComment indicates an expected call of DeleteComment.
+func (mr *MockCatalogMockRecorder) DeleteComment(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteComment", reflect.TypeOf((*MockCatalog)(nil).DeleteComment), arg0, arg1)
+}
+
+// DeleteDescriptor mocks base method.
+func (m *MockCatalog) DeleteDescriptor(arg0 context.Context, arg1 catid.DescID) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteDescriptor", arg0, arg1)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeleteDescriptor indicates an expected call of DeleteDescriptor.
+func (mr *MockCatalogMockRecorder) DeleteDescriptor(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteDescriptor", reflect.TypeOf((*MockCatalog)(nil).DeleteDescriptor), arg0, arg1)
+}
+
+// DeleteName mocks base method.
+func (m *MockCatalog) DeleteName(arg0 context.Context, arg1 descpb.NameInfo, arg2 catid.DescID) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteName", arg0, arg1, arg2)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeleteName indicates an expected call of DeleteName.
+func (mr *MockCatalogMockRecorder) DeleteName(arg0, arg1, arg2 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteName", reflect.TypeOf((*MockCatalog)(nil).DeleteName), arg0, arg1, arg2)
+}
+
+// DeleteZoneConfig mocks base method.
+func (m *MockCatalog) DeleteZoneConfig(arg0 context.Context, arg1 catid.DescID) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteZoneConfig", arg0, arg1)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeleteZoneConfig indicates an expected call of DeleteZoneConfig.
+func (mr *MockCatalogMockRecorder) DeleteZoneConfig(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteZoneConfig", reflect.TypeOf((*MockCatalog)(nil).DeleteZoneConfig), arg0, arg1)
 }
 
 // GetFullyQualifiedName mocks base method.
@@ -102,18 +162,60 @@ func (mr *MockCatalogMockRecorder) MustReadMutableDescriptor(arg0, arg1 interfac
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MustReadMutableDescriptor", reflect.TypeOf((*MockCatalog)(nil).MustReadMutableDescriptor), arg0, arg1)
 }
 
-// NewCatalogChangeBatcher mocks base method.
-func (m *MockCatalog) NewCatalogChangeBatcher() scexec.CatalogChangeBatcher {
+// Reset mocks base method.
+func (m *MockCatalog) Reset(arg0 context.Context) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "NewCatalogChangeBatcher")
-	ret0, _ := ret[0].(scexec.CatalogChangeBatcher)
+	ret := m.ctrl.Call(m, "Reset", arg0)
+	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// NewCatalogChangeBatcher indicates an expected call of NewCatalogChangeBatcher.
-func (mr *MockCatalogMockRecorder) NewCatalogChangeBatcher() *gomock.Call {
+// Reset indicates an expected call of Reset.
+func (mr *MockCatalogMockRecorder) Reset(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewCatalogChangeBatcher", reflect.TypeOf((*MockCatalog)(nil).NewCatalogChangeBatcher))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Reset", reflect.TypeOf((*MockCatalog)(nil).Reset), arg0)
+}
+
+// Run mocks base method.
+func (m *MockCatalog) Run(arg0 context.Context) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Run", arg0)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Run indicates an expected call of Run.
+func (mr *MockCatalogMockRecorder) Run(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Run", reflect.TypeOf((*MockCatalog)(nil).Run), arg0)
+}
+
+// UpdateComment mocks base method.
+func (m *MockCatalog) UpdateComment(arg0 context.Context, arg1 catalogkeys.CommentKey, arg2 string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateComment", arg0, arg1, arg2)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UpdateComment indicates an expected call of UpdateComment.
+func (mr *MockCatalogMockRecorder) UpdateComment(arg0, arg1, arg2 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateComment", reflect.TypeOf((*MockCatalog)(nil).UpdateComment), arg0, arg1, arg2)
+}
+
+// Validate mocks base method.
+func (m *MockCatalog) Validate(arg0 context.Context) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Validate", arg0)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Validate indicates an expected call of Validate.
+func (mr *MockCatalogMockRecorder) Validate(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Validate", reflect.TypeOf((*MockCatalog)(nil).Validate), arg0)
 }
 
 // MockDependencies is a mock of Dependencies interface.
@@ -207,20 +309,6 @@ func (m *MockDependencies) DescriptorMetadataUpdater(arg0 context.Context) scexe
 func (mr *MockDependenciesMockRecorder) DescriptorMetadataUpdater(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescriptorMetadataUpdater", reflect.TypeOf((*MockDependencies)(nil).DescriptorMetadataUpdater), arg0)
-}
-
-// EventLogger mocks base method.
-func (m *MockDependencies) EventLogger() scexec.EventLogger {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "EventLogger")
-	ret0, _ := ret[0].(scexec.EventLogger)
-	return ret0
-}
-
-// EventLogger indicates an expected call of EventLogger.
-func (mr *MockDependenciesMockRecorder) EventLogger() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EventLogger", reflect.TypeOf((*MockDependencies)(nil).EventLogger))
 }
 
 // GetTestingKnobs mocks base method.
@@ -610,6 +698,20 @@ func (m *MockIndexSpanSplitter) MaybeSplitIndexSpans(arg0 context.Context, arg1 
 func (mr *MockIndexSpanSplitterMockRecorder) MaybeSplitIndexSpans(arg0, arg1, arg2 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MaybeSplitIndexSpans", reflect.TypeOf((*MockIndexSpanSplitter)(nil).MaybeSplitIndexSpans), arg0, arg1, arg2)
+}
+
+// MaybeSplitIndexSpansForPartitioning mocks base method.
+func (m *MockIndexSpanSplitter) MaybeSplitIndexSpansForPartitioning(arg0 context.Context, arg1 catalog.TableDescriptor, arg2 catalog.Index) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "MaybeSplitIndexSpansForPartitioning", arg0, arg1, arg2)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// MaybeSplitIndexSpansForPartitioning indicates an expected call of MaybeSplitIndexSpansForPartitioning.
+func (mr *MockIndexSpanSplitterMockRecorder) MaybeSplitIndexSpansForPartitioning(arg0, arg1, arg2 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MaybeSplitIndexSpansForPartitioning", reflect.TypeOf((*MockIndexSpanSplitter)(nil).MaybeSplitIndexSpansForPartitioning), arg0, arg1, arg2)
 }
 
 // MockPeriodicProgressFlusher is a mock of PeriodicProgressFlusher interface.

@@ -270,6 +270,27 @@ func (p remoteParent) apply(opts spanOptions) spanOptions {
 	return opts
 }
 
+type remoteParentFromLocalSpanOption spanRef
+
+func (r remoteParentFromLocalSpanOption) apply(opts spanOptions) spanOptions {
+	opts.RemoteParent = r.Meta()
+	sr := spanRef(r)
+	sr.release()
+	return opts
+}
+
+// WithRemoteParentFromLocalSpan is equivalent to
+// WithRemoteParentFromSpanMeta(sp.Meta()), but doesn't allocate. The span will
+// be created with parent info, but without being linked into the parent. This
+// is useful when the child needs to be created with a different Tracer than the
+// parent - e.g. when a tenant is calling into the local KV server.
+func WithRemoteParentFromLocalSpan(sp *Span) SpanOption {
+	ref, _ /* ok */ := tryMakeSpanRef(sp)
+	// Note that ref will be Empty if tryMakeSpanRef() failed. In that case, the
+	// resulting span will not have a parent.
+	return remoteParentFromLocalSpanOption(ref)
+}
+
 type remoteParentFromTraceInfoOpt tracingpb.TraceInfo
 
 var _ SpanOption = &remoteParentFromTraceInfoOpt{}

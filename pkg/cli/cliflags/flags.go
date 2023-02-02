@@ -901,9 +901,11 @@ failures as well as the frequency of uncertainty-based read restarts.
 <PRE>
 
 </PRE>
-Note that this value must be the same on all nodes in the cluster. In order to
-change it, all nodes in the cluster must be stopped simultaneously and restarted
-with the new value.`,
+This value should be the same on all nodes in the cluster. It is allowed to
+differ such that the max-offset value can be changed via a rolling restart of
+the cluster, in which case the real clock offset between nodes must be below the
+smallest max-offset value of any node.
+`,
 	}
 
 	Store = FlagInfo{
@@ -1822,8 +1824,7 @@ See start --help for more flag details and examples.
 	}
 
 	ConfirmActions = FlagInfo{
-		Name:      "confirm",
-		Shorthand: "p",
+		Name: "confirm",
 		Description: `
 Confirm action:
 <PRE>

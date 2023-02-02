@@ -18,7 +18,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
@@ -26,12 +25,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/semenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -49,16 +48,15 @@ import (
 func validateCheckExpr(
 	ctx context.Context,
 	semaCtx *tree.SemaContext,
-	txn *kv.Txn,
+	txn isql.Txn,
 	sessionData *sessiondata.SessionData,
 	exprStr string,
 	tableDesc *tabledesc.Mutable,
-	ie sqlutil.InternalExecutor,
 	indexIDForValidation descpb.IndexID,
-) error {
-	expr, err := schemaexpr.FormatExprForDisplay(ctx, tableDesc, exprStr, semaCtx, sessionData, tree.FmtParsable)
+) (violatingRow tree.Datums, formattedCkExpr string, err error) {
+	formattedCkExpr, err = schemaexpr.FormatExprForDisplay(ctx, tableDesc, exprStr, semaCtx, sessionData, tree.FmtParsable)
 	if err != nil {
-		return err
+		return nil, formattedCkExpr, err
 	}
 	colSelectors := tabledesc.ColumnsSelectors(tableDesc.AccessibleColumns())
 	columns := tree.AsStringWithFlags(&colSelectors, tree.FmtSerializable)
@@ -66,22 +64,17 @@ func validateCheckExpr(
 	if indexIDForValidation != 0 {
 		queryStr = fmt.Sprintf(`SELECT %s FROM [%d AS t]@[%d] WHERE NOT (%s) LIMIT 1`, columns, tableDesc.GetID(), indexIDForValidation, exprStr)
 	}
-	log.Infof(ctx, "validating check constraint %q with query %q", expr, queryStr)
-	rows, err := ie.QueryRowEx(
+	log.Infof(ctx, "validating check constraint %q with query %q", formattedCkExpr, queryStr)
+	violatingRow, err = txn.QueryRowEx(
 		ctx,
 		"validate check constraint",
-		txn,
+		txn.KV(),
 		sessiondata.RootUserSessionDataOverride,
 		queryStr)
 	if err != nil {
-		return err
+		return nil, formattedCkExpr, err
 	}
-	if rows.Len() > 0 {
-		return pgerror.Newf(pgcode.CheckViolation,
-			"validation of CHECK %q failed on row: %s",
-			expr, labeledRowValues(tableDesc.AccessibleColumns(), rows))
-	}
-	return nil
+	return violatingRow, formattedCkExpr, nil
 }
 
 // matchFullUnacceptableKeyQuery generates and returns a query for rows that are
@@ -108,7 +101,7 @@ func matchFullUnacceptableKeyQuery(
 
 	returnedCols := srcCols
 	for i := 0; i < nCols; i++ {
-		col, err := srcTbl.FindColumnWithID(fk.OriginColumnIDs[i])
+		col, err := catalog.MustFindColumnByID(srcTbl, fk.OriginColumnIDs[i])
 		if err != nil {
 			return "", nil, err
 		}
@@ -127,7 +120,7 @@ func matchFullUnacceptableKeyQuery(
 			}
 		}
 		if !alreadyPresent {
-			col, err := tabledesc.FindPublicColumnWithID(srcTbl, id)
+			col, err := catalog.MustFindPublicColumnByID(srcTbl, id)
 			if err != nil {
 				return "", nil, err
 			}
@@ -185,7 +178,7 @@ func nonMatchingRowQuery(
 	indexIDForValidation descpb.IndexID,
 	limitResults bool,
 ) (sql string, originColNames []string, _ error) {
-	originColNames, err := srcTbl.NamesForColumnIDs(fk.OriginColumnIDs)
+	originColNames, err := catalog.ColumnNamesForIDs(srcTbl, fk.OriginColumnIDs)
 	if err != nil {
 		return "", nil, err
 	}
@@ -200,7 +193,7 @@ func nonMatchingRowQuery(
 			}
 		}
 		if !found {
-			column, err := tabledesc.FindPublicColumnWithID(srcTbl, pkColID)
+			column, err := catalog.MustFindPublicColumnByID(srcTbl, pkColID)
 			if err != nil {
 				return "", nil, err
 			}
@@ -215,7 +208,7 @@ func nonMatchingRowQuery(
 		qualifiedSrcCols[i] = fmt.Sprintf("s.%s", srcCols[i])
 	}
 
-	referencedColNames, err := targetTbl.NamesForColumnIDs(fk.ReferencedColumnIDs)
+	referencedColNames, err := catalog.ColumnNamesForIDs(targetTbl, fk.ReferencedColumnIDs)
 	if err != nil {
 		return "", nil, err
 	}
@@ -282,16 +275,15 @@ func nonMatchingRowQuery(
 // reuse an existing kv.Txn safely.
 func validateForeignKey(
 	ctx context.Context,
+	txn isql.Txn,
 	srcTable *tabledesc.Mutable,
 	targetTable catalog.TableDescriptor,
 	fk *descpb.ForeignKeyConstraint,
 	indexIDForValidation descpb.IndexID,
-	txn *kv.Txn,
-	ie sqlutil.InternalExecutor,
 ) error {
 	nCols := len(fk.OriginColumnIDs)
 
-	referencedColumnNames, err := targetTable.NamesForColumnIDs(fk.ReferencedColumnIDs)
+	referencedColumnNames, err := catalog.ColumnNamesForIDs(targetTable, fk.ReferencedColumnIDs)
 	if err != nil {
 		return err
 	}
@@ -314,8 +306,8 @@ func validateForeignKey(
 			query,
 		)
 
-		values, err := ie.QueryRowEx(ctx, "validate foreign key constraint",
-			txn,
+		values, err := txn.QueryRowEx(ctx, "validate foreign key constraint",
+			txn.KV(),
 			sessiondata.NodeUserSessionDataOverride, query)
 		if err != nil {
 			return err
@@ -338,7 +330,7 @@ func validateForeignKey(
 		query,
 	)
 
-	values, err := ie.QueryRowEx(ctx, "validate fk constraint", txn,
+	values, err := txn.QueryRowEx(ctx, "validate fk constraint", txn.KV(),
 		sessiondata.NodeUserSessionDataOverride, query)
 	if err != nil {
 		return err
@@ -378,7 +370,7 @@ func duplicateRowQuery(
 	indexIDForValidation descpb.IndexID,
 	limitResults bool,
 ) (sql string, colNames []string, _ error) {
-	colNames, err := srcTbl.NamesForColumnIDs(columnIDs)
+	colNames, err := catalog.ColumnNamesForIDs(srcTbl, columnIDs)
 	if err != nil {
 		return "", nil, err
 	}
@@ -446,7 +438,7 @@ func (p *planner) RevalidateUniqueConstraintsInCurrentDB(ctx context.Context) er
 			return err
 		}
 		return RevalidateUniqueConstraintsInTable(
-			ctx, p.Txn(), p.User(), p.ExecCfg().InternalExecutor, tableDesc,
+			ctx, p.InternalSQLTxn(), p.User(), tableDesc,
 		)
 	})
 }
@@ -461,7 +453,7 @@ func (p *planner) RevalidateUniqueConstraintsInTable(ctx context.Context, tableI
 		return err
 	}
 	return RevalidateUniqueConstraintsInTable(
-		ctx, p.Txn(), p.User(), p.ExecCfg().InternalExecutor, tableDesc,
+		ctx, p.InternalSQLTxn(), p.User(), tableDesc,
 	)
 }
 
@@ -492,8 +484,7 @@ func (p *planner) RevalidateUniqueConstraint(
 					index.IndexDesc().KeyColumnIDs[index.ImplicitPartitioningColumnCount():],
 					index.GetPredicate(),
 					0, /* indexIDForValidation */
-					p.ExecCfg().InternalExecutor,
-					p.Txn(),
+					p.InternalSQLTxn(),
 					p.User(),
 					true, /* preExisting */
 				)
@@ -513,8 +504,7 @@ func (p *planner) RevalidateUniqueConstraint(
 				uc.CollectKeyColumnIDs().Ordered(),
 				uc.GetPredicate(),
 				0, /* indexIDForValidation */
-				p.ExecCfg().InternalExecutor,
-				p.Txn(),
+				p.InternalSQLTxn(),
 				p.User(),
 				true, /* preExisting */
 			)
@@ -533,7 +523,7 @@ func (p *planner) IsConstraintActive(
 	if err != nil {
 		return false, err
 	}
-	constraint, _ := tableDesc.FindConstraintWithName(constraintName)
+	constraint := catalog.FindConstraintByName(tableDesc, constraintName)
 	return constraint != nil && constraint.IsEnforced(), nil
 }
 
@@ -562,11 +552,7 @@ func HasVirtualUniqueConstraints(tableDesc catalog.TableDescriptor) bool {
 // enforced by an index. This includes implicitly partitioned UNIQUE indexes
 // and UNIQUE WITHOUT INDEX constraints.
 func RevalidateUniqueConstraintsInTable(
-	ctx context.Context,
-	txn *kv.Txn,
-	user username.SQLUsername,
-	ie sqlutil.InternalExecutor,
-	tableDesc catalog.TableDescriptor,
+	ctx context.Context, txn isql.Txn, user username.SQLUsername, tableDesc catalog.TableDescriptor,
 ) error {
 	// Check implicitly partitioned UNIQUE indexes.
 	for _, index := range tableDesc.ActiveIndexes() {
@@ -578,7 +564,6 @@ func RevalidateUniqueConstraintsInTable(
 				index.IndexDesc().KeyColumnIDs[index.ImplicitPartitioningColumnCount():],
 				index.GetPredicate(),
 				0, /* indexIDForValidation */
-				ie,
 				txn,
 				user,
 				true, /* preExisting */
@@ -599,7 +584,6 @@ func RevalidateUniqueConstraintsInTable(
 				uc.CollectKeyColumnIDs().Ordered(),
 				uc.GetPredicate(),
 				0, /* indexIDForValidation */
-				ie,
 				txn,
 				user,
 				true, /* preExisting */
@@ -634,8 +618,7 @@ func validateUniqueConstraint(
 	columnIDs []descpb.ColumnID,
 	pred string,
 	indexIDForValidation descpb.IndexID,
-	ie sqlutil.InternalExecutor,
-	txn *kv.Txn,
+	txn isql.Txn,
 	user username.SQLUsername,
 	preExisting bool,
 ) error {
@@ -672,7 +655,7 @@ func validateUniqueConstraint(
 		MaxRetries:     5,
 	}
 	for r := retry.StartWithCtx(ctx, retryOptions); r.Next(); {
-		values, err = ie.QueryRowEx(ctx, "validate unique constraint", txn, sessionDataOverride, query)
+		values, err = txn.QueryRowEx(ctx, "validate unique constraint", txn.KV(), sessionDataOverride, query)
 		if err == nil {
 			break
 		}
@@ -744,7 +727,7 @@ func (p *planner) validateTTLScheduledJobInTable(
 	ttl := tableDesc.GetRowLevelTTL()
 
 	execCfg := p.ExecCfg()
-	env := JobSchedulerEnv(execCfg)
+	env := JobSchedulerEnv(execCfg.JobsKnobs())
 
 	wrapError := func(origErr error) error {
 		return errors.WithHintf(
@@ -754,13 +737,7 @@ func (p *planner) validateTTLScheduledJobInTable(
 		)
 	}
 
-	sj, err := jobs.LoadScheduledJob(
-		ctx,
-		env,
-		ttl.ScheduleID,
-		execCfg.InternalExecutor,
-		p.txn,
-	)
+	sj, err := jobs.ScheduledJobTxn(p.InternalSQLTxn()).Load(ctx, env, ttl.ScheduleID)
 	if err != nil {
 		if jobs.HasScheduledJobNotFoundError(err) {
 			return wrapError(
@@ -818,8 +795,8 @@ func (p *planner) RepairTTLScheduledJobForTable(ctx context.Context, tableID int
 	}
 	sj, err := CreateRowLevelTTLScheduledJob(
 		ctx,
-		p.ExecCfg(),
-		p.txn,
+		p.ExecCfg().JobsKnobs(),
+		jobs.ScheduledJobTxn(p.InternalSQLTxn()),
 		p.User(),
 		tableDesc.GetID(),
 		tableDesc.GetRowLevelTTL(),
@@ -903,4 +880,20 @@ func checkMutationInput(
 		colIdx++
 	}
 	return nil
+}
+
+func newCheckViolationErr(
+	ckExpr string, tableColumns []catalog.Column, violatingRow tree.Datums,
+) error {
+	return pgerror.Newf(pgcode.CheckViolation,
+		"validation of CHECK %q failed on row: %s",
+		ckExpr, labeledRowValues(tableColumns, violatingRow))
+}
+
+func newNotNullViolationErr(
+	notNullColName string, tableColumns []catalog.Column, violatingRow tree.Datums,
+) error {
+	return pgerror.Newf(pgcode.NotNullViolation,
+		"validation of column %q NOT NULL failed on row: %s",
+		notNullColName, labeledRowValues(tableColumns, violatingRow))
 }

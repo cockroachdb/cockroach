@@ -11,6 +11,7 @@
 package scdecomp
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -94,14 +95,9 @@ func (w *walkCtx) newExpression(expr string) (*scpb.Expression, error) {
 				if err != nil {
 					return nil, err
 				}
-				w.cachedTypeIDClosures[id], err = typ.GetIDClosure()
-				if err != nil {
-					return nil, err
-				}
+				w.cachedTypeIDClosures[id] = typ.GetIDClosure()
 			}
-			for id = range w.cachedTypeIDClosures[id] {
-				typIDs.Add(id)
-			}
+			w.cachedTypeIDClosures[id].ForEach(typIDs.Add)
 		}
 	}
 
@@ -119,18 +115,19 @@ func (w *walkCtx) newExpression(expr string) (*scpb.Expression, error) {
 	}, nil
 }
 
-func newTypeT(t *types.T) (*scpb.TypeT, error) {
-	ids, err := typedesc.GetTypeDescriptorClosure(t)
-	if err != nil {
-		return nil, err
-	}
-	var ret catalog.DescriptorIDSet
-	for id := range ids {
-		ret.Add(id)
-	}
-	ret.Remove(descpb.InvalidID)
+func newTypeT(t *types.T) *scpb.TypeT {
 	return &scpb.TypeT{
 		Type:          t,
-		ClosedTypeIDs: ret.Ordered(),
-	}, nil
+		ClosedTypeIDs: typedesc.GetTypeDescriptorClosure(t).Ordered(),
+	}
+}
+
+// NewElementCreationMetadata construct a `*scpb.ElementCreationMetadata`
+// based on `clusterVersion`.
+func NewElementCreationMetadata(
+	clusterVersion clusterversion.ClusterVersion,
+) *scpb.ElementCreationMetadata {
+	return &scpb.ElementCreationMetadata{
+		In_23_1OrLater: clusterVersion.IsActive(clusterversion.V23_1),
+	}
 }

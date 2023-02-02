@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/keyvisualizer"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -127,6 +128,7 @@ func TestIndexBackfillMergeRetry(t *testing.T) {
 		GCJob: &sql.GCJobTestingKnobs{
 			SkipWaitingForMVCCGC: true,
 		},
+		KeyVisualizer: &keyvisualizer.TestingKnobs{SkipJobBootstrap: true},
 	}
 
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
@@ -577,6 +579,7 @@ func TestIndexBackfillMergeTxnRetry(t *testing.T) {
 		GCJob: &sql.GCJobTestingKnobs{
 			SkipWaitingForMVCCGC: true,
 		},
+		KeyVisualizer: &keyvisualizer.TestingKnobs{SkipJobBootstrap: true},
 	}
 
 	s, sqlDB, kvDB = serverutils.StartServer(t, params)

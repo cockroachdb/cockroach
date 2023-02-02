@@ -1470,6 +1470,7 @@ func BulkOpSummaryID(tableID, indexID uint64) uint64 {
 // Add combines the values from other, for use on an accumulator BulkOpSummary.
 func (b *BulkOpSummary) Add(other BulkOpSummary) {
 	b.DataSize += other.DataSize
+	b.SSTDataSize += other.SSTDataSize
 	b.DeprecatedRows += other.DeprecatedRows
 	b.DeprecatedIndexEntries += other.DeprecatedIndexEntries
 

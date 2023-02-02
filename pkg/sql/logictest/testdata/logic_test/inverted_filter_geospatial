@@ -49,19 +49,19 @@ SELECT k FROM geo_table WHERE ST_DWithin('POINT(2.5 2.5)'::geometry, geom, 1) OR
 statement ok
 SET CLUSTER SETTING sql.spatial.experimental_box2d_comparison_operators.enabled = on
 
-query I
+query I retry
 SELECT k FROM geo_table WHERE 'POINT(3.0 3.0)'::geometry && geom ORDER BY k
 ----
 3
 6
 
-query I
+query I retry
 SELECT k FROM geo_table WHERE 'POINT(3.0 3.0)'::geometry::box2d && geom ORDER BY k
 ----
 3
 6
 
-query I
+query I retry
 SELECT k FROM geo_table WHERE ST_Covers('LINESTRING(1.0 1.0, 5.0 5.0)'::geometry, geom) ORDER BY k
 ----
 1
@@ -71,7 +71,7 @@ SELECT k FROM geo_table WHERE ST_Covers('LINESTRING(1.0 1.0, 5.0 5.0)'::geometry
 
 # Note that the result of the `~` bounding box operation includes an extra
 # result not present in the previous result of ST_Covers.
-query I
+query I retry
 SELECT k FROM geo_table WHERE 'LINESTRING(1.0 1.0, 5.0 5.0)'::geometry ~ geom ORDER BY k
 ----
 1
@@ -80,7 +80,7 @@ SELECT k FROM geo_table WHERE 'LINESTRING(1.0 1.0, 5.0 5.0)'::geometry ~ geom OR
 4
 6
 
-query I
+query I retry
 SELECT k FROM geo_table WHERE 'LINESTRING(1.0 1.0, 5.0 5.0)'::geometry::box2d ~ geom ORDER BY k
 ----
 1
@@ -89,12 +89,12 @@ SELECT k FROM geo_table WHERE 'LINESTRING(1.0 1.0, 5.0 5.0)'::geometry::box2d ~ 
 4
 6
 
-query I
+query I retry
 SELECT k FROM geo_table WHERE geom ~ 'LINESTRING(1.0 1.0, 5.0 5.0)'::geometry ORDER BY k
 ----
 6
 
-query I
+query I retry
 SELECT k FROM geo_table WHERE geom ~ 'LINESTRING(1.0 1.0, 5.0 5.0)'::geometry::box2d ORDER BY k
 ----
 6

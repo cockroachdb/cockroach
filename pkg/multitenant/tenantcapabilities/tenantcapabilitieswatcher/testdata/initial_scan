@@ -1,0 +1,52 @@
+# Test initial scans work correctly over pre-existing capability state.
+# We also ensure that initial scans see the most recent state when they're
+# started.
+
+update-state
+upsert {ten=10}:{CanAdminSplit=true}
+upsert {ten=11}:{CanAdminSplit=false}
+upsert {ten=15}:{CanAdminSplit=false}
+----
+ok
+
+update-state
+delete {ten=10}
+upsert {ten=15}:{CanAdminSplit=true}
+----
+ok
+
+# Try reading capabilities before the Watcher is started.
+get-capabilities
+{ten=15}
+----
+not-found
+
+get-capabilities
+{ten=10}
+----
+not-found
+
+start
+----
+ok
+
+updates
+----
+Complete Update
+updated {ten=11}:{CanAdminSplit=false}
+updated {ten=15}:{CanAdminSplit=true}
+
+flush-state
+----
+{ten=11}:{CanAdminSplit=false}
+{ten=15}:{CanAdminSplit=true}
+
+get-capabilities
+{ten=10}
+----
+not-found
+
+get-capabilities
+{ten=15}
+----
+{CanAdminSplit=true}

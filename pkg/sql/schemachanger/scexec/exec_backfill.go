@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/scmutationexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/errors"
@@ -362,21 +361,5 @@ func runBackfill(
 	tracker BackfillerProgressWriter,
 	table catalog.TableDescriptor,
 ) error {
-	// Split off the index span prior to backfilling.
-	// TODO(ajwerner): Consider parallelizing splits.
-	for _, destIndexID := range progress.DestIndexIDs {
-		mut, err := scmutationexec.FindMutation(table,
-			scmutationexec.MakeIndexIDMutationSelector(destIndexID))
-		if err != nil {
-			return err
-		}
-
-		// Must be the right index given the above call.
-		idxToBackfill := mut.AsIndex()
-		if err := splitter.MaybeSplitIndexSpans(ctx, table, idxToBackfill); err != nil {
-			return err
-		}
-	}
-
 	return backfiller.BackfillIndexes(ctx, progress, tracker, table)
 }

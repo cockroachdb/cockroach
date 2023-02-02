@@ -19,17 +19,16 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -211,7 +210,7 @@ const (
 type Refresher struct {
 	log.AmbientContext
 	st      *cluster.Settings
-	ex      sqlutil.InternalExecutor
+	ex      isql.Executor
 	cache   *TableStatisticsCache
 	randGen autoStatsRand
 
@@ -267,7 +266,7 @@ type settingOverride struct {
 func MakeRefresher(
 	ambientCtx log.AmbientContext,
 	st *cluster.Settings,
-	ex sqlutil.InternalExecutor,
+	ex isql.Executor,
 	cache *TableStatisticsCache,
 	asOfTime time.Duration,
 ) *Refresher {
@@ -351,10 +350,10 @@ func (r *Refresher) autoStatsFractionStaleRows(explicitSettings *catpb.AutoStats
 func (r *Refresher) getTableDescriptor(
 	ctx context.Context, tableID descpb.ID,
 ) (desc catalog.TableDescriptor) {
-	if err := r.cache.internalExecutorFactory.DescsTxn(ctx, r.cache.ClientDB, func(
-		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+	if err := r.cache.db.DescsTxn(ctx, func(
+		ctx context.Context, txn descs.Txn,
 	) (err error) {
-		if desc, err = descriptors.ByIDWithLeased(txn).WithoutNonPublic().Get().Table(ctx, tableID); err != nil {
+		if desc, err = txn.Descriptors().ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Table(ctx, tableID); err != nil {
 			err = errors.Wrapf(err,
 				"failed to get table descriptor for automatic stats on table id: %d", tableID)
 		}
@@ -707,7 +706,7 @@ func (r *Refresher) maybeRefreshStats(
 		// refresh happens at exactly 2x the current average, and the average
 		// refresh time is calculated from the most recent 4 refreshes. See the
 		// comment in stats/delete_stats.go.)
-		maxTimeBetweenRefreshes := stat.CreatedAt.Add(2*avgRefreshTime(tableStats) + r.extraTime)
+		maxTimeBetweenRefreshes := stat.CreatedAt.Add(2*avgFullRefreshTime(tableStats) + r.extraTime)
 		if timeutil.Now().After(maxTimeBetweenRefreshes) {
 			mustRefresh = true
 		}
@@ -790,21 +789,20 @@ func mostRecentAutomaticStat(tableStats []*TableStatistic) *TableStatistic {
 	return nil
 }
 
-// avgRefreshTime returns the average time between automatic statistics
+// avgFullRefreshTime returns the average time between automatic full statistics
 // refreshes given a list of tableStats from one table. It does so by finding
-// the most recent automatically generated statistic (identified by the name
-// AutoStatsName), and then finds all previously generated automatic stats on
-// those same columns. The average is calculated as the average time between
-// each consecutive stat.
+// the most recent automatically generated statistic and then finds all
+// previously generated automatic stats on those same columns. The average is
+// calculated as the average time between each consecutive stat.
 //
 // If there are not at least two automatically generated statistics on the same
 // columns, the default value defaultAverageTimeBetweenRefreshes is returned.
-func avgRefreshTime(tableStats []*TableStatistic) time.Duration {
+func avgFullRefreshTime(tableStats []*TableStatistic) time.Duration {
 	var reference *TableStatistic
 	var sum time.Duration
 	var count int
 	for _, stat := range tableStats {
-		if stat.Name != jobspb.AutoStatsName {
+		if !stat.IsAuto() || stat.IsPartial() {
 			continue
 		}
 		if reference == nil {

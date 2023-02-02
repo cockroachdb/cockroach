@@ -10,20 +10,14 @@
 
 import { createSelector } from "reselect";
 import { AppState } from "src/store/reducers";
-import { selectTxnInsightsCombiner } from "src/selectors/insightsCommon.selectors";
 import { localStorageSelector } from "src/store/utils/selectors";
+import { TxnInsightEvent } from "src/insights";
 
-const selectTransactionInsightsData = (state: AppState) =>
-  state.adminUI.transactionInsights?.data;
+export const selectTransactionInsights = (state: AppState): TxnInsightEvent[] =>
+  state.adminUI.txnInsights?.data;
 
-export const selectTransactionInsights = createSelector(
-  (state: AppState) => state.adminUI.executionInsights?.data,
-  selectTransactionInsightsData,
-  selectTxnInsightsCombiner,
-);
-
-export const selectTransactionInsightsError = (state: AppState) =>
-  state.adminUI.transactionInsights?.lastError;
+export const selectTransactionInsightsError = (state: AppState): Error | null =>
+  state.adminUI.txnInsights?.lastError;
 
 export const selectSortSetting = createSelector(
   localStorageSelector,
@@ -35,6 +29,8 @@ export const selectFilters = createSelector(
   localStorage => localStorage["filters/InsightsPage"],
 );
 
-export const selectTransactionInsightsLoading = (state: AppState) =>
-  !state.adminUI.transactionInsights?.valid ||
-  state.adminUI.transactionInsights?.inFlight;
+// Show the data as 'Loading' when the request is in flight AND the
+// data is invalid or null.
+export const selectTransactionInsightsLoading = (state: AppState): boolean =>
+  state.adminUI.txnInsights?.inFlight &&
+  (!state.adminUI.txnInsights?.valid || !state.adminUI.txnInsights?.data);

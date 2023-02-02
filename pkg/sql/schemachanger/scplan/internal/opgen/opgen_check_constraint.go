@@ -25,7 +25,7 @@ func init() {
 						TableID:               this.TableID,
 						ConstraintID:          this.ConstraintID,
 						ColumnIDs:             this.ColumnIDs,
-						Expression:            this.Expression,
+						CheckExpr:             this.Expr,
 						FromHashShardedColumn: this.FromHashShardedColumn,
 					}
 				}),
@@ -38,11 +38,11 @@ func init() {
 						BackReferencedTableID: this.TableID,
 					}
 				}),
-				emit(func(this *scpb.CheckConstraint) *scop.UpdateBackReferencesInSequences {
+				emit(func(this *scpb.CheckConstraint) *scop.UpdateTableBackReferencesInSequences {
 					if len(this.UsesSequenceIDs) == 0 {
 						return nil
 					}
-					return &scop.UpdateBackReferencesInSequences{
+					return &scop.UpdateTableBackReferencesInSequences{
 						SequenceIDs:           this.UsesSequenceIDs,
 						BackReferencedTableID: this.TableID,
 					}
@@ -94,11 +94,11 @@ func init() {
 						BackReferencedTableID: this.TableID,
 					}
 				}),
-				emit(func(this *scpb.CheckConstraint) *scop.UpdateBackReferencesInSequences {
+				emit(func(this *scpb.CheckConstraint) *scop.UpdateTableBackReferencesInSequences {
 					if len(this.UsesSequenceIDs) == 0 {
 						return nil
 					}
-					return &scop.UpdateBackReferencesInSequences{
+					return &scop.UpdateTableBackReferencesInSequences{
 						SequenceIDs:           this.UsesSequenceIDs,
 						BackReferencedTableID: this.TableID,
 					}

@@ -21,8 +21,7 @@ func init() {
 	opRegistry.register((*scpb.Sequence)(nil),
 		toPublic(
 			scpb.Status_ABSENT,
-			equiv(scpb.Status_DROPPED),
-			to(scpb.Status_TXN_DROPPED,
+			to(scpb.Status_DROPPED,
 				emit(func(this *scpb.Sequence) *scop.NotImplemented {
 					return notImplemented(this)
 				}),
@@ -36,13 +35,6 @@ func init() {
 			),
 		),
 		toAbsent(scpb.Status_PUBLIC,
-			to(scpb.Status_TXN_DROPPED,
-				emit(func(this *scpb.Sequence, md *opGenContext) *scop.MarkDescriptorAsSyntheticallyDropped {
-					return &scop.MarkDescriptorAsSyntheticallyDropped{
-						DescriptorID: this.SequenceID,
-					}
-				}),
-			),
 			to(scpb.Status_DROPPED,
 				revertible(false),
 				emit(func(this *scpb.Sequence) *scop.MarkDescriptorAsDropped {
@@ -50,16 +42,8 @@ func init() {
 						DescriptorID: this.SequenceID,
 					}
 				}),
-				emit(func(this *scpb.Sequence) *scop.RemoveAllTableComments {
-					return &scop.RemoveAllTableComments{
-						TableID: this.SequenceID,
-					}
-				}),
 			),
 			to(scpb.Status_ABSENT,
-				emit(func(this *scpb.Sequence, md *opGenContext) *scop.LogEvent {
-					return newLogEventOp(this, md)
-				}),
 				emit(func(this *scpb.Sequence, md *opGenContext) *scop.CreateGCJobForTable {
 					if !md.ActiveVersion.IsActive(clusterversion.V23_1) {
 						return &scop.CreateGCJobForTable{

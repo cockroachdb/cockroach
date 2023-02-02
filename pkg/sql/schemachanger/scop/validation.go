@@ -36,5 +36,13 @@ type ValidateConstraint struct {
 	IndexIDForValidation descpb.IndexID
 }
 
+// ValidateColumnNotNull validates a NOT NULL constraint on a table's column.
+type ValidateColumnNotNull struct {
+	validationOp
+	TableID              descpb.ID
+	ColumnID             descpb.ColumnID
+	IndexIDForValidation descpb.IndexID
+}
+
 // Make sure baseOp is used for linter.
 var _ = validationOp{baseOp: baseOp{}}

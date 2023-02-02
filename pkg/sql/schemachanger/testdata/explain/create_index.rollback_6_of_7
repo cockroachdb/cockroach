@@ -6,7 +6,7 @@ CREATE TABLE t (k INT PRIMARY KEY, v e NOT NULL);
 CREATE INDEX idx1 ON t (v) WHERE (v = 'a');
 EXPLAIN (ddl) rollback at post-commit stage 6 of 7;
 ----
-Schema change plan for rolling back CREATE INDEX ‹idx1› ON ‹defaultdb›.public.‹t› (‹v›) WHERE (‹v› = ‹'a'›); 
+Schema change plan for rolling back CREATE INDEX ‹idx1› ON ‹defaultdb›.public.‹t› (‹v›) WHERE (‹v› = ‹'a'›);
  └── PostCommitNonRevertiblePhase
       ├── Stage 1 of 2 in PostCommitNonRevertiblePhase
       │    ├── 8 elements transitioning toward ABSENT
@@ -18,10 +18,9 @@ Schema change plan for rolling back CREATE INDEX ‹idx1› ON ‹defaultdb›.p
       │    │    ├── PUBLIC     → ABSENT      SecondaryIndexPartial:{DescID: 106, IndexID: 3}
       │    │    ├── PUBLIC     → ABSENT      IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 3}
       │    │    └── PUBLIC     → ABSENT      IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 3}
-      │    └── 7 Mutation operations
+      │    └── 6 Mutation operations
       │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":3,"TableID":106}
       │         ├── RemoveDroppedIndexPartialPredicate {"IndexID":3,"TableID":106}
-      │         ├── LogEvent {"TargetStatus":1}
       │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":2,"TableID":106}
       │         ├── SetIndexName {"IndexID":2,"Name":"crdb_internal_in...","TableID":106}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":106}

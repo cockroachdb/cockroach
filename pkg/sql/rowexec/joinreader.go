@@ -28,6 +28,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/memsize"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -240,6 +242,12 @@ type joinReader struct {
 	// scanStats is collected from the trace after we finish doing work for this
 	// join.
 	scanStats execstats.ScanStats
+
+	// Set errorOnLookup to true to cause the join to error out just prior to
+	// performing a lookup. This is currently only set when the join contains
+	// only lookups to rows in remote regions and remote accesses are set to
+	// error out via a session setting.
+	errorOnLookup bool
 }
 
 var _ execinfra.Processor = &joinReader{}
@@ -333,6 +341,9 @@ func newJoinReader(
 		return nil, err
 	}
 
+	errorOnLookup := spec.RemoteOnlyLookups && flowCtx.EvalCtx.SessionData().EnforceHomeRegion &&
+		flowCtx.EvalCtx.Planner != nil && flowCtx.EvalCtx.Planner.IsANSIDML()
+
 	jr := &joinReader{
 		fetchSpec:                         spec.FetchSpec,
 		splitFamilyIDs:                    spec.SplitFamilyIDs,
@@ -346,6 +357,7 @@ func newJoinReader(
 		usesStreamer:                      useStreamer,
 		lookupBatchBytesLimit:             rowinfra.BytesLimit(spec.LookupBatchBytesLimit),
 		limitHintHelper:                   execinfra.MakeLimitHintHelper(spec.LimitHint, post),
+		errorOnLookup:                     errorOnLookup,
 	}
 	if readerType != indexJoinReaderType {
 		jr.groupingState = &inputBatchGroupingState{doGrouping: spec.LeftJoinWithPairedJoiner}
@@ -1008,8 +1020,15 @@ func (jr *joinReader) readInput() (
 	return jrPerformingLookup, outRow, nil
 }
 
+var noHomeRegionError = pgerror.Newf(pgcode.QueryHasNoHomeRegion,
+	"Query has no home region. Try using a lower LIMIT value or running the query from a different region.")
+
 // performLookup reads the next batch of index rows.
 func (jr *joinReader) performLookup() (joinReaderState, *execinfrapb.ProducerMetadata) {
+	if jr.errorOnLookup {
+		jr.MoveToDraining(noHomeRegionError)
+		return jrStateUnknown, jr.DrainHelper()
+	}
 	for {
 		// Fetch the next row and tell the strategy to process it.
 		lookedUpRow, spanID, err := jr.fetcher.NextRow(jr.Ctx())
@@ -1182,6 +1201,7 @@ func (jr *joinReader) execStatsForTrace() *execinfrapb.ComponentStats {
 			ContentionTime:      optional.MakeTimeValue(contentionTime),
 			ContentionEvents:    contentionEvents,
 			BatchRequestsIssued: optional.MakeUint(uint64(jr.fetcher.GetBatchRequestsIssued())),
+			KVCPUTime:           optional.MakeTimeValue(fis.kvCPUTime),
 		},
 		Output: jr.OutputHelper.Stats(),
 	}

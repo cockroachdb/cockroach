@@ -14,23 +14,30 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
-	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
-// CanInlineWith returns whether or not it's valid to inline binding in expr.
-// This is the case when materialize is explicitly set to false, or when:
-//  1. binding has no volatile expressions (because once it's inlined, there's no
-//     guarantee it will be executed fully), and
-//  2. binding is referenced at most once in expr.
+// CanInlineWith returns true if it's valid to inline binding in expr. In order
+// to inline a CTE, the expression must not be volatile. In addition, the
+// materialize clause can affect whether or not a CTE is inlined:
+//
+//   - Default (empty) - Only a singly-referenced CTE is inlined. A
+//     multiply-referenced CTE is not inlined by default because it causes extra
+//     computation. It's not guaranteed in all cases that the benefits of
+//     inlining outweigh the cost of the extra computation.
+//
+//   - MATERIALIZED - The CTE is never inlined.
+//
+//   - NOT MATERIALIZED - A singly- and multiply-referenced CTE is inlined. This
+//     option allows a user to override the default behavior that does not
+//     inline a multiply-referenced CTE, if they have confidence that it will be
+//     beneficial to do so.
 func (c *CustomFuncs) CanInlineWith(binding, expr memo.RelExpr, private *memo.WithPrivate) bool {
-	// If materialization is set, ignore the checks below.
-	if private.Mtr.Set {
-		return !private.Mtr.Materialize
-	}
-	if binding.Relational().VolatilitySet.HasVolatile() {
+	if private.Mtr == tree.CTEMaterializeAlways ||
+		binding.Relational().VolatilitySet.HasVolatile() {
 		return false
 	}
-	return memo.WithUses(expr)[private.ID].Count <= 1
+	return memo.WithUses(expr)[private.ID].Count <= 1 || private.Mtr == tree.CTEMaterializeNever
 }
 
 // InlineWith replaces all references to the With expression in input (via
@@ -64,18 +71,39 @@ func (c *CustomFuncs) InlineWith(binding, input memo.RelExpr, priv *memo.WithPri
 	return replace(input).(memo.RelExpr)
 }
 
-// CanInlineWithScan returns whether or not it's valid and heuristically cheaper
-// to inline a WithScanExpr with its bound expression from the memo. Currently
-// this only allows inlining leak-proof constant VALUES clauses of the form
-// `column IN (VALUES(...))` or `column NOT IN(VALUES(...))`, but could likely
-// be extended to handle other expressions in the future.
-func (c *CustomFuncs) CanInlineWithScan(private *memo.WithScanPrivate, scalar opt.ScalarExpr) bool {
-	if !private.CanInlineInPlace {
+// BoundValues returns the bound Values expression for the WithID of the given
+// private. It returns ok=false if the bound expression is not a Values
+// expression.
+func (c *CustomFuncs) BoundValues(private *memo.WithScanPrivate) (*memo.ValuesExpr, bool) {
+	expr := c.mem.Metadata().WithBinding(private.With)
+	if v, ok := expr.(*memo.ValuesExpr); ok {
+		return v, true
+	}
+	return nil, false
+}
+
+// CanInlineWithScanOfValues returns true if it's valid and heuristically
+// cheaper to inline a WithScanExpr referencing a bound Values expression.
+// Currently, this only allows inlining leak-proof constant VALUES clauses of
+// the form `column IN (VALUES(...))` or `column NOT IN(VALUES(...))`.
+//
+// This function always returns false if the MATERIALIZED option was provided in
+// the CTE. If no materialize option was provided (the default), and the CTE is
+// referenced more than once, this function may return true. Note that this can
+// cause a multiply-referenced CTE to be inlined. This differs from the behavior
+// described in CanInlineWith, but is considered acceptable because a constant
+// Values expression is essentially "materialized" by definition, even if it is
+// inlined multiple times.
+func (c *CustomFuncs) CanInlineWithScanOfValues(
+	v *memo.ValuesExpr, private *memo.WithScanPrivate, scalar opt.ScalarExpr,
+) bool {
+	// Never inline if MATERIALIZED was specified.
+	if private.Mtr == tree.CTEMaterializeAlways {
 		return false
 	}
 	// If we don't have `column IN(...)` or `column NOT IN(...)` or
-	// (col1, col2 ... coln) IN/NOT IN (...), it is not cheaper to inline because
-	// we wouldn't be avoiding one or more joins.
+	// (col1, col2 ... coln) IN/NOT IN (...), it is not cheaper to inline
+	// because we wouldn't be avoiding one or more joins.
 	if tupleExpr, ok := scalar.(*memo.TupleExpr); ok {
 		for _, scalarExpr := range tupleExpr.Elems {
 			if scalarExpr.Op() != opt.VariableOp {
@@ -85,30 +113,17 @@ func (c *CustomFuncs) CanInlineWithScan(private *memo.WithScanPrivate, scalar op
 	} else if scalar.Op() != opt.VariableOp {
 		return false
 	}
-	expr := c.mem.Metadata().WithBinding(private.With)
-	var valuesExpr *memo.ValuesExpr
-	var ok bool
-	if valuesExpr, ok = expr.(*memo.ValuesExpr); !ok {
-		return false
-	}
-	if !valuesExpr.IsConstantsAndPlaceholders() {
+	if !v.IsConstantsAndPlaceholders() {
 		return false
 	}
 	return true
 }
 
-// InlineWithScan replaces a WithScanExpr with its bound expression, mapped to
-// new output ColumnIDs.
-func (c *CustomFuncs) InlineWithScan(private *memo.WithScanPrivate) memo.RelExpr {
-	expr := c.mem.Metadata().WithBinding(private.With)
-	var valuesExpr *memo.ValuesExpr
-	var ok bool
-	valuesExpr.Op()
-	if valuesExpr, ok = expr.(*memo.ValuesExpr); !ok {
-		// Didn't find the expected VALUES.
-		panic(errors.AssertionFailedf("attempt to inline a WithScan which is not a VALUES clause; operator: %s",
-			expr.Op().String()))
-	}
+// InlineWithScanOfValues replaces a WithScanExpr with its bound Values
+// expression, mapped to new output ColumnIDs.
+func (c *CustomFuncs) InlineWithScanOfValues(
+	v *memo.ValuesExpr, private *memo.WithScanPrivate,
+) memo.RelExpr {
 	projections := make(memo.ProjectionsExpr, len(private.InCols))
 	for i := range private.InCols {
 		projections[i] = c.f.ConstructProjectionsItem(
@@ -118,10 +133,10 @@ func (c *CustomFuncs) InlineWithScan(private *memo.WithScanPrivate) memo.RelExpr
 	}
 	// Shallow copy the values in case this WITH binding is inlined more than
 	// once.
-	newRows := make(memo.ScalarListExpr, len(valuesExpr.Rows))
-	copy(newRows, valuesExpr.Rows)
-	newCols := make(opt.ColList, len(valuesExpr.ValuesPrivate.Cols))
-	copy(newCols, valuesExpr.ValuesPrivate.Cols)
+	newRows := make(memo.ScalarListExpr, len(v.Rows))
+	copy(newRows, v.Rows)
+	newCols := make(opt.ColList, len(v.ValuesPrivate.Cols))
+	copy(newCols, v.ValuesPrivate.Cols)
 	newValuesExpr := c.f.ConstructValues(newRows, &memo.ValuesPrivate{
 		Cols: newCols,
 		ID:   c.f.Metadata().NextUniqueID(),

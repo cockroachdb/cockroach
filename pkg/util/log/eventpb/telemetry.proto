@@ -239,6 +239,8 @@ message CapturedIndexUsageStats {
 // ChangefeedFailed events.
 message CreateChangefeed {
   CommonChangefeedEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+
+  bool transformation = 2 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
 }
 
 // ChangefeedFailed is an event for any Changefeed failure since the plan hook

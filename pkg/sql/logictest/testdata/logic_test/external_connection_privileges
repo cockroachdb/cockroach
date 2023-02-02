@@ -84,20 +84,20 @@ GRANT DROP, USAGE ON EXTERNAL CONNECTION foo TO testuser2 WITH GRANT OPTION
 query TTTB colnames
 SHOW GRANTS ON EXTERNAL CONNECTION foo
 ----
-name  grantee    privilege  grantable
-foo   bar        DROP       false
-foo   bar        USAGE      false
-foo   root       ALL        false
-foo   testuser   DROP       true
-foo   testuser   USAGE      true
-foo   testuser2  DROP       true
-foo   testuser2  USAGE      true
+connection_name  grantee    privilege_type  is_grantable
+foo              bar        DROP            false
+foo              bar        USAGE           false
+foo              root       ALL             false
+foo              testuser   DROP            true
+foo              testuser   USAGE           true
+foo              testuser2  DROP            true
+foo              testuser2  USAGE           true
 
 query TTTB colnames
 SHOW GRANTS ON EXTERNAL CONNECTION foo FOR testuser, testuser2
 ----
-name  grantee    privilege  grantable
-foo   testuser   DROP       true
-foo   testuser   USAGE      true
-foo   testuser2  DROP       true
-foo   testuser2  USAGE      true
+connection_name  grantee    privilege_type  is_grantable
+foo              testuser   DROP            true
+foo              testuser   USAGE           true
+foo              testuser2  DROP            true
+foo              testuser2  USAGE           true

@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -1071,7 +1072,7 @@ func TestAssertEnginesEmpty(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	eng, err := storage.Open(ctx, storage.InMemory())
+	eng, err := storage.Open(ctx, storage.InMemory(), cluster.MakeClusterSettings())
 	require.NoError(t, err)
 	defer eng.Close()
 

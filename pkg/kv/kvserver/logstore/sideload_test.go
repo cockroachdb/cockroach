@@ -51,7 +51,7 @@ func mustEntryEq(t testing.TB, l, r raftpb.Entry) {
 }
 
 func mkEnt(
-	v byte, index, term uint64, as *kvserverpb.ReplicatedEvalResult_AddSSTable,
+	enc raftlog.EntryEncoding, index, term uint64, as *kvserverpb.ReplicatedEvalResult_AddSSTable,
 ) raftpb.Entry {
 	cmdIDKey := strings.Repeat("x", raftlog.RaftCommandIDLen)
 	var cmd kvserverpb.RaftCommand
@@ -62,7 +62,7 @@ func mkEnt(
 	}
 	var ent raftpb.Entry
 	ent.Index, ent.Term = index, term
-	ent.Data = raftlog.EncodeRaftCommand(v, kvserverbase.CmdIDKey(cmdIDKey), b)
+	ent.Data = raftlog.EncodeRaftCommand(enc, kvserverbase.CmdIDKey(cmdIDKey), b)
 	return ent
 }
 
@@ -355,7 +355,7 @@ func TestRaftSSTableSideloadingInline(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	v1, v2 := raftlog.EntryEncodingStandardPrefixByte, raftlog.EntryEncodingSideloadedPrefixByte
+	v1, v2 := raftlog.EntryEncodingStandardWithAC, raftlog.EntryEncodingSideloadedWithAC
 	rangeID := roachpb.RangeID(1)
 
 	type testCase struct {
@@ -477,11 +477,11 @@ func TestRaftSSTableSideloadingSideload(t *testing.T) {
 	addSSTStripped := addSST
 	addSSTStripped.Data = nil
 
-	entV1Reg := mkEnt(raftlog.EntryEncodingStandardPrefixByte, 10, 99, nil)
-	entV1SST := mkEnt(raftlog.EntryEncodingStandardPrefixByte, 11, 99, &addSST)
-	entV2Reg := mkEnt(raftlog.EntryEncodingSideloadedPrefixByte, 12, 99, nil)
-	entV2SST := mkEnt(raftlog.EntryEncodingSideloadedPrefixByte, 13, 99, &addSST)
-	entV2SSTStripped := mkEnt(raftlog.EntryEncodingSideloadedPrefixByte, 13, 99, &addSSTStripped)
+	entV1Reg := mkEnt(raftlog.EntryEncodingStandardWithAC, 10, 99, nil)
+	entV1SST := mkEnt(raftlog.EntryEncodingStandardWithAC, 11, 99, &addSST)
+	entV2Reg := mkEnt(raftlog.EntryEncodingSideloadedWithAC, 12, 99, nil)
+	entV2SST := mkEnt(raftlog.EntryEncodingSideloadedWithAC, 13, 99, &addSST)
+	entV2SSTStripped := mkEnt(raftlog.EntryEncodingSideloadedWithAC, 13, 99, &addSSTStripped)
 
 	type tc struct {
 		name              string
@@ -566,6 +566,7 @@ func newOnDiskEngine(ctx context.Context, t *testing.T) (func(), storage.Engine)
 	eng, err := storage.Open(
 		ctx,
 		storage.Filesystem(dir),
+		cluster.MakeClusterSettings(),
 		storage.CacheSize(1<<20 /* 1 MiB */))
 	if err != nil {
 		t.Fatal(err)

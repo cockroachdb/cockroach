@@ -14,8 +14,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -26,7 +26,7 @@ import (
 
 type tenantSpec interface {
 	fmt.Stringer
-	getTenantInfo(ctx context.Context, p *planner) (ret *descpb.TenantInfo, err error)
+	getTenantInfo(ctx context.Context, p *planner) (ret *mtinfopb.TenantInfo, err error)
 	getTenantParameters(ctx context.Context, p *planner) (tid roachpb.TenantID, tenantName roachpb.TenantName, err error)
 }
 
@@ -122,34 +122,34 @@ func (ts *tenantSpecId) getTenantParameters(
 
 func (tenantSpecAll) getTenantInfo(
 	ctx context.Context, p *planner,
-) (ret *descpb.TenantInfo, err error) {
+) (ret *mtinfopb.TenantInfo, err error) {
 	return nil, errors.AssertionFailedf("programming error: cannot use all in this context")
 }
 
 func (ts *tenantSpecName) getTenantInfo(
 	ctx context.Context, p *planner,
-) (ret *descpb.TenantInfo, err error) {
+) (ret *mtinfopb.TenantInfo, err error) {
 	_, tenantName, err := ts.getTenantParameters(ctx, p)
 	if err != nil {
 		return nil, err
 	}
-	return GetTenantRecordByName(ctx, p.ExecCfg(), p.Txn(), tenantName)
+	return GetTenantRecordByName(ctx, p.ExecCfg().Settings, p.InternalSQLTxn(), tenantName)
 }
 
 func (ts *tenantSpecId) getTenantInfo(
 	ctx context.Context, p *planner,
-) (ret *descpb.TenantInfo, err error) {
+) (ret *mtinfopb.TenantInfo, err error) {
 	tid, _, err := ts.getTenantParameters(ctx, p)
 	if err != nil {
 		return nil, err
 	}
-	return GetTenantRecordByID(ctx, p.ExecCfg(), p.Txn(), tid)
+	return GetTenantRecordByID(ctx, p.InternalSQLTxn(), tid, p.ExecCfg().Settings)
 }
 
 // LookupTenantInfo implements PlanHookState for the benefits of CCL statements.
 func (p *planner) LookupTenantInfo(
 	ctx context.Context, ts *tree.TenantSpec, op string,
-) (*descpb.TenantInfo, error) {
+) (*mtinfopb.TenantInfo, error) {
 	tspec, err := p.planTenantSpec(ctx, ts, op)
 	if err != nil {
 		return nil, err

@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/load"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -57,7 +58,7 @@ func TestingSetRangeQPS(s State, rangeID RangeID, qps float64) bool {
 	}
 
 	rlc := s.ReplicaLoad(rangeID, store.StoreID()).(*ReplicaLoadCounter)
-	rlc.QPS.SetMeanRateForTesting(qps)
+	rlc.loadStats.TestingSetStat(load.Queries, qps)
 	return true
 }
 
@@ -73,7 +74,7 @@ func NewStorePool(
 	ambientCtx := log.MakeTestingAmbientContext(stopper.Tracer())
 
 	// Never gossip, pass in nil values.
-	g := gossip.NewTest(1, nil, nil, stopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef())
+	g := gossip.NewTest(1, stopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef())
 	sp := storepool.NewStorePool(
 		ambientCtx,
 		st,
@@ -265,7 +266,7 @@ func TestDistributeQPSCounts(s State, qpsCounts []float64) {
 		for _, rng := range lhs {
 			rl := s.ReplicaLoad(rng.RangeID(), storeID)
 			rlc := rl.(*ReplicaLoadCounter)
-			rlc.QPS.SetMeanRateForTesting(qpsPerRange)
+			rlc.loadStats.TestingSetStat(load.Queries, qpsPerRange)
 		}
 	}
 }

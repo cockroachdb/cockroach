@@ -28,6 +28,7 @@ import (
 type generator struct {
 	settings *cluster.Settings
 	codec    keys.SQLCodec
+	key      func(context.Context) (roachpb.Key, error)
 	getOrInc func(ctx context.Context, key roachpb.Key, inc int64) (int64, error)
 }
 
@@ -56,16 +57,9 @@ func (g *generator) PeekNextUniqueDescID(ctx context.Context) (descpb.ID, error)
 
 // run is a convenience method for accessing the descriptor ID counter.
 func (g *generator) run(ctx context.Context, inc int64) (catid.DescID, error) {
-	key := g.codec.SequenceKey(keys.DescIDSequenceID)
-	if cv := g.settings.Version; g.codec.ForSystemTenant() &&
-		!cv.IsActive(ctx, clusterversion.V23_1DescIDSequenceForSystemTenant) {
-		// At this point, the system tenant may still be using a legacy non-SQL key,
-		// or may be in the process of undergoing the migration away from it, in
-		// which case descriptor ID generation is made unavailable.
-		if cv.IsActive(ctx, clusterversion.V23_1DescIDSequenceForSystemTenant-1) {
-			return catid.InvalidDescID, ErrDescIDSequenceMigrationInProgress
-		}
-		key = keys.LegacyDescIDGenerator
+	key, err := g.key(ctx)
+	if err != nil {
+		return 0, err
 	}
 	nextID, err := g.getOrInc(ctx, key, inc)
 	return catid.DescID(nextID), err
@@ -97,6 +91,9 @@ func NewGenerator(settings *cluster.Settings, codec keys.SQLCodec, db *kv.DB) ev
 	return &generator{
 		settings: settings,
 		codec:    codec,
+		key: func(ctx context.Context) (roachpb.Key, error) {
+			return key(ctx, codec, settings)
+		},
 		getOrInc: func(ctx context.Context, key roachpb.Key, inc int64) (int64, error) {
 			if inc == 0 {
 				ret, err := db.Get(ctx, key)
@@ -107,6 +104,23 @@ func NewGenerator(settings *cluster.Settings, codec keys.SQLCodec, db *kv.DB) ev
 	}
 }
 
+func key(
+	ctx context.Context, codec keys.SQLCodec, settings *cluster.Settings,
+) (roachpb.Key, error) {
+	key := codec.SequenceKey(keys.DescIDSequenceID)
+	if cv := settings.Version; codec.ForSystemTenant() &&
+		!cv.IsActive(ctx, clusterversion.V23_1DescIDSequenceForSystemTenant) {
+		// At this point, the system tenant may still be using a legacy non-SQL key,
+		// or may be in the process of undergoing the migration away from it, in
+		// which case descriptor ID generation is made unavailable.
+		if cv.IsActive(ctx, clusterversion.V23_1DescIDSequenceForSystemTenant-1) {
+			return nil, ErrDescIDSequenceMigrationInProgress
+		}
+		key = keys.LegacyDescIDGenerator
+	}
+	return key, nil
+}
+
 // NewTransactionalGenerator constructs a transactional eval.DescIDGenerator.
 func NewTransactionalGenerator(
 	settings *cluster.Settings, codec keys.SQLCodec, txn *kv.Txn,
@@ -114,6 +128,9 @@ func NewTransactionalGenerator(
 	return &generator{
 		settings: settings,
 		codec:    codec,
+		key: func(ctx context.Context) (roachpb.Key, error) {
+			return key(ctx, codec, settings)
+		},
 		getOrInc: func(ctx context.Context, key roachpb.Key, inc int64) (_ int64, err error) {
 			var ret kv.KeyValue
 			if inc == 0 {
@@ -133,6 +150,22 @@ func GenerateUniqueRoleID(
 	ctx context.Context, db *kv.DB, codec keys.SQLCodec,
 ) (catid.RoleID, error) {
 	return IncrementUniqueRoleID(ctx, db, codec, 1)
+}
+
+// GenerateUniqueRoleIDInTxn is like GenerateUniqueRoleID but performs the
+// operation in the provided transaction.
+func GenerateUniqueRoleIDInTxn(
+	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec,
+) (catid.RoleID, error) {
+	res, err := txn.Inc(ctx, codec.SequenceKey(keys.RoleIDSequenceID), 1)
+	if err != nil {
+		return 0, err
+	}
+	newVal, err := res.Value.GetInt()
+	if err != nil {
+		return 0, errors.NewAssertionErrorWithWrappedErrf(err, "failed to get int from role_id sequence")
+	}
+	return catid.RoleID(newVal - 1), nil
 }
 
 // IncrementUniqueRoleID returns the next available Role ID and increments

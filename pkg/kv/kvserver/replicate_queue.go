@@ -1673,7 +1673,7 @@ func (rq *replicateQueue) considerRebalance(
 	if !ok {
 		// If there was nothing to do for the set of voting replicas on this
 		// range, attempt to rebalance non-voters.
-		log.KvDistribution.Infof(ctx, "no suitable rebalance target for voters")
+		log.KvDistribution.VInfof(ctx, 2, "no suitable rebalance target for voters")
 		addTarget, removeTarget, details, ok = rq.allocator.RebalanceNonVoter(
 			ctx,
 			rq.storePool,
@@ -1693,7 +1693,7 @@ func (rq *replicateQueue) considerRebalance(
 	lhRemovalAllowed := addTarget != (roachpb.ReplicationTarget{})
 
 	if !ok {
-		log.KvDistribution.Infof(ctx, "no suitable rebalance target for non-voters")
+		log.KvDistribution.VInfof(ctx, 2, "no suitable rebalance target for non-voters")
 	} else if !lhRemovalAllowed {
 		if transferOp, err := rq.maybeTransferLeaseAwayTarget(
 			ctx, repl, removeTarget.StoreID, canTransferLeaseFrom,
@@ -2105,9 +2105,11 @@ func RangeUsageInfoForRepl(repl *Replica) allocator.RangeUsageInfo {
 	loadStats := repl.LoadStats()
 	localityInfo := repl.loadStats.RequestLocalityInfo()
 	return allocator.RangeUsageInfo{
-		LogicalBytes:     repl.GetMVCCStats().Total(),
-		QueriesPerSecond: loadStats.QueriesPerSecond,
-		WritesPerSecond:  loadStats.WriteKeysPerSecond,
+		LogicalBytes:             repl.GetMVCCStats().Total(),
+		QueriesPerSecond:         loadStats.QueriesPerSecond,
+		WritesPerSecond:          loadStats.WriteKeysPerSecond,
+		RaftCPUNanosPerSecond:    loadStats.RaftCPUNanosPerSecond,
+		RequestCPUNanosPerSecond: loadStats.RequestCPUNanosPerSecond,
 		RequestLocality: &allocator.RangeRequestLocalityInfo{
 			Counts:   localityInfo.LocalityCounts,
 			Duration: localityInfo.Duration,

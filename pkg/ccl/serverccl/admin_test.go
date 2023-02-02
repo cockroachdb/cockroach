@@ -16,6 +16,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -156,4 +157,41 @@ func TestAdminAPIJobs(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Equal(t, backups[0], jobRes)
+}
+
+func TestListTenants(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DisableDefaultTestTenant: true,
+	})
+	defer s.Stopper().Stop(ctx)
+
+	_, _, err := s.(*server.TestServer).StartSharedProcessTenant(ctx,
+		base.TestSharedProcessTenantArgs{
+			TenantName: "test",
+		})
+	require.NoError(t, err)
+
+	const path = "tenants"
+	var response serverpb.ListTenantsResponse
+
+	if err := getAdminJSONProto(s, path, &response); err != nil {
+		t.Fatalf("unexpected error: %v\n", err)
+	}
+
+	require.NotEmpty(t, response.Tenants)
+	appTenantFound := false
+	for _, tenant := range response.Tenants {
+		if tenant.TenantName == "test" {
+			appTenantFound = true
+		}
+		require.NotNil(t, tenant.TenantId)
+		require.NotEmpty(t, tenant.TenantName)
+		require.NotEmpty(t, tenant.RpcAddr)
+		require.NotEmpty(t, tenant.SqlAddr)
+	}
+	require.True(t, appTenantFound, "test tenant not found")
 }

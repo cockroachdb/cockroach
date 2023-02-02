@@ -261,6 +261,13 @@ func TestLogic_as_of(
 	runLogicTest(t, "as_of")
 }
 
+func TestLogic_asyncpg(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "asyncpg")
+}
+
 func TestLogic_auto_span_config_reconciliation_job(
 	t *testing.T,
 ) {
@@ -1561,6 +1568,13 @@ func TestLogic_reset(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "reset")
+}
+
+func TestLogic_retry(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "retry")
 }
 
 func TestLogic_returning(

@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/faketreeeval"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
@@ -53,10 +54,8 @@ type TestState struct {
 	// change statement will probably alter the contents of uncommitted and these
 	// will not be reflected in committed until the transaction commits, i.e. the
 	// WithTxn method returns.
-	committed, uncommitted nstree.MutableCatalog
+	committed, uncommittedInStorage, uncommittedInMemory nstree.MutableCatalog
 
-	comments                map[catalogkeys.CommentKey]string
-	zoneConfigs             map[catid.DescID]catalog.ZoneConfig
 	currentDatabase         string
 	phase                   scop.Phase
 	sessionData             sessiondata.SessionData
@@ -81,6 +80,18 @@ type TestState struct {
 	// approximateTimestamp is used to populate approximate timestamps in
 	// descriptors.
 	approximateTimestamp time.Time
+
+	catalogChanges     catalogChanges
+	idGenerator        eval.DescIDGenerator
+	refProviderFactory scbuild.ReferenceProviderFactory
+}
+
+type catalogChanges struct {
+	descs               []catalog.Descriptor
+	namesToDelete       map[descpb.NameInfo]descpb.ID
+	descriptorsToDelete catalog.DescriptorIDSet
+	zoneConfigsToDelete catalog.DescriptorIDSet
+	commentsToUpdate    map[catalogkeys.CommentKey]string
 }
 
 // NewTestDependencies returns a TestState populated with the provided options.
@@ -92,6 +103,8 @@ func NewTestDependencies(options ...Option) *TestState {
 	for _, o := range options {
 		o.apply(&s)
 	}
+	s.uncommittedInMemory = catalogDeepCopy(s.committed.Catalog)
+	s.uncommittedInStorage = catalogDeepCopy(s.committed.Catalog)
 	return &s
 }
 
@@ -112,21 +125,10 @@ func (s *TestState) SideEffectLog() string {
 func (s *TestState) WithTxn(fn func(s *TestState)) {
 	s.txnCounter++
 	defer func() {
-		u := s.uncommitted
-		s.committed, s.uncommitted = nstree.MutableCatalog{}, nstree.MutableCatalog{}
-		_ = u.ForEachNamespaceEntry(func(e nstree.NamespaceEntry) error {
-			s.committed.UpsertNamespaceEntry(e, e.GetID(), e.GetMVCCTimestamp())
-			s.uncommitted.UpsertNamespaceEntry(e, e.GetID(), e.GetMVCCTimestamp())
-			return nil
-		})
-		_ = u.ForEachDescriptor(func(d catalog.Descriptor) error {
-			mut := d.NewBuilder().BuildCreatedMutable()
-			mut.ResetModificationTime()
-			d = mut.ImmutableCopy()
-			s.committed.UpsertDescriptor(d)
-			s.uncommitted.UpsertDescriptor(d)
-			return nil
-		})
+		u := s.uncommittedInStorage.Catalog
+		s.committed = catalogDeepCopy(u)
+		s.uncommittedInStorage = catalogDeepCopy(u)
+		s.uncommittedInMemory = catalogDeepCopy(u)
 		s.LogSideEffectf("commit transaction #%d", s.txnCounter)
 		if len(s.createdJobsInCurrentTxn) > 0 {
 			s.LogSideEffectf("notified job registry to adopt jobs: %v", s.createdJobsInCurrentTxn)
@@ -135,6 +137,30 @@ func (s *TestState) WithTxn(fn func(s *TestState)) {
 	}()
 	s.LogSideEffectf("begin transaction #%d", s.txnCounter)
 	fn(s)
+}
+
+func catalogDeepCopy(u nstree.Catalog) (ret nstree.MutableCatalog) {
+	_ = u.ForEachNamespaceEntry(func(e nstree.NamespaceEntry) error {
+		ret.UpsertNamespaceEntry(e, e.GetID(), e.GetMVCCTimestamp())
+		return nil
+	})
+	_ = u.ForEachDescriptor(func(d catalog.Descriptor) error {
+		mut := d.NewBuilder().BuildCreatedMutable()
+		mut.ResetModificationTime()
+		d = mut.ImmutableCopy()
+		ret.UpsertDescriptor(d)
+		return nil
+	})
+	_ = u.ForEachComment(func(key catalogkeys.CommentKey, cmt string) error {
+		ret.UpsertComment(key, cmt)
+		return nil
+	})
+	_ = u.ForEachZoneConfig(func(id catid.DescID, zc catalog.ZoneConfig) error {
+		zc = zc.Clone()
+		ret.UpsertZoneConfig(id, zc.ZoneConfigProto(), zc.GetRawBytesInStorage())
+		return nil
+	})
+	return ret
 }
 
 func (s *TestState) mvccTimestamp() hlc.Timestamp {
@@ -193,51 +219,6 @@ func (s *TestState) FeatureChecker() scbuild.FeatureChecker {
 	return s
 }
 
-// Get implements DescriptorCommentCache interface.
-func (s *TestState) get(
-	objID catid.DescID, subID uint32, commentType catalogkeys.CommentType,
-) (comment string, ok bool) {
-	commentKey := catalogkeys.MakeCommentKey(uint32(objID), subID, commentType)
-	comment, ok = s.comments[commentKey]
-	return comment, ok
-}
-
-// GetDatabaseComment implements the scdecomp.CommentGetter interface.
-func (s *TestState) GetDatabaseComment(dbID catid.DescID) (comment string, ok bool) {
-	return s.get(dbID, 0, catalogkeys.DatabaseCommentType)
-}
-
-// GetSchemaComment implements the scdecomp.CommentGetter interface.
-func (s *TestState) GetSchemaComment(schemaID catid.DescID) (comment string, ok bool) {
-	return s.get(schemaID, 0, catalogkeys.SchemaCommentType)
-}
-
-// GetTableComment implements the scdecomp.CommentGetter interface.
-func (s *TestState) GetTableComment(tableID catid.DescID) (comment string, ok bool) {
-	return s.get(tableID, 0, catalogkeys.TableCommentType)
-}
-
-// GetColumnComment implements the scdecomp.CommentGetter interface.
-func (s *TestState) GetColumnComment(
-	tableID catid.DescID, pgAttrNum catid.PGAttributeNum,
-) (comment string, ok bool) {
-	return s.get(tableID, uint32(pgAttrNum), catalogkeys.ColumnCommentType)
-}
-
-// GetIndexComment implements the scdecomp.CommentGetter interface.
-func (s *TestState) GetIndexComment(
-	tableID catid.DescID, indexID catid.IndexID,
-) (comment string, ok bool) {
-	return s.get(tableID, uint32(indexID), catalogkeys.IndexCommentType)
-}
-
-// GetConstraintComment implements the scdecomp.CommentGetter interface.
-func (s *TestState) GetConstraintComment(
-	tableID catid.DescID, constraintID catid.ConstraintID,
-) (comment string, ok bool) {
-	return s.get(tableID, uint32(constraintID), catalogkeys.ConstraintCommentType)
-}
-
 // DescriptorCommentGetter implements scbuild.Dependencies interface.
 func (s *TestState) DescriptorCommentGetter() scbuild.CommentGetter {
 	return s
@@ -246,6 +227,16 @@ func (s *TestState) DescriptorCommentGetter() scbuild.CommentGetter {
 // ClientNoticeSender implements scbuild.Dependencies.
 func (s *TestState) ClientNoticeSender() eval.ClientNoticeSender {
 	return &faketreeeval.DummyClientNoticeSender{}
+}
+
+// DescIDGenerator implements scbuild.Dependencies.
+func (s *TestState) DescIDGenerator() eval.DescIDGenerator {
+	return s.idGenerator
+}
+
+// ReferenceProviderFactory implements scbuild.Dependencies.
+func (s *TestState) ReferenceProviderFactory() scbuild.ReferenceProviderFactory {
+	return s.refProviderFactory
 }
 
 func (s *TestState) descriptorDiff(desc catalog.Descriptor) string {

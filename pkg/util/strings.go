@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"fmt"
 	io "io"
+	"math/rand"
 	"strings"
 	"text/tabwriter"
 	"unicode/utf8"
@@ -155,4 +156,14 @@ func ExpandTabsInRedactableBytes(s redact.RedactableBytes) (redact.RedactableByt
 		return nil, err
 	}
 	return redact.RedactableBytes(buf.Bytes()), nil
+}
+
+// RandString generates a random string of the desired length from the
+// input alphabet.
+func RandString(rng *rand.Rand, length int, alphabet string) string {
+	buf := make([]byte, length)
+	for i := range buf {
+		buf[i] = alphabet[rng.Intn(len(alphabet))]
+	}
+	return string(buf)
 }

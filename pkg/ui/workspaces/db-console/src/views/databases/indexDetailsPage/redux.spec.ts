@@ -16,6 +16,7 @@ import {
   IndexDetailPageActions,
   IndexDetailsPageData,
   util,
+  TimeScale,
 } from "@cockroachlabs/cluster-ui";
 
 import { AdminUIState, createAdminUIStore } from "src/redux/state";
@@ -57,6 +58,14 @@ function fakeRouteComponentProps(
     },
   };
 }
+
+const timeScale: TimeScale = {
+  key: "Past 10 Minutes",
+  windowSize: moment.duration(10, "minutes"),
+  windowValid: moment.duration(10, "seconds"),
+  sampleSize: moment.duration(10, "seconds"),
+  fixedWindowEnd: false,
+};
 
 class TestDriver {
   private readonly actions: IndexDetailPageActions;
@@ -104,6 +113,8 @@ class TestDriver {
     delete expected.details.lastRead;
     delete this.properties().details.lastReset;
     delete expected.details.lastReset;
+    delete this.properties().timeScale;
+    delete expected.timeScale;
     expect(this.properties()).toEqual(expected);
   }
 
@@ -136,6 +147,9 @@ describe("Index Details Page", function () {
         indexName: "INDEX",
         isTenant: false,
         nodeRegions: {},
+        hasAdminRole: undefined,
+        hasViewActivityRedactedRole: undefined,
+        timeScale: timeScale,
         details: {
           loading: false,
           loaded: false,
@@ -188,6 +202,9 @@ describe("Index Details Page", function () {
       indexName: "INDEX",
       isTenant: false,
       nodeRegions: {},
+      timeScale: timeScale,
+      hasAdminRole: undefined,
+      hasViewActivityRedactedRole: undefined,
       details: {
         loading: false,
         loaded: true,

@@ -48,8 +48,108 @@ begin transaction #1
 # begin StatementPhase
 checking for feature: CREATE INDEX
 increment telemetry for sql.schema.partial_index
-## StatementPhase stage 1 of 1 with 9 MutationType ops
+write *eventpb.CreateIndex to event log:
+  indexName: idx1
+  mutationId: 1
+  sql:
+    descriptorId: 106
+    statement: CREATE INDEX ‹idx1› ON ‹defaultdb›.‹public›.‹t› (‹v›) WHERE (‹v› = ‹'a'›)
+    tag: CREATE INDEX
+    user: root
+  tableName: defaultdb.public.t
+## StatementPhase stage 1 of 1 with 10 MutationType ops
 upsert descriptor #106
+  ...
+     id: 106
+     modificationTime: {}
+  +  mutations:
+  +  - direction: ADD
+  +    index:
+  +      createdAtNanos: "1640998800000000000"
+  +      createdExplicitly: true
+  +      foreignKey: {}
+  +      geoConfig: {}
+  +      id: 2
+  +      interleave: {}
+  +      keyColumnDirections:
+  +      - ASC
+  +      keyColumnIds:
+  +      - 2
+  +      keyColumnNames:
+  +      - v
+  +      keySuffixColumnIds:
+  +      - 1
+  +      name: idx1
+  +      partitioning: {}
+  +      predicate: (v = 'a')
+  +      sharded: {}
+  +      storeColumnNames: []
+  +      version: 4
+  +    mutationId: 1
+  +    state: BACKFILLING
+  +  - direction: ADD
+  +    index:
+  +      constraintId: 1
+  +      createdExplicitly: true
+  +      foreignKey: {}
+  +      geoConfig: {}
+  +      id: 3
+  +      interleave: {}
+  +      keyColumnDirections:
+  +      - ASC
+  +      keyColumnIds:
+  +      - 2
+  +      keyColumnNames:
+  +      - v
+  +      keySuffixColumnIds:
+  +      - 1
+  +      name: crdb_internal_index_3_name_placeholder
+  +      partitioning: {}
+  +      sharded: {}
+  +      storeColumnNames: []
+  +      useDeletePreservingEncoding: true
+  +      version: 4
+  +    mutationId: 1
+  +    state: DELETE_ONLY
+     name: t
+     nextColumnId: 3
+     nextConstraintId: 2
+     nextFamilyId: 1
+  -  nextIndexId: 2
+  +  nextIndexId: 4
+     nextMutationId: 1
+     parentId: 100
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "1"
+  +  version: "2"
+# end StatementPhase
+# begin PreCommitPhase
+## PreCommitPhase stage 1 of 2 with 1 MutationType op
+undo all catalog changes within txn #1
+persist all catalog changes to storage
+## PreCommitPhase stage 2 of 2 with 13 MutationType ops
+upsert descriptor #106
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  +  declarativeSchemaChangerState:
+  +    authorization:
+  +      userName: root
+  +    currentStatuses: <redacted>
+  +    jobId: "1"
+  +    relevantStatements:
+  +    - statement:
+  +        redactedStatement: CREATE INDEX ‹idx1› ON ‹defaultdb›.‹public›.‹t› (‹v›) WHERE
+  +          (‹v› = ‹'a'›)
+  +        statement: CREATE INDEX idx1 ON t (v) WHERE (v = 'a')
+  +        statementTag: CREATE INDEX
+  +    revertible: true
+  +    targetRanks: <redacted>
+  +    targets: <redacted>
+     families:
+     - columnIds:
   ...
      id: 106
      modificationTime: {}
@@ -116,34 +216,7 @@ upsert descriptor #106
      unexposedParentSchemaId: 101
   -  version: "1"
   +  version: "2"
-# end StatementPhase
-# begin PreCommitPhase
-## PreCommitPhase stage 1 of 1 with 2 MutationType ops
-upsert descriptor #106
-  ...
-     createAsOfTime:
-       wallTime: "1640995200000000000"
-  +  declarativeSchemaChangerState:
-  +    authorization:
-  +      userName: root
-  +    currentStatuses: <redacted>
-  +    jobId: "1"
-  +    relevantStatements:
-  +    - statement:
-  +        redactedStatement: CREATE INDEX ‹idx1› ON ‹defaultdb›.‹public›.‹t› (‹v›) WHERE
-  +          (‹v› = ‹'a'›)
-  +        statement: CREATE INDEX idx1 ON t (v) WHERE (v = 'a')
-  +        statementTag: CREATE INDEX
-  +    revertible: true
-  +    targetRanks: <redacted>
-  +    targets: <redacted>
-     families:
-     - columnIds:
-  ...
-       time: {}
-     unexposedParentSchemaId: 101
-  -  version: "1"
-  +  version: "2"
+persist all catalog changes to storage
 create job #1 (non-cancelable: false): "CREATE INDEX idx1 ON defaultdb.public.t (v) WHERE (v = 'a')"
   descriptor IDs: [106]
 # end PreCommitPhase
@@ -167,6 +240,7 @@ upsert descriptor #106
      unexposedParentSchemaId: 101
   -  version: "2"
   +  version: "3"
+persist all catalog changes to storage
 update progress of schema change job #1: "PostCommitPhase stage 2 of 7 with 1 BackfillType op pending"
 commit transaction #3
 begin transaction #4
@@ -188,6 +262,7 @@ upsert descriptor #106
      unexposedParentSchemaId: 101
   -  version: "3"
   +  version: "4"
+persist all catalog changes to storage
 update progress of schema change job #1: "PostCommitPhase stage 4 of 7 with 1 MutationType op pending"
 commit transaction #5
 begin transaction #6
@@ -205,6 +280,7 @@ upsert descriptor #106
      unexposedParentSchemaId: 101
   -  version: "4"
   +  version: "5"
+persist all catalog changes to storage
 update progress of schema change job #1: "PostCommitPhase stage 5 of 7 with 1 BackfillType op pending"
 commit transaction #6
 begin transaction #7
@@ -226,6 +302,7 @@ upsert descriptor #106
      unexposedParentSchemaId: 101
   -  version: "5"
   +  version: "6"
+persist all catalog changes to storage
 update progress of schema change job #1: "PostCommitPhase stage 7 of 7 with 1 ValidationType op pending"
 commit transaction #8
 begin transaction #9
@@ -233,7 +310,7 @@ begin transaction #9
 validate forward indexes [2] in table #106
 commit transaction #9
 begin transaction #10
-## PostCommitNonRevertiblePhase stage 1 of 2 with 7 MutationType ops
+## PostCommitNonRevertiblePhase stage 1 of 2 with 6 MutationType ops
 upsert descriptor #106
   ...
            statement: CREATE INDEX idx1 ON t (v) WHERE (v = 'a')
@@ -314,7 +391,7 @@ upsert descriptor #106
      unexposedParentSchemaId: 101
   -  version: "6"
   +  version: "7"
-write *eventpb.CreateIndex to event log: CREATE INDEX ‹idx1› ON ‹defaultdb›.‹public›.‹t› (‹v›) WHERE (‹v› = ‹'a'›)
+persist all catalog changes to storage
 adding table for stats refresh: 106
 update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 2 with 2 MutationType ops pending"
 set schema change job #1 to non-cancellable
@@ -376,12 +453,15 @@ upsert descriptor #106
      unexposedParentSchemaId: 101
   -  version: "7"
   +  version: "8"
-write *eventpb.FinishSchemaChange to event log
+persist all catalog changes to storage
 create job #2 (non-cancelable: true): "GC for CREATE INDEX idx1 ON defaultdb.public.t (v) WHERE (v = 'a')"
   descriptor IDs: [106]
 update progress of schema change job #1: "all stages completed"
 set schema change job #1 to non-cancellable
 updated schema change job #1 descriptor IDs to []
+write *eventpb.FinishSchemaChange to event log:
+  sc:
+    descriptorId: 106
 commit transaction #11
 notified job registry to adopt jobs: [2]
 # end PostCommitPhase

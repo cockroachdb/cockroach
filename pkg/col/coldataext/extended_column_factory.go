@@ -32,6 +32,14 @@ func NewExtendedColumnFactory(evalCtx *eval.Context) coldata.ColumnFactory {
 	return &extendedColumnFactory{evalCtx: evalCtx}
 }
 
+// NewExtendedColumnFactoryNoEvalCtx returns an extendedColumnFactory that will
+// be producing coldata.DatumVecs that aren't fully initialized - the eval
+// context is not set on those vectors. This can be acceptable if the caller
+// cannot provide the eval.Context but also doesn't intend to compare datums.
+func NewExtendedColumnFactoryNoEvalCtx() coldata.ColumnFactory {
+	return &extendedColumnFactory{}
+}
+
 func (cf *extendedColumnFactory) MakeColumn(t *types.T, n int) coldata.Column {
 	if typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) == typeconv.DatumVecCanonicalTypeFamily {
 		return newDatumVec(t, n, cf.evalCtx)

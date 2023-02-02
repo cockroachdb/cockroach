@@ -727,10 +727,10 @@ func randEncDatumPrimaryFamily(
 	t.Helper()
 	rng, _ := randutil.NewTestRand()
 
-	family, err := desc.FindFamilyByID(0)
+	family, err := catalog.MustFindFamilyByID(desc, 0 /* id */)
 	require.NoError(t, err)
 	for _, colID := range family.ColumnIDs {
-		col, err := desc.FindColumnWithID(colID)
+		col, err := catalog.MustFindColumnByID(desc, colID)
 		require.NoError(t, err)
 		row = append(row, rowenc.EncDatum{Datum: randgen.RandDatum(rng, col.GetType(), col.IsNullable())})
 	}
@@ -781,7 +781,8 @@ func newEvaluatorWithNormCheck(
 		return nil, err
 	}
 
-	return NewEvaluator(norm.SelectClause, execCfg, username.RootUserName(), defaultDBSessionData)
+	return NewEvaluator(norm.SelectClause, execCfg, username.RootUserName(),
+		defaultDBSessionData, hlc.Timestamp{}), nil
 }
 
 var defaultDBSessionData = sessiondatapb.SessionData{

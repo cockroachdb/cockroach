@@ -93,3 +93,54 @@ func (m *ReplicaRecoveryRecord) AsStructuredLog() eventpb.DebugRecoverReplica {
 		EndKey:            m.EndKey.AsRKey().String(),
 	}
 }
+
+func (m *ClusterReplicaInfo) Merge(o ClusterReplicaInfo) error {
+	// When making a cluster id check, make sure that we can create empty
+	// cluster info and merge everything into it. i.e. merging into empty
+	// struct should not trip check failure.
+	if len(m.LocalInfo) > 0 || len(m.Descriptors) > 0 {
+		if m.ClusterID != o.ClusterID {
+			return errors.Newf("can't merge cluster info from different cluster: %s != %s", m.ClusterID,
+				o.ClusterID)
+		}
+	} else {
+		m.ClusterID = o.ClusterID
+	}
+	if len(o.Descriptors) > 0 {
+		if len(m.Descriptors) > 0 {
+			return errors.New("only single cluster replica info could contain descriptors")
+		}
+		m.Descriptors = append(m.Descriptors, o.Descriptors...)
+	}
+	type nsk struct {
+		n roachpb.NodeID
+		s roachpb.StoreID
+	}
+	existing := make(map[nsk]struct{})
+	for _, n := range m.LocalInfo {
+		for _, r := range n.Replicas {
+			existing[nsk{n: r.NodeID, s: r.StoreID}] = struct{}{}
+		}
+	}
+	for _, n := range o.LocalInfo {
+		for _, r := range n.Replicas {
+			if _, ok := existing[nsk{n: r.NodeID, s: r.StoreID}]; ok {
+				return errors.Newf("failed to merge cluster info, replicas from n%d/s%d are already present",
+					r.NodeID, r.StoreID)
+			}
+		}
+	}
+	m.LocalInfo = append(m.LocalInfo, o.LocalInfo...)
+	return nil
+}
+
+func (m *ClusterReplicaInfo) ReplicaCount() (size int) {
+	for _, i := range m.LocalInfo {
+		size += len(i.Replicas)
+	}
+	return size
+}
+
+func (a DeferredRecoveryActions) Empty() bool {
+	return len(a.DecommissionedNodeIDs) == 0
+}

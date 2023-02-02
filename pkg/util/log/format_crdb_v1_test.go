@@ -21,6 +21,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base/serverident"
 	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
@@ -160,7 +161,7 @@ func TestCrdbV1EntryDecoderForVeryLargeEntries(t *testing.T) {
 			Line:      138,
 			Message:   reallyLongEntry,
 			Counter:   2,
-			TenantID:  systemTenantID,
+			TenantID:  serverident.SystemTenantID,
 		},
 		{
 			Severity:  severity.INFO,
@@ -171,7 +172,7 @@ func TestCrdbV1EntryDecoderForVeryLargeEntries(t *testing.T) {
 			Line:      139,
 			Message:   tooLongEntry[:maxMessageLength],
 			Counter:   3,
-			TenantID:  systemTenantID,
+			TenantID:  serverident.SystemTenantID,
 		},
 	}
 	if !reflect.DeepEqual(expected, entries) {

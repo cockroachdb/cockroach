@@ -16,8 +16,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
@@ -128,13 +128,13 @@ func (s *PersistedSQLStats) doFlush(ctx context.Context, workFn func() error, er
 func (s *PersistedSQLStats) doFlushSingleTxnStats(
 	ctx context.Context, stats *roachpb.CollectedTransactionStatistics, aggregatedTs time.Time,
 ) error {
-	return s.cfg.KvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+	return s.cfg.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		// Explicitly copy the stats variable so the txn closure is retryable.
 		scopedStats := *stats
 
 		serializedFingerprintID := sqlstatsutil.EncodeUint64ToBytes(uint64(stats.TransactionFingerprintID))
 
-		insertFn := func(ctx context.Context, txn *kv.Txn) (alreadyExists bool, err error) {
+		insertFn := func(ctx context.Context, txn isql.Txn) (alreadyExists bool, err error) {
 			rowsAffected, err := s.insertTransactionStats(ctx, txn, aggregatedTs, serializedFingerprintID, &scopedStats)
 
 			if err != nil {
@@ -148,7 +148,7 @@ func (s *PersistedSQLStats) doFlushSingleTxnStats(
 			return false /* alreadyExists */, nil /* err */
 		}
 
-		readFn := func(ctx context.Context, txn *kv.Txn) error {
+		readFn := func(ctx context.Context, txn isql.Txn) error {
 			persistedData := roachpb.TransactionStatistics{}
 			err := s.fetchPersistedTransactionStats(ctx, txn, aggregatedTs, serializedFingerprintID, scopedStats.App, &persistedData)
 			if err != nil {
@@ -159,7 +159,7 @@ func (s *PersistedSQLStats) doFlushSingleTxnStats(
 			return nil
 		}
 
-		updateFn := func(ctx context.Context, txn *kv.Txn) error {
+		updateFn := func(ctx context.Context, txn isql.Txn) error {
 			return s.updateTransactionStats(ctx, txn, aggregatedTs, serializedFingerprintID, &scopedStats)
 		}
 
@@ -174,7 +174,7 @@ func (s *PersistedSQLStats) doFlushSingleTxnStats(
 func (s *PersistedSQLStats) doFlushSingleStmtStats(
 	ctx context.Context, stats *roachpb.CollectedStatementStatistics, aggregatedTs time.Time,
 ) error {
-	return s.cfg.KvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+	return s.cfg.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		// Explicitly copy the stats so that this closure is retryable.
 		scopedStats := *stats
 
@@ -182,7 +182,7 @@ func (s *PersistedSQLStats) doFlushSingleStmtStats(
 		serializedTransactionFingerprintID := sqlstatsutil.EncodeUint64ToBytes(uint64(scopedStats.Key.TransactionFingerprintID))
 		serializedPlanHash := sqlstatsutil.EncodeUint64ToBytes(scopedStats.Key.PlanHash)
 
-		insertFn := func(ctx context.Context, txn *kv.Txn) (alreadyExists bool, err error) {
+		insertFn := func(ctx context.Context, txn isql.Txn) (alreadyExists bool, err error) {
 			rowsAffected, err := s.insertStatementStats(
 				ctx,
 				txn,
@@ -204,7 +204,7 @@ func (s *PersistedSQLStats) doFlushSingleStmtStats(
 			return false /* alreadyExists */, nil /* err */
 		}
 
-		readFn := func(ctx context.Context, txn *kv.Txn) error {
+		readFn := func(ctx context.Context, txn isql.Txn) error {
 			persistedData := roachpb.StatementStatistics{}
 			err := s.fetchPersistedStatementStats(
 				ctx,
@@ -224,7 +224,7 @@ func (s *PersistedSQLStats) doFlushSingleStmtStats(
 			return nil
 		}
 
-		updateFn := func(ctx context.Context, txn *kv.Txn) error {
+		updateFn := func(ctx context.Context, txn isql.Txn) error {
 			return s.updateStatementStats(
 				ctx,
 				txn,
@@ -246,10 +246,10 @@ func (s *PersistedSQLStats) doFlushSingleStmtStats(
 
 func (s *PersistedSQLStats) doInsertElseDoUpdate(
 	ctx context.Context,
-	txn *kv.Txn,
-	insertFn func(context.Context, *kv.Txn) (alreadyExists bool, err error),
-	readFn func(context.Context, *kv.Txn) error,
-	updateFn func(context.Context, *kv.Txn) error,
+	txn isql.Txn,
+	insertFn func(context.Context, isql.Txn) (alreadyExists bool, err error),
+	readFn func(context.Context, isql.Txn) error,
+	updateFn func(context.Context, isql.Txn) error,
 ) error {
 	alreadyExists, err := insertFn(ctx, txn)
 	if err != nil {
@@ -298,7 +298,7 @@ func (s *PersistedSQLStats) getTimeNow() time.Time {
 
 func (s *PersistedSQLStats) insertTransactionStats(
 	ctx context.Context,
-	txn *kv.Txn,
+	txn isql.Txn,
 	aggregatedTs time.Time,
 	serializedFingerprintID []byte,
 	stats *roachpb.CollectedTransactionStatistics,
@@ -326,10 +326,10 @@ DO NOTHING
 	statistics := tree.NewDJSON(statisticsJSON)
 
 	nodeID := s.GetEnabledSQLInstanceID()
-	rowsAffected, err = s.cfg.InternalExecutor.ExecEx(
+	rowsAffected, err = txn.ExecEx(
 		ctx,
 		"insert-txn-stats",
-		txn, /* txn */
+		txn.KV(),
 		sessiondata.NodeUserSessionDataOverride,
 		insertStmt,
 		aggregatedTs,            // aggregated_ts
@@ -345,7 +345,7 @@ DO NOTHING
 }
 func (s *PersistedSQLStats) updateTransactionStats(
 	ctx context.Context,
-	txn *kv.Txn,
+	txn isql.Txn,
 	aggregatedTs time.Time,
 	serializedFingerprintID []byte,
 	stats *roachpb.CollectedTransactionStatistics,
@@ -366,10 +366,10 @@ WHERE fingerprint_id = $2
 	statistics := tree.NewDJSON(statisticsJSON)
 
 	nodeID := s.GetEnabledSQLInstanceID()
-	rowsAffected, err := s.cfg.InternalExecutor.ExecEx(
+	rowsAffected, err := txn.ExecEx(
 		ctx,
 		"update-stmt-stats",
-		txn, /* txn */
+		txn.KV(), /* txn */
 		sessiondata.NodeUserSessionDataOverride,
 		updateStmt,
 		statistics,              // statistics
@@ -393,7 +393,7 @@ WHERE fingerprint_id = $2
 
 func (s *PersistedSQLStats) updateStatementStats(
 	ctx context.Context,
-	txn *kv.Txn,
+	txn isql.Txn,
 	aggregatedTs time.Time,
 	serializedFingerprintID []byte,
 	serializedTransactionFingerprintID []byte,
@@ -424,10 +424,10 @@ WHERE fingerprint_id = $3
 	}
 
 	nodeID := s.GetEnabledSQLInstanceID()
-	rowsAffected, err := s.cfg.InternalExecutor.ExecEx(
+	rowsAffected, err := txn.ExecEx(
 		ctx,
 		"update-stmt-stats",
-		txn, /* txn */
+		txn.KV(), /* txn */
 		sessiondata.NodeUserSessionDataOverride,
 		updateStmt,
 		statistics,                         // statistics
@@ -461,7 +461,7 @@ WHERE fingerprint_id = $3
 
 func (s *PersistedSQLStats) insertStatementStats(
 	ctx context.Context,
-	txn *kv.Txn,
+	txn isql.Txn,
 	aggregatedTs time.Time,
 	serializedFingerprintID []byte,
 	serializedTransactionFingerprintID []byte,
@@ -518,10 +518,10 @@ ON CONFLICT (crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_ha
              aggregated_ts, fingerprint_id, transaction_fingerprint_id, app_name, plan_hash, node_id)
 DO NOTHING
 `, values)
-	rowsAffected, err = s.cfg.InternalExecutor.ExecEx(
+	rowsAffected, err = txn.ExecEx(
 		ctx,
 		"insert-stmt-stats",
-		txn, /* txn */
+		txn.KV(), /* txn */
 		sessiondata.NodeUserSessionDataOverride,
 		insertStmt,
 		args...,
@@ -532,7 +532,7 @@ DO NOTHING
 
 func (s *PersistedSQLStats) fetchPersistedTransactionStats(
 	ctx context.Context,
-	txn *kv.Txn,
+	txn isql.Txn,
 	aggregatedTs time.Time,
 	serializedFingerprintID []byte,
 	appName string,
@@ -553,10 +553,10 @@ FOR UPDATE
 `
 
 	nodeID := s.GetEnabledSQLInstanceID()
-	row, err := s.cfg.InternalExecutor.QueryRowEx(
+	row, err := txn.QueryRowEx(
 		ctx,
 		"fetch-txn-stats",
-		txn, /* txn */
+		txn.KV(), /* txn */
 		sessiondata.NodeUserSessionDataOverride,
 		readStmt,                // stmt
 		serializedFingerprintID, // fingerprint_id
@@ -587,7 +587,7 @@ FOR UPDATE
 
 func (s *PersistedSQLStats) fetchPersistedStatementStats(
 	ctx context.Context,
-	txn *kv.Txn,
+	txn isql.Txn,
 	aggregatedTs time.Time,
 	serializedFingerprintID []byte,
 	serializedTransactionFingerprintID []byte,
@@ -609,10 +609,10 @@ WHERE fingerprint_id = $1
 FOR UPDATE
 `
 	nodeID := s.GetEnabledSQLInstanceID()
-	row, err := s.cfg.InternalExecutor.QueryRowEx(
+	row, err := txn.QueryRowEx(
 		ctx,
 		"fetch-stmt-stats",
-		txn, /* txn */
+		txn.KV(), /* txn */
 		sessiondata.NodeUserSessionDataOverride,
 		readStmt,                           // stmt
 		serializedFingerprintID,            // fingerprint_id

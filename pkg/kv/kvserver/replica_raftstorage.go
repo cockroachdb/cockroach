@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -421,31 +422,43 @@ func (r *Replica) updateRangeInfo(ctx context.Context, desc *roachpb.RangeDescri
 	return nil
 }
 
-// clearRangeData clears the data associated with a range descriptor. If
-// rangeIDLocalOnly is true, then only the range-id local keys are deleted.
-// Otherwise, the range-id local keys, range local keys, and user keys are all
-// deleted.
+type clearRangeDataOptions struct {
+	// ClearReplicatedByRangeID indicates that replicated RangeID-based keys
+	// (abort span, etc) should be removed.
+	ClearReplicatedByRangeID bool
+	// ClearUnreplicatedByRangeID indicates that unreplicated RangeID-based keys
+	// (logstore state incl. HardState, etc) should be removed.
+	ClearUnreplicatedByRangeID bool
+	// ClearReplicatedBySpan causes the state machine data (i.e. the replicated state
+	// for the given RSpan) that is key-addressable (i.e. range descriptor, user keys,
+	// locks) to be removed. No data is removed if this is the zero span.
+	ClearReplicatedBySpan roachpb.RSpan
+
+	// If MustUseClearRange is true, a Pebble range tombstone will always be used
+	// to clear the key spans (unless empty). This is typically used when we need
+	// to write additional keys to an SST after this clear, e.g. a replica
+	// tombstone, since keys must be written in order. When this is false, a
+	// heuristic will be used instead.
+	MustUseClearRange bool
+}
+
+// clearRangeData clears the data associated with a range descriptor selected
+// by the provided clearRangeDataOptions.
 //
-// If mustUseClearRange is true, a Pebble range tombstone will always be used to
-// clear the key spans (unless empty). This is typically used when we need to
-// write additional keys to an SST after this clear, e.g. a replica tombstone,
-// since keys must be written in order.
+// TODO(tbg): could rename this to clearReplicaData. The use of "Range" in both the
+// "CRDB Range" and "storage.ClearRange" context in the setting of this method could
+// be confusing.
 func clearRangeData(
-	desc *roachpb.RangeDescriptor,
-	reader storage.Reader,
-	writer storage.Writer,
-	rangeIDLocalOnly bool,
-	mustUseClearRange bool,
+	rangeID roachpb.RangeID, reader storage.Reader, writer storage.Writer, opts clearRangeDataOptions,
 ) error {
-	var keySpans []roachpb.Span
-	if rangeIDLocalOnly {
-		keySpans = []roachpb.Span{rditer.MakeRangeIDLocalKeySpan(desc.RangeID, false)}
-	} else {
-		keySpans = rditer.MakeAllKeySpans(desc)
-	}
+	keySpans := rditer.Select(rangeID, rditer.SelectOpts{
+		ReplicatedBySpan:      opts.ClearReplicatedBySpan,
+		ReplicatedByRangeID:   opts.ClearReplicatedByRangeID,
+		UnreplicatedByRangeID: opts.ClearUnreplicatedByRangeID,
+	})
 
 	pointKeyThreshold, rangeKeyThreshold := clearRangeThresholdPointKeys, clearRangeThresholdRangeKeys
-	if mustUseClearRange {
+	if opts.MustUseClearRange {
 		pointKeyThreshold, rangeKeyThreshold = 1, 1
 	}
 
@@ -625,7 +638,10 @@ func (r *Replica) applySnapshot(
 	// problematic, as it would prevent this store from ever having a new replica
 	// of the removed range. In this case, however, it's copacetic, as subsumed
 	// ranges _can't_ have new replicas.
-	if err := r.clearSubsumedReplicaDiskData(ctx, inSnap.SSTStorageScratch, desc, subsumedRepls, mergedTombstoneReplicaID); err != nil {
+	if err := clearSubsumedReplicaDiskData(
+		ctx, r.store.ClusterSettings(), r.store.Engine(), inSnap.SSTStorageScratch,
+		desc, subsumedRepls, mergedTombstoneReplicaID,
+	); err != nil {
 		return err
 	}
 	stats.subsumedReplicas = timeutil.Now()
@@ -782,9 +798,13 @@ func (r *Replica) applySnapshot(
 // replicas by creating SSTs with range deletion tombstones. We have to be
 // careful here not to have overlapping ranges with the SSTs we have already
 // created since that will throw an error while we are ingesting them. This
-// method requires that each of the subsumed replicas raftMu is held.
-func (r *Replica) clearSubsumedReplicaDiskData(
+// method requires that each of the subsumed replicas raftMu is held, and that
+// the Reader reflects the latest I/O each of the subsumed replicas has done
+// (i.e. Reader was instantiated after all raftMu were acquired).
+func clearSubsumedReplicaDiskData(
 	ctx context.Context,
+	st *cluster.Settings,
+	reader storage.Reader,
 	scratch *SSTSnapshotStorageScratch,
 	desc *roachpb.RangeDescriptor,
 	subsumedRepls []*Replica,
@@ -792,7 +812,11 @@ func (r *Replica) clearSubsumedReplicaDiskData(
 ) error {
 	// NB: we don't clear RangeID local key spans here. That happens
 	// via the call to preDestroyRaftMuLocked.
-	getKeySpans := rditer.MakeReplicatedKeySpansExceptRangeID
+	getKeySpans := func(d *roachpb.RangeDescriptor) []roachpb.Span {
+		return rditer.Select(d.RangeID, rditer.SelectOpts{
+			ReplicatedBySpan: d.RSpan(),
+		})
+	}
 	keySpans := getKeySpans(desc)
 	totalKeySpans := append([]roachpb.Span(nil), keySpans...)
 	for _, sr := range subsumedRepls {
@@ -810,19 +834,23 @@ func (r *Replica) clearSubsumedReplicaDiskData(
 		// We have to create an SST for the subsumed replica's range-id local keys.
 		subsumedReplSSTFile := &storage.MemFile{}
 		subsumedReplSST := storage.MakeIngestionSSTWriter(
-			ctx, r.ClusterSettings(), subsumedReplSSTFile,
+			ctx, st, subsumedReplSSTFile,
 		)
 		defer subsumedReplSST.Close()
 		// NOTE: We set mustClearRange to true because we are setting
 		// RangeTombstoneKey. Since Clears and Puts need to be done in increasing
 		// order of keys, it is not safe to use ClearRangeIter.
+		opts := clearRangeDataOptions{
+			ClearReplicatedByRangeID:   true,
+			ClearUnreplicatedByRangeID: true,
+			MustUseClearRange:          true,
+		}
 		if err := sr.preDestroyRaftMuLocked(
 			ctx,
-			r.store.Engine(),
+			reader,
 			&subsumedReplSST,
 			subsumedNextReplicaID,
-			true, /* clearRangeIDLocalOnly */
-			true, /* mustClearRange */
+			opts,
 		); err != nil {
 			subsumedReplSST.Close()
 			return err
@@ -868,11 +896,11 @@ func (r *Replica) clearSubsumedReplicaDiskData(
 		if totalKeySpans[i].EndKey.Compare(keySpans[i].EndKey) > 0 {
 			subsumedReplSSTFile := &storage.MemFile{}
 			subsumedReplSST := storage.MakeIngestionSSTWriter(
-				ctx, r.ClusterSettings(), subsumedReplSSTFile,
+				ctx, st, subsumedReplSSTFile,
 			)
 			defer subsumedReplSST.Close()
 			if err := storage.ClearRangeWithHeuristic(
-				r.store.Engine(),
+				reader,
 				&subsumedReplSST,
 				keySpans[i].EndKey,
 				totalKeySpans[i].EndKey,

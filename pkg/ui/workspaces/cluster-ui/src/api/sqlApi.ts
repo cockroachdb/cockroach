@@ -119,3 +119,42 @@ export function sqlResultsAreEmpty(
     )
   );
 }
+
+// Error messages relating to upgrades in progress.
+// This is a temporary solution until we can use different queries for
+// different versions. For now we just try to give more info as to why
+// this page is unavailable for insights.
+const UPGRADE_RELATED_ERRORS = [
+  /relation "crdb_internal.txn_execution_insights" does not exist/i,
+  /column "(.*)" does not exist/i,
+];
+
+function isUpgradeError(message: string): boolean {
+  return UPGRADE_RELATED_ERRORS.some(err => message.search(err));
+}
+
+/**
+ * errorMessage cleans the error message returned by the sqlApi,
+ * removing information not useful for the user.
+ * e.g. the error message
+ * "$executing stmt 1: run-query-via-api: only users with either MODIFYCLUSTERSETTING
+ * or VIEWCLUSTERSETTING privileges are allowed to show cluster settings"
+ * became
+ * "only users with either MODIFYCLUSTERSETTING or VIEWCLUSTERSETTING privileges are allowed to show cluster settings"
+ * and the error message
+ * "executing stmt 1: max result size exceeded"
+ * became
+ * "max result size exceeded"
+ * @param message
+ */
+export function sqlApiErrorMessage(message: string): string {
+  message = message.replace("run-query-via-api: ", "");
+  if (message.includes(":")) {
+    return message.split(":")[1];
+  }
+  if (isUpgradeError(message)) {
+    message = "This page may not be available during an upgrade.";
+  }
+
+  return message;
+}

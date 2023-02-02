@@ -139,29 +139,34 @@ func completeFunction(ctx context.Context, c compengine.Context) (compengine.Row
 	}
 
 	c.Trace("completing for %q (%d,%d) with schema %q", prefix, start, end, schemaName)
-	// TODO(knz): use the comment extraction functions from pg_catalog
-	// instead of crdb_internal. This requires exposing comments for
-	// built-in functions through pg_catalog.
+	// Note: we use min(p.oid) ... GROUP BY p.proname to cover the case
+	// there are multiple overloads. This ensures we have only one entry
+	// in the completion results for that function. Its reported
+	// description will also be the description for the first overload.
+	// Separately, we GROUP BY n.nspname to ensure that a UDF with
+	// the same name as a pg_catalog function gets reported as a
+	// separate completion entry.
 	const query = `
 WITH p AS (
+SELECT min(p.oid) AS oid, p.proname, n.nspname
+  FROM pg_catalog.pg_proc p
+  JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
+ WHERE left(p.proname, length($1:::STRING)) = $1:::STRING
+ AND ((length($4) > 0 AND $4 = n.nspname)
+   OR (length($4) = 0 AND n.nspname = ANY current_schemas(true)))
+GROUP BY p.proname, n.nspname
+)
 SELECT DISTINCT
-       proname, nspname
-  FROM pg_catalog.pg_proc
-  JOIN pg_catalog.pg_namespace n ON n.oid = pronamespace)
-SELECT IF(length($4) > 0, pg_catalog.quote_ident($4:::STRING) || '.', '') ||
+       IF(length($4) > 0, pg_catalog.quote_ident($4:::STRING) || '.', '') ||
        pg_catalog.quote_ident(proname) || '(' AS completion,
        'functions' AS category,
-       substr(COALESCE((
-         SELECT details
-          FROM "".crdb_internal.builtin_functions f2
-         WHERE f2.function = p.proname AND f2.schema = p.nspname
-         LIMIT 1), ''), e'[^\n]{0,80}') AS description,
+       IF(length($4) = 0, '(from schema '||nspname||') ', '') ||
+       substr(COALESCE(pg_catalog.obj_description(oid, 'pg_proc'),''), e'[^.\n]{0,80}') AS description,
        $2:::INT AS start,
        $3:::INT AS end
   FROM p
- WHERE left(proname, length($1:::STRING)) = $1:::STRING
- AND ((length($4) > 0 AND $4 = nspname)
-   OR (length($4) = 0 AND nspname = ANY current_schemas(true)))`
+ORDER BY 1,2,3,4,5
+`
 	iter, err := c.Query(ctx, query, prefix, start, end, schemaName)
 	return iter, err
 }

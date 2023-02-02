@@ -198,7 +198,14 @@ func hbaRunTest(t *testing.T, insecure bool) {
 					CommonSinkConfig: logconfig.CommonSinkConfig{Auditable: &bt},
 				},
 				Channels: logconfig.SelectChannels(channel.SESSIONS),
-			}}
+			},
+			"dev": {
+				FileDefaults: logconfig.FileDefaults{
+					CommonSinkConfig: logconfig.CommonSinkConfig{Auditable: &bt},
+				},
+				Channels: logconfig.SelectChannels(channel.DEV),
+			},
+		}
 		dir := sc.GetDirectory()
 		if err := cfg.Validate(&dir); err != nil {
 			t.Fatal(err)
@@ -217,9 +224,10 @@ func hbaRunTest(t *testing.T, insecure bool) {
 		// We can't use the cluster settings to do this, because
 		// cluster settings propagate asynchronously.
 		testServer := s.(*server.TestServer)
-		pgServer := s.(*server.TestServer).PGServer().(*pgwire.Server)
+		pgServer := testServer.PGServer().(*pgwire.Server)
 		pgServer.TestingEnableConnLogging()
 		pgServer.TestingEnableAuthLogging()
+		testServer.PGPreServer().TestingAcceptSystemIdentityOption(true)
 
 		httpClient, err := s.GetAdminHTTPClient()
 		if err != nil {
@@ -431,6 +439,17 @@ func hbaRunTest(t *testing.T, insecure bool) {
 						return td.Expected, nil
 					}
 
+					// We use rmArg to prevent test-only connection parameters to
+					// leak to the session var option parser.
+					rmArg := func(key string) {
+						for i, a := range td.CmdArgs {
+							if a.Key == key {
+								td.CmdArgs = append(td.CmdArgs[:i], td.CmdArgs[i+1:]...)
+								return
+							}
+						}
+					}
+
 					// Prepare a connection string using the server's default.
 					// What is the user requested by the test?
 					user := username.RootUser
@@ -442,20 +461,31 @@ func hbaRunTest(t *testing.T, insecure bool) {
 					// use of client certificates.
 					forceCerts := false
 					if td.HasArg("force_certs") {
+						rmArg("force_certs")
 						forceCerts = true
 					}
 
 					// Whether to display the system identity as well (to test remappings).
 					showSystemIdentity := false
 					if td.HasArg("show_system_identity") {
+						rmArg("show_system_identity")
 						showSystemIdentity = true
+					}
+
+					systemIdentity := user
+					explicitSystemIdentity := td.HasArg("system_identity")
+					if explicitSystemIdentity {
+						td.ScanArgs(t, "system_identity", &systemIdentity)
+						rmArg("system_identity")
 					}
 
 					// We want the certs to be present in the filesystem for this test.
 					// However, certs are only generated for users "root" and "testuser" specifically.
 					sqlURL, cleanupFn := sqlutils.PGUrlWithOptionalClientCerts(
-						t, s.ServingSQLAddr(), t.Name(), url.User(user),
-						forceCerts || user == username.RootUser || user == username.TestUser /* withClientCerts */)
+						t, s.ServingSQLAddr(), t.Name(), url.User(systemIdentity),
+						forceCerts ||
+							systemIdentity == username.RootUser ||
+							systemIdentity == username.TestUser /* withClientCerts */)
 					defer cleanupFn()
 
 					var host, port string
@@ -492,6 +522,12 @@ func hbaRunTest(t *testing.T, insecure bool) {
 						args = append(args,
 							datadriven.CmdArg{Key: key, Vals: []string{options.Get(key)}})
 					}
+
+					if explicitSystemIdentity {
+						args = append(args,
+							datadriven.CmdArg{Key: "options", Vals: []string{"-csystem_identity=" + systemIdentity}})
+					}
+
 					// Now turn the cmdargs into a dsn.
 					var dsnBuf strings.Builder
 					sp := ""

@@ -98,7 +98,7 @@ func (m *monitorImpl) Go(fn func(context.Context) error) {
 			// Note that `t.Fatal` calls `panic(err)`, so this mechanism primarily
 			// enables that use case. But it also offers protection against accidental
 			// panics (NPEs and such) which should not bubble up to the runtime.
-			err = rErr
+			err = errors.WithStack(rErr)
 		}()
 		// Automatically clear the worker status message when the goroutine exits.
 		defer m.t.WorkerStatus()

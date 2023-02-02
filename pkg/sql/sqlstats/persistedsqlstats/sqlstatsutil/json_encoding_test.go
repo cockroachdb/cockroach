@@ -125,6 +125,10 @@ func TestSQLStatsJsonEncoding(t *testing.T) {
          "maxDiskUsage": {
            "mean": {{.Float}},
            "sqDiff": {{.Float}}
+         },
+         "cpuSQLNanos": {
+           "mean": {{.Float}},
+           "sqDiff": {{.Float}}
          }
        },
        "index_recommendations": [{{joinStrings .StringArray}}]
@@ -244,6 +248,10 @@ func TestSQLStatsJsonEncoding(t *testing.T) {
          "maxDiskUsage": {
            "mean": {{.Float}},
            "sqDiff": {{.Float}}
+         },
+         "cpuSQLNanos": {
+           "mean": {{.Float}},
+           "sqDiff": {{.Float}}
          }
        },
        "index_recommendations": [{{joinStrings .StringArray}}]
@@ -354,6 +362,10 @@ func TestSQLStatsJsonEncoding(t *testing.T) {
       "sqDiff": {{.Float}}
     },
     "maxDiskUsage": {
+      "mean": {{.Float}},
+      "sqDiff": {{.Float}}
+    },
+    "cpuSQLNanos": {
       "mean": {{.Float}},
       "sqDiff": {{.Float}}
     }

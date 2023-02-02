@@ -527,7 +527,7 @@ func removeSequenceOwnerIfExists(
 	if tableDesc.Dropped() {
 		return nil
 	}
-	col, err := tableDesc.FindColumnWithID(opts.SequenceOwner.OwnerColumnID)
+	col, err := catalog.MustFindColumnByID(tableDesc, opts.SequenceOwner.OwnerColumnID)
 	if err != nil {
 		return err
 	}
@@ -568,7 +568,7 @@ func resolveColumnItemToDescriptors(
 	if err != nil {
 		return nil, nil, err
 	}
-	col, err := tableDesc.FindColumnWithName(columnItem.ColumnName)
+	col, err := catalog.MustFindColumnByTreeName(tableDesc, columnItem.ColumnName)
 	if err != nil {
 		return nil, nil, err
 	}

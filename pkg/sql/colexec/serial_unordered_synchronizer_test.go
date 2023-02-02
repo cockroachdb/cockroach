@@ -54,7 +54,10 @@ func TestSerialUnorderedSynchronizer(t *testing.T) {
 			},
 		}
 	}
-	s := NewSerialUnorderedSynchronizer(inputs)
+	s := NewSerialUnorderedSynchronizer(inputs,
+		0,   /* serialInputIdxExclusiveUpperBound */
+		nil, /* exceedsInputIdxExclusiveUpperBoundError */
+	)
 	s.Init(ctx)
 	resultBatches := 0
 	for {

@@ -48,7 +48,7 @@ var PerChangefeedMemLimit = settings.RegisterByteSizeSetting(
 	settings.TenantWritable,
 	"changefeed.memory.per_changefeed_limit",
 	"controls amount of data that can be buffered per changefeed",
-	1<<27, // 128MiB
+	1<<29, // 512MiB
 )
 
 // SlowSpanLogThreshold controls when we will log slow spans.
@@ -129,8 +129,8 @@ var ScanRequestSize = settings.RegisterIntSetting(
 	settings.TenantWritable,
 	"changefeed.backfill.scan_request_size",
 	"the maximum number of bytes returned by each scan request",
-	16<<20, // 16 MiB
-)
+	1<<19, // 1/2 MiB
+).WithPublic()
 
 // SinkThrottleConfig describes throttling configuration for the sink.
 // 0 values for any of the settings disable that setting.
@@ -269,4 +269,15 @@ var EventConsumerElasticCPUControlEnabled = settings.RegisterBoolSetting(
 	"changefeed.cpu.per_event_elastic_control.enabled",
 	"determines whether changefeed event processing integrates with elastic CPU control",
 	true,
+)
+
+// RequireExternalConnectionSink is used to restrict non-admins with the CHANGEFEED privilege
+// to create changefeeds to external connections only.
+var RequireExternalConnectionSink = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	"changefeed.permissions.require_external_connection_sink",
+	"if enabled, this settings restricts users with the CHANGEFEED privilege"+
+		" to create changefeeds with external connection sinks only."+
+		" see https://www.cockroachlabs.com/docs/stable/create-external-connection.html",
+	false,
 )

@@ -140,10 +140,14 @@ type Flow interface {
 	// Cleanup.
 	Cancel()
 
-	// AddOnCleanup adds a callback to be executed at the very end of Cleanup.
-	// Callbacks are put on the stack meaning that AddOnCleanup is called
-	// multiple times, then the "later" callbacks are executed first.
-	AddOnCleanup(fn func())
+	// AddOnCleanupStart adds a callback to be executed at the very beginning of
+	// Cleanup.
+	AddOnCleanupStart(fn func())
+
+	// GetOnCleanupFns returns a couple of functions that should be called at
+	// the very beginning and the very end of Cleanup, respectively. Both will
+	// be non-nil.
+	GetOnCleanupFns() (startCleanup, endCleanup func())
 
 	// Cleanup must be called whenever the flow is done (meaning it either
 	// completes gracefully after all processors and mailboxes exited or an
@@ -200,7 +204,10 @@ type FlowBase struct {
 	//  - outboxes
 	waitGroup sync.WaitGroup
 
-	onFlowCleanup func()
+	// onCleanupStart and onCleanupEnd will be called in the very beginning and
+	// the very end of Cleanup(), respectively.
+	onCleanupStart func()
+	onCleanupEnd   func()
 
 	statementSQL string
 
@@ -276,7 +283,7 @@ func NewFlowBase(
 	rowSyncFlowConsumer execinfra.RowReceiver,
 	batchSyncFlowConsumer execinfra.BatchReceiver,
 	localProcessors []execinfra.LocalProcessor,
-	onFlowCleanup func(),
+	onFlowCleanupEnd func(),
 	statementSQL string,
 ) *FlowBase {
 	// We are either in a single tenant cluster, or a SQL node in a multi-tenant
@@ -300,7 +307,7 @@ func NewFlowBase(
 		batchSyncFlowConsumer: batchSyncFlowConsumer,
 		localProcessors:       localProcessors,
 		admissionInfo:         admissionInfo,
-		onFlowCleanup:         onFlowCleanup,
+		onCleanupEnd:          onFlowCleanupEnd,
 		status:                flowNotStarted,
 		statementSQL:          statementSQL,
 	}
@@ -527,17 +534,31 @@ func (f *FlowBase) Cancel() {
 	f.ctxCancel()
 }
 
-// AddOnCleanup is part of the Flow interface.
-func (f *FlowBase) AddOnCleanup(fn func()) {
-	if f.onFlowCleanup != nil {
-		oldOnFlowCleanup := f.onFlowCleanup
-		f.onFlowCleanup = func() {
+// AddOnCleanupStart is part of the Flow interface.
+func (f *FlowBase) AddOnCleanupStart(fn func()) {
+	if f.onCleanupStart != nil {
+		oldOnCleanupStart := f.onCleanupStart
+		f.onCleanupStart = func() {
 			fn()
-			oldOnFlowCleanup()
+			oldOnCleanupStart()
 		}
 	} else {
-		f.onFlowCleanup = fn
+		f.onCleanupStart = fn
 	}
+}
+
+var noopFn = func() {}
+
+// GetOnCleanupFns is part of the Flow interface.
+func (f *FlowBase) GetOnCleanupFns() (startCleanup, endCleanup func()) {
+	onCleanupStart, onCleanupEnd := f.onCleanupStart, f.onCleanupEnd
+	if onCleanupStart == nil {
+		onCleanupStart = noopFn
+	}
+	if onCleanupEnd == nil {
+		onCleanupEnd = noopFn
+	}
+	return onCleanupStart, onCleanupEnd
 }
 
 // Cleanup is part of the Flow interface.
@@ -594,9 +615,6 @@ func (f *FlowBase) Cleanup(ctx context.Context) {
 	}
 	f.status = flowFinished
 	f.ctxCancel()
-	if f.onFlowCleanup != nil {
-		f.onFlowCleanup()
-	}
 }
 
 // cancel cancels all unconnected streams of this flow. This function is called

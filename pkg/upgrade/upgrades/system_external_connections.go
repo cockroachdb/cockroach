@@ -24,6 +24,6 @@ func systemExternalConnectionsTableMigration(
 	ctx context.Context, _ clusterversion.ClusterVersion, d upgrade.TenantDeps,
 ) error {
 	return createSystemTable(
-		ctx, d.DB, d.Settings, d.Codec, systemschema.SystemExternalConnectionsTable,
+		ctx, d.DB.KV(), d.Settings, d.Codec, systemschema.SystemExternalConnectionsTable,
 	)
 }

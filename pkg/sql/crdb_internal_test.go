@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/keyvisualizer"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -36,12 +37,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -83,7 +86,13 @@ func TestGetAllNamesInternal(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	names, err := sql.TestingGetAllNames(ctx, nil, s.InternalExecutor().(*sql.InternalExecutor))
+	var names map[descpb.ID]catalog.NameKey
+	require.NoError(t, s.InternalDB().(isql.DB).Txn(ctx, func(
+		ctx context.Context, txn isql.Txn,
+	) (err error) {
+		names, err = sql.TestingGetAllNames(ctx, txn)
+		return err
+	}))
 	require.NoError(t, err)
 
 	assert.Equal(t, descpb.NameInfo{ParentID: 999, ParentSchemaID: 444, Name: "bob"}, names[9999])
@@ -969,15 +978,21 @@ func TestTxnContentionEventsTable(t *testing.T) {
 	testutils.SucceedsWithin(t, func() error {
 		rows, errVerify := conn.QueryContext(ctx, `SELECT 
 			blocking_txn_id, 
-			waiting_txn_id 
+			waiting_txn_id,
+			waiting_stmt_id,
+			encode(
+					 waiting_txn_fingerprint_id, 'hex'
+			 ) AS waiting_txn_fingerprint_id
 			FROM crdb_internal.transaction_contention_events tce 
 			inner join ( 
-			select 
+			select
+      fingerprint_id,
 			transaction_fingerprint_id, 
 			metadata->'query' as query 
 			from crdb_internal.statement_statistics t 
 			where metadata->>'query' like 'UPDATE t SET %') stats 
-			on stats.transaction_fingerprint_id = tce.waiting_txn_fingerprint_id`)
+			on stats.transaction_fingerprint_id = tce.waiting_txn_fingerprint_id
+			  and stats.fingerprint_id = tce.waiting_stmt_fingerprint_id`)
 		if errVerify != nil {
 			return errVerify
 		}
@@ -985,12 +1000,24 @@ func TestTxnContentionEventsTable(t *testing.T) {
 		for rows.Next() {
 			rowCount++
 
-			var blocking, waiting string
-			errVerify = rows.Scan(&blocking, &waiting)
+			var blockingTxnId, waitingTxnId, waitingStmtId, waitingStmtFingerprint string
+			errVerify = rows.Scan(&blockingTxnId, &waitingTxnId, &waitingStmtId, &waitingStmtFingerprint)
 			if errVerify != nil {
 				return errVerify
 			}
 
+			const defaultIdString = "0x0000000000000000"
+			if blockingTxnId == defaultIdString {
+				return fmt.Errorf("transaction_contention_events had default txn blocking id %s, waiting txn id %s", blockingTxnId, waitingTxnId)
+			}
+
+			if waitingTxnId == defaultIdString {
+				return fmt.Errorf("transaction_contention_events had default waiting txn id %s, blocking txn id %s", waitingTxnId, blockingTxnId)
+			}
+
+			if waitingStmtId == defaultIdString {
+				return fmt.Errorf("transaction_contention_events had default waiting stmt id %s, blocking txn id %s, waiting txn id %s", waitingStmtId, blockingTxnId, waitingTxnId)
+			}
 		}
 
 		if rowCount < 1 {
@@ -1234,7 +1261,11 @@ func TestInternalSystemJobsAccess(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			KeyVisualizer: &keyvisualizer.TestingKnobs{SkipJobBootstrap: true},
+		},
+	})
 	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
 	rootDB := sqlutils.MakeSQLRunner(db)

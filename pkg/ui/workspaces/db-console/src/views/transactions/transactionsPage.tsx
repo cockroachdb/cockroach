@@ -11,10 +11,15 @@
 import { connect } from "react-redux";
 import { createSelector } from "reselect";
 import { RouteComponentProps, withRouter } from "react-router-dom";
-import { refreshNodes, refreshStatements } from "src/redux/apiReducers";
+import {
+  refreshNodes,
+  refreshStatements,
+  refreshUserSQLRoles,
+} from "src/redux/apiReducers";
 import { resetSQLStatsAction } from "src/redux/sqlStats";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 import { AdminUIState } from "src/redux/state";
+import { selectHasAdminRole } from "src/redux/user";
 import { StatementsResponseMessage } from "src/util/api";
 
 import { PrintTime } from "src/views/reports/containers/range/print";
@@ -39,7 +44,10 @@ import {
   mapStateToRecentTransactionsPageProps,
 } from "./recentTransactionsSelectors";
 import { selectTimeScale } from "src/redux/timeScale";
-import { selectStatementsLastUpdated } from "src/selectors/executionFingerprintsSelectors";
+import {
+  selectStatementsLastUpdated,
+  selectStatementsDataValid,
+} from "src/selectors/executionFingerprintsSelectors";
 
 // selectStatements returns the array of AggregateStatistics to show on the
 // TransactionsPage, based on if the appAttr route parameter is set.
@@ -96,6 +104,7 @@ export const transactionColumnsLocalSetting = new LocalSetting(
 const fingerprintsPageActions = {
   refreshData: refreshStatements,
   refreshNodes,
+  refreshUserSQLRoles,
   resetSQLStats: resetSQLStatsAction,
   onTimeScaleChange: setGlobalTimeScaleAction,
   // We use `null` when the value was never set and it will show all columns.
@@ -141,6 +150,7 @@ const TransactionsPageConnected = withRouter(
         ...props,
         columns: transactionColumnsLocalSetting.selectorToArray(state),
         data: selectData(state),
+        isDataValid: selectStatementsDataValid(state),
         lastUpdated: selectStatementsLastUpdated(state),
         timeScale: selectTimeScale(state),
         error: selectLastError(state),
@@ -150,6 +160,7 @@ const TransactionsPageConnected = withRouter(
         search: searchLocalSetting.selector(state),
         sortSetting: sortSettingLocalSetting.selector(state),
         statementsError: state.cachedData.statements.lastError,
+        hasAdminRole: selectHasAdminRole(state),
       },
       activePageProps: mapStateToRecentTransactionsPageProps(state),
     }),

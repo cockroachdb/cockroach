@@ -1,0 +1,23 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "isql",
+    srcs = [
+        "doc.go",
+        "isql_db.go",
+        "options.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/isql",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/kv",
+        "//pkg/sql/catalog",
+        "//pkg/sql/catalog/colinfo",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/sessiondata",
+        "//pkg/util/admission/admissionpb",
+    ],
+)
+
+get_x_data(name = "get_x_data")

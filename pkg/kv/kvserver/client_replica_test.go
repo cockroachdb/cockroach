@@ -47,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/kvclientutils"
@@ -738,7 +739,7 @@ func testTxnReadWithinUncertaintyIntervalAfterIntentResolution(
 		require.Equal(t, readerTxn.ReadTimestamp, rwuiErr.ReadTimestamp)
 		require.Equal(t, readerTxn.GlobalUncertaintyLimit, rwuiErr.GlobalUncertaintyLimit)
 		require.Equal(t, readerTxn.ObservedTimestamps, rwuiErr.ObservedTimestamps)
-		require.Equal(t, writerTxn.WriteTimestamp, rwuiErr.ExistingTimestamp)
+		require.Equal(t, writerTxn.WriteTimestamp, rwuiErr.ValueTimestamp)
 	}
 }
 
@@ -4317,6 +4318,7 @@ func TestStrictGCEnforcement(t *testing.T) {
 				require.NoError(t, r.ReadProtectedTimestampsForTesting(ctx))
 			}
 		}
+		insqlDB = tc.Server(0).InternalDB().(isql.DB)
 	)
 
 	{
@@ -4451,12 +4453,12 @@ func TestStrictGCEnforcement(t *testing.T) {
 		// Create a protected timestamp, and make sure it's not respected since the
 		// KVSubscriber is blocked.
 		rec := mkRecord()
-		require.NoError(t, db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			return ptp.Protect(ctx, txn, &rec)
+		require.NoError(t, insqlDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			return ptp.WithTxn(txn).Protect(ctx, &rec)
 		}))
 		defer func() {
-			require.NoError(t, db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-				return ptp.Release(ctx, txn, rec.ID.GetUUID())
+			require.NoError(t, insqlDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+				return ptp.WithTxn(txn).Release(ctx, rec.ID.GetUUID())
 			}))
 		}()
 		assertScanRejected(t)

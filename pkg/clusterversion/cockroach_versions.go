@@ -327,8 +327,8 @@ const (
 	// the process of upgrading from 22.2 to 23.1.
 	V23_1Start
 
-	// V23_1TenantNames adds a name column to system.tenants.
-	V23_1TenantNames
+	// V23_1TenantNamesStateAndServiceMode adds columns to system.tenants.
+	V23_1TenantNamesStateAndServiceMode
 
 	// V23_1DescIDSequenceForSystemTenant migrates the descriptor ID generator
 	// counter from a meta key to the system.descriptor_id_seq sequence for the
@@ -401,6 +401,13 @@ const (
 	// chagnefeeds created prior to this version.
 	V23_1_ChangefeedExpressionProductionReady
 
+	// V23_1KeyVisualizerTablesAndJobs adds the system tables that support the key visualizer.
+	V23_1KeyVisualizerTablesAndJobs
+
+	// V23_1_KVDirectColumnarScans introduces the support of the "direct"
+	// columnar scans in the KV layer.
+	V23_1_KVDirectColumnarScans
+
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -414,6 +421,9 @@ func (k Key) String() string {
 // TODOPreV22_1 is an alias for V22_1 for use in any version gate/check that
 // previously referenced a < 22.1 version until that check/gate can be removed.
 const TODOPreV22_1 = V22_1
+
+// Offset every version +1M major versions into the future if this is a dev branch.
+const DevOffset = 1000000
 
 // rawVersionsSingleton lists all historical versions here in chronological
 // order, with comments describing what backwards-incompatible features were
@@ -632,7 +642,7 @@ var rawVersionsSingleton = keyedVersions{
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 2},
 	},
 	{
-		Key:     V23_1TenantNames,
+		Key:     V23_1TenantNamesStateAndServiceMode,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 4},
 	},
 	{
@@ -687,6 +697,14 @@ var rawVersionsSingleton = keyedVersions{
 		Key:     V23_1_ChangefeedExpressionProductionReady,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 30},
 	},
+	{
+		Key:     V23_1KeyVisualizerTablesAndJobs,
+		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 32},
+	},
+	{
+		Key:     V23_1_KVDirectColumnarScans,
+		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 34},
+	},
 
 	// *************************************************
 	// Step (2): Add new versions here.
@@ -735,7 +753,6 @@ var versionsSingleton = func() keyedVersions {
 		// which conceptually is actually back down to 2 -- then back to to 1000003,
 		// then on to 1000004, etc.
 		skipFirst := allowUpgradeToDev
-		const devOffset = 1000000
 		first := true
 		for i := range rawVersionsSingleton {
 			// VPrimordial versions are not offset; they don't matter for the logic
@@ -748,7 +765,7 @@ var versionsSingleton = func() keyedVersions {
 				first = false
 				continue
 			}
-			rawVersionsSingleton[i].Major += devOffset
+			rawVersionsSingleton[i].Major += DevOffset
 		}
 	}
 	return rawVersionsSingleton
@@ -762,6 +779,10 @@ var versionsSingleton = func() keyedVersions {
 // simply need to check is that the cluster has upgraded to 23.1.
 var V23_1 = versionsSingleton[len(versionsSingleton)-1].Key
 
+const (
+	BinaryMinSupportedVersionKey = V22_1
+)
+
 // TODO(irfansharif): clusterversion.binary{,MinimumSupported}Version
 // feels out of place. A "cluster version" and a "binary version" are two
 // separate concepts.
@@ -771,12 +792,13 @@ var (
 	// version than binaryMinSupportedVersion, then the binary will exit with
 	// an error. This typically trails the current release by one (see top-level
 	// comment).
-	binaryMinSupportedVersion = ByKey(V22_1)
+	binaryMinSupportedVersion = ByKey(BinaryMinSupportedVersionKey)
 
+	BinaryVersionKey = V23_1
 	// binaryVersion is the version of this binary.
 	//
 	// This is the version that a new cluster will use when created.
-	binaryVersion = versionsSingleton[len(versionsSingleton)-1].Version
+	binaryVersion = ByKey(BinaryVersionKey)
 )
 
 func init() {

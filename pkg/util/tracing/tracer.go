@@ -98,7 +98,7 @@ const (
 	fieldNameOtelTraceID = prefixTracerState + "otel_traceid"
 	fieldNameOtelSpanID  = prefixTracerState + "otel_spanid"
 
-	spanKindTagKey = "span.kind"
+	SpanKindTagKey = "span.kind"
 )
 
 // TODO(davidh): Once performance issues around redaction are

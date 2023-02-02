@@ -152,6 +152,8 @@
 /pkg/server/pgurl/                       @cockroachdb/sql-sessions @cockroachdb/cli-prs
 /pkg/server/server_http*.go              @cockroachdb/obs-inf-prs @cockroachdb/server-prs
 /pkg/server/server_import_ts*.go         @cockroachdb/obs-inf-prs @cockroachdb/kv-prs
+/pkg/server/server_controller_http.go    @cockroachdb/obs-inf-prs @cockroachdb/server-prs
+/pkg/server/server_controller_sql.go     @cockroachdb/sql-sessions @cockroachdb/server-prs
 /pkg/server/serverpb/                    @cockroachdb/obs-inf-prs @cockroachdb/server-prs
 /pkg/server/serverpb/authentication*     @cockroachdb/obs-inf-prs @cockroachdb/prodsec @cockroachdb/server-prs
 /pkg/server/serverpb/index_reco*         @cockroachdb/sql-observability @cockroachdb/obs-inf-prs
@@ -171,10 +173,8 @@
 
 /pkg/ccl/jobsccl/            @cockroachdb/jobs-prs
 /pkg/ccl/changefeedccl/      @cockroachdb/cdc-prs
-# TODO(dt): either add the cockroach repository to this team or remove this team from
-# CODEOWNERS.
-#!/pkg/ccl/streamingccl/       @cockroachdb/tenant-streaming
 
+/pkg/ccl/streamingccl/       @cockroachdb/disaster-recovery
 /pkg/ccl/backupccl/          @cockroachdb/disaster-recovery
 /pkg/ccl/backupccl/*_job.go  @cockroachdb/disaster-recovery @cockroachdb/jobs-prs
 /pkg/ccl/storageccl/         @cockroachdb/disaster-recovery
@@ -222,7 +222,8 @@
 /pkg/kv/kvserver/gc/                    @cockroachdb/kv-prs
 /pkg/kv/kvserver/idalloc/               @cockroachdb/kv-prs
 /pkg/kv/kvserver/intentresolver/        @cockroachdb/kv-prs
-/pkg/kv/kvserver/kvadmission/           @cockroachdb/kv-prs
+/pkg/kv/kvserver/kvadmission/           @cockroachdb/admission-control
+/pkg/kv/kvserver/kvflowcontrol/         @cockroachdb/admission-control
 /pkg/kv/kvserver/kvserverbase/          @cockroachdb/kv-prs
 /pkg/kv/kvserver/kvserverpb/            @cockroachdb/kv-prs
 /pkg/kv/kvserver/kvstorage/             @cockroachdb/repl-prs
@@ -387,6 +388,7 @@
 # Don't ping KV on updates to reserved descriptor IDs and such.
 #!/pkg/keys/constants.go       @cockroachdb/kv-prs-noreview
 /pkg/upgrade/                @cockroachdb/sql-schema
+/pkg/keyvisualizer/          @cockroachdb/kv-obs-prs
 /pkg/multitenant/            @cockroachdb/multi-tenant
 /pkg/release/                @cockroachdb/dev-inf
 /pkg/roachpb/.gitattributes  @cockroachdb/dev-inf

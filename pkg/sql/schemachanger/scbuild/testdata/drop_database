@@ -26,11 +26,11 @@ DROP DATABASE db1 CASCADE
 - [[Owner:{DescID: 104}, ABSENT], PUBLIC]
   {descriptorId: 104, owner: root}
 - [[UserPrivileges:{DescID: 104, Name: admin}, ABSENT], PUBLIC]
-  {descriptorId: 104, privileges: "2", userName: admin}
+  {descriptorId: 104, privileges: "2", userName: admin, withGrantOption: "2"}
 - [[UserPrivileges:{DescID: 104, Name: public}, ABSENT], PUBLIC]
   {descriptorId: 104, privileges: "2048", userName: public}
 - [[UserPrivileges:{DescID: 104, Name: root}, ABSENT], PUBLIC]
-  {descriptorId: 104, privileges: "2", userName: root}
+  {descriptorId: 104, privileges: "2", userName: root, withGrantOption: "2"}
 - [[Database:{DescID: 104}, ABSENT], PUBLIC]
   {databaseId: 104}
 - [[DatabaseRoleSetting:{DescID: 104, Name: __placeholder_role_name__}, ABSENT], PUBLIC]
@@ -44,11 +44,11 @@ DROP DATABASE db1 CASCADE
 - [[Owner:{DescID: 105}, ABSENT], PUBLIC]
   {descriptorId: 105, owner: admin}
 - [[UserPrivileges:{DescID: 105, Name: admin}, ABSENT], PUBLIC]
-  {descriptorId: 105, privileges: "2", userName: admin}
+  {descriptorId: 105, privileges: "2", userName: admin, withGrantOption: "2"}
 - [[UserPrivileges:{DescID: 105, Name: public}, ABSENT], PUBLIC]
   {descriptorId: 105, privileges: "516", userName: public}
 - [[UserPrivileges:{DescID: 105, Name: root}, ABSENT], PUBLIC]
-  {descriptorId: 105, privileges: "2", userName: root}
+  {descriptorId: 105, privileges: "2", userName: root, withGrantOption: "2"}
 - [[Schema:{DescID: 105}, ABSENT], PUBLIC]
   {isPublic: true, schemaId: 105}
 - [[SchemaParent:{DescID: 105, ReferencedDescID: 104}, ABSENT], PUBLIC]
@@ -58,9 +58,9 @@ DROP DATABASE db1 CASCADE
 - [[Owner:{DescID: 106}, ABSENT], PUBLIC]
   {descriptorId: 106, owner: root}
 - [[UserPrivileges:{DescID: 106, Name: admin}, ABSENT], PUBLIC]
-  {descriptorId: 106, privileges: "2", userName: admin}
+  {descriptorId: 106, privileges: "2", userName: admin, withGrantOption: "2"}
 - [[UserPrivileges:{DescID: 106, Name: root}, ABSENT], PUBLIC]
-  {descriptorId: 106, privileges: "2", userName: root}
+  {descriptorId: 106, privileges: "2", userName: root, withGrantOption: "2"}
 - [[Schema:{DescID: 106}, ABSENT], PUBLIC]
   {schemaId: 106}
 - [[SchemaParent:{DescID: 106, ReferencedDescID: 104}, ABSENT], PUBLIC]
@@ -72,9 +72,9 @@ DROP DATABASE db1 CASCADE
 - [[Owner:{DescID: 107}, ABSENT], PUBLIC]
   {descriptorId: 107, owner: root}
 - [[UserPrivileges:{DescID: 107, Name: admin}, ABSENT], PUBLIC]
-  {descriptorId: 107, privileges: "2", userName: admin}
+  {descriptorId: 107, privileges: "2", userName: admin, withGrantOption: "2"}
 - [[UserPrivileges:{DescID: 107, Name: root}, ABSENT], PUBLIC]
-  {descriptorId: 107, privileges: "2", userName: root}
+  {descriptorId: 107, privileges: "2", userName: root, withGrantOption: "2"}
 - [[Sequence:{DescID: 107}, ABSENT], PUBLIC]
   {sequenceId: 107}
 - [[ObjectParent:{DescID: 107, ReferencedDescID: 105}, ABSENT], PUBLIC]
@@ -86,9 +86,9 @@ DROP DATABASE db1 CASCADE
 - [[Owner:{DescID: 110}, ABSENT], PUBLIC]
   {descriptorId: 110, owner: root}
 - [[UserPrivileges:{DescID: 110, Name: admin}, ABSENT], PUBLIC]
-  {descriptorId: 110, privileges: "2", userName: admin}
+  {descriptorId: 110, privileges: "2", userName: admin, withGrantOption: "2"}
 - [[UserPrivileges:{DescID: 110, Name: root}, ABSENT], PUBLIC]
-  {descriptorId: 110, privileges: "2", userName: root}
+  {descriptorId: 110, privileges: "2", userName: root, withGrantOption: "2"}
 - [[Table:{DescID: 110}, ABSENT], PUBLIC]
   {tableId: 110}
 - [[ObjectParent:{DescID: 110, ReferencedDescID: 105}, ABSENT], PUBLIC]
@@ -100,19 +100,21 @@ DROP DATABASE db1 CASCADE
 - [[ColumnName:{DescID: 110, Name: id, ColumnID: 1}, ABSENT], PUBLIC]
   {columnId: 1, name: id, tableId: 110}
 - [[ColumnType:{DescID: 110, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC]
-  {columnId: 1, tableId: 110, type: {family: IntFamily, oid: 20, width: 64}}
+  {columnId: 1, elementCreationMetadata: {in231OrLater: true}, tableId: 110, type: {family: IntFamily, oid: 20, width: 64}}
+- [[ColumnNotNull:{DescID: 110, ColumnID: 1, IndexID: 0}, ABSENT], PUBLIC]
+  {columnId: 1, tableId: 110}
 - [[Column:{DescID: 110, ColumnID: 2}, ABSENT], PUBLIC]
   {columnId: 2, pgAttributeNum: 2, tableId: 110}
 - [[ColumnName:{DescID: 110, Name: name, ColumnID: 2}, ABSENT], PUBLIC]
   {columnId: 2, name: name, tableId: 110}
 - [[ColumnType:{DescID: 110, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], PUBLIC]
-  {columnId: 2, isNullable: true, tableId: 110, type: {family: StringFamily, oid: 1043, visibleType: 7, width: 256}}
+  {columnId: 2, elementCreationMetadata: {in231OrLater: true}, isNullable: true, tableId: 110, type: {family: StringFamily, oid: 1043, visibleType: 7, width: 256}}
 - [[Column:{DescID: 110, ColumnID: 3}, ABSENT], PUBLIC]
   {columnId: 3, pgAttributeNum: 3, tableId: 110}
 - [[ColumnName:{DescID: 110, Name: val, ColumnID: 3}, ABSENT], PUBLIC]
   {columnId: 3, name: val, tableId: 110}
 - [[ColumnType:{DescID: 110, ColumnFamilyID: 0, ColumnID: 3}, ABSENT], PUBLIC]
-  {columnId: 3, isNullable: true, tableId: 110, type: {family: IntFamily, oid: 20, width: 64}}
+  {columnId: 3, elementCreationMetadata: {in231OrLater: true}, isNullable: true, tableId: 110, type: {family: IntFamily, oid: 20, width: 64}}
 - [[ColumnDefaultExpression:{DescID: 110, ColumnID: 3, ReferencedSequenceIDs: [107]}, ABSENT], PUBLIC]
   {columnId: 3, expr: 'nextval(107:::REGCLASS)', tableId: 110, usesSequenceIds: [107]}
 - [[Column:{DescID: 110, ColumnID: 4294967295}, ABSENT], PUBLIC]
@@ -120,13 +122,13 @@ DROP DATABASE db1 CASCADE
 - [[ColumnName:{DescID: 110, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], PUBLIC]
   {columnId: 4.294967295e+09, name: crdb_internal_mvcc_timestamp, tableId: 110}
 - [[ColumnType:{DescID: 110, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT], PUBLIC]
-  {columnId: 4.294967295e+09, isNullable: true, tableId: 110, type: {family: DecimalFamily, oid: 1700}}
+  {columnId: 4.294967295e+09, elementCreationMetadata: {in231OrLater: true}, isNullable: true, tableId: 110, type: {family: DecimalFamily, oid: 1700}}
 - [[Column:{DescID: 110, ColumnID: 4294967294}, ABSENT], PUBLIC]
   {columnId: 4.294967294e+09, isHidden: true, isSystemColumn: true, pgAttributeNum: 4.294967294e+09, tableId: 110}
 - [[ColumnName:{DescID: 110, Name: tableoid, ColumnID: 4294967294}, ABSENT], PUBLIC]
   {columnId: 4.294967294e+09, name: tableoid, tableId: 110}
 - [[ColumnType:{DescID: 110, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], PUBLIC]
-  {columnId: 4.294967294e+09, isNullable: true, tableId: 110, type: {family: OidFamily, oid: 26}}
+  {columnId: 4.294967294e+09, elementCreationMetadata: {in231OrLater: true}, isNullable: true, tableId: 110, type: {family: OidFamily, oid: 26}}
 - [[IndexColumn:{DescID: 110, ColumnID: 1, IndexID: 1}, ABSENT], PUBLIC]
   {columnId: 1, indexId: 1, tableId: 110}
 - [[IndexColumn:{DescID: 110, ColumnID: 2, IndexID: 1}, ABSENT], PUBLIC]
@@ -146,9 +148,9 @@ DROP DATABASE db1 CASCADE
 - [[Owner:{DescID: 108}, ABSENT], PUBLIC]
   {descriptorId: 108, owner: root}
 - [[UserPrivileges:{DescID: 108, Name: admin}, ABSENT], PUBLIC]
-  {descriptorId: 108, privileges: "2", userName: admin}
+  {descriptorId: 108, privileges: "2", userName: admin, withGrantOption: "2"}
 - [[UserPrivileges:{DescID: 108, Name: root}, ABSENT], PUBLIC]
-  {descriptorId: 108, privileges: "2", userName: root}
+  {descriptorId: 108, privileges: "2", userName: root, withGrantOption: "2"}
 - [[Sequence:{DescID: 108}, ABSENT], PUBLIC]
   {sequenceId: 108}
 - [[ObjectParent:{DescID: 108, ReferencedDescID: 106}, ABSENT], PUBLIC]
@@ -160,9 +162,9 @@ DROP DATABASE db1 CASCADE
 - [[Owner:{DescID: 109}, ABSENT], PUBLIC]
   {descriptorId: 109, owner: root}
 - [[UserPrivileges:{DescID: 109, Name: admin}, ABSENT], PUBLIC]
-  {descriptorId: 109, privileges: "2", userName: admin}
+  {descriptorId: 109, privileges: "2", userName: admin, withGrantOption: "2"}
 - [[UserPrivileges:{DescID: 109, Name: root}, ABSENT], PUBLIC]
-  {descriptorId: 109, privileges: "2", userName: root}
+  {descriptorId: 109, privileges: "2", userName: root, withGrantOption: "2"}
 - [[Table:{DescID: 109}, ABSENT], PUBLIC]
   {tableId: 109}
 - [[ObjectParent:{DescID: 109, ReferencedDescID: 106}, ABSENT], PUBLIC]
@@ -176,7 +178,9 @@ DROP DATABASE db1 CASCADE
 - [[ColumnName:{DescID: 109, Name: id, ColumnID: 1}, ABSENT], PUBLIC]
   {columnId: 1, name: id, tableId: 109}
 - [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC]
-  {columnId: 1, tableId: 109, type: {family: IntFamily, oid: 20, width: 64}}
+  {columnId: 1, elementCreationMetadata: {in231OrLater: true}, tableId: 109, type: {family: IntFamily, oid: 20, width: 64}}
+- [[ColumnNotNull:{DescID: 109, ColumnID: 1, IndexID: 0}, ABSENT], PUBLIC]
+  {columnId: 1, tableId: 109}
 - [[ColumnComment:{DescID: 109, ColumnID: 1, Comment: id is good}, ABSENT], PUBLIC]
   {columnId: 1, comment: id is good, pgAttributeNum: 1, tableId: 109}
 - [[Column:{DescID: 109, ColumnID: 2}, ABSENT], PUBLIC]
@@ -184,13 +188,13 @@ DROP DATABASE db1 CASCADE
 - [[ColumnName:{DescID: 109, Name: name, ColumnID: 2}, ABSENT], PUBLIC]
   {columnId: 2, name: name, tableId: 109}
 - [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], PUBLIC]
-  {columnId: 2, isNullable: true, tableId: 109, type: {family: StringFamily, oid: 1043, visibleType: 7, width: 256}}
+  {columnId: 2, elementCreationMetadata: {in231OrLater: true}, isNullable: true, tableId: 109, type: {family: StringFamily, oid: 1043, visibleType: 7, width: 256}}
 - [[Column:{DescID: 109, ColumnID: 3}, ABSENT], PUBLIC]
   {columnId: 3, pgAttributeNum: 3, tableId: 109}
 - [[ColumnName:{DescID: 109, Name: val, ColumnID: 3}, ABSENT], PUBLIC]
   {columnId: 3, name: val, tableId: 109}
 - [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 3}, ABSENT], PUBLIC]
-  {columnId: 3, isNullable: true, tableId: 109, type: {family: IntFamily, oid: 20, width: 64}}
+  {columnId: 3, elementCreationMetadata: {in231OrLater: true}, isNullable: true, tableId: 109, type: {family: IntFamily, oid: 20, width: 64}}
 - [[ColumnDefaultExpression:{DescID: 109, ColumnID: 3, ReferencedSequenceIDs: [108]}, ABSENT], PUBLIC]
   {columnId: 3, expr: 'nextval(108:::REGCLASS)', tableId: 109, usesSequenceIds: [108]}
 - [[Column:{DescID: 109, ColumnID: 4294967295}, ABSENT], PUBLIC]
@@ -198,13 +202,13 @@ DROP DATABASE db1 CASCADE
 - [[ColumnName:{DescID: 109, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], PUBLIC]
   {columnId: 4.294967295e+09, name: crdb_internal_mvcc_timestamp, tableId: 109}
 - [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT], PUBLIC]
-  {columnId: 4.294967295e+09, isNullable: true, tableId: 109, type: {family: DecimalFamily, oid: 1700}}
+  {columnId: 4.294967295e+09, elementCreationMetadata: {in231OrLater: true}, isNullable: true, tableId: 109, type: {family: DecimalFamily, oid: 1700}}
 - [[Column:{DescID: 109, ColumnID: 4294967294}, ABSENT], PUBLIC]
   {columnId: 4.294967294e+09, isHidden: true, isSystemColumn: true, pgAttributeNum: 4.294967294e+09, tableId: 109}
 - [[ColumnName:{DescID: 109, Name: tableoid, ColumnID: 4294967294}, ABSENT], PUBLIC]
   {columnId: 4.294967294e+09, name: tableoid, tableId: 109}
 - [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], PUBLIC]
-  {columnId: 4.294967294e+09, isNullable: true, tableId: 109, type: {family: OidFamily, oid: 26}}
+  {columnId: 4.294967294e+09, elementCreationMetadata: {in231OrLater: true}, isNullable: true, tableId: 109, type: {family: OidFamily, oid: 26}}
 - [[IndexColumn:{DescID: 109, ColumnID: 1, IndexID: 1}, ABSENT], PUBLIC]
   {columnId: 1, indexId: 1, tableId: 109}
 - [[IndexColumn:{DescID: 109, ColumnID: 2, IndexID: 1}, ABSENT], PUBLIC]
@@ -226,9 +230,9 @@ DROP DATABASE db1 CASCADE
 - [[Owner:{DescID: 111}, ABSENT], PUBLIC]
   {descriptorId: 111, owner: root}
 - [[UserPrivileges:{DescID: 111, Name: admin}, ABSENT], PUBLIC]
-  {descriptorId: 111, privileges: "2", userName: admin}
+  {descriptorId: 111, privileges: "2", userName: admin, withGrantOption: "2"}
 - [[UserPrivileges:{DescID: 111, Name: root}, ABSENT], PUBLIC]
-  {descriptorId: 111, privileges: "2", userName: root}
+  {descriptorId: 111, privileges: "2", userName: root, withGrantOption: "2"}
 - [[View:{DescID: 111}, ABSENT], PUBLIC]
   {forwardReferences: [{columnIds: [2], toId: 109}], usesRelationIds: [109], viewId: 111}
 - [[ObjectParent:{DescID: 111, ReferencedDescID: 106}, ABSENT], PUBLIC]
@@ -238,27 +242,27 @@ DROP DATABASE db1 CASCADE
 - [[ColumnName:{DescID: 111, Name: name, ColumnID: 1}, ABSENT], PUBLIC]
   {columnId: 1, name: name, tableId: 111}
 - [[ColumnType:{DescID: 111, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC]
-  {columnId: 1, isNullable: true, tableId: 111, type: {family: StringFamily, oid: 1043, visibleType: 7, width: 256}}
+  {columnId: 1, elementCreationMetadata: {in231OrLater: true}, isNullable: true, tableId: 111, type: {family: StringFamily, oid: 1043, visibleType: 7, width: 256}}
 - [[Column:{DescID: 111, ColumnID: 4294967295}, ABSENT], PUBLIC]
   {columnId: 4.294967295e+09, isHidden: true, isSystemColumn: true, pgAttributeNum: 4.294967295e+09, tableId: 111}
 - [[ColumnName:{DescID: 111, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], PUBLIC]
   {columnId: 4.294967295e+09, name: crdb_internal_mvcc_timestamp, tableId: 111}
 - [[ColumnType:{DescID: 111, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT], PUBLIC]
-  {columnId: 4.294967295e+09, isNullable: true, tableId: 111, type: {family: DecimalFamily, oid: 1700}}
+  {columnId: 4.294967295e+09, elementCreationMetadata: {in231OrLater: true}, isNullable: true, tableId: 111, type: {family: DecimalFamily, oid: 1700}}
 - [[Column:{DescID: 111, ColumnID: 4294967294}, ABSENT], PUBLIC]
   {columnId: 4.294967294e+09, isHidden: true, isSystemColumn: true, pgAttributeNum: 4.294967294e+09, tableId: 111}
 - [[ColumnName:{DescID: 111, Name: tableoid, ColumnID: 4294967294}, ABSENT], PUBLIC]
   {columnId: 4.294967294e+09, name: tableoid, tableId: 111}
 - [[ColumnType:{DescID: 111, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], PUBLIC]
-  {columnId: 4.294967294e+09, isNullable: true, tableId: 111, type: {family: OidFamily, oid: 26}}
+  {columnId: 4.294967294e+09, elementCreationMetadata: {in231OrLater: true}, isNullable: true, tableId: 111, type: {family: OidFamily, oid: 26}}
 - [[Namespace:{DescID: 112, Name: v2, ReferencedDescID: 104}, ABSENT], PUBLIC]
   {databaseId: 104, descriptorId: 112, name: v2, schemaId: 106}
 - [[Owner:{DescID: 112}, ABSENT], PUBLIC]
   {descriptorId: 112, owner: root}
 - [[UserPrivileges:{DescID: 112, Name: admin}, ABSENT], PUBLIC]
-  {descriptorId: 112, privileges: "2", userName: admin}
+  {descriptorId: 112, privileges: "2", userName: admin, withGrantOption: "2"}
 - [[UserPrivileges:{DescID: 112, Name: root}, ABSENT], PUBLIC]
-  {descriptorId: 112, privileges: "2", userName: root}
+  {descriptorId: 112, privileges: "2", userName: root, withGrantOption: "2"}
 - [[View:{DescID: 112}, ABSENT], PUBLIC]
   {forwardReferences: [{columnIds: [1], toId: 111}], usesRelationIds: [111], viewId: 112}
 - [[ObjectParent:{DescID: 112, ReferencedDescID: 106}, ABSENT], PUBLIC]
@@ -268,33 +272,33 @@ DROP DATABASE db1 CASCADE
 - [[ColumnName:{DescID: 112, Name: n1, ColumnID: 1}, ABSENT], PUBLIC]
   {columnId: 1, name: n1, tableId: 112}
 - [[ColumnType:{DescID: 112, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC]
-  {columnId: 1, isNullable: true, tableId: 112, type: {family: StringFamily, oid: 1043, visibleType: 7, width: 256}}
+  {columnId: 1, elementCreationMetadata: {in231OrLater: true}, isNullable: true, tableId: 112, type: {family: StringFamily, oid: 1043, visibleType: 7, width: 256}}
 - [[Column:{DescID: 112, ColumnID: 2}, ABSENT], PUBLIC]
   {columnId: 2, pgAttributeNum: 2, tableId: 112}
 - [[ColumnName:{DescID: 112, Name: n2, ColumnID: 2}, ABSENT], PUBLIC]
   {columnId: 2, name: n2, tableId: 112}
 - [[ColumnType:{DescID: 112, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], PUBLIC]
-  {columnId: 2, isNullable: true, tableId: 112, type: {family: StringFamily, oid: 1043, visibleType: 7, width: 256}}
+  {columnId: 2, elementCreationMetadata: {in231OrLater: true}, isNullable: true, tableId: 112, type: {family: StringFamily, oid: 1043, visibleType: 7, width: 256}}
 - [[Column:{DescID: 112, ColumnID: 4294967295}, ABSENT], PUBLIC]
   {columnId: 4.294967295e+09, isHidden: true, isSystemColumn: true, pgAttributeNum: 4.294967295e+09, tableId: 112}
 - [[ColumnName:{DescID: 112, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], PUBLIC]
   {columnId: 4.294967295e+09, name: crdb_internal_mvcc_timestamp, tableId: 112}
 - [[ColumnType:{DescID: 112, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT], PUBLIC]
-  {columnId: 4.294967295e+09, isNullable: true, tableId: 112, type: {family: DecimalFamily, oid: 1700}}
+  {columnId: 4.294967295e+09, elementCreationMetadata: {in231OrLater: true}, isNullable: true, tableId: 112, type: {family: DecimalFamily, oid: 1700}}
 - [[Column:{DescID: 112, ColumnID: 4294967294}, ABSENT], PUBLIC]
   {columnId: 4.294967294e+09, isHidden: true, isSystemColumn: true, pgAttributeNum: 4.294967294e+09, tableId: 112}
 - [[ColumnName:{DescID: 112, Name: tableoid, ColumnID: 4294967294}, ABSENT], PUBLIC]
   {columnId: 4.294967294e+09, name: tableoid, tableId: 112}
 - [[ColumnType:{DescID: 112, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], PUBLIC]
-  {columnId: 4.294967294e+09, isNullable: true, tableId: 112, type: {family: OidFamily, oid: 26}}
+  {columnId: 4.294967294e+09, elementCreationMetadata: {in231OrLater: true}, isNullable: true, tableId: 112, type: {family: OidFamily, oid: 26}}
 - [[Namespace:{DescID: 113, Name: v3, ReferencedDescID: 104}, ABSENT], PUBLIC]
   {databaseId: 104, descriptorId: 113, name: v3, schemaId: 106}
 - [[Owner:{DescID: 113}, ABSENT], PUBLIC]
   {descriptorId: 113, owner: root}
 - [[UserPrivileges:{DescID: 113, Name: admin}, ABSENT], PUBLIC]
-  {descriptorId: 113, privileges: "2", userName: admin}
+  {descriptorId: 113, privileges: "2", userName: admin, withGrantOption: "2"}
 - [[UserPrivileges:{DescID: 113, Name: root}, ABSENT], PUBLIC]
-  {descriptorId: 113, privileges: "2", userName: root}
+  {descriptorId: 113, privileges: "2", userName: root, withGrantOption: "2"}
 - [[View:{DescID: 113}, ABSENT], PUBLIC]
   {forwardReferences: [{columnIds: [1], toId: 111}, {columnIds: [1, 2], toId: 112}], usesRelationIds: [111, 112], viewId: 113}
 - [[ObjectParent:{DescID: 113, ReferencedDescID: 106}, ABSENT], PUBLIC]
@@ -304,33 +308,33 @@ DROP DATABASE db1 CASCADE
 - [[ColumnName:{DescID: 113, Name: name, ColumnID: 1}, ABSENT], PUBLIC]
   {columnId: 1, name: name, tableId: 113}
 - [[ColumnType:{DescID: 113, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC]
-  {columnId: 1, isNullable: true, tableId: 113, type: {family: StringFamily, oid: 1043, visibleType: 7, width: 256}}
+  {columnId: 1, elementCreationMetadata: {in231OrLater: true}, isNullable: true, tableId: 113, type: {family: StringFamily, oid: 1043, visibleType: 7, width: 256}}
 - [[Column:{DescID: 113, ColumnID: 2}, ABSENT], PUBLIC]
   {columnId: 2, pgAttributeNum: 2, tableId: 113}
 - [[ColumnName:{DescID: 113, Name: n1, ColumnID: 2}, ABSENT], PUBLIC]
   {columnId: 2, name: n1, tableId: 113}
 - [[ColumnType:{DescID: 113, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], PUBLIC]
-  {columnId: 2, isNullable: true, tableId: 113, type: {family: StringFamily, oid: 1043, visibleType: 7, width: 256}}
+  {columnId: 2, elementCreationMetadata: {in231OrLater: true}, isNullable: true, tableId: 113, type: {family: StringFamily, oid: 1043, visibleType: 7, width: 256}}
 - [[Column:{DescID: 113, ColumnID: 4294967295}, ABSENT], PUBLIC]
   {columnId: 4.294967295e+09, isHidden: true, isSystemColumn: true, pgAttributeNum: 4.294967295e+09, tableId: 113}
 - [[ColumnName:{DescID: 113, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], PUBLIC]
   {columnId: 4.294967295e+09, name: crdb_internal_mvcc_timestamp, tableId: 113}
 - [[ColumnType:{DescID: 113, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT], PUBLIC]
-  {columnId: 4.294967295e+09, isNullable: true, tableId: 113, type: {family: DecimalFamily, oid: 1700}}
+  {columnId: 4.294967295e+09, elementCreationMetadata: {in231OrLater: true}, isNullable: true, tableId: 113, type: {family: DecimalFamily, oid: 1700}}
 - [[Column:{DescID: 113, ColumnID: 4294967294}, ABSENT], PUBLIC]
   {columnId: 4.294967294e+09, isHidden: true, isSystemColumn: true, pgAttributeNum: 4.294967294e+09, tableId: 113}
 - [[ColumnName:{DescID: 113, Name: tableoid, ColumnID: 4294967294}, ABSENT], PUBLIC]
   {columnId: 4.294967294e+09, name: tableoid, tableId: 113}
 - [[ColumnType:{DescID: 113, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], PUBLIC]
-  {columnId: 4.294967294e+09, isNullable: true, tableId: 113, type: {family: OidFamily, oid: 26}}
+  {columnId: 4.294967294e+09, elementCreationMetadata: {in231OrLater: true}, isNullable: true, tableId: 113, type: {family: OidFamily, oid: 26}}
 - [[Namespace:{DescID: 114, Name: v4, ReferencedDescID: 104}, ABSENT], PUBLIC]
   {databaseId: 104, descriptorId: 114, name: v4, schemaId: 106}
 - [[Owner:{DescID: 114}, ABSENT], PUBLIC]
   {descriptorId: 114, owner: root}
 - [[UserPrivileges:{DescID: 114, Name: admin}, ABSENT], PUBLIC]
-  {descriptorId: 114, privileges: "2", userName: admin}
+  {descriptorId: 114, privileges: "2", userName: admin, withGrantOption: "2"}
 - [[UserPrivileges:{DescID: 114, Name: root}, ABSENT], PUBLIC]
-  {descriptorId: 114, privileges: "2", userName: root}
+  {descriptorId: 114, privileges: "2", userName: root, withGrantOption: "2"}
 - [[View:{DescID: 114}, ABSENT], PUBLIC]
   {forwardReferences: [{columnIds: [1, 2], toId: 112}], usesRelationIds: [112], viewId: 114}
 - [[ObjectParent:{DescID: 114, ReferencedDescID: 106}, ABSENT], PUBLIC]
@@ -340,35 +344,35 @@ DROP DATABASE db1 CASCADE
 - [[ColumnName:{DescID: 114, Name: n2, ColumnID: 1}, ABSENT], PUBLIC]
   {columnId: 1, name: n2, tableId: 114}
 - [[ColumnType:{DescID: 114, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC]
-  {columnId: 1, isNullable: true, tableId: 114, type: {family: StringFamily, oid: 1043, visibleType: 7, width: 256}}
+  {columnId: 1, elementCreationMetadata: {in231OrLater: true}, isNullable: true, tableId: 114, type: {family: StringFamily, oid: 1043, visibleType: 7, width: 256}}
 - [[Column:{DescID: 114, ColumnID: 2}, ABSENT], PUBLIC]
   {columnId: 2, pgAttributeNum: 2, tableId: 114}
 - [[ColumnName:{DescID: 114, Name: n1, ColumnID: 2}, ABSENT], PUBLIC]
   {columnId: 2, name: n1, tableId: 114}
 - [[ColumnType:{DescID: 114, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], PUBLIC]
-  {columnId: 2, isNullable: true, tableId: 114, type: {family: StringFamily, oid: 1043, visibleType: 7, width: 256}}
+  {columnId: 2, elementCreationMetadata: {in231OrLater: true}, isNullable: true, tableId: 114, type: {family: StringFamily, oid: 1043, visibleType: 7, width: 256}}
 - [[Column:{DescID: 114, ColumnID: 4294967295}, ABSENT], PUBLIC]
   {columnId: 4.294967295e+09, isHidden: true, isSystemColumn: true, pgAttributeNum: 4.294967295e+09, tableId: 114}
 - [[ColumnName:{DescID: 114, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], PUBLIC]
   {columnId: 4.294967295e+09, name: crdb_internal_mvcc_timestamp, tableId: 114}
 - [[ColumnType:{DescID: 114, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT], PUBLIC]
-  {columnId: 4.294967295e+09, isNullable: true, tableId: 114, type: {family: DecimalFamily, oid: 1700}}
+  {columnId: 4.294967295e+09, elementCreationMetadata: {in231OrLater: true}, isNullable: true, tableId: 114, type: {family: DecimalFamily, oid: 1700}}
 - [[Column:{DescID: 114, ColumnID: 4294967294}, ABSENT], PUBLIC]
   {columnId: 4.294967294e+09, isHidden: true, isSystemColumn: true, pgAttributeNum: 4.294967294e+09, tableId: 114}
 - [[ColumnName:{DescID: 114, Name: tableoid, ColumnID: 4294967294}, ABSENT], PUBLIC]
   {columnId: 4.294967294e+09, name: tableoid, tableId: 114}
 - [[ColumnType:{DescID: 114, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], PUBLIC]
-  {columnId: 4.294967294e+09, isNullable: true, tableId: 114, type: {family: OidFamily, oid: 26}}
+  {columnId: 4.294967294e+09, elementCreationMetadata: {in231OrLater: true}, isNullable: true, tableId: 114, type: {family: OidFamily, oid: 26}}
 - [[Namespace:{DescID: 115, Name: typ, ReferencedDescID: 104}, ABSENT], PUBLIC]
   {databaseId: 104, descriptorId: 115, name: typ, schemaId: 106}
 - [[Owner:{DescID: 115}, ABSENT], PUBLIC]
   {descriptorId: 115, owner: root}
 - [[UserPrivileges:{DescID: 115, Name: admin}, ABSENT], PUBLIC]
-  {descriptorId: 115, privileges: "2", userName: admin}
+  {descriptorId: 115, privileges: "2", userName: admin, withGrantOption: "2"}
 - [[UserPrivileges:{DescID: 115, Name: public}, ABSENT], PUBLIC]
   {descriptorId: 115, privileges: "512", userName: public}
 - [[UserPrivileges:{DescID: 115, Name: root}, ABSENT], PUBLIC]
-  {descriptorId: 115, privileges: "2", userName: root}
+  {descriptorId: 115, privileges: "2", userName: root, withGrantOption: "2"}
 - [[EnumType:{DescID: 115}, ABSENT], PUBLIC]
   {arrayTypeId: 116, typeId: 115}
 - [[EnumTypeValue:{DescID: 115, Name: a}, ABSENT], PUBLIC]
@@ -380,11 +384,11 @@ DROP DATABASE db1 CASCADE
 - [[Owner:{DescID: 116}, ABSENT], PUBLIC]
   {descriptorId: 116, owner: root}
 - [[UserPrivileges:{DescID: 116, Name: admin}, ABSENT], PUBLIC]
-  {descriptorId: 116, privileges: "2", userName: admin}
+  {descriptorId: 116, privileges: "2", userName: admin, withGrantOption: "2"}
 - [[UserPrivileges:{DescID: 116, Name: public}, ABSENT], PUBLIC]
   {descriptorId: 116, privileges: "512", userName: public}
 - [[UserPrivileges:{DescID: 116, Name: root}, ABSENT], PUBLIC]
-  {descriptorId: 116, privileges: "2", userName: root}
+  {descriptorId: 116, privileges: "2", userName: root, withGrantOption: "2"}
 - [[AliasType:{DescID: 116, ReferencedTypeIDs: [115 116]}, ABSENT], PUBLIC]
   {closedTypeIds: [115, 116], type: {arrayContents: {family: EnumFamily, oid: 100115, udtMetadata: {arrayTypeOid: 100116}}, arrayElemType: EnumFamily, family: ArrayFamily, oid: 100116}, typeId: 116}
 - [[ObjectParent:{DescID: 116, ReferencedDescID: 106}, ABSENT], PUBLIC]
@@ -394,9 +398,9 @@ DROP DATABASE db1 CASCADE
 - [[Owner:{DescID: 117}, ABSENT], PUBLIC]
   {descriptorId: 117, owner: root}
 - [[UserPrivileges:{DescID: 117, Name: admin}, ABSENT], PUBLIC]
-  {descriptorId: 117, privileges: "2", userName: admin}
+  {descriptorId: 117, privileges: "2", userName: admin, withGrantOption: "2"}
 - [[UserPrivileges:{DescID: 117, Name: root}, ABSENT], PUBLIC]
-  {descriptorId: 117, privileges: "2", userName: root}
+  {descriptorId: 117, privileges: "2", userName: root, withGrantOption: "2"}
 - [[View:{DescID: 117}, ABSENT], PUBLIC]
   {forwardReferences: [{columnIds: [1, 2], toId: 114}], usesRelationIds: [114], usesTypeIds: [115, 116], viewId: 117}
 - [[ObjectParent:{DescID: 117, ReferencedDescID: 106}, ABSENT], PUBLIC]
@@ -406,28 +410,28 @@ DROP DATABASE db1 CASCADE
 - [[ColumnName:{DescID: 117, Name: k, ColumnID: 1}, ABSENT], PUBLIC]
   {columnId: 1, name: k, tableId: 117}
 - [[ColumnType:{DescID: 117, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC]
-  {columnId: 1, isNullable: true, tableId: 117, type: {family: StringFamily, oid: 25}}
+  {columnId: 1, elementCreationMetadata: {in231OrLater: true}, isNullable: true, tableId: 117, type: {family: StringFamily, oid: 25}}
 - [[Column:{DescID: 117, ColumnID: 2}, ABSENT], PUBLIC]
   {columnId: 2, pgAttributeNum: 2, tableId: 117}
 - [[ColumnName:{DescID: 117, Name: n2, ColumnID: 2}, ABSENT], PUBLIC]
   {columnId: 2, name: n2, tableId: 117}
 - [[ColumnType:{DescID: 117, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], PUBLIC]
-  {columnId: 2, isNullable: true, tableId: 117, type: {family: StringFamily, oid: 1043, visibleType: 7, width: 256}}
+  {columnId: 2, elementCreationMetadata: {in231OrLater: true}, isNullable: true, tableId: 117, type: {family: StringFamily, oid: 1043, visibleType: 7, width: 256}}
 - [[Column:{DescID: 117, ColumnID: 3}, ABSENT], PUBLIC]
   {columnId: 3, pgAttributeNum: 3, tableId: 117}
 - [[ColumnName:{DescID: 117, Name: n1, ColumnID: 3}, ABSENT], PUBLIC]
   {columnId: 3, name: n1, tableId: 117}
 - [[ColumnType:{DescID: 117, ColumnFamilyID: 0, ColumnID: 3}, ABSENT], PUBLIC]
-  {columnId: 3, isNullable: true, tableId: 117, type: {family: StringFamily, oid: 1043, visibleType: 7, width: 256}}
+  {columnId: 3, elementCreationMetadata: {in231OrLater: true}, isNullable: true, tableId: 117, type: {family: StringFamily, oid: 1043, visibleType: 7, width: 256}}
 - [[Column:{DescID: 117, ColumnID: 4294967295}, ABSENT], PUBLIC]
   {columnId: 4.294967295e+09, isHidden: true, isSystemColumn: true, pgAttributeNum: 4.294967295e+09, tableId: 117}
 - [[ColumnName:{DescID: 117, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], PUBLIC]
   {columnId: 4.294967295e+09, name: crdb_internal_mvcc_timestamp, tableId: 117}
 - [[ColumnType:{DescID: 117, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT], PUBLIC]
-  {columnId: 4.294967295e+09, isNullable: true, tableId: 117, type: {family: DecimalFamily, oid: 1700}}
+  {columnId: 4.294967295e+09, elementCreationMetadata: {in231OrLater: true}, isNullable: true, tableId: 117, type: {family: DecimalFamily, oid: 1700}}
 - [[Column:{DescID: 117, ColumnID: 4294967294}, ABSENT], PUBLIC]
   {columnId: 4.294967294e+09, isHidden: true, isSystemColumn: true, pgAttributeNum: 4.294967294e+09, tableId: 117}
 - [[ColumnName:{DescID: 117, Name: tableoid, ColumnID: 4294967294}, ABSENT], PUBLIC]
   {columnId: 4.294967294e+09, name: tableoid, tableId: 117}
 - [[ColumnType:{DescID: 117, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], PUBLIC]
-  {columnId: 4.294967294e+09, isNullable: true, tableId: 117, type: {family: OidFamily, oid: 26}}
+  {columnId: 4.294967294e+09, elementCreationMetadata: {in231OrLater: true}, isNullable: true, tableId: 117, type: {family: OidFamily, oid: 26}}

@@ -1,0 +1,50 @@
+# LogicTest: local
+
+statement ok
+SELECT crdb_internal.create_tenant(5, 'five')
+
+statement error unknown capability: "not_a_capability"
+ALTER TENANT [5] GRANT CAPABILITY not_a_capability=true
+
+statement error argument of ALTER TENANT CAPABILITY can_admin_split must be type bool, not type int
+ALTER TENANT [5] GRANT CAPABILITY can_admin_split=1
+
+statement error parameter "can_admin_split" requires a Boolean value
+ALTER TENANT [5] GRANT CAPABILITY can_admin_split=NULL
+
+statement error unknown capability: "not_a_capability"
+ALTER TENANT [5] REVOKE CAPABILITY not_a_capability
+
+statement error no value allowed in revoke: "can_admin_split"
+ALTER TENANT [5] REVOKE CAPABILITY can_admin_split=false
+
+query ITTTTT colnames
+SHOW TENANT 'five' WITH CAPABILITIES
+----
+id  name  data_state  service_mode  capability_name    capability_value
+5   five  ready       none          can_admin_split    false
+5   five  ready       none          can_admin_unsplit  false
+
+statement ok
+ALTER TENANT [5] GRANT CAPABILITY can_admin_split=true
+
+# Check that composite expressions are evaluated properly.
+statement ok
+ALTER TENANT [5] GRANT CAPABILITY can_admin_split=(2=1+1)
+
+query ITTTTT colnames
+SHOW TENANT 'five' WITH CAPABILITIES
+----
+id  name  data_state  service_mode  capability_name    capability_value
+5   five  ready       none          can_admin_split    true
+5   five  ready       none          can_admin_unsplit  false
+
+statement ok
+ALTER TENANT [5] REVOKE CAPABILITY can_admin_split
+
+query ITTTTT colnames
+SHOW TENANT 'five' WITH CAPABILITIES
+----
+id  name  data_state  service_mode  capability_name    capability_value
+5   five  ready       none          can_admin_split    false
+5   five  ready       none          can_admin_unsplit  false

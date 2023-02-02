@@ -175,15 +175,25 @@ import (
 // the test is run as the system tenant.
 //
 // The directives line looks like:
-// # tenant-cluster-setting-override-opt: opt1 opt2
+// # tenant-cluster-setting-override-opt: setting_name1=setting_value1 setting_name2=setting_value2
 //
-// The options are:
-// - allow-zone-configs-for-secondary-tenants: If specified, secondary tenants
-// are allowed to alter their zone configurations.
-// - allow-multi-region-abstractions-for-secondary-tenants: If specified,
-// secondary tenants are allowed to make use of multi-region abstractions.
-// - allow-split-at-for-secondary-tenants: If specified,
-// secondary tenants are allowed to run ALTER TABLE ... SPLIT AT.
+//
+// ###########################################################
+//           TENANT CAPABILITY OVERRIDE OPTION DIRECTIVES
+// ###########################################################
+//
+// Test files can also contain tenant capability override directives around
+// the beginning of the file. These directives can be used to configure tenant
+// capability overrides during setup. This can be useful for altering
+// tenant capabilities for configurations that run their tests as
+// secondary tenants (eg. 3node-tenant). While these directives apply to all
+// configurations under which the test will be run, it's only really meaningful
+// when the test runs as a secondary tenant; the configuration has no effect if
+// the test is run as the system tenant.
+//
+// The directives line looks like:
+// # tenant-capability-override-opt: capability_name1=capability_value1 capability_name2=capability_value2
+//
 //
 // ###########################################
 //           CLUSTER OPTION DIRECTIVES
@@ -324,6 +334,7 @@ import (
 //            Cannot be combined with noticetrace.
 //      - noticetrace: runs the query and compares only the notices that
 //						appear. Cannot be combined with kvtrace.
+//      - nodeidx=N: runs the query on node N of the cluster.
 //
 //    The label is optional. If specified, the test runner stores a hash
 //    of the results of the query under the given label. If the label is
@@ -397,6 +408,12 @@ import (
 //    Defines the start of a subtest. The subtest is any number of statements
 //    that occur after this command until the end of file or the next subtest
 //    command.
+//
+//  - retry
+//    Specifies that the next occurrence of a statement or query directive
+//    (including those which expect errors) will be retried for a fixed
+//    duration until the test passes, or the alloted time has elapsed.
+//    This is similar to the retry option of the query directive.
 //
 // The overall architecture of TestLogic is as follows:
 //
@@ -564,10 +581,6 @@ var (
 	// writes not holding appropriate latches for range key stats update.
 	useMVCCRangeTombstonesForPointDeletes = util.ConstantWithMetamorphicTestBool(
 		"logictest-use-mvcc-range-tombstones-for-point-deletes", false)
-
-	// smallEngineBlocks configures Pebble with a block size of 1 byte, to provoke
-	// bugs in time-bound iterators.
-	smallEngineBlocks = util.ConstantWithMetamorphicTestBool("logictest-small-engine-blocks", false)
 
 	// BackupRestoreProbability is the environment variable for `3node-backup` config.
 	backupRestoreProbability = envutil.EnvOrDefaultFloat64("COCKROACH_LOGIC_TEST_BACKUP_RESTORE_PROBABILITY", 0.0)
@@ -859,9 +872,6 @@ type logicQuery struct {
 	colTypes string
 	// colNames controls the inclusion of column names in the query result.
 	colNames bool
-	// retry indicates if the query should be retried in case of failure with
-	// exponential backoff up to some maximum duration.
-	retry bool
 	// some tests require the output to match modulo sorting.
 	sorter logicSorter
 	// expectedErr and expectedErrCode are as in logicStatement.
@@ -956,11 +966,10 @@ type logicTest struct {
 	clusterOpts []clusterOpt
 	// knobOpts are the options used to create testing knobs.
 	knobOpts []knobOpt
-	// tenantClusterSettingOverrideOpts are the options used by the host cluster
-	// to configure tenant setting overrides  during setup. They're persisted here
-	// because a cluster can be recreated throughout the lifetime of a test, and
-	// we should override tenant settings each time this happens.
-	tenantClusterSettingOverrideOpts []tenantClusterSettingOverrideOpt
+	// toa contains tenant overrides that are persisted here because a cluster
+	// can be recreated throughout the lifetime of a test, and we should use
+	// tenant overrides each time this happens.
+	toa tenantOverrideArgs
 	// cluster is the test cluster against which we are testing. This cluster
 	// may be reset during the lifetime of the test.
 	cluster serverutils.TestClusterInterface
@@ -1048,6 +1057,12 @@ type logicTest struct {
 	// backup and restore before running the next SQL statement. This can be set
 	// to true using the `force-backup-restore` directive.
 	forceBackupAndRestore bool
+
+	// retry indicates if the statement or query should be retried in case of
+	// failure with exponential backoff up to some maximum duration. It is reset
+	// to false after every successful statement or query test point, including
+	// those which are supposed to error out.
+	retry bool
 }
 
 func (t *logicTest) t() *testing.T {
@@ -1091,7 +1106,7 @@ func (t *logicTest) substituteVars(line string) string {
 		if replace, ok := t.varMap[varName]; ok {
 			return replace
 		}
-		return line
+		return varName
 	})
 }
 
@@ -1298,10 +1313,7 @@ func (t *logicTest) newTestServerCluster(bootstrapBinaryPath string, upgradeBina
 // initial cluster to be used in a test, or when creating additional test
 // clusters, after logicTest.setup() has been called.
 func (t *logicTest) newCluster(
-	serverArgs TestServerArgs,
-	clusterOpts []clusterOpt,
-	knobOpts []knobOpt,
-	tenantClusterSettingOverrideOpts []tenantClusterSettingOverrideOpt,
+	serverArgs TestServerArgs, clusterOpts []clusterOpt, knobOpts []knobOpt, toa tenantOverrideArgs,
 ) {
 	var corpusCollectionCallback func(p scplan.Plan, stageIdx int) error
 	if serverArgs.DeclarativeCorpusCollection && t.declarativeCorpusCollector != nil {
@@ -1328,7 +1340,6 @@ func (t *logicTest) newCluster(
 	shouldUseMVCCRangeTombstonesForPointDeletes := useMVCCRangeTombstonesForPointDeletes && !serverArgs.DisableUseMVCCRangeTombstonesForPointDeletes
 	ignoreMVCCRangeTombstoneErrors := supportsMVCCRangeTombstones &&
 		(globalMVCCRangeTombstone || shouldUseMVCCRangeTombstonesForPointDeletes)
-	useSmallEngineBlocks := smallEngineBlocks && !serverArgs.DisableSmallEngineBlocks
 
 	params := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
@@ -1347,7 +1358,6 @@ func (t *logicTest) newCluster(
 						UseRangeTombstonesForPointDeletes: supportsMVCCRangeTombstones &&
 							shouldUseMVCCRangeTombstonesForPointDeletes,
 					},
-					SmallEngineBlocks: useSmallEngineBlocks,
 				},
 				SQLEvalContext: &eval.TestingKnobs{
 					AssertBinaryExprReturnTypes:     true,
@@ -1503,6 +1513,9 @@ func (t *logicTest) newCluster(
 			if err != nil {
 				t.rootT.Fatalf("%+v", err)
 			}
+			if err := tenant.WaitForTenantEndKeySplit(context.Background()); err != nil {
+				t.rootT.Fatalf("%+v", err)
+			}
 			t.tenantAddrs[i] = tenant.SQLAddr()
 		}
 
@@ -1537,14 +1550,12 @@ func (t *logicTest) newCluster(
 	// If we've created a tenant (either explicitly, or probabilistically and
 	// implicitly) set any necessary cluster settings to override blocked
 	// behavior.
-	clusterSettingOverrideArgs := &tenantClusterSettingOverrideArgs{}
 	if cfg.UseTenant || t.cluster.StartedDefaultTestTenant() {
-		for _, opt := range tenantClusterSettingOverrideOpts {
-			opt.apply(clusterSettingOverrideArgs)
-		}
 
 		conn := t.cluster.StorageClusterConn()
-		if clusterSettingOverrideArgs.overrideMultiTenantZoneConfigsAllowed {
+		clusterSettings := toa.clusterSettings
+		_, ok := clusterSettings[sql.SecondaryTenantZoneConfigsEnabled.Key()]
+		if ok {
 			// We reduce the closed timestamp duration on the host tenant so that the
 			// setting override can propagate to the tenant faster.
 			if _, err := conn.Exec(
@@ -1557,41 +1568,19 @@ func (t *logicTest) newCluster(
 			); err != nil {
 				t.Fatal(err)
 			}
+		}
 
-			// Allow secondary tenants to set zone configurations if the configuration
-			// indicates as such. As this is a tenant read-only cluster setting, only
-			// the operator is allowed to set it.
-			if _, err := conn.Exec(
-				"ALTER TENANT [$1] SET CLUSTER SETTING sql.zone_configs.allow_for_secondary_tenant.enabled = true",
-				serverutils.TestTenantID().ToUint64(),
-			); err != nil {
+		tenantID := serverutils.TestTenantID().ToUint64()
+		for name, value := range clusterSettings {
+			query := fmt.Sprintf("ALTER TENANT [$1] SET CLUSTER SETTING %s = $2", name)
+			if _, err := conn.Exec(query, tenantID, value); err != nil {
 				t.Fatal(err)
 			}
 		}
 
-		if clusterSettingOverrideArgs.overrideMultiTenantMultiRegionAbstractionsAllowed {
-			// Allow secondary tenants to make use of multi-region abstractions if the
-			// configuration indicates as such. As this is a tenant read-only cluster
-			// setting, only the operator is allowed to set it.
-			if _, err := conn.Exec(
-				fmt.Sprintf(
-					"ALTER TENANT [$1] SET CLUSTER SETTING %s = true",
-					sql.SecondaryTenantsMultiRegionAbstractionsEnabledSettingName,
-				),
-				serverutils.TestTenantID().ToUint64(),
-			); err != nil {
-				t.Fatal(err)
-			}
-		}
-
-		if clusterSettingOverrideArgs.overrideMultiTenantSplitAtAllowed {
-			if _, err := conn.Exec(
-				fmt.Sprintf(
-					"ALTER TENANT [$1] SET CLUSTER SETTING %s = true",
-					sql.SecondaryTenantSplitAtEnabled.Key(),
-				),
-				serverutils.TestTenantID().ToUint64(),
-			); err != nil {
+		for name, value := range toa.capabilities {
+			query := fmt.Sprintf("ALTER TENANT [$1] GRANT CAPABILITY %s = $2", name)
+			if _, err := conn.Exec(query, tenantID, value); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -1689,6 +1678,14 @@ func (t *logicTest) newCluster(
 			}
 			t.outf("setting distsql_workmem='%dB';", randomWorkmem)
 		}
+
+		if serverArgs.DisableDirectColumnarScans {
+			if _, err := conn.Exec(
+				"SET CLUSTER SETTING sql.distsql.direct_columnar_scans.enabled = false",
+			); err != nil {
+				t.Fatal(err)
+			}
+		}
 	}
 
 	if cfg.OverrideDistSQLMode != "" {
@@ -1716,16 +1713,9 @@ func (t *logicTest) newCluster(
 		})
 	}
 
-	if clusterSettingOverrideArgs.overrideMultiTenantZoneConfigsAllowed {
+	for name, value := range toa.clusterSettings {
 		t.waitForTenantReadOnlyClusterSettingToTakeEffectOrFatal(
-			"sql.zone_configs.allow_for_secondary_tenant.enabled", "true", params.ServerArgs.Insecure,
-		)
-	}
-	if clusterSettingOverrideArgs.overrideMultiTenantMultiRegionAbstractionsAllowed {
-		t.waitForTenantReadOnlyClusterSettingToTakeEffectOrFatal(
-			sql.SecondaryTenantsMultiRegionAbstractionsEnabledSettingName,
-			"true",
-			params.ServerArgs.Insecure,
+			name, value, params.ServerArgs.Insecure,
 		)
 	}
 
@@ -1802,7 +1792,7 @@ func (t *logicTest) resetCluster() {
 		t.Fatal("resetting the cluster before server args were set")
 	}
 	serverArgs := *t.serverArgs
-	t.newCluster(serverArgs, t.clusterOpts, t.knobOpts, t.tenantClusterSettingOverrideOpts)
+	t.newCluster(serverArgs, t.clusterOpts, t.knobOpts, t.toa)
 }
 
 // setup creates the initial cluster for the logic test and populates the
@@ -1814,14 +1804,14 @@ func (t *logicTest) setup(
 	serverArgs TestServerArgs,
 	clusterOpts []clusterOpt,
 	knobOpts []knobOpt,
-	tenantClusterSettingOverrideOpts []tenantClusterSettingOverrideOpt,
+	toa tenantOverrideArgs,
 ) {
 	t.cfg = cfg
 	t.serverArgs = &serverArgs
 	t.serverArgs.DeclarativeCorpusCollection = cfg.DeclarativeCorpusCollection
 	t.clusterOpts = clusterOpts[:]
 	t.knobOpts = knobOpts[:]
-	t.tenantClusterSettingOverrideOpts = tenantClusterSettingOverrideOpts[:]
+	t.toa = toa
 	// TODO(pmattis): Add a flag to make it easy to run the tests against a local
 	// MySQL or Postgres instance.
 	tempExternalIODir, tempExternalIODirCleanup := testutils.TempDir(t.rootT)
@@ -1874,7 +1864,7 @@ func (t *logicTest) setup(
 		}
 		t.newTestServerCluster(bootstrapBinaryPath, upgradeBinaryPath)
 	} else {
-		t.newCluster(serverArgs, t.clusterOpts, t.knobOpts, t.tenantClusterSettingOverrideOpts)
+		t.newCluster(serverArgs, t.clusterOpts, t.knobOpts, t.toa)
 	}
 
 	// Only create the test database on the initial cluster, since cluster restore
@@ -1899,64 +1889,11 @@ CREATE DATABASE test; USE test;
 	t.unsupported = 0
 }
 
-type tenantClusterSettingOverrideArgs struct {
-	// If set, the sql.zone_configs.allow_for_secondary_tenant.enabled default
-	// is set to true by the host. This allows logic tests that run on
-	// secondary tenants to use zone configurations.
-	overrideMultiTenantZoneConfigsAllowed bool
-	// If set, the
-	// sql.multi_region.allow_abstractions_for_secondary_tenants.enabled default
-	// is set to true by the host. This allows logic tests that run on secondary
-	// tenants to make use of multi-region abstractions.
-	overrideMultiTenantMultiRegionAbstractionsAllowed bool
-	// If set, the sql.split_at.allow_for_secondary_tenant.enabled default
-	// is set to true by the host. This allows logic tests that run on
-	// secondary tenants to run ALTER TABLE ... SPLIT AT.
-	overrideMultiTenantSplitAtAllowed bool
-}
-
-// tenantClusterSettingOverrideOpt is implemented by options for configuring
-// tenant setting overrides during setup. For tests that run on the system
-// tenant, these options have no effect.
-type tenantClusterSettingOverrideOpt interface {
-	apply(*tenantClusterSettingOverrideArgs)
-}
-
-// tenantClusterSettingOverrideMultiTenantMultiRegionAbstractionsAllowed
-// corresponds to the allow-multi-region-abstractions-for-secondary-tenants
-// directive.
-type tenantClusterSettingOverrideMultiTenantMultiRegionAbstractionsAllowed struct{}
-
-var _ tenantClusterSettingOverrideOpt = &tenantClusterSettingOverrideMultiTenantMultiRegionAbstractionsAllowed{}
-
-func (t tenantClusterSettingOverrideMultiTenantMultiRegionAbstractionsAllowed) apply(
-	args *tenantClusterSettingOverrideArgs,
-) {
-	args.overrideMultiTenantMultiRegionAbstractionsAllowed = true
-}
-
-// tenantClusterSettingOverrideMultiTenantZoneConfigsAllowed corresponds to
-// the allow-zone-configs-for-secondary-tenants directive.
-type tenantClusterSettingOverrideMultiTenantZoneConfigsAllowed struct{}
-
-var _ tenantClusterSettingOverrideOpt = tenantClusterSettingOverrideMultiTenantZoneConfigsAllowed{}
-
-func (t tenantClusterSettingOverrideMultiTenantZoneConfigsAllowed) apply(
-	args *tenantClusterSettingOverrideArgs,
-) {
-	args.overrideMultiTenantZoneConfigsAllowed = true
-}
-
-// tenantClusterSettingOverrideMultiTenantSplitAtAllowed corresponds to
-// the allow-split-at-for-secondary-tenants directive.
-type tenantClusterSettingOverrideMultiTenantSplitAtAllowed struct{}
-
-var _ tenantClusterSettingOverrideOpt = tenantClusterSettingOverrideMultiTenantSplitAtAllowed{}
-
-func (t tenantClusterSettingOverrideMultiTenantSplitAtAllowed) apply(
-	args *tenantClusterSettingOverrideArgs,
-) {
-	args.overrideMultiTenantSplitAtAllowed = true
+// tenantOverrideArgs are the arguments used by the host cluster to configure
+// tenant overrides (eg. cluster settings, capabilities) during setup.
+type tenantOverrideArgs struct {
+	clusterSettings map[string]string
+	capabilities    map[string]string
 }
 
 // clusterOpt is implemented by options for configuring the test cluster under
@@ -2039,8 +1976,10 @@ func (c knobOptDisableCorpusGeneration) apply(args *base.TestingKnobs) {
 // invoked with each option.
 func parseDirectiveOptions(t *testing.T, path string, directiveName string, f func(opt string)) {
 	switch directiveName {
-	case "knob-opt", "cluster-opt", "tenant-cluster-setting-override-opt":
-		// Fallthrough.
+	case knobDirective,
+		clusterDirective,
+		tenantClusterSettingOverrideDirective,
+		tenantCapabilityOverrideDirective:
 	default:
 		t.Fatalf("cannot parse unknown directive %s", directiveName)
 	}
@@ -2089,33 +2028,47 @@ func parseDirectiveOptions(t *testing.T, path string, directiveName string, f fu
 	}
 }
 
-// readTenantClusterSettingOverrideArgs looks around the beginning of the file
+const (
+	tenantClusterSettingOverrideDirective = "tenant-cluster-setting-override-opt"
+	tenantCapabilityOverrideDirective     = "tenant-capability-override-opt"
+)
+
+// readTenantOverrideArgs looks around the beginning of the file
 // for a line looking like:
 // # tenant-cluster-setting-override-opt: opt1 opt2 ...
-// and parses that line into a set of tenantClusterSettingOverrideArgs that need
+// # tenant-capability-override-opt: opt1 opt2
+// and parses that line into a set of tenantOverrideArgs that need
 // to be overriden by the host cluster before the test begins.
-func readTenantClusterSettingOverrideArgs(
-	t *testing.T, path string,
-) []tenantClusterSettingOverrideOpt {
+func readTenantOverrideArgs(t *testing.T, path string) tenantOverrideArgs {
 	file, err := os.Open(path)
 	require.NoError(t, err)
 	defer file.Close()
 
-	var res []tenantClusterSettingOverrideOpt
-	parseDirectiveOptions(t, path, "tenant-cluster-setting-override-opt", func(opt string) {
-		switch opt {
-		case "allow-zone-configs-for-secondary-tenants":
-			res = append(res, tenantClusterSettingOverrideMultiTenantZoneConfigsAllowed{})
-		case "allow-multi-region-abstractions-for-secondary-tenants":
-			res = append(res, tenantClusterSettingOverrideMultiTenantMultiRegionAbstractionsAllowed{})
-		case "allow-split-at-for-secondary-tenants":
-			res = append(res, tenantClusterSettingOverrideMultiTenantSplitAtAllowed{})
-		default:
-			t.Fatalf("unrecognized cluster option: %s", opt)
-		}
-	})
-	return res
+	getConfigMap := func(directiveName string, configType string) map[string]string {
+		configMap := make(map[string]string)
+		parseDirectiveOptions(t, path, directiveName, func(opt string) {
+			parts := strings.Split(opt, "=")
+			if len(parts) != 2 {
+				t.Fatalf("%s %q must be in format name=value", configType, opt)
+			}
+			name := parts[0]
+			value := parts[1]
+			_, ok := configMap[name]
+			if ok {
+				t.Fatalf("cannot set %s %q more than once", configType, name)
+			}
+			configMap[name] = value
+		})
+		return configMap
+	}
+
+	return tenantOverrideArgs{
+		clusterSettings: getConfigMap(tenantClusterSettingOverrideDirective, "cluster setting"),
+		capabilities:    getConfigMap(tenantCapabilityOverrideDirective, "capability"),
+	}
 }
+
+const knobDirective = "knob-opt"
 
 // readKnobOptions looks around the beginning of the file for a line looking like:
 // # knob-opt: opt1 opt2 ...
@@ -2123,7 +2076,7 @@ func readTenantClusterSettingOverrideArgs(
 // TestServerArgs.Knobs before the cluster is started for the respective test file.
 func readKnobOptions(t *testing.T, path string) []knobOpt {
 	var res []knobOpt
-	parseDirectiveOptions(t, path, "knob-opt", func(opt string) {
+	parseDirectiveOptions(t, path, knobDirective, func(opt string) {
 		switch opt {
 		case "disable-corpus-generation":
 			res = append(res, knobOptDisableCorpusGeneration{})
@@ -2136,13 +2089,15 @@ func readKnobOptions(t *testing.T, path string) []knobOpt {
 	return res
 }
 
+const clusterDirective = "cluster-opt"
+
 // readClusterOptions looks around the beginning of the file for a line looking like:
 // # cluster-opt: opt1 opt2 ...
 // and parses that line into a set of clusterOpts that need to be applied to the
 // TestServerArgs before the cluster is started for the respective test file.
 func readClusterOptions(t *testing.T, path string) []clusterOpt {
 	var res []clusterOpt
-	parseDirectiveOptions(t, path, "cluster-opt", func(opt string) {
+	parseDirectiveOptions(t, path, clusterDirective, func(opt string) {
 		switch opt {
 		case "disable-span-configs":
 			res = append(res, clusterOptDisableSpanConfigs{})
@@ -2448,6 +2403,8 @@ func (t *logicTest) processSubtest(
 	t.lastProgress = timeutil.Now()
 
 	repeat := 1
+	t.retry = false
+
 	for s.Scan() {
 		t.curPath, t.curLineNo = path, s.Line+subtest.lineLineIndexIntoFile
 		if *maxErrs > 0 && t.failures >= *maxErrs {
@@ -2533,6 +2490,11 @@ func (t *logicTest) processSubtest(
 
 			t.success(path)
 
+		case "retry":
+			// retry is a standalone command that may precede a "statement" or "query"
+			// command. It has the same retry effect as the retry option of the query
+			// command.
+			t.retry = true
 		case "statement":
 			stmt := logicStatement{
 				pos:         fmt.Sprintf("\n%s:%d", path, s.Line+subtest.lineLineIndexIntoFile),
@@ -2563,7 +2525,19 @@ func (t *logicTest) processSubtest(
 			}
 			if !s.Skip {
 				for i := 0; i < repeat; i++ {
-					if cont, err := t.execStatement(stmt); err != nil {
+					var cont bool
+					var err error
+					if t.retry {
+						err = testutils.SucceedsSoonError(func() error {
+							t.purgeZoneConfig()
+							var tempErr error
+							cont, tempErr = t.execStatement(stmt)
+							return tempErr
+						})
+					} else {
+						cont, err = t.execStatement(stmt)
+					}
+					if err != nil {
 						if !cont {
 							return err
 						}
@@ -2704,7 +2678,7 @@ func (t *logicTest) processSubtest(
 							query.colNames = true
 
 						case "retry":
-							query.retry = true
+							t.retry = true
 
 						case "kvtrace":
 							// kvtrace without any arguments doesn't perform any additional
@@ -2887,7 +2861,7 @@ func (t *logicTest) processSubtest(
 				}
 
 				for i := 0; i < repeat; i++ {
-					if query.retry && !*rewriteResultsInTestfiles {
+					if t.retry && !*rewriteResultsInTestfiles {
 						if err := testutils.SucceedsSoonError(func() error {
 							t.purgeZoneConfig()
 							return t.execQuery(query)
@@ -2895,7 +2869,7 @@ func (t *logicTest) processSubtest(
 							t.Error(err)
 						}
 					} else {
-						if query.retry && *rewriteResultsInTestfiles {
+						if t.retry && *rewriteResultsInTestfiles {
 							t.purgeZoneConfig()
 							// The presence of the retry flag indicates that we expect this
 							// query may need some time to succeed. If we are rewriting, wait
@@ -3120,12 +3094,7 @@ func (t *logicTest) verifyError(
 ) (bool, error) {
 	if expectErr == "" && expectErrCode == "" && err != nil {
 		t.maybeSkipOnRetry(err)
-		cont := t.unexpectedError(sql, pos, err)
-		if cont {
-			// unexpectedError() already reported via t.Errorf. no need for more.
-			err = nil
-		}
-		return cont, err
+		return t.unexpectedError(sql, pos, err)
 	}
 	if expectNotice != "" {
 		foundNotice := strings.Join(t.noticeBuffer, "\n")
@@ -3212,7 +3181,7 @@ func formatErr(err error) string {
 // when -allow-prepare-fail is specified. The argument "sql" is "" to indicate the
 // work is done on behalf of a statement, which always fail upon an
 // unexpected error.
-func (t *logicTest) unexpectedError(sql string, pos string, err error) bool {
+func (t *logicTest) unexpectedError(sql string, pos string, err error) (bool, error) {
 	if *allowPrepareFail && sql != "" {
 		// This is a query and -allow-prepare-fail is set.  Try to prepare
 		// the query. If prepare fails, this means we (probably) do not
@@ -3224,14 +3193,17 @@ func (t *logicTest) unexpectedError(sql string, pos string, err error) bool {
 				t.outf("\t-- fails prepare: %s", formatErr(err))
 			}
 			t.signalIgnoredError(err, pos, sql)
-			return true
+			return true, nil
 		}
 		if err := stmt.Close(); err != nil {
 			t.Errorf("%s: %s\nerror when closing prepared statement: %s", sql, pos, formatErr(err))
 		}
 	}
-	t.Errorf("%s: %s\nexpected success, but found\n%s", pos, sql, formatErr(err))
-	return false
+	// N.B. We return an error instead of calling t.Errorf because this query
+	// could be asking for a retry. We still use t.Errorf above because
+	// stmt.Close error is probably a sign of bigger issues and not
+	// something retryable.
+	return false, fmt.Errorf("%s: %s\nexpected success, but found\n%s", pos, sql, formatErr(err))
 }
 
 func (t *logicTest) execStatement(stmt logicStatement) (bool, error) {
@@ -3845,6 +3817,7 @@ func (t *logicTest) formatValues(vals []string, valsPerLine int) []string {
 }
 
 func (t *logicTest) success(file string) {
+	t.retry = false
 	t.progress++
 	now := timeutil.Now()
 	if now.Sub(t.lastProgress) >= 2*time.Second {
@@ -4053,12 +4026,11 @@ type TestServerArgs struct {
 	// If set, then we will disable the metamorphic randomization of
 	// useMVCCRangeTombstonesForPointDeletes variable.
 	DisableUseMVCCRangeTombstonesForPointDeletes bool
-	// If set, then we will disable the metamorphic randomization of
-	// smallEngineBlocks variable.
-	DisableSmallEngineBlocks bool
 	// If positive, it provides a lower bound for the default-batch-bytes-limit
 	// metamorphic constant.
 	BatchBytesLimitLowerBound int64
+	// If set, sql.distsql.direct_columnar_scans.enabled is set to false.
+	DisableDirectColumnarScans bool
 }
 
 // RunLogicTests runs logic tests for all files matching the given glob.
@@ -4171,7 +4143,7 @@ func RunLogicTest(
 	}
 
 	lt.setup(
-		config, serverArgsCopy, readClusterOptions(t, path), readKnobOptions(t, path), readTenantClusterSettingOverrideArgs(t, path),
+		config, serverArgsCopy, readClusterOptions(t, path), readKnobOptions(t, path), readTenantOverrideArgs(t, path),
 	)
 
 	lt.runFile(path, config)

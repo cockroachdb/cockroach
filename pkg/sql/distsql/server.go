@@ -216,7 +216,7 @@ func (ds *ServerImpl) setupFlow(
 ) (retCtx context.Context, _ flowinfra.Flow, _ execopnode.OpChains, retErr error) {
 	var sp *tracing.Span          // will be Finish()ed by Flow.Cleanup()
 	var monitor *mon.BytesMonitor // will be closed in Flow.Cleanup()
-	var onFlowCleanup func()
+	var onFlowCleanupEnd func()   // will be called at the very end of Flow.Cleanup()
 	// Make sure that we clean up all resources (which in the happy case are
 	// cleaned up in Flow.Cleanup()) if an error is encountered.
 	defer func() {
@@ -224,8 +224,8 @@ func (ds *ServerImpl) setupFlow(
 			if monitor != nil {
 				monitor.Stop(ctx)
 			}
-			if onFlowCleanup != nil {
-				onFlowCleanup()
+			if onFlowCleanupEnd != nil {
+				onFlowCleanupEnd()
 			} else {
 				reserved.Close(ctx)
 			}
@@ -291,7 +291,7 @@ func (ds *ServerImpl) setupFlow(
 		}
 		// The flow will run in a LeafTxn because we do not want each distributed
 		// Txn to heartbeat the transaction.
-		return kv.NewLeafTxn(ctx, ds.DB, roachpb.NodeID(req.Flow.Gateway), tis), nil
+		return kv.NewLeafTxn(ctx, ds.DB.KV(), roachpb.NodeID(req.Flow.Gateway), tis), nil
 	}
 
 	var evalCtx *eval.Context
@@ -307,7 +307,7 @@ func (ds *ServerImpl) setupFlow(
 		// the whole evalContext, but that isn't free, so we choose to restore
 		// the original state in order to avoid performance regressions.
 		origTxn := evalCtx.Txn
-		onFlowCleanup = func() {
+		onFlowCleanupEnd = func() {
 			evalCtx.Txn = origTxn
 			reserved.Close(ctx)
 		}
@@ -322,7 +322,7 @@ func (ds *ServerImpl) setupFlow(
 			evalCtx.Txn = leafTxn
 		}
 	} else {
-		onFlowCleanup = func() {
+		onFlowCleanupEnd = func() {
 			reserved.Close(ctx)
 		}
 		if localState.IsLocal {
@@ -388,7 +388,7 @@ func (ds *ServerImpl) setupFlow(
 	isVectorized := req.EvalContext.SessionData.VectorizeMode != sessiondatapb.VectorizeOff
 	f := newFlow(
 		flowCtx, sp, ds.flowRegistry, rowSyncFlowConsumer, batchSyncFlowConsumer,
-		localState.LocalProcs, isVectorized, onFlowCleanup, req.StatementSQL,
+		localState.LocalProcs, isVectorized, onFlowCleanupEnd, req.StatementSQL,
 	)
 	opt := flowinfra.FuseNormally
 	if !localState.MustUseLeafTxn() {
@@ -521,10 +521,10 @@ func newFlow(
 	batchSyncFlowConsumer execinfra.BatchReceiver,
 	localProcessors []execinfra.LocalProcessor,
 	isVectorized bool,
-	onFlowCleanup func(),
+	onFlowCleanupEnd func(),
 	statementSQL string,
 ) flowinfra.Flow {
-	base := flowinfra.NewFlowBase(flowCtx, sp, flowReg, rowSyncFlowConsumer, batchSyncFlowConsumer, localProcessors, onFlowCleanup, statementSQL)
+	base := flowinfra.NewFlowBase(flowCtx, sp, flowReg, rowSyncFlowConsumer, batchSyncFlowConsumer, localProcessors, onFlowCleanupEnd, statementSQL)
 	if isVectorized {
 		return colflow.NewVectorizedFlow(base)
 	}

@@ -135,7 +135,7 @@ go_library(
         "@com_github_klauspost_compress//zstd",
         "@com_github_knz_strtime//:strtime",
         "@com_github_lib_pq//oid",
-        "@com_github_pierrec_lz4//:lz4",
+        "@com_github_pierrec_lz4_v4//:lz4",
         "@com_github_twpayne_go_geom//:go-geom",
         "@com_github_twpayne_go_geom//encoding/ewkb",
         "@org_golang_x_crypto//bcrypt",

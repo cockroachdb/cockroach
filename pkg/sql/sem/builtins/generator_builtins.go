@@ -55,9 +55,11 @@ var _ eval.ValueGenerator = &arrayValueGenerator{}
 func init() {
 	// Add all windows to the builtins map after a few sanity checks.
 	for k, v := range generators {
-		if v.props.Class != tree.GeneratorClass {
-			panic(errors.AssertionFailedf("generator functions should be marked with the tree.GeneratorClass "+
-				"function class, found %v", v))
+		for _, g := range v.overloads {
+			if g.Class != tree.GeneratorClass {
+				panic(errors.AssertionFailedf("generator functions should be marked with the tree.GeneratorClass "+
+					"function class, found %v", v))
+			}
 		}
 		registerBuiltin(k, v)
 	}
@@ -65,14 +67,12 @@ func init() {
 
 func genProps() tree.FunctionProperties {
 	return tree.FunctionProperties{
-		Class:    tree.GeneratorClass,
 		Category: builtinconstants.CategoryGenerator,
 	}
 }
 
 func jsonGenPropsWithLabels(returnLabels []string) tree.FunctionProperties {
 	return tree.FunctionProperties{
-		Class:        tree.GeneratorClass,
 		Category:     builtinconstants.CategoryJSON,
 		ReturnLabels: returnLabels,
 	}
@@ -80,7 +80,6 @@ func jsonGenPropsWithLabels(returnLabels []string) tree.FunctionProperties {
 
 func recordGenProps() tree.FunctionProperties {
 	return tree.FunctionProperties{
-		Class:             tree.GeneratorClass,
 		Category:          builtinconstants.CategoryGenerator,
 		ReturnsRecordType: true,
 	}
@@ -399,7 +398,6 @@ var generators = map[string]builtinDefinition{
 
 	"crdb_internal.check_consistency": makeBuiltin(
 		tree.FunctionProperties{
-			Class:            tree.GeneratorClass,
 			Category:         builtinconstants.CategorySystemInfo,
 			DistsqlBlocklist: true, // see #88222
 		},
@@ -425,7 +423,6 @@ var generators = map[string]builtinDefinition{
 
 	"crdb_internal.list_sql_keys_in_range": makeBuiltin(
 		tree.FunctionProperties{
-			Class:    tree.GeneratorClass,
 			Category: builtinconstants.CategorySystemInfo,
 		},
 		makeGeneratorOverload(
@@ -441,7 +438,6 @@ var generators = map[string]builtinDefinition{
 
 	"crdb_internal.payloads_for_span": makeBuiltin(
 		tree.FunctionProperties{
-			Class:    tree.GeneratorClass,
 			Category: builtinconstants.CategorySystemInfo,
 		},
 		makeGeneratorOverload(
@@ -456,7 +452,6 @@ var generators = map[string]builtinDefinition{
 	),
 	"crdb_internal.payloads_for_trace": makeBuiltin(
 		tree.FunctionProperties{
-			Class:    tree.GeneratorClass,
 			Category: builtinconstants.CategorySystemInfo,
 		},
 		makeGeneratorOverload(
@@ -470,9 +465,7 @@ var generators = map[string]builtinDefinition{
 		),
 	),
 	"crdb_internal.show_create_all_schemas": makeBuiltin(
-		tree.FunctionProperties{
-			Class: tree.GeneratorClass,
-		},
+		tree.FunctionProperties{},
 		makeGeneratorOverload(
 			tree.ParamTypes{
 				{Name: "database_name", Typ: types.String},
@@ -486,9 +479,7 @@ The output can be used to recreate a database.'
 		),
 	),
 	"crdb_internal.show_create_all_tables": makeBuiltin(
-		tree.FunctionProperties{
-			Class: tree.GeneratorClass,
-		},
+		tree.FunctionProperties{},
 		makeGeneratorOverload(
 			tree.ParamTypes{
 				{Name: "database_name", Typ: types.String},
@@ -507,9 +498,7 @@ The output can be used to recreate a database.'
 		),
 	),
 	"crdb_internal.show_create_all_types": makeBuiltin(
-		tree.FunctionProperties{
-			Class: tree.GeneratorClass,
-		},
+		tree.FunctionProperties{},
 		makeGeneratorOverload(
 			tree.ParamTypes{
 				{Name: "database_name", Typ: types.String},
@@ -523,9 +512,7 @@ The output can be used to recreate a database.'
 		),
 	),
 	"crdb_internal.decode_plan_gist": makeBuiltin(
-		tree.FunctionProperties{
-			Class: tree.GeneratorClass,
-		},
+		tree.FunctionProperties{},
 		makeGeneratorOverload(
 			tree.ParamTypes{
 				{Name: "gist", Typ: types.String},
@@ -538,9 +525,7 @@ The output can be used to recreate a database.'
 		),
 	),
 	"crdb_internal.decode_external_plan_gist": makeBuiltin(
-		tree.FunctionProperties{
-			Class: tree.GeneratorClass,
-		},
+		tree.FunctionProperties{},
 		makeGeneratorOverload(
 			tree.ParamTypes{
 				{Name: "gist", Typ: types.String},
@@ -553,9 +538,7 @@ The output can be used to recreate a database.'
 		),
 	),
 	"crdb_internal.gen_rand_ident": makeBuiltin(
-		tree.FunctionProperties{
-			Class: tree.GeneratorClass,
-		},
+		tree.FunctionProperties{},
 		makeGeneratorOverload(
 			tree.ParamTypes{
 				{Name: "name_pattern", Typ: types.String},
@@ -673,6 +656,7 @@ func makeGeneratorOverloadWithReturnType(
 		Types:      in,
 		ReturnType: retType,
 		Generator:  g,
+		Class:      tree.GeneratorClass,
 		Info:       info,
 		Volatility: volatility,
 	}
@@ -1579,7 +1563,6 @@ func (g *jsonEachGenerator) Values() (tree.Datums, error) {
 }
 
 var jsonPopulateProps = tree.FunctionProperties{
-	Class:    tree.GeneratorClass,
 	Category: builtinconstants.CategoryJSON,
 }
 
@@ -1603,6 +1586,7 @@ func makeJSONPopulateImpl(gen eval.GeneratorWithExprsOverload, info string) tree
 		Types:              tree.ParamTypes{{Name: "base", Typ: types.Any}, {Name: "from_json", Typ: types.Jsonb}},
 		ReturnType:         tree.IdentityReturnType(0),
 		GeneratorWithExprs: gen,
+		Class:              tree.GeneratorClass,
 		Info:               info,
 		Volatility:         volatility.Stable,
 		// The typical way to call json_populate_record is to send NULL::atype
@@ -2230,6 +2214,7 @@ type rangeKeyIterator struct {
 	// by the constructor of the rangeKeyIterator.
 	rangeID roachpb.RangeID
 	spanKeyIterator
+	planner eval.Planner
 }
 
 var _ eval.ValueGenerator = &rangeKeyIterator{}
@@ -2246,12 +2231,14 @@ func makeRangeKeyIterator(
 	if !isAdmin {
 		return nil, pgerror.Newf(pgcode.InsufficientPrivilege, "user needs the admin role to view range data")
 	}
+	planner := evalCtx.Planner
 	rangeID := roachpb.RangeID(tree.MustBeDInt(args[0]))
 	return &rangeKeyIterator{
 		spanKeyIterator: spanKeyIterator{
-			acc: evalCtx.Planner.Mon().MakeBoundAccount(),
+			acc: planner.Mon().MakeBoundAccount(),
 		},
 		rangeID: rangeID,
+		planner: planner,
 	}, nil
 }
 
@@ -2261,17 +2248,14 @@ func (rk *rangeKeyIterator) ResolvedType() *types.T {
 }
 
 // Start implements the tree.ValueGenerator interface.
-func (rk *rangeKeyIterator) Start(ctx context.Context, txn *kv.Txn) error {
+func (rk *rangeKeyIterator) Start(ctx context.Context, txn *kv.Txn) (err error) {
 	// Scan the range meta K/V's to find the target range. We do this in a
 	// chunk-wise fashion to avoid loading all ranges into memory.
-	rangeDesc, err := kvclient.GetRangeWithID(ctx, txn, rk.rangeID)
+	rangeDesc, err := rk.planner.GetRangeDescByID(ctx, rk.rangeID)
 	if err != nil {
 		return err
 	}
-	if rangeDesc == nil {
-		return errors.Newf("range with ID %d not found", rk.rangeID)
-	}
-	rk.spanKeyIterator.span = roachpb.Span{Key: rangeDesc.StartKey.AsRawKey(), EndKey: rangeDesc.EndKey.AsRawKey()}
+	rk.span = rangeDesc.KeySpan().AsRawSpanWithNoLocals()
 	return rk.spanKeyIterator.Start(ctx, txn)
 }
 

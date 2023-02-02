@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/hba"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -38,7 +39,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -436,7 +436,7 @@ func processPgxStartup(ctx context.Context, s serverutils.TestServerInterface, c
 func execQuery(
 	ctx context.Context, query string, s serverutils.TestServerInterface, c *conn,
 ) error {
-	it, err := s.InternalExecutor().(sqlutil.InternalExecutor).QueryIteratorEx(
+	it, err := s.InternalExecutor().(isql.Executor).QueryIteratorEx(
 		ctx, "test", nil, /* txn */
 		sessiondata.InternalExecutorOverride{User: username.RootUserName(), Database: "system"},
 		query,
@@ -576,7 +576,8 @@ func getSessionArgs(
 		}
 
 		ctx := context.Background()
-		cp, err := parseClientProvidedSessionParameters(ctx, &buf, conn.RemoteAddr(), trustRemoteAddr, false /* acceptTenantName */)
+		cp, err := parseClientProvidedSessionParameters(ctx, &buf, conn.RemoteAddr(), trustRemoteAddr,
+			false /* acceptTenantName */, false /* acceptSystemIdentityOption */)
 		if err != nil {
 			return conn, sql.SessionArgs{}, err
 		}

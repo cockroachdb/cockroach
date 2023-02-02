@@ -55,7 +55,7 @@ func (p *planner) ReassignOwnedBy(ctx context.Context, n *tree.ReassignOwnedBy) 
 	// is a member of old roles and new roles and has CREATE privilege.
 	// Postgres first checks if the role exists before checking privileges.
 	for _, oldRole := range normalizedOldRoles {
-		roleExists, err := RoleExists(ctx, p.ExecCfg().InternalExecutor, p.Txn(), oldRole)
+		roleExists, err := RoleExists(ctx, p.InternalSQLTxn(), oldRole)
 		if err != nil {
 			return nil, err
 		}
@@ -69,7 +69,7 @@ func (p *planner) ReassignOwnedBy(ctx context.Context, n *tree.ReassignOwnedBy) 
 	if err != nil {
 		return nil, err
 	}
-	roleExists, err := RoleExists(ctx, p.ExecCfg().InternalExecutor, p.Txn(), newRole)
+	roleExists, err := RoleExists(ctx, p.InternalSQLTxn(), newRole)
 	if !roleExists {
 		return nil, sqlerrors.NewUndefinedUserError(newRole)
 	}
@@ -177,8 +177,8 @@ func (n *reassignOwnedByNode) startExec(params runParams) error {
 			if err != nil {
 				return err
 			}
-			if isOwner && (lCtx.typDescs[typID].GetKind() != descpb.TypeDescriptor_ALIAS) {
-				if err := n.reassignTypeOwner(lCtx.typDescs[typID], params); err != nil {
+			if isOwner && (lCtx.typDescs[typID].AsAliasTypeDescriptor() == nil) {
+				if err := n.reassignTypeOwner(lCtx.typDescs[typID].(catalog.NonAliasTypeDescriptor), params); err != nil {
 					return err
 				}
 			}
@@ -290,7 +290,7 @@ func (n *reassignOwnedByNode) reassignTableOwner(
 }
 
 func (n *reassignOwnedByNode) reassignTypeOwner(
-	typDesc catalog.TypeDescriptor, params runParams,
+	typDesc catalog.NonAliasTypeDescriptor, params runParams,
 ) error {
 	mutableTypDesc, err := params.p.Descriptors().MutableByID(params.p.txn).Desc(params.ctx, typDesc.GetID())
 	if err != nil {

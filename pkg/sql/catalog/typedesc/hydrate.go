@@ -14,7 +14,6 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
@@ -133,20 +132,21 @@ func ensureTypeMetadataIsHydrated(
 	if maybeDesc == nil {
 		return
 	}
-	switch maybeDesc.GetKind() {
-	case descpb.TypeDescriptor_ENUM, descpb.TypeDescriptor_MULTIREGION_ENUM:
-		n := maybeDesc.NumEnumMembers()
+	if maybeDesc.AsTableImplicitRecordTypeDescriptor() != nil {
+		tm.ImplicitRecordType = true
+		return
+	}
+	if e := maybeDesc.AsEnumTypeDescriptor(); e != nil {
+		n := e.NumEnumMembers()
 		tm.EnumData = &types.EnumMetadata{
 			LogicalRepresentations:  make([]string, n),
 			PhysicalRepresentations: make([][]byte, n),
 			IsMemberReadOnly:        make([]bool, n),
 		}
 		for i := 0; i < n; i++ {
-			tm.EnumData.LogicalRepresentations[i] = maybeDesc.GetMemberLogicalRepresentation(i)
-			tm.EnumData.PhysicalRepresentations[i] = maybeDesc.GetMemberPhysicalRepresentation(i)
-			tm.EnumData.IsMemberReadOnly[i] = maybeDesc.IsMemberReadOnly(i)
+			tm.EnumData.LogicalRepresentations[i] = e.GetMemberLogicalRepresentation(i)
+			tm.EnumData.PhysicalRepresentations[i] = e.GetMemberPhysicalRepresentation(i)
+			tm.EnumData.IsMemberReadOnly[i] = e.IsMemberReadOnly(i)
 		}
-	case descpb.TypeDescriptor_TABLE_IMPLICIT_RECORD_TYPE:
-		tm.ImplicitRecordType = true
 	}
 }

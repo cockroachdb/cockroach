@@ -37,7 +37,7 @@ func (ec *Builtins) EncodeTableIndexKey(
 	if err != nil {
 		return nil, err
 	}
-	index, err := tableDesc.FindIndexWithID(indexID)
+	index, err := catalog.MustFindIndexByID(tableDesc, indexID)
 	if err != nil {
 		return nil, err
 	}
@@ -66,7 +66,7 @@ func (ec *Builtins) EncodeTableIndexKey(
 			var extraColNames []string
 			for i := 0; i < index.NumKeySuffixColumns(); i++ {
 				id := index.GetKeySuffixColumnID(i)
-				col, colErr := tableDesc.FindColumnWithID(id)
+				col, colErr := catalog.MustFindColumnByID(tableDesc, id)
 				if colErr != nil {
 					return nil, errors.CombineErrors(err, colErr)
 				}
@@ -74,7 +74,7 @@ func (ec *Builtins) EncodeTableIndexKey(
 			}
 			var allColNames []string
 			for _, id := range indexColIDs {
-				col, colErr := tableDesc.FindColumnWithID(id)
+				col, colErr := catalog.MustFindColumnByID(tableDesc, id)
 				if colErr != nil {
 					return nil, errors.CombineErrors(err, colErr)
 				}
@@ -100,7 +100,7 @@ func (ec *Builtins) EncodeTableIndexKey(
 		// types of the index columns. So, try to cast the input datums to
 		// the types of the index columns here.
 		var newDatum tree.Datum
-		col, err := tableDesc.FindColumnWithID(indexColIDs[i])
+		col, err := catalog.MustFindColumnByID(tableDesc, indexColIDs[i])
 		if err != nil {
 			return nil, err
 		}

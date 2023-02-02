@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/keyvisualizer"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
@@ -2061,7 +2062,7 @@ func TestStoreRangeSplitRaceUninitializedRHS(t *testing.T) {
 			}
 			return roachpb.NewError(
 				roachpb.NewReadWithinUncertaintyIntervalError(
-					args.Hdr.Timestamp, args.Hdr.Timestamp, hlc.Timestamp{}, nil,
+					args.Hdr.Timestamp, hlc.ClockTimestamp{}, nil, args.Hdr.Timestamp, hlc.ClockTimestamp{},
 				))
 		}
 		return nil
@@ -2308,18 +2309,23 @@ func TestStoreRangeGossipOnSplits(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	// 50% for testing We can't properly test how frequently changes in the
+	// number of ranges trigger the store to gossip its capacities if we have
+	// to worry about changes in the number of leases also triggering store
+	// gossip.
+	overrideCapacityFraction := 0.5
+
 	ctx := context.Background()
 	serv, _, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
-				DisableMergeQueue:                      true,
-				DisableSplitQueue:                      true,
-				DisableScanner:                         true,
-				GossipWhenCapacityDeltaExceedsFraction: 0.5, // 50% for testing
-				// We can't properly test how frequently changes in the number of ranges
-				// trigger the store to gossip its capacities if we have to worry about
-				// changes in the number of leases also triggering store gossip.
-				DisableLeaseCapacityGossip: true,
+				DisableMergeQueue: true,
+				DisableSplitQueue: true,
+				DisableScanner:    true,
+				GossipTestingKnobs: kvserver.StoreGossipTestingKnobs{
+					OverrideGossipWhenCapacityDeltaExceedsFraction: overrideCapacityFraction,
+					DisableLeaseCapacityGossip:                     true,
+				},
 			},
 		},
 	})
@@ -2383,7 +2389,10 @@ func TestStoreRangeGossipOnSplits(t *testing.T) {
 		}
 		select {
 		case rangeCount = <-rangeCountCh:
-			changeCount := int32(math.Ceil(math.Max(float64(lastRangeCount)*0.5, 10)))
+			changeCount := int32(math.Ceil(math.Max(
+				float64(lastRangeCount)*overrideCapacityFraction,
+				kvserver.GossipWhenRangeCountDeltaExceeds,
+			)))
 			diff := rangeCount - (lastRangeCount + changeCount)
 			if diff < -1 || diff > 1 {
 				t.Errorf("gossiped range count %d more than 1 away from expected %d", rangeCount, lastRangeCount+changeCount)
@@ -2574,6 +2583,7 @@ func TestUnsplittableRange(t *testing.T) {
 			SpanConfig: &spanconfig.TestingKnobs{
 				ProtectedTSReaderOverrideFn: spanconfig.EmptyProtectedTSReader,
 			},
+			KeyVisualizer: &keyvisualizer.TestingKnobs{SkipZoneConfigBootstrap: true},
 		},
 	})
 	s := serv.(*server.TestServer)

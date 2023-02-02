@@ -54,11 +54,8 @@ import (
 	"github.com/cockroachdb/pebble/replay"
 	"github.com/cockroachdb/pebble/sstable"
 	"github.com/cockroachdb/pebble/vfs"
-	"github.com/cockroachdb/redact"
 	humanize "github.com/dustin/go-humanize"
 )
-
-const maxSyncDurationFatalOnExceededDefault = true
 
 // Default for MaxSyncDuration below.
 var maxSyncDurationDefault = envutil.EnvOrDefaultDuration("COCKROACH_ENGINE_MAX_SYNC_DURATION_DEFAULT", 20*time.Second)
@@ -79,7 +76,7 @@ var MaxSyncDurationFatalOnExceeded = settings.RegisterBoolSetting(
 	settings.TenantWritable,
 	"storage.max_sync_duration.fatal.enabled",
 	"if true, fatal the process when a disk operation exceeds storage.max_sync_duration",
-	maxSyncDurationFatalOnExceededDefault,
+	true,
 )
 
 // valueBlocksEnabled controls whether older versions of MVCC keys in the same
@@ -639,9 +636,10 @@ func wrapFilesystemMiddleware(opts *pebble.Options) io.Closer {
 	// operations.
 	var closer io.Closer
 	opts.FS, closer = vfs.WithDiskHealthChecks(opts.FS, diskHealthCheckInterval,
-		func(name string, duration time.Duration) {
+		func(name string, opType vfs.OpType, duration time.Duration) {
 			opts.EventListener.DiskSlow(pebble.DiskSlowInfo{
 				Path:     name,
+				OpType:   opType,
 				Duration: duration,
 			})
 		})
@@ -705,17 +703,15 @@ type Pebble struct {
 
 	db *pebble.DB
 
-	closed      bool
-	readOnly    bool
-	path        string
-	auxDir      string
-	ballastPath string
-	ballastSize int64
-	maxSize     int64
-	attrs       roachpb.Attributes
-	properties  roachpb.StoreProperties
-	// settings must be non-nil if this Pebble instance will be used to write
-	// intents.
+	closed       bool
+	readOnly     bool
+	path         string
+	auxDir       string
+	ballastPath  string
+	ballastSize  int64
+	maxSize      int64
+	attrs        roachpb.Attributes
+	properties   roachpb.StoreProperties
 	settings     *cluster.Settings
 	encryption   *EncryptionEnv
 	fileRegistry *PebbleFileRegistry
@@ -867,6 +863,9 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 	if cfg.Opts == nil {
 		cfg.Opts = DefaultPebbleOptions()
 	}
+	if cfg.Settings == nil {
+		return nil, errors.AssertionFailedf("NewPebble requires cfg.Settings to be set")
+	}
 
 	// Initialize the FS, wrapping it with disk health-checking and
 	// ENOSPC-detection.
@@ -888,16 +887,14 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 
 	cfg.Opts.EnsureDefaults()
 	cfg.Opts.ErrorIfNotExists = cfg.MustExist
-	if settings := cfg.Settings; settings != nil {
-		cfg.Opts.WALMinSyncInterval = func() time.Duration {
-			return minWALSyncInterval.Get(&settings.SV)
-		}
-		cfg.Opts.Experimental.EnableValueBlocks = func() bool {
-			version := settings.Version.ActiveVersionOrEmpty(logCtx)
-			return !version.Less(clusterversion.ByKey(
-				clusterversion.V23_1EnablePebbleFormatSSTableValueBlocks)) &&
-				valueBlocksEnabled.Get(&settings.SV)
-		}
+	cfg.Opts.WALMinSyncInterval = func() time.Duration {
+		return minWALSyncInterval.Get(&cfg.Settings.SV)
+	}
+	cfg.Opts.Experimental.EnableValueBlocks = func() bool {
+		version := cfg.Settings.Version.ActiveVersionOrEmpty(logCtx)
+		return !version.Less(clusterversion.ByKey(
+			clusterversion.V23_1EnablePebbleFormatSSTableValueBlocks)) &&
+			valueBlocksEnabled.Get(&cfg.Settings.SV)
 	}
 
 	auxDir := cfg.Opts.FS.PathJoin(cfg.Dir, base.AuxiliaryDir)
@@ -985,12 +982,35 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 		return int(atomic.LoadUint64(&p.atomic.compactionConcurrency))
 	}
 
+	// NB: The ordering of the event listeners passed to TeeEventListener is
+	// deliberate. The listener returned by makeMetricEtcEventListener is
+	// responsible for crashing the process if a DiskSlow event indicates the
+	// disk is stalled. While the logging subsystem should also be robust to
+	// stalls and crash the process if unable to write logs, there's less risk
+	// to sequencing the crashing listener first.
+	//
+	// For the same reason, make the logging call asynchronous for DiskSlow events.
+	// This prevents slow logging calls during a disk slow/stall event from holding
+	// up Pebble's internal disk health checking, and better obeys the
+	// EventListener contract for not having any functions block or take a while to
+	// run. Creating goroutines is acceptable given their low cost, and the low
+	// write concurrency to Pebble's FS (Pebble compactions + flushes + SQL
+	// spilling to disk). If the maximum concurrency of DiskSlow events increases
+	// significantly in the future, we can improve the logic here by queueing up
+	// most of the logging work (except for the Fatalf call), and have it be done
+	// by a single goroutine.
+	lel := pebble.MakeLoggingEventListener(pebbleLogger{
+		ctx:   logCtx,
+		depth: 2, // skip over the EventListener stack frame
+	})
+	oldDiskSlow := lel.DiskSlow
+	lel.DiskSlow = func(info pebble.DiskSlowInfo) {
+		// Run oldDiskSlow asynchronously.
+		go oldDiskSlow(info)
+	}
 	el := pebble.TeeEventListener(
-		pebble.MakeLoggingEventListener(pebbleLogger{
-			ctx:   logCtx,
-			depth: 2, // skip over the EventListener stack frame
-		}),
 		p.makeMetricEtcEventListener(ctx),
+		lel,
 	)
 
 	p.eventListener = &el
@@ -1063,22 +1083,30 @@ func (p *Pebble) makeMetricEtcEventListener(ctx context.Context) pebble.EventLis
 			atomic.AddInt64((*int64)(&p.writeStallDuration), stallDuration)
 		},
 		DiskSlow: func(info pebble.DiskSlowInfo) {
-			maxSyncDuration := maxSyncDurationDefault
-			fatalOnExceeded := maxSyncDurationFatalOnExceededDefault
-			if p.settings != nil {
-				maxSyncDuration = MaxSyncDuration.Get(&p.settings.SV)
-				fatalOnExceeded = MaxSyncDurationFatalOnExceeded.Get(&p.settings.SV)
-			}
+			maxSyncDuration := MaxSyncDuration.Get(&p.settings.SV)
+			fatalOnExceeded := MaxSyncDurationFatalOnExceeded.Get(&p.settings.SV)
 			if info.Duration.Seconds() >= maxSyncDuration.Seconds() {
 				atomic.AddInt64(&p.diskStallCount, 1)
 				// Note that the below log messages go to the main cockroach log, not
 				// the pebble-specific log.
+				//
+				// Run non-fatal log.* calls in separate goroutines as they could block
+				// if the logging device is also slow/stalling, preventing pebble's disk
+				// health checking from functioning correctly. See the comment in
+				// pebble.EventListener on why it's important for this method to return
+				// quickly.
 				if fatalOnExceeded {
-					log.Fatalf(ctx, "disk stall detected: pebble unable to write to %s in %.2f seconds",
-						info.Path, redact.Safe(info.Duration.Seconds()))
+					// The write stall may prevent the process from exiting. If
+					// the process won't exit, we can at least terminate all our
+					// RPC connections first.
+					//
+					// See pkg/cli.runStart for where this function is hooked
+					// up.
+					log.MakeProcessUnavailable()
+
+					log.Fatalf(ctx, "file write stall detected: %s", info)
 				} else {
-					log.Errorf(ctx, "disk stall detected: pebble unable to write to %s in %.2f seconds",
-						info.Path, redact.Safe(info.Duration.Seconds()))
+					go log.Errorf(ctx, "file write stall detected: %s", info)
 				}
 				return
 			}

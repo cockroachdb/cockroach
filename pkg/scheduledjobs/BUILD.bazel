@@ -12,7 +12,7 @@ go_library(
         "//pkg/kv/kvserver/protectedts",
         "//pkg/security/username",
         "//pkg/settings/cluster",
-        "//pkg/sql/sqlutil",
+        "//pkg/sql/isql",
         "//pkg/util/hlc",
         "//pkg/util/timeutil",
     ],

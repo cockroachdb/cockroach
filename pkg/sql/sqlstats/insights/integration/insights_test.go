@@ -99,7 +99,8 @@ func TestInsightsIntegration(t *testing.T) {
 			"start_time, "+
 			"end_time, "+
 			"full_scan, "+
-			"implicit_txn "+
+			"implicit_txn, "+
+			"cpu_sql_nanos "+
 			"FROM crdb_internal.node_execution_insights where "+
 			"query = $1 and app_name = $2 ", "SELECT pg_sleep($1)", appName)
 
@@ -107,7 +108,8 @@ func TestInsightsIntegration(t *testing.T) {
 		var startInsights, endInsights time.Time
 		var fullScan bool
 		var implicitTxn bool
-		err = row.Scan(&query, &status, &startInsights, &endInsights, &fullScan, &implicitTxn)
+		var cpuSQLNanos int64
+		err = row.Scan(&query, &status, &startInsights, &endInsights, &fullScan, &implicitTxn, &cpuSQLNanos)
 
 		if err != nil {
 			return err
@@ -120,6 +122,53 @@ func TestInsightsIntegration(t *testing.T) {
 		delayFromTable := endInsights.Sub(startInsights).Seconds()
 		if delayFromTable < queryDelayInSeconds {
 			return fmt.Errorf("expected at least %f, but was %f", delayFromTable, queryDelayInSeconds)
+		}
+
+		// Add an extra margin of 10ms to the total size of CPU Time.
+		maxCPUMs := delayFromTable*1e3 + 10
+		if cpuSQLNanos < 0 || (cpuSQLNanos > (int64(maxCPUMs) * 1e6)) {
+			return fmt.Errorf("expected cpuSQLNanos to be between zero and %f ms, but was %d", maxCPUMs, cpuSQLNanos)
+		}
+
+		return nil
+	}, 1*time.Second)
+
+	// TODO (xzhang) Turn this into a datadriven test
+	// https://github.com/cockroachdb/cockroach/issues/95010
+	// Verify the txn table content is valid.
+	testutils.SucceedsWithin(t, func() error {
+		row = conn.QueryRowContext(ctx, "SELECT "+
+			"query, "+
+			"start_time, "+
+			"end_time, "+
+			"implicit_txn, "+
+			"cpu_sql_nanos "+
+			"FROM crdb_internal.cluster_txn_execution_insights WHERE "+
+			"query = $1 and app_name = $2 ", "SELECT pg_sleep($1)", appName)
+
+		var query string
+		var startInsights, endInsights time.Time
+		var implicitTxn bool
+		var cpuSQLNanos int64
+		err = row.Scan(&query, &startInsights, &endInsights, &implicitTxn, &cpuSQLNanos)
+
+		if err != nil {
+			return err
+		}
+
+		if !implicitTxn {
+			return fmt.Errorf("expected implictTxn to be true")
+		}
+
+		delayFromTable := endInsights.Sub(startInsights).Seconds()
+		if delayFromTable < queryDelayInSeconds {
+			return fmt.Errorf("expected at least %f, but was %f", delayFromTable, queryDelayInSeconds)
+		}
+
+		// Add an extra margin of 10ms to the total size of CPU Time.
+		maxCPUMs := delayFromTable*1e3 + 10
+		if cpuSQLNanos < 0 || (cpuSQLNanos > (int64(maxCPUMs) * 1e6)) {
+			return fmt.Errorf("expected cpuSQLNanos to be between zero and %f ms, but was %d", maxCPUMs, cpuSQLNanos)
 		}
 
 		return nil

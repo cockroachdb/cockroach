@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
@@ -369,7 +370,7 @@ INSERT INTO foo VALUES (1), (10), (100);
 		t.Helper()
 
 		mm := mon.NewStandaloneBudget(1 << 30)
-		idx, err := table.FindIndexWithID(indexID)
+		idx, err := catalog.MustFindIndexByID(table, indexID)
 		colIDsNeeded := idx.CollectKeyColumnIDs()
 		if idx.Primary() {
 			for _, column := range table.PublicColumns() {
@@ -485,9 +486,9 @@ INSERT INTO foo VALUES (1), (10), (100);
 		var j *jobs.Job
 		var table catalog.TableDescriptor
 		require.NoError(t, sql.DescsTxn(ctx, &execCfg, func(
-			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+			ctx context.Context, txn isql.Txn, descriptors *descs.Collection,
 		) (err error) {
-			mut, err := descriptors.MutableByID(txn).Table(ctx, tableID)
+			mut, err := descriptors.MutableByID(txn.KV()).Table(ctx, tableID)
 			if err != nil {
 				return err
 			}
@@ -523,12 +524,12 @@ INSERT INTO foo VALUES (1), (10), (100);
 			jobToBlock.Store(jobID)
 			mut.MaybeIncrementVersion()
 			table = mut.ImmutableCopy().(catalog.TableDescriptor)
-			return descriptors.WriteDesc(ctx, false /* kvTrace */, mut, txn)
+			return descriptors.WriteDesc(ctx, false /* kvTrace */, mut, txn.KV())
 		}))
 
 		// Run the index backfill
 		changer := sql.NewSchemaChangerForTesting(
-			tableID, 1, execCfg.NodeInfo.NodeID.SQLInstanceID(), s0.DB(), lm, jr, &execCfg, settings)
+			tableID, 1, execCfg.NodeInfo.NodeID.SQLInstanceID(), execCfg.InternalDB, lm, jr, &execCfg, settings)
 		changer.SetJob(j)
 		spans := []roachpb.Span{table.IndexSpan(keys.SystemSQLCodec, test.indexToBackfill)}
 		require.NoError(t, changer.TestingDistIndexBackfill(ctx, table.GetVersion(), spans,
@@ -537,9 +538,9 @@ INSERT INTO foo VALUES (1), (10), (100);
 		// Make the mutation complete, then read the index and validate that it
 		// has the expected contents.
 		require.NoError(t, sql.DescsTxn(ctx, &execCfg, func(
-			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+			ctx context.Context, txn isql.Txn, descriptors *descs.Collection,
 		) error {
-			table, err := descriptors.MutableByID(txn).Table(ctx, tableID)
+			table, err := descriptors.MutableByID(txn.KV()).Table(ctx, tableID)
 			if err != nil {
 				return err
 			}
@@ -549,7 +550,7 @@ INSERT INTO foo VALUES (1), (10), (100);
 				require.NoError(t, table.MakeMutationComplete(mut))
 			}
 			table.Mutations = table.Mutations[toComplete:]
-			datums := fetchIndex(ctx, t, txn, table, test.indexToBackfill)
+			datums := fetchIndex(ctx, t, txn.KV(), table, test.indexToBackfill)
 			require.Equal(t, test.expectedContents, datumSliceToStrMatrix(datums))
 			return nil
 		}))

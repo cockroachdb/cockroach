@@ -2,6 +2,7 @@ setup
 CREATE DATABASE db;
 CREATE SCHEMA db.sc;
 CREATE TABLE db.sc.t (k INT, v STRING);
+COMMENT ON TABLE db.sc.t IS 't has a comment';
 CREATE TYPE db.sc.e AS ENUM('a', 'b', 'c');
 ----
 ...
@@ -19,26 +20,36 @@ begin transaction #1
 # begin StatementPhase
 checking for feature: DROP TABLE
 increment telemetry for sql.schema.drop_table
-## StatementPhase stage 1 of 1 with 1 MutationType op
-add synthetic descriptor #107:
+write *eventpb.DropTable to event log:
+  sql:
+    descriptorId: 107
+    statement: DROP TABLE ‹db›.‹sc›.‹t›
+    tag: DROP TABLE
+    user: root
+  tableName: db.sc.t
+## StatementPhase stage 1 of 1 with 5 MutationType ops
+delete object namespace entry {104 106 t} -> 107
+upsert descriptor #107
   ...
-     formatVersion: 3
-     id: 107
-  -  modificationTime: {}
-  +  modificationTime:
-  +    wallTime: "1640995200000000001"
-     name: t
-     nextColumnId: 4
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  +  dropTime: <redacted>"
+     families:
+     - columnIds:
   ...
      replacementOf:
        time: {}
   +  state: DROP
      unexposedParentSchemaId: 106
-     version: "1"
+  -  version: "1"
+  +  version: "2"
+delete comment TableCommentType(objID: 107, subID: 0)
 # end StatementPhase
 # begin PreCommitPhase
-## PreCommitPhase stage 1 of 1 with 11 MutationType ops
-delete all comments for table descriptor 107
+## PreCommitPhase stage 1 of 2 with 1 MutationType op
+undo all catalog changes within txn #1
+persist all catalog changes to storage
+## PreCommitPhase stage 2 of 2 with 13 MutationType ops
 delete object namespace entry {104 106 t} -> 107
 upsert descriptor #107
   ...
@@ -66,6 +77,8 @@ upsert descriptor #107
      unexposedParentSchemaId: 106
   -  version: "1"
   +  version: "2"
+delete comment TableCommentType(objID: 107, subID: 0)
+persist all catalog changes to storage
 create job #1 (non-cancelable: true): "DROP TABLE db.sc.t"
   descriptor IDs: [107]
 # end PreCommitPhase
@@ -75,7 +88,7 @@ notified job registry to adopt jobs: [1]
 begin transaction #2
 commit transaction #2
 begin transaction #3
-## PostCommitNonRevertiblePhase stage 1 of 1 with 5 MutationType ops
+## PostCommitNonRevertiblePhase stage 1 of 1 with 4 MutationType ops
 upsert descriptor #107
   ...
      createAsOfTime:
@@ -99,12 +112,15 @@ upsert descriptor #107
      unexposedParentSchemaId: 106
   -  version: "2"
   +  version: "3"
-write *eventpb.DropTable to event log: DROP TABLE ‹db›.‹sc›.‹t›
+persist all catalog changes to storage
 create job #2 (non-cancelable: true): "GC for DROP TABLE db.sc.t"
   descriptor IDs: [107]
 update progress of schema change job #1: "all stages completed"
 set schema change job #1 to non-cancellable
 updated schema change job #1 descriptor IDs to []
+write *eventpb.FinishSchemaChange to event log:
+  sc:
+    descriptorId: 107
 commit transaction #3
 notified job registry to adopt jobs: [2]
 # end PostCommitPhase

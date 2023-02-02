@@ -971,7 +971,7 @@ ALTER TABLE t72012 ALTER COLUMN col DROP NOT NULL;
 statement ok
 INSERT INTO t72012 VALUES (NULL)
 
-statement error validation of NOT NULL constraint failed: validation of CHECK "col IS NOT NULL" failed on row: col=NULL, rowid=\d+
+statement error (.*validation of CHECK "col IS NOT NULL" failed on row: col=NULL, rowid=\d+|pq: validation of column "col" NOT NULL failed on row: col=NULL, rowid=\d+)
 ALTER TABLE t72012 ALTER COLUMN col SET NOT NULL
 
 # Regression test for #74216. Do not allow expressions with mutable casts

@@ -57,6 +57,14 @@ func (mc *MutableCatalog) ensureForID(id descpb.ID) *byIDEntry {
 	return newEntry
 }
 
+func (mc *MutableCatalog) maybeGetByID(id descpb.ID) *byIDEntry {
+	if !mc.IsInitialized() {
+		return nil
+	}
+	e, _ := mc.byID.get(id).(*byIDEntry)
+	return e
+}
+
 func (mc *MutableCatalog) ensureForName(key catalog.NameKey) *byNameEntry {
 	mc.maybeInitialize()
 	newEntry := &byNameEntry{
@@ -130,6 +138,29 @@ func (mc *MutableCatalog) UpsertComment(key catalogkeys.CommentKey, cmt string) 
 	mc.byteSize += e.ByteSize()
 }
 
+// DeleteComment deletes a comment from the catalog.
+func (mc *MutableCatalog) DeleteComment(key catalogkeys.CommentKey) {
+	if !mc.IsInitialized() {
+		return
+	}
+	e := mc.maybeGetByID(descpb.ID(key.ObjectID))
+	if e == nil {
+		return
+	}
+	oldByteSize := e.ByteSize()
+	cbt := &e.comments[key.CommentType]
+	oldCommentsByType := *cbt
+	*cbt = commentsByType{}
+	oldCommentsByType.subObjectOrdinals.ForEach(func(subID, oldOrdinal int) {
+		if uint32(subID) == key.SubID {
+			return
+		}
+		cbt.comments = append(cbt.comments, oldCommentsByType.comments[oldOrdinal])
+		cbt.subObjectOrdinals.Set(subID, len(cbt.comments))
+	})
+	mc.byteSize += e.ByteSize() - oldByteSize
+}
+
 // UpsertZoneConfig upserts a (descriptor id -> zone config) mapping into the
 // catalog.
 func (mc *MutableCatalog) UpsertZoneConfig(
@@ -139,6 +170,20 @@ func (mc *MutableCatalog) UpsertZoneConfig(
 	mc.byteSize -= e.ByteSize()
 	e.zc = zone.NewZoneConfigWithRawBytes(zoneConfig, rawBytes)
 	mc.byteSize += e.ByteSize()
+}
+
+// DeleteZoneConfig deletes a zone config from the catalog.
+func (mc *MutableCatalog) DeleteZoneConfig(id descpb.ID) {
+	if !mc.IsInitialized() {
+		return
+	}
+	e := mc.maybeGetByID(id)
+	if e == nil {
+		return
+	}
+	oldByteSize := e.ByteSize()
+	e.zc = nil
+	mc.byteSize += e.ByteSize() - oldByteSize
 }
 
 // AddAll adds the contents of the provided catalog to this one.

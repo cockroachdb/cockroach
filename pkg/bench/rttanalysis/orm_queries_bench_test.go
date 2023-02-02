@@ -361,8 +361,6 @@ LEFT JOIN LATERAL
   ) columns ON true;`,
 		},
 
-		// Once https://github.com/cockroachdb/cockroach/issues/88885 is resolved,
-		// the previous test case should be identical to this one.
 		{
 			Name:  "hasura column descriptions modified",
 			Setup: "CREATE TABLE t(a INT PRIMARY KEY)",

@@ -106,7 +106,7 @@ type testImpl struct {
 	// Map from version to path to the cockroach binary to be used when
 	// mixed-version test wants a binary for that binary. If a particular version
 	// <ver> is found in this map, it is used instead of the binary coming from
-	// `roachprod stage release <ver>`. See the --version-binary-override flags.
+	// `roachprod stage release <ver>`. See the --versions-binary-override flags.
 	//
 	// Version strings look like "20.1.4".
 	versionsBinaryOverride map[string]string
@@ -344,15 +344,14 @@ func (t *testImpl) addFailure(format string, args ...interface{}) {
 	formatFailure(&b, reportFailure)
 	msg := b.String()
 
-	t.L().Printf("test failure #%d: %s", len(t.mu.failures), msg)
+	failureNum := len(t.mu.failures)
+	failureLog := fmt.Sprintf("failure_%d", failureNum)
+	t.L().Printf("test failure #%d: full stack retained in %s.log: %s", failureNum, failureLog, msg)
 	// Also dump the verbose error (incl. all stack traces) to a log file, in case
 	// we need it. The stacks are sometimes helpful, but we don't want them in the
 	// main log as they are highly verbose.
 	{
-		cl, err := t.L().ChildLogger(
-			fmt.Sprintf("failure_%d", len(t.mu.failures)),
-			logger.QuietStderr, logger.QuietStdout,
-		)
+		cl, err := t.L().ChildLogger(failureLog, logger.QuietStderr, logger.QuietStdout)
 		if err == nil {
 			// We don't actually log through this logger since it adds an unrelated
 			// file:line caller (namely ours). The error already has stack traces

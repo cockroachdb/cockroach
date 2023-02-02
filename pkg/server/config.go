@@ -23,18 +23,19 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/base/serverident"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -122,8 +123,7 @@ type BaseConfig struct {
 
 	Tracer *tracing.Tracer
 
-	// idProvider is an interface that makes the logging package
-	// able to peek into the server IDs defined by this configuration.
+	// idProvider contains the tenant and server identity.
 	idProvider *idProvider
 
 	// IDContainer is the Node ID / SQL Instance ID container
@@ -145,15 +145,26 @@ type BaseConfig struct {
 	// ReadWithinUncertaintyIntervalError.
 	MaxOffset MaxOffsetType
 
+	// DisableRuntimeStatsMonitor prevents this server from starting the
+	// async task that collects runtime stats and triggers
+	// heap/goroutine dumps under high load.
+	DisableRuntimeStatsMonitor bool
+
+	// RuntimeStatSampler, if non-nil, will be used as source for
+	// run-time metrics instead of constructing a fresh one.
+	RuntimeStatSampler *status.RuntimeStatSampler
+
 	// GoroutineDumpDirName is the directory name for goroutine dumps using
-	// goroutinedumper.
+	// goroutinedumper. Only used if DisableRuntimeStatsMonitor is false.
 	GoroutineDumpDirName string
 
 	// HeapProfileDirName is the directory name for heap profiles using
-	// heapprofiler. If empty, no heap profiles will be collected.
+	// heapprofiler. If empty, no heap profiles will be collected. Only
+	// used if DisableRuntimeStatsMonitor is false.
 	HeapProfileDirName string
 
 	// CPUProfileDirName is the directory name for CPU profile dumps.
+	// Only used if DisableRuntimeStatsMonitor is false.
 	CPUProfileDirName string
 
 	// InflightTraceDirName is the directory name for job traces.
@@ -182,10 +193,6 @@ type BaseConfig struct {
 
 	// TestingKnobs is used for internal test controls only.
 	TestingKnobs base.TestingKnobs
-
-	// SecondaryTenantKnobs contains the testing knobs to use
-	// for tenant servers started by the serverController.
-	SecondaryTenantKnobs base.TestingKnobs
 
 	// TestingInsecureWebAccess enables uses of the HTTP and UI
 	// endpoints without a valid authentication token. This should be
@@ -346,10 +353,6 @@ type KVConfig struct {
 	// The value is split evenly between the stores if there are more than one.
 	CacheSize int64
 
-	// SoftSlotGranter can be optionally passed into a store to allow the store
-	// to perform additional CPU bound work.
-	SoftSlotGranter *admission.SoftSlotGranter
-
 	// TimeSeriesServerConfig contains configuration specific to the time series
 	// server.
 	TimeSeriesServerConfig ts.ServerConfig
@@ -478,6 +481,19 @@ type SQLConfig struct {
 	// node clocks have necessarily passed it.
 	// Environment Variable: COCKROACH_EXPERIMENTAL_LINEARIZABLE
 	Linearizable bool
+
+	// LocalKVServerInfo is set in configs for shared-process tenants. It contains
+	// info for making Batch requests to the local KV server without using gRPC.
+	LocalKVServerInfo *LocalKVServerInfo
+}
+
+// LocalKVServerInfo is used to group information about the local KV server
+// necessary for creating the internalClientAdapter for an in-process tenant
+// talking to that server.
+type LocalKVServerInfo struct {
+	InternalServer     roachpb.InternalServer
+	ServerInterceptors rpc.ServerInterceptorInfo
+	Tracer             *tracing.Tracer
 }
 
 // MakeSQLConfig returns a SQLConfig with default values.
@@ -622,19 +638,6 @@ func (e *Engines) Close() {
 	*e = nil
 }
 
-// cpuWorkPermissionGranter implements the pebble.CPUWorkPermissionGranter
-// interface.
-//type cpuWorkPermissionGranter struct {
-//*admission.SoftSlotGranter
-//}
-
-//func (c *cpuWorkPermissionGranter) TryGetProcs(count int) int {
-//return c.TryGetSlots(count)
-//}
-//func (c *cpuWorkPermissionGranter) ReturnProcs(count int) {
-//c.ReturnSlots(count)
-//}
-
 // CreateEngines creates Engines based on the specs in cfg.Stores.
 func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 	engines := Engines(nil)
@@ -714,7 +717,6 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 					storage.CacheSize(cfg.CacheSize),
 					storage.MaxSize(sizeInBytes),
 					storage.EncryptionAtRest(spec.EncryptionOptions),
-					storage.Settings(cfg.Settings),
 					storage.If(storeKnobs.SmallEngineBlocks, storage.BlockSize(1)),
 				}
 				if len(storeKnobs.EngineKnobs) > 0 {
@@ -722,6 +724,7 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 				}
 				e, err := storage.Open(ctx,
 					storage.InMemory(),
+					cfg.Settings,
 					storageConfigs...,
 				)
 				if err != nil {
@@ -765,11 +768,6 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 			pebbleConfig.Opts.TableCache = tableCache
 			pebbleConfig.Opts.MaxOpenFiles = int(openFileLimitPerStore)
 			pebbleConfig.Opts.Experimental.MaxWriterConcurrency = 2
-			// TODO(jackson): Implement the new pebble.CPUWorkPermissionGranter
-			// interface.
-			//pebbleConfig.Opts.Experimental.CPUWorkPermissionGranter = &cpuWorkPermissionGranter{
-			//cfg.SoftSlotGranter,
-			//}
 			if storeKnobs.SmallEngineBlocks {
 				for i := range pebbleConfig.Opts.Levels {
 					pebbleConfig.Opts.Levels[i].BlockSize = 1
@@ -960,7 +958,7 @@ func parseAttributes(attrsStr string) roachpb.Attributes {
 //
 // For each of the "main" data items, it also memoizes its
 // representation as a string (the one needed by the
-// log.ServerIdentificationPayload interface) as soon as the value is
+// serverident.ServerIdentificationPayload interface) as soon as the value is
 // initialized. This saves on conversion costs.
 type idProvider struct {
 	// clusterID contains the cluster ID (initialized late).
@@ -981,12 +979,17 @@ type idProvider struct {
 	serverStr atomic.Value
 }
 
-var _ log.ServerIdentificationPayload = (*idProvider)(nil)
+var _ serverident.ServerIdentificationPayload = (*idProvider)(nil)
 
-// ServerIdentityString implements the log.ServerIdentificationPayload interface.
-func (s *idProvider) ServerIdentityString(key log.ServerIdentificationKey) string {
+// TenantID is part of the serverident.ServerIdentificationPayload interface.
+func (s *idProvider) TenantID() interface{} {
+	return s.tenantID
+}
+
+// ServerIdentityString implements the serverident.ServerIdentificationPayload interface.
+func (s *idProvider) ServerIdentityString(key serverident.ServerIdentificationKey) string {
 	switch key {
-	case log.IdentifyClusterID:
+	case serverident.IdentifyClusterID:
 		c := s.clusterStr.Load()
 		cs, ok := c.(string)
 		if !ok {
@@ -998,7 +1001,7 @@ func (s *idProvider) ServerIdentityString(key log.ServerIdentificationKey) strin
 		}
 		return cs
 
-	case log.IdentifyTenantID:
+	case serverident.IdentifyTenantID:
 		t := s.tenantStr.Load()
 		ts, ok := t.(string)
 		if !ok {
@@ -1010,7 +1013,7 @@ func (s *idProvider) ServerIdentityString(key log.ServerIdentificationKey) strin
 		}
 		return ts
 
-	case log.IdentifyInstanceID:
+	case serverident.IdentifyInstanceID:
 		// If tenantID is not set, this is a KV node and it has no SQL
 		// instance ID.
 		if !s.tenantID.IsSet() {
@@ -1018,7 +1021,7 @@ func (s *idProvider) ServerIdentityString(key log.ServerIdentificationKey) strin
 		}
 		return s.maybeMemoizeServerID()
 
-	case log.IdentifyKVNodeID:
+	case serverident.IdentifyKVNodeID:
 		// If tenantID is set, this is a SQL-only server and it has no
 		// node ID.
 		if s.tenantID.IsSet() {
@@ -1034,7 +1037,7 @@ func (s *idProvider) ServerIdentityString(key log.ServerIdentificationKey) strin
 // a SQL server.
 //
 // Note: this should not be called concurrently with logging which may
-// invoke the method from the log.ServerIdentificationPayload
+// invoke the method from the serverident.ServerIdentificationPayload
 // interface.
 func (s *idProvider) SetTenant(tenantID roachpb.TenantID) {
 	if !tenantID.IsSet() {

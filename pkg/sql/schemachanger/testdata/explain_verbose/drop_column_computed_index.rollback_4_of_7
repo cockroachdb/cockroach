@@ -5,7 +5,7 @@ create table t (i INT PRIMARY KEY, j INT, INDEX((j+1)));
 ALTER TABLE t DROP COLUMN j CASCADE;
 EXPLAIN (ddl, verbose) rollback at post-commit stage 4 of 7;
 ----
-• Schema change plan for rolling back ALTER TABLE ‹defaultdb›.public.‹t› DROP COLUMN ‹j› CASCADE; 
+• Schema change plan for rolling back ALTER TABLE ‹defaultdb›.public.‹t› DROP COLUMN ‹j› CASCADE;
 │
 └── • PostCommitNonRevertiblePhase
     │
@@ -16,7 +16,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 4 of 7;
     │   │   ├── • Column:{DescID: 104, ColumnID: 2}
     │   │   │   │ WRITE_ONLY → PUBLIC
     │   │   │   │
-    │   │   │   ├── • PreviousTransactionPrecedence dependency from WRITE_ONLY Column:{DescID: 104, ColumnID: 2}
+    │   │   │   ├── • PreviousStagePrecedence dependency from WRITE_ONLY Column:{DescID: 104, ColumnID: 2}
     │   │   │   │     rule: "Column transitions to PUBLIC uphold 2-version invariant: WRITE_ONLY->PUBLIC"
     │   │   │   │
     │   │   │   ├── • Precedence dependency from PUBLIC ColumnName:{DescID: 104, Name: j, ColumnID: 2}
@@ -37,7 +37,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 4 of 7;
     │   │   │   ├── • SameStagePrecedence dependency from PUBLIC Column:{DescID: 104, ColumnID: 2}
     │   │   │   │     rule: "ensure columns are in increasing order"
     │   │   │   │
-    │   │   │   ├── • PreviousTransactionPrecedence dependency from WRITE_ONLY Column:{DescID: 104, ColumnID: 3}
+    │   │   │   ├── • PreviousStagePrecedence dependency from WRITE_ONLY Column:{DescID: 104, ColumnID: 3}
     │   │   │   │     rule: "Column transitions to PUBLIC uphold 2-version invariant: WRITE_ONLY->PUBLIC"
     │   │   │   │
     │   │   │   ├── • Precedence dependency from PUBLIC ColumnName:{DescID: 104, Name: crdb_internal_idx_expr, ColumnID: 3}
@@ -61,7 +61,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 4 of 7;
     │   │       ├── • Precedence dependency from PUBLIC IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}
     │   │       │     rule: "index dependents exist before index becomes public"
     │   │       │
-    │   │       ├── • PreviousTransactionPrecedence dependency from VALIDATED SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
+    │   │       ├── • PreviousStagePrecedence dependency from VALIDATED SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}
     │   │       │     rule: "SecondaryIndex transitions to PUBLIC uphold 2-version invariant: VALIDATED->PUBLIC"
     │   │       │
     │   │       └── • Precedence dependency from PUBLIC IndexName:{DescID: 104, Name: t_expr_idx, IndexID: 2}
@@ -72,7 +72,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 4 of 7;
     │   │   ├── • PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}
     │   │   │   │ DELETE_ONLY → ABSENT
     │   │   │   │
-    │   │   │   ├── • PreviousTransactionPrecedence dependency from DELETE_ONLY PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}
+    │   │   │   ├── • PreviousStagePrecedence dependency from DELETE_ONLY PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}
     │   │   │   │     rule: "PrimaryIndex transitions to ABSENT uphold 2-version invariant: DELETE_ONLY->ABSENT"
     │   │   │   │
     │   │   │   ├── • Precedence dependency from ABSENT IndexName:{DescID: 104, Name: t_pkey, IndexID: 3}
@@ -90,7 +90,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 4 of 7;
     │   │   ├── • TemporaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 3, SourceIndexID: 1}
     │   │   │   │ WRITE_ONLY → DELETE_ONLY
     │   │   │   │
-    │   │   │   └── • PreviousTransactionPrecedence dependency from WRITE_ONLY TemporaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 3, SourceIndexID: 1}
+    │   │   │   └── • PreviousStagePrecedence dependency from WRITE_ONLY TemporaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 3, SourceIndexID: 1}
     │   │   │         rule: "TemporaryIndex transitions to ABSENT uphold 2-version invariant: WRITE_ONLY->DELETE_ONLY"
     │   │   │
     │   │   └── • IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 4}
@@ -99,7 +99,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 4 of 7;
     │   │       └── • skip PUBLIC → ABSENT operations
     │   │             rule: "skip index-column removal ops on index removal"
     │   │
-    │   └── • 13 Mutation operations
+    │   └── • 12 Mutation operations
     │       │
     │       ├── • SetColumnName
     │       │     ColumnID: 2
@@ -111,26 +111,11 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 4 of 7;
     │       │     Name: crdb_internal_idx_expr
     │       │     TableID: 104
     │       │
-    │       ├── • RefreshStats
-    │       │     TableID: 104
-    │       │
-    │       ├── • LogEvent
-    │       │     Element:
-    │       │       SecondaryIndex:
-    │       │         indexId: 2
-    │       │         tableId: 104
-    │       │     EventBase:
-    │       │       Authorization:
-    │       │         UserName: root
-    │       │       Statement: ALTER TABLE ‹defaultdb›.public.‹t› DROP COLUMN ‹j› CASCADE
-    │       │       StatementTag: ALTER TABLE
-    │       │       TargetMetadata:
-    │       │         SourceElementID: 1
-    │       │         SubWorkID: 1
-    │       │     TargetStatus: 2
-    │       │
     │       ├── • MakeValidatedSecondaryIndexPublic
     │       │     IndexID: 2
+    │       │     TableID: 104
+    │       │
+    │       ├── • RefreshStats
     │       │     TableID: 104
     │       │
     │       ├── • MakeWriteOnlyIndexDeleteOnly
@@ -139,14 +124,6 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 4 of 7;
     │       │
     │       ├── • MakeWriteOnlyColumnPublic
     │       │     ColumnID: 2
-    │       │     EventBase:
-    │       │       Authorization:
-    │       │         UserName: root
-    │       │       Statement: ALTER TABLE ‹defaultdb›.public.‹t› DROP COLUMN ‹j› CASCADE
-    │       │       StatementTag: ALTER TABLE
-    │       │       TargetMetadata:
-    │       │         SourceElementID: 1
-    │       │         SubWorkID: 1
     │       │     TableID: 104
     │       │
     │       ├── • RefreshStats
@@ -154,28 +131,12 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 4 of 7;
     │       │
     │       ├── • MakeWriteOnlyColumnPublic
     │       │     ColumnID: 3
-    │       │     EventBase:
-    │       │       Authorization:
-    │       │         UserName: root
-    │       │       Statement: ALTER TABLE ‹defaultdb›.public.‹t› DROP COLUMN ‹j› CASCADE
-    │       │       StatementTag: ALTER TABLE
-    │       │       TargetMetadata:
-    │       │         SourceElementID: 1
-    │       │         SubWorkID: 1
     │       │     TableID: 104
     │       │
     │       ├── • RefreshStats
     │       │     TableID: 104
     │       │
     │       ├── • MakeIndexAbsent
-    │       │     EventBase:
-    │       │       Authorization:
-    │       │         UserName: root
-    │       │       Statement: ALTER TABLE ‹defaultdb›.public.‹t› DROP COLUMN ‹j› CASCADE
-    │       │       StatementTag: ALTER TABLE
-    │       │       TargetMetadata:
-    │       │         SourceElementID: 1
-    │       │         SubWorkID: 1
     │       │     IndexID: 3
     │       │     TableID: 104
     │       │
@@ -200,7 +161,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 4 of 7;
         │   ├── • TemporaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 3, SourceIndexID: 1}
         │   │   │ DELETE_ONLY → ABSENT
         │   │   │
-        │   │   ├── • PreviousTransactionPrecedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 3, SourceIndexID: 1}
+        │   │   ├── • PreviousStagePrecedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 3, SourceIndexID: 1}
         │   │   │     rule: "TemporaryIndex transitions to ABSENT uphold 2-version invariant: DELETE_ONLY->ABSENT"
         │   │   │
         │   │   └── • Precedence dependency from ABSENT IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 4}

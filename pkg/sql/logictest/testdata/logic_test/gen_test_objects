@@ -165,7 +165,7 @@ CREATE DATABASE newdb2; SET database = newdb2
 # More templates than tables requested: we get a random
 # selection of the templates; there is no numbering.
 query T
-SELECT crdb_internal.generate_test_objects('{"seed":123,"counts":[10],"table_templates":["system.*"]}'::JSONB)->'generated_counts'
+SELECT crdb_internal.generate_test_objects('{"seed":1234,"counts":[10],"table_templates":["system.*"]}'::JSONB)->'generated_counts'
 ----
 {"databases": 0, "schemas": 0, "tables": 10}
 
@@ -173,16 +173,17 @@ query T
 SELECT table_name FROM [SHOW TABLES]
 ORDER BY table_name
 ----
-external_c😓onnections
-join_ tokens
-locations
-migrati̕ons
-protected_ts_m eta
-rEpl"ication_stats
-role_memb"ers
-span_configurations
-stat"ement_statistics
-statement_diagnostics_requests
+database_role_settings
+ev̅entlog
+namespace
+prote"cted_ts"_records
+replication_critical_localitieS
+se
+ttings
+sql_instances
+statement_statist😍ics
+ui
+zon es
 
 # Again, the column names are randomized.
 query TTT
@@ -191,26 +192,26 @@ WHERE table_catalog = 'newdb2' AND table_schema = 'public'
 ORDER BY table_name, column_name
 LIMIT 20
 ----
-external_c😓onnections  "connection_'name"   text
-external_c😓onnections  connection_type      text
-external_c😓onnections  conn😤ection_details  bytea
-external_c😓onnections  "created"           timestamp without time zone
-external_c😓onnections  owner                text
-external_c😓onnections  rowid                bigint
-external_c😓onnections  updated              timestamp without time zone
-"join_ tokens"         "exp iration "       timestamp with time zone
-"join_ tokens"         "i{d"                uuid
-"join_ tokens"         rowid                bigint
-"join_ tokens"         secret               bytea
-locations              "latitud e%p"        numeric
-locations              "localityKey"        text
-locations              "localityVa😲lue"     text
-locations              lon😰gitude           numeric
-locations              rowid                bigint
-migrati̕ons            """pat😥ch\v"         bigint
-migrati̕ons            completed_at         timestamp with time zone
-migrati̕ons            internal             bigint
-migrati̕ons            major                bigint
+database_role_settings      "dataBase_ḯd"     oid
+database_role_settings      role_name         text
+database_role_settings      rowid             bigint
+database_role_settings      settings          ARRAY
+ev̅entlog                   "eventType"       text
+ev̅entlog                   in😜f̈́o           text
+ev̅entlog                   "reportingID"     bigint
+ev̅entlog                   rowid             bigint
+ev̅entlog                   "targetID"        bigint
+ev̅entlog                   "timestam̉  p"    timestamp without time zone
+ev̅entlog                   "uniqueID"        bytea
+namespace                   "name "           text
+namespace                   "parent%42ID"     bigint
+namespace                   "parentSchemaID"  bigint
+namespace                   rowid             bigint
+namespace                   😁id               bigint
+"prote""cted_ts""_records"  "Id"              uuid
+"prote""cted_ts""_records"  meta              bytea
+"prote""cted_ts""_records"  meta_type         text
+"prote""cted_ts""_records"  num_spans         bigint
 
 subtest templates/different_templates_in_each_db
 
@@ -228,15 +229,16 @@ SELECT quote_ident(database_name), quote_ident(schema_name), quote_ident(name)
 FROM "".crdb_internal.tables WHERE database_name ILIKE '%d%b%t%'
 ORDER BY database_name, schema_name, name
 ----
-"d%qbt1"  public  "mig)ra tions "
-"d%qbt1"  public  sql_instances
-"d%qbt1"  public  statement_diagnostics
-"d%qbt2"  public  "prot%vected_ts_meta"
-"d%qbt2"  public  "s\\xbdtatement_bundle_chunks"
-"d%qbt2"  public  tenant_settings
-dbt3      public  descriptor
-dbt3      public  descript🙁or_id_seq
-dbt3      public  "statement_bundle_chu nks"
+"d%qbt1"  public  jobs
+"d%qbt1"  public  join_tokens
+"d%qbt1"  public  "te naNt_settings"
+"d%qbt2"  public  "join_t\\uC6F5okens"
+"d%qbt2"  public  "privIleges"
+"d%qbt2"  public  tenants
+dbt3      public  "n amespac'e"
+dbt3      public  "re
+                  ports_meta"
+dbt3      public  span_configurations
 
 
 statement ok
@@ -507,7 +509,7 @@ user testuser
 query error permission denied to create database
 SELECT crdb_internal.generate_test_objects('foo._._', ARRAY[1,0,0])
 
-query error user testuser has no privileges on relation foo
+query error user has no privileges on foo
 SELECT crdb_internal.generate_test_objects('{"table_templates":["rootonly.foo"]}'::jsonb)
 
 query error template name expansion did not find any usable tables

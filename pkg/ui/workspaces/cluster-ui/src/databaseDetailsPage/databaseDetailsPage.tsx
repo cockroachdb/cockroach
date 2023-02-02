@@ -19,7 +19,7 @@ import { CaretRight } from "src/icon/caretRight";
 import { DatabaseIcon } from "src/icon/databaseIcon";
 import { StackIcon } from "src/icon/stackIcon";
 import { PageConfig, PageConfigItem } from "src/pageConfig";
-import { Pagination, ResultsPerPageLabel } from "src/pagination";
+import { Pagination } from "src/pagination";
 import {
   ColumnDescriptor,
   ISortedTablePagination,
@@ -27,15 +27,16 @@ import {
   SortSetting,
 } from "src/sortedtable";
 import * as format from "src/util/format";
-import { DATE_FORMAT } from "src/util/format";
+import {
+  DATE_FORMAT,
+  EncodeDatabaseTableUri,
+  EncodeDatabaseUri,
+} from "src/util/format";
 import { mvccGarbage, syncHistory, unique } from "../util";
 
 import styles from "./databaseDetailsPage.module.scss";
 import sortableTableStyles from "src/sortedtable/sortedtable.module.scss";
-import {
-  baseHeadingClasses,
-  statisticsClasses,
-} from "src/transactionsPage/transactionsPageClasses";
+import { baseHeadingClasses } from "src/transactionsPage/transactionsPageClasses";
 import { Moment } from "moment";
 import { Caution } from "@cockroachlabs/icons";
 import { Anchor } from "../anchor";
@@ -43,10 +44,10 @@ import LoadingError from "../sqlActivity/errorComponent";
 import { Loading } from "../loading";
 import { Search } from "../search";
 import {
+  calculateActiveFilters,
+  defaultFilters,
   Filter,
   Filters,
-  defaultFilters,
-  calculateActiveFilters,
 } from "src/queryFilter";
 import { UIConfigState } from "src/store";
 import { TableStatistics } from "src/tableStatistics";
@@ -509,7 +510,7 @@ export class DatabaseDetailsPage extends React.Component<
         ),
         cell: table => (
           <Link
-            to={`/database/${this.props.name}/table/${table.name}`}
+            to={EncodeDatabaseTableUri(this.props.name, table.name)}
             className={cx("icon__container")}
           >
             <DatabaseIcon className={cx("icon--s", "icon--primary")} />
@@ -683,7 +684,10 @@ export class DatabaseDetailsPage extends React.Component<
         ),
         cell: table => (
           <Link
-            to={`/database/${this.props.name}/table/${table.name}?tab=grants`}
+            to={
+              EncodeDatabaseTableUri(this.props.name, table.name) +
+              `?tab=grants`
+            }
             className={cx("icon__container")}
           >
             <DatabaseIcon className={cx("icon--s")} />
@@ -772,9 +776,13 @@ export class DatabaseDetailsPage extends React.Component<
         ? this.props.sortSettingTables
         : this.props.sortSettingGrants;
 
-    // Only show the filter component when the viewMode is Tables.
+    const showNodes = !isTenant && nodes.length > 1;
+    const showRegions = regions.length > 1;
+
+    // Only show the filter component when the viewMode is Tables and if at
+    // least one of drop-down is shown.
     const filterComponent =
-      this.props.viewMode == ViewMode.Tables ? (
+      this.props.viewMode == ViewMode.Tables && (showNodes || showRegions) ? (
         <PageConfigItem>
           <Filter
             hideAppNames={true}
@@ -784,8 +792,8 @@ export class DatabaseDetailsPage extends React.Component<
             activeFilters={activeFilters}
             filters={defaultFilters}
             onSubmitFilters={this.onSubmitFilters}
-            showNodes={!isTenant && nodes.length > 1}
-            showRegions={regions.length > 1}
+            showNodes={showNodes}
+            showRegions={showRegions}
           />
         </PageConfigItem>
       ) : (
@@ -798,7 +806,10 @@ export class DatabaseDetailsPage extends React.Component<
           <Breadcrumbs
             items={[
               { link: "/databases", name: "Databases" },
-              { link: `/database/${this.props.name}`, name: "Tables" },
+              {
+                link: EncodeDatabaseUri(this.props.name),
+                name: "Tables",
+              },
             ]}
             divider={
               <CaretRight className={cx("icon--xxs", "icon--primary")} />

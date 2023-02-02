@@ -41,6 +41,10 @@ const execStats: Required<ExecStats> = {
     mean: 4160407,
     squared_diffs: 47880000000000,
   },
+  cpu_sql_nanos: {
+    mean: 4160407,
+    squared_diffs: 47880000000000,
+  },
 };
 
 const statementStats: any = {

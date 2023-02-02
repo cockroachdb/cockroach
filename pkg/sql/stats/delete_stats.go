@@ -17,11 +17,10 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
@@ -52,11 +51,7 @@ var TableStatisticsRetentionPeriod = settings.RegisterDurationSetting(
 // DeleteOldStatsForColumns keeps the most recent keepCount automatic
 // statistics and deletes all the others.
 func DeleteOldStatsForColumns(
-	ctx context.Context,
-	executor sqlutil.InternalExecutor,
-	txn *kv.Txn,
-	tableID descpb.ID,
-	columnIDs []descpb.ColumnID,
+	ctx context.Context, txn isql.Txn, tableID descpb.ID, columnIDs []descpb.ColumnID,
 ) error {
 	columnIDsVal := tree.NewDArray(types.Int)
 	for _, c := range columnIDs {
@@ -68,8 +63,8 @@ func DeleteOldStatsForColumns(
 	// This will delete all old statistics for the given table and columns,
 	// including stats created manually (except for a few automatic statistics,
 	// which are identified by the name AutoStatsName).
-	_, err := executor.Exec(
-		ctx, "delete-statistics", txn,
+	_, err := txn.Exec(
+		ctx, "delete-statistics", txn.KV(),
 		`DELETE FROM system.table_statistics
                WHERE "tableID" = $1
                AND "columnIDs" = $3
@@ -94,8 +89,7 @@ func DeleteOldStatsForColumns(
 // IDs that are older than keepTime.
 func DeleteOldStatsForOtherColumns(
 	ctx context.Context,
-	executor sqlutil.InternalExecutor,
-	txn *kv.Txn,
+	txn isql.Txn,
 	tableID descpb.ID,
 	columnIDs [][]descpb.ColumnID,
 	keepTime time.Duration,
@@ -120,8 +114,8 @@ func DeleteOldStatsForOtherColumns(
 
 	// This will delete all statistics for the given table that are not
 	// on the given columns and are older than keepTime.
-	_, err := executor.Exec(
-		ctx, "delete-statistics", txn,
+	_, err := txn.Exec(
+		ctx, "delete-statistics", txn.KV(),
 		fmt.Sprintf(`DELETE FROM system.table_statistics
                WHERE "tableID" = $1
                AND "columnIDs"::string NOT IN (%s)

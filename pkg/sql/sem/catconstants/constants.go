@@ -88,6 +88,10 @@ const (
 	SystemExternalConnectionsTableName     SystemTableName = "external_connections"
 	RoleIDSequenceName                     SystemTableName = "role_id_seq"
 	SystemJobInfoTableName                 SystemTableName = "job_info"
+	SpanStatsUniqueKeys                    SystemTableName = "span_stats_unique_keys"
+	SpanStatsBuckets                       SystemTableName = "span_stats_buckets"
+	SpanStatsSamples                       SystemTableName = "span_stats_samples"
+	SpanStatsTenantBoundaries              SystemTableName = "span_stats_tenant_boundaries"
 )
 
 // Oid for virtual database and table.
@@ -106,6 +110,8 @@ const (
 	CrdbInternalClusterContentionEventsTableID
 	CrdbInternalClusterDistSQLFlowsTableID
 	CrdbInternalClusterExecutionInsightsTableID
+	CrdbInternalClusterTxnExecutionInsightsTableID
+	CrdbInternalNodeTxnExecutionInsightsTableID
 	CrdbInternalClusterLocksTableID
 	CrdbInternalClusterQueriesTableID
 	CrdbInternalClusterTransactionsTableID
@@ -171,6 +177,7 @@ const (
 	CrdbInternalTenantUsageDetailsViewID
 	CrdbInternalPgCatalogTableIsImplementedTableID
 	CrdbInternalSuperRegions
+	CrdbInternalDroppedRelationsViewID
 	InformationSchemaID
 	InformationSchemaAdministrableRoleAuthorizationsID
 	InformationSchemaApplicableRolesID

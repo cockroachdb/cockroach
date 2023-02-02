@@ -134,8 +134,8 @@ func (p *planner) SchemaExists(ctx context.Context, dbName, scName string) (foun
 	return found, err
 }
 
-// HasAnyPrivilege is part of the eval.DatabaseCatalog interface.
-func (p *planner) HasAnyPrivilege(
+// HasAnyPrivilegeForSpecifier is part of the eval.DatabaseCatalog interface.
+func (p *planner) HasAnyPrivilegeForSpecifier(
 	ctx context.Context,
 	specifier eval.HasPrivilegeSpecifier,
 	user username.SQLUsername,
@@ -161,11 +161,10 @@ func (p *planner) HasAnyPrivilege(
 			continue
 		}
 
-		if err := p.CheckPrivilegeForUser(ctx, desc, priv.Kind, user); err != nil {
-			if pgerror.GetPGCode(err) == pgcode.InsufficientPrivilege {
-				continue
-			}
+		if ok, err := p.HasPrivilege(ctx, desc, priv.Kind, user); err != nil {
 			return eval.HasNoPrivilege, err
+		} else if !ok {
+			continue
 		}
 
 		if priv.GrantOption {
@@ -268,7 +267,7 @@ func validateColumnForHasPrivilegeSpecifier(
 	table catalog.TableDescriptor, specifier eval.HasPrivilegeSpecifier,
 ) error {
 	if specifier.ColumnName != nil {
-		_, err := table.FindColumnWithName(*specifier.ColumnName)
+		_, err := catalog.MustFindColumnByTreeName(table, *specifier.ColumnName)
 		return err
 	}
 	if specifier.ColumnAttNum != nil {
@@ -752,7 +751,7 @@ func (p *planner) getTableAndIndexImpl(
 		return catalog.ResolvedObjectPrefix{}, nil, nil, errors.NewAssertionErrorWithWrappedErrf(err,
 			"failed to re-resolve table %d for index %s", tbl.GetID(), tableWithIndex)
 	}
-	retIdx, err := mut.FindIndexWithID(idx.GetID())
+	retIdx, err := catalog.MustFindIndexByID(mut, idx.GetID())
 	if err != nil {
 		return catalog.ResolvedObjectPrefix{}, nil, nil, errors.NewAssertionErrorWithWrappedErrf(err,
 			"retrieving index %s (%d) from table which was known to already exist for table %d",

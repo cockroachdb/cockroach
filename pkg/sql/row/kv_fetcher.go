@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -33,6 +34,7 @@ import (
 type KVFetcher struct {
 	KVBatchFetcher
 
+	kv  roachpb.KeyValue
 	kvs []roachpb.KeyValue
 
 	batchResponse []byte
@@ -105,6 +107,34 @@ func newTxnKVFetcher(
 	return newTxnKVFetcherInternal(fetcherArgs)
 }
 
+// NewDirectKVBatchFetcher creates a new KVBatchFetcher that uses the
+// COL_BATCH_RESPONSE scan format for Scans (or ReverseScans, if reverse is
+// true).
+//
+// If acc is non-nil, this fetcher will track its fetches and must be Closed.
+// The fetcher only grows and shrinks the account according to its own use, so
+// the memory account can be shared by the caller with other components (as long
+// as there is no concurrency).
+func NewDirectKVBatchFetcher(
+	txn *kv.Txn,
+	bsHeader *roachpb.BoundedStalenessHeader,
+	spec *fetchpb.IndexFetchSpec,
+	reverse bool,
+	lockStrength descpb.ScanLockingStrength,
+	lockWaitPolicy descpb.ScanLockingWaitPolicy,
+	lockTimeout time.Duration,
+	acc *mon.BoundAccount,
+	forceProductionKVBatchSize bool,
+) KVBatchFetcher {
+	f := newTxnKVFetcher(
+		txn, bsHeader, reverse, lockStrength, lockWaitPolicy,
+		lockTimeout, acc, forceProductionKVBatchSize,
+	)
+	f.scanFormat = roachpb.COL_BATCH_RESPONSE
+	f.indexFetchSpec = spec
+	return f
+}
+
 // NewKVFetcher creates a new KVFetcher.
 //
 // If acc is non-nil, this fetcher will track its fetches and must be Closed.
@@ -156,7 +186,7 @@ func NewStreamingKVFetcher(
 		streamerBudgetLimit,
 		streamerBudgetAcc,
 		&batchRequestsIssued,
-		getKeyLockingStrength(lockStrength),
+		GetKeyLockingStrength(lockStrength),
 	)
 	mode := kvstreamer.OutOfOrder
 	if maintainOrdering {
@@ -183,15 +213,11 @@ func newKVFetcher(batchFetcher KVBatchFetcher) *KVFetcher {
 // that generated this kv (0 if nil spanIDs were provided when constructing the
 // fetcher), and any errors that may have occurred.
 //
-// needsCopy is set to true when the caller should copy the returned KeyValue.
-// One example of when this happens is when the returned KV's byte slices are
-// the last reference into a larger backing byte slice. In such a case, the next
-// call to NextKV might potentially allocate a big chunk of new memory, and by
-// copying the returned KeyValue into a small slice that the caller owns, we
-// avoid retaining two large backing byte slices at once.
+// The returned kv is stable meaning that it will not be invalidated on the
+// following nextKV call.
 func (f *KVFetcher) nextKV(
 	ctx context.Context, mvccDecodeStrategy storage.MVCCDecodingStrategy,
-) (ok bool, kv roachpb.KeyValue, spanID int, needsCopy bool, err error) {
+) (ok bool, kv roachpb.KeyValue, spanID int, err error) {
 	for {
 		// Only one of f.kvs or f.batchResponse will be set at a given time. Which
 		// one is set depends on the format returned by a given BatchRequest.
@@ -202,7 +228,7 @@ func (f *KVFetcher) nextKV(
 			// We always return "false" for needsCopy when returning data in the
 			// KV format, because each of the KVs doesn't share any backing memory -
 			// they are all independently garbage collectable.
-			return true, kv, f.spanID, false, nil
+			return true, kv, f.spanID, nil
 		}
 		if len(f.batchResponse) > 0 {
 			var key []byte
@@ -216,26 +242,37 @@ func (f *KVFetcher) nextKV(
 				key, rawBytes, f.batchResponse, err = enginepb.ScanDecodeKeyValueNoTS(f.batchResponse)
 			}
 			if err != nil {
-				return false, kv, 0, false, err
+				return false, kv, 0, err
+			}
+			key = key[:len(key):len(key)]
+			rawBytes = rawBytes[:len(rawBytes):len(rawBytes)]
+			// By default, use the references to the key and the value directly.
+			f.kv = roachpb.KeyValue{
+				Key: key,
+				Value: roachpb.Value{
+					RawBytes:  rawBytes,
+					Timestamp: ts,
+				},
 			}
 			// If we're finished decoding the batch response, nil our reference to it
 			// so that the garbage collector can reclaim the backing memory.
 			lastKey := len(f.batchResponse) == 0
 			if lastKey {
 				f.batchResponse = nil
+				// If we've made it to the very last key in the batch, copy out
+				// the key so that the GC can reclaim the large backing slice
+				// before nextKV() is called again.
+				f.kv.Key = make(roachpb.Key, len(key))
+				copy(f.kv.Key, key)
+				f.kv.Value.RawBytes = make([]byte, len(rawBytes))
+				copy(f.kv.Value.RawBytes, rawBytes)
 			}
-			return true, roachpb.KeyValue{
-				Key: key[:len(key):len(key)],
-				Value: roachpb.Value{
-					RawBytes:  rawBytes[:len(rawBytes):len(rawBytes)],
-					Timestamp: ts,
-				},
-			}, f.spanID, lastKey, nil
+			return true, f.kv, f.spanID, nil
 		}
 
 		resp, err := f.NextBatch(ctx)
 		if err != nil || !resp.MoreKVs {
-			return resp.MoreKVs, roachpb.KeyValue{}, 0, false, err
+			return resp.MoreKVs, roachpb.KeyValue{}, 0, err
 		}
 		f.kvs = resp.KVs
 		f.batchResponse = resp.BatchResponse
@@ -243,18 +280,27 @@ func (f *KVFetcher) nextKV(
 	}
 }
 
+// Init implements the storage.NextKVer interface.
+func (f *KVFetcher) Init(storage.FirstKeyOfRowGetter) (stableKVs bool) {
+	// nextKV never invalidates the returned kv, so it is always stable.
+	return true
+}
+
 // NextKV implements the storage.NextKVer interface.
 // gcassert:inline
 func (f *KVFetcher) NextKV(
 	ctx context.Context, mvccDecodeStrategy storage.MVCCDecodingStrategy,
-) (ok bool, kv roachpb.KeyValue, needsCopy bool, err error) {
-	ok, kv, _, needsCopy, err = f.nextKV(ctx, mvccDecodeStrategy)
-	return ok, kv, needsCopy, err
-}
-
-// GetLastEncodedKey implements the storage.NextKVer interface.
-func (f *KVFetcher) GetLastEncodedKey() roachpb.Key {
-	panic("unimplemented")
+) (ok bool, partialRow bool, kv roachpb.KeyValue, err error) {
+	ok, kv, _, err = f.nextKV(ctx, mvccDecodeStrategy)
+	// nextKV never splits rows.
+	//
+	// Generally speaking, this is _not_ achieved via the WholeRowsOfSize option
+	// (although that option is used the txnKVStreamer). Instead, if one
+	// BatchResponse stops in the middle of a SQL row, then a follow-up
+	// BatchRequest is issued with the corresponding ResumeSpan, so nextKV()
+	// provides a stream of KVs that never stops in the middle of a SQL row.
+	partialRow = false
+	return ok, partialRow, kv, err
 }
 
 // SetupNextFetch overrides the same method from the wrapped KVBatchFetcher in

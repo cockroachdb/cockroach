@@ -26,16 +26,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -375,13 +374,14 @@ func TestGCDurationControl(t *testing.T) {
 	jobs.RegisterConstructor(jobspb.TypeImport, func(_ *jobs.Job, cs *cluster.Settings) jobs.Resumer {
 		return jobs.FakeResumer{}
 	}, jobs.UsesTenantCostControl)
-	s, sqlDB, kvDB := serverutils.StartServer(t, args)
+	s, sqlDB, _ := serverutils.StartServer(t, args)
 	defer s.Stopper().Stop(ctx)
 	registry := s.JobRegistry().(*jobs.Registry)
 
 	// Create and run a dummy job.
+	idb := s.InternalDB().(isql.DB)
 	id := registry.MakeJobID()
-	require.NoError(t, kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+	require.NoError(t, idb.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		_, err := registry.CreateJobWithTxn(ctx, jobs.Record{
 			// Job does not accept an empty Details field, so arbitrarily provide
 			// ImportDetails.
@@ -393,7 +393,7 @@ func TestGCDurationControl(t *testing.T) {
 	}))
 	require.NoError(t,
 		registry.WaitForJobs(
-			ctx, s.InternalExecutor().(sqlutil.InternalExecutor), []jobspb.JobID{id},
+			ctx, []jobspb.JobID{id},
 		))
 
 	tdb := sqlutils.MakeSQLRunner(sqlDB)
@@ -465,7 +465,6 @@ func TestErrorsPopulatedOnRetry(t *testing.T) {
 	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
 	registry := s.JobRegistry().(*jobs.Registry)
-	ie := s.InternalExecutor().(sqlutil.InternalExecutor)
 	mkJob := func(t *testing.T) jobspb.JobID {
 		id := registry.MakeJobID()
 		_, err := registry.CreateJobWithTxn(ctx, jobs.Record{
@@ -495,7 +494,7 @@ func TestErrorsPopulatedOnRetry(t *testing.T) {
 		errorIdx    = executionErrorRE.SubexpIndex("error")
 	)
 	parseTimestamp := func(t *testing.T, s string) time.Time {
-		ptc := tree.NewParseTimeContext(timeutil.Now())
+		ptc := tree.NewParseContext(timeutil.Now())
 		ts, _, err := tree.ParseDTimestamp(ptc, s, time.Microsecond)
 		require.NoError(t, err)
 		return ts.Time
@@ -605,7 +604,7 @@ SELECT unnest(execution_errors)
 			checkLogEntry(t, id, jobs.StatusRunning, secondStart, thirdStart, err2)
 		}
 		close(thirdRun.resume)
-		require.NoError(t, registry.WaitForJobs(ctx, ie, []jobspb.JobID{id}))
+		require.NoError(t, registry.WaitForJobs(ctx, []jobspb.JobID{id}))
 	})
 	t.Run("fail or cancel error", func(t *testing.T) {
 		id := mkJob(t)
@@ -646,7 +645,7 @@ SELECT unnest(execution_errors)
 			checkLogEntry(t, id, jobs.StatusReverting, thirdStart, fourthStart, err3)
 		}
 		close(fourthRun.resume)
-		require.Regexp(t, err2, registry.WaitForJobs(ctx, ie, []jobspb.JobID{id}))
+		require.Regexp(t, err2, registry.WaitForJobs(ctx, []jobspb.JobID{id}))
 	})
 	t.Run("truncation", func(t *testing.T) {
 		id := mkJob(t)
@@ -723,6 +722,6 @@ SELECT unnest(execution_errors)
 			checkLogEntry(t, id, jobs.StatusReverting, sixthStart, seventhStart, err6)
 		}
 		close(seventhRun.resume)
-		require.Regexp(t, err3, registry.WaitForJobs(ctx, ie, []jobspb.JobID{id}))
+		require.Regexp(t, err3, registry.WaitForJobs(ctx, []jobspb.JobID{id}))
 	})
 }

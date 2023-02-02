@@ -25,24 +25,18 @@ import (
 // runs the plans. The resulting value of the last statement in the routine is
 // returned.
 func (p *planner) EvalRoutineExpr(
-	ctx context.Context, expr *tree.RoutineExpr, input tree.Datums,
+	ctx context.Context, expr *tree.RoutineExpr, args tree.Datums,
 ) (result tree.Datum, err error) {
-	// If the routine should not be called on null input, then directly return
-	// NULL if any of the datums in the input are NULL.
-	if !expr.CalledOnNullInput {
-		for i := range input {
-			if input[i] == tree.DNull {
-				return tree.DNull, nil
-			}
-		}
+	// Return the cached result if it exists.
+	if expr.CachedResult != nil {
+		return expr.CachedResult, nil
 	}
-
-	retTypes := []*types.T{expr.ResolvedType()}
 
 	// The result of the routine is the result of the last statement. The result
 	// of any preceding statements is ignored. We set up a rowResultWriter that
 	// can store the results of the final statement here.
 	var rch rowContainerHelper
+	retTypes := []*types.T{expr.ResolvedType()}
 	rch.Init(ctx, retTypes, p.ExtendedEvalContext(), "routine" /* opName */)
 	defer rch.Close(ctx)
 	rrw := NewRowResultWriter(&rch)
@@ -65,61 +59,66 @@ func (p *planner) EvalRoutineExpr(
 	}
 
 	// Execute each statement in the routine sequentially.
+	stmtIdx := 0
 	ef := newExecFactory(ctx, p)
-	for i := 0; i < expr.NumStmts; i++ {
-		if err := func() error {
-			opName := "udf-stmt-" + expr.Name + "-" + strconv.Itoa(i)
-			ctx, sp := tracing.ChildSpan(ctx, opName)
-			defer sp.Finish()
+	err = expr.ForEachPlan(ctx, ef, args, func(plan tree.RoutinePlan, isFinalPlan bool) error {
+		stmtIdx++
+		opName := "udf-stmt-" + expr.Name + "-" + strconv.Itoa(stmtIdx)
+		ctx, sp := tracing.ChildSpan(ctx, opName)
+		defer sp.Finish()
 
-			// Generate a plan for executing the ith statement.
-			plan, err := expr.PlanFn(ctx, ef, i, input)
-			if err != nil {
-				return err
-			}
-
-			// If this is the last statement, use the rowResultWriter created above.
-			// Otherwise, use a rowResultWriter that drops all rows added to it.
-			var w rowResultWriter
-			if i == expr.NumStmts-1 {
-				w = rrw
-			} else {
-				w = &droppingResultWriter{}
-			}
-
-			// Place a sequence point before each statement in the routine for
-			// volatile functions.
-			if expr.EnableStepping {
-				if err := txn.Step(ctx); err != nil {
-					return err
-				}
-			}
-
-			// Run the plan.
-			err = runPlanInsidePlan(ctx, p.RunParams(ctx), plan.(*planComponents), w)
-			if err != nil {
-				return err
-			}
-
-			return nil
-		}(); err != nil {
-			return nil, err
+		// If this is the last statement, use the rowResultWriter created above.
+		// Otherwise, use a rowResultWriter that drops all rows added to it.
+		var w rowResultWriter
+		if isFinalPlan {
+			w = rrw
+		} else {
+			w = &droppingResultWriter{}
 		}
+
+		// Place a sequence point before each statement in the routine for
+		// volatile functions.
+		if expr.EnableStepping {
+			if err := txn.Step(ctx); err != nil {
+				return err
+			}
+		}
+
+		// Run the plan.
+		err = runPlanInsidePlan(ctx, p.RunParams(ctx), plan.(*planComponents), w)
+		if err != nil {
+			return err
+		}
+
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	// Fetch the first row from the row container and return the first
 	// datum.
 	rightRowsIterator := newRowContainerIterator(ctx, rch, retTypes)
 	defer rightRowsIterator.Close()
-	res, err := rightRowsIterator.Next()
+	row, err := rightRowsIterator.Next()
 	if err != nil {
 		return nil, err
 	}
-	if res == nil {
-		// Return NULL if there are no results.
-		return tree.DNull, nil
+	var res tree.Datum
+	if row == nil {
+		// The result is NULL if no rows were returned by the last statement.
+		res = tree.DNull
+	} else {
+		// The result is the first and only column in the row returned by the
+		// last statement.
+		res = row[0]
 	}
-	return res[0], nil
+	if len(expr.Args) == 0 && !expr.EnableStepping {
+		// Cache the result if there are zero arguments and stepping is
+		// disabled.
+		expr.CachedResult = res
+	}
+	return res, nil
 }
 
 // droppingResultWriter drops all rows that are added to it. It only tracks

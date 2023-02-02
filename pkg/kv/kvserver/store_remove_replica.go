@@ -222,7 +222,7 @@ func (s *Store) removeInitializedReplicaRaftMuLocked(
 		return nil
 	}()
 
-	s.maybeGossipOnCapacityChange(ctx, rangeRemoveEvent)
+	s.storeGossip.MaybeGossipOnCapacityChange(ctx, RangeRemoveEvent)
 	s.scanner.RemoveReplica(rep)
 	return ph, nil
 }

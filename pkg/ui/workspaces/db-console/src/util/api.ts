@@ -18,8 +18,6 @@ import moment from "moment";
 import * as protos from "src/js/protos";
 import { FixLong } from "src/util/fixLong";
 import { propsToQueryString } from "src/util/query";
-import { cockroach } from "src/js/protos";
-import TakeTracingSnapshotRequest = cockroach.server.serverpb.TakeTracingSnapshotRequest;
 
 export type DatabaseDetailsRequestMessage =
   protos.cockroach.server.serverpb.DatabaseDetailsRequest;
@@ -206,30 +204,16 @@ export type HotRangesRequestMessage =
   protos.cockroach.server.serverpb.HotRangesRequest;
 export type HotRangesV2ResponseMessage =
   protos.cockroach.server.serverpb.HotRangesResponseV2;
+
+export type KeyVisualizerSamplesRequestMessage =
+  protos.cockroach.server.serverpb.KeyVisSamplesRequest;
+export type KeyVisualizerSamplesResponseMessage =
+  protos.cockroach.server.serverpb.KeyVisSamplesResponse;
+
 export type ListTracingSnapshotsRequestMessage =
   protos.cockroach.server.serverpb.ListTracingSnapshotsRequest;
 export type ListTracingSnapshotsResponseMessage =
   protos.cockroach.server.serverpb.ListTracingSnapshotsResponse;
-
-export type TakeTracingSnapshotRequestMessage =
-  protos.cockroach.server.serverpb.TakeTracingSnapshotRequest;
-export type TakeTracingSnapshotResponseMessage =
-  protos.cockroach.server.serverpb.TakeTracingSnapshotResponse;
-
-export type GetTracingSnapshotRequestMessage =
-  protos.cockroach.server.serverpb.GetTracingSnapshotRequest;
-export type GetTracingSnapshotResponseMessage =
-  protos.cockroach.server.serverpb.GetTracingSnapshotResponse;
-
-export type GetTraceRequestMessage =
-  protos.cockroach.server.serverpb.GetTraceRequest;
-export type GetTraceResponseMessage =
-  protos.cockroach.server.serverpb.GetTraceResponse;
-
-export type SetTraceRecordingTypeRequestMessage =
-  protos.cockroach.server.serverpb.SetTraceRecordingTypeRequest;
-export type SetTraceRecordingTypeResponseMessage =
-  protos.cockroach.server.serverpb.SetTraceRecordingTypeResponse;
 
 // API constants
 
@@ -373,9 +357,13 @@ export function getDatabaseDetails(
 ): Promise<DatabaseDetailsResponseMessage> {
   const queryString = req.include_stats ? "?include_stats=true" : "";
 
+  const promiseErr = IsValidateUriName(req.database);
+  if (promiseErr) {
+    return promiseErr;
+  }
   return timeoutFetch(
     serverpb.DatabaseDetailsResponse,
-    `${API_PREFIX}/databases/${req.database}${queryString}`,
+    `${API_PREFIX}/databases/${EncodeUriName(req.database)}${queryString}`,
     null,
     timeout,
   );
@@ -386,9 +374,16 @@ export function getTableDetails(
   req: TableDetailsRequestMessage,
   timeout?: moment.Duration,
 ): Promise<TableDetailsResponseMessage> {
+  const promiseErr = IsValidateUriName(req.database, req.table);
+  if (promiseErr) {
+    return promiseErr;
+  }
+
   return timeoutFetch(
     serverpb.TableDetailsResponse,
-    `${API_PREFIX}/databases/${req.database}/tables/${req.table}`,
+    `${API_PREFIX}/databases/${EncodeUriName(
+      req.database,
+    )}/tables/${EncodeUriName(req.table)}`,
     null,
     timeout,
   );
@@ -535,9 +530,16 @@ export function getTableStats(
   req: TableStatsRequestMessage,
   timeout?: moment.Duration,
 ): Promise<TableStatsResponseMessage> {
+  const promiseErr = IsValidateUriName(req.database, req.table);
+  if (promiseErr) {
+    return promiseErr;
+  }
+
   return timeoutFetch(
     serverpb.TableStatsResponse,
-    `${API_PREFIX}/databases/${req.database}/tables/${req.table}/stats`,
+    `${API_PREFIX}/databases/${EncodeUriName(
+      req.database,
+    )}/tables/${EncodeUriName(req.table)}/stats`,
     null,
     timeout,
   );
@@ -548,9 +550,16 @@ export function getIndexStats(
   req: IndexStatsRequestMessage,
   timeout?: moment.Duration,
 ): Promise<IndexStatsResponseMessage> {
+  const promiseErr = IsValidateUriName(req.database, req.table);
+  if (promiseErr) {
+    return promiseErr;
+  }
+
   return timeoutFetch(
     serverpb.TableIndexStatsResponse,
-    `${STATUS_PREFIX}/databases/${req.database}/tables/${req.table}/indexstats`,
+    `${STATUS_PREFIX}/databases/${EncodeUriName(
+      req.database,
+    )}/tables/${EncodeUriName(req.table)}/indexstats`,
     null,
     timeout,
   );
@@ -882,74 +891,31 @@ export function getHotRanges(
   );
 }
 
-export function listTracingSnapshots(
+export function getKeyVisualizerSamples(
+  req: KeyVisualizerSamplesRequestMessage,
   timeout?: moment.Duration,
-): Promise<ListTracingSnapshotsResponseMessage> {
+): Promise<KeyVisualizerSamplesResponseMessage> {
   return timeoutFetch(
-    serverpb.ListTracingSnapshotsResponse,
-    `${API_PREFIX}/trace_snapshots`,
-    null,
-    timeout,
-  );
-}
-
-export function takeTracingSnapshot(
-  timeout?: moment.Duration,
-): Promise<TakeTracingSnapshotResponseMessage> {
-  const req = new TakeTracingSnapshotRequest();
-  return timeoutFetch(
-    serverpb.TakeTracingSnapshotResponse,
-    `${API_PREFIX}/trace_snapshots`,
+    serverpb.KeyVisSamplesResponse,
+    `${STATUS_PREFIX}/keyvissamples`,
     req as any,
     timeout,
   );
 }
 
-export function getTracingSnapshot(
-  req: GetTracingSnapshotRequestMessage,
-  timeout?: moment.Duration,
-): Promise<GetTracingSnapshotResponseMessage> {
-  return timeoutFetch(
-    serverpb.GetTracingSnapshotResponse,
-    `${API_PREFIX}/trace_snapshots/${req.snapshot_id}`,
-    null,
-    timeout,
-  );
+export function IsValidateUriName(...args: string[]): Promise<any> {
+  for (const name of args) {
+    if (name.includes("/")) {
+      return Promise.reject(
+        new Error(
+          `util/api: The entity '${name}' contains '/' which is not currently supported in the UI.`,
+        ),
+      );
+    }
+  }
+  return null;
 }
 
-export function getTraceForSnapshot(
-  req: GetTraceRequestMessage,
-  timeout?: moment.Duration,
-): Promise<GetTraceResponseMessage> {
-  return timeoutFetch(
-    serverpb.GetTraceResponse,
-    `${API_PREFIX}/traces`,
-    req as any,
-    timeout,
-  );
-}
-
-export function getLiveTrace(
-  req: GetTraceRequestMessage,
-  timeout?: moment.Duration,
-): Promise<GetTraceResponseMessage> {
-  return timeoutFetch(
-    serverpb.GetTraceResponse,
-    `${API_PREFIX}/traces`,
-    req as any,
-    timeout,
-  );
-}
-
-export function setTraceRecordingType(
-  req: SetTraceRecordingTypeRequestMessage,
-  timeout?: moment.Duration,
-): Promise<SetTraceRecordingTypeResponseMessage> {
-  return timeoutFetch(
-    serverpb.SetTraceRecordingTypeResponse,
-    // TODO(davidh): Consider making this endpoint just POST to `/traces/{trace_ID}`
-    `${API_PREFIX}/settracerecordingtype`,
-    req as any,
-    timeout,
-  );
+export function EncodeUriName(name: string): string {
+  return encodeURIComponent(name);
 }

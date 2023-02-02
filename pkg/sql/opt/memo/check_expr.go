@@ -224,12 +224,19 @@ func (m *Memo) CheckExpr(e opt.Expr) {
 		if t.Cols.SubsetOf(t.Input.Relational().OutputCols) {
 			panic(errors.AssertionFailedf("lookup join with no lookup columns"))
 		}
+		switch t.JoinType {
+		case opt.AntiJoinOp:
+			if len(t.RemoteLookupExpr) > 0 {
+				panic(errors.AssertionFailedf("anti join with a non-empty RemoteLookupExpr"))
+			}
+		}
 		var requiredCols opt.ColSet
 		requiredCols.UnionWith(t.Relational().OutputCols)
-		requiredCols.UnionWith(t.ConstFilters.OuterCols())
+		requiredCols.UnionWith(t.AllLookupFilters.OuterCols())
 		requiredCols.UnionWith(t.On.OuterCols())
 		requiredCols.UnionWith(t.KeyCols.ToSet())
 		requiredCols.UnionWith(t.LookupExpr.OuterCols())
+		requiredCols.UnionWith(t.RemoteLookupExpr.OuterCols())
 		idx := m.Metadata().Table(t.Table).Index(t.Index)
 		for i := range t.KeyCols {
 			requiredCols.Add(t.Table.ColumnID(idx.Column(i).Ordinal()))
@@ -333,7 +340,7 @@ func (m *Memo) CheckExpr(e opt.Expr) {
 		}
 
 	case *WithExpr:
-		if !t.BindingOrdering.Any() && (!t.Mtr.Set || !t.Mtr.Materialize) {
+		if !t.BindingOrdering.Any() && t.Mtr != tree.CTEMaterializeAlways {
 			panic(errors.AssertionFailedf("with ordering can only be specified with forced materialization"))
 		}
 
@@ -423,6 +430,14 @@ func checkExprOrdering(e opt.Expr) {
 				}
 			}
 		}
+	case *SubqueryPrivate:
+		if !ordering.Any() && e.Op() != opt.ArrayFlattenOp {
+			panic(errors.AssertionFailedf(
+				"subquery ordering not allowed in op: %s",
+				redact.Safe(e.Op()),
+			))
+		}
+		return
 	default:
 		return
 	}

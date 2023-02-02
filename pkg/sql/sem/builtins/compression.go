@@ -21,7 +21,7 @@ import (
 	"github.com/golang/snappy"
 	"github.com/klauspost/compress/gzip"
 	"github.com/klauspost/compress/zstd"
-	"github.com/pierrec/lz4"
+	"github.com/pierrec/lz4/v4"
 )
 
 type codec interface {

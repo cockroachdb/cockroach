@@ -13,8 +13,9 @@ package state
 import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/workload"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/replicastats"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/load"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
 // ReplicaLoad defines the methods a datastructure is required to perform in
@@ -50,14 +51,14 @@ type ReplicaLoadCounter struct {
 	ReadKeys   int64
 	ReadBytes  int64
 	clock      *ManualSimClock
-	QPS        *replicastats.ReplicaStats
+	loadStats  *load.ReplicaLoad
 }
 
 // NewReplicaLoadCounter returns a new replica load counter.
 func NewReplicaLoadCounter(clock *ManualSimClock) *ReplicaLoadCounter {
 	return &ReplicaLoadCounter{
-		clock: clock,
-		QPS:   replicastats.NewReplicaStats(clock.Now(), nil),
+		clock:     clock,
+		loadStats: load.NewReplicaLoad(hlc.NewClock(clock, 0), nil),
 	}
 }
 
@@ -67,20 +68,23 @@ func (rl *ReplicaLoadCounter) ApplyLoad(le workload.LoadEvent) {
 	rl.ReadKeys += le.Reads
 	rl.WriteBytes += le.WriteSize
 	rl.WriteKeys += le.Writes
-	rl.QPS.RecordCount(rl.clock.Now(), LoadEventQPS(le), 0)
+
+	rl.loadStats.RecordBatchRequests(LoadEventQPS(le), 0)
+	rl.loadStats.RecordRequests(LoadEventQPS(le))
+	rl.loadStats.RecordReadKeys(float64(le.Reads))
+	rl.loadStats.RecordReadBytes(float64(le.ReadSize))
+	rl.loadStats.RecordWriteKeys(float64(le.Writes))
+	rl.loadStats.RecordWriteBytes(float64(le.WriteSize))
 }
 
 // Load translates the recorded key accesses and size into range usage
 // information.
 func (rl *ReplicaLoadCounter) Load() allocator.RangeUsageInfo {
-	qps := 0.0
-	if rl.QPS != nil {
-		qps, _ = rl.QPS.AverageRatePerSecond(rl.clock.Now())
-	}
+	stats := rl.loadStats.Stats()
 
 	return allocator.RangeUsageInfo{
 		LogicalBytes:     rl.WriteBytes,
-		QueriesPerSecond: qps,
+		QueriesPerSecond: stats.QueriesPerSecond,
 		WritesPerSecond:  float64(rl.WriteKeys),
 	}
 }
@@ -88,9 +92,7 @@ func (rl *ReplicaLoadCounter) Load() allocator.RangeUsageInfo {
 // ResetLoad resets the load of the ReplicaLoad. This only affects rated
 // counters.
 func (rl *ReplicaLoadCounter) ResetLoad() {
-	if rl.QPS != nil {
-		rl.QPS.ResetRequestCounts(rl.clock.Now())
-	}
+	rl.loadStats.Reset()
 }
 
 // Split halves the load of the ReplicaLoad this method is called on and
@@ -101,16 +103,16 @@ func (rl *ReplicaLoadCounter) Split() ReplicaLoad {
 	rl.ReadKeys /= 2
 	rl.ReadBytes /= 2
 
-	otherQPS := replicastats.NewReplicaStats(rl.clock.Now(), nil)
-	rl.QPS.SplitRequestCounts(otherQPS)
+	otherLoadStats := load.NewReplicaLoad(hlc.NewClock(rl.clock, 0), nil)
+	rl.loadStats.Split(otherLoadStats)
 
 	return &ReplicaLoadCounter{
 		WriteKeys:  rl.WriteKeys,
 		WriteBytes: rl.WriteBytes,
 		ReadKeys:   rl.ReadKeys,
 		ReadBytes:  rl.ReadBytes,
-		QPS:        otherQPS,
 		clock:      rl.clock,
+		loadStats:  otherLoadStats,
 	}
 }
 

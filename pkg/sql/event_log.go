@@ -20,15 +20,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/obsservice/obspb"
 	v1 "github.com/cockroachdb/cockroach/pkg/obsservice/obspb/opentelemetry-proto/common/v1"
 	otel_logs_pb "github.com/cockroachdb/cockroach/pkg/obsservice/obspb/opentelemetry-proto/logs/v1"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -215,7 +217,7 @@ func (p *planner) logEventsWithOptions(
 	ctx context.Context, depth int, opts eventLogOptions, entries ...logpb.EventPayload,
 ) error {
 	return logEventInternalForSQLStatements(ctx,
-		p.extendedEvalCtx.ExecCfg, p.txn,
+		p.extendedEvalCtx.ExecCfg, p.InternalSQLTxn(),
 		1+depth,
 		opts,
 		p.getCommonSQLEventDetails(opts.rOpts),
@@ -227,13 +229,13 @@ func (p *planner) logEventsWithOptions(
 func logEventInternalForSchemaChanges(
 	ctx context.Context,
 	execCfg *ExecutorConfig,
-	txn *kv.Txn,
+	txn isql.Txn,
 	sqlInstanceID base.SQLInstanceID,
 	descID descpb.ID,
 	mutationID descpb.MutationID,
 	event logpb.EventPayload,
 ) error {
-	event.CommonDetails().Timestamp = txn.ReadTimestamp().WallTime
+	event.CommonDetails().Timestamp = txn.KV().ReadTimestamp().WallTime
 	scCommon, ok := event.(eventpb.EventWithCommonSchemaChangePayload)
 	if !ok {
 		return errors.AssertionFailedf("unknown event type: %T", event)
@@ -271,7 +273,7 @@ func logEventInternalForSchemaChanges(
 func logEventInternalForSQLStatements(
 	ctx context.Context,
 	execCfg *ExecutorConfig,
-	txn *kv.Txn,
+	txn isql.Txn,
 	depth int,
 	opts eventLogOptions,
 	commonSQLEventDetails eventpb.CommonSQLEventDetails,
@@ -283,7 +285,7 @@ func logEventInternalForSQLStatements(
 			// No txn is set for COPY, so use now instead.
 			event.CommonDetails().Timestamp = timeutil.Now().UnixNano()
 		} else {
-			event.CommonDetails().Timestamp = txn.ReadTimestamp().WallTime
+			event.CommonDetails().Timestamp = txn.KV().ReadTimestamp().WallTime
 		}
 		sqlCommon, ok := event.(eventpb.EventWithCommonSQLPayload)
 		if !ok {
@@ -335,26 +337,34 @@ func logEventInternalForSQLStatements(
 }
 
 type schemaChangerEventLogger struct {
-	txn     *kv.Txn
+	txn     isql.Txn
 	execCfg *ExecutorConfig
 	depth   int
 }
 
-var _ scexec.EventLogger = (*schemaChangerEventLogger)(nil)
+var _ scrun.EventLogger = (*schemaChangerEventLogger)(nil)
+var _ scbuild.EventLogger = (*schemaChangerEventLogger)(nil)
 
-// NewSchemaChangerEventLogger returns a scexec.EventLogger implementation.
-func NewSchemaChangerEventLogger(
-	txn *kv.Txn, execCfg *ExecutorConfig, depth int,
-) scexec.EventLogger {
+// NewSchemaChangerBuildEventLogger returns a scbuild.EventLogger implementation.
+func NewSchemaChangerBuildEventLogger(txn isql.Txn, execCfg *ExecutorConfig) scbuild.EventLogger {
 	return &schemaChangerEventLogger{
 		txn:     txn,
 		execCfg: execCfg,
-		depth:   depth,
+		depth:   1,
 	}
 }
 
-// LogEvent implements the scexec.EventLogger interface.
-func (l schemaChangerEventLogger) LogEvent(
+// NewSchemaChangerRunEventLogger returns a scrun.EventLogger implementation.
+func NewSchemaChangerRunEventLogger(txn isql.Txn, execCfg *ExecutorConfig) scrun.EventLogger {
+	return &schemaChangerEventLogger{
+		txn:     txn,
+		execCfg: execCfg,
+		depth:   0,
+	}
+}
+
+// LogEvent implements the scbuild.EventLogger interface.
+func (l *schemaChangerEventLogger) LogEvent(
 	ctx context.Context, details eventpb.CommonSQLEventDetails, event logpb.EventPayload,
 ) error {
 	return logEventInternalForSQLStatements(ctx,
@@ -366,10 +376,11 @@ func (l schemaChangerEventLogger) LogEvent(
 		event)
 }
 
-func (l schemaChangerEventLogger) LogEventForSchemaChange(
+// LogEventForSchemaChange implements the scrun.EventLogger interface.
+func (l *schemaChangerEventLogger) LogEventForSchemaChange(
 	ctx context.Context, event logpb.EventPayload,
 ) error {
-	event.CommonDetails().Timestamp = l.txn.ReadTimestamp().WallTime
+	event.CommonDetails().Timestamp = l.txn.KV().ReadTimestamp().WallTime
 	scCommon, ok := event.(eventpb.EventWithCommonSchemaChangePayload)
 	if !ok {
 		return errors.AssertionFailedf("unknown event type: %T", event)
@@ -388,14 +399,14 @@ func (l schemaChangerEventLogger) LogEventForSchemaChange(
 func LogEventForJobs(
 	ctx context.Context,
 	execCfg *ExecutorConfig,
-	txn *kv.Txn,
+	txn isql.Txn,
 	event logpb.EventPayload,
 	jobID int64,
 	payload jobspb.Payload,
 	user username.SQLUsername,
 	status jobs.Status,
 ) error {
-	event.CommonDetails().Timestamp = txn.ReadTimestamp().WallTime
+	event.CommonDetails().Timestamp = txn.KV().ReadTimestamp().WallTime
 	jobCommon, ok := event.(eventpb.EventWithCommonJobPayload)
 	if !ok {
 		return errors.AssertionFailedf("unknown event type: %T", event)
@@ -508,7 +519,7 @@ func InsertEventRecords(
 func insertEventRecords(
 	ctx context.Context,
 	execCfg *ExecutorConfig,
-	txn *kv.Txn,
+	txn isql.Txn,
 	depth int,
 	opts eventLogOptions,
 	entries ...logpb.EventPayload,
@@ -561,7 +572,7 @@ func insertEventRecords(
 	// ensure that the external logging only sees the event when the
 	// transaction commits.
 	if txn != nil && opts.dst.hasFlag(LogExternally) {
-		txn.AddCommitTrigger(func(ctx context.Context) {
+		txn.KV().AddCommitTrigger(func(ctx context.Context) {
 			for i := range entries {
 				log.StructuredEvent(ctx, entries[i])
 			}
@@ -573,8 +584,8 @@ func insertEventRecords(
 	if txn != nil && syncWrites {
 		// Yes, do it now.
 		query, args, otelEvents := prepareEventWrite(ctx, execCfg, entries)
-		txn.AddCommitTrigger(func(ctx context.Context) { sendEventsToObsService(ctx, execCfg, otelEvents) })
-		return writeToSystemEventsTable(ctx, execCfg.InternalExecutor, txn, len(entries), query, args)
+		txn.KV().AddCommitTrigger(func(ctx context.Context) { sendEventsToObsService(ctx, execCfg, otelEvents) })
+		return writeToSystemEventsTable(ctx, txn, len(entries), query, args)
 	}
 	// No: do them async.
 	// With txn: trigger async write at end of txn (no event logged if txn aborts).
@@ -582,7 +593,7 @@ func insertEventRecords(
 	if txn == nil {
 		asyncWriteToOtelAndSystemEventsTable(ctx, execCfg, entries)
 	} else {
-		txn.AddCommitTrigger(func(ctx context.Context) {
+		txn.KV().AddCommitTrigger(func(ctx context.Context) {
 			asyncWriteToOtelAndSystemEventsTable(ctx, execCfg, entries)
 		})
 	}
@@ -634,8 +645,8 @@ func asyncWriteToOtelAndSystemEventsTable(
 			for r := retry.Start(retryOpts); r.Next(); {
 				// Don't try too long to write if the system table is unavailable.
 				if err := contextutil.RunWithTimeout(ctx, "record-events", perAttemptTimeout, func(ctx context.Context) error {
-					return execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-						return writeToSystemEventsTable(ctx, execCfg.InternalExecutor, txn, len(entries), query, args)
+					return execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+						return writeToSystemEventsTable(ctx, txn, len(entries), query, args)
 					})
 				}); err != nil {
 					log.Ops.Warningf(ctx, "unable to save %d entries to system.eventlog: %v", len(entries), err)
@@ -734,14 +745,13 @@ VALUES($1, $2, $3, $4, 0)`
 }
 
 func writeToSystemEventsTable(
-	ctx context.Context,
-	ie *InternalExecutor,
-	txn *kv.Txn,
-	numEntries int,
-	query string,
-	args []interface{},
+	ctx context.Context, txn isql.Txn, numEntries int, query string, args []interface{},
 ) error {
-	rows, err := ie.Exec(ctx, "log-event", txn, query, args...)
+	rows, err := txn.ExecEx(
+		ctx, "log-event", txn.KV(),
+		sessiondata.NodeUserSessionDataOverride,
+		query, args...,
+	)
 	if err != nil {
 		return err
 	}

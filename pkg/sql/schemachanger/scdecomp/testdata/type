@@ -37,16 +37,19 @@ ElementState:
     descriptorId: 104
     privileges: "2"
     userName: admin
+    withGrantOption: "2"
   Status: PUBLIC
 - UserPrivileges:
     descriptorId: 104
     privileges: "2"
     userName: root
+    withGrantOption: "2"
   Status: PUBLIC
 - UserPrivileges:
     descriptorId: 104
     privileges: "512"
     userName: public
+    withGrantOption: "0"
   Status: PUBLIC
 - ObjectParent:
     objectId: 104
@@ -241,6 +244,8 @@ ElementState:
       usesTypeIds:
       - 104
       - 105
+    elementCreationMetadata:
+      in231OrLater: true
     familyId: 0
     isNullable: true
     isVirtual: false
@@ -269,6 +274,8 @@ ElementState:
     - 105
     columnId: 4
     computeExpr: null
+    elementCreationMetadata:
+      in231OrLater: true
     familyId: 0
     isNullable: true
     isVirtual: false
@@ -318,6 +325,8 @@ ElementState:
       usesTypeIds:
       - 106
       - 107
+    elementCreationMetadata:
+      in231OrLater: true
     familyId: 0
     isNullable: true
     isVirtual: true
@@ -344,6 +353,8 @@ ElementState:
     closedTypeIds: []
     columnId: 1
     computeExpr: null
+    elementCreationMetadata:
+      in231OrLater: true
     familyId: 0
     isNullable: false
     isVirtual: false
@@ -369,6 +380,8 @@ ElementState:
     closedTypeIds: []
     columnId: 4.294967294e+09
     computeExpr: null
+    elementCreationMetadata:
+      in231OrLater: true
     familyId: 0
     isNullable: true
     isVirtual: false
@@ -394,6 +407,8 @@ ElementState:
     closedTypeIds: []
     columnId: 4.294967295e+09
     computeExpr: null
+    elementCreationMetadata:
+      in231OrLater: true
     familyId: 0
     isNullable: true
     isVirtual: false
@@ -419,6 +434,8 @@ ElementState:
     closedTypeIds: []
     columnId: 5
     computeExpr: null
+    elementCreationMetadata:
+      in231OrLater: true
     familyId: 0
     isNullable: false
     isVirtual: false
@@ -439,6 +456,16 @@ ElementState:
       udtMetadata: null
       visibleType: 0
       width: 0
+  Status: PUBLIC
+- ColumnNotNull:
+    columnId: 1
+    indexIdForValidation: 0
+    tableId: 108
+  Status: PUBLIC
+- ColumnNotNull:
+    columnId: 5
+    indexIdForValidation: 0
+    tableId: 108
   Status: PUBLIC
 - IndexName:
     indexId: 1
@@ -546,11 +573,13 @@ ElementState:
     descriptorId: 108
     privileges: "2"
     userName: admin
+    withGrantOption: "2"
   Status: PUBLIC
 - UserPrivileges:
     descriptorId: 108
     privileges: "2"
     userName: root
+    withGrantOption: "2"
   Status: PUBLIC
 - ObjectParent:
     objectId: 108
@@ -595,16 +624,19 @@ ElementState:
     descriptorId: 109
     privileges: "2"
     userName: admin
+    withGrantOption: "2"
   Status: PUBLIC
 - UserPrivileges:
     descriptorId: 109
     privileges: "2"
     userName: root
+    withGrantOption: "2"
   Status: PUBLIC
 - UserPrivileges:
     descriptorId: 109
     privileges: "512"
     userName: public
+    withGrantOption: "0"
   Status: PUBLIC
 - ObjectParent:
     objectId: 109
@@ -859,6 +891,8 @@ ElementState:
     - 110
     columnId: 3
     computeExpr: null
+    elementCreationMetadata:
+      in231OrLater: true
     familyId: 0
     isNullable: true
     isVirtual: false
@@ -933,6 +967,8 @@ ElementState:
     - 109
     columnId: 2
     computeExpr: null
+    elementCreationMetadata:
+      in231OrLater: true
     familyId: 0
     isNullable: true
     isVirtual: false
@@ -996,6 +1032,8 @@ ElementState:
       referencedColumnIds: []
       usesSequenceIds: []
       usesTypeIds: []
+    elementCreationMetadata:
+      in231OrLater: true
     familyId: 0
     isNullable: true
     isVirtual: false
@@ -1059,6 +1097,8 @@ ElementState:
       referencedColumnIds: []
       usesSequenceIds: []
       usesTypeIds: []
+    elementCreationMetadata:
+      in231OrLater: true
     familyId: 0
     isNullable: true
     isVirtual: true
@@ -1117,6 +1157,8 @@ ElementState:
     closedTypeIds: []
     columnId: 1
     computeExpr: null
+    elementCreationMetadata:
+      in231OrLater: true
     familyId: 0
     isNullable: false
     isVirtual: false
@@ -1142,6 +1184,8 @@ ElementState:
     closedTypeIds: []
     columnId: 4.294967294e+09
     computeExpr: null
+    elementCreationMetadata:
+      in231OrLater: true
     familyId: 0
     isNullable: true
     isVirtual: false
@@ -1167,6 +1211,8 @@ ElementState:
     closedTypeIds: []
     columnId: 4.294967295e+09
     computeExpr: null
+    elementCreationMetadata:
+      in231OrLater: true
     familyId: 0
     isNullable: true
     isVirtual: false
@@ -1192,6 +1238,8 @@ ElementState:
     closedTypeIds: []
     columnId: 6
     computeExpr: null
+    elementCreationMetadata:
+      in231OrLater: true
     familyId: 0
     isNullable: false
     isVirtual: false
@@ -1222,6 +1270,8 @@ ElementState:
       - 2
       usesSequenceIds: []
       usesTypeIds: []
+    elementCreationMetadata:
+      in231OrLater: true
     familyId: 0
     isNullable: true
     isVirtual: true
@@ -1242,6 +1292,16 @@ ElementState:
       udtMetadata: null
       visibleType: 0
       width: 64
+  Status: PUBLIC
+- ColumnNotNull:
+    columnId: 1
+    indexIdForValidation: 0
+    tableId: 111
+  Status: PUBLIC
+- ColumnNotNull:
+    columnId: 6
+    indexIdForValidation: 0
+    tableId: 111
   Status: PUBLIC
 - IndexName:
     indexId: 1
@@ -1359,11 +1419,13 @@ ElementState:
     descriptorId: 111
     privileges: "2"
     userName: admin
+    withGrantOption: "2"
   Status: PUBLIC
 - UserPrivileges:
     descriptorId: 111
     privileges: "2"
     userName: root
+    withGrantOption: "2"
   Status: PUBLIC
 - ObjectParent:
     objectId: 111

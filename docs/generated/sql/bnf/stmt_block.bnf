@@ -642,6 +642,7 @@ drop_tenant_stmt ::=
 
 explainable_stmt ::=
 	preparable_stmt
+	| comment_stmt
 	| execute_stmt
 
 explain_option_list ::=
@@ -770,13 +771,13 @@ use_stmt ::=
 
 show_backup_stmt ::=
 	'SHOW' 'BACKUPS' 'IN' string_or_placeholder_opt_list
-	| 'SHOW' 'BACKUP' show_backup_details 'FROM' string_or_placeholder 'IN' string_or_placeholder_opt_list opt_with_options
-	| 'SHOW' 'BACKUP' string_or_placeholder 'IN' string_or_placeholder_opt_list opt_with_options
-	| 'SHOW' 'BACKUP' string_or_placeholder opt_with_options
-	| 'SHOW' 'BACKUP' 'SCHEMAS' string_or_placeholder opt_with_options
-	| 'SHOW' 'BACKUP' 'FILES' string_or_placeholder opt_with_options
-	| 'SHOW' 'BACKUP' 'RANGES' string_or_placeholder opt_with_options
-	| 'SHOW' 'BACKUP' 'VALIDATE' string_or_placeholder opt_with_options
+	| 'SHOW' 'BACKUP' show_backup_details 'FROM' string_or_placeholder 'IN' string_or_placeholder_opt_list opt_with_show_backup_options
+	| 'SHOW' 'BACKUP' string_or_placeholder 'IN' string_or_placeholder_opt_list opt_with_show_backup_options
+	| 'SHOW' 'BACKUP' string_or_placeholder opt_with_show_backup_options
+	| 'SHOW' 'BACKUP' 'SCHEMAS' string_or_placeholder opt_with_show_backup_options
+	| 'SHOW' 'BACKUP' 'FILES' string_or_placeholder opt_with_show_backup_options
+	| 'SHOW' 'BACKUP' 'RANGES' string_or_placeholder opt_with_show_backup_options
+	| 'SHOW' 'BACKUP' 'VALIDATE' string_or_placeholder opt_with_show_backup_options
 
 show_columns_stmt ::=
 	'SHOW' 'COLUMNS' 'FROM' table_name with_comment
@@ -916,12 +917,9 @@ show_tables_stmt ::=
 	| 'SHOW' 'TABLES' with_comment
 
 show_tenant_stmt ::=
-	'SHOW' 'TENANTS'
-	| 'SHOW' 'TENANT_ALL' 'ALL'
-	| 'SHOW' 'TENANTS' 'WITH' 'REPLICATION' 'STATUS'
-	| 'SHOW' 'TENANT_ALL' 'ALL' 'WITH' 'REPLICATION' 'STATUS'
-	| 'SHOW' 'TENANT' tenant_spec
-	| 'SHOW' 'TENANT' tenant_spec 'WITH' 'REPLICATION' 'STATUS'
+	'SHOW' 'TENANTS' opt_show_tenant_options
+	| 'SHOW' 'TENANT_ALL' 'ALL' opt_show_tenant_options
+	| 'SHOW' 'TENANT' tenant_spec opt_show_tenant_options
 
 show_trace_stmt ::=
 	'SHOW' opt_compact 'TRACE' 'FOR' 'SESSION'
@@ -1012,6 +1010,7 @@ unreserved_keyword ::=
 	| 'ALTER'
 	| 'ALWAYS'
 	| 'ASENSITIVE'
+	| 'AS_JSON'
 	| 'AT'
 	| 'ATOMIC'
 	| 'ATTRIBUTE'
@@ -1030,8 +1029,11 @@ unreserved_keyword ::=
 	| 'CALLED'
 	| 'CANCEL'
 	| 'CANCELQUERY'
+	| 'CAPABILITIES'
+	| 'CAPABILITY'
 	| 'CASCADE'
 	| 'CHANGEFEED'
+	| 'CHECK_FILES'
 	| 'CLOSE'
 	| 'CLUSTER'
 	| 'COLUMNS'
@@ -1069,7 +1071,9 @@ unreserved_keyword ::=
 	| 'DATABASES'
 	| 'DAY'
 	| 'DEALLOCATE'
+	| 'DEBUG_IDS'
 	| 'DEBUG_PAUSE_ON'
+	| 'DEBUG_DUMP_METADATA_SST'
 	| 'DECLARE'
 	| 'DELETE'
 	| 'DEFAULTS'
@@ -1087,6 +1091,7 @@ unreserved_keyword ::=
 	| 'ENCODING'
 	| 'ENCRYPTED'
 	| 'ENCRYPTION_PASSPHRASE'
+	| 'ENCRYPTION_INFO_DIR'
 	| 'ENUM'
 	| 'ENUMS'
 	| 'ESCAPE'
@@ -1337,11 +1342,13 @@ unreserved_keyword ::=
 	| 'SEQUENCE'
 	| 'SEQUENCES'
 	| 'SERVER'
+	| 'SERVICE'
 	| 'SESSION'
 	| 'SESSIONS'
 	| 'SET'
 	| 'SETS'
 	| 'SHARE'
+	| 'SHARED'
 	| 'SHOW'
 	| 'SIMPLE'
 	| 'SKIP'
@@ -1360,6 +1367,7 @@ unreserved_keyword ::=
 	| 'STATEMENTS'
 	| 'STATISTICS'
 	| 'STDIN'
+	| 'STOP'
 	| 'STORAGE'
 	| 'STORE'
 	| 'STORED'
@@ -1587,6 +1595,8 @@ alter_database_stmt ::=
 	| alter_database_drop_region_stmt
 	| alter_database_survival_goal_stmt
 	| alter_database_primary_region_stmt
+	| alter_database_placement_stmt
+	| alter_database_set_stmt
 	| alter_database_add_super_region
 	| alter_database_alter_super_region
 	| alter_database_drop_super_region
@@ -1668,8 +1678,8 @@ for_schedules_clause ::=
 	| 'FOR' 'SCHEDULE' a_expr
 
 create_database_stmt ::=
-	'CREATE' 'DATABASE' database_name opt_with opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause opt_connection_limit opt_primary_region_clause opt_regions_list opt_survival_goal_clause opt_owner_clause opt_super_region_clause opt_secondary_region_clause
-	| 'CREATE' 'DATABASE' 'IF' 'NOT' 'EXISTS' database_name opt_with opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause opt_connection_limit opt_primary_region_clause opt_regions_list opt_survival_goal_clause opt_super_region_clause opt_secondary_region_clause
+	'CREATE' 'DATABASE' database_name opt_with opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause opt_connection_limit opt_primary_region_clause opt_regions_list opt_survival_goal_clause opt_placement_clause opt_owner_clause opt_super_region_clause opt_secondary_region_clause
+	| 'CREATE' 'DATABASE' 'IF' 'NOT' 'EXISTS' database_name opt_with opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause opt_connection_limit opt_primary_region_clause opt_regions_list opt_survival_goal_clause opt_placement_clause opt_super_region_clause opt_secondary_region_clause
 
 create_index_stmt ::=
 	'CREATE' opt_unique 'INDEX' opt_concurrently opt_index_name 'ON' table_name opt_index_access_method '(' index_params ')' opt_hash_sharded opt_storing opt_partition_by_index opt_with_storage_parameter_list opt_where_clause opt_index_visible
@@ -1896,6 +1906,11 @@ show_backup_details ::=
 	| 'RANGES'
 	| 'VALIDATE'
 
+opt_with_show_backup_options ::=
+	'WITH' show_backup_options_list
+	| 'WITH' 'OPTIONS' '(' show_backup_options_list ')'
+	| 
+
 with_comment ::=
 	'WITH' 'COMMENT'
 	| 
@@ -1934,6 +1949,9 @@ statements_or_queries ::=
 
 opt_show_ranges_options ::=
 	'WITH' show_ranges_options
+
+opt_show_tenant_options ::=
+	'WITH' show_tenant_options
 
 opt_compact ::=
 	'COMPACT'
@@ -2142,6 +2160,12 @@ alter_database_primary_region_stmt ::=
 	'ALTER' 'DATABASE' database_name primary_region_clause
 	| 'ALTER' 'DATABASE' database_name 'SET' primary_region_clause
 
+alter_database_placement_stmt ::=
+	'ALTER' 'DATABASE' database_name placement_clause
+
+alter_database_set_stmt ::=
+	'ALTER' 'DATABASE' database_name set_or_reset_clause
+
 alter_database_add_super_region ::=
 	'ALTER' 'DATABASE' database_name 'ADD' 'SUPER' 'REGION' name 'VALUES' name_list
 
@@ -2306,6 +2330,10 @@ opt_regions_list ::=
 
 opt_survival_goal_clause ::=
 	survival_goal_clause
+	| 
+
+opt_placement_clause ::=
+	placement_clause
 	| 
 
 opt_owner_clause ::=
@@ -2624,6 +2652,9 @@ extra_var_value ::=
 	'ON'
 	| cockroachdb_extra_reserved_keyword
 
+show_backup_options_list ::=
+	( show_backup_options ) ( ( ',' show_backup_options ) )*
+
 targets_roles ::=
 	'ROLE' role_spec_list
 	| 'SCHEMA' schema_name_list
@@ -2633,6 +2664,9 @@ targets_roles ::=
 
 show_ranges_options ::=
 	( 'TABLES' | 'INDEXES' | 'DETAILS' | 'KEYS' | 'EXPLAIN' ) ( ( ',' 'TABLES' | ',' 'INDEXES' | ',' 'DETAILS' | ',' 'EXPLAIN' | ',' 'KEYS' ) )*
+
+show_tenant_options ::=
+	( 'REPLICATION' 'STATUS' | 'CAPABILITIES' ) ( ( ',' 'REPLICATION' 'STATUS' | ',' 'CAPABILITIES' ) )*
 
 partition ::=
 	'PARTITION' partition_name
@@ -2806,6 +2840,10 @@ survival_goal_clause ::=
 
 primary_region_clause ::=
 	'PRIMARY' 'REGION' opt_equal region_name
+
+placement_clause ::=
+	'PLACEMENT' 'RESTRICTED'
+	| 'PLACEMENT' 'DEFAULT'
 
 secondary_region_clause ::=
 	'SECONDARY' 'REGION' opt_equal region_name
@@ -3032,8 +3070,7 @@ bare_col_label ::=
 	| bare_label_keywords
 
 common_table_expr ::=
-	table_alias_name opt_col_def_list_no_types 'AS' '(' preparable_stmt ')'
-	| table_alias_name opt_col_def_list_no_types 'AS' materialize_clause '(' preparable_stmt ')'
+	table_alias_name opt_col_def_list_no_types 'AS' materialize_clause '(' preparable_stmt ')'
 
 index_flags_param_list ::=
 	( index_flags_param ) ( ( ',' index_flags_param ) )*
@@ -3156,6 +3193,17 @@ for_locking_item ::=
 
 var_list ::=
 	( var_value ) ( ( ',' var_value ) )*
+
+show_backup_options ::=
+	'AS_JSON'
+	| 'CHECK_FILES'
+	| 'DEBUG_IDS'
+	| 'INCREMENTAL_LOCATION' '=' string_or_placeholder_opt_list
+	| 'KMS' '=' string_or_placeholder_opt_list
+	| 'ENCRYPTION_PASSPHRASE' '=' string_or_placeholder
+	| 'PRIVILEGES'
+	| 'ENCRYPTION_INFO_DIR' '=' string_or_placeholder
+	| 'DEBUG_DUMP_METADATA_SST'
 
 schema_wildcard ::=
 	wildcard_pattern
@@ -3358,11 +3406,16 @@ family_name ::=
 	name
 
 bare_label_keywords ::=
-	'ATOMIC'
+	'AS_JSON'
+	| 'ATOMIC'
 	| 'CALLED'
 	| 'COST'
+	| 'CHECK_FILES'
+	| 'DEBUG_IDS'
+	| 'DEBUG_DUMP_METADATA_SST'
 	| 'DEFINER'
 	| 'DEPENDS'
+	| 'ENCRYPTION_INFO_DIR'
 	| 'EXTERNAL'
 	| 'IMMUTABLE'
 	| 'INPUT'
@@ -3385,6 +3438,7 @@ opt_col_def_list_no_types ::=
 materialize_clause ::=
 	'MATERIALIZED'
 	| 'NOT' 'MATERIALIZED'
+	| 
 
 index_flags_param ::=
 	'FORCE_INDEX' '=' index_name

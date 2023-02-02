@@ -17,11 +17,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/exprutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -149,15 +149,18 @@ func ingestionPlanHook(
 				sourceTenant, dstTenantName, dstTenantID)
 		}
 
-		// Create a new tenant for the replication stream
+		// Create a new tenant for the replication stream.
 		jobID := p.ExecCfg().JobRegistry.MakeJobID()
-		tenantInfo := &descpb.TenantInfoWithUsage{
-			TenantInfo: descpb.TenantInfo{
-				// dstTenantID may be zero which will cause auto-allocation.
-				ID:                     dstTenantID,
-				State:                  descpb.TenantInfo_ADD,
-				Name:                   roachpb.TenantName(dstTenantName),
+		tenantInfo := &mtinfopb.TenantInfoWithUsage{
+			ProtoInfo: mtinfopb.ProtoInfo{
 				TenantReplicationJobID: jobID,
+			},
+			SQLInfo: mtinfopb.SQLInfo{
+				// dstTenantID may be zero which will cause auto-allocation.
+				ID:          dstTenantID,
+				DataState:   mtinfopb.DataStateAdd,
+				ServiceMode: mtinfopb.ServiceModeNone,
+				Name:        roachpb.TenantName(dstTenantName),
 			},
 		}
 
@@ -165,7 +168,12 @@ func ingestionPlanHook(
 		if err != nil {
 			return err
 		}
-		destinationTenantID, err := sql.CreateTenantRecord(ctx, p.ExecCfg(), p.Txn(), tenantInfo, initialTenantZoneConfig)
+		destinationTenantID, err := sql.CreateTenantRecord(
+			ctx, p.ExecCfg().Codec, p.ExecCfg().Settings,
+			p.InternalSQLTxn(),
+			p.ExecCfg().SpanConfigKVAccessor.WithTxn(ctx, p.Txn()),
+			tenantInfo, initialTenantZoneConfig,
+		)
 		if err != nil {
 			return err
 		}
@@ -210,12 +218,10 @@ func ingestionPlanHook(
 			Details:     streamIngestionDetails,
 		}
 
-		_, err = p.ExecCfg().JobRegistry.CreateAdoptableJobWithTxn(ctx, jr, jobID, p.Txn())
-		if err != nil {
-			return err
-		}
-
-		return nil
+		_, err = p.ExecCfg().JobRegistry.CreateAdoptableJobWithTxn(
+			ctx, jr, jobID, p.InternalSQLTxn(),
+		)
+		return err
 	}
 
 	return fn, nil, nil, false, nil

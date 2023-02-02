@@ -110,11 +110,20 @@ func (p Plan) explain(style treeprinter.Style) (string, error) {
 		if p.InRollback {
 			sb.WriteString("rolling back ")
 		}
-		for _, stmt := range p.Statements {
-			sb.WriteString(strings.TrimSuffix(stmt.RedactedStatement, ";"))
-			sb.WriteString("; ")
+		lastStmt := p.Statements[len(p.Statements)-1].RedactedStatement
+		sb.WriteString(strings.TrimSuffix(lastStmt, ";"))
+		if len(p.Statements) > 1 {
+			sb.WriteString("; following ")
+			for i, stmt := range p.Statements[:len(p.Statements)-1] {
+				if i > 0 {
+					sb.WriteString("; ")
+				}
+				sb.WriteString(strings.TrimSuffix(stmt.RedactedStatement, ";"))
+			}
 		}
+		sb.WriteString(";")
 	}
+
 	root := tp.Child(sb.String())
 	var pn treeprinter.Node
 	for i, s := range p.Stages {
@@ -163,7 +172,7 @@ func (p Plan) explainTargets(s scstage.Stage, sn treeprinter.Node, style treepri
 			targetTypeMap.Set(k, numTransitions+1)
 		}
 		// Collect rules affecting this element's status transitions.
-		if style == treeprinter.BulletStyle {
+		if style == treeprinter.BulletStyle && !s.IsResetPreCommitStage() {
 			n, nodeFound := p.Graph.GetNode(t, before)
 			if !nodeFound {
 				return errors.Errorf("could not find node [[%s, %s], %s] in graph",

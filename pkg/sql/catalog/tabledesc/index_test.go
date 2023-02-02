@@ -98,7 +98,7 @@ func TestIndexInterface(t *testing.T) {
 	// are in the correct order.
 	indexes := make([]catalog.Index, len(indexNames))
 	for i, name := range indexNames {
-		idx, err := tableI.FindIndexWithName(name)
+		idx, err := catalog.MustFindIndexByName(tableI, name)
 		require.NoError(t, err)
 		require.Equal(t, name, idx.GetName())
 		require.Equal(t, i, idx.Ordinal())
@@ -235,7 +235,7 @@ func TestIndexInterface(t *testing.T) {
 
 	// Check that finding indexes by ID is correct.
 	for _, idx := range indexes {
-		found, err := tableI.FindIndexWithID(idx.GetID())
+		found, err := catalog.MustFindIndexByID(tableI, idx.GetID())
 		require.NoError(t, err)
 		require.Equalf(t, idx.GetID(), found.GetID(),
 			"mismatched IDs for index '%s'", idx.GetName())

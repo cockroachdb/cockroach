@@ -275,7 +275,7 @@ type RangeStatsFetcher interface {
 	RangeStats(ctx context.Context, keys ...roachpb.Key) ([]*roachpb.RangeStatsResponse, error)
 }
 
-var _ tree.ParseTimeContext = &Context{}
+var _ tree.ParseContext = &Context{}
 
 // ConsistencyCheckRunner is an interface embedded in eval.Context used by
 // crdb_internal.check_consistency.
@@ -570,7 +570,7 @@ func TimestampToInexactDTimestamp(ts hlc.Timestamp) *tree.DTimestamp {
 	return tree.MustMakeDTimestamp(timeutil.Unix(0, ts.WallTime), time.Microsecond)
 }
 
-// GetRelativeParseTime implements ParseTimeContext.
+// GetRelativeParseTime implements ParseContext.
 func (ec *Context) GetRelativeParseTime() time.Time {
 	ret := ec.TxnTimestamp
 	if ret.IsZero() {
@@ -655,6 +655,11 @@ func (ec *Context) GetIntervalStyle() duration.IntervalStyle {
 		return duration.IntervalStyle_POSTGRES
 	}
 	return ec.SessionData().GetIntervalStyle()
+}
+
+// GetCollationEnv returns the collation env.
+func (ec *Context) GetCollationEnv() *tree.CollationEnvironment {
+	return &ec.CollationEnv
 }
 
 // GetDateStyle returns the session date style.
@@ -775,4 +780,9 @@ type StreamIngestManager interface {
 		streamIngestionDetails jobspb.StreamIngestionDetails,
 		jobProgress jobspb.Progress,
 	) (*streampb.StreamIngestionStats, error)
+
+	GetReplicationStatsAndStatus(
+		ctx context.Context,
+		ingestionJobID jobspb.JobID,
+	) (*streampb.StreamIngestionStats, string, error)
 }

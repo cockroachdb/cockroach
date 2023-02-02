@@ -917,24 +917,31 @@ var _ ErrorDetailInterface = &WriteTooOldError{}
 var _ transactionRestartError = &WriteTooOldError{}
 
 // NewReadWithinUncertaintyIntervalError creates a new uncertainty retry error.
-// The read and existing timestamps as well as the txn are purely informational
-// and used for formatting the error message.
-// TODO(nvanbenschoten): change localUncertaintyLimit to hlc.ClockTimestamp.
-// TODO(nvanbenschoten): change existingTS to versionTs.
-// TODO(nvanbenschoten): add localTs and include in error string.
+// The read and value timestamps as well as the txn are purely informational and
+// used for formatting the error message.
 func NewReadWithinUncertaintyIntervalError(
-	readTS, existingTS, localUncertaintyLimit hlc.Timestamp, txn *Transaction,
+	readTS hlc.Timestamp,
+	localUncertaintyLimit hlc.ClockTimestamp,
+	txn *Transaction,
+	valueTS hlc.Timestamp,
+	localTS hlc.ClockTimestamp,
 ) *ReadWithinUncertaintyIntervalError {
-	rwue := &ReadWithinUncertaintyIntervalError{
-		ReadTimestamp:         readTS,
-		ExistingTimestamp:     existingTS,
-		LocalUncertaintyLimit: localUncertaintyLimit,
-	}
+	var globalUncertaintyLimit hlc.Timestamp
+	var observedTSs []ObservedTimestamp
 	if txn != nil {
-		rwue.GlobalUncertaintyLimit = txn.GlobalUncertaintyLimit
-		rwue.ObservedTimestamps = txn.ObservedTimestamps
+		globalUncertaintyLimit = txn.GlobalUncertaintyLimit
+		observedTSs = txn.ObservedTimestamps
 	}
-	return rwue
+	return &ReadWithinUncertaintyIntervalError{
+		// Information about the reader.
+		ReadTimestamp:          readTS,
+		LocalUncertaintyLimit:  localUncertaintyLimit,
+		GlobalUncertaintyLimit: globalUncertaintyLimit,
+		ObservedTimestamps:     observedTSs,
+		// Information about the uncertain value.
+		ValueTimestamp: valueTS,
+		LocalTimestamp: localTS,
+	}
 }
 
 // SafeFormat implements redact.SafeFormatter.
@@ -943,18 +950,23 @@ func (e *ReadWithinUncertaintyIntervalError) SafeFormat(s redact.SafePrinter, _ 
 }
 
 func (e *ReadWithinUncertaintyIntervalError) printError(p Printer) {
+	var localTsStr redact.RedactableString
+	if e.ValueTimestamp != e.LocalTimestamp.ToTimestamp() {
+		localTsStr = redact.Sprintf(" (local=%s)", e.LocalTimestamp)
+	}
+
 	p.Printf("ReadWithinUncertaintyIntervalError: read at time %s encountered "+
-		"previous write with future timestamp %s within uncertainty interval `t <= "+
-		"(local=%v, global=%v)`; "+
+		"previous write with future timestamp %s%s within uncertainty interval `t <= "+
+		"(local=%s, global=%s)`; "+
 		"observed timestamps: ",
-		e.ReadTimestamp, e.ExistingTimestamp, e.LocalUncertaintyLimit, e.GlobalUncertaintyLimit)
+		e.ReadTimestamp, e.ValueTimestamp, localTsStr, e.LocalUncertaintyLimit, e.GlobalUncertaintyLimit)
 
 	p.Printf("[")
 	for i, ot := range observedTimestampSlice(e.ObservedTimestamps) {
 		if i > 0 {
 			p.Printf(" ")
 		}
-		p.Printf("{%d %v}", ot.NodeID, ot.Timestamp)
+		p.Printf("{%d %s}", ot.NodeID, ot.Timestamp)
 	}
 	p.Printf("]")
 }
@@ -987,7 +999,7 @@ func (e *ReadWithinUncertaintyIntervalError) RetryTimestamp() hlc.Timestamp {
 	// If the reader encountered a newer write within the uncertainty interval,
 	// we advance the txn's timestamp just past the uncertain value's timestamp.
 	// This ensures that we read above the uncertain value on a retry.
-	ts := e.ExistingTimestamp.Next()
+	ts := e.ValueTimestamp.Next()
 	// In addition to advancing past the uncertainty value's timestamp, we also
 	// advance the txn's timestamp up to the local uncertainty limit on the node
 	// which hit the error. This ensures that no future read after the retry on
@@ -1010,7 +1022,7 @@ func (e *ReadWithinUncertaintyIntervalError) RetryTimestamp() hlc.Timestamp {
 	// global uncertainty limit to determine uncertainty (see IsUncertain). In
 	// such cases, we're ok advancing just past the value's timestamp. Either
 	// way, we won't see the same value in our uncertainty interval on a retry.
-	ts.Forward(e.LocalUncertaintyLimit)
+	ts.Forward(e.LocalUncertaintyLimit.ToTimestamp())
 	return ts
 }
 

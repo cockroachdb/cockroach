@@ -799,6 +799,7 @@ USE t;
 	for _, rbrChange := range regionalByRowChanges {
 		for _, regionChange := range regionChanges {
 			t.Run(fmt.Sprintf("setup %s executing %s with racing %s", rbrChange.setup, rbrChange.cmd, regionChange.cmd), func(t *testing.T) {
+				defer log.Scope(t).Close(t)
 				interruptStartCh := make(chan struct{})
 				interruptEndCh := make(chan struct{})
 				performInterrupt := false
@@ -854,6 +855,7 @@ USE t;
 	for _, regionChange := range regionChanges {
 		for _, rbrChange := range regionalByRowChanges {
 			t.Run(fmt.Sprintf("setup %s executing %s with racing %s", rbrChange.setup, regionChange.cmd, rbrChange.cmd), func(t *testing.T) {
+				defer log.Scope(t).Close(t)
 				interruptStartCh := make(chan struct{})
 				interruptEndCh := make(chan struct{})
 				performInterrupt := false

@@ -104,6 +104,10 @@ message SessionData {
   // ColIndexJoin operator (when it is using the Streamer API) to construct a
   // single lookup KV batch.
   int64 index_join_streamer_batch_size = 24;
+  // DirectColumnarScansEnabled indicates whether the COL_BATCH_RESPONSE scan
+  // format should be used for ScanRequests and ReverseScanRequests whenever
+  // possible.
+  bool direct_columnar_scans_enabled = 25;
 }
 
 // DataConversionConfig contains the parameters that influence the output

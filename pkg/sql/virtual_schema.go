@@ -142,6 +142,9 @@ type virtualSchemaTable struct {
 type virtualSchemaView struct {
 	schema        string
 	resultColumns colinfo.ResultColumns
+
+	// comment represents comment of virtual schema view.
+	comment string
 }
 
 // getSchema is part of the virtualSchemaDef interface.
@@ -366,7 +369,7 @@ func (v virtualSchemaView) initVirtualTableDesc(
 
 // getComment is part of the virtualSchemaDef interface.
 func (v virtualSchemaView) getComment() string {
-	return ""
+	return v.comment
 }
 
 // isUnimplemented is part of the virtualSchemaDef interface.

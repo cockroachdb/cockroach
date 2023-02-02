@@ -70,19 +70,29 @@ $item
 =>
 $input
 
-# InlineAnyWithScan matches on an ANY or NOT ANY expression which was generated
-# from expressions like `column IN (WithScan)` or `column NOT IN (WithScan)`,
-# where the WITH clause definition was normalized into a VALUES clause with
-# constants or placeholders. The `WithScan` is replaced with the VALUES clause
-# in order to avoid a join and can potentially enable a constrained index scan.
-[InlineAnyWithScan, Normalize]
+# InlineAnyWithScanOfValues matches on an ANY or NOT ANY expression which was
+# generated from expressions like `column IN (WithScan)` or `column NOT IN
+# (WithScan)`, where the WITH clause definition was normalized into a VALUES
+# clause with constants or placeholders. Inlining the Values expression allows
+# other optimizations to trigger.
+[InlineAnyWithScanOfValues, Normalize]
 (Any
     (WithScan $withScanPrivate:*)
-    $scalar:* & (CanInlineWithScan $withScanPrivate $scalar)
+    $scalar:* &
+        (Let ($values $ok):(BoundValues $withScanPrivate) $ok) &
+        (CanInlineWithScanOfValues
+            $values
+            $withScanPrivate
+            $scalar
+        )
     $anyPrivate:*
 )
 =>
-(Any (InlineWithScan $withScanPrivate) $scalar $anyPrivate)
+(Any
+    (InlineWithScanOfValues $values $withScanPrivate)
+    $scalar
+    $anyPrivate
+)
 
 # NormalizeInConst ensures that the In operator's tuple operand is sorted with
 # duplicates removed (since duplicates do not change the result).
@@ -206,6 +216,40 @@ $input
     $subqueryPrivate
 )
 
+# ConvertUncorrelatedExistsToCoalesceSubquery converts an uncorrelated Exists
+# expression to a Coalesce expression with a Subquery. For example:
+#
+#   SELECT EXISTS (
+#     SELECT * FROM b
+#   ) FROM a
+#   =>
+#   SELECT COALESCE(
+#     (SELECT true FROM (SELECT * FROM b) LIMIT 1),
+#     false
+#   ) FROM a
+#
+# This transformation simplifies execbuilder and execution code - we do not need
+# a special execution mode for uncorrelated Exists.
+#
+# Note: We can use an empty ordering for the Limit because Exists never have an
+# ordering.
+[ConvertUncorrelatedExistsToCoalesceSubquery, Normalize]
+(Exists $input:* & ^(HasOuterCols $input) $subqueryPrivate:*)
+=>
+(Coalesce
+    [
+        (Subquery
+            (Project
+                (Limit $input (IntConst 1) (EmptyOrdering))
+                [ (ProjectionsItem (True) (MakeBoolCol)) ]
+                (MakeEmptyColSet)
+            )
+            $subqueryPrivate
+        )
+        (False)
+    ]
+)
+
 # IntroduceExistsLimit inserts a LIMIT 1 "under" Exists so as to save resources
 # to make the EXISTS determination.
 #
@@ -219,6 +263,9 @@ $input
 # when a general-purpose apply operator is supported - in that case it can be
 # definitely worthwhile pushing down a LIMIT 1 to limit the amount of work done
 # on every row.)
+#
+# TODO(mgartner): This rule should never be triggered because
+# ConvertUncorrelatedExistsToCoalesceSubquery should apply first. Remove it.
 [IntroduceExistsLimit, Normalize]
 (Exists
     $input:* & ^(HasOuterCols $input) & ^(HasZeroOrOneRow $input)

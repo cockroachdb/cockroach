@@ -48,8 +48,8 @@ go_test(
     deps = [
         "//pkg/col/coldatatestutils",
         "//pkg/sql/colconv",
-        "//pkg/sql/randgen",
         "//pkg/sql/types",
+        "//pkg/util",
         "//pkg/util/leaktest",
         "//pkg/util/randutil",
         "@com_github_cockroachdb_errors//:errors",

@@ -39,6 +39,10 @@ public  role_options                     table     NULL  NULL
 public  scheduled_jobs                   table     NULL  NULL
 public  settings                         table     NULL  NULL
 public  span_configurations              table     NULL  NULL
+public  span_stats_buckets               table     NULL  NULL
+public  span_stats_samples               table     NULL  NULL
+public  span_stats_tenant_boundaries     table     NULL  NULL
+public  span_stats_unique_keys           table     NULL  NULL
 public  sql_instances                    table     NULL  NULL
 public  sqlliveness                      table     NULL  NULL
 public  statement_bundle_chunks          table     NULL  NULL
@@ -86,6 +90,10 @@ public  role_options                     table     NULL  NULL
 public  scheduled_jobs                   table     NULL  NULL
 public  settings                         table     NULL  NULL
 public  span_count                       table     NULL  NULL
+public  span_stats_buckets               table     NULL  NULL
+public  span_stats_samples               table     NULL  NULL
+public  span_stats_tenant_boundaries     table     NULL  NULL
+public  span_stats_unique_keys           table     NULL  NULL
 public  sql_instances                    table     NULL  NULL
 public  sqlliveness                      table     NULL  NULL
 public  statement_bundle_chunks          table     NULL  NULL
@@ -106,26 +114,6 @@ skipif config 3node-tenant-default-configs
 query I rowsort
 SELECT id FROM system.descriptor
 ----
-1
-3
-4
-5
-6
-7
-8
-11
-12
-13
-14
-15
-19
-20
-21
-23
-24
-25
-26
-27
 28
 30
 31
@@ -136,6 +124,21 @@ SELECT id FROM system.descriptor
 36
 37
 39
+57
+100
+101
+102
+103
+104
+105
+11
+1
+3
+4
+5
+6
+7
+8
 40
 41
 42
@@ -149,12 +152,21 @@ SELECT id FROM system.descriptor
 51
 52
 53
-100
-101
-102
-103
-104
-105
+54
+55
+56
+12
+13
+14
+15
+19
+20
+21
+23
+24
+25
+26
+27
 
 onlyif config 3node-tenant-default-configs
 query I rowsort
@@ -200,6 +212,10 @@ SELECT id FROM system.descriptor
 51
 52
 53
+54
+55
+56
+57
 100
 101
 102
@@ -234,10 +250,10 @@ descriptor  BYTES  true   NULL  ·  {primary}  false
 query TTBTTTB
 SHOW COLUMNS FROM system.users
 ----
-username        STRING  false  NULL   ·  {primary,users_user_id_idx}  false
-hashedPassword  BYTES   true   NULL   ·  {primary}                    false
-isRole          BOOL    false  false  ·  {primary}                    false
-user_id         OID     false  NULL   ·  {primary,users_user_id_idx}  false
+username        STRING  false  NULL  ·  {primary,users_user_id_idx}  false
+hashedPassword  BYTES   true   NULL  ·  {primary}                    false
+isRole          BOOL    false  f     ·  {primary}                    false
+user_id         OID     false  NULL  ·  {primary,users_user_id_idx}  false
 
 query TTBTTTB
 SHOW COLUMNS FROM system.zones
@@ -284,27 +300,27 @@ lastUpdated  TIMESTAMP  false  NULL  ·  {primary}  false
 query TTBTTTB
 SHOW COLUMNS FROM system.jobs
 ----
-id                 INT8       false  unique_rowid()     ·  {jobs_created_by_type_created_by_id_idx,jobs_job_type_idx,jobs_run_stats_idx,jobs_status_created_idx,primary}  false
-status             STRING     false  NULL               ·  {jobs_created_by_type_created_by_id_idx,jobs_run_stats_idx,jobs_status_created_idx,primary}                    false
-created            TIMESTAMP  false  now():::TIMESTAMP  ·  {jobs_run_stats_idx,jobs_status_created_idx,primary}                                                           false
-payload            BYTES      false  NULL               ·  {primary}                                                                                                      false
-progress           BYTES      true   NULL               ·  {primary}                                                                                                      false
-created_by_type    STRING     true   NULL               ·  {jobs_created_by_type_created_by_id_idx,primary}                                                               false
-created_by_id      INT8       true   NULL               ·  {jobs_created_by_type_created_by_id_idx,primary}                                                               false
-claim_session_id   BYTES      true   NULL               ·  {jobs_run_stats_idx,primary}                                                                                   false
-claim_instance_id  INT8       true   NULL               ·  {jobs_run_stats_idx,primary}                                                                                   false
-num_runs           INT8       true   NULL               ·  {jobs_run_stats_idx,primary}                                                                                   false
-last_run           TIMESTAMP  true   NULL               ·  {jobs_run_stats_idx,primary}                                                                                   false
-job_type           STRING     true   NULL               ·  {jobs_job_type_idx,primary}                                                                                    false
+id                 INT8       false  unique_rowid()  ·  {jobs_created_by_type_created_by_id_idx,jobs_job_type_idx,jobs_run_stats_idx,jobs_status_created_idx,primary}  false
+status             STRING     false  NULL            ·  {jobs_created_by_type_created_by_id_idx,jobs_run_stats_idx,jobs_status_created_idx,primary}                    false
+created            TIMESTAMP  false  now()           ·  {jobs_run_stats_idx,jobs_status_created_idx,primary}                                                           false
+payload            BYTES      false  NULL            ·  {primary}                                                                                                      false
+progress           BYTES      true   NULL            ·  {primary}                                                                                                      false
+created_by_type    STRING     true   NULL            ·  {jobs_created_by_type_created_by_id_idx,primary}                                                               false
+created_by_id      INT8       true   NULL            ·  {jobs_created_by_type_created_by_id_idx,primary}                                                               false
+claim_session_id   BYTES      true   NULL            ·  {jobs_run_stats_idx,primary}                                                                                   false
+claim_instance_id  INT8       true   NULL            ·  {jobs_run_stats_idx,primary}                                                                                   false
+num_runs           INT8       true   NULL            ·  {jobs_run_stats_idx,primary}                                                                                   false
+last_run           TIMESTAMP  true   NULL            ·  {jobs_run_stats_idx,primary}                                                                                   false
+job_type           STRING     true   NULL            ·  {jobs_job_type_idx,primary}                                                                                    false
 
 
 query TTBTTTB
 SHOW COLUMNS FROM system.settings
 ----
-name         STRING     false  NULL               ·  {primary}  false
-value        STRING     false  NULL               ·  {primary}  false
-lastUpdated  TIMESTAMP  false  now():::TIMESTAMP  ·  {primary}  false
-valueType    STRING     true   NULL               ·  {primary}  false
+name         STRING     false  NULL   ·  {primary}  false
+value        STRING     false  NULL   ·  {primary}  false
+lastUpdated  TIMESTAMP  false  now()  ·  {primary}  false
+valueType    STRING     true   NULL   ·  {primary}  false
 
 query TTBTTTB
 SHOW COLUMNS FROM system.role_members
@@ -312,8 +328,8 @@ SHOW COLUMNS FROM system.role_members
 role       STRING  false  NULL  ·  {primary,role_members_member_id_idx,role_members_member_idx,role_members_role_id_idx,role_members_role_id_member_id_key,role_members_role_idx}  false
 member     STRING  false  NULL  ·  {primary,role_members_member_id_idx,role_members_member_idx,role_members_role_id_idx,role_members_role_id_member_id_key,role_members_role_idx}  false
 isAdmin    BOOL    false  NULL  ·  {primary}                                                                                                                                       false
-role_id    OID     true   NULL  ·  {primary,role_members_role_id_idx,role_members_role_id_member_id_key}                                                                           false
-member_id  OID     true   NULL  ·  {primary,role_members_member_id_idx,role_members_role_id_member_id_key}                                                                         false
+role_id    OID     false  NULL  ·  {primary,role_members_role_id_idx,role_members_role_id_member_id_key}                                                                           false
+member_id  OID     false  NULL  ·  {primary,role_members_member_id_idx,role_members_role_id_member_id_key}                                                                         false
 
 # Verify default privileges on system tables.
 query TTTB
@@ -513,6 +529,38 @@ system  public  span_configurations              root    DELETE  true
 system  public  span_configurations              root    INSERT  true
 system  public  span_configurations              root    SELECT  true
 system  public  span_configurations              root    UPDATE  true
+system  public  span_stats_buckets               admin   DELETE  true
+system  public  span_stats_buckets               admin   INSERT  true
+system  public  span_stats_buckets               admin   SELECT  true
+system  public  span_stats_buckets               admin   UPDATE  true
+system  public  span_stats_buckets               root    DELETE  true
+system  public  span_stats_buckets               root    INSERT  true
+system  public  span_stats_buckets               root    SELECT  true
+system  public  span_stats_buckets               root    UPDATE  true
+system  public  span_stats_samples               admin   DELETE  true
+system  public  span_stats_samples               admin   INSERT  true
+system  public  span_stats_samples               admin   SELECT  true
+system  public  span_stats_samples               admin   UPDATE  true
+system  public  span_stats_samples               root    DELETE  true
+system  public  span_stats_samples               root    INSERT  true
+system  public  span_stats_samples               root    SELECT  true
+system  public  span_stats_samples               root    UPDATE  true
+system  public  span_stats_tenant_boundaries     admin   DELETE  true
+system  public  span_stats_tenant_boundaries     admin   INSERT  true
+system  public  span_stats_tenant_boundaries     admin   SELECT  true
+system  public  span_stats_tenant_boundaries     admin   UPDATE  true
+system  public  span_stats_tenant_boundaries     root    DELETE  true
+system  public  span_stats_tenant_boundaries     root    INSERT  true
+system  public  span_stats_tenant_boundaries     root    SELECT  true
+system  public  span_stats_tenant_boundaries     root    UPDATE  true
+system  public  span_stats_unique_keys           admin   DELETE  true
+system  public  span_stats_unique_keys           admin   INSERT  true
+system  public  span_stats_unique_keys           admin   SELECT  true
+system  public  span_stats_unique_keys           admin   UPDATE  true
+system  public  span_stats_unique_keys           root    DELETE  true
+system  public  span_stats_unique_keys           root    INSERT  true
+system  public  span_stats_unique_keys           root    SELECT  true
+system  public  span_stats_unique_keys           root    UPDATE  true
 system  public  sql_instances                    admin   DELETE  true
 system  public  sql_instances                    admin   INSERT  true
 system  public  sql_instances                    admin   SELECT  true
@@ -805,6 +853,38 @@ system  public  span_count                       root    DELETE  true
 system  public  span_count                       root    INSERT  true
 system  public  span_count                       root    SELECT  true
 system  public  span_count                       root    UPDATE  true
+system  public  span_stats_buckets               admin   DELETE  true
+system  public  span_stats_buckets               admin   INSERT  true
+system  public  span_stats_buckets               admin   SELECT  true
+system  public  span_stats_buckets               admin   UPDATE  true
+system  public  span_stats_buckets               root    DELETE  true
+system  public  span_stats_buckets               root    INSERT  true
+system  public  span_stats_buckets               root    SELECT  true
+system  public  span_stats_buckets               root    UPDATE  true
+system  public  span_stats_samples               admin   DELETE  true
+system  public  span_stats_samples               admin   INSERT  true
+system  public  span_stats_samples               admin   SELECT  true
+system  public  span_stats_samples               admin   UPDATE  true
+system  public  span_stats_samples               root    DELETE  true
+system  public  span_stats_samples               root    INSERT  true
+system  public  span_stats_samples               root    SELECT  true
+system  public  span_stats_samples               root    UPDATE  true
+system  public  span_stats_tenant_boundaries     admin   DELETE  true
+system  public  span_stats_tenant_boundaries     admin   INSERT  true
+system  public  span_stats_tenant_boundaries     admin   SELECT  true
+system  public  span_stats_tenant_boundaries     admin   UPDATE  true
+system  public  span_stats_tenant_boundaries     root    DELETE  true
+system  public  span_stats_tenant_boundaries     root    INSERT  true
+system  public  span_stats_tenant_boundaries     root    SELECT  true
+system  public  span_stats_tenant_boundaries     root    UPDATE  true
+system  public  span_stats_unique_keys           admin   DELETE  true
+system  public  span_stats_unique_keys           admin   INSERT  true
+system  public  span_stats_unique_keys           admin   SELECT  true
+system  public  span_stats_unique_keys           admin   UPDATE  true
+system  public  span_stats_unique_keys           root    DELETE  true
+system  public  span_stats_unique_keys           root    INSERT  true
+system  public  span_stats_unique_keys           root    SELECT  true
+system  public  span_stats_unique_keys           root    UPDATE  true
 system  public  sql_instances                    admin   DELETE  true
 system  public  sql_instances                    admin   INSERT  true
 system  public  sql_instances                    admin   SELECT  true

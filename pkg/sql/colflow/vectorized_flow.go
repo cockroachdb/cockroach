@@ -369,6 +369,10 @@ func (f *vectorizedFlow) MemUsage() int64 {
 
 // Cleanup is part of the flowinfra.Flow interface.
 func (f *vectorizedFlow) Cleanup(ctx context.Context) {
+	startCleanup, endCleanup := f.FlowBase.GetOnCleanupFns()
+	startCleanup()
+	defer endCleanup()
+
 	// This cleans up all the memory and disk monitoring of the vectorized flow
 	// as well as closes all the closers.
 	f.creator.cleanup(ctx)
@@ -409,7 +413,7 @@ func (s *vectorizedFlowCreator) wrapWithVectorizedStatsCollectorBase(
 	component execinfrapb.ComponentID,
 	monitors []*mon.BytesMonitor,
 ) error {
-	inputWatch := timeutil.NewStopWatch()
+	inputWatch := timeutil.NewStopWatchWithCPU()
 	var memMonitors, diskMonitors []*mon.BytesMonitor
 	for _, m := range monitors {
 		if m.Resource() == mon.DiskResource {
@@ -961,7 +965,11 @@ func (s *vectorizedFlowCreator) setupInput(
 			}
 			s.closers = append(s.closers, os)
 		} else if input.Type == execinfrapb.InputSyncSpec_SERIAL_UNORDERED || opt == flowinfra.FuseAggressively {
-			sync := colexec.NewSerialUnorderedSynchronizer(inputStreamOps)
+			var err error
+			if input.EnforceHomeRegionError != nil {
+				err = input.EnforceHomeRegionError.ErrorDetail(ctx)
+			}
+			sync := colexec.NewSerialUnorderedSynchronizer(inputStreamOps, input.EnforceHomeRegionStreamExclusiveUpperBound, err)
 			opWithMetaInfo = colexecargs.OpWithMetaInfo{
 				Root:            sync,
 				MetadataSources: colexecop.MetadataSources{sync},

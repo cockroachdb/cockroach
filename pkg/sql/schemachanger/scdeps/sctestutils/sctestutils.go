@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descidgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/faketreeeval"
@@ -59,7 +60,7 @@ func WithBuilderDependenciesFromTestServer(
 	)
 	defer cleanup()
 	planner := ip.(interface {
-		Txn() *kv.Txn
+		InternalSQLTxn() descs.Txn
 		Descriptors() *descs.Collection
 		SessionData() *sessiondata.SessionData
 		resolver.SchemaResolver
@@ -67,6 +68,11 @@ func WithBuilderDependenciesFromTestServer(
 		scbuild.AstFormatter
 		scbuild.FeatureChecker
 	})
+
+	refProviderFactory, refCleanup := sql.NewReferenceProviderFactoryForTest(
+		"test", planner.InternalSQLTxn().KV(), username.RootUserName(), &execCfg, "defaultdb",
+	)
+	defer refCleanup()
 
 	// Use "defaultdb" as current database.
 	planner.SessionData().Database = "defaultdb"
@@ -76,8 +82,7 @@ func WithBuilderDependenciesFromTestServer(
 	fn(scdeps.NewBuilderDependencies(
 		execCfg.NodeInfo.LogicalClusterID(),
 		execCfg.Codec,
-		planner.Txn(),
-		planner.Descriptors(),
+		planner.InternalSQLTxn(),
 		sql.NewSkippingCacheSchemaResolver, /* schemaResolverFactory */
 		planner,                            /* authAccessor */
 		planner,                            /* astFormatter */
@@ -85,8 +90,10 @@ func WithBuilderDependenciesFromTestServer(
 		planner.SessionData(),
 		execCfg.Settings,
 		nil, /* statements */
-		execCfg.InternalExecutor,
 		&faketreeeval.DummyClientNoticeSender{},
+		sql.NewSchemaChangerBuildEventLogger(planner.InternalSQLTxn(), &execCfg),
+		refProviderFactory,
+		descidgen.NewGenerator(s.ClusterSettings(), s.Codec(), s.DB()),
 	))
 }
 
@@ -96,15 +103,15 @@ func WithBuilderDependenciesFromTestServer(
 // decoding that into a map[string]interface{}. The function will be called
 // for every object in the decoded map recursively.
 func ProtoToYAML(
-	m protoutil.Message, emitDefaults bool, rewrites func(interface{}),
+	m protoutil.Message, emitDefaults bool, rewrites ...func(interface{}),
 ) (string, error) {
 	target, err := scviz.ToMap(m, emitDefaults)
 	if err != nil {
 		return "", err
 	}
 	scviz.WalkMap(target, scviz.RewriteEmbeddedIntoParent)
-	if rewrites != nil {
-		scviz.WalkMap(target, rewrites)
+	for _, rewrite := range rewrites {
+		scviz.WalkMap(target, rewrite)
 	}
 	out, err := yaml.Marshal(target)
 	if err != nil {
@@ -152,12 +159,12 @@ func Diff(a, b string, args DiffArgs) string {
 
 // ProtoDiff generates an indented summary of the diff between two protos'
 // YAML representations. See ProtoToYAML for documentation on rewrites.
-func ProtoDiff(a, b protoutil.Message, args DiffArgs, rewrites func(interface{})) string {
+func ProtoDiff(a, b protoutil.Message, args DiffArgs, rewrites ...func(interface{})) string {
 	toYAML := func(m protoutil.Message) string {
 		if m == nil {
 			return ""
 		}
-		str, err := ProtoToYAML(m, false /* emitDefaults */, rewrites)
+		str, err := ProtoToYAML(m, false /* emitDefaults */, rewrites...)
 		if err != nil {
 			panic(err)
 		}

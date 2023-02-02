@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
@@ -132,8 +133,8 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 
 	tbDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
 	var dbDesc catalog.DatabaseDescriptor
-	require.NoError(t, sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) (err error) {
-		dbDesc, err = col.ByID(txn).Get().Database(ctx, tbDesc.GetParentID())
+	require.NoError(t, sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) (err error) {
+		dbDesc, err = col.ByID(txn.KV()).Get().Database(ctx, tbDesc.GetParentID())
 		return err
 	}))
 
@@ -298,8 +299,8 @@ INSERT INTO t.kv2 VALUES ('c', 'd'), ('a', 'b'), ('e', 'a');
 	tbDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
 	tb2Desc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv2")
 	var dbDesc catalog.DatabaseDescriptor
-	require.NoError(t, sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) (err error) {
-		dbDesc, err = col.ByID(txn).Get().Database(ctx, tbDesc.GetParentID())
+	require.NoError(t, sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) (err error) {
+		dbDesc, err = col.ByID(txn.KV()).Get().Database(ctx, tbDesc.GetParentID())
 		return err
 	}))
 
@@ -431,7 +432,7 @@ func TestDropIndex(t *testing.T) {
 	}
 	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
 	tests.CheckKeyCount(t, kvDB, tableDesc.TableSpan(keys.SystemSQLCodec), 3*numRows)
-	idx, err := tableDesc.FindIndexWithName("foo")
+	idx, err := catalog.MustFindIndexByName(tableDesc, "foo")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -442,7 +443,7 @@ func TestDropIndex(t *testing.T) {
 	}
 
 	tableDesc = desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
-	if _, err := tableDesc.FindIndexWithName("foo"); err == nil {
+	if _, err := catalog.MustFindIndexByName(tableDesc, "foo"); err == nil {
 		t.Fatalf("table descriptor still contains index after index is dropped")
 	}
 	// TODO (lucy): Maybe this test API should use an offset starting
@@ -464,7 +465,7 @@ func TestDropIndex(t *testing.T) {
 	}
 
 	tableDesc = desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
-	newIdx, err := tableDesc.FindIndexWithName("foo")
+	newIdx, err := catalog.MustFindIndexByName(tableDesc, "foo")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -527,7 +528,7 @@ func TestDropIndexWithZoneConfigOSS(t *testing.T) {
 		t.Fatal(err)
 	}
 	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
-	index, err := tableDesc.FindIndexWithName("foo")
+	index, err := catalog.MustFindIndexByName(tableDesc, "foo")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -566,7 +567,7 @@ func TestDropIndexWithZoneConfigOSS(t *testing.T) {
 	// declares column families.
 
 	tableDesc = desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
-	if _, err := tableDesc.FindIndexWithName("foo"); err == nil {
+	if _, err := catalog.MustFindIndexByName(tableDesc, "foo"); err == nil {
 		t.Fatalf("table descriptor still contains index after index is dropped")
 	}
 }
@@ -867,8 +868,8 @@ func TestDropTableWhileUpgradingFormat(t *testing.T) {
 
 	// Simulate a migration upgrading the table descriptor's format version after
 	// the table has been dropped but before the truncation has occurred.
-	if err := sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) (err error) {
-		tbl, err := col.ByID(txn).Get().Table(ctx, tableDesc.ID)
+	if err := sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) (err error) {
+		tbl, err := col.ByID(txn.KV()).Get().Table(ctx, tableDesc.ID)
 		if err != nil {
 			return err
 		}
@@ -1155,7 +1156,7 @@ WHERE
 			if put.Key.Equal(catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, descpb.ID(tableID))) {
 				filterState.txnID = uuid.UUID{}
 				return roachpb.NewError(roachpb.NewReadWithinUncertaintyIntervalError(
-					request.Txn.ReadTimestamp, afterInsert, hlc.Timestamp{}, request.Txn))
+					request.Txn.ReadTimestamp, hlc.ClockTimestamp{}, request.Txn, afterInsert, hlc.ClockTimestamp{}))
 			}
 		}
 		return nil
@@ -1211,15 +1212,15 @@ func TestDropIndexOnHashShardedIndexWithStoredShardColumn(t *testing.T) {
 	query = `SELECT id FROM system.namespace WHERE name = 'tbl'`
 	tdb.QueryRow(t, query).Scan(&tableID)
 	require.NoError(t, sql.TestingDescsTxn(ctx, s,
-		func(ctx context.Context, txn *kv.Txn, col *descs.Collection) (err error) {
-			tableDesc, err = col.ByID(txn).Get().Table(ctx, tableID)
+		func(ctx context.Context, txn isql.Txn, col *descs.Collection) (err error) {
+			tableDesc, err = col.ByID(txn.KV()).Get().Table(ctx, tableID)
 			return err
 		}))
-	shardIdx, err := tableDesc.FindIndexWithName("idx")
+	shardIdx, err := catalog.MustFindIndexByName(tableDesc, "idx")
 	require.NoError(t, err)
 	require.True(t, shardIdx.IsSharded())
 	require.Equal(t, "crdb_internal_a_shard_7", shardIdx.GetShardColumnName())
-	shardCol, err := tableDesc.FindColumnWithName("crdb_internal_a_shard_7")
+	shardCol, err := catalog.MustFindColumnByName(tableDesc, "crdb_internal_a_shard_7")
 	require.NoError(t, err)
 	require.False(t, shardCol.IsVirtual())
 
@@ -1229,13 +1230,13 @@ func TestDropIndexOnHashShardedIndexWithStoredShardColumn(t *testing.T) {
 
 	// Assert that the index is dropped but the shard column remains after dropping the index.
 	require.NoError(t, sql.TestingDescsTxn(ctx, s,
-		func(ctx context.Context, txn *kv.Txn, col *descs.Collection) (err error) {
-			tableDesc, err = col.ByID(txn).Get().Table(ctx, tableID)
+		func(ctx context.Context, txn isql.Txn, col *descs.Collection) (err error) {
+			tableDesc, err = col.ByID(txn.KV()).Get().Table(ctx, tableID)
 			return err
 		}))
-	_, err = tableDesc.FindIndexWithName("idx")
+	_, err = catalog.MustFindIndexByName(tableDesc, "idx")
 	require.Error(t, err)
-	shardCol, err = tableDesc.FindColumnWithName("crdb_internal_a_shard_7")
+	shardCol, err = catalog.MustFindColumnByTreeName(tableDesc, "crdb_internal_a_shard_7")
 	require.NoError(t, err)
 	require.False(t, shardCol.IsVirtual())
 
@@ -1370,7 +1371,7 @@ func TestDropPhysicalTableGC(t *testing.T) {
 }
 
 func dropLargeDatabaseGeneric(
-	t *testing.T, workloadParams sqltestutils.GenerateViewBasedGraphSchemaParams, useDeclarative bool,
+	t testing.TB, workloadParams sqltestutils.GenerateViewBasedGraphSchemaParams, useDeclarative bool,
 ) {
 	// Creates a complex schema with a view based graph that nests within
 	// each other, which can lead to long DROP times specially if there
@@ -1391,6 +1392,10 @@ func dropLargeDatabaseGeneric(
 		sqlDB.Exec(t, `SET use_declarative_schema_changer=off;`)
 	}
 	startTime := timeutil.Now()
+	if b, isB := t.(*testing.B); isB {
+		b.StartTimer()
+		defer b.StopTimer()
+	}
 	sqlDB.Exec(t, `DROP DATABASE largedb;`)
 	t.Logf("Total time for drop (declarative: %t) %f",
 		useDeclarative,
@@ -1409,6 +1414,42 @@ func TestDropLargeDatabaseWithLegacySchemaChanger(t *testing.T) {
 			GraphDepth:         3,
 		},
 		false)
+}
+
+// BenchmarkDropLargeDatabase adds a benchmark which runs a large database
+// drop for a connected graph of views. It can be used to compare the
+// legacy and declarative schema changer.
+//
+// TODO(ajwerner): The parameters to the generator are a little bit opaque.
+// It'd be nice to have a sense of how many views and how many total columns
+// we end up dropping.
+func BenchmarkDropLargeDatabase(b *testing.B) {
+	defer leaktest.AfterTest(b)()
+	skip.UnderShort(b)
+
+	for _, declarative := range []bool{false, true} {
+		for _, tables := range []int{3, 4} {
+			for _, depth := range []int{2, 3, 4, 5} {
+				for _, columns := range []int{2, 4} {
+					b.Run(fmt.Sprintf("tables=%d,columns=%d,depth=%d,declarative=%t",
+						tables, columns, depth, declarative), func(b *testing.B) {
+						defer log.Scope(b).Close(b)
+						for i := 0; i < b.N; i++ {
+							b.StopTimer()
+							dropLargeDatabaseGeneric(b,
+								sqltestutils.GenerateViewBasedGraphSchemaParams{
+									SchemaName:         "largedb",
+									NumTablesPerDepth:  tables,
+									NumColumnsPerTable: columns,
+									GraphDepth:         depth,
+								},
+								declarative)
+						}
+					})
+				}
+			}
+		}
+	}
 }
 
 func TestDropLargeDatabaseWithDeclarativeSchemaChanger(t *testing.T) {

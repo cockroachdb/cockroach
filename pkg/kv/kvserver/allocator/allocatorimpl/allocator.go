@@ -560,7 +560,7 @@ type AllocatorMetrics struct {
 type Allocator struct {
 	st            *cluster.Settings
 	deterministic bool
-	nodeLatencyFn func(addr string) (time.Duration, bool)
+	nodeLatencyFn func(nodeID roachpb.NodeID) (time.Duration, bool)
 	// TODO(aayush): Let's replace this with a *rand.Rand that has a rand.Source
 	// wrapped inside a mutex, to avoid misuse.
 	randGen allocatorRand
@@ -599,7 +599,7 @@ func makeAllocatorMetrics() AllocatorMetrics {
 func MakeAllocator(
 	st *cluster.Settings,
 	deterministic bool,
-	nodeLatencyFn func(addr string) (time.Duration, bool),
+	nodeLatencyFn func(nodeID roachpb.NodeID) (time.Duration, bool),
 	knobs *allocator.TestingKnobs,
 ) Allocator {
 	var randSource rand.Source
@@ -2492,12 +2492,7 @@ func (a Allocator) shouldTransferLeaseForAccessLocality(
 		if !ok {
 			continue
 		}
-		addr, err := storePool.GossipNodeIDAddress(repl.NodeID)
-		if err != nil {
-			log.KvDistribution.Errorf(ctx, "missing address for n%d: %+v", repl.NodeID, err)
-			continue
-		}
-		remoteLatency, ok := a.nodeLatencyFn(addr.String())
+		remoteLatency, ok := a.nodeLatencyFn(repl.NodeID)
 		if !ok {
 			continue
 		}

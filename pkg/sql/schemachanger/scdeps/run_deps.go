@@ -17,10 +17,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/backfiller"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
@@ -32,12 +32,12 @@ import (
 // given arguments.
 func NewJobRunDependencies(
 	collectionFactory *descs.CollectionFactory,
-	ieFactory descs.TxnManager,
-	db *kv.DB,
+	db descs.DB,
 	backfiller scexec.Backfiller,
+	spanSplitter scexec.IndexSpanSplitter,
 	merger scexec.Merger,
 	rangeCounter backfiller.RangeCounter,
-	eventLoggerFactory EventLoggerFactory,
+	eventLoggerFactory func(isql.Txn) scrun.EventLogger,
 	jobRegistry *jobs.Registry,
 	job *jobs.Job,
 	codec keys.SQLCodec,
@@ -51,40 +51,40 @@ func NewJobRunDependencies(
 	kvTrace bool,
 ) scrun.JobRunDependencies {
 	return &jobExecutionDeps{
-		collectionFactory:       collectionFactory,
-		internalExecutorFactory: ieFactory,
-		db:                      db,
-		backfiller:              backfiller,
-		merger:                  merger,
-		rangeCounter:            rangeCounter,
-		eventLoggerFactory:      eventLoggerFactory,
-		jobRegistry:             jobRegistry,
-		job:                     job,
-		codec:                   codec,
-		settings:                settings,
-		testingKnobs:            testingKnobs,
-		statements:              statements,
-		indexValidator:          indexValidator,
-		commentUpdaterFactory:   metadataUpdaterFactory,
-		sessionData:             sessionData,
-		kvTrace:                 kvTrace,
-		statsRefresher:          statsRefresher,
+		collectionFactory:     collectionFactory,
+		db:                    db,
+		backfiller:            backfiller,
+		spanSplitter:          spanSplitter,
+		merger:                merger,
+		rangeCounter:          rangeCounter,
+		eventLoggerFactory:    eventLoggerFactory,
+		jobRegistry:           jobRegistry,
+		job:                   job,
+		codec:                 codec,
+		settings:              settings,
+		testingKnobs:          testingKnobs,
+		statements:            statements,
+		indexValidator:        indexValidator,
+		commentUpdaterFactory: metadataUpdaterFactory,
+		sessionData:           sessionData,
+		kvTrace:               kvTrace,
+		statsRefresher:        statsRefresher,
 	}
 }
 
 type jobExecutionDeps struct {
-	collectionFactory       *descs.CollectionFactory
-	internalExecutorFactory descs.TxnManager
-	db                      *kv.DB
-	eventLoggerFactory      func(txn *kv.Txn) scexec.EventLogger
-	statsRefresher          scexec.StatsRefresher
-	backfiller              scexec.Backfiller
-	merger                  scexec.Merger
-	commentUpdaterFactory   MetadataUpdaterFactory
-	rangeCounter            backfiller.RangeCounter
-	jobRegistry             *jobs.Registry
-	job                     *jobs.Job
-	kvTrace                 bool
+	collectionFactory     *descs.CollectionFactory
+	db                    descs.DB
+	statsRefresher        scexec.StatsRefresher
+	backfiller            scexec.Backfiller
+	spanSplitter          scexec.IndexSpanSplitter
+	merger                scexec.Merger
+	commentUpdaterFactory MetadataUpdaterFactory
+	rangeCounter          backfiller.RangeCounter
+	eventLoggerFactory    func(isql.Txn) scrun.EventLogger
+	jobRegistry           *jobs.Registry
+	job                   *jobs.Job
+	kvTrace               bool
 
 	indexValidator scexec.Validator
 
@@ -106,26 +106,26 @@ func (d *jobExecutionDeps) ClusterSettings() *cluster.Settings {
 func (d *jobExecutionDeps) WithTxnInJob(ctx context.Context, fn scrun.JobTxnFunc) error {
 	var createdJobs []jobspb.JobID
 	var tableStatsToRefresh []descpb.ID
-	err := d.internalExecutorFactory.DescsTxn(ctx, d.db, func(
-		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+	err := d.db.DescsTxn(ctx, func(
+		ctx context.Context, txn descs.Txn,
 	) error {
 		pl := d.job.Payload()
 		ed := &execDeps{
 			txnDeps: txnDeps{
 				txn:                txn,
 				codec:              d.codec,
-				descsCollection:    descriptors,
+				descsCollection:    txn.Descriptors(),
 				jobRegistry:        d.jobRegistry,
 				validator:          d.indexValidator,
-				eventLogger:        d.eventLoggerFactory(txn),
 				statsRefresher:     d.statsRefresher,
 				schemaChangerJobID: d.job.ID(),
 				schemaChangerJob:   d.job,
 				kvTrace:            d.kvTrace,
 				settings:           d.settings,
 			},
-			backfiller: d.backfiller,
-			merger:     d.merger,
+			backfiller:   d.backfiller,
+			merger:       d.merger,
+			spanSplitter: d.spanSplitter,
 			backfillerTracker: backfiller.NewTracker(
 				d.codec,
 				d.rangeCounter,
@@ -137,15 +137,15 @@ func (d *jobExecutionDeps) WithTxnInJob(ctx context.Context, fn scrun.JobTxnFunc
 			statements:              d.statements,
 			user:                    pl.UsernameProto.Decode(),
 			clock:                   NewConstantClock(timeutil.FromUnixMicros(pl.StartedMicros)),
-			metadataUpdater:         d.commentUpdaterFactory(ctx, descriptors, txn),
+			metadataUpdater:         d.commentUpdaterFactory(ctx, txn.Descriptors(), txn),
 			sessionData:             d.sessionData,
 			testingKnobs:            d.testingKnobs,
 		}
-		if err := fn(ctx, ed); err != nil {
+		if err := fn(ctx, ed, d.eventLoggerFactory(txn)); err != nil {
 			return err
 		}
 		createdJobs = ed.CreatedJobs()
-		tableStatsToRefresh = ed.getTablesForStatsRefresh()
+		tableStatsToRefresh = ed.tableStatsToRefresh
 		return nil
 	})
 	if err != nil {
@@ -155,11 +155,11 @@ func (d *jobExecutionDeps) WithTxnInJob(ctx context.Context, fn scrun.JobTxnFunc
 		d.jobRegistry.NotifyToResume(ctx, createdJobs...)
 	}
 	if len(tableStatsToRefresh) > 0 {
-		err := d.internalExecutorFactory.DescsTxn(ctx, d.db, func(
-			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+		err := d.db.DescsTxn(ctx, func(
+			ctx context.Context, txn descs.Txn,
 		) error {
 			for _, id := range tableStatsToRefresh {
-				tbl, err := descriptors.ByIDWithLeased(txn).WithoutNonPublic().Get().Table(ctx, id)
+				tbl, err := txn.Descriptors().ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Table(ctx, id)
 				if err != nil {
 					return err
 				}

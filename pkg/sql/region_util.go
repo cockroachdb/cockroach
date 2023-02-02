@@ -75,8 +75,9 @@ func GetLiveClusterRegions(ctx context.Context, p PlanHookState) (LiveClusterReg
 	// Non-admin users can't access the crdb_internal.kv_node_status table, which
 	// this query hits, so we must override the user here.
 	override := sessiondata.RootUserSessionDataOverride
+	override.Database = "system"
 
-	it, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryIteratorEx(
+	it, err := p.InternalSQLTxn().QueryIteratorEx(
 		ctx,
 		"get_live_cluster_regions",
 		p.Txn(),
@@ -1426,44 +1427,35 @@ func SynthesizeRegionConfig(
 
 	regionConfig := multiregion.RegionConfig{}
 
-	var regionNames catpb.RegionNames
-	if o.forValidation {
-		regionNames, err = regionEnumDesc.RegionNamesForValidation()
-	} else {
-		regionNames, err = regionEnumDesc.RegionNames()
-	}
-	if err != nil {
-		return regionConfig, err
-	}
-
-	zoneCfgExtensions, err := regionEnumDesc.ZoneConfigExtensions()
-	if err != nil {
-		return regionConfig, err
-	}
-
-	transitioningRegionNames, err := regionEnumDesc.TransitioningRegionNames()
-	if err != nil {
-		return regionConfig, err
-	}
-
-	superRegions, err := regionEnumDesc.SuperRegions()
-	if err != nil {
-		return regionConfig, err
-	}
-
-	regionEnumID, err := dbDesc.MultiRegionEnumID()
-	if err != nil {
-		return regionConfig, err
-	}
-
+	var regionNames, transitioningRegionNames catpb.RegionNames
+	_ = regionEnumDesc.ForEachRegion(func(name catpb.RegionName, transition descpb.TypeDescriptor_EnumMember_Direction) error {
+		switch transition {
+		case descpb.TypeDescriptor_EnumMember_NONE:
+			regionNames = append(regionNames, name)
+		case descpb.TypeDescriptor_EnumMember_ADD:
+			transitioningRegionNames = append(transitioningRegionNames, name)
+		case descpb.TypeDescriptor_EnumMember_REMOVE:
+			transitioningRegionNames = append(transitioningRegionNames, name)
+			if o.forValidation {
+				// Since the partitions and zone configs are only updated when a transaction
+				// commits, this must ignore all regions being added (since they will not be
+				// reflected in the zone configuration yet), but it must include all region
+				// being dropped (since they will not be dropped from the zone configuration
+				// until they are fully removed from the type descriptor, again, at the end
+				// of the transaction).
+				regionNames = append(regionNames, name)
+			}
+		}
+		return nil
+	})
 	regionConfig = multiregion.MakeRegionConfig(
 		regionNames,
 		dbDesc.GetRegionConfig().PrimaryRegion,
 		dbDesc.GetRegionConfig().SurvivalGoal,
-		regionEnumID,
+		regionEnumDesc.GetID(),
 		dbDesc.GetRegionConfig().Placement,
-		superRegions,
-		zoneCfgExtensions,
+		regionEnumDesc.TypeDesc().RegionConfig.SuperRegions,
+		regionEnumDesc.TypeDesc().RegionConfig.ZoneConfigExtensions,
 		multiregion.WithTransitioningRegions(transitioningRegionNames),
 		multiregion.WithSecondaryRegion(dbDesc.GetRegionConfig().SecondaryRegion),
 	)
@@ -1482,20 +1474,18 @@ func SynthesizeRegionConfig(
 // This returns an ErrNotMultiRegionDatabase error if the database isn't
 // multi-region.
 func GetLocalityRegionEnumPhysicalRepresentation(
-	ctx context.Context,
-	internalExecutorFactory descs.TxnManager,
-	kvDB *kv.DB,
-	dbID descpb.ID,
-	locality roachpb.Locality,
+	ctx context.Context, db descs.DB, dbID descpb.ID, locality roachpb.Locality,
 ) ([]byte, error) {
 	var enumReps map[catpb.RegionName][]byte
 	var primaryRegion catpb.RegionName
-	if err := internalExecutorFactory.DescsTxn(ctx, kvDB, func(
-		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
+	if err := db.DescsTxn(ctx, func(
+		ctx context.Context, txn descs.Txn,
 	) error {
 		enumReps, primaryRegion = nil, "" // reset for retry
 		var err error
-		enumReps, primaryRegion, err = GetRegionEnumRepresentations(ctx, txn, dbID, descsCol)
+		enumReps, primaryRegion, err = GetRegionEnumRepresentations(
+			ctx, txn.KV(), dbID, txn.Descriptors(),
+		)
 		return err
 	}); err != nil {
 		return nil, err
@@ -1550,7 +1540,7 @@ func getDBAndRegionEnumDescs(
 	descsCol *descs.Collection,
 	useCache bool,
 	includeOffline bool,
-) (dbDesc catalog.DatabaseDescriptor, regionEnumDesc catalog.TypeDescriptor, _ error) {
+) (dbDesc catalog.DatabaseDescriptor, regionEnumDesc catalog.RegionEnumTypeDescriptor, _ error) {
 	var b descs.ByIDGetterBuilder
 	if useCache {
 		b = descsCol.ByIDWithLeased(txn)
@@ -1572,9 +1562,15 @@ func getDBAndRegionEnumDescs(
 	if err != nil {
 		return nil, nil, err
 	}
-	regionEnumDesc, err = g.Type(ctx, regionEnumID)
+	typeDesc, err := g.Type(ctx, regionEnumID)
 	if err != nil {
 		return nil, nil, err
+	}
+	regionEnumDesc = typeDesc.AsRegionEnumTypeDescriptor()
+	if regionEnumDesc == nil {
+		return nil, nil, errors.AssertionFailedf(
+			"expected region enum type, not %s for type %q (%d)",
+			typeDesc.GetKind(), typeDesc.GetName(), typeDesc.GetID())
 	}
 	return dbDesc, regionEnumDesc, nil
 }
@@ -2398,6 +2394,29 @@ func (p *planner) IsANSIDML() bool {
 	return p.stmt.IsANSIDML()
 }
 
+// GetRangeDescByID is part of the eval.Planner interface.
+func (p *planner) GetRangeDescByID(
+	ctx context.Context, rangeID roachpb.RangeID,
+) (rangeDesc roachpb.RangeDescriptor, _ error) {
+	execCfg := p.execCfg
+	tenantSpan := execCfg.Codec.TenantSpan()
+	rangeDescIterator, err := execCfg.RangeDescIteratorFactory.NewIterator(ctx, tenantSpan)
+	if err != nil {
+		return rangeDesc, err
+	}
+	for rangeDescIterator.Valid() {
+		rangeDesc = rangeDescIterator.CurRangeDescriptor()
+		if rangeDesc.RangeID == rangeID {
+			break
+		}
+		rangeDescIterator.Next()
+	}
+	if !rangeDescIterator.Valid() {
+		return rangeDesc, errors.Newf("range with ID %d not found", rangeID)
+	}
+	return rangeDesc, nil
+}
+
 // OptimizeSystemDatabase is part of the eval.RegionOperator interface.
 func (p *planner) OptimizeSystemDatabase(ctx context.Context) error {
 	globalTables := []string{
@@ -2555,7 +2574,7 @@ func (p *planner) OptimizeSystemDatabase(ctx context.Context) error {
 		// Delete statistics for the table because the statistics materialize
 		// the column type for `crdb_region` and the column type is changing
 		// from bytes to an enum.
-		if _, err := p.ExecCfg().InternalExecutor.Exec(ctx, "delete-stats", p.txn,
+		if _, err := p.InternalSQLTxn().Exec(ctx, "delete-stats", p.txn,
 			`DELETE FROM system.table_statistics WHERE "tableID" = $1;`,
 			descriptor.GetID(),
 		); err != nil {

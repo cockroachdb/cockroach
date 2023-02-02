@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
@@ -28,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -93,15 +95,16 @@ func TestConsistencyQueueRequiresLive(t *testing.T) {
 }
 
 // TestCheckConsistencyMultiStore creates a node with three stores
-// with three way replication. A value is added to the node, and a
-// consistency check is run.
+// with three way replication. A consistency check is run on r1,
+// which always has some data, and on a newly split off range
+// as well.
 func TestCheckConsistencyMultiStore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
 	tc := testcluster.StartTestCluster(t, 3,
 		base.TestClusterArgs{
-			ReplicationMode: base.ReplicationAuto,
+			ReplicationMode: base.ReplicationManual,
 			ServerArgs: base.TestServerArgs{
 				Knobs: base.TestingKnobs{
 					Store: &kvserver.StoreTestingKnobs{
@@ -115,24 +118,38 @@ func TestCheckConsistencyMultiStore(t *testing.T) {
 	defer tc.Stopper().Stop(context.Background())
 	store := tc.GetFirstStoreFromServer(t, 0)
 
-	// Write something to the DB.
-	putArgs := putArgs([]byte("a"), []byte("b"))
-	if _, err := kv.SendWrapped(context.Background(), store.DB().NonTransactionalSender(), putArgs); err != nil {
-		t.Fatal(err)
+	// Split off a range and write to it; we'll use it below but we test r1 first.
+	k2 := tc.ScratchRange(t)
+	{
+		// Write something to k2.
+		putArgs := putArgs(k2, []byte("b"))
+		_, pErr := kv.SendWrapped(context.Background(), store.DB().NonTransactionalSender(), putArgs)
+		require.NoError(t, pErr.GoError())
 	}
 
-	// Run consistency check.
-	checkArgs := roachpb.CheckConsistencyRequest{
-		RequestHeader: roachpb.RequestHeader{
-			// span of keys that include "a".
-			Key:    []byte("a"),
-			EndKey: []byte("aa"),
-		},
-	}
-	if _, err := kv.SendWrappedWith(context.Background(), store.DB().NonTransactionalSender(), roachpb.Header{
-		Timestamp: store.Clock().Now(),
-	}, &checkArgs); err != nil {
-		t.Fatal(err)
+	// 3x replicate our ranges.
+	//
+	// Depending on what we're doing, we need to use LocalMax or [R]KeyMin
+	// for r1 due to the issue below.
+	//
+	// See: https://github.com/cockroachdb/cockroach/issues/95055
+	tc.AddVotersOrFatal(t, roachpb.KeyMin, tc.Targets(1, 2)...)
+	tc.AddVotersOrFatal(t, k2, tc.Targets(1, 2)...)
+
+	// Run consistency check on r1 and ScratchRange.
+	for _, k := range []roachpb.Key{keys.LocalMax, k2} {
+		t.Run(k.String(), func(t *testing.T) {
+			checkArgs := roachpb.CheckConsistencyRequest{
+				RequestHeader: roachpb.RequestHeader{
+					Key:    keys.LocalMax,
+					EndKey: keys.LocalMax.Next(),
+				},
+			}
+			_, pErr := kv.SendWrappedWith(context.Background(), store.DB().NonTransactionalSender(), roachpb.Header{
+				Timestamp: store.Clock().Now(),
+			}, &checkArgs)
+			require.NoError(t, pErr.GoError())
+		})
 	}
 }
 
@@ -366,7 +383,7 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 		// VFS to verify its contents.
 		fs, err := stickyEngineRegistry.GetUnderlyingFS(base.StoreSpec{StickyInMemoryEngineID: strconv.FormatInt(int64(i), 10)})
 		assert.NoError(t, err)
-		cpEng := storage.InMemFromFS(context.Background(), fs, cps[0], storage.CacheSize(1<<20))
+		cpEng := storage.InMemFromFS(context.Background(), fs, cps[0], cluster.MakeClusterSettings(), storage.CacheSize(1<<20))
 		defer cpEng.Close()
 
 		// Find the problematic range in the storage.
@@ -504,6 +521,7 @@ func testConsistencyQueueRecomputeStatsImpl(t *testing.T, hadEstimates bool) {
 	func() {
 		eng, err := storage.Open(ctx,
 			storage.Filesystem(path),
+			cluster.MakeClusterSettings(),
 			storage.CacheSize(1<<20 /* 1 MiB */),
 			storage.MustExist)
 		require.NoError(t, err)

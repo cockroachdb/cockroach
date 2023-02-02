@@ -45,6 +45,10 @@ const execStats: Required<IExecStats> = {
     mean: 80,
     squared_diffs: 0.01,
   },
+  cpu_sql_nanos: {
+    mean: 80,
+    squared_diffs: 0.01,
+  },
 };
 
 const statementStats: Required<IStatementStatistics> = {
@@ -217,34 +221,34 @@ const statementStats: Required<IStatementStatistics> = {
 
 const diagnosticsReports: StatementDiagnosticsReport[] = [
   {
-    id: '594413966918975489',
+    id: "594413966918975489",
     completed: true,
     statement_fingerprint: "SHOW database",
-    statement_diagnostics_id: '594413981435920385',
+    statement_diagnostics_id: "594413981435920385",
     requested_at: moment(1601471146),
   },
   {
-    id: '594413966918975429',
+    id: "594413966918975429",
     completed: true,
     statement_fingerprint: "SHOW database",
-    statement_diagnostics_id: '594413281435920385',
+    statement_diagnostics_id: "594413281435920385",
     requested_at: moment(1601491146),
   },
 ];
 
 const diagnosticsReportsInProgress: StatementDiagnosticsReport[] = [
   {
-    id: '594413966918975489',
+    id: "594413966918975489",
     completed: false,
     statement_fingerprint: "SHOW database",
-    statement_diagnostics_id: '594413981435920385',
+    statement_diagnostics_id: "594413981435920385",
     requested_at: moment(1601471146),
   },
   {
-    id: '594413966918975429',
+    id: "594413966918975429",
     completed: true,
     statement_fingerprint: "SHOW database",
-    statement_diagnostics_id: '594413281435920385',
+    statement_diagnostics_id: "594413281435920385",
     requested_at: moment(1601491146),
   },
 ];
@@ -290,6 +294,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
     nodes: "",
   },
   lastUpdated,
+  isDataValid: true,
   // Aggregate key values in these statements will need to change if implementation
   // of 'statementKey' in appStats.ts changes.
   statements: [
@@ -592,7 +597,8 @@ const statementsPagePropsFixture: StatementsPageProps = {
       aggregatedFingerprintID: "6325213731862855938",
       aggregatedFingerprintHexID:
         Long.fromNumber(6325213731862855938).toString(16),
-      label: "INSERT INTO users VALUES ($1, $2, __more1_10__), (__more10_100__)",
+      label:
+        "INSERT INTO users VALUES ($1, $2, __more1_10__), (__more10_100__)",
       summary: "INSERT INTO users VALUES",
       aggregatedTs,
       aggregationInterval,
@@ -904,7 +910,8 @@ const statementsPagePropsFixture: StatementsPageProps = {
       aggregatedFingerprintID: "16819876564846676829",
       aggregatedFingerprintHexID:
         Long.fromNumber(16819876564846676829).toString(16),
-      label: "INSERT INTO vehicles VALUES ($1, $2, __more1_10__), (__more1_10__)",
+      label:
+        "INSERT INTO vehicles VALUES ($1, $2, __more1_10__), (__more1_10__)",
       summary: "INSERT INTO vehicles",
       aggregatedTs,
       aggregationInterval,

@@ -15,14 +15,17 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
-	"github.com/cockroachdb/errors"
 )
 
-func (m *visitor) RemoveSchemaParent(ctx context.Context, op scop.RemoveSchemaParent) error {
-	db, err := m.checkOutDatabase(ctx, op.Parent.ParentDatabaseID)
+func (i *immediateVisitor) RemoveSchemaParent(
+	ctx context.Context, op scop.RemoveSchemaParent,
+) error {
+	db, err := i.checkOutDatabase(ctx, op.Parent.ParentDatabaseID)
 	if err != nil {
 		return err
 	}
@@ -34,10 +37,10 @@ func (m *visitor) RemoveSchemaParent(ctx context.Context, op scop.RemoveSchemaPa
 	return nil
 }
 
-func (m *visitor) RemoveOwnerBackReferenceInSequence(
+func (i *immediateVisitor) RemoveOwnerBackReferenceInSequence(
 	ctx context.Context, op scop.RemoveOwnerBackReferenceInSequence,
 ) error {
-	seq, err := m.checkOutTable(ctx, op.SequenceID)
+	seq, err := i.checkOutTable(ctx, op.SequenceID)
 	if err != nil || seq.Dropped() {
 		return err
 	}
@@ -45,12 +48,14 @@ func (m *visitor) RemoveOwnerBackReferenceInSequence(
 	return nil
 }
 
-func (m *visitor) RemoveSequenceOwner(ctx context.Context, op scop.RemoveSequenceOwner) error {
-	tbl, err := m.checkOutTable(ctx, op.TableID)
+func (i *immediateVisitor) RemoveSequenceOwner(
+	ctx context.Context, op scop.RemoveSequenceOwner,
+) error {
+	tbl, err := i.checkOutTable(ctx, op.TableID)
 	if err != nil || tbl.Dropped() {
 		return err
 	}
-	col, err := tbl.FindColumnWithID(op.ColumnID)
+	col, err := catalog.MustFindColumnByID(tbl, op.ColumnID)
 	if err != nil || col == nil {
 		return err
 	}
@@ -60,36 +65,13 @@ func (m *visitor) RemoveSequenceOwner(ctx context.Context, op scop.RemoveSequenc
 	return nil
 }
 
-func (m *visitor) RemoveForeignKeyBackReference(
+func (i *immediateVisitor) RemoveForeignKeyBackReference(
 	ctx context.Context, op scop.RemoveForeignKeyBackReference,
 ) error {
-	in, err := m.checkOutTable(ctx, op.ReferencedTableID)
+	in, err := i.checkOutTable(ctx, op.ReferencedTableID)
 	if err != nil || in.Dropped() {
 		// Exit early if the foreign key back-reference holder is getting dropped.
 		return err
-	}
-	// Retrieve foreign key name in origin table to identify it in the referenced
-	// table.
-	var name string
-	{
-		out, err := m.s.GetDescriptor(ctx, op.OriginTableID)
-		if err != nil {
-			return err
-		}
-		tbl, err := catalog.AsTableDescriptor(out)
-		if err != nil {
-			return err
-		}
-		for _, fk := range tbl.OutboundForeignKeys() {
-			if fk.GetConstraintID() == op.OriginConstraintID {
-				name = fk.GetName()
-				break
-			}
-		}
-		if name == "" {
-			return errors.AssertionFailedf("foreign key with ID %d not found in origin table %q (%d)",
-				op.OriginConstraintID, out.GetName(), out.GetID())
-		}
 	}
 	// Attempt to remove back reference.
 	// Note how we
@@ -100,9 +82,9 @@ func (m *visitor) RemoveForeignKeyBackReference(
 	//  2. only attempt to remove (i.e. we do not panic when it's not found):
 	//  this is because if we roll back before the adding FK is published in `out`,
 	//  such a back-reference won't exist in `in` yet.
-	for i, fk := range in.InboundFKs {
-		if fk.OriginTableID == op.OriginTableID && fk.Name == name {
-			in.InboundFKs = append(in.InboundFKs[:i], in.InboundFKs[i+1:]...)
+	for idx, fk := range in.InboundFKs {
+		if fk.OriginTableID == op.OriginTableID && fk.ConstraintID == op.OriginConstraintID {
+			in.InboundFKs = append(in.InboundFKs[:idx], in.InboundFKs[idx+1:]...)
 			if len(in.InboundFKs) == 0 {
 				in.InboundFKs = nil
 			}
@@ -112,18 +94,18 @@ func (m *visitor) RemoveForeignKeyBackReference(
 	return nil
 }
 
-func (m *visitor) UpdateTableBackReferencesInTypes(
+func (i *immediateVisitor) UpdateTableBackReferencesInTypes(
 	ctx context.Context, op scop.UpdateTableBackReferencesInTypes,
 ) error {
 	var forwardRefs catalog.DescriptorIDSet
-	if desc, err := m.s.GetDescriptor(ctx, op.BackReferencedTableID); err != nil {
+	if desc, err := i.getDescriptor(ctx, op.BackReferencedTableID); err != nil {
 		return err
 	} else if !desc.Dropped() {
 		tbl, err := catalog.AsTableDescriptor(desc)
 		if err != nil {
 			return err
 		}
-		parent, err := m.s.GetDescriptor(ctx, desc.GetParentID())
+		parent, err := i.getDescriptor(ctx, desc.GetParentID())
 		if err != nil {
 			return err
 		}
@@ -132,7 +114,7 @@ func (m *visitor) UpdateTableBackReferencesInTypes(
 			return err
 		}
 		ids, _, err := tbl.GetAllReferencedTypeIDs(db, func(id descpb.ID) (catalog.TypeDescriptor, error) {
-			d, err := m.s.GetDescriptor(ctx, id)
+			d, err := i.getDescriptor(ctx, id)
 			if err != nil {
 				return nil, err
 			}
@@ -145,18 +127,21 @@ func (m *visitor) UpdateTableBackReferencesInTypes(
 			forwardRefs.Add(id)
 		}
 	}
-	return updateBackReferencesInTypes(ctx, m, op.TypeIDs, op.BackReferencedTableID, forwardRefs)
+	return updateBackReferencesInTypes(ctx, i, op.TypeIDs, op.BackReferencedTableID, forwardRefs)
 }
 
-func (m *visitor) RemoveBackReferenceInTypes(
+func (i *immediateVisitor) RemoveBackReferenceInTypes(
 	ctx context.Context, op scop.RemoveBackReferenceInTypes,
 ) error {
-	return updateBackReferencesInTypes(ctx, m, op.TypeIDs, op.BackReferencedDescriptorID, catalog.DescriptorIDSet{})
+	return updateBackReferencesInTypes(ctx, i, op.TypeIDs, op.BackReferencedDescriptorID, catalog.DescriptorIDSet{})
 }
 
+// updateBackReferencesInTypes updates back references to `backReferencedDescID`
+// in types represented by `typeIDs`, given the expected forward references from
+// the object represented by `backReferencedDescID`.
 func updateBackReferencesInTypes(
 	ctx context.Context,
-	m *visitor,
+	m *immediateVisitor,
 	typeIDs []catid.DescID,
 	backReferencedDescID catid.DescID,
 	forwardRefs catalog.DescriptorIDSet,
@@ -186,33 +171,27 @@ func updateBackReferencesInTypes(
 	return nil
 }
 
-func (m *visitor) UpdateTypeBackReferencesInTypes(
+func (i *immediateVisitor) UpdateTypeBackReferencesInTypes(
 	ctx context.Context, op scop.UpdateTypeBackReferencesInTypes,
 ) error {
 	var forwardRefs catalog.DescriptorIDSet
-	if desc, err := m.s.GetDescriptor(ctx, op.BackReferencedTypeID); err != nil {
+	if desc, err := i.getDescriptor(ctx, op.BackReferencedTypeID); err != nil {
 		return err
 	} else if !desc.Dropped() {
 		typ, err := catalog.AsTypeDescriptor(desc)
 		if err != nil {
 			return err
 		}
-		ids, err := typ.GetIDClosure()
-		if err != nil {
-			return err
-		}
-		for id := range ids {
-			forwardRefs.Add(id)
-		}
+		forwardRefs = typ.GetIDClosure()
 	}
-	return updateBackReferencesInTypes(ctx, m, op.TypeIDs, op.BackReferencedTypeID, forwardRefs)
+	return updateBackReferencesInTypes(ctx, i, op.TypeIDs, op.BackReferencedTypeID, forwardRefs)
 }
 
-func (m *visitor) UpdateBackReferencesInSequences(
-	ctx context.Context, op scop.UpdateBackReferencesInSequences,
+func (i *immediateVisitor) UpdateTableBackReferencesInSequences(
+	ctx context.Context, op scop.UpdateTableBackReferencesInSequences,
 ) error {
 	var forwardRefs catalog.DescriptorIDSet
-	if desc, err := m.s.GetDescriptor(ctx, op.BackReferencedTableID); err != nil {
+	if desc, err := i.getDescriptor(ctx, op.BackReferencedTableID); err != nil {
 		return err
 	} else if !desc.Dropped() {
 		tbl, err := catalog.AsTableDescriptor(desc)
@@ -220,7 +199,7 @@ func (m *visitor) UpdateBackReferencesInSequences(
 			return err
 		}
 		if op.BackReferencedColumnID != 0 {
-			col, err := tbl.FindColumnWithID(op.BackReferencedColumnID)
+			col, err := catalog.MustFindColumnByID(tbl, op.BackReferencedColumnID)
 			if err != nil {
 				return err
 			}
@@ -242,7 +221,7 @@ func (m *visitor) UpdateBackReferencesInSequences(
 	}
 	for _, seqID := range op.SequenceIDs {
 		if err := updateBackReferencesInSequences(
-			ctx, m, seqID, op.BackReferencedTableID, op.BackReferencedColumnID, forwardRefs,
+			ctx, i, seqID, op.BackReferencedTableID, op.BackReferencedColumnID, forwardRefs,
 		); err != nil {
 			return err
 		}
@@ -256,7 +235,7 @@ func (m *visitor) UpdateBackReferencesInSequences(
 //   - remove `colID` from ColumnIDs field of that back-reference, if `forwardRefs` does not contain `seqID`.
 func updateBackReferencesInSequences(
 	ctx context.Context,
-	m *visitor,
+	m *immediateVisitor,
 	seqID, tblID descpb.ID,
 	colID descpb.ColumnID,
 	forwardRefs catalog.DescriptorIDSet,
@@ -283,7 +262,7 @@ func updateBackReferencesInSequences(
 			updated.Add(colID)
 		}
 	} else {
-		if !current.Contains(colID) {
+		if !current.Contains(colID) && colID != 0 {
 			return nil
 		}
 		current.ForEach(func(id descpb.ColumnID) {
@@ -296,11 +275,11 @@ func updateBackReferencesInSequences(
 	return nil
 }
 
-func (m *visitor) RemoveViewBackReferencesInRelations(
-	ctx context.Context, op scop.RemoveViewBackReferencesInRelations,
+func (i *immediateVisitor) RemoveBackReferencesInRelations(
+	ctx context.Context, op scop.RemoveBackReferencesInRelations,
 ) error {
 	for _, relationID := range op.RelationIDs {
-		if err := removeViewBackReferencesInRelation(ctx, m, relationID, op.BackReferencedViewID); err != nil {
+		if err := removeViewBackReferencesInRelation(ctx, i, relationID, op.BackReferencedID); err != nil {
 			return err
 		}
 	}
@@ -308,7 +287,7 @@ func (m *visitor) RemoveViewBackReferencesInRelations(
 }
 
 func removeViewBackReferencesInRelation(
-	ctx context.Context, m *visitor, relationID, viewID descpb.ID,
+	ctx context.Context, m *immediateVisitor, relationID, backReferencedID descpb.ID,
 ) error {
 	tbl, err := m.checkOutTable(ctx, relationID)
 	if err != nil || tbl.Dropped() {
@@ -317,10 +296,150 @@ func removeViewBackReferencesInRelation(
 	}
 	var newBackRefs []descpb.TableDescriptor_Reference
 	for _, by := range tbl.DependedOnBy {
-		if by.ID != viewID {
+		if by.ID != backReferencedID {
 			newBackRefs = append(newBackRefs, by)
 		}
 	}
 	tbl.DependedOnBy = newBackRefs
+	return nil
+}
+
+func (i *immediateVisitor) RemoveObjectParent(
+	ctx context.Context, op scop.RemoveObjectParent,
+) error {
+	obj, err := i.checkOutDescriptor(ctx, op.ObjectID)
+	if err != nil {
+		return err
+	}
+	switch obj.DescriptorType() {
+	case catalog.Function:
+		sc, err := i.checkOutSchema(ctx, op.ParentSchemaID)
+		if err != nil {
+			return err
+		}
+		sc.RemoveFunction(obj.GetName(), obj.GetID())
+	}
+	return nil
+}
+
+func (i *immediateVisitor) UpdateFunctionTypeReferences(
+	ctx context.Context, op scop.UpdateFunctionTypeReferences,
+) error {
+	fn, err := i.checkOutFunction(ctx, op.FunctionID)
+	if err != nil {
+		return err
+	}
+
+	newForwardRefs := catalog.MakeDescriptorIDSet(op.TypeIDs...)
+	currentForwardRefs := catalog.MakeDescriptorIDSet(fn.DependsOnTypes...)
+	typeIDsToUpdate := newForwardRefs.Union(currentForwardRefs)
+	if err := updateBackReferencesInTypes(ctx, i, typeIDsToUpdate.Ordered(), op.FunctionID, newForwardRefs); err != nil {
+		return err
+	}
+
+	fn.DependsOnTypes = op.TypeIDs
+	return nil
+}
+
+func (i *immediateVisitor) UpdateFunctionRelationReferences(
+	ctx context.Context, op scop.UpdateFunctionRelationReferences,
+) error {
+	fn, err := i.checkOutFunction(ctx, op.FunctionID)
+	if err != nil {
+		return err
+	}
+	relIDs := catalog.DescriptorIDSet{}
+	relIDToReferences := make(map[descpb.ID][]descpb.TableDescriptor_Reference)
+
+	for _, ref := range op.TableReferences {
+		relIDs.Add(ref.TableID)
+		dep := descpb.TableDescriptor_Reference{
+			ID:        op.FunctionID,
+			IndexID:   ref.IndexID,
+			ColumnIDs: ref.ColumnIDs,
+		}
+		relIDToReferences[ref.TableID] = append(relIDToReferences[ref.TableID], dep)
+	}
+
+	for _, ref := range op.ViewReferences {
+		relIDs.Add(ref.ViewID)
+		dep := descpb.TableDescriptor_Reference{
+			ID:        op.FunctionID,
+			ColumnIDs: ref.ColumnIDs,
+		}
+		relIDToReferences[ref.ViewID] = append(relIDToReferences[ref.ViewID], dep)
+	}
+
+	for _, seqID := range op.SequenceIDs {
+		relIDs.Add(seqID)
+		dep := descpb.TableDescriptor_Reference{
+			ID:   op.FunctionID,
+			ByID: true,
+		}
+		relIDToReferences[seqID] = append(relIDToReferences[seqID], dep)
+	}
+
+	for relID, refs := range relIDToReferences {
+		if err := updateBackReferencesInRelation(ctx, i, relID, op.FunctionID, refs); err != nil {
+			return err
+		}
+	}
+
+	fn.DependsOn = relIDs.Ordered()
+	return nil
+}
+
+func updateBackReferencesInRelation(
+	ctx context.Context,
+	i *immediateVisitor,
+	relID descpb.ID,
+	backReferencedID descpb.ID,
+	backRefs []descpb.TableDescriptor_Reference,
+) error {
+	rel, err := i.checkOutTable(ctx, relID)
+	if err != nil {
+		return err
+	}
+	newRefs := rel.DependedOnBy[:0]
+	for _, ref := range rel.DependedOnBy {
+		if ref.ID != backReferencedID {
+			newRefs = append(newRefs, ref)
+		}
+	}
+
+	newRefs = append(newRefs, backRefs...)
+	rel.DependedOnBy = newRefs
+	return nil
+}
+
+func (i *immediateVisitor) SetObjectParentID(ctx context.Context, op scop.SetObjectParentID) error {
+	sc, err := i.checkOutSchema(ctx, op.ObjParent.ParentSchemaID)
+	if err != nil {
+		return err
+	}
+
+	obj, err := i.checkOutDescriptor(ctx, op.ObjParent.ObjectID)
+	if err != nil {
+		return err
+	}
+	switch t := obj.(type) {
+	case *funcdesc.Mutable:
+		if t.ParentSchemaID != descpb.InvalidID {
+			sc.RemoveFunction(t.GetName(), t.GetID())
+		}
+		t.ParentID = sc.GetParentID()
+		t.ParentSchemaID = sc.GetID()
+
+		ol := descpb.SchemaDescriptor_FunctionOverload{
+			ID:         obj.GetID(),
+			ArgTypes:   make([]*types.T, len(t.GetParams())),
+			ReturnType: t.GetReturnType().Type,
+			ReturnSet:  t.GetReturnType().ReturnSet,
+		}
+		for i := range t.Params {
+			ol.ArgTypes[i] = t.Params[i].Type
+		}
+		sc.AddFunction(obj.GetName(), ol)
+	}
 	return nil
 }

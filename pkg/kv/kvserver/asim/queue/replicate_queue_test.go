@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/gossip"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/stretchr/testify/require"
@@ -68,7 +69,12 @@ func TestReplicateQueue(t *testing.T) {
 
 	getReplCounts := func(s state.State) map[int]int {
 		storeView := make(map[int]int)
-		for _, desc := range s.StoreDescriptors() {
+		stores := s.Stores()
+		storeIDs := make([]state.StoreID, len(stores))
+		for i, store := range stores {
+			storeIDs[i] = store.StoreID()
+		}
+		for _, desc := range s.StoreDescriptors(false /* cached */, storeIDs...) {
 			storeView[int(desc.StoreID)] = int(desc.Capacity.RangeCount)
 		}
 		return storeView
@@ -136,12 +142,8 @@ func TestReplicateQueue(t *testing.T) {
 
 			results := make(map[int64]map[int]int)
 			// Initialize the store pool information.
-			exchange := state.NewFixedDelayExhange(
-				start,
-				testSettings.StateExchangeInterval,
-				time.Second*0, /* no state update delay */
-			)
-			exchange.Put(start, s.StoreDescriptors()...)
+			gossip := gossip.NewGossip(s, testSettings)
+			gossip.Tick(ctx, start, s)
 
 			nextRepl := 0
 			repls := s.Replicas(store.StoreID())
@@ -153,13 +155,7 @@ func TestReplicateQueue(t *testing.T) {
 
 				// Update the store's view of the cluster, we update all stores
 				// but only care about s1's view.
-				exchange.Put(state.OffsetTick(start, tick), s.StoreDescriptors()...)
-
-				// Update s1's view of the cluster.
-				s.UpdateStorePool(
-					store.StoreID(),
-					exchange.Get(state.OffsetTick(start, tick), store.Descriptor().StoreID),
-				)
+				gossip.Tick(ctx, state.OffsetTick(start, tick), s)
 
 				// Tick the replicate queue, popping a queued replicas and
 				// considering rebalance.

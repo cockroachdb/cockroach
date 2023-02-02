@@ -9,6 +9,7 @@
 package backupccl
 
 import (
+	"container/heap"
 	"context"
 	"sort"
 
@@ -64,8 +65,10 @@ var targetRestoreSpanSize = settings.RegisterByteSizeSetting(
 // the `BackupManifest_Files` field of a manifest.
 type backupManifestFileIterator interface {
 	next() (backuppb.BackupManifest_File, bool)
+	peek() (backuppb.BackupManifest_File, bool)
 	err() error
 	close()
+	reset()
 }
 
 // inMemoryFileIterator iterates over the `BackupManifest_Files` field stored
@@ -76,11 +79,16 @@ type inMemoryFileIterator struct {
 }
 
 func (i *inMemoryFileIterator) next() (backuppb.BackupManifest_File, bool) {
+	f, hasNext := i.peek()
+	i.curIdx++
+	return f, hasNext
+}
+
+func (i *inMemoryFileIterator) peek() (backuppb.BackupManifest_File, bool) {
 	if i.curIdx >= len(i.manifest.Files) {
 		return backuppb.BackupManifest_File{}, false
 	}
 	f := i.manifest.Files[i.curIdx]
-	i.curIdx++
 	return f, true
 }
 
@@ -89,6 +97,10 @@ func (i *inMemoryFileIterator) err() error {
 }
 
 func (i *inMemoryFileIterator) close() {}
+
+func (i *inMemoryFileIterator) reset() {
+	i.curIdx = 0
+}
 
 var _ backupManifestFileIterator = &inMemoryFileIterator{}
 
@@ -138,17 +150,32 @@ type sstFileIterator struct {
 }
 
 func (s *sstFileIterator) next() (backuppb.BackupManifest_File, bool) {
-	var file backuppb.BackupManifest_File
-	hasNext := s.fi.Next(&file)
-	return file, hasNext
+	f, ok := s.peek()
+	if ok {
+		s.fi.Next()
+	}
+
+	return f, ok
+}
+
+func (s *sstFileIterator) peek() (backuppb.BackupManifest_File, bool) {
+	if ok, _ := s.fi.Valid(); !ok {
+		return backuppb.BackupManifest_File{}, false
+	}
+	return *s.fi.Value(), true
 }
 
 func (s *sstFileIterator) err() error {
-	return s.fi.Err()
+	_, err := s.fi.Valid()
+	return err
 }
 
 func (s *sstFileIterator) close() {
 	s.fi.Close()
+}
+
+func (s *sstFileIterator) reset() {
+	s.fi.Reset()
 }
 
 var _ backupManifestFileIterator = &sstFileIterator{}
@@ -381,4 +408,457 @@ func getBackupManifestFileIters(
 	}
 
 	return layerToFileIterFactory, nil
+}
+
+// generateAndSendImportSpans partitions the spans of requiredSpans into a
+// covering of RestoreSpanEntry's which each have all overlapping files from the
+// passed backups assigned to them. The spans of requiredSpans are
+// trimmed/removed based on the lowWaterMark before the covering for them is
+// generated. These spans are generated one at a time and then sent to spanCh.
+//
+// Consider a chain of backups with files f1, f2… which cover spans as follows:
+//
+//	backup
+//	0|     a___1___c c__2__e          h__3__i
+//	1|         b___4___d           g____5___i
+//	2|     a___________6______________h         j_7_k
+//	3|                                  h_8_i              l_9_m
+//	 keys--a---b---c---d---e---f---g---h----i---j---k---l----m------p---->
+//
+// spans: |-------span1-------||---span2---|           |---span3---|
+//
+// The cover for those spans would look like:
+//
+//	[a, b): 1, 6
+//	[b, c): 1, 4, 6
+//	[c, f): 2, 4, 6
+//	[f, g): 6
+//	[g, h): 5, 6
+//	[h, i): 3, 5, 8
+//	[l, m): 9
+//
+// This cover is created by iterating through the start and end keys of all the
+// files in the backup in key order via fileSpanStartAndEndKeyIterator. The
+// cover spans are initially just the spans between each pair of adjacent keys
+// yielded by the iterator. We then iterate through each cover span and find all
+// the overlapping files. If the files that overlap a cover span is a subset of
+// the files that overlap the span before it, then the two spans are merged into
+// a single span in the final cover. Additionally, if targetSize > 0, we can
+// merge the current cover span with the previous cover span if the merged set
+// of files have a total data size below the target size.
+//
+// The above example is tested in TestRestoreEntryCoverExample.
+//
+// If useSimpleImportSpans is true, the above covering method is not used and
+// the covering is created by makeSimpleImportSpans instead.
+func generateAndSendImportSpans(
+	ctx context.Context,
+	requiredSpans roachpb.Spans,
+	backups []backuppb.BackupManifest,
+	layerToBackupManifestFileIterFactory layerToBackupManifestFileIterFactory,
+	backupLocalityMap map[int]storeByLocalityKV,
+	introducedSpanFrontier *spanUtils.Frontier,
+	lowWaterMark roachpb.Key,
+	targetSize int64,
+	spanCh chan execinfrapb.RestoreSpanEntry,
+	useSimpleImportSpans bool,
+) error {
+	if useSimpleImportSpans {
+		importSpans, err := makeSimpleImportSpans(requiredSpans, backups, layerToBackupManifestFileIterFactory, backupLocalityMap, introducedSpanFrontier, lowWaterMark, targetSize)
+		if err != nil {
+			return err
+		}
+
+		for _, sp := range importSpans {
+			spanCh <- sp
+		}
+		return nil
+	}
+
+	startEndKeyIt, err := newFileSpanStartAndEndKeyIterator(backups, layerToBackupManifestFileIterFactory)
+	if err != nil {
+		return err
+	}
+
+	fileIterByLayer := make([]backupManifestFileIterator, 0, len(backups))
+	for layer := range backups {
+		iter, err := layerToBackupManifestFileIterFactory[layer]()
+		if err != nil {
+			return err
+		}
+
+		fileIterByLayer = append(fileIterByLayer, iter)
+	}
+
+	// lastCovSpanSize is the size of files added to the right-most span of
+	// the cover so far.
+	var lastCovSpanSize int64
+	var lastCovSpan roachpb.Span
+	var covFilesByLayer [][]backuppb.BackupManifest_File
+	var firstInSpan bool
+
+	flush := func(ctx context.Context) error {
+		entry := execinfrapb.RestoreSpanEntry{
+			Span: lastCovSpan,
+		}
+
+		for layer := range covFilesByLayer {
+			for _, f := range covFilesByLayer[layer] {
+				fileSpec := execinfrapb.RestoreFileSpec{Path: f.Path, Dir: backups[layer].Dir}
+				if dir, ok := backupLocalityMap[layer][f.LocalityKV]; ok {
+					fileSpec = execinfrapb.RestoreFileSpec{Path: f.Path, Dir: dir}
+				}
+				entry.Files = append(entry.Files, fileSpec)
+			}
+		}
+
+		if len(entry.Files) > 0 {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case spanCh <- entry:
+			}
+		}
+
+		return nil
+	}
+
+	for _, span := range requiredSpans {
+		firstInSpan = true
+		if span.EndKey.Compare(lowWaterMark) < 0 {
+			continue
+		}
+		if span.Key.Compare(lowWaterMark) < 0 {
+			span.Key = lowWaterMark
+		}
+
+		layersCoveredLater := make(map[int]bool)
+		for layer := range backups {
+			var coveredLater bool
+			introducedSpanFrontier.SpanEntries(span, func(s roachpb.Span,
+				ts hlc.Timestamp) (done spanUtils.OpResult) {
+				if backups[layer].EndTime.Less(ts) {
+					coveredLater = true
+				}
+				return spanUtils.StopMatch
+			})
+			if coveredLater {
+				// Don't use this backup to cover this span if the span was reintroduced
+				// after the backup's endTime. In this case, this backup may have
+				// invalid data, and further, a subsequent backup will contain all of
+				// this span's data. Consider the following example:
+				//
+				// T0: Begin IMPORT INTO on existing table foo, ingest some data
+				// T1: Backup foo
+				// T2: Rollback IMPORT via clearRange
+				// T3: Incremental backup of foo, with a full reintroduction of foo’s span
+				// T4: RESTORE foo: should only restore foo from the incremental backup.
+				//    If data from the full backup were also restored,
+				//    the imported-but-then-clearRanged data will leak in the restored cluster.
+				//    This logic seeks to avoid this form of data corruption.
+				layersCoveredLater[layer] = true
+			}
+		}
+
+		for {
+			if ok, err := startEndKeyIt.valid(); !ok {
+				if err != nil {
+					return err
+				}
+				break
+			}
+
+			key := startEndKeyIt.value()
+			if span.Key.Compare(key) >= 0 {
+				startEndKeyIt.next()
+				continue
+			}
+
+			var coverSpan roachpb.Span
+			if firstInSpan {
+				coverSpan.Key = span.Key
+			} else {
+				coverSpan.Key = lastCovSpan.EndKey
+			}
+
+			if span.ContainsKey(key) {
+				coverSpan.EndKey = startEndKeyIt.value()
+			} else {
+				coverSpan.EndKey = span.EndKey
+			}
+
+			newFilesByLayer, err := getNewIntersectingFilesByLayer(coverSpan, layersCoveredLater, fileIterByLayer)
+			if err != nil {
+				return err
+			}
+
+			var filesByLayer [][]backuppb.BackupManifest_File
+			var covSize int64
+			var newCovFilesSize int64
+
+			for layer := range newFilesByLayer {
+				for _, file := range newFilesByLayer[layer] {
+					sz := file.EntryCounts.DataSize
+					if sz == 0 {
+						sz = 16 << 20
+					}
+					newCovFilesSize += sz
+				}
+				filesByLayer = append(filesByLayer, newFilesByLayer[layer])
+			}
+
+			for layer := range covFilesByLayer {
+				for _, file := range covFilesByLayer[layer] {
+					sz := file.EntryCounts.DataSize
+					if sz == 0 {
+						sz = 16 << 20
+					}
+
+					if coverSpan.Overlaps(file.Span) {
+						covSize += sz
+						filesByLayer[layer] = append(filesByLayer[layer], file)
+					}
+				}
+			}
+
+			if covFilesByLayer == nil {
+				covFilesByLayer = newFilesByLayer
+				lastCovSpan = coverSpan
+				lastCovSpanSize = newCovFilesSize
+			} else {
+				if (newCovFilesSize == 0 || lastCovSpanSize+newCovFilesSize <= targetSize) && !firstInSpan {
+					// If there are no new files that cover this span or if we can add the
+					// files in the new span's cover to the last span's cover and still stay
+					// below targetSize, then we should merge the two spans.
+					for layer := range newFilesByLayer {
+						covFilesByLayer[layer] = append(covFilesByLayer[layer], newFilesByLayer[layer]...)
+					}
+					lastCovSpan.EndKey = coverSpan.EndKey
+					lastCovSpanSize = lastCovSpanSize + newCovFilesSize
+				} else {
+					if err := flush(ctx); err != nil {
+						return err
+					}
+					lastCovSpan = coverSpan
+					covFilesByLayer = filesByLayer
+					lastCovSpanSize = covSize
+				}
+			}
+			firstInSpan = false
+
+			if lastCovSpan.EndKey.Equal(span.EndKey) {
+				break
+			}
+
+			startEndKeyIt.next()
+		}
+	}
+
+	return flush(ctx)
+}
+
+// fileSpanStartAndEndKeyIterator yields (almost) all of the start and end keys
+// of the spans from the files in a backup chain in key order. A start or end
+// key from a file span will be yielded by the iterator if the key is not
+// covered by another file span within the same layer before it in FileCmp
+// order. In particular, this means that if all layers in a backup chain have
+// files with non-overlapping spans, then this iterator would return all start
+// and end keys for all file spans in order. For example:
+//
+//	backup
+//	0|     a___1___c c__2__e          h__3__i
+//	1|         b___4___d           g____5___i
+//	2|     a___________6______________h         j_7_k
+//	3|                                  h_8_i              l_9_m
+//	 keys--a---b---c---d---e---f---g---h----i---j---k---l----m------p---->
+//
+// In this case, since no file span overlaps with another file span within the same layer,
+// the iterator will yield all start and end keys:
+// [a, b, c, d, e, g, h, i, j, k, l, m]
+//
+// Another example, but with file spans that do overlap within a layer:
+//
+//	backup
+//	0|     a___1___c
+//	1|         b_____2_____e
+//	 |                 d___3___f
+//	2|     a___________4___________g
+//	3|
+//	 keys--a---b---c---d---e---f---g--->
+//
+// In this case, there is overlap between files 2 and 3 within layer 1. Since
+// the start and end keys 'b' and 'e' of file 2 will be yielded by the iterator
+// since there are no files before it within the same layer. Start key 'd' of
+// file 3 will not be yielded since it's covered by 2's span. The end key 'f'
+// will still be yielded since it's not covered by 2's span. So the iterator
+// will yield:
+// [a, b, c, e, f, g]
+type fileSpanStartAndEndKeyIterator struct {
+	heap     *fileHeap
+	allIters []backupManifestFileIterator
+	err      error
+}
+
+func newFileSpanStartAndEndKeyIterator(
+	backups []backuppb.BackupManifest, layerToIterFactory layerToBackupManifestFileIterFactory,
+) (*fileSpanStartAndEndKeyIterator, error) {
+	it := &fileSpanStartAndEndKeyIterator{}
+	for layer := range backups {
+		iter, err := layerToIterFactory[layer]()
+		if err != nil {
+			return nil, err
+		}
+
+		it.allIters = append(it.allIters, iter)
+	}
+	it.reset()
+	return it, nil
+}
+
+func (i *fileSpanStartAndEndKeyIterator) next() {
+	if ok, _ := i.valid(); !ok {
+		return
+	}
+
+	prevKey := i.value()
+	for i.heap.Len() > 0 {
+		minItem := heap.Pop(i.heap).(fileHeapItem)
+
+		curKey := minItem.key()
+		if curKey.Compare(prevKey) > 0 {
+			heap.Push(i.heap, minItem)
+			break
+		}
+
+		if minItem.cmpEndKey {
+			file, ok := minItem.fileIter.next()
+			if err := minItem.fileIter.err(); err != nil {
+				i.err = err
+				return
+			}
+			if ok {
+				minItem.cmpEndKey = false
+				minItem.file = file
+				heap.Push(i.heap, minItem)
+			}
+		} else {
+			minItem.cmpEndKey = true
+			heap.Push(i.heap, minItem)
+		}
+	}
+}
+
+func (i *fileSpanStartAndEndKeyIterator) valid() (bool, error) {
+	if i.err != nil {
+		return false, i.err
+	}
+	return i.heap.Len() > 0, nil
+}
+
+func (i *fileSpanStartAndEndKeyIterator) value() roachpb.Key {
+	if ok, _ := i.valid(); !ok {
+		return nil
+	}
+
+	return i.heap.fileHeapItems[0].key()
+}
+func (i *fileSpanStartAndEndKeyIterator) reset() {
+	i.heap = &fileHeap{}
+	i.err = nil
+
+	for _, iter := range i.allIters {
+		iter.reset()
+
+		file, ok := iter.next()
+		if err := iter.err(); err != nil {
+			i.err = err
+			return
+		}
+		if ok {
+			i.heap.fileHeapItems = append(i.heap.fileHeapItems, fileHeapItem{
+				fileIter:  iter,
+				file:      file,
+				cmpEndKey: false,
+			})
+		}
+	}
+	heap.Init(i.heap)
+}
+
+type fileHeapItem struct {
+	fileIter  backupManifestFileIterator
+	file      backuppb.BackupManifest_File
+	cmpEndKey bool
+}
+
+func (f fileHeapItem) key() roachpb.Key {
+	if f.cmpEndKey {
+		return f.file.Span.EndKey
+	}
+	return f.file.Span.Key
+}
+
+type fileHeap struct {
+	fileHeapItems []fileHeapItem
+}
+
+func (f *fileHeap) Len() int {
+	return len(f.fileHeapItems)
+}
+
+func (f *fileHeap) Less(i, j int) bool {
+	return f.fileHeapItems[i].key().Compare(f.fileHeapItems[j].key()) < 0
+}
+
+func (f *fileHeap) Swap(i, j int) {
+	f.fileHeapItems[i], f.fileHeapItems[j] = f.fileHeapItems[j], f.fileHeapItems[i]
+}
+
+func (f *fileHeap) Push(x any) {
+	item, ok := x.(fileHeapItem)
+	if !ok {
+		panic("pushed value not fileHeapItem")
+	}
+
+	f.fileHeapItems = append(f.fileHeapItems, item)
+}
+
+func (f *fileHeap) Pop() any {
+	old := f.fileHeapItems
+	n := len(old)
+	item := old[n-1]
+	f.fileHeapItems = old[0 : n-1]
+	return item
+}
+
+func getNewIntersectingFilesByLayer(
+	span roachpb.Span, layersCoveredLater map[int]bool, fileIters []backupManifestFileIterator,
+) ([][]backuppb.BackupManifest_File, error) {
+	var files [][]backuppb.BackupManifest_File
+
+	for l, iter := range fileIters {
+		var layerFiles []backuppb.BackupManifest_File
+		if !layersCoveredLater[l] {
+			for ; ; iter.next() {
+				f, ok := iter.peek()
+				if !ok {
+					break
+				}
+
+				if span.Overlaps(f.Span) {
+					layerFiles = append(layerFiles, f)
+				}
+
+				if span.EndKey.Compare(f.Span.Key) <= 0 {
+					break
+				}
+			}
+			if iter.err() != nil {
+				return nil, iter.err()
+			}
+		}
+		files = append(files, layerFiles)
+	}
+
+	return files, nil
 }

@@ -26,10 +26,9 @@ import (
 
 type githubIssues struct {
 	disable      bool
-	l            *logger.Logger
 	cluster      *clusterImpl
 	vmCreateOpts *vm.CreateOpts
-	issuePoster  func(ctx context.Context, formatter issues.IssueFormatter, req issues.PostRequest) error
+	issuePoster  func(context.Context, *logger.Logger, issues.IssueFormatter, issues.PostRequest) error
 	teamLoader   func() (team.Map, error)
 }
 
@@ -41,15 +40,11 @@ const (
 	sshErr
 )
 
-func newGithubIssues(
-	disable bool, c *clusterImpl, vmCreateOpts *vm.CreateOpts, l *logger.Logger,
-) *githubIssues {
-
+func newGithubIssues(disable bool, c *clusterImpl, vmCreateOpts *vm.CreateOpts) *githubIssues {
 	return &githubIssues{
 		disable:      disable,
 		vmCreateOpts: vmCreateOpts,
 		cluster:      c,
-		l:            l,
 		issuePoster:  issues.Post,
 		teamLoader:   team.DefaultLoadTeams,
 	}
@@ -59,13 +54,55 @@ func roachtestPrefix(p string) string {
 	return "ROACHTEST_" + p
 }
 
-func (g *githubIssues) shouldPost(t test.Test) bool {
-	opts := issues.DefaultOptionsFromEnv()
-	return !g.disable && opts.CanPost() &&
-		opts.IsReleaseBranch() &&
-		t.Spec().(*registry.TestSpec).Run != nil &&
-		// NB: check NodeCount > 0 to avoid posting issues from this pkg's unit tests.
-		t.Spec().(*registry.TestSpec).Cluster.NodeCount > 0
+// postIssueCondition encapsulates a condition that causes issue
+// posting to be skipped. The `reason` field contains a textual
+// description as to why issue posting was skipped.
+type postIssueCondition struct {
+	cond   func(g *githubIssues, t test.Test) bool
+	reason string
+}
+
+var defaultOpts = issues.DefaultOptionsFromEnv()
+
+var skipConditions = []postIssueCondition{
+	{
+		cond:   func(g *githubIssues, _ test.Test) bool { return g.disable },
+		reason: "issue posting was disabled via command line flag",
+	},
+	{
+		cond:   func(g *githubIssues, _ test.Test) bool { return !defaultOpts.CanPost() },
+		reason: "GitHub API token not set",
+	},
+	{
+		cond:   func(g *githubIssues, _ test.Test) bool { return !defaultOpts.IsReleaseBranch() },
+		reason: fmt.Sprintf("not a release branch: %q", defaultOpts.Branch),
+	},
+	{
+		cond:   func(_ *githubIssues, t test.Test) bool { return t.Spec().(*registry.TestSpec).Run == nil },
+		reason: "TestSpec.Run is nil",
+	},
+	{
+		cond:   func(_ *githubIssues, t test.Test) bool { return t.Spec().(*registry.TestSpec).Cluster.NodeCount == 0 },
+		reason: "Cluster.NodeCount is zero",
+	},
+}
+
+// shouldPost two values: whether GitHub posting should happen, and a
+// reason for skipping (non-empty only when posting should *not*
+// happen).
+func (g *githubIssues) shouldPost(t test.Test) (bool, string) {
+	post := true
+	var reason string
+
+	for _, sc := range skipConditions {
+		if sc.cond(g, t) {
+			post = false
+			reason = sc.reason
+			break
+		}
+	}
+
+	return post, reason
 }
 
 func (g *githubIssues) createPostRequest(
@@ -159,8 +196,10 @@ func (g *githubIssues) createPostRequest(
 	}
 }
 
-func (g *githubIssues) MaybePost(t *testImpl, message string) error {
-	if !g.shouldPost(t) {
+func (g *githubIssues) MaybePost(t *testImpl, l *logger.Logger, message string) error {
+	doPost, skipReason := g.shouldPost(t)
+	if !doPost {
+		l.Printf("skipping GitHub issue posting (%s)", skipReason)
 		return nil
 	}
 
@@ -176,6 +215,7 @@ func (g *githubIssues) MaybePost(t *testImpl, message string) error {
 
 	return g.issuePoster(
 		context.Background(),
+		l,
 		issues.UnitTestFormatter,
 		g.createPostRequest(t, cat, message),
 	)

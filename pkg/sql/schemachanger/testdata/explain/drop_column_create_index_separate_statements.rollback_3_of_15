@@ -6,7 +6,7 @@ ALTER TABLE t DROP COLUMN j CASCADE;
 CREATE UNIQUE INDEX idx ON t(k);
 EXPLAIN (ddl) rollback at post-commit stage 3 of 15;
 ----
-Schema change plan for rolling back ALTER TABLE ‹defaultdb›.public.‹t› DROP COLUMN ‹j› CASCADE; CREATE UNIQUE INDEX ‹idx› ON ‹defaultdb›.public.‹t› (‹k›); 
+Schema change plan for rolling back CREATE UNIQUE INDEX ‹idx› ON ‹defaultdb›.public.‹t› (‹k›); following ALTER TABLE ‹defaultdb›.public.‹t› DROP COLUMN ‹j› CASCADE;
  └── PostCommitNonRevertiblePhase
       ├── Stage 1 of 2 in PostCommitNonRevertiblePhase
       │    ├── 5 elements transitioning toward PUBLIC
@@ -22,10 +22,9 @@ Schema change plan for rolling back ALTER TABLE ‹defaultdb›.public.‹t› D
       │    │    ├── PUBLIC        → ABSENT      IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 4}
       │    │    ├── BACKFILL_ONLY → ABSENT      PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 2, TemporaryIndexID: 4, SourceIndexID: 1}
       │    │    └── WRITE_ONLY    → DELETE_ONLY TemporaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 3, SourceIndexID: 1}
-      │    └── 13 Mutation operations
-      │         ├── RefreshStats {"TableID":104}
-      │         ├── LogEvent {"TargetStatus":2}
+      │    └── 12 Mutation operations
       │         ├── MakeValidatedSecondaryIndexPublic {"IndexID":2,"TableID":104}
+      │         ├── RefreshStats {"TableID":104}
       │         ├── SetColumnName {"ColumnID":2,"Name":"j","TableID":104}
       │         ├── SetColumnName {"ColumnID":4,"Name":"crdb_internal_id...","TableID":104}
       │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":4,"TableID":104}

@@ -99,23 +99,25 @@ type runnerResult struct {
 // run executes the request. An error, if encountered, is both sent on the
 // result channel and returned.
 func (req runnerRequest) run() error {
-	defer physicalplan.ReleaseFlowSpec(&req.flowReq.Flow)
 	res := runnerResult{nodeID: req.sqlInstanceID}
+	defer func() {
+		req.resultChan <- res
+		physicalplan.ReleaseFlowSpec(&req.flowReq.Flow)
+	}()
 
 	conn, err := req.podNodeDialer.Dial(req.ctx, roachpb.NodeID(req.sqlInstanceID), rpc.DefaultClass)
 	if err != nil {
 		res.err = err
-	} else {
-		client := execinfrapb.NewDistSQLClient(conn)
-		// TODO(radu): do we want a timeout here?
-		resp, err := client.SetupFlow(req.ctx, req.flowReq)
-		if err != nil {
-			res.err = err
-		} else {
-			res.err = resp.Error.ErrorDetail(req.ctx)
-		}
+		return err
 	}
-	req.resultChan <- res
+	client := execinfrapb.NewDistSQLClient(conn)
+	// TODO(radu): do we want a timeout here?
+	resp, err := client.SetupFlow(req.ctx, req.flowReq)
+	if err != nil {
+		res.err = err
+	} else {
+		res.err = resp.Error.ErrorDetail(req.ctx)
+	}
 	return res.err
 }
 
@@ -466,6 +468,10 @@ func (dsp *DistSQLPlanner) setupFlows(
 	// usedWorker indicates whether we used at least one DistSQL worker
 	// goroutine to issue the SetupFlow RPC.
 	var usedWorker bool
+	// numIssuedRequests tracks the number of the SetupFlow RPCs that were
+	// issued (either by the current goroutine directly or delegated to the
+	// DistSQL workers).
+	var numIssuedRequests int
 	if sp := tracing.SpanFromContext(origCtx); sp != nil && !sp.IsNoop() {
 		setupReq.TraceInfo = sp.Meta().ToProto()
 	}
@@ -490,6 +496,7 @@ func (dsp *DistSQLPlanner) setupFlows(
 	var runnerSpan *tracing.Span
 	// This span is necessary because it can outlive its parent.
 	runnerCtx, runnerSpan = tracing.ChildSpan(runnerCtx, "setup-flow-async" /* opName */)
+	// runnerCleanup can only be executed _after_ all issued RPCs are complete.
 	runnerCleanup := func() {
 		cancelRunnerCtx()
 		runnerSpan.Finish()
@@ -499,6 +506,23 @@ func (dsp *DistSQLPlanner) setupFlows(
 	var listenerGoroutineWillCleanup bool
 	defer func() {
 		if !listenerGoroutineWillCleanup {
+			// Make sure to receive from the result channel as many times as
+			// there were total SetupFlow RPCs issued, regardless of whether
+			// they were executed concurrently by a DistSQL worker or serially
+			// in the current goroutine. This is needed in order to block
+			// finishing the runner span (in runnerCleanup) until all concurrent
+			// requests are done since the runner span is used as the parent for
+			// the RPC span, and, thus, the runner span can only be finished
+			// when we know that all SetupFlow RPCs have already been completed.
+			//
+			// Note that even in case of an error in runnerRequest.run we still
+			// send on the result channel.
+			for i := 0; i < numIssuedRequests; i++ {
+				<-resultChan
+			}
+			// At this point, we know that all concurrent requests (if there
+			// were any) are complete, so we can safely perform the runner
+			// cleanup.
 			runnerCleanup()
 		}
 	}()
@@ -519,6 +543,7 @@ func (dsp *DistSQLPlanner) setupFlows(
 
 		// Send out a request to the workers; if no worker is available, run
 		// directly.
+		numIssuedRequests++
 		select {
 		case dsp.runnerCoordinator.runnerChan <- runReq:
 			usedWorker = true
@@ -555,7 +580,7 @@ func (dsp *DistSQLPlanner) setupFlows(
 		syncutil.Mutex
 		called bool
 	}{}
-	flow.AddOnCleanup(func() {
+	flow.AddOnCleanupStart(func() {
 		cleanupCalledMu.Lock()
 		defer cleanupCalledMu.Unlock()
 		cleanupCalledMu.called = true
@@ -565,29 +590,38 @@ func (dsp *DistSQLPlanner) setupFlows(
 		cancelRunnerCtx()
 	})
 	err = dsp.stopper.RunAsyncTask(origCtx, "distsql-remote-flows-setup-listener", func(ctx context.Context) {
+		// Note that in the loop below we always receive from the result channel
+		// as many times as there were SetupFlow RPCs issued, thus, by the time
+		// this defer is executed, we are certain that all RPCs were complete,
+		// and runnerCleanup() is safe to be executed.
 		defer runnerCleanup()
 		var seenError bool
 		for i := 0; i < len(flows)-1; i++ {
 			res := <-resultChan
 			if res.err != nil && !seenError {
-				seenError = true
 				// The setup of at least one remote flow failed.
-				cleanupCalledMu.Lock()
-				skipCancel := cleanupCalledMu.called
-				cleanupCalledMu.Unlock()
-				if skipCancel {
-					continue
-				}
-				// First, we update the DistSQL receiver with the error to be
-				// returned to the client eventually.
-				//
-				// In order to not protect DistSQLReceiver.status with a mutex,
-				// we do not update the status here and, instead, rely on the
-				// DistSQLReceiver detecting the error the next time an object
-				// is pushed into it.
-				recv.setErrorWithoutStatusUpdate(res.err, true /* willDeferStatusUpdate */)
-				// Now explicitly cancel the local flow.
-				flow.Cancel()
+				seenError = true
+				func() {
+					cleanupCalledMu.Lock()
+					// Flow.Cancel cannot be called after or concurrently with
+					// Flow.Cleanup.
+					defer cleanupCalledMu.Unlock()
+					if cleanupCalledMu.called {
+						// Cleanup of the local flow has already been performed,
+						// so there is nothing to do.
+						return
+					}
+					// First, we update the DistSQL receiver with the error to
+					// be returned to the client eventually.
+					//
+					// In order to not protect DistSQLReceiver.status with a
+					// mutex, we do not update the status here and, instead,
+					// rely on the DistSQLReceiver detecting the error the next
+					// time an object is pushed into it.
+					recv.setErrorWithoutStatusUpdate(res.err, true /* willDeferStatusUpdate */)
+					// Now explicitly cancel the local flow.
+					flow.Cancel()
+				}()
 			}
 		}
 	})
@@ -1610,7 +1644,7 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 	if err != nil {
 		return err
 	}
-	dsp.finalizePlanWithRowCount(subqueryPlanCtx, subqueryPhysPlan, subqueryPlan.rowCount)
+	dsp.finalizePlanWithRowCount(ctx, subqueryPlanCtx, subqueryPhysPlan, subqueryPlan.rowCount)
 
 	// TODO(arjun): #28264: We set up a row container, wrap it in a row
 	// receiver, and use it and serialize the results of the subquery. The type
@@ -1754,7 +1788,7 @@ func (dsp *DistSQLPlanner) PlanAndRun(
 		recv.SetError(err)
 		return
 	}
-	dsp.finalizePlanWithRowCount(planCtx, physPlan, planCtx.planner.curPlan.mainRowCount)
+	dsp.finalizePlanWithRowCount(ctx, planCtx, physPlan, planCtx.planner.curPlan.mainRowCount)
 	recv.expectedRowsRead = int64(physPlan.TotalEstimatedScannedRows)
 	dsp.Run(ctx, planCtx, txn, physPlan, recv, evalCtx, finishedSetupFn)
 }
@@ -1945,7 +1979,7 @@ func (dsp *DistSQLPlanner) planAndRunPostquery(
 	if err != nil {
 		return err
 	}
-	dsp.FinalizePlan(postqueryPlanCtx, postqueryPhysPlan)
+	dsp.FinalizePlan(ctx, postqueryPlanCtx, postqueryPhysPlan)
 
 	postqueryRecv := recv.clone()
 	defer postqueryRecv.Release()

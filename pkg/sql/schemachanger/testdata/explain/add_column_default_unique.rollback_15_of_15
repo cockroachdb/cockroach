@@ -6,7 +6,7 @@ CREATE TABLE db.public.tbl (i INT PRIMARY KEY);
 ALTER TABLE db.public.tbl ADD COLUMN j INT UNIQUE DEFAULT CAST(date_part('year', now()) AS INT);
 EXPLAIN (ddl) rollback at post-commit stage 15 of 15;
 ----
-Schema change plan for rolling back ALTER TABLE ‹db›.public.‹tbl› ADD COLUMN ‹j› INT8 UNIQUE DEFAULT CAST(date_part(‹'year'›, now()) AS INT8); 
+Schema change plan for rolling back ALTER TABLE ‹db›.public.‹tbl› ADD COLUMN ‹j› INT8 UNIQUE DEFAULT CAST(date_part(‹'year'›, now()) AS INT8);
  └── PostCommitNonRevertiblePhase
       ├── Stage 1 of 3 in PostCommitNonRevertiblePhase
       │    ├── 2 elements transitioning toward PUBLIC
@@ -29,14 +29,13 @@ Schema change plan for rolling back ALTER TABLE ‹db›.public.‹tbl› ADD CO
       │    │    ├── PUBLIC     → ABSENT      IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 5}
       │    │    ├── PUBLIC     → ABSENT      IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 5}
       │    │    └── WRITE_ONLY → DELETE_ONLY TemporaryIndex:{DescID: 106, IndexID: 5, ConstraintID: 5, SourceIndexID: 2}
-      │    └── 13 Mutation operations
+      │    └── 12 Mutation operations
       │         ├── SetIndexName {"IndexID":1,"Name":"tbl_pkey","TableID":106}
       │         ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":2,"TableID":106}
       │         ├── SetColumnName {"ColumnID":2,"Name":"crdb_internal_co...","TableID":106}
       │         ├── MakePublicPrimaryIndexWriteOnly {"IndexID":2,"TableID":106}
       │         ├── SetIndexName {"IndexID":2,"Name":"crdb_internal_in...","TableID":106}
       │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":3,"TableID":106}
-      │         ├── LogEvent {"TargetStatus":1}
       │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":4,"TableID":106}
       │         ├── SetIndexName {"IndexID":4,"Name":"crdb_internal_in...","TableID":106}
       │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":5,"TableID":106}

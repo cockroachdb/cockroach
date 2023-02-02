@@ -33,7 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/geo/geos"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/security/clientsecopts"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -464,6 +464,11 @@ func runStartInternal(
 	if err := serverCfg.Stores.PriorCriticalAlertError(); err != nil {
 		return clierror.NewError(err, exit.FatalError())
 	}
+
+	// Set a MakeProcessUnavailableFunc that will close all sockets. This guards
+	// against a persistent disk stall that prevents the process from exiting or
+	// making progress.
+	log.SetMakeProcessUnavailableFunc(closeAllSockets)
 
 	// Set up a cancellable context for the entire start command.
 	// The context will be canceled at the end.
@@ -1106,7 +1111,7 @@ func reportServerInfo(
 	nodeID := serverCfg.BaseConfig.IDContainer.Get()
 	if serverCfg.SQLConfig.TenantID.IsSystem() {
 		if initialStart {
-			if nodeID == kvserver.FirstNodeID {
+			if nodeID == kvstorage.FirstNodeID {
 				buf.Printf("status:\tinitialized new cluster\n")
 			} else {
 				buf.Printf("status:\tinitialized new node, joined pre-existing cluster\n")

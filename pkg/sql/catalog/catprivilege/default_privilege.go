@@ -412,40 +412,55 @@ func applyDefaultPrivileges(
 	grantOptionList privilege.List,
 ) {
 	userPriv := p.FindOrCreateUser(user)
-	if privilege.ALL.IsSetIn(userPriv.WithGrantOption) && privilege.ALL.IsSetIn(userPriv.Privileges) {
+	newUserPrivs, newUserGrantOptions := ApplyDefaultPrivileges(
+		userPriv.Privileges, userPriv.WithGrantOption, privList, grantOptionList,
+	)
+	userPriv.Privileges = newUserPrivs
+	userPriv.WithGrantOption = newUserGrantOptions
+}
+
+func ApplyDefaultPrivileges(
+	userPrivs uint64,
+	userGrantOptions uint64,
+	defaultPrivs privilege.List,
+	defaultGrantOptions privilege.List,
+) (newUserPrivs uint64, newUserGrantOptions uint64) {
+	if privilege.ALL.IsSetIn(userGrantOptions) && privilege.ALL.IsSetIn(userPrivs) {
 		// User already has 'ALL' privilege: no-op.
 		// If userPriv.WithGrantOption has ALL, then userPriv.Privileges must also have ALL.
 		// It is possible however for userPriv.Privileges to have ALL but userPriv.WithGrantOption to not have ALL
-		return
+		return userPrivs, userGrantOptions
 	}
 
-	privBits := privList.ToBitField()
-	grantBits := grantOptionList.ToBitField()
+	privBits := defaultPrivs.ToBitField()
+	grantBits := defaultGrantOptions.ToBitField()
 
 	// Should not be possible for a privilege to be in grantOptionList that is not in privList.
 	if !privilege.ALL.IsSetIn(privBits) {
-		for _, grantOption := range grantOptionList {
+		for _, grantOption := range defaultGrantOptions {
 			if privBits&grantOption.Mask() == 0 {
-				return
+				return userPrivs, userGrantOptions
 			}
 		}
 	}
 
 	if privilege.ALL.IsSetIn(privBits) {
-		userPriv.Privileges = privilege.ALL.Mask()
+		userPrivs = privilege.ALL.Mask()
 	} else {
-		if !privilege.ALL.IsSetIn(userPriv.Privileges) {
-			userPriv.Privileges |= privBits
+		if !privilege.ALL.IsSetIn(userPrivs) {
+			userPrivs |= privBits
 		}
 	}
 
 	if privilege.ALL.IsSetIn(grantBits) {
-		userPriv.WithGrantOption = privilege.ALL.Mask()
+		userGrantOptions = privilege.ALL.Mask()
 	} else {
-		if !privilege.ALL.IsSetIn(userPriv.WithGrantOption) {
-			userPriv.WithGrantOption |= grantBits
+		if !privilege.ALL.IsSetIn(userGrantOptions) {
+			userGrantOptions |= grantBits
 		}
 	}
+
+	return userPrivs, userGrantOptions
 }
 
 func setRoleHasAllOnTargetObject(

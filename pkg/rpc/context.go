@@ -25,6 +25,7 @@ import (
 
 	circuit "github.com/cockroachdb/circuitbreaker"
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/base/serverident"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -153,9 +154,9 @@ func WithInterceptor(f func(fullMethod string) error) ServerOption {
 // NewServer sets up an RPC server. Depending on the ServerOptions, the Server
 // either expects incoming connections from KV nodes, or from tenant SQL
 // servers.
-func NewServer(rpcCtx *Context, opts ...ServerOption) *grpc.Server {
-	srv, _ /* interceptors */ := NewServerEx(rpcCtx, opts...)
-	return srv
+func NewServer(rpcCtx *Context, opts ...ServerOption) (*grpc.Server, error) {
+	srv, _ /* interceptors */, err := NewServerEx(rpcCtx, opts...)
+	return srv, err
 }
 
 // ServerInterceptorInfo contains the server-side interceptors that a server
@@ -180,7 +181,9 @@ type ClientInterceptorInfo struct {
 // been registered with gRPC for the server. These interceptors can be used
 // manually when bypassing gRPC to call into the server (like the
 // internalClientAdapter does).
-func NewServerEx(rpcCtx *Context, opts ...ServerOption) (*grpc.Server, ServerInterceptorInfo) {
+func NewServerEx(
+	rpcCtx *Context, opts ...ServerOption,
+) (s *grpc.Server, sii ServerInterceptorInfo, err error) {
 	var o serverOpts
 	for _, f := range opts {
 		f(&o)
@@ -209,7 +212,7 @@ func NewServerEx(rpcCtx *Context, opts ...ServerOption) (*grpc.Server, ServerInt
 	if !rpcCtx.Config.Insecure {
 		tlsConfig, err := rpcCtx.GetServerTLSConfig()
 		if err != nil {
-			panic(err)
+			return nil, sii, err
 		}
 		grpcOpts = append(grpcOpts, grpc.Creds(credentials.NewTLS(tlsConfig)))
 	}
@@ -278,12 +281,12 @@ func NewServerEx(rpcCtx *Context, opts ...ServerOption) (*grpc.Server, ServerInt
 	grpcOpts = append(grpcOpts, grpc.ChainUnaryInterceptor(unaryInterceptor...))
 	grpcOpts = append(grpcOpts, grpc.ChainStreamInterceptor(streamInterceptor...))
 
-	s := grpc.NewServer(grpcOpts...)
+	s = grpc.NewServer(grpcOpts...)
 	RegisterHeartbeatServer(s, rpcCtx.NewHeartbeatService())
 	return s, ServerInterceptorInfo{
 		UnaryInterceptors:  unaryInterceptor,
 		StreamInterceptors: streamInterceptor,
-	}
+	}, nil
 }
 
 // Connection is a wrapper around grpc.ClientConn. It prevents the underlying
@@ -684,9 +687,9 @@ func (rpcCtx *Context) Metrics() *Metrics {
 // Note: the node ID ought to be retyped, see
 // https://github.com/cockroachdb/cockroach/pull/73309
 func (rpcCtx *Context) GetLocalInternalClientForAddr(
-	target string, nodeID roachpb.NodeID,
+	nodeID roachpb.NodeID,
 ) RestrictedInternalClient {
-	if target == rpcCtx.Config.AdvertiseAddr && nodeID == rpcCtx.NodeID.Get() {
+	if nodeID == rpcCtx.NodeID.Get() {
 		return rpcCtx.localInternalClient
 	}
 	return nil
@@ -699,6 +702,10 @@ func (rpcCtx *Context) GetLocalInternalClientForAddr(
 // the configured gRPC client-side and server-side interceptors.
 type internalClientAdapter struct {
 	server roachpb.InternalServer
+	// tenant is set when this adapter will be used by a shared-process tenant to
+	// talk to the local KV server. In that case, the internalClientAdapter needs
+	// to pay extra attention to tracing.
+	tenant bool
 
 	// batchHandler is the RPC handler for Batch(). This includes both the chain
 	// of client-side and server-side gRPC interceptors, and bottoms out by
@@ -713,8 +720,14 @@ type internalClientAdapter struct {
 
 var _ RestrictedInternalClient = internalClientAdapter{}
 
+// makeInternalClientAdapter constructs a internalClientAdapter.
+//
+// tenant should be set when this adapter will be used by a shared-process
+// tenant to talk to the local KV server. In that case, the
+// internalClientAdapter needs to pay extra attention to tracing.
 func makeInternalClientAdapter(
 	server roachpb.InternalServer,
+	tenant bool,
 	clientUnaryInterceptors []grpc.UnaryClientInterceptor,
 	clientStreamInterceptors []grpc.StreamClientInterceptor,
 	serverUnaryInterceptors []grpc.UnaryServerInterceptor,
@@ -760,6 +773,7 @@ func makeInternalClientAdapter(
 
 	return internalClientAdapter{
 		server:                   server,
+		tenant:                   tenant,
 		clientStreamInterceptors: clientStreamInterceptors,
 		serverStreamInterceptors: serverStreamInterceptors,
 		batchHandler: func(ctx context.Context, ba *roachpb.BatchRequest, opts ...grpc.CallOption) (*roachpb.BatchResponse, error) {
@@ -776,13 +790,49 @@ func makeInternalClientAdapter(
 			// instead, the result is allocated by the client. We'll copy the
 			// server-side result into reply in batchHandler().
 			reply := new(roachpb.BatchResponse)
-			// Create a new context from the existing one with the "local request" field set.
-			// This tells the handler that this is an in-process request, bypassing ctx.Peer checks.
-			ctx = grpcutil.NewLocalRequestContext(ctx)
+
+			// Create a new context from the existing one with the "local request"
+			// field set. This tells the handler that this is an in-process request,
+			// bypassing ctx.Peer checks. This call also overwrites any possibly
+			// existing info in the context. This is important in situations where a
+			// shared-process tenant calls into the local KV node, and that local RPC
+			// ends up performing another RPC to the local node. The inner RPC must
+			// carry the identity of the system tenant, not the one of the client of
+			// the outer RPC.
+			ctx = grpcutil.NewLocalRequestContext(ctx, tenantIDFromContext(ctx))
+
+			// If this is a tenant calling to the local KV server, we make things look
+			// closer to a remote call from the tracing point of view.
+			if tenant {
+				sp := tracing.SpanFromContext(ctx)
+				if sp != nil && !sp.IsNoop() {
+					// Fill in ba.TraceInfo. For remote RPCs (not done throught the
+					// internalClientAdapter), this is done by the TracingInternalClient
+					ba = ba.ShallowCopy()
+					ba.TraceInfo = sp.Meta().ToProto()
+				}
+				// Wipe the span from context. The server will create a root span with a
+				// different Tracer, based on remote parent information provided by the
+				// TraceInfo above. If we didn't do this, the server would attempt to
+				// create a child span with its different Tracer, which is not allowed.
+				ctx = tracing.ContextWithSpan(ctx, nil)
+			}
+
 			err := batchClientHandler(ctx, grpcinterceptor.BatchMethodName, ba, reply, nil /* ClientConn */, opts...)
 			return reply, err
 		},
 	}
+}
+
+// tenantIDFromContext returns the tenant ID of the current server.
+func tenantIDFromContext(ctx context.Context) roachpb.TenantID {
+	var tenantID roachpb.TenantID
+	si := serverident.ServerIdentificationFromContext(ctx)
+	// si should only be nil in rpc unit tests.
+	if si != nil {
+		tenantID = si.TenantID().(roachpb.TenantID)
+	}
+	return tenantID
 }
 
 // chainUnaryServerInterceptors takes a slice of RPC interceptors and a final RPC
@@ -975,8 +1025,17 @@ func (a internalClientAdapter) RangeFeed(
 		// anything.
 		sender: pipeWriter{},
 	}
+
+	serverCtx := ctx
+	if a.tenant {
+		// Wipe the span from context. The server will create a root span with a
+		// different Tracer, based on remote parent information provided by the
+		// TraceInfo above. If we didn't do this, the server would attempt to
+		// create a child span with its different Tracer, which is not allowed.
+		serverCtx = tracing.ContextWithSpan(ctx, nil)
+	}
 	rawServerStream := &serverStream{
-		ctx: grpcutil.NewLocalRequestContext(ctx),
+		ctx: grpcutil.NewLocalRequestContext(serverCtx, tenantIDFromContext(ctx)),
 		// RangeFeed is a server-streaming RPC, so the server does not receive
 		// anything.
 		receiver: pipeReader{},
@@ -1091,8 +1150,16 @@ func (a internalClientAdapter) MuxRangeFeed(
 		receiver: eventReader,
 		sender:   requestWriter,
 	}
+	serverCtx := ctx
+	if a.tenant {
+		// Wipe the span from context. The server will create a root span with a
+		// different Tracer, based on remote parent information provided by the
+		// TraceInfo above. If we didn't do this, the server would attempt to
+		// create a child span with its different Tracer, which is not allowed.
+		serverCtx = tracing.ContextWithSpan(ctx, nil)
+	}
 	rawServerStream := &serverStream{
-		ctx:      grpcutil.NewLocalRequestContext(ctx),
+		ctx:      grpcutil.NewLocalRequestContext(serverCtx, tenantIDFromContext(ctx)),
 		receiver: requestReader,
 		sender:   eventWriter,
 	}
@@ -1385,17 +1452,20 @@ func IsLocal(iface RestrictedInternalClient) bool {
 	return ok // internalClientAdapter is used for local connections.
 }
 
-// SetLocalInternalServer sets the context's local internal batch server.
+// SetLocalInternalServer links the local server to the Context, allowing some
+// RPCs to bypass gRPC.
 //
 // serverInterceptors lists the interceptors that will be run on RPCs done
 // through this local server.
 func (rpcCtx *Context) SetLocalInternalServer(
 	internalServer roachpb.InternalServer,
+	tenant bool,
 	serverInterceptors ServerInterceptorInfo,
 	clientInterceptors ClientInterceptorInfo,
 ) {
 	rpcCtx.localInternalClient = makeInternalClientAdapter(
 		internalServer,
+		tenant,
 		clientInterceptors.UnaryInterceptors,
 		clientInterceptors.StreamInterceptors,
 		serverInterceptors.UnaryInterceptors,
@@ -1410,7 +1480,7 @@ func (rpcCtx *Context) ConnHealth(
 	target string, nodeID roachpb.NodeID, class ConnectionClass,
 ) error {
 	// The local client is always considered healthy.
-	if rpcCtx.GetLocalInternalClientForAddr(target, nodeID) != nil {
+	if rpcCtx.GetLocalInternalClientForAddr(nodeID) != nil {
 		return nil
 	}
 	if conn, ok := rpcCtx.m.Get(connKey{target, nodeID, class}); ok {
@@ -1441,7 +1511,7 @@ func (rpcCtx *Context) GRPCDialOptions(
 func (rpcCtx *Context) grpcDialOptionsInternal(
 	ctx context.Context, target string, class ConnectionClass, transport transportType,
 ) ([]grpc.DialOption, error) {
-	dialOpts, err := rpcCtx.dialOptsCommon(class)
+	dialOpts, err := rpcCtx.dialOptsCommon(target, class)
 	if err != nil {
 		return nil, err
 	}
@@ -1610,7 +1680,9 @@ func (rpcCtx *Context) dialOptsNetwork(
 
 // dialOptsCommon computes options used for both in-memory and
 // over-the-network RPC connections.
-func (rpcCtx *Context) dialOptsCommon(class ConnectionClass) ([]grpc.DialOption, error) {
+func (rpcCtx *Context) dialOptsCommon(
+	target string, class ConnectionClass,
+) ([]grpc.DialOption, error) {
 	// The limiting factor for lowering the max message size is the fact
 	// that a single large kv can be sent over the network in one message.
 	// Our maximum kv size is unlimited, so we need this to be very large.
@@ -1635,9 +1707,17 @@ func (rpcCtx *Context) dialOptsCommon(class ConnectionClass) ([]grpc.DialOption,
 	} else {
 		dialOpts = append(dialOpts, grpc.WithInitialWindowSize(initialWindowSize))
 	}
-
-	if len(rpcCtx.clientUnaryInterceptors) > 0 {
-		dialOpts = append(dialOpts, grpc.WithChainUnaryInterceptor(rpcCtx.clientUnaryInterceptors...))
+	unaryInterceptors := rpcCtx.clientUnaryInterceptors
+	unaryInterceptors = unaryInterceptors[:len(unaryInterceptors):len(unaryInterceptors)]
+	if rpcCtx.Knobs.UnaryClientInterceptor != nil {
+		if interceptor := rpcCtx.Knobs.UnaryClientInterceptor(
+			target, class,
+		); interceptor != nil {
+			unaryInterceptors = append(unaryInterceptors, interceptor)
+		}
+	}
+	if len(unaryInterceptors) > 0 {
+		dialOpts = append(dialOpts, grpc.WithChainUnaryInterceptor(unaryInterceptors...))
 	}
 	if len(rpcCtx.clientStreamInterceptors) > 0 {
 		dialOpts = append(dialOpts, grpc.WithChainStreamInterceptor(rpcCtx.clientStreamInterceptors...))
@@ -2146,6 +2226,9 @@ func (rpcCtx *Context) runHeartbeat(
 		} else {
 			close(conn.initialHeartbeatDone) // unblock any waiters
 		}
+		if rpcCtx.RemoteClocks != nil {
+			rpcCtx.RemoteClocks.OnDisconnect(ctx, conn.remoteNodeID)
+		}
 	}()
 
 	{
@@ -2156,19 +2239,18 @@ func (rpcCtx *Context) runHeartbeat(
 			// unusual to hit this case.
 			return err
 		}
+		if rpcCtx.RemoteClocks != nil {
+			rpcCtx.RemoteClocks.OnConnect(ctx, conn.remoteNodeID)
+		}
 	}
 
 	// Start heartbeat loop.
-
-	maxOffset := rpcCtx.MaxOffset
-	maxOffsetNanos := maxOffset.Nanoseconds()
 
 	// The request object. Note that we keep the same object from
 	// heartbeat to heartbeat: we compute a new .Offset at the end of
 	// the current heartbeat as input to the next one.
 	request := &PingRequest{
-		OriginAddr:           rpcCtx.Config.Addr,
-		OriginMaxOffsetNanos: maxOffsetNanos,
+		DeprecatedOriginAddr: rpcCtx.Config.Addr,
 		TargetNodeID:         conn.remoteNodeID,
 		ServerVersion:        rpcCtx.Settings.Version.BinaryVersion(),
 	}
@@ -2250,7 +2332,7 @@ func (rpcCtx *Context) runHeartbeat(
 			}
 
 			if err := errors.Wrap(
-				checkVersion(ctx, rpcCtx.Settings, response.ServerVersion),
+				checkVersion(ctx, rpcCtx.Settings.Version, response.ServerVersion),
 				"version compatibility check failed on ping response"); err != nil {
 				return err
 			}
@@ -2279,7 +2361,7 @@ func (rpcCtx *Context) runHeartbeat(
 					remoteTimeNow := timeutil.Unix(0, response.ServerTime).Add(pingDuration / 2)
 					request.Offset.Offset = remoteTimeNow.Sub(receiveTime).Nanoseconds()
 				}
-				rpcCtx.RemoteClocks.UpdateOffset(ctx, target, request.Offset, pingDuration)
+				rpcCtx.RemoteClocks.UpdateOffset(ctx, conn.remoteNodeID, request.Offset, pingDuration)
 			}
 
 			if cb := rpcCtx.HeartbeatCB; cb != nil {
@@ -2331,7 +2413,7 @@ func (rpcCtx *Context) NewHeartbeatService() *HeartbeatService {
 		disableClusterNameVerification:        rpcCtx.Config.DisableClusterNameVerification,
 		clusterID:                             rpcCtx.StorageClusterID,
 		nodeID:                                rpcCtx.NodeID,
-		settings:                              rpcCtx.Settings,
+		version:                               rpcCtx.Settings.Version,
 		onHandlePing:                          rpcCtx.OnIncomingPing,
 		testingAllowNamedRPCToAnonymousServer: rpcCtx.TestingAllowNamedRPCToAnonymousServer,
 	}

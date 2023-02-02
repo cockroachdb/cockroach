@@ -172,7 +172,7 @@ func (rd *restoreDataProcessor) Start(ctx context.Context) {
 		_ = rd.phaseGroup.Wait()
 	}
 	rd.phaseGroup = ctxgroup.WithContext(ctx)
-	log.Infof(ctx, "starting restore data")
+	log.Infof(ctx, "starting restore data processor")
 
 	entries := make(chan execinfrapb.RestoreSpanEntry, rd.numWorkers)
 	rd.sstCh = make(chan mergedSST, rd.numWorkers)
@@ -444,7 +444,7 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 		var err error
 		batcher, err = bulk.MakeSSTBatcher(ctx,
 			"restore",
-			db,
+			db.KV(),
 			evalCtx.Settings,
 			disallowShadowingBelow,
 			writeAtBatchTS,

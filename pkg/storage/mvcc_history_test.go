@@ -184,9 +184,8 @@ func TestMVCCHistories(t *testing.T) {
 		disableSeparateEngineBlocks := strings.Contains(path, "_disable_separate_engine_blocks")
 
 		// We start from a clean slate in every test file.
-		engine, err := storage.Open(ctx, storage.InMemory(),
+		engine, err := storage.Open(ctx, storage.InMemory(), st,
 			storage.CacheSize(1<<20 /* 1 MiB */),
-			storage.Settings(st),
 			storage.If(separateEngineBlocks && !disableSeparateEngineBlocks, storage.BlockSize(1)),
 		)
 		require.NoError(t, err)
@@ -1388,11 +1387,16 @@ func cmdExport(e *evalCtx) error {
 	var summary roachpb.BulkOpSummary
 	var resume storage.MVCCKey
 	var fingerprint uint64
+	var hasRangeKeys bool
 	var err error
 	if shouldFingerprint {
-		summary, resume, fingerprint, err = storage.MVCCExportFingerprint(e.ctx, e.st, r, opts, sstFile)
+		summary, resume, fingerprint, hasRangeKeys, err = storage.MVCCExportFingerprint(e.ctx, e.st, r,
+			opts, sstFile)
 		if err != nil {
 			return err
+		}
+		if !hasRangeKeys {
+			sstFile = &storage.MemFile{}
 		}
 		e.results.buf.Printf("export: %s", &summary)
 		e.results.buf.Print(" fingerprint=true")
@@ -1410,9 +1414,12 @@ func cmdExport(e *evalCtx) error {
 	e.results.buf.Printf("\n")
 
 	if shouldFingerprint {
+		var ssts [][]byte
+		if sstFile.Len() != 0 {
+			ssts = append(ssts, sstFile.Bytes())
+		}
 		// Fingerprint the rangekeys returned as a pebble SST.
-		rangekeyFingerprint, err := storage.FingerprintRangekeys(e.ctx, e.st, opts.FingerprintOptions,
-			[][]byte{sstFile.Bytes()})
+		rangekeyFingerprint, err := storage.FingerprintRangekeys(e.ctx, e.st, opts.FingerprintOptions, ssts)
 		if err != nil {
 			return err
 		}

@@ -53,6 +53,18 @@ const contentionStdDev = bar(cx("contention-dev"), (d: Transaction) =>
     d.stats_data.stats.exec_stats.count,
   ),
 );
+const cpuBar = [
+  bar(
+    "cpu",
+    (d: Transaction) => d.stats_data.stats.exec_stats.cpu_sql_nanos?.mean,
+  ),
+];
+const cpuStdDev = bar(cx("cpu-dev"), (d: Transaction) =>
+  stdDevLong(
+    d.stats_data.stats.exec_stats.cpu_sql_nanos,
+    d.stats_data.stats.exec_stats.count,
+  ),
+);
 const maxMemUsageBar = [
   bar("max-mem-usage", (d: Transaction) =>
     longToInt(d.stats_data.stats.exec_stats.max_mem_usage?.mean),
@@ -103,6 +115,12 @@ export const transactionsContentionBarChart = barChartFactory(
   contentionBar,
   v => Duration(v * 1e9),
   contentionStdDev,
+);
+export const transactionsCPUBarChart = barChartFactory(
+  "grey",
+  cpuBar,
+  v => Duration(v),
+  cpuStdDev,
 );
 export const transactionsMaxMemUsageBarChart = barChartFactory(
   "grey",

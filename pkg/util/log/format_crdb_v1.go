@@ -19,6 +19,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base/serverident"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -323,7 +324,7 @@ func formatLogEntryInternalV1(
 		buf.WriteString(entry.TenantID)
 	} else {
 		// If no tenant ID was set, default to the system tenant ID
-		buf.WriteString(systemTenantID)
+		buf.WriteString(serverident.SystemTenantID)
 	}
 	// Display the tags if set.
 	if len(entry.Tags) != 0 {
@@ -428,7 +429,7 @@ func (d *entryDecoderV1) Decode(entry *logpb.Entry) error {
 		// Process the context tags.
 		redactable := len(m[6]) != 0
 		// Look for a tenant ID tag. Default to system otherwise.
-		entry.TenantID = systemTenantID
+		entry.TenantID = serverident.SystemTenantID
 		tagsToProcess := m[7]
 		if len(tagsToProcess) != 0 && bytes.HasPrefix(tagsToProcess, tenantIDLogTagBytePrefix) {
 			commaIndex := bytes.IndexByte(tagsToProcess, ',')

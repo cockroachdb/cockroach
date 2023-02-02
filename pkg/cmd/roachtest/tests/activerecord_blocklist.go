@@ -30,10 +30,6 @@ var activeRecordBlocklist = blocklist{
 	"ActiveRecord::CockroachDB::Migration::PGChangeSchemaTest#test_change_type_with_symbol_using_timestamp_with_timestamptz_as_default": "49329",
 	"ActiveRecord::CockroachDB::Migration::PGChangeSchemaTest#test_change_type_with_symbol_with_timestamptz_as_default":                 "49329",
 	"ActiveRecord::CockroachDB::Migration::PGChangeSchemaTest#test_change_type_with_symbol_with_timestamptz":                            "49329",
-	"PostgresqlRangeTest#test_timezone_array_awareness_tsrange":                                                                         "27791",
-	"PostgresqlRangeTest#test_timezone_array_awareness_tzrange":                                                                         "27791",
-	// TODO(yang): investigate cause further
-	"PostgreSQLReferentialIntegrityTest#test_all_foreign_keys_valid_having_foreign_keys_in_multiple_schemas": "unknown",
 }
 
 var activeRecordIgnoreList = blocklist{

@@ -60,6 +60,9 @@ func runExecBuildLogicTest(t *testing.T, file string) {
 	serverArgs := logictest.TestServerArgs{
 		DisableWorkmemRandomization: true,
 		ForceProductionValues:       true,
+		// Disable the direct scans in order to keep the output of EXPLAIN (VEC)
+		// deterministic.
+		DisableDirectColumnarScans: true,
 	}
 	logictest.RunLogicTest(t, serverArgs, configIdx, filepath.Join(execBuildLogicTestDir, file))
 }
@@ -548,6 +551,13 @@ func TestExecBuild_trigram_index(
 ) {
 	defer leaktest.AfterTest(t)()
 	runExecBuildLogicTest(t, "trigram_index")
+}
+
+func TestExecBuild_tsvector_index(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runExecBuildLogicTest(t, "tsvector_index")
 }
 
 func TestExecBuild_tuple(

@@ -14,7 +14,10 @@ import {
 } from "@cockroachlabs/cluster-ui";
 import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
-import { refreshTransactionInsightDetails } from "src/redux/apiReducers";
+import {
+  refreshTxnInsightDetails,
+  refreshUserSQLRoles,
+} from "src/redux/apiReducers";
 import { AdminUIState } from "src/redux/state";
 import {
   selectTxnInsightDetails,
@@ -22,6 +25,7 @@ import {
 } from "src/views/insights/insightsSelectors";
 import { setGlobalTimeScaleAction } from "src/redux/statements";
 import { selectTimeScale } from "src/redux/timeScale";
+import { selectHasAdminRole } from "src/redux/user";
 
 const mapStateToProps = (
   state: AdminUIState,
@@ -31,12 +35,14 @@ const mapStateToProps = (
     insightDetails: selectTxnInsightDetails(state, props),
     insightError: selectTransactionInsightDetailsError(state, props),
     timeScale: selectTimeScale(state),
+    hasAdminRole: selectHasAdminRole(state),
   };
 };
 
 const mapDispatchToProps: TransactionInsightDetailsDispatchProps = {
-  refreshTransactionInsightDetails: refreshTransactionInsightDetails,
+  refreshTransactionInsightDetails: refreshTxnInsightDetails,
   setTimeScale: setGlobalTimeScaleAction,
+  refreshUserSQLRoles: refreshUserSQLRoles,
 };
 
 const TransactionInsightDetailsPage = withRouter(

@@ -3,10 +3,15 @@ load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 
 go_library(
     name = "tenantcapabilities",
-    srcs = ["capabilities.go"],
+    srcs = [
+        "capabilities.go",
+        "testingknobs.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/base",
+        "//pkg/kv/kvclient/rangefeed/rangefeedcache",
         "//pkg/multitenant/tenantcapabilities/tenantcapabilitiespb",
         "//pkg/roachpb",
     ],

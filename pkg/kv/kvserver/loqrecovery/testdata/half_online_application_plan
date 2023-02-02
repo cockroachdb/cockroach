@@ -1,0 +1,86 @@
+# Test verifying that changes to replicas are recorded and records
+# are translated to logging upon restarts.
+# To do that, we generate replicas without quorum in two stores,
+# perform recovery and assert the dump of recovery events.
+
+replication-data
+- StoreID: 1
+  RangeID: 1
+  StartKey: /Min
+  EndKey: /Table/1
+  Replicas:
+  - { NodeID: 1, StoreID: 1, ReplicaID: 1}  # Designated replica in this store
+  - { NodeID: 4, StoreID: 4, ReplicaID: 4}
+  - { NodeID: 5, StoreID: 5, ReplicaID: 5}
+  RangeAppliedIndex: 11
+  RaftCommittedIndex: 13
+- StoreID: 1
+  RangeID: 2
+  StartKey: /Table/1
+  EndKey: /Table/5
+  Replicas:
+  - { NodeID: 1, StoreID: 1, ReplicaID: 1}  # Designated replica in this store
+  - { NodeID: 4, StoreID: 4, ReplicaID: 4}
+  - { NodeID: 5, StoreID: 5, ReplicaID: 5}
+  RangeAppliedIndex: 11
+  RaftCommittedIndex: 13
+- StoreID: 2
+  RangeID: 3
+  StartKey: /Table/5
+  EndKey: /Max
+  Replicas:
+  - { NodeID: 2, StoreID: 2, ReplicaID: 2}  # Designated replica in this store
+  - { NodeID: 4, StoreID: 4, ReplicaID: 4}
+  - { NodeID: 5, StoreID: 5, ReplicaID: 5}
+  RangeAppliedIndex: 10
+  RaftCommittedIndex: 13
+----
+ok
+
+collect-replica-info stores=(1,2)
+----
+ok
+
+make-plan
+----
+Replica updates:
+- RangeID: 1
+  StartKey: /Min
+  OldReplicaID: 1
+  NewReplica:
+    NodeID: 1
+    StoreID: 1
+    ReplicaID: 16
+  NextReplicaID: 17
+- RangeID: 2
+  StartKey: /Table/1
+  OldReplicaID: 1
+  NewReplica:
+    NodeID: 1
+    StoreID: 1
+    ReplicaID: 16
+  NextReplicaID: 17
+- RangeID: 3
+  StartKey: /Table/5
+  OldReplicaID: 2
+  NewReplica:
+    NodeID: 2
+    StoreID: 2
+    ReplicaID: 16
+  NextReplicaID: 17
+Decommissioned nodes:
+[n4, n5]
+
+apply-plan stores=(1,2) restart=true
+----
+ok
+
+dump-events stores=(1,2) remove=true status=true
+----
+Events:
+updated range r1, Key:/Min, Store:s1 ReplicaID:16
+updated range r2, Key:/Table/1, Store:s1 ReplicaID:16
+updated range r3, Key:/Table/5, Store:s2 ReplicaID:16
+Statuses:
+node n1 applied plan 00000001-0000-4000-8000-000000000000 at 2022-02-24 01:40:00 +0000 UTC:
+node n2 applied plan 00000001-0000-4000-8000-000000000000 at 2022-02-24 01:40:00 +0000 UTC:

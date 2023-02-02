@@ -13,6 +13,7 @@
 package regionlatency
 
 import (
+	"sort"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -111,6 +112,16 @@ func (m LatencyMap) getLatency(a, b Region) (OneWayLatency, bool) {
 	}
 	toB, ok := fromA[b]
 	return toB, ok
+}
+
+// GetRegions returns the set of regions in the map.
+func (m LatencyMap) GetRegions() []Region {
+	var regions []Region
+	for r := range m.m {
+		regions = append(regions, r)
+	}
+	sort.Strings(regions)
+	return regions
 }
 
 // RoundTripPairs are pairs of round-trip latency between regions.

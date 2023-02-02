@@ -5,22 +5,39 @@ CREATE SCHEMA db.sc;
 /* test */
 EXPLAIN (ddl) DROP SCHEMA db.sc;
 ----
-Schema change plan for DROP SCHEMA ‹db›.‹sc›; 
+Schema change plan for DROP SCHEMA ‹db›.‹sc›;
  ├── StatementPhase
  │    └── Stage 1 of 1 in StatementPhase
- │         ├── 1 element transitioning toward ABSENT
- │         │    └── PUBLIC → TXN_DROPPED Schema:{DescID: 106}
- │         └── 1 Mutation operation
- │              └── MarkDescriptorAsSyntheticallyDropped {"DescriptorID":106}
- ├── PreCommitPhase
- │    └── Stage 1 of 1 in PreCommitPhase
  │         ├── 6 elements transitioning toward ABSENT
- │         │    ├── PUBLIC      → ABSENT  Namespace:{DescID: 106, Name: sc, ReferencedDescID: 104}
- │         │    ├── PUBLIC      → ABSENT  Owner:{DescID: 106}
- │         │    ├── PUBLIC      → ABSENT  UserPrivileges:{DescID: 106, Name: admin}
- │         │    ├── PUBLIC      → ABSENT  UserPrivileges:{DescID: 106, Name: root}
- │         │    ├── TXN_DROPPED → DROPPED Schema:{DescID: 106}
- │         │    └── PUBLIC      → ABSENT  SchemaParent:{DescID: 106, ReferencedDescID: 104}
+ │         │    ├── PUBLIC → ABSENT  Namespace:{DescID: 106, Name: sc, ReferencedDescID: 104}
+ │         │    ├── PUBLIC → ABSENT  Owner:{DescID: 106}
+ │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 106, Name: admin}
+ │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 106, Name: root}
+ │         │    ├── PUBLIC → DROPPED Schema:{DescID: 106}
+ │         │    └── PUBLIC → ABSENT  SchemaParent:{DescID: 106, ReferencedDescID: 104}
+ │         └── 3 Mutation operations
+ │              ├── MarkDescriptorAsDropped {"DescriptorID":106}
+ │              ├── RemoveSchemaParent {"Parent":{"ParentDatabaseID":104,"SchemaID":106}}
+ │              └── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":106,"Name":"sc"}}
+ ├── PreCommitPhase
+ │    ├── Stage 1 of 2 in PreCommitPhase
+ │    │    ├── 6 elements transitioning toward ABSENT
+ │    │    │    ├── ABSENT  → PUBLIC Namespace:{DescID: 106, Name: sc, ReferencedDescID: 104}
+ │    │    │    ├── ABSENT  → PUBLIC Owner:{DescID: 106}
+ │    │    │    ├── ABSENT  → PUBLIC UserPrivileges:{DescID: 106, Name: admin}
+ │    │    │    ├── ABSENT  → PUBLIC UserPrivileges:{DescID: 106, Name: root}
+ │    │    │    ├── DROPPED → PUBLIC Schema:{DescID: 106}
+ │    │    │    └── ABSENT  → PUBLIC SchemaParent:{DescID: 106, ReferencedDescID: 104}
+ │    │    └── 1 Mutation operation
+ │    │         └── UndoAllInTxnImmediateMutationOpSideEffects
+ │    └── Stage 2 of 2 in PreCommitPhase
+ │         ├── 6 elements transitioning toward ABSENT
+ │         │    ├── PUBLIC → ABSENT  Namespace:{DescID: 106, Name: sc, ReferencedDescID: 104}
+ │         │    ├── PUBLIC → ABSENT  Owner:{DescID: 106}
+ │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 106, Name: admin}
+ │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 106, Name: root}
+ │         │    ├── PUBLIC → DROPPED Schema:{DescID: 106}
+ │         │    └── PUBLIC → ABSENT  SchemaParent:{DescID: 106, ReferencedDescID: 104}
  │         └── 6 Mutation operations
  │              ├── MarkDescriptorAsDropped {"DescriptorID":106}
  │              ├── RemoveSchemaParent {"Parent":{"ParentDatabaseID":104,"SchemaID":106}}
@@ -32,8 +49,7 @@ Schema change plan for DROP SCHEMA ‹db›.‹sc›;
       └── Stage 1 of 1 in PostCommitNonRevertiblePhase
            ├── 1 element transitioning toward ABSENT
            │    └── DROPPED → ABSENT Schema:{DescID: 106}
-           └── 5 Mutation operations
-                ├── LogEvent {"TargetStatus":1}
+           └── 4 Mutation operations
                 ├── DeleteDescriptor {"DescriptorID":106}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":104}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":106}

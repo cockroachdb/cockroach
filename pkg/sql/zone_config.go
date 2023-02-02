@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/zone"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -448,7 +449,7 @@ func resolveSubzone(
 		indexName = index.GetName()
 	} else {
 		var err error
-		index, err = table.FindIndexWithName(indexName)
+		index, err = catalog.MustFindIndexByName(table, indexName)
 		if err != nil {
 			return nil, "", err
 		}
@@ -506,7 +507,7 @@ func prepareRemovedPartitionZoneConfigs(
 
 func deleteRemovedPartitionZoneConfigs(
 	ctx context.Context,
-	txn *kv.Txn,
+	txn isql.Txn,
 	tableDesc catalog.TableDescriptor,
 	descriptors *descs.Collection,
 	indexID descpb.IndexID,
@@ -516,11 +517,11 @@ func deleteRemovedPartitionZoneConfigs(
 	kvTrace bool,
 ) error {
 	update, err := prepareRemovedPartitionZoneConfigs(
-		ctx, txn, tableDesc, indexID, oldPart, newPart, execCfg, descriptors,
+		ctx, txn.KV(), tableDesc, indexID, oldPart, newPart, execCfg, descriptors,
 	)
 	if update == nil || err != nil {
 		return err
 	}
-	_, err = writeZoneConfigUpdate(ctx, txn, kvTrace, descriptors, update)
+	_, err = writeZoneConfigUpdate(ctx, txn.KV(), kvTrace, descriptors, update)
 	return err
 }

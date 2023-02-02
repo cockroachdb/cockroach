@@ -45,6 +45,13 @@ object CompositeType
 CompositeType :  TypeID
 CompositeType :  ArrayTypeID
 
+object Function
+
+Function :  FunctionID
+Function : []Params
+Function :  ReturnSet
+Function :  ReturnType
+
 object ColumnFamily
 
 ColumnFamily :  TableID
@@ -161,6 +168,7 @@ ColumnType :  TypeT
 ColumnType :  IsNullable
 ColumnType :  ComputeExpr
 ColumnType :  IsVirtual
+ColumnType :  ElementCreationMetadata
 
 object ColumnDefaultExpression
 
@@ -186,6 +194,12 @@ ColumnComment :  TableID
 ColumnComment :  ColumnID
 ColumnComment :  Comment
 ColumnComment :  PgAttributeNum
+
+object ColumnNotNull
+
+ColumnNotNull :  TableID
+ColumnNotNull :  ColumnID
+ColumnNotNull :  IndexIDForValidation
 
 object IndexName
 
@@ -256,6 +270,7 @@ object UserPrivileges
 UserPrivileges :  DescriptorID
 UserPrivileges :  UserName
 UserPrivileges :  Privileges
+UserPrivileges :  WithGrantOption
 
 object DatabaseRegionConfig
 
@@ -307,6 +322,42 @@ object CompositeTypeAttrName
 CompositeTypeAttrName :  CompositeTypeID
 CompositeTypeAttrName :  Name
 
+object FunctionName
+
+FunctionName :  FunctionID
+FunctionName :  Name
+
+object FunctionVolatility
+
+FunctionVolatility :  FunctionID
+FunctionVolatility :  Volatility
+
+object FunctionLeakProof
+
+FunctionLeakProof :  FunctionID
+FunctionLeakProof :  LeakProof
+
+object FunctionNullInputBehavior
+
+FunctionNullInputBehavior :  FunctionID
+FunctionNullInputBehavior :  NullInputBehavior
+
+object FunctionBody
+
+FunctionBody :  FunctionID
+FunctionBody :  Body
+FunctionBody :  Lang
+FunctionBody : []UsesTables
+FunctionBody : []UsesViews
+FunctionBody : []UsesSequenceIDs
+FunctionBody : []UsesTypeIDs
+
+object FunctionParamDefaultExpression
+
+FunctionParamDefaultExpression :  FunctionID
+FunctionParamDefaultExpression :  Ordinal
+FunctionParamDefaultExpression :  Expression
+
 Table <|-- ColumnFamily
 Table <|-- Column
 View <|-- Column
@@ -339,6 +390,7 @@ Column <|-- ColumnDefaultExpression
 Column <|-- ColumnOnUpdateExpression
 Column <|-- SequenceOwner
 Column <|-- ColumnComment
+Column <|-- ColumnNotNull
 PrimaryIndex <|-- IndexName
 SecondaryIndex <|-- IndexName
 PrimaryIndex <|-- IndexPartitioning
@@ -396,4 +448,10 @@ Sequence <|-- ObjectParent
 EnumType <|-- EnumTypeValue
 CompositeType <|-- CompositeTypeAttrType
 CompositeType <|-- CompositeTypeAttrName
+Function <|-- FunctionName
+Function <|-- FunctionVolatility
+Function <|-- FunctionLeakProof
+Function <|-- FunctionNullInputBehavior
+Function <|-- FunctionBody
+Function <|-- FunctionParamDefaultExpression
 @enduml

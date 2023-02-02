@@ -17,41 +17,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
-
-func newLogEventBase(e scpb.Element, md *opGenContext) scop.EventBase {
-	idx, ok := md.elementToTarget[e]
-	if !ok {
-		panic(errors.AssertionFailedf(
-			"could not find element %s in target state", screl.ElementString(e),
-		))
-	}
-	t := md.Targets[idx]
-	return scop.EventBase{
-		TargetMetadata: *protoutil.Clone(&t.Metadata).(*scpb.TargetMetadata),
-		Authorization:  *protoutil.Clone(&md.Authorization).(*scpb.Authorization),
-		Statement:      md.Statements[t.Metadata.StatementID].RedactedStatement,
-		StatementTag:   md.Statements[t.Metadata.StatementID].StatementTag,
-	}
-}
-
-func newLogEventOp(e scpb.Element, md *opGenContext) *scop.LogEvent {
-	idx, ok := md.elementToTarget[e]
-	if !ok {
-		panic(errors.AssertionFailedf(
-			"could not find element %s in target state", screl.ElementString(e),
-		))
-	}
-	t := md.Targets[idx]
-	return &scop.LogEvent{
-		EventBase:    newLogEventBase(e, md),
-		Element:      *protoutil.Clone(&t.ElementProto).(*scpb.ElementProto),
-		TargetStatus: t.TargetStatus,
-	}
-}
 
 func statementForDropJob(e scpb.Element, md *opGenContext) scop.StatementForDropJob {
 	stmtID := md.Targets[md.elementToTarget[e]].Metadata.StatementID
@@ -147,10 +115,11 @@ func makeOpsFunc(el scpb.Element, fns []interface{}) (opsFunc, scop.Type, error)
 }
 
 var (
-	opInterfaceType           = reflect.TypeOf((*scop.Op)(nil)).Elem()
-	mutationOpInterfaceType   = reflect.TypeOf((*scop.MutationOp)(nil)).Elem()
-	validationOpInterfaceType = reflect.TypeOf((*scop.ValidationOp)(nil)).Elem()
-	backfillOpInterfaceType   = reflect.TypeOf((*scop.BackfillOp)(nil)).Elem()
+	opInterfaceType                  = reflect.TypeOf((*scop.Op)(nil)).Elem()
+	immediateMutationOpInterfaceType = reflect.TypeOf((*scop.ImmediateMutationOp)(nil)).Elem()
+	deferredMutationOpInterfaceType  = reflect.TypeOf((*scop.DeferredMutationOp)(nil)).Elem()
+	validationOpInterfaceType        = reflect.TypeOf((*scop.ValidationOp)(nil)).Elem()
+	backfillOpInterfaceType          = reflect.TypeOf((*scop.BackfillOp)(nil)).Elem()
 )
 
 func checkOpFunc(el scpb.Element, fn interface{}) (opType scop.Type, _ error) {
@@ -183,7 +152,7 @@ func checkOpFunc(el scpb.Element, fn interface{}) (opType scop.Type, _ error) {
 		return 0, returnTypeError()
 	}
 	switch {
-	case out.Implements(mutationOpInterfaceType):
+	case out.Implements(immediateMutationOpInterfaceType), out.Implements(deferredMutationOpInterfaceType):
 		opType = scop.MutationType
 	case out.Implements(validationOpInterfaceType):
 		opType = scop.ValidationType

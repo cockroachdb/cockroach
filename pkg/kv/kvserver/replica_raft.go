@@ -344,7 +344,7 @@ func (r *Replica) propose(
 
 	// Determine the encoding style for the Raft command.
 	prefix := true
-	encodingPrefixByte := raftlog.EntryEncodingStandardPrefixByte
+	entryEncoding := raftlog.EntryEncodingStandardWithoutAC
 	if crt := p.command.ReplicatedEvalResult.ChangeReplicas; crt != nil {
 		// EndTxnRequest with a ChangeReplicasTrigger is special because Raft
 		// needs to understand it; it cannot simply be an opaque command. To
@@ -416,7 +416,7 @@ func (r *Replica) propose(
 		}
 	} else if p.command.ReplicatedEvalResult.AddSSTable != nil {
 		log.VEvent(p.ctx, 4, "sideloadable proposal detected")
-		encodingPrefixByte = raftlog.EntryEncodingSideloadedPrefixByte
+		entryEncoding = raftlog.EntryEncodingSideloadedWithoutAC
 		r.store.metrics.AddSSTableProposals.Inc(1)
 
 		if p.command.ReplicatedEvalResult.AddSSTable.Data == nil {
@@ -438,7 +438,7 @@ func (r *Replica) propose(
 	data := make([]byte, preLen, needed)
 	// Encode prefix with command ID, if necessary.
 	if prefix {
-		raftlog.EncodeRaftCommandPrefix(data, encodingPrefixByte, p.idKey)
+		raftlog.EncodeRaftCommandPrefix(data, entryEncoding, p.idKey)
 	}
 	// Encode body of command.
 	data = data[:preLen+cmdLen]
@@ -684,7 +684,7 @@ func (r *Replica) handleRaftReady(
 // non-sensitive cue as to what happened.
 func (r *Replica) handleRaftReadyRaftMuLocked(
 	ctx context.Context, inSnap IncomingSnapshot,
-) (handleRaftReadyStats, error) {
+) (stats handleRaftReadyStats, _ error) {
 	// handleRaftReadyRaftMuLocked is not prepared to handle context cancellation,
 	// so assert that it's given a non-cancellable context.
 	if ctx.Done() != nil {
@@ -692,12 +692,13 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			"handleRaftReadyRaftMuLocked cannot be called with a cancellable context")
 	}
 
-	stats := handleRaftReadyStats{
+	// NB: we need to reference the named return parameter here. If `stats` were
+	// just a local, we'd be modifying the local but not the return value in the
+	// defer below.
+	stats = handleRaftReadyStats{
 		tBegin: timeutil.Now(),
 	}
 	defer func() {
-		// NB: we need to reference the named return parameter here. If `stats` were
-		// just a local, we'd be modifying the local but not the return value.
 		stats.tEnd = timeutil.Now()
 	}()
 
@@ -927,7 +928,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 
 	msgApps, otherMsgs := splitMsgApps(rd.Messages)
 	r.traceMessageSends(msgApps, "sending msgApp")
-	r.sendRaftMessagesRaftMuLocked(ctx, msgApps, pausedFollowers)
+	r.sendRaftMessages(ctx, msgApps, pausedFollowers)
 
 	// TODO(pavelkalinnikov): find a way to move it to storeEntries.
 	if !raft.IsEmptyHardState(rd.HardState) {
@@ -976,7 +977,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		r.store.replicateQueue.MaybeAddAsync(ctx, r, r.store.Clock().NowAsClockTimestamp())
 	}
 
-	r.sendRaftMessagesRaftMuLocked(ctx, otherMsgs, nil /* blocked */)
+	r.sendRaftMessages(ctx, otherMsgs, nil /* blocked */)
 	r.traceEntries(rd.CommittedEntries, "committed, before applying any entries")
 
 	stats.tApplicationBegin = timeutil.Now()
@@ -1360,7 +1361,9 @@ func (r *Replica) poisonInflightLatches(err error) {
 	defer r.mu.Unlock()
 	for _, p := range r.mu.proposals {
 		p.ec.poison()
-		if p.ec.g.Req.PoisonPolicy == poison.Policy_Error {
+		// TODO(tbg): find out how `p.ec.done()` can have been called at this point,
+		// See: https://github.com/cockroachdb/cockroach/issues/86547
+		if p.ec.g != nil && p.ec.g.Req.PoisonPolicy == poison.Policy_Error {
 			aErr := roachpb.NewAmbiguousResultError(err)
 			// NB: this does not release the request's latches. It's important that
 			// the latches stay in place, since the command could still apply.
@@ -1411,7 +1414,7 @@ func (r *Replica) maybeCoalesceHeartbeat(
 	return true
 }
 
-func (r *Replica) sendRaftMessagesRaftMuLocked(
+func (r *Replica) sendRaftMessages(
 	ctx context.Context, messages []raftpb.Message, blocked map[roachpb.ReplicaID]struct{},
 ) {
 	var lastAppResp raftpb.Message
@@ -1484,19 +1487,24 @@ func (r *Replica) sendRaftMessagesRaftMuLocked(
 		}
 
 		if !drop {
-			r.sendRaftMessageRaftMuLocked(ctx, message)
+			r.sendRaftMessage(ctx, message)
 		}
 	}
 	if lastAppResp.Index > 0 {
-		r.sendRaftMessageRaftMuLocked(ctx, lastAppResp)
+		r.sendRaftMessage(ctx, lastAppResp)
 	}
 }
 
-// sendRaftMessageRaftMuLocked sends a Raft message.
-func (r *Replica) sendRaftMessageRaftMuLocked(ctx context.Context, msg raftpb.Message) {
+// sendRaftMessage sends a Raft message.
+//
+// When calling this method, the raftMu may be held, but it does not need to be.
+// The Replica mu must not be held.
+func (r *Replica) sendRaftMessage(ctx context.Context, msg raftpb.Message) {
+	lastToReplica, lastFromReplica := r.getLastReplicaDescriptors()
+
 	r.mu.RLock()
-	fromReplica, fromErr := r.getReplicaDescriptorByIDRLocked(roachpb.ReplicaID(msg.From), r.raftMu.lastToReplica)
-	toReplica, toErr := r.getReplicaDescriptorByIDRLocked(roachpb.ReplicaID(msg.To), r.raftMu.lastFromReplica)
+	fromReplica, fromErr := r.getReplicaDescriptorByIDRLocked(roachpb.ReplicaID(msg.From), lastToReplica)
+	toReplica, toErr := r.getReplicaDescriptorByIDRLocked(roachpb.ReplicaID(msg.To), lastFromReplica)
 	var startKey roachpb.RKey
 	if msg.Type == raftpb.MsgApp && r.mu.internalRaftGroup != nil {
 		// When the follower is potentially an uninitialized replica waiting for
@@ -1547,13 +1555,10 @@ func (r *Replica) sendRaftMessageRaftMuLocked(ctx context.Context, msg raftpb.Me
 		RangeStartKey: startKey, // usually nil
 	}
 	if !r.sendRaftMessageRequest(ctx, req) {
-		if err := r.withRaftGroup(true, func(raftGroup *raft.RawNode) (bool, error) {
-			r.mu.droppedMessages++
-			raftGroup.ReportUnreachable(msg.To)
-			return true, nil
-		}); err != nil && !errors.Is(err, errRemoved) {
-			log.Fatalf(ctx, "%v", err)
-		}
+		r.mu.Lock()
+		r.mu.droppedMessages++
+		r.mu.Unlock()
+		r.addUnreachableRemoteReplica(toReplica.ReplicaID)
 	}
 }
 
