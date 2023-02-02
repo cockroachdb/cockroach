@@ -54,9 +54,9 @@ type CpuProfiler struct {
 	st       *cluster.Settings
 }
 
-// NewCpuProfiler creates a new CPUProfiler. dir indicates the directory which
+// NewCPUProfiler creates a new CPUProfiler. dir indicates the directory which
 // dumps are stored.
-func NewCpuProfiler(ctx context.Context, dir string, st *cluster.Settings) (*CpuProfiler, error) {
+func NewCPUProfiler(ctx context.Context, dir string, st *cluster.Settings) (*CpuProfiler, error) {
 	if dir == "" {
 		return nil, errors.New("directory to store dumps could not be determined")
 	}
