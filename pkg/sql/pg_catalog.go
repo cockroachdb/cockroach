@@ -2642,7 +2642,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-proc.html`,
 						return false, err
 					}
 
-					err = addPgProcBuiltinRow(name, addRow)
+					err = addPgProcBuiltinRow(name.Object(), addRow)
 					if err != nil {
 						return false, err
 					}

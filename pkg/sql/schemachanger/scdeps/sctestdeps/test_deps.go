@@ -1218,35 +1218,39 @@ func (s *TestState) ResolveFunction(
 // ResolveFunctionByOID implements the scbuild.CatalogReader interface.
 func (s *TestState) ResolveFunctionByOID(
 	ctx context.Context, oid oid.Oid,
-) (string, *tree.Overload, error) {
+) (*tree.FunctionName, *tree.Overload, error) {
 	if !funcdesc.IsOIDUserDefinedFunc(oid) {
-		name, ok := tree.OidToBuiltinName[oid]
+		qol, ok := tree.OidToQualifiedBuiltinOverload[oid]
 		if !ok {
-			return "", nil, errors.Newf("function %d not found", oid)
+			return nil, nil, errors.Newf("function %d not found", oid)
 		}
-		funcDef := tree.FunDefs[name]
-		for _, o := range funcDef.Definition {
-			if o.Oid == oid {
-				return funcDef.Name, o, nil
-			}
-		}
-		return "", nil, errors.Newf("function %d not found", oid)
+		name := tree.MakeQualifiedFunctionName(s.CurrentDatabase(), qol.Schema, tree.OidToBuiltinName[oid])
+		return &name, qol.Overload, nil
 	}
 
 	fnID := funcdesc.UserDefinedFunctionOIDToID(oid)
 	desc, err := s.mustReadImmutableDescriptor(fnID)
 	if err != nil {
-		return "", nil, err
+		return nil, nil, err
 	}
 	fnDesc, err := catalog.AsFunctionDescriptor(desc)
 	if err != nil {
-		return "", nil, err
+		return nil, nil, err
+	}
+	dbDesc, err := s.mustReadImmutableDescriptor(fnDesc.GetParentID())
+	if err != nil {
+		return nil, nil, err
+	}
+	scDesc, err := s.mustReadImmutableDescriptor(fnDesc.GetParentSchemaID())
+	if err != nil {
+		return nil, nil, err
 	}
 	ol, err := fnDesc.ToOverload()
 	if err != nil {
-		return "", nil, err
+		return nil, nil, err
 	}
-	return fnDesc.GetName(), ol, nil
+	name := tree.MakeQualifiedFunctionName(dbDesc.GetName(), scDesc.GetName(), fnDesc.GetName())
+	return &name, ol, nil
 }
 
 // ZoneConfigGetter implements scexec.Dependencies.

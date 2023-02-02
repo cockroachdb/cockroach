@@ -238,7 +238,7 @@ func (d *buildDeps) ResolveFunction(
 // ResolveFunctionByOID implements the scbuild.CatalogReader interface.
 func (d *buildDeps) ResolveFunctionByOID(
 	ctx context.Context, oid oid.Oid,
-) (string, *tree.Overload, error) {
+) (*tree.FunctionName, *tree.Overload, error) {
 	return d.schemaResolver.ResolveFunctionByOID(ctx, oid)
 }
 

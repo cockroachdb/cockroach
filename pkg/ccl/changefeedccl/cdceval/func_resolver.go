@@ -88,13 +88,13 @@ func (rs *cdcFunctionResolver) ResolveFunction(
 // ResolveFunctionByOID implements FunctionReferenceResolver interface.
 func (rs *cdcFunctionResolver) ResolveFunctionByOID(
 	ctx context.Context, oid oid.Oid,
-) (string, *tree.Overload, error) {
+) (*tree.FunctionName, *tree.Overload, error) {
 	fnName, overload, err := rs.wrapped.ResolveFunctionByOID(ctx, oid)
 	if err != nil {
-		return "", nil, err
+		return nil, nil, err
 	}
-	if err := checkOverloadSupported(fnName, overload); err != nil {
-		return "", nil, err
+	if err := checkOverloadSupported(fnName.Object(), overload); err != nil {
+		return nil, nil, err
 	}
 	return fnName, overload, err
 }

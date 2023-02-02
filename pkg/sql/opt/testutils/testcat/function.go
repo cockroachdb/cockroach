@@ -51,8 +51,8 @@ func (tc *Catalog) ResolveFunction(
 // ResolveFunctionByOID part of the tree.FunctionReferenceResolver interface.
 func (tc *Catalog) ResolveFunctionByOID(
 	ctx context.Context, oid oid.Oid,
-) (string, *tree.Overload, error) {
-	return "", nil, errors.AssertionFailedf("ResolveFunctionByOID not supported in test catalog")
+) (*tree.FunctionName, *tree.Overload, error) {
+	return nil, nil, errors.AssertionFailedf("ResolveFunctionByOID not supported in test catalog")
 }
 
 // CreateFunction handles the CREATE FUNCTION statement.
