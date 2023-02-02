@@ -392,6 +392,12 @@ func (j *jsonOrArrayFilterPlanner) extractInvertedFilterConditionFromLeaf(
 		if fetch, ok := t.Left.(*memo.FetchValExpr); ok {
 			invertedExpr = j.extractJSONFetchValEqCondition(ctx, evalCtx, fetch, t.Right)
 		}
+	case *memo.InExpr:
+		if fetch, ok := t.Left.(*memo.FetchValExpr); ok {
+			if _, ok := t.Right.(*memo.TupleExpr); ok {
+				invertedExpr = j.extractJSONInCondition(ctx, evalCtx, fetch, t.Right)
+			}
+		}
 	case *memo.OverlapsExpr:
 		invertedExpr = j.extractArrayOverlapsCondition(ctx, evalCtx, t.Left, t.Right)
 	}
@@ -410,6 +416,41 @@ func (j *jsonOrArrayFilterPlanner) extractInvertedFilterConditionFromLeaf(
 	// We do not currently support pre-filtering for JSON and Array indexes, so
 	// the returned pre-filter state is nil.
 	return invertedExpr, remainingFilters, nil
+}
+
+// extractJSONInCondition extracts an InvertedExpression representing
+// an inverted filter over the planner's inverted index, based on the
+// give left and right expression arguments. If an
+// InvertedExpression cannot be generated from the expression, an
+// inverted.NonInvertedColExpression is returned.
+func (j *jsonOrArrayFilterPlanner) extractJSONInCondition(
+	ctx context.Context, evalCtx *eval.Context, left *memo.FetchValExpr, right opt.ScalarExpr,
+) inverted.Expression {
+	// The right side of the expression should be a constant JSON value.
+	if !memo.CanExtractConstDatum(right) {
+		return inverted.NonInvertedColExpression{}
+	}
+	var invertedExpr inverted.Expression
+	tuple := right.Child(0)
+	tupleLen := tuple.ChildCount()
+	for i := 0; i < tupleLen; i++ {
+		child := tuple.Child(i).(opt.ScalarExpr)
+		expr := j.extractJSONFetchValEqCondition(ctx, evalCtx, left, child)
+		if invertedExpr == nil {
+			invertedExpr = expr
+		} else {
+			invertedExpr = inverted.Or(invertedExpr, expr)
+		}
+
+	}
+
+	if invertedExpr == nil {
+		// An inverted expression could not be extracted.
+		return inverted.NonInvertedColExpression{}
+	}
+
+	return invertedExpr
+
 }
 
 // extractArrayOverlapsCondition extracts an InvertedExpression
