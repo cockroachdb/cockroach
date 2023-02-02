@@ -514,7 +514,7 @@ func (dsp *DistSQLPlanner) planAndRunCreateStats(
 		return err
 	}
 
-	dsp.FinalizePlan(ctx, planCtx, physPlan)
+	FinalizePlan(ctx, planCtx, physPlan)
 
 	recv := MakeDistSQLReceiver(
 		ctx,
