@@ -61,7 +61,6 @@ exports_files([
 # See pkg/roachpb/gen/BUILD.bazel for more details.
 #
 # gazelle:resolve proto go roachpb/api.proto //pkg/roachpb
-# gazelle:resolve proto go roachpb/app_stats.proto //pkg/roachpb
 # gazelle:resolve proto go roachpb/data.proto //pkg/roachpb
 # gazelle:resolve proto go roachpb/errors.proto //pkg/roachpb
 # gazelle:resolve proto go roachpb/index_usage_stats.proto //pkg/roachpb

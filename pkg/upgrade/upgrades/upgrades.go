@@ -258,6 +258,11 @@ var upgrades = []upgradebase.Upgrade{
 		keyVisualizerTablesMigration,
 		"initialize key visualizer tables and jobs",
 	),
+	upgrade.NewTenantUpgrade("delete descriptors of dropped functions",
+		toCV(clusterversion.V23_1_DeleteDroppedFunctionDescriptors),
+		upgrade.NoPrecondition,
+		deleteDescriptorsOfDroppedFunctions,
+	),
 }
 
 func init() {

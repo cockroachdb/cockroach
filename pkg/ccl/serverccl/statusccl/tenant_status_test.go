@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
@@ -1136,7 +1137,7 @@ func testTxnIDResolutionRPC(ctx context.Context, t *testing.T, helper serverccl.
 			require.Equal(t, txnID, resp.ResolvedTxnIDs[0].TxnID,
 				"expected to find txn %s on coordinator node %d, but it "+
 					"was not", txnID.String(), coordinatorNodeID)
-			require.NotEqual(t, roachpb.InvalidTransactionFingerprintID, resp.ResolvedTxnIDs[0].TxnFingerprintID)
+			require.NotEqual(t, appstatspb.InvalidTransactionFingerprintID, resp.ResolvedTxnIDs[0].TxnFingerprintID)
 			return nil
 		})
 	}

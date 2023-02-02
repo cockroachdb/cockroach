@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catsessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
@@ -42,6 +43,7 @@ func (p *planner) createDropDatabaseJob(
 	schemasToDrop []descpb.ID,
 	tableDropDetails []jobspb.DroppedTableDetails,
 	typesToDrop []*typedesc.Mutable,
+	functionsToDrop []*funcdesc.Mutable,
 	jobDesc string,
 ) {
 	// TODO (lucy): This should probably be deleting the queued jobs for all the
@@ -54,6 +56,10 @@ func (p *planner) createDropDatabaseJob(
 	for _, t := range typesToDrop {
 		typeIDs = append(typeIDs, t.ID)
 	}
+	funcIDs := make([]descpb.ID, 0, len(functionsToDrop))
+	for _, t := range functionsToDrop {
+		funcIDs = append(funcIDs, t.ID)
+	}
 	jobRecord := &jobs.Record{
 		Description:   jobDesc,
 		Username:      p.User(),
@@ -62,6 +68,7 @@ func (p *planner) createDropDatabaseJob(
 			DroppedSchemas:    schemasToDrop,
 			DroppedTables:     tableDropDetails,
 			DroppedTypes:      typeIDs,
+			DroppedFunctions:  funcIDs,
 			DroppedDatabaseID: databaseID,
 			FormatVersion:     jobspb.DatabaseJobFormatVersion,
 		},

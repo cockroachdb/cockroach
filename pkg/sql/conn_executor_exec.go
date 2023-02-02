@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
@@ -1156,7 +1157,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 		res.DisableBuffering()
 	}
 
-	var stmtFingerprintID roachpb.StmtFingerprintID
+	var stmtFingerprintID appstatspb.StmtFingerprintID
 	var stats topLevelQueryStats
 	defer func() {
 		planner.maybeLogStatement(
@@ -2296,7 +2297,7 @@ func (ex *connExecutor) onTxnFinish(ctx context.Context, ev txnEvent) {
 		implicit := ex.extraTxnState.txnFinishClosure.implicit
 		ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionEndExecTransaction, timeutil.Now())
 		transactionFingerprintID :=
-			roachpb.TransactionFingerprintID(ex.extraTxnState.transactionStatementsHash.Sum())
+			appstatspb.TransactionFingerprintID(ex.extraTxnState.transactionStatementsHash.Sum())
 
 		err := ex.txnFingerprintIDCache.Add(transactionFingerprintID)
 		if err != nil {
@@ -2355,7 +2356,7 @@ func (ex *connExecutor) recordTransactionStart(txnID uuid.UUID) {
 	// execution.
 	ex.txnIDCacheWriter.Record(contentionpb.ResolvedTxnID{
 		TxnID:            txnID,
-		TxnFingerprintID: roachpb.InvalidTransactionFingerprintID,
+		TxnFingerprintID: appstatspb.InvalidTransactionFingerprintID,
 	})
 
 	ex.state.mu.RLock()
@@ -2397,7 +2398,7 @@ func (ex *connExecutor) recordTransactionStart(txnID uuid.UUID) {
 
 func (ex *connExecutor) recordTransactionFinish(
 	ctx context.Context,
-	transactionFingerprintID roachpb.TransactionFingerprintID,
+	transactionFingerprintID appstatspb.TransactionFingerprintID,
 	ev txnEvent,
 	implicit bool,
 	txnStart time.Time,

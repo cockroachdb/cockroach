@@ -13,7 +13,7 @@ package persistedsqlstats
 import (
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/sslocal"
 )
@@ -23,7 +23,7 @@ import (
 // fields populated, memStmtStatsIterator overrides the
 // sslocal.StmtStatsIterator's Cur() method to populate the aggregated_ts
 // and aggregation_interval fields on the returning
-// roachpb.CollectedStatementStatistics.
+// appstatspb.CollectedStatementStatistics.
 type memStmtStatsIterator struct {
 	*sslocal.StmtStatsIterator
 	aggregatedTs time.Time
@@ -45,7 +45,7 @@ func newMemStmtStatsIterator(
 
 // Cur calls the m.StmtStatsIterator.Cur() and populates the c.AggregatedTs
 // field and c.AggregationInterval field.
-func (m *memStmtStatsIterator) Cur() *roachpb.CollectedStatementStatistics {
+func (m *memStmtStatsIterator) Cur() *appstatspb.CollectedStatementStatistics {
 	c := m.StmtStatsIterator.Cur()
 	c.AggregatedTs = m.aggregatedTs
 	c.AggregationInterval = m.aggInterval
@@ -57,7 +57,7 @@ func (m *memStmtStatsIterator) Cur() *roachpb.CollectedStatementStatistics {
 // fields populated, memTxnStatsIterator overrides the
 // sslocal.TxnStatsIterator's Cur() method to populate the aggregated_ts and
 // aggregatoin_interval fields fields on the returning
-// roachpb.CollectedTransactionStatistics.
+// appstatspb.CollectedTransactionStatistics.
 type memTxnStatsIterator struct {
 	*sslocal.TxnStatsIterator
 	aggregatedTs time.Time
@@ -79,7 +79,7 @@ func newMemTxnStatsIterator(
 
 // Cur calls the m.TxnStatsIterator.Cur() and populates the stats.AggregatedTs
 // and stats.AggregationInterval fields.
-func (m *memTxnStatsIterator) Cur() *roachpb.CollectedTransactionStatistics {
+func (m *memTxnStatsIterator) Cur() *appstatspb.CollectedTransactionStatistics {
 	stats := m.TxnStatsIterator.Cur()
 	stats.AggregatedTs = m.aggregatedTs
 	stats.AggregationInterval = m.aggInterval

@@ -812,6 +812,9 @@ message SchemaChangeDetails {
     (gogoproto.customname) = "DroppedDatabaseID",
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"
   ];
+  // dropped_functions holds the set of functions to drop as part of DROP
+  // FUNCTION, DROP DATABASE or DROP SCHEMA statement.
+  repeated uint32 dropped_functions = 12 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"];
   // desc_id is the target descriptor for this schema change. Note that this ID
   // is not always a table ID! We allow referencing any descriptor here to allow
   // generic schema changes on descriptors whose schema change process involves
@@ -839,6 +842,7 @@ message SchemaChangeDetails {
     (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"
   ];
 
+  // Next id 13.
 }
 
 message SchemaChangeProgress {

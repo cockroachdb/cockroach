@@ -11,16 +11,16 @@
 package sqlstatsutil
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/errors"
 )
 
 // DecodeTxnStatsMetadataJSON decodes the 'metadata' field of the JSON
 // representation of transaction statistics into
-// roachpb.CollectedTransactionStatistics.
+// appstatspb.CollectedTransactionStatistics.
 func DecodeTxnStatsMetadataJSON(
-	metadata json.JSON, result *roachpb.CollectedTransactionStatistics,
+	metadata json.JSON, result *appstatspb.CollectedTransactionStatistics,
 ) error {
 	return jsonFields{
 		{"stmtFingerprintIDs", (*stmtFingerprintIDArray)(&result.StatementFingerprintIDs)},
@@ -28,39 +28,43 @@ func DecodeTxnStatsMetadataJSON(
 }
 
 // DecodeTxnStatsStatisticsJSON decodes the 'statistics' section of the
-// transaction statistics JSON payload into roachpb.TransactionStatistics
+// transaction statistics JSON payload into appstatspb.TransactionStatistics
 // protobuf.
-func DecodeTxnStatsStatisticsJSON(jsonVal json.JSON, result *roachpb.TransactionStatistics) error {
+func DecodeTxnStatsStatisticsJSON(
+	jsonVal json.JSON, result *appstatspb.TransactionStatistics,
+) error {
 	return (*txnStats)(result).decodeJSON(jsonVal)
 }
 
 // DecodeStmtStatsMetadataJSON decodes the 'metadata' field of the JSON
 // representation of the statement statistics into
-// roachpb.CollectedStatementStatistics.
+// appstatspb.CollectedStatementStatistics.
 func DecodeStmtStatsMetadataJSON(
-	metadata json.JSON, result *roachpb.CollectedStatementStatistics,
+	metadata json.JSON, result *appstatspb.CollectedStatementStatistics,
 ) error {
 	return (*stmtStatsMetadata)(result).jsonFields().decodeJSON(metadata)
 }
 
-// DecodeAggregatedMetadataJSON decodes the 'aggregated metadata' represented by roachpb.AggregatedStatementMetadata.
+// DecodeAggregatedMetadataJSON decodes the 'aggregated metadata' represented by appstatspb.AggregatedStatementMetadata.
 func DecodeAggregatedMetadataJSON(
-	metadata json.JSON, result *roachpb.AggregatedStatementMetadata,
+	metadata json.JSON, result *appstatspb.AggregatedStatementMetadata,
 ) error {
 	return (*aggregatedMetadata)(result).jsonFields().decodeJSON(metadata)
 }
 
 // DecodeStmtStatsStatisticsJSON decodes the 'statistics' field and the
 // 'execution_statistics' field in the given json into
-// roachpb.StatementStatistics.
-func DecodeStmtStatsStatisticsJSON(jsonVal json.JSON, result *roachpb.StatementStatistics) error {
+// appstatspb.StatementStatistics.
+func DecodeStmtStatsStatisticsJSON(
+	jsonVal json.JSON, result *appstatspb.StatementStatistics,
+) error {
 	return (*stmtStats)(result).decodeJSON(jsonVal)
 }
 
 // JSONToExplainTreePlanNode decodes the JSON-formatted ExplainTreePlanNode
 // produced by ExplainTreePlanNodeToJSON.
-func JSONToExplainTreePlanNode(jsonVal json.JSON) (*roachpb.ExplainTreePlanNode, error) {
-	node := roachpb.ExplainTreePlanNode{}
+func JSONToExplainTreePlanNode(jsonVal json.JSON) (*appstatspb.ExplainTreePlanNode, error) {
+	node := appstatspb.ExplainTreePlanNode{}
 
 	nameAttr, err := jsonVal.FetchValKey("Name")
 	if err != nil {
@@ -120,7 +124,7 @@ func JSONToExplainTreePlanNode(jsonVal json.JSON) (*roachpb.ExplainTreePlanNode,
 			if str != nil {
 				value = *str
 			}
-			node.Attrs = append(node.Attrs, &roachpb.ExplainTreePlanNode_Attr{
+			node.Attrs = append(node.Attrs, &appstatspb.ExplainTreePlanNode_Attr{
 				Key:   key,
 				Value: value,
 			})

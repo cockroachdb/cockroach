@@ -15,7 +15,7 @@ option go_package = "diagnosticspb";
 import "build/info.proto";
 import "config/zonepb/zone.proto";
 import "gogoproto/gogo.proto";
-import "roachpb/app_stats.proto";
+import "sql/appstatspb/app_stats.proto";
 import "sql/catalog/descpb/structured.proto";
 import "roachpb/metadata.proto";
 

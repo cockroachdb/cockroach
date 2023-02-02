@@ -16,8 +16,8 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -47,21 +47,21 @@ func TestSampledStatsCollection(t *testing.T) {
 			stmt string,
 			implicitTxn bool,
 			database string,
-		) *roachpb.CollectedStatementStatistics {
+		) *appstatspb.CollectedStatementStatistics {
 			t.Helper()
-			key := roachpb.StatementStatisticsKey{
+			key := appstatspb.StatementStatisticsKey{
 				Query:       stmt,
 				ImplicitTxn: implicitTxn,
 				Database:    database,
 				Failed:      false,
 			}
-			var stats *roachpb.CollectedStatementStatistics
+			var stats *appstatspb.CollectedStatementStatistics
 			require.NoError(t, server.SQLServer().(*Server).sqlStats.
 				GetLocalMemProvider().
 				IterateStatementStats(
 					ctx,
 					&sqlstats.IteratorOptions{},
-					func(ctx context.Context, statistics *roachpb.CollectedStatementStatistics) error {
+					func(ctx context.Context, statistics *appstatspb.CollectedStatementStatistics) error {
 						if statistics.Key.Query == key.Query &&
 							statistics.Key.ImplicitTxn == key.ImplicitTxn &&
 							statistics.Key.Database == key.Database &&
@@ -80,17 +80,17 @@ func TestSampledStatsCollection(t *testing.T) {
 	getTxnStats := func(
 		t *testing.T,
 		server serverutils.TestServerInterface,
-		key roachpb.TransactionFingerprintID,
-	) *roachpb.CollectedTransactionStatistics {
+		key appstatspb.TransactionFingerprintID,
+	) *appstatspb.CollectedTransactionStatistics {
 		t.Helper()
-		var stats *roachpb.CollectedTransactionStatistics
+		var stats *appstatspb.CollectedTransactionStatistics
 
 		require.NoError(t, server.SQLServer().(*Server).sqlStats.
 			GetLocalMemProvider().
 			IterateTransactionStats(
 				ctx,
 				&sqlstats.IteratorOptions{},
-				func(ctx context.Context, statistics *roachpb.CollectedTransactionStatistics) error {
+				func(ctx context.Context, statistics *appstatspb.CollectedTransactionStatistics) error {
 					if statistics.TransactionFingerprintID == key {
 						stats = statistics
 					}
@@ -169,7 +169,7 @@ func TestSampledStatsCollection(t *testing.T) {
 		key := util.MakeFNV64()
 		key.Add(uint64(aggStats.ID))
 		key.Add(uint64(selectStats.ID))
-		txStats := getTxnStats(t, s, roachpb.TransactionFingerprintID(key.Sum()))
+		txStats := getTxnStats(t, s, appstatspb.TransactionFingerprintID(key.Sum()))
 
 		require.Equal(t, int64(2), txStats.Stats.Count, "expected to have collected two sets of general stats")
 		require.Equal(t, int64(1), txStats.Stats.ExecStats.Count, "expected to have collected exactly one set of execution stats")

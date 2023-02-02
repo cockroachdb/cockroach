@@ -408,6 +408,8 @@ const (
 	// columnar scans in the KV layer.
 	V23_1_KVDirectColumnarScans
 
+	V23_1_DeleteDroppedFunctionDescriptors
+
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -704,6 +706,10 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     V23_1_KVDirectColumnarScans,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 34},
+	},
+	{
+		Key:     V23_1_DeleteDroppedFunctionDescriptors,
+		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 36},
 	},
 
 	// *************************************************

@@ -20,6 +20,7 @@ go_library(
         "//pkg/server",
         "//pkg/server/diagnostics",
         "//pkg/sql",
+        "//pkg/sql/appstatspb",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/desctestutils",
         "//pkg/sql/parser",

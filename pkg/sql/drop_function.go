@@ -14,6 +14,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
@@ -22,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
 )
@@ -223,7 +226,7 @@ func (p *planner) dropFunctionImpl(ctx context.Context, fnMutable *funcdesc.Muta
 
 	// Mark the UDF as dropped.
 	fnMutable.SetDropped()
-	if err := p.writeFuncSchemaChange(ctx, fnMutable); err != nil {
+	if err := p.writeDropFuncSchemaChange(ctx, fnMutable); err != nil {
 		return err
 	}
 	fnName := tree.MakeQualifiedFunctionName(p.CurrentDatabase(), scDesc.GetName(), fnMutable.GetName())
@@ -242,6 +245,28 @@ func (p *planner) writeFuncDesc(ctx context.Context, funcDesc *funcdesc.Mutable)
 }
 
 func (p *planner) writeFuncSchemaChange(ctx context.Context, funcDesc *funcdesc.Mutable) error {
+	return p.writeFuncDesc(ctx, funcDesc)
+}
+
+func (p *planner) writeDropFuncSchemaChange(ctx context.Context, funcDesc *funcdesc.Mutable) error {
+	_, recordExists := p.extendedEvalCtx.jobs.uniqueToCreate[funcDesc.ID]
+	if recordExists {
+		// For now being, we create jobs for functions only when functions are
+		// dropped.
+		return nil
+	}
+	jobRecord := jobs.Record{
+		JobID:         p.extendedEvalCtx.ExecCfg.JobRegistry.MakeJobID(),
+		Description:   "Drop Function",
+		Username:      p.User(),
+		DescriptorIDs: descpb.IDs{funcDesc.ID},
+		Details: jobspb.SchemaChangeDetails{
+			DroppedFunctions: descpb.IDs{funcDesc.ID},
+		},
+		Progress: jobspb.TypeSchemaChangeProgress{},
+	}
+	p.extendedEvalCtx.jobs.uniqueToCreate[funcDesc.ID] = &jobRecord
+	log.Infof(ctx, "queued drop function job %d for function %d", jobRecord.JobID, funcDesc.ID)
 	return p.writeFuncDesc(ctx, funcDesc)
 }
 

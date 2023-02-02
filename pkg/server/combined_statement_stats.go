@@ -18,10 +18,10 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -199,7 +199,7 @@ func collectCombinedStatements(
 		app := string(tree.MustBeDString(row[2]))
 		aggregatedTs := tree.MustBeDTimestampTZ(row[3]).Time
 
-		var metadata roachpb.CollectedStatementStatistics
+		var metadata appstatspb.CollectedStatementStatistics
 		metadataJSON := tree.MustBeDJSON(row[4]).JSON
 		if err = sqlstatsutil.DecodeStmtStatsMetadataJSON(metadataJSON, &metadata); err != nil {
 			return nil, serverError(ctx, err)
@@ -207,7 +207,7 @@ func collectCombinedStatements(
 
 		metadata.Key.App = app
 		metadata.Key.TransactionFingerprintID =
-			roachpb.TransactionFingerprintID(transactionFingerprintID)
+			appstatspb.TransactionFingerprintID(transactionFingerprintID)
 
 		statsJSON := tree.MustBeDJSON(row[5]).JSON
 		if err = sqlstatsutil.DecodeStmtStatsStatisticsJSON(statsJSON, &metadata.Stats); err != nil {
@@ -229,7 +229,7 @@ func collectCombinedStatements(
 				AggregatedTs:        aggregatedTs,
 				AggregationInterval: time.Duration(aggInterval.Nanos()),
 			},
-			ID:    roachpb.StmtFingerprintID(statementFingerprintID),
+			ID:    appstatspb.StmtFingerprintID(statementFingerprintID),
 			Stats: metadata.Stats,
 		}
 
@@ -303,7 +303,7 @@ func collectCombinedTransactions(
 			return nil, serverError(ctx, err)
 		}
 
-		var metadata roachpb.CollectedTransactionStatistics
+		var metadata appstatspb.CollectedTransactionStatistics
 		metadataJSON := tree.MustBeDJSON(row[3]).JSON
 		if err = sqlstatsutil.DecodeTxnStatsMetadataJSON(metadataJSON, &metadata); err != nil {
 			return nil, serverError(ctx, err)
@@ -317,13 +317,13 @@ func collectCombinedTransactions(
 		aggInterval := tree.MustBeDInterval(row[5]).Duration
 
 		txnStats := serverpb.StatementsResponse_ExtendedCollectedTransactionStatistics{
-			StatsData: roachpb.CollectedTransactionStatistics{
+			StatsData: appstatspb.CollectedTransactionStatistics{
 				StatementFingerprintIDs:  metadata.StatementFingerprintIDs,
 				App:                      app,
 				Stats:                    metadata.Stats,
 				AggregatedTs:             aggregatedTs,
 				AggregationInterval:      time.Duration(aggInterval.Nanos()),
-				TransactionFingerprintID: roachpb.TransactionFingerprintID(fingerprintID),
+				TransactionFingerprintID: appstatspb.TransactionFingerprintID(fingerprintID),
 			},
 		}
 
@@ -509,8 +509,8 @@ func getTotalStatementDetails(
 		return statement, serverError(ctx, errors.Newf("expected %d columns, received %d", expectedNumDatums))
 	}
 
-	var statistics roachpb.CollectedStatementStatistics
-	var aggregatedMetadata roachpb.AggregatedStatementMetadata
+	var statistics appstatspb.CollectedStatementStatistics
+	var aggregatedMetadata appstatspb.AggregatedStatementMetadata
 	metadataJSON := tree.MustBeDJSON(row[0]).JSON
 
 	if err = sqlstatsutil.DecodeAggregatedMetadataJSON(metadataJSON, &aggregatedMetadata); err != nil {
@@ -613,8 +613,8 @@ func getStatementDetailsPerAggregatedTs(
 
 		aggregatedTs := tree.MustBeDTimestampTZ(row[0]).Time
 
-		var metadata roachpb.CollectedStatementStatistics
-		var aggregatedMetadata roachpb.AggregatedStatementMetadata
+		var metadata appstatspb.CollectedStatementStatistics
+		var aggregatedMetadata appstatspb.AggregatedStatementMetadata
 		metadataJSON := tree.MustBeDJSON(row[1]).JSON
 		if err = sqlstatsutil.DecodeAggregatedMetadataJSON(metadataJSON, &aggregatedMetadata); err != nil {
 			return nil, serverError(ctx, err)
@@ -797,8 +797,8 @@ func getStatementDetailsPerPlanHash(
 			explainPlan = getExplainPlanFromGist(ctx, ie, planGist)
 		}
 
-		var metadata roachpb.CollectedStatementStatistics
-		var aggregatedMetadata roachpb.AggregatedStatementMetadata
+		var metadata appstatspb.CollectedStatementStatistics
+		var aggregatedMetadata appstatspb.AggregatedStatementMetadata
 		metadataJSON := tree.MustBeDJSON(row[2]).JSON
 		if err = sqlstatsutil.DecodeAggregatedMetadataJSON(metadataJSON, &aggregatedMetadata); err != nil {
 			return nil, serverError(ctx, err)

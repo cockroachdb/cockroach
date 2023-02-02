@@ -11,7 +11,7 @@
 package sslocal
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/ssmemstorage"
 )
@@ -68,9 +68,9 @@ func (s *StmtStatsIterator) Next() bool {
 	return true
 }
 
-// Cur returns the roachpb.CollectedStatementStatistics at the current internal
+// Cur returns the appstatspb.CollectedStatementStatistics at the current internal
 // counter.
-func (s *StmtStatsIterator) Cur() *roachpb.CollectedStatementStatistics {
+func (s *StmtStatsIterator) Cur() *appstatspb.CollectedStatementStatistics {
 	return s.curIter.Cur()
 }
 
@@ -119,8 +119,8 @@ func (t *TxnStatsIterator) Next() bool {
 	return true
 }
 
-// Cur returns the roachpb.CollectedTransactionStatistics at the current internal
+// Cur returns the appstatspb.CollectedTransactionStatistics at the current internal
 // counter.
-func (t *TxnStatsIterator) Cur() *roachpb.CollectedTransactionStatistics {
+func (t *TxnStatsIterator) Cur() *appstatspb.CollectedTransactionStatistics {
 	return t.curIter.Cur()
 }

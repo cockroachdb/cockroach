@@ -29,6 +29,7 @@ proto_library(
         "//pkg/roachpb:roachpb_proto",
         "//pkg/server/diagnostics/diagnosticspb:diagnosticspb_proto",
         "//pkg/server/status/statuspb:statuspb_proto",
+        "//pkg/sql/appstatspb:appstatspb_proto",
         "//pkg/sql/contentionpb:contentionpb_proto",
         "//pkg/sql/sqlstats/insights:insights_proto",
         "//pkg/storage/enginepb:enginepb_proto",
@@ -68,6 +69,7 @@ go_proto_library(
         "//pkg/roachpb",
         "//pkg/server/diagnostics/diagnosticspb",
         "//pkg/server/status/statuspb",
+        "//pkg/sql/appstatspb",
         "//pkg/sql/catalog/descpb",  # keep
         "//pkg/sql/contentionpb",
         "//pkg/sql/execinfrapb",  # keep

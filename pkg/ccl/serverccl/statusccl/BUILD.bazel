@@ -25,6 +25,7 @@ go_test(
         "//pkg/server",
         "//pkg/server/serverpb",
         "//pkg/spanconfig",
+        "//pkg/sql/appstatspb",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/clusterunique",
         "//pkg/sql/sem/catconstants",
