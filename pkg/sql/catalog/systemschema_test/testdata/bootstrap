@@ -400,7 +400,8 @@ CREATE TABLE public.privileges (
 	grant_options STRING[] NOT NULL,
 	user_id OID NULL,
 	CONSTRAINT "primary" PRIMARY KEY (username ASC, path ASC),
-	UNIQUE INDEX privileges_path_user_id_key (path ASC, user_id ASC) STORING (privileges, grant_options)
+	UNIQUE INDEX privileges_path_user_id_key (path ASC, user_id ASC) STORING (privileges, grant_options),
+  UNIQUE INDEX privileges_path_username_idx_key (path ASC, username ASC) STORING (privileges, grant_options)
 );
 CREATE TABLE public.external_connections (
 	connection_name STRING NOT NULL,
