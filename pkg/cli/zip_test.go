@@ -90,6 +90,7 @@ table_name NOT IN (
 	'cluster_statement_statistics',
 	'cluster_transaction_statistics',
 	'statement_statistics',
+	'statement_statistics_v22_1',
 	'transaction_statistics',
 	'tenant_usage_details',
   'pg_catalog_table_is_implemented'

@@ -157,6 +157,7 @@ var crdbInternal = virtualSchema{
 		catconstants.CrdbInternalSessionTraceTableID:                crdbInternalSessionTraceTable,
 		catconstants.CrdbInternalSessionVariablesTableID:            crdbInternalSessionVariablesTable,
 		catconstants.CrdbInternalStmtStatsTableID:                   crdbInternalStmtStatsView,
+		catconstants.CrdbInternalStmtStatsV22_1TableID:              crdbInternalStmtStatsViewV22_1,
 		catconstants.CrdbInternalTableColumnsTableID:                crdbInternalTableColumnsTable,
 		catconstants.CrdbInternalTableIndexesTableID:                crdbInternalTableIndexesTable,
 		catconstants.CrdbInternalTablesTableLastStatsID:             crdbInternalTablesTableLastStats,
@@ -5772,6 +5773,68 @@ GROUP BY
 		{Name: "sampled_plan", Typ: types.Jsonb},
 		{Name: "aggregation_interval", Typ: types.Interval},
 		{Name: "index_recommendations", Typ: types.StringArray},
+	},
+}
+
+// Copy of crdb_internal.statement_statistics for previous versions during upgrade.
+// See crdb_internal.statement_statistics for more details.
+var crdbInternalStmtStatsViewV22_1 = virtualSchemaView{
+	schema: `
+CREATE VIEW crdb_internal.statement_statistics_v22_1 AS
+SELECT
+  aggregated_ts,
+  fingerprint_id,
+  transaction_fingerprint_id,
+  plan_hash,
+  app_name,
+  max(metadata) as metadata,
+  crdb_internal.merge_statement_stats(array_agg(DISTINCT statistics)),
+  max(sampled_plan),
+  aggregation_interval
+FROM (
+  SELECT
+      aggregated_ts,
+      fingerprint_id,
+      transaction_fingerprint_id,
+      plan_hash,
+      app_name,
+      metadata,
+      statistics,
+      sampled_plan,
+      aggregation_interval
+  FROM
+      crdb_internal.cluster_statement_statistics
+  UNION ALL
+      SELECT
+          aggregated_ts,
+          fingerprint_id,
+          transaction_fingerprint_id,
+          plan_hash,
+          app_name,
+          metadata,
+          statistics,
+          plan,
+          agg_interval
+      FROM
+          system.statement_statistics
+)
+GROUP BY
+  aggregated_ts,
+  fingerprint_id,
+  transaction_fingerprint_id,
+  plan_hash,
+  app_name,
+  aggregation_interval`,
+	resultColumns: colinfo.ResultColumns{
+		{Name: "aggregated_ts", Typ: types.TimestampTZ},
+		{Name: "fingerprint_id", Typ: types.Bytes},
+		{Name: "transaction_fingerprint_id", Typ: types.Bytes},
+		{Name: "plan_hash", Typ: types.Bytes},
+		{Name: "app_name", Typ: types.String},
+		{Name: "metadata", Typ: types.Jsonb},
+		{Name: "statistics", Typ: types.Jsonb},
+		{Name: "sampled_plan", Typ: types.Jsonb},
+		{Name: "aggregation_interval", Typ: types.Interval},
 	},
 }
 
