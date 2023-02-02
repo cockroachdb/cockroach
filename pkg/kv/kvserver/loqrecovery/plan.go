@@ -87,6 +87,7 @@ type PlannedReplicaUpdate struct {
 	// Discarded replicas based on survivor descriptor content.
 	DiscardedAvailableReplicas roachpb.ReplicaSet
 	DiscardedDeadReplicas      roachpb.ReplicaSet
+	DiscardedLeaseholders      roachpb.ReplicaSet
 	// Discarded actual replicas from stores (including stale).
 	DiscardedReplicasCount int
 	NextReplicaID          roachpb.ReplicaID
@@ -156,10 +157,14 @@ func PlanReplicas(
 
 	updates := make([]loqrecoverypb.ReplicaUpdate, len(report.PlannedUpdates))
 	updatedLocations := make(locationsMap)
+	nodesWithDiscardedLeaseholders := make(map[roachpb.NodeID]interface{})
 	for i, u := range report.PlannedUpdates {
 		updates[i] = u.asReplicaUpdate()
 		updatedLocations.add(u.NewReplica.NodeID, u.NewReplica.StoreID)
 		report.DiscardedNonSurvivors += u.DiscardedReplicasCount
+		for _, r := range u.DiscardedLeaseholders.Descriptors() {
+			nodesWithDiscardedLeaseholders[r.NodeID] = struct{}{}
+		}
 	}
 	report.UpdatedNodes = updatedLocations.asSortedSlice()
 
@@ -167,15 +172,22 @@ func PlanReplicas(
 	for id := range deadNodes {
 		decommissionNodeIDs = append(decommissionNodeIDs, id)
 	}
-	sort.Slice(decommissionNodeIDs, func(i, j int) bool {
-		return decommissionNodeIDs[i] < decommissionNodeIDs[j]
-	})
+	sort.Sort(roachpb.NodeIDSlice(decommissionNodeIDs))
+
+	var staleLeaseholderNodes []roachpb.NodeID
+	for node := range nodesWithDiscardedLeaseholders {
+		if _, ok := updatedLocations[node]; !ok {
+			staleLeaseholderNodes = append(staleLeaseholderNodes, node)
+		}
+	}
+	sort.Sort(roachpb.NodeIDSlice(staleLeaseholderNodes))
 
 	return loqrecoverypb.ReplicaUpdatePlan{
-		Updates:               updates,
-		PlanID:                planID,
-		DecommissionedNodeIDs: decommissionNodeIDs,
-		ClusterID:             clusterInfo.ClusterID,
+		Updates:                 updates,
+		PlanID:                  planID,
+		DecommissionedNodeIDs:   decommissionNodeIDs,
+		ClusterID:               clusterInfo.ClusterID,
+		StaleLeaseholderNodeIDs: staleLeaseholderNodes,
 	}, report, err
 }
 
@@ -397,22 +409,12 @@ func rankReplicasBySurvivability(replicas []loqrecoverypb.ReplicaInfo) rankedRep
 		// When finding the best suitable replica evaluate 3 conditions in order:
 		//  - replica is a voter
 		//  - replica has the higher range committed index
+		//  - replica thinks it is the leaseholder
 		//  - replica has the higher store id
 		//
 		// Note: that an outgoing voter cannot be designated, as the only
 		// replication change it could make is to turn itself into a learner, at
 		// which point the range is completely messed up.
-		//
-		// Note: a better heuristic might be to choose the leaseholder store, not
-		// the largest store, as this avoids the problem of requests still hanging
-		// after running the tool in a rolling-restart fashion (when the lease-
-		// holder is under a valid epoch and was ont chosen as designated
-		// survivor). However, this choice is less deterministic, as leaseholders
-		// are more likely to change than replication configs. The hanging would
-		// independently be fixed by the below issue, so staying with largest store
-		// is likely the right choice. See:
-		//
-		// https://github.com/cockroachdb/cockroach/issues/33007
 		voterI := isVoter(replicas[i])
 		voterJ := isVoter(replicas[j])
 		if voterI > voterJ {
@@ -562,10 +564,14 @@ func makeReplicaUpdateIfNeeded(
 	// Replicas that belong to available nodes, but discarded as they are
 	// not preferred choice.
 	discardedAvailable := roachpb.ReplicaSet{}
+	discardedLeaseholders := roachpb.ReplicaSet{}
 	for _, storeReplica := range p[1:] {
 		discardedDead.RemoveReplica(storeReplica.NodeID, storeReplica.StoreID)
 		r, _ := storeReplica.Desc.GetReplicaDescriptor(storeReplica.StoreID)
 		discardedAvailable.AddReplica(r)
+		if storeReplica.LocalAssumesLeaseholder {
+			discardedLeaseholders.AddReplica(r)
+		}
 	}
 
 	// The range needs to be recovered and this replica is a designated survivor.
@@ -586,6 +592,7 @@ func makeReplicaUpdateIfNeeded(
 		StoreID:                    p.storeID(),
 		DiscardedAvailableReplicas: discardedAvailable,
 		DiscardedDeadReplicas:      discardedDead,
+		DiscardedLeaseholders:      discardedLeaseholders,
 		DiscardedReplicasCount:     len(p) - 1,
 		NextReplicaID:              nextReplicaID + nextReplicaIDIncrement + 1,
 	}, true

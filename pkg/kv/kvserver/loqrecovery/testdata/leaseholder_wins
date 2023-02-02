@@ -1,8 +1,9 @@
 # Tests verifying that voter with max StoreID would be designated survivor.
 
-# First use case where we can successfully resolve replica by store ID.
-# With two out of five replicas remaining, check that replica with highest
-# store ID is chosen as a survivor.
+# First use case where we can successfully resolve replicas by leaseholder
+# status.
+# With two out of five replicas remaining, check that replica that thinks
+# it was/is a leaseholder is chosen if everything else is the same.
 
 replication-data
 - StoreID: 1
@@ -81,7 +82,7 @@ dump-store stores=(1,2)
   - RangeID: 1
     RaftReplicaID: 2
 
-# This case is checking that highest store rule still holds when we have
+# This case is checking that leaseholder rule still holds when we have
 # range metadata available.
 replication-data
 - StoreID: 1

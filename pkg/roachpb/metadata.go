@@ -37,6 +37,13 @@ func (n NodeID) String() string {
 // SafeValue implements the redact.SafeValue interface.
 func (n NodeID) SafeValue() {}
 
+// NodeIDSlice implements sort.Interface.
+type NodeIDSlice []NodeID
+
+func (s NodeIDSlice) Len() int           { return len(s) }
+func (s NodeIDSlice) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
+func (s NodeIDSlice) Less(i, j int) bool { return s[i] < s[j] }
+
 // StoreID is a custom type for a cockroach store ID.
 type StoreID int32
 

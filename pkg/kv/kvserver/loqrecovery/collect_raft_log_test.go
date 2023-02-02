@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -247,21 +248,30 @@ func TestCollectLeaseholderStatus(t *testing.T) {
 	adm, err := tc.GetAdminClient(ctx, t, 0)
 	require.NoError(t, err, "failed to get admin client")
 
-	replicas, _, err := loqrecovery.CollectRemoteReplicaInfo(ctx, adm)
-	require.NoError(t, err, "failed to collect replica info")
+	// Note: we need to retry because replica collection is not atomic and
+	// leaseholder could move around so we could see none or more than one.
+	testutils.SucceedsSoon(t, func() error {
+		replicas, _, err := loqrecovery.CollectRemoteReplicaInfo(ctx, adm)
+		require.NoError(t, err, "failed to collect replica info")
 
-	foundLeaseholders := 0
-	foundReplicas := 0
-	for _, rs := range replicas.LocalInfo {
-		for _, rs := range rs.Replicas {
-			if rs.Desc.RangeID == 1 {
-				foundReplicas++
-				if rs.LocalAssumesLeaseholder {
-					foundLeaseholders++
+		foundLeaseholders := 0
+		foundReplicas := 0
+		for _, rs := range replicas.LocalInfo {
+			for _, rs := range rs.Replicas {
+				if rs.Desc.RangeID == 1 {
+					foundReplicas++
+					if rs.LocalAssumesLeaseholder {
+						foundLeaseholders++
+					}
 				}
 			}
 		}
-	}
-	require.Equal(t, 3, foundReplicas, "expecting meta1 replicas on all nodes")
-	require.Equal(t, 1, foundLeaseholders, "expecting meta1 to have single leaseholder")
+		if foundReplicas != 3 {
+			return errors.Newf("expecting total 3 replicas in meta range on all nodes, found %d", foundReplicas)
+		}
+		if foundLeaseholders != 1 {
+			return errors.Newf("expecting single leaseholder in meta range, found %d", foundLeaseholders)
+		}
+		return nil
+	})
 }
