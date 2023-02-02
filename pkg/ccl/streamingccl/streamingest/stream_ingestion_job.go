@@ -46,15 +46,12 @@ func completeStreamIngestion(
 ) error {
 	if err := jobRegistry.UpdateJobWithTxn(ctx, ingestionJobID, txn, false,
 		func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
-			// TODO(adityamaru): This should change in the future, a user should be
-			// allowed to correct their cutover time if the process of reverting the job
-			// has not started.
-			if jobCutoverTime := md.Progress.GetStreamIngest().CutoverTime; !jobCutoverTime.IsEmpty() {
-				return errors.Newf("cutover timestamp already set to %s, "+
-					"job %d is in the process of cutting over", jobCutoverTime.String(), ingestionJobID)
+			progress := md.Progress.GetStreamIngest()
+			if progress.ReplicationStatus == jobspb.ReplicationCuttingOver {
+				return errors.Newf("job %d already started cutting over to timestamp %s",
+					ingestionJobID, progress.CutoverTime)
 			}
 
-			progress := md.Progress.GetStreamIngest()
 			progress.ReplicationStatus = jobspb.ReplicationPendingCutover
 			// Update the sentinel being polled by the stream ingestion job to
 			// check if a complete has been signaled.
