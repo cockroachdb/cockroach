@@ -4,6 +4,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "queue",
     srcs = [
+        "pacer.go",
         "queue.go",
         "replicate_queue.go",
         "split_queue.go",
@@ -22,6 +23,7 @@ go_library(
 go_test(
     name = "queue_test",
     srcs = [
+        "pacer_test.go",
         "replicate_queue_test.go",
         "split_queue_test.go",
     ],

@@ -44,7 +44,7 @@ type Simulator struct {
 	// The simulator can run multiple workload Generators in parallel.
 	generators []workload.Generator
 
-	pacers map[state.StoreID]ReplicaPacer
+	pacers map[state.StoreID]queue.ReplicaPacer
 
 	// Store replicate queues.
 	rqs map[state.StoreID]queue.RangeQueue
@@ -72,7 +72,7 @@ func NewSimulator(
 	settings *config.SimulationSettings,
 	metrics *metrics.MetricsTracker,
 ) *Simulator {
-	pacers := make(map[state.StoreID]ReplicaPacer)
+	pacers := make(map[state.StoreID]queue.ReplicaPacer)
 	rqs := make(map[state.StoreID]queue.RangeQueue)
 	sqs := make(map[state.StoreID]queue.RangeQueue)
 	srs := make(map[state.StoreID]storerebalancer.StoreRebalancer)
@@ -101,7 +101,7 @@ func NewSimulator(
 			settings.RangeSizeSplitThreshold,
 			settings.StartTime,
 		)
-		pacers[storeID] = NewScannerReplicaPacer(
+		pacers[storeID] = queue.NewScannerReplicaPacer(
 			initialState.NextReplicasFn(storeID),
 			settings.PacerLoopInterval,
 			settings.PacerMinIterInterval,
