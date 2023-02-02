@@ -806,7 +806,8 @@ INSERT INTO f VALUES
   (36, '[[]]'),
   (37, '[{"a": [0, "b"]}, null, 1]'),
   (38, '[[0, 1, 2], {"b": "c"}]'),
-  (39, '[[0, [1, 2]]]')
+  (39, '[[0, [1, 2]]]'),
+  (40, '{"a": "a"}')
 
 query T
 SELECT j FROM f@i WHERE j->0 = '[]' ORDER BY k
@@ -1196,6 +1197,84 @@ SELECT j FROM f@i WHERE j->'a'->'b' <@ '{"c": [1, 2], "d": 2}' OR j->'a'->'b' <@
 {"a": {"b": "c", "d": "e"}}
 {"a": {"b": "c"}, "d": "e"}
 {"a": {"b": []}}
+
+#Testing the IN operator
+query T
+SELECT j FROM f@i WHERE j->'a' IN ('1', '2', '3') ORDER BY k
+----
+{"a": 1}
+{"a": 1, "b": 2}
+{"a": 1, "c": 3}
+
+query T
+SELECT j FROM f@i WHERE j->'a' IN ('"a"') ORDER BY k
+----
+{"a": "a"}
+
+query T
+SELECT j FROM f@i WHERE j->'a' IN ('"a"', 'null') ORDER BY k
+----
+{"a": null}
+{"a": "a"}
+
+query T
+SELECT j FROM f@i WHERE j->'a' IN ('{"b": "c"}', '{"c": "d"}') ORDER BY k
+----
+{"a": {"b": "c"}}
+{"a": {"b": "c"}, "d": "e"}
+
+query T
+SELECT j FROM f@i WHERE j->'a' IN ('{"b": "c"}', '"a"') ORDER BY k
+----
+{"a": {"b": "c"}}
+{"a": {"b": "c"}, "d": "e"}
+{"a": "a"}
+
+query T
+SELECT j FROM f@i WHERE j->'a' IN ('[1, 2]', '"a"') ORDER BY k
+----
+{"a": [1, 2]}
+{"a": "a"}
+
+query T
+SELECT j FROM f@i WHERE j->0 IN ('1', '2', '3') ORDER BY k
+----
+[1, 2, {"b": "c"}]
+
+query T
+SELECT j FROM f@i WHERE j->1 IN ('1', '2', '3') ORDER BY k
+----
+[1, 2, {"b": "c"}]
+
+query T
+SELECT j FROM f@i WHERE j->0 IN ('1', '2', '3', '"d"') AND j->1 IN
+ ('"e"', '"d"') ORDER BY k
+----
+
+query T
+SELECT j FROM f@i WHERE j->0 IN ('1', '2', '3', '"d"') OR j->1 IN
+ ('"e"', '"d"') ORDER BY k
+----
+[1, 2, {"b": "c"}]
+[{"a": {"b": "c"}}, "d", "e"]
+
+query T
+SELECT j FROM f@i WHERE j->0 IN ('{"a": {"b": "c"}}', '{"a": [0, "b"]}') ORDER BY k
+----
+[{"a": {"b": "c"}}, "d", "e"]
+[{"a": [0, "b"]}, null, 1]
+
+query T
+SELECT j FROM f@i WHERE j->0 IN ('{"a": {"b": "c"}}', '[]') ORDER BY k
+----
+[{"a": {"b": "c"}}, "d", "e"]
+[[]]
+
+query T
+SELECT j FROM f@i WHERE j->0 IN ('[0, [1, 2]]', '[0, 1, 2]') ORDER BY k
+----
+[[0, 1, 2], {"b": "c"}]
+[[0, [1, 2]]]
 
 # Regression test for #63180. This query should not cause an index out of range
 # error in the inverted filterer.
