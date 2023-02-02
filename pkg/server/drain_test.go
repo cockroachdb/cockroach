@@ -13,6 +13,7 @@ package server_test
 import (
 	"context"
 	"io"
+	"strconv"
 	"testing"
 	"time"
 
@@ -299,4 +300,242 @@ func getAdminClientForServer(
 	return client, func() {
 		_ = conn.Close() // nolint:grpcconnclose
 	}, nil
+}
+
+// TestDrainIgnoresExpiredLeases checks that the drain process
+// does not linger forever in the presence of expired leases.
+func TestDrainIgnoresExpiredLeases(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	stickyEngineRegistry := server.NewStickyInMemEnginesRegistry()
+	defer stickyEngineRegistry.CloseAllStickyInMemEngines()
+	const numServers int = 4
+	stickyServerArgs := make(map[int]base.TestServerArgs)
+	for i := 0; i < numServers; i++ {
+		stickyServerArgs[i] = base.TestServerArgs{
+			Locality: roachpb.Locality{Tiers: []roachpb.Tier{{Key: "node", Value: "n" + strconv.FormatInt(int64(i+1), 10)}}},
+			StoreSpecs: []base.StoreSpec{
+				{
+					InMemory:               true,
+					StickyInMemoryEngineID: t.Name() + strconv.FormatInt(int64(i), 10),
+				},
+			},
+			Knobs: base.TestingKnobs{
+				Server: &server.TestingKnobs{
+					StickyEngineRegistry: stickyEngineRegistry,
+				},
+			},
+		}
+	}
+
+	tc := testcluster.StartTestCluster(t, 4, base.TestClusterArgs{
+		ReplicationMode:   base.ReplicationAuto,
+		ServerArgsPerNode: stickyServerArgs,
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	t.Logf("setting up data...")
+	s0 := tc.Server(0).(*server.TestServer)
+	if err := s0.RunLocalSQL(ctx, func(ctx context.Context, ie *sql.InternalExecutor) error {
+		for _, stmt := range []string{
+			// Adjust the zone configs so that data spreads over the storage
+			// nodes, excluding the observer node.
+			`ALTER RANGE default CONFIGURE ZONE USING constraints = '[-node=n4]'`,
+			// Create a table and make its lease live on the draining node.
+			`CREATE TABLE defaultdb.public.t(x INT PRIMARY KEY)`,
+			`ALTER TABLE defaultdb.public.t CONFIGURE ZONE USING num_replicas = 3, constraints = '[-node=n4]', lease_preferences = '[[+node=n1]]'`,
+			`INSERT INTO defaultdb.public.t(x) SELECT generate_series(1,10000)`,
+		} {
+			if _, err := ie.Exec(ctx, "set-zone", nil, stmt); err != nil {
+				return errors.Wrap(err, stmt)
+			}
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Logf("waiting for up-replication")
+	// Wait for the newly created table to spread over all nodes.
+	testutils.SucceedsSoon(t, func() error {
+		return s0.RunLocalSQL(ctx, func(ctx context.Context, ie *sql.InternalExecutor) error {
+			_, err := ie.Exec(ctx, "wait-replication", nil, `
+SELECT -- wait for up-replication.
+       IF(array_length(replicas, 1) != 3,
+          crdb_internal.force_error('UU000', 'not ready: ' || array_length(replicas, 1)::string || ' replicas'),
+
+          -- once up-replication is reached, ensure that we got the replicas where we wanted.
+          IF(replicas != '{1,2,3}'::INT[] OR lease_holder != 1,
+             crdb_internal.force_Error('UU000', 'zone config not applied properly: ' || replicas::string || ' / lease at n' || lease_holder::int),
+             0))
+  FROM [SHOW RANGES FROM TABLE defaultdb.public.t]`)
+			if err != nil && !testutils.IsError(err, "not ready") {
+				t.Fatal(err)
+			}
+			return err
+		})
+	})
+
+	t.Logf("stopping the draining node")
+	tc.StopServer(0)
+
+	t.Logf("unlocking range")
+	// Now remove the lease preference from the first node, so the lease freely can move to one of the follower nodes
+	sSpare := tc.Server(3).(*server.TestServer)
+	if err := sSpare.RunLocalSQL(ctx, func(ctx context.Context, ie *sql.InternalExecutor) error {
+		_, err := ie.Exec(ctx, "release-range", nil,
+			`ALTER TABLE defaultdb.public.t CONFIGURE ZONE USING constraints = '[]', lease_preferences = '[]'`)
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Logf("waiting for range to get a lease on a remaining node")
+	// As a sanity check, assert that the lease has landed on the target node.
+	// In particular we don't want it on the observer node, because it
+	// would give us a false negative on the test result.
+	testutils.SucceedsSoon(t, func() error {
+		return sSpare.RunLocalSQL(ctx, func(ctx context.Context, ie *sql.InternalExecutor) error {
+			if _, err := ie.Exec(ctx, "bring-lease", nil, `TABLE defaultdb.public.t`); err != nil {
+				t.Fatal(err)
+			}
+
+			_, err := ie.Exec(ctx, "wait-replication", nil, `
+SELECT IF(lease_holder = 1,
+          crdb_internal.force_error('UU000', 'not ready'),
+          0)
+  FROM [SHOW RANGES FROM TABLE defaultdb.public.t]`)
+			if err != nil && !testutils.IsError(err, "not ready") {
+				t.Fatal(err)
+			}
+			return err
+		})
+	})
+
+	t.Logf("restarting all the nodes so we get invalid leases everywhere")
+	for i := 1; i < 3; i++ {
+		t.Logf("restarting node %d", i+1)
+		tc.StopServer(i)
+		tc.RestartServer(i)
+	}
+	t.Logf("restarting first node")
+	tc.RestartServer(0)
+
+	t.Logf("now drain the server -- this is expected to succeed quickly even though some leases are now invalid")
+	s0 = tc.Server(0).(*server.TestServer)
+	testutils.SucceedsSoon(t, func() error {
+		remaining, _, err := s0.Drain(ctx)
+		if err != nil {
+			return err
+		}
+		if remaining == 0 {
+			// No more work to do.
+			return nil
+		}
+		return errors.Newf("work left to do: %d", remaining)
+	})
+	t.Logf("drain complete")
+}
+
+// TestDrainIgnoresExpiredQuietLeases is like
+// TestDrainIgnoresExpiredLeases except that it lets the leases on all
+// participating nodes become invalid during the drain.
+func TestDrainIgnoresExpiredQuietLeases(t *testing.T) {
+	defer leaktest.AfterTest(t)
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	stickyEngineRegistry := server.NewStickyInMemEnginesRegistry()
+	defer stickyEngineRegistry.CloseAllStickyInMemEngines()
+	const numServers int = 3
+	stickyServerArgs := make(map[int]base.TestServerArgs)
+	for i := 0; i < numServers; i++ {
+		stickyServerArgs[i] = base.TestServerArgs{
+			Locality: roachpb.Locality{Tiers: []roachpb.Tier{{Key: "node", Value: "n" + strconv.FormatInt(int64(i+1), 10)}}},
+			StoreSpecs: []base.StoreSpec{
+				{
+					InMemory:               true,
+					StickyInMemoryEngineID: t.Name() + strconv.FormatInt(int64(i), 10),
+				},
+			},
+			Knobs: base.TestingKnobs{
+				Server: &server.TestingKnobs{
+					StickyEngineRegistry: stickyEngineRegistry,
+				},
+			},
+		}
+	}
+
+	tc := testcluster.StartTestCluster(t, 4, base.TestClusterArgs{
+		ReplicationMode:   base.ReplicationAuto,
+		ServerArgsPerNode: stickyServerArgs,
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	t.Logf("setting up data...")
+	s0 := tc.Server(0).(*server.TestServer)
+	if err := s0.RunLocalSQL(ctx, func(ctx context.Context, ie *sql.InternalExecutor) error {
+		for _, stmt := range []string{
+			// Adjust the zone configs so that data spreads over the storage
+			// nodes, excluding the observer node.
+			// Create a table and make its lease live on the draining node.
+			`CREATE TABLE defaultdb.public.t(x INT PRIMARY KEY)`,
+			`ALTER TABLE defaultdb.public.t CONFIGURE ZONE USING num_replicas = 3, constraints = '[]', lease_preferences = '[[+node=n1]]'`,
+			`INSERT INTO defaultdb.public.t(x) SELECT generate_series(1,10000)`,
+		} {
+			if _, err := ie.Exec(ctx, "set-zone", nil, stmt); err != nil {
+				return errors.Wrap(err, stmt)
+			}
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Logf("waiting for up-replication")
+	// Wait for the newly created table to spread over all nodes.
+	testutils.SucceedsSoon(t, func() error {
+		return s0.RunLocalSQL(ctx, func(ctx context.Context, ie *sql.InternalExecutor) error {
+			_, err := ie.Exec(ctx, "wait-replication", nil, `
+SELECT -- wait for up-replication.
+       IF(array_length(replicas, 1) != 3,
+          crdb_internal.force_error('UU000', 'not ready: ' || array_length(replicas, 1)::string || ' replicas'),
+
+          -- once up-replication is reached, ensure that we got the replicas where we wanted.
+          IF(replicas != '{1,2,3}'::INT[] OR lease_holder != 1,
+             crdb_internal.force_Error('UU000', 'zone config not applied properly: ' || replicas::string || ' / lease at n' || lease_holder::int),
+             0))
+  FROM [SHOW RANGES FROM TABLE defaultdb.public.t]`)
+			if err != nil && !testutils.IsError(err, "not ready") {
+				t.Fatal(err)
+			}
+			return err
+		})
+	})
+
+	t.Logf("restarting all the nodes so we get invalid leases everywhere")
+	for i := 0; i < 3; i++ {
+		t.Logf("restarting node %d", i+1)
+		tc.StopServer(i)
+		tc.RestartServer(i)
+	}
+
+	t.Logf("now drain the server -- this is expected to succeed quickly even though some leases are now invalid")
+	s0 = tc.Server(0).(*server.TestServer)
+	testutils.SucceedsSoon(t, func() error {
+		remaining, _, err := s0.Drain(ctx)
+		if err != nil {
+			return err
+		}
+		if remaining == 0 {
+			// No more work to do.
+			return nil
+		}
+		return errors.Newf("work left to do: %d", remaining)
+	})
+	t.Logf("drain complete")
 }
