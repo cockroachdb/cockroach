@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -165,6 +166,7 @@ func (n *dropSchemaNode) startExec(params runParams) error {
 		schemaIDs,
 		n.d.getDroppedTableDetails(),
 		n.d.typesToDelete,
+		n.d.functionsToDelete,
 		tree.AsStringWithFQNames(n.n, params.Ann()),
 	)
 
@@ -230,11 +232,16 @@ func (p *planner) createDropSchemaJob(
 	schemas []descpb.ID,
 	tableDropDetails []jobspb.DroppedTableDetails,
 	typesToDrop []*typedesc.Mutable,
+	functionsToDrop []*funcdesc.Mutable,
 	jobDesc string,
 ) {
 	typeIDs := make([]descpb.ID, 0, len(typesToDrop))
 	for _, t := range typesToDrop {
 		typeIDs = append(typeIDs, t.ID)
+	}
+	fnIDs := make([]descpb.ID, 0, len(functionsToDrop))
+	for _, f := range functionsToDrop {
+		fnIDs = append(fnIDs, f.ID)
 	}
 
 	p.extendedEvalCtx.QueueJob(&jobs.Record{
@@ -245,6 +252,7 @@ func (p *planner) createDropSchemaJob(
 			DroppedSchemas:    schemas,
 			DroppedTables:     tableDropDetails,
 			DroppedTypes:      typeIDs,
+			DroppedFunctions:  fnIDs,
 			DroppedDatabaseID: descpb.InvalidID,
 			// The version distinction for database jobs doesn't matter for jobs that
 			// drop schemas.

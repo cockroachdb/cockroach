@@ -14,7 +14,7 @@ import (
 	"context"
 	"strconv"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/contentionpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/idxrecommendations"
@@ -121,7 +121,7 @@ func (ex *connExecutor) recordStatementSummary(
 	rowsAffected int,
 	stmtErr error,
 	stats topLevelQueryStats,
-) roachpb.StmtFingerprintID {
+) appstatspb.StmtFingerprintID {
 	phaseTimes := ex.statsCollector.PhaseTimes()
 
 	// Collect the statistics.
@@ -163,7 +163,7 @@ func (ex *connExecutor) recordStatementSummary(
 	}
 
 	fullScan := flags.IsSet(planFlagContainsFullIndexScan) || flags.IsSet(planFlagContainsFullTableScan)
-	recordedStmtStatsKey := roachpb.StatementStatisticsKey{
+	recordedStmtStatsKey := appstatspb.StatementStatisticsKey{
 		Query:        stmt.StmtNoConstants,
 		QuerySummary: stmt.StmtSummary,
 		DistSQL:      flags.IsDistributed(),

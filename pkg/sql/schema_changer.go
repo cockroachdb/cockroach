@@ -109,6 +109,7 @@ type SchemaChanger struct {
 	mutationID        descpb.MutationID
 	droppedDatabaseID descpb.ID
 	droppedSchemaIDs  catalog.DescriptorIDSet
+	droppedFnIDs      catalog.DescriptorIDSet
 	sqlInstanceID     base.SQLInstanceID
 	leaseMgr          *lease.Manager
 	db                isql.DB
@@ -633,6 +634,17 @@ func (sc *SchemaChanger) exec(ctx context.Context) error {
 	// Pull out the requested descriptor.
 	desc, err := sc.getTargetDescriptor(ctx)
 	if err != nil {
+		// We had a bug where function descriptors are not deleted after DROP
+		// FUNCTION in legacy schema changer (see #95364). We then add logic to
+		// handle the deletion in jobs and added upgrades to delete all dropped
+		// functions. It's possible that such job is resumed after the cluster is
+		// upgraded (all dropped descriptors are deleted), and we would fail to find
+		// the descriptor here. In this case, we can simply assume the job is done
+		// since we only handle descriptor deletes for functions and `droppedFnIDs`
+		// is not empty only when dropping functions.
+		if sc.droppedFnIDs.Len() > 0 && errors.Is(err, catalog.ErrDescriptorNotFound) {
+			return nil
+		}
 		return err
 	}
 
@@ -688,6 +700,10 @@ func (sc *SchemaChanger) exec(ctx context.Context) error {
 			}
 		case catalog.DatabaseDescriptor:
 			if sc.droppedDatabaseID != desc.GetID() {
+				return nil
+			}
+		case catalog.FunctionDescriptor:
+			if !sc.droppedFnIDs.Contains(desc.GetID()) {
 				return nil
 			}
 		default:
@@ -2568,11 +2584,12 @@ func (r schemaChangeResumer) Resume(ctx context.Context, execCtx interface{}) er
 			return err
 		}
 	}
-	execSchemaChange := func(descID descpb.ID, mutationID descpb.MutationID, droppedDatabaseID descpb.ID, droppedSchemaIDs descpb.IDs) error {
+	execSchemaChange := func(descID descpb.ID, mutationID descpb.MutationID, droppedDatabaseID descpb.ID, droppedSchemaIDs descpb.IDs, droppedFnIDs descpb.IDs) error {
 		sc := SchemaChanger{
 			descID:               descID,
 			mutationID:           mutationID,
 			droppedSchemaIDs:     catalog.MakeDescriptorIDSet(droppedSchemaIDs...),
+			droppedFnIDs:         catalog.MakeDescriptorIDSet(droppedFnIDs...),
 			droppedDatabaseID:    droppedDatabaseID,
 			sqlInstanceID:        p.ExecCfg().NodeInfo.NodeID.SQLInstanceID(),
 			db:                   p.ExecCfg().InternalDB,
@@ -2669,14 +2686,38 @@ func (r schemaChangeResumer) Resume(ctx context.Context, execCtx interface{}) er
 	// Drop the child tables.
 	for i := range details.DroppedTables {
 		droppedTable := &details.DroppedTables[i]
-		if err := execSchemaChange(droppedTable.ID, descpb.InvalidMutationID, details.DroppedDatabaseID, details.DroppedSchemas); err != nil {
+		if err := execSchemaChange(
+			droppedTable.ID,
+			descpb.InvalidMutationID,
+			details.DroppedDatabaseID,
+			details.DroppedSchemas,
+			nil, /* droppedFnIDs */
+		); err != nil {
 			return err
 		}
 	}
 
 	// Drop all schemas.
 	for _, id := range details.DroppedSchemas {
-		if err := execSchemaChange(id, descpb.InvalidMutationID, descpb.InvalidID, details.DroppedSchemas); err != nil {
+		if err := execSchemaChange(
+			id,
+			descpb.InvalidMutationID,
+			descpb.InvalidID,
+			details.DroppedSchemas,
+			nil, /* droppedFnIDs */
+		); err != nil {
+			return err
+		}
+	}
+
+	for _, id := range details.DroppedFunctions {
+		if err := execSchemaChange(
+			id,
+			descpb.InvalidMutationID,
+			descpb.InvalidID,
+			nil, /* droppedSchemaIDs */
+			details.DroppedFunctions,
+		); err != nil {
 			return err
 		}
 	}
@@ -2684,7 +2725,13 @@ func (r schemaChangeResumer) Resume(ctx context.Context, execCtx interface{}) er
 	// Drop the database, if applicable.
 	if details.FormatVersion >= jobspb.DatabaseJobFormatVersion {
 		if dbID := details.DroppedDatabaseID; dbID != descpb.InvalidID {
-			if err := execSchemaChange(dbID, descpb.InvalidMutationID, details.DroppedDatabaseID, details.DroppedSchemas); err != nil {
+			if err := execSchemaChange(
+				dbID,
+				descpb.InvalidMutationID,
+				details.DroppedDatabaseID,
+				details.DroppedSchemas,
+				nil, /* droppedFnIDs */
+			); err != nil {
 				return err
 			}
 			// If there are no tables to GC, the zone config needs to be deleted now.
@@ -2737,7 +2784,7 @@ func (r schemaChangeResumer) Resume(ctx context.Context, execCtx interface{}) er
 	// schema changer. This can be any single-table schema change or any change to
 	// a database or schema other than a drop.
 	if details.DescID != descpb.InvalidID {
-		return execSchemaChange(details.DescID, details.TableMutationID, details.DroppedDatabaseID, details.DroppedSchemas)
+		return execSchemaChange(details.DescID, details.TableMutationID, details.DroppedDatabaseID, details.DroppedSchemas, nil /* droppedFnIDs */)
 	}
 	return nil
 }

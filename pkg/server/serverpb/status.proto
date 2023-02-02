@@ -16,7 +16,6 @@ import "build/info.proto";
 import "errorspb/errors.proto";
 import "gossip/gossip.proto";
 import "jobs/jobspb/jobs.proto";
-import "roachpb/app_stats.proto";
 import "roachpb/data.proto";
 import "roachpb/index_usage_stats.proto";
 import "roachpb/span_config.proto";
@@ -24,6 +23,7 @@ import "roachpb/metadata.proto";
 import "server/diagnostics/diagnosticspb/diagnostics.proto";
 import "server/serverpb/index_recommendations.proto";
 import "server/status/statuspb/status.proto";
+import "sql/appstatspb/app_stats.proto";
 import "sql/contentionpb/contention.proto";
 import "sql/sqlstats/insights/insights.proto";
 import "storage/enginepb/engine.proto";
@@ -1001,7 +1001,7 @@ message Session {
 
   // List of transaction fingerprint IDs in this session.
   repeated uint64 txn_fingerprint_ids = 17 [(gogoproto.customname) = "TxnFingerprintIDs",
-    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/roachpb.TransactionFingerprintID",
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/sql/appstatspb.TransactionFingerprintID",
     (gogoproto.nullable) = false];
 
   // The session's total active time.
@@ -1608,7 +1608,7 @@ message StatementsResponse {
   message CollectedStatementStatistics {
     ExtendedStatementStatisticsKey key = 1 [(gogoproto.nullable) = false];
     uint64 id = 3 [(gogoproto.customname) = "ID",
-      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.StmtFingerprintID"];
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/appstatspb.StmtFingerprintID"];
     cockroach.sql.StatementStatistics stats = 2 [(gogoproto.nullable) = false];
   }
 

@@ -16,6 +16,7 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insights"
@@ -34,7 +35,7 @@ var (
 
 	// ErrExecStatsFingerprintFlushed is returned from the Container when the
 	// stats object for the fingerprint has been flushed to system table before
-	// the roachpb.ExecStats can be recorded.
+	// the appstatspb.ExecStats can be recorded.
 	ErrExecStatsFingerprintFlushed = errors.New("stmtStats flushed before execution stats can be recorded")
 )
 
@@ -66,8 +67,8 @@ func getStatus(statementError error) insights.Statement_Status {
 // statistics into in-memory structs. It is unrelated to the stmtErr in the
 // arguments.
 func (s *Container) RecordStatement(
-	ctx context.Context, key roachpb.StatementStatisticsKey, value sqlstats.RecordedStmtStats,
-) (roachpb.StmtFingerprintID, error) {
+	ctx context.Context, key appstatspb.StatementStatisticsKey, value sqlstats.RecordedStmtStats,
+) (appstatspb.StmtFingerprintID, error) {
 	createIfNonExistent := true
 	// If the statement is below the latency threshold, or stats aren't being
 	// recorded we don't need to create an entry in the stmts map for it. We do
@@ -214,7 +215,7 @@ func (s *Container) RecordStatement(
 
 // RecordStatementExecStats implements sqlstats.Writer interface.
 func (s *Container) RecordStatementExecStats(
-	key roachpb.StatementStatisticsKey, stats execstats.QueryLevelStats,
+	key appstatspb.StatementStatisticsKey, stats execstats.QueryLevelStats,
 ) error {
 	stmtStats, _, _, _, _ :=
 		s.getStatsForStmt(
@@ -249,7 +250,7 @@ func (s *Container) ShouldSample(
 // RecordTransaction implements sqlstats.Writer interface and saves
 // per-transaction statistics.
 func (s *Container) RecordTransaction(
-	ctx context.Context, key roachpb.TransactionFingerprintID, value sqlstats.RecordedTxnStats,
+	ctx context.Context, key appstatspb.TransactionFingerprintID, value sqlstats.RecordedTxnStats,
 ) error {
 	s.recordTransactionHighLevelStats(value.TransactionTimeSec, value.Committed, value.ImplicitTxn)
 

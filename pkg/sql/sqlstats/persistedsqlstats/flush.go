@@ -16,7 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -80,7 +80,7 @@ func (s *PersistedSQLStats) flushStmtStats(ctx context.Context, aggregatedTs tim
 	// s.doFlush directly logs errors if they are encountered. Therefore,
 	// no error is returned here.
 	_ = s.SQLStats.IterateStatementStats(ctx, &sqlstats.IteratorOptions{},
-		func(ctx context.Context, statistics *roachpb.CollectedStatementStatistics) error {
+		func(ctx context.Context, statistics *appstatspb.CollectedStatementStatistics) error {
 			s.doFlush(ctx, func() error {
 				return s.doFlushSingleStmtStats(ctx, statistics, aggregatedTs)
 			}, "failed to flush statement statistics" /* errMsg */)
@@ -95,7 +95,7 @@ func (s *PersistedSQLStats) flushStmtStats(ctx context.Context, aggregatedTs tim
 
 func (s *PersistedSQLStats) flushTxnStats(ctx context.Context, aggregatedTs time.Time) {
 	_ = s.SQLStats.IterateTransactionStats(ctx, &sqlstats.IteratorOptions{},
-		func(ctx context.Context, statistics *roachpb.CollectedTransactionStatistics) error {
+		func(ctx context.Context, statistics *appstatspb.CollectedTransactionStatistics) error {
 			s.doFlush(ctx, func() error {
 				return s.doFlushSingleTxnStats(ctx, statistics, aggregatedTs)
 			}, "failed to flush transaction statistics" /* errMsg */)
@@ -126,7 +126,7 @@ func (s *PersistedSQLStats) doFlush(ctx context.Context, workFn func() error, er
 }
 
 func (s *PersistedSQLStats) doFlushSingleTxnStats(
-	ctx context.Context, stats *roachpb.CollectedTransactionStatistics, aggregatedTs time.Time,
+	ctx context.Context, stats *appstatspb.CollectedTransactionStatistics, aggregatedTs time.Time,
 ) error {
 	return s.cfg.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		// Explicitly copy the stats variable so the txn closure is retryable.
@@ -149,7 +149,7 @@ func (s *PersistedSQLStats) doFlushSingleTxnStats(
 		}
 
 		readFn := func(ctx context.Context, txn isql.Txn) error {
-			persistedData := roachpb.TransactionStatistics{}
+			persistedData := appstatspb.TransactionStatistics{}
 			err := s.fetchPersistedTransactionStats(ctx, txn, aggregatedTs, serializedFingerprintID, scopedStats.App, &persistedData)
 			if err != nil {
 				return err
@@ -172,7 +172,7 @@ func (s *PersistedSQLStats) doFlushSingleTxnStats(
 }
 
 func (s *PersistedSQLStats) doFlushSingleStmtStats(
-	ctx context.Context, stats *roachpb.CollectedStatementStatistics, aggregatedTs time.Time,
+	ctx context.Context, stats *appstatspb.CollectedStatementStatistics, aggregatedTs time.Time,
 ) error {
 	return s.cfg.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		// Explicitly copy the stats so that this closure is retryable.
@@ -205,7 +205,7 @@ func (s *PersistedSQLStats) doFlushSingleStmtStats(
 		}
 
 		readFn := func(ctx context.Context, txn isql.Txn) error {
-			persistedData := roachpb.StatementStatistics{}
+			persistedData := appstatspb.StatementStatistics{}
 			err := s.fetchPersistedStatementStats(
 				ctx,
 				txn,
@@ -301,7 +301,7 @@ func (s *PersistedSQLStats) insertTransactionStats(
 	txn isql.Txn,
 	aggregatedTs time.Time,
 	serializedFingerprintID []byte,
-	stats *roachpb.CollectedTransactionStatistics,
+	stats *appstatspb.CollectedTransactionStatistics,
 ) (rowsAffected int, err error) {
 	insertStmt := `
 INSERT INTO system.transaction_statistics
@@ -348,7 +348,7 @@ func (s *PersistedSQLStats) updateTransactionStats(
 	txn isql.Txn,
 	aggregatedTs time.Time,
 	serializedFingerprintID []byte,
-	stats *roachpb.CollectedTransactionStatistics,
+	stats *appstatspb.CollectedTransactionStatistics,
 ) error {
 	updateStmt := `
 UPDATE system.transaction_statistics
@@ -398,7 +398,7 @@ func (s *PersistedSQLStats) updateStatementStats(
 	serializedFingerprintID []byte,
 	serializedTransactionFingerprintID []byte,
 	serializedPlanHash []byte,
-	stats *roachpb.CollectedStatementStatistics,
+	stats *appstatspb.CollectedStatementStatistics,
 ) error {
 	updateStmt := `
 UPDATE system.statement_statistics
@@ -466,7 +466,7 @@ func (s *PersistedSQLStats) insertStatementStats(
 	serializedFingerprintID []byte,
 	serializedTransactionFingerprintID []byte,
 	serializedPlanHash []byte,
-	stats *roachpb.CollectedStatementStatistics,
+	stats *appstatspb.CollectedStatementStatistics,
 ) (rowsAffected int, err error) {
 
 	aggInterval := s.GetAggregationInterval()
@@ -536,7 +536,7 @@ func (s *PersistedSQLStats) fetchPersistedTransactionStats(
 	aggregatedTs time.Time,
 	serializedFingerprintID []byte,
 	appName string,
-	result *roachpb.TransactionStatistics,
+	result *appstatspb.TransactionStatistics,
 ) error {
 	// We use `SELECT ... FOR UPDATE` statement because we are going to perform
 	// and `UPDATE` on the stats for the given fingerprint later.
@@ -592,8 +592,8 @@ func (s *PersistedSQLStats) fetchPersistedStatementStats(
 	serializedFingerprintID []byte,
 	serializedTransactionFingerprintID []byte,
 	serializedPlanHash []byte,
-	key *roachpb.StatementStatisticsKey,
-	result *roachpb.StatementStatistics,
+	key *appstatspb.StatementStatisticsKey,
+	result *appstatspb.StatementStatistics,
 ) error {
 	readStmt := `
 SELECT

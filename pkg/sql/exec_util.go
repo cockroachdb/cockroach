@@ -55,6 +55,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
@@ -1533,7 +1534,7 @@ type ExecutorTestingKnobs struct {
 	BeforeTxnStatsRecorded func(
 		sessionData *sessiondata.SessionData,
 		txnID uuid.UUID,
-		txnFingerprintID roachpb.TransactionFingerprintID,
+		txnFingerprintID appstatspb.TransactionFingerprintID,
 	)
 
 	// AfterBackupCheckpoint if set will be called after a BACKUP-CHECKPOINT
@@ -3402,9 +3403,9 @@ func (m *sessionDataMutator) SetOptimizerUseLimitOrderingForStreamingGroupBy(val
 // Utility functions related to scrubbing sensitive information on SQL Stats.
 
 // quantizeCounts ensures that the Count field in the
-// roachpb.StatementStatistics is bucketed to the order of magnitude base 10s
+// appstatspb.StatementStatistics is bucketed to the order of magnitude base 10s
 // and recomputes the squared differences using the new Count value.
-func quantizeCounts(d *roachpb.StatementStatistics) {
+func quantizeCounts(d *appstatspb.StatementStatistics) {
 	oldCount := d.Count
 	newCount := telemetry.Bucket10(oldCount)
 	d.Count = newCount

@@ -18,8 +18,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insights"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -62,7 +62,7 @@ func BenchmarkInsights(b *testing.B) {
 				for j := 0; j < numTransactionsPerSession; j++ {
 					statements[numTransactionsPerSession*i+j] = insights.Statement{
 						// Spread across 6 different statement fingerprints.
-						FingerprintID: roachpb.StmtFingerprintID(j % 6),
+						FingerprintID: appstatspb.StmtFingerprintID(j % 6),
 						// Choose latencies in 20ms, 40ms, 60ms, 80ms, 100ms, 120ms, 140ms.
 						// As configured above, only latencies >=100ms are noteworthy.
 						// Since 7 is relatively prime to 6, we'll spread these across all fingerprints.

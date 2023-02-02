@@ -18,8 +18,8 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/contentionpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -97,7 +97,7 @@ func BenchmarkWriter(b *testing.B) {
 					randomValue := randomValueBase + i
 					w.Record(contentionpb.ResolvedTxnID{
 						TxnID:            generateUUID(uint64(randomValue)),
-						TxnFingerprintID: roachpb.TransactionFingerprintID(math.MaxInt - randomValue),
+						TxnFingerprintID: appstatspb.TransactionFingerprintID(math.MaxInt - randomValue),
 					})
 				}
 			}(writerIdx)

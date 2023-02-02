@@ -16,7 +16,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -134,8 +134,8 @@ FROM
 	return query, len(selectedColumns)
 }
 
-func rowToTxnStats(row tree.Datums) (*roachpb.CollectedTransactionStatistics, error) {
-	var stats roachpb.CollectedTransactionStatistics
+func rowToTxnStats(row tree.Datums) (*appstatspb.CollectedTransactionStatistics, error) {
+	var stats appstatspb.CollectedTransactionStatistics
 	var err error
 
 	stats.AggregatedTs = tree.MustBeDTimestampTZ(row[0]).Time
@@ -144,7 +144,7 @@ func rowToTxnStats(row tree.Datums) (*roachpb.CollectedTransactionStatistics, er
 	if err != nil {
 		return nil, err
 	}
-	stats.TransactionFingerprintID = roachpb.TransactionFingerprintID(value)
+	stats.TransactionFingerprintID = appstatspb.TransactionFingerprintID(value)
 
 	stats.App = string(tree.MustBeDString(row[2]))
 

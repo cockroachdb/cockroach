@@ -20,16 +20,16 @@ import (
 	"text/template"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
 )
 
 // GetRandomizedCollectedStatementStatisticsForTest returns a
-// roachpb.CollectedStatementStatistics with its fields randomly filled.
+// appstatspb.CollectedStatementStatistics with its fields randomly filled.
 func GetRandomizedCollectedStatementStatisticsForTest(
 	t *testing.T,
-) (result roachpb.CollectedStatementStatistics) {
+) (result appstatspb.CollectedStatementStatistics) {
 	data := genRandomData()
 	fillObject(t, reflect.ValueOf(&result), &data)
 

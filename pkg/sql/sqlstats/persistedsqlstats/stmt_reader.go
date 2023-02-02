@@ -17,7 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -149,22 +149,22 @@ FROM
 	return query, len(selectedColumns)
 }
 
-func rowToStmtStats(row tree.Datums) (*roachpb.CollectedStatementStatistics, error) {
-	var stats roachpb.CollectedStatementStatistics
+func rowToStmtStats(row tree.Datums) (*appstatspb.CollectedStatementStatistics, error) {
+	var stats appstatspb.CollectedStatementStatistics
 	stats.AggregatedTs = tree.MustBeDTimestampTZ(row[0]).Time
 
 	stmtFingerprintID, err := sqlstatsutil.DatumToUint64(row[1])
 	if err != nil {
 		return nil, err
 	}
-	stats.ID = roachpb.StmtFingerprintID(stmtFingerprintID)
+	stats.ID = appstatspb.StmtFingerprintID(stmtFingerprintID)
 
 	transactionFingerprintID, err := sqlstatsutil.DatumToUint64(row[2])
 	if err != nil {
 		return nil, err
 	}
 	stats.Key.TransactionFingerprintID =
-		roachpb.TransactionFingerprintID(transactionFingerprintID)
+		appstatspb.TransactionFingerprintID(transactionFingerprintID)
 
 	stats.Key.PlanHash, err = sqlstatsutil.DatumToUint64(row[3])
 	if err != nil {

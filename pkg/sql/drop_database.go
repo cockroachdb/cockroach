@@ -179,6 +179,7 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 		schemasIDsToDelete,
 		n.d.getDroppedTableDetails(),
 		n.d.typesToDelete,
+		n.d.functionsToDelete,
 		tree.AsStringWithFQNames(n.n, params.Ann()),
 	)
 

@@ -22,12 +22,12 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessionphase"
@@ -78,7 +78,7 @@ func TestStmtStatsBulkIngestWithRandomMetadata(t *testing.T) {
 			&sqlstats.IteratorOptions{},
 			func(
 				ctx context.Context,
-				statistics *roachpb.CollectedStatementStatistics,
+				statistics *appstatspb.CollectedStatementStatistics,
 			) error {
 				var found bool
 				for i := range testData {
@@ -97,73 +97,73 @@ func TestSQLStatsStmtStatsBulkIngest(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	testData := []struct {
-		id    roachpb.StmtFingerprintID
-		key   roachpb.StatementStatisticsKey
-		stats roachpb.StatementStatistics
+		id    appstatspb.StmtFingerprintID
+		key   appstatspb.StatementStatisticsKey
+		stats appstatspb.StatementStatistics
 	}{
 		{
 			id: 0,
-			key: roachpb.StatementStatisticsKey{
+			key: appstatspb.StatementStatisticsKey{
 				App:      "app1",
 				Query:    "SELECT 1",
 				Database: "testdb",
 			},
-			stats: roachpb.StatementStatistics{
+			stats: appstatspb.StatementStatistics{
 				Count: 7,
 			},
 		},
 		{
 			id: 0,
-			key: roachpb.StatementStatisticsKey{
+			key: appstatspb.StatementStatisticsKey{
 				App:      "app0",
 				Query:    "SELECT 1",
 				Database: "testdb",
 			},
-			stats: roachpb.StatementStatistics{
+			stats: appstatspb.StatementStatistics{
 				Count: 2,
 			},
 		},
 		{
 			id: 1,
-			key: roachpb.StatementStatisticsKey{
+			key: appstatspb.StatementStatisticsKey{
 				App:      "app100",
 				Query:    "SELECT 1,1",
 				Database: "testdb",
 			},
-			stats: roachpb.StatementStatistics{
+			stats: appstatspb.StatementStatistics{
 				Count: 31,
 			},
 		},
 		{
 			id: 1,
-			key: roachpb.StatementStatisticsKey{
+			key: appstatspb.StatementStatisticsKey{
 				App:      "app0",
 				Query:    "SELECT 1,1",
 				Database: "testdb",
 			},
-			stats: roachpb.StatementStatistics{
+			stats: appstatspb.StatementStatistics{
 				Count: 32,
 			},
 		},
 		{
 			id: 0,
-			key: roachpb.StatementStatisticsKey{
+			key: appstatspb.StatementStatisticsKey{
 				App:      "app1",
 				Query:    "SELECT 1",
 				Database: "testdb",
 			},
-			stats: roachpb.StatementStatistics{
+			stats: appstatspb.StatementStatistics{
 				Count: 33,
 			},
 		},
 		{
 			id: 1,
-			key: roachpb.StatementStatisticsKey{
+			key: appstatspb.StatementStatisticsKey{
 				App:      "app100",
 				Query:    "SELECT 1,1",
 				Database: "testdb",
 			},
-			stats: roachpb.StatementStatistics{
+			stats: appstatspb.StatementStatistics{
 				Count: 2,
 			},
 		},
@@ -197,7 +197,7 @@ func TestSQLStatsStmtStatsBulkIngest(t *testing.T) {
 			&sqlstats.IteratorOptions{},
 			func(
 				ctx context.Context,
-				statistics *roachpb.CollectedStatementStatistics,
+				statistics *appstatspb.CollectedStatementStatistics,
 			) error {
 				require.Equal(t, "testdb", statistics.Key.Database)
 				foundStats[statistics.Key.App+statistics.Key.Query] = statistics.Stats.Count
@@ -212,65 +212,65 @@ func TestSQLStatsTxnStatsBulkIngest(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	testData := []struct {
-		stats roachpb.CollectedTransactionStatistics
+		stats appstatspb.CollectedTransactionStatistics
 	}{
 		{
-			stats: roachpb.CollectedTransactionStatistics{
-				TransactionFingerprintID: roachpb.TransactionFingerprintID(0),
+			stats: appstatspb.CollectedTransactionStatistics{
+				TransactionFingerprintID: appstatspb.TransactionFingerprintID(0),
 				App:                      "app1",
-				Stats: roachpb.TransactionStatistics{
+				Stats: appstatspb.TransactionStatistics{
 					Count: 7,
 				},
 			},
 		},
 		{
-			stats: roachpb.CollectedTransactionStatistics{
-				TransactionFingerprintID: roachpb.TransactionFingerprintID(0),
+			stats: appstatspb.CollectedTransactionStatistics{
+				TransactionFingerprintID: appstatspb.TransactionFingerprintID(0),
 				App:                      "app0",
-				Stats: roachpb.TransactionStatistics{
+				Stats: appstatspb.TransactionStatistics{
 					Count: 2,
 				},
 			},
 		},
 		{
-			stats: roachpb.CollectedTransactionStatistics{
-				TransactionFingerprintID: roachpb.TransactionFingerprintID(1),
+			stats: appstatspb.CollectedTransactionStatistics{
+				TransactionFingerprintID: appstatspb.TransactionFingerprintID(1),
 				App:                      "app100",
-				Stats: roachpb.TransactionStatistics{
+				Stats: appstatspb.TransactionStatistics{
 					Count: 31,
 				},
 			},
 		},
 		{
-			stats: roachpb.CollectedTransactionStatistics{
-				TransactionFingerprintID: roachpb.TransactionFingerprintID(1),
+			stats: appstatspb.CollectedTransactionStatistics{
+				TransactionFingerprintID: appstatspb.TransactionFingerprintID(1),
 				App:                      "app0",
-				Stats: roachpb.TransactionStatistics{
+				Stats: appstatspb.TransactionStatistics{
 					Count: 32,
 				},
 			},
 		},
 		{
-			stats: roachpb.CollectedTransactionStatistics{
-				TransactionFingerprintID: roachpb.TransactionFingerprintID(0),
+			stats: appstatspb.CollectedTransactionStatistics{
+				TransactionFingerprintID: appstatspb.TransactionFingerprintID(0),
 				App:                      "app1",
-				Stats: roachpb.TransactionStatistics{
+				Stats: appstatspb.TransactionStatistics{
 					Count: 33,
 				},
 			},
 		},
 		{
-			stats: roachpb.CollectedTransactionStatistics{
-				TransactionFingerprintID: roachpb.TransactionFingerprintID(1),
+			stats: appstatspb.CollectedTransactionStatistics{
+				TransactionFingerprintID: appstatspb.TransactionFingerprintID(1),
 				App:                      "app100",
-				Stats: roachpb.TransactionStatistics{
+				Stats: appstatspb.TransactionStatistics{
 					Count: 2,
 				},
 			},
 		},
 	}
 
-	expectedCount := make(map[roachpb.TransactionFingerprintID]int64)
+	expectedCount := make(map[appstatspb.TransactionFingerprintID]int64)
 	input :=
 		make([]serverpb.StatementsResponse_ExtendedCollectedTransactionStatistics, 0, len(testData))
 
@@ -288,14 +288,14 @@ func TestSQLStatsTxnStatsBulkIngest(t *testing.T) {
 	sqlStats, err := sslocal.NewTempSQLStatsFromExistingTxnStats(input)
 	require.NoError(t, err)
 
-	foundStats := make(map[roachpb.TransactionFingerprintID]int64)
+	foundStats := make(map[appstatspb.TransactionFingerprintID]int64)
 	require.NoError(t,
 		sqlStats.IterateTransactionStats(
 			context.Background(),
 			&sqlstats.IteratorOptions{},
 			func(
 				ctx context.Context,
-				statistics *roachpb.CollectedTransactionStatistics,
+				statistics *appstatspb.CollectedTransactionStatistics,
 			) error {
 				foundStats[statistics.TransactionFingerprintID] = statistics.Stats.Count
 				return nil
@@ -467,7 +467,7 @@ func TestExplicitTxnFingerprintAccounting(t *testing.T) {
 	)
 
 	recordStats := func(testCase *tc) {
-		var txnFingerprintID roachpb.TransactionFingerprintID
+		var txnFingerprintID appstatspb.TransactionFingerprintID
 		txnFingerprintIDHash := util.MakeFNV64()
 		statsCollector.StartTransaction()
 		defer func() {
@@ -487,7 +487,7 @@ func TestExplicitTxnFingerprintAccounting(t *testing.T) {
 		for _, fingerprint := range testCase.fingerprints {
 			stmtFingerprintID, err := statsCollector.RecordStatement(
 				ctx,
-				roachpb.StatementStatisticsKey{
+				appstatspb.StatementStatisticsKey{
 					Query:       fingerprint,
 					ImplicitTxn: testCase.implicit,
 				},
@@ -496,7 +496,7 @@ func TestExplicitTxnFingerprintAccounting(t *testing.T) {
 			require.NoError(t, err)
 			txnFingerprintIDHash.Add(uint64(stmtFingerprintID))
 		}
-		txnFingerprintID = roachpb.TransactionFingerprintID(txnFingerprintIDHash.Sum())
+		txnFingerprintID = appstatspb.TransactionFingerprintID(txnFingerprintIDHash.Sum())
 	}
 
 	for _, tc := range testCases {
@@ -591,14 +591,14 @@ func TestAssociatingStmtStatsWithTxnFingerprint(t *testing.T) {
 			for _, fingerprint := range txn.stmtFingerprints {
 				stmtFingerprintID, err := statsCollector.RecordStatement(
 					ctx,
-					roachpb.StatementStatisticsKey{Query: fingerprint},
+					appstatspb.StatementStatisticsKey{Query: fingerprint},
 					sqlstats.RecordedStmtStats{},
 				)
 				require.NoError(t, err)
 				txnFingerprintIDHash.Add(uint64(stmtFingerprintID))
 			}
 
-			transactionFingerprintID := roachpb.TransactionFingerprintID(txnFingerprintIDHash.Sum())
+			transactionFingerprintID := appstatspb.TransactionFingerprintID(txnFingerprintIDHash.Sum())
 			statsCollector.EndTransaction(ctx, transactionFingerprintID)
 			err := statsCollector.RecordTransaction(ctx, transactionFingerprintID, sqlstats.RecordedTxnStats{
 				SessionData: &sessiondata.SessionData{
@@ -612,11 +612,11 @@ func TestAssociatingStmtStatsWithTxnFingerprint(t *testing.T) {
 			require.NoError(t, err)
 
 			// Gather the collected stats so that we can assert on them.
-			var stats []*roachpb.CollectedStatementStatistics
+			var stats []*appstatspb.CollectedStatementStatistics
 			err = statsCollector.IterateStatementStats(
 				ctx,
 				&sqlstats.IteratorOptions{},
-				func(_ context.Context, s *roachpb.CollectedStatementStatistics) error {
+				func(_ context.Context, s *appstatspb.CollectedStatementStatistics) error {
 					stats = append(stats, s)
 					return nil
 				},

@@ -13,9 +13,9 @@ package sql
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/util/cache"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -76,7 +76,7 @@ func NewTxnFingerprintIDCache(
 
 // Add adds a TxnFingerprintID to the cache, truncating the cache to the cache's capacity
 // if necessary.
-func (b *TxnFingerprintIDCache) Add(value roachpb.TransactionFingerprintID) error {
+func (b *TxnFingerprintIDCache) Add(value appstatspb.TransactionFingerprintID) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
@@ -91,7 +91,7 @@ func (b *TxnFingerprintIDCache) Add(value roachpb.TransactionFingerprintID) erro
 
 // GetAllTxnFingerprintIDs returns a slice of all TxnFingerprintIDs in the cache.
 // The cache may be truncated if the capacity was updated to a smaller size.
-func (b *TxnFingerprintIDCache) GetAllTxnFingerprintIDs() []roachpb.TransactionFingerprintID {
+func (b *TxnFingerprintIDCache) GetAllTxnFingerprintIDs() []appstatspb.TransactionFingerprintID {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
@@ -101,11 +101,11 @@ func (b *TxnFingerprintIDCache) GetAllTxnFingerprintIDs() []roachpb.TransactionF
 		size = capacity
 	}
 
-	txnFingerprintIDs := make([]roachpb.TransactionFingerprintID, 0, size)
-	txnFingerprintIDsRemoved := make([]roachpb.TransactionFingerprintID, 0)
+	txnFingerprintIDs := make([]appstatspb.TransactionFingerprintID, 0, size)
+	txnFingerprintIDsRemoved := make([]appstatspb.TransactionFingerprintID, 0)
 
 	b.mu.cache.Do(func(entry *cache.Entry) {
-		id := entry.Value.(roachpb.TransactionFingerprintID)
+		id := entry.Value.(appstatspb.TransactionFingerprintID)
 
 		if int64(len(txnFingerprintIDs)) == size {
 			txnFingerprintIDsRemoved = append(txnFingerprintIDsRemoved, id)

@@ -18,7 +18,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/contentionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -142,7 +142,7 @@ func TestResolver(t *testing.T) {
 			{
 				blockingTxn: contentionpb.ResolvedTxnID{
 					TxnID:            uuid.FastMakeV4(),
-					TxnFingerprintID: roachpb.InvalidTransactionFingerprintID,
+					TxnFingerprintID: appstatspb.InvalidTransactionFingerprintID,
 				},
 				waitingTxn: contentionpb.ResolvedTxnID{
 					TxnID:            uuid.FastMakeV4(),
@@ -168,18 +168,18 @@ func TestResolver(t *testing.T) {
 				},
 				waitingTxn: contentionpb.ResolvedTxnID{
 					TxnID:            uuid.FastMakeV4(),
-					TxnFingerprintID: roachpb.InvalidTransactionFingerprintID,
+					TxnFingerprintID: appstatspb.InvalidTransactionFingerprintID,
 				},
 				coordinatorNodeID: "2",
 			},
 			{
 				blockingTxn: contentionpb.ResolvedTxnID{
 					TxnID:            uuid.FastMakeV4(),
-					TxnFingerprintID: roachpb.InvalidTransactionFingerprintID,
+					TxnFingerprintID: appstatspb.InvalidTransactionFingerprintID,
 				},
 				waitingTxn: contentionpb.ResolvedTxnID{
 					TxnID:            uuid.FastMakeV4(),
-					TxnFingerprintID: roachpb.InvalidTransactionFingerprintID,
+					TxnFingerprintID: appstatspb.InvalidTransactionFingerprintID,
 				},
 				coordinatorNodeID: "2",
 			},
@@ -275,7 +275,7 @@ func TestResolver(t *testing.T) {
 		// Even we are retrying without creating retry budget, we should still update
 		// the fields on the contention event.
 		require.Equal(t,
-			roachpb.InvalidTransactionFingerprintID,
+			appstatspb.InvalidTransactionFingerprintID,
 			resolver.mu.unresolvedEvents[1].WaitingTxnFingerprintID)
 		require.Equal(t,
 			inProgressContentionEventDueToInProgressBlockingAndWaitingTxn.blockingTxn.TxnFingerprintID,
@@ -554,8 +554,8 @@ func generateUnresolvedContentionEventsFromTestData(
 		inputEvent.WaitingTxnID = tc.waitingTxn.TxnID
 		input = append(input, inputEvent)
 
-		if tc.blockingTxn.TxnFingerprintID != roachpb.InvalidTransactionFingerprintID &&
-			tc.waitingTxn.TxnFingerprintID != roachpb.InvalidTransactionFingerprintID {
+		if tc.blockingTxn.TxnFingerprintID != appstatspb.InvalidTransactionFingerprintID &&
+			tc.waitingTxn.TxnFingerprintID != appstatspb.InvalidTransactionFingerprintID {
 			expectedResolvedEvent := contentionpb.ExtendedContentionEvent{}
 
 			expectedResolvedEvent.BlockingEvent = inputEvent.BlockingEvent
