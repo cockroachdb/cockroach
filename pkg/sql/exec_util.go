@@ -1721,8 +1721,7 @@ func shouldDistributeGivenRecAndMode(
 // completed but is quite annoying to do at the moment.
 func getPlanDistribution(
 	ctx context.Context,
-	p *planner,
-	nodeID *base.SQLIDContainer,
+	txnHasUncommittedTypes bool,
 	distSQLMode sessiondatapb.DistSQLExecMode,
 	plan planMaybePhysical,
 ) physicalplan.PlanDistribution {
@@ -1733,7 +1732,7 @@ func getPlanDistribution(
 	// If this transaction has modified or created any types, it is not safe to
 	// distribute due to limitations around leasing descriptors modified in the
 	// current transaction.
-	if p.Descriptors().HasUncommittedTypes() {
+	if txnHasUncommittedTypes {
 		return physicalplan.LocalPlan
 	}
 

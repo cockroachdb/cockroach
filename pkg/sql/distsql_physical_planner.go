@@ -864,7 +864,7 @@ func (p *PlanningCtx) getDefaultSaveFlowsFunc(
 					// In some edge cases (like when subqueries are present or
 					// when certain component doesn't implement execopnode.OpNode
 					// interface) an error might occur. In such scenario, we
-					// don't want to fail the collection of the bundle, so we
+					// don't want to fail the collection of the bundle, so we're
 					// deliberately ignoring the error.
 					explain = nil
 				}
@@ -4504,17 +4504,15 @@ func maybeMoveSingleFlowToGateway(planCtx *PlanningCtx, plan *PhysicalPlan, rowC
 
 // FinalizePlan adds a final "result" stage and a final projection if necessary
 // as well as populates the endpoints of the plan.
-func (dsp *DistSQLPlanner) FinalizePlan(
-	ctx context.Context, planCtx *PlanningCtx, plan *PhysicalPlan,
-) {
-	dsp.finalizePlanWithRowCount(ctx, planCtx, plan, -1 /* rowCount */)
+func FinalizePlan(ctx context.Context, planCtx *PlanningCtx, plan *PhysicalPlan) {
+	finalizePlanWithRowCount(ctx, planCtx, plan, -1 /* rowCount */)
 }
 
 // finalizePlanWithRowCount adds a final "result" stage and a final projection
 // if necessary as well as populates the endpoints of the plan.
 // - rowCount is the estimated number of rows that the plan outputs. Use a
 // negative number if the stats were not available to make an estimate.
-func (dsp *DistSQLPlanner) finalizePlanWithRowCount(
+func finalizePlanWithRowCount(
 	ctx context.Context, planCtx *PlanningCtx, plan *PhysicalPlan, rowCount int64,
 ) {
 	maybeMoveSingleFlowToGateway(planCtx, plan, rowCount)

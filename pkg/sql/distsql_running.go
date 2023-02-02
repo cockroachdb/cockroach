@@ -927,7 +927,7 @@ type DistSQLReceiver struct {
 	// this node's clock.
 	clockUpdater clockUpdater
 
-	stats *topLevelQueryStats
+	stats topLevelQueryStats
 
 	// isTenantExplainAnalyze is used to indicate that network egress should be
 	// collected in order to estimate RU consumption for a tenant that is running
@@ -1170,7 +1170,6 @@ func MakeDistSQLReceiver(
 		rangeCache:   rangeCache,
 		txn:          txn,
 		clockUpdater: clockUpdater,
-		stats:        &topLevelQueryStats{},
 		stmtType:     stmtType,
 		tracing:      tracing,
 	}
@@ -1196,7 +1195,6 @@ func (r *DistSQLReceiver) clone() *DistSQLReceiver {
 		rangeCache:   r.rangeCache,
 		txn:          r.txn,
 		clockUpdater: r.clockUpdater,
-		stats:        r.stats,
 		stmtType:     tree.Rows,
 		tracing:      r.tracing,
 	}
@@ -1624,7 +1622,8 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 	defer subqueryMemAccount.Close(ctx)
 
 	distributeSubquery := getPlanDistribution(
-		ctx, planner, planner.execCfg.NodeInfo.NodeID, planner.SessionData().DistSQLMode, subqueryPlan.plan,
+		ctx, planner.Descriptors().HasUncommittedTypes(),
+		planner.SessionData().DistSQLMode, subqueryPlan.plan,
 	).WillDistribute()
 	distribute := DistributionType(DistributionTypeNone)
 	if distributeSubquery {
@@ -1644,13 +1643,14 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 	if err != nil {
 		return err
 	}
-	dsp.finalizePlanWithRowCount(ctx, subqueryPlanCtx, subqueryPhysPlan, subqueryPlan.rowCount)
+	finalizePlanWithRowCount(ctx, subqueryPlanCtx, subqueryPhysPlan, subqueryPlan.rowCount)
 
 	// TODO(arjun): #28264: We set up a row container, wrap it in a row
 	// receiver, and use it and serialize the results of the subquery. The type
 	// of the results stored in the container depends on the type of the subquery.
 	subqueryRecv := recv.clone()
 	defer subqueryRecv.Release()
+	defer recv.stats.add(&subqueryRecv.stats)
 	var typs []*types.T
 	if subqueryPlan.execMode == rowexec.SubqueryExecModeExists {
 		subqueryRecv.existsMode = true
@@ -1788,7 +1788,7 @@ func (dsp *DistSQLPlanner) PlanAndRun(
 		recv.SetError(err)
 		return
 	}
-	dsp.finalizePlanWithRowCount(ctx, planCtx, physPlan, planCtx.planner.curPlan.mainRowCount)
+	finalizePlanWithRowCount(ctx, planCtx, physPlan, planCtx.planner.curPlan.mainRowCount)
 	recv.expectedRowsRead = int64(physPlan.TotalEstimatedScannedRows)
 	dsp.Run(ctx, planCtx, txn, physPlan, recv, evalCtx, finishedSetupFn)
 }
@@ -1950,14 +1950,15 @@ func (dsp *DistSQLPlanner) planAndRunPostquery(
 		noteworthyMemoryUsageBytes,
 		dsp.distSQLSrv.Settings,
 	)
-	postqueryMonitor.StartNoReserved(ctx, evalCtx.Planner.Mon())
+	postqueryMonitor.StartNoReserved(ctx, planner.Mon())
 	defer postqueryMonitor.Stop(ctx)
 
 	postqueryMemAccount := postqueryMonitor.MakeBoundAccount()
 	defer postqueryMemAccount.Close(ctx)
 
 	distributePostquery := getPlanDistribution(
-		ctx, planner, planner.execCfg.NodeInfo.NodeID, planner.SessionData().DistSQLMode, postqueryPlan,
+		ctx, planner.Descriptors().HasUncommittedTypes(),
+		planner.SessionData().DistSQLMode, postqueryPlan,
 	).WillDistribute()
 	distribute := DistributionType(DistributionTypeNone)
 	if distributePostquery {
@@ -1979,10 +1980,11 @@ func (dsp *DistSQLPlanner) planAndRunPostquery(
 	if err != nil {
 		return err
 	}
-	dsp.FinalizePlan(ctx, postqueryPlanCtx, postqueryPhysPlan)
+	FinalizePlan(ctx, postqueryPlanCtx, postqueryPhysPlan)
 
 	postqueryRecv := recv.clone()
 	defer postqueryRecv.Release()
+	defer recv.stats.add(&postqueryRecv.stats)
 	// TODO(yuzefovich): at the moment, errOnlyResultWriter is sufficient here,
 	// but it may not be the case when we support cascades through the optimizer.
 	postqueryResultWriter := &errOnlyResultWriter{}
