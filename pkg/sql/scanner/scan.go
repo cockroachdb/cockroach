@@ -391,6 +391,10 @@ func (s *Scanner) Scan(lval ScanSymType) {
 			s.pos++
 			lval.SetID(lexbase.AT_AT)
 			return
+		case 'F': // @F
+			s.pos++
+			lval.SetID(lexbase.OID_FUNCTION_REF)
+			return
 		}
 		return
 

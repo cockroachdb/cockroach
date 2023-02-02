@@ -1,0 +1,54 @@
+query T
+SELECT @F1074('hello,world', ',')
+----
+{hello,world}
+
+statement ok
+CREATE TABLE t1(a INT PRIMARY KEY, b STRING DEFAULT (@F1074('hello,world', ',')))
+
+statement ok
+INSERT INTO t1(a) VALUES (1)
+
+query IT
+SELECT * FROM t1
+----
+1  {hello,world}
+
+statement ok
+INSERT INTO t1 VALUES (2, 'hello,new,world')
+
+statement ok
+CREATE INDEX idx ON t1(@F1074(b,','))
+
+query IT
+SELECT * FROM t1@idx WHERE @F1074(b, ',') = ARRAY['hello','new','world']
+----
+2  hello,new,world
+
+statement ok
+ALTER TABLE t1 ADD CONSTRAINT c_len CHECK (@F814(b) > 2)
+
+statement error pq: failed to satisfy CHECK constraint (length(b) > 2:::INT8)
+INSERT INTO t1 VALUES (3, 'a')
+
+statement ok
+CREATE FUNCTION f1() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$
+
+let $fn_oid
+SELECT oid FROM pg_catalog.pg_proc WHERE proname = 'f1'
+
+query I
+SELECT @F$fn_oid()
+----
+1
+
+statement ok
+CREATE FUNCTION f2(a STRING) RETURNS STRING LANGUAGE SQL AS $$ SELECT a $$
+
+let $fn_oid
+SELECT oid FROM pg_catalog.pg_proc WHERE proname = 'f2'
+
+query T
+SELECT @F$fn_oid('hello world')
+----
+hello world
