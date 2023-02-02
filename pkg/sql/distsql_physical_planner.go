@@ -782,7 +782,7 @@ type PlanningCtx struct {
 
 	// If set, the flows for the physical plan will be passed to this function.
 	// The flows are not safe for use past the lifetime of the saveFlows function.
-	saveFlows func(map[base.SQLInstanceID]*execinfrapb.FlowSpec, execopnode.OpChains) error
+	saveFlows func(_ map[base.SQLInstanceID]*execinfrapb.FlowSpec, _ execopnode.OpChains, vectorized bool) error
 
 	// If set, we will record the mapping from planNode to tracing metadata to
 	// later allow associating statistics with the planNode.
@@ -797,6 +797,10 @@ type PlanningCtx struct {
 	// plan (which prohibit all concurrency) and whether all parts of the plan
 	// are supported natively by the vectorized engine.
 	parallelizeScansIfLocal bool
+
+	// Set if this is either a subquery or a postquery (i.e. not the "main"
+	// query).
+	subOrPostQuery bool
 
 	// onFlowCleanup contains non-nil functions that will be called after the
 	// local flow finished running and is being cleaned up. It allows us to
@@ -836,8 +840,8 @@ func (p *PlanningCtx) IsLocal() bool {
 // plans and their diagrams.
 func (p *PlanningCtx) getDefaultSaveFlowsFunc(
 	ctx context.Context, planner *planner, typ planComponentType,
-) func(map[base.SQLInstanceID]*execinfrapb.FlowSpec, execopnode.OpChains) error {
-	return func(flows map[base.SQLInstanceID]*execinfrapb.FlowSpec, opChains execopnode.OpChains) error {
+) func(map[base.SQLInstanceID]*execinfrapb.FlowSpec, execopnode.OpChains, bool) error {
+	return func(flows map[base.SQLInstanceID]*execinfrapb.FlowSpec, opChains execopnode.OpChains, vectorized bool) error {
 		var diagram execinfrapb.FlowDiagram
 		if planner.instrumentation.shouldSaveDiagrams() {
 			diagramFlags := execinfrapb.DiagramFlags{
@@ -851,7 +855,7 @@ func (p *PlanningCtx) getDefaultSaveFlowsFunc(
 		}
 		var explainVec []string
 		var explainVecVerbose []string
-		if planner.instrumentation.collectBundle && planner.curPlan.flags.IsSet(planFlagVectorized) {
+		if planner.instrumentation.collectBundle && vectorized {
 			flowCtx, cleanup := newFlowCtxForExplainPurposes(ctx, p, planner)
 			defer cleanup()
 			getExplain := func(verbose bool) []string {
@@ -864,7 +868,7 @@ func (p *PlanningCtx) getDefaultSaveFlowsFunc(
 					// In some edge cases (like when subqueries are present or
 					// when certain component doesn't implement execopnode.OpNode
 					// interface) an error might occur. In such scenario, we
-					// don't want to fail the collection of the bundle, so we
+					// don't want to fail the collection of the bundle, so we're
 					// deliberately ignoring the error.
 					explain = nil
 				}
@@ -4504,17 +4508,15 @@ func maybeMoveSingleFlowToGateway(planCtx *PlanningCtx, plan *PhysicalPlan, rowC
 
 // FinalizePlan adds a final "result" stage and a final projection if necessary
 // as well as populates the endpoints of the plan.
-func (dsp *DistSQLPlanner) FinalizePlan(
-	ctx context.Context, planCtx *PlanningCtx, plan *PhysicalPlan,
-) {
-	dsp.finalizePlanWithRowCount(ctx, planCtx, plan, -1 /* rowCount */)
+func FinalizePlan(ctx context.Context, planCtx *PlanningCtx, plan *PhysicalPlan) {
+	finalizePlanWithRowCount(ctx, planCtx, plan, -1 /* rowCount */)
 }
 
 // finalizePlanWithRowCount adds a final "result" stage and a final projection
 // if necessary as well as populates the endpoints of the plan.
 // - rowCount is the estimated number of rows that the plan outputs. Use a
 // negative number if the stats were not available to make an estimate.
-func (dsp *DistSQLPlanner) finalizePlanWithRowCount(
+func finalizePlanWithRowCount(
 	ctx context.Context, planCtx *PlanningCtx, plan *PhysicalPlan, rowCount int64,
 ) {
 	maybeMoveSingleFlowToGateway(planCtx, plan, rowCount)
