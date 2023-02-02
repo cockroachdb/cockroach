@@ -120,6 +120,9 @@ message StatementStatistics {
   // indexes is the list of indexes used by the particular plan when executing the statement.
   repeated string indexes = 30;
 
+  // last_error_code is the last error code for a failed statement, if it exists.
+  optional string last_error_code = 31 [(gogoproto.nullable) = false];
+
   // Note: be sure to update `sql/app_stats.go` when adding/removing fields here!
 
   reserved 13, 14, 17, 18, 19, 20;

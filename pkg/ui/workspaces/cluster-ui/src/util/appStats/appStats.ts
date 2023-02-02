@@ -214,6 +214,7 @@ export function addStatementStats(
     plan_gists: planGists,
     index_recommendations: indexRec,
     indexes: indexes,
+    last_error_code: "",
   };
 }
 
