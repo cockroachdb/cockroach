@@ -528,7 +528,7 @@ func (r *testRunner) runWorker(
 		doDestroy := ctx.Err() == nil
 		if doDestroy {
 			l.PrintfCtx(ctx, "Worker exiting; destroying cluster.")
-			c.Destroy(context.Background(), closeLogger, l)
+			// c.Destroy(context.Background(), closeLogger, l)
 		} else {
 			l.PrintfCtx(ctx, "Worker exiting with canceled ctx. Not destroying cluster.")
 		}

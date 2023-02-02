@@ -67,6 +67,17 @@ type externalResource interface {
 	getConcreteType() sinkType
 }
 
+type eventBuffer interface {
+	// Append appends a row message for asynchronous delivery to the sink.
+	Append(
+		ctx context.Context,
+		topic TopicDescriptor,
+		key, value []byte,
+		updated, mvcc hlc.Timestamp,
+		alloc kvevent.Alloc,
+	) error
+}
+
 // EventSink is the interface used when emitting changefeed events
 // and ensuring they were received.
 type EventSink interface {
@@ -87,6 +98,10 @@ type EventSink interface {
 	// returned, no guarantees are given about which messages have been
 	// delivered or not delivered.
 	Flush(ctx context.Context) error
+}
+
+type tryFlush interface {
+	TryFlush(ctx context.Context) error
 }
 
 // ResolvedTimestampSink is the interface used when emitting resolved
