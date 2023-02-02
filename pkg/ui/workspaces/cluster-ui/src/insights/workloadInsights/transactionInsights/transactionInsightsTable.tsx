@@ -92,6 +92,13 @@ export function makeTransactionInsightsColumns(
       sort: item => item.contentionTime?.asMilliseconds() ?? 0,
     },
     {
+      name: "cpu",
+      title: insightsTableTitles.cpu(execType),
+      cell: item => Duration(item.cpuSQLNanos),
+      sort: item => item.cpuSQLNanos,
+      showByDefault: false,
+    },
+    {
       name: "applicationName",
       title: insightsTableTitles.applicationName(execType),
       cell: item => item.application,
