@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/clientsecopts"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/server/heapprofiler"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -1335,15 +1336,14 @@ func setupAndInitializeLoggingAndProfiling(
 	info := build.GetInfo()
 	log.Ops.Infof(ctx, "%s", log.SafeManaged(info.Short()))
 
-	initTraceDir(ctx, serverCfg.InflightTraceDirName)
-	initCPUProfile(ctx, serverCfg.CPUProfileDirName, serverCfg.Settings)
-	initBlockProfile()
-	initMutexProfile()
-
 	// Disable Stopper task tracking as performing that call site tracking is
 	// moderately expensive (certainly outweighing the infrequent benefit it
 	// provides).
 	stopper = stop.NewStopper()
+	initTraceDir(ctx, serverCfg.InflightTraceDirName)
+	initCPUProfiler(ctx, serverCfg.CPUProfileDirName, serverCfg.Settings, stopper)
+	initBlockProfile()
+	initMutexProfile()
 	log.Event(ctx, "initialized profiles")
 
 	return stopper, nil
@@ -1424,5 +1424,28 @@ func reportReadinessExternally(ctx context.Context, cmd *cobra.Command, waitForI
 	// --background or under systemd.
 	if err := sdnotify.Ready(); err != nil {
 		log.Ops.Errorf(ctx, "failed to signal readiness using systemd protocol: %s", err)
+	}
+}
+
+// initCPUProfiler creates a new CPUProfiler and continuously
+func initCPUProfiler(ctx context.Context, dir string, st *cluster.Settings, stopper *stop.Stopper) {
+	cpuProfiler, err := heapprofiler.NewCPUProfiler(ctx, dir, st)
+	if err != nil {
+		log.Warningf(ctx, "failed to start cpu profiler worker: %v", err)
+	}
+
+	if err = stopper.RunAsyncTask(ctx, "run cpu profiler", func(ctx context.Context) {
+		for {
+			select {
+			case <-stopper.ShouldQuiesce():
+				return
+			default:
+				// Do we always want to take a profile in this case unless the
+				// server.cpu_profile.interval has been exceeded?
+				cpuProfiler.MaybeTakeProfile(ctx, 100)
+			}
+		}
+	}); err != nil {
+		log.Warningf(ctx, "failed when running cpu profiler: %v", err)
 	}
 }
